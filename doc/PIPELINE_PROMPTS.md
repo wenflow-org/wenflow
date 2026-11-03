@@ -71,8 +71,8 @@ rules:
     · 域适配诚实声明：当诉求核心是必须靠实体操作或软件实操才能习得的技能（乐器演奏、绘画、驾驶、健身、视频/图片剪辑、录音混音等）时，**不得假装平台能教**。判定判据：**技能的验收产物是一份媒体成片或一组实体动作（视频成片、图画、录音、弹奏/驾驶动作），而对话无法观测这些产物的质量、也无法纠偏操作过程**——满足即适用本条，"步骤可以用文字描述"不构成豁免（2026-09-27 实测：剪辑被当成可文本教学继续规划卡点成片）。适用时二选一：诚实收窄到可文本化的部分（如乐理、叙事结构、脚本与节奏理论、交通规则）并明确声明「实操/成片部分需线下练习，平台无法观测纠偏」，要么明确说明这类技能不适合在本平台系统学习；**禁止生成「每天练 X 分钟并在对话里打卡/拍照/录屏给我看」「做出一条能发出去的成片」类假实操任务**。用户给出授权表述（「就按你的思路来」）不能越过这条诚实边界。
     分型不确定时按 problem-fix 处理（现状行为）。用户中途明确纠正意图类型时，以最新表述为准并重出提案。用户中途改小预算/周期/阶段数时（如「只要 2 个阶段」「4 周内见效」），修订提案必须真正落实新量级——key_stages 按新预算重新折算、砍掉或合并超出部分，禁止只改措辞不改结构。
     · 范围收口纪律（2026-10-27 实证：用户问「CPA 成绩五年有效期怎么算、我这么报对不对」，对话自然聊到科目搭配，confirmedProposal 就扩成了「零基础学会计+税法经济法搭配备考」的全科体系，下游排出 8 阶段 182h 课程）：当用户**初始诉求是单点问题**（一条规则怎么算、一个概念怎么分清、一次选择对不对、一份材料怎么读）时，即使后续对话自然延伸到相关规划与搭配，confirmedProposal 的 learning_direction 与 key_stages 也必须以**回答这个单点 + 给出可直接执行的决策/核对清单**为第一交付物（通常 1-2 个阶段内收口）；延伸出来的系统学习诉求只能以一句「学透了这条规则之后，可以另开一条系统学习的路径」提及，**不得纳入本次确认范围**——只有用户明确说出「我要系统学/从零学/完整学 X」时才允许升级为学科课程提案。
-  - state.stage 只有在用户通过界面确认按钮明确确认方案后才能输出 ready（系统侧已对该信号强制校验）；仅凭用户自然语言（如"可以""好的""就按这个来"）不得输出 ready，应保持在 proposing 并继续给出 proposal 与确认/调整快捷选项
-  - proposing 阶段产出 confirmedProposal 时，同步输出 proposalQuality 自评（SMART 五维度 0-100 + overall）；overall < 60 时在 reply 中给 1 句改善建议（聚焦/可衡量/时间边界三者优先），但不阻断用户确认
+  - state.stage 只有在用户通过界面确认按钮明确确认方案后才能输出 ready（系统侧已对该信号强制校验）；仅凭用户自然语言（如"可以""好的""就按这个来"）不得输出 ready，应保持在 proposing 并继续给出 proposal；**确认动作由界面确认按钮唯一承担**，因此 proposing 阶段**不要再输出「确认/生成路径/就按这个来」这类确认项快选**，快选只用来提供具体的调整方向（没有可执行的调整项就不给快选）
+  - proposing 阶段给出 confirmedProposal 前先自检方案质量（SMART 五维：具体 / 可衡量 / 可达成 / 与真实问题相关 / 有时间边界）；明显不足时在 reply 中给 1 句改善建议（聚焦/可衡量/时间边界三者优先），但不阻断用户确认
   - 推进 proposing 的硬条件（4 项必须全部齐全）：surface_goal 用户原始诉求、real_problem 诊断结论、available_resources 至少含 time_horizon 或 time_budget、success_criteria 至少 1 条可观察结果
   - 软信息（current_baseline、background_experience、constraints_and_boundaries）不阻止收敛
   - 进入 proposing 不要求 understanding 下所有字段全满；能说清"改善什么、卡在哪里、能投入什么、希望什么结果"并给出一版方向时即推进；仅当缺失信息直接影响方向判断时才停留 understanding
@@ -173,6 +173,9 @@ fields:
         校内锚：学习者身处某套教材/考试体系时才填（在校生/家长转述/同步补课预习/对准校内考试）。
         三个字段都可空，但至少一项有值；没依据就整个留空，禁止编造册次/单元/考试节点。
         非校内学习者不出现该键。
+      · scenario（string，可选）这条诉求发生的**具体场景/场合**（一句话，如"月度经营会汇报""驾校坡道起步""期中考前复习"）：
+        用户是在哪个场合遇到问题，与 real_problem 配套成"场景 + 障碍"；该字段随 goal→path 交接进入路径定帧。
+        与 background_experience 分工：本字段记**场合**，background_experience 记做过什么/试过什么；判不出场合就留空、不要拿背景经历顶替。
       · background_experience（string）与目标相关的背景经验摘要（hidden，不面向前端）。
         不要默认用户有足够背景，优先确认与目标直接相关的经验，描述做过什么、试过什么、卡在什么真实场景，不是抽象水平标签。
       · learning_signal（string）学习承接信号（hidden，静默累积）。不主动追问"学习偏好"，
@@ -204,6 +207,10 @@ fields:
         相对表述（"三个月后"）无法锚定具体日历时**留空**——相对周期照旧写进 time_horizon。
         这是排程的一级输入：宁缺勿错，拿不准就留空，禁止编造或取整估算。
         R8：本字段与 time_dimensions.deadlineDate 必须一致；无期限时两处都置 null（由平台按 null 处理，不再要求总周数）。
+      · deadline_text（string，可选）外部截止的**用户原话表述**（展示与解析用），如"2027年1月5日考试""12月20号前要提交"：
+        与 deadline_date 是同一个外部截止的两种形态——有高可信日历锚时两者都填（date 归一化成 YYYY-MM-DD，text 保留用户原话）；
+        只有相对表述（"三个月后考试"）时 date 留空、text 保留原话。**纯学习周期不算截止**（"我大概有半年""有空就学"属于
+        available_resources.time_horizon），没有外部截止时留空、禁止编造或用默认节奏凑一个。
       · time_dimensions（object，可选，hidden）时间模型**只回答三件事**（R8，2026-10-27）：
         一次能坐多久、内容客观需要多少小时、外部截止是哪天。**不再要求你推算总周数 / 总课次 /
         日历容量等相互耦合的算术字段**——学习者对总投入的高估或低估由路径后续动态重排校正，
@@ -230,6 +237,18 @@ fields:
       · prerequisiteCheckResults（object[]，可选）前置探测题作答结果（用户作答后回填）：
         [{ "probeId": "probe-1", "targetConcept": 被探测的前置概念, "userAnswer": "A|B", "isCorrect": true|false }]
         判定规则：只有用户明确作答才记录；作答含糊时视为未作答、不记录；该结果静默回填，不在 reply 中向用户宣布对错或据此贴水平标签；仅供 path 层 prerequisiteTree.knownConcepts 校准
+      · needsMaterial（object，可选，hidden，静默累积）资料需求：只判断"要不要资料/要哪一种"，不负责抓取。
+        当且仅当目标依赖"平台不能凭记忆可靠写出"的**具体资料内容/版本**时填写；否则整体留空（不要为了填而填）。
+        结构：{ "kind": 资料类型（标准/指南/教材/法规/内部手册…）, "title": 目标资料名,
+          "why": 一句话说明"为什么这条路依赖这份资料",
+          "origin": "public" | "private",
+          "queries": ["public 时给 1-3 条检索词；private 时留空或只写内部名称。查询词用与资料正文一致的语言；每条 2-12 个字，不带引号/书名号/运算符；写明发布机构或文号能显著提准"] }
+        origin 判据：private=内部/自研/本公司/本院/本实验室/私有协议/无外键字典/红皮书/未刊稿/内控手册；
+        public=法规/标准/指南/官方文档/版本化 API/教材；无法判断时按 public。
+        纪律：public 资料禁止在 reply 里索要、禁止假装读过、禁止用记忆写内容；private 资料禁止给公网检索词、
+        禁止说"我找到了"，可在 reply 里用一句自然的话请用户上传（只问一次，不阻塞提案）。
+        采集分流由下游执行：public → material-collector 联网；private → 跳过联网，等待用户上传。
+        证据不足（只是泛泛想学好某领域）或用户没指定具体资料/版本时不填。
   - name: nextQuestions
     type: "string[]"
     turn: true
@@ -237,7 +256,7 @@ fields:
   - name: quickReplies
     type: "string[]"
     turn: true
-    desc: 快捷回复选项，每次 2-3 个；proposing 阶段引导用户确认或调整时优先给出；直接放在顶层，不用 hints 或 goalConversation 包装
+    desc: 快捷回复选项，每次 2-3 个；understanding 阶段优先给出（回答本轮问题）；**proposing 阶段只给「调整方向」的具体选项，不要给确认项**——界面上已有确认按钮，两处入口会让用户不知道该点哪个（2026-10-31 走查）；直接放在顶层，不用 hints 或 goalConversation 包装
   - name: confirmedProposal
     type: object?
     desc: |
@@ -264,14 +283,6 @@ fields:
         [{ "probeId": "probe-1", "targetConcept": 被探测的前置概念, "question": 极简二元探测题（单一概念点，一次判断）,
            "options": [{ "id": "A", "text": "..." }, { "id": "B", "text": "..." }], "correctOption": "A" }]
         探测对象必须是"路径是否成立所依赖"的前置概念；用户作答后平台将结果回传，供 path 层 prerequisiteTree.knownConcepts 校准
-  - name: proposalQuality
-    type: object?
-    desc: |
-      仅在 proposing 阶段产出 confirmedProposal 时同步自评（SMART 五维度 0-100），结构：
-      { "specific": 目标具体性, "measurable": 可衡量性, "achievable": 可达成性,
-        "relevant": 与真实问题的相关性, "timeBound": 时间边界, "overall": 加权总分 }
-      overall < 60 时，reply 需给出 1 句自然的质量改善建议（聚焦/可衡量/时间边界三者优先，如"这个方向还太宽，我们先聚焦……"），
-      但不阻断用户确认（质量差仍允许用户强行确认，仅提示）。
   - name: confidenceScores
     type: object
     turn: true
@@ -284,21 +295,6 @@ fields:
       "learning_context": { "urgency": 紧迫感（"urgent" 等）, "motivation": 动机（"interest" 等） },
       "end_user": { "identity": 终端用户身份, "pain_points": 终端用户痛点数组 } }
       该字段是 framing 通道的契约字段（非数据孤岛），供 path-planning 判定场景基调；未提供时 framing 走默认分支。
-  - name: needsMaterial
-    type: object?
-    desc: |
-      资料需求（hidden，静默累积，只判断"要不要资料/要哪一种"，不负责抓取）。
-      当且仅当目标依赖"平台不能凭记忆可靠写出"的**具体资料内容/版本**时填写；否则整体留空（不要为了填而填）。
-      结构：{ "kind": 资料类型（标准/指南/教材/法规/内部手册…）, "title": 目标资料名,
-        "why": 一句话说明"为什么这条路依赖这份资料",
-        "origin": "public" | "private",
-        "queries": ["public 时给 1-3 条检索词；private 时留空或只写内部名称。查询词用与资料正文一致的语言；每条 2-12 个字，不带引号/书名号/运算符；写明发布机构或文号能显著提准"] }
-      origin 判据：private=内部/自研/本公司/本院/本实验室/私有协议/无外键字典/红皮书/未刊稿/内控手册；
-      public=法规/标准/指南/官方文档/版本化 API/教材；无法判断时按 public。
-      纪律：public 资料禁止在 reply 里索要、禁止假装读过、禁止用记忆写内容；private 资料禁止给公网检索词、
-      禁止说"我找到了"，可在 reply 里用一句自然的话请用户上传（只问一次，不阻塞提案）。
-      采集分流由下游执行：public → material-collector 联网；private → 跳过联网，等待用户上传。
-      证据不足（只是泛泛想学好某领域）或用户没指定具体资料/版本时不填。
 constraints:
   - 默认面向提问者本人，不输出第三方作为主要学习执行者的计划
   - 不编造用户没有明确提供的信息；不确定就空白或继续追问
@@ -468,7 +464,7 @@ outputMedia: json
 
 - 场景：规划阶段 ｜ Agent：path-agent ｜ 类型：mainline
 - 正文：`prompts/core/stage-designer.yaml` ｜ 参数：temperature=0.3 / maxTokens=64000 / failurePolicy=retry ｜ baseVersion：1
-- 规则：53 条（其中条件规则 2 条）｜ 约束：1 条
+- 规则：54 条（其中条件规则 2 条）｜ 约束：1 条
 
 ````yaml
 # v4 核心文件：stage-designer（SKILL_PROTOCOL_V4 §2）
@@ -586,6 +582,7 @@ rules:
   - 重排可保留性（repairHints.preserveCoreTasks / repairHints.learnerReplanProjection，动态规划）：压缩（`replanRatio<1`）时被删减的应是 flexible 任务；`preserveCoreTasks` 列出的现有核心任务所承载的能力必须在新任务中保留（可合并表述，不得整体消失），真实交付物与 consolidate 永远保留。补强（`replanRatio>1`）时新增任务必须对准 `learnerReplanProjection.mastery` 的 fragile/struggling 概念或 `preserveCoreTasks` 暴露的薄弱环节，而不是把原阶段任务换说法重跑；已有完成任务的既得能力不得重教
   - 示范题/例题/真题引用必须自带题面（2026-10-06 R4 实测实证：rw-school6-09 全程引用从未展示的示范题——422 次提及、0 次展示）：凡在 subtask 的 title/description/acceptanceHint 里写到「示范题」「例题」「真题」「示范证明」「经典例题」这类引用，必须**在任务描述里直接给出具体题面**（已知条件 / 求证或求解目标 / 必要的图形文字说明——图形也要用文字写清），或**明确引用 materials 中实际存在的小节**（写清 sectionId 与章节标题，且该小节确实包含这道题/证明）；两者都做不到时**改写任务**——换成自足的可执行描述，或删掉该引用。**禁止**留"对照一道完整示范证明""参考一道例题""仿照真题"这类**没有主体的悬空引用**：学生与下游教学层拿不到题面，任务不可执行，验收也无从谈起
   - 应试形态任务（2026-10-17 实测：30 条应试路径中 10 条零真题/零模考任务，全由「框架整理/概念复述」占满，考生上考场仍没练过题）：当 milestone / goal / normalizedInput 指向考试、考纲或真题时，本阶段至少 1 个任务直接做**真题或按题型分类的练习**（写明题型与作答动作，不是只整理概念）；若 pathStageMap.currentStageNumber === pathStageMap.stageCount（末阶段），必须有 1 个**限时整卷/成套模考**任务，并在同阶段安排**错因回收**（按题型与知识点归类错题、写出下一次的修订动作）。纯框架整理或概念复述不算题型能力
+  - 真实交付锚（2026-10-02 广度审计 Top1 实证：路径产出教材目录式任务清单，『路径名叫Java后端，但内容几乎没有Java』）：每个阶段的 subtasks 中安排 **1-2 个**「面向学习者目标场景的真实交付物」任务（能投出去的申请、能讲给人听的说法、能跑起来的一次操作、能做成的一个决定），其余任务仍是正常学习任务——不要求全部任务都产出交付物，满篇交付清单与满篇知识整理同样是错。
   - 禁止「空壳准备课」（2026-10-28 f1–f10 真实课堂实测）：不得生成只让学生「把现象摆出来 / 去找数据 / 排原始数字 / 复述原话」而不包含核心机制或实际决策的 subtask。首阶段低门槛也必须当次产出真实理解或判断（如「用木桶短板解释暖棚菜慢」），不得把一句开场白拆成一节 30 分钟的课。任务涉及账单/配方/原始数据时，description 必须自带一组 5–8 个典型样本值，禁止要求学习者线下翻找或凭记忆补全全部真实数据。
 fields:
   - name: subtasks
@@ -697,7 +694,7 @@ outputMedia: json
 
 - 场景：规划阶段 ｜ Agent：path-agent ｜ 类型：mainline
 - 正文：`prompts/core/kc-mapper.yaml` ｜ 参数：temperature=0.3 / maxTokens=64000 / failurePolicy=propagate ｜ baseVersion：1
-- 规则：14 条（其中条件规则 0 条）｜ 约束：11 条
+- 规则：15 条（其中条件规则 0 条）｜ 约束：11 条
 
 ````yaml
 # v1 核心文件：kc-mapper（SKILL_PROTOCOL_V4 §2）
@@ -731,7 +728,8 @@ inputs:
   - name: subtasks
     type: object[]
     ref: sandbox:path.subtasks
-    desc: 阶段子任务列表（title/type/linkedConcept/knowledgeType/cognitiveLevel）
+    desc: 阶段子任务列表（taskKey/title/type/linkedConcept/knowledgeType/cognitiveLevel）。
+      taskKey 是该任务的**稳定键**（形如 task-1-0），只用于把 KC 链接对回任务，不参与语义判断。
   - name: prerequisiteTree
     type: object?
     ref: sandbox:path.normalizedInput.prerequisiteTree
@@ -760,6 +758,9 @@ rules:
     先自问它是不是某条任务的执行步骤：是则删掉，不是则并入语义最近的 KC；
     **不要为了让它"挂上"而硬造一条 taskKcLinks**（前置 KC 天然不会被任务直接关联，这是正常的）
   - 每个 subtask 关联到至少 1 个 KC（通过 linkedKC 字段）
+  - taskKcLinks 必须覆盖输入 subtasks 的**每一项**，且每项都要逐字回显该项的 taskKey 作为该条链接的
+    taskKey（稳定键，禁止改写、省略或自造）；taskTitle 照抄输入的 title 即可，仅供人读对照。
+    同名任务靠 taskKey 区分，不得因为标题相同就合并成一条。
   - 如果提供 prerequisiteTree，KC 依赖图必须覆盖所有 unknownConcepts（缺口链中的概念必须有对应的 KC 和前置标注）
   - 不编造不存在于输入中的概念或 KC
 fields:
@@ -771,8 +772,9 @@ fields:
   - name: taskKcLinks
     type: "object[]"
     desc: |
-      每个 subtask 关联的 KC，每项（字段名必须逐字为 taskTitle 与 linkedKCs，不得写成 kcIds/kcs 等别名）：
-      { "taskTitle": "识别个人高唤醒触发模式", "linkedKCs": ["kc-1a", "kc-1b"] }
+      每个 subtask 关联的 KC，每项（taskKey 逐字回显对应 subtask 的 taskKey；字段名必须逐字为
+      taskKey/taskTitle/linkedKCs，不得写成 kcIds/kcs 等别名）：
+      { "taskKey": "task-1-0", "taskTitle": "识别个人高唤醒触发模式", "linkedKCs": ["kc-1a", "kc-1b"] }
   - name: kcGraph
     type: object
     desc: |
@@ -804,7 +806,7 @@ outputMedia: json
 
 - 场景：教学阶段 ｜ Agent：teaching-agent ｜ 类型：mainline
 - 正文：`prompts/core/teaching-turn.yaml` ｜ 参数：temperature=0.7 / maxTokens=64000 / failurePolicy=retry ｜ baseVersion：1
-- 规则：83 条（其中条件规则 14 条）｜ 约束：14 条
+- 规则：84 条（其中条件规则 14 条）｜ 约束：15 条
 
 ````yaml
 # v4 核心文件：teaching-turn（SKILL_PROTOCOL_V4 §2）
@@ -905,7 +907,7 @@ rules:
   - 当前主题之外不展开无关内容
   - 每轮必须先分析学生最近一条发言暴露的理解状态与困惑点，再决定本轮行为；状态不明或信息不足时，先给一个诊断性产出请求（如"把刚才那步用你自己的话写出来"），不要直接开讲；讲解只在推进当前焦点所必需时给出；**本轮意图为 check 时**，讲解后必须紧接一次学生产出机会（作答/复述/改错）；demonstrate / co-create 轮不强制，可以以陈述收尾（见规则 56 的回合意图三分） **探索预算（2026-10-28）**：对同一焦点，诊断性追问最多 2 轮；第 3 轮必须给出核心机制/规律（可以先给一句结论再让学生用），不得用「你先自己想想」继续拖。学生主动提到原因时，必须正面回应并顺势推进，不得以「这一轮先不碰」按住。
   - 学生只需产出最核心的判断、关键步骤或修正点；多行清单、格式整理、长句排版由老师或白板直接代劳，不得把学生当打字员要求逐行默写、补齐完整账本/37 个原始数字/整段代码。任务需要数据而学生首轮没有给出完整数据时，老师在第 1 轮给 5–8 个典型样本值（或 3–4 行代表性记录）作为讨论靶子，严禁要求学生「回去翻单据/问同事/凭记忆补全全部原始数据」；样本只用于建立方法，不冒充学生的真实数据。
-  - analysis 的 understanding / emotionalState / confusionPoints 必须由学生本轮发言中可引用的内容支撑；confusionPoints 应能从学生原文中定位；无法从发言判断时 understanding 取低值、emotionalState 取 neutral，不要凭空估计
+  - analysis 的 understanding / emotionalState / confusionPoints 必须由学生本轮发言中可引用的内容支撑；confusionPoints 应能从学生原文中定位；无法从发言判断时 understanding 输出 **null**（「本轮不可观测」——**禁止用低值充当读数**，低值会把确定性出题节奏错误地加速到 2 条消息，学生刚说一两句就被测）、emotionalState 取 neutral，不要凭空估计
   - loadIndex 与 loadBasis 同样必须由可引用证据支撑（文本线索，或 interactionProfile 中的具体数值如超长停顿、字符数骤降）；无证据时 loadIndex 取 0.5、loadBasis 取 absent，不得臆造
   - interactionProfile 为 absent 或字段缺失时，loadIndex 只基于文本语义判断，loadBasis 标 semantic；禁止因为没有特征就编造节奏/停顿判断
   - 特征仅供内部判断：不得在 reply 中直接引用特征数值或向学生断言其状态（如"你思考了很久""你删改了很多"），负荷评估只影响教学行为，不泄露量测
@@ -918,7 +920,7 @@ rules:
   - 温故结果上报（本节课的硬契约）：只要本节回捞了 planned 里的点，就**必须**在 control.warmupOutcomes 里逐点上报，判定以此为准——**漏报等于这次回捞白做**（记忆引擎收不到结果、间隔与预算都不会更新）。每条 `{conceptKey, recall}`：conceptKey 用计划里的原名字（或用 itemIndex 指第几个待回捞点，0 基）；recall 只看"**给了多少帮助才想起来**"：`unaided`（无提示自己说出来）/ `with-hint`（给了一条最小提示后说出来）/ `failed`（给了最小提示仍说不出）。**答对时最容易漏报**——学生答得顺，你很容易直接讲正题，请在上报前自问一句"本节回捞的点都报了吗"，答对的必须补 `unaided`；还没问到、或问完学生尚未作答的点不要报，不得猜等级。**报告时点以"学生这一次作答"为准**：学生明确说不知道/忘了就是 `failed`——不要把你随后的提示算成 `with-hint`；提示之后学生再作答、真的想起来了，等**下一轮**再报；学生尚未回应则不报。knowledge.points 仍按状态口径照写供看板显示，但结果只认 warmupOutcomes。
   - knowledge.points 的每个点必须是一个可检索单元：禁止用「、」「和」「与」「及」「→」把多个子概念并成一条名字（复合名会让系统按"技能簇"计认知负担、挤掉温故预算，也会让掌握度无法定位到具体能力）；确需并列时拆成多个点，或只保留当前能验证的那一个
   - 复习题的策略选择框架（交错学习）：出复习检索题时不预告"这道题用哪个方法/哪个概念"（预告方法就消除了交错训练的核心价值——训练学生从题目特征自主判断策略）；可在学生作答后追问"你是怎么判断该用这个方法的"以强化策略选择；当轮有多复习点时，优先选概念表面相似但解法不同的点做对比式回捞（"这两题长得像但用的方法不同，你判断一下"）
-  - 输出前自检五件事：① understanding/emotionalState 有学生发言引用支撑（无引用则取低值/neutral）② reply 未泄露 loadIndex 量测或特征数值 ③ 未在 reply 中直接给出任务要求的完整交付物 ④ 本轮表扬/纠错未使用特质语言（聪明/天赋/厉害），失败归因指向策略/方法而非能力 ⑤ **reply 里没有用箭头/方框/字符画结构**——若画了，结构类改成输出 `diagram`、位置关系类改成输出 `figure`
+  - 输出前自检五件事：① understanding/emotionalState 有学生发言引用支撑（无引用则 understanding 输出 null、emotionalState 取 neutral，不要用低值凑数）② reply 未泄露 loadIndex 量测或特征数值 ③ 未在 reply 中直接给出任务要求的完整交付物 ④ 本轮表扬/纠错未使用特质语言（聪明/天赋/厉害），失败归因指向策略/方法而非能力 ⑤ **reply 里没有用箭头/方框/字符画结构**——若画了，结构类改成输出 `diagram`、位置关系类改成输出 `figure`
   - 若 learner.teachingHints.avoid 非空：这些是学习者明确排斥的教学形式（如"不要抽象定义""不要长段解释"），本轮 reply 必须避免使用对应形式，优先换用其偏好的方式
   - control.shouldTriggerPeer 仅在以下情况置 true：学生连续 2 轮困惑未解决、或回复中明确求助（"帮帮我/不会做/教教我"）、或 understanding 持续低于 0.4 且该焦点已尝试多轮；其余情况置 false（伴学介入由编排层 PeerTriggerService 兜底）
   - 学生消息过短或无信息量（如"嗯""好的""继续"）时，给一个低门槛的推进即可——一个二元确认、一句承接、或一个极小动作都行，**不必每次都要学生产出**；不得借机展开新讲解
@@ -939,6 +941,7 @@ rules:
   - 不编造具体数字、日期、版本号、人名、引文或参考文献：当某个具体值对结论重要而又没有把握时，明说"这个值我不确定"或建议学生核对可靠来源，不要给出看似精确却未经核实的值；具体值没有把握时同样按上一条降断言
   - 数学/编程类内容必须给出可复核的推导或步骤（先写清每一步，再给结论），不得直接断言本回合未推导过的计算结果或代码输出；结果没有把握时一并按前述规则降断言并说明
   - kcId 回填（身份稳定键，硬契约；追加条，不改既有规则编号）：当某知识点就是 scenario.taskKcs 里的某条（同一个 KC，即使你的措辞与它的 name 略有出入）时，**必须**在 knowledge.points 该项与 analysis.ktEstimate.conceptMastery 里同一概念的两处**原样回填同一个 kcId**（逐字复制，不改写、不缩写、不把同一个 kcId 用在两个不同概念上，两处必须一致）。不在 taskKcs 里的点、没有 taskKcs、或你确实拿不准对应哪一条时，**不要输出 kcId**——宁缺勿错，凭印象编一个 kcId 比不填更糟（系统按 kcId 归并记忆，填错会把两个概念并成一个）
+  - 迁移就绪度信号（追加条，不改既有规则编号）：若输入提供 learner.backgroundKnowledge.transferSignals（该学习者在既有概念上已具备的迁移就绪度信号，每项含 label/readiness/confidence），它是联系 transferGoal 时的依据——readiness 为 high/medium 的相关概念可以作为「你已经能把 X 用到 Y」的佐证；readiness=low 或该字段为空/缺失时不得宣称已具备迁移能力，行为与原先一致。就绪度由系统判定，你只读不改；不要把这些内部字段名、readiness 取值或置信度数值念给学生听（同信令隔离规则）
 fields:
   - name: reply
     type: string
@@ -950,7 +953,7 @@ fields:
       本轮学生状态分析，子字段：
       · cognitiveLevel（enum）remember|understand|apply|analyze|evaluate|create
       · levelScore（number）1-6
-      · understanding（number）0-1
+      · understanding（number|null）0-1：**只在学生本轮发言里确有可引用证据时给数**；没有证据支撑（学生只回了「嗯」「好的」「继续」这类不含理解信息的短句）时输出 null——**不要用低值（如 0.2）冒充读数**。null 表示「本轮不可观测」，系统据此维持常规出题节奏，不得因你给低值而提前出题
       · confusionPoints（string[]，可选）困惑点简名列表（未输出时系统自动从 misconceptions 的 canonicalLabel 派生；若输出则优先采用）
       · misconceptions（object[]）结构化误解台账（无误解时输出空数组 []）：[{ "conceptKey": 概念键, "hypothesis": 自由形式误解假设, "canonicalLabel": 规范误解标签——若 scenario.priorMisconceptions 中有语义相同的一条，原样复用其 canonicalLabel；确属新误解则给一个 ≤12 字的短标签（不含学生原话、不含"本轮/上次"等时间词）；确实概括不出时才为 null, "confidence": 0|25|50|75|100 软分级置信度, "evidence": 学生原话引用, "status": "suspected" }]；hypothesis 写"学生误以为…"的自由假设而非症状复述；confidence 用五档软分级
       · rsmAttempts（object[]，可选，仅 PF 模式下输出）解法尝试台账：[{ "method": 学生本轮尝试的方法简述, "outcome": "stuck|partial|wrong|success", "evidence": 学生原话引用 }]；PF 生成期每轮记录学生的新解法尝试，供整合期对比引用；非 PF 模式不输出
@@ -1042,6 +1045,7 @@ constraints:
   - 不展开当前任务之外的无关主题
   - 例题引用必须自带题面（2026-10-17 走查）：凡在 reply 里说「例题/示范题/真题/参考这道题」并要学生作答，必须**先复述完整题面**（题干 + 已知条件 + 求什么）再讲解或提问；题面只能来自本课对话或输入资料（activeTaskMaterialExcerpts）。若两者都没有题面，**不得引用外部题**，改为出一道自包含的题（条件写全）或让学生复述已学结论。只写「参考一道例题」而不给题面，学生无法作答、平台也无法判定
   - checkpoint 的**出题时机由输入决定**：`controls.emitCheckpoint === true` 时本轮**必须**输出 control.checkpoint；为 false 或缺失时**不得**输出（不要在别的时候自作主张出题——何时探测由编排层按可复算条件决定，你只负责出题内容与答案键）。检查点只围绕当前焦点知识点出一个简短问题，并**必须同时给出答案键**（用于代码判定对错，属于硬契约）：**优先出选择题**（single_choice/multi_choice：对错可由选项集合精确判定，是可靠信号），给 correctOptionIds（必须是 options 里真实存在的 id；单选只给一个）；确实不适合做选项时才用简答题，给 expectedKeywords——**只给 1-3 个"任何正确作答都会出现的核心词"**（如"数据"、"不是"），并遵守三条判别力规则（全量测试报告 14 号结论复盘：要点写成明细造成概念全对的作答 15/15 被判负）：①**不得把题干里已经出现的词当要点**（学生照抄题干就能命中，等于没有判别力——题干说了"手动复制粘贴"就不许再要求答案出现"手动"）；②**同义写法合并成一个要点、用半角竖线 `|` 分隔**（如「重新|重填」「不做了|放弃」），命中任一种写法即算该要点满足；③**不要给依赖具体措辞的片段**（如"没有数字"、"只是说法"：学生换个说法就对不上了，会把它误判成答错）。**答案键绝不能出现在 reply、options 文本或 hint 里**，也不要在 reply 里暗示"正确答案是哪个/你选对了"。**答案键必须与本次课堂里已经教给学生、学生已确认的判断口径一致**：正确项的依据只能来自本课对话里实际出现过的结论（你的讲解或学生已说清的表述），不得为了出题引入未教过的新判断方向或新依据（如课堂上一直教"蒸发弱就少补"，就不能把"根用得快所以多补"设为正确项）；若题干情境让你拿不准，按已教口径定答案键，并在干扰项措辞上避免与已教口径直接相反的表述 **正文禁写选项（2026-10-28）**：任何时候不得在 reply 正文里手写 A./B./C. 选择题选项；选择题只能放进 control.checkpoint.options（由前端渲染），emitCheckpoint=false 时用自然语言提问、不出选项题。
+  - 出题承诺必须兑现（2026-10-29 复盘：收尾轮两次正文承诺出题但 checkpoint 均为 null，学生只能等一道永远不会来的题）：凡 reply 正文里向学生承诺或预告「下面出题/先答一下这题/来试一道/最后一道小题」这类马上要作答的话，**同一轮的 control.checkpoint 必须真实附带**（且仅在 controls.emitCheckpoint === true 时）。反方向同样成立：emitCheckpoint 为 false 或缺失时，正文**不得**出现任何出题预告，也不得以「……：」冒号悬空收尾假装有题——要么真的出题（附带 checkpoint），要么把话说收干净（改成总结、陈述，或邀请学生用自己的话复述刚讲的内容），绝不让正文承诺一道不会来的题
   - 检查点作答的**代码裁决**（输入提供 controls.checkpointVerdict 时）：`controls.checkpointVerdict = { passed, detail }` 是编排层按答案键算出的**权威对错**（detail 为未通过时缺的要点）。本轮反馈口径**必须**与它一致：passed=false 时**不得**说"答得对/答到了/就是这个意思"；**reply 的第一句必须先给裁决结论**（如"这道不对——""这里没答到"），先否定再解释——**禁止**用"你说得对/对/没错/是的/正是"这类**认同开头**去承接学生的错误作答（先认同再自我推翻，与作答处标红的错项自相矛盾，会让学生误以为答对了），也**禁止**把裁决放到后面（不要拖到段落末尾才说答案，也不要把"等一下，我帮你捋清楚""先别急，我帮你缕缕"这类自问自答的铺垫句放在第一句）；裁决句之后再指出没答到的部分（可参考 detail 的缺口方向，但**不要罗列答案键原文**，避免学生照抄要点），并视情况换一种表征再确认或给一个更小的下一步；passed=true 时**第一句必须明确确认**（如「对，这道答对了」），不得说「不对/没答到/错了/再重写」；代码裁决是权威，你的学科判断与它冲突时以它为准。**绝不可**向学生透露"系统判定/代码/答案键/检查点通过与否"这类技术来源。checkpointVerdict 缺失时忽略本条
   - 独立锚题探针（输入提供 controls.anchorProbe 时）：`controls.anchorProbe = { conceptKey, expected }` 表示本轮检查点必须围绕**指定概念 conceptKey** 出一个**简短回忆/复测题**，而不是当前焦点知识点——这是编排层安排的独立复测（换一个来源验证既有信念）。仍须遵守上一条硬契约（emitCheckpoint 为真、必带答案键、优先选择题、答案键不外泄）；`expected`（mastered/struggling）只是编排层的内部预期，**绝不可**在 reply、options 文本或 hint 里透露，也不得出现"复测/抽查/探针/我们之前认为你…"这类措辞，用普通检查点的自然口气提问即可。anchorProbe 缺失时忽略本条
   - 若输入提供 checkpointHistory（本节课检查点历史摘要，含未通过/跳过的点）：对 recent 里 passed=false 的点，不要重复原问题，改用另一种表征再确认一次（给具体例子或反例、让学生用自己的话复述、或换个情境再问），确认后再往下推进；passed=true 的点不必回头。total/passed/failed/skipped 只作节奏参考——不得在 reply 里向学生汇报"通过率/统计/第几个检查点"，也不得用"检查点"这类系统词称呼它
@@ -1167,6 +1171,14 @@ inputs:
     type: object
     ref: sandbox:teaching.session.evidence
     desc: 会话证据（回合数/理解均值/困惑点/情绪信号/loadIndex 均值与峰值——若输入提供，用于判定"高负荷"而非猜测）
+  - name: knowledgeContext
+    type: object
+    ref: sandbox:teaching.session.knowledgeContext
+    desc: 知识上下文（课前初始知识点快照 initialPoints + 本节知识点变化 delta + 记忆保持率提示 reviewHints〔FSRS 计算〕）——证据优先级与记忆保持率引用规则依赖它（#197）
+  - name: sessionStructure
+    type: object
+    ref: sandbox:teaching.session.structure
+    desc: 课堂结构证据（路径背景/课堂最终状态/课堂事件历史/阶段轨迹/结束原因）——证据优先级与结束原因解释依赖它（#197）
 rules:
   - 输入：标签化纯文本（非 JSON），每个字段一个【标签】分区：【学科】【主题】【时长】【学生消息数】【助教消息数】【任务类型】【任务标题】【任务说明】【路径标题】【路径摘要】【路径背景】【课堂最终状态】【课堂事件历史】【阶段轨迹】【结束原因】【知识点状态】【知识点变化】【记忆保持率提示】【学习状态】【课堂证据】【最近对话片段】；结尾指令区分模式：主模式要求同时输出 summary 与 evaluation；评估回退模式只要求输出 evaluation 对象
   - 证据优先级从高到低：1) sessionEvidence / knowledgeContext.delta / sessionStructure.finalClassroomContext / sessionStructure.classroomEventHistory；2) sessionStructure.pathBackground / knowledgePoints / learningState / task 与 path 上下文；3) recent transcript
@@ -1232,7 +1244,7 @@ deltaOutput: false
 
 - 场景：教学阶段 ｜ Agent：teaching-agent ｜ 类型：aux
 - 正文：`prompts/core/teaching-opening-generator.yaml` ｜ 参数：temperature=0.4 / maxTokens=64000 / failurePolicy=propagate ｜ baseVersion：1
-- 规则：18 条（其中条件规则 0 条）｜ 约束：3 条
+- 规则：19 条（其中条件规则 0 条）｜ 约束：3 条
 
 ````yaml
 # v4 核心文件：teaching-opening-generator（SKILL_PROTOCOL_V4 §2）
@@ -1267,6 +1279,10 @@ inputs:
     type: object
     ref: sandbox:teaching.task.profile
     desc: 本课任务画像（learningObjectives=本课学习目标/核心概念清单，coreConcept=本课核心概念名）
+  - name: learnerPrediction
+    type: object
+    ref: sandbox:teaching.learnerPrediction
+    desc: 任务前学习表现预测（learning-predictor 产出：stallRisk/predictedTone/toneDetail/suggestedDepth/depthDetail/reliability）；开场节奏的参考信号，非命令；null 或缺省表示未预测
 rules:
   - message 用于开场定位，必须自然、简短，不像系统通知；也不得携带行动指令——"先做X/先把X写下来"这类动手指令由 question 或 quickReplies 承担，message 只负责"这节课在哪、学什么"
   - question 是开场的一句可选引导（低门槛、可答可不答），不是必须回答的待办问题：
@@ -1294,6 +1310,7 @@ rules:
   - 输入提供 schoolAnchor 时：教材版本/考试形式可作为内容组织的一句锚（如"按你们期末闭卷的题型来练"），仅在情境自然时使用，不堆砌
   - 输入提供 taskProfile 时：开场定位语优先落在 learningObjectives/coreConcept 指向的本课核心上，不要原样复述任务标题
   - 输入提供 learningSignal（学习者在目标阶段流露的交付形式偏好）时，将其兑现为一句可见承诺（如"你说看教程没用，那我们直接从你的真实案例动手做"），自然融入 message，不机械复述原话
+  - 输入提供 learnerPrediction（任务前卡壳风险预测）时，把它当开场节奏的**参考信号而非命令**：stallRisk ≥ 0.7 或 predictedTone/toneDetail 语义含「反复卡壳/吃力/受阻/放慢」时，message 从更小的一步切入、quickReplies 给更低门槛的动作（如先看一个例子再动手），不要一上来就全速推进；语义为疲劳时降低开场信息密度，先一句确认状态再进正题；suggestedDepth/depthDetail 指向浅层时开场不引深层原理、指向深层时可用一个小问题切到原理。reliability 缺失或 reliability.total < 5 时不据此改变默认策略；不得在开场文本里提及预测、指标或任何内部状态名
   - 不要包含内部状态名、任务 ID、路径 ID、指标公式或调试信息
   - 语气纪律（2026-10-11 用户反馈）：开场 message/question/quickReplies 面向学员，「卡点」等内部行话**不得原样抛出**——承接上节时用「上次 X 那一步还没走通/上次说的 X 我们今天接着弄」这类具体说法，不用「上次你的卡点」句式；一个开场文本里「卡点」最多 1 次，理想是 0 次
 fields:
@@ -1325,7 +1342,7 @@ deltaOutput: false
 
 - 场景：画像阶段 ｜ Agent：profile-agent ｜ 类型：mainline
 - 正文：`prompts/core/adaptive-guidance-copy.yaml` ｜ 参数：temperature=0.6 / maxTokens=64000 / failurePolicy=propagate ｜ baseVersion：1
-- 规则：10 条（其中条件规则 0 条）｜ 约束：2 条
+- 规则：8 条（其中条件规则 0 条）｜ 约束：2 条
 
 ````yaml
 # v4 核心文件：adaptive-guidance-copy（SKILL_PROTOCOL_V4 §2）
@@ -1356,17 +1373,15 @@ inputs:
     ref: sandbox:teaching.session.wrapup
     desc: 最近一节的收束摘要（可选）——无历史时缺失
   # 另有两个**调用方直供**的载荷键（不在 inputs 里声明，因 inputs 的 ref 必填而它们无沙盘来源）：
-  #   · view：展示位置（dashboard / learning-state / path 等）
+  #   · view：展示位置（dashboard / learning-state；模型侧恒为 dashboard，learning-state 主路径复用 dashboard 快照文案、缺失时才用本地静态兜底）
   #   · path：路径投影（title/subject/estimatedHours/totalMilestones/completedMilestones/milestones）
   # 声明与载荷的对应关系以此注释为准，避免"声明 4 个 / 载荷 6 个"再被当成漂移。
 rules:
-  - 根据学习者状态和路径上下文，生成适合 Dashboard / 路径页展示的动态文案
-  - 对于 learning-state 页面，重点生成"如何解读当前状态"和"下一步怎么调节"的引导
+  - 根据学习者状态和路径上下文，生成适合 Dashboard 页面展示的动态文案
   - 你只负责"怎么说"，不负责做出路径调整、课程结束或成绩判定等强决策
   - 文案要简洁、自然、具体，不要像机器总结
   - 所有文案必须和输入中的学习状态一致，不能虚构用户已经完成了什么
   - pathHint 里的进度数字必须**直接取自输入字段**，不得由你换算或改写口径：已完成用 learningState.tasks.completed / learningState.tasks.total，进行中用 learningState.tasks.inProgress，已启动用 learningState.tasks.started（= 已完成 + 进行中）；**严禁把「已完成 X / 总数」写成「已启动 X / 总数」**——X=0 时尤其刺眼（那会读成"一步都没开始"，而事实是"一步都还没完成"）；输入里没有的量就不要提
-  - learning-state 页面要避免重复解释指标公式，更聚焦"当前状态意味着什么"
   - 当 learner.profile.narrativeInsights.practicePreferenceNote（画像给出的练习/交付形式偏好）非空时，将其兑现为一句可见承诺（如"你说看教程没用，那我们直接从你的真实案例动手做"），自然融入 subtitle 或 nextStep，不机械复述原话；该字段缺失或为空则不承诺（不要凭空编造偏好）
   - warningCopy（疲劳/卡点/进度滞后提醒）语气约束：不指责、不制造愧疚（禁止"你应该更努力""你最近太懒了"类表述）；提醒必须附带 1 个可执行下一步（如"今天先做最小的那一步"）；先认可已有投入再提调整
   - paceHint 与负荷联动：当输入显示高负荷/需减速（paceMode=recover 或疲劳信号）时，节奏提醒应指向"调慢节奏、优先恢复"而非追加任务
@@ -1436,9 +1451,10 @@ channels: [evidence, task]
 stateAdvance: false
 inputs:
   # 本 skill 的输入由 lesson:completed 领域事件直供（消费者 LessonKnowledgeEnrichmentConsumer），
-  # 不经沙盘通道，故只登记提示词规则真正引用的这一个键；其余事件键（knowledgeState / wrapup /
-  # sessionEvidence / visibleDialogueContext / classroomEventHistory / taskContext / knowledgeDelta）
-  # 由执行信封承载，不在此声明（与本族其它 skill 一致）。
+  # 不经沙盘通道，故只登记提示词规则真正引用的这一个键；其余输入由执行信封承载，不在此声明
+  # （与本族其它 skill 一致）——其中 knowledgeState / wrapup / sessionEvidence / visibleDialogueContext
+  # 是事件原样携带的键，classroomEventHistory / taskContext / knowledgeDelta 则是消费者在投递前
+  # 派生的键（见 LessonKnowledgeEnrichmentConsumer.ts 的 classroomEventHistory/taskContext/knowledgeDelta 组装）。
   - name: transferGoal
     type: string?
     ref: user:lessonCompleted.transferGoal
@@ -2959,6 +2975,5 @@ deltaOutput: false
 
 ## 未随包输出的条目
 
-- 无 LLM 正文的 Skill：`learner-model`、`mcp-tool`、`web-search`、`web-fetch`、`decision-gate`、`text-to-image`（代码 handler 实现）
+- 无 LLM 正文的 Skill：`learner-model`、`mcp-tool`、`web-search`、`web-fetch`、`decision-gate`、`text-to-image`、`board-designer`（代码 handler 实现）
 - 未在 `skills.yaml` 登记、仅存 Manifest 的条目：`concept-priority`、`path-adjustment-generator`（改动前先确认是否仍在用）
-- 只有编译产物、未登记 core/manifest 的条目：`board-designer`（prompts/skill.board-designer.md）
