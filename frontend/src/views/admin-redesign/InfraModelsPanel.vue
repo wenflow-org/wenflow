@@ -58,7 +58,7 @@
           </div>
           <div class="mk-modal__body">
             <label class="mk-field">
-              <span class="mk-field__label">模型 id</span>
+              <span class="mk-field__label">模型 ID</span>
               <input
                 v-model="form.model"
                 class="mk-field__input"
@@ -95,7 +95,8 @@
                   <span class="mk-field__label">服务地址</span>
                   <input
                     v-model="form.endpoint"
-                    class="mk-field__input"
+                    class="mk-field__input mono"
+                    :title="form.endpoint"
                     :placeholder="editKind === 'embedding' ? 'https://api.example.com/v1/embeddings' : 'https://api.example.com/v1/rerank'"
                   />
                 </label>
@@ -307,7 +308,7 @@ async function save() {
   const kind = editKind.value
   if (!kind) return
   if (!form.value.model.trim()) {
-    toast.error('模型 id 不能为空')
+    toast.error('模型 ID 不能为空')
     return
   }
   if (form.value.connectionMode === 'own' && !form.value.endpoint.trim()) {
@@ -353,8 +354,11 @@ onMounted(load)
 </script>
 
 <style scoped>
-/* 单例引擎：卡面只有一行摘要，不再铺连接表单与模型列表。 */
-.mpp-infra { display: grid; gap: 10px; }
+/* 单例引擎：卡面只有一行摘要，不再铺连接表单与模型列表。
+   两张卡并排（2026-11-03 评审）：向量与重排是两个平级的全局单例引擎，各自只有一行摘要，
+   通栏下一条长条右侧全是空白。两列并排后与上面模型区的卡片同一档节拍。 */
+.mpp-infra { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 900px) { .mpp-infra { grid-template-columns: 1fr; } }
 .mpp-infra__state { margin: 0; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 .mpp-eng { display: flex; flex-direction: column; flex: none; }
 .mpp-eng__id { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }

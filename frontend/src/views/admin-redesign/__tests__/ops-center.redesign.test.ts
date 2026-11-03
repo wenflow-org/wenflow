@@ -100,15 +100,17 @@ async function mountWithRouter(component: unknown, route = '/admin/ops-hub') {
 describe('运维工具面板（原系统工具 Tab1）', () => {
   beforeEach(() => { vi.clearAllMocks() })
 
-  it('只剩事件投递失败一张卡；批量吞吐已迁走、内容抽检已退役，零死信显示健康态而不给假动作', async () => {
+  it('只剩事件投递一张卡；批量吞吐已迁走、内容抽检已退役，零死信显示健康态而不给假动作', async () => {
     const w = await mountWithRouter(ServerToolsPanel)
     const titles = w.findAll('.mk-card__title').map((t) => t.text())
-    expect(titles).toEqual(['事件投递失败'])
+    // 卡名取中性词，状态交给徽标（2026-11-02 评审：健康时标题仍写「失败」与「全部已送达」矛盾）
+    expect(titles).toEqual(['事件投递'])
     expect(w.text()).not.toContain('时间推进')
     expect(w.text()).not.toContain('批量吞吐')
     expect(w.text()).not.toContain('内容抽检')
-    // 卡片保留一句白话说明（这些记录从哪来、点按钮会发生什么）
-    expect(w.findAll('.stp-intro')).toHaveLength(1)
+    // 卡片仍保留一句白话说明（这些记录从哪来、点按钮会发生什么），但 2026-11-02 起不再常驻
+    // 屏面（「让布局自己说话」），改挂卡题 title；这里断言出口，不再断言那个已删的元素。
+    expect(w.find('.mk-card__title').attributes('title')).toContain('第一次投递失败会记在这里')
     // 2026-10-27 重做：0 死信不再渲染禁用重发钮，改健康态摘要 + 刷新出口
     const requeue = w.findAll('button').find((b) => b.text() === '重新发送全部')
     expect(requeue, '零死信不渲染假动作').toBeFalsy()
@@ -163,11 +165,14 @@ describe('数据导出面板（原系统工具 Tab2）', () => {
     expect(w.text()).toContain('已选 2 项')
     const go2 = w.findAll('button').find((b) => b.text() === '开始导出')
     expect(go2?.attributes('disabled')).toBeUndefined()
-    // 行数上限只服务日志组：选业务表时不出现，选日志后出现
-    expect(w.find('.exp-limit').exists()).toBe(false)
+    // 行数上限归日志组：常驻在该组标题行，不再随勾选与否在底部操作条出现/消失
+    const logGroup = w.findAll('.exp-group').find((g) => g.text().includes('日志与审计'))!
+    expect(logGroup.find('.exp-limit').exists()).toBe(true)
+    const otherGroup = w.findAll('.exp-group').find((g) => g.text().includes('账号与学习'))!
+    expect(otherGroup.find('.exp-limit').exists()).toBe(false)
     const logBox = w.findAll('.exp-item input[type="checkbox"]')[4]!
     await logBox.setValue(true)
-    expect(w.find('.exp-limit').exists()).toBe(true)
+    expect(w.find('.exp-foot .exp-limit').exists()).toBe(false)
     w.unmount()
   })
 

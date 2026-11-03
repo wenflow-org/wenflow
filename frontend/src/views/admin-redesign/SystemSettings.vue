@@ -1,18 +1,10 @@
 <template>
   <div class="mk-page mk-page--fill ss-host">
-    <MkPageHead title="系统设置">
-      <template #actions>
-        <!-- 「刷新注册表」原在「模型与接入」自己的页头（2026-11-01 合并前它在 ApiConfig.vue 的
-             #actions 里）。合并后页头归宿主，按钮只在「模型与接入」页签激活时出现——
-             它刷的是那个面板的供应商注册表，在运维工具/数据导出页签上出现就是错位的按钮。 -->
-        <button
-          v-if="tab === 'api'"
-          type="button"
-          class="mk-btn mk-btn--sm"
-          @click="apiRef?.refresh?.()"
-        >刷新注册表</button>
-      </template>
-    </MkPageHead>
+    <!-- 页头只留页名（2026-11-03 用户「最右上角那个多余的按钮…移入运维工具或合并处理，
+         保持顶部干净」）：原「刷新注册表」重读的是模型注册表文件，属「模型与接入」那一张卡，
+         已收进该卡右上的图标钮——它只在那张卡里有意义，挂在全局页头会让每个页签都看着有个
+         与己无关的动作。顶栏的全局刷新广播仍会刷当前面板（见 refreshActive）。 -->
+    <MkPageHead title="系统设置" />
 
     <!-- 五个页签由两类东西合并而来（2026-11-01 用户「这四个拆出来，和模型与接入作为一个页面」）：
          模型与接入原为独立场景，运维工具 / 数据导出 / 会话安全 / 访问与注册原为运营中心的
@@ -48,22 +40,27 @@
       embedded
     />
 
-    <!-- 其余三个无编辑态，切走即销毁 -->
+    <!-- 其余四个无编辑态，切走即销毁。
+         **必须是独立的 v-if，不能接在上一段的 v-else-if 链上**（2026-11-02 修）：上一段是
+         `v-if="apiMounted" v-show="tab === 'api'"`，而 apiMounted 一旦为真就再不变假，
+         v-else-if 只在链头为假时才求值——于是这四页签在「先看过模型与接入」之后全部空白，
+         且不报任何错（2026-11-02 用户「这怎么没内容啊」）。四个条件由同一个 tab 值互斥，
+         拆成独立 v-if 与原来的语义等价。 -->
     <ServerToolsPanel
-      v-else-if="tab === 'tools'"
+      v-if="tab === 'tools'"
       id="ss-panel-tools"
       role="tabpanel"
       aria-labelledby="ss-tab-tools"
       ref="toolsRef"
     />
     <DataExportPanel
-      v-else-if="tab === 'export'"
+      v-if="tab === 'export'"
       id="ss-panel-export"
       role="tabpanel"
       aria-labelledby="ss-tab-export"
     />
     <SessionSecurity
-      v-else-if="tab === 'security'"
+      v-if="tab === 'security'"
       id="ss-panel-security"
       role="tabpanel"
       aria-labelledby="ss-tab-security"
@@ -71,7 +68,7 @@
       embedded
     />
     <AccessControl
-      v-else-if="tab === 'access'"
+      v-if="tab === 'access'"
       id="ss-panel-access"
       role="tabpanel"
       aria-labelledby="ss-tab-access"
@@ -164,11 +161,29 @@ async function refreshActive() {
 
 onMounted(() => {
   /* 页面挂载后把首个 tab 的 ?tab= 对齐一次：直接输 /admin/system-settings 时地址栏没有 tab，
-     补上它，之后的后退/前进才有正确的历史锚点。 */
+     补上它，之后的后退/前进才有正确的历史锚点。
+     **必须确认当前 route 就是本页**（2026-11-02 修）：本组件是由 scene 驱动挂载的，早于
+     AdminConsole 那条「scene → URL」push 落定；此刻 route 还停在上一个页面，这里不带 path 的
+     replace 会把 ?tab= 写到**那个页面**的地址上，并把在途的 push 顶掉——表现为屏上是系统设置、
+     地址栏却停在前一页（如 /admin/people?tab=api），刷新一次就落到别的页面。 */
   void nextTick(() => {
-    if (route && router && !route.query.tab) void router.replace({ query: { ...route.query, tab: tab.value } })
+    if (!route || !router) return
+    if (route.params.page !== 'system-settings') return
+    if (!route.query.tab) void router.replace({ query: { ...route.query, tab: tab.value } })
   })
 })
+
+/* 上一条只在挂载那一刻成立；本组件挂载早于 push 落定，那时 route 还不是本页，于是「补锚点」
+   那一次被守卫挡掉、之后没人再补。这里在 route 真正落到本页、且地址栏没有 ?tab= 时补一次。
+   条件里带 ?tab= 的存在性判断，补完即不再满足，不会自激。 */
+watch(
+  () => [route?.params.page, route?.query.tab] as const,
+  () => {
+    if (!route || !router) return
+    if (route.params.page !== 'system-settings') return
+    if (!route.query.tab) void router.replace({ query: { ...route.query, tab: tab.value } })
+  }
+)
 
 const pageLabel = computed(() => SS_TABS.find((t) => t.key === tab.value)?.label || '系统设置')
 defineExpose({ pageLabel })

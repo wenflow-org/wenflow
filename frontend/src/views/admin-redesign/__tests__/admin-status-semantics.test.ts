@@ -104,7 +104,8 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
       expect(row.text()).toContain('加载失败')
       expect(row.find('button').exists()).toBe(false)
     }
-    expect(w.find('.oh-queue__cleared').text()).toContain('草稿公告')
+    // 清零点名行已撤（2026-11-03）：草稿公告的 0 由上方读数卡回答，队列尾部不再复述
+    expect(w.find('.oh-queue__cleared').exists()).toBe(false)
     const failedCards = w.findAll('.mk-kpi').filter((c) => c.find('.mk-kpi__num').text() === '—')
     for (const card of failedCards) {
       expect(card.classes()).not.toContain('mk-kpi--clickable')

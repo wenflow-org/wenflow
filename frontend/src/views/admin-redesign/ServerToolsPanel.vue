@@ -10,7 +10,15 @@
     <section class="mk-card stp-card">
       <div class="mk-card__head">
         <div class="stp-head">
-          <h4 class="mk-card__title">事件投递失败</h4>
+          <!-- 标题原本叫「事件投递失败」，健康时旁边是绿色「全部已送达」，标题名与状态互相打架
+             （2026-11-02 评审）。卡名改成中性的「事件投递」，成败由徽标与正文回答。
+             2026-11-02 走查：卡头下方原有一行自我介绍（「后台任务（更新学习画像、发放成就等）
+             第一次投递失败会记在这里，确认根因修复后可重发」），它讲的是这张卡是什么、能做什么，
+             属「让布局自己说话」要收掉的那类；同一句改挂卡题 title，悬停与读屏仍拿得到。 -->
+          <h4
+            class="mk-card__title"
+            title="后台任务（更新学习画像、发放成就等）第一次投递失败会记在这里，确认根因修复后可重发。"
+          >事件投递</h4>
           <!-- 死信告警（原状态条语义迁入卡头）：失败显式降 bad，积压 >0 显式 warn，
                零值只有成功加载后才显示「全部已送达」——加载中不得伪装成确认无死信 -->
           <span v-if="deadFailed" class="mk-badge mk-badge--bad">加载失败</span>
@@ -30,7 +38,6 @@
           </button>
         </div>
       </div>
-      <p class="stp-intro">后台任务（更新学习画像、发放成就等）第一次投递失败会记在这里，确认根因修复后可重发。</p>
 
       <MkLoading v-if="deadLoading" />
       <MkEmptyState
@@ -105,14 +112,15 @@
         compact
         @action="loadDead"
       />
-      <!-- 健康态：不是「空表格」，而是一句可确认的结论 + 一条刷新出口 -->
+      <!-- 健康态：不是「空表格」，而是一句可确认的结论 + 一条刷新出口
+           （原来结论下还有一行范围说明，2026-11-02 随卡下那行自我介绍一并撤掉，
+             屏上只剩「没有投递失败的事件」与「刷新」） -->
       <div v-else class="stp-ok">
         <span class="stp-ok__icon" aria-hidden="true">
           <CircleCheck :size="22" :stroke-width="1.9" />
         </span>
         <div class="stp-ok__text">
           <strong>没有投递失败的事件</strong>
-          <span>学习画像更新、成就发放等后台任务都已正常送达。</span>
         </div>
         <button type="button" class="mk-link stp-ok__refresh" @click="loadDead">刷新</button>
       </div>
@@ -265,12 +273,6 @@ defineExpose({ refresh, reload: loadDead })
 }
 /* 工具卡的用途说明（2026-10-28 用户「写法理解成本比较高」）：
    用运营能看懂的话讲清「这些记录从哪来、点按钮会发生什么」。 */
-.stp-intro {
-  margin: -2px 16px 12px;
-  font-size: var(--mk-fs-micro);
-  line-height: 1.5;
-  color: var(--mk-muted);
-}
 /* 卡头左组：标题 + 状态徽标同一行 */
 .stp-head { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
 
@@ -312,7 +314,6 @@ defineExpose({ refresh, reload: loadDead })
 }
 .stp-ok__text { display: grid; gap: 2px; min-width: 0; flex: 1 1 auto; }
 .stp-ok__text strong { font-size: var(--mk-fs-body); font-weight: 600; color: var(--mk-ink); }
-.stp-ok__text span { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.5; }
 .stp-ok__refresh { flex: none; }
 /* 死信表（自动布局）：事件类型长名截断（title 全值）。nowrap 走表级 .mk-table--nowrap */
 .stp-ev {

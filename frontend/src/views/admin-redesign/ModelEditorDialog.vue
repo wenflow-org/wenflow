@@ -29,6 +29,7 @@
                 <input
                   v-model="form.id"
                   class="mk-field__input mono"
+                  :class="{ 'med-id--locked': !isCreate }"
                   :disabled="!isCreate"
                   placeholder="例如 gpt-4o-mini"
                   autocomplete="off"
@@ -47,7 +48,7 @@
           <section class="med-sec med-gen">
             <div class="med-sec__head">
               <h4 class="med-sec__title">生成参数</h4>
-              <span class="med-sec__hint">跟随默认＝使用平台当前默认值</span>
+              <span class="med-sec__hint">跟随默认＝不指定，由上游按自身默认处理（本页不存具体数值）</span>
             </div>
             <div class="med-price">
               <label class="mk-field">
@@ -82,9 +83,12 @@
           </section>
 
           <details class="med-advanced">
-            <summary>
+            <!-- 2026-11-02「让布局自己说话」：折叠头右侧原有列出本弹层五个分区名的一行小字，
+                 它只罗列本弹层自己的分区——展开后各分区标题（用途字段 + 能力 / 调用限制 /
+                 备用模型 / 价格）已各说一次，属要收掉的那类。同一句改挂它描述的那个记号
+                 （summary）的 title，悬停与读屏仍拿得到，屏上不再占一段版面。 -->
+            <summary title="用途、能力、调用限制、备用模型、价格">
               高级设置
-              <span class="med-advanced__hint">用途、能力、调用限制、备用模型、价格</span>
             </summary>
             <div class="med-adv-body">
               <div class="med-two">
@@ -99,8 +103,10 @@
                 </label>
                 <label class="mk-field">
                   <span class="mk-field__label">说明</span>
-                  <!-- 占位符不写「选填」：非必填由没有 * 表达，占位符只该给示例 -->
-                  <input v-model="form.description" class="mk-field__input" />
+                  <!-- 占位符不写「选填」：非必填由没有 * 表达，占位符只该给示例。
+                       改用可换行输入（2026-11-02 评审）：单行 input 会把一句话从右缘硬切，
+                       既没有省略号也读不到后半句 -->
+                  <textarea v-model="form.description" class="mk-field__textarea med-desc" rows="2" />
                 </label>
               </div>
 
@@ -476,6 +482,15 @@ defineExpose({ openWith, close })
   font-weight: 700;
 }
 .med-sec__hint { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+/* 已创建的模型 ID 是只读值，不是待填占位符（2026-11-02 评审：disabled 的弱化字色
+   与「显示名称」白字并排，看起来像没填）。只读态回到正文色 + 次级底，读作「这里是值」 */
+.mk-field__input.med-id--locked {
+  color: var(--mk-ink);
+  -webkit-text-fill-color: currentColor;
+  background: var(--mk-surface-2);
+  opacity: 1;
+}
+.med-desc { min-height: 0; }
 .med-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .med-price { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 /* 高级设置：默认收起，展开后按「用途 / 能力 / 调用限制 / 备用模型」四段排 */
@@ -497,7 +512,6 @@ defineExpose({ openWith, close })
 .med-advanced > summary::-webkit-details-marker { display: none; }
 .med-advanced > summary::before { content: '▸'; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 .med-advanced[open] > summary::before { content: '▾'; }
-.med-advanced__hint { color: var(--mk-muted); font-size: var(--mk-fs-micro); font-weight: 400; }
 .med-adv-body { display: grid; gap: 18px; margin-top: 14px; }
 .med-subrow { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; margin-bottom: 8px; }
 .med-sub {

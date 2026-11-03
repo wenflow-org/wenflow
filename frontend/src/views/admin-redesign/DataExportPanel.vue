@@ -19,7 +19,18 @@
         <section v-for="g in exportGroups" :key="g.key" class="exp-group">
           <div class="exp-group__head">
             <h5 class="exp-group__title">{{ g.label }}</h5>
-            <span class="exp-group__meta">{{ g.meta }}</span>
+            <!-- 行数上限属于日志组自己的设置（2026-11-02 评审）：原先挤在底部操作条
+                 「已选 N 项」旁边，看不出它只作用于日志表。 -->
+            <label v-if="g.key === 'logs'" class="exp-limit">
+              <span class="exp-limit__label">行数上限</span>
+              <MkSelect
+                v-model="logLimit"
+                :options="LOG_LIMIT_OPTIONS"
+                size="sm"
+                aria-label="日志行数上限"
+                :disabled="exporting !== ''"
+              />
+            </label>
           </div>
           <div class="exp-grid">
             <label
@@ -46,23 +57,19 @@
       </div>
 
       <div class="exp-foot">
-        <!-- 行数上限只服务日志组，且只有选中日志表时才出现（避免无意义的假控件） -->
-        <label v-if="hasLogSelected" class="exp-limit">
-          <span class="exp-limit__label">日志行数上限</span>
-          <MkSelect
-            v-model="logLimit"
-            :options="LOG_LIMIT_OPTIONS"
-            size="sm"
-            aria-label="日志行数上限"
-            :disabled="exporting !== ''"
-          />
-        </label>
         <span class="exp-hint">已选 {{ exportSel.length }} 项</span>
-        <span class="exp-note">只读导出，不含敏感字段</span>
+        <!-- 「不含敏感字段」与卡片里列出的邮箱 / IP / 角色自相矛盾（2026-11-02 评审）：
+             导出确实带个人数据，只是不含密码与密钥，按实际包含关系改写 -->
+        <span class="exp-note">只读导出，不含密码与密钥</span>
+        <!-- 未勾选时按钮置灰的前置条件，原为操作条上一行弱化小字（2026-11-02 评审补的
+             置灰原因）。2026-11-02 走查：它是在教读者怎么操作导出钮，属「让布局自己说话」
+             要收掉的那类；同一句改挂它描述的那枚主按钮的 title（仅在未勾选时挂上），
+             屏上不再占一行，按钮保持右对齐。 -->
         <button
           type="button"
           class="mk-btn mk-btn--primary exp-go"
           :disabled="!exportSel.length || exporting !== ''"
+          :title="!exportSel.length ? '先勾选要导出的表' : undefined"
           @click="runExport"
         >{{ exporting !== '' ? '导出中…' : '开始导出' }}</button>
       </div>
@@ -71,7 +78,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { errMsg } from './live'
 import { adminAxios } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
@@ -108,16 +115,26 @@ const LOG_LIMIT_OPTIONS = [
 /** 按「谁来看 / 解决什么问题」分组，而不是按表名字典序平铺六枚胶囊。
     组内卡片自带字段说明与数据范围，勾选即可加入本次导出。 */
 const exportGroups = [
-  { key: 'account', label: '账号与学习', meta: '账号档案与课堂记录', keys: ['users', 'teaching-sessions'] },
-  { key: 'ops', label: '运营与对话', meta: '反馈与目标澄清', keys: ['feedback', 'goal-conversations'] },
-  { key: 'logs', label: '日志与审计', meta: '可按行数截断', keys: ['agent-logs', 'audit-logs'] },
+  { key: 'account', label: '账号与学习', keys: ['users', 'teaching-sessions'] },
+  { key: 'ops', label: '运营与对话', keys: ['feedback', 'goal-conversations'] },
+  { key: 'logs', label: '日志与审计', keys: ['agent-logs', 'audit-logs'] },
 ].map((g) => ({
   ...g,
   items: g.keys.map((k) => exportDefs.find((d) => d.key === k)!),
 }))
 
+/** 各表落进文件里的个人数据：确认框按本次勾选逐表列出，
+    否则只勾「用户反馈」时也会声称文件含账号联系方式（2026-11 评审 OP2-4）。 */
+const EXPORT_DATA_NOTES: Record<string, string> = {
+  users: '账号档案与邮箱',
+  'teaching-sessions': '课堂学习记录',
+  feedback: '反馈评论',
+  'goal-conversations': '学习目标描述',
+  'agent-logs': 'Agent 调用日志',
+  'audit-logs': '管理操作审计与 IP',
+}
+
 const exportSel = ref<string[]>([])
-const hasLogSelected = computed(() => exportSel.value.some((k) => LOG_EXPORT_KEYS.has(k)))
 /** 卡片上的范围读数：日志跟随行数上限，业务表是固定快照口径 */
 const rangeOf = (key: string): string => (LOG_EXPORT_KEYS.has(key) ? `最近 ${logLimit.value} 行` : '最近 20000 条')
 function toggleExport(key: string) {
@@ -165,10 +182,14 @@ async function runExport() {
   const ranges: string[] = []
   if (logKeys.length) ranges.push(`日志类最近 ${logLimit.value} 行`)
   if (keys.length > logKeys.length) ranges.push('业务表最近 20000 条')
+  // 按勾选顺序列出本次会落盘的个人数据（Set 去重：两张日志表说明不同，但未来加表可能撞词）
+  const contents = [...new Set(keys.map((k) => EXPORT_DATA_NOTES[k] || k))]
   const ok = await askConfirm({
     title: '确认导出',
-    message: `将导出 ${labels.join('、')}（共 ${keys.length} 项，${ranges.join('，')}）。文件含账号联系方式与操作日志，请按数据安全规范保存。`,
+    message: `将导出 ${labels.join('、')}（共 ${keys.length} 项，${ranges.join('，')}）。文件包含${contents.join('、')}，请按数据安全规范保存。`,
     confirmText: '开始导出',
+    // 导出是只读取数、不改动任何数据，不该沿用破坏性操作的红色警示按钮
+    danger: false,
   })
   if (!ok) return
   for (const key of keys) {
@@ -211,7 +232,6 @@ async function runExport() {
   color: var(--mk-muted);
   letter-spacing: 0.03em;
 }
-.exp-group__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .exp-limit {
   display: inline-flex;
   align-items: center;

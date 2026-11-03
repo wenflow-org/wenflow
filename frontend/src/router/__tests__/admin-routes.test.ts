@@ -216,10 +216,10 @@ describe('Admin 路由重定向', () => {
     expect(router.currentRoute.value.query.foo).toBe('bar');
   });
 
-  it('/admin/memory-review?userId= → 学习者详情「记忆调度」页签（路由级改投，页面不必先挂载转发）', async () => {
+  it('/admin/memory-review?userId= → 学习者详情「记忆与复习」页签（路由级改投，页面不必先挂载转发）', async () => {
     await router.push('/admin/memory-review?userId=user_abc');
     expect(router.currentRoute.value.path).toBe('/admin/learner-state');
-    expect(router.currentRoute.value.query).toMatchObject({ view: 'learner', id: 'user_abc', tab: 'memory-ops' });
+    expect(router.currentRoute.value.query).toMatchObject({ view: 'learner', id: 'user_abc', tab: 'memory' });
     expect(router.currentRoute.value.query.userId).toBeUndefined();
   });
 

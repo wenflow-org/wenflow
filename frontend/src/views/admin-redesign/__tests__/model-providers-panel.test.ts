@@ -38,7 +38,16 @@ interface ProviderSpec {
   apiKeyEnv?: string | null
   keyHint?: string | null
   status?: 'ready' | 'unconfigured' | 'inherit' | 'disabled'
-  models?: Array<{ id: string; tier?: 'chat' | 'reasoning'; fallbacks?: string[] }>
+  models?: Array<{
+    id: string
+    tier?: 'chat' | 'reasoning'
+    fallbacks?: string[]
+    /** 模型级生成默认（④ 的参数摘要读它）：null/缺省 = 不指定，由上游按自身默认处理 */
+    defaultThinkingMode?: 'enabled' | 'disabled' | null
+    defaultReasoningEffort?: 'low' | 'high' | 'max' | null
+    defaultResponseFormat?: 'none' | 'json_object' | null
+    pricing?: { inputPer1M?: number; cachedInputPer1M?: number; outputPer1M?: number } | null
+  }>
   profileId?: never
 }
 
@@ -66,7 +75,10 @@ function providerView(p: ProviderSpec): Record<string, unknown> {
       reasoningReserveTokens: null,
       maxParallelRequests: null,
       fallbacks: m.fallbacks ?? [],
-      pricing: null,
+      defaultThinkingMode: m.defaultThinkingMode ?? null,
+      defaultReasoningEffort: m.defaultReasoningEffort ?? null,
+      defaultResponseFormat: m.defaultResponseFormat ?? null,
+      pricing: m.pricing ?? null,
       description: null
     }))
   }
@@ -94,6 +106,13 @@ function seedView(extra?: Partial<{ readOnly: boolean; providers: Array<Record<s
 /** 对话模型行（列表行，不是列头表格） */
 function modelRows(wrapper: Awaited<ReturnType<typeof mountPanel>>) {
   return wrapper.findAll('.mpp-model-row')
+}
+
+/** 切浮窗页签（默认「可引入」，2026-11-03 起按能否引入分拣） */
+async function switchPullTab(wrapper: Awaited<ReturnType<typeof mountPanel>>, label: string) {
+  const tab = wrapper.findAll('.pmd-tab').find((t) => t.text().startsWith(label))!
+  await tab.trigger('click')
+  await nextTick()
 }
 
 async function mountPanel(props: Record<string, unknown> = {}, slots: Record<string, string> = {}) {
@@ -138,10 +157,17 @@ describe('ModelProvidersPanel', () => {
     expect(w.find('.mk-card__head').text()).not.toContain('一条通道 =')
     // 状态徽标只出「能不能用」，这一档由下面的连接徽标回答 → 不出徽标
     expect(w.find('.mk-card__head').findAll('.mk-badge')).toHaveLength(0)
-    // 挂载模型区：区名 + 条数，列表不再有列头表格
-    expect(w.find('.mpp-models__head').text()).toContain('挂载模型')
-    expect(w.find('.mpp-models__count').text()).toBe('2 个')
+    // 两段式（2026-11-03）：上连接条 / 下模型列表，没有步号也没有步骤标题行
+    expect(w.findAll('.mpp-step, .mpp-step__no, .mpp-step__head')).toHaveLength(0)
+    expect(w.find('#mpp-platform-panel-conn.mpp-conn').exists()).toBe(true)
+    expect(w.find('#mpp-platform-panel-models.mpp-models').exists()).toBe(true)
+    // 列表工具栏同一行：左条数，右出口
+    expect(w.find('.mpp-toolbar__title').text()).toContain('已挂载模型')
+    expect(w.find('.mpp-models__count').text()).toBe('(2)')
     expect(w.findAll('.mpp-model-row')).toHaveLength(2)
+    // 出口并列在工具栏右端：添加模型（主）+ 手动录入（轻量）
+    expect(w.findAll('.mpp-toolbar__acts .mk-btn').map((b) => b.text())).toEqual(['＋ 添加模型'])
+    expect(w.find('.mpp-toolbar__acts .mk-link').text()).toBe('手动录入')
   })
 
   it('模型为空时给下一步：平台通道直接去配置连接，不铺一张空表', async () => {
@@ -149,8 +175,8 @@ describe('ModelProvidersPanel', () => {
     const w = await mountPanel()
     const setup = w.find('.mpp-setup')
     expect(setup.exists()).toBe(true)
-    expect(setup.text()).toContain('还没有登记模型')
-    expect(setup.text()).toContain('先配置服务地址与 API Key')
+    expect(setup.text()).toContain('还没有挂载模型')
+    expect(setup.text()).toContain('连接条上的地址与密钥就绪后')
     // 2026-10-28 对话模型为空时不铺空列表；向量 / 重排已拆成宿主的独立能力卡
     expect(w.find('.mpp-models__list').exists()).toBe(false)
     expect(w.findAll('.mpp-model-row')).toHaveLength(0)
@@ -187,9 +213,9 @@ describe('ModelProvidersPanel', () => {
     })
     seedView({ providers: [platform] })
     const w = await mountPanel()
-    // 区标题只留「区名 + 条数」，添加入口在本区标题行
-    expect(w.find('.mpp-models__head').text()).toContain('挂载模型')
-    expect(w.find('.mpp-models__count').text()).toBe('3 个')
+    // 工具栏只留「区名 + 条数」，添加入口同排右端
+    expect(w.find('.mpp-toolbar__title').text()).toContain('已挂载模型')
+    expect(w.find('.mpp-models__count').text()).toBe('(3)')
     expect(w.findAll('.mpp-group')).toHaveLength(0)
 
     const rows = modelRows(w)
@@ -202,15 +228,36 @@ describe('ModelProvidersPanel', () => {
     expect(rows[1].findAll('.mpp-fn__chip').map((c) => c.text())).toEqual(['读图'])
   })
 
+  it('④ 每行给参数摘要：设过的项逐条列出，一个都没设的给「参数全部跟随默认」', async () => {
+    seedView({
+      providers: [providerView({ id: 'platform', name: '平台', models: [
+        { id: 'chat-plain' },
+        { id: 'think-configured', defaultThinkingMode: 'enabled', defaultReasoningEffort: 'high', fallbacks: ['fb-a', 'fb-b'], pricing: { inputPer1M: 1, outputPer1M: 2 } }
+      ] }) ]
+    })
+    const w = await mountPanel()
+    const rows = modelRows(w)
+    // 这一行的正文就是它配了什么——④ 叫「模型与参数」，行里必须看得见参数
+    expect(rows[0].find('.mpp-model-params').text()).toBe('参数全部跟随默认')
+    const txt = rows[1].find('.mpp-model-params').text()
+    expect(txt).toContain('思考开启')
+    expect(txt).toContain('推理强度 high')
+    expect(txt).toContain('备用 2 个')
+    expect(txt).toContain('已配单价')
+    // 未设的项不凭空出现在摘要里
+    expect(txt).not.toContain('输出上限')
+    expect(rows[1].find('.mpp-model-params').attributes('title')).toContain('只列这个模型单独设过的项')
+  })
+
   it('只读（配置文件不可写）：写入口全部禁用并给出说明', async () => {
     seedView({ readOnly: true })
     const w = await mountPanel()
     expect(w.text()).toContain('注册表文件所在目录当前不可写')
     // 2026-10-28 新人视角：不再从清单里「新建供应商」，只编辑平台通道
     expect(w.text()).not.toContain('添加供应商')
-    // 模型行的写入口（编辑 / 删除）一并禁用；「测试」是只读动作，仍可用
+    // 模型行的写入口（配置 / 删除）一并禁用；「测试」是只读动作，仍可用
     const rowBtn = (text: string) => w.findAll('.mpp-rowacts .mk-link').find((b) => b.text() === text)!
-    expect(rowBtn('编辑').attributes('disabled')).toBeDefined()
+    expect(rowBtn('配置').attributes('disabled')).toBeDefined()
     expect(rowBtn('测试').attributes('disabled')).toBeUndefined()
     // 删除是低频且不可撤销的动作，收进 ⋯ 菜单（与公告/账号/虚拟学习者同一套行内层级）
     expect(w.findAll('.mpp-rowacts .mk-link').some((b) => b.text() === '删除')).toBe(false)
@@ -259,15 +306,15 @@ describe('ModelProvidersPanel', () => {
     expect(result.attributes('title')).toContain('可以')
   })
 
-  it('运行面读数：冷却中的模型标「冷却中」，其余标「可用」（非连通性结论）', async () => {
+  it('状态读数：冷却中的模型标「冷却中」，其余标「可调用」（非连通性结论）', async () => {
     getModelRegistryMock.mockResolvedValue({
       data: { data: { models: [], cooldowns: [{ providerId: 'platform', model: 'deepseek-v4-flash', remainingMs: 30000 }], warnings: [], runtime: { maxModelCandidates: 2 } } }
     })
     const w = await mountPanel()
     const rows = modelRows(w)
     expect(rows[0].text()).toContain('冷却中')
-    /* 2026-11-01：徽章由「健康」改「可用」——原词被读成「连通过了」，实际只是未熔断 */
-    expect(rows[1].text()).toContain('可用')
+    /* 2026-11-02：「可用」仍被读成「连通过了」，改成直说行为的「可调用」 */
+    expect(rows[1].text()).toContain('可调用')
   })
 
   it('配置告警不只给图标：别名未引用的模型在状态列写明「未被引用」，细节留在 title', async () => {
@@ -293,27 +340,48 @@ describe('ModelProvidersPanel', () => {
     expect(w.find('.pmd').exists()).toBe(false)
     ;(w.vm as unknown as { openPull: () => void }).openPull()
     await nextTick()
+    /* 浮窗默认落「可引入」（2026-11-03）：已添加的 deepseek-v4-flash 不在这一屏，
+       打开即是能直接勾的清单，不用在勾不动的行里扫雷 */
     const rows = w.findAll('.pmd-row')
-    expect(rows).toHaveLength(3)
-    expect(rows[0].text()).toContain('已添加')
-    expect(rows[1].text()).not.toContain('已添加')
-    expect(rows[1].find('input').attributes('disabled')).toBeUndefined()
+    expect(rows).toHaveLength(2)
+    expect(rows.map((r) => r.find('.pmd-row__id').text())).toEqual(['mystery-1', 'mystery-2'])
+    expect(rows[0].text()).not.toContain('已添加')
+    expect(rows[0].find('input').attributes('disabled')).toBeUndefined()
+
+    await switchPullTab(w, '已添加')
+    const added = w.findAll('.pmd-row')
+    expect(added.map((r) => r.find('.pmd-row__id').text())).toEqual(['deepseek-v4-flash'])
+    expect(added[0].text()).toContain('已添加')
+    expect(added[0].find('input').attributes('disabled')).toBeDefined()
     expect(w.find('.mpp-chip').exists()).toBe(false)
   })
 
-  it('上游清单按用途给出建议：向量 / 重排模型置灰并指向对应能力卡', async () => {
+  it('上游清单按用途给出建议：向量 / 重排 / 图像视频模型置灰并说明去向', async () => {
     const upstream = ['deepseek-v4-flash', 'BAAI/bge-m3', 'agnes-image-2.5-flash', 'jev-latest', 'agnes-video-2.5']
     const w = await mountPanel({ upstream })
     ;(w.vm as unknown as { openPull: () => void }).openPull()
     await nextTick()
+    /* 非对话模型不进「可引入」（2026-11-03 起它们在第三个页签里只作说明），
+       所以本页签只剩未挂载的对话模型 jev-latest */
+    const chat = w.findAll('.pmd-row')
+    expect(chat).toHaveLength(1)
+    expect(chat[0].text()).toContain('jev-latest')
+    expect(chat[0].find('input').attributes('disabled')).toBeUndefined()
+
+    await switchPullTab(w, '非对话模型')
     const rows = w.findAll('.pmd-row')
-    expect(rows).toHaveLength(upstream.length)
+    expect(rows).toHaveLength(3)
     expect(rows.every((r) => r.find('input[type="checkbox"]').exists())).toBe(true)
     const embedding = rows.find((r) => r.text().includes('BAAI/bge-m3'))!
     expect(embedding.text()).toContain('建议归入向量模型')
     expect(embedding.find('input').attributes('disabled')).toBeDefined()
-    const chat = rows.find((r) => r.text().includes('agnes-image-2.5-flash'))!
-    expect(chat.find('input').attributes('disabled')).toBeUndefined()
+    /* 2026-11-02 评审：图像 / 视频生成模型此前被当成对话模型可勾选，
+       与「只有对话模型可以添加」自相矛盾；现在同样置灰并写明原因 */
+    const image = rows.find((r) => r.text().includes('agnes-image-2.5-flash'))!
+    expect(image.text()).toContain('图像 / 视频生成，不在此添加')
+    expect(image.find('input').attributes('disabled')).toBeDefined()
+    const video = rows.find((r) => r.text().includes('agnes-video-2.5'))!
+    expect(video.find('input').attributes('disabled')).toBeDefined()
     expect(w.text()).not.toContain('基础设施配置')
     expect(w.text()).not.toContain('插件配置')
     expect(w.text()).not.toContain('暂未接入')

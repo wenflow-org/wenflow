@@ -84,7 +84,11 @@
               <!-- 行内带件数（2026-11-01 外部评审二轮）：卡头只说「共 3 件（1 类）」，
                    行内不写件数时容易被读成「1 条待办」，与读数卡的 3 对不上。 -->
               <span class="oh-task__label">{{ t.label }}<span v-if="t.count > 0" class="oh-task__n">{{ t.count }}</span></span>
-              <span class="oh-task__hint">{{ t.failed ? '数据加载失败，计数不可信' : t.hint }}</span>
+              <!-- hint 只留给「标签本身说不出的后果」（卡在路径生成 / 投递失败会延迟）。
+                   只把标签换个说法的不写：2026-11-02 走查撤掉「用户反馈还没有人回复（不看
+                   评分高低，只看处理状态）」与「公告尚未发布」两条——前者复述行标签，后者
+                   复述页签名，读者从标签与去向按钮就能读懂。 -->
+              <span v-if="t.failed || t.hint" class="oh-task__hint">{{ t.failed ? '数据加载失败，计数不可信' : t.hint }}</span>
             </div>
             <span v-if="t.failed" class="oh-task__state">加载失败</span>
             <button v-else type="button" class="mk-btn mk-btn--sm" @click="t.action()">去处理 →</button>
@@ -97,12 +101,6 @@
             <!-- 只留结论：清零的是哪四类，页级读数带四张 0 卡已经写明，不再逐项复述 -->
             <strong>没有待处理项</strong>
           </div>
-        </div>
-        <!-- 清零项压缩成一行，保留「哪些已经没事」的信息 -->
-        <div v-if="activeTodo.length && clearedTodo.length" class="oh-queue__cleared">
-          <CheckCircle2 :size="13" :stroke-width="2" aria-hidden="true" />
-          <span class="oh-queue__cleared-label">已清零</span>
-          <span class="oh-queue__cleared-names">{{ clearedNames }}</span>
         </div>
       </div>
     </section>
@@ -376,10 +374,12 @@ const ann = announcementCounts
    2026-10-27：页签内改成行动队列——只列失败或仍有计数的事项，每条带一句「为什么」，
    清零项压成底部一行；计数与入口仍以页级读数卡为单源。 */
 const todoReadings = computed(() => [
-  { key: 'feedback', label: '未处理反馈', hint: '用户反馈还没有人回复（不看评分高低，只看处理状态）', count: wbPendingFeedback.value, severity: 'warn' as const, action: goFeedbackPending, failed: !!wbErrors.value.feedback },
+  /* 这两条的 hint 借给「标签换个说法」，2026-11-02 走查清空：
+     「未处理反馈」不需要再解释成「还没有人回复」，「草稿公告」本身就是「尚未发布」。 */
+  { key: 'feedback', label: '未处理反馈', hint: '', count: wbPendingFeedback.value, severity: 'warn' as const, action: goFeedbackPending, failed: !!wbErrors.value.feedback },
   { key: 'paths', label: '生成失败路径', hint: '学习者卡在路径生成，无法进入下一课', count: wbFailedPaths.value, severity: 'bad' as const, action: goFailedPaths, failed: !!wbErrors.value.paths },
   { key: 'dead', label: '事件投递失败', hint: '画像与成就更新会延迟', count: wbDeadLetters.value, severity: 'warn' as const, action: goDeadLetters, failed: !!wbErrors.value.dead },
-  { key: 'draft', label: '草稿公告', hint: '公告尚未发布', count: ann.value.draft, severity: 'muted' as const, action: goAnnouncements, failed: annFailed.value },
+  { key: 'draft', label: '草稿公告', hint: '', count: ann.value.draft, severity: 'muted' as const, action: goAnnouncements, failed: annFailed.value },
 ])
 
 const TODO_SEV_RANK = { bad: 0, warn: 1, muted: 2 } as const
@@ -396,9 +396,8 @@ const activeTodo = computed(() =>
     .filter((t) => t.failed || t.count > 0)
     .sort((a, b) => Number(b.failed) - Number(a.failed) || TODO_SEV_RANK[a.severity] - TODO_SEV_RANK[b.severity] || b.count - a.count)
 )
-/* 已清零：不再各占一行，压成底部一行名单。 */
-const clearedTodo = computed(() => todoItems.value.filter((t) => !t.failed && t.count === 0))
-const clearedNames = computed(() => clearedTodo.value.map((t) => t.label).join(' · '))
+/* 已清零那点名一行（「已清零 · 未处理反馈 · 草稿公告」）2026-11-03 撤除：点到的标签与值
+   就是本页上方四张读数卡，属同一读数说两遍；「哪些已经没事」由那四张卡直接给。 */
 
 /** 卡头结论句：三态纪律——首屏未拉回前不得渲染「全部已清零」（取不到 ≠ 没事）。
  *  全清零返回空串：结论由页级四个 0 与卡内空态承担，卡头不再第三次复读
@@ -544,17 +543,4 @@ onMounted(() => {
   color: var(--mk-green);
 }
 .oh-queue__empty strong { display: block; font-size: var(--mk-fs-body); font-weight: 600; color: var(--mk-ink); }
-.oh-queue__empty span { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.oh-queue__cleared {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 18px 14px;
-  border-top: 1px dashed var(--mk-line);
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
-}
-.oh-queue__cleared svg { flex: none; color: var(--mk-green); }
-.oh-queue__cleared-label { font-weight: 600; }
-.oh-queue__cleared-names { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>

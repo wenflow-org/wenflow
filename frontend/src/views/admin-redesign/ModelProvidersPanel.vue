@@ -31,8 +31,19 @@
         <button v-if="registry?.readOnly" type="button" class="mk-btn mk-btn--sm mk-btn--danger" disabled title="配置文件所在目录不可写，请在部署侧开放写权限">
           只读
         </button>
-        <!-- 宿主动作（获取模型）：与通道状态同一行 -->
-        <slot v-if="selected" name="head-actions" />
+        <!-- 原页头「刷新注册表」移到这里（2026-11-03 用户「移入运维工具或合并处理，保持顶部干净」）：
+             它重读的是本机登记文件（读盘），与工具栏的「重新获取」（向上游拉清单）不是一回事，
+             所以不进模型列表的工具栏，留在卡片身份这一行当低强调图标钮。 -->
+        <button
+          type="button"
+          class="mpp-regreload"
+          :disabled="loading"
+          title="重新读取本机的模型注册表文件，不向上游拉取模型清单"
+          aria-label="重新读取模型注册表"
+          @click="refresh(true)"
+        >
+          <RefreshCw :size="15" :stroke-width="1.75" aria-hidden="true" />
+        </button>
       </div>
     </div>
 
@@ -58,49 +69,61 @@
     />
 
     <div v-else class="mpp-body">
-      <!-- 2026-10-27 用户「这个区域不要了」：撤掉左栏通道清单。这一页就是平台通道本身，
-           一栏列表只为一个通道占 260px，还把模型表挤到断行；自建通道改由配置文件/接口维护。 -->
-      <div v-if="selected" class="mpp-detail">
-        <!-- 接入 API 段：只剩服务地址与密钥（2026-10-27 用户「一块负责 api 一块配置」）。
-             模型清单与下方向量 / 重排配置区在同一张卡的下半段，见 mpp-models。 -->
-        <div id="mpp-platform-panel-conn">
+      <!-- 两段式（2026-11-03 用户「把 1/2/3/4 步骤序号和分层彻底删掉，按成熟产品的紧凑两段式重构」）：
+           上一版把每一步做成「步号 + 步名 + 正文」的块，四步各占一行标题、按钮又各占一行，
+           四行标题加四个按钮把卡片撑成一条纵向流程表，而真正的内容（连接与模型）只剩两行。
+           现在卡片里只有两块：
+             ① 顶部灰底连接条 —— 这条通道接在哪；未配置时这里直接就是表单
+             ② 模型列表区    —— 工具栏一行（条数 + 上游读数 + 重新获取 + 添加模型）+ 双行模型行
+           流程顺序由「上到下」本身表达，不再靠步号解释。 -->
+      <template v-if="selected">
+        <!-- 第一块：灰底连接条。已配置时是宿主注入的一行摘要（地址 / 密钥 / 连接测试 / 重试口径
+             +「连接设置」）；未配置时宿主就在这个位置给地址与密钥输入框，不跳弹层。 -->
+        <div id="mpp-platform-panel-conn" class="mpp-conn">
           <slot name="platform-detail" />
         </div>
 
-        <!-- 2026-10-28 用户「两个卡片合成一个卡片」：模型清单并入平台通道卡，
-             连接段与模型表之间只留一条发丝线，不再另起「平台配置」卡。 -->
-        <div
-          id="mpp-platform-panel-models"
-          class="mpp-block mpp-models"
-        >
-          <!-- 2026-10-28 用户「合并为一个强动作入口」：不再并列「选择要添加」与「添加模型」，
-               上游有待选时按钮直接带上数量；没有上游清单时才落到手动录入。 -->
-          <div class="mpp-models__head">
-            <div class="mpp-models__title">
-              <span class="mpp-sec">挂载模型</span>
-              <span class="mpp-models__count">{{ selected.models.length }} 个</span>
-              <!-- 2026-11-01 外部评审（三轮/四轮/五轮连续三次）：读者一直把这里的绿色徽章
-                   当成「连通过了」。实测它的判定只有一条——该模型有没有在熔断冷却里，
-                   与通道测试根本不是一回事。这里把口径写在表头，徽章本身也改称「可用」。 -->
-              <span class="mpp-models__src" title="这里的「可用」是运行面读数：该模型没有处于熔断冷却中，降级时会被选中。它不是连通性探测结论——通道连不连得上，看通道摘要行里的「连接测试」徽章。">
-                状态＝运行面（未熔断），非连通性探测
+        <!-- 第二块：模型列表区。工具栏一行——左边「已挂载模型 (N)」，右边上游读数 + 两枚出口；
+             下面直接就是双行模型行（id/能力标签 + 配置参数摘要；右侧状态与行内动作）。 -->
+        <section id="mpp-platform-panel-models" class="mpp-models">
+          <div class="mpp-toolbar">
+            <h4 class="mpp-toolbar__title">
+              已挂载模型 <span class="mpp-models__count">({{ selected.models.length }})</span>
+            </h4>
+            <div class="mpp-toolbar__acts">
+              <!-- 上游读数（小灰字）：清单拉过才显示；「还有几个没挂载」挂在 title 里，
+                   不占工具栏的宽度 -->
+              <span v-if="fetchableModels.length" class="mpp-toolbar__meta" :title="upstreamTitle">
+                已获取 {{ fetchableModels.length }} 个
               </span>
+              <!-- 重新获取走宿主注入（它要一起落盘地址与密钥）；与「添加模型」同一行 -->
+              <slot name="upstream-actions" />
+              <button
+                type="button"
+                class="mk-btn mk-btn--sm mk-btn--primary"
+                :disabled="busy || registry?.readOnly"
+                :title="pullAddTitle"
+                @click="onPullAdd"
+              >＋ 添加模型</button>
+              <!-- 轻量手动入口：上游清单里没有的模型（自建、别名）直接录 ID -->
+              <button
+                type="button"
+                class="mk-link"
+                :disabled="busy || registry?.readOnly"
+                title="上游清单里没有的模型（自建、别名）在这里录入模型 ID"
+                @click="openManualAdd"
+              >手动录入</button>
             </div>
-            <span class="mpp-models__acts">
-              <button type="button" class="mk-btn mk-btn--sm" :disabled="busy || registry?.readOnly" @click="openAdd">
-                ＋ 添加模型<template v-if="pullableCount">（上游有 {{ pullableCount }} 个待选）</template>
-              </button>
-            </span>
           </div>
 
-          <!-- 上游清单不再铺在详情里（2026-10-24 用户「拉取作为浮窗」）：拉取只拿到清单，
-               勾选在 PullModelsDialog 里做——详情区只留已登记模型这张表。 -->
+          <!-- 上游异常（获取失败 / 有未保存清单）与卡头徽标同源，跟着列表一起看 -->
+          <slot name="models-meta" />
 
           <!-- 空模型时的下一步（2026-10-28 新人视角）：不丢一张空表，直接说清先做什么 -->
           <div v-if="selected.enabled && !selected.models.length" class="mpp-setup">
             <div class="mpp-setup__text">
-              <strong>还没有登记模型</strong>
-              <span>先配置服务地址与 API Key，再拉取上游模型，或手动添加模型 ID。</span>
+              <strong>还没有挂载模型</strong>
+              <span>连接条上的地址与密钥就绪后，用工具栏的「＋ 添加模型」从上游清单里挑，也可以手动录入模型 ID。</span>
             </div>
             <button
               type="button"
@@ -110,14 +133,20 @@
           </div>
 
           <!-- 对话模型列表（2026-10-28 用户「喜欢下面的设计」）：与向量 / 重排区同一套
-               「身份 + 状态 + 行内动作」语言，不再用带列头的表格。 -->
+               「身份 + 状态 + 行内动作」语言，不用带列头的表格。
+               2026-11-03：每行补一行参数摘要——行里必须看得见配了什么，
+               否则「配置」仍是一枚通向未知的按钮。 -->
           <div v-if="selected.models.length" class="mpp-models__list">
-            <div v-for="m in selected.models" :key="m.id" class="mpp-model-row">
+            <div v-for="m in selected.models" :key="m.id" class="mpp-model-row" :class="{ 'mpp-model-row--menu': openMenu === m.id }">
               <div class="mpp-model-row__main">
                 <div class="mpp-model-row__idline">
                   <span class="mono mpp-model-row__id" :title="m.id">{{ m.id }}</span>
                   <span v-for="tag in functionTags(m)" :key="tag" class="mpp-fn__chip">{{ tag }}</span>
                 </div>
+                <p class="mpp-model-params" :title="PARAM_SUMMARY_TITLE">
+                  <span v-if="paramSummary(m).length">{{ paramSummary(m).join(' · ') }}</span>
+                  <span v-else class="mpp-model-params__def">参数全部跟随默认</span>
+                </p>
                 <span
                   v-if="testResults[m.id]"
                   class="mpp-rowtest"
@@ -126,19 +155,26 @@
                 >{{ testResults[m.id].ok ? '调用通过' : '调用失败' }}<template v-if="testResults[m.id].latency"> · {{ testResults[m.id].latency }}</template></span>
               </div>
               <div class="mpp-model-row__status">
-                <span v-if="cooldownOf(m)" class="mk-badge mk-badge--warn" :title="`已触发熔断冷却，降级时会被跳过（剩余 ${Math.ceil(cooldownOf(m)!.remainingMs / 1000)}s）`">冷却中</span>
+                <span v-if="cooldownOf(m)" class="mk-badge mk-badge--warn" :title="`调用冷却中，降级时会被跳过（剩余 ${Math.ceil(cooldownOf(m)!.remainingMs / 1000)}s）`">冷却中</span>
                 <span
                   v-else
                   class="mk-badge mk-badge--ok"
-                  title="运行面读数：该模型未处于熔断冷却，调用时会被选中。不代表刚做过连通性测试。"
-                >● 可用</span>
+                  title="当前可被选中调用，不代表刚做过连通性测试。"
+                >● 可调用</span>
                 <span v-if="modelWarnings(m).length" class="mk-badge mk-badge--warn mpp-label" :title="modelWarnings(m).join('\n')">⚠ {{ warningLabel(m) }}</span>
               </div>
               <div class="mpp-rowacts">
-                <!-- 高频两枚平铺（测试 / 编辑）；删除是低频且不可撤销，收进 ⋯ 菜单
+                <!-- 第一枚是正题（配这个模型的生成参数 / 能力 / 限额 / 备用 / 价格），
+                     第二枚是只读的连通性验证；删除低频且不可撤销，收进 ⋯ 菜单
                      ——与公告、账号、虚拟学习者同一套行内操作层级（useRowMenu 同源） -->
+                <button
+                  type="button"
+                  class="mk-link"
+                  :disabled="busy || registry?.readOnly"
+                  title="配置这个模型的生成参数、能力、限额、备用模型与价格"
+                  @click="modelEditor?.openWith({ providerId: selected.id, model: m })"
+                >配置</button>
                 <button type="button" class="mk-link" :disabled="testingId === m.id" @click="testModel(selected, m.id)">{{ testingId === m.id ? '测试中…' : '测试' }}</button>
-                <button type="button" class="mk-link" :disabled="busy || registry?.readOnly" @click="modelEditor?.openWith({ providerId: selected.id, model: m })">编辑</button>
                 <div class="mk-menu">
                   <button
                     type="button"
@@ -164,8 +200,8 @@
           <p v-if="!selected.enabled" class="mpp-empty">
             这条通道当前停用，模型不参与路由。
           </p>
-        </div>
-      </div>
+        </section>
+      </template>
       <MkEmptyState v-else compact title="还没有接入通道" />
     </div>
 
@@ -187,6 +223,7 @@ import { computed, onMounted, ref } from 'vue'
 import { adminApiConfigApi, adminModelProvidersApi } from '@/api/adminApi'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import { RefreshCw } from 'lucide-vue-next'
 import ModelEditorDialog, { type ModelLike } from './ModelEditorDialog.vue'
 import PullModelsDialog from './PullModelsDialog.vue'
 import { inferModelCapabilities } from './modelCapabilityInference'
@@ -233,6 +270,9 @@ const emit = defineEmits<{
   changed: []
   /** 已登记的模型 id（宿主用它算「上游还有几个没登记」的关系句，避免两处各算一遍） */
   registered: [ids: string[]]
+  /** ③ 点「添加模型」时清单还没拉过：请宿主先做 ②（拉取 + 落盘连接，成功后宿主会开勾选浮窗）。
+      这条把原先「静默转手动录入」的死路补成一步可预期的动作。 */
+  fetchUpstream: []
 }>()
 
 const view = ref<ProvidersView | null>(null)
@@ -275,10 +315,45 @@ function providerName(p: ProviderView): string {
 const registeredIds = computed(() => new Set(selected.value?.models.map((m) => m.id) ?? []))
 /** 上游模型清单：平台通道的清单来自连接设置（宿主注入） */
 const fetchableModels = computed(() => props.upstream)
-/** 还能登记进模型清单的模型数：拉取结果里已添加的不再计入（不再按名字筛用途） */
+/** 上游还有几个没挂载：这里不按用途筛，向量 / 重排也算——它们仍会出现在选择器里给出去向提示，
+    只是勾不动。所以这个数（未挂载）与选择器里的「可添加 N 个对话模型」不是同一个数。 */
 const pullableCount = computed(() =>
   fetchableModels.value.filter((name) => !registeredIds.value.has(name)).length
 )
+/** 工具栏上游读数的悬停全文：条数上屏，未挂载数不占宽度（工具行已经四件东西） */
+const upstreamTitle = computed(() => {
+  const total = fetchableModels.value.length
+  if (!total) return ''
+  const rest = pullableCount.value
+  return rest ? `其中 ${rest} 个尚未挂载` : '上游清单里的模型都已挂载'
+})
+/** 添加入口的悬停全文：清单没拉过时它会先把清单拉下来（这条暗规则写在按钮上，不藏） */
+const pullAddTitle = computed(() =>
+  fetchableModels.value.length
+    ? '从已获取的上游清单里勾选模型挂载'
+    : '清单还没拉取：先向上游拉一次，成功后直接进入勾选'
+)
+
+/**
+ * ④ 每行的参数摘要（2026-11-03）：只列这个模型**单独设过**的项——口径与模型编辑弹层
+ * 完全一致（生成参数 / 输出限额 / 备用链 / 价格）。一个都没设的行给一句「参数全部跟随默认」，
+ * 不再让一行空白同时意味「没配」和「没读到」。
+ */
+function paramSummary(m: ModelLike): string[] {
+  const out: string[] = []
+  if (m.defaultThinkingMode === 'enabled') out.push('思考开启')
+  else if (m.defaultThinkingMode === 'disabled') out.push('思考关闭')
+  if (m.defaultReasoningEffort) out.push(`推理强度 ${m.defaultReasoningEffort}`)
+  if (m.defaultResponseFormat === 'json_object') out.push('输出 JSON')
+  if (m.defaultMaxTokens != null) out.push(`默认输出 ${m.defaultMaxTokens}`)
+  if (m.maxOutputTokens != null) out.push(`输出上限 ${m.maxOutputTokens}`)
+  if (m.maxParallelRequests != null) out.push(`并发 ${m.maxParallelRequests}`)
+  if (m.fallbacks.length) out.push(`备用 ${m.fallbacks.length} 个`)
+  if (m.pricing && (m.pricing.inputPer1M != null || m.pricing.outputPer1M != null)) out.push('已配单价')
+  return out
+}
+/** 参数摘要行的悬停全文（静态文案单源，不给每行算一遍） */
+const PARAM_SUMMARY_TITLE = '只列这个模型单独设过的项（未设的项不发给上游，由上游按自身默认处理）'
 
 const fallbackOptions = computed(() =>
   providers.value.flatMap((p) => p.models.map((m) => `${p.id}/${m.id}`))
@@ -416,10 +491,14 @@ async function testModel(p: ProviderView, modelId: string): Promise<void> {
   }
 }
 
-/** 单一添加入口：上游有待选就开选择器，否则直接手动录入。 */
-function openAdd(): void {
-  if (pullableCount.value > 0) openPull()
-  else openManualAdd()
+/** ③ 入口一「从上游清单添加」：清单拉过就开勾选浮窗；没拉过就先把 ② 做掉
+    （宿主拉取 → 落盘连接 → 成功后宿主自己开浮窗）。这条次序写在按钮悬停里，不藏。 */
+function onPullAdd(): void {
+  if (!fetchableModels.value.length) {
+    emit('fetchUpstream')
+    return
+  }
+  openPull()
 }
 
 /** 打开拉取结果浮窗：清单只用于勾选，不再在详情里铺开 */
@@ -484,9 +563,11 @@ defineExpose({ refresh, openPull, openHostPull })
 </script>
 
 <style scoped>
-.mpp-alert { margin: 8px 14px 0; }
+/* 卡片两侧统一 16px 槽（与 .mk-card__head 的 padding 一致）：告警条、说明行、
+   四步正文都从这个槽开始，正文不再顶着卡片边框 */
+.mpp-alert { margin: 8px 16px 0; }
 .mpp-note {
-  margin: 8px 14px 0;
+  margin: 8px 16px 0;
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
 }
@@ -496,17 +577,44 @@ defineExpose({ refresh, openPull, openHostPull })
 .mpp-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 0;
+  gap: 14px;
   border-top: 1px solid var(--mk-line);
+  padding: 14px 16px 18px;
   flex: 1 1 auto;
   min-height: 0;
 }
-.mpp-detail { padding: 12px 16px 16px; min-width: 0; overflow-y: auto; }
+/* 两段式（2026-11-03 用户「把 1/2/3/4 步骤序号和分层彻底删掉，按成熟产品的紧凑两段式重构」）：
+   上=灰底连接条，下=模型列表区；两块之间 14px，卡片内横向一条 16px 槽（与 .mk-card__head 同源）。
+   删掉了「步号 + 步名 + 正文」的四层结构——那四行标题加四个按钮把卡片撑成一张流程表，
+   而真正要看的连接与模型只剩两行。顺序由上下位置表达，不再由步号解释。 */
+.mpp-conn { display: grid; gap: 8px; min-width: 0; }
+/* 连接摘要自带 margin-top:12px（它是宿主面板里的一块），在这里会与 grid gap 叠成 20px。
+   摘要元素由宿主组件渲染，作用域 id 不在本组件上，所以必须走 :deep() 才命中。 */
+.mpp-conn :deep(.ac-conn-summary) { margin-top: 0; }
 
-/* 详情分区：连接 / 模型清单 / 上游，三块同一套标题 + 发丝线节奏（v4：1px 发丝线分隔） */
-.mpp-block { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--mk-line); }
-.mpp-block:first-of-type { margin-top: 10px; }
+.mpp-models { display: grid; gap: 10px; min-width: 0; }
+/* 工具栏一行：左「已挂载模型 (N)」，右侧小灰字读数 + 两枚出口 */
+.mpp-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.mpp-toolbar__title { margin: 0; font-size: var(--mk-fs-body); font-weight: 600; color: var(--mk-ink); }
+.mpp-toolbar__acts { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mpp-toolbar__meta { font-size: var(--mk-fs-micro); color: var(--mk-muted); font-variant-numeric: tabular-nums; }
 /* 卡头左组：通道名 + 类型 + 连接状态（2026-10-27 由详情头并入卡头） */
+/* 卡片右上：重读本机注册表。低频、低强调，只给图标 + 悬停说明 */
+.mpp-regreload {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--mk-radius-sm);
+  background: none;
+  color: var(--mk-muted);
+  cursor: pointer;
+}
+.mpp-regreload:hover { background: var(--mk-surface-2); color: var(--mk-ink); }
+.mpp-regreload:disabled { opacity: 0.55; cursor: not-allowed; }
 .mpp-head__id { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
 /* 通道类型：平台内置 / 自建通道 */
 .mpp-type {
@@ -522,39 +630,40 @@ defineExpose({ refresh, openPull, openHostPull })
   background: color-mix(in srgb, var(--mk-blue) 10%, transparent);
   color: var(--mk-blue);
 }
-.mpp-models { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--mk-line); }
-/* 对话模型区标题行：区名 + 条数在左，添加入口在右（2026-10-28 用户「三个区域各自入口」） */
-.mpp-models__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 8px;
-}
-.mpp-models__title { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
-.mpp-sec { font-size: var(--mk-fs-body); }
-/* 对话模型区标题行的添加入口 */
-.mpp-models__acts { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .mpp-label {
   margin-left: 6px;
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
 }
 /* 对话模型列表：与向量 / 重排配置区同一套「身份 + 状态 + 行内动作」语言，不用列头表格 */
-.mpp-models__list { display: grid; }
+/* 行悬停要通栏到卡片内缘（两侧 16px 槽），但行内文字必须回到槽内——
+   用「列表 -16px + 行 16px」而不是原先的 -10px + 10px：那个数比槽小，
+   悬停底色反而溢出卡片边框 6px（实测行背景 x=255、卡片边框 264）。 */
+.mpp-models__list { display: grid; margin: 0 -16px; }
 .mpp-model-row {
   display: flex;
   align-items: center;
   gap: 14px;
   min-height: 52px;
-  padding: 8px 0;
+  padding: 9px 16px;
   border-bottom: 1px solid var(--mk-line);
+  transition: background 0.12s var(--mk-ease-out);
 }
+/* 悬停整行高亮（2026-11-03 评审）：行内左侧是模型名、右端是「测试 / 编辑 / ⋯」，
+   通栏后中间隔着大片空白，鼠标不跟着走就极易串行点错。分隔线之下再给一条行底。 */
+.mpp-model-row:hover { background: var(--mk-table-row-hover-bg); }
 .mpp-model-row:last-child { border-bottom: 0; }
-.mpp-model-row__main { display: grid; gap: 2px; min-width: 0; flex: 1 1 auto; }
+/* 菜单打开时给所属行留底（2026-11-02 评审）：菜单浮在行与行之间，
+   没有行高亮就分不清它是从哪一行的 ⋯ 打开的 */
+.mpp-model-row--menu { background: var(--mk-table-row-hover-bg); }
+.mpp-model-row__main { display: grid; gap: 3px; min-width: 0; flex: 1 1 auto; }
+/* ④ 每行的参数摘要：比模型名弱一档、比状态徽标更靠近名字——它是这一行的「配了什么」 */
+.mpp-model-params { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.5; overflow-wrap: anywhere; }
+.mpp-model-params__def { color: var(--mk-faint); }
 .mpp-model-row__idline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
-.mpp-model-row__id { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 名称列定宽：能力胶囊因此各行同一起点，不再随模型名长短而参差（2026-11-03 评审）。
+   更长的 id 走省略号 + title，不再把后面的胶囊推着走。 */
+.mpp-model-row__id { width: 240px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mpp-model-row__status { display: inline-flex; align-items: center; gap: 6px; flex: none; }
 .mpp-rowtest { display: block; margin-top: 2px; color: var(--mk-green); font-size: var(--mk-fs-micro); }
 .mpp-rowtest--bad { color: var(--mk-red); }
@@ -565,7 +674,6 @@ defineExpose({ refresh, openPull, openHostPull })
   justify-content: space-between;
   gap: 16px;
   flex-wrap: wrap;
-  margin: 4px 0 12px;
   padding: 12px 14px;
   border: 1px dashed var(--mk-line);
   border-radius: var(--mk-radius-md);
@@ -575,14 +683,11 @@ defineExpose({ refresh, openPull, openHostPull })
 .mpp-setup__text strong { font-size: var(--mk-fs-body); color: var(--mk-ink); }
 .mpp-setup__text span { font-size: var(--mk-fs-micro); line-height: 1.5; color: var(--mk-muted); }
 /* 对话模型区计数：与区名同一基线，弱化处理 */
-.mpp-models__src {
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
-}
+/* 条数跟在「已挂载模型」后面，与工具栏右侧的读数分属两端 */
 .mpp-models__count { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; }
 /* 能力标签：跟在模型 ID 后面；没有额外能力时留空，不写占位文案 */
 .mpp-fn__chip {
-  display: inline-block; margin-right: 4px; margin-bottom: 2px; padding: 1px 7px;
+  display: inline-block; margin-right: 6px; padding: 1px 7px;
   border-radius: 999px; background: var(--mk-blue-bg);
   font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue);
   white-space: nowrap;
