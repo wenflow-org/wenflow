@@ -8,9 +8,9 @@
     <div class="completion-body">
       <div v-if="advisory?.shouldSuggest" class="completion-section advisory-section" :class="`advisory-section--${advisory.priority}`">
         <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><MagicStick /></span>{{ advisory.ui.title }}</h4>
-        <p class="section-content">{{ advisory.ui.body }}</p>
+        <p class="section-content">{{ advisoryBody }}</p>
         <p v-if="advisory.attribution?.reason" class="section-attribution">
-          <span class="attribution-tag">主要因为</span>{{ advisory.attribution.reason }}
+          <span class="attribution-tag">主要原因</span>{{ advisory.attribution.reason }}
         </p>
         <p class="section-hint">确认后会调整后续学习安排，已完成的内容不会改变。</p>
         <div v-if="advisoryKept" class="section-hint">你已选择保持原计划，这条建议不会再调整后续安排。</div>
@@ -194,6 +194,14 @@ const summary = computed(() => props.wrapup.summary);
 const evaluation = computed(() => props.wrapup.evaluation);
 const stateUpdate = computed(() => props.wrapup.stateUpdate || null);
 const advisory = computed(() => props.advisory || null);
+/**
+ * 建议正文（2026-11-03）：旧模板会在末尾拖一句与按钮上方提示同义的安抚句
+ * （「该调整只会调整后续阶段的课程安排，不会覆盖/不影响你已完成的内容。」），
+ * 已存库的建议仍带着它——渲染时剥掉，避免同义重复和孤行；模板侧已不再生成这句。
+ */
+const advisoryBody = computed(() => (advisory.value?.ui.body || '')
+  .replace(/该调整只会调整后续阶段的课程安排，(?:不会覆盖|不影响)你已完成的内容。/g, '')
+  .trim());
 /** 学习者已明确「保持原计划」：建议卡转已决策态，不再给可重复点击的按钮 */
 const advisoryKept = computed(() => advisory.value?.learnerResponse?.action === 'keep');
 const busy = computed(() => props.busy === true);

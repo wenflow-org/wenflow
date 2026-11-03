@@ -1,6 +1,6 @@
 /**
  * CompletionCard 的「路径调整建议」归因注记
- * 背景：阈值召回给出建议后，用户看模板句不知道该不该点确认；归因层补一句"主要因为…"。
+ * 背景：阈值召回给出建议后，用户看模板句不知道该不该点确认；归因层补一句"主要原因…"。
  * 约束：归因缺失时不渲染（不能出现空标签）。
  */
 import { describe, expect, it } from 'vitest';
@@ -73,7 +73,7 @@ const baseAdvisory = {
 };
 
 describe('CompletionCard 归因注记', () => {
-  it('有归因时渲染「主要因为 + 一句话」', () => {
+  it('有归因时渲染「主要原因 + 一句话」', () => {
     const w = mountCard({
       ...baseAdvisory,
       attribution: {
@@ -88,13 +88,25 @@ describe('CompletionCard 归因注记', () => {
     });
     const note = w.find('.section-attribution');
     expect(note.exists()).toBe(true);
-    expect(note.text()).toContain('主要因为');
+    expect(note.text()).toContain('主要原因');
+    expect(note.text()).not.toContain('主要因为');
     expect(note.text()).toContain('连着两次没答对');
   });
 
   it('没有归因时不渲染该行（避免空标签）', () => {
     const w = mountCard({ ...baseAdvisory, attribution: null });
     expect(w.find('.section-attribution').exists()).toBe(false);
+  });
+
+
+  it('建议正文剥掉与按钮上方提示同义的安抚尾巴（旧存库数据仍带着它）', () => {
+    const withTail = mountCard({
+      ...baseAdvisory,
+      ui: { ...baseAdvisory.ui, body: '系统检测到 定位判别链断点 这些点仍会影响后续推进。建议先确认是否调整后续阶段安排。该调整只会调整后续阶段的课程安排，不会覆盖你已完成的内容。' },
+    });
+    const text = withTail.find('.advisory-section .section-content').text();
+    expect(text).not.toContain('该调整只会');
+    expect(text.endsWith('及后续阶段安排。') || text.endsWith('后续阶段安排。')).toBe(true);
   });
 
   it('不建议调整时整块不渲染', () => {
