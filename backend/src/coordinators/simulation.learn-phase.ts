@@ -1134,6 +1134,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
         await ctx.assertCurrentSessionLeaseOwned(sessionId);
         const aiResult = await ctx.runTeachingTurnWithStepRetry({
           sessionId,
+          userId: session.userId,
           teachingSessionId,
           learnerMessage: virtualReplyResult.userVisible,
           teachingRevision,
