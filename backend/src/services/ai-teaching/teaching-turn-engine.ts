@@ -458,8 +458,32 @@ export async function processStudentMessage(
     }
   }
 
+  // 断线续讲（resume-continue）本轮无学生新输入，session-resumed 是驱动"自然接续"的唯一信号。
+  // 该事件必须在 buildTeachingTurnInput **之前**并入本轮可见事件——否则模型只从上一轮持久化的
+  // classroomEventHistory 派生 recentEvents，本轮提示词里根本不存在（issue #165）；回合结束后再
+  // 以同一对象 push 落库，保证本轮所见与下一轮历史逐字节一致。
+  const resumedEvent = isResumeContinue
+    ? buildClassroomEvent('session-resumed', '学生刚刚恢复本课堂会话，无新输入', {
+        instruction: '自然地接续上一轮的教学推进：先一句话承接上次进度，再继续当前焦点知识点。不要询问"你想做什么/从哪继续"，不要重新自我介绍或重复开场。',
+      })
+    : null;
+
   const turnInput = await buildTeachingTurnInput({
     ...session,
+    // 断线续讲：把 session-resumed 追加进本轮可见事件（非续讲回合不带该键，行为不变）。
+    ...(resumedEvent
+      ? {
+          teachingState: {
+            ...previousTeachingState,
+            classroomEventHistory: [
+              ...(Array.isArray(previousTeachingState.classroomEventHistory)
+                ? previousTeachingState.classroomEventHistory
+                : []),
+              resumedEvent,
+            ],
+          },
+        }
+      : {}),
     // B2/Q14：喂给模型前对学习者消息做输入围栏（正常文本原样；疑似注入被打标为不可信数据）。
     // 落库消息保持原文（见上方 updatedMessages），因此这里传的是围栏后的浅拷贝。
     messages: fenceLearnerMessagesForModel(updatedMessages),
@@ -941,11 +965,9 @@ export async function processStudentMessage(
     }));
   }
 
-  // 恢复续讲信号：teaching-turn 看到该事件即知本轮无学生新输入，需自然接续上一轮推进
-  if (isResumeContinue) {
-    classroomEvents.push(buildClassroomEvent('session-resumed', '学生刚刚恢复本课堂会话，无新输入', {
-      instruction: '自然地接续上一轮的教学推进：先一句话承接上次进度，再继续当前焦点知识点。不要询问"你想做什么/从哪继续"，不要重新自我介绍或重复开场。',
-    }));
+  // 恢复续讲信号：与 buildTeachingTurnInput 前注入的是同一对象（本轮已可见），此处并入落库历史
+  if (resumedEvent) {
+    classroomEvents.push(resumedEvent);
   }
 
   const stageHistory = Array.isArray(previousTeachingState.stageHistory)
