@@ -244,14 +244,16 @@
               </button>
             </div>
             <!-- 破坏性出口降级为角落小字链接：不与主行动并排抢点击（确认弹窗仍兜底，2026-10-09 用户反馈）。
-                 「先看看」已删：卡片非模态，历史与快选在其后本来可见，不点主按钮的自然状态就是先看看 -->
+                 「先看看」已删：卡片非模态，历史与快选在其后本来可见，不点主按钮的自然状态就是先看看。
+                 「（清空当前进度）」已删（2026-11-03 次要文字扫查）：后果由确认弹窗完整承载，
+                 ⋯菜单的 small 是同一事实的第二遍（用于区分并列项），角落链接不再第三遍陈述 -->
             <button
               v-if="openingScene.kind === 'resume'"
               type="button"
               class="oscene__restart"
               :disabled="typing || actionBusy"
               @click="restart"
-            >重新开始（清空当前进度）</button>
+            >重新开始</button>
         </div>
 
         <div ref="scrollEl" class="tutor__scroll" @scroll="updateNearBottom">
