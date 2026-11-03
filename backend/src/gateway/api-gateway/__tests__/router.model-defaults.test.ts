@@ -13,6 +13,9 @@ const userProviderFindUnique = jest.fn()
 const agentConfigFindFirst = jest.fn()
 const skillConfigFindFirst = jest.fn()
 const platformConfigFindFirst = jest.fn()
+/** #177：目录热重载后归一化平台默认会读/写 platform_api_configs */
+const platformConfigFindUnique = jest.fn()
+const platformConfigUpdate = jest.fn()
 
 jest.mock('../../../config/database', () => ({
   __esModule: true,
@@ -27,7 +30,11 @@ jest.mock('../../../config/system-database', () => ({
   default: {
     agent_model_configs: { findFirst: agentConfigFindFirst },
     skill_model_configs: { findFirst: skillConfigFindFirst },
-    platform_api_configs: { findFirst: platformConfigFindFirst }
+    platform_api_configs: {
+      findFirst: platformConfigFindFirst,
+      findUnique: platformConfigFindUnique,
+      update: platformConfigUpdate
+    }
   }
 }))
 
@@ -87,6 +94,9 @@ describe('模型级生成参数优先级', () => {
       defaultResponseFormat: 'none'
     })
     skillConfigFindFirst.mockResolvedValue(null)
+    // #177：常态没有目录变化 → 归一化不会被调用；给个空行防未 stub
+    platformConfigFindUnique.mockResolvedValue(null)
+    platformConfigUpdate.mockResolvedValue(undefined)
   })
 
   // 路由在 resolve 时按 env 里的文件热重载；每个用例前重建一次不需要，文件没变。
@@ -122,5 +132,67 @@ describe('模型级生成参数优先级', () => {
     const route = await new APIRouter().resolve({ agentId: 'a', skillId: 's-enabled' })
     expect(route.thinkingMode).toBe('enabled')
     expect(route.responseFormat).toBe('json_object')
+  })
+
+  /* #177：平台 DB 未配默认时落到 env AI_MODEL 兜底——目录外的 env 值在运行时无可用渠道，
+     不得生效，应回落文件声明默认（启动/热重载归一化只覆盖 DB，env 只能在取值点拦）。 */
+  it('#177：平台默认未配 + env AI_MODEL 目录外 → 回落文件声明默认', async () => {
+    platformConfigFindFirst.mockResolvedValue({
+      apiUrl: 'https://platform.example/v1',
+      apiKey: 'platform-key',
+      defaultModel: '',
+      defaultReasoningModel: '',
+      defaultTemperature: 0.7,
+      defaultMaxTokens: 2000,
+      defaultThinkingMode: 'default',
+      defaultReasoningEffort: 'default',
+      defaultResponseFormat: 'none'
+    })
+    const previous = process.env.AI_MODEL
+    process.env.AI_MODEL = 'out-of-catalog-judge'
+    try {
+      const { APIRouter } = await import('../router')
+      const route = await new APIRouter().resolve({ agentId: 'a' })
+      expect(route.model).toBe('m-model')
+    } finally {
+      if (previous === undefined) delete process.env.AI_MODEL
+      else process.env.AI_MODEL = previous
+    }
+  })
+
+  /* #177：③ 直接手改 llm-providers.json（绕过管理台写入门禁）使目录收缩后，热重载即在解析前
+     按新目录归一化平台默认——目录外默认不再在运行期生效。 */
+  it('#177：手改目录收缩后热重载 → 立即归一化平台默认', async () => {
+    const { APIRouter } = await import('../router')
+    platformConfigFindUnique.mockResolvedValue({
+      defaultModel: 'm-model',
+      defaultReasoningModel: 'm-model',
+      defaultEvaluationModel: 'm-model',
+      chatModels: null,
+      reasoningModels: null,
+      lightModels: null
+    })
+    // 手改文件：把 m-model 从目录里删掉，只剩 m-plain（mtime 单调前推，确保热重载识别）。
+    // 用 try/finally 还原原目录，避免污染后续用例（不再依赖“本用例是文件最后一个”）。
+    const original = fs.readFileSync(tempConfig, 'utf-8')
+    try {
+      fs.writeFileSync(tempConfig, JSON.stringify({
+        providers: {
+          platform: { name: '平台', enabled: true, recommended: true, models: { 'm-plain': { tier: 'chat' } } }
+        },
+        aliases: { chat: ['m-plain'], reasoning: ['m-plain'] },
+        defaults: { chat: 'm-plain', reasoning: 'm-plain' }
+      }), 'utf-8')
+      fs.utimesSync(tempConfig, new Date(), new Date(Date.now() + 3_600_000))
+
+      await new APIRouter().resolve({ agentId: 'a' })
+
+      expect(platformConfigUpdate).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({ defaultModel: 'm-plain' })
+      }))
+    } finally {
+      fs.writeFileSync(tempConfig, original, 'utf-8')
+      fs.utimesSync(tempConfig, new Date(), new Date(Date.now() + 7_200_000))
+    }
   })
 })

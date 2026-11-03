@@ -18,7 +18,7 @@
  */
 
 import { logger } from '../utils/logger';
-import { getModelDefaults, resolvesToRegisteredModel } from '../config/models.config';
+import { getModelDefaults, getProviderCatalog, resolvesToRegisteredModel } from '../config/models.config';
 
 interface SkillModelSeedEntry {
   skillId: string;
@@ -162,11 +162,24 @@ function parseAliasMembers(raw: unknown): string[] {
 }
 
 /**
+ * 目录内首个可用模型（优先 tier 命中，否则退回第一个）——文件 `defaults` 自身也可能被手改到
+ * 目录外（`parseLlmProvidersConfig` 只校验结构、不校验 defaults 是否注册），归一化目标必须是
+ * 目录内模型，否则会把 DB 默认改成一个同样无可用渠道的 id。
+ */
+function firstRegisteredModelId(tier: 'chat' | 'reasoning'): string | null {
+  const models = getProviderCatalog().filter((p) => p.enabled).flatMap((p) => p.models);
+  return (models.find((m) => m.tier === tier) ?? models[0])?.id ?? null;
+}
+
+/**
  * #177：平台三个默认模型字段（chat/reasoning/evaluation）必须能解析到 llm-providers.json 注册目录。
  * 解析不到（值非空、且不是已注册别名/裸 id/限定式引用）时按 File-as-Truth 归一化回目录声明的
  * 默认（{chat, reasoning}）并告警——这是消除故障本身（否则这些模型会被当作字面 id 发给上游，
  * 无可用渠道 → transport 失败 → skill 静默规则兜底）。空值不算漂移（交给 env/下游兜底）。
  * 只改「确实解析不到目录」的字段，不覆盖合法配置。
+ *
+ * 运行期同样会调用本函数：目录热重载（手改 llm-providers.json、供应商删/停用）后由
+ * api-gateway 在解析前重跑，见 router.ts resolve()。
  */
 export async function normalizePlatformModelDefaults(systemPrisma: any): Promise<number> {
   try {
@@ -189,11 +202,30 @@ export async function normalizePlatformModelDefaults(systemPrisma: any): Promise
       light: parseAliasMembers(platform.lightModels),
     };
     const { chat, reasoning } = getModelDefaults();
+    const chatTarget = resolvesToRegisteredModel(chat, overrides)
+      ? chat
+      : (firstRegisteredModelId('chat') ?? chat);
+    const reasoningTarget = resolvesToRegisteredModel(reasoning, overrides)
+      ? reasoning
+      : (firstRegisteredModelId('reasoning') ?? chatTarget);
+
+    // #177：env 兜底（DB 未配默认时的最后来源）指向目录外时启动期告警；运行期由 api-gateway
+    // 护栏兜住（目录外 env 值不生效，回落文件默认，见 router.guardEnvFallbackModel）。
+    for (const [envKey, tier] of [['AI_MODEL', 'chat'], ['AI_MODEL_REASONING', 'reasoning']] as const) {
+      const value = String(process.env[envKey] || '').trim();
+      if (value && !resolvesToRegisteredModel(value, overrides)) {
+        logger.warn('[seed-skill-model] env 默认模型不在已注册目录（运行期会回落文件默认）', {
+          envKey,
+          value,
+          tier,
+        });
+      }
+    }
 
     const fixes: Record<string, string> = {};
-    if (!resolvesToRegisteredModel(platform.defaultModel, overrides)) fixes.defaultModel = chat;
-    if (!resolvesToRegisteredModel(platform.defaultReasoningModel, overrides)) fixes.defaultReasoningModel = reasoning;
-    if (!resolvesToRegisteredModel(platform.defaultEvaluationModel, overrides)) fixes.defaultEvaluationModel = chat;
+    if (!resolvesToRegisteredModel(platform.defaultModel, overrides)) fixes.defaultModel = chatTarget;
+    if (!resolvesToRegisteredModel(platform.defaultReasoningModel, overrides)) fixes.defaultReasoningModel = reasoningTarget;
+    if (!resolvesToRegisteredModel(platform.defaultEvaluationModel, overrides)) fixes.defaultEvaluationModel = chatTarget;
     if (!Object.keys(fixes).length) return 0;
 
     await systemPrisma.platform_api_configs.update({

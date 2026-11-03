@@ -348,7 +348,8 @@ export async function executeSkillHandler(
         skillId === 'mcp-tool'
           ? error?.code || 'MCP_TOOL_EXECUTION_FAILED'
           : error?.message || String(error),
-        error?.code
+        error?.code,
+        typeof error?.category === 'string' ? error.category : undefined
       );
       logger.error('[skill-executor] 执行失败', {
         skillId,
@@ -430,7 +431,8 @@ async function recordSkillSpan(
   durationMs: number,
   success: boolean,
   errorMessage?: string,
-  errorCode?: string
+  errorCode?: string,
+  errorCategory?: string
 ): Promise<void> {
   try {
     const inputStr = JSON.stringify(summarizeSkillLogPayload(skillId, input, 'input')).slice(0, 1000);
@@ -451,6 +453,9 @@ async function recordSkillSpan(
       durationMs,
       error: success ? null : (errorMessage || 'SKILL_EXECUTION_FAILED'),
       errorCode: success ? null : (errorCode || 'SKILL_EXECUTION_FAILED'),
+      // #177：skill 层行也带上真实失败类别（网关错误对象自带 category）——成功率口径据此判上游失败，
+      // 不再靠 errorCode 猜；旧行无 category 时口径按 code 回退（见 skill-runtime-contract.service）。
+      errorCategory: success ? null : (errorCategory || null),
       executionLayer: 'skill',
       actorType: 'skill',
       actorId: skillId,

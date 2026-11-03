@@ -216,6 +216,64 @@ describe('错误映射', () => {
     await handlerFor('delete', '/:id/models/:modelId')({ params: { id: 'custom', modelId: 'cm-1' }, body: {} }, res);
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
   });
+
+  /* #177：供应商级门禁——删/停整条通道会让它的全部模型一起离开运行时目录，
+     与删单模型同一根因，单模型门禁挡不住。 */
+  it('删除仍被平台默认引用的供应商 → 400（整条通道的模型一起消失）', async () => {
+    mockGetConfig.mockResolvedValue({
+      apiUrl: 'https://platform.example.com/v1',
+      apiKey: 'platform-key',
+      defaultModel: 'cm-1',
+      defaultReasoningModel: 'm-chat',
+      defaultEvaluationModel: 'm-chat',
+      chatModels: [],
+      reasoningModels: [],
+      lightModels: []
+    });
+    const res = createRes();
+    await handlerFor('delete', '/:id')({ params: { id: 'custom' }, body: {} }, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      code: 'invalid',
+      error: expect.stringContaining('供应商「custom」')
+    }));
+    const file = JSON.parse(fs.readFileSync(tempConfig, 'utf-8'));
+    expect(file.providers.custom).toBeDefined();
+  });
+
+  it('停用仍被走平台通道 skill 绑定的供应商 → 400', async () => {
+    mockSkillBindings.push({ skillId: 'goal-conversation', model: 'cm-1', endpoint: null });
+    const res = createRes();
+    await handlerFor('patch', '/:id')({ params: { id: 'custom' }, body: { enabled: false } }, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      error: expect.stringContaining('goal-conversation')
+    }));
+    const file = JSON.parse(fs.readFileSync(tempConfig, 'utf-8'));
+    expect(file.providers.custom.enabled).not.toBe(false);
+  });
+
+  it('未被运行期引用的供应商停用照常放行', async () => {
+    const res = createRes();
+    await handlerFor('patch', '/:id')({ params: { id: 'custom' }, body: { enabled: false } }, res);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+  });
+
+  it('重命名（不改启用位）不触发供应商级门禁', async () => {
+    mockGetConfig.mockResolvedValue({
+      apiUrl: 'https://platform.example.com/v1',
+      apiKey: 'platform-key',
+      defaultModel: 'cm-1',
+      defaultReasoningModel: 'm-chat',
+      defaultEvaluationModel: 'm-chat',
+      chatModels: [],
+      reasoningModels: [],
+      lightModels: []
+    });
+    const res = createRes();
+    await handlerFor('patch', '/:id')({ params: { id: 'custom' }, body: { name: '自建通道 2' } }, res);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+  });
 });
 
 describe('真实调用端点', () => {

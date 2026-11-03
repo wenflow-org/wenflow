@@ -292,4 +292,27 @@ describe('skill-runtime-contract.service', () => {
     expect(effective.reliability.maxLogicalRetries).toBe(1)
     expect(effective.reliability.logicalRetrySource).toBe('skill-override')
   })
+
+  /* #177：展示用成功率口径剔除上游/基础设施失败与调用方取消（与 executor 同口径）。 */
+  it('成功率口径带上游失败剔除条件：prompt groupBy where + agent 聚合 SQL', async () => {
+    mockPromptGroupBy.mockResolvedValueOnce([]).mockResolvedValueOnce([])
+    aggRows = []
+
+    await getUnifiedSkillStats(['label-generator'], 'all')
+
+    // prompt_call_logs：where 带 NOT(失败 且 errorCode 属上游码/调用方取消)
+    const promptWhere = JSON.stringify(mockPromptGroupBy.mock.calls[0][0].where)
+    expect(promptWhere).toContain('RETRY_BUDGET_EXHAUSTED')
+    expect(promptWhere).toContain('CALLER_ABORTED')
+
+    // agent_call_logs：前缀聚合 SQL 内联同口径剔除谓词——按 category 判（单一真源），
+    // errorCode 分支仅在 errorCategory 为空（skill 层旧行）时回退，避免把 category='protocol'
+    // 的真实失败静默化（TRUNCATED_EMPTY_OUTPUT 反复重试 → RETRY_BUDGET_EXHAUSTED）。
+    const aggCall = mockAgentQueryRaw.mock.calls.find((c: any) => String(c[0]?.join?.('?')).includes('AS "n"'))
+    const aggSql = JSON.stringify(aggCall?.slice(1))
+    expect(aggSql).toContain('errorCategory')
+    expect(aggSql).toContain('IS NULL')
+    expect(aggSql).toContain('provider_http')
+    expect(aggSql).toContain('RETRY_BUDGET_EXHAUSTED')
+  })
 })

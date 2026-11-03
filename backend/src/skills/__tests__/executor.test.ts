@@ -138,6 +138,8 @@ describe('统一 Skill Executor', () => {
     // span 照记（观测不丢），但成功率不被上游故障拉低
     expect(logCreate).toHaveBeenCalled()
     expect(skillUpdate).not.toHaveBeenCalled()
+    // #177：skill 层 span 也带上真实失败类别（供成功率口径按 category 判，而非猜 errorCode）
+    expect(logCreate.mock.calls.at(-1)[0].data.errorCategory).toBe('provider_http')
   })
 
   it('quality 与 cached 双向桥接：legacy cached 派生 quality', async () => {

@@ -259,8 +259,14 @@ export function buildPathSandboxPool(
     path: {
       normalizedInput: normalizedInputV1,
       replan: null, // goal→path 生成场景无 replan（replan 走 learn 链）
-      previousMilestone: null, // stage-designer 通道，由 stage 链单独校验
-      // 动态规划（2026-10-17）：上一阶段真实学习信号，stage-designer 通道由 stage 链注入与校验
+      // stage-designer 通道：真实值由 stage-enrichment 从 stageDesignerInput 手工注入，
+      // 不经本沙盘池，也**没有** stage 链的运行时对账（运行期对账 checkAgentSandboxRefs*
+      // 全仓只有 4 个调用点：path-planning / goal-conversation / teaching-turn / simulation）。
+      // stage-designer / kc-mapper 声明的这些 ref 只由**静态声明门禁**覆盖
+      // （validateSandboxPath + checkInputHandoffs，对沙盘路径注册表做校验），与本池无关。
+      previousMilestone: null,
+      // 动态规划（2026-10-17）：上一阶段真实学习信号，同为 stage-enrichment 手工注入，
+      // 亦仅由上述静态声明门禁覆盖，无 stage 链运行期对账。
       previousStageOutcome: null,
     },
   };
