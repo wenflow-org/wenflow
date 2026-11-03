@@ -46,6 +46,7 @@ fields:
   - fieldId: knowledgeStateSummary
     promptRole: derived-presentation
     valueType: string
+    persistKey: knowledgeMemory.globalBackground.knowledgeStateSummary
     description: 本节课后知识状态自然语言摘要（LBM 式，供学习表现预测器与教学决策读取）
 
   # === skill:learner-model 聚合产出（确定性 snapshot 结构） ===

@@ -432,6 +432,9 @@ export class LearnerKnowledgeMemoryService {
     const enrichedReusableFoundations: string[] = [];
     const enrichedBlockedFoundations: string[] = [];
     const enrichedTransferSignals: LearnerTransferSignal[] = [];
+    // issue #194：knowledgeStateSummary 曾只写进 learner_evidence、从不进快照。
+    // 证据按 occurredAt desc 取，首个非空摘要即最新一次课后状态摘要。
+    let enrichedKnowledgeStateSummary: string | undefined;
 
     for (const evidence of allPersistedEvidence) {
       const evidencePathId = evidence.pathId ?? undefined;
@@ -443,6 +446,11 @@ export class LearnerKnowledgeMemoryService {
         if (Array.isArray(payload.reusableFoundations)) enrichedReusableFoundations.push(...payload.reusableFoundations);
         if (Array.isArray(payload.blockedFoundations)) enrichedBlockedFoundations.push(...payload.blockedFoundations);
         if (Array.isArray(payload.transferSignals)) enrichedTransferSignals.push(...payload.transferSignals);
+        if (!enrichedKnowledgeStateSummary
+          && typeof payload.knowledgeStateSummary === 'string'
+          && payload.knowledgeStateSummary.trim()) {
+          enrichedKnowledgeStateSummary = payload.knowledgeStateSummary.trim();
+        }
         continue;
       }
       if (evidence.evidenceType === 'dialogue-concepts-extracted') {
@@ -1203,6 +1211,7 @@ export class LearnerKnowledgeMemoryService {
         ...enrichedBlockedFoundations
       ]).slice(0, 20),
       transferSignals,
+      ...(enrichedKnowledgeStateSummary ? { knowledgeStateSummary: enrichedKnowledgeStateSummary } : {}),
     };
 
     return {

@@ -268,6 +268,9 @@ export interface LearnerGlobalBackgroundKnowledge {
   reusableFoundations: string[];
   blockedFoundations: string[];
   transferSignals: LearnerTransferSignal[];
+  /** 最近一次课后知识状态自然语言摘要（lesson-knowledge-enricher 产出，供预测器/教学决策读取）；
+   *  无 enrichment 证据时不出现（issue #194：此前声明为 profile 产出却从未进快照）。 */
+  knowledgeStateSummary?: string;
 }
 
 export interface LearnerPathKnowledgeMemory {

@@ -440,6 +440,9 @@ export async function buildTeachingScenarioContext(
   // - 失败/超时 → null，教学照常
   context.learnerPrediction = await buildLearnerPrediction(userId, path.id, task.id, milestone?.id, previousSession?.id, {
     fatigueSignal: learningState ? classifyLoad({ ktl: learningState.ktl, lf: learningState.lf }).fatigueRisk : undefined,
+    // issue #194：摘要取自本次教学上下文已加载的画像快照，与 conceptLedger 等同一数据源；
+    // 预测器不再自己查 learner_evidence（旧行为见 fetchLatestKnowledgeSummary 已删除）。
+    knowledgeStateSummary: learnerSnapshot.knowledgeMemory.globalBackground.knowledgeStateSummary,
     taskContext: {
       title: task.title,
       knowledgeType: (task as any).knowledgeType,
@@ -490,6 +493,11 @@ export async function buildLearnerPrediction(
   opts: {
     fatigueSignal?: 'low' | 'medium' | 'high';
     taskContext: { title: string; knowledgeType?: string; learningObjectives?: string[] };
+    /**
+     * 最近一次课后知识状态摘要（issue #194）：由调用方从**画像快照**
+     * （knowledgeMemory.globalBackground.knowledgeStateSummary）取，不再由本函数直查 learner_evidence。
+     */
+    knowledgeStateSummary?: string;
   },
 ): Promise<LearnerPredictionContext | null> {
   const cooldownKey = `${userId}:${taskId}`;
@@ -526,8 +534,9 @@ export async function buildLearnerPrediction(
     if (coolingUntil > Date.now()) return null;
     if (coolingUntil) predictionFailureCooldown.delete(cooldownKey);
 
-    // 2) 无记录 → LLM 预测（读取最近知识状态摘要）+ 超时保护
-    const summary = await fetchLatestKnowledgeSummary(userId);
+    // 2) 无记录 → LLM 预测（读取画像快照里的最近知识状态摘要）+ 超时保护
+    // issue #194：摘要来自画像（快照 globalBackground），不再绕过画像直查 learner_evidence。
+    const summary = opts.knowledgeStateSummary?.trim() || undefined;
     const controller = new AbortController();
     llmController = controller;
     // issue #182 ④：executor 以 options.abortSignal 覆盖请求级信号（skills/executor.ts:241-242），
@@ -617,22 +626,6 @@ function safeParseStringArray(raw: string | null | undefined): string[] {
   } catch {
     return [];
   }
-}
-
-/** 从最近一次 session-knowledge-distilled 证据中读取知识状态摘要 */
-async function fetchLatestKnowledgeSummary(userId: string): Promise<string | undefined> {
-  try {
-    const row = await prisma.learner_evidence.findFirst({
-      where: { userId, evidenceType: 'session-knowledge-distilled' },
-      orderBy: { occurredAt: 'desc' },
-      select: { payload: true },
-    });
-    if (!row) return undefined;
-    const parsed = JSON.parse(row.payload);
-    return typeof parsed.knowledgeStateSummary === 'string' && parsed.knowledgeStateSummary.trim()
-      ? parsed.knowledgeStateSummary.trim()
-      : undefined;
-  } catch { return undefined; }
 }
 
 /** 行为投影器（LLM-KT Behavioral Dynamics Projector）：近期回合级行为动态压缩 */
