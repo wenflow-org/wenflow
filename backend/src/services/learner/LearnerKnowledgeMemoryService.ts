@@ -606,6 +606,38 @@ export class LearnerKnowledgeMemoryService {
       }
     }
 
+    // #195（复核补修）：把「同一课双通道」的去重从**原始名字级**提到**概念身份级**。
+    // 结构看板名与可靠摘要的知识点名先经注册表解析 canonical 身份（只读，createIfMissing:false，
+    // 读侧绝不创建概念），名字不同但归并到同一 conceptId 的同一概念据此在会话内只计一次；
+    // 解析不到身份时退回原有名字键比较（旧行为逐字兼容）。批量解析一次，避免逐条往返。
+    const sessionConceptNames: string[] = [];
+    for (const session of allSessions) {
+      const rawKnowledgeState = parseJsonSafe<Array<{ name?: string }>>(session.knowledgeState, []);
+      for (const point of rawKnowledgeState) if (point?.name) sessionConceptNames.push(point.name);
+      const rawWrapup = parseJsonSafe<any>(session.wrapup, null);
+      // 与下方 `summaryIsReliable` 同口径：降级摘要不进掌握证据，其知识点名也无需解析。
+      if (rawWrapup?.status !== 'summary-only' && rawWrapup?.sources?.summary !== 'fallback') {
+        const items = rawWrapup?.summary?.knowledgeItems;
+        if (Array.isArray(items)) for (const item of items) if (item?.name) sessionConceptNames.push(item.name);
+      }
+    }
+    const sessionIdentityByNorm = new Map<string, string>();
+    if (sessionConceptNames.length > 0) {
+      try {
+        const resolved = await conceptRegistryService.resolveMany(input.userId, sessionConceptNames, { createIfMissing: false });
+        for (const [norm, conceptId] of resolved) sessionIdentityByNorm.set(norm, conceptId);
+      } catch (error) {
+        logger.warn('[learner-knowledge] 会话概念身份解析失败（只读，best-effort）', {
+          userId: input.userId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    const sessionIdentityOf = (name: string | null | undefined): string | undefined => {
+      const key = normalizeConceptKeyCanonical(name);
+      return key ? sessionIdentityByNorm.get(key) : undefined;
+    };
+
     for (const session of allSessions) {
       const sessionPathId = session.learningPathId ?? undefined;
       const isCurrentPath = sessionPathId === path?.id;
@@ -633,12 +665,17 @@ export class LearnerKnowledgeMemoryService {
       // 名称/状态/progress」——二者同名时本会各推一条信号、等权落进同一个 mastery 均值（一课双计、
       // 且摘要受 ≤5 项预算截断会让同名概念权重不一致）。这里以结构化信号为准跳过同名项；
       // 摘要独有的概念在下方的「幽灵概念」判定里另行排除出掌握均值。
+      // #195（复核补修）：去重键除名字外再并一层 canonical 身份（见上 `sessionIdentityOf`），
+      // 覆盖「模型把看板概念改写成别名/不同写法」的名字键失配情形。
       const structuredConceptKeys = new Set<string>();
+      const structuredConceptIds = new Set<string>();
 
       for (const point of knowledgeState) {
         const conceptKey = normalizeConceptKey(point.name);
         if (!conceptKey) continue;
         structuredConceptKeys.add(conceptKey);
+        const structuredIdentity = sessionIdentityOf(point.name);
+        if (structuredIdentity) structuredConceptIds.add(structuredIdentity);
         const { score, stability } = signalFromProgress(point.progress, point.status);
         const current = conceptSignals.get(conceptKey) || [];
         current.push({
@@ -677,6 +714,9 @@ export class LearnerKnowledgeMemoryService {
           if (!conceptKey) continue;
           // #195：本课已在结构化看板里记过的概念不再由摘要重复计一次。
           if (structuredConceptKeys.has(conceptKey)) continue;
+          // #195（复核补修）：名字不同但 canonical 身份与看板某项相同（别名/改写）仍算同一概念。
+          const itemIdentity = sessionIdentityOf(item?.name);
+          if (itemIdentity && structuredConceptIds.has(itemIdentity)) continue;
           const score = typeof item.progress === 'number' ? clamp(item.progress / 100, 0, 1) : 0.5;
           const status = item.status === 'mastered' || item.status === 'review' || item.status === 'learning'
             ? item.status
@@ -786,17 +826,15 @@ export class LearnerKnowledgeMemoryService {
       // 过滤的「只认接触过且证据为负」一致）。只有标签信号的概念 = 未评估 → pending。
       const evidence = allSignals.filter((signal) => signal.sourceType !== 'task-label');
       // #195：仅由 LLM 摘要（derived）、无任何结构化看板 / 记忆痕迹接触证据的概念 = 幽灵概念。
-      // session-wrapup 的 knowledgeItems 是模型对课堂的判断，可能造出看板里不存在的知识点；
-      // 这类概念不得混入掌握均值（issue 建议的独立标记）——与「只有 task-label 信号 = 未评估」
-      // 同口径：masteryScore=0 / status=pending，仅保留 sourceType='derived' 的身份，不进
-      // mastered / struggling / fragile 名单。有真实接触证据（session-knowledge / memory-trace）
-      // 在场时，可靠摘要仍按 #70 P-45 作为补充证据参与（沿用原口径，不改 task-label/memory-trace）。
+      // session-wrapup 的 knowledgeItems 是模型对课堂的判断，可能造出看板里不存在的知识点。
+      // 复核补修：这类概念**不再对外暴露 state**（下方 globalConceptStates / conceptStates 过滤
+      // 掉 isGhost 行），因此既不入掌握均值、也不进 mastered / struggling / fragile 名单，
+      // 更不会被任务级 confidence 计入（taskMastery 从 conceptStates 建倒排）。
+      // 有真实接触证据（session-knowledge / memory-trace）在场时，可靠摘要仍按 #70 P-45
+      // 作为补充证据参与（沿用原口径，不改 task-label/memory-trace 的既有行为）。
       const isDerivedOnly = evidence.length > 0
         && evidence.every((signal) => signal.sourceType === 'derived');
       const masteryEvidence = isDerivedOnly ? [] : evidence;
-      const masteryScore = masteryEvidence.length > 0
-        ? clamp(masteryEvidence.reduce((sum, signal) => sum + signal.score, 0) / masteryEvidence.length, 0, 1)
-        : 0;
 
       // #59/#60 第 2 条：消灭 OR 吸收——此前任一条历史 review 会永久压住后来的 mastered。
       // 现改为「最近一条有业务时间的证据说了算」，让后来真的掌握能翻案；
@@ -807,6 +845,19 @@ export class LearnerKnowledgeMemoryService {
       const latestTimed = masteryEvidence
         .filter((signal) => typeof signal.seenAt === 'string' && signal.seenAt.length > 0)
         .sort((a, b) => String(b.seenAt).localeCompare(String(a.seenAt)))[0];
+
+      // #195（复核补修 · 跨会话去等权）：masteryScore 与 status 同源——都取「最近一条有业务时间的
+      // 证据」（同一个 latestTimed，含同一套排序与并列规则：业务时间 seenAt 字符串降序、稳定排序
+      // 同时间取先入者；绝不用墙钟 occurredAt）。此前 masteryScore 是 masteryEvidence 全量信号的
+      // 等权算术平均，同一概念在会话 1=0.4、会话 2=1.0 会得 0.7——与 status 的「最近一条说了算」
+      // 判据不一致（旧课稀释新课），正是本条要消除的失真。无任何带业务时间的证据时（旧数据/测试桩）
+      // 退回原等权均值，与上方 status 的 OR 回退口径配套，行为不变。
+      const masteryScore = latestTimed
+        ? clamp(latestTimed.score, 0, 1)
+        : masteryEvidence.length > 0
+          ? clamp(masteryEvidence.reduce((sum, signal) => sum + signal.score, 0) / masteryEvidence.length, 0, 1)
+          : 0;
+
       const statusFromLatest: 'pending' | 'learning' | 'mastered' | 'review' | null = latestTimed
         ? latestTimed.status === 'review' || latestTimed.stability === 'fragile'
           ? 'review'
@@ -855,15 +906,32 @@ export class LearnerKnowledgeMemoryService {
         relatedMilestoneIds,
         lastSeenAt,
       };
-      return { state, allSignals };
+      return { state, allSignals, isGhost: isDerivedOnly };
     });
 
-    const globalConceptStates: LearnerConceptState[] = conceptStateRows.map((row) => row.state);
+    // #195（复核补修）：幽灵概念（仅由 LLM 摘要支撑、无结构化接触证据）不对外暴露 state——
+    // globalConceptStates / conceptStates 均剔除，故 taskMastery 倒排、globalSignals 名单、
+    // 确定性概念台账都不会再出现它们（task 级 confidence 也因此不再把幽灵计入）。
+    const globalConceptStates: LearnerConceptState[] = conceptStateRows
+      .filter((row) => !row.isGhost)
+      .map((row) => row.state);
     // 当前路径视图：本路径产出的信号 + 用户级痕迹（pathId 缺省）参与过的概念；
     // 只在其它路径出现过的概念不进 currentPath（不影响 taskMastery / 前置缺口）。
     const conceptStates: LearnerConceptState[] = conceptStateRows
-      .filter((row) => row.allSignals.some((signal) => signal.pathId === undefined || signal.pathId === path?.id))
+      .filter((row) => !row.isGhost && row.allSignals.some((signal) => signal.pathId === undefined || signal.pathId === path?.id))
       .map((row) => row.state);
+
+    // #195（复核补修）：幽灵名此前会经 currentPath.recentEvidence[].conceptKeys 漏出（摘要证据
+    // 条目原样携带 knowledgeItems 名），等于绕过上面 state 的过滤。按同一幽灵名单剔除：事件条目
+    // 本身保留（它确实发生过），只去掉幽灵概念名。归一化口径与 conceptKey 一致。
+    const ghostConceptKeys = new Set(
+      conceptStateRows.filter((row) => row.isGhost).map((row) => row.state.conceptKey)
+    );
+    const stripGhostConceptKeys = (conceptKeys: string[]): string[] =>
+      conceptKeys.filter((key) => {
+        const normalized = normalizeConceptKey(key);
+        return !normalized || !ghostConceptKeys.has(normalized);
+      });
 
     // 概念身份补齐（只读）：来源不含痕迹的信号（会话知识/摘要/任务标签）没有 conceptId，
     // 用注册表按归一化键解析一次（`createIfMissing:false` —— **读侧绝不创建概念**）。
@@ -1091,6 +1159,7 @@ export class LearnerKnowledgeMemoryService {
           prerequisiteGaps,
           recentEvidence: Array.from(new Map(
             recentEvidence
+              .map((item) => ({ ...item, conceptKeys: stripGhostConceptKeys(item.conceptKeys) }))
               .sort((a, b) => new Date(b.happenedAt).getTime() - new Date(a.happenedAt).getTime())
               .map((item) => [`${item.type}:${item.sessionId || item.taskId || item.happenedAt}`, item])
           ).values()).slice(0, 20),
