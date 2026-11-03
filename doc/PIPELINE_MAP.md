@@ -22,7 +22,7 @@ flowchart LR
   U[用户 / 虚拟学习者] --> G["澄清阶段<br/>goal-agent<br/>goal-conversation"]
   G -->|"goal handoff（字段路由）"| P["规划阶段<br/>path-agent<br/>path-planning → stage-designer"]
   P -->|"path ready"| T["教学阶段<br/>teaching-agent<br/>teaching-opening-generator → teaching-turn → peer-reinforcement → session-wrapup"]
-  T -.->|"lesson 事件"| F["画像阶段<br/>profile-agent<br/>learner-model → lesson-knowledge-enricher"]
+  T -.->|"lesson 事件"| F["画像阶段<br/>profile-agent<br/>lesson-knowledge-enricher"]
   F -.->|"LearnerSnapshot / hints"| P
   F -.->|"LearnerSnapshot / hints"| T
   S["仿真阶段<br/>simulation-agent<br/>virtual-learner-goal-dialogue-simulator → goal-conversation → virtual-learner-path-evaluator → virtual-learner-learn-turn-simulator"] --> G
@@ -38,7 +38,7 @@ flowchart LR
 | 1 | 澄清阶段 | `goal-agent` | `goal-conversation` | 49 / 79 | `prompts/orchestration/goal.yaml` |
 | 2 | 规划阶段 | `path-agent` | `path-planning` → `stage-designer` | 48 / 54 | `prompts/orchestration/path.yaml` |
 | 3 | 教学阶段 | `teaching-agent` | `teaching-opening-generator` → `teaching-turn` → `peer-reinforcement` → `session-wrapup` | 48 / 58 | `prompts/orchestration/teaching.yaml` |
-| 4 | 画像阶段 | `profile-agent` | `learner-model` → `lesson-knowledge-enricher` | 21 / 33 | `prompts/orchestration/profile.yaml` |
+| 4 | 画像阶段 | `profile-agent` | `lesson-knowledge-enricher` | 21 / 33 | `prompts/orchestration/profile.yaml` |
 | 5 | 仿真阶段 | `simulation-agent` | `virtual-learner-goal-dialogue-simulator` → `goal-conversation` → `virtual-learner-path-evaluator` → `virtual-learner-learn-turn-simulator` → `virtual-learner-referee` → `virtual-learner-actor-auditor` → `virtual-learner-memory-curator` | 20 / 30 | `prompts/orchestration/simulation.yaml` |
 
 > Goal/Path/Teaching 是纵向主链；Profile 是横切状态层（事件驱动）；Simulation 是目标函数相反的验证旁路。
@@ -136,9 +136,10 @@ flowchart LR
 
 | 步 | 节点 | 类型 | 职责 | 条件 | 循环 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | `skill:learner-model` | skill | goal-and-learning-signal-ingestion | when learner profile related events arrive | — |
+| 1 | `LearnerEvidenceProjector` | service | learner-evidence-projection | when learner profile related events arrive | — |
 | 2 | `skill:lesson-knowledge-enricher` | skill | lesson-knowledge-enrichment | when lesson ends | — |
-| 3 | `LearnerSnapshotRefreshService` | service | learner-snapshot-refresh | after learner updates are applied | — |
+| 3 | `LearnerProfileService` | service | learner-profile-cache-clear | after learner evidence is projected | — |
+| 4 | `LearnerSnapshotRefreshService` | service | learner-snapshot-refresh | after learner updates are applied | — |
 
 | Skill | 类型 | 提示词正文 | 参数 | 输入/输出 | 字段角色 |
 | --- | --- | --- | --- | --- | --- |
@@ -149,6 +150,7 @@ flowchart LR
 > 「字段角色」= manifest `promptContract.fields` 的 direction/visibility 元数据；输出 schema 以 core.yaml 的 `fields` 为准，0 不代表没有输出契约。
 **不在 Agent steps 内、但登记在本阶段的 Skill**：
 - `adaptive-guidance-copy`（mainline）— coordinator 登记（profile-agent）：根据情境生成自适应引导话术
+- `learner-model`（handler-only）— coordinator 登记（profile-agent）：聚合学习者画像、状态与知识记忆（handler-only，无 LLM prompt）
 - `learning-predictor`（mainline）— coordinator 登记（profile-agent）：任务前基于知识状态摘要预测卡壳风险，含实证校准闭环
 
 ### 5. 仿真阶段（`simulation`）

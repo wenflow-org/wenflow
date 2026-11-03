@@ -253,8 +253,7 @@ skills:
     aliases: [learner-model-agent]
     coordinator:
       agentId: profile-agent
-      steps:
-        - { step: 1, role: goal-and-learning-signal-ingestion, condition: when learner profile related events arrive }
+      steps: []
     dataSource:
       db:
         - table: learner_evidence
@@ -266,7 +265,7 @@ skills:
         - table: learning_paths
           via: service
       sandbox: []
-    notes: handler 直读反例（P4 例外账）——handler 本体经 LearnerSnapshotService 直读 4 表（agents/learner-model-agent/index.ts:78-120），无 LLM 输入组装
+    notes: handler 直读反例（P4 例外账）——handler 本体经 LearnerSnapshotService 直读 4 表（agents/learner-model-agent/index.ts:78-120），无 LLM 输入组装；拉取式 API（按 action 取快照/写增量），不在 learner.definition.ts steps 内
 
   - skillId: lesson-knowledge-enricher
     kind: mainline
