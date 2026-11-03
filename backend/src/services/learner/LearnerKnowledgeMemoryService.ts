@@ -437,6 +437,11 @@ export class LearnerKnowledgeMemoryService {
     const enrichedTransferSignals: LearnerTransferSignal[] = [];
     // issue #194：knowledgeStateSummary 曾只写进 learner_evidence、从不进快照。
     // 证据按 occurredAt desc 取，首个非空摘要即最新一次课后状态摘要。
+    // issue #198：摘要是**自由文本**，可命名其它路径的概念。它随 globalBackground 进入
+    // 教学上下文并作为 learning-predictor 的输入（TeachingContextBuilder:446），而预测器按
+    // pathId/taskId 计算——若取到别的路径的摘要，别的路径的概念会无声渗入当前路径的教学场景
+    // （focusConcepts 回写 prediction_records）。故摘要必须按**当前路径**取；其它路径的摘要
+    // 不参与（跨路径概念仍以 conceptLedger/recurringConfusions 等结构化字段用户级聚合）。
     let enrichedKnowledgeStateSummary: string | undefined;
 
     for (const evidence of allPersistedEvidence) {
@@ -460,6 +465,7 @@ export class LearnerKnowledgeMemoryService {
         if (Array.isArray(payload.blockedFoundations)) enrichedBlockedFoundations.push(...payload.blockedFoundations);
         if (Array.isArray(payload.transferSignals)) enrichedTransferSignals.push(...payload.transferSignals);
         if (!enrichedKnowledgeStateSummary
+          && isCurrentPath
           && typeof payload.knowledgeStateSummary === 'string'
           && payload.knowledgeStateSummary.trim()) {
           enrichedKnowledgeStateSummary = payload.knowledgeStateSummary.trim();
