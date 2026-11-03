@@ -351,7 +351,7 @@
              方案先在对话流里完整呈现、可直接回复继续调整（一轮二轮都行）；
              这颗按钮是显式确认入口——点开方案卡审阅，确认动作仍只发生在卡内 -->
         <div v-if="loggedIn && live.started && !live.sending && live.stage === 'proposing' && live.proposal && !showProposal" class="proposal-invite">
-          <span class="proposal-invite__hint">{{ entryCopy.hint }}</span>
+          <span v-if="entryCopy.hint" class="proposal-invite__hint">{{ entryCopy.hint }}</span>
           <button type="button" class="btn-primary proposal-invite__btn" @click="openProposalReview">{{ entryCopy.button }}</button>
         </div>
         <!-- 输入区：对话卡内的底条（2026-10-06 归位）——回形针资料入口内置输入框，
@@ -1243,7 +1243,7 @@ const doneGenNote = computed(() => {
 /** Escape 关闭方案浮层（状态保留，对话可继续）。
     【2026-10-31 一锤定音修复】proposing 阶段不再自动弹浮层：方案先在对话流里完整落地
     （AI 本来就以「你看要不要调整？」收尾，后端非确认回复会再出新方案——多轮协商本就存在），
-    浮层只在用户点「查看方案并确认」显式进入时出现；generating/done 两个阶段仍自动出现
+    浮层只在用户点「查看方案」显式进入时出现；generating/done 两个阶段仍自动出现
     （那是生成进度与结果面板，不是方案本身）。 */
 const proposalDismissed = ref(false);
 /** 用户显式请求查看方案卡（对话流内的确认入口按钮） */
@@ -2250,7 +2250,8 @@ function shuffleScenes() {
   color: var(--mk-muted);
   min-width: 0;
 }
-.proposal-invite__btn { flex: 0 0 auto; padding: 8px 16px; }
+/* margin-left:auto：正常态不再有 hint（2026-11-03），space-between 单子项会靠左，按钮留在右侧 */
+.proposal-invite__btn { flex: 0 0 auto; margin-left: auto; padding: 8px 16px; }
 
 /* ---------- 生成状态 pill（走查 2026-11-01 P22） ----------
    三档语言：run=蓝描边脉点（与 .proposal__stop 同族的进行态）、done=平静绿档

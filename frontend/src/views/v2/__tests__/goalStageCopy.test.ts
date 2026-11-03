@@ -54,9 +54,9 @@ describe('proposalEntryCopy：确认入口条只说确认这一件事', () => {
     expect(copy.hint).not.toContain('已就绪');
   });
 
-  it('方案就绪（含确认式问句）时：确认入口保持原措辞', () => {
+  it('方案就绪时：入口条只剩「查看方案」，不再有提示句', () => {
     const copy = proposalEntryCopy(false);
-    expect(copy.button).toBe('查看方案并确认');
-    expect(copy.hint).toContain('方案已就绪');
+    expect(copy.button).toBe('查看方案');
+    expect(copy.hint).toBe('');
   });
 });
