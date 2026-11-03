@@ -382,7 +382,16 @@ class GoalConversationService {
       {
         ...options,
         stage,
-        sanitizeContent: (text: string) => this.sanitizeVisibleContent(text)
+        sanitizeContent: (text: string) => this.sanitizeVisibleContent(text),
+        // 回合级幂等标记（#160）清理收口：终局路径（proposing 确认 / 硬阻断 / gated）由
+        // appendMessage 落用户消息并直接收尾，不经过 updateCollectedData；标记若不在这些
+        // 路径一并清除，会永留在 collectedData 里，把后续「内容相同」的消息误判为重试而不追加。
+        // 只对「落用户消息的 lifecycle 写入」清（appendMessage.role === 'user' 即回合提交）；
+        // 否决计量 / ready 回落等中途 lifecycle 写入不清，避免打断失败回合的重试去重。
+        mutateCollectedData: (data: Record<string, any>) => {
+          if (options.appendMessage?.role === 'user') delete data.pendingUserTurn;
+          options.mutateCollectedData?.(data);
+        }
       }
     );
   }
@@ -1029,10 +1038,12 @@ async continueConversation(
    * 回合级幂等（#160）：判定本次用户消息要不要追加；返回 false 表示本回合的用户消息此前已落库
    * （前端「重试」重发同一句），不再重复追加。
    * 判据是「本回合是否已落过库」而非「本条是否为 messages 最后一条」：`pendingUserTurn` 在回合
-   * 开始落用户消息时写入、在 `updateCollectedData`（回合提交）时清除，它存在 ⇒ 上一回合未提交
-   * （callAI 抛错 / updateCollectedData 三次 revision 冲突后抛出 / 进程中断）。此时库里可能已留下
-   * 该回合的 AI 回复，一并丢弃——那条回复从未交付给用户（提交成功才会返回响应）。
-   * 提交成功的回合会清掉标记，故用户合法地再次发送同一句话不会被误吞。
+   * 开始落用户消息时写入，在回合提交时清除——普通回合在 `updateCollectedData` 清，终局路径
+   * （proposing 确认 / 硬阻断 / gated，见 `updateConversationLifecycle`）在落用户消息的同一笔
+   * lifecycle 写入里一并清。它存在 ⇒ 上一回合未提交（callAI 抛错 / updateCollectedData 三次
+   * revision 冲突后抛出 / 进程中断）。此时库里可能已留下该回合的 AI 回复，一并丢弃——那条回复
+   * 从未交付给用户（提交成功才会返回响应）。提交成功的回合会清掉标记，故用户合法地再次发送同一
+   * 句话不会被误吞。
    */
   private resolveUserTurnAppend(data: Record<string, any>, sanitizedContent: string): boolean {
     const replyHash = this.hashTurnReply(sanitizedContent);

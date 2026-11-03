@@ -353,3 +353,81 @@ describe('#160 同一根因的 startConversation 实例', () => {
     expect(messages[messages.length - 1].role).toBe('ai');
   });
 });
+
+/**
+ * #160 回归（第二轮）：回合级幂等标记 `pendingUserTurn` 的清理必须收口到「所有终局路径」。
+ * 终局路径（proposing 确认 / 硬阻断 / gated）由 updateConversationLifecycle 以 appendMessage
+ * 落用户消息并直接收尾，不经过 updateCollectedData；标记若只在那清会永久残留，把后续
+ * 「内容相同」的消息误判为重试而不追加。
+ */
+describe('#160 终局路径清理回合级幂等标记（标记不得永久残留）', () => {
+  function seedProposing(extra: Record<string, unknown>) {
+    conversationRecord = {
+      id: 'conv-1',
+      userId: 'user-1',
+      description: '随便聊聊',
+      stage: 'proposing',
+      status: 'active',
+      revision: 1,
+      learningPathId: null,
+      collectedData: JSON.stringify({
+        messages: [{ role: 'user', content: USER_REPLY }],
+        understanding: {},
+        stage: 'proposing',
+        confidence: 0.5,
+        collected: {},
+        ...extra,
+      }),
+      messages: '[]',
+    };
+  }
+
+  it('硬阻断终局：落用户消息的 lifecycle 写在收尾时一并清除 pendingUserTurn', async () => {
+    seedProposing({
+      responseTriage: { mode: 'emotional_support', confidence: 'high', reasons: [] },
+      pendingUserTurn: { replyHash: 'deadbeef' },
+    });
+
+    await goalConversationService.continueConversation('conv-1', '确认', 'user-1', { confirmProposal: true });
+
+    const data = JSON.parse(conversationRecord.collectedData);
+    expect(data.pendingUserTurn).toBeUndefined();
+    expect(data.stage).toBe('completed');
+    // 用户消息仍随终局写入落库（清理标记不改变「消息照落」的行为）
+    expect(data.messages[data.messages.length - 1]).toEqual(
+      expect.objectContaining({ role: 'user', content: '确认' })
+    );
+  });
+
+  it('gated 终局：清除 pendingUserTurn，会话仍停在 proposing', async () => {
+    mockPlatformSettingFindUnique.mockResolvedValue({ key: 'responseTriageMode', value: 'gated' });
+    seedProposing({
+      responseTriage: { mode: 'combination', confidence: 'medium', reasons: [] },
+      pendingUserTurn: { replyHash: 'deadbeef' },
+    });
+
+    await goalConversationService.continueConversation('conv-1', '确认', 'user-1', { confirmProposal: true });
+
+    const data = JSON.parse(conversationRecord.collectedData);
+    expect(data.pendingUserTurn).toBeUndefined();
+    expect(data.stage).toBe('proposing');
+  });
+
+  it('否决计量等中途 lifecycle 写入不清标记：失败回合的重试去重不被破坏', async () => {
+    const refusal = '再想想吧';
+    seedProposing({});
+    mockExecuteSkill.mockRejectedValue(new Error('upstream gateway 502'));
+
+    // 第一发失败：这句由本回合落库（落库时写入标记并被保留，供重试去重）
+    await expect(
+      goalConversationService.continueConversation('conv-1', refusal, 'user-1', { confirmProposal: true })
+    ).rejects.toThrow('upstream gateway 502');
+    // 重试同一句：中途的否决计量 lifecycle 写不得清掉标记，否则这句话会被当新回合重复追加
+    await expect(
+      goalConversationService.continueConversation('conv-1', refusal, 'user-1', { confirmProposal: true })
+    ).rejects.toThrow('upstream gateway 502');
+
+    const copies = persistedMessages().filter((m) => m.role === 'user' && m.content === refusal);
+    expect(copies).toHaveLength(1);
+  });
+});
