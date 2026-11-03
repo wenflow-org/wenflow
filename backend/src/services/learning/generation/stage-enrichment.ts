@@ -33,6 +33,7 @@ import { auditGeneratedPath, reorderStageTasks } from './path-structure-integrat
 import { sanitizeUserFacingText } from '../user-facing-text';
 import { detectStageFiller, isStageFiller, detectCrossStageFiller, isCrossStageFiller } from './stage-filler';
 import { buildSupplementRequest, mergeSupplementTasks, needsLessonSupplement } from './stage-task-supplement';
+import { applyCrossStageDedup, buildExistingStageTitles } from './stage-cross-stage-dedup';
 import {
   supplementZeroRefStage,
   createZeroRefSupplementGate,
@@ -44,7 +45,8 @@ import { mapAndPersistKcAnnotation, mergeKcStageAnnotation, type KcAnnotation } 
 import { assembleStageDesignerChannels } from '../../field-dispatcher';
 import { extractPromptMaterials, STAGE_MATERIAL_LIMITS, collectMaterialSectionRefs } from '../../materials/material-prompt-projection';
 import { buildSectionSemanticOrder } from '../../materials/material-semantic-order';
-import { summarizeSectionRefPositions, assessMaterialCoverage } from '../../materials/material-refs';
+import { summarizeSectionRefPositions } from '../../materials/material-refs';
+import { auditStageMaterialCoverage } from './stage-material-coverage-audit';
 import type { PreviousStageOutcome } from './progressive-design';
 import {
   assertGenerationRunFence,
@@ -235,6 +237,8 @@ async function enrichLearningPathWithAndersonInner(
     if (!learningPath) {
       throw new Error('PATH_ENRICHMENT_TARGET_NOT_FOUND');
     }
+    // 跨阶段复读闸的存量侧输入（快照口径见 stage-cross-stage-dedup.buildExistingStageTitles）。
+    const existingStageTitles = buildExistingStageTitles(learningPath.milestones);
     if (appendOnly || restrictMilestoneIds) {
       // 追加/渐进 restrict：只处理目标阶段，其余阶段一概不碰（不删除、不覆盖任何既有任务）。
       learningPath.milestones = learningPath.milestones.filter(
@@ -870,32 +874,11 @@ async function enrichLearningPathWithAndersonInner(
       await Promise.all(batchIndexes.map(processStageDesign));
     }
 
-    // 全路径覆盖体检（只告警）：阶段数 ≥3、资料 ≥9 节，但所有引用都停在文档前半，
-    // 或存在零引用阶段 ⇒ 生成当下就能看见缺口（报告里「后半引用 0」的运行期对应物），
-    // 而不是等 A/B 复算才发现。不阻断、不改写模型输出。
-    if (stageMaterialAudit.length >= 3) {
-      const primarySectionTotal = Number(
-        (normalizedInput as any)?.resources?.materials?.[0]?.pack?.sections?.length
-        || (normalizedInput as any)?.materials?.[0]?.pack?.sections?.length
-        || 0,
-      );
-      const coverage = assessMaterialCoverage(stageMaterialAudit, primarySectionTotal);
-      if (coverage.lowCoverage) {
-        logger.warn('[stage-material-window] 全路径引用未覆盖资料后半', {
-          pathId,
-          primarySectionTotal,
-          maxSection: coverage.maxSection,
-          stages: stageMaterialAudit.length,
-        });
-      }
-      if (coverage.zeroRefStages.length > 0) {
-        logger.warn('[stage-material-window] 存在零引用阶段', {
-          pathId,
-          zeroRefStages: coverage.zeroRefStages,
-          stageCount: stageMaterialAudit.length,
-        });
-      }
-    }
+    // 跨阶段复读闸（判据与阈值见 stage-cross-stage-dedup）。
+    applyCrossStageDedup({ pathId, existingStageTitles, stageDesignOutputs });
+
+    // 全路径材料覆盖体检（只告警，判据见 stage-material-coverage-audit）。
+    auditStageMaterialCoverage({ pathId, stageMaterialAudit, normalizedInput });
 
     // KC 映射（kc-mapper）：stage-designer 全部完成后，将概念与子任务分解为知识组件 + 依赖图，
     // 写回 aiPromptTemplate.kcAnnotation，结束"写后无读者"，供 teaching-turn 按 KC 粒度消费。
