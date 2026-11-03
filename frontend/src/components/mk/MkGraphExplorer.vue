@@ -1208,6 +1208,9 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
 /* 未选中态的概览：建议入口清单（分布计数画布头图例已有，不再重复呈现） */
 .mk-ge__overview {
   display: grid;
+  /* minmax(0,1fr)：auto 轨会被 nowrap 概念名的 max-content 撑到卡外（2026-11-03 真机：
+     24 字生成名把 254px 面板撑到 322px，里层的省略号永远轮不到生效），显式收窄轨道 */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--mk-space-3);
   align-content: start;
 }
@@ -1219,6 +1222,8 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
 }
 .mk-ge__overview-list {
   display: grid;
+  /* 同上：轨道收窄，长概念名交给 .mk-ge__overview-item > span 的 ellipsis */
+  grid-template-columns: minmax(0, 1fr);
   gap: 4px;
   margin: 0;
   padding: 0;
