@@ -121,14 +121,15 @@ describe('画像叙述：单对话观测 + 出处', () => {
   });
 
   // issue #196：knowledge-background 合并分支随其唯一写入方（learner.coordinator）退役而删除；
-  // applyUpdate 至此对未支持的 dataType 不再「静默成功」。
+  // dataType 已收窄为 applyUpdate 实际落地的三种（types.ts），本用例以存量非法字面量验证
+  // 运行期防御分支仍显式判失败（不再静默写回）。
   it('applyUpdate 对未支持的 dataType 返回失败（不再静默写回）', async () => {
     mockGoalFindFirst.mockResolvedValue(conv({}));
 
     const result = await new ProfileAggregator().applyUpdate('u1', {
       agentId: 'test',
       timestamp: new Date().toISOString(),
-      dataType: 'behavioral',
+      dataType: 'behavioral' as any,
       data: {},
       confidence: 0.5,
     });

@@ -1342,7 +1342,7 @@ deltaOutput: false
 
 - 场景：画像阶段 ｜ Agent：profile-agent ｜ 类型：mainline
 - 正文：`prompts/core/adaptive-guidance-copy.yaml` ｜ 参数：temperature=0.6 / maxTokens=64000 / failurePolicy=propagate ｜ baseVersion：1
-- 规则：8 条（其中条件规则 0 条）｜ 约束：2 条
+- 规则：9 条（其中条件规则 0 条）｜ 约束：2 条
 
 ````yaml
 # v4 核心文件：adaptive-guidance-copy（SKILL_PROTOCOL_V4 §2）
@@ -1385,6 +1385,7 @@ rules:
   - 当 learner.profile.narrativeInsights.practicePreferenceNote（画像给出的练习/交付形式偏好）非空时，将其兑现为一句可见承诺（如"你说看教程没用，那我们直接从你的真实案例动手做"），自然融入 subtitle 或 nextStep，不机械复述原话；该字段缺失或为空则不承诺（不要凭空编造偏好）
   - warningCopy（疲劳/卡点/进度滞后提醒）语气约束：不指责、不制造愧疚（禁止"你应该更努力""你最近太懒了"类表述）；提醒必须附带 1 个可执行下一步（如"今天先做最小的那一步"）；先认可已有投入再提调整
   - paceHint 与负荷联动：当输入显示高负荷/需减速（paceMode=recover 或疲劳信号）时，节奏提醒应指向"调慢节奏、优先恢复"而非追加任务
+  - 迁移就绪度信号（追加条，不改既有规则编号）：若输入提供 learner.knowledgeMemory.globalBackground.transferSignals（该学习者在既有概念上已具备的迁移就绪度信号，每项含 label/readiness/confidence），它是 nextStep 的可用依据——readiness 为 high/medium 且与当前路径焦点相关的概念，可在 nextStep 里兑现为「可以把 X 用到 Y」一类可执行的下一步；readiness=low 或该字段为空/缺失时不得宣称已具备迁移能力，行为与原先一致。就绪度由系统判定，你只读不改；不要把这些内部字段名、readiness 取值或置信度数值写进文案（同信令隔离规则）
 fields:
   - name: headline
     type: string

@@ -143,11 +143,13 @@ export async function assembleLearningState(
   const timeSessionsHydrated = timeSessions.map((s) => ({ ...s, messages: messagesById.get(s.id) ?? s.messages }));
 
   let primaryPath = pickPrimaryPath(paths) || paths[0] || null;
+  // paths 查询已带 status:'active'，故 primaryPath 非空 ⇔ 存在 active 路径。
+  const hasActivePath = Boolean(primaryPath);
   if (!primaryPath) {
     // #155：无 active 路径（路径已完成/归档）时，用户级画像不再整体清零。这里回退到该用户最近的
-    // 非 abandoned 路径作为画像锚点，使 dashboard / learning-state-guidance / review 仍能构建
-    // learnerSnapshot（其 globalSignals/globalBackground 是按 userId 聚合的跨路径并集，不依赖具体
-    // 路径；只有 currentPath 依赖这条锚点路径）。有 active 路径的用户不走这条回退，paths 口径不变。
+    // 非 abandoned 路径，让 dashboard / learning-state-guidance 仍有路径可展示、结构口径自洽
+    // （globalSignals/globalBackground 按 userId 聚合、不依赖具体路径）；但**不**把它当作画像锚点
+    // （见下方 refresh 的 #205 处理）。有 active 路径的用户不走这条回退，paths 口径不变。
     primaryPath = await prisma.learning_paths.findFirst({
       where: { userId, status: { not: 'abandoned' } },
       orderBy: { updatedAt: 'desc' },
@@ -183,10 +185,24 @@ export async function assembleLearningState(
     };
   }
 
+  // #205：快照锚点（currentPath）只对「用户当前的 active 路径」有意义。默认用 active 主路径；
+  // 调用方显式传 pathId 时，仅当该路径确属本用户且 status='active' 才锚定——否则 archived/completed
+  // 路径会被伪造成 currentPath，summary 据此给出指向「已下线不可继续学习」路径的 open-path /
+  // continue-learning（复核第二轮点名：显式 pathId 逃生口仍能重现 #205）。非 active 一律走 global
+  // 口径：globalSignals / globalBackground 仍非空（LearnerKnowledgeMemoryService #155 按 userId 聚合），
+  // currentPath 留空、不伪造。
+  let anchorPathId: string | undefined = hasActivePath ? primaryPath.id : undefined;
+  if (pathId) {
+    const requestedActive = await prisma.learning_paths.findFirst({
+      where: { id: pathId, userId, status: 'active' },
+      select: { id: true },
+    });
+    anchorPathId = requestedActive?.id ?? undefined;
+  }
   const learnerSnapshot = await learnerSnapshotRefreshService.refresh({
     userId,
-    pathId: pathId ?? primaryPath.id,
-    scope: snapshotScope,
+    pathId: anchorPathId,
+    scope: anchorPathId ? snapshotScope : 'global',
   });
 
   // P1.6 落后触发器（TIME-TRUST-SCHEME-20261001）通知侧：快照带 deadline_pace_behind

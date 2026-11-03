@@ -837,8 +837,9 @@ export class ProfileAggregator {
             break;
 
           default:
-            // 不再静默吞掉未知 dataType（issue #196）：此前未匹配的取值会落到这里、
-            // 写回未改动的 collectedData 并返回 success，缺失被静默化。
+            // dataType 已收窄为上面三种（types.ts ProfileUpdateSource，issue #196 复核），类型层不会再
+            // 传入未声明值；本分支仅作运行期防御（agent 侧 metadata.source 是 as 断言）。不静默吞掉：
+            // 此前未匹配的取值会写回未改动的 collectedData 并返回 success，缺失被静默化。
             logger.warn('[profile-aggregator] 收到未支持的 dataType，已忽略', {
               userId,
               dataType: source.dataType,
