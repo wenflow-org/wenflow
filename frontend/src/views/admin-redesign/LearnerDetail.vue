@@ -436,20 +436,21 @@
           <h3 class="mk-card__title">全局信号与背景</h3>
           <!-- 口径纠错：原 title 写「跨全部学习路径汇总」，实测数据源是当前路径的会话与学习证据
                （sessions/learner_evidence 均按 pathId 过滤）+ 该学习者全部记忆痕迹，不是跨全部路径 -->
-          <span class="mk-card__meta">{{ sigHeadMeta }} · {{ scopeNote.label }}</span>
+          <span class="mk-card__meta" :title="SIG_SCOPE_NOTE">{{ sigHeadMeta }} · {{ scopeNote.label }}</span>
         </div>
         <div class="ld-sigbody">
           <div class="ld-sig-sec">
-            <h4 class="ld-sig-sec__h">概念信号</h4>
+            <h4 class="ld-sig-sec__h" :title="SIG_TIER_NOTE">概念信号</h4>
             <div class="ld-sig-tiers">
               <p v-for="t in signalTierRows" :key="t.key" class="ld-sig-tier">
                 <span class="ld-sig-tier__head">
                   <i class="ld-sig-tier__dot" :class="`is-${t.key}`" aria-hidden="true"></i>
                   <strong>{{ t.label }} {{ t.n }}</strong>
                 </span>
-                <span class="ld-sig-tier__names">{{ t.names.length ? t.names.join('、') : '—' }}</span>
+                <span class="ld-sig-tier__names" :title="t.names.join('、')">{{ t.names.length ? t.names.join('、') : '—' }}</span>
               </p>
             </div>
+            <p class="ld-sig-sec__foot">{{ signalTierFoot }}</p>
           </div>
           <div class="ld-sig-sec">
             <h4 class="ld-sig-sec__h">教学基础</h4>
@@ -503,16 +504,22 @@
           <p
             v-if="evidence.length"
             class="mk-section__conclusion"
-            title="教学类事件接口侧只取近 20 条，目标与路径类事件全量并入，故本行是「最近」而非「共」。低置信计数仅供参考，不构成「证据不足」判定"
+            title="学习事件＝教学类（课堂 / 任务 / 总结 / 评估）与目标·路径类事件合并后的时间线。接口教学类只取近 20 条、目标路径类全量并入，故是「最近」而非「共」。低置信计数仅供参考，不构成「证据不足」判定"
           >
-            最近 {{ evidence.length }} 条学习事件，其中
+            学习事件 {{ evidence.length }} 条（教学 + 目标 / 路径），其中
             {{ evidence.filter((e) => evidenceLowConfidence(e.score) && !isDomainEvidence(e.title)).length }} 条置信度低于 50%。
           </p>
           <!-- 校准明细（2026-10-21）：判分前预测、逐概念复习 rating、难度调整此前只存在于
-               learner_evidence.payload，证据页只有一行泛化标题；这里给出人读摘要。 -->
+               learner_evidence.payload，证据页只有一行泛化标题；这里给出人读摘要。
+               2026-11-01 外部评审 P2：与上方「学习事件 N 条」并列会被读成同一列表的前后不一致——
+               其实校准三类不在事件时间线里（两个不相交集合），标题就地写明统计对象；
+               title 里写死的「最近 30 条」也随之改成按当前条数表述，避免第三个数字漂移。 -->
           <div v-if="calibrationDetails.length" class="ld-calib">
-            <span class="ld-calib__head" title="最近 30 条：检查点判分前预测 · 复习结果（FSRS rating） · 难度调整，来自判分时记录的校准证据">
-              校准明细 · 最近 {{ calibrationDetails.length }} 条
+            <span
+              class="ld-calib__head"
+              :title="`校准记录＝判分前预测 · 复习结果（FSRS rating） · 难度调整。接口按发生时间倒序最多取 30 条，当前 ${calibrationDetails.length} 条。与学习事件时间线是两个不相交的集合`"
+            >
+              校准记录 {{ calibrationDetails.length }} 条（判分预测 / 复习评分 / 难度调整）
             </span>
             <ul class="ld-calib__list">
               <li v-for="(c, i) in calibrationDetails" :key="i" class="ld-calib__item">
@@ -600,6 +607,10 @@
             <!-- 当前读数行（2026-10-11 用户走查）：四张 KPI 卡与曲线卡同族指标合流——当前值并入
                  曲线卡头部，撤页宽 KPI 横排；四个读数全缺省时整行不出现（曲线/空态自足） -->
             <div v-if="metricCards.some((m) => m.value !== '—')" class="ld-load__hits">
+              <!-- 2026-11-01 外部评审 P1 收尾：本行是**当前快照**，下方带日期的那条是**当日记录**，
+                   两条各自留一位小数，LSB 这类差值会骑在四舍五入边界上（实测 −7.1 与 −7.2）。
+                   把来源标出来，读者就不会把它当成同一读数的两个值。 -->
+              <span class="ld-load__hits-src" title="本行取自当前快照，与带日期的当日记录各算各的，都会四舍五入到一位小数">当前快照</span>
               <div v-for="m in metricCards" :key="m.label" class="ld-load__hit" :title="m.title">
                 <span>{{ m.label }}</span>
                 <strong :class="{ 'is-good': m.tone === 'ok', 'is-bad': m.tone === 'bad' }">{{ m.value }}</strong>
@@ -610,8 +621,8 @@
                 <span><i class="ld-load__dot is-lss"></i>LSS 压力</span>
                 <span><i class="ld-load__dot is-lf"></i>LF 疲劳</span>
                 <span><i class="ld-load__dot is-lsb"></i>LSB 状态</span>
-                <span v-if="loadDisplayDay" class="ld-load__chip" :class="`ld-load__chip${loadZoneCls(loadZoneOf(loadDisplayDay))}`">
-                  {{ loadZoneCls(loadZoneOf(loadDisplayDay)) === '--fresh' ? '状态良好' : loadZoneCls(loadZoneOf(loadDisplayDay)) === '--optimal' ? '需要休息' : '高风险' }}
+                <span v-if="loadDisplayDay" class="ld-load__chip" :class="`ld-load__chip${loadZoneChip.cls}`" :title="loadZoneChip.title">
+                  {{ loadZoneChip.text }}
                 </span>
               </div>
               <MkChart :option="loadChartOption" height="260px" />
@@ -969,7 +980,14 @@ import { isDegradedWrapup } from './cockpitWrapup'
 import { liveLearners, liveVirtuals, liveGetLearnerDetail, liveGetLearnerEvidence, liveGetLearnerPredictions, liveRecomputeLearner, liveGetMemoryTraces, timeAgo, errMsg, type LearnerEvidenceRaw, type LoadCurvePoint, type PredictionCalibration, type MemoryTraceRow, type CalibrationDetailItem } from './live'
 import { evidenceDotTone, evidenceLowConfidence, evidenceSignalZh, evidenceTypeZh, evidenceFullTooltip, evidenceConfidenceTone, evidenceDensityTooltip } from './evidence'
 import { conceptBarTone, transferReadinessZh, misconceptionRiskZh, normalizeLearnerTab, levelWordZh } from './learner-profile'
-import { learnerMetric, type LearnerMetricKey } from '@/utils/learnerMetrics'
+import {
+  learnerMetric,
+  toDisplayHundred,
+  toDisplayHundredSigned,
+  toneOfHundred,
+  LEARNER_METRIC_BAND_HUNDRED,
+  type LearnerMetricKey,
+} from '@/utils/learnerMetrics'
 // pathStatusText：路径域状态文案（active → 「学习中」；全局字典是「进行中」）。本文件已从
 // './statusText' 引入同名 statusText（会话域），故此处显式改名，避免两条文案链混用。
 import { loadCaliber, panelScopeNote, statusText as pathStatusText } from './opsShared'
@@ -1022,6 +1040,15 @@ const LOAD_ZONE_LSS = 'LSS 学习压力（0-100，越高越累）'
 const LOAD_ZONE_LF = 'LF 疲劳度（0-100，≥60 警戒）'
 const LOAD_ZONE_LSB = 'LSB 状态平衡（训练负荷减疲劳，负值表示状态差）'
 const LOAD_NONE_HINT = '学习者完成课堂/任务后，系统会记录每次的压力评估。'
+/* 2026-11-01 外部评审 P0：证据 Tab 的概念信号（掌握度）与「记忆与复习」里的记忆强度
+   （FSRS 可提取率）是两条独立轴，各自都对，但同屏并列且不说明关系时会被读成自相矛盾
+   （「挣扎」vs「稳固 93%」）。这里把两条轴的关系写在概念信号的悬停说明里。 */
+const SIG_TIER_NOTE = '概念信号按掌握度分档（来自学习证据与课堂表现）。'
+  + '\n「记忆与复习」里的记忆强度是按 FSRS 可提取率算的另一条轴：一个概念可以先在掌握度上仍是「挣扎」，同时因为刚刚复习过而记忆强度回升。两条轴判据不同，可以同时出现，不是互相矛盾。'
+/* 卡片 meta 的「当前路径」只限定会话/学习证据那一侧；概念清单是学习者级、跨全部路径的，
+   两段数据在卡内混排，不写清就会被读成「当前路径只有 4 个概念」。 */
+const SIG_SCOPE_NOTE = '「当前路径」限定的是本卡的会话与学习证据（按 pathId 过滤）。'
+  + '\n概念清单与记忆痕迹是该学习者的用户级数据，跨全部路径，不随页内「路径范围」开关变化。'
 const CALIB_META_TITLE = '预测与实际情况的吻合率（非学习者自评）'
 const GRAPH_TRUNCATED_NOTE = '仅显示部分概念，共'
 const MEMORY_PANE_TITLE = '记忆与复习'
@@ -1809,7 +1836,10 @@ async function loadDetail(id: string | undefined, opts: { soft?: boolean } = {})
       sessions: liveEvidence.value.slice(0, 6).map((e) => ({
         time: e.time,
         title: e.title,
-        result: evidenceSignalZh(e.signal, e.title) || e.detail || '—',
+        /* 2026-11-01 外部评审 P1：原先把 signal 词（「创建」/「生成」）当成整条结果，
+           detail 里带的**路径名**被 `||` 短路掉——「学习动态」于是只剩「路径创建 / 路径生成」
+           两两成对、看不出是哪条路径，被读成系统重复触发了两次。改为「动作 · 对象」拼起来。 */
+        result: [evidenceSignalZh(e.signal, e.title), e.detail].filter(Boolean).join(' · ') || '—',
         tone: evidenceDotTone(e.signal, e.score, e.title),
         concepts: e.concepts
       })),
@@ -2214,23 +2244,26 @@ const narrativeSourceTitle = computed(() => {
 
 const metricCards = computed(() => {
   const m = (dynamicState.value?.metrics || {}) as Record<string, number>
-  const fmt = (v?: number) => (v == null ? '—' : v.toFixed(1))
-  /* 后端语义核实（backend/src/services/learning/learning-state.service.ts）：
-     LSS=Learning Stress Score 学习压力（0-10，越高越累）、KTL=Knowledge Training Load 训练负荷
-     （LSS 的慢 EWMA，高=负荷重）、LF=Learning Fatigue 疲劳（≥6 警戒）；三者均为负荷类——
-     高值是坏（红）、低值是好（绿）。LSB=KTL−LF 状态平衡，正=状态好。
-     标签/参考带/色调阈值单点取自 learnerMetrics.ts——此前本页两处渲染点
-     （metricCards 与 learningStateRows）与 VirtualProfile.lsmRows 各写一套且互相打架。 */
+  const fmt = (v?: number | null) => (v == null ? '—' : v.toFixed(1))
+  /* 2026-11-01 外部评审 P0 修复：本页统一到 0–100 展示刻度。
+     快照 `dynamicState.metrics` 是内部 0–10（learnerMetrics.ts 的阈值即为 0–10 口径），
+     而本卡下方「学习压力记录」曲线读 learning_metrics（0–100，警戒线 60、图例也写 0–100）——
+     此前两处各自直接上屏：同屏两个读数差 10 倍、判色相反（实测卡 1.1 / 曲线 10.8，
+     LF 卡上判绿、曲线上判红）。换算与 0–100 判色单点在 utils/learnerMetrics.ts，本页只调不改口径。 */
   const card = (key: LearnerMetricKey) => {
     const def = learnerMetric(key)
-    const v = m[key]
-    const missing = v == null || v === 0
+    /* 2026-11-01 外部评审 P1：LSB 是 KTL−LF 的**有符号**差值，必须走不裁下界的换算。
+       原先四读数一律用 toDisplayHundred（`Math.max(0, …)`），把 −0.72 冲成 0.0，
+       于是本卡顶部 LSB 写 0.0、同一张卡下方曲线写 −7.2，被读成两个打架的读数。 */
+    const hundred = key === 'lsb' ? toDisplayHundredSigned(m[key]) : toDisplayHundred(m[key])
+    const missing = hundred == null || hundred === 0
+    const bandText = LEARNER_METRIC_BAND_HUNDRED[key]
     return {
       label: def.label,
-      value: fmt(v),
-      band: def.band,
-      title: missing ? '暂无数据' : `${def.band}\n${def.bandTitle}`,
-      tone: def.toneOf(v)
+      value: fmt(hundred),
+      band: bandText.band,
+      title: missing ? '暂无数据' : `${bandText.band}\n${bandText.bandTitle}`,
+      tone: toneOfHundred(key, hundred)
     }
   }
   return [card('lss'), card('ktl'), card('lf'), card('lsb')]
@@ -2295,13 +2328,67 @@ const signalTiers = computed<Record<'mastered' | 'struggling' | 'fragile', strin
   return { mastered: arr('masteredConcepts'), struggling: arr('strugglingConcepts'), fragile: arr('fragileConcepts') }
 })
 
-/** 信号三档（学没学会）：已掌握=stable/mastered，脆弱=fragile/待复习，挣扎=learning 且掌握度<55%。
- *  分档依据是 performance 信号，与概览概念条的迁移准备度分档不同维 */
-const signalTierRows = computed(() => [
-  { key: 'mastered', label: '已掌握', n: signalTiers.value.mastered.length, names: signalTiers.value.mastered },
-  { key: 'struggling', label: '挣扎', n: signalTiers.value.struggling.length, names: signalTiers.value.struggling },
-  { key: 'fragile', label: '脆弱', n: signalTiers.value.fragile.length, names: signalTiers.value.fragile }
-])
+/** 信号四档（学没学会）：已掌握=stable/mastered，脆弱=fragile/待复习，挣扎=learning 且掌握度<55%。
+ *  分档依据是 performance 信号，与概览概念条的迁移准备度分档不同维。
+ *
+ *  2026-11-01 外部评审 P0：卡头写「13 个概念」，三档加起来只有 4 个（0+3+1），
+ *  另外 9 个去向不明——因为后端三档是**非穷尽过滤**（`status==='pending'` 与
+ *  `status==='learning' && mastery>=0.55` 都不进任何一档）。这里补第四档「未开始」，
+ *  用概念清单减去前三档得出，让四档加总等于卡头总数。
+ *
+ *  四档一律**只数概念清单里的那些**：实测该学员的 `strugglingConcepts` 里有一个
+ *  「读取Excel表对象」，而清单里同一概念写的是完整名
+ *  「用代码把 Excel 源表读成表格对象（header 指定哪一行被抬为列名）」——直接相加会多出 1
+ *  （0+3+1+10=14 ≠ 13，第一版修复实测就是这个结果）。对齐后加总闭合，
+ *  不在清单里的标签单独列出来（`outside`），不静默丢掉。 */
+const signalTierRows = computed(() => {
+  const ledgerLabels = conceptLedgerLabels.value
+  const ledgerSet = new Set(ledgerLabels.map((n) => n.trim()))
+  const scoped = (names: string[]) => names.filter((n) => ledgerSet.has(n.trim()))
+  const mastered = scoped(signalTiers.value.mastered)
+  const struggling = scoped(signalTiers.value.struggling)
+  const fragile = scoped(signalTiers.value.fragile)
+  const outside = [
+    ...signalTiers.value.mastered,
+    ...signalTiers.value.struggling,
+    ...signalTiers.value.fragile
+  ].filter((n) => n.trim() && !ledgerSet.has(n.trim()))
+  const tiered = new Set([...mastered, ...struggling, ...fragile].map((n) => n.trim()))
+  const untouched = ledgerLabels.filter((n) => !tiered.has(n.trim()))
+  return [
+    { key: 'mastered', label: '已掌握', n: mastered.length, names: mastered },
+    { key: 'struggling', label: '挣扎', n: struggling.length, names: struggling },
+    { key: 'fragile', label: '脆弱', n: fragile.length, names: fragile },
+    { key: 'untouched', label: '未开始', n: untouched.length, names: untouched },
+    { key: 'outside', label: '不在概念清单', n: outside.length, names: outside }
+  ]
+})
+
+/** 概念信号脚注：把四档与卡头总数的加总关系写出来；有标签不在清单里时说明去哪了
+ *  （否则四档之和会大于卡头总数，读者只能当成又一个对不上的数字）。 */
+const signalTierFoot = computed(() => {
+  const total = conceptLedgerLabels.value.length
+  const outside = signalTierRows.value.find((t) => t.key === 'outside')
+  const four = signalTierRows.value.filter((t) => t.key !== 'outside')
+  const head = four.map((t) => t.n).join(' + ')
+  const sum = four.reduce((acc, t) => acc + t.n, 0)
+  if (!total) return ''
+  const base = `${head} = ${sum}，与卡头「${total} 个概念」对得上，四档都只数概念清单里的那些`
+  const names = outside && outside.names.length ? outside.names.join('、') : ''
+  /* R1：一句只讲一件事——这类说明不写分号，拆成两句 */
+  return names ? `${base}。另有 ${outside ? outside.n : 0} 个标签不在当前概念清单里、未计入：${names}` : base
+})
+
+/** 概念台账里的概念名（与卡头「N 个概念」同源，保证第四档能与之加总闭合）。
+ *  台账缺失（旧快照）时退三档本身的并集，至少不会凭空多报。 */
+const conceptLedgerLabels = computed<string[]>(() => {
+  const gb = (knowledgeMemory.value as Record<string, unknown> | null)?.globalBackground
+  const ledger = (gb && typeof gb === 'object' ? (gb as Record<string, unknown>).conceptLedger : undefined)
+  if (!Array.isArray(ledger)) return []
+  return ledger
+    .map((x) => String((x as Record<string, unknown>)?.label || (x as Record<string, unknown>)?.conceptKey || ''))
+    .filter(Boolean)
+})
 
 /** 反复困惑（在哪跌倒）：对话证据提炼的重复误解，概念+复发次数+模式说明 */
 const recurringConfusions = computed<{ label: string; count: number; pattern: string }[]>(() => {
@@ -2564,14 +2651,39 @@ const loadChartOption = computed<EChartsCoreOption>(() => {
 
 const loadDisplayDay = computed(() => loadSeries.value[loadSeries.value.length - 1] ?? null)
 const loadFmt = (v: number | null) => (v == null ? '—' : v.toFixed(1))
-/** 压力语义：LF 高 = 疲劳高；LSB = KTL-LF，负 = 状态不佳 */
+/** 压力语义：LF 高 = 疲劳高；LSB = KTL-LF，负 = 状态不佳。
+ *  2026-11-01 外部评审 P0：阈值原为 LF ≥ 6、LSB ≥ −3——那是**内部 0–10 口径**，
+ *  而这条曲线读 learning_metrics（0–100，同一张卡的警戒线就画在 60）。于是 LF=12.3
+ *  被标成「高风险」，图上离警戒线还远、上方卡片读数又判「低」——同屏三处三种判据。
+ *  这里统一到 0–100 口径（LF 警戒 60、LSB 分档 ±30）。 */
 function loadZoneOf(p: LoadPoint): 'fresh' | 'optimal' | 'risk' {
-  if (p.lsb == null) return p.lf != null && p.lf >= 6 ? 'risk' : 'optimal'
+  if (p.lsb == null) return p.lf != null && p.lf >= 60 ? 'risk' : 'optimal'
   if (p.lsb >= 0) return 'fresh'
-  if (p.lsb >= -3) return 'optimal'
+  if (p.lsb >= -30) return 'optimal'
   return 'risk'
 }
 const loadZoneCls = (z: 'fresh' | 'optimal' | 'risk') => (z === 'fresh' ? '--fresh' : z === 'optimal' ? '--optimal' : '--risk')
+
+/* 2026-11-01 外部评审 P1：这里原先按档位直接下**指令式**结论（fresh→「状态良好」、
+   optimal→「需要休息」、risk→「高风险」），于是 LSB = −7.2（落在 optimal 档）时图上写着
+   「需要休息」，而同卡上方写着「疲劳：低（12.3，警戒 ≥ 60）」、底部写着「疲劳风险 低」
+   「建议节奏 适中」——同一张卡里前后建议相反。根因是两条判据不同源：本档位只看 LSB
+   （训练负荷 − 学习疲劳，绝对量），上方那两处走 ACWR 相对量（lf/ktl，基座未成熟时恒为
+   low/moderate）。两套判据各自都对，错在把其中一套的档位写成对另一套的否定。
+   现在胶囊只陈述 LSB 轴自己的事实，并把判据差异写进悬停说明。 */
+const loadZoneChip = computed(() => {
+  const z = loadDisplayDay.value ? loadZoneOf(loadDisplayDay.value) : 'fresh'
+  /* 档位词里**不出现「疲劳」**：页头那颗胶囊与「趋势与建议」里的「疲劳风险」都按 ACWR 相对量
+     判（实测「疲劳：低」），本胶囊只看 LSB 绝对量，两边同为一种说法时会被读成同屏矛盾——
+     这正是评审上一轮报的那条。改成只陈述 LSB 轴自己的方向。 */
+  const text = z === 'fresh' ? 'LSB 平衡' : z === 'optimal' ? 'LSB 略偏负' : 'LSB 明显偏负'
+  return {
+    text,
+    cls: loadZoneCls(z),
+    title: 'LSB 状态平衡 = 训练负荷 − 学习疲劳，本档位只看这一条轴：≥ 0 平衡、−30 ~ 0 疲劳略偏高、< −30 疲劳明显偏高。'
+      + '\n数据源里「疲劳风险 / 建议节奏」两行按相对量（学习疲劳 ÷ 训练负荷）另判，两者判据不同，可以同时出现。'
+  }
+})
 
 /* ---------- 预测校准（实证命中率） ---------- */
 /** 预测校准结论（卡头结论常驻，就地派生；无样本时保持说明文案） */
@@ -2607,19 +2719,24 @@ const riskFactors = computed(() => (teachingHints.value?.riskFactors || []) as s
    tone 对齐本页 metricCards 的负荷语义（高=坏）。 */
 const learningStateRows = computed(() => {
   const m = (dynamicState.value?.metrics || {}) as Record<string, number>
-  const width = (v: number | undefined) => (v == null || v === 0 ? 0 : Math.min(100, Math.round((v / 10) * 100)))
+  /* 与 metricCards 同一刻度（0–100）：条形宽度按 /100 取百分比，不再按内部 0–10 的 /10
+     （旧实现把 1.1 画成 11% 宽，而下方曲线同一天的 10.8 画到 108% 被截顶） */
+  const width = (v: number | null | undefined) => (v == null || v === 0 ? 0 : Math.min(100, Math.round(v)))
   const row = (key: LearnerMetricKey) => {
     const def = learnerMetric(key)
-    const v = m[key]
-    const t = def.toneOf(v)
+    /* LSB 走有符号换算（见 metricCards 同款注释）：否则 −7.2 被裁成 0 → 本行渲染成「—」，
+       与卡片上的 0.0、曲线上的 −7.2 凑成第三种读数。 */
+    const hundred = key === 'lsb' ? toDisplayHundredSigned(m[key]) : toDisplayHundred(m[key])
+    const t = toneOfHundred(key, hundred)
+    const bandText = LEARNER_METRIC_BAND_HUNDRED[key]
     return {
       label: def.label,
-      value: v ? (key === 'lsb' ? `${v > 0 ? '+' : ''}${v.toFixed(1)}` : v.toFixed(1)) : '—',
-      width: key === 'lsb' ? (v ? Math.min(100, Math.round(Math.abs(v) * 8 + 10)) : 0) : width(v),
+      value: hundred == null || hundred === 0 ? '—' : (key === 'lsb' ? `${hundred > 0 ? '+' : ''}${hundred.toFixed(1)}` : hundred.toFixed(1)),
+      width: key === 'lsb' ? (hundred == null || hundred === 0 ? 0 : Math.min(100, Math.round(Math.abs(hundred) * 0.8 + 10))) : width(hundred),
       // 共享口径的 '' = 缺值/中性 → 本页条形用 'muted'（本页只有 ok/bad 上色档）
       tone: (t === '' ? 'muted' : t) as 'ok' | 'warn' | 'bad' | 'muted',
-      hint: def.band,
-      hintTitle: def.bandTitle
+      hint: bandText.band,
+      hintTitle: bandText.bandTitle
     }
   }
   return [row('lss'), row('ktl'), row('lf'), row('lsb')]
@@ -2779,8 +2896,11 @@ const memoryRowsFiltered = computed(() => {
 })
 /** 卡头不再报状态分档（2026-10-23 走查：同一组计数已由工具栏 pills 承担，卡头复读一遍）；
     只留作用域标注——它不是页级开关的复读：记忆块按用户级、跨全部路径，与页内「路径范围」
-    无关，读错会漏掉在另一条路径学过的概念。 */
-const memMetaText = computed(() => allPathsScope.value.label)
+    无关，读错会漏掉在另一条路径学过的概念。
+    2026-11-01 外部评审 P1：光写「跨全部路径」放在一个刚被上面下拉框收窄成「当前路径」的
+    页面上，会被读成两者打架（「筛选器限定当前路径，表格却写跨全部路径」）。把「与上方
+    路径范围无关」这层直接写进可见文案，而不是只留在悬停说明里。 */
+const memMetaText = computed(() => `${allPathsScope.value.label} · 记忆按学员统计，不随「路径范围」收窄`)
 
 const trendText = computed(() => (d.value?.trend === 'up' ? '↗ 上升' : d.value?.trend === 'down' ? '↘ 下降' : '→ 稳定'))
 const trendBadge = computed(() => (d.value?.trend === 'up' ? 'mk-badge--ok' : d.value?.trend === 'down' ? 'mk-badge--bad' : 'mk-badge--muted'))
@@ -3143,6 +3263,8 @@ const snapshotHint = computed(() =>
 
 /* 学习压力曲线卡头部当前读数行（2026-10-11 自页宽 KPI 横排合流）：四格 mini hit，
    语气色沿用 is-good/is-bad（与预测校准 hit 同词汇），口径进 title */
+/* 读数行来源标注（2026-11-01 外部评审 P1 收尾）：本行是当前快照，下方带日期的是当日记录 */
+.ld-load__hits-src { align-self: center; color: var(--mk-muted); font-size: var(--mk-fs-micro); margin-right: 4px; }
 .ld-load__hits {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -3187,8 +3309,13 @@ const snapshotHint = computed(() =>
 .ld-sig-tier__dot.is-mastered { background: var(--mk-green); }
 .ld-sig-tier__dot.is-struggling { background: var(--mk-amber); }
 .ld-sig-tier__dot.is-fragile { background: var(--mk-red); }
+/* 第四档「未开始」（2026-11-01 外部评审 P0）：中性灰，与前两档的正/负色区分开，
+   避免读成第三种「学会程度」 */
+.ld-sig-tier__dot.is-untouched { background: var(--mk-muted); }
 .ld-sig-tier strong { font-size: var(--mk-fs-micro); font-variant-numeric: tabular-nums; }
 .ld-sig-tier__names { color: var(--mk-muted); line-height: 1.6; min-width: 0; }
+/* 加总口径脚注（2026-11-01 外部评审 P0）：四档必须闭合到卡头的概念总数 */
+.ld-sig-sec__foot { margin: 6px 0 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 /* 反复困惑行（2026-10-11 外部评审二轮）：概念加粗句首、说明降一档灰、频次改右侧轻徽标 */
 .ld-fnd--rc .ld-fnd__item { display: flex; align-items: baseline; gap: 10px; }
 .ld-fnd__item--warn::before { content: '↻'; color: var(--mk-amber); }
@@ -3424,7 +3551,7 @@ const snapshotHint = computed(() =>
   .ld-pf-sub > div + div { border-left: 0; padding-left: 0; }
   .ld-insights--cols { columns: 1; }
   .ld-sig-tiers { grid-template-columns: 1fr; }
-  .ld-load__hits { grid-template-columns: repeat(2, 1fr); }
+.ld-load__hits { grid-template-columns: repeat(2, 1fr); }
   .ld-ev-grid { grid-template-columns: 1fr; grid-template-rows: none; height: auto; min-height: 0; }
   .ld-ev-main .ld-evidence { max-height: none; overflow: visible; }
   .ld-ev-side { overflow: visible; }

@@ -200,7 +200,8 @@
               <div class="lc-celluser">
                 <MkCellAvatar :name="r.name" :tone="isVirtualRow(r) ? 'virtual' : r.isTestAccount ? 'test' : 'default'" />
                 <div class="mk-cell-main">
-                  <strong :title="r.name">{{ r.name }}</strong>
+                  <strong :title="r.email ? `${r.name}
+${r.email}` : r.name">{{ r.name }}</strong>
                   <!-- 备注在副行：姓名行保持全额宽度（2026-10-24 压字回归） -->
                   <!-- 副行去重（2026-10-24）：邮箱 local part 与姓名同值时不复读；无副行内容时整行不占位 -->
                   <span v-if="emailSubline(r.email, r.name) || r.isTestAccount" class="mk-cell-subline">
@@ -218,6 +219,14 @@
                 <!-- 副行只放路径真值：任务为空时主行已写「未开始」，副行再补一句「尚未开始学习」
                      等于同一状态写两遍（2026-10-29 冗余副文审计） -->
                 <span v-if="r.path" class="mk-cell-sub" :title="r.path">{{ r.path }}</span>
+                <!-- 2026-11-01 外部评审 P1：本列只展示「最近更新的那条在学路径」，
+                     多路径学员看起来像只有一条（同一学员在学习路径列表里明明有 2 条）。
+                     这里把总数标出来，读成「其中一条」而不是「全部」。 -->
+                <span
+                  v-if="extraPathCount(r) > 0"
+                  class="mk-badge mk-badge--sm mk-badge--muted"
+                  :title="`该学员共有 ${r.pathCount} 条在学路径，本列展示的是最近更新的那条，另外 ${extraPathCount(r)} 条可在「学习路径」列表查看`"
+                >共 {{ r.pathCount }} 条路径</span>
               </div>
             </td>
             <td v-if="!lcHiddenCols.has('status')">
@@ -260,13 +269,16 @@
                    风险行的琥珀色已撤——风险摘要在左侧列，动作本身与风险无关，颜色只保留一种。
                    「重算」这种低频维护动作收进 ⋯。 -->
               <div class="mk-actions">
+                <!-- 2026-11-01 外部评审 P2：对「未开始」且没有任何在学路径的空白账号，
+                     给的却是蓝色高亮的「发提醒」，而预填正文是「希望保持当前学习节奏」——
+                     对该账号语义不成立，也容易误触骚扰。这类行改为「邀请开启学习」，文案同步。 -->
                 <button
                   v-if="isLive && !r.isTestAccount"
                   type="button"
                   class="mk-link"
-                  title="发送站内提醒（站内信）"
+                  :title="notStarted(r) ? '发送站内邀请（站内信）：该学员还没有开始任何学习' : '发送站内提醒（站内信）'"
                   @click.stop="openIntervene(r)"
-                >发提醒</button>
+                >{{ notStarted(r) ? '邀请开启学习' : '发提醒' }}</button>
                 <div class="mk-menu">
                   <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="rowMenu === r.id" @click.stop="toggleRowMenu(r.id)">⋯</button>
                   <div v-if="rowMenu === r.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="rowPopStyle" @click.stop>
@@ -389,6 +401,8 @@ interface Row {
   ts?: number
   /** 当前活跃路径 ID：重算必须带上，否则后端写 global 口径投影而本页读 path 口径 */
   pathId?: string
+  /** 在学路径总数（后端 activePathCount）：>1 时「当前进度」列标「共 N 条路径」 */
+  pathCount?: number | null
 }
 
 const keyword = ref('')
@@ -442,15 +456,30 @@ useOverlay(computed(() => !!intervene.value), intervenePanelRef)
 useMaskClose(interveneMaskRef, () => { intervene.value = null })
 useEscape(() => !!intervene.value, () => { intervene.value = null })
 
+/** 「未开始」判定：没有当前任务且没有在学路径（列表里主行写「未开始」的那些空白账号）。
+    它们的指标全是「—」，按快照默认值会落进「疲劳：低」分支，于是提醒正文变成
+    「希望保持当前学习节奏」——对从未开始学习的账号说不通（2026-11-01 外部评审 P2）。 */
+function notStarted(r: Row): boolean {
+  return !r.task && !r.path
+}
 function openIntervene(r: Row) {
   sentTo.value = null
   intervene.value = r
+  if (notStarted(r)) {
+    interveneTitle.value = '开启学习邀请'
+    interveneBody.value = '你还没有开始第一个学习目标。可以从建立一次目标对话开始，我们会据此为你生成学习路径。'
+    return
+  }
   interveneTitle.value = r.fatigue === '高' ? '学习状态提醒：疲劳度偏高' : '学习状态提醒'
   interveneBody.value = r.risk
     ? `检测到学习状态需关注：${r.risk}。建议调整学习节奏或补充练习。`
     : r.fatigue !== '低'
       ? `检测到疲劳度${r.fatigue}，建议适当休息后继续学习。`
       : '希望保持当前学习节奏，如有困难可随时反馈。'
+}
+/** 本列只展示一条在学路径：>1 时给出「共 N 条路径」角标（后端 activePathCount） */
+function extraPathCount(r: Row): number {
+  return Math.max(0, (r.pathCount || 0) - (r.path ? 1 : 0))
 }
 /** 与行内「详情」同一落点：弹窗里的风险摘要就在证据页签 */
 function goInterveneSession(r: Row) {
@@ -540,7 +569,8 @@ const rows = computed<Row[]>(() =>
     confidence: m.confidence,
     ts: dataAt ? new Date(dataAt).getTime() : undefined,
     recomputedAt: m.generatedAt || '',
-    pathId: m.pathId
+    pathId: m.pathId,
+    pathCount: typeof m.activePathCount === 'number' ? m.activePathCount : null
     }
   })
 )

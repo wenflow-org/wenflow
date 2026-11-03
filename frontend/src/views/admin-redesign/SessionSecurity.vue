@@ -69,13 +69,16 @@
             :title="`清理${bulkScope.label}已过期 / 已下线的历史会话`"
             @click="cleanupAllHistory"
           >清理历史（{{ bulkCleanupCount }}）</button>
+          <!-- 2026-11-01 外部评审（三轮）：按钮写「下线全部（7）」而表里能看到 8 条活跃，
+               管理员读成「漏了一条」。实际是剔除本机当前会话（不能把自己踢下线）：
+               文案与悬停都把这个差说清楚。 -->
           <button
             v-if="bulkRevokeCount"
             type="button"
             class="mk-btn mk-btn--danger-ghost mk-btn--sm"
-            :title="`下线${bulkScope.label}的全部活跃会话`"
+            :title="`下线${bulkScope.label}除本设备外的全部活跃会话（本机当前会话不会被下线，因此比活跃数少 1）`"
             @click="revokeAllSessions"
-          >下线全部<template v-if="bulkRevokeCount > 1">（{{ bulkRevokeCount }}）</template></button>
+          >下线其他会话（{{ bulkRevokeCount }}）</button>
         </div>
       </div>
 
@@ -179,8 +182,15 @@
              括号内外两个 42 同屏重复，读数像出错（2026-10-30 人工复查）。 -->
         <details v-if="g.historical.length" class="ss-hist" :open="statusFilter !== ''">
           <summary class="mk-section__summary ss-hist__summary">
-            <span class="ss-hist__title">已结束会话（{{ g.historical.length }}<template v-if="fullHistorical(g) > g.historical.length"> / 全量 {{ fullHistorical(g) }}</template>）</span>
+            <span class="ss-hist__title">已结束会话（<template v-if="fullHistorical(g) > g.historical.length">显示 {{ g.historical.length }} / 共 {{ fullHistorical(g) }}</template><template v-else>{{ g.historical.length }}</template>）</span>
             <span class="ss-hist__meta">过期 {{ groupCounts(g).expired }} · 已撤销 {{ groupCounts(g).revoked }}</span>
+            <!-- 2026-11-01 外部评审（五轮 P2）：只列最近 92 条、却写着共 183 条，
+                 读者怀疑有 91 条丢了。这里直说取样口径与取全量的出口。 -->
+            <span
+              v-if="fullHistorical(g) > g.historical.length"
+              class="ss-hist__hint"
+              :title="`列表按时间倒序取最近 ${g.historical.length} 条（后端行窗口上限 100）。全部 ${fullHistorical(g)} 条历史会话可经「数据导出」拉全量 CSV。`"
+            >仅显示最近 {{ g.historical.length }} 条，全量走「数据导出」</span>
           </summary>
           <div class="mk-table-scroll">
             <table class="mk-table mk-table--fixed">
@@ -858,6 +868,8 @@ onMounted(async () => {
 }
 .ss-hist__summary:hover { background: var(--mk-hover-surface); }
 .ss-hist__meta { color: var(--mk-faint); font-weight: 600; font-size: var(--mk-fs-micro); }
+/* 截断说明：贴在折叠头右端，弱化但不藏（读者要知道列表为什么不等于总数） */
+.ss-hist__hint { margin-left: auto; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
 /* 大屏/4K 适配（全站 mk 体系档位；表格与状态条由 shared.css 档位覆盖）。
    分组名走 --mk-fs-emphasis，随档位自动放大，故不在档位内重复声明。 */

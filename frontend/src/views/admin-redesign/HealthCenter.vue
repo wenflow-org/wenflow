@@ -500,7 +500,7 @@ function rowJump(item: HealthCenterItem): RowJump | null {
     return { label: '执行日志 →', go: () => void router.push('/admin/execution-logs') }
   }
   if (item.id === 'runtime-outbox-dead' && item.count > 0) {
-    return { label: '运维工具 →', go: () => void router.push('/admin/ops-hub?tab=tools') }
+    return { label: '运维工具 →', go: () => void router.push('/admin/system-settings?tab=tools') }
   }
   return null
 }

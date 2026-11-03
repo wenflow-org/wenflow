@@ -563,7 +563,8 @@ html[data-theme='dark'] {
   --mk-search-clear-bg: #3a3c41;
   --mk-search-clear-fg: #afb1b6;
   --mk-meta-link-on-bg: rgba(91, 141, 239, 0.22);
-  --mk-input-disabled-bg: #19191a;
+  /* 禁用输入底色要和面板面（#202124）拉开一档，否则暗色下禁用态读不出来（2026-10-31 四轮评审 P0-3） */
+  --mk-input-disabled-bg: #141416;
   --mk-btn-disabled-bg: #2c2e33;
   --mk-modal-close-bg: #2a2b2d;
   --mk-modal-close-hover-bg: #343537;

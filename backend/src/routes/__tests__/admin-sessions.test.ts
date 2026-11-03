@@ -117,6 +117,12 @@ describe('GET /api/admin/sessions', () => {
 
     expect(res.statusCode).toBe(200)
     expect(sessionsFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: {}, take: 100 }))
+    /* 2026-11-01 外部评审：行窗口必须让「活跃」先占位——管理员每次登录写一行，
+       历史行很快把 100 行窗口占满，仍在有效期的旧会话会被挤出去，
+       于是「活跃表只列 3 行」与「下线全部（7）」同屏打架。 */
+    expect(sessionsFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: [{ revokedAt: 'asc' }, { createdAt: 'desc' }] })
+    )
     expect(usersFindMany).toHaveBeenCalledWith({
       where: { id: { in: ['admin-1'] } },
       select: { id: true, name: true, email: true }

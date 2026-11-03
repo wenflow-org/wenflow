@@ -2,7 +2,7 @@
 // 挂载: /api/admin/notifications
 import express, { Request, Response } from 'express';
 import { checkIsAdmin } from '../../services/admin-access.service';
-import { findUserIdOnly, listRealUserIds } from '../../services/users/user.repo';
+import { findUserIdOnly, listLearnerIds } from '../../services/users/user.repo';
 import {
   listNotificationsForAdmin,
   countNotificationsWhere,
@@ -110,8 +110,10 @@ router.post('/', async (req: Request, res: Response) => {
       if (!user) return res.status(404).json({ success: false, error: { message: '用户不存在' } });
       targetIds.push(user.id);
     } else {
-      // 全员 = 所有真实用户（排除虚拟学习者与测试账号）
-      const users = await listRealUserIds();
+      /* 全员 = 全体学员（真实账号里再摘掉管理员与测试/虚拟账号）。
+         2026-11-01 外部评审（五轮 P2）：原口径把 admin 也算进去，教学向通知（如学习周报）
+         发到管理员手上不成立；管理员要收就定向发。 */
+      const users = await listLearnerIds();
       targetIds.push(...users.map((u) => u.id));
     }
 

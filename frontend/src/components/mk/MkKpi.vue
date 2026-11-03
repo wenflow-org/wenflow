@@ -7,39 +7,61 @@
     :type="clickable ? 'button' : undefined"
     class="mk-kpi"
     :class="[tone ? `mk-kpi--${tone}` : '', { 'mk-kpi--clickable': clickable, 'mk-kpi--compact': compact }]"
+    :title="cardTitle"
   >
     <span class="mk-kpi__label">{{ label }} </span>
     <strong class="mk-kpi__num">{{ value }}<span v-if="valueNote && !compact" class="mk-kpi__num-note">{{ valueNote }}</span></strong>
-    <span v-if="hint && !compact" class="mk-kpi__hint" :class="hintTone ? `mk-kpi__hint--${hintTone}` : ''">{{ hint }}</span>
-    <!-- 默认 slot（2026-10-05）：卡内附挂位。空 slot 渲染零节点，既有用法无感。
-         2026-10-16 用户拍板「kpi 面板内部进度条不要出现」——原 VL 判例（.mk-minibar 进度槽）
-         已退役，读数类卡保持「label + 数值 + 一句口径」；此 slot 留给确有必要的附挂物，
-         别再往里塞进度轨道。 -->
+    <!-- 2026-11-01 用户拍板「KPI 的面板下方不许有解释说明文字，全站改了」：
+         原先卡内第三行渲染一句灰色口径说明，二十处调用方各写一句，
+         一排卡高矮不一、读数被说明文字压住。现在卡内只留「标签 + 数值」，
+         原 hint 文案改挂到卡根节点的 title（悬停可见、读屏可读），信息不丢。
+         错误态不靠那行字着色——各调用方本来就把 tone 传在数字上（bad/warn/muted）。
+         卡内仍不再放进度条（2026-10-16 判例）；此 slot 留给确有必要的附挂物。 -->
     <slot></slot>
   </component>
 </template>
 
 <script setup lang="ts">
-withDefaults(
+import { computed } from 'vue'
+
+const props = withDefaults(
   defineProps<{
     label: string
     value: string | number
     /** 数值行内的分解注记（2026-10-21）：只给「同一条读数拆开看」用（完课量的真实 / 虚拟），
         不再新开一行副行——五卡里只有一卡有副行会把整排卡抬高 */
     valueNote?: string
+    /** 口径/状态说明。2026-11-01 起**不再在卡内渲染**，只作为卡根节点的 title（悬停/读屏） */
     hint?: string
     /** 数字着色：ok 绿 / warn 琥珀 / bad 红（含失败告警态）/ muted 弱灰（无数据，非异常） */
     tone?: 'ok' | 'warn' | 'bad' | 'muted' | ''
-    /** 脚注着色：失败域「加载失败，计数不可信」等需要红字脚注的调用方（2026-10-06 审核
-        §OpsHub #174——页内自搓瓦片为红脚注私生一张卡，收编进共享原语而非每页再长一张） */
+    /** @deprecated 2026-11-01：卡内已不渲染 hint，着色无落点。调用方请用 tone 在数字上表达
+        （各失败态调用方此前已同时传了 tone）。保留 prop 只为不做 20 处调用方的无谓改动。 */
     hintTone?: 'ok' | 'warn' | 'bad' | ''
+    /** 悬停说明（读屏也可达）。声明为 prop 而不是靠属性透传，避免与 hint 的合并顺序不可控 */
+    title?: string
     /** 可点击（总览 KPI 等跳转入口）：hover 高亮 */
     clickable?: boolean
     /** 紧凑模式（列表页顶部 KPI）：减内边距/字号、隐藏 hint，压缩垂直空间 */
     compact?: boolean
   }>(),
-  { hint: '', valueNote: '', tone: '', hintTone: '', clickable: false, compact: false }
+  { hint: '', valueNote: '', tone: '', hintTone: '', title: '', clickable: false, compact: false }
 )
+
+/**
+ * 悬停说明 = 调用方的 title 与 hint 合并（2026-11-01 用户拍板：卡内不再显示解释文字）。
+ * 两段文字互为子串时取长的那个，避免卡库那类「title 与 hint 说的几乎同一件事」的卡片
+ * 悬停出现两句重复话。
+ */
+const cardTitle = computed(() => {
+  const t = (props.title || '').trim()
+  const h = (props.hint || '').trim()
+  if (!t) return h || undefined
+  if (!h) return t
+  if (t.includes(h)) return t
+  if (h.includes(t)) return h
+  return `${t} ${h}`
+})
 </script>
 
 <style scoped>
@@ -83,10 +105,6 @@ withDefaults(
   color: var(--mk-muted);
   white-space: nowrap;
 }
-.mk-kpi__hint { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.35; }
-.mk-kpi__hint--bad { color: var(--mk-red); }
-.mk-kpi__hint--warn { color: var(--mk-amber); }
-.mk-kpi__hint--ok { color: var(--mk-green); }
 .mk-kpi--bad .mk-kpi__num { color: var(--mk-red); }
 .mk-kpi--warn .mk-kpi__num { color: var(--mk-amber); }
 .mk-kpi--ok .mk-kpi__num { color: var(--mk-green); }
@@ -130,8 +148,7 @@ html[data-theme='dark'] .mk-kpi { border-color: var(--mk-line); }
   .mk-kpi { padding: 12px 15px; }
   .mk-kpi__label { font-size: var(--mk-fs-micro); }
   .mk-kpi__num { font-size: 27px; }
-  .mk-kpi__hint { font-size: var(--mk-fs-micro); }
-}
+  }
 
 /* 1920px 档（最低标准 1080p 全屏） */
 @media (min-width: 1920px) {
@@ -144,17 +161,14 @@ html[data-theme='dark'] .mk-kpi { border-color: var(--mk-line); }
   .mk-kpi { padding: 14px 17px; border-radius: var(--mk-radius-xl); gap: 5px; }
   .mk-kpi__label { font-size: var(--mk-fs-micro); }
   .mk-kpi__num { font-size: 29px; }
-  .mk-kpi__hint { font-size: var(--mk-fs-micro); }
-}
+  }
 @media (min-width: 2800px) {
   .mk-kpi { padding: 15px 19px; gap: 6px; }
   .mk-kpi__label { font-size: var(--mk-fs-micro); }
   .mk-kpi__num { font-size: 31px; }
-  .mk-kpi__hint { font-size: var(--mk-fs-micro); }
-}
+  }
 @media (min-width: 3600px) {
   .mk-kpi__label { font-size: var(--mk-fs-body); }
   .mk-kpi__num { font-size: 35px; }
-  .mk-kpi__hint { font-size: var(--mk-fs-body); }
-}
+  }
 </style>

@@ -34,16 +34,19 @@
       </template>
     </MkPageHead>
 
-    <!-- 卡库构成 KPI（全站家法：label + 28px 值 + hint 一短句口径，长解释收 title）。
+    <!-- 卡库构成 KPI（全站家法：label + 值，卡内不再有说明行）。
          2026-10-14 KPI 审计：原「卡总数」卡删除——那个数与下方「卡墙」卡头「共 N 张」同屏复读。
-         2026-10-26：「预置卡 / 自建卡」合成一张（两个数并排，hint 拆分）；
+         2026-10-26：「预置卡 / 自建卡」合成一张（两个数并排）；
+         2026-11-01 用户拍板「KPI 面板下方不许有解释说明文字」：构成拆分**不是解释而是读数拆分**，
+         改挂同行内的 value-note（仍在数值行上，不新开一行）；定义回退这类要人工看住的异常
+         按全站 KPI 语言走数字档位（琥珀），而不是一行小字。
          「已创建实例」只留读数，跳转改卡头链接（可点这件事此前只有悬停才看得出）。 -->
     <section class="mk-kpi-grid vlc-summary" aria-label="卡库构成">
       <MkKpi
         label="身份卡"
         :value="summary?.total ?? '—'"
-        :hint="compositionHint"
-        :hintTone="presetHintTone"
+        :value-note="compositionHint"
+        :tone="presetHintTone"
       />
       <MkKpi
         label="已创建实例"

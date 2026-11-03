@@ -110,6 +110,17 @@
         >
           看 Trace
         </button>
+        <!-- 填入试跑（2026-10-31 四轮评审）：线上真实入参一键回填 JSON 编辑器——
+             复杂沙盒上下文手写 JSON 几乎跑不通；与「重跑」分离：填入后可先改再跑 -->
+        <button
+          type="button"
+          class="sdp-log__fill"
+          :disabled="log.loading || trialRunning"
+          title="把该次调用的真实入参填入试跑编辑器，不自动运行"
+          @click="fillTrial(log)"
+        >
+          填入试跑
+        </button>
         <div v-if="openLogId === log.id && log.detail" class="sdp-log__detail">
           <div v-if="log.detail.input" class="sdp-log__io">
             <span>输入</span>
@@ -126,9 +137,12 @@
         </div>
       </div>
     </div>
+    <!-- 空态与列表互斥（2026-10-31 四轮评审 P0-1）：此前 v-if 链只挂在 loading/error 上，
+         与列表的 v-if="recentLogs.length" 不互斥——有 8 条记录时「近一周内没有调用记录」
+         仍同时渲染在同一张卡里，同一屏幕自相矛盾。 -->
     <MkLoading v-if="recentLogsLoading" inline text="日志加载中…" />
     <p v-else-if="recentLogsError" class="sdp-none sdp-bad-text">近 8 条日志加载失败。<button type="button" class="mk-link" @click="loadRecentLogs">重试</button></p>
-    <p v-else class="sdp-none">近一周内没有调用记录。</p>
+    <p v-else-if="!recentLogs.length" class="sdp-none">近一周内没有调用记录。</p>
   </section>
 </template>
 
@@ -376,6 +390,17 @@ async function rerun(log: LogRow) {
   await runTrial()
 }
 
+/** 填入试跑（不自动运行）：回填真实入参后停下来，允许先修改再点「运行预览」 */
+async function fillTrial(log: LogRow) {
+  await ensureLogDetail(log)
+  if (!log.detail?.input) {
+    toast.error('该调用没有可用输入')
+    return
+  }
+  trialInput.value = log.detail.input
+  toast.info('已填入该次调用的真实入参，可修改后运行预览')
+}
+
 /** 展开详情展示截断（detail 保留完整原文供重跑） */
 function displayCap(v?: string) {
   return v && v.length > 3000 ? `${v.slice(0, 3000)}\n…（截断）` : v || ''
@@ -597,9 +622,9 @@ watch(() => props.skillId, (id) => { void loadTrialDefault(id) }, { immediate: t
 .sdp-logs { display: grid; gap: 4px; }
 .sdp-log {
   display: grid;
-  /* 3 列：主体（吃掉剩余宽）+ 重跑 + 看 Trace（两个窄动作列）。主体列必须 minmax(0,1fr)——
+  /* 4 列：主体（吃掉剩余宽）+ 重跑 + 看 Trace + 填入试跑（窄动作列）。主体列必须 minmax(0,1fr)——
      auto 列在窄容器里会把摘要挤没 */
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-xl);
   background: var(--mk-surface);
@@ -657,6 +682,19 @@ watch(() => props.skillId, (id) => { void loadTrialDefault(id) }, { immediate: t
 }
 .sdp-log__trace:hover { background: var(--mk-blue-bg); }
 .sdp-log__trace:disabled { color: var(--mk-faint); cursor: not-allowed; }
+.sdp-log__fill {
+  border: 0;
+  border-left: 1px solid var(--mk-line);
+  background: transparent;
+  color: var(--mk-blue);
+  font: inherit;
+  font-size: var(--mk-fs-micro);
+  font-weight: 700;
+  padding: 0 10px;
+  cursor: pointer;
+}
+.sdp-log__fill:hover { background: var(--mk-blue-bg); }
+.sdp-log__fill:disabled { color: var(--mk-faint); cursor: not-allowed; }
 /* 执行链路（试跑块内的子区块：分隔线 + 步骤行） */
 .sdp-steps { display: grid; gap: 6px; padding-top: 8px; border-top: 1px solid var(--mk-line); }
 .sdp-step {

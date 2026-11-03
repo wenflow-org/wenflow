@@ -25,6 +25,8 @@ export interface VirtualLearnerRow {
   abandonedCount?: number
   /** 卡死（running 超回收阈值无写入）会话数 */
   stalledCount: number
+  /** 自动驾驶最后一次错误（五轮评审 P8；进程重启中断不计） */
+  activeError?: string | null
   /** 进行中会话 id（会话样本内，用于「进行中」列直达座舱） */
   runningSessionIds: string[]
   /** 已暂停会话 id（autopilot=stopped） */

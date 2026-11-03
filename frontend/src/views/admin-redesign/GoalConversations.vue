@@ -41,6 +41,7 @@
         label="未生成路径"
         :value="rows.length ? pathPendingCount : '—'"
         :tone="pathPendingCount ? 'warn' : ''"
+        hint="还没有生成学习路径的目标对话（列表窗口内统计），点击只看这些"
         :clickable="!!rows.length && pathPendingCount > 0"
         :class="{ 'gc-kpi--on': noPathOnly }"
         :aria-pressed="rows.length && pathPendingCount > 0 ? noPathOnly : undefined"
@@ -152,6 +153,8 @@
               @click="toggleGcSort('turns')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('turns')">澄清轮次<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th v-if="showCol('constraints')" scope="col" class="gc-c-constraints">约束条件</th>
+            <!-- 2026-11-01 外部评审 P1：让「未生成路径 N」能在列表里落地（默认隐藏，列菜单可开） -->
+            <th v-if="showCol('path')" scope="col" class="gc-c-path">关联路径</th>
             <th
               v-if="showCol('stageDate')"
               scope="col"
@@ -190,9 +193,14 @@
                        200px（≤1599 收 176px）强制最小宽，长名字/长邮箱被省略号截断后
                        看不到全值——同表其余格均有 title -->
                   <!-- 2026-10-18：姓名即学习者详情入口（行点击仍是进会话，这里 stop 冒泡） -->
+                  <!-- 2026-11-01 外部评审 P2：副行邮箱在「local part 与昵称同值」时按设计不复读
+                       （副行渲染规则），于是同一列有的行有副行、有的没有，被读成排版不一致。
+                       默认规则不动，但邮箱改为姓名格上始终可查——同名用户核对不再依赖副行。 -->
                   <button
                     type="button"
                     class="mk-user-link"
+                    :title="r.userEmail ? `${r.userName}
+${r.userEmail}` : r.userName"
                     @click.stop="openLearner(r.userId)"
                     @keydown.enter.stop.prevent="openLearner(r.userId)"
                   >{{ r.userName }}</button>
@@ -226,8 +234,13 @@
               </div>
               <span v-else class="mk-na">—</span>
             </td>
+            <td v-if="showCol('path')">
+              <span v-if="!r.hasPath" class="mk-badge mk-badge--sm mk-badge--warn">未生成</span>
+              <span v-else class="mk-cell-sub" :title="r.pathCell">{{ r.pathCell || '已生成' }}</span>
+            </td>
             <td v-if="showCol('stageDate')">
-              <span v-if="r.timelineDate" :title="`阶段时间线 ${r.timeline}`">{{ r.timelineDate }}</span>
+              <span v-if="r.timelineDate" :title="`阶段时间线 ${r.timeline}
+最近活动 ${r.timelineDateAbs}`">{{ r.timelineDate }}</span>
               <span v-else class="mk-na">—</span>
             </td>
             <!-- 相对时间是人话（「3 天前」），走正文无衬线；等宽只留给 id/代码类机器串 -->
@@ -289,7 +302,7 @@ import { isLive, openSubPage } from './store'
 import { useListQueryState } from './learner-profile'
 import { useSessionDrill } from './useSessionDrill'
 import { errMsg, timeAgo, isPageCacheFresh, liveRefreshSeq, markPageFetched } from './live'
-import { stageProgressIndex, stageTimelineText, stageTimeline, monthDayText, GOAL_STAGE_TOTAL, statusText } from './statusText'
+import { stageProgressIndex, stageTimelineText, GOAL_STAGE_TOTAL, statusText } from './statusText'
 import { useRowMenu } from './useRowMenu'
 import { useIsNarrow } from './useIsNarrow'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
@@ -339,6 +352,10 @@ interface Row {
   timeline: string
   /** 时间线末条日期（阶段日期列显示值，阶段词由徽章单源；全串进 title） */
   timelineDate: string
+  /** 「最近活动」的绝对时间（悬停用；格内是 timeAgo 相对读数） */
+  timelineDateAbs: string
+  /** 关联路径名（无路径为空串）；仅「关联路径」列使用（默认隐藏） */
+  pathCell: string
   /** 时间线末站绝对时间（阶段日期列排序用；与 stageTimeline 末条同源） */
   stageDateAbs: string
   regenerating?: boolean
@@ -435,13 +452,16 @@ const gcAppliedViews = computed(() => {
    · 约束条件：真实数据稀疏（~35% 有值），逐条约束在详情里看。
    2026-10-27 用户「这个列还是重复了」：路径列并入状态（已完成即已生成），路径入口
    收进操作列（有路径时显示「路径」），不再单列重复。
-   两项仍可在「列」菜单打开；存储键升 v2，旧本地配置不覆盖新默认。 */
-const GC_DEFAULT_HIDDEN = ['constraints', 'created'] as const
+   两项仍可在「列」菜单打开；存储键升 v2，旧本地配置不覆盖新默认。
+   2026-11-01 外部评审 P1：「关联路径」列同理由默认隐藏、可在「列」菜单打开——
+   默认表宽与用户 2026-10-27 拍板的五列不变，但「未生成路径 N」有地方可落地。 */
+const GC_DEFAULT_HIDDEN = ['constraints', 'created', 'path'] as const
 const gcColDefs = [
   { key: 'summary', label: '目标摘要' },
   { key: 'status', label: '状态' },
   { key: 'turns', label: '澄清轮次' },
   { key: 'constraints', label: '约束条件' },
+  { key: 'path', label: '关联路径' },
   { key: 'stageDate', label: '最近活动' },
   { key: 'created', label: '创建时间' },
 ] as const
@@ -570,13 +590,12 @@ function summaryOf(c: Record<string, unknown>): string {
 function mapRow(c: Record<string, unknown>): Row {
   const u = (c.users as Record<string, unknown>) || {}
   const stage = String(c.stage || '')
-  const stageTl = stageTimeline({
-    stage,
-    status: String(c.status || ''),
-    createdAt: String(c.createdAt || ''),
-    updatedAt: String(c.updatedAt || ''),
-    completedAt: String(c.completedAt || '')
-  })
+  // 2026-10-15 用户拍板：阶段日期拆独立列。末站绝对时间与 stageTimeline 末条同源——
+  // 已完成=completedAt（缺则回落 createdAt），其余=updatedAt || createdAt；仅排序用。
+  // 提到 return 之前，供「最近活动」列同时给出相对读数与绝对悬停。
+  const stageDateAbs = String(
+    (String(c.status || '').toLowerCase() === 'completed' ? (c.completedAt || c.createdAt) : (c.updatedAt || c.createdAt)) || ''
+  )
   return {
     id: String(c.id),
     userId: String(c.userId || ''),
@@ -606,13 +625,17 @@ function mapRow(c: Record<string, unknown>): Row {
       updatedAt: String(c.updatedAt || ''),
       completedAt: String(c.completedAt || '')
     }),
-    // 写法用「10月13日」而非裸「10-13」——单看不再是数字区间的形状（2026-10-13 运营走查 F2）
-    timelineDate: monthDayText(stageTl.at(-1)?.date || ''),
-    // 2026-10-15 用户拍板：阶段日期拆独立列。末站绝对时间与 stageTimeline 末条同源——
-    // 已完成=completedAt（缺则回落 createdAt），其余=updatedAt || createdAt；仅排序用
-    stageDateAbs: String(
-      (String(c.status || '').toLowerCase() === 'completed' ? (c.completedAt || c.createdAt) : (c.updatedAt || c.createdAt)) || ''
-    ),
+    stageDateAbs,
+    // 2026-11-01 外部评审 P2：本列原用 monthDayText 出「10月28日」绝对日期，而同页创建时间
+    // 列、同事其它列表页的最近活动列都是 timeAgo 相对时间——同页两种口径，且绝对日期看不出
+    // 到底离「近 7 天」有多远（KPI 卡就写着「近 7 天 +3」）。改相对时间，绝对时间退到悬停。
+    // 无时间戳的老数据保持空串（渲染「—」）：timeAgo('') 会给「从未」，那是给创建时间列的语义
+    timelineDate: stageDateAbs ? timeAgo(stageDateAbs) : '',
+    timelineDateAbs: stageDateAbs,
+    // 2026-11-01 外部评审 P1：KPI 卡说「未生成路径 1」，列表里却没有一列能指出是哪一条
+    // （路径信息此前只并进状态列）。该列默认不进表（用户 2026-10-27 拍板默认口径不改），
+    // 可在「列」菜单打开。只带路径**名**，绝不把 lp_… 内部 id 上屏。
+    pathCell: c.learningPathTitle ? String(c.learningPathTitle) : '',
   }
 }
 
@@ -896,6 +919,8 @@ onMounted(() => {
 .gc-c-status { width: 84px; }
 .gc-c-turns { width: 68px; }
 .gc-c-constraints { width: 140px; }
+/* 关联路径（2026-11-01 外部评审 P1，默认隐藏）：够放「未生成」徽标与常见路径名片段 */
+.gc-c-path { width: 150px; }
 .gc-c-stage-date { width: 78px; }
 .gc-c-created { width: 72px; }
 /* 操作列宽度由全局 .mk-c-act 统一（2026-10-27） */

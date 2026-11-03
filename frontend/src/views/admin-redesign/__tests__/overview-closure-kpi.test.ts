@@ -108,7 +108,7 @@ describe('总览完课量 KPI（#105）', () => {
     await closureCard(wrapper)!.trigger('click');
     expect(intent.scene).toBe('teaching-sessions');
   });
-  it('读数失败不伪造 0：值给「—」、hint 如实呈报，并在卡内给重试', async () => {
+  it('读数失败不伪造 0：值给「—」、说明如实呈报（走悬停），并在卡内给重试', async () => {
     closureSummaryMock.mockImplementation(async () => {
       throw new Error('boom');
     });
@@ -116,7 +116,9 @@ describe('总览完课量 KPI（#105）', () => {
 
     const card = closureCard(wrapper);
     expect(card!.text()).toContain('—');
-    expect(card!.text()).toContain('读数加载失败');
+    /* 2026-11-01：卡内不再渲染解释文字，失败说明退到卡根 title */
+    expect(card!.find('.mk-kpi__hint').exists()).toBe(false);
+    expect(card!.attributes('title')).toContain('读数加载失败');
     expect(card!.text()).not.toContain('未标记');
     // 2026-10-26：失败态卡不可点（读数不可信），卡内自带重试，不再只能靠整页重试
     expect(card!.classes()).not.toContain('mk-kpi--clickable');

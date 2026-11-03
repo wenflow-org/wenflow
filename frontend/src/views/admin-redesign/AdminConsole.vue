@@ -99,14 +99,15 @@ const LearningPaths = asyncPage(() => import('./OpsContent.vue'));
 const VirtualLearners = asyncPage(() => import('./VirtualLearners.vue'));
 const VirtualLearnerCards = asyncPage(() => import('./VirtualLearnerCards.vue'));
 const Skills = asyncPage(() => import('./Skills.vue'));
-// Prompt 评估（2026-10-25 用户拍板从 skills 宿主页签拆回独立页，归入侧栏 Skill 组）
-const PromptEval = asyncPage(() => import('./PromptEval.vue'));
 const Orchestrator = asyncPage(() => import('./Orchestrator.vue'));
 const ExecLogs = asyncPage(() => import('./ExecLogs.vue'));
 // 2026-09-29 拆回独立页：成本分析从执行日志宿主释放
 const TokenCost = asyncPage(() => import('./TokenCost.vue'));
 const AuditLogs = asyncPage(() => import('./AuditLogs.vue'));
-const ApiConfig = asyncPage(() => import('./ApiConfig.vue'));
+// 系统设置（2026-11-01）：模型与接入 + 运营中心原系统运维四页签合并（用户「这四个拆出来，
+// 和模型与接入作为一个页面，但是模型与接入要改名字了」）。模型与接入降为该页首屏页签，
+// 不再作为独立场景注册——旧 id api-config 的 URL 在 router 改投过来。
+const SystemSettings = asyncPage(() => import('./SystemSettings.vue'));
 const PromptWorkbench = asyncPage(() => import('./PromptWorkbench.vue'));
 // 运营术语表（2026-10-10 抽屉退役改整页）：壳层帮助按钮跳转的隐藏场景，不进侧栏
 const AdminGlossary = asyncPage(() => import('./AdminGlossary.vue'));
@@ -155,15 +156,13 @@ const components: Record<string, unknown> = {
   'orchestrator': Orchestrator,
   // 外挂能力（2026-10-19 从 api-config 宿主拆回独立场景，侧栏 Skill 组）
   'addons': Addons,
-  // Prompt 评估（2026-10-25 从 skills 宿主页签拆回独立场景，侧栏 Skill 组）：
-  // 面板 PromptEvalPanel 由本页异步加载；旧 /admin/skills?tab=prompt-eval 在 Skills 页改投
-  'prompt-eval': PromptEval,
+  // Prompt 评估 2026-11-01 下线：场景与侧栏项一并摘除，旧 URL 在 router 改投 /admin/skills
   'execution-logs': ExecLogs,
   'token-cost': TokenCost,
   'memory-review': MemoryReview,
   'audit-logs': AuditLogs,
-  'api-config': ApiConfig,
-  // 访问与注册 2026-10-27 并入运营中心宿主 tab（场景下线，URL 重定向兼容）
+  'system-settings': SystemSettings,
+  // 访问与注册 2026-11-01 随系统运维四页签迁入「系统设置」（此前 2026-10-27 曾并入运营中心 tab）
   // 隐藏场景（不在 manifest 侧栏）：PromptWorkbench 是「新建 Skill」骨架生成的唯一入口，
   // 健康中心 hash/yaml 跳转深链至此，勿删注册
   'skill-workbench': PromptWorkbench,

@@ -55,8 +55,9 @@
             class="mk-link"
             :class="{ 'mk-link--active': checkVisible }"
             :aria-pressed="checkVisible"
+            :title="checkVisible ? '收起勾选列并清空已选' : '显示勾选列进入选择态，勾选后才会出现批量操作条'"
             @click="toggleBatchMode"
-          >批量操作</button>
+          >{{ checkVisible ? '退出批量' : '批量操作' }}</button>
           <MkCols
             :col-defs="ulColDefs"
             storage-key="wf_users_hidden_cols_v5"
@@ -570,7 +571,7 @@ async function batchDelete() {
   if (!ids.length || batchBusy.value) return
   const ok = await askConfirm({
     title: '批量删除用户',
-    message: `确认批量删除 ${ids.length} 个用户？删除后用户将无法登录，历史数据保留，可在后台恢复。`,
+    message: `确认批量删除 ${ids.length} 个用户？删除后用户将无法登录，历史数据保留，需要恢复时到「视图 → 已删除」里找回。`,
     confirmText: `删除 ${ids.length} 个用户`,
     busy: true
   })
@@ -629,7 +630,9 @@ function exportSelected() {
 async function removeUser(u: UserRow) {
   const ok = await askConfirm({
     title: '删除用户',
-    message: `确认删除用户「${u.name}」（${u.email}）？\n删除后用户将无法登录，历史数据保留，可在后台恢复。`,
+    /* 邮箱独占一行（2026-11-01 外部评审）：和账号名挤在一句里时，确认框宽度不够，
+       长邮箱会在连字符处被折断成两行，读起来像两个地址。 */
+    message: `确认删除用户「${u.name}」？\n邮箱：${u.email}\n删除后用户将无法登录，历史数据保留，需要恢复时到「视图 → 已删除」里找回。`,
     confirmText: '删除',
     busy: true
   })
@@ -637,7 +640,9 @@ async function removeUser(u: UserRow) {
   u.busy = true
   try {
     await liveDeleteUser(u.id)
-    toast.success(`「${u.name}」已删除`)
+    /* 删除是可逆的软删：toast 顺带给出找回路径——否则「可在后台恢复」只是一句空承诺
+       （2026-11-01 外部评审二轮：删完找不到回收站入口） */
+    toast.success(`「${u.name}」已删除，可在「视图 → 已删除」恢复`)
     doneConfirm()
   } catch (e) {
     toast.error(`删除失败：${errMsg(e)}`)
@@ -651,7 +656,7 @@ async function removeUser(u: UserRow) {
 async function restoreUserRow(u: UserRow) {
   const ok = await askConfirm({
     title: '恢复用户',
-    message: `确认恢复用户「${u.name}」（${u.email}）？\n恢复后该用户可重新登录，历史数据原样保留。`,
+    message: `确认恢复用户「${u.name}」？\n邮箱：${u.email}\n恢复后该用户可重新登录，历史数据原样保留。`,
     confirmText: '恢复',
     danger: false
   })
@@ -791,8 +796,11 @@ function clearFilters() {
 /* 固定列宽（2026-10-22 用户「翻页不同页码时候，列宽怎么还在变呢」）：用户/邮箱两列在
    auto 布局下按当页最长文本分宽，翻页跳动；fixed 后按表头宽度定死，余量按权重摊开。 */
 .u-c-check { width: 36px; }
-.u-c-user { width: 250px; }
-.u-c-email { width: 190px; }
+.u-c-user { width: 220px; }
+/* 2026-11-01 外部评审（二轮）：邮箱是账号的唯一识别符，却是第一个被截断的列
+   （ui-review-demo-…@example.in 尾巴被吃），而「操作」列只有两颗按钮却吃掉 400px。
+   邮箱加宽 + 给操作列定宽，余量不再全落到最右列。 */
+.u-c-email { width: 280px; }
 .u-c-role { width: 96px; }
 /* 390 档 fixed 表按比例摊薄列宽，「路径 / 课堂」+ 右缘 caret（绝对定位 -12px）会贴到内衬里；
    112 = 文字 75 + 左右内衬 32 + 余量，窄屏保整词与箭头。 */

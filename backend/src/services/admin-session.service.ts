@@ -7,11 +7,18 @@ import prisma from '../config/database';
  * 列出、按 id 查、单个吊销、批量吊销、批量取管理员名称。
  */
 
-/** 会话列表：按 createdAt 倒序取 limit 条（过滤条件由调用方构造） */
+/**
+ * 会话列表：活跃优先、同档按 createdAt 倒序取 limit 条（过滤条件由调用方构造）。
+ *
+ * 2026-11-01 外部评审：「活跃会话」表只显示 3 行，而同屏「下线全部（7）」按全量计数——
+ * 管理员每次登录写一行，历史行很快把 100 行窗口占满，仍在有效期内的旧会话被挤出窗口
+ * （原排序只看 createdAt）。活跃行才是「要动手的对象」，必须先占窗口：
+ * revokedAt 升序让 NULL（未撤销）排在已撤销之前。
+ */
 export function listAdminSessions(where: Record<string, unknown>, take: number) {
   return prisma.admin_sessions.findMany({
     where,
-    orderBy: { createdAt: 'desc' },
+    orderBy: [{ revokedAt: 'asc' }, { createdAt: 'desc' }],
     take,
   });
 }

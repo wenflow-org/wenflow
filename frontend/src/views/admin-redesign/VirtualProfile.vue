@@ -1983,7 +1983,16 @@ async function loadDetail(id?: string, quiet = false) {
           rounds: Number(s.roundCount ?? 0),
           durationMs: (() => {
             const from = Date.parse(String(s.createdAt || s.startedAt || ''))
-            const to = Date.parse(String(s.updatedAt || ''))
+            /* 2026-10-31 五轮评审 P2：挂机不计时——推进中/停机的会话以自动驾驶最后心跳为
+               活动终点（停机后心跳冻结，暂停 3 小时不再被算进运行时长）；终态会话以最后
+               一次落库写（updatedAt）收口（总结/收尾写入晚于最后一次心跳） */
+            let sr: Record<string, unknown> | null = null
+            try { sr = typeof s.stageResults === 'string' ? JSON.parse(s.stageResults || '{}') : (s.stageResults || null) } catch { sr = null }
+            const ap = (sr?.autopilot || null) as Record<string, unknown> | null
+            const hb = Date.parse(String(ap?.heartbeatAt || ''))
+            const upd = Date.parse(String(s.updatedAt || ''))
+            const terminal = ['completed', 'failed', 'abandoned', 'timeout', 'cancelled', 'incomplete'].includes(String(s.status || '').toLowerCase())
+            const to = terminal ? upd : Number.isFinite(hb) ? hb : upd
             return Number.isFinite(from) && Number.isFinite(to) && to >= from ? to - from : undefined
           })(),
           currentTask: s.currentTaskTitle ? String(s.currentTaskTitle) : null
@@ -2774,12 +2783,17 @@ const loopStages = computed<LoopStage[]>(() => {
           : stage.includes('memor') || stage.includes('review')
             ? 4
             : -1
+  /* 路径从未生成时不得把「教学回合」高亮为当前环（2026-10-31 五轮评审 P1）：
+     目标确认后状态机可能把 latest.stage 推到 teaching，但 pathTotal=0——钳回「路径规划」 */
+  const currentIdx2 = currentIdx >= 2 && pathTotal === 0 ? 1 : currentIdx
   const toneOf = (i: number): LoopStage['tone'] => {
     if (i === 4 && (due ?? 0) > 0) return 'alert'
     // 零运行：五环都还没走过。此前全部落 done（绿边），读起来像「闭环已完成」——
     // 改为只有入口环 active、其余虚线待办，明确「从这里开始」。
     if (!allRuns.value.length) return i === 0 ? 'active' : 'idle'
-    return i === currentIdx ? 'active' : 'done'
+    /* 指针前 = done、指针 = active、指针后 = idle（2026-10-31 五轮评审 P1：
+       原来指针之后也全落 done 绿边，0 教学会话/0 成果被画成已完成） */
+    return i < currentIdx2 ? 'done' : i === currentIdx2 ? 'active' : 'idle'
   }
   return [
     { name: '目标对话', meta: '澄清真实目标与约束', val: `${goalTotal} 会话`, tone: toneOf(0), title: `来源：故事池目标会话合计 ${goalTotal}` },
@@ -2906,7 +2920,8 @@ const timelineSessionOptions = computed(() =>
     .map((r) => ({
       sessionId: String(r.sessionId),
       // 传原始时间 createdAt（RunItem 内 time 已是 timeAgo 文案，再喂 timeAgo 会二次格式化出 Invalid Date）
-      label: `${formatRunResult(r.result)} · ${r.storyTitle || '未关联故事'} · ${timeAgo(String(r.createdAt || ''))}`,
+      /* 2026-10-31 五轮评审 P3：标签读展示态（已暂停），不再与页头徽章打架 */
+      label: `${formatRunResult(runDisplayState(r))} · ${r.storyTitle || '未关联故事'} · ${timeAgo(String(r.createdAt || ''))}`,
     })),
 )
 /** MkSelect 形态：value = sessionId（v-model 仍是 timelineSessionId） */
@@ -3008,26 +3023,32 @@ interface RunDayGroup { key: string; title: string; runs: RunItem[] }
    故事池 = 按故事看（教材库存视角，卡片自带各故事的最近会话）；
    这里   = 按时间看（会话流水视角：全部会话按时间倒序、按日期分组），
    两个 tab 因此不再是同一数据的重复展示。 */
+/* 2026-10-31 五轮评审 P9：筛选维度与隔壁故事池对齐——全部 / 进行中 / 已暂停 / 已完成 / 需关注，
+   原「未完成」把已暂停混进终态桶，与故事池的「已暂停」独立胶囊不一致 */
 const RUN_FILTERS = [
   { key: '', label: '全部' },
   { key: 'active', label: '进行中' },
+  { key: 'paused', label: '已暂停' },
   { key: 'done', label: '已完成' },
-  /* 2026-10-23 走查：原来第四格叫「失败」且只收 tone=bad——「已放弃 / 已暂停 / 超时」
-     这些终态既不在进行中也不在已完成，于是出现「全部 1、其余 0」的读不通。
-     改「未完成」＝除进行中与已完成以外的全部终态；具体状态词看行内徽章。 */
-  { key: 'unfinished', label: '未完成' },
+  { key: 'bad', label: '需关注' },
 ] as const
 const runsFilter = ref('')
 function isRunActive(r: RunItem): boolean {
-  /* 2026-10-31 四轮评审 R1：自动驾驶停机不算「进行中」（落「未完成」桶，行内徽章如实标已暂停） */
+  /* 2026-10-31 四轮评审 R1：自动驾驶停机不算「进行中」（落「已暂停」桶，行内徽章同词） */
   if (r.paused && (r.result === 'running' || r.result === 'created')) return false
   return r.result === 'running' || r.result === 'created'
 }
 function isRunDone(r: RunItem): boolean {
   return r.tone === 'ok' || r.result === 'completed'
 }
-function isRunUnfinished(r: RunItem): boolean {
-  return !isRunActive(r) && !isRunDone(r)
+/** 展示态 = 已暂停（含自动驾驶停机折叠，见 runDisplayState） */
+function isRunPaused(r: RunItem): boolean {
+  return !isRunActive(r) && !isRunDone(r) && runDisplayState(r) === 'paused'
+}
+/** 需关注 = 系统失败 + 人为终止 + 超时等异常终态（与列表「异常」列同一关注面） */
+function isRunBad(r: RunItem): boolean {
+  const st = String(r.result || '').toLowerCase()
+  return r.tone === 'bad' || ['failed', 'abandoned', 'timeout'].includes(st)
 }
 const runFilterOptions = computed(() =>
   RUN_FILTERS.map((f) => ({
@@ -3037,17 +3058,20 @@ const runFilterOptions = computed(() =>
       ? allRuns.value.length
       : f.key === 'active'
         ? allRuns.value.filter(isRunActive).length
-        : f.key === 'done'
-          ? allRuns.value.filter(isRunDone).length
-          : allRuns.value.filter(isRunUnfinished).length,
+        : f.key === 'paused'
+          ? allRuns.value.filter(isRunPaused).length
+          : f.key === 'done'
+            ? allRuns.value.filter(isRunDone).length
+            : allRuns.value.filter(isRunBad).length,
   }))
 )
 /** 时间倒序 + 筛选（与 runFilterOptions 同口径） */
 const runRows = computed<RunItem[]>(() => {
   const rows = allRuns.value.slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
   if (runsFilter.value === 'active') return rows.filter(isRunActive)
+  if (runsFilter.value === 'paused') return rows.filter(isRunPaused)
   if (runsFilter.value === 'done') return rows.filter(isRunDone)
-  if (runsFilter.value === 'unfinished') return rows.filter(isRunUnfinished)
+  if (runsFilter.value === 'bad') return rows.filter(isRunBad)
   return rows
 })
 /** 会话流水行内时刻 HH:mm（完整日期见日期分组头） */

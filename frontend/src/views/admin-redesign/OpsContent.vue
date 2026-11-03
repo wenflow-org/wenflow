@@ -178,10 +178,13 @@
                       v-if="p.user?.id"
                       type="button"
                       class="mk-user-link"
+                      :title="p.user?.email ? `${p.user?.name || '—'}
+${p.user?.email}` : (p.user?.name || '—')"
                       @click.stop="openLearnerOf(p)"
                       @keydown.enter.stop.prevent="openLearnerOf(p)"
                     >{{ p.user?.name || '—' }}</button>
-                    <strong v-else>{{ p.user?.name || '—' }}</strong>
+                    <strong v-else :title="p.user?.email ? `${p.user?.name || '—'}
+${p.user?.email}` : (p.user?.name || '—')">{{ p.user?.name || '—' }}</strong>
                     <!-- 备注在副行：姓名行保持全额宽度（2026-10-24 压字回归） -->
                     <!-- 副行去重（2026-10-24）：邮箱 local part 与姓名同值时不再复读 -->
                     <span v-if="emailSubline(p.user?.email, p.user?.name) || p.isTestAccount" class="mk-cell-subline">
@@ -249,7 +252,7 @@
         v-else
         min
         icon="◌"
-        :title="isFiltered ? '当前筛选无匹配' : '没有学习路径'"
+        :title="emptyStateTitle"
         :action-text="isFiltered ? '清除筛选' : '去目标对话'"
         @action="isFiltered ? clearFilters() : goGoalConversations()"
       />
@@ -438,6 +441,17 @@ const filtered = computed(() => {
   }))
 })
 const isFiltered = computed(() => !!keyword.value.trim() || statusFilter.value !== 'all')
+/* 空态标题（2026-11-01 外部评审 P2）：状态下拉会列出计数为 0 的档（如「生成失败 (0)」），
+   选中后就只剩一句「当前筛选无匹配」——运营分不清是这类路径真的没有、还是和别的条件没交集。
+   单状态筛选且该档为 0 时，把档名写进标题；档名与下拉同源，避免两处用词不一致。 */
+const emptyStateTitle = computed(() => {
+  if (!isFiltered.value) return '没有学习路径'
+  if (statusFilter.value !== 'all') {
+    const name = ocStatusPills.value.find((p) => p.key === statusFilter.value)?.name
+    if (name) return `当前没有「${name}」的学习路径`
+  }
+  return '当前筛选无匹配'
+})
 function clearFilters() {
   keyword.value = ''
   statusFilter.value = 'all'

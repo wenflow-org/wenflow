@@ -141,7 +141,13 @@
         </div>
         <div class="mk-modal__body">
           <label class="mk-field" :class="{ 'mk-field--error': toolErrors.id }">
-            <span class="mk-field__label">工具 ID <em class="mk-field__req">*</em></span>
+            <!-- 编辑态：ID 是主键不可改（输入框禁用），红星撤下、改挂锁定说明——
+                 否则禁用框带必填星号会被读成「该填但填不了」（2026-10-31 四轮评审 P0-3） -->
+            <span class="mk-field__label">
+              工具 ID
+              <em v-if="!toolEditingId" class="mk-field__req">*</em>
+              <em v-else class="ac-field__locked">创建后不可修改</em>
+            </span>
             <input v-model="toolForm.id" class="mk-field__input" placeholder="例如：web-search / text-to-image" :disabled="!!toolEditingId" />
             <span v-if="toolErrors.id" class="mk-field__err">{{ toolErrors.id }}</span>
           </label>
@@ -202,6 +208,13 @@
             <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeConfig">✕</button>
           </div>
           <div class="mk-modal__body">
+            <!-- 资料采集去哪了（2026-10-31 四轮评审 P0-4）：联网卡列了三个成员能力
+                 （网页搜索/网页抓取/资料采集），配置弹窗却只有 搜索/抓取 两条通道——
+                 资料采集是编排 Skill，复用这两条通道取数，没有自己的 provider 链；
+                 不造假通道行，用一行说明把口径闭合。 -->
+            <p v-if="configTarget?.id === 'web'" class="ac-config-note">
+              资料采集不单独配密钥：它复用「搜索 / 抓取」两条通道取数。这两条通道配好，联网的三个成员能力即可用。
+            </p>
             <!-- 优先级（2026-10-26 用户两次走查：「这个真的很丑」「本身是三选一，然后用户可以
                  自己配置优先级」）：每通道一条链，第一位是主用，其余是备用；顺序由用户自己排，
                  也可以把 provider 加进/移出链。
@@ -219,11 +232,15 @@
                   <span class="ac-prio__rank">{{ i === 0 ? '主用' : `备用 ${i}` }}</span>
                   <strong class="ac-prio__name">{{ providerLabelOf(pid) }}</strong>
                   <span class="ac-prio__ops">
-                    <button type="button" class="ac-prio__op" aria-label="上移" :disabled="i === 0"
-                            @click="moveInOrder(channel.id, i, -1)">↑</button>
-                    <button type="button" class="ac-prio__op" aria-label="下移"
-                            :disabled="i === orderOf(channel.id).length - 1"
-                            @click="moveInOrder(channel.id, i, 1)">↓</button>
+                    <!-- 排序箭头只在 ≥2 个服务时出现（2026-10-31 四轮评审）：只有一个主用时
+                         ↑↓ 无效且挤在胶囊里 -->
+                    <template v-if="orderOf(channel.id).length > 1">
+                      <button type="button" class="ac-prio__op" aria-label="上移" :disabled="i === 0"
+                              @click="moveInOrder(channel.id, i, -1)">↑</button>
+                      <button type="button" class="ac-prio__op" aria-label="下移"
+                              :disabled="i === orderOf(channel.id).length - 1"
+                              @click="moveInOrder(channel.id, i, 1)">↓</button>
+                    </template>
                     <button type="button" class="ac-prio__op" aria-label="移出链"
                             :disabled="orderOf(channel.id).length === 1"
                             @click="removeFromOrder(channel.id, i)">✕</button>
@@ -904,9 +921,15 @@ function goLogs(skillId: string) {
 }
 .ac-cap-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  /* 三张能力卡恒等分整行（2026-10-31 四轮评审 P2-8）：auto-fit 280px 在宽屏会多出空轨道——
+     三张卡只占约 3/4 行宽，右侧留一条尴尬空白，与下方通栏 MCP 卡右缘不齐。
+     宽屏恒 3 列（本组就是 3 张内置能力卡 + 一张通栏卡），窄屏回落 auto-fit 自然折行。 */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   align-items: stretch;
+}
+@media (max-width: 1080px) {
+  .ac-cap-grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 }
 .ac-cap {
   display: grid;
@@ -953,7 +976,25 @@ function goLogs(skillId: string) {
 .ac-cap-skel { height: 104px; border-radius: var(--mk-radius-xl); }
 .ac-cap-skel--wide { grid-column: 1 / -1; height: 168px; }
 
-/* 服务配置弹窗：先排通道优先级（主用 + 备用，用户可自己调），再填链上 provider 的密钥/入口。
+/* 资料采集口径说明行（P0-4）：与通道行同节奏的中性小字 */
+.ac-config-note {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--mk-radius-md);
+  background: var(--mk-surface-2);
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+  line-height: 1.6;
+}
+/* 编辑态锁定说明（P0-3）：替代必填红星的位置，弱色小字（页面前缀，不占 mk- 原语命名空间） */
+.ac-field__locked {
+  font-style: normal;
+  font-weight: 400;
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-faint);
+  margin-left: 5px;
+}
+/* MCP 服务编辑弹窗：先排通道优先级（主用 + 备用，用户可自己调），再填链上 provider 的密钥/入口。
    2026-10-25 用户「不要这种解释型文案」：简介、降级注记、provider 说明句、字段提示行全撤。
    2026-10-26 用户两次走查「这个真的很丑」「本身是三选一，然后用户可以自己配置优先级」：
    原先是「只读顺序行 + 全部 provider 平铺成灰底卡」，读起来像都在用、每张卡还各带一个

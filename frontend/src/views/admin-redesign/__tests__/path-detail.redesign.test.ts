@@ -3,8 +3,9 @@
  *
  * 断言 = 解析行为与数据诚实性：
  *  - 有关联对话 → 就地换开座舱（?view=session-real&id=gc_x&stage=path），from 原样带走
- *  - 无关联对话（孤儿路径，M-2 2026-10-29 夜审）→ 不再落死空态：就地渲染路径自身内容
- *    （页头注明未关联对话 + PathJourneyPanel 阶段/任务），面包屑回写路径名
+ *  - 无关联对话（孤儿路径；2026-11-01 外部评审 P1/P2 重做）→ 信息卡直出路径基础信息
+ *    （所属用户 / 状态 / 里程碑·任务数 / 短式可复制 ID）并给「去目标对话」回链；
+ *    内容查看收编到学习者详情（原 M-2「就地渲染阶段任务」随之退役），面包屑回写路径名
  *  - 接口失败 → 错误态可重试
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
@@ -92,18 +93,20 @@ describe('PathDetail 路径深链适配层', () => {
     w.unmount()
   })
 
-  it('孤儿路径 → 不再落死空态：页头注明未关联对话，阶段与任务就地渲染（M-2）', async () => {
-    // 面板内容体自取同一详情接口：第二次调用返回同一条
+  it('孤儿路径 → 信息卡直出基础信息 + 可复制 ID + 回链，不再落死空态（2026-11-01 评审 P1/P2）', async () => {
     detailMock.mockResolvedValue({ data: { data: orphanBody() } })
     const w = mountShim()
     await settle()
     const text = w.text()
-    expect(text).toContain('未关联目标对话')
+    // 信息卡：标题 / 状态（active→学习中）/ 里程碑与任务计数 / 复制入口
     expect(text).toContain('毛笔小楷入门')
-    expect(text).toContain('执笔与运笔')
-    expect(text).toContain('中锋线条练习')
-    // 旧的死空态文案不再出现
-    expect(text).not.toContain('该路径没有关联的目标对话')
+    expect(text).toContain('学习中')
+    expect(text).toContain('1 个 · 1 条')
+    expect(text).toContain('复制')
+    // 说明句带出「内容在哪里看」的去处，不再是死路
+    expect(text).toContain('该路径没有关联的目标对话，因此没有可跳转的学习会话座舱')
+    expect(text).toContain('路径内容仍可在学习者详情里查看')
+    expect(text).toContain('去目标对话')
     // 面包屑回写路径名（不再是裸 id）
     expect(subPage.value?.label).toBe('毛笔小楷入门')
     expect(subPage.value?.view).toBe('path')

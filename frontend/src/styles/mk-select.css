@@ -86,7 +86,12 @@
 .mk-select--sm .mk-select__trigger { height: 30px; min-width: 0; padding: 0 7px 0 9px; font-size: var(--mk-fs-micro); }
 .mk-select__trigger:hover:not(:disabled) { border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line)); }
 .mk-select__trigger:focus-visible { outline: none; border-color: var(--mk-blue); box-shadow: var(--mk-focus-ring); }
-.mk-select__trigger:disabled { opacity: 0.5; cursor: not-allowed; }
+.mk-select__trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--mk-input-disabled-bg);
+  border-color: var(--mk-line, #e1e8f2);
+}
 /* 校验失败：与 .mk-field--error 的输入框同色 */
 .mk-select--error .mk-select__trigger { border-color: var(--mk-red, #dc2626); }
 .mk-select__value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

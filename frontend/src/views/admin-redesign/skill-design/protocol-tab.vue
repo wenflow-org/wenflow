@@ -34,6 +34,16 @@
           :class="{ 'sdp-pw__viewbtn--active': coreViewMode === 'preview' }"
           @click="switchCoreView('preview')"
         >预览</button>
+        <!-- 展开/收起（2026-10-31 四轮评审 P1-7）：teaching-turn 这类 2.7 万字的 Prompt
+             在固定高（≈30 行）的编辑器里滚动阅读很吃力——给一个整屏档 -->
+        <button
+          v-if="coreViewMode === 'raw'"
+          type="button"
+          class="sdp-pw__viewbtn sdp-pw__viewbtn--tall"
+          :aria-pressed="coreRawTall"
+          :title="coreRawTall ? '收起到常规高度' : '展开到整屏高度，便于通读长 Prompt'"
+          @click="coreRawTall = !coreRawTall"
+        >{{ coreRawTall ? '收起' : '展开' }}</button>
       </div>
       <div v-if="coreClassification" class="sdp-pw__classify" :class="`sdp-pw__classify--${coreClassification.level}`">
         <strong>编辑分级：{{ coreLevelLabel(coreClassification.level) }}</strong>
@@ -170,7 +180,10 @@
                   @change="markDirty"
                 />
                 <input v-model="f.optional" type="checkbox" aria-label="可选" @change="markDirty" />
-                <input v-model="f.desc" class="mk-input" placeholder="功能描述" @input="markDirty" />
+                <!-- desc 用 textarea（2026-10-31 四轮评审 P1-7）：生成指令常是整句说明，
+                     单行 input 只留最前面十几个字（如「2026-09-27 起停用」这类关键约束被截掉），
+                     也没有任何查看全文的入口；换成可纵向拖拽的多行框 -->
+                <textarea v-model="f.desc" rows="1" class="mk-input sdp-pwform__fielddesc" placeholder="功能描述" @input="markDirty"></textarea>
                 <input v-model="f.turn" type="checkbox" aria-label="turn（回合输出）" @change="markDirty" />
                 <button type="button" class="mk-link mk-link--danger" @click="removeField(i)">删除</button>
               </div>
@@ -234,7 +247,7 @@
       <!-- 源码视图（YAML 语法高亮覆盖层）。v-else 会连 preview 档一起命中——
            切到「预览」时 YAML 编辑器仍整块挂在上方（2026-10-31 三轮评审），
            三档视图互斥改为显式 else-if -->
-      <div v-else-if="coreViewMode === 'raw'" class="sdp-codehl">
+      <div v-else-if="coreViewMode === 'raw'" class="sdp-codehl" :class="{ 'sdp-codehl--tall': coreRawTall }">
         <pre class="sdp-codehl__pre mono" aria-hidden="true"><code v-html="coreHighlighted"></code></pre>
         <textarea
           ref="coreTextareaRef"
@@ -407,6 +420,8 @@ const corePublishResult = ref<{ ok: boolean; message?: string; agentId?: string;
 const coreUncertain = ref<any>(null)
 const corePublishIssues = ref<Array<Record<string, unknown>>>([])
 const coreViewMode = ref<'form' | 'raw' | 'preview'>('form')
+/** 源码视图整屏档（2026-10-31 四轮评审 P1-7）：长 Prompt 通读用；切回表单/预览不保留 */
+const coreRawTall = ref(false)
 const coreForm = ref<CoreFormState | null>(null)
 /** 编译预览是否已过期（#126）：保存只写盘、不重编译，预览内容可能落后于磁盘 */
 const corePreviewStale = ref(false)
@@ -834,6 +849,7 @@ watch(
     coreUncertain.value = null
     corePublishIssues.value = []
     coreViewMode.value = 'form'
+    coreRawTall.value = false
     openFormSections.value = new Set(['identity', 'inputs', 'fields'])
     corePreviewStale.value = false
     coreFormIssue.value = null
@@ -932,6 +948,11 @@ watch(
   pointer-events: none;
 }
 .sdp-codehl__pre::-webkit-scrollbar { display: none; }
+/* 整屏档：长 Prompt 通读（2.7 万字量级），高度按视口给，仍保持两层 padding 一致 */
+.sdp-codehl--tall {
+  min-height: min(84vh, 1200px);
+  max-height: min(92vh, 1400px);
+}
 .sdp-codehl__ta {
   position: relative;
   z-index: 1;
@@ -1030,6 +1051,8 @@ watch(
   cursor: pointer;
 }
 .sdp-pw__viewbtn--active { background: var(--mk-surface); color: var(--mk-ink); box-shadow: inset 0 0 0 1px var(--mk-blue); }
+/* 展开/收起：同一容器内的工具钮，与三个视图档区分（虚线边） */
+.sdp-pw__viewbtn--tall { margin-left: 6px; border-left: 1px dashed var(--mk-line); border-radius: 0 var(--mk-radius-sm) var(--mk-radius-sm) 0; color: var(--mk-blue); }
 .sdp-pwform {
   display: grid;
   gap: 16px;
@@ -1147,18 +1170,25 @@ watch(
 .sdp-pwform__fields { display: grid; gap: 8px; }
 .sdp-pwform__fieldrow {
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) 116px 34px minmax(150px, 1.6fr) 34px 52px;
+  /* 列宽重分配（2026-10-31 四轮评审 P1-7）：name 只存 reply/figure 这类短标识，
+     原 1fr 却占约 25%；真正带说明的 desc 只有 1.6fr 且单行截断。
+     现 name 收窄、desc 加宽（并且是可变高的多行框）。 */
+  grid-template-columns: minmax(96px, 0.7fr) 108px 32px minmax(260px, 2.4fr) 32px 52px;
   gap: 10px;
-  align-items: center;
+  align-items: start;
   padding: 4px 0;
 }
+/* desc 多行框：默认单行高、可纵向拖拽展开（与规则 textarea 同语汇） */
+.sdp-pwform__fielddesc { min-height: 36px; resize: vertical; line-height: 1.6; }
 .sdp-pwform__fieldrow--head {
   font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   font-weight: 700;
   padding-bottom: 0;
 }
-.sdp-pwform__fieldrow input[type='checkbox'] { width: 15px; height: 15px; accent-color: var(--mk-blue); justify-self: center; }
+.sdp-pwform__fieldrow input[type='checkbox'] { width: 15px; height: 15px; accent-color: var(--mk-blue); justify-self: center; align-self: center; }
+/* 行内对齐：desc 变高后复选框与删除钮仍居行首那条基线上 */
+.sdp-pwform__fieldrow > .mk-link { align-self: center; justify-self: end; }
 .sdp-pwform .mk-input { min-height: 36px; padding: 8px 12px; font-size: var(--mk-fs-body); }
 .sdp-pwform textarea.mk-input { line-height: 1.65; }
 @media (max-width: 860px) {

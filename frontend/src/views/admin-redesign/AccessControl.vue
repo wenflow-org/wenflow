@@ -132,7 +132,9 @@
                   :label="IP_QUOTA_TITLE"
                   @update:model-value="setQuotaEnabled"
                 />
-                <label class="ac-quota-field">
+                <!-- 2026-11-01 外部评审：开关关闭时输入框只是「暗一档」，在一屏灰字里仍被读成可填；
+                     整组（标签 + 数字 + 单位）一起压暗，才看得出这是「当前不生效的值」 -->
+                <label class="ac-quota-field" :class="{ 'ac-quota-field--off': !registerIpQuotaEnabled }">
                   <span class="mk-field__label">每日上限</span>
                   <input
                     type="number"
@@ -144,6 +146,7 @@
                     @change="onQuotaInput"
                   />
                   <em>个 / IP</em>
+                  <span v-if="!registerIpQuotaEnabled" class="ac-quota-off">当前不限制</span>
                 </label>
                 <button
                   v-if="registerIpQuotaEnabled && quotaDirty"
@@ -326,6 +329,19 @@ function onOutboundKeydown(e: KeyboardEvent): void {
   void nextTick(() => outboundEls.value[next]?.focus())
 }
 
+const MODE_TEXT: Record<'loopback' | 'private' | 'any', string> = {
+  loopback: '仅本机（127.0.0.1）',
+  private: '私有网段',
+  any: '不限制来源'
+}
+const MODE_RANK: Record<'loopback' | 'private' | 'any', number> = { loopback: 2, private: 1, any: 0 }
+/** 本次保存是「收紧」而不是「放宽」：按档位比较编辑值与服务端现值 */
+function isTightening(): boolean {
+  const saved = cfg.value?.networkPolicy?.adminAccessMode
+  if (!saved) return false
+  return MODE_RANK[policy.adminAccessMode] > MODE_RANK[saved]
+}
+
 async function savePolicy(): Promise<void> {
   if (saving.value || !policyDirty.value || saveBlocked.value) return
   if (policy.adminAccessMode === 'any') {
@@ -333,6 +349,16 @@ async function savePolicy(): Promise<void> {
       title: '开放公网访问',
       message: '你正在将 Admin 后台开放到公网/任意来源访问。\n任何能访问该服务地址的人都能看到管理入口，请确认已了解风险。',
       confirmText: '确认开放',
+    })
+    if (!ok) return
+  } else if (isTightening()) {
+    /* 2026-11-01 外部评审（三轮 P0）：往严收紧同样可能「把自己关在门外」——
+       原来只在开放公网时拦一次，收紧没有任何提示，误选「仅本机」保存后远程管理员直接掉线。 */
+    const ok = await askConfirm({
+      title: '收紧后台访问来源',
+      message: `保存后只接受「${MODE_TEXT[policy.adminAccessMode]}」进来的请求。
+如果你现在不是从这类来源访问后台，保存会立刻把自己挡在门外（要到服务器上改配置才能恢复）。`,
+      confirmText: '我已确认当前来源',
     })
     if (!ok) return
   }
@@ -566,6 +592,11 @@ onMounted(() => { if (isLive.value) void loadRegistrationStatus() })
 .ac-quota-field .mk-field__label { margin: 0; }
 .ac-quota-field .mk-field__input { width: 76px; text-align: center; font-variant-numeric: tabular-nums; }
 .ac-quota-field em { font-style: normal; color: var(--mk-faint); }
+/* 配额关闭 = 这组数不生效：整组压暗 + 输入框改虚线边 + 明写「当前不限制」。
+   仅压暗仍被读成「可填」（2026-11-01 外部评审二轮），三重信号一起给才不留歧义。 */
+.ac-quota-field--off { opacity: 0.45; }
+.ac-quota-field--off .mk-field__input { border-style: dashed; }
+.ac-quota-off { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-muted); white-space: nowrap; }
 
 /* 保存归位到表单末尾：改完整张卡，动作就在手边（2026-10-30 人工复查） */
 .ac-foot {

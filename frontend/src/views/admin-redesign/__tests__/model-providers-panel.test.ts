@@ -259,14 +259,15 @@ describe('ModelProvidersPanel', () => {
     expect(result.attributes('title')).toContain('可以')
   })
 
-  it('运行面读数：冷却中的模型标「冷却中」，空态是「健康」', async () => {
+  it('运行面读数：冷却中的模型标「冷却中」，其余标「可用」（非连通性结论）', async () => {
     getModelRegistryMock.mockResolvedValue({
       data: { data: { models: [], cooldowns: [{ providerId: 'platform', model: 'deepseek-v4-flash', remainingMs: 30000 }], warnings: [], runtime: { maxModelCandidates: 2 } } }
     })
     const w = await mountPanel()
     const rows = modelRows(w)
     expect(rows[0].text()).toContain('冷却中')
-    expect(rows[1].text()).toContain('健康')
+    /* 2026-11-01：徽章由「健康」改「可用」——原词被读成「连通过了」，实际只是未熔断 */
+    expect(rows[1].text()).toContain('可用')
   })
 
   it('配置告警不只给图标：别名未引用的模型在状态列写明「未被引用」，细节留在 title', async () => {

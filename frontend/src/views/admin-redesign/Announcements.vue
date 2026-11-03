@@ -106,7 +106,7 @@
             <td>
               <div class="mk-actions">
                 <button v-if="r.status !== 'published'" type="button" class="mk-link" :disabled="r.busy" @click="publish(r)">发布</button>
-                <button v-if="r.status === 'published'" type="button" class="mk-link" :disabled="r.busy" @click="archive(r)">下线</button>
+                <button v-if="r.status === 'published'" type="button" class="mk-link an-act--danger" :disabled="r.busy" @click="archive(r)">下线</button>
                 <button type="button" class="mk-link" :disabled="r.busy" @click="openEdit(r)">编辑</button>
                 <div class="mk-menu">
                   <!-- aria-expanded 按行判定（审核 #168）：menuOpen 是 useRowMenu 的全局布尔，
@@ -194,24 +194,38 @@
             <span class="mk-field__hint">{{ form.body.length }} / 3000 字</span>
             <span v-if="errors.body" class="mk-field__err">{{ errors.body }}</span>
           </label>
-          <label class="mk-field">
+          <div class="mk-field">
             <!-- 必填项已带 *，非必填不再追加「（可选）」：标签后半句只是把「没有 *」再说一遍 -->
             <span class="mk-field__label">过期时间</span>
-            <input v-model="form.expiresAt" type="datetime-local" class="mk-field__input" />
-          </label>
-          <!-- 仅新建态显示：编辑走「保存修改」，saveEdit 不读 publishNow（发布由行内「发布」按钮负责），
-               编辑态留着会是看得见、改了没用的控件 -->
-          <label v-if="!editingId" class="mk-field an-publish-now">
-            <input v-model="form.publishNow" type="checkbox" />
-            <span class="mk-field__label" style="margin:0">创建后立即发布</span>
-          </label>
+            <!-- 2026-11-01 外部评审：原生 datetime-local 在中文环境把空态渲染成「年 /月/日 --:--」
+                 （字间空格不均、深色下与系统配色冲突），交给 MkDateTime 统一回显 + 快捷档 -->
+            <MkDateTime v-model="form.expiresAt" label="过期时间" placeholder="留空表示不过期" />
+            <div class="an-exp-quick">
+              <button type="button" class="mk-link" @click="setExpiresInDays(7)">7 天后</button>
+              <button type="button" class="mk-link" @click="setExpiresInDays(30)">30 天后</button>
+              <button v-if="form.expiresAt" type="button" class="mk-link" @click="form.expiresAt = ''">清空</button>
+            </div>
+          </div>
+          <!-- 2026-11-01 外部评审（三轮）：勾选框「创建后立即发布」与主按钮「创建并发布」是同一件事，
+               按钮文案还跟着勾选变，「取消勾选后按钮会变成什么」全靠猜。改成两个具名出口：
+               存为草稿 / 创建并发布——勾选框撤除。 -->
         </div>
         <div class="mk-modal__foot">
           <!-- 统一关闭路径：提交中禁关（此前绕过 closeCreate，与 Esc/遮罩/✕ 的守卫不一致） -->
           <button type="button" class="mk-btn" @click="closeCreate">取消</button>
-          <button type="button" class="mk-btn mk-btn--primary" :disabled="creating" @click="editingId ? saveEdit() : create()">
-            {{ creating ? '保存中…' : editingId ? '保存修改' : form.publishNow ? '创建并发布' : '创建草稿' }}
-          </button>
+          <template v-if="editingId">
+            <button type="button" class="mk-btn mk-btn--primary" :disabled="creating" @click="saveEdit()">
+              {{ creating ? '保存中…' : '保存修改' }}
+            </button>
+          </template>
+          <template v-else>
+            <button type="button" class="mk-btn" :disabled="creating" @click="create(false)">
+              {{ creating ? '保存中…' : '存为草稿' }}
+            </button>
+            <button type="button" class="mk-btn mk-btn--primary" :disabled="creating" @click="create(true)">
+              {{ creating ? '保存中…' : '创建并发布' }}
+            </button>
+          </template>
         </div>
       </div>
     </div>
@@ -246,6 +260,7 @@ import MockSkeletonTable from './SkeletonTable.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkDateTime from '@/components/mk/MkDateTime.vue'
 import Pagination from './Pagination.vue'
 
 /** 嵌入模式：作为「通知与公告」页「公告」tab 渲染（仅去掉外层壳，状态条/新建/编辑弹窗保留）。
@@ -548,6 +563,14 @@ function toIso(v: string): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString()
 }
 
+/** 快捷档（2026-11-01 外部评审建议）：从此刻起 N 天整点，省得手拨日历 */
+function setExpiresInDays(days: number): void {
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  d.setHours(23, 59, 0, 0)
+  form.value.expiresAt = toLocalInput(d.toISOString())
+}
+
 async function saveEdit() {
   errors.value = {}
   if (!form.value.title.trim()) errors.value.title = '请输入标题'
@@ -570,7 +593,7 @@ async function saveEdit() {
   }
 }
 
-async function create() {
+async function create(publishNow: boolean) {
   errors.value = {}
   if (!form.value.title.trim()) errors.value.title = '请输入标题'
   if (!form.value.body.trim()) errors.value.body = '请输入正文'
@@ -582,10 +605,10 @@ async function create() {
       body: form.value.body.trim(),
       severity: form.value.severity,
       expiresAt: toIso(form.value.expiresAt),
-      publishNow: form.value.publishNow
+      publishNow
     })
     createOpen.value = false
-    toast.success(form.value.publishNow ? '公告已创建并发布' : '草稿已创建')
+    toast.success(publishNow ? '公告已创建并发布' : '草稿已创建')
   } catch (e) {
     toast.error(`创建失败：${errMsg(e)}`)
   } finally {
@@ -663,7 +686,13 @@ function expiresLabel(iso: string): string {
 .an-sev--on.an-sev--info { border-color: var(--mk-blue); color: var(--mk-blue); background: var(--mk-blue-bg, #eef5ff); }
 .an-sev--on.an-sev--warning { border-color: var(--mk-amber); color: var(--mk-amber); background: var(--mk-amber-bg); }
 .an-sev--on.an-sev--critical { border-color: var(--mk-red); color: var(--mk-red); background: var(--mk-red-bg); }
-.an-publish-now { display: flex; align-items: center; gap: 8px; }
+/* 下行类动作（下线公告）用危险色，与「编辑」这条日常动作拉开：2026-11-01 外部评审指出
+   两者同为蓝字链接，误点即让用户端公告消失（弹窗有二次确认，但颜色仍应先劝退） */
+.an-act--danger { color: var(--mk-amber); }
+.an-act--danger:hover { color: var(--mk-red); }
+/* 过期时间快捷档：与字段同宽左对齐，一颗颗小链接，不抢主操作 */
+.an-exp-quick { display: flex; gap: 14px; margin-top: 2px; }
+.an-exp-quick .mk-link { font-size: var(--mk-fs-micro); }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {

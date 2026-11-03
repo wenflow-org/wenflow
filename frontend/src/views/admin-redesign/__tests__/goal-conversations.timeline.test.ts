@@ -16,6 +16,7 @@ import GoalConversations from '../GoalConversations.vue';
 
 const mockRouter = () => createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] });
 import { dataSource } from '../store';
+import { timeAgo } from '../live';
 
 const { listMock, statsMock } = vi.hoisted(() => ({
   listMock: vi.fn(),
@@ -94,7 +95,10 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
     // 阶段词不再作为徽章文本上屏
     expect(cell.text()).not.toContain('澄清中');
     const dateEl = stageDateEl(wrapper);
-    expect(dateEl.text()).toBe('8月13日');
+    /* 2026-11-01 外部评审 P2：本列由绝对日期（8月13日）改为相对时间，与同页创建时间列
+       及同事其它列表页统一；绝对时间退到悬停（不断言具体相对词，避免测试随当前日期漂移）。 */
+    expect(dateEl.text()).toBe(timeAgo('2026-08-13T04:00:00.000Z'));
+    expect(dateEl.attributes('title')).toContain('2026-08-13');
     expect(dateEl.attributes('title')).toContain('创建 08-12 → 澄清中 08-13');
     /* 教学组列序统一（2026-10-16）：身份 → 用户 → 状态 → 过程 → 时间 → 操作。
        原先把「最近活动」紧跟状态列（当状态伴侣），与同组其它页「时间列在过程之后」不一致；
@@ -134,7 +138,8 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
     const cell = wrapper.findAll('tbody tr')[0].findAll('td')[2];
     expect(cell.text()).toBe('已完成');
     const dateEl = stageDateEl(wrapper);
-    expect(dateEl.text()).toBe('8月14日');
+    expect(dateEl.text()).toBe(timeAgo('2026-08-14T06:00:00.000Z'));
+    expect(dateEl.attributes('title')).toContain('2026-08-14');
     expect(dateEl.attributes('title')).toContain('创建 08-12 → 已完成 08-14');
     expect(wrapper.find('.gc-stage-cell__dot').exists()).toBe(false);
     wrapper.unmount();
@@ -161,7 +166,8 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
     const row = wrapper.find('tbody tr');
     expect(row.find('td .mk-badge').text()).toBe('已取消');
     const dateEl = stageDateEl(wrapper);
-    expect(dateEl.text()).toBe('8月13日');
+    expect(dateEl.text()).toBe(timeAgo('2026-08-13T04:00:00.000Z'));
+    expect(dateEl.attributes('title')).toContain('2026-08-13');
     expect(dateEl.attributes('title')).toContain('创建 08-12 → 已取消 08-13');
     wrapper.unmount();
   });

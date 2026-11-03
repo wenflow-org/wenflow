@@ -111,10 +111,10 @@
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('weak')">需关注<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th scope="col" class="mk-num mk-th--sortable mr-c-prop" :aria-sort="userSortState('proposed')"
                 @click="toggleUserSort('proposed')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('proposed')">归并候选<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('proposed')">待合并同义词<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th scope="col" class="mk-num mk-th--sortable mr-c-scatter" :aria-sort="userSortState('scatter')"
                 @click="toggleUserSort('scatter')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('scatter')">散键<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('scatter')">未归类记忆<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th scope="col" class="mk-num mk-th--sortable mr-c-strength" :aria-sort="userSortState('strength')"
                 @click="toggleUserSort('strength')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('strength')">记忆强度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
@@ -137,7 +137,8 @@
                 <div class="mr__user">
                   <MkCellAvatar :name="row.name" :tone="row.isVirtualLearner ? 'virtual' : 'default'" />
                   <div class="mk-cell-main">
-                    <strong>{{ row.name || '未命名' }}</strong>
+                    <strong :title="row.email ? `${row.name || '未命名'}
+${row.email}` : (row.name || '未命名')">{{ row.name || '未命名' }}</strong>
                     <!-- 2026-10-23 走查：副行原为截断的内部 userId（user_9f559a6…abf073），
                          既不可读也不能检索；改与其它列表同口径显示邮箱，无邮箱才退回短 id -->
                     <!-- 备注在副行：姓名行保持全额宽度（2026-10-24 压字回归） -->
@@ -150,7 +151,17 @@
                   </div>
                 </div>
               </td>
-              <td class="mk-num">{{ row.traces }}</td>
+              <!-- 2026-11-01 外部评审 P1：「记忆痕迹 4」与「记忆强度 83%」并排时，
+                   83% 其实是 3 条的平均（未初始化的痕迹没有强度、不计入平均），
+                   读者会以为 4 条都参与了平均。把未计入平均的条数就地标出来。 -->
+              <td class="mk-num">
+                <b>{{ row.traces }}</b>
+                <span
+                  v-if="uninitializedTraces(row) > 0"
+                  class="mk-cell-sub mr__traces-sub"
+                  :title="`${row.traces} 条记忆痕迹里，有 ${uninitializedTraces(row)} 条还没有记忆强度（未初始化），不计入「记忆强度」的平均值`"
+                >未初始化 {{ uninitializedTraces(row) }}</span>
+              </td>
               <td class="mk-num">
                 <!-- 只留数字：比例条移到「记忆强度」列，避免与相邻列的另一条并排读成一条 -->
                 <b class="mr__due-num" :class="`mr__due-num--${dueTone(row)}`">{{ row.due }}</b>
@@ -158,12 +169,12 @@
               <td class="mk-num">
                 <div v-if="row.weak > 0 || row.audit?.ambiguous" class="mr__focus">
                   <span v-if="row.weak > 0" class="mk-badge mk-badge--sm mk-badge--warn">薄弱 {{ row.weak }}</span>
-                  <!-- 待人工确认的归并候选：确认 / 驳回在「记忆调度」页签，点数字直达 -->
+                  <!-- 待人工确认的同义归并：确认 / 驳回在「记忆调度」页签，点数字直达 -->
                   <button
                     v-if="row.audit?.ambiguous"
                     type="button"
                     class="mk-link mr__act"
-                    title="待人工确认的归并候选：点击到「记忆调度」确认或驳回"
+                    title="模型判定为同义、等待人工确认合并的记忆条目：点击到「记忆调度」确认或驳回"
                     @click.stop="openOps(row.userId)"
                   >待确认 {{ row.audit.ambiguous }}</button>
                 </div>
@@ -190,7 +201,11 @@
                 <span v-else class="mr__none">0</span>
               </td>
               <td class="mk-num">
-                <span v-if="row.avgStrength != null" class="mr__strength">
+                <span
+                  v-if="row.avgStrength != null"
+                  class="mr__strength"
+                  :title="`按 ${row.tracesWithStrength ?? row.traces} 条有强度的痕迹取平均（另有 ${uninitializedTraces(row)} 条未初始化，不计入）`"
+                >
                   <span class="mk-minibar mr__bar" aria-hidden="true"><i class="mk-minibar__fill" :style="{ width: strengthPct(row) + '%' }"></i></span>
                   <b class="mr__strength-pct">{{ strengthPct(row) }}%</b>
                 </span>
@@ -288,10 +303,12 @@ interface OverviewRow {
   /* 原型 renderMemory 三列：薄弱 = FSRS 强度<40% 的痕迹数；平均强度 0-1，null = 无带 FSRS 强度的痕迹 */
   weak: number
   avgStrength: number | null
+  /** 有 FSRS 强度的痕迹条数（avgStrength 的分母；traces 是全量，含未初始化） */
+  tracesWithStrength?: number | null
   lastReviewedAt: string | null
-  /** 模型给出的同义归并候选数（audit.proposed；没跑过归并观察的用户为 0） */
+  /** 模型判定为同义、待人工确认的记忆条目数（audit.proposed；没跑过归并观察的用户为 0） */
   proposed: number
-  /** 未挂靠到标准概念的记忆标识数（散键） */
+  /** 未挂靠到标准概念的记忆标识数（列表列名「未归类记忆」） */
   scatter: number
 }
 
@@ -449,10 +466,10 @@ const overviewCards = computed<OverviewCard[]>(() => {
   const numTone = (tone: OverviewCard['tone']): OverviewCard['tone'] => (failed ? 'bad' : pending ? 'muted' : tone)
   const numHint = (text: string) => (failed ? '取数失败' : pending ? '取数中…' : text)
   /* 待审队列已并入此卡（2026-10-22 用户「合并了」）：需人工确认的不是只有 ambiguous，
-     同义概念待确认 + 模糊候选 + 散键清理建议才是完整的「人审待办」。口径取
+     同义概念待确认 + 模糊候选 + 未归类记忆清理建议才是完整的「人审待办」。口径取
      fragmentation.pendingReview；后端旧版没这个字段时退回 ambiguous，不静默归零。 */
   const reviewQueue = totals.value.fragmentation?.pendingReview
-  /* 归并审计是「按用户跑观察」才有的投影：一条都没有时，需人工确认/归并候选的 0 不是
+  /* 归并审计是「按用户跑观察」才有的投影：一条都没有时，需人工确认/待合并同义词的 0 不是
      「观察过、很干净」，而是「还没观察」。两者必须分开显示（2026-10-23 用户
      「为什么包括测试的也是很多0」——26 位测试用户、55 条痕迹，审计读数全是 0）。 */
   const noAudit = (t.usersWithAudit ?? 0) === 0
@@ -468,8 +485,10 @@ const overviewCards = computed<OverviewCard[]>(() => {
       /* 确认 / 驳回 / 回滚在「记忆调度」页签：卡可点，落到需关注快筛（同一批人） */
       clickable: !noAudit
     },
-    /* 2026-10-23：待归并建议 / 未挂靠散键不再占 KPI 卡——两项都能落到「哪位学习者」，
-       改由列表的「归并候选」「散键」两列承载，页头只留列表无法表达的读数 */
+    /* 2026-10-23：待归并建议 / 未归类记忆不再占 KPI 卡——两项都能落到「哪位学习者」，
+       改由列表的「待合并同义词」「未归类记忆」两列承载，页头只留列表无法表达的读数
+       （2026-11-01 外部评审 P1：两列原名是内部算法/存储黑话，产品与运营读不懂，
+        已改成业务可读文案） */
   ];
 });
 
@@ -509,6 +528,12 @@ function dueTone(row: OverviewRow): 'none' | 'warn' | 'high' {
 function strengthPct(row: OverviewRow): number {
   return row.avgStrength == null ? 0 : Math.round(row.avgStrength * 100);
 }
+/** 未初始化痕迹数 = 全量痕迹 − 有强度的痕迹（后端 tracesWithStrength 缺失时按 0 处理，不臆造） */
+function uninitializedTraces(row: OverviewRow): number {
+  const withStrength = row.tracesWithStrength
+  if (withStrength == null) return 0
+  return Math.max(0, row.traces - withStrength)
+}
 function fullTime(iso: string): string {
   return new Date(iso).toLocaleString('zh-CN', { hour12: false });
 }
@@ -531,7 +556,7 @@ async function loadOverview() {
     if (seq !== overviewSeq) return
     const body = res.data?.data ?? res.data ?? {}
     /* 2026-10-23 用户「列的信息就很少，但是 kpi 信息很多」：把原来只住在 KPI 的两项
-       （待归并建议 / 未挂靠散键）搬到行上——它们本来就有逐用户读数，只是没接出来。 */
+       （待归并建议 / 未归类记忆）搬到行上——它们本来就有逐用户读数，只是没接出来。 */
     rows.value = (Array.isArray(body.users) ? body.users : []).map((u: Record<string, any>) => ({
       ...u,
       proposed: Number(u.audit?.proposed ?? 0),
@@ -597,7 +622,7 @@ function openLearner(userId: string) {
   openSubPage('learner', userId, { tab: LEARNER_DETAIL_LANDING.memoryReview })
 }
 
-/** 行内待办数字（待确认 / 归并候选 / 散键）→ 「记忆调度」页签：确认、驳回、回滚都在那里 */
+/** 行内待办数字（待确认 / 待合并同义词 / 未归类记忆）→ 「记忆调度」页签：确认、驳回、回滚都在那里 */
 function openOps(userId: string) {
   openSubPage('learner', userId, { tab: 'memory-ops' })
 }
@@ -657,6 +682,8 @@ onMounted(async () => {
    逐行横跳，定为 38px 后条起点对齐，数值右缘仍与右对齐表头同侧。 */
 .mr__strength { display: inline-flex; align-items: center; gap: 8px; }
 .mr__strength-pct { font-variant-numeric: tabular-nums; font-weight: 700; width: 38px; text-align: right; }
+/* 未初始化痕迹的角标（2026-11-01 外部评审 P1）：弱色小字，压在痕迹数下面，不与数字抢视线 */
+.mr__traces-sub { display: block; font-size: var(--mk-fs-micro); }
 .mr__bar { width: 64px; }
 
 /* 窄屏（2026-10-17 实测）：八张 KPI 卡竖排后高于视口，fill 布局把列表卡压成 1px 高，

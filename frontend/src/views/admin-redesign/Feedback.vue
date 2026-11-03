@@ -175,7 +175,20 @@
           <header class="mk-drawer__head">
             <div class="mk-drawer__heading">
               <h3 class="mk-drawer__title">{{ detail.userName }} 的反馈</h3>
-              <span class="mk-drawer__sub mono">{{ detail.id }}</span>
+              <!-- 反馈 ID 是运营与研发对日志的唯一定位符：给一颗复制钮
+                   （2026-11-01 外部评审：此前只能手动框选 39 个字符的 id） -->
+              <span class="fb-idrow">
+                <span class="mk-drawer__sub mono">{{ detail.id }}</span>
+                <button
+                  type="button"
+                  class="fb-idrow__copy"
+                  :aria-label="`复制反馈 ID ${detail.id}`"
+                  title="复制反馈 ID"
+                  @click="copyDetailId"
+                >
+                  <Copy :size="12" :stroke-width="2" aria-hidden="true" />
+                </button>
+              </span>
             </div>
             <button type="button" class="mk-drawer__close" aria-label="关闭" @click="closeDetail">✕</button>
           </header>
@@ -190,13 +203,42 @@
             <!-- 事实清单（原型 dl.kv → 共享 mk-facts 栅格）：三维评分带点阵；id 类格单行省略、全文在 title -->
             <div class="mk-facts">
               <div><span>评分</span><span class="mk-dots" :class="{ 'mk-dots--warn': detail.rating <= 2 }" role="img" :aria-label="`评分 ${detail.rating}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': d <= detail.rating }"></i></span><strong class="mono">{{ detail.rating }}/5</strong></div>
-              <div><span>有用度</span><span class="mk-dots" role="img" :aria-label="`有用度 ${detail.helpfulness ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.helpfulness != null && d <= detail.helpfulness }"></i></span><strong class="mono">{{ detail.helpfulness ?? '—' }}</strong></div>
-              <div><span>清晰度</span><span class="mk-dots" role="img" :aria-label="`清晰度 ${detail.clarity ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.clarity != null && d <= detail.clarity }"></i></span><strong class="mono">{{ detail.clarity ?? '—' }}</strong></div>
-              <div><span>难度</span><span class="mk-dots" role="img" :aria-label="`难度 ${detail.difficulty ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.difficulty != null && d <= detail.difficulty }"></i></span><strong class="mono">{{ detail.difficulty ?? '—' }}</strong></div>
+              <div><span>有用度</span><span class="mk-dots" role="img" :aria-label="`有用度 ${detail.helpfulness ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.helpfulness != null && d <= detail.helpfulness }"></i></span><strong class="mono">{{ detail.helpfulness != null ? `${detail.helpfulness}/5` : '—' }}</strong></div>
+              <div><span>清晰度</span><span class="mk-dots" role="img" :aria-label="`清晰度 ${detail.clarity ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.clarity != null && d <= detail.clarity }"></i></span><strong class="mono">{{ detail.clarity != null ? `${detail.clarity}/5` : '—' }}</strong></div>
+              <div><span>难度</span><span class="mk-dots" role="img" :aria-label="`难度 ${detail.difficulty ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.difficulty != null && d <= detail.difficulty }"></i></span><strong class="mono">{{ detail.difficulty != null ? `${detail.difficulty}/5` : '—' }}</strong></div>
               <div><span>节点</span><strong class="mono" :title="detail.agentId || ''">{{ detail.agentId || '—' }}</strong></div>
               <div><span>策略</span><strong :title="detail.strategy || ''">{{ detail.strategy || '—' }}</strong></div>
-              <div><span>任务</span><strong class="mono" :title="detail.taskId || ''">{{ detail.taskId || '—' }}</strong></div>
-              <div><span>会话</span><strong class="mono" :title="detail.sessionId || ''">{{ detail.sessionId || '—' }}</strong></div>
+              <div><span>任务</span>
+                <span class="fb-idrow">
+                  <strong class="mono" :title="detail.taskId || ''">{{ detail.taskId || '—' }}</strong>
+                  <button
+                    v-if="detail.taskId"
+                    type="button"
+                    class="fb-idrow__copy"
+                    :aria-label="`复制任务 ID ${detail.taskId}`"
+                    title="复制任务 ID"
+                    @click="copyField('任务 ID', detail.taskId)"
+                  >
+                    <Copy :size="12" :stroke-width="2" aria-hidden="true" />
+                  </button>
+                </span>
+              </div>
+              <div><span>会话</span>
+                <span class="fb-idrow">
+                  <strong class="mono" :title="detail.sessionId || ''">{{ detail.sessionId || '—' }}</strong>
+                  <!-- 排查 Bad Case 要把会话 ID 贴进日志检索：截断的 id 没法手动选全 -->
+                  <button
+                    v-if="detail.sessionId"
+                    type="button"
+                    class="fb-idrow__copy"
+                    :aria-label="`复制会话 ID ${detail.sessionId}`"
+                    title="复制会话 ID"
+                    @click="copyField('会话 ID', detail.sessionId)"
+                  >
+                    <Copy :size="12" :stroke-width="2" aria-hidden="true" />
+                  </button>
+                </span>
+              </div>
               <!-- 提交时间（审核 #169）：绝对时间入事实格，相对时间留列表列（另三张表同口径） -->
               <div><span>提交时间</span><strong class="mono" :title="detail.createdAtRaw">{{ fmtDateTime(detail.createdAtRaw) }}</strong></div>
             </div>
@@ -227,10 +269,23 @@
           </div>
           <!-- 底部动作（原型 .ovl__foot：取消/忽略在左、主钮最右、常驻滚动区外；同 gc-detail__foot 判例） -->
           <footer class="mk-drawer__foot">
+            <!-- 2026-11-01 外部评审（二轮）：主次倒置——「分流入库」被做成了饱和蓝主按钮，
+                 而真正把反馈处理完的「标记已解决」只是绿描边次级。按动作的终局性排：
+                 解决 = 主按钮；分流 = 次级（处理中）；忽略 = ghost。 -->
+            <!-- 只记阶段性跟进、不动处理状态时，此前没有出口（三个按钮都会改状态） -->
+            <button
+              v-if="noteDraft.trim() && noteDraft.trim() !== (detail.internalNote || '')"
+              type="button"
+              class="mk-btn"
+              :disabled="saving"
+              @click="saveNoteOnly"
+            >仅保存备注</button>
             <button type="button" class="mk-btn mk-btn--ghost" :disabled="saving" @click="save('dismissed')">忽略</button>
-            <button type="button" class="mk-btn mk-btn--ok" :disabled="saving" @click="save('resolved')">标记已解决</button>
-            <button type="button" class="mk-btn mk-btn--primary" :disabled="saving" @click="save('triaged')">
-              {{ saving ? '保存中…' : '标记已分流' }}
+            <button type="button" class="mk-btn" :disabled="saving" @click="save('triaged')">标记已分流</button>
+            <!-- 备注与状态一起提交：写了内部备注时按钮直说「保存备注并解决」，
+                 免得运营以为备注要另存一次（2026-11-01 外部评审三轮） -->
+            <button type="button" class="mk-btn mk-btn--primary" :disabled="saving" @click="save('resolved')">
+              {{ saving ? '保存中…' : noteDraft.trim() ? '保存备注并解决' : '标记已解决' }}
             </button>
           </footer>
         </aside>
@@ -254,6 +309,8 @@ import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import { useTableSort } from './useTableSort'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
+import { Copy } from 'lucide-vue-next'
+import { copyText } from './clipboard'
 
 /** 嵌入模式：作为运营中心「反馈」tab 渲染（仅去掉外层状态条；宿主承载域计数）。
     count 事件：反馈总数上报（宿主「反馈 N」徽章）。
@@ -323,6 +380,14 @@ const noteDraft = ref('')
     ✕/遮罩/Esc 全部指向本函数（与 Confirm.vue busy 拦截同款）。 */
 function closeDetail() {
   if (!saving.value) detail.value = null
+}
+/** 复制反馈 ID：成功/失败都给 toast（失败时把 id 一起打出来，手动可复制） */
+async function copyDetailId() {
+  const id = detail.value?.id
+  if (!id) return
+  const ok = await copyText(id)
+  if (ok) toast.success('已复制反馈 ID')
+  else toast.error(`复制失败，请手动复制：${id}`)
 }
 useEscape(() => !!detail.value, closeDetail)
 const panelRef = ref<HTMLElement | null>(null)
@@ -512,6 +577,28 @@ async function openDetail(r: Row) {
   }
 }
 
+async function copyField(label: string, text: string) {
+  const ok = await copyText(text)
+  if (ok) toast.success(`已复制${label}`)
+  else toast.error(`复制失败，请手动复制：${text}`)
+}
+
+/** 只保存内部备注、不改处理状态（后端同一支 PUT，状态原样回传） */
+async function saveNoteOnly() {
+  const d = detail.value
+  if (!d || saving.value) return
+  saving.value = true
+  try {
+    await adminFeedbackApi.update(d.id, { status: d.status, internalNote: noteDraft.value.trim() || null })
+    d.internalNote = noteDraft.value.trim()
+    toast.success('备注已保存（处理状态未变）')
+  } catch (e) {
+    toast.error(`保存失败：${errMsg(e)}`)
+  } finally {
+    saving.value = false
+  }
+}
+
 async function save(status: Status) {
   const d = detail.value
   if (!d || saving.value) return
@@ -561,6 +648,24 @@ onMounted(() => {
 
 /* 嵌入模式（运营中心宿主 flex 列内）：占满剩余高度，表格区内滚（对齐 oc-embedded 先例） */
 .fb-embedded { flex: 1; min-height: 0; overflow: hidden; }
+/* 抽屉头部的反馈 ID 行：id + 复制钮，id 过长时自身省略，钮不跟着被挤 */
+.fb-idrow { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.fb-idrow .mk-drawer__sub { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-idrow__copy {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--mk-radius-sm);
+  background: transparent;
+  color: var(--mk-faint);
+  cursor: pointer;
+}
+.fb-idrow__copy:hover { color: var(--mk-ink); border-color: var(--mk-line); background: var(--mk-hover-surface); }
+.fb-idrow__copy:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
 .fb-row { cursor: pointer; }
 .fb-rating { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .fb-rating b { font-size: var(--mk-fs-micro); color: var(--mk-ink); }

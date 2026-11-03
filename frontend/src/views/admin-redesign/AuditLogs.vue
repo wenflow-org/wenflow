@@ -945,14 +945,14 @@ onMounted(() => {
   void applyFilters()
 })
 
-/** 会话安全深链：?user=用户名 → 只看该用户当前会话（运营中心宿主「会话安全」tab） */
+/** 会话安全深链：?user=用户名 → 只看该用户当前会话（系统设置「会话安全」页签） */
 function goSessions(username: string) {
-  void router.push({ path: '/admin/ops-hub', query: { tab: 'security', user: username } })
+  void router.push({ path: '/admin/system-settings', query: { tab: 'security', user: username } })
 }
 
-/** 导出只有运营中心数据导出页一个入口（CSV、最近 2000 条），本页不再自出 JSON */
+/** 导出只有系统设置「数据导出」页签一个入口（CSV、最近 2000 条），本页不再自出 JSON */
 function goExport() {
-  void router.push({ path: '/admin/ops-hub', query: { tab: 'export' } })
+  void router.push({ path: '/admin/system-settings', query: { tab: 'export' } })
 }
 </script>
 

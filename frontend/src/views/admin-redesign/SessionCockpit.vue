@@ -55,7 +55,7 @@
     <!-- ===== hero（原型 renderSessionDetail）：会话身份 + 状态/阶段 pills + 真实能力动作 =====
          主标题传会话主题（2026-10-04 全站评审 P2-7：截断裸会话 ID 做 24px/700 主标题不可读，
          人类可读主题此前缩在 12.5px 副行）；无主题回退 shortId。会话 ID 降为 pills 行 meta。 -->
-    <MkDetailHero class="cp-hero" avatar="S" :title="heroTitle" :sub="heroSub">
+    <MkDetailHero class="cp-hero" :avatar="heroAvatar" :title="heroTitle" :sub="heroSub">
       <template #pills>
         <!-- 状态 pill：生命周期合成态（与原顶栏徽章同源，原型 statusPill 位） -->
         <span class="mk-badge" :class="`mk-badge--${heroStatusTone}`" :title="statusTitle">{{ heroStatusText }}</span>
@@ -67,7 +67,7 @@
           :title="`路径进度按子任务统计（与「阶段推进」步点同源）：${pathProgressText}`"
         >路径 {{ pathProgressText }}</span>
         <!-- 阶段 pill：归一后的当前阶段（原型 pill--info 位） -->
-        <span class="mk-badge mk-badge--info">{{ stageLabel(currentStage) }}</span>
+        <span class="mk-badge mk-badge--info">{{ stageLabel(displayStage) }}</span>
         <!-- 课堂类型 pill（2026-10-21）：正课/复习课/延伸课；后两者不结算任务 -->
         <span v-if="classroomMode" class="mk-badge" :class="classroomModeBadge" :title="classroomModeTitle">{{ classroomModeText }}</span>
         <!-- 只读模式声明（原顶栏 .mk-status__meta 迁入，2026-10-11 走查）：真实会话控制台只读，
@@ -232,7 +232,13 @@
       <div class="mk-card__head">
         <h3 class="mk-card__title">阶段推进</h3>
         <span class="cp-stepcard__spacer"></span>
-        <span class="mk-card__meta">已完成 <b class="mono">{{ stageDoneCount }}</b> / {{ stageFlow.length }} 阶段</span>
+        <!-- 2026-11-01 外部评审 P1：「已完成 N/4 阶段」与下方「0/15 课已完成」同屏，
+             易被读成「学习阶段完成＝课学完」。阶段轴的完成只认课堂收尾/出总结（见
+             cockpitStages.stageDone），故卡头改说「已推进 N/4」，并把口径写进 title。 -->
+        <span
+          class="mk-card__meta"
+          :title="`阶段完成＝本会话课堂已收尾或已出总结（与「路径任务是否学完」无关）。当前 ${stageDoneCount}/${stageFlow.length} 个阶段已到达完成态`"
+        >阶段已推进 <b class="mono">{{ stageDoneCount }}</b> / {{ stageFlow.length }}</span>
         <!-- 下游直达（2026-10-11 走查）：Path / Learn 的数据本卡已摆在页签里，但下钻到它们自己的页面
              此前要回列表再点一次。两条出口的取数判据与返回记忆见 stageJumpTargets。 -->
         <span v-if="stageJumpTargets.length" class="cp-stepjumps">
@@ -804,7 +810,9 @@
             <span class="mk-card__meta">{{ pathReviewStatus ? pathReviewDecisionLabel : '未评审' }}</span>
           </div>
           <div class="cp-aside-body">
-            <div class="cp-review-panel__actions">
+            <!-- 已接受后动作行整行撤下（2026-10-31 五轮评审 P6）：此前「评审/接受」按钮与
+                 已接受徽章同屏复读 4 遍；决策未落定时才渲染操作 -->
+            <div v-if="pathReviewDecision !== 'accept'" class="cp-review-panel__actions">
               <button type="button" class="cp-btn cp-btn--sm" :disabled="reviewPathDisabled" :title="reviewPathTitle" @click="act('reviewPath')">评审</button>
               <button v-if="acceptPathVisible" type="button" class="cp-btn cp-btn--primary cp-btn--sm" :disabled="acceptPathDisabled" :title="acceptPathTitle" @click="act('acceptPath')">接受</button>
               <button v-if="replanPathVisible" type="button" class="cp-btn cp-btn--primary cp-btn--sm" :disabled="replanPathDisabled" :title="replanPathTitle" @click="act('replanPath')">按意见重规划</button>
@@ -1100,7 +1108,7 @@ import { parseLogEntry, virtualLogPhaseZh } from './sessionLog'
 import { useSafePolling } from '@/composables/useSafePolling'
 import {
   asRecord, normalized, firstText, boolValue, numberValue,
-  conversationMessages, formatTime, stageLabel, wrapupCardIcon, pathDeadlineView
+  conversationMessages, formatTime, formatLogTime, stageLabel, wrapupCardIcon, pathDeadlineView
 } from './cockpitFormat'
 import { useCockpitTraces, timelineKindLabel } from './cockpitTraces'
 import { useCockpitLogs, LOG_WINDOW } from './useCockpitLogs'
@@ -1901,11 +1909,17 @@ const timeoutReadout = computed(() => {
    不再让 summary 顶层 completedTasks 与它并排成为第二个口径。
    summary 的 completedTasks 保留在 hasCompletedTask/hasRunnablePathTask 里做存在性判据。 */
 const doneLessonCount = computed(() => countDoneLessons(learnLessons.value))
-/** 学习总结卡头：课数与卡内课时行同源（learnLessons）；课表未加载时不报 N/0 假读 */
+/** 学习总结卡头：两条轴各自报数，且轴名写在读数里
+ *  （2026-11-01 外部评审 P0：原先只报「N/M 课已完成」，与第 4 步「已生成 d/t 课」同屏时
+ *   被读成「0 节 vs 1 节」打架——一个数的是已出总结的课次（课堂收尾即计入），
+ *   一个数的是已学完的课（任务达标才算）。同一节课完全可以「已收尾但未学完」。） */
 const wrapupHeadMeta = computed(() => {
   /* 2026-10-18 用户走查「这类文案」：读数行只报课数进度。「终局总结已生成」是状态位
      不是读数，卡体正文与阶段状态已表达，并列在读数行会把课进度读成半句话。 */
-  return learnLessons.value.length ? `${doneLessonCount.value}/${learnLessons.value.length} 课已完成` : ''
+  const total = learnLessons.value.length
+  if (!total) return ''
+  const summarized = wrapupLessonStat.value.done
+  return `${summarized}/${total} 课已出总结 · ${doneLessonCount.value}/${total} 课已学完`
 })
 const hasRunnablePathTask = computed(() => pathMilestones.value.some((milestone) => {
   const tasks = milestone.subtasks || milestone.tasks
@@ -2114,7 +2128,7 @@ const {
 
 const {
   effectiveStageIndex, stageDone, stageActive,
-  stageProgress, stageMiniStatus, learnProgressText, pathProgressText
+  stageProgress, stageMiniStatus, learnProgressText, pathProgressText, wrapupLessonStat
 } = useCockpitStages({
   currentStage, bindings, stageStatus, stageResults,
   isTerminal, isFailedTerminal, isInterruptedTerminal, hasWrapup,
@@ -2149,6 +2163,16 @@ const heroSub = computed(() => {
 /* hero 主标题：路径会话 = 学习路径名（2026-10-31 外部评审 P1-1「张冠李戴」：路径详情/目标阶段页
    的 h1 挂着最近一节单课的课名，真正的路径名缩在 12px 灰色副行——主位还给路径名，单课主题下放副文）；
    非路径会话仍用会话主题（2026-10-04 全站评审 P2-7：人类可读主题升 24px/700 主位）；都缺回退 shortId */
+/* 阶段展示口径（2026-10-31 五轮评审 P1）：路径证据缺失时徽章与 stepper 一致钳制到「路径」
+   （raw currentStage 可能已被状态机推到 teaching，但路径本体从未生成） */
+const hasPathEvidenceCockpit = computed(() =>
+  !!(bindings.value.learningPathId || stageStatus.value.path?.generated || pathMilestonesView.value.length)
+)
+const displayStage = computed<string>(() => {
+  const raw = String(currentStage.value || 'goal')
+  const order = ['goal', 'path', 'teaching', 'learning', 'wrapup']
+  return order.indexOf(raw) >= 2 && !hasPathEvidenceCockpit.value ? 'path' : raw
+})
 const heroUsesPathTitle = computed(() => {
   if (!hasPath.value || !pathGeneratedOrReady.value) return false
   const pathTitle = pathDetailTitle.value
@@ -2165,6 +2189,20 @@ const heroTitle = computed(() => {
   const learnerName = firstText(String(asRecord(session.value?.profile).userName || ''))
   if (learnerName) return `${learnerName}的目标对话`
   return shortId.value
+})
+
+/** hero 头像字母（2026-11-01 外部评审 P2）：原先是写死的 `avatar="S"`——换学员、换路径
+ *  都还是 S，被读成 Session/Stage 的硬编码残留。改为取学习者名首字，无名时取真路径名/
+ *  story 名首字；`buildPathDetailTitle` 的泛型兜底「学习路径」不是身份（谁都会变成「学」），
+ *  与 S 是同一类问题，故显式排除。本页是课堂域，都没有才兜底「课」。 */
+const heroAvatar = computed(() => {
+  const learnerName = firstText(String(asRecord(session.value?.profile).userName || ''))
+  if (learnerName) return learnerName.slice(0, 1)
+  const pathTitle = firstText(pathDetailTitle.value || '')
+  if (pathTitle && pathTitle !== '学习路径') return pathTitle.slice(0, 1)
+  const storyTitle = firstText(String(asRecord(session.value?.storyContext).title || ''))
+  if (storyTitle && storyTitle !== '学习路径') return storyTitle.slice(0, 1)
+  return '课'
 })
 
 /* 面包屑同源穿帮（2026-10-31 三轮评审 P1；四轮评审 R3 自愈化）：H1 已回退到故事名，
@@ -2660,10 +2698,12 @@ async function loadLogs() {
       resetLogs()
       appendLogs(items.slice(-LOG_WINDOW).map((l: Record<string, unknown>) => {
         const view = parseLogEntry(l)
+        // 虚拟会话日志字段是 timestamp（非 createdAt）；兼容两者
+        const stamp = String(l.timestamp || l.createdAt || '')
         return {
           id: String(l.id ?? ''),
-          // 虚拟会话日志字段是 timestamp（非 createdAt）；兼容两者
-          time: l.timestamp || l.createdAt ? new Date(String(l.timestamp || l.createdAt)).toLocaleTimeString('zh-CN', { hour12: false }) : '',
+          at: stamp,
+          time: formatLogTime(stamp),
           text: view.text || view.phase,
           // 折叠行没有可排查的载荷：别挂一个只有合成字段的「原文」
           view: { ...view, phase: timelineKindLabel(String(l.phase)), ...(l.jumpTab ? { rawJson: '' } : {}) },
@@ -2687,9 +2727,11 @@ async function loadLogs() {
       /* 阶段徽章中文化（2026-10-18）：虚拟日志 phase 是后端枚举（virtual-reply / goal-response…），
          此前主视觉位直接露英文；筛选项同源取自这里，所以筛选也一并变中文 */
       const phase = virtualLogPhaseZh(view.phase)
+      const stamp = String(l.timestamp || l.createdAt || '')
       return {
         id: String(l.id ?? l.messageId ?? ''),
-        time: l.timestamp || l.createdAt ? new Date(String(l.timestamp || l.createdAt)).toLocaleTimeString('zh-CN', { hour12: false }) : '',
+        at: stamp,
+        time: formatLogTime(stamp),
         text: view.text || phase,
         view: { ...view, phase }
       }
@@ -2939,6 +2981,9 @@ const lifeControlsCockpit = computed(() =>
   vlabControlsFor(lifeStateCockpit.value, {
     stage: typeof session.value?.currentStage === 'string' ? session.value.currentStage : undefined
   }).filter((c) => lifeHandlersCockpit[c.key])
+    /* 2026-10-31 五轮评审 P7：自动驾驶停机（会话未冻结）时，hero「继续」与操作栏主钮
+       「自动驾驶」是同一件事的两个入口——只留操作栏那个；teaching 冻结暂停不受影响 */
+    .filter((c) => !(c.key === 'resume' && (autopilot.value.status || '') === 'stopped' && !isPaused.value))
 )
 /** 统一操作入口：需确认的操作（stop/retry）先过模型文案确认，再执行 */
 function runCockpitAction(c: VsControlDef) {
@@ -3556,15 +3601,12 @@ async function copyRawJson() {
 /* 跟随钮的定位容器（滚动容器之外）：按钮 absolute 常驻右上，上翻日志也始终可见（#52） */
 .cp-logs-wrap { position: relative; }
 .cp-logs {
-  max-height: 360px;
-  overflow-y: auto;
-  /* 嵌套滚动隔离（2026-10-06 审核 #72）：同一屏叠了页面/侧栏/日志/课程树多个纵向滚动容器，
-     内层滚到底时不再把滚动链传给外层（否则滚轮滚谁取决于指针落点） */
-  overscroll-behavior: contain;
+  /* 定高滚动窗口的上下边缘永远在硬切文字（2026-10-31 五轮评审 P4：上沿无头残文、
+     下沿半行）——解除定高让日志自然生长（同目标对话 R10 判例）；
+     「最近 60 条」窗口口径与跟随逻辑保持不变（无内滚后恒为跟随态） */
   display: grid;
   gap: 4px;
-  /* 底部呼吸位（2026-10-31 三轮评审 P2）：无 padding 时滚到底最后一行被裁半行 */
-  padding-bottom: 8px;
+  padding: 2px 0 8px;
 }
 .cp-logs-bar { display: flex; justify-content: flex-end; padding-bottom: 4px; }
 .cp-logs__follow {

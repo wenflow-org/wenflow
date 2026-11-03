@@ -2,8 +2,8 @@ import { ref, type Ref } from 'vue';
 
 /**
  * 页签键盘契约（roving tabindex + 方向键/Home/End）：
- * 声明了 role="tablist"/role="tab" 就必须兑现 ARIA tabs 语义——此前 Skills / ExecLogs /
- * PromptEvalPanel 三处只有 role 与点击，方向键无反应、所有页签都在 Tab 序里逐个停留。
+ * 声明了 role="tablist"/role="tab" 就必须兑现 ARIA tabs 语义——此前 Skills / ExecLogs 两页
+ * 只有 role 与点击，方向键无反应、所有页签都在 Tab 序里逐个停留。
  *
  * 用法：
  *   const { setTabRef, onTabKeydown } = useTablistKeyboard(TABS, tab, switchTab)

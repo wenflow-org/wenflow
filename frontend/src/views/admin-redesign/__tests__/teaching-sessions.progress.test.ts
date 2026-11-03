@@ -344,7 +344,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     wrapper.unmount();
   });
 
-  it('异常堆积告警：失败/收尾失败/超时合计 ≥ 10 → 「异常」KPI 转红 + hint 披露阈值', async () => {
+  it('异常堆积告警：失败/收尾失败/超时合计 ≥ 10 → 「异常」KPI 转红 + 悬停披露阈值', async () => {
     listMock.mockResolvedValue({
       data: {
         success: true,
@@ -354,7 +354,9 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     const wrapper = await mountLive();
     const abn = wrapper.findAll('.mk-kpi-grid .mk-kpi').find((t) => t.find('.mk-kpi__label').text().trim() === '异常')!;
     expect(abn.classes()).toContain('mk-kpi--bad');
-    expect(abn.find('.mk-kpi__hint').text()).toBe('异常堆积');
+    /* 2026-11-01：卡内不再渲染解释文字，「异常堆积」与阈值都在卡根 title 里 */
+    expect(abn.find('.mk-kpi__hint').exists()).toBe(false);
+    expect(abn.attributes('title')).toContain('异常堆积');
     expect(abn.attributes('title')).toContain('≥ 10');
     expect(abn.attributes('title')).toContain('失败 / 收尾失败 / 超时');
     wrapper.unmount();
@@ -537,7 +539,9 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     expect(rows[0].text()).toContain('1 小时 30 分');
     expect(rows[1].text()).toContain('26 小时 40 分');
     expect(rows[0].text()).toContain('—');
-    expect(rows[0].find('td .mk-cell-sub').attributes('title')).toBe('任务类型原文：weird_type');
+    /* 2026-11-01 外部评审 P2：副行里的 8 位会话哈希已退到悬停，title 末尾补会话 ID —— 
+       原先哈希占着副行正文，一整屏只能靠它区分同前缀的课堂标题 */
+    expect(rows[0].find('td .mk-cell-sub').attributes('title')).toBe('任务类型原文：weird_type；会话 ID：a');
     expect(rows[1].find('.ts-ia').attributes('title')).toContain('时长 26 小时 40 分');
     expect(rows[1].find('.ts-ia').attributes('title')).not.toContain('长时标注');
     wrapper.unmount();

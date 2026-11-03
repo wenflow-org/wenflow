@@ -141,12 +141,15 @@ routingsMock.mockResolvedValue({
       fields: [
         { fieldId: 'learner_state', promptRole: 'hard-required', valueType: 'object', description: '学习者当前状态' },
         { fieldId: 'public_reply', promptRole: 'public-reply', valueType: 'string', description: '公开回复' },
-        { fieldId: 'mastery_delta', promptRole: 'proposal-output', valueType: 'object', description: '掌握度增量' }
+        { fieldId: 'mastery_delta', promptRole: 'proposal-output', valueType: 'object', description: '掌握度增量' },
+        // 隐式推断类内部出参：编排里由本阶段模型产出，绝不属于「输入契约」（2026-10-31 四轮评审 P0-2 回归锁定）
+        { fieldId: 'analysis.confusion', promptRole: 'hidden-inference', valueType: 'object', description: '隐式推断出参' }
       ],
       promptRoleMeta: [
         { id: 'hard-required', label: '必填入参' },
         { id: 'public-reply', label: '公开回复' },
-        { id: 'proposal-output', label: '方案产出' }
+        { id: 'proposal-output', label: '方案产出' },
+        { id: 'hidden-inference', label: '隐式推断' }
       ],
       // 平铺后 RoutingTab 内嵌 SkillFieldRouting 也读本接口（需 core.fields/core.sync）
       core: { exists: true, fields: [], sync: null }
@@ -164,6 +167,20 @@ versionsMock.mockResolvedValue({
 overviewMock.mockResolvedValue({
   data: { data: { items: [{ agentId: 'skill:skill-a', kind: 'skill', displayName: '教学回合', health: 'good', file: { path: 'prompts/skill.teaching.md' } }] } }
 })
+/* core YAML（协议页签：输入契约 = inputs 声明 + 输出字段/规则表单的同一份数据） */
+const CORE_MOCK = {
+  data: {
+    core: {
+      inputs: [
+        { name: 'learner', type: 'object', ref: 'sandbox:agent.learner', desc: '学习者状态' },
+        { name: 'messages', type: 'array', ref: 'user:latestMessage' }
+      ],
+      rules: ['先诊断再讲解', '不替学生写作业'],
+      fields: []
+    }
+  }
+}
+coreMock.mockResolvedValue(CORE_MOCK)
 
 function mountDetail() {
   subPage.value = { view: 'skill', id: 'skill-a' }
@@ -248,7 +265,8 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
     expect(OrchestratorSource).not.toContain('goHashDrift')
     expect(OrchestratorSource).not.toContain('stageHandoffs')
     // 阶段数/Skill 总数收进总览卡头右组 meta（F8-4 三源口径 title 随行）
-    expect(OrchestratorSource).toContain('}} 阶段 · {{ totalSkills }} 个 Skill')
+    // 2026-10-31 四轮评审：Skill 数带「编排」限定词，与 Skill 目录的 29 个区分口径
+    expect(OrchestratorSource).toContain('}} 阶段 · {{ totalSkills }} 个编排 Skill')
     expect(OrchestratorSource).toContain(':title="skillKpiTitle"')
   })
 
@@ -398,16 +416,24 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     const cards = bloc.findAll('.mk-card__title').map((t) => t.text())
     expect(cards).toEqual(['输入契约', '输出契约', '回合状态机', '终止条件', 'System Prompt'])
 
-    // 输入 = 非产出角色字段（hard-required）；输出 = proposal-output / public-reply 等产出角色
-    const ins = bloc.findAll('.skd-vrow')
-    expect(ins.length).toBe(3)
-    expect(ins[0].text()).toContain('learner_state')
-    expect(ins[0].text()).toContain('入参')
-    expect(ins[0].text()).toContain('必填')
-    // 输出契约卡必含产出字段与角色徽标（后端 promptRoleMeta 单源人话）
+    // 输入契约 = core YAML 的 inputs 声明（2026-10-31 四轮评审 P0-2 重做）：
+    // 字段路由 fields 全部是产出字段，隐式推断/控制信号也是出参——不能再按「非产出角色」反选成入参
+    const inCard = bloc.findAll('.skd-grid > .mk-card')[0]
+    const inRows = inCard.findAll('.skd-vrow')
+    expect(inRows.length).toBe(2)
+    expect(inRows[0].text()).toContain('learner')
+    expect(inRows[0].text()).toContain('编排注入')
+    expect(inRows[1].text()).toContain('用户 / 平台')
+
+    // 输出契约 = 字段路由全量产出（含隐式推断出参），角色徽标走 promptRoleMeta 单源人话
     const outCard = bloc.findAll('.skd-grid > .mk-card')[1]
+    const outRows = outCard.findAll('.skd-vrow')
+    expect(outRows.length).toBe(4)
     expect(outCard.text()).toContain('public_reply')
     expect(outCard.text()).toContain('公开回复')
+    expect(outCard.text()).toContain('analysis.confusion')
+    expect(outCard.text()).toContain('隐式推断')
+    expect(inCard.text()).not.toContain('analysis.confusion')
 
     // System Prompt：生效内容代码卡 + 截断说明不误报
     expect(bloc.find('.skd-code').text()).toContain('SYSTEM PROMPT BODY')
@@ -512,7 +538,7 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     await settle()
     expect(testSkillMock).toHaveBeenCalledWith('skill-a', { milestone: {}, cognitiveCore: {} })
     w.unmount()
-    coreMock.mockResolvedValue({ data: {} })
+    coreMock.mockResolvedValue(CORE_MOCK)
   })
 
   it('版本页签：只保留 VersionsTab 单一入口，不再重复渲染 Prompt 版本表', async () => {

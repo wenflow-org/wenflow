@@ -35,7 +35,6 @@ function styleBlock(file: string): string {
 const PAGES = [
   'Announcements.vue',
   'Notifications.vue',
-  'PromptEvalPanel.vue',
   'SkillDetail.vue',
   'Skills.vue',
   'Feedback.vue',

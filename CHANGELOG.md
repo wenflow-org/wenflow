@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-11
+
+### 新增功能
+
+- **管理端「系统设置」页**：模型与接入 + 运营中心原「系统运维」四页签（运维工具 / 数据导出 / 会话安全 / 访问与注册）合并为一个宿主，五个并列页签，默认落「模型与接入」。起因是运营中心把两类后果完全不同的动作放在一起（改文案 vs 重放事件 / 导全库 / 踢会话），而旧页名「模型与接入」也装不下后四项。运营中心此后只剩内容运营五页签（待办 / 反馈 / 成就 / 公告 / 站内通知）。旧地址 `/admin/api-config`、`/admin/models`、`/admin/ops-center`、`/admin/devtools`、`/admin/export-data`、`/admin/session-security`、`/admin/access-control` 以及 `/admin/ops-hub?tab=tools|export|security|access` 全部改投到新页对应页签，老书签不留 404。
+
+### 下线
+
+- **Prompt 评估页下线**：侧栏 Skill 组回到三项（字段流转 / Skill 目录 / 插件），页面本体、路由与老深链一并摘除——`/admin/prompt-eval` 与 `/admin/skills?tab=prompt-eval` 改投「Skill 目录」，老书签不留 404。后端 `/api/admin/prompt-ops` 的评估端点（eval-cases / run-eval / eval-runs）暂留，未从界面暴露。
+
 ## 2026-10
 
 ### 新增功能

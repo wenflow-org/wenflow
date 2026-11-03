@@ -58,8 +58,8 @@
       />
     </section>
 
-    <!-- Prompt 评估的读数带与页签 2026-10-25 拆到独立页 PromptEval.vue（用户「拆成单页，
-         把这个 tab 撤掉，放到组里」）：本页只剩目录，不再有视图切换。 -->
+    <!-- 2026-10-25 起本页只剩目录（读数带与页签当时拆到独立页）；2026-11-01 那个独立页
+         整体下线，侧栏 Skill 组只剩「字段流转 / Skill 目录 / 插件」。 -->
 
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
@@ -206,9 +206,11 @@
             <section class="mk-kpi-grid" aria-label="Skill 模型路由统计">
               <MkKpi label="承载模型" :value="routeModelCount" />
               <!-- 2026-10-31 三轮评审：本卡 29 与下方覆盖表「共 31 个技能」上下相距 20px，
-                   两个裸数并排读作口径打架。hint 引用覆盖表上报的全量数（31 含未入目录列的
-                   辅助 Skill），29/31 的关系读一行就闭合 -->
-              <MkKpi label="已路由 Skill" :value="routedSkillCount" :hint="coverageReady && coverageTotal ? `覆盖表全量 ${coverageTotal} 个技能，未路由的走平台默认` : ''" />
+                   两个裸数并排读作口径打架。hint 引用覆盖表上报的全量数（31 含未入目录的
+                   辅助 Skill），29/31 的关系读一行就闭合；
+                   2026-10-31 四轮评审补充：说清「多出来的是什么」（平台内部 / 工具类 Skill，
+                   未登记进 Skill 目录），并补齐了它们的展示名与归属（裸 id 行不再出现） -->
+              <MkKpi label="已路由 Skill" :value="routedSkillCount" :hint="coverageReady && coverageTotal ? `覆盖表全量 ${coverageTotal} 个技能（含未入目录的平台内部/工具 Skill），未路由的走平台默认` : ''" />
               <MkKpi label="主模型覆盖" :value="primaryCoverageText" />
               <!-- 降级策略：真实口径 = 自定义兜底链计数；无自定义链时给出 registry 默认链的
                    解析结果（F7-5：空数组=「无（空链）」）。registry 未加载显 —，不伪装 -->
@@ -241,7 +243,7 @@ import { useEscape } from './useEscape'
 import { useMaskClose, useOverlay } from './useOverlay'
 import { useRoute, useRouter } from 'vue-router'
 import { skillStatOf, isLive, intent, investigateAgent, openSubPage } from './store'
-import { liveSkillProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, liveLoading, errMsg, liveRefreshSeq } from './live'
+import { liveSkillProfiles, liveExtraProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, liveLoading, errMsg, liveRefreshSeq } from './live'
 import { completionMetaOf } from './glossaryMeta'
 import { RATE_THRESHOLD_NOTE, successRateOf, successRateText, successRateTone, rateToneOf } from './rate-utils'
 import MockSkeletonTable from './SkeletonTable.vue'
@@ -258,7 +260,7 @@ import SkillModelCoverage from './SkillModelCoverage.vue'
 import { adminSkillsApi, adminApiConfigApi, type SkillCompletion, type SkillReconciliationReport } from '@/api/adminApi'
 
 /* ================= 目录页（2026-10-25 用户「拆成单页，把这个 tab 撤掉，放到组里」：
-   Prompt 评估拆为独立页 PromptEval.vue 并归入侧栏 Skill 组，本页只剩目录；
+   本页只剩目录（Prompt 评估当时拆成的独立页 2026-11-01 已整体下线，旧深链改投回本页）；
    「模型路由」2026-10-24 退役——路由是 Skill 的属性，单技能配置在详情「运行时」里改，
    跨 Skill 对照与批量套用收进页头「批量模型配置」弹窗） ================= */
 
@@ -278,10 +280,8 @@ function openVersions(id: string) {
   openSubPage('skill', id, { tab: 'versions' })
 }
 
-/** 退役 tab 的老深链（健康检查/漂移/对账）改投独立页；Prompt 评估同批改投新独立页 */
+/** 退役 tab 的老深链（健康检查/漂移/对账）改投独立页 */
 const RETIRED_TABS = new Set(['health', 'drift', 'recon'])
-/** 旧「Prompt 评估」页签 → 独立页 /admin/prompt-eval（2026-10-25 拆页；?peTab= 原样带走） */
-const LEGACY_EVAL_TAB = 'prompt-eval'
 /** 旧「模型路由」页签 → 页头弹窗（旧书签/旧文档链接不失效） */
 const LEGACY_ROUTING_TAB = 'model-routing'
 const bulkOpen = ref(false)
@@ -300,9 +300,6 @@ function openSkillFromBulk(id: string) {
 }
 const toHealthCenter = (extra: Record<string, string> = {}) =>
   void router.replace({ path: '/admin/health-center', query: extra })
-/** 旧评估页签 → 独立页：?peTab= 是评估页自己的内层键，原样带走（去掉宿主键 ?tab=） */
-const toPromptEval = (extra: Record<string, string> = {}) =>
-  void router.replace({ path: '/admin/prompt-eval', query: extra })
 /** 去掉宿主页签键后的其余 query（改投别的页时只带走定位参数） */
 function withoutTabKey(): Record<string, string> {
   const q = { ...(route.query as Record<string, string>) }
@@ -316,11 +313,6 @@ watch(
     if (typeof t === 'string' && RETIRED_TABS.has(t)) {
       // 老书签 / 旧文档链接：/admin/skills?tab=health → /admin/health-center（?recon=/?diff= 等定位参数一并带走）
       toHealthCenter(withoutTabKey())
-      return
-    }
-    // 旧「Prompt 评估」页签：2026-10-25 拆为独立页，老深链 /admin/skills?tab=prompt-eval → /admin/prompt-eval
-    if (t === LEGACY_EVAL_TAB) {
-      toPromptEval(withoutTabKey())
       return
     }
     // 旧「模型路由」页签：落到运行列表并打开页头弹窗，地址收敛为 ?tab=run
@@ -342,10 +334,6 @@ watch(
       intent.tab = ''
       toHealthCenter()
       return
-    }
-    if (t === LEGACY_EVAL_TAB) {
-      intent.tab = ''
-      toPromptEval()
     }
   },
   { immediate: true }
@@ -557,10 +545,18 @@ const sortSelect = computed({
    归属 Agent、完成度、备用链解析都从这里取，矩阵不再另查一份。
    computed 惰性求值，函数声明可后置（fallbackOf / completionBadgeOf 在下方定义）。 */
 const agentLabelsBySkill = computed<Record<string, string>>(() =>
-  Object.fromEntries(cards.value.map((s) => [s.id, agentLabelOf(s)]))
+  Object.fromEntries([
+    ...cards.value.map((s) => [s.id, agentLabelOf(s)]),
+    // 外挂能力 Skill 不在主目录（isExtraSkill 过滤），但覆盖表（31 行）里有它们：
+    // 补上归属文案，避免弹窗里出现「裸 id + —」的行（2026-10-31 四轮评审 P1-5）
+    ...liveExtraProfiles.value.map((p) => [p.id, p.agentName || p.agentId || '工具类'])
+  ])
 )
 const skillNamesBySkill = computed<Record<string, string>>(() =>
-  Object.fromEntries(cards.value.map((s) => [s.id, s.name || s.id]))
+  Object.fromEntries([
+    ...cards.value.map((s) => [s.id, s.name || s.id]),
+    ...liveExtraProfiles.value.map((p) => [p.id, p.name || p.id])
+  ])
 )
 const completionBySkill = computed<Record<string, { text: string; cls: string; title: string }>>(() => {
   const out: Record<string, { text: string; cls: string; title: string }> = {}
@@ -1143,7 +1139,9 @@ const fallbackPolicyText = computed(() => {
   display: inline-flex;
   align-items: center;
   flex: none;
-  max-width: 128px; /* 长 Agent 名省略（全名走 title） */
+  /* 2026-10-31 四轮评审 P2-9：原 128px 会把「虚拟学习者 Agent」截成「虚拟学习者 A…」，
+     而该行右侧到读数区还有 600px+ 富余——无意义的截断。放宽到 240px（长 Agent 名仍省略）。 */
+  max-width: 240px;
   padding: 2px 9px;
   border-radius: 999px;
   background: var(--mk-line);

@@ -35,7 +35,7 @@
         :label="k.label"
         :value="k.value"
         :value-note="k.valueNote"
-        :hint="k.hint"
+        :hint="kpiHint(k)"
         :title="kpiTitle(k)"
         @click="jumpToKpi(k)"
       />
@@ -201,8 +201,11 @@
               <span class="rankrow__idx">{{ i + 1 }}</span>
               <!-- 英文主行（2026-10-25 用户「以英文为主」）：与 Skills 列表 / 详情 hero 同口径，
                    canonical id 在前；中文 displayName 只在它确实是别名时括注（同 id 不重复） -->
+              <!-- 2026-11-01 外部评审（五轮 P2）：1920 下长 id 带中文别名会被截成
+                   「teaching-opening-generator · 课…」，被吃掉的是 id 本身。id 是监控键，
+                   优先保它完整：id 长到 22 字符以上就不再续别名（别名仍在悬停里）。 -->
               <span class="rankrow__grow" :title="skillNameTitle(s.agentId)">
-                {{ skillIdOf(s.agentId) }}<template v-if="skillAliasOf(s.agentId)"> · {{ skillAliasOf(s.agentId) }}</template>
+                {{ skillIdOf(s.agentId) }}<template v-if="skillAliasOf(s.agentId) && skillIdOf(s.agentId).length <= 22"> · {{ skillAliasOf(s.agentId) }}</template>
               </span>
               <!-- 占比条（mk-minibar 共享原语）：名次数字只给序，条给「梯队差距」一眼可读；
                    无金银铜——排序徽章是装饰不编码信息 -->
@@ -414,7 +417,7 @@ type LoopExtraState = 'loading' | 'ready' | 'failed';
 const teachState = ref<LoopExtraState>('loading');
 const memState = ref<LoopExtraState>('loading');
 /** P2 异常→动作闭环：五环各接深链（跳目标页 scene），点击行为与 title 同步披露 */
-interface LoopStage { name: string; val: string; tone: 'active' | 'done' | 'alert'; title?: string; scene: string; sceneQuery?: Record<string, string>; failN?: number; ringFailed?: boolean }
+interface LoopStage { name: string; val: string; tone: 'done' | 'alert'; title?: string; scene: string; sceneQuery?: Record<string, string>; failN?: number; ringFailed?: boolean }
 const loopStages = computed<LoopStage[]>(() => {
   const d = data.value;
   const evalOk = (d?.wrapup.evaluationModel ?? 0) + (d?.wrapup.evaluationAiFallback ?? 0);
@@ -423,7 +426,10 @@ const loopStages = computed<LoopStage[]>(() => {
   return [
     {
       name: '目标对话',
-      val: `${d?.loop.conversationsActive ?? 0} 进行中`, tone: 'active',
+      /* 2026-11-01 外部评审：本环此前恒蓝框，而同样「N 进行中」的「路径规划」是绿框——
+         蓝被读成「选中/当前」，五环里只有它一个蓝，语义自相矛盾。五环只保留两档：
+         正常（done）/ 有失败（alert），进行中与否由读数本身说明。 */
+      val: `${d?.loop.conversationsActive ?? 0} 进行中`, tone: 'done',
       title: '进行中的目标对话数',
       scene: 'goal-conversations',
     },
@@ -944,6 +950,16 @@ function jumpToKpi(k: KpiCard) {
    全部下沉到本 tooltip 长释——副行说「这个数怎么算」，tooltip 说「这一窗具体是多少」。
    （2026-10-19 用户走查：「目标对话 ｜ 累计完成 14 个」「用户活跃 ｜ 今日新增 0…」这类
    hint 在报另一个读数，不是口径；目标页由卡片点击直达，见 kpiTargets。） */
+/**
+ * 卡面副行（口径短语）：成功率在「今日没有调用」时值为「—」，副行若继续讲成功率怎么算，
+ * 会被读成「监控坏了」。这种零分母的情况必须在卡面上直说（2026-11-01 外部评审三轮 P0）。
+ */
+function kpiHint(k: KpiCard): string {
+  const rate = k.key === 'todaySuccessRate' || k.label === '今日成功率'
+  if (rate && (k.value === '—' || k.value === '-')) return '今日 00:00 至今还没有调用，成功率没有可算的样本'
+  return k.hint
+}
+
 function kpiTitle(k: KpiCard): string {
   const trend = k.trend ? `较昨日同时刻 ${k.trend.pct}` : ''
   /* foot 里的 baseNote（「较昨日同时刻」/「昨日同时刻无对照」）在有趋势数字时与 trend 重复，
@@ -1335,8 +1351,6 @@ onBeforeUnmount(() => { feedRo?.disconnect(); feedRo = null })
 /* 可点线索：悬停只换边框与底色（全站判例，不做位移），行尾箭头常显 */
 .loop__step:hover { border-color: color-mix(in srgb, var(--mk-blue) 50%, transparent); background: var(--mk-btn-hover-bg); }
 .loop__step:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 2px; }
-.loop__step--active { border-color: var(--mk-blue); background: var(--mk-blue-bg); }
-.loop__step--active:hover { background: var(--mk-blue-bg-strong); }
 .loop__step--done { border-color: color-mix(in srgb, var(--mk-green) 34%, var(--mk-line)); }
 .loop__step--alert { border-color: color-mix(in srgb, var(--mk-amber) 42%, var(--mk-line)); background: var(--mk-amber-bg); }
 /* 阶段号是人话标签（「阶段 1」），不与等宽字体混排 */
@@ -1485,7 +1499,7 @@ html[data-theme='dark'] .loop__fail { background: var(--mk-surface-2); }
 }
 .rankrow--link { cursor: pointer; }
 .rankrow--link:hover .rankrow__grow { color: var(--mk-blue); }
-.rankrow__bar { width: 64px; flex: none; }
+.rankrow__bar { width: 48px; flex: none; }
 .rankrow__val { flex: none; font-variant-numeric: tabular-nums; font-weight: 600; font-size: var(--mk-fs-micro); color: var(--mk-ink); }
 /* 调用/失败两列（评审 2026-10-10）：右对齐定宽成列；失败非零红字提示，零给「–」保列形。
    宽度按「调用次数 / 失败次数」四字表头定（2026-10-24 用户「调用次数就写调用次数就可以了」）：

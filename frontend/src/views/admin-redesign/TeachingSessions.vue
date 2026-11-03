@@ -17,6 +17,8 @@
         label="需关注"
         :value="attentionCount"
         :tone="attentionCount ? 'warn' : ''"
+        hint="点击只看这些"
+        :title="`失败 / 超时、已完成但没写出总结、或带建议（附注）的会话合计 ${attentionCount} 节。点击只看这些会话。三档明细可在「列」菜单打开“关注”列`"
         :class="{ 'ts-kpi--on': pill === 'attention' }"
         :aria-pressed="pill === 'attention'"
         @click="pill = pill === 'attention' ? 'all' : 'attention'"
@@ -38,6 +40,7 @@
         label="缺总结"
         :value="missingWrapupCount"
         :tone="missingWrapupCount ? 'warn' : ''"
+        :title="`已结束（完成 / 失败 / 超时 / 已废弃 / 收尾失败）但没有写出总结的会话合计 ${missingWrapupCount} 节。点击只看这些会话。与「需关注」不是包含关系：已废弃的课缺总结但不算需关注，进行中带建议的课算需关注但不缺总结`"
         :class="{ 'ts-kpi--on': wrapFilter === 'missing' }"
         :aria-pressed="wrapFilter === 'missing'"
         @click="wrapFilter = wrapFilter === 'missing' ? '' : 'missing'"
@@ -46,6 +49,7 @@
         clickable
         label="有建议"
         :value="advisoryCount"
+        :title="`带课后建议（附注）的会话合计 ${advisoryCount} 节。点击只看这些会话`"
         :class="{ 'ts-kpi--on': onlyAdvisory }"
         :aria-pressed="onlyAdvisory"
         @click="toggleOnlyAdvisory"
@@ -214,7 +218,10 @@
                   <strong :title="r.topic">{{ r.topic }}</strong>
                   <!-- 副行并档（2026-10-06 审核 #39）：原「学科·任务类型」与「总结摘要」两行
                        合成一条（全文仍留 title），会话列三行并回两行，行高向全站 66px 档收敛 -->
-                  <span class="mk-cell-sub" :class="{ 'ts-summary': tsSubNote(r) }" :title="sessionSubTitle(r)">{{ sessionSubText(r) }}<span v-if="r.id" class="ts-sid mono" :title="String(r.id)"> · {{ String(r.id).slice(-8) }}</span></span>
+                  <!-- 2026-11-01 外部评审 P2：副行原样带一截 8 位会话哈希（` · e69f0968`），
+                       同批课堂的标题前缀本来就一样，截断后一整屏只能靠这串晦涩哈希区分，
+                       看起来像复制粘贴。哈希退到悬停（完整 id 在座舱/日志里），副行只留可读信息。 -->
+                  <span class="mk-cell-sub" :class="{ 'ts-summary': tsSubNote(r) }" :title="sessionSubTitle(r)">{{ sessionSubText(r) }}</span>
                 </div>
               </td>
               <td v-if="!tsHiddenCols.has('user')">
@@ -909,11 +916,13 @@ function sessionSubText(r: Row): string {
   const note = tsSubNote(r)
   return note ? `${base} · ${note.text}` : base
 }
-/** 会话列副行 title：任务类型原文 + 课后总结全文（副行不再承载学员向长句，全文退到悬停） */
+/** 会话列副行 title：任务类型原文 + 课后总结全文（副行不再承载学员向长句，全文退到悬停）；
+ *  会话 id 也在这里（2026-11-01 外部评审 P2：原先哈希占着副行正文，退到悬停后仍可核对）。 */
 function sessionSubTitle(r: Row): string | undefined {
   const summary = String(r.wrapup?.topicSummary || '')
   const parts = [taskTypeTitle(r.taskType), tsSubNote(r)?.title]
   if (summary && !tsSubNote(r)) parts.push(`课后总结：${summary}`)
+  if (r.id) parts.push(`会话 ID：${String(r.id)}`)
   const kept = parts.filter(Boolean)
   return kept.length ? kept.join('；') : undefined
 }
@@ -1074,7 +1083,7 @@ defineExpose({ refreshNow })
 /* 筛选弹层里的字段（标签在上、控件在下；外壳 .mk-adv* 是共享原语） */
 /* 会话列副行上限 300px（原 387px 由 sub 行撑开；主行 260px 由 --mk-cell-main-max 兜底） */
 .ts-row td:first-child .mk-cell-sub { max-width: 300px; }
-.ts-sid { color: var(--mk-faint); font-weight: 500; }/* 原型 .tbl td：nowrap（表格为 fixed，列宽由表头决定；
+/* 原型 .tbl td：nowrap（表格为 fixed，列宽由表头决定；
    长内容由 .ts-summary-preview / .mk-cell-main / .mk-cell-sub 的 max-width 截断兜底）。
    2026-10-05 CM6：收敛为全局修饰类 .mk-table--nowrap（表元素已挂该 class），本页不再私持拷贝 *//* 进度列：数字 x/y + 迷你条（mk-minibar 复用，会话域统一进度表达） */
 /* 互动列（批B）：时长主值+副行。副行 messageCount/知识点 nowrap 撑到 109px 溢出 70px 单元格、

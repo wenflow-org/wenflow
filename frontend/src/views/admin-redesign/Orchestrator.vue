@@ -62,7 +62,7 @@
              计数 meta 归 head-right）——单行不占画布高度。阶段数画布五列可见这里点明（窄屏
              画布横向滚动时兜底）；Skill 总数是本页唯一非显然读数，title 保留 F8-4 三源口径 -->
         <div class="mk-card__head-right">
-          <span v-if="stages.length" class="mk-card__meta" :title="skillKpiTitle">{{ stages.length }} 阶段 · {{ totalSkills }} 个 Skill</span>
+          <span v-if="stages.length" class="mk-card__meta" :title="skillKpiTitle">{{ stages.length }} 阶段 · {{ totalSkills }} 个编排 Skill</span>
           <button
             v-if="contractFailed"
             type="button"
@@ -122,9 +122,15 @@
                   class="orch-odg-chip"
                   :class="contractOf(s.id).failed ? 'orch-odg-chip--failed' : `orch-odg-chip--${kind}`"
                   :title="contractChipTitle(s.id, kind)"
-                >{{ kind === 'in' ? '入' : '出' }} {{ contractCountText(s.id, kind) }}</span>
+                >{{ contractChipText(s.id, kind) }}</span>
               </div>
-              <span class="orch-odg-fields" :title="contractOf(s.id).outs.join(' · ')">{{ contractOf(s.id).outs.slice(0, 4).join(' · ') }}<template v-if="contractOf(s.id).outs.length > 4">…</template></span>
+              <!-- 产出字段 chip 流式排列（2026-10-31 四轮评审）：此前是一整串用「 · 」拼的文本 +
+                   overflow-wrap:anywhere，英文驼峰名在单词中间被劈开（…first_delive / rable）。
+                   改成逐字段一枚 chip：各 chip 自己 nowrap + 省略，超长名整体省略并给 title。 -->
+              <div class="orch-odg-fields" :title="contractOf(s.id).outs.join(' · ')">
+                <span v-for="f in contractOf(s.id).outs.slice(0, 4)" :key="f" class="orch-odg-field" :title="f">{{ f }}</span>
+                <span v-if="contractOf(s.id).outs.length > 4" class="orch-odg-field orch-odg-field--more">+{{ contractOf(s.id).outs.length - 4 }}</span>
+              </div>
             </footer>
           </div>
         </div>
@@ -242,7 +248,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { dataSource, openSubPage } from './store'
-import { liveTopoNodes, liveSkillCatalog, liveLoading, liveFailures, reloadLiveTopology, liveRefreshSeq, errMsg } from './live'
+import { liveTopoNodes, liveSkillCatalog, liveSkillProfiles, liveLoading, liveFailures, reloadLiveTopology, liveRefreshSeq, errMsg } from './live'
 import { TERMS } from './terms'
 import { adminRuntimeDefinitionsApi, adminFieldRoutingsApi, adminSkillsApi, type SkillReconciliationReport } from '@/api/adminApi'
 import FieldRoutingTable from './FieldRoutingTable.vue'
@@ -617,6 +623,14 @@ function contractCountText(id: string, kind: 'in' | 'out'): string {
   if (!c.loaded) return '…'
   return String(kind === 'in' ? c.ins.length : c.outs.length)
 }
+/** 列脚 chip 全文（2026-10-31 四轮评审）：阶段 3/4/5 的「入 0」被读成「不接收任何上游输入」——
+ *  就绪且为 0 时补一句「无必填」，点明口径是「没有 hard-required 必填项」而非「无输入」。
+ *  该口径本身属实：教学/画像/仿真阶段的入参在编排里被归为隐式推断（见 contractTitle 注释）。 */
+function contractChipText(id: string, kind: 'in' | 'out'): string {
+  const text = contractCountText(id, kind)
+  if (kind === 'in' && text === '0') return '入 0（无必填）'
+  return `${kind === 'in' ? '入' : '出'} ${text}`
+}
 function contractChipTitle(id: string, kind: 'in' | 'out'): string {
   const c = contractOf(id)
   if (c.failed) return `字段契约未加载：${c.failed}`
@@ -871,10 +885,11 @@ const totalSkills = computed(() => stages.value.reduce((sum, stage) => sum + sta
 /** Skill KPI tooltip（F8-4 走查）：本页三处 Skill 总数各有域，本卡须自报口径——
     本卡 = 编排拓扑内挂载的 Skill 节点数（Σ 各阶段）；治理卡「Skill 定义」= 运行时
     定义条目数（GET /admin/runtime-definitions）；侧栏「Skill 目录」徽章 = Skill
-    目录档案数（不含插件）。三数不必相等，问「平台共多少 Skill」先确认口径。 */
-const skillKpiTitle = computed(
-  () =>
-    `本页挂载的 Skill 数（各阶段合计，当前 ${stages.value.length} 个阶段）`
+    目录档案数（不含插件）。三数不必相等，问「平台共多少 Skill」先确认口径。
+    2026-10-31 四轮评审：本页 21 与目录 29 并排出现时要能自解释——补上「目录侧是哪个数」。 */
+const skillKpiTitle = computed(() =>
+  `本页挂载的编排 Skill 数（各阶段合计，当前 ${stages.value.length} 个阶段）。`
+  + `通用工具 Skill / 插件能力不在编排管线内，不计入本数——全平台 Skill 目录共 ${liveSkillProfiles.value.length} 个，见「Skill 目录」。`
 )
 /* 页级「未解析」读数（原告警条用）已随告警迁健康中心（检查项 orchestration-steps）删除；
    行级读数曾挂在「阶段交接明细」表的徽章上（unresolvedOf/哈希漂移），该表 2026-10-13 整体删除。 */
@@ -1087,14 +1102,24 @@ html[data-theme='dark'] {
 .orch-odg-chip--out { background: color-mix(in srgb, var(--mk-green, #15803d) 12%, transparent); color: var(--mk-green, #15803d); }
 /* 契约拉取失败：红字显式说出「未加载」，与「加载中 …」和「真 0 个」在视觉上可分辨 */
 .orch-odg-chip--failed { background: color-mix(in srgb, var(--mk-red, #dc2626) 10%, transparent); color: var(--mk-red, #dc2626); }
-.orch-odg-fields {
-  min-width: 0;
-  /* 字段名是列脚唯一的信息，允许折两行；超长才省略，完整值仍在 title */
-  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
-  overflow: hidden; overflow-wrap: anywhere;
+/* 列脚产出字段：逐字段 chip（2026-10-31 四轮评审 P-断词）——
+   原实现是一整串 nowrap 文本 + overflow-wrap:anywhere，英文驼峰名会在单词中间被劈开
+   （confirmedProposal.first_delive / rable）。chip 自带省略号：超长名整体省略，全文在 title。 */
+.orch-odg-fields { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.orch-odg-field {
+  max-width: 100%;
+  padding: 1px 6px;
+  border-radius: var(--mk-radius-sm, 6px);
+  border: 1px solid var(--mk-line, #e6ebf4);
+  background: var(--mk-surface, #fff);
   font-family: var(--mk-mono, Consolas, monospace);
-  font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint);
+  font-size: var(--mk-fs-micro, 12px);
+  color: var(--mk-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+.orch-odg-field--more { color: var(--mk-faint); }
 /* 审核 #110：1440 档卡内可用宽约 1136px，而 5×232 + 4×100 = 1560 必横滚约 448px 才见第 4-5 列，
    卡题「管线总览 · 五阶段字段血缘」的全貌在标准视野内不成立。1599 档收窄列宽与列间距
    （5×196 + 4×48 + 24 ≈ 1196，接近卡宽；仍略超则保留少量内横滚）。1920 起沿用原全展开档。

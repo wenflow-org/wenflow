@@ -130,6 +130,13 @@ export class LearnerSnapshotRefreshService {
             （琥珀「测试」）是两类人；isTestAccountUser 对 /^virtual_/ 也返回 true，
             只靠它会把虚拟学习者渲染成「测试账号」。 */
         isVirtualLearner: true,
+        /* 列表的「当前进度」列只展示一条路径（take: 1，按 updatedAt 取最近更新的活跃路径）。
+           2026-11-01 外部评审 P1：多路径学员在这里只看到其中一条，而同一屏的「学习路径」列表
+           显示他有 2 条在学——读者会以为丢数据。这里同时取活跃路径**总数**，
+           前端在有第二条时给出「共 N 条路径学习中」的角标，把「这是其中一条」说清楚。 */
+        _count: {
+          select: { learning_paths: { where: { status: 'active' } } },
+        },
         learning_paths: {
           where: params?.pathId ? { id: params.pathId } : { status: 'active' },
           select: {
@@ -246,6 +253,8 @@ export class LearnerSnapshotRefreshService {
         isTestAccount: isTestAccountUser(user),
         pathId: path?.id || null,
         pathTitle: path?.title || null,
+        /** 在学路径总数（列表列只展示其中最近更新的一条，>1 时前端标「共 N 条」） */
+        activePathCount: user._count?.learning_paths ?? (path ? 1 : 0),
         /** 快照重建时刻（排查用；列表的「数据更新」列读 dataUpdatedAt） */
         generatedAt: snapshot.freshness.generatedAt,
         dataUpdatedAt,
@@ -286,7 +295,7 @@ export class LearnerSnapshotRefreshService {
    * 按 evidenceType 白名单取最近 N 条，occurredAt 倒序。
    */
   async listDomainEvidence(userId: string, evidenceTypes: string[], take: number) {
-    return prisma.learner_evidence.findMany({
+    const rows = await prisma.learner_evidence.findMany({
       where: {
         userId,
         evidenceType: { in: evidenceTypes },
@@ -304,6 +313,19 @@ export class LearnerSnapshotRefreshService {
         payload: true,
       },
     });
+    /* 2026-11-01 外部评审 P1（学习动态读起来像重复事件）：learner_evidence 是幂等投影，
+       但删 learning_paths 时不清它的历史行（只清会话软指针），于是**已删除路径**的事件
+       仍留在时间线上——同一学员重生成过路径时，就会看到两条「路径创建 + 路径生成」，
+       而且都没有可区分的信息。这里在读侧把指向已不存在路径的行滤掉（不删数据，
+       保留排查余地）；没有 pathId 的行（目标域证据）不受影响。 */
+    const pathIds = [...new Set(rows.map((r) => r.pathId).filter((id): id is string => !!id))];
+    if (!pathIds.length) return rows;
+    const alive = await prisma.learning_paths.findMany({
+      where: { id: { in: pathIds } },
+      select: { id: true },
+    });
+    const aliveSet = new Set(alive.map((p) => p.id));
+    return rows.filter((r) => !r.pathId || aliveSet.has(r.pathId));
   }
 
   /** 目标用户是否虚拟学习者（learner-models 默认视图准入判断） */

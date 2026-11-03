@@ -35,6 +35,8 @@ vi.mock('../live', async () => {
     liveFailures,
     liveLoading: ref(false),
     liveRefreshSeq: ref(0),
+    // 侧栏角标回写（2026-11-01：OpsHub 拉完三域后同步给 live 共享读数）
+    setLiveOpsPendingCounts: () => {},
     loadLiveData: vi.fn(async () => {}),
     errMsg: (e: unknown) => String(e),
     liveCreateAnnouncement: vi.fn(async () => {}),
@@ -86,7 +88,7 @@ describe('运营中心：运营待办页签只留行动清单', () => {
     expect(w.find('.oh-task').text()).toContain('生成失败路径')
     expect(w.find('.oh-task').text()).toContain('去处理 →')
     expect(w.find('.oh-queue__cleared').text()).toContain('已清零')
-    expect(w.find('.oh-queue__cleared').text()).toContain('待处理反馈')
+    expect(w.find('.oh-queue__cleared').text()).toContain('未处理反馈')
     expect(w.find('.oh-queue__cleared').text()).toContain('草稿公告')
 
     w.unmount()

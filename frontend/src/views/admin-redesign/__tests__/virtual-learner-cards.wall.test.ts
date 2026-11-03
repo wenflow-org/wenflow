@@ -124,8 +124,10 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     // 2026-10-26：预置 / 自建合成一张「身份卡」，两个数进 hint；
     // 「已创建实例」只留读数，跳转改卡头链接（可点这件事此前只有悬停才看得出）
     expect(labels).toEqual(['身份卡', '已创建实例']);
-    expect(w.find('.mk-kpi__hint').text()).toContain('预置 1');
-    expect(w.find('.mk-kpi__hint').text()).toContain('自建 1');
+    /* 2026-11-01：构成拆分在数值行的 value-note 上，卡内不再有说明行 */
+    expect(w.find('.mk-kpi__hint').exists()).toBe(false);
+    expect(w.find('.mk-kpi__num-note').text()).toContain('预置 1');
+    expect(w.find('.mk-kpi__num-note').text()).toContain('自建 1');
     expect(w.find('.mk-card__meta').text()).toContain('共 2 张');
     const wall = w.findAll('.vlc-card');
     expect(wall).toHaveLength(2);

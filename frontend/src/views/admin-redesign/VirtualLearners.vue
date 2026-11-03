@@ -261,7 +261,8 @@
             </td>
             <td v-if="!isNarrow && !hiddenCols.has('sessions')" class="mk-num">{{ s.sessions }}</td>
             <td v-if="!isNarrow && !hiddenCols.has('abnormal')" class="vl-abnormal">
-              <template v-if="s.failedCount > 0 || s.stalledCount > 0">
+              <!-- 2026-10-31 五轮评审 P8：座舱日志已报错（如僵尸会话自动回收）时异常列不再留空 — -->
+              <template v-if="s.failedCount > 0 || s.stalledCount > 0 || s.activeError">
                 <span
                   v-if="s.failedCount > 0"
                   class="vl-abn vl-abn--fail"
@@ -272,6 +273,11 @@
                   class="vl-abn vl-abn--stall"
                   :title="stalledCellTitle(s)"
                 >无响应 {{ s.stalledCount }}</span>
+                <span
+                  v-if="s.activeError"
+                  class="vl-abn vl-abn--stall"
+                  :title="`自动驾驶最近错误：${s.activeError}`"
+                >自动驾驶错误</span>
               </template>
               <span v-else class="mk-na">—</span>
             </td>
@@ -442,6 +448,7 @@ const samples = computed<Sample[]>(() =>
     failedCount: Number(v.failedCount || 0),
     abandonedCount: Number(v.abandonedCount || 0),
     stalledCount: Number(v.stalledCount || 0),
+    activeError: v.activeError ?? null,
     runningSessionIds: v.runningSessionIds,
     /* G2（2026-10-10）：已暂停会话 id 必须随行带出——否则「正在运行」条的暂停样本拿不到
        可回退的会话 id。列表本行的逐条徽章已改用 activeRuns，但这两列仍供运行条消费。 */

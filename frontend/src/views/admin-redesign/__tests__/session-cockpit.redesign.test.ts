@@ -6,7 +6,7 @@
  *    状态 + 阶段 pills——回合 pill 已撤（P3#13：回合数单源=阶段推进卡）/ 真实能力动作）
  *  - 教学闭环定位（原型 .loop 五环）2026-10-19 拍板下线：与下方 stepper 同源同态、属纯重复，
  *    本文件只保留「不得回归」的断言
- *  - 阶段推进（.stepper done/active/idle 三态 + 卡头「已完成 N / 4 阶段」+ statstrip 三读数）
+ *  - 阶段推进（.stepper done/active/idle 三态 + 卡头「阶段已推进 N / 4」+ statstrip 三读数）
  *  - 双栏 grid(1.5fr/1fr)：回合记录表（# / 类型 / 内容 / 时间；原型 Token/耗时/解答分无真数据不硬造）
  *    + 知识状态更新 ranklist（真实掌握度；无数据整卡不渲染）
  *  - 保留功能：advisory 条、stepper 步点即阶段页签导航
@@ -216,11 +216,13 @@ beforeEach(() => {
 });
 
 describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）', () => {
-  it('hero：头像 S + 会话主题主标题 + ID 副行 meta + 科目/开始于副文 + 状态/阶段 pills；真实能力动作，不搬原型假钮', async () => {
+  it('hero：头像取身份首字（不写死 S）+ 会话主题主标题 + ID 副行 meta + 科目/开始于副文 + 状态/阶段 pills；真实能力动作，不搬原型假钮', async () => {
     stableVirtualApi.getRealSessionConsole.mockResolvedValue(realTeachingPayload());
     const w = await mountCockpit('session-real', 'ts_re_1');
 
-    expect(w.find('.mk-hero__avatar').text()).toBe('S');
+    // 2026-11-01 外部评审 P2：原先写死 avatar="S"（换学员/换路径都还是 S）。
+    // 该 fixture 无 profile.userName、path 与 storyContext 也为空 ⇒ 落到课堂域兜底「课」
+    expect(w.find('.mk-hero__avatar').text()).toBe('课');
     // 主标题 = 会话主题（teaching.topic）：截断裸 ID 不再做 24px/700 主标题（2026-10-04 全站评审 P2-7）
     expect(w.find('.mk-hero__title').text()).toBe('函数');
     // 2026-10-23 走查：截断会话 ID 也从 pills 行撤下（完整 ID 在 URL / 数据包 / 日志里）
@@ -366,7 +368,7 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     w.unmount();
   });
 
-  it('顶栏按钮簇与状态徽章同源（2026-10-19 运营走查）：自动驾驶已停的会话不再同时给「暂停」', async () => {
+  it('顶栏按钮簇与状态徽章同源（2026-10-19 运营走查；五轮 P7 收紧）：自动驾驶已停的会话不再给「暂停/继续」', async () => {
     // 复现原缺陷：会话 status 仍是 running、autopilot.status 已是 stopped。
     // 修前 lifeStateCockpit 只看 status+isPaused → 判 running → 顶栏给「暂停」，
     // 而同屏状态徽章/运行状态卡按 runLifecycleState 判 paused → 一个会话两个状态词。
@@ -377,7 +379,9 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     stableVirtualApi.getVirtualSession.mockResolvedValue(payload);
     const w = await mountCockpit('session', 'vs_1');
     const heroBtns = w.find('.cp-hero, .mk-hero, .cp').findAll('.mk-btn').map((b) => b.text());
-    expect(heroBtns).toContain('继续');
+    // 2026-10-31 五轮评审 P7：自动驾驶停机（会话未冻结）时 hero「继续」与操作栏主钮
+    // 「自动驾驶」同义——hero 只留 终止，恢复推进统一走操作栏「自动驾驶」
+    expect(heroBtns).not.toContain('继续');
     expect(heroBtns).not.toContain('暂停');
     w.unmount();
   });
@@ -435,9 +439,10 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     expect(steps[0].find('.cp-stp__meta').text()).toBe('学习者发言 1');
     expect(steps[1].find('.cp-stp__meta').text()).toBe('已完成');
 
-    // 卡头右侧完成计数
-    expect(w.find('.cp-stepcard').text()).toContain('已完成');
-    expect(w.find('.cp-stepcard').text()).toContain('/ 4 阶段');
+    // 卡头右侧完成计数（2026-11-01 外部评审 P1：改「阶段已推进 N / 4」——与下方
+    // 「0/15 课已完成」同屏时，旧的「已完成 N / 4 阶段」会被读成「学习阶段完成＝课学完」）
+    expect(w.find('.cp-stepcard').text()).toContain('阶段已推进');
+    expect(w.find('.cp-stepcard').text()).toContain('/ 4');
 
     // 2026-10-12 重设计：卡下方的 MkStatStrip 三读数（当前阶段/已用回合/下一阶段）撤——
     // 前两者步点阵自身已表达，「已用回合」与 Goal 步点「学习者发言 N」近重复且两次被误读

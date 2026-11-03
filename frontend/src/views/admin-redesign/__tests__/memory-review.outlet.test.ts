@@ -81,7 +81,7 @@ describe('MemoryReview R7 页出口：三组建议列表', () => {
     expect(actionButtons.filter((t) => t === '确认').length).toBe(3);
     expect(actionButtons.filter((t) => t === '驳回').length).toBe(3);
     // 审计队列补「散键清理」格（CC-2：drops 计数此前从不渲染）
-    expect(text).toContain('散键清理');
+    expect(text).toContain('未归类记忆清理');
   });
 
   it('三组建议全空 → 各组空态文案，不留死表格', async () => {
@@ -92,7 +92,7 @@ describe('MemoryReview R7 页出口：三组建议列表', () => {
     const text = w.find('.mr__detail').text();
     expect(text).toContain('本次没有达到置信度阈值的归并建议。');
     expect(text).toContain('没有待人工确认项。');
-    expect(text).toContain('没有待清理的散键。');
+    expect(text).toContain('没有待清理的未归类记忆。');
   });
 
   it('驳回：三组各自的驳回都过确认弹层（非危险档）并按各自主键调用 POST reject', async () => {
@@ -217,7 +217,7 @@ describe('MemoryReview 归并处理条（2026-10-19 重设计）', () => {
     expect(bar.text()).toContain('已选 3 项');
     expect(bar.text()).toContain('归并 1');
     expect(bar.text()).toContain('人工确认对 1');
-    expect(bar.text()).toContain('散键 1');
+    expect(bar.text()).toContain('未归类记忆 1');
     expect(bar.text()).toContain('清空');
     expect(bar.text()).toContain('执行选中（3）');
     const warn = bar.find('.mr-bulk__warn');
