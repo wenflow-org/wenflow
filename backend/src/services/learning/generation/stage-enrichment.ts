@@ -490,16 +490,20 @@ async function enrichLearningPathWithAndersonInner(
           goal: milestone.goal || null,
           estimatedHours: milestone.estimatedHours || null,
         },
-        ...(designerChannels['previousMilestone'] || previousMilestone ? {
-          previousMilestone: designerChannels['previousMilestone'] || (previousMilestone ? {
-            stageNumber: previousMilestone.stageNumber,
-            title: previousMilestone.title,
-            coreConcept: previousMilestone.coreConceptId || null,
+        ...(previousMilestone ? {
+          previousMilestone: {
+            // #167：配置抽值（stageNumber/title/coreConcept）与手拼回退二选一后，
+            // 再与上一阶段任务摘要合并——原实现以配置抽值优先并直接短路，
+            // 使 tasks 分支永不执行，而提示词把 tasks 声明为跨阶段去重/衔接的唯一事实源。
+            ...(designerChannels['previousMilestone'] || {
+              stageNumber: previousMilestone.stageNumber,
+              title: previousMilestone.title,
+              coreConcept: previousMilestone.coreConceptId || null,
+            }),
             // 幽灵通道修复（2026-10-26）：上一阶段真实任务清单（串行生成后才存在）。
-            // 提示词规则 13 的「previousMilestoneContext」从来不存在，跨阶段衔接/去重
-            // 规则此前只能靠阶段标题猜；现在首操作任务能真正「用上一阶段刚产出的东西」。
+            // 首操作任务借此真正「用上一阶段刚产出的东西」，而非只靠阶段标题猜。
             ...(stageTaskSummaries.get(stageIndex - 1) ? { tasks: stageTaskSummaries.get(stageIndex - 1) } : {}),
-          } : null),
+          },
         } : {}),
         ...stageDesignerBaseInput,
         ...(stageMaterials ? { materials: stageMaterials } : {}),
