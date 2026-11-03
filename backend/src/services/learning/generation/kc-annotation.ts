@@ -36,6 +36,8 @@ export interface KcAnnotationSubtask {
   linkedConcept?: string | null;
   knowledgeType?: string | null;
   cognitiveLevel?: string | null;
+  /** 稳定键（issue #179）：随输入下发、要求模型逐字回显，落库时据它绑 subtasks.id。 */
+  taskKey?: string;
 }
 
 /** cognitiveCore / cognitiveDesign 均可作映射输入（模块只取 prerequisiteTree 与整体透传） */
@@ -221,6 +223,8 @@ export async function mapAndPersistKcAnnotation(params: KcAnnotationParams): Pro
         goal: m.goal,
       })),
       subtasks: subtasks.map((t) => ({
+        // 稳定键（issue #179）：必须随输入下发到模型，否则模型无法回显、落库时绑不到 subtasks.id。
+        taskKey: t.taskKey,
         title: t.title,
         type: t.type,
         linkedConcept: t.linkedConcept,

@@ -283,6 +283,62 @@ describe('LearningService.completeTask milestone progression', () => {
     expect(at).toBeLessThanOrEqual(after + 1000)
   })
 
+  it('#204：会话在结算前已闭合时不留给 lesson:completed 兜底，自己 eager 刷教学快照', async () => {
+    await learningService.completeTask({
+      taskId: 'task-2',
+      userId,
+      sessionId: 'session-1',
+      sessionClosedBeforeCompletion: true
+    })
+
+    // 该次收尾不会再产出 lesson:completed，而事件消费者按 sessionId 跳过 task:completed
+    // → 必须在这一侧刷新，否则投影键 0 次刷新、快照静默陈旧
+    expect(mockSnapshotRefresh).toHaveBeenCalledWith(expect.objectContaining({
+      userId,
+      pathId,
+      taskId: 'task-2',
+      milestoneId: 'milestone-1',
+      scope: 'teaching'
+    }))
+  })
+
+  it('#147：会话由本次结算一并关闭时仍不 eager 刷，留给 lesson:completed 消费者', async () => {
+    await learningService.completeTask({ taskId: 'task-2', userId, sessionId: 'session-1' })
+
+    expect(mockSnapshotRefresh).not.toHaveBeenCalled()
+    // 该开关只是「谁负责刷」的输入侧控制，不进事件载荷（载荷仍只有 track/completionSource/sessionId）
+    const payload = JSON.parse(outbox.find(item => item.eventType === 'task:completed')?.payload || '{}')
+    expect(payload.sessionId).toBe('session-1')
+    expect(payload).not.toHaveProperty('sessionClosedBeforeCompletion')
+  })
+
+  it('#204：重进补结算时任务已由上一跳写完成（alreadyCompleted 早退）仍补一次 eager 刷新', async () => {
+    // 重进补结算：会话已闭合（finalization.taskCompletion 落 failed 后重试），任务本身
+    // 已被上一跳写完成 → 事务在入队前就早退，不产生 task:completed，消费者也无从刷新
+    expect(tasks[0].status).toBe('completed')
+    await learningService.completeTask({
+      taskId: 'task-1',
+      userId,
+      sessionId: 'session-1',
+      sessionClosedBeforeCompletion: true
+    })
+
+    expect(outbox.map(item => item.eventType)).not.toContain('task:completed')
+    expect(mockSnapshotRefresh).toHaveBeenCalledWith(expect.objectContaining({
+      userId,
+      pathId,
+      taskId: 'task-1',
+      milestoneId: 'milestone-1',
+      scope: 'teaching'
+    }))
+  })
+
+  it('#204：alreadyCompleted 且会话未闭合（同流程/纯路径）不补刷，避免重复重算', async () => {
+    await learningService.completeTask({ taskId: 'task-1', userId })
+
+    expect(mockSnapshotRefresh).not.toHaveBeenCalled()
+  })
+
   it('回滚冲突生成时不会把已取消的旧 worker 恢复为可运行状态', async () => {
     const restoreTx = {
       learning_paths: {

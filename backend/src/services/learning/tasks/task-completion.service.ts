@@ -438,7 +438,25 @@ export async function completeTask(data: CompleteTaskData) {
     const subtask = completionResult.task;
     const updatedSubtask = completionResult.task;
 
+    // #204：教学快照的 eager 刷新叶子。教学链路（带 sessionId）默认把这一键的刷新留给同一节课的
+    // lesson:completed 消费者；会话在本次结算前已闭合（end_only 补结算 / complete_task 重试）时
+    // 不会再产出 lesson:completed，消费者又按 sessionId 跳过 task:completed —— 必须由这里补刷，
+    // 否则该次收尾对投影键 0 次刷新（快照静默陈旧至 getLatest 的 10 分钟兜底）。
+    // 注意 alreadyCompleted 早退（下面）也在其列：重进补结算时任务可能已由上一跳写完成。
+    const scheduleEagerSnapshotRefresh = () => {
+      runBackgroundTask('learner-snapshot.task-completed', () => learnerSnapshotRefreshService.refresh({
+        userId: data.userId,
+        pathId: subtask.milestones?.learningPathId || pathId || undefined,
+        taskId: data.taskId,
+        milestoneId: subtask.milestoneId,
+        scope: 'teaching',
+      }), { userId: data.userId, taskId: data.taskId });
+    };
+
     if (completionResult.alreadyCompleted) {
+      // #204：任务已由上一跳写完成 → 事务在入队前就早退（不产生 task:completed，其它副作用也不该重放），
+      // 但「已闭合会话」这一支的刷新兜底仍要补做，否则重进补结算永远是 0 次刷新。
+      if (data.sessionId && data.sessionClosedBeforeCompletion) scheduleEagerSnapshotRefresh();
       return {
         task: completionResult.task,
         learningReport: undefined,
@@ -555,18 +573,15 @@ export async function completeTask(data: CompleteTaskData) {
 
     logger.info(`任务完成：${subtask.id}`, { userId: data.userId });
 
-    // #147：带 sessionId = 教学收尾中的任务结算。该画像快照键（teaching:path:milestone:task）与同一次
-    // 收尾的 lesson:completed 完全相同，且由 lesson:completed 的消费者统一刷新（endSession 已在
-    // completeTask 之前或紧随其后）。这里再 eager 刷一次是同一 projectionKey 的重复重算，故教学链路
-    // 不刷；纯路径任务（无 sessionId，无 lesson:completed 事件）保持原有的立即刷新不变。
-    if (!data.sessionId) {
-      runBackgroundTask('learner-snapshot.task-completed', () => learnerSnapshotRefreshService.refresh({
-        userId: data.userId,
-        pathId: subtask.milestones?.learningPathId || undefined,
-        taskId: data.taskId,
-        milestoneId: subtask.milestoneId,
-        scope: 'teaching',
-      }), { userId: data.userId, taskId: data.taskId });
+    // #147：带 sessionId = 教学收尾中的任务结算。该画像快照键（teaching:path:milestone:task）与同一节课
+    // 的 lesson:completed 完全相同，刷新由 lesson:completed 的消费者的那一次承担（其在两条链路上都会
+    // 刷新同一键）；这里再 eager 刷一次是同一 projectionKey 的重复重算，故教学链路默认不刷。
+    // 例外（回归 #204）：本次结算前会话已闭合（end_only 补结算 / complete_task 重试）→ 不会再产出
+    // lesson:completed，没有别的刷新方，必须在此 eager 刷新，否则该次收尾对投影键 0 次刷新
+    // （alreadyCompleted 早退分支见上方同名兜底）。
+    // 纯路径任务（无 sessionId，无 lesson:completed 事件）保持原有的立即刷新不变。
+    if (!data.sessionId || data.sessionClosedBeforeCompletion) {
+      scheduleEagerSnapshotRefresh();
     }
     dashboardGuidanceSnapshotService.refreshInBackground(data.userId, 'task-completed');
     learnerStateReviewService.refreshInBackground(data.userId);

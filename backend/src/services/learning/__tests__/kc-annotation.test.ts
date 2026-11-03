@@ -136,6 +136,23 @@ describe('mapAndPersistKcAnnotation（契约事故回归）', () => {
     }]);
   });
 
+  it('默认（非渐进）配置也把 taskKey 下发到模型（issue #179 断点①）', async () => {
+    // 断点①：mapAndPersistKcAnnotation 重建 subtasks 载荷时曾丢掉 taskKey，默认配置下模型收不到、
+    // 无法逐字回显，落库时便绑不到 subtasks.id。
+    withResultMock().mockResolvedValue({ success: true, output: goodOutput });
+
+    await mapAndPersistKcAnnotation({
+      pathId: 'lp_1',
+      template,
+      milestones,
+      subtasks: [{ ...subtasks[0], taskKey: 'task-1-0' }],
+      persist: jest.fn(),
+    });
+
+    const [, input] = withResultMock().mock.calls[0];
+    expect(input.subtasks[0].taskKey).toBe('task-1-0');
+  });
+
   it('cognitiveCore 缺失时降级为 null（不编造概念）', async () => {
     withResultMock().mockResolvedValue({ success: true, output: goodOutput });
 
