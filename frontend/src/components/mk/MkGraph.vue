@@ -373,7 +373,11 @@ function buildOption(): EChartsCoreOption {
             : (denseGraph ? [Math.round(90 * shrink), Math.round(170 * shrink)] : [80, 160]),
           gravity: narrow ? 0.13 : (denseGraph ? 0.06 : 0.08),
           friction: 0.82,
-          layoutAnimation: true
+          // 2026-11-04：关掉力导向动画。开动画时 ECharts 只在初始（节点尚未散开、大量重叠）
+          // 的位置跑一次 labelLayout.hideOverlap，节点随后动画收敛到新位置却不再重算标签 →
+          // 中文概念名压在相邻节点/标签上、末尾被吞（1920/2560 复现）。关动画后力导向在渲染
+          // 前同步收敛，hideOverlap 拿最终位置判定，重叠标签被正常收掉。
+          layoutAnimation: false
         },
         data: nodes.map((node) => {
           const highlighted = highlightSet.has(node.id)

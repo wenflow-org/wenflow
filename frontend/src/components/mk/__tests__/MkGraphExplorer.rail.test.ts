@@ -130,6 +130,28 @@ describe('MkGraphExplorer 路径轨窄屏平铺（≤900）', () => {
     expect(texts.join(' ')).not.toContain('lp_x');
     w.unmount();
   });
+
+  // 2026-11-04：两条无标题路径同时回落「未命名路径」时，轨上/「更多」浮层里会逐字相同、无法区分
+  // （实证 lp_…oboui70 / lp_…zu7bhwj）。对重名项按出现顺序补序号；唯一项不长序号。
+  it('多条无标题路径回落文案重名时补序号区分，唯一项不补', () => {
+    const w = mount(MkGraphExplorer, {
+      props: {
+        nodes: NODES,
+        edges: [],
+        paths: [
+          { id: 'lp_a', title: null },
+          { id: 'lp_b', title: null },
+          { id: 'lp_c', title: '有标题的路径' },
+        ],
+      },
+    });
+    const texts = chipTexts(w);
+    expect(texts).toContain('未命名路径 1');
+    expect(texts).toContain('未命名路径 2');
+    // 唯一无标题场景（上面那条用例）仍保持原文案：此处只在重名 ≥2 时补
+    expect(texts).not.toContain('未命名路径');
+    w.unmount();
+  });
 });
 
 describe('MkGraphExplorer 路径轨的有界化', () => {

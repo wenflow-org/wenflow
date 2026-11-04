@@ -559,7 +559,10 @@ export class ConceptGraphService {
     for (const concept of allConcepts) if (concept.originPathId) pathIds.add(concept.originPathId);
     const pathTitles = await this.deps.listPathTitles([...pathIds]);
     const titleById = new Map(pathTitles.map((item) => [item.id, item.title]));
+    // 2026-11-04：只保留 learning_paths 里仍存在的路径。边/概念可能残留指向已删除路径的 pathId，
+    // 这类路径选进筛选后 concept-graph 会 404「路径不存在」、整块图谱不可用；不给不可用项留入口。
     const paths = [...pathIds]
+      .filter((id) => titleById.has(id))
       .map((id) => ({ id, title: titleById.get(id) ?? null }))
       .sort((a, b) => String(a.title ?? a.id).localeCompare(String(b.title ?? b.id)));
 

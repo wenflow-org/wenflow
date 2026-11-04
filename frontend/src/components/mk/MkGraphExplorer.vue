@@ -416,11 +416,23 @@ const allPathOption = computed<PathOption>(() => ({
   label: props.paths.length > 1 ? `全部路径（${props.paths.length} 条）` : '全部路径',
 }))
 
-const pathOnlyOptions = computed<PathFilterOption[]>(() =>
+const pathOnlyOptions = computed<PathFilterOption[]>(() => {
   // 无标题路径回落「未命名路径」而非裸 id（lp_1791… 对学习者无意义）；
   // 与列表页/学习台同款口径（V2LearningPaths / V2Dashboard 都是 `title || name || '未命名路径'`）
-  props.paths.map((p) => ({ value: p.id, label: p.title || '未命名路径' }))
-)
+  const options = props.paths.map((p) => ({ value: p.id, label: p.title || '未命名路径' }))
+  // 2026-11-04：同名项（实证=两条无标题路径同时回落「未命名路径」，lp_…oboui70 / lp_…zu7bhwj）
+  // 在轨与「更多」浮层里逐字相同、无法区分。对重名项按出现顺序补「1/2」序号；仅当同名 ≥2 条时
+  // 补，唯一项仍保持原回落文案（单条无标题不能长出无意义的「1」）。
+  const total = new Map<string, number>()
+  for (const opt of options) total.set(opt.label, (total.get(opt.label) ?? 0) + 1)
+  const seen = new Map<string, number>()
+  return options.map((opt) => {
+    if ((total.get(opt.label) ?? 0) < 2) return opt
+    const n = (seen.get(opt.label) ?? 0) + 1
+    seen.set(opt.label, n)
+    return { ...opt, label: `${opt.label} ${n}` }
+  })
+})
 
 /** 路径多到轨上放不下（且溢出值得开浮层）时收「更多」。
     窄屏一律不收（改多行平铺，见 railNarrow）：全部路径直接铺在轨上、点选，不走「更多」浮层 */
@@ -1122,7 +1134,9 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   display: grid;
   grid-template-columns: minmax(0, 1fr) 280px;
   gap: var(--mk-space-4);
-  align-items: stretch;
+  /* start 而非 stretch（2026-11-04 宽屏走查）：未选中时侧栏只有「图谱概览」几条建议，
+     stretch 会把卡片拉满画布行高、底部留出 400+px 死白（2560 下更明显）。 */
+  align-items: start;
 }
 .mk-ge__canvas {
   min-width: 0;
@@ -1174,7 +1188,9 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-md);
   background: var(--mk-surface);
-  height: 100%;
+  /* height: 100% 删去（2026-11-04 宽屏走查）：它把卡片硬拔到画布行高（100% 按网格区
+     高度解析，与 align-items: start 并存仍会拉满），概览内容只有 313px 时留下大块空白。
+     改由内容决定高度。 */
   box-sizing: border-box;
 }
 .mk-ge__side-title {
@@ -1254,9 +1270,11 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
 }
 .mk-ge__overview-item > span:first-child {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* 换行代替省略号（2026-11-04 溢出走查）：25 字概念名（「结果义与过去事件义的区分决定
+     完成时与过去时的取舍」）在 232px 窄栏里被 nowrap+ellipsis 截成「结果义与过去事件义
+     的区分决定完成时…」，同一条在详情卡里是全名——列表是导航入口，截断后长名无从区分。
+     min-width:0 保留：否则 flex item 按 min-content 撑宽，外层 minmax(0,1fr) 也压不住。 */
+  overflow-wrap: anywhere;
 }
 /* 状态徽章是固定两字，不能被长概念名挤成「待学 / 习」 */
 .mk-ge__overview-item > .mk-badge {
@@ -1438,7 +1456,8 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   /* 图例后多留 32px：首屏底边原先正好切在「图谱概览」标题腰部，只露出半截字。
      把下一张卡整体推到首屏之外，避免假半截卡；滚动后卡片完整出现。 */
   .mk-ge__canvas { padding-bottom: calc(var(--mk-space-2) + 24px); }
-  .mk-ge__side { height: auto; }
+  /* 窄屏原本在此把 .mk-ge__side 的 height 覆回 auto（对抗桌面 100%）；桌面 100% 已删
+     （2026-11-04），此覆写失去对象，一并删去。 */
   /* 视图分段控件（全部/核心概念/知识组件）只有 27px 高，触屏上它是最常用的过滤器 */
   .mk-ge__seg-btn {
     min-height: 36px;
