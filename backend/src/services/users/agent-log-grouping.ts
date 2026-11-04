@@ -45,6 +45,27 @@ export interface AgentLogGroupRow {
   [key: string]: any;
 }
 
+/** 参与模型补全的行：#230 补数查询只需 traceId + metadata，不必带展示字段 */
+export interface AgentLogModelSourceRow {
+  traceId?: string | null;
+  metadata?: string | null;
+  [key: string]: any;
+}
+
+/**
+ * 提取一组日志行里去重后的非空 traceId（列优先，回退 metadata.traceId）。
+ * 供调用方按已选中的 traceId 集合另取承载模型名的行——见 routes/users.buildAgentLogView。
+ */
+export function collectAgentLogTraceIds(logs: AgentLogModelSourceRow[]): string[] {
+  const ids = new Set<string>();
+  for (const log of logs) {
+    const metadata = parseMetadata(log.metadata);
+    const traceId = String(log.traceId || metadata.traceId || '').trim();
+    if (traceId) ids.add(traceId);
+  }
+  return [...ids];
+}
+
 function parseMetadata(metadata: string | null | undefined): Record<string, any> {
   if (!metadata) return {};
   try {
@@ -87,8 +108,15 @@ export function parseAgentLogGroupId(id: string): AgentLogGroupId | null {
  *
  * 详情端点必须用同一个 where 取数后调用本函数，再按 id 取其中一条；这样两处的
  * groupCount/groupItems/model 由构造保证相同（#225），而不是靠两套实现「看起来一致」。
+ *
+ * @param modelSourceRows #230：模型名只写在 api-gateway 行上，而网关行不在默认口径的
+ *   userListed 白名单里、**不在本参数 logs 的取数集内**。调用方按已选 traceId 另取回
+ *   网关行后从这里传入，仅用于建模型索引，不参与去重/分组/输出。
  */
-export function collapseAgentLogGroups(logs: AgentLogGroupRow[]): any[] {
+export function collapseAgentLogGroups(
+  logs: AgentLogGroupRow[],
+  modelSourceRows: AgentLogModelSourceRow[] = []
+): any[] {
   // 1) 去重：同 traceId + agentId + 秒级时间视为同一次调用的重复落库。
   //    注意这是**跨会话**去重（key 不含会话），列表一直如此；详情若按会话去重会多出条目。
   const dedupeMap = new Map<string, any>();
@@ -111,9 +139,13 @@ export function collapseAgentLogGroups(logs: AgentLogGroupRow[]): any[] {
   /* 同一 trace 的业务行与 api-gateway 行是两条日志（agentId 不同、不合并），
      但模型名只写在网关行的 metadata 里。先按 traceId 建索引，折叠后提到业务行顶层，
      用户侧「模型」列才显示实际模型而不是笼统的「内置模型」。
-     索引建在**去重后的全量行**上（网关行通常不带会话 id，不能靠会话预筛）。 */
+
+     #230：网关行同样不在默认口径的 userListed 白名单里，默认视图的取数集（logs）里
+     根本没有它——所以索引不能只看 logs，还要合入调用方按已选 traceId 另取回的
+     modelSourceRows（user.repo.listAgentLogModelRowsByTraceIds）。取数集内已有的模型
+     优先级更高（先入先占），补数行只填空缺。 */
   const modelByTrace = new Map<string, string>();
-  for (const value of dedupeMap.values()) {
+  for (const value of [...dedupeMap.values(), ...modelSourceRows]) {
     const metadata = parseMetadata(value.metadata);
     const model = typeof metadata.model === 'string' ? metadata.model.trim() : '';
     const traceId = String(value.traceId || metadata.traceId || '');

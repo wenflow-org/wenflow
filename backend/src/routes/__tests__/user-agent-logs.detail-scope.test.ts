@@ -18,6 +18,7 @@ const USER_LISTED = ['skill:goal-conversation', 'skill:path-planning', 'path-age
 
 const listUserAgentLogsForGrouping = jest.fn()
 const listUserAgentLogsForExport = jest.fn()
+const listAgentLogModelRowsByTraceIds = jest.fn()
 const findUserAgentLogById = jest.fn()
 
 function makeRow(id: string, agentId: string, calledAt: string, metadata: Record<string, any>, traceId?: string) {
@@ -62,6 +63,7 @@ jest.mock('../../services/users/user.repo', () => ({
   findSubtasksByIds: jest.fn(),
   listUserAgentLogsForGrouping,
   listUserAgentLogsForExport,
+  listAgentLogModelRowsByTraceIds,
   findUserAgentLogById,
   markOnboardingCompleted: jest.fn(),
 }))
@@ -129,6 +131,12 @@ const descByCalledAt = (a: any, b: any) => b.calledAt.getTime() - a.calledAt.get
 function useRows(rows: any[]) {
   listUserAgentLogsForGrouping.mockImplementation(async (where: any) =>
     rows.filter((row) => matchesScope(row, where)).slice().sort(descByCalledAt))
+  // #230：模型补数行按「已选 traceId + api-gateway」取，不受默认口径白名单约束
+  // （网关行不在 USER_LISTED 里，默认取数集不含它，模型名只能靠这次补数回来）。
+  listAgentLogModelRowsByTraceIds.mockImplementation(async (userId: string, traceIds: string[]) =>
+    rows.filter((row) => row.userId === userId
+      && row.agentId === 'api-gateway'
+      && traceIds.includes(String(row.traceId ?? ''))))
 }
 
 function createResponse() {
@@ -179,6 +187,7 @@ describe('#225 agent-logs 详情与列表共用折叠管线', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     listUserAgentLogsForExport.mockResolvedValue([])
+    listAgentLogModelRowsByTraceIds.mockResolvedValue([])
     findUserAgentLogById.mockResolvedValue(null)
   })
 
@@ -189,6 +198,9 @@ describe('#225 agent-logs 详情与列表共用折叠管线', () => {
     expect(listRow).toBeTruthy()
     expect(listRow.groupCount).toBe(2)
     expect(listRow.groupItems.map((item: any) => item.agentId)).toEqual(['skill:path-planning', 'skill:path-planning'])
+    // #230：模型名只写在 api-gateway 行（不在默认白名单里、不在本次取数集内），
+    // 默认口径也必须按已选 traceId 把它补回来，否则「模型」列恒为 null。
+    expect(listRow.model).toBe('claude-x')
 
     const detailRes = await callDetail('path:conv-path-1', {})
     expect(detailRes.statusCode).toBe(200)

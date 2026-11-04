@@ -126,6 +126,21 @@ export function findUserAgentLogById(logId: string, userId: string) {
   });
 }
 
+/**
+ * #230：模型名只写在 api-gateway 行的 metadata 上（见 gateway/api-gateway/executor），
+ * 而网关行不在默认口径的 userListed 白名单里，默认视图的主取数（listUserAgentLogsForGrouping）
+ * 拿不到它，于是折叠组的 model 恒为 null。这里按**已选中行的 traceId 集合**单独补取网关行，
+ * 不受白名单约束——补的是同一 trace 的展示元数据，不是「要展示的一行」。
+ * 只 select 建模型索引所需字段；traceIds 为空时不发查询。
+ */
+export function listAgentLogModelRowsByTraceIds(userId: string, traceIds: string[]) {
+  if (!traceIds.length) return Promise.resolve([] as Array<{ traceId: string | null; metadata: string | null }>);
+  return prisma.agent_call_logs.findMany({
+    where: { userId, agentId: 'api-gateway', traceId: { in: traceIds } },
+    select: { traceId: true, metadata: true }
+  });
+}
+
 export function markOnboardingCompleted(userId: string) {
   return prisma.users.update({
     where: { id: userId },

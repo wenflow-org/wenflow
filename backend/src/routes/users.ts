@@ -12,12 +12,14 @@ import {
   findSubtasksByIds,
   listUserAgentLogsForGrouping,
   listUserAgentLogsForExport,
+  listAgentLogModelRowsByTraceIds,
   findUserAgentLogById,
   markOnboardingCompleted,
 } from '../services/users/user.repo';
 import {
   parseAgentLogGroupId,
   collapseAgentLogGroups,
+  collectAgentLogTraceIds,
 } from '../services/users/agent-log-grouping';
 import { rejectProjectionAccess } from '../middleware/projection-access.middleware';
 import { learnerSnapshotRefreshService } from '../services/learner/LearnerSnapshotRefreshService';
@@ -457,13 +459,19 @@ router.get('/me/sessions', async (req, res, next) => {
    本函数只补一件事：服务把折叠组的 id 覆盖成合成组键（path:/goal:<convId>）后，组代表的真实
    主键不再可见，而前端「详情」用 `log.repLogId || log.id` 拉单条调用；故按代表行保留下来的
    身份字段（traceId/agentId/metadata）在同一批原始行里回查其主键。回查不到时留空，前端退回
-   组键——组键详情由 #220 支持，功能不受影响。这里不做任何去重/分组/排序，不构成第二份折叠实现。 */
-function buildAgentLogView(rows: any[]): any[] {
+   组键——组键详情由 #220 支持，功能不受影响。这里不做任何去重/分组/排序，不构成第二份折叠实现。
+
+   #230：「可见集过滤」与「元数据补全」分开。rows 仍按白名单取（业务动作才该出现在默认列表），
+   但模型名只写在 api-gateway 行的 metadata 上，而网关行不在白名单里、不在 rows 内。故按 rows
+   已选中的 traceId 集合另发一次补数查询取网关行（listAgentLogModelRowsByTraceIds，不受白名单
+   约束），只喂给折叠函数建模型索引——不进入展示/分组。 */
+async function buildAgentLogView(userId: string, rows: any[]): Promise<any[]> {
+  const modelRows = await listAgentLogModelRowsByTraceIds(userId, collectAgentLogTraceIds(rows));
   const rowsById = new Map<string, any>();
   for (const row of rows) {
     rowsById.set(String(row.id), row);
   }
-  return collapseAgentLogGroups(rows).map((group) => {
+  return collapseAgentLogGroups(rows, modelRows).map((group) => {
     const items: any[] = Array.isArray(group.groupItems) ? group.groupItems : [];
     // 单行/未归组的行：id 本身就是真实主键（服务只在折叠组上覆盖 id），无需补代表 id
     if (items.length === 0) return group;
@@ -496,7 +504,7 @@ router.get('/me/agent-logs', async (req, res, next) => {
 
     // #225：折叠管线单一事实源在 agent-log-grouping；列表/导出/详情共用同一个 buildAgentLogView，
     // 用同一条 buildAgentLogWhere 取数，两处 groupCount/groupItems/model 由构造保证一致。
-    const sortedGroups = buildAgentLogView(logs);
+    const sortedGroups = await buildAgentLogView(userId, logs);
 
     // total 与 logs 同口径：total = 折叠后的组数，分页切片也落在组上
     const total = sortedGroups.length;
@@ -530,7 +538,7 @@ router.get('/me/agent-logs/export', async (req, res, next) => {
     const where = buildAgentLogWhere(userId, req.query, capability.capabilityType);
 
     // 2026-11-04：与列表同一折叠视图导出，避免页面记录数与导出记录数两套口径（12 vs 24）
-    const logs = buildAgentLogView(await listUserAgentLogsForExport(where));
+    const logs = await buildAgentLogView(userId, await listUserAgentLogsForExport(where));
 
     if (format === 'csv') {
       const headers = ['id', 'agentId', 'success', 'durationMs', 'tokensUsed', 'error', 'calledAt'];
@@ -582,7 +590,7 @@ router.get('/me/agent-logs/:logId', async (req, res, next) => {
       if (capability.error) return sendAgentLogValidationError(res, capability.error);
       const scopeWhere = buildAgentLogWhere(userId, req.query, capability.capabilityType);
       const logs = await listUserAgentLogsForGrouping(scopeWhere);
-      const group = buildAgentLogView(logs).find((entry) => entry.id === logId);
+      const group = (await buildAgentLogView(userId, logs)).find((entry) => entry.id === logId);
       if (!group) {
         return res.status(404).json({
           success: false,
