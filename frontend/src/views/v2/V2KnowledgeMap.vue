@@ -6,7 +6,10 @@
       <div class="km__hero">
         <div>
           <h1>知识图谱</h1>
-          <p>把你所有学习路径里的概念汇成一张图，颜色是掌握程度。</p>
+          <!-- 副标题「把你所有学习路径里的概念汇成一张图，颜色是掌握程度。」已删（2026-11-04）：
+               颜色语义 mk-ge__legend 图卡底部常驻在讲，条数/当前路径 km__note 条常驻在讲，
+               「汇成一张图」页面本身自明——三句全是别处已有的信息（同一 hero 里
+               图例/通栏按钮已因同款重复教学删过两轮） -->
           <!-- 「怎么看这张图」折叠图例已删（2026-09-27）：图谱卡底部的 mk-ge__legend
                常驻覆盖同一套语义（线型/颜色/形状），顶部那份是重复教学 -->
           <!-- 「查看学习状态」通栏 ghost 已删（2026-10-09 用户反馈）：PC 顶导航与移动端底部
@@ -183,17 +186,9 @@ onMounted(async () => {
   margin-bottom: var(--mk-space-5);
 }
 .km__hero h1 {
-  margin: 0 0 var(--mk-space-2);
+  margin: 0;
   /* 原型 .wf-km__hero h1 = 21px（全站 h1 档随原型走；移动端仍落 18px 全站约定） */
   font-size: 21px;
-}
-.km__hero p {
-  /* 原型 .wf-km__hero p：12.5px + max-width 32ch（一行不超过 32 字，说明不再铺满 640px） */
-  max-width: 32ch;
-  margin: 0;
-  font-size: var(--mk-fs-12_5);
-  line-height: 1.7;
-  color: var(--mk-muted);
 }
 .km__note {
   margin: 0 0 var(--mk-space-4);
