@@ -5,7 +5,9 @@
     <div class="user-settings-page">
       <!-- 状态条（P3-45，设计评审）：撤「已启用/未启用」徽章——标题是唯一状态句。
            开关绑的是 apiConfig.enabled（自定义模型服务是否启用），标签必须写明它真正控制的对象，
-           不再用裸「启用/禁用」贴在标题右侧（会被读成「内置模型服务 禁用」）——走查 2026-10-08 #10 -->
+           不再用裸「启用/禁用」贴在标题右侧（会被读成「内置模型服务 禁用」）——走查 2026-10-08 #10。
+           2026-11-04 走查：标签再挂「：开/关」是把标题已说的状态复述第二遍（同屏重复），
+           故标签只留对象名，开合由开关轨道本身表达——状态句仍只由标题一处承载。 -->
       <div class="settings-status">
         <div class="settings-status__left">
           <div>
@@ -22,7 +24,7 @@
             @change="handleEnabledChange"
           />
           <span class="uc-switch__track"></span>
-          <span class="uc-switch__label">自定义模型服务：{{ apiConfig.enabled ? '开' : '关' }}</span>
+          <span class="uc-switch__label">自定义模型服务</span>
         </label>
       </div>
 
