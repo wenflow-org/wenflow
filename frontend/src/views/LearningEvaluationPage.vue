@@ -173,6 +173,20 @@
               </div>
               <div class="evaluation-transcript-item__body">
                 <MarkdownRenderer :content="message.content" />
+                <!-- 2026-11-04 走查：当堂对话此前只回放文字，课堂里老师真出过的结构图
+                     （mermaid）与白板图（figure）全部丢失——回看时讲解引用「图里/左栏」
+                     同样找不到所指。与学习页同款双通道内联渲染。 -->
+                <TeachingDiagram
+                  v-for="(d, di) in (message.diagrams || [])"
+                  :key="'d' + index + '-' + di"
+                  :code="d.code"
+                  :caption="d.caption"
+                />
+                <TeachingFigure
+                  v-for="(f, fi) in (message.figures || [])"
+                  :key="'f' + index + '-' + fi"
+                  :figure="f"
+                />
               </div>
             </article>
           </div>
@@ -193,6 +207,8 @@ import { askConfirm } from '@/views/admin-redesign/useConfirm';
 // html2canvas 体积大，仅导出图片时动态加载
 import CompletionCard from '@/components/CompletionCard.vue';
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue';
+import TeachingDiagram from '@/components/TeachingDiagram.vue';
+import TeachingFigure from '@/components/TeachingFigure.vue';
 import SessionFeedbackPanel from '@/components/learning/SessionFeedbackPanel.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import ImmersiveMenu from '@/components/ImmersiveMenu.vue';

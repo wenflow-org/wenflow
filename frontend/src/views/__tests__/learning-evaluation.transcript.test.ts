@@ -32,6 +32,12 @@ vi.mock('@/utils/projection', () => ({
 
 vi.mock('@/components/CompletionCard.vue', () => ({ default: { template: '<div class="stub-completion" />' } }));
 vi.mock('@/components/learning/SessionFeedbackPanel.vue', () => ({ default: { template: '<div class="stub-feedback" />' } }));
+vi.mock('@/components/TeachingFigure.vue', () => ({
+  default: { props: ['figure'], template: '<div class="stub-figure" :data-kind="figure && figure.kind" />' }
+}));
+vi.mock('@/components/TeachingDiagram.vue', () => ({
+  default: { props: ['code', 'caption'], template: '<div class="stub-diagram" />' }
+}));
 
 const html2canvasMock = vi.hoisted(() => vi.fn());
 vi.mock('html2canvas-pro', () => ({ default: html2canvasMock }));
@@ -102,6 +108,30 @@ describe('LearningEvaluationPage 当堂对话折叠', () => {
     const w = await mountReady();
     expect(w.findAll('.evaluation-transcript-item').length).toBe(2);
     expect(w.find('.evaluation-transcript-toggle').exists()).toBe(false);
+  });
+
+  it('带图消息内联回放课堂结构图与白板图（2026-11-04：此前只回放文字，图全丢）', async () => {
+    const visualMessages = [
+      { role: 'user', content: '我的回答', timestamp: '2026-09-23T02:55:00.000Z' },
+      {
+        role: 'assistant',
+        content: '这条讲解，配对照图',
+        timestamp: '2026-09-23T02:56:00.000Z',
+        diagrams: [{ engine: 'mermaid', code: 'graph TD; A-->B' }],
+        figures: [{ kind: 'compare', caption: '原问法 vs 改写后' }]
+      }
+    ];
+    getSessionDetailMock.mockResolvedValue({ ...detail, messages: visualMessages });
+
+    const w = await mountReady();
+    const items = w.findAll('.evaluation-transcript-item');
+    expect(items.length).toBe(2);
+    // 图只挂在 assistant 带图消息内：白板图 + 结构图各一
+    expect(items[1].findAll('.stub-figure').length).toBe(1);
+    expect(items[1].find('.stub-figure').attributes('data-kind')).toBe('compare');
+    expect(items[1].findAll('.stub-diagram').length).toBe(1);
+    // 无图消息不渲染图节点
+    expect(items[0].findAll('.stub-figure, .stub-diagram').length).toBe(0);
   });
 
   it('导出图片前临时展开全部消息，导出结束后恢复折叠态', async () => {
