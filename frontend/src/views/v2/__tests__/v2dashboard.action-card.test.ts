@@ -57,10 +57,12 @@ describe('学习台：说明文字与路径卡底边', () => {
     expect(block, '首句裁剪被删掉了，说明会整段铺开').toContain('split(');
   });
 
-  it('行动说明用两行视觉截断兜住高度，且只夹今日行动那一处', () => {
+  it('行动说明用视觉截断兜住高度、溢出带省略号，且只夹今日行动那一处', () => {
     const task = ruleAfter('.action__desc--task');
-    expect(decl(task, '-webkit-line-clamp')).toBe('2');
+    // 2026-11-04：两行会在列举中途被 clip 收尾（无省略号），放宽到三行并以「…」收尾
+    expect(decl(task, '-webkit-line-clamp')).toBe('3');
     expect(decl(task, 'overflow')).toBe('hidden');
+    expect(decl(task, 'text-overflow')).toBe('ellipsis');
     // 状态类文案（生成中/失败/空态）不夹，否则「你也可以先去别的页面看看」会被切掉
     const base = ruleAfter('.action__desc ');
     expect(decl(base, '-webkit-line-clamp'), '.action__desc 基础类被夹了').toBeNull();

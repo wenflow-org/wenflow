@@ -885,15 +885,18 @@ onMounted(async () => {
    13px/700 蓝链。触控高 36→44（P2-35：实测 60.7×36px、桌面档 38.9px 同低于 44 地板；
    基础样式抬齐而非只进移动媒体查询，字号不动、扩的是热区）。
    左右各外扩 6px 内边距（配等量负外边距，视觉与布局都不动）：像「继续」这种两字链接
-   实测只有 35px 宽，只够高不够宽，横竖都得够才好点（2026-10-08 视觉检查）。 */
+   实测只有 35px 宽，只够高不够宽，横竖都得够才好点（2026-10-08 视觉检查）。
+   2026-11-04：横向热区改只往左扩（12px 内边距 + -12px 左边距，右边归零）。原右向 6px 外扩
+   越过卡片内容右缘、把 .history__aside 撑出 6px 横向溢出（scrollWidth 78 / clientWidth 72）；
+   收掉右向即清溢出，文字位置、44px 高度热区与盒子宽度都保持不变。 */
 .history__resume,
 .history__feedback,
 .history__restart {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
-  padding: 0 6px;
-  margin: 0 -6px;
+  padding: 0 0 0 12px;
+  margin: 0 0 0 -12px;
   border: 0;
   background: none;
   font-size: 13px;

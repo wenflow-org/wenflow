@@ -325,7 +325,11 @@ function normalize(p: Record<string, any>): PathCard {
   const title = p.title || p.name || '未命名路径';
   // AI 生成的简短摘要优先（path-planning summary），旧数据回退用户目标原文
   const desc = p.summary || p.description || '';
-  const stages: number = lc?.totalStages || p.totalStages || (p.milestones?.length ?? p.weeks?.length ?? 0);
+  // 2026-11-04 走查：阶段数以路径自身为准（阶段列表 / totalStages），不再优先 generationLifecycle.totalStages——
+  // 后者取自生成 run 的 totalItems（渐进式 core run 恒为 1），会把 4 阶段的路径在列表卡显示成「第 1 / 1 阶段」，
+  // 与同 id 详情页 hero 的「1 / 4 当前阶段」自相矛盾（详情页取路径阶段列表长度）。
+  const ownStages: number = p.milestones?.length ?? p.weeks?.length ?? 0;
+  const stages: number = ownStages || p.totalStages || lc?.totalStages || 0;
   const hours = p.estimatedHours;
 
   if (lc && lc.phase !== 'ready') {

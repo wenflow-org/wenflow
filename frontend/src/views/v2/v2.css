@@ -609,6 +609,15 @@ html, body {
      组件内 ≥1500 档自管 1180 */
   .v2-page.goal .work { max-width: 1180px; }
   .v2-page.goal .entry { max-width: 1360px; }
+  /* 2026-11-04 初始态内容列跟随容器加宽：.entry 已拓到 1360，但组件内 hero / 卡片 /
+     输入框 / 最近会话仍钉在 640（初始态同列四条），2560 实测内容仅 736px、左右各空
+     约 900px，整块悬在中央。这里把同列四条一起拓到 960（仍窄于 1360 容器、留出边距，
+     行长可控），副标题的 640 上限一并放开以跟随列宽。 */
+  .v2-page.goal main.entry .entry__hero,
+  .v2-page.goal main.entry .entry__cards,
+  .v2-page.goal main.entry .composer--entry,
+  .v2-page.goal main.entry .recent { max-width: 960px; }
+  .v2-page.goal main.entry .entry__hero p { max-width: none; }
   /* 课堂阅读列在 ≥1280 档由页面 scoped 规则拓到 1000；这里的外壳必须同步到 1120，
      否则旧 960 的高权重选择器会把 scoped 覆盖掉（2026-10-29 实测 body 仅 960）。 */
   .v2-page.learn .learn__body { max-width: 1120px; }

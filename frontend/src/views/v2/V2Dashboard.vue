@@ -1413,10 +1413,13 @@ onMounted(loadAll);
 }
 .action__title { margin: 0; font-size: 19px; line-height: 1.35; letter-spacing: -0.01em; }
 .action__desc { margin: 0; font-size: 14px; line-height: 1.7; color: var(--muted); max-width: 56ch; }
-/* 今日行动的说明可能很长（用户自己的任务描述），两行封顶：
-   只在这一处夹，状态类文案（生成中/失败/空态）不夹，别把「你也可以先去别的页面看看」切掉 */
+/* 今日行动的说明可能很长（用户自己的任务描述），封顶截断：
+   只在这一处夹，状态类文案（生成中/失败/空态）不夹，别把「你也可以先去别的页面看看」切掉。
+   2026-11-04：两行封顶会在列举中途（如「…现价 / 昨收 / 涨跌幅）：1) 现价 10.50」）被 clip
+   收尾且无省略号，读起来像半句断掉；放宽到三行并显式给 text-overflow:ellipsis，溢出时以「…」收尾。 */
 .action__desc--task {
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  overflow: hidden; text-overflow: ellipsis;
 }
 /* 行动卡提示行：原型 wf-action__note 纯文字行（图标 + 12.5px 蓝字），无底无框 */
 .action__reason {
