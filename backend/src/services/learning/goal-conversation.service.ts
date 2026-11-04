@@ -736,10 +736,7 @@ async continueConversation(
             });
 
             if (!bound) {
-              // 落败方：标记占位路径 failed（不会被生成恢复/自动重试），并复用赢家已绑定的路径
-              await learningService
-                .markActiveGenerationFailed(placeholderPath.id, new Error('并发确认，本条占位路径作废'), runId)
-                .catch(() => undefined);
+              // 落败方：bindGeneratingPath 已删除本请求的占位路径（#212），直接复用赢家已绑定的路径
               return this.resolveConcurrentConfirmation(conversationId, data);
             }
 
