@@ -33,7 +33,7 @@ import {
   type ResponseTriageEnforcementMode,
 } from './response-triage';
 import { assembleGoalHandoff } from '../../services/field-dispatcher';
-import { buildCompletedConversationResult, buildHardBlockMessage, buildHardBlockResult, resolveConversationUserVisible } from './goal-conversation.exit';
+import { buildCompletedConversationResult, buildHardBlockMessage, buildHardBlockResult, PATH_GENERATING_USER_VISIBLE, resolveConversationUserVisible } from './goal-conversation.exit';
 import learningService from './learning.service';
 import { bindGeneratingPath, kickPathGeneration, rejudgeHardBlockedCompletion, type GoalConversationRejudgeDeps } from './goal-conversation-rejudge';
 import { createDomainEvent } from '../../events/contracts';
@@ -431,7 +431,7 @@ class GoalConversationService {
     const generating = !learningPath || learningPath.status === 'generating';
     return {
       userVisible: generating
-        ? '已收到确认，学习路径正在生成，通常 10-60 秒内完成，可前往“学习路径”查看进度。'
+        ? PATH_GENERATING_USER_VISIBLE
         : '学习路径已经生成，可以去查看啦！',
       internal: {
         core: {
@@ -761,7 +761,7 @@ async continueConversation(
               systemPromptOverrides: options?.systemPromptOverrides
             });
             return {
-              userVisible: '已收到确认，学习路径正在生成，通常 10-60 秒内完成，可前往“学习路径”查看进度。',
+              userVisible: PATH_GENERATING_USER_VISIBLE,
               internal: {
                 core: {
                   conversationId,
@@ -1598,11 +1598,12 @@ async continueConversation(
     // GET /api/learning/paths/:id 自相矛盾。这里改用权威 learning_paths 鲜查状态（与
     // buildCompletedConversationResult 同源），不新增写路径；未绑路径时保持旧的原样回吐。
     let learningPath = data.learningPath || (conversation.learningPathId ? { id: conversation.learningPathId } : null);
-    let learningPathForVisible: { id: string; name?: string | null } | null = null;
+    let learningPathForVisible: { id: string; name?: string | null; status?: string | null } | null = null;
     if (conversation.learningPathId) {
       const path = await prisma.learning_paths.findFirst({ where: { id: conversation.learningPathId } });
       learningPath = path ? { id: path.id, status: path.status } : null;
-      learningPathForVisible = path ? { id: path.id, name: path.name || path.title || null } : null;
+      // #223：status 一并带给文案函数——会话 completed 不代表路径已生成。
+      learningPathForVisible = path ? { id: path.id, name: path.name || path.title || null, status: path.status } : null;
     }
 
     // #213/#221：GET 快照的 userVisible 按状态取值——硬阻断重建拒绝文案，已有路径给

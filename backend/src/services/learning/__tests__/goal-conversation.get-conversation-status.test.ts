@@ -185,6 +185,51 @@ describe('getConversation · 已完成会话的 userVisible 重建（#213）', (
     expect(result.userVisible).not.toBe('会话详情获取成功');
   });
 
+  it('已完成但路径仍在生成：userVisible 说正在生成，不说已生成（#223）', async () => {
+    mockGoalFindFirst.mockResolvedValue({
+      id: 'gc-1',
+      userId: 'user-1',
+      description: '学会手冲咖啡',
+      stage: 'completed',
+      status: 'completed',
+      revision: 2,
+      learningPathId: 'lp-1',
+      collectedData: JSON.stringify({ messages: [], understanding: {}, collected: {} }),
+      completedAt: new Date(),
+    });
+    // 确认时绑定的占位路径：名字固定「个性化学习路径」，status=generating
+    mockPathFindFirst.mockResolvedValue({ id: 'lp-1', status: 'generating', name: null, title: '个性化学习路径' });
+
+    const result = await goalConversationService.getConversation('gc-1', 'user-1');
+
+    expect(result.userVisible).toBe(
+      '已收到确认，学习路径正在生成，通常 10-60 秒内完成，可前往“学习路径”查看进度。',
+    );
+    expect(result.userVisible).not.toContain('学习路径已生成');
+    // 与 /reply 同源：同一操作两处口径一致
+    expect(result.learningPath).toEqual({ id: 'lp-1', status: 'generating' });
+  });
+
+  it('已完成但路径生成失败：userVisible 如实报失败，绝不说已生成（#223）', async () => {
+    mockGoalFindFirst.mockResolvedValue({
+      id: 'gc-1',
+      userId: 'user-1',
+      description: '学会手冲咖啡',
+      stage: 'completed',
+      status: 'completed',
+      revision: 2,
+      learningPathId: 'lp-1',
+      collectedData: JSON.stringify({ messages: [], understanding: {}, collected: {} }),
+      completedAt: new Date(),
+    });
+    mockPathFindFirst.mockResolvedValue({ id: 'lp-1', status: 'failed', name: '手冲咖啡入门', title: '手冲咖啡入门' });
+
+    const result = await goalConversationService.getConversation('gc-1', 'user-1');
+
+    expect(result.userVisible).toBe('学习路径生成失败，可前往“学习路径”重试。');
+    expect(result.userVisible).not.toContain('已生成');
+  });
+
   it('已完成、无路径且非硬阻断：userVisible 为 null（不落占位串）', async () => {
     mockGoalFindFirst.mockResolvedValue({
       id: 'gc-1',
