@@ -799,6 +799,11 @@ onMounted(() => {
    没有 token，两处都按同一字面量写；此处跟随，不另造一个只有本组件用的 token。 */
 /* 比全局 .mk-drawer 的 inset:0 高一档特异性，确保不被后注入的全局样式覆盖 */
 .mk-drawer.mk-drawer { top: 56px; }
+/* 2026-11-04 走查：≤560 时壳层顶栏因面包屑换行改为两行、高 72px（Shell.vue 同判例），
+   此处跟随同一字面量；否则抽屉仍从 56px 起，正好盖住次行的面包屑。 */
+@media (max-width: 560px) {
+  .mk-drawer.mk-drawer { top: 72px; }
+}
 /* 抽屉内容区：mk-drawer__body 提供滚动/内边距，此处补纵向排布（原型 .ovl__body grid gap16） */
 .fb-body { display: grid; gap: 16px; align-content: start; }
 /* 首段徽章行（原型 .ovl__body 首段 pills）：状态 / 难度适配 / UI 类型 / 轮次 */

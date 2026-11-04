@@ -165,7 +165,7 @@
                 @click="toggleLogSort('calledAt')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleLogSort('calledAt')">时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th v-if="!hiddenCols.has('status')" scope="col" class="ex-c-level">状态</th>
-              <th v-if="!hiddenCols.has('kind')" scope="col" class="ex-c-kind">类型</th>
+              <th v-if="!hiddenCols.has('kind')" scope="col" class="ex-c-kind" :title="KIND_COL_TITLE">类型</th>
               <th v-if="!hiddenCols.has('agent')" scope="col" class="ex-c-agent">Skill</th>
               <th v-if="!hiddenCols.has('trace')" scope="col" class="ex-c-trace">Trace</th>
               <th v-if="!hiddenCols.has('msg')" scope="col" class="ex-c-msg">消息</th>
@@ -617,6 +617,11 @@ async function copyTrace(traceId: string) {
 /* D3 表格增强：列显隐（localStorage 持久化）。列集/列序 2026-10-02 对齐原型 renderObserve
    （时间|状态|Skill|Trace|消息|耗时），key 升 v2：旧存储按旧列集持久化，不清会盖掉新默认 */
 const COLS_KEY = 'wf_exec_hidden_cols_v2'
+/* 类型列口径（2026-11-04）：同一调用链的网关记录与 Skill 记录合并为一行，本页可见行数会少于
+   页码器「共 N 条记录」的记录数——这是该列唯一能分辨合并行来源（网关 / Skill）的地方，口径就收在
+   本列 title。此前它挂在 Trace 列，d681ed52 删列 title 时整段丢失，页码器侧的解释又被判定为装配
+   自述撤下，现网一度两头皆无（用户走查 2026-11-04）。此处补回，与 live.ts 的 liveLogsRowsMerged 同源设计。 */
+const KIND_COL_TITLE = '记录来源（网关 / Skill / 调用）。同一调用链的网关记录与 Skill 记录合并为一行，所以本页可见行数会少于「共 N 条记录」的记录数'
 const colDefs = [
   { key: 'time', label: '时间' },
   { key: 'status', label: '状态' },

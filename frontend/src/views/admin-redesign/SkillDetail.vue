@@ -48,7 +48,7 @@
                     <span class="mono skd-vrow__name" :title="f.name || f.ref">{{ f.name || '—' }}</span>
                     <span class="mk-badge mk-badge--muted" :title="`来源声明：${f.ref || '—'}`">{{ refSourceLabel(f.ref) }}</span>
                     <span class="skd-vrow__desc" :title="f.desc || f.note || ''">{{ f.desc || f.note || f.ref || '—' }}</span>
-                    <span class="mono skd-vrow__type">{{ f.type || '—' }}</span>
+                    <span class="mono skd-vrow__type" :title="f.type || '—'">{{ f.type || '—' }}</span>
                   </div>
                   <p v-if="!contractIns.length" class="mk-empty--line">该 Skill 的 core YAML 未声明输入（inputs）。</p>
                   <p class="mk-card__note" title="来源说明：core 文件的 inputs 声明（name / type / ref / desc）">输入契约取 core 文件的 inputs 声明，ref 前缀标来源。</p>
@@ -78,7 +78,7 @@
                     <span class="mono skd-vrow__name" :title="f.fieldId">{{ f.fieldId }}</span>
                     <span class="mk-badge" :class="roleCls(f.promptRole)">{{ roleLabel(f.promptRole) }}</span>
                     <span class="skd-vrow__desc" :title="f.description || ''">{{ f.description || '—' }}</span>
-                    <span class="mono skd-vrow__type">{{ f.valueType || '—' }}</span>
+                    <span class="mono skd-vrow__type" :title="f.valueType || '—'">{{ f.valueType || '—' }}</span>
                   </div>
                   <p v-if="!contractOuts.length" class="mk-empty--line">该 Skill 暂无产出字段声明。</p>
                   <p class="mk-card__note" title="来源说明：字段路由的产出行（编排文件每个 skill:xxx 产出段）">输出契约取编排产出行的全量，含隐式推断与控制信号这类内部出参。core YAML 里声明的输出字段是另一份，见同页签的核心文件表单。</p>
@@ -1336,7 +1336,9 @@ useEscape(
 .skd-pad { padding: 12px 16px; display: grid; gap: 10px; align-content: start; }
 
 /* ===== 协议：vrow 契约行（原型 protoRow：mono 名 + 方向 pill + 描述 + 类型 + 必填 pill） ===== */
-.skd-rows { display: grid; gap: 0; }
+/* 2026-11-04 二轮：容器的宽度才是这行的可用宽——同一视口下 .skd-grid 的 minmax(300px,1fr)
+   会把卡片切成两列（1100 视口时卡片仅 378px），与视口宽无关。容器 = 行列表自身（卡片宽减内边距）。 */
+.skd-rows { display: grid; gap: 0; container-type: inline-size; }
 .skd-vrow {
   display: flex;
   align-items: center;
@@ -1354,8 +1356,44 @@ useEscape(
   font-weight: 700; flex: none; max-width: 340px;
   overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
 }
-.skd-vrow__desc { flex: 1; min-width: 0; color: var(--mk-muted); font-size: var(--mk-fs-micro); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.skd-vrow__type { flex: none; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+/* 2026-11-04 1920 走查：描述列原本单行 nowrap + ellipsis，1920 下三条契约描述实测 626/506/460
+   的文案被 465/424/407 的盒截断——title 悬停只是兜底，正文读不全。描述是整句中文，不像字段名
+   那样怕断词，改成整行折行（与容器断档里的窄屏同一口径），行高随文案增高。 */
+.skd-vrow__desc { flex: 1; min-width: 0; color: var(--mk-muted); font-size: var(--mk-fs-micro); white-space: normal; overflow-wrap: anywhere; }
+/* 类型列可收缩：200 字符的内联对象类型在单行里也要退化成省略号（完整值在 title），
+   不能把整行撑出卡右缘被 overflow:clip 裁掉。 */
+.skd-vrow__type {
+  flex: 0 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--mk-muted); font-size: var(--mk-fs-micro);
+}
+/* 2026-11-04 390 宽走查：协议页签契约行整行撑出卡片——name 是 flex:none + max-width:340px 不收缩，
+   desc 的 flex:1 被压到 0，尾部「类型」列越出卡右缘后被 .mk-card 的 overflow:clip 裁掉
+   （array<string> 这类类型整列读不到，该列原本也无 ellipsis 无 title、页面又无横滚可追）。
+   改成两行栅格：首行 = name（可收缩省略，已有 title）+ 徽标 + 类型（带省略号与 title 兜底），
+   描述换到第二行整行折行。
+   2026-11-04 二轮：原来断档看视口（≤900），901–1279 区间仍是单行——卡片被 .skd-grid 切成两列后
+   仅 378px，同样的裁切复现（type 越界 24px、desc 压到 0），且 900→901 有跳变。
+   改按容器（行列表）实际宽度断档：与视口无关，390 窄屏与 1100 两列卡片命中同一条。 */
+@container (max-width: 600px) {
+  .skd-vrow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, auto);
+    align-items: baseline;
+    column-gap: 8px;
+    row-gap: 4px;
+  }
+  .skd-vrow__name { grid-column: 1; grid-row: 1; max-width: none; min-width: 0; }
+  .skd-vrow > .mk-badge { grid-column: 2; grid-row: 1; }
+  .skd-vrow__type {
+    grid-column: 3; grid-row: 1; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .skd-vrow__desc {
+    grid-column: 1 / -1; grid-row: 2;
+    white-space: normal; overflow: visible; text-overflow: clip;
+  }
+}
 
 /* ===== 协议：回合状态机 steps（原型 .steps/.step，index.html 434-439） ===== */
 .skd-steps { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }

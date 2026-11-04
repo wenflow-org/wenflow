@@ -1046,7 +1046,10 @@ watch(() => props.skillId, () => {
 .sdp-testbar { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
 /* 200px：两个下拉的选中项「跟随配置（关闭思考）」在 150px 下被省略号截掉，
    读者只能看到「跟随配置（关闭…」——而这正是测试时唯一要核对的取值 */
-.sdp-testbar__field { display: grid; gap: 5px; flex: 0 1 200px; min-width: 0; }
+/* 2026-11-04 1920 走查：200px 是按「跟随配置（关闭思考）」定的，思考强度选中
+   「跟随配置（按模型默认）」多一个字，实测文案 165px 被 159px 的内容盒裁掉（末尾「默认」被省略号吞）。
+   固定基准量不住动态文案：改成按内容取宽，min-width 保住 200px 的齐平感。 */
+.sdp-testbar__field { display: grid; gap: 5px; flex: 0 1 auto; min-width: 200px; }
 .sdp-testbar__field > span { font-size: var(--mk-fs-micro); color: var(--mk-muted); font-weight: 600; }
 .sdp-testbar .sdp-form__msg { align-self: center; }
 .sdp-test-result { display: grid; gap: 10px; align-content: start; min-width: 0; }

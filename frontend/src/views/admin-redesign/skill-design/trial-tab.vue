@@ -57,7 +57,9 @@
           <span class="mono sdp-step__ms">{{ s.ms != null ? `${s.ms} ms` : '—' }}</span>
         </div>
         <p v-if="!trialSteps.length" class="sdp-none" :title="trialResult ? '本次试跑仅返回最终输出' : '尚未试跑'">
-          {{ trialResult ? '本次试跑仅返回最终输出，暂无逐步明细。' : '还没运行过，点「运行预览」后这里显示每一步的耗时。' }}
+          <!-- 2026-11-04 文案口径修复：原句「点「运行预览」后这里显示每一步的耗时。」是教用法式句式，
+               按既定口径只报状态（未运行过、无逐步明细），不教操作。 -->
+          {{ trialResult ? '本次试跑仅返回最终输出，暂无逐步明细。' : '尚未运行过，暂无逐步明细。' }}
         </p>
       </div>
     </section>
@@ -718,6 +720,28 @@ watch(() => props.skillId, (id) => { void loadTrialDefault(id) }, { immediate: t
 }
 .sdp-log__fill:hover { background: var(--mk-blue-bg); }
 .sdp-log__fill:disabled { color: var(--mk-faint); cursor: not-allowed; }
+/* 2026-11-04 修复：窄屏（≤640）下四个动作列把主体压到 ~87px，主体内部
+   8px/64px/46px 固定列 + 摘要 1fr 的总宽超出单元格——时长溢出到单元格外压住动作按钮、
+   摘要被挤成 0 宽不可见。改为两行：主体独占首行（时间/时长齐左，摘要换行省略截断），
+   三个动作按钮均分次行。只改排布，不删任何数据。 */
+@media (max-width: 640px) {
+  .sdp-log { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .sdp-log__main {
+    grid-column: 1 / -1;
+    grid-template-columns: 8px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "dot time dur"
+      "summary summary summary";
+    gap: 4px 8px;
+  }
+  .sdp-log__dot { grid-area: dot; }
+  .sdp-log__time { grid-area: time; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sdp-log__dur { grid-area: dur; }
+  .sdp-log__summary { grid-area: summary; }
+  .sdp-log__rerun { border-left: 0; border-top: 1px solid var(--mk-line); }
+  .sdp-log__trace,
+  .sdp-log__fill { border-top: 1px solid var(--mk-line); }
+}
 /* 执行链路（试跑块内的子区块：分隔线 + 步骤行） */
 .sdp-steps { display: grid; gap: 6px; padding-top: 8px; border-top: 1px solid var(--mk-line); }
 .sdp-step {

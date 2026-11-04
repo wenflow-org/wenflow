@@ -1454,6 +1454,19 @@ html[data-theme='dark'] {
   }
 }
 
+/* 窄屏（≤560）顶栏换行（2026-11-04 走查）：390×844 下单行装不下「分组名 / 页名」+
+   菜单钮 + 4 个工具钮 + 账户，面包屑被压到 28px——分组名溢出盒子压住刷新钮、页名塌成
+   0 宽。工具钮是 flex:none 的固定 34px，压不动，故改为两行：首行菜单钮与工具钮/账户，
+   面包屑以 flex-basis:100% 独占次行；组名/页名各自省略号截断，数据不删。
+   横向间距收到 4px（6 个 34px 方钮 + 菜单钮 + 账户，320 宽也放得进首行），
+   两行内容 34 + 24 + 行距 6 + 上下各 4 = 顶栏高 72px（Feedback.vue 的抽屉让位量按此同步）。 */
+@media (max-width: 560px) {
+  .mshell__top { flex-wrap: wrap; height: auto; min-height: 56px; padding: 4px 20px; gap: 6px 4px; }
+  .mshell__top-crumb { order: 10; flex: 1 1 100%; }
+  /* 组名原本 nowrap 且不可压缩：多级面包屑（「… / A / B」）在次行仍会横向溢出，一并给它截断 */
+  .mshell__top-sub { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+}
+
 /* 短视口（1080P 及以下）收紧导航纵向节奏：20 个场景 + 6 组标签在 953px 可视高里溢出 78px，
    末两项（模型与接入 / 用户账号）要滚动才看得到——导航一屏看不全等于没有。
    只压行高与组间距，字号与图标尺寸不动（可读性不变）。

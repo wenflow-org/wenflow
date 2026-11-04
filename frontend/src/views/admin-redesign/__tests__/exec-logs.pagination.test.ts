@@ -612,7 +612,7 @@ describe('批次 1：EG7 / EG17 / D19', () => {
     expect(adv.find('.mk-pill__count').text()).toBe('1');
   });
 
-  it('页码器只报记录数（单位「条记录」），表头与列菜单不再挂合并口径说明', async () => {
+  it('页码器只报记录数（单位「条记录」），「行数少于记录数」的口径收在「类型」列 title', async () => {
     liveLogsTotal.value = 30;
     liveLogsFiltered.value = [fakeSpan(1)];
     liveLogsRowsMerged.value = 2;
@@ -621,6 +621,11 @@ describe('批次 1：EG7 / EG17 / D19', () => {
     // 页码器旁边不再出现讲系统怎么拼数据的句子；单位自身说清数的是记录
     expect(w.find('.pagination-note').exists()).toBe(false);
     expect(w.find('.mk-pagination__total').text()).toContain('共 30 条记录');
+    // 2026-11-04 用户走查：页码器写「30 条记录/页」但本页只渲染更少行，此前既无注记也无 title。
+    // 口径按 live.ts 的设计收在「类型」列（合并行唯一可辨来源的列，默认可见）——Hover 可得且不占版位。
+    const kindTh = w.findAll('th').find((th) => th.text().trim() === '类型')!;
+    expect(kindTh.attributes('title')).toContain('少于');
+    // Trace 列与列菜单不再各挂一句字段解释（避免同页多口径漂移）
     const traceTh = w.findAll('th').find((th) => th.text().trim() === 'Trace')!;
     expect(traceTh.attributes('title')).toBeUndefined();
     await w.find('.mk-cols__trigger').trigger('click');

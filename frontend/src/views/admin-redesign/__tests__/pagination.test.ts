@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import Pagination from '../Pagination.vue';
-import { chooseMkSelect, mkSelectOptions } from '@/components/mk/__tests__/mkSelect';
+import { chooseMkSelect, mkSelectLabels, mkSelectOptions } from '@/components/mk/__tests__/mkSelect';
 
 function mountPagination(props: Record<string, unknown> = {}) {
   return mount(Pagination, {
@@ -89,6 +89,13 @@ describe('Pagination（mk-pagination 传统分页器）', () => {
     const w = mountPagination({ showTotal: true, unit: '位学习者' });
     expect(w.text()).toContain('共 378 位学习者');
     expect(w.text()).not.toContain('378 条');
+  });
+
+  it('每页条数档位的单位跟随 unit（2026-11-04）：执行日志写「条记录/页」，不再与「共 N 条记录」串口径', () => {
+    const w = mountPagination({ unit: '条记录' });
+    expect(mkSelectLabels(w as never, '每页条数')).toEqual(['15 条记录/页', '30 条记录/页', '50 条记录/页', '100 条记录/页']);
+    // 默认 unit（'条'）文案不变，其余列表页零影响
+    expect(mkSelectLabels(mountPagination() as never, '每页条数')[1]).toBe('30 条/页');
   });
 
   it('信息行不再复读「每页 S 条」（P3-28，设计评审 4.3-28：与右侧「S条/页」下拉同屏同事实，条数单源在下拉）', () => {

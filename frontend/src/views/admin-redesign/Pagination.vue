@@ -136,8 +136,11 @@ const sizeOptions = computed(() => {
   set.add(props.pageSize)
   return [...set].sort((a, b) => a - b)
 })
+/* 2026-11-04：每页条数档位的单位跟随 unit（与「共 N <unit>」同口径）——此前写死「条/页」，
+   在执行日志这类列表上把「每页记录数」读成了「每页行数」（同一调用的网关行与 Skill 行合并后
+   一页可见行数少于档位值），与总数字段「共 N 条记录」对不上。默认 unit='条' 时文案不变。 */
 const sizeSelectOptions = computed(() =>
-  sizeOptions.value.map((s) => ({ value: s, label: `${s} 条/页` }))
+  sizeOptions.value.map((s) => ({ value: s, label: `${s} ${props.unit}/页` }))
 )
 /** MkSelect 的 v-model：保留 number（原生 select 靠 change 里 Number()，这里不需要） */
 const sizeModel = computed({
@@ -210,11 +213,17 @@ watch(
   align-items: center;
   gap: 8px;
   min-width: 0;
+  /* 2026-11-04：窄屏（≤390）页码多时（如卡库 7 页 = 上一页+7 页码+下一页）整组 386px，
+     父级 .mk-pagination 只到 333px，flex-nowrap 下「下一页」被推出视口不可点。
+     允许右侧组与页码行换行，且可收缩到 min-content，溢出改由折行吸收，不删按钮。 */
+  flex-wrap: wrap;
 }
 .mk-pagination__nav {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 .mk-pagination__btn,
 .mk-pagination__num {

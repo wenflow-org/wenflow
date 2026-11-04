@@ -126,7 +126,7 @@
               <col class="ss-col--time">
               <col class="ss-col--time">
               <col class="ss-col--time">
-              <col style="width:var(--mk-col-badge)">
+              <col class="ss-col--status">
               <col style="width:var(--mk-col-actions-wide)">
             </colgroup>
             <thead>
@@ -219,7 +219,7 @@
                 <col class="ss-col--time">
                 <col class="ss-col--time">
                 <col class="ss-col--time">
-                <col style="width:var(--mk-col-badge)">
+                <col class="ss-col--status">
                 <col style="width:var(--mk-col-actions-wide)">
               </colgroup>
               <thead>
@@ -898,8 +898,18 @@ onMounted(async () => {
 /* LY6（2026-10-05 布局方案 §4）：三列时刻在 ≤1599 档收 176→112（MM-DD HH:mm 预算），
    七列合计 968px，在 1280 内容区 992 内不再横向滚动；≥1600 恢复 token 原值。 */
 .ss-col--time { width: var(--mk-col-datetime); }
+/* 2026-11-04：状态列要容得下 3 字徽章。历史行的「已过期 / 已撤销」徽章本身 54px，
+   而 --mk-col-badge 的 64px 只算了徽章、未计单元格左右 16px 内衬（内容盒仅 32px），
+   390 / 1280 档徽章右缘越出 td 6px 压进「操作」列。本页两表同取
+   max(token, 88px = 54 + 32 内衬 + 2px 余量)，2 字（活跃 42px）与 3 字徽章都落在
+   本列内，活跃表与历史表的「状态 / 操作」也保持同宽对齐。 */
+.ss-col--status { width: max(var(--mk-col-badge), 88px); }
 @media (max-width: 1599px) {
   .ss-col--time { width: 112px; }
+  /* 2026-11-04：≤1599 档列收 112px 后，内容盒只剩 80px（112−左右 16 内衬），
+     而「MM-DD HH:mm」按正文 14px 要 90px，溢出 10px（390×844 走查复现的量化溢出）。
+     本档把时间文本降到 micro 角色（≈12px→77px），与 ≥2800 档 .ss-time 同一字号口径。 */
+  .ss-time { font-size: var(--mk-fs-micro); }
 }
 .ss-current {
   display: inline-flex;

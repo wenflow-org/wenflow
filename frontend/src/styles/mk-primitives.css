@@ -98,6 +98,13 @@
   .mk-card--fill > .log-body,
   .mk-card--fill > .ss-body,
   .mk-card--fill > .sk-grid { flex: none !important; min-height: 0 !important; max-height: none !important; }
+  /* 2026-11-04 390 走查：退回整页滚动后，页尾控件会停在悬浮「回到顶部」按钮下方——
+     执行日志分页器「下一页」实测与之相交 810px²，elementFromPoint 命中 .mk-backtop__icon，
+     点击被截走。给外层 fill 页留出按钮高 36 + 上下间距的底部呼吸位（64px），滚到底时
+     页尾停在按钮上方；嵌套 fill 页不担当滚动宿主（下面已放开 overflow），维持原呼吸位，
+     不叠出双重留白。 */
+  .mk-page--fill { padding-bottom: calc(var(--mk-space-8) + var(--mk-space-4)); }
+  .mk-page--fill .mk-page--fill { padding-bottom: var(--mk-page-pad-b-fill); }
 }
 
 /* ----- 状态条（每页开头一行） -----
@@ -471,6 +478,19 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
    此前 TokenCost.vue 4 处使用但全局零定义，渲染成无样式裸 <p>（视觉审计 附 A #7）。 */
 .mk-card__note { margin: 0; padding: 8px 2px; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 .mk-card__head-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; margin-left: auto; }
+/* 2026-11-04 390 宽走查：右组 flex-shrink:0 且自身不折行，控件多的页（Skill 目录的
+   归属/窗口/排序/方向）整组宽于卡头，溢出卡右缘后被 .mk-card 的 overflow:clip 裁掉——
+   移动端那几个筛选点不到。窄屏放开收缩 + 组内折行（右对齐），宽屏仍是同一行恒贴右；
+   与上面 ≤900 的卡头折行同一档，两处一起才凑成窄屏两行工具条。 */
+@media (max-width: 900px) {
+  .mk-card__head > .mk-card__head-right,
+  .mk-card__head > .mk-card__head-right:first-child {
+    flex: 0 1 auto;
+    min-width: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}
 /* 卡头右组的主操作按钮与筛选控件（输入框/下拉/pills）同高：
    原来按钮 34.8px、输入框 41px，同一条工具栏高矮不齐；stretch 到行高即与最高控件齐平。 */
 .mk-card__head-right .mk-btn { align-self: stretch; }
@@ -723,6 +743,16 @@ html[data-theme='dark'] .mk-menu__pop { background: var(--mk-surface-2); }
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-xl);
   box-shadow: var(--mk-shadow-pop);
+}
+/* 2026-11-04 390 窄屏走查：弹层锚在卡头右组内的触发钮（.mk-adv 只有按钮宽）上，right:0 +
+   min-width:280 从按钮右缘（实测 x=256）向左顶出视口（popLeft=-24，标签/输入框左缘被裁，
+   页面无横向滚动可补：scrollWidth=clientWidth）。窄屏把锚点提到卡头右组本身——右组撑满
+   工具条宽度、又在视口内，弹层左右贴齐它并放开 min-width，任何窄屏宽度下都落在视口内；
+   宽屏（>900）仍是贴触发钮右缘的浮层形态。 */
+@media (max-width: 900px) {
+  .mk-card__head-right { position: relative; }
+  .mk-adv { position: static; }
+  .mk-adv__pop { left: 0; right: 0; min-width: 0; }
 }
 
 /* 表格横向滚动容器：窄屏多列表不溢出，粘性表头仍可用 */
