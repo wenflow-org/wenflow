@@ -1583,6 +1583,16 @@ async continueConversation(
 
     const data = JSON.parse(conversation.collectedData);
 
+    // 已绑路径的会话不信 collectedData 里冻结的 learningPath（#211）：确认时只写入一次
+    // status:'generating'，异步生成完成回调不回写，冻结值会永久停在「生成中」，与 /reply 及
+    // GET /api/learning/paths/:id 自相矛盾。这里改用权威 learning_paths 鲜查状态（与
+    // buildCompletedConversationResult 同源），不新增写路径；未绑路径时保持旧的原样回吐。
+    let learningPath = data.learningPath || (conversation.learningPathId ? { id: conversation.learningPathId } : null);
+    if (conversation.learningPathId) {
+      const path = await prisma.learning_paths.findFirst({ where: { id: conversation.learningPathId } });
+      learningPath = path ? { id: path.id, status: path.status } : null;
+    }
+
     return {
       id: conversation.id,
       description: conversation.description,
@@ -1595,7 +1605,7 @@ async continueConversation(
       confirmedProposal: data.confirmedProposal || null,
       structuredData: data.structuredData || null,
       confidenceScores: data.confidenceScores || null,
-      learningPath: data.learningPath || (conversation.learningPathId ? { id: conversation.learningPathId } : null),
+      learningPath,
       confidence: data.confidence || 0,
       createdAt: conversation.createdAt,
       completedAt: conversation.completedAt
