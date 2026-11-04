@@ -184,32 +184,34 @@ describe('users agent log routes', () => {
     expect(goal.model).toBe('deepseek-v4.1-flash');
   });
 
-  it('列表过滤 userVisible=false 的内部 skill（如 adaptive-guidance-copy）', async () => {
-    const mkLog = (id: string, convId: string | null, agentId: string, calledAt: string) => ({
-      id,
-      agentId,
-      sourceEntry: 'platform',
-      calledAt: new Date(calledAt),
-      success: true,
-      errorCode: null,
-      metadata: JSON.stringify({ conversationId: convId }),
-      traceId: `t-${id}`,
-    });
-    agentLogMocks.findMany.mockResolvedValue([
-      mkLog('copy1', null, 'skill:adaptive-guidance-copy', '2026-09-04T10:00:00.000Z'),
-      mkLog('copy2', null, 'skill:adaptive-guidance-copy', '2026-09-04T10:01:00.000Z'),
-    ]);
-    agentLogMocks.count.mockResolvedValue(2);
+  it('默认口径按 manifest userListed 放行真实业务动作，排除内部 skill 与 0 行编排器（#219）', async () => {
+    agentLogMocks.findMany.mockResolvedValue([]);
     const req: any = { user: { userId: 'user-1' }, query: {} };
     const res = createResponse();
 
     await routes['GET /me/agent-logs'](req, res, jest.fn());
 
-    // 过滤生效在 SQL 层：断言传给 DB 的 where.agentId.notIn 包含内部 skill
+    // 过滤生效在 SQL 层：断言传给 DB 的 where.agentId.in 是 manifest userListed 白名单
     const wherePassed = agentLogMocks.findMany.mock.calls.at(-1)?.[0]?.where;
-    expect(wherePassed.agentId.notIn).toContain('skill:adaptive-guidance-copy');
-    expect(wherePassed.agentId.notIn).toContain('skill:kc-mapper');
-    expect(wherePassed.agentId.notIn).toContain('system-call');
+    const listed = wherePassed.agentId.in as string[];
+    // 真实写日志的业务 skill（线上行数见 #219 证据）必须放行，否则默认列表只剩 path-agent
+    expect(listed).toEqual(
+      expect.arrayContaining([
+        'skill:goal-conversation',
+        'skill:path-planning',
+        'skill:teaching-turn',
+        'skill:session-wrapup',
+        'path-agent',
+      ])
+    );
+    // goal-agent / teaching-agent 是 userVisible 的展示身份，全表 0 行，放进默认口径只会是空
+    expect(listed).not.toContain('goal-agent');
+    expect(listed).not.toContain('teaching-agent');
+    // 内部噪音与网关不得进入默认列表
+    expect(listed).not.toContain('skill:adaptive-guidance-copy');
+    expect(listed).not.toContain('skill:kc-mapper');
+    expect(listed).not.toContain('api-gateway');
+    expect(listed).not.toContain('system-call');
     // mock 不模拟 SQL 过滤，因此这里只断言 where 构造正确
   });
 

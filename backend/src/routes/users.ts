@@ -19,7 +19,7 @@ import { rejectProjectionAccess } from '../middleware/projection-access.middlewa
 import { learnerSnapshotRefreshService } from '../services/learner/LearnerSnapshotRefreshService';
 import { getLevelFromXp } from '../services/learner/level.util';
 import { normalizeSessionDurationMinutes } from '../services/learning/learning.helpers';
-import { listAgentManifest, type MonitoringGroupName } from '../services/agent-manifest.service';
+import { listAgentManifest, listUserListedAgentIds, type MonitoringGroupName } from '../services/agent-manifest.service';
 import { parseDayKeyRange } from '../services/time/day-boundary';
 import { loadTeachingMessagesForIds } from '../services/ai-teaching/teaching-session-message-store';
 
@@ -79,20 +79,12 @@ function buildAgentLogWhere(userId: string, query: any) {
   }
 
   if (includeSystem !== 'true' && !agentId && !capabilityType) {
-    // 非内部系统 agent：manifest userVisible=false 的内部 skill（kc-mapper/adaptive-guidance-copy/
-    // learner-model/virtual-learner-* 等）不进入用户 AI 任务列表，避免「copy/mapper」等噪音
-    const internalAgents = listAgentManifest()
-      .filter((a) => !a.userVisible)
-      .map((a) => a.id);
-    where.agentId = { notIn: [...internalAgents, 'system-call', 'unknown'] };
-    where.AND = [
-      {
-        OR: [
-          { executionLayer: null },
-          { executionLayer: { not: 'api-gateway' } }
-        ]
-      }
-    ];
+    // 默认「AI 任务记录」口径：只放行真实写日志的业务动作（manifest userListed）。
+    // 不能用 userVisible：它表示「是否顶层编排器」——goal-agent/teaching-agent 被放行却全表
+    // 0 行（真实调用记在 skill:goal-conversation / skill:teaching-turn 名下），默认视图结构性
+    // 只剩 path-agent。也不能用「排除内部 skill」的黑名单：清单外的网关/历史 id 会漏进来，
+    // 才需要 executionLayer 补丁。此处白名单同时天然排除 api-gateway / system-call / unknown。
+    where.agentId = { in: listUserListedAgentIds() };
   }
 
   if (startDate || endDate) {
