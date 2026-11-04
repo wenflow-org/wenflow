@@ -33,7 +33,7 @@ import {
   type ResponseTriageEnforcementMode,
 } from './response-triage';
 import { assembleGoalHandoff } from '../../services/field-dispatcher';
-import { buildCompletedConversationResult, buildHardBlockResult } from './goal-conversation.exit';
+import { buildCompletedConversationResult, buildHardBlockMessage, buildHardBlockResult, resolveCompletedConversationUserVisible } from './goal-conversation.exit';
 import learningService from './learning.service';
 import { bindGeneratingPath, kickPathGeneration, rejudgeHardBlockedCompletion, type GoalConversationRejudgeDeps } from './goal-conversation-rejudge';
 import { createDomainEvent } from '../../events/contracts';
@@ -370,7 +370,7 @@ class GoalConversationService {
       completedAt?: Date | null;
       learningPathId?: string | null;
       learningPath?: { id: string; status?: string } | null;
-      appendMessage?: { role: 'user' | 'ai'; content: string };
+      appendMessage?: { role: 'user' | 'ai'; content: string } | Array<{ role: 'user' | 'ai'; content: string }>;
       mutateCollectedData?: (data: Record<string, any>) => void;
       /** 传值 = revision 条件更新（CAS）；失配返回 false 且不写入（审计 §1.4） */
       expectedRevision?: number;
@@ -389,7 +389,10 @@ class GoalConversationService {
         // 只对「落用户消息的 lifecycle 写入」清（appendMessage.role === 'user' 即回合提交）；
         // 否决计量 / ready 回落等中途 lifecycle 写入不清，避免打断失败回合的重试去重。
         mutateCollectedData: (data: Record<string, any>) => {
-          if (options.appendMessage?.role === 'user') delete data.pendingUserTurn;
+          const appended = options.appendMessage
+            ? (Array.isArray(options.appendMessage) ? options.appendMessage : [options.appendMessage])
+            : [];
+          if (appended.some((message) => message.role === 'user')) delete data.pendingUserTurn;
           options.mutateCollectedData?.(data);
         }
       }
@@ -654,9 +657,14 @@ async continueConversation(
           //    「再次确认」放行。否则 F96/F97 会在分诊判 referral 后仍生成 5.3h/26.4h 路径。
           const hardBlockTriage = storedTriage ?? triageGoalResponse(understanding);
           if (isHardBlockResponseTriage(hardBlockTriage, understanding)) {
+            // #213：拒绝文案随终局落库（user 回合 + ai 拒绝回合同笔原子写入）。此前文案
+            // 只进返回值，重载后用户只看到自己那句确认，无从知道为什么没生成路径。
             await this.updateConversationLifecycle(conversationId, 'completed', {
               status: 'completed',
-              appendMessage: { role: 'user', content: userReply },
+              appendMessage: [
+                { role: 'user', content: userReply },
+                { role: 'ai', content: buildHardBlockMessage(hardBlockTriage) },
+              ],
               mutateCollectedData: (currentData) => {
                 currentData[RESPONSE_TRIAGE_KEY] = hardBlockTriage;
                 delete currentData[RESPONSE_TRIAGE_PENDING_KEY];
@@ -682,9 +690,15 @@ async continueConversation(
               ...storedTriage,
               reasons: [...storedTriage.reasons, 'gated：分诊结论待用户确认，暂不自动生成路径'],
             };
+            const gatedLine = buildTriageAdvisoryLine(pendingTriage).trim();
+            const gatedVisible = `${gatedLine}\n\n若仍希望直接生成学习路径，请再次确认；也可以先补充说明，我们再一起调整方向。`;
             await this.updateConversationLifecycle(conversationId, 'proposing', {
               status: 'active',
-              appendMessage: { role: 'user', content: userReply },
+              // #213：gated 提示同样落库（旧模式只落 user 回合，重载后提示消失）。
+              appendMessage: [
+                { role: 'user', content: userReply },
+                { role: 'ai', content: gatedVisible },
+              ],
               mutateCollectedData: (currentData) => {
                 currentData[RESPONSE_TRIAGE_KEY] = storedTriage;
                 currentData[RESPONSE_TRIAGE_PENDING_KEY] = pendingTriage;
@@ -694,9 +708,8 @@ async continueConversation(
               conversationId,
               mode: storedTriage.mode,
             });
-            const gatedLine = buildTriageAdvisoryLine(pendingTriage).trim();
             return {
-              userVisible: `${gatedLine}\n\n若仍希望直接生成学习路径，请再次确认；也可以先补充说明，我们再一起调整方向。`,
+              userVisible: gatedVisible,
               internal: {
                 core: {
                   conversationId,
@@ -1590,11 +1603,19 @@ async continueConversation(
       learningPath = path ? { id: path.id, status: path.status } : null;
     }
 
+    // #213：已完成硬阻断会话的 userVisible 不再硬编码为「会话详情获取成功」——拒绝文案
+    // 此前只进 /reply 返回值，重载后无从重建。复用 /reply 同源构造（goal-conversation.exit）。
+    const userVisible = resolveCompletedConversationUserVisible({
+      conversationId: conversation.id, status: conversation.status,
+      collectedData: conversation.collectedData, learningPathId: conversation.learningPathId,
+    });
+
     return {
       id: conversation.id,
       description: conversation.description,
       stage: conversation.stage,
       status: conversation.status,
+      userVisible,
       messages: data.messages || [],
       collected: data.collected || {},
       understanding: data.understanding || {},

@@ -82,3 +82,60 @@ describe('getConversation · learningPath 状态鲜查（#211）', () => {
     expect(result.learningPath).toBeNull();
   });
 });
+
+describe('getConversation · 已完成会话的 userVisible 重建（#213）', () => {
+  beforeEach(() => {
+    mockGoalFindFirst.mockReset();
+    mockPathFindFirst.mockReset();
+  });
+
+  it('硬阻断终局：GET 快照重建拒绝文案，不再返回硬编码的「会话详情获取成功」', async () => {
+    mockGoalFindFirst.mockResolvedValue({
+      id: 'gc-1',
+      userId: 'user-1',
+      description: '学会手冲咖啡',
+      stage: 'completed',
+      status: 'completed',
+      revision: 3,
+      learningPathId: null,
+      collectedData: JSON.stringify({
+        messages: [
+          { role: 'user', content: '就按这个方案来' },
+          { role: 'ai', content: '（历史拒绝文案）' },
+        ],
+        understanding: {
+          surface_goal: '学会手冲咖啡',
+          platform_judgment: 'not_judgeable',
+          skill_nature: 'physical_internalized',
+        },
+        collected: {},
+        responseTriage: { mode: 'referral', confidence: 'high', reasons: [] },
+      }),
+      completedAt: new Date(),
+    });
+
+    const result = await goalConversationService.getConversation('gc-1', 'user-1');
+
+    expect(result.userVisible).toContain('不会生成学习路径');
+    expect(result.userVisible).not.toBe('会话详情获取成功');
+    expect(mockPathFindFirst).not.toHaveBeenCalled();
+  });
+
+  it('未完成会话：userVisible 保持 null（路由回退到通用确认语）', async () => {
+    mockGoalFindFirst.mockResolvedValue({
+      id: 'gc-1',
+      userId: 'user-1',
+      description: '随便聊聊',
+      stage: 'proposing',
+      status: 'active',
+      revision: 1,
+      learningPathId: null,
+      collectedData: JSON.stringify({ messages: [], understanding: {}, collected: {} }),
+      completedAt: null,
+    });
+
+    const result = await goalConversationService.getConversation('gc-1', 'user-1');
+
+    expect(result.userVisible).toBeNull();
+  });
+});

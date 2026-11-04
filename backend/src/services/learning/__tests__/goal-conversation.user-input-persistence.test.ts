@@ -393,10 +393,13 @@ describe('#160 终局路径清理回合级幂等标记（标记不得永久残�
     const data = JSON.parse(conversationRecord.collectedData);
     expect(data.pendingUserTurn).toBeUndefined();
     expect(data.stage).toBe('completed');
-    // 用户消息仍随终局写入落库（清理标记不改变「消息照落」的行为）
-    expect(data.messages[data.messages.length - 1]).toEqual(
-      expect.objectContaining({ role: 'user', content: '确认' })
-    );
+    // 语义订正（#213）：终局不再只落 user 回合——拒绝文案必须作为 ai 回合一起落库，
+    // 否则重载后用户只看到自己的确认、看不到「为什么没生成路径」。用户消息仍在末尾倒数第二条。
+    const lastUser = data.messages[data.messages.length - 2];
+    expect(lastUser).toEqual(expect.objectContaining({ role: 'user', content: '确认' }));
+    const lastAi = data.messages[data.messages.length - 1];
+    expect(lastAi).toEqual(expect.objectContaining({ role: 'ai' }));
+    expect(lastAi.content).toContain('不会生成学习路径');
   });
 
   it('gated 终局：清除 pendingUserTurn，会话仍停在 proposing', async () => {
