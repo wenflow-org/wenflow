@@ -589,10 +589,12 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
-/* AI 任务运行中：右下角 8px 蓝点，不再用整圈描边 */
+/* AI 任务运行中：右下角 8px 蓝点，不再用整圈描边。
+   2026-11-04 走查：此前写成 top:7 与未读红点（top 9 / right 10）同叠右上角，
+   红蓝两点半透明互叠成脏点；按注释本意钉回右下角，双态并存时分角展示。 */
 .nc__busy-dot {
   position: absolute;
-  top: 7px;
+  bottom: 7px;
   right: 7px;
   width: 8px;
   height: 8px;
