@@ -690,7 +690,7 @@ const sparseActiveDay = computed(() => {
   return days.length === 1 ? days[0] : null
 });
 
-/* 系统健康摘要：拉统一健康清单（60s 缓存），只取 warn/error 计数。
+/* 系统健康摘要：拉巡检聚合的健康清单（/health-center/summary，60s 缓存），只取 warn/error 计数。
    P1#3 三态纪律：加载中 / 加载失败 / 空清单 / 有数据是四种不同事实，
    不得全部坍缩成「加载中」，更不能让「拉不到」冒充正常——失败态着弱琥珀并给重试出口。 */
 const healthCheck = ref<{ total: number; warn: number; error: number } | null>(null);
@@ -737,8 +737,12 @@ const statusAction = computed(() => {
 })
 async function loadHealth() {
   try {
-    const res = await adminHealthCenterApi.get()
-    const items = res.data?.data?.items ?? []
+    // 2026-11-04 修复同屏数字不一致：总览结论条与健康中心 KPI 是同一条「健康检查」事实，
+    // 必须读同一数据源。此前总览读列表端点 /health-center（14 项，无 runtime-degradation 等
+    // 两项运行时观测）只数到 1 个 warn，点进健康中心却读概要端点 /health-center/summary
+    // （16 项，abnormal=2）——同一事实两页各报一个数。改读概要端点与健康中心逐一对齐。
+    const res = await adminHealthCenterApi.getSummary()
+    const items = res.data?.data?.health?.items ?? []
     if (!items.length) {
       healthState.value = 'empty'
       return
@@ -1153,15 +1157,21 @@ const todoItems = computed<TodoItem[]>(() => {
   // 否则同屏红结论配「没有待处理的事项」（healthTone 由 healthCheck error/warn 计数派生）
   const hc = healthCheck.value;
   if (healthState.value === 'ready' && hc && (hc.error > 0 || hc.warn > 0)) {
-    const n = hc.error > 0 ? hc.error : hc.warn;
-    const label = hc.error > 0 ? '异常' : '需关注';
+    /* 2026-11-04：行文案与悬停说明必须给同一组数。原写法行内只报一档（error>0 报 error，
+       否则报 warn），悬停却报 error+warn 合计，两档并存时同一行自相矛盾（行「1 项异常」、
+       悬停「共 3 项」）。改为行内两档分别报数，合计与悬停、健康中心「检查异常」KPI 对齐 */
+    const counted: string[] = []
+    if (hc.error > 0) counted.push(`${hc.error} 项异常`)
+    if (hc.warn > 0) counted.push(`${hc.warn} 项需关注`)
+    const text = `健康检查 ${counted.join('、')}`
     items.push({
       key: 'health',
-      text: `健康检查 ${n} 项${label}`,
-      main: `健康检查 ${n} 项${label}`,
-      /* 2026-10-28 数据审计：本行只数 error 档；健康中心 KPI 的「检查异常 N」另含 warn 档，
-         两页数字不同时给出解释，避免被读成数据不一致 */
-      title: `只计「${label}」档（error）。健康中心的「检查异常」另含「需关注」（warn）档`,
+      text,
+      main: text,
+      /* 2026-11-04：loadHealth 已改读 /health-center/summary，本节数与健康中心 KPI「检查异常」
+         同源同口径；原「本行只数 error 档 / 健康中心另含 warn 档」的说明已不成立（error=0 时
+         会渲染成把「需关注」硬配「（error）」），改为如实说明两档均计入 */
+      title: `含「异常」与「需关注」两档，与健康中心「检查异常」同一统计方式，共 ${hc.error + hc.warn} 项`,
       tone: (hc.error > 0 ? 'bad' : 'warn') as Tone,
       actLabel: '健康中心',
       action: () => jump('health-center'),
