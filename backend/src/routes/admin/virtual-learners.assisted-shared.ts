@@ -289,7 +289,24 @@ export async function runDayLearning(
     const lessons = Math.max(1, Math.min(10, input.lessonsPerDay));
     const attempts: Array<{ success?: boolean; error?: string }> = [];
     for (let i = 0; i < lessons; i += 1) {
-      const r = await simulationCoordinator.executeAutoLearning(sessionId, { maxMilestones: 1, maxTurns });
+      let r = await simulationCoordinator.executeAutoLearning(sessionId, { maxMilestones: 1, maxTurns });
+      // #154：课堂被解绑（卡死收课残留 / 并发收课）不是「当天没课」，而是「这门课需要重开」。
+      // 旧实现见 !success 直接 break → summarizeDayLearning started:false → 时钟回滚、逐日空转。
+      // 与 batch 驱动（batch-experiment.service）统一：识别 LEARN_CLASSROOM_UNBOUND 后重开本课再试一次。
+      if (r && r.success !== true && /learn_classroom_unbound/i.test(String(r.error || ''))) {
+        try {
+          // 调用方已持有会话租约（runAssistedSessionMutation），此处直接重开，不再包 runLeasedExclusive（会自锁）。
+          const resumed = await simulationCoordinator.restartLearningPhase(sessionId);
+          if (resumed?.success) {
+            r = await simulationCoordinator.executeAutoLearning(sessionId, { maxMilestones: 1, maxTurns });
+          }
+        } catch (recoverError: unknown) {
+          logger.warn('[assisted] 解绑课堂自动续课失败，回滚当天（不白烧一天）', {
+            sessionId,
+            error: asErrorLike(recoverError).message
+          });
+        }
+      }
       attempts.push({ success: r?.success === true, error: r?.error });
       if (!r?.success) break;
       const after = await findSessionStatus(sessionId);

@@ -21,15 +21,21 @@ import path from 'node:path';
 import {
   ModelPricing,
   getLlmRegistryStatus,
+  getProviderCatalog,
   parseLlmProvidersConfig,
   reloadLlmProvidersIfChanged,
-  resolveConfigPath
+  resolveConfigPath,
+  resolveModelRef
 } from '../../config/models.config';
 import {
   deleteProviderSecret,
   providerSecretSummary,
   setProviderSecret
 } from '../provider-secrets.service';
+import systemPrisma from '../../config/system-database';
+import apiConfigService from '../apiConfig.service';
+import { normalizePlatformModelDefaults } from '../seed-skill-model-configs';
+import { selectModelForAlias } from '../../gateway/api-gateway/model-alias';
 import { MAX_MODEL_CANDIDATES } from '../../gateway/api-gateway/executor';
 import { logger } from '../../utils/logger';
 
@@ -52,6 +58,96 @@ export class RegistryEditError extends Error {
   }
 }
 
+/**
+ * #177 目录收缩门禁：删模型 / 删停供应商前，除 saveRegistry 已挡的文件 `root.defaults` 外，
+ * 还要挡两类**运行时仍然指向该模型的引用**——否则「默认值写对后再把目录删小」会让目录外值
+ * 在运行期生效（与原故障同一通路：路由对解析不到的值原样透传 → 无可用渠道 transport 失败）：
+ *  - platform_api_configs 的三个平台默认（按 DB 别名覆盖展开后选中该模型，或字面就是它）；
+ *  - 启用的 skill_model_configs 显式绑定该模型、且该 skill 未自带 endpoint（即走继承通道）。
+ * 自带独立 endpoint 的 skill 由自家通道提供模型，不受平台目录约束，不计。
+ * 放在 service 层（而非路由）：routes 层禁止直接引数据库客户端（scripts/check-route-db-boundary.mjs）。
+ */
+export async function assertModelNotReferencedByRuntime(providerId: string, modelId: string): Promise<void> {
+  const bare = modelId;
+  const qualified = `${providerId}/${modelId}`;
+  const matches = (value: string): boolean => value === bare || value === qualified;
+
+  const config = await apiConfigService.getConfig();
+  const overrides = {
+    chat: config.chatModels ?? [],
+    reasoning: config.reasoningModels ?? [],
+    light: config.lightModels ?? [],
+  };
+  const platformDefaults: Array<[string, string]> = [
+    ['默认模型', config.defaultModel],
+    ['推理默认模型', config.defaultReasoningModel],
+    ['评估默认模型', config.defaultEvaluationModel],
+  ];
+  for (const [label, value] of platformDefaults) {
+    const configured = String(value || '').trim();
+    if (!configured) continue;
+    const resolved = selectModelForAlias(configured, { overrides })?.model ?? configured;
+    if (matches(configured) || matches(resolved)) {
+      throw new RegistryEditError(
+        `模型「${modelId}」仍是平台${label}的生效值（${configured}），删掉会让全平台默认路由落到目录外模型。`
+          + '请先在「路由与调用」把该默认改到别的目录内模型再删。',
+        400,
+        'invalid'
+      );
+    }
+  }
+
+  const boundRows = await systemPrisma.skill_model_configs.findMany({
+    where: { enabled: true, NOT: [{ model: null }, { model: '' }] },
+    select: { skillId: true, model: true, endpoint: true },
+  });
+  const boundSkills = boundRows
+    .filter((row) => !String(row.endpoint || '').trim())
+    .filter((row) => {
+      const value = String(row.model || '').trim();
+      const ref = resolveModelRef(value);
+      return ref ? ref.modelId === bare && ref.providerId === providerId : matches(value);
+    })
+    .map((row) => row.skillId);
+  if (boundSkills.length) {
+    throw new RegistryEditError(
+      `模型「${modelId}」仍被 ${boundSkills.length} 个走平台通道的 skill 显式绑定（${boundSkills.join('、')}），`
+        + '删掉后它们运行时会因无可用渠道失败。请先在「Skill 运行时」改到别的目录内模型再删。',
+      400,
+      'invalid'
+    );
+  }
+}
+
+/**
+ * #177 供应商级门禁：删除 / 停用整条供应商会让它的**全部**模型同时从运行时注册目录消失——
+ * 与单模型删除同一根因，却绕过了单模型门禁（默认值写对后，再把整条通道删/停）。
+ * 逐个模型复用同一口径校验；本就没有模型在目录里的（未启用的条目）跳过，删它不改变运行时。
+ */
+export async function assertProviderNotReferencedByRuntime(providerId: string): Promise<void> {
+  const provider = getProviderCatalog().find((p) => p.id === providerId);
+  if (!provider || provider.enabled === false) return;
+  const blocked: string[] = [];
+  for (const model of provider.models) {
+    try {
+      await assertModelNotReferencedByRuntime(providerId, model.id);
+    } catch (error) {
+      if (error instanceof RegistryEditError) {
+        blocked.push(error.message);
+        continue;
+      }
+      throw error;
+    }
+  }
+  if (blocked.length) {
+    throw new RegistryEditError(
+      `供应商「${providerId}」删掉/停用会让 ${blocked.length} 个仍在用的模型落到目录外：\n${blocked.join('\n')}`,
+      400,
+      'invalid'
+    );
+  }
+}
+
 export interface ProviderViewModel {
   id: string;
   name: string;
@@ -61,8 +157,7 @@ export interface ProviderViewModel {
   endpointSource: 'inherit' | 'own';
   baseUrl: string | null;
   apiKeyEnv: string | null;
-  keySource: 'db' | 'env' | 'none';
-  /** 尾部 4 位摘要（`····abcd`）；密钥短于 8 位或未配置为 null */
+  keySource: 'db' | 'env' | 'none';  /** 尾部 4 位摘要（`····abcd`）；密钥短于 8 位或未配置为 null */
   keyHint: string | null;
   /** inherit = 端点与密钥在连接设置里；unconfigured = 自带端点但还没密钥 */
   status: 'ready' | 'unconfigured' | 'inherit' | 'disabled';
@@ -374,6 +469,15 @@ function saveRegistry(root: Root, warnings: string[]): string[] {
     }
     throw new RegistryEditError(`新配置无法生效（已回滚到写前内容）：${reload.error}`, 400, 'invalid', warnings);
   }
+
+  // #177：写后热重载推进了 lastMtimeMs，router 的「热重载后归一化」不会再触发（走的是这条写路径）。
+  // 所以这里自己按新目录复检平台三档默认：目录收缩后若有 DB 默认悬空，立即归一化回目录内默认。
+  // 失败只告警不阻断（写已成功；归一化是自愈，不是写入的前置条件）。
+  void normalizePlatformModelDefaults(systemPrisma).catch((err) => {
+    logger.warn('[model-providers] 目录写后平台默认归一化失败', {
+      errorMessage: err instanceof Error ? err.message : String(err)
+    });
+  });
   return warnings;
 }
 
@@ -660,6 +764,13 @@ export async function updateProvider(providerId: string, input: ProviderInput): 
   requireProvider(root, providerId);
   const next = cloneRoot(root);
   const target = requireProvider(next, providerId);
+  // #177：判定与写入共用同一个开关，杜绝「判定看恰好 false、写入看非 true」的语义漂移——
+  // `enabled` 任何非 true 的定义值都会停用（1/0/null/"false" 都是脚本常见写法，都会真的停用）。
+  const disablesProvider = input.enabled !== undefined && input.enabled !== true;
+  const wasEnabled = target.enabled !== false;
+  if (wasEnabled && disablesProvider) {
+    await assertProviderNotReferencedByRuntime(providerId);
+  }
 
   if (input.name !== undefined) {
     const name = String(input.name).trim();
@@ -671,7 +782,7 @@ export async function updateProvider(providerId: string, input: ProviderInput): 
     if (text) target.description = text;
     else delete target.description;
   }
-  if (input.enabled !== undefined) target.enabled = input.enabled === true;
+  if (input.enabled !== undefined) target.enabled = !disablesProvider;
   if (input.supportsSystemRole !== undefined) {
     if (typeof input.supportsSystemRole === 'boolean') target.supportsSystemRole = input.supportsSystemRole;
     else delete target.supportsSystemRole;
@@ -722,6 +833,8 @@ export async function deleteProvider(providerId: string): Promise<EditOutcome> {
       }
     }
   }
+  // #177：删整条供应商 = 它的模型整体离开运行时目录；先挡仍被平台默认/skill 绑定引用的（未启用条目内部跳过）
+  await assertProviderNotReferencedByRuntime(providerId);
   const finalWarnings = saveRegistry(next, warnings);
   try {
     await deleteProviderSecret(providerId);
@@ -867,6 +980,8 @@ export async function deleteModel(providerId: string, modelId: string): Promise<
       }
     }
   }
+  // #177：单模型删除同样要挡「运行时仍在引用」（平台三档默认 / 走平台通道的 skill 绑定）
+  await assertModelNotReferencedByRuntime(providerId, modelId);
   const finalWarnings = saveRegistry(next, warnings);
   return { warnings: finalWarnings };
 }

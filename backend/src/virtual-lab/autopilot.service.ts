@@ -800,7 +800,7 @@ export class AutopilotService {
           })
           return
         }
-        const recoverable = /provider|timeout|timed out|fetch failed|network|rate.?limit|503|502|budget|invalid json|does not contain valid json|retry/i.test(errMsg)
+        const recoverable = /provider|timeout|timed out|fetch failed|network|rate.?limit|503|502|budget|invalid json|does not contain valid json|retry|learn_classroom_unbound/i.test(errMsg)
         if (!recoverable) {
           await this.writeState(sessionId, {
             status: 'failed',
@@ -1138,7 +1138,7 @@ export class AutopilotService {
 
       if (!learnResult.success) {
         const errMsg = String(learnResult.error || '').toLowerCase()
-        const recoverable = /provider|timeout|timed out|fetch failed|network|rate.?limit|503|502|budget|invalid json|does not contain valid json|retry/i.test(errMsg)
+        const recoverable = /provider|timeout|timed out|fetch failed|network|rate.?limit|503|502|budget|invalid json|does not contain valid json|retry|learn_classroom_unbound/i.test(errMsg)
         if (!recoverable || lessonRecoveries >= AUTOPILOT_LESSON_RECOVERY_LIMIT) {
           await this.writeState(sessionId, {
             status: 'failed',

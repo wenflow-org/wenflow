@@ -576,6 +576,22 @@
       </div>
 
       <!-- 生成成功 -->
+      <!-- #213：硬阻断终局（已完成但没有路径）——不再谎称「路径已创建」。
+           拒绝文案已由服务端落库并经 GET 快照重建，这里原样展示原因与补救指引。 -->
+      <div v-else-if="phase === 'done' && !live.learningPath && live.completionNote" class="proposal proposal--center">
+        <button
+          type="button"
+          class="proposal__x proposal__x--corner"
+          aria-label="关闭"
+          :title="CLOSE_ESC_HINT"
+          @click="proposalDismissed = true"
+        >×</button>
+        <h2 class="proposal__title">这次没有生成学习路径</h2>
+        <p class="proposal__generating-note">{{ live.completionNote }}</p>
+        <div class="proposal__actions proposal__actions--center">
+          <button type="button" class="btn-ghost" @click="proposalDismissed = true; proposalReviewRequested = false">留在本页</button>
+        </div>
+      </div>
       <div v-else-if="phase === 'done'" class="proposal proposal--center">
         <button
           type="button"
@@ -675,7 +691,7 @@ const chatPlaceholder = computed(() => {
   // 不写「上方/下面」这类方位指路（文案门禁 R2）
   if (showProposal.value) {
     if (phase.value === 'generating') return '正在生成路径，进度见弹窗';
-    if (phase.value === 'done') return '路径已创建，先在弹窗里选择下一步';
+    if (phase.value === 'done') return live.learningPath ? '路径已创建，先在弹窗里选择下一步' : '本次没有生成学习路径，原因见弹窗';
     return '先处理方案确认弹窗，Esc 可回到对话';
   }
   // 不写「上方」：输入框与重试按钮同屏，点哪儿由位置自明（文案门禁 R2）
@@ -1238,7 +1254,8 @@ const genPill = computed(() => {
     return genPillCopy(genTrack.value.lc);
   }
   if (phase.value === 'done') {
-    return { tone: 'run' as const, text: '路径已创建 · 生成中' };
+    // #213：无路径即硬阻断终局——不谎称「路径已创建」，也不跟踪一个不存在的生成任务。
+    return live.learningPath ? { tone: 'run' as const, text: '路径已创建 · 生成中' } : null;
   }
   if (confirmError.value) {
     return live.stopped === 'confirm'

@@ -126,3 +126,70 @@ export async function buildCompletedConversationResult(input: {
     },
   };
 }
+
+/**
+ * 路径仍在生成时的用户可见文案。与 /reply（goal-conversation.service.ts 的
+ * confirmProposal 同步返回）共用同一句，避免同一操作在两处口径不一（#223）。
+ */
+export const PATH_GENERATING_USER_VISIBLE =
+  '已收到确认，学习路径正在生成，通常 10-60 秒内完成，可前往“学习路径”查看进度。';
+
+/** 路径生成失败时的用户可见文案：如实说失败并可重试，绝不说已生成（#223）。 */
+const PATH_GENERATION_FAILED_USER_VISIBLE = '学习路径生成失败，可前往“学习路径”重试。';
+
+/**
+ * GET 快照的 userVisible（#213 / #221 / #223）：字段语义是「用户可见的结果」，不能落成
+ * HTTP 层占位串。按状态给值：
+ *
+ * - 已完成 + 已绑路径 + 路径 status 为 generating：生成中文案（与 /reply 同源）；
+ * - 已完成 + 已绑路径 + 路径 status 为 failed：如实报失败，不谎称已生成；
+ * - 已完成 + 已绑路径 + 其它（active 等已完成态）：`学习路径已生成：<名字>`（与
+ *   output-normalizer 同款文案）；
+ * - 已完成 + 未绑路径 + 存档分诊判硬阻断：复用 /reply 同源的 buildHardBlockResult
+ *   重建拒绝文案（#213：保证「当场返回」与「刷新重建」逐字一致）；
+ * - 已完成 + 未绑路径 + 非硬阻断：返回 null（无用户可见的终局文案，不臆造）；
+ * - 进行中：返回最后一条 assistant 消息文本（用户看到的就是它），没有则 null。
+ *
+ * 调用方不得再用占位串兜底——null 就是「没有可展示的文案」。
+ */
+export function resolveConversationUserVisible(input: {
+  conversationId: string;
+  status: string;
+  collectedData: string | null;
+  learningPathId: string | null;
+  learningPath: { id: string; name?: string | null; status?: string | null } | null;
+  messages: Array<{ role?: unknown; content?: unknown }> | null | undefined;
+}): string | null {
+  if (input.status === 'completed') {
+    if (input.learningPath) {
+      // 会话 completed 只说明确认已落库，不等于路径已生成（#223）：占位路径在确认时
+      // 就已绑定且 status='generating'，必须按路径自身的 status 说话。
+      if (input.learningPath.status === 'generating') return PATH_GENERATING_USER_VISIBLE;
+      if (input.learningPath.status === 'failed') return PATH_GENERATION_FAILED_USER_VISIBLE;
+      return `学习路径已生成：${input.learningPath.name || '未命名路径'}`;
+    }
+    // 已绑路径但权威行缺失：既不谎称「已生成」，也不误落硬阻断拒绝文案。
+    if (input.learningPathId) return null;
+    const data = JSON.parse(input.collectedData || '{}');
+    const triage = resolveResponseTriageFromCollectedData(data);
+    if (!isHardBlockResponseTriage(triage, data.understanding)) return null;
+    return buildHardBlockResult(
+      {
+        conversationId: input.conversationId,
+        understanding: data.understanding || {},
+        confidence: data.confidence || 0,
+        collected: data.collected || {},
+      },
+      triage as ResponseTriage,
+    ).userVisible;
+  }
+
+  const messages = Array.isArray(input.messages) ? input.messages : [];
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message?.role !== 'ai' && message?.role !== 'assistant') continue;
+    const content = typeof message.content === 'string' ? message.content.trim() : '';
+    if (content) return content;
+  }
+  return null;
+}

@@ -42,6 +42,30 @@ describe('PredictionCalibrationService（校准闭环）', () => {
       expect(arg.data.stallRisk).toBe(0.7);
       expect(arg.data.focusConcepts).toBe('["合并聚合"]');
       expect(arg.data.summaryEcho).toHaveLength(500);
+      // #181：无自由描述原文时落 null（不塞空串）
+      expect(arg.data.toneDetail).toBeNull();
+      expect(arg.data.depthDetail).toBeNull();
+    });
+
+    it('#181：toneDetail/depthDetail 自由描述原文一并落库（不再落库即丢）', async () => {
+      mockPrisma.prediction_records.create.mockResolvedValue({});
+      await predictionCalibrationService.recordPrediction({
+        userId: 'u1',
+        taskId: 't1',
+        prediction: {
+          stallRisk: 0.7,
+          predictedTone: 'struggle',
+          toneDetail: '预计在材料/工具栏位区分环节反复卡壳，其余部分较顺畅',
+          suggestedDepth: 'deep',
+          depthDetail: '需要深挖原理并配对比练习',
+          focusConcepts: [],
+          rationale: 'r',
+        },
+      });
+
+      const arg = mockPrisma.prediction_records.create.mock.calls[0][0];
+      expect(arg.data.toneDetail).toBe('预计在材料/工具栏位区分环节反复卡壳，其余部分较顺畅');
+      expect(arg.data.depthDetail).toBe('需要深挖原理并配对比练习');
     });
   });
 

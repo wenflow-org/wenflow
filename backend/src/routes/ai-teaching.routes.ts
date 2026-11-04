@@ -55,6 +55,15 @@ const teachingMessagesUserLimiter = rateLimit({
 });
 
 /**
+ * 学习者单条消息的应用级上限（#224）。
+ * 口径与前端输入框一致：frontend/src/views/v2/V2LearningPage.vue 的编辑器与编辑态
+ * textarea 均为 maxlength=800、计数显示 "x / 800"。前端拦的是产品层，这里拦 API 层，
+ * 防止绕过前端直接打接口把整段文本送进模型并落库（每条消息会触发 1-2 次 LLM 调用）。
+ * 注意这是业务上限，不是传输层上限（bootstrap/http-app.ts 的 express.json({ limit: '2mb' })）。
+ */
+const TEACHING_MESSAGE_MAX_CHARS = 800;
+
+/**
  * 会话级归因单点：所有带 :sessionId 的路由在进入处理前把会话 id 注入请求上下文，
  * 使 prompt_call_logs / llm_execution_attempts / session_events 能按会话直接查询。
  * 此前只有流式分支手工注入，非流式回合的遥测行 sessionId 为空。
@@ -896,8 +905,13 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
     const { message } = req.body;
     const interactionMeta = sanitizeInteractionMeta(req.body?.meta);
 
-    if (!message) {
+    if (typeof message !== 'string' || message.trim().length === 0) {
       return sendValidationError(res, '缺少消息内容');
+    }
+
+    // #224：应用级长度上限（传输层 2mb 不是业务上限）。必须在幂等受理/落库/模型调用之前拒绝。
+    if (message.length > TEACHING_MESSAGE_MAX_CHARS) {
+      return sendValidationError(res, `消息内容不能超过 ${TEACHING_MESSAGE_MAX_CHARS} 字符`);
     }
 
     const expectedRevision = requireExpectedRevision(req.body?.revision);

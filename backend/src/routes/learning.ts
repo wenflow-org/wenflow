@@ -18,6 +18,7 @@ import pathOrchestrator from '../coordinators/path.coordinator';
 import { isPathMutationConflictError } from '../services/learning/path-mutation-safety';
 import { openSessionClearanceService } from '../services/learning/open-session-clearance.service';
 import { applyPathStructuralEdit, type PathStructuralEditInput } from '../services/learning/path-structural-edit.service';
+import { resolveGoalTriageEvidenceForUser } from '../services/learning/goal-triage-evidence';
 import {
   buildGoalPathRequestFromConversation,
   buildStoredGoalPathRequest,
@@ -141,6 +142,13 @@ const generatePathSchema = z.object({
   subject: z.string().max(200).optional(),
   deadline: z.string().regex(ISO_DEADLINE_REGEX, 'deadline 必须是 ISO 日期格式').optional(),
   deadlineText: z.string().max(500).optional(),
+  /**
+   * goal 层判定凭证（#217 / #222）：**只接受服务端已落库的结论**——提交目标会话 id，
+   * 由服务端读 `goal_conversations.collectedData` 里的 understanding / responseTriage。
+   * 请求体不再接受 `understanding`（客户端自断言不能作为放行依据）；
+   * 会话不存在/不属于该用户/没有判定结论 → 422 `GOAL_TRIAGE_REQUIRED`。
+   */
+  sourceConversationId: z.string().max(200).optional(),
   userProfile: z.object({
     skillLevel: z.string().optional(),
     currentSkillLevel: z.string().optional(),
@@ -427,13 +435,29 @@ router.post('/paths/generate', llmGenerateUserLimiter, async (req, res, next) =>
     const data = generatePathSchema.parse(req.body);
     withPathContext(req);
 
-const result = await pathOrchestrator.generate({
+    // 生成路径动作的前置闸门（#217/#222）：闸门本身在 pathOrchestrator.generate 里（唯一动作入口），
+    // 这里只负责把**服务端产出的**判定凭证传下去。凭证来自 `goal_conversations.collectedData`，
+    // 且必须与该会话的目标（description + 已完成状态）绑定——借一场自己的 judgeable 会话
+    // 为另一个目标建路径、或拿未完成会话的兜底分诊，都解析不出凭证。
+    // 请求体里的 understanding 不再参与放行（那是 #222 的绕过面：客户端自断言 judgeable）。
+    // 会话不存在/不属于该用户/目标不匹配/未完成/没有结论 → 下传 null，由闸门拒绝
+    // （GOAL_TRIAGE_REQUIRED）；命中硬阻断 → GOAL_NOT_JUDGEABLE；两种都不生成、不落库。
+    const goalTriage = data.sourceConversationId
+      ? await resolveGoalTriageEvidenceForUser({
+          conversationId: data.sourceConversationId,
+          userId,
+          description: data.description,
+        })
+      : null;
+
+    const result = await pathOrchestrator.generate({
       userId,
       description: data.description,
       subject: data.subject,
       deadline: data.deadline ? new Date(data.deadline) : undefined,
       deadlineText: data.deadlineText,
-      userProfile: data.userProfile
+      userProfile: data.userProfile,
+      goalTriage
     });
 
     res.status(201).json({
@@ -445,6 +469,18 @@ const result = await pathOrchestrator.generate({
       return res.status(400).json({
         success: false,
         error: { message: '数据验证失败', details: error.errors }
+      });
+    }
+
+    // 分诊闸门的两种拒绝：均 422（语义错误而非服务端故障），文案原样透出。
+    if (error?.code === 'GOAL_TRIAGE_REQUIRED' || error?.code === 'GOAL_NOT_JUDGEABLE') {
+      return res.status(422).json({
+        success: false,
+        error: {
+          message: error.message,
+          code: error.code,
+          ...(error.triage ? { responseTriage: error.triage } : {})
+        }
       });
     }
 
@@ -1215,6 +1251,14 @@ router.post('/tasks/:taskId/complete', async (req, res, next) => {
       subjectiveDifficulty: data.subjectiveDifficulty,
       notes: data.notes,
       completionSource: resolveTaskCompletionSource(req),
+      // #147（回归 #204）：blackbox VL 先 endTeaching(end_only) 再走本端点——会话已闭合，
+      // 本次完成不会再产出 lesson:completed；带上会话 id 让事件消费者跳过重复刷新，并由
+      // sessionClosedBeforeCompletion 让 completeTask 补做一次 eager 刷新（否则本路
+      // 不传 sessionId 时 eager + 消费者会双刷同一投影键）。「已闭合」前提由紧随其后的
+      // recordDirectTaskCompletion 强制（未闭合会以 FINALIZATION_SESSION_NOT_CLOSED 拒绝）。
+      ...(data.teachingSessionId
+        ? { sessionId: data.teachingSessionId, sessionClosedBeforeCompletion: true }
+        : {}),
     });
 
     // P1-3：blackbox VL 先 endTeaching(end_only) 再走本端点结算任务；

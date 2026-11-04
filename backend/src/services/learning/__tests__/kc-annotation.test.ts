@@ -10,7 +10,7 @@
  * 2. 有 success+output 才落库，success:false / 抛错 / 空 output 都不落库且不抛；
  * 3. skill 输入带 cognitiveCore 与 prerequisiteTree（kc-mapper 的缺口覆盖校验输入）。
  */
-import { mapAndPersistKcAnnotation } from '../generation/kc-annotation';
+import { mapAndPersistKcAnnotation, bindKcLinksToSubtaskIds } from '../generation/kc-annotation';
 import * as skills from '../../../skills';
 
 jest.mock('../../../skills', () => ({
@@ -136,6 +136,23 @@ describe('mapAndPersistKcAnnotation（契约事故回归）', () => {
     }]);
   });
 
+  it('默认（非渐进）配置也把 taskKey 下发到模型（issue #179 断点①）', async () => {
+    // 断点①：mapAndPersistKcAnnotation 重建 subtasks 载荷时曾丢掉 taskKey，默认配置下模型收不到、
+    // 无法逐字回显，落库时便绑不到 subtasks.id。
+    withResultMock().mockResolvedValue({ success: true, output: goodOutput });
+
+    await mapAndPersistKcAnnotation({
+      pathId: 'lp_1',
+      template,
+      milestones,
+      subtasks: [{ ...subtasks[0], taskKey: 'task-1-0' }],
+      persist: jest.fn(),
+    });
+
+    const [, input] = withResultMock().mock.calls[0];
+    expect(input.subtasks[0].taskKey).toBe('task-1-0');
+  });
+
   it('cognitiveCore 缺失时降级为 null（不编造概念）', async () => {
     withResultMock().mockResolvedValue({ success: true, output: goodOutput });
 
@@ -155,19 +172,14 @@ describe('mapAndPersistKcAnnotation（契约事故回归）', () => {
 import { coerceKcMapperParsed } from '../../../skills/kc-mapper';
 
 describe('coerceKcMapperParsed（契约等价变体归一）', () => {
-  it('空 gapCoverage（[]/{}）移除，非空归为 {covered,uncovered}', () => {
+  it('gapCoverage 已非契约字段（#193）：模型残留该键一律丢弃', () => {
     expect(coerceKcMapperParsed({ conceptKcs: [], gapCoverage: [] }).gapCoverage).toBeUndefined();
     expect(coerceKcMapperParsed({ conceptKcs: [], gapCoverage: {} }).gapCoverage).toBeUndefined();
     const r = coerceKcMapperParsed({
       conceptKcs: [],
       gapCoverage: [{ conceptId: 'c1', coveredKCs: ['kc-1'], gaps: [] }, { conceptId: 'c2', gaps: ['没覆盖'] }],
     });
-    expect(r.gapCoverage).toEqual({ covered: ['c1'], uncovered: [{ concept: 'c2', reason: '没覆盖' }] });
-  });
-
-  it('单条明细对象也归为契约形态', () => {
-    const r = coerceKcMapperParsed({ conceptKcs: [], gapCoverage: { conceptId: 'c1', gaps: [] } });
-    expect(r.gapCoverage).toEqual({ covered: ['c1'], uncovered: [] });
+    expect(r.gapCoverage).toBeUndefined();
   });
 
   it('taskKcLinks 的 kcIds 别名补出 linkedKCs（保留原字段）', () => {
@@ -202,10 +214,42 @@ describe('coerceKcMapperParsed（契约等价变体归一）', () => {
       conceptKcs: [{ conceptId: 'c1', kcs: [{ kcId: 'kc-1', name: 'n', taxonomy: 'factual' }] }],
       taskKcLinks: [{ taskTitle: 't', linkedKCs: ['kc-1'] }],
       kcGraph: { nodes: [{ kcId: 'kc-1', name: 'n', taxonomy: 'factual' }], edges: [{ from: 'a', to: 'b', relation: 'prerequisite' }] },
-      gapCoverage: { covered: ['c1'], uncovered: [] },
     };
     const once = coerceKcMapperParsed(input);
     expect(once).toEqual(input);
     expect(coerceKcMapperParsed(once)).toEqual(input);
+  });
+});
+
+describe('bindKcLinksToSubtaskIds（issue #179：稳定键 taskKey 绑真实任务 id）', () => {
+  it('同名任务各带独立 taskKey：各绑到自己的 subtasks.id，不共享', () => {
+    // kc-mapper 逐字回显输入 taskKey；同名任务靠 taskKey 区分（标题相同不再造成歧义）。
+    const annotation = {
+      taskKcLinks: [
+        { taskKey: 'task-1-2', taskTitle: '复述清单', linkedKCs: ['kc-a'] },
+        { taskKey: 'task-3-0', taskTitle: '复述清单', linkedKCs: ['kc-b'] },
+      ],
+    };
+    const ids = new Map([['task-1-2', 'st_first'], ['task-3-0', 'st_second']]);
+    const bound = bindKcLinksToSubtaskIds(annotation, ids)!;
+    expect(bound.taskKcLinks).toEqual([
+      { taskKey: 'task-1-2', taskTitle: '复述清单', linkedKCs: ['kc-a'], taskId: 'st_first' },
+      { taskKey: 'task-3-0', taskTitle: '复述清单', linkedKCs: ['kc-b'], taskId: 'st_second' },
+    ]);
+  });
+
+  it('模型漏回显 taskKey / 键不在本次运行内：链接原样保留（读侧回退标题并集）', () => {
+    const links = [
+      { taskTitle: '旧标注无键', linkedKCs: ['kc-x'] },
+      { taskKey: 'task-9-9', taskTitle: '键不在本次运行', linkedKCs: ['kc-y'] },
+    ];
+    const bound = bindKcLinksToSubtaskIds({ taskKcLinks: links }, new Map([['task-1-0', 'st_1']]))!;
+    expect(bound.taskKcLinks).toEqual(links);
+  });
+
+  it('无 taskKcLinks / 空标注：原样返回（不构造空数组）', () => {
+    const annotation = { conceptKcs: [] };
+    expect(bindKcLinksToSubtaskIds(annotation, new Map())).toBe(annotation);
+    expect(bindKcLinksToSubtaskIds(null, new Map())).toBeNull();
   });
 });

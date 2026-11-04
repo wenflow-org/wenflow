@@ -459,7 +459,10 @@ router.get('/:conversationId', authMiddleware, async (req: Request, res: Respons
       return res.json({
         success: true,
         data: {
-          userVisible: '会话详情获取成功',
+          // #213/#221：userVisible 是「用户可见的结果」，由 getConversation 按状态重建
+          // （进行中 = 最后一条 AI 回复；已完成 = 路径文案或硬阻断拒绝文案；无文案为 null）。
+          // 不再用「会话详情获取成功」这类 HTTP 占位串兜底。
+          userVisible: conversation.userVisible,
           control: {
             conversationId,
             stage: conversation.stage,
@@ -477,7 +480,8 @@ router.get('/:conversationId', authMiddleware, async (req: Request, res: Respons
     return res.json({
       success: true,
       data: {
-        userVisible: '会话详情获取成功',
+        // 同上：占位串不再进入 data.userVisible（null = 本次快照没有可展示的终局文案）。
+        userVisible: conversation.userVisible,
         internal: {
           core: {
             conversationId,

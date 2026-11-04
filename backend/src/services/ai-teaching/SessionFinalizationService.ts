@@ -289,6 +289,11 @@ export class SessionFinalizationService {
         // #105 观测统一：事件记录收束通道与会话 id（真人与 VL 都可能走 finalize，轨道由 isVirtualLearner 派生）
         completionSource: 'teaching-finalize',
         sessionId: input.sessionId,
+        // #147 缺口（回归 #204）：会话在本次 finalize 之前就已闭合（end_only 补结算 / complete_task
+        // 重试——上面因此跳过了 auto-end）时，本次不会再产出 lesson:completed，教学投影没有别的刷新方；
+        // 声明出去让 completeTask 补做 eager 刷新，避免该次收尾对投影键 0 次刷新。这里用顶部快照（auto-end
+        // 之前的 status）判断，正常链路（本次 auto-end 关课）恒为 false，仍由 lesson:completed 消费者刷新。
+        sessionClosedBeforeCompletion: session.status === 'completed' && !!session.wrapup,
         // 时钟域：模拟链路下把任务完成时间落在模拟日（无模拟上下文时 simulatedNowOr() === new Date()，
         // 现网行为不变）。否则 completedAt 会用真墙钟，污染概念账本 lastSeenAt → 延迟锚题跨域比较。
         asOf: simulatedNowOr(),

@@ -9,6 +9,9 @@ import os from 'node:os';
 import path from 'node:path';
 
 const mockSecretRows = new Map<string, { providerId: string; apiKey: string; apiKeyEnv: string | null }>();
+/** #177 运行期引用门禁读到的平台默认与启用 skill 绑定（默认无，按需覆写） */
+const mockGetConfig = jest.fn();
+const mockSkillBindings: Array<{ skillId: string; model: string | null; endpoint: string | null }> = [];
 
 jest.mock('../../../config/system-database', () => ({
   __esModule: true,
@@ -27,8 +30,16 @@ jest.mock('../../../config/system-database', () => ({
       deleteMany: async ({ where }: { where: { providerId: string } }) => {
         mockSecretRows.delete(where.providerId);
       }
-    }
+    },
+    // #177：门禁读平台默认（经 apiConfigService，已 mock）+ 启用 skill 绑定 + 写后归一化读平台行
+    skill_model_configs: { findMany: async () => mockSkillBindings },
+    platform_api_configs: { findUnique: async () => null, update: async () => undefined }
   }
+}));
+
+jest.mock('../../apiConfig.service', () => ({
+  __esModule: true,
+  default: { getConfig: (...args: unknown[]) => mockGetConfig(...args) }
 }));
 
 jest.mock('../../../utils/secret-crypto', () => ({
@@ -130,6 +141,17 @@ beforeAll(() => {
 beforeEach(() => {
   writeFixture();
   mockSecretRows.clear();
+  mockSkillBindings.length = 0;
+  // #177 门禁默认：平台三档默认未配、无 skill 绑定 → 增删改一律放行（与既有用例语义一致）
+  mockGetConfig.mockReset();
+  mockGetConfig.mockResolvedValue({
+    defaultModel: '',
+    defaultReasoningModel: '',
+    defaultEvaluationModel: '',
+    chatModels: [],
+    reasoningModels: [],
+    lightModels: []
+  });
   invalidateProviderSecretCache();
   delete process.env.CUSTOM_KEY;
   // 让模块内的注册表状态对准夹具（每次编辑后都会强制重载，这里只是起点）
@@ -420,5 +442,59 @@ describe('运行时密钥解析（DB 密文 → 环境变量回落）', () => {
     // 进程内 60s 缓存：环境变量在真实部署里靠重启改，测试里显式失效
     invalidateProviderSecretCache();
     await expect(resolveProviderApiKey('custom', 'CUSTOM_KEY')).resolves.toBeNull();
+  });
+});
+
+describe('#177 运行期引用门禁（判定与写入语义同源）', () => {
+  it('停用整条供应商前挡「仍被平台默认引用」', async () => {
+    mockGetConfig.mockResolvedValue({
+      defaultModel: 'm-chat',
+      defaultReasoningModel: 'm-reason',
+      defaultEvaluationModel: 'm-chat',
+      chatModels: [],
+      reasoningModels: [],
+      lightModels: []
+    });
+    await expectEditError(() => updateProvider(PLATFORM_PROVIDER_ID, { enabled: false }), 400, '平台默认模型');
+  });
+
+  it('非布尔 enabled 载荷（1/0/null/"false"）同样触发门禁，不能既停用又绕过', async () => {
+    mockSkillBindings.push({ skillId: 'goal-conversation', model: 'm-chat', endpoint: null });
+    for (const payload of [1, 0, null, 'false', '0']) {
+      await expectEditError(
+        () => updateProvider(PLATFORM_PROVIDER_ID, { enabled: payload } as never),
+        400,
+        'goal-conversation'
+      );
+    }
+    // 未触发停用的值（true）不受门禁影响
+    await expect(updateProvider(PLATFORM_PROVIDER_ID, { enabled: true })).resolves.toBeTruthy();
+  });
+
+  it('删整条供应商前挡「仍被 skill 绑定引用」', async () => {
+    // custom 在共享夹具里没有模型 → 本用例局部写一份带模型的目录，绑定其模型后再删整条通道
+    fs.writeFileSync(tempConfig, JSON.stringify({
+      providers: {
+        platform: { name: '平台', recommended: true, models: { 'm-chat': { tier: 'chat' } } },
+        custom: { name: '自建通道', enabled: true, baseUrl: 'https://api.example.com/v1', apiKeyEnv: 'CUSTOM_KEY', models: { 'cm-1': { tier: 'chat' } } }
+      },
+      aliases: { chat: ['m-chat'] },
+      defaults: { chat: 'm-chat', reasoning: 'm-chat' }
+    }, null, 2), 'utf-8');
+    modelsConfig.reloadLlmProvidersIfChanged(true);
+    mockSkillBindings.push({ skillId: 'goal-conversation', model: 'cm-1', endpoint: null });
+    await expectEditError(() => deleteProvider('custom'), 400, '供应商「custom」');
+  });
+
+  it('删单模型前挡「仍被平台默认引用」（文件 defaults 未指向它）', async () => {
+    mockGetConfig.mockResolvedValue({
+      defaultModel: 'm-extra',
+      defaultReasoningModel: '',
+      defaultEvaluationModel: '',
+      chatModels: [],
+      reasoningModels: [],
+      lightModels: []
+    });
+    await expectEditError(() => deleteModel(PLATFORM_PROVIDER_ID, 'm-extra'), 400, '平台默认模型');
   });
 });

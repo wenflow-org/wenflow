@@ -20,6 +20,7 @@ import { partitionMaterialNeeds } from '../services/materials/material-need-orig
 import { findWebRecordByTitle, normalizeTitleForMatch } from '../services/materials/material-web-ingest.service';
 import { patchPathsWithAsyncMaterials, type AsyncMaterialPatch } from '../services/materials/material-async-collect.service';
 import { collectBriefsWithDeadline } from '../services/materials/material-brief.service';
+import { assertPathGenerationAllowed, type GoalTriageEvidence } from '../services/learning/path-generation-gate';
 import type { ResponseTriage } from '../services/learning/response-triage';
 import {
   getPathAgentInputConfig,
@@ -107,6 +108,12 @@ export interface PathGenerationInput {
   systemPromptOverrides?: {
     pathAgent?: string;
   };
+  /**
+   * goal 层判定凭证（#217）：`generate` 是生成路径的唯一动作入口，所有调用方都必须
+   * 带上 goal 层产物（分诊结论 / understanding / visibleSummary），否则拒绝生成。
+   * `generateFromGoal` → `normalizeGoalRequest` 会自动注入；直生成入口由调用方提供。
+   */
+  goalTriage?: GoalTriageEvidence | null;
 }
 
 /** 前置知识探测结果（goal 层 prerequisiteCheckResults 透传，供 path-planning prerequisiteTree.knownConcepts 校准） */
@@ -244,8 +251,10 @@ export interface GoalPathRequest {
   /** 学习者负荷画像（虚拟学习者链路注入 `availableTime`/`cognitiveLoadTolerance`；真实用户不传 ⇒ 行为不变） */
   learnerLoadProfile?: LearnerLoadProfile | null;
   /**
-   * 响应分诊结论（goal 层透传，advisory 默认）。仅承载/透传，**不参与 path 生成逻辑**；
-   * 缺失（真实用户/旧会话）⇒ undefined，生成行为与今天完全一致。
+   * 响应分诊结论（goal 层透传）。**参与判定**（#217）：`normalizeGoalRequest` 把它连同
+   * `visibleSummary` 一起注入 `PathGenerationInput.goalTriage`，由 `generate` 的闸门执行；
+   * 硬阻断结论不进入生成/落库，普通 referral 照常生成。
+   * 缺失（重建/旧会话）⇒ undefined，由 visibleSummary 兜底；两者都没有则拒绝生成。
    */
   responseTriage?: ResponseTriage | null;
   /**
@@ -1002,9 +1011,12 @@ class PathCoordinator {
         skillLevel,
         currentSkillLevel: skillLevel,
         timePerDay: availableTime,
-        structuredData: input.structuredData || null,
+        // structuredData/confidenceScores 的 routings 声明 handoff:[path]（goal-agent 行），
+        // 配置式交接取用优先、旧直连字段回退——与同函数内 needsMaterial 同款取用顺序。
+        // 此前这两行只读直连字段，声明为交接的 handoff 值无人消费（审计 #178）。
+        structuredData: (goalFinalPayload.goalHandoffFields as any)?.['structuredData'] ?? input.structuredData ?? null,
         confirmedProposal: config.normalizedInput.includeConfirmedProposal ? input.visibleSummary?.confirmedProposal || null : null,
-        confidenceScores: input.confidenceScores ?? null,
+        confidenceScores: (goalFinalPayload.goalHandoffFields as any)?.['confidenceScores'] ?? input.confidenceScores ?? null,
         conversationHistory: config.normalizedInput.includeConversationHistory ? input.conversationHistory || [] : [],
         normalizedInput: framedNormalizedInput,
         goalFinalPayload: {
@@ -1036,10 +1048,30 @@ class PathCoordinator {
     // 路径生成变慢，故默认改 sync：先采后生成，让 pack 真正进入 resources.materials。
     // 需要旧行为时设 MATERIAL_COLLECTION_MODE=async（保留回滚口）。
     const mode: 'sync' | 'async' = process.env.MATERIAL_COLLECTION_MODE === 'async' ? 'async' : 'sync';
-    return this.buildNormalizedGoalInput(input, config, mode);
+    const normalized = await this.buildNormalizedGoalInput(input, config, mode);
+    // goal 层判定凭证随归一化结果一起下传，由 generate 统一守卫（#217）。
+    // responseTriage 优先；缺失时用 visibleSummary 的可判定性投影兜同一套判定。
+    normalized.goalTriage = {
+      responseTriage: input.responseTriage ?? null,
+      visibleSummary: input.visibleSummary ?? null,
+    };
+    return normalized;
   }
 
   async generate(input: PathGenerationInput) {
+    // 生成路径动作的唯一闸门（#217）：没有 goal 层判定凭证就拒绝，命中硬阻断也拒绝。
+    // 放在最前面，保证任何入口都不会先落库/先起后台生成。
+    //
+    // 只约束**新建**路径（不带 existingPathId）。带 existingPathId 的是既有路径的
+    // 重新生成 / 整条重建 / 失败重试：那条链路的目标早已落库（`runGoalAsync(storedGoalRequest)`
+    // 自带 visibleSummary），而旧数据兜底分支（learning.ts 的 retry / rebuild / regenerate
+    // fallback 与 path-regeneration.service）手上没有任何 goal 层产物——若也要求凭证，
+    // 这些入口会稳定抛 GOAL_TRIAGE_REQUIRED 并被 markActiveGenerationFailed 记成失败。
+    // 它与本 issue 的攻击面无关：绕过需要的是「用任意文本**新建**一条路径」。
+    if (!input.existingPathId) {
+      assertPathGenerationAllowed(input.goalTriage);
+    }
+
     logger.info('[path-coordinator] generate start', {
       agentId: this.id,
       source: input.source || 'api',

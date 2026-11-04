@@ -82,12 +82,16 @@ export function findSubtasksByIds(taskIds: string[]) {
   });
 }
 
-export function listUserAgentLogs(where: Prisma.agent_call_logsWhereInput, skip: number, take: number) {
+/**
+ * 取该用户符合筛选条件的全量原始行（有上限），供列表路由先折叠成组再对组做分页。
+ * 分页/total 必须与 dedupe→会话折叠后的组同口径（#214）：故在应用层折叠前一次性取数，
+ * 上限防止无界扫描；超出上限时按调用时间倒序截断，与列表最终排序方向一致。
+ */
+export function listUserAgentLogsForGrouping(where: Prisma.agent_call_logsWhereInput) {
   return prisma.agent_call_logs.findMany({
     where,
     orderBy: { calledAt: 'desc' },
-    skip,
-    take,
+    take: 5000,
     select: {
       id: true,
       agentId: true,
@@ -103,10 +107,6 @@ export function listUserAgentLogs(where: Prisma.agent_call_logsWhereInput, skip:
       metadata: true
     }
   });
-}
-
-export function countUserAgentLogs(where: Prisma.agent_call_logsWhereInput) {
-  return prisma.agent_call_logs.count({ where });
 }
 
 export function listUserAgentLogsForExport(where: Prisma.agent_call_logsWhereInput) {

@@ -29,6 +29,8 @@ import {
   boundTaskCompletionError,
   isAbortLikeLearnError,
   isTransientUpstreamLearnError,
+  isTeachingSessionStaleError,
+  isResumableTeachingSessionConflictError,
   isPathReviewAlreadyAcceptedForCurrentPath,
   parseProfileData,
   resolveLearnerLoadProfile,
@@ -608,6 +610,34 @@ describe('misc pure helpers', () => {
     // 硬失败：业务/契约类不该被当成"再跑一次就好"
     expect(isTransientUpstreamLearnError(new Error('业务校验失败：缺少必填字段'))).toBe(false)
     expect(isTransientUpstreamLearnError(new Error('当前 Learn 没有绑定教学会话'))).toBe(false)
+  })
+
+  it('#153：中断窗口类课堂冲突（STALE / BUSY）非终局——一次重启不再让整节课不可续', () => {
+    const stale = Object.assign(new Error('课堂已在其他页面更新，请刷新后继续'), {
+      code: 'TEACHING_SESSION_STALE',
+      category: 'conflict',
+      status: 409
+    })
+    const busy = Object.assign(new Error('课堂正在处理另一项操作，请稍后重试'), {
+      code: 'TEACHING_SESSION_BUSY',
+      category: 'conflict',
+      status: 409
+    })
+    // category='conflict' 本身不在上游突发白名单，必须由 #153 的短路识别为非终局
+    expect(isTeachingSessionStaleError(stale)).toBe(true)
+    expect(isResumableTeachingSessionConflictError(stale)).toBe(true)
+    expect(isTransientUpstreamLearnError(stale)).toBe(true)
+    // BUSY：崩溃进程遗留的操作租约未到期（≤2 分钟自愈），同属中断窗口
+    expect(isResumableTeachingSessionConflictError(busy)).toBe(true)
+    expect(isTransientUpstreamLearnError(busy)).toBe(true)
+    // 但 BUSY 不能靠"现读 revision 重试"恢复（revision 未变、租约仍被占），故不算 STALE
+    expect(isTeachingSessionStaleError(busy)).toBe(false)
+    // 非中断窗口的冲突（课堂状态本身变了）仍按原语义终局
+    const stateChanged = Object.assign(new Error('x'), { code: 'TEACHING_SESSION_STATE_CHANGED', category: 'conflict' })
+    expect(isResumableTeachingSessionConflictError(stateChanged)).toBe(false)
+    expect(isTransientUpstreamLearnError(stateChanged)).toBe(false)
+    expect(isTeachingSessionStaleError(null)).toBe(false)
+    expect(isResumableTeachingSessionConflictError(null)).toBe(false)
   })
 
   it('isPathReviewAlreadyAcceptedForCurrentPath：已接受的当前 Path 才短路（换版需重评）', () => {

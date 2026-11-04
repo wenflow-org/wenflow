@@ -16,6 +16,18 @@ import { learnerSnapshotRefreshService } from '../services/learner/LearnerSnapsh
 import { logger } from '../utils/logger';
 import type { DurableDomainEvent, DurableEventType } from './contracts';
 
+/**
+ * #148：只作废画像缓存、不触发快照重算的事件类型。
+ *
+ * `goal:understanding:updated` 的载荷不含 `pathId` / `taskId`（goal 阶段本就没有路径），
+ * 消费侧的 scope 推断恒为 `'global'` —— 于是目标对话每澄清一轮都重建一次用户级全量快照。
+ * 该快照在 goal 阶段没有消费方：目标对话本身不读快照，路径生成（path-generation.core）在
+ * goal 收尾时会自行 `refresh({ scope: 'global' })` 重建并把学习证据注入首版难度校准；
+ * 管理端读路径是 `getLatest`（10 分钟内先用持久化投影、过期才重建）。
+ * 画像缓存仍然作废：profile-aggregator 读的正是本事件写入的 goal 证据，需按轮更新（惰性重算）。
+ */
+const PROFILE_ONLY_EVENT_TYPES: ReadonlySet<DurableEventType> = new Set(['goal:understanding:updated']);
+
 /** 该消费者负责的事件类型（与 outbox 注册保持一致） */
 export const LEARNER_EVENT_TYPES: DurableEventType[] = [
   'goal:understanding:updated',
@@ -45,15 +57,27 @@ export async function handleLearnerEvent(event: DurableDomainEvent): Promise<voi
   if (event.userId) {
     learnerProfileService.clear(event.userId);
     const data = event.data || {};
-    await learnerSnapshotRefreshService.refresh({
-      userId: event.userId,
-      pathId: data.pathId || undefined,
-      milestoneId: data.milestoneId || undefined,
-      taskId: data.taskId || undefined,
-      scope: data.pathId ? (data.taskId ? 'teaching' : 'path') : 'global',
-      lastEventId: event.id,
-      lastEventAt: event.occurredAt,
-    });
+    // #147：教学的 task:completed 带 sessionId（见 task-completion.service 的 completionContext）。
+    // 它的投影键（teaching:path:milestone:task）与同一节课的 lesson:completed 完全相同，本次刷新
+    // 由 lesson:completed 的消费承担——该事件在两条链路上都会刷新同一个 projectionKey（真人 finalize
+    // 的 auto-end 在 completeTask 之前入队；VL 仿真 completeTask→endSession 反序），故这里与消费顺序
+    // 无关地按 sessionId 跳过，避免同一键重复重算。
+    // 例外（回归 #204）：本次结算前会话已闭合（end_only 补结算 / complete_task 重试）时不会再产出
+    // lesson:completed，刷新改由 completeTask 的 eager 路径补做（sessionClosedBeforeCompletion），
+    // 否则该次收尾对投影键 0 次刷新、快照静默陈旧。
+    // 证据投影仍照做（幂等）；纯路径任务（无 sessionId）不在此列，仍由本消费者刷新。
+    const isTeachingTaskCompletion = event.type === 'task:completed' && !!data.sessionId;
+    if (!isTeachingTaskCompletion && !PROFILE_ONLY_EVENT_TYPES.has(event.type)) {
+      await learnerSnapshotRefreshService.refresh({
+        userId: event.userId,
+        pathId: data.pathId || undefined,
+        milestoneId: data.milestoneId || undefined,
+        taskId: data.taskId || undefined,
+        scope: data.pathId ? (data.taskId ? 'teaching' : 'path') : 'global',
+        lastEventId: event.id,
+        lastEventAt: event.occurredAt,
+      });
+    }
   }
 
   // 增强失败在链尾重抛：快照已刷新，但事件仍需重投以补齐增强产物

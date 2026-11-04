@@ -77,9 +77,8 @@ export function listCoolingDowns(now: number = Date.now()): CooldownSnapshot[] {
  * - provider_http / network / provider_timeout：上游不稳定，换候选可能更好
  * - 不含 quota（账号/余额级，换模型无效）、authentication、configuration、protocol 等
  */
+export const FALLBACK_WORTHY_CATEGORIES = ['rate_limit', 'provider_http', 'network', 'provider_timeout'] as const;
+
 export function isFallbackWorthyCategory(category: string | null | undefined): boolean {
-  return category === 'rate_limit'
-    || category === 'provider_http'
-    || category === 'network'
-    || category === 'provider_timeout';
+  return (FALLBACK_WORTHY_CATEGORIES as readonly string[]).includes(String(category || '').toLowerCase());
 }

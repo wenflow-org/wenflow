@@ -15,6 +15,7 @@ import {
   createRuntimeRetryBudget,
   getEffectiveLogicalRetryLimit
 } from '../services/reliability-settings.service';
+import { isFallbackWorthyCategory } from '../gateway/api-gateway/deployment-health';
 import {
   ToolApprovalRequiredError,
   isToolApprovalRequired,
@@ -41,6 +42,19 @@ function isCallerAbort(error: any): boolean {
   if (String(error.code || '') === 'CALLER_ABORTED') return true;
   if (String(error.name || '') === 'AbortError') return true;
   return /aborted by caller/i.test(String(error.message || ''));
+}
+
+/**
+ * 是否为**上游/基础设施类**失败（限流、上游 HTTP、网络、上游超时）。
+ * 与 {@link isCallerAbort} 同口径：这类错误不代表 Skill 逻辑失败，不应计入技能成功率——
+ * 否则一次上游故障（含 #177 的「目录外模型无可用渠道」）会把整列 skill 打成 0 失败，
+ * 污染健康度面板。类别集合复用网关既有的「上游不稳定」判定（deployment-health），
+ * 不再维护第二份清单；网关终止错误 `RETRY_BUDGET_EXHAUSTED` 会继承最后一次真实失败的
+ * category，故本判定同样覆盖它。认证/配额/协议/配置类失败仍照常计入。
+ */
+function isUpstreamFailure(error: any): boolean {
+  if (!error || typeof error !== 'object') return false;
+  return isFallbackWorthyCategory(error.category);
 }
 
 function summarizeSkillPayload(value: any, depth = 0): any {
@@ -192,7 +206,16 @@ export async function executeSkillHandler(
     retryBudget.limits.maxLogicalRetries
   );
   const agentId = parentContext.agentId || parentAgent;
-  const callerAgent = parentContext.callerAgent || parentAgent;
+  // #185：skill span 的 callerAgent 只认「本 skill 所属 agent」这一个真实边界，不再继承上层的
+  // callerAgent。上层写入的 callerAgent（autopilot / blackbox 的 'simulation-agent'、
+  // batch-experiment 的任务名、acp-context 中间件的 X-Caller-Agent 客户端身份）是「本次运行从哪来」，
+  // 不是编排交接的调用方；一旦继承，simulation-agent 会盖住整条真实教学链的 span——实测
+  // skill:session-wrapup 被记成 simulation-agent -> session-wrapup（同一 skill 的 LLM 行早已
+  // 按自身声明的 caller.agentId 记为 teaching-agent）；无归属的 handler-only/aux skill
+  // （getAgentOfSkill 为空）则借用该标记，把 learner-state-review 这类教学链内诊断调用
+  // 记成仿真调用。运行来源本就由 sourceEntry / experimentId / runId 承载，无需 callerAgent 兜底。
+  // 无归属 skill 记为「调用方未知」（null），与真实用户/管理端窗口下的既有记录口径一致。
+  const callerAgent = parentAgent;
   const parentExecutionId = parentContext.executionLogId;
   const rootExecutionId = parentContext.rootExecutionId || parentContext.executionLogId || executionLogId;
   const contextEnvelope = buildSkillContextEnvelope({
@@ -307,9 +330,10 @@ export async function executeSkillHandler(
       if (error && typeof error === 'object') {
         error.skillDurationMs = durationMs;
       }
-      // 调用方取消不算技能失败：仍记 span 供观测，但不计入 successRate，
-      // 否则客户端超时/切页会把技能成功率拉低（QA skill 调查 P3）。
-      if (!isCallerAbort(error)) {
+      // 调用方取消 / 上游基础设施故障不算技能失败：仍记 span 供观测，但不计入 successRate，
+      // 否则客户端超时/切页、单次上游 5xx（含无可用渠道的目录外模型）会把技能成功率拉低
+      // （QA skill 调查 P3 / #177 健康度面板污染）。
+      if (!isCallerAbort(error) && !isUpstreamFailure(error)) {
         await recordSkillStats(skillId, false, durationMs);
       }
       void recordSkillSpan(
@@ -324,7 +348,8 @@ export async function executeSkillHandler(
         skillId === 'mcp-tool'
           ? error?.code || 'MCP_TOOL_EXECUTION_FAILED'
           : error?.message || String(error),
-        error?.code
+        error?.code,
+        typeof error?.category === 'string' ? error.category : undefined
       );
       logger.error('[skill-executor] 执行失败', {
         skillId,
@@ -406,7 +431,8 @@ async function recordSkillSpan(
   durationMs: number,
   success: boolean,
   errorMessage?: string,
-  errorCode?: string
+  errorCode?: string,
+  errorCategory?: string
 ): Promise<void> {
   try {
     const inputStr = JSON.stringify(summarizeSkillLogPayload(skillId, input, 'input')).slice(0, 1000);
@@ -427,6 +453,9 @@ async function recordSkillSpan(
       durationMs,
       error: success ? null : (errorMessage || 'SKILL_EXECUTION_FAILED'),
       errorCode: success ? null : (errorCode || 'SKILL_EXECUTION_FAILED'),
+      // #177：skill 层行也带上真实失败类别（网关错误对象自带 category）——成功率口径据此判上游失败，
+      // 不再靠 errorCode 猜；旧行无 category 时口径按 code 回退（见 skill-runtime-contract.service）。
+      errorCategory: success ? null : (errorCategory || null),
       executionLayer: 'skill',
       actorType: 'skill',
       actorId: skillId,

@@ -73,7 +73,8 @@ export interface GoalConversationRejudgeDeps {
     userInput: string,
     isFirst: boolean,
     userId?: string,
-    options?: RejudgeConversationOptions
+    options?: RejudgeConversationOptions,
+    callOptions?: { excludeTrailingUserInput?: boolean }
   ) => Promise<unknown>;
   withConversationId: (result: unknown, conversationId: string) => unknown;
   getStructuredOutputValid: (aiResponse: unknown) => boolean;
@@ -83,7 +84,7 @@ export interface GoalConversationRejudgeDeps {
     role: string,
     content: string,
     meta?: Record<string, number> | null,
-    extra?: { quickReplies?: unknown }
+    extra?: { quickReplies?: unknown; idempotentUserTurn?: boolean }
   ) => Promise<void>;
   getGoalExt: (internal: unknown) => { quickReplies?: unknown };
   updateCollectedData: (conversationId: string, aiResponse: unknown) => Promise<void>;
@@ -98,7 +99,8 @@ export interface GoalConversationRejudgeDeps {
  * 确认链路共用段（2026-10-29 抽取）：建占位路径 → 认领生成 run → 以 revision CAS 把路径
  * 原子绑定到会话。两个调用方：proposing 阶段的 confirmProposal 硬规则、
  * completed 硬阻断会话的补充说明重判通过（rejudgeHardBlockedCompletion）。
- * 返回 bound=false 表示 CAS 失配（并发写赢了自己），占位路径由调用方负责作废。
+ * 返回 bound=false 表示 CAS 失配（并发写赢了自己）：本条占位路径已被本函数删除，不留在用户
+ * 可见列表里（#212），调用方只需按最新状态复用赢家路径。
  */
 export async function bindGeneratingPath(
   deps: GoalConversationRejudgeDeps,
@@ -122,6 +124,14 @@ export async function bindGeneratingPath(
       ext: {
         goalConversation: {
           understanding: input.data.understanding || {},
+          // 交接声明（prompts/orchestration/goal.yaml 的 pathInRawOutput）把以下键当作
+          // skill 原始输出里的物理位置；seed 是确认链路里 skill 输出的替代品。
+          confirmedProposal: input.data.confirmedProposal ?? null,
+          // structuredData/confidenceScores 只在确有值时落键：写成 `?? null` 会把「skill 没产出
+          // 该字段」伪装成「产出为 null」，assembleGoalHandoff 的 skip 诊断（goal-conversation
+          // .service 的 warn）随之静默——缺值就照实报缺，由消费方回退旧的直连字段。
+          ...(input.data.structuredData != null ? { structuredData: input.data.structuredData } : {}),
+          ...(input.data.confidenceScores != null ? { confidenceScores: input.data.confidenceScores } : {}),
           nextQuestions: [],
           collected: input.data.collected || {}
         }
@@ -133,7 +143,7 @@ export async function bindGeneratingPath(
   const runId = await learningService.claimPathCoreGeneration(placeholderPath.id, null);
 
   // 原子确认（审计 §1.4）：以 revision 条件把「确认权 + 占位路径」一次性绑定；
-  // 并发/重试的落败方 CAS 失配：不写库、不推进对话（占位路径由调用方作废并读最新状态兜底）。
+  // 并发/重试的落败方 CAS 失配：不写库、不推进对话。
   const bound = await deps.updateConversationLifecycle(input.conversation.id, 'completed', {
     status: 'completed',
     completedAt: new Date(),
@@ -144,7 +154,37 @@ export async function bindGeneratingPath(
     ...(input.onBound ? { mutateCollectedData: input.onBound } : {}),
   });
 
+  if (!bound) {
+    await discardLosingPlaceholder(placeholderPath.id, runId);
+    return { bound, placeholderPath: null, runId: null, seedResult };
+  }
+
   return { bound, placeholderPath, runId, seedResult };
+}
+
+/**
+ * 作废并发确认落败方的占位路径（#212）。
+ *
+ * 落败方的占位路径从未被任何会话/学习会话引用，也没有 kick 过生成，直接删除即可；
+ * `path_generation_runs` / `milestones` 由 learning_paths 的 ON DELETE CASCADE 一并清掉，
+ * 否则它会以 `failed` 占位（标题「个性化学习路径」）出现在用户路径列表里，点重试还会
+ * 在同一目标下再造一条真路径。
+ *
+ * 删除失败时退回旧行为（标 failed）：至少不让带 processing run 的生成中占位被
+ * recoverStaleGeneratingPaths 恢复成一条没人要的真路径。
+ */
+async function discardLosingPlaceholder(pathId: string, runId: string): Promise<void> {
+  try {
+    await prisma.learning_paths.delete({ where: { id: pathId } });
+  } catch (error) {
+    logger.warn('[goal-conversation] 并发确认落败方占位路径删除失败，退回标记失败', {
+      pathId,
+      error: String(error),
+    });
+    await learningService
+      .markActiveGenerationFailed(pathId, new Error('并发确认，本条占位路径作废'), runId)
+      .catch(() => undefined);
+  }
 }
 
 /** 确认链路共用段：绑定成功后异步跑 Path 生成（失败回调作废占位路径，供 markActiveGenerationFailed 兜底）。 */
@@ -214,13 +254,18 @@ export async function rejudgeHardBlockedCompletion(
     replyPreview: userReply.slice(0, 40),
   });
 
-  // 调模型把补充说明并进 understanding（先不写当前用户消息，避免本轮输入重复进入上下文）
-  const aiResponse = (await deps.callAI(conversation.id, userReply, false, userId, options)) as AiTurnResponse;
+  // 用户补充说明**先落库再调模型**（#160：落库与调用解耦，callAI 非结构化失败也不丢这一轮输入）。
+  // 本条已在历史里，故 callAI 侧传 excludeTrailingUserInput 把它剔出上下文，避免重复喂入；
+  // 失败重试由 saveMessage 的回合级幂等（pendingUserTurn）护栏挡住重复写入。
+  await deps.saveMessage(conversation.id, 'user', userReply, options?.meta, { idempotentUserTurn: true });
+
+  const aiResponse = (await deps.callAI(conversation.id, userReply, false, userId, options, {
+    excludeTrailingUserInput: true
+  })) as AiTurnResponse;
   const responseWithConversationId = deps.withConversationId(aiResponse, conversation.id);
 
   if (!deps.getStructuredOutputValid(aiResponse)) {
-    // 422 恢复信封前先持久化本轮用户消息，保证补充说明不丢（与普通回合同款兜底）
-    await deps.saveMessage(conversation.id, 'user', userReply, options?.meta);
+    // 用户补充说明已落库（上方），AI 回复不落库 → 422 恢复信封刷新后仍不丢（与普通回合同款兜底）
     logger.warn('[goal-conversation] 硬阻断重判结构化输出失败，状态未更新', {
       conversationId: conversation.id,
       userId,
@@ -229,8 +274,7 @@ export async function rejudgeHardBlockedCompletion(
     deps.throwStructuredOutputInvalid(responseWithConversationId);
   }
 
-  // 追加进对话：用户补充说明 + 模型回合（补充说明从此在库有痕迹，不再被短路丢弃）
-  await deps.saveMessage(conversation.id, 'user', userReply, options?.meta);
+  // 模型回合追加进对话（补充说明已在上方落库，不再重复写）
   await deps.saveMessage(conversation.id, 'ai', aiResponse.userVisible, null, { quickReplies: deps.getGoalExt(aiResponse.internal).quickReplies });
 
   // 持久化更新后的 understanding，并重算落库分诊结论（updateCollectedData 内重算 RESPONSE_TRIAGE_KEY）
@@ -294,10 +338,8 @@ export async function rejudgeHardBlockedCompletion(
     expectedRevision: latest.revision
   });
   if (!bound) {
-    // CAS 失配：并发写赢了自己。作废自己的占位路径后按最新状态返回（赢家可能已绑路径）。
-    await learningService
-      .markActiveGenerationFailed(placeholderPath.id, new Error('并发重判，本条占位路径作废'), runId)
-      .catch(() => undefined);
+    // CAS 失配：并发写赢了自己。本请求的占位路径已由 bindGeneratingPath 删除（#212），
+    // 直接按最新状态返回（赢家可能已绑路径，也可能仍在建行）。
     const refreshed = await prisma.goal_conversations.findUnique({ where: { id: conversation.id } });
     if (refreshed?.learningPathId) {
       const refreshedData = refreshed.collectedData ? JSON.parse(refreshed.collectedData) : latestData;

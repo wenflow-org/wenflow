@@ -41,7 +41,7 @@ import {
 } from './stage-material-supplement';
 import { schoolAnchorCoverage, type PathSchoolAnchor } from './school-anchor';
 import { buildAnchorGoalNote } from './school-anchor-goal';
-import { mapAndPersistKcAnnotation, mergeKcStageAnnotation, type KcAnnotation } from './kc-annotation';
+import { mapAndPersistKcAnnotation, mergeKcStageAnnotation, bindKcLinksToSubtaskIds, type KcAnnotation } from './kc-annotation';
 import { assembleStageDesignerChannels } from '../../field-dispatcher';
 import { extractPromptMaterials, STAGE_MATERIAL_LIMITS, collectMaterialSectionRefs } from '../../materials/material-prompt-projection';
 import { buildSectionSemanticOrder } from '../../materials/material-semantic-order';
@@ -64,6 +64,7 @@ import {
   normalizePathTaskType,
   parsePathCognitiveDesign,
   parsePathPromptTemplate,
+  resolveMilestoneConcept,
   resolvePersistedNormalizedInput,
   resolveTaskConcept,
 } from '../learning.helpers';
@@ -493,16 +494,20 @@ async function enrichLearningPathWithAndersonInner(
           goal: milestone.goal || null,
           estimatedHours: milestone.estimatedHours || null,
         },
-        ...(designerChannels['previousMilestone'] || previousMilestone ? {
-          previousMilestone: designerChannels['previousMilestone'] || (previousMilestone ? {
-            stageNumber: previousMilestone.stageNumber,
-            title: previousMilestone.title,
-            coreConcept: previousMilestone.coreConceptId || null,
+        ...(previousMilestone ? {
+          previousMilestone: {
+            // #167：配置抽值（stageNumber/title/coreConcept）与手拼回退二选一后，
+            // 再与上一阶段任务摘要合并——原实现以配置抽值优先并直接短路，
+            // 使 tasks 分支永不执行，而提示词把 tasks 声明为跨阶段去重/衔接的唯一事实源。
+            ...(designerChannels['previousMilestone'] || {
+              stageNumber: previousMilestone.stageNumber,
+              title: previousMilestone.title,
+              coreConcept: previousMilestone.coreConceptId || null,
+            }),
             // 幽灵通道修复（2026-10-26）：上一阶段真实任务清单（串行生成后才存在）。
-            // 提示词规则 13 的「previousMilestoneContext」从来不存在，跨阶段衔接/去重
-            // 规则此前只能靠阶段标题猜；现在首操作任务能真正「用上一阶段刚产出的东西」。
+            // 首操作任务借此真正「用上一阶段刚产出的东西」，而非只靠阶段标题猜。
             ...(stageTaskSummaries.get(stageIndex - 1) ? { tasks: stageTaskSummaries.get(stageIndex - 1) } : {}),
-          } : null),
+          },
         } : {}),
         ...stageDesignerBaseInput,
         ...(stageMaterials ? { materials: stageMaterials } : {}),
@@ -883,11 +888,27 @@ async function enrichLearningPathWithAndersonInner(
     // KC 映射（kc-mapper）：stage-designer 全部完成后，将概念与子任务分解为知识组件 + 依赖图，
     // 写回 aiPromptTemplate.kcAnnotation，结束"写后无读者"，供 teaching-turn 按 KC 粒度消费。
     // 契约收口在 kc-annotation 模块（executeSkillWithResult；2026-09-22 判空错配事故修复见该文件头注）。
-    // 渐进式（批次 D）：单阶段输出走 **增量合并**（mergeKcStageAnnotation，v2 顶层与 v1 同形、
-    // byStage 存阶段快照）——整包调用会把单阶段输出当全量覆写、抹掉其他阶段的 KC。
-    // persist 注入 no-op：合并结果经本函数返回值交给下方 final 事务统一写 template（避免双写竞争）。
+    // 渐进式（批次 D）与追加补齐（appendOnly，仅对空白阶段生成）都走 **增量合并**
+    // （mergeKcStageAnnotation，v2 顶层与 v1 同形、byStage 存阶段快照）：两者的 kc-mapper
+    // 输入都只含本轮的阶段/任务，整包调用会把这段输出当全量覆写、抹掉**已设计阶段**的
+    // taskKcLinks（issue #169：append 自愈通道只判 progressive，未判 appendOnly）。
+    // 合并结果经本函数返回值交给下方 final 事务统一写 template（避免双写竞争）。
+    //
+    // 任务↔KC 的稳定键（issue #179）：连接键不能用会变形的自然语言标题，也不能靠标题自带的唯一性
+    // （同名任务无解）。这里给本次运行的每个任务分配「阶段序号-阶段内序号」的稳定键，随 kc-mapper
+    // 输入下发并要求逐字回显。
+    // 键**写在任务对象自己的属性上**（而非 WeakMap）：同阶段重排（reorderStageTasks →
+    // remapStageTaskReferences/repairForwardReferences）用浅拷贝 `{ ...task }` 换掉任务对象，
+    // 弱引用表会因对象身份被换而查不到；自身属性则随浅拷贝一起流动，重排只挪位置不改键。
+    // subtaskIdByTaskKey 在下方事务内按属性回填真实 subtasks.id（事务重试时清空重建）。
+    const subtaskIdByTaskKey = new Map<string, string>();
+    for (const stage of stageDesignOutputs) {
+      stage.subtasks.forEach((task: any, index: number) => {
+        if (task && typeof task === 'object') task.taskKey = `task-${stage.stageNumber}-${index}`;
+      });
+    }
     let kcAnnotation: KcAnnotation | null;
-    if (progressive) {
+    if (progressive || appendOnly) {
       const { executeSkillWithResult } = await import('../../../skills');
       const { kcMapperDefinition } = await import('../../../skills/kc-mapper');
       const kcParams = {
@@ -902,6 +923,7 @@ async function enrichLearningPathWithAndersonInner(
           goal: m.goal,
         })),
         subtasks: stageDesignOutputs.flatMap((s) => s.subtasks.map((t: any) => ({
+          taskKey: t.taskKey,
           title: t.title,
           type: t.type,
           linkedConcept: t.linkedConcept,
@@ -967,6 +989,7 @@ async function enrichLearningPathWithAndersonInner(
         goal: m.goal,
       })),
       subtasks: stageDesignOutputs.flatMap((s) => s.subtasks.map((t: any) => ({
+        taskKey: t.taskKey,
         title: t.title,
         type: t.type,
         linkedConcept: t.linkedConcept,
@@ -1002,24 +1025,33 @@ async function enrichLearningPathWithAndersonInner(
     //
     // 只收 `conceptSource === 'linked-concept'`：回退文本（'fallback-text'）可能是 path 内局部序号
     // `concept-N`，把它当 canonical 注册会重造"同键不同义"污染（实测别名表出现 aliasRaw="concept-1"）。
-    const subtaskConceptIds = new Map<string, string>();
+    //
+    // 里程碑核心概念（milestones.conceptId 的目标）与子任务共用同一张 `canonicalName → conceptId` 表：
+    // 两侧写的都是「认知设计里的概念名」，故合并成一次 resolveMany（少一次 concepts/aliases 写事务）。
+    const canonicalConceptIdsByName = new Map<string, string>();
     try {
-      const names = stageDesignOutputs
-        .flatMap((s) => s.subtasks)
-        .map((t: any) => {
-          const linked = typeof t?.linkedConcept === 'string' ? t.linkedConcept : null;
-          const resolved = resolveTaskConcept(linked, pathCognitiveDesign, linked, taskConceptMap);
-          return resolved.conceptSource === 'linked-concept' ? resolved.linkedConceptName : null;
-        })
-        .filter((name): name is string => !!name && !!name.trim());
+      const names = [
+        ...stageDesignOutputs
+          .flatMap((s) => s.subtasks)
+          .map((t: any) => {
+            const linked = typeof t?.linkedConcept === 'string' ? t.linkedConcept : null;
+            const resolved = resolveTaskConcept(linked, pathCognitiveDesign, linked, taskConceptMap);
+            return resolved.conceptSource === 'linked-concept' ? resolved.linkedConceptName : null;
+          }),
+        // 里程碑核心概念（与 path-generation.core 落 coreConceptName 同源同函数）
+        ...learningPath.milestones.map((milestone) => {
+          const resolved = resolveMilestoneConcept(milestone.coreConceptId, pathCognitiveDesign, milestone.coreConceptId);
+          return resolved.conceptSource === 'linked-concept' ? resolved.coreConceptName : null;
+        }),
+      ].filter((name): name is string => !!name && !!name.trim());
       if (names.length > 0) {
         const resolved = await conceptRegistryService.resolveMany(data.userId, names, {
           source: 'write_time', level: 'concept', originPathId: pathId,
         });
-        for (const [key, conceptId] of resolved) subtaskConceptIds.set(key, conceptId);
+        for (const [key, conceptId] of resolved) canonicalConceptIdsByName.set(key, conceptId);
       }
     } catch (error) {
-      logger.warn('[stage-enrichment] 子任务概念身份预解析失败（best-effort，conceptId 留空）', {
+      logger.warn('[stage-enrichment] 任务/里程碑概念身份预解析失败（best-effort，conceptId 留空）', {
         pathId,
         error: error instanceof Error ? error.message : String(error),
       });
@@ -1032,6 +1064,7 @@ async function enrichLearningPathWithAndersonInner(
       for (const key of Object.keys(materialRefsByTask)) delete materialRefsByTask[key];
       for (const key of Object.keys(misconceptionHintsByTask)) delete misconceptionHintsByTask[key];
       for (const key of Object.keys(adjustabilityByTask)) delete adjustabilityByTask[key];
+      subtaskIdByTaskKey.clear();
       await assertGenerationRunFence(tx, pathId, runId);
       const lockedPath = await tx.learning_paths.updateMany({
         where: { id: pathId, activeGenerationRunId: runId },
@@ -1085,6 +1118,10 @@ async function enrichLearningPathWithAndersonInner(
             || (taskData.knowledgeType && taskData.cognitiveLevel ? `${taskData.knowledgeType} + ${taskData.cognitiveLevel}` : null);
 
           const subtaskId = `st_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${milestone.stageNumber}_${j}`;
+          // 稳定键 → 真实 id 登记（issue #179）：键在 kc-mapper 之前按原顺序分配并写在任务对象上，
+          // 同阶段重排的浅拷贝会带着它流动，这里按属性取回即可（不再依赖对象身份）。
+          const taskKey = (taskData as any)?.taskKey;
+          if (taskKey) subtaskIdByTaskKey.set(taskKey, subtaskId);
           // 任务 → 可调整性（动态规划）：skill 侧已归一为 core|flexible，未给值时按 core 保守处理
           adjustabilityByTask[subtaskId] = (taskData as any).adjustability === 'flexible' ? 'flexible' : 'core';
           // 任务 → 资料条目（skill 侧已逐字核对）：按 subtaskId 落进 aiPromptTemplate.materialRefs.byTask
@@ -1128,7 +1165,7 @@ async function enrichLearningPathWithAndersonInner(
               linkedConceptId: resolvedConcept.linkedConceptId || null,
               linkedConceptName: resolvedConcept.linkedConceptName || null,
               // canonical 身份（事务外预解析；未命中留 null，回填脚本可补）
-              conceptId: subtaskConceptIds.get(normalizeConceptKey(resolvedConcept.linkedConceptName)) ?? null,
+              conceptId: canonicalConceptIdsByName.get(normalizeConceptKey(resolvedConcept.linkedConceptName)) ?? null,
               knowledgeType: taskData.knowledgeType || null,
               cognitiveLevel: taskData.cognitiveLevel || null,
               icapLevel: taskData.icapLevel || null,
@@ -1178,6 +1215,15 @@ async function enrichLearningPathWithAndersonInner(
           title: milestone.title ?? null,
           estimatedHours: stageHours,
         });
+        // 里程碑 canonical 概念身份（issue #166）：`coreConceptId` 是 path 内局部序号（concept-N），
+        // 概念图「去练习」锚点按 canonical `conceptId` 跨表 join；落库侧此前从不写该列，故在此用
+        // 与子任务同一张预解析表回填（同一 `resolveMilestoneConcept` 语义，命中认知设计才取 canonical）。
+        const milestoneConcept = resolveMilestoneConcept(
+          milestone.coreConceptId, pathCognitiveDesign, milestone.coreConceptId,
+        );
+        const milestoneCanonicalId = milestoneConcept.conceptSource === 'linked-concept' && milestoneConcept.coreConceptName
+          ? canonicalConceptIdsByName.get(normalizeConceptKey(milestoneConcept.coreConceptName)) ?? null
+          : null;
         if (stageHours !== null) {
           pathNormalizedHours += stageHours;
           // 阶段级「时间说明」拼接已下线（2026-10-25 方向改造）：实证它把内部预算口径差
@@ -1196,11 +1242,25 @@ async function enrichLearningPathWithAndersonInner(
             where: { id: milestone.id },
             data: {
               estimatedHours: stageHours,
+              ...(milestoneCanonicalId ? { conceptId: milestoneCanonicalId } : {}),
               ...(anchorNote && anchorGoalBase !== null ? { goal: `${anchorGoalBase}${anchorNote}` } : {}),
               updatedAt: new Date(),
             }
           });
+        } else if (milestoneCanonicalId) {
+          // 无任务阶段不会走进上面的学时回写分支，但仍需补 canonical 身份（否则该里程碑锚点恒空）
+          await tx.milestones.update({
+            where: { id: milestone.id },
+            data: { conceptId: milestoneCanonicalId },
+          });
         }
+      }
+      // 任务↔KC 连接键收稳（issue #179）：kc-mapper 只能按标题回写链接，而标题是会被改写的
+      // 自然语言（落库前经 sanitizeUserFacingText），同名任务更无法在标题上区分。落库前按模型
+      // 逐字回显的 taskKey 把链路绑到真实 subtasks.id 上，读侧即可按 id 精确匹配，标题退为兜底键。
+      // 未回显 taskKey 的链接（旧标注 / 模型漏回显）原样保留，由读侧回退标题并集。
+      if (kcAnnotation) {
+        kcAnnotation = bindKcLinksToSubtaskIds(kcAnnotation, subtaskIdByTaskKey);
       }
       // 终局预算夹（Frontier-100 R1 实证 F81：目标 3h，core 骨架 3h，stageDesign 按任务分钟
       // 回写后 4.5h）：core 夹只作用于骨架，逐阶段 1.25× 容差累加仍可把总量放大到目标 1.5×。
@@ -1384,7 +1444,7 @@ async function enrichLearningPathWithAndersonInner(
       // 离线评审才发现 3 条路径 KC/审计双双丢失）。落显式标记：可见、可统计、可告警。
       const auditDisabledReason = kcAnnotation
         ? null
-        : (progressive ? 'kc-mapper-failed' : 'kc-mapper-persist-failed');
+        : ((progressive || appendOnly) ? 'kc-mapper-failed' : 'kc-mapper-persist-failed');
       if (structureAudit && structureAudit.issues.length > 0) {
         logger.warn('[stage-enrichment] 路径结构审计发现问题（只记录，不重排）', {
           pathId: learningPath.id,

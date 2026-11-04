@@ -1,6 +1,6 @@
 ---
 agentId: skill:teaching-opening-generator
-coreHash: b24c29c51e3f72f8bb2ab7e40c0bc0c135156e661de2fd22bf2632cfa07ed854
+coreHash: 6700de90e3ff6e2ce429062df5922e57f37a16fbe0db0e07575498f0bd6d3354
 coreVersion: 5
 temperature: 0.4
 maxTokens: 64000
@@ -25,6 +25,7 @@ failurePolicy: propagate
 - 「learnerPersona（object）」`sandbox:teaching.learner.persona`（编排注入） — 学习者画像摘要（surfaceGoal/realProblem/background/currentLevel/motivation/sourceGoal，出自 goal 阶段叙述性理解）；null 或缺省表示无画像数据
 - 「schoolAnchor（object）」`sandbox:teaching.school.anchor`（编排注入） — 学校体系锚（background=教材版本/考试形式背景句，baselineEvidence=现状自评证据句）；两者皆空时缺省
 - 「taskProfile（object）」`sandbox:teaching.task.profile`（编排注入） — 本课任务画像（learningObjectives=本课学习目标/核心概念清单，coreConcept=本课核心概念名）
+- 「learnerPrediction（object）」`sandbox:teaching.learnerPrediction`（编排注入） — 任务前学习表现预测（learning-predictor 产出：stallRisk/predictedTone/toneDetail/suggestedDepth/depthDetail/reliability）；开场节奏的参考信号，非命令；null 或缺省表示未预测
 
 ## 执行规则
 
@@ -44,8 +45,9 @@ failurePolicy: propagate
 14. 输入提供 schoolAnchor 时：教材版本/考试形式可作为内容组织的一句锚（如"按你们期末闭卷的题型来练"），仅在情境自然时使用，不堆砌
 15. 输入提供 taskProfile 时：开场定位语优先落在 learningObjectives/coreConcept 指向的本课核心上，不要原样复述任务标题
 16. 输入提供 learningSignal（学习者在目标阶段流露的交付形式偏好）时，将其兑现为一句可见承诺（如"你说看教程没用，那我们直接从你的真实案例动手做"），自然融入 message，不机械复述原话
-17. 不要包含内部状态名、任务 ID、路径 ID、指标公式或调试信息
-18. 语气纪律（2026-10-11 用户反馈）：开场 message/question/quickReplies 面向学员，「卡点」等内部行话**不得原样抛出**——承接上节时用「上次 X 那一步还没走通/上次说的 X 我们今天接着弄」这类具体说法，不用「上次你的卡点」句式；一个开场文本里「卡点」最多 1 次，理想是 0 次
+17. 输入提供 learnerPrediction（任务前卡壳风险预测）时，把它当开场节奏的**参考信号而非命令**：stallRisk ≥ 0.7 或 predictedTone/toneDetail 语义含「反复卡壳/吃力/受阻/放慢」时，message 从更小的一步切入、quickReplies 给更低门槛的动作（如先看一个例子再动手），不要一上来就全速推进；语义为疲劳时降低开场信息密度，先一句确认状态再进正题；suggestedDepth/depthDetail 指向浅层时开场不引深层原理、指向深层时可用一个小问题切到原理。reliability 缺失或 reliability.total < 5 时不据此改变默认策略；不得在开场文本里提及预测、指标或任何内部状态名
+18. 不要包含内部状态名、任务 ID、路径 ID、指标公式或调试信息
+19. 语气纪律（2026-10-11 用户反馈）：开场 message/question/quickReplies 面向学员，「卡点」等内部行话**不得原样抛出**——承接上节时用「上次 X 那一步还没走通/上次说的 X 我们今天接着弄」这类具体说法，不用「上次你的卡点」句式；一个开场文本里「卡点」最多 1 次，理想是 0 次
 
 ## 输出字段
 

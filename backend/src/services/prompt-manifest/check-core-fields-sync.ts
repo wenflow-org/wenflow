@@ -145,19 +145,9 @@ export const ORPHAN_EXEMPT_FIELDS: ReadonlyArray<{ skillId: string; field: strin
     evidence: 'simulation.yaml:35 stories 字段已退役（语义由 profileData.storyPool 承接），core 仍要求输出的故事切片不进数据面路由',
   },
   {
-    skillId: 'goal-conversation',
-    field: 'proposalQuality',
-    evidence: '顶层内部自评（confirmedProposal 的 SMART 分维度），仅驱动 reply 改善提示，不进数据面路由；goal.yaml:125 只路由 confirmedProposal.* 子字段',
-  },
-  {
     skillId: 'virtual-learner-learn-turn-simulator',
     field: 'checkpointAnswer',
     evidence: '2026-09-18 P1-3：平台出题时的作答草案，由 virtual-lab/blackbox-runner 直接读取用于提交检查点，不进编排数据面路由',
-  },
-  {
-    skillId: 'goal-conversation',
-    field: 'needsMaterial',
-    evidence: 'prompts/core/goal-conversation.yaml：goal→path 接线缝的 hidden 输出，只声明「要不要外部权威资料」、不进数据面路由；消费方 = backend/src/skills/material-collector（采集编排器）',
   },
   {
     skillId: 'teaching-turn',

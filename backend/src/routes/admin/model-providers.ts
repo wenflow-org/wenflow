@@ -83,6 +83,7 @@ router.patch('/:id', async (req, res) => {
           ...(body.supportsSystemRole !== undefined ? { supportsSystemRole: body.supportsSystemRole } : {}),
         }
       : body;
+    // #177 供应商级门禁（含停用整条通道）已下沉到 updateProvider，判定与写入语义同源
     const result = await updateProvider(req.params.id, patch);
     setAuditAction(res, 'model-provider-update', { targetType: 'model-provider', targetId: req.params.id });
     setAuditAfter(res, { ...body, apiKey: body.apiKey ? '***' : undefined });
@@ -94,6 +95,7 @@ router.patch('/:id', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
+    // #177 供应商级门禁已下沉到 deleteProvider（「平台」自身不可删，由 service 挡）
     const result = await deleteProvider(req.params.id);
     setAuditAction(res, 'model-provider-delete', { targetType: 'model-provider', targetId: req.params.id });
     await okWithView(res, result.warnings, `供应商「${req.params.id}」已删除`);
@@ -152,6 +154,7 @@ router.patch('/:id/models/:modelId', async (req, res) => {
 
 router.delete('/:id/models/:modelId', async (req, res) => {
   try {
+    // #177 单模型删除门禁已下沉到 deleteModel（判定与写入语义同源，routes 不直连 DB）
     const result = await deleteModel(req.params.id, req.params.modelId);
     setAuditAction(res, 'model-provider-model-delete', { targetType: 'model-provider', targetId: req.params.id });
     await okWithView(res, result.warnings, `模型「${req.params.modelId}」已删除`);

@@ -36,18 +36,21 @@ jest.mock('../../services/learner/LearnerSnapshotRefreshService', () => ({
   learnerSnapshotRefreshService: { refresh: jest.fn() }
 }));
 
-import '../users';
-/* 日期键区间自 2026-10-31 走查 P0-3 起按**应用时区本地日**解析（此前 startDate 走 UTC 零点、
-   endDate 走机器本地 23:59:59，起止口径不对称，UTC+8 用户 00:00–08:00 的记录会被整段漏掉）；
-   期望值直接取自同一 helper，避免测试里再抄一份时区算术。 */
 import { parseDayKeyRange } from '../../services/time/day-boundary';
+
+import '../users';
 
 function createResponse() {
   return {
     headers: {} as Record<string, string>,
     body: undefined as any,
+    statusCode: undefined as number | undefined,
     setHeader(name: string, value: string) {
       this.headers[name] = value;
+    },
+    status(code: number) {
+      this.statusCode = code;
+      return this;
     },
     send(payload: any) {
       this.body = payload;
@@ -87,6 +90,9 @@ describe('users agent log routes', () => {
 
     await routes['GET /me/agent-logs/export'](req, res, jest.fn());
 
+    // 日界口径同源（#201）：buildAgentLogWhere 自 b54e0b31 起用 parseDayKeyRange 按
+    // **应用时区本地日**解析日期键。此处直接引用被测实现所用的同一 helper，避免断言
+    // 与实现口径二次漂移（旧断言写死 new Date('2026-07-01')，即 P0-3 已废止的 UTC 零点口径）。
     const range = parseDayKeyRange('2026-07-01', '2026-07-16');
     expect(agentLogMocks.findMany).toHaveBeenCalledWith({
       where: {
@@ -185,33 +191,86 @@ describe('users agent log routes', () => {
     expect(goal.model).toBe('deepseek-v4.1-flash');
   });
 
-  it('列表过滤 userVisible=false 的内部 skill（如 adaptive-guidance-copy）', async () => {
-    const mkLog = (id: string, convId: string | null, agentId: string, calledAt: string) => ({
-      id,
-      agentId,
-      sourceEntry: 'platform',
-      calledAt: new Date(calledAt),
-      success: true,
-      errorCode: null,
-      metadata: JSON.stringify({ conversationId: convId }),
-      traceId: `t-${id}`,
-    });
-    agentLogMocks.findMany.mockResolvedValue([
-      mkLog('copy1', null, 'skill:adaptive-guidance-copy', '2026-09-04T10:00:00.000Z'),
-      mkLog('copy2', null, 'skill:adaptive-guidance-copy', '2026-09-04T10:01:00.000Z'),
-    ]);
-    agentLogMocks.count.mockResolvedValue(2);
+  it('默认口径按 manifest userListed 放行真实业务动作，排除内部 skill 与 0 行编排器（#219）', async () => {
+    agentLogMocks.findMany.mockResolvedValue([]);
     const req: any = { user: { userId: 'user-1' }, query: {} };
     const res = createResponse();
 
     await routes['GET /me/agent-logs'](req, res, jest.fn());
 
-    // 过滤生效在 SQL 层：断言传给 DB 的 where.agentId.notIn 包含内部 skill
+    // 过滤生效在 SQL 层：断言传给 DB 的 where.agentId.in 是 manifest userListed 白名单
     const wherePassed = agentLogMocks.findMany.mock.calls.at(-1)?.[0]?.where;
-    expect(wherePassed.agentId.notIn).toContain('skill:adaptive-guidance-copy');
-    expect(wherePassed.agentId.notIn).toContain('skill:kc-mapper');
-    expect(wherePassed.agentId.notIn).toContain('system-call');
+    const listed = wherePassed.agentId.in as string[];
+    // 真实写日志的业务 skill（线上行数见 #219 证据）必须放行，否则默认列表只剩 path-agent
+    expect(listed).toEqual(
+      expect.arrayContaining([
+        'skill:goal-conversation',
+        'skill:path-planning',
+        'skill:teaching-turn',
+        'skill:session-wrapup',
+        'path-agent',
+      ])
+    );
+    // goal-agent / teaching-agent 是 userVisible 的展示身份，全表 0 行，放进默认口径只会是空
+    expect(listed).not.toContain('goal-agent');
+    expect(listed).not.toContain('teaching-agent');
+    // 内部噪音与网关不得进入默认列表
+    expect(listed).not.toContain('skill:adaptive-guidance-copy');
+    expect(listed).not.toContain('skill:kc-mapper');
+    expect(listed).not.toContain('api-gateway');
+    expect(listed).not.toContain('system-call');
     // mock 不模拟 SQL 过滤，因此这里只断言 where 构造正确
+  });
+
+  it('capabilityType 分组从 manifest 派生且限定在用户可见集内（#218/#226）', async () => {
+    agentLogMocks.findMany.mockResolvedValue([]);
+    const agentIdsFor = async (capabilityType: string): Promise<string[]> => {
+      const req: any = { user: { userId: 'user-1' }, query: { format: 'json', capabilityType } };
+      await routes['GET /me/agent-logs/export'](req, createResponse(), jest.fn());
+      return agentLogMocks.findMany.mock.calls.at(-1)?.[0]?.where?.agentId?.in as string[];
+    };
+
+    // 真实授课 id 是 skill:teaching-turn（manifest Teaching 组，线上 327 行）；
+    // 旧硬编码 id ai-teaching-agent 线上 0 行，曾让该筛选恒空。
+    const teaching = await agentIdsFor('teaching');
+    expect(teaching).toContain('skill:teaching-turn');
+    expect(teaching).not.toContain('ai-teaching-agent');
+
+    // #226：Profile 组内没有任何 userListed 的 id（learner-model / adaptive-guidance-copy
+    // 都是内部 skill），能力筛选在用户可见集内再筛后为空——不再把 86 行内部 skill
+    // 从筛选视图放出来（默认视图对它们本来就是 0 行）。
+    const profile = await agentIdsFor('profile');
+    expect(profile).toEqual([]);
+    expect(profile).not.toContain('learner-model-agent');
+
+    const path = await agentIdsFor('path');
+    expect(path).toContain('skill:path-planning');
+    expect(path).toContain('path-agent');
+
+    // tutoring / tracking 在 manifest 里没有对应监控组：显式空数组 ——
+    // 若删键，capabilityType 不命中就会退化成「不筛选、返回全部日志」。
+    expect(await agentIdsFor('tutoring')).toEqual([]);
+    expect(await agentIdsFor('tracking')).toEqual([]);
+    expect(await agentIdsFor('system')).toEqual(['system-call', 'unknown']);
+  });
+
+  it('capabilityType 结果集 ⊆ 默认结果集，不越出 userListed 白名单（#226）', async () => {
+    agentLogMocks.findMany.mockResolvedValue([]);
+    const agentIdsFor = async (query: Record<string, unknown>): Promise<string[]> => {
+      const req: any = { user: { userId: 'user-1' }, query: { format: 'json', ...query } };
+      await routes['GET /me/agent-logs/export'](req, createResponse(), jest.fn());
+      return agentLogMocks.findMany.mock.calls.at(-1)?.[0]?.where?.agentId?.in as string[];
+    };
+
+    const defaultIds = await agentIdsFor({});
+    expect(defaultIds.length).toBeGreaterThan(0);
+
+    // 能力筛选 = 在用户可见集内按能力再筛：任何 X 的 id 集合都必须是默认口径的子集。
+    // 修复前 profile 会返回 skill:adaptive-guidance-copy 等内部 skill（默认视图不含）。
+    for (const capabilityType of ['goal', 'path', 'teaching', 'profile']) {
+      const scoped = await agentIdsFor({ capabilityType });
+      expect(scoped.filter((id) => !defaultIds.includes(id))).toEqual([]);
+    }
   });
 
   it('path-agent 阶段流水用 sourceConversationId 并入 path 组，且 phase 透传到明细', async () => {
@@ -255,17 +314,184 @@ describe('users agent log routes', () => {
     expect(pathGroup[0].groupItems.map((i: any) => i.phase)).toEqual(['core', 'core', 'stageDesign']);
   });
 
-  it('page 负值被钳制为 1（skip=0），不再向 Prisma 传负 skip', async () => {
+  it('page 负值被钳制为 1（组起点=0），不向 Prisma 传负 skip', async () => {
     agentLogMocks.findMany.mockResolvedValue([]);
-    agentLogMocks.count.mockResolvedValue(0);
     const req: any = { user: { userId: 'user-1' }, query: { page: '-5' } };
     const res = createResponse();
 
     await routes['GET /me/agent-logs'](req, res, jest.fn());
 
+    // #214：分页建立在折叠后的组上，取数不再传 skip/take，而是全量（有上限）后对组切片
     const args = agentLogMocks.findMany.mock.calls.at(-1)?.[0];
-    expect(args.skip).toBe(0);
+    expect(args.skip).toBeUndefined();
+    expect(args.take).toBe(5000);
     expect(res.body?.success).toBe(true);
+    expect(res.body?.data?.pagination?.page).toBe(1);
+  });
+
+  it('total/分页以折叠后的组为准（#214：原始行数 4 折成 1 组时 total=1）', async () => {
+    const mkPathStage = (id: string, calledAt: string) => ({
+      id,
+      agentId: 'path-agent',
+      sourceEntry: 'platform',
+      calledAt: new Date(calledAt),
+      success: true,
+      errorCode: null,
+      metadata: JSON.stringify({
+        eventType: 'path-generation-stage',
+        executionLayer: 'flow-event',
+        phase: 'core',
+        sourceConversationId: 'gc_same',
+      }),
+      traceId: `tr-${id}`,
+    });
+    // 同一会话 4 条原始行 → 折叠成 1 个 path 组
+    agentLogMocks.findMany.mockResolvedValue([
+      mkPathStage('pa1', '2026-09-04T11:00:00.000Z'),
+      mkPathStage('pa2', '2026-09-04T11:00:01.000Z'),
+      mkPathStage('pa3', '2026-09-04T11:00:02.000Z'),
+      mkPathStage('pa4', '2026-09-04T11:00:03.000Z'),
+    ]);
+    const req: any = { user: { userId: 'user-1' }, query: { page: '1', limit: '100' } };
+    const res = createResponse();
+
+    await routes['GET /me/agent-logs'](req, res, jest.fn());
+
+    expect(res.body?.data?.logs).toHaveLength(1);
+    expect(res.body?.data?.pagination).toEqual({ page: 1, limit: 100, total: 1, totalPages: 1 });
+  });
+
+  it('翻页在组上推进，不再跨页重复返回同一组（#214）', async () => {
+    const mkPathStage = (id: string, conv: string, calledAt: string) => ({
+      id,
+      agentId: 'path-agent',
+      sourceEntry: 'platform',
+      calledAt: new Date(calledAt),
+      success: true,
+      errorCode: null,
+      metadata: JSON.stringify({
+        eventType: 'path-generation-stage',
+        executionLayer: 'flow-event',
+        phase: 'core',
+        sourceConversationId: conv,
+      }),
+      traceId: `tr-${id}`,
+    });
+    // 三个不同会话，各 2 条 → 3 个组（每组折叠后 id 取稳定 groupKey）
+    agentLogMocks.findMany.mockResolvedValue([
+      mkPathStage('a1', 'gc_a', '2026-09-04T11:00:03.000Z'),
+      mkPathStage('a2', 'gc_a', '2026-09-04T11:00:03.500Z'),
+      mkPathStage('b1', 'gc_b', '2026-09-04T11:00:02.000Z'),
+      mkPathStage('b2', 'gc_b', '2026-09-04T11:00:02.500Z'),
+      mkPathStage('c1', 'gc_c', '2026-09-04T11:00:01.000Z'),
+      mkPathStage('c2', 'gc_c', '2026-09-04T11:00:01.500Z'),
+    ]);
+
+    const page1: any = { user: { userId: 'user-1' }, query: { page: '1', limit: '2' } };
+    const res1 = createResponse();
+    await routes['GET /me/agent-logs'](page1, res1, jest.fn());
+
+    const page2: any = { user: { userId: 'user-1' }, query: { page: '2', limit: '2' } };
+    const res2 = createResponse();
+    await routes['GET /me/agent-logs'](page2, res2, jest.fn());
+
+    const ids1 = (res1.body?.data?.logs ?? []).map((l: any) => l.id);
+    const ids2 = (res2.body?.data?.logs ?? []).map((l: any) => l.id);
+    expect(ids1).toEqual(['path:gc_a', 'path:gc_b']);
+    expect(ids2).toEqual(['path:gc_c']);
+    // 两页无重复
+    expect(ids1.some((id: string) => ids2.includes(id))).toBe(false);
+    expect(res1.body?.data?.pagination).toEqual({ page: 1, limit: 2, total: 3, totalPages: 2 });
+    expect(res2.body?.data?.pagination).toEqual({ page: 2, limit: 2, total: 3, totalPages: 2 });
+  });
+
+  it('列表返回的每个折叠组 id 都能被详情端点取到（#220：合成组键不再 404）', async () => {
+    const mkLog = (id: string, agentId: string, calledAt: string, metadata: Record<string, any>) => ({
+      id,
+      agentId,
+      sourceEntry: 'platform',
+      calledAt: new Date(calledAt),
+      success: true,
+      errorCode: null,
+      durationMs: 1000,
+      metadata: JSON.stringify(metadata),
+      traceId: `trace-${id}`,
+    });
+    agentLogMocks.findMany.mockResolvedValue([
+      mkLog('g1', 'skill:goal-conversation', '2026-09-04T09:00:00.000Z', { conversationId: 'gc_conv1' }),
+      mkLog('g2', 'skill:goal-conversation', '2026-09-04T09:02:00.000Z', { conversationId: 'gc_conv1' }),
+      mkLog('p1', 'path-agent', '2026-09-04T09:05:00.000Z', { sourceConversationId: 'gc_path', phase: 'core' }),
+      mkLog('p2', 'path-agent', '2026-09-04T09:06:00.000Z', { sourceConversationId: 'gc_path', phase: 'stageDesign' }),
+    ]);
+
+    const listRes = createResponse();
+    await routes['GET /me/agent-logs']({ user: { userId: 'user-1' }, query: {} }, listRes, jest.fn());
+    const logs = listRes.body?.data?.logs ?? [];
+    expect(logs.map((l: any) => l.id).sort()).toEqual(['goal:gc_conv1', 'path:gc_path']);
+
+    // 契约：列表里声明可查的 id（折叠组键），详情端点必须 200 且返回同一组
+    for (const row of logs) {
+      agentLogMocks.findFirst.mockClear();
+      const detailRes = createResponse();
+      await routes['GET /me/agent-logs/:logId'](
+        { user: { userId: 'user-1' }, params: { logId: row.id }, query: {} },
+        detailRes,
+        jest.fn()
+      );
+      expect(detailRes.statusCode).toBeUndefined();
+      expect(detailRes.body?.success).toBe(true);
+      expect(detailRes.body?.data?.id).toBe(row.id);
+      expect(detailRes.body?.data?.groupCount).toBe(row.groupCount);
+      expect(detailRes.body?.data?.groupItems).toHaveLength(row.groupCount);
+      // 组内明细与列表完全一致（真实子项 id 可直接用于单条详情）
+      expect(detailRes.body?.data?.groupItems.map((i: any) => i.id))
+        .toEqual(row.groupItems.map((i: any) => i.id));
+      // 组键走会话反查，不再拿合成键去主键表查
+      expect(agentLogMocks.findFirst).not.toHaveBeenCalled();
+    }
+
+    // 组明细保留 phase，与列表口径一致
+    const pathDetail = createResponse();
+    await routes['GET /me/agent-logs/:logId'](
+      { user: { userId: 'user-1' }, params: { logId: 'path:gc_path' }, query: {} },
+      pathDetail,
+      jest.fn()
+    );
+    expect(pathDetail.body?.data?.groupItems.map((i: any) => i.phase)).toEqual(['core', 'stageDesign']);
+  });
+
+  it('真实主键 id 的详情仍走主键查询（#220 不改变非折叠行）', async () => {
+    agentLogMocks.findFirst.mockResolvedValue({ id: 'acl_real', agentId: 'skill:teaching-turn' });
+    const res = createResponse();
+
+    await routes['GET /me/agent-logs/:logId'](
+      { user: { userId: 'user-1' }, params: { logId: 'acl_real' }, query: {} },
+      res,
+      jest.fn()
+    );
+
+    expect(agentLogMocks.findFirst).toHaveBeenCalledWith({
+      where: { id: 'acl_real', userId: 'user-1' }
+    });
+    expect(agentLogMocks.findMany).not.toHaveBeenCalled();
+    expect(res.body).toEqual({
+      success: true,
+      data: { id: 'acl_real', agentId: 'skill:teaching-turn' }
+    });
+  });
+
+  it('查不到任何真实行的组键仍返回 404（不伪造组详情）', async () => {
+    agentLogMocks.findMany.mockResolvedValue([]);
+    const res = createResponse();
+
+    await routes['GET /me/agent-logs/:logId'](
+      { user: { userId: 'user-1' }, params: { logId: 'path:gc_missing' }, query: {} },
+      res,
+      jest.fn()
+    );
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body?.success).toBe(false);
   });
 
   // 2026-11-04：分页与计数须与「折叠后」的列表同口径——此前 total 数去重/折叠前的原始行、

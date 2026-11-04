@@ -932,6 +932,10 @@ export async function executeFullSession(
 
     let totalLearningSteps = 0;
     let taskBoundaries = 0;
+    // #154：解绑课堂（LEARN_CLASSROOM_UNBOUND）在本入口同样无出口——旧实现直接 break → 一键全流程
+    // 判失败。按 batch/autopilot 的口径统一走 restart-learning 续课，用独立上限兜底防无界重启。
+    let unboundRecoveries = 0;
+    const UNBOUND_RECOVERY_LIMIT = 3;
     let lastAfter: VirtualSessionWithProfile | null = null;
     while (taskBoundaries < maxTaskBoundaries) {
       const learnResult = await ctx.executeAutoLearning(sessionId, { maxMilestones });
@@ -954,6 +958,23 @@ export async function executeFullSession(
         break;
       }
       if (!learnResult.success) {
+        // #154：解绑课堂可经 restart-learning 续课（与 batch/autopilot/advance-day 统一）。
+        // 上限 3 次，达到后仍失败即如实报错收口，避免确定性卡死变成无界重启。
+        if (
+          unboundRecoveries < UNBOUND_RECOVERY_LIMIT
+          && /learn_classroom_unbound/i.test(String(learnResult.error || ''))
+        ) {
+          unboundRecoveries += 1;
+          try {
+            const restarted = await ctx.restartLearningPhase(sessionId);
+            if (restarted.success) continue;
+          } catch (recoverError: unknown) {
+            logger.warn('[simulation-coordinator] 一键全流程解绑续课失败', {
+              sessionId,
+              error: asErrorLike(recoverError).message
+            });
+          }
+        }
         summary.error = learnResult.error || '自动学习失败';
         break;
       }

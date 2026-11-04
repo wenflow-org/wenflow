@@ -50,7 +50,6 @@ path-planning ──► cognitiveCore.coreConcepts[]  (id:"concept-1" / name / d
 kc-mapper ──────► conceptKcs[]   (conceptId:"concept-1" → kcs[]: kcId:"kc-1a")
                   taskKcLinks[]  (taskTitle → linkedKCs[])
                   kcGraph{nodes[{kcId,name,taxonomy}], edges[{from,to,relation}]}
-                  gapCoverage    (covered[] / uncovered[])
                      │
                      └─► aiPromptTemplate.kcAnnotation   ← JSON blob，无表无索引
 ```

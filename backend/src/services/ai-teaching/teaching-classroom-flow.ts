@@ -194,7 +194,9 @@ export function buildClassroomEvent(
 }
 
 export function detectEndIntent(message: string) {
-  const text = (message || '').trim();
+  // 防御：非字符串入参（如 123 / {} / [] / true）不得让 `.trim` 抛 TypeError 升级成 500；
+  // 统一归一为字符串后再判空。
+  const text = String(message ?? '').trim();
   if (!text) return { isEndIntent: false, reason: '' };
 
   const patterns = [

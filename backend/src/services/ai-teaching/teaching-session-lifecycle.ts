@@ -441,7 +441,11 @@ export async function startSession(input: TeachingSessionStartInput): Promise<{
         messagesBaseCount: claim.messagesBaseCount,
         knowledgeState: resumedKnowledgeState,
         teachingState: resumedTeachingState,
-        allowedStatuses: ['active', 'paused', 'timeout']
+        allowedStatuses: ['active', 'paused', 'timeout'],
+        // #216：复用开课不产生新回合——不推进 revision、事件记 session.resumed。
+        // 否则每次重开课堂都会让 revision 空转 +1（客户端乐观锁持有的 revision 与真实状态脱节），
+        // 事件流还会出现「turn.committed 但 revision=null」的账实不符行。
+        eventKind: 'session.resumed',
       });
       committed = true;
 
@@ -455,7 +459,7 @@ export async function startSession(input: TeachingSessionStartInput): Promise<{
         opening,
         knowledgePoints: normalizeKnowledgePoints(resumedKnowledgeState),
         mode: 'resumed',
-        revision: previousSession.revision + 1,
+        revision: previousSession.revision,
         memoryWarmup: (sessionArtifacts.memoryWarmup as ReviewPlan | undefined) ?? null,
         scene: buildSessionOpeningScene({ mode: 'resumed', context: resumedContext, sameTaskAttempt }),
       };
