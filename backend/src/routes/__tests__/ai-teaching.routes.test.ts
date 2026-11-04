@@ -1034,7 +1034,18 @@ describe('ai-teaching routes', () => {
           endTime: null, duration: null, status: 'active', messageCount: 9, lastActiveAt: hoursAgo(199),
         },
         {
-          // 非 active 的课不出现在这个端点（已结束/超时）
+          // 2026-11-04：暂停（离开课堂即 paused）与超时待恢复（timeout）同样是可继续的课堂，
+          // 不能被滤掉——通知面板「进行中 / 空闲中」两档靠这个端点出数。
+          id: 's_paused', subject: '化学', topic: '元素周期', taskId: 't4', startTime: hoursAgo(3),
+          endTime: null, duration: null, status: 'paused', messageCount: 6, lastActiveAt: hoursAgo(2.5),
+        },
+        {
+          id: 's_timeout', subject: '物理', topic: '受力分析', taskId: 't5', startTime: hoursAgo(3),
+          // 2026-11-04：超时结束的课带 endTime；lastActiveAt 仍在 48h 窗口内，旧口径会误标「进行中」
+          endTime: hoursAgo(1), duration: null, status: 'timeout', messageCount: 8, lastActiveAt: hoursAgo(2),
+        },
+        {
+          // 已结束的课不出现在这个端点（completed 是终态）
           id: 's_done', subject: '历史', topic: '旧课', taskId: 't3', startTime: hoursAgo(300),
           endTime: hoursAgo(299), duration: 60, status: 'completed', messageCount: 4, lastActiveAt: hoursAgo(299),
         },
@@ -1044,11 +1055,16 @@ describe('ai-teaching routes', () => {
       await handler({ user: { userId: 'user-1' }, query: {} }, res);
 
       const data = res.json.mock.calls[0][0].data;
-      expect(data).toHaveLength(2);
+      expect(data).toHaveLength(4);
       const live = data.find((s: any) => s.sessionId === 's_live');
       const idle = data.find((s: any) => s.sessionId === 's_idle');
       expect(live.activity).toBe('active');
       expect(idle.activity).toBe('idle');
+      // paused / timeout 不得缺席（缺陷修复回归）
+      expect(data.map((s: any) => s.sessionId)).toEqual(expect.arrayContaining(['s_paused', 's_timeout']));
+      // 2026-11-04：已超时结束（endTime 非空）的课即便在恢复窗口内也归「空闲中」，不冒充进行中
+      expect(data.find((s: any) => s.sessionId === 's_timeout').activity).toBe('idle');
+      expect(data.find((s: any) => s.sessionId === 's_paused').activity).toBe('active');
       // lastActiveAt 必须原样透出（面板空闲档要显示「最近活跃多久前」）
       expect(new Date(live.lastActiveAt).getTime()).toBeCloseTo(hoursAgo(0.2).getTime(), -3);
       expect(new Date(idle.lastActiveAt).getTime()).toBeCloseTo(hoursAgo(199).getTime(), -3);

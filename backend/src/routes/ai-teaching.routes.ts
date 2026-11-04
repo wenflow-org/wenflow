@@ -1471,7 +1471,9 @@ router.get('/sessions/active', async (req: any, res) => {
     const { taskId } = req.query;
 
     const sessions = await aiTeachingCoordinator.getSessionHistory(userId);
-    const activeSessions = sessions.filter(s => s.status === 'active');
+    // 2026-11-04：可继续的课堂不止 active——离开课堂即 paused、超时待恢复为 timeout，
+    // 三者都是 startSession 可恢复的状态；只认 active 会让「继续当前任务」进入的课堂在面板两档整体缺席。
+    const activeSessions = sessions.filter(s => ['active', 'paused', 'timeout'].includes(s.status));
 
     // 活跃度分档（2026-11-03）：lastActiveAt = 每会话最近一条消息时间；activity 与断线恢复窗口同源。
     // 投影逻辑在 session-activity.ts（本文件受超大文件棘轮约束，只许缩短）。

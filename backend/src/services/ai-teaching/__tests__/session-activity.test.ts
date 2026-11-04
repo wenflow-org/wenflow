@@ -56,4 +56,14 @@ describe('projectActiveSession', () => {
     const out = projectActiveSession({ ...base, lastActiveAt: ago(HOUR) }, now);
     expect(out.activity).toBe('active');
   });
+
+  it('已超时结束的课（endTime 非空）即便最近活跃在恢复窗口内，也不冒充「进行中」', () => {
+    // 2026-11-04：timeout 行必然带 endTime；旧口径只按 lastActiveAt 分区，会把已中断的旧课标成
+    // 「进行中」（与顶部「上次那节是超时中断」互相矛盾）。
+    const out = projectActiveSession(
+      { ...base, lastActiveAt: ago(HOUR), endTime: ago(2 * HOUR) },
+      now,
+    );
+    expect(out.activity).toBe('idle');
+  });
 });
