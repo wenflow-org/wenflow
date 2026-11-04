@@ -126,6 +126,24 @@ export function findUserAgentLogById(logId: string, userId: string) {
   });
 }
 
+/**
+ * #220：列表折叠行的 id 是合成组键 `path:`/`goal:<conversationId>`，不是主键，
+ * `findUserAgentLogById` 对它恒 null。这里按组键里的会话 id 反查候选原始行：
+ * 会话 id 一定内嵌在该组每行的 metadata（sourceConversationId/conversationId/sessionId）里，
+ * 故用 substring 兜住三种写法；组内精确归属由上层按列表同一口径再筛，误召回的行会被丢弃。
+ * 网关行（模型名）也一并带回，保证详情与列表的组内容同源。
+ */
+export function listUserAgentLogsByConversation(userId: string, conversationId: string) {
+  return prisma.agent_call_logs.findMany({
+    where: {
+      userId,
+      metadata: { contains: conversationId }
+    },
+    orderBy: { calledAt: 'desc' },
+    take: 5000
+  });
+}
+
 export function markOnboardingCompleted(userId: string) {
   return prisma.users.update({
     where: { id: userId },

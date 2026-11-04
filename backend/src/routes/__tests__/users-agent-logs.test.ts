@@ -44,8 +44,13 @@ function createResponse() {
   return {
     headers: {} as Record<string, string>,
     body: undefined as any,
+    statusCode: undefined as number | undefined,
     setHeader(name: string, value: string) {
       this.headers[name] = value;
+    },
+    status(code: number) {
+      this.statusCode = code;
+      return this;
     },
     send(payload: any) {
       this.body = payload;
@@ -184,33 +189,64 @@ describe('users agent log routes', () => {
     expect(goal.model).toBe('deepseek-v4.1-flash');
   });
 
-  it('列表过滤 userVisible=false 的内部 skill（如 adaptive-guidance-copy）', async () => {
-    const mkLog = (id: string, convId: string | null, agentId: string, calledAt: string) => ({
-      id,
-      agentId,
-      sourceEntry: 'platform',
-      calledAt: new Date(calledAt),
-      success: true,
-      errorCode: null,
-      metadata: JSON.stringify({ conversationId: convId }),
-      traceId: `t-${id}`,
-    });
-    agentLogMocks.findMany.mockResolvedValue([
-      mkLog('copy1', null, 'skill:adaptive-guidance-copy', '2026-09-04T10:00:00.000Z'),
-      mkLog('copy2', null, 'skill:adaptive-guidance-copy', '2026-09-04T10:01:00.000Z'),
-    ]);
-    agentLogMocks.count.mockResolvedValue(2);
+  it('默认口径按 manifest userListed 放行真实业务动作，排除内部 skill 与 0 行编排器（#219）', async () => {
+    agentLogMocks.findMany.mockResolvedValue([]);
     const req: any = { user: { userId: 'user-1' }, query: {} };
     const res = createResponse();
 
     await routes['GET /me/agent-logs'](req, res, jest.fn());
 
-    // 过滤生效在 SQL 层：断言传给 DB 的 where.agentId.notIn 包含内部 skill
+    // 过滤生效在 SQL 层：断言传给 DB 的 where.agentId.in 是 manifest userListed 白名单
     const wherePassed = agentLogMocks.findMany.mock.calls.at(-1)?.[0]?.where;
-    expect(wherePassed.agentId.notIn).toContain('skill:adaptive-guidance-copy');
-    expect(wherePassed.agentId.notIn).toContain('skill:kc-mapper');
-    expect(wherePassed.agentId.notIn).toContain('system-call');
+    const listed = wherePassed.agentId.in as string[];
+    // 真实写日志的业务 skill（线上行数见 #219 证据）必须放行，否则默认列表只剩 path-agent
+    expect(listed).toEqual(
+      expect.arrayContaining([
+        'skill:goal-conversation',
+        'skill:path-planning',
+        'skill:teaching-turn',
+        'skill:session-wrapup',
+        'path-agent',
+      ])
+    );
+    // goal-agent / teaching-agent 是 userVisible 的展示身份，全表 0 行，放进默认口径只会是空
+    expect(listed).not.toContain('goal-agent');
+    expect(listed).not.toContain('teaching-agent');
+    // 内部噪音与网关不得进入默认列表
+    expect(listed).not.toContain('skill:adaptive-guidance-copy');
+    expect(listed).not.toContain('skill:kc-mapper');
+    expect(listed).not.toContain('api-gateway');
+    expect(listed).not.toContain('system-call');
     // mock 不模拟 SQL 过滤，因此这里只断言 where 构造正确
+  });
+
+  it('capabilityType 分组从 manifest 派生：teaching/profile 命中真实 skill id（#218）', async () => {
+    agentLogMocks.findMany.mockResolvedValue([]);
+    const agentIdsFor = async (capabilityType: string): Promise<string[]> => {
+      const req: any = { user: { userId: 'user-1' }, query: { format: 'json', capabilityType } };
+      await routes['GET /me/agent-logs/export'](req, createResponse(), jest.fn());
+      return agentLogMocks.findMany.mock.calls.at(-1)?.[0]?.where?.agentId?.in as string[];
+    };
+
+    // 真实授课 id 是 skill:teaching-turn（manifest Teaching 组，线上 327 行）；
+    // 旧硬编码 id ai-teaching-agent 线上 0 行，曾让该筛选恒空。
+    const teaching = await agentIdsFor('teaching');
+    expect(teaching).toContain('skill:teaching-turn');
+    expect(teaching).not.toContain('ai-teaching-agent');
+
+    const profile = await agentIdsFor('profile');
+    expect(profile).toContain('skill:learner-model');
+    expect(profile).not.toContain('learner-model-agent');
+
+    const path = await agentIdsFor('path');
+    expect(path).toContain('skill:path-planning');
+    expect(path).toContain('path-agent');
+
+    // tutoring / tracking 在 manifest 里没有对应监控组：显式空数组 ——
+    // 若删键，capabilityType 不命中就会退化成「不筛选、返回全部日志」。
+    expect(await agentIdsFor('tutoring')).toEqual([]);
+    expect(await agentIdsFor('tracking')).toEqual([]);
+    expect(await agentIdsFor('system')).toEqual(['system-call', 'unknown']);
   });
 
   it('path-agent 阶段流水用 sourceConversationId 并入 path 组，且 phase 透传到明细', async () => {
@@ -341,5 +377,94 @@ describe('users agent log routes', () => {
     expect(ids1.some((id: string) => ids2.includes(id))).toBe(false);
     expect(res1.body?.data?.pagination).toEqual({ page: 1, limit: 2, total: 3, totalPages: 2 });
     expect(res2.body?.data?.pagination).toEqual({ page: 2, limit: 2, total: 3, totalPages: 2 });
+  });
+
+  it('列表返回的每个折叠组 id 都能被详情端点取到（#220：合成组键不再 404）', async () => {
+    const mkLog = (id: string, agentId: string, calledAt: string, metadata: Record<string, any>) => ({
+      id,
+      agentId,
+      sourceEntry: 'platform',
+      calledAt: new Date(calledAt),
+      success: true,
+      errorCode: null,
+      durationMs: 1000,
+      metadata: JSON.stringify(metadata),
+      traceId: `trace-${id}`,
+    });
+    agentLogMocks.findMany.mockResolvedValue([
+      mkLog('g1', 'skill:goal-conversation', '2026-09-04T09:00:00.000Z', { conversationId: 'gc_conv1' }),
+      mkLog('g2', 'skill:goal-conversation', '2026-09-04T09:02:00.000Z', { conversationId: 'gc_conv1' }),
+      mkLog('p1', 'path-agent', '2026-09-04T09:05:00.000Z', { sourceConversationId: 'gc_path', phase: 'core' }),
+      mkLog('p2', 'path-agent', '2026-09-04T09:06:00.000Z', { sourceConversationId: 'gc_path', phase: 'stageDesign' }),
+    ]);
+
+    const listRes = createResponse();
+    await routes['GET /me/agent-logs']({ user: { userId: 'user-1' }, query: {} }, listRes, jest.fn());
+    const logs = listRes.body?.data?.logs ?? [];
+    expect(logs.map((l: any) => l.id).sort()).toEqual(['goal:gc_conv1', 'path:gc_path']);
+
+    // 契约：列表里声明可查的 id（折叠组键），详情端点必须 200 且返回同一组
+    for (const row of logs) {
+      agentLogMocks.findFirst.mockClear();
+      const detailRes = createResponse();
+      await routes['GET /me/agent-logs/:logId'](
+        { user: { userId: 'user-1' }, params: { logId: row.id } },
+        detailRes,
+        jest.fn()
+      );
+      expect(detailRes.statusCode).toBeUndefined();
+      expect(detailRes.body?.success).toBe(true);
+      expect(detailRes.body?.data?.id).toBe(row.id);
+      expect(detailRes.body?.data?.groupCount).toBe(row.groupCount);
+      expect(detailRes.body?.data?.groupItems).toHaveLength(row.groupCount);
+      // 组内明细与列表完全一致（真实子项 id 可直接用于单条详情）
+      expect(detailRes.body?.data?.groupItems.map((i: any) => i.id))
+        .toEqual(row.groupItems.map((i: any) => i.id));
+      // 组键走会话反查，不再拿合成键去主键表查
+      expect(agentLogMocks.findFirst).not.toHaveBeenCalled();
+    }
+
+    // 组明细保留 phase，与列表口径一致
+    const pathDetail = createResponse();
+    await routes['GET /me/agent-logs/:logId'](
+      { user: { userId: 'user-1' }, params: { logId: 'path:gc_path' } },
+      pathDetail,
+      jest.fn()
+    );
+    expect(pathDetail.body?.data?.groupItems.map((i: any) => i.phase)).toEqual(['core', 'stageDesign']);
+  });
+
+  it('真实主键 id 的详情仍走主键查询（#220 不改变非折叠行）', async () => {
+    agentLogMocks.findFirst.mockResolvedValue({ id: 'acl_real', agentId: 'skill:teaching-turn' });
+    const res = createResponse();
+
+    await routes['GET /me/agent-logs/:logId'](
+      { user: { userId: 'user-1' }, params: { logId: 'acl_real' } },
+      res,
+      jest.fn()
+    );
+
+    expect(agentLogMocks.findFirst).toHaveBeenCalledWith({
+      where: { id: 'acl_real', userId: 'user-1' }
+    });
+    expect(agentLogMocks.findMany).not.toHaveBeenCalled();
+    expect(res.body).toEqual({
+      success: true,
+      data: { id: 'acl_real', agentId: 'skill:teaching-turn' }
+    });
+  });
+
+  it('查不到任何真实行的组键仍返回 404（不伪造组详情）', async () => {
+    agentLogMocks.findMany.mockResolvedValue([]);
+    const res = createResponse();
+
+    await routes['GET /me/agent-logs/:logId'](
+      { user: { userId: 'user-1' }, params: { logId: 'path:gc_missing' } },
+      res,
+      jest.fn()
+    );
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body?.success).toBe(false);
   });
 });

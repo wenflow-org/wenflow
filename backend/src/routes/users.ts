@@ -12,14 +12,19 @@ import {
   findSubtasksByIds,
   listUserAgentLogsForGrouping,
   listUserAgentLogsForExport,
+  listUserAgentLogsByConversation,
   findUserAgentLogById,
   markOnboardingCompleted,
 } from '../services/users/user.repo';
+import {
+  parseAgentLogGroupId,
+  buildCollapsedAgentLogGroup,
+} from '../services/users/agent-log-grouping';
 import { rejectProjectionAccess } from '../middleware/projection-access.middleware';
 import { learnerSnapshotRefreshService } from '../services/learner/LearnerSnapshotRefreshService';
 import { getLevelFromXp } from '../services/learner/level.util';
 import { normalizeSessionDurationMinutes } from '../services/learning/learning.helpers';
-import { listAgentManifest } from '../services/agent-manifest.service';
+import { listAgentManifest, listUserListedAgentIds, type MonitoringGroupName } from '../services/agent-manifest.service';
 import { parseDayKeyRange } from '../services/time/day-boundary';
 import { loadTeachingMessagesForIds } from '../services/ai-teaching/teaching-session-message-store';
 
@@ -27,6 +32,35 @@ import { loadTeachingMessagesForIds } from '../services/ai-teaching/teaching-ses
 const INVALID_LOGIN_PASSWORD_HASH = '$2b$10$OAioDMuBkv4OiDj1OPaJse/r3xbZoGaxLWtBNBD6VSlBa5T4nwkdG';
 
 const router = express.Router();
+
+// capabilityType（前端「活动类型」筛选键）→ manifest 监控组。
+// agent id 的单一事实源是 manifest：此前这里是一张手写 id 表，teaching/tutoring/profile
+// 挂的是已废弃 id（ai-teaching-agent / ai-tutor / learner-model-agent，线上 0 行），
+// 真实授课 id 是 skill:teaching-turn（Teaching 组），于是按这三类筛选恒空。
+const CAPABILITY_MONITORING_GROUPS: Record<string, MonitoringGroupName> = {
+  goal: 'Goal',
+  path: 'Path',
+  teaching: 'Teaching',
+  profile: 'Profile'
+};
+
+function buildCapabilityAgentMap(): Record<string, string[]> {
+  const manifest = listAgentManifest();
+  const map: Record<string, string[]> = {};
+  for (const [capabilityType, group] of Object.entries(CAPABILITY_MONITORING_GROUPS)) {
+    map[capabilityType] = manifest
+      .filter((entry) => entry.monitoringGroup === group)
+      .map((entry) => entry.id);
+  }
+  // tutoring / tracking 在 manifest 里没有对应监控组（没有辅导、进度追踪 Agent），
+  // 显式保留空数组，维持「筛该项返回空」的既有行为：若删掉键，请求会因不命中
+  // `capabilityType in capabilityAgents` 而退化成不筛选，反而返回全部日志。
+  map.tutoring = [];
+  map.tracking = [];
+  // 平台底层调用不是 manifest 里的 agent/skill，保持原有口径
+  map.system = ['system-call', 'unknown'];
+  return map;
+}
 
 function buildAgentLogWhere(userId: string, query: any) {
   const agentId = query.agentId as string;
@@ -37,15 +71,7 @@ function buildAgentLogWhere(userId: string, query: any) {
   const endDate = query.endDate as string;
   const where: any = { userId };
 
-  const capabilityAgents: Record<string, string[]> = {
-    goal: ['skill:goal-conversation'],
-    path: ['skill:path-planning'],
-    teaching: ['ai-teaching-agent'],
-    tutoring: ['ai-tutor'],
-    tracking: [],
-    profile: ['learner-model-agent'],
-    system: ['system-call', 'unknown']
-  };
+  const capabilityAgents = buildCapabilityAgentMap();
 
   if (agentId) {
     where.agentId = agentId;
@@ -58,20 +84,12 @@ function buildAgentLogWhere(userId: string, query: any) {
   }
 
   if (includeSystem !== 'true' && !agentId && !capabilityType) {
-    // 非内部系统 agent：manifest userVisible=false 的内部 skill（kc-mapper/adaptive-guidance-copy/
-    // learner-model/virtual-learner-* 等）不进入用户 AI 任务列表，避免「copy/mapper」等噪音
-    const internalAgents = listAgentManifest()
-      .filter((a) => !a.userVisible)
-      .map((a) => a.id);
-    where.agentId = { notIn: [...internalAgents, 'system-call', 'unknown'] };
-    where.AND = [
-      {
-        OR: [
-          { executionLayer: null },
-          { executionLayer: { not: 'api-gateway' } }
-        ]
-      }
-    ];
+    // 默认「AI 任务记录」口径：只放行真实写日志的业务动作（manifest userListed）。
+    // 不能用 userVisible：它表示「是否顶层编排器」——goal-agent/teaching-agent 被放行却全表
+    // 0 行（真实调用记在 skill:goal-conversation / skill:teaching-turn 名下），默认视图结构性
+    // 只剩 path-agent。也不能用「排除内部 skill」的黑名单：清单外的网关/历史 id 会漏进来，
+    // 才需要 executionLayer 补丁。此处白名单同时天然排除 api-gateway / system-call / unknown。
+    where.agentId = { in: listUserListedAgentIds() };
   }
 
   if (startDate || endDate) {
@@ -620,6 +638,26 @@ router.get('/me/agent-logs/:logId', async (req, res, next) => {
   try {
     const userId = req.user.userId;
     const { logId } = req.params;
+
+    // #220：列表把同一会话折叠成一条，`id` 是合成组键（`path:`/`goal:<conversationId>`），
+    // 不是 agent_call_logs 主键，直接 findFirst 必然 404。按组键反查该会话的真实行，
+    // 用与列表一致的折叠口径重建成同一条组记录（含 groupItems / groupCount），
+    // 让列表返回的 id 保持稳定且可详查。
+    const groupId = parseAgentLogGroupId(logId);
+    if (groupId) {
+      const groupRows = await listUserAgentLogsByConversation(userId, groupId.conversationId);
+      const group = buildCollapsedAgentLogGroup(groupId.groupKey, groupRows);
+      if (!group) {
+        return res.status(404).json({
+          success: false,
+          error: { message: '日志不存在' }
+        });
+      }
+      return res.json({
+        success: true,
+        data: group
+      });
+    }
 
     const log = await findUserAgentLogById(logId, userId);
 

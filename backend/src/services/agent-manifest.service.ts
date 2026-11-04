@@ -44,7 +44,17 @@ export interface AgentManifestEntry {
   category: string;
   kind: AgentRuntimeKind;
   runtimeEnabled: boolean;
+  /**
+   * 是否顶层编排器（用于「官方 Agent 目录」等展示身份）。
+   * 注意：它**不**决定用户「AI 任务记录」默认列表是否可见——goal-agent/teaching-agent
+   * 为 true 只是展示身份，真实调用记在 skill:goal-conversation / skill:teaching-turn 名下。
+   */
   userVisible: boolean;
+  /**
+   * 是否进入用户默认「AI 任务记录」列表（GET /me/agent-logs 不带筛选时放行）。
+   * 只标**真实写日志的业务动作**；未标 = 不进默认列表（内部 skill / 平台底层调用）。
+   */
+  userListed?: boolean;
   monitoringGroup?: MonitoringGroupName;
   aliases?: string[];
   agentMembers?: string[];
@@ -80,6 +90,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     kind: 'agent',
     runtimeEnabled: true,
     userVisible: true,
+    // 唯一真正写日志（阶段流水）的顶层 Agent：goal-agent/teaching-agent 全表 0 行
+    userListed: true,
     monitoringGroup: 'Path'
     // agentMembers 由 prompts/skills.yaml parentAgent 派生（P1）
   },
@@ -127,6 +139,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     kind: 'skill',
     runtimeEnabled: true,
     userVisible: false,
+    // 用户发起的业务动作，默认列表可见（目标对话真实日志记在这里，不在 goal-agent）
+    userListed: true,
     monitoringGroup: 'Goal',
     aliases: ['goal-conversation-agent', 'goal-conversation'],
     ioContractVersion: 'agent-output-v1',
@@ -143,6 +157,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     kind: 'skill',
     runtimeEnabled: true,
     userVisible: false,
+    userListed: true,
     monitoringGroup: 'Path',
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.2, maxTokens: 64000 }
@@ -193,6 +208,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     kind: 'skill',
     runtimeEnabled: true,
     userVisible: false,
+    // 授课真实日志记在这里，不在 teaching-agent（后者全表 0 行）
+    userListed: true,
     monitoringGroup: 'Teaching',
     aliases: ['teaching-turn-agent'],
     ioContractVersion: 'agent-output-v1',
@@ -219,6 +236,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     kind: 'skill',
     runtimeEnabled: true,
     userVisible: false,
+    userListed: true,
     monitoringGroup: 'Teaching',
     aliases: ['session-wrapup-agent'],
     ioContractVersion: 'agent-output-v1',
@@ -724,6 +742,18 @@ export function getOfficialAgentDefinitionsForUsers() {
       description: item.description,
       category: item.category
     }));
+}
+
+/**
+ * 用户默认「AI 任务记录」列表（GET /me/agent-logs 不带筛选）放行的 agentId 集合。
+ * 口径 = 真实写日志的业务动作（manifest userListed），与「是否顶层编排器」（userVisible）解耦：
+ * goal-agent / teaching-agent 虽是 userVisible=true，但全表 0 行，放行它们只会让默认列表结构性
+ * 只剩 path-agent；api-gateway / kc-mapper / adaptive-guidance-copy 等内部行不在集合内，自然被排除。
+ */
+export function listUserListedAgentIds(): string[] {
+  return AGENT_MANIFEST
+    .filter(item => item.userListed && item.kind !== 'alias')
+    .map(item => item.id);
 }
 
 export function getMonitoringGroupMappings() {
