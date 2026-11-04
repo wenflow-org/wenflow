@@ -629,6 +629,10 @@
               </div>
               <MkChart :option="loadChartOption" height="260px" />
               <div v-if="loadDisplayDay" class="ld-load__info">
+                <!-- 2026-11-04：与上方「当前快照」配对补一处**可见**来源标——本行是 learning_metrics 的
+                     当日记录，两行同族指标各算各的（LF 实测 6.9 / 6.8），只在上方 title 里说明时，
+                     读者仍会把两行当成同一读数的两个值。 -->
+                <span class="ld-load__info-src">当日记录</span>
                 <b>{{ loadDisplayDay.label }}</b>
                 <span class="is-lss-t">LSS {{ loadFmt(loadDisplayDay.lss) }}</span>
                 <span class="is-lf-t">LF {{ loadFmt(loadDisplayDay.lf) }}</span>
@@ -1230,23 +1234,29 @@ const userRecord = ref<{ currentLevel: string; xp: number; pathCount: number; cr
  *  无响应依赖 → 运行时切主题时图谱 Edge/画布配色停在亮色。复用响应式 isDark
  *  （useIsDark 的 MutationObserver 跟随 data-theme），与同文件图表同源。 */
 const graphTheme = computed<'light' | 'dark'>(() => (isDark.value ? 'dark' : 'light'))
+/** 图谱加载序号：深链落图谱页签时，作用域回填会触发按当前路径重拉——首次按缺省（跨全部路径）
+    发出的那次若晚到，会把正确结果覆盖回去。last-wins 守卫（2026-11-04）。 */
+let graphLoadSeq = 0
 async function loadConceptGraph(userId: string, pathId: string | null = scopePathId.value || null) {
   if (!userId) return
+  const seq = ++graphLoadSeq
   graphLoading.value = true
   graphError.value = ''
   try {
     const res = await adminMemoryReviewApi.conceptGraph(userId, pathId ? { pathId } : undefined)
+    if (seq !== graphLoadSeq) return
     const data = res?.data?.data ?? res?.data ?? {}
     graphNodes.value = Array.isArray(data.nodes) ? data.nodes : []
     graphEdges.value = Array.isArray(data.edges) ? data.edges : []
     graphMeta.value = data.meta ?? null
   } catch (error) {
+    if (seq !== graphLoadSeq) return
     graphError.value = `概念图加载失败：${errMsg(error)}`
     graphNodes.value = []
     graphEdges.value = []
     graphMeta.value = null
   } finally {
-    graphLoading.value = false
+    if (seq === graphLoadSeq) graphLoading.value = false
   }
 }
 /** 路径轨已上移到页级（ld-scope）：同一个作用域同时管图与「概念掌握/证据/教学会话」，
@@ -1731,6 +1741,17 @@ async function loadDetail(id: string | undefined, opts: { soft?: boolean } = {})
       // 本次是「不带 pathId」的请求，故快照的 currentPath 就是该学习者自己的当前路径。
       // 按路径取值时不覆盖——那时 currentPath 反映的是所选路径，不是「当前路径」。
       if (!learnerCurrentPathId.value) learnerCurrentPathId.value = currentPathId.value
+      // 2026-11-04：深链/刷新直接落到「图谱」页签时，图会在本作用域落定**之前**就按缺省 pathId
+      // 拉一次——而 concept-graph 端点的缺省 pathId=null 是「跨全部路径并集」（本例 35），卡头却随
+      // 上面回填写成「当前路径」（本例应 16）：同一页既报 35 又标当前路径，与「概念掌握」卡的跨路径
+      // 台账数也对不上。作用域刚从空回填成当前路径、此刻又停在图谱页签 → 按该路径重拉（第一次的
+      // 结果由 loadConceptGraph 的序号守卫丢弃），与开关对齐。
+      if (tab.value === 'graph') {
+        graphNodes.value = []
+        graphEdges.value = []
+        graphMeta.value = null
+        void loadConceptGraph(String(id), currentPathId.value)
+      }
     }
     const progress = (currentPath.progress || {}) as Record<string, number>
     const globalSignals = (km.globalSignals || {}) as Record<string, unknown>
@@ -3563,6 +3584,8 @@ const snapshotHint = computed(() =>
 .ld-load__chip { margin-left: auto; font-size: var(--mk-fs-micro); font-weight: 800; padding: 2px 9px; border-radius: 999px; }
 .ld-load__info { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; font-size: var(--mk-fs-micro); color: var(--mk-muted); border-top: 1px dashed var(--mk-line); padding-top: 8px; }
 .ld-load__info b { color: var(--mk-ink); }
+/* 当日记录来源标（2026-11-04）：与上方「当前快照」配对，两行各标来源、不再只靠悬停区分 */
+.ld-load__info-src { align-self: center; color: var(--mk-muted); font-size: var(--mk-fs-micro); margin-right: 4px; }
 .ld-load__info .is-lss-t { color: var(--mk-blue); font-weight: 700; }
 .ld-load__info .is-lf-t { color: var(--mk-red); font-weight: 700; }
 .ld-load__info .is-lsb-t { color: var(--mk-green); font-weight: 700; }
