@@ -555,6 +555,9 @@
 
         <!-- 输入区 -->
         <div class="composer">
+          <!-- #224：本页编辑器与编辑态 textarea 共用 800 上限，后端在
+               backend/src/routes/ai-teaching.routes.ts 以 TEACHING_MESSAGE_MAX_CHARS=800
+               同口径强制（超限 400）；改一处必须同步改另一处。 -->
           <div class="composer__box">
             <textarea
               ref="composerEl"
