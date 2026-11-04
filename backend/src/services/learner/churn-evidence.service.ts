@@ -91,13 +91,14 @@ export async function recordChurnRiskAtFinalize(params: {
     // 站内轻提醒：cooling/dormant 发（lost 不发——触达可能已流失的人须另行取得同意）
     let notified = false;
     if (signal.bucket === 'cooling' || signal.bucket === 'dormant') {
+      // 2026-11-04 文案改口径：通知正文只说状态与动作，去掉陪伴/预设心理的措辞
       await prisma.notifications.create({
         data: {
           userId: params.userId,
-          title: signal.bucket === 'cooling' ? '几天没见，学习进度都帮你留着' : '好久不见，路径还在原地等你',
+          title: signal.bucket === 'cooling' ? '已有几天未开始学习' : '已有较长时间未开始学习',
           body: signal.bucket === 'cooling'
-            ? '回来从上次结束的地方继续就行，不需要从头开始。'
-            : '之前的路径和笔记都还在。可以接着学，也可以重新定一个方向。',
+            ? '距上次学习已有数日，学习进度已保留。可从上次结束处继续。'
+            : '距上次学习已有较长时间，之前的路径和笔记仍在。可继续原路径，也可重新选择方向。',
           kind: 'system',
         },
       });
