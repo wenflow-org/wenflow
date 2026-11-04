@@ -19,6 +19,7 @@ import {
   triageGoalResponse,
 } from './response-triage';
 import { buildCompletedConversationResult, buildHardBlockMessage } from './goal-conversation.exit';
+import { getPathCompletionProjection } from './goal-conversation.path-projection';
 import learningService from './learning.service';
 
 /** service 侧 GoalConversationOptions 的结构子集（重判链路只读 meta / systemPromptOverrides 并原样透传） */
@@ -91,7 +92,7 @@ export interface GoalConversationRejudgeDeps {
   buildConfirmedResult: (
     conversationId: string,
     data: Record<string, unknown>,
-    learningPath: { id: string; status?: string } | null
+    learningPath: { id: string; status?: string; lifecycle?: string | null } | null
   ) => unknown;
 }
 
@@ -343,18 +344,20 @@ export async function rejudgeHardBlockedCompletion(
     const refreshed = await prisma.goal_conversations.findUnique({ where: { id: conversation.id } });
     if (refreshed?.learningPathId) {
       const refreshedData = refreshed.collectedData ? JSON.parse(refreshed.collectedData) : latestData;
-      const winnerPath = await prisma.learning_paths.findFirst({ where: { id: refreshed.learningPathId } });
+      // #228：与 service 侧确认复用同一投影（权威行 + 活动 run 推导的 lifecycle），
+      // 避免这条并发落败支路只看 status 而谎称「已生成」。
+      const winnerPath = await getPathCompletionProjection(refreshed.learningPathId);
       return deps.buildConfirmedResult(
         conversation.id,
         refreshedData,
-        winnerPath ? { id: winnerPath.id, status: winnerPath.status } : null
+        winnerPath ? { id: winnerPath.id, status: winnerPath.status, lifecycle: winnerPath.lifecycle } : null
       );
     }
     return buildCompletedConversationResult({
       conversationId: conversation.id,
       collectedData: refreshed?.collectedData ?? null,
       learningPathId: refreshed?.learningPathId ?? null,
-      findPath: (id) => prisma.learning_paths.findFirst({ where: { id } }),
+      findPath: (id) => getPathCompletionProjection(id),
     });
   }
 

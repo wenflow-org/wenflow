@@ -83,7 +83,8 @@ export async function buildCompletedConversationResult(input: {
   conversationId: string;
   collectedData: string | null;
   learningPathId: string | null;
-  findPath: (id: string) => Promise<{ id: string; status: string } | null>;
+  /** lifecycle 是权威信号（活动 run 推导，见 resolvePathCompletionUserVisible），由调用方投影后注入 */
+  findPath: (id: string) => Promise<{ id: string; status: string; lifecycle?: string | null } | null>;
 }) {
   const data = JSON.parse(input.collectedData || '{}');
   const triage = resolveResponseTriageFromCollectedData(data);
@@ -100,13 +101,25 @@ export async function buildCompletedConversationResult(input: {
   }
 
   let learningPath = null;
+  let pathLifecycle: string | null = null;
+  let pathStatus: string | null = null;
   if (input.learningPathId) {
     const path = await input.findPath(input.learningPathId);
-    if (path) learningPath = { id: path.id, status: path.status };
+    if (path) {
+      learningPath = { id: path.id, status: path.status };
+      pathStatus = path.status;
+      pathLifecycle = path.lifecycle ?? null;
+    }
   }
 
   return {
-    userVisible: '学习路径已经生成，可以去查看啦！',
+    // #228 残余：这条早退分支原先写死「已生成」，与同一响应体里的 learningPath.status 自相矛盾。
+    // 现在与 GET 快照共用同一个分支函数：只有 lifecycle=ready 才说已生成。
+    userVisible: resolvePathCompletionUserVisible({
+      lifecycle: pathLifecycle,
+      status: pathStatus,
+      readyText: PATH_COMPLETED_USER_VISIBLE,
+    }),
     internal: {
       core: {
         conversationId: input.conversationId,
@@ -137,14 +150,45 @@ export const PATH_GENERATING_USER_VISIBLE =
 /** 路径生成失败时的用户可见文案：如实说失败并可重试，绝不说已生成（#223）。 */
 const PATH_GENERATION_FAILED_USER_VISIBLE = '学习路径生成失败，可前往“学习路径”重试。';
 
+/** 路径确已就绪时的用户可见文案（/reply 早退与确认同步返回共用同一句）。 */
+export const PATH_COMPLETED_USER_VISIBLE = '学习路径已经生成，可以去查看啦！';
+
 /**
- * GET 快照的 userVisible（#213 / #221 / #223）：字段语义是「用户可见的结果」，不能落成
+ * 路径完成态文案的**唯一分档**（#223 残余 / #228）——GET 快照与 /reply 都走这里，避免两处各写一套。
+ *
+ * 权威入参是 `lifecycle`（活动 run 推导：`ready | core_processing | stage_design_processing |
+ * stage_design_failed | …`，见 getPathGenerationLifecycle），**不是** `learning_paths.status`：
+ * status 在 stage design 窗口恒为 `active`（core 落库时就置 active），只用它必然在 25-50 秒的
+ * 阶段设计窗口里谎称「已生成」，与 `/paths/:id/generation-status` 互相打架。
+ *
+ * - `ready` → readyText（已生成的句式由调用方给：GET 是「学习路径已生成：<名字>」）；
+ * - `*_failed` → 失败文案；
+ * - 其余（core/stage_design 的 processing / queued / stale）→ 正在生成文案（与 /reply 同源常量）；
+ * - `lifecycle` 拿不到时退回 `status`（generating / failed）判定，都拿不到才按 readyText（保持旧行为）。
+ */
+export function resolvePathCompletionUserVisible(input: {
+  lifecycle?: string | null;
+  status?: string | null;
+  readyText: string;
+}): string {
+  const lifecycle = typeof input.lifecycle === 'string' && input.lifecycle.length > 0 ? input.lifecycle : null;
+  if (lifecycle) {
+    if (lifecycle === 'ready') return input.readyText;
+    if (lifecycle.endsWith('_failed')) return PATH_GENERATION_FAILED_USER_VISIBLE;
+    return PATH_GENERATING_USER_VISIBLE;
+  }
+  if (input.status === 'generating') return PATH_GENERATING_USER_VISIBLE;
+  if (input.status === 'failed') return PATH_GENERATION_FAILED_USER_VISIBLE;
+  return input.readyText;
+}
+
+/**
+ * GET 快照的 userVisible（#213 / #221 / #223 / #228）：字段语义是「用户可见的结果」，不能落成
  * HTTP 层占位串。按状态给值：
  *
- * - 已完成 + 已绑路径 + 路径 status 为 generating：生成中文案（与 /reply 同源）；
- * - 已完成 + 已绑路径 + 路径 status 为 failed：如实报失败，不谎称已生成；
- * - 已完成 + 已绑路径 + 其它（active 等已完成态）：`学习路径已生成：<名字>`（与
- *   output-normalizer 同款文案）；
+ * - 已完成 + 已绑路径：按 `learningPath.lifecycle` 分档（见 resolvePathCompletionUserVisible）——
+ *   只有 ready 才说「学习路径已生成：<名字>」；生成中（core / stage design 窗口）说正在生成；
+ *   失败（含 stage design 失败）如实报失败。只用 status 判定会在阶段设计窗口谎称已生成（#228）；
  * - 已完成 + 未绑路径 + 存档分诊判硬阻断：复用 /reply 同源的 buildHardBlockResult
  *   重建拒绝文案（#213：保证「当场返回」与「刷新重建」逐字一致）；
  * - 已完成 + 未绑路径 + 非硬阻断：返回 null（无用户可见的终局文案，不臆造）；
@@ -157,16 +201,18 @@ export function resolveConversationUserVisible(input: {
   status: string;
   collectedData: string | null;
   learningPathId: string | null;
-  learningPath: { id: string; name?: string | null; status?: string | null } | null;
+  learningPath: { id: string; name?: string | null; status?: string | null; lifecycle?: string | null } | null;
   messages: Array<{ role?: unknown; content?: unknown }> | null | undefined;
 }): string | null {
   if (input.status === 'completed') {
     if (input.learningPath) {
-      // 会话 completed 只说明确认已落库，不等于路径已生成（#223）：占位路径在确认时
-      // 就已绑定且 status='generating'，必须按路径自身的 status 说话。
-      if (input.learningPath.status === 'generating') return PATH_GENERATING_USER_VISIBLE;
-      if (input.learningPath.status === 'failed') return PATH_GENERATION_FAILED_USER_VISIBLE;
-      return `学习路径已生成：${input.learningPath.name || '未命名路径'}`;
+      // 会话 completed 只说明确认已落库，不等于路径已生成（#223/#228）：占位路径在确认时就已绑定，
+      // 权威信号是活动 run 推导的 lifecycle（status 在 stage design 窗口恒为 active）。
+      return resolvePathCompletionUserVisible({
+        lifecycle: input.learningPath.lifecycle,
+        status: input.learningPath.status,
+        readyText: `学习路径已生成：${input.learningPath.name || '未命名路径'}`,
+      });
     }
     // 已绑路径但权威行缺失：既不谎称「已生成」，也不误落硬阻断拒绝文案。
     if (input.learningPathId) return null;

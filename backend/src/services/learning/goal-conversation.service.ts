@@ -34,7 +34,8 @@ import {
   type ResponseTriageEnforcementMode,
 } from './response-triage';
 import { assembleGoalHandoff } from '../../services/field-dispatcher';
-import { buildCompletedConversationResult, buildHardBlockMessage, buildHardBlockResult, PATH_GENERATING_USER_VISIBLE, resolveConversationUserVisible } from './goal-conversation.exit';
+import { buildCompletedConversationResult, buildHardBlockMessage, buildHardBlockResult, PATH_COMPLETED_USER_VISIBLE, PATH_GENERATING_USER_VISIBLE, resolveConversationUserVisible, resolvePathCompletionUserVisible } from './goal-conversation.exit';
+import { getPathCompletionProjection } from './goal-conversation.path-projection';
 import learningService from './learning.service';
 import { bindGeneratingPath, kickPathGeneration, rejudgeHardBlockedCompletion, type GoalConversationRejudgeDeps } from './goal-conversation-rejudge';
 import { createDomainEvent } from '../../events/contracts';
@@ -434,20 +435,27 @@ class GoalConversationService {
   private buildConfirmedResult(
     conversationId: string,
     data: Record<string, any>,
-    learningPath: { id: string; status?: string } | null
+    learningPath: { id: string; status?: string; lifecycle?: string | null } | null
   ) {
-    const generating = !learningPath || learningPath.status === 'generating';
+    // #228：与 GET 快照 / /reply 早退共用同一个分档函数（原先此处另写一份 status 判定）；
+    // 未绑路径时保持「正在生成」，绝不谎称已生成。
+    const userVisible = learningPath
+      ? resolvePathCompletionUserVisible({
+          lifecycle: learningPath.lifecycle,
+          status: learningPath.status,
+          readyText: PATH_COMPLETED_USER_VISIBLE,
+        })
+      : PATH_GENERATING_USER_VISIBLE;
     return {
-      userVisible: generating
-        ? PATH_GENERATING_USER_VISIBLE
-        : '学习路径已经生成，可以去查看啦！',
+      userVisible,
       internal: {
         core: {
           conversationId,
           stage: 'completed',
           confidence: data.confidence || 0.9,
           isCompleted: true,
-          learningPath
+          // lifecycle 只是文案的输入，不进响应信封（保持既有 payload 形状）
+          learningPath: learningPath ? { id: learningPath.id, status: learningPath.status } : null
         },
         ext: {
           goalConversation: {
@@ -466,12 +474,12 @@ class GoalConversationService {
     const latest = await prisma.goal_conversations.findUnique({ where: { id: conversationId } });
     const latestData = latest?.collectedData ? JSON.parse(latest.collectedData) : fallbackData;
     const winnerPath = latest?.learningPathId
-      ? await prisma.learning_paths.findFirst({ where: { id: latest.learningPathId } })
+      ? await getPathCompletionProjection(latest.learningPathId)
       : null;
     return this.buildConfirmedResult(
       conversationId,
       latestData,
-      winnerPath ? { id: winnerPath.id, status: winnerPath.status } : null
+      winnerPath ? { id: winnerPath.id, status: winnerPath.status, lifecycle: winnerPath.lifecycle } : null
     );
   }
 
@@ -603,7 +611,9 @@ async continueConversation(
             conversationId,
             collectedData: conversation.collectedData,
             learningPathId: conversation.learningPathId,
-            findPath: (id) => prisma.learning_paths.findFirst({ where: { id } }),
+            // #228：文案的权威信号是 lifecycle（活动 run 推导），不是路径 status——
+            // 这里注入的投影与 GET 快照同源，保证同一状态两接口给同一口径。
+            findPath: (id) => getPathCompletionProjection(id),
           });
         }
 
@@ -657,9 +667,13 @@ async continueConversation(
           // 幂等快路径（审计 §1.4）：该对话已确认过（并发重试/双击的第二次请求）→
           // 直接复用已存在的路径，不再新建占位路径。
           if (conversation.learningPathId) {
-            const existingPath = await prisma.learning_paths.findFirst({ where: { id: conversation.learningPathId } });
+            const existingPath = await getPathCompletionProjection(conversation.learningPathId);
             if (existingPath) {
-              return this.buildConfirmedResult(conversationId, data, { id: existingPath.id, status: existingPath.status });
+              return this.buildConfirmedResult(conversationId, data, {
+                id: existingPath.id,
+                status: existingPath.status,
+                lifecycle: existingPath.lifecycle,
+              });
             }
           }
 
@@ -1622,15 +1636,15 @@ async continueConversation(
 
     // 已绑路径的会话不信 collectedData 里冻结的 learningPath（#211）：确认时只写入一次
     // status:'generating'，异步生成完成回调不回写，冻结值会永久停在「生成中」，与 /reply 及
-    // GET /api/learning/paths/:id 自相矛盾。这里改用权威 learning_paths 鲜查状态（与
-    // buildCompletedConversationResult 同源），不新增写路径；未绑路径时保持旧的原样回吐。
+    // GET /api/learning/paths/:id 自相矛盾。这里改用权威行鲜查（与 buildCompletedConversationResult
+    // 同源）；#228：status 在 stage design 窗口恒为 active，故连同活动 run 推导的 lifecycle 一起投影。
     let learningPath = data.learningPath || (conversation.learningPathId ? { id: conversation.learningPathId } : null);
-    let learningPathForVisible: { id: string; name?: string | null; status?: string | null } | null = null;
+    let learningPathForVisible: { id: string; name?: string | null; status?: string | null; lifecycle?: string | null } | null = null;
     if (conversation.learningPathId) {
-      const path = await prisma.learning_paths.findFirst({ where: { id: conversation.learningPathId } });
-      learningPath = path ? { id: path.id, status: path.status } : null;
-      // #223：status 一并带给文案函数——会话 completed 不代表路径已生成。
-      learningPathForVisible = path ? { id: path.id, name: path.name || path.title || null, status: path.status } : null;
+      const projection = await getPathCompletionProjection(conversation.learningPathId);
+      learningPath = projection ? { id: projection.id, status: projection.status } : null;
+      // lifecycle 只喂给文案函数，不落进响应的 learningPath（保持既有 payload 形状）
+      learningPathForVisible = projection ? { ...projection } : null;
     }
 
     // #213/#221：GET 快照的 userVisible 按状态取值——硬阻断重建拒绝文案，已有路径给
