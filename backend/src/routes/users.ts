@@ -12,12 +12,14 @@ import {
   findSubtasksByIds,
   listUserAgentLogsForGrouping,
   listUserAgentLogsForExport,
+  listAgentLogModelRowsByTraceIds,
   findUserAgentLogById,
   markOnboardingCompleted,
 } from '../services/users/user.repo';
 import {
   parseAgentLogGroupId,
   collapseAgentLogGroups,
+  collectAgentLogTraceIds,
 } from '../services/users/agent-log-grouping';
 import { rejectProjectionAccess } from '../middleware/projection-access.middleware';
 import { learnerSnapshotRefreshService } from '../services/learner/LearnerSnapshotRefreshService';
@@ -43,6 +45,49 @@ const CAPABILITY_MONITORING_GROUPS: Record<string, MonitoringGroupName> = {
   profile: 'Profile'
 };
 
+// #229：capabilityType 的合法键 = manifest 派生的四个能力组 + 三个显式键（tutoring/tracking/system）。
+// 修复前未知值（`x` / `tutoring2`）与大小写变体（`Teaching` / `PROFILE`）既不命中能力分支、
+// 又因是「真值」而跳过默认白名单，where 退化成 { userId }，等价于 includeSystem=true 的全量日志
+// （api-gateway 与内部 skill 全部漏出）。现在大小写变体归一后按合法键处理（明确等价），
+// 其余未知值明确拒绝（400 VALIDATION_ERROR）并回列允许值——静默退化是最差的选项。
+const CAPABILITY_TYPES = [
+  ...Object.keys(CAPABILITY_MONITORING_GROUPS),
+  'tutoring',
+  'tracking',
+  'system'
+];
+
+// 用可选字段而非 `ok: true/false` 判别式联合：本仓库 strictNullChecks=false，
+// 布尔字面量判别式在这套 tsconfig 下不做收窄（已用 tsc 验证），读 `message` 会编译报错。
+type CapabilityTypeParseResult = { capabilityType?: string; error?: string };
+
+/**
+ * 校验并归一化 capabilityType 查询参数。
+ * - 未传 / 空串（含纯空白）= 不筛选，走默认 userListed 白名单（既有口径，`capabilityType=` 与不传同义）；
+ * - 大小写变体按小写归一后命中合法键（`Teaching` ≡ `teaching`，明确等价而非静默全量）；
+ * - 其余（含非字符串，如重复参数成数组）= 未知值，返回可回给调用方的 400 消息。
+ */
+function parseCapabilityTypeQuery(raw: unknown): CapabilityTypeParseResult {
+  const allowed = CAPABILITY_TYPES.join('、');
+  if (raw === undefined || raw === null) return { capabilityType: undefined };
+  if (typeof raw !== 'string') {
+    return { error: `capabilityType 只能是单个字符串。允许值：${allowed}` };
+  }
+  const normalized = raw.trim().toLowerCase();
+  if (!normalized) return { capabilityType: undefined };
+  if (!CAPABILITY_TYPES.includes(normalized)) {
+    return { error: `capabilityType 无效：${raw}。允许值：${allowed}` };
+  }
+  return { capabilityType: normalized };
+}
+
+function sendAgentLogValidationError(res: any, message: string) {
+  return res.status(400).json({
+    success: false,
+    error: { message, code: 'VALIDATION_ERROR', status: 400 }
+  });
+}
+
 function buildCapabilityAgentMap(): Record<string, string[]> {
   const manifest = listAgentManifest();
   const userListed = new Set(listUserListedAgentIds());
@@ -56,8 +101,9 @@ function buildCapabilityAgentMap(): Record<string, string[]> {
       .map((entry) => entry.id);
   }
   // tutoring / tracking 在 manifest 里没有对应监控组（没有辅导、进度追踪 Agent），
-  // 显式保留空数组，维持「筛该项返回空」的既有行为：若删掉键，请求会因不命中
-  // `capabilityType in capabilityAgents` 而退化成不筛选，反而返回全部日志。
+  // 显式保留空数组，维持「筛该项返回空」的既有行为，这一条现在由 #229 的两道保险共同守住：
+  // parseCapabilityTypeQuery 认它们是**合法键**，所以键必须映射到一个（空）集合——
+  // 若删掉键，合法请求会落到 `{ in: undefined }`（Prisma 报错），而不是像修复前那样退化成全量。
   map.tutoring = [];
   map.tracking = [];
   // 平台底层调用不是 manifest 里的 agent/skill（也就不在 userListed 白名单里），
@@ -66,9 +112,12 @@ function buildCapabilityAgentMap(): Record<string, string[]> {
   return map;
 }
 
-function buildAgentLogWhere(userId: string, query: any) {
+/**
+ * @param capabilityType 已经过 parseCapabilityTypeQuery 校验归一化的值（undefined = 不按能力筛）。
+ *   不在这里再解析原始 query：分支只认合法键，未知值在路由层已被 400 拒绝。
+ */
+function buildAgentLogWhere(userId: string, query: any, capabilityType?: string) {
   const agentId = query.agentId as string;
-  const capabilityType = query.capabilityType as string;
   const success = query.success as string;
   const includeSystem = query.includeSystem as string;
   const startDate = query.startDate as string;
@@ -79,21 +128,23 @@ function buildAgentLogWhere(userId: string, query: any) {
 
   if (agentId) {
     where.agentId = agentId;
-  } else if (capabilityType && capabilityType in capabilityAgents) {
+  } else if (capabilityType) {
+    // #229：合法键必在 map 里。四个能力组的集合本身就是在 listUserListedAgentIds() 内再筛
+    // （见 buildCapabilityAgentMap），所以「能力筛选 ⊆ 默认白名单」由构造保证，不靠两条 if 恰好配合。
     where.agentId = { in: capabilityAgents[capabilityType] };
-  }
-
-  if (success !== undefined) {
-    where.success = success === 'true';
-  }
-
-  if (includeSystem !== 'true' && !agentId && !capabilityType) {
+  } else if (includeSystem !== 'true') {
     // 默认「AI 任务记录」口径：只放行真实写日志的业务动作（manifest userListed）。
     // 不能用 userVisible：它表示「是否顶层编排器」——goal-agent/teaching-agent 被放行却全表
     // 0 行（真实调用记在 skill:goal-conversation / skill:teaching-turn 名下），默认视图结构性
     // 只剩 path-agent。也不能用「排除内部 skill」的黑名单：清单外的网关/历史 id 会漏进来，
     // 才需要 executionLayer 补丁。此处白名单同时天然排除 api-gateway / system-call / unknown。
+    // #229：这条 else 分支是「不筛 agentId」的唯一出口前提——走到这里必然带白名单或能力集合，
+    // 只有 includeSystem=true 才允许 where 不带 agentId（显式请求底层日志）。
     where.agentId = { in: listUserListedAgentIds() };
+  }
+
+  if (success !== undefined) {
+    where.success = success === 'true';
   }
 
   if (startDate || endDate) {
@@ -408,13 +459,19 @@ router.get('/me/sessions', async (req, res, next) => {
    本函数只补一件事：服务把折叠组的 id 覆盖成合成组键（path:/goal:<convId>）后，组代表的真实
    主键不再可见，而前端「详情」用 `log.repLogId || log.id` 拉单条调用；故按代表行保留下来的
    身份字段（traceId/agentId/metadata）在同一批原始行里回查其主键。回查不到时留空，前端退回
-   组键——组键详情由 #220 支持，功能不受影响。这里不做任何去重/分组/排序，不构成第二份折叠实现。 */
-function buildAgentLogView(rows: any[]): any[] {
+   组键——组键详情由 #220 支持，功能不受影响。这里不做任何去重/分组/排序，不构成第二份折叠实现。
+
+   #230：「可见集过滤」与「元数据补全」分开。rows 仍按白名单取（业务动作才该出现在默认列表），
+   但模型名只写在 api-gateway 行的 metadata 上，而网关行不在白名单里、不在 rows 内。故按 rows
+   已选中的 traceId 集合另发一次补数查询取网关行（listAgentLogModelRowsByTraceIds，不受白名单
+   约束），只喂给折叠函数建模型索引——不进入展示/分组。 */
+async function buildAgentLogView(userId: string, rows: any[]): Promise<any[]> {
+  const modelRows = await listAgentLogModelRowsByTraceIds(userId, collectAgentLogTraceIds(rows));
   const rowsById = new Map<string, any>();
   for (const row of rows) {
     rowsById.set(String(row.id), row);
   }
-  return collapseAgentLogGroups(rows).map((group) => {
+  return collapseAgentLogGroups(rows, modelRows).map((group) => {
     const items: any[] = Array.isArray(group.groupItems) ? group.groupItems : [];
     // 单行/未归组的行：id 本身就是真实主键（服务只在折叠组上覆盖 id），无需补代表 id
     if (items.length === 0) return group;
@@ -435,7 +492,11 @@ router.get('/me/agent-logs', async (req, res, next) => {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     // limit 钳制（1-100），防止无上限分页拉全表
     const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 100);
-    const where = buildAgentLogWhere(userId, req.query);
+    // #229：capabilityType 先校验（未知值 400 + 列出允许值），再进 where 构造；
+    // 绝不把未识别的筛选键当「无筛选」放过去（那会退化成 includeSystem 级别的全量日志）。
+    const capability = parseCapabilityTypeQuery(req.query.capabilityType);
+    if (capability.error) return sendAgentLogValidationError(res, capability.error);
+    const where = buildAgentLogWhere(userId, req.query, capability.capabilityType);
 
     // #214 分页/总数须与「dedupe→会话折叠」后的组同口径：原始行数≠折叠组数。
     // 因此先取该用户全量（有上限）原始行，折叠成组后再对组做 slice/total。
@@ -443,7 +504,7 @@ router.get('/me/agent-logs', async (req, res, next) => {
 
     // #225：折叠管线单一事实源在 agent-log-grouping；列表/导出/详情共用同一个 buildAgentLogView，
     // 用同一条 buildAgentLogWhere 取数，两处 groupCount/groupItems/model 由构造保证一致。
-    const sortedGroups = buildAgentLogView(logs);
+    const sortedGroups = await buildAgentLogView(userId, logs);
 
     // total 与 logs 同口径：total = 折叠后的组数，分页切片也落在组上
     const total = sortedGroups.length;
@@ -471,10 +532,13 @@ router.get('/me/agent-logs/export', async (req, res, next) => {
   try {
     const userId = req.user.userId;
     const format = (req.query.format as string) || 'json';
-    const where = buildAgentLogWhere(userId, req.query);
+    // #229：导出口径与列表一致，同样拒绝未知 capabilityType（否则导出会绕过校验漏出全量日志）。
+    const capability = parseCapabilityTypeQuery(req.query.capabilityType);
+    if (capability.error) return sendAgentLogValidationError(res, capability.error);
+    const where = buildAgentLogWhere(userId, req.query, capability.capabilityType);
 
     // 2026-11-04：与列表同一折叠视图导出，避免页面记录数与导出记录数两套口径（12 vs 24）
-    const logs = buildAgentLogView(await listUserAgentLogsForExport(where));
+    const logs = await buildAgentLogView(userId, await listUserAgentLogsForExport(where));
 
     if (format === 'csv') {
       const headers = ['id', 'agentId', 'success', 'durationMs', 'tokensUsed', 'error', 'calledAt'];
@@ -520,9 +584,13 @@ router.get('/me/agent-logs/:logId', async (req, res, next) => {
     // groupItems / model 在列表与详情之间漂移，因此折叠只保留一份实现。
     const groupId = parseAgentLogGroupId(logId);
     if (groupId) {
-      const scopeWhere = buildAgentLogWhere(userId, req.query);
+      // #229：组详情也带同一组筛选（前端 buildFilterParams 复用），未知 capabilityType 同样拒绝，
+      // 否则这里会用退化成 { userId } 的 where 全量取数（响应仍只返回一个组，但取数口径被放宽）。
+      const capability = parseCapabilityTypeQuery(req.query.capabilityType);
+      if (capability.error) return sendAgentLogValidationError(res, capability.error);
+      const scopeWhere = buildAgentLogWhere(userId, req.query, capability.capabilityType);
       const logs = await listUserAgentLogsForGrouping(scopeWhere);
-      const group = buildAgentLogView(logs).find((entry) => entry.id === logId);
+      const group = (await buildAgentLogView(userId, logs)).find((entry) => entry.id === logId);
       if (!group) {
         return res.status(404).json({
           success: false,
