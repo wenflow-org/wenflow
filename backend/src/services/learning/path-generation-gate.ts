@@ -47,6 +47,19 @@ export interface GoalTriageEvidence {
   responseTriage?: ResponseTriage | null;
   understanding?: Record<string, unknown> | null;
   visibleSummary?: { platformJudgment?: string | null; skillNature?: string | null } | null;
+  /**
+   * 最后一条凭证来源（#227 复核补）：这条既有路径是**服务端生成管线**创建并尝试过的
+   * 存量**占位**路径（`aiGenerated=true`、有 `path_generation_runs` 记录、模板里从未出现
+   * `goalFinalPayload`）。它没有可解析的判定产物、目标描述也被服务端改写成学习者口径
+   * （与任何会话的 description 都不逐字相等），因此既解析不出结论、也补不上 #222 凭证；
+   * 若一并拒绝，这类「生成失败待救援」的路径会稳定 422（复核实测的回归）。
+   *
+   * 为什么它不可被攻击者利用：`POST /learning/paths` 建出的路径 `aiGenerated=false`、
+   * 没有任何 run、模板是显式「无 goal 判定」标记，**永远走不到这一档**；用户也无法
+   * 自行创建 `path_generation_runs` 行或改写模板。命中这一档时按「无更优结论」处理
+   * （即 `triageGoalResponse({})` 的默认路径判定），只用于放行服务端失败路径的救援。
+   */
+  serverGeneratedPlaceholder?: boolean;
 }
 
 export type GoalTriageDecision =
@@ -113,6 +126,13 @@ export function evaluateGoalTriageEvidence(
 
   const hasEvidence = !!responseTriage || !!visibleSummary || !!providedUnderstanding;
   if (!hasEvidence) {
+    // 存量服务端生成占位（失败救援档，见 `GoalTriageEvidence.serverGeneratedPlaceholder`）：
+    // 没有任何判定产物可解析，按「无更优结论」走默认分诊（`triageGoalResponse({})`），
+    // 与这条路径当初被创建时的口径一致——不把「生成失败」二次判成「无凭证」。
+    if (evidence?.serverGeneratedPlaceholder) {
+      const triage = triageGoalResponse({});
+      return { status: 'allowed', triage };
+    }
     return { status: 'unverified', message: GOAL_TRIAGE_REQUIRED_MESSAGE };
   }
 
@@ -150,8 +170,24 @@ export class GoalTriageRequiredError extends Error {
 }
 
 /**
- * 生成路径动作的唯一守卫：所有入口（goal 链、仿真、直生成 API、重建兜底）都在
- * `pathOrchestrator.generate` 里过这一道。命中即抛错，调用方不落库。
+ * 生成路径动作的守卫：命中即抛错，调用方不落库。`pathOrchestrator.generate` 用它守住
+ * goal 链 / 仿真 / 直生成 API / 重建 / 重试；重建类入口（学员端 regenerate、失败 retry、
+ * 管理端救援）还会在认领 run 之前用它做一次预检，好把拒绝变成 422 而不是后台失败。
+ *
+ * **不是**「所有生成动作都过这一道」：`learning.service` 的 core 自动恢复
+ * （`recoverStaleGeneratingPaths` → `this.generateLearningPath`）绕开 coordinator 直接
+ * 调生成，不经过本守卫。该旁路重放的是服务端自己落库的 `inputSnapshot`（用户无法注入
+ * 文本），故未纳入；这里如实记录，不再声称覆盖所有入口（#227 复核）。
+ *
+ * 准入前提分两类（#227 订正，此前文档声称「所有入口都在这一道」是不准确的）：
+ *  - **新建路径**：本次调用必须携带 goal 层判定凭证（`GoalTriageEvidence`）；
+ *  - **既有路径**（重新生成 / 整条重建 / 失败重试）：豁免的唯一前提是**这条路径自身
+ *    携带服务端产出的 goal 判定**（模板 `goalFinalPayload.visibleSummary` 的判定字段，
+ *    或它关联的已完成目标会话），或本次调用带了与目标绑定的服务端会话凭证。
+ *    「带 existingPathId」本身不是豁免理由——`POST /paths` 能用任意用户文本建出
+ *    `status=active`、0 里程碑、无 goal 产物的空壳路径，它同样是「一条已存在的行」。
+ *    路径侧凭证的解析在 `goal-triage-evidence.resolveGoalTriageEvidenceForExistingPath`
+ *    （读 DB，故不放在本纯函数模块里）。
  */
 export function assertPathGenerationAllowed(evidence: GoalTriageEvidence | null | undefined): void {
   const decision = evaluateGoalTriageEvidence(evidence);
@@ -161,4 +197,19 @@ export function assertPathGenerationAllowed(evidence: GoalTriageEvidence | null 
   if (decision.status === 'unverified') {
     throw new GoalTriageRequiredError(decision.message);
   }
+}
+
+/**
+ * `POST /learning/paths`（手工建路径，无任何 goal 层输入）落库时写入的显式标记：
+ * 「这条路径**没有** goal 判定」。此前该情形留下 `aiPromptTemplate = null`，
+ * 而「旧数据（可能是 goal 链产物）也常常是 null」，一个空值同时表示两件事（#227）。
+ * 现在空壳路径有显式 `goalJudgment: null`，闸门读侧据此直接判定无凭证、不再去猜。
+ */
+export const MANUAL_PATH_PROMPT_TEMPLATE = JSON.stringify({ source: 'manual', goalJudgment: null });
+
+/** 模板里是否带显式「无 goal 判定」标记（`POST /paths` 的空壳路径）。 */
+export function hasExplicitNoGoalJudgment(template: unknown): boolean {
+  if (!template || typeof template !== 'object') return false;
+  const record = template as Record<string, unknown>;
+  return record.source === 'manual' && record.goalJudgment === null;
 }

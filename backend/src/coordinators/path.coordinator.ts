@@ -20,7 +20,13 @@ import { partitionMaterialNeeds } from '../services/materials/material-need-orig
 import { findWebRecordByTitle, normalizeTitleForMatch } from '../services/materials/material-web-ingest.service';
 import { patchPathsWithAsyncMaterials, type AsyncMaterialPatch } from '../services/materials/material-async-collect.service';
 import { collectBriefsWithDeadline } from '../services/materials/material-brief.service';
-import { assertPathGenerationAllowed, type GoalTriageEvidence } from '../services/learning/path-generation-gate';
+import {
+  assertPathGenerationAllowed,
+  evaluateGoalTriageEvidence,
+  PathGenerationBlockedError,
+  type GoalTriageEvidence,
+} from '../services/learning/path-generation-gate';
+import { resolveGoalTriageEvidenceForPathId } from '../services/learning/goal-triage-evidence';
 import type { ResponseTriage } from '../services/learning/response-triage';
 import {
   getPathAgentInputConfig,
@@ -109,8 +115,9 @@ export interface PathGenerationInput {
     pathAgent?: string;
   };
   /**
-   * goal 层判定凭证（#217）：`generate` 是生成路径的唯一动作入口，所有调用方都必须
-   * 带上 goal 层产物（分诊结论 / understanding / visibleSummary），否则拒绝生成。
+   * goal 层判定凭证（#217）：`generate` 是生成路径的唯一动作入口。新建路径必须带
+   * goal 层产物（分诊结论 / understanding / visibleSummary），否则拒绝生成；
+   * 既有路径（重建/重试）除此之外还认**路径自身携带**的判定产物（#227，见 `generate`）。
    * `generateFromGoal` → `normalizeGoalRequest` 会自动注入；直生成入口由调用方提供。
    */
   goalTriage?: GoalTriageEvidence | null;
@@ -1059,16 +1066,32 @@ class PathCoordinator {
   }
 
   async generate(input: PathGenerationInput) {
-    // 生成路径动作的唯一闸门（#217）：没有 goal 层判定凭证就拒绝，命中硬阻断也拒绝。
+    // 生成路径动作的唯一闸门（#217/#222/#227）：没有 goal 层判定凭证就拒绝，命中硬阻断也拒绝。
     // 放在最前面，保证任何入口都不会先落库/先起后台生成。
     //
-    // 只约束**新建**路径（不带 existingPathId）。带 existingPathId 的是既有路径的
-    // 重新生成 / 整条重建 / 失败重试：那条链路的目标早已落库（`runGoalAsync(storedGoalRequest)`
-    // 自带 visibleSummary），而旧数据兜底分支（learning.ts 的 retry / rebuild / regenerate
-    // fallback 与 path-regeneration.service）手上没有任何 goal 层产物——若也要求凭证，
-    // 这些入口会稳定抛 GOAL_TRIAGE_REQUIRED 并被 markActiveGenerationFailed 记成失败。
-    // 它与本 issue 的攻击面无关：绕过需要的是「用任意文本**新建**一条路径」。
-    if (!input.existingPathId) {
+    // 既有路径（重新生成 / 整条重建 / 失败重试）的豁免前提**不是**「存在 existingPathId」，
+    // 而是「这条路径自身携带服务端产出的 goal 判定」：`POST /paths` 能用任意用户文本建出
+    // status=active、0 里程碑、无任何 goal 产物的空壳路径（#227），它同样是一条已存在的行，
+    // 豁免它等于给「建空壳 → regenerate?mode=rebuild-all」两步开后门。
+    // 因此既有路径只在两种情况放行：
+    //   1. 本次调用已携带判定凭证（goal 链重建自带 visibleSummary）；
+    //   2. 该路径自身能解析出判定产物（模板 visibleSummary / 关联目标会话），
+    //      或本次调用补了与目标绑定的服务端会话凭证（#222 那套）。
+    // 解析不出的旧数据/空壳路径在这里被拦下，不再先落库再失败。
+    if (input.existingPathId) {
+      const decision = evaluateGoalTriageEvidence(input.goalTriage);
+      if (decision.status === 'blocked') {
+        throw new PathGenerationBlockedError(decision.triage);
+      }
+      if (decision.status === 'unverified') {
+        const storedEvidence = await resolveGoalTriageEvidenceForPathId({
+          pathId: input.existingPathId,
+          userId: input.userId,
+          sourceConversationId: input.sourceConversationId,
+        });
+        assertPathGenerationAllowed(storedEvidence);
+      }
+    } else {
       assertPathGenerationAllowed(input.goalTriage);
     }
 

@@ -108,7 +108,12 @@ function basePath(overrides: Record<string, any> = {}) {
       goalFinalPayload: {
         rawGoal: '学会 TypeScript',
         sourceConversationId: 'conv-1',
-        visibleSummary: { realProblem: '写前端越来越吃力' },
+        // 真实 goal 链路径的模板投影带判定字段（#227：只认「解析得出判定结论」的凭证）
+        visibleSummary: {
+          realProblem: '写前端越来越吃力',
+          platformJudgment: 'judgeable_output',
+          skillNature: 'tool_operation',
+        },
         conversationHistory: [],
       },
     }),

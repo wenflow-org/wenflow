@@ -18,7 +18,10 @@ import pathOrchestrator from '../coordinators/path.coordinator';
 import { isPathMutationConflictError } from '../services/learning/path-mutation-safety';
 import { openSessionClearanceService } from '../services/learning/open-session-clearance.service';
 import { applyPathStructuralEdit, type PathStructuralEditInput } from '../services/learning/path-structural-edit.service';
-import { resolveGoalTriageEvidenceForUser } from '../services/learning/goal-triage-evidence';
+import {
+  assertExistingPathGoalTriageAllowed,
+  resolveGoalTriageEvidenceForUser,
+} from '../services/learning/goal-triage-evidence';
 import {
   buildGoalPathRequestFromConversation,
   buildStoredGoalPathRequest,
@@ -69,6 +72,20 @@ const sendPathMutationConflict = (res: express.Response, error: unknown) => {
       code: conflict.code,
       status: 409,
       ...(conflict.details ? { details: conflict.details } : {})
+    }
+  });
+  return true;
+};
+
+/** goal 层闸门的两种拒绝（#217/#222/#227）：均 422（语义错误而非服务端故障），文案原样透出。 */
+const sendGoalTriageRejection = (res: express.Response, error: any): boolean => {
+  if (error?.code !== 'GOAL_TRIAGE_REQUIRED' && error?.code !== 'GOAL_NOT_JUDGEABLE') return false;
+  res.status(422).json({
+    success: false,
+    error: {
+      message: error.message,
+      code: error.code,
+      ...(error.triage ? { responseTriage: error.triage } : {})
     }
   });
   return true;
@@ -410,9 +427,11 @@ router.post('/paths', async (req, res, next) => {
       description: data.description
     });
 
+    // #227 复核：手工建路径会在库里写「无 goal 判定」标记（`aiPromptTemplate`），
+    // 但它是内部 JSON blob，不该随 201 响应透出（改动前该字段是 null）。
     res.status(201).json({
       success: true,
-      data: path
+      data: stripPathGenerationInternals(path)
     });
   } catch (error: any) {
     if (error.name === 'ZodError') {
@@ -473,16 +492,7 @@ router.post('/paths/generate', llmGenerateUserLimiter, async (req, res, next) =>
     }
 
     // 分诊闸门的两种拒绝：均 422（语义错误而非服务端故障），文案原样透出。
-    if (error?.code === 'GOAL_TRIAGE_REQUIRED' || error?.code === 'GOAL_NOT_JUDGEABLE') {
-      return res.status(422).json({
-        success: false,
-        error: {
-          message: error.message,
-          code: error.code,
-          ...(error.triage ? { responseTriage: error.triage } : {})
-        }
-      });
-    }
+    if (sendGoalTriageRejection(res, error)) return;
 
     next(error);
   }
@@ -630,16 +640,33 @@ router.patch('/paths/:pathId/retry', async (req, res, next) => {
       });
     }
 
+    // 本次要下发的重建请求（只读查询，先建好再预检：预检判的就是它实际携带的凭证）
+    const storedGoalRequest = buildStoredGoalPathRequest(path)
+      || await buildGoalPathRequestFromConversation(path);
+
+    // #227 闸门预检（必须在认领 run 之前）：既有路径的豁免前提是「本次请求携带的 goal 凭证」
+    // 或「路径自身携带服务端 goal 判定」；空壳路径（POST /paths 任意文本）在这里 422、
+    // 不认领 run、不落库。凭证取「本次真正下发的那一个」（请求体优先，回落模板存储）。
+    const retrySourceConversationId = typeof req.body?.sourceConversationId === 'string' && req.body.sourceConversationId.trim()
+      ? req.body.sourceConversationId.trim()
+      : (extractStoredSourceConversationId(path.aiPromptTemplate) || null);
+    const existingPathEvidence = await assertExistingPathGoalTriageAllowed(path, retrySourceConversationId);
+
     const runId = await learningService.claimPathCoreGeneration(
       pathId,
       retry.expectedActiveGenerationRunId
     );
 
-    const storedGoalRequest = buildStoredGoalPathRequest(path)
-      || await buildGoalPathRequestFromConversation(path);
+    // 与预检用同一个凭证 id 下发，保证「预检放行 = coordinator 闸门放行」（否则会出现
+    // 「200 已返回、后台却被闸门拦下」的静默失败）。
+    const dispatchedConversationId = retrySourceConversationId || storedGoalRequest?.sourceConversationId;
 
     if (storedGoalRequest) {
-      pathOrchestrator.runGoalAsync({ ...storedGoalRequest, generationRunId: runId }, {
+      pathOrchestrator.runGoalAsync({
+        ...storedGoalRequest,
+        sourceConversationId: dispatchedConversationId,
+        generationRunId: runId
+      }, {
         onError: async (error) => {
           logger.error(`重试生成路径失败：${pathId}`, error);
           await learningService.markActiveGenerationFailed(pathId, error, runId);
@@ -647,14 +674,14 @@ router.patch('/paths/:pathId/retry', async (req, res, next) => {
       });
     } else {
       // 兜底：非 Goal 来源或旧数据缺少正式入口时，退回裸 Path 输入重试。
-      const sourceConversationId = extractStoredSourceConversationId(path.aiPromptTemplate);
       pathOrchestrator.runAsync({
         userId,
         description: path.description,
         subject: path.subject,
         deadline: path.deadline || undefined,
         deadlineText: path.deadlineText || undefined,
-        sourceConversationId,
+        sourceConversationId: dispatchedConversationId,
+        goalTriage: existingPathEvidence,
         existingPathId: pathId,
         generationRunId: runId,
         userProfile: {}
@@ -673,6 +700,7 @@ router.patch('/paths/:pathId/retry', async (req, res, next) => {
     });
   } catch (error: any) {
     if (sendPathMutationConflict(res, error)) return;
+    if (sendGoalTriageRejection(res, error)) return;
     next(error);
   }
 });
@@ -725,8 +753,6 @@ router.post('/paths/:pathId/regenerate', llmGenerateUserLimiter, async (req, res
           { status: 409, code: 'PATH_MUTATION_HAS_IN_PROGRESS' }
         ));
       }
-      const runId = await learningService.claimPathCoreGeneration(pathId, path.activeGenerationRunId, { allowCompleted: true });
-
       // 重建必须回灌 goal 结构化画像：只带 description 时规划器仅看得到污染单行
       // （surfaceGoal=原文拼接、conversationHistory=0、confirmedProposal 丢失），
       // 实测产出纯认知脚手架、零学科内容（半年英语/社交路径两案，2026-09-26）。
@@ -741,9 +767,24 @@ router.post('/paths/:pathId/regenerate', llmGenerateUserLimiter, async (req, res
       }
       rebuiltGoalRequest = rebuiltGoalRequest || buildStoredGoalPathRequest(path, adjustments);
 
+      // #227 闸门预检（必须在认领 run 之前）：整条重建此前只因「带 existingPathId」就整条
+      // 跳过唯一守卫，而 POST /paths 能用任意文本建出无 goal 产物的空壳路径——
+      // 于是「建空壳 → rebuild-all」两步就能拿到 4 里程碑/20 任务的完整可学路径。
+      // 现在豁免前提是「这条路径自身携带服务端 goal 判定」，或本次调用补服务端凭证（#222）。
+      const rebuildSourceConversationId = typeof req.body?.sourceConversationId === 'string' && req.body.sourceConversationId.trim()
+        ? req.body.sourceConversationId.trim()
+        : (extractStoredSourceConversationId(path.aiPromptTemplate) || null);
+      const existingPathEvidence = await assertExistingPathGoalTriageAllowed(path, rebuildSourceConversationId);
+
+      const runId = await learningService.claimPathCoreGeneration(pathId, path.activeGenerationRunId, { allowCompleted: true });
+
+      // 与预检用同一个凭证 id 下发，保证「预检放行 = coordinator 闸门放行」。
+      const dispatchedConversationId = rebuildSourceConversationId || rebuiltGoalRequest?.sourceConversationId;
+
       if (rebuiltGoalRequest) {
         pathOrchestrator.runRebuildFromGoalAsync({
           ...rebuiltGoalRequest,
+          sourceConversationId: dispatchedConversationId,
           adjustments: adjustments || undefined,
           existingPathId: pathId,
           generationRunId: runId,
@@ -761,7 +802,6 @@ router.post('/paths/:pathId/regenerate', llmGenerateUserLimiter, async (req, res
           }
         });
       } else {
-        const sourceConversationId = extractStoredSourceConversationId(path.aiPromptTemplate);
         // 基底用原始用户目标（goalFinalPayload.rawGoal / 会话 description），
         // 避免用已被历次重建污染的 path.description 造成「（整条重建）（整条重建）…」嵌套累积
         const parsedPromptTemplate = parsePromptTemplate(path.aiPromptTemplate);
@@ -778,7 +818,8 @@ router.post('/paths/:pathId/regenerate', llmGenerateUserLimiter, async (req, res
           subject: path.subject || undefined,
           deadline: path.deadline || undefined,
           deadlineText: path.deadlineText || undefined,
-          sourceConversationId,
+          sourceConversationId: dispatchedConversationId,
+          goalTriage: existingPathEvidence,
           existingPathId: pathId,
           generationRunId: runId,
           userProfile: {
@@ -841,27 +882,41 @@ router.post('/paths/:pathId/regenerate', llmGenerateUserLimiter, async (req, res
     }
 
     // 无学习进度 → 整路径重建（现有 replace-path 语义），补充说明注入 goal 请求
-    const runId = await learningService.claimPathCoreGeneration(pathId, path.activeGenerationRunId);
-
     const storedGoalRequest = buildStoredGoalPathRequest(path, adjustments)
       || await buildGoalPathRequestFromConversation(path);
 
+    // #227 闸门预检（必须在认领 run 之前）：同 rebuild-all，豁免前提是「本次请求携带的
+    // goal 凭证」或「路径自身携带服务端 goal 判定」；空壳路径在这里 422、零落库。
+    const regenerateSourceConversationId = typeof req.body?.sourceConversationId === 'string' && req.body.sourceConversationId.trim()
+      ? req.body.sourceConversationId.trim()
+      : (extractStoredSourceConversationId(path.aiPromptTemplate) || null);
+    const existingPathEvidence = await assertExistingPathGoalTriageAllowed(path, regenerateSourceConversationId);
+
+    const runId = await learningService.claimPathCoreGeneration(pathId, path.activeGenerationRunId);
+
+    // 与预检用同一个凭证 id 下发，保证「预检放行 = coordinator 闸门放行」。
+    const dispatchedConversationId = regenerateSourceConversationId || storedGoalRequest?.sourceConversationId;
+
     if (storedGoalRequest) {
-      pathOrchestrator.runGoalAsync({ ...storedGoalRequest, generationRunId: runId }, {
+      pathOrchestrator.runGoalAsync({
+        ...storedGoalRequest,
+        sourceConversationId: dispatchedConversationId,
+        generationRunId: runId
+      }, {
         onError: async (error) => {
           logger.error(`重新生成学习路径失败：${pathId}`, error);
           await learningService.markActiveGenerationFailed(pathId, error, runId);
         }
       });
     } else {
-      const sourceConversationId = extractStoredSourceConversationId(path.aiPromptTemplate);
       pathOrchestrator.runAsync({
         userId,
         description: path.description || path.title || path.name || '个性化学习路径',
         subject: path.subject || undefined,
         deadline: path.deadline || undefined,
         deadlineText: path.deadlineText || undefined,
-        sourceConversationId,
+        sourceConversationId: dispatchedConversationId,
+        goalTriage: existingPathEvidence,
         existingPathId: pathId,
         generationRunId: runId,
         userProfile: {
@@ -884,6 +939,7 @@ router.post('/paths/:pathId/regenerate', llmGenerateUserLimiter, async (req, res
     });
   } catch (error: any) {
     if (sendPathMutationConflict(res, error)) return;
+    if (sendGoalTriageRejection(res, error)) return;
     next(error);
   }
 });

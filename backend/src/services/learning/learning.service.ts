@@ -67,6 +67,7 @@ import {
 } from './generation/path-generation.core';
 import { enrichLearningPathWithAnderson } from './generation/stage-enrichment';
 import { ownerContextOverride } from './generation/owner-context';
+import { MANUAL_PATH_PROMPT_TEMPLATE } from './path-generation-gate';
 import {
   markTaskInProgress,
   assertTaskReadyForLearning,
@@ -621,6 +622,10 @@ class LearningService {
           name: data.name,
           title: data.title || data.name,
           description: data.description || '',
+          // 手工建的路径没有任何 goal 层输入，显式标记「无 goal 判定」（#227）。
+          // 此前留 aiPromptTemplate=null，而「旧数据（可能是 goal 链产物）也常是 null」，
+          // 一个空值同时表示两件事：重建闸门与人工复核都无从区分。
+          aiPromptTemplate: MANUAL_PATH_PROMPT_TEMPLATE,
           updatedAt: new Date()
         }
       });
