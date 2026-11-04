@@ -33,7 +33,7 @@ import {
   type ResponseTriageEnforcementMode,
 } from './response-triage';
 import { assembleGoalHandoff } from '../../services/field-dispatcher';
-import { buildCompletedConversationResult, buildHardBlockMessage, buildHardBlockResult, resolveCompletedConversationUserVisible } from './goal-conversation.exit';
+import { buildCompletedConversationResult, buildHardBlockMessage, buildHardBlockResult, resolveConversationUserVisible } from './goal-conversation.exit';
 import learningService from './learning.service';
 import { bindGeneratingPath, kickPathGeneration, rejudgeHardBlockedCompletion, type GoalConversationRejudgeDeps } from './goal-conversation-rejudge';
 import { createDomainEvent } from '../../events/contracts';
@@ -1598,16 +1598,20 @@ async continueConversation(
     // GET /api/learning/paths/:id 自相矛盾。这里改用权威 learning_paths 鲜查状态（与
     // buildCompletedConversationResult 同源），不新增写路径；未绑路径时保持旧的原样回吐。
     let learningPath = data.learningPath || (conversation.learningPathId ? { id: conversation.learningPathId } : null);
+    let learningPathForVisible: { id: string; name?: string | null } | null = null;
     if (conversation.learningPathId) {
       const path = await prisma.learning_paths.findFirst({ where: { id: conversation.learningPathId } });
       learningPath = path ? { id: path.id, status: path.status } : null;
+      learningPathForVisible = path ? { id: path.id, name: path.name || path.title || null } : null;
     }
 
-    // #213：已完成硬阻断会话的 userVisible 不再硬编码为「会话详情获取成功」——拒绝文案
-    // 此前只进 /reply 返回值，重载后无从重建。复用 /reply 同源构造（goal-conversation.exit）。
-    const userVisible = resolveCompletedConversationUserVisible({
+    // #213/#221：GET 快照的 userVisible 按状态取值——硬阻断重建拒绝文案，已有路径给
+    // 「学习路径已生成：<名字>」，进行中给最后一条 AI 回复；不再用 HTTP 占位串兜底。
+    const userVisible = resolveConversationUserVisible({
       conversationId: conversation.id, status: conversation.status,
       collectedData: conversation.collectedData, learningPathId: conversation.learningPathId,
+      learningPath: learningPathForVisible,
+      messages: data.messages,
     });
 
     return {

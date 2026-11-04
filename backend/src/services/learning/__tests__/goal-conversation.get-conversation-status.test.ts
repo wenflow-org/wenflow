@@ -121,7 +121,7 @@ describe('getConversation · 已完成会话的 userVisible 重建（#213）', (
     expect(mockPathFindFirst).not.toHaveBeenCalled();
   });
 
-  it('未完成会话：userVisible 保持 null（路由回退到通用确认语）', async () => {
+  it('进行中会话：userVisible 是最后一条 AI 消息（#221：不再是路由占位串）', async () => {
     mockGoalFindFirst.mockResolvedValue({
       id: 'gc-1',
       userId: 'user-1',
@@ -130,8 +130,72 @@ describe('getConversation · 已完成会话的 userVisible 重建（#213）', (
       status: 'active',
       revision: 1,
       learningPathId: null,
+      collectedData: JSON.stringify({
+        messages: [
+          { role: 'user', content: '我想学手冲' },
+          { role: 'ai', content: '先确认一下你平时用什么器具？' },
+          { role: 'user', content: 'V60' },
+        ],
+        understanding: {},
+        collected: {},
+      }),
+      completedAt: null,
+    });
+
+    const result = await goalConversationService.getConversation('gc-1', 'user-1');
+
+    expect(result.userVisible).toBe('先确认一下你平时用什么器具？');
+  });
+
+  it('进行中会话且没有任何 AI 消息：userVisible 为 null（不落占位串）', async () => {
+    mockGoalFindFirst.mockResolvedValue({
+      id: 'gc-1',
+      userId: 'user-1',
+      description: '随便聊聊',
+      stage: 'understanding',
+      status: 'active',
+      revision: 1,
+      learningPathId: null,
       collectedData: JSON.stringify({ messages: [], understanding: {}, collected: {} }),
       completedAt: null,
+    });
+
+    const result = await goalConversationService.getConversation('gc-1', 'user-1');
+
+    expect(result.userVisible).toBeNull();
+  });
+
+  it('已完成且有路径：userVisible 返回「学习路径已生成：<名字>」', async () => {
+    mockGoalFindFirst.mockResolvedValue({
+      id: 'gc-1',
+      userId: 'user-1',
+      description: '学会手冲咖啡',
+      stage: 'completed',
+      status: 'completed',
+      revision: 2,
+      learningPathId: 'lp-1',
+      collectedData: JSON.stringify({ messages: [], understanding: {}, collected: {} }),
+      completedAt: new Date(),
+    });
+    mockPathFindFirst.mockResolvedValue({ id: 'lp-1', status: 'active', name: '手冲咖啡入门', title: '手冲咖啡入门' });
+
+    const result = await goalConversationService.getConversation('gc-1', 'user-1');
+
+    expect(result.userVisible).toBe('学习路径已生成：手冲咖啡入门');
+    expect(result.userVisible).not.toBe('会话详情获取成功');
+  });
+
+  it('已完成、无路径且非硬阻断：userVisible 为 null（不落占位串）', async () => {
+    mockGoalFindFirst.mockResolvedValue({
+      id: 'gc-1',
+      userId: 'user-1',
+      description: '随便聊聊',
+      stage: 'completed',
+      status: 'completed',
+      revision: 2,
+      learningPathId: null,
+      collectedData: JSON.stringify({ messages: [], understanding: {}, collected: {} }),
+      completedAt: new Date(),
     });
 
     const result = await goalConversationService.getConversation('gc-1', 'user-1');
