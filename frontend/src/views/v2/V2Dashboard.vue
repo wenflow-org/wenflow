@@ -149,7 +149,7 @@
               <span class="action__from">来自路径「{{ primaryPath?.title }}」</span>
             </div>
             <h2 class="action__title">路径正在生成，稍等一下</h2>
-            <p class="action__desc">生成一般需要几分钟，完成后会直接出现今日行动。你也可以先去别的页面看看。</p>
+            <p class="action__desc">正在生成，完成后会直接出现今日行动。你也可以先去别的页面看看。</p>
             <div class="action__meta">
               <span class="tag">信息已保留</span>
             </div>

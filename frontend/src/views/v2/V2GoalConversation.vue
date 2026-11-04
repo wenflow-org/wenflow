@@ -530,7 +530,7 @@
 
         <div class="proposal__note">
           <span v-if="materialCount">已上传 {{ materialCount }} 份资料，生成路径时按目标相关性选用，其余保留在资料库。</span>
-          <span>确认后在本页生成，通常几分钟。失败可原地重试，信息不会丢。</span>
+          <span>确认后在本页生成。失败可原地重试，信息不会丢。</span>
           <AiContentNote />
         </div>
         </div><!-- /.proposal__body（内容滚动区） -->
@@ -561,7 +561,7 @@
         <h2 class="proposal__title">正在生成你的路径…</h2>
         <!-- 等待态只讲两件事：还要多久、完成后去哪看。「可以离开」由下方的
              proposal__note 单独承担，同一屏不再说两遍（2026-10-29 全站副文审计） -->
-        <p class="proposal__generating-note">{{ genWaitText }} · 根据 {{ live.filledCount }} 条已确认信息拆解，通常几分钟。完成后会出现在路径列表。</p>
+        <p class="proposal__generating-note">{{ genWaitText }} · 根据 {{ live.filledCount }} 条已确认信息拆解。完成后会出现在路径列表。</p>
         <div class="skeleton"><i style="width: 82%"></i><i style="width: 64%"></i><i style="width: 74%"></i></div>
         <!-- 生成阶段模型输出是 JSON（对用户不可读）：delta 阶段给中性进度文案，不直出原始流（P3） -->
         <div class="proposal__stream">
@@ -1021,7 +1021,7 @@ const GEN_WAIT_STAGES: Array<[number, string]> = [
   [8, '正在梳理你的目标…'],
   [25, '正在拆解阶段…'],
   [60, '正在排布任务…'],
-  [Infinity, '正在收尾，马上就好…'],
+  [Infinity, '正在收尾…'],
 ];
 function stageText(stages: Array<[number, string]>) {
   for (const [until, text] of stages) if (waitTick.value < until) return text;

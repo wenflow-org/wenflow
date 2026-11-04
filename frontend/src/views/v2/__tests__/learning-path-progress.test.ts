@@ -37,7 +37,7 @@ describe('buildGenerationProgress 主行', () => {
   it('core 阶段不再承诺具体分钟数（#112：实测 56 条里 34 条 >120s）', () => {
     const copy = buildGenerationProgress({ phase: 'core', completedStages: 0, totalStages: 5 }, NOW);
     expect(copy.primary).toContain('正在生成路径');
-    expect(copy.primary).toContain('几分钟');
+    expect(copy.primary, '时长承诺复活（2026-11-05 口径：一律不承诺时长）').not.toContain('分钟');
     expect(copy.primary, '用户侧文案又写回了 1-2/1-3 分钟的数值承诺').not.toMatch(/1-[23]\s*分钟/);
   });
 
@@ -46,7 +46,7 @@ describe('buildGenerationProgress 主行', () => {
       { phase: 'stage_design', completedStages: 5, totalStages: 5, currentStageNumber: null },
       NOW
     );
-    expect(copy.primary).toBe('课时正在写入，马上就好…');
+    expect(copy.primary).toBe('课时正在写入…');
     expect(copy.primary).not.toContain('5/5');
   });
 
@@ -71,7 +71,7 @@ describe('buildGenerationProgress 主行', () => {
 
   it('completed 超过 total 时按 total 夹紧（脏数据不显示 7/5）', () => {
     const copy = buildGenerationProgress({ phase: 'stage_design', completedStages: 7, totalStages: 5, currentStageNumber: 9 }, NOW);
-    expect(copy.primary).toBe('课时正在写入，马上就好…');
+    expect(copy.primary).toBe('课时正在写入…');
   });
 });
 

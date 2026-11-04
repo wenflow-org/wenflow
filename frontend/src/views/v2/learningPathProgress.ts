@@ -70,9 +70,9 @@ export function buildGenerationProgress(
 
   let primary: string;
   if (lifecycle.phase === 'core') {
-    primary = '正在生成路径（通常几分钟）…';
+    primary = '正在生成路径…';
   } else if (total > 0 && clampedDone >= total) {
-    primary = '课时正在写入，马上就好…';
+    primary = '课时正在写入…';
   } else if (total > 0) {
     const current = isPositiveInt(lifecycle.currentStageNumber)
       ? Math.min(lifecycle.currentStageNumber, total)
