@@ -23,7 +23,7 @@ import {
   aggregateWindow,
   aggregateTokenGroups,
 } from '../../../services/cost/token-cost.service';
-import { dayKeyOf } from '../../../services/time/day-boundary';
+import { dayKeyOf, addDaysToDayKey } from '../../../services/time/day-boundary';
 import * as modelsConfig from '../../../config/models.config';
 
 const mockListUsersBasicInfo = listUsersBasicInfo as jest.Mock;
@@ -180,7 +180,11 @@ describe('GET /token-cost/summary', () => {
     expect(body.data.totals.completionTokens).toBe(60);
     expect(body.data.totals.calls).toBe(3);
     expect(body.data.totals.failed).toBe(1);
-    expect(body.data.trend).toHaveLength(7);
+    /* 2026-11-04 日标签覆盖窗口触及的每个整本地日：窗口 = [今日 00:00 − days×24h, now]
+       跨 days+1 个本地日（首日整日在窗口内），否则首日只进 KPI 总量、不进趋势 */
+    expect(body.data.trend).toHaveLength(8);
+    expect(body.data.trend[0].date).toBe(addDaysToDayKey(dayKeyOf(new Date()), -7));
+    expect(body.data.trend[body.data.trend.length - 1].date).toBe(dayKeyOf(new Date()));
     const sum = body.data.trend.reduce((s: number, t: any) => s + t.tokens, 0);
     expect(sum).toBe(300);
     const failedDay = body.data.trend.find((t: any) => t.failed > 0);

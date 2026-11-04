@@ -580,11 +580,13 @@ const failedCallsText = computed(() =>
   failedCalls.value > 0 ? `${failedCalls.value} 次` : '0 次'
 )
 /** 失败卡副行：同一张卡内给分母，失败率不再另开一张卡。
-    统计范围单独说明（2026-11-02 评审）：本卡数是窗口内全部失败调用，下面三张明细表
+    统计范围单独说明（2026-11-02 评审）：本卡数是窗口内失败调用，下面三张明细表
     只收产生 Token 用量的网关调用——不加这句，51 次失败在任何明细行上都找不到，
-    会被读成「数字对不上」。 */
+    会被读成「数字对不上」。
+    2026-11-04 口径对齐：本卡「失败」与 /admin/execution-logs 的「失败」同一判据（不含超时），
+    副行补「不含超时」以免被读成全量失败。 */
 const failedHintShort = computed(
-  () => `共 ${totalCalls.value} 次调用 · ${failedPct.value} · 三张明细排行只统计产生 Token 用量的网关调用，其余失败不在明细行里`
+  () => `共 ${totalCalls.value} 次调用 · ${failedPct.value} · 失败不含超时 · 三张明细排行只统计产生 Token 用量的网关调用，其余失败不在明细行里`
 )
 
 /* P1#25 单价未配置 = 决策态：卡可点直达「系统设置」补单价 */
@@ -820,10 +822,18 @@ const trendCols = computed(() => trend.value.map((d) => ({
   display: flex;
   flex-direction: column;
   padding: 2px 14px 0;
+  /* 2026-11-04：窄屏八列（最小内容宽实测 709px > 卡内容宽 305px）会溢出卡右缘，
+     此前无滚动容器，最右「成本 / 占比」列被 .mk-card 的 overflow:clip 静默裁掉且不可达。
+     由表格自身接管横滚（同 .mk-table-scroll / SkillDetail .skd-tablewrap 判例），
+     列宽契约不删、数据不删。 */
+  overflow-x: auto;
 }
 .tc-skilltable__head,
 .tc-skilltable__row {
   display: grid;
+  /* 2026-11-04：行不得压到八列最小内容宽以下（否则数字列互相挤字），
+     窄屏溢出交由 .tc-skilltable 的横滚接管；宽屏 min-content 仍低于可用宽，行为不变。 */
+  min-width: min-content;
   /* 列宽收敛（2026-10-14 用户评审）：原五列纯 fr（1.4/.5/.9/.8/1）在宽屏把每个数值摊到
      各自列的最右——996px 卡里 Skill 列拿 282px 只装 85px 文字（Skill↔调用 空 197px），
      1480px 卡里更到 ~340px 空转。现按内容给上下限（Skill 是唯一文本列，其余数字列 ~100px），

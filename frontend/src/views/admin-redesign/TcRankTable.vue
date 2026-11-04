@@ -184,12 +184,20 @@ function rowTitle(r: RankRow): string {
   display: flex;
   flex-direction: column;
   padding: 2px 14px 0;
+  /* 2026-11-04：390×844 窄屏七列最小内容宽实测 786px > 卡内容宽 305px，整表溢出卡右缘
+     被 .mk-card 的 overflow:clip 静默裁掉「失败次数 / Token 用量 / 成本 / Token 占比」列，
+     且祖先链无滚动容器、末列不可达（同页 .tc-skilltable 已按同判例接管横滚）。
+     由表格自身接管横滚，列宽契约不删、数据不删。 */
+  overflow-x: auto;
 }
 .tc-table__head,
 .tc-table__row {
   display: grid;
   align-items: center;
   gap: 10px;
+  /* 2026-11-04：行不得压到七列最小内容宽以下（否则数字列互相挤字），
+     窄屏溢出交由 .tc-table 的横滚接管；宽屏 min-content 仍低于可用宽，行为不变。 */
+  min-width: min-content;
 }
 /* user/model 半宽侧表：原「名称 1fr 独吃 + Token 固定 112px」——Token 副行
    （prompt X · completion Y）实测宽 ~227px，溢出列宽会压到「失败」列上（用户实测「挤着」）。
