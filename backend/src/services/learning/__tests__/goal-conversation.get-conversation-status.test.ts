@@ -2,15 +2,22 @@
  * #211：goal 会话快照 GET 的 learningPath.status 不再回吐 collectedData 里冻结的
  * 'generating'，而是对已绑路径的会话用权威 learning_paths 鲜查状态（与 /reply 的
  * buildCompletedConversationResult 同源）。这里用最小 prisma 桩直接驱动真实 getConversation。
+ *
+ * #228：status 在 stage design 窗口恒为 active，文案的权威信号改成活动 run 推导的 lifecycle
+ * （learning_paths.findUnique + activeGenerationRun/milestones → getPathGenerationLifecycle）。
  */
 const mockGoalFindFirst = jest.fn();
 const mockPathFindFirst = jest.fn();
+const mockPathFindUnique = jest.fn();
 
 jest.mock('../../../config/database', () => ({
   __esModule: true,
   default: {
     goal_conversations: { findFirst: (...args: unknown[]) => mockGoalFindFirst(...args) },
-    learning_paths: { findFirst: (...args: unknown[]) => mockPathFindFirst(...args) },
+    learning_paths: {
+      findFirst: (...args: unknown[]) => mockPathFindFirst(...args),
+      findUnique: (...args: unknown[]) => mockPathFindUnique(...args),
+    },
   },
 }));
 
@@ -19,6 +26,25 @@ jest.mock('../../../utils/logger', () => ({
 }));
 
 import goalConversationService from '../goal-conversation.service';
+
+/** 权威行同时喂给两处读（findFirst=投影用；findUnique=lifecycle 推导用），两处读的是同一行 */
+function stubAuthoritativePath(row: Record<string, unknown>) {
+  const base = {
+    id: 'lp-1',
+    userId: 'user-1',
+    aiGenerated: true,
+    aiPromptTemplate: null,
+    activeGenerationRunId: null,
+    totalMilestones: 2,
+    updatedAt: new Date(),
+    activeGenerationRun: null,
+    // 已就绪路径必然已有阶段任务（taskCount>0），否则会被判成生成态缺失
+    milestones: [{ stageNumber: 1, subtasks: [{ id: 't1' }] }],
+    ...row,
+  };
+  mockPathFindFirst.mockResolvedValue(base);
+  mockPathFindUnique.mockResolvedValue(base);
+}
 
 function conversationRow(overrides: {
   learningPathId: string | null;
@@ -46,6 +72,7 @@ describe('getConversation · learningPath 状态鲜查（#211）', () => {
   beforeEach(() => {
     mockGoalFindFirst.mockReset();
     mockPathFindFirst.mockReset();
+    mockPathFindUnique.mockReset();
   });
 
   it('已绑路径：冻结 generating + 权威 active → 返回 active', async () => {
@@ -53,7 +80,7 @@ describe('getConversation · learningPath 状态鲜查（#211）', () => {
       learningPathId: 'lp-1',
       learningPath: { id: 'lp-1', status: 'generating' },
     }));
-    mockPathFindFirst.mockResolvedValue({ id: 'lp-1', status: 'active' });
+    stubAuthoritativePath({ id: 'lp-1', status: 'active' });
 
     const result = await goalConversationService.getConversation('gc-1', 'user-1');
 
@@ -87,6 +114,7 @@ describe('getConversation · 已完成会话的 userVisible 重建（#213）', (
   beforeEach(() => {
     mockGoalFindFirst.mockReset();
     mockPathFindFirst.mockReset();
+    mockPathFindUnique.mockReset();
   });
 
   it('硬阻断终局：GET 快照重建拒绝文案，不再返回硬编码的「会话详情获取成功」', async () => {
@@ -177,7 +205,7 @@ describe('getConversation · 已完成会话的 userVisible 重建（#213）', (
       collectedData: JSON.stringify({ messages: [], understanding: {}, collected: {} }),
       completedAt: new Date(),
     });
-    mockPathFindFirst.mockResolvedValue({ id: 'lp-1', status: 'active', name: '手冲咖啡入门', title: '手冲咖啡入门' });
+    stubAuthoritativePath({ id: 'lp-1', status: 'active', name: '手冲咖啡入门', title: '手冲咖啡入门' });
 
     const result = await goalConversationService.getConversation('gc-1', 'user-1');
 
@@ -198,7 +226,7 @@ describe('getConversation · 已完成会话的 userVisible 重建（#213）', (
       completedAt: new Date(),
     });
     // 确认时绑定的占位路径：名字固定「个性化学习路径」，status=generating
-    mockPathFindFirst.mockResolvedValue({ id: 'lp-1', status: 'generating', name: null, title: '个性化学习路径' });
+    stubAuthoritativePath({ id: 'lp-1', status: 'generating', name: null, title: '个性化学习路径' });
 
     const result = await goalConversationService.getConversation('gc-1', 'user-1');
 
@@ -222,7 +250,84 @@ describe('getConversation · 已完成会话的 userVisible 重建（#213）', (
       collectedData: JSON.stringify({ messages: [], understanding: {}, collected: {} }),
       completedAt: new Date(),
     });
-    mockPathFindFirst.mockResolvedValue({ id: 'lp-1', status: 'failed', name: '手冲咖啡入门', title: '手冲咖啡入门' });
+    stubAuthoritativePath({ id: 'lp-1', status: 'failed', name: '手冲咖啡入门', title: '手冲咖啡入门' });
+
+    const result = await goalConversationService.getConversation('gc-1', 'user-1');
+
+    expect(result.userVisible).toBe('学习路径生成失败，可前往“学习路径”重试。');
+    expect(result.userVisible).not.toContain('已生成');
+  });
+
+  it('stage design 窗口：status 仍为 active，但 lifecycle=stage_design_processing → 说正在生成（#228 残余）', async () => {
+    mockGoalFindFirst.mockResolvedValue({
+      id: 'gc-1',
+      userId: 'user-1',
+      description: '学会手冲咖啡',
+      stage: 'completed',
+      status: 'completed',
+      revision: 2,
+      learningPathId: 'lp-1',
+      collectedData: JSON.stringify({ messages: [], understanding: {}, collected: {} }),
+      completedAt: new Date(),
+    });
+    // core 落库时就把 status 写成 active，阶段设计还在跑：只知道 status 会谎称「已生成」
+    stubAuthoritativePath({
+      id: 'lp-1',
+      status: 'active',
+      name: '门店销售表月度汇总',
+      title: '门店销售表月度汇总',
+      milestones: [{ stageNumber: 1, subtasks: [] }, { stageNumber: 2, subtasks: [] }],
+      activeGenerationRun: {
+        id: 'run-1',
+        phase: 'stageDesign',
+        status: 'processing',
+        retryAllowed: false,
+        completedItems: 0,
+        totalItems: 2,
+        heartbeatAt: new Date(),
+        leaseExpiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+
+    const result = await goalConversationService.getConversation('gc-1', 'user-1');
+
+    expect(result.userVisible).toBe(
+      '已收到确认，学习路径正在生成，通常 10-60 秒内完成，可前往“学习路径”查看进度。',
+    );
+    expect(result.userVisible).not.toContain('已生成');
+    // 响应的 learningPath 形状不变（status 仍是权威行里的 active）
+    expect(result.learningPath).toEqual({ id: 'lp-1', status: 'active' });
+  });
+
+  it('stage design 失败：status 仍为 active，但 lifecycle=stage_design_failed → 如实报失败（#228 残余）', async () => {
+    mockGoalFindFirst.mockResolvedValue({
+      id: 'gc-1',
+      userId: 'user-1',
+      description: '学会手冲咖啡',
+      stage: 'completed',
+      status: 'completed',
+      revision: 2,
+      learningPathId: 'lp-1',
+      collectedData: JSON.stringify({ messages: [], understanding: {}, collected: {} }),
+      completedAt: new Date(),
+    });
+    stubAuthoritativePath({
+      id: 'lp-1',
+      status: 'active',
+      name: '门店销售表月度汇总',
+      title: '门店销售表月度汇总',
+      milestones: [{ stageNumber: 1, subtasks: [] }],
+      activeGenerationRun: {
+        id: 'run-1',
+        phase: 'stageDesign',
+        status: 'failed',
+        retryAllowed: true,
+        completedItems: 0,
+        totalItems: 1,
+        heartbeatAt: new Date(),
+        leaseExpiresAt: new Date(Date.now() - 60_000),
+      },
+    });
 
     const result = await goalConversationService.getConversation('gc-1', 'user-1');
 
