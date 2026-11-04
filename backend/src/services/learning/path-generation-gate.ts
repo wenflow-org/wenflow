@@ -17,6 +17,13 @@
  *    （产物里没有 hidden 字段就按 `triageGoalResponse` 既有的「缺字段一律容忍」口径）；
  *  - 命中硬阻断 → 不生成，复用 `goal-conversation.exit.buildHardBlockMessage`（#213 文案）；
  *  - **没有产物 → 拒绝生成**，而不是「缺上下文按可判定处理」放行——放行正是本 issue 的缺陷。
+ *
+ * #222 补充：凭证的**来源**由调用方保证——
+ *  - 目标会话/仿真链路：凭证来自服务端自己的 goal 产物（`visibleSummary` / `responseTriage`）；
+ *  - 直生成 API（`POST /learning/paths/generate`）：凭证由
+ *    `services/learning/goal-triage-evidence` 从 `goal_conversations.collectedData` 读取，
+ *    请求体里的 `understanding` 不再下传（那是「客户端自断言 judgeable」的绕过面）。
+ *    本模块本身仍只做纯函数判定，不读 DB。
  */
 import {
   isHardBlockResponseTriage,
@@ -53,7 +60,8 @@ export type GoalTriageDecision =
  */
 export const GOAL_TRIAGE_REQUIRED_MESSAGE =
   '生成学习路径前需要目标判定结论：请先完成目标对话（平台会判断这个目标能否客观判定），'
-  + '再把判定结果随请求一起提交；本入口不会在缺少判定时自行猜测并生成路径。';
+  + '并在请求里提交该会话的 sourceConversationId；本入口只认服务端已落库的判定结论，'
+  + '不采信请求体自带的判定，也不会在缺少判定时自行猜测并生成路径。';
 
 function isNonEmptyObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && Object.keys(value as Record<string, unknown>).length > 0;
@@ -76,11 +84,12 @@ const DECISION_KEYS = [
  * 为什么不能只判非空对象：那样闸门只是从「不发凭证就 201」变成「发任意对象就 201」，
  * `{"x":1}` 照样能造出路径，issue #217 的契约仍然没守住（第五轮独立复核结论）。
  *
- * 注意：这**不**解决「客户端伪造判定」——`{"platform_judgment":"judgeable"}` 仍能被构造。
- * 凭证可信性要靠服务端自算、或读服务端已落库的分诊结论（#217 的后续说明），
- * 那是比这个纯函数大得多的一步，不在这里假装解决。
+ * 注意：本函数不看凭证**由谁产生**——`{"platform_judgment":"judgeable"}` 这种形状照样能通过。
+ * 凭证可信性由调用方保证（#222）：直生成 API 已改为从 `goal_conversations.collectedData`
+ * 读取服务端结论，不再下传请求体里的 understanding（见 `goal-triage-evidence.ts`）。
+ * 该模块复用本函数判定「这场会话是否真的产出了判定结论」，所以这里必须是唯一口径。
  */
-function hasDecisionEvidence(value: unknown): value is Record<string, unknown> {
+export function hasGoalDecisionEvidence(value: unknown): value is Record<string, unknown> {
   if (!isNonEmptyObject(value)) return false;
   for (const key of DECISION_KEYS) {
     const v = value[key];
@@ -98,7 +107,7 @@ export function evaluateGoalTriageEvidence(
 ): GoalTriageDecision {
   const responseTriage = evidence?.responseTriage || null;
   const visibleSummary = evidence?.visibleSummary || null;
-  const providedUnderstanding = hasDecisionEvidence(evidence?.understanding)
+  const providedUnderstanding = hasGoalDecisionEvidence(evidence?.understanding)
     ? evidence.understanding
     : null;
 
