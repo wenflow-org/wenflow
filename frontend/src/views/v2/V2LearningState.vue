@@ -315,13 +315,16 @@
             <div v-if="hasKpiData" class="advisory__sub">
               <div class="advisory__subhead">
                 <strong>学习调控</strong>
-                <span class="band__meta">{{ pendingAdjust.length ? `${pendingAdjust.length} 条待确认` : '暂无待确认' }}</span>
+                <!-- 2026-11-04：无待确认时区块头不再报「暂无待确认」——下方 ctl__empty 首句已述同一状态，
+                     同屏两处报空属重复；区块头只保留计数，空态作唯一状态出口 -->
+                <span v-if="pendingAdjust.length" class="band__meta">{{ pendingAdjust.length }} 条待确认</span>
               </div>
               <!-- P3-41（设计评审）：区块头已有「N 条待确认」计数，子块标签再带数字同屏双计数——
                    子块改纯语义「待我处理」撤数字，计数只留区块头一处 -->
               <section class="ctl">
                 <p class="ctl__label">待我处理</p>
-                <p v-if="!pendingAdjust.length" class="ctl__empty">没有待处理的调整。课后 AI 认为需要调整时，会在这里出现，你可以在这里确认或忽略。</p>
+                <!-- 2026-11-04：空态原为操作指引句（教用法），改为只述状态与去向 -->
+                <p v-if="!pendingAdjust.length" class="ctl__empty">没有待处理的调整。课后 AI 认为需要调整时，会在这里出现，待你确认或忽略。</p>
                 <article v-for="card in pendingAdjust" :key="card.id" class="ctl-card">
                   <header class="ctl-card__head">
                     <span class="dec__tag dec__tag--blue">{{ card.pathTitle || '当前路径' }}</span>
@@ -408,7 +411,9 @@
             <div class="band__head">
               <div class="band__title">
                 <strong>复习清单</strong>
-                <span class="band__meta">{{ reviewMeta }}</span>
+                <!-- 2026-11-04：无到期时区块头不再报「暂无到期」——下方 chart__empty 首句既述状态，
+                     区块头只留状态读数，空态作唯一状态出口（同屏重复走查） -->
+                <span v-if="reviewMeta" class="band__meta">{{ reviewMeta }}</span>
               </div>
             </div>
             <div class="band__body">
@@ -419,7 +424,9 @@
                 <button type="button" class="chart__retry" @click="loadReviews">重试</button>
               </div>
               <div v-else-if="!reviewRows.length" class="chart__empty">
-                <strong>暂无到期复习</strong>
+                <!-- 2026-11-04：空态原句「暂无到期复习」与区块头 meta「暂无到期」同屏重复，
+                     改为「还没有…」述状态，与掌握分布空态同口径，空态只在一处报状态 -->
+                <strong>还没有要复习的内容</strong>
                 <p>学过的知识点进入复习窗口后，会按记忆强度排在这里。</p>
               </div>
               <ul v-else class="rlist__rows">
@@ -1059,7 +1066,8 @@ const reviewRows = computed(() =>
 
 const reviewMeta = computed(() => {
   const due = reviewDue.value.length;
-  if (!due) return '暂无到期';
+  // 2026-11-04：无到期返回空串——区块头随之不渲染，避免与下方空态首句同屏双报状态
+  if (!due) return '';
   const planned = reviewPlanned.value;
   return planned != null && planned > 0 ? `到期 ${due} · 下节课复习 ${planned}` : `到期 ${due}`;
 });

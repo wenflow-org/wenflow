@@ -93,7 +93,8 @@
       </div>
 
       <div class="session-feedback__actions">
-        <p>反馈不会影响任务完成状态，你可以随时修改。</p>
+        <!-- 2026-11-04 删「你可以随时修改」心理预设，只留状态（反馈不影响完成状态） -->
+        <p>反馈不会影响任务完成状态。</p>
         <button
           type="button"
           class="feedback-btn feedback-btn--primary"

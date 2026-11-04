@@ -125,7 +125,8 @@
 
     <div v-if="!blocked" class="completion-actions">
       <!-- 三个动作的后果写清楚：用户反馈「又是继续、又是返回、又是完成，不知道什么意思」 -->
-      <p class="completion-actions__hint">{{ taskCompleted ? '本节任务已计入路径进度，下面两项不会重复推进。' : '完成任务会推进路径进度，其余不会。' }}</p>
+      <!-- 2026-11-04 删「不会重复推进/其余不会」安抚尾巴，只留状态与动作 -->
+      <p class="completion-actions__hint">{{ taskCompleted ? '本节任务已计入路径进度。' : '完成任务会推进路径进度。' }}</p>
       <div class="completion-actions__row">
         <button type="button" class="completion-btn completion-btn--action completion-btn--default" :disabled="busy" @click="emit('action', 'continue-task')"><span class="completion-icon" aria-hidden="true"><VideoPlay /></span>继续练习</button>
         <button type="button" class="completion-btn completion-btn--action completion-btn--link" :disabled="busy" @click="emit('action', 'end')"><span class="completion-icon" aria-hidden="true"><ArrowLeft /></span>返回学习路径</button>
@@ -202,8 +203,9 @@ const advisory = computed(() => props.advisory || null);
  * （「该调整只会调整后续阶段的课程安排，不会覆盖/不影响你已完成的内容。」），
  * 已存库的建议仍带着它——渲染时剥掉，避免同义重复和孤行；模板侧已不再生成这句。
  */
-/** 结算安抚句：有归因时并进同一段流，无归因时独立成行（文案单源，防 R6 同文件重复） */
-const settleReassurance = '确认后会调整后续学习安排，已完成的内容不会改变。';
+/** 结算安抚句：有归因时并进同一段流，无归因时独立成行（文案单源，防 R6 同文件重复）
+    （2026-11-04 去「已完成的内容不会改变」这句替用户表态的安抚，只说调整动作） */
+const settleReassurance = '确认后会调整后续学习安排。';
 const advisoryBody = computed(() => (advisory.value?.ui.body || '')
   .replace(/该调整只会调整后续阶段的课程安排，(?:不会覆盖|不影响)你已完成的内容。/g, '')
   .trim());

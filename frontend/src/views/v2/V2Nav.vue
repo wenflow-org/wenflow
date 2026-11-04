@@ -158,7 +158,8 @@ const showBack = computed(() => !onTabSection.value && !route.path.startsWith('/
  * 正文 H1 保留为唯一页题。
  */
 const titleHidden = computed(
-  () => route.path.startsWith('/dashboard') || route.path.startsWith('/knowledge-map') || route.path.startsWith('/library')
+  // 2026-11-04：学习状态窄屏同屏三处「学习状态」（导航高亮 + 顶栏标题 + 正文 H1，顶栏与 H1 相距 62px），按本集合 P2-23 同口径收进来
+  () => route.path.startsWith('/dashboard') || route.path.startsWith('/knowledge-map') || route.path.startsWith('/library') || route.path.startsWith('/learning-state')
 );
 const pageTitle = computed(() => {
   const t = route.meta?.title;

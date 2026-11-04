@@ -84,6 +84,10 @@ describe('LearningEvaluationPage 已结算任务的入口口径', () => {
 
     expect(apiGetMock).toHaveBeenCalledWith('/learning/tasks/t1');
     expect(cardOf(w).props('taskCompleted')).toBe(true);
+    // 移动吸底条须与桌面卡口径一致：已结算即收起「完成任务」（2026-11-04）
+    const barBtns = w.findAll('.evaluation-ctabar button').map((b) => b.text());
+    expect(barBtns).not.toContain('完成任务');
+    expect(barBtns).toEqual(['继续练习', '返回']);
   });
 
   it('课次未完成 → taskCompleted=false（照旧递「完成任务」）', async () => {
@@ -92,6 +96,9 @@ describe('LearningEvaluationPage 已结算任务的入口口径', () => {
     await flushPromises();
 
     expect(cardOf(w).props('taskCompleted')).toBe(false);
+    // 未结算时吸底条仍递三键（含「完成任务」）
+    const barBtns = w.findAll('.evaluation-ctabar button').map((b) => b.text());
+    expect(barBtns).toEqual(['继续练习', '返回', '完成任务']);
   });
 
   it('探测失败按未结算处理，不改变既有入口', async () => {

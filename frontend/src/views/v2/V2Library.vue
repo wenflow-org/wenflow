@@ -8,7 +8,9 @@
           <h1>资料库</h1>
           <p v-if="!loading && !loadError" class="library__sub">{{ summaryText }}</p>
         </div>
-        <button type="button" class="library__upload" :disabled="uploading" @click="openPicker">
+        <!-- 「上传资料」每屏只保留一个入口（2026-11-04：空资料库时页头 PRIMARY 与空态居中 CTA
+             同屏重复）——空态显示居中 CTA，有资料后本按钮是唯一入口。同 V2LearningPaths。 -->
+        <button v-if="items.length" type="button" class="library__upload" :disabled="uploading" @click="openPicker">
           <Upload :size="16" :stroke-width="2" aria-hidden="true" />
           {{ uploading ? '上传中…' : '上传资料' }}
         </button>
