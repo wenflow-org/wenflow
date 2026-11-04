@@ -1,6 +1,6 @@
 # 虚拟学习者链路（Source of Truth）
 
-> 📌 类型：活规范（优先级链 16/17；第 3 条 goalSeed.realProblem 已从代码剔除）｜最后核验：2026-09-28。索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范（优先级链 16/17；goalSeed.realProblem 已从代码剔除，不参与开场诉求）｜最后核验：2026-11-02。索引见 [doc/README.md](./README.md)。
 
 ## 顶层模型
 
@@ -13,7 +13,7 @@
                           └─ 正式 Path（只吃 Goal，不读 story，不改 Path 契约）
                                 └─ Learn / 指标 / 前台投影验收
 
-快捷支路：账号自动学习（账号已有 Path 后直接上课，不经故事/Goal）——**2026-10-18 已下线**，入口/服务/API 已移除，仅保留运行记录表与存量数据
+快捷支路：账号自动学习（账号已有 Path 后直接上课，不经故事/Goal）——**2026-10-18 已下线**，入口/路由/服务/API 已移除，仅保留运行记录表、存量数据，以及未被引用的 `quick-learn/snapshot-diff.ts` 纯函数工具
 ```
 
 ## 分层与职责
@@ -26,7 +26,7 @@
 | Goal | `goal_conversations.description` | 开场诉求写入 description；正式对话收束 |
 | Path | `learning_paths` | **只消费 Goal 产物**（`rawGoal`/`visibleSummary`/`history`） |
 | Learn | teaching sessions + metrics | 真平台上课链路 |
-| 快捷（已下线） | `virtual_quick_learn_runs` | 跳过故事/Goal 的自动学习支路；2026-10-18 移除代码，仅留存量表 |
+| 快捷（已下线） | `virtual_quick_learn_runs` | 跳过故事/Goal 的自动学习支路；2026-10-18 移除入口/路由/服务/API，仅留存量表与未被引用的 `quick-learn/snapshot-diff.ts` |
 | 投影 | projection token | 前台以虚拟账号视角验收 |
 
 ## 传递规则（故事 → Goal → Path）
@@ -37,9 +37,10 @@
 
 1. `story.visibleOpening`
 2. `story.goalSeed.surfaceGoal`
-3. `story.goalSeed.realProblem`
-4. `story.triggerEvent` / `outline`
-5. `profile.learningGoal`（仅兜底，不是正规路径）
+3. `story.triggerEvent` / `outline`
+4. `profile.learningGoal`（仅兜底，不是正规路径）
+
+`goalSeed.realProblem` 是设计者给的诊断结论（隐藏层），不参与开场诉求——兜底链只收「学习者自己说得出口」的内容。
 
 ### 入口行为
 
@@ -67,6 +68,7 @@
 
 「账号自动学习」原语义：账号已有 Path 后，`startSession → teaching-turn → endSession → completeTask`，不经故事与 Goal。
 该支路已于 2026-10-18 下线（入口/路由/服务/API 移除；运行记录表保留供存量数据与用户删除清理）。
+`backend/src/virtual-lab/quick-learn/` 下仍留有未接线的纯函数 diff 工具（`snapshot-diff.ts` 及其测试），无任何模块引用，属待清理死代码。
 VL 学习一律走「故事 → Goal → Path → Learn」主链。
 
 ## 残余

@@ -1,8 +1,10 @@
 # 课堂管线与评价管线（单文件）
 
+> 📌 类型：活规范｜最后核验：2026-11-02。索引见 [doc/README.md](./README.md)。
+
 > 口径：本文描述的是**当前分支代码的真实调用链**（文件/函数可直接对照），不是设计稿。
 > 基线：`feat/teaching-figures` @ `62108427`（2026-10-27）。
-> 配套：`CLASSROOM_SKILLS.md`（课堂用到的提示词全文合集）、`OVERHAUL_LOG.md`（本轮改造条目与读数）。
+> 配套：`CLASSROOM_SKILLS.md`（课堂用到的提示词全文合集）。
 
 ---
 
@@ -21,7 +23,7 @@
                                                      │
    学生一句话 ─▶ 路由 ─▶ 编排层 ─▶ 引擎 8 步 ─▶ skill ─▶ 归一化 ─▶ 闸门 ─▶ 落库 ─▶ 前端
                             │                              ▲
-                            └──────────────────────────────┴── 板书层（2026-10-27，探针内）：
+                            └──────────────────────────────┴── 板书层（2026-10-28 起，已接进主链路）：
                                                                 先定「本轮问什么」→ 画板 → 老师看着真板说话
 ```
 
@@ -34,9 +36,9 @@
 ### 1.1 入口与返回
 
 ```
-POST /api/ai-teaching/sessions/:sessionId/messages        routes/ai-teaching.routes.ts:867
+POST /api/ai-teaching/sessions/:sessionId/messages        routes/ai-teaching.routes.ts:884
   → AITeachingCoordinator.processStudentMessage()          AITeachingCoordinator.ts:246
-  → teaching-turn-engine.processStudentMessage()           teaching-turn-engine.ts:245
+  → teaching-turn-engine.processStudentMessage()           teaching-turn-engine.ts:288
 ```
 
 路由层负责鉴权、参数校验、幂等键、`revision` 期望值；编排层负责虚拟学习者旁路与分发；引擎是主链路。
@@ -47,18 +49,18 @@ POST /api/ai-teaching/sessions/:sessionId/messages        routes/ai-teaching.rou
 
 | # | 做什么 | 代码位置 | 失败时 |
 |---|---|---|---|
-| 1 | 会话租约（2 分钟操作租约 + 心跳续租） | `claimOperation`（engine:283） | 409 BUSY，客户端重试 |
-| 2 | 重建上下文（每回合重建，不缓存） | `buildTeachingScenarioContext`（engine:309） | 抛错即中止 |
-| 3 | **代码裁决**本轮控制信号（出题？出图？锚题？修复？） | `shouldEmitCheckpoint` / `resolveAnchorProbeTarget` / `buildVisualOpportunity`（engine:365-400） | 无信号则纯语言推进 |
-| 4 | 调 skill（提示词 + 本轮输入） | `executeSkill(teachingTurnAgentDefinition, turnInput)`（engine:~420） | 300s 超时兜底 |
+| 1 | 会话租约（2 分钟操作租约 + 心跳续租） | `claimOperation`（engine:326） | 409 BUSY，客户端重试 |
+| 2 | 重建上下文（每回合重建，不缓存） | `buildTeachingScenarioContext`（engine:352） | 抛错即中止 |
+| 3 | **代码裁决**本轮控制信号（出题？出图？锚题？修复？） | `shouldEmitCheckpoint` / `resolveAnchorProbeTarget` / `buildVisualOpportunity`（engine:405-427） | 无信号则纯语言推进 |
+| 4 | 调 skill（提示词 + 本轮输入） | `executeSkill(teachingTurnAgentDefinition, turnInput)`（engine:497） | 300s 超时兜底 |
 | 5 | 归一化出口（字段白名单 + 图型校验 + 图内算式复算） | `normalizeOutput()` / `normalizeTeachingFigure` | 不合规的字段/图直接丢弃 |
-| 6 | 引擎闸门链（10 道，见 §1.7） | engine:900 起 | 逐道降级：不出图 / 脱敏 |
+| 6 | 引擎闸门链（10 道，见 §1.7） | engine:1052 起 | 逐道降级：不出图 / 脱敏 |
 | 7 | 落库 `teaching_session_messages`（含 `payload.figures`、`figureSource`） | `TeachingSessionRepository` | 幂等键重放 |
 | 8 | 返回前端 | `V2LearningPage.vue` → `TeachingFigure.vue` → `render.ts` | 渲染失败给空态，不影响文字 |
 
 ### 1.3 输入：`TeachingTurnInput`
 
-定义在 `src/skills/teaching-turn/index.ts:62`。五组：
+定义在 `src/skills/teaching-turn/index.ts:62`。八组：
 
 | 组 | 字段 | 谁填 |
 |---|---|---|
@@ -69,11 +71,11 @@ POST /api/ai-teaching/sessions/:sessionId/messages        routes/ai-teaching.rou
 | 场景-材料 | `scenario.materials` / `activeTaskMaterialExcerpts` / `supplementaryMaterial` | 材料链 + 教师补充槽晋升 |
 | 控制 | `controls`（五信号） | **代码**裁决，见 §1.5 |
 | 图 | `visualOpportunity`（图型建议 + 触发原因） | `buildVisualOpportunity` |
-| 板书 | `boardContext` / `boardAction` | 板书层（§1.6，探针内接线） |
+| 板书 | `boardContext` | 板书层（§1.6，已接进主链路） |
 
 ### 1.4 输出：`TeachingTurnOutput`
 
-定义在 `src/skills/teaching-turn/index.ts:338`：
+定义在 `src/skills/teaching-turn/index.ts:343`：
 
 | 字段 | 含义 | 下游 |
 |---|---|---|
@@ -101,7 +103,7 @@ POST /api/ai-teaching/sessions/:sessionId/messages        routes/ai-teaching.rou
 
 **为什么要代码裁决**：实测埋在 2 万字提示词里的规则会被忽略；写进本轮输入（`controls`）才生效。
 
-### 1.6 板书层（2026-10-27，探针内验证，尚未接进主链路）
+### 1.6 板书层（2026-10-27 起，2026-10-28 已接进 teaching-turn-engine 主链路）
 
 定位：**白板解决的是纯文字造成的认知压力，不是做题区**。所以默认不挖空。
 
@@ -153,11 +155,11 @@ after6 的 b2 实拍是 t3 板画成酒精、老师问水银，板永远在画�
 
 **动作**（`decideBoardOp`）：`setup`（上板）→ `focus`（指板）→ `update`（换板；判据为本轮 `intent.exampleChange !== 'none'`）→ `none`。旧判据 `hasNewNumbers` 只认数字，会漏掉换介质。
 
-**接线计划（尚未做）**：`TeachingSessionRepository` 的 payload 增 `boardState`；引擎第 3~6 步之间插板书层（先算意图再画板）；`teaching-turn` 提示词去掉图型指南、输出 schema 去掉 `figure`；前端把 `TeachingFigure.vue` 提为常驻白板区。
+**接线（2026-10-28 已完成）**：`board-intent` / `board-state` / `board-controller` / `board-designer` 已全部接进 `teaching-turn-engine` 主链路（代码裁决控制信号之后、调 skill 之前先算意图再画板；首轮板先行，后续轮同轮刷新）；板状态随 `sessionArtifacts.board` 持久化，老师可见板面经 `boardContext` 注入本轮输入。
 
 ### 1.7 图闸：10 道，顺序固定
 
-全部在 `teaching-turn-engine.ts:900` 之后，只有走完才下发：
+全部在 `teaching-turn-engine.ts:1052` 之后，只有走完才下发：
 
 | # | 闸门 | 在问什么 | 命中后的动作 |
 |---|---|---|---|
@@ -178,13 +180,15 @@ after6 的 b2 实拍是 t3 板画成酒精、老师问水银，板永远在画�
 
 ```
 prompts/core/teaching-turn.yaml   ← 唯一真相源（83 条 rules，单行 `  - ...`）
-  └─ npm run prompts:compile-all  → prompts/skill.teaching-turn.md（31 个编译产物，frontmatter 带 coreHash）
+  └─ npm run prompts:compile-all  → prompts/skill.*.md（每个 core 编译 1 个产物，frontmatter 带 coreHash；teaching-turn 的产物即 prompts/skill.teaching-turn.md）
       └─ npm run prompts:sync-core → prisma/system.db 的 agent_prompts ACTIVE 版本
-          └─ prompt-composer.ts:317：systemPromptOverride || promptConfig.systemPrompt || spec.defaultSystemPrompt
+          └─ prompt-composer.ts:316：systemPromptOverride || promptConfig.systemPrompt || spec.defaultSystemPrompt
 ```
 
+> 口径（2026-11-02 核验）：`teaching-turn.yaml` 含 **83 条 rules**（`rules:` 顶层 `  - ` 条目；编译产物 `prompts/skill.teaching-turn.md` 的编号规则同为 83 条）。`prompts:compile-all` 按 core 逐个编译——**31 个 core 文件 → 31 个编译产物**（均带 `coreHash`）；而 `prompts/skill.*.md` 实际共 **32 个**，多出的 `prompts/skill.board-designer.md` 没有对应 core、为手写 md（frontmatter 无 `coreHash`）。故「31」指编译产物数，「32」指目录下 `skill.*.md` 总数。
+
 **三条硬事实**：
-1. **只改 `.md` 不生效**：运行时优先读 DB 的 ACTIVE 版本；本工作树已同步到 `skill:teaching-turn` v18（30,860 字符）。
+1. **只改 `.md` 不生效**：运行时优先读 DB 的 ACTIVE 版本；本工作树已同步到 `skill:teaching-turn` v19（32,914 字符）。
 2. **只改 `.yaml` 不生效**：编译产物与 DB 不会自动更新，健康中心 `w4-corehash` 会报 baseline-drift。
 3. **规则 15/38 有逐字一致性测试**：`text-observable-rules.test.ts` 强制 yaml 与 md 中这两条逐字相同。
 
@@ -281,7 +285,6 @@ prompts/core/teaching-turn.yaml   ← 唯一真相源（83 条 rules，单行 ` 
 |---|---|---|
 | `doc/CLASSROOM_SKILLS.md` | 人 | 课堂 8 个 skill 全文（由 `skill-pack.mjs` 生成，不手改） |
 | `doc/CLASSROOM_PIPELINE.md` | 人 | 本文：课堂 + 评价两条线 |
-| `doc/OVERHAUL_LOG.md` | 人 | 本轮每条改造、改法、读数、反例 |
 | `outputs/board-compare/index.html` | 人 | 三列对照：旧做题区 / 新减负区 / 换题后 |
 | `outputs/board-review/index.html` | 人 | 评审台：两态切换 + 逐条勾判 + 导出 ~0.4KB 结论 |
 | `outputs/board-compare/brief.md` | 模型 | 1KB：数字 + 判非保留的条目 |
@@ -306,7 +309,7 @@ prompts/core/teaching-turn.yaml   ← 唯一真相源（83 条 rules，单行 ` 
 
 - 不是导出遗漏：`teaching_session_messages.payload` 与 `virtual_session_logs.details.output` 里都没有 `figures`/`figure` 键；后端也没有任何图闸拒绝日志。也就是说**模型根本没有提出过图**，不是被 10 道闸挡掉。
 - `buildVisualOpportunity` 只在特定线索（ASCII 结构、位置描述、时序描述等）出现时给 hint；这批对话大多没有命中。命中也不是强制出图，最终仍要模型自己输出 `figure`。
-- 因此（**2026-10-28 接线前**）：探针里的白板裁剪/换板修复没有进入真实课堂——`board-intent/board-state/board-controller` 仍未接 `teaching-turn-engine`。这 10 份记录是生产现状基线，不是白板修复的验收。接线后的结果见本节末尾。
+- 因此（**2026-10-28 接线前**）：探针里的白板裁剪/换板修复当时尚未进入真实课堂——`board-intent/board-state/board-controller` 尚未接 `teaching-turn-engine`（现已全部接入，见本节末尾）。这 10 份记录是接线前的生产现状基线，不是白板修复的验收。
 - 第二个结构性观察：`--days=1` 时每案例都完成 1 节、第 2 节停在 active。课节确实在推进，但「一节课上完」与「一天结束」不是同一件事，报告里两种情况都保留。
 
 **v19 复跑（2026-10-28，f3/f10 各 1 天）**：提示词升到 teaching-turn v19、stage-designer v9，并加了两处代码护栏（悬空图指代、`passed=true` 却被否定）。对比：
@@ -325,7 +328,7 @@ prompts/core/teaching-turn.yaml   ← 唯一真相源（83 条 rules，单行 ` 
 | f3 | completed | 5（3/2） | 2 | 1→2 | split-compare | 0 | 0 |
 | f10 | completed | 11（6/5） | 5 | 1→4 | split-compare | 0 | 0 |
 
-真实课堂不再 0 张图；老师回指「白板左边那栏、第 2 步」时板上确实有对应内容。f10 的三次刷新分别对应「5 笔/3 人」「26000/约六成」等新数据。接线细节、两次失败与修复、残留（换板触发词偏宽、白板每轮重发、板型语义偏弱）见 `doc/OVERHAUL_LOG.md` §11。
+真实课堂不再 0 张图；老师回指「白板左边那栏、第 2 步」时板上确实有对应内容。f10 的三次刷新分别对应「5 笔/3 人」「26000/约六成」等新数据。残留项：换板触发词偏宽、白板每轮重发、板型语义偏弱。
 
 ---
 
@@ -333,11 +336,11 @@ prompts/core/teaching-turn.yaml   ← 唯一真相源（83 条 rules，单行 ` 
 
 | 环节 | 文件 |
 |---|---|
-| 路由 | `backend/src/routes/ai-teaching.routes.ts:867` |
+| 路由 | `backend/src/routes/ai-teaching.routes.ts:884` |
 | 编排 | `backend/src/services/ai-teaching/AITeachingCoordinator.ts:246` |
-| 引擎 | `backend/src/services/ai-teaching/teaching-turn-engine.ts:245`（八步）/ `:900` 起（图闸） |
+| 引擎 | `backend/src/services/ai-teaching/teaching-turn-engine.ts:288`（八步）/ `:1052` 起（图闸） |
 | 上下文 | `backend/src/services/ai-teaching/TeachingContextBuilder.ts`（`buildTeachingScenarioContext`） |
-| skill 契约 | `backend/src/skills/teaching-turn/index.ts:62`（输入）/ `:338`（输出）/ 归一化与图型白名单 |
+| skill 契约 | `backend/src/skills/teaching-turn/index.ts:62`（输入）/ `:343`（输出）/ 归一化与图型白名单 |
 | 提示词真相源 | `prompts/core/teaching-turn.yaml` → `prompts/skill.teaching-turn.md` → `prisma/system.db` ACTIVE |
 | 图能力 | `backend/src/services/ai-teaching/teaching-visual.service.ts`（图型规则 / 脱敏 / `FIGURE_KIND_GUIDE`） |
 | 板书意图 | `board-intent.ts`（askAbout / exampleChange / 收口 / 老师可见描述） |

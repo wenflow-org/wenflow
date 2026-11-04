@@ -1,6 +1,6 @@
 # KC 概念身份与图关系改造设计
 
-> 📌 类型：活规范（实现度 ~95%，时效管理最佳范式）｜最后核验：2026-09-28。索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范（实现度 ~95%，时效管理最佳范式）｜最后核验：2026-11-02。索引见 [doc/README.md](./README.md)。
 
 > 状态：**L1/L2/L3 + 前端画布已落地**（见文末「交付状态」）｜日期：2026-09-22（2026-09-23 更新）
 > 关联：`doc/LEARNER_STATE_REVIEW_DESIGN.md`（调控分工纪律）、`doc/VIRTUAL_LEARNER_SIMULATED_DAY_CONTRACT.md`（跨日模拟契约）、`doc/LEARNER_MODEL_ARCHITECTURE.md`
@@ -55,12 +55,12 @@ kc-mapper ──────► conceptKcs[]   (conceptId:"concept-1" → kcs[]:
                      └─► aiPromptTemplate.kcAnnotation   ← JSON blob，无表无索引
 ```
 
-消费端**只有两处**，都在 `TeachingContextBuilder.ts`：
+消费端**只有两处**，都在 `teaching-context-knowledge.ts`（`TeachingContextBuilder.ts` 只 import 调用）：
 
 | 位置 | 读了什么 | 没读什么 |
 |---|---|---|
-| `resolveTaskKcsFromPath`（`:337-367`） | `taskKcLinks` + `kcGraph.nodes` → 摊平成当前任务的 KC 数组 | **`kcGraph.edges` 一次都没读** |
-| `buildCognitiveFrame`（`:392-445`） | `coreConcepts`，`neighboringConcepts = filter(≠当前).slice(0,3)` | **不是图遍历，是取前三个** |
+| `resolveTaskKcsFromPath`（`teaching-context-knowledge.ts:85`） | `taskKcLinks` + `kcGraph.nodes` → 摊平成当前任务的 KC 数组 | **`kcGraph.edges` 一次都没读** |
+| `buildCognitiveFrame`（`teaching-context-knowledge.ts:229`） | `coreConcepts`，`neighboringConcepts = filter(≠当前).slice(0,3)` | **不是图遍历，是取前三个** |
 
 `prerequisiteConcepts`（`:984-987`）来自 `learnerSnapshot.knowledgeMemory.currentPath.prerequisiteGaps`，而后者由 `LearnerKnowledgeMemoryService.ts:559-568` 计算：拿**当前任务**的概念名去 `memory_traces` 找掌握度低的（`masteryScore < 0.45` 或 `stability === 'fragile'`）。
 
@@ -298,7 +298,7 @@ model concept_edges {
 
 ### 5.1 `neighboringConcepts`：`.slice(0,3)` → 1-hop 遍历
 
-`TeachingContextBuilder.ts:406-416`。改为：
+`teaching-context-knowledge.ts:146`（`fetchGraphNeighbors`）与 `:246`（`buildCognitiveFrame` 内选邻居）。改为：
 
 ```ts
 // 伪码：当前 concept 的 1-hop 邻居（prerequisite 入边优先 → 后继 → part_of 兄弟）
@@ -338,11 +338,11 @@ const gaps = upstream.filter((node) => isWeak(traceByConceptId.get(node.conceptI
 
 | 能力 | 位置 |
 |---|---|
-| 可丢弃学习者端到端驱动（断点续跑/不烧日/自动清理） | `src/scripts/simulate-learner-e2e.ts`（483 行） |
+| 可丢弃学习者端到端驱动（断点续跑/不烧日/自动清理） | `src/scripts/simulate-learner-e2e.ts`（512 行） |
 | 纯函数判定层（就绪/退避/终局分类） | `src/services/virtual-lab/run-harness.ts` |
-| 逐日推进（重放业务时间戳，不 mock 时钟） | `POST /api/admin/virtual-learners/sessions/:id/advance-day`（`virtual-learners.ts:3112`） |
-| 模拟时钟读取 | `GET .../simulation-clock`（`:1998`） |
-| **每日只读聚合（核心观测量）** | `GET .../day-timeline`（`:2016`）→ `dayLoad` / `metrics{lss,ktl,lf,lsb}` / `pacing` / `tasks[]` / `difficultyAdjustments[]` / `reviewQuota` / `memory{traceCount,dueCount,fragileCount,stableCount,avgRetention}` |
+| 逐日推进（重放业务时间戳，不 mock 时钟） | `POST /api/admin/virtual-learners/sessions/:id/advance-day`（`virtual-learners.assisted-simulation.ts:178`） |
+| 模拟时钟读取 | `GET .../simulation-clock`（`virtual-learners.session-lifecycle.ts:913`） |
+| **每日只读聚合（核心观测量）** | `GET .../day-timeline`（`virtual-learners.session-lifecycle.ts:931`）→ `dayLoad` / `metrics{lss,ktl,lf,lsb}` / `pacing` / `tasks[]` / `difficultyAdjustments[]` / `reviewQuota` / `memory{traceCount,dueCount,fragileCount,stableCount,avgRetention}` |
 | 批量规模化 | `batch-experiment.service.ts`（多学习者 × 各自 Goal→Path→学完→跨日衰减） |
 
 ### 6.2 两条验证轨道
@@ -392,7 +392,7 @@ E2E_ADMIN_NAME=admin E2E_ADMIN_PASSWORD=*** \
 | 6 | **邻域有依据**：`cognitiveFrame.neighboringConcepts` 每项与当前 concept 间存在 edge | 新增只读断言脚本 | 100% |
 | 7 | **重规划触发率无异常抬升**：`difficultyAdjustments[]` / replan advisory 触发天数 | `day-timeline` | 与基线偏差 ≤ 1 天/14 天 |
 | 8 | **前置缺口语义正确**：gap 的 conceptId 必须是当前 concept 的**上游** | 新增只读断言脚本 | 100% |
-| 9 | **边物化一致**：`concept_edges`(relation='prerequisite', scope='path') 行数 == 各路径 `kcGraph.edges` 总数 | SQL | 相等 |
+| 9 | **边物化一致（未漏）**：逐路径 `concept_edges`(relation='prerequisite', scope='path', source='kc-mapper') 行数 ≥ 该路径 stored `kcGraph.edges` 数；多出行数单独报出 | SQL | 无路径「物化行数 < stored 数」（超集不变式：未漏） |
 
 **新增断言脚本**（只读，不改业务）：`src/scripts/verify-kc-identity.ts` —— 一次跑完断言 1/2/3/9；断言 6/8 需读一次教学上下文的 `cognitiveFrame`，可在 e2e 跑完后对保留的 `--keep` 学习者调 `TeachingContextBuilder` 校验。
 

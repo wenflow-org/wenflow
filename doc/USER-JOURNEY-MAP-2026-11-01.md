@@ -1,5 +1,7 @@
 # 用户侧旅程地图（学习者视角）
 
+> 📌 类型：活规范（地图）｜最后核验：2026-11-02。索引见 [doc/README.md](./README.md)。
+
 > 这份文档回答一个问题：**一个学习者从进站到学完一课，路上经过哪些环节、每一步在做什么、页面上能点哪些按钮。**
 > 只覆盖学习者侧；运营/管理员侧见 [ADMIN-JOURNEY-MAP-2026-11-01.md](./ADMIN-JOURNEY-MAP-2026-11-01.md)。
 
@@ -18,7 +20,7 @@
 - 连带清理：巡检脚本 `scripts/v4-ui-audit.mjs` 里靠 `/v2/*` 顺带验证「旧地址也能开」的 3 条已删除（canonical 版本它本来就有）；README 中「旧 `/v2/*` 地址会自动重定向」的说明已删。
 - **命名残留**：URL 去掉了前缀，但组件名和目录没改——页面组件仍在 `frontend/src/views/v2/` 下、仍叫 `V2Dashboard` / `V2LearningPage` / `V2GoalConversation` 等。所以在代码里搜 `v2` 到处命中，在浏览器地址栏里却一个都看不到，这是正常的。
 - 同类旧地址不止 `/v2`：`/next`、`/next/vision`、`/profile`、`/settings`、`/agent-logs`、`/achievements`、`/learning-history`、`/user`（→ `/user/account`）**仍保留**重定向（书签/外链兼容），这是这个仓库的一贯做法——本次只清理了 `/v2` 那批。
-- 迁移时间无法从 git 考证：该文件最早进入历史的那次提交（`d00a057a chore: 累积开发改动`，2026-07-23）里，`/dashboard` 已经指向 `V2Dashboard`、`/v2/dashboard` 已经是重定向——也就是说这次「转正」发生在被记录的历史之前。
+- 迁移时间可以大致圈定：路由文件自初始提交（`3164f47f Initial commit: AI Learning Platform`，2026-04-12）起就在库里，当时 `/dashboard` 还是旧版；到父提交 `b7f545d1`（2026-07-20）时 `/dashboard` 仍指向旧版 `Dashboard.vue`、且没有任何 `/v2` 路由；再到 `d00a057a chore: 累积开发改动`（2026-07-23）时，`/dashboard` 已指向 `V2Dashboard`、`/v2/dashboard` 已是重定向——所以这次「转正」发生在这两次提交之间（该提交是累积改动，精确日期无法再细分）。
 
 | 状态 | 首页主按钮 | 去哪 |
 |---|---|---|

@@ -96,36 +96,36 @@ const STAGES = [
     title: '二、课堂执行：学生每说一句话，走一遍',
     note:
       '这是「一节课里反复发生的」四个 skill。teaching-turn 是主体；board-designer 是 2026-10-27 的板书层，' +
-      '在探针内与 teaching-turn 串行（先定板、再说话），保证老师说的每句话都对应板上真实存在的东西。' +
-      '板书层尚未接进 teaching-turn-engine，线上课堂目前只跑 teaching-turn。',
+      '与 teaching-turn 串行（先定板、再说话），保证老师说的每句话都对应板上真实存在的东西。' +
+      '板书层已接进 teaching-turn-engine：首轮先定板，后续轮同轮刷新并按需挂板。',
     items: [
       {
         file: 'skill.teaching-opening-generator.md',
         when: '进入一个 task 的第一回合',
         input: 'task + 材料摘要 + 学生画像',
         output: '开场白（建立情境、给出第一个问题），不含图',
-        code: 'services/ai-teaching/teaching-opening.service.ts',
+        code: 'backend/src/skills/v4-aux-skills/index.ts',
       },
       {
         file: 'skill.teaching-turn.md',
         when: '每一轮学生发言',
         input: '对话历史 + scenario（taskType/认知帧/策略/材料/占位）+ 代码裁决的控制信号 + boardContext',
         output: 'reply / analysis / knowledge / pedagogy / control / figure',
-        code: 'skills/teaching-turn（提示词 63KB，输出由 normalizeOutput 白名单收口）',
+        code: 'skills/teaching-turn（提示词 68KB，输出由 normalizeOutput 白名单收口）',
       },
       {
         file: 'skill.board-designer.md',
-        when: '探针内每轮（或换例子时）先于 teaching-turn 调用；引擎尚未接线',
+        when: '每轮（或换例子时）先于 teaching-turn 调用；引擎已接线',
         input: 'task + 学生这句话 + 图型建议 + questionIntent + 上一块板（换板时）',
         output: 'figure JSON（完整板）；由代码派生提问态 / 剥注释 / 过图闸后才下发',
-        code: 'backend/scripts/board-probe.ts（原型）；接线见 CLASSROOM_PIPELINE.md §1.6',
+        code: 'backend/src/services/ai-teaching/board-designer.service.ts（已接）；探针原型见 backend/scripts/board-probe.ts',
       },
       {
         file: 'skill.session-wrapup.md',
         when: '会话收尾 / 学生离开',
         input: '整段对话 + 学情痕迹',
         output: '本次课小结、掌握度、下次建议',
-        code: 'services/ai-teaching/session-wrapup.ts',
+        code: 'backend/src/skills/session-wrapup/index.ts',
       },
     ],
   },
@@ -146,12 +146,15 @@ const INDEX_ONLY = [
   ['skill.learner-progress-report.md', '进度报告', '课后'],
   ['skill.replan-attribution.md', '重规划归因', '课后'],
   ['skill.semantic-freeze-judge.md', '语义冻结判定（验收口径）', '课后'],
-  ['skill.virtual-learner-*.md（12 个）', '虚拟学习者：人格/场景/模拟/评审/仲裁——用于造课与验收，不进真实课堂', '离线'],
+  ['skill.virtual-learner-*.md（9 个）', '虚拟学习者：人格/场景/模拟/评审/仲裁——用于造课与验收，不进真实课堂', '离线'],
   ['skill.skill-author.md / skill.skill-compiler.md', '写 skill 的 skill（开发用）', '离线'],
 ];
 
 const out = [];
 out.push('# 课堂 Skill 合集（单文件）');
+out.push('');
+out.push('> 📌 类型：活规范｜最后核验：2026-11-02。索引见 [doc/README.md](./README.md)。');
+out.push('>');
 out.push('');
 out.push('> 由 `outputs/e2e/skill-pack.mjs` 从 `prompts/` 原样拼出，**不要手改这一份**——改源文件再重跑。');
 try {

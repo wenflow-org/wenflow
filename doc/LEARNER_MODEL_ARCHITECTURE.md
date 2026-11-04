@@ -1,6 +1,6 @@
 # 学习者模型场景设计（新版架构）
 
-> 📌 类型：活规范（实现度 ~90%；Phase 5 已消费；§6 契约表/§10/§11 待补）｜最后核验：2026-09-28。索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范（实现度 ~90%；Phase 5 已消费；§6 契约表/§10/§11 待补）｜最后核验：2026-11-02。索引见 [doc/README.md](./README.md)。
 
 ## 1. 目标
 
@@ -35,7 +35,6 @@
 它的职责是将以下数据源聚合为统一快照：
 
 - `goal_conversations`
-- `student_baselines`
 - `learning_metrics`
 - `teaching_sessions`
 - `learning_paths / milestones / subtasks`
@@ -48,9 +47,9 @@
 
 ## 3. 是否需要编排器
 
-当前阶段不单独为学习者模型场景增加 orchestrator。
+学习者模型场景的 orchestrator 已在编排层注册：`learnerAgentRuntimeDefinition`（id `profile-agent`、`managedByCode: true`），三步链路 `skill:learner-model` → `skill:lesson-knowledge-enricher` → `LearnerSnapshotRefreshService`（`backend/src/coordinators/learner.definition.ts`；已列入 `ORCHESTRATOR_RUNTIME_DEFINITIONS`）。
 
-原因：
+原因（最初保持无 orchestrator 的考量，Phase 1）：
 
 1. 学习者模型场景不是一个独立用户流程，而是跨路径/教学/admin 的共享上游状态层。
 2. 当前主要工作是确定性聚合、事件触发刷新、按需读取，不是多 Agent 多阶段编排。
@@ -64,6 +63,8 @@
 
 ### 未来何时引入 orchestrator
 
+> 本节所列条件已在实现中发生——编排层已注册学习者主链 orchestrator（`learnerAgentRuntimeDefinition`，id `profile-agent`、`managedByCode: true`；链路 `skill:learner-model` → `skill:lesson-knowledge-enricher` → `LearnerSnapshotRefreshService`）。以下为最初的判断条件，保留供参考。
+
 当满足以下任一条件时，可考虑新增 `learner-refresh-orchestrator`：
 
 - 学习者快照由多个子 Agent 共同产出
@@ -71,13 +72,12 @@
 - 存在高成本异步批量重算需求
 - 需要失败重试、阶段日志、后台运行状态管理
 
-在此之前，不新增 orchestrator。
+在此之前，不新增 orchestrator（该阶段已随上述注册结束）。
 
 ## 4. 在新版架构中的位置
 
 ```text
 goal_conversations
-student_baselines
 learning_metrics
 teaching_sessions
 learning_paths / milestones / subtasks
@@ -140,28 +140,36 @@ type LearnerSnapshot = {
     }
   }
 
-  profile: StableLearnerProfile
-  dynamicState: DynamicLearnerState
+  profile: LearnerModelProfile
+  dynamicState: LearnerDynamicState
+  learningControlState: LearnerLearningControlState
+  replanSignal: LearnerReplanSignal
   knowledgeMemory: LearnerKnowledgeMemory
-  teachingHints: TeachingHints
+  teachingHints: LearnerTeachingHints
 }
 ```
 
-### 6.1 StableLearnerProfile
+### 6.1 LearnerModelProfile
 
 长期相对稳定，来源于：
 
 - `goal_conversations`
-- `student_baselines`
 
-主要内容：
+主要内容（对应 `LearnerModelProfile`，见 `backend/src/agents/learner-model-agent/types.ts`）：
 
-- cognitive
-- preferences
-- emotional
-- behavioral
+- `cognitive`（CognitiveProfile）
+- `preferences`（LearningPreferences）
+- `emotional`（EmotionalProfile）
+- `behavioral`（BehavioralBaseline）
+- `learning`（LearningState）
+- `history`（InteractionHistory）
+- `narrativeInsights`（LearnerNarrativeInsights）
+- `curriculumControls`（LearnerCurriculumControls）
+- `narratives`（LearnerGoalNarratives，可选：仅在有目标对话数据时存在）
+- `narrativeSource`（画像叙述出处，可选，可为 null）
+- `derivedInsights`（learningVelocity / optimalSessionLength / recommendedDifficulty / suggestedApproach / riskFactors / strengths）
 
-### 6.2 DynamicLearnerState
+### 6.2 LearnerDynamicState
 
 近期学习态，来源于：
 
@@ -279,7 +287,7 @@ type PathKnowledgeMemory = {
 }
 ```
 
-### 6.4 TeachingHints
+### 6.4 LearnerTeachingHints
 
 给 teaching 直接消费的指导信息：
 
@@ -400,7 +408,6 @@ type TeachingLearnerProjection = {
 2. `teaching_sessions.knowledgeState`
 3. `summary / evaluation`
 4. `goal_conversations`
-5. `student_baselines`
 
 ### 9.3 Concept Key 归一化优先级
 
@@ -531,7 +538,7 @@ query：
 
 ## 12. 服务拆分建议
 
-当前阶段不引入 orchestrator，但建议引入以下服务：
+学习者模型场景的 orchestrator 已在编排层注册（见 §3）；此外建议引入以下服务：
 
 ### 12.1 `LearnerSnapshotService`
 
@@ -590,7 +597,7 @@ query：
 
 - `backend/src/routes/admin/learner-models.ts`
 
-> ⚠️ 2026-08-30 复核：页面实际实现于管理端重构后的新路径（路由 `/admin/learner-models` 重定向至 `/admin/learner-center`）：
+> ⚠️ 2026-08-30 复核：页面实际实现于管理端重构后的新路径（`/admin/learner-models` 与 `/admin/learner-center` 旧路径均重定向至 `/admin/learner-state`）：
 > - 前端列表页：`frontend/src/views/admin-redesign/LearnerCenter.vue`（原设计名 LearnerModels.vue）
 > - 前端详情页：`frontend/src/views/admin-redesign/LearnerDetail.vue`（原设计名 LearnerModelDetail.vue）
 
@@ -662,6 +669,6 @@ query：
 
 1. `skill:learner-model` 是 canonical id。
 2. 输出命名空间使用 `internal.ext.learner`。
-3. 当前不单独建设 learner orchestrator。
+3. 学习者模型主链 orchestrator 已在编排层注册（id `profile-agent`、`managedByCode: true`；链路 `skill:learner-model` → `skill:lesson-knowledge-enricher` → `LearnerSnapshotRefreshService`）。
 4. learner snapshot 采用“事件刷新 + 按需读取”模型。
 5. admin v1 只做“只读 + 重算”，不做人工编辑。

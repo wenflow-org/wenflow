@@ -325,7 +325,7 @@
           "artifactKind": "generation",
           "interactionMode": "snapshot",
           "contractFields": 0,
-          "ruleCount": 53,
+          "ruleCount": 55,
           "constraintCount": 1,
           "conditionalRuleCount": 2,
           "phases": [
@@ -630,7 +630,7 @@
           "interactionMode": "turn",
           "contractFields": 16,
           "ruleCount": 83,
-          "constraintCount": 14,
+          "constraintCount": 15,
           "conditionalRuleCount": 14,
           "phases": [
             "turn-generated",
@@ -1831,7 +1831,7 @@
       "artifactKind": "generation",
       "interactionMode": "snapshot",
       "contractFields": 0,
-      "ruleCount": 53,
+      "ruleCount": 55,
       "constraintCount": 1,
       "conditionalRuleCount": 2,
       "phases": [
@@ -1954,7 +1954,7 @@
       "interactionMode": "turn",
       "contractFields": 16,
       "ruleCount": 83,
-      "constraintCount": 14,
+      "constraintCount": 15,
       "conditionalRuleCount": 14,
       "phases": [
         "turn-generated",
@@ -2781,6 +2781,34 @@
       "usedInStages": []
     },
     {
+      "skillId": "board-designer",
+      "stage": null,
+      "agentId": null,
+      "kind": "handler-only",
+      "displayName": "课堂板书设计器 Skill",
+      "description": "按本轮教学意图生成课堂白板（认知减负区）的板面 spec，经 teaching-turn 归一化后上墙",
+      "coreFile": null,
+      "manifestFile": null,
+      "hasCore": false,
+      "hasManifest": false,
+      "baseVersion": null,
+      "channels": [],
+      "identity": "",
+      "inputs": 0,
+      "outputs": 0,
+      "params": null,
+      "executionMode": null,
+      "artifactKind": null,
+      "interactionMode": null,
+      "contractFields": 0,
+      "ruleCount": 0,
+      "constraintCount": 0,
+      "conditionalRuleCount": 0,
+      "phases": [],
+      "contextMode": null,
+      "usedInStages": []
+    },
+    {
       "skillId": "teaching-opening-generator",
       "stage": null,
       "agentId": "teaching-agent",
@@ -3195,12 +3223,7 @@
       "coreFile": null
     }
   ],
-  "compiledOnlyPrompts": [
-    {
-      "skillId": "board-designer",
-      "promptFile": "prompts/skill.board-designer.md"
-    }
-  ],
+  "compiledOnlyPrompts": [],
   "skillsWithoutPrompt": [
     {
       "skillId": "learner-model",
@@ -3237,18 +3260,24 @@
       "kind": "handler-only",
       "displayName": "文生图 Skill",
       "reason": "handler-only：无 LLM 提示词，逻辑在代码 handler"
+    },
+    {
+      "skillId": "board-designer",
+      "kind": "handler-only",
+      "displayName": "课堂板书设计器 Skill",
+      "reason": "handler-only：无 LLM 提示词，逻辑在代码 handler"
     }
   ],
   "counts": {
-    "skills": 37,
+    "skills": 38,
     "byKind": {
       "mainline": 20,
-      "handler-only": 8,
+      "handler-only": 9,
       "aux": 9
     },
     "prompts": 31,
     "mainline": 20,
     "aux": 9,
-    "handlerOnly": 8
+    "handlerOnly": 9
   }
 }

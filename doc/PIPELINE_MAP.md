@@ -195,16 +195,16 @@ flowchart LR
 
 ## 3. Prompt 全量清单
 
-共 37 个已登记 Skill（mainline 20 / aux 9 / handler-only 8），其中 31 个有 LLM 提示词正文。
+共 38 个已登记 Skill（mainline 20 / aux 9 / handler-only 9），其中 31 个有 LLM 提示词正文。
 
 | Skill | 所属阶段（含复用） | Agent | 类型 | 规则/约束（条件） | 正文 | Manifest | 身份（首行） |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `goal-conversation` | 澄清阶段、仿真阶段 | `goal-agent` | mainline | 39/3 | `prompts/core/goal-conversation.yaml` | `prompts/manifests/goal-conversation.yaml` | 学习目标澄清与方向收敛助手，通过自然对话澄清学习目标，信息足够时收敛到第一版学习方向。 |
 | `path-planning` | 规划阶段 | `path-agent` | mainline | 52/4 | `prompts/core/path-planning.yaml` | `prompts/manifests/path-planning.yaml` | 一位认知建构师，负责先为用户的真实问题构建隐藏的认知图景，再据此设计一条阶段化的学习骨架。 |
-| `stage-designer` | 规划阶段 | `path-agent` | mainline | 53/1（2） | `prompts/core/stage-designer.yaml` | `prompts/manifests/stage-designer.yaml` | 一位阶段任务设计师。 |
+| `stage-designer` | 规划阶段 | `path-agent` | mainline | 55/1（2） | `prompts/core/stage-designer.yaml` | `prompts/manifests/stage-designer.yaml` | 一位阶段任务设计师。 |
 | `path-reviewer` | 规划阶段 | `path-agent` | mainline | 12/3 | `prompts/core/path-reviewer.yaml` | `prompts/manifests/path-reviewer.yaml` | 学习路径质量评审器。你评审的是 path-planning 生成的学习路径，不是直接面对用户。 |
 | `kc-mapper` | 规划阶段 | `path-agent` | mainline | 14/11 | `prompts/core/kc-mapper.yaml` | `prompts/manifests/kc-mapper.yaml` | 对给定的认知核心（cognitiveCore）与任务列表（subtasks）做机器可读的结构标注： |
-| `teaching-turn` | 教学阶段 | `teaching-agent` | mainline | 83/14（14） | `prompts/core/teaching-turn.yaml` | `prompts/manifests/teaching-turn.yaml` | 一位结构化教学回合生成器。 |
+| `teaching-turn` | 教学阶段 | `teaching-agent` | mainline | 83/15（14） | `prompts/core/teaching-turn.yaml` | `prompts/manifests/teaching-turn.yaml` | 一位结构化教学回合生成器。 |
 | `peer-reinforcement` | 教学阶段 | `teaching-agent` | mainline | 12/4 | `prompts/core/peer-reinforcement.yaml` | `prompts/manifests/peer-reinforcement.yaml` | 学习伙伴，和学生一起探索问题。 |
 | `session-wrapup` | 教学阶段 | `teaching-agent` | mainline | 22/3（1） | `prompts/core/session-wrapup.yaml` | `prompts/manifests/session-wrapup.yaml` | 一位课后产出助手。请基于本节课的结构化证据生成课后总结与评估。 |
 | `adaptive-guidance-copy` | 画像阶段 | `profile-agent` | mainline | 10/2 | `prompts/core/adaptive-guidance-copy.yaml` | `prompts/manifests/adaptive-guidance-copy.yaml` | 一个学习产品的动态引导文案生成器。 |
@@ -227,6 +227,7 @@ flowchart LR
 | `material-collector` | — | — | handler-only | 13/6 | `prompts/core/material-collector.yaml` | `prompts/manifests/material-collector.yaml` | 「资料采集抽取器」，是 material-collector 编排链里唯一的 LLM 环节。 |
 | `material-brief` | — | — | handler-only | 9/5 | `prompts/core/material-brief.yaml` | `prompts/manifests/material-brief.yaml` | 「资料理解摘要器」。用户上传了一份学习资料，解析后的正文交给你。 |
 | `text-to-image` | — | — | handler-only | 0/0 | — | — | — |
+| `board-designer` | — | — | handler-only | 0/0 | — | — | — |
 | `teaching-opening-generator` | 教学阶段 | `teaching-agent` | aux | 18/3 | `prompts/core/teaching-opening-generator.yaml` | `prompts/manifests/teaching-opening-generator.yaml` | 课堂开场交互生成器。基于课堂场景、当前阶段与学习者状态，为一个教学 Session 生成短、低门槛、可直接渲染的开场交互块。 |
 | `learner-progress-report` | — | — | aux | 3/1 | `prompts/core/learner-progress-report.yaml` | `prompts/manifests/learner-progress-report.yaml` | 学习进展报告生成器。基于任务学习数据、指标与学习信号，生成一段内部用于学习者状态中心的简短分析。 |
 | `learner-state-review` | — | — | aux | 6/2 | `prompts/core/learner-state-review.yaml` | `prompts/manifests/learner-state-review.yaml` | WenFlow 的学习状态评审诊断器。基于给定的学习状态摘要、知识线索与最近证据， |
@@ -251,6 +252,7 @@ flowchart LR
 | `web-fetch` | handler-only | handler-only：无 LLM 提示词，逻辑在代码 handler |
 | `decision-gate` | handler-only | handler-only：无 LLM 提示词，逻辑在代码 handler |
 | `text-to-image` | handler-only | handler-only：无 LLM 提示词，逻辑在代码 handler |
+| `board-designer` | handler-only | handler-only：无 LLM 提示词，逻辑在代码 handler |
 
 ## 5. 未在 skills.yaml 登记、但仍有 Manifest 的条目
 
@@ -260,14 +262,6 @@ flowchart LR
 | --- | --- | --- |
 | `concept-priority` | `prompts/manifests/concept-priority.yaml` | — |
 | `path-adjustment-generator` | `prompts/manifests/path-adjustment-generator.yaml` | — |
-
-## 6. 有编译产物但未登记
-
-这些条目只有 `prompts/skill.<id>.md`，既没有 `prompts/core/<id>.yaml`，也没有 manifest，且未进 `skills.yaml`；属于绕过 File-as-Truth 的旁路，改动前先确认是否应正式登记。
-
-| Skill | 编译产物 |
-| --- | --- |
-| `board-designer` | `prompts/skill.board-designer.md` |
 
 ## 7. 维护
 

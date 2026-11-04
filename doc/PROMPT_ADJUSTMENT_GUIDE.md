@@ -1,6 +1,6 @@
 # Prompt 调整指引（PROMPT_ADJUSTMENT_GUIDE）
 
-> 📌 类型：活规范（提示词调整操作指南）｜最后核验：2026-09-28（死链/死命令已修）。索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范（提示词调整操作指南）｜最后核验：2026-11-02（死链/死命令已修）。索引见 [doc/README.md](./README.md)。
 
 > 面向拿到项目后需要调整提示词的开发者/运营。2026-09 起 prompt 体系**只有一条编译链**——
 > 原第二级编译（prompt-compiler 服务：routing 重写 + `{{}}` 引用注解）已整体退役（16c3cabd），
@@ -17,7 +17,7 @@
 
 | 层 | 位置 | 能否手改 |
 |---|---|---|
-| 真源 SSOT | `prompts/core/*.yaml`（32 个） | ✅ 唯一人工编辑入口 |
+| 真源 SSOT | `prompts/core/*.yaml`（31 个） | ✅ 唯一人工编辑入口 |
 | 编译产物 | `prompts/skill.*.md` | ❌ 勿手改（漂移会被 sync 跳过） |
 | DB 镜像 | system 库 `agent_prompts` | ❌ 直改被中间件 409 拦截 |
 

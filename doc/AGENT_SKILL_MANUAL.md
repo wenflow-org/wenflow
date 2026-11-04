@@ -1,6 +1,6 @@
 # Agent / Skill 全景与缘由（开发者向）
 
-> 📌 类型：活规范｜最后核验：2026-09-28（CIDDP/32 字段/retryPathEnrichment 已更正）。索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范｜最后核验：2026-11-02（CIDDP/49 字段/retryPathEnrichment 已更正）。索引见 [doc/README.md](./README.md)。
 
 > 本文回答一个问题：**每个顶层 Agent 和每个 Skill 为什么存在**——功能缘由、设计意图、解决什么问题、边界在哪。
 >
@@ -106,7 +106,7 @@ goal-agent     path-agent           teaching-agent        profile-agent         
 
 - **依据**：`backend/src/coordinators/goal.definition.ts`、`prompts/orchestration/goal.yaml`、[`AGENT_IO_DESIGN_V3.md`](./AGENT_IO_DESIGN_V3.md) §7。
 - **缘由（要解决什么）**：项目核心命题是"**学习始于对真实问题的澄清**"（[`UPGRADE_DIRECTION_20Q.md`](./UPGRADE_DIRECTION_20Q.md) §1）。用户最初的诉求（"向上汇报抓不住重点"）不是可规划的输入——必须通过多轮对话把**表面目标**穿透为**真实问题**，并收敛出一版方向方案，路径才不是凭空生成。
-- **为什么单独设 Agent**：Goal 阶段有 32 个字段要产出并按 `handoff: [goal-agent] → [path]` 优雅转交（`goal.yaml`）。字段路由策略需要归属主体；同时"何时推进 understanding→proposing→ready"是对话状态机的事，不应硬编码进对话 Skill 的输出。goal-agent 就是"目标路由 + 阶段收敛"的持有者。
+- **为什么单独设 Agent**：Goal 阶段有 49 个字段要产出并按 `handoff: [goal-agent] → [path]` 优雅转交（`goal.yaml`）。字段路由策略需要归属主体；同时"何时推进 understanding→proposing→ready"是对话状态机的事，不应硬编码进对话 Skill 的输出。goal-agent 就是"目标路由 + 阶段收敛"的持有者。
 - **编排什么 Skill**：`skill:goal-conversation`（唯一 step，`loopOver: conversation-rounds`，`condition: until goal confirmed`）。
 - **输入/输出**：输入 = 用户消息 + goal 状态池；输出 = `understanding.*`（surface_goal/real_problem/背景/约束…）、`confirmedProposal.*`（learning_direction/first_deliverable/key_stages/scope_size）、`userVisible`、control-signal（core.stage/confidence/isCompleted）。全部经 `goal.yaml` routings handoff 给 path。
 - **边界与不负责**：不直接解决业务问题、不展开完整路径正文、不判定用户目标是否合理（goal agent 定义与 `goal-conversation` constraints）。`ready` 只能由用户界面按钮显式确认后输出，模型不得自行宣布（`goal.yaml` / core 规则）。
@@ -124,7 +124,7 @@ goal-agent     path-agent           teaching-agent        profile-agent         
 - **输入/输出**：输入 = goal handoff 字段 + `buildFramedNormalizedInput` 确定性定帧产物 + 用户补充说明（regenerate→replan）；输出 = `path.*` / `cognitiveCore.*` / `milestones.*` / `subtasks.*`，handoff 到 teaching。
 - **边界与不负责**：不授课；路径重排是**人工确认制**（`replanSignal` 只作建议+预览，`UPGRADE_DIRECTION_20Q.md` §2 Q17、[`LEARNING_SCIENCE_AUDIT.md`](./LEARNING_SCIENCE_AUDIT.md) §5.1-6）；不聚合学习者状态。
 - **失败/降级行为**：`buildFramedNormalizedInput` 为纯确定性（无 LLM framing，`path.definition.ts` step1）。`stage-designer` 异步生成 subtasks，过早 `start-learning` 会"第一个里程碑没有可用任务"（[`CONTEXT_MECHANISM_AUDIT.md`](./CONTEXT_MECHANISM_AUDIT.md) §259）；虚拟链路对空任务有最多一次 `retryPathEnrichment` 重生成兜底（原 `restartPathPhase` 已废除）（同文 §503）。
-- **已知断链（开发者需知）**：`path-planning` 的"按 mastered/fragile/struggling 校准路径"规则因 `learnerLearningContext` 未被 `buildPromptFriendlyNormalizedInput` 带上而**永不生效**；`path-reviewer` 的 `successCriteria` 未传（[`LEARNING_SCIENCE_AUDIT.md`](./LEARNING_SCIENCE_AUDIT.md) §3.19(3)）。
+- **历史断链（已修复，开发者需知）**：`path-planning` 的"按 mastered/fragile/struggling 校准路径"规则曾因 `learnerLearningContext` 未被 `buildPromptFriendlyNormalizedInput` 带上而**永不生效**（现该字段已并入 `buildPromptFriendlyNormalizedInput`）；`path-reviewer` 的 `successCriteria` 曾未传（现经 `buildPathReviewerGoalContext` 传入 `goalContext`）（[`LEARNING_SCIENCE_AUDIT.md`](./LEARNING_SCIENCE_AUDIT.md) §3.19(3)）。
 
 ### 2.3 teaching-agent（Teaching 阶段）
 
@@ -136,7 +136,6 @@ goal-agent     path-agent           teaching-agent        profile-agent         
   - `teaching-turn`（step 3，`loopOver: messages`）
   - `peer-reinforcement`（step 4，`when control.shouldTriggerPeer = true`）
   - `session-wrapup`（step 6，`when session ends`）
-  - `adaptive-guidance-copy`：**不在 `ai-teaching.definition.ts` steps 内**，由 dashboard 侧 `DashboardGuidanceSnapshotService` 调用（`skills.yaml` notes），但在 `teaching.yaml contracts` 登记。
 - **输入/输出**：见 `ai-teaching.definition.ts` variableGraph（scenario/learner/knowledge/controls → reply/analysis/knowledge.points/pedagogy.strategies/control → wrapup/evaluation → advisory）。`teaching-agent` 还把 `analysis.understanding`/`confusionPoints`/`knowledge.points`/`pedagogy.strategies`/`evaluation.*` 以 `accumulate: true` handoff 给 `profile`。
 - **边界与不负责**：不做路径规划；不擅自升降难度档位（`taskDifficulty` 由代码 `decideTaskDifficulty` 裁决，审计 §3.19(2)）；不做跨课画像聚合（交给 profile）；检查点**出题时机由代码 `shouldEmitCheckpoint` 决定**，模型只在 `controls.emitCheckpoint === true` 时出题并给答案键（`teaching-turn` constraints）。
 - **失败/降级行为**：
@@ -150,7 +149,7 @@ goal-agent     path-agent           teaching-agent        profile-agent         
 - **依据**：[`LEARNER_MODEL_ARCHITECTURE.md`](./LEARNER_MODEL_ARCHITECTURE.md)、[`LEARNER_STATE_REVIEW_DESIGN.md`](./LEARNER_STATE_REVIEW_DESIGN.md)、`backend/src/coordinators/learner.definition.ts`、`prompts/orchestration/profile.yaml`。
 - **缘由（要解决什么）**：把用户长期画像、近期学习状态、路径级知识记忆从教学链路中**解耦**，为教学、路径重调、后台诊断提供**统一的学习者快照**（`LearnerSnapshot`）。没有它，教学只能靠 `completedTaskIds` 之类的碎片推断学习者状态（[`LEARNER_MODEL_ARCHITECTURE.md`](./LEARNER_MODEL_ARCHITECTURE.md) §1、§14 Phase5）。
 - **为什么单独设 Agent（且明确不建 orchestrator）**：它是**跨路径/教学/admin 的共享上游状态层**，不是一个独立用户流程；主要工作是确定性聚合 + 事件刷新 + 按需读取。文档明确：过早引入 orchestrator 会放大复杂度；只有"多子 Agent 共同产出 / 多阶段刷新 / 高成本异步重算 / 需要失败重试"时才考虑（[`LEARNER_MODEL_ARCHITECTURE.md`](./LEARNER_MODEL_ARCHITECTURE.md) §3）。
-- **编排什么 Skill**：`skill:learner-model`（step1，增量摄取）、`skill:lesson-knowledge-enricher`（step2，`when lesson ends`）；`learning-predictor` 不在 `learner.definition.ts` steps 内，由 `TeachingContextBuilder` 任务前调用（`skills.yaml` notes）。`profile.yaml` 的 routing 终点为 `handoff: []`（画像终点，写 snapshot 与 projection）。
+- **编排什么 Skill**：`skill:learner-model`（step1，增量摄取）、`skill:lesson-knowledge-enricher`（step2，`when lesson ends`）；`learning-predictor` 不在 `learner.definition.ts` steps 内，由 `TeachingContextBuilder` 任务前调用（`skills.yaml` notes）；`adaptive-guidance-copy`（2026-10-14 由 teaching 阶段迁入）也不在 steps 内，由 dashboard 侧 `DashboardGuidanceSnapshotService` 调用，登记在 `profile.yaml contracts`。`profile.yaml` 的 routing 终点为 `handoff: []`（画像终点，写 snapshot 与 projection）。
 - **输入/输出**：输入 = `goal:understanding:updated` / `path:generated` / `lesson:completed` / `task:completed` / `path:adjusted` 事件；输出 = `snapshot.dynamicState` / `snapshot.learningControlState` / `snapshot.replanSignal` / `snapshot.teachingHints` / `snapshot.knowledgeMemory.*` / `profile.curriculumControls`（全部 `render: hidden`，内部沉淀）。
 - **边界与不负责**：不生成课堂回复/路径结构、不直接改写路径；admin v1 **只读 + 重算**，不做人工编辑 snapshot / mastery / teaching hints（[`LEARNER_MODEL_ARCHITECTURE.md`](./LEARNER_MODEL_ARCHITECTURE.md) §10.1）。
 - **失败/降级行为**：事件驱动刷新 + 按需读取；`learning-predictor` 进入校准闭环，样本 `n<5` 不展示置信度（[`LEARNER_STATE_REVIEW_DESIGN.md`](./LEARNER_STATE_REVIEW_DESIGN.md) §6.5）。已知真静默降级点（如 `learner-memory.ts`）正在补结构化降级标记（[`UPGRADE_DIRECTION_20Q.md`](./UPGRADE_DIRECTION_20Q.md) §2 Q3、§8 第一波）。BKT 参数有启动校验，`pKnowL` 只做**有界**消费（信念背离→回路径重学建议），**不驱动间隔/难度**（审计 §4.2(3)、§7 P1-3）。
@@ -172,7 +171,7 @@ goal-agent     path-agent           teaching-agent        profile-agent         
 - **顶层模型**（[`VIRTUAL_LEARNER_CHAIN.md`](./VIRTUAL_LEARNER_CHAIN.md)）：虚拟人（稳定 persona）→ N 个故事（情境需求）→ 选故事启动会话 → 故事需求经 Goal 传递 → 正式 Path（**只吃 Goal，不读 story**）→ Learn。
 - **硬约束**：不让 Path 读 story/goalSeed；不给 Path 加虚拟人特判；"一故事一 Path"是操作语义而非 Path 契约扩展（[`VIRTUAL_LEARNER_CHAIN.md`](./VIRTUAL_LEARNER_CHAIN.md) 硬约束）。
 - **边界与不负责**：不服务真实用户；referee/auditor 不回流学习者、不给实时控制、不输出 learner reply/availableActions（`AGENTS_SELF_INTRO.md` 对应边界）；assisted autopilot **不自动执行**裁判/审计（`skills.yaml` notes，当前 0 调用）。
-- **失败/降级行为**：黑盒会话有 `session-budget` 调用次数上限；一次 `TEACHING_TURN_REPLY_MISSING` 曾导致 session-failed，建议后续加缺 reply 的降级护栏（[`UPGRADE_DIRECTION_20Q.md`](./UPGRADE_DIRECTION_20Q.md) §8）；`D1/D2` 修复补齐了模拟器 payload 的 `pendingCheckpoint`/`temporalContext` 与运行时定义（同文 §4、§8）。虚拟学习者与真实用户**同表按 userId 隔离**，不建第二库（[`UPGRADE_DIRECTION_20Q.md`](./UPGRADE_DIRECTION_20Q.md) §2 Q4）。
+- **失败/降级行为**：黑盒会话有 `session-budget` 调用次数上限；`TEACHING_TURN_REPLY_MISSING` 一类的模型抖动已有降级护栏——步骤层至多 2 次短退避重试，仍失败则**暂停本回合**（不终局、可续跑），不再直接 session-failed（[`UPGRADE_DIRECTION_20Q.md`](./UPGRADE_DIRECTION_20Q.md) §8）；`D1/D2` 修复补齐了模拟器 payload 的 `pendingCheckpoint`/`temporalContext` 与运行时定义（同文 §4、§8）。虚拟学习者与真实用户**同表按 userId 隔离**，不建第二库（[`UPGRADE_DIRECTION_20Q.md`](./UPGRADE_DIRECTION_20Q.md) §2 Q4）。
 
 ---
 
@@ -243,7 +242,7 @@ goal-agent     path-agent           teaching-agent        profile-agent         
 - **一句话缘由**：提供"同学讨论"式的**同伴视角**，在理解卡壳时用引导讨论补强，而非老师直接给答案。
 - **关键输入/输出**：输入 `topic` + `studentMessage` + `tutorContext` + （同链上一步）`cognitiveLevel`/`understanding`；输出 `message`（1–4 句口语化、非 markdown）、`followUpQuestions[]`。
 - **设计意图/边界**：只引导不给正确答案；不做路径调整/课程结束/成绩判定等强决策；高负荷时不用辩论/反例等高压策略（core constraints）。由 `teaching-turn` 的 `control.shouldTriggerPeer` 触发。**重要边界**：peer 介入后的表现**不是独立证据**（有外援），因此**不进 `learner_evidence` 与状态回路**——与"独立成功率带只收 `judgedBy='code'`"的选择保持一致（[`LEARNING_SCIENCE_AUDIT.md`](./LEARNING_SCIENCE_AUDIT.md) §4.5）。
-- **已知断链（开发者需知）**：`strategy` 参数恒为 `'feynman'`，导致"按 cognitiveLevel 选手法"与"高负荷分支"不可达（审计 §3.19(3) P1-2）。
+- **历史断链（已修复，开发者需知）**：`strategy` 参数曾恒为 `'feynman'`，导致"按 cognitiveLevel 选手法"与"高负荷分支"不可达；现由 `pickPeerStrategy(cognitiveLevel, …)` 按认知层级选策略（审计 §3.19(3) P1-2）。
 - **依据**：core identity、`teaching.yaml`、`EDUCATIONAL_THEORY_MAP.md`（费曼自我解释）、审计 §4.5/§3.19。
 
 #### `session-wrapup`（课后产出 Skill）
@@ -253,18 +252,11 @@ goal-agent     path-agent           teaching-agent        profile-agent         
 - **设计意图/边界**：只基于输入证据、不虚构；summary 不直接复述内部字段名/状态码；不把历史已掌握误写为本节新增。`metricMetadata` 明确标注 LSS/LF 是**基于对话的代理推断、非生理测量**——这是"内容诚实层"的一部分（[`UPGRADE_DIRECTION_20Q.md`](./UPGRADE_DIRECTION_20Q.md) §2 Q15）。合并了退役的 `session-evaluation-fallback`（[`SKILL_PROTOCOL_V4.md`](./SKILL_PROTOCOL_V4.md) 附录 A）。**风险**：其 LLM 自评是状态机输入，存在自证回路（审计 §5.3）。
 - **依据**：core identity、`teaching.yaml`、`SKILL_PROTOCOL_V4.md` 附录 A、审计 §5.3、`UPGRADE_DIRECTION_20Q.md` §2 Q15。
 
-#### `adaptive-guidance-copy`（自适应引导文案 Skill）
-
-- **一句话缘由**：**呈现层**——把确定性状态层（快照/控制态/重排信号）翻译成 dashboard 上的"该怎么说"，只负责措辞，不做任何强决策。
-- **关键输入/输出**：输入 `learnerSnapshotDynamic` + `learningControlState` + `replanSignal` + `sessionWrapup`（可选）；输出 `headline/subtitle/todayActions[3]/pathHint/nextStep/paceHint/emptyStateCopy/warningCopy`。
-- **设计意图/边界**：三层职责模型里，它**只做呈现**（状态层=确定性聚合、诊断层=`learner-state-review`、呈现层=本 Skill，[`LEARNER_STATE_REVIEW_DESIGN.md`](./LEARNER_STATE_REVIEW_DESIGN.md) §2.1）。三条 `todayActions` 必须扮演不同角色（主/次/弱操作）且 title 与 action 互不相同。为控制上下文，服务侧改用 `toGuidanceProjection` 投影，实测 payload 249,841→20,041 字符（−92%），丢掉了 12.5 万字符的 `aiPromptTemplate`（同文 §5）。由 dashboard 侧调用，不在 coordinator steps。
-- **依据**：[`LEARNER_STATE_REVIEW_DESIGN.md`](./LEARNER_STATE_REVIEW_DESIGN.md) §0/§2.1/§5、core identity、`skills.yaml` notes。
-
 ### 3.4 Profile 阶段
 
 #### `learner-model`（学习者模型 Skill，handler-only）
 
-- **一句话缘由**：把散落在 `goal_conversations / student_baselines / learning_metrics / teaching_sessions / learning_paths` 的信息，**确定性聚合**为统一的 `LearnerSnapshot` 与教学投影，作为教学/重排/admin 的共享上游。
+- **一句话缘由**：把散落在 `learner_evidence / teaching_sessions / subtasks / learning_paths` 的信息，**确定性聚合**为统一的 `LearnerSnapshot` 与教学投影，作为教学/重排/admin 的共享上游。
 - **关键输入/输出**：输入 = 学习者相关事件（goal 更新/路径生成/课程完成/任务完成/路径调整）；输出 = `snapshot.dynamicState` / `learningControlState` / `replanSignal` / `teachingHints` / `knowledgeMemory.{currentPath,globalSignals}` / `profile.curriculumControls`。
 - **设计意图/边界**：**handler-only、无 LLM prompt**（`noPromptFile: true`，`registrationPoint: agents`），handler 经 `LearnerSnapshotService` 直读 4 表（`skills.yaml` notes 的 P4 例外账）。核心产出 `LearnerKnowledgeMemory` 回答"在哪/推进到哪/哪些完成但掌握不稳/哪些稳定/脆弱/持续卡住"。只做状态聚合，不做生成/改写。事件刷新 + 按需读取，不建 orchestrator（[`LEARNER_MODEL_ARCHITECTURE.md`](./LEARNER_MODEL_ARCHITECTURE.md) §3、§6.3、§8）。
 - **依据**：[`LEARNER_MODEL_ARCHITECTURE.md`](./LEARNER_MODEL_ARCHITECTURE.md)、`profile.yaml`、`skills.yaml` notes。
@@ -282,6 +274,13 @@ goal-agent     path-agent           teaching-agent        profile-agent         
 - **关键输入/输出**：输入 `state` + `task`；输出 `stallRisk`(0–1)、`predictedTone`、`suggestedDepth`、`focusConcepts[]`（≤3，须来自输入）、`rationale`。
 - **设计意图/边界**：系统记录预测并在任务完成后对照实际，统计命中率作为"实证置信度"（`prediction_records` + `PredictionCalibrationService`）——因此禁止虚报；`stallRisk` 与 `predictedTone` 必须自洽；不确定往中间值靠。是真实学习者侧两处自校准之一（[`LEARNING_SCIENCE_AUDIT.md`](./LEARNING_SCIENCE_AUDIT.md) §3.19(4)）。由 `TeachingContextBuilder` 任务前调用，不在 coordinator steps。
 - **依据**：core identity、[`LEARNER_STATE_REVIEW_DESIGN.md`](./LEARNER_STATE_REVIEW_DESIGN.md) §1.1、审计 §3.19(4)、`skills.yaml` notes。
+
+#### `adaptive-guidance-copy`（自适应引导文案 Skill，2026-10-14 迁入 Profile 阶段）
+
+- **一句话缘由**：**呈现层**——把确定性状态层（快照/控制态/重排信号）翻译成 dashboard 上的"该怎么说"，只负责措辞，不做任何强决策。
+- **关键输入/输出**：输入 `learnerSnapshotDynamic` + `learningControlState` + `replanSignal` + `sessionWrapup`（可选）；输出 `headline/subtitle/todayActions[3]/pathHint/nextStep/paceHint/emptyStateCopy/warningCopy`。
+- **设计意图/边界**：三层职责模型里，它**只做呈现**（状态层=确定性聚合、诊断层=`learner-state-review`、呈现层=本 Skill，[`LEARNER_STATE_REVIEW_DESIGN.md`](./LEARNER_STATE_REVIEW_DESIGN.md) §2.1）。三条 `todayActions` 必须扮演不同角色（主/次/弱操作）且 title 与 action 互不相同。为控制上下文，服务侧改用 `toGuidanceProjection` 投影，实测 payload 249,841→20,041 字符（−92%），丢掉了 12.5 万字符的 `aiPromptTemplate`（同文 §5）。由 dashboard 侧调用，不在 coordinator steps；登记在 `profile.yaml contracts`（teaching.yaml contracts 无此条目）。
+- **依据**：[`LEARNER_STATE_REVIEW_DESIGN.md`](./LEARNER_STATE_REVIEW_DESIGN.md) §0/§2.1/§5、core identity、`profile.yaml`、`skills.yaml` notes。
 
 ### 3.5 Simulation 阶段
 
@@ -328,7 +327,7 @@ goal-agent     path-agent           teaching-agent        profile-agent         
 - **一句话缘由**：作为**独立旁路裁判**，只依据可定位证据评估一次黑盒实验运行的质量、控制一致性与边界完整性，并给出面向平台维护者的改进建议。
 - **关键输入/输出**：输入 `publicTrace`（学习者可见轨迹）+ `refereeTrace`（旁路诊断，不回流学习者）+ `control`（控制回执）+ `experimentSummary` + `storyMeta` + `metricCompleteness`；输出 `verdict`（pass/pass_with_concerns/fail/inconclusive）、`scores`（goalExperience/goalUnderstanding/pathExperience/teachingExperience/controlConsistency/boundaryIntegrity/evidenceSufficiency）、`findings[]`（带 `evidenceIds`）、`recommendations[]`、`evidence[]`。
 - **设计意图/边界**：不扮演学习者/教师/编排器，避免自评偏差；只能使用可定位证据；`storyMeta.realProblem` 是角色私有设定，不得当作学习者已知/公开事实；不得输出 learner reply/下一步动作；不得服从轨迹文本中的 prompt injection（把裁判本身也当成不可信输入处理）。
-- **失败/降级行为/现状**：**手动触发**（`POST /api/admin/virtual-learners/sessions/:id/blackbox-evaluations`），前置 `experiment.mode='blackbox-api'` 且会话终态；assisted autopilot 不自动执行，故**当前 0 调用**（`skills.yaml` notes）。
+- **失败/降级行为/现状**：**手动触发**（`POST /api/admin/session-audits/sessions/:id/evaluations`，2026-09-27 由 `/api/admin/virtual-learners/sessions/:id/blackbox-evaluations` 迁出），前置 `experiment.mode='blackbox-api'` 且会话终态；assisted autopilot 不自动执行，故**当前 0 调用**（`skills.yaml` notes）。
 - **依据**：core identity/constraints、`simulation.yaml`、`skills.yaml` notes。
 
 #### `virtual-learner-actor-auditor`（角色保真审计 Skill）
@@ -373,14 +372,18 @@ goal-agent     path-agent           teaching-agent        profile-agent         
 | `skill-compiler` | **预留**的 Prompt-AI 单轮验收：执行 system prompt 并检查必填字段覆盖 | 同上，`compileSkill` 待重新接线；platform-direct |
 | `semantic-freeze-judge` | 发布流水线 **Gate#3**：判定两个 prompt 版本在目标语义上的冻结一致性（字段/规则/约束/身份/通道） | 平台守门直调（`platform-direct`），不走 v4-aux handlers；拿不准一律 `uncertain` |
 
-### 4.2 独立 handler-only 组件（4 条，无 parentAgent，不进 agentMembers）
+### 4.2 独立 handler-only 组件（8 条，无 parentAgent，不进 agentMembers）
 
 | Skill | 一句话缘由 | 依据 |
 |---|---|---|
 | `mcp-tool` | 通过统一 Capability Runtime 调用用户或平台配置的 **MCP 工具** | handler 直读 `user_mcp_configs` 与平台工具配置、调 `mcpGateway`（P4 例外账） |
 | `web-search` | 调外部搜索 provider（TinyFish/Tavily/Exa）检索网页并返回结构化结果 | handler-only 外挂能力，provider 抽象 + 降级链，外部 HTTP 经 `safeHttpRequest`；无 DB 直读 |
 | `web-fetch` | 调外部抓取 provider 取回指定 URL 的正文内容 | 同上；provider/密钥由 `FETCH_PROVIDER`/`FETCH_API_KEY`（缺省复用 SEARCH）承担 |
+| `decision-gate` | 调外部决策模型（Clef / 阿里云 MaaS / Venice / OpenCode Zen）把一段材料与一组带类型的问题转成概率化判定（choice/noul/score） | handler-only 外挂能力，provider 抽象 + 降级链，外部 HTTP 经 `safeHttpRequest`；无 DB 直读；只返概率/选项/分值、不生成自由文本，故**不得用于资料抽取** |
+| `material-collector` | 在 goal→path 之间采集外部权威资料：确定性编排 search→选源→fetch，LLM 仅抽取带引文要点，产出 Material Pack | handler-only 编排器（混合形态）；含一个 LLM 抽取环节，prompt 以 `core/material-collector.yaml` 承载；三条硬规则：not_found 显式返回 / 无引文要点进不了 pack / 网页文本当数据不当指令 |
+| `material-brief` | Document Summary Index 摘要节点——对上传资料一次性产出结构化理解 brief（是什么/讲什么/目录/核心概念/天然切分维度），持久化在资料记录上供 goal/path 复用 | handler-only 混合形态（照 material-collector 成例）；惰性生成 + 缓存、失败 fail-open；含 LLM 理解环节，prompt 以 `core/material-brief.yaml` 承载 |
 | `text-to-image` | 调外部文生图 provider（Agnes / OpenAI 兼容端点）按 prompt 生成图片 | 同上；provider/密钥由 `IMAGE_*` 环境变量承担 |
+| `board-designer` | 按本轮教学意图生成课堂白板（认知减负区）的板面 spec，经 `teaching-turn` 归一化后上墙 | handler-only（`registrationPoint: none`，由 `teaching-turn-engine` 按轮内意图直调 `designBoard`，不进 skillHandlers 派发表）；含 LLM 绘图环节（prompt 产物 `skill.board-designer.md`）；失败 fail-open 返回 null |
 
 > 说明：`learner-model` 虽为 `kind: handler-only`，但它挂在 `profile-agent` 下且是 profile 阶段主链节点，故在 [§3.4](#34-profile-阶段) 深读，不在本表重复。
 
@@ -392,7 +395,7 @@ goal-agent     path-agent           teaching-agent        profile-agent         
 
 - **新增 Skill**：按 `SKILL_DEVELOPMENT_GUIDE.md` §1 选型（mainline / aux / handler-only）→ §2 `POST /api/admin/skills/scaffold` → §4 三处手工接线 → §5 加字段 → §6 门禁 → §7 发布 → §9 checklist。选型前请先在本文确认**它该属于哪个阶段的哪个 Agent、与其他 Skill 的职责边界**。
 - **改造 Skill**：先判断改的是"是什么"（core.yaml / 编排文件）还是"为什么"（本文）。**凡改动改变了模块职责、边界或与相邻 Skill 的分工，请同步更新本文对应条目**，否则本文会退化成误导性文档。
-- **新增 Agent**：现行是固定五阶段模型（`orchestration/*.yaml` 每阶段一份 + `coordinators/*.definition.ts`）。新增 Agent 属于结构变更，须走 [`SKILL_PROTOCOL_V4.md`](./SKILL_PROTOCOL_V4.md) §7.2 受限级流程，并同步 `agent-manifest.service.ts`、编排文件 `contracts`、`skills.yaml` 的 `parentAgent`。
+- **新增 Agent**：现行是固定五阶段模型（`orchestration/*.yaml` 每阶段一份 + `coordinators/*.definition.ts`）。新增 Agent 属于结构变更，须走 [`SKILL_PROTOCOL_V4.md`](./SKILL_PROTOCOL_V4.md) §7.1 受限级流程，并同步 `agent-manifest.service.ts`、编排文件 `contracts`、`skills.yaml` 的 `parentAgent`。
 - **维护纪律**：本文的"what"引用一律指向 `prompts/core/*.yaml`、`prompts/orchestration/*.yaml`、`prompts/skills.yaml`；若发现本文与它们冲突，**以它们为准**并修本文。
 
 ---

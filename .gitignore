@@ -223,7 +223,6 @@ doc/*
 # 例外：管理端视觉层规范（守卫规则 10/11/12 与巡检脚本按路径引用它作为判据）
 !doc/ADMIN_VISUAL_LAYER_SPEC.md
 # 例外：文案语义审查标准（copy:dump 的审阅依据，代码注释与脚本引用）
-!doc/ADMIN_COPY_SEMANTIC_AUDIT.md
 # 例外：Prompt 缓存优化技术文档（缓存口径与运维配置的权威引用）
 !doc/PROMPT_CACHE_OPTIMIZATION.md
 !doc/SKILL_PROTOCOL_V4.md
@@ -235,8 +234,6 @@ doc/*
 !doc/README.en.md
 !doc/NON_FUNCTIONAL_GOVERNANCE_PLAN.md
 !doc/EDUCATIONAL_THEORY_MAP.md
-!doc/PATH_ANDERSON_ITERATION_NOTE.md
-!doc/PATH_ANDERSON_ITERATION_NOTE.en.md
 !doc/PATH_PRODUCTION_REPLAN_CONTRACT.md
 !doc/PATH_PRODUCTION_REPLAN_CONTRACT.en.md
 !doc/VIRTUAL_LEARNER_CHAIN.md
@@ -246,8 +243,6 @@ doc/*
 !doc/LEARNER_STATE_REVIEW_DESIGN.md
 !doc/ADMIN_TERMINOLOGY_AUDIT.md
 !doc/ADMIN_OPERATIONS_MANUAL.md
-!doc/CONTEXT_MECHANISM_AUDIT.md
-!doc/LEARNING_SCIENCE_AUDIT.md
 !doc/AGENT_IO_DESIGN_V3.md
 !doc/SKILL_DEVELOPMENT_GUIDE.md
 # 例外：Prompt 调整指引（prompts/_README.md「如何修改 Prompt」按路径引用它）
@@ -259,15 +254,16 @@ doc/*
 # 例外：KC 概念身份/图 与 多路径信号作用域（协议与架构文档按路径引用）
 !doc/KC_CONCEPT_IDENTITY_AND_GRAPH_DESIGN.md
 !doc/KC_MULTIPATH_AND_LEARNER_SIGNAL_SCOPE.md
-# 例外：管理端页面模板 / 列宽规范 / 业务审计 / 模块对标（历史快照，随代码可查）
-!doc/ADMIN_PAGE_TEMPLATES.md
+# 例外：管理端列宽规范（活规范）
 !doc/ADMIN_COLUMN_WIDTH_SPEC.md
-!doc/ADMIN_TABS_BUSINESS_AUDIT.md
-!doc/ADMIN_MODULE_BENCHMARK.md
-# 例外：虚拟学习者预制与日期模拟（预制真源已迁 presets.yaml v4，文档留痕）
-!doc/VIRTUAL_LEARNER_PRESET_DESIGN.md
+# 例外：虚拟学习者日期模拟（接口契约 + 设计）
 !doc/VIRTUAL_LEARNER_SIMULATED_DAY_CONTRACT.md
 !doc/VIRTUAL_LEARNER_SIMULATED_DAY_DESIGN.md
+# 例外：课堂管线与提示词全文合集 / 教学图评审包 / 会话大 JSON 增量化设计
+!doc/CLASSROOM_PIPELINE.md
+!doc/CLASSROOM_SKILLS.md
+!doc/LLM_PACK_GUIDE.md
+!doc/SESSION_JSON_INCREMENTAL_DESIGN.md
 # 例外：开发脚本手册 与 newui 原型登记规则
 !doc/DEV_SCRIPTS.md
 !doc/NEWUI-PROTOTYPES.md

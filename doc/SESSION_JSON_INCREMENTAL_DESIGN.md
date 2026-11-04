@@ -1,6 +1,6 @@
 # 会话大 JSON 列增量化改造设计（messages / logs）
 
-> 📌 类型：设计留痕（已落地）｜最后核验：2026-10-16。索引见 [doc/README.md](./README.md)。
+> 📌 类型：设计留痕（已落地）｜最后核验：2026-11-02。索引见 [doc/README.md](./README.md)。
 
 > **状态（2026-09-22）**：两侧均已落地。
 > - virtual_sessions.logs → commit 157090f4（子表 + hydrateSessionLogsField 兼容桥）
@@ -49,14 +49,15 @@
 3. 写：首次追加时**惰性播种**（事务内：列 → 侧表），此后 `commitTurnState` 只
    INSERT 新增消息 + 更新会话行（不再写 messages 列，列冻结）。快照基线 =
    播种后侧表行数；commit 时 `payload.messages.slice(baseline)` 为增量。
-   协议契约推荐改显式：claim 返回 `messagesBaseLength`，coordinator commit 传增量数组，
-   repo 校验 `baseLength` 未变（侧表 COUNT 对账）后落库。
+   协议契约推荐改显式：claim 返回 `messagesBaseCount`，coordinator commit 回传该基线
+   （仍携带整包消息），repo 校验基线未变（侧表 COUNT 对账）后仅落 `slice(baseCount)`
+   的新增消息。
 4. `appendPeerMessages` 改为：revision CAS + INSERT 行（不再整包重写）；
    「在途回合拒绝」语义保留。
 5. 消费方（评估转录/管理端 teaching detail/导出）必须全部经仓储读，直查
    `messages` 列的代码清零（实施时以 grep 验收）。
-6. 迁移：加表轻量；惰性播种避免 1.7GB 库一次性回填；`messages` 列过渡期冻结保留，
-   稳定后另开迁移清空（届时可再回收一大截库体积）。
+6. 迁移：加表轻量；惰性播种避免 1.7GB 库一次性回填；`messages` 列在首次写入时即把列
+   内容搬入侧表并置 null（原地回收，无需再等后续迁移清空）。
 
 ## 二、virtual_sessions.logs（建议先做）
 
@@ -79,7 +80,7 @@
 2. 写：coordinator 追加 = INSERT（天然利用自增 id 保序）；字节预算改为「裁最旧行」。
 3. 读：双读（侧表有行用侧表，否则回退列）；管理端 5 处经统一 helper。
 4. reclaim：读改写改为 INSERT 终态行；retention：对侧表会话 DELETE 行（不再是列裁剪）。
-5. 惰性播种同侧；`logs` 列过渡期冻结，后续迁移清空。
+5. 惰性播种同侧；`logs` 列在首次写入时即搬入侧表并置 null（原地回收）。
 
 ## 三、验收清单（任一侧实施时）
 

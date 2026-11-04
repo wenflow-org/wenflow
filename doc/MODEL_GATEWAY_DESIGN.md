@@ -1,6 +1,6 @@
 # 模型 / 网关配置设计（以模型为中心）
 
-> 📌 类型：活规范（网关 SSOT，19 条核对 18 条准确）｜最后核验：2026-09-28。索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范（网关 SSOT，19 条核对 18 条准确）｜最后核验：2026-11-02。索引见 [doc/README.md](./README.md)。
 
 > 状态：P0~P3 已落地；2026-09-24 完成一次全面对账修订（见文末「修订记录」）。
 > §2「现状」为写作时点（2026-09-03 前后）快照，已解决项已就地标注——单读 §2 会低估现状。
@@ -12,7 +12,7 @@
 ## 0. 结论（TL;DR）
 
 1. **配置的原子单位是「模型」，不是「技能」也不是「平台」。** 每个模型声明自己的接入信息 + 能力元数据 + 限额；技能/Agent 只引用**逻辑别名**并做最小覆盖。
-2. 现状的骨架（多层解析、重试预算、错误分类、attempt 级遥测、健康探针、缓存热生效）**保留**，不推倒重来。
+2. 现状的骨架（多层解析、重试预算、错误分类、attempt 级遥测、缓存热生效）**保留**，不推倒重来（健康/能力探针已于 2026-10-27 整体下线，不在保留之列）。
 3. 三个真正的缺口：
    - **能力元数据没有闭环**：`models.config.ts` 有能力雏形，但只用来判 `supportsThinking`；思考/输出预算混在一个 `max_tokens` 里。
    - **`maxTokens` 语义错误**（P0 已修）：全局 floor 把每-skill 声明的输出预算**无条件抬到模型硬上限**（deepseek 131072），使 `prompts/core/*.yaml` 的 `params.maxTokens` 全部失效。
@@ -55,12 +55,12 @@
 |---|---|---|
 | `platform_api_configs` | 平台默认端点/密钥/默认模型/思考档；`availableModels`（逗号串）、`chatModels`/`reasoningModels`/`lightModels`（JSON 数组）、`reasoningEndpoint`/`lightEndpoint` **路由层从不读**，仅 api-config 读写回显 | `schema.prisma:97-122`；`apiConfig.service.ts:69-83`；`router.ts:300-312` |
 | `skill_model_configs` | 真实生效：`model`/`thinkingMode`/`reasoningEffort`/`endpoint`/`apiKey`/`requestTimeoutMs`/`maxLogicalRetries`；`temperature`/`maxTokens` 已 DEPRECATED（写路径剥离、运行时不再读） | `router.ts:123-189`；`skillModelConfig.service.ts:172-196`；`reliability-settings.service.ts:143-172` |
-| `agent_model_configs` | **无任何写入方**，却占据解析第二优先级 → 幽灵优先级 | `router.ts:275-288`；全库无 create/upsert |
+| `agent_model_configs` | **无任何写入方**；幽灵优先级已于 2026-10-08 从解析链摘除（表与迁移脚本保留，仅摘解析链） | `router.ts#resolveBaseRoute`（摘除说明注释）；全库无 create/upsert |
 | `agent_lab_configs` | 整表被复用为 path/simulation 输入配置的 JSON 容器；`model`/`temperature`/`maxTokens`/`apiKey` 列**无消费者** | `agentConfig.service.ts:95-189` |
 
 ### 2.2 解析优先级（现状）
 
-- **路由**（endpoint/key/model/timeout/thinking）：`user-agent-override → user-provider → agent-config → platform 默认 → env`；skill 层在其上做 endpoint/model/thinking/timeout 覆盖（`router.ts:70-121`）。
+- **路由**（endpoint/key/model/timeout/thinking）：`user-agent-override → user-provider → platform 默认 → env`（`agent-config` 跳已于 2026-10-08 摘除）；skill 层在其上做 endpoint/model/thinking/timeout 覆盖（`router.ts:70-121`）。
 - **生成参数**（真正发给上游的 model/temperature/max_tokens）：`runtimeOverride → ACTIVE agent_prompts → codeDefaults → routeFallback`（`resolve-llm-call-params.ts:110-146`）。
 - `tier` 在 skill 层是**装饰性**字段：`resolveModel` 与 `resolveReasoningModel` 对非空 model 返回同值 ⇒ chat/reasoning 分支等价，`light` 无代码（`router.ts:54-68,136-158`）。
   - **2026-09-24 注**：P2 别名层落地后此条仅在 model 为**具体 id** 时成立；model 为别名（`chat`/`reasoning`/`light`）时 tier 决定是否走 `requireThinking` 能力过滤（见 §4.2），不再是纯装饰。
@@ -100,7 +100,7 @@ this.applyThinkingMode(route, requestBody);
 - `agent_call_logs`（每逻辑调用：token/status/attempt/maxAttempts/errorCategory/model/sessionId）
 - `prompt_call_logs`（tokenUsage/attemptTrace/failureStage）
 - `llm_execution_attempts`（**最细粒度**：transportAttemptNo/http/错误类/backoff/retryAfter/超时/TTFT/缓存命中）
-- 健康探针：5 金丝雀 skill → `platform_api_configs.connectionStatus/lastCheckedAt`（默认关闭，间隔 120s）
+- ~~健康探针：5 金丝雀 skill → `platform_api_configs.connectionStatus/lastCheckedAt`（默认关闭，间隔 120s）~~ ——**2026-10-27 整体下线**（用户拍板「没有意义的功能，拿掉吧」）：两个服务、启动接线与 `/admin/system` 探针路由全部删除；`connectionStatus/lastCheckedAt` 字段保留但已无写入方
 - 成本：`computeCallCostUsd` 只被审计脚本引用；`pricing` 全空 ⇒ 无金额口径
 
 ### 2.6 切换模型（现状）
@@ -226,7 +226,7 @@ aliases / defaults
 ```
 
 - **加载器**：`config/models.config.ts` 启动时解析并**原地**摊平进历史导出（`AVAILABLE_MODELS` / `MODEL_MAP` / `MODEL_ALIASES` / `MODELS_BY_TIER`——数组/Map 身份不变，内容随热重载更新），别名过滤、skill 兜底链校验、成本价目表、`/api/config/available-models`、前端选择器**零改动**看到自定义模型。
-- **失败语义**：文件缺失 = 内置兜底目录（4 个种子模型，fresh clone 可启动）；文件存在但非法 = **fail-loud** 拒绝启动；运行期热重载失败 = 保留上一次好目录 + 日志 + registry 总览告警。
+- **失败语义**：文件缺失 = 内置兜底目录（3 个种子模型，fresh clone 可启动）；文件存在但非法 = **fail-loud** 拒绝启动；运行期热重载失败 = 保留上一次好目录 + 日志 + registry 总览告警。
 - **热重载**：`APIRouter.resolve()` 每次解析前 `reloadLlmProvidersIfChanged()`（mtime 变更才重读）；路径可用 `LLM_PROVIDERS_CONFIG` 环境变量覆盖。
 - **供应商端点**：provider 声明 `baseUrl` 时必须给 `apiKeyEnv`（密钥只走环境变量，严禁入文件）。路由层规则（`APIRouter.applyProviderEndpoint`）：解析后的模型命中自带端点的供应商 ⇒ `endpoint/apiKey` 整体切换（`source='provider-endpoint'`，`privateNetworkPolicy='runtime'`）；密钥 env 缺失 = 明确报错不带病调用；**用户自带 provider（source user-*）不受覆盖**。继承通道（无 baseUrl）行为与历史版本一致。
 - **模型引用**：裸 id（历史 DB 配置零迁移）或限定式 `providerId/modelId`（仅当命中已注册供应商+目录内模型才按限定式解析；聚合网关自带 `/` 的字面模型 id 不误伤）。**多通道重名合法**（同一模型经平台聚合网关与用户自建供应商各服务一份是常态）：裸 id 解析取声明在前的启用通道（first-wins），registry 总览发歧义告警，限定式全量可解析。请求空间只认裸 id——限定式在路由层还原为上游字面 id。
@@ -239,7 +239,7 @@ aliases / defaults
 - 写回的格式与原文对齐（短数组单行、沿袭原换行风格）：一次编辑不应带出满屏与本次改动无关的 diff。
 - **密钥不进文件**：文件规则本来就禁止真实密钥，页面里填的密钥落 system.db 密文表 `provider_secrets`（AES-256-GCM，AAD=`system.provider_secrets.apiKey`），文件里只同步一个 `apiKeyEnv` 名。运行时解析顺序改为 **本表密文 → `apiKeyEnv` 环境变量**（`APIRouter.applyProviderEndpoint`，60s 缓存 + 写接口失效）——同一台机器上「页面点保存 → 下一次调用就用新密钥」。
 - **平台通道例外**：`id=platform`（无 baseUrl 的继承通道）的服务地址与密钥仍归 `platform_api_configs`（`PUT /api/admin/api-config`，UI 里嵌在「平台」这条通道的详情内、走脏位保存）；它的 `PATCH`/`DELETE` 在注册表侧被拒绝。
-- **不在这里编辑**：别名成员、档位默认（`defaults`）、按 agent/skill 的模型绑定仍归「路由与调用」页；模型编辑器只写模型自身字段（档位/能力/限额/备用链/单价）。
+- **不在这里编辑**：模型编辑器只写模型自身字段（档位/能力/限额/备用链/单价）。别名成员、档位默认（`defaults`）的**控制台编辑入口已于 2026-10-28 整体撤出**（文件仍是唯一写源）；按 agent/skill 的模型绑定另在「Skill 模型覆盖 / Skill 运行时」页编辑。
 
 ### 4.3 ③ 参数解析策略（P0 已实现）
 
@@ -332,10 +332,10 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
 | 切模型 | 改别名的一个映射项（**已支持热生效**：60s TTL + 主动失效） |
 | 回滚 | 改回映射；变更写 `node_config_changes` 审计 |
 | 灰度 | 别名权重 + 会话粘性（复用现有 `sessionId`） |
-| 验证 | per-deployment 健康探针（现有探针只到平台级，需下沉） |
+| 验证 | ~~per-deployment 健康探针（现有探针只到平台级，需下沉）~~ ——健康/能力探针机制已于 2026-10-27 整体下线 |
 
-**健康快照与实验钉扎**：
-- 健康快照由周期探测（开关开启时）或手动「立即探测」生成，进程启动不向模型服务发真实请求（dev 热重载下每次启动都探测尤其浪费）；见 `bootstrap/gateway.ts` 的 `syncCapabilityProbeSettings`。
+**健康快照（已下线）与实验钉扎**：
+- **健康/能力探针已整体下线（2026-10-27）**：周期探测 / 手动「立即探测」机制连同 `services/ai-capability-health.service.ts`、`capability-probe-settings.service.ts` 两个服务、`bootstrap/gateway.ts` 的启动接线（原 `syncCapabilityProbeSettings`）与 `/admin/system` 探针路由一并删除；`platform_api_configs.connectionStatus/lastCheckedAt` 字段保留但已无写入方。
 - **实验钉扎（prompt-lab）**：`promptRuntimeOverride.routeOverride` 支持 `expectedProviderId` + `expectedCredentialFingerprint`（route.apiKey 的 SHA-256）双校验——实验期间路由漂移或换钥即拒绝执行，防实验结果串线；`privateNetworkPolicy` 只能收紧不能放宽。
 
 ---
@@ -431,7 +431,7 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
 | **P1** | 部署级 cooldown + fallback 链 + `TRUNCATED_EMPTY_OUTPUT` 分类与定向重试 | **已实现** | 新增 `api-gateway/deployment-health.ts`；`api-gateway/executor.ts`；`config/models.config.ts`（`fallbacks`） |
 | **P2** | ①别名层（code 注册表 + DB 覆盖 + 能力过滤）✅ ②超时口径统一 ✅（**2026-09-24 复核补遗**：executor 层当时确已统一，但传输层 `SAFE_HTTP_MAX_TIMEOUT_MS=300s` 二次钳制漏网，覆盖 >300s 的调用仍被砍半且遥测虚记——已对齐 600s + parity 测试补锁，见 §2.4/§4.10） ③降级记账 ✅ ④per-model 并发闸门（默认不限）✅ ⑤只读总览 API（方案 B）✅ | **已完成** | `config/models.config.ts`、`gateway/api-gateway/{model-alias,model-concurrency}.ts`、`services/model-registry.service.ts`、`routes/admin/model-registry.ts` |
 | — | **未采纳**：能力元数据 DB 化（方案 A：新建 system 表 + 迁移）——模型能力仍以代码注册表为唯一写源；`frontend` 展示待空窗期 | — | — |
-| **P3** | 管理端可视化：**已做** —— ①`模型总览` tab（只读，消费 `/api/admin/model-registry`：默认解析 / 别名映射与降级标记 / 能力与限额 / 部署冷却 / 配置提示）②「路由默认」由 `<select>` 改为可输入的别名候选（`chat`/`reasoning`/`light`，候选来自后端注册表，未拉取清单也能填）③执行日志成本 tab 金额条（缺单价显示「未配置」）。**未做**：金额条与内嵌组件时间窗口对齐、`bySession` 端点、别名成员可视化编辑（方案 A 未采纳） | **基本完成** | `frontend/src/views/admin-redesign/{ApiConfig.vue,ModelRegistryOverview.vue,ExecLogs.vue}`、`frontend/src/api/adminApi.ts`、`services/cost/call-cost-aggregation.ts` |
+| **P3** | 管理端可视化：**已做** —— ①`模型总览` tab（只读，消费 `/api/admin/model-registry`：默认解析 / 别名映射与降级标记 / 能力与限额 / 部署冷却 / 配置提示）②~~「路由默认」由 `<select>` 改为可输入的别名候选（`chat`/`reasoning`/`light`，候选来自后端注册表，未拉取清单也能填）~~（该平台默认 / 别名编辑入口已于 2026-10-28 整体撤出控制台，仅「模型总览」保留只读展示）③执行日志成本 tab 金额条（缺单价显示「未配置」）。**未做**：金额条与内嵌组件时间窗口对齐、`bySession` 端点、别名成员可视化编辑（方案 A 未采纳） | **基本完成** | `frontend/src/views/admin-redesign/{ApiConfig.vue,ModelRegistryOverview.vue,ExecLogs.vue}`、`frontend/src/api/adminApi.ts`、`services/cost/call-cost-aggregation.ts` |
 
 **P0 验收**：
 - `npx jest src/services/__tests__/resolve-llm-call-params.test.ts src/gateway --runInBand` 全绿
@@ -457,7 +457,7 @@ node scripts/vl-ai-audit.mjs --tag=builtin --story=first --phase=both --runs=3 -
 - 不做多租户预算/计费系统（`pricing` 仅只读核算占位）。
 - 不引入 Redis（cooldown 先进程内；多实例时再评估）。
 - 不改 skill 的业务重试语义（`retryStrategy` 归 skill 契约，网关只管传输可靠性）。
-- `agent_model_configs` 的"幽灵优先级"——**决定（2026-09-24 落笔，此前 P2 悬空未决）：从解析链摘除**。理由：全库无任何业务写入方（仅 Prisma 生成类型与历史手工行），该优先级使路由冷路径多一次查询且语义误导。执行挂后续网关批次（需同步调整 `router.test.ts` 优先级链用例与 `model-registry.service` 的漂移提示口径）；执行前该分支保持现状（表空时行为不变）。
+- `agent_model_configs` 的"幽灵优先级"——**已于 2026-10-08 从解析链摘除**（决定 2026-09-24 落笔，此前 P2 悬空未决）。理由：全库无任何业务写入方（仅历史迁移脚本），该优先级使路由冷路径多一次查询且语义误导。表与迁移脚本保留，仅摘解析链；解析链现为 `user-agent-override → user-provider → platform 默认`（`router.ts#resolveBaseRoute`），`model-registry.service` 对遗留行保留清理提示。
 - 不把 `models.config.ts` 直接改成 DB 表（P2 再迁，保持同构）。
 
 ---
@@ -470,7 +470,7 @@ node scripts/vl-ai-audit.mjs --tag=builtin --story=first --phase=both --runs=3 -
 |---|---|
 | 平台配置字段消费 | `api-gateway/router.ts#getPlatformConfigRecord / getPlatformDefault / resolvePlatformApiKey`；`services/apiConfig.service.ts` |
 | skill 配置读写 | `api-gateway/router.ts#getSkillConfig`；`services/skillModelConfig.service.ts` |
-| 幽灵表 | `api-gateway/router.ts#getAgentConfig`；`services/model-registry.service.ts`（漂移提示） |
+| 幽灵表（优先级已于 2026-10-08 摘除） | `api-gateway/router.ts#resolveBaseRoute`（摘除说明注释）；`services/model-registry.service.ts`（遗留行清理提示） |
 | 生成参数优先级 | `services/resolve-llm-call-params.ts#resolveLlmGenerationParams` |
 | maxTokens floor（已修） | 同上（「输出预算策略」分支） |
 | thinking 映射 | `api-gateway/thinking-policy.ts#buildThinkingPolicy`；`config/models.config.ts#ModelDefinition` |
@@ -485,7 +485,7 @@ node scripts/vl-ai-audit.mjs --tag=builtin --story=first --phase=both --runs=3 -
 | 降级/冷却 | `api-gateway/deployment-health.ts`；`executor.ts#execute`（fallback 段）；`config/models.config.ts#fallbacks` |
 | 可观测表 | `prisma/schema.prisma`（agent_call_logs / prompt_call_logs / llm_execution_attempts） |
 | **遥测写路径分流** | `services/telemetry-writer.service.ts`（后台写 vs await 语义注释 + flush） |
-| 健康探针 | `services/ai-capability-health.service.ts`；`bootstrap/gateway.ts#syncCapabilityProbeSettings`（金丝雀移除说明） |
+| 健康/能力探针（2026-10-27 整体下线） | 服务与启动接线已删除（`services/ai-capability-health.service.ts` / `capability-probe-settings.service.ts`、`bootstrap/gateway.ts` 接线、`/admin/system` 探针路由）；`platform_api_configs.connectionStatus/lastCheckedAt` 字段保留但无写入方 |
 | 缓存热生效 | `api-gateway/cache.ts`（TTL + 惰性清扫）；`gateway/api-gateway/index.ts#invalidateCache` 的 16 个变更点接线 |
 | 路由钉扎（实验） | `gateway/api-gateway/index.ts#applyRouteOverride`；`api-gateway/types.ts#RouteExecutionOverride` |
 

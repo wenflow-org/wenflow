@@ -1,6 +1,6 @@
 # 开发脚本手册（DEV_SCRIPTS）
 
-> 📌 类型：活规范（跑批脚本唯一索引）｜最后核验：2026-09-28（86 条路径引用零失效）。索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范（跑批脚本唯一索引）｜最后核验：2026-11-02（86 条路径引用零失效）。索引见 [doc/README.md](./README.md)。
 
 > 面向**二次开发**：本地几百个脚本怎么找、怎么用、哪些别当工具用。
 > 本文只写**稳定的定位与约定**；具体清单以目录为准（脚本会漂移，动手前先 `git log -- <脚本>` 确认它还在维护）。
@@ -150,14 +150,14 @@ node scripts/<名字>.mjs [参数]
 | `probe-peer-contract-e2e` / `probe-opening-e2e` / `probe-guidance-e2e` / `probe-consolidator-e2e` | 课堂各 skill |
 | `probe-probe-scoring-e2e` / `probe-triage-advisory-e2e` | 探测题确定性判分 / 分诊只落库 |
 | `probe-material-{upload,path-e2e,teaching-turn,learn-wiring}` | 附件 → 路径 → 任务 → 课堂 全链 |
-| `probe-teaching-visual-{courses,model}` | 教学配图时机 / 模型能否输出 `visual` |
+| `probe-teaching-visual-{courses,replay,replay-calls}` | 教学配图时机（自然发言下老师是否主动配图）/ 配图 prompt 重放出图 / 模型级重放（真实 payload + ACTIVE 提示词是否仍输出 `visual`） |
 | `probe-session-eval-shadow` | 会话评估影子（真实数据，不调 LLM） |
 
 > 探针的共同设计：**走生产入口**（不另写组装路径）+ **只读或可清理**（`--keep` 决定是否留数据）。
 
 ### 3.4 数据回填 / 修复（默认 dry-run）
 
-`backfill-concept-{graph,registry}`（概念图边 / 概念身份）· `backfill-{metric-path-identity,path-subject}` · `consolidate-misconceptions`（误解台账归并）· `dedupe-memory-traces` · `repair-learning-metric-scale` · `cleanup-{field-routings,orphan-field-routings,retired-field-data,test-paths}` · `kc-annotation-refresh`（用**当前已发布**契约重跑既有路径；默认**拒绝**重跑有痕迹的路径）
+`backfill-concept-{graph,registry}`（概念图边 / 概念身份）· `backfill-{metric-path-identity,path-subject}` · `consolidate-misconceptions`（误解台账归并）· `dedupe-memory-traces` · `repair-learning-metric-scale` · `cleanup-{field-routings,orphan-field-routings,retired-field-data}` · `kc-annotation-refresh`（用**当前已发布**契约重跑既有路径；默认**拒绝**重跑有痕迹的路径）
 
 ### 3.5 离线评测（`eval-*`，不落库）
 
@@ -201,7 +201,7 @@ node scripts/<名字>.mjs [参数]
 | `eval-material-semantic.ts`（`material:semantic:eval`） | 真机评测（≥20 用例：单/跨资料召回、rerank 精排、代表采样、关停开关、分块健全性）。资料写临时目录，不污染用户数据；`--only=A/B/C/D/E/F` 只跑某类 |
 | `audit-material-semantic.ts`（`material:semantic:audit`） | **真实资料库审计**（只读）：① 静态全量扫描（切不出块/单块超上限/命中块数上限/块大小与保留率分布）；② 抽样嵌入 + 「小节标题当查询词」召回自检（可选 `--rerank=1` 出精排对照）。`--embed=N --recall=K --only=static\|embed` |
 | `ab-path-material-pack.ts`（`material:ab:path-pack`） | **path 资料包 A/B**（真实联网长文，拷贝到临时沙箱跑，索引缓存复用）：A=现状/B=语义 tldr/C=语义 tldr+MMR24/D=分层24/E=分层48/**G=新入库结构+旧pack**/**F=新链路（生产实现）**；判据=资料包文本是否引用到各块正文（36 字滑窗，排除文档开头 1500 字的目录污染），分「后半」「前 1/4」两档。`--docs=N --min=10000`（`--fresh=1` 清索引缓存） |
-| `ab-goal-path-material.ts`（`material:ab:goal-path`） | **goal→path 端到端 A/B**：20 个内置 goal，每个 goal 两臂（old=历史扁平资料+旧打包 / new=结构恢复+语义打包），独立用户、同资料，走生产 `generateFromGoal`；输出任务/课时/materialRefs/后半引用比例与包层指标，原始 JSON 落 `doc/local/ab-goal-path/`。`--arms=old\|new\|both --count=N --start=N`（两臂并行跑两个进程，各约 45 分钟） |
+| `ab-goal-path-material.ts`（`material:ab:goal-path`） | **goal→path 端到端 A/B**：20 个内置 goal，每个 goal 两臂（old=历史扁平资料+旧打包 / new=结构恢复+语义打包），独立用户、同资料，走生产 `generateFromGoal`；输出任务/课时/materialRefs/后半引用比例与包层指标，原始 JSON 落 `doc/measurement/119/`（默认；`--outDir` 可改）。`--arms=old\|new\|both --count=N --start=N`（两臂并行跑两个进程，各约 45 分钟） |
 | `analyze-goal-path-ab.ts`（`material:ab:goal-path:report`） | 合并上面两份结果并重算指标：目录污染修正的引用位置、包层 sections/keyPoints 后半覆盖。`--old=<json> --new=<json>` |
 
 ### 3.9 全链验证 / 重放
@@ -218,7 +218,7 @@ node scripts/<名字>.mjs [参数]
 
 ### 3.10 前端 / 设计系统
 
-`frontend/scripts/check-design-system.mjs`（八条规则守卫；`design:check`；`--update` 更新基线）· `frontend/scripts/design-system-baseline.json`
+`frontend/scripts/check-design-system.mjs`（二十条规则守卫；`design:check`；`--update` 更新基线）· `frontend/scripts/design-system-baseline.json`
 
 ---
 

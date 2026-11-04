@@ -1,6 +1,6 @@
 # Admin 视觉层设计语言（v4，2026-10-02）
 
-> 📌 类型：活规范（⛔ 禁归档，守卫硬引用）｜最后核验：2026-10-03
+> 📌 类型：活规范（⛔ 禁归档，守卫硬引用）｜最后核验：2026-11-02
 >
 > **2026-10-03 台账对账**：规则层（§0–§7.5）逐条与代码复核，全部一致，未改；只更新了
 > 落地台账类条目——§2 总览骨架（Row B 两卡）、§6 组件词汇表（`.stageband` 升共享原语、
@@ -21,7 +21,7 @@
 > 已按此法落地的页面：平台总览（0038b189）、教学会话 / 学习路径 / 目标对话 / 记忆复习（0e861d5c）、
 > 壳层与原语规格（de510a98）、侧栏底部（d89734e7）。
 > 配套文档：`doc/NEWUI-PROTOTYPES.md`（双原型登记 + 原型值残留规则）。
-> ~~`doc/ADMIN_PAGE_TEMPLATES.md`（v1 模板规范）已存档（2026-10-02）——骨架节奏与组件词汇由本文承接。~~
+> ~~`ADMIN_PAGE_TEMPLATES.md（已移出仓库，见 git 历史）`（v1 模板规范）已存档（2026-10-02）——骨架节奏与组件词汇由本文承接。~~
 > v2（2026-09-25）把 v1 的数值升格为硬规则并完成 token 化——那层工作全部仍然有效；
 > v3 改的是**规格取值与组件词汇**（下文逐条标注），不是推倒 v2 的守卫体系。
 
@@ -75,8 +75,8 @@ v4 修正）。
 |---|---|---|---|
 | 平 | `--wf-shadow-xs` | `none` | **卡片、状态条、KPI、表格**（1px 发丝线就是全部质感） |
 | 悬浮 | `--mk-shadow-sm` | `0 1px 2px rgba(15,23,42,.04), 0 1px 3px rgba(15,23,42,.06)` | 吸顶表头、粘性工具条 |
-| 浮层 | `--mk-shadow-pop` | `0 16px 40px rgba(15,23,42,.16)` | 菜单、弹层、粘性悬浮控件 |
-| 模态 | `--mk-shadow-modal` | `0 24px 64px rgba(15,23,42,.22)` | 模态、抽屉、toast、登录壳 |
+| 浮层 | `--mk-shadow-pop` | `0 16px 40px rgba(15,23,42,.16)` | 菜单、弹层、粘性悬浮控件、**toast**（2026-11-02 从模态档下移：小卡挂模态档的 24/64 阴影，暗色下是一团黑雾，多张叠加更重） |
+| 模态 | `--mk-shadow-modal` | `0 24px 64px rgba(15,23,42,.22)` | 模态、抽屉、登录壳 |
 
 - **v4 收口**：v3 实际存在**四档**（多一条 `--mk-shadow-drawer = -16px 0 48px rgba(15,23,42,.18)`），
   且 `--shadow-md/-lg/-xl` 映射混乱（md 与 lg 同指 pop）。现在：drawer 并入 pop
@@ -141,7 +141,7 @@ v4 修正）。
 
 ### 危险确认（`danger`）的默认与显式豁免（原 ADMIN_PAGE_TEMPLATES §阶段 1 续⑥，2026-10-16 迁入本文）
 
-`askConfirm` 默认 `danger: true`（红）；**销毁类操作依赖这个默认**，不得翻转默认值。明确非危险的确认须**显式** `danger: false`，共 19 处口径（推进实验 / 模拟跨日衰减 / 同步到 DB / 一键修复 / 重放死信×2 / 恢复路径 / 从该课开始学习 / 重建学习路径 / 按评审意见重规划 / 刷新设计页 / 切换 Skill / 离开设计页 / 恢复用户×2 / 启动故事 / 批量启动自动驾驶 / 批量停止自动驾驶 / 批量启停自动驾驶）。保持红色：删除 / 移除 / 终止 / 下线 / 撤回 / 强制下线 / 开放公网访问；动态确认（同一 code path 可能渲染销毁或非销毁）保持红色。`busy` 模式仍未启用（漏调 `done()` 会永久卡住弹窗，留待逐页接线）。
+`askConfirm` 默认 `danger: true`（红）；**销毁类操作依赖这个默认**，不得翻转默认值。明确非危险的确认须**显式** `danger: false`，共 33 处（推进实验 / 模拟跨日衰减 / 同步到 DB / 一键修复 / 重放死信×2 / 恢复路径 / 从该课开始学习 / 重建学习路径 / 按评审意见重规划 / 刷新设计页 / 切换 Skill / 离开设计页 / 恢复用户×2 / 启动故事 / 批量启动自动驾驶 / 批量停止自动驾驶 / 批量启停自动驾驶 等）。保持红色：删除 / 移除 / 终止 / 下线 / 撤回 / 强制下线 / 开放公网访问；动态确认（同一 code path 可能渲染销毁或非销毁）保持红色。`busy` 模式仍未启用（漏调 `done()` 会永久卡住弹窗，留待逐页接线）。
 
 ### 数字
 
@@ -284,7 +284,7 @@ v4 修正）。
 
 ## 1. 层级（Typography hierarchy）
 
-文本仍只有**三个角色 token**（micro 12 / body 14 / emphasis 15；档位覆写在 `styles/mk-primitives.css` 的 `:root` —— 1440 档 12.5/14.5/15.5、1920 档 13/15/16，**不在 main.css**）。
+文本仍只有**三个角色 token**（micro 12 / body 14 / emphasis 15；档位覆写在 `styles/main.css` 的 `:root`（全局加载）—— 1440 档 12.5/14.5/15.5、1920 档 13/15/16；`mk-primitives.css` 只被 admin 壳懒加载，内只剩 2800 档）。
 v3 修订两条：
 
 1. **卡片标题升到 emphasis 档**：`mk-card__title` 15/700 墨色（v2 时是 body 14/700；
@@ -381,7 +381,7 @@ v3 修订两条：
 | `.ranklist/.rankrow` | 页面本地复刻（Overview Row B / LearnerCenter / ApiConfig 等） | 页面 |
 | `.meterrow/.meter` | 页面本地复刻（LearnerCenter / LearnerDetail / DayTimeline） | 页面 |
 | `.hero` | `MkDetailHero`（24px 标题） | 原语组件 |
-| `.statstrip`（L2 详情页 hero 下的一行分格读数） | **共享原语** `MkStatStrip`（`layout="grid"`，2026-10-05 批次五 CM2 收敛页私有复刻，`components/mk/MkStatStrip.vue:124-127`）；现消费四处：LearnerDetail / UserAccountPane（原 UserDetail 抽出的账号面）/ VirtualProfile / SessionCockpit。**PathDetail 不渲染**（2026-10-02 用户拍板撤除，原型路径详情本无此带）。**归属（2026-10-27 用户「执行日志的 kpi 设计和其他的都不一样」）**：它只服务「详情页 hero 下」与「卡内读数槽」（现宿主 VirtualProfile / Overview / MemoryReview）；**列表页的页级读数一律 `section.mk-kpi-grid` + `MkKpi`**（白面卡 + 26px 数字），不得用 statstrip 充当页头 KPI 带。守卫：`host-kpi-band.test.ts` 的「页级读数形态归属」 | 原语组件 |
+| `.statstrip`（L2 详情页 hero 下的一行分格读数） | **共享原语** `MkStatStrip`（`layout="grid"`，2026-10-05 批次五 CM2 收敛页私有复刻，`components/mk/MkStatStrip.vue:124-127`）；现消费三处：VirtualProfile / Overview / MemoryReview。**PathDetail 不渲染**（2026-10-02 用户拍板撤除，原型路径详情本无此带）。**归属（2026-10-27 用户「执行日志的 kpi 设计和其他的都不一样」）**：它只服务「详情页 hero 下」与「卡内读数槽」（现宿主 VirtualProfile / Overview / MemoryReview）；**列表页的页级读数一律 `section.mk-kpi-grid` + `MkKpi`**（白面卡 + 26px 数字），不得用 statstrip 充当页头 KPI 带。守卫：`host-kpi-band.test.ts` 的「页级读数形态归属」 | 原语组件 |
 | L2 详情骨架（hero + statstrip + subtabs） | LearnerDetail 已按此骨架（318da349 起；原独立 UserDetail 页并入其「账号与许可」页签，由 UserAccountPane 承载） | 页面 |
 | `.login*` | `Login.vue` 页面复刻（分栏品牌 aside + 表单 panel） | 页面 |
 | `odg-*` | `DataFlowGraph`（orch-odg-*） | 页面 |
@@ -391,7 +391,7 @@ v3 修订两条：
 
 ## 7. 壳层（v3 新增条目）
 
-- 侧栏 **244px**（原型 --nav-w；≥1440 起各档 +36 供 4K zoom 补偿），扁平导航：
+- 侧栏 **244px**（原型 --nav-w；≥1440 起各档递增至 260 / 276 / 284 / 324 / 372，供 4K zoom 补偿），扁平导航：
   分组标签大写字距 0.12em、子项不缩进、裸 17px 线性图标（无芯片底）、
   选中 = 整行 `--mk-blue-bg` 胶囊 + 主色字 600（无左条、无内缩）。
 - 侧栏底部 = **唯一一行「收起导航」**（图标+文字，nav__item 同款）；品牌行删除。
@@ -422,7 +422,7 @@ v3 及以前的本文档只约束 `src/views/admin-redesign/`。但 2026-10-02 �
 
 ### 7.5.1 令牌层：唯一事实源
 
-`frontend/src/styles/tokens.css` 是 `--wf-*` 唯一令牌层（167 枚）。加载顺序由
+`frontend/src/styles/tokens.css` 是 `--wf-*` 唯一令牌层（157 枚）。加载顺序由
 `main.css` 顶部第一行 `@import` 保证——**必须早于** `design-system.css`、
 `admin-surface.css`、`main.css` 自身块，因为别名要指向已定义的令牌。
 
@@ -487,10 +487,10 @@ v4 的处理：实心状态按钮**不复用语义文字色令牌**，改用两�
 
 治理面扩大后暴露一类新错误：**规则会给出在该文件上无法执行的整改建议**。
 规则 5/6 的建议是「改用 `<MkLoading>` / `.mk-skeleton`」，而这两个原语定义在
-`mk-primitives.css`——该文件只被 `AdminConsole.vue` 与 `SkillDesignPage.vue` **懒加载**，
+`mk-primitives.css`——该文件只被 `AdminConsole.vue` **懒加载**，
 用户侧路由从不加载它。
 
-已实证的既有缺陷：`V2LearningPage.vue:123` 已经在用 `<MkLoading>`，但在用户侧路由下
+已实证的既有缺陷：`V2LearningPage.vue:110` 已经在用 `<MkLoading>`，但在用户侧路由下
 `.mk-spinner` 与 `.mk-loading` 两个类**零命中**，转圈根本不显示。照着规则 5 的报错去改
 用户侧页面，只会把同一个坏组件换一个地方用。
 
@@ -603,7 +603,7 @@ MkSelect 触发器裸 class 的 (0,1,0)——下拉在用户页被清成透明�
 | 09-30 #3-5 | 总览三连（d2319116/9f42050f/0038b189） | ✅ 状态条+闭环条+源码级复刻；brief-* 卡语言退役 |
 | 09-30 #6 | 四教学页分布条/桶组（0e861d5c） | ✅ stageband/buckets 三态色语义全站统一 |
 | 10-01 | 健康中心 service 卡+事件流、登录页分栏复刻 | 进行中（本批次） |
-| **10-02 A** | 令牌层归一：新建 `tokens.css`（`--wf-*` 唯一层 167 枚），`--mk-*`/`--color-*`/`--neutral-*`/`--radius-*`/`--shadow-*` 全降为别名；删 76 枚死令牌（`--lab-*`/`--fluent-*`/`--acrylic-*`/`--glass-*`）；修 `admin-surface.css` 级联缺陷（暗色曾被 `:root` 浅色字面量盖掉） | ✅ |
+| **10-02 A** | 令牌层归一：新建 `tokens.css`（`--wf-*` 唯一层 157 枚），`--mk-*`/`--color-*`/`--neutral-*`/`--radius-*`/`--shadow-*` 全降为别名；删 76 枚死令牌（`--lab-*`/`--fluent-*`/`--acrylic-*`/`--glass-*`）；修 `admin-surface.css` 级联缺陷（暗色曾被 `:root` 浅色字面量盖掉） | ✅ |
 | **10-02 B** | 暗色调色板归一：用户侧 `--color-primary` #5a94f8→#5b8def（补上 18f09fd3 漏掉的一半）、`--neutral-*` 十一档改实测收敛坡道；`--shadow-xs` 改 `none` | ✅ |
 | **10-02 C** | 圆角收口：砍 `--mk-radius-lg(10)`、`--mk-radius-xl` 12→16（全站卡片 +4px）、删 `--radius-md` 越权覆盖（12→8，用户侧与 Admin 侧控件圆角首次统一）；阴影四档→三档 | ✅ |
 | **10-02 D** | 退役材质：渐变主按钮 34→0、`backdrop-filter` 15→0、hover 抬升 20→0、彩色外发光 35→0；同步退役 §7 顶栏毛玻璃 | ✅ |
@@ -615,7 +615,7 @@ MkSelect 触发器裸 class 的 (0,1,0)——下拉在用户页被清成透明�
 | **10-03 #3** | 虚拟学习者列表按方言体系重排（67931eb2：格词汇归原语、列序对齐、假行点击退役）+ KPI 带压缩（6fbc5fa5） | ✅ |
 | **10-03 #4** | 平台总览密度优化（4e9d3d55）：状态条改「结论 / 明细」两层、待办长句主副行、事件流底部渐隐、KPI 注记防孤字 | ✅ |
 
-当前全站私写 hex 存量以 `scripts/design-system-baseline.json` 为准（**218**；口径沿革 v2 收官 649 → 09-29 505 → 09-30 464 → 10-03 **218**，批次 E 扩面后用户侧纳入计数）。
+当前全站私写 hex 存量以 `scripts/design-system-baseline.json` 为准（**160**；守卫实测存量 139 处于基线内；口径沿革 v2 收官 649 → 09-29 505 → 09-30 464 → 10-03 218，批次 E 扩面后用户侧纳入计数）。
 
 ## 9. 与原型的已登记偏离（复刻时不照搬的部分）
 
@@ -623,7 +623,7 @@ MkSelect 触发器裸 class 的 (0,1,0)——下拉在用户页被清成透明�
    本仓辅助文字下限 12px，且规则 16 棘轮禁止新增 <12px。
 2. **按钮字号 14px**：原型 .btn 与 .btn--sm 同为 12px（字号不承载层级，高度才是）；
    我们保留 14/12 两级，密集管理台里 12px 中文按钮标签偏小。
-3. **侧栏宽度档位**：原型恒 244px；我们 244 基档 + 各断点 +36（4K zoom 补偿，沿 v2 档位体系）。
+3. **侧栏宽度档位**：原型恒 244px；我们 244 基档 + 各断点递增至 260 / 276 / 284 / 324 / 372（4K zoom 补偿，沿 v2 档位体系）。
 4. **总览 Row B 只有两张小卡**：原型是「图 1.6fr + 事件 1fr」下一排三小卡，其中第三张
    「学习状态分布」**不落**（后端暂无学习状态聚合口径）。曾短暂做过「模型与失败」顶替卡，
    2026-10-01 用户拍板**不做顶替卡**，Row B 固定两卡（Skill 调用量 Top 5 + 待处理事项）。
@@ -639,11 +639,12 @@ MkSelect 触发器裸 class 的 (0,1,0)——下拉在用户页被清成透明�
      UserDetail 页已并入其「账号与许可」页签（账号面 = UserAccountPane，自带「账号概览」读数条）；
    - VirtualProfile 头部**有意**只留身份信息（2026-09-27 决策「数量即 tab 角标，不单设 KPI 行》）——
      头部不放读数；hero 下、subtabs 上现有一行共享 `MkStatStrip`（grid 变体，2026-10-05 由原
-     vp-metricgrid 收敛而来，见 `VirtualProfile.vue:31-37`），复刻时按此，不再另设私有统计带；
+     vp-metricgrid 收敛而来，见 `VirtualProfile.vue:82`），复刻时按此，不再另设私有统计带；
    - SessionCockpit 是 **T3 驾驶舱自有模板**（cp-topbar + RunStageBar 已覆盖原型
      session-detail 的 hero/stepper 职责，且多出日志/瀑布/自动驾控等监控面），
      不按 L2 详情改造；
-   - SkillDesignPage 是**编辑工作台**（sdp-head + mk-pills 页签），原型 skill-detail
+   - SkillDetail 是**编辑工作台**（MkSubTabs 六页签；原 SkillDesignPage 拆分后的子组件在
+     `skill-design/*`），原型 skill-detail
      是只读视图——工作台不降级成只读页。
 
 ## 10. 内容宽度（v3 更新数值）

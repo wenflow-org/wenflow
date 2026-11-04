@@ -1,6 +1,6 @@
 # 路径生产场景改造说明（统一架构）
 
-> 📌 类型：活规范｜最后核验：2026-10-16（修正 2 处 409 判定、补记 `rebuild-all` 模式）。索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范｜最后核验：2026-11-02（修正 2 处 409 判定、补记 `rebuild-all` 模式）。索引见 [doc/README.md](./README.md)。
 
 ## 适用范围
 
@@ -40,7 +40,7 @@ learning.service 调用 path-agent 时，除基础字段外需透传：
 
 ## Anderson 标注策略
 
-- 标注字段来源修正为 `label-generator` 的 `displayLabel/shortLabel`。
+- 标注字段来源为确定性函数 `generateDisplayLabel`（由 `knowledgeType × cognitiveLevel` 查 `DISPLAY_LABEL_MAP` 产出 `displayLabel`）；`label-generator` 技能已于 2026-07 退役，`shortLabel` 已无写入。
 - 标注失败采用 fail-open：路径继续生成，不因标注失败中断。
 
 ## existingPathId 覆写策略
@@ -68,13 +68,14 @@ learning.service 调用 path-agent 时，除基础字段外需透传：
 | `regenerate`（有 `completed`、无 `in_progress`） | ✅ | 收敛为 replan-stage：重设计当前活动阶段、保留已完成；带 `fromStageNumber` 时转为从该阶段起的多阶段重排 |
 | `regenerate` + `mode=rebuild-all` | ✅ | 显式「整条重来」：即使有 `completed` 也走 replace-path 整建（旧课堂/记录孤儿化保留在库）；有 `in_progress` → 409 `PATH_MUTATION_HAS_IN_PROGRESS` |
 | `regenerate` + `adjustments` | ✅ | `adjustments` **不是分支开关**（分支由学习进度决定）；它作为 `reason` 与 `normalizedInput.understanding.adjustments` 注入，重规划时最高优先级 |
-| `replan` + `mode=overwrite` | ✅ 现行唯一模式（默认） | 就地重设计**单个目标阶段**（resolveStageReplanTarget 定位当前活动阶段）：删除该阶段未完成任务、保留已完成（order 续排）、冻结学习证据、rollbackSnapshot 可恢复；发 `path:adjusted` 事件 |
+| `replan` + `mode=overwrite` | ✅ 默认模式 | 就地重设计**单个目标阶段**（resolveStageReplanTarget 定位当前活动阶段）：删除该阶段未完成任务、保留已完成（order 续排）、冻结学习证据、rollbackSnapshot 可恢复；发 `path:adjusted` 事件 |
+| `replan` + `mode=compress` | ✅ 压缩模式（2026-10-15 双向化） | 同为单阶段重设计，但把目标阶段压到更少任务：任务数系数 0.5（`REPLAN_TASK_RATIO.compress`，经 `resolveReplanTaskRatio` 注入 `planningHints.targetSubtasksForStage`）；压缩时保护 core 任务、优先删减 flexible |
 | `replan` + `mode=new_version` | ❌ 未实现（抛 `PATH_VERSIONING_NOT_SUPPORTED` 409） | 契约第一版曾承诺"创建新路径版本"，从未落地；按 2026-08-31 决策**不实现版本化/回退**（用户侧无需旧版本，overwrite + 冻结语义已满足） |
 
 契约字段：
 
 - `triggerSource`: `goal-conversation|learner-model-agent|ai-teaching|admin|system|api`
-- `mode`: replan 用 `new_version|overwrite`（服务端默认 `overwrite`；`new_version` 抛 `PATH_VERSIONING_NOT_SUPPORTED`）；regenerate 另接受 `rebuild-all`（显式整条重建）
+- `mode`: replan 用 `new_version|overwrite|compress`（服务端默认 `overwrite`；`new_version` 抛 `PATH_VERSIONING_NOT_SUPPORTED`；`compress` 把目标阶段压到更少任务，任务数系数 0.5）；regenerate 另接受 `rebuild-all`（显式整条重建）
 - `evidence`: 自定义证据对象
 - `adjustments`（regenerate 专用）: 用户补充说明文本
 
