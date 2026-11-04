@@ -44,8 +44,13 @@ function createResponse() {
   return {
     headers: {} as Record<string, string>,
     body: undefined as any,
+    statusCode: undefined as number | undefined,
     setHeader(name: string, value: string) {
       this.headers[name] = value;
+    },
+    status(code: number) {
+      this.statusCode = code;
+      return this;
     },
     send(payload: any) {
       this.body = payload;
@@ -372,5 +377,94 @@ describe('users agent log routes', () => {
     expect(ids1.some((id: string) => ids2.includes(id))).toBe(false);
     expect(res1.body?.data?.pagination).toEqual({ page: 1, limit: 2, total: 3, totalPages: 2 });
     expect(res2.body?.data?.pagination).toEqual({ page: 2, limit: 2, total: 3, totalPages: 2 });
+  });
+
+  it('列表返回的每个折叠组 id 都能被详情端点取到（#220：合成组键不再 404）', async () => {
+    const mkLog = (id: string, agentId: string, calledAt: string, metadata: Record<string, any>) => ({
+      id,
+      agentId,
+      sourceEntry: 'platform',
+      calledAt: new Date(calledAt),
+      success: true,
+      errorCode: null,
+      durationMs: 1000,
+      metadata: JSON.stringify(metadata),
+      traceId: `trace-${id}`,
+    });
+    agentLogMocks.findMany.mockResolvedValue([
+      mkLog('g1', 'skill:goal-conversation', '2026-09-04T09:00:00.000Z', { conversationId: 'gc_conv1' }),
+      mkLog('g2', 'skill:goal-conversation', '2026-09-04T09:02:00.000Z', { conversationId: 'gc_conv1' }),
+      mkLog('p1', 'path-agent', '2026-09-04T09:05:00.000Z', { sourceConversationId: 'gc_path', phase: 'core' }),
+      mkLog('p2', 'path-agent', '2026-09-04T09:06:00.000Z', { sourceConversationId: 'gc_path', phase: 'stageDesign' }),
+    ]);
+
+    const listRes = createResponse();
+    await routes['GET /me/agent-logs']({ user: { userId: 'user-1' }, query: {} }, listRes, jest.fn());
+    const logs = listRes.body?.data?.logs ?? [];
+    expect(logs.map((l: any) => l.id).sort()).toEqual(['goal:gc_conv1', 'path:gc_path']);
+
+    // 契约：列表里声明可查的 id（折叠组键），详情端点必须 200 且返回同一组
+    for (const row of logs) {
+      agentLogMocks.findFirst.mockClear();
+      const detailRes = createResponse();
+      await routes['GET /me/agent-logs/:logId'](
+        { user: { userId: 'user-1' }, params: { logId: row.id } },
+        detailRes,
+        jest.fn()
+      );
+      expect(detailRes.statusCode).toBeUndefined();
+      expect(detailRes.body?.success).toBe(true);
+      expect(detailRes.body?.data?.id).toBe(row.id);
+      expect(detailRes.body?.data?.groupCount).toBe(row.groupCount);
+      expect(detailRes.body?.data?.groupItems).toHaveLength(row.groupCount);
+      // 组内明细与列表完全一致（真实子项 id 可直接用于单条详情）
+      expect(detailRes.body?.data?.groupItems.map((i: any) => i.id))
+        .toEqual(row.groupItems.map((i: any) => i.id));
+      // 组键走会话反查，不再拿合成键去主键表查
+      expect(agentLogMocks.findFirst).not.toHaveBeenCalled();
+    }
+
+    // 组明细保留 phase，与列表口径一致
+    const pathDetail = createResponse();
+    await routes['GET /me/agent-logs/:logId'](
+      { user: { userId: 'user-1' }, params: { logId: 'path:gc_path' } },
+      pathDetail,
+      jest.fn()
+    );
+    expect(pathDetail.body?.data?.groupItems.map((i: any) => i.phase)).toEqual(['core', 'stageDesign']);
+  });
+
+  it('真实主键 id 的详情仍走主键查询（#220 不改变非折叠行）', async () => {
+    agentLogMocks.findFirst.mockResolvedValue({ id: 'acl_real', agentId: 'skill:teaching-turn' });
+    const res = createResponse();
+
+    await routes['GET /me/agent-logs/:logId'](
+      { user: { userId: 'user-1' }, params: { logId: 'acl_real' } },
+      res,
+      jest.fn()
+    );
+
+    expect(agentLogMocks.findFirst).toHaveBeenCalledWith({
+      where: { id: 'acl_real', userId: 'user-1' }
+    });
+    expect(agentLogMocks.findMany).not.toHaveBeenCalled();
+    expect(res.body).toEqual({
+      success: true,
+      data: { id: 'acl_real', agentId: 'skill:teaching-turn' }
+    });
+  });
+
+  it('查不到任何真实行的组键仍返回 404（不伪造组详情）', async () => {
+    agentLogMocks.findMany.mockResolvedValue([]);
+    const res = createResponse();
+
+    await routes['GET /me/agent-logs/:logId'](
+      { user: { userId: 'user-1' }, params: { logId: 'path:gc_missing' } },
+      res,
+      jest.fn()
+    );
+
+    expect(res.statusCode).toBe(404);
+    expect(res.body?.success).toBe(false);
   });
 });

@@ -12,9 +12,14 @@ import {
   findSubtasksByIds,
   listUserAgentLogsForGrouping,
   listUserAgentLogsForExport,
+  listUserAgentLogsByConversation,
   findUserAgentLogById,
   markOnboardingCompleted,
 } from '../services/users/user.repo';
+import {
+  parseAgentLogGroupId,
+  buildCollapsedAgentLogGroup,
+} from '../services/users/agent-log-grouping';
 import { rejectProjectionAccess } from '../middleware/projection-access.middleware';
 import { learnerSnapshotRefreshService } from '../services/learner/LearnerSnapshotRefreshService';
 import { getLevelFromXp } from '../services/learner/level.util';
@@ -633,6 +638,26 @@ router.get('/me/agent-logs/:logId', async (req, res, next) => {
   try {
     const userId = req.user.userId;
     const { logId } = req.params;
+
+    // #220：列表把同一会话折叠成一条，`id` 是合成组键（`path:`/`goal:<conversationId>`），
+    // 不是 agent_call_logs 主键，直接 findFirst 必然 404。按组键反查该会话的真实行，
+    // 用与列表一致的折叠口径重建成同一条组记录（含 groupItems / groupCount），
+    // 让列表返回的 id 保持稳定且可详查。
+    const groupId = parseAgentLogGroupId(logId);
+    if (groupId) {
+      const groupRows = await listUserAgentLogsByConversation(userId, groupId.conversationId);
+      const group = buildCollapsedAgentLogGroup(groupId.groupKey, groupRows);
+      if (!group) {
+        return res.status(404).json({
+          success: false,
+          error: { message: '日志不存在' }
+        });
+      }
+      return res.json({
+        success: true,
+        data: group
+      });
+    }
 
     const log = await findUserAgentLogById(logId, userId);
 
