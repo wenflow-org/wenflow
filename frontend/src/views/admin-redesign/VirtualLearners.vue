@@ -135,12 +135,15 @@
           <!-- 批量入口（2026-10-26）：从「列」菜单挪到卡头一枚按钮。列菜单此前是唯一入口，
                且入口只写一个「列」字，第一次进这页的人读不出这页能批量跑。
                多选默认仍不出来（2026-10-17 用户拍板），按钮只负责把勾选列打开。 -->
+          <!-- 2026-11-04：0 实例时批量无对象可勾，按钮置灰（此前仍可点，只揭开一片空勾选表头，
+               读作死键）；空态已由「从卡库派生」CTA 承接下一步 -->
           <button
             v-if="isLive && !isNarrow"
             type="button"
             class="mk-btn mk-btn--sm vl-batch-toggle"
             :class="{ 'vl-batch-toggle--on': batchMode }"
             :aria-pressed="batchMode"
+            :disabled="!samples.length"
             @click="toggleBatchMode"
           >批量</button>
           <MkCols

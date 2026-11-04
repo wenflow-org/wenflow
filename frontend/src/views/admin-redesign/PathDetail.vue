@@ -27,7 +27,9 @@
     <section v-else class="mk-card pdx-orphan">
       <div class="mk-card__head">
         <h3 class="mk-card__title">{{ pathInfo?.title || '未命名路径' }}</h3>
-        <span class="mk-card__meta">{{ pathInfo?.subject || '—' }}</span>
+        <!-- 2026-11-04 缺陷修复：生成路径常把目标文本同时写进 title 与 subject，卡头右侧 meta
+             再复述一遍标题属冗余。沿用列表页 P2-6 口径（OpsContent.vue：仅 subject≠title 才渲染副行）。 -->
+        <span v-if="pathInfo?.subject && pathInfo.subject !== pathInfo?.title" class="mk-card__meta">{{ pathInfo.subject }}</span>
       </div>
       <MkRowList>
         <MkRow title="所属用户" :time="pathInfo?.userLabel || '—'" />

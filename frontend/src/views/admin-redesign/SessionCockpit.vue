@@ -62,7 +62,7 @@
         <!-- 路径进度 pill（2026-10-31 外部评审 P1-1）：主标题是路径名后，「已完成」只指本节课堂，
              首屏须并列路径真实进度（子任务口径，与 Path 阶段步点同源），不再让 1/13 读成学完 -->
         <span
-          v-if="heroUsesPathTitle && pathProgressText"
+          v-if="heroUsesPathTitle && pathProgressText && !pathProgressRepeatedInStepper"
           class="mk-badge mk-badge--muted"
           :title="`路径进度按子任务统计（与「阶段推进」步点同源）：${pathProgressText}`"
         >路径 {{ pathProgressText }}</span>
@@ -2316,6 +2316,11 @@ function stepMeta(st: StageKey) {
   if (stageActive(st)) return isTerminal.value ? '中断' : '进行中'
   return '待进入'
 }
+/* 2026-11-04：页头「路径 任务 x/y」徽章与「阶段推进」Path 瓦片副标同源同串，
+   同屏出现两次（评审「同屏重复」）。Path 瓦片已常驻该串时页头不再复述一遍。 */
+const pathProgressRepeatedInStepper = computed(() =>
+  !!pathProgressText.value && stepMeta('path') === pathProgressText.value
+)
 /* 与瓦片同一判据：卡头计数只数真正走完的阶段，否则「4 / 4」会和只亮三枚对勾的瓦片打架 */
 const stageDoneCount = computed(() =>
   stageFlow.reduce((n, st) => n + (stageDone(st as StageKey) && !isCurrentStage(st as StageKey) ? 1 : 0), 0)

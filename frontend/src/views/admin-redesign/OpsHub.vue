@@ -81,9 +81,10 @@
           >
             <span class="oh-task__bar" aria-hidden="true"></span>
             <div class="oh-task__text">
-              <!-- 行内带件数（2026-11-01 外部评审二轮）：卡头只说「共 3 件（1 类）」，
-                   行内不写件数时容易被读成「1 条待办」，与读数卡的 3 对不上。 -->
-              <span class="oh-task__label">{{ t.label }}<span v-if="t.count > 0" class="oh-task__n">{{ t.count }}</span></span>
+              <!-- 行内件数徽标 2026-11-04 撤除（同屏重复走查）：与页级 KPI 读数卡同一数字
+                   同屏并列（读数卡在上、行内再挂一遍），读数卡是唯一出处，行内只留
+                   事项名 / 后果 / 去向。件数口径由卡头「共 N 件待处理（M 类）」与读数卡承载。 -->
+              <span class="oh-task__label">{{ t.label }}</span>
               <!-- hint 只留给「标签本身说不出的后果」（卡在路径生成 / 投递失败会延迟）。
                    只把标签换个说法的不写：2026-11-02 走查撤掉「用户反馈还没有人回复（不看
                    评分高低，只看处理状态）」与「公告尚未发布」两条——前者复述行标签，后者
@@ -522,17 +523,7 @@ onMounted(() => {
 .oh-task--failed .oh-task__bar { background: var(--mk-red); }
 .oh-task__text { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; }
 .oh-task__label { font-size: var(--mk-fs-body); font-weight: 600; color: var(--mk-ink); }
-/* 件数贴在被聚合的事项名后：主单位是「件」，不是「条待办」 */
-.oh-task__n {
-  margin-left: 8px;
-  padding: 0 6px;
-  border-radius: var(--mk-radius-sm);
-  background: var(--mk-hover-surface);
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  color: var(--mk-muted);
-}
+/* .oh-task__n 件数徽标样式随行内徽标一并撤除（2026-11-04 同屏重复走查） */
 .oh-task__hint { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .oh-task__state { flex: none; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-red); }
 .oh-queue__empty {

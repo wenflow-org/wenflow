@@ -332,7 +332,8 @@
         <div v-if="coreCompiledMeta" class="sdp-pw__meta mono">
           coreHash <span :title="coreCompiledMeta.coreHash">{{ coreShortHash(coreCompiledMeta.coreHash) }}</span> · coreVersion {{ coreCompiledMeta.coreVersion }}
         </div>
-        <pre class="sdp-pw__pre">{{ coreCompiledPrompt || '点「保存并编译」后显示五块产物（dry run，不写入）。' }}</pre>
+        <!-- 空态只说状态不教用法（2026-11-04 文案口径：原「点「保存并编译」后显示…」是交互说明书，改述当前状态） -->
+        <pre class="sdp-pw__pre">{{ coreCompiledPrompt || '暂无编译产物（dry run，不写入）。' }}</pre>
       </div>
     </div>
     </section>

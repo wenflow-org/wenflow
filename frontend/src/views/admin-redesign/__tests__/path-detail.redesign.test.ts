@@ -114,6 +114,33 @@ describe('PathDetail 路径深链适配层', () => {
     w.unmount()
   })
 
+  it('孤儿路径：subject 与 title 同值 → 卡头不重复渲染（2026-11-04 次要标签冗余修复）', async () => {
+    // 生成路径常把目标文本同写进 title/subject（如「对着《灵飞经》练中锋线条…」），
+    // 若照旧无条件渲染 meta，卡头会同一句话出现两遍。
+    detailMock.mockResolvedValue({
+      data: { data: { ...orphanBody(), title: '毛笔小楷入门', subject: '毛笔小楷入门' } }
+    })
+    const w = mountShim()
+    await settle()
+    // 标题只在卡头出现一次（面包屑不回显在本组件文本里）
+    const occurrences = w.text().split('毛笔小楷入门').length - 1
+    expect(occurrences).toBe(1)
+    expect(w.find('.mk-card__meta').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('孤儿路径：subject 与 title 不同 → 卡头照常显示 subject 副标', async () => {
+    detailMock.mockResolvedValue({
+      data: { data: { ...orphanBody(), title: '毛笔小楷入门', subject: '钢笔楷书' } }
+    })
+    const w = mountShim()
+    await settle()
+    const meta = w.find('.mk-card__meta')
+    expect(meta.exists()).toBe(true)
+    expect(meta.text()).toBe('钢笔楷书')
+    w.unmount()
+  })
+
   it('接口失败 → 错误态给重试，不假开座舱', async () => {
     detailMock.mockRejectedValue(new Error('网络不可达'))
     const w = mountShim()

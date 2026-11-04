@@ -420,7 +420,8 @@ async function clearModelOverride() {
   const count = selected.value.length
   const ok = await askConfirm({
     title: '用平台默认模型',
-    message: `将清空选中的 ${count} 个技能单独指定的模型，改用平台默认模型。通道、参数覆盖与备用链保持不变，可随时在 Skill 运行时重新指定模型。`,
+    // 2026-11-04 文案口径：删尾巴「可随时在 Skill 运行时重新指定模型」——教用法/自我宣告，只留状态陈述
+    message: `将清空选中的 ${count} 个技能单独指定的模型，改用平台默认模型。通道、参数覆盖与备用链保持不变。`,
     confirmText: '清空模型覆盖',
     busy: true,
     danger: false,

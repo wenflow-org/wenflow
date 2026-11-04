@@ -383,6 +383,34 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     w.unmount();
   });
 
+  /* 2026-11-04 评审：卡库实况——learningGoal（=goalSeed.domain）与 story.title 同源同值，
+     name 又常是「想解决 + 目标」，卡面读成「想解决X / X / 场景X」三行同一句话。 */
+  it('三行同义复述去重：目标行与卡名同源、场景行与目标同值时都不上卡面', async () => {
+    cardsIndexMock.mockImplementation(async () => ({
+      data: {
+        data: {
+          cards: [
+            // 首卡即 eval 取证的那张：name=想解决+goal，goal=firstTaskTitle（三行同文）
+            { profileId: 'p1', userId: 'u1', cardKey: 'frontier-F100', name: '想解决纯情绪宣泄/急性心理危机（非学习诉求）', goal: '纯情绪宣泄/急性心理危机（非学习诉求）', opening: '今天上午刚被公司裁员了。', knowledgeLevel: 'beginner', tags: [], preset: false, sourceKind: 'synthetic', email: null, taskCount: 1, firstTaskTitle: '纯情绪宣泄/急性心理危机（非学习诉求）' },
+            // 次卡：目标与场景真不同，两行都要留
+            { profileId: 'p2', userId: 'u2', cardKey: 'k2', name: '郑凯', goal: '回本', opening: null, knowledgeLevel: 'beginner', tags: [], preset: true, sourceKind: null, email: null, taskCount: 1, firstTaskTitle: '亏了三万的那只基金' },
+          ],
+          summary: { total: 2, builtin: 1, custom: 1 },
+        },
+      },
+    }));
+    const w = await mountPage();
+    const cards = w.findAll('.vlc-card');
+    // 首卡三行同义 → 只留卡名，目标行与「场景」行都不印（开场白是独立内容，保留）
+    expect(cards[0].find('.vlc-card__goal').exists()).toBe(false);
+    expect(cards[0].find('.vlc-card__task').exists()).toBe(false);
+    expect(cards[0].find('.vlc-card__opening').exists()).toBe(true);
+    // 次卡两行各有区分度 → 都保留
+    expect(cards[1].find('.vlc-card__goal').text()).toBe('回本');
+    expect(cards[1].find('.vlc-card__task').text()).toBe('场景亏了三万的那只基金');
+    w.unmount();
+  });
+
   it('老接口没有任务字段：不渲染任务行，也不把「不知道」写成 0 个任务', async () => {
     cardsIndexMock.mockImplementation(async () => ({
       data: {

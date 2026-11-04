@@ -25,4 +25,11 @@ describe('卡墙卡头 · 长标题与徽章', () => {
     expect(rule('.vlc-avatar')).toContain('flex: none')
     expect(rule('.vlc-card__pick')).toContain('flex: none')
   })
+
+  /* 2026-11-04 评审：1920 下卡墙列更窄，长概念名被压到 161px 单行省略，只剩半句。
+     名称/开场白改折行截断（最多两行），不再单行 ellipsis。 */
+  it('长文本折行截断：名称与开场白最多两行（-webkit-line-clamp: 2）', () => {
+    expect(rule('.vlc-card__name')).toContain('-webkit-line-clamp: 2')
+    expect(rule('.vlc-card__opening')).toContain('-webkit-line-clamp: 2')
+  })
 })

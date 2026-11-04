@@ -163,11 +163,15 @@
             <!-- 已派生标识（2026-10-31 三轮评审 P3）：派生实例归虚拟学习者列表，卡面只报数 -->
             <span v-if="(c.derivedCount || 0) > 0" class="mk-badge mk-badge--ok" title="该卡已派生出虚拟学习者实例（实例在虚拟学习者列表）">已派生 {{ c.derivedCount }}</span>
           </header>
-          <p v-if="c.goal" class="vlc-card__goal" :title="c.goal">{{ c.goal }}</p>
+          <p v-if="showGoal(c)" class="vlc-card__goal" :title="c.goal">{{ c.goal }}</p>
           <!-- 首个任务标题（2026-10-27 密度收口）：目标是抽象的（「回本，或者至少别再亏」），
                真正会被开的那节课叫「亏了三万的那只基金」——创建时要勾的就是它，卡面直接给。
-               整面墙都是一张一任务的卡时不再重复「1 个任务」，只留标题。 -->
-          <p v-if="c.firstTaskTitle" class="vlc-card__task" :title="c.firstTaskTitle">
+               整面墙都是一张一任务的卡时不再重复「1 个任务」，只留标题。
+               2026-11-04 评审：卡库里 learningGoal（=goalSeed.domain）与 story.title 同源同值，
+               name 又常是「想解决+目标」——三行同义复述；showGoal/showTask 去重。 -->
+          <!-- 2026-11-04 修复：v-if 改成函数调用后丢失 firstTaskTitle 的 string|null 窄化，
+               :title 需 string|undefined；空值兜底为 undefined（null 渲染为空，等价）。 -->
+          <p v-if="showTask(c)" class="vlc-card__task" :title="c.firstTaskTitle ?? undefined">
             <span class="vlc-card__task-k">场景</span>{{ c.firstTaskTitle }}
           </p>
           <p v-if="c.opening" class="vlc-card__opening" :title="c.opening">{{ c.opening }}</p>
@@ -523,6 +527,30 @@ function taskText(c: CardWallEntry): string {
   return typeof n === 'number' && n > 1 ? `${n} 个任务` : ''
 }
 
+/* 卡面同义去重（2026-11-04 评审）：卡库里 learningGoal（接口 goal，=goalSeed.domain）与
+   firstTaskTitle（=story.title）同源同值，读成「目标 X」+「场景 X」两行同一句话；
+   name 又常是「想解决 + 目标」（想解决…/想搞懂…）——三行同义复述，单卡扫视时全是复读。
+   与 showLevel / taskText / showCardKey 同一条密度口径：不比卡名多给信息、也不区分任何
+   两张卡的行，不上卡面。只去重展示，不改数据。 */
+function normText(s: string): string {
+  return s.replace(/\s+/g, '').toLowerCase()
+}
+/** 目标行：卡名里已含目标（如「想解决」+goal）时不重复印 */
+function showGoal(c: CardWallEntry): boolean {
+  const g = normText(c.goal || '')
+  if (!g) return false
+  return !normText(cardName(c)).includes(g)
+}
+/** 任务行：与卡名 / 目标行同值（story.title 恒等于 goalSeed.domain）时不再复述 */
+function showTask(c: CardWallEntry): boolean {
+  const t = normText(c.firstTaskTitle || '')
+  if (!t) return false
+  const n = normText(cardName(c))
+  if (t === n || n.includes(t)) return false
+  const g = normText(c.goal || '')
+  return !(g && (t === g || g.includes(t) || t.includes(g)))
+}
+
 /* 难度只在「有区分度」时上卡面（2026-10-27 密度收口）：整面墙 21 张卡全是「入门」时，
    这行字每张都印一遍，既不是读数也不是可操作信息，只是把卡脚垫高。 */
 const showLevel = computed(() => {
@@ -619,8 +647,9 @@ watch(liveRefreshSeq, () => {
 </script>
 
 <style scoped>
-.vlc-summary { max-width: 720px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-@media (max-width: 640px) { .vlc-summary { grid-template-columns: minmax(0, 1fr); } }
+/* 2026-11-04：撤掉页面私有的 max-width:720px + grid-template-columns——前者把 KPI 行
+   钉成窄列（1920 下只占内容区 44%，右侧空 904px），后者在 .mk-kpi-grid 的 flex 容器上
+   本就不生效；KPI 带宽窄交给共享原语的 flex 铺满 + 180px 换行点。 */
 /* 卡头全选：与卡面勾选框同一套尺寸语言，只在卡墙有卡时出现 */
 .vlc-pick-all {
   display: inline-flex;
@@ -694,12 +723,16 @@ watch(liveRefreshSeq, () => {
 .vlc-card__name {
   font-size: var(--mk-fs-body);
   color: var(--mk-ink);
+  /* 2026-11-04 评审：1920/2560 卡墙列更窄，长概念名（想解决纯情绪宣泄/急…）被压到
+     161px 单行省略、标题只剩半句。名称是卡面主标识，允许折到两行、超出再省略——
+     不撑破卡片（min-width:0 已收），与下方 .vlc-card__goal 同款换行截断。 */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
   /* 名称是唯一可伸缩项：长标题吃满剩余宽度后自己省略，别去压徽章 */
   flex: 1 1 auto;
-  min-width: 0;
   min-width: 0;
 }
 /* 来源角标可收缩：名字长时 flex:none 的角标会被挤出卡框，允许它收缩并省略 */
@@ -739,9 +772,13 @@ watch(liveRefreshSeq, () => {
   font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
   line-height: 1.5;
+  /* 2026-11-04 评审：开场白是长句（1920 下 715px 挤进 275px 单行），单行省略只剩一小截；
+     折到两行再截断，仍是预览不铺满整卡，且不删文本（完整值仍在 title 兜底）。 */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 /* 首个任务行：与目标同字号，前面一个弱化的小标签；单行省略（标题通常 8–14 字） */
 .vlc-card__task {
