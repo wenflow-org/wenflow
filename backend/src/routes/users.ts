@@ -10,8 +10,7 @@ import {
   listUserTeachingSessions,
   countUserTeachingSessions,
   findSubtasksByIds,
-  listUserAgentLogs,
-  countUserAgentLogs,
+  listUserAgentLogsForGrouping,
   listUserAgentLogsForExport,
   findUserAgentLogById,
   markOnboardingCompleted,
@@ -388,10 +387,9 @@ router.get('/me/agent-logs', async (req, res, next) => {
     const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 100);
     const where = buildAgentLogWhere(userId, req.query);
 
-    const [logs, total] = await Promise.all([
-      listUserAgentLogs(where, (page - 1) * limit, limit * 3),
-      countUserAgentLogs(where)
-    ]);
+    // #214 分页/总数须与「dedupe→会话折叠」后的组同口径：原始行数≠折叠组数。
+    // 因此先取该用户全量（有上限）原始行，折叠成组后再对组做 slice/total。
+    const logs = await listUserAgentLogsForGrouping(where);
 
     const parseMetadata = (metadata: string | null) => {
       if (!metadata) return {} as Record<string, any>;
@@ -547,7 +545,7 @@ router.get('/me/agent-logs', async (req, res, next) => {
       collapsed.set(`item:${key}`, item);
     }
 
-    const normalizedLogs = Array.from(collapsed.values())
+    const sortedGroups = Array.from(collapsed.values())
       .map((log) => {
         const ownMetadata = parseMetadata(log.metadata);
         const model = (typeof log.model === 'string' && log.model.trim())
@@ -556,8 +554,11 @@ router.get('/me/agent-logs', async (req, res, next) => {
           || '';
         return { ...log, model: model.trim() ? model : null };
       })
-      .sort((a, b) => new Date(b.calledAt).getTime() - new Date(a.calledAt).getTime())
-      .slice(0, limit);
+      .sort((a, b) => new Date(b.calledAt).getTime() - new Date(a.calledAt).getTime());
+
+    // total 与 logs 同口径：total = 折叠后的组数，分页切片也落在组上
+    const total = sortedGroups.length;
+    const normalizedLogs = sortedGroups.slice((page - 1) * limit, (page - 1) * limit + limit);
 
     res.json({
       success: true,

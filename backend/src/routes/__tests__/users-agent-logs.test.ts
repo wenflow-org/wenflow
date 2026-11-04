@@ -252,16 +252,94 @@ describe('users agent log routes', () => {
     expect(pathGroup[0].groupItems.map((i: any) => i.phase)).toEqual(['core', 'core', 'stageDesign']);
   });
 
-  it('page 负值被钳制为 1（skip=0），不再向 Prisma 传负 skip', async () => {
+  it('page 负值被钳制为 1（组起点=0），不向 Prisma 传负 skip', async () => {
     agentLogMocks.findMany.mockResolvedValue([]);
-    agentLogMocks.count.mockResolvedValue(0);
     const req: any = { user: { userId: 'user-1' }, query: { page: '-5' } };
     const res = createResponse();
 
     await routes['GET /me/agent-logs'](req, res, jest.fn());
 
+    // #214：分页建立在折叠后的组上，取数不再传 skip/take，而是全量（有上限）后对组切片
     const args = agentLogMocks.findMany.mock.calls.at(-1)?.[0];
-    expect(args.skip).toBe(0);
+    expect(args.skip).toBeUndefined();
+    expect(args.take).toBe(5000);
     expect(res.body?.success).toBe(true);
+    expect(res.body?.data?.pagination?.page).toBe(1);
+  });
+
+  it('total/分页以折叠后的组为准（#214：原始行数 4 折成 1 组时 total=1）', async () => {
+    const mkPathStage = (id: string, calledAt: string) => ({
+      id,
+      agentId: 'path-agent',
+      sourceEntry: 'platform',
+      calledAt: new Date(calledAt),
+      success: true,
+      errorCode: null,
+      metadata: JSON.stringify({
+        eventType: 'path-generation-stage',
+        executionLayer: 'flow-event',
+        phase: 'core',
+        sourceConversationId: 'gc_same',
+      }),
+      traceId: `tr-${id}`,
+    });
+    // 同一会话 4 条原始行 → 折叠成 1 个 path 组
+    agentLogMocks.findMany.mockResolvedValue([
+      mkPathStage('pa1', '2026-09-04T11:00:00.000Z'),
+      mkPathStage('pa2', '2026-09-04T11:00:01.000Z'),
+      mkPathStage('pa3', '2026-09-04T11:00:02.000Z'),
+      mkPathStage('pa4', '2026-09-04T11:00:03.000Z'),
+    ]);
+    const req: any = { user: { userId: 'user-1' }, query: { page: '1', limit: '100' } };
+    const res = createResponse();
+
+    await routes['GET /me/agent-logs'](req, res, jest.fn());
+
+    expect(res.body?.data?.logs).toHaveLength(1);
+    expect(res.body?.data?.pagination).toEqual({ page: 1, limit: 100, total: 1, totalPages: 1 });
+  });
+
+  it('翻页在组上推进，不再跨页重复返回同一组（#214）', async () => {
+    const mkPathStage = (id: string, conv: string, calledAt: string) => ({
+      id,
+      agentId: 'path-agent',
+      sourceEntry: 'platform',
+      calledAt: new Date(calledAt),
+      success: true,
+      errorCode: null,
+      metadata: JSON.stringify({
+        eventType: 'path-generation-stage',
+        executionLayer: 'flow-event',
+        phase: 'core',
+        sourceConversationId: conv,
+      }),
+      traceId: `tr-${id}`,
+    });
+    // 三个不同会话，各 2 条 → 3 个组（每组折叠后 id 取稳定 groupKey）
+    agentLogMocks.findMany.mockResolvedValue([
+      mkPathStage('a1', 'gc_a', '2026-09-04T11:00:03.000Z'),
+      mkPathStage('a2', 'gc_a', '2026-09-04T11:00:03.500Z'),
+      mkPathStage('b1', 'gc_b', '2026-09-04T11:00:02.000Z'),
+      mkPathStage('b2', 'gc_b', '2026-09-04T11:00:02.500Z'),
+      mkPathStage('c1', 'gc_c', '2026-09-04T11:00:01.000Z'),
+      mkPathStage('c2', 'gc_c', '2026-09-04T11:00:01.500Z'),
+    ]);
+
+    const page1: any = { user: { userId: 'user-1' }, query: { page: '1', limit: '2' } };
+    const res1 = createResponse();
+    await routes['GET /me/agent-logs'](page1, res1, jest.fn());
+
+    const page2: any = { user: { userId: 'user-1' }, query: { page: '2', limit: '2' } };
+    const res2 = createResponse();
+    await routes['GET /me/agent-logs'](page2, res2, jest.fn());
+
+    const ids1 = (res1.body?.data?.logs ?? []).map((l: any) => l.id);
+    const ids2 = (res2.body?.data?.logs ?? []).map((l: any) => l.id);
+    expect(ids1).toEqual(['path:gc_a', 'path:gc_b']);
+    expect(ids2).toEqual(['path:gc_c']);
+    // 两页无重复
+    expect(ids1.some((id: string) => ids2.includes(id))).toBe(false);
+    expect(res1.body?.data?.pagination).toEqual({ page: 1, limit: 2, total: 3, totalPages: 2 });
+    expect(res2.body?.data?.pagination).toEqual({ page: 2, limit: 2, total: 3, totalPages: 2 });
   });
 });
