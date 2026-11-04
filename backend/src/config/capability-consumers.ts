@@ -104,11 +104,6 @@ const MODEL_ENTRIES: CapabilityConsumerEntry[] = [
     consumers: ['gateway/api-gateway/model-concurrency.ts#maxParallelRequests'],
   },
   {
-    field: 'model.fallbacks',
-    kind: 'runtime',
-    consumers: ['gateway/api-gateway/executor.ts#getModelFallbacks', 'config/models.config.ts#getModelFallbacks'],
-  },
-  {
     field: 'model.pricing',
     kind: 'runtime',
     consumers: ['services/cost/model-cost.ts#pricing'],

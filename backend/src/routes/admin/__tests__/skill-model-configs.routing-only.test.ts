@@ -34,10 +34,6 @@ jest.mock('../../../utils/secret-redaction', () => ({
 }))
 
 import router from '../skill-model-configs'
-import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
-import { reloadLlmProvidersIfChanged } from '../../../config/models.config'
 
 function getHandler(method: 'get' | 'put' | 'post', path: string) {
   const layer = (router as any).stack.find(
@@ -70,7 +66,7 @@ describe('skill-model-configs routing-only write path', () => {
     })
   })
 
-  it('PUT 忽略裸 temperature/maxTokens，接受 paramOverrides/fallbackChain 并返回新契约投影', async () => {
+  it('PUT 忽略裸 temperature/maxTokens，接受 paramOverrides 并返回新契约投影', async () => {
     mockGet.mockResolvedValue({
       skillId: 'goal-conversation',
       enabled: true,
@@ -97,6 +93,8 @@ describe('skill-model-configs routing-only write path', () => {
           maxLogicalRetries: 1,
           requestTimeoutMs: 60000,
           paramOverrides: { temperature: 0.4, topP: 0.9, maxTokens: 32000 },
+          // 2026-11-04 用户「去掉降级这个功能，不要」：兜底链字段整个下线，
+          // 客户端再传也只当没看见（下面断言它不会落进写盘参数）
           fallbackChain: ['agnes-3.0-flash'],
         },
       },
@@ -111,10 +109,10 @@ describe('skill-model-configs routing-only write path', () => {
         requestTimeoutMs: 60000,
         enabled: true,
         paramOverrides: JSON.stringify({ temperature: 0.4, topP: 0.9, maxTokens: 32000 }),
-        fallbackChain: JSON.stringify(['agnes-3.0-flash']),
       })
     )
     expect(mockUpsert.mock.calls[0][1]).not.toHaveProperty('temperature', 0.1)
+    expect(mockUpsert.mock.calls[0][1]).not.toHaveProperty('fallbackChain')
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
         success: true,
@@ -162,8 +160,11 @@ describe('skill-model-configs routing-only write path', () => {
     expect(res.status).toHaveBeenCalledWith(400)
   })
 
-  it('PUT 拒绝未注册的 fallback 候选', async () => {
+  /* 降级功能已下线：兜底链字段不再有任何校验面（以前会拦未注册候选），
+     传了就只是被忽略；这条守住「别把字段又悄悄接回来」。 */
+  it('兜底链字段已下线：传未注册候选也不报错，也不会写进配置', async () => {
     mockGet.mockResolvedValue({ skillId: 'goal-conversation', enabled: true, model: 'deepseek-v4.1-flash', apiKey: null })
+    mockUpsert.mockImplementation(async (_id: string, data: any) => ({ skillId: 'goal-conversation', ...data }))
     const handler = getHandler('put', '/:skillId')
     const res = createRes()
     await handler(
@@ -173,7 +174,8 @@ describe('skill-model-configs routing-only write path', () => {
       },
       res
     )
-    expect(res.status).toHaveBeenCalledWith(400)
+    expect(res.status).not.toHaveBeenCalledWith(400)
+    expect(mockUpsert.mock.calls[0][1]).not.toHaveProperty('fallbackChain')
   })
 
   it('GET 暴露含 topP 与 sources 的生成参数投影', async () => {
@@ -183,7 +185,6 @@ describe('skill-model-configs routing-only write path', () => {
       temperature: 0.2,
       maxTokens: 2000,
       paramOverrides: null,
-      fallbackChain: null,
     })
     const handler = getHandler('get', '/:skillId')
     const res = createRes()
@@ -212,7 +213,7 @@ describe('bulk-apply：清空模型覆盖（跟随平台默认）', () => {
     mockUpsert.mockImplementation(async (skillId: string, input: any) => ({ skillId, ...input }))
   })
 
-  it('clearModel 只把 model 置空，不碰通道 / 思考 / 参数 / 备用链', async () => {
+  it('clearModel 只把 model 置空，不碰通道 / 思考 / 参数', async () => {
     const handler = getHandler('post', '/bulk-apply')
     const req: any = { body: { skillIds: ['a', 'b'], clearModel: true } }
     const res = createRes()
@@ -253,7 +254,7 @@ describe('coverage 覆盖矩阵（拍板 #9：平台默认白名单）', () => {
     })
     // 只有 goal-conversation 有配置行；白名单 4 技能全部 platform-default
     mockGetAll.mockResolvedValue([
-      { skillId: 'goal-conversation', endpoint: 'http://127.0.0.1:3000/v1', model: 'deepseek-v4.1-flash', tier: 'chat', paramOverrides: null, fallbackChain: null },
+      { skillId: 'goal-conversation', endpoint: 'http://127.0.0.1:3000/v1', model: 'deepseek-v4.1-flash', tier: 'chat', paramOverrides: null },
     ])
 
     const handler = getHandler('get', '/coverage')
@@ -277,7 +278,7 @@ describe('coverage 覆盖矩阵（拍板 #9：平台默认白名单）', () => {
       files: [{ agentId: 'skill:skill-author' }],
     })
     mockGetAll.mockResolvedValue([
-      { skillId: 'skill-author', endpoint: null, model: 'deepseek-v4.1-flash', tier: 'chat', paramOverrides: null, fallbackChain: null },
+      { skillId: 'skill-author', endpoint: null, model: 'deepseek-v4.1-flash', tier: 'chat', paramOverrides: null },
     ])
 
     const handler = getHandler('get', '/coverage')
@@ -287,87 +288,5 @@ describe('coverage 覆盖矩阵（拍板 #9：平台默认白名单）', () => {
     const payload = res.json.mock.calls[0][0]
     expect(payload.data.unconfigured).toEqual([]) // 白名单成员不计入未配置
     expect(payload.data.allowlisted).toEqual([])  // 但已有 model 行 → 不在 allowlisted
-  })
-})
-
-
-// ---------------------------------------------------------------------------
-// 供应商维度（llm-providers.json File-as-Truth）：限定式引用 / 跨供应商兜底拒绝。
-// 用临时目录配置切换注册表，跑完恢复种子目录（不影响文件内前序用例的种子注册表状态）。
-// ---------------------------------------------------------------------------
-describe('skill-model-configs 兜底链的供应商校验', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'llm-providers-skilltest-'))
-  const tempConfig = path.join(tmpDir, 'llm-providers.json')
-
-  beforeAll(() => {
-    fs.writeFileSync(tempConfig, JSON.stringify({
-      providers: {
-        platform: {
-          name: '平台通道',
-          models: {
-            'main-chat': { label: 'Main Chat', tier: 'chat', defaultMaxTokens: 32768 },
-            'alt-chat': { label: 'Alt Chat', tier: 'chat', defaultMaxTokens: 32768 },
-          },
-        },
-        other: {
-          name: '其他通道',
-          baseUrl: 'http://other.example/v1',
-          apiKeyEnv: 'UT_OTHER_KEY',
-          models: {
-            'other-chat': { label: 'Other Chat', tier: 'chat', defaultMaxTokens: 32768 },
-          },
-        },
-      },
-      aliases: {},
-      defaults: { chat: 'main-chat', reasoning: 'main-chat' },
-    }), 'utf-8')
-    process.env.LLM_PROVIDERS_CONFIG = tempConfig
-    process.env.UT_OTHER_KEY = 'ut-other-placeholder-key'
-    reloadLlmProvidersIfChanged()
-  })
-
-  afterAll(() => {
-    delete process.env.LLM_PROVIDERS_CONFIG
-    delete process.env.UT_OTHER_KEY
-    reloadLlmProvidersIfChanged()
-    fs.rmSync(tmpDir, { recursive: true, force: true })
-  })
-
-  function putFallback(body: Record<string, unknown>) {
-    const handler = getHandler('put', '/:skillId')
-    const res = createRes()
-    return handler(
-      { params: { skillId: 'goal-conversation' }, body: { enabled: true, model: 'main-chat', ...body } },
-      res
-    ).then(() => res)
-  }
-
-  it('接受同供应商限定式引用（platform/alt-chat）与裸 id（alt-chat）', async () => {
-    const res = await putFallback({ fallbackChain: ['platform/alt-chat'] })
-    expect(res.status).not.toHaveBeenCalledWith(400)
-    const res2 = await putFallback({ fallbackChain: ['alt-chat'] })
-    expect(res2.status).not.toHaveBeenCalledWith(400)
-  })
-
-  it('拒绝跨供应商候选（裸 id 或限定式，两种写法都拦）', async () => {
-    const res = await putFallback({ fallbackChain: ['other/other-chat'] })
-    expect(res.status).toHaveBeenCalledWith(400)
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({
-        error: expect.stringContaining('跨供应商'),
-      })
-    )
-    const res2 = await putFallback({ fallbackChain: ['other-chat'] })
-    expect(res2.status).toHaveBeenCalledWith(400)
-  })
-
-  it('限定式引用与裸 id 指向同一模型时视为自身并拒绝', async () => {
-    const res = await putFallback({ fallbackChain: ['platform/main-chat'] })
-    expect(res.status).toHaveBeenCalledWith(400)
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({
-        error: expect.stringContaining('不能是主模型自身'),
-      })
-    )
   })
 })

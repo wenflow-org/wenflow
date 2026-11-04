@@ -1,8 +1,10 @@
 <template>
   <!-- 模型编辑（新增 / 修改，2026-10-18 BYOK 重做）。
-       字段与后端解析器的校验一一对应：档位、思考/推理强度（强度依赖思考）、四类限额（正数）、
-       备用链（必须是真实存在的模型）、单价。前端先拦一遍，后端再拦一次并回吐人话原因。
-       「模型 ID」只在新增时可填：它是路由与被引用配置的键，改名等于换模型（后端也会拒）。 -->
+       字段与后端解析器的校验一一对应：思考/推理强度（强度依赖思考）、四类限额（正数）、单价。
+       前端先拦一遍，后端再拦一次并回吐人话原因。
+       「模型 ID」只在新增时可填：它是路由与被引用配置的键，改名等于换模型（后端也会拒）。
+       档位（chat / reasoning）不在这一层让运营选：界面不做模型类型区分，编辑时原样带回，
+       只有注册表里本就写着 reasoning 的条目不会被改成 chat。 -->
   <Teleport v-if="open" to="body">
     <div ref="maskRef" class="mk-modal">
       <div ref="panelRef" class="mk-modal__panel mk-modal__panel--wide med-modal" role="dialog" aria-label="模型设置">
@@ -16,12 +18,13 @@
             <span class="mk-alert__msg">{{ error }}</span>
           </div>
 
-          <!-- 主路径只留「模型身份 + 生成参数」；价格与能力/限额/备用链一起进高级设置
-               （2026-10-28 用户「单价不是很重要的东西」），不占新增模型的第一屏。 -->
+          <!-- 主路径只留「模型身份 + 生成参数」；价格与能力/限额一起进高级设置
+               （2026-10-28 用户「单价不是很重要的东西」），不占新增模型的第一屏。
+               2026-11-04 用户「配置弹窗里面的东西还没改，还是老一套的」：分区标题下的说明行
+               全部撤除——让布局自己说话；需要解释的写进占位符。 -->
           <section class="med-sec">
             <div class="med-sec__head">
               <h4 class="med-sec__title">模型身份</h4>
-              <span class="med-sec__hint">模型 ID 是路由与配置引用的键，创建后不可修改</span>
             </div>
             <div class="med-two">
               <label class="mk-field">
@@ -44,13 +47,13 @@
           </section>
 
           <!-- 生成参数（2026-10-24 用户拍板「每个模型各自一套」）：原来只有平台级默认，
-               现在每个模型可单独覆盖；「跟随默认」= 不写模型字段。 -->
+               现在每个模型可单独覆盖；「跟随默认」= 不写模型字段。
+               2026-11-04 用户「输出格式这个功能先下掉」：输出格式一栏撤除。 -->
           <section class="med-sec med-gen">
             <div class="med-sec__head">
               <h4 class="med-sec__title">生成参数</h4>
-              <span class="med-sec__hint">跟随默认＝不指定，由上游按自身默认处理（本页不存具体数值）</span>
             </div>
-            <div class="med-price">
+            <div class="med-two">
               <label class="mk-field">
                 <span class="mk-field__label">思考模式</span>
                 <MkSelect
@@ -70,43 +73,32 @@
                   :disabled="form.defaultThinkingMode === 'disabled'"
                 />
               </label>
-              <label class="mk-field">
-                <span class="mk-field__label">输出格式</span>
-                <MkSelect
-                  v-model="form.defaultResponseFormat"
-                  :options="RESPONSE_FORMAT_OPTIONS"
-                  aria-label="输出格式"
-                  block
-                />
-              </label>
             </div>
           </section>
 
           <details class="med-advanced">
-            <!-- 2026-11-02「让布局自己说话」：折叠头右侧原有列出本弹层五个分区名的一行小字，
-                 它只罗列本弹层自己的分区——展开后各分区标题（用途字段 + 能力 / 调用限制 /
-                 备用模型 / 价格）已各说一次，属要收掉的那类。同一句改挂它描述的那个记号
+            <!-- 2026-11-02「让布局自己说话」：折叠头右侧原有列出本弹层分区名的一行小字，
+                 它只罗列本弹层自己的分区——展开后各分区标题（说明 / 能力 / 调用限制 /
+                 价格）已各说一次，属要收掉的那类。同一句改挂它描述的那个记号
                  （summary）的 title，悬停与读屏仍拿得到，屏上不再占一段版面。 -->
-            <summary title="用途、能力、调用限制、备用模型、价格">
+            <summary title="说明、能力、调用限制、价格">
               高级设置
             </summary>
             <div class="med-adv-body">
-              <div class="med-two">
-                <label class="mk-field">
-                  <span class="mk-field__label">用途</span>
-                  <MkSelect
-                    v-model="form.tier"
-                    :options="TIER_OPTIONS"
-                    aria-label="用途"
-                    block
-                  />
-                </label>
+              <div>
                 <label class="mk-field">
                   <span class="mk-field__label">说明</span>
                   <!-- 占位符不写「选填」：非必填由没有 * 表达，占位符只该给示例。
                        改用可换行输入（2026-11-02 评审）：单行 input 会把一句话从右缘硬切，
-                       既没有省略号也读不到后半句 -->
-                  <textarea v-model="form.description" class="mk-field__textarea med-desc" rows="2" />
+                       既没有省略号也读不到后半句。
+                       2026-11-04：说明常常是一整段运维备注，固定两行会在句中截断——
+                       高度跟着内容走（field-sizing），到视口上限才出现内滚。 -->
+                  <textarea
+                    v-model="form.description"
+                    class="mk-field__textarea med-desc"
+                    rows="2"
+                    placeholder="中文理解强，适合结构化输出"
+                  />
                 </label>
               </div>
 
@@ -133,7 +125,6 @@
               <div>
                 <div class="med-subrow">
                   <h5 class="med-sub">调用限制</h5>
-                  <span class="med-sub__hint">留空 = 使用默认值，并发留空 = 不限</span>
                 </div>
                 <div class="med-two">
                   <label class="mk-field">
@@ -152,46 +143,6 @@
                     <span class="mk-field__label">并发上限</span>
                     <input v-model.number="form.maxParallelRequests" class="mk-field__input mono" type="number" min="1" placeholder="不限" />
                   </label>
-                </div>
-              </div>
-
-              <div>
-                <div class="med-subrow">
-                  <h5 class="med-sub">备用模型</h5>
-                  <span class="med-sub__hint">主模型失败后按顺序尝试</span>
-                </div>
-                <!-- 原生的多选 listbox 一屏铺开全部候选、也看不出尝试顺序；
-                     改成「已选编号 → 搜索 → 勾选」三段，顺序即勾选顺序。 -->
-                <div class="med-fb">
-                  <div v-if="pickedFallbacks.length" class="med-fb__picked">
-                    <span v-for="(opt, i) in pickedFallbacks" :key="opt" class="med-fb__chip">
-                      <b class="med-fb__order">{{ i + 1 }}</b>
-                      <span class="mono med-fb__name" :title="opt">{{ opt }}</span>
-                      <button type="button" class="med-fb__remove" :aria-label="`移除 ${opt}`" @click="removeFallback(opt)">✕</button>
-                    </span>
-                  </div>
-                  <p v-else class="med-fb__empty">未选备用模型：沿用默认备用模型列表</p>
-                  <input
-                    v-model="fallbackQuery"
-                    class="mk-field__input med-fb__filter"
-                    placeholder="搜索模型"
-                    aria-label="搜索备用模型"
-                    autocomplete="off"
-                  />
-                  <div class="med-fb__list">
-                    <label
-                      v-for="opt in filteredFallbacks"
-                      :key="opt"
-                      class="med-fb__row"
-                      :class="{ 'med-fb__row--on': pickedFallbacks.includes(opt) }"
-                    >
-                      <input type="checkbox" :checked="pickedFallbacks.includes(opt)" @change="toggleFallback(opt)" />
-                      <span class="mono med-fb__id" :title="opt">{{ opt }}</span>
-                    </label>
-                    <p v-if="!filteredFallbacks.length" class="med-fb__empty">
-                      {{ availableFallbacks.length ? '没有匹配的模型' : '当前没有其他可选模型' }}
-                    </p>
-                  </div>
                 </div>
               </div>
 
@@ -251,17 +202,17 @@ export interface ModelLike {
   /** 模型级生成默认（2026-10-24）；null/缺省 = 跟随平台默认 */
   defaultThinkingMode?: 'enabled' | 'disabled' | null
   defaultReasoningEffort?: 'low' | 'high' | 'max' | null
+  /** 输出格式（2026-11-04 从弹层下线）：注册表里可能还写着，这里只读不写——
+   *  提交时不带这个键，未动过的旧值原样留着，等这个功能回来再给入口。 */
   defaultResponseFormat?: 'none' | 'json_object' | null
   maxOutputTokens: number | null
   defaultMaxTokens: number | null
   reasoningReserveTokens: number | null
   maxParallelRequests: number | null
-  fallbacks: string[]
   pricing: { inputPer1M?: number; cachedInputPer1M?: number; outputPer1M?: number } | null
   description: string | null
 }
 
-const props = defineProps<{ fallbackOptions: string[] }>()
 const emit = defineEmits<{ saved: [{ modelId: string; warnings: string[] }]; closed: [] }>()
 
 const open = ref(false)
@@ -273,8 +224,6 @@ const providerId = ref('')
 const stepInfo = ref<{ index: number; total: number } | null>(null)
 const maskRef = ref<HTMLElement | null>(null)
 const panelRef = ref<HTMLElement | null>(null)
-const pickedFallbacks = ref<string[]>([])
-const fallbackQuery = ref('')
 /** 显示名称是否被手动改过：没改过时跟随模型 ID（拉取结果预填时两栏不再各写一遍） */
 const labelTouched = ref(false)
 
@@ -287,7 +236,6 @@ const form = reactive({
   supportsReasoningEffort: false,
   defaultThinkingMode: 'default' as 'default' | 'enabled' | 'disabled',
   defaultReasoningEffort: 'default' as 'default' | 'low' | 'high' | 'max',
-  defaultResponseFormat: 'default' as 'default' | 'none' | 'json_object',
   maxOutputTokens: null as number | null,
   defaultMaxTokens: null as number | null,
   reasoningReserveTokens: null as number | null,
@@ -298,7 +246,9 @@ const form = reactive({
   outputPer1M: null as number | null
 })
 
-/* 三个生成参数与用途的下拉档位：文案保持与旧原生 select 逐字一致 */
+/* 生成参数的下拉档位：文案保持与旧原生 select 逐字一致。
+   2026-11-04 用户「输出格式这个功能先下掉」：输出格式档位随字段一并撤除，
+   已存的值原样留在注册表里，这里不读也不写。 */
 const THINKING_MODE_OPTIONS: Array<{ value: 'default' | 'enabled' | 'disabled'; label: string }> = [
   { value: 'default', label: '跟随默认' },
   { value: 'enabled', label: '强制开启' },
@@ -310,38 +260,9 @@ const REASONING_EFFORT_OPTIONS: Array<{ value: 'default' | 'low' | 'high' | 'max
   { value: 'high', label: '高（high）' },
   { value: 'max', label: '最高（max）' }
 ]
-const RESPONSE_FORMAT_OPTIONS: Array<{ value: 'default' | 'none' | 'json_object'; label: string }> = [
-  { value: 'default', label: '跟随默认' },
-  { value: 'none', label: '关闭' },
-  { value: 'json_object', label: 'JSON 对象' }
-]
-const TIER_OPTIONS: Array<{ value: 'chat' | 'reasoning'; label: string }> = [
-  { value: 'chat', label: '对话' },
-  { value: 'reasoning', label: '推理' }
-]
 /** 能力卡与生成参数同名（单一文案源：同文件出现两次会被文案门禁记复读） */
 const CAP_REASONING = '推理强度'
 
-/** 备用链候选：排除自己（主模型出错后不可能再回落给自己） */
-const availableFallbacks = computed(() => {
-  const self = `${providerId.value}/${form.id.trim()}`
-  return props.fallbackOptions.filter((opt) => opt !== self)
-})
-/** 备用链搜索：候选多时靠筛选找，不再用原生 listbox 一屏铺开 */
-const filteredFallbacks = computed(() => {
-  const q = fallbackQuery.value.trim().toLowerCase()
-  return q ? availableFallbacks.value.filter((opt) => opt.toLowerCase().includes(q)) : availableFallbacks.value
-})
-
-/** 叠加/移除备用模型：数组顺序就是尝试顺序 */
-function toggleFallback(opt: string): void {
-  pickedFallbacks.value = pickedFallbacks.value.includes(opt)
-    ? pickedFallbacks.value.filter((x) => x !== opt)
-    : [...pickedFallbacks.value, opt]
-}
-function removeFallback(opt: string): void {
-  pickedFallbacks.value = pickedFallbacks.value.filter((x) => x !== opt)
-}
 /** 用户一旦手改显示名称，就停止跟随模型 ID */
 function onLabelInput(): void {
   labelTouched.value = true
@@ -386,7 +307,6 @@ function openWith(target: { providerId: string; model: ModelLike | null; presetI
   form.supportsReasoningEffort = m?.supportsReasoningEffort ?? false
   form.defaultThinkingMode = m?.defaultThinkingMode ?? 'default'
   form.defaultReasoningEffort = m?.defaultReasoningEffort ?? 'default'
-  form.defaultResponseFormat = m?.defaultResponseFormat ?? 'default'
   form.maxOutputTokens = m?.maxOutputTokens ?? null
   form.defaultMaxTokens = m?.defaultMaxTokens ?? null
   form.reasoningReserveTokens = m?.reasoningReserveTokens ?? null
@@ -395,8 +315,6 @@ function openWith(target: { providerId: string; model: ModelLike | null; presetI
   form.inputPer1M = m?.pricing?.inputPer1M ?? null
   form.cachedInputPer1M = m?.pricing?.cachedInputPer1M ?? null
   form.outputPer1M = m?.pricing?.outputPer1M ?? null
-  pickedFallbacks.value = [...(m?.fallbacks ?? [])]
-  fallbackQuery.value = ''
   labelTouched.value = false
   open.value = true
 }
@@ -438,12 +356,10 @@ async function submit(): Promise<void> {
       // 'default' → null：后端删掉模型字段，运行时跟随平台默认
       defaultThinkingMode: form.defaultThinkingMode === 'default' ? null : form.defaultThinkingMode,
       defaultReasoningEffort: form.defaultReasoningEffort === 'default' ? null : form.defaultReasoningEffort,
-      defaultResponseFormat: form.defaultResponseFormat === 'default' ? null : form.defaultResponseFormat,
       maxOutputTokens: numOrNull(form.maxOutputTokens),
       defaultMaxTokens: numOrNull(form.defaultMaxTokens),
       reasoningReserveTokens: numOrNull(form.reasoningReserveTokens),
       maxParallelRequests: numOrNull(form.maxParallelRequests),
-      fallbacks: pickedFallbacks.value,
       pricing,
       description: form.description.trim()
     }
@@ -464,7 +380,7 @@ defineExpose({ openWith, close })
 </script>
 
 <style scoped>
-/* 单列 + 折叠高级项：首屏只放模型身份与价格，高级项默认收起 */
+/* 单列 + 折叠高级项：首屏只放模型身份与生成参数，其余默认收起 */
 .med-modal.mk-modal__panel--wide { width: min(720px, 96vw); max-width: none; }
 .med-sec { min-width: 0; }
 .med-sec + .med-sec { margin-top: 18px; }
@@ -481,7 +397,6 @@ defineExpose({ openWith, close })
   font-size: var(--mk-fs-body);
   font-weight: 700;
 }
-.med-sec__hint { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 /* 已创建的模型 ID 是只读值，不是待填占位符（2026-11-02 评审：disabled 的弱化字色
    与「显示名称」白字并排，看起来像没填）。只读态回到正文色 + 次级底，读作「这里是值」 */
 .mk-field__input.med-id--locked {
@@ -490,10 +405,16 @@ defineExpose({ openWith, close })
   background: var(--mk-surface-2);
   opacity: 1;
 }
-.med-desc { min-height: 0; }
+/* 说明跟着内容长高（field-sizing 不受支持的浏览器退回 rows=2 + 内滚，不会截断） */
+.med-desc {
+  min-height: 0;
+  max-height: 30vh;
+  field-sizing: content;
+  resize: vertical;
+}
 .med-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .med-price { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-/* 高级设置：默认收起，展开后按「用途 / 能力 / 调用限制 / 备用模型」四段排 */
+/* 高级设置：默认收起，展开后按「说明 / 能力 / 调用限制 / 价格」四段排 */
 .med-advanced {
   margin-top: 20px;
   padding-top: 14px;
@@ -544,72 +465,6 @@ defineExpose({ openWith, close })
   border-color: var(--mk-blue);
   background: color-mix(in srgb, var(--mk-blue) 6%, var(--mk-surface));
 }
-
-/* 备用模型：已选区（带尝试顺序）+ 搜索 + 候选勾选，替代原生多选 listbox */
-.med-fb {
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-md);
-  background: var(--mk-surface);
-  overflow: hidden;
-}
-.med-fb__picked { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 10px 0; }
-.med-fb__chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 100%;
-  padding: 3px 6px;
-  border-radius: 999px;
-  background: var(--mk-surface-3);
-}
-.med-fb__order {
-  display: inline-grid;
-  place-items: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--mk-blue);
-  color: var(--mk-graph-on-accent);
-  font-size: var(--mk-fs-micro);
-  font-weight: 800;
-  flex: none;
-}
-.med-fb__name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--mk-fs-micro);
-}
-.med-fb__remove {
-  border: 0;
-  background: none;
-  padding: 0 2px;
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
-  cursor: pointer;
-}
-.med-fb__remove:hover { color: var(--mk-red); }
-.med-fb__empty {
-  margin: 0;
-  padding: 10px 10px 0;
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
-}
-.med-fb__filter { width: calc(100% - 20px); margin: 10px; }
-.med-fb__list { max-height: 156px; overflow-y: auto; border-top: 1px solid var(--mk-line); }
-.med-fb__row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 10px;
-  border-bottom: 1px solid var(--mk-line);
-  font-size: var(--mk-fs-micro);
-  cursor: pointer;
-}
-.med-fb__row:last-child { border-bottom: 0; }
-.med-fb__row:hover { background: var(--mk-table-row-hover-bg); }
-.med-fb__row--on { background: color-mix(in srgb, var(--mk-blue) 5%, transparent); }
-.med-fb__id { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (max-width: 900px) {
   .med-modal.mk-modal__panel--wide { width: min(100%, 96vw); }

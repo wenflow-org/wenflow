@@ -2,7 +2,7 @@
  * 向量 / 重排单例引擎卡（2026-10-28 用户「全局单例引擎，不要套多模型卡片」）：
  * 1. 两张紧凑卡只回答「挂的哪个模型、走哪条连接、健不健康」，卡面不铺表单；
  * 2. 连接方式用两枚说明卡（复用对话模型连接 / 独立服务），与模型参数在同一弹层一次保存；
- * 3. 未配置时只给配置入口；配置来源收进状态徽标 title。
+ * 3. 未配置时不出现测试动作；卡头的「＋ 添加模型」恒在；配置来源收进状态徽标 title。
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
@@ -102,13 +102,70 @@ describe('InfraModelsPanel', () => {
     expect(list[1].text()).toContain('Reranker');
     expect(list[0].find('.mk-badge').text()).toBe('已配置');
     expect(list[0].find('.mpp-eng__model').text()).toBe('BAAI/bge-m3');
-    expect(list[0].find('.mpp-eng__conn').text()).toBe('独立端点 · gw.example');
-    expect(list[1].find('.mpp-eng__conn').text()).toBe('复用对话模型的连接');
+    // 2026-11-04「让布局自己说话」：模型行下不再有维度 / 连接归属这类次级说明行
+    expect(wrapper.find('.mpp-eng__params').exists()).toBe(false);
+    expect(wrapper.find('.mpp-eng__conn').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('维度由上游返回');
+    expect(wrapper.text()).not.toContain('Cohere 兼容');
+    expect(wrapper.text()).not.toContain('独立端点');
     // 卡面不裸露表单，也没有「未保存 / 保存连接」
     expect(wrapper.find('.mpp-eng input').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('未保存');
     expect(wrapper.text()).not.toContain('保存连接');
-    expect(list[0].findAll('button').map((b) => b.text())).toEqual(['测试', '配置']);
+    // 每张卡自己一枚「＋ 添加模型」（卡头右组），模型行是「测试 / 配置」
+    expect(list[0].find('.mk-card__head-right button').text()).toBe('＋ 添加模型');
+    expect(list[0].find('.mpp-eng__acts').findAll('button').map((b) => b.text())).toEqual(['测试', '配置']);
+    wrapper.unmount();
+  });
+
+  /* 2026-11-04 用户「这两个拉取，弹窗怎么还不一样呢」：向量 / 重排的「＋ 添加模型」
+     与对话卡共用同一张上游清单弹窗（单选），不再是「配置表单 + 候选小胶囊」。 */
+  it('卡头「＋ 添加模型」：开同一张清单弹窗，只列该用途的模型', async () => {
+    pullMock.mockResolvedValue({
+      data: { data: { models: ['BAAI/bge-m3', 'deepseek-v4.1-flash', 'BAAI/bge-reranker-v2-m3'] } },
+    });
+    const wrapper = mountPanel();
+    await flushPromises();
+    const btn = cards(wrapper)[0].find('.mk-card__head-right button');
+    await btn.trigger('click');
+    await flushPromises();
+
+    // 拉取按用途过滤：向量卡只留 embedding 那一个
+    expect(pullMock).toHaveBeenCalledWith(expect.objectContaining({ kind: 'embedding' }));
+    const dialog = wrapper.find('.pmd');
+    expect(dialog.exists()).toBe(true);
+    expect(dialog.find('.mk-modal__title').text()).toBe('添加向量模型');
+    expect(dialog.findAll('.pmd-row .pmd-row__id').map((r) => r.text())).toEqual(['BAAI/bge-m3']);
+    // 单例：单选、没有全选、没有手动录入出口（手填走「配置」）
+    expect(dialog.find('input[type="radio"]').exists()).toBe(true);
+    expect(dialog.find('.pmd-all').exists()).toBe(false);
+    expect(dialog.find('.pmd-manual').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('清单里选中即用：只换模型，连接方式与参数沿用当前配置', async () => {
+    pullMock.mockResolvedValue({ data: { data: { models: ['BAAI/bge-large-zh-v1.5'] } } });
+    const wrapper = mountPanel();
+    await flushPromises();
+    await cards(wrapper)[0].find('.mk-card__head-right button').trigger('click');
+    await flushPromises();
+
+    await wrapper.find('.pmd-row input[type="radio"]').trigger('change');
+    await flushPromises();
+    const confirm = wrapper.findAll('.pmd button').find((b) => b.text() === '确认引入')!;
+    await confirm.trigger('click');
+    await flushPromises();
+
+    expect(updateMock).toHaveBeenCalledWith({
+      embedding: {
+        connectionMode: 'own',
+        endpoint: 'https://gw.example/v1/embeddings',
+        model: 'BAAI/bge-large-zh-v1.5',
+        timeoutMs: 20000,
+        batchSize: 32,
+        dimensions: 1024,
+      },
+    });
     wrapper.unmount();
   });
 
@@ -183,11 +240,11 @@ describe('InfraModelsPanel', () => {
     await modal.findAll('.mk-modal__foot button').find((b) => b.text() === '取消')!.trigger('click');
     await flushPromises();
     expect(updateMock).not.toHaveBeenCalled();
-    expect(cards(wrapper)[0].find('.mpp-eng__conn').text()).toBe('独立端点 · gw.example');
+    expect(cards(wrapper)[0].find('.mpp-eng__model').text()).toBe('BAAI/bge-m3');
     wrapper.unmount();
   });
 
-  it('未配置时只给配置入口，不出现测试动作', async () => {
+  it('未配置时不出现测试动作，只留添加与配置', async () => {
     const data = view();
     data.rerank = { ...data.rerank, configured: false, model: '', keySource: 'none' };
     getMock.mockResolvedValue({ data: { data } });
@@ -196,7 +253,9 @@ describe('InfraModelsPanel', () => {
     const rerank = cards(wrapper)[1];
 
     expect(rerank.find('.mk-badge').text()).toBe('未配置');
-    expect(rerank.findAll('button').map((b) => b.text())).toEqual(['配置']);
+    const labels = rerank.findAll('button').map((b) => b.text());
+    expect(labels).toEqual(['＋ 添加模型', '配置']);
+    expect(labels).not.toContain('测试');
     wrapper.unmount();
   });
 

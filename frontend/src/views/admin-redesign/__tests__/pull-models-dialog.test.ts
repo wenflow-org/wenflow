@@ -1,6 +1,8 @@
 /**
- * 模型资产选择器（2026-10-28 用户「应用商店级的选择弹窗」）：
- * 单一入口、搜索与分类页签、能力标签推断、向量/重排建议分流、手动录入兜底。
+ * 上游模型清单（2026-10-28 用户「应用商店级的选择弹窗」）：
+ * 单一入口、搜索、能力标签推断、就地测试、手动录入兜底。
+ * 2026-11-04 用户「不分什么对话非对话，这个页面就是拉取列表测试添加」：
+ * 分类页签与「建议归入向量/重排」一并撤除，清单原样列出。
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -25,7 +27,7 @@ const MODELS = [
 
 function mountDialog(registered: string[] = ['deepseek-v4.1-flash'], providerId = '', models = MODELS) {
   return mount(PullModelsDialog, {
-    props: { providerName: '平台', providerId, models, registered },
+    props: { providerId, models, registered },
     global: { stubs: { teleport: true } },
   })
 }
@@ -40,51 +42,35 @@ function rowOf(wrapper: ReturnType<typeof mountDialog>, needle: string) {
   return wrapper.findAll('.pmd-row').find((r) => r.text().includes(needle))!
 }
 
-function tabOf(wrapper: ReturnType<typeof mountDialog>, label: string) {
-  return wrapper.findAll('.pmd-tab').find((t) => t.text().startsWith(label))!
-}
-
-async function switchTab(wrapper: ReturnType<typeof mountDialog>, label: string) {
-  await tabOf(wrapper, label).trigger('click')
-  await nextTick()
-}
-
 describe('PullModelsDialog', () => {
   beforeEach(() => { testMock.mockReset() })
 
-  it('按模型名推断能力与用途：思考 / 读图 / 向量 / 重排各有标签与去向提示', async () => {
+  it('清单原样列出：已添加的置灰并沉到末尾，不猜能力', async () => {
     const w = mountDialog()
     await open(w)
-    expect(w.find('.mk-modal__title').text()).toBe('添加对话模型')
-    /* 默认落「可引入」（2026-11-03）：打开就是这一屏能勾的对话模型，已添加与向量/重排不在里面 */
+    expect(w.find('.mk-modal__title').text()).toBe('添加模型')
+    // 2026-11-04 用户「不分什么对话非对话，这个页面就是拉取列表测试添加」：8 个上游模型全在
     expect(w.findAll('.pmd-row .pmd-row__id').map((r) => r.text())).toEqual([
-      'agnes-3.0-flash', 'mimo-v2.5-flash', 'deepseek-r1', 'gpt-4o', 'step-fun/step-1v',
+      'agnes-3.0-flash', 'mimo-v2.5-flash', 'BAAI/bge-m3', 'BAAI/bge-reranker-v2-m3',
+      'deepseek-r1', 'gpt-4o', 'step-fun/step-1v', 'deepseek-v4.1-flash',
     ])
 
-    const r1 = rowOf(w, 'deepseek-r1')
-    expect(r1.text()).toContain('思考')
-    expect(r1.text()).toContain('推理强度')
-    expect(r1.text()).toContain('新发现')
+    // 2026-11-04 用户「能力特性我们也不知道吧，这个列表并不能获取这些」：
+    // `/v1/models` 只回 id，清单里不再出现任何按名字猜出来的能力标签
+    expect(w.text()).not.toContain('能力特性')
+    expect(w.findAll('.pmd-row__tags, .pmd-chip')).toHaveLength(0)
+    expect(w.find('.pmd-cols').text()).toBe('模型标识状态')
+    expect(rowOf(w, 'deepseek-r1').text()).not.toContain('思考')
+    expect(rowOf(w, 'gpt-4o').text()).not.toContain('读图')
+    expect(rowOf(w, 'deepseek-r1').text()).toContain('可添加')
 
-    expect(rowOf(w, 'gpt-4o').text()).toContain('读图')
+    // 向量 / 重排不再被挡在外面：照样可勾
+    const embedding = rowOf(w, 'BAAI/bge-m3')
+    expect(embedding.find('input').attributes('disabled')).toBeUndefined()
 
-    await switchTab(w, '已添加')
-    expect(w.findAll('.pmd-row .pmd-row__id').map((r) => r.text())).toEqual(['deepseek-v4.1-flash'])
     const added = rowOf(w, 'deepseek-v4.1-flash')
     expect(added.text()).toContain('已添加')
     expect(added.find('input').attributes('disabled')).toBeDefined()
-
-    await switchTab(w, '非对话模型')
-    expect(w.findAll('.pmd-row .pmd-row__id').map((r) => r.text())).toEqual([
-      'BAAI/bge-m3', 'BAAI/bge-reranker-v2-m3',
-    ])
-    const embedding = rowOf(w, 'BAAI/bge-m3')
-    expect(embedding.text()).toContain('建议归入向量模型')
-    expect(embedding.find('input').attributes('disabled')).toBeDefined()
-
-    const rerank = rowOf(w, 'BAAI/bge-reranker-v2-m3')
-    expect(rerank.text()).toContain('建议归入重排模型')
-    expect(rerank.find('input').attributes('disabled')).toBeDefined()
   })
 
   it('勾选后确认：按勾选顺序回传，按钮文案带已选数量', async () => {
@@ -102,60 +88,49 @@ describe('PullModelsDialog', () => {
     expect(w.emitted('confirm')?.[0]).toEqual([['agnes-3.0-flash', 'mimo-v2.5-flash']])
   })
 
-  it('页签口径：可引入只数对话模型，已添加与非对话模型互不重叠', async () => {
+  it('没有分类页签，也没有「建议归入哪张卡」的判词', async () => {
     const w = mountDialog()
     await open(w)
-    expect(w.findAll('.pmd-tab').map((t) => t.text()))
-      .toEqual(['可引入 (5)', '已添加 (1)', '非对话模型 (2)'])
-    expect(w.text()).not.toContain('推荐预设')
-
-    /* 已添加的模型不再出现在「可引入」这一屏：不用在勾不动的行里扫雷 */
-    await switchTab(w, '已添加')
-    expect(w.findAll('.pmd-row')).toHaveLength(1)
-    expect(w.text()).toContain('deepseek-v4.1-flash')
-
-    await switchTab(w, '非对话模型')
-    expect(w.findAll('.pmd-row')).toHaveLength(2)
-    expect(w.text()).toContain('BAAI/bge-m3')
-    expect(w.text()).toContain('bge-reranker')
+    expect(w.find('.pmd-tab').exists()).toBe(false)
+    expect(w.find('.pmd-tabs').exists()).toBe(false)
+    expect(w.text()).not.toContain('非对话')
+    expect(w.text()).not.toContain('建议归入')
+    expect(w.text()).not.toContain('不在此添加')
+    expect(w.findAll('.pmd-row')).toHaveLength(MODELS.length)
   })
 
-  it('页签恒为三项且都可点：0 命中不置灰，改由该分类的空态说明缘由', async () => {
-    const w = mountDialog([], '', ['agnes-3.0-flash'])
+  it('全选只数可添加的行；空清单给空态', async () => {
+    const w = mountDialog()
     await open(w)
-    /* 0 命中不再整条抽掉、也不再置灰：页签消失会被读成「这里没有按能力筛选」的筛选维度，
-       而置灰只是把同一条信息推给用户去猜 */
-    const tabs = w.findAll('.pmd-tab')
-    expect(tabs.map((t) => t.text())).toEqual(['可引入 (1)', '已添加 (0)', '非对话模型 (0)'])
-    expect(tabs.map((t) => t.attributes('disabled'))).toEqual([undefined, undefined, undefined])
-    // 说明文案 2026-11-02 改写：讲清能力标签与「非对话模型」的口径
-    expect(w.text()).toContain('判不出的记')
-    expect(rowOf(w, 'agnes-3.0-flash').text()).toContain('—')
+    // 默认 8 个上游模型里 1 个已添加 → 可添加 7 个
+    expect(w.find('.pmd-all').text()).toContain('全选当前可添加的 7 个模型')
+    // 能力在哪里填：引入后逐项确认（清单本身不猜）
+    expect(w.text()).toContain('引入时会让你逐项确认')
 
-    await switchTab(w, '已添加')
-    expect(w.find('.pmd-empty').text()).toBe('这个供应商还没有已添加的模型')
-
-    await switchTab(w, '非对话模型')
-    expect(w.find('.pmd-empty').text()).toBe('上游没有图像、视频或向量模型')
+    const empty = mount(PullModelsDialog, {
+      props: { models: [], registered: [] },
+      global: { stubs: { teleport: true } },
+    })
+    await open(empty)
+    expect(empty.find('.pmd-empty').text()).toContain('没有拉取到模型')
+    expect(empty.find('.pmd-all').exists()).toBe(false)
   })
 
-  it('全选作用于当前页签的可见行，勾选不蔓延到别的页签', async () => {
+  it('全选只作用于当前搜索结果里的可添加行', async () => {
     const w = mountDialog(['deepseek-v4.1-flash'])
     await open(w)
     await w.find('.pmd-filter').setValue('flash')
     await nextTick()
     expect(w.findAll('.pmd-row .pmd-row__id').map((r) => r.text()))
-      .toEqual(['agnes-3.0-flash', 'mimo-v2.5-flash'])
+      .toEqual(['agnes-3.0-flash', 'mimo-v2.5-flash', 'deepseek-v4.1-flash'])
     await w.find('.pmd-all input').setValue(true)
     await nextTick()
     expect(w.find('.pmd-foot__count').text()).toContain('2')
 
-    /* 已添加的 flash 在另一个页签，勾选碰不到它；该页签没有可勾选行，全选入口整体不出现 */
-    await switchTab(w, '已添加')
+    // 已添加的那一行勾不动，也没被全选带上
     const addedRow = rowOf(w, 'deepseek-v4.1-flash')
     expect((addedRow.find('input').element as HTMLInputElement).checked).toBe(false)
     expect(addedRow.find('input').attributes('disabled')).toBeDefined()
-    expect(w.find('.pmd-all').exists()).toBe(false)
   })
 
   it('手动录入是兜底出口：点链接只发事件，不携带勾选', async () => {
@@ -166,23 +141,40 @@ describe('PullModelsDialog', () => {
     expect(w.emitted('confirm')).toBeUndefined()
   })
 
-  it('无可引入时给该分类的空态且不出现全选；空清单给另一句空态', async () => {
+  /* 2026-11-04 用户「这两个拉取，弹窗怎么还不一样呢」：向量 / 重排复用这同一张弹窗，
+     single 模式 = 单选、无全选、无手动录入出口、当前在用的那行标「使用中」。 */
+  it('单选模式：一个 radio、无全选、无手动录入，当前在用的标「使用中」', async () => {
     const w = mount(PullModelsDialog, {
-      props: { providerName: '平台', models: ['BAAI/bge-m3'], registered: ['BAAI/bge-m3'] },
+      props: { title: '添加向量模型', models: ['BAAI/bge-m3', 'BAAI/bge-reranker-v2-m3'], registered: ['BAAI/bge-m3'], single: true, allowManual: false, hint: '' },
       global: { stubs: { teleport: true } },
     })
     await open(w)
-    expect(w.find('.pmd-empty').text()).toBe('上游的对话模型都已添加')
+    expect(w.find('.mk-modal__title').text()).toBe('添加向量模型')
+    expect(w.findAll('input[type="radio"]')).toHaveLength(2)
+    expect(w.findAll('input[type="checkbox"]')).toHaveLength(0)
     expect(w.find('.pmd-all').exists()).toBe(false)
-    expect(w.findAll('.pmd-row')).toHaveLength(0)
+    expect(w.find('.pmd-manual').exists()).toBe(false)
+    expect(w.find('.pmd-hint span').exists()).toBe(false)
+    expect(rowOf(w, 'BAAI/bge-m3').text()).toContain('使用中')
+    expect(rowOf(w, 'BAAI/bge-m3').find('input').attributes('disabled')).toBeDefined()
 
-    const empty = mount(PullModelsDialog, {
-      props: { providerName: '平台', models: [], registered: [] },
+    // 单选：点第二个就替换第一个
+    await rowOf(w, 'BAAI/bge-reranker-v2-m3').find('input').trigger('change')
+    await nextTick()
+    expect(w.find('.pmd-foot__count').text()).toContain('1')
+    await w.findAll('.pmd button').find((b) => b.text() === '确认引入')!.trigger('click')
+    expect(w.emitted('confirm')?.[0]).toEqual([['BAAI/bge-reranker-v2-m3']])
+  })
+
+  it('全部已添加时不出现全选', async () => {
+    const all = mount(PullModelsDialog, {
+      props: { models: ['BAAI/bge-m3'], registered: ['BAAI/bge-m3'] },
       global: { stubs: { teleport: true } },
     })
-    await open(empty)
-    expect(empty.find('.pmd-empty').text()).toContain('没有拉取到模型')
-    expect(empty.find('.pmd-all').exists()).toBe(false)
+    await open(all)
+    expect(all.findAll('.pmd-row')).toHaveLength(1)
+    expect(all.find('.pmd-row input').attributes('disabled')).toBeDefined()
+    expect(all.find('.pmd-all').exists()).toBe(false)
   })
 
   /* 2026-10-26 用户「拉取模型那里可以测试了」：勾选前就地验一次，

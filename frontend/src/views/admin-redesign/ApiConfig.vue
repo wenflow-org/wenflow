@@ -16,7 +16,7 @@
     <!-- 单页（2026-10-26 用户「我不知为啥还要有默认设置。不就是配置的模型吗，这个页面我觉得
          可以和前面的合并了」）：一级页签「接入 / 调用」撤除，本页自上而下两段——
          ① 供应商面板：左列表 / 右详情；平台详情的二级页签 = 模型 / 连接 / 基础设施 / 生成参数
-         ② 调用策略（尝试与降级、退避与超时、平台出站速率 + 近 1 小时 429 / 冷却读数）
+         ② 调用策略（尝试与重试、退避与超时、平台出站速率 + 近 1 小时 429 读数）
          「平台默认生成参数」并进平台详情第四个页签：它就是「这些模型默认怎么生成」，
          与模型表是同一个对象，此前单独一张卡叫「平台默认生成参数」，读起来像另一套设置。
          旧键 ?tab=routing / runtime / model-routing 仍归一到这里（TAB_ALIAS），书签不失效。 -->
@@ -30,7 +30,6 @@
         ref="providersRef"
         :upstream="models"
         :default-model="defaultModel"
-        :default-reasoning-model="defaultReasoningModel"
         @registered="onProvidersRegistered"
         @platform-models="onPlatformModels"
         @fetch-upstream="onFetchClick"
@@ -45,21 +44,10 @@
              与「密钥已配置 / 重试策略」并排，作为通道自身的一条事实。 -->
         <template #head-status />
 
-        <!-- 上游清单的出口（2026-11-03）：落在模型列表工具栏里，与「＋ 添加模型」同一行——
-             它俩是同一件事的两半（先有清单，才能挑）。用这条通道的地址与密钥获取模型，
-             成功后连接一并落盘，不再要求先点「保存连接」。 -->
-        <template #upstream-actions>
-          <button
-            type="button"
-            class="mk-btn mk-btn--sm"
-            :disabled="fetching || !providersReady"
-            :title="models.length ? '按当前服务地址与密钥向上游重新拉取模型清单' : '按当前服务地址与密钥向上游拉取模型清单'"
-            @click="onFetchClick"
-          >
-            <MkLoading v-if="fetching" inline text="获取中…" />
-            <span v-else>↻ {{ models.length ? '重新获取' : '获取模型' }}</span>
-          </button>
-        </template>
+        <!-- 上游清单的出口已并入面板的「＋ 添加模型」（2026-11-04 用户「上游清单这个我不太想要了，
+             多此一举，在添加模型时候，就是拉取清单，然后从弹出的清单列表选择需要的模型」）：
+             拉取→落盘连接→开勾选浮窗这条链由面板发 fetchUpstream，本页的 onFetchClick 承接；
+             这里不再有常驻的「重新获取」按钮。 -->
         <template #platform-detail>
           <!-- 第一块：灰底连接条（2026-11-03 两段式）。
                未配置时它就是表单：Base URL + API Key 两格 +「保存并获取模型」，
@@ -102,17 +90,11 @@
             </button>
           </div>
 
-          <div v-else class="ac-conn-summary">
-            <span class="ac-conn-summary__url mono" :title="form.apiUrl">{{ form.apiUrl || '未配置服务地址' }}</span>
-            <span class="mk-badge" :class="keySet ? 'mk-badge--ok' : 'mk-badge--warn'">
-              {{ keySet ? '密钥已配置' : '未配置密钥' }}
-            </span>
-            <span class="mk-badge" :class="connBadge.cls" :title="connBadgeTitle">{{ connBadge.text }}</span>
-            <span v-if="reliability" class="ac-conn-summary__policy" :title="policyTitle">
-              重试 {{ reliability.maxUpstreamAttempts }} 次 · 间隔 {{ reliability.retryBaseDelayMs }}ms · RPM {{ reliability.platformRpmLimit || '不限' }}
-            </span>
-            <button type="button" class="mk-btn mk-btn--sm ac-conn-summary__edit" @click="openConnModal">连接设置</button>
-          </div>
+          <!-- 已配置态只留一个入口（2026-11-04 用户「收到连接设置里面」）：
+               地址、密钥状态、上次获取结果、重试 / 间隔 / RPM 全部收进弹层，
+               卡头不再摆一串读数——那些都是「连接设置」里的事实，点开就能看见，
+               留在卡头只会把这一行挤满。 -->
+          <button v-else type="button" class="mk-btn mk-btn--sm ac-conn-open" @click="openConnModal">连接设置</button>
 
           <!-- 调用策略读取失败仍在卡面提示；重试预算告警跟着参数走，只在连接设置弹层里出现 -->
           <div v-if="isLive && configLoadFailed && !reliability" class="ac-policy ac-policy--inline">
@@ -144,7 +126,17 @@
       <div v-if="connOpen" ref="connMaskRef" class="mk-modal">
         <div ref="connPanelRef" class="mk-modal__panel ac-conn-modal" role="dialog" aria-label="连接设置">
           <div class="mk-modal__head">
-            <h3 class="mk-modal__title">连接设置</h3>
+            <div>
+              <h3 class="mk-modal__title">连接设置</h3>
+              <!-- 原卡头那两枚读数（密钥状态 / 上次获取结果）搬到这里（2026-11-04 用户「收到连接设置里面」）：
+                   它们是这条连接的当前事实，站在弹层里填地址与密钥时正好要看。 -->
+              <p class="ac-conn-modal__state">
+                <span class="mk-badge" :class="keySet ? 'mk-badge--ok' : 'mk-badge--warn'">
+                  {{ keySet ? '密钥已配置' : '未配置密钥' }}
+                </span>
+                <span class="mk-badge" :class="connBadge.cls" :title="connBadgeTitle">{{ connBadge.text }}</span>
+              </p>
+            </div>
             <button type="button" class="mk-modal__close" aria-label="关闭" @click="cancelConnModal">✕</button>
           </div>
           <div class="mk-modal__body">
@@ -199,9 +191,6 @@
             <div v-if="configLoadFailed && !reliability" class="mk-alert mk-alert--row" role="alert">
               <span class="mk-alert__msg">调用策略读取失败</span>
               <button type="button" class="mk-alert__btn" @click="retryConfigLoad">重试</button>
-            </div>
-            <div v-if="reliability && fallbackDisabled" class="mk-alert mk-alert--row" role="alert">
-              <span class="mk-alert__msg">当前重试预算下「模型降级」永远不会触发：同模型重试会先耗尽尝试次数，请把「最大重试」调大</span>
             </div>
           </div>
           <div class="mk-modal__foot ac-conn-modal__foot">
@@ -286,7 +275,6 @@ const providersReady = computed(() => providersLoaded.value || !!cfg.value)
    纯 UI 部署（不写 env AI_MODEL）走完「填地址 → 拉清单 → 挂模型」也没有落点，
    运行时 `router.resolveModel` 直接抛 `AI model is not configured`——流程缺的正是这一步。 */
 const defaultModel = computed(() => cfg.value?.defaultModel ?? '')
-const defaultReasoningModel = computed(() => cfg.value?.defaultReasoningModel ?? '')
 /** 已挂载的模型 id（面板回传）：默认只能在这些里选，删模型时也用它挑替补 */
 const mountedModelIds = ref<string[]>([])
 
@@ -305,10 +293,7 @@ async function seedDefaultModel(): Promise<void> {
   defaultSeeded.value = true
   try {
     const first = mountedModelIds.value[0]
-    await liveSetDefaultModel({
-      defaultModel: first,
-      defaultReasoningModel: cfg.value.defaultReasoningModel || first
-    })
+    await liveSetDefaultModel({ defaultModel: first })
     toast.success(`已把「${first}」设为平台默认模型`)
   } catch {
     defaultSeeded.value = false
@@ -317,15 +302,15 @@ async function seedDefaultModel(): Promise<void> {
 
 /** 显式设默认：连接设置还有未保存改动时先挡下——写默认会重新拉配置回显，
     未保存的连接改动会被「丢弃未保存的配置修改?」拦一次，把一次点击变成一次意外提问。 */
-async function onSetDefault(modelId: string, kind: 'chat' | 'reasoning'): Promise<void> {
+async function onSetDefault(modelId: string): Promise<void> {
   if (saving.value) return
   if (dirty.value.has('conn')) {
     toast.error('连接设置还有未保存的改动，先保存再设默认模型')
     return
   }
   try {
-    await liveSetDefaultModel(kind === 'reasoning' ? { defaultReasoningModel: modelId } : { defaultModel: modelId })
-    toast.success(kind === 'reasoning' ? `推理默认已设为 ${modelId}` : `平台默认已设为 ${modelId}`)
+    await liveSetDefaultModel({ defaultModel: modelId })
+    toast.success(`平台默认已设为 ${modelId}`)
   } catch (e) {
     toast.error(`设置默认模型失败：${errMsg(e)}`)
   }
@@ -333,14 +318,10 @@ async function onSetDefault(modelId: string, kind: 'chat' | 'reasoning'): Promis
 
 /** 删掉默认模型后改指下一个可用模型：默认不能指向已不存在的 id，否则调用同样失败 */
 async function onModelRemoved(modelId: string): Promise<void> {
-  const patch: { defaultModel?: string; defaultReasoningModel?: string } = {}
-  const pickNext = () => mountedModelIds.value.find((id) => id !== modelId) ?? ''
-  if (modelId === defaultModel.value) patch.defaultModel = pickNext()
-  if (modelId === defaultReasoningModel.value) patch.defaultReasoningModel = pickNext()
-  if (!Object.keys(patch).length) return
+  if (modelId !== defaultModel.value) return
+  const next = mountedModelIds.value.find((id) => id !== modelId) ?? ''
   try {
-    await liveSetDefaultModel(patch)
-    const next = patch.defaultModel ?? patch.defaultReasoningModel
+    await liveSetDefaultModel({ defaultModel: next })
     toast.success(next ? `原默认模型已删除，平台默认改为 ${next}` : '原默认模型已删除，请另设平台默认模型')
   } catch (e) {
     toast.error(`更新默认模型失败：${errMsg(e)}`)
@@ -457,16 +438,6 @@ function limMax(field: string, fallback: number): number {
 function limMin(field: string, fallback: number): number {
   return Number(reliabilityLimits.value?.[field] ?? fallback)
 }
-
-/** 当前重试配置下模型降级是否永不触发(executor 守卫语义:1 + 传输重试 < 上游最大尝试) */
-const fallbackDisabled = computed(() => {
-  const r = reliability.value
-  if (!r) return false
-  const upstream = Number(r.maxUpstreamAttempts)
-  const transport = Number(r.maxTransportRetries)
-  if (!Number.isInteger(upstream) || !Number.isInteger(transport)) return false
-  return upstream <= 1 || 1 + transport >= upstream
-})
 
 async function loadReliability() {
   try {
@@ -634,12 +605,6 @@ useEscape(() => connOpen.value, cancelConnModal)
 useOverlay(connOpen, connPanelRef)
 useMaskClose(connMaskRef, cancelConnModal)
 
-const policyTitle = computed(() => {
-  const r = reliability.value
-  if (!r) return ''
-  return `最大重试 ${r.maxUpstreamAttempts} 次（含首次与备用模型）· 间隔 ${r.retryBaseDelayMs}ms · RPM 上限 ${r.platformRpmLimit || '不限'}`
-})
-
 function openConnModal(): void {
   connBackup.value = {
     apiUrl: form.apiUrl,
@@ -699,11 +664,11 @@ async function fetchModels() {
     const saved = await saveGroups(['conn'], { silent: true })
     if (!saved) return
     toast.success(list.length ? `已保存连接，获取到 ${list.length} 个模型` : '已保存连接，但服务未返回模型列表')
-    // 拉到的清单直接进入勾选浮窗：选模型 → 逐个配置
-    if (list.length) {
-      await nextTick()
-      providersRef.value?.openHostPull?.()
-    }
+    // 拉到的清单直接进入勾选浮窗：选模型 → 逐个配置。
+    /* 2026-11-04 用户「只保留添加模型，手动录入放到添加模型的页面里面」：手动录入只剩浮窗底栏
+       这一处，所以上游返回 0 个模型时也必须开窗——否则「清单里没有」这件事就没有出口了。 */
+    await nextTick()
+    providersRef.value?.openHostPull?.()
   } catch (e) {
     connectionStatus.value = 'failed'
     connCheckedAt.value = new Date().toISOString()
@@ -755,11 +720,12 @@ async function saveGroups(groups: string[], opts: { silent?: boolean } = {}): Pr
         return Number.isInteger(f) ? f : 0
       }
       const base = reliabilityBase.value ?? {}
-      /* 2026-10-26 界面只露「最大重试」（= maxUpstreamAttempts，含降级跳转的总尝试上限）。
+      /* 2026-10-26 界面只露「最大重试」（= maxUpstreamAttempts，本次调用的总尝试上限）。
          同模型重试数、超时、退避上限、抖动这几项不再上屏，但必须原样回传库里的现值：
          后端 PUT 是 partial 合并，少传一项就等于把它重置成默认值。
-         刻意不把「最大重试」联动到同模型重试数——执行器只在「上游尝试还有余量」时才会
-         跳到备用模型，把同模型重试顶到 上游-1 会让降级永远不触发（本卡上面那条告警就是它）。 */
+         刻意不把「最大重试」联动到同模型重试数：两者是各自独立的预算。
+         2026-11-04 用户「去掉降级这个功能，不要」：模型降级整条下线，原先「降级永不触发」
+         那条告警一并撤除。 */
       const sanitized = {
         maxUpstreamAttempts: intOr(reliability.value.maxUpstreamAttempts, base.maxUpstreamAttempts),
         maxTransportRetries: intOr(reliability.value.maxTransportRetries, base.maxTransportRetries),
@@ -859,45 +825,27 @@ async function resetConfig() {
    重试怎么配；地址 / 密钥 / 策略的编辑都在「连接设置」弹层里，一次保存。 */
 /* 父级网关摘要：包成一块浅底内嵌面板，与下方的模型列举区拉开父子层级（2026-11-03 评审）。
    面板内的 URL 是这一整块的主语，故给正文色 + mono。 */
-/* 未配置时的连接条（2026-11-03 两段式）：同一条灰底，原地给两格 + 一颗主操作 */
+/* 未配置时的连接条（2026-11-03 两段式）：同一条灰底，原地给两格 + 一颗主操作。
+   2026-11-04 两栏后它落在 300px 的左栏里，改成竖排（原来三列横排在这个宽度会挤成一团）。 */
+/* 未配置时的连接条（2026-11-03 两段式）：原地给两格 + 一颗主操作。
+   2026-11-04 用户「把链接做到这个卡片右上角吧」后它落在卡头右组：改横排，
+   窄了按字段自身最小宽度折行（flex-wrap），不再固定三列被卡头压扁。 */
 .ac-conn-setup {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: end;
-  padding: 10px 12px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-md);
-  background: var(--mk-surface-2);
-}
-@media (max-width: 900px) {
-  .ac-conn-setup { grid-template-columns: minmax(0, 1fr); }
-}
-.ac-conn-summary {
   display: flex;
-  align-items: center;
-  gap: 10px;
   flex-wrap: wrap;
-  margin-top: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-md);
-  background: var(--mk-surface-2);
-  font-size: var(--mk-fs-micro);
+  gap: 8px;
+  align-items: flex-end;
 }
-.ac-conn-summary__url {
-  color: var(--mk-ink);
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ac-conn-summary__policy { color: var(--mk-muted); }
-.ac-conn-summary__edit { margin-left: auto; }
-/* 连接块头右组：获取模型 */
+.ac-conn-setup .mk-field { flex: 1 1 150px; min-width: 140px; }
+/* 已配置态的卡头入口（2026-11-04 用户「收到连接设置里面」）：卡头只留这一颗按钮，
+   地址 / 密钥状态 / 上次获取 / 重试口径全在弹层里。 */
+.ac-conn-open { white-space: nowrap; }
 
 /* 连接设置弹层 */
 .ac-conn-modal { width: min(560px, 94vw); }
+/* 弹层标题下的状态行：原先摆在卡头的那两枚读数（密钥状态 / 上次获取结果）搬到这里，
+   填地址与密钥时正对着看。 */
+.ac-conn-modal__state { display: flex; align-items: center; gap: 8px; margin: 6px 0 0; }
 .ac-conn-modal__policy {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

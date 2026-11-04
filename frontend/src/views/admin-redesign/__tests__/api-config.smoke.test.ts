@@ -110,13 +110,13 @@ function providersView(): Record<string, unknown> {
             id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', tier: 'chat',
             supportsThinking: true, supportsReasoningEffort: true, maxOutputTokens: 131072,
             defaultMaxTokens: 32768, reasoningReserveTokens: 8192, maxParallelRequests: null,
-            fallbacks: ['agnes-3.0-flash'], pricing: null, description: null
+            pricing: null, description: null
           },
           {
             id: 'agnes-3.0-flash', label: 'Agnes 3.0 Flash', tier: 'chat',
             supportsThinking: false, supportsReasoningEffort: false, maxOutputTokens: 65536,
             defaultMaxTokens: 32768, reasoningReserveTokens: null, maxParallelRequests: null,
-            fallbacks: [], pricing: null, description: null
+            pricing: null, description: null
           }
         ]
       },
@@ -129,7 +129,7 @@ function providersView(): Record<string, unknown> {
             id: 'acme-chat', label: 'Acme Chat', tier: 'chat',
             supportsThinking: false, supportsReasoningEffort: false, maxOutputTokens: null,
             defaultMaxTokens: null, reasoningReserveTokens: null, maxParallelRequests: 8,
-            fallbacks: [], pricing: { inputPer1M: 0.3, outputPer1M: 0.6 }, description: null
+            pricing: { inputPer1M: 0.3, outputPer1M: 0.6 }, description: null
           }
         ]
       }
@@ -178,10 +178,10 @@ async function openPlatformSettings(wrapper: Awaited<ReturnType<typeof mountApiC
   await flushPromises();
 }
 
-/** 卡面只留摘要；地址 / 密钥 / 重试都在「连接设置」弹层里。 */
+/** 卡头只有一颗「连接设置」入口；地址 / 密钥 / 重试 / 状态读数都在那个弹层里。 */
 async function openConnSettings(wrapper: Awaited<ReturnType<typeof mountApiConfig>>) {
   const btn = wrapper.findAll('button').find((b) => b.text() === '连接设置');
-  expect(btn, '连接摘要里应有「连接设置」').toBeTruthy();
+  expect(btn, '卡头应有「连接设置」入口').toBeTruthy();
   await btn!.trigger('click');
   await nextTick();
   await flushPromises();
@@ -223,13 +223,13 @@ describe('ApiConfig P1 修复批', () => {
               id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', tier: 'chat', provider: 'deepseek',
               capabilities: { supportsThinking: true, supportsReasoningEffort: true },
               limits: { maxOutputTokens: 131072, defaultMaxTokens: 32768, reasoningReserveTokens: 8192, maxParallelRequests: null },
-              fallbacks: ['agnes-3.0-flash'], pricingConfigured: false
+              pricingConfigured: false
             },
             {
               id: 'agnes-3.0-flash', label: 'Agnes 3.0 Flash', tier: 'chat', provider: 'agnes',
               capabilities: { supportsThinking: false, supportsReasoningEffort: false },
               limits: { maxOutputTokens: 65536, defaultMaxTokens: 32768, reasoningReserveTokens: 0, maxParallelRequests: null },
-              fallbacks: [], pricingConfigured: false
+              pricingConfigured: false
             }
           ],
           aliases: [
@@ -240,10 +240,7 @@ describe('ApiConfig P1 修复批', () => {
           ],
           defaults: {
             defaultModelConfigured: 'chat', defaultModelResolved: 'deepseek-v4-flash', defaultModelSource: 'alias',
-            defaultReasoningModelConfigured: null, defaultReasoningModelResolved: null, defaultReasoningModelSource: 'unset'
           },
-          fallbackChains: [{ model: 'deepseek-v4-flash', fallbacks: ['agnes-3.0-flash'] }],
-          cooldowns: [],
           warnings: ['示例告警'],
           deprecatedPromptModelCount: 0
         }
@@ -256,7 +253,6 @@ describe('ApiConfig P1 修复批', () => {
       apiKeyConfigured: true,
       availableModels: ['model-a', 'model-b'],
       defaultModel: 'model-a',
-      defaultReasoningModel: 'model-a',
       defaultEvaluationModel: 'model-b',
       defaultThinkingMode: 'default' as const,
       defaultReasoningEffort: 'default' as const,
@@ -271,8 +267,7 @@ describe('ApiConfig P1 修复批', () => {
           apiKeyConfigured: true,
           availableModels: ['model-a', 'model-b'],
           defaultModel: 'model-a',
-          defaultReasoningModel: 'model-a',
-          defaultEvaluationModel: 'model-b',
+              defaultEvaluationModel: 'model-b',
           connectionStatus: 'connected',
           lastCheckedAt: '2026-08-13T09:00:00.000Z',
           networkPolicy: { adminAccessMode: 'private', adminAllowedIps: [], allowPrivateNetwork: true, privateNetworkHosts: [] }
@@ -342,7 +337,10 @@ describe('ApiConfig P1 修复批', () => {
     await cancel.trigger('click');
     await flushPromises();
     expect(updateConfigMock).not.toHaveBeenCalled();
-    expect(wrapper.find('.ac-conn-summary__url').text()).toBe('https://api.example.com/v1');
+    // 回滚后地址仍是原值——它现在只在弹层里可见（2026-11-04 用户「收到连接设置里面」）
+    await openConnSettings(wrapper);
+    expect((wrapper.find('.ac-conn-modal input[placeholder="https://api.example.com/v1"]').element as HTMLInputElement).value)
+      .toBe('https://api.example.com/v1');
     wrapper.unmount();
   });
 
@@ -354,7 +352,6 @@ describe('ApiConfig P1 修复批', () => {
       apiKeyConfigured: true,
       availableModels: ['model-a', 'model-b'],
       defaultModel: 'model-a',
-      defaultReasoningModel: 'model-a',
       defaultEvaluationModel: 'model-b',
       defaultThinkingMode: 'default',
       defaultReasoningEffort: 'default',
@@ -391,33 +388,39 @@ describe('ApiConfig P1 修复批', () => {
     const panel = wrapper.find('.mpp');
     expect(panel.exists()).toBe(true);
     // 2026-10-28 三卡重构：本卡标题是能力角色，不再是通道名
-    expect(panel.find('.mk-card__head .mk-card__title').text()).toBe('对话与推理模型');
+    expect(panel.find('.mk-card__head .mk-card__title').text()).toBe('对话模型');
     // 2026-10-27 用户「这个区域不要了」：左栏通道清单整块撤掉，页面直接是平台通道详情
     expect(wrapper.find('.mpp-list').exists()).toBe(false);
     expect(wrapper.findAll('.mpp-item')).toHaveLength(0);
     expect(panel.text()).not.toContain('Acme 网关');
     const detail = wrapper.find('.mpp .mk-card__head');
-    expect(detail.text()).toContain('对话与推理模型');
+    expect(detail.text()).toContain('对话模型');
     expect(detail.find('.mpp-type').text()).toBe('LLM');
-    // 连接编辑收进弹层：卡面只留一行摘要，不再裸露地址 / 密钥表单
+    // 连接全收进弹层（2026-11-04 用户「收到连接设置里面」）：卡面不再裸露地址 / 密钥表单，
+    // 也没有那串摘要读数，只剩一颗「连接设置」入口
     expect(wrapper.find('.ac-conn').exists()).toBe(false);
-    expect(wrapper.find('.ac-conn-summary').exists()).toBe(true);
-    expect(wrapper.find('.ac-conn-summary__url').text()).toBe('https://api.example.com/v1');
+    expect(wrapper.find('.ac-conn-summary').exists()).toBe(false);
     expect(wrapper.find('.ac-ps').exists()).toBe(false);
-    expect(wrapper.find('.ac-conn-summary input').exists()).toBe(false);
+    expect(wrapper.find('.ac-conn-open').text()).toBe('连接设置');
+    expect(wrapper.find('.mpp .mk-card__head').text()).not.toContain('https://api.example.com/v1');
     // 上游读数文案撤掉（2026-10-28）：无异常、无未保存时不占卡头
     expect(wrapper.find('.mpp-head__id .ac-models-meta').exists()).toBe(false);
     // 模型是否可用由行内「测试」回答；通道测试在连接设置弹层里
     // 两段式（2026-11-03 用户「把步骤序号和分层彻底删掉」）：没有步号、没有步骤标题行
     expect(wrapper.findAll('.mpp-step, .mpp-step__no')).toHaveLength(0);
-    // 工具栏同一行：左「已挂载模型 (N)」，右侧上游读数 + 重新获取 + 添加模型 + 手动录入
-    const toolbar = wrapper.find('.mpp-toolbar');
-    expect(toolbar.find('.mpp-toolbar__title').text()).toContain('已挂载模型');
-    expect(toolbar.find('.mpp-models__count').text()).toMatch(/^\(\d+\)$/);
-    expect(toolbar.findAll('.mpp-toolbar__acts .mk-btn').map((b) => b.text())).toEqual(['↻ 重新获取', '＋ 添加模型']);
-    expect(toolbar.find('.mpp-toolbar__acts .mk-link').text()).toBe('手动录入');
-    // 上游读数只上屏条数，未挂载数进 title（工具栏已经四件东西）
-    expect(toolbar.find('.mpp-toolbar__meta').text()).toMatch(/^已获取 \d+ 个$/);
+    // 模型区没有工具栏行（2026-11-04 用户「没有意义，这里」+「这个彻底不要」）：
+    // 列表标题、条数、默认读数都撤了，「＋ 添加模型」上移到卡头右组
+    expect(wrapper.find('.mpp-toolbar').exists()).toBe(false);
+    expect(wrapper.find('.mpp-models__count').exists()).toBe(false);
+    expect(wrapper.find('.mpp-models').text()).not.toContain('已挂载模型');
+    expect(wrapper.find('.mpp-models').text()).not.toContain('默认：');
+    expect(wrapper.findAll('.mpp-add').map((b) => b.text())).toEqual(['＋ 添加模型']);
+    expect(wrapper.find('.mpp-head__conn .mpp-add').exists()).toBe(true);
+    expect(wrapper.find('.mpp-models').text()).not.toContain('手动录入');
+    // 上游读数与「重新获取」不再常驻：拉清单并入「＋ 添加模型」（2026-11-04 用户「多此一举」）
+    expect(wrapper.find('.mpp-toolbar__meta').exists()).toBe(false);
+    expect(wrapper.find('.mpp-upstream').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('上游清单');
     await openConnSettings(wrapper);
     // 2026-11-03 用户「只有模型级别的连通性」：弹层里的通道级「测试连通性」撤除
     expect(wrapper.findAll('.ac-conn-modal__test')).toHaveLength(0);
@@ -444,22 +447,29 @@ describe('ApiConfig P1 修复批', () => {
     // 一级页签已撤；供应商面板与调用策略同屏
     expect(wrapper.find('.ac-tabs').exists()).toBe(false);
     expect(wrapper.find('.mpp').exists()).toBe(true);
-    // 2026-10-28 用户「表单不要直接裸露」：参数在连接设置弹层，卡面只有摘要
+    // 2026-10-28 用户「表单不要直接裸露」：连接参数全在「连接设置」弹层里
     expect(wrapper.text()).not.toContain('全站调用策略');
     expect(wrapper.findAll('.ac-policy__num')).toHaveLength(0);
-    expect(wrapper.find('.ac-conn-summary').text()).toContain('https://api.example.com/v1');
+    expect(wrapper.find('.ac-conn-open').text()).toBe('连接设置');
     // 2026-10-28 用户「按能力角色拆成三个独立卡片」：对话卡 + 向量卡 + 重排卡
     expect(wrapper.findAll('#ac-panel-access .mk-card')).toHaveLength(3);
     expect(wrapper.find('.mpp #mpp-platform-panel-models').exists()).toBe(true);
     expect(wrapper.find('.mpp-config').exists()).toBe(false);
-    // 两段式：卡片里只有「连接条 + 模型列表区」，没有步号与步骤标题行
+    // 单列（2026-11-04 用户「还是不要左右结构了，把链接做到这个卡片右上角吧」）：
+    // 连接从独立左栏搬进卡头右组，正文只剩模型清单一块
     expect(wrapper.findAll('.mpp-step, .mpp-step__no, .mpp-step__name')).toHaveLength(0);
-    expect(wrapper.find('.mpp-conn').exists()).toBe(true);
+    expect(wrapper.find('.mpp-body .mpp-side').exists()).toBe(false);
+    expect(wrapper.find('.mpp-body .mpp-conn').exists()).toBe(false);
+    expect(wrapper.find('.mpp-head__conn .mpp-conn').exists()).toBe(true);
+    expect(wrapper.find('.mpp-conn #mpp-platform-panel-conn, .mpp-conn.mpp-conn').exists()).toBe(true);
+    expect(wrapper.find('#mpp-platform-panel-conn').exists()).toBe(true);
     expect(wrapper.find('.mpp-models').exists()).toBe(true);
-    // 卡头不再挂任何流程按钮（两颗出口都在列表工具栏里）；右上只留重读注册表的图标钮
+    // 卡头右组里只有连接入口与添加入口，不再有流程按钮，也不再有「重读本机注册表」的刷新图标
+    // （2026-11-04 用户「不要有刷新」；同日「这个彻底不要」后「＋ 添加模型」从工具栏上移到卡头）
     const head = wrapper.find('.mpp > .mk-card__head');
-    expect(head.find('.mk-btn').exists()).toBe(false);
-    expect(head.find('.mpp-regreload').exists()).toBe(true);
+    // 2026-11-04 用户「去掉降级这个功能，不要」：组配置入口随备用链下线，卡头右组回到两枚
+    expect(head.findAll('.mk-btn').map((b) => b.text())).toEqual(['连接设置', '＋ 添加模型']);
+    expect(head.find('.mpp-regreload').exists()).toBe(false);
     // 二级页签也撤了：没有 tab 控件，内容常驻
     expect(wrapper.findAll('.mpp-subtabs').length).toBe(0);
     expect(wrapper.findAll('.mk-subtab').length).toBe(0);
@@ -470,9 +480,8 @@ describe('ApiConfig P1 修复批', () => {
     for (const id of ['conn', 'models', 'infra']) {
       expect((wrapper.find(`#mpp-platform-panel-${id}`).attributes('style') || '')).not.toContain('display: none');
     }
-    // 三张卡各有能力角色标签
-    expect(wrapper.text()).toContain('对话与推理模型');
-    expect(wrapper.text()).toContain('已挂载模型');
+    // 三张卡各有能力角色标签（卡题，不是列表标题）
+    expect(wrapper.text()).toContain('对话模型');
     expect(wrapper.text()).toContain('向量模型');
     expect(wrapper.text()).toContain('重排模型');
     expect(wrapper.text()).not.toContain('基础设施');
@@ -483,8 +492,9 @@ describe('ApiConfig P1 修复批', () => {
     expect(areas).toHaveLength(2);
     expect(areas[0].text()).toContain('BAAI/bge-m3');
     expect(areas[1].text()).toContain('BAAI/bge-reranker-v2-m3');
-    // 单例卡只留一句连接归属：复用的卡不重复平台地址，地址在对话卡摘要里
-    expect(areas[1].text()).toContain('复用对话模型的连接');
+    // 2026-11-04「让布局自己说话」：模型行下不再有连接归属 / 维度这类次级说明行；
+    // 同时复用的卡也不能把平台地址重复印在卡面上
+    expect(areas[1].text()).not.toContain('复用对话模型的连接');
     expect(areas[1].text()).not.toContain('https://newapi.wenflow.org');
     expect(wrapper.text()).not.toContain('基础设施模型');
     expect(wrapper.text()).not.toContain('平台必需');
@@ -510,7 +520,6 @@ describe('ApiConfig P1 修复批', () => {
       apiKeyConfigured: true,
       availableModels: ['model-a', 'model-b'],
       defaultModel: 'model-a',
-      defaultReasoningModel: 'model-a',
       defaultEvaluationModel: 'model-b',
       defaultThinkingMode: 'default' as const,
       defaultReasoningEffort: 'default' as const,
@@ -541,7 +550,9 @@ describe('ApiConfig P1 修复批', () => {
 
     const wrapper = await mountApiConfig();
     await openPlatformSettings(wrapper);
-    const fetchBtn = wrapper.findAll('.mk-btn').find((b) => b.text().includes('获取模型'))!;
+    // 2026-11-04：拉清单并落盘连接的动作现在挂在「＋ 添加模型」上（独立的「获取模型 / 重新获取」已撤）
+    const fetchBtn = wrapper.findAll('.mk-btn').find((b) => b.text().includes('添加模型'))!;
+    expect(fetchBtn, '「＋ 添加模型」应承接「拉清单 + 落盘连接」').toBeTruthy();
     await fetchBtn.trigger('click');
     await flushPromises();
     await nextTick();
@@ -560,6 +571,40 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
+  /* 2026-11-04 用户「只保留添加模型，手动录入放到添加模型的页面里面」：
+     手动录入只剩勾选浮窗底栏一处，所以上游返回 0 个模型时也必须开窗——
+     否则「清单里没有」这件事在页面上就没有出口了。 */
+  it('上游返回 0 个模型也开勾选浮窗：手动录入是它的兜底出口', async () => {
+    const cfg = {
+      apiUrl: 'https://api.example.com/v1',
+      apiKeyConfigured: true,
+      availableModels: [] as string[],
+      defaultModel: '',
+      defaultEvaluationModel: '',
+      defaultThinkingMode: 'default' as const,
+      defaultReasoningEffort: 'default' as const,
+      connectionStatus: 'connected' as const,
+      lastCheckedAt: '2026-08-13T09:00:00.000Z',
+      networkPolicy: { adminAccessMode: 'private' as const, adminAllowedIps: [], allowPrivateNetwork: true, privateNetworkHosts: [] }
+    };
+    liveApiConfig.value = cfg;
+    getConfigMock.mockImplementation(async () => ({ data: { data: { ...cfg } } }));
+    testConnectionMock.mockResolvedValue({ data: { data: { connected: true, modelsCount: 0, models: [] } } });
+    updateConfigMock.mockImplementation(async () => ({ data: { data: {} } }));
+
+    const wrapper = await mountApiConfig();
+    await openPlatformSettings(wrapper);
+    const addBtn = wrapper.find('.mpp-add');
+    await addBtn.trigger('click');
+    await flushPromises();
+    await nextTick();
+    await flushPromises();
+
+    expect(wrapper.find('.pmd').exists(), '0 个模型时也要开窗，手动录入才有出口').toBe(true);
+    expect(wrapper.find('.pmd-manual').text()).toContain('手动录入模型 ID');
+    wrapper.unmount();
+  });
+
   /* 2026-10-27 流程：第 1 步要求「填链接和 key」。换了地址却没重填密钥时，
      不能拿旧密钥去试新端点，也不能把旧密钥存到新地址上。 */
   it('流程：换地址但没重填 API Key 时，连接设置不允许保存', async () => {
@@ -568,7 +613,6 @@ describe('ApiConfig P1 修复批', () => {
       apiKeyConfigured: true,
       availableModels: ['model-a'],
       defaultModel: 'model-a',
-      defaultReasoningModel: 'model-a',
       defaultEvaluationModel: 'model-a',
       defaultThinkingMode: 'default' as const,
       defaultReasoningEffort: 'default' as const,
@@ -608,7 +652,10 @@ describe('ApiConfig P1 修复批', () => {
 
   /* 2026-10-27 P1：获取与重置都绑定到当前通道；
      2026-10-28：连接类动作全部收进「连接设置」弹层；
-     2026-11-03：页面级「刷新注册表」撤除，收进卡片右上图标钮；「重新获取」进列表工具栏。 */
+     2026-11-03：页面级「刷新注册表」进卡片右上图标钮，「重新获取」进列表工具栏；
+     2026-11-04：用户「不要有刷新」——卡片右上的重读注册表图标钮撤除；
+     2026-11-04：用户「上游清单这个我不太想要了，多此一举」——左栏「上游清单 + 重新获取」整块撤除，
+     拉取并入「＋ 添加模型」（点它即向上游拉一次、拉到开勾选浮窗），页面上只剩这一条上游出口。 */
   /* 2026-11-03 两段式：连接条未配置时原地就是表单，不再要求先进弹层 */
   it('连接未配置：连接条原地给 Base URL / API Key + 保存并获取模型', async () => {
     // 空配置：地址与密钥都没配过 → 连接条应原地变成表单
@@ -619,23 +666,29 @@ describe('ApiConfig P1 修复批', () => {
     expect(setup.exists()).toBe(true)
     expect(setup.findAll('.mk-field__label').map((l) => l.text())).toEqual(['Base URL', 'API Key'])
     expect(setup.find('.mk-btn--primary').text()).toBe('保存并获取模型')
-    // 已配置态的那条摘要不与之同时出现
-    expect(wrapper.find('.ac-conn-summary').exists()).toBe(false)
+    // 已配置态那颗「连接设置」入口不与之同时出现
+    expect(wrapper.find('.ac-conn-open').exists()).toBe(false)
+    // 页面上不再有独立的「上游清单」块（未配置与否都不渲染）
+    expect(wrapper.find('.mpp-upstream').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('上游清单')
     wrapper.unmount()
   })
 
-  it('P1：页头干净；获取在列表工具栏，重读注册表在卡片右上，重置在连接设置里', async () => {
+  it('P1：页头干净；添加模型即拉清单，重置在连接设置里，卡头无刷新钮', async () => {
     const wrapper = await mountApiConfig();
     await flushPromises();
     // 页头不再有任何动作（用户「最右上角那个多余的按钮…保持顶部干净」）
     expect(wrapper.findAll('.mk-pagehead__actions > button').map((b) => b.text())).toEqual([])
     expect(wrapper.text()).not.toContain('连接并拉取')
-    expect(wrapper.find('.mpp-toolbar__acts').text()).toContain('重新获取')
-    // 重读本机注册表（读盘）与重新获取（拉上游）是两件事，各在一处
-    expect(wrapper.find('.mpp > .mk-card__head .mpp-regreload').exists()).toBe(true)
-    // 工具栏里没有第二颗保存 / 重置，避免「先点哪个」的分裂
-    expect(wrapper.find('.mpp-toolbar__acts').text()).not.toContain('重置此通道')
-    expect(wrapper.find('.mpp-toolbar__acts').text()).not.toContain('保存')
+    // 独立的「重新获取」出口已撤；上游拉取只在「＋ 添加模型」里发生
+    expect(wrapper.find('.mpp-upstream').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('重新获取')
+    expect(wrapper.findAll('.mpp-add').map((b) => b.text())).toEqual(['＋ 添加模型'])
+    // 重读本机注册表（读盘）的图标钮已撤（2026-11-04 用户「不要有刷新」）
+    expect(wrapper.find('.mpp > .mk-card__head .mpp-regreload').exists()).toBe(false)
+    // 模型区没有第二颗保存 / 重置，避免「先点哪个」的分裂
+    expect(wrapper.find('.mpp-models').text()).not.toContain('重置此通道')
+    expect(wrapper.find('.mpp-models').text()).not.toContain('保存')
     await openConnSettings(wrapper)
     expect(wrapper.find('.ac-conn-modal__foot').text()).toContain('重置此通道')
     expect(wrapper.find('.ac-conn__danger').exists()).toBe(false)
@@ -702,15 +755,20 @@ describe('ApiConfig P1 修复批', () => {
     const cards = wrapper.findAll('#ac-panel-access > .mk-card');
     expect(cards).toHaveLength(1);
     expect(cards[0].classes()).toContain('mpp');
-    // 卡面没有输入框，只有一行摘要
+    // 卡面没有输入框，连接参数全在「连接设置」弹层（2026-11-04 用户「收到连接设置里面」）
     expect(wrapper.find('.mpp .ac-conn-form').exists()).toBe(false);
     expect(wrapper.find('.mpp input[placeholder="https://api.example.com/v1"]').exists()).toBe(false);
-    expect(wrapper.find('.ac-conn-summary').text()).toContain('https://api.example.com/v1');
-    expect(wrapper.find('.ac-conn-summary').text()).toContain('重试 3 次');
+    expect(wrapper.find('.ac-conn-summary').exists()).toBe(false);
+    expect(wrapper.find('.ac-conn-open').text()).toBe('连接设置');
     expect(wrapper.find('.mpp .ac-policy--inline').exists()).toBe(false);
 
     await openConnSettings(wrapper);
     const modal = wrapper.find('.ac-conn-modal');
+    // 地址 / 重试口径都在弹层里；两枚状态徽标（密钥 / 上次获取）也搬进弹层头部
+    expect((modal.find('input[placeholder="https://api.example.com/v1"]').element as HTMLInputElement).value)
+      .toBe('https://api.example.com/v1');
+    expect(modal.find('.ac-conn-modal__state').text()).toContain('密钥已配置');
+    expect(modal.text()).toContain('最大重试');
     const policy = modal.findAll('.ac-conn-modal__policy .mk-field');
     expect(policy).toHaveLength(3);
     const labels = policy.map((f) => f.find('.mk-field__label').text());
@@ -736,8 +794,7 @@ describe('ApiConfig P1 修复批', () => {
 
   /* 收掉细项后，保存仍要把库里现值的整组字段回传——否则后端 partial 合并会把
      没露出的传输重试 / 超时重置成默认值，等于悄悄改了策略。
-     也不得把「最大重试」联动到同模型重试数：执行器只在还有上游余量时才降级，
-     把同模型重试顶到 上游-1 会让降级永远不触发。 */
+     也不得把「最大重试」联动到同模型重试数：两者是各自独立的预算。 */
   it('只露三个字段时，保存回传完整策略（隐藏项与同模型重试均沿用现值）', async () => {
     const wrapper = await mountApiConfig();
     await flushPromises();
@@ -751,7 +808,7 @@ describe('ApiConfig P1 修复批', () => {
     expect(updateReliabilityMock).toHaveBeenCalledTimes(1);
     expect(updateReliabilityMock.mock.calls[0][0]).toMatchObject({
       maxUpstreamAttempts: 6,
-      // 不联动：保留现值 1，降级才有余量可用
+      // 不联动：保留现值 1
       maxTransportRetries: 1,
       // 其余细项同样沿用 beforeEach 里的现值
       maxLogicalRetries: 1,
@@ -768,13 +825,12 @@ describe('ApiConfig P1 修复批', () => {
      纯 UI 部署（不写 env AI_MODEL）走完「填地址 → 拉清单 → 挂模型」后第一次调用会直接失败。 */
   describe('P0：平台默认模型', () => {
     /** 接入配置（live 层模块 ref 跨用例共享，所以每条用例显式种一份，不靠上一条的残留） */
-    function seedConfig(patch: Partial<{ defaultModel: string; defaultReasoningModel: string }> = {}) {
+    function seedConfig(patch: Partial<{ defaultModel: string }> = {}) {
       const config = {
         apiUrl: 'https://api.example.com/v1',
         apiKeyConfigured: true,
         availableModels: ['deepseek-v4-flash', 'agnes-3.0-flash'],
         defaultModel: 'model-a',
-        defaultReasoningModel: 'model-a',
         defaultEvaluationModel: 'model-b',
         defaultThinkingMode: 'default' as const,
         defaultReasoningEffort: 'default' as const,
@@ -787,14 +843,13 @@ describe('ApiConfig P1 修复批', () => {
       getConfigMock.mockResolvedValue({ data: { data: { ...config } } });
     }
 
-    it('首个挂载模型自动成为平台默认（对话 + 推理一起种，缺省时兜底一次）', async () => {
-      seedConfig({ defaultModel: '', defaultReasoningModel: '' });
+    it('首个挂载模型自动成为平台默认（缺省时兜底一次）', async () => {
+      seedConfig({ defaultModel: '' });
       const wrapper = await mountApiConfig();
       await flushPromises();
       expect(updateConfigMock).toHaveBeenCalledTimes(1);
       expect(updateConfigMock.mock.calls[0][0]).toMatchObject({
         defaultModel: 'deepseek-v4-flash',
-        defaultReasoningModel: 'deepseek-v4-flash',
         // PUT 是字段级合并：其余字段按现值带回，apiKey 传空串（后端沿用已存密钥）
         apiUrl: 'https://api.example.com/v1',
         apiKey: ''
@@ -818,13 +873,11 @@ describe('ApiConfig P1 修复批', () => {
       expect(panel.exists()).toBe(true);
       // 宿主把 live 配置里的默认传给面板（面板只显示、不自己写）
       expect(panel.props('defaultModel')).toBe('model-a');
-      panel.vm.$emit('setDefault', 'model-b', 'chat');
+      panel.vm.$emit('setDefault', 'model-b');
       await flushPromises();
       expect(updateConfigMock).toHaveBeenCalledTimes(1);
       expect(updateConfigMock.mock.calls[0][0]).toMatchObject({
         defaultModel: 'model-b',
-        // 未点的档位保持现值
-        defaultReasoningModel: 'model-a',
         apiUrl: 'https://api.example.com/v1',
         apiKey: ''
       });
@@ -838,7 +891,7 @@ describe('ApiConfig P1 修复批', () => {
       await openConnSettings(wrapper);
       await wrapper.find('.ac-conn-modal .mk-field__input').setValue('https://api.changed.com/v1');
       await nextTick();
-      wrapper.findComponent(ModelProvidersPanel).vm.$emit('setDefault', 'model-b', 'chat');
+      wrapper.findComponent(ModelProvidersPanel).vm.$emit('setDefault', 'model-b');
       await flushPromises();
       expect(updateConfigMock).not.toHaveBeenCalled();
       wrapper.unmount();
@@ -852,8 +905,7 @@ describe('ApiConfig P1 修复批', () => {
       await flushPromises();
       expect(updateConfigMock).toHaveBeenCalledTimes(1);
       expect(updateConfigMock.mock.calls[0][0]).toMatchObject({
-        defaultModel: 'deepseek-v4-flash',
-        defaultReasoningModel: 'deepseek-v4-flash'
+        defaultModel: 'deepseek-v4-flash'
       });
       wrapper.unmount();
     });

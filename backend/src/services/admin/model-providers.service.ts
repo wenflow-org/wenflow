@@ -30,7 +30,6 @@ import {
   providerSecretSummary,
   setProviderSecret
 } from '../provider-secrets.service';
-import { MAX_MODEL_CANDIDATES } from '../../gateway/api-gateway/executor';
 import { logger } from '../../utils/logger';
 
 const PROVIDER_ID_PATTERN = /^[a-z0-9][a-z0-9_-]*$/;
@@ -90,7 +89,6 @@ export interface ModelViewModel {
   defaultMaxTokens: number | null;
   reasoningReserveTokens: number | null;
   maxParallelRequests: number | null;
-  fallbacks: string[];
   pricing: ModelPricing | null;
   description: string | null;
 }
@@ -135,13 +133,12 @@ export interface ModelInput {
   defaultMaxTokens?: number | null;
   reasoningReserveTokens?: number | null;
   maxParallelRequests?: number | null;
-  fallbacks?: string[] | null;
   pricing?: ModelPricing | null;
   description?: string | null;
 }
 
 export interface EditOutcome {
-  /** 写成功但需要运营知道的事（别名/备用链指向失效模型、备用链超出运行时上限等），不阻断操作 */
+  /** 写成功但需要运营知道的事（别名指向失效模型等），不阻断操作 */
   warnings: string[];
 }
 
@@ -244,19 +241,8 @@ function isReadOnly(): boolean {
   }
 }
 
-/** 模型 id → 声明它的供应商（跨供应商重名合法，所以是数组） */
-function modelOwners(root: Root): Map<string, string[]> {
-  const owners = new Map<string, string[]>();
-  for (const [pid, entry] of Object.entries(providersOf(root))) {
-    for (const mid of Object.keys((entry.models ?? {}) as Record<string, unknown>)) {
-      owners.set(mid, [...(owners.get(mid) ?? []), pid]);
-    }
-  }
-  return owners;
-}
-
 /**
- * 短数组收成一行：`JSON.stringify(…, 2)` 会把 `"fallbacks": ["x"]` 摊成三行，
+ * 短数组收成一行：`JSON.stringify(…, 2)` 会把 `"members": ["a", "b"]` 摊成三行，
  * 一次编辑就制造出满屏与本次改动无关的 diff（这文件在 git 里是要被 review 的）。
  * 只收「收成一行不超过 120 字符」的数组——$rules 那种长文本数组保持多行（作者本来就那么排）。
  */
@@ -402,7 +388,6 @@ function toModelView(raw: Record<string, unknown>, id: string): ModelViewModel {
     defaultMaxTokens: typeof raw.defaultMaxTokens === 'number' ? raw.defaultMaxTokens : null,
     reasoningReserveTokens: typeof raw.reasoningReserveTokens === 'number' ? raw.reasoningReserveTokens : null,
     maxParallelRequests: typeof raw.maxParallelRequests === 'number' ? raw.maxParallelRequests : null,
-    fallbacks: Array.isArray(raw.fallbacks) ? raw.fallbacks.map((x) => String(x)) : [],
     pricing: raw.pricing && typeof raw.pricing === 'object' && !Array.isArray(raw.pricing) ? (raw.pricing as ModelPricing) : null,
     description: typeof raw.description === 'string' && raw.description.trim() ? raw.description.trim() : null
   };
@@ -493,52 +478,12 @@ function positiveNumberOrNull(value: unknown, field: string): number | null {
   return num;
 }
 
-/**
- * 备用链检查：目标必须真实存在；跨供应商候选只在运行时不可达（降级只换模型名不换端点），
- * 故按告警处理而不是拒绝——文件本身允许这么写，运行时也会跳过。
- * 另：运行时最多用主模型 + 1 条备用（MAX_MODEL_CANDIDATES），多余条目只留在文件里。
- */
-function checkFallbacks(providerId: string, fallbacks: string[], root: Root): string[] {
-  const warnings: string[] = [];
-  const owners = modelOwners(root);
-  const pairs = new Set<string>();
-  for (const [pid, entry] of Object.entries(providersOf(root))) {
-    for (const mid of Object.keys((entry.models ?? {}) as Record<string, unknown>)) pairs.add(`${pid}/${mid}`);
-  }
-  for (const target of fallbacks) {
-    const slash = target.indexOf('/');
-    const qualified = slash > 0;
-    const targetProvider = qualified ? target.slice(0, slash) : null;
-    const targetModel = qualified ? target.slice(slash + 1) : target;
-    if (qualified) {
-      if (!pairs.has(target)) {
-        throw new RegistryEditError(`备用模型「${target}」不在任何供应商目录中，请先添加该模型。`, 400, 'invalid');
-      }
-      if (targetProvider !== providerId) {
-        warnings.push(`备用模型「${target}」属于别的供应商，运行时降级只换模型名不换端点，该候选不可达。`);
-      }
-      continue;
-    }
-    const owning = owners.get(targetModel) ?? [];
-    if (!owning.length) {
-      throw new RegistryEditError(`备用模型「${target}」不在任何供应商目录中，请先添加该模型。`, 400, 'invalid');
-    }
-    if (!owning.includes(providerId)) {
-      warnings.push(`备用模型「${target}」由供应商「${owning[0]}」提供，运行时降级只换模型名不换端点，该候选不可达。`);
-    }
-  }
-  if (fallbacks.length > MAX_MODEL_CANDIDATES - 1) {
-    warnings.push(`备用链写了 ${fallbacks.length} 条，运行时最多用到第 ${MAX_MODEL_CANDIDATES - 1} 条（主模型 + ${MAX_MODEL_CANDIDATES - 1} 跳）。`);
-  }
-  return warnings;
-}
-
 /** 模型条目的规范字段顺序（写回文件的可读性靠它，而不是靠碰巧的插入顺序） */
 const MODEL_KEY_ORDER = [
   'label', 'tier', 'supportsThinking', 'supportsReasoningEffort', 'vision',
   'defaultThinkingMode', 'defaultReasoningEffort', 'defaultResponseFormat',
   'maxOutputTokens', 'defaultMaxTokens',
-  'reasoningReserveTokens', 'maxParallelRequests', 'fallbacks', 'pricing', 'description'
+  'reasoningReserveTokens', 'maxParallelRequests', 'pricing', 'description'
 ];
 
 function buildModelEntry(input: ModelInput, existing: Record<string, unknown> | null): Record<string, unknown> {
@@ -590,9 +535,6 @@ function buildModelEntry(input: ModelInput, existing: Record<string, unknown> | 
     const value = positiveNumberOrNull(input[key], label);
     if (value === null) delete merged[key as string];
     else merged[key as string] = value;
-  }
-  if (input.fallbacks !== undefined) {
-    merged.fallbacks = Array.isArray(input.fallbacks) ? input.fallbacks.map((x) => String(x).trim()).filter(Boolean) : [];
   }
   if (input.pricing !== undefined) {
     if (!input.pricing) delete merged.pricing;
@@ -713,16 +655,7 @@ export async function deleteProvider(providerId: string): Promise<EditOutcome> {
   const next = cloneRoot(root);
   delete providersOf(next)[providerId];
 
-  const warnings: string[] = [];
-  for (const [pid, p] of Object.entries(providersOf(next))) {
-    const models = (p.models ?? {}) as Record<string, Record<string, unknown>>;
-    for (const [mid, m] of Object.entries(models)) {
-      if (Array.isArray(m.fallbacks) && m.fallbacks.map(String).some((f) => removed.has(f))) {
-        warnings.push(`「${pid}/${mid}」的备用链里还留着已删除的模型，运行时会被忽略，建议一并清理。`);
-      }
-    }
-  }
-  const finalWarnings = saveRegistry(next, warnings);
+  const finalWarnings = saveRegistry(next, []);
   try {
     await deleteProviderSecret(providerId);
   } catch (e) {
@@ -759,12 +692,9 @@ export async function addModel(providerId: string, input: ModelInput): Promise<E
   const image = buildModelEntry({ ...input, id: modelId }, null);
   if (image.label === undefined) image.label = modelId;
   if (image.tier === undefined) image.tier = 'chat';
-  const warnings = Array.isArray(image.fallbacks) && image.fallbacks.length
-    ? checkFallbacks(providerId, image.fallbacks as string[], next)
-    : [];
   models[modelId] = image;
   target.models = models;
-  const finalWarnings = saveRegistry(next, warnings);
+  const finalWarnings = saveRegistry(next, []);
   return { modelId, warnings: finalWarnings };
 }
 
@@ -801,9 +731,6 @@ export async function addModels(
     const image = buildModelEntry({ ...input, id: modelId }, null);
     if (image.label === undefined) image.label = modelId;
     if (image.tier === undefined) image.tier = 'chat';
-    if (Array.isArray(image.fallbacks) && image.fallbacks.length) {
-      warnings.push(...checkFallbacks(providerId, image.fallbacks as string[], next));
-    }
     models[modelId] = image;
   }
   target.models = models;
@@ -824,12 +751,9 @@ export async function updateModel(providerId: string, modelId: string, input: Mo
   const updated = buildModelEntry(input, models[modelId]);
   if (updated.label === undefined) updated.label = modelId;
   if (updated.tier === undefined) updated.tier = 'chat';
-  const warnings = Array.isArray(updated.fallbacks) && updated.fallbacks.length
-    ? checkFallbacks(providerId, updated.fallbacks as string[], next)
-    : [];
   models[modelId] = updated;
   target.models = models;
-  const finalWarnings = saveRegistry(next, warnings);
+  const finalWarnings = saveRegistry(next, []);
   return { warnings: finalWarnings };
 }
 
@@ -858,15 +782,6 @@ export async function deleteModel(providerId: string, modelId: string): Promise<
   target.models = models;
 
   // 别名残留告警由 selfCheck 统一给（它按「保存后是否还解析得到」判定，一处口径就够了）
-  const warnings: string[] = [];
-  for (const [pid, p] of Object.entries(providersOf(next))) {
-    const pModels = (p.models ?? {}) as Record<string, Record<string, unknown>>;
-    for (const [mid, m] of Object.entries(pModels)) {
-      if (Array.isArray(m.fallbacks) && m.fallbacks.map(String).includes(modelId)) {
-        warnings.push(`「${pid}/${mid}」的备用链里还留着「${modelId}」，运行时会被忽略。`);
-      }
-    }
-  }
-  const finalWarnings = saveRegistry(next, warnings);
+  const finalWarnings = saveRegistry(next, []);
   return { warnings: finalWarnings };
 }

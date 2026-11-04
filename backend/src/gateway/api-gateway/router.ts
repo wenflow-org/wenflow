@@ -88,16 +88,6 @@ function parseSkillParamOverrides(raw: unknown): ResolvedRoute['skillParamOverri
   };
 }
 
-/** 解析 skill_model_configs.fallbackChain（JSON string[]）。坏值视为未声明（null=用 registry 默认链）。 */
-function parseSkillFallbackChain(raw: unknown): string[] | null {
-  if (typeof raw !== 'string' || !raw.trim()) return null;
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return null;
-    const out = parsed.filter((x): x is string => typeof x === 'string' && x.trim().length > 0).map(s => s.trim());
-    return out.length ? out : [];
-  } catch { return null; }
-}
 
 export class APIRouter {
   /** 热重载错误只在该报错文本变化时记一次，避免每次 resolve 刷日志 */
@@ -158,26 +148,11 @@ export class APIRouter {
     return selectModelForAlias(model, { overrides: aliasOverrides })?.model ?? model;
   }
 
-  private resolveReasoningModel(configModel?: string | null, aliasOverrides?: Record<string, string[]> | null): string {
-    const model = (configModel || process.env.AI_MODEL_REASONING || process.env.AI_MODEL || '').trim();
-    if (!model) {
-      throw new Error('AI reasoning model is not configured. Set admin defaultReasoningModel or AI_MODEL_REASONING.');
-    }
-    // reasoning 别名按能力过滤：优先 supportsThinking 的成员（require_parameters 思路）
-    return selectModelForAlias(model, { overrides: aliasOverrides, requireThinking: true })?.model ?? model;
-  }
-
-  /** 推理档技能未单独配模型时的继承值：平台推理默认 → 基础路由模型。
-   *  平台没有配推理默认就保持原来的继承结果，不拿 env 值悄悄改写基础路由。 */
-  private resolveSkillReasoningDefault(
-    platformRecord: { defaultReasoningModel?: string | null } | null,
-    aliasOverrides: Record<string, string[]> | null,
-    inheritedModel: string
-  ): string {
-    const configured = (platformRecord?.defaultReasoningModel || '').trim();
-    if (!configured) return inheritedModel;
-    return this.resolveReasoningModel(configured, aliasOverrides);
-  }
+  /* 2026-11-04 用户「为什么还在区分默认推理和对话，没有这个了。所谓的推理，是取决于使用者
+     开启的思考强度」：撤掉 resolveReasoningModel 与 resolveSkillReasoningDefault。
+     平台只有一个默认模型；某个 Skill 要不要长思考由它的 thinkingMode / reasoningEffort 决定，
+     而不是「推理档换一个模型」。此前 tier=reasoning 且未配模型的 Skill 会改走平台推理默认，
+     那是「两档模型」的遗留——现在一律走基础路由模型。 */
 
   /** platform_api_configs 的别名覆盖（此前为只回显的死字段，现作为别名映射的动态来源）。 */
   private platformAliasOverrides(config: {
@@ -269,8 +244,6 @@ export class APIRouter {
         return null;
       }
 
-      const tier = (config.tier || '').toLowerCase();
-      const isReasoning = tier === 'reasoning';
       const configuredEndpoint = (config.endpoint || '').trim();
       const configuredApiKey = configuredEndpoint
         ? decryptSecret(config.apiKey, SKILL_KEY_CONTEXT) || ''
@@ -300,20 +273,15 @@ export class APIRouter {
       const platformRecord = await this.getPlatformConfigRecord();
       const overrides = platformRecord ? this.platformAliasOverrides(platformRecord) : null;
       const userModelWins = inheritedUserEndpoint && LEARN_DIALOGUE_SKILLS.has(skillId);
-      // 2026-10-24：推理档此前只在「技能自己写了模型」时生效，未写模型就退回对话默认，
-      // 平台的 defaultReasoningModel 在运行时没有任何消费者。现补上继承分支：
-      // tier=reasoning 且未单独配模型 → 用平台推理默认；平台没配推理默认（或读不到平台行）
-      // 时仍沿用基础路由，不凭空改模型。
-      const reasoningInherited = !config.model && isReasoning && !userModelWins
-        ? this.resolveSkillReasoningDefault(platformRecord, overrides, inheritedRoute.model)
-        : inheritedRoute.model;
+      /* 2026-11-04：模型选择不再分档。Skill 自己写了模型就用它，没写就沿用基础路由
+         （最终落到平台那一个默认模型）；要不要长思考由 thinkingMode / reasoningEffort 决定。
+         此前这里还有一条「tier=reasoning 且未配模型 → 走平台推理默认」的继承分支，已随
+         「默认推理模型」这个概念一并撤除。 */
       const model = userModelWins
         ? inheritedRoute.model
         : config.model
-          ? (isReasoning
-            ? this.resolveReasoningModel(config.model, overrides)
-            : this.resolveModel(config.model, overrides))
-          : reasoningInherited;
+          ? this.resolveModel(config.model, overrides)
+          : inheritedRoute.model;
       // 生成参数优先级（2026-10-24）：Skill 显式配置 > 最终模型的模型默认 > 平台默认。
       // 平台默认这里直接读平台行，不再用 inheritedRoute——后者可能带着「平台默认模型」的
       // 模型级默认，技能换过模型时会张冠李戴。
@@ -340,11 +308,10 @@ export class APIRouter {
         responseFormat: modelDefaults.responseFormat
           ? this.normalizeResponseFormat(modelDefaults.responseFormat)
           : platformResponse,
-        // 2026-09-28 配置体系优化：skill 级参数覆盖（paramOverrides JSON）与兜底链
-        // （fallbackChain JSON）经路由透传；temperature/maxTokens 列本身仍是 deprecated 占位。
+        // 2026-09-28 配置体系优化：skill 级参数覆盖（paramOverrides JSON）经路由透传；
+        // temperature/maxTokens 列本身仍是 deprecated 占位。
         // 上层字段级优先级见 services/resolve-llm-call-params.ts 头注释。
         skillParamOverrides: parseSkillParamOverrides(config.paramOverrides),
-        skillFallbackChain: parseSkillFallbackChain(config.fallbackChain),
         // 路由仅继承上层 temperature/maxTokens，供未声明 prompt/覆盖的调用回退
         temperature: inheritedRoute.temperature,
         maxTokens: inheritedRoute.maxTokens,
@@ -488,7 +455,6 @@ export class APIRouter {
         apiUrl: true,
         apiKey: true,
         defaultModel: true,
-        defaultReasoningModel: true,
         defaultTemperature: true,
         defaultMaxTokens: true,
         reasoningEndpoint: true,

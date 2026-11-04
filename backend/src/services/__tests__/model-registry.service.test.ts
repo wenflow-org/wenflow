@@ -14,7 +14,6 @@ jest.mock('../../config/system-database', () => ({
 }))
 
 import { getModelRegistryOverview } from '../model-registry.service'
-import { markCoolingDown, resetDeploymentHealth } from '../../gateway/api-gateway/deployment-health'
 
 const BASE_PLATFORM = {
   id: 'platform',
@@ -28,20 +27,20 @@ const BASE_PLATFORM = {
 describe('model-registry.service（只读总览）', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    resetDeploymentHealth()
     platformFindFirst.mockResolvedValue({ ...BASE_PLATFORM })
     agentPromptsCount.mockResolvedValue(0)
     agentCallCount.mockResolvedValue(0)
   })
 
-  it('D12：近 1 小时 429 计数与当前冷却数进入总览', async () => {
+  /* 2026-11-04 用户「去掉降级这个功能，不要」：冷却注册表只服务换模型降级，
+     随降级一起下线；429 计数是调用日志的事实，留在总览里。 */
+  it('D12：近 1 小时 429 计数进入总览（冷却数已随降级下线）', async () => {
     agentCallCount.mockResolvedValue(7)
-    markCoolingDown('deepseek::https://api.example.com/v1::deepseek-v4.1-flash', 60_000)
     const overview = await getModelRegistryOverview()
     expect(agentCallCount).toHaveBeenCalledWith(expect.objectContaining({
       where: expect.objectContaining({ statusCode: 429 })
     }))
-    expect(overview.rateLimit).toEqual({ windowMinutes: 60, count429: 7, coolingDown: 1 })
+    expect(overview.rateLimit).toEqual({ windowMinutes: 60, count429: 7 })
   })
 
   it('别名默认来自代码注册表，并给出默认选中项', async () => {
@@ -85,11 +84,10 @@ describe('model-registry.service（只读总览）', () => {
     expect(overview.defaults).toMatchObject({
       defaultModelConfigured: 'chat',
       defaultModelResolved: 'deepseek-v4.1-flash',
-      defaultModelSource: 'alias',
-      defaultReasoningModelConfigured: 'reasoning',
-      defaultReasoningModelResolved: 'deepseek-v4.1-flash',
-      defaultReasoningModelSource: 'alias'
+      defaultModelSource: 'alias'
     })
+    // 2026-11-04：平台不再有「默认推理模型」，总览也不再出这一档读数
+    expect(overview.defaults).not.toHaveProperty('defaultReasoningModelResolved')
   })
 
   it('具体模型 id 的来源标记为 concrete', async () => {
@@ -99,7 +97,8 @@ describe('model-registry.service（只读总览）', () => {
     expect(overview.defaults.defaultModelResolved).toBe('deepseek-v4.1-flash')
   })
 
-  /* 2026-10-24：平台没配默认时运行时落到 env，界面必须说清来源，不能只显示「未配置」。 */
+  /* 2026-10-24：平台没配默认时运行时落到 env，界面必须说清来源，不能只显示「未配置」。
+     2026-11-04：只剩一个默认模型（默认推理模型已撤，AI_MODEL_REASONING 不再被读）。 */
   it('runtimeDefaults 区分界面配置 / env 兜底 / 未配置', async () => {
     const ui = await getModelRegistryOverview()
     expect(ui.runtimeDefaults).toMatchObject({ source: 'ui', model: 'deepseek-v4.1-flash' })
@@ -108,19 +107,15 @@ describe('model-registry.service（只读总览）', () => {
     const prevReasoning = process.env.AI_MODEL_REASONING
     platformFindFirst.mockResolvedValue({ ...BASE_PLATFORM, defaultModel: null, defaultReasoningModel: null })
     process.env.AI_MODEL = 'agnes-3.0-flash'
-    process.env.AI_MODEL_REASONING = 'agnes-3.0-flash'
+    // 历史环境变量留着也不算数——它已不是任何一档的来源
+    process.env.AI_MODEL_REASONING = 'deepseek-v4.1-flash'
     try {
       const fromEnv = await getModelRegistryOverview()
-      expect(fromEnv.runtimeDefaults).toEqual({
-        model: 'agnes-3.0-flash',
-        source: 'env',
-        reasoningModel: 'agnes-3.0-flash',
-        reasoningSource: 'env'
-      })
+      expect(fromEnv.runtimeDefaults).toEqual({ model: 'agnes-3.0-flash', source: 'env' })
       delete process.env.AI_MODEL
       delete process.env.AI_MODEL_REASONING
       const none = await getModelRegistryOverview()
-      expect(none.runtimeDefaults).toEqual({ model: null, source: 'none', reasoningModel: null, reasoningSource: 'none' })
+      expect(none.runtimeDefaults).toEqual({ model: null, source: 'none' })
     } finally {
       if (prevModel === undefined) delete process.env.AI_MODEL
       else process.env.AI_MODEL = prevModel
@@ -129,27 +124,17 @@ describe('model-registry.service（只读总览）', () => {
     }
   })
 
-  it('模型清单含能力、限额与降级链', async () => {
+  it('模型清单含能力与限额（不再有降级链字段）', async () => {
     const overview = await getModelRegistryOverview()
     const main = overview.models.find((model) => model.id === 'deepseek-v4.1-flash')!
     expect(main.capabilities).toEqual({ supportsThinking: true, supportsReasoningEffort: true })
     expect(main.limits.maxOutputTokens).toBe(131072)
     expect(main.limits.defaultMaxTokens).toBe(32768)
-    expect(main.fallbacks).toEqual([])
-    // 2026-10-18 上游下线 V4/V4-Pro 后平台目录不再声明模型级 fallbacks；有效链为空
-    expect(overview.fallbackChains).toEqual([])
-    expect(overview.runtime).toEqual({ maxModelCandidates: 3, fallbackSwapsModelOnly: true })
-  })
-
-  it('暴露当前冷却中的部署', async () => {
-    markCoolingDown('platform|https://gw.example/v1|deepseek-v4.1-flash', 60_000)
-    const overview = await getModelRegistryOverview()
-    expect(overview.cooldowns).toHaveLength(1)
-    expect(overview.cooldowns[0]).toMatchObject({
-      providerId: 'platform',
-      endpoint: 'https://gw.example/v1',
-      model: 'deepseek-v4.1-flash'
-    })
+    // 降级功能整个下线（2026-11-04）：总览里不再有模型级 / 运行时级兜底链字段
+    expect(main).not.toHaveProperty('fallbacks')
+    expect(overview).not.toHaveProperty('fallbackChains')
+    expect(overview).not.toHaveProperty('runtime')
+    expect(overview).not.toHaveProperty('cooldowns')
   })
 
   it('提示废弃的 prompt model 副本数量', async () => {

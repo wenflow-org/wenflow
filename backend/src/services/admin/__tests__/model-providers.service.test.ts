@@ -198,15 +198,16 @@ describe('供应商', () => {
     await expectEditError(() => updateProvider('custom', { baseUrl: '' }), 400, '服务地址不能清空');
   });
 
-  it('删除：平台通道被拒；自建供应商连密钥一起清（并告警备用链残留）', async () => {
+  it('删除：平台通道被拒；自建供应商连密钥一起清', async () => {
     await addModel('custom', { id: 'cm-1', tier: 'chat' });
-    await addModel(PLATFORM_PROVIDER_ID, { id: 'm-chat-2', tier: 'chat', fallbacks: ['cm-1'] });
+    await addModel(PLATFORM_PROVIDER_ID, { id: 'm-chat-2', tier: 'chat' });
     mockSecretRows.set('custom', { providerId: 'custom', apiKey: 'wfsec:v1:test:eA==', apiKeyEnv: 'CUSTOM_KEY' });
     await expectEditError(() => deleteProvider(PLATFORM_PROVIDER_ID), 400, '不能删除');
     const result = await deleteProvider('custom');
     expect(providerIds()).toEqual([PLATFORM_PROVIDER_ID]);
     expect(mockSecretRows.has('custom')).toBe(false);
-    expect(result.warnings.join(' ')).toContain('备用链');
+    // 降级下线（2026-11-04）后没有「备用链里还留着已删模型」这条告警了
+    expect(result.warnings.join(' ')).not.toContain('备用链');
   });
 
   it('移除密钥：DB 行删掉，文件里的环境变量名保留', async () => {
@@ -218,8 +219,7 @@ describe('供应商', () => {
 });
 
 describe('模型', () => {
-  it('新增模型：写入规范字段顺序 + 跨供应商备用链告警 + 超出运行时跳数告警', async () => {
-    await addModel('custom', { id: 'cm-1', tier: 'chat' });
+  it('新增模型：写入规范字段顺序（不再有备用链字段）', async () => {
     const result = await addModel(PLATFORM_PROVIDER_ID, {
       id: 'm-new',
       label: 'M New',
@@ -227,22 +227,22 @@ describe('模型', () => {
       supportsThinking: true,
       supportsReasoningEffort: true,
       maxOutputTokens: 131072,
-      fallbacks: ['m-chat', 'custom/cm-1', 'm-reason']
+      // 2026-11-04 用户「去掉降级这个功能，不要」：字段已从入参类型里下线，
+      // 老客户端再传也只当没看见（下面断言它不落盘）
+      ...({ fallbacks: ['m-chat'] } as Record<string, unknown>)
     });
     const entry = readFile().providers.platform.models['m-new'];
     expect(Object.keys(entry)).toEqual([
-      'label', 'tier', 'supportsThinking', 'supportsReasoningEffort', 'maxOutputTokens', 'fallbacks'
+      'label', 'tier', 'supportsThinking', 'supportsReasoningEffort', 'maxOutputTokens'
     ]);
-    expect(entry.fallbacks).toEqual(['m-chat', 'custom/cm-1', 'm-reason']);
-    expect(result.warnings.join(' ')).toContain('运行时最多用到第 2 条');
-    expect(result.warnings.join(' ')).toContain('属于别的供应商');
+    expect(entry).not.toHaveProperty('fallbacks');
+    expect(result.warnings.join(' ')).not.toContain('备用');
   });
 
-  it('新增模型的拒绝面：重复 id / id 非法 / 备用链指向不存在的模型 / 勾强度没勾思考', async () => {
+  it('新增模型的拒绝面：重复 id / id 非法 / 勾强度没勾思考', async () => {
     await addModel('custom', { id: 'cm-1', tier: 'chat' });
     await expectEditError(() => addModel('custom', { id: 'cm-1', tier: 'chat' }), 409, '已有模型');
     await expectEditError(() => addModel('custom', { id: 'cm/1', tier: 'chat' }), 400, '只能用字母');
-    await expectEditError(() => addModel('custom', { id: 'cm-2', tier: 'chat', fallbacks: ['ghost'] }), 400, '不在任何供应商目录中');
     await expectEditError(() => addModel('custom', { id: 'cm-3', tier: 'chat', supportsReasoningEffort: true }), 400, '必须同时支持思考模式');
   });
 
@@ -358,7 +358,7 @@ describe('写回的文件格式（git diff 卫生 + 换行风格沿袭）', () =
     expect(before).toContain('"aliases"');
 
     await createProvider({ id: 'tmp-gw', name: '临时网关', baseUrl: 'https://tmp.example.com/v1', apiKey: 'sk-tmp-123456' });
-    await addModel('tmp-gw', { id: 'tmp-model', tier: 'chat', fallbacks: ['m-chat'] });
+    await addModel('tmp-gw', { id: 'tmp-model', tier: 'chat' });
     await updateModel('tmp-gw', 'tmp-model', { label: '临时模型' });
     await deleteProvider('tmp-gw');
 

@@ -745,7 +745,6 @@ export const adminApiConfigApi = {
     apiKey: string;
     availableModels: string | string[];
     defaultModel: string;
-    defaultReasoningModel: string;
     defaultEvaluationModel: string;
     defaultThinkingMode?: string;
     defaultReasoningEffort?: string;
@@ -786,8 +785,9 @@ export const adminApiConfigApi = {
   },
 
   /**
-   * 模型配置总览（只读）：能力注册表 / 别名映射 / 默认解析 / 降级链 / 部署冷却 / 配置漂移告警。
+   * 模型配置总览（只读）：能力注册表 / 别名映射 / 默认解析 / 配置漂移告警。
    * 模型目录的唯一写源 = File-as-Truth 配置文件 llm-providers.json（doc/MODEL_GATEWAY_DESIGN.md §4.2）。
+   * 2026-11-04 用户「去掉降级这个功能，不要」：降级链 / 部署冷却两项已随降级整条下线。
    */
   getModelRegistry: async () => {
     return adminAxios.get('/admin/model-registry');
@@ -1335,7 +1335,6 @@ export const adminSkillsApi = {
     thinkingMode?: string;
     reasoningEffort?: string;
     paramOverrides?: Record<string, number> | null;
-    fallbackChain?: string[] | null;
     requestTimeoutMs?: number | null;
     maxLogicalRetries?: number | null;
     enabled?: boolean;
@@ -1348,7 +1347,7 @@ export const adminSkillsApi = {
     return adminAxios.get('/admin/skill-model-configs/coverage');
   },
 
-  /** 批量套用同一份通道/模型/参数/兜底配置到多个 skill */
+  /** 批量套用同一份通道/模型/参数配置到多个 skill（2026-11-04 起不再有备用链字段） */
   bulkApplySkillModelConfig: async (data: {
     skillIds: string[];
     endpoint?: string;
@@ -1356,16 +1355,10 @@ export const adminSkillsApi = {
     model?: string;
     tier?: string;
     paramOverrides?: Record<string, number> | null;
-    fallbackChain?: string[] | null;
     /** 只清空模型覆盖（改为跟随平台默认），其余字段保持不变；与套用字段互斥 */
     clearModel?: boolean;
   }) => {
     return adminAxios.post('/admin/skill-model-configs/bulk-apply', data);
-  },
-
-  /** 通道能力探测：返回该 endpoint+key 下可用的模型列表 */
-  probeSkillChannel: async (skillId: string) => {
-    return adminAxios.post(`/admin/skill-model-configs/${encodeURIComponent(skillId)}/probe`);
   },
 
   deleteSkillModelConfig: async (skillId: string) => {
@@ -1376,17 +1369,10 @@ export const adminSkillsApi = {
     return adminAxios.post(`/admin/skills/${encodeURIComponent(skillId)}/test`, input);
   },
 
-  /** 模型延迟探测：不对 handler 全量试跑，直发上游看指定思考档的真实延迟/JSON/token */
-  modelProbe: async (skillId: string, data: {
-    thinkingMode?: string;
-    reasoningEffort?: string;
-    testInput?: string;
-    timeoutMs?: number;
-  }) => {
-    // 后端探测默认超时 180s（可到数分钟）；不能吃 adminAxios 的 30s 默认值，
-    // 否则前端先报「请求超时」，UI 承诺的「最长 180s」永远等不到
-    return adminAxios.post(`/admin/skills/${encodeURIComponent(skillId)}/model-probe`, data, { timeout: AI_REQUEST_TIMEOUT });
-  },
+  /* 2026-11-04：`probeSkillChannel` 与 `modelProbe` 一并撤除——前者指向的
+     /skill-model-configs/:id/probe 路由本就不存在（兜底链校验删掉后更无出处），
+     后者是 Skill 运行时页「模型测试」的唯一调用方，而那块已从该页撑出去
+     （连通性测试在平台「模型与接入」页每个模型上都有）。 */
 
   getEffectiveSkillPrompt: async (skillId: string) => {
     return adminAxios.get(`/admin/skills/${encodeURIComponent(skillId)}/effective-prompt`);

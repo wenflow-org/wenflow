@@ -143,15 +143,8 @@ if (-not [string]::IsNullOrWhiteSpace($aiModelInput)) {
 }
 Set-EnvValue -Path $envPath -Key 'AI_MODEL' -Value $aiModelCurrent
 
-$aiReasoningModelCurrent = Get-EnvValue -Path $envPath -Key 'AI_MODEL_REASONING'
-if ([string]::IsNullOrWhiteSpace($aiReasoningModelCurrent)) {
-    $aiReasoningModelCurrent = 'deepseek-v4.1-flash'
-}
-$aiReasoningModelInput = Read-Host "AI_MODEL_REASONING [$aiReasoningModelCurrent]"
-if (-not [string]::IsNullOrWhiteSpace($aiReasoningModelInput)) {
-    $aiReasoningModelCurrent = $aiReasoningModelInput
-}
-Set-EnvValue -Path $envPath -Key 'AI_MODEL_REASONING' -Value $aiReasoningModelCurrent
+# 平台只有这一个默认模型（2026-11-04 起不再问 AI_MODEL_REASONING：某个 Skill 要不要长思考
+# 由它的思考模式 / 推理强度决定，不是换一个模型）。旧 .env 里残留的该键不再被后端读取。
 
 # 向量 / 重排（基础设施模型）：只作首次部署种子与回落，管理台「模型与接入」优先。
 # 留空即不启用语义层（fail-open 回退关键词/窗口），不影响启动。默认模型名给出可直接用的值。

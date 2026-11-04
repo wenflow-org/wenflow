@@ -159,35 +159,58 @@ describe('ModelEditorDialog', () => {
     updateModelMock.mockReset()
   })
 
-  it('新建：字段分三层（标识 / 能力与限额 / 备用链与单价），提交时清空的限额不发 0', async () => {
-    const w = mount(ModelEditorDialog, { props: { fallbackOptions: ['platform/m-chat'] }, ...mountOptions })
+  it('新建：标识 / 生成参数 / 高级设置三段，提交时清空的限额不发 0', async () => {
+    const w = mount(ModelEditorDialog, mountOptions)
     w.vm.openWith({ providerId: 'acme-gateway', model: null })
     await flushPromises()
     await w.find('.med-modal .med-two input').setValue('acme-chat')
-    await chooseMkSelect(w, '用途', 'reasoning')
-    await w.findAll('.med-adv-body .med-two')[1].findAll('input')[0].setValue('65536')
+    await w.find('.med-adv-body .med-two input').setValue('65536')
 
-    addModelMock.mockResolvedValue({ data: { success: true, warnings: ['备用链写了 2 条…'] } })
+    addModelMock.mockResolvedValue({ data: { success: true, warnings: ['保存时出现 2 条提示…'] } })
     await btn(w, '保存').trigger('click')
     await flushPromises()
     expect(addModelMock).toHaveBeenCalledWith('acme-gateway', expect.objectContaining({
       id: 'acme-chat',
-      tier: 'reasoning',
+      tier: 'chat',
       maxOutputTokens: 65536,
       defaultMaxTokens: null,
-      fallbacks: [],
       pricing: {}
     }))
+    // 两个键都不再随保存提交（2026-11-04）：注册表里已有的旧值原样留着——
+    // 输出格式功能下线；备用链随降级整条下线，编辑单个模型不再重写它
+    expect(addModelMock.mock.calls[0][1]).not.toHaveProperty('defaultResponseFormat')
+    expect(addModelMock.mock.calls[0][1]).not.toHaveProperty('fallbacks')
     // 告警随 saved 事件回传面板（不在弹层里常驻展示）
-    expect(w.emitted('saved')?.[0]?.[0]).toEqual({ modelId: 'acme-chat', warnings: ['备用链写了 2 条…'] })
+    expect(w.emitted('saved')?.[0]?.[0]).toEqual({ modelId: 'acme-chat', warnings: ['保存时出现 2 条提示…'] })
   })
 
-  it('高级设置：用途只留下拉，能力压成三个紧凑标签（思考 / 推理强度 / 读图）', async () => {
-    const w = mount(ModelEditorDialog, { props: { fallbackOptions: [] }, ...mountOptions })
+  it('档位不再让运营选：编辑已有条目时原样带回', async () => {
+    const w = mount(ModelEditorDialog, mountOptions)
+    // 2026-11-04 用户「我们不做模型类型区分」：弹层里没有第二个选对话 / 推理的地方
+    w.vm.openWith({ providerId: 'platform', model: null, presetId: 'm-new' })
+    await flushPromises()
+    expect(w.text()).not.toContain('用途')
+
+    w.vm.openWith({
+      providerId: 'platform',
+      model: {
+        id: 'm-deep', label: 'm-deep', tier: 'reasoning', supportsThinking: true, supportsReasoningEffort: true, vision: false,
+        maxOutputTokens: null, defaultMaxTokens: null, reasoningReserveTokens: null, maxParallelRequests: null,
+        pricing: null, description: null
+      }
+    })
+    await flushPromises()
+    updateModelMock.mockResolvedValue({ data: { success: true, warnings: [] } })
+    await btn(w, '保存').trigger('click')
+    await flushPromises()
+    expect(updateModelMock).toHaveBeenCalledWith('platform', 'm-deep', expect.objectContaining({ tier: 'reasoning' }))
+  })
+
+  it('高级设置：能力压成三个紧凑标签（思考 / 推理强度 / 读图）', async () => {
+    const w = mount(ModelEditorDialog, mountOptions)
     w.vm.openWith({ providerId: 'acme-gateway', model: null })
     await flushPromises()
-    // 2026-10-28 用户「不要这个，后面的能力也改一下」：用途提示与能力说明都不再上屏
-    expect(w.text()).not.toContain('推理档用于长思考与复杂判断')
+    // 2026-10-28 用户「不要这个，后面的能力也改一下」：能力说明不上屏
     expect(w.text()).not.toContain('只勾模型实际支持的能力')
     expect(w.text()).not.toContain('先思考再回答')
     expect(w.text()).not.toContain('可调节思考深度')
@@ -195,18 +218,16 @@ describe('ModelEditorDialog', () => {
     const caps = w.findAll('.med-cap')
     expect(caps).toHaveLength(3)
     expect(caps.map((c) => c.text())).toEqual(['思考', '推理强度', '读图'])
-    // 用途仍保留：它决定模型进「对话」还是「推理」分组
-    expect(mkSelectValue(w, '用途')).toBe('chat')
   })
 
   it('勾了推理强度没勾思考：保存时就地拦下并说明依赖（不发请求）', async () => {
-    const w = mount(ModelEditorDialog, { props: { fallbackOptions: [] }, ...mountOptions })
+    const w = mount(ModelEditorDialog, mountOptions)
     w.vm.openWith({
       providerId: 'acme-gateway',
       model: {
         id: 'acme-chat', label: 'acme-chat', tier: 'chat', supportsThinking: false, supportsReasoningEffort: false, vision: false,
         maxOutputTokens: null, defaultMaxTokens: null, reasoningReserveTokens: null, maxParallelRequests: null,
-        fallbacks: [], pricing: null, description: null
+        pricing: null, description: null
       }
     })
     await flushPromises()
@@ -234,13 +255,13 @@ describe('ModelEditorDialog', () => {
   })
 
   it('单价三档：编辑回填并与输入/输出一起提交（缓存命中价是成本口径的一部分）', async () => {
-    const w = mount(ModelEditorDialog, { props: { fallbackOptions: [] }, ...mountOptions })
+    const w = mount(ModelEditorDialog, mountOptions)
     w.vm.openWith({
       providerId: 'platform',
       model: {
         id: 'm-priced', label: 'm-priced', tier: 'chat', supportsThinking: false, supportsReasoningEffort: false, vision: false,
         maxOutputTokens: null, defaultMaxTokens: null, reasoningReserveTokens: null, maxParallelRequests: null,
-        fallbacks: [], pricing: { inputPer1M: 0.3, cachedInputPer1M: 0.006, outputPer1M: 1.2 }, description: null
+        pricing: { inputPer1M: 0.3, cachedInputPer1M: 0.006, outputPer1M: 1.2 }, description: null
       }
     })
     await flushPromises()
@@ -258,13 +279,13 @@ describe('ModelEditorDialog', () => {
   })
 
   it('编辑：模型 ID 只读（路由按它找模型，改名等于换模型）', async () => {
-    const w = mount(ModelEditorDialog, { props: { fallbackOptions: [] }, ...mountOptions })
+    const w = mount(ModelEditorDialog, mountOptions)
     w.vm.openWith({
       providerId: 'acme-gateway',
       model: {
         id: 'acme-chat', label: 'Acme Chat', tier: 'chat', supportsThinking: true, supportsReasoningEffort: false, vision: false,
         maxOutputTokens: 65536, defaultMaxTokens: 4096, reasoningReserveTokens: null, maxParallelRequests: 8,
-        fallbacks: [], pricing: { inputPer1M: 0.3 }, description: '主用'
+        pricing: { inputPer1M: 0.3 }, description: '主用'
       }
     })
     await flushPromises()
@@ -283,28 +304,27 @@ describe('ModelEditorDialog', () => {
   })
 
   it('生成参数：默认跟随平台，显式选择后随模型提交', async () => {
-    const w = mount(ModelEditorDialog, { props: { fallbackOptions: [] }, ...mountOptions })
+    const w = mount(ModelEditorDialog, mountOptions)
     w.vm.openWith({ providerId: 'platform', model: null, presetId: 'm-gen' })
     await flushPromises()
     expect(mkSelectValue(w, '思考模式')).toBe('default')
     expect(mkSelectValue(w, '推理强度')).toBe('default')
-    expect(mkSelectValue(w, '输出格式')).toBe('default')
+    // 2026-11-04 用户「输出格式这个功能先下掉」：这一格连同它的下拉一起消失
+    expect(w.text()).not.toContain('输出格式')
 
     await chooseMkSelect(w, '思考模式', 'disabled')
     await chooseMkSelect(w, '推理强度', 'max')
-    await chooseMkSelect(w, '输出格式', 'json_object')
     addModelMock.mockResolvedValue({ data: { success: true, warnings: [] } })
     await btn(w, '保存').trigger('click')
     await flushPromises()
     expect(addModelMock).toHaveBeenCalledWith('platform', expect.objectContaining({
       defaultThinkingMode: 'disabled',
-      defaultReasoningEffort: 'max',
-      defaultResponseFormat: 'json_object'
+      defaultReasoningEffort: 'max'
     }))
   })
 
   it('显示名称默认跟随模型 ID，手改后不再覆盖', async () => {
-    const w = mount(ModelEditorDialog, { props: { fallbackOptions: [] }, ...mountOptions })
+    const w = mount(ModelEditorDialog, mountOptions)
     w.vm.openWith({ providerId: 'platform', model: null, presetId: 'm-one' })
     await flushPromises()
     const id = w.find('.med-modal .med-two input')
@@ -320,30 +340,5 @@ describe('ModelEditorDialog', () => {
     await id.setValue('m-three')
     await nextTick()
     expect(labelValue()).toBe('自定义名称')
-  })
-
-  it('备用模型：勾选顺序即尝试顺序，可单条移除', async () => {
-    const w = mount(ModelEditorDialog, {
-      props: { fallbackOptions: ['platform/m-chat', 'platform/m-backup', 'platform/m-third'] },
-      ...mountOptions
-    })
-    w.vm.openWith({ providerId: 'platform', model: null, presetId: 'm-main' })
-    await flushPromises()
-    const rows = w.findAll('.med-fb__row')
-    await rows[1].find('input').setValue(true)
-    await rows[2].find('input').setValue(true)
-    expect(w.findAll('.med-fb__chip .med-fb__name').map((e) => e.text())).toEqual(['platform/m-backup', 'platform/m-third'])
-    expect(w.findAll('.med-fb__order').map((e) => e.text())).toEqual(['1', '2'])
-
-    await w.findAll('.med-fb__remove')[0].trigger('click')
-    expect(w.findAll('.med-fb__chip .med-fb__name').map((e) => e.text())).toEqual(['platform/m-third'])
-    expect(w.findAll('.med-fb__order').map((e) => e.text())).toEqual(['1'])
-
-    addModelMock.mockResolvedValue({ data: { success: true, warnings: [] } })
-    await btn(w, '保存').trigger('click')
-    await flushPromises()
-    expect(addModelMock).toHaveBeenCalledWith('platform', expect.objectContaining({
-      fallbacks: ['platform/m-third']
-    }))
   })
 })

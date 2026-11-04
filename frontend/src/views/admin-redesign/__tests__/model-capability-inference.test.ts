@@ -4,7 +4,6 @@ import {
   inferModelCapabilities,
   inferenceLabels,
   readableModelName,
-  roleSuggestion,
 } from '../modelCapabilityInference'
 
 describe('modelCapabilityInference', () => {
@@ -13,9 +12,7 @@ describe('modelCapabilityInference', () => {
     expect(inferModelCapabilities('text-embedding-3-small').role).toBe('embedding')
     expect(inferModelCapabilities('BAAI/bge-reranker-v2-m3').role).toBe('rerank')
     expect(inferModelCapabilities('deepseek-v3').role).toBe('chat')
-    expect(roleSuggestion('embedding')).toBe('建议归入向量模型')
-    expect(roleSuggestion('rerank')).toBe('建议归入重排模型')
-    expect(roleSuggestion('chat')).toBe('')
+    // 2026-11-04：用途只服务向量/重排卡按用途拉取，不再产出「建议归入哪张卡」的判词
   })
 
   it('从模型名推断思考、推理强度与读图', () => {

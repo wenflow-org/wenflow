@@ -12,38 +12,46 @@
        高级设置（单价只服务成本分析，不是接入路径）。
        编辑是**即时保存**：点保存就落盘并热生效，不并入页脚保存条——只有当前通道的服务地址与
        密钥仍是连接设置的脏位保存（那段表单由宿主经 #platform-detail 插槽注入）。
-       运行面读数（冷却/健康/配置漂移告警）另取 GET /admin/model-registry：编辑面只有配置值，
-       把「这个模型现在能不能用」也算在这里会让两个接口互相复述。 -->
+       运行面读数（配置漂移告警）另取 GET /admin/model-registry：编辑面只有配置值，
+       把「这个模型现在能不能用」也算在这里会让两个接口互相复述。
+       2026-11-04 用户「去掉降级这个功能，不要」：备用链与部署冷却随降级整条下线，
+       运行面只保留告警徽标。 -->
   <section class="mk-card mpp">
     <!-- 2026-10-27 用户「这个重新设计，可以先放到第三个」：卡头承接通道身份与状态——
          平台通道 + 平台内置 + 连接状态，右侧是写盘状态与本页动作；详情里不再单起一行标题。
-         2026-10-28 三卡重构：本卡只负责「对话与推理模型」这一类能力，连接参数仍是平台通道。 -->
+         2026-10-28 三卡重构：本卡只负责「对话模型」这一类能力，连接参数仍是平台通道。
+         2026-11-04 用户「还是不要左右结构了，把链接做到这个卡片右上角吧」：
+         连接从独立左栏挪进卡头右组——卡片恢复单列（模型清单独占整卡宽度），
+         「这条通道接在哪」与「这张卡是什么」同处一行，右边就是它接的地址与密钥状态。
+         2026-11-04 用户「对话与推理模型是不是换个标准名字好点」：卡题改「对话模型」，
+         与「向量模型 / 重排模型」同一套角色命名；「推理」不再是一类模型。 -->
     <div class="mk-card__head">
       <div class="mpp-head__id">
-        <h3 class="mk-card__title">对话与推理模型</h3>
+        <h3 class="mk-card__title">对话模型</h3>
         <span class="mpp-type mpp-type--platform" :title="registryPathTitle">LLM</span>
         <!-- 宿主注入的连接状态（「连接正常 · N 前」）：与通道身份同一行 -->
         <slot v-if="selected" name="head-status" />
-        <slot name="models-meta" />
         <span v-if="headBadge" class="mk-badge" :class="headBadge.cls">{{ headBadge.label }}</span>
       </div>
-      <div class="mk-card__head-right">
+      <div class="mk-card__head-right mpp-head__conn">
+        <!-- 连接（地址 / 密钥状态 / 上次获取 / 重试口径 +「连接设置」）：由宿主经此插槽注入。
+             未配置时宿主在这里给地址与密钥输入框（不必先进弹层填完再回来）。 -->
+        <div v-if="selected" id="mpp-platform-panel-conn" class="mpp-conn">
+          <slot name="platform-detail" />
+        </div>
         <button v-if="registry?.readOnly" type="button" class="mk-btn mk-btn--sm mk-btn--danger" disabled title="配置文件所在目录不可写，请在部署侧开放写权限">
           只读
         </button>
-        <!-- 原页头「刷新注册表」移到这里（2026-11-03 用户「移入运维工具或合并处理，保持顶部干净」）：
-             它重读的是本机登记文件（读盘），与工具栏的「重新获取」（向上游拉清单）不是一回事，
-             所以不进模型列表的工具栏，留在卡片身份这一行当低强调图标钮。 -->
+        <!-- 2026-11-04 用户「这个彻底不要」：工具栏最后一行只剩一颗按钮后就近上移到卡头右组——
+             与向量 / 重排卡的「＋ 添加模型」同址（都在卡头右端），正文直接从清单开始。 -->
         <button
+          v-if="selected"
           type="button"
-          class="mpp-regreload"
-          :disabled="loading"
-          title="重新读取本机的模型注册表文件，不向上游拉取模型清单"
-          aria-label="重新读取模型注册表"
-          @click="refresh(true)"
-        >
-          <RefreshCw :size="15" :stroke-width="1.75" aria-hidden="true" />
-        </button>
+          class="mk-btn mk-btn--sm mk-btn--primary mpp-add"
+          :disabled="busy || registry?.readOnly"
+          :title="pullAddTitle"
+          @click="onPullAdd"
+        >＋ 添加模型</button>
       </div>
     </div>
 
@@ -69,61 +77,13 @@
     />
 
     <div v-else class="mpp-body">
-      <!-- 两段式（2026-11-03 用户「把 1/2/3/4 步骤序号和分层彻底删掉，按成熟产品的紧凑两段式重构」）：
-           上一版把每一步做成「步号 + 步名 + 正文」的块，四步各占一行标题、按钮又各占一行，
-           四行标题加四个按钮把卡片撑成一条纵向流程表，而真正的内容（连接与模型）只剩两行。
-           现在卡片里只有两块：
-             ① 顶部灰底连接条 —— 这条通道接在哪；未配置时这里直接就是表单
-             ② 模型列表区    —— 工具栏一行（条数 + 上游读数 + 重新获取 + 添加模型）+ 双行模型行
-           流程顺序由「上到下」本身表达，不再靠步号解释。 -->
+      <!-- 单列（2026-11-04 用户「还是不要左右结构了，把链接做到这个卡片右上角吧」）：
+           连接搬进卡头右组之后，正文只剩一块——模型清单，独占整卡宽度。
+           此前是两栏（左连接 / 右列表），连接被拎成 300px 的独立左栏、模型表被挤到 995px 里；
+           用户不需要这条通道接在哪与挂了哪些模型分成两竖列并排看，连接已上移到卡片右上，
+           正文这一段回到「一张清单」的本来形态。 -->
       <template v-if="selected">
-        <!-- 第一块：灰底连接条。已配置时是宿主注入的一行摘要（地址 / 密钥 / 连接测试 / 重试口径
-             +「连接设置」）；未配置时宿主就在这个位置给地址与密钥输入框，不跳弹层。 -->
-        <div id="mpp-platform-panel-conn" class="mpp-conn">
-          <slot name="platform-detail" />
-        </div>
-
-        <!-- 第二块：模型列表区。工具栏一行——左边「已挂载模型 (N)」，右边上游读数 + 两枚出口；
-             下面直接就是双行模型行（id/能力标签 + 配置参数摘要；右侧状态与行内动作）。 -->
         <section id="mpp-platform-panel-models" class="mpp-models">
-          <div class="mpp-toolbar">
-            <h4 class="mpp-toolbar__title">
-              已挂载模型 <span class="mpp-models__count">({{ selected.models.length }})</span>
-            </h4>
-            <!-- 平台默认模型读数（P0 2026-11-04）：没单独配的 Skill 都走这个模型。
-                 缺省时运行时直接报「AI model is not configured」，所以它跟着列表标题一起上屏——
-                 它是这条通道能不能跑起来的前提，不是可选项。 -->
-            <span
-              class="mpp-toolbar__default"
-              :class="{ 'mpp-toolbar__default--unset': !defaultModel }"
-              :title="defaultTitle"
-            >默认：{{ defaultModel || '未设置' }}</span>
-            <div class="mpp-toolbar__acts">
-              <!-- 上游读数（小灰字）：清单拉过才显示；「还有几个没挂载」挂在 title 里，
-                   不占工具栏的宽度 -->
-              <span v-if="fetchableModels.length" class="mpp-toolbar__meta" :title="upstreamTitle">
-                已获取 {{ fetchableModels.length }} 个
-              </span>
-              <!-- 重新获取走宿主注入（它要一起落盘地址与密钥）；与「添加模型」同一行 -->
-              <slot name="upstream-actions" />
-              <button
-                type="button"
-                class="mk-btn mk-btn--sm mk-btn--primary"
-                :disabled="busy || registry?.readOnly"
-                :title="pullAddTitle"
-                @click="onPullAdd"
-              >＋ 添加模型</button>
-              <!-- 轻量手动入口：上游清单里没有的模型（自建、别名）直接录 ID -->
-              <button
-                type="button"
-                class="mk-link"
-                :disabled="busy || registry?.readOnly"
-                title="上游清单里没有的模型（自建、别名）在这里录入模型 ID"
-                @click="openManualAdd"
-              >手动录入</button>
-            </div>
-          </div>
-
           <!-- 上游异常（获取失败 / 有未保存清单）与卡头徽标同源，跟着列表一起看 -->
           <slot name="models-meta" />
 
@@ -131,7 +91,7 @@
           <div v-if="selected.enabled && !selected.models.length" class="mpp-setup">
             <div class="mpp-setup__text">
               <strong>还没有挂载模型</strong>
-              <span>连接条上的地址与密钥就绪后，用工具栏的「＋ 添加模型」从上游清单里挑，也可以手动录入模型 ID。</span>
+              <span>连接就绪后点「＋ 添加模型」，从上游清单里挑。清单里没有的（自建、别名），在弹窗底部手动录入模型 ID。</span>
             </div>
             <button
               type="button"
@@ -154,14 +114,14 @@
                   <span
                     v-if="isDefaultModel(m)"
                     class="mk-badge mk-badge--info mpp-default-chip"
-                    title="没单独指定模型的 Skill 都走这个模型（对话档默认）"
+                    title="平台当前默认，未单独配模型的 Skill 都继承它"
                   >默认</span>
                   <span v-for="tag in functionTags(m)" :key="tag" class="mpp-fn__chip">{{ tag }}</span>
                 </div>
-                <p class="mpp-model-params" :title="PARAM_SUMMARY_TITLE">
-                  <span v-if="paramSummary(m).length">{{ paramSummary(m).join(' · ') }}</span>
-                  <span v-else class="mpp-model-params__def">参数全部跟随默认</span>
-                </p>
+                <!-- 2026-11-04 用户「不要这种文案，上『Avoid unnecessary secondary labels and
+                     descriptions. Let the layout do the explaining.』」：每行原有的参数摘要
+                     （默认输出 / 输出上限 / 并发 / 已配单价）整行撤除——它在 配置 弹层里，
+                     行上只要 id、能力标签与动作；没配参数的模型也不再写「参数全部跟随默认」。 -->
                 <span
                   v-if="testResults[m.id]"
                   class="mpp-rowtest"
@@ -170,23 +130,28 @@
                 >{{ testResults[m.id].ok ? '调用通过' : '调用失败' }}<template v-if="testResults[m.id].latency"> · {{ testResults[m.id].latency }}</template></span>
               </div>
               <div class="mpp-model-row__status">
-                <span v-if="cooldownOf(m)" class="mk-badge mk-badge--warn" :title="`调用冷却中，降级时会被跳过（剩余 ${Math.ceil(cooldownOf(m)!.remainingMs / 1000)}s）`">冷却中</span>
+                <!-- 可调用（2026-11-04 用户「保留但弱化」）：此前是绿色描边的「● 可调用」徽标，
+                     读起来像一次刚做完的连通性测试结果。它其实只是一个常驻事实——这个模型在
+                     路由里能被选中——所以降成一枚小圆点：dot + title 说清口径，不给灰度文字，
+                     免得每行都挂一条可读噪声。
+                     2026-11-04 用户「去掉降级这个功能，不要」：冷却徽标随降级下线，状态列只剩
+                     告警徽标与这枚小圆点。 -->
                 <span
-                  v-else
-                  class="mk-badge mk-badge--ok"
+                  class="mpp-dot"
                   title="当前可被选中调用，不代表刚做过连通性测试。"
-                >● 可调用</span>
+                  aria-label="当前可被选中调用"
+                ></span>
                 <span v-if="modelWarnings(m).length" class="mk-badge mk-badge--warn mpp-label" :title="modelWarnings(m).join('\n')">⚠ {{ warningLabel(m) }}</span>
               </div>
               <div class="mpp-rowacts">
-                <!-- 第一枚是正题（配这个模型的生成参数 / 能力 / 限额 / 备用 / 价格），
+                <!-- 第一枚是正题（配这个模型的生成参数 / 能力 / 限额 / 价格），
                      第二枚是只读的连通性验证；删除低频且不可撤销，收进 ⋯ 菜单
-                     ——与公告、账号、虚拟学习者同一套行内操作层级（useRowMenu 同源） -->
+                     ——与公告、账号、虚拟学习者同一套行内操作层级（useRowMenu 同源）。 -->
                 <button
                   type="button"
                   class="mk-link"
                   :disabled="busy || registry?.readOnly"
-                  title="配置这个模型的生成参数、能力、限额、备用模型与价格"
+                  title="配置这个模型的生成参数、能力、限额与价格"
                   @click="modelEditor?.openWith({ providerId: selected.id, model: m })"
                 >配置</button>
                 <button type="button" class="mk-link" :disabled="testingId === m.id" @click="testModel(selected, m.id)">{{ testingId === m.id ? '测试中…' : '测试' }}</button>
@@ -200,24 +165,18 @@
                     @click.stop="toggleMenu(m.id)"
                   >⋯</button>
                   <div v-if="openMenu === m.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
-                    <!-- 平台默认（P0 2026-11-04）：低频但必做一次，所以收进 ⋯ 而不是行内第三枚链接——
-                         行内已有「配置 / 测试」，再平铺两枚会把每行推成操作条。 -->
+                    <!-- 平台默认（P0 2026-11-04；2026-11-04 用户「为什么还在区分默认推理和对话，没有这个了。
+                         所谓的推理，是取决于使用者开启的思考强度」→ 收成一枚）：
+                         平台只有**一个**默认模型；某个 Skill 要不要长思考，由它的思考模式 / 推理强度决定，
+                         不是换一个模型。低频但必做一次，所以收进 ⋯ 而不是行内第三枚链接。 -->
                     <button
                       type="button"
                       class="mk-menu__item"
                       role="menuitem"
                       :disabled="busy || registry?.readOnly || isDefaultModel(m)"
-                      title="让没单独指定模型的 Skill 都走这个模型"
-                      @click="requestDefault(m, 'chat')"
-                    >设为默认（对话）</button>
-                    <button
-                      type="button"
-                      class="mk-menu__item"
-                      role="menuitem"
-                      :disabled="busy || registry?.readOnly || m.id === defaultReasoningModel"
-                      title="推理档的 Skill 未单独指定模型时走这个"
-                      @click="requestDefault(m, 'reasoning')"
-                    >设为默认（推理）</button>
+                      title="没单独指定模型的 Skill 都走这个模型"
+                      @click="requestDefault(m)"
+                    >设为默认</button>
                     <button
                       type="button"
                       class="mk-menu__item mk-menu__item--danger"
@@ -240,7 +199,6 @@
 
     <PullModelsDialog
       ref="pullDialog"
-      :provider-name="selected ? providerName(selected) : ''"
       :provider-id="selected?.id ?? ''"
       :models="fetchableModels"
       :registered="[...registeredIds]"
@@ -248,7 +206,7 @@
       @manual="openManualAdd"
     />
     <ModelCapabilityConfirmDialog ref="capabilityDialog" @confirm="addSelected" />
-    <ModelEditorDialog ref="modelEditor" :fallback-options="fallbackOptions" @saved="onModelSaved" />
+    <ModelEditorDialog ref="modelEditor" @saved="onModelSaved" />
   </section>
 </template>
 
@@ -257,7 +215,6 @@ import { computed, onMounted, ref } from 'vue'
 import { adminApiConfigApi, adminModelProvidersApi } from '@/api/adminApi'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
-import { RefreshCw } from 'lucide-vue-next'
 import ModelEditorDialog, { type ModelLike } from './ModelEditorDialog.vue'
 import ModelCapabilityConfirmDialog, { type ConfirmedModelCapability } from './ModelCapabilityConfirmDialog.vue'
 import PullModelsDialog from './PullModelsDialog.vue'
@@ -286,22 +243,19 @@ interface ProvidersView {
   registry: { path: string; source: 'file' | 'embedded-fallback'; mtimeMs: number | null; lastError: string | null; readOnly: boolean }
   providers: ProviderView[]
 }
-/** 运行面读数（GET /admin/model-registry 的子集）：冷却、告警、候选上限 */
+/** 运行面读数（GET /admin/model-registry 的子集）：告警 */
 interface RegistryHealth {
   models: Array<{ id: string; providerId: string }>
-  cooldowns: Array<{ providerId: string; model: string; remainingMs: number }>
   warnings: string[]
-  runtime?: { maxModelCandidates: number }
 }
 
 const props = withDefaults(defineProps<{
   /** 上游模型清单（宿主连接设置里拉到的，平台通道用） */
   upstream?: string[]
-  /** 平台默认模型（对话档）：没单独指定模型的 Skill 走它。空 = 未设置，运行时不可用 */
+  /** 平台默认模型：没单独指定模型的 Skill 都走它。空 = 未设置，运行时不可用。
+      平台只有这一个默认（2026-11-04 用户「为什么还在区分默认推理和对话，没有这个了」）。 */
   defaultModel?: string
-  /** 平台默认推理模型：推理档 Skill 未单独指定时走它 */
-  defaultReasoningModel?: string
-}>(), { upstream: () => [], defaultModel: '', defaultReasoningModel: '' })
+}>(), { upstream: () => [], defaultModel: '' })
 
 const emit = defineEmits<{
   /** 注册表被改动（增删改）→ 宿主决定是否重取别名/默认解析 */
@@ -314,8 +268,9 @@ const emit = defineEmits<{
       这条把原先「静默转手动录入」的死路补成一步可预期的动作。 */
   fetchUpstream: []
   /** 设为平台默认（P0）：默认模型存 DB platform_api_configs，不在注册表文件里，
-      所以本面板只发意图，由宿主（持有 live 配置）落盘。kind 区分对话档 / 推理档。 */
-  setDefault: [modelId: string, kind: 'chat' | 'reasoning']
+      所以本面板只发意图，由宿主（持有 live 配置）落盘。平台只有一个默认——推理与否
+      由 Skill 的思考模式 / 推理强度决定，不由换模型决定。 */
+  setDefault: [modelId: string]
   /** 模型被删除后通知宿主：若删的正是平台默认，宿主负责改指到下一个可用模型，
       否则默认会指向一个已不存在的 id（运行时同样报错）。 */
   removeModel: [modelId: string]
@@ -354,77 +309,22 @@ const registryPathTitle = computed(() => {
   return parts.join('\n')
 })
 
-/** 供应商展示名：文件里的 dev 默认名「平台」不带到界面上——没有平台默认这回事，
-    它就是「这个部署当前实际调用的通道」。别的部署给 platform 起了真名就照实显示。 */
-function providerName(p: ProviderView): string {
-  return p.id === 'platform' && p.name === '平台' ? '平台通道' : p.name
-}
 const registeredIds = computed(() => new Set(selected.value?.models.map((m) => m.id) ?? []))
-/** 上游模型清单：平台通道的清单来自连接设置（宿主注入） */
+/** 上游模型清单：平台通道的清单来自连接设置（宿主注入）。只喂「添加模型」的勾选浮窗——
+    页面上不再单独出「已获取 N 个」的读数（2026-11-04 用户「上游清单这个我不太想要了」）。 */
 const fetchableModels = computed(() => props.upstream)
-/** 上游还有几个没挂载：这里不按用途筛，向量 / 重排也算——它们仍会出现在选择器里给出去向提示，
-    只是勾不动。所以这个数（未挂载）与选择器里的「可添加 N 个对话模型」不是同一个数。 */
-const pullableCount = computed(() =>
-  fetchableModels.value.filter((name) => !registeredIds.value.has(name)).length
-)
-/** 工具栏上游读数的悬停全文：条数上屏，未挂载数不占宽度（工具行已经四件东西） */
-const upstreamTitle = computed(() => {
-  const total = fetchableModels.value.length
-  if (!total) return ''
-  const rest = pullableCount.value
-  return rest ? `其中 ${rest} 个尚未挂载` : '上游清单里的模型都已挂载'
-})
-/** 添加入口的悬停全文：清单没拉过时它会先把清单拉下来（这条暗规则写在按钮上，不藏） */
-const pullAddTitle = computed(() =>
-  fetchableModels.value.length
-    ? '从已获取的上游清单里勾选模型挂载'
-    : '清单还没拉取：先向上游拉一次，成功后直接进入勾选'
-)
-
-/**
- * ④ 每行的参数摘要（2026-11-03）：只列这个模型**单独设过**的项——口径与模型编辑弹层
- * 完全一致（生成参数 / 输出限额 / 备用链 / 价格）。一个都没设的行给一句「参数全部跟随默认」，
- * 不再让一行空白同时意味「没配」和「没读到」。
- */
-function paramSummary(m: ModelLike): string[] {
-  const out: string[] = []
-  if (m.defaultThinkingMode === 'enabled') out.push('思考开启')
-  else if (m.defaultThinkingMode === 'disabled') out.push('思考关闭')
-  if (m.defaultReasoningEffort) out.push(`推理强度 ${m.defaultReasoningEffort}`)
-  if (m.defaultResponseFormat === 'json_object') out.push('输出 JSON')
-  if (m.defaultMaxTokens != null) out.push(`默认输出 ${m.defaultMaxTokens}`)
-  if (m.maxOutputTokens != null) out.push(`输出上限 ${m.maxOutputTokens}`)
-  if (m.maxParallelRequests != null) out.push(`并发 ${m.maxParallelRequests}`)
-  if (m.fallbacks.length) out.push(`备用 ${m.fallbacks.length} 个`)
-  if (m.pricing && (m.pricing.inputPer1M != null || m.pricing.outputPer1M != null)) out.push('已配单价')
-  return out
-}
-/** 参数摘要行的悬停全文（静态文案单源，不给每行算一遍） */
-const PARAM_SUMMARY_TITLE = '只列这个模型单独设过的项（未设的项不发给上游，由上游按自身默认处理）'
+/** 添加入口的悬停全文：它自带「先拉清单」这一步（这条暗规则写在按钮上，不藏） */
+const pullAddTitle = '按当前服务地址与密钥向上游拉取模型清单，拉到后勾选要挂载的模型'
 
 /* ---------- 平台默认模型（P0 2026-11-04） ---------- */
-/** 行内「默认」徽章的判据：平台默认就是这个模型（对话档） */
+/** 行内「默认」徽章的判据：平台默认就是这个模型 */
 function isDefaultModel(m: ModelLike): boolean {
   return !!props.defaultModel && m.id === props.defaultModel
 }
-/** 工具栏默认读数的悬停全文：说清它管谁、在哪改、缺了会怎样 */
-const defaultTitle = computed(() => {
-  if (props.defaultModel) {
-    const extra = props.defaultReasoningModel && props.defaultReasoningModel !== props.defaultModel
-      ? `，推理档另走 ${props.defaultReasoningModel}`
-      : ''
-    return `没单独指定模型的 Skill 都走它${extra}。在模型行的 ⋯ 菜单里换。`
-  }
-  return '还没有钉平台默认模型：没单独指定模型的 Skill 调用会直接失败（AI model is not configured）。在模型行的 ⋯ 菜单里设一个。'
-})
 /** 「设为默认」只发意图：默认模型存 DB，由持有 live 配置的宿主落盘 */
-function requestDefault(m: ModelLike, kind: 'chat' | 'reasoning'): void {
-  emit('setDefault', m.id, kind)
+function requestDefault(m: ModelLike): void {
+  emit('setDefault', m.id)
 }
-
-const fallbackOptions = computed(() =>
-  providers.value.flatMap((p) => p.models.map((m) => `${p.id}/${m.id}`))
-)
 
 /** 已登记模型 id 回传宿主（上游清单的关系句由宿主渲染，数据同源一次算） */
 function emitRegistered(): void {
@@ -444,9 +344,6 @@ function statusBadge(p: ProviderView): { cls: string; label: string } | null {
 }
 const headBadge = computed(() => (selected.value ? statusBadge(selected.value) : null))
 
-function cooldownOf(m: ModelLike) {
-  return (health.value?.cooldowns ?? []).find((c) => c.model === m.id && c.providerId === selected.value?.id) ?? null
-}
 function modelWarnings(m: ModelLike): string[] {
   return (health.value?.warnings ?? []).filter((w) => w.includes(`模型「${m.id}」`))
 }
@@ -490,7 +387,7 @@ async function refresh(force = false): Promise<void> {
 
 /**
  * 运行面读数失败不该让整块面板报「读取失败」：它只喂状态列与告警角标，
- * 缺了就按「没有冷却记录」渲染，编辑面照常用。
+ * 缺了就按「没有告警」渲染，编辑面照常用。
  */
 async function adminModelRegistryHealth(): Promise<RegistryHealth | null> {
   try {
@@ -565,12 +462,15 @@ async function testModel(p: ProviderView, modelId: string): Promise<void> {
 
 /** ③ 入口一「从上游清单添加」：清单拉过就开勾选浮窗；没拉过就先把 ② 做掉
     （宿主拉取 → 落盘连接 → 成功后宿主自己开浮窗）。这条次序写在按钮悬停里，不藏。 */
+/**
+ * 「＋ 添加模型」（2026-11-04 用户「在添加模型时候，就是拉取清单，然后从弹出的清单列表选择需要的模型」）：
+ * 这一枚就是添加模型的**唯一入口**，且每次都向上游拉一份新清单，拉到后宿主直接开勾选浮窗
+ * （宿主拉取 → 落盘连接 → 成功后宿主开浮窗；清单没拉过时也是这条路，不再有第二种可能）。
+ * 之所以每次都拉、不复用会话里那份旧清单：上游新增的模型要能立刻看到，
+ * 也正是这一点让「上游清单 + 重新获取」那块成了重复的第二条路，2026-11-04 一并撤掉。
+ */
 function onPullAdd(): void {
-  if (!fetchableModels.value.length) {
-    emit('fetchUpstream')
-    return
-  }
-  openPull()
+  emit('fetchUpstream')
 }
 
 /** 打开拉取结果浮窗：清单只用于勾选，不再在详情里铺开 */
@@ -583,9 +483,12 @@ function openPull(): void {
   pullDialog.value?.openWith()
 }
 
-/** 平台通道同步上游清单后直接弹浮窗 */
+/** 平台通道同步上游清单后直接弹浮窗。
+    2026-11-04：上游返回 0 个模型也开——手动录入只剩浮窗底栏这一处，不开窗就等于
+    「清单里没有」没有出口；空清单的说明由浮窗自己给（「这次没有拉取到模型」）。 */
 function openHostPull(): void {
-  openPull()
+  if (!selected.value) return
+  pullDialog.value?.openWith()
 }
 
 /** 手动新增（选择器底部的兜底通道） */
@@ -645,65 +548,39 @@ defineExpose({ refresh, openPull, openHostPull })
   font-size: var(--mk-fs-micro);
 }
 /* 2026-10-27 用户「这个区域不要了」：左栏通道清单撤掉后，详情独占整卡宽度。
-   2026-10-28 用户「两个卡片合成一个卡片」：接入与模型清单同卡，卡片按内容自然撑高。 */
+   2026-10-28 用户「两个卡片合成一个卡片」：接入与模型清单同卡，卡片按内容自然撑高。
+   2026-11-04 用户「还是不要左右结构了，把链接做到这个卡片右上角吧」：连接上移卡头右组后，
+   正文回到单列——只有模型清单一块，独占整卡宽度。 */
 .mpp { display: flex; flex-direction: column; flex: none; }
 .mpp-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 14px;
+  gap: 12px;
   border-top: 1px solid var(--mk-line);
   padding: 14px 16px 18px;
   flex: 1 1 auto;
   min-height: 0;
 }
-/* 两段式（2026-11-03 用户「把 1/2/3/4 步骤序号和分层彻底删掉，按成熟产品的紧凑两段式重构」）：
-   上=灰底连接条，下=模型列表区；两块之间 14px，卡片内横向一条 16px 槽（与 .mk-card__head 同源）。
-   删掉了「步号 + 步名 + 正文」的四层结构——那四行标题加四个按钮把卡片撑成一张流程表，
-   而真正要看的连接与模型只剩两行。顺序由上下位置表达，不再由步号解释。 */
-.mpp-conn { display: grid; gap: 8px; min-width: 0; }
-/* 连接摘要自带 margin-top:12px（它是宿主面板里的一块），在这里会与 grid gap 叠成 20px。
-   摘要元素由宿主组件渲染，作用域 id 不在本组件上，所以必须走 :deep() 才命中。 */
-.mpp-conn :deep(.ac-conn-summary) { margin-top: 0; }
+/* 卡头右组的连接块：地址 / 密钥与连接状态 / 重试口径 +「连接设置」。
+   它是宿主机注入的（连接编辑留在那边），所以内部的 .ac-conn-* 只能靠宿主自己的样式，
+   这里只负责让它在右组里不被压扁、窄屏可折行。 */
+.mpp-head__conn { flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+.mpp-conn { display: grid; min-width: 0; }
 
 .mpp-models { display: grid; gap: 10px; min-width: 0; }
-/* 工具栏一行：左「已挂载模型 (N)」，右侧小灰字读数 + 两枚出口 */
-.mpp-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
-.mpp-toolbar__title { margin: 0; font-size: var(--mk-fs-body); font-weight: 600; color: var(--mk-ink); }
-.mpp-toolbar__acts { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.mpp-toolbar__meta { font-size: var(--mk-fs-micro); color: var(--mk-muted); font-variant-numeric: tabular-nums; }
-/* 平台默认读数（P0 2026-11-04）：与「已挂载模型 (N)」同一行的读数，落点回答
-   「没单独配的 Skill 走哪个」。缺省时必须显眼——它不是一个可以留空的偏好项。 */
-.mpp-toolbar__default {
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-ink);
-  font-variant-numeric: tabular-nums;
-  max-width: 280px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.mpp-toolbar__default--unset {
-  color: var(--mk-amber);
-  font-weight: 600;
-}
 /* 卡头左组：通道名 + 类型 + 连接状态（2026-10-27 由详情头并入卡头） */
-/* 卡片右上：重读本机注册表。低频、低强调，只给图标 + 悬停说明 */
-.mpp-regreload {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--mk-radius-sm);
-  background: none;
-  color: var(--mk-muted);
-  cursor: pointer;
-}
-.mpp-regreload:hover { background: var(--mk-surface-2); color: var(--mk-ink); }
-.mpp-regreload:disabled { opacity: 0.55; cursor: not-allowed; }
 .mpp-head__id { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+/* 「可调用」弱化后的状态点（2026-11-04）：不占文字位、不抢状态列的注意，
+   只在整行「配了什么」的右侧留一个安静的绿点；口径全靠 title。 */
+.mpp-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--mk-green);
+  opacity: 0.55;
+  flex: none;
+}
 /* 通道类型：平台内置 / 自建通道 */
 .mpp-type {
   padding: 1px 7px;
@@ -724,9 +601,7 @@ defineExpose({ refresh, openPull, openHostPull })
   font-size: var(--mk-fs-micro);
 }
 /* 对话模型列表：与向量 / 重排配置区同一套「身份 + 状态 + 行内动作」语言，不用列头表格 */
-/* 行悬停要通栏到卡片内缘（两侧 16px 槽），但行内文字必须回到槽内——
-   用「列表 -16px + 行 16px」而不是原先的 -10px + 10px：那个数比槽小，
-   悬停底色反而溢出卡片边框 6px（实测行背景 x=255、卡片边框 264）。 */
+/* 行悬停通栏到卡片内缘、行内文字回到槽内：列表 −16px + 行 16px（2026-11-04 回到单列后又适用两侧）。 */
 .mpp-models__list { display: grid; margin: 0 -16px; }
 .mpp-model-row {
   display: flex;
@@ -745,9 +620,6 @@ defineExpose({ refresh, openPull, openHostPull })
    没有行高亮就分不清它是从哪一行的 ⋯ 打开的 */
 .mpp-model-row--menu { background: var(--mk-table-row-hover-bg); }
 .mpp-model-row__main { display: grid; gap: 3px; min-width: 0; flex: 1 1 auto; }
-/* ④ 每行的参数摘要：比模型名弱一档、比状态徽标更靠近名字——它是这一行的「配了什么」 */
-.mpp-model-params { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.5; overflow-wrap: anywhere; }
-.mpp-model-params__def { color: var(--mk-faint); }
 .mpp-model-row__idline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
 /* 名称列定宽：能力胶囊因此各行同一起点，不再随模型名长短而参差（2026-11-03 评审）。
    更长的 id 走省略号 + title，不再把后面的胶囊推着走。 */
@@ -770,9 +642,6 @@ defineExpose({ refresh, openPull, openHostPull })
 .mpp-setup__text { display: grid; gap: 4px; min-width: 0; }
 .mpp-setup__text strong { font-size: var(--mk-fs-body); color: var(--mk-ink); }
 .mpp-setup__text span { font-size: var(--mk-fs-micro); line-height: 1.5; color: var(--mk-muted); }
-/* 对话模型区计数：与区名同一基线，弱化处理 */
-/* 条数跟在「已挂载模型」后面，与工具栏右侧的读数分属两端 */
-.mpp-models__count { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; }
 /* 能力标签：跟在模型 ID 后面；没有额外能力时留空，不写占位文案 */
 .mpp-fn__chip {
   display: inline-block; margin-right: 6px; padding: 1px 7px;

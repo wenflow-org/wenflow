@@ -85,14 +85,8 @@ export interface ModelDefinition {
    */
   reasoningReserveTokens?: number;
   /**
-   * 降级候选（主模型在「可降级错误」上耗尽重试后按序尝试）。
-   * 空/未配置 = 不降级（默认）。见 doc/MODEL_GATEWAY_DESIGN.md §4.5。
-   * 注意：当前运行时降级**只换模型名不换端点**，跨供应商候选在保存侧被拒绝（见 §4.5）。
-   */
-  fallbacks?: string[];
-  /**
    * 本地并发上限（同模型同时进行的上游请求数）。未配置 = 不限（默认）。
-   * 超限与上游 429 同构，交回统一退避/降级链路；见 doc/MODEL_GATEWAY_DESIGN.md §4.6。
+   * 超限与上游 429 同构，交回统一退避链路；见 doc/MODEL_GATEWAY_DESIGN.md §4.6。
    */
   maxParallelRequests?: number;
   /**
@@ -204,7 +198,7 @@ function buildEmbeddedFallback(): RegistrySnapshot {
     {
       id: 'deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash', tier: 'chat', provider: 'deepseek', providerId: 'platform',
       supportsThinking: true, supportsReasoningEffort: true, maxOutputTokens: 131072, defaultMaxTokens: 32768,
-      reasoningReserveTokens: 8192, fallbacks: [],
+      reasoningReserveTokens: 8192,
       description: 'V4.1 Flash：标准运行模型（字面 id，2026-09-28 起全链统一）'
     },
     {
@@ -336,7 +330,6 @@ function parseModelEntry(providerId: string, providerName: string, endpoint: { b
     ...(b.defaultMaxTokens != null ? { defaultMaxTokens: asNumber(b.defaultMaxTokens, 'defaultMaxTokens', where) } : {}),
     ...(b.reasoningReserveTokens != null ? { reasoningReserveTokens: asNumber(b.reasoningReserveTokens, 'reasoningReserveTokens', where) } : {}),
     ...(b.maxParallelRequests != null ? { maxParallelRequests: asNumber(b.maxParallelRequests, 'maxParallelRequests', where) } : {}),
-    ...(Array.isArray(b.fallbacks) ? { fallbacks: b.fallbacks.map((x) => String(x).trim()).filter(Boolean) } : {}),
     ...(b.pricing != null ? { pricing: asPricing(b.pricing, where) } : {}),
     ...(typeof b.description === 'string' && b.description.trim() ? { description: b.description.trim() } : {}),
     ...(defaultThinkingMode ? { defaultThinkingMode } : {}),
@@ -686,20 +679,6 @@ export function getModelReasoningReserveTokens(modelId: string): number {
 /** 模型是否支持 `reasoning_effort` 字段。 */
 export function supportsReasoningEffort(modelId: string): boolean {
   return MODEL_MAP.get(modelId)?.supportsReasoningEffort ?? false;
-}
-
-/** 取模型的降级候选（已过滤不存在的模型 id 与重复项）；未配置返回空数组。 */
-export function getModelFallbacks(modelId: string): string[] {
-  const declared = MODEL_MAP.get(modelId)?.fallbacks ?? [];
-  const seen = new Set<string>([modelId]);
-  const out: string[] = [];
-  for (const id of declared) {
-    const trimmed = typeof id === 'string' ? id.trim() : '';
-    if (!trimmed || seen.has(trimmed) || !MODEL_MAP.has(trimmed)) continue;
-    seen.add(trimmed);
-    out.push(trimmed);
-  }
-  return out;
 }
 
 /**

@@ -2,7 +2,8 @@
  * 模型能力推断（2026-10-28 用户「元数据字典推断 / Zero-Config 引入」）。
  *
  * 只做「从上游 id 猜用途与能力」这一件事，猜不中的模型仍可手动编辑。
- * 用途判断优先于能力判断：向量 / 重排模型不应出现在对话模型的待选清单里。
+ * 2026-11-04 用户「我们不做模型类型区分」：判出的用途只服务「向量 / 重排卡按用途拉取」，
+ * 不再把模型挡在添加清单之外，也不再给「建议归入哪张卡」的判词。
  */
 
 export type ModelRole = 'chat' | 'embedding' | 'rerank' | 'image'
@@ -69,14 +70,6 @@ export function inferenceLabels(inference: ModelInference): string[] {
   if (inference.code) labels.push('代码')
   if (inference.tool) labels.push('Tool')
   return labels
-}
-
-/** 模型类型建议：非对话模型在选择器里提示应去哪张卡配置。 */
-export function roleSuggestion(role: ModelRole): string {
-  if (role === 'embedding') return '建议归入向量模型'
-  if (role === 'rerank') return '建议归入重排模型'
-  if (role === 'image') return '图像 / 视频生成，不在此添加'
-  return ''
 }
 
 /** 从上游 id 派生的可读名（只用于选择器辅助识别，不落库、不替代真实 id）。 */

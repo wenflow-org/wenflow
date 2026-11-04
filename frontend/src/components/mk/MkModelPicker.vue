@@ -48,8 +48,7 @@
             class="mk-mp__opt"
             :class="{
               'is-active': row.index === activeIndex,
-              'is-selected': row.opt.value === modelValue,
-              'is-mismatch': row.opt.tier && tier && row.opt.tier !== tier
+              'is-selected': row.opt.value === modelValue
             }"
             role="option"
             :aria-selected="row.opt.value === modelValue"
@@ -63,7 +62,6 @@
             </span>
             <span class="mk-mp__meta">
               <span class="mk-mp__tags">
-                <span v-if="row.opt.tier" class="mk-badge mk-badge--muted">{{ tierText(row.opt.tier) }}</span>
                 <span v-if="row.opt.thinking" class="mk-badge mk-badge--muted" title="支持思考模式">思考</span>
                 <span v-if="row.opt.reasoning" class="mk-badge mk-badge--muted" title="支持推理强度">强度</span>
                 <span v-if="row.opt.vision" class="mk-badge mk-badge--muted" title="支持图片输入">视觉</span>
@@ -92,8 +90,9 @@
  *
  * 行为约定：
  * - 未选项由 allowInherit 提供「继承…」一行，空输入不再承担继承语义；
- * - allowCustom 允许把搜索词直接当模型 ID 提交（别名、聚合网关 id 等注册表外的合法值）；
- * - tier 只用于标注「层级不同」（该选项仍可选，由父组件决定是否同步层级），不做静默过滤。
+ * - allowCustom 允许把搜索词直接当模型 ID 提交（别名、聚合网关 id 等注册表外的合法值）。
+ * （2026-11-04 撤掉 tier 的展示与「层级不同」标注：目录里的 chat / reasoning 是模型分类，
+ *   不是选择器要让运营做的决定；平台只有一档默认，长不长思考由调用方的思考模式决定。）
  */
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { ChevronDown } from 'lucide-vue-next'
@@ -102,6 +101,7 @@ export interface MkModelOption {
   /** 模型 ID 或逻辑别名；空字符串 = 继承 */
   value: string
   label?: string
+  /** 目录里的模型分类（chat / reasoning）：只作数据，选择器不再展示，也不据此过滤 */
   tier?: string
   /** 分组名（缺省用 providerName，再缺省归到「模型」） */
   group?: string
@@ -126,8 +126,6 @@ const props = withDefaults(
     inheritLabel?: string
     /** 允许把搜索词当模型 ID 提交 */
     allowCustom?: boolean
-    /** 当前层级：仅用于标注层级不同的候选 */
-    tier?: string | null
     /** 不可选的模型 ID（主模型、已选备用） */
     exclude?: string[]
     disabled?: boolean
@@ -139,7 +137,6 @@ const props = withDefaults(
     allowInherit: false,
     inheritLabel: '用平台默认模型',
     allowCustom: true,
-    tier: null,
     exclude: () => [],
     disabled: false,
     compact: false
@@ -203,12 +200,6 @@ function priceText(o: MkModelOption): string {
   const hasOut = typeof o.priceOut === 'number'
   if (!hasIn && !hasOut) return ''
   return `入 ${hasIn ? o.priceIn : '—'} / 出 ${hasOut ? o.priceOut : '—'}`
-}
-
-/** 层级是后端枚举码（chat / reasoning），上屏走中文；未知值原样保留，避免硬造词 */
-const TIER_TEXT: Record<string, string> = { chat: '对话', reasoning: '推理' }
-function tierText(t?: string): string {
-  return t ? TIER_TEXT[t] ?? t : ''
 }
 
 /** 过滤后的候选（继承行不参与过滤，始终置顶） */
@@ -434,7 +425,6 @@ onBeforeUnmount(() => {
 }
 .mk-mp__opt.is-active { background: var(--mk-surface-2); }
 .mk-mp__opt.is-selected { box-shadow: inset 2px 0 0 var(--mk-blue); }
-.mk-mp__opt.is-mismatch .mk-mp__id { color: var(--mk-muted); }
 .mk-mp__opt-main { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex-wrap: wrap; }
 .mk-mp__id { font-size: var(--mk-fs-body); overflow-wrap: anywhere; }
 .mk-mp__opt-label { color: var(--mk-faint); font-size: var(--mk-fs-micro); }

@@ -185,7 +185,7 @@
 
     <!-- ===== 批量模型配置（2026-10-24 用户「这个页面和 Skill 内部运行时重复了」）=====
          跨 Skill 的对照表与批量套用不属于「点开某一个 Skill」的流程，但也不该再占一个
-         一级页签：同一份模型/参数/备用链在详情「运行时」里已经能逐项改。收进页头弹窗，
+         一级页签：同一份模型/参数在详情「运行时」里已经能逐项改。收进页头弹窗，
          页签只留运行与评估；旧 ?tab=model-routing 深链由路由监听打开本弹窗。 -->
     <Teleport to="body">
       <div v-if="bulkOpen" ref="bulkMaskRef" class="mk-modal">
@@ -202,8 +202,7 @@
           </div>
           <div class="mk-modal__body">
             <!-- 读数带（原「模型路由」页签的页面级读数槽位）：前 3 张从 skills 列表 +
-                 coverage 派生（去重模型数 / 已路由 Skill 数 / 主模型覆盖占比）；降级策略另读
-                 只读的 /admin/model-registry，把「registry 默认」解析成实际链，拉不到显 — 不编造 -->
+                 coverage 派生（去重模型数 / 已路由 Skill 数 / 主模型覆盖占比）。 -->
             <section class="mk-kpi-grid" aria-label="Skill 模型路由统计">
               <MkKpi label="承载模型" :value="routeModelCount" />
               <!-- 2026-10-31 三轮评审：本卡 29 与下方覆盖表「共 31 个技能」上下相距 20px，
@@ -211,20 +210,15 @@
                    两个数字天然一致，悬停只留一句「这一行数的是什么」。 -->
               <MkKpi label="已路由 Skill" :value="routedSkillCount" :hint="coverageReady ? '覆盖表已登记的路由行数（含未入目录的平台内部 / 工具 Skill）' : ''" />
               <MkKpi label="主模型覆盖" :value="primaryCoverageText" />
-              <!-- 降级策略：真实口径 = 自定义兜底链计数；无自定义链时给出 registry 默认链的
-                   解析结果（F7-5：空数组=「无（空链）」）。registry 未加载显 —，不伪装 -->
-              <MkKpi label="降级策略" :value="fallbackPolicyText" />
             </section>
             <SkillModelCoverage
               embedded
               :skill-names="skillNamesBySkill"
               :agent-labels="agentLabelsBySkill"
               :completion="completionBySkill"
-              :fallback-info="fallbackBySkill"
               :rec-loading="recLoading"
               :rec-error="recError"
               :platform-default-model="registryDefaultModel"
-              :platform-default-reasoning-model="registryDefaultReasoningModel"
               @applied="refreshCoverage"
               @open-skill="openSkillFromBulk"
             />
@@ -489,10 +483,10 @@ function healthLabel(health: Health): string {
 }
 
 /* ================= 路由 · 版本元数据（P1① 原型列结构的数据来源） =================
-   原型 renderSkillHub 1662-1706 的 8 列里，版本/路由模型/备用模型三列不在 live.ts 的
+   原型 renderSkillHub 1662-1706 的 8 列里，版本/路由模型两列不在 live.ts 的
    LiveSkillProfile（id/name/category/agentId/agentName）里，故本页直接取两个只读端点：
    - GET /admin/skills（同 live 注册表源）：promptVersion / promptName + description
-   - GET /admin/skill-model-configs/coverage：生效 model / fallbackChain（未配置=平台默认）
+   - GET /admin/skill-model-configs/coverage：生效 model（未配置=平台默认）
    列可得性核查：
      Skill ✓ / 归属 Agent ✓ / Prompt 版本 ✓ / 路由模型 ✓ / 调用 ✓（stats.callCount，窗口随筛选）
      / P95 ✗（后端仅日志聚合 p50/p99，无技能级 P95 → 占位「—」）/ 通过率 ✓（stats.successRate）
@@ -504,7 +498,7 @@ function healthLabel(health: Health): string {
    ※ 状态声明必须在 useTableSort 之前（版本/路由排序访问器在 setup 期就可能被求值，
      放到下方会撞 TDZ：恢复上次排序为「版本」时页面直接白屏）。 */
 interface SkillMetaEntry { promptVersion: number | null; promptName: string; description: string }
-interface SkillRouteEntry { model: string | null; fallbackChain: string[] | null; tier: string }
+interface SkillRouteEntry { model: string | null; tier: string }
 
 const skillMetaById = ref<Map<string, SkillMetaEntry>>(new Map())
 const coverageById = ref<Map<string, SkillRouteEntry>>(new Map())
@@ -551,8 +545,8 @@ const sortSelect = computed({
 })
 
 /* 覆盖矩阵复用运行表的路由上下文（2026-10-24 合并两张重复表）：
-   归属 Agent、完成度、备用链解析都从这里取，矩阵不再另查一份。
-   computed 惰性求值，函数声明可后置（fallbackOf / completionBadgeOf 在下方定义）。 */
+   归属 Agent、完成度都从这里取，矩阵不再另查一份。
+   computed 惰性求值，函数声明可后置（completionBadgeOf 在下方定义）。 */
 const agentLabelsBySkill = computed<Record<string, string>>(() =>
   Object.fromEntries([
     ...cards.value.map((s) => [s.id, agentLabelOf(s)]),
@@ -575,9 +569,6 @@ const completionBySkill = computed<Record<string, { text: string; cls: string; t
   }
   return out
 })
-const fallbackBySkill = computed<Record<string, { text: string; title: string }>>(() =>
-  Object.fromEntries(cards.value.map((s) => [s.id, { text: fallbackOf(s.id), title: fallbackTitleOf(s.id) }]))
-)
 
 const filtered = computed(() => {
   let list = cards.value
@@ -738,10 +729,10 @@ watch(liveRefreshSeq, () => {
   void refreshCoverage()
 })
 
-/* 弹窗里的「备用模型」列依赖 registry 兜底链（/admin/model-registry）：懒加载，
-   打开时才拉；拉取失败（registryReady 仍 false）时下次打开自动重试 */
+/* 弹窗里的「平台默认」展示依赖 registry 解析后的默认模型（/admin/model-registry）：懒加载，
+   打开时才拉；拉取失败（registryDefaultModel 仍空）时下次打开自动重试 */
 watch(bulkOpen, (open) => {
-  if (open && !registryReady.value) void refreshRegistry()
+  if (open && !registryDefaultModel.value) void refreshRegistry()
 })
 
 /** 完成度五档文案（draft → live）；文案单源：glossaryMeta.ts（与后端 glossary-content 对齐）。
@@ -786,50 +777,23 @@ function recGateDetail(completion: SkillCompletion): string {
   return '全部门槛通过'
 }
 
-/* ---- registry 兜底链（F7-5，只读 /admin/model-registry）----
-   运行时兜底来源 = skill 级 fallbackChain ?? 主模型在 llm-providers.json 的 fallbacks
-   （executor.ts:378-410 / :760，超过运行时候选上限的尾部不生效）。
-   「备用模型」列与「降级策略」KPI 必须给出解析后的实际链：
-   显式空数组（deepseek-v4.1-flash，llm-providers.json:24）=「无（空链）」，
-   不把别名成员/其他模型的降级目标张冠李戴；registry 拉不到 → —，不编造。 */
-interface RegistryModelEntry { fallbacks: string[] }
-const registryModels = ref<Map<string, RegistryModelEntry>>(new Map())
-/** 平台默认模型（registry 解析别名后的真值）：未显式配模型的 Skill 按它解析默认链 */
+/* ---- registry 平台默认模型（只读 /admin/model-registry）----
+   未单独指定模型的 Skill 实际跑哪个模型由 registry 解析别名后的真值决定
+   （2026-11-04 用户「去掉降级这个功能，不要」：registry 兜底链 / 冷却已随降级下线，
+   这里只留解析后的平台默认模型 id）。 */
+/** 平台默认模型（registry 解析别名后的真值）：未显式配模型的 Skill 按它显示实际生效模型。
+    平台只有一个默认（2026-11-04 起不再有「推理档平台默认模型」）。 */
 const registryDefaultModel = ref('')
-/** 推理档平台默认模型同上（coverage.tier=reasoning 且未配模型的行） */
-const registryDefaultReasoningModel = ref('')
-/** 运行时最多模型候选数（含主模型）：决定声明链实际生效的前几跳 */
-const registryMaxCandidates = ref(2)
-/** registry 是否成功拉到（空目录不算就绪）：区分「没拉到」与「确实无链」 */
-const registryReady = ref(false)
 
 async function refreshRegistry(): Promise<void> {
   try {
     const res = await adminApiConfigApi.getModelRegistry()
     const data = res.data?.data as {
-      models?: Array<{ id?: string; fallbacks?: unknown }>
-      defaults?: { defaultModelResolved?: string | null; defaultReasoningModelResolved?: string | null }
-      runtime?: { maxModelCandidates?: number }
+      defaults?: { defaultModelResolved?: string | null }
     } | undefined
-    const m = new Map<string, RegistryModelEntry>()
-    for (const model of data?.models || []) {
-      if (!model?.id) continue
-      m.set(model.id, {
-        fallbacks: Array.isArray(model.fallbacks) ? model.fallbacks.filter((x): x is string => typeof x === 'string') : []
-      })
-    }
-    if (!m.size) throw new Error('模型目录为空')
-    registryModels.value = m
     registryDefaultModel.value = String(data?.defaults?.defaultModelResolved || '')
-    registryDefaultReasoningModel.value = String(data?.defaults?.defaultReasoningModelResolved || '')
-    const maxCandidates = Number(data?.runtime?.maxModelCandidates)
-    registryMaxCandidates.value = Number.isFinite(maxCandidates) && maxCandidates >= 1 ? maxCandidates : 2
-    registryReady.value = true
   } catch {
-    registryModels.value = new Map()
     registryDefaultModel.value = ''
-    registryDefaultReasoningModel.value = ''
-    registryReady.value = false
   }
 }
 
@@ -859,13 +823,12 @@ async function refreshSkillMeta(): Promise<void> {
 async function refreshCoverage(): Promise<void> {
   try {
     const res = await adminSkillsApi.getSkillModelCoverage()
-    const data = res.data?.data as { skills?: Array<{ skillId: string; model: string | null; fallbackChain: string[] | null; tier?: string }> } | undefined
+    const data = res.data?.data as { skills?: Array<{ skillId: string; model: string | null; tier?: string }> } | undefined
     const m = new Map<string, SkillRouteEntry>()
     for (const r of data?.skills || []) {
       if (!r.skillId) continue
       m.set(r.skillId, {
         model: r.model ?? null,
-        fallbackChain: Array.isArray(r.fallbackChain) ? r.fallbackChain : null,
         tier: r.tier === 'reasoning' ? 'reasoning' : 'chat'
       })
     }
@@ -930,53 +893,14 @@ function routingTitleOf(skillId: string): string {
   return row.model ? `生效模型：${row.model}` : '未单独配置模型：走平台默认'
 }
 
-/** Skill 无自定义链时，其生效主模型的 registry 默认兜底链（截到运行时生效上限，
-    与 executor MAX_MODEL_CANDIDATES / api-config 总览同口径）；
-    返回 null = 解析不到（registry 未加载 / 模型不在目录），显示层显 — 不猜 */
-function registryChainOf(skillId: string): string[] | null {
-  if (!coverageReady.value || !registryReady.value) return null
-  const row = coverageById.value.get(skillId)
-  const modelId = row?.model
-    || (row?.tier === 'reasoning' ? registryDefaultReasoningModel.value : registryDefaultModel.value)
-  if (!modelId) return null
-  const entry = registryModels.value.get(modelId)
-  if (!entry) return null
-  return entry.fallbacks.slice(0, Math.max(0, registryMaxCandidates.value - 1))
-}
-
-/** 备用模型列（路由表，F7-5）：自定义兜底链优先；无 → 解析 registry 默认链
-    （显式空数组显示「无（空链）」；registry/覆盖未加载或模型不在目录 → 「—」不伪装） */
-function fallbackOf(skillId: string): string {
-  if (!coverageReady.value) return '—'
-  const row = coverageById.value.get(skillId)
-  if (!row) return '—'
-  if (row.fallbackChain && row.fallbackChain.length) return row.fallbackChain.join(' → ')
-  const chain = registryChainOf(skillId)
-  if (chain === null) return '—'
-  return chain.length ? chain.join(' → ') : '无备用模型（配置为空）'
-}
-
-function fallbackTitleOf(skillId: string): string {
-  if (!coverageReady.value) return '模型覆盖数据未加载'
-  const row = coverageById.value.get(skillId)
-  if (!row) return '该 Skill 没有备用模型配置记录，显示 —'
-  if (row.fallbackChain && row.fallbackChain.length) return `Skill 自定义备用模型列表：${row.fallbackChain.join(' → ')}`
-  if (!registryReady.value) return '无自定义备用模型列表。平台默认列表未加载（模型总览拉取失败或未就绪）'
-  const modelId = row.model || (row.tier === 'reasoning' ? registryDefaultReasoningModel.value : registryDefaultModel.value)
-  const chain = registryChainOf(skillId)
-  if (chain === null) return `无自定义备用模型列表。模型「${modelId || '未知'}」不在模型目录，默认列表无法解析`
-  return chain.length
-    ? `无自定义备用模型列表。平台默认（${modelId}）：${chain.join(' → ')}`
-    : `无自定义备用模型列表。平台默认（${modelId}）未配置备用模型，调用失败时不会自动切换`
-}
-
 /** 归属 Agent 文案（路由表 mono 副行） */
 function agentLabelOf(s: { agentId: string; agentName?: string }): string {
   return s.agentName || s.agentId || '工具类'
 }
 
-/* ---- 批量模型配置弹窗的 4 张读数（原「模型路由」页签 KPI 带）---- */
-/** 有生效路由标签的 Skill：**与覆盖表同一份数据**——这四张卡说的就是下面那张覆盖表。
+/* ---- 批量模型配置弹窗的 3 张读数（原「模型路由」页签 KPI 带）----
+   2026-11-04 用户「去掉降级这个功能，不要」：原「降级策略」KPI 随降级整条下线。 */
+/** 有生效路由标签的 Skill：**与覆盖表同一份数据**——这三张卡说的就是下面那张覆盖表。
     2026-11-02 评审：此前取 Skill 目录（29 行）当分母，与表头「共 31 个技能」上下并排
     读作两个数字打架，且 29 行全走同一个模型时算出的「主模型覆盖 100%」与 31 也对不上。
     覆盖表已登记的行本身就是「已路由」（行内 source 三档必居其一），故直接按覆盖表计数。 */
@@ -1002,37 +926,6 @@ const primaryModel = computed(() => {
 const primaryCoverageText = computed(() =>
   routingLabels.value.length ? `${Math.round((primaryModel.value.count / routingLabels.value.length) * 100)}%` : '—'
 )
-/** 降级策略副行：有自定义兜底链数 → 计数；否则 registry 默认（分母同样取覆盖表全量） */
-const fallbackConfigured = computed(() =>
-  [...coverageById.value.values()].filter((r) => (r.fallbackChain?.length ?? 0) > 0).length
-)
-/** 主模型（覆盖占比最高）对应的 registry 模型 id：「平台默认」桶 → registry 解析后的平台默认模型 */
-const primaryModelId = computed(() => {
-  const label = primaryModel.value.label
-  if (!label || label === '未配置') return ''
-  if (label === '平台默认') return registryDefaultModel.value
-  return label
-})
-/** 主模型的 registry 默认链（截到运行时生效上限）；null = 解析不到（不猜） */
-const primaryRegistryChain = computed<string[] | null>(() => {
-  if (!registryReady.value || !primaryModelId.value) return null
-  const entry = registryModels.value.get(primaryModelId.value)
-  if (!entry) return null
-  return entry.fallbacks.slice(0, Math.max(0, registryMaxCandidates.value - 1))
-})
-/** 降级策略卡（原硬编码「自动」删）：真实口径 = 自定义兜底链计数；无自定义链时给出
-    registry 默认链的解析结果（F7-5）；覆盖/registry 未加载显 —，不伪装。
-    2026-10-17 用户走查「怎么高度还不一样呢」：数值位此前塞整句
-    「无备用模型（平台默认配置为空）」，28px 下换两行，把整排 KPI 从 128px 撑到 165px，
-    切页签时读数带高度跳动。数值位只留短状态，原因与链明细进 hint/title。 */
-const fallbackPolicyText = computed(() => {
-  if (!coverageReady.value) return '—'
-  if (fallbackConfigured.value > 0) return `${fallbackConfigured.value} 个自定义`
-  if (!registryReady.value) return '—'
-  const chain = primaryRegistryChain.value
-  if (chain === null) return '—'
-  return chain.length ? `${chain.length} 个备用模型` : '无备用模型'
-})
 </script>
 
 <style scoped>

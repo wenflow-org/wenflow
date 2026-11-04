@@ -49,7 +49,7 @@ export interface ResolvedRoute {
   model: string;
   /** 该模型是否声明支持图片输入（llm-providers.json `vision: true`）；带图请求的放行依据 */
   vision?: boolean;
-  /** 推理模型（用户双模型配置：reasoningModel / 平台 defaultReasoningModel），供两段式调用使用 */
+  /** 推理模型：只剩学习端 BYOK 会填（user_api_configs.reasoningModel）；平台默认推理模型 2026-11-04 已撤，运行时不再读这一档 */
   reasoningModel?: string;
   /** 模型是否由 skill 级配置显式指定（true=skill_model_configs.model 非空；false=继承上层默认） */
   modelExplicit?: boolean;
@@ -72,8 +72,6 @@ export interface ResolvedRoute {
     /** 'json_object'=强制 JSON；'none'=显式关闭通道默认（解析时白名单校验） */
     responseFormat?: string;
   } | null;
-  /** skill 级兜底链（skill_model_configs.fallbackChain 解析值；null=用 registry 默认链）。 */
-  skillFallbackChain?: string[] | null;
   timeoutMs?: number;
   timeoutSource?: 'skill-override' | 'agent-override' | 'route-override' | 'environment-default';
   privateNetworkPolicy: 'runtime' | 'public-only';
@@ -150,10 +148,6 @@ export interface ExecutionContext {
   runId?: string;
   requestPath?: string;
   abortSignal?: AbortSignal;
-  /** 降级来源模型：本次请求是作为 fallback 被发起的（不发给上游，仅用于遥测/日志） */
-  fallbackFrom?: string;
-  /** 已尝试过的模型轨迹（含首跳主模型）；用于允许最多 2 跳 fallback 且防环 */
-  fallbackTrail?: string[];
   /** 流式模式下逐段透传内容增量；与 request.stream 配合启用流式执行路径 */
   onStreamChunk?: (delta: string) => void;
   /**
