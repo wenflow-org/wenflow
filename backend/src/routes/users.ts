@@ -12,13 +12,12 @@ import {
   findSubtasksByIds,
   listUserAgentLogsForGrouping,
   listUserAgentLogsForExport,
-  listUserAgentLogsByConversation,
   findUserAgentLogById,
   markOnboardingCompleted,
 } from '../services/users/user.repo';
 import {
   parseAgentLogGroupId,
-  buildCollapsedAgentLogGroup,
+  collapseAgentLogGroups,
 } from '../services/users/agent-log-grouping';
 import { rejectProjectionAccess } from '../middleware/projection-access.middleware';
 import { learnerSnapshotRefreshService } from '../services/learner/LearnerSnapshotRefreshService';
@@ -409,170 +408,9 @@ router.get('/me/agent-logs', async (req, res, next) => {
     // 因此先取该用户全量（有上限）原始行，折叠成组后再对组做 slice/total。
     const logs = await listUserAgentLogsForGrouping(where);
 
-    const parseMetadata = (metadata: string | null) => {
-      if (!metadata) return {} as Record<string, any>;
-      try {
-        return JSON.parse(metadata) as Record<string, any>;
-      } catch {
-        return {} as Record<string, any>;
-      }
-    };
-
-    const getLogSource = (log: {
-      id: string;
-      agentId: string;
-      sourceEntry: string;
-    }) => {
-      if (log.id.startsWith('acl_')) return 'business';
-      if (log.agentId === 'system-call' || log.agentId === 'unknown') return 'infrastructure';
-      return 'runtime';
-    };
-
-    const sourcePriority: Record<string, number> = {
-      business: 3,
-      runtime: 2,
-      infrastructure: 1,
-    };
-
-    const dedupeMap = new Map<string, any>();
-    // 会话级折叠：goal/path 按 conversationId 归组（skill 层 metadata 已注入 conversationId；
-    // path 阶段子调用 stage-designer/kc-mapper 通过 goal→path 的 conversationId 一并归到同一会话组）。
-    // 目标：goal 对话多轮、path 多次子调用不再逐条刷屏，折叠成「会话 × N 次」单条（可展开明细）。
-    const isConversationAgent = (agent: string) =>
-      agent === 'skill:goal-conversation'
-      || agent === 'skill:path-planning'
-      || agent === 'skill:path-reviewer'
-      || agent === 'skill:stage-designer'
-      || agent === 'skill:kc-mapper'
-      || agent === 'path-agent';
-    const convKeyOf = (agent: string, metadata: Record<string, any>) => {
-      if (!isConversationAgent(agent)) return null;
-      // path-agent 阶段流水日志用 sourceConversationId；其余 skill 用 conversationId/sessionId
-      const conv = metadata.sourceConversationId
-        || metadata.conversationId
-        || metadata.sessionId
-        || null;
-      if (!conv) return null;
-      return agent === 'skill:goal-conversation' ? `goal:${conv}` : `path:${conv}`;
-    };
-    for (const log of logs) {
-      const metadata = parseMetadata(log.metadata);
-      const traceId = log.traceId || metadata.traceId || '';
-      const secondBucket = log.calledAt.toISOString().slice(0, 19);
-      const dedupeKey = traceId
-        ? `${traceId}|${log.agentId}|${secondBucket}`
-        : `${log.agentId}|${secondBucket}`;
-
-      const currentSource = getLogSource(log as any);
-      const existing = dedupeMap.get(dedupeKey);
-      if (!existing) {
-        dedupeMap.set(dedupeKey, { ...log, logSource: currentSource });
-      } else {
-        const existingPriority = sourcePriority[existing.logSource] || 0;
-        const currentPriority = sourcePriority[currentSource] || 0;
-        if (currentPriority > existingPriority) {
-          dedupeMap.set(dedupeKey, { ...log, logSource: currentSource });
-        }
-      }
-    }
-
-    /* 同一 trace 的业务行与 api-gateway 行是两条日志（agentId 不同、不合并），
-       但模型名只写在网关行的 metadata 里。先按 traceId 建索引，折叠后提到业务行顶层，
-       用户侧「模型」列才显示实际模型而不是笼统的「内置模型」。 */
-    const modelByTrace = new Map<string, string>();
-    for (const value of dedupeMap.values()) {
-      const metadata = parseMetadata(value.metadata);
-      const model = typeof metadata.model === 'string' ? metadata.model.trim() : '';
-      const traceId = String(value.traceId || metadata.traceId || '');
-      if (model && traceId && !modelByTrace.has(traceId)) modelByTrace.set(traceId, model);
-    }
-
-    // 组：key=goal/path 会话；rep=组内优先级最高的代表日志；items=组内全部（去重后）调用明细
-    const groupMap = new Map<string, { rep: any; items: any[] }>();
-    for (const value of dedupeMap.values()) {
-      const metadata = parseMetadata(value.metadata);
-      const agent = String(value.agentId || '');
-      const groupKey = convKeyOf(agent, metadata);
-      if (!groupKey) continue;
-      const currentSource = value.logSource || 'runtime';
-      const cur = groupMap.get(groupKey);
-      if (!cur) {
-        groupMap.set(groupKey, { rep: value, items: [value] });
-      } else {
-        groupMap.set(groupKey, {
-          rep: (sourcePriority[currentSource] || 0) > (sourcePriority[cur.rep.logSource || 'runtime'] || 0)
-            ? value
-            : cur.rep,
-          items: [...cur.items, value],
-        });
-      }
-    }
-
-    const collapsed = new Map<string, any>();
-    for (const [groupKey, { rep, items }] of groupMap) {
-      if (items.length <= 1) {
-        collapsed.set(groupKey, rep);
-        continue;
-      }
-      // 组时间取最近一次调用（排序/展示用）；id 用稳定 groupKey 供前端 dismiss/key
-      const itemsAsc = [...items].sort(
-        (a, b) => new Date(a.calledAt).getTime() - new Date(b.calledAt).getTime()
-      );
-      const lastAt = itemsAsc[itemsAsc.length - 1].calledAt;
-      // path 组代表优先 path-planning（用户语义「生成学习路径」），避免 path-agent 阶段流水抢占展示
-      const groupRep = groupKey.startsWith('path:')
-        ? itemsAsc.find((i) => String(i.agentId) === 'skill:path-planning')
-          || itemsAsc.find((i) => String(i.agentId) === 'skill:path-reviewer')
-          || rep
-        : rep;
-      collapsed.set(groupKey, {
-        ...groupRep,
-        id: groupKey,
-        calledAt: lastAt,
-        groupCount: items.length,
-        // 业务层代表行通常没有 model；模型名在同 trace 的网关行 metadata 里
-        model: modelByTrace.get(String(groupRep.traceId || '')) ?? null,
-        groupItems: itemsAsc.map((item) => ({
-          id: item.id,
-          agentId: item.agentId,
-          calledAt: item.calledAt,
-          success: item.success,
-          durationMs: item.durationMs,
-          errorCode: item.errorCode,
-          // path-agent 阶段流水透传 phase，前端可显示「主结构 / 阶段任务」等阶段名
-          phase: (() => {
-            try {
-              const m = item.metadata ? JSON.parse(item.metadata) : {};
-              return (m.phase && typeof m.phase === 'string') ? m.phase : null;
-            } catch { return null; }
-          })(),
-        })),
-      });
-    }
-    // 未折叠进任何会话组的日志（teaching-turn/session-wrapup/peer 等）仍逐条输出
-    for (const [key, value] of dedupeMap) {
-      const metadata = parseMetadata(value.metadata);
-      const agent = String(value.agentId || '');
-      const groupKey = convKeyOf(agent, metadata);
-      if (groupKey && collapsed.has(groupKey)) continue;
-      // 未归组的 path-agent 阶段流水：附上 phase，前端据此显示「主结构/阶段任务」而非裸「agent」
-      let item = value;
-      if (agent === 'path-agent' && typeof metadata.phase === 'string') {
-        item = { ...value, phase: metadata.phase };
-      }
-      collapsed.set(`item:${key}`, item);
-    }
-
-    const sortedGroups = Array.from(collapsed.values())
-      .map((log) => {
-        const ownMetadata = parseMetadata(log.metadata);
-        const model = (typeof log.model === 'string' && log.model.trim())
-          || (typeof ownMetadata.model === 'string' ? ownMetadata.model : '')
-          || modelByTrace.get(String(log.traceId || ownMetadata.traceId || ''))
-          || '';
-        return { ...log, model: model.trim() ? model : null };
-      })
-      .sort((a, b) => new Date(b.calledAt).getTime() - new Date(a.calledAt).getTime());
+    // #225：折叠管线单一事实源在 agent-log-grouping；详情端点用同一个 where 取数后
+    // 调用同一个函数，两处 groupCount/groupItems/model 由构造保证一致。
+    const sortedGroups = collapseAgentLogGroups(logs);
 
     // total 与 logs 同口径：total = 折叠后的组数，分页切片也落在组上
     const total = sortedGroups.length;
@@ -640,13 +478,17 @@ router.get('/me/agent-logs/:logId', async (req, res, next) => {
     const { logId } = req.params;
 
     // #220：列表把同一会话折叠成一条，`id` 是合成组键（`path:`/`goal:<conversationId>`），
-    // 不是 agent_call_logs 主键，直接 findFirst 必然 404。按组键反查该会话的真实行，
-    // 用与列表一致的折叠口径重建成同一条组记录（含 groupItems / groupCount），
-    // 让列表返回的 id 保持稳定且可详查。
+    // 不是 agent_call_logs 主键，直接 findFirst 必然 404。这里用与列表**完全相同**的
+    // 取数口径与折叠管线（同一个 buildAgentLogWhere + 同一个 collapseAgentLogGroups），
+    // 再从结果里取该组键，让列表返回的 id 稳定可详查。
+    // #225：只共享 where 不够——列表的去重是跨会话的（key 不含会话），且模型名要从
+    // 不带会话 id 的网关行补。任何一处单独实现都会让同一条折叠行的 groupCount /
+    // groupItems / model 在列表与详情之间漂移，因此折叠只保留一份实现。
     const groupId = parseAgentLogGroupId(logId);
     if (groupId) {
-      const groupRows = await listUserAgentLogsByConversation(userId, groupId.conversationId);
-      const group = buildCollapsedAgentLogGroup(groupId.groupKey, groupRows);
+      const scopeWhere = buildAgentLogWhere(userId, req.query);
+      const logs = await listUserAgentLogsForGrouping(scopeWhere);
+      const group = collapseAgentLogGroups(logs).find((entry) => entry.id === logId);
       if (!group) {
         return res.status(404).json({
           success: false,

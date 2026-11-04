@@ -381,6 +381,22 @@ onMounted(() => {
   loadLogs();
 });
 
+/**
+ * 列表 / 详情 / 导出共用的筛选口径。详情也必须带上同一组筛选：
+ * 折叠组的 groupCount/groupItems 由后端用列表 where 复算，不带筛选就会退回默认口径，
+ * 出现「同一条折叠行点进去条数变了」（#225）。
+ */
+const buildFilterParams = (): AgentLogQueryParams => {
+  const params: AgentLogQueryParams = {};
+  if (filters.agentId) params.agentId = filters.agentId;
+  if (filters.capabilityType) params.capabilityType = filters.capabilityType;
+  if (typeof filters.success === 'boolean') params.success = filters.success;
+  params.includeSystem = filters.includeSystem;
+  if (filters.startDate) params.startDate = filters.startDate;
+  if (filters.endDate) params.endDate = filters.endDate;
+  return params;
+};
+
 const loadLogs = async () => {
   // 竞态守卫：seq 代际号 last-wins，快速翻页/连点查询时丢弃过期响应
   const seq = ++loadLogsSeq;
@@ -389,15 +405,9 @@ const loadLogs = async () => {
   try {
     const params: AgentLogQueryParams = {
       page: pagination.page,
-      limit: pagination.limit
+      limit: pagination.limit,
+      ...buildFilterParams()
     };
-    
-    if (filters.agentId) params.agentId = filters.agentId;
-    if (filters.capabilityType) params.capabilityType = filters.capabilityType;
-    if (typeof filters.success === 'boolean') params.success = filters.success;
-    params.includeSystem = filters.includeSystem;
-    if (filters.startDate) params.startDate = filters.startDate;
-    if (filters.endDate) params.endDate = filters.endDate;
 
     const res = await getAgentLogs(params);
     if (seq !== loadLogsSeq) return; // 已有更新的请求：丢弃本次过期响应
@@ -478,7 +488,7 @@ const viewDetail = async (log: AgentLogItem) => {
   detailLoading.value = true;
 
   try {
-    const res = await getAgentLogDetail(log.id);
+    const res = await getAgentLogDetail(log.id, buildFilterParams());
     if (seq !== detailSeq) return;
     const detail = res?.data || res;
     if (detail) {
@@ -497,13 +507,7 @@ const exportLogs = async (format: 'json' | 'csv') => {
   if (exporting.value) return;
   exportingFormat.value = format;
   try {
-    const params: AgentLogQueryParams = { format };
-    if (filters.agentId) params.agentId = filters.agentId;
-    if (filters.capabilityType) params.capabilityType = filters.capabilityType;
-    if (typeof filters.success === 'boolean') params.success = filters.success;
-    params.includeSystem = filters.includeSystem;
-    if (filters.startDate) params.startDate = filters.startDate;
-    if (filters.endDate) params.endDate = filters.endDate;
+    const params: AgentLogQueryParams = { format, ...buildFilterParams() };
 
     const data = await exportAgentLogs(params);
     const blob = format === 'csv'

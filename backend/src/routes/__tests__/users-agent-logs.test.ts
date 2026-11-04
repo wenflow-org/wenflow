@@ -408,7 +408,7 @@ describe('users agent log routes', () => {
       agentLogMocks.findFirst.mockClear();
       const detailRes = createResponse();
       await routes['GET /me/agent-logs/:logId'](
-        { user: { userId: 'user-1' }, params: { logId: row.id } },
+        { user: { userId: 'user-1' }, params: { logId: row.id }, query: {} },
         detailRes,
         jest.fn()
       );
@@ -427,7 +427,7 @@ describe('users agent log routes', () => {
     // 组明细保留 phase，与列表口径一致
     const pathDetail = createResponse();
     await routes['GET /me/agent-logs/:logId'](
-      { user: { userId: 'user-1' }, params: { logId: 'path:gc_path' } },
+      { user: { userId: 'user-1' }, params: { logId: 'path:gc_path' }, query: {} },
       pathDetail,
       jest.fn()
     );
@@ -439,7 +439,7 @@ describe('users agent log routes', () => {
     const res = createResponse();
 
     await routes['GET /me/agent-logs/:logId'](
-      { user: { userId: 'user-1' }, params: { logId: 'acl_real' } },
+      { user: { userId: 'user-1' }, params: { logId: 'acl_real' }, query: {} },
       res,
       jest.fn()
     );
@@ -459,7 +459,7 @@ describe('users agent log routes', () => {
     const res = createResponse();
 
     await routes['GET /me/agent-logs/:logId'](
-      { user: { userId: 'user-1' }, params: { logId: 'path:gc_missing' } },
+      { user: { userId: 'user-1' }, params: { logId: 'path:gc_missing' }, query: {} },
       res,
       jest.fn()
     );
