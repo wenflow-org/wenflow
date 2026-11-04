@@ -204,14 +204,26 @@ if [ "$NON_INTERACTIVE" != true ]; then
     [ -n "$input" ] && set_env "AI_API_URL" "$input"
 
     CURRENT=$(get_env "AI_MODEL")
-    [ -z "$CURRENT" ] && CURRENT="deepseek-v4-flash"
+    [ -z "$CURRENT" ] && CURRENT="deepseek-v4.1-flash"
     read -r -p "  AI_MODEL [$CURRENT]: " input
     [ -n "$input" ] && set_env "AI_MODEL" "$input"
 
     CURRENT=$(get_env "AI_MODEL_REASONING")
-    [ -z "$CURRENT" ] && CURRENT="deepseek-v4-pro"
+    [ -z "$CURRENT" ] && CURRENT="deepseek-v4.1-flash"
     read -r -p "  AI_MODEL_REASONING [$CURRENT]: " input
     [ -n "$input" ] && set_env "AI_MODEL_REASONING" "$input"
+
+    # 向量 / 重排（基础设施模型）：只作首次部署种子与回落，管理台「模型与接入」优先。
+    # 留空 = 不启用语义层（fail-open 回退关键词/窗口），不影响启动。
+    CURRENT=$(get_env "EMBEDDING_API_URL")
+    read -r -p "  EMBEDDING_API_URL (向量模型地址，留空 = 不启用) [$CURRENT]: " input
+    [ -n "$input" ] && set_env "EMBEDDING_API_URL" "$input"
+    CURRENT=$(get_env "EMBEDDING_API_KEY")
+    read -r -p "  EMBEDDING_API_KEY (向量模型密钥，回车沿用当前): " input
+    [ -n "$input" ] && set_env "EMBEDDING_API_KEY" "$input"
+    CURRENT=$(get_env "RERANK_API_URL")
+    read -r -p "  RERANK_API_URL (重排模型地址，留空 = 不启用) [$CURRENT]: " input
+    [ -n "$input" ] && set_env "RERANK_API_URL" "$input"
 
     echo ""
 

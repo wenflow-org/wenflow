@@ -48,6 +48,11 @@
 
 ### 2.2 部署期脚本只写 4 个 env，且与运行时真相不同源
 
+> **2026-11-04 更新**：这一节原本还记着两个缺陷，已修——脚本默认值曾写**已下线的模型 id**
+> （`deepseek-v4-flash` / `deepseek-v4-pro`，写入 `.env` 后启动即命中「已下线」归一化），
+> 现已改 `deepseek-v4.1-flash`；并且两个脚本与 `.env.production.example` 都补上了
+> embedding / rerank 三个变量（留空 = 不启用语义层，不影响启动）。下面的「四个变量」按修订前记。
+
 - `setup-env.ps1:108-154` 与 `docker-start.sh:167-214` 只往 `backend/.env` 写 `AI_API_URL` / `AI_API_KEY` / `AI_MODEL` / `AI_MODEL_REASONING` 四个变量；`.env.production.example:47-50` 也只有这四个，**没有 embedding/rerank**。
 - 运行时并不直接读这四个变量作为主路径——它们只是 `platform_api_configs` 为空时的**兜底**（`router.ts:594-611` `getFallbackConfig`、`apiConfig.service.ts:37-42` 作为默认对象）。真正生效的是 DB 行。
 - 结论：**env 与 UI 不是同一份真相**。env 只是「初始化 DB 默认值」的种子。用户说「脚本还不完善」，本质就是这条种子链没有闭环（写了 env 却不保证落成 DB 行，embedding/rerank 完全没种）。
@@ -207,8 +212,8 @@
 | **P1（向量/重排拉取）✅ 2026-11-04 已实现** | 向量 / 重排卡补「拉取」：配置弹层的模型 ID 旁加「拉取」，用这条能力的连接拉一份上游 `/v1/models`，按用途过滤（与对话侧同一套 `inferModelCapabilities`）后点选填入；独立服务可带草稿连接直接拉（不必先保存一次），但换地址后留空密钥一律拒绝、不回退旧密钥。新增 `POST /admin/infra-models/pull` + 纯函数 `resolveInfraModelsBaseUrl`（从 `…/v1/embeddings` 这类带类型路径的端点反推 base） | 新增 `routes/admin/__tests__/infra-models.pull.test.ts`（真实 express + fetch，6 例）；`InfraModelsPanel.vue`、`infra-models.ts`、`infra-config.ts`、`adminApi.ts` |
 | **P2** | 插件：decision/image 支持多 provider 有序链（与 web 同构），统一「主用→备用」降级 UI 与持久化 | `config/plugin-providers.ts`、`Addons.vue`、`plugin-providers.service.ts`、`routes/admin/plugins.ts` |
 | **P1** | 能力从「静默推断」改「预填 + 逐模型确认再落盘」 | `ModelProvidersPanel.vue`、`ModelEditorDialog.vue`、`PullModelsDialog.vue` |
-| **P2** | 插件：decision/image 支持多 provider 有序链（与 web 同构），统一「主用→备用」降级 UI 与持久化 | `config/plugin-providers.ts`、`Addons.vue`、`plugin-providers.service.ts`、`routes/admin/plugins.ts` |
-| **P2** | 部署脚本闭环：`setup-env.ps1` / `docker-start.sh` / `.env.production.example` 补 embedding/rerank（作为首次 `infraModels` 种子）；文档说明「env 只种 DB、不是运行时真相」 | 脚本 + `doc/DEV_SCRIPTS.md` |
+| **P2（部署脚本）✅ 2026-11-04 已实现** | 部署脚本闭环：`setup-env.ps1` / `docker-start.sh` 的默认模型 id 从**已下线**的 `deepseek-v4-flash` / `deepseek-v4-pro` 改为 `deepseek-v4.1-flash`（写入 `.env` 后启动会命中「已下线」归一化）；两个脚本与 `.env.production.example` 补 embedding / rerank 三个变量（**留空即不启用语义层，不影响启动**，只作首次部署种子与回落） | `setup-env.ps1`、`docker-start.sh`、`backend/.env.production.example` |
+| **P2** | 插件：decision/image 支持多 provider 有序链（与 web 同构），统一「主用→备用」降级 UI 与持久化 —— **设计见 §7，未实现** | `config/plugin-providers.ts`、`Addons.vue`、`plugin-providers.service.ts`、`routes/admin/plugins.ts` |
 | **P3（可选）** | 对称化：视 D2 决定 embedding/rerank 是否搬进 `llm-providers.json`；Skill 覆盖率视图弱化单模型时的覆盖入口 | — |
 
 **验收锚点**：全新库、只配管理员账号、UI 里填 Base URL+Key → 拉取 → 挂 1 个对话模型 → **无需碰 env 即可完成一次真实 LLM 调用**（当前会因 §2.4 失败，修完应通过）。
