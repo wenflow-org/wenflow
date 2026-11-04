@@ -7,13 +7,14 @@
  * 「哪些状态算哪一档」与 total 的口径。
  */
 const mockPrisma = {
-  goal_conversations: { groupBy: jest.fn(), count: jest.fn() },
+  goal_conversations: { groupBy: jest.fn(), count: jest.fn(), findMany: jest.fn() },
   users: { count: jest.fn() },
+  $queryRaw: jest.fn(),
 };
 
 jest.mock('../../../config/database', () => ({ __esModule: true, default: mockPrisma }));
 
-import { bucketGoalConversationStatusCounts } from '../goal-conversation-admin.repo';
+import { bucketGoalConversationStatusCounts, findGoalConversationsForAdmin } from '../goal-conversation-admin.repo';
 
 const rows = (...items: Array<[string, number]>) =>
   items.map(([status, n]) => ({ status, _count: { _all: n } }));
@@ -43,5 +44,41 @@ describe('goal-conversation-admin.repo 状态分桶', () => {
       failed: 0,
     });
     expect(bucketGoalConversationStatusCounts(rows(['FAILED', 2])).failed).toBe(2);
+  });
+});
+
+/**
+ * 列表摘要乱码兜底（2026-11-04）：历史 goal 会话有 description 入库即为 U+FFFD 的乱码行，
+ * 取数层必须改读 collectedData 里的可读 goal，且绝不再把 U+FFFD 原文下发到列表。
+ */
+describe('goal-conversation-admin.repo 列表摘要乱码兜底', () => {
+  const baseRow = (id: string, description: string | null) => ({
+    id, userId: 'u1', status: 'active', stage: 'understanding', description,
+    learningPathId: null, createdAt: new Date(0), updatedAt: new Date(0), completedAt: null,
+    users: { id: 'u1', name: 'n', email: 'e', isVirtualLearner: false },
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it('乱码 description 改读可读 goal；没有可读来源时落「—」，绝不下发 U+FFFD', async () => {
+    mockPrisma.goal_conversations.findMany.mockResolvedValue([
+      baseRow('a', '����ѧ���� Excel'),          // 乱码，但有可读 goal
+      baseRow('b', '\uFFFD\uFFFD 乱码无救'),      // 乱码，且无可读 goal
+      baseRow('c', '正常可读目标'),               // 正常行不受影响
+    ]);
+    mockPrisma.$queryRaw
+      .mockResolvedValueOnce([
+        { id: 'a', goal: null, lg: null, obj: null, tgt: null, cg: '可读目标 A', csg: '可读目标 A' },
+        { id: 'b', goal: null, lg: null, obj: null, tgt: null, cg: null, csg: null },
+      ])
+      .mockResolvedValueOnce([]); // extras 查询（turns/constraints）
+
+    const out = await findGoalConversationsForAdmin({}, 0, 15);
+    const byId = Object.fromEntries(out.map((r: any) => [r.id, r.summary]));
+
+    expect(byId.a).toBe('可读目标 A');
+    expect(byId.b).toBe('—');
+    expect(byId.c).toBe('正常可读目标');
+    expect(out.some((r: any) => r.summary.includes('\uFFFD'))).toBe(false);
   });
 });

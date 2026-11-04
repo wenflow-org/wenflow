@@ -6,11 +6,19 @@ import { Prisma } from '@prisma/client';
  * 列表/详情/状态更新/删除/重生成前置计数/漏斗统计；where 组装（请求筛选语义）留在路由层。
  */
 
+/**
+ * 文本是否为编码损坏（含 U+FFFD 替换符）。2026-11-04：少数历史 goal 会话的 description
+ * 在入库前就已固化乱码，列表摘要对这批行改读 collectedData 里的可读 goal（见取数层）。
+ */
+function isMojibake(text: string | null | undefined): boolean {
+  return !!text && text.includes('\uFFFD');
+}
+
 export async function findGoalConversationsForAdmin(where: Prisma.goal_conversationsWhereInput, skip: number, limit: number) {
   // 列裁剪（2026-10-01 页面性能实测）：列表 1000 行整包输出 20.8MB（collectedData 均摊
   // 16.7KB/行是绝对大头），序列化+传输 2.9s。列表只需要「摘要」，不需要 collectedData
-  // 原文与 messages——摘要分两步取：本查询取 description，随后仅对 description 为空的行
-  // 用 json_extract 库内取 collectedData 的 goal 字段（不整包出库），拼成 summary 返回。
+  // 原文与 messages——摘要分两步取：本查询取 description，随后仅对 description 为空
+  // 或已乱码的行用 json_extract 库内取 collectedData 的 goal 字段（不整包出库），拼成 summary 返回。
   // 抽屉全量走 getDetail 单行查询，不受影响。
   const rows = await prisma.goal_conversations.findMany({
     where,
@@ -42,22 +50,27 @@ export async function findGoalConversationsForAdmin(where: Prisma.goal_conversat
   if (!rows.length) return rows;
 
   // 摘要补齐（与前端 summaryOf 同口径）：description 优先，其次 collectedData 的
-  // goal/learningGoal/objective/target 字段。仅查 description 为空的行。
-  const needGoal = rows.filter((r) => !r.description).map((r) => r.id);
+  // goal/learningGoal/objective/target 字段。description 为空、或本身已是乱码的行才查。
+  // 2026-11-04 修复：历史数据里有写入阶段即已固化为 U+FFFD 的乱码 description（编码问题在
+  // 落库前就坏了，非本页显示问题）；此处仅对这批行改读 collectedData 里 AI 澄清后的可读 goal，
+  // 取不到则落「—」，绝不把乱码原文上屏。只处理确实乱码的行，正常行行为零变化。
+  const needGoal = rows.filter((r) => !r.description || isMojibake(r.description)).map((r) => r.id);
   const goalMap = new Map<string, string>();
   if (needGoal.length) {
-    const goals = await prisma.$queryRaw<Array<{ id: string; goal: string | null; lg: string | null; obj: string | null; tgt: string | null }>>`
+    const goals = await prisma.$queryRaw<Array<{ id: string; goal: string | null; lg: string | null; obj: string | null; tgt: string | null; cg: string | null; csg: string | null }>>`
       SELECT id,
              json_extract(collectedData, '$.goal') AS goal,
              json_extract(collectedData, '$.learningGoal') AS lg,
              json_extract(collectedData, '$.objective') AS obj,
-             json_extract(collectedData, '$.target') AS tgt
+             json_extract(collectedData, '$.target') AS tgt,
+             json_extract(collectedData, '$.collected.goal') AS cg,
+             json_extract(collectedData, '$.collected.surface_goal') AS csg
       FROM goal_conversations
       WHERE id IN (${Prisma.join(needGoal)})
         AND collectedData IS NOT NULL`;
     for (const g of goals) {
-      const v = g.goal || g.lg || g.obj || g.tgt;
-      if (v) goalMap.set(g.id, String(v));
+      const v = g.goal || g.lg || g.obj || g.tgt || g.cg || g.csg;
+      if (v && !isMojibake(String(v))) goalMap.set(g.id, String(v));
     }
   }
 
@@ -95,8 +108,10 @@ export async function findGoalConversationsForAdmin(where: Prisma.goal_conversat
   }
   return rows.map((r) => {
     const extra = extraMap.get(r.id);
+    // 2026-11-04：乱码 description 绝不上屏——可读 goal 优先，取不到就落空占位 '—'（不把 U+FFFD 原文渲染给运营）
+    const rawSummary = goalMap.get(r.id) || r.description || '';
     return Object.assign(r, {
-      summary: r.description || goalMap.get(r.id) || '—',
+      summary: isMojibake(rawSummary) ? '—' : (rawSummary || '—'),
       turns: extra ? extra.turns : null,
       constraints: extra
         ? [extra.availableTime, extra.deadlineText].filter((v): v is string => !!v)

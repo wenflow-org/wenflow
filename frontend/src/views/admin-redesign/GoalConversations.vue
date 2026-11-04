@@ -605,10 +605,13 @@ function statusCellTitle(r: Row): string | undefined {
 
 /** 目标摘要：description 优先，其次 collectedData 里的 goal 字段 */
 function summaryOf(c: Record<string, unknown>): string {
-  if (c.description) return String(c.description)
+  // 2026-11-04：个别历史会话 description 入库即为乱码（U+FFFD），别把方块原文上屏
+  const desc = String(c.description || '')
+  if (desc && !desc.includes('\uFFFD')) return desc
   try {
     const cd = JSON.parse(String(c.collectedData || '{}'))
-    return String(cd.goal || cd.learningGoal || cd.objective || cd.target || '—')
+    const goal = String(cd.goal || cd.learningGoal || cd.objective || cd.target || '')
+    return goal && !goal.includes('\uFFFD') ? goal : '—'
   } catch {
     return '—'
   }
@@ -634,7 +637,11 @@ function mapRow(c: Record<string, unknown>): Row {
     stage,
     // 2026-10-01 列表列裁剪：服务端已按同口径解析 summary（description 优先，
     // 其次 collectedData.goal——该大列不再随列表出库）；summaryOf 仅作旧响应兜底
-    summary: String(c.summary ?? '') || summaryOf(c),
+    // 2026-11-04：服务端若仍下发乱码摘要（历史行），退回 summaryOf 取可读值，避免方块上屏
+    summary: (() => {
+      const s = String(c.summary ?? '')
+      return s && !s.includes('\uFFFD') ? s : summaryOf(c)
+    })(),
     // 澄清轮次/约束条件（2026-10-01 对齐原型两列）：后端库内 JSON 取数带回；旧响应缺省
     turns: typeof c.turns === 'number' ? c.turns : null,
     constraints: Array.isArray(c.constraints) ? (c.constraints as unknown[]).map(String) : [],
