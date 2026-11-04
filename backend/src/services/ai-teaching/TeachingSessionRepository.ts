@@ -889,8 +889,17 @@ export class TeachingSessionRepository {
         result: Record<string, any>;
         revision?: number | null;
       } | null;
+      /**
+       * #216：复用开课走本方法持久化「恢复」快照时，它并不是一个回合提交。
+       * 传 'session.resumed' 表示本次写入**不推进 revision**（除非确实带了新结算），
+       * 事件按会话恢复记录。缺省 'turn.committed' 保持回合语义（revision+1）。
+       */
+      eventKind?: 'turn.committed' | 'session.resumed';
     }
   ): Promise<void> {
+    // 复用开课不是回合：无新结算时不得空转 revision（#216）
+    const resumesSession = payload.eventKind === 'session.resumed';
+    const advanceRevision = !resumesSession || payload.settlement?.revision != null;
     await withTransaction(async (tx) => {
       // 补充槽 materialId 抢救合并（报告 #28）：仅在外发状态存在「待回写的 requested 槽位」时
       // 多读一次当前行走窄合并——等待窗口外零成本；把并发回写的 id 并入本次整包写入。
@@ -922,7 +931,7 @@ export class TeachingSessionRepository {
           operationId: null,
           operationKind: null,
           operationLeaseExpiresAt: null,
-          revision: { increment: 1 },
+          ...(advanceRevision ? { revision: { increment: 1 } } : {}),
           updatedAt: new Date(),
         }
       });
@@ -970,12 +979,23 @@ export class TeachingSessionRepository {
         }, tx as unknown as import('./TeachingMessageIdempotencyService').TeachingOperationLedgerClient);
       }
 
+      // 事件行 revision：有结算用结算 revision（回合对外 revision）；复用开课无结算时取
+      // 当前行 revision（未推进）——恢复事件不再出现「turn.committed + revision=null」的账实不符。
+      const eventRevision = payload.settlement?.revision != null
+        ? payload.settlement.revision
+        : resumesSession
+          ? ((await tx.teaching_sessions.findUnique({
+              where: { id: sessionId },
+              select: { revision: true },
+            }))?.revision ?? null)
+          : null;
+
       await recordSessionEvent({
         sessionId,
-        kind: 'turn.committed',
+        kind: resumesSession ? 'session.resumed' : 'turn.committed',
         actor: 'system',
         status: 'ok',
-        revision: payload.settlement?.revision ?? null,
+        revision: eventRevision,
         payload: {
           messages: payload.messages.length,
           knowledgePoints: payload.knowledgeState.length,
