@@ -602,6 +602,8 @@ html, body {
   .v2-page.state .state__main,
   .v2-page.ach .ach__main,
   .v2-page.history .history__main,
+  /* 2026-11-04 走查补位：知识图谱此前钉 1180 不入名单，宽屏档全场最窄 */
+  .v2-page.km .km__main,
   .v2-page.evaluation-page .evaluation-shell {
     max-width: 1360px;
   }

@@ -163,10 +163,16 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* 2026-11-04 走查：此前 1180 死值是全站唯一不随宽屏加宽的内容容器（学习台等
+   1140→1260@1440→1360@1680 三档），≥1440 起本页反而全场最窄。改成与学习台同一套
+   阶梯：组件内 1140/1260@1440，≥1680 的 1360 由 v2.css 高分屏名单统一管。 */
 .km__main {
-  max-width: 1180px;
+  max-width: 1140px;
   margin: 0 auto;
-  padding: var(--mk-space-6) var(--mk-space-5) var(--mk-space-8);
+  padding: var(--mk-space-6) 28px var(--mk-space-8);
+}
+@media (min-width: 1440px) {
+  .km__main { max-width: 1260px; }
 }
 .km__hero {
   display: flex;
