@@ -77,6 +77,8 @@ export interface PluginChannelView {
   label: string;
   /** 当前生效的 provider 顺序（环境变量优先，缺省用目录默认） */
   order: string[];
+  /** true = 顺序由代码固定，界面上不给排（见 PluginChannelDef.orderFixed） */
+  orderFixed: boolean;
 }
 
 export interface PluginConfigView {
@@ -118,8 +120,11 @@ function secretFieldOf(provider: PluginProviderDef): PluginProviderField | null 
 }
 
 function effectiveField(pluginId: string, provider: PluginProviderDef, field: PluginProviderField): string {
-  const stored = runtime?.[pluginId]?.[provider.id]?.fields?.[field.key];
-  if (stored) return stored;
+  // 内置字段（联网三家上游地址）由代码写死：平台存档不再参与，只留环境变量这一层逃生口。
+  if (!field.builtin) {
+    const stored = runtime?.[pluginId]?.[provider.id]?.fields?.[field.key];
+    if (stored) return stored;
+  }
   return envFirst(field.env) || field.fallback || '';
 }
 
@@ -223,6 +228,7 @@ async function hydrate(): Promise<RuntimeConfig> {
       };
     }
     for (const channel of plugin.channels) {
+      if (channel.orderFixed) continue;
       const order = normalizeOrder(plugin, storedOrders[plugin.id]?.[channel.id]);
       if (order.length) nextOrders[plugin.id][channel.id] = order;
     }
@@ -291,6 +297,8 @@ function resolveOrder(
   plugin: PluginConfigDef,
   channel: PluginConfigDef['channels'][number],
 ): string[] {
+  // 固定顺序的通道（联网搜索 / 抓取）不受平台存档与环境变量影响：顺序就是代码里那一行。
+  if (channel.orderFixed) return [...channel.defaultOrder];
   const stored = runtimeOrders[plugin.id]?.[channel.id];
   if (stored?.length) return [...stored];
   const known = new Set(plugin.providers.map((p) => p.id));
@@ -323,6 +331,7 @@ async function viewOf(plugin: PluginConfigDef): Promise<PluginConfigView> {
       id: channel.id,
       label: channel.label,
       order: resolveOrder(plugin, channel),
+      orderFixed: Boolean(channel.orderFixed),
     })),
     providers: plugin.providers.map((provider) => {
       const cached = runtime?.[plugin.id]?.[provider.id];
@@ -332,7 +341,8 @@ async function viewOf(plugin: PluginConfigDef): Promise<PluginConfigView> {
         configured: isConfigured(plugin.id, provider),
         keySource: cached?.keySource ?? 'none',
         keyHint: cached?.keyHint ?? null,
-        fields: provider.fields.map((field) => ({
+        // 内置字段（上游地址）不上屏：界面只留用户真正要填的那几项
+        fields: provider.fields.filter((field) => !field.builtin).map((field) => ({
           key: field.key,
           label: field.label,
           type: field.type,
@@ -394,11 +404,16 @@ export async function savePluginProviderConfig(
     if (!provider) throw new PluginProviderConfigError(`未知 provider：${providerId}`);
     if (!patch || typeof patch !== 'object') throw new PluginProviderConfigError(`${provider.label} 的配置无效`);
     const nextFields = { ...(pluginStored[providerId] || {}) };
+    // 顺手清掉历史存档里的内置字段（早期版本允许在界面改地址），它们已经不再生效
+    for (const field of provider.fields) if (field.builtin) delete nextFields[field.key];
 
     for (const [key, raw] of Object.entries(patch)) {
       if (key === 'clearKey') continue;
       const field = provider.fields.find((f) => f.key === key);
       if (!field) throw new PluginProviderConfigError(`未知字段：${providerId}.${key}`);
+      if (field.builtin) {
+        throw new PluginProviderConfigError(`${provider.label} 的「${field.label}」由平台内置，不需要也不允许修改`);
+      }
       if (field.secret) {
         const apiKey = typeof raw === 'string' ? raw.trim() : '';
         if (apiKey) {
@@ -427,6 +442,9 @@ export async function savePluginProviderConfig(
   for (const [channelId, raw] of Object.entries(input.orders || {})) {
     const channel = plugin.channels.find((c) => c.id === channelId);
     if (!channel) throw new PluginProviderConfigError(`未知通道：${pluginId}.${channelId}`);
+    if (channel.orderFixed) {
+      throw new PluginProviderConfigError(`${plugin.label}的「${channel.label}」顺序由平台内置，不需要也不允许修改`);
+    }
     if (!Array.isArray(raw)) throw new PluginProviderConfigError(`${channel.label} 的优先级无效`);
     // 保存处比 hydrate 严格：未知 provider 直接拒绝，不静默丢弃（用户点选的一定要落库）
     const known = new Set(plugin.providers.map((p) => p.id));

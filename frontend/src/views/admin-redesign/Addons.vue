@@ -217,6 +217,45 @@
             <p v-if="configTarget?.id === 'web'" class="ac-config-note">
               资料采集不单独配密钥：它复用「搜索 / 抓取」两条通道取数。这两条通道配好，联网的三个成员能力即可用。
             </p>
+            <!-- 联网（2026-11-04 用户「其实这个是写死的，相当于只需要配 key 就行，那么优化设计吧」）：
+                 三家上游的地址是代码内置值，「搜索 / 抓取」的顺序也内置——界面上再摆可填的地址框、
+                 再给一套「主用 / 加入备用」排序控件，等于让运营去改两件已经写死的事。
+                 这一支只留三样：谁已配置、密钥填在哪、依次尝试的顺序是什么。 -->
+            <template v-if="isWebConfig">
+              <p class="ac-config-order">
+                搜索与抓取都按 <b>{{ fixedOrderText }}</b> 依次尝试
+              </p>
+              <section class="ac-config-provider" v-for="provider in configTarget?.providers ?? []" :key="provider.id">
+                <header class="ac-config-provider__head">
+                  <strong class="ac-config-provider__name">{{ provider.label }}</strong>
+                  <span class="ac-config-provider__badges">
+                    <span class="mk-badge" :class="provider.configured ? 'mk-badge--ok' : 'mk-badge--warn'">
+                      {{ provider.configured ? '已配置' : '缺少密钥' }}
+                    </span>
+                  </span>
+                </header>
+                <div class="ac-config-fields">
+                  <label class="mk-field" v-for="field in provider.fields" :key="field.key">
+                    <span class="mk-field__label">{{ field.label }}</span>
+                    <input
+                      v-model="draft[provider.id][field.key]"
+                      class="mk-field__input"
+                      :type="field.type"
+                      :placeholder="fieldPlaceholder(field)"
+                      autocomplete="new-password"
+                    />
+                  </label>
+                </div>
+                <div v-if="provider.keySource === 'db' || clearKeys[provider.id]" class="ac-config-provider__foot">
+                  <button
+                    type="button"
+                    class="mk-link"
+                    @click="toggleClearKey(provider.id)"
+                  >{{ clearKeys[provider.id] ? '取消清除' : '清除已保存密钥' }}</button>
+                </div>
+              </section>
+            </template>
+            <template v-else>
             <!-- 优先级（2026-10-26 用户两次走查：「这个真的很丑」「本身是三选一，然后用户可以
                  自己配置优先级」）：每通道一条链，第一位是主用，其余是备用；顺序由用户自己排，
                  也可以把 provider 加进/移出链。
@@ -293,6 +332,7 @@
                 >{{ clearKeys[provider.id] ? '取消清除' : '清除已保存密钥' }}</button>
               </div>
             </section>
+            </template>
           </div>
           <div class="mk-modal__foot">
             <button type="button" class="mk-btn" @click="closeConfig">取消</button>
@@ -404,7 +444,8 @@ interface PluginProvider {
 interface PluginConfig {
   id: string
   label: string
-  channels: Array<{ id: string; label: string; order: string[] }>
+  /** orderFixed = 顺序由代码固定（联网），界面不给排 */
+  channels: Array<{ id: string; label: string; order: string[]; orderFixed?: boolean }>
   providers: PluginProvider[]
 }
 
@@ -657,6 +698,16 @@ function toggleClearKey(providerId: string) {
   clearKeys.value = { ...clearKeys.value, [providerId]: !clearKeys.value[providerId] }
 }
 
+/** 联网分支：地址内置、顺序内置，弹层只让填密钥（2026-11-04 用户「其实这个是写死的」） */
+const isWebConfig = computed(() => configTarget.value?.id === 'web')
+/** 上面那行只读顺序：两条通道顺序一致时合成一句，不一致时逐条列出（目录里目前一致） */
+const fixedOrderText = computed(() => {
+  const channels = configTarget.value?.channels ?? []
+  const nameOf = (id: string) => providerLabelOf(id)
+  const joined = channels.map((c) => (orderDraft.value[c.id] ?? c.order).map(nameOf).join(' → '))
+  if (!joined.length) return ''
+  return joined.every((line) => line === joined[0]) ? joined[0] : ''
+})
 function providerLabelOf(providerId: string): string {
   return configTarget.value?.providers.find((p) => p.id === providerId)?.label || providerId
 }
@@ -733,6 +784,9 @@ async function saveConfig() {
       const now = (draft.value[provider.id]?.[field.key] ?? '').trim()
       if (field.secret) {
         if (now) patch[field.key] = now
+      } else if (isWebConfig.value) {
+        // 联网的地址是内置值（服务端也不再接受写入），非密钥字段一律不提交
+        continue
       } else if (now !== (field.value || field.placeholder).trim()) {
         // 与打开弹窗时的初始值比对：生效值原样带出时不算脏，空串 = 删除界面覆盖，回落服务端环境变量
         patch[field.key] = now
@@ -741,7 +795,8 @@ async function saveConfig() {
     if (clearKeys.value[provider.id]) patch.clearKey = true
     if (Object.keys(patch).length) providers[provider.id] = patch
   }
-  const orders = ordersDirty.value
+  // 联网的顺序内置（服务端拒绝写入），不提交 orders
+  const orders = !isWebConfig.value && ordersDirty.value
     ? Object.fromEntries(cfg.channels.map((ch) => [ch.id, orderOf(ch.id)]))
     : undefined
   if (!Object.keys(providers).length && !orders) {
@@ -988,6 +1043,13 @@ function goLogs(skillId: string) {
 .ac-cap-skel--wide { grid-column: 1 / -1; height: 168px; }
 
 /* 资料采集口径说明行（P0-4）：与通道行同节奏的中性小字 */
+/* 联网：内置顺序的只读一行 */
+.ac-config-order {
+  margin: 0 0 12px;
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+}
+.ac-config-order b { color: var(--mk-ink); font-weight: 700; }
 .ac-config-note {
   margin: 0;
   padding: 8px 12px;
