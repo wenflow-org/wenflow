@@ -59,8 +59,10 @@
     </div>
 
     <div v-if="!loadError" class="stats">
+      <!-- 2026-11-04：pagination.total 是折叠后的记录数（同一次调用的重复行已去重、同会话多轮归成一条），
+           不是原始调用次数，故不写「总调用」；导出与列表同走折叠视图，两处条数一致。 -->
       <div class="stat-card">
-        <span>总调用</span>
+        <span>记录条数（折叠后）</span>
         <strong>{{ pagination.total }}</strong>
       </div>
       <div class="stat-card">
@@ -259,6 +261,11 @@ interface AgentLogItem {
   sourceEntry?: string | null;
   callerAgent?: string | null;
   logSource?: string;
+  /** 折叠会话组的代表调用真实 id（组 id 是合成键，详情接口只认真实 id） */
+  repLogId?: string;
+  /** 折叠会话组内的调用次数 / 明细（后端归并附带） */
+  groupCount?: number;
+  groupItems?: Array<{ id: string; agentId: string; calledAt: string; success?: boolean; durationMs?: number; errorCode?: string | null; phase?: string | null }>;
   /** 实际模型名（折叠会话由后端从组内网关 span 提取） */
   model?: string | null;
   input?: unknown;
@@ -478,7 +485,9 @@ const viewDetail = async (log: AgentLogItem) => {
   detailLoading.value = true;
 
   try {
-    const res = await getAgentLogDetail(log.id);
+    // 2026-11-04：折叠会话行的 id 是合成组键（path:/goal: 前缀），直接拿去查详情必然 404；
+    // 有代表调用真实 id 时按它查，拿到的输入/输出才是这条会话的实际内容
+    const res = await getAgentLogDetail(log.repLogId || log.id);
     if (seq !== detailSeq) return;
     const detail = res?.data || res;
     if (detail) {
@@ -610,6 +619,8 @@ const formatAgentId = (logOrAgentId: string | AgentLogItem | null | undefined) =
   // 保持本地字典，仅作显示层映射（未命中时原样回退 agentId）。
   const agentNames: Record<string, string> = {
     'skill:path-planning': '学习路径规划',
+    // 2026-11-04：路径生成编排器此前未收录，行内直接印内部 id「path-agent」
+    'path-agent': '路径生成',
     'skill:goal-conversation': '目标对话',
     'ai-teaching-agent': 'AI 授课',
     'teaching-agent': 'AI 授课',
@@ -651,6 +662,9 @@ const getCapabilityType = (agentId?: string) => {
   const mapping: Record<string, string> = {
     'skill:goal-conversation': 'goal',
     'skill:path-planning': 'path',
+    // 2026-11-04：path-agent 是路径生成编排器，此前未收录被归到 system，
+    // 同一行来源标「业务层」、能力标「平台底层调用」自相矛盾（也与「隐藏底层调用」冲突）
+    'path-agent': 'path',
     'ai-teaching-agent': 'teaching',
     'teaching-agent': 'teaching',
     'ai-tutor': 'tutoring',
