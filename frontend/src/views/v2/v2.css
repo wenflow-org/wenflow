@@ -620,6 +620,11 @@ html, body {
   .v2-page.goal main.entry .composer--entry,
   .v2-page.goal main.entry .recent { max-width: 960px; }
   .v2-page.goal main.entry .entry__hero p { max-width: none; }
+  /* 入口态输入白盒/提示行跟随 960 列：组件内 ≥1101 的 760 阅读宽帽是给会话态消息列的，
+     入口态列 640 时代它不生效；列拓到 960 后帽子露出来——场景卡 960 而白盒 760 居中
+     悬空各 100px，与场景卡不等宽（2026-11-04 用户指认）。会话态（.chat 内）不受影响。 */
+  .v2-page.goal main.entry .composer--entry .composer__box,
+  .v2-page.goal main.entry .composer--entry .composer__hint { max-width: none; }
   /* 课堂阅读列在 ≥1280 档由页面 scoped 规则拓到 1000；这里的外壳必须同步到 1120，
      否则旧 960 的高权重选择器会把 scoped 覆盖掉（2026-10-29 实测 body 仅 960）。 */
   .v2-page.learn .learn__body { max-width: 1120px; }
