@@ -269,7 +269,11 @@ for (const p of [...walk(SRC, [], '.css'), ...walk(SRC)]) {
  * （若将来新增同类钩子，请在此登记，否则规则 8 会把它当 bug 报出来。）
  * 键统一带 `--`：与 definedTokens / 引用侧同一形式，查表才成立（2026-10-02）。
  */
-const TOKEN_HOOK_WHITELIST = new Set(['--mk-empty-min-h', '--mk-skel-card-min', '--mk-skel-cols'])
+// 2026-11-04：--nc-panel-top 由 V2NotifCenter.vue 运行时经
+//   document.documentElement.style.setProperty 写入（实测吸顶横幅底边 + 顶栏高），
+//   CSS 侧只以 var(--nc-panel-top, 64px) 兜底消费，静态没有 `--nc-panel-top:` 声明，
+//   故规则 8 会误报。它确实是"未定义即设计"的运行时钩子，登记于此。
+const TOKEN_HOOK_WHITELIST = new Set(['--mk-empty-min-h', '--mk-skel-card-min', '--mk-skel-cols', '--nc-panel-top'])
 
 /**
  * 【已定位、已排期】的未定义 token —— 报告但不阻断（token → 一句话原因）。

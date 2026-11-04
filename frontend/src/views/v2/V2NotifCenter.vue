@@ -262,6 +262,18 @@ const rootRef = ref<HTMLElement | null>(null);
 const bellRef = ref<HTMLButtonElement | null>(null);
 const panelRef = ref<HTMLElement | null>(null);
 
+/** 2026-11-04 修复：固定面板的 top 要让开吸顶公告横幅（.anb 实测高度，桌面 41px/移动端 107px 均不固定）。
+ *  有横幅时写「横幅底边 + 顶栏高」；无横幅（或桌面，横幅在流内不与固定面板重叠）则清掉、回落 CSS 里的 64px 顶栏高。 */
+function syncPanelTop() {
+  const banner = document.querySelector('.anb');
+  // 2026-11-04 修复：横幅底边只是顶栏顶边，面板还须再下让一条吸顶顶栏（否则边界对齐顶栏顶边，
+  // 面板把整条顶栏连铃铛一起盖住）；按实测 .v2nav-bar 高补齐，与无横幅回落 64px（顶栏高）同参照。
+  const navH = Math.round(document.querySelector('.v2nav-bar')?.getBoundingClientRect().height ?? 0);
+  const top = banner ? Math.round(banner.getBoundingClientRect().bottom) + (navH || 64) : 0;
+  if (top > 0) document.documentElement.style.setProperty('--nc-panel-top', `${top}px`);
+  else document.documentElement.style.removeProperty('--nc-panel-top');
+}
+
 /* ---------- 通知 ---------- */
 const notifItems = ref<NotifItem[]>([]);
 const notifTotal = ref(0);
@@ -513,6 +525,7 @@ function closePanel() {
 }
 function toggle() {
   if (open.value) { closePanel(); return; }
+  syncPanelTop();
   open.value = true;
   // 默认落有内容的一栏；都空则通知（可继续的课堂也算"有内容"）
   tab.value = busyItems.value.length || openSessions.value.length || feed.value.length ? 'tasks' : 'notif';
@@ -530,11 +543,14 @@ onMounted(() => {
   schedulePoll();
   document.addEventListener('click', onDocClick);
   document.addEventListener('keydown', onKey);
+  // 视口宽度变化（桌面↔移动档）会改变横幅换行高度与面板定位基准，重算 top
+  window.addEventListener('resize', syncPanelTop);
 });
 onBeforeUnmount(() => {
   window.clearTimeout(pollTimer);
   document.removeEventListener('click', onDocClick);
   document.removeEventListener('keydown', onKey);
+  window.removeEventListener('resize', syncPanelTop);
 });
 </script>
 
@@ -638,11 +654,15 @@ onBeforeUnmount(() => {
 @media (max-width: 1100px) {
   .nc__panel {
     position: fixed;
-    top: 64px;
+    /* 2026-11-04 修复：吸顶公告横幅（.anb，z-index:200 > 面板 60）会盖住面板顶部「通知 / AI 任务」
+       两枚页签，分栏切换不了——top 不能写死 64px，改由开面板/改视口时实测横幅底边写入
+       --nc-panel-top（无横幅或桌面回落 64px 顶栏高；桌面横幅在流内不与面板重叠）。 */
+    top: var(--nc-panel-top, 64px);
     left: 12px;
     right: 12px;
     width: auto;
-    max-height: calc((100dvh - 140px) / var(--vp-zoom, 1));
+    /* 上限随 top 一起收缩，保证面板底边不被推到底部 dock 之下 */
+    max-height: calc((100dvh - var(--nc-panel-top, 64px) - 76px) / var(--vp-zoom, 1));
     display: flex;
     flex-direction: column;
   }
