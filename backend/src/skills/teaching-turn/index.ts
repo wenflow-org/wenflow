@@ -3142,7 +3142,19 @@ function evaluateCompletionByTaskProfile(input: TeachingTurnInput) {
   });
 }
 
-function validateTeachingTurnOutput(parsed: any, input: TeachingTurnInput) {
+/**
+ * 看板指代词（2026-11-04）：「左边那栏 / 右边第 2 条 / 板书 / 看板 / 如上图 / 图里 / 表中」
+ * 这类把学生视线引向一块「板/图/表」的方位指示。内容词不命中——心理学课讲
+ * 「左脑/右脑半球」「图像记忆」「第一原则」是正当课文，不拦。
+ */
+const BOARD_DEIXIS_RE = new RegExp([
+  '[左右][边侧]?[那这][一]?[栏块幅张]',
+  '[左右][边侧]?第\\s*[一二三四五六七八九十1-9]+\\s*条',
+  '板书|看板|白板|板上的|黑板上',
+  '如上[图表]|上[图表]中|这张图|图里|图中|如下表|下表中|上表|表中|表里|示意图',
+].join('|'));
+
+export function validateTeachingTurnOutput(parsed: any, input: TeachingTurnInput) {
   if (!parsed || typeof parsed !== 'object') {
     return { valid: false, failureReason: 'TEACHING_TURN_OUTPUT_NOT_OBJECT' };
   }
@@ -3191,6 +3203,18 @@ function validateTeachingTurnOutput(parsed: any, input: TeachingTurnInput) {
 
   if (hasPrematureCompletionLanguage && !completionLanguageAllowed) {
     return { valid: false, failureReason: 'TEACHING_TURN_REPLY_COMPLETION_MISMATCH' };
+  }
+
+  // 有板指代漂移守卫（2026-11-04 无板任务实锤：模型讲「左边那栏…右边第 4 条给了个答案」，
+  // 所指的板从未存在，学生全屏找不到。core 契约本就要求 boardContext 缺席时 reply 必须
+  // 脱离图也成立，flash 档照样漂——确定性兜底：本轮没出 figure/diagram、任务也没注入
+  // boardContext 时，reply 出现看板指代即判校验失败，走既有 retryStrategy 重写。
+  // 板上真实存在（boardContext 注入）或本轮真出了图时，指代合法不拦。）
+  const emittedVisualThisTurn = !!(parsed.figure || parsed.diagram
+    || (Array.isArray(parsed.figures) && parsed.figures.length)
+    || (Array.isArray(parsed.diagrams) && parsed.diagrams.length));
+  if (!input.boardContext && !emittedVisualThisTurn && BOARD_DEIXIS_RE.test(reply)) {
+    return { valid: false, failureReason: 'TEACHING_TURN_BOARD_DEIXIS_WITHOUT_BOARD' };
   }
 
   return { valid: true };
@@ -3362,7 +3386,12 @@ const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutp
       + `knowledge（对象，含 points 数组）、pedagogy（对象，含 strategies）、control（对象）；缺任一块整轮都会失败，不能只给其中一部分；`
       + `1) knowledge.points 要围绕当前任务、验收标准和最近课堂对话动态生成，不要偏题；`
       + `2) pedagogy.strategies 只能使用允许的枚举；`
-      + `3) 保持当前任务的 core concept 与 target relation 不偏移。`,
+      + `3) 保持当前任务的 core concept 与 target relation 不偏移。`
+      // 无板指代（2026-11-04 实锤，见 validateTeachingTurnOutput 守卫注释）：点名改写路径，
+      // 二选一给清楚——写进正文（推荐）或真的出图；不许第三次仍对着空板讲「左边那栏」。
+      + (failureReason === 'TEACHING_TURN_BOARD_DEIXIS_WITHOUT_BOARD'
+        ? `\n4) 你的 reply 引用了不存在的板书/图（如「左边那栏」「右边第 N 条」「如图」），但本轮没有产出任何 figure/diagram，学生屏幕上找不到所指内容。二选一重写 reply：把想引用的两栏/条目内容**直接写成正文文字**（Markdown 列表，推荐）；或按 figure 契约**真的产出**与指代逐条对应的对照图——引用了图就必须真的出图，二者只能取其一。`
+        : ''),
   },
 };
 
