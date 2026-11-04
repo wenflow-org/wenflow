@@ -314,11 +314,11 @@ const pagination = reactive({
 const AGENT_OPTIONS = [
   { value: '', label: '全部' },
   { value: 'skill:path-planning', label: 'Path Agent' },
-  /* 两个 id 都是授课（新 teaching-agent / 旧 ai-teaching-agent），展示名统一「AI 授课」；
-     旧 id 只服务历史数据，保留独立筛选项 */
-  { value: 'teaching-agent', label: 'AI 授课' },
-  { value: 'ai-teaching-agent', label: 'AI 授课（legacy）' },
-  { value: 'learner-model-agent', label: 'Learner State Hub' }
+  /* #218：下拉曾挂已废弃 id（teaching-agent / ai-teaching-agent / learner-model-agent，
+     线上 0 行），「Agent=AI 授课」恒空。改为 manifest 中的真实 id
+     （skill:teaching-turn 是授课真实执行体）。 */
+  { value: 'skill:teaching-turn', label: 'AI 授课' },
+  { value: 'skill:learner-state-review', label: 'Learner State Hub' }
 ];
 const CAPABILITY_OPTIONS = [
   { value: '', label: '全部' },
@@ -608,13 +608,35 @@ const formatAgentId = (logOrAgentId: string | AgentLogItem | null | undefined) =
   // 来源说明：本页为用户侧执行日志，无现成 agent 清单 API 可复用；id 含
   // 历史/业务别名（ai-teaching-agent、ai-tutor 等）与 admin 注册表不同构，
   // 保持本地字典，仅作显示层映射（未命中时原样回退 agentId）。
+  // #218：键以 manifest 真实 id 为准（skill:teaching-turn / skill:learner-model 等），
+  // 旧 id 保留只为兼容历史行。
   const agentNames: Record<string, string> = {
-    'skill:path-planning': '学习路径规划',
     'skill:goal-conversation': '目标对话',
-    'ai-teaching-agent': 'AI 授课',
+    'goal-agent': '目标对话',
+    'skill:path-planning': '学习路径规划',
+    'path-agent': '学习路径规划',
+    'skill:stage-designer': '阶段任务设计',
+    'skill:path-reviewer': '路径评审',
+    'skill:kc-mapper': '知识点映射',
     'teaching-agent': 'AI 授课',
-    'ai-tutor': 'AI 辅导',
+    'skill:teaching-turn': 'AI 授课',
+    'skill:peer-reinforcement': '伴学补强',
+    'skill:session-wrapup': '课后总结',
+    'skill:teaching-opening-generator': '课堂开场',
+    'skill:board-designer': '课堂板书',
+    'ai-teaching-agent': 'AI 授课',
+    'profile-agent': '学习者 Agent',
+    'skill:learner-model': '学习者模型',
+    'skill:lesson-knowledge-enricher': '课后知识增强',
+    'skill:adaptive-guidance-copy': '自适应引导文案',
+    'skill:learner-progress-report': '学习进度报告',
+    'skill:learner-state-review': '学习状态复盘',
+    'skill:concept-consolidator': '概念归并',
+    'skill:concept-load-estimator': '概念负担评估',
+    'skill:replan-attribution': '重排归因',
+    'skill:learning-predictor': '学习表现预测',
     'learner-model-agent': '学习者模型',
+    'ai-tutor': 'AI 辅导',
     'system-call': '平台底层调用'
   };
   
@@ -647,13 +669,37 @@ const getLogSourceLabel = (log: AgentLogItem) => {
 
 const getCapabilityType = (agentId?: string) => {
   // agent → 能力类型映射（显示层字典，与上方 agentNames 同源；无 agent 清单 API，
-  // 保持本地映射，未命中归为 system）
+  // 保持本地映射，未命中归为 system）。
+  // #218：键与后端 capabilityType 派生分组对齐（manifest monitoringGroup），
+  // 否则服务端按该能力筛出的行会在客户端二次过滤（displayLogs）时被丢掉，
+  // 表现为「表里只剩几行、页脚总数却是几十条」。四个能力组须 100% 覆盖 manifest id。
+  // tutoring 无对应 manifest agent，保留键仅为兼容历史行。
   const mapping: Record<string, string> = {
     'skill:goal-conversation': 'goal',
+    'goal-agent': 'goal',
     'skill:path-planning': 'path',
-    'ai-teaching-agent': 'teaching',
+    'skill:stage-designer': 'path',
+    'skill:path-reviewer': 'path',
+    'skill:kc-mapper': 'path',
+    'path-agent': 'path',
     'teaching-agent': 'teaching',
+    'skill:teaching-turn': 'teaching',
+    'skill:peer-reinforcement': 'teaching',
+    'skill:session-wrapup': 'teaching',
+    'skill:teaching-opening-generator': 'teaching',
+    'skill:board-designer': 'teaching',
+    'ai-teaching-agent': 'teaching',
     'ai-tutor': 'tutoring',
+    'profile-agent': 'profile',
+    'skill:learner-model': 'profile',
+    'skill:lesson-knowledge-enricher': 'profile',
+    'skill:adaptive-guidance-copy': 'profile',
+    'skill:learner-progress-report': 'profile',
+    'skill:learner-state-review': 'profile',
+    'skill:concept-consolidator': 'profile',
+    'skill:concept-load-estimator': 'profile',
+    'skill:replan-attribution': 'profile',
+    'skill:learning-predictor': 'profile',
     'learner-model-agent': 'profile',
     'unknown': 'system',
     'system-call': 'system'

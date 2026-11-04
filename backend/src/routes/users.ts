@@ -19,7 +19,7 @@ import { rejectProjectionAccess } from '../middleware/projection-access.middlewa
 import { learnerSnapshotRefreshService } from '../services/learner/LearnerSnapshotRefreshService';
 import { getLevelFromXp } from '../services/learner/level.util';
 import { normalizeSessionDurationMinutes } from '../services/learning/learning.helpers';
-import { listAgentManifest } from '../services/agent-manifest.service';
+import { listAgentManifest, type MonitoringGroupName } from '../services/agent-manifest.service';
 import { parseDayKeyRange } from '../services/time/day-boundary';
 import { loadTeachingMessagesForIds } from '../services/ai-teaching/teaching-session-message-store';
 
@@ -27,6 +27,35 @@ import { loadTeachingMessagesForIds } from '../services/ai-teaching/teaching-ses
 const INVALID_LOGIN_PASSWORD_HASH = '$2b$10$OAioDMuBkv4OiDj1OPaJse/r3xbZoGaxLWtBNBD6VSlBa5T4nwkdG';
 
 const router = express.Router();
+
+// capabilityType（前端「活动类型」筛选键）→ manifest 监控组。
+// agent id 的单一事实源是 manifest：此前这里是一张手写 id 表，teaching/tutoring/profile
+// 挂的是已废弃 id（ai-teaching-agent / ai-tutor / learner-model-agent，线上 0 行），
+// 真实授课 id 是 skill:teaching-turn（Teaching 组），于是按这三类筛选恒空。
+const CAPABILITY_MONITORING_GROUPS: Record<string, MonitoringGroupName> = {
+  goal: 'Goal',
+  path: 'Path',
+  teaching: 'Teaching',
+  profile: 'Profile'
+};
+
+function buildCapabilityAgentMap(): Record<string, string[]> {
+  const manifest = listAgentManifest();
+  const map: Record<string, string[]> = {};
+  for (const [capabilityType, group] of Object.entries(CAPABILITY_MONITORING_GROUPS)) {
+    map[capabilityType] = manifest
+      .filter((entry) => entry.monitoringGroup === group)
+      .map((entry) => entry.id);
+  }
+  // tutoring / tracking 在 manifest 里没有对应监控组（没有辅导、进度追踪 Agent），
+  // 显式保留空数组，维持「筛该项返回空」的既有行为：若删掉键，请求会因不命中
+  // `capabilityType in capabilityAgents` 而退化成不筛选，反而返回全部日志。
+  map.tutoring = [];
+  map.tracking = [];
+  // 平台底层调用不是 manifest 里的 agent/skill，保持原有口径
+  map.system = ['system-call', 'unknown'];
+  return map;
+}
 
 function buildAgentLogWhere(userId: string, query: any) {
   const agentId = query.agentId as string;
@@ -37,15 +66,7 @@ function buildAgentLogWhere(userId: string, query: any) {
   const endDate = query.endDate as string;
   const where: any = { userId };
 
-  const capabilityAgents: Record<string, string[]> = {
-    goal: ['skill:goal-conversation'],
-    path: ['skill:path-planning'],
-    teaching: ['ai-teaching-agent'],
-    tutoring: ['ai-tutor'],
-    tracking: [],
-    profile: ['learner-model-agent'],
-    system: ['system-call', 'unknown']
-  };
+  const capabilityAgents = buildCapabilityAgentMap();
 
   if (agentId) {
     where.agentId = agentId;

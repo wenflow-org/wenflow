@@ -213,6 +213,35 @@ describe('users agent log routes', () => {
     // mock 不模拟 SQL 过滤，因此这里只断言 where 构造正确
   });
 
+  it('capabilityType 分组从 manifest 派生：teaching/profile 命中真实 skill id（#218）', async () => {
+    agentLogMocks.findMany.mockResolvedValue([]);
+    const agentIdsFor = async (capabilityType: string): Promise<string[]> => {
+      const req: any = { user: { userId: 'user-1' }, query: { format: 'json', capabilityType } };
+      await routes['GET /me/agent-logs/export'](req, createResponse(), jest.fn());
+      return agentLogMocks.findMany.mock.calls.at(-1)?.[0]?.where?.agentId?.in as string[];
+    };
+
+    // 真实授课 id 是 skill:teaching-turn（manifest Teaching 组，线上 327 行）；
+    // 旧硬编码 id ai-teaching-agent 线上 0 行，曾让该筛选恒空。
+    const teaching = await agentIdsFor('teaching');
+    expect(teaching).toContain('skill:teaching-turn');
+    expect(teaching).not.toContain('ai-teaching-agent');
+
+    const profile = await agentIdsFor('profile');
+    expect(profile).toContain('skill:learner-model');
+    expect(profile).not.toContain('learner-model-agent');
+
+    const path = await agentIdsFor('path');
+    expect(path).toContain('skill:path-planning');
+    expect(path).toContain('path-agent');
+
+    // tutoring / tracking 在 manifest 里没有对应监控组：显式空数组 ——
+    // 若删键，capabilityType 不命中就会退化成「不筛选、返回全部日志」。
+    expect(await agentIdsFor('tutoring')).toEqual([]);
+    expect(await agentIdsFor('tracking')).toEqual([]);
+    expect(await agentIdsFor('system')).toEqual(['system-call', 'unknown']);
+  });
+
   it('path-agent 阶段流水用 sourceConversationId 并入 path 组，且 phase 透传到明细', async () => {
     const mkPathStage = (id: string, conv: string, phase: string, calledAt: string) => ({
       id,
