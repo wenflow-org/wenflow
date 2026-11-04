@@ -138,7 +138,7 @@ export function stripDanglingFigureReferences(reply: string | null | undefined):
     .replace(/([，。；！？、：])\1+/g, '$1')
     .replace(/[（(]\s*[）)]/g, '')
     .replace(/[ \t]{2,}/g, ' ')
-    .replace(/(^|\n)\s*[，,、；;—\-]+\s*/g, '$1')
+    .replace(/(^|\n)\s*[，,、；;—-]+\s*/g, '$1')
     .replace(/([。！？\n])\s*[，,、；;]\s*/g, '$1')
     .trim();
 }

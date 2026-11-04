@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 测试桩：模拟 prisma/服务行形状不追求类型精度（仓库探针脚本同惯例） */
 /**
  * 管理端「生成 / 重新生成学习路径」入口（`generateLearningPathFromConversation`）回归。
  *

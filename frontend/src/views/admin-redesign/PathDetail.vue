@@ -85,7 +85,8 @@ const shortPathId = computed(() => {
 })
 async function copyPathId() {
   const ok = await copyText(pathId.value)
-  ok ? toast.success('路径 ID 已复制') : toast.error('复制失败，请手动选中复制')
+  if (ok) toast.success('路径 ID 已复制')
+  else toast.error('复制失败，请手动选中复制')
 }
 const PATH_STATUS_TEXT: Record<string, string> = {
   active: '学习中', generating: '生成中', failed: '生成失败', archived: '已下线', completed: '已完成',

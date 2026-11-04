@@ -22,9 +22,9 @@ export async function loadPathConceptNames(learningPathId: string | null | undef
       select: { coreConceptName: true, subtasks: { select: { coreConcept: true, linkedConceptName: true } } },
     });
     const names = new Set<string>();
-    for (const milestone of milestones as Array<Record<string, any>>) {
+    for (const milestone of milestones as Array<Record<string, unknown>>) {
       if (milestone.coreConceptName) names.add(String(milestone.coreConceptName));
-      for (const task of (milestone.subtasks as Array<Record<string, any>>) ?? []) {
+      for (const task of (milestone.subtasks as Array<Record<string, unknown>>) ?? []) {
         if (task.coreConcept) names.add(String(task.coreConcept));
         if (task.linkedConceptName) names.add(String(task.linkedConceptName));
       }

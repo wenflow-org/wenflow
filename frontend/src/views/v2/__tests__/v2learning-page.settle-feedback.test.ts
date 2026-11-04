@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 挂载实例内部状态注入（w.vm as any），仓库测试桩同惯例 */
 /**
  * #115「完成并结算」反馈断点（2026-10-20 复测）：
  *

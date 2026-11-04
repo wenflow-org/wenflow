@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 测试桩：模拟 prisma/服务行形状不追求类型精度（仓库探针脚本同惯例） */
 /**
  * 目标对话状态分桶（2026-11-02 P2-2）。
  *

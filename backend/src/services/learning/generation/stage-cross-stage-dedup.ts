@@ -25,12 +25,12 @@ export const CROSS_STAGE_DEDUP_THRESHOLD = 0.72;
  * 所以先留一份快照，让新阶段仍能与「库里已有的前序阶段」比对（否则跨阶段闸对历史阶段失效）。
  */
 export function buildExistingStageTitles(
-  milestones: readonly Record<string, any>[],
+  milestones: readonly Record<string, unknown>[],
 ): Map<number, string[]> {
   return new Map<number, string[]>(
     milestones.map((milestone) => [
       Number(milestone.stageNumber),
-      (((milestone.subtasks as any[]) || [])
+      (((milestone.subtasks as Array<Record<string, unknown>>) || [])
         .map((task) => String(task?.title || '').trim())
         .filter((title: string) => title.length > 0)),
     ]),
@@ -40,7 +40,7 @@ export function buildExistingStageTitles(
 /** 闸门需要的最小形状（stageDesignOutputs 的元素）。 */
 export interface StageDesignLike {
   stageNumber: number;
-  subtasks: any[];
+  subtasks: unknown[];
 }
 
 /**

@@ -10,7 +10,7 @@
 > **本文是什么（定位）**
 > - 是**开发者文档**：解释"为什么这样拆、代码在哪、哪些没做"，服务于改造/排障，不承诺产品能力。对外能力以 `README.md` / `admin-guide.md` 为准。
 > - 与 [`LEARNER_MODEL_ARCHITECTURE.md`](./LEARNER_MODEL_ARCHITECTURE.md) 的分工：那篇讲 `LearnerSnapshot` 的**契约与场景设计**（what）；本文只补 Q6/Q7 特有的**维度判别**与**机制级解释**（why + how），**不重复**其快照字段表。
-> - 相邻：[`LEARNER_STATE_REVIEW_DESIGN.md`](./LEARNER_STATE_REVIEW_DESIGN.md)（诊断层 + BKT + 校准闭环）、[`LEARNING_SCIENCE_AUDIT.md`](./local/LEARNING_SCIENCE_AUDIT.md)（自认边界与溯源）、[`EDUCATIONAL_THEORY_MAP.md`](./EDUCATIONAL_THEORY_MAP.md)（理论落点）。
+> - 相邻：[`LEARNER_STATE_REVIEW_DESIGN.md`](./LEARNER_STATE_REVIEW_DESIGN.md)（诊断层 + BKT + 校准闭环）、`LEARNING_SCIENCE_AUDIT.md`（自认边界与溯源）、[`EDUCATIONAL_THEORY_MAP.md`](./EDUCATIONAL_THEORY_MAP.md)（理论落点）。
 >
 > **诚实约定**：每条机制结论尽量带 `文件:行`。凡代码里**没有真正接线**、或只是纯函数/`test-only` 的，本文明确标 **「已实现算法，未接线」** 或 **「未实现/未核实」**，绝不用"架构上支持"糊过去。
 

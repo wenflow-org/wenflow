@@ -2,7 +2,7 @@
 
 > 📌 类型：参考资料｜文献核验 2026-10-22（联网检索 + 交叉核对）｜最后核验：2026-11-02（§八 实测数据口径）｜索引见 [doc/README.md](./README.md)
 > 用途：教学图（位置线/对照/阶梯/交集/矩阵等）的图型配额、提示词措辞、评审口径的**理论依据引用源**；同时登记"哪些说法只有设计经验、不能当已验证结论"。
-> 关联文档：[EDUCATIONAL_THEORY_MAP.md](./EDUCATIONAL_THEORY_MAP.md)（认知负荷理论 §二⑧）、[LEARNING_SCIENCE_AUDIT.md](./LEARNING_SCIENCE_AUDIT.md)。
+> 关联文档：[EDUCATIONAL_THEORY_MAP.md](./EDUCATIONAL_THEORY_MAP.md)（认知负荷理论 §二⑧）、`LEARNING_SCIENCE_AUDIT.md`（已归档删除，出处留档于 git 历史 3c555923^）。
 >
 > **证据分级**
 > - **A｜强**：多项独立元分析或大样本一致结论，可直接写进产品说明。

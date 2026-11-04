@@ -31,7 +31,7 @@ function parsedWith(reply: string, extra: Record<string, unknown> = {}) {
   return {
     reply,
     analysis: { cognitiveLevel: 'understand', levelScore: 2, engagement: 0.8, emotionalState: 'neutral', loadIndex: 0.4 },
-    knowledge: { currentPoint: '区分行为描述与可推翻问法', points: [] as any[] },
+    knowledge: { currentPoint: '区分行为描述与可推翻问法', points: [] },
     pedagogy: { strategies: ['explain'] },
     control: { isCompletionCandidate: false, shouldTriggerPeer: false },
     ...extra,
