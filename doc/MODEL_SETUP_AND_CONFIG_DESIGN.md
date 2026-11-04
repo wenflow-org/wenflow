@@ -86,12 +86,19 @@
 - `skill_model_configs`（`schema.prisma:148-174`）字段全：`model?/thinkingMode?/reasoningEffort?/endpoint?/apiKey?/requestTimeoutMs?/maxLogicalRetries?/paramOverrides?/fallbackChain?`。
 - 默认 `model IS NULL` = 继承平台默认（`MODEL_GATEWAY_DESIGN.md:27`）；`runtime-tab.vue` 有「覆盖平台默认」开关，关着就全跟平台默认。**这正是用户要的「Skill 基本都跟平台默认」**，无需改。要改的是 §2.4——先让「平台默认」真的存在。
 
-### 2.8 插件：有「通道顺序链」的雏形，web 有真降级，decision/image 只有单 provider
+### 2.8 插件：四个通道**都已经**是「有序 provider 链 = 降级」，无需改造
 
-- 目录 `plugin-providers.ts` 定义三组插件：**联网(web)**（搜索/抓取两通道，TinyFish/Tavily/Exa）、**决策(decision)**（阿里云/Cloudflare/Venice/OpenCode Zen/自建）、**生图(image)**（Agnes）。
-- 每个 provider 自带 `服务地址 + 模型 + 密钥`（`plugin-providers.ts:80-186`）。
-- 降级：`web-search.service.ts:4,70` 有真「按顺序逐个 provider 尝试、失败自动降级」；`Addons.vue` 允许拖 `主用/备用1/备用2` 并持久化顺序。**decision / image 目前是单 provider 链，没有多 provider 降级。**
-- ⇒ 用户说「插件还有一个降级」，指的就是这条链。设计要做的是**把「有序链=降级」讲清并统一到 decision/image**，见 §5。
+> **2026-11-04 复核更正**：本节初稿写的是「web 有真降级，decision/image 只有单 provider、没有多
+> provider 降级」——**这是错的**。逐处读代码后：decision 与 image 与 web 同构，都按
+> `readPluginChannelOrder(...)` 拿到顺序后 `for (const id of order) { try … }` 逐个尝试、
+> 失败打「尝试降级」日志（`decision.service.ts:63-79`、`image.service.ts:39-60`）。
+> 真正的差别只是**已实现的 provider 数量**，不是机制。
+
+- 目录 `plugin-providers.ts` 定义三组插件：**联网(web)**（搜索/抓取两通道，TinyFish/Tavily/Exa）、**决策(decision)**（阿里云/Cloudflare/Venice/OpenCode Zen/自建）、**生图(image)**（Agnes）。每个 provider 自带 `服务地址 + 模型 + 密钥`（`plugin-providers.ts:80-186`）。
+- **配置面**：`orders: Record<channelId, providerId[]>` 按插件分通道存（`plugin-providers.service.ts:42,91-92,427-441`），`Addons.vue` 里拖 `主用 / 备用1 / 备用2` 即改这条链——**四个通道一视同仁**，不是只有联网能排。
+- **运行面**：`web-search` / `fetch` / `decision` / `image` 四处服务都是「按链逐个 provider 尝试，失败自动降级」，同一个形状。
+- **唯一的真实限制**：**生图目前只有 `agnes` 一个已实现 provider**（`image/providers/index.ts:14-16` 的 `KNOWN_PROVIDERS` 与 `IMPLEMENTED_PROVIDERS` 都只有它），所以它的链永远只有一项、**没有第二个可降级对象**。决策有 5 个已实现 provider，但默认链只放了 `alibaba` 一个（`DEFAULT_DECISION_PROVIDER_ORDER`）——用户可以在界面上把其余几个加进链。
+- ⇒ 用户说的「插件还有一个降级」指的就是这条链，**它已经是现状**；要补的不是机制，而是「默认链只给一个」与「生图没有第二家」这两个事实的**说清**（见 §7）。
 
 ---
 
@@ -187,10 +194,11 @@
 
 **降级设计（两层，别混）：**
 
-1. **通道内 provider 降级（=「插件降级」用户所指）**：一条链里按顺序尝试，失败自动下一个。`web` 已实现（`web-search.service.ts:4,70`），**要把 decision / image 也支持成有序链**（当前单 provider）。每个 provider 自带地址 + 模型 + 密钥，换 provider 即换端点/密钥——这一点比对话侧更强（对话侧 fallback 只换模型名、不换端点，见 §8 风险）。
+1. **通道内 provider 降级（=「插件降级」用户所指）——已经在跑，不是待做项**（更正见 §2.8）：一条链里按顺序尝试、失败自动下一个，`web/fetch/decision/image` 四处同构（`web-search.service.ts:4,70`、`decision.service.ts:63-79`、`image.service.ts:39-60`）。每个 provider 自带地址 + 模型 + 密钥，换 provider 即换端点/密钥——这一点**比对话侧更强**（对话侧 fallback 只换模型名、不换端点，见 §8 风险）。
+   - 要补的只是两个**事实的说清**，不是机制：① 决策有 5 个已实现 provider 而默认链只放了一个（界面可加）；② 生图只有一个已实现的 provider（`agnes`），**它的链永远只有一项**——用户若以为「配了备用就会降级」，需要对这一条明说。
 2. **能力降级（插件停用/缺失时整步降级）**：某插件关闭或失败时，依赖它的那一步走「各卡标注的降级路径」（如资料包标为未找到），流水线继续跑而不是整条挂掉。这层是**行为约定**，不是用户可编辑配置，保持现状描述即可。
 
-**配置顺序与模型一致**：先填 provider 的地址/密钥 → 测连通 → 选/排链 → 保存。UI 已基本具备（`Addons.vue` 的 `主用/备用` 拖拽 + 逐 provider 字段），主要是把 decision/image 补成同一套多 provider 链。
+**配置顺序与模型一致**：先填 provider 的地址/密钥 → 测连通 → 选/排链 → 保存。UI 已具备（`Addons.vue` 的 `主用/备用` 拖拽 + 逐 provider 字段 + `orders` 持久化）。
 
 ---
 
@@ -210,10 +218,8 @@
 | **P0（阻塞）✅ 2026-11-04 已实现** | 恢复「平台默认模型」钉选：模型行 ⋯ 菜单出「设为默认（对话）/（推理）」，行内出「默认」徽章，工具栏出「默认：<id>」（缺省时琥珀警示）；**首个挂载模型自动成为默认**（只在默认为空时兜底，已有默认绝不改写）；删掉当前默认时自动改指下一个可用模型。写 `platform_api_configs.defaultModel/defaultReasoningModel`（`liveSetDefaultModel` 走既有 `PUT /api/admin/api-config`）。实测：把默认清空 → 刷新页面 → 自动种回 `deepseek-v4.1-flash`；行菜单改指 `agnes-3.0-flash` → 徽章与读数同步；连接有未保存改动时挡下设默认 | `ApiConfig.vue`、`ModelProvidersPanel.vue`、`live.ts` |
 | **P1（能力确认）✅ 2026-11-04 已实现** | 能力从「按模型名推断后静默落盘」改为「推断只预填 + 用户核对确认」（用户「让用户自己去勾选，因为他自己一定要清楚他的模型有什么能力」）。批量添加走 `PullModelsDialog → ModelCapabilityConfirmDialog`：逐模型列出 思考 / 推理强度 / 读图 三勾，预填推断值、可改，确认后才写入注册表；手动录入仍走模型编辑器的能力区（本来就是用户自己勾） | `ModelProvidersPanel.vue`、新增 `ModelCapabilityConfirmDialog.vue` |
 | **P1（向量/重排拉取）✅ 2026-11-04 已实现** | 向量 / 重排卡补「拉取」：配置弹层的模型 ID 旁加「拉取」，用这条能力的连接拉一份上游 `/v1/models`，按用途过滤（与对话侧同一套 `inferModelCapabilities`）后点选填入；独立服务可带草稿连接直接拉（不必先保存一次），但换地址后留空密钥一律拒绝、不回退旧密钥。新增 `POST /admin/infra-models/pull` + 纯函数 `resolveInfraModelsBaseUrl`（从 `…/v1/embeddings` 这类带类型路径的端点反推 base） | 新增 `routes/admin/__tests__/infra-models.pull.test.ts`（真实 express + fetch，6 例）；`InfraModelsPanel.vue`、`infra-models.ts`、`infra-config.ts`、`adminApi.ts` |
-| **P2** | 插件：decision/image 支持多 provider 有序链（与 web 同构），统一「主用→备用」降级 UI 与持久化 | `config/plugin-providers.ts`、`Addons.vue`、`plugin-providers.service.ts`、`routes/admin/plugins.ts` |
-| **P1** | 能力从「静默推断」改「预填 + 逐模型确认再落盘」 | `ModelProvidersPanel.vue`、`ModelEditorDialog.vue`、`PullModelsDialog.vue` |
 | **P2（部署脚本）✅ 2026-11-04 已实现** | 部署脚本闭环：`setup-env.ps1` / `docker-start.sh` 的默认模型 id 从**已下线**的 `deepseek-v4-flash` / `deepseek-v4-pro` 改为 `deepseek-v4.1-flash`（写入 `.env` 后启动会命中「已下线」归一化）；两个脚本与 `.env.production.example` 补 embedding / rerank 三个变量（**留空即不启用语义层，不影响启动**，只作首次部署种子与回落） | `setup-env.ps1`、`docker-start.sh`、`backend/.env.production.example` |
-| **P2** | 插件：decision/image 支持多 provider 有序链（与 web 同构），统一「主用→备用」降级 UI 与持久化 —— **设计见 §7，未实现** | `config/plugin-providers.ts`、`Addons.vue`、`plugin-providers.service.ts`、`routes/admin/plugins.ts` |
+| **P2（插件）✅ 无需改造（2026-11-04 复核）** | 四个插件通道**都已经**是「有序 provider 链 = 降级」：配置面 `orders` 按插件分通道持久化、界面可拖「主用→备用」，运行面四处服务都按链逐个尝试、失败自动降级。初稿把它记成「decision/image 缺多 provider 降级」是**错的**，已在 §2.8 更正。剩下的是文案说清（决策默认链只放一家、生图只有一个已实现 provider） | —（如需文案，`Addons.vue` + `capabilityCatalog.ts`） |
 | **P3（可选）** | 对称化：视 D2 决定 embedding/rerank 是否搬进 `llm-providers.json`；Skill 覆盖率视图弱化单模型时的覆盖入口 | — |
 
 **验收锚点**：全新库、只配管理员账号、UI 里填 Base URL+Key → 拉取 → 挂 1 个对话模型 → **无需碰 env 即可完成一次真实 LLM 调用**（当前会因 §2.4 失败，修完应通过）。
