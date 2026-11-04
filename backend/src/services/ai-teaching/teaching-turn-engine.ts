@@ -326,6 +326,16 @@ export async function processStudentMessage(
     understanding: number;
   };
 }> {
+  // 受理入口护栏（issue #210）：纯空白 / 非字符串 message 不是真实学生输入，不得进入教学回合——
+  // 否则会落库一条空 user 消息、推进 revision 并发起付费模型调用（直连 API 可用来刷额度）。
+  // 口径与 HTTP 路由一致（routes/ai-teaching.routes.ts 的 typeof + trim 校验），此处再兜一层，
+  // 避免检查点 / 虚拟学习者 / 脚本等直连调用点绕过路由校验。
+  // 例外：resume-continue 是「断线后纯续讲、本轮无学生新输入」的合法模式（message 恒为 ''），
+  // 豁免以保住既有续讲行为（见下方 isResumeContinue 分支）。
+  if (options.kind !== 'resume-continue' && (typeof message !== 'string' || message.trim().length === 0)) {
+    throw new Error('缺少消息内容');
+  }
+
   const operationClaim = options.operationClaim || await teachingSessionRepository.claimOperation(
     sessionId,
     options.checkpointId ? `checkpoint:${options.checkpointId}` : 'message',

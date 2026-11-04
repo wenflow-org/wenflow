@@ -445,6 +445,27 @@ describe('ai-teaching routes', () => {
     }
   });
 
+  it('#210 纯空白 message（空格/换行/制表）→ 400 校验错误，不落库不跑模型', async () => {
+    const handler = getRouteHandler('/sessions/:sessionId/messages');
+    for (const blankMessage of ['', '   ', '\n\n', '\t', ' \n\t ']) {
+      const res = createResponse();
+      await handler({
+        user: { userId: 'user-1' },
+        params: { sessionId: 'session-1' },
+        headers: { 'idempotency-key': 'blank-key' },
+        body: { message: blankMessage, revision: 1 },
+      }, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: expect.objectContaining({ code: 'VALIDATION_ERROR', message: '缺少消息内容' }),
+      });
+      // 关键：空白输入必须在受理、落库、付费模型调用之前被拒
+      expect(mockCoordinator.processStudentMessage).not.toHaveBeenCalled();
+    }
+  });
+
   it('SSE 流式：Accept text/event-stream 时输出 final/done 事件并关闭连接', async () => {
     mockCoordinator.processStudentMessage.mockResolvedValue({
       aiResponse: '继续',
