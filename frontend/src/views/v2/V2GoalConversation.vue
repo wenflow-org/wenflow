@@ -279,11 +279,15 @@
                     @keydown.space.prevent="keyboardReply(q.text)"
                   >{{ q.text }}</button>
                 </div>
+                <!-- streaming 复用为「不可重生成」口径（同 V2LearningPage）：失败气泡的
+                     恢复动作只留内联「重试」——它对 start/confirm/supplement/reply 四种
+                     失败都能正确重放，而悬浮「重新生成」遇到无前驱用户消息的失败
+                     （如 start 失败）只会 toast「找不到对应的问题」死路 -->
                 <MessageActions
                   :show="hoveredMsgId === km.key"
-                  :streaming="live.sending"
+                  :streaming="live.sending || km.msg.failed"
+                  :copy-handler="() => copyMessage(km.msg.content)"
                   @regenerate="regenerateMessage(km.msg)"
-                  @copy="copyMessage(km.msg.content)"
                   @feedback="(up) => sendMessageFeedback(km.msg, up)"
                 />
                 <div class="msg__meta">
@@ -351,7 +355,7 @@
              方案先在对话流里完整呈现、可直接回复继续调整（一轮二轮都行）；
              这颗按钮是显式确认入口——点开方案卡审阅，确认动作仍只发生在卡内 -->
         <div v-if="loggedIn && live.started && !live.sending && live.stage === 'proposing' && live.proposal && !showProposal" class="proposal-invite">
-          <span v-if="entryCopy.hint" class="proposal-invite__hint">{{ entryCopy.hint }}</span>
+          <span class="proposal-invite__hint">{{ entryCopy.hint }}</span>
           <button type="button" class="btn-primary proposal-invite__btn" @click="openProposalReview">{{ entryCopy.button }}</button>
         </div>
         <!-- 输入区：对话卡内的底条（2026-10-06 归位）——回形针资料入口内置输入框，
@@ -483,7 +487,9 @@
           </ol>
         </div>
 
-        <!-- 前置自测：帮路径更贴合基础（可选作答，作答后自动收录） -->
+        <!-- 前置自测：帮路径更贴合基础。2026-11-02 口径重做——作答是本地表单动作，
+             不再每答一题发一个对话回合（两题场景会把面板锁死 30-90s 且题目随重渲染漂移）；
+             作答随「确认，生成我的路径」一次性提交，可随时改选。 -->
         <div v-if="live.proposal.probes && live.proposal.probes.length" class="proposal__probes">
           <span class="proposal__stages-label">快速自测（可选）</span>
           <div v-for="p in live.proposal.probes" :key="p.probeId" class="probe">
@@ -495,11 +501,17 @@
                 type="button"
                 class="probe__opt"
                 :class="{ 'probe__opt--on': live.probeAnswers[p.probeId] === o.id }"
-                :disabled="live.sending || !!live.probeAnswers[p.probeId]"
-                @click="live.answerProbe(p, o.id, o.text)"
+                :disabled="live.sending"
+                @click="pickProbe(p, o.id)"
               ><b>{{ o.id }}</b> {{ o.text }}</button>
             </div>
           </div>
+          <p v-if="probeReceipt" class="probe__receipt">{{ probeReceipt }}</p>
+          <!-- 换题保护：方案重渲染换了题/少一道时，已作答按题号失配会静默失效（回执从 2/2 掉回去），
+               这里明说「失效了几题、请重答」，不让作答无声蒸发（2026-11-02 业务口径） -->
+          <p v-if="live.droppedProbeAnswers" class="probe__receipt probe__receipt--warn">
+            方案更新后题目变了，之前答过的 {{ live.droppedProbeAnswers }} 道已失效，请重新作答。
+          </p>
         </div>
 
         <div v-if="confirmError" class="errorbar">
@@ -624,6 +636,7 @@ import { useUserStore } from '@/stores/user';
 import { currentUserId, dropLegacyRecentGoalsStorage, getGoalConversationCid, clearGoalGenTracking, getGoalGenTracking, setGoalGenTracking } from '@/utils/sessionCleanup';
 import { cachedMessageHtml, plainMessageHtml } from '@/utils/messageMarkdown';
 import { toast } from '@/utils/toast';
+import { copyText } from '@/utils/clipboard';
 import { feedbackApi } from '@/api/feedback';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
 import { isAwaitingAnswer, proposalEntryCopy } from './goalStageCopy';
@@ -700,8 +713,23 @@ const awaitingAnswer = computed(() => {
   }
   return false;
 });
-const entryCopy = computed(() => proposalEntryCopy(awaitingAnswer.value));
-/* 快选行不再显示可见标签（2026-11-03 用户反馈「直接不要这个提示」）：用法说明只保留给读屏器。 */
+/** 未作答的自测题数（0 = 没有题或已答完）：入口条据此把「有题可答」挑明 */
+const unansweredProbes = computed(() => {
+  const { answered, total } = live.probeProgress();
+  return Math.max(0, total - answered);
+});
+const entryCopy = computed(() => proposalEntryCopy(awaitingAnswer.value, unansweredProbes.value));
+/* 快选行不再显示可见标签（2026-11-03 用户反馈「直接不要这个提示」）：
+   「也可以直接选（点选填入输入框，可多选）」及按阶段变体、只教一次的逻辑一并移除，
+   用法说明只保留给读屏器。 */
+
+/* 自测作答回执：作答是本地表单（不逐题发回合），要让用户看见「记下了、确认时一起提交」，
+   否则点完没有任何反馈，和「点了没反应」分不开。 */
+const probeReceipt = computed(() => {
+  const { answered, total } = live.probeProgress();
+  if (!answered || !total) return '';
+  return answered >= total ? `已答 ${total} 题，会随确认一起提交` : `已答 ${answered} / ${total} 题`;
+});
 
 onMounted(() => {
   window.addEventListener('keydown', onProposalKey);
@@ -957,6 +985,11 @@ function pickReply(text: string) {
   toggleReply(text);
   focusComposerInput();
 }
+/** 作答自测题：本地记下答案，并收起「题目已更新」提示（用户已知悉换题） */
+function pickProbe(probe: { probeId: string }, optionId: string) {
+  live.answerProbe(probe, optionId);
+  live.acknowledgeProbeChange();
+}
 function keyboardReply(text: string) {
   if (pickedReplySet.value.has(text.trim())) {
     focusComposerInput();
@@ -1012,11 +1045,12 @@ const hoveredMsgId = ref<string | null>(null);
 function onBubbleEnter(id: string) { hoveredMsgId.value = id; }
 function onBubbleLeave() { hoveredMsgId.value = null; }
 
-async function copyMessage(text: string) {
-  try {
-    await navigator.clipboard.writeText(text);
-    toast.success('已复制到剪贴板');
-  } catch { toast.error('复制失败'); }
+/** 复制消息正文（与课堂侧同口径：局域网 http 下 Clipboard API 不可用，回退 execCommand） */
+async function copyMessage(text: string): Promise<boolean> {
+  const ok = await copyText(text);
+  if (ok) toast.success('已复制到剪贴板');
+  else toast.error('复制失败：浏览器未授予剪贴板权限，请手动选中文字复制');
+  return ok;
 }
 
 /** 消息级点赞/点踩上报：内容去重（后端按内容哈希 key），失败静默不打扰 */
@@ -1243,7 +1277,7 @@ const doneGenNote = computed(() => {
 /** Escape 关闭方案浮层（状态保留，对话可继续）。
     【2026-10-31 一锤定音修复】proposing 阶段不再自动弹浮层：方案先在对话流里完整落地
     （AI 本来就以「你看要不要调整？」收尾，后端非确认回复会再出新方案——多轮协商本就存在），
-    浮层只在用户点「查看方案」显式进入时出现；generating/done 两个阶段仍自动出现
+    浮层只在用户点「查看方案并确认」显式进入时出现；generating/done 两个阶段仍自动出现
     （那是生成进度与结果面板，不是方案本身）。 */
 const proposalDismissed = ref(false);
 /** 用户显式请求查看方案卡（对话流内的确认入口按钮） */
@@ -2166,17 +2200,21 @@ function shuffleScenes() {
    去白面板与面板头（replies-panel__head），整行蓝调按钮组：
    1px 蓝 28% 描边 + 蓝 5% 底 + blue-deep 文字 + 前置 6px 蓝点；选中变 ✓ */
 .replies {
-  display: flex; flex-direction: column; gap: 8px;
+  display: flex; flex-wrap: wrap; gap: 8px;
   margin-left: 40px;
 }
+/* 2026-11-02 用户反馈「快选太宽」：整行大按钮改成自动宽度的胶囊（与历史轮次 .msg__reply 同语言），
+   多个选项并排换行，不再一条占满一整行。 */
 .reply {
-  display: flex; align-items: flex-start; gap: 9px; width: 100%;
-  min-height: 44px; padding: 11px 14px; border-radius: 12px;
+  display: inline-flex; align-items: center; gap: 7px;
+  width: auto; max-width: 100%;
+  min-height: 38px; padding: 8px 14px;
+  border-radius: var(--mk-radius-pill);
   text-align: left;
   border: 1px solid color-mix(in srgb, var(--blue) 28%, transparent);
   background: color-mix(in srgb, var(--blue) 5%, transparent);
   color: var(--blue-deep);
-  font: inherit; font-size: 14px; font-weight: 600; line-height: 1.45;
+  font: inherit; font-size: 13.5px; font-weight: 600; line-height: 1.45;
   cursor: pointer;
   transition: background 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
 }
@@ -2250,8 +2288,7 @@ function shuffleScenes() {
   color: var(--mk-muted);
   min-width: 0;
 }
-/* margin-left:auto：正常态不再有 hint（2026-11-03），space-between 单子项会靠左，按钮留在右侧 */
-.proposal-invite__btn { flex: 0 0 auto; margin-left: auto; padding: 8px 16px; }
+.proposal-invite__btn { flex: 0 0 auto; padding: 8px 16px; }
 
 /* ---------- 生成状态 pill（走查 2026-11-01 P22） ----------
    三档语言：run=蓝描边脉点（与 .proposal__stop 同族的进行态）、done=平静绿档
@@ -2454,6 +2491,15 @@ function shuffleScenes() {
   background: var(--surface);
 }
 .probe__q { margin: 0; font-size: 13px; font-weight: 700; color: var(--ink); line-height: 1.55; }
+/* 自测作答回执（2026-11-02）：作答改为本地表单、不逐题发回合，点完必须有可见回执，
+   否则和「点了没反应」分不开 */
+.probe__receipt {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--mk-muted);
+}
+/* 换题导致作答失效：要做成提醒而不是普通回执，颜色取已定义的 amber 令牌（明暗自动翻转） */
+.probe__receipt--warn { color: var(--mk-amber); }
 /* 快速自测选项：原型 .wf-probe__opts —— 整行堆叠按钮（A/B 前缀方块 + 文案），非内联 chip 换行 */
 .probe__opts { display: grid; gap: 8px; }
 .probe__opt {
@@ -2626,7 +2672,10 @@ function shuffleScenes() {
      box-shadow 而非 border，不占布局尺寸），让角标与药丸之间有一道干净的呼吸缝。 */
   .panel__count-k { display: none; }
   .panel__count {
-    position: absolute; top: -6px; right: -5px;
+    /* 2026-11-04：原为 right:-5px —— badge 向右外挂 5px，390 宽实测把按钮撑出
+       scrollWidth 85 > clientWidth 80（按钮内容 48+5+11 正好 64 = 80−padding 16，本不溢出）。
+       改贴 0 后 badge 仍压在药丸右上角（上挂 6px 不变），按钮不再产生横向溢出。 */
+    position: absolute; top: -6px; right: 0;
     min-width: 17px; padding: 0 5px;
     border-radius: 999px;
     background: color-mix(in srgb, var(--blue) 14%, var(--surface));

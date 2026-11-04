@@ -20,9 +20,12 @@ const apiMock = vi.hoisted(() => ({
 }));
 
 vi.mock('@/api/aiTeaching', () => ({ aiTeachingAPI: apiMock }));
-vi.mock('@/utils/toast', () => ({ toast: { info: vi.fn(), error: vi.fn() } }));
+const toastMock = vi.hoisted(() => ({ info: vi.fn(), error: vi.fn() }));
+vi.mock('@/utils/toast', () => ({ toast: toastMock }));
 
 import { useCheckpointFlow } from '../useCheckpointFlow';
+
+const toast = toastMock;
 
 /** 流式提交时页面传给 api 的那组回调（与 streamSubmitCheckpoint 的 handlers 同形） */
 type CheckpointStreamHandlers = {
@@ -86,16 +89,18 @@ describe('useCheckpointFlow：讲解回合的心跳必须喂到停滞看门狗',
     );
 
     const pending = flow.submitCheckpoint();
-    // 只推进到讲解到达之后、卡片 1.2s 自动收起之前（收起会把 feedback 清空）
     await vi.advanceTimersByTimeAsync(120_500);
     await pending;
-    expect(flow.checkpointFeedback.value).toContain('讲解正文');
+    // 2026-11-02 起：讲解归对话区。没有注入 sink 的宿主（本用例）落到 lastSettledReply，
+    // 由页面在卡片关闭时补进聊天流；卡片自己只留判定，且已在判定窗内收起。
+    expect(flow.lastSettledReply.value?.text).toContain('讲解正文');
     expect(flow.checkpointPassed.value).toBe(true);
+    expect(flow.checkpoint.value).toBeNull();
     expect(apiMock.submitCheckpoint).not.toHaveBeenCalled();
     flow.disposeCheckpoint();
   });
 
-  it('反证：完全没有活动时，90 秒仍必须掐断——复现走查里那句「回答正确，可继续」', async () => {
+  it('反证：完全没有活动时，90 秒仍必须掐断——对错判定保留、讲解由 toast 认领', async () => {
     const flow = makeFlow();
     apiMock.submitCheckpoint.mockResolvedValue({ passed: true, revision: 1 });
 
@@ -116,8 +121,54 @@ describe('useCheckpointFlow：讲解回合的心跳必须喂到停滞看门狗',
     await vi.advanceTimersByTimeAsync(125_000);
     await pending;
 
-    expect(flow.checkpointFeedback.value).toBe('回答正确，可继续。');
+    // 判定保留（不回退成"提交失败"）、讲解流状态清干净、不再回写一个已收起卡片的文案
+    expect(flow.checkpointPassed.value).toBe(true);
+    expect(flow.checkpointStreaming.value).toBe(false);
+    expect(flow.checkpointFeedback.value).toBe('');
+    expect(toast.info).toHaveBeenCalledWith(expect.stringContaining('讲解没能送达'));
     expect(apiMock.submitCheckpoint).not.toHaveBeenCalled();
+    flow.disposeCheckpoint();
+  });
+
+  it('讲解归对话区：delta 逐段喂给页面 sink，卡片只留判定', async () => {
+    const session = ref({ sessionId: 's1', revision: 0 });
+    const appended: string[] = [];
+    const settled: string[] = [];
+    const flow = useCheckpointFlow(session, ref(false), ref(false), {
+      append: (d) => appended.push(d),
+      settle: (t) => settled.push(t),
+    });
+    flow.checkpoint.value = {
+      id: 'cp-sink',
+      type: 'single_choice',
+      question: '这一列在程序里该当数字还是文字？',
+      options: [{ id: 'A', text: '数字' }, { id: 'B', text: '文字' }],
+      allowSkip: false,
+    };
+    flow.selectedOptions.value = ['B'];
+
+    apiMock.streamSubmitCheckpoint.mockImplementation(
+      (_s: unknown, _c: unknown, _p: unknown, _r: unknown, handlers: CheckpointStreamHandlers) =>
+        new Promise((resolve) => {
+          handlers.onJudgement?.({ passed: true, judgedBy: 'code', detail: null });
+          handlers.onDelta?.('数量是');
+          handlers.onDelta?.('数字。');
+          setTimeout(() => resolve({ passed: true, feedback: '数量是数字，备注是文字', revision: 1 }), 10);
+        }),
+    );
+
+    const pending = flow.submitCheckpoint();
+    // 推进过判定窗（0.9s）：卡片的收起由判定到位时排的定时器负责
+    await vi.advanceTimersByTimeAsync(1000);
+    await pending;
+
+    expect(appended.join('')).toBe('数量是数字。');
+    expect(settled).toEqual(['数量是数字，备注是文字']);
+    // 作答回显在判定到位时就入流（早于讲解 delta，保证「我的答案 → 讲解」的顺序）
+    expect(flow.lastAnswerEcho.value?.text).toContain('我的答案');
+    // 讲解不再进卡片：判定后 0.9s 卡片即收起
+    expect(flow.checkpoint.value).toBeNull();
+    expect(flow.lastSettledReply.value).toBeNull();
     flow.disposeCheckpoint();
   });
 });

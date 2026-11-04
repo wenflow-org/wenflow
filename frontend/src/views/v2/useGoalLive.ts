@@ -2,7 +2,7 @@
  * 目标规划会话状态管理：由问流后端 goal-conversation skill 驱动。
  * 只负责交互与展示：会话由后端真实 skill 处理，本地仅做视图恢复（localStorage），不新增任何落库逻辑。
  */
-import { computed, reactive, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import {
   getGoalConversationCid,
   getGoalConversationMsgs,
@@ -19,10 +19,10 @@ import {
   streamReplyGoalConversation,
   streamRegenerateGoalConversation,
   type GoalConversationEnvelope,
+  type GoalProbeAnswer,
   type GoalUnderstanding
 } from '@/api/goalConversation';
 import { useInteractionMeta, type InteractionMeta } from '@/composables/useInteractionMeta';
-import { buildProbeAnswerText } from './probeAnswer';
 // 气泡时间标签单一实现（nowTime / formatMsgTime 同源），见 learningChat.ts 注释
 import { nowTime, formatMsgTime } from './learningChat';
 
@@ -334,7 +334,12 @@ const GOAL_SEND_STALL_TIMEOUT_MS = 90_000;
 /** 单次发送总闸：心跳只证明传输活着，总闸保证永挂任务最终有超时出口 */
 const GOAL_SEND_TOTAL_TIMEOUT_MS = 600_000;
 
-async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: string, meta?: InteractionMeta) {
+async function run(
+  action: 'start' | 'reply' | 'confirm' | 'supplement',
+  text: string,
+  meta?: InteractionMeta,
+  turnOptions?: { probeAnswers?: GoalProbeAnswer[] },
+) {
   const gen = generation;
   sending.value = true;
   failed.value = '';
@@ -374,7 +379,7 @@ async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: s
       if (action === 'start') {
         env = await streamStartGoalConversation(text, { meta }, { onDelta, onActivity: armWatchdog, signal: abort.signal });
       } else if (action === 'confirm') {
-        env = await streamReplyGoalConversation(conversationId.value, text, { confirmProposal: true }, { onDelta, onActivity: armWatchdog, signal: abort.signal });
+        env = await streamReplyGoalConversation(conversationId.value, text, { confirmProposal: true, probeAnswers: turnOptions?.probeAnswers }, { onDelta, onActivity: armWatchdog, signal: abort.signal });
       } else if (action === 'supplement') {
         env = await streamRegenerateGoalConversation(conversationId.value, text, { onDelta, onActivity: armWatchdog, signal: abort.signal });
       } else {
@@ -502,7 +507,7 @@ async function send(text: string, skipUserPush = false) {
   ) {
     // 方案卡在展示时键入确认短语 = 与确认按钮同权的显式确认；
     // 不路由的话模型只能复述方案（硬规则禁模型自报 ready）→ goal 阶段绕圈圈
-    await run('confirm', t);
+    await run('confirm', t, undefined, { probeAnswers: pendingProbeAnswers() });
   } else {
     await run('reply', t, meta);
   }
@@ -513,17 +518,72 @@ async function confirm() {
   const label = '确认并生成路径';
   pushMessage({ role: 'user', content: label, time: nowTime() });
   setGoalConversationMsgs(JSON.stringify(messages.value.slice(-60)));
-  await run('confirm', label);
+  await run('confirm', label, undefined, { probeAnswers: pendingProbeAnswers() });
 }
 
-/** 前置探测题作答：把选项以明确格式作为用户消息发送，goal-conversation 回填
-    prerequisiteCheckResults。消息格式与渲染识别共用 ./probeAnswer（先给答案、题目跟后）。 */
-async function answerProbe(probe: { probeId: string; targetConcept: string; question: string; options: Array<{ id: string; text: string }> }, optionId: string, optionText: string) {
+/**
+ * 待提交的前置自测作答（按当前方案的题目顺序，只收已作答的）。
+ * 2026-11-02 口径：自测是「方案确认前的一张表单」——作答不发对话回合，
+ * 随确认请求一次性提交，后端按 confirmedProposal 的 correctOption 确定性判分。
+ */
+function pendingProbeAnswers(): GoalProbeAnswer[] {
+  const p = proposal.value;
+  if (!p) return [];
+  return p.probes
+    .filter((probe) => !!probeAnswers.value[probe.probeId])
+    .map((probe) => ({
+      probeId: probe.probeId,
+      userAnswer: probeAnswers.value[probe.probeId],
+      ...(probe.targetConcept ? { targetConcept: probe.targetConcept } : {}),
+    }));
+}
+
+/** 已作答题数 / 题目总数（面板回执文案用） */
+function probeProgress(): { answered: number; total: number } {
+  const total = proposal.value?.probes.length ?? 0;
+  const answered = pendingProbeAnswers().length;
+  return { answered, total };
+}
+
+/**
+ * 换题保护（2026-11-02 业务口径）：作答按 probeId 记录，方案重渲染若换了题/少一道，
+ * 旧答案会**凭空失效**——回执从 2/2 掉回 1/2，用户以为「我答过的丢了」。
+ * 这里在方案变化时主动清掉已不存在的题号，并把「被清掉几题」暴露给面板，
+ * 让用户看到「题目有更新，请重新确认」，而不是无声蒸发。
+ */
+const droppedProbeAnswers = ref(0);
+watch(proposal, (next) => {
+  const ids = new Set((next?.probes ?? []).map((p) => p.probeId));
+  if (!ids.size) return;
+  const kept: Record<string, string> = {};
+  let dropped = 0;
+  for (const [probeId, optionId] of Object.entries(probeAnswers.value)) {
+    if (ids.has(probeId)) kept[probeId] = optionId;
+    else dropped += 1;
+  }
+  if (dropped > 0) {
+    probeAnswers.value = kept;
+    droppedProbeAnswers.value = dropped;
+  }
+});
+
+/** 重新作答即视为已知悉换题，提示收起 */
+function acknowledgeProbeChange() {
+  droppedProbeAnswers.value = 0;
+}
+
+/**
+ * 前置探测题作答（2026-11-02 口径重做）：**只记本地状态，不发对话回合**。
+ *
+ * 旧实现每答一题就把答案当消息发给模型、走一个完整回合，两题场景实测卡住：
+ * 答第 1 题后面板全部选项禁用、等 30-90s，回来时方案重渲染（题目少一道/换题），
+ * 用户既答不完也看不懂。现在作答是纯本地表单，点「确认，生成我的路径」时随确认
+ * 一次性提交（见 pendingProbeAnswers / confirm），判分由后端确定性完成。
+ * 再点别的选项 = 改答案（本地覆盖），不锁死。
+ */
+function answerProbe(probe: { probeId: string }, optionId: string) {
   if (sending.value) return;
-  if (probeAnswers.value[probe.probeId]) return; // 已作答，防重复
   probeAnswers.value = { ...probeAnswers.value, [probe.probeId]: optionId };
-  const text = buildProbeAnswerText(probe.question, optionId, optionText);
-  await send(text, false);
 }
 
 async function supplement(text: string) {
@@ -636,6 +696,10 @@ export function useGoalLive() {
     quickReplies,
     proposal,
     probeAnswers,
+    probeProgress,
+    pendingProbeAnswers,
+    droppedProbeAnswers,
+    acknowledgeProbeChange,
     learningPath,
     sending,
     streamingText,

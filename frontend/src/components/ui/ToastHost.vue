@@ -90,8 +90,11 @@ const dismissToast = (item: ToastItem) => {
   color: var(--mk-ink);
   font-size: 13.5px;
   line-height: 1.5;
-  /* toast → 模态阴影档（§0.5 阴影表：模态/抽屉/toast/登录壳） */
-  box-shadow: var(--mk-shadow-modal);
+  /* 阴影降到「浮层档」（2026-11-02 用户走查：右上角通知在亮/暗两色下都拖着一圈重影）。
+     原引 --mk-shadow-modal 是给模态/抽屉那类大面积弹层准备的（亮 0 24 64/.22、暗 0 24 64/.7），
+     挂在 340px 宽的小卡上，暗色里就是一团黑雾、多张还互相叠加。
+     toast 是「浮在内容之上的小卡」，对应 §0.5 的浮层（pop）档。 */
+  box-shadow: var(--mk-shadow-pop);
   pointer-events: auto;
 }
 

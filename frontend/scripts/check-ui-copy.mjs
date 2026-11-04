@@ -11,7 +11,7 @@
  *   R6 同文件重复：同一句文案在同一文件出现 ≥2 次（复读）
  *   R7 冗余副标：非必填标记「（可选）/ 选填」——必填已用 * 标注，再标「可选」是把
  *      「没有 *」换一句话说一遍（2026-10-29 冗余副文审计；判定标准见
- *      doc/ADMIN_COPY_SEMANTIC_AUDIT.md「冗余副文专项」）
+ *      ADMIN_COPY_SEMANTIC_AUDIT.md（已移出仓库，见 git 历史）「冗余副文专项」）
  *
  * 用法：
  *   node scripts/check-ui-copy.mjs            # 与基线比对，新增即失败

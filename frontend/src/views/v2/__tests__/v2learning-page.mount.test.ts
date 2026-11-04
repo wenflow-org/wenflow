@@ -418,3 +418,80 @@ describe('V2LearningPage 挂载回归', () => {
     w.unmount();
   });
 });
+
+/**
+ * 开场引导的恢复对位（2026-11-02 走查：同一节课看到「两个问题」）。
+ * question/quickReplies 与开场白分开落库（messages[0].analysis），刷新恢复时按直播同一套规则
+ * 摆回面板；旧数据（正文里粘着 question、analysis 没有 question 字段）只出现一次，不重复。
+ */
+describe('开场引导恢复对位', () => {
+  it('学习者未开口时刷新：气泡只放定位语，question 摆回面板，全屏只有一处问题', async () => {
+    api.startSession.mockResolvedValue({ sessionId: 's_restore', revision: 3, mode: 'resumed', scene: { kind: 'relearn', title: '重新学这一课' } });
+    api.getSessionDetail.mockResolvedValue({
+      revision: 3,
+      messages: [{
+        role: 'assistant',
+        content: '这节课拿六个真实考试句子，练一件事：先找时间标志词、再判断动作性质。',
+        analysis: {
+          openingMode: 'self-assess',
+          quickReplies: [{ text: '先讲「时间标志词」怎么找' }, { text: '直接开始标六个句子' }],
+          question: '你平时做这类题，是先扫时间词，还是先凭语感把选项读一遍？',
+        },
+      }],
+    });
+
+    const w = await mountPage();
+    const questionText = '你平时做这类题，是先扫时间词，还是先凭语感把选项读一遍？';
+
+    // 气泡 = 定位语（question 不在气泡里）
+    const bubble = w.find('.msg--ai .msg__bubble');
+    expect(bubble.text()).toContain('先找时间标志词');
+    expect(bubble.text()).not.toContain(questionText);
+    // 面板 = question + 动作选项
+    expect(w.find('.replies__question').text()).toBe(questionText);
+    expect(w.findAll('.reply')).toHaveLength(2);
+    // 全屏只有一处问题
+    expect(w.text().split(questionText).length - 1).toBe(1);
+
+    w.unmount();
+  });
+
+  it('旧数据（正文里粘着 question、analysis 无 question 字段）只出现一次，不重复', async () => {
+    api.startSession.mockResolvedValue({ sessionId: 's_legacy', revision: 4, mode: 'resumed', scene: { kind: 'relearn', title: '重新学这一课' } });
+    const legacyQuestion = '「since 2019」和「last Friday」在你眼里是同一类信号吗？';
+    api.getSessionDetail.mockResolvedValue({
+      revision: 4,
+      messages: [{
+        role: 'assistant',
+        content: `这节课拿六个句子练时间标志词。\n\n${legacyQuestion}`,
+        analysis: { openingMode: 'self-assess', quickReplies: [{ text: '先讲「时间标志词」' }] },
+      }],
+    });
+
+    const w = await mountPage();
+    // 没有 question 字段就不摆面板那一行；正文里的那份原样保留 → 仍然只有一处
+    expect(w.find('.replies__question').exists()).toBe(false);
+    expect(w.text().split(legacyQuestion).length - 1).toBe(1);
+
+    w.unmount();
+  });
+
+  it('已经上过课再刷新：不重建动作选项（旧动作不该在课中重新冒出来）', async () => {
+    api.startSession.mockResolvedValue({ sessionId: 's_mid', revision: 9, mode: 'resumed', scene: null });
+    api.getSessionDetail.mockResolvedValue({
+      revision: 9,
+      messages: [
+        { role: 'assistant', content: '开场定位语。', analysis: { quickReplies: [{ text: '先讲「X」' }], question: '你之前接触过吗？' } },
+        { role: 'user', content: '直接开始' },
+        { role: 'assistant', content: '好，第一句先圈时间词。' },
+      ],
+    });
+
+    const w = await mountPage();
+    expect(w.find('.replies').exists()).toBe(false);
+    expect(w.find('.replies__question').exists()).toBe(false);
+    expect(w.findAll('.reply')).toHaveLength(0);
+
+    w.unmount();
+  });
+});

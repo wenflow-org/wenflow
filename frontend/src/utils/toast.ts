@@ -63,6 +63,17 @@ const resetToastTimer = (id: number, duration: number) => {
 const addToast = (type: ToastType, message: string, duration = 3000) => {
   const now = Date.now();
   const dedupeKey = `${type}\u0000${message}`;
+
+  // 同文案仍在屏上 → 只续时，不再叠第二张（2026-11-02 走查）。
+  // 原实现只在 1.2s 窗口内去重，用户反复点同一个按钮（如局域网 http 下复制连点）
+  // 会堆起两三张一模一样的卡，右上角一片阴影；同一条信息重复出现本来也不该占位。
+  const onScreen = toasts.find((item) => item.type === type && item.message === message);
+  if (onScreen) {
+    recentToasts.set(dedupeKey, { id: onScreen.id, shownAt: now });
+    resetToastTimer(onScreen.id, duration);
+    return onScreen.id;
+  }
+
   const recent = recentToasts.get(dedupeKey);
   const duplicate = recent && now - recent.shownAt <= DEDUPE_WINDOW_MS
     ? toasts.find((item) => item.id === recent.id)

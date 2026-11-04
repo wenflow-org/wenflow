@@ -4,7 +4,7 @@
  *
  * 关键词门禁（check-ui-copy.mjs）只能抓词典/句式反模式；「随此切换，记忆与行为基线不变」
  * 这类解释性文案每个词都合法，只能靠读者（人或大模型）按语义判断。本脚本把候选行连同
- * 文件与行号导出，交给审阅方逐条判「删 / 留」，审阅标准见 doc/ADMIN_COPY_SEMANTIC_AUDIT.md。
+ * 文件与行号导出，交给审阅方逐条判「删 / 留」，审阅标准见 ADMIN_COPY_SEMANTIC_AUDIT.md（已移出仓库，见 git 历史）。
  *
  * 用法：
  *   node scripts/dump-ui-copy.mjs                 # JSONL → stdout

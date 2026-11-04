@@ -35,12 +35,15 @@ export interface ProposalEntryCopy {
 
 /**
  * 入口条文案：hint 只在真有非可见信息时出现（导师在要信息），按钮一颗。
- * 导师在问会改方案的问题时，入口条不再宣称「方案已就绪」——因为方案里正有一个待表态的点。
  * 正常态不再给提示句（2026-11-03 用户反馈「不要这种写法」）：「方案已就绪——回复即可
  * 继续调整，满意了再确认」是自我宣告加教用法，方案面板本身就在，按钮「查看方案」足够。
- * （快选行在 understanding 也存在，文案不能只说「调整」。）
+ * 导师在问会改方案的问题时，入口条不再宣称「方案已就绪」——因为方案里正有一个待表态的点。
+ * （快选行在 understanding 也存在，文案不能只说「调整」；该行可见标签已于 2026-11-03 移除。）
+ *
+ * `unansweredProbes`（2026-11-02 业务口径）：自测题只长在预览面板里，用户不开面板就看不到题，
+ * 也谈不上作答。有题未答时入口条把这件事挑明，别让「可选」变成「不可见」。
  */
-export function proposalEntryCopy(awaitingAnswer: boolean): ProposalEntryCopy {
+export function proposalEntryCopy(awaitingAnswer: boolean, unansweredProbes = 0): ProposalEntryCopy {
   if (awaitingAnswer) {
     // 不写「在下面回复导师」：方位指路是文案门禁 R2 禁项，且方案卡审阅浮层打开时
     // 输入区会随遮罩锁定（P21），「下面」并不总是一个能立刻用的去处
@@ -49,8 +52,17 @@ export function proposalEntryCopy(awaitingAnswer: boolean): ProposalEntryCopy {
       button: '查看当前方案',
     };
   }
+  if (unansweredProbes > 0) {
+    return {
+      hint: `还有 ${unansweredProbes} 道快速自测可先答，用来校准起点`,
+      button: '查看方案',
+    };
+  }
   return {
     hint: '',
     button: '查看方案',
   };
 }
+
+/* 快选行的可见标签已整体移除（2026-11-03 用户反馈「直接不要这个提示」），
+   用法说明只保留给读屏器（V2GoalConversation .visually-hidden）。 */

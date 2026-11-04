@@ -3,7 +3,7 @@
    1. 会话验证遮罩（main.ts 动态创建，独立于 mk 体系）；
    2. 4K 超大屏 zoom（壳层全局等比放大）。
    原 EP 覆写块已随 Element Plus 全量移除而删除（QuickLearnPanel 2026-09 重写为 mk-* 原语，
-   全仓现无任何 element-plus import；见 doc/ADMIN_PAGE_TEMPLATES.md §① 的 09-25 批注）。 */
+   全仓现无任何 element-plus import；见 ADMIN_PAGE_TEMPLATES.md（已移出仓库，见 git 历史） §① 的 09-25 批注）。 */
 
 html.admin-session-concealed,
 html.admin-session-concealed body,

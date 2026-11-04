@@ -60,3 +60,22 @@ describe('proposalEntryCopy：确认入口条只说确认这一件事', () => {
     expect(copy.hint).toBe('');
   });
 });
+
+describe('proposalEntryCopy：有未答自测时把这件事挑明（2026-11-02 业务口径）', () => {
+  it('有未答题：提示写明还有几道可选自测，按钮不变', () => {
+    const copy = proposalEntryCopy(false, 2);
+    expect(copy.hint).toContain('2 道快速自测');
+    expect(copy.hint).toContain('校准起点');
+    expect(copy.button).toBe('查看方案');
+  });
+
+  it('无未答题：同样没有提示句', () => {
+    expect(proposalEntryCopy(false, 0).hint).toBe('');
+  });
+
+  it('导师仍在问会改方案的问题时：优先播报「回答导师」，不掺自测', () => {
+    const copy = proposalEntryCopy(true, 2);
+    expect(copy.hint).toContain('导师这一问');
+    expect(copy.hint).not.toContain('快速自测');
+  });
+});
