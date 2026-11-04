@@ -225,4 +225,35 @@ describe('LearningEvaluationPage 当堂对话折叠', () => {
     // 答案键被服务端剥离：页面上不该出现「正确答案」字样
     expect(cpItem.text()).not.toContain('正确答案');
   });
+
+  it('同版白板快照回放去重：板变了才画新版（2026-11-04「看图都是一张图」）', async () => {
+    const vennRev = (rev: number, firstLeft: string) => ({
+      engine: 'svg',
+      kind: 'venn',
+      board: true,
+      boardRevision: rev,
+      spec: { left: { head: '常识解释', items: [firstLeft] }, right: { head: '心理学解释', items: ['能测'] }, overlap: { head: '两边都谈', items: ['总迟到'] } }
+    });
+    getSessionDetailMock.mockResolvedValue({
+      ...detail,
+      messages: [
+        { role: 'assistant', content: '第一次摆板', timestamp: '2026-09-23T02:51:00.000Z', figures: [vennRev(1, '懒、不上心')] },
+        { role: 'assistant', content: '同一块板再看一眼', timestamp: '2026-09-23T02:53:00.000Z', figures: [vennRev(1, '懒、不上心')] },
+        { role: 'assistant', content: '同版又画一次', timestamp: '2026-09-23T02:54:00.000Z', figures: [vennRev(1, '懒、不上心')] },
+        { role: 'user', content: '把这一步画成结构图', timestamp: '2026-09-23T02:55:00.000Z' },
+        { role: 'assistant', content: '板更新了', timestamp: '2026-09-23T02:56:00.000Z', figures: [vennRev(2, '懒、不重视')] },
+        { role: 'assistant', content: '新版再指一次', timestamp: '2026-09-23T02:57:00.000Z', figures: [vennRev(2, '懒、不重视')] }
+      ]
+    });
+
+    const w = await mountReady();
+    await w.find('.evaluation-transcript-toggle').trigger('click');
+    const items = w.findAll('.evaluation-transcript-item');
+    expect(items.length).toBe(6);
+    // 6 条快照只画 2 次：rev1 首现（第 1 条）、rev2 首现（第 5 条）；重复快照条目零图
+    const figCounts = items.map((i) => i.findAll('.stub-figure').length);
+    expect(figCounts).toEqual([1, 0, 0, 0, 1, 0]);
+    // 新版内容确实画出来（不是把 rev1 留着充数）
+    expect(items[4].find('.stub-figure').attributes('data-kind')).toBe('venn');
+  });
 });

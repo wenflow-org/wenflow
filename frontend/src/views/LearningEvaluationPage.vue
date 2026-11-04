@@ -392,13 +392,39 @@ const toTs = (value: unknown): number => {
 const TRANSCRIPT_PREVIEW_COUNT = 2;
 const transcriptExpanded = ref(false);
 const transcriptEntries = computed<TranscriptEntry[]>(() => {
+  // 白板快照去重（2026-11-04 用户反馈「看图都是一张图」）：直播时每回合内联当前板快照
+  // 是对的（学生始终看得到板），但回放时同版快照逐条重画——本例 6 条图只有 2 个版本，
+  // 每版重复 3 次。回放语义改为「板变了才画新版」：按 boardRevision（缺省退回 spec 内容）
+  // 与 mermaid code 去重，重复快照不再渲染，正文照常回放。
+  const seenBoardSigs = new Set<string>();
+  const boardSig = (figure: { boardRevision?: number; spec?: unknown }): string => (
+    figure.boardRevision != null ? `r${figure.boardRevision}` : JSON.stringify(figure.spec ?? null)
+  );
   const entries: TranscriptEntry[] = [
-    ...mainDialogueMessages.value.map((message, index) => ({
-      kind: 'message' as const,
-      key: `m-${index}-${message.timestamp || ''}`,
-      ts: toTs(message.timestamp),
-      message,
-    })),
+    ...mainDialogueMessages.value.map((message, index) => {
+      // 无条件过滤：filter 天然放行首次出现的快照（同时登记签名），其后同版快照被剔
+      const freshFigures = (message.figures || []).filter((f) => {
+        const sig = 'b' + boardSig(f);
+        if (seenBoardSigs.has(sig)) return false;
+        seenBoardSigs.add(sig);
+        return true;
+      });
+      const freshDiagrams = (message.diagrams || []).filter((d) => {
+        const sig = 'm' + d.code;
+        if (seenBoardSigs.has(sig)) return false;
+        seenBoardSigs.add(sig);
+        return true;
+      });
+      const dropped = freshFigures.length !== (message.figures || []).length
+        || freshDiagrams.length !== (message.diagrams || []).length;
+      const view = dropped ? { ...message, figures: freshFigures, diagrams: freshDiagrams } : message;
+      return {
+        kind: 'message' as const,
+        key: `m-${index}-${message.timestamp || ''}`,
+        ts: toTs(message.timestamp),
+        message: view,
+      };
+    }),
     ...transcriptCheckpoints.value.map((checkpoint, index) => ({
       kind: 'checkpoint' as const,
       key: `cp-${index}-${checkpoint.checkpointId || checkpoint.submittedAt || ''}`,
