@@ -2,6 +2,7 @@ const mockRequirementOrchestrator = {
   start: jest.fn(),
   step: jest.fn(),
   regenerate: jest.fn(),
+  getConversation: jest.fn(),
 };
 
 jest.mock('../../coordinators/requirement.coordinator', () => ({
@@ -16,8 +17,8 @@ jest.mock('../../utils/logger', () => ({ logger: { error: jest.fn() } }));
 import router from '../goal-conversation';
 import { PathMutationConflictError } from '../../services/learning/path-mutation-safety';
 
-function getRouteHandler(path: string) {
-  const layer = (router as any).stack.find((item: any) => item.route?.path === path && item.route?.methods?.post);
+function getRouteHandler(path: string, method: 'post' | 'get' = 'post') {
+  const layer = (router as any).stack.find((item: any) => item.route?.path === path && item.route?.methods?.[method]);
   if (!layer) throw new Error(`Route not found: ${path}`);
   return layer.route.stack[layer.route.stack.length - 1].handle;
 }
@@ -365,6 +366,46 @@ describe('goal-conversation public route contracts', () => {
       expect(joined).toContain('event: final\n');
       expect(joined).toContain('event: done\ndata: {}');
       expect(res.end).toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /:conversationId · userVisible 契约（#221）', () => {
+    function getSnapshot(overrides: Record<string, any> = {}) {
+      return {
+        id: 'gc-1',
+        stage: 'proposing',
+        status: 'active',
+        confidence: 0.5,
+        userVisible: null,
+        messages: [],
+        collected: {},
+        understanding: {},
+        nextQuestions: [],
+        learningPath: null,
+        ...overrides,
+      };
+    }
+
+    it('服务层无用户可见文案时返回 null，不透出「会话详情获取成功」占位串', async () => {
+      mockRequirementOrchestrator.getConversation.mockResolvedValue(getSnapshot());
+      const handler = getRouteHandler('/:conversationId', 'get');
+      const res = createResponse();
+
+      await handler({ user: { userId: 'user-1' }, params: { conversationId: 'gc-1' } }, res);
+
+      expect(res.json.mock.calls[0][0].data.userVisible).toBeNull();
+    });
+
+    it('进行中快照原样透出最后一条 AI 回复', async () => {
+      mockRequirementOrchestrator.getConversation.mockResolvedValue(getSnapshot({
+        userVisible: '先确认一下你平时用什么器具？',
+      }));
+      const handler = getRouteHandler('/:conversationId', 'get');
+      const res = createResponse();
+
+      await handler({ user: { userId: 'user-1' }, params: { conversationId: 'gc-1' } }, res);
+
+      expect(res.json.mock.calls[0][0].data.userVisible).toBe('先确认一下你平时用什么器具？');
     });
   });
 });

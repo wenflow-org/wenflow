@@ -128,31 +128,51 @@ export async function buildCompletedConversationResult(input: {
 }
 
 /**
- * 已完成硬阻断会话的 userVisible（#213）：GET 快照此前硬编码「会话详情获取成功」，
- * 分诊硬阻断终局的拒绝文案重载后无处可寻。这里复用 /reply 同源的 buildHardBlockResult
- * 重建文案，保证「当场返回」与「刷新重建」逐字一致。
+ * GET 快照的 userVisible（#213 / #221）：字段语义是「用户可见的结果」，不能落成
+ * HTTP 层占位串。按状态给值：
  *
- * 只对「已完成 + 未绑路径 + 存档分诊判硬阻断」返回文案；其余形态返回 null，路由回退
- * 通用确认语——普通完成态与「非硬阻断无路径」终局保持既有 GET 行为不变（避免把
- * buildCompletedConversationResult 里"学习路径已经生成"的句子误当成拒绝原因）。
+ * - 已完成 + 已绑路径：`学习路径已生成：<名字>`（与 output-normalizer 同款文案）；
+ * - 已完成 + 未绑路径 + 存档分诊判硬阻断：复用 /reply 同源的 buildHardBlockResult
+ *   重建拒绝文案（#213：保证「当场返回」与「刷新重建」逐字一致）；
+ * - 已完成 + 未绑路径 + 非硬阻断：返回 null（无用户可见的终局文案，不臆造）；
+ * - 进行中：返回最后一条 assistant 消息文本（用户看到的就是它），没有则 null。
+ *
+ * 调用方不得再用占位串兜底——null 就是「没有可展示的文案」。
  */
-export function resolveCompletedConversationUserVisible(input: {
+export function resolveConversationUserVisible(input: {
   conversationId: string;
   status: string;
   collectedData: string | null;
   learningPathId: string | null;
+  learningPath: { id: string; name?: string | null } | null;
+  messages: Array<{ role?: unknown; content?: unknown }> | null | undefined;
 }): string | null {
-  if (input.status !== 'completed' || input.learningPathId) return null;
-  const data = JSON.parse(input.collectedData || '{}');
-  const triage = resolveResponseTriageFromCollectedData(data);
-  if (!isHardBlockResponseTriage(triage, data.understanding)) return null;
-  return buildHardBlockResult(
-    {
-      conversationId: input.conversationId,
-      understanding: data.understanding || {},
-      confidence: data.confidence || 0,
-      collected: data.collected || {},
-    },
-    triage as ResponseTriage,
-  ).userVisible;
+  if (input.status === 'completed') {
+    if (input.learningPath) {
+      return `学习路径已生成：${input.learningPath.name || '未命名路径'}`;
+    }
+    // 已绑路径但权威行缺失：既不谎称「已生成」，也不误落硬阻断拒绝文案。
+    if (input.learningPathId) return null;
+    const data = JSON.parse(input.collectedData || '{}');
+    const triage = resolveResponseTriageFromCollectedData(data);
+    if (!isHardBlockResponseTriage(triage, data.understanding)) return null;
+    return buildHardBlockResult(
+      {
+        conversationId: input.conversationId,
+        understanding: data.understanding || {},
+        confidence: data.confidence || 0,
+        collected: data.collected || {},
+      },
+      triage as ResponseTriage,
+    ).userVisible;
+  }
+
+  const messages = Array.isArray(input.messages) ? input.messages : [];
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message?.role !== 'ai' && message?.role !== 'assistant') continue;
+    const content = typeof message.content === 'string' ? message.content.trim() : '';
+    if (content) return content;
+  }
+  return null;
 }
