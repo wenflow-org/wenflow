@@ -90,6 +90,14 @@
             <h4 class="mpp-toolbar__title">
               已挂载模型 <span class="mpp-models__count">({{ selected.models.length }})</span>
             </h4>
+            <!-- 平台默认模型读数（P0 2026-11-04）：没单独配的 Skill 都走这个模型。
+                 缺省时运行时直接报「AI model is not configured」，所以它跟着列表标题一起上屏——
+                 它是这条通道能不能跑起来的前提，不是可选项。 -->
+            <span
+              class="mpp-toolbar__default"
+              :class="{ 'mpp-toolbar__default--unset': !defaultModel }"
+              :title="defaultTitle"
+            >默认：{{ defaultModel || '未设置' }}</span>
             <div class="mpp-toolbar__acts">
               <!-- 上游读数（小灰字）：清单拉过才显示；「还有几个没挂载」挂在 title 里，
                    不占工具栏的宽度 -->
@@ -141,6 +149,13 @@
               <div class="mpp-model-row__main">
                 <div class="mpp-model-row__idline">
                   <span class="mono mpp-model-row__id" :title="m.id">{{ m.id }}</span>
+                  <!-- 平台默认（P0 2026-11-04）：这一枚就是「没单独配的 Skill 走哪个」的答案，
+                       与下面「设为默认」动作同源。缺省时谁都没标，「默认：未设置」在工具栏顶部兜底。 -->
+                  <span
+                    v-if="isDefaultModel(m)"
+                    class="mk-badge mk-badge--info mpp-default-chip"
+                    title="没单独指定模型的 Skill 都走这个模型（对话档默认）"
+                  >默认</span>
                   <span v-for="tag in functionTags(m)" :key="tag" class="mpp-fn__chip">{{ tag }}</span>
                 </div>
                 <p class="mpp-model-params" :title="PARAM_SUMMARY_TITLE">
@@ -185,6 +200,24 @@
                     @click.stop="toggleMenu(m.id)"
                   >⋯</button>
                   <div v-if="openMenu === m.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
+                    <!-- 平台默认（P0 2026-11-04）：低频但必做一次，所以收进 ⋯ 而不是行内第三枚链接——
+                         行内已有「配置 / 测试」，再平铺两枚会把每行推成操作条。 -->
+                    <button
+                      type="button"
+                      class="mk-menu__item"
+                      role="menuitem"
+                      :disabled="busy || registry?.readOnly || isDefaultModel(m)"
+                      title="让没单独指定模型的 Skill 都走这个模型"
+                      @click="requestDefault(m, 'chat')"
+                    >设为默认（对话）</button>
+                    <button
+                      type="button"
+                      class="mk-menu__item"
+                      role="menuitem"
+                      :disabled="busy || registry?.readOnly || m.id === defaultReasoningModel"
+                      title="推理档的 Skill 未单独指定模型时走这个"
+                      @click="requestDefault(m, 'reasoning')"
+                    >设为默认（推理）</button>
                     <button
                       type="button"
                       class="mk-menu__item mk-menu__item--danger"
@@ -211,9 +244,10 @@
       :provider-id="selected?.id ?? ''"
       :models="fetchableModels"
       :registered="[...registeredIds]"
-      @confirm="addSelected"
+      @confirm="startCapabilityConfirm"
       @manual="openManualAdd"
     />
+    <ModelCapabilityConfirmDialog ref="capabilityDialog" @confirm="addSelected" />
     <ModelEditorDialog ref="modelEditor" :fallback-options="fallbackOptions" @saved="onModelSaved" />
   </section>
 </template>
@@ -225,8 +259,8 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import { RefreshCw } from 'lucide-vue-next'
 import ModelEditorDialog, { type ModelLike } from './ModelEditorDialog.vue'
+import ModelCapabilityConfirmDialog, { type ConfirmedModelCapability } from './ModelCapabilityConfirmDialog.vue'
 import PullModelsDialog from './PullModelsDialog.vue'
-import { inferModelCapabilities } from './modelCapabilityInference'
 import { askConfirm } from './useConfirm'
 import { useRowMenu } from './useRowMenu'
 import { errMsg } from './live'
@@ -263,16 +297,28 @@ interface RegistryHealth {
 const props = withDefaults(defineProps<{
   /** 上游模型清单（宿主连接设置里拉到的，平台通道用） */
   upstream?: string[]
-}>(), { upstream: () => [] })
+  /** 平台默认模型（对话档）：没单独指定模型的 Skill 走它。空 = 未设置，运行时不可用 */
+  defaultModel?: string
+  /** 平台默认推理模型：推理档 Skill 未单独指定时走它 */
+  defaultReasoningModel?: string
+}>(), { upstream: () => [], defaultModel: '', defaultReasoningModel: '' })
 
 const emit = defineEmits<{
   /** 注册表被改动（增删改）→ 宿主决定是否重取别名/默认解析 */
   changed: []
   /** 已登记的模型 id（宿主用它算「上游还有几个没登记」的关系句，避免两处各算一遍） */
   registered: [ids: string[]]
+  /** 平台通道已挂载的模型 id（只这一条通道，不含停用示例供应商）：宿主据此种/校正平台默认 */
+  platformModels: [ids: string[]]
   /** ③ 点「添加模型」时清单还没拉过：请宿主先做 ②（拉取 + 落盘连接，成功后宿主会开勾选浮窗）。
       这条把原先「静默转手动录入」的死路补成一步可预期的动作。 */
   fetchUpstream: []
+  /** 设为平台默认（P0）：默认模型存 DB platform_api_configs，不在注册表文件里，
+      所以本面板只发意图，由宿主（持有 live 配置）落盘。kind 区分对话档 / 推理档。 */
+  setDefault: [modelId: string, kind: 'chat' | 'reasoning']
+  /** 模型被删除后通知宿主：若删的正是平台默认，宿主负责改指到下一个可用模型，
+      否则默认会指向一个已不存在的 id（运行时同样报错）。 */
+  removeModel: [modelId: string]
 }>()
 
 const view = ref<ProvidersView | null>(null)
@@ -291,6 +337,7 @@ const { openMenu, toggleMenu, popStyle } = useRowMenu()
 
 const modelEditor = ref<InstanceType<typeof ModelEditorDialog> | null>(null)
 const pullDialog = ref<InstanceType<typeof PullModelsDialog> | null>(null)
+const capabilityDialog = ref<InstanceType<typeof ModelCapabilityConfirmDialog> | null>(null)
 
 const providers = computed(() => view.value?.providers ?? [])
 /** 目录文件状态（路径/可写/最近一次热重载错误）：模板里多处按它决定是否禁用编辑 */
@@ -355,6 +402,26 @@ function paramSummary(m: ModelLike): string[] {
 /** 参数摘要行的悬停全文（静态文案单源，不给每行算一遍） */
 const PARAM_SUMMARY_TITLE = '只列这个模型单独设过的项（未设的项不发给上游，由上游按自身默认处理）'
 
+/* ---------- 平台默认模型（P0 2026-11-04） ---------- */
+/** 行内「默认」徽章的判据：平台默认就是这个模型（对话档） */
+function isDefaultModel(m: ModelLike): boolean {
+  return !!props.defaultModel && m.id === props.defaultModel
+}
+/** 工具栏默认读数的悬停全文：说清它管谁、在哪改、缺了会怎样 */
+const defaultTitle = computed(() => {
+  if (props.defaultModel) {
+    const extra = props.defaultReasoningModel && props.defaultReasoningModel !== props.defaultModel
+      ? `，推理档另走 ${props.defaultReasoningModel}`
+      : ''
+    return `没单独指定模型的 Skill 都走它${extra}。在模型行的 ⋯ 菜单里换。`
+  }
+  return '还没有钉平台默认模型：没单独指定模型的 Skill 调用会直接失败（AI model is not configured）。在模型行的 ⋯ 菜单里设一个。'
+})
+/** 「设为默认」只发意图：默认模型存 DB，由持有 live 配置的宿主落盘 */
+function requestDefault(m: ModelLike, kind: 'chat' | 'reasoning'): void {
+  emit('setDefault', m.id, kind)
+}
+
 const fallbackOptions = computed(() =>
   providers.value.flatMap((p) => p.models.map((m) => `${p.id}/${m.id}`))
 )
@@ -362,6 +429,9 @@ const fallbackOptions = computed(() =>
 /** 已登记模型 id 回传宿主（上游清单的关系句由宿主渲染，数据同源一次算） */
 function emitRegistered(): void {
   emit('registered', providers.value.flatMap((p) => p.models.map((m) => m.id)))
+  /* 平台默认只能选平台通道上的模型：`registered` 是全部供应商的并集（含停用的示例条目），
+     拿它当默认候选会把默认指到别的通道去，所以单独回传这一条通道的清单。 */
+  emit('platformModels', selected.value?.models.map((m) => m.id) ?? [])
 }
 
 /** 详情头徽标：只出「能不能用」。「用连接设置」这一档返回 null——那句话由下面「连接」段
@@ -454,6 +524,8 @@ async function removeModel(m: ModelLike): Promise<void> {
   try {
     const res = await adminModelProvidersApi.removeModel(selected.value!.id, m.id)
     adopt(res?.data, res?.data?.warnings ?? [])
+    // 通知宿主：删的若正是平台默认，宿主改指下一个可用模型（默认不能指向已删的 id）
+    emit('removeModel', m.id)
   } catch (e) {
     actionError.value = errMsg(e)
   } finally {
@@ -523,26 +595,27 @@ function openManualAdd(): void {
 }
 
 /**
- * 选择器确认：批量引入，能力标签按模型名推断后随写入落盘。
- * 不再逐个弹配置框——运营勾完即可在列表里直接测试。
+ * 选择器确认（P1 2026-11-04）：不直接落盘，先过一道能力确认。
+ * 此前是「按模型名推断后随写入落盘」（静默真相）——用户明确要求「让用户自己去勾选，
+ * 因为他自己一定要清楚他的模型有什么能力」，所以推断降级为预填，核对过才算数。
  */
-async function addSelected(ids: string[]): Promise<void> {
-  if (!selected.value || !ids.length) return
+function startCapabilityConfirm(ids: string[]): void {
+  if (!ids.length) return
+  capabilityDialog.value?.openWith(ids)
+}
+
+/**
+ * 能力确认后的批量引入：写的是**用户核对过的**能力值，不再是推断结果。
+ * 不再逐个弹配置框——勾完即可在列表里直接测试。
+ */
+async function addSelected(models: ConfirmedModelCapability[]): Promise<void> {
+  if (!selected.value || !models.length) return
   busy.value = true
   actionError.value = ''
   try {
-    const models = ids.map((id) => {
-      const inferred = inferModelCapabilities(id)
-      return {
-        id,
-        supportsThinking: inferred.supportsThinking,
-        supportsReasoningEffort: inferred.supportsReasoningEffort,
-        vision: inferred.vision
-      }
-    })
     const res = await adminModelProvidersApi.addModels(selected.value.id, models)
     adopt(res?.data, res?.data?.warnings ?? [])
-    toast.success(`已引入 ${ids.length} 个模型`)
+    toast.success(`已引入 ${models.length} 个模型`)
   } catch (e) {
     actionError.value = errMsg(e)
   } finally {
@@ -598,6 +671,21 @@ defineExpose({ refresh, openPull, openHostPull })
 .mpp-toolbar__title { margin: 0; font-size: var(--mk-fs-body); font-weight: 600; color: var(--mk-ink); }
 .mpp-toolbar__acts { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .mpp-toolbar__meta { font-size: var(--mk-fs-micro); color: var(--mk-muted); font-variant-numeric: tabular-nums; }
+/* 平台默认读数（P0 2026-11-04）：与「已挂载模型 (N)」同一行的读数，落点回答
+   「没单独配的 Skill 走哪个」。缺省时必须显眼——它不是一个可以留空的偏好项。 */
+.mpp-toolbar__default {
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-ink);
+  font-variant-numeric: tabular-nums;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mpp-toolbar__default--unset {
+  color: var(--mk-amber);
+  font-weight: 600;
+}
 /* 卡头左组：通道名 + 类型 + 连接状态（2026-10-27 由详情头并入卡头） */
 /* 卡片右上：重读本机注册表。低频、低强调，只给图标 + 悬停说明 */
 .mpp-regreload {
@@ -692,6 +780,9 @@ defineExpose({ refresh, openPull, openHostPull })
   font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue);
   white-space: nowrap;
 }
+/* 默认徽章（P0 2026-11-04）：与能力胶囊同宽同形，但走徽章底色 —— 它是「选了它」，
+   不是「它有什么能力」，两者同形同色会被读成同一种事实。 */
+.mpp-default-chip { margin-right: 6px; }
 .mpp-rowacts { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .mpp-empty { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 </style>

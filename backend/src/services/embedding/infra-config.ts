@@ -63,6 +63,20 @@ export function resolveInfraEndpoint(baseUrl: string, kind: InfraModelKind): str
   return /\/v1$/i.test(base) ? `${base}${suffix}` : `${base}/v1${suffix}`;
 }
 
+/**
+ * 从「这条能力的端点」反推上游 base URL（供拉模型清单用）。
+ *
+ * 为什么要反推：向量 / 重排卡也要能像对话模型一样「向上游拉一份清单再挑」，
+ * 而它自己的端点是带类型路径的（`…/v1/embeddings`、`…/v1/rerank`，见 resolveInfraEndpoint）。
+ * 剥掉末尾的类型段就回到 base，再交给既有「按 `/v1` 约定补 `/models`」的逻辑，
+ * 不必为这条能力另写一套 URL 规则。
+ */
+export function resolveInfraModelsBaseUrl(endpoint: string): string {
+  const trimmed = String(endpoint || '').trim();
+  if (!trimmed) return '';
+  return trimmed.replace(/\/+$/, '').replace(/\/(embeddings?|reranks?|reranking)$/i, '');
+}
+
 function positiveInt(value: unknown): number | null {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : null;

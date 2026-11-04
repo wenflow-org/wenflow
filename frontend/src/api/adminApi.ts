@@ -906,7 +906,11 @@ export interface InfraModelsUpdateInput {
 export const adminInfraModelsApi = {
   get: async () => adminAxios.get('/admin/infra-models'),
   update: async (data: InfraModelsUpdateInput) => adminAxios.put('/admin/infra-models', data),
-  test: async (kind: 'embedding' | 'rerank') => adminAxios.post('/admin/infra-models/test', { kind })
+  test: async (kind: 'embedding' | 'rerank') => adminAxios.post('/admin/infra-models/test', { kind }),
+  /** 用这条能力的连接向上游拉模型清单（P1 2026-11-04）：向量 / 重排不必手打模型 ID。
+   *  独立服务可带草稿连接：填地址与密钥后直接拉，不必先保存一次。 */
+  pull: async (data: { kind: 'embedding' | 'rerank'; endpoint?: string; apiKey?: string }) =>
+    adminAxios.post('/admin/infra-models/pull', data)
 };
 
 // ============================================================

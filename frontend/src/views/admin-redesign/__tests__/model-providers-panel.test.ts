@@ -268,7 +268,7 @@ describe('ModelProvidersPanel', () => {
     expect(removeItem.attributes('disabled')).toBeDefined()
   })
 
-  it('选择器确认后批量引入：能力标签随模型名推断，不再逐个弹配置框', async () => {
+  it('选择器确认后先过能力确认（推断只预填），确认才落盘', async () => {
     addModelsMock.mockResolvedValue({ data: { data: {} } })
     const w = await mountPanel({ upstream: ['mimo-v2.5-flash', 'step-3.5-flash'] })
     ;(w.vm as unknown as { openPull: () => void }).openPull()
@@ -279,6 +279,20 @@ describe('ModelProvidersPanel', () => {
     await w.findAll('.pmd-list .pmd-row input')[1].setValue(true)
     await nextTick()
     await w.findAll('.pmd .mk-modal__foot .mk-btn--primary')[0].trigger('click')
+    await nextTick()
+
+    /* P1（2026-11-04）用户「让用户自己去勾选，因为他自己一定要清楚他的模型有什么能力」：
+       勾完不直接落盘，先出能力确认层——预填来自推断，用户核对后才算数。 */
+    expect(addModelsMock).not.toHaveBeenCalled()
+    const rows = w.findAll('.mcc-row')
+    expect(rows).toHaveLength(2)
+    expect(w.find('.mcc').text()).toContain('确认模型能力')
+
+    // 用户把第二个模型的「读图」勾上（推断不出，默认未勾）→ 落盘值必须跟着用户
+    const vision = rows[1].findAll('input[type="checkbox"]')[2]
+    await vision.setValue(true)
+    await nextTick()
+    await w.find('.mcc .mk-modal__foot .mk-btn--primary').trigger('click')
     await flushPromises()
 
     expect(addModelsMock).toHaveBeenCalledTimes(1)
@@ -286,12 +300,12 @@ describe('ModelProvidersPanel', () => {
     expect(providerId).toBe('platform')
     expect(models).toEqual([
       { id: 'mimo-v2.5-flash', supportsThinking: false, supportsReasoningEffort: false, vision: false },
-      { id: 'step-3.5-flash', supportsThinking: false, supportsReasoningEffort: false, vision: false }
+      { id: 'step-3.5-flash', supportsThinking: false, supportsReasoningEffort: false, vision: true }
     ])
-    // 引入后不再自动弹模型编辑弹层
+    // 引入后不再自动弹模型编辑弹层；选择器与能力确认层都已关闭
     expect(w.find('.med-modal').exists()).toBe(false)
-    // 选择器确认后关闭
     expect(w.find('.pmd').exists()).toBe(false)
+    expect(w.find('.mcc').exists()).toBe(false)
   })
 
   it('单模型测试走真实调用，结果回显在该模型行内', async () => {
@@ -385,5 +399,53 @@ describe('ModelProvidersPanel', () => {
     expect(w.text()).not.toContain('基础设施配置')
     expect(w.text()).not.toContain('插件配置')
     expect(w.text()).not.toContain('暂未接入')
+  })
+
+  /* P0（2026-11-04）：平台默认模型是平台能不能跑起来的前提——没单独指定模型的 Skill
+     都走它，缺省时运行时直接抛 AI model is not configured。 */
+  describe('平台默认模型（P0）', () => {
+    it('工具栏出当前默认；行内「默认」徽章只在命中的模型行出现', async () => {
+      const w = await mountPanel({ defaultModel: 'agnes-3.0-flash' })
+      const readout = w.find('.mpp-toolbar__default')
+      expect(readout.exists()).toBe(true)
+      expect(readout.text()).toContain('agnes-3.0-flash')
+      const rows = modelRows(w)
+      const deepseekRow = rows.find((r) => r.text().includes('deepseek-v4-flash'))!
+      const agnesRow = rows.find((r) => r.text().includes('agnes-3.0-flash'))!
+      expect(deepseekRow.find('.mpp-default-chip').exists()).toBe(false)
+      expect(agnesRow.find('.mpp-default-chip').exists()).toBe(true)
+    })
+
+    it('默认缺省时读数显「未设置」并带警示态', async () => {
+      const w = await mountPanel()
+      const readout = w.find('.mpp-toolbar__default')
+      expect(readout.text()).toContain('未设置')
+      expect(readout.classes()).toContain('mpp-toolbar__default--unset')
+    })
+
+    it('⋯ 菜单出「设为默认（对话）/（推理）」；已是该档默认时该项禁用，点击只发意图', async () => {
+      const w = await mountPanel({ defaultModel: 'deepseek-v4-flash' })
+      const firstRow = modelRows(w)[0]
+      await firstRow.find('.mk-menu__btn').trigger('click')
+      await flushPromises()
+      const items = firstRow.findAll('.mk-menu__item')
+      const setChat = items.find((b) => b.text().includes('设为默认（对话）'))!
+      const setReason = items.find((b) => b.text().includes('设为默认（推理）'))!
+      expect(setChat.exists()).toBe(true)
+      expect(setReason.exists()).toBe(true)
+      // 已是对话默认 → 对话项禁用；推理默认未设 → 推理项可用
+      expect(setChat.attributes('disabled')).toBeDefined()
+      expect(setReason.attributes('disabled')).toBeUndefined()
+      await setReason.trigger('click')
+      await flushPromises()
+      expect(w.emitted('setDefault')).toEqual([['deepseek-v4-flash', 'reasoning']])
+      // 面板自身不写注册表文件（默认存 DB，由宿主落盘）
+      expect(updateModelMock).not.toHaveBeenCalled()
+    })
+
+    it('平台通道模型 id 单独回传宿主（默认候选不含自建 / 停用供应商）', async () => {
+      const w = await mountPanel()
+      expect(w.emitted('platformModels')?.at(-1)).toEqual([['deepseek-v4-flash', 'agnes-3.0-flash']])
+    })
   })
 })

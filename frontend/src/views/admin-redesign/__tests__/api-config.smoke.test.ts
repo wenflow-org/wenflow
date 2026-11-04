@@ -8,6 +8,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import ApiConfig from '../ApiConfig.vue';
+import ModelProvidersPanel from '../ModelProvidersPanel.vue';
 import { dataSource } from '../store';
 import { liveApiConfig } from '../live';
 import { confirmState, settleConfirm } from '../useConfirm';
@@ -760,5 +761,101 @@ describe('ApiConfig P1 修复批', () => {
       jitterEnabled: true,
     });
     wrapper.unmount();
+  });
+
+  /* P0（2026-11-04）：平台默认模型此前无处可设——运行时只认 DB platform_api_configs.defaultModel，
+     文件 defaults 只是展示（MODEL_GATEWAY_DESIGN §0 补记），而「平台默认与别名」整块 2026-10-28 撤出。
+     纯 UI 部署（不写 env AI_MODEL）走完「填地址 → 拉清单 → 挂模型」后第一次调用会直接失败。 */
+  describe('P0：平台默认模型', () => {
+    /** 接入配置（live 层模块 ref 跨用例共享，所以每条用例显式种一份，不靠上一条的残留） */
+    function seedConfig(patch: Partial<{ defaultModel: string; defaultReasoningModel: string }> = {}) {
+      const config = {
+        apiUrl: 'https://api.example.com/v1',
+        apiKeyConfigured: true,
+        availableModels: ['deepseek-v4-flash', 'agnes-3.0-flash'],
+        defaultModel: 'model-a',
+        defaultReasoningModel: 'model-a',
+        defaultEvaluationModel: 'model-b',
+        defaultThinkingMode: 'default' as const,
+        defaultReasoningEffort: 'default' as const,
+        connectionStatus: 'connected',
+        lastCheckedAt: '2026-08-13T09:00:00.000Z',
+        networkPolicy: { adminAccessMode: 'private' as const, adminAllowedIps: [], allowPrivateNetwork: true, privateNetworkHosts: [] },
+        ...patch
+      };
+      liveApiConfig.value = config;
+      getConfigMock.mockResolvedValue({ data: { data: { ...config } } });
+    }
+
+    it('首个挂载模型自动成为平台默认（对话 + 推理一起种，缺省时兜底一次）', async () => {
+      seedConfig({ defaultModel: '', defaultReasoningModel: '' });
+      const wrapper = await mountApiConfig();
+      await flushPromises();
+      expect(updateConfigMock).toHaveBeenCalledTimes(1);
+      expect(updateConfigMock.mock.calls[0][0]).toMatchObject({
+        defaultModel: 'deepseek-v4-flash',
+        defaultReasoningModel: 'deepseek-v4-flash',
+        // PUT 是字段级合并：其余字段按现值带回，apiKey 传空串（后端沿用已存密钥）
+        apiUrl: 'https://api.example.com/v1',
+        apiKey: ''
+      });
+      wrapper.unmount();
+    });
+
+    it('已有平台默认绝不改写（自动种默认只在缺省时兜底一次）', async () => {
+      seedConfig();
+      const wrapper = await mountApiConfig();
+      await flushPromises();
+      expect(updateConfigMock).not.toHaveBeenCalled();
+      wrapper.unmount();
+    });
+
+    it('面板「设为默认」落盘到接入配置（默认存 DB，不在注册表文件里）', async () => {
+      seedConfig();
+      const wrapper = await mountApiConfig();
+      await flushPromises();
+      const panel = wrapper.findComponent(ModelProvidersPanel);
+      expect(panel.exists()).toBe(true);
+      // 宿主把 live 配置里的默认传给面板（面板只显示、不自己写）
+      expect(panel.props('defaultModel')).toBe('model-a');
+      panel.vm.$emit('setDefault', 'model-b', 'chat');
+      await flushPromises();
+      expect(updateConfigMock).toHaveBeenCalledTimes(1);
+      expect(updateConfigMock.mock.calls[0][0]).toMatchObject({
+        defaultModel: 'model-b',
+        // 未点的档位保持现值
+        defaultReasoningModel: 'model-a',
+        apiUrl: 'https://api.example.com/v1',
+        apiKey: ''
+      });
+      wrapper.unmount();
+    });
+
+    it('连接设置还有未保存改动时挡下设默认（避免回显冲掉未保存的连接）', async () => {
+      seedConfig();
+      const wrapper = await mountApiConfig();
+      await flushPromises();
+      await openConnSettings(wrapper);
+      await wrapper.find('.ac-conn-modal .mk-field__input').setValue('https://api.changed.com/v1');
+      await nextTick();
+      wrapper.findComponent(ModelProvidersPanel).vm.$emit('setDefault', 'model-b', 'chat');
+      await flushPromises();
+      expect(updateConfigMock).not.toHaveBeenCalled();
+      wrapper.unmount();
+    });
+
+    it('删掉当前默认模型时改指下一个可用模型（默认不指向已删 id）', async () => {
+      seedConfig();
+      const wrapper = await mountApiConfig();
+      await flushPromises();
+      wrapper.findComponent(ModelProvidersPanel).vm.$emit('removeModel', 'model-a');
+      await flushPromises();
+      expect(updateConfigMock).toHaveBeenCalledTimes(1);
+      expect(updateConfigMock.mock.calls[0][0]).toMatchObject({
+        defaultModel: 'deepseek-v4-flash',
+        defaultReasoningModel: 'deepseek-v4-flash'
+      });
+      wrapper.unmount();
+    });
   });
 });

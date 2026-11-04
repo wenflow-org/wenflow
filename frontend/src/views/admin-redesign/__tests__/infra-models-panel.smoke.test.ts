@@ -8,10 +8,11 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import InfraModelsPanel from '../InfraModelsPanel.vue';
 
-const { getMock, testMock, updateMock } = vi.hoisted(() => ({
+const { getMock, testMock, updateMock, pullMock } = vi.hoisted(() => ({
   getMock: vi.fn(),
   testMock: vi.fn(),
   updateMock: vi.fn(),
+  pullMock: vi.fn(),
 }));
 
 vi.mock('@/api/adminApi', () => ({
@@ -19,6 +20,7 @@ vi.mock('@/api/adminApi', () => ({
     get: getMock,
     test: testMock,
     update: updateMock,
+    pull: pullMock,
   },
 }));
 
@@ -81,6 +83,7 @@ describe('InfraModelsPanel', () => {
     getMock.mockReset();
     testMock.mockReset();
     updateMock.mockReset();
+    pullMock.mockReset();
     getMock.mockResolvedValue({ data: { data: view() } });
     testMock.mockResolvedValue({
       data: { data: { ok: true, model: 'BAAI/bge-m3', latencyMs: 120, dimensions: 1024 } },
@@ -203,6 +206,47 @@ describe('InfraModelsPanel', () => {
     const [embedding, rerank] = cards(wrapper);
     expect(embedding.find('.mk-badge').attributes('title')).toBe('配置来源：平台配置');
     expect(rerank.find('.mk-badge').attributes('title')).toBe('配置来源：对话模型的连接');
+    wrapper.unmount();
+  });
+
+  /* P1（2026-11-04 用户「它每一个接口都独立的自己去拉就行了」）：向量 / 重排也向上游拉清单再挑，
+     不再让人凭记忆手打模型 ID。 */
+  it('配置弹层可向上游拉取，候选按用途过滤，点一个填进模型 ID', async () => {
+    pullMock.mockResolvedValue({
+      data: { data: { kind: 'embedding', models: ['BAAI/bge-m3', 'BAAI/bge-reranker-v2-m3', 'gpt-4o'] } },
+    });
+    const wrapper = mountPanel();
+    await flushPromises();
+    await openConfig(wrapper, 0); // 向量模型卡（own 模式）
+
+    const pullBtn = wrapper.findAll('.infra-model-pull').find((b) => b.text() === '拉取')!;
+    expect(pullBtn.exists()).toBe(true);
+    await pullBtn.trigger('click');
+    await flushPromises();
+
+    // 独立服务：把弹层里填的地址与密钥一起发过去（还没保存也能拉）
+    expect(pullMock).toHaveBeenCalledTimes(1);
+    expect(pullMock.mock.calls[0][0]).toMatchObject({ kind: 'embedding', endpoint: 'https://gw.example/v1/embeddings' });
+
+    // 只留向量模型：重排与对话模型不出现在候选里
+    const cands = wrapper.findAll('.infra-cand').map((c) => c.text());
+    expect(cands).toEqual(['BAAI/bge-m3']);
+    await wrapper.find('.infra-cand').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('.infra-model-row input').element).toHaveProperty('value', 'BAAI/bge-m3');
+    wrapper.unmount();
+  });
+
+  it('拉不到匹配用途的模型时给一句人话，不铺空清单', async () => {
+    pullMock.mockResolvedValue({ data: { data: { kind: 'rerank', models: ['gpt-4o', 'step-3.7-flash'] } } });
+    const wrapper = mountPanel();
+    await flushPromises();
+    await openConfig(wrapper, 1); // 重排模型卡
+    await wrapper.findAll('.infra-model-pull').find((b) => b.text() === '拉取')!.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.findAll('.infra-cand')).toHaveLength(0);
+    expect(wrapper.find('.infra-cands__note').text()).toContain('没识别出重排模型');
     wrapper.unmount();
   });
 });

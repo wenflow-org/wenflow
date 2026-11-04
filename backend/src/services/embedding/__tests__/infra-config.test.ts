@@ -12,6 +12,7 @@ import {
   defaultInfraModelsConfig,
   mergeInfraModelsConfig,
   resolveInfraEndpoint,
+  resolveInfraModelsBaseUrl,
   validateInfraModelsConfig,
 } from '../infra-config';
 
@@ -126,5 +127,27 @@ describe('resolveInfraEndpoint', () => {
 
   it('空地址返回空串', () => {
     expect(resolveInfraEndpoint('', 'embedding')).toBe('');
+  });
+});
+
+/* P1（2026-11-04）：向量 / 重排卡要能「向上游拉清单再挑」，得先从带类型路径的端点回到 base。
+   剥掉的只是末尾那一类型段，其余路径（自建网关的 /openai/v1 之类）必须原样保留。 */
+describe('resolveInfraModelsBaseUrl', () => {
+  it('剥掉末尾的类型段', () => {
+    expect(resolveInfraModelsBaseUrl('https://gw.example/v1/embeddings'))
+      .toBe('https://gw.example/v1');
+    expect(resolveInfraModelsBaseUrl('https://gw.example/v1/rerank'))
+      .toBe('https://gw.example/v1');
+    expect(resolveInfraModelsBaseUrl('https://gw.example/v1/')).toBe('https://gw.example/v1');
+  });
+
+  it('非标准路径只去类型段，不吃掉网关自己的前缀', () => {
+    expect(resolveInfraModelsBaseUrl('https://gw.example/openai/v1/embeddings'))
+      .toBe('https://gw.example/openai/v1');
+  });
+
+  it('没有类型段时原样返回（已是 base 就别再削）', () => {
+    expect(resolveInfraModelsBaseUrl('https://gw.example/v1')).toBe('https://gw.example/v1');
+    expect(resolveInfraModelsBaseUrl('')).toBe('');
   });
 });

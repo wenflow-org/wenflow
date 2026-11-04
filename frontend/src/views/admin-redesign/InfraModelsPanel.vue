@@ -59,12 +59,42 @@
           <div class="mk-modal__body">
             <label class="mk-field">
               <span class="mk-field__label">模型 ID</span>
-              <input
-                v-model="form.model"
-                class="mk-field__input"
-                :placeholder="editKind === 'embedding' ? '例如：BAAI/bge-m3' : '例如：BAAI/bge-reranker-v2-m3'"
-              />
+              <span class="infra-model-row">
+                <input
+                  v-model="form.model"
+                  class="mk-field__input"
+                  :placeholder="editKind === 'embedding' ? '例如：BAAI/bge-m3' : '例如：BAAI/bge-reranker-v2-m3'"
+                />
+                <!-- 拉取（P1 2026-11-04 用户「它每一个接口都独立的自己去拉就行了」）：
+                     向量 / 重排也向上游拉一份清单再挑，不必凭记忆手打模型 ID。
+                     独立服务时带草稿连接去拉——「填地址和 key → 拉取 → 选」是自然顺序。 -->
+                <button
+                  type="button"
+                  class="mk-btn mk-btn--sm infra-model-pull"
+                  :disabled="pulling"
+                  title="用这条能力的连接向上游拉模型清单（复用对话连接时取对话卡的地址与密钥）"
+                  @click="pullCandidates"
+                >{{ pulling ? '拉取中…' : '拉取' }}</button>
+              </span>
             </label>
+            <!-- 拉取结果：只留这条能力用得上的那些，点一下填进模型 ID -->
+            <div v-if="candidates.length" class="infra-cands">
+              <div class="infra-cands__head">
+                <span>{{ candidateNote }}</span>
+                <button type="button" class="mk-link" @click="candidates = []">收起</button>
+              </div>
+              <div class="infra-cands__list">
+                <button
+                  v-for="c in candidates"
+                  :key="c.id"
+                  type="button"
+                  class="infra-cand"
+                  :class="{ 'is-on': c.id === form.model }"
+                  @click="form.model = c.id"
+                >{{ c.id }}</button>
+              </div>
+            </div>
+            <p v-else-if="pullNote" class="infra-cands__note">{{ pullNote }}</p>
 
             <div class="mk-field">
               <span class="mk-field__label">连接方式</span>
@@ -167,6 +197,7 @@ import {
 } from '@/api/adminApi'
 import { errMsg } from './live'
 import { MODEL_TYPE_LABEL } from './modelTypeLabels'
+import { inferModelCapabilities } from './modelCapabilityInference'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { toast } from '@/utils/toast'
@@ -286,6 +317,8 @@ useMaskClose(maskRef, closeEdit)
 function openEdit(entry: InfraModelEntryView) {
   editKind.value = entry.kind
   editEntry.value = entry
+  candidates.value = []
+  pullNote.value = ''
   form.value = {
     connectionMode: entry.connectionMode,
     /* inherit 的 endpoint 是后端解析结果，不能回填成独立地址。 */
@@ -302,6 +335,49 @@ function openEdit(entry: InfraModelEntryView) {
 function closeEdit() {
   editKind.value = null
   editEntry.value = null
+  candidates.value = []
+  pullNote.value = ''
+}
+
+/* ---------- 拉取上游清单（P1 2026-11-04） ---------- */
+const pulling = ref(false)
+const pullNote = ref('')
+const candidates = ref<Array<{ id: string }>>([])
+const candidateNote = computed(() =>
+  `上游匹配到 ${candidates.value.length} 个${editKind.value ? kindLabel(editKind.value) : ''}，点一个填进模型 ID`
+)
+
+/**
+ * 拉一份上游清单并按用途过滤：向量卡只留推断为 embedding 的，重排卡只留 rerank 的
+ * （判据与对话侧同一套 `inferModelCapabilities`，不另造一份规则）。
+ * 独立服务时把弹层里填的地址与密钥一起发过去——用户还没保存就拉，是自然顺序。
+ */
+async function pullCandidates() {
+  const kind = editKind.value
+  if (!kind || pulling.value) return
+  pulling.value = true
+  pullNote.value = ''
+  try {
+    const payload: { kind: InfraKind; endpoint?: string; apiKey?: string } = { kind }
+    if (form.value.connectionMode === 'own') {
+      payload.endpoint = form.value.endpoint.trim()
+      payload.apiKey = form.value.apiKey.trim()
+    }
+    const res = await adminInfraModelsApi.pull(payload)
+    const all = ((res.data?.data?.models ?? []) as unknown[]).map((m) => String(m))
+    const matched = all.filter((id) => inferModelCapabilities(id).role === kind)
+    candidates.value = matched.map((id) => ({ id }))
+    if (!matched.length) {
+      pullNote.value = all.length
+        ? `上游 ${all.length} 个模型里没识别出${kindLabel(kind)}，可直接填模型 ID`
+        : '这次没有拉取到模型'
+    }
+  } catch (e) {
+    candidates.value = []
+    pullNote.value = `拉取失败：${errMsg(e)}`
+  } finally {
+    pulling.value = false
+  }
 }
 
 async function save() {
@@ -435,4 +511,48 @@ onMounted(load)
   font-size: var(--mk-fs-micro);
 }
 .infra-formrow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+
+/* 模型 ID 行 + 拉取（P1 2026-11-04）：输入框占满，拉取贴右，拉取中禁用 */
+.infra-model-row { display: flex; align-items: center; gap: 8px; }
+.infra-model-row .mk-field__input { flex: 1 1 auto; min-width: 0; }
+.infra-model-pull { flex: none; white-space: nowrap; }
+/* 拉取结果：一条能被点选的模型清单。候选可能几十个，限高内滚，不把弹层撑长 */
+.infra-cands { display: grid; gap: 6px; }
+.infra-cands__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+}
+.infra-cands__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 132px;
+  overflow-y: auto;
+  padding: 8px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-md);
+}
+.infra-cand {
+  padding: 3px 9px;
+  border: 1px solid var(--mk-line);
+  border-radius: 999px;
+  background: var(--mk-surface-2);
+  color: var(--mk-ink);
+  font: inherit;
+  font-size: var(--mk-fs-micro);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.infra-cand:hover { border-color: var(--mk-blue); color: var(--mk-blue); }
+.infra-cand.is-on {
+  border-color: color-mix(in srgb, var(--mk-blue) 45%, transparent);
+  background: var(--mk-blue-bg);
+  color: var(--mk-blue);
+  font-weight: 700;
+}
+.infra-cands__note { margin: 0; color: var(--mk-muted); font-size: var(--mk-fs-micro); line-height: 1.5; }
 </style>

@@ -29,8 +29,13 @@
       <ModelProvidersPanel
         ref="providersRef"
         :upstream="models"
+        :default-model="defaultModel"
+        :default-reasoning-model="defaultReasoningModel"
         @registered="onProvidersRegistered"
+        @platform-models="onPlatformModels"
         @fetch-upstream="onFetchClick"
+        @set-default="onSetDefault"
+        @remove-model="onModelRemoved"
       >
         <!-- 2026-10-27 用户「这个重新设计，可以先放到第三个」：通道身份、连接状态与动作
              统一收到卡头一行。2026-10-28：连接编辑收进弹层，卡头只留「获取模型」。 -->
@@ -237,6 +242,7 @@ import {
   liveFetchModels,
   liveLoading,
   liveSaveApiConfig,
+  liveSetDefaultModel,
   timeAgo,
   errMsg,
   liveFailures,
@@ -271,11 +277,85 @@ void props
 const providersRef = ref<{ refresh?: (force?: boolean) => void; openHostPull?: () => void } | null>(null)
 /** 供应商面板首次回传即视为注册表已就绪：同步按钮按 apiUrl 判禁用，首屏地址未回填时点不动 */
 const providersLoaded = ref(false)
-function onProvidersRegistered() {
-  providersLoaded.value = true
-}
 /** 注册表已就绪：面板首次回传，或 live 配置已到（首屏未回填地址时按钮不该点不动） */
 const providersReady = computed(() => providersLoaded.value || !!cfg.value)
+
+/* ---------- 平台默认模型（P0 2026-11-04） ----------
+   为什么这里要有：默认模型只认 DB `platform_api_configs.defaultModel`，文件里的 `defaults`
+   只是展示（MODEL_GATEWAY_DESIGN.md §0 补记）。2026-10-28 把「平台默认与别名」整块撤出后，
+   纯 UI 部署（不写 env AI_MODEL）走完「填地址 → 拉清单 → 挂模型」也没有落点，
+   运行时 `router.resolveModel` 直接抛 `AI model is not configured`——流程缺的正是这一步。 */
+const defaultModel = computed(() => cfg.value?.defaultModel ?? '')
+const defaultReasoningModel = computed(() => cfg.value?.defaultReasoningModel ?? '')
+/** 已挂载的模型 id（面板回传）：默认只能在这些里选，删模型时也用它挑替补 */
+const mountedModelIds = ref<string[]>([])
+
+/**
+ * 首个挂载模型自动成为平台默认（只在默认为空时兜底一次）。
+ * 已有默认绝不改写——默认是「没单独配的 Skill 走哪个」的落点，静默换掉它等于换掉一批技能的行为。
+ * 失败不抛给用户：这是兜底便利，不是用户动作；他仍可在模型行的 ⋯ 里手动设。
+ */
+const defaultSeeded = ref(false)
+async function seedDefaultModel(): Promise<void> {
+  if (defaultSeeded.value || saving.value) return
+  // 连接设置还有未保存改动时先不种：写默认会重拉配置回显，把未保存的连接改动冲掉
+  if (dirty.value.has('conn')) return
+  if (!cfg.value || defaultModel.value || !mountedModelIds.value.length) return
+  if (!cfg.value.apiUrl) return
+  defaultSeeded.value = true
+  try {
+    const first = mountedModelIds.value[0]
+    await liveSetDefaultModel({
+      defaultModel: first,
+      defaultReasoningModel: cfg.value.defaultReasoningModel || first
+    })
+    toast.success(`已把「${first}」设为平台默认模型`)
+  } catch {
+    defaultSeeded.value = false
+  }
+}
+
+/** 显式设默认：连接设置还有未保存改动时先挡下——写默认会重新拉配置回显，
+    未保存的连接改动会被「丢弃未保存的配置修改?」拦一次，把一次点击变成一次意外提问。 */
+async function onSetDefault(modelId: string, kind: 'chat' | 'reasoning'): Promise<void> {
+  if (saving.value) return
+  if (dirty.value.has('conn')) {
+    toast.error('连接设置还有未保存的改动，先保存再设默认模型')
+    return
+  }
+  try {
+    await liveSetDefaultModel(kind === 'reasoning' ? { defaultReasoningModel: modelId } : { defaultModel: modelId })
+    toast.success(kind === 'reasoning' ? `推理默认已设为 ${modelId}` : `平台默认已设为 ${modelId}`)
+  } catch (e) {
+    toast.error(`设置默认模型失败：${errMsg(e)}`)
+  }
+}
+
+/** 删掉默认模型后改指下一个可用模型：默认不能指向已不存在的 id，否则调用同样失败 */
+async function onModelRemoved(modelId: string): Promise<void> {
+  const patch: { defaultModel?: string; defaultReasoningModel?: string } = {}
+  const pickNext = () => mountedModelIds.value.find((id) => id !== modelId) ?? ''
+  if (modelId === defaultModel.value) patch.defaultModel = pickNext()
+  if (modelId === defaultReasoningModel.value) patch.defaultReasoningModel = pickNext()
+  if (!Object.keys(patch).length) return
+  try {
+    await liveSetDefaultModel(patch)
+    const next = patch.defaultModel ?? patch.defaultReasoningModel
+    toast.success(next ? `原默认模型已删除，平台默认改为 ${next}` : '原默认模型已删除，请另设平台默认模型')
+  } catch (e) {
+    toast.error(`更新默认模型失败：${errMsg(e)}`)
+  }
+}
+
+function onProvidersRegistered(): void {
+  providersLoaded.value = true
+}
+
+/** 平台通道挂载的模型变更（增删后都会回传）：默认候选跟着它走，空默认时顺手种一个 */
+function onPlatformModels(ids: string[]): void {
+  mountedModelIds.value = ids
+  void seedDefaultModel()
+}
 /** 连接条未配置态（2026-11-03 两段式）：地址还空着、也不在读取中/读取失败——
     这时连接条原地变成表单，省掉「先点连接设置」那一步。
     读取中或读取失败不给表单：空地址不代表没配过（读取失败由卡内 alert 说清）。 */

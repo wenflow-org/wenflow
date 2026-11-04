@@ -2003,6 +2003,33 @@ export async function liveSaveApiConfig(data: {
   await fetchLiveApiConfig()
 }
 
+/**
+ * 设置平台默认模型（对话档 / 推理档）。
+ *
+ * 默认模型是**运行面选择**，落在 DB `platform_api_configs.defaultModel`——与模型清单
+ * （`llm-providers.json`）不同源：清单回答「有哪些模型」，默认回答「没单独指定的 Skill 走哪个」。
+ * 两者都缺时，运行时直接抛 `AI model is not configured`（`router.resolveModel`），
+ * 所以「填地址 → 拉清单 → 挂模型」之后必须补上这一步，否则平台跑不起来。
+ */
+export async function liveSetDefaultModel(patch: {
+  /** 省略 = 保持现值（PUT 是字段级合并，不传的字段不会被改写） */
+  defaultModel?: string
+  defaultReasoningModel?: string
+}): Promise<void> {
+  const c = liveApiConfig.value
+  if (!c) throw new Error('接入配置尚未载入')
+  await adminApiConfigApi.updateConfig({
+    apiUrl: c.apiUrl,
+    // 空串 = 地址没变，后端沿用已保存的密钥（不会把密钥清掉）
+    apiKey: '',
+    availableModels: c.availableModels,
+    defaultModel: patch.defaultModel ?? c.defaultModel,
+    defaultReasoningModel: patch.defaultReasoningModel ?? c.defaultReasoningModel,
+    defaultEvaluationModel: c.defaultEvaluationModel
+  })
+  await fetchLiveApiConfig()
+}
+
 export async function liveSaveNetworkPolicy(p: LiveApiConfig['networkPolicy']): Promise<void> {
   await adminApiConfigApi.updateNetworkPolicy(p)
   await fetchLiveApiConfig()
