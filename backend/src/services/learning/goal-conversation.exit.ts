@@ -126,3 +126,33 @@ export async function buildCompletedConversationResult(input: {
     },
   };
 }
+
+/**
+ * 已完成硬阻断会话的 userVisible（#213）：GET 快照此前硬编码「会话详情获取成功」，
+ * 分诊硬阻断终局的拒绝文案重载后无处可寻。这里复用 /reply 同源的 buildHardBlockResult
+ * 重建文案，保证「当场返回」与「刷新重建」逐字一致。
+ *
+ * 只对「已完成 + 未绑路径 + 存档分诊判硬阻断」返回文案；其余形态返回 null，路由回退
+ * 通用确认语——普通完成态与「非硬阻断无路径」终局保持既有 GET 行为不变（避免把
+ * buildCompletedConversationResult 里"学习路径已经生成"的句子误当成拒绝原因）。
+ */
+export function resolveCompletedConversationUserVisible(input: {
+  conversationId: string;
+  status: string;
+  collectedData: string | null;
+  learningPathId: string | null;
+}): string | null {
+  if (input.status !== 'completed' || input.learningPathId) return null;
+  const data = JSON.parse(input.collectedData || '{}');
+  const triage = resolveResponseTriageFromCollectedData(data);
+  if (!isHardBlockResponseTriage(triage, data.understanding)) return null;
+  return buildHardBlockResult(
+    {
+      conversationId: input.conversationId,
+      understanding: data.understanding || {},
+      confidence: data.confidence || 0,
+      collected: data.collected || {},
+    },
+    triage as ResponseTriage,
+  ).userVisible;
+}

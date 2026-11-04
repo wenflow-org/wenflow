@@ -447,7 +447,9 @@ router.get('/:conversationId', authMiddleware, async (req: Request, res: Respons
       return res.json({
         success: true,
         data: {
-          userVisible: '会话详情获取成功',
+          // #213：已完成会话的 userVisible 由 getConversation 用与 /reply 同源的构造重建
+          // （硬阻断时即拒绝文案），不再无条件硬编码。
+          userVisible: conversation.userVisible || '会话详情获取成功',
           control: {
             conversationId,
             stage: conversation.stage,
@@ -465,7 +467,7 @@ router.get('/:conversationId', authMiddleware, async (req: Request, res: Respons
     return res.json({
       success: true,
       data: {
-        userVisible: '会话详情获取成功',
+        userVisible: conversation.userVisible || '会话详情获取成功',
         internal: {
           core: {
             conversationId,

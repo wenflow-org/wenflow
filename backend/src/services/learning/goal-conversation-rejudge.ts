@@ -99,7 +99,8 @@ export interface GoalConversationRejudgeDeps {
  * 确认链路共用段（2026-10-29 抽取）：建占位路径 → 认领生成 run → 以 revision CAS 把路径
  * 原子绑定到会话。两个调用方：proposing 阶段的 confirmProposal 硬规则、
  * completed 硬阻断会话的补充说明重判通过（rejudgeHardBlockedCompletion）。
- * 返回 bound=false 表示 CAS 失配（并发写赢了自己），占位路径由调用方负责作废。
+ * 返回 bound=false 表示 CAS 失配（并发写赢了自己）：本条占位路径已被本函数删除，不留在用户
+ * 可见列表里（#212），调用方只需按最新状态复用赢家路径。
  */
 export async function bindGeneratingPath(
   deps: GoalConversationRejudgeDeps,
@@ -142,7 +143,7 @@ export async function bindGeneratingPath(
   const runId = await learningService.claimPathCoreGeneration(placeholderPath.id, null);
 
   // 原子确认（审计 §1.4）：以 revision 条件把「确认权 + 占位路径」一次性绑定；
-  // 并发/重试的落败方 CAS 失配：不写库、不推进对话（占位路径由调用方作废并读最新状态兜底）。
+  // 并发/重试的落败方 CAS 失配：不写库、不推进对话。
   const bound = await deps.updateConversationLifecycle(input.conversation.id, 'completed', {
     status: 'completed',
     completedAt: new Date(),
@@ -153,7 +154,37 @@ export async function bindGeneratingPath(
     ...(input.onBound ? { mutateCollectedData: input.onBound } : {}),
   });
 
+  if (!bound) {
+    await discardLosingPlaceholder(placeholderPath.id, runId);
+    return { bound, placeholderPath: null, runId: null, seedResult };
+  }
+
   return { bound, placeholderPath, runId, seedResult };
+}
+
+/**
+ * 作废并发确认落败方的占位路径（#212）。
+ *
+ * 落败方的占位路径从未被任何会话/学习会话引用，也没有 kick 过生成，直接删除即可；
+ * `path_generation_runs` / `milestones` 由 learning_paths 的 ON DELETE CASCADE 一并清掉，
+ * 否则它会以 `failed` 占位（标题「个性化学习路径」）出现在用户路径列表里，点重试还会
+ * 在同一目标下再造一条真路径。
+ *
+ * 删除失败时退回旧行为（标 failed）：至少不让带 processing run 的生成中占位被
+ * recoverStaleGeneratingPaths 恢复成一条没人要的真路径。
+ */
+async function discardLosingPlaceholder(pathId: string, runId: string): Promise<void> {
+  try {
+    await prisma.learning_paths.delete({ where: { id: pathId } });
+  } catch (error) {
+    logger.warn('[goal-conversation] 并发确认落败方占位路径删除失败，退回标记失败', {
+      pathId,
+      error: String(error),
+    });
+    await learningService
+      .markActiveGenerationFailed(pathId, new Error('并发确认，本条占位路径作废'), runId)
+      .catch(() => undefined);
+  }
 }
 
 /** 确认链路共用段：绑定成功后异步跑 Path 生成（失败回调作废占位路径，供 markActiveGenerationFailed 兜底）。 */
@@ -307,10 +338,8 @@ export async function rejudgeHardBlockedCompletion(
     expectedRevision: latest.revision
   });
   if (!bound) {
-    // CAS 失配：并发写赢了自己。作废自己的占位路径后按最新状态返回（赢家可能已绑路径）。
-    await learningService
-      .markActiveGenerationFailed(placeholderPath.id, new Error('并发重判，本条占位路径作废'), runId)
-      .catch(() => undefined);
+    // CAS 失配：并发写赢了自己。本请求的占位路径已由 bindGeneratingPath 删除（#212），
+    // 直接按最新状态返回（赢家可能已绑路径，也可能仍在建行）。
     const refreshed = await prisma.goal_conversations.findUnique({ where: { id: conversation.id } });
     if (refreshed?.learningPathId) {
       const refreshedData = refreshed.collectedData ? JSON.parse(refreshed.collectedData) : latestData;
