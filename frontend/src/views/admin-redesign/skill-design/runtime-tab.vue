@@ -5,7 +5,8 @@
        ① 独立配置改成卡头开关（Override），状态与动作同处，不再用复选框占一行；
        ② 配置按「模型 / 生成参数 / 请求与容错」三段竖排，每段内是两列字段；
           参数覆盖从三列大格子改成一行一个字段的小表（标签 / 模式 / 值对齐）；
-       ③ 模型测试收成右侧窄栏、视觉次级，≤1080 回落单列；
+       ③（2026-11-04 撤除）模型测试那块已从本页撑出去：它是直发上游的连通性探测，
+          平台「模型与接入」页每个模型都有「测试」，在 Skill 页再留一份等于同一件事两处入口；
        2026-10-24（用户「生效值是什么东西，没意义，拿掉，什么叫独立配置」）：
        顶部「生效值」只读摘要删掉——导航副文/分节页头/表单本身已有同样的当前值，
        改为一行「取值顺序」；卡头开关从「独立配置」改称「覆盖平台默认」（说出独立于谁）。 -->
@@ -46,36 +47,45 @@
         <!-- 当前生效配置（2026-11-03 二稿：用户「做的太差了」后改版）。
              一稿是「四行通栏读数 + 浅底描边盒」，两处实测毛病：盒子框大内容少，宽屏下右侧
              空一半；层级也反了——「取值顺序」这条**永远不变**的规则被摆在最重的一行，
-             比真正在跑的模型 id 还亮。现在：模型 id 当主角（+ 档位/能力胶囊），其余六项
-             排成两列读数，不再套盒子；取值顺序只作悬停说明挂在模型 id 上（需要时再看）。 -->
+             比真正在跑的模型 id 还亮。现在：模型 id 当主角（+ 能力胶囊），其余五项
+             排成两列读数，不再套盒子；取值顺序只作悬停说明挂在模型 id 上（需要时再看）。
+             2026-11-04 用户「为什么还在区分默认推理和对话」：档位胶囊撤除——平台只有一档
+             默认，长不长思考看这一屏已有的「思考模式 / 推理强度」两项。 -->
+        <!-- 2026-11-04 用户「他是在平台配置模型之下的，进行独立的调整」：
+             卡面改成「基线 + 差异」两段——先写清基线是谁（平台默认模型），
+             再只列**这个 Skill 改过的**项，每一项后面标注它在没改时会取什么。
+             此前是五项读数平铺，读者看不出哪几项是本 Skill 的决定、哪几项只是继承；
+             模型那一行还写着「未单独指定，跟随平台默认」，与卡头「覆盖平台默认 已开启」读作打架。 -->
         <div class="sdp-live">
-          <p class="sdp-live__model">
-            <span class="mono sdp-live__id" :title="`${summaryModel}
+          <div class="sdp-base">
+            <span class="sdp-base__k">基线</span>
+            <span class="mono sdp-base__model" :title="`${baseModel}
 
-${orderTitle}`">{{ summaryModel }}</span>
-            <!-- 档位与能力做成**陈述句**（2026-11-02 评审：原来只写 chat / 思考 / 推理强度，
-                 三个裸词被读成「只有标签、值还没填」）。档位说中文，能力带「支持」。 -->
-            <span class="sdp-chip" :title="rtForm.tier === 'reasoning' ? '推理档：长思考与复杂判断' : '对话档：常规回合'">{{ tierText }}</span>
+${orderTitle}`">{{ baseModel }}</span>
+            <!-- 能力做成**陈述句**（2026-11-02 评审：原来只写 思考 / 推理强度 两个裸词，
+                 被读成「只有标签、值还没填」）。 -->
             <span v-for="cap in summaryCaps" :key="cap" class="sdp-chip" title="模型目录声明的能力（不支持的能力不会发给上游）">{{ cap }}</span>
-            <span v-if="!rtForm.enabled" class="sdp-chip">用平台默认</span>
-            <span v-if="summaryMeta" class="sdp-live__meta">{{ summaryMeta }}</span>
-          </p>
-          <!-- 覆盖开着、模型这一项留空：上面那行已经是平台默认的那个 id，这里只补一句
-               「这一项没有单独指定」——不再同时挂一枚「模型：平台默认」胶囊，两句话会打架。 -->
-          <p v-if="rtForm.enabled && !rtForm.model" class="sdp-live__sub" :title="inheritedModelTitle">
-            模型这一项未单独指定，跟随平台默认。
-          </p>
-          <p v-else-if="!rtForm.enabled" class="sdp-live__note">
-            覆盖已关闭：模型与超时按平台默认，生成参数仍按 Prompt 文件声明取值。
-          </p>
-          <div class="mk-facts mk-facts--rows sdp-live__facts">
-            <div><span>思考模式</span><strong>{{ thinkingLabel }}</strong></div>
-            <div><span>推理强度</span><strong>{{ cfgEffortLabel }}</strong></div>
-            <div><span>temperature</span><strong>{{ generationParams?.temperature ?? INHERIT_PROMPT_LABEL }}</strong></div>
-            <div><span>请求超时</span><strong>{{ rtForm.requestTimeoutMs ? `${Math.round(rtForm.requestTimeoutMs / 1000)}s` : '平台默认' }}</strong></div>
-            <div><span>逻辑重试</span><strong>{{ effectiveLogicalRetries }} 次</strong></div>
-            <div><span>备用模型</span><strong>{{ fallbackChain.length ? `${fallbackChain.length} 个` : '平台默认' }}</strong></div>
+            <span v-if="summaryMeta" class="sdp-base__meta">{{ summaryMeta }}</span>
+            <span class="sdp-base__src">{{ baseModelSource }}</span>
           </div>
+
+          <template v-if="rtForm.enabled">
+            <div class="sdp-diff">
+              <p class="sdp-diff__k">本 Skill 独立调整</p>
+              <ul class="sdp-diff__list">
+                <li v-for="row in changedRows" :key="row.label">
+                  <span class="sdp-diff__label">{{ row.label }}</span>
+                  <strong class="sdp-diff__val">{{ row.value }}</strong>
+                  <em class="sdp-diff__base" :title="row.baseTitle">{{ row.base }}</em>
+                </li>
+              </ul>
+              <p v-if="!changedRows.length" class="sdp-diff__none">没有单独调整的项，全部沿用基线</p>
+              <p v-else-if="followRows.length" class="sdp-diff__rest">其余沿用基线：{{ followRows.join(' / ') }}</p>
+            </div>
+          </template>
+          <p v-else class="sdp-live__note">
+            覆盖已关闭：模型与超时按基线，生成参数仍按 Prompt 文件声明取值。
+          </p>
         </div>
 
         <!-- 配置弹层：模型 / 生成参数 / 请求与容错三段，底部一颗保存。 -->
@@ -101,10 +111,8 @@ ${orderTitle}`">{{ summaryModel }}</span>
                   :options="pickerOptions"
                   allow-inherit
                   inherit-label="用平台默认模型"
-                  :tier="rtForm.tier"
                   :disabled="!rtForm.enabled"
                   @update:model-value="rtForm.model = $event"
-                  @pick="onModelPicked"
                 />
                 <!-- 选中项的能力与价格就地核对（Azure Foundry 的部署行形态）：不必再回接入页查 -->
                 <span v-if="!inheritingModel && primaryMetaText" class="sdp-model-meta">{{ primaryMetaText }}</span>
@@ -250,37 +258,6 @@ ${orderTitle}`">{{ summaryModel }}</span>
                   </div>
                 </div>
               </div>
-
-              <div class="sdp-field">
-                <span>降级顺序<em>{{ fallbackHint }}</em></span>
-                <div class="sdp-fallback">
-                  <ol v-if="fallbackChain.length" class="sdp-fallback__chain" aria-label="备用链顺序">
-                    <li v-for="(m, i) in fallbackChain" :key="m" class="sdp-chip">
-                      <b class="mono">{{ i + 1 }}</b><span class="mono">{{ m }}</span>
-                      <button type="button" class="mk-link mk-link--danger" :disabled="!rtForm.enabled" :aria-label="`移除备用模型 ${m}`" @click="removeFallback(m)">×</button>
-                    </li>
-                  </ol>
-                  <!-- 空链的显式状态（2026-11-02 评审：下拉只显占位文案「选择备用模型」，
-                       旁注「留空则用平台默认备用模型」——分不清是「没选」还是「已选中某个」）。
-                       现在空链给一枚「未设置」胶囊，下拉的占位改成动作词「添加备用模型」。 -->
-                  <span v-else class="sdp-chip sdp-chip--muted" title="本 Skill 没有自己的降级顺序，失败时按平台默认列表切换">未设置</span>
-                  <MkModelPicker
-                    v-if="fallbackChain.length < 2"
-                    :model-value="newFallback"
-                    :options="fallbackOptions"
-                    :exclude="fallbackExclude"
-                    :tier="rtForm.tier"
-                    :allow-custom="false"
-                    :disabled="!rtForm.enabled"
-                    placeholder="添加备用模型"
-                    @update:model-value="addFallbackValue"
-                  />
-                  <button type="button" class="mk-link sdp-fallback__probe" :disabled="probing || !rtForm.enabled" @click="probeChannel">
-                    {{ probing ? '探测中…' : '探测当前通道可用模型' }}
-                  </button>
-                  <span v-if="probeMsg" class="sdp-chip" :class="probeErr ? 'sdp-chip--danger' : 'sdp-chip--ok'">{{ probeMsg }}</span>
-                </div>
-              </div>
             </section>
                 </div>
               </div>
@@ -296,58 +273,6 @@ ${orderTitle}`">{{ summaryModel }}</span>
           </div>
         </Teleport>
 
-        <section id="sdp-panel-test" class="sdp-panel sdp-panel--test">
-              <header class="sdp-panel__head">
-                <h4>模型测试</h4>
-                <span class="sdp-panel__state">直发上游，不留记录</span>
-              </header>
-              <!-- 2026-11-03：测试动线从「左控制栏 / 右结果栏」的 1:1.1 两栏收成一条直线——
-                   两栏各占半张卡、下面还有一半是空的，空态提示浮在右半张卡的空地上，
-                   而主操作「开始探测」被挤到左栏第二行，与它要填的两个下拉离得最远。 -->
-              <div class="sdp-testbar">
-                <label class="sdp-testbar__field">
-                  <span>思考模式</span>
-                  <MkSelect
-                    v-model="probeForm.thinkingMode"
-                    :options="probeThinkingModeOptions"
-                    aria-label="模型测试思考模式"
-                    block
-                  />
-                </label>
-                <label class="sdp-testbar__field">
-                  <span>思考强度</span>
-                  <MkSelect
-                    v-model="probeForm.reasoningEffort"
-                    :options="probeReasoningEffortOptions"
-                    aria-label="模型测试推理强度"
-                    block
-                    :disabled="probeForm.thinkingMode === 'disabled'"
-                  />
-                </label>
-                <button type="button" class="mk-btn mk-btn--primary" :disabled="probeRunning" @click="runModelProbe">
-                  {{ probeRunning ? '探测中…（最长 180s）' : '开始探测' }}
-                </button>
-                <span v-if="probeError" class="sdp-form__msg is-err">{{ probeError }}</span>
-              </div>
-
-              <div class="sdp-test-result">
-                <p v-if="probeResult?.resolved" class="sdp-probe__resolved">
-                  生效：{{ probeResult.resolved.model }} · {{ probeResult.resolved.thinkingMode }} / {{ probeResult.resolved.reasoningEffort }}
-                </p>
-                <div v-if="probeResult" class="sdp-probe" :class="probeResult.jsonOk === 'ok' ? 'is-ok' : 'is-bad'">
-                  <div class="sdp-probe__grid">
-                    <div><span>总耗时</span><strong class="mono">{{ fmtMs(probeResult.durationMs ?? 0) }}</strong></div>
-                    <div><span>首字 TTFT</span><strong class="mono">{{ probeResult.ttftContentMs != null ? fmtMs(probeResult.ttftContentMs) : '—' }}</strong></div>
-                    <div><span>JSON</span><strong class="mono">{{ probeResult.jsonOk || '—' }}</strong></div>
-                    <div><span>输出字符</span><strong class="mono">{{ probeResult.contentChars ?? '—' }}</strong></div>
-                    <div><span>输出 token</span><strong class="mono">{{ probeResult.completionTokens ?? '—' }}</strong></div>
-                    <div><span>结束原因</span><strong class="mono">{{ probeResult.finish || '—' }}</strong></div>
-                  </div>
-                  <pre v-if="probeResult.contentPreview" class="sdp-probe__pre mono">{{ probeResult.contentPreview }}</pre>
-                </div>
-                <p v-else class="sdp-test-result__empty">还没有探测结果。点「开始探测」直发一次上游请求，结果会留在这里。</p>
-              </div>
-            </section>
       </div>
 
       <div v-if="rtMsg" class="sdp-form__footer">
@@ -360,21 +285,22 @@ ${orderTitle}`">{{ summaryModel }}</span>
 
 <script setup lang="ts">
 /**
- * 运行时 tab：模型与路由（覆盖平台默认开关 / 模型层级 / 思考档 / 超时 / 参数覆盖 / 失败处理与备用模型）
+ * 运行时 tab：模型与路由（覆盖平台默认开关 / 模型层级 / 思考档 / 超时 / 参数覆盖）
  * + 模型测试（直发上游探测）。重排说明见模板顶部注释：本组件是该页唯一的编辑入口。
+ * 2026-11-04 用户「去掉降级这个功能，不要」：备用链（降级顺序）整块撤除。
  */
 import { computed, ref, watch } from 'vue'
 import { adminPlatformSettingsApi, adminSkillsApi } from '@/api/adminApi'
 import { askConfirm } from '../useConfirm'
 import { useEscape } from '../useEscape'
 import { useOverlay, useMaskClose } from '../useOverlay'
-import { errText, fmtMs, callParamSourceLabel, thinkingCapabilityNotice, type ThinkingCapability } from './sdp-shared'
+import { errText, callParamSourceLabel, thinkingCapabilityNotice, type ThinkingCapability } from './sdp-shared'
 import { useModelCatalog } from '@/composables/useModelCatalog'
-import MkModelPicker, { type MkModelOption } from '@/components/mk/MkModelPicker.vue'
+import MkModelPicker from '@/components/mk/MkModelPicker.vue'
 import MkSwitch from '@/components/mk/MkSwitch.vue'
 import MkSelect from '@/components/mk/MkSelect.vue'
 
-// 模型目录候选（File-as-Truth llm-providers.json）：模型与备用模型共用一个可选择器；
+// 模型目录候选（File-as-Truth llm-providers.json）：模型选择器消费；
 // 加载失败静默降级为空目录（仍可按输入提交别名 / 注册表外 id，不影响保存）
 const { pickerOptions, load: loadModelCatalog } = useModelCatalog()
 loadModelCatalog()
@@ -408,7 +334,6 @@ const props = defineProps<{ skillId: string; refreshTick: number }>()
 const emit = defineEmits<{ (e: 'dirty', p: { dirty: boolean; label: string }): void }>()
 
 interface RuntimeForm {
-  tier: 'chat' | 'reasoning'
   model: string
   thinkingMode: 'default' | 'enabled' | 'disabled'
   reasoningEffort: 'default' | 'low' | 'high' | 'max'
@@ -416,7 +341,6 @@ interface RuntimeForm {
   enabled: boolean
 }
 const rtForm = ref<RuntimeForm>({
-  tier: 'chat',
   model: '',
   thinkingMode: 'default',
   reasoningEffort: 'default',
@@ -461,13 +385,6 @@ const paramMax = ref<ParamField>({ mode: 'inherit', value: null })
 const paramAttempts = ref<ParamField>({ mode: 'inherit', value: null })
 // 加载时该 skill 是否已有覆盖（决定保存时是发对象、发 null 清空、还是不发）
 const hadParamOverrides = ref(false)
-// ── 兜底链（fallbackChain）：[]=显式无链；未动过则不发送（继承 registry 默认链）──
-const fallbackChain = ref<string[]>([])
-const fallbackTouched = ref(false)
-const newFallback = ref('')
-const probing = ref(false)
-const probeMsg = ref('')
-const probeErr = ref(false)
 
 const effectiveLogicalRetries = computed(() =>
   logicalRetryMode.value === 'inherit' ? platformLogicalRetries.value : logicalRetryMode.value === 'disabled' ? 0 : customLogicalRetries.value
@@ -514,20 +431,6 @@ const inheritedModelText = computed(() => {
   if (!model) return ''
   return `模型未单独指定，当前使用平台默认：${model}`
 })
-/** 卡面「模型：平台默认」胶囊的悬停全文：说清覆盖开着、只是模型这一项跟随平台默认 */
-const inheritedModelTitle = computed(() => {
-  const model = String(generationParams.value?.model || '')
-  return model
-    ? `覆盖已开启，但模型这一项没有单独指定，实际使用平台默认：${model}`
-    : '覆盖已开启，但模型这一项没有单独指定，使用平台默认模型（平台默认模型暂未加载）'
-})
-/** 档位中文：胶囊里一个裸词 chat 会被读成「值还没填」的标签（2026-11-02 评审） */
-const tierText = computed(() => (rtForm.value.tier === 'reasoning' ? '推理档' : '对话档'))
-/** 卡面摘要：当前到底跑哪个模型、有哪些能力（2026-10-28） */
-const summaryModel = computed(() => {
-  if (rtForm.value.enabled && rtForm.value.model) return rtForm.value.model
-  return String(generationParams.value?.model || '平台默认模型')
-})
 /** 能力胶囊写成陈述句（2026-11-02 评审）：裸「思考 / 推理强度」被读成没有值的标签 */
 const summaryCaps = computed(() => {
   const opt = primaryOption.value
@@ -563,91 +466,69 @@ const thinkingNotice = computed(() =>
   )
 )
 
-/* ---------- 模型测试（model-probe；与 probeChannel 通道探测是两件事） ---------- */
-interface ProbeForm {
-  thinkingMode: 'default' | 'enabled' | 'disabled'
-  reasoningEffort: 'default' | 'low' | 'high' | 'max'
-}
-interface ProbeResult {
-  durationMs?: number
-  ttftContentMs?: number | null
-  contentChars?: number
-  completionTokens?: number | null
-  finish?: string
-  jsonOk?: string
-  contentPreview?: string
-  resolved?: { model?: string; thinkingMode?: string; reasoningEffort?: string }
-}
-const probeForm = ref<ProbeForm>({ thinkingMode: 'default', reasoningEffort: 'default' })
-const probeRunning = ref(false)
-const probeError = ref('')
-const probeResult = ref<ProbeResult | null>(null)
-
-/** 「跟随配置」档位回显（读当前生效配置，不与探测参数混为一谈） */
+/* ---------- 基线 + 差异（2026-11-04） ----------
+   基线 = 这个 Skill 什么都不改时会拿到的配置。卡面只列改过的项，每项右侧标注基线会取什么。 */
+/** 推理强度在卡面的读数（思考关掉时它不参与，恒为「按模型默认」） */
 const cfgEffortLabel = computed(() =>
   rtForm.value.reasoningEffort === 'default' ? '按模型默认' : rtForm.value.reasoningEffort
 )
-/* 探测下拉首项带当前配置回显 → 动态选项 */
-const probeThinkingModeOptions = computed<Array<{ value: ProbeForm['thinkingMode']; label: string }>>(() => [
-  { value: 'default', label: `跟随配置（${thinkingLabel.value}）` },
-  { value: 'enabled', label: '开启' },
-  { value: 'disabled', label: '关闭' }
-])
-const probeReasoningEffortOptions = computed<Array<{ value: ProbeForm['reasoningEffort']; label: string }>>(() => [
-  { value: 'default', label: `跟随配置（${cfgEffortLabel.value}）` },
-  { value: 'low', label: 'low' },
-  { value: 'high', label: 'high' },
-  { value: 'max', label: 'max' }
-])
+/** 基线模型：本 Skill 没单独指定时就是平台默认（generationParams 的合并链已算出） */
+const baseModel = computed(() => {
+  if (rtForm.value.enabled && rtForm.value.model) return rtForm.value.model
+  return String(generationParams.value?.model || '平台默认模型')
+})
+/** 基线这一行的来源句：换模型这件事本身有没有做 */
+const baseModelSource = computed(() => {
+  if (!rtForm.value.enabled) return '平台默认模型'
+  return rtForm.value.model ? '本 Skill 指定' : '平台默认模型'
+})
+interface DiffRow { label: string; value: string; base: string; baseTitle: string; changed: boolean }
+/** 五项读数逐条与基线对比；覆盖关闭时这套设置不参与，不列差异 */
+const diffRows = computed<DiffRow[]>(() => {
+  if (!rtForm.value.enabled) return []
+  const t = paramT.value
+  return [
+    {
+      label: '思考模式',
+      value: thinkingLabel.value,
+      base: INHERIT_DEFAULT_LABEL,
+      baseTitle: '这一项不单独设置时，由模型自身决定要不要思考',
+      changed: rtForm.value.thinkingMode !== 'default'
+    },
+    {
+      label: '推理强度',
+      value: cfgEffortLabel.value,
+      base: INHERIT_DEFAULT_LABEL,
+      baseTitle: '这一项不单独设置时，由模型自身决定思考的深度',
+      changed: rtForm.value.thinkingMode !== 'disabled' && rtForm.value.reasoningEffort !== 'default'
+    },
+    {
+      label: 'temperature',
+      value: t.mode === 'override' && t.value != null ? String(t.value) : String(generationParams.value?.temperature ?? '—'),
+      base: INHERIT_PROMPT_LABEL,
+      baseTitle: '这一项不覆盖时，取 Prompt 文件里声明的值',
+      changed: t.mode === 'override'
+    },
+    {
+      label: '请求超时',
+      value: rtForm.value.requestTimeoutMs ? `${Math.round(rtForm.value.requestTimeoutMs / 1000)}s` : '平台默认',
+      base: '平台默认',
+      baseTitle: '这一项不单独设置时，用平台的请求超时',
+      changed: rtForm.value.requestTimeoutMs != null
+    },
+    {
+      label: '逻辑重试',
+      value: `${effectiveLogicalRetries.value} 次`,
+      base: `平台默认 ${platformLogicalRetries.value} 次`,
+      baseTitle: '这一项不单独设置时，用平台的逻辑重试次数',
+      changed: logicalRetryMode.value !== 'inherit'
+    }
+  ]
+})
+const changedRows = computed(() => diffRows.value.filter((r) => r.changed))
+const followRows = computed(() => diffRows.value.filter((r) => !r.changed).map((r) => r.label))
 
-function resetProbe() {
-  probeRunning.value = false
-  probeError.value = ''
-  probeResult.value = null
-  probeForm.value = { thinkingMode: 'default', reasoningEffort: 'default' }
-}
-
-async function runModelProbe() {
-  const id = props.skillId
-  if (!id || probeRunning.value) return
-  probeRunning.value = true
-  probeError.value = ''
-  probeResult.value = null
-  try {
-    const res = await adminSkillsApi.modelProbe(id, {
-      thinkingMode: probeForm.value.thinkingMode,
-      reasoningEffort: probeForm.value.reasoningEffort
-    })
-    if (id !== props.skillId) return
-    probeResult.value = (res.data?.data ?? res.data ?? {}) as ProbeResult
-  } catch (e) {
-    if (id !== props.skillId) return
-    probeError.value = `探测失败：${errText(e)}`
-  } finally {
-    if (id === props.skillId) probeRunning.value = false
-  }
-}
-
-/** 通道探测：用该 skill 已保存的 endpoint+key 拉可用模型列表 */
-async function probeChannel() {
-  if (probing.value) return
-  probing.value = true
-  probeMsg.value = ''
-  probeErr.value = false
-  try {
-    const res = await adminSkillsApi.probeSkillChannel(props.skillId)
-    const d = res.data?.data as { ok: boolean; count?: number; models?: string[]; message?: string } | undefined
-    if (d?.ok) probeMsg.value = `通道可用模型 ${d.count} 个：${(d.models || []).join(', ')}`
-    else { probeErr.value = true; probeMsg.value = d?.message || '探测失败' }
-  } catch (e) {
-    probeErr.value = true
-    probeMsg.value = `探测失败：${errText(e)}`
-  } finally {
-    probing.value = false
-  }
-}
-
-/** 主模型在目录里的条目：备用链要按它的供应商与层级收窄（后端 validateFallbackChain 同规则） */
+/** 主模型在目录里的条目：用于就地核对能力与价格（2026-11-04 起不再收窄备用候选） */
 const primaryOption = computed(() => pickerOptions.value.find((o) => o.value === rtForm.value.model) ?? null)
 const primaryMetaText = computed(() => {
   const o = primaryOption.value
@@ -656,40 +537,10 @@ const primaryMetaText = computed(() => {
   const price = o.priceIn != null || o.priceOut != null
     ? `入 ${o.priceIn ?? '—'} / 出 ${o.priceOut ?? '—'}`
     : ''
-  return [o.providerName, o.tier, caps, price].filter(Boolean).join(' · ')
+  // 2026-11-04：不再把目录里的档位枚举（chat / reasoning）印在这一行——它是目录分类，
+  // 不是运营要在这里做的选择；能力与价格才是就地核对的对象。
+  return [o.providerName, caps, price].filter(Boolean).join(' · ')
 })
-const fallbackHint = computed(() => {
-  if (primaryOption.value) return ''
-  if (fallbackChain.value.length) return '主模型为空，候选按层级列出'
-  return '未设置时，失败按平台默认列表切换'
-})
-/** 备用候选：同供应商 + 同层级；主模型未指定时只按层级收窄 */
-const fallbackOptions = computed(() => {
-  const primary = primaryOption.value
-  return pickerOptions.value.filter((o) => {
-    if (primary) return o.providerId === primary.providerId && o.tier === primary.tier
-    return !rtForm.value.tier || o.tier === rtForm.value.tier
-  })
-})
-const fallbackExclude = computed(() => [rtForm.value.model, ...fallbackChain.value].filter(Boolean))
-
-/** 选中候选即入链；选择器自身受 max 2 与 exclude 约束 */
-function addFallbackValue(m: string) {
-  const value = (m || '').trim()
-  newFallback.value = ''
-  if (!value || fallbackChain.value.includes(value) || fallbackChain.value.length >= 2) return
-  fallbackChain.value = [...fallbackChain.value, value]
-  fallbackTouched.value = true
-}
-
-/** 选中目录里的模型时同步层级：候选行标了 tier，选 reasoning 模型却留着 chat 会路由错档 */
-function onModelPicked(opt: MkModelOption | null) {
-  if (opt?.tier === 'chat' || opt?.tier === 'reasoning') rtForm.value.tier = opt.tier
-}
-function removeFallback(m: string) {
-  fallbackChain.value = fallbackChain.value.filter(x => x !== m)
-  fallbackTouched.value = true
-}
 
 watch(
   () => rtForm.value.thinkingMode,
@@ -701,7 +552,6 @@ watch(
 /** 默认运行时表单（与初始定义一致）；切 skill / 404 时显式回退，避免残留上一个 skill 的数据 */
 function resetRtForm() {
   rtForm.value = {
-    tier: 'chat',
     model: '',
     thinkingMode: 'default',
     reasoningEffort: 'default',
@@ -716,11 +566,6 @@ function resetRtForm() {
   paramMax.value = { mode: 'inherit', value: null }
   paramAttempts.value = { mode: 'inherit', value: null }
   hadParamOverrides.value = false
-  fallbackChain.value = []
-  fallbackTouched.value = false
-  newFallback.value = ''
-  probeMsg.value = ''
-  probeErr.value = false
 }
 
 /* ---------- 配置弹层（2026-10-28）：取消回滚，保存一次提交 ---------- */
@@ -737,8 +582,6 @@ interface ConfigBackup {
   paramTopP: ParamField
   paramMax: ParamField
   paramAttempts: ParamField
-  fallbackChain: string[]
-  fallbackTouched: boolean
   hadParamOverrides: boolean
 }
 let configBackup: ConfigBackup | null = null
@@ -754,8 +597,6 @@ function openConfig() {
     paramTopP: { ...paramTopP.value },
     paramMax: { ...paramMax.value },
     paramAttempts: { ...paramAttempts.value },
-    fallbackChain: [...fallbackChain.value],
-    fallbackTouched: fallbackTouched.value,
     hadParamOverrides: hadParamOverrides.value
   }
   configOpen.value = true
@@ -771,8 +612,6 @@ function closeConfig() {
     paramTopP.value = { ...configBackup.paramTopP }
     paramMax.value = { ...configBackup.paramMax }
     paramAttempts.value = { ...configBackup.paramAttempts }
-    fallbackChain.value = [...configBackup.fallbackChain]
-    fallbackTouched.value = configBackup.fallbackTouched
     hadParamOverrides.value = configBackup.hadParamOverrides
   }
   configBackup = null
@@ -797,10 +636,9 @@ async function loadRuntime() {
     platformLogicalRetries.value = Number(relRes.value.data?.data?.settings?.maxLogicalRetries ?? 1)
   }
   if (skillRes.status === 'fulfilled') {
-    const raw = (skillRes.value.data?.data || null) as (RuntimeForm & { maxLogicalRetries?: number | null; paramOverrides?: string | null; fallbackChain?: string | null; generationParams?: typeof generationParams.value }) | null
+    const raw = (skillRes.value.data?.data || null) as (RuntimeForm & { maxLogicalRetries?: number | null; paramOverrides?: string | null; generationParams?: typeof generationParams.value }) | null
     generationParams.value = raw?.generationParams || null
     rtForm.value = {
-      tier: raw?.tier === 'reasoning' ? 'reasoning' : 'chat',
       model: raw?.model || '',
       thinkingMode: raw?.thinkingMode || 'default',
       reasoningEffort: raw?.reasoningEffort || 'default',
@@ -818,11 +656,6 @@ async function loadRuntime() {
     paramTopP.value = po.topP != null ? { mode: 'override', value: po.topP } : { mode: 'inherit', value: null }
     paramMax.value = po.maxTokens != null ? { mode: 'override', value: po.maxTokens } : { mode: 'inherit', value: null }
     paramAttempts.value = po.maxAttempts != null ? { mode: 'override', value: po.maxAttempts } : { mode: 'inherit', value: null }
-    // 兜底链：JSON 原文 → string[]（未配置=registry 默认链）
-    let fc: string[] = []
-    if (raw?.fallbackChain) { try { fc = (JSON.parse(raw.fallbackChain) || []).filter((x: unknown) => typeof x === 'string') } catch { fc = [] } }
-    fallbackChain.value = fc
-    fallbackTouched.value = false
   } else {
     // 无本 Skill 覆盖（404）等失败：显式重置为默认值，不残留上一 skill
     resetRtForm()
@@ -834,7 +667,7 @@ async function loadRuntime() {
   emit('dirty', { dirty: false, label: '运行时配置' })
 }
 
-async function saveRuntime(okMsg = '已更新（生成参数与备用模型一起保存）') {
+async function saveRuntime(okMsg = '已更新') {
   if (rtSaving.value) return
   rtSaving.value = true
   rtMsg.value = ''
@@ -882,7 +715,6 @@ async function saveRuntime(okMsg = '已更新（生成参数与备用模型一�
     if (maxVal != null) overrides.maxTokens = maxVal
     if (attemptsVal != null) overrides.maxAttempts = attemptsVal
     const payload: Record<string, unknown> = {
-      tier: rtForm.value.tier,
       model: rtForm.value.model || undefined,
       thinkingMode: rtForm.value.thinkingMode,
       reasoningEffort: rtForm.value.thinkingMode === 'disabled' ? 'default' : rtForm.value.reasoningEffort,
@@ -892,11 +724,9 @@ async function saveRuntime(okMsg = '已更新（生成参数与备用模型一�
     }
     if (Object.keys(overrides).length > 0) payload.paramOverrides = overrides
     else if (hadParamOverrides.value) payload.paramOverrides = null
-    if (fallbackTouched.value) payload.fallbackChain = fallbackChain.value
     await adminSkillsApi.updateSkillModelConfig(props.skillId, payload)
     rtErr.value = false
     rtMsg.value = okMsg
-    fallbackTouched.value = false
     await loadRuntime()
     configOpen.value = false
     configBackup = null
@@ -953,7 +783,6 @@ watch(
     configOpen.value = false
     configBackup = null
     resetRtForm()
-    resetProbe()
     generationParams.value = null
     rtMsg.value = ''
     void loadRuntime()
@@ -972,8 +801,7 @@ function formSnapshot(): string {
     t: paramT.value,
     tp: paramTopP.value,
     mx: paramMax.value,
-    at: paramAttempts.value,
-    fc: fallbackChain.value
+    at: paramAttempts.value
   })
 }
 let dirtyBase = formSnapshot()
@@ -983,7 +811,7 @@ function reportDirty() {
   emit('dirty', { dirty, label: '运行时配置' })
 }
 watch(
-  [rtForm, logicalRetryMode, customLogicalRetries, paramT, paramTopP, paramMax, paramAttempts, fallbackChain],
+  [rtForm, logicalRetryMode, customLogicalRetries, paramT, paramTopP, paramMax, paramAttempts],
   reportDirty,
   { deep: true }
 )
@@ -1001,26 +829,40 @@ watch(() => props.skillId, () => {
 .sdp-body { display: grid; gap: 16px; padding: 4px 16px 16px; }
 /* 取值顺序：一行说清「谁压谁」。原来这块是「生效值」只读摘要，把下面各分节的
    当前值又抄一遍（导航副文、分节页头、表单各一份），已删（2026-10-24 用户判定无意义）。 */
-/* 当前生效配置（2026-11-03 二稿）：不套盒子——模型当主角，六项读数两列横铺。
-   一稿的浅底描边盒在 914px 宽下框大内容少，右侧一半是空的。 */
-.sdp-live { display: grid; gap: 10px; }
-.sdp-live__model { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0; min-width: 0; }
-/* 主角：真实在跑的模型 id（比读数高一级，卡面第一眼先读它） */
-.sdp-live__id { color: var(--mk-ink); font-weight: 700; font-size: var(--mk-fs-emphasis); overflow-wrap: anywhere; }
-.sdp-live__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.sdp-live__sub { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+/* 卡面「基线 + 差异」（2026-11-04）：第一段是基线（平台默认模型那一行），
+   第二段只列本 Skill 改过的项。 */
+.sdp-live { display: grid; gap: 14px; }
 .sdp-live__note { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-amber); line-height: 1.6; }
-/* 六项读数两列（键都是 2~4 字，键列定宽让两列的值各自成一条竖线）；
-   窄容器回落单列，与编排图抽屉同一套做法 */
-.sdp-live__facts { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; row-gap: 6px; }
-.sdp-live__facts > div { grid-template-columns: 88px minmax(0, 1fr); gap: 4px 10px; }
-.sdp-live__facts > div > strong { overflow-wrap: anywhere; }
-@media (max-width: 900px) {
-  .sdp-live__facts { grid-template-columns: minmax(0, 1fr); }
+.sdp-base { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+/* 「基线」这枚词是这一行的角色标签，不是值：做成小字灰标签，别抢模型 id 的第一眼 */
+.sdp-base__k {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--mk-surface-2);
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+  font-weight: 600;
+  line-height: 1.7;
+}
+/* 主角：基线模型 id（比读数高一级，卡面第一眼先读它） */
+.sdp-base__model { color: var(--mk-ink); font-weight: 700; font-size: var(--mk-fs-emphasis); overflow-wrap: anywhere; }
+.sdp-base__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.sdp-base__src { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.sdp-diff { display: grid; gap: 8px; }
+.sdp-diff__k { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); font-weight: 700; letter-spacing: 0.04em; }
+.sdp-diff__list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+/* 一行三格：项名 / 本 Skill 的取值 / 未调整时会取什么。第三格是差异的对照面，
+   亮度降一档，读起来像脚注而不是第二个值。 */
+.sdp-diff__list > li { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: 10px; align-items: baseline; min-width: 0; }
+.sdp-diff__label { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.sdp-diff__val { color: var(--mk-ink); font-weight: 700; overflow-wrap: anywhere; }
+.sdp-diff__base { color: var(--mk-faint); font-size: var(--mk-fs-micro); font-style: normal; }
+.sdp-diff__none { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.sdp-diff__rest { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+@media (max-width: 720px) {
+  .sdp-diff__list > li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
 }
 
-/* 模型测试常驻卡面；配置三段收进弹层 */
-.sdp-panel--test { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--mk-line); }
 .sdp-config-modal { width: min(720px, 96vw); }
 .sdp-config-modal__foot { display: flex; align-items: center; gap: 8px; }
 .sdp-config-modal__spacer { flex: 1 1 auto; }
@@ -1041,20 +883,6 @@ watch(() => props.skillId, () => {
 .sdp-panel__head h4 { margin: 0; font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
 .sdp-panel__state { font-size: var(--mk-fs-micro); color: var(--mk-faint); overflow-wrap: anywhere; }
 
-/* 模型测试（2026-11-03）：一条直线——两个下拉 + 主操作同行、底部对齐（下拉上面
-   各有一行标签，用 flex-end 让按钮与下拉底边齐），结果与空态提示整行铺开在下面 */
-.sdp-testbar { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
-/* 200px：两个下拉的选中项「跟随配置（关闭思考）」在 150px 下被省略号截掉，
-   读者只能看到「跟随配置（关闭…」——而这正是测试时唯一要核对的取值 */
-.sdp-testbar__field { display: grid; gap: 5px; flex: 0 1 200px; min-width: 0; }
-.sdp-testbar__field > span { font-size: var(--mk-fs-micro); color: var(--mk-muted); font-weight: 600; }
-.sdp-testbar .sdp-form__msg { align-self: center; }
-.sdp-test-result { display: grid; gap: 10px; align-content: start; min-width: 0; }
-.sdp-test-result__empty { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); line-height: 1.6; }
-@media (max-width: 860px) {
-  /* flex 项目的主尺寸由 flex-basis 决定，写 width:100% 会被 200px 压住——必须改 flex */
-  .sdp-testbar__field { flex: 1 1 100%; }
-}
 
 .sdp-chip {
   display: inline-flex;
@@ -1067,14 +895,6 @@ watch(() => props.skillId, () => {
   font-size: var(--mk-fs-micro);
   font-weight: 600;
 }
-.sdp-chip b { color: var(--mk-ink); font-weight: 600; font-variant-numeric: tabular-nums; }
-.sdp-chip--ok { background: var(--mk-green-bg, #e8f5ec); color: var(--mk-green, #20704a); }
-.sdp-chip--danger { background: var(--mk-red-bg, #fdecec); color: var(--mk-red, #b3372f); }
-.sdp-fallback { display: grid; gap: 8px; }
-.sdp-fallback__chain { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.sdp-fallback__chain b { color: var(--mk-faint); font-weight: 700; }
-.sdp-fallback__probe { justify-self: start; }
-.mk-link--danger { color: var(--mk-red, #b3372f); }
 /* 卡头：覆盖开关与配置入口同处右组；标题左，动作右 */
 .sdp-card__head { flex-wrap: wrap; }
 .sdp-head__switch { margin-left: auto; }
@@ -1117,8 +937,6 @@ watch(() => props.skillId, () => {
 .sdp-param__ctl > :only-child { grid-column: 1 / -1; }
 /* 继承档的生效取值（只读）：与右侧输入框同宽同位，切到「覆盖」时被输入框顶替，行高不变 */
 .sdp-param__val { font-size: var(--mk-fs-micro); color: var(--mk-ink); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* 空备用链的显式状态胶囊（与 sdp-chip 同形，弱化到底色而不是文字） */
-.sdp-chip--muted { background: transparent; border: 1px dashed var(--mk-line); color: var(--mk-faint); }
 @media (max-width: 700px) {
   /* 窄屏：参数行整行放模式选择 */
   .sdp-param { grid-template-columns: minmax(0, 1fr); }
@@ -1140,24 +958,6 @@ watch(() => props.skillId, () => {
 }
 .sdp-form__msg { margin: 0 auto 0 0; font-size: var(--mk-fs-micro); color: var(--mk-green); font-weight: 600; }
 .sdp-form__msg.is-err { color: var(--mk-red); }
-.sdp-probe { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl); }
-.sdp-probe.is-ok { border-color: rgba(22, 163, 74, 0.35); background: var(--mk-green-bg); }
-.sdp-probe.is-bad { border-color: rgba(220, 38, 38, 0.3); background: var(--mk-red-bg); }
-.sdp-probe__resolved { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); overflow-wrap: anywhere; }
-.sdp-probe__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
-.sdp-probe__grid > div { display: grid; gap: 2px; font-size: var(--mk-fs-micro); min-width: 0; }
-.sdp-probe__grid span { color: var(--mk-faint); }
-.sdp-probe__grid strong { color: var(--mk-ink); font-weight: 600; overflow-wrap: anywhere; }
-.sdp-probe__pre {
-  margin: 0;
-  max-height: 160px;
-  overflow: auto;
-  font-size: var(--mk-fs-micro);
-  line-height: 1.6;
-  color: var(--mk-muted);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
 .sdp-error {
   padding: 10px 12px;
   border-radius: var(--mk-radius-xl);
@@ -1184,7 +984,6 @@ watch(() => props.skillId, () => {
   .sdp-pane .mk-input { font-size: var(--mk-fs-emphasis); padding: 12px 15px; }
   .sdp-form__msg { font-size: var(--mk-fs-body); }
   .sdp-form__footer { padding: 0 20px 20px; }
-  .sdp-probe__resolved, .sdp-probe__grid > div, .sdp-probe__pre { font-size: var(--mk-fs-body); }
 }
 
 /* 暗色模式：分节导航用壳层已有的 subtle 底，不再单独覆盖 */

@@ -422,20 +422,23 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
     const { wrapper } = await mountPage();
     await gotoTab(wrapper, '运行时');
     // 2026-10-28 用户「skill 详情的模型也改一下」：卡面先给当前值，表单收进弹层
-    // 2026-11-03 二稿：卡面 = 模型当主角 + 六项两列读数（不再套描边盒）
+    /* 2026-11-04 用户「他是在平台配置模型之下的，进行独立的调整」：
+       卡面 = 基线（平台默认模型那一行）+ 差异（本 Skill 改过的项）。 */
     const live = wrapper.find('.sdp-live');
     expect(live.exists()).toBe(true);
-    expect(live.find('.sdp-live__id').text()).toContain('gpt-4o-mini');
-    // 取值顺序（谁压谁）降成模型 id 的悬停说明，不再占一行读数
-    expect(live.find('.sdp-live__id').attributes('title') ?? '').toContain('本 Skill 指定');
-
-    const facts = live.findAll('.sdp-live__facts > div');
-    expect(facts.map((d) => d.find('span').text())).toEqual([
-      '思考模式', '推理强度', 'temperature', '请求超时', '逻辑重试', '备用模型'
-    ]);
-    // 真实值仍取自配置：mock requestTimeoutMs=30000 / T=0.4
-    expect(live.find('.sdp-live__facts').text()).toContain('0.4');
-    expect(live.find('.sdp-live__facts').text()).toContain('30s');
+    expect(live.find('.sdp-base__model').text()).toContain('gpt-4o-mini');
+    expect(live.find('.sdp-base__src').text()).toBe('本 Skill 指定');
+    // 取值顺序（谁压谁）降成基线模型 id 的悬停说明，不占一行读数
+    expect(live.find('.sdp-base__model').attributes('title') ?? '').toContain('本 Skill 指定');
+    // 只列改过的项：mock 里 Skill 只单独设了 requestTimeoutMs=30000；
+    // T=0.4 是 Prompt 声明值（generationParams），不算这个 Skill 的改动
+    const diff = live.findAll('.sdp-diff__list > li');
+    expect(diff.map((li) => li.find('.sdp-diff__label').text())).toEqual(['请求超时']);
+    // 第三格是「不单独设置时会取什么」
+    expect(diff[0].find('.sdp-diff__base').text()).toBe('平台默认');
+    expect(diff[0].find('.sdp-diff__val').text()).toBe('30s');
+    // 没改的项收成一行，不再逐条占版面
+    expect(live.find('.sdp-diff__rest').text()).toBe('其余沿用基线：思考模式 / 推理强度 / temperature / 逻辑重试');
     expect(wrapper.find('.sdp-nav').exists()).toBe(false);
 
     // 详细分段只在弹层里；打开后当前值仍读段头
@@ -455,23 +458,16 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
     wrapper.unmount();
   });
 
-  it('运行时 tab：模型测试直发 model-probe，返回的延迟/JSON/token 落到读数格', async () => {
+  /* 2026-11-04：模型测试（直发上游探测）从 Skill 运行时段撑出去——连通性测试在
+     平台「模型与接入」页每个模型上都有，这一页只负责「这个 Skill 改了什么」。 */
+  it('运行时 tab：模型测试块已不在本页，也不发探测请求', async () => {
     const { wrapper } = await mountPage();
     await gotoTab(wrapper, '运行时');
-    // 平铺后本页有两处「开始探测」（SkillDetail 只读概览的模型测试 + 设计区块 RuntimeTab 的模型测试）；
-    // 断言目标是设计区块（RuntimeTab，根 .sdp-pane），故按容器定位其探测钮。
-    const probeBtn = wrapper.find('.sdp-pane').findAll('button').find((b) => b.text() === '开始探测')!;
-    await probeBtn.trigger('click');
-    await settle();
-    expect(apiMocks.modelProbe).toHaveBeenCalledTimes(1);
-    expect((apiMocks.modelProbe.mock.calls[0] as unknown[])[0]).toBe('test-skill');
-    expect((apiMocks.modelProbe.mock.calls[0] as unknown[])[1]).toEqual({ thinkingMode: 'default', reasoningEffort: 'default' });
-    const grid = wrapper.find('.sdp-probe__grid');
-    expect(grid.exists()).toBe(true);
-    expect(grid.text()).toContain('1.2s'); // 1234ms → 档
-    expect(grid.text()).toContain('210ms'); // TTFT
-    expect(grid.text()).toContain('42'); // 输出字符
-    expect(wrapper.find('.sdp-probe__resolved').text()).toContain('gpt-4o-mini');
+    const pane = wrapper.find('.sdp-pane');
+    expect(pane.findAll('button').some((b) => b.text() === '开始探测')).toBe(false);
+    expect(pane.find('.sdp-testbar').exists()).toBe(false);
+    expect(pane.find('.sdp-probe__grid').exists()).toBe(false);
+    expect(apiMocks.modelProbe).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 

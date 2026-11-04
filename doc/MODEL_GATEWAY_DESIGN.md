@@ -16,10 +16,10 @@
 3. 三个真正的缺口：
    - **能力元数据没有闭环**：`models.config.ts` 有能力雏形，但只用来判 `supportsThinking`；思考/输出预算混在一个 `max_tokens` 里。
    - **`maxTokens` 语义错误**（P0 已修）：全局 floor 把每-skill 声明的输出预算**无条件抬到模型硬上限**（deepseek 131072），使 `prompts/core/*.yaml` 的 `params.maxTokens` 全部失效。
-   - **没有降级/冷却**：429 进来耗尽重试预算即终局失败；无 fallback、无 circuit breaker（见 `doc/NON_FUNCTIONAL_GOVERNANCE_PLAN.md:760-771`）。
+   - **没有降级/冷却**：429 进来耗尽重试预算即终局失败；无 fallback、无 circuit breaker（见 `doc/NON_FUNCTIONAL_GOVERNANCE_PLAN.md:760-771`）。**2026-11-04 起这句话重新成立**：P1 曾补上的降级与冷却已按下线清单撤除（见 §4.5）。
 4. 目标形态＝**模型能力注册表 + 别名/部署 + 能力驱动参数构造 + 错误分类可靠性链路**。
 
-> **2026-09-24 对账**：上述三个缺口已全部闭环（能力注册表 + 预算分离 = P0；maxTokens 语义 = P0；降级/冷却 = P1）。本节保留为写作时的动机记录。
+> **2026-09-24 对账**：上述三个缺口已全部闭环（能力注册表 + 预算分离 = P0；maxTokens 语义 = P0；降级/冷却 = P1）。本节保留为写作时的动机记录；其中降级/冷却已于 2026-11-04 主动下线。
 
 > **2026-10-24 现状补记（默认模型不再物化）**
 > - 平台默认模型只认 `platform_api_configs.defaultModel`（推理档 `defaultReasoningModel`）；文件 `defaults` 只做展示/校验，运行时不再读。
@@ -89,7 +89,7 @@ this.applyThinkingMode(route, requestBody);
 | 逻辑层重试 | `callPrompt`（解析/校验/空内容失败触发），受 `maxLogicalRetries` 约束（`prompt-composer.ts:227-231,330-342`） |
 | 预算 | `maxUpstreamAttempts=10 / maxTransportRetries=5 / maxLogicalRetries=5`（`retry-budget.ts:34-44`） |
 | 错误分类 | 11 类；429/5xx/408/425/网络/超时可重试；400/401/402/403 不可（`failure-classification.ts`；`executor.ts:357-373`） |
-| **降级** | ~~无~~ → **已解决（P1）**：部署级 cooldown + 模型 fallback 链（见 §4.5） |
+| **降级** | ~~无~~ → P1 做过（部署级 cooldown + fallback 链），**2026-11-04 整条下线**（见 §4.5） |
 | **冷却/熔断** | ~~无~~ → **已解决（P1）**：`deployment-health.ts`（见 §4.5） |
 | 超时 | 写作时点：宣称 600s、实际被 300s 截断 → P2② 统一了执行器口径；**2026-09-24 对账发现传输层 `SAFE_HTTP_MAX_TIMEOUT_MS=300_000` 二次钳制漏网**——覆盖 >300s 的 skill/path-planning 调用在 wire 层仍被静默砍半、遥测 `effectiveTimeoutMs` 虚记 600s。已对齐 600s 并加 parity 测试锁死口径（§4.10；根因是传输层整层缺席于本文档与证据索引） |
 | 并发 | ~~只有全局 RPM 令牌桶~~ → **已补（P2④）**：per-model 并发闸门（`model-concurrency.ts`）；RPM 现为 platform / virtual-learner 双通道**等待**语义（见 §4.6） |
@@ -129,7 +129,7 @@ this.applyThinkingMode(route, requestBody);
 
 1. **`maxOutput` 是能力上限，不是请求参数。** 请求参数由调用方声明，只在越界时 clamp。
 2. **错误必须分类处理**：可重试的退避、不可重试的立即失败、429 进冷却；且 provider SDK 自带重试要关掉，避免 `(1+N)²`。
-3. **降级必须记账**，否则统计/成本会把降级结果算到主模型头上。
+3. ~~**降级必须记账**~~：当初做降级时按这条记账；功能下线后无降级行可记。
 
 ---
 
@@ -140,9 +140,9 @@ this.applyThinkingMode(route, requestBody);
 ② 别名与部署       逻辑名(chat/reasoning/light) → [部署...] + 策略
 ③ 参数解析         调用方声明意图 → 结合注册表 clamp → 最终请求
 ④ 请求构造         能力驱动（是否发 thinking / reasoning_effort / 预算分离）
-⑤ 可靠性           错误分类 → 退避 → 冷却 → 同别名换部署 → 跨别名降级
+⑤ 可靠性           错误分类 → 退避 → 耗尽即终局失败（降级/冷却 2026-11-04 下线）
 ⑥ 并发配额         per-model/部署 并发 + rpm
-⑦ 可观测           实际模型 / 降级次数 / token / 成本
+⑦ 可观测           实际模型 / token / 成本
 ⑧ 切换与回滚       别名映射热更新 + 变更审计 + 灰度权重
 ```
 
@@ -180,7 +180,7 @@ export interface ModelDefinition {
 }
 ```
 
-**裁剪记录（2026-09-24 对账）**：已实现的注册表是上述接口的**能力 + 限额 + 经济性半边**（`supportsThinking` / `supportsReasoningEffort` / `maxOutputTokens` / `defaultMaxTokens` / `reasoningReserveTokens` / `fallbacks` / `maxParallelRequests` / `pricing`）。接入半边（`endpoint` / `apiKeyRef` / `realModelId` / `contextWindow` / `supportsTools` / `supportsResponseFormat` / `requestTimeoutMs` / `rpm`）**有意识地未实现**：当前部署是单一聚合网关（所有模型同 endpoint/apiKey），接入信息归平台层（`platform_api_configs`）；引入 per-provider 端点时再按本接口补齐。P0 的「已实现」以本记录为准。
+**裁剪记录（2026-09-24 对账）**：已实现的注册表是上述接口的**能力 + 限额 + 经济性半边**（`supportsThinking` / `supportsReasoningEffort` / `maxOutputTokens` / `defaultMaxTokens` / `reasoningReserveTokens` / `maxParallelRequests` / `pricing`；`fallbacks` 已于 2026-11-04 下线）。接入半边（`endpoint` / `apiKeyRef` / `realModelId` / `contextWindow` / `supportsTools` / `supportsResponseFormat` / `requestTimeoutMs` / `rpm`）**有意识地未实现**：当前部署是单一聚合网关（所有模型同 endpoint/apiKey），接入信息归平台层（`platform_api_configs`）；引入 per-provider 端点时再按本接口补齐。P0 的「已实现」以本记录为准。
 
 #### 4.1a 视觉能力（`vision`，2026-10-18 #123 落地）
 
@@ -230,7 +230,7 @@ aliases / defaults
 - **热重载**：`APIRouter.resolve()` 每次解析前 `reloadLlmProvidersIfChanged()`（mtime 变更才重读）；路径可用 `LLM_PROVIDERS_CONFIG` 环境变量覆盖。
 - **供应商端点**：provider 声明 `baseUrl` 时必须给 `apiKeyEnv`（密钥只走环境变量，严禁入文件）。路由层规则（`APIRouter.applyProviderEndpoint`）：解析后的模型命中自带端点的供应商 ⇒ `endpoint/apiKey` 整体切换（`source='provider-endpoint'`，`privateNetworkPolicy='runtime'`）；密钥 env 缺失 = 明确报错不带病调用；**用户自带 provider（source user-*）不受覆盖**。继承通道（无 baseUrl）行为与历史版本一致。
 - **模型引用**：裸 id（历史 DB 配置零迁移）或限定式 `providerId/modelId`（仅当命中已注册供应商+目录内模型才按限定式解析；聚合网关自带 `/` 的字面模型 id 不误伤）。**多通道重名合法**（同一模型经平台聚合网关与用户自建供应商各服务一份是常态）：裸 id 解析取声明在前的启用通道（first-wins），registry 总览发歧义告警，限定式全量可解析。请求空间只认裸 id——限定式在路由层还原为上游字面 id。
-- **降级边界**：skill 兜底链候选必须**同供应商**（保存侧校验拒绝跨供应商）；跨供应商兜底需等端点感知降级（候选自带 endpoint/key，未做）。
+- ~~**降级边界**：skill 兜底链候选必须**同供应商**~~——2026-11-04 随降级功能下线，这一节不再适用。
 - **可观测**：`/admin/model-registry` 总览新增 providers 段 + registry 文件状态（source/mtime/lastError）+ 缺密钥告警；`/api/config/available-models` 返回 providers 维度。
 
 **编辑入口（2026-10-18，BYOK）**：文件仍是唯一真源，管理台只是它的**编辑器**——两者不是两个写源。
@@ -273,14 +273,24 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
 ```
 
 **已实现（P1）**：
-- **部署级 cooldown**：`deployment-health.ts`，键 = `providerId|endpoint|model`；仅「可降级错误类」触发；进程内实现，不引入 Redis。
-- **降级链**：模型声明 `fallbacks`（`models.config.ts`）。注册表当前（2026-10-18 上游下线 `deepseek-v4-flash` / `deepseek-v4-pro` 后）平台目录未声明模型级 fallbacks，降级改由 skill 级 `fallbackChain` 承担；机制与「agnes 无思考能力时由 `thinking-policy` 自动裁剪字段」不变。限一跳，且仅在 `!streamStarted`（内容未透传）时生效。
-- **skill 级兜底链（2026-09-28）**：`skill_model_configs.fallbackChain`（JSON string[]，≤2 跳）优先于 registry 全局链；保存时校验候选在 registry、与主模型同 tier、且**在该 skill 的 endpoint+key 上可服务**（`routes/admin/skill-model-configs.ts` 的频道探测，30min 缓存）。背景：registry 默认链里的 agnes-3.0-flash 在新 key 分组不存在，400→503「空气兜底」会掩盖真因。探测走 `utils/safe-http`（协议/保留地址/凭据 URL 检查，policy=runtime 与 executor 同款）。
-- **单端点前提（2026-09-24 补记）**：降级只换 `model`、不换 `endpoint/apiKey`——`deepseek → agnes` 成立的前提是所有模型经由**同一聚合网关**。若将来 per-provider 端点落地，fallback 链必须随部署（endpoint+key）整体切换，否则跨 provider 直接 404。
-- **可降级错误类**：`rate_limit` / `provider_http` / `network` / `provider_timeout`；**不含** `quota`（账号/余额级，换模型无效）、`authentication`、`configuration`、`protocol`。
-- **降级记账**：失败候选与降级调用**各自成行**（`agent_call_logs`），降级请求上下文带 `ExecutionContext.fallbackFrom` 与 `fallbackChainSource`（skill/registry，不发给上游）；冷却中候选会被跳过。
 - **语义失败定向重试**：`TRUNCATED_EMPTY_OUTPUT`（`content` 空 且 `finish_reason=length`）判为可重试，重试时**关闭思考**（不是整包翻倍 maxTokens）。
 - **未做（留 P2 ④）**：provider 级多部署负载均衡、per-model 并发上限。
+
+> **2026-11-04：降级 / 冷却整条下线（用户「去掉降级这个功能，不要」）。**
+> 上面那套「耗尽 → 换部署 → 跨别名降级」的实现已全部撤除，本节目录里的候选链、冷却注册表、
+> 降级记账都只作为历史记录保留。下线清单：
+> - `gateway/api-gateway/deployment-health.ts` 删除（冷却注册表只服务降级；文件内的部署键改由
+>   `executor.ts` 就地拼，仍供 per-model 并发闸门使用）。
+> - `executor.ts` 去掉 `resolveModelCandidates` / `MAX_MODEL_CANDIDATES` / fallback 换型重试段，
+>   重试预算耗尽即终局失败；遥测不再写 `fallbackFrom` / `fallbackTrail` / `fallbackChainSource`。
+> - `config/models.config.ts` 去掉 `ModelDefinition.fallbacks` 与 `getModelFallbacks`；
+>   `llm-providers.json` 不再有 `fallbacks` 键（模型级链历史上一直为空）。
+> - `skill_model_configs.fallbackChain` 不再读写（DB 列保留不删）；保存侧的同 tier / 同供应商 /
+>   通道可服务性校验与探测缓存（`probeChannelModels`）一并移除。
+> - 管理端：`/admin/model-registry` 不再返回 `fallbackChains` / `cooldowns` / `runtime`；
+>   模型设置弹层的备用模型一栏、Skill 运行时的兜底链选择、以及当天刚加的「组配置」入口全部撤除。
+> 保留的历史理由（单端点前提、可降级错误类清单）见修订前的记录；若将来重做，参照
+> `git log -- doc/MODEL_GATEWAY_DESIGN.md`。
 
 ### 4.6 ⑥ 并发配额
 
@@ -290,7 +300,7 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
 **已实现（P2 ④）**：`api-gateway/model-concurrency.ts`
 - 键 = 部署（`providerId|endpoint|model`），计数进程内。
 - **默认不限**：未配置 `models.config.maxParallelRequests` 即完全不生效（零行为变化、零开销）。限值是运维决策，不靠猜（成熟参照：LiteLLM `max_parallel_requests`）。
-- 超限抛 `LOCAL_CONCURRENCY_LIMIT`（`rate_limit` / 429 / 可重试），与上游 429**同构** ⇒ 直接复用统一的退避与降级链路（配合 §4.5，饱和的主模型可自动让位给 fallback）。
+- 超限抛 `LOCAL_CONCURRENCY_LIMIT`（`rate_limit` / 429 / 可重试），与上游 429**同构** ⇒ 直接复用统一的退避链路。
 - 槽位在 `finally` 中释放，异常路径不泄漏。
 - **待做**：由 `rpm`/`tpm` 自动推导上限、多实例共享计数（需 Redis）。
 
@@ -299,28 +309,28 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
 | 机制 | 超限行为 | 粒度 | 意图 |
 |---|---|---|---|
 | RPM 令牌桶 | **排队等待**（令牌按 rpm 速率滴灌，突发≈1 秒容量；不报错） | 逻辑调用（内部重试不加计） | 让自动驾驶自然变慢 |
-| per-model 并发闸门 | **立即拒绝**（`rate_limit`/429 同构，进统一退避/降级链路） | 单次上游 attempt | 防我方突发触发上游 429 |
+| per-model 并发闸门 | **立即拒绝**（`rate_limit`/429 同构，进统一退避链路） | 单次上游 attempt | 防我方突发触发上游 429 |
 
 已知小缺口：RPM `acquire()` 不感知调用方 `abortSignal`，已取消的请求仍占排队位（低 rpm 配置下轻微延迟后来者）。
 
 ### 4.7 ⑦ 可观测
 
-- `llm_execution_attempts` 增 `deploymentId` / `fallbackIndex`；`agent_call_logs` 增实际模型与原始请求模型。
+- `llm_execution_attempts` 增 `deploymentId`（`fallbackIndex` 随降级下线不再需要）；`agent_call_logs` 增实际模型与原始请求模型。
 - 接上 `model-cost.ts`（`pricing` 补齐后）产出金额。
 
 **已实现（P2 ①③⑤）**：
-- 降级记账：`agent_call_logs.metadata.fallbackFrom`（复用现有 JSON 列）。
+- ~~降级记账：`agent_call_logs.metadata.fallbackFrom`~~（2026-11-04 随降级下线不再写入）。
 - **只读总览**：`GET /api/admin/model-registry`（`services/model-registry.service.ts`）——读模型统一，汇聚
   ①每个模型的能力与限额（`supportsThinking` / `supportsReasoningEffort` / 输出上限 / 缺省 / 推理预留 / 并发上限）、
-  ②别名映射（成员、DB 覆盖声明、默认选中、`requireThinking` 下的选中与降级标记）、
+  ②别名映射（成员、DB 覆盖声明、默认选中、`requireThinking` 下的选中与降级标记；这里的「降级」指别名成员能力不足时的回退选人，与已下线的模型降级无关）、
   ③平台默认模型的**解析结果与来源**（别名 / 具体 / 未配置）、
-  ④降级链、⑤**当前冷却中的部署**（进程内快照）、⑥配置漂移告警（未注册模型、别名为空、废弃 `prompt.model` 副本数；「模型未被任何别名引用」已于 2026-10-28 撤除——控制台不再维护别名，该告警不可行动）。
+  ④~~降级链~~、⑤~~当前冷却中的部署~~（均随降级功能 2026-11-04 下线）、⑥配置漂移告警（未注册模型、别名为空、废弃 `prompt.model` 副本数；「模型未被任何别名引用」已于 2026-10-28 撤除——控制台不再维护别名，该告警不可行动）。
   该接口**不做写操作**（方案 B）。写源辨析：模型能力以代码注册表为唯一写源；`skill_model_configs` 已于 2026-09-28 落地 File-as-Truth（§4.2a，管理台可写）；`agent_model_configs` 的唯一写方是迁移脚本 `migrate-database-secrets.ts:112`——三处语义不同，勿混淆。
 - **成本金额已接线**：`services/cost/call-cost-aggregation.ts`（纯函数）提供按模型/会话/技能/节点的金额聚合，
   管理端 `routes/admin/token-cost.ts` 的排行条目与 `totals` 追加 `usd / pricingKnown / callsMissingPricing / pricedCalls`，
   响应顶层新增 `pricingStatus`（列出「已配置 / 待补单价」模型）；前端成本 tab 有金额条。
   **单价未配置时 `usd: null` 且显示「单价未配置」，绝不用 0 冒充**（`models.config.pricing` 仍为空，待财务权威单价）。
-- **待做**：`llm_execution_attempts` 增 `deploymentId` / `fallbackIndex` 真列；补权威单价；成本金额条与内嵌组件的
+- **待做**：`llm_execution_attempts` 增 `deploymentId` 真列；补权威单价；成本金额条与内嵌组件的
   时间窗口对齐；`bySession` 增加会话维度端点。
 
 **遥测写路径分流（2026-09 性能整改补记）**：`telemetry-writer.service` 中 `createAgentCall` / `createPromptCall` 为**后台写**——调用时同步发起底层 INSERT 但调用方不等待（失败仅 warn，业务语义不变）；两表携带 userPayload / rawModelOutput 大文本，await 内联在 LLM 响应关键路径上会被 SQLite 单写者竞争放大 SSE 完成延迟。`createLlmAttempt` 保持 **await**：其成败经 `attemptTelemetryComplete` 汇总写入 `agent_call_logs.metadata`，管理端执行日志据此标注 dataCompleteness，不能乐观化。`flush()` 供优雅关闭/测试等待在途后台写落盘。
@@ -404,7 +414,7 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
 文档成文后最大的执行模型变化：**所有 LLM 调用默认以流式发出**（`callPrompt` 的 `streamRequested = context.stream !== false`，探测等场景可显式关闭）。
 
 - **请求形态层与透传层解耦**：默认全部走上游 SSE（更早收到首字节、TTFT 可观测）；但「逐字透传给客户端」仅当调用方注入流式意向（`streamRequest.enabled`）且输出 media 为 markdown/text 时启用。同请求首个透传调用消费 `streamRequest.consumed`，后续调用自动降级为整包（JSON 契约类输出不受影响）。
-- **重试门闩**：流式路径仅「首字节（首个内容增量）之前」可重试；`streamStarted` 置位后，传输重试与模型降级全部停用——否则客户端收到两段拼接内容，且 HTTP 200 已提交无法改状态码。
+- **重试门闩**：流式路径仅「首字节（首个内容增量）之前」可重试；`streamStarted` 置位后，传输重试全部停用——否则客户端收到两段拼接内容，且 HTTP 200 已提交无法改状态码。
 - **provider 兼容**：不识别 `stream_options` 报 400 的 provider 自动去参重试一次（不消耗重试预算）；声明流式但 provider 返回完整 JSON 的回退缓冲解析；返回 event-stream 头却无 SSE 事件判 `INVALID_STREAM_RESPONSE`。
 - **逻辑重试 restart**：校验失败触发生成重试时，已透传场景先发 `restart` 事件清空客户端已显示内容，防新旧拼接。
 - **遥测复用**：流结束时合成与缓冲路径一致的 ChatResponse（id/model/usage/finish_reason），attempt 级遥测原样复用；TTFT 与 KV 前缀缓存命中随 attempt 落库。
@@ -418,7 +428,7 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
 | 能力元数据放代码常量而非 DB | 起步快、可 review、可单测；DB 化留到需要管理端编辑时（保持同构，迁移成本低） |
 | `maxTokens` 改为"声明优先" | 会显著降低实际输出预算（131072 → 800~64000；2026-10-17 全技能统一 64000）。**这是修正而非回归**；若某技能截断，应显式提高其 `prompts/core/*.yaml` 的 `maxTokens`，而不是退回全局 floor |
 | `runtime-override` 保持豁免 | 调试链路不受 clamp 影响；代价是越界由调用方负责 |
-| 降级链默认"同别名优先" | 先换部署（同模型不同区域/key）再换模型，避免质量漂移 |
+| ~~降级链默认"同别名优先"~~ | 2026-11-04 随降级下线；现在不换模型，失败就报错，由调用方决定是否重发 |
 | 不做多租户预算/计费 | 当前无此需求，`pricing` 留空即"金额未知"，不用 0 冒充 |
 
 ---
@@ -428,7 +438,7 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
 | 阶段 | 内容 | 状态 | 涉及文件 |
 |---|---|---|---|
 | **P0** | 能力注册表（per-model）+ `maxTokens` 语义修正 + thinking 预算分离 | **已实现** | `config/models.config.ts`、`services/resolve-llm-call-params.ts`、`gateway/api-gateway/executor.ts` |
-| **P1** | 部署级 cooldown + fallback 链 + `TRUNCATED_EMPTY_OUTPUT` 分类与定向重试 | **已实现** | 新增 `api-gateway/deployment-health.ts`；`api-gateway/executor.ts`；`config/models.config.ts`（`fallbacks`） |
+| **P1** | 部署级 cooldown + fallback 链 + `TRUNCATED_EMPTY_OUTPUT` 分类与定向重试 | **部分已实现**：降级 / 冷却 2026-11-04 下线，定向重试保留 | `api-gateway/executor.ts`（`deployment-health.ts` 已删除） |
 | **P2** | ①别名层（code 注册表 + DB 覆盖 + 能力过滤）✅ ②超时口径统一 ✅（**2026-09-24 复核补遗**：executor 层当时确已统一，但传输层 `SAFE_HTTP_MAX_TIMEOUT_MS=300s` 二次钳制漏网，覆盖 >300s 的调用仍被砍半且遥测虚记——已对齐 600s + parity 测试补锁，见 §2.4/§4.10） ③降级记账 ✅ ④per-model 并发闸门（默认不限）✅ ⑤只读总览 API（方案 B）✅ | **已完成** | `config/models.config.ts`、`gateway/api-gateway/{model-alias,model-concurrency}.ts`、`services/model-registry.service.ts`、`routes/admin/model-registry.ts` |
 | — | **未采纳**：能力元数据 DB 化（方案 A：新建 system 表 + 迁移）——模型能力仍以代码注册表为唯一写源；`frontend` 展示待空窗期 | — | — |
 | **P3** | 管理端可视化：**已做** —— ①`模型总览` tab（只读，消费 `/api/admin/model-registry`：默认解析 / 别名映射与降级标记 / 能力与限额 / 部署冷却 / 配置提示）②「路由默认」由 `<select>` 改为可输入的别名候选（`chat`/`reasoning`/`light`，候选来自后端注册表，未拉取清单也能填）③执行日志成本 tab 金额条（缺单价显示「未配置」）。**未做**：金额条与内嵌组件时间窗口对齐、`bySession` 端点、别名成员可视化编辑（方案 A 未采纳） | **基本完成** | `frontend/src/views/admin-redesign/{ApiConfig.vue,ModelRegistryOverview.vue,ExecLogs.vue}`、`frontend/src/api/adminApi.ts`、`services/cost/call-cost-aggregation.ts` |
@@ -482,7 +492,7 @@ node scripts/vl-ai-audit.mjs --tag=builtin --story=first --phase=both --runs=3 -
 | **全流式执行** | `composers/prompt-composer.ts#callPrompt`（streamRequested/streamDeltaEligible）；`executor.ts#executeStreamRequest`；`utils/sse-parser.ts` |
 | **RPM 双通道** | `api-gateway/rpm-limiter.ts`；`services/rpm-limit-config.service.ts`；`api-gateway/index.ts#execute`（通道选择） |
 | 并发闸门 | `api-gateway/model-concurrency.ts`；`config/models.config.ts#maxParallelRequests` |
-| 降级/冷却 | `api-gateway/deployment-health.ts`；`executor.ts#execute`（fallback 段）；`config/models.config.ts#fallbacks` |
+| 降级/冷却 | 已下线（2026-11-04）：`deployment-health.ts` 删除；`executor.ts#execute` 无 fallback 段；模型目录无 `fallbacks` |
 | 可观测表 | `prisma/schema.prisma`（agent_call_logs / prompt_call_logs / llm_execution_attempts） |
 | **遥测写路径分流** | `services/telemetry-writer.service.ts`（后台写 vs await 语义注释 + flush） |
 | 健康探针 | `services/ai-capability-health.service.ts`；`bootstrap/gateway.ts#syncCapabilityProbeSettings`（金丝雀移除说明） |

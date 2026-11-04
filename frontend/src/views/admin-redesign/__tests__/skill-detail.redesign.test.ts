@@ -596,14 +596,13 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     expect(w.findAll('button').some((b) => b.text() === '配置')).toBe(true)
     // 2026-10-24 用户「生效值没意义，拿掉」：只读摘要删掉，换成「谁压谁」的说明
     expect(w.text()).not.toContain('只读 · 当前实际生效')
-    // 2026-11-03：这条说明降成模型 id 的悬停全文（不再占一行读数）
-    expect(w.find('.sdp-live__id').attributes('title') ?? '').toContain('本 Skill 指定')
-    // 模型测试（右侧验证列）
-    expect(w.text()).toContain('模型测试')
-    expect(w.text()).toContain('开始探测')
-    // 同题不再出现两遍：页面里「模型与路由」「模型测试」各只一处
+    // 2026-11-04「基线 + 差异」：第一行是基线模型（悬停仍是「谁压谁」那套说明）
+    expect(w.find('.sdp-base__model').attributes('title') ?? '').toContain('本 Skill 指定')
+    // 2026-11-04：模型测试块已从本页撑出去——连通性测试在「模型与接入」页每个模型上都有
+    expect(w.text()).not.toContain('开始探测')
+    expect(w.find('#sdp-panel-test').exists()).toBe(false)
+    // 同题不再出现两遍：页面里「模型与路由」只一处
     expect(w.findAll('.mk-card__title').filter((t) => t.text().includes('模型与路由')).length).toBe(1)
-    expect(w.findAll('.mk-card__title').filter((t) => t.text().includes('模型测试')).length).toBe(0) // 模型测试是段标题不是卡
     expect(w.text()).not.toContain('运行时限制')
     // 最近调用（SkillDrawer 概览迁入）：无日志窗口数据 → 明确空态
     expect(w.text()).toContain('最近调用')
