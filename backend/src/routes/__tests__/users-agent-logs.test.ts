@@ -254,23 +254,71 @@ describe('users agent log routes', () => {
     expect(await agentIdsFor('system')).toEqual(['system-call', 'unknown']);
   });
 
-  it('capabilityType 结果集 ⊆ 默认结果集，不越出 userListed 白名单（#226）', async () => {
+  it('capabilityType 结果集 ⊆ 默认结果集：合法值出子集，未知值被拒（#226/#229）', async () => {
     agentLogMocks.findMany.mockResolvedValue([]);
-    const agentIdsFor = async (query: Record<string, unknown>): Promise<string[]> => {
+    const request = async (query: Record<string, unknown>) => {
       const req: any = { user: { userId: 'user-1' }, query: { format: 'json', ...query } };
-      await routes['GET /me/agent-logs/export'](req, createResponse(), jest.fn());
-      return agentLogMocks.findMany.mock.calls.at(-1)?.[0]?.where?.agentId?.in as string[];
+      const res = createResponse();
+      await routes['GET /me/agent-logs/export'](req, res, jest.fn());
+      return {
+        status: res.statusCode as number | undefined,
+        agentIds: agentLogMocks.findMany.mock.calls.at(-1)?.[0]?.where?.agentId?.in as string[] | undefined,
+      };
     };
 
-    const defaultIds = await agentIdsFor({});
+    const defaultIds = (await request({})).agentIds as string[];
     expect(defaultIds.length).toBeGreaterThan(0);
 
     // 能力筛选 = 在用户可见集内按能力再筛：任何 X 的 id 集合都必须是默认口径的子集。
     // 修复前 profile 会返回 skill:adaptive-guidance-copy 等内部 skill（默认视图不含）。
-    for (const capabilityType of ['goal', 'path', 'teaching', 'profile']) {
-      const scoped = await agentIdsFor({ capabilityType });
-      expect(scoped.filter((id) => !defaultIds.includes(id))).toEqual([]);
+    // #229：相邻的坑是「未知值不命中任何分支 → where 退化成 { userId }」，这里把合法性
+    // 检查做成 status 感知的，避免在 400 分支上读到上一条 mock 调用而假绿。
+    for (const capabilityType of ['goal', 'path', 'teaching', 'profile', 'Teaching', 'PROFILE', '']) {
+      const { status, agentIds } = await request({ capabilityType });
+      expect(status).toBeUndefined();
+      expect(agentIds.filter((id) => !defaultIds.includes(id))).toEqual([]);
     }
+
+    // 未知值不再静默退化为 includeSystem 级别的全量，而是明确拒绝
+    for (const capabilityType of ['x', 'tutoring2']) {
+      const { status } = await request({ capabilityType });
+      expect(status).toBe(400);
+    }
+  });
+
+  // #229：`?capabilityType=x` / `Teaching` / `PROFILE` / `tutoring2` 修前既不命中
+  // `capabilityType in capabilityAgents`、又因是「真值」跳过默认白名单，where 退化成
+  // { userId }，逐字节等于 includeSystem=true 的全量日志（api-gateway 与内部 skill 全漏出）。
+  it('#229 未知 capabilityType 返回 400 VALIDATION_ERROR 并列出允许值，不退化成全量日志', async () => {
+    agentLogMocks.findMany.mockResolvedValue([]);
+    const callWith = async (capabilityType: unknown) => {
+      const res = createResponse();
+      await routes['GET /me/agent-logs'](
+        { user: { userId: 'user-1' }, query: { capabilityType } } as any,
+        res,
+        jest.fn()
+      );
+      return res;
+    };
+
+    const allowed = ['goal', 'path', 'teaching', 'profile', 'tutoring', 'tracking', 'system'];
+    // 未知字符串（拼错 / 大小写变体之外的错值）+ 非字符串（重复参数成数组 / 数字）：一律拒绝
+    for (const bad of ['x', 'tutoring2', 'teaching2', ['teaching', 'x'], 7]) {
+      const res = await callWith(bad);
+      expect(res.statusCode).toBe(400);
+      expect(res.body?.success).toBe(false);
+      expect(res.body?.error?.code).toBe('VALIDATION_ERROR');
+      // 允许值必须回给调用方（静默退化是最差选项）
+      for (const value of allowed) {
+        expect(res.body?.error?.message).toContain(value);
+      }
+      if (typeof bad === 'string') {
+        // 报错回显具体非法值，便于前端定位是哪个筛选键写错了
+        expect(res.body?.error?.message).toContain(`无效：${bad}`);
+      }
+    }
+    // 被拒即不触库：没有任何一条请求落到「无 agentId 筛选」的 where
+    expect(agentLogMocks.findMany).not.toHaveBeenCalled();
   });
 
   it('path-agent 阶段流水用 sourceConversationId 并入 path 组，且 phase 透传到明细', async () => {
