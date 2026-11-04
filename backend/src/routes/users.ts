@@ -45,10 +45,14 @@ const CAPABILITY_MONITORING_GROUPS: Record<string, MonitoringGroupName> = {
 
 function buildCapabilityAgentMap(): Record<string, string[]> {
   const manifest = listAgentManifest();
+  const userListed = new Set(listUserListedAgentIds());
   const map: Record<string, string[]> = {};
   for (const [capabilityType, group] of Object.entries(CAPABILITY_MONITORING_GROUPS)) {
+    // #226：能力筛选 = 在用户可见集内再按能力筛。此前这里直接取整个监控组，
+    // 于是 profile 把 userListed=false 的内部 skill（skill:adaptive-guidance-copy 等）
+    // 全放出来——默认视图 0 行、筛选视图 86 行，两个视图各有各的可见集。
     map[capabilityType] = manifest
-      .filter((entry) => entry.monitoringGroup === group)
+      .filter((entry) => entry.monitoringGroup === group && userListed.has(entry.id))
       .map((entry) => entry.id);
   }
   // tutoring / tracking 在 manifest 里没有对应监控组（没有辅导、进度追踪 Agent），
@@ -56,7 +60,8 @@ function buildCapabilityAgentMap(): Record<string, string[]> {
   // `capabilityType in capabilityAgents` 而退化成不筛选，反而返回全部日志。
   map.tutoring = [];
   map.tracking = [];
-  // 平台底层调用不是 manifest 里的 agent/skill，保持原有口径
+  // 平台底层调用不是 manifest 里的 agent/skill（也就不在 userListed 白名单里），
+  // 「系统底层调用」是刻意独立于默认视图的显式范围（同 includeSystem），保持原有口径
   map.system = ['system-call', 'unknown'];
   return map;
 }

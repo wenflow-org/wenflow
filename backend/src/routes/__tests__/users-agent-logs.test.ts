@@ -220,7 +220,7 @@ describe('users agent log routes', () => {
     // mock 不模拟 SQL 过滤，因此这里只断言 where 构造正确
   });
 
-  it('capabilityType 分组从 manifest 派生：teaching/profile 命中真实 skill id（#218）', async () => {
+  it('capabilityType 分组从 manifest 派生且限定在用户可见集内（#218/#226）', async () => {
     agentLogMocks.findMany.mockResolvedValue([]);
     const agentIdsFor = async (capabilityType: string): Promise<string[]> => {
       const req: any = { user: { userId: 'user-1' }, query: { format: 'json', capabilityType } };
@@ -234,8 +234,11 @@ describe('users agent log routes', () => {
     expect(teaching).toContain('skill:teaching-turn');
     expect(teaching).not.toContain('ai-teaching-agent');
 
+    // #226：Profile 组内没有任何 userListed 的 id（learner-model / adaptive-guidance-copy
+    // 都是内部 skill），能力筛选在用户可见集内再筛后为空——不再把 86 行内部 skill
+    // 从筛选视图放出来（默认视图对它们本来就是 0 行）。
     const profile = await agentIdsFor('profile');
-    expect(profile).toContain('skill:learner-model');
+    expect(profile).toEqual([]);
     expect(profile).not.toContain('learner-model-agent');
 
     const path = await agentIdsFor('path');
@@ -247,6 +250,25 @@ describe('users agent log routes', () => {
     expect(await agentIdsFor('tutoring')).toEqual([]);
     expect(await agentIdsFor('tracking')).toEqual([]);
     expect(await agentIdsFor('system')).toEqual(['system-call', 'unknown']);
+  });
+
+  it('capabilityType 结果集 ⊆ 默认结果集，不越出 userListed 白名单（#226）', async () => {
+    agentLogMocks.findMany.mockResolvedValue([]);
+    const agentIdsFor = async (query: Record<string, unknown>): Promise<string[]> => {
+      const req: any = { user: { userId: 'user-1' }, query: { format: 'json', ...query } };
+      await routes['GET /me/agent-logs/export'](req, createResponse(), jest.fn());
+      return agentLogMocks.findMany.mock.calls.at(-1)?.[0]?.where?.agentId?.in as string[];
+    };
+
+    const defaultIds = await agentIdsFor({});
+    expect(defaultIds.length).toBeGreaterThan(0);
+
+    // 能力筛选 = 在用户可见集内按能力再筛：任何 X 的 id 集合都必须是默认口径的子集。
+    // 修复前 profile 会返回 skill:adaptive-guidance-copy 等内部 skill（默认视图不含）。
+    for (const capabilityType of ['goal', 'path', 'teaching', 'profile']) {
+      const scoped = await agentIdsFor({ capabilityType });
+      expect(scoped.filter((id) => !defaultIds.includes(id))).toEqual([]);
+    }
   });
 
   it('path-agent 阶段流水用 sourceConversationId 并入 path 组，且 phase 透传到明细', async () => {

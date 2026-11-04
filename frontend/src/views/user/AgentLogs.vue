@@ -90,8 +90,8 @@
       </div>
 
       <div v-else-if="!displayLogs.length" class="uc-empty">
-        <strong>暂无日志</strong>
-        <span>调整筛选条件或稍后再来查看</span>
+        <strong>{{ emptyStateTitle }}</strong>
+        <span>{{ emptyStateHint }}</span>
       </div>
 
       <template v-else>
@@ -366,6 +366,19 @@ const displayLogs = computed(() => {
     ? logs.value.filter((log) => getCapabilityType(log.agentId) === filters.capabilityType)
     : logs.value;
 });
+
+/* 平台里结构性没有对应 agent 的能力类：筛选必然为空，不能沿用通用「暂无日志」
+   （会被读成筛选或加载出错）。#226：tutoring 在 manifest 中无监控组；
+   profile 组内也没有 userListed 的 id（能力筛选只在用户可见集内再筛）。 */
+const STRUCTURAL_EMPTY_CAPABILITIES: Record<string, string> = {
+  tutoring: '平台暂无辅导类调用记录',
+  profile: '平台暂无学习者模型类调用记录'
+};
+const structuralEmptyText = computed(() => STRUCTURAL_EMPTY_CAPABILITIES[filters.capabilityType] || '');
+const emptyStateTitle = computed(() => structuralEmptyText.value || '暂无日志');
+const emptyStateHint = computed(() =>
+  structuralEmptyText.value ? '可切换到其他活动类型查看' : '调整筛选条件或稍后再来查看'
+);
 
 // 本页无样本时不能把「无样本」写成 0 分：成功率 / 平均耗时是「0%」「0ms」会被读成
 // 「全部失败 / 零耗时」（走查 2026-10-08 #51，本页空态与「总调用 0」并排）。
