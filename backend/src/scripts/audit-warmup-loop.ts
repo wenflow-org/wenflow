@@ -1,7 +1,7 @@
 /**
  * 只读审计：**课内温故（memoryWarmup）闭环在真实数据上到底有没有跑起来**。
  *
- * 背景（2026-09-16 调查，详见 doc/LEARNING_SCIENCE_AUDIT.md §3.2）：
+ * 背景（2026-09-16 调查，详见 LEARNING_SCIENCE_AUDIT.md（已移出仓库，见 git 历史） §3.2）：
  * 该环曾被认为"已实现但暂无数据"，实测发现是**三处断点导致环完全断电**：
  *   1) `completeInitialization` 重写 sessionArtifacts 时丢掉 memoryWarmup（计划被抹掉）；
  *   2) `generateOpening` 未传 memoryWarmup、回合 context 也不回填 → 模型**从未看到**温故计划；

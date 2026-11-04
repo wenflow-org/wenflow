@@ -71,11 +71,144 @@ export function computeEffectiveDurationMinutes(session: TeachingSessionRecord) 
 }
 
 export function buildRecoveredOpening(session: TeachingSessionRecord): TeachingOpening {
+  const core = clipOpeningName(session.topic);
   return {
     message: `已为你恢复这节关于 **${session.topic}** 的课程进度，我们从你上次离开的地方继续。`,
     question: '准备好了的话，我们继续刚才的内容。',
-    quickReplies: [{ text: '继续上次进度' }, { text: '先回顾一下' }, { text: '从当前焦点继续' }],
+    quickReplies: [
+      { text: `回顾上次的「${core}」` },
+      { text: `继续「${core}」的进度` },
+      { text: '从上次的地方接着走' },
+    ],
     mode: 'self-assess',
+  };
+}
+
+/** 开场 chip 里引用的内容名：截短，保证整条 chip 不超 14 字 */
+function clipOpeningName(raw: unknown): string {
+  const text = String(raw ?? '').trim();
+  if (!text) return '本课内容';
+  return text.length > 6 ? `${text.slice(0, 6)}…` : text;
+}
+
+/**
+ * 开场动作选项（确定性）：本课核心概念名 + 与 mode 匹配的动词。
+ *
+ * 为什么要有它：LLM 开场允许省略 quickReplies，实测 39.5% 的开场落库为空数组
+ * （2026-11-02 用户反馈「开场很不舒服」实锤）——学生看到一句话、页面上没有任何可点的东西。
+ * 兜底 chip 必须**承载本课内容**（"拿「退款口径」看个例子"），不能用"开始吧/继续往下讲"
+ * 这类放到任何一节课都成立的万能词（用户同批反馈「快选没什么意义」）。
+ */
+export function buildOpeningActionChips(
+  context: TeachingScenarioContext,
+  mode: TeachingOpening['mode'] = 'example-first',
+): Array<{ text: string }> {
+  const core = clipOpeningName(context.taskProfile?.coreConcept || context.topic || context.taskTitle);
+  if (mode === 'predict') {
+    return [{ text: `让我先判断「${core}」` }, { text: '给点提示再判断' }, { text: '我先猜一个，你验证' }];
+  }
+  if (mode === 'self-assess') {
+    return [{ text: `先讲「${core}」` }, { text: `拿「${core}」试一小步` }, { text: '跳过自评，直接练' }];
+  }
+  return [{ text: `拿「${core}」看个例子` }, { text: '我先试一小步' }, { text: '先讲要点，再拿例子练' }];
+}
+
+/**
+ * question 里的动作指向词：question 不配控件，写出动作就是许一个点不动的承诺
+ * （2026-11-02 用户反馈实锤：开场写着"也可以直接往下走"，页面上没有任何可点控件）。
+ * 命中即确定性丢弃整句——不做片段手术，避免留下半个残句。
+ */
+const OPENING_QUESTION_ACTION_TELL =
+  /(直接(动手|往下|开始|来|试|做)|先(动手|写|做|试|看一遍|练一遍)|现在(就)?(开始|动手)|马上(开始|动手))/;
+
+/**
+ * 开场 question 的第二类「答不了」形态：**判答式提问**。
+ *
+ * 2026-11-02 实测：开场白写着「这节课拿六个考试句子，把时间标志词和动作性质变成你排除选项的依据」，
+ * 下一行却问「「since 2019」和「last Friday」在你眼里是同一类信号吗？」，而页面上只有三个动作
+ * chip（先讲「时间标志词」/拿第1句试标信号/跳过自评，直接练六句）——学生既答不了这句、也看不出
+ * 这两个表达式从哪来（它们在本屏从未出现，是任务里第 3、5 句的片段）。
+ *
+ * 开场 question 没有作答控件（想答只能自己打字），它的定位是「你可以想想」的一行引导；
+ * 写成需要判定/选择的题，就等于把一道没有答题卡的题摆在动作选项上方。
+ */
+const OPENING_QUESTION_QUIZ_TELL =
+  /(是不是|是否是|同一类|同一个|一样吗|一样不|对吗|对不对|算不算|属于哪|哪一(?:个|种|类)|哪个更)/;
+
+/** question 里带引号的片段：只有含 ASCII 字母/数字才算「引了材料」（「退款口径」这类中文概念名不算） */
+const QUOTED_SPAN_RE = /[「『“"]([^」』”"]{2,60})[」』”"]/g;
+const MATERIAL_LIKE_RE = /[A-Za-z0-9]/;
+
+/**
+ * 开场 question 是否该丢（确定性）：
+ * ① 判答式提问；② 引了本屏还没出现过的材料（带引号的拉丁/数字片段）。
+ * 宁可不出题，也不留一道学生答不了、又和开场白对不上的问题。
+ */
+export function isUnanswerableOpeningQuestion(question: string, message: string): boolean {
+  const q = String(question || '').trim();
+  if (!q) return false;
+  if (OPENING_QUESTION_QUIZ_TELL.test(q)) return true;
+  const seen = String(message || '');
+  for (const match of q.matchAll(QUOTED_SPAN_RE)) {
+    const quoted = match[1];
+    if (!MATERIAL_LIKE_RE.test(quoted)) continue;
+    if (!seen.includes(quoted)) return true;
+  }
+  return false;
+}
+
+/**
+ * question 被丢掉后，「自评」这个词就失去了指代对象（「跳过自评，直接练六句」里的自评从没出现过）。
+ * 只在没有 question 时剥掉这半句，chip 其余内容（本课内容 + 动作）保留。
+ */
+function stripDanglingSelfAssess(text: string): string {
+  const next = String(text || '')
+    .replace(/^(?:跳过|略过|先不|不做)自评[，,、]?\s*/, '')
+    .replace(/(?:跳过|略过)自评[，,、]?\s*/g, '')
+    .trim();
+  return next.length >= 2 ? next : text;
+}
+
+
+/**
+ * 开场「一条行动线」契约的确定性兜底（2026-11-02 用户反馈「开场很不舒服」）：
+ * - quickReplies 至少 1 个：模型没给就按本课内容补（buildOpeningActionChips）；
+ * - question 里不得出现动作指向词，命中即丢；
+ * - mode 非法时回落到 example-first。
+ * 放在 generateOpening 出参口，保证任何调用方拿到的开场第一屏都有可点动作。
+ */
+export function ensureOpeningActionLine(
+  opening: Partial<TeachingOpening> | null | undefined,
+  context: TeachingScenarioContext,
+): TeachingOpening {
+  const message = typeof opening?.message === 'string' ? opening.message.trim() : '';
+  const rawQuestion = typeof opening?.question === 'string' ? opening.question.trim() : '';
+  const mode: TeachingOpening['mode'] =
+    opening?.mode === 'predict' || opening?.mode === 'self-assess' || opening?.mode === 'example-first'
+      ? opening.mode
+      : 'example-first';
+  const provided = (Array.isArray(opening?.quickReplies) ? opening!.quickReplies : [])
+    .map((item) => (typeof item === 'string' ? item : item?.text))
+    .map((text) => String(text ?? '').trim())
+    .filter((text) => text.length > 0)
+    .slice(0, 3)
+    .map((text) => ({ text }));
+  // question 的可用性：动作指向词（自己许愿点不动的动作）+ 判答式/引未展示材料的提问，都丢。
+  const keepQuestion = !!rawQuestion
+    && !OPENING_QUESTION_ACTION_TELL.test(rawQuestion)
+    && !isUnanswerableOpeningQuestion(rawQuestion, message);
+  /* message 缺失时用 question 顶替，并把 question 位清空（2026-11-02 走查）：
+     message 与 question 是同一屏上的两句话，任一侧为空时另一侧就是唯一的那句；
+     让两者同时承载同一句，会让它在「气泡 + 面板」各出现一次——正是用户看到的「两个问题」。 */
+  const messageText = message || (keepQuestion ? rawQuestion : '');
+  const replies = (provided.length > 0 ? provided : buildOpeningActionChips(context, mode))
+    // 没有 question 时，「自评」无从指代（学生没被问到任何东西）→ 剥掉那半句
+    .map((item) => ({ text: keepQuestion ? item.text : stripDanglingSelfAssess(item.text) }));
+  return {
+    message: messageText,
+    question: message && keepQuestion ? rawQuestion : '',
+    quickReplies: replies,
+    mode,
   };
 }
 
@@ -99,9 +232,9 @@ export function composeWelcome(opening: TeachingOpening): string {
 export function buildDeterministicOpening(context: TeachingScenarioContext): TeachingOpening {
   return {
     message: `我们先从 **${context.topic || context.taskTitle}** 开始这节课。目标是把关键知识点讲清楚，并在过程中检查你的掌握情况。`,
-    // 开场只留一个「下一步」（2026-10-09 用户反馈）：quickReplies 在场时不给 question，
-    // 与 core 规则的互斥约束、normalize 兜底同一口径
-    quickReplies: [{ text: '准备好了，开始' }, { text: '先讲讲目标' }, { text: '换种方式讲解' }],
+    // 动作选项必须带本课内容（2026-11-02 用户反馈「快选没什么意义」）：此前写死的
+    // "准备好了，开始 / 先讲讲目标 / 换种方式讲解" 放哪节课都成立，学生看不出点下去会得到什么。
+    quickReplies: buildOpeningActionChips(context, 'example-first'),
     mode: 'example-first',
   };
 }

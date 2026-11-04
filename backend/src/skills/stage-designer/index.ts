@@ -8,6 +8,8 @@ import { callPrompt } from '../../composers/prompt-composer';
 import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 import { loadPromptFile } from '../../composers/prompt-files/loader';
 import { normalizeMaterialRefs } from '../../services/materials/material-refs';
+import { assessStageMaterialCompleteness } from '../../services/materials/subtask-material-completeness';
+import { assessStageMetaLessons } from '../../services/learning/generation/stage-subtask-quality';
 import { assessMaterialRefCoverage } from '../../services/materials/material-ref-coverage.service';
 import type { PromptMaterial } from '../../services/materials/material-prompt-projection';
 import { logger } from '../../utils/logger';
@@ -282,18 +284,38 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
         return { subtasks };
       },
       validateParsedOutput: (parsed) => validateStageDesignerOutput(parsed),
-      // 软校验：相关资料却零引用 → 带反馈重试一次；仍失败按当前输出继续（不阻断阶段设计）。
+      // 软校验：三关都查——① 「承诺了材料却没给本体」（2026-11-02 实测：写「给你 6 个句子」
+      // 却只给特征词，课堂与白板都拿不到材料）；② 「伪课」（只有整理/合并/归因/写卡、无新知识点）；
+      // ③ 「相关资料却零引用」。命中任意一关 → 带反馈重试一次，仍失败按当前输出继续。
+      // 三关**并列收集**而非首关即返回（2026-11-02 实测缺陷）：此前一旦材料本体不过就 early return，
+      // 同一阶段里成片的伪课（M1 两节「整理判别卡 / 归因修订判别卡」）根本没机会被判定，反馈里
+      // 也永远只字不提。并列后一次重试能拿到全部问题。
       softValidateParsedOutput: (parsed) => {
         const subtasks = Array.isArray(parsed?.subtasks) ? parsed.subtasks : [];
+        const problems: Array<{ failureReason: string; violations?: string[] }> = [];
+        const materialBody = assessStageMaterialCompleteness(subtasks);
+        if (!materialBody.valid) {
+          problems.push({ failureReason: materialBody.failureReason as string, violations: materialBody.violations });
+        }
+        const metaLessons = assessStageMetaLessons(subtasks);
+        if (!metaLessons.valid) {
+          problems.push({ failureReason: metaLessons.failureReason as string, violations: metaLessons.violations });
+        }
         const coverage = assessMaterialRefCoverage({
           materials: stageMaterials,
           nodes: coverageNodes(subtasks),
           text: coverageText(subtasks),
           scope: 'STAGE',
         });
-        return coverage.valid
-          ? { valid: true }
-          : { valid: false, failureReason: coverage.failureReason, violations: coverage.violations };
+        if (!coverage.valid) {
+          problems.push({ failureReason: coverage.failureReason, violations: coverage.violations });
+        }
+        if (problems.length === 0) return { valid: true };
+        return {
+          valid: false,
+          failureReason: problems.map((problem) => problem.failureReason).join(' | '),
+          violations: problems.flatMap((problem) => problem.violations || []),
+        };
       },
       mapEnvelope: (output, _input, runtimeContract) => adaptToRuntimeEnvelope({
         contract: runtimeContract,
@@ -306,13 +328,35 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
       }),
       retryStrategy: {
         maxAttempts: 2,
-        onValidationFail: ({ failureReason }) => [
-          '请只输出一个阶段任务 JSON 对象，必须包含 subtasks 数组。',
-          failureReason.startsWith('MATERIAL_REFS_MISSING_')
-            ? '本阶段资料与目标相关时，每个 subtask 至少给 1 条 materialRefs：sectionId 取自资料 sections[].id，quote 逐字复制该章节标题或 keyPoints[].cite；不得改写、不得编造。与目标明显无关的资料可以整体不引用。'
-            : null,
-          `上次失败原因：${failureReason}`,
-        ].filter(Boolean).join('\n\n'),
+        // failureReason 可能是多关并列（用 ' | ' 连接），逐关匹配并拼出对应改法，
+        // 让一次重试能收到全部问题，而不是只有第一关。
+        onValidationFail: ({ failureReason, violations }) => {
+          const blocks: string[] = ['请只输出一个阶段任务 JSON 对象，必须包含 subtasks 数组。'];
+          if (failureReason.includes('MATERIAL_BODY_MISSING_')) {
+            blocks.push([
+              '上一个版本里有任务**承诺了具体材料却没给材料本体**（例如「给你 6 个句子」却只列了 already、yesterday 这类特征词）。',
+              '改法（任选其一）：① 在 description 里把材料本体逐条写出来——句子/题面/数据值按 1. 2. 3. 编号列全，学习者不用去别处找；',
+              '② 引用 materials 里真实存在的小节（sectionId + 逐字 quote）；③ 材料本来就属于学习者手头或前序任务产出时，在 description 里写明来源（「用你手上的 X」「用任务 2 产出的 Y」）。',
+              '不许保留「给你 N 个句子/道题」却不写出这些句子/题目的写法。',
+            ].join('\n'));
+          }
+          if (failureReason.includes('META_ONLY_LESSONS_STAGE')) {
+            blocks.push([
+              '上一个版本里有**伪课**：把「整理卡片 / 合并清单 / 错题归因 / 写自检卡」这类收尾动作单独做成了 40 分钟的课。',
+              '这些动作属于一次练习内部的收尾，必须并进它所属的那节课（写在 description 里作为该课的产出之一），不能单独成课。',
+              '改法：把这些任务合并进产生素材的那节课（如「做完 10 道题并逐题写明排除理由、错因归入四类」），或换成有独占能力增量的新任务；',
+              '阶段尾部最多保留 1 节收口课（收拢成果/错因回收），且它必须有自己的产出物。',
+            ].join('\n'));
+          }
+          if (failureReason.includes('MATERIAL_REFS_MISSING_')) {
+            blocks.push('本阶段资料与目标相关时，每个 subtask 至少给 1 条 materialRefs：sectionId 取自资料 sections[].id，quote 逐字复制该章节标题或 keyPoints[].cite；不得改写、不得编造。与目标明显无关的资料可以整体不引用。');
+          }
+          if (Array.isArray(violations) && violations.length) {
+            blocks.push(`具体问题：${violations.join('；')}`);
+          }
+          blocks.push(`上次失败原因：${failureReason}`);
+          return blocks.filter(Boolean).join('\n\n');
+        },
       },
     }, input);
 

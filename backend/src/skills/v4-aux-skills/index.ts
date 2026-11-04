@@ -293,10 +293,12 @@ async function teachingOpeningGeneratorHandler(input: any) {
     normalize: (parsed, d) => {
       const message = asTrimmedString(parsed?.message);
       const quickReplies = coerceTextOptions(parsed?.quickReplies);
-      // 开场只留一个「下一步」（2026-10-09 用户反馈）：动作选项在场时丢弃引导 question——
-      // message 指令 + question + quickReplies 三者同屏，抢学生仅有的一次回复，决策过载。
-      // core 规则已声明互斥，这里是模型越约时的确定性兜底
-      const question = quickReplies.length > 0 ? '' : asTrimmedString(parsed?.question);
+      /* 2026-11-02 用户反馈（「开场很不舒服」）：question 与 quickReplies 不再互斥。
+         旧口径是动作选项在场就丢掉 question，结果没有动作选项的开场（模型省略 quickReplies）
+         只剩一句 question，学生看到一句"也可以直接往下走"却没有任何可点控件。
+         新口径：动作出口恒由 quickReplies 承担（缺省时由 ensureOpeningActionLine 按本课内容补齐），
+         question 只作它上方的一行思考引导；带动作词/无控件的 question 在那里被确定性丢弃。 */
+      const question = asTrimmedString(parsed?.question);
       return {
         message,
         question,

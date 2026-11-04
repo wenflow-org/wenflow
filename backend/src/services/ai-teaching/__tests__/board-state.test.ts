@@ -18,6 +18,7 @@ import {
   describeBoardForTeacher,
   diffBoardStages,
   countBoardSlots,
+  isDegenerateFirstBoard,
 } from '../board-state';
 
 const splitCompare = {
@@ -283,5 +284,50 @@ describe('board-state：减负模式（conceal）', () => {
     expect(next.figure!.conceal).toBe('takeaway');
     expect((next.figure!.maskedSpec.left as any).rows[0].label).toBe('240 ÷ 800 = 0.3');
     expect((next.figure!.maskedSpec as any).delta).toBeUndefined();
+  });
+});
+
+/**
+ * 首版空壳矩阵守卫（2026-11-02 真实课堂实测）
+ *
+ * 现场：首课白板是 6 行 × 3 列矩阵，18 格全部 tone:'hit'（hit = 学生已标出），
+ * 图例「✓ 已标出」。学生一项都还没标，看到的是一屏勾，读不出任何内容。
+ */
+describe('isDegenerateFirstBoard：首版全 hit 矩阵不摆', () => {
+  const matrixSpec = (cells: Array<{ r: number; c: number; tone: string }>) => ({
+    kind: 'matrix',
+    spec: {
+      title: '6 个句子的时间标志词与动作性质',
+      rowLabels: ['already', 'since 2020', 'yesterday', 'last week', 'now', 'for three years'],
+      colLabels: ['时间标志词', '动作性质', '例句'],
+      cells,
+    },
+  });
+  const fullHit = () => {
+    const cells: Array<{ r: number; c: number; tone: string }> = [];
+    for (let r = 0; r < 6; r += 1) for (let c = 0; c < 3; c += 1) cells.push({ r, c, tone: 'hit' });
+    return cells;
+  };
+
+  it('首版 18 格全 hit → 判为空壳', () => {
+    const board = openBoard('t1', matrixSpec(fullHit()));
+    expect(board.revision).toBe(1);
+    expect(isDegenerateFirstBoard(board)).toBe(true);
+  });
+
+  it('首版有留白（部分 hit / 有 miss）→ 正常摆板', () => {
+    const cells = fullHit();
+    cells[0] = { r: 0, c: 0, tone: 'miss' };
+    expect(isDegenerateFirstBoard(openBoard('t1', matrixSpec(cells)))).toBe(false);
+  });
+
+  it('非首版（revision > 1）全 hit → 允许（全部识别完的复盘板合法）', () => {
+    const first = openBoard('t1', matrixSpec(fullHit()));
+    const second = { ...first, revision: 2 };
+    expect(isDegenerateFirstBoard(second)).toBe(false);
+  });
+
+  it('非矩阵板不受影响', () => {
+    expect(isDegenerateFirstBoard(openBoard('t1', splitCompare))).toBe(false);
   });
 });

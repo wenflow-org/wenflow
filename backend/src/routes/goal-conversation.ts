@@ -222,6 +222,16 @@ function getConfirmProposal(body: any): boolean {
   return body?.confirmProposal === true;
 }
 
+/**
+ * 前置自测作答（2026-11-02）：面板内本地作答、随「确认」一次性提交。
+ * 这里只做形态过滤；逐项字段校验与判分合并由
+ * `services/learning/goal-probe-answers.normalizeProbeAnswerInput` 负责。
+ */
+function getProbeAnswers(body: any): unknown[] | undefined {
+  const raw = body?.probeAnswers;
+  return Array.isArray(raw) && raw.length > 0 ? raw : undefined;
+}
+
 router.post('/start', authMiddleware, goalConversationUserLimiter, async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
@@ -297,6 +307,7 @@ router.post('/:conversationId/reply', authMiddleware, goalConversationUserLimite
         () => requirementOrchestrator.step(conversationId, reply, userId, {
           contextMode: getContextMode(req.body),
           confirmProposal: getConfirmProposal(req.body),
+          probeAnswers: getProbeAnswers(req.body),
           meta: sanitizeMeta(req.body?.meta)
         }),
         (result) => goalEnvelopeForRequest(req, result, conversationId)
@@ -306,6 +317,7 @@ router.post('/:conversationId/reply', authMiddleware, goalConversationUserLimite
     const result = await requirementOrchestrator.step(conversationId, reply, userId, {
       contextMode: getContextMode(req.body),
       confirmProposal: getConfirmProposal(req.body),
+      probeAnswers: getProbeAnswers(req.body),
       meta: sanitizeMeta(req.body?.meta)
     });
     return res.json({

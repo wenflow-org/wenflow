@@ -124,11 +124,12 @@ describe('teaching-turn canonical artifact', () => {
 
     const output = await teachingTurnAgentHandler(input)
     const teaching = (output.internal?.ext as any)?.teaching as TeachingTurnOutput;
+    // 万能确认词被改写成带当前点名的具体动作（2026-11-02 用户反馈「快选没什么意义」）
     expect(teaching.knowledge.confirmCheck).toEqual({
       prompt: '这个点感觉怎么样？',
       actions: [
-        { label: '掌握了，继续', message: '这个点我掌握了，继续往下' },
-        { label: '再讲一遍', message: '这个点还不太清楚，换个方式讲' },
+        { label: '「print执…」懂了', message: '这个点我掌握了，继续往下' },
+        { label: '「print执…」还没懂', message: '这个点还不太清楚，换个方式讲' },
       ],
     });
   })
@@ -212,8 +213,8 @@ describe('teaching-turn canonical artifact', () => {
     expect(normalized.knowledge.confirmCheck).toEqual({
       prompt: '这个点感觉怎么样？',
       actions: [
-        { label: '掌握了，继续', message: '这个点我掌握了，继续往下' },
-        { label: '再讲一遍', message: '这个点还不太清楚，换个方式讲' },
+        { label: '「闭包」懂了', message: '这个点我掌握了，继续往下' },
+        { label: '「闭包」还没懂', message: '这个点还不太清楚，换个方式讲' },
       ],
     })
   })

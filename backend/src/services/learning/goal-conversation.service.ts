@@ -17,6 +17,7 @@ import {
 } from './learner-load-profile';
 import { selectGoalHistory, RECENT_CONTEXT_LIMIT } from './goal-conversation.context';
 import { isProposalConfirmationText, isExplicitRefusalText } from './goal-conversation.confirm-text';
+import { mergeProbeAnswersIntoUnderstanding, normalizeProbeAnswerInput } from './goal-probe-answers';
 import { applyConversationLifecycle, type ConversationLifecycleDb } from './goal-conversation.lifecycle';
 import systemPrisma from '../../config/system-database';
 import {
@@ -54,6 +55,13 @@ interface GoalConversationOptions {
    * 真实用户不传 ⇒ 不落库、不参与体量推导（行为与今天完全一致）。
    */
   learnerLoadProfile?: LearnerLoadProfile | null;
+  /**
+   * 前置自测作答（2026-11-02 业务口径梳理）：面板内本地作答、随「确认」一次性提交。
+   * 服务端按 `confirmedProposal.prerequisiteDiagnostics[].correctOption` 确定性判分，
+   * 合并进 `understanding.prerequisiteCheckResults`（不再让模型逐题读对话消息回填）。
+   * 入参是请求原始形态，逐项校验见 goal-probe-answers.normalizeProbeAnswerInput。
+   */
+  probeAnswers?: unknown[];
 }
 
 interface GoalNormalizedStateV1 {
@@ -666,6 +674,17 @@ async continueConversation(
             });
           }
           const data = JSON.parse(conversation.collectedData || '{}');
+          /* 前置自测：确认时一次性提交的作答在此确定性合并（2026-11-02）。
+             旧链路是「每答一题发一个对话回合、由模型回填」，两题场景会把面板锁死 30-90s
+             且题目随重渲染漂移；现在作答只随确认到达，判分键取 confirmedProposal。 */
+          const incomingProbeAnswers = normalizeProbeAnswerInput(options?.probeAnswers);
+          if (incomingProbeAnswers.length > 0) {
+            data.understanding = mergeProbeAnswersIntoUnderstanding(
+              data.understanding,
+              data.confirmedProposal,
+              incomingProbeAnswers,
+            );
+          }
           const understanding = data.understanding || {};
 
           // 幂等快路径（审计 §1.4）：该对话已确认过（并发重试/双击的第二次请求）→
@@ -768,6 +787,14 @@ async continueConversation(
                   false,
                   userReply
                 );
+                // 自测作答一并落库（刷新后回看方案时仍能显示哪些题已答）
+                if (incomingProbeAnswers.length > 0) {
+                  currentData.understanding = mergeProbeAnswersIntoUnderstanding(
+                    currentData.understanding,
+                    currentData.confirmedProposal,
+                    incomingProbeAnswers,
+                  );
+                }
               }
             });
 

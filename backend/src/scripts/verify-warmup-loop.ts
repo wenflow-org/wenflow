@@ -2,7 +2,7 @@
 /**
  * 课内温故闭环的**端到端验证**（用当前代码开一节新虚拟课，不用历史数据）。
  *
- * 对应 doc/LEARNING_SCIENCE_AUDIT.md §3.5 的 5 个观测点：
+ * 对应 LEARNING_SCIENCE_AUDIT.md（已移出仓库，见 git 历史） §3.5 的 5 个观测点：
  *   1 计划是否落库（teachingState.sessionArtifacts.memoryWarmup）
  *   2 计划是否到达模型（行为证据：模型能否报出温故点结果——它没看到就问不出来）
  *   3 结果是否摘取（items[].outcome）

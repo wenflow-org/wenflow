@@ -1,7 +1,7 @@
 /**
  * 预制虚拟学习者不变量检查器（#91 / P-67「判据·不变量检查器」，只读、无副作用）
  *
- * 设计稿 `doc/VIRTUAL_LEARNER_PRESET_DESIGN.md §四` 的遗留项：定义（presets.yaml）与实例
+ * 设计稿 `VIRTUAL_LEARNER_PRESET_DESIGN.md（已移出仓库，见 git 历史） §四` 的遗留项：定义（presets.yaml）与实例
  * （virtual_learner_profiles）之间缺一组可复核的判据。本模块只检查**结构自洽与定义→实例
  * 一致性**，不冻结任何期望结论（「不做答案键」）——因此没有任何学习结果/答案类断言。
  *

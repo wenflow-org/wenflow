@@ -115,11 +115,17 @@ describe('maxTokens 预算', () => {
 });
 
 describe('pipeline map 分类（不把直调/孤儿 prompt 静默当主链）', () => {
-  it('board-designer 归 compiled-only；无 core 的孤儿 prompt 单列', () => {
+  // 2026-11-02 更新：a896886d 已把 board-designer 按 F7 登记进 prompts/skills.yaml
+  // （kind=handler-only、registrationPoint=none、prompt 以独立产物 skill.board-designer.md 承载）。
+  // 登记之后它不再是「绕过户口簿的 compiled-only」，而是**已登记的直调能力**——本用例据此改成
+  // 断言「它在 skillsWithoutPrompt 里被显式标为 handler-only，且不在 compiled-only 名单里」，
+  // 保留原意：直调/孤儿 prompt 不许被当成主链静默混入。
+  it('board-designer 已登记为 handler-only（不再是 compiled-only）；无 core 的孤儿 prompt 单列', () => {
     const mapPath = path.resolve(process.cwd(), '..', 'doc', 'pipeline-map.json');
     const map = JSON.parse(fs.readFileSync(mapPath, 'utf8'));
     const ids = (rows: Array<Record<string, unknown>>) => rows.map((row) => row.skillId || row.id || row.name);
-    expect(ids(map.compiledOnlyPrompts)).toContain('board-designer');
+    expect(ids(map.skillsWithoutPrompt)).toContain('board-designer');
+    expect(ids(map.compiledOnlyPrompts)).not.toContain('board-designer');
     expect(ids(map.orphanPrompts)).toEqual(
       expect.arrayContaining(['concept-priority', 'path-adjustment-generator']),
     );

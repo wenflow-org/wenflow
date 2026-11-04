@@ -868,7 +868,7 @@ export function normalizeOutput(parsed: Record<string, any>, input: TeachingTurn
     knowledge: {
       currentPoint: resolvedCurrentPoint,
       points: normalizedKnowledgePoints.slice(0, 5),
-      ...(normalizeConfirmCheck(knowledge.confirmCheck)),
+      ...(normalizeConfirmCheck(knowledge.confirmCheck, resolvedCurrentPoint)),
     },
     pedagogy: {
       strategies: normalizedStrategies.length > 0 ? normalizedStrategies : fallbackStrategies,
@@ -2724,17 +2724,40 @@ function resolveConfusionPoints(rawConfusionPoints: any, rawMisconceptions: any)
   return Array.from(new Set(derived)).slice(0, 5);
 }
 
+/**
+ * 万能确认词（放到哪节课都成立）：命中且 label 不带当前点名时，改写成带点名的具体动作。
+ * 2026-11-02 用户反馈「快选没什么意义」——"掌握了，继续 / 再讲一遍"每节课一字不差，
+ * 学生看不出点下去会讲哪个点；core 规则已要求带点名，这里是模型不照做时的确定性兜底。
+ */
+const GENERIC_CONFIRM_LABEL_RE =
+  /^(掌握了?[，,]?继续|继续|再讲一遍|再讲一次|再听一遍|懂了|明白了|不太懂|没掌握|不会|再练一个|下一个|好的)$/;
+
+/** 点名截短：保证改写后的 label 不超过 12 字（positive「…」懂了=11 / negative「…」还没懂=12） */
+function clipSignedPoint(point: string): string {
+  const trimmed = point.trim();
+  return trimmed.length > 6 ? `${trimmed.slice(0, 6)}…` : trimmed;
+}
+
 /** 归一化确认动作组（knowledge.confirmCheck）：恰好 2 个动作、字段限长；不合法返回空 */
-function normalizeConfirmCheck(value: any): { confirmCheck?: NonNullable<TeachingTurnOutput['knowledge']['confirmCheck']> } {
+function normalizeConfirmCheck(value: any, currentPoint?: string | null): { confirmCheck?: NonNullable<TeachingTurnOutput['knowledge']['confirmCheck']> } {
   if (!value || typeof value !== 'object') return {};
   const rawActions = Array.isArray(value.actions) ? value.actions : [];
+  const pointLabel = clipSignedPoint(String(currentPoint || ''));
   const actions = rawActions
     .filter((a: any) => a && typeof a?.label === 'string' && a.label.trim() && typeof a?.message === 'string' && a.message.trim())
     .slice(0, 2)
-    .map((a: any) => ({
-      label: String(a.label).trim().slice(0, 12),
-      message: String(a.message).trim().slice(0, 120),
-    }));
+    .map((a: any, index: number) => {
+      const rawLabel = String(a.label).trim();
+      const isGeneric = GENERIC_CONFIRM_LABEL_RE.test(rawLabel.replace(/\s/g, ''));
+      // 顺序语义见 core：actions[0]=正面（认可继续）、actions[1]=反面（还需要帮助）
+      const label = isGeneric && pointLabel
+        ? (index === 0 ? `「${pointLabel}」懂了` : `「${pointLabel}」还没懂`)
+        : rawLabel;
+      return {
+        label: label.slice(0, 12),
+        message: String(a.message).trim().slice(0, 120),
+      };
+    });
   if (actions.length !== 2) return {};
   return {
     confirmCheck: {
