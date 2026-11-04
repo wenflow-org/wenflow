@@ -90,8 +90,8 @@
       </div>
 
       <div v-else-if="!displayLogs.length" class="uc-empty">
-        <strong>暂无日志</strong>
-        <span>调整筛选条件或稍后再来查看</span>
+        <strong>{{ emptyStateTitle }}</strong>
+        <span>{{ emptyStateHint }}</span>
       </div>
 
       <template v-else>
@@ -367,6 +367,19 @@ const displayLogs = computed(() => {
     : logs.value;
 });
 
+/* 平台里结构性没有对应 agent 的能力类：筛选必然为空，不能沿用通用「暂无日志」
+   （会被读成筛选或加载出错）。#226：tutoring 在 manifest 中无监控组；
+   profile 组内也没有 userListed 的 id（能力筛选只在用户可见集内再筛）。 */
+const STRUCTURAL_EMPTY_CAPABILITIES: Record<string, string> = {
+  tutoring: '平台暂无辅导类调用记录',
+  profile: '平台暂无学习者模型类调用记录'
+};
+const structuralEmptyText = computed(() => STRUCTURAL_EMPTY_CAPABILITIES[filters.capabilityType] || '');
+const emptyStateTitle = computed(() => structuralEmptyText.value || '暂无日志');
+const emptyStateHint = computed(() =>
+  structuralEmptyText.value ? '可切换到其他活动类型查看' : '调整筛选条件或稍后再来查看'
+);
+
 // 本页无样本时不能把「无样本」写成 0 分：成功率 / 平均耗时是「0%」「0ms」会被读成
 // 「全部失败 / 零耗时」（走查 2026-10-08 #51，本页空态与「总调用 0」并排）。
 // 无样本时模板显示「—」，只在有日志时才给百分比与耗时。
@@ -381,6 +394,22 @@ onMounted(() => {
   loadLogs();
 });
 
+/**
+ * 列表 / 详情 / 导出共用的筛选口径。详情也必须带上同一组筛选：
+ * 折叠组的 groupCount/groupItems 由后端用列表 where 复算，不带筛选就会退回默认口径，
+ * 出现「同一条折叠行点进去条数变了」（#225）。
+ */
+const buildFilterParams = (): AgentLogQueryParams => {
+  const params: AgentLogQueryParams = {};
+  if (filters.agentId) params.agentId = filters.agentId;
+  if (filters.capabilityType) params.capabilityType = filters.capabilityType;
+  if (typeof filters.success === 'boolean') params.success = filters.success;
+  params.includeSystem = filters.includeSystem;
+  if (filters.startDate) params.startDate = filters.startDate;
+  if (filters.endDate) params.endDate = filters.endDate;
+  return params;
+};
+
 const loadLogs = async () => {
   // 竞态守卫：seq 代际号 last-wins，快速翻页/连点查询时丢弃过期响应
   const seq = ++loadLogsSeq;
@@ -389,15 +418,9 @@ const loadLogs = async () => {
   try {
     const params: AgentLogQueryParams = {
       page: pagination.page,
-      limit: pagination.limit
+      limit: pagination.limit,
+      ...buildFilterParams()
     };
-    
-    if (filters.agentId) params.agentId = filters.agentId;
-    if (filters.capabilityType) params.capabilityType = filters.capabilityType;
-    if (typeof filters.success === 'boolean') params.success = filters.success;
-    params.includeSystem = filters.includeSystem;
-    if (filters.startDate) params.startDate = filters.startDate;
-    if (filters.endDate) params.endDate = filters.endDate;
 
     const res = await getAgentLogs(params);
     if (seq !== loadLogsSeq) return; // 已有更新的请求：丢弃本次过期响应
@@ -478,7 +501,7 @@ const viewDetail = async (log: AgentLogItem) => {
   detailLoading.value = true;
 
   try {
-    const res = await getAgentLogDetail(log.id);
+    const res = await getAgentLogDetail(log.id, buildFilterParams());
     if (seq !== detailSeq) return;
     const detail = res?.data || res;
     if (detail) {
@@ -497,13 +520,7 @@ const exportLogs = async (format: 'json' | 'csv') => {
   if (exporting.value) return;
   exportingFormat.value = format;
   try {
-    const params: AgentLogQueryParams = { format };
-    if (filters.agentId) params.agentId = filters.agentId;
-    if (filters.capabilityType) params.capabilityType = filters.capabilityType;
-    if (typeof filters.success === 'boolean') params.success = filters.success;
-    params.includeSystem = filters.includeSystem;
-    if (filters.startDate) params.startDate = filters.startDate;
-    if (filters.endDate) params.endDate = filters.endDate;
+    const params: AgentLogQueryParams = { format, ...buildFilterParams() };
 
     const data = await exportAgentLogs(params);
     const blob = format === 'csv'

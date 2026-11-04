@@ -9,6 +9,7 @@
  *
  * 这里用后端 jest 读取 .vue 源码做文本解析（不构建前端）：
  *   - 能力类型映射 / 展示名字典覆盖 manifest 四个能力组的全部 id；
+ *   - 能力类型映射的**值**等于 manifest 声明的分组（只锁键集合挡不住 id 换组）；
  *   - 字典键与 Agent 下拉的 id 都必须是 manifest 已知 id 或 alias（防再挂废弃 id）。
  */
 import fs from 'fs';
@@ -42,6 +43,13 @@ function objectKeys(source: string, marker: string): string[] {
   return [...objectBlock(source, marker).matchAll(/'([^']+)':/g)].map((match) => match[1]);
 }
 
+/** 取对象字面量块的「键 → 值」对（值限定为单引号字符串） */
+function objectEntries(source: string, marker: string): Array<[string, string]> {
+  return [...objectBlock(source, marker).matchAll(/'([^']+)':\s*'([^']*)'/g)].map(
+    (match) => [match[1], match[2]] as [string, string]
+  );
+}
+
 describe('#218 用户侧 AgentLogs.vue 字典与 manifest 对齐', () => {
   const source = readSource();
   const manifest = listAgentManifest();
@@ -68,6 +76,38 @@ describe('#218 用户侧 AgentLogs.vue 字典与 manifest 对齐', () => {
     const keys = objectKeys(source, 'const agentNames: Record<string, string> = {');
     expect(keys.length).toBeGreaterThan(0);
     expect(capabilityGroupIds.filter((id) => !keys.includes(id))).toEqual([]);
+  });
+
+  // #226：只锁「键集合相等」挡不住语义漂移——把 skill:teaching-turn 从 teaching 组
+  // 挪到 profile 组，键集合不变、守卫仍绿。这里锁值：每个 manifest id 的分组值
+  // 必须等于 manifest 声明的 monitoringGroup（小写）。
+  it('每个 manifest id 的分组值等于 manifest 声明的分组值', () => {
+    const entries = objectEntries(source, 'const mapping: Record<string, string> = {');
+    const declaredGroup = new Map(
+      manifest
+        .filter((entry) => CAPABILITY_GROUPS.includes(entry.monitoringGroup ?? ''))
+        .map((entry) => [entry.id, (entry.monitoringGroup as string).toLowerCase()])
+    );
+
+    const mismatched = [...declaredGroup.entries()]
+      .map(([id, expected]) => {
+        const actual = entries.find((entry) => entry[0] === id)?.[1] ?? '(缺失)';
+        return actual === expected ? null : `${id}: manifest=${expected}, 前端 mapping=${actual}`;
+      })
+      .filter((item): item is string => item !== null);
+
+    expect(mismatched).toEqual([]);
+  });
+
+  it('能力映射值都是已知能力类型（不写错拼写）', () => {
+    const entries = objectEntries(source, 'const mapping: Record<string, string> = {');
+    const allowedValues = new Set([
+      ...CAPABILITY_GROUPS.map((group) => group.toLowerCase()),
+      'tutoring',
+      'tracking',
+      'system'
+    ]);
+    expect(entries.filter(([, value]) => !allowedValues.has(value))).toEqual([]);
   });
 
   it('字典键与 Agent 下拉都只使用 manifest 已知 id（不挂废弃 id）', () => {
