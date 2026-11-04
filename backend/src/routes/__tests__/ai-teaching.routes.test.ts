@@ -425,6 +425,26 @@ describe('ai-teaching routes', () => {
     expect(mockCoordinator.processStudentMessage).not.toHaveBeenCalled();
   });
 
+  it('#209 真值但非字符串的 message → 400 校验错误（此前穿透成 500）', async () => {
+    const handler = getRouteHandler('/sessions/:sessionId/messages');
+    for (const badMessage of [123, { a: 1 }, ['x'], true]) {
+      const res = createResponse();
+      await handler({
+        user: { userId: 'user-1' },
+        params: { sessionId: 'session-1' },
+        headers: { 'idempotency-key': 'bad-type-key' },
+        body: { message: badMessage, revision: 1 },
+      }, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: expect.objectContaining({ code: 'VALIDATION_ERROR' }),
+      });
+      expect(mockCoordinator.processStudentMessage).not.toHaveBeenCalled();
+    }
+  });
+
   it('SSE 流式：Accept text/event-stream 时输出 final/done 事件并关闭连接', async () => {
     mockCoordinator.processStudentMessage.mockResolvedValue({
       aiResponse: '继续',

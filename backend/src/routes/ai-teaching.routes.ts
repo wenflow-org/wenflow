@@ -895,7 +895,7 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
     const { message } = req.body;
     const interactionMeta = sanitizeInteractionMeta(req.body?.meta);
 
-    if (!message) {
+    if (typeof message !== 'string' || message.trim().length === 0) {
       return sendValidationError(res, '缺少消息内容');
     }
 
