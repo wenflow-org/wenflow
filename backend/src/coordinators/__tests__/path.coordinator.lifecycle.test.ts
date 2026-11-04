@@ -20,6 +20,12 @@ jest.mock('../../utils/logger', () => ({
 
 import { pathCoordinator } from '../path.coordinator'
 
+// #217：generate 是生成路径的唯一动作入口，要求带 goal 层判定凭证。
+// 本文件只测后台任务生命周期，给一份可判定的凭证即可（不改变任何断言）。
+const GOAL_TRIAGE_EVIDENCE = {
+  goalTriage: { understanding: { primary_block_type: 'capability', recurrence: 'recurring' } }
+}
+
 describe('PathCoordinator background lifecycle', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -29,7 +35,7 @@ describe('PathCoordinator background lifecycle', () => {
   it('runAsync 将 generation 和 hooks 放入同一个 lazy tracked task', async () => {
     const onSuccess = jest.fn()
     mockGenerateLearningPath.mockResolvedValue({ id: 'path-1' })
-    pathCoordinator.runAsync({ userId: 'user-1', description: '学习 TypeScript' }, { onSuccess })
+    pathCoordinator.runAsync({ userId: 'user-1', description: '学习 TypeScript', ...GOAL_TRIAGE_EVIDENCE }, { onSuccess })
 
     expect(mockRunBackgroundTask).toHaveBeenCalledTimes(1)
     const [name, task, context] = mockRunBackgroundTask.mock.calls[0]
@@ -45,7 +51,7 @@ describe('PathCoordinator background lifecycle', () => {
   it('generation 失败时等待 onError 并保留原始失败给 Tracker 记录', async () => {
     const onError = jest.fn().mockResolvedValue(undefined)
     mockGenerateLearningPath.mockRejectedValue(new Error('generation failed'))
-    pathCoordinator.runAsync({ userId: 'user-1', description: '学习 TypeScript' }, { onError })
+    pathCoordinator.runAsync({ userId: 'user-1', description: '学习 TypeScript', ...GOAL_TRIAGE_EVIDENCE }, { onError })
 
     const task = mockRunBackgroundTask.mock.calls[0][1]
     await expect(task()).rejects.toThrow('generation failed')
@@ -55,7 +61,7 @@ describe('PathCoordinator background lifecycle', () => {
   it('draining 时不启动 generation，并通知业务 hook 收敛占位状态', async () => {
     mockIsAccepting.mockReturnValue(false)
     const onError = jest.fn().mockResolvedValue(undefined)
-    pathCoordinator.runAsync({ userId: 'user-1', description: '学习 TypeScript' }, { onError })
+    pathCoordinator.runAsync({ userId: 'user-1', description: '学习 TypeScript', ...GOAL_TRIAGE_EVIDENCE }, { onError })
 
     await Promise.resolve()
     expect(mockRunBackgroundTask).not.toHaveBeenCalled()

@@ -141,6 +141,12 @@ const generatePathSchema = z.object({
   subject: z.string().max(200).optional(),
   deadline: z.string().regex(ISO_DEADLINE_REGEX, 'deadline 必须是 ISO 日期格式').optional(),
   deadlineText: z.string().max(500).optional(),
+  /**
+   * goal 层判定凭证（#217）：目标对话产出的 understanding（含 platform_judgment /
+   * skill_nature / primary_block_type / support_need 等）。生成路径前必须提供——
+   * 本入口不自行猜测目标能否客观判定；缺失即 422 `GOAL_TRIAGE_REQUIRED`。
+   */
+  understanding: z.record(z.any()).optional(),
   userProfile: z.object({
     skillLevel: z.string().optional(),
     currentSkillLevel: z.string().optional(),
@@ -427,13 +433,18 @@ router.post('/paths/generate', llmGenerateUserLimiter, async (req, res, next) =>
     const data = generatePathSchema.parse(req.body);
     withPathContext(req);
 
-const result = await pathOrchestrator.generate({
+    // 生成路径动作的前置闸门（#217）：闸门本身在 pathOrchestrator.generate 里（唯一动作入口），
+    // 这里只负责把 goal 层判定凭证传下去——缺少凭证会被拒（GOAL_TRIAGE_REQUIRED），
+    // 命中硬阻断会被拒（GOAL_NOT_JUDGEABLE）；两种都不生成、不落库。
+    // 注意：本入口**不自行猜测**可判定性（关键词/启发式会误伤也能被绕过）。
+    const result = await pathOrchestrator.generate({
       userId,
       description: data.description,
       subject: data.subject,
       deadline: data.deadline ? new Date(data.deadline) : undefined,
       deadlineText: data.deadlineText,
-      userProfile: data.userProfile
+      userProfile: data.userProfile,
+      goalTriage: data.understanding ? { understanding: data.understanding } : null
     });
 
     res.status(201).json({
@@ -445,6 +456,18 @@ const result = await pathOrchestrator.generate({
       return res.status(400).json({
         success: false,
         error: { message: '数据验证失败', details: error.errors }
+      });
+    }
+
+    // 分诊闸门的两种拒绝：均 422（语义错误而非服务端故障），文案原样透出。
+    if (error?.code === 'GOAL_TRIAGE_REQUIRED' || error?.code === 'GOAL_NOT_JUDGEABLE') {
+      return res.status(422).json({
+        success: false,
+        error: {
+          message: error.message,
+          code: error.code,
+          ...(error.triage ? { responseTriage: error.triage } : {})
+        }
       });
     }
 
