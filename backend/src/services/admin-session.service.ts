@@ -32,44 +32,48 @@ export interface AdminSessionCounts {
 }
 
 /**
- * 按管理员分组的会话计数（全量口径）：groupBy 三次拿 active/expired/revoked，
+ * 按管理员分组的会话计数（全量口径）：单条 SQL 把每行归入 active/expired/revoked 后计数，
  * total 为三者之和（同一分区的并集，不会重复计数）。
  *
  * 列表接口的 limit 只约束「行窗口」，页面上的活跃/过期/总数一律以本函数为准——
  * 否则窗口行数会被读成全量（运营走查 B13 F6-1：默认 limit=100 被页签角标/统计条/组头当全量）。
+ *
+ * 2026-11-04：不再用 Prisma 的 `expiresAt: { gt: now }` 过滤。SQLite 里日期列若被以 ISO
+ * 文本写入（历史/外部脚本直插，非 Prisma 写入路径），与整数毫秒的 now 跨类型比较顺时针恒判
+ * 「文本更大」，早已过期的行会被算作 active；而前端按 `new Date()` 解析判过期，两端口径打架，
+ * 「下线其他会话（N）」比同屏活跃行多算（会话安全卡片 3 vs 2）。这里对文本值经 unixepoch()
+ * 归一到毫秒再比较，两类存储同口径。
  */
 export async function countAdminSessionsByAdmin(
   scopeWhere: Record<string, unknown>,
   now: Date,
 ): Promise<Map<string, AdminSessionCounts>> {
-  const [active, expired, revoked] = await Promise.all([
-    prisma.admin_sessions.groupBy({
-      by: ['adminId'],
-      where: { ...scopeWhere, revokedAt: null, expiresAt: { gt: now } },
-      _count: { _all: true },
-    }),
-    prisma.admin_sessions.groupBy({
-      by: ['adminId'],
-      where: { ...scopeWhere, revokedAt: null, expiresAt: { lte: now } },
-      _count: { _all: true },
-    }),
-    prisma.admin_sessions.groupBy({
-      by: ['adminId'],
-      where: { ...scopeWhere, revokedAt: { not: null } },
-      _count: { _all: true },
-    }),
-  ]);
+  const adminId = typeof scopeWhere.adminId === 'string' ? scopeWhere.adminId : null;
+  const nowMs = now.getTime();
+  const rows = await prisma.$queryRawUnsafe<
+    Array<{ adminId: string; active: number | bigint; expired: number | bigint; revoked: number | bigint }>
+  >(
+    `SELECT adminId AS adminId,
+       SUM(CASE WHEN revokedAt IS NULL AND (
+             CASE WHEN typeof(expiresAt) = 'text' THEN unixepoch(expiresAt) * 1000 ELSE expiresAt END
+           ) > ? THEN 1 ELSE 0 END) AS active,
+       SUM(CASE WHEN revokedAt IS NULL AND (
+             CASE WHEN typeof(expiresAt) = 'text' THEN unixepoch(expiresAt) * 1000 ELSE expiresAt END
+           ) <= ? THEN 1 ELSE 0 END) AS expired,
+       SUM(CASE WHEN revokedAt IS NOT NULL THEN 1 ELSE 0 END) AS revoked
+     FROM admin_sessions
+     ${adminId ? 'WHERE adminId = ?' : ''}
+     GROUP BY adminId`,
+    ...(adminId ? [nowMs, nowMs, adminId] : [nowMs, nowMs]),
+  );
 
   const counts = new Map<string, AdminSessionCounts>();
-  const bump = (adminId: string, key: 'active' | 'expired' | 'revoked', n: number) => {
-    const row = counts.get(adminId) ?? { total: 0, active: 0, expired: 0, revoked: 0 };
-    row[key] += n;
-    row.total += n;
-    counts.set(adminId, row);
-  };
-  for (const r of active) bump(r.adminId, 'active', r._count._all);
-  for (const r of expired) bump(r.adminId, 'expired', r._count._all);
-  for (const r of revoked) bump(r.adminId, 'revoked', r._count._all);
+  for (const r of rows) {
+    const active = Number(r.active);
+    const expired = Number(r.expired);
+    const revoked = Number(r.revoked);
+    counts.set(r.adminId, { total: active + expired + revoked, active, expired, revoked });
+  }
   return counts;
 }
 

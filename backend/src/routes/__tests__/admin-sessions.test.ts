@@ -11,6 +11,7 @@ const sessionsUpdate = jest.fn()
 const sessionsUpdateMany = jest.fn()
 const sessionsDeleteMany = jest.fn()
 const usersFindMany = jest.fn()
+const queryRawUnsafe = jest.fn()
 
 const mockRouter = () => ({
   get: (path: string, ...handlers: RouteHandler[]) => { routes[`GET ${path}`] = handlers },
@@ -35,7 +36,8 @@ jest.mock('../../config/database', () => ({
       update: sessionsUpdate,
       updateMany: sessionsUpdateMany,
       deleteMany: sessionsDeleteMany
-    }
+    },
+    $queryRawUnsafe: queryRawUnsafe
   }
 }))
 
@@ -108,6 +110,8 @@ describe('GET /api/admin/sessions', () => {
     jest.clearAllMocks()
     sessionsFindMany.mockResolvedValue([baseSession])
     sessionsGroupBy.mockResolvedValue([])
+    // countAdminSessionsByAdmin 2026-11-04 起改用单条 raw SQL（文本/整数日期统一口径）
+    queryRawUnsafe.mockResolvedValue([])
     sessionsDeleteMany.mockResolvedValue({ count: 0 })
     usersFindMany.mockResolvedValue([{ id: 'admin-1', name: '管理员甲', email: 'admin@example.com' }])
   })
@@ -170,11 +174,10 @@ describe('GET /api/admin/sessions', () => {
      不受 limit 裁剪，供前端把「100 行窗口」与「真实全量」区分开。 */
   it('返回全量 counts + adminCounts + window（行窗口只约束 sessions）', async () => {
     sessionsFindMany.mockResolvedValue([baseSession])
-    // 三次 groupBy 依次为 active / expired / revoked
-    sessionsGroupBy
-      .mockResolvedValueOnce([{ adminId: 'admin-1', _count: { _all: 467 } }])
-      .mockResolvedValueOnce([{ adminId: 'admin-1', _count: { _all: 33 } }])
-      .mockResolvedValueOnce([{ adminId: 'admin-1', _count: { _all: 5 } }])
+    // 2026-11-04：计数改由单条 raw SQL 给出（CASE 归 class + SUM），一行即四口径
+    queryRawUnsafe.mockResolvedValueOnce([
+      { adminId: 'admin-1', active: 467, expired: 33, revoked: 5 }
+    ])
 
     const { res } = await run('GET', '/', adminReq())
 
@@ -183,11 +186,10 @@ describe('GET /api/admin/sessions', () => {
       { adminId: 'admin-1', total: 505, active: 467, expired: 33, revoked: 5 }
     ])
     expect(res.body.data.window).toEqual({ limit: 100, returned: 1 })
-    // 统计查询不带 status 过滤（作用域全量），且不受 limit 影响
-    expect(sessionsGroupBy).toHaveBeenCalledWith(expect.objectContaining({
-      by: ['adminId'],
-      where: { revokedAt: null, expiresAt: { gt: expect.any(Date) } }
-    }))
+    // 统计查询是作用域全量（不叠加 status 过滤、不受 limit 裁剪）：无 adminId 时不带 WHERE 参数
+    expect(queryRawUnsafe).toHaveBeenCalledTimes(1)
+    expect(queryRawUnsafe.mock.calls[0][0]).toContain('FROM admin_sessions')
+    expect(queryRawUnsafe.mock.calls[0][0]).not.toContain('WHERE adminId =')
   })
 
   it('adminId 作用域同时约束行与统计（统计不叠加 status 过滤）', async () => {
@@ -196,9 +198,12 @@ describe('GET /api/admin/sessions', () => {
     expect(sessionsFindMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { adminId: 'admin-9', revokedAt: null, expiresAt: { gt: expect.any(Date) } }
     }))
-    expect(sessionsGroupBy).toHaveBeenCalledWith(expect.objectContaining({
-      where: { adminId: 'admin-9', revokedAt: { not: null } }
-    }))
+    // 计数 SQL 带 adminId 限定，且不带 status 条件（作用域全量）
+    expect(queryRawUnsafe).toHaveBeenCalledTimes(1)
+    const [sql, ...params] = queryRawUnsafe.mock.calls[0]
+    expect(sql).toContain('WHERE adminId = ?')
+    expect(sql).not.toContain('status')
+    expect(params).toContain('admin-9')
   })
 })
 
