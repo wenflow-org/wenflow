@@ -72,6 +72,22 @@ describe('生成路径前置分诊闸门（#217）', () => {
     }
   });
 
+  it('只有「任意非空对象」不算凭证 —— 必须带判定字段（#217 复核补强）', () => {
+    for (const understanding of [{ x: 1 }, { note: '随便写的' }, { platform_judgment: '  ' }]) {
+      const decision = evaluateGoalTriageEvidence({ understanding });
+      expect(decision.status).toBe('unverified');
+    }
+    // 反向：带任一判定字段就认（camel / snake 都算）
+    for (const understanding of [
+      { platform_judgment: 'judgeable' },
+      { skillNature: 'cognitive_internalized' },
+      { primaryBlockType: 'capability' },
+      { support_need: 'none' },
+    ]) {
+      expect(evaluateGoalTriageEvidence({ understanding }).status).not.toBe('unverified');
+    }
+  });
+
   it('assert 在硬阻断/无凭证时抛对应错误', () => {
     expect(() => assertPathGenerationAllowed({ understanding: BLOCKED_UNDERSTANDING }))
       .toThrow(PathGenerationBlockedError);

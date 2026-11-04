@@ -67,4 +67,26 @@ describe('PathCoordinator background lifecycle', () => {
     expect(mockRunBackgroundTask).not.toHaveBeenCalled()
     expect(onError).toHaveBeenCalledWith(expect.any(Error))
   })
+
+  // #217 的闸门只应约束「新建」：既有路径的重新生成 / 重建 / 重试手上没有 goal 层产物，
+  // 若一并要求凭证，这些旧数据兜底入口会稳定抛 GOAL_TRIAGE_REQUIRED 并被记成失败。
+  it('既有路径的重建（带 existingPathId）不需要判定凭证，照常进入 generation', async () => {
+    mockGenerateLearningPath.mockResolvedValue({ id: 'path-1' })
+    pathCoordinator.runAsync({ userId: 'user-1', description: '学习 TypeScript', existingPathId: 'path-1' })
+
+    const task = mockRunBackgroundTask.mock.calls[0][1]
+    await task()
+    expect(mockGenerateLearningPath).toHaveBeenCalledTimes(1)
+  })
+
+  it('新建路径（无 existingPathId）没有判定凭证时直接失败，且不进入 generation', async () => {
+    mockGenerateLearningPath.mockResolvedValue({ id: 'path-1' })
+    const onError = jest.fn().mockResolvedValue(undefined)
+    pathCoordinator.runAsync({ userId: 'user-1', description: '学习 TypeScript' }, { onError })
+
+    const task = mockRunBackgroundTask.mock.calls[0][1]
+    await expect(task()).rejects.toThrow(/目标判定结论/)
+    expect(mockGenerateLearningPath).not.toHaveBeenCalled()
+    expect(onError).toHaveBeenCalledTimes(1)
+  })
 })

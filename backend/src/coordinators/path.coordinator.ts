@@ -1061,7 +1061,16 @@ class PathCoordinator {
   async generate(input: PathGenerationInput) {
     // 生成路径动作的唯一闸门（#217）：没有 goal 层判定凭证就拒绝，命中硬阻断也拒绝。
     // 放在最前面，保证任何入口都不会先落库/先起后台生成。
-    assertPathGenerationAllowed(input.goalTriage);
+    //
+    // 只约束**新建**路径（不带 existingPathId）。带 existingPathId 的是既有路径的
+    // 重新生成 / 整条重建 / 失败重试：那条链路的目标早已落库（`runGoalAsync(storedGoalRequest)`
+    // 自带 visibleSummary），而旧数据兜底分支（learning.ts 的 retry / rebuild / regenerate
+    // fallback 与 path-regeneration.service）手上没有任何 goal 层产物——若也要求凭证，
+    // 这些入口会稳定抛 GOAL_TRIAGE_REQUIRED 并被 markActiveGenerationFailed 记成失败。
+    // 它与本 issue 的攻击面无关：绕过需要的是「用任意文本**新建**一条路径」。
+    if (!input.existingPathId) {
+      assertPathGenerationAllowed(input.goalTriage);
+    }
 
     logger.info('[path-coordinator] generate start', {
       agentId: this.id,

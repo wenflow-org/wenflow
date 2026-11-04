@@ -34,7 +34,7 @@ import { buildHardBlockMessage } from './goal-conversation.exit';
  * - `visibleSummary`：goal→path 的确定性投影（`platformJudgment` / `skillNature`）。
  *   目标会话/仿真链路走这个形状。
  *
- * 三者都不存在（或 `understanding` 为空对象）⇒ 视为「没有判定凭证」⇒ 拒绝。
+ * 三者都不存在（或 `understanding` 不含任一判定字段）⇒ 视为「没有判定凭证」⇒ 拒绝。
  */
 export interface GoalTriageEvidence {
   responseTriage?: ResponseTriage | null;
@@ -60,6 +60,36 @@ function isNonEmptyObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * `understanding` 里被 `response-triage` 真正消费的判定字段（snake / camel 两种命名都认）。
+ * 只有带上其中之一，才算「有判定结论」。
+ */
+const DECISION_KEYS = [
+  'platform_judgment', 'platformJudgment',
+  'skill_nature', 'skillNature',
+  'primary_block_type', 'primaryBlockType',
+  'support_need', 'supportNeed',
+];
+
+/**
+ * 只认「带判定结论」的 understanding。
+ *
+ * 为什么不能只判非空对象：那样闸门只是从「不发凭证就 201」变成「发任意对象就 201」，
+ * `{"x":1}` 照样能造出路径，issue #217 的契约仍然没守住（第五轮独立复核结论）。
+ *
+ * 注意：这**不**解决「客户端伪造判定」——`{"platform_judgment":"judgeable"}` 仍能被构造。
+ * 凭证可信性要靠服务端自算、或读服务端已落库的分诊结论（#217 的后续说明），
+ * 那是比这个纯函数大得多的一步，不在这里假装解决。
+ */
+function hasDecisionEvidence(value: unknown): value is Record<string, unknown> {
+  if (!isNonEmptyObject(value)) return false;
+  for (const key of DECISION_KEYS) {
+    const v = value[key];
+    if (typeof v === 'string' && v.trim().length > 0) return true;
+  }
+  return false;
+}
+
+/**
  * 生成路径前的分诊判定（纯函数，无 DB / 无 LLM / 无副作用）。
  * 同一套 `response-triage` 规则，只是把「无凭证」显式判成 `unverified`。
  */
@@ -68,7 +98,7 @@ export function evaluateGoalTriageEvidence(
 ): GoalTriageDecision {
   const responseTriage = evidence?.responseTriage || null;
   const visibleSummary = evidence?.visibleSummary || null;
-  const providedUnderstanding = isNonEmptyObject(evidence?.understanding)
+  const providedUnderstanding = hasDecisionEvidence(evidence?.understanding)
     ? evidence.understanding
     : null;
 
