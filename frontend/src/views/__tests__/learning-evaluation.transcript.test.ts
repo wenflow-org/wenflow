@@ -85,7 +85,7 @@ describe('LearningEvaluationPage 当堂对话折叠', () => {
 
     const toggle = w.find('.evaluation-transcript-toggle');
     expect(toggle.exists()).toBe(true);
-    expect(toggle.text()).toContain('展开更早的 3 条消息');
+    expect(toggle.text()).toContain('展开更早的 3 条');
     expect(toggle.attributes('aria-expanded')).toBe('false');
   });
 
@@ -100,7 +100,7 @@ describe('LearningEvaluationPage 当堂对话折叠', () => {
 
     await w.find('.evaluation-transcript-toggle').trigger('click');
     expect(w.findAll('.evaluation-transcript-item').length).toBe(2);
-    expect(w.find('.evaluation-transcript-toggle').text()).toContain('展开更早的 3 条消息');
+    expect(w.find('.evaluation-transcript-toggle').text()).toContain('展开更早的 3 条');
   });
 
   it('消息不超过预览条数时不出现折叠开关', async () => {
@@ -150,5 +150,79 @@ describe('LearningEvaluationPage 当堂对话折叠', () => {
 
     expect(itemsAtExport).toBe(5);
     expect(w.findAll('.evaluation-transcript-item').length).toBe(2);
+  });
+
+  it('小测按 submittedAt 编进时间线（2026-11-04：此前评估页完全不回放小测）', async () => {
+    getSessionDetailMock.mockResolvedValue({
+      ...detail,
+      state: {
+        checkpointHistory: [
+          {
+            checkpointId: 'cp_1',
+            title: '下面哪一条更像心理学的问法？',
+            question: '下面哪一条更像心理学的问法？',
+            type: 'single_choice',
+            options: [
+              { id: 'A', text: '他是不是根本不重视这份工作？' },
+              { id: 'B', text: '在什么条件下，这类迟到更容易出现？' },
+              { id: 'C', text: '他这个人到底靠不靠谱？' }
+            ],
+            selectedOptionIds: ['B'],
+            passed: true,
+            submittedAt: '2026-09-23T02:55:30.000Z'
+          }
+        ]
+      }
+    });
+
+    const w = await mountReady();
+    // 5 条消息 + 1 个小测 = 6 条时间线条目；折叠态显最近 2 条：
+    // 小测(02:55:30) 晚于「这是我的判断」(03:00 之前最后一条 user 是 03:00)…
+    // 时间线升序展开校验，先展开
+    await w.find('.evaluation-transcript-toggle').trigger('click');
+    const items = w.findAll('.evaluation-transcript-item');
+    expect(items.length).toBe(6);
+
+    const cpItem = w.find('.evaluation-transcript-item--checkpoint');
+    expect(cpItem.exists()).toBe(true);
+    expect(cpItem.text()).toContain('下面哪一条更像心理学的问法？');
+    // 三个选项都在，B 高亮为学生所选，判定为通过
+    expect(cpItem.findAll('.evaluation-transcript-checkpoint__opt').length).toBe(3);
+    const picked = cpItem.findAll('.evaluation-transcript-checkpoint__opt.is-picked');
+    expect(picked.length).toBe(1);
+    expect(picked[0].text()).toContain('在什么条件下，这类迟到更容易出现？');
+    expect(cpItem.find('.evaluation-transcript-checkpoint__verdict.is-pass').exists()).toBe(true);
+    // 插入位置：小测(02:55:30) 在 02:55 的用户消息之后、02:56 的讲解之前
+    const texts = items.map((i) => i.text());
+    const cpIndex = texts.findIndex((t) => t.includes('下面哪一条更像心理学的问法？'));
+    expect(texts[cpIndex - 1]).toContain('我准备好了');
+    expect(texts[cpIndex + 1]).toContain('第二条讲解');
+  });
+
+  it('未通过的小测给「未通过」判定且不高亮正确项（服务端不下发答案键）', async () => {
+    getSessionDetailMock.mockResolvedValue({
+      ...detail,
+      state: {
+        checkpointHistory: [
+          {
+            checkpointId: 'cp_x',
+            question: '哪一句无法被证据推翻？',
+            type: 'single_choice',
+            options: [{ id: 'A', text: '他性格内向' }],
+            selectedOptionIds: ['A'],
+            passed: false,
+            submittedAt: '2026-09-23T03:02:00.000Z'
+          }
+        ]
+      }
+    });
+
+    const w = await mountReady();
+    await w.find('.evaluation-transcript-toggle').trigger('click');
+    const cpItem = w.find('.evaluation-transcript-item--checkpoint');
+    expect(cpItem.exists()).toBe(true);
+    expect(cpItem.find('.evaluation-transcript-checkpoint__verdict.is-fail').exists()).toBe(true);
+    // 答案键被服务端剥离：页面上不该出现「正确答案」字样
+    expect(cpItem.text()).not.toContain('正确答案');
   });
 });

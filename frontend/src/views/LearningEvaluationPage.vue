@@ -145,7 +145,7 @@
           <!-- 卡头的「本次学习 / 当堂对话 / N 条消息」已经说明这是本次课堂的对话回看，
                不再补一句同义提要（2026-10-29 全站副文审计） -->
 
-          <div v-if="mainDialogueMessages.length" class="evaluation-transcript-list">
+          <div v-if="transcriptEntries.length" class="evaluation-transcript-list">
             <button
               v-if="hiddenTranscriptCount > 0"
               type="button"
@@ -160,35 +160,70 @@
                 aria-hidden="true"
               ></span>
             </button>
-            <article
-              v-for="(message, index) in visibleTranscriptMessages"
-              :key="`${message.timestamp || 'message'}-${index}`"
-              class="evaluation-transcript-item"
-              :class="`evaluation-transcript-item--${message.role}`"
-              :style="{ animationDelay: Math.min(index * 40, 500) + 'ms' }"
-            >
-              <div class="evaluation-transcript-item__meta">
-                <strong>{{ getMessageRoleLabel(message.role) }}</strong>
-                <span v-if="message.timestamp">{{ formatMessageTime(message.timestamp) }}</span>
-              </div>
-              <div class="evaluation-transcript-item__body">
-                <MarkdownRenderer :content="message.content" />
-                <!-- 2026-11-04 走查：当堂对话此前只回放文字，课堂里老师真出过的结构图
-                     （mermaid）与白板图（figure）全部丢失——回看时讲解引用「图里/左栏」
-                     同样找不到所指。与学习页同款双通道内联渲染。 -->
-                <TeachingDiagram
-                  v-for="(d, di) in (message.diagrams || [])"
-                  :key="'d' + index + '-' + di"
-                  :code="d.code"
-                  :caption="d.caption"
-                />
-                <TeachingFigure
-                  v-for="(f, fi) in (message.figures || [])"
-                  :key="'f' + index + '-' + fi"
-                  :figure="f"
-                />
-              </div>
-            </article>
+            <template v-for="(entry, index) in visibleTranscriptEntries" :key="entry.key">
+              <article
+                v-if="entry.kind === 'message'"
+                class="evaluation-transcript-item"
+                :class="`evaluation-transcript-item--${entry.message.role}`"
+                :style="{ animationDelay: Math.min(index * 40, 500) + 'ms' }"
+              >
+                <div class="evaluation-transcript-item__meta">
+                  <strong>{{ getMessageRoleLabel(entry.message.role) }}</strong>
+                  <span v-if="entry.message.timestamp">{{ formatMessageTime(entry.message.timestamp) }}</span>
+                </div>
+                <div class="evaluation-transcript-item__body">
+                  <MarkdownRenderer :content="entry.message.content" />
+                  <!-- 2026-11-04 走查：当堂对话此前只回放文字，课堂里老师真出过的结构图
+                       （mermaid）与白板图（figure）全部丢失——回看时讲解引用「图里/左栏」
+                       同样找不到所指。与学习页同款双通道内联渲染。 -->
+                  <TeachingDiagram
+                    v-for="(d, di) in (entry.message.diagrams || [])"
+                    :key="'d' + index + '-' + di"
+                    :code="d.code"
+                    :caption="d.caption"
+                  />
+                  <TeachingFigure
+                    v-for="(f, fi) in (entry.message.figures || [])"
+                    :key="'f' + index + '-' + fi"
+                    :figure="f"
+                  />
+                </div>
+              </article>
+              <!-- 小测回放卡（2026-11-04 走查）：题面/选项/学生选择/对错都在
+                   teachingState.checkpointHistory（服务端已剥答案键），此前评估页完全不回放。
+                   只读展示：高亮学生所选，给通过/未通过判定；正确答案不展示（服务端不下发）。 -->
+              <article
+                v-else
+                class="evaluation-transcript-item evaluation-transcript-item--checkpoint"
+                :style="{ animationDelay: Math.min(index * 40, 500) + 'ms' }"
+              >
+                <div class="evaluation-transcript-item__meta">
+                  <strong>小测</strong>
+                  <span v-if="entry.checkpoint.submittedAt">{{ formatMessageTime(entry.checkpoint.submittedAt) }}</span>
+                </div>
+                <div class="evaluation-transcript-checkpoint">
+                  <p class="evaluation-transcript-checkpoint__q">{{ entry.checkpoint.question || entry.checkpoint.title }}</p>
+                  <ul v-if="entry.checkpoint.options && entry.checkpoint.options.length" class="evaluation-transcript-checkpoint__options">
+                    <li
+                      v-for="opt in entry.checkpoint.options"
+                      :key="opt.id"
+                      class="evaluation-transcript-checkpoint__opt"
+                      :class="{ 'is-picked': (entry.checkpoint.selectedOptionIds || []).includes(opt.id) }"
+                    >
+                      <span class="evaluation-transcript-checkpoint__opt-id">{{ opt.id }}</span>
+                      <span class="evaluation-transcript-checkpoint__opt-text">{{ opt.text }}</span>
+                    </li>
+                  </ul>
+                  <p
+                    v-if="typeof entry.checkpoint.passed === 'boolean'"
+                    class="evaluation-transcript-checkpoint__verdict"
+                    :class="entry.checkpoint.passed ? 'is-pass' : 'is-fail'"
+                  >
+                    {{ entry.checkpoint.passed ? '通过' : '未通过' }}
+                  </p>
+                </div>
+              </article>
+            </template>
           </div>
 
           <div v-else class="evaluation-transcript-empty">
@@ -324,18 +359,64 @@ const canRetryWrapup = computed(() => {
 const canSubmitSessionFeedback = computed(() => !isProjectionMode());
 const mainDialogueMessages = computed(() => (sessionDetail.value?.messages || []).filter((message) => message.role === 'user' || message.role === 'assistant'));
 
+/* 小测回放条目（2026-11-04 走查）：题面/选项/学生选择/对错在 teachingState.checkpointHistory，
+   服务端 getSessionDetail 已剥答案键（correctOptionIds 绝不下发）。按 submittedAt 编进对话
+   时间线，旧课同样可回放。 */
+interface TranscriptCheckpoint {
+  checkpointId?: string;
+  title?: string;
+  question?: string;
+  type?: string;
+  options?: Array<{ id: string; text: string }>;
+  selectedOptionIds?: string[];
+  passed?: boolean;
+  submittedAt?: string;
+}
+const transcriptCheckpoints = computed<TranscriptCheckpoint[]>(() => {
+  const state = sessionDetail.value?.state as Record<string, unknown> | null | undefined;
+  const history = Array.isArray(state?.checkpointHistory) ? state!.checkpointHistory : [];
+  return (history as TranscriptCheckpoint[]).filter((c) => c && (c.question || c.title));
+});
+
+type TranscriptEntry =
+  | { kind: 'message'; key: string; ts: number; message: (typeof mainDialogueMessages.value)[number] }
+  | { kind: 'checkpoint'; key: string; ts: number; checkpoint: TranscriptCheckpoint };
+
+const toTs = (value: unknown): number => {
+  const t = typeof value === 'string' ? Date.parse(value) : NaN;
+  return Number.isNaN(t) ? 0 : t;
+};
+
 /* 当堂对话默认只回看最近两条：长会话（5 条消息里两三条是几百字讲解）在手机上能占好几屏，
    而这一块是"回看"而非必读。导出图片/打印前会临时全展开，避免导出的报告缺内容。 */
 const TRANSCRIPT_PREVIEW_COUNT = 2;
 const transcriptExpanded = ref(false);
-const hiddenTranscriptCount = computed(() => Math.max(mainDialogueMessages.value.length - TRANSCRIPT_PREVIEW_COUNT, 0));
-const visibleTranscriptMessages = computed(() => (
+const transcriptEntries = computed<TranscriptEntry[]>(() => {
+  const entries: TranscriptEntry[] = [
+    ...mainDialogueMessages.value.map((message, index) => ({
+      kind: 'message' as const,
+      key: `m-${index}-${message.timestamp || ''}`,
+      ts: toTs(message.timestamp),
+      message,
+    })),
+    ...transcriptCheckpoints.value.map((checkpoint, index) => ({
+      kind: 'checkpoint' as const,
+      key: `cp-${index}-${checkpoint.checkpointId || checkpoint.submittedAt || ''}`,
+      ts: toTs(checkpoint.submittedAt),
+      checkpoint,
+    })),
+  ];
+  // 同时刻消息在前、小测在后（出题正文 → 学生作答 → 判定卡的自然顺序）
+  return entries.sort((a, b) => a.ts - b.ts || (a.kind === 'message' ? -1 : 1));
+});
+const hiddenTranscriptCount = computed(() => Math.max(transcriptEntries.value.length - TRANSCRIPT_PREVIEW_COUNT, 0));
+const visibleTranscriptEntries = computed(() => (
   transcriptExpanded.value
-    ? mainDialogueMessages.value
-    : mainDialogueMessages.value.slice(-TRANSCRIPT_PREVIEW_COUNT)
+    ? transcriptEntries.value
+    : transcriptEntries.value.slice(-TRANSCRIPT_PREVIEW_COUNT)
 ));
 const transcriptToggleLabel = computed(() => (
-  transcriptExpanded.value ? '收起对话' : `展开更早的 ${hiddenTranscriptCount.value} 条消息`
+  transcriptExpanded.value ? '收起对话' : `展开更早的 ${hiddenTranscriptCount.value} 条`
 ));
 /** 导出前展开全部对话（返回是否临时展开，便于导出后恢复用户原本的折叠状态） */
 const expandTranscriptForExport = async () => {
@@ -1485,6 +1566,59 @@ onUnmounted(() => {
   line-height: 1.8;
   color: var(--muted);
 }
+
+/* 小测回放卡（只读）：高亮学生所选 + 通过/未通过判定；正确答案服务端不下发，不展示 */
+.evaluation-transcript-checkpoint {
+  display: grid;
+  gap: 10px;
+}
+
+.evaluation-transcript-checkpoint__q {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.evaluation-transcript-checkpoint__options {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.evaluation-transcript-checkpoint__opt {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.evaluation-transcript-checkpoint__opt.is-picked {
+  border-color: color-mix(in srgb, var(--blue) 45%, transparent);
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
+  color: var(--ink);
+}
+
+.evaluation-transcript-checkpoint__opt-id {
+  flex: none;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.evaluation-transcript-checkpoint__verdict {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.evaluation-transcript-checkpoint__verdict.is-pass { color: var(--green, #16a34a); }
+.evaluation-transcript-checkpoint__verdict.is-fail { color: var(--red, #dc2626); }
 
 .evaluation-transcript-empty {
   padding: 20px;
