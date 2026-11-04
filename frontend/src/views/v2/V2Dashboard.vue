@@ -1262,24 +1262,27 @@ onMounted(loadAll);
 
 /* ---------- AI 提示条 ---------- */
 /* 底改纯色（原型 wf-tip 319-333）：蓝→青渐变底退役，1px 蓝弱边 + 6% 蓝底 */
+/* 2026-11-04 走查：flex-start 是给两行文本钉首行用的，但关闭钮 44px 热区只收了上边距，
+   把行高撑到 36px——单行文本被钉在顶上（上留白 11px / 下留白 27px）。改垂直居中。 */
 .tip {
-  display: flex; align-items: flex-start; gap: 9px;
+  display: flex; align-items: center; gap: 9px;
   padding: 11px 12px;
   border-radius: var(--mk-radius-lg);
   border: 1px solid color-mix(in srgb, var(--blue) 16%, transparent);
   background: color-mix(in srgb, var(--blue) 6%, transparent);
 }
 /* 图标：去掉白色阴影盒，直接着紫（v2 的紫 token 别名是 --accent = --mk-purple） */
-.tip__icon { color: var(--accent); flex: none; display: grid; place-items: center; margin-top: 1px; }
+.tip__icon { color: var(--accent); flex: none; display: grid; place-items: center; }
 .tip p { margin: 0; flex: 1; min-width: 0; font-size: 13px; line-height: 1.55; color: var(--ink); }
 /* 关闭钮：视觉 28px（原型 wf-tip__close）；padding 8 把点击热区扩到 44×44，
+   四边 -8 负边距把外占位收回 28px（随 align-items:center 居中），热区仍是 44×44，
    background-clip 让 hover 底只画在 28px 内容盒里 */
 .tip__close {
   box-sizing: content-box; width: 28px; height: 28px; padding: 8px;
   background-clip: content-box;
   border: 0; background-color: transparent;
   display: grid; place-items: center;
-  margin: -8px -8px 0 0;
+  margin: -8px -8px -8px 0;
   color: var(--faint); font-size: 19px; line-height: 1; cursor: pointer;
   border-radius: var(--mk-radius-md);
 }
