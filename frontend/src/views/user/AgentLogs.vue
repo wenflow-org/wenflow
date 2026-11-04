@@ -997,6 +997,13 @@ html[data-theme='dark'] .filter-dates input[type='date'] {
   overflow: hidden;
 }
 
+/* 2026-11-04 走查：弹窗体是 display:grid，三个折叠节被均分压扁（「输出 (output)」块可见 0px，
+   body 又因内容被裁而无滚动余量）。min-height:min-content 让节拒绝被压到内容以下——
+   总高超出弹窗时由 .uc-dialog__body 的 overflow-y 兜底滚动，输入/输出永远可达。 */
+.detail-collapse {
+  min-height: min-content;
+}
+
 .detail-collapse summary {
   padding: 10px 14px;
   font-size: 13px;
