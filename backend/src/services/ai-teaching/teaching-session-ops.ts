@@ -22,6 +22,7 @@ import {
   getPendingCheckpoint,
   judgeCheckpointAnswer,
   normalizeCheckpointShape,
+  projectMessagesForClient,
   recordCheckpointAttemptEvidence,
   stripCheckpointAnswerKeys,
 } from './teaching-checkpoint';
@@ -190,7 +191,8 @@ export async function getSessionDetail(sessionId: string, userId: string): Promi
     endTime: session.endTime,
     duration: session.duration,
     status: session.status,
-    messages: session.messages,
+    // 消息出口：剔除停写的调试信封并剥离答案键（#240，与 /users/me/sessions 共用同一投影）
+    messages: projectMessagesForClient(session.messages),
     state: stripCheckpointAnswerKeys(session.teachingState || {}),
     knowledgePoints: session.knowledgeState,
     wrapup: await withPmcLongTermState(session.wrapup, userId, session.endTime),
