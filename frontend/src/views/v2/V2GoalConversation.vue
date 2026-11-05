@@ -165,6 +165,10 @@
              右边还露出半截气泡的边角；压暗一层让面板成为唯一焦点，点遮罩即收起 -->
         <div v-if="panelOpen" class="panel__mask" aria-hidden="true" @click="togglePanel"></div>
         <div class="panel__body">
+          <!-- 内容整体包进 .panel__scroll（2026-11-05）：窄屏面板内部滚动时半颗「清空重聊」
+               被滚动视口硬切在底边。滚动发生在内层，底缘渐隐 mask 才能只作用于内容、
+               不把面板自己的描边/圆角/投影一起淡掉（sticky 伪元素钉不进 padding 区，已试无效） -->
+          <div class="panel__scroll">
           <div class="panel__bar"><i :style="{ width: (live.filledCount / live.totalFields) * 100 + '%' }"></i></div>
           <div class="panel__confidence">{{ stageLabel }}</div>
 
@@ -200,6 +204,7 @@
                药丸占满，这里收进目标信息悬浮面板底部（点「目标信息」两步可达）；
                桌面端仍走头部按钮，不重复 -->
           <button type="button" class="panel__clear" @click="doReset">清空重聊</button>
+          </div>
         </div>
       </aside>
 
@@ -1998,7 +2003,10 @@ function shuffleScenes() {
 .panel__count { font-size: 12px; font-weight: 800; color: var(--blue-deep); }
 /* 折叠指示箭头：仅移动端显示 */
 .panel__caret { display: none; font-size: 12px; color: var(--faint); flex-shrink: 0; }
-.panel__body { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.panel__body { display: flex; flex-direction: column; min-height: 0; }
+/* 面板内容滚动层（2026-11-05）：面板壳（描边/圆角/投影）与内容滚动分离——
+   底缘渐隐 mask 只作用于内容层，不会把壳一起淡掉。桌面不滚动，mask 不生效 */
+.panel__scroll { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
 .panel__bar { height: 6px; border-radius: 999px; background: color-mix(in srgb, var(--line) 55%, transparent); overflow: hidden; }
 .panel__bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width .4s ease; }
 .panel__confidence { font-size: 12px; color: var(--faint); }
@@ -2893,15 +2901,29 @@ function shuffleScenes() {
     z-index: 26;
     /* 高度上限：60% → 70% 视口（2026-11-05 用户裁定「一屏装下」），下沿改成
        「留出 composer + 底部导航 ≈ 240px」的硬约束——短屏（320×568）靠这一项兜住，
-       长屏则真的能把 7 项清单一次排完。内容仍超高时面板内部滚动（滚动条已隐）。 */
+       长屏则真的能把 7 项清单一次排完。内容仍超高时由内层 .panel__scroll 滚动 */
     max-height: min(calc(70dvh / var(--vp-zoom, 1)), calc((100dvh - 240px) / var(--vp-zoom, 1)));
-    overflow: auto;
-    padding: 12px;
+    /* 壳层只裁不滚（overflow hidden）：滚动在内层 .panel__scroll，底缘渐隐才有作用对象 */
+    overflow: hidden;
+    display: flex; flex-direction: column;
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: var(--mk-radius-modal);
     box-shadow: var(--mk-shadow-modal); /* 模态档 */
   }
+  .panel:not(.panel--collapsed) .panel__scroll {
+    /* 底衬 32（2026-11-05）：滚到底时「清空重聊」完整停在渐隐带之上，不再顶边 */
+    padding: 12px 12px 32px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+    /* 底缘渐隐（2026-11-05 用户指出「下边没有了」）：半颗「清空重聊」被滚动视口
+       硬切在底边读作破版。mask 只罩内容层（.panel__scroll），壳的描边/圆角/投影不动；
+       与 MkGraphExplorer 轨条两端渐隐同一写法 */
+    mask-image: linear-gradient(to bottom, black calc(100% - 26px), transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 26px), transparent 100%);
+  }
+  .panel:not(.panel--collapsed) .panel__scroll::-webkit-scrollbar { display: none; }
   /* 面板遮罩（2026-11-05 用户裁定）：浮层直接盖在聊天字上、右缘还露半截气泡，
      压暗一层后面板才是唯一焦点；z-index 取 21（> 步条带 6 / 消息流，< 面板 26），
      点击即收起（悬浮层点外部关闭是默认心智，不需要再找 ▾） */
