@@ -934,7 +934,7 @@
           "artifactKind": "copy",
           "interactionMode": "snapshot",
           "contractFields": 0,
-          "ruleCount": 10,
+          "ruleCount": 12,
           "constraintCount": 2,
           "conditionalRuleCount": 0,
           "phases": [
@@ -1009,7 +1009,7 @@
           "interactionMode": "snapshot",
           "contractFields": 0,
           "ruleCount": 9,
-          "constraintCount": 4,
+          "constraintCount": 5,
           "conditionalRuleCount": 0,
           "phases": [
             "predicted"
@@ -2081,7 +2081,7 @@
       "artifactKind": "copy",
       "interactionMode": "snapshot",
       "contractFields": 0,
-      "ruleCount": 10,
+      "ruleCount": 12,
       "constraintCount": 2,
       "conditionalRuleCount": 0,
       "phases": [
@@ -2190,7 +2190,7 @@
       "interactionMode": "snapshot",
       "contractFields": 0,
       "ruleCount": 9,
-      "constraintCount": 4,
+      "constraintCount": 5,
       "conditionalRuleCount": 0,
       "phases": [
         "predicted"
