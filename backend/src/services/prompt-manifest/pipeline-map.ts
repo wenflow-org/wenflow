@@ -587,7 +587,13 @@ export function renderPromptsMarkdown(map: PipelineMap): string {
   const pushPrompt = (p: PipelinePrompt): void => {
     if (!p.coreFile || emitted.has(p.skillId)) return;
     emitted.add(p.skillId);
-    const raw = fs.readFileSync(path.join(ROOT, p.coreFile), 'utf8').replace(/\s+$/, '');
+    // 生成物按字节比对：core YAML 在 Windows（autocrlf=true）下检出为 CRLF，
+    // 原样内嵌会让任何干净检出上的 pipeline:map:check 恒定报「生成物已过期」，
+    // 而重新生成后 git diff 又是空的（2026-11-05 实测）。故内嵌前归一化为 LF。
+    const raw = fs
+      .readFileSync(path.join(ROOT, p.coreFile), 'utf8')
+      .replace(/\r\n?/g, '\n')
+      .replace(/\s+$/, '');
     const params = p.params
       ? Object.entries(p.params)
           .map(([k, v]) => `${k}=${String(v)}`)
