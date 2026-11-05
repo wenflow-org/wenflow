@@ -256,12 +256,16 @@ const form = reactive({
   outputPer1M: null as number | null
 })
 
-/* 生成参数的下拉档位：文案保持与旧原生 select 逐字一致。
+/* 生成参数的下拉档位。
    2026-11-04 用户「输出格式这个功能先下掉」：输出格式档位随字段一并撤除，
-   已存的值原样留在注册表里，这里不读也不写。 */
+   已存的值原样留在注册表里，这里不读也不写。
+   2026-11-05 用户「思考强度为什么还强制开启？」：`enabled` 原写作「强制开启」，
+   但它一点都不强制——优先级是 Skill 显式配置 > 模型默认 > 平台默认，
+   某个 Skill 自己选了「关闭」时，模型这一档根本不参与。它只是「没被另行指定时用哪一档」，
+   所以改回与人话一致的「开启」，与 Skill 运行时页同一个词（那一页写「开启」已经很久了）。 */
 const THINKING_MODE_OPTIONS: Array<{ value: 'default' | 'enabled' | 'disabled'; label: string }> = [
   { value: 'default', label: '跟随默认' },
-  { value: 'enabled', label: '强制开启' },
+  { value: 'enabled', label: '开启' },
   { value: 'disabled', label: '关闭' }
 ]
 /**
