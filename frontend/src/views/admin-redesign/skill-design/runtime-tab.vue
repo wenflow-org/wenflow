@@ -64,7 +64,7 @@
 ${orderTitle}`">{{ baseModel }}</span>
             <!-- 能力做成**陈述句**（2026-11-02 评审：原来只写 思考 / 推理强度 两个裸词，
                  被读成「只有标签、值还没填」）。 -->
-            <span v-for="cap in summaryCaps" :key="cap" class="sdp-chip" title="模型目录声明的能力（不支持的能力不会发给上游）">{{ cap }}</span>
+            <span v-for="cap in summaryCaps" :key="cap" class="sdp-chip">{{ cap }}</span>
             <span v-if="summaryMeta" class="sdp-base__meta">{{ summaryMeta }}</span>
             <span class="sdp-base__src">{{ baseModelSource }}</span>
           </div>
@@ -80,7 +80,6 @@ ${orderTitle}`">{{ baseModel }}</span>
                 </li>
               </ul>
               <p v-if="!changedRows.length" class="sdp-diff__none">没有单独调整的项，全部沿用基线</p>
-              <p v-else-if="followRows.length" class="sdp-diff__rest">其余沿用基线：{{ followRows.join(' / ') }}</p>
             </div>
           </template>
           <p v-else class="sdp-live__note">
@@ -530,7 +529,6 @@ const diffRows = computed<DiffRow[]>(() => {
   ]
 })
 const changedRows = computed(() => diffRows.value.filter((r) => r.changed))
-const followRows = computed(() => diffRows.value.filter((r) => !r.changed).map((r) => r.label))
 
 /** 主模型在目录里的条目：用于就地核对能力与价格（2026-11-04 起不再收窄备用候选） */
 const primaryOption = computed(() => pickerOptions.value.find((o) => o.value === rtForm.value.model) ?? null)
@@ -866,7 +864,6 @@ watch(() => props.skillId, () => {
 .sdp-diff__val { color: var(--mk-ink); font-weight: 700; overflow-wrap: anywhere; }
 .sdp-diff__base { color: var(--mk-faint); font-size: var(--mk-fs-micro); font-style: normal; }
 .sdp-diff__none { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.sdp-diff__rest { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 @media (max-width: 720px) {
   .sdp-diff__list > li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
 }

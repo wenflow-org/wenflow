@@ -437,8 +437,10 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
     // 第三格是「不单独设置时会取什么」
     expect(diff[0].find('.sdp-diff__base').text()).toBe('平台默认');
     expect(diff[0].find('.sdp-diff__val').text()).toBe('30s');
-    // 没改的项收成一行，不再逐条占版面
-    expect(live.find('.sdp-diff__rest').text()).toBe('其余沿用基线：思考模式 / 推理强度 / temperature / 逻辑重试');
+    // 2026-11-05 用户「不要这种文案，这属于什么文案」：没改的项不再逐一点名——
+    // 基线行已写明基线是谁、差异列表已只列改过的项，再把「其余」数一遍属自述装配（负空间复述）。
+    expect(live.find('.sdp-diff__rest').exists()).toBe(false);
+    expect(live.text()).not.toContain('其余沿用基线');
     expect(wrapper.find('.sdp-nav').exists()).toBe(false);
 
     // 详细分段只在弹层里；打开后当前值仍读段头
