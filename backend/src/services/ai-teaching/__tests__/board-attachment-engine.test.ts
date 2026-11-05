@@ -297,3 +297,88 @@ describe('#243 白板防复读：引擎真实入参下守卫必须生效', () =>
     expect(assistant.figures[0].spec.title).not.toBe('本轮新图')
   })
 })
+
+/**
+ * #244：看板指代守卫必须读得到「本轮到底有没有板」。
+ *
+ * 守卫单测只喂纯函数参数，证明不了引擎真实交给校验器的那份 input。这里抓
+ * `executeSkill(teachingTurnAgentDefinition, turnInput, …)` 的实际入参，再用**真实**
+ * 校验器（jest.requireActual，模块本身被本文件 mock 成空定义）对它跑一次：
+ * 无板回合的 boardContext 是「本任务暂无板书」提示串（非空），旧判据 `!boardContext`
+ * 恒为 false → 永不触发；现在靠 boardPresent 结构化信号判定。
+ */
+describe('#244 看板指代守卫：引擎真实入参', () => {
+  const realValidator = jest.requireActual('../../../skills/teaching-turn')
+    .validateTeachingTurnOutput as (parsed: any, input: any) => { valid: boolean; failureReason?: string }
+  const DEIXIS_REPLY = '左边那栏是你原来的问法，右边第 4 条给了个答案。'
+
+  function capturedTurnInput() {
+    const call = mockTurnSkill.mock.calls[0] as unknown as [unknown, any]
+    return call[1]
+  }
+
+  function artifactWith(reply: string) {
+    return {
+      reply,
+      analysis: { understanding: 0.6, engagement: 0.7, confusionPoints: [] },
+      knowledge: { currentPoint: '光反应与暗反应', points: [] },
+      control: {},
+      pedagogy: { strategies: ['questioning'] },
+    }
+  }
+
+  it('无板回合：boardPresent=false，且真实校验器对指代 reply 判失败', async () => {
+    await runTurn(sessionRecord(null as never, [
+      { role: 'user', content: '开始吧', timestamp: new Date(Date.now() - 120_000).toISOString() },
+    ]), '这题怎么想？')
+
+    const input = capturedTurnInput()
+    expect(input.boardPresent).toBe(false)
+    expect(input.boardContext).toContain('本任务暂无板书')
+
+    const verdict = realValidator(artifactWith(DEIXIS_REPLY), input)
+    expect(verdict.valid).toBe(false)
+    expect(verdict.failureReason).toBe('TEACHING_TURN_BOARD_DEIXIS_WITHOUT_BOARD')
+  })
+
+  it('有板回合：boardPresent=true，同样的指代 reply 放行（不得修过头）', async () => {
+    await runTurn(sessionRecord(boardAt(1), [
+      { role: 'user', content: '开始吧', timestamp: new Date(Date.now() - 120_000).toISOString() },
+    ]), '这块板在讲什么？')
+
+    const input = capturedTurnInput()
+    expect(input.boardPresent).toBe(true)
+    expect(input.boardContext).not.toContain('本任务暂无板书')
+
+    const verdict = realValidator(artifactWith(DEIXIS_REPLY), input)
+    expect(verdict.valid).toBe(true)
+  })
+
+  it('首版空壳矩阵（degenerate，永不下发）→ boardPresent=false，指代 reply 判失败', async () => {
+    // 学生屏幕上没有板，但 board.figure 非空、describeBoardForTeacher 也照常描述它。
+    // 若这里算「有板」，模型就会指着不存在的板讲「左边那栏」——与 #244 同一现象。
+    const cells: Array<{ r: number; c: number; tone: string }> = []
+    for (let r = 0; r < 2; r += 1) for (let c = 0; c < 2; c += 1) cells.push({ r, c, tone: 'hit' })
+    const degenerate = openBoard('task-1', {
+      kind: 'matrix',
+      spec: { title: '全格已标出', rowLabels: ['A', 'B'], colLabels: ['x', 'y'], cells },
+    })
+    expect(degenerate.figure).not.toBeNull()
+
+    const previous: any[] = [
+      { role: 'user', content: '开始吧', timestamp: new Date(Date.now() - 120_000).toISOString() },
+    ]
+    const { assistant } = await runTurn(sessionRecord(degenerate, previous), '这题怎么想？')
+
+    // 引擎确实没下发这块板
+    expect(assistant.figures).toBeUndefined()
+
+    const input = capturedTurnInput()
+    expect(input.boardPresent).toBe(false)
+    expect(input.boardContext).toContain('本任务暂无板书')
+
+    const verdict = realValidator(artifactWith(DEIXIS_REPLY), input)
+    expect(verdict.valid).toBe(false)
+    expect(verdict.failureReason).toBe('TEACHING_TURN_BOARD_DEIXIS_WITHOUT_BOARD')
+  })
+})
