@@ -291,7 +291,9 @@
   --text-muted: var(--mk-muted);
   --text-disabled: var(--neutral-500);
   --text-inverse: var(--neutral-950);
-  --text-on-primary: #141415;
+  /* 2026-11-05 用户终裁「主按钮蓝底白字」：暗色档 primary 同步收深（见 tokens.css 品牌交互色注释），
+     白字对 #2f6ae0 达 4.9:1 AA；原 #141415 暗字 pairing 已废 */
+  --text-on-primary: #FFFFFF;
   /* 已删除（死别名清理）：--text-on-success / -warning / -danger 及 *-light / -info-light
      七枚暗色档（随亮色档同删）。 */
 

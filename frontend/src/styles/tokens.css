@@ -362,12 +362,16 @@
 
   --wf-overlay: rgba(3, 7, 14, 0.62);
 
-  /* ---- 品牌 / 交互色（暗色降饱和提亮） ---- */
-  --wf-color-primary: #5b8def;
-  --wf-color-primary-light: #8db3fa;
-  --wf-color-primary-lighter: #a8c5fc;
-  --wf-color-primary-dark: #3f74d6;
-  --wf-color-primary-darker: #2f6ae0;
+  /* ---- 品牌 / 交互色 ----
+     2026-11-05 用户终裁「深色模式主按钮蓝底白字」：暗色档亮蓝 #5b8def 配白字对比仅
+     3.2:1（不达 AA 4.5:1），配暗字 #10131a（5.8:1）读作「蓝底黑字」被用户否掉——
+     主色收敛回品牌唯一交互色 #2f6ae0（白字 4.9:1 达 AA），亮暗两主题同蓝；
+     hover/pressed 链恢复亮色档同款（base 变深后原暗色档 hover 值已不构成层级） */
+  --wf-color-primary: #2f6ae0;
+  --wf-color-primary-light: #5a94f8;
+  --wf-color-primary-lighter: #8db3fa;
+  --wf-color-primary-dark: #1f57cc;
+  --wf-color-primary-darker: #1843a3;
 
   --wf-color-secondary: #6ec5e3;
   --wf-color-secondary-light: #96d5ec;
@@ -409,7 +413,9 @@
   --wf-text-muted: #afb1b6;
   --wf-text-disabled: #7a7e85;
   --wf-text-inverse: #141415;
-  --wf-text-on-primary: #10131a;
+  /* 2026-11-05 用户终裁「主按钮蓝底白字」：随 --wf-color-primary 收深至 #2f6ae0，
+     白字 4.9:1 达 AA（原 #10131a 暗字 pairing 已废，见上方品牌交互色注释） */
+  --wf-text-on-primary: #ffffff;
 
   --wf-border-default: #36373c;
   --wf-border-light: #2a2b2d;

@@ -1,29 +1,23 @@
 {
   "hex": {
     "src/views/admin-redesign/AchIcon.vue": 3,
-    "src/views/admin-redesign/ApiConfig.vue": 6,
-    "src/views/admin-redesign/AuditLogs.vue": 8,
-    "src/views/admin-redesign/ExecLogs.vue": 7,
-    "src/views/admin-redesign/LearnerDetail.vue": 2,
-    "src/views/admin-redesign/PromptEvalPanel.vue": 2,
+    "src/views/admin-redesign/ApiConfig.vue": 2,
+    "src/views/admin-redesign/ExecLogs.vue": 6,
     "src/views/admin-redesign/RunStateBadge.vue": 16,
     "src/views/admin-redesign/session-cockpit/RunStatusPanel.vue": 2,
     "src/views/admin-redesign/SessionCockpit.vue": 34,
     "src/views/admin-redesign/Shell.vue": 1,
     "src/views/admin-redesign/skill-design/engineering-tab.vue": 11,
     "src/views/admin-redesign/skill-design/protocol-tab.vue": 7,
-    "src/views/admin-redesign/skill-design/runtime-tab.vue": 1,
     "src/views/admin-redesign/skill-design/trial-tab.vue": 17,
     "src/views/admin-redesign/skill-design/versions-tab.vue": 4,
     "src/views/admin-redesign/Skills.vue": 1,
     "src/views/admin-redesign/Users.vue": 1,
     "src/views/HomeNext.vue": 2,
-    "src/views/v2/V2AuthLayout.vue": 1,
     "src/views/v2/V2LearningPage.vue": 27,
     "src/views/v2/V2LearningState.vue": 1,
     "src/views/v2/V2Login.vue": 1,
-    "src/components/chat/MessageActions.vue": 1,
-    "src/components/ui/ToastHost.vue": 4
+    "src/components/chat/MessageActions.vue": 1
   },
   "mediaSpacing": {
     "src/styles/mk-primitives.css": 35,
@@ -33,7 +27,7 @@
     "src/styles/mk-primitives.css": 11
   },
   "baseSmallFont": {
-    "src/styles/mk-primitives.css": 5
+    "src/styles/mk-primitives.css": 4
   },
   "radius": {
     "src/views/v2/V2Dashboard.vue": 1,
@@ -70,7 +64,8 @@
       "kp-btn--mastered",
       "kp-btn--retry",
       "learn__init",
-      "learn__init-error"
+      "learn__init-error",
+      "msg__replies"
     ],
     "src/views/v2/V2LearningPathDetail.vue": [
       "crumbs__toggle",

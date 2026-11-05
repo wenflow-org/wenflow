@@ -154,7 +154,8 @@
       <!-- 左：信息清单（移动端默认折叠为顶栏，点击展开；桌面端恒展开） -->
       <aside class="panel" :class="{ 'panel--collapsed': !panelExpanded }">
         <button type="button" class="panel__head" :aria-expanded="panelExpanded" @click="togglePanel">
-          <strong>目标信息</strong>
+          <!-- 「目标」+可折叠「信息」：窄屏收进 6/7 计数后胶囊宽度紧张，短标签让位 -->
+          <strong>目标<span class="panel__head-ext">信息</span></strong>
           <span class="panel__count"><span class="panel__count-k">已收集</span> {{ live.filledCount }} / {{ live.totalFields }}</span>
           <span class="panel__caret" aria-hidden="true">{{ panelExpanded ? '▾' : '▸' }}</span>
         </button>
@@ -194,11 +195,13 @@
           <ol class="stage-nav">
             <!-- 第 1 步与左栏 7 项清单的对应关系：澄清期在此直接给出「已收集 N/7」，
                  否则步骤条只说「澄清问题」、面板只说「继续澄清中」，读不出两者是同一步
-                 （2026-10-08 用户侧走查）。窄屏该行与右上「目标信息」按钮共处一行、余量紧张，
+                 （2026-10-08 用户侧走查）。窄屏该行与右上「目标」按钮共处一行、余量紧张，
                  ≤1100 隐藏（见文件末样式块），移动端计数由面板角标承担。 -->
-            <li class="stage-nav__item" :class="stageCls(1)"><i>1</i>澄清问题<span v-if="live.stageIndex === 1" class="stage-nav__sub">已收集 {{ live.filledCount }}/{{ live.totalFields }}</span></li>
-            <li class="stage-nav__item" :class="stageCls(2)"><i>2</i>确认方案</li>
-            <li class="stage-nav__item" :class="stageCls(3)"><i>3</i>生成路径</li>
+            <!-- 极简面包屑（2026-11-05 屏效比）：胶囊叠胶囊退役——步标 i 由 stageMark
+                 给出（已完成=✓ / 进行中=呼吸蓝点 / 未开始=序号），步骤间 CSS「›」连接 -->
+            <li class="stage-nav__item" :class="stageCls(1)"><i>{{ stageMark(1) }}</i>澄清问题<span v-if="live.stageIndex === 1" class="stage-nav__sub">已收集 {{ live.filledCount }}/{{ live.totalFields }}</span></li>
+            <li class="stage-nav__item" :class="stageCls(2)"><i>{{ stageMark(2) }}</i>确认方案</li>
+            <li class="stage-nav__item" :class="stageCls(3)"><i>{{ stageMark(3) }}</i>生成路径</li>
           </ol>
           <!-- 方案被 Esc/关闭后提供重开入口，消除「关掉就找不回」的死路
               （2026-10-31 起与输入区上方的协商入口条同一处理器） -->
@@ -351,8 +354,15 @@
         <!-- 方案协商入口（2026-10-31 一锤定音修复）：proposing 不再自动盖 modal，
              方案先在对话流里完整呈现、可直接回复继续调整（一轮二轮都行）；
              这颗按钮是显式确认入口——点开方案卡审阅，确认动作仍只发生在卡内 -->
+        <!-- 方案预览微卡片（2026-11-05 用户裁定方案 A）：左侧填方案摘要（此前 70% 空黑读作渲染 Bug），
+             副行优先承接 entryCopy.hint（导师追问/自测未答的语境），就绪态给阶段摘要 -->
         <div v-if="loggedIn && live.started && !live.sending && live.stage === 'proposing' && live.proposal && !showProposal" class="proposal-invite">
-          <span class="proposal-invite__hint">{{ entryCopy.hint }}</span>
+          <span class="proposal-invite__doc" aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1.5V8h4.5L14 3.5zM8 12h8v1.5H8V12zm0 4h8v1.5H8V16z"/></svg></span>
+          <div class="proposal-invite__text">
+            <strong class="proposal-invite__title">学习方案 · 待确认</strong>
+            <span v-if="entryCopy.hint" class="proposal-invite__sub">{{ entryCopy.hint }}</span>
+            <span v-else-if="live.proposal?.stages?.length" class="proposal-invite__sub">共 {{ live.proposal.stages.length }} 个阶段 · {{ live.proposal?.outcome || '可直接确认生成路径' }}</span>
+          </div>
           <button type="button" class="btn-primary proposal-invite__btn" @click="openProposalReview">{{ entryCopy.button }}</button>
         </div>
         <!-- 输入区：对话卡内的底条（2026-10-06 归位）——回形针资料入口内置输入框，
@@ -1379,6 +1389,14 @@ function openProposalReview() {
   readOnlyReview.value = false;
 }
 
+/** 面包屑步标（2026-11-05 极简进度条）：已完成=✓（文字压暗不抢焦点）、
+    进行中=空串（CSS 渲染呼吸蓝点）、未开始=序号（暗灰不催促） */
+function stageMark(i: number) {
+  if (live.stageIndex > i) return '✓';
+  if (live.stageIndex === i) return '';
+  return String(i);
+}
+
 function stageCls(i: number) {
   return {
     'stage-nav__item--current': live.stageIndex === i,
@@ -2030,22 +2048,44 @@ function shuffleScenes() {
   font-size: 12px; font-weight: 700; cursor: pointer;
 }
 .chat__show-proposal:hover { background: color-mix(in srgb, var(--blue) 18%, var(--surface)); }
+/* 极简面包屑（2026-11-05 屏效比）：胶囊叠胶囊退役——已完成=青绿 ✓ + 文字压暗（翻篇不抢焦点）、
+   进行中=亮白粗体 + 前置呼吸蓝点 + 正下方 2px 指示条、未开始=暗灰序号，步骤间「›」极细连接 */
 .stage-nav__item {
-  display: inline-flex; align-items: center; gap: 7px;
-  font-size: 12px; font-weight: 700; color: var(--faint);
-  padding: 5px 10px; border-radius: var(--mk-radius-pill);
+  display: inline-flex; align-items: center; gap: 5px;
+  position: relative;
+  font-size: 12px; font-weight: 600; color: var(--faint);
+  padding: 5px 2px;
+}
+.stage-nav__item + .stage-nav__item::before {
+  content: '›';
+  margin-right: 7px;
+  color: var(--faint);
+  opacity: .7;
+  font-weight: 400;
 }
 .stage-nav__item i {
-  width: 17px; height: 17px; border-radius: 50%;
-  background: color-mix(in srgb, var(--line) 60%, transparent); color: var(--faint);
-  font-size: 12px; font-weight: 800; font-style: normal;
-  display: grid; place-items: center;
+  width: auto; height: auto; border-radius: 0; background: none;
+  font-size: 12px; font-weight: 700; font-style: normal;
+  display: inline; place-items: initial;
 }
-.stage-nav__item--current { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 10%, transparent); }
-.stage-nav__item--current i { background: var(--blue); color: var(--text-on-primary); }
-/* done 态：原型 .wf-stagenav__item.is-done —— 浅绿字 + 浅绿底圆（非实绿底白字） */
-.stage-nav__item--done { color: var(--green-ink); }
-.stage-nav__item--done i { background: color-mix(in srgb, var(--green) 16%, transparent); color: var(--green-ink); }
+.stage-nav__item--done { color: var(--muted); }
+.stage-nav__item--done i { color: var(--green-ink); }
+.stage-nav__item--current { color: var(--ink); font-weight: 800; }
+.stage-nav__item--current i {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--blue);
+  animation: stage-dot-breathe 1.6s ease-in-out infinite;
+}
+.stage-nav__item--current::after {
+  content: '';
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 2px;
+  background: var(--blue);
+}
+@keyframes stage-dot-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .35; }
+}
 /* 第 1 步右侧的「已收集 N/7」：把步骤条与左栏 7 项清单的对应关系写在同一步里 */
 .stage-nav__sub { font-size: 12px; font-weight: 600; color: var(--faint); }
 .chat__clear { font-size: 12px; font-weight: 600; color: var(--faint); cursor: pointer; }
@@ -2229,8 +2269,7 @@ function shuffleScenes() {
   grid-template-columns: minmax(0, 1fr) auto;
   grid-auto-flow: dense;
 }
-.msg__content--actions > .msg__bubble,
-.msg__content--actions > .msg__replies { grid-column: 1 / -1; }
+.msg__content--actions > .msg__bubble { grid-column: 1 / -1; }
 .msg__content--actions > .msg-actions {
   grid-column: 2;
   align-self: center;
@@ -2269,8 +2308,8 @@ function shuffleScenes() {
   display: flex; flex-wrap: wrap; gap: 8px;
   margin-left: 40px;
 }
-/* 2026-11-02 用户反馈「快选太宽」：整行大按钮改成自动宽度的胶囊（与历史轮次 .msg__reply 同语言），
-   多个选项并排换行，不再一条占满一整行。 */
+/* 2026-11-02 用户反馈「快选太宽」：整行大按钮改成自动宽度的胶囊，
+   多个选项并排换行，不再一条占满一整行。（历史轮次 .msg__reply 已随「旧选项销毁」退役） */
 .reply {
   display: inline-flex; align-items: center; gap: 7px;
   width: auto; max-width: 100%;
@@ -2305,27 +2344,8 @@ function shuffleScenes() {
   width: auto; height: auto; margin-top: 0; border-radius: 0; background: none;
   color: var(--blue); font-size: 13px; font-weight: 800; line-height: 1.45;
 }
-/* P2-14：历史轮次的快捷补充（随消息渲染，点选填入输入框；选中态跟随输入草稿）。
-   对齐原型 .wf-chip：蓝调胶囊 */
-.msg__replies { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
-.msg__reply {
-  min-height: 38px; padding: 8px 14px;
-  border-radius: var(--mk-radius-pill);
-  border: 1px solid color-mix(in srgb, var(--blue) 32%, transparent);
-  background: color-mix(in srgb, var(--blue) 6%, transparent);
-  color: var(--blue-deep);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-.msg__reply:hover { background: color-mix(in srgb, var(--blue) 12%, transparent); color: var(--blue-deep); }
-.msg__reply--on {
-  border-color: color-mix(in srgb, var(--blue) 72%, transparent);
-  background: color-mix(in srgb, var(--blue) 15%, var(--surface));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--blue) 34%, transparent);
-}
+/* 历史轮次快捷补充（.msg__replies/.msg__reply）已随「旧选项销毁」改造退役（2026-11-05）：
+   活快选由下方 .replies 常驻面板承担，样式同语言见 .reply */
 @media (prefers-reduced-motion: no-preference) {
   .replies { animation: replies-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) both; }
 }
@@ -2340,21 +2360,34 @@ function shuffleScenes() {
 .proposal-invite {
   flex: 0 0 auto;
   margin: 0 16px 8px;
-  padding: 10px 14px;
+  padding: 6px 10px 6px 12px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   border: 1px solid color-mix(in srgb, var(--blue) 34%, transparent);
   border-radius: 12px;
   background: color-mix(in srgb, var(--blue) 8%, var(--surface));
 }
-.proposal-invite__hint {
-  font-size: var(--mk-fs-body);
-  color: var(--mk-muted);
-  min-width: 0;
+/* 方案预览微卡片（2026-11-05 用户裁定方案 A）：左 65% 方案摘要两行（文档图标 + 主标/副标），
+   右侧「查看并确认」——总高 ≈54px，比旧 hint 单行条更薄且信息量更高 */
+.proposal-invite__doc {
+  flex: none;
+  display: grid; place-items: center;
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--blue) 14%, transparent);
+  color: var(--blue-deep);
 }
-.proposal-invite__btn { flex: 0 0 auto; padding: 8px 16px; }
+.proposal-invite__text { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.proposal-invite__title {
+  font-size: 14px; line-height: 1.35; font-weight: 800; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.proposal-invite__sub {
+  font-size: 12px; line-height: 1.35; color: var(--mk-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.proposal-invite__btn { flex: 0 0 auto; padding: 8px 12px; font-size: 12px; }
 
 /* ---------- 生成状态 pill（走查 2026-11-01 P22） ----------
    三档语言：run=蓝描边脉点（与 .proposal__stop 同族的进行态）、done=平静绿档
@@ -2631,16 +2664,7 @@ function shuffleScenes() {
 .proposal__note :deep(.ai-note) {
   font-size: 12px; line-height: 1.5;
 }
-.proposal__supplement { display: grid; gap: 12px; width: 100%; }
-.proposal__supplement-input {
-  border: 1px solid color-mix(in srgb, var(--amber) 45%, transparent);
-  background: color-mix(in srgb, var(--amber) 7%, transparent);
-  border-radius: var(--mk-radius-xl);
-  padding: 12px 14px;
-  font: inherit; font-size: 13px; color: var(--ink);
-  resize: none; outline: none;
-  min-height: 56px;
-}
+/* 浮层内补充表单已退役（2026-11-05 用户裁定：补充改道聊天界面） */
 
 /* 生成中 */
 .spinner {
@@ -2754,20 +2778,17 @@ function shuffleScenes() {
      而它承载的只是一个次要计数。改成柔和的蓝底蓝字，并加一圈 surface 描边（用
      box-shadow 而非 border，不占布局尺寸），让角标与药丸之间有一道干净的呼吸缝。 */
   .panel__count-k { display: none; }
+  /* 「目标 6/7 ▸」（2026-11-05 极简进度条）：6/7 从右上角悬浮角标收进胶囊内部——
+     角标读作「未读消息」且把顶部撑出一截鼓包；内联后省 ~20px 宽、消掉鼓包 */
+  .panel__head-ext { display: none; }
   .panel__count {
-    /* 2026-11-04：原为 right:-5px —— badge 向右外挂 5px，390 宽实测把按钮撑出
-       scrollWidth 85 > clientWidth 80（按钮内容 48+5+11 正好 64 = 80−padding 16，本不溢出）。
-       改贴 0 后 badge 仍压在药丸右上角（上挂 6px 不变），按钮不再产生横向溢出。 */
-    position: absolute; top: -6px; right: 0;
-    min-width: 17px; padding: 0 5px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--blue) 14%, var(--surface));
-    color: var(--blue-deep);
-    /* 字号必须留 12：mobile:spec 的 fonts 口径统计 <12px 的文本，goal 页预算为 0
-       （见 frontend/scripts/check-mobile-spec.mjs）。收形只动底色与描边，不动字号。 */
-    font-size: 12px; font-weight: 800; line-height: 16px;
-    text-align: center;
-    box-shadow: 0 0 0 2px var(--surface);
+    position: static;
+    min-width: 0; padding: 0;
+    background: none; box-shadow: none;
+    border-radius: 0;
+    color: var(--muted);
+    font-size: 12px; font-weight: 700; line-height: 16px;
+    text-align: left;
   }
   .panel--collapsed .panel__body { display: none; }
   .panel:not(.panel--collapsed) .panel__body {
@@ -2815,12 +2836,16 @@ function shuffleScenes() {
   .msg--ai .msg__content { flex: 1; }
   /* 快捷补充改单行横滑（2026-11-05 屏效比）：3 个胶囊折两行吃 84px，单行省 ~46px；
      右侧自然露出半颗胶囊表达「可横滑」，滚动条隐藏降噪 */
-  .replies,
-  .msg__replies { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-  .replies::-webkit-scrollbar,
-  .msg__replies::-webkit-scrollbar { display: none; }
-  .reply,
-  .msg__reply { flex: 0 0 auto; }
+  .replies { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .replies::-webkit-scrollbar { display: none; }
+  .reply { flex: 0 0 auto; }
+  /* 操作条（👍👎🔄📋）收紧（2026-11-05 屏效比）：左对齐贴气泡下缘（不再偏右悬浮）、
+     上下空隙收半——负边距只收视觉空隙，36×36 触控盒不缩（EG20 口径） */
+  .chat .msg__content--actions > .msg-actions {
+    grid-column: 1;
+    justify-content: flex-start;
+    margin: -7px 0 -5px;
+  }
   /* 消息少时贴底：首个子项吃满剩余空间（等价 justify-content:flex-end，但溢出时不会把顶部
      推出可达范围——auto 外边距在无剩余空间时按 0 处理）。短会话下最新一条与快捷补充紧贴输入框，
      视线与拇指都不用上下跑。窄屏专属：桌面要从上往下长（见基础档注释）。 */
@@ -2910,9 +2935,9 @@ function shuffleScenes() {
   .entry { padding: 28px 16px; justify-content: space-evenly; }
   /* 阶段导航在窄屏收紧，给右上角的目标信息按钮腾位置（390 下两者刚好共处一行，
      合计 ~325px ≤ 头部带内容宽 336px） */
-  .stage-nav { gap: 3px; }
-  .stage-nav__item { padding: 4px 5px; font-size: 12px; gap: 4px; min-height: 40px; }
-  .stage-nav__item i { width: 14px; height: 14px; font-size: 12px; }
+  .stage-nav { gap: 2px; }
+  /* min-height 40 与 .panel__head 同高（pill-align 门禁等式）；左右 padding 去掉（无胶囊底） */
+  .stage-nav__item { padding: 4px 2px; font-size: 12px; gap: 4px; min-height: 40px; }
   /* ≤360：非当前阶段只留序号（那三个字的宽度换 4 字标签+计数角标的位置） */
   @media (max-width: 360px) {
     .stage-nav__item:not(.stage-nav__item--current) { font-size: 0; gap: 0; padding: 4px 3px; }

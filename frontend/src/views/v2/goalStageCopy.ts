@@ -60,7 +60,8 @@ export function proposalEntryCopy(awaitingAnswer: boolean, unansweredProbes = 0)
   }
   return {
     hint: '',
-    button: '查看方案',
+    // 2026-11-05 用户裁定：就绪态按钮表达「看完即可确认」的动作闭环（微卡片语境）
+    button: '查看并确认',
   };
 }
 
