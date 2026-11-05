@@ -1333,19 +1333,35 @@ export function buildFramedNormalizedInput(input: any): any {
     .test([surfaceGoal, explicitProblem, ...keyStages].join(' '));
   const planningHints = derivePlanningHints(timeHorizon, timePerSession, timeBudget, timeBudgetCadence, keyStages, timeDimensions, scopeSize, learnerLoadProfile, triage, narrowScopeSignal);
   // 技能性质（2026-10-26）：goal 层 understanding.skill_nature 白名单透传，决定 AI 代跑边界。
-  const skillNature = normalizeSkillNature(input.skillNature);
-  const skillNatureEvidence = normalizeString(input.skillNatureEvidence) || null;
+  // 读取口径是**内层 learnerProfile**（与 producer path.coordinator.ts 写入处、
+  // 以及下游 stage-enrichment 的 learnerProfile.platformJudgment 同一层）。
+  // 顶层仍是兜底：旧快照/外部调用方把这两个键放在 normalizedInput 顶层时行为不变。
+  // 2026-11-05 #242：此处曾只读顶层，内层值被下面的 delete 分支显式抹掉——字段自诞生起从未透传。
+  const rawSkillNature = learnerProfile.skillNature ?? input.skillNature;
+  const rawSkillNatureEvidence = learnerProfile.skillNatureEvidence ?? input.skillNatureEvidence;
+  const skillNature = normalizeSkillNature(rawSkillNature);
+  const skillNatureEvidence = normalizeString(rawSkillNatureEvidence) || null;
   // 平台可判定性（2026-10-26 二拆）：与 skillNature 独立——决定「平台能不能判学习者做对了」。
   // physical_internalized + not_judgeable 时，任务形态只能是「训练计划 + 复盘归因」，
   // 不得编自查卡假装可判定。
-  const platformJudgment = normalizePlatformJudgment(input.platformJudgment);
-  const platformJudgmentEvidence = normalizeString(input.platformJudgmentEvidence) || null;
-  const sensorReadouts = Array.isArray(input.sensorReadouts)
-    ? (input.sensorReadouts as unknown[])
+  const rawPlatformJudgment = learnerProfile.platformJudgment ?? input.platformJudgment;
+  const rawPlatformJudgmentEvidence = learnerProfile.platformJudgmentEvidence ?? input.platformJudgmentEvidence;
+  const rawSensorReadouts = learnerProfile.sensorReadouts ?? input.sensorReadouts;
+  const platformJudgment = normalizePlatformJudgment(rawPlatformJudgment);
+  const platformJudgmentEvidence = normalizeString(rawPlatformJudgmentEvidence) || null;
+  const sensorReadouts = Array.isArray(rawSensorReadouts)
+    ? (rawSensorReadouts as unknown[])
         .map((v) => normalizeString(v))
         .filter((v): v is string => !!v)
         .slice(0, 8)
     : null;
+  // 可观测性（#242 教训）：值存在却归一失败时留痕，不再静默丢弃。
+  if (rawSkillNature !== undefined && rawSkillNature !== null && !skillNature) {
+    console.warn(`[path-framing] skillNature 值无法归一，按缺失处理：${String(rawSkillNature).slice(0, 80)}`);
+  }
+  if (rawPlatformJudgment !== undefined && rawPlatformJudgment !== null && !platformJudgment) {
+    console.warn(`[path-framing] platformJudgment 值无法归一，按缺失处理：${String(rawPlatformJudgment).slice(0, 80)}`);
+  }
   // 校内锚：LLM 抽取口径（2026-09-30 用户拍板「不要走正则，走大模型自身的推理理解」）。
   // goal-conversation 的 understanding.school_anchor → visibleSummary → buildNormalizedInputV1
   // → 此处透传。没有该键（非校内学习者/旧链路）时**不注入**，不做任何关键词匹配兜底。
