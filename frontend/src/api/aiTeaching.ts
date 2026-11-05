@@ -417,7 +417,8 @@ const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, m
  * 「结算现在不可能成功、重试也无意义」的服务端明确拒绝码（finalizeSessionReliably 不做状态补偿）：
  * - 三个收束门禁（teaching-closure.ts #51 P-25）：检查点未答 / 老师末问未回应 / 末次检查未过——
  *   需要用户先回应课内问答，原文有行动指引；
- * - FINALIZATION_SESSION_NOT_CLOSED：自动关课已跑但 wrapup 未落，原文指引「先结束课堂」；
+ * - FINALIZATION_SESSION_NOT_CLOSED：自动关课回来状态机仍未闭合（服务端文案「课堂收束尚未完成，
+ *   请稍后重试」）；不再引导「先结束课堂」——那条路此时必然 409（#239）；
  * - TEACHING_SESSION_STALE：revision 已被在途回合推进，原文指引刷新/重试。
  */
 const FINALIZATION_UNACTIONABLE_ERROR_CODES = new Set([

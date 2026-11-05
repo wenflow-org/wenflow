@@ -1190,8 +1190,12 @@ export class TeachingSessionRepository {
       const step = action === 'complete_task'
         ? 'taskCompletion'
         : action === 'complete_review' ? 'reviewCompletion' : 'sessionClosure';
+      // 收束完成的判据是状态机闭合（status==='completed'），不是 wrapup 是否落库：
+      // 幽灵课按设计把 wrapup 留 NULL（teaching-session-lifecycle.ts 的非正常终态分支），
+      // 若以 wrapup 为准，completed 的幽灵课会一直判成「没结束」→ 幂等重放落到
+      // allowedStatuses 不含 completed 的 409 STATE_CHANGED（#239 的「此后无路」）。
       const stepCompleted = action === 'end_only'
-        ? current.status === 'completed' && !!current.wrapup
+        ? current.status === 'completed'
         : currentFinalization?.[step] === 'completed';
       if (stepCompleted) {
         if (!existingOperation) {
@@ -1238,7 +1242,8 @@ export class TeachingSessionRepository {
         throw new TeachingSessionConflictError('当前课堂状态无法结束', 'TEACHING_SESSION_STATE_CHANGED');
       }
 
-      const baseTeachingState = !currentFinalization && current.status === 'completed' && current.wrapup
+      // 与 stepCompleted 同口径：completed 即状态机闭合，wrapup 可为 NULL（幽灵课，#239）
+      const baseTeachingState = !currentFinalization && current.status === 'completed'
         ? {
             ...(current.teachingState || {}),
             finalization: {
@@ -1559,7 +1564,7 @@ export class TeachingSessionRepository {
     if (session.userId !== userId) {
       throw new TeachingSessionConflictError('无权操作该课堂', 'TEACHING_SESSION_FORBIDDEN');
     }
-    if (session.status !== 'completed' || !session.wrapup) {
+    if (session.status !== 'completed') {
       throw new TeachingSessionConflictError('课堂尚未完成收束，无法补记任务结算', 'FINALIZATION_SESSION_NOT_CLOSED');
     }
 

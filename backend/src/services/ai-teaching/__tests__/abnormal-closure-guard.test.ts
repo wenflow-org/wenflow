@@ -1,8 +1,9 @@
 /**
  * 幽灵课 / 弃跑状态泄漏拦截 + F2 入队侧收紧（2026-10-06 修复轮）。
  *
- * A. 非正常终态（`endReason==='learner-abandoned'` 等）的会话**仍然收束**（状态机照常闭合、wrapup 照常落库、
- *    调用方轮询/清场逻辑不变），但**不写正式轨**：learner_evidence（lesson:completed 事件不带 userId）、
+ * A. 非正常终态（`endReason==='learner-abandoned'` 等）的会话**仍然收束**（状态机照常闭合到 completed，
+ *    wrapup 按设计留 NULL——调用方只能按 status 判定闭合、不得依赖 wrapup，见 #239），
+ *    但**不写正式轨**：learner_evidence（lesson:completed 事件不带 userId）、
  *    learning_metrics（session-wrapup / session_load）、记忆回写（FSRS trace）、误解台账、休眠信号、
  *    检查点留痕、aux 课后刷新链一律跳过，只落一条审计日志。
  * B. `review:completed` 只在 endSession **真正成功**（completed + wrapup，且非弃跑）后入队；
