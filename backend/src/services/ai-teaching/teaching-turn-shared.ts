@@ -39,15 +39,27 @@ export function requireTeachingRevision(revision: number | undefined): number {
   return Number(revision);
 }
 
-export function appendTimestamp(messages: Array<{ role: string; content: string; timestamp?: string; analysis?: any; checkpoint?: boolean; meta?: Record<string, number> | null }>): TeachingSessionMessage[] {
+/**
+ * 给历史消息补时间戳。**必须整体复制、只覆盖 role/content/timestamp**（issue #243）：
+ *
+ * 旧实现按白名单 role/content/timestamp/analysis/checkpoint/meta 重建对象，于是白板消息的
+ * `figures`/`figureSource`（以及 strategies、images、diagrams…）在进入回合内存快照时被整体丢掉。
+ * 下游 `decideBoardAttachment` 正是用这份快照取「上次下发的板版本」基线
+ * （board-state.ts#getLastSentBoardRevision 扫 `figures[].board`），基线因此恒为 null，
+ * 「板没变不重发」的守卫自 2026-10-31 引入起就没生效过——同一张板被挂到每条新消息下。
+ *
+ * 白名单重建还会随字段增补继续丢新字段（同一次实测：strategies 也一并消失），
+ * 所以这里改成复制 + 覆盖：新增的任何业务字段默认保留，只有 timestamp 是「缺了才补」。
+ */
+export function appendTimestamp<T extends { role: string; content: string; timestamp?: string }>(
+  messages: T[],
+): TeachingSessionMessage[] {
   return messages.map((message) => ({
+    ...message,
     role: toMessageRole(message.role),
     content: message.content,
     timestamp: message.timestamp || new Date().toISOString(),
-    ...(message.analysis ? { analysis: message.analysis } : {}),
-    ...(message.checkpoint ? { checkpoint: true } : {}),
-    ...(message.meta && Object.keys(message.meta).length > 0 ? { meta: message.meta } : {})
-  }));
+  }) as TeachingSessionMessage);
 }
 
 export async function buildTeachingTurnInput(
