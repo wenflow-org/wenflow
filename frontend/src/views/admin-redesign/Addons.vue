@@ -57,9 +57,12 @@
                 :aria-label="`${p.name}插件开关`"
                 @update:model-value="togglePlugin(p.id, $event)"
               />
-              <!-- MCP 的入口是「新建服务」；其余能力的入口是服务配置 -->
-              <button v-if="p.id === 'mcp'" type="button" class="mk-btn mk-btn--sm" @click="openToolCreate">新建服务</button>
-              <button v-else type="button" class="mk-btn mk-btn--sm" @click="openConfig(p)">配置</button>
+              <!-- 入口动作与模型卡统一为主色实心按钮（2026-11-05 用户「都统一了」）：
+                   三张模型卡的卡头右组都是 `mk-btn--primary`，这里原先是描边次级钮，
+                   同处卡头右端的同权入口却是两种控件。MCP 的入口是「新建服务」，
+                   其余能力的入口是服务配置。 -->
+              <button v-if="p.id === 'mcp'" type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="openToolCreate">新建服务</button>
+              <button v-else type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="openConfig(p)">配置</button>
             </div>
           </div>
 

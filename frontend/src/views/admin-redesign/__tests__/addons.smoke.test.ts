@@ -172,6 +172,11 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     expect(switches).toHaveLength(4);
     // 开关不再挂「停用后：…」解释型 title
     expect(switches[0].attributes('title')).toBeUndefined();
+    // 卡头右端的入口与三张模型卡统一为主色实心（2026-11-05 用户「都统一了」）
+    const entries = wrapper.findAll('.ac-cap .mk-card__head-right button')
+      .filter((b) => !b.classes().includes('mk-switch'))
+    expect(entries.map((b) => b.text())).toEqual(['配置', '配置', '配置', '新建服务'])
+    expect(entries.every((b) => b.classes().includes('mk-btn--primary'))).toBe(true)
     wrapper.unmount();
   });
 
