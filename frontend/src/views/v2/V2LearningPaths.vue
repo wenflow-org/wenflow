@@ -12,18 +12,12 @@
         </div>
       </transition>
 
-      <!-- 页头按原型 wf-paths__head（index.html 1786-1792）：左 16px 标题 + 右 ghost「新目标」，
-           无 hero 大标题与说明文字；失败态仍隐藏（与失败原因同屏会互相矛盾）。
+      <!-- 页头整块撤除（2026-11-05 屏效比）：顶栏已写「学习路径」，页内 h2「我的学习路径」是
+           同一句复读；「新目标」按钮并入下方搜索/排序/筛选行（一条控制栏读完，省 2 行 ≈100px）。
+           失败态仍隐藏（与失败原因同屏会互相矛盾）。
            「新建目标」每屏只保留一个入口（2026-10-09 用户反馈：空态 CTA、列表尾虚线条
            与页头短钮三处并存是重复）——空态显示居中「规划第一个目标」，有路径后本按钮
            是唯一入口（原列表尾 wf-newpath 虚线条已随本次反馈移除）。 -->
-      <div v-if="!loadError" class="paths__head">
-        <h2>我的学习路径</h2>
-        <button v-if="cards.length > 0" type="button" class="paths__new-goal" @click="router.push('/goal-conversation')">
-          <Plus :size="15" :stroke-width="2" aria-hidden="true" />
-          新目标
-        </button>
-      </div>
 
       <!-- 加载 -->
       <div v-if="loading" class="paths__loading">
@@ -41,7 +35,9 @@
       />
 
       <template v-else>
-        <!-- 筛选（无任何路径时整行隐藏：空态下五个「0」芯片是噪音，2026-09-24 全新账号走查发现） -->
+        <!-- 控制行（2026-11-05 屏效比）：搜索 + 排序 +「新目标」并成一条；筛选在桌面是同一条
+             芯片行的下一行、移动端收进按钮（见下方 .paths__filter-btn）。
+             无任何路径时整行隐藏：空态下五个「0」芯片是噪音（2026-09-24 全新账号走查发现） -->
         <div v-if="cards.length" class="filters">
           <button
             v-for="f in filterList"
@@ -73,20 +69,26 @@
               <MkSelect v-model="sort" :options="SORT_OPTIONS" aria-label="排序方式" block />
             </div>
           </label>
+          <button type="button" class="paths__new-goal paths__new-goal--inline" @click="router.push('/goal-conversation')">
+            <Plus :size="15" :stroke-width="2" aria-hidden="true" />
+            新目标
+          </button>
+          <!-- 移动端筛选入口（原独立一行的 .paths__filter-btn 并入本行）：≤1100 才显示 -->
+          <button
+            type="button"
+            class="paths__filter-btn"
+            :aria-expanded="filterSheetOpen ? 'true' : 'false'"
+            @click="filterSheetOpen = true"
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M3 5h18l-7 8v5l-4-2v-3z"/></svg>
+            筛选 · {{ activeFilterLabel }}
+          </button>
         </div>
 
         <!-- 移动端筛选（批13）：芯片行在 375 折两行占首屏 ~9%，≤1100 收进按钮 + 底部弹层；
-             桌面仍用芯片行。单选即点即生效并收起。 -->
-        <button
-          v-if="cards.length"
-          type="button"
-          class="paths__filter-btn"
-          :aria-expanded="filterSheetOpen ? 'true' : 'false'"
-          @click="filterSheetOpen = true"
-        >
-          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M3 5h18l-7 8v5l-4-2v-3z"/></svg>
-          筛选 · {{ activeFilterLabel }}
-        </button>
+             桌面仍用芯片行。单选即点即生效并收起。
+             2026-11-05 屏效比：按钮挪进 .paths__tools 控制行（与搜索/排序/新目标同一行），
+             不再自己占一整行大胶囊。 -->
         <div v-if="filterSheetOpen" class="paths__filter-mask" @click.self="filterSheetOpen = false">
           <div class="paths__filter-sheet" role="dialog" aria-label="筛选路径">
             <div class="paths__filter-head">
@@ -638,9 +640,8 @@ onBeforeUnmount(() => {
   padding: 24px 28px 48px;
   display: grid; gap: 18px;
 }
-/* 页头按原型 wf-paths__head（718-719）：左标题、右 ghost 按钮 */
-.paths__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.paths__head h2 { margin: 0; font-size: 16px; font-weight: 800; letter-spacing: -0.01em; }
+/* 页头已撤除（2026-11-05 屏效比：页内 h2「我的学习路径」与顶栏「学习路径」复读）；
+   「新目标」并入下方搜索/排序控制行 */
 /* ghost「新目标」＝原型 wf-btn--ghost（surface 底 + line 描边 + muted 字） */
 .paths__new-goal {
   display: inline-flex; align-items: center; gap: 6px;
@@ -848,8 +849,14 @@ onBeforeUnmount(() => {
 
 @media (max-width: 1100px) {
   .paths__main { padding: 16px 14px 32px; }
-  /* 页头按原型常驻 16px：窄屏给按钮留行，整行可换行不挤压 */
-  .paths__head { flex-wrap: wrap; }
+  /* 控制行窄屏两行：搜索独占第一行（满宽，输入的明确主位），
+     排序＋新目标＋筛选三个控制在第二行等距排开——原先是「搜索+排序」+「新目标」+
+     「筛选」三行，收成两行后首屏多露半张路径卡（2026-11-05 屏效比） */
+  .paths__tools { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+  .paths__search { grid-column: 1 / -1; flex: 1 1 auto; max-width: none; }
+  .paths__sort { margin-left: 0; justify-content: center; min-width: 0; }
+  .paths__new-goal--inline { margin-left: 0; justify-content: center; }
+  .paths__filter-btn { justify-content: center; }
   /* 触诊下限（mobile:spec lt44 只紧不松）：搜索框/排序在 375 抬到 44px */
   .paths__search { min-height: 44px; }
   .paths__search input { min-height: 44px; }
@@ -988,7 +995,8 @@ onBeforeUnmount(() => {
 @media (max-width: 1100px) {
   .filters { display: none; }
   /* 移动端触诊下限 44（mobile:spec 只紧不松）：外观仍是 chip，只高一档 */
-  .paths__filter-btn { display: inline-flex; min-height: 44px; }
+  /* 44 触控带保留；white-space:nowrap 阻止「筛选 · 全部」在 114px 列里折成两行（实测 55px 高） */
+  .paths__filter-btn { display: inline-flex; min-height: 44px; white-space: nowrap; overflow: hidden; }
   /* 菜单项进 44 触控带：弹出层是悬浮的，点偏了没有 hover 兜底 */
   .pcard__menu { min-width: 168px; }
   .pcard__menu-item { min-height: 44px; }

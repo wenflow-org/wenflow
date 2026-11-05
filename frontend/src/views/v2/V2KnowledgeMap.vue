@@ -17,7 +17,10 @@
         </div>
       </div>
 
-      <p v-if="narrowedNote" class="km__note">{{ narrowedNote }}</p>
+      <!-- 说明框已撤（2026-11-05 屏效比）：蓝边通栏 66px 只讲「共 N 条路径、N 个节点、
+           当前展示哪条」——图卡统计行（mk-ge__stats）与路径轨已各自常驻同一组数字，
+           本行是同屏第三份。当前路径由轨道上高亮芯片 + 图卡标题承担 -->
+      <p v-if="narrowedNote" class="km__note visually-hidden">{{ narrowedNote }}</p>
 
       <!-- 卡壳（border / radius / padding 10px 10px 4px）落在内部 .mk-ge__card 上：
            原型里 wf-rail 与 .wf-graph 是兄弟，路径 chip 要露在图卡**外面**，
@@ -190,16 +193,10 @@ onMounted(async () => {
   /* 原型 .wf-km__hero h1 = 21px（全站 h1 档随原型走；移动端仍落 18px 全站约定） */
   font-size: 21px;
 }
+/* 说明框视觉已撤（2026-11-05 屏效比）：内容仅留给读屏（visually-hidden 全局类），
+   不再占 66px 视觉高度——同屏第三份数字（图卡统计行 + 路径轨已各有） */
 .km__note {
-  margin: 0 0 var(--mk-space-4);
-  padding: var(--mk-space-3) var(--mk-space-4);
-  border: 1px solid var(--mk-line);
-  border-left: 3px solid var(--mk-blue);
-  border-radius: var(--mk-radius-md);
-  background: var(--mk-surface-2);
-  font-size: var(--mk-fs-12_5);
-  line-height: 1.6;
-  color: var(--mk-muted);
+  margin: 0;
 }
 .km__card {
   min-width: 0;

@@ -7,26 +7,26 @@
            21px 问候独占一行 + 下方 12.5px 日期行；副标是 Vue 多出的功能，降级为日期行内的
            行内续写（不新增第三行），整行排不下时靠日期行的省略号截断 -->
       <div v-if="!loadError" class="greet">
+        <!-- 眉题行（2026-11-05 屏效比）：日期与连续天数同一行——移动端原先被拆成上下两行
+             （flex-direction:column 各占一行，白吃 ~40px），合并后日期在左、药丸在右，
+             大标题（问候语）在其下，首屏立刻多出一行可用高度 -->
+        <div class="greet__eyebrow">
+          <span class="greet__date">{{ dateText }}<template v-if="greetSub && !tipVisible"> · <span class="greet__sub">{{ greetSub }}</span></template></span>
+          <div class="streak" :class="{ 'streak--off': streakDays === 0 }" title="连续学习天数">
+            <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67zM11.71 19c-1.78 0-3.22-1.4-3.22-3.14 0-1.62 1.05-2.76 2.81-3.12 1.77-.36 3.6-1.21 4.62-2.58.39 1.29.59 2.65.59 4.04 0 2.65-2.15 4.8-4.8 4.8z"/></svg>
+            <!-- 走查 2026-10-08 #56：0 态原文案「点亮连续记录」是动词短语，药丸外形 + 动宾
+                 结构读作可点操作，实际是不可点的状态徽章（无 click、cursor:auto）。
+                 改成与有天数档同构的陈述句「连续 0 天」，不再冒充按钮；
+                 真正的行动提示在本周节奏卡的 streakNote（「今天学 10 分钟，开始连续记录」）。 -->
+            <template v-if="streakDays > 0">连续 {{ streakDays }} 天</template>
+            <template v-else>连续 0 天</template>
+          </div>
+        </div>
         <div class="greet__main">
           <!-- P3-39（设计评审）：视觉主标题原是无语义 strong，h1 挂在今日行动卡 14px 任务标题上
                （大纲与视觉权重倒挂）——greet 升 h1（读屏大纲恢复页面结构，样式不变）、
                今日行动卡 action__title 降 h2 -->
           <h1 class="greet__headline">{{ greetHeadline }}</h1>
-          <span class="greet__date">{{ dateText }}<template v-if="greetSub && !tipVisible"> · <span class="greet__sub">{{ greetSub }}</span></template></span>
-        </div>
-        <!-- 连续学习天数的唯一出处：0 态也给一句话，不整块消失（2026-09-25 去重：
-             原侧栏 mini 卡把同一个数字再显示一遍，现 mini 只留鼓励文案）。
-             P2-21（2026-10-04 全站评审 confirmed）：「今天还没开始」后缀撤除——它与本周节奏卡
-             week__note「今天还没点亮 · 学一会儿就能续上」条件恒同、同陈述双写；
-             提醒单源留给 week__note（streakNote 逻辑保留），徽章只报天数 -->
-        <div class="streak" :class="{ 'streak--off': streakDays === 0 }" title="连续学习天数">
-          <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67zM11.71 19c-1.78 0-3.22-1.4-3.22-3.14 0-1.62 1.05-2.76 2.81-3.12 1.77-.36 3.6-1.21 4.62-2.58.39 1.29.59 2.65.59 4.04 0 2.65-2.15 4.8-4.8 4.8z"/></svg>
-          <!-- 走查 2026-10-08 #56：0 态原文案「点亮连续记录」是动词短语，药丸外形 + 动宾
-               结构读作可点操作，实际是不可点的状态徽章（无 click、cursor:auto）。
-               改成与有天数档同构的陈述句「连续 0 天」，不再冒充按钮；
-               真正的行动提示在本周节奏卡的 streakNote（「今天学 10 分钟，开始连续记录」）。 -->
-          <template v-if="streakDays > 0">连续 {{ streakDays }} 天</template>
-          <template v-else>连续 0 天</template>
         </div>
       </div>
 
@@ -117,6 +117,16 @@
                   <button type="button" class="link-muted action__rest" @click="setResting(true)">今天休息</button>
                 </div>
               </div>
+              <!-- 路径归属（2026-11-05 屏效比）：原独立的右栏路径进度卡（含标题/阶段/进度/详情链）
+                   与行动卡讲的是同一条路径同一阶段，合并为行动卡底部一条分隔栏——
+                   省一整张卡（移动端 ≥140px），路径信息仍然一处可见 -->
+              <div v-if="primaryPath" class="action__path">
+                <span class="action__path-title" :title="primaryPath.title">
+                  所属路径：{{ primaryPath.title }}
+                  <span class="action__path-pct">整体 {{ primaryPath.percent }}%</span>
+                </span>
+                <router-link :to="`/learning-path/${primaryPath.id}`" class="action__path-link">路径详情 ›</router-link>
+              </div>
             </template>
           </section>
 
@@ -181,7 +191,9 @@
 
           <!-- 路径进度条卡（2026-09-27 信噪比重设计）：5 阶段全量标题是路径详情页的内容，
                学习台只保留「当前位置 + 一句话 + 去向」；阶段全量列表与预估投入见详情页 -->
-          <aside v-if="primaryPath" class="card path">
+          <!-- 路径进度条卡已并入行动卡页脚（2026-11-05 屏效比）：两卡同讲一条路径同一阶段，
+               合并后移动端省一整张卡；此 aside 仅保留给「无今日任务」等边界场景 -->
+          <aside v-if="primaryPath && pageState !== 'active'" class="card path">
             <div class="path__head">
               <div class="path__title">
                 <strong>{{ primaryPath.title }}</strong>
@@ -333,7 +345,6 @@
               <div><small>总时长</small><strong>{{ daySheet.minutes }} 分钟</strong></div>
               <div><small>学习次数</small><strong>{{ daySheet.count }} 次</strong></div>
               <div><small>状态摘要</small><strong>{{ daySheet.stateSummary }}</strong></div>
-              <div class="sheet__summary-wide"><small>主要内容</small><strong>{{ daySheet.primaryTask }}</strong></div>
             </div>
 
             <!-- 空日 analysis 与「学习记录」空态同文案，重复展示（2026-09-26 走查 07 号截图） -->
@@ -1234,7 +1245,10 @@ onMounted(loadAll);
   .dash__main { max-width: 1260px; }
 }
 /* 问候行：两行结构（21px 问候 + 12.5px 日期行），右侧琥珀 streak 药丸 */
-.greet { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 2px 2px 0; }
+.greet { display: grid; gap: 3px; padding: 2px 2px 0; }
+/* 眉题行（2026-11-05 屏效比）：日期（可省略）在左、连续天数药丸在右，同一行；
+   原先 .greet 是 space-between 的两列 + 移动端 column，日期与药丸各占一行 */
+.greet__eyebrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
 /* min-width: 0：让日期行的省略号接管「排不下」——副标 inline 续写在后面，
    整行 nowrap，排不下时截断而不是把 streak 药丸顶出首屏 */
 .greet__main { display: grid; gap: 3px; min-width: 0; }
@@ -1254,7 +1268,8 @@ onMounted(loadAll);
   font-size: 12px; font-weight: 700; color: var(--amber);
   background: color-mix(in srgb, var(--amber) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--amber) 34%, transparent);
-  padding: 7px 11px; border-radius: var(--mk-radius-pill);
+  /* padding 7/11 → 4/9（2026-11-05 屏效比）：眉题行内与 12.5px 日期同高，药丸不再比文字高一头 */
+  padding: 4px 9px; border-radius: var(--mk-radius-pill);
 }
 .streak--off {
   /* 走查 2026-10-08 #56：0 态 12px 文字原用 --faint，叠在 10% 药丸底上仅 4.22:1
@@ -1270,15 +1285,16 @@ onMounted(loadAll);
 /* 2026-11-04 走查：flex-start 是给两行文本钉首行用的，但关闭钮 44px 热区只收了上边距，
    把行高撑到 36px——单行文本被钉在顶上（上留白 11px / 下留白 27px）。改垂直居中。 */
 .tip {
-  display: flex; align-items: center; gap: 9px;
-  padding: 11px 12px;
+  display: flex; align-items: center; gap: 8px;
+  /* 11/12 → 8/12（2026-11-05 屏效比）：单行小字横幅，AI 声明行高度对齐 */
+  padding: 8px 12px;
   border-radius: var(--mk-radius-lg);
   border: 1px solid color-mix(in srgb, var(--blue) 16%, transparent);
   background: color-mix(in srgb, var(--blue) 6%, transparent);
 }
 /* 图标：去掉白色阴影盒，直接着紫（v2 的紫 token 别名是 --accent = --mk-purple） */
 .tip__icon { color: var(--accent); flex: none; display: grid; place-items: center; }
-.tip p { margin: 0; flex: 1; min-width: 0; font-size: 13px; line-height: 1.55; color: var(--ink); }
+.tip p { margin: 0; flex: 1; min-width: 0; font-size: 12px; line-height: 1.5; color: var(--ink); }
 /* 关闭钮：视觉 28px（原型 wf-tip__close）；padding 8 把点击热区扩到 44×44，
    四边 -8 负边距把外占位收回 28px（随 align-items:center 居中），热区仍是 44×44，
    background-clip 让 hover 底只画在 28px 内容盒里 */
@@ -1453,6 +1469,21 @@ onMounted(loadAll);
    落到屏外不可点），子项的收缩/省略在无约束轨道下永远不触发。 */
 .action__foot { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-top: auto; }
 .action__actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+/* 行动卡底栏「所属路径 … 路径详情 ›」（2026-11-05 屏效比：原独立路径卡并入） */
+.action__path {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin-top: auto;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+  font-size: 12px; color: var(--faint);
+  min-width: 0;
+}
+.action__path-title {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.action__path-pct { color: var(--muted); }
+.action__path-link { flex: none; color: var(--blue-deep); font-weight: 700; text-decoration: none; }
+.action__path-link:hover { text-decoration: underline; }
 .btn-primary {
   display: inline-flex; align-items: center; gap: 7px;
   padding: 11px 22px; border-radius: var(--mk-radius-xl);
@@ -1613,7 +1644,9 @@ onMounted(loadAll);
   /* 卡内标题按基线收到 14px——16px 比路径页卡标题（用户点过名的 15.5px 档）还大一档 */
   .action__title { font-size: 14px; line-height: 1.4; }
   .dash__main { padding: 16px 14px 32px; }
-  .greet { flex-direction: column; align-items: flex-start; gap: 8px; }
+  /* 眉题行在窄屏保持同行（原 .greet{flex-direction:column} 把日期与药丸拆成两行，
+     白吃 ~40px）；日期优先省略，药丸 flex:none 不缩 */
+  .greet { gap: 2px; }
 }
 </style>
 
@@ -1707,19 +1740,31 @@ a.btn-primary { text-decoration: none; }
   display: grid; gap: 14px;
   align-content: start;
 }
+/* 三列数据条（2026-11-05 屏效比「干掉碎盒子」）：原 2 列格子 + 各自带框的 4 个盒子占 3 行
+   （≈260px）；改成一条横条内三列、仅竖线分隔——总时长 / 学习次数 / 状态摘要在同一行读完。
+   「主要内容」独立框已删（下面的「当天观察」「学习记录」已复述同一句话） */
 .sheet__summary {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
-}
-.sheet__summary > div {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 12px; /* 圆角阶梯：面板 */
-  padding: 11px 13px;
-  display: grid; gap: 3px;
+  padding: 10px 0;
 }
-.sheet__summary-wide { grid-column: 1 / -1; }
+.sheet__summary > div {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0 12px;
+  display: grid; gap: 2px;
+  min-width: 0;
+}
+.sheet__summary > div + div { border-left: 1px solid var(--line); }
 .sheet__summary small { font-size: 12px; color: var(--faint); font-weight: 700; }
-.sheet__summary strong { font-size: 14px; line-height: 1.4; }
+.sheet__summary strong {
+  font-size: 14px; line-height: 1.4;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .sheet__block {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -1756,10 +1801,12 @@ a.btn-primary { text-decoration: none; }
   padding: 4px 10px; border-radius: var(--mk-radius-pill);
   white-space: nowrap;
 }
-.scard__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+/* 标签行收紧（2026-11-05 屏效比）：4 个胶囊原先折成两行——字号受 mobile:spec 的 12px
+   下限约束不能降，改收内边距与间距：3/9 → 2/7、gap 6 → 4，402 视口四个并排一行 */
+.scard__chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .chip {
   font-size: 12px; font-weight: 700;
-  padding: 3px 9px; border-radius: var(--mk-radius-pill);
+  padding: 2px 7px; border-radius: var(--mk-radius-pill);
   background: var(--canvas); color: var(--muted);
 }
 .chip--blue { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 10%, transparent); }

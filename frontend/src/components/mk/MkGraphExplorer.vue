@@ -1450,6 +1450,11 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   margin: 0;
   padding: 0;
   list-style: none;
+  /* 双列网格（2026-11-05 屏效比）：前置/后继各有 6 条时逐条整行拉成 12 行——
+     概念名多为 6~9 字，两列并排高度直接减半；触控盒不变（item 仍 padding 10/7） */
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 6px;
 }
 .mk-ge__rel-item {
   display: block;
@@ -1494,19 +1499,26 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   /* 路径 chip 桌面 38px（原型档）；触屏抬到 44 —— 轨道里 chip 数量 = 路径数 +1，
      每个 <44 都吃 mobile:spec 的 lt44 预算（kmap 页预算 7，旧 select 是 44 不占额度） */
   .mk-ge__chip { min-height: 44px; }
-  /* 窄屏路径轨改多行平铺：脚本侧 railBounded 在 ≤900 恒 false（不收「更多」），
-     这里让轨换行铺开全部 chip、不再横滚——390 轨宽仅 ~358px，横滚时屏外路径
-     只有一道很淡的右缘渐隐提示，学习者不好选（2026-10-15 走查）。
-     横滚相关的两端渐隐/scroll-margin 在窄屏失去意义，一并关掉。 */
+  /* 窄屏路径轨（2026-11-05 用户裁定反转 2026-10-15 的多行平铺）：5 条路径平铺占 4 行 208px，
+     把图谱画布挤到首屏以下——改回**单行横滑**（两侧渐隐 + 已选 chip 自动滚进视口，
+     可发现性由渐隐与「更多」出口承担）；chip 触控仍 44，不破 mobile:spec。 */
   .mk-ge__rail {
-    flex-wrap: wrap;
-    overflow-x: visible;
+    flex-wrap: nowrap;
+    overflow-x: auto;
   }
-  .mk-ge__rail--fade-l,
-  .mk-ge__rail--fade-r,
+  /* 单行横滑下两端渐隐必须回来：它是「屏外还有路径」的唯一静态提示
+     （2026-10-15 关掉它是因为当时轨不横滚；现改回横滚，一并恢复 mask） */
+  .mk-ge__rail--fade-r {
+    mask-image: linear-gradient(to right, black calc(100% - 32px), transparent);
+    -webkit-mask-image: linear-gradient(to right, black calc(100% - 32px), transparent);
+  }
+  .mk-ge__rail--fade-l {
+    mask-image: linear-gradient(to right, transparent, black 32px);
+    -webkit-mask-image: linear-gradient(to right, transparent, black 32px);
+  }
   .mk-ge__rail--fade-l.mk-ge__rail--fade-r {
-    mask-image: none;
-    -webkit-mask-image: none;
+    mask-image: linear-gradient(to right, transparent, black 32px, black calc(100% - 32px), transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, black 32px, black calc(100% - 32px), transparent);
   }
   /* 与 script 的 scrollSelectedChip 配套：chip 被**平台**自动滚进视口时（焦点落在一张卡片上，
      平台会把它滚到光标处；或宿主在轨尾钉进一枚新 chip），把落点边界设在 chip 的左缘

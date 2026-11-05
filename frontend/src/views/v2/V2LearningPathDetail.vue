@@ -215,6 +215,10 @@
                       >{{ refLabel(ref) }}</button>
                     </small>
                   </div>
+                  <!-- 操作区（2026-11-05 屏效比「按行重排」）：原按钮与标题同排（24px 1fr auto auto），
+                       窄屏两枚按钮把标题挤成 4 行竖条——标题独占整宽，按钮统一落到任务项末尾的
+                       .task__ops 行（右对齐），标题 4 行→2 行 -->
+                  <div class="task__ops">
                   <button type="button" v-if="task.id === currentTask?.id && canLearn" class="task__cta" @click="goLearn(task.id)">
                     {{ task.status === 'in_progress' ? '继续学习' : '开始学习' }}
                   </button>
@@ -234,6 +238,7 @@
                     :aria-expanded="editingTaskId === task.id"
                     @click="toggleTaskEditor(task.id)"
                   >微调</button>
+                  </div>
                   </div>
                   <!-- #64 P-39：手动结构编辑（插 / 延 / 缩 / 删）。顺序权威=subtasks.order，保存后静默刷新。 -->
                   <div v-if="editingTaskId === task.id" class="task-edit" role="group" aria-label="任务微调">
@@ -270,21 +275,12 @@
                「进行到哪」（当前任务 + 接下来合并）／「学习资料」（资料 + 原文预览合并）／
                「设计意图」（默认折叠，依据型信息）；「路径状态」空态卡删除（hero 指标已覆盖） -->
           <aside class="side">
-            <section v-if="currentTask || nextTasks.length" class="card sidecard" :class="{ 'sidecard--current': currentTask }">
-              <span class="kicker">进行到哪</span>
-              <template v-if="currentTask">
-                <strong>{{ currentTask.title || currentTask.displayLabel }}</strong>
-                <p>完成后还剩 {{ remainingAfterCurrent }} 个任务。</p>
-                <div class="sidecard__meta">
-                  <span class="tag tag--blue">{{ currentTask.estimatedMinutes ? `约 ${currentTask.estimatedMinutes} 分钟` : '—' }}</span>
-                  <span class="tag">{{ taskKindText(currentTask) }}</span>
-                </div>
-                <button type="button" v-if="canLearn" class="btn-ghost btn-primary--block" @click="goLearn(currentTask.id)">
-                  {{ currentTask.status === 'in_progress' ? '继续当前任务' : '开始学习' }}
-                </button>
-              </template>
-              <div v-if="nextTasks.length" class="sidecard__sub">
-                <span class="sidecard__sub-head">接下来</span>
+            <!-- 「进行到哪」卡已瘦身（2026-11-05 用户裁定）：当前任务 + 「继续学习」按钮 + 剩余数
+                 在 hero 与阶段 1 的高亮任务项里已经各出现一次，整块冗余；
+                 只保留「接下来」预告列表（它承载的是阶段 1 之外的信息） -->
+            <section v-if="nextTasks.length" class="card sidecard">
+              <span class="kicker">接下来</span>
+              <div class="sidecard__sub">
                 <ol class="next-list">
                   <li v-for="t in nextTasks" :key="t.id">
                     <strong>{{ t.title || t.displayLabel }}</strong>
@@ -1625,12 +1621,6 @@ const currentStageNo = computed(() => {
   return idx >= 0 ? stageNo(stages.value[idx], idx) : 1;
 });
 
-const remainingAfterCurrent = computed(() => {
-  if (!currentTask.value) return 0;
-  const idx = allTasks.value.findIndex((t) => t.id === currentTask.value?.id);
-  return Math.max(0, allTasks.value.length - idx - 1);
-});
-
 const nextTasks = computed(() => {
   if (!currentTask.value) return [];
   const idx = allTasks.value.findIndex((t) => t.id === currentTask.value?.id);
@@ -1852,7 +1842,6 @@ onBeforeUnmount(() => {
   transition: transform 0.18s ease, background 0.18s ease;
 }
 .btn-primary:not(:disabled):active { transform: scale(0.98); }
-.btn-primary--block { justify-content: center; width: 100%; }
 .btn-ghost {
   padding: 10px 18px; border-radius: var(--mk-radius-xl);
   border: 1px solid var(--line); background: var(--surface);
@@ -1935,12 +1924,21 @@ onBeforeUnmount(() => {
 }
 .stage__body--open .stage__body-inner { padding: 8px 12px 12px; opacity: 1; }
 .task {
-  display: grid; grid-template-columns: 24px 1fr auto auto;
-  align-items: center; gap: 11px;
+  /* 两行结构（2026-11-05 屏效比）：图标 + 正文占第一行（标题独占整宽），
+     操作按钮落到第二行的 .task__ops（右对齐）——原 4 列同排让窄屏标题只剩一半宽，
+     被按钮挤成 4 行竖条。改行后标题 4 行→2 行，任务项变矮 */
+  display: grid; grid-template-columns: 24px minmax(0, 1fr);
+  align-items: start; gap: 6px 11px;
   padding: 9px 10px;
   border-radius: 12px; /* 圆角阶梯：面板 */
   border: 1px solid transparent;
 }
+.task__ops {
+  grid-column: 2;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  margin-top: 4px;
+}
+.task__ops:has(> :only-child) { justify-content: flex-start; }
 /* #64 P-39：任务微调入口（只在校验通过的任务上出现；第 4 列在无按钮的行自动塌成 0 宽） */
 .task__edit {
   font: inherit; font-size: 12px; color: var(--muted);
@@ -2002,7 +2000,6 @@ onBeforeUnmount(() => {
 .sidecard { padding: 16px 18px; display: grid; gap: 10px; align-content: start; }
 .sidecard strong { font-size: 15px; line-height: 1.5; }
 .sidecard p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.65; }
-.sidecard__meta { display: flex; gap: 8px; flex-wrap: wrap; }
 /* 侧栏折叠头（设计意图，2026-09-25）：与问题背景的 bg-head 同款箭头语言 */
 .sidecard__head {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
@@ -2031,7 +2028,6 @@ onBeforeUnmount(() => {
 .material-ref { background: none; border: none; padding: 0 4px 0 0; font-size: 12px; color: var(--blue); cursor: pointer; text-decoration: underline; }
 .material-ref:disabled { color: var(--muted); text-decoration: none; cursor: default; }
 .material-text { margin: 8px 0 0; max-height: 220px; overflow: auto; white-space: pre-wrap; font-size: 12px; line-height: 1.6; color: var(--ink); }
-.sidecard--current { border-color: color-mix(in srgb, var(--blue) 30%, transparent); }
 .tag {
   padding: 4px 10px; border-radius: var(--mk-radius-pill);
   background: var(--line); border: 1px solid var(--line);
@@ -2076,8 +2072,6 @@ onBeforeUnmount(() => {
      会垫在 2-4 屏外（2026-09-25 移动框架审查）；order:-1 提到阶段列表之前，
      桌面双列布局不受影响（order 只在单列时改变视觉顺序） */
   .side { position: static; order: -1; }
-  /* 单列下侧栏提到最前，其「继续当前任务」与主区 hero 重复且会被固定底栏压住；窄屏只保留主区那颗。 */
-  .sidecard--current .btn-primary--block { display: none; }
 }
 </style>
 
