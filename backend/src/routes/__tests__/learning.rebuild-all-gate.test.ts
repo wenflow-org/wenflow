@@ -16,6 +16,7 @@ const mockFindUnique = jest.fn();
 const mockClaimPathCoreGeneration = jest.fn();
 const mockMarkActiveGenerationFailed = jest.fn();
 const mockGetPathGenerationRetry = jest.fn();
+const mockRetryPathEnrichment = jest.fn();
 const mockCreateLearningPath = jest.fn();
 const mockRunGoalAsync = jest.fn();
 const mockRunAsync = jest.fn();
@@ -38,6 +39,7 @@ jest.mock('../../services/learning/learning.service', () => ({
     claimPathCoreGeneration: (...args: unknown[]) => mockClaimPathCoreGeneration(...args),
     markActiveGenerationFailed: (...args: unknown[]) => mockMarkActiveGenerationFailed(...args),
     getPathGenerationRetry: (...args: unknown[]) => mockGetPathGenerationRetry(...args),
+    retryPathEnrichment: (...args: unknown[]) => mockRetryPathEnrichment(...args),
     createLearningPath: (...args: unknown[]) => mockCreateLearningPath(...args),
   },
 }));
@@ -334,6 +336,28 @@ describe('PATCH /paths/:pathId/retry 的 goal 闸门（#227）', () => {
       success: true,
       data: expect.objectContaining({ retryType: 'core' }),
     }));
+  });
+
+  it('#238：retryPathEnrichment 判死时 PATCH /retry 回 400 而不是落 500', async () => {
+    mockFindUnique.mockResolvedValue({ ...goalGeneratedPath(), status: 'failed' });
+    mockGetPathGenerationRetry.mockResolvedValue({ allowed: true, retryType: 'stageDesign', expectedActiveGenerationRunId: 'run-0' });
+    mockRetryPathEnrichment.mockRejectedValue(new Error('学习路径主结构尚未完成，暂不能继续生成阶段任务'));
+    const next = jest.fn();
+    const handler = getRouteHandler('patch', '/paths/:pathId/retry');
+    const res = createResponse();
+
+    await handler({
+      user: { userId: 'user-1' },
+      params: { pathId: 'lp_goal' },
+      body: {},
+    }, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      error: { message: '学习路径主结构尚未完成，暂不能继续生成阶段任务' },
+    });
+    expect(next).not.toHaveBeenCalled();
   });
 });
 

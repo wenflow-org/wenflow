@@ -317,10 +317,14 @@ export function getPathLearningAccessState(
     }
   })();
 
-  if (pathStatus !== 'active') {
+  // #238：status 列可能陈旧（被抢占的 core 必撞 fence 不再复位）；活动 stageDesign run 已成功且有任务即视为完成。
+  const effectivePathStatus = pathStatus === 'generating' && activeRun?.status === 'succeeded'
+    && activeRun.phase === 'stageDesign' && taskCount > 0 ? 'active' : pathStatus;
+
+  if (effectivePathStatus !== 'active') {
     // 已下线是管理员的治理动作，必须在这里短路：此前 archived 会掉进下面的
     // 「generationStatus 齐全 + enrichment succeeded」分支，反而返回可学。
-    if (pathStatus === 'archived') {
+    if (effectivePathStatus === 'archived') {
       return {
         generationStatus,
         canStartLearning: false,
@@ -328,7 +332,7 @@ export function getPathLearningAccessState(
       };
     }
 
-    if (pathStatus === 'generating') {
+    if (effectivePathStatus === 'generating') {
       return {
         generationStatus,
         canStartLearning: false,
@@ -336,7 +340,7 @@ export function getPathLearningAccessState(
       };
     }
 
-    if (pathStatus === 'failed') {
+    if (effectivePathStatus === 'failed') {
       return {
         generationStatus,
         canStartLearning: false,
@@ -346,11 +350,11 @@ export function getPathLearningAccessState(
   }
 
   if (!generationStatus || !enrichmentStatus) {
-    const missingGeneratedState = pathStatus === 'active' && aiGenerated && taskCount === 0;
+    const missingGeneratedState = effectivePathStatus === 'active' && aiGenerated && taskCount === 0;
     return {
       generationStatus,
-      canStartLearning: pathStatus === 'active' && !missingGeneratedState,
-      learningBlockedReason: pathStatus === 'active' && !missingGeneratedState
+      canStartLearning: effectivePathStatus === 'active' && !missingGeneratedState,
+      learningBlockedReason: effectivePathStatus === 'active' && !missingGeneratedState
         ? null
         : missingGeneratedState
           ? '学习路径生成状态缺失，暂不能开始学习，请重试生成。'

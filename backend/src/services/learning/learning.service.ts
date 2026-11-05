@@ -431,7 +431,59 @@ class LearningService {
       })));
     }
 
-    return recoveredRuns + result.count;
+    // #238：generating + activeGenerationRunId 非空、但该 run 已经终结（succeeded/cancelled）
+    // 的行此前永不命中任何回收规则（上面的孤儿规则要求 activeGenerationRunId 为空，租约规则
+    // 只扫 queued/processing），于是一条被 stageDesign/replan 抢占过的路径会永久卡在
+    // 「生成中」——开不了课，接口互相矛盾。这里按 run 的终态把 status 归一：
+    //   · succeeded（阶段设计完成）→ active（任务已全部落库，路径可学）
+    //   · cancelled（被接管后释放）→ 有里程碑则 active，空壳才落 failed
+    // 留 60s 宽限，避免与正在进行的事务收尾抢写。
+    const settledGeneratingPaths = await prisma.learning_paths.findMany({
+      where: {
+        status: 'generating',
+        activeGenerationRunId: { not: null },
+        activeGenerationRun: { status: { in: ['succeeded', 'cancelled'] } },
+        updatedAt: { lt: new Date(Date.now() - 60 * 1000) }
+      },
+      select: {
+        id: true,
+        activeGenerationRun: { select: { id: true, status: true, phase: true } }
+      }
+    });
+
+    let recoveredSettled = 0;
+    for (const path of settledGeneratingPaths) {
+      const settledRun = path.activeGenerationRun;
+      if (!settledRun) continue;
+      const milestoneCount = await prisma.milestones.count({ where: { learningPathId: path.id } });
+      const nextStatus = settledRun.status === 'succeeded' || milestoneCount > 0 ? 'active' : 'failed';
+      const updated = await prisma.learning_paths.updateMany({
+        where: {
+          id: path.id,
+          status: 'generating',
+          activeGenerationRunId: settledRun.id
+        },
+        data: { status: nextStatus, updatedAt: new Date() }
+      });
+      if (updated.count === 1) {
+        recoveredSettled += 1;
+        logger.warn('已按生成任务终态复位卡住的 generating 路径', {
+          pathId: path.id,
+          runId: settledRun.id,
+          runStatus: settledRun.status,
+          runPhase: settledRun.phase,
+          nextStatus
+        });
+        if (nextStatus === 'failed') {
+          await this.updatePathGenerationStatus(path.id, {
+            core: 'failed',
+            lastError: 'GENERATION_RUN_SETTLED_WITHOUT_CONTENT'
+          });
+        }
+      }
+    }
+
+    return recoveredRuns + result.count + recoveredSettled;
   }
 
   /**
@@ -657,13 +709,21 @@ class LearningService {
       throw new Error('无权访问此学习路径');
     }
 
-    if (path.status !== 'active') {
-      throw new Error('学习路径主结构尚未完成，暂不能继续生成阶段任务');
-    }
-
     const generationStatus = parsePathGenerationStatus(path.aiPromptTemplate);
     const activeRun = await getActiveGenerationRun(path.id, path.activeGenerationRunId);
     const retry = resolveGenerationRetry(path.status, generationStatus, activeRun, path.updatedAt);
+
+    // #238：闸门必须与 resolveGenerationRetry 用同一条判定。此前这里只看 path.status，
+    // 于是「core 早已产出主结构、只是 status 被并发抢占停在 generating」的路径在
+    // retry-allowed 的 stageDesign 重试上被判死（PATCH /retry 一路 500）。
+    // 只对 generating 开这个口子：archived（管理员下线）/ failed 等仍是原语义，不放行。
+    const staleGeneratingWithCoreDone = path.status === 'generating'
+      && retry.allowed
+      && retry.retryType === 'stageDesign';
+    if (path.status !== 'active' && !staleGeneratingWithCoreDone) {
+      throw new Error('学习路径主结构尚未完成，暂不能继续生成阶段任务');
+    }
+
     if (retry.allowed && retry.retryType === 'stageDesign') {
       const queued = await this.queuePathEnrichmentRetry(path, generationStatus);
       return {

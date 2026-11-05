@@ -10,7 +10,8 @@ const mockPrisma: any = {
     updateMany: jest.fn()
   },
   milestones: {
-    findMany: jest.fn()
+    findMany: jest.fn(),
+    count: jest.fn()
   },
   $transaction: jest.fn()
 }
@@ -53,6 +54,7 @@ describe('LearningService stale core recovery', () => {
     ;(learningService as any).pathTemplateMemo?.clear?.()
     mockPrisma.learning_paths.findMany.mockResolvedValue([])
     mockPrisma.milestones.findMany.mockResolvedValue([])
+    mockPrisma.milestones.count.mockResolvedValue(0)
     mockPrisma.$transaction.mockImplementation(async (callback: any) => callback(mockPrisma))
     jest.spyOn(learningService as any, 'updatePathGenerationStatus').mockResolvedValue(undefined)
   })
@@ -186,6 +188,43 @@ describe('LearningService stale core recovery', () => {
     await expect(learningService.retryEligibleFailedPathPreparations()).resolves.toBe(0)
 
     expect(mockPrisma.learning_paths.findMany.mock.calls[0][0]).not.toHaveProperty('take')
+  })
+
+  it('#238：generating + 非空 activeRun，但 run 已 succeeded → 回收为 active', async () => {
+    mockPrisma.path_generation_runs.findMany.mockResolvedValue([])
+    mockPrisma.learning_paths.findMany.mockResolvedValue([
+      { id: 'path-1', activeGenerationRun: { id: 'run-1', status: 'succeeded', phase: 'stageDesign' } }
+    ])
+    mockPrisma.milestones.count.mockResolvedValue(12)
+
+    await expect(learningService.recoverStaleGeneratingPaths()).resolves.toBe(1)
+
+    expect(mockPrisma.learning_paths.findMany).toHaveBeenLastCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        status: 'generating',
+        activeGenerationRunId: { not: null },
+        activeGenerationRun: { status: { in: ['succeeded', 'cancelled'] } }
+      })
+    }))
+    expect(mockPrisma.learning_paths.updateMany).toHaveBeenCalledWith({
+      where: { id: 'path-1', status: 'generating', activeGenerationRunId: 'run-1' },
+      data: { status: 'active', updatedAt: expect.any(Date) }
+    })
+  })
+
+  it('#238：终态 run 但一个里程碑都没有 → 回收为 failed（空壳不谎称可学）', async () => {
+    mockPrisma.path_generation_runs.findMany.mockResolvedValue([])
+    mockPrisma.learning_paths.findMany.mockResolvedValue([
+      { id: 'path-1', activeGenerationRun: { id: 'run-1', status: 'cancelled', phase: 'core' } }
+    ])
+    mockPrisma.milestones.count.mockResolvedValue(0)
+
+    await expect(learningService.recoverStaleGeneratingPaths()).resolves.toBe(1)
+
+    expect(mockPrisma.learning_paths.updateMany).toHaveBeenCalledWith({
+      where: { id: 'path-1', status: 'generating', activeGenerationRunId: 'run-1' },
+      data: { status: 'failed', updatedAt: expect.any(Date) }
+    })
   })
 
   it('P4：预检失败也会把重试计数落库（修复每分钟无限重试）', async () => {

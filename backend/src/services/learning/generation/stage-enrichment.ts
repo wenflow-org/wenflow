@@ -79,6 +79,7 @@ import {
   heartbeatGenerationRun,
   recordPathGenerationStageLog,
   restorePathAfterMutationConflict,
+  restorePathStatusAfterRunSettled,
   startGenerationHeartbeat,
   updatePathGenerationStatus,
   createGenerationId,
@@ -1583,6 +1584,9 @@ async function enrichLearningPathWithAndersonInner(
           errorMessage: null
         }
       });
+      // #238：本 run 可能抢占了仍在 'generating' 的 core run（被抢占者随后必撞 fence），
+      // 成功收尾必须把陈旧的 'generating' 复位，否则路径永久卡在生成中、无法开课。
+      await restorePathStatusAfterRunSettled(tx, pathId, runId, 'active');
       await enqueueDomainEvent(tx, createDomainEvent({
         type: 'path:generated',
         aggregateType: 'path',
@@ -1707,7 +1711,9 @@ async function enrichLearningPathWithAndersonInner(
         runId,
         andersonError,
         andersonError?.message?.includes('EMPTY_TASKS') ? 'PATH_STAGE_DESIGN_ZERO_TASKS' : 'PATH_ENRICHMENT_FAILED',
-        'stageDesign'
+        'stageDesign',
+        // #238：阶段设计失败不销毁骨架路径，只把（可能被本 run 抢占而陈旧的）'generating' 复位为可学。
+        'active'
       );
     } catch (fenceError) {
       if (!(fenceError instanceof Error) || fenceError.message !== 'GENERATION_RUN_FENCED') throw fenceError;

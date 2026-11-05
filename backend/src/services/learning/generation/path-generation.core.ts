@@ -1145,7 +1145,7 @@ export async function markActiveGenerationFailed(pathId: string, error: unknown,
       error,
       run.phase === 'stageDesign' ? 'PATH_ENRICHMENT_FAILED' : 'PATH_GENERATION_CORE_FAILED',
       run.phase === 'stageDesign' ? 'stageDesign' : 'core',
-      run.phase === 'core' ? 'failed' : undefined
+      run.phase === 'core' ? 'failed' : 'active'
     );
   } catch (fenceError) {
     if (!(fenceError instanceof Error) || fenceError.message !== 'GENERATION_RUN_FENCED') throw fenceError;

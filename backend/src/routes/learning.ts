@@ -701,6 +701,19 @@ router.patch('/paths/:pathId/retry', async (req, res, next) => {
   } catch (error: any) {
     if (sendPathMutationConflict(res, error)) return;
     if (sendGoalTriageRejection(res, error)) return;
+    // #238：retryPathEnrichment 抛出的「主结构尚未完成 / 阶段任务仍在生成中 / 已准备完成」
+    // 都是「当前状态不能重试」，与 /retry-stage-design（:1249-1259）同一语义、同一句话。
+    // 此前这里只映射 409/422，其余落到 next(error) → http-app 的 500 INTERNAL_ERROR。
+    if (
+      error.message === '学习路径主结构尚未完成，暂不能继续生成阶段任务'
+      || error.message === '阶段任务仍在生成中，请稍后查看'
+      || error.message === '阶段任务已经准备完成，无需重试'
+    ) {
+      return res.status(400).json({
+        success: false,
+        error: { message: error.message }
+      });
+    }
     next(error);
   }
 });

@@ -52,6 +52,7 @@ import {
   failGenerationRun,
   heartbeatGenerationRun,
   restorePathAfterMutationConflict,
+  restorePathStatusAfterRunSettled,
   startGenerationHeartbeat,
   updatePathGenerationStatus,
 } from '../generation/run-lifecycle';
@@ -494,6 +495,9 @@ async function redesignMilestoneTasks(
           errorMessage: null
         }
       });
+      // #238：replan 的 stageDesign run 可能抢占了仍在 'generating' 的 core run，
+      // 成功收尾必须把陈旧的 'generating' 复位（否则永久卡在生成中、无法开课）。
+      await restorePathStatusAfterRunSettled(tx, path.id, runId, 'active');
     }
     await enqueueDomainEvent(tx, createDomainEvent({
       type: 'path:adjusted',
@@ -664,6 +668,8 @@ async function executeDownstreamReplan(context: {
           errorMessage: null
         }
       });
+      // #238：多阶段重排的成功收尾同样负责复位被抢占 core 留下的陈旧 'generating'。
+      await restorePathStatusAfterRunSettled(tx, pathId, runId, 'active');
     });
   } catch (error) {
     if (isPathMutationConflictError(error)) {
@@ -684,7 +690,9 @@ async function executeDownstreamReplan(context: {
         error instanceof Error && error.message.includes('EMPTY_TASKS')
           ? 'PATH_STAGE_DESIGN_ZERO_TASKS'
           : 'PATH_ENRICHMENT_FAILED',
-        'stageDesign'
+        'stageDesign',
+        // #238：失败收尾同样复位被抢占 core 留下的陈旧 'generating'（路径骨架仍可学）。
+        'active'
       );
     } catch (fenceError) {
       if (!(fenceError instanceof Error) || fenceError.message !== 'GENERATION_RUN_FENCED') throw fenceError;
@@ -964,7 +972,9 @@ export async function requestPathReplan(data: PathReplanRequest) {
         error instanceof Error && error.message.includes('EMPTY_TASKS')
           ? 'PATH_STAGE_DESIGN_ZERO_TASKS'
           : 'PATH_ENRICHMENT_FAILED',
-        'stageDesign'
+        'stageDesign',
+        // #238：失败收尾同样复位被抢占 core 留下的陈旧 'generating'（路径骨架仍可学）。
+        'active'
       );
     } catch (fenceError) {
       if (!(fenceError instanceof Error) || fenceError.message !== 'GENERATION_RUN_FENCED') throw fenceError;
