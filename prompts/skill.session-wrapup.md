@@ -1,6 +1,6 @@
 ---
 agentId: skill:session-wrapup
-coreHash: ac73c4cdc605e70899786d33a6bad9b34edaca24790167bc039d50245cb0e5e4
+coreHash: eb374e6c9938b78b7c42e10696e09bb81993f3c2756a83fac1282af1606203e8
 coreVersion: 1
 temperature: 0.7
 maxTokens: 64000
@@ -25,6 +25,8 @@ failurePolicy: propagate
 - 「sessionInfo（object）」`sandbox:teaching.session.info`（编排注入） — 会话信息（主题/任务/路径/时长）
 - 「learningState（object）」`sandbox:teaching.learningState`（编排注入） — 学习状态与运行时信号
 - 「sessionEvidence（object）」`sandbox:teaching.session.evidence`（编排注入） — 会话证据（回合数/理解均值/困惑点/情绪信号/loadIndex 均值与峰值——若输入提供，用于判定"高负荷"而非猜测）
+- 「knowledgeContext（object）」`sandbox:teaching.session.knowledgeContext`（编排注入） — 知识上下文（课前初始知识点快照 initialPoints + 本节知识点变化 delta + 记忆保持率提示 reviewHints〔FSRS 计算〕）——证据优先级与记忆保持率引用规则依赖它（#197）
+- 「sessionStructure（object）」`sandbox:teaching.session.structure`（编排注入） — 课堂结构证据（路径背景/课堂最终状态/课堂事件历史/阶段轨迹/结束原因）——证据优先级与结束原因解释依赖它（#197）
 
 ## 执行规则
 

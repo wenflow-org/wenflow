@@ -2,6 +2,7 @@ import { SkillDefinition, SkillExecutionResult } from '../protocol';
 import { callPrompt } from '../../composers/prompt-composer';
 import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 import { loadPromptFile } from '../../composers/prompt-files/loader';
+import { logger } from '../../utils/logger';
 
 export const KC_MAPPER_PROMPT = loadPromptFile('skill:kc-mapper')?.systemPrompt || '';
 
@@ -17,7 +18,7 @@ export const kcMapperDefinition: SkillDefinition = {
     type: 'object',
     properties: { cognitiveCore: { type: 'object' }, milestones: { type: 'array' }, subtasks: { type: 'array' }, prerequisiteTree: { type: 'object' } },
   },
-  outputSchema: { type: 'object', properties: { conceptKcs: { type: 'array' }, taskKcLinks: { type: 'array' }, kcGraph: { type: 'object' }, gapCoverage: { type: 'object' } } },
+  outputSchema: { type: 'object', properties: { conceptKcs: { type: 'array' }, taskKcLinks: { type: 'array' }, kcGraph: { type: 'object' } } },
   capabilities: ['kc-mapping', 'knowledge-graph'],
   stats: { callCount: 0, successRate: 0, avgLatency: 0 }
 };
@@ -31,37 +32,16 @@ export function validateKcMapperOutput(parsed: any) {
 /**
  * 契约校验前的等价变体归一（core fields 契约校验用；业务形态仍由 normalizeOutput 决定）。
  *
- * 2026-09-22 事故：core 声明 gapCoverage 为 `object?`，严格 schema 只接受 object/null/缺省；
- * 而模型在**未提供 prerequisiteTree** 时普遍输出 `gapCoverage: []` 或 `{}`，被
- * `gapCoverage(type-mismatch:object)` 判死——两次重试都合规仍失败。这里按语义归一：
- * 空的 gapCoverage（[]、{}、null、无有效键）一律**移除该字段**（"无缺口报告"与缺省等价），
- * 非空对象保留。同理归一 taskKcLinks 的 kcIds/linkedKcIds 别名 → linkedKCs（下游读取侧亦有容错）。
+ * 归一 taskKcLinks 的 kcIds/linkedKcIds/kcs 别名 → linkedKCs，kcGraph 节点/边补全（下游读取侧亦有容错）。
+ * 对齐 core 契约：kc-mapper 的产出只有 conceptKcs / taskKcLinks / kcGraph（gapCoverage 已随 #193 从契约移除）。
  */
 export function coerceKcMapperParsed(parsed: any): any {
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return parsed;
 
   const out: any = { ...parsed };
 
-  const gc = out.gapCoverage;
-  const gcEmpty = gc === undefined
-    || gc === null
-    || (Array.isArray(gc) && gc.length === 0)
-    || (typeof gc === 'object' && !Array.isArray(gc) && Object.keys(gc).length === 0);
-  if (gcEmpty) {
-    delete out.gapCoverage;
-  } else if (Array.isArray(gc)) {
-    // 模型实测形态（2026-09-22）：gapCoverage 被写成"逐概念的覆盖明细"数组
-    //   [{ conceptId, coveredByKcs: [...], gaps: [...] }, ...]
-    // 与契约 { covered: string[], uncovered: [{concept, reason}] } 不同名。
-    // 按语义归一：gaps 非空 → uncovered（有缺口）；否则归入 covered。
-    out.gapCoverage = normalizeGapCoverageEntries(gc);
-  } else if (typeof gc === 'object') {
-    // 也可能只给单条明细对象 { conceptId, gaps: [...], coveredKCs: [...] }，或已是契约形态
-    const hasContractShape = Array.isArray((gc as any).covered) || Array.isArray((gc as any).uncovered);
-    if (!hasContractShape) {
-      out.gapCoverage = normalizeGapCoverageEntries([gc]);
-    }
-  }
+  // #193：gapCoverage 已不是契约字段；模型若残留该键，一律丢弃，避免非契约字段流入落库产物。
+  delete out.gapCoverage;
 
   if (Array.isArray(out.taskKcLinks)) {
     out.taskKcLinks = out.taskKcLinks.map((link: any) => {
@@ -109,31 +89,6 @@ export function coerceKcMapperParsed(parsed: any): any {
   }
 
   return out;
-}
-
-/**
- * 把模型的"逐概念覆盖明细"归一到契约形态 { covered: string[], uncovered: [{concept, reason}] }。
- * 兼容 coveredKCs / coveredByKcs / gaps 等实测字段名（2026-09-22）。
- */
-function normalizeGapCoverageEntries(entries: any[]): { covered: string[]; uncovered: Array<{ concept: string; reason: string }> } {
-  const covered: string[] = [];
-  const uncovered: Array<{ concept: string; reason: string }> = [];
-  for (const item of entries) {
-    if (!item || typeof item !== 'object') continue;
-    const conceptLabel = String((item as any).concept ?? (item as any).conceptId ?? '').trim();
-    const gaps = Array.isArray((item as any).gaps) ? (item as any).gaps : [];
-    if (gaps.length > 0) {
-      for (const g of gaps) {
-        uncovered.push({
-          concept: String((g as any)?.concept ?? (typeof g === 'string' ? conceptLabel : conceptLabel)),
-          reason: String((g as any)?.reason ?? (typeof g === 'string' ? g : '存在未覆盖缺口')),
-        });
-      }
-    } else if (conceptLabel) {
-      covered.push(conceptLabel);
-    }
-  }
-  return { covered, uncovered };
 }
 
 /**
@@ -199,22 +154,25 @@ export async function kcMapper(input: any): Promise<SkillExecutionResult<any>> {
         prerequisiteTree: payload.prerequisiteTree || null,
       }),
       normalizeOutput: (parsed) => {
-        // 落库前同样走契约归一：否则校验通过、落库的却仍是别名字段（kcIds / type / 逐概念 gapCoverage），
-        // 下游按 linkedKCs / relation / {covered,uncovered} 读取会静默读空（2026-09-22 实测）。
+        // 落库前同样走契约归一：否则校验通过、落库的却仍是别名字段（kcIds / type 形态），
+        // 下游按 linkedKCs / relation 读取会静默读空（2026-09-22 实测）。
         const normalized = coerceKcMapperParsed(parsed);
         const conceptKcs = Array.isArray(normalized?.conceptKcs) ? normalized.conceptKcs : [];
         const taskKcLinks = Array.isArray(normalized?.taskKcLinks) ? normalized.taskKcLinks : [];
+        // KC 粒度审计（警告级）：每概念 2-5 KC、每任务 ≥1 关联 KC。此前作为 audit 字段随产物落库、
+        // 全仓无读取（issue #193）——它本就只是告警，改为直接进日志（消费方=可观测性），不再进产物。
+        const auditWarnings = auditKcGranularity(normalized, input);
+        if (auditWarnings.length > 0) {
+          logger.warn('[kc-mapper] KC 粒度审计告警', { warnings: auditWarnings });
+        }
         return {
           conceptKcs,
           taskKcLinks,
           kcGraph: normalized?.kcGraph || { nodes: [], edges: [] },
-          gapCoverage: normalized?.gapCoverage ?? null,
-          // KC 粒度审计（警告级）：每概念 2-5 KC、每任务 ≥1 关联 KC
-          audit: auditKcGranularity(normalized, input),
         };
       },
       validateParsedOutput: (parsed) => validateKcMapperOutput(parsed),
-      // 契约校验前的等价变体归一（见 coerceKcMapperParsed 头注：空 gapCoverage / kcIds 别名）
+      // 契约校验前的等价变体归一（见 coerceKcMapperParsed 头注：kcIds 别名 / kcGraph 补全）
       coerceParsedForContract: (parsed) => coerceKcMapperParsed(parsed),
       mapEnvelope: (output, _input, runtimeContract) => adaptToRuntimeEnvelope({
         contract: runtimeContract,
@@ -233,7 +191,7 @@ export async function kcMapper(input: any): Promise<SkillExecutionResult<any>> {
           `上一次输出未通过结构化校验，原因：${failureReason || '输出不是合法 JSON 对象'}。`
           + '请直接输出且只输出一个 JSON 对象，不要输出任何解释、标题、markdown 标题或代码块围栏。'
           + '对象必须包含顶层字段 conceptKcs（数组，每项 { conceptId, kcs: [{ kcId, name, taxonomy, prerequisiteKCs }] }），'
-          + '并可包含 taskKcLinks、kcGraph、gapCoverage；字段名必须与约定完全一致，不要自创字段、不要返回讲解文字。',
+          + '并可包含 taskKcLinks、kcGraph；字段名必须与约定完全一致，不要自创字段、不要返回讲解文字。',
       },
     }, input);
 

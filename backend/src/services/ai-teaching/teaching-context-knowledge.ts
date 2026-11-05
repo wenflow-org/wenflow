@@ -5,6 +5,7 @@ import type { TeachingKnowledgePointState, TeachingSessionRecord } from './Teach
 import { logger } from '../../utils/logger';
 import { conceptRegistryService } from '../learner/concept-registry.service';
 import { conceptGraphService, RELATION_PREREQUISITE, RELATION_PART_OF } from '../learner/concept-graph.service';
+import { sanitizeUserFacingText } from '../learning/user-facing-text';
 import type { InteractionMetaRecord, InteractionHistoryEntry, TeachingScenarioContext } from './teaching-context-types';
 
 /** 仅提取每条消息中可用的数值特征（meta 中的合法数字字段） */
@@ -75,6 +76,31 @@ export function dedupeConcepts(values: Array<string | null | undefined>): string
   return Array.from(new Set(values.map((value) => normalizeConcept(value)).filter(Boolean) as string[]));
 }
 
+/**
+ * 任务↔KC 连接键的口径（issue #179）。
+ *
+ * kc-mapper 的输入标题来自 stage-designer 的**原始**标题，而 subtasks 落库前经
+ * `sanitizeUserFacingText()` 收口（内部词表：回捞 → 回顾）；本函数两侧都用同一个
+ * 收口再比较——只 trim/折叠空格消除不了该改写，凡是命中过词表的任务都会静默匹配不到 KC。
+ * 用同一收口也让既有路径（标注里存的仍是原始标题）无需重跑生成即可对上。
+ *
+ * 这只是**兜底键**：写侧已在落库时为每条链接绑上稳定键 `subtasks.id`（见 stage-enrichment），
+ * 读侧优先按 id 匹配（见 resolveTaskKcsFromPath）。
+ */
+function taskTitleKey(value: unknown): string | null {
+  return normalizeConcept(sanitizeUserFacingText(value).text);
+}
+
+/** 契约是 linkedKCs，但实测弱模型/漂移模型会写成 kcIds / linkedKcIds / kcs（2026-09-22）。 */
+function linkedKcIdsOf(link: any): unknown[] {
+  if (!link || typeof link !== 'object') return [];
+  if (Array.isArray(link.linkedKCs)) return link.linkedKCs;
+  if (Array.isArray(link.kcIds)) return link.kcIds;
+  if (Array.isArray(link.linkedKcIds)) return link.linkedKcIds;
+  if (Array.isArray(link.kcs)) return link.kcs;
+  return [];
+}
+
 function parsePathPromptTemplateCore(path: any) {
   const promptTemplate = parsePathPromptTemplate(path?.aiPromptTemplate);
   // #9 退役：统一读 cognitiveCore（旧数据需先跑 scripts/migrate-cognitive-core.ts 迁移）
@@ -88,17 +114,31 @@ export function resolveTaskKcsFromPath(task: any, path: any): Array<{ kcId: stri
     const kcAnnotation = template?.kcAnnotation;
     if (!kcAnnotation || typeof kcAnnotation !== 'object') return [];
     const taskKcLinks = Array.isArray(kcAnnotation.taskKcLinks) ? kcAnnotation.taskKcLinks : [];
-    const matched = taskKcLinks.find((link: any) => normalizeConcept(link?.taskTitle) === normalizeConcept(task?.title));
-    // 字段兼容：契约是 linkedKCs，但实测弱模型/漂移模型会写成 kcIds / linkedKcIds / kcs（2026-09-22）。
-    // 读取侧归一，避免"落了库但下游解析为空"的静默断链。
-    const linkedKcIds = matched
-      ? (Array.isArray(matched.linkedKCs) ? matched.linkedKCs
-        : Array.isArray(matched.kcIds) ? matched.kcIds
-        : Array.isArray(matched.linkedKcIds) ? matched.linkedKcIds
-        : Array.isArray(matched.kcs) ? matched.kcs
-        : [])
+    // 连接键优先用稳定键 subtasks.id（写侧落库时回填，见 stage-enrichment）；旧标注无 id 时回退标题。
+    // 回退也必须**收集全部同键链接**而非取首条——同一标题的不同任务各有一条链接，
+    // `find` 取首条会把别的任务的 KC 挂到本任务上（静默挂错，比丢失更难发现）。
+    const taskIdKey = normalizeConcept(typeof task?.id === 'string' ? task.id : null);
+    const matchedById = taskIdKey
+      ? taskKcLinks.filter((link: any) => normalizeConcept(typeof link?.taskId === 'string' ? link.taskId : null) === taskIdKey)
       : [];
-    if (!matched || linkedKcIds.length === 0) return [];
+    const normalizedTaskTitle = taskTitleKey(task?.title);
+    const matched = matchedById.length > 0
+      ? matchedById
+      : (normalizedTaskTitle
+        ? taskKcLinks.filter((link: any) => taskTitleKey(link?.taskTitle) === normalizedTaskTitle)
+        : []);
+    // 同键多条时取并集（保序去重），不再只取首条
+    const seenKc = new Set<string>();
+    const linkedKcIds: unknown[] = [];
+    for (const link of matched) {
+      for (const kcId of linkedKcIdsOf(link)) {
+        const key = normalizeConcept(typeof kcId === 'string' ? kcId : null);
+        if (!key || seenKc.has(key)) continue;
+        seenKc.add(key);
+        linkedKcIds.push(kcId);
+      }
+    }
+    if (linkedKcIds.length === 0) return [];
     const kcGraphNodes = Array.isArray(kcAnnotation.kcGraph?.nodes) ? kcAnnotation.kcGraph.nodes : [];
     return linkedKcIds.map((kcId: any) => {
       const node = kcGraphNodes.find((n: any) => normalizeConcept(n?.kcId) === normalizeConcept(kcId));
@@ -279,24 +319,6 @@ export function buildCognitiveFrame(params: {
   } as TeachingScenarioContext['cognitiveFrame'];
 }
 
-export function parseLearningObjectives(raw: string | null | undefined): string[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return dedupeConcepts(parsed.map((item) => String(item)));
-    }
-    if (typeof parsed === 'string') {
-      return dedupeConcepts([parsed]);
-    }
-  } catch {
-    return dedupeConcepts([raw]);
-  }
-  return [];
-}
-
-
-
 /**
  * 本课的"知识组件种子"：kc-mapper 已经把任务↔KC 的映射落在 `kcAnnotation.taskKcLinks` 里，
  * 复用 `resolveTaskKcsFromPath`（含契约漂移归一）取出来即可，**不新增 LLM 调用**。
@@ -321,17 +343,28 @@ export function buildTaskKnowledgeSeeds(params: {
   return dedupeConcepts(names).slice(0, 4).map((name) => ({ name, status: 'pending' as const, progress: 0 }));
 }
 
-/** 有效失败（PF）触发条件：概念性任务 + 无既定学习目标（新概念）+ 有迁移目标 + 练习/项目型 */
+/**
+ * 有效失败（PF）触发条件：概念性任务 + 有迁移目标 + 练习/项目型。
+ *
+ * issue #193（复核收口）：原判据还含「无既定学习目标（新概念）」一项，判据源是
+ * `subtasks.learningObjectives` 是否为空。该字段在**生成链**结构性为空——`prompts/core/stage-designer.yaml`
+ * 明令「不要输出 learningObjectives」，stage-enrichment 每个 subtask 写 null（实测 2037/2037 为空）
+ * ⇒ 对生成出来的任务该条件恒真、从不判别，等于把 PF 是否触发挂在与生成链无关的分支上，故移除。
+ *
+ * 注意这是**行为变更**而非等价改写：该字段并非全链恒空——path-structural-edit 的 insert_task
+ * （routes/learning.ts 可达）可显式写入非空值；对这类手工插入任务，旧实现 isNewConcept=false 会抑制 PF，
+ * 移除后它们也按上述三条件判 PF（当前前端不发送该字段，属 API-only 路径）。
+ * 另：「本课学习目标」若要用，请读 taskProfile.learningObjectives（= 本课 KC 种子，TeachingContextBuilder 组装），
+ * 那才是被填充的通道。
+ */
 export function determineTaskMode(
   task: any,
-  persistedLearningObjectives: string[],
   cognitiveFrame: { targetRelation: string | null },
 ): 'normal' | 'productiveFailure' {
   const isConceptual = task.knowledgeType === 'conceptual';
-  const isNewConcept = persistedLearningObjectives.length === 0;
   const hasTransferGoal = cognitiveFrame.targetRelation !== null;
   const isPracticeOrProject = task.taskType === 'practice' || task.taskType === 'project';
-  if (isConceptual && isNewConcept && hasTransferGoal && isPracticeOrProject) {
+  if (isConceptual && hasTransferGoal && isPracticeOrProject) {
     return 'productiveFailure';
   }
   return 'normal';

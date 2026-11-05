@@ -120,14 +120,21 @@ describe('画像叙述：单对话观测 + 出处', () => {
     expect(profile.narrativeInsights.goalNarrative).toBe('来自证据的真实问题');
   });
 
-  it('learner_background 的复用基础并入优势', async () => {
-    mockGoalFindFirst.mockResolvedValue(
-      conv({}, { extra: { learner_background: { reusableFoundations: ['会做表格'] } } })
-    );
+  // issue #196：knowledge-background 合并分支随其唯一写入方（learner.coordinator）退役而删除；
+  // dataType 已收窄为 applyUpdate 实际落地的三种（types.ts），本用例以存量非法字面量验证
+  // 运行期防御分支仍显式判失败（不再静默写回）。
+  it('applyUpdate 对未支持的 dataType 返回失败（不再静默写回）', async () => {
+    mockGoalFindFirst.mockResolvedValue(conv({}));
 
-    const { profile } = await new ProfileAggregator().aggregateProfile('u1');
+    const result = await new ProfileAggregator().applyUpdate('u1', {
+      agentId: 'test',
+      timestamp: new Date().toISOString(),
+      dataType: 'behavioral' as any,
+      data: {},
+      confidence: 0.5,
+    });
 
-    expect(profile.derivedInsights.strengths).toContain('可复用基础：会做表格');
+    expect(result).toEqual({ success: false, changes: [] });
   });
 
   it('无证据也无已完成对话：全默认画像且 narrativeSource 为 null', async () => {

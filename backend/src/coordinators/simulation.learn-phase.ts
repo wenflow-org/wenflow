@@ -1134,6 +1134,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
         await ctx.assertCurrentSessionLeaseOwned(sessionId);
         const aiResult = await ctx.runTeachingTurnWithStepRetry({
           sessionId,
+          userId: session.userId,
           teachingSessionId,
           learnerMessage: virtualReplyResult.userVisible,
           teachingRevision,
@@ -1930,6 +1931,14 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
       // 零会话状态写入；error 保留「没有绑定教学会话」字样——batch 驱动
       // （batch-experiment.service）靠它命中既有 regex 重置 learningStarted 走重启恢复。
       const unboundSessionMessage = '当前 Learn 没有绑定教学会话';
+      // #154：卡死收课（`taskRuntime.status === 'timeout'`，见上方非收敛分支）与其它收课解绑都会把
+      // 顶层 teachingSessionId 置空，本步因此拿不到可驱动的课堂。旧实现三驱动（batch / autopilot /
+      // advance-day）里只有 batch 认识「没有绑定教学会话」会自动重启，autopilot 与 advance-day 不认识
+      // → 会话被终态化为 failed 或每天空转（无出口）。
+      // 这里不动协调层语义（仍按 H-3 干净跳过、零会话状态写入），只把返回的 error 前置一个稳定 code
+      // `LEARN_CLASSROOM_UNBOUND`：让 autopilot / advance-day 能像 batch 一样把它识别成「可恢复、
+      // 重启本课续跑」，三驱动口径统一。重启走各驱动既有的 restart-learning 入口与恢复上限，
+      // 确定性卡死不会变成无界重启打转（达到恢复上限即按各自策略收口）。
       aiResponse = '当前 Learn 没有绑定教学会话：上一课堂已收束解绑（保留现场等待 restart-learning 续课），本步已跳过，不影响会话状态。';
       logger.warn('[simulation-coordinator] Learn 无绑定教学会话，跳过本步（非终局，不写 failed）', {
         sessionId,
@@ -1955,7 +1964,9 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
         userMessage: virtualReplyResult.userVisible,
         aiResponse,
         logs,
-        error: unboundSessionMessage,
+        // error 前置 LEARN_CLASSROOM_UNBOUND 供 autopilot / advance-day 与 batch 统一识别为可恢复态；
+        // 保留「没有绑定教学会话」原文，batch 既有 regex 仍能命中。
+        error: `LEARN_CLASSROOM_UNBOUND: ${unboundSessionMessage}`,
         currentTaskStopped: true
       };
     }

@@ -203,6 +203,24 @@ describe('SimulationOrchestrator.executeFullSession 诚实返回', () => {
     expect(learnStub).toHaveBeenCalledTimes(4)
   })
 
+  it('#154 解绑课堂（LEARN_CLASSROOM_UNBOUND）→ restart-learning 续课后继续推进，而非判失败', async () => {
+    sessionRecord = buildSession('teaching', 'running')
+    mockMilestonesFindMany.mockResolvedValue([{ subtasks: [{ id: 't1' }] }])
+    const learnStub = jest.fn()
+      .mockResolvedValueOnce({ success: false, error: 'LEARN_CLASSROOM_UNBOUND: 当前 Learn 没有绑定教学会话' })
+      .mockImplementationOnce(async () => (sessionRecord.status = 'completed', { success: true, totalSteps: 3 }))
+    ;(coordinator as any).executeAutoLearning = learnStub
+    const restartStub = jest.fn().mockResolvedValue({ success: true, teachingSessionId: 'ts-2' })
+    ;(coordinator as any).restartLearningPhase = restartStub
+
+    const result = await coordinator.executeFullSession('simulation-1', {})
+
+    expect(restartStub).toHaveBeenCalledTimes(1)
+    expect(learnStub).toHaveBeenCalledTimes(2)
+    expect(result.success).toBe(true)
+    expect(result.isPathCompleted).toBe(true)
+  })
+
   it('自动学习无进展（0 回合）→ 显式 error', async () => {
     sessionRecord = buildSession('teaching', 'running')
     mockMilestonesFindMany.mockResolvedValue([

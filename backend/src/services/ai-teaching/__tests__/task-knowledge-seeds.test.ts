@@ -33,6 +33,67 @@ describe('buildTaskKnowledgeSeeds（本课知识组件种子）', () => {
     expect(seeds.every((s) => s.status === 'pending' && s.progress === 0)).toBe(true);
   });
 
+  it('标题收口不一致（issue #179）：annotation 存原始标题、DB 存 sanitize 后标题 → 仍能对上', () => {
+    // kc-mapper 拿到 stage-designer 的原始标题；subtasks 落库前 sanitizeUserFacingText 把「回捞」→「回顾」，
+    // teaching 侧拿 DB 标题回来查。两侧必须共用同一收口，否则这条链必断（KC 粒度静默丢空）。
+    const rawTitlePath = {
+      aiPromptTemplate: JSON.stringify({
+        kcAnnotation: {
+          taskKcLinks: [{ taskTitle: '回捞学科全景框架并校准理论映射', linkedKCs: ['kc-1a'] }],
+          kcGraph: { nodes: [{ kcId: 'kc-1a', name: '学科全景框架', taxonomy: 'conceptual' }] },
+        },
+      }),
+    };
+    const seeds = buildTaskKnowledgeSeeds({
+      task: { title: '回顾学科全景框架并校准理论映射' }, // subtasks 表里的落库值
+      path: rawTitlePath,
+      resolvedConcept: resolved,
+    });
+    expect(seeds.map((s) => s.name)).toEqual(['学科全景框架']);
+  });
+
+  it('同题不同任务（issue #179）：稳定键 taskId 各归其主，不共享第一条链接', () => {
+    // 同一标题的不同任务在 kcAnnotation 里各有一条链接（渐进设计逐阶段产出后并集）。
+    // 连接键必须用写侧绑定的 subtasks.id，否则读侧 find 取首条 → 后一条任务挂到前一条的 KC。
+    const sameTitlePath = {
+      aiPromptTemplate: JSON.stringify({
+        kcAnnotation: {
+          taskKcLinks: [
+            { taskTitle: '复述清单', linkedKCs: ['kc-a'], taskId: 'st_1' },
+            { taskTitle: '复述清单', linkedKCs: ['kc-b'], taskId: 'st_2' },
+          ],
+          kcGraph: { nodes: [
+            { kcId: 'kc-a', name: 'A 能力' },
+            { kcId: 'kc-b', name: 'B 能力' },
+          ] },
+        },
+      }),
+    };
+    const first = buildTaskKnowledgeSeeds({ task: { id: 'st_1', title: '复述清单' }, path: sameTitlePath, resolvedConcept: resolved });
+    const second = buildTaskKnowledgeSeeds({ task: { id: 'st_2', title: '复述清单' }, path: sameTitlePath, resolvedConcept: resolved });
+    expect(first.map((s) => s.name)).toEqual(['A 能力']);
+    expect(second.map((s) => s.name)).toEqual(['B 能力']);
+  });
+
+  it('旧标注无 taskId（issue #179）：同题多条取并集，不再静默只取首条', () => {
+    const legacyPath = {
+      aiPromptTemplate: JSON.stringify({
+        kcAnnotation: {
+          taskKcLinks: [
+            { taskTitle: '复述清单', linkedKCs: ['kc-a'] },
+            { taskTitle: '复述清单', linkedKCs: ['kc-b'] },
+          ],
+          kcGraph: { nodes: [
+            { kcId: 'kc-a', name: 'A 能力' },
+            { kcId: 'kc-b', name: 'B 能力' },
+          ] },
+        },
+      }),
+    };
+    const seeds = buildTaskKnowledgeSeeds({ task: { id: 'st_1', title: '复述清单' }, path: legacyPath, resolvedConcept: resolved });
+    expect(seeds.map((s) => s.name)).toEqual(['A 能力', 'B 能力']);
+  });
+
   it('契约漂移：linkedKCs 缺失时认 kcIds / linkedKcIds / kcs', () => {
     const mk = (key: string) => ({
       aiPromptTemplate: JSON.stringify({

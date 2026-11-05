@@ -16,6 +16,8 @@ const usersCount = jest.fn();
 const projectionsFindMany = jest.fn();
 const projectionsFindUnique = jest.fn();
 const projectionsUpsert = jest.fn();
+/** #205：无 active 路径用户的「路径身份」回退查询（展示用，不参与快照锚定） */
+const learningPathsFindMany = jest.fn();
 
 jest.mock('../../../config/database', () => ({
   __esModule: true,
@@ -27,9 +29,15 @@ jest.mock('../../../config/database', () => ({
           : usersFindMany(args),
       count: (...args: any[]) => usersCount(...args),
     },
+    learning_paths: {
+      findMany: (...args: any[]) => learningPathsFindMany(...args),
+    },
     learner_projections: { findMany: projectionsFindMany, findUnique: projectionsFindUnique, upsert: projectionsUpsert },
   },
 }));
+
+// clearAllMocks 不清实现：默认「没有回退身份」；用例按需 mockResolvedValueOnce 覆写。
+learningPathsFindMany.mockResolvedValue([]);
 
 jest.mock('../LearnerSnapshotService', () => ({
   learnerSnapshotService: { getSnapshot: jest.fn() },
@@ -115,6 +123,49 @@ describe('listForAdmin 口径（只排除虚拟学习者）', () => {
 
     const data = await learnerSnapshotRefreshService.listForAdmin({ limit: 50 });
     expect(data.items[0].isTestAccount).toBe(true);
+  });
+
+  /* #205：无 active 路径的用户此前行内「路径」列恒空（active-only 过滤）。
+     修法：路径身份回退到最近的非 abandoned 路径用于展示，但快照锚点仍只认 active——
+     pathId 保持 null、快照走 global 口径，避免 currentPath 被锚到 archived（同一 bug 在列表重现），
+     也避免前端重算带 archived pathId 写 path 键而本行读 global 键（LearnerCenter.vue:390/741）。
+     身份回退走独立查询，不靠放宽嵌套 where 的 take（否则更新的归档路径可能把 active 挤出窗口）。 */
+  it('无 active 路径：路径身份回退展示非 abandoned 路径，但不锚定（pathId null / global 口径）', async () => {
+    usersFindMany.mockResolvedValue([baseUser({ id: 'u-arch', learning_paths: [] })]);
+    usersCount.mockResolvedValue(1);
+    projectionsFindMany.mockResolvedValue([]);
+    learningPathsFindMany.mockResolvedValueOnce([{ userId: 'u-arch', title: '归档路径' }]);
+    stubFreshProjections();
+
+    const data = await learnerSnapshotRefreshService.listForAdmin({ limit: 50 });
+    expect(data.items[0].pathTitle).toBe('归档路径');
+    expect(data.items[0].pathId).toBeNull();
+    const { learnerSnapshotService } = jest.requireMock('../LearnerSnapshotService');
+    expect(learnerSnapshotService.getSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'u-arch', learningPathId: undefined, mode: 'global' }),
+    );
+  });
+
+  it('有 active 路径：锚点与身份都取 active 路径（行为不变）', async () => {
+    usersFindMany.mockResolvedValue([
+      baseUser({
+        id: 'u-act',
+        learning_paths: [{ id: 'p-act', title: '进行中路径', status: 'active', updatedAt: new Date() }],
+      }),
+    ]);
+    usersCount.mockResolvedValue(1);
+    projectionsFindMany.mockResolvedValue([]);
+    stubFreshProjections();
+
+    const data = await learnerSnapshotRefreshService.listForAdmin({ limit: 50 });
+    expect(data.items[0].pathId).toBe('p-act');
+    expect(data.items[0].pathTitle).toBe('进行中路径');
+    // 有 active 路径时不查身份回退
+    expect(learningPathsFindMany).not.toHaveBeenCalled();
+    const { learnerSnapshotService } = jest.requireMock('../LearnerSnapshotService');
+    expect(learnerSnapshotService.getSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'u-act', learningPathId: 'p-act', mode: 'path' }),
+    );
   });
 });
 

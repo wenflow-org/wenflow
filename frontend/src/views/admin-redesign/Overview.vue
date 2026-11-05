@@ -39,8 +39,9 @@
         :title="kpiTitle(k)"
         @click="jumpToKpi(k)"
       />
-      <!-- 完课量（#105 读侧接入，2026-10-19）：收束事件统一观测的按轨拆分，
-           点卡进教学会话页看逐条轨道/通道。与上方四卡不同源（含虚拟/测试）。
+      <!-- 完课量（#105 读侧接入，2026-10-19；2026-11-04 口径对齐 #186）：收束事件统一观测的按轨拆分，
+           点卡进教学会话页看逐条轨道/通道。主值走非虚拟口径（与上方四卡调用统计同源）；
+           行内注「真实 / 未标记」之和即主值，虚拟学习者单列标注「不计入」。
            2026-10-21 用户「五个就一个有，也不要了，直接把这个做到上面」：五卡里只有本卡
            带副行，整排被抬高一档——分解移到数值行内（valueNote），副行只留给取数三态。
            失败态卡不可点（卡内放重试钮），读数失败不能靠点卡跳去别处兜底。 -->
@@ -595,16 +596,17 @@ const kpiCards = computed<KpiCard[]>(() =>
   }))
 );
 
-/* ===== 完课量（#105 读侧接入，2026-10-19）=====
-   「管理端同屏不同源」的读侧收口：真实侧与虚拟侧不再各算各的——统一数收束事件
-   （learner_evidence 已投影的 task:completed 行，口径单点 closure-observability.ts）。
-   家法同上方四卡：hint 一行可见口径（真实 / 虚拟 / 未标记分解），长释进 title 悬停。
-   与上方四卡不同源：本卡含虚拟学习者与测试账号（拆分自证），不并入真实口径读数；
+/* ===== 完课量（#105 读侧接入，2026-10-19；2026-11-04 口径对齐 #186）=====
+   数据源：learner_evidence 已投影的 task:completed 行（口径单点 closure-observability.ts）。
+   主值 total 走**非虚拟口径**（与上方四卡调用统计同一套判据），byTrack/bySource 与主值
+   同源同口径——行内注「真实 / 未标记」之和恒等于 total，数值行内自证；虚拟学习者单列
+   virtualCount 并标注「不计入」，既不混进主值也不丢披露。
    历史无 track 行如实显示「未标记」，不回填、不猜；读数以已投影事件为准（消费滞后时偏小）。 */
 type ClosureSummary = {
   total: number
   byTrack: Record<string, number>
   bySource: Record<string, number>
+  virtualCount: number
   pathCompletions: number
 }
 const closureState = ref<'loading' | 'ready' | 'error'>('loading')
@@ -617,6 +619,7 @@ async function loadClosure() {
       total: Number(body.total ?? 0),
       byTrack: (body.byTrack || {}) as Record<string, number>,
       bySource: (body.bySource || {}) as Record<string, number>,
+      virtualCount: Number(body.virtualCount ?? 0),
       pathCompletions: Number(body.pathCompletions ?? 0),
     }
     closureState.value = 'ready'
@@ -639,12 +642,15 @@ const closureKpi = computed(() => {
   }
   const s = closureSummary.value
   const human = s.byTrack.human ?? 0
-  const virtual = s.byTrack['virtual-learner'] ?? 0
   const unmarked = (s.byTrack.legacy ?? 0) + (s.byTrack.unknown ?? 0)
   const unmarkedLabel = closureTrackText('legacy')
-  const hintParts = [`真实 ${human}`, `虚拟 ${virtual}`]
+  const virtual = s.virtualCount ?? 0
+  // 行内注只分解**主值同口径**（非虚拟）：真实 + 未标记 恒等于 total，数值行内自证；
+  // 虚拟学习者单列并标注「不计入」——否则会出现「主值 2 / 注 1+11+1=13」的卡内自相矛盾（#186 复核）。
+  const hintParts = [`真实 ${human}`]
   if (unmarked > 0) hintParts.push(`${unmarkedLabel} ${unmarked}`)
-  const title = `本卡含虚拟学习者与测试账号，与真实用户 KPI 不同源。整条路径完成 ${s.pathCompletions} 次（统计单位不同，未计入任务完课量）。`
+  if (virtual > 0) hintParts.push(`虚拟 ${virtual} 不计入`)
+  const title = `完课量按非虚拟口径（与上方真实用户 KPI 同源）；行内注「真实 / 未标记」之和即主值，虚拟学习者单列、不计入主值。整条路径完成 ${s.pathCompletions} 次（统计单位不同，未计入任务完课量）。`
   return {
     label: '完课量',
     value: `${s.total}`,

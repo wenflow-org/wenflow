@@ -16,6 +16,8 @@ import { DurableEventConsumerRegistry } from '../events/consumer-registry';
 import { DurableOutboxWorker } from '../events/outbox.worker';
 import { handleLearnerEvent, LEARNER_EVENT_TYPES } from '../events/learner-event-consumer';
 import { reviewCompletedConsumer } from '../services/learner/ReviewCompletedConsumer';
+import { learnerProfileService } from '../services/learner/LearnerProfileService';
+import { learnerSnapshotRefreshService } from '../services/learner/LearnerSnapshotRefreshService';
 import { autopilotService } from '../virtual-lab/autopilot.service';
 import { startBatchExperimentScheduler } from '../services/virtual-lab/batch-experiment.service';
 import { startSimulatedDayScheduler } from '../services/virtual-lab/simulated-day-scheduler';
@@ -71,6 +73,21 @@ export function startOutboxWorker(): DurableOutboxWorker {
   // 断链修复 P0-1：复习结果事件消费者（写 learner_evidence + memory_traces，幂等）
   durableConsumers.register(['review:completed'], async (event) => {
     await reviewCompletedConsumer.handle(event);
+    // #157：复习结果此前只写证据/痕迹，不清画像缓存、不刷快照——复习带来的 trace 变化
+    //（fragile/stable、FSRS 到期）要等下一次学习事件或被 5min 内存 / 10min 持久化投影
+    // 缓存窗口放过才可见。这里与 learner 线（learner-event-consumer）对齐：清缓存 + 重算快照。
+    // 会话所属路径随事件 payload 带出（warmup-writeback），旧事件无 pathId → 回落 global。
+    if (event.userId) {
+      learnerProfileService.clear(event.userId);
+      const data = (event.data || {}) as { pathId?: string | null };
+      await learnerSnapshotRefreshService.refresh({
+        userId: event.userId,
+        pathId: data.pathId || undefined,
+        scope: data.pathId ? 'path' : 'global',
+        lastEventId: event.id,
+        lastEventAt: event.occurredAt,
+      });
+    }
   });
   durableConsumers.register(LEARNER_EVENT_TYPES, handleLearnerEvent);
   const worker = new DurableOutboxWorker(durableConsumers);

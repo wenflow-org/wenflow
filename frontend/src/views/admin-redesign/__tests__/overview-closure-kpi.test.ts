@@ -67,9 +67,12 @@ beforeEach(() => {
   closureSummaryMock.mockImplementation(async () => ({
     data: {
       data: {
-        total: 127,
-        byTrack: { human: 0, 'virtual-learner': 20, unknown: 0, legacy: 107 },
-        bySource: { unknown: 107, 'vl-assisted': 20 },
+        // #186 口径对齐后的真实响应形状：主值 total 与 byTrack 同源同口径（非虚拟），
+        // 行内注「真实 + 未标记」之和恒等于 total（90+17=107）；虚拟 20 单列、标注「不计入」。
+        total: 107,
+        byTrack: { human: 90, 'virtual-learner': 0, unknown: 0, legacy: 17 },
+        bySource: { 'human-ui': 90, unknown: 17 },
+        virtualCount: 20,
         pathCompletions: 1
       }
     }
@@ -78,26 +81,30 @@ beforeEach(() => {
 });
 
 describe('总览完课量 KPI（#105）', () => {
-  it('分解挂在数值行内（valueNote）：真实 / 虚拟 / 未标记；不再单开副行抬高整排（2026-10-21）', async () => {
+  it('分解挂在数值行内（valueNote）：真实 / 未标记之和 = 主值；虚拟单列标注「不计入」', async () => {
     const wrapper = await mountOverview();
 
     const card = closureCard(wrapper);
     expect(card).toBeTruthy();
-    expect(card!.text()).toContain('127');
+    expect(card!.text()).toContain('107');
     const note = card!.find('.mk-kpi__num-note');
     expect(note.exists()).toBe(true);
-    expect(note.text()).toContain('真实 0');
+    // 与主值同口径的两项相加 = 107（数值行内自证，不再「主值 107 却标真实 0」）
+    expect(note.text()).toContain('真实 90');
+    expect(note.text()).toContain('未标记 17');
+    // 虚拟单列，且明确标注不计入主值
     expect(note.text()).toContain('虚拟 20');
-    expect(note.text()).toContain('未标记 107');
+    expect(note.text()).toContain('不计入');
     // 五卡里只有这一卡曾带副行，副行撤掉后整排高度一致
     expect(card!.find('.mk-kpi__hint').exists()).toBe(false);
   });
 
-  it('title 只保留与真实口径不同源的限定', async () => {
+  it('title 说明主值走非虚拟口径、虚拟单列不计入', async () => {
     const wrapper = await mountOverview();
 
     const title = closureCard(wrapper)!.attributes('title') || '';
-    expect(title).toContain('与真实用户 KPI 不同源');
+    expect(title).toContain('非虚拟口径');
+    expect(title).toContain('不计入');
     expect(title).not.toContain('不回填');
     expect(title).not.toContain('通道构成');
   });

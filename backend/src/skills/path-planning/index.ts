@@ -336,6 +336,16 @@ export function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
           level: normalizePromptString(learnerProfile.currentBaseline?.level),
           evidence: normalizePromptString(learnerProfile.currentBaseline?.evidence),
         },
+        // 技能性质 / 平台可判定性（2026-11-05 #242）：定帧层早已把它们写在 learnerProfile 内
+        // （path.coordinator.ts:403-430 生产、path-planning-hints.ts:1443-1459 透传），但本投影是
+        // 逐字段白名单重建，与 schoolAnchor 同型地被静默裁掉 ⇒ path-planning 载荷里一次都不出现。
+        // 无值时不出键（与定帧层同口径：判不出就按通用口径处理）。
+        ...(normalizePromptString(learnerProfile.skillNature)
+          ? { skillNature: normalizePromptString(learnerProfile.skillNature) }
+          : {}),
+        ...(normalizePromptString(learnerProfile.platformJudgment)
+          ? { platformJudgment: normalizePromptString(learnerProfile.platformJudgment) }
+          : {}),
       },
       problemSpace: {
         realProblem: normalizePromptString(problemSpace.realProblem),
@@ -713,6 +723,8 @@ export const pathAgentDefinition: AgentDefinition = {
     'time-estimation'
   ],
   
+  // 文档性元数据，不参与运行时分发/发布（语义见 agents/protocol.ts 的 AgentDefinition.subscribes）：
+  // 下列事件名均为描述性说明，全仓无对应 dispatch 调用点，请勿据此排查真实订阅关系。
   subscribes: [
     'learning:speed:change',
     'learning:focus:shift',

@@ -57,6 +57,17 @@ describe('path generation status', () => {
     }, new Date(), now)).toMatchObject({ allowed: true, retryType: 'stageDesign', reason: 'failed' });
   });
 
+  it('treats a succeeded run with zero-task stages as retryable, not completed (#241)', () => {
+    const succeededStageRun = { id: 'stage-run', phase: 'stageDesign', status: 'succeeded' };
+    expect(resolveGenerationRetry(
+      'active', { stageDesign: 'succeeded' }, succeededStageRun, new Date(), now, true
+    )).toMatchObject({ allowed: true, retryType: 'stageDesign', reason: 'incomplete' });
+    // 有任务时仍是完成态（防修过头）
+    expect(resolveGenerationRetry(
+      'active', { stageDesign: 'succeeded' }, succeededStageRun, new Date(), now, false
+    )).toMatchObject({ allowed: false, retryType: null, reason: 'completed' });
+  });
+
   it('calculates per-stage progress and rejects zero-task stages', () => {
     expect(calculateStageProgress(1, 3)).toEqual({ completedItems: 1, totalItems: 3, progress: 33 });
     expect(calculateStageProgress(3, 3)).toEqual({ completedItems: 3, totalItems: 3, progress: 100 });

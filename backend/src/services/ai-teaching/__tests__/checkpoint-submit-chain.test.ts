@@ -636,3 +636,39 @@ describe('反馈硬门接线（拍板 #5 切口1+2）：code 判错回合的回�
     expect(mockRecordDegradation).not.toHaveBeenCalled();
   })
 })
+
+describe('受理入口护栏（issue #210）：纯空白 message 不当真实教学回合', () => {
+  it.each(['', '   ', '\n\n', '\t', ' \n\t '])(
+    '空白 message %p → 抛「缺少消息内容」，不落库、不跑模型',
+    async (blank) => {
+      const session = sessionRecord();
+      await expect(
+        processStudentMessage('sess-1', blank, { operationClaim: claim(session) as never })
+      ).rejects.toThrow('缺少消息内容');
+      expect(mockTurnSkill).not.toHaveBeenCalled();
+      expect(mockCommitTurnState).not.toHaveBeenCalled();
+    }
+  )
+
+  it('非字符串 message → 同样拒绝（不向下游 .trim 抛 TypeError）', async () => {
+    const session = sessionRecord();
+    await expect(
+      processStudentMessage('sess-1', 123 as never, { operationClaim: claim(session) as never })
+    ).rejects.toThrow('缺少消息内容');
+    expect(mockTurnSkill).not.toHaveBeenCalled();
+    expect(mockCommitTurnState).not.toHaveBeenCalled();
+  })
+
+  it('resume-continue 空 message 豁免（断线续讲无学生新输入，保住既有行为）', async () => {
+    const session = sessionRecord();
+    mockClaimOperation.mockResolvedValue(claim(session));
+    const result = await processStudentMessage('sess-1', '', {
+      operationClaim: claim(session) as never,
+      kind: 'resume-continue',
+    });
+    expect(result).toBeDefined();
+    // 续讲不落库伪 user 消息
+    const committed = mockCommitTurnState.mock.calls[0][2] as any;
+    expect(committed.messages.some((m: any) => m.role === 'user' && m.content === '')).toBe(false);
+  })
+})

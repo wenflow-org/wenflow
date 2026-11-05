@@ -627,3 +627,81 @@ describe('ReviewCompletedConsumer 模拟钟绑定（M-15）', () => {
     }
   })
 })
+
+/**
+ * #158：复习落库 stability 与课内 canonical 映射同口径。
+ * 旧口径「没到 mastered 一律 fragile」会让一次「复习了但只到 hard」（status=learning）直接
+ * 绕过 LearnerKnowledgeMemoryService 的脆弱证据门（extractionCount≥3 且已过 7 天），
+ * 把「刚学一半」判成 fragile。新口径：learning→developing；只有真未答出（rating=again）才 fragile。
+ */
+describe('ReviewCompletedConsumer · 复习 stability 映射（#158）', () => {
+  interface Tx {
+    domain_event_inbox: { findUnique: jest.Mock; create: jest.Mock }
+    teaching_sessions: { findUnique: jest.Mock }
+    learner_evidence: { findFirst: jest.Mock; create: jest.Mock }
+    memory_traces: { findUnique: jest.Mock; upsert: jest.Mock; findMany: jest.Mock; count: jest.Mock }
+    learner_projections: { upsert: jest.Mock }
+  }
+
+  const buildTx = (): Tx => ({
+    domain_event_inbox: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      create: jest.fn().mockResolvedValue({}),
+    },
+    teaching_sessions: { findUnique: jest.fn().mockResolvedValue({ learningPathId: 'path-1' }) },
+    learner_evidence: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({}) },
+    memory_traces: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      upsert: jest.fn().mockResolvedValue({}),
+      findMany: jest.fn().mockResolvedValue([]),
+      count: jest.fn().mockResolvedValue(0),
+    },
+    learner_projections: { upsert: jest.fn().mockResolvedValue({}) },
+  })
+
+  const eventWith = (reviewItems: unknown[]) => createDomainEvent({
+    id: 'evt-158',
+    type: 'review:completed',
+    aggregateType: 'review',
+    aggregateId: 'ts-1',
+    userId: 'user-1',
+    source: 'session-finalization',
+    occurredAt: new Date(1_700_000_000_000),
+    data: { sessionId: 'ts-1', mode: 'review', reviewItems },
+  })
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockResolveConceptIdSafe.mockResolvedValue(null)
+    getActiveForConcepts.mockResolvedValue([])
+  })
+
+  it('复习一次、rating=hard、未到 mastered → 写 developing（不再直接 fragile）', async () => {
+    const tx = buildTx()
+    transaction.mockImplementation(async (callback: (client: Tx) => Promise<unknown>) => callback(tx))
+
+    await new ReviewCompletedConsumer().handle(eventWith([
+      { conceptKey: '光合作用', label: '光合作用', status: 'learning', progress: 40, masteryScore: 0.5, rating: 'hard' },
+    ]))
+
+    const upsert = tx.memory_traces.upsert.mock.calls[0][0]
+    expect(upsert.create.stability).toBe('developing')
+    expect(upsert.update.stability).toBe('developing')
+  })
+
+  it('复习判定 mastered → stable；本次未答出（rating=again）→ 维持 fragile', async () => {
+    const tx = buildTx()
+    transaction.mockImplementation(async (callback: (client: Tx) => Promise<unknown>) => callback(tx))
+
+    await new ReviewCompletedConsumer().handle(eventWith([
+      { conceptKey: '光合作用', label: '光合作用', status: 'mastered', progress: 100, masteryScore: 0.9, rating: 'easy' },
+      { conceptKey: '呼吸作用', label: '呼吸作用', status: 'not-recalled', progress: 0, masteryScore: 0.5, rating: 'again' },
+    ]))
+
+    const calls = tx.memory_traces.upsert.mock.calls.map((call) => call[0])
+    const mastered = calls.find((call) => call.create.conceptKey === '光合作用')
+    const again = calls.find((call) => call.create.conceptKey === '呼吸作用')
+    expect(mastered.create.stability).toBe('stable')
+    expect(again.create.stability).toBe('fragile')
+  })
+})

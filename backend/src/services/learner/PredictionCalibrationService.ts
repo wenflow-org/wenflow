@@ -42,6 +42,9 @@ export class PredictionCalibrationService {
         suggestedDepth: prediction.suggestedDepth,
         focusConcepts: JSON.stringify(prediction.focusConcepts || []),
         rationale: prediction.rationale || '',
+        // P1-13 / #181：自由描述原文一并落库，供第 2 回合起/重试/续课从本表重建时保真
+        toneDetail: prediction.toneDetail ?? null,
+        depthDetail: prediction.depthDetail ?? null,
         summaryEcho: summaryEcho ? summaryEcho.slice(0, 500) : null,
       },
     });

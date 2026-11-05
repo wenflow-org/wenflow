@@ -86,7 +86,7 @@ import { repairContradictedPassedVerdict, shouldGuardReplyForFailedConcept, stri
 import { assessAdjacentRepetition, findPreviousAssistantReply } from './teaching-repetition-guard';
 import { decideBoardIntent, numbersOnBoard } from './board-intent';
 import { applyBoardOp } from './board-controller';
-import { BOARD_DESIGN_BASE_INSTRUCTION, decideBoardAttachment, describeBoardForTeacher, openBoard, type BoardState } from './board-state';
+import { BOARD_DESIGN_BASE_INSTRUCTION, boardPromptInputForTeacher, decideBoardAttachment, openBoard, type BoardState } from './board-state';
 import { designBoard } from './board-designer.service';
 import { recordDegradation } from '../../skills/degradation-telemetry';
 import type { ReplanAdvisory } from './ReplanAdvisoryService';
@@ -234,6 +234,9 @@ export async function generateOpening(context: TeachingScenarioContext): Promise
             },
           }
           : {}),
+        // #181：开场生成器此前不在输入白名单里带预测 ⇒ 预测对「学生第一印象/首轮节奏」
+        // 零作用（1–2 回合的短课几乎等于没有回喂）。缺省不进载荷（与 recap 同一口径）。
+        ...(context.learnerPrediction ? { learnerPrediction: context.learnerPrediction } : {}),
         __prompt: {
           userId: context.userId,
           taskId: context.taskId,
@@ -326,6 +329,16 @@ export async function processStudentMessage(
     understanding: number;
   };
 }> {
+  // 受理入口护栏（issue #210）：纯空白 / 非字符串 message 不是真实学生输入，不得进入教学回合——
+  // 否则会落库一条空 user 消息、推进 revision 并发起付费模型调用（直连 API 可用来刷额度）。
+  // 口径与 HTTP 路由一致（routes/ai-teaching.routes.ts 的 typeof + trim 校验），此处再兜一层，
+  // 避免检查点 / 虚拟学习者 / 脚本等直连调用点绕过路由校验。
+  // 例外：resume-continue 是「断线后纯续讲、本轮无学生新输入」的合法模式（message 恒为 ''），
+  // 豁免以保住既有续讲行为（见下方 isResumeContinue 分支）。
+  if (options.kind !== 'resume-continue' && (typeof message !== 'string' || message.trim().length === 0)) {
+    throw new Error('缺少消息内容');
+  }
+
   const operationClaim = options.operationClaim || await teachingSessionRepository.claimOperation(
     sessionId,
     options.checkpointId ? `checkpoint:${options.checkpointId}` : 'message',
@@ -458,8 +471,32 @@ export async function processStudentMessage(
     }
   }
 
+  // 断线续讲（resume-continue）本轮无学生新输入，session-resumed 是驱动"自然接续"的唯一信号。
+  // 该事件必须在 buildTeachingTurnInput **之前**并入本轮可见事件——否则模型只从上一轮持久化的
+  // classroomEventHistory 派生 recentEvents，本轮提示词里根本不存在（issue #165）；回合结束后再
+  // 以同一对象 push 落库，保证本轮所见与下一轮历史逐字节一致。
+  const resumedEvent = isResumeContinue
+    ? buildClassroomEvent('session-resumed', '学生刚刚恢复本课堂会话，无新输入', {
+        instruction: '自然地接续上一轮的教学推进：先一句话承接上次进度，再继续当前焦点知识点。不要询问"你想做什么/从哪继续"，不要重新自我介绍或重复开场。',
+      })
+    : null;
+
   const turnInput = await buildTeachingTurnInput({
     ...session,
+    // 断线续讲：把 session-resumed 追加进本轮可见事件（非续讲回合不带该键，行为不变）。
+    ...(resumedEvent
+      ? {
+          teachingState: {
+            ...previousTeachingState,
+            classroomEventHistory: [
+              ...(Array.isArray(previousTeachingState.classroomEventHistory)
+                ? previousTeachingState.classroomEventHistory
+                : []),
+              resumedEvent,
+            ],
+          },
+        }
+      : {}),
     // B2/Q14：喂给模型前对学习者消息做输入围栏（正常文本原样；疑似注入被打标为不可信数据）。
     // 落库消息保持原文（见上方 updatedMessages），因此这里传的是围栏后的浅拷贝。
     messages: fenceLearnerMessagesForModel(updatedMessages),
@@ -492,9 +529,9 @@ export async function processStudentMessage(
   // 为什么没板也要说话：提示词里「无 boardContext 则禁止看图指代」埋在 system prompt 里，
   // 真人走查实测会被忽略——模型靠"字段缺席"自己推断不出限制，于是假设有一块板并描述它的
   // 排布（一手「两栏」、一手「两个圈」）。正向告知写进本轮输入才生效。
-  // 语义不翻转：figure/diagram 丢弃闸（下方）看的是 `board` 真值，不看这个字段在不在；
-  // 提示词侧的判据也已同步改为按内容判（2026-11-03，见 prompts/core/teaching-turn.yaml rule15）。
-  (turnInput as { boardContext?: string | null }).boardContext = describeBoardForTeacher(board);
+  // 语义不翻转：figure/diagram 丢弃闸看的是 `board` 真值；提示词侧已按内容判（2026-11-03，rule15）；
+  // #244 起文案与校验器信号同源（boardReachesStudent：degenerate 首版板永不下发，不得声称有板）。
+  Object.assign(turnInput, boardPromptInputForTeacher(board));
   // 教学回合 wall-clock 超时兜底：LLM 挂起时避免操作租约（30min）被占导致会话内所有操作 409 BUSY；
   // 超时走 releaseOperation + 客户端重试路径（revision 未递增，重试安全）。
   // 阈值对齐 platform_settings.aiReliability.defaultRequestTimeoutMs（300s）：
@@ -945,11 +982,9 @@ export async function processStudentMessage(
     }));
   }
 
-  // 恢复续讲信号：teaching-turn 看到该事件即知本轮无学生新输入，需自然接续上一轮推进
-  if (isResumeContinue) {
-    classroomEvents.push(buildClassroomEvent('session-resumed', '学生刚刚恢复本课堂会话，无新输入', {
-      instruction: '自然地接续上一轮的教学推进：先一句话承接上次进度，再继续当前焦点知识点。不要询问"你想做什么/从哪继续"，不要重新自我介绍或重复开场。',
-    }));
+  // 恢复续讲信号：与 buildTeachingTurnInput 前注入的是同一对象（本轮已可见），此处并入落库历史
+  if (resumedEvent) {
+    classroomEvents.push(resumedEvent);
   }
 
   const stageHistory = Array.isArray(previousTeachingState.stageHistory)

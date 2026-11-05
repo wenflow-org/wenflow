@@ -242,13 +242,39 @@ export async function failGenerationRun(
     if (failed.count !== 1) return false;
 
     const updatedPath = await tx.learning_paths.updateMany({
-      where: { id: pathId, activeGenerationRunId: runId },
+      where: {
+        id: pathId,
+        activeGenerationRunId: runId,
+        // 'active' 只用于复位陈旧的 'generating'（#238）：archived/completed 是治理/结业态，
+        // 后台失败不得把它们翻回可学。'failed' 保持原语义（core 失败无条件落库）。
+        ...(pathStatus === 'active' ? { status: 'generating' } : {})
+      },
       data: {
         ...(pathStatus ? { status: pathStatus } : {}),
         updatedAt: now
       }
     });
     return updatedPath.count === 1;
+  });
+}
+
+/**
+ * 收尾复位（#238）：learning_paths.status 只由 core 认领写成 'generating'，但 stageDesign /
+ * replan 可以抢占 core run——被抢占的 core 之后必然撞 GENERATION_RUN_FENCED，永远不再写回
+ * 'active'，于是路径永久卡在「生成中」（无法开课、与 generation-status 的矛盾、重试入口报错）。
+ * 因此接管的 run 在成功/失败收尾时都必须负责把陈旧的 'generating' 复位。
+ *
+ * 只从 'generating' 复位：archived（管理员下线）/ completed（结业）等状态保持不变。
+ */
+export async function restorePathStatusAfterRunSettled(
+  tx: any,
+  pathId: string,
+  runId: string,
+  settledStatus: 'active' | 'failed' = 'active'
+): Promise<void> {
+  await tx.learning_paths.updateMany({
+    where: { id: pathId, activeGenerationRunId: runId, status: 'generating' },
+    data: { status: settledStatus, updatedAt: new Date() }
   });
 }
 

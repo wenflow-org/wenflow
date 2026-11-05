@@ -133,6 +133,15 @@ export interface LearnerModelProfile {
     optimalSessionLength: number;
     recommendedDifficulty: 'easy' | 'medium' | 'hard';
     suggestedApproach: string;
+    /**
+     * riskFactors / strengths 由 ProfileAggregator.identifyRiskFactors / identifyStrengths 从画像字段
+     * （cognitive/learning/behavioral/emotional）确定性推导，**不消费** knowledgeMemory.globalBackground
+     * 台账——契约上「不接通」。issue #196 点名的「叙述层增强永不触发」是：原先
+     * reusableFoundations→strengths / blockedFoundations→riskFactors 的增强，其唯一写入口
+     * （applyUpdate 的 'knowledge-background' 合并分支，写入方 learner.coordinator）在 1b3cf644 退役后
+     * 已无调用方。该分支与其增强随该提交一并移除、不再接通：接通需重造写入口或改从 globalBackground
+     * 派生，属产品决策，未做（保住现有行为）。
+     */
     riskFactors: string[];
     strengths: string[];
   };
@@ -268,6 +277,11 @@ export interface LearnerGlobalBackgroundKnowledge {
   reusableFoundations: string[];
   blockedFoundations: string[];
   transferSignals: LearnerTransferSignal[];
+  /** 最近一次课后知识状态自然语言摘要（lesson-knowledge-enricher 产出，供预测器/教学决策读取）；
+   *  无 enrichment 证据时不出现（issue #194：此前声明为 profile 产出却从未进快照）。
+   *  issue #198：摘要按**当前路径**取（自由文本可命名概念，跨路径取会经预测器渗入当前教学场景）；
+   *  外层 globalBackground 的其它结构化字段仍是用户级跨路径聚合。 */
+  knowledgeStateSummary?: string;
 }
 
 export interface LearnerPathKnowledgeMemory {
@@ -426,6 +440,9 @@ export interface TeachingLearnerProjection {
     blockedFoundations: string[];
     recentConceptLedger: LearnerBackgroundConceptLedgerItem[];
     recurringConfusions: LearnerRecurringConfusion[];
+    /** 迁移就绪度信号（lesson-knowledge-enricher 产出、经快照 globalBackground 聚合）。
+     *  供课堂在联系迁移目标时点名可迁移概念（issue #196：此前该字段无任何确定性消费方）。 */
+    transferSignals: LearnerTransferSignal[];
   };
   learningControlState: LearnerLearningControlState;
   /**
@@ -525,7 +542,12 @@ export interface LearnerPersonalizationConfig {
 export interface ProfileUpdateSource {
   agentId: string;
   timestamp: string;
-  dataType: 'cognitive' | 'behavioral' | 'learning' | 'preferences' | 'emotional' | 'interaction' | 'knowledge-background';
+  // dataType 收窄为 applyUpdate 实际落地的三种（issue #196 复核）：'behavioral' / 'preferences' /
+  // 'interaction' 虽被声明，但 applyUpdate 从无对应分支、只会落到 default 被判失败——声明与行为矛盾，
+  // 故一并移除。未声明的取值不再可能经类型进入；default 仅作运行期防御（agent 侧 metadata.source
+  // 是 as 断言，可能带任意值）。'knowledge-background' 随其合并分支移除：唯一写入方
+  // （learner.coordinator）在 1b3cf644 退役后无人调用。
+  dataType: 'cognitive' | 'learning' | 'emotional';
   data: Partial<
     CognitiveProfile & 
     BehavioralBaseline & 
@@ -533,9 +555,7 @@ export interface ProfileUpdateSource {
     LearningPreferences & 
     EmotionalProfile &
     InteractionHistory
-  > & {
-    learnerBackground?: Partial<LearnerGlobalBackgroundKnowledge>;
-  };
+  >;
   confidence: number;
 }
 

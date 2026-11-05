@@ -737,9 +737,68 @@ export async function recordAnchorProbeResult(
 }
 
 /**
- * 剥离检查点答案键（客户端投影前调用）：答案键只用于服务端代码裁决，**绝不下发**。
- * 覆盖两处暴露面：`pendingCheckpoint` 本身，以及原样返回的 `teachingState`（其中也存了一份）。
+ * 检查点答案键的字段名：只用于服务端代码裁决，**任何客户端投影都不得携带**。
+ * 逐键剥离而**不是**按路径白名单下探——`teachingState` 里同一份答案键有多处副本
+ * （顶层 `pendingCheckpoint`、`checkpointHistory`、`sessionArtifacts`、
+ * `lastRuntimeEnvelope.artifact.control.checkpoint`，消息里还有历史 `promptDebug`），
+ * 白名单漏一处就是一次泄漏（240：`/detail` 的 `state.lastRuntimeEnvelope` 漏剥）。
  */
+const CHECKPOINT_ANSWER_KEY_NAMES = ['correctOptionIds', 'expectedKeywords'] as const;
+
+/**
+ * 递归剥离答案键（结构无关）。返回**新对象**，但只在真的删了键的分支上重建节点，
+ * 未命中的子树原样复用——既不修改入参（纯函数），也不为整棵树付出深拷贝代价。
+ */
+function stripAnswerKeysDeep(value: any): any {
+  if (!value || typeof value !== 'object') return value;
+  if (Array.isArray(value)) {
+    let changed = false;
+    const next = value.map((item) => {
+      const stripped = stripAnswerKeysDeep(item);
+      if (stripped !== item) changed = true;
+      return stripped;
+    });
+    return changed ? next : value;
+  }
+  let changed = false;
+  const next: Record<string, any> = {};
+  for (const key of Object.keys(value)) {
+    if ((CHECKPOINT_ANSWER_KEY_NAMES as readonly string[]).includes(key)) {
+      changed = true;
+      continue;
+    }
+    const item = value[key];
+    const stripped = stripAnswerKeysDeep(item);
+    if (stripped !== item) changed = true;
+    next[key] = stripped;
+  }
+  return changed ? next : value;
+}
+
+/**
+ * 消息行 → 客户端投影：剔除已停写的调试信封 + 剥离答案键。
+ *
+ * 为什么必须剔除而不是只剥键（#240）：存量行的 `promptDebug.rawModelOutput` /
+ * `extractedJson` / `attempts[].rawOutput` 是**模型原始输出的字符串**，里面同样嵌着
+ * `control.checkpoint.correctOptionIds`——按键名递归删只能删结构里的键，删不掉字符串里的副本。
+ * 该信封自 2026-10-08 起停写、前端只有类型声明无任何 UI 读取
+ * （见 routes/ai-teaching.routes.ts `promptDebugEnabled` 注释），故学习者侧出口直接不下发。
+ *
+ * 读侧出口不止一个：`/detail`（teaching-session-ops.getSessionDetail）与
+ * `/users/me/sessions`（routes/users.ts）都必须过这里——#240 的教训就是"只补一处"。
+ */
+export function projectMessagesForClient<T extends Record<string, any>>(messages: T[]): T[] {
+  if (!Array.isArray(messages)) return messages;
+  const withoutDebug = messages.map((message) => {
+    if (!message || typeof message !== 'object') return message;
+    const { promptDebug, peerDebug, ...rest } = message as Record<string, any>;
+    void promptDebug;
+    void peerDebug;
+    return rest as T;
+  });
+  return stripCheckpointAnswerKeys({ messages: withoutDebug }).messages;
+}
+
 /**
  * 消息响应里下发的 `checkpoint`：**必须先剥离答案键**。
  *
@@ -771,22 +830,18 @@ export function inheritTeachingState<T extends Record<string, any>>(
   return { ...(previousTeachingState || {}), ...turnState };
 }
 
+/**
+ * 剥离检查点答案键（客户端投影前调用）：答案键只用于服务端代码裁决，**绝不下发**。
+ *
+ * 覆盖面是**结构无关**的：任意深度的 `correctOptionIds` / `expectedKeywords` 都会被删除——
+ * `pendingCheckpoint`、`checkpointHistory`、`sessionArtifacts`、
+ * `lastRuntimeEnvelope.artifact.control.checkpoint`（写侧保存的模型原始输出）等，白名单漏一处就是泄漏。
+ * 只删**结构里的键**：嵌在字符串（如存量 `promptDebug.rawModelOutput`）里的副本删不掉，
+ * 那种行必须在消息出口整份剔除调试信封（`projectMessagesForClient`）。
+ * 学员自己的作答（`submittedOptionIds` / `selectedOptionIds`）、`passed`、`options` 全部保留
+ * ——评估页回放小测要用这些。
+ */
 export function stripCheckpointAnswerKeys<T extends Record<string, any> | null | undefined>(teachingState: T): T {
   if (!teachingState || typeof teachingState !== 'object') return teachingState;
-  const clone: Record<string, any> = { ...(teachingState as Record<string, any>) };
-  const stripOne = (checkpoint: any) => {
-    if (!checkpoint || typeof checkpoint !== 'object') return checkpoint;
-    const { correctOptionIds, expectedKeywords, ...rest } = checkpoint;
-    void correctOptionIds;
-    void expectedKeywords;
-    return rest;
-  };
-  if (clone.pendingCheckpoint) clone.pendingCheckpoint = stripOne(clone.pendingCheckpoint);
-  if (Array.isArray(clone.checkpointHistory)) {
-    clone.checkpointHistory = clone.checkpointHistory.map(stripOne);
-  }
-  if (clone.sessionArtifacts && typeof clone.sessionArtifacts === 'object' && clone.sessionArtifacts.pendingCheckpoint) {
-    clone.sessionArtifacts = { ...clone.sessionArtifacts, pendingCheckpoint: stripOne(clone.sessionArtifacts.pendingCheckpoint) };
-  }
-  return clone as T;
+  return stripAnswerKeysDeep(teachingState) as T;
 }

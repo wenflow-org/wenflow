@@ -1,0 +1,51 @@
+{
+  "cookies": [
+    {
+      "name": "wenflow_token",
+      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJ1c2VyX2YyZGU0MDllLTA3NTMtNDAxNC05NjRiLWRkNjM1MzhhOWFjYyIsIm5hbWUiOiJ1eHByb2JlODUxNjI2IiwidG9rZW5WZXJzaW9uIjowLCJwdXJwb3NlIjoiYWNjZXNzIiwidHlwZSI6InVzZXIiLCJpYXQiOjE3OTMyNjEyMzAsImV4cCI6MTc5MzI2MzAzMCwiYXVkIjoid2VuZmxvdzp1c2VyIiwiaXNzIjoid2VuZmxvdyJ9.JMJ3k46d8_saYPqPcyZW2vSzW-kUXZapItgldT2h3XM",
+      "domain": "localhost",
+      "path": "/",
+      "expires": 1793866030.480264,
+      "httpOnly": true,
+      "secure": false,
+      "sameSite": "Strict"
+    },
+    {
+      "name": "wenflow_refresh_token",
+      "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJ1c2VyX2YyZGU0MDllLTA3NTMtNDAxNC05NjRiLWRkNjM1MzhhOWFjYyIsInRva2VuVmVyc2lvbiI6MCwicHVycG9zZSI6InJlZnJlc2giLCJqdGkiOiI2ZmM2NWU5YS00OWYxLTQwM2EtODc4Mi04NGI3OTk0NDBmMDAiLCJ0eXBlIjoidXNlciIsImlhdCI6MTc5MzI2MTIzMCwiZXhwIjoxNzk1ODUzMjMwLCJhdWQiOiJ3ZW5mbG93OnVzZXIiLCJpc3MiOiJ3ZW5mbG93In0.oWsTz6x2jEePj_aQ4CaFn0lGJmku4TzSzqtlvDeHbDA",
+      "domain": "localhost",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": false,
+      "sameSite": "Strict"
+    }
+  ],
+  "origins": [
+    {
+      "origin": "http://localhost:5173",
+      "localStorage": [
+        {
+          "name": "wenflow_session",
+          "value": "1"
+        },
+        {
+          "name": "user_fetched_at",
+          "value": "1793261230490"
+        },
+        {
+          "name": "v2_theme",
+          "value": "light"
+        },
+        {
+          "name": "wenflow-theme",
+          "value": "light"
+        },
+        {
+          "name": "user",
+          "value": "{\"id\":\"user_f2de409e-0753-4014-964b-dd63538a9acc\",\"email\":\"uxprobe851626@wenflow.local\",\"name\":\"uxprobe851626\",\"xp\":0,\"role\":\"user\",\"currentLevel\":\"beginner\",\"createdAt\":\"2026-10-29T07:27:34.108Z\",\"lastLoginAt\":\"2026-10-29T08:07:10.474Z\",\"streakDays\":0,\"longestStreak\":0,\"onboardingCompleted\":true,\"level\":1,\"xpToNextLevel\":100}"
+        }
+      ]
+    }
+  ]
+}

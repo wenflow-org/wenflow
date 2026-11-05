@@ -38,13 +38,22 @@ export const learnerModelAgentDefinition: AgentDefinition = {
     'risk-detection'
   ],
   
+  // 文档性元数据，不参与运行时分发（语义见 agents/protocol.ts 的 AgentDefinition.subscribes）。
+  // 本 Agent 的真实执行体是 bootstrap/schedulers.ts 里注册的 handleLearnerEvent(LEARNER_EVENT_TYPES)
+  // （见 events/learner-event-consumer.ts），其消费集合即下列 7 类；此处按真实集合对齐，
+  // 不再声明全仓查无的 learning:completed / content:generated。
   subscribes: [
-    'learning:completed',
-    'content:generated',
+    'goal:understanding:updated',
     'task:completed',
-    'goal:understanding:updated'
+    'lesson:completed',
+    'path:created',
+    'path:generated',
+    'path:adjusted',
+    'path:completed'
   ],
   
+  // 文档性元数据，不参与运行时发布：以下两个事件在全仓没有任何 emit 点，Agent 执行体也不会发出，
+  // 保留仅为描述性说明，请勿据此排查真实事件的发出方。
   publishes: [
     'profile:updated',
     'personalization:ready'

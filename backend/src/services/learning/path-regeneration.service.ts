@@ -11,6 +11,7 @@ import { logger } from '../../utils/logger'
 import { findGoalConversationForPathSummary } from './learning-routes.repo'
 import { buildGoalPathVisibleSummary } from './goal-path-visible-summary'
 import { resolveLearnerLoadProfileFromCollectedData } from './learner-load-profile'
+import { assertExistingPathGoalTriageAllowed } from './goal-triage-evidence'
 import learningService from './learning.service'
 
 export interface RegenerablePath {
@@ -21,6 +22,8 @@ export interface RegenerablePath {
   description?: string | null
   subject?: string | null
   aiPromptTemplate?: string | null
+  /** 服务端生成管线建的路径标记（#227：存量失败占位救援档需要，用户建的空壳为 false） */
+  aiGenerated?: boolean | null
   activeGenerationRunId?: string | null
   deadline?: Date | null
   deadlineText?: string | null
@@ -146,12 +149,22 @@ export async function buildGoalPathRequestFromConversation(path: RegenerablePath
 /**
  * 认领一次 core 生成并按「目标画像优先」的链路重跑主结构。
  * 调用方负责前置状态校验（失败态/无进度）与审计；这里只做认领 + 触发。
+ *
+ * #227：认领前先过既有路径的 goal 闸门（豁免前提是「这条路径自身携带服务端产出
+ * 的 goal 判定」，或它自己存的来源会话凭证）——与 `pathOrchestrator.generate`
+ * 里那道唯一闸门同口径，前置只是为了让调用方拿到明确错误，而不是
+ * 「返回成功、路径却在后台被闸门拦下并记成失败」。
  */
 export async function regeneratePathCoreFromStoredGoal(
   path: RegenerablePath,
   options: { adjustments?: string | null } = {}
 ): Promise<{ runId: string; mode: 'goal' | 'fallback' }> {
   const adjustments = options.adjustments ?? null
+  await assertExistingPathGoalTriageAllowed(
+    path,
+    extractStoredSourceConversationId(path.aiPromptTemplate) ?? null,
+  )
+
   const runId = await learningService.claimPathCoreGeneration(path.id, path.activeGenerationRunId ?? null)
 
   const onError = async (error: unknown) => {

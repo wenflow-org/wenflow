@@ -238,6 +238,10 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
             // 补课调用一直在传，提示词的 supplementRequest 规则却永远拿不到输入。
             previousStageOutcome: payload.previousStageOutcome || null,
             supplementRequest: payload.supplementRequest || null,
+            // 跨阶段去重事实源（2026-11-05 #249）：编排层 stage-enrichment 在 stageIndex>1 时注入并
+            // 打「已注入」日志，但本白名单此前未带 ⇒ 键在 skill 边界被静默丢弃，模型侧从未见过它。
+            // 与 previousStageOutcome 同型写成恒发键：未注入时发 null，便于从载荷直方图核对是否为空。
+            allPreviousStageTasks: payload.allPreviousStageTasks || null,
           }
         : {
             milestone: withLoadTargetForMilestone(payload.milestone, payload.cognitiveCore),
@@ -252,6 +256,7 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
             repairHints: payload.repairHints || null,
             previousStageOutcome: payload.previousStageOutcome || null,
             supplementRequest: payload.supplementRequest || null,
+            allPreviousStageTasks: payload.allPreviousStageTasks || null,
           }),
       normalizeOutput: (parsed, payload) => {
         const subtasks = withMaterialRefs(

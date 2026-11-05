@@ -632,4 +632,102 @@ describe('SessionFinalizationService', () => {
 
     expect(mockEndSession).not.toHaveBeenCalled()
   })
+
+  // #239 回归：幽灵课（<2 条学生回合且 <60s）按设计把 wrapup 留 NULL，但状态机已闭合到
+  // completed。旧的 auto-end 后置校验要求「completed + wrapup」，于是自动关课成功后自己
+  // 409 FINALIZATION_SESSION_NOT_CLOSED，而此刻 /end、/messages、/continue 全已不可用。
+  it('#239：auto-end 落到 completed 但 wrapup 为 null（幽灵课）时仍继续结算，不死锁', async () => {
+    const ghostAfterAutoEnd = {
+      ...completedSession(),
+      status: 'completed',
+      wrapup: null,
+      revision: 5,
+    }
+    mockRepository.assertOwnership
+      .mockResolvedValueOnce(completedSession({ status: 'active', wrapup: null, revision: 4 }))
+      .mockResolvedValueOnce(ghostAfterAutoEnd)
+    mockEndSession.mockResolvedValue({ status: 'completed', operationId: 'auto-end-op', revision: 5 })
+    mockRepository.claimFinalization.mockResolvedValue({
+      status: 'claimed',
+      operationId: 'task-op',
+      leaseOwner: 'lease-1',
+      session: ghostAfterAutoEnd
+    })
+    mockCompleteTask.mockResolvedValue({ alreadyCompleted: false, task: { id: 'task-1', status: 'completed' } })
+    mockRepository.completeFinalizationStep.mockResolvedValue({
+      ...ghostAfterAutoEnd,
+      revision: 6,
+      teachingState: { finalization: { taskCompletion: 'completed' } }
+    })
+
+    const result = await service.finalize({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      action: 'complete_task',
+      operationId: 'task-op',
+      revision: 4
+    })
+
+    expect(mockCompleteTask).toHaveBeenCalledTimes(1)
+    expect(result.status).toBe('completed')
+    expect((result as any).taskCompletion).toEqual({ status: 'completed', alreadyCompleted: false })
+    // 本次 auto-end 关的课：sessionClosedBeforeCompletion 仍按顶部快照取 false（既有语义不变）
+    expect(mockCompleteTask).toHaveBeenCalledWith(expect.objectContaining({
+      sessionClosedBeforeCompletion: false
+    }))
+  })
+
+  // #239 另一条无路：completed + wrapup=null 的终态再点一次「完成」。
+  // 旧实现在 auto-end 前置判断里把「completed 但无 wrapup」当成未结束，于是再调一次
+  // endSession → claimFinalization(end_only) 的 allowedStatuses 不含 completed → 409 STATE_CHANGED。
+  it('#239：completed + wrapup=null 再结算时不重复 auto-end，直接走任务结算', async () => {
+    const ghost = { ...completedSession(), status: 'completed', wrapup: null, revision: 5 }
+    mockRepository.assertOwnership.mockResolvedValue(ghost)
+    mockRepository.claimFinalization.mockResolvedValue({
+      status: 'claimed',
+      operationId: 'task-op',
+      leaseOwner: 'lease-1',
+      session: ghost
+    })
+    mockCompleteTask.mockResolvedValue({ alreadyCompleted: false, task: { id: 'task-1', status: 'completed' } })
+    mockRepository.completeFinalizationStep.mockResolvedValue({
+      ...ghost,
+      revision: 6,
+      teachingState: { finalization: { taskCompletion: 'completed' } }
+    })
+
+    await service.finalize({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      action: 'complete_task',
+      operationId: 'task-op',
+      revision: 5
+    })
+
+    expect(mockEndSession).not.toHaveBeenCalled()
+    expect(mockCompleteTask).toHaveBeenCalledTimes(1)
+    // 本次结算前会话已闭合（completed，wrapup 可为 NULL）→ 必须补做 eager 投影刷新（#204/#239）
+    expect(mockCompleteTask).toHaveBeenCalledWith(expect.objectContaining({
+      sessionClosedBeforeCompletion: true
+    }))
+  })
+
+  // 反向约束（不能修过头）：auto-end 回来**没**到 completed（仍在 finalizing / failed）时，
+  // 必须仍然拒绝结算，且文案不能引导用户去做一个必然 409 的动作。
+  it('#239：auto-end 回来仍未闭合时仍拒绝结算，文案不给不可执行的指引', async () => {
+    mockRepository.assertOwnership
+      .mockResolvedValueOnce(completedSession({ status: 'active', wrapup: null, revision: 4 }))
+      .mockResolvedValueOnce(completedSession({ status: 'finalization_failed', wrapup: null, revision: 5 }))
+    mockEndSession.mockResolvedValue({ status: 'completed', operationId: 'auto-end-op', revision: 5 })
+
+    await expect(service.finalize({
+      sessionId: 'session-1',
+      userId: 'user-1',
+      action: 'complete_task',
+      operationId: 'task-op',
+      revision: 4
+    })).rejects.toMatchObject({ code: 'FINALIZATION_SESSION_NOT_CLOSED', status: 409 })
+
+    expect(mockCompleteTask).not.toHaveBeenCalled()
+  })
 })

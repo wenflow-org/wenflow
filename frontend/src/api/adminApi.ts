@@ -240,9 +240,10 @@ export const adminDashboardApi = {
   },
 
   /**
-   * 完课量按轨道/通道拆分（#105 读侧接入）：数据 = learner_evidence 已投影收束事件，
-   * task:completed 计入完课量；历史无 track 行归 legacy（未标记），不回填。
-   * 返回 { total, byTrack, bySource, pathCompletions }。
+   * 完课量按轨道/通道拆分（#105 读侧接入；2026-11-04 口径对齐 #186）：
+   * 数据 = learner_evidence 已投影收束事件。total/byTrack/bySource 同源同口径（非虚拟），
+   * 三项轨道相加即 total；虚拟学习者单列 virtualCount（不计入）；历史无 track 行归 legacy（未标记）。
+   * 返回 { total, byTrack, bySource, virtualCount, pathCompletions }。
    */
   getClosureSummary: async () => {
     return adminAxios.get('/admin/overview/closure');

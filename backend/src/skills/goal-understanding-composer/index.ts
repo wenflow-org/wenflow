@@ -100,7 +100,14 @@ export function mergeUnderstanding(previousUnderstanding: any, parsedJson: any):
     background: { ...(understanding.background || {}), ...(nextUnderstanding.background || {}) },
     learning_style: { ...(understanding.learning_style || {}), ...(nextUnderstanding.learning_style || {}) },
     cognitive_profile: { ...(understanding.cognitive_profile || {}), ...(nextUnderstanding.cognitive_profile || {}) },
-    emotional_profile: { ...(understanding.emotional_profile || {}), ...(nextUnderstanding.emotional_profile || {}) }
+    emotional_profile: { ...(understanding.emotional_profile || {}), ...(nextUnderstanding.emotional_profile || {}) },
+    // canonical 容器是硬必填的读取来源（available_resources.time_budget/time_horizon、
+    // success_criteria.observable_result 等）。本轮只输出子集时若整包覆盖，上一轮兄弟键会丢，
+    // 阶段被从 proposing 压回 understanding。此处与 delta 路径（mergeStateDelta 的"缺席=不变"）对齐。
+    available_resources: { ...(understanding.available_resources || {}), ...(nextUnderstanding.available_resources || {}) },
+    success_criteria: { ...(understanding.success_criteria || {}), ...(nextUnderstanding.success_criteria || {}) },
+    current_baseline: { ...(understanding.current_baseline || {}), ...(nextUnderstanding.current_baseline || {}) },
+    time_dimensions: { ...(understanding.time_dimensions || {}), ...(nextUnderstanding.time_dimensions || {}) }
   }
 }
 

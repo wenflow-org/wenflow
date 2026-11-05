@@ -91,7 +91,9 @@ describe('skill-model-configs routing-only write path', () => {
         params: { skillId: 'goal-conversation' },
         body: {
           enabled: true,
-          model: 'override-model',
+          // #177：未自带 endpoint 的 skill 只能钉目录内模型（门禁见下方同名用例），
+          // 本用例考的是 paramOverrides 管线，故用注册表内的真实模型。
+          model: 'deepseek-v4.1-flash',
           temperature: 0.1,
           maxTokens: 999,
           maxLogicalRetries: 1,
@@ -106,7 +108,7 @@ describe('skill-model-configs routing-only write path', () => {
     // 裸 temperature/maxTokens 仍被忽略（兼容旧客户端；请改用 paramOverrides）
     expect(mockUpsert.mock.calls[0][1]).toEqual(
       expect.objectContaining({
-        model: 'override-model',
+        model: 'deepseek-v4.1-flash',
         maxLogicalRetries: 1,
         requestTimeoutMs: 60000,
         enabled: true,
@@ -176,6 +178,38 @@ describe('skill-model-configs routing-only write path', () => {
     expect(res.status).toHaveBeenCalledWith(400)
   })
 
+  /* #177：未自带 endpoint 的 skill 走继承通道，显式钉目录外模型会在运行期无可用渠道。 */
+  it('PUT 拒绝未自带 endpoint 时钉目录外模型', async () => {
+    mockGet.mockResolvedValue({ skillId: 'goal-conversation', enabled: true, model: null, endpoint: null, apiKey: null })
+    const handler = getHandler('put', '/:skillId')
+    const res = createRes()
+    await handler(
+      { params: { skillId: 'goal-conversation' }, body: { enabled: true, model: 'totally-unknown-model' } },
+      res
+    )
+    expect(res.status).toHaveBeenCalledWith(400)
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      error: expect.stringContaining('totally-unknown-model'),
+    }))
+    expect(mockUpsert).not.toHaveBeenCalled()
+  })
+
+  it('自带 endpoint 的 skill 允许钉该独立通道的模型（不受平台目录约束）', async () => {
+    mockGet.mockResolvedValue({ skillId: 'goal-conversation', enabled: true, model: null, endpoint: null, apiKey: null })
+    mockUpsert.mockImplementation(async (_id: string, data: any) => ({ skillId: 'goal-conversation', ...data }))
+    const handler = getHandler('put', '/:skillId')
+    const res = createRes()
+    await handler(
+      {
+        params: { skillId: 'goal-conversation' },
+        body: { enabled: true, model: 'self-hosted-model', endpoint: 'http://127.0.0.1:30001/v1', apiKey: 'k' },
+      },
+      res
+    )
+    expect(res.status).not.toHaveBeenCalledWith(400)
+    expect(mockUpsert).toHaveBeenCalled()
+  })
+
   it('GET 暴露含 topP 与 sources 的生成参数投影', async () => {
     mockGet.mockResolvedValue({
       skillId: 'goal-conversation',
@@ -233,6 +267,15 @@ describe('bulk-apply：清空模型覆盖（跟随平台默认）', () => {
     await handler({ body: { skillIds: ['a'], clearModel: true, model: 'agnes-3.0-flash' } } as any, res)
     expect(mockUpsert).not.toHaveBeenCalled()
     expect(res.status).toHaveBeenCalledWith(400)
+  })
+
+  /* #177：批量套用未提供独立 endpoint 时，同样不能把目录外模型钉给走继承通道的 skill。 */
+  it('未提供 endpoint 时拒绝批量套用目录外模型', async () => {
+    const handler = getHandler('post', '/bulk-apply')
+    const res = createRes()
+    await handler({ body: { skillIds: ['a', 'b'], model: 'totally-unknown-model' } } as any, res)
+    expect(res.status).toHaveBeenCalledWith(400)
+    expect(mockUpsert).not.toHaveBeenCalled()
   })
 })
 

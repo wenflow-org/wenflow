@@ -10,7 +10,8 @@
 import systemPrisma from '../config/system-database';
 import {
   AVAILABLE_MODELS, MODEL_ALIASES, MODEL_MAP, getModelAliasMembers,
-  getProviderCatalog, getLlmRegistryStatus, getModelDefaults, reloadLlmProvidersIfChanged
+  getProviderCatalog, getLlmRegistryStatus, getModelDefaults, reloadLlmProvidersIfChanged,
+  resolvesToRegisteredModel
 } from '../config/models.config';
 import { selectModelForAlias } from '../gateway/api-gateway/model-alias';
 import { MAX_MODEL_CANDIDATES } from '../gateway/api-gateway/executor';
@@ -235,6 +236,20 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
     : null;
   const evaluationSelection = evaluationModel ? selectModelForAlias(evaluationModel, { overrides: dbLists }) : null;
 
+  // 平台三档默认必须落在已注册目录内（含别名展开）。指向目录外的模型（如历史遗留的评测专用
+  // id）在运行时无可用渠道、请求直接 transport 失败，且未单独配模型的 skill 会静默继承它（#177）。
+  // 这里把它变成可见的配置漂移告警——与别名/降级链告警同一面（管理端「模型注册表」页渲染）。
+  for (const [label, configured, selection] of [
+    ['默认模型', defaultModel, chatSelection],
+    ['推理默认模型', reasoningModel, reasoningSelection],
+    ['评估默认模型', evaluationModel, evaluationSelection],
+  ] as const) {
+    const resolved = selection?.model ?? configured;
+    if (!resolvesToRegisteredModel(resolved, dbLists)) {
+      warnings.push(`平台${label}「${configured}」不在已注册模型目录中（llm-providers.json）：运行时会因无可用渠道失败；未单独配置模型的 skill 会继承它。请改到目录内模型或用已注册别名。`);
+    }
+  }
+
   const models = AVAILABLE_MODELS.map((model) => ({
     id: model.id,
     label: model.label,
@@ -295,6 +310,21 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
     const agentOverrideCount = await systemPrisma.agent_model_configs.count({ where: { enabled: true } });
     if (agentOverrideCount > 0) {
       warnings.push(`${agentOverrideCount} 行 agent_model_configs 遗留数据（已不参与路由解析，可清理）。`);
+    }
+  } catch { /* 总览是诊断页:统计失败不阻塞其余信息 */ }
+
+  // 启用的 skill_model_configs 若显式钉了目录外模型，同样会 transport 失败（#177：同一陷阱
+  // 此前已在 board-designer 手工绕过一次）。未配模型（null/空）走「继承平台默认」，由上面的
+  // 平台默认告警覆盖，不在此重复告警。
+  try {
+    const skillRows = await systemPrisma.skill_model_configs.findMany({
+      where: { enabled: true, NOT: [{ model: null }, { model: '' }] },
+      select: { skillId: true, model: true }
+    });
+    const drifted = skillRows.filter((row) => !resolvesToRegisteredModel(row.model, dbLists));
+    if (drifted.length) {
+      const detail = drifted.map((row) => `${row.skillId}→${row.model}`).join('、');
+      warnings.push(`有 ${drifted.length} 个启用 skill 绑定了已注册目录外的模型（运行时无可用渠道）：${detail}。请在「Skill 运行时」改到目录内模型或清空以继承平台默认。`);
     }
   } catch { /* 总览是诊断页:统计失败不阻塞其余信息 */ }
 

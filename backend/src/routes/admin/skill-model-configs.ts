@@ -3,7 +3,7 @@ import skillModelConfigService from '../../services/skillModelConfig.service';
 import { preserveConfiguredSecret, toSecretSafeResponse } from '../../utils/secret-redaction';
 import { normalizeEndpointIdentity } from '../../utils/endpoint-identity';
 import { getPlatformReliabilitySettings } from '../../services/reliability-settings.service';
-import { resolveModelRef } from '../../config/models.config';
+import { resolveModelRef, resolvesToRegisteredModel } from '../../config/models.config';
 import { buildVisionBindingWarning } from '../../config/vision-capability';
 import { scanPromptFiles } from '../../composers/prompt-files/loader';
 import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
@@ -281,6 +281,17 @@ router.post('/bulk-apply', async (req, res) => {
         return res.status(400).json({ success: false, error: '配置独立 endpoint 时必须同时提供 apiKey' });
       }
     }
+    // #177：未提供独立 endpoint 的 skill 走继承通道（平台/上游），显式钉的模型必须解析到
+    // llm-providers.json 目录——目录外的值会在运行时被原样发给继承通道，无可用渠道 → transport 失败。
+    // 自带 endpoint 的 skill 是独立通道，模型由该通道提供，不在此约束。
+    if (model && !endpoint && !resolvesToRegisteredModel(model)) {
+      return res.status(400).json({
+        success: false,
+        error: `模型「${model}」不在已注册模型目录（llm-providers.json）中：本次套用未提供独立 endpoint，`
+          + 'skill 会用继承通道发送它 → 运行时无可用渠道 transport 失败。请改到目录内模型或用已注册别名，'
+          + '或同时提供该模型可用的独立通道。',
+      });
+    }
     const paramOverridesRaw = body.paramOverrides ?? undefined;
     let paramOverridesValue: string | null | undefined;
     if (paramOverridesRaw !== undefined) {
@@ -446,6 +457,26 @@ router.put('/:skillId', async (req, res) => {
     // endpoint scheme 校验（2026-09-28 教训：无 scheme 会在 executor 拼 URL 时炸 NETWORK_POLICY_BLOCKED）
     if (finalEndpoint && !hasValidScheme(finalEndpoint)) {
       return res.status(400).json({ success: false, error: 'endpoint 必须带 http/https scheme（如 http://host:30001）' });
+    }
+
+    // #177：未自带 endpoint 的 skill 走继承通道（平台/上游），显式钉的模型必须解析到
+    // llm-providers.json 目录——目录外的值会在运行时被原样发给继承通道，无可用渠道 → transport 失败。
+    // 自带 endpoint 的 skill 是独立通道，模型由该通道提供，不在此约束。
+    // 只在本次确实写 model、或把 endpoint 清掉（让已存模型改走继承通道）时校验：partial 保存
+    // （如只改 paramOverrides / 保留 endpoint）不该被库里的历史坏值卡住。
+    const writesModel = typeof body.model === 'string' && body.model.trim() !== '';
+    const clearsEndpoint = endpointProvided && !finalEndpoint;
+    if (!finalEndpoint && (writesModel || clearsEndpoint)) {
+      const effectiveModel = writesModel
+        ? String(body.model).trim()
+        : (typeof existing?.model === 'string' ? existing.model.trim() : '');
+      if (effectiveModel && !resolvesToRegisteredModel(effectiveModel)) {
+        return res.status(400).json({
+          success: false,
+          error: `模型「${effectiveModel}」不在已注册模型目录（llm-providers.json）中：该 skill 未配置独立 endpoint，`
+            + '会用继承通道发送这个模型 → 运行时无可用渠道 transport 失败。请改到目录内模型或用已注册别名。',
+        });
+      }
     }
 
     // 参数覆盖校验

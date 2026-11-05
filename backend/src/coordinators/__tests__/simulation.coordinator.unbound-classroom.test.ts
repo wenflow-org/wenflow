@@ -176,4 +176,36 @@ describe('H-3：收课解绑后并发步不终局会话', () => {
       expect(call[0]?.data?.status).not.toBe('failed')
     }
   })
+
+  // #154：卡死收课（non-convergence）现场 taskRuntime.status 落为 'timeout'。旧实现一律当无绑定
+  // 跳过并返回裸错误串，autopilot / advance-day 不认识 → 打成 failed / 逐日空转。修复后协调层
+  // 不动语义（仍干净跳过、零状态写入），只把 error 前置稳定 code LEARN_CLASSROOM_UNBOUND，
+  // 由各驱动识别后走到各自的 restart-learning（含恢复上限），与 batch 口径统一。
+  const buildStuckLearningState = () => ({
+    ...buildLearningState(),
+    taskRuntime: {
+      status: 'timeout',
+      taskId: 'task-1',
+      taskTitle: '任务一',
+      turns: 9,
+      closureAttribution: { reason: 'non-convergence', masteryDelta: 0, judgeFalseCount: 2 }
+    }
+  })
+
+  it('#154 卡死收课（taskRuntime.timeout）→ error 带 LEARN_CLASSROOM_UNBOUND，交由驱动续课', async () => {
+    sessionRecord.stageResults = JSON.stringify({ teaching: buildStuckLearningState(), runtimeStats: { aiCalls: 0 } })
+
+    const result: any = await coordinator.executeLearningStep('simulation-1')
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('LEARN_CLASSROOM_UNBOUND')
+    // 保留「没有绑定教学会话」原文，batch 既有 regex（/没有绑定教学会话/）仍能命中
+    expect(result.error).toContain('没有绑定教学会话')
+    expect(result.currentTaskStopped).toBe(true)
+    // 协调层不再自行重开课堂（续课交给驱动，走各自恢复上限，避免确定性卡死无界重启）
+    expect(sessionRecord.status).toBe('running')
+    for (const call of mockVirtualSessionUpdate.mock.calls) {
+      expect(call[0]?.data?.status).not.toBe('failed')
+    }
+  })
 })

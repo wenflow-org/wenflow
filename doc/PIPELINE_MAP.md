@@ -22,7 +22,7 @@ flowchart LR
   U[用户 / 虚拟学习者] --> G["澄清阶段<br/>goal-agent<br/>goal-conversation"]
   G -->|"goal handoff（字段路由）"| P["规划阶段<br/>path-agent<br/>path-planning → stage-designer"]
   P -->|"path ready"| T["教学阶段<br/>teaching-agent<br/>teaching-opening-generator → teaching-turn → peer-reinforcement → session-wrapup"]
-  T -.->|"lesson 事件"| F["画像阶段<br/>profile-agent<br/>learner-model → lesson-knowledge-enricher"]
+  T -.->|"lesson 事件"| F["画像阶段<br/>profile-agent<br/>lesson-knowledge-enricher"]
   F -.->|"LearnerSnapshot / hints"| P
   F -.->|"LearnerSnapshot / hints"| T
   S["仿真阶段<br/>simulation-agent<br/>virtual-learner-goal-dialogue-simulator → goal-conversation → virtual-learner-path-evaluator → virtual-learner-learn-turn-simulator"] --> G
@@ -35,10 +35,10 @@ flowchart LR
 
 | # | 阶段 | Agent | 调用顺序（agent steps） | 字段 / 路由 | 编排文件 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | 澄清阶段 | `goal-agent` | `goal-conversation` | 49 / 79 | `prompts/orchestration/goal.yaml` |
-| 2 | 规划阶段 | `path-agent` | `path-planning` → `stage-designer` | 48 / 54 | `prompts/orchestration/path.yaml` |
-| 3 | 教学阶段 | `teaching-agent` | `teaching-opening-generator` → `teaching-turn` → `peer-reinforcement` → `session-wrapup` | 48 / 58 | `prompts/orchestration/teaching.yaml` |
-| 4 | 画像阶段 | `profile-agent` | `learner-model` → `lesson-knowledge-enricher` | 21 / 33 | `prompts/orchestration/profile.yaml` |
+| 1 | 澄清阶段 | `goal-agent` | `goal-conversation` | 48 / 78 | `prompts/orchestration/goal.yaml` |
+| 2 | 规划阶段 | `path-agent` | `path-planning` → `stage-designer` | 47 / 53 | `prompts/orchestration/path.yaml` |
+| 3 | 教学阶段 | `teaching-agent` | `teaching-opening-generator` → `teaching-turn` → `peer-reinforcement` → `session-wrapup` | 48 / 57 | `prompts/orchestration/teaching.yaml` |
+| 4 | 画像阶段 | `profile-agent` | `lesson-knowledge-enricher` | 21 / 33 | `prompts/orchestration/profile.yaml` |
 | 5 | 仿真阶段 | `simulation-agent` | `virtual-learner-goal-dialogue-simulator` → `goal-conversation` → `virtual-learner-path-evaluator` → `virtual-learner-learn-turn-simulator` → `virtual-learner-referee` → `virtual-learner-actor-auditor` → `virtual-learner-memory-curator` | 20 / 30 | `prompts/orchestration/simulation.yaml` |
 
 > Goal/Path/Teaching 是纵向主链；Profile 是横切状态层（事件驱动）；Simulation 是目标函数相反的验证旁路。
@@ -50,7 +50,7 @@ flowchart LR
 目标对话：澄清目标、收集背景、收敛到方向方案
 
 - **Agent**：`goal-agent` — Goal Agent
-- **编排声明**：`prompts/orchestration/goal.yaml`（49 字段 / 79 条路由）
+- **编排声明**：`prompts/orchestration/goal.yaml`（48 字段 / 78 条路由）
 - **代码入口**：
   - 真实用户 Goal 对话（多轮状态机）：`backend/src/services/learning/goal-conversation.service.ts`
   - Goal → Path handoff（确定性定帧）：`backend/src/coordinators/path.coordinator.ts`
@@ -61,7 +61,7 @@ flowchart LR
 
 | Skill | 类型 | 提示词正文 | 参数 | 输入/输出 | 字段角色 |
 | --- | --- | --- | --- | --- | --- |
-| `goal-conversation` | mainline | `prompts/core/goal-conversation.yaml` | temp=0.7 / retry | 3/10 | 11 |
+| `goal-conversation` | mainline | `prompts/core/goal-conversation.yaml` | temp=0.7 / retry | 3/8 | 11 |
 
 > 「字段角色」= manifest `promptContract.fields` 的 direction/visibility 元数据；输出 schema 以 core.yaml 的 `fields` 为准，0 不代表没有输出契约。
 ### 2. 规划阶段（`path`）
@@ -69,7 +69,7 @@ flowchart LR
 学习路径生成：Framing → Path Planning → Stage Designer → Path Reviewer → KC Mapper
 
 - **Agent**：`path-agent` — Path Generation Agent
-- **编排声明**：`prompts/orchestration/path.yaml`（48 字段 / 54 条路由）
+- **编排声明**：`prompts/orchestration/path.yaml`（47 字段 / 53 条路由）
 - **代码入口**：
   - 路径生成主链（path-planning → stage-designer）：`backend/src/services/learning/generation/path-generation.core.ts`
   - Path 协调与 handoff 装配：`backend/src/coordinators/path.coordinator.ts`
@@ -86,7 +86,7 @@ flowchart LR
 | `path-planning` | mainline | `prompts/core/path-planning.yaml` | temp=0.5 / retry | 6/8 | 0 |
 | `stage-designer` | mainline | `prompts/core/stage-designer.yaml` | temp=0.3 / retry | 11/1 | 0 |
 | `path-reviewer` | mainline | `prompts/core/path-reviewer.yaml` | temp=0.3 / propagate | 3/5 | 0 |
-| `kc-mapper` | mainline | `prompts/core/kc-mapper.yaml` | temp=0.3 / propagate | 4/4 | 0 |
+| `kc-mapper` | mainline | `prompts/core/kc-mapper.yaml` | temp=0.3 / propagate | 4/3 | 0 |
 
 > 「字段角色」= manifest `promptContract.fields` 的 direction/visibility 元数据；输出 schema 以 core.yaml 的 `fields` 为准，0 不代表没有输出契约。
 **不在 Agent steps 内、但登记在本阶段的 Skill**：
@@ -98,7 +98,7 @@ flowchart LR
 授课执行：Teaching Turn → Peer/Checkpoint → Wrapup
 
 - **Agent**：`teaching-agent` — AI Teaching Agent
-- **编排声明**：`prompts/orchestration/teaching.yaml`（48 字段 / 58 条路由）
+- **编排声明**：`prompts/orchestration/teaching.yaml`（48 字段 / 57 条路由）
 - **代码入口**：
   - 教学会话状态机（开课/回合/收束）：`backend/src/services/ai-teaching/AITeachingCoordinator.ts`
   - 课堂上下文构建（五输入通道）：`backend/src/services/ai-teaching/TeachingContextBuilder.ts`
@@ -119,8 +119,8 @@ flowchart LR
 | --- | --- | --- | --- | --- | --- |
 | `teaching-turn` | mainline | `prompts/core/teaching-turn.yaml` | temp=0.7 / retry | 7/8 | 16 |
 | `peer-reinforcement` | mainline | `prompts/core/peer-reinforcement.yaml` | temp=0.7 / propagate | 7/2 | 0 |
-| `session-wrapup` | mainline | `prompts/core/session-wrapup.yaml` | temp=0.7 / propagate | 5/2 | 0 |
-| `teaching-opening-generator` | aux | `prompts/core/teaching-opening-generator.yaml` | temp=0.4 / propagate | 6/4 | 0 |
+| `session-wrapup` | mainline | `prompts/core/session-wrapup.yaml` | temp=0.7 / propagate | 7/2 | 0 |
+| `teaching-opening-generator` | aux | `prompts/core/teaching-opening-generator.yaml` | temp=0.4 / propagate | 7/4 | 0 |
 
 > 「字段角色」= manifest `promptContract.fields` 的 direction/visibility 元数据；输出 schema 以 core.yaml 的 `fields` 为准，0 不代表没有输出契约。
 ### 4. 画像阶段（`profile`）
@@ -136,9 +136,10 @@ flowchart LR
 
 | 步 | 节点 | 类型 | 职责 | 条件 | 循环 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | `skill:learner-model` | skill | goal-and-learning-signal-ingestion | when learner profile related events arrive | — |
+| 1 | `LearnerEvidenceProjector` | service | learner-evidence-projection | when learner profile related events arrive | — |
 | 2 | `skill:lesson-knowledge-enricher` | skill | lesson-knowledge-enrichment | when lesson ends | — |
-| 3 | `LearnerSnapshotRefreshService` | service | learner-snapshot-refresh | after learner updates are applied | — |
+| 3 | `LearnerProfileService` | service | learner-profile-cache-clear | after learner evidence is projected | — |
+| 4 | `LearnerSnapshotRefreshService` | service | learner-snapshot-refresh | after learner updates are applied | — |
 
 | Skill | 类型 | 提示词正文 | 参数 | 输入/输出 | 字段角色 |
 | --- | --- | --- | --- | --- | --- |
@@ -149,6 +150,7 @@ flowchart LR
 > 「字段角色」= manifest `promptContract.fields` 的 direction/visibility 元数据；输出 schema 以 core.yaml 的 `fields` 为准，0 不代表没有输出契约。
 **不在 Agent steps 内、但登记在本阶段的 Skill**：
 - `adaptive-guidance-copy`（mainline）— coordinator 登记（profile-agent）：根据情境生成自适应引导话术
+- `learner-model`（handler-only）— coordinator 登记（profile-agent）：聚合学习者画像、状态与知识记忆（handler-only，无 LLM prompt）
 - `learning-predictor`（mainline）— coordinator 登记（profile-agent）：任务前基于知识状态摘要预测卡壳风险，含实证校准闭环
 
 ### 5. 仿真阶段（`simulation`）
@@ -176,7 +178,7 @@ flowchart LR
 
 | Skill | 类型 | 提示词正文 | 参数 | 输入/输出 | 字段角色 |
 | --- | --- | --- | --- | --- | --- |
-| `goal-conversation` | mainline | `prompts/core/goal-conversation.yaml` | temp=0.7 / retry | 3/10 | 11 |
+| `goal-conversation` | mainline | `prompts/core/goal-conversation.yaml` | temp=0.7 / retry | 3/8 | 11 |
 | `virtual-learner-persona-designer` | mainline | `prompts/core/virtual-learner-persona-designer.yaml` | temp=0.8 / retry | 4/1 | 0 |
 | `virtual-learner-scenario-designer` | mainline | `prompts/core/virtual-learner-scenario-designer.yaml` | temp=0.9 / retry | 8/3 | 0 |
 | `virtual-learner-goal-dialogue-simulator` | mainline | `prompts/core/virtual-learner-goal-dialogue-simulator.yaml` | temp=0.8 / propagate | 7/4 | 0 |
@@ -201,10 +203,10 @@ flowchart LR
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `goal-conversation` | 澄清阶段、仿真阶段 | `goal-agent` | mainline | 39/3 | `prompts/core/goal-conversation.yaml` | `prompts/manifests/goal-conversation.yaml` | 学习目标澄清与方向收敛助手，通过自然对话澄清学习目标，信息足够时收敛到第一版学习方向。 |
 | `path-planning` | 规划阶段 | `path-agent` | mainline | 52/4 | `prompts/core/path-planning.yaml` | `prompts/manifests/path-planning.yaml` | 一位认知建构师，负责先为用户的真实问题构建隐藏的认知图景，再据此设计一条阶段化的学习骨架。 |
-| `stage-designer` | 规划阶段 | `path-agent` | mainline | 55/1（2） | `prompts/core/stage-designer.yaml` | `prompts/manifests/stage-designer.yaml` | 一位阶段任务设计师。 |
+| `stage-designer` | 规划阶段 | `path-agent` | mainline | 54/1（2） | `prompts/core/stage-designer.yaml` | `prompts/manifests/stage-designer.yaml` | 一位阶段任务设计师。 |
 | `path-reviewer` | 规划阶段 | `path-agent` | mainline | 12/3 | `prompts/core/path-reviewer.yaml` | `prompts/manifests/path-reviewer.yaml` | 学习路径质量评审器。你评审的是 path-planning 生成的学习路径，不是直接面对用户。 |
-| `kc-mapper` | 规划阶段 | `path-agent` | mainline | 14/11 | `prompts/core/kc-mapper.yaml` | `prompts/manifests/kc-mapper.yaml` | 对给定的认知核心（cognitiveCore）与任务列表（subtasks）做机器可读的结构标注： |
-| `teaching-turn` | 教学阶段 | `teaching-agent` | mainline | 83/15（14） | `prompts/core/teaching-turn.yaml` | `prompts/manifests/teaching-turn.yaml` | 一位结构化教学回合生成器。 |
+| `kc-mapper` | 规划阶段 | `path-agent` | mainline | 15/11 | `prompts/core/kc-mapper.yaml` | `prompts/manifests/kc-mapper.yaml` | 对给定的认知核心（cognitiveCore）与任务列表（subtasks）做机器可读的结构标注： |
+| `teaching-turn` | 教学阶段 | `teaching-agent` | mainline | 84/15（14） | `prompts/core/teaching-turn.yaml` | `prompts/manifests/teaching-turn.yaml` | 一位结构化教学回合生成器。 |
 | `peer-reinforcement` | 教学阶段 | `teaching-agent` | mainline | 12/4 | `prompts/core/peer-reinforcement.yaml` | `prompts/manifests/peer-reinforcement.yaml` | 学习伙伴，和学生一起探索问题。 |
 | `session-wrapup` | 教学阶段 | `teaching-agent` | mainline | 22/3（1） | `prompts/core/session-wrapup.yaml` | `prompts/manifests/session-wrapup.yaml` | 一位课后产出助手。请基于本节课的结构化证据生成课后总结与评估。 |
 | `adaptive-guidance-copy` | 画像阶段 | `profile-agent` | mainline | 10/2 | `prompts/core/adaptive-guidance-copy.yaml` | `prompts/manifests/adaptive-guidance-copy.yaml` | 一个学习产品的动态引导文案生成器。 |
@@ -228,7 +230,7 @@ flowchart LR
 | `material-brief` | — | — | handler-only | 9/5 | `prompts/core/material-brief.yaml` | `prompts/manifests/material-brief.yaml` | 「资料理解摘要器」。用户上传了一份学习资料，解析后的正文交给你。 |
 | `text-to-image` | — | — | handler-only | 0/0 | — | — | — |
 | `board-designer` | — | — | handler-only | 0/0 | — | — | — |
-| `teaching-opening-generator` | 教学阶段 | `teaching-agent` | aux | 18/3 | `prompts/core/teaching-opening-generator.yaml` | `prompts/manifests/teaching-opening-generator.yaml` | 课堂开场交互生成器。基于课堂场景、当前阶段与学习者状态，为一个教学 Session 生成短、低门槛、可直接渲染的开场交互块。 |
+| `teaching-opening-generator` | 教学阶段 | `teaching-agent` | aux | 19/3 | `prompts/core/teaching-opening-generator.yaml` | `prompts/manifests/teaching-opening-generator.yaml` | 课堂开场交互生成器。基于课堂场景、当前阶段与学习者状态，为一个教学 Session 生成短、低门槛、可直接渲染的开场交互块。 |
 | `learner-progress-report` | — | — | aux | 3/1 | `prompts/core/learner-progress-report.yaml` | `prompts/manifests/learner-progress-report.yaml` | 学习进展报告生成器。基于任务学习数据、指标与学习信号，生成一段内部用于学习者状态中心的简短分析。 |
 | `learner-state-review` | — | — | aux | 6/2 | `prompts/core/learner-state-review.yaml` | `prompts/manifests/learner-state-review.yaml` | WenFlow 的学习状态评审诊断器。基于给定的学习状态摘要、知识线索与最近证据， |
 | `concept-consolidator` | — | — | aux | 11/6 | `prompts/core/concept-consolidator.yaml` | `prompts/manifests/concept-consolidator.yaml` | 对给定的候选知识点名字做机器可读的**归并判定**：判断哪些其实是同一个概念的不同说法 |

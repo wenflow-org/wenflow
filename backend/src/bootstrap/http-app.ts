@@ -23,6 +23,16 @@ interface RequestError {
   stack?: string;
   status?: number;
   code?: string;
+  /** http-errors 风格错误的机器可读类型（body-parser 超限为 'entity.too.large'） */
+  type?: string;
+}
+
+/**
+ * 请求体超限（body-parser 的 PayloadTooLargeError）识别。
+ * raw-body 抛出时带 status=413 与 type='entity.too.large'，两者任一命中即视为超限。
+ */
+function isPayloadTooLargeError(err: RequestError): boolean {
+  return err.type === 'entity.too.large' || err.status === 413;
 }
 
 export interface HttpAppDeps {
@@ -179,8 +189,24 @@ export function registerErrorHandlers(app: express.Express): void {
       method: req.method
     });
 
+    // #215：请求体超限是客户端错误，单独映射为 413 / PAYLOAD_TOO_LARGE，
+    // 不落入通用 500 / INTERNAL_ERROR 通道（否则会污染服务端错误率且语义不符）。
+    if (isPayloadTooLargeError(err)) {
+      res.status(413).json({
+        success: false,
+        error: {
+          message: '请求体过大',
+          code: 'PAYLOAD_TOO_LARGE',
+          status: 413
+        }
+      });
+      return;
+    }
+
     const isProduction = process.env.NODE_ENV === 'production';
 
+    // #215：错误响应永不回吐 stack（含服务器绝对路径与依赖版本路径），
+    // 完整堆栈只进上面的服务端日志。
     // 生产环境隐藏敏感信息
     if (isProduction) {
       res.status(err.status || 500).json({
@@ -192,14 +218,13 @@ export function registerErrorHandlers(app: express.Express): void {
         }
       });
     } else {
-      // 开发环境返回详细错误
+      // 开发环境返回详细错误信息（不含堆栈）
       res.status(err.status || 500).json({
         success: false,
         error: {
           message: err.message || 'Internal Server Error',
           code: err.code || 'INTERNAL_ERROR',
-          status: err.status || 500,
-          stack: err.stack
+          status: err.status || 500
         }
       });
     }

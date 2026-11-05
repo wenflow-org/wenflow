@@ -138,10 +138,14 @@ export class LearnerSnapshotRefreshService {
           select: { learning_paths: { where: { status: 'active' } } },
         },
         learning_paths: {
+          // 锚点路径：行的快照口径只认 active（非 active 会被伪造成 currentPath，#205）。
+          // 「有路径但无 active」时的路径身份（pathTitle）由下方 fallbackTitleByUser 单独补——
+          // 不靠放宽这里的 where + take N（那会让更新的归档路径把 active 挤出窗口，静默降级为 global）。
           where: params?.pathId ? { id: params.pathId } : { status: 'active' },
           select: {
             id: true,
             title: true,
+            status: true,
             updatedAt: true,
           },
           orderBy: { updatedAt: 'desc' },
@@ -153,17 +157,37 @@ export class LearnerSnapshotRefreshService {
       take: limit,
     });
 
+    // #205：无 active 路径的用户，行内「路径」此前恒空（active-only 过滤）。这里单独取一次「最近的非
+    // abandoned 路径」仅用于展示身份，不参与快照锚定。独立取值（而非放宽上面的嵌套 where）保证不会
+    // 漏掉 active 路径，也把「身份」与「锚点」两件事分开。
+    const usersWithoutPath = users.filter((user) => user.learning_paths.length === 0).map((user) => user.id);
+    const fallbackTitleByUser = new Map<string, string>();
+    if (usersWithoutPath.length > 0) {
+      const fallbackPaths = await prisma.learning_paths.findMany({
+        where: { userId: { in: usersWithoutPath }, status: { not: 'abandoned' } },
+        orderBy: { updatedAt: 'desc' },
+        select: { userId: true, title: true },
+      });
+      for (const row of fallbackPaths) {
+        if (row.title && !fallbackTitleByUser.has(row.userId)) fallbackTitleByUser.set(row.userId, row.title);
+      }
+    }
+
     // 批量取快照：先命中模块缓存，再按 projectionKey in [...] 批量读 learner_projections，
     // 避免每用户逐个 getLatest 重建（原实现每页 100 用户 ≈1300+ 查询）。
     const entries = Array.from(users, (user) => {
-      const path = user.learning_paths[0];
+      // 快照锚点只认 status='active' 的路径（含调用方显式 pathId——非 active 会被伪造成 currentPath，
+      // #205）；无 active 路径时走 global 口径，路径身份仅由 fallbackTitleByUser 补展示。
+      const path = user.learning_paths[0] || null;
+      const anchored = path?.status === 'active' ? path : null;
       return {
         user,
         path,
+        anchored,
         key: this.buildKey({
           userId: user.id,
-          pathId: path?.id,
-          scope: path?.id ? 'path' : 'global',
+          pathId: anchored?.id,
+          scope: anchored?.id ? 'path' : 'global',
         }),
       };
     });
@@ -217,8 +241,8 @@ export class LearnerSnapshotRefreshService {
           await Promise.all(stillMissing.slice(i, i + REBUILD_CHUNK).map(async (entry) => {
             const snapshot = await this.refresh({
               userId: entry.user.id,
-              pathId: entry.path?.id,
-              scope: entry.path?.id ? 'path' : 'global',
+              pathId: entry.anchored?.id,
+              scope: entry.anchored?.id ? 'path' : 'global',
             });
             snapshotsByUser.set(entry.user.id, snapshot);
           }));
@@ -226,7 +250,7 @@ export class LearnerSnapshotRefreshService {
       }
     }
 
-    const snapshots = entries.map(({ user, path }) => {
+    const snapshots = entries.map(({ user, path, anchored }) => {
       const snapshot = snapshotsByUser.get(user.id);
       if (!snapshot) {
         throw new Error(`学习者快照构建失败: ${user.id}`);
@@ -251,8 +275,12 @@ export class LearnerSnapshotRefreshService {
         isVirtualLearner: user.isVirtualLearner,
         /** 测试/虚拟账号标记（excludeTest 未开启时供前端灰标签展示；开启后恒为 false） */
         isTestAccount: isTestAccountUser(user),
-        pathId: path?.id || null,
-        pathTitle: path?.title || null,
+        /** pathId 必须与行的快照口径键一致（前端重算带它，见 LearnerCenter.vue:390/741）：
+            只认 active 锚点；无 active 路径时保持 null，避免重算写 path 键而本行读 global 键。 */
+        pathId: anchored?.id || null,
+        /** 路径身份展示（#205）：无 active 路径时回退到最近的非 abandoned 路径名，
+            不再让「有路径但无 active」的用户显示空白路径。 */
+        pathTitle: path?.title || fallbackTitleByUser.get(user.id) || null,
         /** 在学路径总数（列表列只展示其中最近更新的一条，>1 时前端标「共 N 条」） */
         activePathCount: user._count?.learning_paths ?? (path ? 1 : 0),
         /** 快照重建时刻（排查用；列表的「数据更新」列读 dataUpdatedAt） */

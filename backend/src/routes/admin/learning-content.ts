@@ -206,10 +206,15 @@ router.post('/paths/:id/retry-generation', async (req: Request, res: Response) =
         return res.json({ success: true, data: { success: true, retryType: 'core', runId: run.runId, mode: run.mode } });
       } catch (fallbackError: any) {
         const conflict = isPathMutationConflictError(fallbackError);
+        // #227：goal 层闸门拒绝（路径自身既无判定产物、也无来源会话凭证）是语义错误，
+        // 与学员端入口一致按 422 透出，别再伪装成服务端 500。
+        const triageRejected = fallbackError?.code === 'GOAL_TRIAGE_REQUIRED'
+          || fallbackError?.code === 'GOAL_NOT_JUDGEABLE';
+        const status = conflict ? 409 : (triageRejected ? 422 : 500);
         logger.warn('[admin-learning-content] 无虚拟会话，回退主结构重建失败', { pathId: path.id, error: fallbackError?.message });
-        return res.status(conflict ? 409 : 500).json({
+        return res.status(status).json({
           success: false,
-          error: { message: fallbackError?.message || '重试路径生成失败', status: conflict ? 409 : 500 }
+          error: { message: fallbackError?.message || '重试路径生成失败', status }
         });
       }
     }

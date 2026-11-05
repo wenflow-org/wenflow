@@ -334,10 +334,19 @@ export interface TeachingTurnInput {
     instruction: string;
   } | null;
   /**
-   * 当前白板的文本描述（2026-10-28 接线）：只在白板真实存在时注入。
-   * 模型据此知道「板上写了什么、哪里还空着」；没有 boardContext 时禁止任何看图指代。
+   * 当前白板的文本描述（2026-10-28 接线，2026-11-03 起**每轮都注入**）：
+   * 有板时是「板上写了什么」，没板时是 `describeBoardForTeacher(null)` 那句
+   * 「本任务暂无板书」正向告知（见 board-state.ts）。因此**不能**用它的真假判「有没有板」。
    */
   boardContext?: string | null;
+  /**
+   * 本轮学生屏幕上是否真的有板（#244 结构化信号）：由编排层（teaching-turn-engine →
+   * board-state.boardPromptInputForTeacher）按 board-state.boardReachesStudent 显式注入
+   * （degenerate 首版板永不下发，不算有板）。看板指代守卫以此为准；`boardContext` 是给模型
+   * 看的文本，两种语义混用一个字段正是「守卫永不触发」的根因，故不靠猜字符串。
+   * 缺省（非编排层调用，如单测/其它入口）时回落到「内容等价于无板」的判据。
+   */
+  boardPresent?: boolean;
 }
 
 export interface TeachingTurnOutput {
@@ -626,6 +635,8 @@ export const teachingTurnAgentDefinition: AgentDefinition = {
     'knowledge-state-suggestion',
     'teaching-strategy-selection'
   ],
+  // 文档性元数据，不参与运行时分发/发布（语义见 agents/protocol.ts 的 AgentDefinition.subscribes）：
+  // 下列事件名均为描述性说明，全仓无对应 dispatch 调用点，请勿据此排查真实订阅关系。
   subscribes: ['teaching:turn:requested'],
   publishes: ['teaching:turn:generated'],
   inputSchema: {
@@ -3146,13 +3157,66 @@ function evaluateCompletionByTaskProfile(input: TeachingTurnInput) {
  * 看板指代词（2026-11-04）：「左边那栏 / 右边第 2 条 / 板书 / 看板 / 如上图 / 图里 / 表中」
  * 这类把学生视线引向一块「板/图/表」的方位指示。内容词不命中——心理学课讲
  * 「左脑/右脑半球」「图像记忆」「第一原则」是正当课文，不拦。
+ *
+ * #244 收窄（2026-11-05）：旧版把 `上表`/`表里`/`表中` 当裸子串，守卫一旦真正可达就成了
+ * 误伤路径——「这节课上表现得很主动」命中 `上表`、「透视表里」/「报表中」/「表里如一」
+ * 命中 `表里`/`表中`（本地 dev.db 253 条 assistant 消息里 `透视表里` 出现 6 次、`表里` 11 次），
+ * 而这些与板/图毫无指代关系，两轮误判即整轮失败。现只认「带限定语」的表指代：
+ * `如下表/下表中/对照表中/该表里/这表里/上表（后不接「现/演」）`。裸 `表中` 一并去掉
+ * （会命中「报表中」「课表中」）——宁可漏判一次表指代，也不把正常课堂话术判废。
  */
 const BOARD_DEIXIS_RE = new RegExp([
   '[左右][边侧]?[那这][一]?[栏块幅张]',
   '[左右][边侧]?第\\s*[一二三四五六七八九十1-9]+\\s*条',
   '板书|看板|白板|板上的|黑板上',
-  '如上[图表]|上[图表]中|这张图|图里|图中|如下表|下表中|上表|表中|表里|示意图',
+  '如上[图表]|上[图表]中|这张图|图里|图中|示意图',
+  // 表指代：限定语 + 表 + 方位，避免与「课上表现/透视表里/报表中/表里如一」碰撞
+  '如下表|下表中|对照表[中里]|[该这]表[中里]|上表(?!现|演)',
 ].join('|'));
+
+/**
+ * 「过早收束」语言判据（#163 收窄）：
+ * 原判据是裸词 `/已完成/`，任何进度陈述（如「这个练习已完成了一半」）都会整轮判废；
+ * 课中 `input.knowledge.points` 常含冻结的 pending 点，旧的「全 mastered」硬门禁几乎恒 false，
+ * 误伤是常态而非边界（该门禁已从 validateTeachingTurnOutput 移除）。现只认两类信号，且命中集是原裸词的**真子集**（收窄不得新增命中）：
+ * - **结论式**完成语：已完成 / 满足（要求|标准），且收在句读或行尾/串尾——
+ *   「已完成了一半」这类进行中的陈述不再命中；
+ *   两处刻意不扩：① 不带「已经」前缀——旧裸词 `/已完成/` 本就不命中「已经完成。」
+ *   （已-经-完-成不连续），若在此扩成 `(?:已|已经)` 会凭空新增同类误伤（如「前两步已经完成。」判废整轮）；
+ *   ② 不认「满足条件」——旧裸词只认「满足…要求/标准」，加上等于新增命中。
+ * - 显式推进指令：与 teaching-knowledge-state.hasPrematureNextStepLanguage 同源，同样只认收在
+ *   句读/串尾的**推进结论**——「稍后进入下一环节，我们先做…」这类半句陈述不再整轮判废
+ *   （旧裸词 `/进入下一环节/` 会命中句中任意位置）。
+ */
+const PREMATURE_COMPLETION_LANGUAGE: RegExp[] = [
+  /已完成(?:了)?(?:要求|标准|条件)?(?=[。！？!?；;\n]|$)/,
+  /满足[^。！？!?\n]{0,10}(?:要求|标准)(?=[。！？!?；;\n]|$)/,
+  /进入下一环节(?=[。！？!?；;\n]|$)/,
+  /进入下一个任务(?=[。！？!?；;\n]|$)/,
+  /接下来[^。！？!?\n]{0,10}下一环节(?=[。！？!?；;\n]|$)/,
+  /接下来[^。！？!?\n]{0,10}下一个任务(?=[。！？!?；;\n]|$)/,
+];
+
+/**
+ * 「本轮没有可指代的板书」判据（#244）。
+ *
+ * 为什么不能直接 `!input.boardContext`：引擎每轮都注入 `boardContext`（2026-11-03 起），
+ * 无板时它的内容是 board-state.ts 那句「本任务暂无板书」正向告知——**非空字符串**。
+ * 于是「字段在场」与「有板」被混为一谈，旧判据恒为 false，整段守卫生产不可达。
+ *
+ * 判据优先级：
+ * ① `boardPresent`（编排层按「学生屏幕上真有板」显式注入的结构化事实）——不猜字符串；
+ * ② 缺省时按**内容**判（与提示词 rule15 同一口径）：写着「本任务暂无板书」= 无板；
+ * ③ 完全没有 `boardContext` = 无板（单测/其它入口的旧形态，行为不变）。
+ */
+const NO_BOARD_CONTEXT_MARKER = '本任务暂无板书';
+
+function hasRealBoard(input: TeachingTurnInput): boolean {
+  if (typeof input.boardPresent === 'boolean') return input.boardPresent;
+  const context = input.boardContext;
+  if (typeof context !== 'string' || !context.trim()) return false;
+  return !context.includes(NO_BOARD_CONTEXT_MARKER);
+}
 
 export function validateTeachingTurnOutput(parsed: any, input: TeachingTurnInput) {
   if (!parsed || typeof parsed !== 'object') {
@@ -3176,44 +3240,35 @@ export function validateTeachingTurnOutput(parsed: any, input: TeachingTurnInput
   }
 
   const reply = typeof parsed.reply === 'string' ? parsed.reply.trim() : '';
+  // #163（缺口③）：此前这里用「模型自称完成 + input.knowledge.points 全 mastered」派生
+  // `completionLanguageAllowed`。但课中 points 含冻结的 pending 点，该门禁几乎恒 false，
+  // 且这里的 mastered 读数发生在知识合并之前（引擎后续会以「冻结目标集」与 soft 收口重判）——
+  // 于是任何命中收束措辞的合法回合都会被整轮判废（issue 点名的「误伤面是常态而非边界」）。
+  // 改为**信任模型自己的完成信号**（与收束判据完全同源）：`control.isCompletionCandidate=true`
+  // 即放行收束措辞，其正确性由引擎的冻结目标集 / soft 收口门禁兜底（虚假完成仍会被 soft-AND 拦）。
+  // 收窄后的 `PREMATURE_COMPLETION_LANGUAGE` 只捕获会被硬门禁误伤的边界，不会放大检查成本。
   const rawCompletionCandidate = parsed.control?.isCompletionCandidate === true;
-  // 2026-08-30：完成一致性校验不再使用关键词硬匹配（evaluateByCriteria/evaluateByProfile），
-  // 改为 LLM 语义判定 + 知识硬门禁：模型说完成 + 知识点全 mastered 才允许宣布完成。
-  const resolvedKnowledge = resolveKnowledgeBlock(parsed);
-  const rawPoints = Array.isArray(resolvedKnowledge.points) ? resolvedKnowledge.points : [];
-  const inputPointMap = new Map(
-    (Array.isArray(input.knowledge?.points) ? input.knowledge.points : [])
-      .filter((point) => typeof point?.name === 'string' && point.name.trim())
-      .map((point) => [point.name.trim().toLowerCase(), point])
-  );
-
-  rawPoints.forEach((point: any) => {
-    if (typeof point?.name !== 'string' || !point.name.trim()) return;
-    inputPointMap.set(point.name.trim().toLowerCase(), {
-      name: point.name.trim(),
-      status: point.status,
-      progress: point.progress,
-    });
-  });
-
-  const allKnowledgeMastered = Array.from(inputPointMap.values()).length > 0
-    && Array.from(inputPointMap.values()).every((point: any) => point?.status === 'mastered');
-  const hasPrematureCompletionLanguage = /已完成|满足.*要求|满足.*标准|进入下一环节|进入下一个任务|接下来.*下一环节|接下来.*下一个任务/.test(reply);
-  const completionLanguageAllowed = rawCompletionCandidate && allKnowledgeMastered;
+  const hasPrematureCompletionLanguage = PREMATURE_COMPLETION_LANGUAGE.some((pattern) => pattern.test(reply));
+  const completionLanguageAllowed = rawCompletionCandidate;
 
   if (hasPrematureCompletionLanguage && !completionLanguageAllowed) {
     return { valid: false, failureReason: 'TEACHING_TURN_REPLY_COMPLETION_MISMATCH' };
   }
 
   // 有板指代漂移守卫（2026-11-04 无板任务实锤：模型讲「左边那栏…右边第 4 条给了个答案」，
-  // 所指的板从未存在，学生全屏找不到。core 契约本就要求 boardContext 缺席时 reply 必须
-  // 脱离图也成立，flash 档照样漂——确定性兜底：本轮没出 figure/diagram、任务也没注入
-  // boardContext 时，reply 出现看板指代即判校验失败，走既有 retryStrategy 重写。
-  // 板上真实存在（boardContext 注入）或本轮真出了图时，指代合法不拦。）
-  const emittedVisualThisTurn = !!(parsed.figure || parsed.diagram
+  // 所指的板从未存在，学生全屏找不到。core 契约本就要求无板时 reply 必须脱离图也成立，
+  // flash 档照样漂——确定性兜底：本轮没出 figure/diagram、任务也没有真实板书时，
+  // reply 出现看板指代即判校验失败，走既有 retryStrategy 重写。
+  // 板上真实存在或本轮真出了图时，指代合法不拦。
+  // #244：判据从「boardContext 字段真假」改为 hasRealBoard（结构化 boardPresent 优先，
+  // 回落内容等价于无板）——引擎每轮无条件注入非空 boardContext，旧判据恒 false、守卫不可达。）
+  // #244：本轮模型「自称出了图」不算数——无板回合的 figure/diagram 会在引擎里被删掉
+  // （teaching-turn-engine 的「无 boardContext ⇒ 丢弃模型输出的 figure/diagram」闸），
+  // reply 却已按「有图」写完，学生屏幕上一片空白。所以只在本轮**真有板**时承认自出图。
+  const emittedVisualThisTurn = hasRealBoard(input) && !!(parsed.figure || parsed.diagram
     || (Array.isArray(parsed.figures) && parsed.figures.length)
     || (Array.isArray(parsed.diagrams) && parsed.diagrams.length));
-  if (!input.boardContext && !emittedVisualThisTurn && BOARD_DEIXIS_RE.test(reply)) {
+  if (!hasRealBoard(input) && !emittedVisualThisTurn && BOARD_DEIXIS_RE.test(reply)) {
     return { valid: false, failureReason: 'TEACHING_TURN_BOARD_DEIXIS_WITHOUT_BOARD' };
   }
 
@@ -3387,10 +3442,19 @@ const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutp
       + `1) knowledge.points 要围绕当前任务、验收标准和最近课堂对话动态生成，不要偏题；`
       + `2) pedagogy.strategies 只能使用允许的枚举；`
       + `3) 保持当前任务的 core concept 与 target relation 不偏移。`
-      // 无板指代（2026-11-04 实锤，见 validateTeachingTurnOutput 守卫注释）：点名改写路径，
-      // 二选一给清楚——写进正文（推荐）或真的出图；不许第三次仍对着空板讲「左边那栏」。
+      // 无板指代（2026-11-04 实锤，见 validateTeachingTurnOutput 守卫注释）：点名改写路径。
+      // #244：本轮**没有**真实板书，模型自出的 figure/diagram 会被引擎丢弃（学生看不到），
+      // 因此这里只能给一条路——写进正文。旧文案的「或真的产出一张图」在无板回合是死路，
+      // 重试也会再次被同一守卫拦下（且图随后被删），两轮用完整轮失败。
       + (failureReason === 'TEACHING_TURN_BOARD_DEIXIS_WITHOUT_BOARD'
-        ? `\n4) 你的 reply 引用了不存在的板书/图（如「左边那栏」「右边第 N 条」「如图」），但本轮没有产出任何 figure/diagram，学生屏幕上找不到所指内容。二选一重写 reply：把想引用的两栏/条目内容**直接写成正文文字**（Markdown 列表，推荐）；或按 figure 契约**真的产出**与指代逐条对应的对照图——引用了图就必须真的出图，二者只能取其一。`
+        ? `\n4) 你的 reply 引用了不存在的板书/图（如「左边那栏」「右边第 N 条」「如图」），但本轮没有任何板书，学生屏幕上找不到所指内容。把想引用的两栏/条目内容**直接写成正文文字**（Markdown 列表），并用文字把方位关系说清楚；本轮不要输出 figure/diagram——它会因为无板书而被丢弃。`
+        : '')
+      // #163：此前该失败原因不在重试文案里，模型无信号可改，两轮同类失败即整轮丢弃
+      // （teaching-turn-engine 直接 throw，本轮消息不落库）。仅在命中该原因时附加，避免每轮灌无关约束。
+      + (failureReason === 'TEACHING_TURN_REPLY_COMPLETION_MISMATCH'
+        ? `\n4) reply 里不得出现收束结论或推进指令：只有当 control.isCompletionCandidate=true 时，`
+          + `才允许写「（本节/本任务）已完成」「已满足要求」这类结论，或「进入下一环节/下一个任务」这类推进语；`
+          + `本轮 control.isCompletionCandidate 为 false，请改写为仍在当前环节推进的说法（例如「这个练习已完成了一半」是允许的）。`
         : ''),
   },
 };

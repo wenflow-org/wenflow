@@ -3,7 +3,7 @@
  * skill: → 路由表 handoff 校验；sandbox: → 沙盘路径注册表；user: → 绿灯。
  */
 
-import { checkInputRefHandoff, checkInputHandoffs } from '../input-handoff-check'
+import { checkInputRefHandoff, checkInputHandoffs, checkRuleInputDeclarations } from '../input-handoff-check'
 import type { CoreFile } from '../core-file-loader'
 
 jest.mock('../../field-dispatcher', () => ({
@@ -124,5 +124,68 @@ describe('checkInputRefHandoff（三前缀分叉）', () => {
     const issues = await checkInputHandoffs(core)
     expect(issues).toHaveLength(1)
     expect(issues[0].code).toBe('input-upstream-unrouted')
+  })
+})
+
+describe('checkRuleInputDeclarations（#197 规则引用键 ↔ inputs 声明）', () => {
+  const wrapupRules = [
+    '证据优先级从高到低：1) sessionEvidence / knowledgeContext.delta / sessionStructure.finalClassroomContext；2) knowledgePoints',
+    '记忆保持率引用（knowledgeContext.reviewHints）：仅当输入提供了非空的【记忆保持率提示】分区时，才可引用',
+  ]
+
+  const makeWrapupCore = (withExtraInputs: boolean): CoreFile => ({
+    ...makeCore('session-wrapup'),
+    rules: wrapupRules,
+    inputs: [
+      { ref: 'sandbox:teaching.session.evidence', kind: 'sandbox', skill: '', fieldPath: '', sandboxPath: 'teaching.session.evidence', userPath: '', name: 'sessionEvidence' },
+      ...(withExtraInputs
+        ? [
+            { ref: 'sandbox:teaching.session.knowledgeContext', kind: 'sandbox' as const, skill: '', fieldPath: '', sandboxPath: 'teaching.session.knowledgeContext', userPath: '', name: 'knowledgeContext' },
+            { ref: 'sandbox:teaching.session.structure', kind: 'sandbox' as const, skill: '', fieldPath: '', sandboxPath: 'teaching.session.structure', userPath: '', name: 'sessionStructure' },
+          ]
+        : []),
+    ],
+  })
+
+  it('声明 coverage 完整时通过（#197 修复态）', () => {
+    expect(checkRuleInputDeclarations(makeWrapupCore(true))).toHaveLength(0)
+  })
+
+  it('撤回 knowledgeContext / sessionStructure 声明后拦下（#197 同类漂移）', () => {
+    const issues = checkRuleInputDeclarations(makeWrapupCore(false))
+    const keys = issues.map((issue) => issue.message)
+    expect(issues.every((issue) => issue.code === 'rule-input-key-undeclared')).toBe(true)
+    expect(keys.some((m) => m.includes('knowledgeContext.delta'))).toBe(true)
+    expect(keys.some((m) => m.includes('sessionStructure.finalClassroomContext'))).toBe(true)
+  })
+
+  it('声明根下的点路径引用通过（scenario.taskKcs）', () => {
+    const core = makeWrapupCore(true)
+    core.rules = ['若输入提供 scenario.taskKcs（当前任务的 KC 列表）：对齐 KC 粒度']
+    core.inputs = [{ ref: 'sandbox:teaching.scenario', kind: 'sandbox', skill: '', fieldPath: '', sandboxPath: 'teaching.scenario', userPath: '', name: 'scenario' }]
+    expect(checkRuleInputDeclarations(core)).toHaveLength(0)
+  })
+
+  it('未登记来源的简写根被拦下', () => {
+    const core = makeWrapupCore(true)
+    core.rules = ['若 fantasizedKey.subjective 存在时按它推进']
+    core.inputs = [{ ref: 'sandbox:teaching.scenario', kind: 'sandbox', skill: '', fieldPath: '', sandboxPath: 'teaching.scenario', userPath: '', name: 'scenario' }]
+    const issues = checkRuleInputDeclarations(core)
+    expect(issues).toHaveLength(1)
+    expect(issues[0].message).toContain('fantasizedKey.subjective')
+  })
+
+  it('未声明任何 inputs 的文件不参与对账', () => {
+    const core = makeWrapupCore(true)
+    core.inputs = []
+    expect(checkRuleInputDeclarations(core)).toHaveLength(0)
+  })
+
+  it('已登记来源的编排注入键通过（teaching-turn.visualOpportunity）', () => {
+    const core = makeWrapupCore(true)
+    core.skillId = 'teaching-turn'
+    core.rules = ['若输入提供 `visualOpportunity.suggested === true`：这是编排层判定的出图时机']
+    core.inputs = [{ ref: 'sandbox:teaching.scenario', kind: 'sandbox', skill: '', fieldPath: '', sandboxPath: 'teaching.scenario', userPath: '', name: 'scenario' }]
+    expect(checkRuleInputDeclarations(core)).toHaveLength(0)
   })
 })
