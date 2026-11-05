@@ -409,8 +409,8 @@ const startSseHeartbeat = (res: any) => {
  * 是否随消息响应下发 prompt 调试信封（`promptDebug` / `peerDebug`，含完整 systemPrompt）。
  *
  * 默认**关**（18 号报告衍生观察项）：`/messages` 面向学习者，而 `promptDebug` 里是 ~18k 的教学提示词；
- * 前端只有类型声明、没有任何 UI 读取它（admin 视图也不走该端点、`/detail` 不含该字段）
- * → 属"无消费者 + 提示词外泄"。需要调试时置环境变量 `PROMPT_DEBUG_ENVELOPE=1`。
+ * 前端只有类型声明、没有任何 UI 读取它（admin 视图也不走该端点；`/detail` 不含**新**写入的该字段，但存量消息行
+ * 里仍有历史信封，由出口 `projectMessagesForClient` 整份剔除）→ 属"无消费者 + 提示词外泄"；调试时置 PROMPT_DEBUG_ENVELOPE=1。
  */
 const promptDebugEnabled = (): boolean => process.env.PROMPT_DEBUG_ENVELOPE === '1';
 

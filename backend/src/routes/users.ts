@@ -28,6 +28,7 @@ import { normalizeSessionDurationMinutes } from '../services/learning/learning.h
 import { listAgentManifest, listUserListedAgentIds, type MonitoringGroupName } from '../services/agent-manifest.service';
 import { parseDayKeyRange } from '../services/time/day-boundary';
 import { loadTeachingMessagesForIds } from '../services/ai-teaching/teaching-session-message-store';
+import { projectMessagesForClient, stripCheckpointAnswerKeys } from '../services/ai-teaching/teaching-checkpoint';
 
 // 与 auth.service 等价的假哈希：密码比对失败时保持恒定时间，防时序探测
 const INVALID_LOGIN_PASSWORD_HASH = '$2b$10$OAioDMuBkv4OiDj1OPaJse/r3xbZoGaxLWtBNBD6VSlBa5T4nwkdG';
@@ -426,6 +427,28 @@ router.get('/me/sessions', async (req, res, next) => {
         }
       }
 
+      // 检查点答案键绝不下发（#240）：本端点此前把整行 `...session` 原样下发，
+      // `teachingState` 列（含 lastRuntimeEnvelope 里的模型原始输出）与 `messages` 列
+      // （存量行 promptDebug 里的模型原始输出）都会把当下这道待答题的答案带给学习者。
+      // `/detail` 修好后这里成了唯一剩下的 learner 明文出口（实测 19/39 会话命中）。
+      // 注意 `...session` 会把原始字符串列一起带出去，因此必须在返回值里显式覆盖这两个字段。
+      const safeState = parsedState ? stripCheckpointAnswerKeys(parsedState) : null;
+      const safeMessages = (() => {
+        const raw = session.messages;
+        if (!raw) return raw;
+        // 旁表水合后是数组，旧行是 JSON 字符串：两种形态都要过同一份投影
+        const parsedMessages = Array.isArray(raw) ? raw : (() => {
+          try {
+            const value = JSON.parse(raw);
+            return Array.isArray(value) ? value : null;
+          } catch {
+            return null;
+          }
+        })();
+        if (!parsedMessages) return null;
+        return JSON.stringify(projectMessagesForClient(parsedMessages));
+      })();
+
       // 时长统一口径（与 /learning/stats、学习状态聚合同源）：优先 duration 列（已扣暂停/idle），
       // 无值才用 endTime−startTime 兜底并封顶 30 分钟。此前这里裸算 endTime−startTime 且不封顶，
       // 导致跨天未收束的会话把日历单日算成几千甚至两万分钟（如 25729 分钟）。
@@ -437,7 +460,10 @@ router.get('/me/sessions', async (req, res, next) => {
         taskTitle: task?.title || null,
         taskStatus: task?.status || null,
         estimatedMinutes: task?.estimatedMinutes || null,
-        parsedState
+        // 覆盖 `...session` 带出的原始字符串列（见上方答案键剥离注释）
+        teachingState: safeState ? JSON.stringify(safeState) : null,
+        messages: safeMessages,
+        parsedState: safeState
       };
     });
 
