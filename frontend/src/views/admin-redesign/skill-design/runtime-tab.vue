@@ -843,7 +843,7 @@ watch(() => props.skillId, () => {
 /* 「基线」这枚词是这一行的角色标签，不是值：做成小字灰标签，别抢模型 id 的第一眼 */
 .sdp-base__k {
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-surface-2);
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
@@ -894,7 +894,7 @@ watch(() => props.skillId, () => {
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-surface-2);
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);

@@ -221,7 +221,7 @@ html[data-theme='dark'] .mk-status__meta-link:hover { background: rgba(91, 141, 
   align-items: center;
   gap: 6px;
   padding: 3px 8px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-red-bg);
   color: var(--mk-red);
   font-size: var(--mk-fs-micro);
@@ -829,7 +829,7 @@ html[data-theme='dark'] .mk-menu__pop { background: var(--mk-surface-2); }
   align-items: center;
   gap: 5px;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-xs);
   border: 1px solid transparent;
   font-size: var(--mk-fs-micro);
   font-weight: 600;
@@ -858,8 +858,6 @@ html[data-theme='dark'] .mk-menu__pop { background: var(--mk-surface-2); }
 .mk-badge--self { background: var(--mk-blue-bg-strong); color: var(--mk-accent-deep, #1f57cc); }
 /* 已删除标记：灰色 */
 .mk-badge--deleted { background: var(--mk-badge-deleted-bg); color: var(--mk-badge-deleted-fg); }
-/* 直角徽章：需要与文字/表格行对齐的紧凑场景 */
-.mk-badge--chip { border-radius: var(--mk-radius-xs); }
 
 /* ----- 迷你进度条（进度量化统一表达：控制台评估维度条 / Goal 置信度条共用，ADMIN_DEEP_SESSION_AUDIT 4.3） ----- */
 .mk-minibar {
@@ -1019,7 +1017,7 @@ html[data-theme='dark'] .mk-menu__pop { background: var(--mk-surface-2); }
   gap: 4px;
   height: 32px;
   padding: 0 12px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-md);
   font: inherit;
   font-size: var(--mk-fs-micro);
   font-weight: 600;
@@ -1054,7 +1052,7 @@ html[data-theme='dark'] .mk-pill--active {
   /* 与胶囊的 gap 4px 相加 = 视觉 6px。此前胶囊非 flex，靠 margin 单独让位 */
   margin-left: 2px;
   padding: 0 6px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-xs);
   background: var(--mk-surface-3);
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);

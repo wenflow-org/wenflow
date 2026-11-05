@@ -568,7 +568,7 @@ watch(() => props.skillId, (id) => { void loadTrialDefault(id) }, { immediate: t
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-sm);
   background: #eef2fa;
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);

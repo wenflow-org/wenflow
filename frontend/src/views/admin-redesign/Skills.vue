@@ -1060,7 +1060,7 @@ const primaryCoverageText = computed(() =>
      而该行右侧到读数区还有 600px+ 富余——无意义的截断。放宽到 240px（长 Agent 名仍省略）。 */
   max-width: 240px;
   padding: 2px 9px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-line);
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);

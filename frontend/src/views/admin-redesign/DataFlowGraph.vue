@@ -1608,7 +1608,7 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 .dfg-gate__src:hover .dfg-gate__jump { color: var(--mk-blue); }
 .dfg-gate__count {
   flex-shrink: 0; font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-muted);
-  background: var(--mk-graph-badge-bg); padding: 2px 9px; border-radius: 999px; font-variant-numeric: tabular-nums;
+  background: var(--mk-graph-badge-bg); padding: 2px 9px; border-radius: var(--mk-radius-xs); font-variant-numeric: tabular-nums;
 }
 .dfg-gate .dfg-chips { margin-top: 9px; }
 
@@ -1657,7 +1657,7 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 }
 .dfg-step__name--link:hover { text-decoration: underline; }
 .dfg-step__badge {
-  padding: 1px 7px; border-radius: 999px; background: var(--mk-graph-badge-bg); color: var(--mk-muted);
+  padding: 1px 7px; border-radius: var(--mk-radius-xs); background: var(--mk-graph-badge-bg); color: var(--mk-muted);
   font-size: var(--mk-fs-micro); font-weight: 800;
 }
 .dfg-step__badge--gate { background: color-mix(in srgb, var(--hz) 14%, var(--mk-graph-node-bg)); color: color-mix(in srgb, var(--hz) 75%, var(--mk-ink)); }
@@ -1761,7 +1761,7 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 .dfg-legend.is-dimmed { opacity: 0.55; }
 .dfg-legend__item {
   display: inline-flex; align-items: center; gap: 5px;
-  padding: 2px 8px; border-radius: 999px;
+  padding: 2px 8px; border-radius: var(--mk-radius-sm);
   border: 1px solid transparent; background: transparent;
   font: inherit; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted);
   cursor: pointer;
@@ -1800,7 +1800,7 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 /* 区块（原型 section = 区块头 + 内容；原 .dfg-flow 虚线自绘框并入此文法） */
 .dfg-section { display: grid; gap: 8px; }
 .dfg-flow__list { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.dfg-flow__chip { padding: 2px 9px; border-radius: 999px; background: var(--mk-blue); color: var(--mk-graph-on-accent); font-size: var(--mk-fs-micro); font-weight: 700; }
+.dfg-flow__chip { padding: 2px 9px; border-radius: var(--mk-radius-sm); background: var(--mk-blue); color: var(--mk-graph-on-accent); font-size: var(--mk-fs-micro); font-weight: 700; }
 .dfg-flow__chip--soft { background: var(--mk-graph-flow-soft-bg); color: var(--mk-accent-deep); }
 .dfg-flow__chip--out { background: var(--mk-graph-flow-out); }
 .dfg-flow__arrow { color: var(--mk-blue); font-weight: 800; }

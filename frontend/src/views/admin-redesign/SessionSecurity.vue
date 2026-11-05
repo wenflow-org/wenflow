@@ -906,7 +906,7 @@ onMounted(async () => {
   align-items: center;
   font-size: var(--mk-fs-micro);
   font-weight: 700;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-xs);
   padding: 2px 9px;
   /* 实底 surface（而非与当前行底同色 16% 蓝）：胶囊形状与行底分层；文字 accent-deep
      对 surface 复算 ~6.5:1（原同色叠同色在暗色下胶囊消失、文字仅 4.11:1） */

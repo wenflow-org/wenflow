@@ -1043,7 +1043,7 @@ function goLogs(skillId: string) {
   gap: 6px;
   padding: 3px 5px 3px 9px;
   border: 1px solid var(--mk-line);
-  border-radius: 999px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-surface);
 }
 .ac-prio__rank { font-size: var(--mk-fs-micro); color: var(--mk-faint); }

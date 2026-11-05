@@ -65,6 +65,29 @@ Admin 与用户侧统一 `--mk-blue = #2f6ae0`（暗色 `#5b8def` 不变）；ho
 **禁止 5/7/9/10/11/13/14/18/20/22/26px 等一切中间档**——v4 已删除 `--mk-radius-lg(10)`
 这一档。历史上「10 保留给复刻件」的例外随该档一起取消；复刻件改用 12px。
 
+**2026-11-05 去胶囊化（用户「看看 admin 有没有这个问题」）**：阶梯本身没改，改的是**实现是否
+按阶梯落位**。当时实测：按钮 8px / 输入 6px / 下拉 8px 都已达标，但 `.mk-badge` 基准样式写的是
+`999px`、`.mk-pill`（筛选触发器）也是 `999px`，另有 ~25 个页面私有 tag/chip 直接写 `999px`——
+即「代码违反了自己的规范」。同批按档归位：
+
+- 徽章 / 计数 / 状态标签 → `--mk-radius-xs`(4px)：`.mk-badge` 基准、`.mk-pill__count`、
+  `.mshell__item-badge`、`.cp-review__badge`、`.vl-abn`、`.exec-status`、`.schcell__state` 等
+- 行内 tag / chip / 类型标签 → `--mk-radius-sm`(6px)：`.mcc-chip`、`.mpp-type`、`.sk-agent-tag`、
+  `.dt-chip`、`.sdp-chip`、`.vp-trait` 等
+- 筛选触发器 / 带边框的导航项 / 账号 chip → `--mk-radius-md`(8px)：`.mk-pill`、`.mk-pillselect`、
+  `.mg__toc-item`、`.mshell__userchip`
+- 仍保留 `999px`（真胶囊/几何）：迷你进度条、`stageband`、开关轨道与滑块、图端口点、
+  连接线、回到顶部、批量操作条（含其按钮）、20×20 圆形图标钮
+
+同时删掉 `页面 scoped` 里那条「把 .mk-pill 与 .mk-badge 压成同一档」的覆盖（SkillReconciliation）：
+它是在给一个语义错位（把非交互读数写成筛选 pill）打补丁，改回 `.mk-badge--muted` 后覆盖整条撤除。
+`.mk-badge--chip` 变体随之与基准同档、且全仓零引用，一并删除（原语数 458 → 457）。
+
+**判据（下次新增控件时先问自己）**：`999px` 只回答「这是个圆」，不回答「这是个标签」。
+凡是被读作标签/读数/状态的元素，按 4px 或 6px 落位；凡是被读作控件的，按 8px 落位。
+门禁 `check-design-system.mjs` 只校验「值在阶梯上」（999 是合法档），**拦不住语义错位**，
+所以这条靠评审而非脚本守。
+
 守卫 `scripts/check-design-system.mjs` 的 `RADIUS_OK` 白名单已同步为
 `0 / 4 / 6 / 8 / 12 / 16 / 999 / 50%`（v3 漏了 8px，导致写 `8px` 反被报错，
 v4 修正）。

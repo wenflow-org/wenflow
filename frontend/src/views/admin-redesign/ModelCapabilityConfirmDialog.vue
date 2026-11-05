@@ -185,7 +185,7 @@ defineExpose({ openWith })
 .mcc-row__tags { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .mcc-chip {
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-blue-bg);
   color: var(--mk-blue);
   font-size: var(--mk-fs-micro);

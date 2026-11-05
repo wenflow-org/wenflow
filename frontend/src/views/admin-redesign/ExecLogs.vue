@@ -1482,7 +1482,7 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: var(--mk-mu
   justify-content: center;
   font-size: var(--mk-fs-micro);
   font-weight: 700;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-xs);
   padding: 1px 8px;
   white-space: nowrap;
 }

@@ -1155,7 +1155,7 @@ function onBatchReclaim(ids: string[]) {
   display: inline-block;
   margin-left: 6px;
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-xs);
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   font-variant-numeric: tabular-nums;

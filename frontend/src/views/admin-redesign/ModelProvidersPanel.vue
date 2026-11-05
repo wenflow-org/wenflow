@@ -601,7 +601,7 @@ defineExpose({ refresh, openPull, openHostPull, openAdd: onPullAdd })
 /* 通道类型：平台内置 / 自建通道 */
 .mpp-type {
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-surface-2);
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);

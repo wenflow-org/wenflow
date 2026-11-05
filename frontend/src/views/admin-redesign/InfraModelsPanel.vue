@@ -678,7 +678,7 @@ onMounted(load)
    这里不引 .mpp-type--platform（那是对话卡局部的修饰类），直接给出同一组值。 */
 .mpp-type {
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-sm);
   background: color-mix(in srgb, var(--mk-blue) 10%, transparent);
   color: var(--mk-blue);
   font-size: var(--mk-fs-micro);
@@ -778,7 +778,7 @@ onMounted(load)
 .infra-cand {
   padding: 3px 9px;
   border: 1px solid var(--mk-line);
-  border-radius: 999px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-surface-2);
   color: var(--mk-ink);
   font: inherit;
