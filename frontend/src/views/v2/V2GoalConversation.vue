@@ -273,19 +273,9 @@
                 @mouseleave="onBubbleLeave"
               >
                 <div class="msg__bubble msg__bubble--html msg__bubble--relative" v-html="messageHtml(km.msg)"></div>
-                <!-- P2-14：历史轮次的快捷补充随消息渲染（当前轮由下方面板承担），点选填入输入框 -->
-                <div v-if="km.msg.quickReplies?.length && km.key !== lastAiKey" class="msg__replies">
-                  <button
-                    v-for="q in km.msg.quickReplies"
-                    :key="q.text"
-                    type="button"
-                    class="msg__reply"
-                    :class="{ 'msg__reply--on': pickedReplySet.has(q.text.trim()) }"
-                    @click="pickReply(q.text)"
-                    @keydown.enter.prevent="keyboardReply(q.text)"
-                    @keydown.space.prevent="keyboardReply(q.text)"
-                  >{{ q.text }}</button>
-                </div>
+                <!-- 历史轮次的快捷补充不再内联渲染（2026-11-05 屏效比「旧选项销毁」）：
+                     胶囊完成点选使命后滞留历史既占空间又与用户已发出的回答重复，
+                     唯一的活快选由下方 .replies 常驻面板承担（只挂最新 AI 轮） -->
                 <!-- streaming 复用为「不可重生成」口径（同 V2LearningPage）：失败气泡的
                      恢复动作只留内联「重试」——它对 start/confirm/supplement/reply 四种
                      失败都能正确重放，而悬浮「重新生成」遇到无前驱用户消息的失败
@@ -328,7 +318,7 @@
           <!-- 快捷补充选项（skill 每轮返回）：对齐原型 .wf-replies —— 去白面板与面板头，
                改整行 .wf-reply 按钮组（蓝描边 + 蓝 5% 底 + 前置 6px 蓝点，选中变 ✓）。
                勾选语义不变：点选打勾进输入框，再点取消 -->
-          <div v-if="!live.sending && live.quickReplies.length && live.stageIndex < 3" class="replies">
+          <div v-if="!live.sending && repliesActive && live.quickReplies.length && live.stageIndex < 3" class="replies">
             <!-- 可见标签已移除（2026-11-03 用户反馈「直接不要这个提示」）：快选用法说明只保留给读屏器 -->
             <span class="visually-hidden">快捷补充：点选填入输入框，可多选</span>
             <button
@@ -731,17 +721,15 @@ function onNarrowChange(e: MediaQueryListEvent) {
 /* Escape 已在 onProposalKey 中处理方案浮层关闭；
    此处预留扩展位：后续 live 支持 cancel() 时可加 Escape 中止生成 */
 
-// 稳定 key 渲染消息列表（失败气泡移除/追加时避免 DOM 复用错乱）
+/** 稳定 key 渲染消息列表（失败气泡移除/追加时避免 DOM 复用错乱） */
 const keyedMessages = computed(() =>
   live.messages.map((m, i) => ({ key: m.id ?? `i_${i}`, msg: m }))
 );
-/** P2-14：最后一条 AI 消息的 key——其快捷补充由下方的常驻面板承担，历史轮次才内联渲染 chip */
-const lastAiKey = computed(() => {
-  for (let i = live.messages.length - 1; i >= 0; i -= 1) {
-    if (live.messages[i].role === 'ai') return live.messages[i].id ?? `i_${i}`;
-  }
-  return '';
-});
+/** 快捷补充挂载门控（2026-11-05 屏效比「旧选项销毁」）：只在最新一条消息是 AI 时挂载——
+    用户一旦回复（点胶囊或手动打字），上一轮胶囊立刻消失；AI 新回合到位时换装本轮新选项 */
+const repliesActive = computed(
+  () => live.messages.length > 0 && live.messages[live.messages.length - 1]?.role === 'ai'
+);
 /* 本轮导师是否还在提问（2026-10-31 用户走查）：proposing 轮的提问会让「方案已就绪」与
    「我还有个问题」同时成立——用户不知道该回答还是该确认。判据见 goalStageCopy.ts。 */
 const awaitingAnswer = computed(() => {
@@ -2108,7 +2096,11 @@ function shuffleScenes() {
   padding: 16px 16px 20px;
   display: flex; flex-direction: column; gap: 18px;
   transition: filter .2s ease, opacity .2s ease;
+  /* 原生滚动条隐藏（2026-11-05 屏效比）：桌面 Windows 的经典粗滚动条在移动视口仿真里
+     出戏且挤占右缘；触屏滚动手势/滚轮不受影响，内容可达性不变 */
+  scrollbar-width: none;
 }
+.chat__scroll::-webkit-scrollbar { display: none; }
 /* AI 生成声明（2026-11-05 屏效比改造自输入区元数据条迁来）：对话流顶部居中一行，
    随内容滚动；消息少时由移动端「贴底」规则带着一起贴在最新消息上方 */
 .chat__ai-note { display: flex; justify-content: center; }
@@ -2224,9 +2216,10 @@ function shuffleScenes() {
   background: var(--surface);
 }
 .msg__bubble {
-  /* 原型 .wf-msg p：11/13 内边距、13.5px / 1.6 行高、16px 圆角基线 */
-  padding: 11px 13px;
-  font-size: 13.5px; line-height: 1.6;
+  /* 原型 .wf-msg p：11/13 内边距、13.5px 行高、16px 圆角基线；
+     2026-11-05 屏效比微调：12/14 + 行高 1.55——卡片更紧凑、易读性不降档 */
+  padding: 12px 14px;
+  font-size: 13.5px; line-height: 1.55;
   border-radius: 16px; /* 圆角阶梯：卡片/弹层 */
   background: var(--surface); color: var(--ink);
 }
@@ -2855,6 +2848,9 @@ function shuffleScenes() {
      同样字数多折 2~3 行；品牌已由顶栏承载，气泡不再需要逐条自报家门 */
   .msg__avatar { display: none; }
   .msg--ai { max-width: 100%; }
+  /* AI 回复占满对话列宽（2026-11-05 屏效比第 2 刀）：内容自然宽会在右侧留出空白带，
+     flex:1 让卡片与步条带/输入框同缘（≈屏宽 92%），长文再省 1~2 行 */
+  .msg--ai .msg__content { flex: 1; }
   /* 快捷补充改单行横滑（2026-11-05 屏效比）：3 个胶囊折两行吃 84px，单行省 ~46px；
      右侧自然露出半颗胶囊表达「可横滑」，滚动条隐藏降噪 */
   .replies,
@@ -2875,17 +2871,22 @@ function shuffleScenes() {
   /* 移动端 hint 行整体脱离文档流（0 高，原占 17px + gap 7px），内容挂到输入框与底部导航
      之间那道缝里。触屏没有键盘快捷键提示，隐藏之。 */
   .composer { position: relative; }
-  /* 本档 .v2-page 已有 padding-bottom:72px 让位底部 tab 栏，不再叠 safe-area（会留出空缝）。
-     下内边距 30→22（2026-11-05 屏效比：AI 声明迁对话流顶部、快捷键隐藏、计数 3500 起
-     才浮现——hint 行常态为空，22px 只兜偶尔出现的计数：12px 字号行高 18 + 距底 3 = 21 ≤ 22）；
-     上内边距 10→6：输入区与消息区之间不再多垫一道白。 */
-  .chat > .composer { padding: 6px 16px 22px; }
+  /* 脱壳（2026-11-05 屏效比第 4 刀）：基础档的 border-top + 96% surface 背景在移动端
+     是输入框外多套的一层矩形（暗色下色差尤其明显）——撤掉，胶囊直接浮在画布上；
+     上下内边距收到 4/8（基础档的 safe-area padding-bottom 被本简写整体覆盖，
+     移动端底部有 tab 栏接管该区域，不留双份空缝） */
+  .chat > .composer {
+    padding: 4px 16px 8px;
+    border-top: 0;
+    background: transparent;
+  }
   .composer__hint {
     position: absolute;
     /* left/right 取 .composer 的左右内边距（16），不是 0：绝对定位的包含块是 composer 的
        padding box，写 0 会让 hint 比输入框右缘多探出 16px（390 实测 380 vs 364）。
-       对齐到输入框同一条列宽。 */
-    left: 16px; right: 16px; bottom: 3px;
+       对齐到输入框同一条列宽。bottom 为负：常态为空的 hint 行不再占输入区高度，
+       偶尔浮现的计数（≥3500 字）落进输入框与底部导航之间的 dock 缝里，不与胶囊重叠 */
+    left: 16px; right: 16px; bottom: -14px;
     height: 0;
     /* 底部对齐：hint 行（0 高）里的内容向上生长，落进 composer 预留的下内边距里，
        不向下溢进底部导航。 */
@@ -3074,5 +3075,18 @@ function shuffleScenes() {
   /* 窄屏阶段导航一行放不下「澄清问题 + 已收集 5/7」（390 实测该行只有 ~11px 余量，
      与右上「目标信息」按钮共享）。移动端计数已由面板角标承担，这里隐藏随行计数。 */
   .stage-nav__sub { display: none; }
+}
+
+/* 沉浸式顶栏（2026-11-05 屏效比第 5 刀·大胆档）：goal tab ≤768 撤品牌栏——
+   dock 已高亮「目标规划」表达位置，步骤条带吸顶承担阶段语境，顶部再省 65px；
+   铃铛/头像菜单（含主题切换）在「学习台」tab 与设置页仍可达，本页为纯沉浸对话。
+   平板竖屏 769-1100 保留导航（该档是移动布局但已接近桌面导航尺寸）。 */
+@media (max-width: 768px) {
+  .goal :deep(.v2nav-bar) { display: none; }
+  /* 步条带成为吸顶：不透明画布底 + 发丝线下缘，气泡从下方穿过时边界不生硬 */
+  .chat__head {
+    background: var(--canvas);
+    border-bottom: 1px solid var(--line);
+  }
 }
 </style>
