@@ -23,7 +23,6 @@ jest.mock('../../../services/agentRequestTimeout.service', () => ({
 jest.mock('../../../config/models.config', () => ({
   supportsThinkingMode: () => false,
   getModelDefinition: jest.fn(() => undefined),
-  getModelFallbacks: jest.fn(() => []),
   getModelMaxParallelRequests: jest.fn(() => null),
   // 视觉闸门按注册表声明判定；测试里 model id 就是能力开关
   supportsVision: jest.fn((modelId: string) => modelId === 'vision-capable'),
@@ -42,7 +41,6 @@ import { APIExecutor, foldSystemMessagesIntoUser, summarizeContentForLog } from 
 import type { ChatRequest, ResolvedRoute } from '../types';
 import { messageHasImage, messagesHaveImages, type ChatContentPart } from '../types';
 import { createRetryBudget } from '../retry-budget';
-import { resetDeploymentHealth } from '../deployment-health';
 
 const PNG_DATA_URL = 'data:image/png;base64,' + 'A'.repeat(2000);
 // 单测占位符：真实凭据只在环境里；这里的调用全部被 safe-http mock 拦截，不出网
@@ -139,7 +137,6 @@ describe('视觉硬闸门（#123 验收③：未声明视觉的模型带图请�
   beforeEach(() => {
     jest.restoreAllMocks();
     safeHttpRequestMock.mockReset();
-    resetDeploymentHealth();
   });
 
   function imageRequest(model: string): ChatRequest {

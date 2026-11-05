@@ -3,7 +3,7 @@
  *
  * 钉的是「选择语义」而不是外观：
  * - 继承是一条显式选项（此前空输入框承担继承语义，运营看不出「不填 = 继承什么」）；
- * - 候选按供应商分组、带层级/能力标注；搜索能按供应商名命中；
+ * - 候选按供应商分组、带能力标注（2026-11-04 起不再展示目录档位）；搜索能按供应商名命中；
  * - 注册表外的合法值（别名、聚合网关 id）允许直接按输入提交，但必须显式出现在候选里；
  * - exclude 用于备用链：主模型与已选备用不再出现在候选里。
  */
@@ -18,7 +18,7 @@ const OPTIONS: MkModelOption[] = [
     tier: 'chat',
     providerName: '平台',
     thinking: true,
-    reasoning: true,
+    efforts: ['low', 'high', 'max'],
     priceIn: 0.3,
     priceOut: 1.2
   },
@@ -107,19 +107,18 @@ describe('MkModelPicker', () => {
     w.unmount()
   })
 
-  it('exclude 隐藏主模型与已选备用；层级不同的候选带标注但仍可选', async () => {
-    const w = mountPicker({
-      tier: 'chat',
-      exclude: ['agnes-3.0-flash'],
-      modelValue: ''
-    })
+  it('exclude 隐藏主模型与已选备用；目录档位不再作为候选标注', async () => {
+    const w = mountPicker({ exclude: ['agnes-3.0-flash'], modelValue: '' })
     await openPicker(w)
     const ids = w.findAll('.mk-mp__opt').map((o) => o.find('.mk-mp__id').text())
     expect(ids).not.toContain('agnes-3.0-flash')
-    const mismatch = w.findAll('.mk-mp__opt').find((o) => o.classes().includes('is-mismatch'))
-    expect(mismatch?.find('.mk-mp__id').text()).toBe('acme-vision')
+    // 2026-11-04：选择器不再按层级区分候选（没有「层级不同」的灰显标注，也没有档位徽标）
+    expect(w.findAll('.mk-mp__opt.is-mismatch')).toHaveLength(0)
+    const acme = w.findAll('.mk-mp__opt').find((o) => o.find('.mk-mp__id').text() === 'acme-vision')!
+    expect(acme.text()).not.toContain('推理')
 
-    await mismatch!.trigger('click')
+    await acme.trigger('click')
+    // 选项对象仍带目录分类（父组件据此收窄备用链），只是不再上屏
     expect(w.emitted('pick')?.[0]?.[0]).toMatchObject({ value: 'acme-vision', tier: 'reasoning' })
     w.unmount()
   })

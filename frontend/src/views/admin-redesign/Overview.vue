@@ -1364,7 +1364,7 @@ onBeforeUnmount(() => { feedRo?.disconnect(); feedRo = null })
 
 /* ---- 胶囊（原型 .pill：卡头 tools 徽标）---- */.pill {
   display: inline-flex; align-items: center; gap: 5px;
-  padding: 2px 9px; border-radius: 999px;
+  padding: 2px 9px; border-radius: var(--mk-radius-sm);
   font-size: var(--mk-fs-micro); font-weight: 600;
   border: 1px solid transparent; white-space: nowrap;
 }

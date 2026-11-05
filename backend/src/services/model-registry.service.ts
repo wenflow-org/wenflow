@@ -14,10 +14,8 @@ import {
   resolvesToRegisteredModel
 } from '../config/models.config';
 import { selectModelForAlias } from '../gateway/api-gateway/model-alias';
-import { MAX_MODEL_CANDIDATES } from '../gateway/api-gateway/executor';
 import { providerSecretSources } from './provider-secrets.service';
 import { getInfraModelStatus } from './embedding/infra-config.service';
-import { listCoolingDowns, type CooldownSnapshot } from '../gateway/api-gateway/deployment-health';
 
 export interface ModelRegistryOverview {
   generatedAt: string;
@@ -53,7 +51,8 @@ export interface ModelRegistryOverview {
     keyConfigured: boolean | null;
     capabilities: {
       supportsThinking: boolean;
-      supportsReasoningEffort: boolean;
+      /** 这台模型接受哪几档 reasoning_effort（空数组 = 不支持该字段） */
+      reasoningEfforts: string[];
     };
     limits: {
       maxOutputTokens: number | null;
@@ -61,7 +60,6 @@ export interface ModelRegistryOverview {
       reasoningReserveTokens: number;
       maxParallelRequests: number | null;
     };
-    fallbacks: string[];
     pricingConfigured: boolean;
     description?: string;
   }>;
@@ -79,9 +77,6 @@ export interface ModelRegistryOverview {
     defaultModelConfigured: string | null;
     defaultModelResolved: string | null;
     defaultModelSource: 'alias' | 'concrete' | 'unset';
-    defaultReasoningModelConfigured: string | null;
-    defaultReasoningModelResolved: string | null;
-    defaultReasoningModelSource: 'alias' | 'concrete' | 'unset';
     /** 评估默认路由（platform_api_configs.defaultEvaluationModel，经 api-config 页配置） */
     defaultEvaluationModelConfigured: string | null;
     defaultEvaluationModelResolved: string | null;
@@ -91,22 +86,11 @@ export interface ModelRegistryOverview {
   runtimeDefaults: {
     model: string | null;
     source: 'ui' | 'env' | 'none';
-    reasoningModel: string | null;
-    reasoningSource: 'ui' | 'env' | 'none';
   };
-  fallbackChains: Array<{
-    model: string;
-    fallbacks: string[];
-    effectiveFallbacks: string[];
-    truncated: boolean;
-  }>;
-  runtime: { maxModelCandidates: number; fallbackSwapsModelOnly: boolean };
-  cooldowns: CooldownSnapshot[];
   /** D12（2026-10-22）：近 1 小时上游限流与当前冷却读数，供「调用与健康」一眼判断是否在挨 429 */
   rateLimit: {
     windowMinutes: number;
     count429: number;
-    coolingDown: number;
   };
   /** 配置漂移 / 待清理项 */
   warnings: string[];
@@ -225,15 +209,11 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
   });
 
   const defaultModel = platform?.defaultModel ?? null;
-  const reasoningModel = platform?.defaultReasoningModel ?? null;
-  // 评估默认是真实存在的第三档路由（api-config 页可配置，schema defaultEvaluationModel）；
-  // 运行时经 apiConfig.service 读取，未配置时兜底 env AI_MODEL_REASONING。
-  // 总览与其余两档同口径：只展示 platform 行上的已配置值，不做 env 兜底/伪造。
+  // 评估默认是真实存在的独立路由（api-config 页可配置，schema defaultEvaluationModel）；
+  // 运行时经 apiConfig.service 读取。总览只展示 platform 行上的已配置值，不做 env 兜底/伪造。
+  // （2026-11-04：平台不再有「默认推理模型」——推理与否由 Skill 的思考模式 / 推理强度决定。）
   const evaluationModel = platform?.defaultEvaluationModel ?? null;
   const chatSelection = defaultModel ? selectModelForAlias(defaultModel, { overrides: dbLists }) : null;
-  const reasoningSelection = reasoningModel
-    ? selectModelForAlias(reasoningModel, { overrides: dbLists, requireThinking: true })
-    : null;
   const evaluationSelection = evaluationModel ? selectModelForAlias(evaluationModel, { overrides: dbLists }) : null;
 
   // 平台三档默认必须落在已注册目录内（含别名展开）。指向目录外的模型（如历史遗留的评测专用
@@ -241,7 +221,7 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
   // 这里把它变成可见的配置漂移告警——与别名/降级链告警同一面（管理端「模型注册表」页渲染）。
   for (const [label, configured, selection] of [
     ['默认模型', defaultModel, chatSelection],
-    ['推理默认模型', reasoningModel, reasoningSelection],
+    // 2026-11-04 起 defaultReasoningModel 退役（思考由 skill 的 thinkingMode / reasoningEffort 决定）
     ['评估默认模型', evaluationModel, evaluationSelection],
   ] as const) {
     const resolved = selection?.model ?? configured;
@@ -263,7 +243,7 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
       : null,
     capabilities: {
       supportsThinking: model.supportsThinking === true,
-      supportsReasoningEffort: model.supportsReasoningEffort === true
+      reasoningEfforts: model.reasoningEfforts ?? []
     },
     limits: {
       maxOutputTokens: model.maxOutputTokens ?? null,
@@ -271,38 +251,9 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
       reasoningReserveTokens: model.reasoningReserveTokens ?? 0,
       maxParallelRequests: model.maxParallelRequests ?? null
     },
-    fallbacks: model.fallbacks ?? [],
     pricingConfigured: Boolean(model.pricing && Object.values(model.pricing).some((value) => typeof value === 'number')),
     description: model.description
   }));
-
-  // 运行时有效链:executor 只允许主模型 + 最多 2 跳 fallback(MAX_MODEL_CANDIDATES),
-  // 声明链更长也只生效前 N 个候选——展示层必须与运行时一致,避免「看着 3 层保险实际 1 层」
-  const runtimeMaxCandidates = MAX_MODEL_CANDIDATES;
-  const fallbackChains = models
-    .filter((model) => model.fallbacks.length > 0)
-    .map((model) => ({
-      model: model.id,
-      fallbacks: model.fallbacks,
-      effectiveFallbacks: model.fallbacks.slice(0, Math.max(0, runtimeMaxCandidates - 1)),
-      truncated: model.fallbacks.length > runtimeMaxCandidates - 1
-    }));
-  // 降级语义:仅切换模型名,网关与密钥沿用主调用(单网关拓扑下正确;多网关需候选自带部署)
-  const runtime = { maxModelCandidates: runtimeMaxCandidates, fallbackSwapsModelOnly: true as const };
-
-  // 跨供应商降级链提示:降级不换网关/密钥,跨供应商链只在单网关拓扑下可用。
-  // 两层口径：旧 provider 展示字段（deepseek/agnes 渠道差异）+ providerId（自带端点的独立供应商）。
-  for (const model of AVAILABLE_MODELS) {
-    for (const target of model.fallbacks ?? []) {
-      const targetModel = AVAILABLE_MODELS.find((item) => item.id === target);
-      if (!targetModel) continue;
-      if (targetModel.provider !== model.provider) {
-        warnings.push(`模型「${model.id}」的降级目标「${target}」属于不同 provider（${model.provider} → ${targetModel.provider}）。降级仅切换模型名、网关与密钥沿用主调用：单网关拓扑下可用，多网关部署时该链不可用。`);
-      } else if (model.providerId !== targetModel.providerId) {
-        warnings.push(`模型「${model.id}」的降级目标「${target}」属于不同供应商（${model.providerId} → ${targetModel.providerId}）。降级不切换端点，跨供应商候选不可达。`);
-      }
-    }
-  }
 
   // 遗留表检测:agent_model_configs 已于 2026-10-08 摘出路由解析链（doc/MODEL_GATEWAY_DESIGN.md
   // §422 决定），遗留行不再影响路由——只提示清理，不再说「优先级高于平台默认」。
@@ -342,8 +293,9 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
     );
   }
 
-  /* D12（2026-10-22 拍板 B）：把「最近是否在挨上游 429」变成可读的运营读数。
-     两处来源与页面语义一致：429 计数看调用日志（按 HTTP 状态码），冷却数看部署健康快照。
+  /* D12（2026-10-22 拍板 B）：把「最近是否在挨上游 429」变成可读的运营读数——
+     429 计数看调用日志（按 HTTP 状态码）。2026-11-04 随降级功能下线撤掉「冷却数」那一半：
+     冷却注册表只服务于换模型降级，降级没了它就没有数据来源。
      读日志失败不影响总览本身（该接口是只读诊断面），失败时按 0 展示并在 warnings 说明。 */
   const rateWindowMinutes = 60;
   let count429 = 0;
@@ -362,7 +314,6 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
   } catch {
     warnings.push('近 1 小时 429 计数读取失败，当前显示 0，不代表没有限流。');
   }
-  const cooldowns = listCoolingDowns();
 
   return {
     generatedAt: new Date().toISOString(),
@@ -380,29 +331,19 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
       defaultModelConfigured: defaultModel,
       defaultModelResolved: chatSelection?.model ?? defaultModel,
       defaultModelSource: defaultModel ? (chatSelection ? 'alias' : 'concrete') : 'unset',
-      defaultReasoningModelConfigured: reasoningModel,
-      defaultReasoningModelResolved: reasoningSelection?.model ?? reasoningModel,
-      defaultReasoningModelSource: reasoningModel ? (reasoningSelection ? 'alias' : 'concrete') : 'unset',
       defaultEvaluationModelConfigured: evaluationModel,
       defaultEvaluationModelResolved: evaluationSelection?.model ?? evaluationModel,
       defaultEvaluationModelSource: evaluationModel ? (evaluationSelection ? 'alias' : 'concrete') : 'unset'
     },
     /* 运行时真正用的默认（2026-10-24）：台面上的 defaults 只报「平台配了什么」（unset 就是没配），
-       但运行时还会落 env AI_MODEL / AI_MODEL_REASONING。来源必须能被界面说清，否则
-       「没配默认为什么还有模型」只能靠猜。 */
+       但运行时还会落 env AI_MODEL。来源必须能被界面说清，否则「没配默认为什么还有模型」只能靠猜。 */
     runtimeDefaults: {
       model: chatSelection?.model ?? defaultModel ?? ((process.env.AI_MODEL || '').trim() || null),
-      source: defaultModel ? 'ui' : ((process.env.AI_MODEL || '').trim() ? 'env' : 'none'),
-      reasoningModel: reasoningSelection?.model ?? reasoningModel ?? ((process.env.AI_MODEL_REASONING || '').trim() || null),
-      reasoningSource: reasoningModel ? 'ui' : ((process.env.AI_MODEL_REASONING || '').trim() ? 'env' : 'none')
+      source: defaultModel ? 'ui' : ((process.env.AI_MODEL || '').trim() ? 'env' : 'none')
     },
-    fallbackChains,
-    runtime,
-    cooldowns,
     rateLimit: {
       windowMinutes: rateWindowMinutes,
-      count429,
-      coolingDown: cooldowns.length
+      count429
     },
     warnings,
     deprecatedPromptModelCount

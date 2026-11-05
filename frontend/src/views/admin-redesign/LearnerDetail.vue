@@ -3110,7 +3110,7 @@ const snapshotHint = computed(() =>
    低透明底 + 彩边彩字，多枚并排时不再抢视觉焦点 */
 .ld-concept {
   padding: 2px 9px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-xs);
   font-size: var(--mk-fs-micro);
   font-weight: 500;
 }
@@ -3211,7 +3211,7 @@ const snapshotHint = computed(() =>
   color: var(--mk-muted);
   background: var(--mk-surface);
   border: 1px solid var(--mk-line);
-  border-radius: 999px;
+  border-radius: var(--mk-radius-sm);
   padding: 0 8px;
 }
 
@@ -3234,7 +3234,7 @@ const snapshotHint = computed(() =>
 .ld-kv__prior {
   margin-left: 6px;
   padding: 0 5px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-surface-2);
   color: var(--mk-muted);
   font-style: normal;
@@ -3482,7 +3482,7 @@ const snapshotHint = computed(() =>
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-sm);
 }
 .ld-ev__signal.is-ok { background: var(--mk-green-bg); color: var(--mk-green); }
 .ld-ev__signal.is-warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
@@ -3495,7 +3495,7 @@ const snapshotHint = computed(() =>
   font-weight: 700;
   color: var(--mk-amber);
   background: var(--mk-amber-bg);
-  border-radius: 999px;
+  border-radius: var(--mk-radius-sm);
   padding: 1px 8px;
 }
 /* 置信度迷你条：绿(≥80%) / 蓝(50-79%) / 琥珀(<50%) */
@@ -3581,7 +3581,7 @@ const snapshotHint = computed(() =>
 .ld-load__dot.is-lss { background: var(--mk-blue); }
 .ld-load__dot.is-lf { background: var(--mk-red); }
 .ld-load__dot.is-lsb { background: var(--mk-green); }
-.ld-load__chip { margin-left: auto; font-size: var(--mk-fs-micro); font-weight: 800; padding: 2px 9px; border-radius: 999px; }
+.ld-load__chip { margin-left: auto; font-size: var(--mk-fs-micro); font-weight: 800; padding: 2px 9px; border-radius: var(--mk-radius-sm); }
 .ld-load__info { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; font-size: var(--mk-fs-micro); color: var(--mk-muted); border-top: 1px dashed var(--mk-line); padding-top: 8px; }
 .ld-load__info b { color: var(--mk-ink); }
 /* 当日记录来源标（2026-11-04）：与上方「当前快照」配对，两行各标来源、不再只靠悬停区分 */
@@ -3611,7 +3611,7 @@ const snapshotHint = computed(() =>
 .ld-cal__row:last-child { border-bottom: none; }
 .ld-cal__task { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--mk-ink); cursor: help; }
 .ld-cal__risk { color: var(--mk-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.ld-cal__outcome { font-size: var(--mk-fs-micro); font-weight: 700; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+.ld-cal__outcome { font-size: var(--mk-fs-micro); font-weight: 700; padding: 1px 7px; border-radius: var(--mk-radius-xs); white-space: nowrap; }
 .ld-cal__outcome.is-smooth { color: var(--mk-green); background: var(--mk-green-bg); }
 .ld-cal__outcome.is-hard { color: var(--mk-red); background: var(--mk-red-bg); }
 .ld-cal__outcome.is-pending { color: var(--mk-faint); background: var(--mk-surface-2); }

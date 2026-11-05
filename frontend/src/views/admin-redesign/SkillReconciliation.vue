@@ -11,7 +11,7 @@
       <template v-else-if="recReport">
         <!-- 口径 pill（中性 mk-pill）+ 异常计数（mk-badge 语气，替代自造色块） -->
         <div class="sk-rec__pills">
-          <span class="mk-pill" :title="`已上线数 / 登记册全量（登记册含插件，多于目录）`">已上线 {{ recReport.summary.byStatus.live || 0 }} / {{ recReport.summary.total }}</span>
+          <span class="mk-badge mk-badge--muted" :title="`已上线数 / 登记册全量（登记册含插件，多于目录）`">已上线 {{ recReport.summary.byStatus.live || 0 }} / {{ recReport.summary.total }}</span>
           <span v-if="recReport.summary.unregistered" class="mk-badge mk-badge--bad">未注册 {{ recReport.summary.unregistered }}</span>
           <span v-if="recReport.summary.activeMissing" class="mk-badge mk-badge--warn" :title="ACTIVE_MISSING_HINT">无生效版本 {{ recReport.summary.activeMissing }}</span>
           <span v-if="recReport.summary.orphanRegistrations" class="mk-badge mk-badge--bad" title="登记册已删除/不存在，但注册记录仍残留（幽灵注册）">失效注册 {{ recReport.summary.orphanRegistrations }}</span>
@@ -416,8 +416,10 @@ defineExpose({ refresh, recReport, recDiff });
 .sk-rec-row--flagged { background: color-mix(in srgb, var(--mk-red) 6%, transparent); }
 
 .sk-rec__pills { display: inline-flex; gap: 6px; margin-left: auto; flex-wrap: wrap; align-items: center; }
-/* 同行里 mk-pill（中性口径）与 mk-badge（异常语气）统一到同一档尺寸，避免高矮不齐 */
-.sk-rec__pills > * { padding: 5px 12px; border-radius: 999px; font-size: var(--mk-fs-micro); font-weight: 600; }
+/* 2026-11-05 去胶囊化：这一行原先把「已上线 X/Y」借 .mk-pill 当形状（那是筛选触发器），
+   再靠下面这条覆盖把胶囊与徽章压成同一档高度——两个不同语义的元素硬对齐。
+   现在整行都是 .mk-badge（中性读数走 --muted、异常走 --bad/--warn），形状由徽章自带，
+   覆盖行整条撤除。 */
 .sk-rec__skeleton { padding: 12px; }
 .sk-rec-table th, .sk-rec-table td { text-align: left; }
 /* 四个布尔列（配置声明/运行注册/生效版本/完成度）与差集列取居中：铺满卡片后每列 128px，

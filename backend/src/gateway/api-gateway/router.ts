@@ -8,15 +8,13 @@ import { endpointsMatch } from '../../utils/endpoint-identity';
 import { selectModelForAlias } from './model-alias';
 import { reloadLlmProvidersIfChanged, resolvesToRegisteredModel, getModelDefaults, resolveModelRef, supportsVision, getModelGenerationDefaults } from '../../config/models.config';
 import { normalizePlatformModelDefaults } from '../../services/seed-skill-model-configs';
+const warnedOutOfCatalogEnvModels = new Set<string>();
 import { resolveProviderApiKey } from '../../services/provider-secrets.service';
 
 const PLATFORM_KEY_CONTEXT = 'system.platform_api_configs.apiKey';
 const SKILL_KEY_CONTEXT = 'system.skill_model_configs.apiKey';
 const USER_KEY_CONTEXT = 'main.user_api_configs.apiKey';
 const USER_AGENT_KEY_CONTEXT = 'main.user_agent_model_configs.apiKey';
-
-/** #177：env 兜底模型目录外告警去重（resolve 是热路径，同一坏值只告警一次）。 */
-const warnedOutOfCatalogEnvModels = new Set<string>();
 
 interface Config {
   providerId: string;
@@ -27,7 +25,7 @@ interface Config {
   vision?: boolean;
   reasoningModel?: string;
   thinkingMode?: 'default' | 'enabled' | 'disabled';
-  reasoningEffort?: 'default' | 'low' | 'high' | 'max';
+  reasoningEffort?: string;
   /** 通道级结构化输出默认（user-provider 继承 platform 通道设置；skill paramOverrides 仍可覆盖） */
   responseFormat?: 'none' | 'json_object';
   temperature: number;
@@ -92,16 +90,6 @@ function parseSkillParamOverrides(raw: unknown): ResolvedRoute['skillParamOverri
   };
 }
 
-/** 解析 skill_model_configs.fallbackChain（JSON string[]）。坏值视为未声明（null=用 registry 默认链）。 */
-function parseSkillFallbackChain(raw: unknown): string[] | null {
-  if (typeof raw !== 'string' || !raw.trim()) return null;
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return null;
-    const out = parsed.filter((x): x is string => typeof x === 'string' && x.trim().length > 0).map(s => s.trim());
-    return out.length ? out : [];
-  } catch { return null; }
-}
 
 export class APIRouter {
   /** 热重载错误只在该报错文本变化时记一次，避免每次 resolve 刷日志 */
@@ -154,43 +142,32 @@ export class APIRouter {
   }
 
   private resolveModel(configModel?: string | null, aliasOverrides?: Record<string, string[]> | null): string {
-    const model = (configModel || process.env.AI_MODEL || '').trim();
+    const configured = (configModel || '').trim();
+    const model = (configured || process.env.AI_MODEL || '').trim();
     if (!model) {
       throw new Error('AI model is not configured. Set admin defaultModel or AI_MODEL.');
     }
     // 逻辑别名（chat / light …）展开为具体部署；具体模型 id 原样返回
-    return selectModelForAlias(model, { overrides: aliasOverrides })?.model ?? model;
-  }
-
-  private resolveReasoningModel(configModel?: string | null, aliasOverrides?: Record<string, string[]> | null): string {
-    const model = (configModel || process.env.AI_MODEL_REASONING || process.env.AI_MODEL || '').trim();
-    if (!model) {
-      throw new Error('AI reasoning model is not configured. Set admin defaultReasoningModel or AI_MODEL_REASONING.');
-    }
-    // reasoning 别名按能力过滤：优先 supportsThinking 的成员（require_parameters 思路）
-    return selectModelForAlias(model, { overrides: aliasOverrides, requireThinking: true })?.model ?? model;
+    const resolved = selectModelForAlias(model, { overrides: aliasOverrides })?.model ?? model;
+    // env 兜底（DB 未配默认）过目录护栏（#177）；显式配置值保持原样
+    return configured ? resolved : this.guardEnvFallbackModel(resolved, aliasOverrides);
   }
 
   /**
-   * #177 运行期护栏（env 兜底）：平台 DB 未配默认时，平台路由落 env `AI_MODEL` / `AI_MODEL_REASONING`。
-   * env 没有写入门禁（管理台三档默认的写入门禁管不到它），指向 llm-providers.json 目录外的值
+   * #177 运行期护栏（env 兜底）：平台 DB 未配默认时，平台路由落 env `AI_MODEL`。
+   * env 没有写入门禁（管理台默认模型的写入门禁管不到它），指向 llm-providers.json 目录外的值
    * （历史遗留评测 id、已删模型的 id）在运行时无可用渠道，原样透传上游只会 transport 失败。
    * 这里在取值点兜住：解析不到注册目录就改用文件声明的默认并告警（同一坏值只告警一次）。
-   * 只作用于**平台通道**默认——用户自带 provider / skill 显式绑定的模型身份不属于平台目录，保持原样。
+   * 只作用于平台通道默认——用户自带 provider / skill 显式绑定的模型身份不属于平台目录，保持原样。
    */
-  private guardEnvFallbackModel(
-    model: string,
-    tier: 'chat' | 'reasoning',
-    aliasOverrides?: Record<string, string[]> | null
-  ): string {
+  private guardEnvFallbackModel(model: string, aliasOverrides?: Record<string, string[]> | null): string {
     if (resolvesToRegisteredModel(model, aliasOverrides)) return model;
     const declared = getModelDefaults();
-    const fallback = (tier === 'reasoning' ? declared.reasoning : declared.chat) || declared.chat;
+    const fallback = declared.chat;
     if (!fallback || !resolvesToRegisteredModel(fallback, aliasOverrides)) return model;
     if (!warnedOutOfCatalogEnvModels.has(model)) {
       warnedOutOfCatalogEnvModels.add(model);
       logger.warn?.('[api-gateway] env 兜底默认模型不在已注册目录（llm-providers.json），改用文件声明默认', {
-        tier,
         envModel: model,
         fallback,
       });
@@ -198,31 +175,11 @@ export class APIRouter {
     return fallback;
   }
 
-  /** 平台通道默认模型：DB 值原样解析；落到 env 兜底时过目录护栏（#177）。 */
-  private resolvePlatformModel(configModel: string | null | undefined, aliasOverrides?: Record<string, string[]> | null): string {
-    const configured = String(configModel ?? '').trim();
-    const resolved = this.resolveModel(configured || null, aliasOverrides);
-    return configured ? resolved : this.guardEnvFallbackModel(resolved, 'chat', aliasOverrides);
-  }
-
-  /** 平台通道推理默认模型：同 resolvePlatformModel（env 兜底过目录护栏）。 */
-  private resolvePlatformReasoningModel(configModel: string | null | undefined, aliasOverrides?: Record<string, string[]> | null): string {
-    const configured = String(configModel ?? '').trim();
-    const resolved = this.resolveReasoningModel(configured || null, aliasOverrides);
-    return configured ? resolved : this.guardEnvFallbackModel(resolved, 'reasoning', aliasOverrides);
-  }
-
-  /** 推理档技能未单独配模型时的继承值：平台推理默认 → 基础路由模型。
-   *  平台没有配推理默认就保持原来的继承结果，不拿 env 值悄悄改写基础路由。 */
-  private resolveSkillReasoningDefault(
-    platformRecord: { defaultReasoningModel?: string | null } | null,
-    aliasOverrides: Record<string, string[]> | null,
-    inheritedModel: string
-  ): string {
-    const configured = (platformRecord?.defaultReasoningModel || '').trim();
-    if (!configured) return inheritedModel;
-    return this.resolvePlatformReasoningModel(configured, aliasOverrides);
-  }
+  /* 2026-11-04 用户「为什么还在区分默认推理和对话，没有这个了。所谓的推理，是取决于使用者
+     开启的思考强度」：撤掉 resolveReasoningModel 与 resolveSkillReasoningDefault。
+     平台只有一个默认模型；某个 Skill 要不要长思考由它的 thinkingMode / reasoningEffort 决定，
+     而不是「推理档换一个模型」。此前 tier=reasoning 且未配模型的 Skill 会改走平台推理默认，
+     那是「两档模型」的遗留——现在一律走基础路由模型。 */
 
   /** platform_api_configs 的别名覆盖（此前为只回显的死字段，现作为别名映射的动态来源）。 */
   private platformAliasOverrides(config: {
@@ -258,7 +215,7 @@ export class APIRouter {
     }
 
     // #177 运行期归一化：直接手改 llm-providers.json（绕过管理台写入门禁）后目录收缩，可能让平台
-    // 三档默认指向的模型从目录里消失——运行期继续用列表外的 id 会无可用渠道 transport 失败。
+    // 默认指向的模型从目录里消失——运行期继续用列表外的 id 会无可用渠道 transport 失败。
     // 目录确实变了就地按新目录重新归一化平台默认（与启动期同一 File-as-Truth 口径），
     // 在本次解析使用之前消除故障本身；无变化（常态）不走 DB。
     if (reload.reloaded) {
@@ -327,8 +284,6 @@ export class APIRouter {
         return null;
       }
 
-      const tier = (config.tier || '').toLowerCase();
-      const isReasoning = tier === 'reasoning';
       const configuredEndpoint = (config.endpoint || '').trim();
       const configuredApiKey = configuredEndpoint
         ? decryptSecret(config.apiKey, SKILL_KEY_CONTEXT) || ''
@@ -358,20 +313,15 @@ export class APIRouter {
       const platformRecord = await this.getPlatformConfigRecord();
       const overrides = platformRecord ? this.platformAliasOverrides(platformRecord) : null;
       const userModelWins = inheritedUserEndpoint && LEARN_DIALOGUE_SKILLS.has(skillId);
-      // 2026-10-24：推理档此前只在「技能自己写了模型」时生效，未写模型就退回对话默认，
-      // 平台的 defaultReasoningModel 在运行时没有任何消费者。现补上继承分支：
-      // tier=reasoning 且未单独配模型 → 用平台推理默认；平台没配推理默认（或读不到平台行）
-      // 时仍沿用基础路由，不凭空改模型。
-      const reasoningInherited = !config.model && isReasoning && !userModelWins
-        ? this.resolveSkillReasoningDefault(platformRecord, overrides, inheritedRoute.model)
-        : inheritedRoute.model;
+      /* 2026-11-04：模型选择不再分档。Skill 自己写了模型就用它，没写就沿用基础路由
+         （最终落到平台那一个默认模型）；要不要长思考由 thinkingMode / reasoningEffort 决定。
+         此前这里还有一条「tier=reasoning 且未配模型 → 走平台推理默认」的继承分支，已随
+         「默认推理模型」这个概念一并撤除。 */
       const model = userModelWins
         ? inheritedRoute.model
         : config.model
-          ? (isReasoning
-            ? this.resolveReasoningModel(config.model, overrides)
-            : this.resolveModel(config.model, overrides))
-          : reasoningInherited;
+          ? this.resolveModel(config.model, overrides)
+          : inheritedRoute.model;
       // 生成参数优先级（2026-10-24）：Skill 显式配置 > 最终模型的模型默认 > 平台默认。
       // 平台默认这里直接读平台行，不再用 inheritedRoute——后者可能带着「平台默认模型」的
       // 模型级默认，技能换过模型时会张冠李戴。
@@ -398,11 +348,10 @@ export class APIRouter {
         responseFormat: modelDefaults.responseFormat
           ? this.normalizeResponseFormat(modelDefaults.responseFormat)
           : platformResponse,
-        // 2026-09-28 配置体系优化：skill 级参数覆盖（paramOverrides JSON）与兜底链
-        // （fallbackChain JSON）经路由透传；temperature/maxTokens 列本身仍是 deprecated 占位。
+        // 2026-09-28 配置体系优化：skill 级参数覆盖（paramOverrides JSON）经路由透传；
+        // temperature/maxTokens 列本身仍是 deprecated 占位。
         // 上层字段级优先级见 services/resolve-llm-call-params.ts 头注释。
         skillParamOverrides: parseSkillParamOverrides(config.paramOverrides),
-        skillFallbackChain: parseSkillFallbackChain(config.fallbackChain),
         // 路由仅继承上层 temperature/maxTokens，供未声明 prompt/覆盖的调用回退
         temperature: inheritedRoute.temperature,
         maxTokens: inheritedRoute.maxTokens,
@@ -497,7 +446,7 @@ export class APIRouter {
       // （此前硬编码 'default' → 上游预思考开启，path-gen 类长任务被烧慢超时）
       let responseFormat: 'none' | 'json_object' = 'none';
       let thinkingMode: 'default' | 'enabled' | 'disabled' = 'default';
-      let reasoningEffort: 'default' | 'low' | 'high' | 'max' = 'default';
+      let reasoningEffort = 'default';
       try {
         const plat = await systemPrisma.platform_api_configs.findUnique({
           where: { id: 'platform' },
@@ -546,7 +495,6 @@ export class APIRouter {
         apiUrl: true,
         apiKey: true,
         defaultModel: true,
-        defaultReasoningModel: true,
         defaultTemperature: true,
         defaultMaxTokens: true,
         reasoningEndpoint: true,
@@ -600,13 +548,17 @@ export class APIRouter {
     return 'default';
   }
 
-  private normalizeReasoningEffort(value?: string | null): 'default' | 'low' | 'high' | 'max' {
-    const normalized = (value || '').trim().toLowerCase();
-    if (normalized === 'low' || normalized === 'high' || normalized === 'max') {
-      return normalized;
-    }
-    // medium/xhigh 等由上游映射处理，不在此归一；平台只显式表达 default/low/high/max
-    return 'default';
+  /**
+   * 挡位归一：只做去空白与空值回落，**不按平台词表过滤**。
+   *
+   * 2026-11-05 用户「应该放开允许填写挡位，和具体请求参数」：取值是上游定义的，
+   * 平台这一层没有资格把 xhigh / dynamic 这类自家词改写成 default——那样它永远发不出去，
+   * 而且失败是静默的。放行哪一档由 thinking-policy 按**模型声明的 reasoningEfforts** 裁，
+   * 那才是知道「这台模型认什么词」的地方。
+   */
+  private normalizeReasoningEffort(value?: string | null): string {
+    const normalized = (value || '').trim();
+    return normalized || 'default';
   }
 
   private async getPlatformDefault(): Promise<ResolvedRoute> {
@@ -621,7 +573,7 @@ export class APIRouter {
         return this.getFallbackConfig();
       }
 
-      const platformModel = this.resolvePlatformModel(config.defaultModel, this.platformAliasOverrides(config));
+      const platformModel = this.resolveModel(config.defaultModel, this.platformAliasOverrides(config));
       // 模型级生成默认优先于平台默认（2026-10-24）：模型编辑里显式设过就用它，
       // 未设（'default'/缺省）仍走平台 defaultThinkingMode / defaultReasoningEffort / defaultResponseFormat。
       const modelDefaults = getModelGenerationDefaults(platformModel);
@@ -650,8 +602,7 @@ export class APIRouter {
   }
 
   private getFallbackConfig(): ResolvedRoute {
-    // env 兜底（平台行缺失）：目录外的 env 默认不得生效（#177）
-    const fallbackModel = this.guardEnvFallbackModel(this.resolveModel(), 'chat');
+    const fallbackModel = this.resolveModel();
     return {
       providerId: 'env-default',
       endpoint: this.resolveBaseEndpoint(),

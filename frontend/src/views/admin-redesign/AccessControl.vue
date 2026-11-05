@@ -672,7 +672,7 @@ onMounted(() => { if (isLive.value) void loadRegistrationStatus() })
 .ac-opt--off .ac-opt__radio { opacity: 0.5; }
 .ac-opt__tag {
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-sm);
   background: color-mix(in srgb, var(--mk-blue) 12%, transparent);
   color: var(--mk-blue);
   font-size: var(--mk-fs-micro);

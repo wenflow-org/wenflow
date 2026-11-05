@@ -251,6 +251,7 @@ doc/*
 !doc/UPGRADE_DIRECTION_20Q.md
 !doc/LEARNER_CENTER_AND_STATE_FUSION.md
 !doc/MODEL_GATEWAY_DESIGN.md
+!doc/MODEL_SETUP_AND_CONFIG_DESIGN.md
 # 例外：KC 概念身份/图 与 多路径信号作用域（协议与架构文档按路径引用）
 !doc/KC_CONCEPT_IDENTITY_AND_GRAPH_DESIGN.md
 !doc/KC_MULTIPATH_AND_LEARNER_SIGNAL_SCOPE.md
@@ -258,6 +259,8 @@ doc/*
 !doc/ADMIN_COLUMN_WIDTH_SPEC.md
 # 例外：管理端表头规范（活规范：守卫规则 20–22 与巡检按路径引用）
 !doc/ADMIN_TABLE_HEADER_SPEC.md
+# 例外：模型接入与配置设计（模型设置弹层/默认模型单档化的设计依据）
+!doc/MODEL_SETUP_AND_CONFIG_DESIGN.md
 # 例外：虚拟学习者日期模拟（接口契约 + 设计）
 !doc/VIRTUAL_LEARNER_SIMULATED_DAY_CONTRACT.md
 !doc/VIRTUAL_LEARNER_SIMULATED_DAY_DESIGN.md

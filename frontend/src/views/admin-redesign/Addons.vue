@@ -10,41 +10,48 @@
          不再另起一张同权卡；新建入口跟着 MCP 能力行走，页头不再挂全局「新建 MCP 服务」。 -->
     <MkPageHead title="插件" />
 
-    <!-- 可选能力（2026-10-27 bento 重设计）：
-         三张内置能力卡并排（联网 / 决策 / 生图），MCP 工具调用占一整行——
-         它不是第四张同形卡，而是带子资源的容器：能力头在下、服务列表挂在卡内。
-         这样「可选能力」回答开没开、最近用没用；MCP 卡再回答「接了哪些服务」。 -->
+    <!-- 可选能力（2026-11-05 用户「布局不采取分栏了吧 先保持一致」）：
+         单列堆叠，每张能力一张全宽卡，解剖与「系统设置」里的对话 / 向量 / 重排卡一致——
+         卡头（图标 + 能力名 + 最近调用 + 开关 + 入口），卡内一行成员。
+         此前是 bento：三张内置能力卡三列并排、MCP 占一整行；四个平级能力被拆成
+         「3 列 + 1 通栏」两种形状，读者得先分辨为什么第四张不一样宽。
+         MCP 仍是带子资源的容器（服务列表挂在卡内），但它现在与其余三张同宽同形。 -->
     <section class="ac-section">
+      <!-- 区头只留区名（2026-11-05 用户「这种说明文案不要」）：右端那行
+           「4 项能力 · 6 个 Skill」是把下方四张卡再数一遍，读者扫一眼卡片就有答案。
+           保留的只有「启停状态未读取」——那是读失败，不读这一行看不出来。 -->
       <div class="ac-section__head">
         <h2 class="ac-section__title">可选能力</h2>
         <span v-if="pluginStateFailed" class="mk-badge mk-badge--warn">启停状态未读取</span>
-        <span class="ac-section__meta">{{ pluginRows.length }} 项能力 · {{ pluginMemberCount }} 个 Skill</span>
       </div>
       <div v-if="configsFailed" class="mk-alert mk-alert--row ac-error" role="alert">
         <span class="mk-alert__msg">{{ configErrorText }}</span>
         <button type="button" class="mk-alert__btn" @click="loadPluginConfigs">重试</button>
       </div>
-      <!-- 首载骨架：保持三卡 + 全宽 MCP 卡的位置，数据到达不跳版 -->
-      <div v-if="loading" class="ac-cap-grid" aria-hidden="true">
-        <div v-for="n in 3" :key="n" class="mk-skeleton ac-cap-skel"></div>
-        <div class="mk-skeleton ac-cap-skel ac-cap-skel--wide"></div>
+      <!-- 首载骨架：单列四卡，与最终形态同形，数据到达不跳版 -->
+      <div v-if="loading" class="ac-list" aria-hidden="true">
+        <div v-for="n in 4" :key="n" class="mk-skeleton ac-cap-skel"></div>
       </div>
-      <div v-else class="ac-cap-grid">
-        <article
+      <div v-else class="ac-list">
+        <section
           v-for="p in pluginRows"
           :key="p.id"
-          class="ac-cap"
-          :class="{ 'is-off': !pluginEnabled(p.id), 'ac-cap--wide': p.id === 'mcp' }"
+          class="mk-card ac-cap"
+          :class="{ 'is-off': !pluginEnabled(p.id) }"
         >
-          <header class="ac-cap__head">
-            <span class="ac-cap__glyph" aria-hidden="true">
-              <component :is="p.icon" :size="18" :stroke-width="1.8" />
-            </span>
+          <div class="mk-card__head ac-cap__head">
             <div class="ac-cap__id">
-              <strong>{{ p.name }}</strong>
-              <span class="ac-cap__last">{{ p.last === '从未' ? '从未调用' : `最近 ${p.last}` }}</span>
+              <span class="ac-cap__glyph" aria-hidden="true">
+                <component :is="p.icon" :size="15" :stroke-width="1.8" />
+              </span>
+              <h3 class="mk-card__title">{{ p.name }}</h3>
+              <span class="mk-card__meta">{{ p.last === '从未' ? '从未调用' : `最近 ${p.last}` }}</span>
+              <!-- 成员与可用性跟在标题后：这一行是「这个能力由哪些 Skill 组成」，
+                   不必为它单起一行（2026-11-05 全宽单列后，单行卡片比两行更紧凑） -->
+              <span v-if="membersText(p)" class="ac-cap__members">{{ membersText(p) }}</span>
+              <button v-if="p.errorCount > 0" type="button" class="mk-link ac-cap__fail" @click="goLogs(p.primary)">查失败</button>
             </div>
-            <div class="ac-cap__actions">
+            <div class="mk-card__head-right ac-ctl">
               <MkSwitch
                 :model-value="pluginEnabled(p.id)"
                 :state-text="pluginEnabled(p.id) ? '启用' : '停用'"
@@ -52,61 +59,72 @@
                 :aria-label="`${p.name}插件开关`"
                 @update:model-value="togglePlugin(p.id, $event)"
               />
-              <!-- MCP 的入口是「新建服务」；其余能力的入口是服务配置 -->
-              <button v-if="p.id === 'mcp'" type="button" class="mk-btn mk-btn--sm" @click="openToolCreate">新建服务</button>
-              <button v-else type="button" class="mk-btn mk-btn--sm" @click="openConfig(p)">配置</button>
+              <!-- 入口动作与模型卡统一为主色实心按钮（2026-11-05 用户「都统一了」）：
+                   三张模型卡的卡头右组都是 `mk-btn--primary`，这里原先是描边次级钮，
+                   同处卡头右端的同权入口却是两种控件。MCP 的入口是「新建服务」，
+                   其余能力的入口是服务配置。
+                   动作外面那层是**定宽动作列**（2026-11-05 用户「统一一下右侧」）：
+                   「配置」与「新建服务」文案不同宽，开关的 x 跟着飘 24px，
+                   四张卡的开关凑不到一条竖线上。 -->
+              <div class="ac-ctl__acts">
+                <button v-if="p.id === 'mcp'" type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="openToolCreate">新建服务</button>
+                <button v-else type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="openConfig(p)">配置</button>
+              </div>
             </div>
-          </header>
-          <div class="ac-cap__meta">
-            <span v-if="membersText(p)" class="ac-cap__members">{{ membersText(p) }}</span>
-            <button v-if="p.errorCount > 0" type="button" class="mk-link ac-cap__fail" @click="goLogs(p.primary)">查失败</button>
           </div>
 
-          <!-- MCP 服务是 MCP 工具调用的子资源：同一张卡内展开，独立开关/测试/发现工具 -->
+          <!-- MCP 服务是 MCP 工具调用的子资源：同一张卡内展开，独立开关/测试/发现工具。
+               行的右组与卡头同一套解剖（2026-11-05 用户「统一一下右侧」）：
+               左侧只放「名称 + 类型/入口」这类读数，右侧只剩控制件——开关 + 动作列。
+               此前类型与入口是动作列前面的两个数据列，于是这一行的「右侧」里
+               读数与控件混在一起，开关还被挤到比卡头左 70px 的位置。 -->
           <div v-if="p.id === 'mcp'" class="ac-mcp__body">
             <div v-if="mcpTools.length" class="ac-mcp__list">
               <div v-for="t in mcpTools" :key="t.id" class="ac-mcp__row">
                 <span class="ac-mcp__dot" :class="t.enabled ? 'is-on' : 'is-off'"></span>
                 <div class="ac-mcp__main" :title="`${t.name}（${t.id}）`">
                   <strong>{{ t.name }}</strong>
-                </div>
-                <!-- 类型/端点是中文短标签（文件系统 / 本机进程），走正文无衬线 -->
-                <span class="ac-mcp__type">
-                  <span v-if="t.transport === 'mcp'" class="mk-badge mk-badge--info">MCP</span>
-                  <template v-else>{{ mcpTypeText(t.type) }}</template>
-                </span>
-                <span class="ac-mcp__endpoint" :title="endpointTitle(t.endpoint)">{{ endpointLabel(t.endpoint) }}</span>
-                <MkSwitch
-                  :model-value="t.enabled"
-                  :state-text="t.enabled ? '启用' : '停用'"
-                  :busy="toolBusy === t.id"
-                  :aria-label="`${t.name}服务开关`"
-                  @update:model-value="toggleToolEnabled(t, $event)"
-                />
-                <div class="mk-actions">
-                  <button
-                    v-if="t.transport === 'mcp'"
-                    type="button"
-                    class="mk-link"
-                    :disabled="discoveringId === t.id"
-                    :title="discoveredMap[t.id]?.join(', ')"
-                    @click="discoverTools(t)"
-                  >
-                    {{ discoveringId === t.id ? '发现中…' : (discoveredMap[t.id] ? `工具 ${discoveredMap[t.id].length}` : '发现工具') }}
-                  </button>
-                  <button type="button" class="mk-link" :disabled="testingId === t.id" @click="testTool(t)">
-                    {{ testingId === t.id ? '测试中…' : '测试' }}
-                  </button>
-                  <span v-if="testResult?.id === t.id" class="ac-mcp__test" :class="testResult.ok ? 'is-ok' : 'is-bad'">
-                    {{ testResult.ok ? `通过 · ${testResult.latencyMs}ms` : `失败 · ${testResult.error || ''}` }}
+                  <!-- 类型/端点是中文短标签（文件系统 / 本机进程），走正文无衬线 -->
+                  <span class="ac-mcp__meta">
+                    <span v-if="t.transport === 'mcp'" class="mk-badge mk-badge--info">MCP</span>
+                    <template v-else>{{ mcpTypeText(t.type) }}</template>
+                    <span class="ac-mcp__sep" aria-hidden="true">·</span>
+                    <span class="ac-mcp__endpoint" :title="endpointTitle(t.endpoint)">{{ endpointLabel(t.endpoint) }}</span>
                   </span>
-                  <button v-if="testResult?.id === t.id && !testResult.ok" type="button" class="mk-link" @click="openToolEdit(t)">编辑</button>
-                  <div class="mk-menu">
-                    <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === t.id" @click.stop="toggleMenu(t.id)">⋯</button>
-                    <div v-if="openMenu === t.id" class="mk-menu__pop" :style="popStyle" @click.stop>
-                      <button type="button" class="mk-menu__item" @click="menuEdit(t)">编辑</button>
-                      <div class="mk-menu__sep"></div>
-                      <button type="button" class="mk-menu__item mk-menu__item--danger" @click="menuRemove(t)">删除</button>
+                </div>
+                <div class="ac-ctl">
+                  <MkSwitch
+                    :model-value="t.enabled"
+                    :state-text="t.enabled ? '启用' : '停用'"
+                    :busy="toolBusy === t.id"
+                    :aria-label="`${t.name}服务开关`"
+                    @update:model-value="toggleToolEnabled(t, $event)"
+                  />
+                  <div class="mk-actions ac-ctl__acts">
+                    <button
+                      v-if="t.transport === 'mcp'"
+                      type="button"
+                      class="mk-link"
+                      :disabled="discoveringId === t.id"
+                      :title="discoveredMap[t.id]?.join(', ')"
+                      @click="discoverTools(t)"
+                    >
+                      {{ discoveringId === t.id ? '发现中…' : (discoveredMap[t.id] ? `工具 ${discoveredMap[t.id].length}` : '发现工具') }}
+                    </button>
+                    <button type="button" class="mk-link mk-link--hold mk-link--hold-test" :disabled="testingId === t.id" @click="testTool(t)">
+                      {{ testingId === t.id ? '测试中…' : '测试' }}
+                    </button>
+                    <span v-if="testResult?.id === t.id" class="ac-mcp__test" :class="testResult.ok ? 'is-ok' : 'is-bad'">
+                      {{ testResult.ok ? `通过 · ${testResult.latencyMs}ms` : `失败 · ${testResult.error || ''}` }}
+                    </span>
+                    <button v-if="testResult?.id === t.id && !testResult.ok" type="button" class="mk-link" @click="openToolEdit(t)">编辑</button>
+                    <div class="mk-menu">
+                      <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === t.id" @click.stop="toggleMenu(t.id)">⋯</button>
+                      <div v-if="openMenu === t.id" class="mk-menu__pop" :style="popStyle" @click.stop>
+                        <button type="button" class="mk-menu__item" @click="menuEdit(t)">编辑</button>
+                        <div class="mk-menu__sep"></div>
+                        <button type="button" class="mk-menu__item mk-menu__item--danger" @click="menuRemove(t)">删除</button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -127,7 +145,7 @@
               @action="mcpFailed ? loadMcpTools() : openToolCreate()"
             />
           </div>
-        </article>
+        </section>
       </div>
     </section>
 
@@ -210,15 +228,48 @@
             <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeConfig">✕</button>
           </div>
           <div class="mk-modal__body">
-            <!-- 资料采集去哪了（2026-10-31 四轮评审 P0-4）：联网卡列了三个成员能力
-                 （网页搜索/网页抓取/资料采集），配置弹窗却只有 搜索/抓取 两条通道——
-                 资料采集是编排 Skill，复用这两条通道取数，没有自己的 provider 链；
-                 不造假通道行，用一行说明把口径闭合。
-                 2026-11-04 文案口径：删末句「这两条通道配好，联网的三个成员能力即可用」——教用法，
-                 只留状态陈述。 -->
-            <p v-if="configTarget?.id === 'web'" class="ac-config-note">
-              资料采集不单独配密钥：它复用「搜索 / 抓取」两条通道取数。
-            </p>
+            <!-- 2026-11-05 用户「这种文案不要…注释型文案不要出现」：原先这里有两块说明文字——
+                 ① 「资料采集不单独配密钥：它复用『搜索 / 抓取』两条通道取数。这两条通道配好，
+                 联网的三个成员能力即可用。」②「搜索与抓取都按 X → Y → Z 依次尝试」。
+                 ① 整块撤除：它是设计决策的解释（为什么这里只有两条通道），而弹窗里就那三张
+                 provider 卡，读一眼即知配什么；② 收成一行只读数据「尝试顺序 X → Y → Z」——
+                 顺序是影响运行时的真实事实，且界面上没有第二处，留着但要按数据写、不按句子写。 -->
+            <template v-if="isWebConfig">
+              <p class="ac-config-order">
+                <span class="ac-config-order__k">尝试顺序</span>
+                <b>{{ fixedOrderText }}</b>
+              </p>
+              <section class="ac-config-provider" v-for="provider in configTarget?.providers ?? []" :key="provider.id">
+                <header class="ac-config-provider__head">
+                  <strong class="ac-config-provider__name">{{ provider.label }}</strong>
+                  <span class="ac-config-provider__badges">
+                    <span class="mk-badge" :class="provider.configured ? 'mk-badge--ok' : 'mk-badge--warn'">
+                      {{ provider.configured ? '已配置' : '缺少密钥' }}
+                    </span>
+                  </span>
+                </header>
+                <div class="ac-config-fields">
+                  <label class="mk-field" v-for="field in provider.fields" :key="field.key">
+                    <span class="mk-field__label">{{ field.label }}</span>
+                    <input
+                      v-model="draft[provider.id][field.key]"
+                      class="mk-field__input"
+                      :type="field.type"
+                      :placeholder="fieldPlaceholder(field)"
+                      autocomplete="new-password"
+                    />
+                  </label>
+                </div>
+                <div v-if="provider.keySource === 'db' || clearKeys[provider.id]" class="ac-config-provider__foot">
+                  <button
+                    type="button"
+                    class="mk-link"
+                    @click="toggleClearKey(provider.id)"
+                  >{{ clearKeys[provider.id] ? '取消清除' : '清除已保存密钥' }}</button>
+                </div>
+              </section>
+            </template>
+            <template v-else>
             <!-- 优先级（2026-10-26 用户两次走查：「这个真的很丑」「本身是三选一，然后用户可以
                  自己配置优先级」）：每通道一条链，第一位是主用，其余是备用；顺序由用户自己排，
                  也可以把 provider 加进/移出链。
@@ -295,6 +346,7 @@
                 >{{ clearKeys[provider.id] ? '取消清除' : '清除已保存密钥' }}</button>
               </div>
             </section>
+            </template>
           </div>
           <div class="mk-modal__foot">
             <button type="button" class="mk-btn" @click="closeConfig">取消</button>
@@ -406,7 +458,8 @@ interface PluginProvider {
 interface PluginConfig {
   id: string
   label: string
-  channels: Array<{ id: string; label: string; order: string[] }>
+  /** orderFixed = 顺序由代码固定（联网），界面不给排 */
+  channels: Array<{ id: string; label: string; order: string[]; orderFixed?: boolean }>
   providers: PluginProvider[]
 }
 
@@ -512,8 +565,6 @@ const pluginRows = computed(() => {
   void liveSkillStatsMap.value
   return buildPluginRows(PLUGIN_GROUPS, mcpAvailability.value)
 })
-/** 卡头读数：几组能力、几个运行时 Skill（2026-10-21 重设计后卡头只放数据） */
-const pluginMemberCount = computed(() => pluginRows.value.reduce((n, p) => n + p.members.length, 0))
 
 async function loadMcpTools() {
   mcpLoading.value = true
@@ -659,6 +710,16 @@ function toggleClearKey(providerId: string) {
   clearKeys.value = { ...clearKeys.value, [providerId]: !clearKeys.value[providerId] }
 }
 
+/** 联网分支：地址内置、顺序内置，弹层只让填密钥（2026-11-04 用户「其实这个是写死的」） */
+const isWebConfig = computed(() => configTarget.value?.id === 'web')
+/** 上面那行只读顺序：两条通道顺序一致时合成一句，不一致时逐条列出（目录里目前一致） */
+const fixedOrderText = computed(() => {
+  const channels = configTarget.value?.channels ?? []
+  const nameOf = (id: string) => providerLabelOf(id)
+  const joined = channels.map((c) => (orderDraft.value[c.id] ?? c.order).map(nameOf).join(' → '))
+  if (!joined.length) return ''
+  return joined.every((line) => line === joined[0]) ? joined[0] : ''
+})
 function providerLabelOf(providerId: string): string {
   return configTarget.value?.providers.find((p) => p.id === providerId)?.label || providerId
 }
@@ -735,6 +796,9 @@ async function saveConfig() {
       const now = (draft.value[provider.id]?.[field.key] ?? '').trim()
       if (field.secret) {
         if (now) patch[field.key] = now
+      } else if (isWebConfig.value) {
+        // 联网的地址是内置值（服务端也不再接受写入），非密钥字段一律不提交
+        continue
       } else if (now !== (field.value || field.placeholder).trim()) {
         // 与打开弹窗时的初始值比对：生效值原样带出时不算脏，空串 = 删除界面覆盖，回落服务端环境变量
         patch[field.key] = now
@@ -743,7 +807,8 @@ async function saveConfig() {
     if (clearKeys.value[provider.id]) patch.clearKey = true
     if (Object.keys(patch).length) providers[provider.id] = patch
   }
-  const orders = ordersDirty.value
+  // 联网的顺序内置（服务端拒绝写入），不提交 orders
+  const orders = !isWebConfig.value && ordersDirty.value
     ? Object.fromEntries(cfg.channels.map((ch) => [ch.id, orderOf(ch.id)]))
     : undefined
   if (!Object.keys(providers).length && !orders) {
@@ -920,85 +985,48 @@ function goLogs(skillId: string) {
    与成本分析 / 健康中心同款），不再需要宿主 flex 列里的内滚容器。 */
 .mono { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); }
 
-/* 可选能力：三张内置能力卡 + 一张全宽 MCP 卡（2026-10-27 bento 重设计）。
-   auto-fit 280px：1280 档三列，窄屏自动两列/单列；MCP 卡始终整行。 */
+/* 可选能力：四张能力卡单列堆叠（2026-11-05 用户「布局不采取分栏了吧 先保持一致」）。
+   此前是三列 bento + 一张通栏 MCP 卡：四个平级能力被拆成两种形状，读者得先分辨
+   为什么第四张不一样宽；现在四张同宽同形，与「系统设置」里那三张模型卡同一节拍。 */
 .ac-section { display: grid; gap: 12px; }
 .ac-section__head { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .ac-section__title { margin: 0; font-size: var(--mk-fs-emphasis); font-weight: 650; color: var(--mk-ink); }
-.ac-section__meta {
-  margin-left: auto;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.ac-cap-grid {
-  display: grid;
-  /* 三张能力卡恒等分整行（2026-10-31 四轮评审 P2-8）：auto-fit 280px 在宽屏会多出空轨道——
-     三张卡只占约 3/4 行宽，右侧留一条尴尬空白，与下方通栏 MCP 卡右缘不齐。
-     宽屏恒 3 列（本组就是 3 张内置能力卡 + 一张通栏卡），窄屏回落 auto-fit 自然折行。 */
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  align-items: stretch;
-}
-@media (max-width: 1080px) {
-  .ac-cap-grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
-}
-.ac-cap {
-  display: grid;
-  align-content: start;
-  gap: 10px;
-  min-width: 0;
-  padding: 14px 16px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-xl);
-  background: var(--mk-surface);
-}
-.ac-cap--wide { grid-column: 1 / -1; container-type: inline-size; }
-.ac-cap__head { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.ac-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+/* 卡头沿用 .mk-card__head 的排版（12/16 + 发丝线）：一行装下「图标 + 能力名 + 最近调用 +
+   成员 + 入口与开关」，与模型卡同址同形（2026-11-05 单列后不再需要第二行）。 */
+.ac-cap { display: flex; flex-direction: column; flex: none; }
+.ac-cap__head { min-width: 0; }
+.ac-cap__id { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
 .ac-cap__glyph {
   flex: none;
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: var(--mk-radius-md);
+  width: 22px;
+  height: 22px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-surface-3);
   color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
 }
-.ac-cap__id { display: grid; gap: 2px; min-width: 0; flex: 1; }
-.ac-cap__id strong { font-size: var(--mk-fs-body); font-weight: 650; color: var(--mk-ink); line-height: 1.3; }
-.ac-cap__last { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; }
-.ac-cap__actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
-  flex: none;
-}
-.ac-cap__meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
-.ac-cap__members { font-size: var(--mk-fs-micro); color: var(--mk-faint); line-height: 1.45; }
+.ac-cap__members { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.45; }
 .ac-cap__fail { font-size: var(--mk-fs-micro); }
 /* 停用只压信息层，开关与按钮保持清晰可点 */
 .ac-cap.is-off .ac-cap__id,
-.ac-cap.is-off .ac-cap__glyph,
-.ac-cap.is-off .ac-cap__meta { opacity: 0.55; }
-.ac-cap-skel { height: 104px; border-radius: var(--mk-radius-xl); }
-.ac-cap-skel--wide { grid-column: 1 / -1; height: 168px; }
+.ac-cap.is-off .ac-cap__glyph { opacity: 0.55; }
+.ac-cap-skel { height: 50px; border-radius: var(--mk-radius-xl); }
 
-/* 资料采集口径说明行（P0-4）：与通道行同节奏的中性小字 */
-.ac-config-note {
-  margin: 0;
-  padding: 8px 12px;
-  border-radius: var(--mk-radius-md);
-  background: var(--mk-surface-2);
-  color: var(--mk-muted);
+/* 联网：内置顺序的只读一行（2026-11-05 改成「标签 + 值」的数据行，不再写成一句话。
+   顺序是影响运行时的真实事实，界面上也没有第二处出口，所以留着；
+   原先那句「搜索与抓取都按 X → Y → Z 依次尝试」是叙述句，与三张 provider 卡并列时读作说明文案。） */
+.ac-config-order {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 12px;
+  color: var(--mk-ink);
   font-size: var(--mk-fs-micro);
-  line-height: 1.6;
 }
+.ac-config-order__k { color: var(--mk-muted); }
+.ac-config-order b { font-weight: 700; }
 /* MCP 服务编辑弹窗：先排通道优先级（主用 + 备用，用户可自己调），再填链上 provider 的密钥/入口。
    2026-10-25 用户「不要这种解释型文案」：简介、降级注记、provider 说明句、字段提示行全撤。
    2026-10-26 用户两次走查「这个真的很丑」「本身是三选一，然后用户可以自己配置优先级」：
@@ -1027,7 +1055,7 @@ function goLogs(skillId: string) {
   gap: 6px;
   padding: 3px 5px 3px 9px;
   border: 1px solid var(--mk-line);
-  border-radius: 999px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-surface);
 }
 .ac-prio__rank { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
@@ -1072,33 +1100,43 @@ function goLogs(skillId: string) {
 .ac-config-provider__foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 8px; }
 .ac-config-provider__foot .mk-link { font-size: var(--mk-fs-micro); }
 @media (max-width: 720px) {
-  .ac-cap { padding: 12px 14px; }
-  .ac-cap__head { flex-wrap: wrap; }
-  .ac-cap__actions { width: 100%; justify-content: flex-end; }
+  .ac-cap__head { flex-wrap: wrap; row-gap: 8px; }
+  .ac-cap__head .mk-card__head-right { width: 100%; justify-content: flex-end; }
 }
 
 /* 能力配置加载失败错误条：外形走 .mk-alert--row，本类只保留节内位置 */
 .ac-error { margin: 0; }
 
-/* MCP 子列表：挂在 MCP 工具调用卡内（cap--wide），不再另起卡或缩进到行外 */
-.ac-mcp__body { display: grid; gap: 8px; }
+/* MCP 子列表：挂在 MCP 工具调用卡内，与本卡其余内容同一 16px 槽。
+   卡头自带一条底边发丝线，这里只补纵向间距，不再画第二条线。 */
+/* 行的右组（能力卡卡头与 MCP 服务行共用，2026-11-05 用户「统一一下右侧」）：
+   开关 + **定宽动作列**。动作列不定宽时，开关的 x 跟着动作文案走——
+   「配置」与「新建服务」差 24px，四张卡的开关凑不到一条竖线，行与行读起来像两套版。 */
+.ac-section { --ac-act-w: 104px; }
+.ac-ctl { display: inline-flex; align-items: center; gap: 12px; flex: none; }
+.ac-ctl__acts {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: var(--ac-act-w);
+}
+.ac-mcp__body { display: grid; gap: 8px; padding: 0 0 14px; }
 .ac-mcp__list {
   container-type: inline-size;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-md);
+  /* 满宽 + 淡底（2026-11-05 统一右侧）：此前是内缩 16px、四边描边的面板，
+     于是行里最后一个控件比卡头右缘退 17px——「统一」就只是说法。
+     淡底 + 顶部发丝线已足够说明「这是挂在 MCP 卡里的子资源」。 */
   background: var(--mk-surface-2);
-  overflow: hidden;
+  border-top: 1px solid var(--mk-line);
 }
 .ac-mcp__row {
   display: grid;
-  /* 2026-10-24：类型/入口按内容收（max-content 上限），富余空间只留在末尾动作列，
-     消除 585–662px 的空白中段；动作列右对齐。 */
-  /* 名称吃掉剩余宽度，类型/入口/状态/动作全部 max-content 靠右成组；
-     不再让某个具名列被余量拉成 500px+ 的空列。 */
-  grid-template-columns: 10px minmax(0, 1fr) max-content max-content max-content max-content;
+  /* 左侧只放读数（名称 + 类型/入口），右侧整块是控制件（开关 + 动作列） */
+  grid-template-columns: 10px minmax(0, 1fr) max-content;
   gap: 12px;
   align-items: center;
-  padding: 10px 12px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--mk-line);
 }
 .ac-mcp__row:last-child { border-bottom: none; }
@@ -1107,11 +1145,18 @@ function goLogs(skillId: string) {
 .ac-mcp__dot.is-off { background: var(--mk-faint); }
 .ac-mcp__main { display: grid; gap: 1px; min-width: 0; }
 .ac-mcp__main strong { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ac-mcp__type { font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
-/* 状态徽标与动作组同处右缘：徽标列吃 1fr 并右对齐，把空白留在类型/入口与动作之间，
-   消除某个具名列被拉成 585–662px 空列（2026-10-24 复核）。 */
-.ac-mcp__row > .mk-switch { justify-self: end; }
-.ac-mcp__row > .mk-actions { justify-self: end; }
+/* 类型 / 入口并成名称下面的一行读数：它们描述这台服务，不参与操作 */
+.ac-mcp__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+  white-space: nowrap;
+}
+.ac-mcp__sep { color: var(--mk-faint); }
+.ac-mcp__row > .ac-ctl { justify-self: end; }
 .ac-mcp__test { font-size: var(--mk-fs-micro); font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .ac-mcp__test.is-ok { color: var(--mk-green); }
 .ac-mcp__test.is-bad { color: var(--mk-red); max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
@@ -1132,21 +1177,17 @@ function goLogs(skillId: string) {
 /* 窄卡：MCP 行两行重排（状态点/名称/徽标一行，类型/endpoint 次行，操作收底行） */
 @container (max-width: 540px) {
   .ac-mcp__row {
-    grid-template-columns: 10px minmax(0, 1fr) auto;
+    grid-template-columns: 10px minmax(0, 1fr);
     grid-template-areas:
-      'dot main badge'
-      '. type endpoint'
-      '. actions actions';
+      'dot main'
+      '. ctl';
     row-gap: 5px;
     column-gap: 12px;
     padding: 12px 16px;
   }
   .ac-mcp__dot { grid-area: dot; }
   .ac-mcp__main { grid-area: main; }
-  .ac-mcp__type { grid-area: type; }
-  .ac-mcp__endpoint { grid-area: endpoint; }
-  .ac-mcp__row .mk-switch { grid-area: badge; justify-self: end; }
-  .ac-mcp__row .mk-actions { grid-area: actions; }
+  .ac-mcp__row .ac-ctl { grid-area: ctl; justify-self: end; }
 }
 @media (max-width: 800px) {
   .ac-mcp__formrow { grid-template-columns: 1fr; }
@@ -1157,19 +1198,19 @@ function goLogs(skillId: string) {
   .mono { font-size: var(--mk-fs-micro); }
   .ac-mcp__row { padding: 12px 18px; }
   .ac-mcp__main strong { font-size: var(--mk-fs-body); }
-    .ac-mcp__type, .ac-mcp__endpoint { font-size: var(--mk-fs-micro); }
+    .ac-mcp__meta { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
   .mono { font-size: var(--mk-fs-micro); }
   .ac-mcp__row { padding: 14px 22px; }
   .ac-mcp__main strong { font-size: var(--mk-fs-micro); }
-    .ac-mcp__type, .ac-mcp__endpoint { font-size: var(--mk-fs-micro); }
+    .ac-mcp__meta { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
   .mono { font-size: var(--mk-fs-body); }
   .ac-mcp__row { padding: 16px 26px; }
   .ac-mcp__main strong { font-size: var(--mk-fs-emphasis); }
-    .ac-mcp__type, .ac-mcp__endpoint { font-size: var(--mk-fs-body); }
+    .ac-mcp__meta { font-size: var(--mk-fs-body); }
 }
 
 /* ================= 暗色模式（D1 补完）：外挂能力 ================= */

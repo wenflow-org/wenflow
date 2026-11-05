@@ -129,7 +129,6 @@ describe('APIRouter 供应商端点覆盖', () => {
       maxTokens: null,
       requestTimeoutMs: null,
       paramOverrides: null,
-      fallbackChain: null
     })
     const route = await new APIRouter().resolve({ skillId: 'demo-skill' })
     expect(route.model).toBe('test-model')

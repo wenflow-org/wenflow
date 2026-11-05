@@ -1,47 +1,14 @@
 import { Router } from 'express';
+import { resolvesToRegisteredModel } from '../../config/models.config';
 import skillModelConfigService from '../../services/skillModelConfig.service';
 import { preserveConfiguredSecret, toSecretSafeResponse } from '../../utils/secret-redaction';
 import { normalizeEndpointIdentity } from '../../utils/endpoint-identity';
 import { getPlatformReliabilitySettings } from '../../services/reliability-settings.service';
-import { resolveModelRef, resolvesToRegisteredModel } from '../../config/models.config';
 import { buildVisionBindingWarning } from '../../config/vision-capability';
 import { scanPromptFiles } from '../../composers/prompt-files/loader';
 import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 
 const router = Router();
-
-// ── 通道能力探测缓存（保存时校验 fallback 候选是否真的在该通道可服务）──
-// 2026-09-28 教训：registry 声明的 agnes-3.0-flash 在新 key 分组不存在，400→503 空气兜底。
-// 出网走 utils/safe-http（协议/保留地址/凭据内嵌 URL 检查，policy=runtime 与 executor 同款）。
-const CHANNEL_PROBE_TTL_MS = 30 * 60 * 1000;
-const channelModelCache = new Map<string, { at: number; models: Set<string> | null }>();
-
-async function probeChannelModels(endpoint: string, apiKey: string): Promise<Set<string> | null> {
-  const cacheKey = `${endpoint}|${apiKey.length}:${apiKey.slice(0, 8)}`;
-  const hit = channelModelCache.get(cacheKey);
-  if (hit && Date.now() - hit.at < CHANNEL_PROBE_TTL_MS) return hit.models;
-  const miss = (models: Set<string> | null) => { channelModelCache.set(cacheKey, { at: Date.now(), models }); return models; };
-  try {
-    let origin: string;
-    try { origin = new URL(endpoint).origin; } catch { return miss(null); }
-    const { safeHttpRequest } = await import('../../utils/safe-http');
-    const res = await safeHttpRequest<{ data?: Array<{ id?: string }> }>(`${origin}/v1/models`, {
-      method: 'GET',
-      headers: { Authorization: `Bearer ${apiKey}` },
-      timeoutMs: 8000,
-      maxResponseBytes: 1024 * 1024,
-      responseType: 'json',
-      privateNetworkPolicy: 'runtime',
-    });
-    if (res.status < 200 || res.status >= 300 || !Array.isArray(res.data?.data)) return miss(null);
-    const ids = new Set<string>(res.data.data
-      .map((m: any) => String(m?.id || '').trim())
-      .filter((x: string) => x.length > 0));
-    return miss(ids);
-  } catch {
-    return miss(null);
-  }
-}
 
 /** endpoint 必须带 scheme（executor.resolveChatCompletionsUrl 才能拼出合法 URL） */
 function hasValidScheme(endpoint: string): boolean {
@@ -94,49 +61,10 @@ function validateParamOverrides(raw: unknown):
   return { ok: true, value: out };
 }
 
-/** 候选的上游字面 id：注册表内的引用（含 provider/model 限定式）还原为裸 id，未知的按字面量。 */
-function upstreamModelIds(list: string[]): string[] {
-  return list.map((m) => resolveModelRef(m)?.modelId ?? m);
-}
-
-/** 兜底链校验：≤2 跳；候选须在注册表（支持 provider/model 限定式引用）、与主模型同 tier、
- *  同供应商、不重复不含主模型。跨供应商候选被拒绝：当前运行时降级只换模型名不换端点
- *  （doc/MODEL_GATEWAY_DESIGN.md §4.5）。通道可服务性由调用方探测（probeChannelModels）补充。*/
-function validateFallbackChain(raw: unknown, primaryModel: string | null):
-  { ok: true; value: string[] } | { ok: false; error: string } {
-  if (!Array.isArray(raw)) return { ok: false, error: 'fallbackChain 必须是字符串数组' };
-  const chain = raw.map(x => String(x || '').trim()).filter(Boolean);
-  if (chain.length > 2) return { ok: false, error: 'fallbackChain 最多 2 跳' };
-  const seen = new Set<string>();
-  for (const m of chain) {
-    if (seen.has(m)) return { ok: false, error: `fallbackChain 含重复模型: ${m}` };
-    seen.add(m);
-    const ref = resolveModelRef(m);
-    if (!ref) return { ok: false, error: `fallback 候选不在模型注册表: ${m}` };
-    if (primaryModel) {
-      const pRef = resolveModelRef(primaryModel);
-      // 同一模型的不同写法（裸 id vs provider/model 限定式）都视为自身
-      if (pRef && ref.definition === pRef.definition) {
-        return { ok: false, error: `fallback 候选不能是主模型自身: ${m}` };
-      }
-      if (m === primaryModel) return { ok: false, error: `fallback 候选不能是主模型自身: ${m}` };
-      if (pRef) {
-        if (pRef.definition.tier !== ref.definition.tier) {
-          return { ok: false, error: `fallback 禁止跨 tier：${primaryModel}(${pRef.definition.tier})→${m}(${ref.definition.tier})` };
-        }
-        if (pRef.providerId !== ref.providerId) {
-          return { ok: false, error: `fallback 禁止跨供应商：${primaryModel}(${pRef.providerId})→${m}(${ref.providerId})。当前降级只换模型名不换端点，跨供应商候选不可达` };
-        }
-      }
-    }
-  }
-  return { ok: true, value: chain };
-}
-
 /**
  * 配置体系（2026-09-28 起，取代 Phase 2 只读路由模式）：
  * skill_model_configs = 运行时绑定层——路由（endpoint/key）、模型（tier/model/thinking/effort）、
- * 参数覆盖（paramOverrides：temperature/topP/maxTokens，缺字段=不覆盖）、兜底链（fallbackChain）。
+ * 参数覆盖（paramOverrides：temperature/topP/maxTokens，缺字段=不覆盖）。
  * 生成参数默认仍由 File-as-Truth（agent_prompts ACTIVE）提供，被覆盖时以覆盖为准，
  * 生效值与来源以 GET /:skillId 的 generationParams.sources 投影为准。
  */
@@ -149,7 +77,6 @@ function pickEditableConfig(body: any) {
     endpoint: body?.endpoint,
     apiKey: body?.apiKey,
     paramOverrides: body?.paramOverrides ?? undefined,
-    fallbackChain: body?.fallbackChain ?? undefined,
     requestTimeoutMs: body?.requestTimeoutMs,
     maxLogicalRetries: body?.maxLogicalRetries,
     enabled: body?.enabled,
@@ -216,7 +143,6 @@ router.get('/coverage', async (req, res) => {
         tier: row?.tier ?? 'chat',
         source,
         paramOverrides: row?.paramOverrides ? JSON.parse(row.paramOverrides) : null,
-        fallbackChain: row?.fallbackChain ? JSON.parse(row.fallbackChain) : null,
       };
     });
     res.json({
@@ -262,7 +188,6 @@ router.post('/bulk-apply', async (req, res) => {
         endpoint ? 'endpoint' : '',
         apiKey ? 'apiKey' : '',
         body.paramOverrides !== undefined ? 'paramOverrides' : '',
-        body.fallbackChain !== undefined ? 'fallbackChain' : '',
         body.tier !== undefined ? 'tier' : '',
         body.thinkingMode !== undefined ? 'thinkingMode' : '',
       ].filter(Boolean);
@@ -299,23 +224,6 @@ router.post('/bulk-apply', async (req, res) => {
       if ('error' in v) return res.status(400).json({ success: false, error: v.error });
       paramOverridesValue = v.value === null ? null : JSON.stringify(v.value);
     }
-    const fallbackChainRaw = body.fallbackChain ?? undefined;
-    let fallbackChainValue: string | null | undefined;
-    if (fallbackChainRaw !== undefined) {
-      const v = validateFallbackChain(fallbackChainRaw, model);
-      if ('error' in v) return res.status(400).json({ success: false, error: v.error });
-      fallbackChainValue = v.value === null ? null : JSON.stringify(v.value);
-      if (v.value.length && endpoint && apiKey) {
-        const available = await probeChannelModels(endpoint, apiKey);
-        if (available) {
-          const missing = upstreamModelIds(v.value).filter(m => !available.has(m));
-          if (missing.length) {
-            return res.status(400).json({ success: false, error: `fallback 候选在该通道不可用：${missing.join(', ')}` });
-          }
-        }
-      }
-    }
-
     const before = await Promise.all(skillIds.map(id => skillModelConfigService.get(id).catch(() => null)));
     setAuditAction(res, 'skill-model-configs-bulk-apply', { targetType: 'skill-model-config', targetId: skillIds.join(',') });
     setAuditBefore(res, before);
@@ -324,13 +232,12 @@ router.post('/bulk-apply', async (req, res) => {
     const after: any[] = [];
     for (const skillId of skillIds) {
       try {
-        // 只清模型：其余字段（thinking/超时/覆盖参数/备用链/独立通道）保持原样，
+        // 只清模型：其余字段（thinking/超时/覆盖参数/独立通道）保持原样，
         // 否则「跟随平台默认」会顺手抹掉行为差异配置。
         const input: any = clearModel
           ? { model: null }
           : pickEditableConfig({ ...body, skillIdChecked: true });
         if (paramOverridesValue !== undefined) input.paramOverrides = paramOverridesValue;
-        if (fallbackChainValue !== undefined) input.fallbackChain = fallbackChainValue;
         const saved = await skillModelConfigService.upsert(skillId, input);
         after.push(saved);
         results.push({ skillId, ok: true });
@@ -458,7 +365,6 @@ router.put('/:skillId', async (req, res) => {
     if (finalEndpoint && !hasValidScheme(finalEndpoint)) {
       return res.status(400).json({ success: false, error: 'endpoint 必须带 http/https scheme（如 http://host:30001）' });
     }
-
     // #177：未自带 endpoint 的 skill 走继承通道（平台/上游），显式钉的模型必须解析到
     // llm-providers.json 目录——目录外的值会在运行时被原样发给继承通道，无可用渠道 → transport 失败。
     // 自带 endpoint 的 skill 是独立通道，模型由该通道提供，不在此约束。
@@ -487,34 +393,8 @@ router.put('/:skillId', async (req, res) => {
       paramOverridesValue = v.value;
     }
 
-    // 兜底链校验（registry / 同 tier / ≤2 跳）；主模型取最终生效 model
+    // 保存告警（视觉绑定提示等）；2026-11-04 之前这里还挂着兜底链校验的告警
     const warnings: string[] = [];
-    let fallbackChainValue: string[] | null | undefined;
-    if (body.fallbackChain !== undefined) {
-      const primaryModel = (typeof body.model === 'string' && body.model.trim() ? body.model.trim() : null)
-        || (typeof existing?.model === 'string' && existing.model.trim() ? existing.model.trim() : null);
-      const v = validateFallbackChain(body.fallbackChain, primaryModel);
-      if ('error' in v) return res.status(400).json({ success: false, error: v.error });
-      fallbackChainValue = v.value;
-      // 通道可服务性探测（能解析出 endpoint+key 才探；探测失败不阻断，只告警）
-      const probeKey = (typeof body.apiKey === 'string' && body.apiKey.trim() ? body.apiKey.trim() : '')
-        || (existing?.apiKey && existing.apiKey !== '' ? existing.apiKey : '');
-      if (fallbackChainValue.length && finalEndpoint && probeKey) {
-        const available = await probeChannelModels(finalEndpoint, probeKey);
-        if (available) {
-          const missing = upstreamModelIds(fallbackChainValue).filter(m => !available.has(m));
-          if (missing.length) {
-            return res.status(400).json({
-              success: false,
-              error: `fallback 候选在该通道不可用：${missing.join(', ')}（探测到 ${available.size} 个模型；空气兜底会以 503 掩盖真因）`
-            });
-          }
-        } else {
-          warnings.push('通道探测失败，fallback 候选未校验（保存时请确认通道模型列表）');
-        }
-      }
-    }
-
     const input = preserveConfiguredSecret(
       pickEditableConfig(body),
       endpointChanged ? { ...existing, apiKey: null } as any : existing as any
@@ -524,9 +404,6 @@ router.put('/:skillId', async (req, res) => {
     }
     if (paramOverridesValue !== undefined) {
       input.paramOverrides = paramOverridesValue === null ? null : JSON.stringify(paramOverridesValue);
-    }
-    if (fallbackChainValue !== undefined) {
-      input.fallbackChain = fallbackChainValue === null ? null : JSON.stringify(fallbackChainValue);
     }
     const config = await skillModelConfigService.upsert(req.params.skillId, input);
     // 操作审计：保存后快照新配置
@@ -558,7 +435,7 @@ router.put('/:skillId', async (req, res) => {
         warnings,
         routingOnly: false,
       },
-      message: '配置已更新（paramOverrides/fallbackChain 同表管理；生效值见 generationParams.sources）',
+      message: '配置已更新（paramOverrides 同表管理；生效值见 generationParams.sources）',
     });
   } catch (error: any) {
     res.status(500).json({ success: false, error: error.message });

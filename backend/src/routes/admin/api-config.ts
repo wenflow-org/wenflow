@@ -30,7 +30,6 @@ router.get('/', async (req, res) => {
         apiKeyConfigured: Boolean(config.apiKey),
         availableModels: config.availableModels,
         defaultModel: config.defaultModel,
-        defaultReasoningModel: config.defaultReasoningModel,
         defaultEvaluationModel: config.defaultEvaluationModel,
         defaultTemperature: config.defaultTemperature ?? 0.7,
         defaultMaxTokens: config.defaultMaxTokens ?? 2048,
@@ -113,7 +112,6 @@ router.put('/', async (req, res) => {
       apiKey, 
       availableModels, 
       defaultModel, 
-      defaultReasoningModel, 
       defaultEvaluationModel,
       defaultTemperature,
       defaultMaxTokens,
@@ -185,7 +183,7 @@ router.put('/', async (req, res) => {
     };
     const invalidDefaults = ([
       ['默认模型', defaultModel],
-      ['推理默认模型', defaultReasoningModel],
+      // 2026-11-04 起 defaultReasoningModel 退役（思考由 skill 的 thinkingMode / reasoningEffort 决定）
       ['评估默认模型', defaultEvaluationModel],
     ] as const)
       .filter(([, value]) => typeof value === 'string' && value.trim() !== ''
@@ -226,7 +224,6 @@ router.put('/', async (req, res) => {
       apiKey: resolvedApiKey,
       availableModels: modelsArray,
       defaultModel,
-      defaultReasoningModel,
       defaultEvaluationModel,
       defaultTemperature: defaultTemperature ?? currentConfig.defaultTemperature,
       defaultMaxTokens: defaultMaxTokens ?? currentConfig.defaultMaxTokens,
@@ -258,7 +255,6 @@ router.put('/', async (req, res) => {
         apiKeyConfigured: Boolean(updatedConfig.apiKey),
         availableModels: updatedConfig.availableModels,
         defaultModel: updatedConfig.defaultModel,
-        defaultReasoningModel: updatedConfig.defaultReasoningModel,
         defaultEvaluationModel: updatedConfig.defaultEvaluationModel,
         defaultTemperature: updatedConfig.defaultTemperature,
         defaultMaxTokens: updatedConfig.defaultMaxTokens,

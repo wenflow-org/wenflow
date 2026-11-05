@@ -87,7 +87,7 @@ export interface SimulatorRoute {
   model?: string
   privateNetworkPolicy?: 'runtime' | 'public-only'
   thinkingMode?: 'default' | 'enabled' | 'disabled'
-  reasoningEffort?: 'default' | 'low' | 'high' | 'max'
+  reasoningEffort?: string
   timeoutMs?: number | null
   apiKey?: string
   credentialFingerprint?: string

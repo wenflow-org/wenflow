@@ -18,7 +18,8 @@ export interface ModelCatalogEntry {
   /** 该模型所属供应商是否自带端点（llm-providers.json 声明了 baseUrl） */
   hasOwnEndpoint?: boolean
   supportsThinking?: boolean
-  supportsReasoningEffort?: boolean
+  /** 这台模型声明的推理强度挡位；空/缺省 = 不支持该字段 */
+  reasoningEfforts?: string[]
   vision?: boolean
   pricing?: { inputPer1M?: number; cachedInputPer1M?: number; outputPer1M?: number }
 }
@@ -75,7 +76,8 @@ export function useModelCatalog() {
       group: m.providerName || m.providerId,
       providerName: m.providerName || m.providerId,
       thinking: m.supportsThinking === true,
-      reasoning: m.supportsReasoningEffort === true,
+      // 挡位数组（不是布尔）：选择器与配置页都按「这台模型认哪几档」展示与出选项
+      efforts: Array.isArray(m.reasoningEfforts) ? m.reasoningEfforts : [],
       vision: m.vision === true,
       priceIn: m.pricing?.inputPer1M ?? null,
       priceOut: m.pricing?.outputPer1M ?? null

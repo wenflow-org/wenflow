@@ -485,7 +485,7 @@ watch(
   font-size: var(--mk-fs-micro);
   font-weight: 600;
   padding: 0 6px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-xs);
   border: 1px solid currentColor;
   opacity: 0.85;
 }
@@ -502,7 +502,7 @@ watch(
 .dt-cell__detail { display: grid; gap: 6px; margin-top: 4px; min-width: 0; }
 
 /* 状态 chip（节奏/信号）：胶囊词汇，同原型 .pill（238-244） */
-.dt-chip { font-size: var(--mk-fs-micro); padding: 1px 8px; border-radius: 999px; background: var(--mk-surface-3); color: var(--mk-muted); }
+.dt-chip { font-size: var(--mk-fs-micro); padding: 1px 8px; border-radius: var(--mk-radius-sm); background: var(--mk-surface-3); color: var(--mk-muted); }
 .dt-chip--warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
 .dt-chip--pace-slow { background: var(--mk-amber-bg); color: var(--mk-amber-fill); }
 .dt-chip--pace-fast { background: var(--mk-blue-bg); color: var(--mk-blue); }

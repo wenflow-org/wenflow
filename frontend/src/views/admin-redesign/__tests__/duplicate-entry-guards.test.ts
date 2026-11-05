@@ -54,11 +54,16 @@ describe('重复操作入口守卫', () => {
     expect(src).toContain('async function onOverrideToggle')
   })
 
-  it('接入页：连接与策略只在连接设置弹层里有一颗保存钮，不再有整页保存条', () => {
+  /* 2026-11-05 用户「连接设置和添加模型合并到一起吧，只保留添加模型」：
+     连接段搬进「添加模型」弹窗后，它的保存钮仍是**唯一一颗**（拉清单会自动落盘，
+     这颗只服务「只改了重试 / RPM」那一路），页面上依然没有整页保存条。 */
+  it('接入页：连接与策略只有弹窗里一颗保存钮，不再有整页保存条', () => {
     const src = read('ApiConfig.vue')
     expect(src).not.toContain('class="ac-save"')
     expect(src).not.toContain('showSaveBar')
-    expect(src.match(/@click="saveConnModal"/g) ?? []).toHaveLength(1)
+    expect(src.match(/@click="saveConnFromDialog"/g) ?? []).toHaveLength(1)
+    // 每个域各保存一次：连接 + 全站策略
+    expect(src.match(/saveGroups\(\[/g) ?? []).toHaveLength(2)
   })
 
   it('供应商设置弹窗不再重复行内的启用开关与密钥输入（仅创建时出现）', () => {

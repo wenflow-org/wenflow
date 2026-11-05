@@ -1,5 +1,6 @@
 <template>
-  <!-- Skill × 模型 × 参数 × 备用模型 覆盖矩阵（2026-10-19：原「兜底」与同表列头「备用模型」同义不同词）。
+  <!-- Skill × 模型 × 参数 覆盖矩阵（2026-10-19：原「兜底」与同表列头「备用模型」同义不同词）。
+       2026-11-04 用户「去掉降级这个功能，不要」：备用模型列 / 筛选 / 计数随降级整条下线。
        embedded：宿主（Skills.vue 的「批量模型配置」弹窗）已经给了面板与内衬，
        这里不再套第二层卡壳，也不重复弹窗标题。 -->
   <div :class="['skc', embedded ? 'skc--embedded' : 'mk-card']">
@@ -18,13 +19,11 @@
     </div>
     <div class="skc__body">
       <!-- 说明段已删（2026-10-17 用户走查：这类文案没有用）：
-           「未配置的技能会走平台默认」是下面「路由来源」列与页头「降级策略」KPI 的原文复述；
+           「未配置的技能会走平台默认」是下面「路由来源」列的原文复述；
            「对多个技能套用同一份…配置：」是表单自身的用途，输入框占位与按钮已说明。
            原 p 的 title 还挂着一条 2026-09-28 的研发事故记录，属实现历史，不该出现在界面上。 -->
       <!-- 可筛选的来源视图（2026-10-20 走查）：此前只有一张不可筛的矩阵，
-           看不出「多少 Skill 在用平台默认、多少独立配置」。计数取全量口径，不随其它筛选变化。
-           2026-10-27 筛选语法对齐教学会话（M3：同页 chip 组不得一组单选一组多选）：
-           来源是单选视图（含「全部」），备用模型是可叠加的开关 → 独立「标志筛选」组 + 激活前缀勾。 -->
+           看不出「多少 Skill 在用平台默认、多少独立配置」。计数取全量口径，不随其它筛选变化。 -->
       <div class="skc__filters">
           <MkPillSelect
             v-model="sourceSelect"
@@ -33,21 +32,15 @@
             :options="sourceOptions"
             :active="sourceFilter !== 'all'"
           />
-        <MkPillSelect
-          v-model="fallbackSelect"
-          label="备用模型"
-          aria-label="按备用模型筛选"
-          :options="fallbackSelectOptions"
-          :active="onlyFallback"
-        />        <!-- 2026-10-26：原「把默认还原成继承」的按钮改口「用平台默认」——
+        <!-- 2026-10-26：原「把默认还原成继承」的按钮改口「用平台默认」——
              这个动作的结果就是「本 Skill 不再单独指定模型，改用平台默认那个」，
              直接说结果，不引入「继承」这层中间概念。
-             只清 model，通道/思考/参数/备用链保持原样；放筛选行右端，不挤占通道套用那一行。 -->
+             只清 model，通道/思考/参数保持原样；放筛选行右端，不挤占通道套用那一行。 -->
         <button
           type="button"
           class="mk-btn mk-btn--sm skc__inherit"
           :disabled="bulkSaving || !selected.length"
-          title="清空所选技能单独指定的模型，改用平台默认模型。通道、思考、参数与备用链保持不变"
+          title="清空所选技能单独指定的模型，改用平台默认模型。通道、思考与参数保持不变"
           @click="clearModelOverride"
         >用平台默认模型</button>
       </div>
@@ -72,7 +65,7 @@
       <p v-if="loadErr && rows.length" class="note note--bad" role="alert">刷新失败：{{ loadErr }}（下表仍为上次成功的数据）</p>
       <p v-if="bulkMsg" class="note" :class="{ 'note--bad': bulkErr }" :role="bulkErr ? 'alert' : 'status'" aria-live="polite">{{ bulkMsg }}</p>
 
-      <!-- 原型 .tbl：统一 mk-table--dense 词表；长内容列（参数/备用模型链）走 wrap 列 -->
+      <!-- 原型 .tbl：统一 mk-table--dense 词表；长内容列（参数）走 wrap 列 -->
       <div v-if="visibleRows.length" class="mk-table-scroll">
         <table class="mk-table mk-table--dense skc__table">
           <thead>
@@ -110,12 +103,6 @@
                 :aria-sort="covSortState('params')"
                 @click="toggleCovSort('params')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleCovSort('params')" title="按覆盖项数排序">参数覆盖<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th
-                scope="col"
-                class="mk-th--sortable skc__wrap"
-                :aria-sort="covSortState('fallback')"
-                @click="toggleCovSort('fallback')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleCovSort('fallback')" title="按备用模型链条数排序">备用模型<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <!-- 完成度：原只读路由表独有列，合并后保留在同一行（不参与排序，属上下文状态） -->
               <th scope="col" title="上线完成度：草稿 → 已上线（来自完成度一致性核查）">完成度</th>
             </tr>
@@ -137,10 +124,13 @@
                   {{ s.source === 'platform-default' ? '用平台默认' : s.source === 'skill-channel' ? '独立通道' : '技能覆盖' }}
                 </span>
               </td>
-              <!-- 模型/参数/备用链三格的值可能是中文（未配置 / 平台默认），走正文；对齐靠 tabular-nums。
+              <!-- 模型/参数两格的值可能是中文（未配置 / 平台默认），走正文；对齐靠 tabular-nums。
                    2026-10-24 用户「还 chat 上了，没有这种了」：tier 是技能自己的档位字段，
                    不是模型名的一部分；对话档是全站默认，挂在模型后面只会被读成
-                   「deepseek-v4.1-flash chat」这种不存在的模型名。只保留有用的推理档提示。
+                   「deepseek-v4.1-flash chat」这种不存在的模型名。
+                   2026-11-04 用户「为什么还在区分默认推理和对话，没有这个了。所谓的推理，是取决于
+                   使用者开启的思考强度」：推理不再是「另一个模型」，连「推理」档徽章也一并撤掉——
+                   一个 Skill 要不要长思考，看它的思考模式 / 推理强度，不靠档位标注。
                    2026-10-26 用户「不太想走继承这个说法」：徽章由「继承」改为「平台默认」——
                    这一格说的是「本 Skill 没单独指定，实际跑的是平台那个模型」，
                    而模型 id 就在左边写着，说「平台默认」比说「继承」更直接。 -->
@@ -148,18 +138,15 @@
                 <span class="skc__model">
                   <template v-if="s.model">
                     <span class="skc__model-id">{{ s.model }}</span>
-                    <span v-if="s.tier === 'reasoning'" class="mk-badge mk-badge--muted" title="推理档：长思考与复杂判断">推理</span>
                   </template>
                   <template v-else>
                     <span class="skc__model-id skc__model-id--inherit">{{ inheritedModelOf(s) }}</span>
                     <span class="mk-badge mk-badge--muted" :title="inheritTitleOf(s)">平台默认</span>
-                    <span v-if="s.tier === 'reasoning'" class="mk-badge mk-badge--muted" title="推理档：未配模型时走平台推理默认">推理</span>
                   </template>
                 </span>
               </td>
               <!-- 2026-10-18：整串 JSON 挤在单元格里属开发向；表内只给项数，原文进 title -->
               <td class="skc__wrap" :title="s.paramOverrides ? JSON.stringify(s.paramOverrides) : undefined">{{ overrideText(s.paramOverrides) }}</td>
-              <td class="skc__wrap" :title="props.fallbackInfo[s.skillId]?.title || (s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : undefined)">{{ props.fallbackInfo[s.skillId]?.text || (s.fallbackChain && s.fallbackChain.length ? s.fallbackChain.join(' → ') : '平台默认') }}</td>
               <td>
                 <span
                   v-if="props.completion[s.skillId]"
@@ -225,28 +212,23 @@ const emit = defineEmits<{ (e: 'applied'): void; (e: 'open-skill', skillId: stri
 const props = withDefaults(defineProps<{
   /** 嵌在宿主面板里（Skills.vue 的批量模型配置弹窗）：不渲染 mk-card 卡壳与自己的标题 */
   embedded?: boolean
-  /** 平台默认模型（registry 解析后的具体 id）：未配模型的技能「生效的是什么」靠它显示 */
+  /** 平台默认模型（registry 解析后的具体 id）：未配模型的技能「生效的是什么」靠它显示。
+      平台只有一个默认（2026-11-04 起不再有「平台推理默认模型」）。 */
   platformDefaultModel?: string
-  /** 平台推理默认模型：tier=reasoning 且未配模型时继承它 */
-  platformDefaultReasoningModel?: string
   /** skillId → 展示名（宿主从 Skill 目录映射；缺省回落到 skillId） */
   skillNames?: Record<string, string>
   /** skillId → 归属 Agent 文案（宿主从 Skill 目录映射） */
   agentLabels?: Record<string, string>
   /** skillId → 完成度徽章（无记录即不在对账范围） */
   completion?: Record<string, { text: string; cls: string; title: string }>
-  /** skillId → 备用模型列文案与长释（含平台默认链解析；缺省回落到覆盖数据自身） */
-  fallbackInfo?: Record<string, { text: string; title: string }>
   recLoading?: boolean
   recError?: string
 }>(), {
   embedded: false,
   platformDefaultModel: '',
-  platformDefaultReasoningModel: '',
   skillNames: () => ({}),
   agentLabels: () => ({}),
   completion: () => ({}),
-  fallbackInfo: () => ({}),
   recLoading: false,
   recError: '',
 })
@@ -263,7 +245,6 @@ interface Row {
   tier: string
   source: 'skill-channel' | 'skill-model-only' | 'platform-default'
   paramOverrides: Record<string, number> | null
-  fallbackChain: string[] | null
 }
 
 const rows = ref<Row[]>([])
@@ -282,42 +263,29 @@ const sourceOptions = computed(() => [
   { value: 'skill-model-only', label: `技能覆盖（${counts.value.skillModelOnly}）` },
   { value: 'skill-channel', label: `独立通道（${counts.value.skillChannel}）` }
 ])
-const onlyFallback = ref(false)
 const counts = computed(() => {
-  const out = { all: rows.value.length, platformDefault: 0, skillModelOnly: 0, skillChannel: 0, fallback: 0 }
+  const out = { all: rows.value.length, platformDefault: 0, skillModelOnly: 0, skillChannel: 0 }
   for (const r of rows.value) {
     if (r.source === 'platform-default') out.platformDefault += 1
     else if (r.source === 'skill-model-only') out.skillModelOnly += 1
     else if (r.source === 'skill-channel') out.skillChannel += 1
-    if (r.fallbackChain && r.fallbackChain.length) out.fallback += 1
   }
   return out
 })
-/** 备用模型维度（2026-10-27 统一）：从常驻 chip 迁入下拉，计数只在 option 文案里。 */
-const fallbackSelect = computed<string>({
-  get: () => (onlyFallback.value ? 'fallback' : ''),
-  set: (v) => { onlyFallback.value = v === 'fallback' }
-})
-const fallbackSelectOptions = computed(() => [
-  { value: '', label: '全部备用模型' },
-  { value: 'fallback', label: `自定义备用模型（${counts.value.fallback}）` }
-])
-const isFiltered = computed(() => sourceFilter.value !== 'all' || onlyFallback.value || !!keyword.value.trim())
+const isFiltered = computed(() => sourceFilter.value !== 'all' || !!keyword.value.trim())
 function clearFilters(): void {
   sourceFilter.value = 'all'
-  onlyFallback.value = false
   keyword.value = ''
 }
 
 /* 矩阵排序（2026-10-17 用户走查「有的列没有排序」）：数据是全量覆盖清单，
-   客户端排序诚实；参数覆盖按覆盖项数排（无覆盖 = 0），备用模型按链条数排（该列列头就叫「备用模型」，注释与卡头不再用「兜底」）。 */
+   客户端排序诚实；参数覆盖按覆盖项数排（无覆盖 = 0）。 */
 const { sortState: covSortState, toggle: toggleCovSort, sortRows: sortCovRows } = useTableSort<Row>({
   accessors: {
     skill: (r) => r.skillId,
     source: (r) => r.source,
     model: (r) => r.model || '未配置',
-    params: (r) => (r.paramOverrides ? Object.keys(r.paramOverrides).length : 0),
-    fallback: (r) => r.fallbackChain?.length ?? 0
+    params: (r) => (r.paramOverrides ? Object.keys(r.paramOverrides).length : 0)
   },
   storageKey: 'wf_skc_sort'
 })
@@ -345,26 +313,21 @@ function overrideText(p: Record<string, number> | null): string {
   const n = p ? Object.keys(p).length : 0
   return n ? `${n} 项参数` : '—'
 }
-/** 未配模型时，这一行实际会用到哪个模型：推理档走平台推理默认，其余走平台默认 */
-function inheritedModelOf(row: Row): string {
-  const model = row.tier === 'reasoning'
-    ? (props.platformDefaultReasoningModel || props.platformDefaultModel)
-    : props.platformDefaultModel
-  return model || '—'
+/** 未配模型时，这一行实际会用到哪个模型：平台只有一个默认，谁来都走它。
+    （2026-11-04 前的「推理档走平台推理默认」已随该概念一并撤除。） */
+function inheritedModelOf(_row: Row): string {
+  return props.platformDefaultModel || '—'
 }
-function inheritTitleOf(row: Row): string {
-  const model = inheritedModelOf(row)
+function inheritTitleOf(_row: Row): string {
+  const model = inheritedModelOf(_row)
   if (model === '—') return '本 Skill 没有单独指定模型，用平台默认模型（平台默认模型暂未加载）'
-  return row.tier === 'reasoning'
-    ? `本 Skill 没有单独指定模型，实际用平台推理默认：${model}`
-    : `本 Skill 没有单独指定模型，实际用平台默认：${model}`
+  return `本 Skill 没有单独指定模型，实际用平台默认：${model}`
 }
 const sortedRows = computed(() => sortCovRows(rows.value))
 const visibleRows = computed(() => {
   const q = keyword.value.trim().toLowerCase()
   return sortedRows.value.filter((r) => {
     if (sourceFilter.value !== 'all' && r.source !== sourceFilter.value) return false
-    if (onlyFallback.value && !(r.fallbackChain && r.fallbackChain.length)) return false
     if (!q) return true
     // 别名也能搜到（主行是英文 id，运营常按中文名找）；id / 模型 / endpoint 保持原口径
     return [aliasOf(r.skillId), r.skillId, r.model, r.endpoint].some((v) => typeof v === 'string' && v.toLowerCase().includes(q))
@@ -421,7 +384,7 @@ async function clearModelOverride() {
   const ok = await askConfirm({
     title: '用平台默认模型',
     // 2026-11-04 文案口径：删尾巴「可随时在 Skill 运行时重新指定模型」——教用法/自我宣告，只留状态陈述
-    message: `将清空选中的 ${count} 个技能单独指定的模型，改用平台默认模型。通道、参数覆盖与备用链保持不变。`,
+    message: `将清空选中的 ${count} 个技能单独指定的模型，改用平台默认模型。通道与参数覆盖保持不变。`,
     confirmText: '清空模型覆盖',
     busy: true,
     danger: false,
@@ -542,13 +505,12 @@ onMounted(load)
    2026-10-24 合并后加了两列：下限从 220 收到 160，连同 wrap 列收窄，避免 1280 下必须横滚 */
 .skc__table th:nth-child(4),
 .skc__table td:nth-child(4) { min-width: 160px; }
-/* 完成度列：徽章宽度固定，不需要参与伸展 */
-.skc__table th:nth-child(7),
-.skc__table td:nth-child(7) { width: 84px; }
+/* 完成度列（2026-11-04 备用模型列下线后由第 7 列前移为第 6 列）：徽章宽度固定，不需要参与伸展 */
+.skc__table th:nth-child(6),
+.skc__table td:nth-child(6) { width: 84px; }
 .skc__apply { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .skc__apply .mk-input { max-width: 280px; }
 .skc__apply .is-err { border-color: var(--mk-red); }
-/* 原型 .tbl td.wrap：长文本列（参数覆盖 / 备用模型链）换行不截断 */
-.skc__table th.skc__wrap,
+/* 原型 .tbl td.wrap：长文本列（参数覆盖）换行不截断 */
 .skc__table td.skc__wrap { white-space: normal; overflow-wrap: anywhere; min-width: 140px; max-width: 240px; }
 </style>
