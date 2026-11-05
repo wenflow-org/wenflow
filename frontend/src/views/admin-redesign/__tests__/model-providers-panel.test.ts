@@ -344,7 +344,7 @@ describe('ModelProvidersPanel', () => {
     await btn(w, '测试')!.trigger('click')
     await flushPromises()
     expect(testMock).toHaveBeenCalledWith('platform', { modelId: 'deepseek-v4-flash' })
-    const result = w.find('.mpp-rowtest')
+    const result = w.find('.mk-rowres')
     expect(result.text()).toContain('调用通过')
     expect(result.text()).toContain('1234ms')
     expect(result.attributes('title')).toContain('可以')

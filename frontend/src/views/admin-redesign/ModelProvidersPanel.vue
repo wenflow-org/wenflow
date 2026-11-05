@@ -119,15 +119,19 @@
                     title="平台当前默认，未单独配模型的 Skill 都继承它"
                   >默认</span>
                   <span v-for="tag in functionTags(m)" :key="tag" class="mk-badge mk-badge--muted mpp-fn__chip">{{ tag }}</span>
-                  <!-- 测试结果跟在能力标签之后、同一行（2026-11-05 用户「不再另起一行了」）：
-                       此前它是 __main 网格的第二行，整行为此高出一截，而它说的正是这一行的状态。 -->
-                  <span
-                    v-if="testResults[m.id]"
-                    class="mpp-rowtest"
-                    :class="{ 'mpp-rowtest--bad': !testResults[m.id].ok }"
-                    :title="testResults[m.id].text"
-                  >{{ testResults[m.id].ok ? '调用通过' : '调用失败' }}<template v-if="testResults[m.id].latency"> · {{ testResults[m.id].latency }}</template></span>
                 </div>
+                <!-- 测试结果是这一行的第二行读数，与 id 行同一左缘、不占动作列
+                     （2026-11-05 用户「调用通过确实还是换行好看一些」）：
+                     判词带色，时延退成弱色——一条读数里只有「通过 / 失败」是结论。 -->
+                <span
+                  v-if="testResults[m.id]"
+                  class="mk-rowres"
+                  :class="{ 'mk-rowres--bad': !testResults[m.id].ok }"
+                  :title="testResults[m.id].text"
+                ><span class="mk-rowres__verdict">{{ testResults[m.id].ok ? '调用通过' : '调用失败' }}</span><span
+                  v-if="testResults[m.id].latency"
+                  class="mk-rowres__meta"
+                >· {{ testResults[m.id].latency }}</span></span>
                 <!-- 2026-11-04 用户「不要这种文案，上『Avoid unnecessary secondary labels and
                      descriptions. Let the layout do the explaining.』」：每行原有的参数摘要
                      （默认输出 / 输出上限 / 并发 / 已配单价）整行撤除——它在 配置 弹层里，
@@ -644,10 +648,6 @@ defineExpose({ refresh, openPull, openHostPull, openAdd: onPullAdd })
    更长的 id 走省略号 + title，不再把后面的胶囊推着走。 */
 .mpp-model-row__id { width: 240px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mpp-model-row__status { display: inline-flex; align-items: center; gap: 6px; flex: none; }
-/* 测试结果：与能力标签同一行的行内读数（2026-11-05 用户「不再另起一行了」）。
-   不加 margin：idline 已有 8px gap；nowrap 保证「调用通过 · 2059ms」不在句中折行。 */
-.mpp-rowtest { color: var(--mk-green); font-size: var(--mk-fs-micro); white-space: nowrap; }
-.mpp-rowtest--bad { color: var(--mk-red); }
 /* 空模型时的下一步：一句话 + 一个动作，不丢一张只有表头的空表 */
 .mpp-setup {
   display: flex;

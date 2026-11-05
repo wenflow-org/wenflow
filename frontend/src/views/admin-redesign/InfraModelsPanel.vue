@@ -51,12 +51,17 @@
                   title="运行时就调用这个模型"
                 >启用</span>
               </div>
+              <!-- 与对话卡同一条读数解剖（2026-11-05 用户「调用通过确实还是换行好看一些」）：
+                   判词带色加粗，时延 / 维度退成弱色。 -->
               <span
                 v-if="testOf(g.kind, m)"
-                class="mpp-eng__res"
-                :class="{ 'is-bad': !testOf(g.kind, m)!.ok }"
+                class="mk-rowres"
+                :class="{ 'mk-rowres--bad': !testOf(g.kind, m)!.ok }"
                 :title="testOf(g.kind, m)!.text"
-              >{{ testOf(g.kind, m)!.ok ? '调用通过' : '调用失败' }}<template v-if="testOf(g.kind, m)!.detail"> · {{ testOf(g.kind, m)!.detail }}</template></span>
+              ><span class="mk-rowres__verdict">{{ testOf(g.kind, m)!.ok ? '调用通过' : '调用失败' }}</span><span
+                v-if="testOf(g.kind, m)!.detail"
+                class="mk-rowres__meta"
+              >· {{ testOf(g.kind, m)!.detail }}</span></span>
             </div>
             <!-- 动作集与对话卡对齐（2026-11-05 用户「里面的菜单按钮数量不一样啊」）：
                  配置 · 测试 同为 mk-link，删除与「设为启用」是低频/危险动作收进 ⋯。 -->
@@ -689,8 +694,6 @@ onMounted(load)
 .mpp-eng__model--none { color: var(--mk-muted); }
 /* 启用徽标：与对话卡的「默认」徽标同形（它讲的是「选了它」，不是「它有什么能力」） */
 .mpp-eng__on { flex: none; }
-.mpp-eng__res { color: var(--mk-green); white-space: nowrap; font-size: var(--mk-fs-micro); }
-.mpp-eng__res.is-bad { color: var(--mk-red); font-weight: 600; }
 
 /* 弹层分区（2026-11-05）：与模型设置弹层同一套「分区标题 + 两列栅格」解剖。 */
 .infra-sec { display: grid; gap: 10px; align-content: start; }

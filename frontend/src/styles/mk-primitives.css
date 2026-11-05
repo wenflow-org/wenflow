@@ -1214,6 +1214,15 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
 /* 「测试 / 测试中…」这一对在各页反复出现（模型行 / 向量重排行 / 添加模型弹窗 / 插件页），
    写成全局档，免得四个组件各写一遍同样的 var（含测试结果的那两处卡片还会各自 scoped）。 */
 .mk-link--hold-test { --mk-link-hold: '测试中…'; }
+
+/* 行内测试结果：判词 + 读数。三张模型卡（对话 / 向量 / 重排）共用同一条读法——
+   判词带色并加粗（通过绿 / 失败红），时延与维度这类附加读数退到弱色，
+   免得整行同色同重、全都在喊。它自带一行：与 id 行同一左缘，不占动作列
+   （2026-11-05 用户「调用通过确实还是换行好看一些」）。 */
+.mk-rowres { display: inline-flex; align-items: baseline; gap: 5px; font-size: var(--mk-fs-micro); white-space: nowrap; }
+.mk-rowres__verdict { color: var(--mk-green); font-weight: 600; }
+.mk-rowres--bad .mk-rowres__verdict { color: var(--mk-red); }
+.mk-rowres__meta { color: var(--mk-muted); }
 .mk-link--danger { color: var(--mk-red, #dc2626); }
 .mk-link--danger:hover { background: var(--mk-red-bg, #fef2f2); }
 /* 链接按钮「激活/展开中」态（ExecLogs 筛选、MkCols 列设置共用）。

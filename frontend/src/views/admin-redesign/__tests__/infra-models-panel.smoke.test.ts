@@ -425,11 +425,11 @@ describe('InfraModelsPanel', () => {
 
     // 一条连接挂多个模型：测的必须是那一行，否则 B 行会显示 A 的结果
     expect(testMock).toHaveBeenCalledWith('embedding', 'text-embedding-3-large');
-    const res = rows(wrapper, 0)[2].find('.mpp-eng__res');
+    const res = rows(wrapper, 0)[2].find('.mk-rowres');
     expect(res.text()).toContain('调用通过');
     expect(res.text()).toContain('88ms');
     // 别的行没有读数
-    expect(rows(wrapper, 0)[0].find('.mpp-eng__res').exists()).toBe(false);
+    expect(rows(wrapper, 0)[0].find('.mk-rowres').exists()).toBe(false);
     wrapper.unmount();
   });
 
