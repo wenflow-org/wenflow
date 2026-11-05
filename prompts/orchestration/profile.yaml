@@ -46,6 +46,7 @@ fields:
   - fieldId: knowledgeStateSummary
     promptRole: derived-presentation
     valueType: string
+    persistKey: knowledgeMemory.globalBackground.knowledgeStateSummary
     description: 本节课后知识状态自然语言摘要（LBM 式，供学习表现预测器与教学决策读取）
 
   # === skill:learner-model 聚合产出（确定性 snapshot 结构） ===
@@ -79,7 +80,8 @@ fields:
     description: 课程控制（taskGranularity/conceptDensity/reviewFrequency）
 
   # === skill:adaptive-guidance-copy 产出（2026-10-14 由 teaching 阶段随技能迁入） ===
-  # 学习者可见的页面文案：dashboard / path-list / path-detail / learning-state 首屏投影
+  # 学习者可见的页面文案：dashboard / learning-state 首屏投影
+  # （learning-state 页复用 dashboard 快照文案，快照缺失时才落本地静态兜底；path 视图已退役）
   - fieldId: headline
     promptRole: public-reply
     valueType: string
@@ -158,11 +160,13 @@ routings:
     accumulate: false
     visibilityPreset: agent-internal
 
-  # learner-model → profile-agent（聚合产出，终点消费）
+  # learner-model → profile-agent：非 handoff——字段由 ProfileAggregator 确定性聚合写入
+  # snapshot/projection，profile-agent 从不调用 skill:learner-model（audit-handoff-edges 该边零命中），
+  # 无运行时消费者，故 handoff 置空（#180）。
   - agentId: skill:learner-model
     fieldId: snapshot.dynamicState
     render: hidden
-    handoff: [profile-agent]
+    handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
@@ -170,7 +174,7 @@ routings:
   - agentId: skill:learner-model
     fieldId: snapshot.learningControlState
     render: hidden
-    handoff: [profile-agent]
+    handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
@@ -178,7 +182,7 @@ routings:
   - agentId: skill:learner-model
     fieldId: snapshot.replanSignal
     render: hidden
-    handoff: [profile-agent]
+    handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
@@ -186,7 +190,7 @@ routings:
   - agentId: skill:learner-model
     fieldId: snapshot.teachingHints
     render: hidden
-    handoff: [profile-agent]
+    handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
@@ -194,7 +198,7 @@ routings:
   - agentId: skill:learner-model
     fieldId: snapshot.knowledgeMemory.currentPath
     render: hidden
-    handoff: [profile-agent]
+    handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
@@ -202,7 +206,7 @@ routings:
   - agentId: skill:learner-model
     fieldId: snapshot.knowledgeMemory.globalSignals
     render: hidden
-    handoff: [profile-agent]
+    handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
@@ -210,7 +214,7 @@ routings:
   - agentId: skill:learner-model
     fieldId: profile.curriculumControls
     render: hidden
-    handoff: [profile-agent]
+    handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal

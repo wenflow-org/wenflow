@@ -45,4 +45,39 @@ describe('LearnerStateSummaryService（#41 冷启动门）', () => {
     expect(learnerStateSummaryService.build({ learnerSnapshot: snapshotOf({ ktl: 6, lf: 4, lsb: 2 }) }).global.stateLevel).toBe('balanced')
     expect(learnerStateSummaryService.build({ learnerSnapshot: snapshotOf({ ktl: 6, lf: 1, lsb: 5 }) }).global.stateLevel).toBe('strong')
   })
+
+  /* #205（复核第二轮）：'continue-learning' 不得对「已下线/已完成」路径广告。
+     画像回退把 archived/completed 路径当 primaryPath 传进来时，primaryAction 必须回落 create-goal。 */
+  it('传入非 active（archived）路径：不再给 continue-learning', () => {
+    const out = learnerStateSummaryService.build({
+      learnerSnapshot: snapshotOf({ ktl: 6, lf: 4, lsb: 2 }),
+      path: { id: 'p-arch', status: 'archived' },
+    })
+    expect(out.global.primaryAction).toBe('create-goal')
+    expect(out.path).toBeNull()
+  })
+
+  it('传入 completed 路径：同样不再给 continue-learning', () => {
+    const out = learnerStateSummaryService.build({
+      learnerSnapshot: snapshotOf({ ktl: 6, lf: 4, lsb: 2 }),
+      path: { id: 'p-done', status: 'completed' },
+    })
+    expect(out.global.primaryAction).toBe('create-goal')
+  })
+
+  it('传入 active 路径：仍给 continue-learning（行为不变）', () => {
+    const out = learnerStateSummaryService.build({
+      learnerSnapshot: snapshotOf({ ktl: 6, lf: 4, lsb: 2 }),
+      path: { id: 'p-act', status: 'active' },
+    })
+    expect(out.global.primaryAction).toBe('continue-learning')
+  })
+
+  it('路径未带 status（既有调用口径）：按可继续处理（行为不变）', () => {
+    const out = learnerStateSummaryService.build({
+      learnerSnapshot: snapshotOf({ ktl: 6, lf: 4, lsb: 2 }),
+      path: { id: 'p-legacy' },
+    })
+    expect(out.global.primaryAction).toBe('continue-learning')
+  })
 })

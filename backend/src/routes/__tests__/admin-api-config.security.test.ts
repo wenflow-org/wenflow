@@ -246,4 +246,37 @@ describe('Admin API 配置 Secret 绑定', () => {
     expect(payload.connectionStatus).toBe('unknown')
     expect(payload).not.toHaveProperty('lastCheckedAt')
   })
+
+  /* #177：平台默认模型写入门禁——目录外的值（如评测专用 id）运行时无可用渠道、
+     会被未配模型的 skill 静默继承，必须在写入点拒绝而不是等下次启动归一化。 */
+  it('拒绝把注册目录外的模型写成平台默认', async () => {
+    const req: any = {
+      body: { apiUrl: currentConfig.apiUrl, apiKey: '', defaultModel: 'deepseek-v4.1-flash-JUDGE' }
+    }
+    const res = createResponse()
+
+    await routes['PUT /'](req, res)
+
+    expect(res.statusCode).toBe(400)
+    expect(res.body.error).toContain('deepseek-v4.1-flash-JUDGE')
+    expect(updateConfig).not.toHaveBeenCalled()
+  })
+
+  it('目录内模型、已注册别名与清空均可写入平台默认', async () => {
+    const req: any = {
+      body: {
+        apiUrl: currentConfig.apiUrl,
+        apiKey: '',
+        defaultModel: 'chat',
+        defaultReasoningModel: 'deepseek-v4.1-flash',
+        defaultEvaluationModel: ''
+      }
+    }
+    const res = createResponse()
+
+    await routes['PUT /'](req, res)
+
+    expect(res.statusCode).toBe(200)
+    expect(updateConfig).toHaveBeenCalled()
+  })
 })

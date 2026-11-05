@@ -21,7 +21,11 @@ export interface ConversationLifecycleOptions {
   completedAt?: Date | null;
   learningPathId?: string | null;
   learningPath?: { id: string; status?: string } | null;
-  appendMessage?: ConversationLifecycleMessage;
+  /**
+   * 追加消息：单条或数组。数组用于终局把「用户回合 + AI 收尾/拒绝文案」在同一笔原子写入中
+   * 一起落库（#213：硬阻断拒绝文案此前只进返回值，重载后消失）。
+   */
+  appendMessage?: ConversationLifecycleMessage | ConversationLifecycleMessage[];
   mutateCollectedData?: (data: Record<string, unknown>) => void;
   sanitizeContent?: (text: string) => string;
   /** 传值 = 以 revision 条件更新（CAS）；失配返回 false 且不写入任何字段 */
@@ -70,22 +74,27 @@ export async function applyConversationLifecycle(
         collectedData.learningPath = options.learningPath;
       }
 
-      if (options.appendMessage) {
+      const appendedMessages = options.appendMessage
+        ? (Array.isArray(options.appendMessage) ? options.appendMessage : [options.appendMessage])
+        : [];
+      if (appendedMessages.length > 0) {
         collectedData.messages = Array.isArray(collectedData.messages) ? collectedData.messages : [];
-        collectedData.messages.push({
-          role: options.appendMessage.role,
-          content: options.sanitizeContent
-            ? options.sanitizeContent(options.appendMessage.content)
-            : options.appendMessage.content,
-          time: new Date().toISOString(),
-        });
+        for (const message of appendedMessages) {
+          collectedData.messages.push({
+            role: message.role,
+            content: options.sanitizeContent
+              ? options.sanitizeContent(message.content)
+              : message.content,
+            time: new Date().toISOString(),
+          });
+        }
       }
 
       const data: Record<string, unknown> = {
         stage: options.stage,
         collectedData: JSON.stringify(collectedData),
         // S1 数据质量修复：messages 列与 collectedData.messages 双写
-        ...(options.appendMessage ? { messages: JSON.stringify(collectedData.messages) } : {}),
+        ...(appendedMessages.length > 0 ? { messages: JSON.stringify(collectedData.messages) } : {}),
         status: options.status,
         completedAt: options.completedAt,
         learningPathId: options.learningPathId,

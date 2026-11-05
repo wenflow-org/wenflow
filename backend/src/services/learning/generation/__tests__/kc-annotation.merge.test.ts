@@ -11,7 +11,6 @@ const stage1Output: KcAnnotation = {
     nodes: [{ kcId: 'kc-1a', name: '五领域边界', taxonomy: 'concept' }],
     edges: [{ from: 'kc-1a', to: 'kc-1b', type: 'prerequisite' }],
   },
-  gapCoverage: { covered: ['领域边界'], missing: [] },
 };
 
 const stage2Output: KcAnnotation = {
@@ -21,7 +20,6 @@ const stage2Output: KcAnnotation = {
     nodes: [{ kcId: 'kc-2a', name: '行为转写', taxonomy: 'procedure' }],
     edges: [{ from: 'kc-1a', to: 'kc-2a', type: 'prerequisite' }],
   },
-  gapCoverage: { covered: ['行为转写'], missing: [] },
 };
 
 describe('mergeKcStageAnnotation 增量合并契约（批次 D3）', () => {

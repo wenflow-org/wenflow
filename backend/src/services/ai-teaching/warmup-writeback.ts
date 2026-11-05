@@ -110,6 +110,9 @@ export async function enqueueReviewCompletedEvent(
       data: {
         sessionId: session.id,
         mode: session.mode || 'review',
+        // #157：带出会话所属路径——消费侧据此刷新「路径」作用域的画像快照
+        //（此前消费侧只写证据/痕迹，复习带来的 trace 变化要等缓存过期或下一次学习事件才可见）。
+        pathId: session.learningPathId ?? null,
         reviewItems: items,
       },
     });

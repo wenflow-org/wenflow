@@ -458,6 +458,30 @@ export function decideBoardAttachment(
 }
 
 /**
+ * 学生屏幕上是否真的有一块板（提示词侧与校验器侧**共用**的判据，#244）。
+ *
+ * 为什么不是 `!!board`：首版空壳矩阵（全格 hit、无留白）由 `decideBoardAttachment`
+ * 判为 `degenerate` 而**永不下发**（见 isDegenerateFirstBoard 与 decideBoardAttachment），
+ * 但 `board.figure` 仍非空、`describeBoardForTeacher` 也照常描述它。若把这种板算作「有板」，
+ * 守卫就会放行「左边那栏」——学生屏幕上一片空白，正是 #244 要修的现象。
+ */
+export function boardReachesStudent(board: BoardState | null | undefined): boolean {
+  return !!board?.figure && !isDegenerateFirstBoard(board);
+}
+
+/**
+ * 本轮送给老师的白板输入（#244）：提示词里的 `boardContext` 文案与校验器用的 `boardPresent`
+ * **同源产出**，避免「文案说有板 / 信号说没板」再次对不上。
+ * 返回值直接 Object.assign 进 turnInput（见 teaching-turn-engine 的注入点）。
+ */
+export function boardPromptInputForTeacher(
+  board: BoardState | null | undefined,
+): { boardContext: string; boardPresent: boolean } {
+  const onScreen = boardReachesStudent(board) ? board : null;
+  return { boardContext: describeBoardForTeacher(onScreen), boardPresent: !!onScreen };
+}
+
+/**
  * 给老师的白板描述。`board` 为 null（本任务从未生成过板书）时返回那句正向的
  * 「本任务暂无板书」——这句原先就写好了，却因调用点的 `if (board)` 守卫成了不可达分支
  * （2026-11-03 心理学走查 S3-3：无板回合模型自己假设有一块板并描述它的排布，

@@ -40,7 +40,10 @@ export interface FinalizeSessionInput {
 function finalizationState(session: TeachingSessionRecord): SessionFinalizationState | null {
   const stored = getSessionFinalizationState(session.teachingState);
   if (stored) return stored;
-  if (session.status !== 'completed' || !session.wrapup) return null;
+  // 「收束完成」的口径是状态机闭合（status==='completed'），不是 wrapup 是否落库：
+  // 幽灵课按设计把 wrapup 留 NULL（见 teaching-session-lifecycle.ts 收束写入处），
+  // 若这里再以 wrapup 为准，completed 的幽灵课会被判成「没结束」而永久卡死（#239）。
+  if (session.status !== 'completed') return null;
   return {
     sessionClosure: 'completed',
     taskCompletion: 'not_started',
@@ -161,8 +164,10 @@ export class SessionFinalizationService {
         };
       }
       const completedSession = await teachingSessionRepository.assertOwnership(input.sessionId, input.userId);
-      // 复习课完成标记：前端以 reviewCompletion==='completed' 判定收束完成（否则永远走兜底文案）
-      if (completedSession.status === 'completed' && completedSession.wrapup) {
+      // 复习课完成标记：前端以 reviewCompletion==='completed' 判定收束完成（否则永远走兜底文案）。
+      // 判据同 #239：收束完成看状态机（status==='completed'），不看 wrapup——短复习课也可能是
+      // 幽灵课（wrapup 留 NULL），若以此拦住标记，前端会一直判「未完成」而反复重试。
+      if (completedSession.status === 'completed') {
         await teachingSessionRepository.markReviewCompleted(input.sessionId).catch((error) => {
           logger.warn('[finalize] 复习课完成标记写入失败（不影响收束）:', error);
         });
@@ -217,10 +222,11 @@ export class SessionFinalizationService {
       && session.operationLeaseExpiresAt > new Date();
     // claim 的乐观锁基准：auto-end 会前进 revision，走完 auto-end 后以 endResult 为准（见下）
     let claimRevision = input.revision;
-    if ((session.status !== 'completed' || !session.wrapup) && !activeFinalization) {
-      // complete_task 前置要求会话已结束（completed + wrapup），但前端 finish('complete_task')
-      // 不会先调 end——这里与 end_only/complete_review 一致，自动先结束课堂生成 wrapup，
-      // 否则教学完成后的自动收束必然 409 FINALIZATION_SESSION_NOT_CLOSED（真实用户高频场景）
+    if (session.status !== 'completed' && !activeFinalization) {
+      // complete_task 前置要求会话已结束，但前端 finish('complete_task') 不会先调 end——
+      // 这里与 end_only/complete_review 一致，自动先结束课堂生成 wrapup，
+      // 否则教学完成后的自动收束必然 409 FINALIZATION_SESSION_NOT_CLOSED（真实用户高频场景）。
+      // 前置判据只看 status：completed 即已闭合，wrapup 可为 NULL（幽灵课，#239）。
       const endResult = await aiTeachingCoordinator.endSession(
         input.sessionId,
         // 固定记为 task-completed：这是「为完成任务而自动关课」，同时作为重进补结算的标记
@@ -242,8 +248,11 @@ export class SessionFinalizationService {
         };
       }
       const ended = await teachingSessionRepository.assertOwnership(input.sessionId, input.userId);
-      if (ended.status !== 'completed' || !ended.wrapup) {
-        const error = new Error('请先结束课堂并生成学习反馈');
+      // 收束判据 = 状态机已闭合（status==='completed'），不看 wrapup：幽灵课按设计留 NULL
+      //（teaching-session-lifecycle.ts 的非正常终态分支），若仍要求 wrapup 存在，自动关课之后
+      // 必然抛 FINALIZATION_SESSION_NOT_CLOSED，而此刻 /end 也已无法再用 → 永久卡死（#239）。
+      if (ended.status !== 'completed') {
+        const error = new Error('课堂收束尚未完成，请稍后重试');
         (error as any).code = 'FINALIZATION_SESSION_NOT_CLOSED';
         (error as any).status = 409;
         throw error;
@@ -289,6 +298,12 @@ export class SessionFinalizationService {
         // #105 观测统一：事件记录收束通道与会话 id（真人与 VL 都可能走 finalize，轨道由 isVirtualLearner 派生）
         completionSource: 'teaching-finalize',
         sessionId: input.sessionId,
+        // #147 缺口（回归 #204）：会话在本次 finalize 之前就已闭合（end_only 补结算 / complete_task
+        // 重试——上面因此跳过了 auto-end）时，本次不会再产出 lesson:completed，教学投影没有别的刷新方；
+        // 声明出去让 completeTask 补做 eager 刷新，避免该次收尾对投影键 0 次刷新。这里用顶部快照（auto-end
+        // 之前的 status）判断，正常链路（本次 auto-end 关课）恒为 false，仍由 lesson:completed 消费者刷新。
+        // 判据同上：闭合 = status==='completed'，幽灵课的 wrapup 按设计为 NULL 也必须算「已闭合」（#239）。
+        sessionClosedBeforeCompletion: session.status === 'completed',
         // 时钟域：模拟链路下把任务完成时间落在模拟日（无模拟上下文时 simulatedNowOr() === new Date()，
         // 现网行为不变）。否则 completedAt 会用真墙钟，污染概念账本 lastSeenAt → 延迟锚题跨域比较。
         asOf: simulatedNowOr(),

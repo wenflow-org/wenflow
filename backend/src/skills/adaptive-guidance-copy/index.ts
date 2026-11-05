@@ -15,13 +15,16 @@ export const adaptiveGuidanceCopyDefinition: SkillDefinition = {
   displayName: '动态引导文案生成器',
   version: '1.0.0',
   category: 'generation',
-  description: '根据学习者状态与路径上下文生成 Dashboard / Path 页面引导文案',
+  description: '根据学习者状态与路径上下文生成 Dashboard / learning-state 页面引导文案',
   status: 'working',
 
   inputSchema: {
     type: 'object',
     properties: {
-      view: { type: 'string', description: '页面类型：dashboard|path-list|path-detail|learning-state', required: true },
+      // 契约收口（#187）：模型侧唯一真实 skill 调用是 dashboard（DashboardGuidanceSnapshotService）；
+      // learning-state 主路径复用 dashboard 快照文案，仅快照缺失时才走本地静态兜底 buildFallback；
+      // path-list/path-detail 无任何调用方（路由对非 dashboard/learning-state 返回 400）
+      view: { type: 'string', description: '页面类型：dashboard|learning-state', required: true },
       learnerSnapshot: { type: 'object', description: '学习者快照', required: true },
       learningState: { type: 'object', description: '学习状态', required: true },
       path: { type: 'object', description: '路径上下文' },
@@ -44,7 +47,7 @@ export const adaptiveGuidanceCopyDefinition: SkillDefinition = {
     }
   },
 
-  capabilities: ['adaptive-copy', 'dashboard-copy', 'path-copy', 'learning-guidance'],
+  capabilities: ['adaptive-copy', 'dashboard-copy', 'learning-guidance'],
 
   stats: {
     callCount: 0,
@@ -54,7 +57,7 @@ export const adaptiveGuidanceCopyDefinition: SkillDefinition = {
 };
 
 export interface AdaptiveGuidanceCopyInput {
-  view: 'dashboard' | 'path-list' | 'path-detail' | 'learning-state';
+  view: 'dashboard' | 'learning-state';
   learnerSnapshot: any;
   learningState: any;
   path?: any;
@@ -128,15 +131,11 @@ export function buildFallback(input: AdaptiveGuidanceCopyInput): AdaptiveGuidanc
 
   const headlineMap: Record<string, string> = {
     dashboard: `欢迎回来，${name}`,
-    'path-list': `先选一条最值得继续的路径`,
-    'path-detail': `继续推进「${pathTitle}」`,
     'learning-state': `先看清当前状态，再决定下一步`,
   };
 
   const subtitleMap: Record<string, string> = {
     dashboard: recentTrend === 'declining' ? '先稳住节奏，再继续推进。' : '从上次停下的位置接上学习。',
-    'path-list': '优先完成一个最关键的小任务，不要同时展开太多分支。',
-    'path-detail': '把当前阶段的核心概念做稳，再决定是否扩展更多内容。',
     'learning-state': recentTrend === 'declining'
       ? '最近状态有些下滑，先判断是疲劳、卡点，还是任务粒度偏大。'
       : '结合最近趋势看节奏、负荷和掌握情况，再决定继续推进还是先调整。',
@@ -147,14 +146,10 @@ export function buildFallback(input: AdaptiveGuidanceCopyInput): AdaptiveGuidanc
         { title: '继续上次学习', desc: '从当前任务接着推进。', action: '继续学习', to: 'continue-learning' },
         { title: '查看学习状态', desc: '看看当前节奏和负荷。', action: '查看状态', to: 'learning-state' },
       ]
-    : input.view === 'learning-state'
-      ? [
-          { title: '查看当前路径', desc: '回到当前任务，确认状态影响的是哪一步。', action: '查看路径', to: 'path-detail' },
-          { title: '继续学习', desc: '如果状态稳定，就继续完成当前最小任务。', action: '继续学习', to: 'continue-learning' },
-          { title: '回看学习台', desc: '从总览页面看今天建议和节奏提示。', action: '回到学习台', to: 'continue-learning' },
-        ]
     : [
-        { title: '先完成当前阶段', desc: '优先把本阶段最关键的一件事做完。', action: '查看路径', to: 'path-detail' },
+        { title: '查看当前路径', desc: '回到当前任务，确认状态影响的是哪一步。', action: '查看路径', to: 'path-detail' },
+        { title: '继续学习', desc: '如果状态稳定，就继续完成当前最小任务。', action: '继续学习', to: 'continue-learning' },
+        { title: '回看学习台', desc: '从总览页面看今天建议和节奏提示。', action: '回到学习台', to: 'continue-learning' },
       ];
 
   return {

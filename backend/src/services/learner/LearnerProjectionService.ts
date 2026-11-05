@@ -97,7 +97,9 @@ export class LearnerProjectionService {
           blockedFoundations: (globalBackground.blockedFoundations ?? []).slice(0, 5),
           conceptLedger: Array.isArray(globalBackground.conceptLedger) ? globalBackground.conceptLedger.slice(0, 5) : [],
           recurringConfusions: Array.isArray(globalBackground.recurringConfusions) ? globalBackground.recurringConfusions.slice(0, 3) : [],
-          transferSignals: [],
+          // 与其余台账项同口径透传（仅 slice 截断）：此前硬置空导致 profile-agent 声明的
+          // 「写入 snapshot 与 projection」（prompts/orchestration/profile.yaml）在投影侧落空。
+          transferSignals: Array.isArray(globalBackground.transferSignals) ? globalBackground.transferSignals.slice(0, 3) : [],
         },
       },
     } as LearnerSnapshot;
@@ -220,6 +222,8 @@ export class LearnerProjectionService {
         blockedFoundations: snapshot.knowledgeMemory.globalBackground.blockedFoundations,
         recentConceptLedger: snapshot.knowledgeMemory.globalBackground.conceptLedger.slice(0, 12),
         recurringConfusions: snapshot.knowledgeMemory.globalBackground.recurringConfusions.slice(0, 8),
+        // 迁移就绪度信号：此前无人消费（issue #196）；现送达课堂投影，由 teaching-turn 规则显式读取
+        transferSignals: (snapshot.knowledgeMemory.globalBackground.transferSignals ?? []).slice(0, 8),
       },
       learningControlState: snapshot.learningControlState,
       ...(options.taskDifficulty ? { taskDifficulty: options.taskDifficulty } : {}),

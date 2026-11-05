@@ -69,6 +69,8 @@ export interface HandoffDeclaredRouting {
   agentId: string;
   fieldId: string;
   handoff?: string[] | null;
+  /** #184：仅人工/外部入口可达（缺省=主链自动触发）；非 auto 的声明边不计「死边」 */
+  reachability?: 'manual' | 'external' | null;
 }
 
 /** 声明源阶段的最小结构：与 OrchestrationStage 兼容 */
@@ -89,13 +91,18 @@ export interface DeclaredHandoffEdge {
   stage: string;
   /** 声明该边的 fieldId 列表（同一对 agent 可被多个字段引用） */
   fields: string[];
+  /** true=该边全部字段声明为 manual/external（#184）：零命中是设计，不算死边 */
+  external?: boolean;
 }
 
 export interface DeclaredVsUsedComparison {
   declaredEdges: DeclaredHandoffEdge[];
   usedEdgeCount: number;
   matchedEdgeCount: number;
+  /** 声明了但窗口内零命中、且为自动链声明（死边候选） */
   declaredButNeverUsed: DeclaredHandoffEdge[];
+  /** 声明了但窗口内零命中、且声明为 manual/external（#184，不计死边） */
+  externalEdges: DeclaredHandoffEdge[];
   usedButUndeclared: HandoffEdgeUsage[];
 }
 
@@ -256,14 +263,17 @@ export function extractDeclaredHandoffEdges(stages: readonly HandoffDeclaredStag
       for (const target of routing.handoff || []) {
         const raw = normalizeEndpoint(target);
         if (!raw) continue;
-        const callee = stageOrchestrator.get(raw) || raw;
-        const key = handoffEdgeKey(caller, callee);
-        const existing = merged.get(key);
-        if (existing) {
-          if (!existing.fields.includes(routing.fieldId)) existing.fields.push(routing.fieldId);
-        } else {
-          merged.set(key, { caller, callee, calleeRaw: raw, stage: stage.stage, fields: [routing.fieldId] });
-        }
+      const callee = stageOrchestrator.get(raw) || raw;
+      const key = handoffEdgeKey(caller, callee);
+      const isExternal = !!routing.reachability;
+      const existing = merged.get(key);
+      if (existing) {
+        if (!existing.fields.includes(routing.fieldId)) existing.fields.push(routing.fieldId);
+        // 一条边只要有任一字段是自动链声明，整体即按自动链口径（external=false）
+        if (!isExternal) existing.external = false;
+      } else {
+        merged.set(key, { caller, callee, calleeRaw: raw, stage: stage.stage, fields: [routing.fieldId], external: isExternal });
+      }
       }
     }
   }
@@ -275,7 +285,8 @@ export function extractDeclaredHandoffEdges(stages: readonly HandoffDeclaredStag
 
 /**
  * 声明边 vs 运行边对比：
- * - declaredButNeverUsed：声明了但窗口内零命中（死边候选）
+ * - declaredButNeverUsed：声明了但窗口内零命中（死边候选，仅自动链声明）
+ * - externalEdges：零命中但声明为 manual/external（#184，不计死边）
  * - usedButUndeclared：运行了但未在 YAML 声明（幽灵边候选）
  * 默认按无向配对匹配（见 DeclaredVsUsedOptions.undirected）。
  */
@@ -289,13 +300,16 @@ export function compareDeclaredVsUsed(
 
   const usedKeys = new Set(used.map((edge) => keyOf(edge.caller, edge.callee)));
   const declaredKeys = new Set(declared.map((edge) => keyOf(edge.caller, edge.callee)));
-  const declaredButNeverUsed = declared.filter((edge) => !usedKeys.has(keyOf(edge.caller, edge.callee)));
+  const neverUsed = declared.filter((edge) => !usedKeys.has(keyOf(edge.caller, edge.callee)));
+  const externalEdges = neverUsed.filter((edge) => edge.external);
+  const declaredButNeverUsed = neverUsed.filter((edge) => !edge.external);
   const usedButUndeclared = used.filter((edge) => !declaredKeys.has(keyOf(edge.caller, edge.callee)));
   return {
     declaredEdges: [...declared],
     usedEdgeCount: used.length,
-    matchedEdgeCount: declared.length - declaredButNeverUsed.length,
+    matchedEdgeCount: declared.length - declaredButNeverUsed.length - externalEdges.length,
     declaredButNeverUsed,
+    externalEdges,
     usedButUndeclared,
   };
 }

@@ -427,6 +427,114 @@ describe('ai-teaching routes', () => {
     expect(mockCoordinator.processStudentMessage).not.toHaveBeenCalled();
   });
 
+  it('#209 真值但非字符串的 message → 400 校验错误（此前穿透成 500）', async () => {
+    const handler = getRouteHandler('/sessions/:sessionId/messages');
+    for (const badMessage of [123, { a: 1 }, ['x'], true]) {
+      const res = createResponse();
+      await handler({
+        user: { userId: 'user-1' },
+        params: { sessionId: 'session-1' },
+        headers: { 'idempotency-key': 'bad-type-key' },
+        body: { message: badMessage, revision: 1 },
+      }, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: expect.objectContaining({ code: 'VALIDATION_ERROR' }),
+      });
+      expect(mockCoordinator.processStudentMessage).not.toHaveBeenCalled();
+    }
+  });
+
+  it('#210 纯空白 message（空格/换行/制表）→ 400 校验错误，不落库不跑模型', async () => {
+    const handler = getRouteHandler('/sessions/:sessionId/messages');
+    for (const blankMessage of ['', '   ', '\n\n', '\t', ' \n\t ']) {
+      const res = createResponse();
+      await handler({
+        user: { userId: 'user-1' },
+        params: { sessionId: 'session-1' },
+        headers: { 'idempotency-key': 'blank-key' },
+        body: { message: blankMessage, revision: 1 },
+      }, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: expect.objectContaining({ code: 'VALIDATION_ERROR', message: '缺少消息内容' }),
+      });
+      // 关键：空白输入必须在受理、落库、付费模型调用之前被拒
+      expect(mockCoordinator.processStudentMessage).not.toHaveBeenCalled();
+    }
+  });
+
+  it('#224 恰好 800 字符（与前端 maxlength 同口径）→ 通过校验并受理', async () => {
+    mockCoordinator.processStudentMessage.mockResolvedValue({
+      aiResponse: '收到',
+      analysis: {
+        cognitiveLevel: 'understand',
+        levelScore: 3,
+        understanding: 0.5,
+        confusionPoints: [],
+        engagement: 0.5,
+        emotionalState: 'neutral',
+      },
+      currentState: { lss: 1, ktl: 1, lf: 1, lsb: 1 },
+      strategies: [],
+      knowledgePoint: null,
+      knowledgePoints: [],
+      isCompletion: false,
+      shouldConfirmEnd: false,
+      endReason: null,
+      recovered: false,
+      autoEnded: false,
+      peerTriggered: false,
+      checkpoint: null,
+    });
+    const boundaryMessage = 'A'.repeat(800);
+    const handler = getRouteHandler('/sessions/:sessionId/messages');
+    const res = createResponse();
+
+    await handler({
+      user: { userId: 'user-1' },
+      params: { sessionId: 'session-1' },
+      headers: { 'idempotency-key': 'boundary-key' },
+      body: { message: boundaryMessage, revision: 1 },
+    }, res);
+
+    expect(res.status).not.toHaveBeenCalledWith(400);
+    expect(mockCoordinator.processStudentMessage).toHaveBeenCalledWith(
+      'session-1',
+      boundaryMessage,
+      expect.objectContaining({ expectedRevision: 1 }),
+    );
+  });
+
+  it('#224 超过 800 字符 → 400 校验错误，不落库不跑模型', async () => {
+    const handler = getRouteHandler('/sessions/:sessionId/messages');
+    for (const longMessage of ['A'.repeat(801), 'A'.repeat(1_000_000)]) {
+      const res = createResponse();
+      await handler({
+        user: { userId: 'user-1' },
+        params: { sessionId: 'session-1' },
+        headers: { 'idempotency-key': 'too-long-key' },
+        body: { message: longMessage, revision: 1 },
+      }, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: expect.objectContaining({
+          code: 'VALIDATION_ERROR',
+          message: '消息内容不能超过 800 字符',
+        }),
+      });
+      // 关键：超长输入必须在幂等受理（落库）、付费模型调用之前被拒
+      expect(mockReserveTeachingOperation).not.toHaveBeenCalled();
+      expect(mockCoordinator.processStudentMessage).not.toHaveBeenCalled();
+    }
+  });
+
   it('SSE 流式：Accept text/event-stream 时输出 final/done 事件并关闭连接', async () => {
     mockCoordinator.processStudentMessage.mockResolvedValue({
       aiResponse: '继续',

@@ -171,25 +171,32 @@ routings:
     notes: internal — 仅调试
 
   # === path-evaluator ===
+  # manual（#184）— 唯一人工入口是 assisted 座舱「路径评审」（SessionCockpit.vue:801，!isBlackbox）；
+  # 自动入口 PATH_DISLIKE_ENABLED=false 已关闭（simulation.path-phase.ts:650），黑盒链路不走。
   - agentId: skill:virtual-learner-path-evaluator
     fieldId: reaction
     render: visible
     handoff: [simulation-agent]
     internal: false
     accumulate: false
+    reachability: manual
+    notes: manual — 仅 assisted 座舱手动评审触发（自动入口 PATH_DISLIKE_ENABLED=false）
   - agentId: skill:virtual-learner-path-evaluator
     fieldId: visibleRequestedChanges
     render: visible
     handoff: [simulation-agent]
     internal: false
     accumulate: false
+    reachability: manual
+    notes: manual — 仅 assisted 座舱手动评审触发（自动入口 PATH_DISLIKE_ENABLED=false）
   - agentId: skill:virtual-learner-path-evaluator
     fieldId: debug
     render: hidden
     handoff: [simulation-agent]
     internal: true
     accumulate: false
-    notes: internal — 仅调试
+    reachability: manual
+    notes: internal — 仅调试；manual — 仅 assisted 座舱手动评审触发（自动入口 PATH_DISLIKE_ENABLED=false）
 
   # === epistemic-grounding（物理两阶段第一段） ===
   - agentId: skill:virtual-learner-epistemic-grounding
@@ -240,68 +247,91 @@ routings:
     notes: internal — 编排层提交检查点使用
 
   # === referee ===
+  # external（#184）— 仅 POST /api/admin/session-audits/sessions/:id/evaluations（routes/admin/session-audits.ts）
+  # 手动触发；前置 experiment.mode=blackbox-api 且会话终态。仿真核不调用，assisted autopilot 不自动执行。
   - agentId: skill:virtual-learner-referee
     fieldId: verdict
     render: visible
     handoff: [simulation-agent]
     internal: false
     accumulate: false
+    reachability: external
+    notes: external — 手动：POST /api/admin/session-audits/sessions/:id/evaluations（blackbox-api 终态），仿真核不调用
   - agentId: skill:virtual-learner-referee
     fieldId: scores
     render: visible
     handoff: [simulation-agent]
     internal: false
     accumulate: false
+    reachability: external
+    notes: external — 手动：POST /api/admin/session-audits/sessions/:id/evaluations（blackbox-api 终态），仿真核不调用
   - agentId: skill:virtual-learner-referee
     fieldId: findings
     render: visible
     handoff: [simulation-agent]
     internal: false
     accumulate: false
+    reachability: external
+    notes: external — 手动：POST /api/admin/session-audits/sessions/:id/evaluations（blackbox-api 终态），仿真核不调用
   - agentId: skill:virtual-learner-referee
     fieldId: recommendations
     render: visible
     handoff: [simulation-agent]
     internal: false
     accumulate: false
+    reachability: external
+    notes: external — 手动：POST /api/admin/session-audits/sessions/:id/evaluations（blackbox-api 终态），仿真核不调用
   - agentId: skill:virtual-learner-referee
     fieldId: evidence
     render: visible
     handoff: [simulation-agent]
     internal: false
     accumulate: false
+    reachability: external
+    notes: external — 手动：POST /api/admin/session-audits/sessions/:id/evaluations（blackbox-api 终态），仿真核不调用
 
   # === actor-auditor（与 referee 共享 fieldId，词汇统一批次） ===
+  # external（#184）— 同 referee：仅 session-audits 独立面手动触发，仿真核不调用。
   - agentId: skill:virtual-learner-actor-auditor
     fieldId: verdict
     render: visible
     handoff: [simulation-agent]
     internal: false
     accumulate: false
+    reachability: external
+    notes: external — 手动：POST /api/admin/session-audits/sessions/:id/evaluations（blackbox-api 终态），仿真核不调用
   - agentId: skill:virtual-learner-actor-auditor
     fieldId: scores
     render: visible
     handoff: [simulation-agent]
     internal: false
     accumulate: false
+    reachability: external
+    notes: external — 手动：POST /api/admin/session-audits/sessions/:id/evaluations（blackbox-api 终态），仿真核不调用
   - agentId: skill:virtual-learner-actor-auditor
     fieldId: findings
     render: visible
     handoff: [simulation-agent]
     internal: false
     accumulate: false
+    reachability: external
+    notes: external — 手动：POST /api/admin/session-audits/sessions/:id/evaluations（blackbox-api 终态），仿真核不调用
   - agentId: skill:virtual-learner-actor-auditor
     fieldId: recommendations
     render: visible
     handoff: [simulation-agent]
     internal: false
     accumulate: false
+    reachability: external
+    notes: external — 手动：POST /api/admin/session-audits/sessions/:id/evaluations（blackbox-api 终态），仿真核不调用
   - agentId: skill:virtual-learner-actor-auditor
     fieldId: evidence
     render: visible
     handoff: [simulation-agent]
     internal: false
     accumulate: false
+    reachability: external
+    notes: external — 手动：POST /api/admin/session-audits/sessions/:id/evaluations（blackbox-api 终态），仿真核不调用
 
   # === memory-curator ===
   - agentId: skill:virtual-learner-memory-curator

@@ -183,5 +183,29 @@ describe('#105 任务结算通道按调用方身份分流（completionSource）'
       'vl-blackbox',
       12
     );
+    // #204：VL 直调路径在 endTeaching(end_only) 之后结算 → 声明会话已闭合：事件消费者据此按
+    // sessionId 跳过重复刷新，completeTask 据此补做一次 eager 刷新（否则该投影键双刷 / 0 刷）。
+    expect(mockLearningService.completeTask).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: 'task-vl',
+      userId: 'user-vl',
+      sessionId: 'teaching-vl',
+      sessionClosedBeforeCompletion: true,
+    }));
+  });
+
+  it('#204：不带 teachingSessionId 的结算不声明「会话已闭合」，避免误抑制消费者刷新', async () => {
+    const handler = getPostHandler('/tasks/:taskId/complete');
+    const res = createResponse();
+
+    await handler({
+      headers: {},
+      user: { userId: 'user-human' },
+      params: { taskId: 'task-human' },
+      body: { actualMinutes: 30 },
+    }, res, jest.fn());
+
+    const payload = mockLearningService.completeTask.mock.calls[0][0] as Record<string, unknown>;
+    expect(payload).not.toHaveProperty('sessionId');
+    expect(payload).not.toHaveProperty('sessionClosedBeforeCompletion');
   });
 });

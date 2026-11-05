@@ -316,6 +316,31 @@ describe('AutopilotService 全自动模式', () => {
     expect(String(final.lastError)).toContain('恢复上限')
   })
 
+  it('assisted：#154 解绑课堂（LEARN_CLASSROOM_UNBOUND）被识别为可恢复 → restart-learning 续跑，而非首发即失败', async () => {
+    mockExecuteSingleStep.mockImplementation(async () => {
+      sessionRecord.currentStage = 'path'
+      return { success: true, goalReady: true }
+    })
+    mockWaitForPathReady.mockResolvedValue({ ready: true })
+    mockResolvePathReview.mockImplementation(async () => {
+      sessionRecord.currentStage = 'teaching'
+      return { success: true }
+    })
+    // 协调层无绑定课堂时返回该 code（含「没有绑定教学会话」原文）
+    mockExecuteAutoLearning.mockResolvedValue({ success: false, error: 'LEARN_CLASSROOM_UNBOUND: 当前 Learn 没有绑定教学会话' })
+    mockRestartLearningPhase.mockResolvedValue({ success: true })
+
+    await service.start('s1')
+    const final = await waitTerminal()
+
+    // 关键：被当成可恢复 → 走了 restart-learning；若仍不可恢复则一次都不会调用（对照下方 fatal 用例）
+    expect(mockRestartLearningPhase).toHaveBeenCalled()
+    expect(mockRestartLearningPhase.mock.calls.length).toBeGreaterThanOrEqual(1)
+    // 达到恢复上限后按 autopilot 既有策略收口（bounded，非无界重启）
+    expect(final.status).toBe('failed')
+    expect(String(final.lastError)).toContain('恢复上限')
+  })
+
   it('assisted：回合上限=分片边界，连续无进展触发看门狗（不重启）', async () => {
     mockExecuteSingleStep.mockImplementation(async () => {
       sessionRecord.currentStage = 'path'

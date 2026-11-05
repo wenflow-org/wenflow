@@ -139,9 +139,11 @@ interface RoutingRowForAudit {
   root: string;
   handoff: string[];
   stage: string;
+  /** #184：声明为仅人工/外部入口可达（缺省=主链自动触发） */
+  reachability?: 'manual' | 'external';
 }
 
-type DeadEdgeReason = 'declared-field-zero-hits' | 'routing-root-not-observed';
+type DeadEdgeReason = 'declared-field-zero-hits' | 'routing-root-not-observed' | 'declared-non-auto';
 
 interface DeadRoutingEdge {
   skillId: string;
@@ -168,6 +170,7 @@ function buildRoutingIndex(stages: OrchestrationStage[]): Map<string, RoutingRow
         root,
         handoff: [...routing.handoff],
         stage: stage.stage,
+        reachability: routing.reachability,
       });
       index.set(skillId, list);
     }
@@ -177,32 +180,43 @@ function buildRoutingIndex(stages: OrchestrationStage[]): Map<string, RoutingRow
 
 /**
  * 死边候选判定（启发式，需结合 caveat 解读）：
+ * - routing 声明为 manual/external（#184）→ 不计死边，单列 declared-non-auto
  * - root 出现在观测产出键中 → 存活
  * - root 是 core 声明字段但零命中 → 死字段驱动的死边（declared-field-zero-hits）
  * - root 是平台/包装豁免根（path/userVisible/core/goalConversation/debug/control）→ 跳过
  * - 其余 → routing 引用了该 skill 从未产出的根（routing-root-not-observed）
  */
-function findDeadRoutingEdges(skill: SkillFieldHitRates, routings: RoutingRowForAudit[]): DeadRoutingEdge[] {
+function classifyRoutingEdges(
+  skill: SkillFieldHitRates,
+  routings: RoutingRowForAudit[],
+): { dead: DeadRoutingEdge[]; external: DeadRoutingEdge[] } {
   const producedRoots = new Set(skill.fields.filter((entry) => entry.hits > 0).map((entry) => entry.field));
   const declaredFields = new Set(skill.declaredFields);
-  const edges: DeadRoutingEdge[] = [];
+  const dead: DeadRoutingEdge[] = [];
+  const external: DeadRoutingEdge[] = [];
   for (const routing of routings) {
-    if (producedRoots.has(routing.root)) continue;
-    let reason: DeadEdgeReason | null = null;
-    if (declaredFields.has(routing.root)) reason = 'declared-field-zero-hits';
-    else if (!EXEMPT_ROOT_NAMES.has(routing.root)) reason = 'routing-root-not-observed';
-    if (!reason) continue;
-    edges.push({
+    const base = {
       skillId: skill.skillId,
       agentId: skill.agentId,
       fieldId: routing.fieldId,
       root: routing.root,
       handoff: routing.handoff,
       stage: routing.stage,
-      reason,
-    });
+    };
+    // 非 auto 声明边：仅人工/外部入口可达，零命中是设计而非缺陷，不计入死边口径
+    if (routing.reachability) {
+      external.push({ ...base, reason: 'declared-non-auto' });
+      continue;
+    }
+    if (producedRoots.has(routing.root)) continue;
+    let reason: DeadEdgeReason | null = null;
+    if (declaredFields.has(routing.root)) reason = 'declared-field-zero-hits';
+    else if (!EXEMPT_ROOT_NAMES.has(routing.root)) reason = 'routing-root-not-observed';
+    if (!reason) continue;
+    dead.push({ ...base, reason });
   }
-  return edges.sort((a, b) => a.fieldId.localeCompare(b.fieldId) || a.stage.localeCompare(b.stage));
+  const byField = (a: DeadRoutingEdge, b: DeadRoutingEdge) => a.fieldId.localeCompare(b.fieldId) || a.stage.localeCompare(b.stage);
+  return { dead: dead.sort(byField), external: external.sort(byField) };
 }
 
 const CAVEATS: string[] = [
@@ -229,6 +243,7 @@ function buildJsonOutput(
   rows: ReadonlyArray<{ agentId: string; createdAt: Date; success: boolean }>,
   aggregation: ReturnType<typeof aggregateFieldHitRates>,
   deadRoutingEdges: DeadRoutingEdge[],
+  externalRoutingEdges: DeadRoutingEdge[],
 ): unknown {
   const nonJsonMediaSkills = [...declared.meta.entries()]
     .filter(([, meta]) => meta.outputMedia !== 'json')
@@ -242,6 +257,7 @@ function buildJsonOutput(
   const skills = aggregation.skills.map((skill) => ({
     ...skill,
     deadRoutingEdges: deadRoutingEdges.filter((edge) => edge.skillId === skill.skillId),
+    externalRoutingEdges: externalRoutingEdges.filter((edge) => edge.skillId === skill.skillId),
   }));
 
   return {
@@ -264,11 +280,13 @@ function buildJsonOutput(
       deadFields: aggregation.skills.reduce((sum, skill) => sum + skill.deadFields.length, 0),
       driftFields: aggregation.skills.reduce((sum, skill) => sum + skill.driftFields.length, 0),
       deadRoutingEdges: deadRoutingEdges.length,
+      externalRoutingEdges: externalRoutingEdges.length,
       skippedMissingAgent: aggregation.skippedMissingAgent,
       skippedNonSkillAgent: aggregation.skippedNonSkillAgent,
     },
     skills,
     deadRoutingEdges,
+    externalRoutingEdges,
   };
 }
 
@@ -317,13 +335,18 @@ async function main(): Promise<void> {
 
   const routingIndex = buildRoutingIndex(stages);
   const deadRoutingEdges: DeadRoutingEdge[] = [];
+  const externalRoutingEdges: DeadRoutingEdge[] = [];
   for (const skill of aggregation.skills) {
-    deadRoutingEdges.push(...findDeadRoutingEdges(skill, routingIndex.get(skill.skillId) ?? []));
+    const classified = classifyRoutingEdges(skill, routingIndex.get(skill.skillId) ?? []);
+    deadRoutingEdges.push(...classified.dead);
+    externalRoutingEdges.push(...classified.external);
   }
-  deadRoutingEdges.sort((a, b) => a.skillId.localeCompare(b.skillId) || a.fieldId.localeCompare(b.fieldId));
+  const bySkillField = (a: DeadRoutingEdge, b: DeadRoutingEdge) => a.skillId.localeCompare(b.skillId) || a.fieldId.localeCompare(b.fieldId);
+  deadRoutingEdges.sort(bySkillField);
+  externalRoutingEdges.sort(bySkillField);
 
   if (args.json) {
-    console.log(JSON.stringify(buildJsonOutput(args, since, stages, declared, rows, aggregation, deadRoutingEdges), null, 2));
+    console.log(JSON.stringify(buildJsonOutput(args, since, stages, declared, rows, aggregation, deadRoutingEdges, externalRoutingEdges), null, 2));
     return;
   }
 
@@ -351,6 +374,7 @@ async function main(): Promise<void> {
   console.log('\n-- 汇总 --');
   console.log(
     `  技能 ${aggregation.skills.length} 个｜死字段 ${deadFieldCount}｜契约漂移字段 ${driftFieldCount}｜死边候选 ${deadRoutingEdges.length}` +
+    `｜manual/external 声明边 ${externalRoutingEdges.length}（不计死边）` +
     `｜minCalls 过滤 ${aggregation.skippedBelowMinCalls} 个 skill`,
   );
 
@@ -378,6 +402,13 @@ async function main(): Promise<void> {
       console.log(`  死边候选（routing 声明但从未产出）${skillDeadEdges.length} 条：`);
       for (const edge of skillDeadEdges) {
         console.log(`    · ${edge.agentId} / ${edge.fieldId} → [${edge.handoff.join(', ')}]（${edge.reason}，stage=${edge.stage}）`);
+      }
+    }
+    const skillExternalEdges = externalRoutingEdges.filter((edge) => edge.skillId === skill.skillId);
+    if (skillExternalEdges.length > 0) {
+      console.log(`  manual/external 声明边 ${skillExternalEdges.length} 条（非 auto，不计死边）：`);
+      for (const edge of skillExternalEdges) {
+        console.log(`    · ${edge.agentId} / ${edge.fieldId} → [${edge.handoff.join(', ')}]（stage=${edge.stage}）`);
       }
     }
   }

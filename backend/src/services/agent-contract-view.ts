@@ -103,6 +103,11 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     'session.evidence',
     'session.wrapup',
     'learningState',
+    // #193（实例 1）：scenario 是 teaching 回合的「编排层整块组装」输入通道——
+    // buildTeachingTurnInput（ai-teaching/teaching-turn-shared.ts）把 taskKcs/cognitiveFrame/materials/
+    // taskProfile/pathProgress 等组装成单个顶层对象注入，没有单点抽取路径，因此**不作 routings 通道行**
+    // （通道行不变式要求可按 pathInRawOutput 装配）；它在 prompts/orchestration/teaching.yaml 以 fields 行
+    // 声明，并在此沙盘键注册表 + core inputs（sandbox:teaching.scenario）登记。
     'scenario',
     'scenario.interactionProfile',
     'interactionProfile',
@@ -121,6 +126,14 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     'learner.persona',
     'school.anchor',
     'task.profile',
+    // #181：开场生成器新增 learnerPrediction 输入（编排层 TaskContextBuilder 组装、
+    // v4-aux-skills 在调用前注入），同「编排注入」性质，登记后 check-handoff --strict 通过。
+    'learnerPrediction',
+    // #197：session-wrapup 实收 7 键，其中 knowledgeContext / sessionStructure 由编排层
+    // 现场拼装（teaching-session-lifecycle / wrapup-regen），提示词规则依赖但 core inputs 未声明。
+    // 补声明后这两个「编排注入」键需登记，否则 prompts:check-handoff --strict 判 sandbox-path-unregistered。
+    'session.knowledgeContext',
+    'session.structure',
   ],
   'profile-agent': [
     'snapshot.dynamicState',

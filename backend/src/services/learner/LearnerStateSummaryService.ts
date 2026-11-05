@@ -79,9 +79,14 @@ class LearnerStateSummaryService {
           ? 'info'
           : 'none';
 
+    /* #205（复核第二轮）：'continue-learning' 的含义是「有可继续的路径」。此前只看 `input.path?.id`
+       是否存在，于是画像回退把 archived/completed 路径当 primaryPath 传进来时，summary 仍广告
+       'continue-learning'。改为：显式 path 只有 status='active'（或未带 status，兼容既有调用/测试）
+       才算可继续；否则退回快照的 currentPath 判据（非 active 路径不再产生 currentPath）。 */
+    const pathContinuable = Boolean(input.path?.id) && (!input.path.status || input.path.status === 'active');
     const primaryAction: LearnerGlobalStateSummary['primaryAction'] = stateLevel === 'recover'
       ? 'learning-state'
-      : input.path?.id || snapshot.knowledgeMemory.currentPath?.learningPathId
+      : pathContinuable || snapshot.knowledgeMemory.currentPath?.learningPathId
         ? 'continue-learning'
         : 'create-goal';
 

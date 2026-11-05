@@ -592,7 +592,10 @@
       </div>
 
       <!-- 生成结束（两态）：正常 = 路径已创建；分诊硬阻断 = 不生成路径，给阻断说明与补充重判退路
-           （2026-11-05 UX 审计 P0：此前硬阻断信封也弹「路径已创建 · 生成中」假成功） -->
+           （2026-11-05 UX 审计 P0：此前硬阻断信封也弹「路径已创建 · 生成中」假成功）
+           合并取舍：采用 develop 的「同一张 done 卡片内分两态」结构（本分支此前是在卡片外另开
+           一个 v-else-if 面板，两处并行会同时渲染出两张卡）。本分支的 #213 资产不丢——
+           服务端落库的拒绝原文仍在阻断态里展示，见下方 hardBlocked 分支。 -->
       <div v-else-if="phase === 'done'" class="proposal proposal--center">
         <button
           type="button"
@@ -601,13 +604,16 @@
           :title="CLOSE_ESC_HINT"
           @click="proposalDismissed = true"
         >×</button>
-        <template v-if="live.hardBlocked">
+        <!-- 阻断态判据：优先服务端结构化 hardBlocked；老信封没有该字段时，
+             回落到本分支 #213 的拒绝原文（completionNote 非空即硬阻断），两条都成立才判定态。 -->
+        <template v-if="live.hardBlocked || live.completionNote">
           <!-- 阻断态：中性图标 + 事实标题，动作只有「留在本页」（补充说明在对话输入框发送，服务端会重判） -->
           <span class="done-ring done-ring--blocked" aria-hidden="true">
             <svg viewBox="0 0 24 24" width="26" height="26"><path fill="currentColor" d="M12 2 1 21h22L12 2zm1 14h-2v2h2v-2zm0-8h-2v5h2V8z"/></svg>
           </span>
           <h2 class="proposal__title">这一目标暂不会生成学习路径</h2>
-          <p class="proposal__generating-note">完整说明已在对话里给出。情况有变化时，回复补充说明，问流会结合补充重新判断。</p>
+          <!-- 有服务端落库的拒绝原文就直接展示（用户要知道「为什么」）；没有才回落到通用说明。 -->
+          <p class="proposal__generating-note">{{ live.completionNote || '完整说明已在对话里给出。情况有变化时，回复补充说明，问流会结合补充重新判断。' }}</p>
           <div class="proposal__actions proposal__actions--center">
             <button type="button" class="btn-primary btn-primary--lg" @click="proposalDismissed = true; proposalReviewRequested = false">回到对话</button>
           </div>
@@ -711,9 +717,12 @@ const chatPlaceholder = computed(() => {
   if (showProposal.value) {
     if (phase.value === 'generating') return '正在生成路径，进度见弹窗';
     if (phase.value === 'done') {
-      return live.hardBlocked
-        ? '这一目标不会生成路径，可回对话补充说明'
-        : '路径已创建，先在弹窗里选择下一步';
+      // 合并取舍：develop 的硬阻断分支 + 本分支「done 但确实没有路径」的兜底。
+      // 只取 develop 会把「非硬阻断的异常无路径态」说成「路径已创建」（假成功正是它的反面）。
+      if (live.hardBlocked) return '这一目标不会生成路径，可回对话补充说明';
+      return live.learningPath
+        ? '路径已创建，先在弹窗里选择下一步'
+        : '本次没有生成学习路径，原因见弹窗';
     }
     return '先处理方案确认弹窗，Esc 可回到对话';
   }
@@ -1309,7 +1318,8 @@ const genPill = computed(() => {
     return genPillCopy(genTrack.value.lc);
   }
   if (phase.value === 'done') {
-    return { tone: 'run' as const, text: '路径已创建 · 生成中' };
+    // #213：无路径即硬阻断终局——不谎称「路径已创建」，也不跟踪一个不存在的生成任务。
+    return live.learningPath ? { tone: 'run' as const, text: '路径已创建 · 生成中' } : null;
   }
   if (confirmError.value) {
     return live.stopped === 'confirm'

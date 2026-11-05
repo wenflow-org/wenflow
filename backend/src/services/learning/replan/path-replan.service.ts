@@ -52,9 +52,28 @@ import {
   failGenerationRun,
   heartbeatGenerationRun,
   restorePathAfterMutationConflict,
+  restorePathStatusAfterRunSettled,
   startGenerationHeartbeat,
   updatePathGenerationStatus,
 } from '../generation/run-lifecycle';
+
+/**
+ * #250：「当前路径没有可重设计的阶段」是可预期的业务前置条件，不是服务器故障。
+ *
+ * previewOnly 分支早已把同一条件建模为 200 `no-signal`；非预览分支此前抛裸 Error，
+ * 落进 http-app 的 500 INTERNAL_ERROR。这里给它具名 + status=409 + PATH_ 前缀的 code，
+ * 与同模块 `createPathVersioningUnsupportedError`（PathMutationConflictError, 409）同形状，
+ * 路由的 `isPathMutationConflictError` 会认出并原样回 409+code（/replan 与 /regenerate 都已接）。
+ */
+export class PathReplanNoTargetStageError extends Error {
+  readonly status = 409;
+  readonly code = 'PATH_REPLAN_NO_TARGET_STAGE';
+
+  constructor() {
+    super('当前路径没有可重设计的阶段');
+    this.name = 'PathReplanNoTargetStageError';
+  }
+}
 
 /* ---------------- 重排规模锚（2026-10-15 双向化） ----------------
    背景（审计 §七）：重排此前**不向 stage-designer 传任务数锚**，designer 于是掉到「全缺默认 3-6 个」，
@@ -494,6 +513,9 @@ async function redesignMilestoneTasks(
           errorMessage: null
         }
       });
+      // #238：replan 的 stageDesign run 可能抢占了仍在 'generating' 的 core run，
+      // 成功收尾必须把陈旧的 'generating' 复位（否则永久卡在生成中、无法开课）。
+      await restorePathStatusAfterRunSettled(tx, path.id, runId, 'active');
     }
     await enqueueDomainEvent(tx, createDomainEvent({
       type: 'path:adjusted',
@@ -664,6 +686,8 @@ async function executeDownstreamReplan(context: {
           errorMessage: null
         }
       });
+      // #238：多阶段重排的成功收尾同样负责复位被抢占 core 留下的陈旧 'generating'。
+      await restorePathStatusAfterRunSettled(tx, pathId, runId, 'active');
     });
   } catch (error) {
     if (isPathMutationConflictError(error)) {
@@ -684,7 +708,9 @@ async function executeDownstreamReplan(context: {
         error instanceof Error && error.message.includes('EMPTY_TASKS')
           ? 'PATH_STAGE_DESIGN_ZERO_TASKS'
           : 'PATH_ENRICHMENT_FAILED',
-        'stageDesign'
+        'stageDesign',
+        // #238：失败收尾同样复位被抢占 core 留下的陈旧 'generating'（路径骨架仍可学）。
+        'active'
       );
     } catch (fenceError) {
       if (!(fenceError instanceof Error) || fenceError.message !== 'GENERATION_RUN_FENCED') throw fenceError;
@@ -775,7 +801,7 @@ export async function requestPathReplan(data: PathReplanRequest) {
         },
       };
     }
-    throw new Error('当前路径没有可重设计的阶段');
+    throw new PathReplanNoTargetStageError();
   }
 
   if (data.previewOnly || (replanSignal?.shouldSuggest && data.requireConfirmation !== false)) {
@@ -964,7 +990,9 @@ export async function requestPathReplan(data: PathReplanRequest) {
         error instanceof Error && error.message.includes('EMPTY_TASKS')
           ? 'PATH_STAGE_DESIGN_ZERO_TASKS'
           : 'PATH_ENRICHMENT_FAILED',
-        'stageDesign'
+        'stageDesign',
+        // #238：失败收尾同样复位被抢占 core 留下的陈旧 'generating'（路径骨架仍可学）。
+        'active'
       );
     } catch (fenceError) {
       if (!(fenceError instanceof Error) || fenceError.message !== 'GENERATION_RUN_FENCED') throw fenceError;

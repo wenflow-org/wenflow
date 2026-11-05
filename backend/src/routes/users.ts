@@ -10,68 +10,154 @@ import {
   listUserTeachingSessions,
   countUserTeachingSessions,
   findSubtasksByIds,
-  listUserAgentLogs,
+  listUserAgentLogsForGrouping,
   listUserAgentLogsForExport,
+  listAgentLogModelRowsByTraceIds,
+  listAgentLogModelRowsByPathIds,
   findUserAgentLogById,
   markOnboardingCompleted,
 } from '../services/users/user.repo';
+import {
+  parseAgentLogGroupId,
+  collapseAgentLogGroups,
+  collectAgentLogTraceIds,
+  collectAgentLogPathIds,
+  buildAgentLogModelIndex,
+  buildAgentLogModelIndexByPath,
+  resolveAgentLogModel,
+} from '../services/users/agent-log-grouping';
 import { rejectProjectionAccess } from '../middleware/projection-access.middleware';
 import { learnerSnapshotRefreshService } from '../services/learner/LearnerSnapshotRefreshService';
 import { getLevelFromXp } from '../services/learner/level.util';
 import { normalizeSessionDurationMinutes } from '../services/learning/learning.helpers';
-import { listAgentManifest } from '../services/agent-manifest.service';
+import { listAgentManifest, listUserListedAgentIds, type MonitoringGroupName } from '../services/agent-manifest.service';
 import { parseDayKeyRange } from '../services/time/day-boundary';
 import { loadTeachingMessagesForIds } from '../services/ai-teaching/teaching-session-message-store';
+import { projectMessagesForClient, stripCheckpointAnswerKeys } from '../services/ai-teaching/teaching-checkpoint';
 
 // 与 auth.service 等价的假哈希：密码比对失败时保持恒定时间，防时序探测
 const INVALID_LOGIN_PASSWORD_HASH = '$2b$10$OAioDMuBkv4OiDj1OPaJse/r3xbZoGaxLWtBNBD6VSlBa5T4nwkdG';
 
 const router = express.Router();
 
-function buildAgentLogWhere(userId: string, query: any) {
+// capabilityType（前端「活动类型」筛选键）→ manifest 监控组。
+// agent id 的单一事实源是 manifest：此前这里是一张手写 id 表，teaching/tutoring/profile
+// 挂的是已废弃 id（ai-teaching-agent / ai-tutor / learner-model-agent，线上 0 行），
+// 真实授课 id 是 skill:teaching-turn（Teaching 组），于是按这三类筛选恒空。
+const CAPABILITY_MONITORING_GROUPS: Record<string, MonitoringGroupName> = {
+  goal: 'Goal',
+  path: 'Path',
+  teaching: 'Teaching',
+  profile: 'Profile'
+};
+
+// #229：capabilityType 的合法键 = manifest 派生的四个能力组 + 三个显式键（tutoring/tracking/system）。
+// 修复前未知值（`x` / `tutoring2`）与大小写变体（`Teaching` / `PROFILE`）既不命中能力分支、
+// 又因是「真值」而跳过默认白名单，where 退化成 { userId }，等价于 includeSystem=true 的全量日志
+// （api-gateway 与内部 skill 全部漏出）。现在大小写变体归一后按合法键处理（明确等价），
+// 其余未知值明确拒绝（400 VALIDATION_ERROR）并回列允许值——静默退化是最差的选项。
+const CAPABILITY_TYPES = [
+  ...Object.keys(CAPABILITY_MONITORING_GROUPS),
+  'tutoring',
+  'tracking',
+  'system'
+];
+
+// 用可选字段而非 `ok: true/false` 判别式联合：本仓库 strictNullChecks=false，
+// 布尔字面量判别式在这套 tsconfig 下不做收窄（已用 tsc 验证），读 `message` 会编译报错。
+type CapabilityTypeParseResult = { capabilityType?: string; error?: string };
+
+/**
+ * 校验并归一化 capabilityType 查询参数。
+ * - 未传 / 空串（含纯空白）= 不筛选，走默认 userListed 白名单（既有口径，`capabilityType=` 与不传同义）；
+ * - 大小写变体按小写归一后命中合法键（`Teaching` ≡ `teaching`，明确等价而非静默全量）；
+ * - 其余（含非字符串，如重复参数成数组）= 未知值，返回可回给调用方的 400 消息。
+ */
+function parseCapabilityTypeQuery(raw: unknown): CapabilityTypeParseResult {
+  const allowed = CAPABILITY_TYPES.join('、');
+  if (raw === undefined || raw === null) return { capabilityType: undefined };
+  if (typeof raw !== 'string') {
+    return { error: `capabilityType 只能是单个字符串。允许值：${allowed}` };
+  }
+  const normalized = raw.trim().toLowerCase();
+  if (!normalized) return { capabilityType: undefined };
+  if (!CAPABILITY_TYPES.includes(normalized)) {
+    return { error: `capabilityType 无效：${raw}。允许值：${allowed}` };
+  }
+  return { capabilityType: normalized };
+}
+
+function sendAgentLogValidationError(res: any, message: string) {
+  return res.status(400).json({
+    success: false,
+    error: { message, code: 'VALIDATION_ERROR', status: 400 }
+  });
+}
+
+function buildCapabilityAgentMap(): Record<string, string[]> {
+  const manifest = listAgentManifest();
+  const userListed = new Set(listUserListedAgentIds());
+  const map: Record<string, string[]> = {};
+  for (const [capabilityType, group] of Object.entries(CAPABILITY_MONITORING_GROUPS)) {
+    // #226：能力筛选 = 在用户可见集内再按能力筛。此前这里直接取整个监控组，
+    // 于是 profile 把 userListed=false 的内部 skill（skill:adaptive-guidance-copy 等）
+    // 全放出来——默认视图 0 行、筛选视图 86 行，两个视图各有各的可见集。
+    map[capabilityType] = manifest
+      .filter((entry) => entry.monitoringGroup === group && userListed.has(entry.id))
+      .map((entry) => entry.id);
+  }
+  // tutoring / tracking 在 manifest 里没有对应监控组（没有辅导、进度追踪 Agent），
+  // 显式保留空数组，维持「筛该项返回空」的既有行为，这一条现在由 #229 的两道保险共同守住：
+  // parseCapabilityTypeQuery 认它们是**合法键**，所以键必须映射到一个（空）集合——
+  // 若删掉键，合法请求会落到 `{ in: undefined }`（Prisma 报错），而不是像修复前那样退化成全量。
+  map.tutoring = [];
+  map.tracking = [];
+  // 平台底层调用不是 manifest 里的 agent/skill（也就不在 userListed 白名单里），
+  // 「系统底层调用」是刻意独立于默认视图的显式范围（同 includeSystem），保持原有口径
+  map.system = ['system-call', 'unknown'];
+  return map;
+}
+
+/**
+ * @param capabilityType 已经过 parseCapabilityTypeQuery 校验归一化的值（undefined = 不按能力筛）。
+ *   不在这里再解析原始 query：分支只认合法键，未知值在路由层已被 400 拒绝。
+ */
+function buildAgentLogWhere(userId: string, query: any, capabilityType?: string) {
   const agentId = query.agentId as string;
-  const capabilityType = query.capabilityType as string;
   const success = query.success as string;
   const includeSystem = query.includeSystem as string;
   const startDate = query.startDate as string;
   const endDate = query.endDate as string;
   const where: any = { userId };
 
-  const capabilityAgents: Record<string, string[]> = {
-    goal: ['skill:goal-conversation'],
-    path: ['skill:path-planning'],
-    teaching: ['ai-teaching-agent'],
-    tutoring: ['ai-tutor'],
-    tracking: [],
-    profile: ['learner-model-agent'],
-    system: ['system-call', 'unknown']
-  };
+  const capabilityAgents = buildCapabilityAgentMap();
 
-  if (agentId) {
+  if (agentId && capabilityType) {
+    // #247：两者同时下发时取交集。此前是 if / else-if，agentId 真值直接短路，
+    // capabilityType 连读都不读（合法能力键被静默吞掉，既不交集也不 400），结果集
+    // 退化成「只用 agentId」——前端两个下拉同时下发时，用户选的能力筛选完全不生效。
+    // 交集为空即明确返回空集（Prisma `in: []`），而不是让 agentId 单独放行。
+    const capabilitySet = capabilityAgents[capabilityType] || [];
+    where.agentId = { in: capabilitySet.includes(agentId) ? [agentId] : [] };
+  } else if (agentId) {
     where.agentId = agentId;
-  } else if (capabilityType && capabilityType in capabilityAgents) {
+  } else if (capabilityType) {
+    // #229：合法键必在 map 里。四个能力组的集合本身就是在 listUserListedAgentIds() 内再筛
+    // （见 buildCapabilityAgentMap），所以「能力筛选 ⊆ 默认白名单」由构造保证，不靠两条 if 恰好配合。
     where.agentId = { in: capabilityAgents[capabilityType] };
+  } else if (includeSystem !== 'true') {
+    // 默认「AI 任务记录」口径：只放行真实写日志的业务动作（manifest userListed）。
+    // 不能用 userVisible：它表示「是否顶层编排器」——goal-agent/teaching-agent 被放行却全表
+    // 0 行（真实调用记在 skill:goal-conversation / skill:teaching-turn 名下），默认视图结构性
+    // 只剩 path-agent。也不能用「排除内部 skill」的黑名单：清单外的网关/历史 id 会漏进来，
+    // 才需要 executionLayer 补丁。此处白名单同时天然排除 api-gateway / system-call / unknown。
+    // #229：这条 else 分支是「不筛 agentId」的唯一出口前提——走到这里必然带白名单或能力集合，
+    // 只有 includeSystem=true 才允许 where 不带 agentId（显式请求底层日志）。
+    where.agentId = { in: listUserListedAgentIds() };
   }
 
   if (success !== undefined) {
     where.success = success === 'true';
-  }
-
-  if (includeSystem !== 'true' && !agentId && !capabilityType) {
-    // 非内部系统 agent：manifest userVisible=false 的内部 skill（kc-mapper/adaptive-guidance-copy/
-    // learner-model/virtual-learner-* 等）不进入用户 AI 任务列表，避免「copy/mapper」等噪音
-    const internalAgents = listAgentManifest()
-      .filter((a) => !a.userVisible)
-      .map((a) => a.id);
-    where.agentId = { notIn: [...internalAgents, 'system-call', 'unknown'] };
-    where.AND = [
-      {
-        OR: [
-          { executionLayer: null },
-          { executionLayer: { not: 'api-gateway' } }
-        ]
-      }
-    ];
   }
 
   if (startDate || endDate) {
@@ -353,6 +439,28 @@ router.get('/me/sessions', async (req, res, next) => {
         }
       }
 
+      // 检查点答案键绝不下发（#240）：本端点此前把整行 `...session` 原样下发，
+      // `teachingState` 列（含 lastRuntimeEnvelope 里的模型原始输出）与 `messages` 列
+      // （存量行 promptDebug 里的模型原始输出）都会把当下这道待答题的答案带给学习者。
+      // `/detail` 修好后这里成了唯一剩下的 learner 明文出口（实测 19/39 会话命中）。
+      // 注意 `...session` 会把原始字符串列一起带出去，因此必须在返回值里显式覆盖这两个字段。
+      const safeState = parsedState ? stripCheckpointAnswerKeys(parsedState) : null;
+      const safeMessages = (() => {
+        const raw = session.messages;
+        if (!raw) return raw;
+        // 旁表水合后是数组，旧行是 JSON 字符串：两种形态都要过同一份投影
+        const parsedMessages = Array.isArray(raw) ? raw : (() => {
+          try {
+            const value = JSON.parse(raw);
+            return Array.isArray(value) ? value : null;
+          } catch {
+            return null;
+          }
+        })();
+        if (!parsedMessages) return null;
+        return JSON.stringify(projectMessagesForClient(parsedMessages));
+      })();
+
       // 时长统一口径（与 /learning/stats、学习状态聚合同源）：优先 duration 列（已扣暂停/idle），
       // 无值才用 endTime−startTime 兜底并封顶 30 分钟。此前这里裸算 endTime−startTime 且不封顶，
       // 导致跨天未收束的会话把日历单日算成几千甚至两万分钟（如 25729 分钟）。
@@ -364,7 +472,10 @@ router.get('/me/sessions', async (req, res, next) => {
         taskTitle: task?.title || null,
         taskStatus: task?.status || null,
         estimatedMinutes: task?.estimatedMinutes || null,
-        parsedState
+        // 覆盖 `...session` 带出的原始字符串列（见上方答案键剥离注释）
+        teachingState: safeState ? JSON.stringify(safeState) : null,
+        messages: safeMessages,
+        parsedState: safeState
       };
     });
 
@@ -378,178 +489,46 @@ router.get('/me/sessions', async (req, res, next) => {
   }
 });
 
-/* 调用日志「会话折叠」视图：同 trace 去重 → goal/path 会话归组 → 补齐模型名 → 按时间倒序。
-   2026-11-04：列表与导出共用本函数——此前列表走折叠后视图、导出走原始行，同一筛选下页面条数与
-   导出记录数不一致（如 12 vs 24），且导出还带同一次调用的重复行。两处收口到同一视图后口径一致。 */
-function buildAgentLogView(logs: any[]): any[] {
-  const parseMetadata = (metadata: string | null) => {
-    if (!metadata) return {} as Record<string, any>;
-    try {
-      return JSON.parse(metadata) as Record<string, any>;
-    } catch {
-      return {} as Record<string, any>;
-    }
-  };
+/* 调用日志「会话折叠」视图（#214/#225）：列表 GET /me/agent-logs、导出 /me/agent-logs/export
+   与详情 GET /me/agent-logs/:logId（组键分支）共用本函数；详情的真实主键分支不整批折叠，
+   但复用同一条模型补全（collectAgentLogTraceIds + listAgentLogModelRowsByTraceIds +
+   buildAgentLogModelIndex/resolveAgentLogModel，见 #245）。折叠的**单一事实源**是
+   services/users/agent-log-grouping 的 collapseAgentLogGroups——去重 → 会话分组 → 组代表 →
+   模型补全 → 排序全部由它完成，因此同一组键在三处的 groupCount/groupItems/model 逐字段一致。
 
-  const getLogSource = (log: {
-    id: string;
-    agentId: string;
-    sourceEntry: string;
-  }) => {
-    if (log.id.startsWith('acl_')) return 'business';
-    if (log.agentId === 'system-call' || log.agentId === 'unknown') return 'infrastructure';
-    return 'runtime';
-  };
+   本函数只补一件事：服务把折叠组的 id 覆盖成合成组键（path:/goal:<convId>）后，组代表的真实
+   主键不再可见，而前端「详情」用 `log.repLogId || log.id` 拉单条调用；故按代表行保留下来的
+   身份字段（traceId/agentId/metadata）在同一批原始行里回查其主键。回查不到时留空，前端退回
+   组键——组键详情由 #220 支持，功能不受影响。这里不做任何去重/分组/排序，不构成第二份折叠实现。
 
-  const sourcePriority: Record<string, number> = {
-    business: 3,
-    runtime: 2,
-    infrastructure: 1,
-  };
-
-  const dedupeMap = new Map<string, any>();
-  // 会话级折叠：goal/path 按 conversationId 归组（skill 层 metadata 已注入 conversationId；
-  // path 阶段子调用 stage-designer/kc-mapper 通过 goal→path 的 conversationId 一并归到同一会话组）。
-  // 目标：goal 对话多轮、path 多次子调用不再逐条刷屏，折叠成「会话 × N 次」单条（可展开明细）。
-  const isConversationAgent = (agent: string) =>
-    agent === 'skill:goal-conversation'
-    || agent === 'skill:path-planning'
-    || agent === 'skill:path-reviewer'
-    || agent === 'skill:stage-designer'
-    || agent === 'skill:kc-mapper'
-    || agent === 'path-agent';
-  const convKeyOf = (agent: string, metadata: Record<string, any>) => {
-    if (!isConversationAgent(agent)) return null;
-    // path-agent 阶段流水日志用 sourceConversationId；其余 skill 用 conversationId/sessionId
-    const conv = metadata.sourceConversationId
-      || metadata.conversationId
-      || metadata.sessionId
-      || null;
-    if (!conv) return null;
-    return agent === 'skill:goal-conversation' ? `goal:${conv}` : `path:${conv}`;
-  };
-  for (const log of logs) {
-    const metadata = parseMetadata(log.metadata);
-    const traceId = log.traceId || metadata.traceId || '';
-    const secondBucket = log.calledAt.toISOString().slice(0, 19);
-    const dedupeKey = traceId
-      ? `${traceId}|${log.agentId}|${secondBucket}`
-      : `${log.agentId}|${secondBucket}`;
-
-    const currentSource = getLogSource(log as any);
-    const existing = dedupeMap.get(dedupeKey);
-    if (!existing) {
-      dedupeMap.set(dedupeKey, { ...log, logSource: currentSource });
-    } else {
-      const existingPriority = sourcePriority[existing.logSource] || 0;
-      const currentPriority = sourcePriority[currentSource] || 0;
-      if (currentPriority > existingPriority) {
-        dedupeMap.set(dedupeKey, { ...log, logSource: currentSource });
-      }
-    }
+   #230：「可见集过滤」与「元数据补全」分开。rows 仍按白名单取（业务动作才该出现在默认列表），
+   但模型名只写在 api-gateway 行的 metadata 上，而网关行不在白名单里、不在 rows 内。故按 rows
+   已选中的 traceId 集合另发一次补数查询取网关行（listAgentLogModelRowsByTraceIds，不受白名单
+   约束），只喂给折叠函数建模型索引——不进入展示/分组。
+   #248：path: 组的代表行是无 traceId 的 path-agent 阶段流水，traceId 键在这批行上不存在；
+   再按 rows 的 metadata.pathId 集合补一次网关行（listAgentLogModelRowsByPathIds），同一批
+   补数行喂给 traceId 与 pathId 两条索引。 */
+async function buildAgentLogView(userId: string, rows: any[]): Promise<any[]> {
+  const [modelRows, pathModelRows] = await Promise.all([
+    listAgentLogModelRowsByTraceIds(userId, collectAgentLogTraceIds(rows)),
+    listAgentLogModelRowsByPathIds(userId, collectAgentLogPathIds(rows)),
+  ]);
+  const rowsById = new Map<string, any>();
+  for (const row of rows) {
+    rowsById.set(String(row.id), row);
   }
-
-  /* 同一 trace 的业务行与 api-gateway 行是两条日志（agentId 不同、不合并），
-     但模型名只写在网关行的 metadata 里。先按 traceId 建索引，折叠后提到业务行顶层，
-     用户侧「模型」列才显示实际模型而不是笼统的「内置模型」。 */
-  const modelByTrace = new Map<string, string>();
-  for (const value of dedupeMap.values()) {
-    const metadata = parseMetadata(value.metadata);
-    const model = typeof metadata.model === 'string' ? metadata.model.trim() : '';
-    const traceId = String(value.traceId || metadata.traceId || '');
-    if (model && traceId && !modelByTrace.has(traceId)) modelByTrace.set(traceId, model);
-  }
-
-  // 组：key=goal/path 会话；rep=组内优先级最高的代表日志；items=组内全部（去重后）调用明细
-  const groupMap = new Map<string, { rep: any; items: any[] }>();
-  for (const value of dedupeMap.values()) {
-    const metadata = parseMetadata(value.metadata);
-    const agent = String(value.agentId || '');
-    const groupKey = convKeyOf(agent, metadata);
-    if (!groupKey) continue;
-    const currentSource = value.logSource || 'runtime';
-    const cur = groupMap.get(groupKey);
-    if (!cur) {
-      groupMap.set(groupKey, { rep: value, items: [value] });
-    } else {
-      groupMap.set(groupKey, {
-        rep: (sourcePriority[currentSource] || 0) > (sourcePriority[cur.rep.logSource || 'runtime'] || 0)
-          ? value
-          : cur.rep,
-        items: [...cur.items, value],
-      });
-    }
-  }
-
-  const collapsed = new Map<string, any>();
-  for (const [groupKey, { rep, items }] of groupMap) {
-    if (items.length <= 1) {
-      collapsed.set(groupKey, rep);
-      continue;
-    }
-    // 组时间取最近一次调用（排序/展示用）；id 用稳定 groupKey 供前端 dismiss/key
-    const itemsAsc = [...items].sort(
-      (a, b) => new Date(a.calledAt).getTime() - new Date(b.calledAt).getTime()
-    );
-    const lastAt = itemsAsc[itemsAsc.length - 1].calledAt;
-    // path 组代表优先 path-planning（用户语义「生成学习路径」），避免 path-agent 阶段流水抢占展示
-    const groupRep = groupKey.startsWith('path:')
-      ? itemsAsc.find((i) => String(i.agentId) === 'skill:path-planning')
-        || itemsAsc.find((i) => String(i.agentId) === 'skill:path-reviewer')
-        || rep
-      : rep;
-    collapsed.set(groupKey, {
-      ...groupRep,
-      id: groupKey,
-      // 2026-11-04：id 是合成组键（path:/goal: 前缀），详情接口按它查不到日志；
-      // 另带代表日志的真实 id，前端「详情」用它拉完整详情（输入/输出）
-      repLogId: groupRep.id,
-      calledAt: lastAt,
-      groupCount: items.length,
-      // 业务层代表行通常没有 model；模型名在同 trace 的网关行 metadata 里
-      model: modelByTrace.get(String(groupRep.traceId || '')) ?? null,
-      groupItems: itemsAsc.map((item) => ({
-        id: item.id,
-        agentId: item.agentId,
-        calledAt: item.calledAt,
-        success: item.success,
-        durationMs: item.durationMs,
-        errorCode: item.errorCode,
-        // path-agent 阶段流水透传 phase，前端可显示「主结构 / 阶段任务」等阶段名
-        phase: (() => {
-          try {
-            const m = item.metadata ? JSON.parse(item.metadata) : {};
-            return (m.phase && typeof m.phase === 'string') ? m.phase : null;
-          } catch { return null; }
-        })(),
-      })),
-    });
-  }
-  // 未折叠进任何会话组的日志（teaching-turn/session-wrapup/peer 等）仍逐条输出
-  for (const [key, value] of dedupeMap) {
-    const metadata = parseMetadata(value.metadata);
-    const agent = String(value.agentId || '');
-    const groupKey = convKeyOf(agent, metadata);
-    if (groupKey && collapsed.has(groupKey)) continue;
-    // 未归组的 path-agent 阶段流水：附上 phase，前端据此显示「主结构/阶段任务」而非裸「agent」
-    let item = value;
-    if (agent === 'path-agent' && typeof metadata.phase === 'string') {
-      item = { ...value, phase: metadata.phase };
-    }
-    collapsed.set(`item:${key}`, item);
-  }
-
-  // 折叠后按时间倒序；列表在其上分页、导出直接取整份，保证两处条数同源
-  return Array.from(collapsed.values())
-    .map((log) => {
-      const ownMetadata = parseMetadata(log.metadata);
-      const model = (typeof log.model === 'string' && log.model.trim())
-        || (typeof ownMetadata.model === 'string' ? ownMetadata.model : '')
-        || modelByTrace.get(String(log.traceId || ownMetadata.traceId || ''))
-        || '';
-      return { ...log, model: model.trim() ? model : null };
-    })
-    .sort((a, b) => new Date(b.calledAt).getTime() - new Date(a.calledAt).getTime());
+  return collapseAgentLogGroups(rows, [...modelRows, ...pathModelRows]).map((group) => {
+    const items: any[] = Array.isArray(group.groupItems) ? group.groupItems : [];
+    // 单行/未归组的行：id 本身就是真实主键（服务只在折叠组上覆盖 id），无需补代表 id
+    if (items.length === 0) return group;
+    const rep = items
+      .map((item) => rowsById.get(String(item.id)))
+      .find((row) => row
+        && String(row.traceId ?? '') === String(group.traceId ?? '')
+        && String(row.agentId ?? '') === String(group.agentId ?? '')
+        && String(row.metadata ?? '') === String(group.metadata ?? ''));
+    return rep ? { ...group, repLogId: String(rep.id) } : group;
+  });
 }
 
 // 获取用户 Agent 调用日志
@@ -559,19 +538,23 @@ router.get('/me/agent-logs', async (req, res, next) => {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     // limit 钳制（1-100），防止无上限分页拉全表
     const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 100);
-    const where = buildAgentLogWhere(userId, req.query);
+    // #229：capabilityType 先校验（未知值 400 + 列出允许值），再进 where 构造；
+    // 绝不把未识别的筛选键当「无筛选」放过去（那会退化成 includeSystem 级别的全量日志）。
+    const capability = parseCapabilityTypeQuery(req.query.capabilityType);
+    if (capability.error) return sendAgentLogValidationError(res, capability.error);
+    const where = buildAgentLogWhere(userId, req.query, capability.capabilityType);
 
-    // 2026-11-04：此前 skip=(page-1)*limit 作用在「去重/会话折叠前」的原始行空间、total 也数原始行，
-    // 而真正返回的是折叠后的列表——于是 count 与实际可达记录数不符、第 2 页还会与第 1 页重复。
-    // 改为先取该筛选下全部原始行（与导出同一 take=1000 口径），在内存按同一视图折叠后再分页。
-    const logs = await listUserAgentLogs(where, 0, 1000);
+    // #214 分页/总数须与「dedupe→会话折叠」后的组同口径：原始行数≠折叠组数。
+    // 因此先取该用户全量（有上限）原始行，折叠成组后再对组做 slice/total。
+    const logs = await listUserAgentLogsForGrouping(where);
 
-    // 2026-11-04：折叠视图抽到 buildAgentLogView，与导出同一口径；total 取折叠后条数
-    // （前端页头/页脚/页数同源），与实际可达记录数一致。
-    const normalizedLogs = buildAgentLogView(logs);
+    // #225：折叠管线单一事实源在 agent-log-grouping；列表/导出/详情共用同一个 buildAgentLogView，
+    // 用同一条 buildAgentLogWhere 取数，两处 groupCount/groupItems/model 由构造保证一致。
+    const sortedGroups = await buildAgentLogView(userId, logs);
 
-    const total = normalizedLogs.length;
-    const pageLogs = normalizedLogs.slice((page - 1) * limit, page * limit);
+    // total 与 logs 同口径：total = 折叠后的组数，分页切片也落在组上
+    const total = sortedGroups.length;
+    const pageLogs = sortedGroups.slice((page - 1) * limit, (page - 1) * limit + limit);
 
     res.json({
       success: true,
@@ -595,10 +578,13 @@ router.get('/me/agent-logs/export', async (req, res, next) => {
   try {
     const userId = req.user.userId;
     const format = (req.query.format as string) || 'json';
-    const where = buildAgentLogWhere(userId, req.query);
+    // #229：导出口径与列表一致，同样拒绝未知 capabilityType（否则导出会绕过校验漏出全量日志）。
+    const capability = parseCapabilityTypeQuery(req.query.capabilityType);
+    if (capability.error) return sendAgentLogValidationError(res, capability.error);
+    const where = buildAgentLogWhere(userId, req.query, capability.capabilityType);
 
     // 2026-11-04：与列表同一折叠视图导出，避免页面记录数与导出记录数两套口径（12 vs 24）
-    const logs = buildAgentLogView(await listUserAgentLogsForExport(where));
+    const logs = await buildAgentLogView(userId, await listUserAgentLogsForExport(where));
 
     if (format === 'csv') {
       const headers = ['id', 'agentId', 'success', 'durationMs', 'tokensUsed', 'error', 'calledAt'];
@@ -635,7 +621,36 @@ router.get('/me/agent-logs/:logId', async (req, res, next) => {
     const userId = req.user.userId;
     const { logId } = req.params;
 
-    const log = await findUserAgentLogById(logId, userId);
+    // #220：列表把同一会话折叠成一条，`id` 是合成组键（`path:`/`goal:<conversationId>`），
+    // 不是 agent_call_logs 主键，直接 findFirst 必然 404。这里用与列表**完全相同**的
+    // 取数口径与折叠管线（同一个 buildAgentLogWhere + 同一个 buildAgentLogView，
+    // 其折叠实现即 collapseAgentLogGroups），再从结果里取该组键，让列表返回的 id 稳定可详查。
+    // #225：只共享 where 不够——列表的去重是跨会话的（key 不含会话），且模型名要从
+    // 不带会话 id 的网关行补。任何一处单独实现都会让同一条折叠行的 groupCount /
+    // groupItems / model 在列表与详情之间漂移，因此折叠只保留一份实现。
+    // #229：详情（组键与真实主键两条分支）都带同一组筛选（前端 buildFilterParams 复用），
+    // 未知 capabilityType 一律拒绝，否则 where 会退化成 { userId } 的全量取数。
+    const capability = parseCapabilityTypeQuery(req.query.capabilityType);
+    if (capability.error) return sendAgentLogValidationError(res, capability.error);
+    const scopeWhere = buildAgentLogWhere(userId, req.query, capability.capabilityType);
+
+    const groupId = parseAgentLogGroupId(logId);
+    if (groupId) {
+      const logs = await listUserAgentLogsForGrouping(scopeWhere);
+      const group = (await buildAgentLogView(userId, logs)).find((entry) => entry.id === logId);
+      if (!group) {
+        return res.status(404).json({
+          success: false,
+          error: { message: '日志不存在' }
+        });
+      }
+      return res.json({
+        success: true,
+        data: group
+      });
+    }
+
+    const log = await findUserAgentLogById(logId, userId, scopeWhere);
 
     if (!log) {
       return res.status(404).json({
@@ -644,9 +659,29 @@ router.get('/me/agent-logs/:logId', async (req, res, next) => {
       });
     }
 
+    // #245：真实主键行（acl_*）的详情是 UI 的主路径——前端用 `log.repLogId || log.id` 拉详情，
+    // 折叠组都带 repLogId，所以连组行也走这里。业务行的 model 列在写侧恒为空，模型名只写在
+    // 同 trace 的 api-gateway 行 metadata 上，而网关行不在默认白名单内。此前本分支直接
+    // res.json(findFirst 原始行)，整条模型补数被跳过，同一个 id 在列表/导出有模型名、详情为 null。
+    // 这里复用折叠管线的同一套索引与解析（buildAgentLogModelIndex / resolveAgentLogModel），
+    // 让三处的 model 由构造一致，而不是各写一遍。
+    const logRows = [log];
+    // #248：path-agent 阶段流水无 traceId，也要按 metadata.pathId 补同路径的网关行，
+    // 否则 path 组的代表行详情（repLogId 走本分支）模型列仍为 null，与列表不一致。
+    const [modelRows, pathModelRows] = await Promise.all([
+      listAgentLogModelRowsByTraceIds(userId, collectAgentLogTraceIds(logRows)),
+      listAgentLogModelRowsByPathIds(userId, collectAgentLogPathIds(logRows)),
+    ]);
+    const modelSources = [...logRows, ...modelRows, ...pathModelRows];
+    const model = resolveAgentLogModel(
+      log,
+      buildAgentLogModelIndex(modelSources),
+      buildAgentLogModelIndexByPath(modelSources)
+    );
+
     res.json({
       success: true,
-      data: log
+      data: { ...log, model }
     });
   } catch (error) {
     next(error);

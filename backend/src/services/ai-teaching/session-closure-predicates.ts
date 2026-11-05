@@ -10,7 +10,8 @@
  * 非正常终态收束判定（幽灵课 / 弃跑状态泄漏，2026-10-06 修复）。
  *
  * 语义：这次收束不是「学完了」而是「跑掉了 / 课已经废了」。命中后收束**仍然闭合状态机**
- * （会话照常落到 completed，wrapup 照常落库，调用方的轮询/清场逻辑不变），但**不写正式轨**：
+ * （会话照常落到 completed，wrapup 按设计留 NULL——见 `teaching-session-lifecycle.ts` 收束写入处；
+ * 调用方的轮询/清场逻辑不得依赖 wrapup，只能按 status 判定收束完成，见 #239），但**不写正式轨**：
  * learner_evidence（含 lesson:completed 事件与快照刷新）/ learning_metrics（session-wrapup 与
  * session_load）/ 记忆回写（FSRS trace、误解台账、休眠信号）/ 温故回写（review:completed），
  * 只留一条审计日志。

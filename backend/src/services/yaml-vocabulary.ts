@@ -41,6 +41,17 @@ export const VISIBILITY_PRESETS = ['user-clarification', 'agent-internal'] as co
 export type VisibilityPreset = (typeof VISIBILITY_PRESETS)[number];
 
 /**
+ * 编排 routing.reachability 受控词表（#184）：缺省 = 主链自动触发；显式值表示该路由声明的
+ * 产出仅经人工/外部入口可达，不会被仿真核等自动链调用。
+ *   - manual：人工入口（如 assisted 座舱按钮）
+ *   - external：独立面 / 外部端点入口（如 session-audits API）
+ * 消费方：audit-field-hit-rates（死边候选）与 audit-handoff-edges（声明边零命中）——非 auto
+ * 的声明边不计入死边口径；入口细节仍写在 routing.notes 与 skills.yaml。
+ */
+export const ROUTING_REACHABILITY = ['manual', 'external'] as const;
+export type RoutingReachability = (typeof ROUTING_REACHABILITY)[number];
+
+/**
  * core params.failurePolicy（业务意图词表，SKILL_PROTOCOL_V4 §2.4.4）
  * 2026-08-11：fallback 已退役（纯重试+明确失败改造）；
  * 2026-09-18：从**可写词表**移除，新 core 文件必须用 retry | propagate。

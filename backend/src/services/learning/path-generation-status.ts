@@ -31,7 +31,8 @@ interface StageDesignGenerationStatus {
 export interface RetryDecision {
   allowed: boolean;
   retryType: PathGenerationRetryType | null;
-  reason: 'failed' | 'stale' | 'not-failed' | 'completed';
+  /** incomplete：#241「生成任务报成功、但路径仍留零任务阶段」——需要追加式补齐，不是完成态 */
+  reason: 'failed' | 'stale' | 'not-failed' | 'completed' | 'incomplete';
 }
 
 export interface PathGenerationRollbackSnapshotV1 {
@@ -110,8 +111,16 @@ export function resolveGenerationRetry(
   generationStatus: StageDesignGenerationStatus | null,
   activeRun: PersistedPathGenerationRun | null | undefined,
   pathUpdatedAt: Date,
-  now = Date.now()
+  now = Date.now(),
+  // #241：run.status=succeeded 不等于「路径可学」——rebuild-all 后核心骨架已重建、阶段设计
+  // 被取消时会留下「run 成功 + 全部阶段零子任务」的空壳。此时 retryAllowed 必须为真（走追加式
+  // 补齐），否则 PATCH /retry 判「已完成」回 400，而 POST /retry-stage-design 会补齐 → 自相矛盾。
+  hasEmptyMilestones = false
 ): RetryDecision {
+  // 阶段设计在途（processing 未过期）：空阶段只是因为还没写完，不得判可重试
+  //（与 retryPathEnrichment 的 generationInFlight 同口径）。
+  const designInFlight = generationStatus?.stageDesign === 'processing'
+    && !isStageDesignStale(generationStatus, pathUpdatedAt, now);
   if (activeRun) {
     if (activeRun.status === 'succeeded') {
       if (activeRun.phase === 'core' && generationStatus?.stageDesign === 'failed') {
@@ -119,6 +128,9 @@ export function resolveGenerationRetry(
       }
       if (activeRun.phase === 'core' && isStageDesignStale(generationStatus, pathUpdatedAt, now)) {
         return { allowed: true, retryType: 'stageDesign', reason: 'stale' };
+      }
+      if (hasEmptyMilestones && !designInFlight) {
+        return { allowed: true, retryType: 'stageDesign', reason: 'incomplete' };
       }
       return { allowed: false, retryType: null, reason: 'completed' };
     }
@@ -136,6 +148,12 @@ export function resolveGenerationRetry(
         reason: 'stale'
       };
     }
+    // 被重建流程取消的 stageDesign run（真实事故现场）不满足成功/失败/过期任一判定，
+    // 但它下面的路径若仍零任务，同样是「未完成」——交给追加式补齐。
+    if (activeRun.status === 'cancelled' && hasEmptyMilestones && !designInFlight) {
+      return { allowed: true, retryType: 'stageDesign', reason: 'incomplete' };
+    }
+    // queued/processing 且未过期：生成在途，绝不叠加第二次重试
     return { allowed: false, retryType: null, reason: 'not-failed' };
   }
 
@@ -150,6 +168,11 @@ export function resolveGenerationRetry(
   }
   if (pathStatus === 'generating' && now - pathUpdatedAt.getTime() >= STALE_CORE_MINUTES * 60 * 1000) {
     return { allowed: true, retryType: 'core', reason: 'stale' };
+  }
+  // 无活动 run 的历史态同样要认「零任务阶段」（stageDesign 已完成/缺失但路径为空）：
+  // 只要不是核心生成在途（generating）或阶段设计在途（processing），就允许补齐。
+  if (hasEmptyMilestones && pathStatus !== 'generating' && !designInFlight) {
+    return { allowed: true, retryType: 'stageDesign', reason: 'incomplete' };
   }
   return { allowed: false, retryType: null, reason: 'not-failed' };
 }

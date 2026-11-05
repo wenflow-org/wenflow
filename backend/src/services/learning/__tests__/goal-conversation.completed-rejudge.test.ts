@@ -27,10 +27,16 @@ interface ConversationRow {
   completedAt?: Date | null;
 }
 
-/** learning_paths 行的最小形状（验证「同一会话只允许一条活路径」） */
+/** learning_paths 行的最小形状（验证「同一会话只允许一条活路径」；#228 用例额外带 lifecycle 推导字段） */
 interface PathRow {
   id: string;
   status: string;
+  userId?: string;
+  aiGenerated?: boolean;
+  aiPromptTemplate?: string | null;
+  updatedAt?: Date;
+  activeGenerationRun?: Record<string, unknown> | null;
+  milestones?: Array<{ stageNumber: number; subtasks: Array<{ id: string }> }>;
 }
 
 let conversationRecord: ConversationRow;
@@ -315,8 +321,11 @@ describe('completed 硬阻断会话：补充说明重判通过', () => {
     expect(prismaMock.learning_paths.create).not.toHaveBeenCalled();
     expect(conversationRecord.learningPathId).toBe(boundPathId);
 
-    // 返回已有路径的完成文案
-    expect(second.userVisible).toBe('学习路径已经生成，可以去查看啦！');
+    // 返回已有路径的完成文案（#228 语义订正：这条占位路径的权威 status 仍是 generating，
+    // 旧断言写死「已经生成」正是在锁定「路径还在生成却宣称已生成」的缺陷行为）
+    expect(second.userVisible).toBe(
+      '已收到确认，学习路径正在生成，通常 10-60 秒内完成，可前往“学习路径”查看进度。',
+    );
     const internal = second.internal as GoalEnvelope;
     expect(internal.core.learningPath).toEqual(expect.objectContaining({ id: boundPathId }));
   });
@@ -378,6 +387,42 @@ describe('非硬阻断终局的普通 completed 会话：行为不回归', () =>
     expect(result.userVisible).toBe('学习路径已经生成，可以去查看啦！');
     const internal = result.internal as GoalEnvelope;
     expect(internal.core.learningPath).toEqual({ id: 'lp-existing', status: 'active' });
+  });
+
+  it('已绑路径但仍在阶段设计窗口 → 说「正在生成」，不再谎称已生成（#228 残余）', async () => {
+    conversationRecord.learningPathId = 'lp-designing';
+    // core 落库时就把 status 写成 active，而阶段设计还在跑：只看 status 会谎称「已生成」
+    pathStore.set('lp-designing', {
+      id: 'lp-designing',
+      status: 'active',
+      userId: 'user-1',
+      aiGenerated: true,
+      aiPromptTemplate: null,
+      updatedAt: new Date(),
+      milestones: [{ stageNumber: 1, subtasks: [] }],
+      activeGenerationRun: {
+        id: 'run-1',
+        phase: 'stageDesign',
+        status: 'processing',
+        retryAllowed: false,
+        completedItems: 0,
+        totalItems: 1,
+        heartbeatAt: new Date(),
+        leaseExpiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+
+    const result = await goalConversationService.continueConversation('conv-1', '现在怎么样了', 'user-1');
+
+    expect(mockExecuteSkill).not.toHaveBeenCalled();
+    expect(mockRunGoalAsync).not.toHaveBeenCalled();
+    // 与同一秒的 GET 快照逐字同源（#228：同一态两接口同一口径）
+    expect(result.userVisible).toBe(
+      '已收到确认，学习路径正在生成，通常 10-60 秒内完成，可前往“学习路径”查看进度。',
+    );
+    expect(result.userVisible).not.toContain('已经生成');
+    const internal = result.internal as GoalEnvelope;
+    expect(internal.core.learningPath).toEqual({ id: 'lp-designing', status: 'active' });
   });
 
   it('无路径且存档分诊非硬阻断 → 照旧短路返回，不触发 LLM（referral 但 judgeable）', async () => {

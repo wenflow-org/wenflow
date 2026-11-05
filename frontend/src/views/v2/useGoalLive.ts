@@ -87,6 +87,10 @@ function toList(input: unknown): string[] {
 
 /* 时间标签实现已统一到 learningChat.ts（nowTime / formatMsgTime），此处不再保留副本。 */
 
+/** 硬阻断拒绝文案的稳定识别标记（初判「这类目标当前不会生成学习路径」与重判「这次仍不会
+    生成学习路径」两版都含此句）。#213：完成态无路径只有硬阻断一种正常终局需要展示原因。 */
+const HARD_BLOCK_REFUSAL_MARKER = '不会生成学习路径';
+
 const conversationId = ref('');
 const messages = ref<LiveMessage[]>([]);
 /** 流式渐进渲染：SSE delta 累积的原始模型文本（goal skill 为 JSON 输出，final 到达前展示此文本；到达后以官方消息为准） */
@@ -110,6 +114,9 @@ const confirmedProposal = ref<Record<string, unknown> | null>(null);
 /** 前置探测题作答记录（probeId → 选项 id，防重复作答） */
 const probeAnswers = ref<Record<string, string>>({});
 const learningPath = ref<{ id: string; status?: string } | null>(null);
+/** 已完成但没有生成路径时服务端给出的说明（#213：硬阻断拒绝文案已落库，GET 快照会重建）。
+    普通成功终局的收尾语不落库，仍由 done 面板承载，不进这里。 */
+const completionNote = ref('');
 const sending = ref(false);
 const failed = ref<'start' | 'reply' | 'confirm' | 'supplement' | 'resume' | ''>('');
 const resumeErrorStatus = ref<number | null>(null);
@@ -267,6 +274,15 @@ function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string;
     : 'understanding';
   // confidence：信封仍带该字段，但页面从不渲染（2026-09-27 死状态清理），不再维护
   isCompleted.value = core?.isCompleted === true;  learningPath.value = core?.learningPath ?? null;
+  // #213：已完成且没有路径 = 分诊硬阻断终局。拒绝文案不能像普通收尾语那样丢弃，
+  // 否则用户确认后当场看不到、重载后也看不到（服务端现已落库并由 GET 重建）。
+  // 正向识别硬阻断文案（初判/重判两版都含此句），其余 completed 无路径的旧异常态
+  // （如「学习路径已经生成」占位）不误判为拒绝原因——保持既有行为不变。
+  const isHardBlockRefusal = !!env.userVisible && env.userVisible.includes(HARD_BLOCK_REFUSAL_MARKER);
+  completionNote.value = stage.value === 'completed' && !learningPath.value && isHardBlockRefusal ? env.userVisible : '';
+  // 合并取舍：develop 新增的服务端结构化标记（比文案匹配更可靠，2026-11-05 UX 审计 P0）。
+  // 两条并存——模板优先用 hardBlocked，并用 completionNote 兜住「老信封没有该字段、
+  // 但 userVisible 里确实带着拒绝原文」的回落场景，两边行为都不丢。
   hardBlocked.value = core?.hardBlocked === true;
   // 已完成的会话不再作为「继续上次的规划」入口：路径已生成，恢复终态会话只会造成
   // 「已经产生了新路径，goal 还让继续上次规划」的困惑。清本地缓存（带 :conversationId
@@ -306,10 +322,9 @@ function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string;
         pushMessage({ role: 'user', content: opts.userText, time: nowTime() });
       }
     }
-    // 完成信封不再把 userVisible 落进对话：确认后的收尾语（「已收到确认，正在生成…」）
-    // 服务端不落库（updateConversationLifecycle 只追加 user 确认消息），客户端渲染会造成
-    // 「阶段结束后 AI 还发消息」且刷新后凭空消失的双态不一致；该信息由 done 面板承载。
-    if (env.userVisible && stage.value !== 'completed') pushMessage({ role: 'ai', content: env.userVisible, time: nowTime() });
+    // 普通成功终局的收尾语（「已收到确认，正在生成…」）不落库，渲染后刷新即消失，仍由
+    // done 面板承载；但硬阻断终局（completed 且无 learningPath）的拒绝文案已落库，必须上屏。
+    if (env.userVisible && (stage.value !== 'completed' || (!learningPath.value && isHardBlockRefusal))) pushMessage({ role: 'ai', content: env.userVisible, time: nowTime() });
   }
   // 硬阻断终局例外（2026-11-05 UX 审计 P0）：阻断说明（不会生成路径 + 补充说明可重判）
   // 必须在对话流里可见。上面的「completed 不落 userVisible」只针对确认收尾语；对硬阻断
@@ -678,6 +693,7 @@ function reset(clearStorage = true) {
   quickReplies.value = [];
   confirmedProposal.value = null;
   learningPath.value = null;
+  completionNote.value = '';
   freshKeys.value = [];
   failed.value = '';
   stopped.value = '';
@@ -715,6 +731,7 @@ export function useGoalLive() {
     droppedProbeAnswers,
     acknowledgeProbeChange,
     learningPath,
+    completionNote,
     sending,
     streamingText,
     failed,
