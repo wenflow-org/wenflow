@@ -362,6 +362,95 @@ describe('users agent log routes', () => {
     expect(pathGroup[0].groupItems.map((i: any) => i.phase)).toEqual(['core', 'core', 'stageDesign']);
   });
 
+  // #246：无 traceId 时的去重键退化成「同 agentId + 同秒即重复」，把「同一次调用重复落库」
+  // 的语义降级成「同秒不同事件也互撞」。path-agent 阶段流水写侧不写 traceId，而父阶段
+  // succeeded 与子阶段 started 在生产上只差几十毫秒、必然落进同一秒，于是一条真实事件被
+  // 静默丢弃、groupCount 少 1。修复：退化键必须带上事件身份（metadata.phase + metadata.status）。
+  it('#246 同秒、无 traceId、但 phase/status 不同的 path-agent 行不再被当重复吞掉', async () => {
+    const mkStage = (id: string, phase: string, status: string, ms: number) => ({
+      id,
+      agentId: 'path-agent',
+      sourceEntry: 'platform',
+      calledAt: new Date(`2026-09-04T11:00:00.${String(ms).padStart(3, '0')}Z`),
+      success: status === 'succeeded',
+      errorCode: null,
+      metadata: JSON.stringify({
+        eventType: 'path-generation-stage',
+        executionLayer: 'flow-event',
+        phase,
+        status,
+        pathId: 'lp_events',
+        sourceConversationId: 'gc_events',
+      }),
+      traceId: null,
+    });
+    // 同秒（11:00:00.000 vs .017）、同为 path-agent、traceId 均为 null，但阶段/状态不同
+    agentLogMocks.findMany.mockResolvedValue([
+      mkStage('acl_core_done', 'core', 'succeeded', 0),
+      mkStage('acl_stage_start', 'stageDesign', 'started', 17),
+    ]);
+    const res = createResponse();
+
+    await routes['GET /me/agent-logs'](
+      { user: { userId: 'user-1' }, query: {} } as any,
+      res,
+      jest.fn()
+    );
+
+    const logs = res.body?.data?.logs ?? [];
+    // 修复前两条被去重成 1 行，items.length<=1 时组键不生效、只剩一条原始行（groupCount 缺失）；
+    // 修复后应出现 path:gc_events 组且 groupCount=2。
+    const group = logs.find((l: any) => l.id === 'path:gc_events')
+      ?? logs.find((l: any) => String(l.agentId) === 'path-agent');
+    expect(group).toBeTruthy();
+    // 两条都是真实事件：都被保留、groupCount 必须是 2
+    expect(group.groupCount).toBe(2);
+    expect(group.groupItems.map((i: any) => i.id).sort())
+      .toEqual(['acl_core_done', 'acl_stage_start']);
+  });
+
+  it('#246 没修过头：真重复（同秒、同 agent、同 phase/status）的行仍被合并', async () => {
+    const mkStage = (id: string, phase: string, status: string, ms: number) => ({
+      id,
+      agentId: 'path-agent',
+      sourceEntry: 'platform',
+      calledAt: new Date(`2026-09-04T12:00:00.${String(ms).padStart(3, '0')}Z`),
+      success: true,
+      errorCode: null,
+      metadata: JSON.stringify({
+        eventType: 'path-generation-stage',
+        executionLayer: 'flow-event',
+        phase,
+        status,
+        pathId: 'lp_dup',
+        sourceConversationId: 'gc_dup',
+      }),
+      traceId: null,
+    });
+    agentLogMocks.findMany.mockResolvedValue([
+      mkStage('acl_dup_a', 'core', 'succeeded', 0),
+      mkStage('acl_dup_b', 'core', 'succeeded', 400),
+      mkStage('acl_other', 'stageDesign', 'started', 600),
+    ]);
+    const res = createResponse();
+
+    await routes['GET /me/agent-logs'](
+      { user: { userId: 'user-1' }, query: {} } as any,
+      res,
+      jest.fn()
+    );
+
+    const logs = res.body?.data?.logs ?? [];
+    const group = logs.find((l: any) => l.id === 'path:gc_dup')
+      ?? logs.find((l: any) => String(l.agentId) === 'path-agent');
+    expect(group).toBeTruthy();
+    // 两条同 phase/status 的真重复折成 1 条，加上 stageDesign 那条 → groupCount=2（不是 3）
+    expect(group.groupCount).toBe(2);
+    const ids = group.groupItems.map((i: any) => i.id);
+    expect(ids).toContain('acl_other');
+    expect(ids.filter((id: string) => id !== 'acl_other')).toHaveLength(1);
+  });
+
   it('page 负值被钳制为 1（组起点=0），不向 Prisma 传负 skip', async () => {
     agentLogMocks.findMany.mockResolvedValue([]);
     const req: any = { user: { userId: 'user-1' }, query: { page: '-5' } };

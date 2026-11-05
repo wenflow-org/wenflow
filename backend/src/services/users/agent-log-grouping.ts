@@ -155,14 +155,20 @@ export function collapseAgentLogGroups(
 ): any[] {
   // 1) 去重：同 traceId + agentId + 秒级时间视为同一次调用的重复落库。
   //    注意这是**跨会话**去重（key 不含会话），列表一直如此；详情若按会话去重会多出条目。
+  //    #246：无 traceId 时（path-agent 阶段流水写侧不写 traceId）退化键必须带上事件身份
+  //    （metadata.phase + metadata.status）。此前退化键只有 agentId + 秒，把语义降级成
+  //    「同秒同 agent 即重复」——父阶段 succeeded 与子阶段 started 常只差几十毫秒、必然同秒，
+  //    于是两条真实事件互撞、后入的一条被静默丢弃（groupCount 少 1），且谁被丢由行序决定。
   const dedupeMap = new Map<string, any>();
   for (const log of logs) {
     const metadata = parseMetadata(log.metadata);
     const traceId = log.traceId || metadata.traceId || '';
     const secondBucket = new Date(log.calledAt).toISOString().slice(0, 19);
+    const eventPhase = typeof metadata.phase === 'string' ? metadata.phase : '';
+    const eventStatus = typeof metadata.status === 'string' ? metadata.status : '';
     const dedupeKey = traceId
       ? `${traceId}|${log.agentId}|${secondBucket}`
-      : `${log.agentId}|${secondBucket}`;
+      : `${log.agentId}|${secondBucket}|${eventPhase}|${eventStatus}`;
     const source = logSourceOf(log);
     const existing = dedupeMap.get(dedupeKey);
     if (!existing) {
