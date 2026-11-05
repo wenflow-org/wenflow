@@ -52,39 +52,46 @@
         <template #head-status />
 
         <!-- 2026-11-05 用户「连接设置和添加模型合并到一起吧，只保留添加模型」：
-             连接的编辑不再有自己的入口，全部搬进「＋ 添加模型」那张弹窗（服务地址 / 密钥 /
-             最大重试 / 重试间隔 / RPM 上限 / 重置此通道 + 上游清单）。
-             卡头右组因此只剩那一颗按钮；`#platform-detail` 插槽撤除。 -->
+             连接的编辑不再有自己的入口，全部搬进「＋ 添加模型」那张弹窗。
+             同日再精简（用户「这个区域精简一下，占太多空间，下方的拉取模型是重点」）：
+             默认只显示一行摘要，点「修改连接」才展开表单——这张弹窗的正题是下面的清单，
+             连接是偶尔改一次的东西，不该常驻占掉三分之一屏。 -->
         <template #add-conn>
-          <div class="ac-conn-form">
-            <label class="mk-field">
-              <span class="mk-field__label">服务地址</span>
-              <input class="mk-field__input" v-model="form.apiUrl" placeholder="https://api.example.com/v1" @input="markDirty('conn')" />
-            </label>
-            <label class="mk-field">
-              <span class="mk-field__label">API Key</span>
-              <span class="ac-key-wrap">
-                <span class="ac-key-input-row">
-                  <input
-                    class="mk-field__input"
-                    :type="keyVisible ? 'text' : 'password'"
-                    v-model="form.apiKey"
-                    autocomplete="new-password"
-                    :placeholder="keySet ? '留空 = 沿用已配置' : '输入 API Key'"
-                    @input="markDirty('conn')"
-                  />
-                  <button
-                    v-if="keySet || form.apiKey"
-                    type="button"
-                    class="ac-key-toggle"
-                    :title="keyVisible ? '隐藏' : '显示'"
-                    @click="keyVisible = !keyVisible"
-                  ><Eye v-if="keyVisible" :size="15" :stroke-width="1.75" />
-                    <EyeOff v-else :size="15" :stroke-width="1.75" /></button>
+          <p v-if="!connOpen" class="ac-conn-summary">
+            <span class="mono ac-conn-summary__addr" :title="form.apiUrl || '未配置服务地址'">{{ form.apiUrl || '未配置服务地址' }}</span>
+            <span v-if="isLive && reliability" class="ac-conn-summary__policy">重试 {{ reliability.maxUpstreamAttempts }} 次 · {{ reliability.platformRpmLimit > 0 ? `RPM ${reliability.platformRpmLimit}` : 'RPM 不限' }}</span>
+          </p>
+          <div v-else class="ac-conn-form">
+            <div class="ac-conn-pair">
+              <label class="mk-field">
+                <span class="mk-field__label">服务地址</span>
+                <input class="mk-field__input" v-model="form.apiUrl" placeholder="https://api.example.com/v1" @input="markDirty('conn')" />
+              </label>
+              <label class="mk-field">
+                <span class="mk-field__label">API Key</span>
+                <span class="ac-key-wrap">
+                  <span class="ac-key-input-row">
+                    <input
+                      class="mk-field__input"
+                      :type="keyVisible ? 'text' : 'password'"
+                      v-model="form.apiKey"
+                      autocomplete="new-password"
+                      :placeholder="keySet ? '留空 = 沿用已配置' : '输入 API Key'"
+                      @input="markDirty('conn')"
+                    />
+                    <button
+                      v-if="keySet || form.apiKey"
+                      type="button"
+                      class="ac-key-toggle"
+                      :title="keyVisible ? '隐藏' : '显示'"
+                      @click="keyVisible = !keyVisible"
+                    ><Eye v-if="keyVisible" :size="15" :stroke-width="1.75" />
+                      <EyeOff v-else :size="15" :stroke-width="1.75" /></button>
+                  </span>
+                  <em v-if="keyHintNeeded" class="ac-keyhint">更换服务地址需重新输入密钥</em>
                 </span>
-                <em v-if="keyHintNeeded" class="ac-keyhint">更换服务地址需重新输入密钥</em>
-              </span>
-            </label>
+              </label>
+            </div>
 
             <template v-if="isLive && reliability">
               <div class="ac-conn-policy">
@@ -117,19 +124,34 @@
              一起落盘（打开弹窗时那次拉取只读），但只改重试 / RPM 时不发任何请求，需要一个显式出口。 -->
         <template #add-conn-actions>
           <button
-            v-if="connDirty"
+            v-if="!connOpen"
             type="button"
-            class="mk-btn mk-btn--sm mk-btn--primary"
-            :disabled="saving"
-            @click="saveConnFromDialog"
-          >{{ saving ? '保存中…' : '保存连接' }}</button>
-          <button
-            type="button"
-            class="mk-btn mk-btn--sm mk-btn--danger-ghost ac-conn__danger"
-            :disabled="resetting"
-            title="只清本条通道的地址、密钥与模型清单"
-            @click="resetConfig"
-          >{{ resetting ? '重置中…' : '重置此通道' }}</button>
+            class="mk-link"
+            @click="connOpen = true"
+          >修改连接</button>
+          <template v-else>
+            <button
+              type="button"
+              class="mk-link"
+              :disabled="connDirty"
+              :title="connDirty ? '还有未保存的改动' : '收起连接设置'"
+              @click="connOpen = false"
+            >收起</button>
+            <button
+              v-if="connDirty"
+              type="button"
+              class="mk-btn mk-btn--sm mk-btn--primary"
+              :disabled="saving"
+              @click="saveConnFromDialog"
+            >{{ saving ? '保存中…' : '保存连接' }}</button>
+            <button
+              type="button"
+              class="mk-btn mk-btn--sm mk-btn--danger-ghost ac-conn__danger"
+              :disabled="resetting"
+              title="只清本条通道的地址、密钥与模型清单"
+              @click="resetConfig"
+            >{{ resetting ? '重置中…' : '重置此通道' }}</button>
+          </template>
         </template>
 
         <!-- 上游读数不常驻（2026-10-28 用户「文案不要」）：只留异常与未保存两种需要处理的状态 -->
@@ -549,8 +571,13 @@ const saving = ref(false)
    重置此通道）。快照与回滚因此改挂在那个弹窗的开合上：弹窗打开（opened）记一份已保存的连接，
    关窗（closed）时若还有未保存改动就回到快照，与旧「取消即回滚」同一语义。 */
 const connBackup = ref<{ apiUrl: string; apiKey: string; reliability: Reliability | null } | null>(null)
+/** 连接段折叠（默认收起：这张弹窗的正题是下面的模型清单）。
+ *  没配地址时自动展开——首次部署进来就是要填它；有未保存改动时不许收。 */
+const connOpen = ref(false)
 
 function snapshotConn(): void {
+  // 每次打开弹窗回到「收起」：没配地址时展开（首次部署就是要填它）
+  connOpen.value = !form.apiUrl.trim()
   if (connBackup.value) return
   connBackup.value = {
     apiUrl: form.apiUrl,
@@ -566,6 +593,7 @@ function snapshotConn(): void {
  * dirty 已清空，这里什么都不做——否则会把刚存下去的值又改回开窗前的旧值。
  */
 function onAddClosed(): void {
+  connOpen.value = false
   const backup = connBackup.value
   connBackup.value = null
   if (!backup) return
@@ -776,6 +804,27 @@ async function resetConfig() {
    原来这一整块是独立弹层的正文。搬进弹窗后它排在模型清单之前：
    地址与密钥先填、再往下挑模型，就是用户做这件事的自然顺序。 */
 .ac-conn-form { display: grid; gap: 12px; }
+/* 收起态：一行摘要（地址 + 策略），高度 ≈ 20px，把纵向空间让给下面的清单 */
+.ac-conn-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0;
+  min-width: 0;
+}
+.ac-conn-summary__addr {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--mk-ink);
+  font-size: var(--mk-fs-micro);
+}
+.ac-conn-summary__policy { color: var(--mk-muted); font-size: var(--mk-fs-micro); white-space: nowrap; }
+/* 地址与密钥并排：竖着排是 242px 里最费的两行 */
+.ac-conn-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .ac-conn-policy {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -789,7 +838,7 @@ async function resetConfig() {
 .ac-conn-policy .mk-field { align-content: start; }
 .ac-conn-policy .mk-field__label { white-space: nowrap; }
 @media (max-width: 640px) {
-  .ac-conn-policy { grid-template-columns: minmax(0, 1fr); }
+  .ac-conn-policy, .ac-conn-pair { grid-template-columns: minmax(0, 1fr); }
 }
 /* 「重置此通道」在连接段标题右侧：危险动作跟着它作用的那一段走，不混进弹窗统一底栏 */
 .ac-conn__danger { white-space: nowrap; }

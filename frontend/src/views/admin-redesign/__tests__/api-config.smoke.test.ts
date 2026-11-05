@@ -190,7 +190,13 @@ async function openConnSettings(wrapper: Awaited<ReturnType<typeof mountApiConfi
   await nextTick();
   await flushPromises();
   expect(wrapper.find('.pmd').exists(), '弹窗应已打开').toBe(true);
-  expect(wrapper.find('.ac-conn-form').exists(), '弹窗里应有连接段').toBe(true);
+  /* 2026-11-05 用户「这个区域精简一下，占太多空间，下方的拉取模型是重点」：
+     已配好的通道默认收起成一行摘要，点「修改连接」才展开；没配地址时直接展开。 */
+  if (wrapper.find('.ac-conn-summary').exists()) {
+    await wrapper.findAll('button').find((b) => b.text() === '修改连接')!.trigger('click');
+    await nextTick();
+  }
+  expect(wrapper.find('.ac-conn-form').exists(), '展开后应有连接表单').toBe(true);
 }
 
 /** 弹窗连接段里的保存钮（只改策略、没拉清单时的显式出口） */
@@ -319,6 +325,45 @@ describe('ApiConfig P1 修复批', () => {
 
   /* 2026-11-05 用户「连接设置和添加模型合并到一起吧，只保留添加模型」：
      连接与调用策略共用弹窗里的「保存连接」，关窗未保存就回滚。 */
+  it('连接段默认收起成一行摘要，点「修改连接」才展开；有未保存改动时不许收起', async () => {
+    liveApiConfig.value = {
+      apiUrl: 'https://api.example.com/v1',
+      apiKeyConfigured: true,
+      availableModels: ['model-a'],
+      defaultModel: 'model-a',
+      defaultEvaluationModel: 'model-a',
+      defaultThinkingMode: 'default' as const,
+      defaultReasoningEffort: 'default' as const,
+      connectionStatus: 'connected',
+      lastCheckedAt: '2026-08-13T09:00:00.000Z',
+      networkPolicy: { adminAccessMode: 'private' as const, adminAllowedIps: [], allowPrivateNetwork: true, privateNetworkHosts: [] }
+    };
+    const wrapper = await mountApiConfig();
+    const panel = wrapper.findComponent(ModelProvidersPanel);
+    (panel.vm as unknown as { openPull: () => void }).openPull();
+    await nextTick();
+    await flushPromises();
+
+    // 收起态：一行摘要（地址 + 策略），表单不渲染——纵向空间留给下面的清单
+    const summary = wrapper.find('.ac-conn-summary');
+    expect(summary.text()).toContain('https://api.example.com/v1');
+    expect(summary.text()).toContain('重试');
+    expect(wrapper.find('.ac-conn-form').exists()).toBe(false);
+    // 危险动作（重置此通道）只在展开时出现
+    expect(wrapper.findAll('button').some((b) => b.text().includes('重置此通道'))).toBe(false);
+
+    const toggle = () => wrapper.findAll('button').find((b) => b.text() === '修改连接' || b.text() === '收起')!;
+    await toggle().trigger('click');
+    await nextTick();
+    expect(wrapper.find('.ac-conn-form').exists()).toBe(true);
+
+    // 改了连接：收起被挡下（改动不能藏在一个折起来的段里）
+    await wrapper.find('.ac-conn-form input[placeholder="https://api.example.com/v1"]').setValue('https://new.example.com/v1');
+    await nextTick();
+    expect(wrapper.findAll('button').find((b) => b.text() === '收起')!.attributes('disabled')).toBeDefined();
+    wrapper.unmount();
+  });
+
   it('添加模型弹窗里的连接段：保存连接与调用策略，取消回滚', async () => {
     const wrapper = await mountApiConfig();
     await openConnSettings(wrapper);
