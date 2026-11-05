@@ -4,7 +4,7 @@
  * 1. 两张卡只回答「配了哪些模型、哪个在用、健不健康」，卡面不铺表单；
  * 2. 一条连接可配多个模型，其中一个是启用态——行内动作与对话卡同序同形（配置 · 测试 · ⋯），
  *    ⋯ 里是「设为启用 / 删除」；
- * 3. 连接方式用两枚说明卡（复用对话模型连接 / 独立服务），与模型参数在同一弹层一次保存；
+ * 3. 连接默认走全局通道，勾「使用独立接口地址覆盖全局通道」才展开地址与密钥（2026-11-05）；
  * 4. 卡头不挂状态徽标（2026-11-05）。
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -307,23 +307,26 @@ describe('InfraModelsPanel', () => {
     wrapper.unmount();
   });
 
-  it('配置弹层：连接方式用两枚说明卡，独立服务展开地址与密钥', async () => {
+  it('配置弹层：模型 ID 只读，独立地址是一枚勾选框，地址填根路径并给出实际请求', async () => {
     const wrapper = mountPanel();
     await flushPromises();
     await openConfig(wrapper, 0);
 
     const modal = wrapper.find('.mk-modal');
     expect(modal.find('.mk-modal__title').text()).toBe('配置向量模型');
-    expect(modal.findAll('.infra-choice__opt')).toHaveLength(2);
-    expect((modal.find('input[value="own"]').element as HTMLInputElement).checked).toBe(true);
+    /* 2026-11-05 用户「向量和重排的配置界面要改一下」：模型 ID 只读——
+       这一格曾经能改、旁边还挂「拉取」，与卡头「＋ 添加模型」是同一件事的两个出口。 */
+    expect(modal.find('.infra-model-name').text()).toBe('BAAI/bge-m3');
+    expect(modal.find('.infra-model-row').exists()).toBe(false);
+    expect((modal.find('.infra-own input').element as HTMLInputElement).checked).toBe(true);
     const labels = modal.findAll('.mk-field__label').map((l) => l.text());
-    // 「id」统一写作「ID」，与模型编辑弹窗同一写法（2026-11-02 评审）
-    expect(labels).toContain('模型 ID');
     expect(labels).toContain('服务地址');
     expect(labels).toContain('API Key');
     expect(labels).toContain('超时（毫秒）');
+    // 回填成根地址；实际请求地址由这一层拼，和对话卡填根域名的口径一致
     expect((modal.find('.infra-conn input.mk-field__input').element as HTMLInputElement).value)
-      .toBe('https://gw.example/v1/embeddings');
+      .toBe('https://gw.example');
+    expect(modal.find('.infra-conn .mk-field__hint').text()).toContain('https://gw.example/v1/embeddings');
     wrapper.unmount();
   });
 
@@ -333,7 +336,7 @@ describe('InfraModelsPanel', () => {
     await openConfig(wrapper, 1);
 
     const modal = wrapper.find('.mk-modal');
-    expect((modal.find('input[value="inherit"]').element as HTMLInputElement).checked).toBe(true);
+    expect((modal.find('.infra-own input').element as HTMLInputElement).checked).toBe(false);
     expect(modal.find('.infra-conn').exists()).toBe(false);
     expect(modal.find('.infra-inherit').text()).toContain('https://newapi.wenflow.org');
     wrapper.unmount();
@@ -346,8 +349,8 @@ describe('InfraModelsPanel', () => {
     await openConfig(wrapper, 1);
 
     const modal = wrapper.find('.mk-modal');
-    // 切到独立服务（重绘后重新取弹层 DOM）
-    await modal.find('input[value="own"]').setValue(true);
+    // 勾上「使用独立接口地址覆盖全局通道」（重绘后重新取弹层 DOM）
+    await modal.find('.infra-own input').setValue(true);
     await flushPromises();
     const own = wrapper.find('.mk-modal');
     const inputs = own.findAll('.infra-conn input.mk-field__input');
@@ -370,18 +373,20 @@ describe('InfraModelsPanel', () => {
     wrapper.unmount();
   });
 
-  it('配置里改模型 ID：池里那一项跟着改名，启用项也跟过去', async () => {
+  it('模型 ID 只读：保存只回传连接与参数，模型池原样带回', async () => {
     const wrapper = mountPanel();
     await flushPromises();
     await openConfig(wrapper, 0);
 
-    await wrapper.find('.infra-model-row input').setValue('BAAI/bge-m3-2026');
-    await wrapper.find('.mk-modal__foot').findAll('button').find((b) => b.text() === '保存')!.trigger('click');
+    const modal = wrapper.find('.mk-modal');
+    expect(modal.find('.infra-model-row input').exists()).toBe(false);
+    expect(modal.find('.infra-model-name').text()).toBe('BAAI/bge-m3');
+    await modal.findAll('.mk-modal__foot button').find((b) => b.text() === '保存')!.trigger('click');
     await flushPromises();
 
     expect(updateMock.mock.calls[0][0].embedding).toMatchObject({
-      models: ['BAAI/bge-m3-2026'],
-      model: 'BAAI/bge-m3-2026',
+      models: ['BAAI/bge-m3'],
+      model: 'BAAI/bge-m3',
     });
     wrapper.unmount();
   });
@@ -391,7 +396,7 @@ describe('InfraModelsPanel', () => {
     await flushPromises();
     await openConfig(wrapper, 0);
     const modal = wrapper.find('.mk-modal');
-    await modal.find('input[value="inherit"]').setValue(true);
+    await modal.find('.infra-own input').setValue(false);
     await modal.findAll('.mk-modal__foot button').find((b) => b.text() === '取消')!.trigger('click');
     await flushPromises();
     expect(updateMock).not.toHaveBeenCalled();
@@ -433,43 +438,16 @@ describe('InfraModelsPanel', () => {
     wrapper.unmount();
   });
 
-  /* P1（2026-11-04 用户「它每一个接口都独立的自己去拉就行了」）：向量 / 重排也向上游拉清单再挑。 */
-  it('配置弹层可向上游拉取，候选按用途过滤，点一个填进模型 ID', async () => {
-    pullMock.mockResolvedValue({
-      data: { data: { kind: 'embedding', models: ['BAAI/bge-m3', 'BAAI/bge-reranker-v2-m3', 'gpt-4o'] } },
-    });
+  /* 2026-11-05：拉清单只从卡头「＋ 添加模型」一条路走，配置弹层里不再有第二个入口。 */
+  it('配置弹层里没有拉取入口：加模型只从卡头走', async () => {
     const wrapper = mountPanel();
     await flushPromises();
-    await openConfig(wrapper, 0); // 向量模型卡（own 模式）
+    await openConfig(wrapper, 0);
 
-    const pullBtn = wrapper.findAll('.infra-model-pull').find((b) => b.text() === '拉取')!;
-    expect(pullBtn.exists()).toBe(true);
-    await pullBtn.trigger('click');
-    await flushPromises();
-
-    // 独立服务：把弹层里填的地址与密钥一起发过去（还没保存也能拉）
-    expect(pullMock).toHaveBeenCalledTimes(1);
-    expect(pullMock.mock.calls[0][0]).toMatchObject({ kind: 'embedding', endpoint: 'https://gw.example/v1/embeddings' });
-
-    // 只留向量模型：重排与对话模型不出现在候选里
-    const cands = wrapper.findAll('.infra-cand').map((c) => c.text());
-    expect(cands).toEqual(['BAAI/bge-m3']);
-    await wrapper.find('.infra-cand').trigger('click');
-    await flushPromises();
-    expect(wrapper.find('.infra-model-row input').element).toHaveProperty('value', 'BAAI/bge-m3');
-    wrapper.unmount();
-  });
-
-  it('拉不到匹配用途的模型时给一句人话，不铺空清单', async () => {
-    pullMock.mockResolvedValue({ data: { data: { kind: 'rerank', models: ['gpt-4o', 'step-3.7-flash'] } } });
-    const wrapper = mountPanel();
-    await flushPromises();
-    await openConfig(wrapper, 1); // 重排模型卡
-    await wrapper.findAll('.infra-model-pull').find((b) => b.text() === '拉取')!.trigger('click');
-    await flushPromises();
-
-    expect(wrapper.findAll('.infra-cand')).toHaveLength(0);
-    expect(wrapper.find('.infra-cands__note').text()).toContain('没识别出重排模型');
+    const modal = wrapper.find('.mk-modal');
+    expect(modal.findAll('button').some((b) => b.text() === '拉取')).toBe(false);
+    expect(modal.find('.infra-cands').exists()).toBe(false);
+    expect(pullMock).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 });

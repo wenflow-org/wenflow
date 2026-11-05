@@ -135,82 +135,41 @@
                  连接方式那一组**保留**（用户「之前设计向量和重拍有一个沿用对话模型 api 端点和 key
                  的设置，这个可以保留」）：复用时不出现地址与密钥，只说明复用的是哪条地址。
                  注意连接是**按能力**一份，池子里所有模型共用——这里改一次，整池都跟着变。 -->
-            <section class="infra-sec">
+                        <section class="infra-sec">
               <div class="infra-sec__head">
                 <h4 class="infra-sec__title">模型</h4>
               </div>
-              <label class="mk-field">
-                <span class="mk-field__label">模型 ID</span>
-                <span class="infra-model-row">
-                  <input
-                    v-model="form.model"
-                    class="mk-field__input mono"
-                    :placeholder="editKind === 'embedding' ? '例如：BAAI/bge-m3' : '例如：BAAI/bge-reranker-v2-m3'"
-                  />
-                  <!-- 拉取（P1 2026-11-04 用户「它每一个接口都独立的自己去拉就行了」）：
-                       独立服务时带草稿连接去拉——「填地址和 key → 拉取 → 选」是自然顺序。 -->
-                  <button
-                    type="button"
-                    class="mk-btn mk-btn--sm infra-model-pull"
-                    :disabled="pulling"
-                    title="用这条能力的连接向上游拉模型清单（复用对话连接时取对话卡的地址与密钥）"
-                    @click="pullCandidates"
-                  >{{ pulling ? '拉取中…' : '拉取' }}</button>
-                </span>
-              </label>
-              <div v-if="candidates.length" class="infra-cands">
-                <div class="infra-cands__head">
-                  <span>{{ candidateNote }}</span>
-                  <button type="button" class="mk-link" @click="candidates = []">收起</button>
-                </div>
-                <div class="infra-cands__list">
-                  <button
-                    v-for="c in candidates"
-                    :key="c.id"
-                    type="button"
-                    class="infra-cand"
-                    :class="{ 'is-on': c.id === form.model }"
-                    @click="form.model = c.id"
-                  >{{ c.id }}</button>
-                </div>
-              </div>
-              <p v-else-if="pullNote" class="infra-cands__note">{{ pullNote }}</p>
+              <!-- 2026-11-05 用户「向量和重排的配置界面要改一下」：模型 ID 改成只读。
+                   这一格曾经能改、旁边还挂「拉取」，等于在「配置某一行参数」的弹层里
+                   又开了一个换模型 / 拉清单的入口，与卡头的「＋ 添加模型」是同一件事的两个出口。 -->
+              <p v-if="editingModel" class="infra-model-name mono" :title="editingModel">{{ editingModel }}</p>
+              <p v-else class="infra-model-name infra-model-name--none">这条能力还没有模型</p>
             </section>
 
             <section class="infra-sec">
               <div class="infra-sec__head">
                 <h4 class="infra-sec__title">连接</h4>
               </div>
-              <div class="infra-choice" role="radiogroup" aria-label="连接方式">
-                <label class="infra-choice__opt" :class="{ 'is-on': form.connectionMode === 'inherit' }">
-                  <input v-model="form.connectionMode" type="radio" value="inherit" />
-                  <span class="infra-choice__text">
-                    <strong>复用对话模型的连接</strong>
-                    <small>地址与密钥都取对话卡，按类型自动拼接路径</small>
-                  </span>
-                </label>
-                <label class="infra-choice__opt" :class="{ 'is-on': form.connectionMode === 'own' }">
-                  <input v-model="form.connectionMode" type="radio" value="own" />
-                  <span class="infra-choice__text">
-                    <strong>独立服务</strong>
-                    <small>这个能力走自己的地址与密钥</small>
-                  </span>
-                </label>
-              </div>
+              <!-- 两条路合成一枚勾选框（2026-11-05 用户「配置界面要改一下」）：
+                   原来是一对单选卡（复用对话模型的连接 / 独立服务），读起来像两个并列方案，
+                   其实默认那条没有可配的东西。现在默认走全局通道，要另起才勾。 -->
+              <label class="infra-own">
+                <input v-model="form.connectionMode" type="checkbox" true-value="own" false-value="inherit" />
+                <span>使用独立接口地址覆盖全局通道</span>
+              </label>
 
               <p v-if="form.connectionMode === 'inherit'" class="infra-inherit">
-                当前复用 <span class="mono">{{ view?.platformBaseUrl || '对话卡的服务地址' }}</span>
+                地址与密钥取对话卡：<span class="mono">{{ view?.platformBaseUrl || '对话卡的服务地址' }}</span>
               </p>
               <template v-else>
                 <div class="infra-conn" :class="{ 'infra-conn--rerank': editKind === 'rerank' }">
+                  <!-- 地址口径与对话卡统一：填根地址，路径由这一层按能力拼（2026-11-05）——
+                       此前这一格要填带 /v1/embeddings 的完整端点，而对话卡填的是根域名，
+                       运营在同一页里面对两种填法。 -->
                   <label class="mk-field">
                     <span class="mk-field__label">服务地址</span>
-                    <input
-                      v-model="form.endpoint"
-                      class="mk-field__input mono"
-                      :title="form.endpoint"
-                      :placeholder="editKind === 'embedding' ? 'https://api.example.com/v1/embeddings' : 'https://api.example.com/v1/rerank'"
-                    />
+                    <input v-model="form.endpoint" class="mk-field__input mono" :title="form.endpoint" placeholder="https://api.example.com" />
+                    <span class="mk-field__hint">实际请求 <span class="mono">{{ resolvedEndpoint || '—' }}</span></span>
                   </label>
                   <label v-if="editKind === 'rerank'" class="mk-field">
                     <span class="mk-field__label">接口规范</span>
@@ -500,14 +459,28 @@ const editingModel = ref('')
 const editKindLabel = computed(() => (editKind.value ? kindLabel(editKind.value) : ''))
 const form = ref({
   connectionMode: 'inherit' as ConnectionMode,
+  /** 独立服务的**根地址**（路径由 resolvedEndpoint 拼；存库时写完整端点） */
   endpoint: '',
   apiKey: '',
   clearKey: false,
-  model: '',
   timeoutMs: 20000,
   batchSize: 32,
   dimensions: null as number | null,
 })
+
+/** 这个能力的路径尾巴：与后端按类型拼路径同一口径 */
+const kindSuffix = computed(() => (editKind.value === 'rerank' ? '/v1/rerank' : '/v1/embeddings'))
+/** 已经带类型路径的地址原样用（自建服务可能不是 /v1），否则拼上标准路径 */
+const resolvedEndpoint = computed(() => {
+  const raw = form.value.endpoint.trim().replace(/\/+$/, '')
+  if (!raw) return ''
+  if (/\/(embeddings|rerank)$/i.test(raw)) return raw
+  return raw + kindSuffix.value
+})
+/** 回填时把完整端点还原成根地址（编辑一次不会把 /v1/embeddings 越叠越多） */
+function rootOf(value: string): string {
+  return String(value || '').trim().replace(/\/(v\d+\/)?(embeddings|rerank)\/?$/i, '').replace(/\/+$/, '')
+}
 
 const keyPlaceholder = computed(() => {
   const entry = editEntry.value
@@ -523,20 +496,17 @@ useEscape(() => Boolean(editKind.value), closeEdit)
 useOverlay(computed(() => Boolean(editKind.value)), panelRef)
 useMaskClose(maskRef, closeEdit)
 
-/** 打开配置弹层：改连接 / 参数 / 这一行的模型 ID */
+/** 打开配置弹层：改这条能力的连接与参数（模型 ID 只读，加模型走卡头） */
 function openEdit(entry: InfraModelEntryView, model: string) {
   editKind.value = entry.kind
   editEntry.value = entry
   editingModel.value = model
-  candidates.value = []
-  pullNote.value = ''
   form.value = {
     connectionMode: entry.connectionMode,
-    /* inherit 的 endpoint 是后端解析结果，不能回填成独立地址。 */
-    endpoint: entry.connectionMode === 'own' ? entry.endpoint : '',
+    /* inherit 的 endpoint 是后端解析结果，不能回填成独立地址；own 的回填成根地址 */
+    endpoint: entry.connectionMode === 'own' ? rootOf(entry.endpoint) : '',
     apiKey: '',
     clearKey: false,
-    model,
     timeoutMs: entry.timeoutMs,
     batchSize: entry.batchSize ?? 32,
     dimensions: entry.dimensions,
@@ -547,57 +517,14 @@ function closeEdit() {
   editKind.value = null
   editEntry.value = null
   editingModel.value = ''
-  candidates.value = []
-  pullNote.value = ''
-}
-
-/* ---------- 拉取上游清单（P1 2026-11-04） ---------- */
-const pulling = ref(false)
-const pullNote = ref('')
-const candidates = ref<Array<{ id: string }>>([])
-const candidateNote = computed(() =>
-  `上游匹配到 ${candidates.value.length} 个${editKind.value ? kindLabel(editKind.value) : ''}，点一个填进模型 ID`
-)
-
-/**
- * 拉一份上游清单并按用途过滤：向量卡只留推断为 embedding 的，重排卡只留 rerank 的
- * （判据与对话侧同一套 `inferModelCapabilities`，不另造一份规则）。
- * 独立服务时把弹层里填的地址与密钥一起发过去——用户还没保存就拉，是自然顺序。
- */
-async function pullCandidates() {
-  const kind = editKind.value
-  if (!kind || pulling.value) return
-  pulling.value = true
-  pullNote.value = ''
-  try {
-    const payload: { kind: InfraKind; endpoint?: string; apiKey?: string } = { kind }
-    if (form.value.connectionMode === 'own') {
-      payload.endpoint = form.value.endpoint.trim()
-      payload.apiKey = form.value.apiKey.trim()
-    }
-    const res = await adminInfraModelsApi.pull(payload)
-    const all = ((res.data?.data?.models ?? []) as unknown[]).map((m) => String(m))
-    const matched = all.filter((id) => inferModelCapabilities(id).role === kind)
-    candidates.value = matched.map((id) => ({ id }))
-    if (!matched.length) {
-      pullNote.value = all.length
-        ? `上游 ${all.length} 个模型里没识别出${kindLabel(kind)}，可直接填模型 ID`
-        : '这次没有拉取到模型'
-    }
-  } catch (e) {
-    candidates.value = []
-    pullNote.value = `拉取失败：${errMsg(e)}`
-  } finally {
-    pulling.value = false
-  }
 }
 
 async function save() {
   const kind = editKind.value
   const entry = editEntry.value
   if (!kind || !entry) return
-  if (!form.value.model.trim()) {
-    toast.error('模型 ID 不能为空')
+  if (!editingModel.value) {
+    toast.error('这条能力还没有模型，先在卡头「＋ 添加模型」里挑一个')
     return
   }
   if (form.value.connectionMode === 'own' && !form.value.endpoint.trim()) {
@@ -612,19 +539,11 @@ async function save() {
     toast.error('批量大小必须是 1-128 之间的整数')
     return
   }
-  const nextModel = form.value.model.trim()
-  /* 模型 ID 可能被改名：池子里那一项跟着换，启用项若正是它也要跟着换。
-     连接与参数是这条能力的，改一次整池生效。 */
-  const renamed = editingModel.value && editingModel.value !== nextModel
-  if (renamed && entry.models.includes(nextModel)) {
-    toast.error(`「${nextModel}」已经在这条连接的模型列表里了`)
-    return
-  }
-  const models = renamed
-    ? entry.models.map((id) => (id === editingModel.value ? nextModel : id))
-    : [...entry.models]
-  const active = entry.model ? (renamed && entry.model === editingModel.value ? nextModel : entry.model) : nextModel
-  if (!models.includes(nextModel)) models.push(nextModel)
+  /* 模型 ID 只读（2026-11-05）：改名 / 换模型归卡头的「＋ 添加模型」，
+     这一层只改连接与参数。池子与启用项原样带回。 */
+  const models = [...entry.models]
+  const active = entry.model || editingModel.value
+  if (!models.includes(editingModel.value)) models.push(editingModel.value)
   if (!models.includes(active)) models.push(active)
 
   const rawDimensions = form.value.dimensions as number | string | null
@@ -637,7 +556,7 @@ async function save() {
     dimensions: rawDimensions === null || rawDimensions === '' ? null : Number(rawDimensions),
   }
   if (form.value.connectionMode === 'own') {
-    patch.endpoint = form.value.endpoint.trim()
+    patch.endpoint = resolvedEndpoint.value
     if (form.value.apiKey.trim()) patch.apiKey = form.value.apiKey.trim()
     if (form.value.clearKey) patch.clearKey = true
   }
@@ -705,28 +624,6 @@ onMounted(load)
   font-size: var(--mk-fs-body);
   font-weight: 700;
 }
-.infra-choice { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.infra-choice__opt {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  padding: 10px 12px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-md);
-  cursor: pointer;
-  min-width: 0;
-}
-.infra-choice__opt.is-on {
-  border-color: color-mix(in srgb, var(--mk-blue) 45%, transparent);
-  background: color-mix(in srgb, var(--mk-blue) 5%, transparent);
-}
-.infra-choice__opt input { margin-top: 2px; flex: none; }
-.infra-choice__text { display: grid; gap: 3px; min-width: 0; }
-.infra-choice__text strong { font-size: var(--mk-fs-micro); color: var(--mk-ink); }
-.infra-choice__text small { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.5; }
-@media (max-width: 760px) {
-  .infra-choice { grid-template-columns: minmax(0, 1fr); }
-}
 .infra-inherit {
   margin: 0;
   padding: 9px 11px;
@@ -752,49 +649,27 @@ onMounted(load)
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
 }
-.infra-formrow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-
-/* 模型 ID 行 + 拉取（P1 2026-11-04）：输入框占满，拉取贴右，拉取中禁用 */
-.infra-model-row { display: flex; align-items: center; gap: 8px; }
-.infra-model-row .mk-field__input { flex: 1 1 auto; min-width: 0; }
-.infra-model-pull { flex: none; white-space: nowrap; }
-/* 拉取结果：一条能被点选的模型清单。候选可能几十个，限高内滚，不把弹层撑长 */
-.infra-cands { display: grid; gap: 6px; }
-.infra-cands__head {
+/* 独立接口地址：一枚勾选框（默认走全局通道，要另起才勾） */
+.infra-own {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
-}
-.infra-cands__list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  max-height: 132px;
-  overflow-y: auto;
-  padding: 8px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-md);
-}
-.infra-cand {
-  padding: 3px 9px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-sm);
-  background: var(--mk-surface-2);
+  gap: 8px;
   color: var(--mk-ink);
-  font: inherit;
   font-size: var(--mk-fs-micro);
   cursor: pointer;
+}
+.infra-own input { margin: 0; flex: none; }
+/* 只读的模型 ID：它是这一行的身份，不是待填字段 */
+.infra-model-name {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--mk-ink);
+  font-size: var(--mk-fs-body);
 }
-.infra-cand:hover { border-color: var(--mk-blue); color: var(--mk-blue); }
-.infra-cand.is-on {
-  border-color: color-mix(in srgb, var(--mk-blue) 45%, transparent);
-  background: var(--mk-blue-bg);
-  color: var(--mk-blue);
-  font-weight: 700;
-}
-.infra-cands__note { margin: 0; color: var(--mk-muted); font-size: var(--mk-fs-micro); line-height: 1.5; }
+.infra-model-name--none { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+.infra-formrow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+
 </style>
