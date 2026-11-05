@@ -1791,7 +1791,9 @@ function shuffleScenes() {
   min-width: 0;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--mk-radius-modal);
+  /* 16 → 12（2026-11-05 去肥胖化）：现代 AI 工具（Claude/Cursor）的输入框是 12px
+     圆角矩形而非全圆胶囊；与上方方案卡同档圆角，底部两块不再「圆角打架」 */
+  border-radius: 12px;
   /* 四边等距：原为 8px 8px 8px 16px（左 16 是给回形针单独留的），桌面档实测左右不对称
      ——回形针一侧比发送键一侧多缩进 8px，整条控件视觉重心偏左（2026-10-08 用户侧视觉检查）。
      移动档早就是四边 6px，这里对齐同一取法。 */
@@ -2038,6 +2040,12 @@ function shuffleScenes() {
   /* 上下 10→6（2026-11-05 屏效比）：步条带 60→52；移动端「目标信息」药丸锚点带
      （.panel 的 padding）与本值保持同一条上下 padding，两条带中线才重合（pill-align 门禁） */
   padding: 6px 16px;
+  /* 实色底 + 抬层（2026-11-05 穿模修复）：聊天流滚动时气泡文字从本条下缘的
+     半透明缝里透上来（截图实证第一行字穿进步骤条下方）；surface 实色不透明 +
+     z-index 高于滚动区，滚过的内容在条下干净裁断 */
+  background: var(--surface);
+  position: relative;
+  z-index: 6;
 }
 .stage-nav { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; }
 .chat__show-proposal {
@@ -2373,7 +2381,8 @@ function shuffleScenes() {
 .proposal-invite__doc {
   flex: none;
   display: grid; place-items: center;
-  width: 30px; height: 30px;
+  width: 32px; height: 32px;
+  /* 同心圆角：外卡 12 内芯 8（2026-11-05 去肥胖化） */
   border-radius: 8px;
   background: color-mix(in srgb, var(--blue) 14%, transparent);
   color: var(--blue-deep);
@@ -2387,7 +2396,16 @@ function shuffleScenes() {
   font-size: 12px; line-height: 1.35; color: var(--mk-muted);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.proposal-invite__btn { flex: 0 0 auto; padding: 8px 12px; font-size: 12px; }
+/* 内嵌按钮（2026-11-05 去肥胖化）：外卡 12px 圆角里塞全圆胶囊产生圆角冲突——
+   改 8px 同心圆角；高度保 36（mobile:spec lt36:0 硬门槛，不再压到 32），
+   从描边/圆角/内边距去体重而不是压矮触控目标。
+   .v2-page 前缀：压过 v2.css 的 `.v2-page .btn-primary`（0,2,0）对 border-radius 的设定 */
+.v2-page .proposal-invite__btn {
+  flex: 0 0 auto;
+  min-height: 36px; height: 36px; padding: 0 12px;
+  border-radius: 8px;
+  font-size: 12px;
+}
 
 /* ---------- 生成状态 pill（走查 2026-11-01 P22） ----------
    三档语言：run=蓝描边脉点（与 .proposal__stop 同族的进行态）、done=平静绿档
@@ -2754,22 +2772,23 @@ function shuffleScenes() {
     pointer-events: auto;
     display: inline-flex; align-items: center; gap: 5px;
     margin-right: 16px;
-    padding: 7px 8px;
+    padding: 7px 10px;
     /* EG20（2026-10-05 复测）：触屏下该药丸实测 81×34，低于 36px 触控下限 → 抬到 38。
        2026-10-07：再抬到 40，与 .stage-nav__item 的 min-height 严格同高 —— 两条头部带
-       （.chat__head / .panel 锚点带）都由 10+40+10=60 组成，药丸中线才与阶段导航重合。 */
-    min-height: 40px;
-    border: 1px solid var(--line);
-    border-radius: var(--mk-radius-pill);
-    background: var(--surface);
+       （.chat__head / .panel 锚点带）同 padding + 同子高，药丸中线才与阶段导航重合。
+       2026-11-05 去肥胖化：触控下限 36 是硬门槛（mobile:spec lt36:0），高度不能再压，
+       改从「体重」下手——全圆胶囊 → 8px 小圆角、描边撤销只留 6% 底色，视觉不再比文字壮。 */
+    min-height: 36px;
+    border: 0;
+    border-radius: var(--mk-radius-md);
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
     color: var(--muted);
     font-size: 12px;
-    box-shadow: var(--wf-shadow-raised); /* 悬浮档 */
   }
   .panel__head strong { font-size: 12px; }
   /* 展开箭头是 9px 的字形「▸」，12px 字号下渲染成一个几乎认不出的小点
      （2026-10-07 放大核对：它和「息」字之间还隔着 5px，读起来像个孤立标点）。
-     抬到 13px，让「目标信息 ▸」读成一个整体。 */
+     抬到 13px，让「目标 ▸」读成一个整体（2026-11-05 窄屏标签已收「目标信息」→「目标」）。 */
   .panel__caret { display: inline; font-size: 13px; }
   /* 计数角标：绝对定位不吃宽度（右上角那一条带要和阶段导航挤在同一行），
      「已收集」三字省掉只留「3 / 7」。
@@ -2936,8 +2955,9 @@ function shuffleScenes() {
   /* 阶段导航在窄屏收紧，给右上角的目标信息按钮腾位置（390 下两者刚好共处一行，
      合计 ~325px ≤ 头部带内容宽 336px） */
   .stage-nav { gap: 2px; }
-  /* min-height 40 与 .panel__head 同高（pill-align 门禁等式）；左右 padding 去掉（无胶囊底） */
-  .stage-nav__item { padding: 4px 2px; font-size: 12px; gap: 4px; min-height: 40px; }
+  /* 40→36（2026-11-05 去肥胖化）：36 是 mobile:spec 的硬触控下沿，顶栏得以收 4px；
+     与 .panel__head 同高（pill-align 门禁等式）；左右 padding 去掉（无胶囊底） */
+  .stage-nav__item { padding: 4px 2px; font-size: 12px; gap: 4px; min-height: 36px; }
   /* ≤360：非当前阶段只留序号（那三个字的宽度换 4 字标签+计数角标的位置） */
   @media (max-width: 360px) {
     .stage-nav__item:not(.stage-nav__item--current) { font-size: 0; gap: 0; padding: 4px 3px; }
@@ -3076,4 +3096,20 @@ function shuffleScenes() {
     border-bottom: 1px solid var(--line);
   }
 }
+
+/* 内部滚动层统一隐去原生滚动槽（2026-11-05 去肥胖化补）：
+   目标面板浮层 / 方案预览浮层 / 入口叙事块都自带 overflow，Windows Chromium 会在
+   内容右缘画一条 15px 经典滚动槽（灰杠 + 上下箭头）——它把行内文字挤窄一截，还会和
+   面板自己的渐隐遮罩叠成「双边框」，读起来像内容没对齐。与 .chat__scroll 同一口径；
+   滚轮 / 触控 / 键盘滚动、焦点滚入视野均不变。 */
+.panel,
+.panel__body,
+.proposal__body,
+.proposal--center,
+.entry { scrollbar-width: none; }
+.panel::-webkit-scrollbar,
+.panel__body::-webkit-scrollbar,
+.proposal__body::-webkit-scrollbar,
+.proposal--center::-webkit-scrollbar,
+.entry::-webkit-scrollbar { width: 0; height: 0; }
 </style>

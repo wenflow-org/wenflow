@@ -91,6 +91,16 @@
 }
 .mk-select--block .mk-select__trigger { width: 100%; min-width: 0; }
 .mk-select--sm .mk-select__trigger { height: 30px; min-width: 0; padding: 0 7px 0 9px; font-size: var(--mk-fs-micro); }
+/* 无边框轻量档（2026-11-05 去肥胖化）：工具条里的筛选/排序与旁边文字行同权重；
+   高度保 36（mobile:spec lt36 硬下沿），只撤描边与底色，hover 浮出浅底 */
+.mk-select--borderless .mk-select__trigger {
+  height: 36px; min-width: 0; padding: 0 4px 0 6px;
+  border-color: transparent; background: transparent;
+  color: var(--mk-muted); font-size: var(--mk-fs-micro); font-weight: 600;
+}
+.mk-select--borderless .mk-select__trigger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--mk-ink) 6%, transparent);
+}
 .mk-select__trigger:hover:not(:disabled) { border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line)); }
 .mk-select__trigger:focus-visible { outline: none; border-color: var(--mk-blue); box-shadow: var(--mk-focus-ring); }
 .mk-select__trigger:disabled {

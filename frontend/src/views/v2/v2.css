@@ -746,7 +746,13 @@ html, body {
     padding-bottom: 0;
     /* 视口下沿已无覆盖，焦点/Tab 滚进视野时留一点呼吸位即可 */
     scroll-padding-bottom: 12px;
+    /* 窄屏真正的滚动容器是 .v2-page 本身（不是 html），design-system.css 里
+       「html 滚动条 thin → none」那刀够不到它：实测右缘仍渲染 Windows 原生槽，
+       clientWidth 387 / offsetWidth 402——白吃 15px 宽，卡片右缘与页面右缘差一截。
+       与 html 同一口径隐去；滚轮 / 触控 / 键盘滚动、焦点滚入视野全部不变。 */
+    scrollbar-width: none;
   }
+  html .v2-page:has(> .v2nav__dock)::-webkit-scrollbar { width: 0; height: 0; }
   /* 移动端基准字号 16 → 14。桌面 body 是 16px，任何「没写自己字号」的元素都会继承它，
      在 390 下比周围内容（12.5–13.5px）整整大一档——用户指的筛选条容器实测就是 16px
      （里面的药丸是 12.5px），学习历史的日期行容器同样 16px（内容 14px）。

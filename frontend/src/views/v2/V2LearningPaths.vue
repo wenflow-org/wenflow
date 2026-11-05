@@ -35,9 +35,11 @@
       />
 
       <template v-else>
-        <!-- 控制行（2026-11-05 屏效比）：搜索 + 排序 +「新目标」并成一条；筛选在桌面是同一条
-             芯片行的下一行、移动端收进按钮（见下方 .paths__filter-btn）。
-             无任何路径时整行隐藏：空态下五个「0」芯片是噪音（2026-09-24 全新账号走查发现） -->
+        <!-- 控制区（2026-11-05 去肥胖化重排）：
+             第一行 = 搜索 + 「新目标」（创建动作靠主搜索位，不再夹在排序与筛选之间）；
+             第二行 = 路径总数（左）+ 筛选/排序轻量入口（右，无边框文字档）。
+             桌面另有 .filters 芯片行承担分类切换，移动端收进筛选弹层。
+             无任何路径时整区隐藏：空态下五个「0」芯片是噪音（2026-09-24 全新账号走查发现） -->
         <div v-if="cards.length" class="filters">
           <button
             v-for="f in filterList"
@@ -51,44 +53,45 @@
           </button>
         </div>
 
-        <!-- 搜索 + 排序（批18）：路径多了以后不能只靠分类芯片逐个翻；q 入 URL 与筛选同口径 -->
         <div v-if="cards.length" class="paths__tools">
-          <label class="paths__search">
-            <Search :size="15" :stroke-width="1.75" aria-hidden="true" />
-            <input
-              v-model="search"
-              type="search"
-              placeholder="搜索路径标题或内容"
-              aria-label="搜索学习路径"
-            />
-            <button v-if="search" type="button" class="paths__search-clear" aria-label="清空搜索" @click="search = ''">×</button>
-          </label>
-          <label class="paths__sort">
-            <span class="paths__sort-label">排序</span>
-            <div class="paths__sort-select">
-              <MkSelect v-model="sort" :options="SORT_OPTIONS" aria-label="排序方式" block />
-            </div>
-          </label>
-          <button type="button" class="paths__new-goal paths__new-goal--inline" @click="router.push('/goal-conversation')">
-            <Plus :size="15" :stroke-width="2" aria-hidden="true" />
-            新目标
-          </button>
-          <!-- 移动端筛选入口（原独立一行的 .paths__filter-btn 并入本行）：≤1100 才显示 -->
-          <button
-            type="button"
-            class="paths__filter-btn"
-            :aria-expanded="filterSheetOpen ? 'true' : 'false'"
-            @click="filterSheetOpen = true"
-          >
-            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M3 5h18l-7 8v5l-4-2v-3z"/></svg>
-            筛选 · {{ activeFilterLabel }}
-          </button>
+          <div class="paths__row paths__row--main">
+            <label class="paths__search">
+              <Search :size="15" :stroke-width="1.75" aria-hidden="true" />
+              <input
+                v-model="search"
+                type="search"
+                placeholder="搜索路径标题或内容"
+                aria-label="搜索学习路径"
+              />
+              <button v-if="search" type="button" class="paths__search-clear" aria-label="清空搜索" @click="search = ''">×</button>
+            </label>
+            <button type="button" class="paths__new-goal paths__new-goal--inline" @click="router.push('/goal-conversation')">
+              <Plus :size="15" :stroke-width="2" aria-hidden="true" />
+              新目标
+            </button>
+          </div>
+          <div class="paths__row paths__row--meta">
+            <span class="paths__count">共 {{ visibleCards.length }} 条路径</span>
+            <label class="paths__sort">
+              <div class="paths__sort-select">
+                <MkSelect v-model="sort" :options="SORT_OPTIONS" aria-label="排序方式" borderless />
+              </div>
+            </label>
+            <!-- 移动端筛选入口（原独立一行的胶囊并入本行）：显示当前状态、≤1100 才显示 -->
+            <button
+              type="button"
+              class="paths__filter-btn"
+              :aria-expanded="filterSheetOpen ? 'true' : 'false'"
+              @click="filterSheetOpen = true"
+            >
+              {{ filter === 'all' ? '全部状态' : activeFilterLabel }} ▾
+            </button>
+          </div>
         </div>
 
-        <!-- 移动端筛选（批13）：芯片行在 375 折两行占首屏 ~9%，≤1100 收进按钮 + 底部弹层；
-             桌面仍用芯片行。单选即点即生效并收起。
-             2026-11-05 屏效比：按钮挪进 .paths__tools 控制行（与搜索/排序/新目标同一行），
-             不再自己占一整行大胶囊。 -->
+        <!-- 移动端筛选弹层（批13）：芯片行在 375 折两行占首屏 ~9%，≤1100 收进「全部状态 ▾」
+             （就在上方 .paths__row--meta 里）+ 底部弹层；桌面仍用芯片行。
+             单选即点即生效并收起。 -->
         <div v-if="filterSheetOpen" class="paths__filter-mask" @click.self="filterSheetOpen = false">
           <div class="paths__filter-sheet" role="dialog" aria-label="筛选路径">
             <div class="paths__filter-head">
@@ -645,8 +648,9 @@ onBeforeUnmount(() => {
 /* ghost「新目标」＝原型 wf-btn--ghost（surface 底 + line 描边 + muted 字） */
 .paths__new-goal {
   display: inline-flex; align-items: center; gap: 6px;
-  min-height: 38px; padding: 0 14px;
-  border: 1px solid var(--line); border-radius: var(--mk-radius-xl);
+  min-height: 38px; padding: 0 12px;
+  /* 16 → 8（2026-11-05 去肥胖化）：工具条里与搜索框同档控件圆角 */
+  border: 1px solid var(--line); border-radius: var(--mk-radius-md);
   background: var(--surface); color: var(--muted);
   font-family: inherit; font-size: 13px; font-weight: 700;
   cursor: pointer;
@@ -658,12 +662,19 @@ onBeforeUnmount(() => {
 }
 /* 搜索+排序工具行（批18）：全尺寸常显（移动端芯片行收弹层后，这里是唯一检索入口），
    视觉压到原型 chip 语言（1px line / surface 底 / muted 字 / 胶囊） */
-.paths__tools { display: flex; align-items: center; gap: 10px; margin: 14px 0 2px; flex-wrap: wrap; }
+.paths__tools { display: grid; gap: 8px; margin: 14px 0 2px; }
+/* 第一行：搜索 + 新目标 */
+.paths__row--main { display: flex; align-items: center; gap: 10px; min-width: 0; }
+/* 第二行：路径总数（左）+ 筛选/排序轻量下拉（右）——三个控件同权重、无厚描边 */
+.paths__row--meta { display: flex; align-items: center; gap: 6px; }
+.paths__count { margin-right: auto; font-size: 12px; color: var(--faint); }
 .paths__search {
   flex: 1 1 220px; max-width: 420px;
   display: flex; align-items: center; gap: 8px;
-  padding: 0 14px; min-height: 36px;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--mk-radius-pill);
+  padding: 0 12px; min-height: 36px;
+  /* 胶囊 → 8px 控件圆角、描边弱化（2026-11-05 去肥胖化）：成熟 UI 的输入框是小圆角矩形，
+     全圆胶囊把搜索框读成"按钮"；描边降为发丝（--line 本色已是低对比，这里不再加粗） */
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--mk-radius-md);
   color: var(--faint);
   transition: border-color var(--mk-dur-fast, 120ms) ease, box-shadow var(--mk-dur-fast, 120ms) ease;
 }
@@ -678,7 +689,7 @@ onBeforeUnmount(() => {
 .paths__search input::placeholder { color: var(--faint); }
 .paths__search-clear { border: 0; background: none; padding: 4px; font-size: 15px; color: var(--faint); cursor: pointer; line-height: 1; }
 .paths__search-clear:hover { color: var(--ink); }
-.paths__sort { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.paths__sort { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
 /* 包裹层只定位，按钮视觉由 MkSelect 承担（2026-10-27 自绘下拉） */
 .paths__sort-select { flex: 0 0 auto; }
 /* wrapper 沉底：AI 提示与页脚一起贴近底部 */
@@ -754,7 +765,14 @@ onBeforeUnmount(() => {
 .pcard__head-main { flex: 1; min-width: 0; }
 .pcard__head-right { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
 /* 状态徽章＝原型 wf-badge（216-238 / 301-304）：4×10 内边距、999 圆角、12px/800 */
-.pcard__badge { padding: 4px 10px; border-radius: var(--mk-radius-pill); font-size: 12px; font-weight: 800; flex: 0 0 auto; }
+/* 状态标签（2026-11-05 去肥胖化）：原 4/10 内边距 + 全圆胶囊，视觉面积压过标题。
+   改小方签：2/6 内边距 + 4px 圆角 + 无描边（只留 10% 底色）——「进行中」不再冒充按钮。
+   字号保 12px（mobile:spec 的 fonts 门禁硬下限，不许 11px）。 */
+.pcard__badge {
+  padding: 2px 6px; border-radius: 4px;
+  font-size: 12px; font-weight: 800; flex: 0 0 auto;
+  border: 0;
+}
 .pcard__badge--green { color: var(--green-ink); background: color-mix(in srgb, var(--green) 12%, transparent); }
 .pcard__badge--blue { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 11%, transparent); }
 /* 走查 2026-10-08 #13：「生成中」徽章原先用通用墨色 --cyan-ink（cyan 75% 混 ink），
@@ -849,14 +867,11 @@ onBeforeUnmount(() => {
 
 @media (max-width: 1100px) {
   .paths__main { padding: 16px 14px 32px; }
-  /* 控制行窄屏两行：搜索独占第一行（满宽，输入的明确主位），
-     排序＋新目标＋筛选三个控制在第二行等距排开——原先是「搜索+排序」+「新目标」+
-     「筛选」三行，收成两行后首屏多露半张路径卡（2026-11-05 屏效比） */
-  .paths__tools { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
-  .paths__search { grid-column: 1 / -1; flex: 1 1 auto; max-width: none; }
-  .paths__sort { margin-left: 0; justify-content: center; min-width: 0; }
-  .paths__new-goal--inline { margin-left: 0; justify-content: center; }
-  .paths__filter-btn { justify-content: center; }
+  /* 窄屏把「新目标」抬到 44：它是本页唯一主操作，mobile:spec 分级口径要求主操作 ≥44
+     （旁边的排序/筛选是无边框文字档，留在 36–40 紧凑带） */
+  .paths__new-goal--inline { flex: 0 0 auto; min-height: 44px; }
+  /* 「全部状态 ▾」的无边框档写在下方基座规则之后（同层覆盖，见 1011 行媒体块）：
+     此处若覆盖会被后面的基座 border 反超，实测仍是描边盒子 */
   /* 触诊下限（mobile:spec lt44 只紧不松）：搜索框/排序在 375 抬到 44px */
   .paths__search { min-height: 44px; }
   .paths__search input { min-height: 44px; }
@@ -980,9 +995,10 @@ onBeforeUnmount(() => {
 .paths__filter-btn {
   display: none;
   align-items: center; gap: 6px;
-  min-height: 36px; padding: 7px 14px;
+  min-height: 36px; padding: 7px 12px;
   align-self: flex-start;
-  border: 1px solid var(--line); border-radius: var(--mk-radius-pill);
+  /* 胶囊 → 8px（2026-11-05 去肥胖化）：筛选与排序同为「轻量文字下拉」，不再套大胶囊 */
+  border: 1px solid var(--line); border-radius: var(--mk-radius-md);
   background: var(--surface); color: var(--muted);
   font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer;
   transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
@@ -994,9 +1010,20 @@ onBeforeUnmount(() => {
 }
 @media (max-width: 1100px) {
   .filters { display: none; }
-  /* 移动端触诊下限 44（mobile:spec 只紧不松）：外观仍是 chip，只高一档 */
-  /* 44 触控带保留；white-space:nowrap 阻止「筛选 · 全部」在 114px 列里折成两行（实测 55px 高） */
-  .paths__filter-btn { display: inline-flex; min-height: 44px; white-space: nowrap; overflow: hidden; }
+  /* 触控下沿 36（mobile:spec lt36 硬下沿，与旁边 MkSelect --borderless 同高）：
+     外观降为纯文字 + ▾，与「默认 ▾」并排像同一组轻量下拉，不再一盒一字 */
+  .paths__filter-btn {
+    display: inline-flex;
+    min-height: 36px; padding: 0 6px;
+    border-color: transparent; background: transparent;
+    color: var(--mk-muted, var(--muted));
+    font-size: var(--mk-fs-micro, 12px); font-weight: 600;
+    white-space: nowrap; overflow: hidden;
+  }
+  .paths__filter-btn:hover {
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
+    border-color: transparent; color: var(--ink);
+  }
   /* 菜单项进 44 触控带：弹出层是悬浮的，点偏了没有 hover 兜底 */
   .pcard__menu { min-width: 168px; }
   .pcard__menu-item { min-height: 44px; }
