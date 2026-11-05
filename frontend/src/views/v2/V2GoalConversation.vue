@@ -195,16 +195,15 @@
               </div>
             </li>
           </ul>
-
-          <!-- 说明属于左侧信息面板（它描述的就是这份清单的整理机制）：
-               短版贴清单底部，不做整块 tip（2026-09-27 用户反馈二改） -->
-          <div class="panel__tip">聊到的内容会自动整理成这份清单。</div>
-          <!-- 移动端清空重聊入口（2026-11-05 UX 审计）：唯一入口 .chat__clear 在 ≤1100px
-               被 display:none 后移动端无任何替代入口。窄屏头部一行已被阶段导航+目标信息
-               药丸占满，这里收进目标信息悬浮面板底部（点「目标信息」两步可达）；
-               桌面端仍走头部按钮，不重复 -->
-          <button type="button" class="panel__clear" @click="doReset">清空重聊</button>
           </div>
+          <!-- 移动端清空重聊入口（2026-11-05 UX 审计）：唯一入口 .chat__clear 在 ≤1100px
+               被 display:none 后移动端无任何替代入口。窄屏头部一行已被阶段导航+学情画像
+               药丸占满，这里收进悬浮面板底部（点「学情 6/7」两步可达）；
+               桌面端仍走头部按钮，不重复。
+               2026-11-05 二次调整：从滚动层里挪出来钉在面板底部——之前它在滚动层末尾，
+               静止时整颗溶进底缘渐隐带里，用户以为按钮没了（本次反馈）；钉死后永远可见，
+               滚动层里只剩清单本身，配合渐隐带也不会再出现半颗按钮 -->
+          <button type="button" class="panel__clear" @click="doReset">清空重聊</button>
         </div>
       </aside>
 
@@ -1945,11 +1944,9 @@ function shuffleScenes() {
   font-size: 12px; color: var(--faint); padding-left: 6px;
 }
 .composer__hint-right { display: inline-flex; align-items: center; gap: 10px; flex-shrink: 0; }
-.panel__tip {
-  font-size: 12px; color: var(--faint); border-top: 1px solid var(--line); padding-top: 10px;
-  margin-top: auto;
-}
-/* 清空重聊：桌面档隐藏（头部 .chat__clear 承担），≤1100 由目标信息面板底部的本按钮承担 */
+/* 「聊到的内容会自动整理成这份清单。」tip 已删（2026-11-05 用户裁定）：
+   面板里 7 项清单本身就是整理结果，这句机制说明是重复信息 */
+/* 清空重聊：桌面档隐藏（头部 .chat__clear 承担），≤1100 由面板底部的本按钮承担 */
 .panel__clear { display: none; }
 .composer__count { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* 「新目标」不属于 composer 元数据条：移动端由底部「目标规划」导航回到无参路由，
@@ -2912,18 +2909,38 @@ function shuffleScenes() {
     box-shadow: var(--mk-shadow-modal); /* 模态档 */
   }
   .panel:not(.panel--collapsed) .panel__scroll {
-    /* 底衬 32（2026-11-05）：滚到底时「清空重聊」完整停在渐隐带之上，不再顶边 */
-    padding: 12px 12px 32px;
+    /* 底衬 28（2026-11-05）：滚到底时最后一行完整停在渐隐带上方 */
+    padding: 12px 12px 28px;
+    flex: 1 1 auto;
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-width: none;
-    /* 底缘渐隐（2026-11-05 用户指出「下边没有了」）：半颗「清空重聊」被滚动视口
-       硬切在底边读作破版。mask 只罩内容层（.panel__scroll），壳的描边/圆角/投影不动；
+    /* 底缘渐隐（2026-11-05 用户指出「下边没有了」）：内容被滚动视口硬切在底边读作破版。
+       mask 只罩内容层（.panel__scroll），壳的描边/圆角/投影不动；
        与 MkGraphExplorer 轨条两端渐隐同一写法 */
     mask-image: linear-gradient(to bottom, black calc(100% - 26px), transparent 100%);
     -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 26px), transparent 100%);
   }
   .panel:not(.panel--collapsed) .panel__scroll::-webkit-scrollbar { display: none; }
+  /* 清空重聊钉在面板底部（滚动层之外，2026-11-05 二次反馈）：之前它在滚动层末尾，
+     静止时整颗溶进底缘渐隐带里，用户以为按钮没了。钉死后永远完整可见，
+     滚动层里只剩清单，配合渐隐带也不会再出现半颗按钮 */
+  .panel__clear {
+    display: block;
+    flex: none;
+    width: 100%;
+    min-height: 36px;
+    padding: 6px 12px 10px;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+  }
+  .panel__clear:hover { color: var(--red-ink); }
   /* 面板遮罩（2026-11-05 用户裁定）：浮层直接盖在聊天字上、右缘还露半截气泡，
      压暗一层后面板才是唯一焦点；z-index 取 21（> 步条带 6 / 消息流，< 面板 26），
      点击即收起（悬浮层点外部关闭是默认心智，不需要再找 ▾） */
@@ -3077,25 +3094,8 @@ function shuffleScenes() {
     .composer__count { display: none; }
   }
   .chat__clear { display: none; }
-  /* 清空重聊移动端入口：收进目标信息悬浮面板底部（面板默认折叠、点「目标信息」展开可见），
-     热区 36px 达触屏门禁；桌面档 display:none 不变 */
-  .panel__clear {
-    display: block;
-    width: 100%;
-    min-height: 36px;
-    margin-top: 10px;
-    padding: 7px 10px;
-    border: 1px solid var(--line);
-    border-radius: var(--mk-radius-md);
-    background: var(--surface);
-    color: var(--muted);
-    font: inherit;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    text-align: center;
-  }
-  .panel__clear:hover { color: var(--red-ink); }
+  /* 清空重聊移动端入口的样式在上方 .panel:not(--collapsed) 区块（钉在面板底部，
+     2026-11-05 从滚动层挪出）；此处不再重复声明 */
 
   /* ===== 移动端密度（2026-09-24，2026-09-30 随原型对齐更新）=====
      判据：页面主容器左右 14px、卡片内边距 12–16、hero/h1 22px、区块标题 15–17px。
