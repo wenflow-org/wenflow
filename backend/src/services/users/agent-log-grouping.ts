@@ -67,6 +67,21 @@ export function collectAgentLogTraceIds(logs: AgentLogModelSourceRow[]): string[
 }
 
 /**
+ * #248：提取一组日志行里去重后的非空 metadata.pathId。
+ * path-agent 的阶段流水（写侧不写 traceId）与同路径的 api-gateway 行都用这个键关联；
+ * goal/teaching 类行没有 pathId，产出空集合，故不影响它们既有的 traceId 补数口径。
+ */
+export function collectAgentLogPathIds(logs: AgentLogModelSourceRow[]): string[] {
+  const ids = new Set<string>();
+  for (const log of logs) {
+    const metadata = parseMetadata(log.metadata);
+    const pathId = String(metadata.pathId || '').trim();
+    if (pathId) ids.add(pathId);
+  }
+  return [...ids];
+}
+
+/**
  * 模型索引：traceId → metadata.model。
  *
  * 模型名只写在 api-gateway 行上，而网关行不在默认口径的 userListed 白名单里、不在主取数集内，
@@ -87,17 +102,37 @@ export function buildAgentLogModelIndex(rows: AgentLogModelSourceRow[]): Map<str
 }
 
 /**
- * 单行模型：自身列 / 自身元数据优先，否则按 traceId 查模型索引；都没有则 null。
+ * #248：pathId → metadata.model。path: 折叠组的代表行是无 traceId 的 path-agent 阶段流水，
+ * 模型名只写在同 metadata.pathId 的 api-gateway 行上——traceId 索引在这批行上结构性为空，
+ * 必须用 pathId 作为第二条连接键。先入先占，与 traceId 索引同语义。
+ */
+export function buildAgentLogModelIndexByPath(rows: AgentLogModelSourceRow[]): Map<string, string> {
+  const index = new Map<string, string>();
+  for (const value of rows) {
+    const metadata = parseMetadata(value.metadata);
+    const model = typeof metadata.model === 'string' ? metadata.model.trim() : '';
+    const pathId = String(metadata.pathId || '').trim();
+    if (model && pathId && !index.has(pathId)) index.set(pathId, model);
+  }
+  return index;
+}
+
+/**
+ * 单行模型：自身列 / 自身元数据优先，否则按 traceId 查模型索引；再退到 metadata.pathId
+ * （#248：path-agent 阶段流水无 traceId，只能按同路径的网关行取模型）。都没有则 null。
  * 与折叠归一化（collapseAgentLogGroups 第 3 步）逐字段同一语义，供详情复用。
  */
 export function resolveAgentLogModel(
   log: AgentLogModelSourceRow & { model?: string | null },
-  modelIndex: Map<string, string>
+  modelIndex: Map<string, string>,
+  modelIndexByPath: Map<string, string> = new Map()
 ): string | null {
   const ownMetadata = parseMetadata(log.metadata);
+  const ownPathId = String(ownMetadata.pathId || '').trim();
   const model = (typeof log.model === 'string' && log.model.trim())
     || (typeof ownMetadata.model === 'string' ? ownMetadata.model : '')
     || modelIndex.get(String(log.traceId || ownMetadata.traceId || ''))
+    || (ownPathId ? modelIndexByPath.get(ownPathId) : '')
     || '';
   return model.trim() ? model : null;
 }
@@ -148,6 +183,8 @@ export function parseAgentLogGroupId(id: string): AgentLogGroupId | null {
  * @param modelSourceRows #230：模型名只写在 api-gateway 行上，而网关行不在默认口径的
  *   userListed 白名单里、**不在本参数 logs 的取数集内**。调用方按已选 traceId 另取回
  *   网关行后从这里传入，仅用于建模型索引，不参与去重/分组/输出。
+ *   #248：path-agent 阶段流水没有 traceId，调用方还需按已选 metadata.pathId 另取回网关行
+ *   一并传入——同一批补数行同时喂给 traceId 索引与 pathId 索引。
  */
 export function collapseAgentLogGroups(
   logs: AgentLogGroupRow[],
@@ -155,14 +192,20 @@ export function collapseAgentLogGroups(
 ): any[] {
   // 1) 去重：同 traceId + agentId + 秒级时间视为同一次调用的重复落库。
   //    注意这是**跨会话**去重（key 不含会话），列表一直如此；详情若按会话去重会多出条目。
+  //    #246：无 traceId 时（path-agent 阶段流水写侧不写 traceId）退化键必须带上事件身份
+  //    （metadata.phase + metadata.status）。此前退化键只有 agentId + 秒，把语义降级成
+  //    「同秒同 agent 即重复」——父阶段 succeeded 与子阶段 started 常只差几十毫秒、必然同秒，
+  //    于是两条真实事件互撞、后入的一条被静默丢弃（groupCount 少 1），且谁被丢由行序决定。
   const dedupeMap = new Map<string, any>();
   for (const log of logs) {
     const metadata = parseMetadata(log.metadata);
     const traceId = log.traceId || metadata.traceId || '';
     const secondBucket = new Date(log.calledAt).toISOString().slice(0, 19);
+    const eventPhase = typeof metadata.phase === 'string' ? metadata.phase : '';
+    const eventStatus = typeof metadata.status === 'string' ? metadata.status : '';
     const dedupeKey = traceId
       ? `${traceId}|${log.agentId}|${secondBucket}`
-      : `${log.agentId}|${secondBucket}`;
+      : `${log.agentId}|${secondBucket}|${eventPhase}|${eventStatus}`;
     const source = logSourceOf(log);
     const existing = dedupeMap.get(dedupeKey);
     if (!existing) {
@@ -181,6 +224,8 @@ export function collapseAgentLogGroups(
      modelSourceRows（user.repo.listAgentLogModelRowsByTraceIds）。取数集内已有的模型
      优先级更高（先入先占），补数行只填空缺。 */
   const modelByTrace = buildAgentLogModelIndex([...dedupeMap.values(), ...modelSourceRows]);
+  // #248：path: 组的代表行无 traceId，模型只能按 metadata.pathId 关联同路径的网关行
+  const modelByPath = buildAgentLogModelIndexByPath([...dedupeMap.values(), ...modelSourceRows]);
 
   // 2) 组：key=goal/path 会话；rep=组内优先级最高的代表日志；items=组内全部（去重后）调用明细
   const groupMap = new Map<string, { rep: any; items: any[] }>();
@@ -225,8 +270,11 @@ export function collapseAgentLogGroups(
       id: groupKey,
       calledAt: lastAt,
       groupCount: items.length,
-      // 业务层代表行通常没有 model；模型名在同 trace 的网关行 metadata 里
-      model: modelByTrace.get(String(groupRep.traceId || '')) ?? null,
+      // 业务层代表行通常没有 model；模型名在同 trace 的网关行 metadata 里，
+      // path 类代表行没有 traceId 时退到同 pathId 的网关行（#248）。
+      model: modelByTrace.get(String(groupRep.traceId || ''))
+        ?? modelByPath.get(String(parseMetadata(groupRep.metadata).pathId || ''))
+        ?? null,
       groupItems: itemsAsc.map((item) => ({
         id: item.id,
         agentId: item.agentId,
@@ -256,8 +304,9 @@ export function collapseAgentLogGroups(
     collapsed.set(`item:${key}`, item);
   }
 
-  // 3) 最终归一化：代表行自身 model → 同 trace 网关行 model → null；按最近调用倒序
+  // 3) 最终归一化：代表行自身 model → 同 trace 网关行 model → 同 pathId 网关行 model → null；
+  //    按最近调用倒序
   return Array.from(collapsed.values())
-    .map((log) => ({ ...log, model: resolveAgentLogModel(log, modelByTrace) }))
+    .map((log) => ({ ...log, model: resolveAgentLogModel(log, modelByTrace, modelByPath) }))
     .sort((a, b) => new Date(b.calledAt).getTime() - new Date(a.calledAt).getTime());
 }
