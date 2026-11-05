@@ -230,10 +230,15 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     // 地址是内置值：界面不再出现地址字段
     expect(dialog.text()).not.toContain('搜索地址');
     expect(dialog.text()).not.toContain('抓取地址');
-    // 顺序也是内置的：没有主用 / 备用排序控件，只留一行只读说明
+    // 顺序也是内置的：没有主用 / 备用排序控件，只留一行只读数据
     expect(dialog.findAll('.ac-prio')).toHaveLength(0);
     expect(dialog.text()).not.toContain('主用');
-    expect(dialog.find('.ac-config-order').text()).toBe('搜索与抓取都按 TinyFish → Tavily → Exa 依次尝试');
+    expect(dialog.find('.ac-config-order').text()).toBe('尝试顺序TinyFish → Tavily → Exa');
+    /* 2026-11-05 用户「这种文案不要…注释型文案不要出现」：
+       弹窗里不再有整句说明（原「资料采集不单独配密钥：…」），也没有「依次尝试」这类叙述。 */
+    expect(dialog.find('.ac-config-note').exists()).toBe(false);
+    expect(dialog.text()).not.toContain('资料采集不单独配密钥');
+    expect(dialog.text()).not.toContain('依次尝试');
     // 这是外部服务配置，不是 Skill 的 LLM 模型绑定
     expect(dialog.text()).not.toContain('跟随平台默认');
     expect(dialog.text()).not.toContain('完整运行时');

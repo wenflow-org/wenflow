@@ -216,20 +216,16 @@
             <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeConfig">✕</button>
           </div>
           <div class="mk-modal__body">
-            <!-- 资料采集去哪了（2026-10-31 四轮评审 P0-4）：联网卡列了三个成员能力
-                 （网页搜索/网页抓取/资料采集），配置弹窗却只有 搜索/抓取 两条通道——
-                 资料采集是编排 Skill，复用这两条通道取数，没有自己的 provider 链；
-                 不造假通道行，用一行说明把口径闭合。 -->
-            <p v-if="configTarget?.id === 'web'" class="ac-config-note">
-              资料采集不单独配密钥：它复用「搜索 / 抓取」两条通道取数。这两条通道配好，联网的三个成员能力即可用。
-            </p>
-            <!-- 联网（2026-11-04 用户「其实这个是写死的，相当于只需要配 key 就行，那么优化设计吧」）：
-                 三家上游的地址是代码内置值，「搜索 / 抓取」的顺序也内置——界面上再摆可填的地址框、
-                 再给一套「主用 / 加入备用」排序控件，等于让运营去改两件已经写死的事。
-                 这一支只留三样：谁已配置、密钥填在哪、依次尝试的顺序是什么。 -->
+            <!-- 2026-11-05 用户「这种文案不要…注释型文案不要出现」：原先这里有两块说明文字——
+                 ① 「资料采集不单独配密钥：它复用『搜索 / 抓取』两条通道取数。这两条通道配好，
+                 联网的三个成员能力即可用。」②「搜索与抓取都按 X → Y → Z 依次尝试」。
+                 ① 整块撤除：它是设计决策的解释（为什么这里只有两条通道），而弹窗里就那三张
+                 provider 卡，读一眼即知配什么；② 收成一行只读数据「尝试顺序 X → Y → Z」——
+                 顺序是影响运行时的真实事实，且界面上没有第二处，留着但要按数据写、不按句子写。 -->
             <template v-if="isWebConfig">
               <p class="ac-config-order">
-                搜索与抓取都按 <b>{{ fixedOrderText }}</b> 依次尝试
+                <span class="ac-config-order__k">尝试顺序</span>
+                <b>{{ fixedOrderText }}</b>
               </p>
               <section class="ac-config-provider" v-for="provider in configTarget?.providers ?? []" :key="provider.id">
                 <header class="ac-config-provider__head">
@@ -1006,23 +1002,19 @@ function goLogs(skillId: string) {
 .ac-cap.is-off .ac-cap__glyph { opacity: 0.55; }
 .ac-cap-skel { height: 50px; border-radius: var(--mk-radius-xl); }
 
-/* 资料采集口径说明行（P0-4）：与通道行同节奏的中性小字 */
-/* 联网：内置顺序的只读一行 */
+/* 联网：内置顺序的只读一行（2026-11-05 改成「标签 + 值」的数据行，不再写成一句话。
+   顺序是影响运行时的真实事实，界面上也没有第二处出口，所以留着；
+   原先那句「搜索与抓取都按 X → Y → Z 依次尝试」是叙述句，与三张 provider 卡并列时读作说明文案。） */
 .ac-config-order {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   margin: 0 0 12px;
-  color: var(--mk-muted);
+  color: var(--mk-ink);
   font-size: var(--mk-fs-micro);
 }
-.ac-config-order b { color: var(--mk-ink); font-weight: 700; }
-.ac-config-note {
-  margin: 0;
-  padding: 8px 12px;
-  border-radius: var(--mk-radius-md);
-  background: var(--mk-surface-2);
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
-  line-height: 1.6;
-}
+.ac-config-order__k { color: var(--mk-muted); }
+.ac-config-order b { font-weight: 700; }
 /* MCP 服务编辑弹窗：先排通道优先级（主用 + 备用，用户可自己调），再填链上 provider 的密钥/入口。
    2026-10-25 用户「不要这种解释型文案」：简介、降级注记、provider 说明句、字段提示行全撤。
    2026-10-26 用户两次走查「这个真的很丑」「本身是三选一，然后用户可以自己配置优先级」：
