@@ -28,8 +28,8 @@ export interface GatewayConfig {
   ai: {
     baseUrl: string;
     apiKey: string;
+    /** 平台默认模型：没单独指定模型的 Skill 都走它（平台只有这一个默认） */
     defaultModel: string;
-    defaultReasoningModel?: string;
   };
 }
 
@@ -39,7 +39,6 @@ const DEFAULT_CONFIG: GatewayConfig = {
     baseUrl: process.env.AI_API_URL || 'http://localhost:3000',
     apiKey: process.env.AI_API_KEY || '',
     defaultModel: process.env.AI_MODEL || '',
-    defaultReasoningModel: process.env.AI_MODEL_REASONING || '',
   },
 };
 
@@ -54,7 +53,7 @@ export class EduClawGateway {
 
   constructor(prisma: PrismaClient, config: Partial<GatewayConfig> = {}) {
     this.prisma = prisma;
-    // 深合并 ai 配置，避免浅合并丢失 defaultReasoningModel
+    // 深合并 ai 配置，避免浅合并丢字段
     this.config = {
       ...DEFAULT_CONFIG,
       ...config,

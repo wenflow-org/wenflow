@@ -50,6 +50,7 @@ vi.mock('../live', async () => {
     shortId: (s: string) => s,
     // 模型与接入面板（嵌入态）读的这些
     liveApiConfig: ref(null),
+    liveLoading: ref(false),
     liveFetchModels: vi.fn(async () => []),
     liveSaveApiConfig: vi.fn(async () => {}),
     // 访问与注册面板（嵌入态）读的这些
@@ -240,7 +241,7 @@ describe('嵌入态：面板不自带页头', () => {
     w.unmount()
   })
 
-  it('独立挂载（不传 embedded）时页头仍在，且页头没有动作（刷新注册表在卡片右上）', async () => {
+  it('独立挂载（不传 embedded）时页头仍在，且页头没有动作（上游出口在卡片左栏）', async () => {
     const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/admin/:page?', component: { template: '<div/>' } }] })
     await router.push('/admin/system-settings?tab=api')
     await router.isReady()
@@ -248,8 +249,10 @@ describe('嵌入态：面板不自带页头', () => {
     await flushPromises()
     expect(w.find('.mk-pagehead__title').text()).toBe('模型与接入')
     expect(w.findAll('.mk-pagehead__actions > button')).toHaveLength(0)
-    // 重读本机注册表仍可达——它现在是那张卡右上的图标钮
-    expect(w.find('.mpp > .mk-card__head .mpp-regreload').exists()).toBe(true)
+    // 重读本机注册表那只刷新图标钮已撤（2026-11-04 用户「不要有刷新」），
+    // 上游清单只剩左栏一条出口，页头与卡片都不再挂刷新动作
+    expect(w.find('.mpp > .mk-card__head .mpp-regreload').exists()).toBe(false)
+    expect(w.find('.mpp > .mk-card__head .mk-btn').exists()).toBe(false)
     expect(w.classes()).toContain('mk-page--fill')
     expect(w.classes()).not.toContain('ac-host--embedded')
     w.unmount()

@@ -900,7 +900,7 @@ watch(
    规格对齐原型 .nav__badge（中性灰底 / 选中蓝底） */
 .mshell__item-badge {
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-xs);
   background: var(--mk-surface-3);
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
@@ -1178,7 +1178,7 @@ watch(
   font-weight: 700;
   color: var(--mk-ink);
   padding: 4px 8px 4px 4px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-md);
   cursor: pointer;
   transition: background 0.14s ease;
 }

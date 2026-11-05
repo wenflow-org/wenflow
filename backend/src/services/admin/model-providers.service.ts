@@ -19,24 +19,20 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  LEGACY_REASONING_EFFORTS,
   ModelPricing,
+  REASONING_EFFORT_PATTERN,
   getLlmRegistryStatus,
-  getProviderCatalog,
   parseLlmProvidersConfig,
+  parseReasoningEfforts,
   reloadLlmProvidersIfChanged,
-  resolveConfigPath,
-  resolveModelRef
+  resolveConfigPath
 } from '../../config/models.config';
 import {
   deleteProviderSecret,
   providerSecretSummary,
   setProviderSecret
 } from '../provider-secrets.service';
-import systemPrisma from '../../config/system-database';
-import apiConfigService from '../apiConfig.service';
-import { normalizePlatformModelDefaults } from '../seed-skill-model-configs';
-import { selectModelForAlias } from '../../gateway/api-gateway/model-alias';
-import { MAX_MODEL_CANDIDATES } from '../../gateway/api-gateway/executor';
 import { logger } from '../../utils/logger';
 
 const PROVIDER_ID_PATTERN = /^[a-z0-9][a-z0-9_-]*$/;
@@ -58,96 +54,6 @@ export class RegistryEditError extends Error {
   }
 }
 
-/**
- * #177 目录收缩门禁：删模型 / 删停供应商前，除 saveRegistry 已挡的文件 `root.defaults` 外，
- * 还要挡两类**运行时仍然指向该模型的引用**——否则「默认值写对后再把目录删小」会让目录外值
- * 在运行期生效（与原故障同一通路：路由对解析不到的值原样透传 → 无可用渠道 transport 失败）：
- *  - platform_api_configs 的三个平台默认（按 DB 别名覆盖展开后选中该模型，或字面就是它）；
- *  - 启用的 skill_model_configs 显式绑定该模型、且该 skill 未自带 endpoint（即走继承通道）。
- * 自带独立 endpoint 的 skill 由自家通道提供模型，不受平台目录约束，不计。
- * 放在 service 层（而非路由）：routes 层禁止直接引数据库客户端（scripts/check-route-db-boundary.mjs）。
- */
-export async function assertModelNotReferencedByRuntime(providerId: string, modelId: string): Promise<void> {
-  const bare = modelId;
-  const qualified = `${providerId}/${modelId}`;
-  const matches = (value: string): boolean => value === bare || value === qualified;
-
-  const config = await apiConfigService.getConfig();
-  const overrides = {
-    chat: config.chatModels ?? [],
-    reasoning: config.reasoningModels ?? [],
-    light: config.lightModels ?? [],
-  };
-  const platformDefaults: Array<[string, string]> = [
-    ['默认模型', config.defaultModel],
-    ['推理默认模型', config.defaultReasoningModel],
-    ['评估默认模型', config.defaultEvaluationModel],
-  ];
-  for (const [label, value] of platformDefaults) {
-    const configured = String(value || '').trim();
-    if (!configured) continue;
-    const resolved = selectModelForAlias(configured, { overrides })?.model ?? configured;
-    if (matches(configured) || matches(resolved)) {
-      throw new RegistryEditError(
-        `模型「${modelId}」仍是平台${label}的生效值（${configured}），删掉会让全平台默认路由落到目录外模型。`
-          + '请先在「路由与调用」把该默认改到别的目录内模型再删。',
-        400,
-        'invalid'
-      );
-    }
-  }
-
-  const boundRows = await systemPrisma.skill_model_configs.findMany({
-    where: { enabled: true, NOT: [{ model: null }, { model: '' }] },
-    select: { skillId: true, model: true, endpoint: true },
-  });
-  const boundSkills = boundRows
-    .filter((row) => !String(row.endpoint || '').trim())
-    .filter((row) => {
-      const value = String(row.model || '').trim();
-      const ref = resolveModelRef(value);
-      return ref ? ref.modelId === bare && ref.providerId === providerId : matches(value);
-    })
-    .map((row) => row.skillId);
-  if (boundSkills.length) {
-    throw new RegistryEditError(
-      `模型「${modelId}」仍被 ${boundSkills.length} 个走平台通道的 skill 显式绑定（${boundSkills.join('、')}），`
-        + '删掉后它们运行时会因无可用渠道失败。请先在「Skill 运行时」改到别的目录内模型再删。',
-      400,
-      'invalid'
-    );
-  }
-}
-
-/**
- * #177 供应商级门禁：删除 / 停用整条供应商会让它的**全部**模型同时从运行时注册目录消失——
- * 与单模型删除同一根因，却绕过了单模型门禁（默认值写对后，再把整条通道删/停）。
- * 逐个模型复用同一口径校验；本就没有模型在目录里的（未启用的条目）跳过，删它不改变运行时。
- */
-export async function assertProviderNotReferencedByRuntime(providerId: string): Promise<void> {
-  const provider = getProviderCatalog().find((p) => p.id === providerId);
-  if (!provider || provider.enabled === false) return;
-  const blocked: string[] = [];
-  for (const model of provider.models) {
-    try {
-      await assertModelNotReferencedByRuntime(providerId, model.id);
-    } catch (error) {
-      if (error instanceof RegistryEditError) {
-        blocked.push(error.message);
-        continue;
-      }
-      throw error;
-    }
-  }
-  if (blocked.length) {
-    throw new RegistryEditError(
-      `供应商「${providerId}」删掉/停用会让 ${blocked.length} 个仍在用的模型落到目录外：\n${blocked.join('\n')}`,
-      400,
-      'invalid'
-    );
-  }
-}
-
 export interface ProviderViewModel {
   id: string;
   name: string;
@@ -157,7 +63,8 @@ export interface ProviderViewModel {
   endpointSource: 'inherit' | 'own';
   baseUrl: string | null;
   apiKeyEnv: string | null;
-  keySource: 'db' | 'env' | 'none';  /** 尾部 4 位摘要（`····abcd`）；密钥短于 8 位或未配置为 null */
+  keySource: 'db' | 'env' | 'none';
+  /** 尾部 4 位摘要（`····abcd`）；密钥短于 8 位或未配置为 null */
   keyHint: string | null;
   /** inherit = 端点与密钥在连接设置里；unconfigured = 自带端点但还没密钥 */
   status: 'ready' | 'unconfigured' | 'inherit' | 'disabled';
@@ -174,18 +81,20 @@ export interface ModelViewModel {
   label: string;
   tier: 'chat' | 'reasoning';
   supportsThinking: boolean;
-  supportsReasoningEffort: boolean;
+  /** 这台模型接受哪几档 reasoning_effort；空数组 = 不支持该字段。
+   *  数组里的每个词就是请求体里的取值（上游定义的词，平台不翻译），
+   *  管理台据此渲染挡位列表，运行时据此裁剪请求（见 gateway/api-gateway/thinking-policy.ts）。 */
+  reasoningEfforts: string[];
   /** 声明可接收图片输入（见 models.config.ts ModelDefinition.vision） */
   vision: boolean;
   /** 模型级生成默认；null = 跟随平台默认（2026-10-24） */
   defaultThinkingMode: 'enabled' | 'disabled' | null;
-  defaultReasoningEffort: 'low' | 'high' | 'max' | null;
+  defaultReasoningEffort: string | null;
   defaultResponseFormat: 'none' | 'json_object' | null;
   maxOutputTokens: number | null;
   defaultMaxTokens: number | null;
   reasoningReserveTokens: number | null;
   maxParallelRequests: number | null;
-  fallbacks: string[];
   pricing: ModelPricing | null;
   description: string | null;
 }
@@ -220,6 +129,9 @@ export interface ModelInput {
   label?: string;
   tier?: string;
   supportsThinking?: boolean;
+  /** 挡位数组（每项就是请求体里的 reasoning_effort 取值）：传空数组 = 关掉这个能力；不传 = 不改动 */
+  reasoningEfforts?: string[];
+  /** 历史入参（布尔）：true 折算成 low/high/max，保留只为兼容旧调用方。 */
   supportsReasoningEffort?: boolean;
   vision?: boolean;
   /** 'default' / null = 清除模型覆盖，跟随平台默认 */
@@ -230,13 +142,12 @@ export interface ModelInput {
   defaultMaxTokens?: number | null;
   reasoningReserveTokens?: number | null;
   maxParallelRequests?: number | null;
-  fallbacks?: string[] | null;
   pricing?: ModelPricing | null;
   description?: string | null;
 }
 
 export interface EditOutcome {
-  /** 写成功但需要运营知道的事（别名/备用链指向失效模型、备用链超出运行时上限等），不阻断操作 */
+  /** 写成功但需要运营知道的事（别名指向失效模型等），不阻断操作 */
   warnings: string[];
 }
 
@@ -339,19 +250,8 @@ function isReadOnly(): boolean {
   }
 }
 
-/** 模型 id → 声明它的供应商（跨供应商重名合法，所以是数组） */
-function modelOwners(root: Root): Map<string, string[]> {
-  const owners = new Map<string, string[]>();
-  for (const [pid, entry] of Object.entries(providersOf(root))) {
-    for (const mid of Object.keys((entry.models ?? {}) as Record<string, unknown>)) {
-      owners.set(mid, [...(owners.get(mid) ?? []), pid]);
-    }
-  }
-  return owners;
-}
-
 /**
- * 短数组收成一行：`JSON.stringify(…, 2)` 会把 `"fallbacks": ["x"]` 摊成三行，
+ * 短数组收成一行：`JSON.stringify(…, 2)` 会把 `"members": ["a", "b"]` 摊成三行，
  * 一次编辑就制造出满屏与本次改动无关的 diff（这文件在 git 里是要被 review 的）。
  * 只收「收成一行不超过 120 字符」的数组——$rules 那种长文本数组保持多行（作者本来就那么排）。
  */
@@ -469,15 +369,6 @@ function saveRegistry(root: Root, warnings: string[]): string[] {
     }
     throw new RegistryEditError(`新配置无法生效（已回滚到写前内容）：${reload.error}`, 400, 'invalid', warnings);
   }
-
-  // #177：写后热重载推进了 lastMtimeMs，router 的「热重载后归一化」不会再触发（走的是这条写路径）。
-  // 所以这里自己按新目录复检平台三档默认：目录收缩后若有 DB 默认悬空，立即归一化回目录内默认。
-  // 失败只告警不阻断（写已成功；归一化是自愈，不是写入的前置条件）。
-  void normalizePlatformModelDefaults(systemPrisma).catch((err) => {
-    logger.warn('[model-providers] 目录写后平台默认归一化失败', {
-      errorMessage: err instanceof Error ? err.message : String(err)
-    });
-  });
   return warnings;
 }
 
@@ -491,13 +382,16 @@ function toModelView(raw: Record<string, unknown>, id: string): ModelViewModel {
     label: typeof raw.label === 'string' && raw.label.trim() ? raw.label.trim() : id,
     tier: raw.tier === 'reasoning' ? 'reasoning' : 'chat',
     supportsThinking: raw.supportsThinking === true,
-    supportsReasoningEffort: raw.supportsReasoningEffort === true,
+    reasoningEfforts: parseReasoningEfforts(raw.reasoningEfforts, raw.supportsReasoningEffort, id),
     vision: raw.vision === true,
     defaultThinkingMode: raw.defaultThinkingMode === 'enabled' || raw.defaultThinkingMode === 'disabled'
       ? raw.defaultThinkingMode
       : null,
-    defaultReasoningEffort: raw.defaultReasoningEffort === 'low' || raw.defaultReasoningEffort === 'high' || raw.defaultReasoningEffort === 'max'
-      ? raw.defaultReasoningEffort
+    // 回显不按平台词表卡：运营填的可能是上游自有词（xhigh 等），原样带回
+    defaultReasoningEffort: typeof raw.defaultReasoningEffort === 'string'
+      && REASONING_EFFORT_PATTERN.test(raw.defaultReasoningEffort.trim())
+      && raw.defaultReasoningEffort.trim().toLowerCase() !== 'default'
+      ? raw.defaultReasoningEffort.trim()
       : null,
     defaultResponseFormat: raw.defaultResponseFormat === 'none' || raw.defaultResponseFormat === 'json_object'
       ? raw.defaultResponseFormat
@@ -506,7 +400,6 @@ function toModelView(raw: Record<string, unknown>, id: string): ModelViewModel {
     defaultMaxTokens: typeof raw.defaultMaxTokens === 'number' ? raw.defaultMaxTokens : null,
     reasoningReserveTokens: typeof raw.reasoningReserveTokens === 'number' ? raw.reasoningReserveTokens : null,
     maxParallelRequests: typeof raw.maxParallelRequests === 'number' ? raw.maxParallelRequests : null,
-    fallbacks: Array.isArray(raw.fallbacks) ? raw.fallbacks.map((x) => String(x)) : [],
     pricing: raw.pricing && typeof raw.pricing === 'object' && !Array.isArray(raw.pricing) ? (raw.pricing as ModelPricing) : null,
     description: typeof raw.description === 'string' && raw.description.trim() ? raw.description.trim() : null
   };
@@ -588,6 +481,34 @@ function assertModelId(modelId: string, where: string): void {
   }
 }
 
+/**
+ * 挡位入参归一：去空白、去重、保持上传顺序。
+ *
+ * **不按平台词表卡**（2026-11-05 用户「写死了五档，但是后面的请求能对上吗，应该放开允许填写挡位」）：
+ * 数组里的每个词就是请求体里 `reasoning_effort` 的取值，原样发出。上游各家词表不一致
+ * （minimal/low/medium/high、只认 low/high、自家 xhigh…），只有运营知道这台模型认什么。
+ * 这里只拦形态明显不对的（带空格、超长、奇怪字符），因为那是必然发不出去的值。
+ */
+function validateEfforts(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    throw new RegistryEditError('推理强度挡位必须是一个数组。', 400, 'invalid');
+  }
+  const out: string[] = [];
+  for (const item of value) {
+    const token = typeof item === 'string' ? item.trim().toLowerCase() : '';
+    if (!token) continue;
+    if (!REASONING_EFFORT_PATTERN.test(token)) {
+      throw new RegistryEditError(
+        `挡位填的是要发给上游的那个词，只能是不带空格的短词（如 low / high / max），实际 ${JSON.stringify(item)}。`,
+        400,
+        'invalid'
+      );
+    }
+    if (!out.includes(token)) out.push(token);
+  }
+  return out;
+}
+
 function positiveNumberOrNull(value: unknown, field: string): number | null {
   if (value == null || value === '') return null;
   const num = typeof value === 'number' ? value : Number(value);
@@ -597,52 +518,12 @@ function positiveNumberOrNull(value: unknown, field: string): number | null {
   return num;
 }
 
-/**
- * 备用链检查：目标必须真实存在；跨供应商候选只在运行时不可达（降级只换模型名不换端点），
- * 故按告警处理而不是拒绝——文件本身允许这么写，运行时也会跳过。
- * 另：运行时最多用主模型 + 1 条备用（MAX_MODEL_CANDIDATES），多余条目只留在文件里。
- */
-function checkFallbacks(providerId: string, fallbacks: string[], root: Root): string[] {
-  const warnings: string[] = [];
-  const owners = modelOwners(root);
-  const pairs = new Set<string>();
-  for (const [pid, entry] of Object.entries(providersOf(root))) {
-    for (const mid of Object.keys((entry.models ?? {}) as Record<string, unknown>)) pairs.add(`${pid}/${mid}`);
-  }
-  for (const target of fallbacks) {
-    const slash = target.indexOf('/');
-    const qualified = slash > 0;
-    const targetProvider = qualified ? target.slice(0, slash) : null;
-    const targetModel = qualified ? target.slice(slash + 1) : target;
-    if (qualified) {
-      if (!pairs.has(target)) {
-        throw new RegistryEditError(`备用模型「${target}」不在任何供应商目录中，请先添加该模型。`, 400, 'invalid');
-      }
-      if (targetProvider !== providerId) {
-        warnings.push(`备用模型「${target}」属于别的供应商，运行时降级只换模型名不换端点，该候选不可达。`);
-      }
-      continue;
-    }
-    const owning = owners.get(targetModel) ?? [];
-    if (!owning.length) {
-      throw new RegistryEditError(`备用模型「${target}」不在任何供应商目录中，请先添加该模型。`, 400, 'invalid');
-    }
-    if (!owning.includes(providerId)) {
-      warnings.push(`备用模型「${target}」由供应商「${owning[0]}」提供，运行时降级只换模型名不换端点，该候选不可达。`);
-    }
-  }
-  if (fallbacks.length > MAX_MODEL_CANDIDATES - 1) {
-    warnings.push(`备用链写了 ${fallbacks.length} 条，运行时最多用到第 ${MAX_MODEL_CANDIDATES - 1} 条（主模型 + ${MAX_MODEL_CANDIDATES - 1} 跳）。`);
-  }
-  return warnings;
-}
-
 /** 模型条目的规范字段顺序（写回文件的可读性靠它，而不是靠碰巧的插入顺序） */
 const MODEL_KEY_ORDER = [
-  'label', 'tier', 'supportsThinking', 'supportsReasoningEffort', 'vision',
+  'label', 'tier', 'supportsThinking', 'reasoningEfforts', 'vision',
   'defaultThinkingMode', 'defaultReasoningEffort', 'defaultResponseFormat',
   'maxOutputTokens', 'defaultMaxTokens',
-  'reasoningReserveTokens', 'maxParallelRequests', 'fallbacks', 'pricing', 'description'
+  'reasoningReserveTokens', 'maxParallelRequests', 'pricing', 'description'
 ];
 
 function buildModelEntry(input: ModelInput, existing: Record<string, unknown> | null): Record<string, unknown> {
@@ -659,16 +540,23 @@ function buildModelEntry(input: ModelInput, existing: Record<string, unknown> | 
     merged.tier = input.tier;
   }
   if (input.supportsThinking !== undefined) merged.supportsThinking = input.supportsThinking === true;
-  if (input.supportsReasoningEffort !== undefined) merged.supportsReasoningEffort = input.supportsReasoningEffort === true;
+  // 挡位：数组即支持集，先按词表归一（未知词拒），再和 supportsThinking 对账。
+  // 旧的布尔键在这里就地删除——它是**读**兼容字段，写回只产出数组。
+  if (input.reasoningEfforts !== undefined) {
+    merged.reasoningEfforts = validateEfforts(input.reasoningEfforts);
+  } else if (input.supportsReasoningEffort !== undefined) {
+    merged.reasoningEfforts = input.supportsReasoningEffort === true ? [...LEGACY_REASONING_EFFORTS] : [];
+  }
+  delete merged.supportsReasoningEffort;
+  if (Array.isArray(merged.reasoningEfforts) && merged.reasoningEfforts.length === 0) delete merged.reasoningEfforts;
   // 图片理解是独立能力：不勾就显式写 false（上游不支持时运行时会拒图，不是静默丢图）
   if (input.vision !== undefined) merged.vision = input.vision === true;
-  if (merged.supportsReasoningEffort === true && merged.supportsThinking !== true) {
-    throw new RegistryEditError('勾了「支持推理强度」就必须同时支持思考模式（上游字段依赖该能力）。', 400, 'invalid');
+  if (Array.isArray(merged.reasoningEfforts) && merged.reasoningEfforts.length && merged.supportsThinking !== true) {
+    throw new RegistryEditError('填了推理强度挡位就必须同时支持思考模式（上游字段依赖该能力）。', 400, 'invalid');
   }
   // 模型级生成默认（2026-10-24）：'default' / 空 = 删除覆盖，跟随平台默认
   const enumFields: Array<[keyof ModelInput, string, readonly string[]]> = [
     ['defaultThinkingMode', '思考模式', ['default', 'enabled', 'disabled']],
-    ['defaultReasoningEffort', '思考强度', ['default', 'low', 'high', 'max']],
     ['defaultResponseFormat', '输出格式', ['default', 'none', 'json_object']]
   ];
   for (const [key, label, allowed] of enumFields) {
@@ -683,6 +571,19 @@ function buildModelEntry(input: ModelInput, existing: Record<string, unknown> | 
     }
     merged[key as string] = raw;
   }
+  /* 默认挡位不走枚举：取值是上游定义的（与 reasoningEfforts 同一套词），
+     只做形态校验；「必须在本模型声明的挡位里」由下面那条统一对账。 */
+  if (input.defaultReasoningEffort !== undefined) {
+    const raw = typeof input.defaultReasoningEffort === 'string' ? input.defaultReasoningEffort.trim().toLowerCase() : '';
+    if (!raw || raw === 'default') delete merged.defaultReasoningEffort;
+    else if (!REASONING_EFFORT_PATTERN.test(raw)) {
+      throw new RegistryEditError(
+        `思考强度只能是不带空格的短词（如 low / high / max），实际 ${JSON.stringify(input.defaultReasoningEffort)}。`,
+        400,
+        'invalid'
+      );
+    } else merged.defaultReasoningEffort = raw;
+  }
   const numFields: Array<[keyof ModelInput, string]> = [
     ['maxOutputTokens', '输出上限'],
     ['defaultMaxTokens', '缺省输出'],
@@ -694,9 +595,6 @@ function buildModelEntry(input: ModelInput, existing: Record<string, unknown> | 
     const value = positiveNumberOrNull(input[key], label);
     if (value === null) delete merged[key as string];
     else merged[key as string] = value;
-  }
-  if (input.fallbacks !== undefined) {
-    merged.fallbacks = Array.isArray(input.fallbacks) ? input.fallbacks.map((x) => String(x).trim()).filter(Boolean) : [];
   }
   if (input.pricing !== undefined) {
     if (!input.pricing) delete merged.pricing;
@@ -714,6 +612,18 @@ function buildModelEntry(input: ModelInput, existing: Record<string, unknown> | 
     const text = typeof input.description === 'string' ? input.description.trim() : '';
     if (text) merged.description = text;
     else delete merged.description;
+  }
+  // 默认档位必须落在本模型声明的挡位里（否则运行时那档会被 thinking-policy 裁掉，
+  // 「默认值」看上去生效但请求里根本没这个字段）
+  const declaredEfforts = Array.isArray(merged.reasoningEfforts) ? merged.reasoningEfforts as string[] : [];
+  if (typeof merged.defaultReasoningEffort === 'string'
+    && merged.defaultReasoningEffort !== 'default'
+    && !declaredEfforts.includes(merged.defaultReasoningEffort)) {
+    throw new RegistryEditError(
+      `默认推理强度「${merged.defaultReasoningEffort}」不在本模型声明的挡位（${declaredEfforts.join(' / ') || '未声明'}）里。`,
+      400,
+      'invalid'
+    );
   }
   // 已知键按规范顺序重排，未知键留尾部（不丢运维自己加的字段）
   const ordered: Record<string, unknown> = {};
@@ -764,13 +674,6 @@ export async function updateProvider(providerId: string, input: ProviderInput): 
   requireProvider(root, providerId);
   const next = cloneRoot(root);
   const target = requireProvider(next, providerId);
-  // #177：判定与写入共用同一个开关，杜绝「判定看恰好 false、写入看非 true」的语义漂移——
-  // `enabled` 任何非 true 的定义值都会停用（1/0/null/"false" 都是脚本常见写法，都会真的停用）。
-  const disablesProvider = input.enabled !== undefined && input.enabled !== true;
-  const wasEnabled = target.enabled !== false;
-  if (wasEnabled && disablesProvider) {
-    await assertProviderNotReferencedByRuntime(providerId);
-  }
 
   if (input.name !== undefined) {
     const name = String(input.name).trim();
@@ -782,7 +685,7 @@ export async function updateProvider(providerId: string, input: ProviderInput): 
     if (text) target.description = text;
     else delete target.description;
   }
-  if (input.enabled !== undefined) target.enabled = !disablesProvider;
+  if (input.enabled !== undefined) target.enabled = input.enabled === true;
   if (input.supportsSystemRole !== undefined) {
     if (typeof input.supportsSystemRole === 'boolean') target.supportsSystemRole = input.supportsSystemRole;
     else delete target.supportsSystemRole;
@@ -824,18 +727,7 @@ export async function deleteProvider(providerId: string): Promise<EditOutcome> {
   const next = cloneRoot(root);
   delete providersOf(next)[providerId];
 
-  const warnings: string[] = [];
-  for (const [pid, p] of Object.entries(providersOf(next))) {
-    const models = (p.models ?? {}) as Record<string, Record<string, unknown>>;
-    for (const [mid, m] of Object.entries(models)) {
-      if (Array.isArray(m.fallbacks) && m.fallbacks.map(String).some((f) => removed.has(f))) {
-        warnings.push(`「${pid}/${mid}」的备用链里还留着已删除的模型，运行时会被忽略，建议一并清理。`);
-      }
-    }
-  }
-  // #177：删整条供应商 = 它的模型整体离开运行时目录；先挡仍被平台默认/skill 绑定引用的（未启用条目内部跳过）
-  await assertProviderNotReferencedByRuntime(providerId);
-  const finalWarnings = saveRegistry(next, warnings);
+  const finalWarnings = saveRegistry(next, []);
   try {
     await deleteProviderSecret(providerId);
   } catch (e) {
@@ -872,12 +764,9 @@ export async function addModel(providerId: string, input: ModelInput): Promise<E
   const image = buildModelEntry({ ...input, id: modelId }, null);
   if (image.label === undefined) image.label = modelId;
   if (image.tier === undefined) image.tier = 'chat';
-  const warnings = Array.isArray(image.fallbacks) && image.fallbacks.length
-    ? checkFallbacks(providerId, image.fallbacks as string[], next)
-    : [];
   models[modelId] = image;
   target.models = models;
-  const finalWarnings = saveRegistry(next, warnings);
+  const finalWarnings = saveRegistry(next, []);
   return { modelId, warnings: finalWarnings };
 }
 
@@ -914,9 +803,6 @@ export async function addModels(
     const image = buildModelEntry({ ...input, id: modelId }, null);
     if (image.label === undefined) image.label = modelId;
     if (image.tier === undefined) image.tier = 'chat';
-    if (Array.isArray(image.fallbacks) && image.fallbacks.length) {
-      warnings.push(...checkFallbacks(providerId, image.fallbacks as string[], next));
-    }
     models[modelId] = image;
   }
   target.models = models;
@@ -937,12 +823,9 @@ export async function updateModel(providerId: string, modelId: string, input: Mo
   const updated = buildModelEntry(input, models[modelId]);
   if (updated.label === undefined) updated.label = modelId;
   if (updated.tier === undefined) updated.tier = 'chat';
-  const warnings = Array.isArray(updated.fallbacks) && updated.fallbacks.length
-    ? checkFallbacks(providerId, updated.fallbacks as string[], next)
-    : [];
   models[modelId] = updated;
   target.models = models;
-  const finalWarnings = saveRegistry(next, warnings);
+  const finalWarnings = saveRegistry(next, []);
   return { warnings: finalWarnings };
 }
 
@@ -971,17 +854,6 @@ export async function deleteModel(providerId: string, modelId: string): Promise<
   target.models = models;
 
   // 别名残留告警由 selfCheck 统一给（它按「保存后是否还解析得到」判定，一处口径就够了）
-  const warnings: string[] = [];
-  for (const [pid, p] of Object.entries(providersOf(next))) {
-    const pModels = (p.models ?? {}) as Record<string, Record<string, unknown>>;
-    for (const [mid, m] of Object.entries(pModels)) {
-      if (Array.isArray(m.fallbacks) && m.fallbacks.map(String).includes(modelId)) {
-        warnings.push(`「${pid}/${mid}」的备用链里还留着「${modelId}」，运行时会被忽略。`);
-      }
-    }
-  }
-  // #177：单模型删除同样要挡「运行时仍在引用」（平台三档默认 / 走平台通道的 skill 绑定）
-  await assertModelNotReferencedByRuntime(providerId, modelId);
-  const finalWarnings = saveRegistry(next, warnings);
+  const finalWarnings = saveRegistry(next, []);
   return { warnings: finalWarnings };
 }

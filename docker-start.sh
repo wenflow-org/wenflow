@@ -204,14 +204,24 @@ if [ "$NON_INTERACTIVE" != true ]; then
     [ -n "$input" ] && set_env "AI_API_URL" "$input"
 
     CURRENT=$(get_env "AI_MODEL")
-    [ -z "$CURRENT" ] && CURRENT="deepseek-v4-flash"
+    [ -z "$CURRENT" ] && CURRENT="deepseek-v4.1-flash"
     read -r -p "  AI_MODEL [$CURRENT]: " input
     [ -n "$input" ] && set_env "AI_MODEL" "$input"
 
-    CURRENT=$(get_env "AI_MODEL_REASONING")
-    [ -z "$CURRENT" ] && CURRENT="deepseek-v4-pro"
-    read -r -p "  AI_MODEL_REASONING [$CURRENT]: " input
-    [ -n "$input" ] && set_env "AI_MODEL_REASONING" "$input"
+    # 平台只有这一个默认模型（2026-11-04 起不再问 AI_MODEL_REASONING：某个 Skill 要不要长思考
+    # 由它的思考模式 / 推理强度决定，不是换一个模型）。旧 .env 里残留的该键不再被后端读取。
+
+    # 向量 / 重排（基础设施模型）：只作首次部署种子与回落，管理台「模型与接入」优先。
+    # 留空 = 不启用语义层（fail-open 回退关键词/窗口），不影响启动。
+    CURRENT=$(get_env "EMBEDDING_API_URL")
+    read -r -p "  EMBEDDING_API_URL (向量模型地址，留空 = 不启用) [$CURRENT]: " input
+    [ -n "$input" ] && set_env "EMBEDDING_API_URL" "$input"
+    CURRENT=$(get_env "EMBEDDING_API_KEY")
+    read -r -p "  EMBEDDING_API_KEY (向量模型密钥，回车沿用当前): " input
+    [ -n "$input" ] && set_env "EMBEDDING_API_KEY" "$input"
+    CURRENT=$(get_env "RERANK_API_URL")
+    read -r -p "  RERANK_API_URL (重排模型地址，留空 = 不启用) [$CURRENT]: " input
+    [ -n "$input" ] && set_env "RERANK_API_URL" "$input"
 
     echo ""
 
@@ -252,7 +262,6 @@ printf "  %-20s %b\n" "Secret 加密 Keyring" "${GREEN}已配置${NC}"
 printf "  %-20s %b\n" "AI_API_KEY" "$AI_STATUS"
 printf "  %-20s %s\n" "AI_API_URL" "$(get_env "AI_API_URL")"
 printf "  %-20s %s\n" "AI_MODEL" "$(get_env "AI_MODEL")"
-printf "  %-20s %s\n" "AI_MODEL_REASONING" "$(get_env "AI_MODEL_REASONING")"
 printf "  %-20s %s\n" "管理员" "$(get_env "INIT_ADMIN_NAME")"
 
 if [ ${#JWT_FINAL} -lt 32 ]; then

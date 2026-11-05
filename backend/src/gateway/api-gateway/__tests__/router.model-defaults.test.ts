@@ -112,7 +112,7 @@ describe('模型级生成参数优先级', () => {
     skillConfigFindFirst.mockResolvedValue({
       endpoint: null, apiKey: null, model: 'm-plain', tier: 'chat',
       thinkingMode: null, reasoningEffort: null, temperature: 0.2, maxTokens: 5000,
-      requestTimeoutMs: null, paramOverrides: null, fallbackChain: null
+      requestTimeoutMs: null, paramOverrides: null
     })
     const { APIRouter } = await import('../router')
     const route = await new APIRouter().resolve({ agentId: 'a', skillId: 's-plain' })
@@ -126,7 +126,7 @@ describe('模型级生成参数优先级', () => {
     skillConfigFindFirst.mockResolvedValue({
       endpoint: null, apiKey: null, model: 'm-model', tier: 'chat',
       thinkingMode: 'enabled', reasoningEffort: null, temperature: 0.2, maxTokens: 5000,
-      requestTimeoutMs: null, paramOverrides: null, fallbackChain: null
+      requestTimeoutMs: null, paramOverrides: null
     })
     const { APIRouter } = await import('../router')
     const route = await new APIRouter().resolve({ agentId: 'a', skillId: 's-enabled' })

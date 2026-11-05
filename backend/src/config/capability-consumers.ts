@@ -74,9 +74,13 @@ const MODEL_ENTRIES: CapabilityConsumerEntry[] = [
     consumers: ['gateway/api-gateway/thinking-policy.ts#supportsThinking'],
   },
   {
-    field: 'model.supportsReasoningEffort',
+    field: 'model.reasoningEfforts',
     kind: 'runtime',
-    consumers: ['gateway/api-gateway/thinking-policy.ts#supportsReasoningEffort'],
+    consumers: [
+      'gateway/api-gateway/thinking-policy.ts#reasoningEfforts',
+      'gateway/api-gateway/router.ts#normalizeReasoningEffort',
+      'services/admin/model-providers.service.ts#validateEfforts',
+    ],
   },
   {
     field: 'model.vision',
@@ -102,11 +106,6 @@ const MODEL_ENTRIES: CapabilityConsumerEntry[] = [
     field: 'model.maxParallelRequests',
     kind: 'runtime',
     consumers: ['gateway/api-gateway/model-concurrency.ts#maxParallelRequests'],
-  },
-  {
-    field: 'model.fallbacks',
-    kind: 'runtime',
-    consumers: ['gateway/api-gateway/executor.ts#getModelFallbacks', 'config/models.config.ts#getModelFallbacks'],
   },
   {
     field: 'model.pricing',

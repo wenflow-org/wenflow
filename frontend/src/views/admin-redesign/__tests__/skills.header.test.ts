@@ -36,8 +36,8 @@ vi.mock('@/api/adminApi', () => ({
     // 模型路由页签只剩覆盖矩阵一张表：给两行数据让它渲染出表头
     getSkillModelCoverage: vi.fn(async () => ({
       data: { data: { skills: [
-        { skillId: 'skill:a', endpoint: null, model: 'deepseek-v4.1-flash', tier: 'chat', source: 'skill-model-only', paramOverrides: null, fallbackChain: null },
-        { skillId: 'skill:c', endpoint: null, model: null, tier: 'chat', source: 'platform-default', paramOverrides: null, fallbackChain: null }
+        { skillId: 'skill:a', endpoint: null, model: 'deepseek-v4.1-flash', tier: 'chat', source: 'skill-model-only', paramOverrides: null },
+        { skillId: 'skill:c', endpoint: null, model: null, tier: 'chat', source: 'platform-default', paramOverrides: null }
       ] } }
     }))
   }),
@@ -303,7 +303,9 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     expect(dialog.exists()).toBe(true)
     expect(dialog.findAll('table')).toHaveLength(1)
     const routingSortable = dialog.findAll('th.mk-th--sortable').map((t) => t.text())
-    expect(routingSortable).toEqual(expect.arrayContaining(['Skill', '路由来源', '模型', '参数覆盖', '备用模型']))
+    // 2026-11-04 用户「去掉降级这个功能，不要」：备用模型列随降级下线
+    expect(routingSortable).toEqual(expect.arrayContaining(['Skill', '路由来源', '模型', '参数覆盖']))
+    expect(routingSortable).not.toContain('备用模型')
     const headers = dialog.findAll('th').map((t) => t.text())
     expect(headers).toEqual(expect.arrayContaining(['完成度']))
     w.unmount()

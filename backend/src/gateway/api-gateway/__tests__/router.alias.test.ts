@@ -104,13 +104,16 @@ describe('APIRouter 逻辑别名解析（chat / reasoning / light）', () => {
     expect(route.model).toBe('deepseek-v4.1-flash')
   })
 
-  /* 2026-10-24：推理档此前只在技能自己写了模型时生效；未写模型就退回对话默认，
-     平台的 defaultReasoningModel 在运行时没有消费者。 */
-  it('tier=reasoning 且未配模型 → 继承平台推理默认（而不是对话默认）', async () => {
+  /* 2026-10-24：推理档此前只在技能自己写了模型时生效；未写模型退回平台默认。
+     2026-11-04 用户「为什么还在区分默认推理和对话，没有这个了。所谓的推理，是取决于使用者
+     开启的思考强度」：平台不再有「默认推理模型」，档位不再影响模型选择——
+     tier=reasoning 且未配模型时和别的档一样沿用基础路由（即平台那一个默认）。 */
+  it('tier=reasoning 且未配模型 → 沿用平台默认（档位不再换模型）', async () => {
     platformConfigFindFirst.mockResolvedValue({
       ...BASE_PLATFORM,
-      defaultModel: 'agnes-3.0-flash',
-      defaultReasoningModel: 'deepseek-v4.1-flash'
+      defaultModel: 'deepseek-v4.1-flash',
+      // 库里可能还留着历史值，但后端已不再读它（这一行就是来钉住「读了也不算数」）
+      defaultReasoningModel: 'agnes-3.0-flash'
     })
     skillConfigFindFirst.mockResolvedValue({
       endpoint: null,

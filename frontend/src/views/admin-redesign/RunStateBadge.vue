@@ -63,7 +63,7 @@ function onActivate(e: KeyboardEvent) {
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-xs);
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   line-height: 1.5;

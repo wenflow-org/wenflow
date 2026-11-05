@@ -430,7 +430,7 @@ onMounted(() => {
   gap: 6px;
   padding: 4px 10px;
   border: 1px solid var(--mk-line);
-  border-radius: 999px;
+  border-radius: var(--mk-radius-md);
   font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
   text-decoration: none;

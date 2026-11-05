@@ -30,7 +30,7 @@ export interface SkillModelConfig {
   maxTokens: number;
   /** 参数覆盖 JSON 原文（{"temperature":..,"topP":..,"maxTokens":..}，null=未覆盖） */
   paramOverrides?: string | null;
-  /** 兜底链 JSON 原文（string[]，null=registry 默认链） */
+  /** 兜底链 JSON 原文：2026-11-04 随降级功能下线不再读写，DB 列保留（不删列）。 */
   fallbackChain?: string | null;
   requestTimeoutMs?: number | null;
   maxLogicalRetries?: number | null;

@@ -11,7 +11,9 @@ import {
   DEFAULT_INFRA_TIMEOUT_MS,
   defaultInfraModelsConfig,
   mergeInfraModelsConfig,
+  migrateLegacyModelPool,
   resolveInfraEndpoint,
+  resolveInfraModelsBaseUrl,
   validateInfraModelsConfig,
 } from '../infra-config';
 
@@ -126,5 +128,155 @@ describe('resolveInfraEndpoint', () => {
 
   it('空地址返回空串', () => {
     expect(resolveInfraEndpoint('', 'embedding')).toBe('');
+  });
+});
+
+/* P1（2026-11-04）：向量 / 重排卡要能「向上游拉清单再挑」，得先从带类型路径的端点回到 base。
+   剥掉的只是末尾那一类型段，其余路径（自建网关的 /openai/v1 之类）必须原样保留。 */
+describe('resolveInfraModelsBaseUrl', () => {
+  it('剥掉末尾的类型段', () => {
+    expect(resolveInfraModelsBaseUrl('https://gw.example/v1/embeddings'))
+      .toBe('https://gw.example/v1');
+    expect(resolveInfraModelsBaseUrl('https://gw.example/v1/rerank'))
+      .toBe('https://gw.example/v1');
+    expect(resolveInfraModelsBaseUrl('https://gw.example/v1/')).toBe('https://gw.example/v1');
+  });
+
+  it('非标准路径只去类型段，不吃掉网关自己的前缀', () => {
+    expect(resolveInfraModelsBaseUrl('https://gw.example/openai/v1/embeddings'))
+      .toBe('https://gw.example/openai/v1');
+  });
+
+  it('没有类型段时原样返回（已是 base 就别再削）', () => {
+    expect(resolveInfraModelsBaseUrl('https://gw.example/v1')).toBe('https://gw.example/v1');
+    expect(resolveInfraModelsBaseUrl('')).toBe('');
+  });
+});
+
+/*
+ * 模型池（2026-11-05 用户「我拉去了四个，配置了四个，那我可以选择其中一个作为启用吧」）：
+ * 一条连接可以配多个模型，其中一个是启用态。这里钉的是池子与启用项之间的不变量——
+ * 池子空 ⟺ 未选择模型；启用项一定在池子里；旧记录（只有单个 model）读出来是一个只含它的池子。
+ */
+describe('模型池', () => {
+  it('默认配置的池子里就是那一个默认模型', () => {
+    const config = defaultInfraModelsConfig(ENV);
+    expect(config.embedding.models).toEqual(['BAAI/bge-m3']);
+    expect(config.rerank.models).toEqual(['BAAI/bge-reranker-v2-m3']);
+  });
+
+  it('显式给池子：整体覆盖并保留顺序', () => {
+    const merged = mergeInfraModelsConfig(defaultInfraModelsConfig(ENV), {
+      embedding: { models: ['BAAI/bge-m3', 'BAAI/bge-large-zh-v1.5', 'text-embedding-3-large'], model: 'BAAI/bge-large-zh-v1.5' },
+    });
+    expect(merged.embedding.models).toEqual(['BAAI/bge-m3', 'BAAI/bge-large-zh-v1.5', 'text-embedding-3-large']);
+    expect(merged.embedding.model).toBe('BAAI/bge-large-zh-v1.5');
+  });
+
+  it('只切启用项（不传池子）：池子不变', () => {
+    const base = mergeInfraModelsConfig(defaultInfraModelsConfig(ENV), {
+      embedding: { models: ['BAAI/bge-m3', 'BAAI/bge-large-zh-v1.5'], model: 'BAAI/bge-m3' },
+    });
+    const merged = mergeInfraModelsConfig(base, { embedding: { model: 'BAAI/bge-large-zh-v1.5' } });
+    expect(merged.embedding.model).toBe('BAAI/bge-large-zh-v1.5');
+    expect(merged.embedding.models).toEqual(['BAAI/bge-m3', 'BAAI/bge-large-zh-v1.5']);
+  });
+
+  it('切到池子外的 id：落回池中第一个，不写矛盾状态', () => {
+    const merged = mergeInfraModelsConfig(defaultInfraModelsConfig(ENV), {
+      embedding: { models: ['BAAI/bge-m3', 'BAAI/bge-large-zh-v1.5'], model: 'not-configured' },
+    });
+    expect(merged.embedding.model).toBe('BAAI/bge-m3');
+    expect(merged.embedding.models).toEqual(['BAAI/bge-m3', 'BAAI/bge-large-zh-v1.5']);
+  });
+
+  it('清空池子 = 未选择模型（合法态）', () => {
+    const merged = mergeInfraModelsConfig(defaultInfraModelsConfig(ENV), {
+      embedding: { models: [], model: '' },
+    });
+    expect(merged.embedding.models).toEqual([]);
+    expect(merged.embedding.model).toBe('');
+    // 空池子是「还没选」，不是配置错误
+    const config = defaultInfraModelsConfig(ENV);
+    config.embedding.models = [];
+    config.embedding.model = '';
+    expect(validateInfraModelsConfig(config)).toEqual([]);
+  });
+
+  it('池子里重复的 id 去重，空串丢弃', () => {
+    const merged = mergeInfraModelsConfig(defaultInfraModelsConfig(ENV), {
+      embedding: { models: ['a', 'a', '', 'b'], model: 'a' },
+    });
+    expect(merged.embedding.models).toEqual(['a', 'b']);
+  });
+
+  it('旧记录（只有 model、没有 models）读出来是一个只含它的池子', () => {
+    const migrated = migrateLegacyModelPool({
+      embedding: { model: 'BAAI/bge-large-zh-v1.5' },
+      rerank: { model: '' },
+      required: true,
+    }) as { embedding: { models: string[] }; rerank: { models: string[] } };
+    expect(migrated.embedding.models).toEqual(['BAAI/bge-large-zh-v1.5']);
+    expect(migrated.rerank.models).toEqual([]);
+  });
+
+  it('已带 models 的记录原样通过迁移（不覆盖新数据）', () => {
+    const raw = { embedding: { model: 'a', models: ['a', 'b'] } };
+    const migrated = migrateLegacyModelPool(raw) as { embedding: { models: string[] } };
+    expect(migrated.embedding.models).toEqual(['a', 'b']);
+  });
+
+  it('校验：启用项不在池子里 / 池内有重复，都要拦下', () => {
+    const config = defaultInfraModelsConfig(ENV);
+    config.embedding.models = ['a', 'b'];
+    config.embedding.model = 'c';
+    expect(validateInfraModelsConfig(config).join('\n')).toContain('不在已配置的模型里');
+    config.embedding.model = 'a';
+    config.embedding.models = ['a', 'a'];
+    expect(validateInfraModelsConfig(config).join('\n')).toContain('重复项');
+  });
+});
+
+/* 显示名称（2026-11-05 用户「模型id和模型名称不能改吗」）：id 是键、名称给人看。
+   存的是 id → 名称，跟着池子走——池子变了名称也得跟着裁，不能留孤儿。 */
+describe('模型显示名称', () => {
+  it('默认没有名称（卡行退回显示 id）', () => {
+    expect(defaultInfraModelsConfig(ENV).embedding.labels).toEqual({});
+  });
+
+  it('按池子写入：空串即删除该条，池子外的名称进不来', () => {
+    const base = defaultInfraModelsConfig(ENV);
+    const config = mergeInfraModelsConfig(base, {
+      embedding: { labels: { 'BAAI/bge-m3': '主向量模型' } },
+    });
+    expect(config.embedding.labels).toEqual({ 'BAAI/bge-m3': '主向量模型' });
+
+    // 换池子 = 整体换：旧池子里的名称随旧 id 一起裁掉，池子外的键进不来
+    const two = mergeInfraModelsConfig(config, {
+      embedding: { models: ['a', 'b'], model: 'a', labels: { a: 'A', orphan: '不该出现' } },
+    });
+    expect(two.embedding.labels).toEqual({ a: 'A' });
+    const cleared = mergeInfraModelsConfig(two, { embedding: { labels: { a: '  ' } } });
+    expect(cleared.embedding.labels).toEqual({});
+    // 清空整份名称也是「给了 labels」：空表即清空（否则界面里删得掉、库里删不掉）
+    expect(mergeInfraModelsConfig(config, { embedding: { labels: {} } }).embedding.labels).toEqual({});
+  });
+
+  it('没提交 labels 时保留已有名称（PUT 是 partial 合并）', () => {
+    const named = mergeInfraModelsConfig(defaultInfraModelsConfig(ENV), {
+      embedding: { labels: { 'BAAI/bge-m3': '主向量' } },
+    });
+    const afterTimeout = mergeInfraModelsConfig(named, { embedding: { timeoutMs: 30000 } });
+    expect(afterTimeout.embedding.timeoutMs).toBe(30000);
+    expect(afterTimeout.embedding.labels).toEqual({ 'BAAI/bge-m3': '主向量' });
+  });
+
+  it('删掉模型时它的名称一起裁掉', () => {
+    const two = mergeInfraModelsConfig(defaultInfraModelsConfig(ENV), {
+      embedding: { models: ['a', 'b'], model: 'a', labels: { a: 'A', b: 'B' } },
+    });
+    expect(two.embedding.labels).toEqual({ a: 'A', b: 'B' });
+    const one = mergeInfraModelsConfig(two, { embedding: { models: ['a'], model: 'a' } });
+    expect(one.embedding.labels).toEqual({ a: 'A' });
   });
 });

@@ -330,7 +330,7 @@ onMounted(() => {
   color: var(--mk-muted);
   background: color-mix(in srgb, var(--mk-blue) 9%, transparent);
   padding: 5px 12px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-sm);
 }
 
 .auth__back {
