@@ -1332,20 +1332,21 @@ export function buildFramedNormalizedInput(input: any): any {
   const narrowScopeSignal = /(只(?:攻|练|学)|单方向|一个方向|这一件事|这件事就够|不展开|专门(?:攻|练|学)|仅(?:攻|练|学))/
     .test([surfaceGoal, explicitProblem, ...keyStages].join(' '));
   const planningHints = derivePlanningHints(timeHorizon, timePerSession, timeBudget, timeBudgetCadence, keyStages, timeDimensions, scopeSize, learnerLoadProfile, triage, narrowScopeSignal);
-  // 技能性质（2026-10-26）：goal 层 understanding.skill_nature 白名单透传，决定 AI 代跑边界。
-  const skillNature = normalizeSkillNature(input.skillNature);
-  const skillNatureEvidence = normalizeString(input.skillNatureEvidence) || null;
-  // 平台可判定性（2026-10-26 二拆）：与 skillNature 独立——决定「平台能不能判学习者做对了」。
-  // physical_internalized + not_judgeable 时，任务形态只能是「训练计划 + 复盘归因」，
-  // 不得编自查卡假装可判定。
-  const platformJudgment = normalizePlatformJudgment(input.platformJudgment);
-  const platformJudgmentEvidence = normalizeString(input.platformJudgmentEvidence) || null;
-  const sensorReadouts = Array.isArray(input.sensorReadouts)
-    ? (input.sensorReadouts as unknown[])
-        .map((v) => normalizeString(v))
-        .filter((v): v is string => !!v)
-        .slice(0, 8)
+  // #242：读**内层 learnerProfile**（producer path.coordinator.ts:398-430 写的这层，顶层为旧快照兜底）；
+  // 此前只读顶层 ⇒ 读不到，再由下方 else 整键删除，该字段从未通过定帧层。值无法归一也留痕。
+  const rawSkillNature = learnerProfile.skillNature ?? input.skillNature;
+  const rawPlatformJudgment = learnerProfile.platformJudgment ?? input.platformJudgment;
+  const rawSensorReadouts = learnerProfile.sensorReadouts ?? input.sensorReadouts;
+  const skillNature = normalizeSkillNature(rawSkillNature);
+  const skillNatureEvidence = normalizeString(learnerProfile.skillNatureEvidence ?? input.skillNatureEvidence) || null;
+  // 平台可判定性（2026-10-26 二拆）：not_judgeable 时任务形态只能是「训练计划 + 复盘归因」，不得编自查卡假装可判定。
+  const platformJudgment = normalizePlatformJudgment(rawPlatformJudgment);
+  const platformJudgmentEvidence = normalizeString(learnerProfile.platformJudgmentEvidence ?? input.platformJudgmentEvidence) || null;
+  const sensorReadouts = Array.isArray(rawSensorReadouts)
+    ? (rawSensorReadouts as unknown[]).map((v) => normalizeString(v)).filter((v): v is string => !!v).slice(0, 8)
     : null;
+  if (rawSkillNature != null && !skillNature) console.warn(`[path-framing] skillNature 无法归一，按缺失处理：${String(rawSkillNature).slice(0, 80)}`);
+  if (rawPlatformJudgment != null && !platformJudgment) console.warn(`[path-framing] platformJudgment 无法归一，按缺失处理：${String(rawPlatformJudgment).slice(0, 80)}`);
   // 校内锚：LLM 抽取口径（2026-09-30 用户拍板「不要走正则，走大模型自身的推理理解」）。
   // goal-conversation 的 understanding.school_anchor → visibleSummary → buildNormalizedInputV1
   // → 此处透传。没有该键（非校内学习者/旧链路）时**不注入**，不做任何关键词匹配兜底。
@@ -1420,10 +1421,8 @@ export function buildFramedNormalizedInput(input: any): any {
   // （下游按"键不存在"判定非校内路径，空壳会让锚规则误触发）。
   if (schoolAnchor) framed.schoolAnchor = schoolAnchor;
   else delete framed.schoolAnchor;
-  // 技能性质（2026-10-26 外部评审实证）：决定「AI 能否替学习者代跑核心动作」。
-  // 与锚同样只在有值时带出——判不出时下游按通用口径处理，不强制任何一档。
-  // 放在 learnerProfile 内而不是顶层：path/stage 两处 prompt 都已引用 learnerProfile，
-  // 不必新增顶层输入契约（顶层键要同步 manifest 与沙箱声明）。
+  // 技能性质（2026-10-26）：决定「AI 能否替学习者代跑核心动作」，与锚一样只在有值时带出，放在 learnerProfile 内
+  // （path/stage 两处 prompt 都已引用它，不必新增顶层契约）。
   if (skillNature) {
     framed.learnerProfile.skillNature = skillNature;
     if (skillNatureEvidence) framed.learnerProfile.skillNatureEvidence = skillNatureEvidence;
@@ -1431,8 +1430,8 @@ export function buildFramedNormalizedInput(input: any): any {
     delete framed.learnerProfile.skillNature;
     delete framed.learnerProfile.skillNatureEvidence;
   }
-  // 平台可判定性（2026-10-26 二拆）：同层透传。下游 stage-designer 据此决定任务形态——
-  // not_judgeable 时只能给「训练计划 + 复盘归因」，禁止把身体技能降级成写自查卡。
+  // 平台可判定性（2026-10-26 二拆）：下游 stage-designer 据此决定任务形态——not_judgeable 时只能给
+  // 「训练计划 + 复盘归因」，禁止把身体技能降级成写自查卡。
   if (platformJudgment) {
     framed.learnerProfile.platformJudgment = platformJudgment;
     if (platformJudgmentEvidence) framed.learnerProfile.platformJudgmentEvidence = platformJudgmentEvidence;
