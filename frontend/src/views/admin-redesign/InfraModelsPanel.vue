@@ -169,7 +169,6 @@
                   <label class="mk-field">
                     <span class="mk-field__label">服务地址</span>
                     <input v-model="form.endpoint" class="mk-field__input mono" :title="form.endpoint" placeholder="https://api.example.com" />
-                    <span class="mk-field__hint">实际请求 <span class="mono">{{ resolvedEndpoint || '—' }}</span></span>
                   </label>
                   <label v-if="editKind === 'rerank'" class="mk-field">
                     <span class="mk-field__label">接口规范</span>
@@ -186,6 +185,11 @@
                     />
                   </label>
                 </div>
+                <!-- 实际请求地址放在两列之外单独一行（2026-11-05）：原来挂在「服务地址」格子里，
+                     那格只有 1.6fr，长一点的地址会被折成三行，把整行的输入框顶得高低不齐。 -->
+                <p class="infra-endpoint" :title="resolvedEndpoint">
+                  实际请求 <span class="mono">{{ resolvedEndpoint || '—' }}</span>
+                </p>
                 <label v-if="editEntry?.keySource === 'db'" class="infra-clearkey">
                   <input v-model="form.clearKey" type="checkbox" />
                   <span>清除已保存的密钥（仍可回落环境变量）</span>
@@ -641,6 +645,16 @@ onMounted(load)
 .infra-conn--rerank { grid-template-columns: minmax(0, 1.4fr) 140px minmax(0, 1fr); }
 @media (max-width: 760px) {
   .infra-conn, .infra-conn--rerank { grid-template-columns: minmax(0, 1fr); }
+}
+/* 拼出来的实际请求地址：一行读完，放不下省略（它是用来核对地址的，折行反而读不出全貌） */
+.infra-endpoint {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
 }
 .infra-clearkey {
   display: flex;

@@ -326,7 +326,7 @@ describe('InfraModelsPanel', () => {
     // 回填成根地址；实际请求地址由这一层拼，和对话卡填根域名的口径一致
     expect((modal.find('.infra-conn input.mk-field__input').element as HTMLInputElement).value)
       .toBe('https://gw.example');
-    expect(modal.find('.infra-conn .mk-field__hint').text()).toContain('https://gw.example/v1/embeddings');
+    expect(modal.find('.infra-endpoint').text()).toContain('https://gw.example/v1/embeddings');
     wrapper.unmount();
   });
 
