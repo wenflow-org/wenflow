@@ -110,13 +110,15 @@
                 <div class="mpp-model-row__idline">
                   <span class="mono mpp-model-row__id" :title="m.id">{{ m.id }}</span>
                   <!-- 平台默认（P0 2026-11-04）：这一枚就是「没单独配的 Skill 走哪个」的答案，
-                       与下面「设为默认」动作同源。缺省时谁都没标，「默认：未设置」在工具栏顶部兜底。 -->
+                       与下面「设为默认」动作同源。缺省时谁都没标，「默认：未设置」在工具栏顶部兜底。
+                       2026-11-05 用户「右侧 pill 优化一下」：改实心主色——整行只有它是「被选中的」，
+                       颜色要压得住右边的能力胶囊（两者此前都是蓝 tint 底，实测 rgba .18 / .16，看不出差别）。 -->
                   <span
                     v-if="isDefaultModel(m)"
-                    class="mk-badge mk-badge--info mpp-default-chip"
+                    class="mk-badge mpp-default-chip"
                     title="平台当前默认，未单独配模型的 Skill 都继承它"
                   >默认</span>
-                  <span v-for="tag in functionTags(m)" :key="tag" class="mpp-fn__chip">{{ tag }}</span>
+                  <span v-for="tag in functionTags(m)" :key="tag" class="mk-badge mk-badge--muted mpp-fn__chip">{{ tag }}</span>
                 </div>
                 <!-- 2026-11-04 用户「不要这种文案，上『Avoid unnecessary secondary labels and
                      descriptions. Let the layout do the explaining.』」：每行原有的参数摘要
@@ -658,15 +660,15 @@ defineExpose({ refresh, openPull, openHostPull, openAdd: onPullAdd })
 .mpp-setup__text strong { font-size: var(--mk-fs-body); color: var(--mk-ink); }
 .mpp-setup__text span { font-size: var(--mk-fs-micro); line-height: 1.5; color: var(--mk-muted); }
 /* 能力标签：跟在模型 ID 后面；没有额外能力时留空，不写占位文案 */
-.mpp-fn__chip {
-  display: inline-block; margin-right: 6px; padding: 1px 7px;
-  border-radius: 999px; background: var(--mk-blue-bg);
-  font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue);
-  white-space: nowrap;
-}
-/* 默认徽章（P0 2026-11-04）：与能力胶囊同宽同形，但走徽章底色 —— 它是「选了它」，
-   不是「它有什么能力」，两者同形同色会被读成同一种事实。 */
-.mpp-default-chip { margin-right: 6px; }
+/* 能力胶囊（2026-11-05 用户「右侧 pill 优化一下」）：中性灰底弱字，整行退到二线。
+   与「默认」分家——那是「这一台正在被用」（状态），这是「这一台会什么」（能力）。
+   间距不再自己加 margin-right：行容器 .mpp-model-row__idline 已有 8px gap，
+   再叠一个 margin 会让「id→默认」是 8px、「默认→能力」是 14px（实测），同一行两种间距。 */
+.mpp-fn__chip { font-weight: 600; }
+/* 默认徽章：实心主色 + 白字，全行唯一高亮。
+   不用 --mk-blue 当底：它在暗色档被有意提亮成 #5b8def，白字只有 3.23:1
+   （与 .mk-btn--primary 同款坑，见 mk-primitives.css:1631）。 */
+.mpp-default-chip { background: var(--mk-blue-fill, #2f6ae0); color: var(--mk-on-fill); }
 .mpp-rowacts { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .mpp-empty { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 </style>
