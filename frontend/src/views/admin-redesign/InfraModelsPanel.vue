@@ -73,7 +73,7 @@
                   <input v-model="form.connectionMode" type="radio" value="inherit" />
                   <span class="infra-choice__text">
                     <strong>复用对话模型的连接</strong>
-                    <small>地址与密钥都取对话卡，按类型自动拼接路径</small>
+                    <small>地址与密钥都沿用对话模型的连接</small>
                   </span>
                 </label>
                 <label class="infra-choice__opt" :class="{ 'is-on': form.connectionMode === 'own' }">
@@ -117,7 +117,7 @@
               </div>
               <label v-if="editEntry?.keySource === 'db'" class="infra-clearkey">
                 <input v-model="form.clearKey" type="checkbox" />
-                <span>清除已保存的密钥（仍可回落环境变量）</span>
+                <span>清除已保存的密钥（之后改用环境变量中的密钥）</span>
               </label>
             </template>
 
@@ -196,7 +196,7 @@ function kindLabel(kind: InfraKind): string {
 
 function sourceText(entry: InfraModelEntryView): string {
   if (entry.connectionMode === 'inherit') return '配置来源：对话模型的连接'
-  return entry.configSource === 'db' ? '配置来源：平台配置' : '配置来源：环境变量回落'
+  return entry.configSource === 'db' ? '配置来源：平台配置' : '配置来源：环境变量'
 }
 
 /** 卡面只留一句连接归属，细节进弹层。 */

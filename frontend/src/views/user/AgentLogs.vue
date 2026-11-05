@@ -392,8 +392,10 @@ const STRUCTURAL_EMPTY_CAPABILITIES: Record<string, string> = {
 };
 const structuralEmptyText = computed(() => STRUCTURAL_EMPTY_CAPABILITIES[filters.capabilityType] || '');
 const emptyStateTitle = computed(() => structuralEmptyText.value || '暂无日志');
+/* 空态副文精简到一句指令（§7.3）：原「可切换到其他活动类型查看」既隔空指路（门禁 R2）
+   又把「怎么操作」写了一遍，改为直接说换个类型试试。 */
 const emptyStateHint = computed(() =>
-  structuralEmptyText.value ? '可切换到其他活动类型查看' : '调整筛选条件或稍后再来查看'
+  structuralEmptyText.value ? '换个活动类型试试' : '调整筛选条件或稍后再来查看'
 );
 
 // 本页无样本时不能把「无样本」写成 0 分：成功率 / 平均耗时是「0%」「0ms」会被读成
@@ -652,7 +654,9 @@ const formatAgentId = (logOrAgentId: string | AgentLogItem | null | undefined) =
     'skill:path-planning': '学习路径规划',
     // 2026-11-04：路径生成编排器此前未收录，行内直接印内部 id「path-agent」
     'path-agent': '路径生成',
-    'skill:stage-designer': '阶段任务设计',
+    // 2026-11-06 文案排查 §7：原展示名「阶段任务设计」含内部词「阶段任务」（门禁 R4），
+    // 改为「课程阶段设计」——同一能力，用户可读且不再直出内部生成阶段名。
+    'skill:stage-designer': '课程阶段设计',
     'skill:path-reviewer': '路径评审',
     'skill:kc-mapper': '知识点映射',
     'teaching-agent': 'AI 授课',

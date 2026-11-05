@@ -78,7 +78,10 @@ defineExpose({ scrollEl, scrollDown, jumpToBottom, nearBottom });
         <span v-if="showAvatar" class="msg__avatar"><img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" :alt="aiLabel" /></span>
         <div class="msg__content">
           <div class="msg__bubble msg__bubble--html" v-html="htmlFor(m)"></div>
-          <span v-if="m.confusion?.length" class="msg__chip msg__chip--confuse">发现卡点：「{{ m.confusion.join('、') }}」· 导师会在这里多做确认</span>
+          <span v-if="m.confusion?.length" class="msg__chip msg__chip--confuse">
+            <span class="msg__chip-tag">发现卡点</span>
+            <span class="msg__chip-text">「{{ m.confusion.join('、') }}」· 导师会在这里多做确认</span>
+          </span>
           <div class="msg__meta">
             {{ aiLabel }} · {{ m.time || nowTime() }}
             <button v-if="m.failed" type="button" class="msg__retry" @click="emit('retry')">重试</button>
@@ -95,7 +98,40 @@ defineExpose({ scrollEl, scrollDown, jumpToBottom, nearBottom });
   flex-direction: column;
   gap: 18px;
   overflow-y: auto;
+  /* 内层聊天流不再画原生粗滚动槽（2026-11-06 审计 §6）：Windows Chromium 的经典
+     滚动条（灰杠 + 上下箭头）会把气泡文字挤窄一截，和滚动容器自身的内边距叠成错位。
+     滚轮 / 触控 / 键盘滚动、焦点滚入视野均不变；外层容器若另有细滑块，由宿主决定。 */
+  scrollbar-width: none;
 }
+.chat-msg-list::-webkit-scrollbar { width: 0; height: 0; }
+/* 「发现卡点」的状态标签（2026-11-06 审计 §1 / 复核修正）：20px 小方签只套在短标签上——
+   后半句「「X」· 导师会在这里多做确认」是可换行的说明文字，跟着标签一起塞进 20px 定高
+   会溢出压到下方 meta 行。现在改为「标签 + 说明」两段：标签固定 20px，说明正常换行。 */
+.msg__chip {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  align-self: flex-start;
+  max-width: 100%;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.msg__chip-tag {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 1px 6px;
+  border-radius: var(--mk-radius-xs);
+  background: color-mix(in srgb, var(--wf-color-warning) 14%, transparent);
+  color: var(--amber-ink);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.msg__chip-text { min-width: 0; }
+.msg__chip--confuse .msg__chip-text { color: var(--amber-ink); }
 /* 发送失败重试：真按钮（父页 scoped 样式够不到本组件，这里自带 reset 兜底） */
 .msg__retry {
   margin-left: 8px;

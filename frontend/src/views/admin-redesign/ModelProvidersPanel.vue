@@ -28,7 +28,7 @@
         <span v-if="headBadge" class="mk-badge" :class="headBadge.cls">{{ headBadge.label }}</span>
       </div>
       <div class="mk-card__head-right">
-        <button v-if="registry?.readOnly" type="button" class="mk-btn mk-btn--sm mk-btn--danger" disabled title="配置文件所在目录不可写，请在部署侧开放写权限">
+        <button v-if="registry?.readOnly" type="button" class="mk-btn mk-btn--sm mk-btn--danger" disabled title="当前为只读状态，无法在本页修改，请让部署人员开放写权限">
           只读
         </button>
         <!-- 原页头「刷新注册表」移到这里（2026-11-03 用户「移入运维工具或合并处理，保持顶部干净」）：
@@ -38,8 +38,8 @@
           type="button"
           class="mpp-regreload"
           :disabled="loading"
-          title="重新读取本机的模型注册表文件，不向上游拉取模型清单"
-          aria-label="重新读取模型注册表"
+          title="重新读取本机保存的模型配置，不连接上游重新拉取清单"
+          aria-label="重新读取本机模型配置"
           @click="refresh(true)"
         >
           <RefreshCw :size="15" :stroke-width="1.75" aria-hidden="true" />
@@ -55,7 +55,7 @@
       <span class="mk-alert__msg">{{ w }}</span>
     </div>
     <p v-if="registry?.readOnly" class="mpp-note">
-      注册表文件所在目录当前不可写，页面只能查看。请由部署侧开放写权限后再编辑。
+      当前为只读状态，只能查看。请让部署人员开放写权限后再编辑。
     </p>
 
     <MkLoading v-if="loading && !view" inline text="读取接入通道…" />
@@ -155,7 +155,7 @@
                 >{{ testResults[m.id].ok ? '调用通过' : '调用失败' }}<template v-if="testResults[m.id].latency"> · {{ testResults[m.id].latency }}</template></span>
               </div>
               <div class="mpp-model-row__status">
-                <span v-if="cooldownOf(m)" class="mk-badge mk-badge--warn" :title="`调用冷却中，降级时会被跳过（剩余 ${Math.ceil(cooldownOf(m)!.remainingMs / 1000)}s）`">冷却中</span>
+                <span v-if="cooldownOf(m)" class="mk-badge mk-badge--warn" :title="`调用失败后暂时冷却，恢复前不会被选用（剩余 ${Math.ceil(cooldownOf(m)!.remainingMs / 1000)}s）`">冷却中</span>
                 <span
                   v-else
                   class="mk-badge mk-badge--ok"
@@ -198,7 +198,7 @@
             </div>
           </div>
           <p v-if="!selected.enabled" class="mpp-empty">
-            这条通道当前停用，模型不参与路由。
+            这条通道已停用，其中的模型不会被调用。
           </p>
         </section>
       </template>
@@ -302,7 +302,7 @@ const selected = computed(() => providers.value.find((p) => p.id === 'platform')
 const registryPathTitle = computed(() => {
   const r = view.value?.registry
   if (!r) return ''
-  const parts = [`目录文件：${r.path}`]
+  const parts = [`配置文件：${r.path}`]
   if (r.lastError) parts.push(`最近更新失败：${r.lastError}`)
   return parts.join('\n')
 })
@@ -353,7 +353,7 @@ function paramSummary(m: ModelLike): string[] {
   return out
 }
 /** 参数摘要行的悬停全文（静态文案单源，不给每行算一遍） */
-const PARAM_SUMMARY_TITLE = '只列这个模型单独设过的项（未设的项不发给上游，由上游按自身默认处理）'
+const PARAM_SUMMARY_TITLE = '只列这个模型单独设过的项，其余参数由上游按默认值处理'
 
 const fallbackOptions = computed(() =>
   providers.value.flatMap((p) => p.models.map((m) => `${p.id}/${m.id}`))
@@ -445,7 +445,7 @@ function adopt(payload: unknown, warnings: string[]): void {
 async function removeModel(m: ModelLike): Promise<void> {
   const ok = await askConfirm({
     title: `删除模型「${m.id}」`,
-    message: '从模型目录里删掉它，此后不再参与路由。若它正被默认路由或别名引用，系统会拦下并说明。',
+    message: '删除后它不再参与模型调用。若它正被默认模型或别名引用，系统会拦下并提示。',
     confirmText: '删除模型'
   })
   if (ok !== true) return

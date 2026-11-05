@@ -35,6 +35,9 @@ export const AGENT_LABEL: Record<string, string> = {
 export const PATH_PHASE_LABEL: Record<string, string> = {
   core: '路径规划',
   stageDesign: '课程设计',
+  // 后端部分日志/通知仍以 snake_case 回传同一阶段。不登记就会把内部枚举
+  // （stage_design）原样端到用户面前（SPEC §7：清除英文枚举与实现外露）。
+  stage_design: '课程设计',
   started: '启动',
   succeeded: '完成',
   failed: '失败',
@@ -43,9 +46,15 @@ export const PATH_PHASE_LABEL: Record<string, string> = {
 /** 未登记 agent 的兜底名：不泄露内部代号 */
 export const AI_TASK_FALLBACK_LABEL = 'AI 任务';
 
+/** path-agent 未登记阶段（后端新增能力时的过渡态）的兜底名：
+ *  宁可说「处理中」，也不把 phase 的原始值拼进用户可见文案。 */
+export const PATH_PHASE_FALLBACK_LABEL = '处理中';
+
 export function agentLabelOf(agentId: string, phase?: string | null): string {
   if (agentId === 'path-agent') {
-    if (phase) return PATH_PHASE_LABEL[phase] ? `路径生成 · ${PATH_PHASE_LABEL[phase]}` : `路径生成 · ${phase}`;
+    // 原实现 `路径生成 · ${phase}` 会把未登记的内部枚举（如 stage_design /
+    // persisting）直接展示给用户；改为查表 + 中性兜底（2026-11-06 SPEC §7）。
+    if (phase) return `路径生成 · ${PATH_PHASE_LABEL[phase] ?? PATH_PHASE_FALLBACK_LABEL}`;
     return '路径生成';
   }
   return AGENT_LABEL[agentId] ?? AI_TASK_FALLBACK_LABEL;

@@ -51,7 +51,9 @@
                          爬升期）时整体状态刻意显示「积累中」（见 toneOf 的 mature 分支，与
                          /state/warnings、建议引擎同判据），只写三档阈值会让 -14.42「积累中」的
                          用户按图例读成「需要休息」档——补一行积累期的说明 -->
-                    <li><b class="dot dot--green"></b>整体状态＝训练负荷 − 疲劳：≥40 精力充沛 · 20–39 最优训练区 · &lt;20 需要休息</li>
+                    <!-- 内部算法式（「整体状态＝训练负荷 − 疲劳」）不再直出（2026-11-06 审计 §7.1）：
+                         用户不需要知道状态是怎么算出来的，只需要知道落在哪一档 -->
+                    <li><b class="dot dot--green"></b>整体状态：≥40 精力充沛 · 20–39 最优训练区 · &lt;20 需要休息</li>
                     <li><b class="dot dot--blue"></b>数据积累期显示「积累中」，暂不定档</li>
                     <li><b class="dot dot--amber"></b>保持规律学习让训练负荷平稳积累。疲劳偏高时安排休息，避免长期处于低状态区</li>
                   </ul>
@@ -59,9 +61,10 @@
                 <!-- 空态不报「近 N 天」：无数据时没有跨度可言，写「近 10 天」会先承诺一张不存在的图 -->
                 <span v-if="hasAnyLoad" class="band__meta">{{ drawnSpanLabel }}</span>
               </div>
-              <!-- 窗口选择器只在真的有更长历史可看时出现（数据不足 42 天时两档是同一条图，
-                   留着只会让口径与图对不上——2026-09-27 外部走查） -->
-              <div v-if="showRangeSeg" class="band__extra">
+              <!-- 窗口选择器只在真的有图可切时出现（2026-11-06 审计 §5 + 空态口径）：
+                   空态/加载中/加载失败时图区是一块说明，切换器切的是不存在的曲线（死开关）；
+                   数据不足 42 天时两档是同一条图，90 天档也不出现（2026-09-27 外部走查） -->
+              <div v-if="showRangeSeg && hasAnyLoad" class="band__extra">
                 <!-- role+aria-pressed（2026-09-27 a11y）：纯视觉的选中底色读屏听不出，与图谱页层级分段同口径 -->
                 <div class="seg" role="group" aria-label="趋势时间窗口">
                   <button type="button" class="seg__item" :class="{ 'seg__item--on': effectiveRange === 7 }" :aria-pressed="effectiveRange === 7" @click="setRange(7)">近 7 天</button>
@@ -128,7 +131,9 @@
                 </svg>
               </span>
               <strong>学习状态正在积累中</strong>
-              <p>完成第一个学习任务后开始记录，随着学习天数增加，训练负荷、疲劳度与整体状态曲线会逐步完整。</p>
+              <!-- 空态精简至 20 字内（2026-11-06 审计 §7.3）：原两行讲的是记录机制，
+                   对「现在该做什么」没有增量信息 -->
+              <p>完成第一次学习后，这里会记录状态曲线。</p>
               <router-link to="/learning-paths" class="chart__empty-cta">去开始学习</router-link>
             </div>
             <template v-else>
@@ -200,8 +205,8 @@
                 </svg>
                 <!-- X 轴日期：两根时长柱与曲线点各自对应哪一天，桌面/移动都不再只有一个悬停值 -->
                 <div class="ff-xaxis" aria-hidden="true">
-                  <!-- 30 天档每 3~5 天出一个刻度（xTickEvery 按点数折算 ≤10 个），
-                       末位日期强制保留，别让「最新是哪天」丢掉 -->
+                  <!-- 刻度按 xTickEvery 抽稀（2026-11-06 审计 §5：30 天档 = 每 5 天一个，
+                       全档 ≤7 个日期），末位日期强制保留，别让「最新是哪天」丢掉 -->
                   <template v-for="(p, i) in points" :key="`x-${p.date}`">
                     <span
                       v-if="i % xTickEvery === 0 || i === points.length - 1"
@@ -212,7 +217,7 @@
               </div>
               <!-- 500 条上限的口径说明（2026-09-27）：凑满上限说明大概率被截断，
                    早段日子没有背景柱不是故障，先说清楚 -->
-              <p v-if="sessionsTruncated" class="ff-trunc">时长背景柱仅统计最近 {{ SESSIONS_LIMIT }} 次学习记录，更早的日子未计入。</p>
+              <p v-if="sessionsTruncated" class="ff-trunc">时长柱只统计最近 {{ SESSIONS_LIMIT }} 次学习记录，更早的日子未计入。</p>
               <!-- aria-live：SVG 本体 aria-hidden，唯一的历史值出口在这里，切日时 polite 播报 -->
               <div v-if="displayDay" class="ff-info" aria-live="polite">
                 <b>{{ displayDay.label }}</b>
@@ -253,36 +258,31 @@
                  生成的建议——否则会出现「KPI 全 0」与「你已投入大量时间/有些疲劳」同屏自相矛盾
                  （2026-10-15 走查 #41；2026-10-20 起用 KPI 口径取代会被后向填充的 hasAnyLoad）。
                  无数据回落中性空态。 -->
-            <template v-if="skillCopy && hasKpiData">
-              <!-- 2026-11-05 屏效比「去首页复读」：无**真正可执行的调整**时（pendingAdjust 空、
-                   guideActions 空），skill 的引导语整段是学习台的职责（「去学第一节课」），
-                   在本页连说三遍且毫无动作可做——降级为一行结论；只有真触发调整
-                   （疲劳超标/知识点连错等）时才展开完整建议 + 采用/保持动作 -->
+            <template v-if="guidanceCopy && hasKpiData">
+              <!-- 2026-11-06 审计 §3「彻底移除属学习台的破冰引导上半部分」：
+                   headline / subtitle / warningCopy 就是学习台首屏消费的那三个字段
+                   （V2Dashboard 的 greet__headline 与 AI 提示条），搬到本页会渲染出
+                   「先把断点找出来」「这条路径刚起步，还没到需要提醒疲劳的程度」这类
+                   破冰话术，并与下方 /state/warnings 的「学习疲劳预警」红框同屏对打。
+                   本卡从此只呈现可执行内容：待确认调整、建议深链、课堂依据、真实预警。 -->
               <div v-if="!hasAdvisoryAction" class="guide guide--compact">
-                <h3 class="guide__title">{{ skillCopy.headline }}</h3>
-                <p class="guide__evidence">当前没有需要调整的安排。有需要时这里会出现建议与处理入口。</p>
+                <p class="guide__evidence">当前无需调整，有需要时会在这里提醒。</p>
               </div>
-              <!-- PC 自查发现的自相矛盾（2026-11-05 用户截图）：诊断行取的是 skillCopy.warningCopy，
-                   而它属于「首页破冰话术」（"这条路径刚起步，还没到需要提醒疲劳的程度"），
-                   与下方真正的 /state/warnings 疲劳预警同屏打架。判据：有真预警时预警必须在场，
-                   破冰话术整段退场（它本来就只该出现在学习台）——有预警就不再渲染诊断/建议两行 -->
+              <!-- 有真预警时预警必须在场，建议行整段退场（2026-11-05 判据保留） -->
               <template v-else-if="!warningRows.length">
-              <!-- 2026-11-05 用户定稿「诊断 → 建议」两行对照：原先标题、橙色警告、带播放图标
-                   和「继续」按钮的嵌套卡、下一步·节奏脚注四段车轱辘话说的是同一件事，
-                   且「继续」与「采用建议/保持原计划」两排按钮打架——
-                   现在两行说清，动作入口收敛到下方那一对按钮 -->
-              <div class="guide">
-                <p class="guide__diag"><b>诊断</b><span>{{ adviceDiagnosis }}</span></p>
-                <p class="guide__plan">
-                  <b>建议</b>
-                  <span>{{ advicePlan }}<i v-if="advicePace">（{{ advicePace }}）</i></span>
-                </p>
-              </div>
-              <!-- 依据行保留：它是新信息（课堂证据），不在「重复说三遍」之列 -->
-              <p v-if="evidenceHint" class="guide__evidence">依据：{{ evidenceHint }}</p>
-              <!-- 诊断自报无证据时建议降级为参考口径（state/iphone/6）：明说建议不再是
-                   调整依据，动作按钮已随 hasAdvisoryAction 撤下 -->
-              <p v-if="reviewLacksEvidence" class="guide__evidence guide__evidence--warn">本次没有可依据的课堂证据，AI 建议仅供参考，暂不作为调整依据。</p>
+                <!-- 只剩「建议」行：诊断行整段取自 warningCopy/headline（= 首页破冰话术），已删；
+                     建议也只在有真实动作时才出——nextStep 同样属首页引导句，不再回落复读 -->
+                <div v-if="advicePlan" class="guide">
+                  <p class="guide__plan">
+                    <b>建议</b>
+                    <span>{{ advicePlan }}</span>
+                  </p>
+                </div>
+                <!-- 依据行保留：它是新信息（课堂证据），不在「重复说三遍」之列 -->
+                <p v-if="evidenceHint" class="guide__evidence">依据：{{ evidenceHint }}</p>
+                <!-- 诊断自报无证据时建议降级为参考口径（state/iphone/6）：明说建议不再是
+                     调整依据，动作按钮已随 hasAdvisoryAction 撤下 -->
+                <p v-if="reviewLacksEvidence" class="guide__evidence guide__evidence--warn">本次没有可依据的课堂证据，AI 建议仅供参考，暂不作为调整依据。</p>
               </template>
             </template>
 
@@ -310,11 +310,14 @@
 
             </div><!-- /advisory__body：预警常显，与正文同层 -->
 
-            <!-- 预警（数据告警，两种模式都展示） -->
+            <!-- 预警（数据告警，两种模式都展示；空态/0 KPI 由 hasKpiData 拦下） -->
             <div v-if="warningsLoadFailed" class="chart__empty" role="alert">
               预警数据加载失败，请刷新页面重试。
             </div>
-            <div v-if="skillCopy && hasKpiData && warningRows.length" class="suggest__list suggest__list--warnings">
+            <!-- 2026-11-06 审计 §3：预警的在场不与 guidance 文案冲突——guidance 取不到时
+                 预警仍由下方静态兜底块（suggestionCards 含 warnings）呈现，这里再挂一次
+                 就是同屏两遍同一条预警；故仍按 guidanceCopy 在场渲染（每条预警只出一处）。 -->
+            <div v-if="guidanceCopy && hasKpiData && warningRows.length" class="suggest__list suggest__list--warnings">
               <article v-for="(w, i) in warningRows" :key="i" class="sug" :class="`sug--${w.level}`">
                 <span class="sug__icon" :style="{ background: w.bg, color: w.ink }" v-html="w.icon"></span>
                 <div class="sug__body">
@@ -480,7 +483,8 @@
               </div>
               <div v-else-if="!masteryBuckets.total" class="chart__empty">
                 <strong>还没有知识点数据</strong>
-                <p>开始学习路径后，这里会按已掌握 / 进行中 / 待学习分档统计。</p>
+                <!-- 空态精简（2026-11-06 审计 §7.3）：三档名称下方图例已列全，这里不再复述 -->
+                <p>开始学习后，这里会按掌握程度分档。</p>
               </div>
               <!-- 三色分段条（2026-11-05 屏效比）：原三行各画一根进度条占 ~90px，
                    合成一根按占比分段的横条 + 一行数字图例——一眼看出分布，不再逐行读 -->
@@ -588,8 +592,11 @@ function toneOf(key: MetricKey, v: number, mature?: boolean): { tone: string; co
     // 后端 mature=false：PMC 冷启动爬升期（KTL 基座未成熟）form<0 属正常，
     // 不能按「严重疲劳」展示——与 /state/warnings、建议引擎同判据。
     if (mature === false) return { tone: 'blue', color: 'var(--blue-deep)', note: '积累中' };
-    // LSB = KTL - LF（-100 ~ +100），分档对齐后端相对量判据与状态分档文案
-    if (v < 0) return { tone: 'red', color: 'var(--red-ink)', note: '严重疲劳，优先休息' };
+    // LSB = KTL - LF（-100 ~ +100），分档对齐后端相对量判据与状态分档文案。
+    // 标签文案压到 4 字（原「严重疲劳，优先休息」9 字）：窄屏 2 列时标签折成两行会
+    // 破 20px 方签并顶乱数值基线（2026-11-06 复核）；「休息」这一动作由图例
+    // （「疲劳偏高时安排休息」）承担，标签只报状态。
+    if (v < 0) return { tone: 'red', color: 'var(--red-ink)', note: '严重疲劳' };
     if (v >= 40) return { tone: 'green', color: 'var(--green-ink)', note: '精力充沛' };
     if (v >= 20) return { tone: 'blue', color: 'var(--blue-deep)', note: '最优训练区' };
     return { tone: 'amber', color: 'var(--amber-ink)', note: '需要休息' };
@@ -702,9 +709,11 @@ const earliestDataOffset = computed(() => {
 });
 
 const windowStartOffset = computed(() => {
-  // 数据少时窗口自动收缩（但至少约一周）；数据多时用满所选范围
+  /* 数据少时窗口自动收缩（但至少约一周）；数据多时用满所选范围。
+     下限 6 = 「近 7 天」档正好画 7 天（i 从 6 到 0 共 7 天）。原下限 7 画出 8 天，
+     与切换器上的「近 7 天」标签自相矛盾（2026-11-06 审计 §5：切到哪档就该是哪档的跨度）。 */
   const base = Math.min(effectiveRange.value - 1, earliestDataOffset.value + 2);
-  return Math.max(base, 7);
+  return Math.max(base, 6);
 });
 
 const series = computed<Array<Omit<TrendPoint, 'x' | 'ky' | 'ly' | 'sy' | 'bx' | 'by' | 'bh'>>>(() => {
@@ -753,10 +762,13 @@ const activeSeries = computed(() => {
   return days.slice(Math.max(0, first - 2));
 });
 
-/* 量程与刻度（2026-11-05 用户定稿「Y 轴整十刻度 + 0 基准线」）：
+/* 量程与刻度（2026-11-05 用户定稿「Y 轴整十刻度 + 0 基准线」；2026-11-06 审计 §5 复核）：
    旧版把量程 5 等分取整，间隔 17.5 的 -26/-8/9/27/44 刻度谁也读不懂，0 基准还没线。
-   现在先挑步长（5/10/20/25/50 里取能覆盖量程且 ≤5 段的最小档），再把上下界吸附到
+   现在先挑步长（5/10/20/40/50/100 里取能覆盖量程且 ≤5 段的最小档），再把上下界吸附到
    步长整倍数——刻度、网格线、0 基线全部落在同一坐标系上。
+   步长候选里剔除 25（2026-11-06 审计 §5「整十刻度」）：25 的倍数（-25/25/75）不是整十数，
+   量程恰好落在 100~125 时会画出 -50/-25/0/25/50/75 这种刻度；40 顶替它，
+   倍数全是整十。5/10/20/40/50/100 的倍数无一例外都是整十。
    ① 下界强制含 0（rawLo ≤ 0）：时长背景柱的正数从 0 基线往上长，不再从负数轴底冒出来；
    ② 上界锚 40「精力充沛」阈值线：数据最高 25 时撑到 40 即可（用户拍板），不再硬顶 44
       把上半张图留成空白——40 线贴顶恰好成为上边界。 */
@@ -774,7 +786,7 @@ const valueDomain = computed<{ lo: number; hi: number; step: number }>(() => {
   const pad = Math.max(4, (hi - lo) * 0.12);
   const rawLo = Math.min(lo - pad, 0);
   const rawHi = Math.max(hi + pad, 40);
-  const step = [5, 10, 20, 25, 50, 100].find((s) => (rawHi - rawLo) / s <= 5) ?? 100;
+  const step = [5, 10, 20, 40, 50, 100].find((s) => (rawHi - rawLo) / s <= 5) ?? 100;
   return {
     lo: Math.floor(rawLo / step) * step,
     hi: Math.ceil(rawHi / step) * step,
@@ -839,9 +851,14 @@ const points = computed<TrendPoint[]>(() => {
   });
 });
 
-/* X 轴日期抽稀（2026-11-05 用户定稿）：30 天全印是一排密密麻麻的小字——
-   最多 10 个刻度，其余日子靠悬停/键盘读数（ff-xaxis 的 span 只在步进点上渲染） */
-const xTickEvery = computed(() => Math.max(1, Math.ceil(activeSeries.value.length / 10)));
+/* X 轴日期抽稀（2026-11-05 用户定稿；2026-11-06 审计 §5 收紧为「每 4~5 天一个刻度」）：
+   旧版 ceil(n/10)，30 天档步进 3 天 = 10 个日期仍挤成一行小字。现在从整档里挑「首个
+   能把刻度数压到 ≤7 的步长」：7 天视图逐日（7 个）、30 天视图 5 天、90 天视图 15 天。
+   其余日子靠悬停/键盘读数，末位日期由模板强制保留（见 ff-xaxis）。 */
+const xTickEvery = computed(() => {
+  const n = activeSeries.value.length;
+  return [1, 2, 3, 4, 5, 7, 10, 15, 30].find((s) => n / s <= 7) ?? 30;
+});
 
 const barW = computed(() => {
   const n = activeSeries.value.length || 1;
@@ -1177,19 +1194,13 @@ function setRange(r: 7 | 30 | 90) {
 const guidance = ref<Record<string, any> | null>(null);
 
 const router = useRouter();
-/* 模型偶尔自带字段说明前缀（「下一步最值得做：…」「节奏保持稳定：…」），模板又加了一次标签，
-   于是渲染成「下一步：下一步最值得做：」（2026-10-31 走查 P1-9）。统一在这里剥掉前缀，
-   前端标签才是唯一口径；兜底文案本身不带前缀，剥不到也无副作用。 */
-const stripCopyLabel = (text: unknown, pattern: RegExp): string => String(text ?? '').replace(pattern, '').trim();
-const skillCopy = computed<Record<string, any> | null>(() => {
-  const copy = guidance.value?.copy as Record<string, any> | null | undefined;
-  if (!copy) return null;
-  return {
-    ...copy,
-    nextStep: stripCopyLabel(copy.nextStep, /^(?:下一步最值得做|下一步)\s*[：:]\s*/),
-    paceHint: stripCopyLabel(copy.paceHint, /^(?:节奏保持稳定|节奏保持|节奏正常|节奏)\s*[：:]\s*/),
-  };
-});
+/* 2026-11-06 审计 §3：本页只消费 copy.todayActions（可执行深链）。
+   headline / subtitle / warningCopy / nextStep / paceHint 都是学习台首屏的引导文案，
+   在本页渲染即「首页破冰引导模块」复读，并会与 /state/warnings 的疲劳预警对打——
+   原先的 stripCopyLabel（剥「下一步：」这类前缀）因此一并退役：不再有第二个出口。 */
+const guidanceCopy = computed<Record<string, any> | null>(
+  () => (guidance.value?.copy as Record<string, any> | null | undefined) ?? null
+);
 
 /* ---------- 状态评审诊断（diagnosis 层，Slice 2c） ---------- */
 const reviewDiagnosis = computed(() => guidance.value?.review?.diagnosis || null);
@@ -1429,23 +1440,13 @@ const suggestSource = computed(() => {
   return '系统建议';
 });
 
-const skillWarning = computed(() => {
-  const w = skillCopy.value?.warningCopy;
-  return w && w !== '当前没有明显风险。' ? w : '';
-});
-
-/* 诊断/建议两行文案（2026-11-05 用户定稿）：标题、橙色警告、嵌套动作卡、下一步·节奏
-   四段说的是同一件事——合并成「诊断 → 建议」两行对照：
-   诊断取警告（无警告退副标/标题），建议取第一个动作卡（无动作退下一步），节奏并入括号 */
-const adviceDiagnosis = computed(() =>
-  String(skillWarning.value || skillCopy.value?.subtitle || skillCopy.value?.headline || '').trim()
-);
+/* 建议行（2026-11-06 审计 §3 收窄）：只认真实动作卡（todayActions → 深链），
+   不再回落 skillCopy.nextStep——那是学习台首页的引导句，在本页复读只会与预警/调整说同一件事。
+   同批删掉的是诊断行：它的文案来自 warningCopy/subtitle/headline，正是首页破冰话术的来源。 */
 const advicePlan = computed(() => {
   const a = guideActions.value[0];
-  if (a) return [a.title, a.desc].filter(Boolean).join('——');
-  return String(skillCopy.value?.nextStep || '').trim();
+  return a ? [a.title, a.desc].filter(Boolean).join('——') : '';
 });
-const advicePace = computed(() => String(skillCopy.value?.paceHint || '').trim());
 
 const svgPlay = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>';
 const svgLayers = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="m12 2 10 5-10 5L2 7l10-5zm0 7.6L18.9 7 12 4.4 5.1 7 12 9.6zM2 12l10 5 10-5v2l-10 5L2 14v-2zm0 5 10 5 10-5v2l-10 5L2 19v-2z" opacity=".9"/></svg>';
@@ -1454,7 +1455,7 @@ const svgMedal2 = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="c
 const svgHome = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="m12 3 9 8h-3v9h-4v-6h-4v6H6v-9H3l9-8z"/></svg>';
 
 const guideActions = computed(() => {
-  const list = skillCopy.value?.todayActions;
+  const list = guidanceCopy.value?.todayActions;
   if (!Array.isArray(list)) return [];
   const pathId = guidance.value?.summary?.path?.pathId || null;
   const taskId = guidance.value?.summary?.path?.taskId || null;
@@ -1726,16 +1727,30 @@ function loadGuidance() {
 .vitals--meta .vitals__foot { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 /* 未画线的学习压力给中性点（不与三条曲线的颜色混同） */
 .ff-dot--plain { background: var(--faint); }
-.vitals--meta small { font-size: 12px; color: var(--faint); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* 数值统一深色（2026-11-05 用户定稿）：颜色只留给圆点与标签，数字不再各走一套
-   折线色——否则绿点配蓝数字、紫点配绿数字，看图时大脑对不上 */
+.vitals--meta small { font-size: var(--mk-fs-12); color: var(--faint); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 数值统一正文色（2026-11-05 用户定稿；2026-11-06 审计 §2 复核）：颜色只留给圆点与标签，
+   数字不再各走一套折线色——否则绿点配蓝数字、紫点配绿数字，看图时大脑对不上。
+   暗色档补纯白（--wf-neutral-950 在暗色档 = #FFFFFF）：--ink 是 #efeff0 的柔白，
+   与本页「关键数值纯白」的定稿差一档。 */
 .vitals--meta b { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--ink); }
-.vitals--meta b i { font-size: 12px; font-style: normal; font-weight: 600; color: var(--faint); }
-/* 分档标签改小方签（2026-11-05 全局去肥胖化）：4px 圆角、收内衬 */
-.metric__note { width: fit-content; font-size: 12px; font-weight: 800; padding: 2px 6px; border-radius: 4px; }
-/* PC 1 行 4 列（2026-11-05 用户定稿）：2×2 是窄屏的排法，PC 每格 500px 宽、
-   字挤在最左、右边空 80% 灰底。趋势卡满宽后 4 格一字排开正好填满横向。 */
-@media (min-width: 768px) {
+[data-theme='dark'] .vitals--meta b { color: var(--wf-neutral-950); }
+.vitals--meta b i { font-size: var(--mk-fs-12); font-style: normal; font-weight: 600; color: var(--faint); }
+/* 分档标签 = 紧凑小方签（2026-11-05 全局去肥胖化；2026-11-06 审计 §1）：
+   固定 20px 行高（12px 字 + 2px 上下内衬）、4px 圆角、半透明底、无描边。
+   单行不折 + 可收缩省略（2026-11-06 复核）：窄屏 2 列时每格内宽只剩 ~130px，
+   数值占去大半，长标签一旦折行就有 36px 高、与同行数值基线错位（四张卡不再严丝合缝）。
+   nowrap 保 20px 单行，min-width:0 + ellipsis 让它在极窄时让位给数值（数值 min-content
+   不可收缩，先保住数字）；配套已把最长档位文案压到 4 字（见 toneOf 的「严重疲劳」）。 */
+.metric__note {
+  width: fit-content; max-width: 100%; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--mk-fs-12); font-weight: 800;
+  line-height: 16px; padding: 2px 6px; border-radius: var(--mk-radius-xs);
+}
+/* PC 1 行 4 列（2026-11-05 用户定稿；2026-11-06 审计 §2 对齐 >= 1024 桌面档）：
+   2×2 是窄屏的排法，PC 每格 500px 宽、字挤在最左、右边空 80% 灰底。
+   趋势卡满宽后 4 格一字排开正好填满横向。768~1023 是平板档，仍走 2×2。 */
+@media (min-width: 1024px) {
   .vitals--meta { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 /* 胶囊底色用「前景 ink × 表面」混色：暗色主题自动降饱和（外部评审：原 rgba 撞色在暗底上刺眼） */
@@ -1811,13 +1826,15 @@ function loadGuidance() {
 .sug__cta {
   /* 走查 2026-10-08 #79：这枚「继续」此前只有 7px 上下内边距，桌面实测约 45×30，
      比同页「查看学习历史」（107×44）小一截，是触控热区不达标的可点元素。
-     抬到 36px 触控底线，宽度随文案（inline-flex 居中），不改变它在卡内的次级观感。 */
+     抬到 36px 触控底线，宽度随文案（inline-flex 居中），不改变它在卡内的次级观感。
+     2026-11-06 审计 §1：圆角从全圆胶囊改为 8px 控件档（同心圆角法则）；
+     36px 高度是既有 a11y 回归用例锁住的下沿（.sug__cta ≥36），按「测试锁住的旧口径」保留。 */
   display: inline-flex; align-items: center; justify-content: center;
   min-height: 36px;
-  font-size: 12px; font-weight: 800; color: var(--blue-deep);
+  font-size: var(--mk-fs-12); font-weight: 800; color: var(--blue-deep);
   border: 1px solid color-mix(in srgb, var(--blue) 40%, transparent);
   background: color-mix(in srgb, var(--blue) 6%, transparent);
-  padding: 7px 13px; border-radius: var(--mk-radius-pill);
+  padding: 7px 13px; border-radius: var(--mk-radius-md);
   cursor: pointer; white-space: nowrap;
 }
 .sug__cta:hover { background: color-mix(in srgb, var(--blue) 12%, transparent); }
@@ -1840,12 +1857,15 @@ function loadGuidance() {
 .advisory__star { width: 15px; height: 15px; flex: 0 0 auto; color: var(--amber); }
 /* 卡头右侧的来源标注（AI 生成 / 系统建议）：跟 head 同色会抢星标语义，压回 meta 灰 */
 .advisory__head .band__meta { margin-left: auto; font-weight: 600; color: var(--faint); }
-/* 待确认小方签（2026-11-05）：琥珀字 + 12% 底、4px 圆角，与全局方签语言一致 */
+/* 待确认小方签（2026-11-05；2026-11-06 审计 §1 收口）：12px 字 + 16px 行高 + 2px 内衬
+   = 20px 高，4px 圆角，琥珀 12% 半透明底、无描边 */
 .advisory__pending {
   flex: 0 0 auto;
-  font-size: 12px; font-weight: 800; color: var(--amber-ink);
+  font-size: var(--mk-fs-12); font-weight: 800; line-height: 16px;
+  white-space: nowrap;
+  color: var(--amber-ink);
   background: color-mix(in srgb, var(--amber-ink) 12%, var(--surface));
-  padding: 2px 6px; border-radius: 4px;
+  padding: 2px 6px; border-radius: var(--mk-radius-xs);
 }
 .advisory__body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 11px; }
 .advisory__actions { display: flex; gap: 9px; flex-wrap: wrap; }
@@ -1861,12 +1881,14 @@ function loadGuidance() {
 }
 /* 区块头「学习调控」已撤（2026-11-05）：.advisory__subhead 样式随之删除 */
 
-/* 主次双按钮（原型 wf-btn 279-286）：primary 蓝渐变 + 44 触控带，ghost 白底 line 描边 */
+/* 主次双按钮（原型 wf-btn 279-286；2026-11-06 审计 §1 同心圆角 + 高度收敛）：
+   卡内按钮 32px / 8px 圆角（外层卡 16px，内层控件走 --mk-radius-md），禁用 44px 全圆胶囊；
+   字号走 micro 档（12~13px）。窄屏由文末 640 档抬回 44 触控带。 */
 .adv-btn {
   display: inline-flex; align-items: center; justify-content: center;
-  min-height: 44px; padding: 0 18px;
-  border: 1px solid transparent; border-radius: var(--mk-radius-xl);
-  font: inherit; font-size: 14px; font-weight: 700;
+  min-height: 32px; padding: 0 14px;
+  border: 1px solid transparent; border-radius: var(--mk-radius-md);
+  font: inherit; font-size: var(--mk-fs-micro); font-weight: 700;
   cursor: pointer; white-space: nowrap;
   transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease;
 }
@@ -1925,10 +1947,10 @@ function loadGuidance() {
 .chart__retry {
   margin-top: 10px;
   min-height: 36px;
-  font: inherit; font-size: 12px; font-weight: 800; color: var(--blue-deep);
+  font: inherit; font-size: var(--mk-fs-12); font-weight: 800; color: var(--blue-deep);
   border: 1px solid color-mix(in srgb, var(--blue) 40%, transparent);
   background: color-mix(in srgb, var(--blue) 6%, transparent);
-  padding: 7px 16px; border-radius: var(--mk-radius-pill); cursor: pointer;
+  padding: 7px 14px; border-radius: var(--mk-radius-md); cursor: pointer;
 }
 .chart__retry:hover { background: color-mix(in srgb, var(--blue) 12%, transparent); }
 .chart__empty {
@@ -1963,25 +1985,22 @@ function loadGuidance() {
 </style>
 
 <style scoped>
-/* skill 引导块 */
-/* 「诊断 → 建议」两行对照（2026-11-05 用户定稿）：行首小标签像化验单，
-   一眼分清哪句是病灶、哪句是处方；标题/警告框/嵌套动作卡/下一步·节奏四段已并入这两行 */
+/* skill 引导块
+   2026-11-06 审计 §3：诊断行（.guide__diag）与无动作时的标题（.guide__title）随
+   「首页破冰引导」一起删除——它们的文案来自 headline/subtitle/warningCopy。现役只有
+   建议行（真实动作深链）+ 依据行 + 紧凑提示行，.guide 容器保留（单列显式轨道，#122）。 */
 .guide { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
-.guide__title { margin: 0; font-size: 16px; letter-spacing: -0.01em; }
-.guide__diag,
 .guide__plan {
   margin: 0;
   display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 8px;
   font-size: 13px; line-height: 1.65; color: var(--muted);
 }
-.guide__diag b,
-.guide__plan b { font-size: 12px; font-weight: 800; color: var(--faint); padding-top: 2px; }
+.guide__plan b { font-size: var(--mk-fs-12); font-weight: 800; color: var(--faint); padding-top: 2px; }
 /* 建议行是全卡最重要的句子：颜色抬一档、字重抬一档 */
 .guide__plan { color: var(--ink); }
 .guide__plan span { font-weight: 600; }
-.guide__plan i { font-style: normal; font-weight: 400; color: var(--faint); }
 /* 建议与调控互相引用（2026-09-27）：依据行把 AI 建议挂回到调控区的证据条目 */
-.guide__evidence { margin: 0; font-size: 12px; color: var(--faint); line-height: 1.6; }
+.guide__evidence { margin: 0; font-size: var(--mk-fs-12); color: var(--faint); line-height: 1.6; }
 /* 无证据降级提示（state/iphone/6）：琥珀色与「预警」语言同族，区别于普通依据行 */
 .guide__evidence--warn { color: var(--amber-ink); }
 .suggest__list--warnings { border-top: 1px dashed var(--line); padding-top: 12px; }
@@ -2038,10 +2057,12 @@ function loadGuidance() {
 }
 .ctl-card__confirm > span { flex: 1; min-width: 0; }
 .ctl-btn {
-  min-height: 36px; padding: 0 14px;
-  border: 1px solid var(--line); border-radius: var(--mk-radius-pill);
+  /* 2026-11-06 审计 §1：卡内按钮 32px 高 / 8px 圆角（外层 .ctl-card 12px，同心圆角法则），
+     不再用全圆胶囊；字号走 micro 档。窄屏由下方 640 档抬回 44 触控带。 */
+  min-height: 32px; padding: 0 12px;
+  border: 1px solid var(--line); border-radius: var(--mk-radius-md);
   background: var(--surface); color: var(--muted);
-  font-size: 12.5px; font-weight: 700; cursor: pointer;
+  font-size: var(--mk-fs-micro); font-weight: 700; cursor: pointer;
   transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, transform 0.15s ease;
 }
 .ctl-btn:hover { color: var(--ink); border-color: color-mix(in srgb, var(--ink) 30%, transparent); }
@@ -2059,16 +2080,20 @@ function loadGuidance() {
 .ctl__rows li { display: flex; align-items: baseline; gap: 10px; }
 .ctl__row-text { flex: 1; min-width: 0; font-size: 12.5px; color: color-mix(in srgb, var(--ink) 72%, var(--muted)); line-height: 1.6; }
 .ctl__row-time { font-size: 12px; color: var(--faint); white-space: nowrap; }
-.dec__tag { font-size: 12px; font-weight: 800; padding: 2px 6px; border-radius: 4px; white-space: nowrap; }
+/* 状态小方签（2026-11-06 审计 §1）：12px 字 + 16px 行高 + 2px 上下内衬 = 20px 高，
+   4px 圆角、半透明底、无描边（6px 内衬只影响左右，不撑高） */
+.dec__tag { font-size: var(--mk-fs-12); font-weight: 800; line-height: 16px; padding: 2px 6px; border-radius: var(--mk-radius-xs); white-space: nowrap; }
 .dec__tag--blue { color: var(--blue-ink); background: color-mix(in srgb, var(--blue-deep) 12%, var(--surface)); }
 .dec__tag--purple { color: var(--purple-ink); background: color-mix(in srgb, var(--purple-ink) 12%, var(--surface)); }
 .dec__tag--cyan { color: var(--wf-color-secondary-dark); background: color-mix(in srgb, var(--cyan) 12%, var(--surface)); }
 .dec__tag--amber { color: var(--amber-ink); background: color-mix(in srgb, var(--amber-ink) 13%, var(--surface)); }
 .dec__tag--green { color: var(--green-ink); background: color-mix(in srgb, var(--green-ink) 12%, var(--surface)); }
 @media (max-width: 640px) {
-  /* 确认调整是本页关键动作，触屏抬到 44 触控带（mobile:spec lt44 口径） */
+  /* 确认调整 / 采用建议是本页关键动作，触屏抬到 44 触控带（mobile:spec lt44 口径）——
+     桌面档的 32px 只服务指针；手指上不缩小热区 */
   .ctl-card__actions .ctl-btn,
   .ctl-card__confirm .ctl-btn { min-height: 44px; flex: 1; }
+  .adv-btn { min-height: 44px; flex: 1; }
   .ctl__rows li { flex-wrap: wrap; }
 }
 </style>
@@ -2076,11 +2101,12 @@ function loadGuidance() {
 <style scoped>
 .chart__empty strong { font-size: 14px; color: var(--muted); display: block; margin-bottom: 6px; }
 .chart__empty p { margin: 0; font-size: 12.5px; color: var(--faint); }
-/* 引导文案加载失败时的原地重试按钮 */
+/* 引导文案加载失败时的原地重试按钮（2026-11-06 审计 §1：卡内按钮改 8px 控件圆角，
+   不再用 16px 大圆角；高度维持 36+ 的触控带，见 .chart__retry 同类取舍） */
 .guide-retry {
-  margin-left: 8px; padding: 10px 12px; border-radius: var(--mk-radius-xl);
+  margin-left: 8px; padding: 9px 12px; border-radius: var(--mk-radius-md);
   border: 1px solid var(--line); background: var(--surface);
-  font-size: 12.5px; font-weight: 700; color: var(--blue-deep); cursor: pointer;
+  font-size: var(--mk-fs-micro); font-weight: 700; color: var(--blue-deep); cursor: pointer;
 }
 .guide-retry:disabled { opacity: .6; cursor: default; }
 </style>

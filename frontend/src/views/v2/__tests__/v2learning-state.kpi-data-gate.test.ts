@@ -119,9 +119,11 @@ describe('学习状态页数据门（#41）', () => {
     const w = mount(V2LearningState);
     await flushPromises();
 
-    // 2026-11-05 改版：本 fixture 无可执行建议（todayActions 空、待确认空）→ 走 compact 档，
-    // 仍渲染 headline；自动处理与已执行两节合并为「近期自动调控记录」一条流水
-    expect(w.find('.guide__title').text()).toBe('你已投入时间');
+    // 2026-11-06 审计 §3：学习台首页的破冰引导（headline/warningCopy）整段移出本页卡片，
+    // compact 档只留一行本页自有的结论；自动处理与已执行两节合并为「近期自动调控记录」一条流水
+    expect(w.find('.guide__title').exists()).toBe(false);
+    expect(w.text()).not.toContain('你已投入时间');
+    expect(w.text()).toContain('当前无需调整，有需要时会在这里提醒。');
     expect(w.find('.advisory__sub').exists()).toBe(true);
     expect(w.text()).toContain('近期自动调控记录');
   });

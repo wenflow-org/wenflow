@@ -23,8 +23,9 @@
       <p v-if="narrowedNote" class="km__note visually-hidden">{{ narrowedNote }}</p>
 
       <!-- 卡壳（border / radius / padding 10px 10px 4px）落在内部 .mk-ge__card 上：
-           原型里 wf-rail 与 .wf-graph 是兄弟，路径 chip 要露在图卡**外面**，
-           所以本节点只当 :deep 锚点，不再自己套一层卡（否则会卡中卡） -->
+           2026-11-06 起路径切换收进图卡内的统计栏（单个下拉，见 MkGraphExplorer），
+           卡外不再有 wf-rail 式的独立控件行；本节点只当 :deep 锚点，不再自己套一层卡
+           （否则会卡中卡） -->
       <section class="km__card">
         <MkGraphExplorer
           :nodes="nodes"
@@ -203,7 +204,8 @@ onMounted(async () => {
 }
 /* 图卡外壳落在组件的结构层 .mk-ge__card 上（原型 .wf-graph：surface 底 + 1px 线 +
    radius-modal + shadow-sm + padding 10px 10px 4px）。本节点只当 :deep 锚点：
-   路径 chip 轨要露在图卡外面（原型 wf-rail 与 .wf-graph 是兄弟），所以卡壳不能套在最外层。 */
+   路径切换已收进图卡内的统计栏（单个下拉），卡外没有独立控件行，卡壳仍由组件结构层出，
+   页面这边不再重复套一层。 */
 .km__card :deep(.mk-ge__card) {
   padding: 10px 10px 4px;
   border: 1px solid var(--line);

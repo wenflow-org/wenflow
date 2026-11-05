@@ -55,8 +55,10 @@
       />
 
       <template v-else>
-        <!-- 主区：今日行动 + 路径进度 -->
-        <div class="dash__grid-main">
+        <!-- 主区左栏：今日行动 + 路径进度 + 今日安排（2026-11-06 双栏重构：
+             原来「今日行动」独占 2 等分栅格的一格、右半屏空着；现在左栏整栈放 60%，
+             右栏 40% 放「本周节奏」，PC 首屏一屏读完「今天做什么 + 这周节奏」。 -->
+        <div class="dash__left">
           <!-- 进行中：今日行动卡 -->
           <section v-if="pageState === 'active'" class="card action">
             <template v-if="resting">
@@ -136,7 +138,7 @@
               <span class="action__from">路径「{{ primaryPath?.title }}」</span>
             </div>
             <h2 class="action__title">这版路径没生成出来，重试一般能好</h2>
-            <p class="action__desc">{{ primaryPath?.errorText || '生成失败。你的目标和已确认信息都保留着，不会丢。' }}</p>
+            <p class="action__desc">{{ primaryPath?.errorText || '目标和已确认的信息都保留着，不会丢。' }}</p>
             <div class="action__meta">
               <span class="tag tag--red">{{ primaryPath?.retryType === 'stage_design' ? '部分阶段生成失败' : '路径生成失败' }}</span>
               <span class="tag">信息已保留</span>
@@ -159,7 +161,7 @@
               <span class="action__from">来自路径「{{ primaryPath?.title }}」</span>
             </div>
             <h2 class="action__title">路径正在生成，稍等一下</h2>
-            <p class="action__desc">正在生成，完成后会直接出现今日行动。你也可以先去别的页面看看。</p>
+            <p class="action__desc">生成完成后，这里会直接出现今日行动。</p>
             <div class="action__meta">
               <span class="tag">信息已保留</span>
             </div>
@@ -210,7 +212,6 @@
               <router-link :to="`/learning-path/${primaryPath.id}`" class="path__detail-link">路径详情 ›</router-link>
             </div>
           </aside>
-        </div>
 
         <!-- 今日安排：预算台账 + 到期复习合成一张连续分区卡。
              原折叠在「今日详情」里，但「今天学什么/复习什么」是每天的主体信息，不该收起（批17）。 -->
@@ -266,6 +267,7 @@
             </template>
           </template>
         </section>
+        </div>
 
         <!-- 快捷入口整块移除（2026-09-27 信噪比重设计）：学习状态/全部路径/成就
              三项与主导航重复（学习状态、学习路径在导航条；成就在个人中心），
@@ -273,10 +275,9 @@
 
         <!-- 学习节奏常显（2026-09-27）：信噪比重设计后主区已收敛，折叠开关失去存在
              意义——藏内容的成本（一次点击+预期管理）高于滚动成本，本周节奏直接展开。
-             「展开整月」保留（原型同款）：整月日历卡已按原型收成一行 month-summary，
-             这个开关现在控制摘要行的显隐，属于低频回看的第二档。 -->
-        <div class="dash__grid-week">
-          <section class="card week">
+             「展开整月」保留（任务单 §3）：它不再只是多显示一行摘要，而是真的展开
+             本月 30 天打卡矩阵（见下方 .month）；统计行随矩阵一起出现，属于低频回看的第二档。 -->
+        <section class="card week">
             <div class="card-head">
               <strong>本周节奏</strong>
               <button type="button" v-if="hasAnyMinutes" class="link-muted" @click="monthOpen = !monthOpen">{{ monthOpen ? '收起整月 ▴' : '展开整月 ▾' }}</button>
@@ -298,7 +299,7 @@
             </div>
             <!-- 空态给出口（R6D）：照抄今日行动卡的开始学习入口逻辑（todayTask 有则 goLearn，
                  没有则去路径页），文字链复用 .link-muted（同「数据源失败 + 重试」的行内先例） -->
-            <div v-else class="week__empty">完成第一次学习后，这里会按天记录学习时长。 <button v-if="todayTask" type="button" class="link-muted" @click="goLearn">开始学习</button><router-link v-else to="/learning-paths" class="link-muted">查看全部路径</router-link></div>
+            <div v-else class="week__empty">完成第一次学习后，这里会显示每日时长。 <button v-if="todayTask" type="button" class="link-muted" @click="goLearn">开始学习</button><router-link v-else to="/learning-paths" class="link-muted">查看全部路径</router-link></div>
             <div v-if="hasAnyMinutes" class="week__stats">
               <span>本周 <b>{{ weekTotal }}</b> 分钟</span>
               <span><b>{{ weekActiveDays }}</b> 天有学习</span>
@@ -336,7 +337,6 @@
               <p class="month__sum">本月 {{ monthTotals.minutes }} 分钟 · {{ monthTotals.days }} 天有学习 · {{ monthTotals.sessions }} 次</p>
             </div>
           </section>
-        </div>
       </template>
     </main>
 
@@ -444,8 +444,9 @@ import { useCurrentTask } from '@/composables/useCurrentTask';
 import { useSafePolling } from '@/composables/useSafePolling';
 import { unwrapArray } from './unwrap';
 
-/* 日弹层空态与当天观察文案引擎共用同一句，收成单源避免改一处漏一处 */
-const EMPTY_DAY_MSG = '这一天没有学习记录。可以休息，也可以补一次短时学习。';
+/* 日弹层空态与当天观察文案引擎共用同一句，收成单源避免改一处漏一处。
+   任务单 §7③：空态提示精简到 15~20 字，去掉「补一次短时学习」这类机制解释式罗列。 */
+const EMPTY_DAY_MSG = '这一天没有记录，休息或补一次短时学习。';
 
 const router = useRouter();
 const userStore = useUserStore();
@@ -760,7 +761,9 @@ const stageInfo = computed(() => {
   return `${(idx >= 0 ? idx : 0) + 1} / ${primaryPath.value.stages.length || '?'}`;
 });
 
-const guidanceEmptyText = computed(() => guidanceCopy.value?.emptyStateCopy || '讲讲最近想解决的事，问流会梳理成目标和阶段安排。');
+/* 引导空态兜底（任务单 §7③）：15~20 字内、只给一句可做的事，
+   不再解释「问流会梳理成目标和阶段安排」的机制；skill 给了 emptyStateCopy 时以它为准 */
+const guidanceEmptyText = computed(() => guidanceCopy.value?.emptyStateCopy || '说说最近想解决的事，帮你理成一条路径。');
 
 /* skill 今日行动（todayActions 语义跳转解析） */
 interface SkillAction { label: string; to: string; primary: boolean }
@@ -1164,12 +1167,25 @@ function fmtDuration(minutes: number) {
   return `${minutes} 分钟`;
 }
 
+/** 时间行里的紧凑时长（2026-11-06 任务单 §3 给定格式：`03:19 - 03:39 · 20分钟 · 已完成`）。
+    整句叙述仍用 fmtDuration（「累计 20 分钟」读起来更顺），只有元信息行去掉空格。 */
+function fmtDurationCompact(minutes: number) {
+  if (minutes >= 60) {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return m ? `${h}小时${m}分` : `${h}小时`;
+  }
+  return `${minutes}分钟`;
+}
+
+/* 时间行只保留状态本身（标题已说明是哪一节课）：
+   原「任务已完成 / 本次学习已结束」在 12px 元信息行里比时间戳还重。 */
 function sessionStatusLabel(s: Record<string, any>) {
-  if (s.taskStatus === 'completed') return '任务已完成';
-  if (s.taskStatus === 'in_progress') return '任务进行中';
-  if (s.endTime) return '本次学习已结束';
-  if (s.status === 'completed') return '本次学习已结束';
-  if (s.status === 'active') return '仍在进行';
+  if (s.taskStatus === 'completed') return '已完成';
+  if (s.taskStatus === 'in_progress') return '进行中';
+  if (s.endTime) return '已结束';
+  if (s.status === 'completed') return '已结束';
+  if (s.status === 'active') return '进行中';
   return '已记录';
 }
 
@@ -1200,7 +1216,7 @@ const daySheet = computed(() => {
       id: s.id,
       title: s.taskTitle || '本次学习',
       timeRange: `${fmtTime(s.startTime)}${s.endTime ? ' - ' + fmtTime(s.endTime) : ' 开始'}`,
-      durationText: fmtDuration(s.durationMinutes ?? 0),
+      durationText: fmtDurationCompact(s.durationMinutes ?? 0),
       statusLabel: sessionStatusLabel(s),
       understanding: typeof analysis.understanding === 'number' ? Math.round(analysis.understanding * 100) : null,
       engagement: typeof analysis.engagement === 'number' ? Math.round(analysis.engagement * 100) : null,
@@ -1300,6 +1316,9 @@ onMounted(loadAll);
   font-size: 12.5px; color: var(--faint);
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* 连续天数：计数条，不是状态签——v2.css 的全局去肥胖化规则（2026-11-06）
+   明确把 .streak 从 `.badge/.tag` 的方签收敛里排除（带描边的实底药丸是它的既有形态），
+   这里保持与全站一致的计数条语言，只做本页尺寸。 */
 .streak {
   display: inline-flex; align-items: center; gap: 6px; flex: none;
   font-size: 12px; font-weight: 700; color: var(--amber);
@@ -1399,10 +1418,12 @@ onMounted(loadAll);
 .budget__link:hover { opacity: 0.8; }
 .budget__link:hover .budget__name { color: var(--blue); }
 .budget__name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 认知带宽签（负担轻 / 负担中 / 负担重）：与页内其它状态签同一组数值 */
 .budget__bw {
-  flex: none; padding: 1px 7px; border-radius: var(--mk-radius-xs);
+  display: inline-flex; align-items: center; flex: none;
+  height: 20px; padding: 1px 6px; border-radius: var(--mk-radius-sm);
   background: color-mix(in srgb, var(--green) 10%, transparent);
-  color: var(--green-ink); font-size: 12px; font-weight: 600; white-space: nowrap;
+  color: var(--green-ink); font-size: var(--mk-fs-micro); font-weight: 600; line-height: 1; white-space: nowrap;
 }
 .budget__num { flex: none; color: var(--faint); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 /* 进度条：6px + 蓝→青渐变（原实色 #10b981 已退役） */
@@ -1424,11 +1445,13 @@ onMounted(loadAll);
 .review__plan-body span { font-size: 12.5px; color: var(--muted); }
 
 /* ---------- 主区 ---------- */
-/* 列比对齐原型：等分双列（原 1.55fr / 1fr）+ 16px gap */
-.dash__grid-main {  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+/* 左栏栈（2026-11-06 双栏重构）：PC 上是 .dash__main 栅格的第 1 列（60%），
+   卡内 今日行动 →（非 active 时的路径副卡）→ 今日安排 依次竖排；
+   窄屏退化为一列全宽（仍是同一段 DOM、同一顺序，不再需要 display:contents 拆层）。 */
+.dash__left { display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
-  align-items: stretch;
+  align-items: start;
 }
 .action {
   padding: 16px;
@@ -1473,7 +1496,9 @@ onMounted(loadAll);
   white-space: nowrap; font-variant-numeric: tabular-nums;
 }
 .action__title { margin: 0; font-size: 19px; line-height: 1.35; letter-spacing: -0.01em; }
-.action__desc { margin: 0; font-size: 14px; line-height: 1.7; color: var(--muted); max-width: 56ch; }
+/* 描述性正文（任务单 §4）：常规字重 400 + 行高 1.5，不靠加粗表达层级；
+   标题与关键数值才用 semibold/bold */
+.action__desc { margin: 0; font-size: 14px; font-weight: 400; line-height: 1.5; color: var(--muted); max-width: 56ch; }
 /* 今日行动的说明可能很长（用户自己的任务描述），封顶截断：
    只在这一处夹，状态类文案（生成中/失败/空态）不夹，别把「你也可以先去别的页面看看」切掉。
    2026-11-04：两行封顶会在列举中途（如「…现价 / 昨收 / 涨跌幅）：1) 现价 10.50」）被 clip
@@ -1492,13 +1517,20 @@ onMounted(loadAll);
 .action__reason svg { width: 13px; height: 13px; flex: none; margin-top: 2px; }
 .action__reason span { min-width: 0; }
 .action__meta { display: flex; gap: 8px; flex-wrap: wrap; }
+/* 状态小签（2026-11-06 去肥胖化）：原 5/11 内边距 + 全圆胶囊 + 1px 描边，
+   读作「能点的药丸」而它们是纯状态说明。统一为紧凑方签：22px 高 / 1px 6px 内边距 /
+   6px 圆角 / 无描边，只靠柔和半透明底色区分——与 v2.css 的全局 `.v2-page .tag`
+   同一组数值，避免两条规则谁后注入谁赢时视觉跳档。 */
 .tag {
-  padding: 5px 11px; border-radius: var(--mk-radius-pill);
-  background: var(--line); border: 1px solid var(--line);
-  font-size: 12px; font-weight: 600; color: var(--muted);
+  display: inline-flex; align-items: center;
+  height: 22px; padding: 1px 6px;
+  border: 0; border-radius: var(--mk-radius-sm);
+  background: color-mix(in srgb, var(--line) 60%, transparent);
+  font-size: var(--mk-fs-micro); font-weight: 600; line-height: 1; color: var(--muted);
+  white-space: nowrap; flex-shrink: 0;
 }
-.tag--blue { background: color-mix(in srgb, var(--blue) 9%, transparent); border-color: color-mix(in srgb, var(--blue) 30%, transparent); color: var(--blue-deep); }
-.tag--red { background: color-mix(in srgb, var(--wf-color-danger) 10%, transparent); border-color: color-mix(in srgb, var(--wf-color-danger) 35%, transparent); color: var(--red-ink); }
+.tag--blue { background: color-mix(in srgb, var(--blue) 10%, transparent); color: var(--blue-deep); }
+.tag--red { background: color-mix(in srgb, var(--wf-color-danger) 10%, transparent); color: var(--red-ink); }
 .action__footer { display: flex; align-items: center; gap: 12px; margin-top: auto; flex-wrap: wrap; }
 /* 行动卡 foot（原型 wf-action__foot 345-349）：grid，今日进度行在按钮行**上方**。
    P1-6（2026-10-04）：轨道必须显式 minmax(0,1fr)——隐式 auto 轨道按子项 max-content
@@ -1521,20 +1553,26 @@ onMounted(loadAll);
 .action__path-pct { color: var(--muted); }
 .action__path-link { flex: none; color: var(--blue-deep); font-weight: 700; text-decoration: none; }
 .action__path-link:hover { text-decoration: underline; }
+/* 卡内主按钮（任务单 §1 内嵌按钮口径，2026-11-06）：原 11/22 内边距 + 16px 圆角，
+   在 16px 圆角卡里是「肥大的圆角块」。收到 32px 高 / 8px 圆角 / 13px 字，
+   与卡片 16px 圆角成同心圆角阶梯；移动端仍由 v2.css 的 44px min-height 兜触控。 */
 .btn-primary {
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 11px 22px; border-radius: var(--mk-radius-xl);
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  height: 32px; padding: 0 14px; border-radius: var(--mk-radius-md);
   /* 实色主按钮：蓝渐变与 30% 蓝色发光投影一并退役（按钮不承担层级，用留白表达） */
   background: var(--blue);
-  color: var(--text-on-primary); font-size: 14px; font-weight: 700;
+  /* 深色模式下品牌蓝底的文字必须是纯白：显式钉 token，不靠继承翻转 */
+  color: var(--text-on-primary); font-size: 13px; font-weight: 700;
   cursor: pointer;
   transition: transform 0.18s ease, background 0.18s ease;
 }
 .btn-primary:not(:disabled):active { transform: scale(0.98); }
+/* 次按钮（查看详情）：同一套内嵌按钮尺寸，仅材质不同 */
 .btn-ghost {
-  padding: 10px 18px; border-radius: var(--mk-radius-xl);
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 32px; padding: 0 14px; border-radius: var(--mk-radius-md);
   border: 1px solid var(--line); background: var(--surface);
-  font-size: 14px; font-weight: 700; color: var(--muted); cursor: pointer;
+  font-size: 13px; font-weight: 700; color: var(--muted); cursor: pointer;
 }
 .action__today { display: flex; align-items: center; gap: 10px; min-width: 0; }
 /* P1-6（2026-10-04）：span 须可收缩（flex-shrink+min-width:0+ellipsis），否则 nowrap 文案
@@ -1546,7 +1584,7 @@ onMounted(loadAll);
   max-width: 100%;
   padding: 9px 12px;
   border: 1px solid color-mix(in srgb, var(--blue) 28%, transparent);
-  border-radius: var(--mk-radius-lg, 12px);
+  border-radius: var(--mk-radius-md);
   background: color-mix(in srgb, var(--blue) 6%, transparent);
   font-size: 12.5px; color: var(--muted);
   text-decoration: none;
@@ -1567,8 +1605,10 @@ onMounted(loadAll);
 .action__today-bar { flex: 1; min-width: 0; height: 6px; border-radius: 999px; background: color-mix(in srgb, var(--line) 55%, transparent); overflow: hidden; }
 .action__today-bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
 .action__examples { display: flex; gap: 8px; flex-wrap: wrap; }
+/* 快捷示例（空态卡的点击建议）：与内嵌按钮同尺寸语言，不再是全圆胶囊 */
 .example {
-  padding: 9px 14px; border-radius: var(--mk-radius-xl);
+  display: inline-flex; align-items: center;
+  height: 32px; padding: 0 12px; border-radius: var(--mk-radius-md);
   border: 1px dashed color-mix(in srgb, var(--blue) 40%, transparent);
   background: color-mix(in srgb, var(--blue) 5%, transparent);
   color: var(--blue-deep); font-size: 13px; font-weight: 600; cursor: pointer;
@@ -1581,7 +1621,15 @@ onMounted(loadAll);
 .path__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .path__title strong { font-size: 16px; }
 .path__sub { display: block; margin-top: 3px; font-size: 12px; color: var(--faint); }
-.badge { padding: 4px 10px; border-radius: var(--mk-radius-pill); font-size: 12px; font-weight: 800; }
+/* 路径状态签（进行中 / 已完成 / 生成中）：同样是纯状态说明而非按钮，
+   2026-11-06 去肥胖化到 22px 高 / 6px 圆角 / 无描边的紧凑方签；
+   数值与 v2.css 全局 `.v2-page .badge` 保持同一组（谁后注入都不跳档）。 */
+.badge {
+  display: inline-flex; align-items: center; flex: none;
+  height: 22px; padding: 1px 6px;
+  border: 0; border-radius: var(--mk-radius-sm);
+  font-size: var(--mk-fs-micro); font-weight: 600; line-height: 1; white-space: nowrap;
+}
 .badge--blue { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 10%, transparent); }
 .badge--red { color: var(--red-ink); background: color-mix(in srgb, var(--wf-color-danger) 12%, transparent); }
 /* 页脚吸底：.path 已用 align-self:start 按内容定高（走查 2026-10-08 #73），正常情况下
@@ -1595,31 +1643,26 @@ onMounted(loadAll);
 
 <style scoped>
 /* ---------- 本周节奏 ---------- */
-.dash__grid-week { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
-/* PC 双栏一屏（2026-11-05 用户定稿「填补右上角大空洞」）：
-   1101 以上左 60% = 今日行动 + 路径副卡 + 今日安排，右 40% = 本周节奏整卡；
-   两个中间层 grid 用 display:contents 拆掉，子卡直接进 .dash__main 的栅格——
-   DOM 顺序一字不改，移动端（≤1100）仍是原来的单列流。
-   原来「今日行动」占 2 等分栅格的一格、右边空出半屏（active 态没有 path 副卡）。 */
-@media (min-width: 1101px) {
+/* PC 双栏一屏（2026-11-05 定稿，2026-11-06 按任务单收到 1024 档）：
+   ≥1024 起 .dash__main 变左右双栏 —— 左 61% = 今日行动 +（路径副卡）+ 今日安排，
+   右 39% = 本周节奏整卡；一屏内读完「今天做什么」与「这周节奏」，右半屏不再空。
+   两道中间层（原 .dash__grid-main / .dash__grid-week）退役：子卡直接进栅格。
+   窄屏（≤1023）仍是一列全宽流，DOM 顺序与视觉顺序一致。 */
+@media (min-width: 1024px) {
   .dash__main {
     display: grid;
-    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    grid-template-columns: minmax(0, 61fr) minmax(0, 39fr);
     gap: 16px;
     align-items: start;
   }
-  /* 兜底：页头/提示条/页脚等直接子块仍满宽 */
+  /* 兜底：页头/提示条等直接子块仍满宽 */
   .dash__main > * { grid-column: 1 / -1; }
-  .dash__grid-main,
-  .dash__grid-week { display: contents; }
-  /* 显式排行：页头 1、提示条 2、然后左列三块与右列本周节奏并排。
-     不写行号的话，auto-placement 会把提示条排到跨 3 行的本周节奏之下（实测掉到页面中段）。 */
+  /* 双栏两列显式落位：左栏整栈与右栏本周节奏同起一行。
+     不写行号的话，auto-placement 会把提示条排到本周节奏之下（实测掉到页面中段）。 */
   .greet { grid-row: 1; }
   .tip { grid-row: 2; }
-  .action { grid-column: 1; grid-row: 3; align-self: start; }
-  .path { grid-column: 1; grid-row: 4; }
-  .agenda { grid-column: 1; grid-row: 5; }
-  .week { grid-column: 2; grid-row: 3 / span 3; }
+  .dash__left { grid-column: 1; grid-row: 3; }
+  .week { grid-column: 2; grid-row: 3; }
 }
 .week { padding: 16px 20px; display: grid; gap: 12px; align-content: start; }
 .week__grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
@@ -1654,17 +1697,17 @@ onMounted(loadAll);
 /* 区块级数据源失败提示（区别于空态：失败可见，不伪装成无数据） */
 .dash__source-fail {
   padding: 14px 16px;
-  font-size: 12.5px; line-height: 1.6;
+  font-size: 12.5px; font-weight: 400; line-height: 1.5;
   color: var(--muted);
   background: color-mix(in srgb, var(--amber) 8%, transparent);
   border: 1px dashed color-mix(in srgb, var(--amber) 35%, transparent);
   border-radius: var(--mk-radius-lg);
 }
 .dash__source-retry {
-  margin-left: 8px; padding: 6px 12px;
-  font-size: 12px; font-weight: 700; color: var(--blue-deep);
+  margin-left: 8px; padding: 0 10px; height: 30px;
+  font-size: 12px; font-weight: 600; color: var(--blue-deep);
   background: none; border: 1px solid color-mix(in srgb, var(--blue) 35%, transparent);
-  border-radius: var(--mk-radius-pill); cursor: pointer;
+  border-radius: var(--mk-radius-md); cursor: pointer;
 }
 .dash__source-retry:hover { background: color-mix(in srgb, var(--blue) 8%, transparent); }
 .week__stats { display: flex; gap: 18px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
@@ -1715,10 +1758,13 @@ onMounted(loadAll);
 .month__sum { margin: 0; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* ---------- 响应式 ---------- */
-@media (max-width: 1100px) {
+/* 断点取 1023：与 PC 双栏（min-width: 1024）严丝合缝。若仍留在 1100，
+   1024~1100 之间会同时吃到「双栏」与「单列 + 移动端内边距」两套规则，
+   卡片左缘轨道在这种半宽档会跳一档。 */
+@media (max-width: 1023px) {
   /* 单列轨道用 minmax(0,1fr) 而非 1fr：1fr = minmax(auto,1fr)，下限仍是内容 min-content，
      折叠区里的 nowrap 内容会顺着这条链把整页顶宽（展开态 390→538px、居中按钮被迫右移）。 */
-  .dash__grid-main, .dash__grid-week { grid-template-columns: minmax(0, 1fr); }
+  .dash__left { grid-template-columns: minmax(0, 1fr); }
   /* 卡内标题按基线收到 14px——16px 比路径页卡标题（用户点过名的 15.5px 档）还大一档 */
   .action__title { font-size: 14px; line-height: 1.4; }
   .dash__main { padding: 16px 14px 32px; }
@@ -1799,7 +1845,14 @@ a.btn-primary { text-decoration: none; }
 .sheet__date { font-size: 12px; font-weight: 700; color: var(--faint); }
 .sheet__headline { margin: 4px 0 0; font-size: 18px; letter-spacing: -0.01em; }
 .sheet__head-right { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
-.sheet__zone { font-size: 12px; font-weight: 800; padding: 4px 10px; border-radius: var(--mk-radius-pill); white-space: nowrap; }
+/* 强度档标签（无记录 / 轻度 / 中度 / 高强度）：纯状态说明，
+   2026-11-06 去肥胖化到 22px 紧凑方签；与页内 .tag/.badge 同一组数值（6px 圆角 / 1px 6px） */
+.sheet__zone {
+  display: inline-flex; align-items: center; flex: 0 0 auto;
+  height: 22px; padding: 1px 6px; border: 0;
+  border-radius: var(--mk-radius-sm);
+  font-size: var(--mk-fs-micro); font-weight: 600; line-height: 1; white-space: nowrap;
+}
 .sheet__zone--low { color: var(--cyan-ink); background: color-mix(in srgb, var(--cyan) 14%, transparent); }
 .sheet__zone--mid { color: var(--amber); background: color-mix(in srgb, var(--amber) 15%, transparent); }
 .sheet__zone--high { color: var(--purple-ink); background: color-mix(in srgb, var(--accent) 14%, transparent); }
@@ -1817,6 +1870,10 @@ a.btn-primary { text-decoration: none; }
   padding: 16px 18px 28px;
   display: grid; gap: 14px;
   align-content: start;
+  /* 滚动条（任务单 §6）不在本文件重复实现：v2.css 的全局块已经对 `.v2-page *`
+     统一了 4px 自绘滑块 / 透明轨道 / 去箭头，本抽屉在 .v2-page 内自动命中。
+     这里若再写 scrollbar-width/scrollbar-color，Chromium 会反过来让 ::-webkit-scrollbar
+     整族失效（见 v2.css「全局滚动条」注释），反而退回原生粗槽。 */
 }
 /* 三列数据条（2026-11-05 屏效比「干掉碎盒子」）：原 2 列格子 + 各自带框的 4 个盒子占 3 行
    （≈260px）；改成一条横条内三列、仅竖线分隔——总时长 / 学习次数 / 状态摘要在同一行读完。
@@ -1851,7 +1908,8 @@ a.btn-primary { text-decoration: none; }
   display: grid; gap: 10px;
 }
 .sheet__block h4 { margin: 0; font-size: 13px; }
-.sheet__block p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.7; }
+/* 当天观察等多行描述：常规字重 400 + 行高 1.5（任务单 §4） */
+.sheet__block p { margin: 0; font-size: 13px; font-weight: 400; color: var(--muted); line-height: 1.5; }
 .sheet__empty {
   font-size: 13px; color: var(--faint);
   border: 1px dashed var(--line); border-radius: var(--mk-radius-xl);
@@ -1883,29 +1941,36 @@ a.btn-primary { text-decoration: none; }
 /* 标签行不换行（2026-11-05）：去掉状态胶囊后只剩三个诊断标签，
    402 实测一行 ~240px，收住 flex-wrap 保证永远「整整齐齐一行」 */
 .scard__chips { display: flex; flex-wrap: nowrap; gap: 6px; overflow: hidden; }
-/* 状态标签改方签（2026-11-05 全局去肥胖化）：4px 圆角、不描边、10% 底色 */
+/* 状态标签改方签（2026-11-05 全局去肥胖化）：不描边、10% 底色；
+   2026-11-06 按任务单 §1 统一到 20px 高 / 1px 6px 内边距 / 6px 圆角，
+   三个诊断标签恒在一行；字号走 --mk-fs-micro（基准 12px，随全站档位缩放） */
 .chip {
-  font-size: 12px; font-weight: 700;
-  padding: 2px 7px; border-radius: 4px;
+  display: inline-flex; align-items: center;
+  height: 20px; padding: 1px 6px; border-radius: var(--mk-radius-sm);
   background: var(--canvas); color: var(--muted);
+  font-size: var(--mk-fs-micro); font-weight: 600; line-height: 1;
   white-space: nowrap;
 }
 .chip--blue { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 10%, transparent); }
 .chip--cyan { color: var(--cyan-ink); background: color-mix(in srgb, var(--cyan) 14%, transparent); }
 .chip--purple { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
-/* 卡点去盒子（2026-11-05）：原描边 + 底色的琥珀胶囊块在白卡里又厚又抢眼，
-   降为一行琥珀小字，信息不丢、体量减半 */
+/* 卡点降为一行琥珀小字（2026-11-05 去盒子）：不再描边铺底；
+   它是描述性正文，字重按任务单 §4 收到 400（颜色已承担提示职责） */
 .scard__confuse {
   margin: 0;
-  font-size: 12px; color: var(--amber); font-weight: 600; line-height: 1.55;
+  font-size: 12px; color: var(--amber); font-weight: 400; line-height: 1.5;
 }
-/* 底栏：左环节流程、右课堂事件展开（2026-11-05 用户定稿，原各占一行） */
+/* 底栏：左环节流程、右课堂事件展开（2026-11-05 用户定稿，原各占一行；
+   2026-11-06 任务单 §3 再确认：同一行左右两端对齐，环节过长时省略而不是把按钮顶下去） */
 .scard__foot {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   border-top: 1px dashed var(--line);
   padding-top: 8px;
 }
-.scard__stages { min-width: 0; font-size: 12px; color: var(--faint); }
+.scard__stages {
+  min-width: 0; font-size: 12px; color: var(--faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .scard__stage { color: var(--muted); font-weight: 600; }
 .scard__stage-sep { color: var(--faint); }
 .scard__toggle {

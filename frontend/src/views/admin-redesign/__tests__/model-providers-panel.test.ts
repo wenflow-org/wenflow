@@ -252,7 +252,8 @@ describe('ModelProvidersPanel', () => {
   it('只读（配置文件不可写）：写入口全部禁用并给出说明', async () => {
     seedView({ readOnly: true })
     const w = await mountPanel()
-    expect(w.text()).toContain('注册表文件所在目录当前不可写')
+    // 2026-11-06 文案排查 §7.2：只读说明不再讲「注册表文件所在目录」这类机制，改为直说只读与找谁开放
+    expect(w.text()).toContain('当前为只读状态')
     // 2026-10-28 新人视角：不再从清单里「新建供应商」，只编辑平台通道
     expect(w.text()).not.toContain('添加供应商')
     // 模型行的写入口（配置 / 删除）一并禁用；「测试」是只读动作，仍可用

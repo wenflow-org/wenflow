@@ -650,7 +650,9 @@ const closureKpi = computed(() => {
   const hintParts = [`真实 ${human}`]
   if (unmarked > 0) hintParts.push(`${unmarkedLabel} ${unmarked}`)
   if (virtual > 0) hintParts.push(`虚拟 ${virtual} 不计入`)
-  const title = `完课量按非虚拟口径（与上方真实用户 KPI 同源）；行内注「真实 / 未标记」之和即主值，虚拟学习者单列、不计入主值。整条路径完成 ${s.pathCompletions} 次（统计单位不同，未计入任务完课量）。`
+  /* 长释（2026-11-06 文案排查 §7 修复）：原句有分号拼接、隔空指路「上方」与内部词
+     「口径」，改为一句直说事实——只统计真实账号，行内两项相加即总数，虚拟单列不计入。 */
+  const title = `只统计真实账号的完课记录，「真实」与「未标记」两项相加即总数，虚拟学习者的记录单独列出、不计入总数。整条路径完成 ${s.pathCompletions} 次，按路径计，不计入任务完课量。`
   return {
     label: '完课量',
     value: `${s.total}`,

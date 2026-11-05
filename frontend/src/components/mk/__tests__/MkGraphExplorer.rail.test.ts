@@ -1,24 +1,24 @@
 /**
- * 路径筛选轨「有界化」护栏（2026-10-05）。
+ * 知识图谱路径切换：**单个下拉**（2026-11-06 §5 定稿）。
  *
- * 病根：轨道是单行 overflow-x:auto，滚动条被显式抹掉（scrollbar-width:none +
- * ::-webkit-scrollbar{display:none}）、无渐隐无箭头。实测某账号 10 条路径、1440 视口：
- * 轨道内容 2390px / 可视 1140px（溢出 2.1 倍），11 枚 chip 只有 5 枚完整可见，最后一枚
- * 右缘 2538px —— 1248px 的内容在屏幕外且零提示。路径数只会涨，所以轨必须有界。
+ * 背景（本文件取代旧的「有界轨 + 更多（N）」护栏）：
+ *  - 旧实现是图卡上方一行平铺胶囊，桌面只放得下 3 枚，其余收进「更多（N）」浮层；
+ *    长路径名 + 路径数增长后，浮层会盖住下方概览面板，且同一件事（切换路径）存在
+ *    轨、浮层、下拉三套控件（PC 有下拉、窄屏只有轨）。
+ *  - 新设计：撤除轨与「更多」浮层，统一成一个 `MkSelect` 路径下拉，并与画布头部的
+ *    统计筛选栏同栏（`.mk-ge__bar` 左端）。任何视口、任意条数都只有这一个控件。
  *
- * 本文件锁三件事，任何一条挂了都意味着「路径多了就有点不到」会复发：
- *  1) 阈值内全量铺开、不出现「更多」（别为了整齐把 3 条路径也塞进浮层）；
- *  2) 超阈值时轨上 chip 数恒定（全部 + 3 + 更多），且「更多」计数 = 轨外路径数；
- *  3) 当前选中路径**永远在轨上**——选中项掉进「更多」就等于用户看不出自己在哪条路径。
- *
- * 阈值为什么是 3 而不是「铺满为止」：轨布局宽实测恒 1024px（`.km__main` 封顶 1180），
- * chip 上限 260px —— 3 枚最坏 948px 放得下，4 枚最坏 1216px 必然横滚（实测第 4 枚被裁一半）。
+ * 本文件锁四件事，任一条挂了都意味着「路径切不了 / 又长出第二套控件」会复发：
+ *  1) 结构唯一性：只有一个 combobox，且不存在 `.mk-ge__rail` / `.mk-ge__chip` /
+ *     `.mk-ge__more*` 这套旧结构；
+ *  2) 不再截断：10 条路径 → 11 个选项（全部路径 + 10 条），没有「更多（7）」；
+ *  3) 语义/行为不变：选中 emit update:pathId（全部路径 → null）、选中项回显、
+ *     无标题回落 + 重名补序号、选中当前项不重复 emit；
+ *  4) 键盘不缩水：↑↓ 换项、Enter 选中、选中后焦点回到触发器；无路径/加载/错误态
+ *     没有下拉（整屏三态里不出现孤立控件）。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 vi.mock('../MkGraph.vue', () => ({
   default: {
@@ -33,8 +33,7 @@ vi.mock('../../ui/V2ResultState.vue', () => ({ default: { template: '<div />' } 
 
 import MkGraphExplorer from '../MkGraphExplorer.vue';
 
-/** jsdom 不实现 Element.scrollTo / scrollIntoView：组件里选中 chip 会调 scrollTo（轨自身定位），
-    缺失时 nextTick 回调会在落焦点之前抛错——「方向键换选后焦点仍在 chip 上」会假失败 */
+/** jsdom 不实现 Element.scrollTo / scrollIntoView：listbox 打开时会把选中项滚进视口 */
 beforeEach(() => {
   Element.prototype.scrollIntoView = () => undefined;
   Element.prototype.scrollTo = () => undefined;
@@ -46,94 +45,83 @@ function makePaths(n: number) {
   return Array.from({ length: n }, (_, i) => ({ id: `lp_${i + 1}`, title: `路径标题 ${i + 1}` }));
 }
 
-function mountRail(pathCount: number, pathId: string | null = null) {
+function mountExplorer(extra: Record<string, unknown> = {}) {
   return mount(MkGraphExplorer, {
-    props: { nodes: NODES, edges: [], paths: makePaths(pathCount), pathId },
+    props: { nodes: NODES, edges: [], paths: makePaths(10), ...extra },
   });
 }
 
-const chipTexts = (w: ReturnType<typeof mountRail>) =>
-  w.findAll('.mk-ge__rail .mk-ge__chip').map((c) => c.text());
+const trigger = (w: ReturnType<typeof mountExplorer>) => w.find('.mk-ge__pathpick .mk-select__trigger');
+/** 下拉的选项文案（listbox 用 v-show 常驻 DOM，展开与否都能读） */
+const optionTexts = (w: ReturnType<typeof mountExplorer>) =>
+  w.findAll('.mk-ge__pathpick .mk-listbox-opt').map((o) => o.text());
 
-/** 焦点断言必须挂进 document：脱离文档的节点 focus() 不生效，activeElement 恒为 body */
-function mountRailAttached(pathCount: number, pathId: string | null = null) {
-  return mount(MkGraphExplorer, {
-    props: { nodes: NODES, edges: [], paths: makePaths(pathCount), pathId },
-    attachTo: document.body,
-  });
-}
-
-/** 以指定窄屏媒体查询命中态挂载（组件靠 window.matchMedia('(max-width: 900px)') 判定窄屏轨） */
-function withNarrowMatch(narrow: boolean, fn: () => void) {
-  const original = window.matchMedia;
-  window.matchMedia = ((query: string) => ({
-    matches: query.includes('max-width: 900px') ? narrow : false,
-    media: query,
-    onchange: null,
-    addEventListener: () => undefined,
-    removeEventListener: () => undefined,
-    addListener: () => undefined,
-    removeListener: () => undefined,
-    dispatchEvent: () => false,
-  })) as unknown as typeof window.matchMedia;
-  try {
-    fn();
-  } finally {
-    window.matchMedia = original;
-  }
-}
-
-/**
- * 窄屏轨平铺（2026-10-15 走查）：390 轨宽仅 ~358px，桌面那套「3 枚 + 更多」在手机档
- * 3-4 条路径时既够不着「更多」出口、又必须横滑（屏外路径只有一道很淡的右缘渐隐提示），
- * 学习者「不好选」。修法=≤900 不收「更多」、轨换行铺开全部 chip。
- */
-describe('MkGraphExplorer 路径轨窄屏平铺（≤900）', () => {
-  it('窄屏下 10 条路径全量铺开、不出现「更多」', () => {
-    withNarrowMatch(true, () => {
-      const w = mountRail(10);
-      const chips = chipTexts(w);
-      expect(chips).toHaveLength(11); // 全部路径 + 10 条
-      expect(chips).toContain('路径标题 10');
-      expect(w.find('.mk-ge__chip--more').exists()).toBe(false);
-      w.unmount();
-    });
-  });
-
-  it('宽屏（≥901）仍走有界轨 +「更多」，与窄屏判别', () => {
-    withNarrowMatch(false, () => {
-      const w = mountRail(10);
-      expect(w.find('.mk-ge__chip--more').exists()).toBe(true);
-      expect(chipTexts(w)).toHaveLength(4); // 全部 + 3
-      w.unmount();
-    });
-  });
-
-  it('窄屏下选中任一路径 chip 均在轨上（无「更多」可掉）', () => {
-    withNarrowMatch(true, () => {
-      const w = mountRail(10, 'lp_8');
-      expect(chipTexts(w)).toContain('路径标题 8');
-      w.unmount();
-    });
-  });
-
-  it('无标题路径 chip 回落「未命名路径」，不裸出 id', () => {
-    const w = mount(MkGraphExplorer, {
-      props: {
-        nodes: NODES,
-        edges: [],
-        paths: [{ id: 'lp_x', title: null }, { id: 'lp_y', title: '有标题的路径' }],
-      },
-    });
-    const texts = chipTexts(w);
-    expect(texts).toContain('未命名路径');
-    expect(texts.join(' ')).not.toContain('lp_x');
+describe('MkGraphExplorer 路径切换：只有一个下拉（§5）', () => {
+  it('旧结构整体退场：没有平铺胶囊轨、没有「更多」浮层', () => {
+    const w = mountExplorer();
+    expect(w.find('.mk-ge__rail').exists()).toBe(false);
+    expect(w.find('.mk-ge__railrow').exists()).toBe(false);
+    expect(w.find('.mk-ge__chip').exists()).toBe(false);
+    expect(w.find('.mk-ge__more-panel').exists()).toBe(false);
+    // 全组件只有一个路径选择控件（combobox），不再有 radiogroup 第二套
+    expect(w.findAll('[role="combobox"]')).toHaveLength(1);
+    expect(w.find('[role="radiogroup"]').exists()).toBe(false);
     w.unmount();
   });
 
-  // 2026-11-04：两条无标题路径同时回落「未命名路径」时，轨上/「更多」浮层里会逐字相同、无法区分
-  // （实证 lp_…oboui70 / lp_…zu7bhwj）。对重名项按出现顺序补序号；唯一项不长序号。
-  it('多条无标题路径回落文案重名时补序号区分，唯一项不补', () => {
+  it('下拉与统计栏同栏：pathpick 位于 .mk-ge__bar 内、统计之前', () => {
+    const w = mountExplorer();
+    const bar = w.find('.mk-ge__bar');
+    expect(bar.find('.mk-ge__pathpick').exists()).toBe(true);
+    expect(bar.find('.mk-ge__stats').exists()).toBe(true);
+    const html = bar.html();
+    expect(html.indexOf('mk-ge__pathpick')).toBeLessThan(html.indexOf('mk-ge__stats'));
+    w.unmount();
+  });
+
+  it('10 条路径全量进下拉（全部 + 10），不再截断成「全部 + 3 + 更多」', () => {
+    const w = mountExplorer();
+    const texts = optionTexts(w);
+    expect(texts).toHaveLength(11);
+    expect(texts[0]).toBe('全部路径（10 条）');
+    expect(texts).toContain('路径标题 10');
+    expect(texts.join(' ')).not.toContain('更多');
+    w.unmount();
+  });
+
+  it('选中项回显在触发器上（全部路径 / 某条路径）', () => {
+    const all = mountExplorer();
+    expect(trigger(all).text()).toContain('全部路径（10 条）');
+    all.unmount();
+
+    const one = mountExplorer({ pathId: 'lp_8' });
+    expect(trigger(one).text()).toContain('路径标题 8');
+    one.unmount();
+  });
+
+  it('点选某条路径 emit update:pathId = 该 id；选「全部路径」emit null', async () => {
+    const w = mountExplorer();
+    await trigger(w).trigger('click');
+    await w.findAll('.mk-ge__pathpick .mk-listbox-opt')[8].trigger('click'); // 全部 + lp_1..lp_8
+    expect(w.emitted('update:pathId')?.[0]).toEqual(['lp_8']);
+
+    const w2 = mountExplorer({ pathId: 'lp_3' });
+    await trigger(w2).trigger('click');
+    await w2.findAll('.mk-ge__pathpick .mk-listbox-opt')[0].trigger('click');
+    expect(w2.emitted('update:pathId')?.[0]).toEqual([null]);
+    w.unmount();
+    w2.unmount();
+  });
+
+  it('重复选中当前路径不再 emit（避免无谓重拉）', async () => {
+    const w = mountExplorer({ pathId: 'lp_2' });
+    await trigger(w).trigger('click');
+    await w.findAll('.mk-ge__pathpick .mk-listbox-opt')[2].trigger('click');
+    expect(w.emitted('update:pathId')).toBeUndefined();
+    w.unmount();
+  });
+
+  it('无标题路径回落「未命名路径」，重名补序号，不裸出 id', () => {
     const w = mount(MkGraphExplorer, {
       props: {
         nodes: NODES,
@@ -145,190 +133,87 @@ describe('MkGraphExplorer 路径轨窄屏平铺（≤900）', () => {
         ],
       },
     });
-    const texts = chipTexts(w);
+    const texts = optionTexts(w);
     expect(texts).toContain('未命名路径 1');
     expect(texts).toContain('未命名路径 2');
-    // 唯一无标题场景（上面那条用例）仍保持原文案：此处只在重名 ≥2 时补
     expect(texts).not.toContain('未命名路径');
+    expect(texts.join(' ')).not.toContain('lp_a');
     w.unmount();
   });
 });
 
-describe('MkGraphExplorer 路径轨的有界化', () => {
-  it('阈值内（4 条）全量铺开，不出现「更多」', async () => {
-    const w = mountRail(4);
-    expect(chipTexts(w)).toEqual([
-      '全部路径（4 条）',
-      '路径标题 1',
-      '路径标题 2',
-      '路径标题 3',
-      '路径标题 4',
-    ]);
-    expect(w.find('.mk-ge__chip--more').exists()).toBe(false);
-    w.unmount();
-  });
+describe('MkGraphExplorer 路径下拉的键盘与三态', () => {
+  it('键盘：↓ 打开并移动、Enter 选中，焦点回到触发器', async () => {
+    const w = mount(MkGraphExplorer, {
+      props: { nodes: NODES, edges: [], paths: makePaths(10), pathId: 'lp_1' },
+      attachTo: document.body,
+    });
+    const btn = trigger(w);
+    expect(btn.attributes('role')).toBe('combobox');
+    expect(btn.attributes('aria-expanded')).toBe('false');
 
-  it('10 条时轨上恒定 4 枚 chip + 「更多（7）」', async () => {
-    const w = mountRail(10);
-    expect(chipTexts(w)).toEqual([
-      '全部路径（10 条）',
-      '路径标题 1',
-      '路径标题 2',
-      '路径标题 3',
-    ]);
-    const more = w.find('.mk-ge__chip--more');
-    expect(more.exists()).toBe(true);
-    expect(more.text()).toContain('更多（7）');
-    w.unmount();
-  });
-
-  it('选中项不在前 3 条时被钉进轨上，且不重复出现在「更多」里', async () => {
-    const w = mountRail(10, 'lp_8');
-    const texts = chipTexts(w);
-    expect(texts).toContain('路径标题 8');
-    // 钉选会顶掉第 3 条（路径标题 3），轨上仍是 4 枚
-    expect(texts).toHaveLength(4);
-    expect(texts).not.toContain('路径标题 3');
-    expect(texts.filter((t) => t === '路径标题 8')).toHaveLength(1);
-
-    await w.find('.mk-ge__chip--more').trigger('click');
-    const items = w.findAll('.mk-ge__more-item').map((i) => i.text());
-    expect(items).toHaveLength(7);
-    expect(items).not.toContain('路径标题 8');
-    w.unmount();
-  });
-
-  it('「更多」浮层列出全部轨外路径，点一条 emit update:pathId 并收起', async () => {
-    const w = mountRail(10);
-    await w.find('.mk-ge__chip--more').trigger('click');
-
-    const items = w.findAll('.mk-ge__more-item');
-    expect(items.map((i) => i.text())).toEqual([
-      '路径标题 4',
-      '路径标题 5',
-      '路径标题 6',
-      '路径标题 7',
-      '路径标题 8',
-      '路径标题 9',
-      '路径标题 10',
-    ]);
-
-    await items[1].trigger('click');
-    expect(w.emitted('update:pathId')?.[0]).toEqual(['lp_5']);
-    expect(w.find('.mk-ge__more-panel').exists()).toBe(false);
-    w.unmount();
-  });
-
-  it('轨上点 chip 直接换路径', async () => {
-    const w = mountRail(10);
-    await w.findAll('.mk-ge__rail .mk-ge__chip')[2].trigger('click');
+    await btn.trigger('keydown', { key: 'ArrowDown' });
+    expect(btn.attributes('aria-expanded')).toBe('true');
+    // 打开时 activeIndex 落在当前选中项（lp_1 = 下标 1），再按一次 ↓ 到 lp_2
+    await btn.trigger('keydown', { key: 'ArrowDown' });
+    await btn.trigger('keydown', { key: 'Enter' });
     expect(w.emitted('update:pathId')?.[0]).toEqual(['lp_2']);
+    expect(document.activeElement).toBe(btn.element);
     w.unmount();
   });
 
-  it('Esc 与点击浮层外都能收起「更多」', async () => {
-    const w = mountRail(10);
-    await w.find('.mk-ge__chip--more').trigger('click');
-    expect(w.find('.mk-ge__more-panel').exists()).toBe(true);
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
-    await w.vm.$nextTick();
-    expect(w.find('.mk-ge__more-panel').exists()).toBe(false);
-
-    await w.find('.mk-ge__chip--more').trigger('click');
-    expect(w.find('.mk-ge__more-panel').exists()).toBe(true);
-    document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await w.vm.$nextTick();
-    expect(w.find('.mk-ge__more-panel').exists()).toBe(false);
+  it('Esc 收起且不误选', async () => {
+    const w = mountExplorer({ pathId: 'lp_1' });
+    const btn = trigger(w);
+    await btn.trigger('keydown', { key: 'ArrowDown' });
+    await btn.trigger('keydown', { key: 'Escape' });
+    expect(btn.attributes('aria-expanded')).toBe('false');
+    expect(w.emitted('update:pathId')).toBeUndefined();
     w.unmount();
   });
 
-  it('轨的 radiogroup 契约不变：只有选中项 tabindex=0', async () => {
-    const w = mountRail(10, 'lp_1');
-    const chips = w.findAll('.mk-ge__rail .mk-ge__chip');
-    expect(w.find('[role="radiogroup"]').exists()).toBe(true);
-    expect(chips.filter((c) => c.attributes('tabindex') === '0')).toHaveLength(1);
-    expect(chips[1].attributes('aria-checked')).toBe('true');
-    expect(chips.filter((c) => c.attributes('role') === 'radio')).toHaveLength(chips.length);
-    w.unmount();
-  });
-
-  /**
-   * 焦点回归：父组件换路径会把整屏切成加载态、轨道连同 chip 一起卸载重建，
-   * 换选后若不同步落焦点，activeElement 会掉回 body —— 键盘用户不知道自己换到了哪条。
-   */
-  it('轨上方向键换选后，焦点仍在新的选中 chip 上', async () => {
-    const w = mountRailAttached(10, 'lp_1');
-    const chips = () => w.findAll('.mk-ge__rail .mk-ge__chip');
-    (chips()[1].element as HTMLElement).focus();
-    expect(document.activeElement).toBe(chips()[1].element);
-
-    await chips()[1].trigger('keydown', { key: 'ArrowRight' });
+  it('换路径触发重载（骨架顶掉图卡）后，焦点仍回到路径下拉', async () => {
+    const w = mount(MkGraphExplorer, {
+      props: { nodes: NODES, edges: [], paths: makePaths(10), pathId: 'lp_1' },
+      attachTo: document.body,
+    });
+    await trigger(w).trigger('click');
+    await w.findAll('.mk-ge__pathpick .mk-listbox-opt')[2].trigger('click');
     expect(w.emitted('update:pathId')?.[0]).toEqual(['lp_2']);
-    // 父组件完成重载（pathId 同步回组件）——焦点必须落在这枚新 chip 上，而不是掉回 body
-    await w.setProps({ pathId: 'lp_2' });
+
+    // 宿主重载：loading=true 时整屏骨架替换图卡，下拉被卸载；加载结束再挂回来
+    await w.setProps({ loading: true, pathId: 'lp_2' });
+    expect(w.find('.mk-ge__pathpick').exists()).toBe(false);
+    await w.setProps({ loading: false });
     await w.vm.$nextTick();
-    const selected = w.findAll('.mk-ge__rail .mk-ge__chip').find(
-      (c) => c.attributes('aria-checked') === 'true'
-    );
-    expect(selected?.text()).toBe('路径标题 2');
-    expect(document.activeElement).toBe(selected?.element);
+
+    expect(document.activeElement).toBe(trigger(w).element);
     w.unmount();
   });
 
-  it('从「更多」浮层选中后，焦点落在轨上那枚 chip 上', async () => {
-    const w = mountRailAttached(10);
-    await w.find('.mk-ge__chip--more').trigger('click');
-    await w.vm.$nextTick();
-    expect(document.activeElement).toBe(w.find('.mk-ge__more-item').element);
-
-    await w.findAll('.mk-ge__more-item')[2].trigger('click');
-    expect(w.emitted('update:pathId')?.[0]).toEqual(['lp_6']);
-    await w.setProps({ pathId: 'lp_6' });
-    await w.vm.$nextTick();
-    const selected = w.findAll('.mk-ge__rail .mk-ge__chip').find(
-      (c) => c.attributes('aria-checked') === 'true'
-    );
-    expect(selected?.text()).toBe('路径标题 6');
-    expect(document.activeElement).toBe(selected?.element);
+  it('只有 1 条路径时不渲染路径下拉（没有可切换的对象）', () => {
+    const w = mountExplorer({ paths: makePaths(1) });
+    expect(w.find('.mk-ge__pathpick').exists()).toBe(false);
     w.unmount();
   });
-});
 
-/**
- * #23 走查护栏（2026-10-09 手机·浅色）：路径轨的滚动定位不能把「全部路径」出口推出视口。
- *
- * 病根：原实现裸调 `chip.scrollIntoView({ inline: 'center' })`，滚动容器是**所有可滚祖先**，
- * 390×844 实测把轨推到 scrollLeft=125，「全部路径（10 条）」只剩 x=-111..30（140px 里 111px
- * 在视口外）；而它是「看全貌」的唯一出口，既不在「更多」浮层里、也不在轨的另一端。探针复测：
- * 点它聚焦后连按 6 次 ←，scrollLeft 恒 101 不动，落在轨外那截根本滚不回来。
- * 组件测试摸不到布局（jsdom 没有 clientWidth），所以这里锁源码，锁住「只滚轨自身、
- * 只在整枚落在右侧之外时才滚」这两条，以及与之配套的 scroll-margin 落在最后一个 <style> 块。
- */
-const sfcSource = readFileSync(
-  resolve(dirname(fileURLToPath(import.meta.url)), '../MkGraphExplorer.vue'),
-  'utf8'
-);
-/** 去注释后再断言「源码里没有 X」：注释里点名「为什么弃用某 API」是允许的 */
-const stripComments = (src: string): string =>
-  src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '');
+  it('空态（0 节点）与加载/错误态不出现路径下拉', () => {
+    const empty = mountExplorer({ nodes: [] });
+    expect(empty.find('.mk-ge__pathpick').exists()).toBe(false);
+    empty.unmount();
 
-describe('MkGraphExplorer 路径轨滚动定位（#23）', () => {
-  it('不再用 chip.scrollIntoView（滚动容器含页面级祖先，会把出口推出视口）', () => {
-    expect(stripComments(sfcSource)).not.toContain('scrollIntoView');
+    const loading = mountExplorer({ loading: true });
+    expect(loading.find('.mk-ge__pathpick').exists()).toBe(false);
+    loading.unmount();
+
+    const error = mountExplorer({ error: '知识图谱加载失败，请稍后重试。' });
+    expect(error.find('.mk-ge__pathpick').exists()).toBe(false);
+    error.unmount();
   });
 
-  it('只滚轨自身：从 railEl 取 rect 算 scrollLeft，并钳制在轨两端内', () => {
-    expect(sfcSource).toContain('rail.scrollTo');
-    expect(sfcSource).toContain('rail.scrollWidth - rail.clientWidth');
-    // 只在目标整枚落在可视区右侧之外时才滚——左侧一律不动（出口不会被回推）
-    expect(sfcSource).toContain('left >= boxRight');
-  });
-
-  it('配套的 scroll-margin-inline 写在 ≤900 覆盖里（最后一个 <style> 块，否则被后面规则盖成死代码）', () => {
-    const blocks = [...sfcSource.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]);
-    const scoped = blocks[blocks.length - 1];
-    const mediaIdx = scoped.indexOf('@media (max-width: 900px)');
-    expect(mediaIdx, '最后一个 <style> 块里没有 ≤900 覆盖').toBeGreaterThan(-1);
-    expect(scoped.slice(mediaIdx)).toContain('scroll-margin-inline');
+  it('宿主接管路径视角（showPathRail=false）时不再画第二套同义控件', () => {
+    const w = mountExplorer({ showPathRail: false });
+    expect(w.find('.mk-ge__pathpick').exists()).toBe(false);
+    w.unmount();
   });
 });
