@@ -293,6 +293,27 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     expect(mcpRow!.find('.mk-switch').exists()).toBe(true);
     wrapper.unmount();
   });
+
+  /* 2026-11-05 用户「统一一下右侧」：能力卡卡头与 MCP 服务行用同一套右组——
+     开关 + 定宽动作列（`.ac-ctl` / `.ac-ctl__acts`）。服务行的类型 / 入口是读数，
+     退到名称下面，右侧只剩控制件。此前服务行把它们排在动作列前面，
+     于是这一行「右侧」里读数与控件混在一起，开关还被挤到比卡头左 70px。 */
+  it('右组统一：卡头与服务行都是「开关 + 动作列」，服务行的读数退到名称下面', async () => {
+    const wrapper = await mountLive();
+    for (const cap of wrapper.findAll('.ac-cap')) {
+      const right = cap.find('.ac-cap__head .mk-card__head-right');
+      expect(right.classes()).toContain('ac-ctl');
+      expect(right.find('.mk-switch').exists()).toBe(true);
+      expect(right.find('.ac-ctl__acts button').exists()).toBe(true);
+    }
+
+    const row = wrapper.find('.ac-mcp__row');
+    expect(row.find('.ac-mcp__main .ac-mcp__meta').exists()).toBe(true);
+    const ctl = row.find('.ac-ctl');
+    expect(ctl.find('.mk-switch').exists()).toBe(true);
+    expect(ctl.find('.mk-actions').classes()).toContain('ac-ctl__acts');
+    wrapper.unmount();
+  });
 });
 
 describe('Addons MCP 服务（transport 支持）', () => {

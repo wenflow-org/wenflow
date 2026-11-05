@@ -51,7 +51,7 @@
               <span v-if="membersText(p)" class="ac-cap__members">{{ membersText(p) }}</span>
               <button v-if="p.errorCount > 0" type="button" class="mk-link ac-cap__fail" @click="goLogs(p.primary)">查失败</button>
             </div>
-            <div class="mk-card__head-right">
+            <div class="mk-card__head-right ac-ctl">
               <MkSwitch
                 :model-value="pluginEnabled(p.id)"
                 :state-text="pluginEnabled(p.id) ? '启用' : '停用'"
@@ -62,57 +62,69 @@
               <!-- 入口动作与模型卡统一为主色实心按钮（2026-11-05 用户「都统一了」）：
                    三张模型卡的卡头右组都是 `mk-btn--primary`，这里原先是描边次级钮，
                    同处卡头右端的同权入口却是两种控件。MCP 的入口是「新建服务」，
-                   其余能力的入口是服务配置。 -->
-              <button v-if="p.id === 'mcp'" type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="openToolCreate">新建服务</button>
-              <button v-else type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="openConfig(p)">配置</button>
+                   其余能力的入口是服务配置。
+                   动作外面那层是**定宽动作列**（2026-11-05 用户「统一一下右侧」）：
+                   「配置」与「新建服务」文案不同宽，开关的 x 跟着飘 24px，
+                   四张卡的开关凑不到一条竖线上。 -->
+              <div class="ac-ctl__acts">
+                <button v-if="p.id === 'mcp'" type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="openToolCreate">新建服务</button>
+                <button v-else type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="openConfig(p)">配置</button>
+              </div>
             </div>
           </div>
 
-          <!-- MCP 服务是 MCP 工具调用的子资源：同一张卡内展开，独立开关/测试/发现工具 -->
+          <!-- MCP 服务是 MCP 工具调用的子资源：同一张卡内展开，独立开关/测试/发现工具。
+               行的右组与卡头同一套解剖（2026-11-05 用户「统一一下右侧」）：
+               左侧只放「名称 + 类型/入口」这类读数，右侧只剩控制件——开关 + 动作列。
+               此前类型与入口是动作列前面的两个数据列，于是这一行的「右侧」里
+               读数与控件混在一起，开关还被挤到比卡头左 70px 的位置。 -->
           <div v-if="p.id === 'mcp'" class="ac-mcp__body">
             <div v-if="mcpTools.length" class="ac-mcp__list">
               <div v-for="t in mcpTools" :key="t.id" class="ac-mcp__row">
                 <span class="ac-mcp__dot" :class="t.enabled ? 'is-on' : 'is-off'"></span>
                 <div class="ac-mcp__main" :title="`${t.name}（${t.id}）`">
                   <strong>{{ t.name }}</strong>
-                </div>
-                <!-- 类型/端点是中文短标签（文件系统 / 本机进程），走正文无衬线 -->
-                <span class="ac-mcp__type">
-                  <span v-if="t.transport === 'mcp'" class="mk-badge mk-badge--info">MCP</span>
-                  <template v-else>{{ mcpTypeText(t.type) }}</template>
-                </span>
-                <span class="ac-mcp__endpoint" :title="endpointTitle(t.endpoint)">{{ endpointLabel(t.endpoint) }}</span>
-                <MkSwitch
-                  :model-value="t.enabled"
-                  :state-text="t.enabled ? '启用' : '停用'"
-                  :busy="toolBusy === t.id"
-                  :aria-label="`${t.name}服务开关`"
-                  @update:model-value="toggleToolEnabled(t, $event)"
-                />
-                <div class="mk-actions">
-                  <button
-                    v-if="t.transport === 'mcp'"
-                    type="button"
-                    class="mk-link"
-                    :disabled="discoveringId === t.id"
-                    :title="discoveredMap[t.id]?.join(', ')"
-                    @click="discoverTools(t)"
-                  >
-                    {{ discoveringId === t.id ? '发现中…' : (discoveredMap[t.id] ? `工具 ${discoveredMap[t.id].length}` : '发现工具') }}
-                  </button>
-                  <button type="button" class="mk-link mk-link--hold mk-link--hold-test" :disabled="testingId === t.id" @click="testTool(t)">
-                    {{ testingId === t.id ? '测试中…' : '测试' }}
-                  </button>
-                  <span v-if="testResult?.id === t.id" class="ac-mcp__test" :class="testResult.ok ? 'is-ok' : 'is-bad'">
-                    {{ testResult.ok ? `通过 · ${testResult.latencyMs}ms` : `失败 · ${testResult.error || ''}` }}
+                  <!-- 类型/端点是中文短标签（文件系统 / 本机进程），走正文无衬线 -->
+                  <span class="ac-mcp__meta">
+                    <span v-if="t.transport === 'mcp'" class="mk-badge mk-badge--info">MCP</span>
+                    <template v-else>{{ mcpTypeText(t.type) }}</template>
+                    <span class="ac-mcp__sep" aria-hidden="true">·</span>
+                    <span class="ac-mcp__endpoint" :title="endpointTitle(t.endpoint)">{{ endpointLabel(t.endpoint) }}</span>
                   </span>
-                  <button v-if="testResult?.id === t.id && !testResult.ok" type="button" class="mk-link" @click="openToolEdit(t)">编辑</button>
-                  <div class="mk-menu">
-                    <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === t.id" @click.stop="toggleMenu(t.id)">⋯</button>
-                    <div v-if="openMenu === t.id" class="mk-menu__pop" :style="popStyle" @click.stop>
-                      <button type="button" class="mk-menu__item" @click="menuEdit(t)">编辑</button>
-                      <div class="mk-menu__sep"></div>
-                      <button type="button" class="mk-menu__item mk-menu__item--danger" @click="menuRemove(t)">删除</button>
+                </div>
+                <div class="ac-ctl">
+                  <MkSwitch
+                    :model-value="t.enabled"
+                    :state-text="t.enabled ? '启用' : '停用'"
+                    :busy="toolBusy === t.id"
+                    :aria-label="`${t.name}服务开关`"
+                    @update:model-value="toggleToolEnabled(t, $event)"
+                  />
+                  <div class="mk-actions ac-ctl__acts">
+                    <button
+                      v-if="t.transport === 'mcp'"
+                      type="button"
+                      class="mk-link"
+                      :disabled="discoveringId === t.id"
+                      :title="discoveredMap[t.id]?.join(', ')"
+                      @click="discoverTools(t)"
+                    >
+                      {{ discoveringId === t.id ? '发现中…' : (discoveredMap[t.id] ? `工具 ${discoveredMap[t.id].length}` : '发现工具') }}
+                    </button>
+                    <button type="button" class="mk-link mk-link--hold mk-link--hold-test" :disabled="testingId === t.id" @click="testTool(t)">
+                      {{ testingId === t.id ? '测试中…' : '测试' }}
+                    </button>
+                    <span v-if="testResult?.id === t.id" class="ac-mcp__test" :class="testResult.ok ? 'is-ok' : 'is-bad'">
+                      {{ testResult.ok ? `通过 · ${testResult.latencyMs}ms` : `失败 · ${testResult.error || ''}` }}
+                    </span>
+                    <button v-if="testResult?.id === t.id && !testResult.ok" type="button" class="mk-link" @click="openToolEdit(t)">编辑</button>
+                    <div class="mk-menu">
+                      <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === t.id" @click.stop="toggleMenu(t.id)">⋯</button>
+                      <div v-if="openMenu === t.id" class="mk-menu__pop" :style="popStyle" @click.stop>
+                        <button type="button" class="mk-menu__item" @click="menuEdit(t)">编辑</button>
+                        <div class="mk-menu__sep"></div>
+                        <button type="button" class="mk-menu__item mk-menu__item--danger" @click="menuRemove(t)">删除</button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1097,24 +1109,34 @@ function goLogs(skillId: string) {
 
 /* MCP 子列表：挂在 MCP 工具调用卡内，与本卡其余内容同一 16px 槽。
    卡头自带一条底边发丝线，这里只补纵向间距，不再画第二条线。 */
-.ac-mcp__body { display: grid; gap: 8px; padding: 12px 16px 14px; }
+/* 行的右组（能力卡卡头与 MCP 服务行共用，2026-11-05 用户「统一一下右侧」）：
+   开关 + **定宽动作列**。动作列不定宽时，开关的 x 跟着动作文案走——
+   「配置」与「新建服务」差 24px，四张卡的开关凑不到一条竖线，行与行读起来像两套版。 */
+.ac-section { --ac-act-w: 104px; }
+.ac-ctl { display: inline-flex; align-items: center; gap: 12px; flex: none; }
+.ac-ctl__acts {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: var(--ac-act-w);
+}
+.ac-mcp__body { display: grid; gap: 8px; padding: 0 0 14px; }
 .ac-mcp__list {
   container-type: inline-size;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-md);
+  /* 满宽 + 淡底（2026-11-05 统一右侧）：此前是内缩 16px、四边描边的面板，
+     于是行里最后一个控件比卡头右缘退 17px——「统一」就只是说法。
+     淡底 + 顶部发丝线已足够说明「这是挂在 MCP 卡里的子资源」。 */
   background: var(--mk-surface-2);
-  overflow: hidden;
+  border-top: 1px solid var(--mk-line);
 }
 .ac-mcp__row {
   display: grid;
-  /* 2026-10-24：类型/入口按内容收（max-content 上限），富余空间只留在末尾动作列，
-     消除 585–662px 的空白中段；动作列右对齐。 */
-  /* 名称吃掉剩余宽度，类型/入口/状态/动作全部 max-content 靠右成组；
-     不再让某个具名列被余量拉成 500px+ 的空列。 */
-  grid-template-columns: 10px minmax(0, 1fr) max-content max-content max-content max-content;
+  /* 左侧只放读数（名称 + 类型/入口），右侧整块是控制件（开关 + 动作列） */
+  grid-template-columns: 10px minmax(0, 1fr) max-content;
   gap: 12px;
   align-items: center;
-  padding: 10px 12px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--mk-line);
 }
 .ac-mcp__row:last-child { border-bottom: none; }
@@ -1123,11 +1145,18 @@ function goLogs(skillId: string) {
 .ac-mcp__dot.is-off { background: var(--mk-faint); }
 .ac-mcp__main { display: grid; gap: 1px; min-width: 0; }
 .ac-mcp__main strong { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ac-mcp__type { font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
-/* 状态徽标与动作组同处右缘：徽标列吃 1fr 并右对齐，把空白留在类型/入口与动作之间，
-   消除某个具名列被拉成 585–662px 空列（2026-10-24 复核）。 */
-.ac-mcp__row > .mk-switch { justify-self: end; }
-.ac-mcp__row > .mk-actions { justify-self: end; }
+/* 类型 / 入口并成名称下面的一行读数：它们描述这台服务，不参与操作 */
+.ac-mcp__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+  white-space: nowrap;
+}
+.ac-mcp__sep { color: var(--mk-faint); }
+.ac-mcp__row > .ac-ctl { justify-self: end; }
 .ac-mcp__test { font-size: var(--mk-fs-micro); font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .ac-mcp__test.is-ok { color: var(--mk-green); }
 .ac-mcp__test.is-bad { color: var(--mk-red); max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
@@ -1148,21 +1177,17 @@ function goLogs(skillId: string) {
 /* 窄卡：MCP 行两行重排（状态点/名称/徽标一行，类型/endpoint 次行，操作收底行） */
 @container (max-width: 540px) {
   .ac-mcp__row {
-    grid-template-columns: 10px minmax(0, 1fr) auto;
+    grid-template-columns: 10px minmax(0, 1fr);
     grid-template-areas:
-      'dot main badge'
-      '. type endpoint'
-      '. actions actions';
+      'dot main'
+      '. ctl';
     row-gap: 5px;
     column-gap: 12px;
     padding: 12px 16px;
   }
   .ac-mcp__dot { grid-area: dot; }
   .ac-mcp__main { grid-area: main; }
-  .ac-mcp__type { grid-area: type; }
-  .ac-mcp__endpoint { grid-area: endpoint; }
-  .ac-mcp__row .mk-switch { grid-area: badge; justify-self: end; }
-  .ac-mcp__row .mk-actions { grid-area: actions; }
+  .ac-mcp__row .ac-ctl { grid-area: ctl; justify-self: end; }
 }
 @media (max-width: 800px) {
   .ac-mcp__formrow { grid-template-columns: 1fr; }
@@ -1173,19 +1198,19 @@ function goLogs(skillId: string) {
   .mono { font-size: var(--mk-fs-micro); }
   .ac-mcp__row { padding: 12px 18px; }
   .ac-mcp__main strong { font-size: var(--mk-fs-body); }
-    .ac-mcp__type, .ac-mcp__endpoint { font-size: var(--mk-fs-micro); }
+    .ac-mcp__meta { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
   .mono { font-size: var(--mk-fs-micro); }
   .ac-mcp__row { padding: 14px 22px; }
   .ac-mcp__main strong { font-size: var(--mk-fs-micro); }
-    .ac-mcp__type, .ac-mcp__endpoint { font-size: var(--mk-fs-micro); }
+    .ac-mcp__meta { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
   .mono { font-size: var(--mk-fs-body); }
   .ac-mcp__row { padding: 16px 26px; }
   .ac-mcp__main strong { font-size: var(--mk-fs-emphasis); }
-    .ac-mcp__type, .ac-mcp__endpoint { font-size: var(--mk-fs-body); }
+    .ac-mcp__meta { font-size: var(--mk-fs-body); }
 }
 
 /* ================= 暗色模式（D1 补完）：外挂能力 ================= */
