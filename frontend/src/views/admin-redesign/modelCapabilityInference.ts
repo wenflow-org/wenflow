@@ -6,7 +6,7 @@
  * 不再把模型挡在添加清单之外，也不再给「建议归入哪张卡」的判词。
  */
 
-import { LEGACY_REASONING_EFFORTS, type ReasoningEffortLevel } from './reasoningEfforts'
+import { LEGACY_REASONING_EFFORTS } from './reasoningEfforts'
 
 export type ModelRole = 'chat' | 'embedding' | 'rerank' | 'image'
 
@@ -14,7 +14,7 @@ export interface ModelInference {
   role: ModelRole
   supportsThinking: boolean
   /** 推断出的档位：判断依据只有名字，能说的是「多半支持这几档」，具体以核对为准 */
-  reasoningEfforts: ReasoningEffortLevel[]
+  reasoningEfforts: string[]
   vision: boolean
   code: boolean
   tool: boolean
@@ -65,13 +65,13 @@ export function inferModelCapabilities(id: string): ModelInference {
   }
 }
 
-/** 上屏的能力标签（顺序固定：思考 → 推理强度 → 读图 → 代码 → Tool）。 */
+/** 上屏的能力标签（顺序固定：思考 → 推理强度 → 视觉 → 代码 → Tool）。 */
 export function inferenceLabels(inference: ModelInference): string[] {
   if (inference.role !== 'chat') return []
   const labels: string[] = []
   if (inference.supportsThinking) labels.push('思考')
   if (inference.reasoningEfforts.length) labels.push('推理强度')
-  if (inference.vision) labels.push('读图')
+  if (inference.vision) labels.push('视觉')
   if (inference.code) labels.push('代码')
   if (inference.tool) labels.push('Tool')
   return labels

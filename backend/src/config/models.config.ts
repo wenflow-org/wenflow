@@ -43,16 +43,41 @@ export interface ModelPricing {
 }
 
 /**
- * `reasoning_effort` 的合法挡位词表（上游 OpenAI 兼容协议口径）。
+ * `reasoning_effort` 的**常见**挡位词（OpenAI 兼容口径），不是白名单。
  *
- * 平台负责「认识这几个词」，具体哪台模型支持哪几档由注册表逐模型声明
- * （`ModelDefinition.reasoningEfforts`）。此前这里是三档写死（low/high/max），
- * 等于替所有模型宣称同一个支持集——2026-11-05 用户「不同模型强度挡位也不一样啊」。
+ * 2026-11-05 用户「写死了五档，但是后面的请求能对上吗，应该放开允许填写挡位」：
+ * 这个字段的取值本来就是**上游的定义域**，各家并不一致——OpenAI 系是
+ * minimal/low/medium/high，有的只认 low/high，有的用自家词（如 xhigh / dynamic）。
+ * 平台做不了「替上游认词」这件事，只做三件：逐模型声明它认哪些词、原样带着往下发、
+ * 没声明的不发。所以这里只作**常见值**用于界面提示与旧数据折算，写入不按它卡。
  */
-export const REASONING_EFFORT_LEVELS = ['minimal', 'low', 'medium', 'high', 'max'] as const;
-export type ReasoningEffortLevel = (typeof REASONING_EFFORT_LEVELS)[number];
-/** 历史默认档位：旧布尔字段折算成数组时用它，保持既有行为不变 */
-export const LEGACY_REASONING_EFFORTS: readonly ReasoningEffortLevel[] = ['low', 'high', 'max'];
+export const COMMON_REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'max'] as const;
+export type CommonReasoningEffort = (typeof COMMON_REASONING_EFFORTS)[number];
+/** 历史默认档位：旧布尔字段（supportsReasoningEffort: true）折算成数组时用它 */
+export const LEGACY_REASONING_EFFORTS: readonly string[] = ['low', 'high', 'max'];
+
+/**
+ * 挡位词的形态校验：不带空白、以字母数字开头，允许 `._+-`（覆盖 low/high/xhigh/
+ * gpt-5.1-high 这类上游写法），长度 ≤ 32。不校验「是不是我认识的词」——那是上游的事。
+ */
+export const REASONING_EFFORT_PATTERN = /^[a-z0-9][a-z0-9._+-]{0,31}$/i;
+
+/**
+ * 单个挡位词归一：trim + 小写。
+ * 小写与同文件其它枚举字段（thinkingMode / responseFormat）同一口径——上游这几个词
+ * 都是小写，界面里打成 HIGH 也按 high 存，免得存进去的值与请求里发出去的不是同一个。
+ * 形态不合抛错；空串由调用方按「未声明」处理。
+ */
+export function normalizeEffortToken(raw: unknown, where: string): string {
+  const token = typeof raw === 'string' ? raw.trim() : '';
+  if (!token) return '';
+  if (!REASONING_EFFORT_PATTERN.test(token)) {
+    throw new Error(
+      `llm-providers.json：${where} 的挡位词只能是不带空格的短词（如 low / high / max），实际 ${JSON.stringify(raw)}`,
+    );
+  }
+  return token.toLowerCase();
+}
 
 export interface ModelDefinition {
   id: string;
@@ -80,9 +105,11 @@ export interface ModelDefinition {
    * 上游根本不认，而"不支持"与"支持但不认这一档"在请求体上是同一件事：发了没用。
    *
    * 现在由注册表逐模型声明：数组即支持集，空/缺省 = 不支持该字段（等价于旧的 false）。
-   * 顺序即上屏顺序。写入时按 REASONING_EFFORT_LEVELS 校验，未知词直接拒。
+   * 顺序即上屏顺序。**写入不按平台词表卡**（2026-11-05 用户「应该放开允许填写挡位，和具体
+   * 请求参数」）：数组里的每个词就是请求体里 `reasoning_effort` 的取值，原样发出；
+   * 只做形态校验（不带空白、长度 ≤ 32），因为「这个上游认不认」只有运营知道。
    */
-  reasoningEfforts?: ReasoningEffortLevel[];
+  reasoningEfforts?: string[];
   /** 历史字段（布尔）：读入时折算成 reasoningEfforts，写回时不再产出。
    *  保留只为兼容已经落盘的旧注册表——它不知道词表，只知道「支持 / 不支持」。 */
   supportsReasoningEffort?: boolean;
@@ -126,7 +153,8 @@ export interface ModelDefinition {
    * 运行时优先级：Skill 显式配置 > 模型默认 > 平台默认。
    */
   defaultThinkingMode?: 'default' | 'enabled' | 'disabled';
-  defaultReasoningEffort?: 'default' | ReasoningEffortLevel;
+  /** 模型级默认挡位；'default' = 跟随平台默认。取值必须在本模型 reasoningEfforts 里 */
+  defaultReasoningEffort?: string;
   defaultResponseFormat?: 'default' | 'none' | 'json_object';
 }
 
@@ -344,11 +372,12 @@ function parseModelEntry(providerId: string, providerName: string, endpoint: { b
      两者都收：数组按词表校验并去重保序，布尔 true 折算成历史三档——迁移期不必手工改文件，
      读出来的 ModelDefinition 恒为数组，下游只认一种形态。 */
   const reasoningEfforts = parseReasoningEfforts(b.reasoningEfforts, b.supportsReasoningEffort, where);
-  const defaultReasoningEffort = asEnum(
-    b.defaultReasoningEffort,
-    ['default', ...REASONING_EFFORT_LEVELS] as const,
-    'defaultReasoningEffort',
-  );
+  /* 模型默认挡位：'default' / 空 = 不写模型级默认（跟随平台）；其余按挡位词形态校验。
+     不按平台词表卡——词表是上游的，运营填的必须能被原样发出去。 */
+  const rawDefaultEffort = normalizeEffortToken(b.defaultReasoningEffort, 'defaultReasoningEffort');
+  const defaultReasoningEffort = rawDefaultEffort && rawDefaultEffort.toLowerCase() !== 'default'
+    ? rawDefaultEffort
+    : undefined;
   const def: ModelDefinition = {
     id: modelId,
     label: typeof b.label === 'string' && b.label.trim() ? b.label.trim() : modelId,
@@ -376,7 +405,7 @@ function parseModelEntry(providerId: string, providerName: string, endpoint: { b
   /* 模型默认档位必须落在它自己声明的挡位里：写了 default 值却不声明该档，
      运行时那个默认永远发不出去（能力裁剪会把它挡掉），是典型的"文件里有、永远不生效"。 */
   if (def.defaultReasoningEffort && def.defaultReasoningEffort !== 'default'
-    && !def.reasoningEfforts?.includes(def.defaultReasoningEffort as ReasoningEffortLevel)) {
+    && !def.reasoningEfforts?.includes(def.defaultReasoningEffort)) {
     throw new Error(
       `llm-providers.json：${where} 的 defaultReasoningEffort=${def.defaultReasoningEffort} 不在 reasoningEfforts（${def.reasoningEfforts?.join('/') || '未声明'}）里`,
     );
@@ -392,17 +421,14 @@ export function parseReasoningEfforts(
   rawEfforts: unknown,
   rawLegacyFlag: unknown,
   where: string,
-): ReasoningEffortLevel[] {
+): string[] {
   if (Array.isArray(rawEfforts)) {
-    const out: ReasoningEffortLevel[] = [];
+    const out: string[] = [];
     for (const item of rawEfforts) {
-      const normalized = typeof item === 'string' ? item.trim().toLowerCase() : '';
-      if (!REASONING_EFFORT_LEVELS.includes(normalized as ReasoningEffortLevel)) {
-        throw new Error(
-          `llm-providers.json：${where} 的 reasoningEfforts 只能是 ${REASONING_EFFORT_LEVELS.join(' / ')}，实际 ${JSON.stringify(item)}`,
-        );
-      }
-      if (!out.includes(normalized as ReasoningEffortLevel)) out.push(normalized as ReasoningEffortLevel);
+      const token = normalizeEffortToken(item, where); // where 带模型标识，报错能指到具体那台
+      // 空串 = 该项没填（跳过）；同一个词写两遍只留一份，顺序即上屏顺序
+      if (!token) continue;
+      if (!out.includes(token)) out.push(token);
     }
     return out;
   }
@@ -722,7 +748,7 @@ export function getModelDefaultMaxTokens(modelId: string): number | null {
  */
 export function getModelGenerationDefaults(modelId: string): {
   thinkingMode?: 'enabled' | 'disabled';
-  reasoningEffort?: ReasoningEffortLevel;
+  reasoningEffort?: string;
   responseFormat?: 'none' | 'json_object';
 } {
   const def = MODEL_MAP.get(modelId);
@@ -745,7 +771,7 @@ export function getModelReasoningReserveTokens(modelId: string): number {
 }
 
 /** 模型声明的推理强度挡位（空数组 = 不支持该字段）。 */
-export function getModelReasoningEfforts(modelId: string): ReasoningEffortLevel[] {
+export function getModelReasoningEfforts(modelId: string): string[] {
   return MODEL_MAP.get(modelId)?.reasoningEfforts ?? [];
 }
 
@@ -756,7 +782,7 @@ export function supportsReasoningEffort(modelId: string): boolean {
 
 /** 模型是否接受某一具体挡位（传进来的值不在它声明的集合里 = 发了也没用）。 */
 export function modelAcceptsReasoningEffort(modelId: string, effort: string): boolean {
-  return getModelReasoningEfforts(modelId).includes(effort as ReasoningEffortLevel);
+  return getModelReasoningEfforts(modelId).includes(effort);
 }
 
 /**

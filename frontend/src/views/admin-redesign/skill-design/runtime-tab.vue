@@ -294,7 +294,7 @@ import { askConfirm } from '../useConfirm'
 import { useEscape } from '../useEscape'
 import { useOverlay, useMaskClose } from '../useOverlay'
 import { errText, callParamSourceLabel, thinkingCapabilityNotice, type ThinkingCapability } from './sdp-shared'
-import { REASONING_EFFORT_LEVELS, effortOptions, normalizeEfforts, type ReasoningEffortLevel } from '../reasoningEfforts'
+import { COMMON_REASONING_EFFORTS, effortOptions, normalizeEfforts } from '../reasoningEfforts'
 import { useModelCatalog } from '@/composables/useModelCatalog'
 import MkModelPicker from '@/components/mk/MkModelPicker.vue'
 import MkSwitch from '@/components/mk/MkSwitch.vue'
@@ -324,7 +324,7 @@ const THINKING_MODE_OPTIONS = [
 const reasoningEffortOptions = computed(() => {
   const levels = effectiveModelCap.value?.efforts?.length
     ? normalizeEfforts(effectiveModelCap.value.efforts)
-    : [...REASONING_EFFORT_LEVELS]
+    : [...COMMON_REASONING_EFFORTS]
   return effortOptions(levels, INHERIT_DEFAULT_LABEL)
 })
 const PARAM_MODE_OPTIONS = [
@@ -339,7 +339,7 @@ const emit = defineEmits<{ (e: 'dirty', p: { dirty: boolean; label: string }): v
 interface RuntimeForm {
   model: string
   thinkingMode: 'default' | 'enabled' | 'disabled'
-  reasoningEffort: 'default' | ReasoningEffortLevel
+  reasoningEffort: 'default' | string
   requestTimeoutMs: number | null
   enabled: boolean
 }
@@ -441,7 +441,7 @@ const summaryCaps = computed(() => {
   return [
     cap?.thinking ? '支持思考' : '',
     cap?.efforts.length ? `支持推理强度 ${cap.efforts.join(' / ')}` : '',
-    opt?.vision ? '支持读图' : ''
+    opt?.vision ? '支持视觉' : ''
   ].filter(Boolean)
 })
 const summaryMeta = computed(() => {
@@ -538,7 +538,7 @@ const primaryMetaText = computed(() => {
   const caps = [
     o.thinking ? '思考' : '',
     o.efforts.length ? `推理强度 ${o.efforts.join(' / ')}` : '',
-    o.vision ? '读图' : ''
+    o.vision ? '视觉' : ''
   ].filter(Boolean).join(' / ')
   const price = o.priceIn != null || o.priceOut != null
     ? `入 ${o.priceIn ?? '—'} / 出 ${o.priceOut ?? '—'}`

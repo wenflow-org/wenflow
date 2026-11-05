@@ -162,7 +162,7 @@ export interface ModelDefinition {
   realModelId?: string;            // 上游真实模型名（默认 = id）
   // —— 能力 ——
   supportsThinking?: boolean;
-  reasoningEfforts?: ReasoningEffortLevel[]; // 逐模型声明认哪几档（空 = 不支持该字段）
+  reasoningEfforts?: string[];     // 逐模型声明认哪几档——填的就是发给上游的 reasoning_effort 取值（空 = 不支持该字段）
   supportsTools?: boolean;
   supportsResponseFormat?: boolean;
   vision?: boolean;                // 是否支持图片输入（OpenAI 兼容 image_url 内容块；2026-10-18 #123）
@@ -261,6 +261,9 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
   强度是**逐档**放行的（2026-11-05）：注册表 `reasoningEfforts` 里没声明的那一档同样不发——
   上游各家强度词表不一致（OpenAI 系 minimal/low/medium/high，有的只认 low/high，有的没有这个字段），
   平台此前把 low/high/max 三档写死在界面与校验里，等于替所有模型宣称同一个支持集。
+  挡位词由运营**逐模型自由填写**（2026-11-05 用户「写死了五档，但是后面的请求能对上吗，应该放开允许填写挡位，
+  和具体请求参数」）：注册表里写什么词，请求体里就发什么词，平台不翻译、不改写、也不按自己的词表收窄，
+  只拦形态（不带空格的短词、≤32 字符，落盘前 trim + 小写）。
 - **预算分离**：`thinking=enabled` 时 `max_tokens = min(声明输出 + reasoningReserveTokens, maxOutputTokens)`，避免推理吃光输出预算。
 - 多部署时按 `require_parameters` 思路过滤：**只有支持本次所需参数的部署参与本轮路由**（这解释了历史上 `thinking:{type:"disabled"}` 偶发 400——不是抖动，是路由到了不支持的部署）。
 

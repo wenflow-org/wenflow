@@ -240,22 +240,29 @@ describe('模型', () => {
     expect(result.warnings.join(' ')).not.toContain('备用');
   });
 
-  it('推理强度挡位：逐模型声明、去重保序、未知词拒、老布尔键折成三档且不再写回', async () => {
+  it('推理强度挡位：逐模型声明、去重保序、自定义词放行、老布尔键折成三档且不再写回', async () => {
     await addModel('custom', { id: 'cm-eff', tier: 'chat', supportsThinking: true, reasoningEfforts: ['high', 'low', 'high'] });
     const entry = readFile().providers.custom.models['cm-eff'];
-    // 去重 + 保上传顺序（上屏顺序就是操作者勾的顺序）
+    // 去重 + 保上传顺序（上屏顺序就是操作者填的顺序）
     expect(entry.reasoningEfforts).toEqual(['high', 'low']);
 
     // 空数组 = 关掉这个能力：键整个删掉，不落一个空壳
     await updateModel('custom', 'cm-eff', { reasoningEfforts: [] });
     expect(readFile().providers.custom.models['cm-eff'].reasoningEfforts).toBeUndefined();
 
-    // 词表以外的词直接拒（上游不认的档位宁可编辑期报错，不在运行时静默丢）
+    /* 平台词表之外的词**放行**（2026-11-05 用户「写死了五档，但是后面的请求能对上吗，
+       应该放开允许填写挡位」）：数组里的每个词就是请求体里的取值，上游认什么只有运营知道。 */
+    await updateModel('custom', 'cm-eff', { reasoningEfforts: ['xhigh', 'dynamic'] });
+    expect(readFile().providers.custom.models['cm-eff'].reasoningEfforts).toEqual(['xhigh', 'dynamic']);
+
+    // 只拦形态必然发不出去的值：带空格 / 空串（空串按未填处理，跳过）
     await expectEditError(
-      () => updateModel('custom', 'cm-eff', { reasoningEfforts: ['ultra'] }),
+      () => updateModel('custom', 'cm-eff', { reasoningEfforts: ['very high'] }),
       400,
-      '推理强度挡位只能是'
+      '只能是不带空格的短词'
     );
+    await updateModel('custom', 'cm-eff', { reasoningEfforts: ['high', ''] });
+    expect(readFile().providers.custom.models['cm-eff'].reasoningEfforts).toEqual(['high']);
 
     // 老调用方仍传布尔：折算成历史三档；写回只产出数组，布尔键不会被留在文件里
     await updateModel('custom', 'cm-eff', { supportsReasoningEffort: true });

@@ -235,11 +235,11 @@ describe('ModelProvidersPanel', () => {
     expect(rows).toHaveLength(3)
     const caps = (i: number) => rows[i].findAll('.mpp-fn__chip').map((c) => c.text())
     expect(caps(0)).toEqual([])
-    expect(caps(1)).toEqual(['读图'])
+    expect(caps(1)).toEqual(['视觉'])
     // 强度标签带档位读数（2026-11-05）：只写「推理强度」看不出这台模型认哪几档
     expect(caps(2)).toEqual(['思考', '推理强度 low / high'])
     // 能力标签有可读文本，不只靠颜色
-    expect(rows[1].findAll('.mpp-fn__chip').map((c) => c.text())).toEqual(['读图'])
+    expect(rows[1].findAll('.mpp-fn__chip').map((c) => c.text())).toEqual(['视觉'])
   })
 
   /* 2026-11-04 用户「不要这种文案，上『Avoid unnecessary secondary labels and descriptions.
@@ -302,10 +302,25 @@ describe('ModelProvidersPanel', () => {
     expect(rows).toHaveLength(2)
     expect(w.find('.mcc').text()).toContain('确认模型能力')
 
-    // 用户把第二个模型的「读图」勾上（推断不出，默认未勾）→ 落盘值必须跟着用户
-    // 每行三组控件：思考、五档强度（.mcc-effort）、读图——按 aria-label 取，不数下标
-    const vision = rows[1].findAll('input[type="checkbox"]').find((i) => i.attributes('aria-label')?.endsWith('支持读图'))!
-    await vision.setValue(true)
+    // 用户把第二个模型的「视觉」勾上（推断不出，默认未勾）→ 落盘值必须跟着用户
+    // 每行三组控件：思考、强度挡位词输入框（.mcc-effort-input）、视觉——按 aria-label 取，不数下标
+    // 每次取行都重新查询：任一勾选变化会让列表重渲染，缓存的节点会脱离文档
+    const rowAt = (i: number) => w.findAll('.mcc-row')[i]
+    const cb = (i: number, label: string) =>
+      rowAt(i).findAll('input[type="checkbox"]').find((c) => c.attributes('aria-label')?.endsWith(label))!
+
+    await cb(1, '支持视觉').setValue(true)
+    /* 挡位是手填的词（2026-11-05 用户「应该放开允许填写挡位，和具体请求参数」）：
+       空格 / 逗号分隔、落盘前小写归一；没开思考的行填了也不提交（后端会拒）。 */
+    await cb(1, '支持思考').setValue(true)
+    await nextTick()
+    expect(rowAt(1).find('.mcc-effort-input').attributes('disabled')).toBeUndefined()
+    await rowAt(1).find('.mcc-effort-input').setValue('low, XHigh')
+    // 第一个模型填过挡位又关掉思考 → 挡位不随它落盘
+    await cb(0, '支持思考').setValue(true)
+    await nextTick()
+    await rowAt(0).find('.mcc-effort-input').setValue('high')
+    await cb(0, '支持思考').setValue(false)
     await nextTick()
     await w.find('.mcc .mk-modal__foot .mk-btn--primary').trigger('click')
     await flushPromises()
@@ -315,7 +330,7 @@ describe('ModelProvidersPanel', () => {
     expect(providerId).toBe('platform')
     expect(models).toEqual([
       { id: 'mimo-v2.5-flash', supportsThinking: false, reasoningEfforts: [], vision: false },
-      { id: 'step-3.5-flash', supportsThinking: false, reasoningEfforts: [], vision: true }
+      { id: 'step-3.5-flash', supportsThinking: true, reasoningEfforts: ['low', 'xhigh'], vision: true }
     ])
     // 引入后不再自动弹模型编辑弹层；选择器与能力确认层都已关闭
     expect(w.find('.med-modal').exists()).toBe(false)

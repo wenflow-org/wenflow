@@ -21,13 +21,12 @@ import path from 'node:path';
 import {
   LEGACY_REASONING_EFFORTS,
   ModelPricing,
-  REASONING_EFFORT_LEVELS,
+  REASONING_EFFORT_PATTERN,
   getLlmRegistryStatus,
   parseLlmProvidersConfig,
   parseReasoningEfforts,
   reloadLlmProvidersIfChanged,
-  resolveConfigPath,
-  type ReasoningEffortLevel
+  resolveConfigPath
 } from '../../config/models.config';
 import {
   deleteProviderSecret,
@@ -83,13 +82,14 @@ export interface ModelViewModel {
   tier: 'chat' | 'reasoning';
   supportsThinking: boolean;
   /** 这台模型接受哪几档 reasoning_effort；空数组 = 不支持该字段。
-   *  管理台据此渲染挡位勾选，运行时据此裁剪请求（见 gateway/api-gateway/thinking-policy.ts）。 */
-  reasoningEfforts: ReasoningEffortLevel[];
+   *  数组里的每个词就是请求体里的取值（上游定义的词，平台不翻译），
+   *  管理台据此渲染挡位列表，运行时据此裁剪请求（见 gateway/api-gateway/thinking-policy.ts）。 */
+  reasoningEfforts: string[];
   /** 声明可接收图片输入（见 models.config.ts ModelDefinition.vision） */
   vision: boolean;
   /** 模型级生成默认；null = 跟随平台默认（2026-10-24） */
   defaultThinkingMode: 'enabled' | 'disabled' | null;
-  defaultReasoningEffort: ReasoningEffortLevel | null;
+  defaultReasoningEffort: string | null;
   defaultResponseFormat: 'none' | 'json_object' | null;
   maxOutputTokens: number | null;
   defaultMaxTokens: number | null;
@@ -129,7 +129,7 @@ export interface ModelInput {
   label?: string;
   tier?: string;
   supportsThinking?: boolean;
-  /** 挡位数组：传空数组 = 关掉这个能力；不传 = 不改动。 */
+  /** 挡位数组（每项就是请求体里的 reasoning_effort 取值）：传空数组 = 关掉这个能力；不传 = 不改动 */
   reasoningEfforts?: string[];
   /** 历史入参（布尔）：true 折算成 low/high/max，保留只为兼容旧调用方。 */
   supportsReasoningEffort?: boolean;
@@ -387,8 +387,11 @@ function toModelView(raw: Record<string, unknown>, id: string): ModelViewModel {
     defaultThinkingMode: raw.defaultThinkingMode === 'enabled' || raw.defaultThinkingMode === 'disabled'
       ? raw.defaultThinkingMode
       : null,
-    defaultReasoningEffort: (REASONING_EFFORT_LEVELS as readonly string[]).includes(String(raw.defaultReasoningEffort))
-      ? raw.defaultReasoningEffort as ReasoningEffortLevel
+    // 回显不按平台词表卡：运营填的可能是上游自有词（xhigh 等），原样带回
+    defaultReasoningEffort: typeof raw.defaultReasoningEffort === 'string'
+      && REASONING_EFFORT_PATTERN.test(raw.defaultReasoningEffort.trim())
+      && raw.defaultReasoningEffort.trim().toLowerCase() !== 'default'
+      ? raw.defaultReasoningEffort.trim()
       : null,
     defaultResponseFormat: raw.defaultResponseFormat === 'none' || raw.defaultResponseFormat === 'json_object'
       ? raw.defaultResponseFormat
@@ -478,22 +481,30 @@ function assertModelId(modelId: string, where: string): void {
   }
 }
 
-/** 挡位入参归一：按词表白名单校验、去重、保持上传顺序；未知词直接拒（错误落到编辑弹窗） */
-function validateEfforts(value: unknown): ReasoningEffortLevel[] {
+/**
+ * 挡位入参归一：去空白、去重、保持上传顺序。
+ *
+ * **不按平台词表卡**（2026-11-05 用户「写死了五档，但是后面的请求能对上吗，应该放开允许填写挡位」）：
+ * 数组里的每个词就是请求体里 `reasoning_effort` 的取值，原样发出。上游各家词表不一致
+ * （minimal/low/medium/high、只认 low/high、自家 xhigh…），只有运营知道这台模型认什么。
+ * 这里只拦形态明显不对的（带空格、超长、奇怪字符），因为那是必然发不出去的值。
+ */
+function validateEfforts(value: unknown): string[] {
   if (!Array.isArray(value)) {
     throw new RegistryEditError('推理强度挡位必须是一个数组。', 400, 'invalid');
   }
-  const out: ReasoningEffortLevel[] = [];
+  const out: string[] = [];
   for (const item of value) {
-    const normalized = typeof item === 'string' ? item.trim().toLowerCase() : '';
-    if (!(REASONING_EFFORT_LEVELS as readonly string[]).includes(normalized)) {
+    const token = typeof item === 'string' ? item.trim().toLowerCase() : '';
+    if (!token) continue;
+    if (!REASONING_EFFORT_PATTERN.test(token)) {
       throw new RegistryEditError(
-        `推理强度挡位只能是 ${REASONING_EFFORT_LEVELS.join(' / ')}，实际 ${JSON.stringify(item)}。`,
+        `挡位填的是要发给上游的那个词，只能是不带空格的短词（如 low / high / max），实际 ${JSON.stringify(item)}。`,
         400,
         'invalid'
       );
     }
-    if (!out.includes(normalized as ReasoningEffortLevel)) out.push(normalized as ReasoningEffortLevel);
+    if (!out.includes(token)) out.push(token);
   }
   return out;
 }
@@ -546,7 +557,6 @@ function buildModelEntry(input: ModelInput, existing: Record<string, unknown> | 
   // 模型级生成默认（2026-10-24）：'default' / 空 = 删除覆盖，跟随平台默认
   const enumFields: Array<[keyof ModelInput, string, readonly string[]]> = [
     ['defaultThinkingMode', '思考模式', ['default', 'enabled', 'disabled']],
-    ['defaultReasoningEffort', '思考强度', ['default', ...REASONING_EFFORT_LEVELS]],
     ['defaultResponseFormat', '输出格式', ['default', 'none', 'json_object']]
   ];
   for (const [key, label, allowed] of enumFields) {
@@ -560,6 +570,19 @@ function buildModelEntry(input: ModelInput, existing: Record<string, unknown> | 
       throw new RegistryEditError(`${label}只能是 ${allowed.join(' / ')}。`, 400, 'invalid');
     }
     merged[key as string] = raw;
+  }
+  /* 默认挡位不走枚举：取值是上游定义的（与 reasoningEfforts 同一套词），
+     只做形态校验；「必须在本模型声明的挡位里」由下面那条统一对账。 */
+  if (input.defaultReasoningEffort !== undefined) {
+    const raw = typeof input.defaultReasoningEffort === 'string' ? input.defaultReasoningEffort.trim().toLowerCase() : '';
+    if (!raw || raw === 'default') delete merged.defaultReasoningEffort;
+    else if (!REASONING_EFFORT_PATTERN.test(raw)) {
+      throw new RegistryEditError(
+        `思考强度只能是不带空格的短词（如 low / high / max），实际 ${JSON.stringify(input.defaultReasoningEffort)}。`,
+        400,
+        'invalid'
+      );
+    } else merged.defaultReasoningEffort = raw;
   }
   const numFields: Array<[keyof ModelInput, string]> = [
     ['maxOutputTokens', '输出上限'],

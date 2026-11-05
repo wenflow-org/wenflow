@@ -93,30 +93,36 @@
                   </label>
                   <label class="mk-field mk-field--switch med-cap" :class="{ 'med-cap--on': form.vision }">
                     <input v-model="form.vision" type="checkbox" />
-                    <span class="med-cap__text"><b>读图</b></span>
+                    <span class="med-cap__text"><b>视觉</b></span>
                   </label>
                 </div>
-                <!-- 挡位逐模型勾（2026-11-05）：不再是一个「支持推理强度」的总开关——
-                     上游各家强度词表并不一致，勾了总开关等于替模型宣称三档都可用。
-                     勾哪几档就是这台模型的支持集，生成参数与 Skill 运行时的下拉只出这几档。 -->
-                <div class="med-efforts">
+                <!-- 挡位由运营手填（2026-11-05 二稿）：填的就是请求体里那个字段的取值，
+                     原样发给上游。平台不再固定五档——各家词表不一致，认哪些词只有运营知道。
+                     一条都不填 = 这台模型不发这个字段（等价于旧的不支持）。 -->
+                <div class="med-efforts" :class="{ 'med-efforts--off': !form.supportsThinking }">
                   <span class="med-efforts__k">{{ CAP_REASONING }}</span>
                   <div class="med-efforts__list">
-                    <label
-                      v-for="level in EFFORT_LEVELS"
-                      :key="level"
-                      class="med-effort"
-                      :class="{ 'med-effort--on': form.reasoningEfforts.includes(level), 'med-effort--off': !form.supportsThinking }"
-                    >
-                      <input
-                        v-model="form.reasoningEfforts"
-                        type="checkbox"
-                        :value="level"
+                    <span v-for="level in form.reasoningEfforts" :key="level" class="med-effort">
+                      <span class="mono med-effort__token">{{ level }}</span>
+                      <button
+                        type="button"
+                        class="med-effort__del"
                         :disabled="!form.supportsThinking"
-                        :aria-label="`支持${effortShortText(level)}档推理强度`"
-                      />
-                      <span>{{ effortShortText(level) }}</span>
-                    </label>
+                        :aria-label="`移除挡位 ${level}`"
+                        @click="removeEffort(level)"
+                      >✕</button>
+                    </span>
+                    <input
+                      v-model="effortDraft"
+                      class="med-effort__input mono"
+                      :disabled="!form.supportsThinking"
+                      :placeholder="!form.supportsThinking ? '先开思考' : '添加挡位，如 xhigh'"
+                      aria-label="添加推理强度挡位"
+                      autocomplete="off"
+                      @keydown.enter.prevent="addEffort"
+                      @blur="addEffort"
+                      @input="error = ''"
+                    />
                   </div>
                 </div>
               </div>
@@ -188,13 +194,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { adminModelProvidersApi } from '@/api/adminApi'
 import { errMsg } from './live'
 import MkSelect from '@/components/mk/MkSelect.vue'
-import {
-  REASONING_EFFORT_LEVELS,
-  effortOptions,
-  effortShortText,
-  normalizeEfforts,
-  type ReasoningEffortLevel
-} from './reasoningEfforts'
+import { REASONING_EFFORT_PATTERN, effortOptions, normalizeEfforts } from './reasoningEfforts'
 import { useEscape } from './useEscape'
 import { useMaskClose, useOverlay } from './useOverlay'
 
@@ -203,12 +203,13 @@ export interface ModelLike {
   label: string
   tier: 'chat' | 'reasoning'
   supportsThinking: boolean
-  /** 这台模型声明的推理强度挡位（后端 ModelViewModel.reasoningEfforts）；空数组 = 不支持该字段 */
-  reasoningEfforts: ReasoningEffortLevel[]
+  /** 这台模型声明的推理强度挡位（后端 ModelViewModel.reasoningEfforts）；空数组 = 不支持该字段。
+   *  每项就是请求体里的取值——上游定义的词，平台不改写。 */
+  reasoningEfforts: string[]
   vision: boolean
   /** 模型级生成默认（2026-10-24）；null/缺省 = 跟随平台默认 */
   defaultThinkingMode?: 'enabled' | 'disabled' | null
-  defaultReasoningEffort?: ReasoningEffortLevel | null
+  defaultReasoningEffort?: string | null
   /** 输出格式（2026-11-04 从弹层下线）：注册表里可能还写着，这里只读不写——
    *  提交时不带这个键，未动过的旧值原样留着，等这个功能回来再给入口。 */
   defaultResponseFormat?: 'none' | 'json_object' | null
@@ -242,10 +243,10 @@ const form = reactive({
   tier: 'chat' as 'chat' | 'reasoning',
   supportsThinking: false,
   vision: false,
-  /** 挡位多选：勾哪几档就是这台模型的支持集（顺序按词表归一，与后端落盘顺序一致） */
-  reasoningEfforts: [] as ReasoningEffortLevel[],
+  /** 这台模型认的挡位词（手填）：每项原样发上游 */
+  reasoningEfforts: [] as string[],
   defaultThinkingMode: 'default' as 'default' | 'enabled' | 'disabled',
-  defaultReasoningEffort: 'default' as 'default' | ReasoningEffortLevel,
+  defaultReasoningEffort: 'default' as string,
   maxOutputTokens: null as number | null,
   defaultMaxTokens: null as number | null,
   reasoningReserveTokens: null as number | null,
@@ -263,24 +264,44 @@ const THINKING_MODE_OPTIONS: Array<{ value: 'default' | 'enabled' | 'disabled'; 
   { value: 'enabled', label: '强制开启' },
   { value: 'disabled', label: '关闭' }
 ]
-/** 挡位词表（勾选项与下拉共用）：只列本弹层用得到的那几个符号 */
-const EFFORT_LEVELS = REASONING_EFFORT_LEVELS
 /**
- * 生成参数里的可选档位：只出这台模型在上面的「能力」里勾了的挡位。
- * 一档没勾时下拉只有「跟随默认」，且整项禁用——没有挡位可选就是没有这一项。
- * 同时把已选的默认值拉回可选集：先勾了 high 又把 high 取消，默认值不能悬空。
+ * 生成参数里的可选档位：只出这台模型在下面「能力」里填过的挡位。
+ * 一条没填时下拉只有「跟随默认」，且整项禁用——没有挡位可选就是没有这一项。
  */
 const effortSelectOptions = computed(() => effortOptions(
   form.reasoningEfforts,
-  // 一档都没勾时那唯一一项要自己说明原因：否则「跟随默认」读起来像还有别的档位没展开
+  // 一条都没填时那唯一一项要自己说明原因：否则「跟随默认」读起来像还有别的档位没展开
   form.reasoningEfforts.length ? '跟随默认' : '这台模型没有声明挡位'
 ))
+/** 档位输入草稿（回车或失焦即添加；形态不对就地报错，不写进列表） */
+const effortDraft = ref('')
+
+function addEffort(): void {
+  // 小写与后端落盘口径一致（上游这几个词都是小写），免得界面上写的与发出去的不是一个值
+  const token = effortDraft.value.trim().toLowerCase()
+  if (!token) return
+  if (!REASONING_EFFORT_PATTERN.test(token)) {
+    error.value = '挡位填的是要发给上游的那个词，只能是不带空格的短词。'
+    return
+  }
+  if (!form.reasoningEfforts.includes(token)) form.reasoningEfforts.push(token)
+  effortDraft.value = ''
+  error.value = ''
+}
+
+function removeEffort(level: string): void {
+  form.reasoningEfforts = form.reasoningEfforts.filter((x) => x !== level)
+}
+
+/* 默认挡位必须留在列表里：删掉正在被当作默认的那一档，默认值不能悬空。
+   列表是原地 push / filter 的，所以要 deep watch（浅 watch 拿不到同一引用内的变化）。 */
 watch(
   () => form.reasoningEfforts,
   (levels) => {
     if (form.defaultReasoningEffort === 'default') return
     if (!levels.includes(form.defaultReasoningEffort)) form.defaultReasoningEffort = 'default'
-  }
+  },
+  { deep: true }
 )
 /** 能力卡与生成参数同名（单一文案源：同文件出现两次会被文案门禁记复读） */
 const CAP_REASONING = '推理强度'
@@ -446,7 +467,7 @@ defineExpose({ openWith, close })
 .med-sub__hint { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 .med-advanced .mk-field { align-content: start; }
 
-/* 能力：两枚紧凑勾选标签（思考 / 读图），名称与模型表的功能列一致 */
+/* 能力：两枚紧凑勾选标签（思考 / 视觉），名称与模型表的功能列一致 */
 .med-checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .med-cap {
   display: flex;
@@ -467,26 +488,54 @@ defineExpose({ openWith, close })
   background: color-mix(in srgb, var(--mk-blue) 6%, var(--mk-surface));
 }
 
-/* 推理强度挡位：一行五枚窄勾选（与上面的能力开关同一副外观，但只占一行高度） */
+/* 推理强度挡位：一排「词 + 删除」，末尾一个输入框（填的就是请求里发的那个值） */
 .med-efforts { margin-top: 8px; padding: 9px 10px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-md); }
 .med-efforts__k { display: block; margin-bottom: 8px; color: var(--mk-muted); font-size: var(--mk-fs-micro); font-weight: 600; }
-.med-efforts__list { display: flex; flex-wrap: wrap; gap: 6px; }
+.med-efforts__list { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .med-effort {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
-  border: 1px solid var(--mk-line);
+  gap: 2px;
+  padding: 2px 3px 2px 8px;
+  border: 1px solid var(--mk-blue);
   border-radius: var(--mk-radius-sm);
-  background: var(--mk-surface);
-  color: var(--mk-muted);
+  background: color-mix(in srgb, var(--mk-blue) 6%, var(--mk-surface));
+  color: var(--mk-ink);
   font-size: var(--mk-fs-micro);
+}
+.med-effort__token { font-weight: 600; }
+/* 删除钮：小一号的 ×，不占额外横向空间（每枚挡位右侧各一个） */
+.med-effort__del {
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--mk-radius-xs);
+  background: transparent;
+  color: var(--mk-faint);
+  font-size: var(--mk-fs-micro);
+  line-height: 1;
   cursor: pointer;
 }
-.med-effort input[type='checkbox'] { margin: 0; flex: none; }
-/* 勾上 = 这台模型确实认这一档；没开思考时整组置灰（没有思考就没有强度可调） */
-.med-effort--on { border-color: var(--mk-blue); background: color-mix(in srgb, var(--mk-blue) 6%, var(--mk-surface)); color: var(--mk-ink); }
-.med-effort--off { opacity: 0.5; cursor: not-allowed; }
+.med-effort__del:hover:not(:disabled) { background: var(--mk-hover-surface); color: var(--mk-ink); }
+.med-effort__del:disabled { cursor: not-allowed; }
+.med-effort__input {
+  flex: 1 1 150px;
+  min-width: 120px;
+  padding: 3px 6px;
+  border: 1px dashed var(--mk-line);
+  border-radius: var(--mk-radius-sm);
+  background: transparent;
+  color: var(--mk-ink);
+  font: inherit;
+  font-size: var(--mk-fs-micro);
+}
+.med-effort__input:focus { border-style: solid; border-color: var(--mk-blue); outline: none; }
+.med-effort__input:disabled { cursor: not-allowed; opacity: 0.5; }
+/* 没开思考时整组置灰：没有思考就没有强度可调 */
+.med-efforts--off { opacity: 0.6; }
 
 @media (max-width: 900px) {
   .med-modal.mk-modal__panel--wide { width: min(100%, 96vw); }

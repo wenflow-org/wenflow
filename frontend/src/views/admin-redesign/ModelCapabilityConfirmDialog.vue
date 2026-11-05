@@ -21,7 +21,7 @@
             <span>模型</span>
             <span>思考</span>
             <span>强度挡位</span>
-            <span>读图</span>
+            <span>视觉</span>
           </div>
           <div class="mcc-list">
             <div v-for="row in rows" :key="row.id" class="mcc-row">
@@ -36,29 +36,22 @@
                 <input v-model="row.supportsThinking" type="checkbox" :aria-label="`${row.id} 支持思考`" />
               </label>
               <div class="mcc-row__cell mcc-efforts">
-                <label
-                  v-for="level in EFFORT_LEVELS"
-                  :key="level"
-                  class="mcc-effort"
-                  :class="{ 'mcc-effort--on': row.reasoningEfforts.includes(level), 'mcc-effort--off': !row.supportsThinking }"
-                >
-                  <input
-                    v-model="row.reasoningEfforts"
-                    type="checkbox"
-                    :value="level"
-                    :disabled="!row.supportsThinking"
-                    :aria-label="`${row.id} 支持${effortShortText(level)}档推理强度`"
-                  />
-                  <span>{{ effortShortText(level) }}</span>
-                </label>
+                <input
+                  v-model="row.effortText"
+                  class="mcc-effort-input mono"
+                  :disabled="!row.supportsThinking"
+                  :placeholder="row.supportsThinking ? '如 low / high / max' : '先开思考'"
+                  :aria-label="`${row.id} 的推理强度挡位`"
+                  autocomplete="off"
+                />
               </div>
               <label class="mcc-row__cell">
-                <input v-model="row.vision" type="checkbox" :aria-label="`${row.id} 支持读图`" />
+                <input v-model="row.vision" type="checkbox" :aria-label="`${row.id} 支持视觉`" />
               </label>
             </div>
             <p v-if="!rows.length" class="mcc-empty">没有要引入的模型</p>
           </div>
-          <p class="mcc-hint">推断只认模型名，判不出的一律留空。留空是保守档：不发思考、强度与读图参数，模型照常可用。</p>
+          <p class="mcc-hint">推断只认模型名，判不出的一律留空。留空是保守档：不发思考、强度与视觉参数，模型照常可用。</p>
         </div>
 
         <div class="mk-modal__foot mcc-foot">
@@ -76,7 +69,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { inferModelCapabilities, inferenceLabels } from './modelCapabilityInference'
-import { REASONING_EFFORT_LEVELS, effortShortText, type ReasoningEffortLevel } from './reasoningEfforts'
+import { normalizeEfforts } from './reasoningEfforts'
 import { useEscape } from './useEscape'
 import { useMaskClose, useOverlay } from './useOverlay'
 
@@ -87,21 +80,21 @@ export type ConfirmedModelCapability = {
   id: string
   supportsThinking: boolean
   /** 这台模型认哪几档推理强度；空数组 = 不支持该字段 */
-  reasoningEfforts: ReasoningEffortLevel[]
+  reasoningEfforts: string[]
   vision: boolean
 }
 
 interface Row extends ConfirmedModelCapability {
   /** 推断出的能力标签（只用于让用户认得出这是哪个模型，不参与提交） */
   tags: string[]
+  /** 挡位的编辑态文本（空格 / 逗号分隔）：确认时才解析成数组，
+   *  否则每敲一个字符都要改写数组，光标位置会跟着跳 */
+  effortText: string
 }
 
 const emit = defineEmits<{
   confirm: [models: ConfirmedModelCapability[]]
 }>()
-
-/** 挡位词表：与模型编辑弹层共用同一份（勾选项、文案、顺序都一致） */
-const EFFORT_LEVELS = REASONING_EFFORT_LEVELS
 
 const open = ref(false)
 const rows = ref<Row[]>([])
@@ -118,6 +111,7 @@ function openWith(ids: string[]): void {
       reasoningEfforts: [...inference.reasoningEfforts],
       vision: inference.vision,
       tags: inferenceLabels(inference),
+      effortText: inference.reasoningEfforts.join(' '),
     }
   })
   open.value = true
@@ -132,11 +126,12 @@ function confirm(): void {
   if (!rows.value.length) return
   emit(
     'confirm',
-    rows.value.map(({ id, supportsThinking, reasoningEfforts, vision }) => ({
+    rows.value.map(({ id, supportsThinking, effortText, vision }) => ({
       id,
       supportsThinking,
-      // 没开思考的模型不该带着挡位落盘（后端会拒），这里先清掉
-      reasoningEfforts: supportsThinking ? reasoningEfforts : [],
+      // 没开思考的模型不该带着挡位落盘（后端会拒），这里先清掉。
+      // 空格与逗号都当分隔符：运营从文档里复制过来的词表两种写法都有。
+      reasoningEfforts: supportsThinking ? normalizeEfforts(effortText.split(/[\s,，]+/)) : [],
       vision,
     })),
   )
@@ -194,21 +189,19 @@ defineExpose({ openWith })
 }
 .mcc-row__none { color: var(--mk-faint); }
 .mcc-row__cell { display: flex; justify-content: center; cursor: pointer; }
-/* 挡位五选：一行五枚窄勾选，与模型编辑弹层同一副外观 */
-.mcc-efforts { justify-content: flex-start; flex-wrap: wrap; gap: 4px; cursor: default; }
-.mcc-effort {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 1px 6px;
+/* 挡位手填：一个输入框装这台模型认的整串词（空格 / 逗号分隔），确认时才解析 */
+.mcc-efforts { justify-content: flex-start; cursor: default; }
+.mcc-effort-input {
+  width: 100%;
+  padding: 3px 7px;
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-sm);
-  color: var(--mk-muted);
-  cursor: pointer;
+  background: var(--mk-surface);
+  color: var(--mk-ink);
+  font: inherit;
+  font-size: var(--mk-fs-micro);
 }
-.mcc-effort input[type='checkbox'] { margin: 0; flex: none; }
-.mcc-effort--on { border-color: var(--mk-blue); color: var(--mk-ink); }
-.mcc-effort--off { opacity: 0.45; cursor: not-allowed; }
+.mcc-effort-input:disabled { cursor: not-allowed; opacity: 0.5; }
 .mcc-empty { margin: 0; padding: 14px 12px; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 .mcc-hint { margin: 10px 0 0; color: var(--mk-muted); font-size: var(--mk-fs-micro); line-height: 1.5; }
 .mcc-foot { align-items: center; gap: 10px; }

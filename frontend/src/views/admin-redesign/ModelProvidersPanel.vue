@@ -394,7 +394,7 @@ function functionTags(m: ModelLike): string[] {
   const tags: string[] = []
   if (m.supportsThinking) tags.push('思考')
   if (m.reasoningEfforts.length) tags.push(`推理强度 ${m.reasoningEfforts.join(' / ')}`)
-  if (m.vision) tags.push('读图')
+  if (m.vision) tags.push('视觉')
   return tags
 }
 async function refresh(force = false): Promise<void> {

@@ -15,7 +15,7 @@ describe('modelCapabilityInference', () => {
     // 2026-11-04：用途只服务向量/重排卡按用途拉取，不再产出「建议归入哪张卡」的判词
   })
 
-  it('从模型名推断思考、推理强度与读图', () => {
+  it('从模型名推断思考、推理强度与视觉', () => {
     const r1 = inferModelCapabilities('deepseek-r1')
     expect(r1.supportsThinking).toBe(true)
     // 预填历史三档（low/high/max）：推断只是预填，用户核对后才落盘
@@ -25,7 +25,7 @@ describe('modelCapabilityInference', () => {
     const vision = inferModelCapabilities('gpt-4o')
     expect(vision.vision).toBe(true)
     expect(vision.supportsThinking).toBe(false)
-    expect(inferenceLabels(vision)).toEqual(['读图', 'Tool'])
+    expect(inferenceLabels(vision)).toEqual(['视觉', 'Tool'])
 
     const step = inferModelCapabilities('step-fun/step-1v')
     expect(step.vision).toBe(true)

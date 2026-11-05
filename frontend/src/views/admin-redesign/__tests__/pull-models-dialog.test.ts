@@ -61,7 +61,7 @@ describe('PullModelsDialog', () => {
     expect(w.findAll('.pmd-row__tags, .pmd-chip')).toHaveLength(0)
     expect(w.find('.pmd-cols').text()).toBe('模型标识状态')
     expect(rowOf(w, 'deepseek-r1').text()).not.toContain('思考')
-    expect(rowOf(w, 'gpt-4o').text()).not.toContain('读图')
+    expect(rowOf(w, 'gpt-4o').text()).not.toContain('视觉')
     expect(rowOf(w, 'deepseek-r1').text()).toContain('可添加')
 
     // 向量 / 重排不再被挡在外面：照样可勾

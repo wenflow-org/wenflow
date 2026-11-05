@@ -206,7 +206,7 @@ describe('ModelEditorDialog', () => {
     expect(updateModelMock).toHaveBeenCalledWith('platform', 'm-deep', expect.objectContaining({ tier: 'reasoning' }))
   })
 
-  it('高级设置：能力两枚开关（思考 / 读图）+ 逐档强度勾选', async () => {
+  it('高级设置：能力两枚开关（思考 / 视觉）+ 挡位手填输入框', async () => {
     const w = mount(ModelEditorDialog, mountOptions)
     w.vm.openWith({ providerId: 'acme-gateway', model: null })
     await flushPromises()
@@ -214,13 +214,45 @@ describe('ModelEditorDialog', () => {
     expect(w.text()).not.toContain('只勾模型实际支持的能力')
     expect(w.text()).not.toContain('先思考再回答')
     expect(w.text()).not.toContain('可调节思考深度')
-    expect(w.text()).not.toContain('可读图与截图')
+    expect(w.text()).not.toContain('可看图片与截图')
     const caps = w.findAll('.med-cap')
-    expect(caps.map((c) => c.text())).toEqual(['思考', '读图'])
-    // 2026-11-05 用户「不同模型强度挡位也不一样啊」：强度不再是一个总开关，而是逐档勾
-    const levels = w.findAll('.med-effort')
-    expect(levels.map((l) => l.text())).toEqual(['最低', '低', '中', '高', '最高'])
-    expect(levels.every((l) => l.find('input').attributes('disabled') !== undefined)).toBe(true)
+    expect(caps.map((c) => c.text())).toEqual(['思考', '视觉'])
+    /* 2026-11-05 用户「写死了五档，但是后面的请求能对上吗，应该放开允许填写挡位」：
+       挡位不再是一组固定档，而是运营手填的词——新模型不预置任何挡，填一个进一个。 */
+    expect(w.findAll('.med-effort')).toHaveLength(0)
+    expect(w.find('.med-effort__input').attributes('placeholder')).toBe('先开思考')
+    // 挡位依赖思考已开：没开思考时输入框不可用
+    expect(w.find('.med-effort__input').attributes('disabled')).toBeDefined()
+    await caps[0].find('input[type="checkbox"]').setValue(true)
+    await flushPromises()
+    expect(w.find('.med-effort__input').attributes('disabled')).toBeUndefined()
+    expect(w.find('.med-effort__input').attributes('placeholder')).toBe('添加挡位，如 xhigh')
+  })
+
+  it('挡位填什么发什么：自定义词原样进请求体（只做小写与去空白），带空格的词就地拦下', async () => {
+    const w = mount(ModelEditorDialog, mountOptions)
+    w.vm.openWith({ providerId: 'platform', model: null, presetId: 'm-free' })
+    await flushPromises()
+    await w.findAll('.med-cap input[type="checkbox"]')[0].setValue(true)
+    await flushPromises()
+    const input = w.find('.med-effort__input')
+
+    // 界面不按自己的词表过滤：上游各家词表不一致，认哪些词只有运营知道
+    await input.setValue('very high')
+    await input.trigger('keydown.enter')
+    expect(w.find('[role="alert"]').text()).toContain('不带空格的短词')
+    expect(w.findAll('.med-effort')).toHaveLength(0)
+
+    await input.setValue('XHigh')
+    await input.trigger('keydown.enter')
+    await flushPromises()
+    expect(w.findAll('.med-effort__token').map((t) => t.text())).toEqual(['xhigh'])
+    expect(mkSelectLabels(w, '推理强度')).toEqual(['跟随默认', 'xhigh'])
+
+    addModelMock.mockResolvedValue({ data: { success: true, warnings: [] } })
+    await btn(w, '保存').trigger('click')
+    await flushPromises()
+    expect(addModelMock).toHaveBeenCalledWith('platform', expect.objectContaining({ reasoningEfforts: ['xhigh'] }))
   })
 
   it('勾了挡位没勾思考：保存时就地拦下并说明依赖（不发请求）', async () => {
@@ -315,10 +347,11 @@ describe('ModelEditorDialog', () => {
     // 挡位依赖思考能力：先勾上「思考」这一枚能力，挡位才可选
     await w.findAll('.med-cap input[type="checkbox"]')[0].setValue(true)
     await flushPromises()
-    // 勾上 low / high / max 后下拉才出现这三档
-    for (const label of ['低', '高', '最高']) {
-      const chip = w.findAll('.med-effort').find((c) => c.text() === label)!
-      await chip.find('input').setValue(true)
+    // 填进 low / high / max 后下拉才出现这三档
+    const effortInput = w.find('.med-effort__input')
+    for (const token of ['low', 'high', 'max']) {
+      await effortInput.setValue(token)
+      await effortInput.trigger('keydown.enter')
     }
     await flushPromises()
     expect(mkSelectLabels(w, '推理强度')).toEqual(['跟随默认', '低（low）', '高（high）', '最高（max）'])

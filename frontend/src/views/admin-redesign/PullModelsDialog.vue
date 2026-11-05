@@ -185,7 +185,7 @@ const props = withDefaults(defineProps<{
   stateLine: '',
   stateLineTitle: '',
   allowManual: true,
-  hint: '能力列表里没有，勾完引入时会让你逐项确认思考 / 推理强度 / 读图。',
+  hint: '能力列表里没有，勾完引入时会让你逐项确认思考 / 推理强度 / 视觉。',
 })
 
 const emit = defineEmits<{

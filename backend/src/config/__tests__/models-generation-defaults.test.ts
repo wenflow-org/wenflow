@@ -44,10 +44,10 @@ describe('模型级生成参数解析', () => {
   it('非法枚举 fail-loud，报错带字段名', () => {
     expect(() => parseLlmProvidersConfig(configWith({ defaultThinkingMode: 'on' })))
       .toThrow(/defaultThinkingMode 只能是 default \/ enabled \/ disabled/)
-    // medium 自 2026-11-05 起是合法档位（词表扩到 minimal/low/medium/high/max），
-    // 这里换一个词表外的词来测「非法枚举」
-    expect(() => parseLlmProvidersConfig(configWith({ defaultReasoningEffort: 'ultra' })))
-      .toThrow(/defaultReasoningEffort 只能是/)
+    /* 挡位词不按平台词表卡（2026-11-05 用户「应该放开允许填写挡位，和具体请求参数」）：
+       只拦形态必然发不出去的值（带空格） */
+    expect(() => parseLlmProvidersConfig(configWith({ defaultReasoningEffort: 'very high' })))
+      .toThrow(/只能是不带空格的短词/)
     expect(() => parseLlmProvidersConfig(configWith({ defaultResponseFormat: 'json' })))
       .toThrow(/defaultResponseFormat 只能是/)
   })
@@ -66,5 +66,13 @@ describe('模型级生成参数解析', () => {
       defaultReasoningEffort: 'high'
     }))
     expect(ok.models.find((m) => m.id === 'm-gen')?.defaultReasoningEffort).toBe('high')
+
+    // 上游自有词同样放行：声明什么就发什么，平台不翻译
+    const custom = parseLlmProvidersConfig(configWith({
+      supportsThinking: true,
+      reasoningEfforts: ['xhigh'],
+      defaultReasoningEffort: 'xhigh'
+    }))
+    expect(custom.models.find((m) => m.id === 'm-gen')?.reasoningEfforts).toEqual(['xhigh'])
   })
 })

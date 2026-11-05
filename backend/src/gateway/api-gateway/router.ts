@@ -6,7 +6,7 @@ import { getAgentRequestTimeoutInfo } from '../../services/agentRequestTimeout.s
 import { decryptSecret, SecretCryptoError } from '../../utils/secret-crypto';
 import { endpointsMatch } from '../../utils/endpoint-identity';
 import { selectModelForAlias } from './model-alias';
-import { reloadLlmProvidersIfChanged, resolveModelRef, supportsVision, getModelGenerationDefaults, REASONING_EFFORT_LEVELS, type ReasoningEffortLevel } from '../../config/models.config';
+import { reloadLlmProvidersIfChanged, resolveModelRef, supportsVision, getModelGenerationDefaults } from '../../config/models.config';
 import { resolveProviderApiKey } from '../../services/provider-secrets.service';
 
 const PLATFORM_KEY_CONTEXT = 'system.platform_api_configs.apiKey';
@@ -23,7 +23,7 @@ interface Config {
   vision?: boolean;
   reasoningModel?: string;
   thinkingMode?: 'default' | 'enabled' | 'disabled';
-  reasoningEffort?: 'default' | ReasoningEffortLevel;
+  reasoningEffort?: string;
   /** 通道级结构化输出默认（user-provider 继承 platform 通道设置；skill paramOverrides 仍可覆盖） */
   responseFormat?: 'none' | 'json_object';
   temperature: number;
@@ -406,7 +406,7 @@ export class APIRouter {
       // （此前硬编码 'default' → 上游预思考开启，path-gen 类长任务被烧慢超时）
       let responseFormat: 'none' | 'json_object' = 'none';
       let thinkingMode: 'default' | 'enabled' | 'disabled' = 'default';
-      let reasoningEffort: 'default' | ReasoningEffortLevel = 'default';
+      let reasoningEffort = 'default';
       try {
         const plat = await systemPrisma.platform_api_configs.findUnique({
           where: { id: 'platform' },
@@ -508,14 +508,17 @@ export class APIRouter {
     return 'default';
   }
 
-  private normalizeReasoningEffort(value?: string | null): 'default' | ReasoningEffortLevel {
-    const normalized = (value || '').trim().toLowerCase();
-    // 词表以外的值（xhigh 等）按「未指定」处理；这一档发不发得出去由 thinking-policy
-    // 再按模型声明的 reasoningEfforts 裁一次——两处都放行才算数。
-    if ((REASONING_EFFORT_LEVELS as readonly string[]).includes(normalized)) {
-      return normalized as ReasoningEffortLevel;
-    }
-    return 'default';
+  /**
+   * 挡位归一：只做去空白与空值回落，**不按平台词表过滤**。
+   *
+   * 2026-11-05 用户「应该放开允许填写挡位，和具体请求参数」：取值是上游定义的，
+   * 平台这一层没有资格把 xhigh / dynamic 这类自家词改写成 default——那样它永远发不出去，
+   * 而且失败是静默的。放行哪一档由 thinking-policy 按**模型声明的 reasoningEfforts** 裁，
+   * 那才是知道「这台模型认什么词」的地方。
+   */
+  private normalizeReasoningEffort(value?: string | null): string {
+    const normalized = (value || '').trim();
+    return normalized || 'default';
   }
 
   private async getPlatformDefault(): Promise<ResolvedRoute> {
