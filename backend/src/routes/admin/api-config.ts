@@ -183,7 +183,6 @@ router.put('/', async (req, res) => {
     };
     const invalidDefaults = ([
       ['默认模型', defaultModel],
-      ['推理默认模型', defaultReasoningModel],
       ['评估默认模型', defaultEvaluationModel],
     ] as const)
       .filter(([, value]) => typeof value === 'string' && value.trim() !== ''

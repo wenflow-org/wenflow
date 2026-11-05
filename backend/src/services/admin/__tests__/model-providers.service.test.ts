@@ -486,33 +486,34 @@ describe('运行时密钥解析（DB 密文 → 环境变量回落）', () => {
   });
 });
 
-describe('#177 运行期引用门禁（判定与写入语义同源）', () => {
-  it('停用整条供应商前挡「仍被平台默认引用」', async () => {
+/* 2026-11-05 产品决定下线 #177 运行期引用门禁，见 CHANGELOG：
+   平台 DB 默认 / skill 绑定不再阻止删改注册表；文件级 defaults 自检仍然生效。 */
+describe('#177 运行期引用门禁已下线（2026-11-05）', () => {
+  it('#177 已下线：停用供应商不再因平台 DB 默认引用而受阻', async () => {
+    // custom 先补一个模型，再让平台 DB 默认指向它——旧门禁会拦停用，现在应放行。
+    await addModel('custom', { id: 'cm-1', tier: 'chat' })
     mockGetConfig.mockResolvedValue({
-      defaultModel: 'm-chat',
-      defaultReasoningModel: 'm-reason',
-      defaultEvaluationModel: 'm-chat',
+      defaultModel: 'cm-1',
+      defaultReasoningModel: 'cm-1',
+      defaultEvaluationModel: 'cm-1',
       chatModels: [],
       reasoningModels: [],
       lightModels: []
-    });
-    await expectEditError(() => updateProvider(PLATFORM_PROVIDER_ID, { enabled: false }), 400, '平台默认模型');
-  });
+    })
+    await expect(updateProvider('custom', { enabled: false })).resolves.toBeTruthy()
+    expect(readFile().providers.custom.enabled).toBe(false)
+  })
 
-  it('非布尔 enabled 载荷（1/0/null/"false"）同样触发门禁，不能既停用又绕过', async () => {
-    mockSkillBindings.push({ skillId: 'goal-conversation', model: 'm-chat', endpoint: null });
+  it('#177 已下线：非布尔 enabled 载荷不再被 skill 绑定门禁拦截', async () => {
+    mockSkillBindings.push({ skillId: 'goal-conversation', model: 'm-chat', endpoint: null })
     for (const payload of [1, 0, null, 'false', '0']) {
-      await expectEditError(
-        () => updateProvider(PLATFORM_PROVIDER_ID, { enabled: payload } as never),
-        400,
-        'goal-conversation'
-      );
+      await expect(updateProvider('custom', { enabled: payload } as never)).resolves.toBeTruthy()
     }
-    // 未触发停用的值（true）不受门禁影响
-    await expect(updateProvider(PLATFORM_PROVIDER_ID, { enabled: true })).resolves.toBeTruthy();
-  });
+    // true 同样不受影响
+    await expect(updateProvider('custom', { enabled: true })).resolves.toBeTruthy()
+  })
 
-  it('删整条供应商前挡「仍被 skill 绑定引用」', async () => {
+  it('#177 已下线：删除被 skill 绑定的供应商不再拦截', async () => {
     // custom 在共享夹具里没有模型 → 本用例局部写一份带模型的目录，绑定其模型后再删整条通道
     fs.writeFileSync(tempConfig, JSON.stringify({
       providers: {
@@ -524,10 +525,11 @@ describe('#177 运行期引用门禁（判定与写入语义同源）', () => {
     }, null, 2), 'utf-8');
     modelsConfig.reloadLlmProvidersIfChanged(true);
     mockSkillBindings.push({ skillId: 'goal-conversation', model: 'cm-1', endpoint: null });
-    await expectEditError(() => deleteProvider('custom'), 400, '供应商「custom」');
-  });
+    await expect(deleteProvider('custom')).resolves.toBeTruthy();
+    expect(providerIds()).toEqual(['platform']);
+  })
 
-  it('删单模型前挡「仍被平台默认引用」（文件 defaults 未指向它）', async () => {
+  it('#177 已下线：删除被平台 DB 默认引用的模型不再拦截（文件 defaults 仍指向别处）', async () => {
     mockGetConfig.mockResolvedValue({
       defaultModel: 'm-extra',
       defaultReasoningModel: '',
@@ -535,7 +537,8 @@ describe('#177 运行期引用门禁（判定与写入语义同源）', () => {
       chatModels: [],
       reasoningModels: [],
       lightModels: []
-    });
-    await expectEditError(() => deleteModel(PLATFORM_PROVIDER_ID, 'm-extra'), 400, '平台默认模型');
-  });
+    })
+    await expect(deleteModel(PLATFORM_PROVIDER_ID, 'm-extra')).resolves.toBeTruthy()
+    expect(readFile().providers.platform.models['m-extra']).toBeUndefined()
+  })
 });

@@ -11,7 +11,7 @@ import {
   getPlatformReliabilitySettings,
   type PlatformReliabilitySettings,
 } from './reliability-settings.service';
-import { FALLBACK_WORTHY_CATEGORIES } from '../gateway/api-gateway/deployment-health';
+import { UPSTREAM_FAILURE_CATEGORIES } from '../gateway/api-gateway/upstream-failure';
 import skillModelConfigService from './skillModelConfig.service';
 
 export type SkillStatsRange = '24h' | '7d' | '30d' | 'all';
@@ -19,7 +19,7 @@ export type SkillStatsRange = '24h' | '7d' | '30d' | 'all';
 /* ===== #177：skill 成功率口径剔除上游/基础设施类失败 =====
  * 上游/基础设施类失败（限流、上游 HTTP、网络、上游超时）与调用方取消不代表 skill 逻辑失败，
  * 与 skills/executor.ts 的 isUpstreamFailure / isCallerAbort 同一口径——类别集合**直接引用**
- * gateway/api-gateway/deployment-health.FALLBACK_WORTHY_CATEGORIES（单一真源，网关加类别此处自动跟随）。
+ * gateway/api-gateway/upstream-failure.UPSTREAM_FAILURE_CATEGORIES（单一真源，网关加类别此处自动跟随）。
  * 不计入 skill 成功率，否则一次上游故障（含「目录外模型无可用渠道」）会把整列 skill 打成 0 失败，
  * 污染健康度面板。行仍照记，只是不参与成功率分子/分母。
  *
@@ -52,9 +52,9 @@ const PROMPT_UPSTREAM_EXCLUSION = {
 
 /* agent_call_logs 的剔除条件（SQL 骨架）：失败 且（按 category 命中上游类别/调用方取消
    ——与 executor 同源；或 category 为空时按 code 回退，仅供 skill 层无 category 的旧行）。
-   类别来源 FALLBACK_WORTHY_CATEGORIES 单点引用，不抄第二份清单。 */
+   类别来源 UPSTREAM_FAILURE_CATEGORIES 单点引用，不抄第二份清单。 */
 const AGENT_UPSTREAM_EXCLUSION_SQL = Prisma.sql`NOT ("success" = 0 AND (
-  COALESCE("errorCategory", '') IN (${Prisma.join([...FALLBACK_WORTHY_CATEGORIES, 'caller_abort'])}) OR (
+  COALESCE("errorCategory", '') IN (${Prisma.join([...UPSTREAM_FAILURE_CATEGORIES, 'caller_abort'])}) OR (
     "errorCategory" IS NULL AND (
       COALESCE("errorCode", '') IN (${Prisma.join([...UPSTREAM_FAILURE_CODES])})
       OR COALESCE("errorCode", '') LIKE ${'%' + CALLER_ABORT_CODE_FRAGMENT + '%'}

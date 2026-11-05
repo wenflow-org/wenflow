@@ -60,13 +60,18 @@ describe('APIRouter 逻辑别名解析（chat / reasoning / light）', () => {
   it('DB 覆盖（chatModels）优先于代码注册表', async () => {
     platformConfigFindFirst.mockResolvedValue({
       ...BASE_PLATFORM,
-      chatModels: JSON.stringify(['agnes-3.0-flash'])
+      chatModels: JSON.stringify(['agnes-2.5-flash'])
     })
     const route = await new APIRouter().resolve({})
-    expect(route.model).toBe('agnes-3.0-flash')
+    expect(route.model).toBe('agnes-2.5-flash')
   })
 
   it('skill 级 model 为别名 light → 展开为 agnes', async () => {
+    // 夹具改用注册表内 enabled 的模型：agnes-3.0-flash 只在停用的示例 provider 里。
+    platformConfigFindFirst.mockResolvedValue({
+      ...BASE_PLATFORM,
+      lightModels: JSON.stringify(['agnes-2.5-flash'])
+    })
     skillConfigFindFirst.mockResolvedValue({
       endpoint: null,
       apiKey: null,
@@ -79,7 +84,7 @@ describe('APIRouter 逻辑别名解析（chat / reasoning / light）', () => {
       requestTimeoutMs: 45000
     })
     const route = await new APIRouter().resolve({ skillId: 'some-skill' })
-    expect(route.model).toBe('agnes-3.0-flash')
+    expect(route.model).toBe('agnes-2.5-flash')
   })
 
   it('tier=reasoning + model 为别名 reasoning → 按能力选支持思考的 v4.1-flash', async () => {

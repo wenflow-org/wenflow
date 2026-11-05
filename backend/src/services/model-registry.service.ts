@@ -216,12 +216,11 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
   const chatSelection = defaultModel ? selectModelForAlias(defaultModel, { overrides: dbLists }) : null;
   const evaluationSelection = evaluationModel ? selectModelForAlias(evaluationModel, { overrides: dbLists }) : null;
 
-  // 平台三档默认必须落在已注册目录内（含别名展开）。指向目录外的模型（如历史遗留的评测专用
-  // id）在运行时无可用渠道、请求直接 transport 失败，且未单独配模型的 skill 会静默继承它（#177）。
-  // 这里把它变成可见的配置漂移告警——与别名/降级链告警同一面（管理端「模型注册表」页渲染）。
+  // 平台默认必须落在已注册目录内（含别名展开）。指向目录外的模型（如历史遗留的评测专用 id）
+  // 在运行时无可用渠道、请求直接 transport 失败，且未单独配模型的 skill 会静默继承它。
+  // 这里把它变成可见的配置漂移告警——与别名告警同一面（管理端「模型注册表」页渲染）。
   for (const [label, configured, selection] of [
     ['默认模型', defaultModel, chatSelection],
-    ['推理默认模型', reasoningModel, reasoningSelection],
     ['评估默认模型', evaluationModel, evaluationSelection],
   ] as const) {
     const resolved = selection?.model ?? configured;

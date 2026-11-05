@@ -176,8 +176,9 @@ describe('错误映射', () => {
     expect(payload.warnings.join(' ')).toContain('别名「chat」');
   });
 
-  /* #177：目录收缩门禁——文件 root.defaults 之外，DB 平台默认与 skill 显式绑定同样不能被删空。 */
-  it('删除仍被平台 DB 默认模型引用的模型 → 400（文件 defaults 并不指向它）', async () => {
+  /* 2026-11-05 产品决定下线 #177 目录外默认门禁，见 CHANGELOG：
+     DB 平台默认引用不再阻止删除模型（文件 root.defaults 的校验仍在 service 里）。 */
+  it('#177 已下线：删除被平台 DB 默认引用的模型 → 不再拦截', async () => {
     mockGetConfig.mockResolvedValue({
       apiUrl: 'https://platform.example.com/v1',
       apiKey: 'platform-key',
@@ -190,24 +191,20 @@ describe('错误映射', () => {
     });
     const res = createRes();
     await handlerFor('delete', '/:id/models/:modelId')({ params: { id: 'custom', modelId: 'cm-1' }, body: {} }, res);
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-      code: 'invalid',
-      error: expect.stringContaining('平台默认模型')
-    }));
-    // 模型仍在文件里（未删）
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+    // 模型已从文件里删掉
     const file = JSON.parse(fs.readFileSync(tempConfig, 'utf-8'));
-    expect(file.providers.custom.models['cm-1']).toBeDefined();
+    expect(file.providers.custom.models['cm-1']).toBeUndefined();
   });
 
-  it('删除仍被走平台通道的 skill 显式绑定的模型 → 400', async () => {
+  /* 2026-11-05 产品决定下线 #177 运行期引用门禁，见 CHANGELOG：skill 绑定不再阻止删除模型。 */
+  it('#177 已下线：删除被走平台通道的 skill 显式绑定的模型 → 不再拦截', async () => {
     mockSkillBindings.push({ skillId: 'goal-conversation', model: 'cm-1', endpoint: null });
     const res = createRes();
     await handlerFor('delete', '/:id/models/:modelId')({ params: { id: 'custom', modelId: 'cm-1' }, body: {} }, res);
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-      error: expect.stringContaining('goal-conversation')
-    }));
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+    const file = JSON.parse(fs.readFileSync(tempConfig, 'utf-8'));
+    expect(file.providers.custom.models['cm-1']).toBeUndefined();
   });
 
   it('自带独立 endpoint 的 skill 绑定不阻止删除（模型由其实例通道提供）', async () => {
@@ -217,9 +214,9 @@ describe('错误映射', () => {
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
   });
 
-  /* #177：供应商级门禁——删/停整条通道会让它的全部模型一起离开运行时目录，
-     与删单模型同一根因，单模型门禁挡不住。 */
-  it('删除仍被平台默认引用的供应商 → 400（整条通道的模型一起消失）', async () => {
+  /* 2026-11-05 产品决定下线 #177 供应商级门禁，见 CHANGELOG：
+     删整条通道不再因平台 DB 默认引用而被拦。 */
+  it('#177 已下线：删除被平台默认引用的供应商 → 不再拦截', async () => {
     mockGetConfig.mockResolvedValue({
       apiUrl: 'https://platform.example.com/v1',
       apiKey: 'platform-key',
@@ -232,25 +229,19 @@ describe('错误映射', () => {
     });
     const res = createRes();
     await handlerFor('delete', '/:id')({ params: { id: 'custom' }, body: {} }, res);
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-      code: 'invalid',
-      error: expect.stringContaining('供应商「custom」')
-    }));
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
     const file = JSON.parse(fs.readFileSync(tempConfig, 'utf-8'));
-    expect(file.providers.custom).toBeDefined();
+    expect(file.providers.custom).toBeUndefined();
   });
 
-  it('停用仍被走平台通道 skill 绑定的供应商 → 400', async () => {
+  /* 2026-11-05 产品决定下线 #177 供应商级门禁，见 CHANGELOG：skill 绑定不再阻止停用通道。 */
+  it('#177 已下线：停用被走平台通道 skill 绑定的供应商 → 不再拦截', async () => {
     mockSkillBindings.push({ skillId: 'goal-conversation', model: 'cm-1', endpoint: null });
     const res = createRes();
     await handlerFor('patch', '/:id')({ params: { id: 'custom' }, body: { enabled: false } }, res);
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-      error: expect.stringContaining('goal-conversation')
-    }));
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
     const file = JSON.parse(fs.readFileSync(tempConfig, 'utf-8'));
-    expect(file.providers.custom.enabled).not.toBe(false);
+    expect(file.providers.custom.enabled).toBe(false);
   });
 
   it('未被运行期引用的供应商停用照常放行', async () => {
