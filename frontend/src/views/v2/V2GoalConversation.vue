@@ -154,27 +154,41 @@
       <!-- 左：信息清单（移动端默认折叠为顶栏，点击展开；桌面端恒展开） -->
       <aside class="panel" :class="{ 'panel--collapsed': !panelExpanded }">
         <button type="button" class="panel__head" :aria-expanded="panelExpanded" @click="togglePanel">
-          <!-- 「目标」+可折叠「信息」：窄屏收进 6/7 计数后胶囊宽度紧张，短标签让位 -->
-          <strong>目标<span class="panel__head-ext">信息</span></strong>
+          <!-- 「学情」+可折叠「画像」（2026-11-05 用户裁定）：这 7 项是给规划用的背景信息
+               （想解决的问题 / 动机 / 经验 / 卡点 / 周期 / 时间 / 成功标准），不是 7 个学习目标；
+               旧文案「目标 6/7」会让用户读成「我有 7 个目标」 -->
+          <strong>学情<span class="panel__head-ext">画像</span></strong>
           <span class="panel__count"><span class="panel__count-k">已收集</span> {{ live.filledCount }} / {{ live.totalFields }}</span>
           <span class="panel__caret" aria-hidden="true">{{ panelExpanded ? '▾' : '▸' }}</span>
         </button>
+        <!-- 面板背后的遮罩（2026-11-05 用户裁定）：窄屏面板是悬浮层，直接浮在聊天字上，
+             右边还露出半截气泡的边角；压暗一层让面板成为唯一焦点，点遮罩即收起 -->
+        <div v-if="panelOpen" class="panel__mask" aria-hidden="true" @click="togglePanel"></div>
         <div class="panel__body">
           <div class="panel__bar"><i :style="{ width: (live.filledCount / live.totalFields) * 100 + '%' }"></i></div>
           <div class="panel__confidence">{{ stageLabel }}</div>
 
           <ul class="checklist">
-            <li v-for="f in live.fields" :key="f.key" class="field" :class="[`field--${f.status}`, { 'field--fresh': f.fresh }]">
+            <li
+              v-for="f in live.fields"
+              :key="f.key"
+              class="field"
+              :class="[`field--${f.status}`, { 'field--fresh': f.fresh, 'field--short': SHORT_KEYS.has(f.key) }]"
+            >
               <!-- 原型 .wf-field__mark：done = 绿 18% 浅底 + 绿字勾；未完成 = 灰空圆（无虚线内芯） -->
               <span class="field__mark">
                 <svg v-if="f.status === 'done'" viewBox="0 0 24 24" width="11" height="11"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
               </span>
               <div class="field__body">
-                <div class="field__label">{{ f.label }}</div>
+                <div class="field__label">
+                  {{ f.label }}
+                  <!-- 「刚收录」徽章 → 6px 小蓝点（2026-11-05 用户裁定）：5 个一模一样的蓝胶囊
+                       竖着排下来抢走全部注意力，而左侧绿勾已经表达了「已收录」 -->
+                  <span v-if="f.fresh" class="field__fresh" title="刚收录"><span class="visually-hidden">刚收录</span></span>
+                </div>
                 <div v-if="f.value" class="field__value">{{ f.value }}</div>
                 <div v-else class="field__value field__value--todo">待补充</div>
               </div>
-              <span v-if="f.fresh" class="field__fresh">刚收录</span>
             </li>
           </ul>
 
@@ -493,7 +507,7 @@
         <div v-if="reviewProposal?.stages.length" class="proposal__stages">
           <span class="proposal__stages-label">路径大纲 · {{ reviewProposal.stageCount }} 个阶段</span>
           <ol>
-            <li v-for="(s, i) in reviewProposal.stages" :key="i" class="pstep"><i>{{ i + 1 }}</i><div><strong>{{ s }}</strong></div></li>
+            <li v-for="(s, i) in reviewProposal.stages" :key="i" class="pstep"><i>{{ i + 1 }}</i><div><strong>{{ stageHead(s) }}</strong>{{ stageTail(s) }}</div></li>
           </ol>
         </div>
 
@@ -672,6 +686,9 @@ const panelOpen = ref(false);
 const panelExpanded = computed(() => !isNarrow.value || panelOpen.value);
 /** 输入上限：后端 GOAL_INPUT_MAX_CHARS 是 4096，前端再收紧只会把「贴一段背景」截断，对齐后端 */
 const INPUT_MAX = 4096;
+/* 短字段双列（2026-11-05 用户裁定）：期望周期 / 可用时间通常只有「30 天」「25 分钟」几个字，
+   各占一整行把面板撑到要滚动；这两项改半宽小卡并排，面板一屏更装得下 */
+const SHORT_KEYS = new Set(['time_horizon', 'time_per_session']);
 /* 双视图（初始态/会话态）各自渲染一份的错误条与输入提示，文案收成单源避免改一处漏一处 */
 const CONNECT_FAIL_MSG = '连接失败，没能开始对话。';
 const ATTACH_HINT = '添加资料：PDF / Word / PPT / Excel / TXT / Markdown，也可以直接拖到输入框';
@@ -1397,6 +1414,20 @@ function stageMark(i: number) {
   return String(i);
 }
 
+/** 阶段标题拆两档（2026-11-05 用户裁定「全篇粗体显笨重」）：
+    「拆题：把题目场景翻译成…」里冒号前是短标签（重）、冒号后是描述（常规）。
+    没有冒号时整句按描述走，不再整句加粗。 */
+function stageHead(s: string): string {
+  const text = String(s ?? '');
+  const i = text.search(/[：:]/);
+  return i > 0 ? text.slice(0, i + 1) : '';
+}
+function stageTail(s: string): string {
+  const text = String(s ?? '');
+  const i = text.search(/[：:]/);
+  return i > 0 ? text.slice(i + 1) : text;
+}
+
 function stageCls(i: number) {
   return {
     'stage-nav__item--current': live.stageIndex === i,
@@ -1782,6 +1813,20 @@ function shuffleScenes() {
 
 /* ---------- 输入区 ---------- */
 .composer { display: grid; gap: 7px; }
+/* 底部渐隐（2026-11-05 用户裁定）：消息滚到底边是被滚动视口「硬切」一行——
+   切边正好贴着方案卡/输入框顶边，读起来像「被卡片盖住」。在底部固定区上方铺一层
+   透明→画布的 26px 渐变，让滑过的文字自己化开；配套 .chat__scroll 的 40px 底衬，
+   滚到底时最后一行停在渐变之上，不会被长期压淡。
+   .proposal-invite 抬 z-index：它是不透明卡，压在 composer 的渐变之上，两处渐变同色不叠印。 */
+.composer,
+.proposal-invite { position: relative; }
+.proposal-invite { z-index: 1; }
+.composer::before,
+.proposal-invite::before {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 100%;
+  height: 26px; pointer-events: none;
+  background: linear-gradient(180deg, transparent, var(--canvas));
+}
 .composer__box {
   position: relative;
   display: flex; align-items: flex-end; gap: 10px;
@@ -1960,9 +2005,11 @@ function shuffleScenes() {
 
 /* 目标信息字段行：原型 .wf-field —— 发丝线平铺行（去圆角悬浮底），
    done = 绿 18% 浅底 + 绿字勾，未完成 = 灰空圆 */
-.checklist { list-style: none; margin: 0; padding: 0; display: grid; }
+/* 双列栅格（2026-11-05）：长字段默认跨满两列，短字段（见 .field--short）各占半列并排 */
+.checklist { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 10px; }
 .field {
   position: relative;
+  grid-column: 1 / -1;
   display: grid; grid-template-columns: 16px 1fr; gap: 9px;
   padding: 9px 0;
   border-top: 1px solid var(--line);
@@ -1979,9 +2026,28 @@ function shuffleScenes() {
 .field__mark svg { width: 10px; height: 10px; }
 .field--done .field__mark { background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--green-ink); }
 .field__label { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: var(--faint); }
-.field__value { margin-top: 3px; font-size: 13px; font-weight: 600; line-height: 1.5; color: var(--ink); }
-.field__value--todo { color: var(--faint); font-size: 13px; font-weight: 500; }
-/* 「刚收录」徽章：对齐原型 .wf-field__fresh —— 蓝色（原先绿底白勾同源的绿系） */
+/* 正文常规字重（2026-11-05 用户裁定）：大段描述全用 600/700 会糊成一团、显得笨重；
+   只留短标签/短数值的重音，正文回到 400 + 柔和浅色 + 1.5 行高 */
+.field__value { margin-top: 3px; font-size: 13px; font-weight: 400; line-height: 1.5; color: color-mix(in srgb, var(--ink) 84%, transparent); }
+.field__value--todo { color: var(--faint); font-size: 13px; font-weight: 400; }
+/* 短字段双列（2026-11-05 用户裁定）：期望周期 / 可用时间各占半宽小卡并排 */
+.field--short {
+  grid-column: span 1;
+  margin: 4px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--mk-radius-md);
+}
+.field--short .field__value { margin-top: 2px; }
+/* 刚收录 = 6px 蓝点（2026-11-05 用户裁定）：原「刚收录」蓝胶囊竖排 5 个抢焦点，
+   与左侧绿勾重复表达同一件事 */
+.field__fresh {
+  display: inline-block;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--blue);
+  flex: none;
+}
+/* 「刚收录」行内高亮：对齐原型 .wf-field__fresh —— 蓝色（原先绿底白勾同源的绿系） */
 .field--fresh { background: color-mix(in srgb, var(--blue) 6%, transparent); }
 /* 刚收录闪显：值写入时一次蓝色高亮脉冲（reduced-motion 下被全局规则压掉） */
 @media (prefers-reduced-motion: no-preference) {
@@ -2001,14 +2067,6 @@ function shuffleScenes() {
   from { opacity: 0; transform: scale(0.6); }
   to { opacity: 1; transform: scale(1); }
 }
-.field__fresh {
-  position: absolute; top: 9px; right: 0;
-  font-size: 12px; font-weight: 800; color: var(--blue-deep);
-  background: color-mix(in srgb, var(--blue) 12%, transparent);
-  padding: 2px 6px; border-radius: var(--mk-radius-pill);
-}
-/* 徽章绝对定位在行尾：给同排的正文让位，长值不会钻到徽章底下 */
-.field--fresh .field__body { padding-right: 52px; }
 </style>
 
 <style scoped>
@@ -2084,12 +2142,9 @@ function shuffleScenes() {
   background: var(--blue);
   animation: stage-dot-breathe 1.6s ease-in-out infinite;
 }
-.stage-nav__item--current::after {
-  content: '';
-  position: absolute; left: 0; right: 0; bottom: 0;
-  height: 2px;
-  background: var(--blue);
-}
+/* 底部 2px 蓝下划线已撤（2026-11-05 用户裁定）：它与步条带的灰分割线平行且悬空 5px，
+   读作「两条线打架」，而左侧还会探到「›」分隔符下方。当前步态由三样东西已经说清——
+   ✓/●/序号 步标 + 白色 800 粗体 + 呼吸蓝点，再画一根线纯属重复。 */
 @keyframes stage-dot-breathe {
   0%, 100% { opacity: 1; }
   50% { opacity: .35; }
@@ -2103,7 +2158,8 @@ function shuffleScenes() {
   flex: 1;
   overflow-y: auto;
   /* 画布直铺：不再有白卡内边距，左右与 .chat__head 的 16px 对齐 */
-  padding: 16px 16px 20px;
+  /* 底衬 20→32（2026-11-05）：给滚动边缘的 26px 渐隐让位，滚到底时最后一行不吃渐变 */
+  padding: 16px 16px 32px;
   display: flex; flex-direction: column; gap: 18px;
   transition: filter .2s ease, opacity .2s ease;
   /* 原生滚动条隐藏（2026-11-05 屏效比）：桌面 Windows 的经典粗滚动条在移动视口仿真里
@@ -2535,6 +2591,20 @@ function shuffleScenes() {
   background: var(--surface);
   border-top: 1px solid var(--line);
 }
+/* 底部双钮收形（2026-11-05 用户裁定）：15px 字 + 13px 竖内衬 + 16px 圆角在 40px 高度上
+   读作两颗胖胶囊。改成 40px 定高 + 8px 同心圆角 + 左 1 : 右 2（次按钮「再补充点信息」是
+   退路、主按钮「确认，生成我的路径」是终局，宽度比例应写进版式而不是靠字数自然形成）。
+   .proposal__foot 前缀：压过同组件基座的 .btn-primary--lg / .btn-ghost 内边距。 */
+.proposal__foot .btn-ghost,
+.proposal__foot .btn-primary {
+  flex: 1 1 0; min-height: 40px; padding: 0 12px;
+  justify-content: center;
+  border-radius: var(--mk-radius-md);
+  font-size: 14px;
+}
+/* .btn-ghost 基座是块级按钮（无 flex），文字要居中得先立起 flex */
+.proposal__foot .btn-ghost { display: inline-flex; align-items: center; }
+.proposal__foot .btn-primary { flex: 2 1 0; }
 .proposal--center { position: relative; display: grid; justify-items: center; text-align: center; gap: 12px; padding: 34px 28px; overflow-y: auto; }
 .proposal__stream {
   width: 100%;
@@ -2600,7 +2670,10 @@ function shuffleScenes() {
   font-size: 12px; font-weight: 800; font-style: normal;
   display: grid; place-items: center;
 }
-.pstep strong { display: block; font-size: 13.5px; line-height: 1.5; }
+/* 阶段行两档字重（2026-11-05 用户裁定）：整句 700 的长描述读起来糊且笨重，
+   改成「短标签重 + 描述常规」——strong 是冒号前的标签，其余是描述 */
+.pstep > div { font-size: 13.5px; line-height: 1.5; color: color-mix(in srgb, var(--ink) 84%, transparent); }
+.pstep strong { font-weight: 700; color: var(--ink); }
 .proposal__probes {
   display: grid; gap: 10px; width: 100%; text-align: left;
 }
@@ -2815,10 +2888,10 @@ function shuffleScenes() {
     top: calc(100% + 6px);
     left: 16px; right: 16px;
     z-index: 26;
-    /* 高度上限取「不超过 60% 视口」与「给 composer 留位」的较小值：
-       悬浮层顶边在头部带下方 ≈118px，下方要留 composer(103) + 底部导航(62) ≈ 300px，
-       短屏（320×568）下 60dvh 会盖住输入框，靠这一项兜住。内容仍超高时面板内部滚动。 */
-    max-height: min(calc(60dvh / var(--vp-zoom, 1)), calc((100dvh - 320px) / var(--vp-zoom, 1)));
+    /* 高度上限：60% → 70% 视口（2026-11-05 用户裁定「一屏装下」），下沿改成
+       「留出 composer + 底部导航 ≈ 240px」的硬约束——短屏（320×568）靠这一项兜住，
+       长屏则真的能把 7 项清单一次排完。内容仍超高时面板内部滚动（滚动条已隐）。 */
+    max-height: min(calc(70dvh / var(--vp-zoom, 1)), calc((100dvh - 240px) / var(--vp-zoom, 1)));
     overflow: auto;
     padding: 12px;
     background: var(--surface);
@@ -2826,6 +2899,15 @@ function shuffleScenes() {
     border-radius: var(--mk-radius-modal);
     box-shadow: var(--mk-shadow-modal); /* 模态档 */
   }
+  /* 面板遮罩（2026-11-05 用户裁定）：浮层直接盖在聊天字上、右缘还露半截气泡，
+     压暗一层后面板才是唯一焦点；z-index 取 21（> 步条带 6 / 消息流，< 面板 26），
+     点击即收起（悬浮层点外部关闭是默认心智，不需要再找 ▾） */
+  .panel__mask {
+    position: fixed; inset: 0; z-index: 21;
+    background: color-mix(in srgb, var(--ink) 58%, transparent);
+    animation: panel-mask-in 0.16s ease-out both;
+  }
+  @keyframes panel-mask-in { from { opacity: 0; } to { opacity: 1; } }
   /* 面板紧凑化（.field 已是原型 .wf-field 平铺发丝线行）：行内边距 9→7、gap 9→8、
      值 13→12.5；标记/徽章尺寸随桌面档（16px），只把绝对定位徽章对齐到新的行内边距；
      「待补充」行只有一行内容，标签与值并排（原先占两行纯属浪费，5 行白吃 ~110px）。 */
@@ -2834,7 +2916,8 @@ function shuffleScenes() {
   .field__value--todo { font-size: 12px; }
   .field--todo .field__body { display: flex; align-items: baseline; gap: 6px; }
   .field--todo .field__value { margin-top: 0; min-width: 0; }
-  .field__fresh { top: 7px; right: 0; }
+  /* 短字段小卡（2026-11-05）：窄屏行内边距 7 上下，卡片左右再补 10，两列不贴边 */
+  .field--short { padding: 7px 10px; }
   .panel__bar { height: 5px; }
   /* 移动端信息清单默认折叠：头部横条可点，收起时隐藏进度条/清单/提示 */
   .panel__head { cursor: pointer; }
@@ -2845,7 +2928,7 @@ function shuffleScenes() {
   /* overscroll-behavior:contain 隔断滚动链——列表滚到边缘时不再触发整页橡皮筋
      （本页 height:100dvh 不随文档滚动，iOS 上链式滚动会把底部导航一起拽动）。
      padding 16/20→10/16、消息间距 18→16（2026-11-05 屏效比）：对话区首屏多装半轮问答 */
-  .chat__scroll { min-height: 0; overscroll-behavior: contain; padding: 10px 16px 16px; gap: 16px; }
+  .chat__scroll { min-height: 0; overscroll-behavior: contain; padding: 10px 16px 40px; gap: 16px; }
   /* AI 头像左列撤除（2026-11-05 屏效比）：30px 圆 + 10px gap 把整段回复推开 40px 宽，
      同样字数多折 2~3 行；品牌已由顶栏承载，气泡不再需要逐条自报家门 */
   .msg__avatar { display: none; }
@@ -3000,7 +3083,8 @@ function shuffleScenes() {
      （2026-09-27 死 CSS 清理：.nav 及 .nav__ 系列、.live-badge、.proposal__skip、
      .peerdock 暗色档均已移除——模板早已不渲染这些类。.replies 当时被误列入：
      2026-09-30 快捷补充面板改名 .replies 后重新启用，移动端 margin-left 归零规则仍在。） */
-  .chat__scroll { padding: 14px; }
+  /* 底衬 14 → 40（2026-11-05）：本条整条覆盖上面的 padding，底部必须显式带上渐变让位值 */
+  .chat__scroll { padding: 14px 14px 40px; }
   .login-gate { padding: 28px 20px; border-radius: var(--mk-radius-modal); }
   .login-gate h1 { font-size: 18px; }
 }
