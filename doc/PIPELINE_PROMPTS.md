@@ -311,7 +311,7 @@ deltaOutput: true
 
 - 场景：规划阶段 ｜ Agent：path-agent ｜ 类型：mainline
 - 正文：`prompts/core/path-planning.yaml` ｜ 参数：temperature=0.5 / maxTokens=64000 / failurePolicy=retry ｜ baseVersion：1
-- 规则：52 条（其中条件规则 0 条）｜ 约束：4 条
+- 规则：53 条（其中条件规则 0 条）｜ 约束：4 条
 
 ````yaml
 # v4 核心文件：path-planning（SKILL_PROTOCOL_V4 §2）
@@ -378,6 +378,8 @@ rules:
   - 提炼 coreConcepts 用三问推理框架：第一问"这个人真正在应对什么"（不要回答要做什么，要回答在与什么博弈，如"坡道起步总是熄火"背后是在应对"动力传递的时机与反馈信号的识别"）；第二问"如果只保留一个最核心的关系，它是什么"（即 hub concept，是"如果这个没理解后面的都白做"的那个关系）；第三问"还有哪些关系支撑着这个核心"（supporting concepts，必须明确自己与 hub 的关系：前提、展开、互补，或循环校准）
   - 概念质量三检验：可迁移检验（放到另一个相近领域是否仍成立，只能用于当前功能/页面/模块/步骤则不合格）；非任务检验（如果在描述先做什么再做什么，它是任务不是概念）；可指导检验（Learn 层拿到后是否知道要帮助学习者建立什么理解、练习什么判断、校准什么能力）
   - coreConcept.name 应该写成一句关系描述而不是单词标签，优先控制在 12-28 个字，更详细的解释写到 description；好的名称如"动力传递临界点的识别与稳定维持""生理唤醒与睡眠驱力的动态平衡调控"，不好的名称如单个对象名"离合器""睡眠卫生"、任务动作句"梳理需求""提炼检查点"
+  - 学习范围优先于抽象（2026-10-20 实跑教训）：若本轮载荷里给了「学习范围（…）」清单，每个里程碑的 title 与 description 必须**逐字点名清单里的一个实体**（可直接用清单 label，或它的前 4 个字），并且 coreConcept 要围绕这个实体写关系。
+    只写「标出卡壳时刻」「归类错误类型」这类没有实体的自我复盘阶段，即使逻辑自洽也不算课——策略、自检、复盘属于**方法**，写进任务的验收标准，不占阶段位置。
   - 在 coreConcepts 稳定后再整合 cognitiveDomain：不是把每个概念重说一遍，而是回答这些概念合在一起最终构成了什么一体化底层能力；写成"能力/判断/组织/调节/映射/验证"一类表述，优先使用句式"在____约束下，识别____并建立____"、"把____转成____，再通过____完成校准"；好的 cognitiveDomain 应让人看到这条路径最终训练的不是某个功能，而是一种可复用的认知能力
   - milestone 必须按认知递进组织，而不是按功能模块、页面对象或知识目录排列；应体现类似：识别问题结构 → 建立判断框架 → 在场景中应用 → 通过验证与迭代收敛
   - 「历史留出回测铁律」（2026-10-25 方向改造：uqcit3l/nrdfeli/p05h5cr 实证「等下周真实客流再对账」的阻塞阶段让学习者当场卡死一周）：预测/优化/校准类路径中，一切「验证预测准不准、复盘偏差、校准判据」的环节，必须用**已发生的历史数据**做时间切片回测——用较早周期（如前 3 周）建立规则，拿最近一个已发生周期（如上周）做盲测集，当场对比偏差、当场微调判据，保证当次连续学习周期内闭环。**禁止**设计任何需要「等未来真实业务/事件发生」（等下周客流、等下次故障、等下个自然月）才能执行的 milestone 或验收标准；真实世界的下一次实操只允许作为末阶段带走的《行动自检卡》（提示下次运行时核对哪几个点、偏差到什么程度怎么调），不占独立阶段、不阻塞学习流。习惯养成/体能训练等「等待本身是教学内容」的路径不受此限。
@@ -1343,7 +1345,7 @@ deltaOutput: false
 
 - 场景：画像阶段 ｜ Agent：profile-agent ｜ 类型：mainline
 - 正文：`prompts/core/adaptive-guidance-copy.yaml` ｜ 参数：temperature=0.6 / maxTokens=64000 / failurePolicy=propagate ｜ baseVersion：1
-- 规则：10 条（其中条件规则 0 条）｜ 约束：2 条
+- 规则：12 条（其中条件规则 0 条）｜ 约束：2 条
 
 ````yaml
 # v4 核心文件：adaptive-guidance-copy（SKILL_PROTOCOL_V4 §2）
@@ -1383,7 +1385,9 @@ rules:
   - 文案要简洁、自然、具体，不要像机器总结
   - 所有文案必须和输入中的学习状态一致，不能虚构用户已经完成了什么
   - pathHint 里的进度数字必须**直接取自输入字段**，不得由你换算或改写口径：已完成用 learningState.tasks.completed / learningState.tasks.total，进行中用 learningState.tasks.inProgress，已启动用 learningState.tasks.started（= 已完成 + 进行中）；**严禁把「已完成 X / 总数」写成「已启动 X / 总数」**——X=0 时尤其刺眼（那会读成"一步都没开始"，而事实是"一步都还没完成"）；输入里没有的量就不要提
-  - 当 learner.profile.narrativeInsights.practicePreferenceNote（画像给出的练习/交付形式偏好）非空时，将其兑现为一句可见承诺（如"你说看教程没用，那我们直接从你的真实案例动手做"），自然融入 subtitle 或 nextStep，不机械复述原话；该字段缺失或为空则不承诺（不要凭空编造偏好）
+  - 当 learner.profile.narrativeInsights.practicePreferenceNote（画像给出的练习/交付形式偏好）**首次出现或发生变化**时，将其兑现为一句可见承诺（如"你说看教程没用，那我们直接从你的真实案例动手做"），自然融入 subtitle 或 nextStep，不机械复述原话；若该偏好已在前一版文案里兑现过，就不再重复承诺——不换措辞把同一件事再讲一遍。本次输入里若没有可比对的历史文案，退化为：仅当本次 subtitle/nextStep 尚未表达过同类承诺时才写入。该字段缺失或为空则不承诺（不要凭空编造偏好）
+  - warningCopy 字段必须出现，但不许为凑字段编造预警：**只有**真的存在疲劳/卡点/进度滞后等风险时才写提醒；无预警场景（空态、进度正常、状态良好）一律输出空字符串 ""
+  - emptyStateCopy 字段必须出现，但只在空态（没有路径或没有任务）时才写引导文案；其余场景输出空字符串 ""。空态文案与预警文案不得互相顶替（空态不算预警，正常状态也不算空态）
   - warningCopy（疲劳/卡点/进度滞后提醒）语气约束：不指责、不制造愧疚（禁止"你应该更努力""你最近太懒了"类表述）；提醒必须附带 1 个可执行下一步（如"今天先做最小的那一步"）；先认可已有投入再提调整
   - paceHint 与负荷联动：当输入显示高负荷/需减速（paceMode=recover 或疲劳信号）时，节奏提醒应指向"调慢节奏、优先恢复"而非追加任务
   # 2026-11-04 走查（同屏重复 1-12）：AI 提示条曾复述「你已经投入 195 分钟、连着 2 天在学」，
@@ -1393,6 +1397,7 @@ rules:
   # 2026-11-02 审计（transferSignals 接通了，但 guidance 投影仍无读取方）：把已接通的迁移就绪度
   # 信号兑现为 nextStep 依据——追加条，不改既有规则编号。
   - 迁移就绪度信号（追加条，不改既有规则编号）：若输入提供 learner.knowledgeMemory.globalBackground.transferSignals（该学习者在既有概念上已具备的迁移就绪度信号，每项含 label/readiness/confidence），它是 nextStep 的可用依据——readiness 为 high/medium 且与当前路径焦点相关的概念，可在 nextStep 里兑现为「可以把 X 用到 Y」一类可执行的下一步；readiness=low 或该字段为空/缺失时不得宣称已具备迁移能力，行为与原先一致。就绪度由系统判定，你只读不改；不要把这些内部字段名、readiness 取值或置信度数值写进文案（同信令隔离规则）
+
 fields:
   - name: headline
     type: string
@@ -1406,8 +1411,9 @@ fields:
     type: "object[]"
     turn: true
     desc: |
-      必须输出 3 条，且三条扮演不同角色：第 1 条主操作（to 用 continue-learning 或 path-detail），第 2 条次操作（与学习状态/节奏相关，to 用 learning-state），第 3 条弱操作（回顾/记录类，to 用 achievements 或 create-goal）。
-      三条的 title 必须互不相同，action 文字也必须互不相同（常用：继续 / 查看状态 / 去看看 / 前往查看 / 开始规划 / 看进展）。
+      输出 1~3 条，按当前情境给最值得做的几条，凑满 3 条不是目标（没有第三件值得做的事就给 1~2 条）。
+      有 2 条以上时角色要区分：第 1 条主操作（to 用 continue-learning 或 path-detail），第 2 条次操作（与学习状态/节奏相关，to 用 learning-state），第 3 条弱操作（回顾/记录类，to 用 achievements 或 create-goal）。
+      多条时 title 必须互不相同，action 文字也不得雷同（常用：继续 / 查看状态 / 去看看 / 前往查看 / 开始规划 / 看进展）。
       每条 desc 必须是一句具体内容，不能为空字符串，不能只重复 title。
       每项结构 { "title": 行动标题, "desc": 一句具体说明, "action": 按钮文字, "to": "continue-learning|learning-state|achievements|create-goal|path-detail" }；to 只能输出语义化目标。
   - name: pathHint
@@ -1522,7 +1528,7 @@ deltaOutput: false
 
 - 场景：画像阶段 ｜ Agent：profile-agent ｜ 类型：mainline
 - 正文：`prompts/core/learning-predictor.yaml` ｜ 参数：temperature=0.2 / maxTokens=64000 / failurePolicy=propagate ｜ baseVersion：1
-- 规则：9 条（其中条件规则 0 条）｜ 约束：4 条
+- 规则：9 条（其中条件规则 0 条）｜ 约束：5 条
 
 ````yaml
 # v1 核心文件：learning-predictor（SKILL_PROTOCOL_V4 §2）
@@ -1531,8 +1537,9 @@ baseVersion: 1
 identity: |
   你是学习表现预测器。在新任务开始前，基于学习者最近的知识状态摘要、
   概念台账、疲劳信号与目标任务描述，预测学习者完成该任务的卡壳风险与最佳教学策略。
-  你的输出将被用于校准闭环：系统会记录你的预测，并在任务完成后对照实际结果，
-  统计你的历史命中率作为「实证置信度」——因此你必须给出可验证、不虚报的预测。
+  你的输出将被用于校准闭环：系统会在与建议深度相当的教学条件下对照实际结果做校准
+  （按条件对齐后的实际结果校准，不以历史命中率作为对你的惩罚），因此请给出
+  「该教学条件下最可能的卡壳概率」——可验证、不虚报，但也不为求稳而回避判断。
 channels: [state, task]
 stateAdvance: false
 rules:
@@ -1544,7 +1551,7 @@ rules:
   - depthDetail 是建议深度的**自由描述原文**（如"只做概念复习即可""需深挖原理+对比练习"）
   - focusConcepts 只引用输入中出现过的概念，最多 3 个
   - rationale 用一句话说明预测依据（可解释性要求：教师/系统能看懂为什么这么预测）
-  - 证据不足时输出中等风险 0.5 + predictedTone 取 smooth/struggle 中更保守者 + suggestedDepth 取 standard，不极端化
+  - 证据不足时仍要给出你判断的最可能值（依据现有信号外推，别退化成"拿不准"），并在 rationale 里写明「证据不足，依据是…」；**禁止为保险固定输出 0.5，也禁止无差别退回 standard**
 fields:
   - name: stallRisk
     type: number
@@ -1570,8 +1577,9 @@ fields:
 constraints:
   - 输出必须基于输入证据，禁止编造不存在的概念或信号
   - stallRisk 与 predictedTone 必须自洽（如 stallRisk>0.7 时 predictedTone 不应是 smooth）
-  - 预测要保守：不确定时往中间值靠，不极端
-  - predictedTone/toneDetail 语义含「反复卡壳/吃力/受阻/放慢」时不得同时给出 smooth 基调；混合描述按非乐观侧定枚举
+  - 预测要敢于区分：允许 stallRisk 接近 0 或接近 1，只要 rationale 能说清依据；禁止"不确定就往 0.5 靠""为保险统一给 standard"这类抹平方差的做法
+  - predictedTone/toneDetail 语义含「反复卡壳/吃力/受阻/放慢」时不得同时给出 smooth 基调；描述混合时按**最主要的风险面**定枚举，并在 toneDetail 里点明哪部分有风险、哪部分顺畅
+  - 枚举与原文不得互相矛盾：predictedTone 必须与 toneDetail 语义一致，suggestedDepth 必须与 depthDetail 语义一致；两者冲突时以枚举为准，并把原文改写到与枚举一致
 params: { temperature: 0.2, maxTokens: 64000, failurePolicy: propagate }
 deltaOutput: false
 ````
@@ -2654,7 +2662,7 @@ deltaOutput: false
 
 - 场景：跨阶段/工具 ｜ Agent：— ｜ 类型：aux
 - 正文：`prompts/core/learner-state-review.yaml` ｜ 参数：temperature=0.3 / maxTokens=64000 / failurePolicy=propagate ｜ baseVersion：1
-- 规则：6 条（其中条件规则 0 条）｜ 约束：2 条
+- 规则：8 条（其中条件规则 0 条）｜ 约束：2 条
 
 ````yaml
 # v4 核心文件：learner-state-review（SKILL_PROTOCOL_V4 §2）
@@ -2672,6 +2680,11 @@ rules:
   - 区分「观察」与「假设」；不确定的判断放入 falsifiableClaims，并给出可检验的 expect
   - 输出严格 JSON 对象，不要 markdown 代码块、解释文字或多余文本
   - 诊断聚焦「为什么」与「下一步」，不做路径改写、成绩判定或课程结束等强决策
+  # 2026-11-05 UX 审计（bare/24 + state/iphone/6）：面向学习者的叙述曾裸露内部字段名
+  # （「recentEvidence 为空」直接上屏，读起来像开发日志）；且同一条建议在无证据时仍断言
+  # 具体掌握事实，与诊断自报「无证据」同屏互斥。两条约束钉死口径。
+  - narrative 只说面向学习者的中文：不得出现内部字段名（如 recentEvidence、evidenceRefs）或任何英文键名
+  - recentEvidence 为空时：insights 输出空数组，narrative 固定按「本次没有可依据的课堂证据，无法给出有证据支撑的判断」口径说明，不得基于猜测断言任何具体掌握事实
 fields:
   - name: insights
     type: "object[]"
@@ -2684,7 +2697,9 @@ fields:
     desc: "可证伪断言，每项 { claim, checkOn: next_lesson|next_task|next_review, expect }"
   - name: narrative
     type: string
-    desc: "1 到 2 句话人话总结"
+    desc: "1 到 2 句话人话总结（只说面向学习者的中文，不出现内部字段名或英文键名）"
+# constraints 段为 core schema 必填（可为空数组）：2026-11-05 误删导致 check-yaml-vocabulary
+# schema-error，按原文恢复（内容与 rules 前三条同义，保留作显式边界）
 constraints:
   - 不虚构用户已完成的内容或证据
   - 不输出精确掌握度数值

@@ -14,13 +14,13 @@
         <table class="mk-table">
           <thead>
             <tr>
-              <th>变体</th>
-              <th>版本</th>
-              <th title="占在线流量百分比，基线=各对照臂之外的剩余流量">权重</th>
-              <th class="mk-num" title="近 7 天按版本归因">近7天调用</th>
-              <th class="mk-num">成功率</th>
-              <th class="mk-num">均耗时</th>
-              <th class="mk-th--right mk-col--actions-wide">操作</th>
+              <th scope="col">变体</th>
+              <th scope="col">版本</th>
+              <th title="占在线流量百分比，基线=各对照臂之外的剩余流量" scope="col">权重</th>
+              <th class="mk-num" title="近 7 天按版本归因" scope="col">近7天调用</th>
+              <th class="mk-num" scope="col">成功率</th>
+              <th class="mk-num" scope="col">均耗时</th>
+              <th class="mk-th--right mk-col--actions-wide" scope="col">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -132,7 +132,7 @@
              操作列空表头，行高 34px 低于 40px 下限）——同页三张表统一语汇 -->
         <table class="mk-table">
           <thead>
-            <tr><th>版本</th><th title="核心文件哈希值">核心哈希</th><th title="核心文件版本号">核心版本</th><th>状态</th><th>发布者</th><th class="mk-th--right mk-col--actions-wide">操作</th></tr>
+            <tr><th scope="col">版本</th><th title="核心文件哈希值" scope="col">核心哈希</th><th title="核心文件版本号" scope="col">核心版本</th><th scope="col">状态</th><th scope="col">发布者</th><th class="mk-th--right mk-col--actions-wide" scope="col">操作</th></tr>
           </thead>
           <tbody>
             <tr v-for="v in coreVersions" :key="v.version" :class="{ 'sdp-pw__table-active': v.status === 'ACTIVE' }">
@@ -179,10 +179,10 @@
         <table class="mk-table">
           <thead>
             <tr>
-              <th>版本</th>
-              <th>状态</th>
-              <th>名称</th>
-              <th class="mk-th--right mk-col--actions-wide">操作</th>
+              <th scope="col">版本</th>
+              <th scope="col">状态</th>
+              <th scope="col">名称</th>
+              <th class="mk-th--right mk-col--actions-wide" scope="col">操作</th>
             </tr>
           </thead>
           <tbody>

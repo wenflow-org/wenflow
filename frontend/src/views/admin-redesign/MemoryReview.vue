@@ -39,7 +39,7 @@
           <div v-if="detail.reviewPlan?.items.length" class="mk-table-scroll">
           <table class="mk-table">
             <thead>
-              <tr><th>概念</th><th class="mk-num">记忆强度</th><th>到期原因</th><th class="mk-num">负担</th><th>负担因子</th><th>来源路径</th></tr>
+              <tr><th scope="col">概念</th><th class="mk-num" scope="col">记忆强度</th><th scope="col">到期原因</th><th class="mk-num" scope="col">负担</th><th scope="col">负担因子</th><th scope="col">来源路径</th></tr>
             </thead>
             <tbody>
               <tr v-for="item in detail.reviewPlan.items" :key="item.conceptKey">
@@ -198,9 +198,9 @@
             </colgroup>
             <thead>
               <tr>
-                <th class="mr__th-check">选择</th>
-                <th>归并目标</th><th>证据（别名 · 理由）</th><th class="mk-num">置信度</th><th class="mk-num">名称相似度</th>
-                <th>可自动执行</th><th class="mk-th--right mk-c-act">操作</th>
+                <th class="mr__th-check" scope="col">选择</th>
+                <th scope="col">归并目标</th><th scope="col">证据（别名 · 理由）</th><th class="mk-num" scope="col">置信度</th><th class="mk-num" scope="col">名称相似度</th>
+                <th scope="col">可自动执行</th><th class="mk-th--right mk-c-act" scope="col">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -282,7 +282,7 @@
             <!-- 表头补明「候选 A / B 是概念键」（2026-10-06 审核 #62）：原表头只写 A / B
                  两个单字母；A/B 两列是无人类可读 label 的裸 conceptKey，与另三表同降 .mr__sub 档。
                  R7：补 选择/操作 两列——此前这组建议只可看不可动（审计 CC-2） -->
-            <thead><tr><th class="mr__th-check">选择</th><th>归并目标（候选 A）</th><th>并入（候选 B）</th><th>证据（理由）</th><th class="mk-th--right mk-c-act">操作</th></tr></thead>
+            <thead><tr><th class="mr__th-check" scope="col">选择</th><th scope="col">归并目标（候选 A）</th><th scope="col">并入（候选 B）</th><th scope="col">证据（理由）</th><th class="mk-th--right mk-c-act" scope="col">操作</th></tr></thead>
             <tbody>
               <tr v-for="(item, index) in detail.audit.ambiguous" :key="`${item.a}-${item.b}-${index}`">
                 <td>
@@ -338,7 +338,7 @@
               <col />
               <col style="width: 132px" />
             </colgroup>
-            <thead><tr><th class="mr__th-check">选择</th><th>未归类记忆（概念标识）</th><th>证据（理由）</th><th class="mk-th--right mk-c-act">操作</th></tr></thead>
+            <thead><tr><th class="mr__th-check" scope="col">选择</th><th scope="col">未归类记忆（概念标识）</th><th scope="col">证据（理由）</th><th class="mk-th--right mk-c-act" scope="col">操作</th></tr></thead>
             <tbody>
               <tr v-for="(drop, index) in detail.audit.dropCandidates" :key="`${drop.conceptKey}-${index}`">
                 <td>
@@ -389,7 +389,7 @@
           <h4 class="mr__h4">已执行归并（可回滚 · 按次留档）</h4>
           <div v-if="rollbackableMerges.length" class="mk-table-scroll">
           <table class="mk-table">
-            <thead><tr><th>规范键</th><th>别名</th><th class="mk-num">删除条数</th><th>执行时间</th><th></th></tr></thead>
+            <thead><tr><th scope="col">规范键</th><th scope="col">别名</th><th class="mk-num" scope="col">删除条数</th><th scope="col">执行时间</th><th scope="col"></th></tr></thead>
             <tbody>
               <tr v-for="merge in rollbackableMerges" :key="merge.mergeId || `${merge.canonical}-${merge.appliedAt}`">
                 <td class="mr__sub">{{ merge.canonical }}</td>
@@ -417,7 +417,7 @@
           <h4 class="mr__h4">别名归并（不删除记录：登记别名并改指向）</h4>
           <div v-if="appliedAliasRollbackable.length" class="mk-table-scroll">
           <table class="mk-table">
-            <thead><tr><th>归并目标</th><th>别名</th><th class="mk-num">改指向记录数</th><th>执行时间</th><th></th></tr></thead>
+            <thead><tr><th scope="col">归并目标</th><th scope="col">别名</th><th class="mk-num" scope="col">改指向记录数</th><th scope="col">执行时间</th><th scope="col"></th></tr></thead>
             <tbody>
               <tr v-for="merge in appliedAliasRollbackable" :key="merge.aliasMergeId || `${merge.canonical}-${merge.appliedAt}`">
                 <td class="mr__sub">{{ merge.canonical }}</td>
@@ -457,7 +457,7 @@
         <div v-if="detail.duePreview.length" class="mk-table-scroll">
           <table class="mk-table">
           <thead><tr>
-            <th>概念</th>
+            <th scope="col">概念</th>
             <th
               scope="col"
               class="mk-num mk-th--sortable"
@@ -476,7 +476,7 @@
               title="点列头排序：降序 = 复现最多的在前"
               :aria-sort="dueSortState('extractions')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleDueSort('extractions')">提取次数<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-            <th>来源</th>
+            <th scope="col">来源</th>
             <th
               scope="col"
               class="mk-th--sortable"
@@ -529,7 +529,7 @@
         <p v-if="!detail.duplicatedFamilies.length" class="mr__sub">没有同族重复。</p>
         <div v-else class="mk-table-scroll">
           <table class="mk-table">
-          <thead><tr><th>重复组</th><th class="mk-num">条数</th><th>成员</th></tr></thead>
+          <thead><tr><th scope="col">重复组</th><th class="mk-num" scope="col">条数</th><th scope="col">成员</th></tr></thead>
           <tbody>
             <tr v-for="family in detail.duplicatedFamilies" :key="family.family">
               <!-- 归一化键没有人类可读 label（后端只回 key）→ 同 负担因子 口径降为 sub，不冒充正文 -->

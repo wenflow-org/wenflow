@@ -131,13 +131,13 @@
             </colgroup>
             <thead>
               <tr>
-                <th>设备</th>
-                <th>IP</th>
-                <th>登录时间</th>
-                <th>最后活跃</th>
-                <th>过期时间</th>
-                <th>状态</th>
-                <th class="mk-th--right mk-c-act">操作</th>
+                <th scope="col">设备</th>
+                <th scope="col">IP</th>
+                <th scope="col">登录时间</th>
+                <th scope="col">最后活跃</th>
+                <th scope="col">过期时间</th>
+                <th scope="col">状态</th>
+                <th class="mk-th--right mk-c-act" scope="col">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -224,13 +224,13 @@
               </colgroup>
               <thead>
                 <tr>
-                  <th>设备</th>
-                  <th>IP</th>
-                  <th>登录时间</th>
-                  <th>最后活跃</th>
-                  <th>过期时间</th>
-                  <th>状态</th>
-                  <th class="mk-th--right mk-c-act">操作</th>
+                  <th scope="col">设备</th>
+                  <th scope="col">IP</th>
+                  <th scope="col">登录时间</th>
+                  <th scope="col">最后活跃</th>
+                  <th scope="col">过期时间</th>
+                  <th scope="col">状态</th>
+                  <th class="mk-th--right mk-c-act" scope="col">操作</th>
                 </tr>
               </thead>
               <tbody>

@@ -244,6 +244,106 @@ describe('PredictionCalibrationService（校准闭环）', () => {
       expect(stats.total).toBe(0);
       expect(stats.stallHitRate).toBeNull();
       expect(stats.toneHitRate).toBeNull();
+      expect(stats.calibration).toEqual([]);
+      // 新增条件校准字段在空样本时也不虚报：每组 total 0、比率 null
+      expect(stats.byDepth).toHaveLength(3);
+      expect(stats.byDepth.every((g: any) => g.total === 0 && g.stallHitRate === null)).toBe(true);
+      expect(stats.depthKeySource).toBe('none');
+    });
+  });
+
+  describe('empiricalStats（条件校准：按教学深度分组）', () => {
+    /** 8 行样本：deep 组 6 行（够样本），standard 组 2 行（不足），shallow 组 0 行 */
+    const rowsByDepth = [
+      // --- deep 组（6 行）：stall 命中 4/6，tone 命中 4/6，hard 4/6 ---
+      { stallRisk: 0.8, predictedTone: 'struggle', outcome: 'struggled', suggestedDepth: 'deep' },
+      { stallRisk: 0.7, predictedTone: 'struggle', outcome: 'smooth', suggestedDepth: 'deep' },
+      { stallRisk: 0.9, predictedTone: 'fatigue', outcome: 'failed', suggestedDepth: 'deep' },
+      { stallRisk: 0.1, predictedTone: 'smooth', outcome: 'smooth', suggestedDepth: 'deep' },
+      { stallRisk: 0.2, predictedTone: 'smooth', outcome: 'struggled', suggestedDepth: 'deep' },
+      { stallRisk: 0.6, predictedTone: 'struggle', outcome: 'struggled', suggestedDepth: 'deep' },
+      // --- standard 组（2 行）：样本不足，必须给 null ---
+      { stallRisk: 0.5, predictedTone: 'smooth', outcome: 'smooth', suggestedDepth: 'standard' },
+      { stallRisk: 0.4, predictedTone: 'struggle', outcome: 'struggled', suggestedDepth: 'standard' },
+    ];
+
+    it('按 depth 分组给出命中率与校准桶（全局字段不被破坏）', async () => {
+      mockPrisma.prediction_records.findMany.mockResolvedValue(rowsByDepth);
+      const stats = await predictionCalibrationService.empiricalStats('u1');
+
+      // 全局口径与修复前完全一致：4/8 stall 命中（standard 两行都在 0.5 边界上判 miss）、6/8 tone 命中
+      expect(stats.total).toBe(8);
+      expect(stats.stallHitRate).toBe(0.5);
+      expect(stats.toneHitRate).toBe(0.75);
+      expect(stats.calibration[0]).toMatchObject({ range: '0-0.3', n: 2, hard: 1, hardRate: 0.5 });
+      expect(stats.calibration[1]).toMatchObject({ range: '0.3-0.6', n: 2, hard: 1, hardRate: 0.5 });
+      expect(stats.calibration[2]).toMatchObject({ range: '0.6-1.0', n: 4, hard: 3, hardRate: 0.75 });
+
+      // 条件校准：deep 组
+      const deep = stats.byDepth.find((g: any) => g.depth === 'deep');
+      expect(deep).toMatchObject({
+        depthSource: 'suggested',
+        total: 6,
+        insufficient: false,
+        stallHitRate: 0.667,
+        toneHitRate: 0.667,
+        hardRate: 0.667,
+      });
+      // deep 组内桶：0-0.3 n=2 hard=1；0.3-0.6 空（0.6 归上桶）；0.6-1.0 n=4 hard=3
+      expect(deep.calibration[0]).toMatchObject({ n: 2, hard: 1, hardRate: 0.5 });
+      expect(deep.calibration[1]).toMatchObject({ n: 0, hardRate: null });
+      expect(deep.calibration[2]).toMatchObject({ n: 4, hard: 3, hardRate: 0.75 });
+
+      // 全局与分组互不干扰：deep 组占比不等于全局（条件校准的意义所在）
+      expect(stats.byDepthMinSample).toBe(5);
+      expect(stats.depthKeySource).toBe('suggested');
+      expect(stats.unclassifiedDepthCount).toBe(0);
+    });
+
+    it('某组样本不足 → 该组比率与桶占比全 null，但 total 如实计数', async () => {
+      mockPrisma.prediction_records.findMany.mockResolvedValue(rowsByDepth);
+      const stats = await predictionCalibrationService.empiricalStats('u1');
+
+      const standard = stats.byDepth.find((g: any) => g.depth === 'standard');
+      expect(standard.total).toBe(2);
+      expect(standard.insufficient).toBe(true);
+      expect(standard.stallHitRate).toBeNull();
+      expect(standard.toneHitRate).toBeNull();
+      expect(standard.hardRate).toBeNull();
+      // 桶内 n 如实计数（2 行都落在 0.3-0.6），但 hardRate 不给（防小样本虚报）
+      expect(standard.calibration[1]).toMatchObject({ n: 2, hard: 1, hardRate: null });
+
+      // 完全无样本的 shallow 组：total 0 + 全 null，组本身仍返回（前端可显示空态）
+      const shallow = stats.byDepth.find((g: any) => g.depth === 'shallow');
+      expect(shallow).toMatchObject({ total: 0, insufficient: true, depthSource: 'none' });
+      expect(shallow.stallHitRate).toBeNull();
+      expect(shallow.calibration.every((b: any) => b.hardRate === null)).toBe(true);
+    });
+
+    it('有 actualDepth 时以实际执行深度为主，缺失才回落 suggestedDepth', async () => {
+      mockPrisma.prediction_records.findMany.mockResolvedValue([
+        // 建议 shallow，实际按 deep 执行 → 应计入 deep 组并标记 actual
+        { stallRisk: 0.8, predictedTone: 'struggle', outcome: 'struggled', suggestedDepth: 'shallow', actualDepth: 'deep' },
+        // 无 actualDepth → 回落 suggestedDepth
+        { stallRisk: 0.9, predictedTone: 'struggle', outcome: 'struggled', suggestedDepth: 'shallow' },
+        // 深度非法/缺失 → 计入 unclassifiedDepthCount，不进任何组
+        { stallRisk: 0.3, predictedTone: 'smooth', outcome: 'smooth', suggestedDepth: 'extreme' },
+        { stallRisk: 0.3, predictedTone: 'smooth', outcome: 'smooth', suggestedDepth: null },
+      ]);
+      const stats = await predictionCalibrationService.empiricalStats('u1');
+
+      expect(stats.total).toBe(4);
+      const deep = stats.byDepth.find((g: any) => g.depth === 'deep');
+      const shallow = stats.byDepth.find((g: any) => g.depth === 'shallow');
+      expect(deep.total).toBe(1);
+      expect(deep.depthSource).toBe('actual');
+      expect(shallow.total).toBe(1);
+      expect(shallow.depthSource).toBe('suggested');
+      // 两组都样本不足 → 不给命中率
+      expect(deep.stallHitRate).toBeNull();
+      expect(shallow.stallHitRate).toBeNull();
+      expect(stats.unclassifiedDepthCount).toBe(2);
+      expect(stats.depthKeySource).toBe('mixed');
     });
   });
 });

@@ -818,7 +818,7 @@
                    既读不出可筛性、也让副行变成两件事的拼盘）：会话身份=主题+路径，阶段单列。
                    列序按「读一条会话的叙事」重排（2026-10-11）：身份 → 课程位置（阶段→进度，
                    两级位置相邻）→ 结果状态 → 过程量（互动）→ 产出（课后总结）→ 元信息（时间/ID） -->
-              <tr><th>课堂</th><th>阶段</th><th>进度</th><th>状态</th><th>课堂类型</th><th>互动</th><th>课后总结</th><th>时间</th><th>课堂 ID</th></tr>
+              <tr><th scope="col">课堂</th><th scope="col">阶段</th><th scope="col">进度</th><th scope="col">状态</th><th scope="col">课堂类型</th><th scope="col">互动</th><th scope="col">课后总结</th><th scope="col">时间</th><th scope="col">课堂 ID</th></tr>
             </thead>
             <tbody>
               <tr v-for="s in ldSessionRowsFiltered" :key="s.id" class="ld-pane-row" @click="openSessionCockpit(s.id)">

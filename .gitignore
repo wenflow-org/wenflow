@@ -256,6 +256,8 @@ doc/*
 !doc/KC_MULTIPATH_AND_LEARNER_SIGNAL_SCOPE.md
 # 例外：管理端列宽规范（活规范）
 !doc/ADMIN_COLUMN_WIDTH_SPEC.md
+# 例外：管理端表头规范（活规范：守卫规则 20–22 与巡检按路径引用）
+!doc/ADMIN_TABLE_HEADER_SPEC.md
 # 例外：虚拟学习者日期模拟（接口契约 + 设计）
 !doc/VIRTUAL_LEARNER_SIMULATED_DAY_CONTRACT.md
 !doc/VIRTUAL_LEARNER_SIMULATED_DAY_DESIGN.md
@@ -364,3 +366,7 @@ backend/.runtime/
 
 # 用户旅程走查的证据目录（每一步大截图 / 接口取数 / DOM 体检 / 图文报告，可重跑）
 walkthrough/
+
+# 小红书单词卡侧项目（2026-10-19 用户：不是平台项目、不上 GitHub；只有 *.png 被上面的通配挡住，
+# py/mjs/json/csv/svg 仍会进 git status，故整目录忽略）
+小红书/

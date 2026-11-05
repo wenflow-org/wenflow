@@ -5,22 +5,22 @@
       <header class="mk-section__head"><h4>基础信息</h4></header>
       <table class="sdp-kv">
         <tbody>
-          <tr><th title="kind">类型</th><td><code class="mono">{{ overview.kind }}</code></td></tr>
-          <tr><th title="agentId">Agent 标识</th><td><code class="mono">{{ overview.agentId }}</code></td></tr>
+          <tr><th title="kind" scope="col">类型</th><td><code class="mono">{{ overview.kind }}</code></td></tr>
+          <tr><th title="agentId" scope="col">Agent 标识</th><td><code class="mono">{{ overview.agentId }}</code></td></tr>
           <!-- 2026-11-02 评审：这一行是 core 编译出来的 Prompt 文件（agent-overview 的 file.path），
                不是可编辑的核心文件；标签写「文件路径」会与协议页签的 prompts/core/<id>.yaml 撞名。 -->
-          <tr v-if="overview.file"><th title="file.path">Prompt 文件路径</th><td><code class="mono" :title="overview.file.path">{{ overview.file.path }}</code></td></tr>
-          <tr v-if="overview.file?.hash"><th title="file.hash">Prompt 文件哈希</th><td><code class="mono" :title="`${overview.file.hash}（编译产物 prompts/${skillId}.md 的正文哈希）`">{{ shortHash(overview.file.hash) }}</code></td></tr>
-          <tr v-if="overview.db?.id"><th title="db.id">生效记录 ID</th><td><code class="mono">{{ overview.db.id }}</code></td></tr>
-          <tr v-if="overview.db?.version"><th title="db.version">生效版本</th><td><code class="mono">v{{ overview.db.version }}</code></td></tr>
+          <tr v-if="overview.file"><th title="file.path" scope="col">Prompt 文件路径</th><td><code class="mono" :title="overview.file.path">{{ overview.file.path }}</code></td></tr>
+          <tr v-if="overview.file?.hash"><th title="file.hash" scope="col">Prompt 文件哈希</th><td><code class="mono" :title="`${overview.file.hash}（编译产物 prompts/${skillId}.md 的正文哈希）`">{{ shortHash(overview.file.hash) }}</code></td></tr>
+          <tr v-if="overview.db?.id"><th title="db.id" scope="col">生效记录 ID</th><td><code class="mono">{{ overview.db.id }}</code></td></tr>
+          <tr v-if="overview.db?.version"><th title="db.version" scope="col">生效版本</th><td><code class="mono">v{{ overview.db.version }}</code></td></tr>
           <!-- B19-F7-3：agent_prompts.useCount 列（2026-10-31 四轮评审撤除）——
                该计数列后端从未递增（全库检索无任何 increment 写点），恒显 0，
                与运行时 KPI/版本页签的真实调用数（调用日志聚合 191 次）同屏打架。
                数据列启用前不再上屏「0」，避免把假零读成真没调用。 -->
-          <tr v-if="overview.db?.model"><th>默认模型</th><td><code class="mono">{{ overview.db.model }}</code></td></tr>
-          <tr v-if="overview.db?.publishedAt"><th>发布时间</th><td>{{ fmtTime(String(overview.db.publishedAt)) }}</td></tr>
+          <tr v-if="overview.db?.model"><th scope="col">默认模型</th><td><code class="mono">{{ overview.db.model }}</code></td></tr>
+          <tr v-if="overview.db?.publishedAt"><th scope="col">发布时间</th><td>{{ fmtTime(String(overview.db.publishedAt)) }}</td></tr>
           <tr v-if="overview.drift">
-            <th>不一致状态</th>
+            <th scope="col">不一致状态</th>
             <td>
               <code class="mono" :class="overview.drift === 'in-sync' ? 'sdp-ok' : 'sdp-warn'">{{ driftLabel(overview.drift) }}</code>
             </td>
@@ -51,14 +51,14 @@
       </header>
       <table class="sdp-kv">
         <tbody>
-          <tr><th title="version">契约版本</th><td><code class="mono">{{ overview.runtimeContract.version }}</code></td></tr>
-          <tr><th title="contextMode">上下文模式</th><td><code class="mono">{{ overview.runtimeContract.contextMode }}</code></td></tr>
-          <tr v-if="overview.runtimeContract.businessState?.domain"><th title="domain">业务域</th><td><code class="mono">{{ overview.runtimeContract.businessState.domain }}</code></td></tr>
-          <tr v-if="overview.runtimeContract.businessState?.phases"><th title="phases">阶段集合</th><td><code class="mono">{{ overview.runtimeContract.businessState.phases.join(', ') }}</code></td></tr>
-          <tr v-if="overview.runtimeContract.businessState?.defaultPhase"><th title="defaultPhase">默认阶段</th><td><code class="mono">{{ overview.runtimeContract.businessState.defaultPhase }}</code></td></tr>
-          <tr v-if="overview.runtimeContract.businessState?.terminalPhases"><th title="terminalPhases">终止阶段</th><td><code class="mono">{{ overview.runtimeContract.businessState.terminalPhases.join(', ') }}</code></td></tr>
-          <tr v-if="overview.runtimeContract.contextUpdate?.mode"><th title="contextUpdate.mode">上下文更新模式</th><td><code class="mono">{{ overview.runtimeContract.contextUpdate.mode }}</code></td></tr>
-          <tr><th title="outputEnvelope">输出封装</th><td><code class="mono">{{ overview.runtimeContract.outputEnvelope }}</code></td></tr>
+          <tr><th title="version" scope="col">契约版本</th><td><code class="mono">{{ overview.runtimeContract.version }}</code></td></tr>
+          <tr><th title="contextMode" scope="col">上下文模式</th><td><code class="mono">{{ overview.runtimeContract.contextMode }}</code></td></tr>
+          <tr v-if="overview.runtimeContract.businessState?.domain"><th title="domain" scope="col">业务域</th><td><code class="mono">{{ overview.runtimeContract.businessState.domain }}</code></td></tr>
+          <tr v-if="overview.runtimeContract.businessState?.phases"><th title="phases" scope="col">阶段集合</th><td><code class="mono">{{ overview.runtimeContract.businessState.phases.join(', ') }}</code></td></tr>
+          <tr v-if="overview.runtimeContract.businessState?.defaultPhase"><th title="defaultPhase" scope="col">默认阶段</th><td><code class="mono">{{ overview.runtimeContract.businessState.defaultPhase }}</code></td></tr>
+          <tr v-if="overview.runtimeContract.businessState?.terminalPhases"><th title="terminalPhases" scope="col">终止阶段</th><td><code class="mono">{{ overview.runtimeContract.businessState.terminalPhases.join(', ') }}</code></td></tr>
+          <tr v-if="overview.runtimeContract.contextUpdate?.mode"><th title="contextUpdate.mode" scope="col">上下文更新模式</th><td><code class="mono">{{ overview.runtimeContract.contextUpdate.mode }}</code></td></tr>
+          <tr><th title="outputEnvelope" scope="col">输出封装</th><td><code class="mono">{{ overview.runtimeContract.outputEnvelope }}</code></td></tr>
         </tbody>
       </table>
     </section>

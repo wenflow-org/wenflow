@@ -8,3 +8,10 @@
 # 冻结考卷按 sha256 逐字节校验：manifest 的哈希以 LF 计算，Windows autocrlf 检出为 CRLF
 # 会让 `--verify` 整批报 HASH_MISMATCH（2026-10-20 实测），对照因此无法开始
 /doc/measurement/frozen-exam-*/** text eol=lf
+
+# 全管线生成物：`pipeline:map:check` 按字节比对，生成器写 LF；Windows autocrlf 检出为 CRLF
+# 会让新克隆上 `--check` 恒定报「生成物已过期」，而重新生成后 `git diff` 又是空的
+# （2026-11-05 在干净工作树实测），故强制 LF
+/doc/PIPELINE_MAP.md text eol=lf
+/doc/PIPELINE_PROMPTS.md text eol=lf
+/doc/pipeline-map.json text eol=lf

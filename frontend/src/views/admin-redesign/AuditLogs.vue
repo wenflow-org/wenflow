@@ -172,7 +172,7 @@
                 @click="toggleAlSort('success')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleAlSort('success')">结果<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th v-if="colVisible('ip')" scope="col" class="al-c-ip">IP</th>
-              <th class="mk-th--right al-c-expand" aria-hidden="true"></th>
+              <th class="mk-th--right al-c-expand" aria-hidden="true" scope="col"></th>
             </tr>
           </thead>
           <tbody>
