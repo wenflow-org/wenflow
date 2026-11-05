@@ -537,11 +537,14 @@ onMounted(load)
 }
 .mpp-eng__id { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; flex: 0 0 auto; }
 .mpp-eng__acts { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
+/* 类型标识（Embedding / Reranker）：与对话卡那枚 LLM 徽标同一套蓝调（2026-11-05 用户
+   「不喜欢这个灰色」）——三张卡同处一层，一个是蓝底、两个是灰底，读起来像两种来历。
+   这里不引 .mpp-type--platform（那是对话卡局部的修饰类），直接给出同一组值。 */
 .mpp-type {
   padding: 1px 7px;
   border-radius: 999px;
-  background: var(--mk-surface-2);
-  color: var(--mk-muted);
+  background: color-mix(in srgb, var(--mk-blue) 10%, transparent);
+  color: var(--mk-blue);
   font-size: var(--mk-fs-micro);
   font-weight: 600;
   line-height: 1.5;
