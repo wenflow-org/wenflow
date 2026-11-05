@@ -13,6 +13,7 @@ import {
   listUserAgentLogsForGrouping,
   listUserAgentLogsForExport,
   listAgentLogModelRowsByTraceIds,
+  listAgentLogModelRowsByPathIds,
   findUserAgentLogById,
   markOnboardingCompleted,
 } from '../services/users/user.repo';
@@ -20,7 +21,9 @@ import {
   parseAgentLogGroupId,
   collapseAgentLogGroups,
   collectAgentLogTraceIds,
+  collectAgentLogPathIds,
   buildAgentLogModelIndex,
+  buildAgentLogModelIndexByPath,
   resolveAgentLogModel,
 } from '../services/users/agent-log-grouping';
 import { rejectProjectionAccess } from '../middleware/projection-access.middleware';
@@ -501,14 +504,20 @@ router.get('/me/sessions', async (req, res, next) => {
    #230：「可见集过滤」与「元数据补全」分开。rows 仍按白名单取（业务动作才该出现在默认列表），
    但模型名只写在 api-gateway 行的 metadata 上，而网关行不在白名单里、不在 rows 内。故按 rows
    已选中的 traceId 集合另发一次补数查询取网关行（listAgentLogModelRowsByTraceIds，不受白名单
-   约束），只喂给折叠函数建模型索引——不进入展示/分组。 */
+   约束），只喂给折叠函数建模型索引——不进入展示/分组。
+   #248：path: 组的代表行是无 traceId 的 path-agent 阶段流水，traceId 键在这批行上不存在；
+   再按 rows 的 metadata.pathId 集合补一次网关行（listAgentLogModelRowsByPathIds），同一批
+   补数行喂给 traceId 与 pathId 两条索引。 */
 async function buildAgentLogView(userId: string, rows: any[]): Promise<any[]> {
-  const modelRows = await listAgentLogModelRowsByTraceIds(userId, collectAgentLogTraceIds(rows));
+  const [modelRows, pathModelRows] = await Promise.all([
+    listAgentLogModelRowsByTraceIds(userId, collectAgentLogTraceIds(rows)),
+    listAgentLogModelRowsByPathIds(userId, collectAgentLogPathIds(rows)),
+  ]);
   const rowsById = new Map<string, any>();
   for (const row of rows) {
     rowsById.set(String(row.id), row);
   }
-  return collapseAgentLogGroups(rows, modelRows).map((group) => {
+  return collapseAgentLogGroups(rows, [...modelRows, ...pathModelRows]).map((group) => {
     const items: any[] = Array.isArray(group.groupItems) ? group.groupItems : [];
     // 单行/未归组的行：id 本身就是真实主键（服务只在折叠组上覆盖 id），无需补代表 id
     if (items.length === 0) return group;
@@ -657,8 +666,18 @@ router.get('/me/agent-logs/:logId', async (req, res, next) => {
     // 这里复用折叠管线的同一套索引与解析（buildAgentLogModelIndex / resolveAgentLogModel），
     // 让三处的 model 由构造一致，而不是各写一遍。
     const logRows = [log];
-    const modelRows = await listAgentLogModelRowsByTraceIds(userId, collectAgentLogTraceIds(logRows));
-    const model = resolveAgentLogModel(log, buildAgentLogModelIndex([...logRows, ...modelRows]));
+    // #248：path-agent 阶段流水无 traceId，也要按 metadata.pathId 补同路径的网关行，
+    // 否则 path 组的代表行详情（repLogId 走本分支）模型列仍为 null，与列表不一致。
+    const [modelRows, pathModelRows] = await Promise.all([
+      listAgentLogModelRowsByTraceIds(userId, collectAgentLogTraceIds(logRows)),
+      listAgentLogModelRowsByPathIds(userId, collectAgentLogPathIds(logRows)),
+    ]);
+    const modelSources = [...logRows, ...modelRows, ...pathModelRows];
+    const model = resolveAgentLogModel(
+      log,
+      buildAgentLogModelIndex(modelSources),
+      buildAgentLogModelIndexByPath(modelSources)
+    );
 
     res.json({
       success: true,

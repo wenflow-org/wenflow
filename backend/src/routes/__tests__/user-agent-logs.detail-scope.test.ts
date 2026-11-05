@@ -19,6 +19,7 @@ const USER_LISTED = ['skill:goal-conversation', 'skill:path-planning', 'path-age
 const listUserAgentLogsForGrouping = jest.fn()
 const listUserAgentLogsForExport = jest.fn()
 const listAgentLogModelRowsByTraceIds = jest.fn()
+const listAgentLogModelRowsByPathIds = jest.fn()
 const findUserAgentLogById = jest.fn()
 
 function makeRow(id: string, agentId: string, calledAt: string, metadata: Record<string, any>, traceId?: string) {
@@ -64,6 +65,7 @@ jest.mock('../../services/users/user.repo', () => ({
   listUserAgentLogsForGrouping,
   listUserAgentLogsForExport,
   listAgentLogModelRowsByTraceIds,
+  listAgentLogModelRowsByPathIds,
   findUserAgentLogById,
   markOnboardingCompleted: jest.fn(),
 }))
@@ -137,6 +139,14 @@ function useRows(rows: any[]) {
     rows.filter((row) => row.userId === userId
       && row.agentId === 'api-gateway'
       && traceIds.includes(String(row.traceId ?? ''))))
+  // #248：path: 组的代表行无 traceId，补数键换成 metadata.pathId（网关行的 pathId 存在）
+  listAgentLogModelRowsByPathIds.mockImplementation(async (userId: string, pathIds: string[]) =>
+    rows.filter((row) => {
+      if (row.userId !== userId || row.agentId !== 'api-gateway') return false
+      let metadata: any = {}
+      try { metadata = JSON.parse(row.metadata || '{}') } catch { metadata = {} }
+      return pathIds.includes(String(metadata.pathId ?? ''))
+    }))
 }
 
 function createResponse() {
@@ -188,6 +198,7 @@ describe('#225 agent-logs 详情与列表共用折叠管线', () => {
     jest.clearAllMocks()
     listUserAgentLogsForExport.mockResolvedValue([])
     listAgentLogModelRowsByTraceIds.mockResolvedValue([])
+    listAgentLogModelRowsByPathIds.mockResolvedValue([])
     findUserAgentLogById.mockResolvedValue(null)
   })
 
@@ -307,5 +318,53 @@ describe('#225 agent-logs 详情与列表共用折叠管线', () => {
     expect(detailRes.body.data.model).toBe(listRow.model)
     // 且不是靠原始行自带 model 蒙对的——原始行没有 model 列值
     expect(detailRes.body.data.model).toBe('deepseek-v4.1-flash')
+  })
+
+  // #248：path: 折叠组的代表行是无 traceId 的 path-agent 阶段流水（写侧不写 traceId，
+  // metadata 里也没有 model）；模型名只写在同 pathId 的 api-gateway 行上，而网关行不在
+  // 默认白名单、不在本次取数集内。此前补数只认 traceId，键在这批行上结构性不存在，
+  // 于是 path 组的 model 恒为 null（includeSystem=true 也救不了）。修复：改用 metadata.pathId。
+  it('#248 整组无 traceId 的 path: 组按 metadata.pathId 补回模型名', async () => {
+    useRows([
+      makeRow('acl_pa1', 'path-agent', '2026-10-05T10:00:00.000Z', {
+        sourceConversationId: 'conv-flow', phase: 'core', status: 'succeeded', pathId: 'lp_flow_1',
+      }),
+      makeRow('acl_pa2', 'path-agent', '2026-10-05T10:00:05.000Z', {
+        sourceConversationId: 'conv-flow', phase: 'stageDesign', status: 'started', pathId: 'lp_flow_1',
+      }),
+      // 网关行：api-gateway 不在默认白名单，listUserAgentLogsForGrouping 不会返回它
+      makeRow('acl_gw_flow', 'api-gateway', '2026-10-05T10:00:01.000Z', {
+        pathId: 'lp_flow_1', model: 'm-path',
+      }, 'tr-flow'),
+    ])
+
+    const listRes = await callList({})
+    const listRow = listRes.body.data.logs.find((log: any) => log.id === 'path:conv-flow')
+    expect(listRow).toBeTruthy()
+    expect(listRow.groupCount).toBe(2)
+    // 修复前这里恒为 null（整组没有 traceId，补数键不存在）
+    expect(listRow.model).toBe('m-path')
+    // 补数确实走了 pathId 键，而不是碰巧从取数集里看到网关行
+    expect(listAgentLogModelRowsByPathIds)
+      .toHaveBeenCalledWith(USER_ID, expect.arrayContaining(['lp_flow_1']))
+
+    const detailRes = await callDetail('path:conv-flow', {})
+    expect(detailRes.body.data.model).toBe(listRow.model)
+  })
+
+  it('#248 没修过头：非 path 组仍按 traceId 取模型，无 traceId 无 pathId 仍为 null', async () => {
+    useRows([
+      makeRow('acl_goal1', 'skill:goal-conversation', '2026-10-06T10:00:00.000Z', { conversationId: 'gc_m' }, 'tr-goal'),
+      makeRow('acl_goal2', 'skill:goal-conversation', '2026-10-06T10:01:00.000Z', { conversationId: 'gc_m' }, 'tr-goal'),
+      makeRow('acl_gw_goal', 'api-gateway', '2026-10-06T10:00:01.000Z', { model: 'm-goal' }, 'tr-goal'),
+      // 无 traceId、无 pathId：修复前后都必须保持 null
+      makeRow('acl_plain', 'skill:teaching-turn', '2026-10-06T10:02:00.000Z', {}),
+    ])
+
+    const listRes = await callList({})
+    const goal = listRes.body.data.logs.find((log: any) => log.id === 'goal:gc_m')
+    expect(goal.model).toBe('m-goal')
+    const plain = listRes.body.data.logs.find((log: any) => log.id === 'acl_plain')
+    expect(plain.model).toBeNull()
   })
 })

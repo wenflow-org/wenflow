@@ -150,6 +150,26 @@ export function listAgentLogModelRowsByTraceIds(userId: string, traceIds: string
   });
 }
 
+/**
+ * #248：path: 折叠组的代表行是无 traceId 的 path-agent 阶段流水（写侧不写 traceId，
+ * metadata 里也没有 model），模型名只写在同 metadata.pathId 的 api-gateway 行上。
+ * traceId 补数在这批行上结构性取不到，故按**已选中行的 metadata.pathId** 另取一次网关行。
+ * metadata 是字符串列（SQLite），先用 contains 粗筛，调用方建索引时再按 JSON 精确匹配
+ * pathId——粗筛的过匹配不会串到别的路径。只 select 建模型索引所需字段，不改变展示口径。
+ */
+export function listAgentLogModelRowsByPathIds(userId: string, pathIds: string[]) {
+  const ids = [...new Set(pathIds.map((id) => String(id || '').trim()).filter(Boolean))];
+  if (!ids.length) return Promise.resolve([] as Array<{ traceId: string | null; metadata: string | null }>);
+  return prisma.agent_call_logs.findMany({
+    where: {
+      userId,
+      agentId: 'api-gateway',
+      OR: ids.map((pathId) => ({ metadata: { contains: pathId } }))
+    },
+    select: { traceId: true, metadata: true }
+  });
+}
+
 export function markOnboardingCompleted(userId: string) {
   return prisma.users.update({
     where: { id: userId },
