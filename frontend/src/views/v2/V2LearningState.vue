@@ -2064,6 +2064,16 @@ function loadGuidance() {
    摘要文本交给 .band__meta 已有的 ellipsis 收尾 */
 .pref-fold,
 .pref-fold__head { min-width: 0; }
+/* 窄屏 .band__head 的 flex-wrap:wrap 把 ▾ 挤到第二行左缘（读作一颗游离的箭头，
+   2026-11-05 用户截图）。注意 scoped 编译会给每条规则追加 [data-v] 属性选择器：
+   `.band__head[data-v]` 与 `.pref-fold__head[data-v]` 同为 (0,2,0)，后者写在前面就输。
+   所以这里用「后代 + 双类」抬到 (0,3,0)，稳赢 regardless of 顺序。
+   另外 flex-wrap 按「假设主尺寸」折行，标题自然宽永远超一行——不止要收回
+   flex-basis，还得禁掉本卡头部的折行，让收缩/ellipsis 接手 */
+.pref-fold .band__head { flex-wrap: nowrap; }
+.pref-fold .band__title { flex: 1 1 auto; min-width: 0; }
+/* 展开后摘要行与下方全量列表重复（同一句话还是截断的），展开态收起摘要只留标题 */
+.pref-fold[open] .band__meta { display: none; }
 .pref-fold[open] .band__chev { transform: rotate(180deg); }
 .pref-fold .band__chev { transition: transform 0.16s ease; }
 /* 无调整时的紧凑引导行 */
