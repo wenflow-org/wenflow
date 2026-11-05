@@ -137,14 +137,11 @@
               :hide-isolated="hideIsolated"
               @select="onCanvasSelect"
             />
-            <!-- 图例走 DOM：画布内图例在 graph 系列里会误导（categories 是节点分组，不是关系） -->
+            <!-- 图例走 DOM：画布内图例在 graph 系列里会误导（categories 是节点分组，不是关系）。
+                 2026-11-05 PC 走查：四档状态点从底图例撤除——画布头统计行同屏已有同一套
+                 「已掌握/进行中/记忆偏弱/待学习」计数（同一信息横竖各画一遍是重复），
+                 底图例只留「连线语义 + 形状/操作提示」这两样头行没有的东西 -->
             <div class="mk-ge__legend">
-              <span class="mk-ge__legend-group">
-                <i class="mk-ge__dot mk-ge__dot--ok" />{{ CONCEPT_BAND_LABEL.stable }}
-                <i class="mk-ge__dot mk-ge__dot--mid" />{{ CONCEPT_BAND_LABEL.learning }}
-                <i class="mk-ge__dot mk-ge__dot--weak" />{{ CONCEPT_BAND_LABEL.fragile }}
-                <i class="mk-ge__dot mk-ge__dot--none" />{{ CONCEPT_BAND_LABEL.unknown }}
-              </span>
               <span class="mk-ge__legend-group">
                 <i
                   class="mk-ge__line"
@@ -1150,9 +1147,10 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   display: grid;
   grid-template-columns: minmax(0, 1fr) 280px;
   gap: var(--mk-space-4);
-  /* start 而非 stretch（2026-11-04 宽屏走查）：未选中时侧栏只有「图谱概览」几条建议，
-     stretch 会把卡片拉满画布行高、底部留出 400+px 死白（2560 下更明显）。 */
-  align-items: start;
+  /* 2026-11-05 PC 走查改回 stretch：用户点名概览卡「像块膏药」——短卡浮在画布右上，
+     下面空一截。侧栏作为独立栏与画布等高（stretched），空白由栏内 flex 布局吸收；
+     内容仍然顶对齐，不强行居中。 */
+  align-items: stretch;
 }
 .mk-ge__canvas {
   min-width: 0;
@@ -1174,16 +1172,8 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
      已有 flex-wrap，整组放不下时作为整体换行，组内文字不再词中拆断 */
   white-space: nowrap;
 }
-.mk-ge__dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: var(--mk-radius-pill);
-}
-.mk-ge__dot--ok { background: var(--mk-green); }
-.mk-ge__dot--mid { background: var(--mk-amber); }
-.mk-ge__dot--weak { background: var(--mk-red); }
-.mk-ge__dot--none { background: var(--mk-line); }
+/* .mk-ge__dot* 已删（2026-11-05 PC 走查）：四档状态点从底图例撤除后无引用，
+   状态色点只剩画布头统计行自己的 <i>（.mk-ge__stat 系） */
 .mk-ge__line {
   display: inline-block;
   width: 22px;
@@ -1208,9 +1198,11 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-md);
   background: var(--mk-surface);
-  /* height: 100% 删去（2026-11-04 宽屏走查）：它把卡片硬拔到画布行高（100% 按网格区
-     高度解析，与 align-items: start 并存仍会拉满），概览内容只有 313px 时留下大块空白。
-     改由内容决定高度。 */
+  /* 2026-11-05 PC 走查：随 stretch 拉满画布行高（用户点名「与画布等高」），
+     flex 列让详情态的内容自然从上往下排；概览态内容少时卡内留白交给栏本身，
+     不再像短卡浮在画布旁。此前 height:100% 拔高的顾虑随「概览即首页」设计一并翻案。 */
+  display: flex; flex-direction: column;
+  min-height: 0;
   box-sizing: border-box;
 }
 .mk-ge__side-title {
