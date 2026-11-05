@@ -362,6 +362,76 @@ describe('PATCH /paths/:pathId/retry 的 goal 闸门（#227）', () => {
 });
 
 /**
+ * #241：rebuild-all 后「active 但 0 个任务」时，PATCH /retry 与 POST /retry-stage-design
+ * 必须同口径——此前前者被 resolveGenerationRetry 的「run 成功=已完成」挡住回 400，
+ * 后者直接进 retryPathEnrichment、用 append 补齐回 200，同一次用户操作自相矛盾。
+ */
+describe('#241：两个重试入口对零任务路径同口径', () => {
+  const invoke = async (method: 'patch' | 'post', path: string) => {
+    const res = createResponse();
+    const next = jest.fn();
+    await getRouteHandler(method, path)({
+      user: { userId: 'user-1' },
+      params: { pathId: 'lp_goal' },
+      body: {},
+    }, res, next);
+    return { res, next };
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockFindUnique.mockResolvedValue(goalGeneratedPath());
+    mockRunGoalAsync.mockImplementation(() => {});
+    mockRunAsync.mockImplementation(() => {});
+  });
+
+  it('run 成功但阶段全空 → 两个入口都 200 且都走 append 补齐', async () => {
+    mockGetPathGenerationRetry.mockResolvedValue({
+      allowed: true,
+      retryType: 'stageDesign',
+      reason: 'incomplete',
+      expectedActiveGenerationRunId: 'run-stage',
+    });
+    mockRetryPathEnrichment.mockResolvedValue({
+      accepted: true,
+      retryType: 'stageDesign',
+      mode: 'append',
+      emptyMilestoneCount: 2,
+      runId: 'run-append',
+    });
+
+    const patch = await invoke('patch', '/paths/:pathId/retry');
+    const post = await invoke('post', '/paths/:pathId/retry-stage-design');
+
+    expect(patch.res.status).not.toHaveBeenCalled();
+    expect(post.res.status).not.toHaveBeenCalled();
+    expect(patch.res.json.mock.calls[0][0].data).toMatchObject({ mode: 'append', emptyMilestoneCount: 2 });
+    expect(post.res.json.mock.calls[0][0].data).toMatchObject({ mode: 'append', emptyMilestoneCount: 2 });
+    expect(patch.next).not.toHaveBeenCalled();
+  });
+
+  it('防修过头：路径真的准备完成 → 两个入口都拒绝，都不出现 200', async () => {
+    mockGetPathGenerationRetry.mockResolvedValue({
+      allowed: false,
+      retryType: null,
+      reason: 'completed',
+      expectedActiveGenerationRunId: 'run-stage',
+    });
+    mockRetryPathEnrichment.mockRejectedValue(new Error('阶段任务已经准备完成，无需重试'));
+
+    const patch = await invoke('patch', '/paths/:pathId/retry');
+    const post = await invoke('post', '/paths/:pathId/retry-stage-design');
+
+    expect(patch.res.status).toHaveBeenCalledWith(400);
+    expect(post.res.status).toHaveBeenCalledWith(400);
+    expect(patch.res.json.mock.calls[0][0].error.message).toContain('无需重试');
+    expect(post.res.json.mock.calls[0][0].error.message).toContain('无需重试');
+    expect(patch.next).not.toHaveBeenCalled();
+    expect(post.next).not.toHaveBeenCalled();
+  });
+});
+
+/**
  * #227 复核补的两条防线：
  *  - 路由预检不得把 `buildGoalPathRequestFromConversation` 现算的 visibleSummary 当凭证
  *    （那个函数不看会话 status）：模板为 null + 关联会话未完成 → 必须 422；

@@ -646,7 +646,11 @@ export async function getPathGenerationLifecycle(pathId: string, userId: string)
     taskCount
   );
   const stale = isGenerationRunStale(run);
-  const retry = resolveGenerationRetry(path.status, legacy, run, path.updatedAt);
+  // #241：重试判定须与 PATCH /retry 同口径——run 成功但路径仍留零任务阶段时也算可重试。
+  // 渐进式路径的「后续阶段尚未设计」是预期状态（空里程碑不是缺陷），排除以防误报。
+  const hasEmptyMilestones = !progressive
+    && path.milestones.some((milestone) => milestone.subtasks.length === 0);
+  const retry = resolveGenerationRetry(path.status, legacy, run, path.updatedAt, Date.now(), hasEmptyMilestones);
 
   let phase: 'core' | 'stage_design' | 'ready' = 'ready';
   let status: 'queued' | 'processing' | 'stale' | 'failed' | 'ready' = 'ready';

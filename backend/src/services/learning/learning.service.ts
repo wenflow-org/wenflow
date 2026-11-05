@@ -780,8 +780,21 @@ class LearningService {
 
     const generationStatus = parsePathGenerationStatus(path.aiPromptTemplate);
     const activeRun = await getActiveGenerationRun(path.id, path.activeGenerationRunId);
+    // #241：同一状态必须给出同一判定。此前只看 run.status=succeeded 就判「已完成」，
+    // 于是「重建后 active 但全路径零任务」在 PATCH /retry 回 400、POST /retry-stage-design
+    // 却能追加补齐（200）——两个入口对同一次用户操作给出相反答案。
+    // 零任务阶段是「未完成」，不是「已完成」：retryAllowed 必须为真，且由 retryPathEnrichment
+    // 走 append-tasks 自愈（只创建、不覆盖，不会与课堂证据冲突）。
+    const emptyMilestoneIds = await this.listEmptyMilestoneIds(path.id);
     return {
-      ...resolveGenerationRetry(path.status, generationStatus, activeRun, path.updatedAt),
+      ...resolveGenerationRetry(
+        path.status,
+        generationStatus,
+        activeRun,
+        path.updatedAt,
+        Date.now(),
+        emptyMilestoneIds.length > 0
+      ),
       expectedActiveGenerationRunId: path.activeGenerationRunId
     };
   }

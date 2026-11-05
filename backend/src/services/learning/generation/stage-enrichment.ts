@@ -136,6 +136,8 @@ export async function enrichLearningPathWithAnderson(
     progressive?: boolean;
     restrictMilestoneIds?: string[];
     previousStageOutcome?: PreviousStageOutcome | null;
+    /** #241：整条重建（rebuild-all）已获准覆盖已完成证据时，阶段设计必须沿用同一放行口径。 */
+    allowCompleted?: boolean;
   } = {}
 ): Promise<void> {
   // 【A/B 归因修复 2026-10-01】后台生成链路原本没有 userId 请求上下文 → callPrompt 的
@@ -144,6 +146,24 @@ export async function enrichLearningPathWithAnderson(
   return runWithContext({ ...getRequestContext(), userId: data.userId }, () =>
     enrichLearningPathWithAndersonInner(pathId, runId, data, analysis, options)
   );
+}
+
+/**
+ * #241：stageDesign 的路径变更闸门 scope。
+ *
+ * `rebuild-all` 在 core 阶段以 `allowCompleted` 删除并重建全部里程碑；同一事务随后创建的
+ * stageDesign run 若仍按 replace-tasks 的默认口径复核（不允许已完成课堂/证据），就会把刚重建
+ * 空出来的路径取消掉——真实事故：core succeeded 同秒 stageDesign cancelled
+ * `PATH_MUTATION_HAS_COMPLETED_TEACHING_EVIDENCE`，路径留下 active + 0 任务。
+ * append-tasks 自带「目标阶段必须为空」约束，不需要（也不应放宽）allowCompleted。
+ */
+export function buildStageMutationScope(
+  appendOnly: boolean,
+  appendMilestoneIds: string[],
+  allowCompleted?: boolean
+): { milestoneIds: string[] } | { allowCompleted: true } | Record<string, never> {
+  if (appendOnly) return { milestoneIds: appendMilestoneIds };
+  return allowCompleted === true ? { allowCompleted: true } : {};
 }
 
 async function enrichLearningPathWithAndersonInner(
@@ -160,6 +180,8 @@ async function enrichLearningPathWithAndersonInner(
     progressive?: boolean;
     restrictMilestoneIds?: string[];
     previousStageOutcome?: PreviousStageOutcome | null;
+    /** #241：见 enrichLearningPathWithAnderson 同名选项。 */
+    allowCompleted?: boolean;
   } = {}
 ): Promise<void> {
   const startTime = Date.now();
@@ -192,7 +214,7 @@ async function enrichLearningPathWithAndersonInner(
       prisma,
       pathId,
       appendOnly ? 'append-tasks' : 'replace-tasks',
-      appendOnly ? { milestoneIds: appendMilestoneIds } : {}
+      buildStageMutationScope(appendOnly, appendMilestoneIds, options.allowCompleted)
     );
     // 重试不留脏行：replace 语义下本轮 run 取代此前所有 stageDesign 尝试，
     // 但 stage items 的唯一约束是 [runId, stageNumber]，两轮 runId 不同故并存——
@@ -1076,7 +1098,7 @@ async function enrichLearningPathWithAndersonInner(
         tx,
         pathId,
         appendOnly ? 'append-tasks' : 'replace-tasks',
-        appendOnly ? { milestoneIds: appendMilestoneIds } : {}
+        buildStageMutationScope(appendOnly, appendMilestoneIds, options.allowCompleted)
       );
       for (const milestone of learningPath.milestones) {
         if (!appendOnly) {

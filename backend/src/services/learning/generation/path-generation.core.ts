@@ -1088,6 +1088,10 @@ export async function generateLearningPath(data: GeneratePathData) {
   const stageRunId = fullPath.activeGenerationRunId;
   if (!stageRunId) throw new Error('GENERATION_RUN_REQUIRED');
   const progressive = isProgressiveStageDesignEnabled();
+  // #241：整条重建（replan.forceReplace）在 core 已获准覆盖已完成证据。阶段设计必须沿用同一
+  // 放行口径，否则「允许重建骨架、却不允许重建阶段」自相矛盾——真实事故里 stageDesign 因
+  // PATH_MUTATION_HAS_COMPLETED_TEACHING_EVIDENCE 被取消，路径留下 active + 0 任务。
+  const allowCompleted = (generationData.userProfile as any)?.replan?.forceReplace === true;
   runBackgroundTask(
     'learning.path.stage-enrichment',
     () => enrichLearningPathWithAnderson(fullPath.id, stageRunId, generationData, analysis, {
@@ -1097,6 +1101,7 @@ export async function generateLearningPath(data: GeneratePathData) {
             restrictMilestoneIds: firstMilestoneId ? [firstMilestoneId] : undefined,
           }
         : {}),
+      ...(allowCompleted ? { allowCompleted: true } : {}),
     }),
     { pathId: fullPath.id, runId: stageRunId, userId: generationData.userId },
     await ownerContextOverride(generationData.userId)
