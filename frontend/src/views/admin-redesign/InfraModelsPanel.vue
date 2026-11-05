@@ -51,6 +51,11 @@
                   title="运行时就调用这个模型"
                 >启用</span>
               </div>
+              <span
+                v-if="labelOf(g.kind, m)"
+                class="mpp-eng__label"
+                :title="labelOf(g.kind, m)"
+              >{{ labelOf(g.kind, m) }}</span>
               <!-- 与对话卡同一条读数解剖（2026-11-05 用户「调用通过确实还是换行好看一些」）：
                    判词带色加粗，时延 / 维度退成弱色。 -->
               <span
@@ -139,11 +144,20 @@
               <div class="infra-sec__head">
                 <h4 class="infra-sec__title">模型</h4>
               </div>
-              <!-- 2026-11-05 用户「向量和重排的配置界面要改一下」：模型 ID 改成只读。
-                   这一格曾经能改、旁边还挂「拉取」，等于在「配置某一行参数」的弹层里
-                   又开了一个换模型 / 拉清单的入口，与卡头的「＋ 添加模型」是同一件事的两个出口。 -->
-              <p v-if="editingModel" class="infra-model-name mono" :title="editingModel">{{ editingModel }}</p>
-              <p v-else class="infra-model-name infra-model-name--none">这条能力还没有模型</p>
+              <!-- 与模型设置弹层同一对标识（2026-11-05 用户「模型id和模型名称不能改吗，为啥不在配置里面靠齐」）：
+                   模型 ID 只读——它是键，改名等于换模型（对话模型那边也是锁的，得删了重加）；
+                   能改的是显示名称，默认跟随 ID，填了就在卡行与清单里替 ID 说话。 -->
+              <div v-if="editingModel" class="infra-formrow">
+                <label class="mk-field">
+                  <span class="mk-field__label">模型 ID</span>
+                  <input class="mk-field__input mono infra-id--locked" :value="editingModel" disabled :title="editingModel" />
+                </label>
+                <label class="mk-field">
+                  <span class="mk-field__label">显示名称</span>
+                  <input v-model="form.label" class="mk-field__input" placeholder="默认跟随模型 ID" />
+                </label>
+              </div>
+              <p v-else class="infra-model-name infra-model-name--none">{{ NO_MODEL_HINT }}</p>
             </section>
 
             <section class="infra-sec">
@@ -195,6 +209,7 @@
       :title="addTitle"
       :models="addModels"
       :registered="addRegistered"
+      :labels="addEntry?.labels ?? {}"
       :allow-manual="false"
       :loading="addLoading"
       :error="addError"
@@ -300,6 +315,9 @@ import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useRowMenu } from './useRowMenu'
 import { toast } from '@/utils/toast'
+
+/** 池子空着时的那句话：弹层里的空态与保存前的拦截说的是同一件事，收一处（文案守卫 R6） */
+const NO_MODEL_HINT = '这条能力还没有模型，先在卡头「＋ 添加模型」里挑一个'
 
 type InfraKind = 'embedding' | 'rerank'
 type ConnectionMode = 'inherit' | 'own'
@@ -697,10 +715,26 @@ const editEntry = ref<InfraModelEntryView | null>(null)
 const editingModel = ref('')
 const editKindLabel = computed(() => (editKind.value ? kindLabel(editKind.value) : ''))
 const form = ref({
+  /** 显示名称：空串 = 没起名（卡行与清单里退回显示 id） */
+  label: '',
   timeoutMs: 20000,
   batchSize: 32,
   dimensions: null as number | null,
 })
+
+/** 卡行与清单行的次级说明：起过名就显示名称，没起名不硬编一句话（2026-11-04「版面自己说话」） */
+function labelOf(kind: InfraKind, model: string): string {
+  return view.value?.[kind]?.labels?.[model] ?? ''
+}
+
+/** 显示名称的写回值：清空即删掉这一条（不留一个空串键），其余行的名字原样带回 */
+function labelPatch(base: Record<string, string> | undefined, model: string, name: string): Record<string, string> {
+  const out = { ...(base ?? {}) }
+  delete out[model]
+  const trimmed = name.trim()
+  if (trimmed) out[model] = trimmed
+  return out
+}
 
 /** 回填时把完整端点还原成根地址（编辑一次不会把 /v1/embeddings 越叠越多） */
 function rootOf(value: string): string {
@@ -719,6 +753,7 @@ function openEdit(entry: InfraModelEntryView, model: string) {
   editEntry.value = entry
   editingModel.value = model
   form.value = {
+    label: entry.labels?.[model] ?? '',
     timeoutMs: entry.timeoutMs,
     batchSize: entry.batchSize ?? 32,
     dimensions: entry.dimensions,
@@ -736,7 +771,7 @@ async function save() {
   const entry = editEntry.value
   if (!kind || !entry) return
   if (!editingModel.value) {
-    toast.error('这条能力还没有模型，先在卡头「＋ 添加模型」里挑一个')
+    toast.error(NO_MODEL_HINT)
     return
   }
   if (!Number.isInteger(form.value.timeoutMs) || form.value.timeoutMs < 1000 || form.value.timeoutMs > 120000) {
@@ -759,6 +794,9 @@ async function save() {
   const patch: Record<string, unknown> = {
     models,
     model: active,
+    /* 显示名称按池子整体提交（后端按池子裁剪）：只改这一行的名字，
+       其余行的名字要原样带回，否则一次保存会把别人的名字抹掉。 */
+    labels: labelPatch(entry.labels, editingModel.value, form.value.label),
     timeoutMs: form.value.timeoutMs,
     batchSize: kind === 'embedding' ? form.value.batchSize : null,
     dimensions: rawDimensions === null || rawDimensions === '' ? null : Number(rawDimensions),
@@ -813,6 +851,15 @@ onMounted(load)
   line-height: 1.5;
 }
 .mpp-eng__model { color: var(--mk-ink); font-size: var(--mk-fs-body); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 显示名称：id 下面的一行，只在运营起过名时出现（没起名不硬编一句话） */
+.mpp-eng__label {
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .mpp-eng__model--none { color: var(--mk-muted); }
 /* 启用徽标：与对话卡的「默认」徽标同形（它讲的是「选了它」，不是「它有什么能力」） */
 .mpp-eng__on { flex: none; }
@@ -902,6 +949,13 @@ onMounted(load)
   font-size: var(--mk-fs-body);
 }
 .infra-model-name--none { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+/* 只读的模型 ID：与模型设置弹层同一处理——回到正文色 + 次级底，读作「这里是值」而不是「禁用控件」 */
+.mk-field__input.infra-id--locked {
+  color: var(--mk-ink);
+  -webkit-text-fill-color: currentColor;
+  background: var(--mk-surface-2);
+  opacity: 1;
+}
 .infra-formrow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 
 </style>

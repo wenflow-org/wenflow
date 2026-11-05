@@ -187,6 +187,8 @@ const props = withDefaults(defineProps<{
   allowManual?: boolean
   /** 底栏说明；空串即不显示 */
   hint?: string
+  /** 已配置模型的显示名称（id → 名称）：宿主起过名的行优先显示它 */
+  labels?: Record<string, string>
   /** 宿主按用途筛掉了几条：给了就在清单下方多一条「显示全部」的出口 */
   hiddenCount?: number
   /** 清单为空时的说明（宿主自己有筛选口径时自己给：全量就是空 / 是被筛空了） */
@@ -205,6 +207,7 @@ const props = withDefaults(defineProps<{
   allowManual: true,
   hint: '能力列表里没有，勾完引入时会让你逐项确认思考 / 推理强度 / 视觉。',
   hiddenCount: 0,
+  labels: () => ({}),
   emptyText: '',
   tester: undefined,
 })
@@ -241,7 +244,8 @@ const rows = computed<PickerRow[]>(() => {
     const added = registeredSet.value.has(id)
     return {
       id,
-      display: hasReadableName(id) ? readableModelName(id) : '',
+      // 运营起过名就用他的名字；没起名才按 id 现推一个可读名
+      display: props.labels[id] || (hasReadableName(id) ? readableModelName(id) : ''),
       added,
       // 只有「已添加」勾不动；不再按模型角色判断能不能加（2026-11-04）
       selectable: !added,

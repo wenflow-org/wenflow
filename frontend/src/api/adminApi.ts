@@ -871,6 +871,8 @@ export interface InfraModelEntryView {
   model: string;
   /** 已配置的模型池（含启用项）：一条连接可配多个，⋯ 里切换启用 / 删除 */
   models: string[];
+  /** 模型显示名称（id → 名称，2026-11-05）：与对话模型的「显示名称」同一件事，没起名就只显示 id */
+  labels: Record<string, string>;
   apiKeyEnv: string;
   timeoutMs: number;
   batchSize: number | null;

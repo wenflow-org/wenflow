@@ -254,6 +254,7 @@ async function toView(
     endpoint: entry.endpoint,
     model: entry.model,
     models: [...entry.models],
+    labels: { ...entry.labels },
     apiKeyEnv: entry.apiKeyEnv,
     timeoutMs: entry.timeoutMs,
     batchSize: entry.batchSize,

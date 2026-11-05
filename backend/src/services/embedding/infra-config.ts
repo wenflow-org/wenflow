@@ -39,6 +39,12 @@ export interface InfraModelEntry {
    * 上一个丢掉，运营还得重新拉清单重挑。
    */
   models: string[];
+  /**
+   * 模型显示名称（id → 名称，2026-11-05 用户「模型id和模型名称不能改吗」）。
+   * 与对话模型的 `displayName` 同一件事：id 是键（不可改名），名称是给人看的那一栏。
+   * 只存池子里还在的 id——归一化时按池子裁剪，空串即删除该条。
+   */
+  labels: Record<string, string>;
   apiKeyEnv: string;
   timeoutMs: number;
   /** 仅 embedding 使用；rerank 固定 null */
@@ -61,6 +67,8 @@ export const DEFAULT_EMBEDDING_BATCH_SIZE = 32;
 export const MAX_INFRA_TIMEOUT_MS = 120_000;
 export const MAX_EMBEDDING_BATCH_SIZE = 128;
 export const MAX_EMBEDDING_DIMENSIONS = 16_384;
+/** 显示名称长度上限：它是给人看的一行字，不是第二份标识 */
+export const MAX_MODEL_LABEL_LENGTH = 64;
 
 /**
  * 沿用平台连接时，按类型从平台 base URL 推导端点。
@@ -104,6 +112,7 @@ export function defaultInfraModelsConfig(env: NodeJS.ProcessEnv = process.env): 
       endpoint: (env.EMBEDDING_API_URL || '').trim(),
       model: embeddingModel,
       models: [embeddingModel],
+      labels: {},
       apiKeyEnv: 'EMBEDDING_API_KEY',
       timeoutMs: positiveInt(env.EMBEDDING_TIMEOUT_MS) ?? DEFAULT_INFRA_TIMEOUT_MS,
       batchSize: positiveInt(env.EMBEDDING_BATCH_SIZE) ?? DEFAULT_EMBEDDING_BATCH_SIZE,
@@ -115,6 +124,7 @@ export function defaultInfraModelsConfig(env: NodeJS.ProcessEnv = process.env): 
       endpoint: (env.RERANK_API_URL || '').trim(),
       model: rerankModel,
       models: [rerankModel],
+      labels: {},
       // 当前 BGE 网关两接口共用一把 key；独立 key 用 RERANK_API_KEY，缺省回落 embedding key
       apiKeyEnv: 'RERANK_API_KEY',
       timeoutMs: positiveInt(env.EMBEDDING_TIMEOUT_MS) ?? DEFAULT_INFRA_TIMEOUT_MS,
@@ -172,6 +182,27 @@ export function migrateLegacyModelPool(raw: unknown): unknown {
   return out;
 }
 
+/**
+ * 显示名称归一化：按池子裁剪（删了模型不留孤儿名称），空串即删除该条。
+ * 给了 `labels` 就按「整份」理解（与 `models` 同一口径）——否则清空某个名字
+ * 与「没改」在请求体上长得一样，界面里删得掉、库里删不掉。
+ * 没给 `labels` 时保留已有值：PUT 是 partial 合并，改超时不该把名字弄丢。
+ */
+function mergeLabels(
+  pool: readonly string[],
+  input: unknown,
+  base: Record<string, string>,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  const given = input && typeof input === 'object' ? input as Record<string, unknown> : null;
+  for (const id of pool) {
+    const raw = given ? given[id] : base[id];
+    const name = typeof raw === 'string' ? raw.trim() : '';
+    if (name) out[id] = name.slice(0, MAX_MODEL_LABEL_LENGTH);
+  }
+  return out;
+}
+
 function mergeEntry(kind: InfraModelKind, base: InfraModelEntry, input: Partial<InfraModelEntry> | undefined): InfraModelEntry {
   if (!input) return base;
   /* 池子与启用项一起解：两条更新路径都要能用——
@@ -197,6 +228,7 @@ function mergeEntry(kind: InfraModelKind, base: InfraModelEntry, input: Partial<
     endpoint: mergeText(base.endpoint, input.endpoint),
     model: active,
     models: pool,
+    labels: mergeLabels(pool, input.labels, base.labels),
     apiKeyEnv: mergeText(base.apiKeyEnv, input.apiKeyEnv),
     timeoutMs: mergeInt(base.timeoutMs, input.timeoutMs) ?? base.timeoutMs,
     batchSize: kind === 'embedding' ? mergeInt(base.batchSize, input.batchSize) : null,
@@ -271,8 +303,8 @@ export function validateInfraModelsConfig(config: InfraModelsConfig): string[] {
 /** 仅保留可落库字段：绝不让 apiKey 进入 platform_settings */
 export function toPersistedInfraModelsConfig(config: InfraModelsConfig): InfraModelsConfig {
   return {
-    embedding: { ...config.embedding, models: [...config.embedding.models] },
-    rerank: { ...config.rerank, models: [...config.rerank.models] },
+    embedding: { ...config.embedding, models: [...config.embedding.models], labels: { ...config.embedding.labels } },
+    rerank: { ...config.rerank, models: [...config.rerank.models], labels: { ...config.rerank.labels } },
     required: config.required,
   };
 }

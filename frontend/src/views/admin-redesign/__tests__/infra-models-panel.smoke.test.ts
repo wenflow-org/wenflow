@@ -43,6 +43,7 @@ function view(mode: { embedding?: 'inherit' | 'own'; rerank?: 'inherit' | 'own' 
       endpoint: 'https://gw.example/v1/embeddings',
       model: 'BAAI/bge-m3',
       models: ['BAAI/bge-m3'],
+      labels: {} as Record<string, string>,
       apiKeyEnv: 'EMBEDDING_API_KEY',
       timeoutMs: 20000,
       batchSize: 32,
@@ -59,6 +60,7 @@ function view(mode: { embedding?: 'inherit' | 'own'; rerank?: 'inherit' | 'own' 
       endpoint: 'https://newapi.wenflow.org/v1/rerank',
       model: 'BAAI/bge-reranker-v2-m3',
       models: ['BAAI/bge-reranker-v2-m3'],
+      labels: {} as Record<string, string>,
       apiKeyEnv: 'RERANK_API_KEY',
       timeoutMs: 20000,
       batchSize: null,
@@ -309,21 +311,47 @@ describe('InfraModelsPanel', () => {
 
   /* 2026-11-05 用户「配置里面还有 url，添加模型还有」：同一条连接只能在一处填。
      连接归「＋ 添加模型」那张弹窗（与对话卡同序），配置弹层只剩模型 ID 与参数。 */
-  it('配置弹层：模型 ID 只读、只剩参数，连接不在这里', async () => {
+  it('配置弹层：模型 ID 只读、显示名称可填，连接不在这里', async () => {
     const wrapper = mountPanel();
     await flushPromises();
     await openConfig(wrapper, 0);
 
     const modal = wrapper.find('.mk-modal');
     expect(modal.find('.mk-modal__title').text()).toBe('配置向量模型');
-    /* 2026-11-05 用户「向量和重排的配置界面要改一下」：模型 ID 只读——
-       这一格曾经能改、旁边还挂「拉取」，与卡头「＋ 添加模型」是同一件事的两个出口。 */
-    expect(modal.find('.infra-model-name').text()).toBe('BAAI/bge-m3');
-    expect(modal.find('.infra-model-row').exists()).toBe(false);
+    /* 2026-11-05 用户「模型id和模型名称不能改吗，为啥不在配置里面靠齐」：
+       与模型设置弹层同一对标识——ID 是键（只读），能改的是显示名称。 */
+    const idInput = modal.find('.infra-id--locked');
+    expect((idInput.element as HTMLInputElement).value).toBe('BAAI/bge-m3');
+    expect((idInput.element as HTMLInputElement).disabled).toBe(true);
+    const labelInput = modal.findAll('input.mk-field__input')[1];
+    expect((labelInput.element as HTMLInputElement).value).toBe('');
+    expect(labelInput.attributes('placeholder')).toBe('默认跟随模型 ID');
     // 地址与密钥不在这里：改名 / 换模型 / 换连接都归卡头那一颗按钮
     expect(modal.find('.infra-own').exists()).toBe(false);
     expect(modal.find('.infra-conn').exists()).toBe(false);
-    expect(modal.findAll('.mk-field__label').map((l) => l.text())).toEqual(['超时（毫秒）', '批量大小', '向量维度']);
+    expect(modal.findAll('.mk-field__label').map((l) => l.text()))
+      .toEqual(['模型 ID', '显示名称', '超时（毫秒）', '批量大小', '向量维度']);
+    wrapper.unmount();
+  });
+
+  it('显示名称可改：保存按池子整体回传，卡行显示这个名字', async () => {
+    const labeled = view();
+    labeled.embedding.labels = { 'BAAI/bge-m3': '主向量模型' };
+    updateMock.mockResolvedValue({ data: { data: labeled } });
+    const wrapper = mountPanel();
+    await flushPromises();
+    await openConfig(wrapper, 0);
+
+    const modal = wrapper.find('.mk-modal');
+    const labelInput = modal.findAll('input.mk-field__input')[1];
+    expect((labelInput.element as HTMLInputElement).value).toBe('');
+    await labelInput.setValue('主向量模型');
+    await modal.findAll('.mk-modal__foot button').find((b) => b.text() === '保存')!.trigger('click');
+    await flushPromises();
+
+    expect(updateMock.mock.calls[0][0].embedding.labels).toEqual({ 'BAAI/bge-m3': '主向量模型' });
+    // 起过名的行在 ID 下面多一行名称；没起名的行不硬编一句
+    expect(rows(wrapper, 0)[0].find('.mpp-eng__label').text()).toBe('主向量模型');
     wrapper.unmount();
   });
 
@@ -486,19 +514,20 @@ describe('InfraModelsPanel', () => {
     wrapper.unmount();
   });
 
-  it('配置弹层保存：只回传参数与模型池，连接一个字段都不发', async () => {
+  it('配置弹层保存：只回传参数、显示名称与模型池，连接一个字段都不发', async () => {
     const wrapper = mountPanel();
     await flushPromises();
     await openConfig(wrapper, 0);
 
     const modal = wrapper.find('.mk-modal');
-    expect(modal.find('.infra-model-row input').exists()).toBe(false);
-    expect(modal.find('.infra-model-name').text()).toBe('BAAI/bge-m3');
+    expect((modal.find('.infra-id--locked').element as HTMLInputElement).value).toBe('BAAI/bge-m3');
     await modal.findAll('.mk-modal__foot button').find((b) => b.text() === '保存')!.trigger('click');
     await flushPromises();
 
     const patch = updateMock.mock.calls[0][0].embedding;
     expect(patch).toMatchObject({ models: ['BAAI/bge-m3'], model: 'BAAI/bge-m3', timeoutMs: 20000 });
+    // 没起名就是空表（后端按池子裁剪后落库），不是 undefined
+    expect(patch.labels).toEqual({});
     // 连接字段一律不出现：少传 = 保留库里现值
     expect(patch).not.toHaveProperty('endpoint');
     expect(patch).not.toHaveProperty('apiKey');

@@ -236,3 +236,47 @@ describe('模型池', () => {
     expect(validateInfraModelsConfig(config).join('\n')).toContain('重复项');
   });
 });
+
+/* 显示名称（2026-11-05 用户「模型id和模型名称不能改吗」）：id 是键、名称给人看。
+   存的是 id → 名称，跟着池子走——池子变了名称也得跟着裁，不能留孤儿。 */
+describe('模型显示名称', () => {
+  it('默认没有名称（卡行退回显示 id）', () => {
+    expect(defaultInfraModelsConfig(ENV).embedding.labels).toEqual({});
+  });
+
+  it('按池子写入：空串即删除该条，池子外的名称进不来', () => {
+    const base = defaultInfraModelsConfig(ENV);
+    const config = mergeInfraModelsConfig(base, {
+      embedding: { labels: { 'BAAI/bge-m3': '主向量模型' } },
+    });
+    expect(config.embedding.labels).toEqual({ 'BAAI/bge-m3': '主向量模型' });
+
+    // 换池子 = 整体换：旧池子里的名称随旧 id 一起裁掉，池子外的键进不来
+    const two = mergeInfraModelsConfig(config, {
+      embedding: { models: ['a', 'b'], model: 'a', labels: { a: 'A', orphan: '不该出现' } },
+    });
+    expect(two.embedding.labels).toEqual({ a: 'A' });
+    const cleared = mergeInfraModelsConfig(two, { embedding: { labels: { a: '  ' } } });
+    expect(cleared.embedding.labels).toEqual({});
+    // 清空整份名称也是「给了 labels」：空表即清空（否则界面里删得掉、库里删不掉）
+    expect(mergeInfraModelsConfig(config, { embedding: { labels: {} } }).embedding.labels).toEqual({});
+  });
+
+  it('没提交 labels 时保留已有名称（PUT 是 partial 合并）', () => {
+    const named = mergeInfraModelsConfig(defaultInfraModelsConfig(ENV), {
+      embedding: { labels: { 'BAAI/bge-m3': '主向量' } },
+    });
+    const afterTimeout = mergeInfraModelsConfig(named, { embedding: { timeoutMs: 30000 } });
+    expect(afterTimeout.embedding.timeoutMs).toBe(30000);
+    expect(afterTimeout.embedding.labels).toEqual({ 'BAAI/bge-m3': '主向量' });
+  });
+
+  it('删掉模型时它的名称一起裁掉', () => {
+    const two = mergeInfraModelsConfig(defaultInfraModelsConfig(ENV), {
+      embedding: { models: ['a', 'b'], model: 'a', labels: { a: 'A', b: 'B' } },
+    });
+    expect(two.embedding.labels).toEqual({ a: 'A', b: 'B' });
+    const one = mergeInfraModelsConfig(two, { embedding: { models: ['a'], model: 'a' } });
+    expect(one.embedding.labels).toEqual({ a: 'A' });
+  });
+});
