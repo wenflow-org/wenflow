@@ -129,7 +129,14 @@ function buildAgentLogWhere(userId: string, query: any, capabilityType?: string)
 
   const capabilityAgents = buildCapabilityAgentMap();
 
-  if (agentId) {
+  if (agentId && capabilityType) {
+    // #247：两者同时下发时取交集。此前是 if / else-if，agentId 真值直接短路，
+    // capabilityType 连读都不读（合法能力键被静默吞掉，既不交集也不 400），结果集
+    // 退化成「只用 agentId」——前端两个下拉同时下发时，用户选的能力筛选完全不生效。
+    // 交集为空即明确返回空集（Prisma `in: []`），而不是让 agentId 单独放行。
+    const capabilitySet = capabilityAgents[capabilityType] || [];
+    where.agentId = { in: capabilitySet.includes(agentId) ? [agentId] : [] };
+  } else if (agentId) {
     where.agentId = agentId;
   } else if (capabilityType) {
     // #229：合法键必在 map 里。四个能力组的集合本身就是在 listUserListedAgentIds() 内再筛

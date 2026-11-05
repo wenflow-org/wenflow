@@ -451,6 +451,55 @@ describe('users agent log routes', () => {
     expect(ids.filter((id: string) => id !== 'acl_other')).toHaveLength(1);
   });
 
+  // #247：agentId 与 capabilityType 同时下发时，此前是 if / else-if：agentId 真值直接短路，
+  // capabilityType 连读都不读（合法键被静默吞掉，既不取交集也不 400）。前端是两个独立下拉、
+  // buildFilterParams 会把两者同时发出，因此这是日常可达路径。修复：两者取交集。
+  it('#247 agentId 与 capabilityType 同时下发时取交集，capabilityType 不再被静默忽略', async () => {
+    agentLogMocks.findMany.mockResolvedValue([]);
+    const whereFor = async (query: Record<string, unknown>) => {
+      await routes['GET /me/agent-logs/export'](
+        { user: { userId: 'user-1' }, query: { format: 'json', ...query } } as any,
+        createResponse(),
+        jest.fn()
+      );
+      return agentLogMocks.findMany.mock.calls.at(-1)?.[0]?.where;
+    };
+
+    // 相容：agentId 属于 path 能力集合（skill:path-planning / path-agent）→ 交集即该 id
+    const compatible = await whereFor({ agentId: 'skill:path-planning', capabilityType: 'path' });
+    expect(compatible.agentId).toEqual({ in: ['skill:path-planning'] });
+
+    // 不相容：交集为空集，绝不退化成「只用 agentId」
+    const incompatible = await whereFor({ agentId: 'skill:teaching-turn', capabilityType: 'path' });
+    expect(incompatible.agentId).toEqual({ in: [] });
+    expect(incompatible.agentId).not.toBe('skill:teaching-turn');
+  });
+
+  it('#247 没修过头：只传一个参数时的既有行为不变', async () => {
+    agentLogMocks.findMany.mockResolvedValue([]);
+    const whereFor = async (query: Record<string, unknown>) => {
+      await routes['GET /me/agent-logs/export'](
+        { user: { userId: 'user-1' }, query: { format: 'json', ...query } } as any,
+        createResponse(),
+        jest.fn()
+      );
+      return agentLogMocks.findMany.mock.calls.at(-1)?.[0]?.where;
+    };
+
+    // 只传 agentId：仍是单值字符串（不是 in 集合）
+    expect((await whereFor({ agentId: 'skill:teaching-turn' })).agentId)
+      .toBe('skill:teaching-turn');
+    // 只传 capabilityType：仍是能力集合，且与修复前逐字段相同
+    expect((await whereFor({ capabilityType: 'path' })).agentId)
+      .toEqual({ in: expect.arrayContaining(['skill:path-planning', 'path-agent']) });
+    // 两者都不传：仍是 manifest userListed 默认白名单
+    const defaultWhere = await whereFor({});
+    expect(Array.isArray(defaultWhere.agentId.in)).toBe(true);
+    expect(defaultWhere.agentId.in.length).toBeGreaterThan(0);
+    // includeSystem=true（无 agentId/capabilityType）：仍不带 agentId 条件
+    expect((await whereFor({ includeSystem: 'true' })).agentId).toBeUndefined();
+  });
+
   it('page 负值被钳制为 1（组起点=0），不向 Prisma 传负 skip', async () => {
     agentLogMocks.findMany.mockResolvedValue([]);
     const req: any = { user: { userId: 'user-1' }, query: { page: '-5' } };
