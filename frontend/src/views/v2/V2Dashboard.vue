@@ -1238,8 +1238,13 @@ onMounted(loadAll);
 /* min-width: 0：让日期行的省略号接管「排不下」——副标 inline 续写在后面，
    整行 nowrap，排不下时截断而不是把 streak 药丸顶出首屏 */
 .greet__main { display: grid; gap: 3px; min-width: 0; }
-/* 视觉主标题（原 strong，P3-39 升 h1）：h1 默认 margin 清零，字号字重沿用原 21px/800 不变 */
-.greet__main .greet__headline { margin: 0; font-size: 21px; font-weight: 800; letter-spacing: -0.01em; color: var(--ink); }
+/* 视觉主标题（原 strong，P3-39 升 h1）：h1 默认 margin 清零，字号字重沿用原 21px/800 不变。
+   text-wrap: balance：标题文案每日变化、21px 下换行点随字数漂，此前第二行常只剩
+   一个孤字（小米实测「稳」单字成行）；balance 让两行长度均衡，无换行时零影响 */
+.greet__main .greet__headline {
+  margin: 0; font-size: 21px; font-weight: 800; letter-spacing: -0.01em; color: var(--ink);
+  text-wrap: balance;
+}
 .greet__date {
   font-size: 12.5px; color: var(--faint);
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

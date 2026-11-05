@@ -189,7 +189,9 @@
             <!-- failed：待重试 -->
             <template v-else>
               <!-- P2-30（设计评审）：错误行动词与按钮对齐——后端兜底句在渲染层改说「主结构」，见 failReasonText -->
-              <div class="pcard__fail-reason">{{ failReasonText(card) || '生成失败，目标和已确认信息已保留。' }}</div>
+              <!-- 保留语义对齐（paths/xiaomi/1）：后端保留的是已完成任务与进度，标题/描述
+                   会被重新生成，「目标和已确认信息已保留」与重排事实不符，改说学习进度 -->
+              <div class="pcard__fail-reason">{{ failReasonText(card) || '生成失败，已完成的学习进度会保留。' }}</div>
               <div v-if="deleting === card.id" class="pcard__confirm" @click.stop>
                 <span>{{ CONFIRM_DELETE_PATH_MSG }}</span>
                 <button type="button" class="pcard__confirm-yes" @click="doDelete(card)">删除</button>

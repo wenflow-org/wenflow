@@ -71,7 +71,7 @@
       </div>
       <div class="stat-card">
         <span>平均耗时（本页）</span>
-        <strong>{{ hasPageSamples ? avgDuration + 'ms' : '—' }}</strong>
+        <strong>{{ hasPageSamples ? formatDuration(avgDuration) : '—' }}</strong>
       </div>
       <div class="stat-card">
         <span>Token（本页）</span>
@@ -124,7 +124,7 @@
               <td><span class="uc-badge" :class="row.success ? 'uc-badge--ok' : 'uc-badge--bad'">
                 {{ row.success ? '成功' : '失败' }}
               </span></td>
-              <td class="uc-table__muted">{{ row.durationMs ?? '-' }}</td>
+              <td class="uc-table__muted">{{ formatDuration(row.durationMs) }}</td>
               <td class="uc-table__muted">{{ row.tokensUsed ?? '-' }}</td>
               <td class="uc-table__muted" :title="`来源：${getModelSourceInfo(row).label}`">{{ getModelSourceInfo(row).display }}</td>
               <td class="uc-table__muted logs-error-cell">{{ row.error || '-' }}</td>
@@ -189,7 +189,7 @@
               <div class="detail-fact"><span>状态</span><span class="uc-badge" :class="currentLog.success ? 'uc-badge--ok' : 'uc-badge--bad'">
                 {{ currentLog.success ? '成功' : '失败' }}
               </span></div>
-              <div class="detail-fact"><span>耗时</span><strong>{{ currentLog.durationMs }}ms</strong></div>
+              <div class="detail-fact"><span>耗时</span><strong>{{ formatDuration(currentLog.durationMs) }}</strong></div>
               <div class="detail-fact"><span>Token</span><strong>{{ currentLog.tokensUsed || '-' }}</strong></div>
               <div class="detail-fact"><span>模型来源</span><strong>{{ getModelSourceInfo(currentLog).label }}</strong></div>
               <div class="detail-fact"><span>Provider</span><strong>{{ getModelSourceInfo(currentLog).providerName }}</strong></div>
@@ -242,6 +242,7 @@ import { ref, reactive, computed, onMounted } from 'vue';
 import { toast } from '../../utils/toast';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
 import { getAgentLogDetail, getAgentLogs, exportAgentLogs } from '@/api/userCustom';
+import { formatWaited } from '../v2/learningPathProgress';
 import { useEscape } from '@/views/admin-redesign/useEscape';
 import { useOverlay } from '@/views/admin-redesign/useOverlay';
 import dayjs from 'dayjs';
@@ -363,6 +364,14 @@ const avgDuration = computed(() => {
   const total = displayLogs.value.reduce((sum, l) => sum + (l.durationMs || 0), 0);
   return Math.round(total / displayLogs.value.length);
 });
+
+/** 裸毫秒 → 人读时长（account/iphone/5）：统计卡 90272ms、详情 50622ms 直拼不可读。
+    口径复用 v2/learningPathProgress.formatWaited（「1 分 30 秒 / 42 秒 / 1 小时 2 分」），
+    异常值回退裸数加单位。 */
+function formatDuration(ms?: number | null): string {
+  if (ms == null || !Number.isFinite(ms) || ms < 0) return '-';
+  return formatWaited(ms) ?? `${ms}ms`;
+}
 
 const totalTokens = computed(() => {
   return displayLogs.value.reduce((sum, l) => sum + (l.tokensUsed || 0), 0);

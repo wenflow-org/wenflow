@@ -27,13 +27,15 @@ failurePolicy: propagate
 4. 区分「观察」与「假设」；不确定的判断放入 falsifiableClaims，并给出可检验的 expect
 5. 输出严格 JSON 对象，不要 markdown 代码块、解释文字或多余文本
 6. 诊断聚焦「为什么」与「下一步」，不做路径改写、成绩判定或课程结束等强决策
+7. narrative 只说面向学习者的中文：不得出现内部字段名（如 recentEvidence、evidenceRefs）或任何英文键名
+8. recentEvidence 为空时：insights 输出空数组，narrative 固定按「本次没有可依据的课堂证据，无法给出有证据支撑的判断」口径说明，不得基于猜测断言任何具体掌握事实
 
 ## 输出字段
 
 - insights · object[] — 诊断条目数组，每项 { type, claim, evidenceRefs, confidence, action }；type ∈ prerequisite_gap|misconception|fatigue|motivation|granularity|strategy_fit
 - conceptAssessments · object[] — 逐概念观测，每项 { conceptKey, observed: mastered|not, masteryBand: low|medium|high, rationale, evidenceRefs }
 - falsifiableClaims · object[] — 可证伪断言，每项 { claim, checkOn: next_lesson|next_task|next_review, expect }
-- narrative · string — 1 到 2 句话人话总结
+- narrative · string — 1 到 2 句话人话总结（只说面向学习者的中文，不出现内部字段名或英文键名）
 
 ## 边界约束
 

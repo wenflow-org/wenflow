@@ -101,6 +101,8 @@ const pushMessage = (m: LiveMessage): LiveMessage => {
 const metaTracker = useInteractionMeta();
 const stage = ref<'understanding' | 'proposing' | 'ready' | 'completed' | ''>('');
 const isCompleted = ref(false);
+/** 分诊硬阻断终局（completed 且不会生成路径）：视图据此展示阻断说明而非「路径已创建」假成功 */
+const hardBlocked = ref(false);
 const understanding = ref<GoalUnderstanding>({});
 const collected = ref<Record<string, unknown>>({});
 const quickReplies = ref<Array<{ text: string; icon?: string }>>([]);
@@ -265,6 +267,7 @@ function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string;
     : 'understanding';
   // confidence：信封仍带该字段，但页面从不渲染（2026-09-27 死状态清理），不再维护
   isCompleted.value = core?.isCompleted === true;  learningPath.value = core?.learningPath ?? null;
+  hardBlocked.value = core?.hardBlocked === true;
   // 已完成的会话不再作为「继续上次的规划」入口：路径已生成，恢复终态会话只会造成
   // 「已经产生了新路径，goal 还让继续上次规划」的困惑。清本地缓存（带 :conversationId
   // 的 URL 回看不依赖该缓存，resumeById 按 id 直取）。
@@ -307,6 +310,15 @@ function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string;
     // 服务端不落库（updateConversationLifecycle 只追加 user 确认消息），客户端渲染会造成
     // 「阶段结束后 AI 还发消息」且刷新后凭空消失的双态不一致；该信息由 done 面板承载。
     if (env.userVisible && stage.value !== 'completed') pushMessage({ role: 'ai', content: env.userVisible, time: nowTime() });
+  }
+  // 硬阻断终局例外（2026-11-05 UX 审计 P0）：阻断说明（不会生成路径 + 补充说明可重判）
+  // 必须在对话流里可见。上面的「completed 不落 userVisible」只针对确认收尾语；对硬阻断
+  // 再套用会把唯一的结果说明整个丢掉（done 弹层此前还把它误读成「路径已创建」）。
+  // 服务端只落 user 消息，resume 时 meta.messages 分支同样拿不到它——两种分支之后统一
+  // 补挂，按内容去重（重进会话不重复叠同一句）。
+  if (env.userVisible && hardBlocked.value
+    && !messages.value.some((m) => m.role === 'ai' && m.content === env.userVisible)) {
+    pushMessage({ role: 'ai', content: env.userVisible, time: nowTime() });
   }
   // P2-14：恢复会话时用最后一条带快捷补充的 AI 消息回填当前轮面板（刷新后不再只剩输入框）
   if (!quickReplies.value.length) {
@@ -660,6 +672,7 @@ function reset(clearStorage = true) {
   messages.value = [];
   stage.value = '';
   isCompleted.value = false;
+  hardBlocked.value = false;
   understanding.value = {};
   collected.value = {};
   quickReplies.value = [];
@@ -690,6 +703,7 @@ export function useGoalLive() {
     stage,
     stageIndex,
     isCompleted,
+    hardBlocked,
     fields,
     filledCount,
     totalFields: FIELD_DEFS.length,

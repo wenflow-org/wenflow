@@ -325,9 +325,13 @@ function buildOption(): EChartsCoreOption {
         center: [highlightSet.size ? '46%' : '50%', '50%'],
         // 布局盒留边：四边都要给节点半径 + 底部标签留空间，否则力导向收边时
         // 最外圈节点会贴住画布边缘，底部标签被 canvas 的 overflow:clip 切掉。
-        top: narrow ? 22 : 40,
-        bottom: narrow ? 36 : 48,
-        left: narrow ? 28 : 48,
+        // 2026-11-05 知识图谱页走查（P2）：narrow 档余量不够两行标签——12px 字号 ×
+        // lineHeight 16 的两行标签 ≈37px 高（distance 5 + 32 文字），bottom 36 仍把
+        // 「第二个动词的角色判定」第二行拦腰截断；left 28 放不下以节点为中心的
+        // 6 字行半宽（36px），首字左半被裁。抬到 top 44 / bottom 46 / left 44。
+        top: narrow ? 44 : 40,
+        bottom: narrow ? 46 : 48,
+        left: narrow ? 44 : 48,
         right: narrow ? 56 : 96,
         scaleLimit: { min: 0.3, max: 4 },
         label: {
@@ -350,9 +354,11 @@ function buildOption(): EChartsCoreOption {
         // ECharts 6.1 的 labelLayout 里并不存在，只有 hideOverlap / moveOverlap）；压在
         // 节点上的情况交给上面的同色底衬。moveOverlap 是一维推移，会为了不同行的标签把
         // 标签整体推离自己的节点，故不启用。
-        // 课堂浮窗只亮 2 个本节知识点；hideOverlap 会把后一个标签当“重叠”直接吞掉。
-        // 有高亮时放开，保证两个黄色标签都出现（普通图仍保留防叠字）。
-        labelLayout: { hideOverlap: highlightSet.size === 0 },
+        // hideOverlap 常开（2026-11-05 课堂走查）：旧版在「有高亮」时整体关闭——课堂浮窗
+        // 两个本节知识点标签若互相重叠会被当“重叠”吞掉后者。现在改为多高亮时标签上下
+        // 交错（见下方 data.label.position），两枚高亮标签不再互压，hideOverlap 得以
+        // 常开：课堂上“判断动作性质”橙字直接叠在连线/非高亮标签上的压字被正常收掉。
+        labelLayout: { hideOverlap: true },
         emphasis: { focus: 'adjacency', label: { show: true, fontWeight: 'bold' } },
         select: { label: { show: true }, itemStyle: { borderWidth: 2 } },
         lineStyle: { curveness: 0.08 },
@@ -383,6 +389,9 @@ function buildOption(): EChartsCoreOption {
           const highlighted = highlightSet.has(node.id)
           const dimmed = highlightSet.size > 0 && !highlighted
           const baseSize = Math.min(narrow ? 34 : 44, (narrow ? 12 : 15) + (degree.get(node.id) ?? 0) * 4)
+          // 多个高亮时标签上下交错：第 1 枚在节点下方、第 2 枚起在上方——hideOverlap
+          // 常开后（见上方 labelLayout 注释），交错保证两枚高亮标签不因互相重叠被吞
+          const highlightIndex = props.highlightIds.indexOf(node.id)
           return {
             id: node.id,
             name: node.label,
@@ -398,7 +407,8 @@ function buildOption(): EChartsCoreOption {
             label: {
               show: labelWorthy.has(node.id),
               fontWeight: highlighted ? 'bold' : 'normal',
-              color: highlighted ? (dark ? '#ffe08a' : '#8a4b00') : textColor
+              color: highlighted ? (dark ? '#ffe08a' : '#8a4b00') : textColor,
+              position: highlighted && highlightIndex > 0 ? 'top' : 'bottom'
             },
             raw: node
           }

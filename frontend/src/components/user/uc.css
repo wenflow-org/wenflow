@@ -300,6 +300,9 @@ select.uc-field__input {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  /* 热区（2026-11-05 UX 审计）：label 可点盒实测仅 139×22、轨道 40×22，低于 36px
+     触屏门禁——min-height 抬命中高（label 整行可点，语义不变），轨道/字号视觉不变 */
+  min-height: 36px;
   cursor: pointer;
   -webkit-user-select: none;
   user-select: none;

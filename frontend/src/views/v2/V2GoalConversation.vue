@@ -180,6 +180,11 @@
           <!-- 说明属于左侧信息面板（它描述的就是这份清单的整理机制）：
                短版贴清单底部，不做整块 tip（2026-09-27 用户反馈二改） -->
           <div class="panel__tip">聊到的内容会自动整理成这份清单。</div>
+          <!-- 移动端清空重聊入口（2026-11-05 UX 审计）：唯一入口 .chat__clear 在 ≤1100px
+               被 display:none 后移动端无任何替代入口。窄屏头部一行已被阶段导航+目标信息
+               药丸占满，这里收进目标信息悬浮面板底部（点「目标信息」两步可达）；
+               桌面端仍走头部按钮，不重复 -->
+          <button type="button" class="panel__clear" @click="doReset">清空重聊</button>
         </div>
       </aside>
 
@@ -217,7 +222,7 @@
 
         <!-- 不在整条消息流上挂 aria-live：流式重渲/每条新消息都会被读屏连播（含原始 JSON delta），
              收窄到下方等待条的 aria-live（P3） -->
-        <div ref="scrollEl" class="chat__scroll" :class="{ 'chat__scroll--dim': showProposal }" @scroll.passive="onScrollPin">
+        <div ref="scrollEl" class="chat__scroll" :class="{ 'chat__scroll--dim': showProposal, 'chat__scroll--pill': genPillVisibleInChat }" @scroll.passive="onScrollPin">
           <template v-for="km in keyedMessages" :key="km.key">
             <div v-if="km.msg.role === 'user'" class="msg msg--user" :class="{ 'msg--editing': editingMsgId === km.key }">
               <!-- 编辑态：textarea 替换气泡 -->
@@ -452,11 +457,12 @@
       @click.self="onOverlayBackdrop"
     >
       <!-- 预览：对齐原型 dialog 三段 —— head（eyebrow + 标题 + 关关闭 ×）/
-           body（rows + 大纲 + 自测 + 提示）/ 贴底 foot（ghost「再补充」+ primary「确认」） -->
-      <div v-if="phase === 'preview' && live.proposal" class="proposal">
+           body（rows + 大纲 + 自测 + 提示）/ 贴底 foot（ghost「再补充」+ primary「确认」）。
+           readOnlyReview：generating/done 期的只读回看（方案已消费，foot 只给「返回」） -->
+      <div v-if="reviewVisible" class="proposal">
         <div class="proposal__head">
           <div class="proposal__head-text">
-            <span class="proposal__eyebrow">路径预览 · 请确认</span>
+            <span class="proposal__eyebrow">{{ readOnlyReview ? '路径预览 · 已确认' : '路径预览 · 请确认' }}</span>
             <h2 class="proposal__title">为你整理的学习方向</h2>
           </div>
           <button
@@ -464,35 +470,35 @@
             class="proposal__x"
             aria-label="关闭方案确认"
             :title="CLOSE_ESC_HINT"
-            @click="proposalDismissed = true; proposalReviewRequested = false"
+            @click="dismissProposalX"
           >×</button>
         </div>
 
         <div class="proposal__body">
         <div class="proposal__rows">
-          <div v-if="live.proposal.problem" class="proposal__row">
+          <div v-if="reviewProposal?.problem" class="proposal__row">
             <span>核心问题</span>
-            <p>{{ live.proposal.problem }}</p>
+            <p>{{ reviewProposal.problem }}</p>
           </div>
-          <div v-if="live.proposal.outcome" class="proposal__row">
+          <div v-if="reviewProposal?.outcome" class="proposal__row">
             <span>预计产出</span>
-            <p>{{ live.proposal.outcome }}</p>
+            <p>{{ reviewProposal.outcome }}</p>
           </div>
         </div>
 
-        <div v-if="live.proposal.stages.length" class="proposal__stages">
-          <span class="proposal__stages-label">路径大纲 · {{ live.proposal.stageCount }} 个阶段</span>
+        <div v-if="reviewProposal?.stages.length" class="proposal__stages">
+          <span class="proposal__stages-label">路径大纲 · {{ reviewProposal.stageCount }} 个阶段</span>
           <ol>
-            <li v-for="(s, i) in live.proposal.stages" :key="i" class="pstep"><i>{{ i + 1 }}</i><div><strong>{{ s }}</strong></div></li>
+            <li v-for="(s, i) in reviewProposal.stages" :key="i" class="pstep"><i>{{ i + 1 }}</i><div><strong>{{ s }}</strong></div></li>
           </ol>
         </div>
 
         <!-- 前置自测：帮路径更贴合基础。2026-11-02 口径重做——作答是本地表单动作，
              不再每答一题发一个对话回合（两题场景会把面板锁死 30-90s 且题目随重渲染漂移）；
              作答随「确认，生成我的路径」一次性提交，可随时改选。 -->
-        <div v-if="live.proposal.probes && live.proposal.probes.length" class="proposal__probes">
+        <div v-if="reviewProposal?.probes && reviewProposal.probes.length" class="proposal__probes">
           <span class="proposal__stages-label">快速自测（可选）</span>
-          <div v-for="p in live.proposal.probes" :key="p.probeId" class="probe">
+          <div v-for="p in reviewProposal.probes" :key="p.probeId" class="probe">
             <p class="probe__q">{{ p.question }}</p>
             <div class="probe__opts">
               <button
@@ -501,7 +507,7 @@
                 type="button"
                 class="probe__opt"
                 :class="{ 'probe__opt--on': live.probeAnswers[p.probeId] === o.id }"
-                :disabled="live.sending"
+                :disabled="live.sending || readOnlyReview"
                 @click="pickProbe(p, o.id)"
               ><b>{{ o.id }}</b> {{ o.text }}</button>
             </div>
@@ -514,7 +520,7 @@
           </p>
         </div>
 
-        <div v-if="confirmError" class="errorbar">
+        <div v-if="confirmError && !readOnlyReview" class="errorbar">
           确认失败，请重试。<button type="button" class="errorbar__retry" @click="doConfirm">重试</button>
         </div>
 
@@ -530,7 +536,7 @@
 
         <div class="proposal__note">
           <span v-if="materialCount">已上传 {{ materialCount }} 份资料，生成路径时按目标相关性选用，其余保留在资料库。</span>
-          <span>确认后在本页生成。失败可原地重试，信息不会丢。</span>
+          <span v-if="!readOnlyReview">确认后在本页生成。失败可原地重试，信息不会丢。</span>
           <AiContentNote />
         </div>
         </div><!-- /.proposal__body（内容滚动区） -->
@@ -538,7 +544,11 @@
         <!-- sticky foot：贴卡片底，不随 body 滚走（原型 .wf-dialog__foot 的位置语义） -->
         <div class="proposal__foot">
           <!-- 真按钮而非 span[role=button]：Space 键触发、禁用语义免手工维护（E2E 自动化也靠 button 语义定位） -->
-          <template v-if="!supplementMode">
+          <!-- 只读回看（2026-11-05 UX 审计）：generating/done 期回看已确认方案，不给确认/补充动作（方案已消费） -->
+          <template v-if="readOnlyReview">
+            <button type="button" class="btn-primary" @click="closeReadOnlyReview">返回</button>
+          </template>
+          <template v-else-if="!supplementMode">
             <button type="button" class="btn-ghost" @click="supplementMode = true">再补充点信息</button>
             <button type="button" class="btn-primary btn-primary--lg" @click="doConfirm">确认，生成我的路径</button>
           </template>
@@ -569,13 +579,17 @@
           <p class="proposal__stream-text">正在逐项整理方案内容，完成后会自动展示。</p>
         </div>
         <div class="proposal__note">可以离开本页，生成进度会保留。</div>
+        <!-- 回看方案（2026-11-05 UX 审计）：确认后提案浮层即被生成面板取代，原两个重开入口
+             都以 stage=proposing 为门槛——生成期再无入口可复查刚确认过的方案。这里给只读回看。 -->
+        <button v-if="proposalSnapshot" type="button" class="proposal__stop" @click="openReadOnlyReview">回看已确认的方案</button>
         <button type="button" class="proposal__stop" @click="live.stop()">
           <svg viewBox="0 0 24 24" width="12" height="12"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
           停止生成
         </button>
       </div>
 
-      <!-- 生成成功 -->
+      <!-- 生成结束（两态）：正常 = 路径已创建；分诊硬阻断 = 不生成路径，给阻断说明与补充重判退路
+           （2026-11-05 UX 审计 P0：此前硬阻断信封也弹「路径已创建 · 生成中」假成功） -->
       <div v-else-if="phase === 'done'" class="proposal proposal--center">
         <button
           type="button"
@@ -584,6 +598,18 @@
           :title="CLOSE_ESC_HINT"
           @click="proposalDismissed = true"
         >×</button>
+        <template v-if="live.hardBlocked">
+          <!-- 阻断态：中性图标 + 事实标题，动作只有「留在本页」（补充说明在对话输入框发送，服务端会重判） -->
+          <span class="done-ring done-ring--blocked" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="26" height="26"><path fill="currentColor" d="M12 2 1 21h22L12 2zm1 14h-2v2h2v-2zm0-8h-2v5h2V8z"/></svg>
+          </span>
+          <h2 class="proposal__title">这一目标暂不会生成学习路径</h2>
+          <p class="proposal__generating-note">完整说明已在对话里给出。情况有变化时，回复补充说明，问流会结合补充重新判断。</p>
+          <div class="proposal__actions proposal__actions--center">
+            <button type="button" class="btn-primary btn-primary--lg" @click="proposalDismissed = true; proposalReviewRequested = false">回到对话</button>
+          </div>
+        </template>
+        <template v-else>
         <span class="done-ring">
           <svg viewBox="0 0 24 24" width="26" height="26"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
         </span>
@@ -603,6 +629,9 @@
           <!-- 留在本页：done 态此前只有 Esc 一个退出途径（触屏无 Esc），补显式次级出口 -->
           <button type="button" class="btn-ghost" @click="proposalDismissed = true; proposalReviewRequested = false">留在本页</button>
         </div>
+        </template>
+        <!-- 回看方案（同生成中态）：done 态方案数据已被确认消费，用页面快照承接只读回看 -->
+        <button v-if="!live.hardBlocked && proposalSnapshot" type="button" class="proposal__stop" @click="openReadOnlyReview">回看已确认的方案</button>
       </div>
     </div>
 
@@ -675,7 +704,11 @@ const chatPlaceholder = computed(() => {
   // 不写「上方/下面」这类方位指路（文案门禁 R2）
   if (showProposal.value) {
     if (phase.value === 'generating') return '正在生成路径，进度见弹窗';
-    if (phase.value === 'done') return '路径已创建，先在弹窗里选择下一步';
+    if (phase.value === 'done') {
+      return live.hardBlocked
+        ? '这一目标不会生成路径，可回对话补充说明'
+        : '路径已创建，先在弹窗里选择下一步';
+    }
     return '先处理方案确认弹窗，Esc 可回到对话';
   }
   // 不写「上方」：输入框与重试按钮同屏，点哪儿由位置自明（文案门禁 R2）
@@ -734,6 +767,7 @@ const probeReceipt = computed(() => {
 onMounted(() => {
   window.addEventListener('keydown', onProposalKey);
   window.addEventListener('resize', onViewportResize);
+  window.addEventListener('resize', syncOverlayTop);
   // iOS 键盘不改布局视口高度、只改 visualViewport，需单独监听（Android 的
   // viewport meta 带 interactive-widget=resizes-content，走上面的 resize）
   window.visualViewport?.addEventListener('resize', onViewportResize);
@@ -771,6 +805,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onProposalKey);
   window.removeEventListener('resize', onViewportResize);
+  window.removeEventListener('resize', syncOverlayTop);
   window.visualViewport?.removeEventListener('resize', onViewportResize);
   narrowMq?.removeEventListener('change', onNarrowChange);
   // 离页/刷新前把在途草稿落盘（防抖窗口内未落的那一版）
@@ -1003,6 +1038,41 @@ const availableReplies = computed(() => currentQuickReplies.value);
 const pickedReplySet = computed(() => new Set(input.value.split('\n').map((s) => s.trim()).filter(Boolean)));
 const scrollEl = ref<HTMLElement | null>(null);
 const phase = ref<'preview' | 'generating' | 'done'>('preview');
+/* 只读回看（2026-11-05 UX 审计）：确认进入生成期后，方案卡的两个重开入口都以
+   stage=proposing 为门槛，用户再无入口复查自己刚确认过的方案。方案数据在确认响应
+   落地后随信封清空（completed ext 不带 confirmedProposal），这里在页面留存最后一份
+   快照供只读回看；foot 只给「返回」，不给确认/补充动作（方案已消费）。 */
+const proposalSnapshot = ref<NonNullable<ReturnType<typeof useGoalLive>['proposal']> | null>(null);
+watch(() => live.proposal, (p) => { if (p) proposalSnapshot.value = p; }, { immediate: true });
+const readOnlyReview = ref(false);
+const reviewReturnPhase = ref<'generating' | 'done'>('done');
+/** 预览卡的展示条件：正常确认流（phase=preview + 实时方案）或只读回看（快照）。
+    回看期间 phase 保持 generating/done 不变——生成计时与 phase 对齐 watch 都不被打断。 */
+const reviewVisible = computed(() =>
+  readOnlyReview.value
+    ? !!proposalSnapshot.value
+    : phase.value === 'preview' && !!live.proposal
+);
+/** 预览卡渲染的方案数据：回看用快照，正常流用实时方案 */
+const reviewProposal = computed(() => (readOnlyReview.value ? proposalSnapshot.value : live.proposal));
+function openReadOnlyReview() {
+  if (!proposalSnapshot.value) return;
+  reviewReturnPhase.value = phase.value === 'generating' ? 'generating' : 'done';
+  readOnlyReview.value = true;
+  supplementMode.value = false;
+  confirmError.value = false;
+  proposalDismissed.value = false;
+  proposalReviewRequested.value = false;
+}
+function closeReadOnlyReview() {
+  readOnlyReview.value = false;
+}
+/** 预览卡 ×：回看态返回原相位；正常确认流关闭浮层（可从「查看方案」重开） */
+function dismissProposalX() {
+  if (readOnlyReview.value) { closeReadOnlyReview(); return; }
+  proposalDismissed.value = true;
+  proposalReviewRequested.value = false;
+}
 /* P2-12：等待态加阶段文案（比三点动画更能留住人）。每秒 tick，按已等待秒数切换文案。 */
 const waitTick = ref(0);
 let waitTimer: ReturnType<typeof setInterval> | undefined;
@@ -1229,6 +1299,8 @@ watch(
    不得给平静终态（P22 缺陷1）。浮层打开期间返回 null 让位。 */
 const genPill = computed(() => {
   if (!live.started && !genTrack.value) return null;
+  // 分诊硬阻断终局：不会生成路径，「路径已创建 · 生成中」类状态条一律不显示（P0 假成功）
+  if (live.hardBlocked) return null;
   if (showProposal.value) return null;
   if (phase.value === 'generating') {
     const stage = waitTick.value < 8 ? '梳理目标' : waitTick.value < 25 ? '拆解阶段' : waitTick.value < 60 ? '排布任务' : '即将完成';
@@ -1265,14 +1337,21 @@ function onGenPillClick() {
 }
 
 /** 完成弹层的副文（P22 缺陷3）：跟随真实状态——生成完成后不再说「还在生成中」。
-    跟踪未建立（旧信封无 learningPath 等）回退原句，不做无凭据的宣称。 */
+    跟踪未建立（旧信封无 learningPath 等）回退原句，不做无凭据的宣称。
+    分诊硬阻断终局不走本句：阻断卡有自己的说明（见模板 hardBlocked 分支）。 */
 const doneGenNote = computed(() => {
+  if (live.hardBlocked) return '';
   const lc = genTrack.value?.lc;
   if (!lc) return '阶段与任务还在生成中。';
   if (lc.status === 'failed' || lc.status === 'stale') return '生成没有完成，可在学习路径里重试。';
   if (lc.phase === 'ready') return '生成完成，可去学习路径查看。';
   return `阶段与任务还在生成中 · ${genStageLabel(lc)}。`;
 });
+
+/** 会话态生成 pill 出现且不在浮层下（浮层打开时 pill 本身隐藏，无需让位）。
+    滚动区据此在底部留出 pill 高度的让位空间——实测（小米 441×952 截图） pill 会
+    压在贴底消息的最后一行上，让位后末行文字不再被胶囊遮住。 */
+const genPillVisibleInChat = computed(() => live.started && !!genPill.value);
 
 /** Escape 关闭方案浮层（状态保留，对话可继续）。
     【2026-10-31 一锤定音修复】proposing 阶段不再自动弹浮层：方案先在对话流里完整落地
@@ -1290,8 +1369,19 @@ const showProposal = computed(
    关闭时归还原焦点，键盘用户不至于被「丢」在页面里 */
 const overlayRef = ref<HTMLElement | null>(null);
 let preOverlayFocus: HTMLElement | null = null;
+/** 方案浮层让位吸顶公告横幅（2026-11-05 UX 审计，沿用 V2NotifCenter.syncPanelTop 同款量法）：
+    横幅底边 + 顶栏高写入 --gc-overlay-top；无横幅清掉、CSS 回落 0。 */
+function syncOverlayTop() {
+  const banner = document.querySelector('.anb');
+  const navH = Math.round(document.querySelector('.v2nav-bar')?.getBoundingClientRect().height ?? 0);
+  const top = banner ? Math.round(banner.getBoundingClientRect().bottom) + (navH || 64) : 0;
+  if (top > 0) document.documentElement.style.setProperty('--gc-overlay-top', `${top}px`);
+  else document.documentElement.style.removeProperty('--gc-overlay-top');
+}
 watch(showProposal, (open) => {
   if (open) {
+    // 打开时机量测最准：横幅可能随公告轮换/dismiss 出现或消失
+    syncOverlayTop();
     preOverlayFocus = document.activeElement as HTMLElement | null;
     void nextTick(() => overlayRef.value?.focus());
   } else {
@@ -1317,6 +1407,8 @@ function onOverlayBackdrop() {
 function openProposalReview() {
   proposalDismissed.value = false;
   proposalReviewRequested.value = true;
+  // 从只读回看/生成态切回正常确认流：清残留的回看状态，foot 恢复确认动作
+  readOnlyReview.value = false;
 }
 
 function stageCls(i: number) {
@@ -1833,6 +1925,8 @@ function shuffleScenes() {
   font-size: 12px; color: var(--faint); border-top: 1px solid var(--line); padding-top: 10px;
   margin-top: auto;
 }
+/* 清空重聊：桌面档隐藏（头部 .chat__clear 承担），≤1100 由目标信息面板底部的本按钮承担 */
+.panel__clear { display: none; }
 .composer__count { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* 「新目标」不属于 composer 元数据条：移动端由底部「目标规划」导航回到无参路由，
    route.params watcher 负责 resetToEntry，并保留「继续上次的规划」恢复入口。 */
@@ -2015,6 +2109,10 @@ function shuffleScenes() {
    2026-10-06 用户否掉（「消息不应该是从上面往下面走吗」），回退为窄屏专属（见 ≤1100 档）。 */
 
 .chat__scroll--dim { filter: blur(2px); opacity: .45; pointer-events: none; }
+/* 生成 pill 让位（2026-11-05 UX 审计）：pill 出现时（浮层关闭态）在滚动区底部留出
+   一条 pill 高度的呼吸带，贴底的最后一行消息不再被胶囊压住（小米 441×952 实测截图）。
+   pill 隐藏（浮层打开/无 pill）时回落 20px 原值，不占空。 */
+.chat__scroll--pill { padding-bottom: 60px; }
 
 .msg { display: flex; flex-direction: column; gap: 5px; max-width: 78%; } /* 82→78：随两栏同步收窄后的读感档（2026-09-27 三改） */
 /* 三改：聊天列本身已收窄，气泡 74% 配合 work 1000px 总宽即可 */
@@ -2056,7 +2154,10 @@ function shuffleScenes() {
 .msg--user .msg__meta { display: inline-flex; align-items: center; gap: 7px; }
 .msg--user .msg__edit-btn {
   position: relative;
-  width: 20px; height: 20px;
+  /* 热区（2026-11-05 UX 审计）：桌面档原 20×20 低于本仓 36px 口径（审计在 iPhone UA
+     量到 20×20 即此档）；抬 36 后负 margin 抵消占位，meta 行高度不变。触屏档 40 不变。 */
+  width: 36px; height: 36px;
+  margin: -8px;
   display: inline-grid; place-items: center;
   padding: 0;
   border: 0;
@@ -2075,6 +2176,7 @@ function shuffleScenes() {
     /* EG20：触屏触控地板 40（与 AI 操作条同口径），图标居中——本体达标后不再依赖 ::before 扩热区 */
     width: 40px;
     height: 40px;
+    margin: -10px;
   }
 }
 /* 编辑态 */
@@ -2361,6 +2463,10 @@ function shuffleScenes() {
    遮罩盖住页级 composer 与导航（原先 absolute 只盖住 .chat 一块） */
 .overlay {
   position: fixed; inset: 0;
+  /* 让位吸顶公告横幅（2026-11-05 UX 审计，同 V2NotifCenter 的 --nc-panel-top 先例）：
+     .anb sticky z-index:200 > 本浮层 z-index:60，横幅展示期会盖住浮层头部与关闭键
+     （移动端横幅实测高 107px）。top 由 syncOverlayTop 按横幅实测底边写入；无横幅回落 0。 */
+  top: var(--gc-overlay-top, 0);
   display: grid; place-items: center;
   padding: 24px;
   /* 遮罩跟随主题：原先写死浅色 rgba(244,247,252,.55)，深色下是一层白纱（2026-09-24 反馈） */
@@ -2525,10 +2631,16 @@ function shuffleScenes() {
 .probe__opt:disabled { cursor: default; opacity: .92; }
 .proposal__actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .proposal__actions--center { justify-content: center; }
-/* 完成态双按钮等宽：原「查看我的路径」按内容撑到 ~360px，「留在本页」只有 ~80px，
-   视觉重心左偏；等分后两个出口权重一致。 */
-.proposal__actions--center .btn-primary,
-.proposal__actions--center .btn-ghost { flex: 1 1 0; justify-content: center; min-width: 0; }
+/* 完成态动作行：主按钮吃剩余宽（flex-basis auto），次按钮按内容宽——原等分
+   （flex:1 1 0）把「查看我的路径」压到 99px 折成「查看我的路/径」两行（双机实测），
+   主 CTA 折词是可避免副作用。nowrap 保证 6 字标签永不折行；空间不足时 flex-wrap
+   让次按钮落到第二行，不裁字。 */
+.proposal__actions--center .btn-primary {
+  flex: 1 1 auto; justify-content: center;
+  min-width: fit-content;
+  white-space: nowrap;
+}
+.proposal__actions--center .btn-ghost { flex: 0 0 auto; justify-content: center; }
 .btn-primary {
   display: inline-flex; align-items: center; gap: 7px;
   padding: 11px 22px; border-radius: var(--mk-radius-xl);
@@ -2591,6 +2703,12 @@ function shuffleScenes() {
   color: var(--green);
   display: grid; place-items: center;
   box-shadow: 0 0 0 8px color-mix(in srgb, var(--wf-color-success) 7%, transparent);
+}
+/* 硬阻断终局：非失败也非成功，中性琥珀提示（令牌派生，随主题翻转） */
+.done-ring--blocked {
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
+  color: var(--amber);
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--amber) 6%, transparent);
 }
 
 /* ---------- 响应式 ---------- */
@@ -2820,6 +2938,25 @@ function shuffleScenes() {
     .composer__count { display: none; }
   }
   .chat__clear { display: none; }
+  /* 清空重聊移动端入口：收进目标信息悬浮面板底部（面板默认折叠、点「目标信息」展开可见），
+     热区 36px 达触屏门禁；桌面档 display:none 不变 */
+  .panel__clear {
+    display: block;
+    width: 100%;
+    min-height: 36px;
+    margin-top: 10px;
+    padding: 7px 10px;
+    border: 1px solid var(--line);
+    border-radius: var(--mk-radius-md);
+    background: var(--surface);
+    color: var(--muted);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+  }
+  .panel__clear:hover { color: var(--red-ink); }
 
   /* ===== 移动端密度（2026-09-24，2026-09-30 随原型对齐更新）=====
      判据：页面主容器左右 14px、卡片内边距 12–16、hero/h1 22px、区块标题 15–17px。

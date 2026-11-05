@@ -1583,6 +1583,13 @@ async continueConversation(
       structuredData: data.structuredData || null,
       confidenceScores: data.confidenceScores || null,
       learningPath: data.learningPath || (conversation.learningPathId ? { id: conversation.learningPathId } : null),
+      // 硬阻断终局标记（2026-11-05 UX 审计 P0）：与 buildCompletedConversationResult 同判据
+      // （completed + 无路径 + 分诊硬阻断）。GET 恢复信封缺此标记时，前端重进已完成会话
+      // 会把「completed 且 learningPath:null」当普通完成，重弹「路径已创建」假成功弹层。
+      hardBlocked:
+        conversation.status === 'completed'
+        && !conversation.learningPathId
+        && isHardBlockResponseTriage(resolveResponseTriageFromCollectedData(data), data.understanding || {}),
       confidence: data.confidence || 0,
       createdAt: conversation.createdAt,
       completedAt: conversation.completedAt

@@ -161,7 +161,11 @@ function envelopeGoalConversation(result: any, fallbackConversationId?: string) 
         stage: core.stage || 'understanding',
         confidence: typeof core.confidence === 'number' ? core.confidence : 0,
         isCompleted: !!core.isCompleted,
-        learningPath: core.learningPath || null
+        learningPath: core.learningPath || null,
+        // 硬阻断终局标记透传（2026-11-05 UX 审计 P0）：core 是白名单重建，不透传该字段
+        // 前端永远收不到 true，「路径已创建」假成功弹层照旧。仅 true 时携带（缺席=falsy，
+        // 普通信封的公开 DTO 形状不变，routes.contract 契约测试的 toEqual 不受影响）。
+        ...(core.hardBlocked === true ? { hardBlocked: true as const } : {})
       },
       ext: {
         goalConversation: {
@@ -484,7 +488,10 @@ router.get('/:conversationId', authMiddleware, async (req: Request, res: Respons
             stage: conversation.stage,
             confidence: conversation.confidence,
             isCompleted: conversation.status === 'completed',
-            learningPath: conversation.learningPath || null
+            learningPath: conversation.learningPath || null,
+            // 硬阻断终局标记透传（2026-11-05 UX 审计 P0）：重进已完成会话的恢复信封
+            // 与确认回合的 final 信封同口径，缺省一律 false
+            hardBlocked: conversation.hardBlocked === true
           },
           ext: {
             goalConversation: {

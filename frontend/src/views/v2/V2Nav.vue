@@ -4,12 +4,14 @@
        窄屏左槽亮品牌 logo 与学习台先例一致 -->
   <header class="v2nav-bar" :data-notitle="titleHidden || undefined">
     <div class="v2nav-bar__left">
-      <router-link to="/dashboard" class="v2nav-bar__brand" aria-label="问流 WenFlow，返回工作台">
-        <img :src="isDark ? '/logo-dark.png' : '/logo.png'" alt="" class="v2nav-bar__logo" />
-      </router-link>
+      <!-- 返回钮放左组首位（bare/25）：原先夹在 logo 与页标题之间，无页标题的页面
+           （如资料库）「‹」孤悬 logo 右侧，读不出返回语义——贴左缘才是标准返回位 -->
       <button v-if="showBack" type="button" class="v2nav-back" aria-label="返回上一页" @click="goBack">
         <ChevronLeft :size="20" :stroke-width="2" aria-hidden="true" />
       </button>
+      <router-link to="/dashboard" class="v2nav-bar__brand" aria-label="问流 WenFlow，返回工作台">
+        <img :src="isDark ? '/logo-dark.png' : '/logo.png'" alt="" class="v2nav-bar__logo" />
+      </router-link>
       <strong v-if="pageTitle" class="v2nav-bar__title">{{ pageTitle }}</strong>
     </div>
 

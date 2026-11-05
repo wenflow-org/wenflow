@@ -61,6 +61,11 @@ export function buildHardBlockResult(ctx: GoalExitContext, triage: ResponseTriag
         confidence: ctx.confidence,
         isCompleted: true,
         learningPath: null,
+        // 硬阻断终局标记（2026-11-05 UX 审计 P0）：completed 信封需要区分
+        // 「有路径的正常完成」与「分诊硬阻断、无路径」两态——此前前端把这类信封
+        // 与普通完成同样处理，弹出「路径已创建 · 生成中」假成功弹层。
+        // outputSchema 未开 additionalProperties，该字段原样透传到前端。
+        hardBlocked: true,
       },
       ext: {
         goalConversation: {

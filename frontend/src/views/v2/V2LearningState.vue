@@ -249,6 +249,9 @@
                 <template v-if="skillCopy.paceHint">节奏：{{ skillCopy.paceHint }}</template>
               </p>
               <p v-if="evidenceHint" class="guide__evidence">依据：{{ evidenceHint }}</p>
+              <!-- 诊断自报无证据时建议降级为参考口径（state/iphone/6）：明说建议不再是
+                   调整依据，动作按钮已随 hasAdvisoryAction 撤下 -->
+              <p v-if="reviewLacksEvidence" class="guide__evidence guide__evidence--warn">本次没有可依据的课堂证据，AI 建议仅供参考，暂不作为调整依据。</p>
             </template>
 
             <!-- 状态评审（AI 诊断书）已移至「学习调控」区第三层「诊断依据」（2026-09-27）：
@@ -392,7 +395,7 @@
                   </button>
                 </h3>
                 <div v-show="reviewOpen" class="review__body">
-                  <p v-if="reviewNarrative" class="review__narrative">{{ reviewNarrative }}</p>
+                  <p v-if="reviewNarrative" class="review__narrative">{{ reviewNarrativeDisplay }}</p>
                   <ul v-if="reviewInsights.length" class="review__list">
                     <li v-for="(it, i) in reviewInsights" :key="i" class="review__item">
                       <strong>{{ it.claim }}</strong>
@@ -502,7 +505,12 @@
             <ul class="legend">
               <li><b class="dot dot--blue"></b>训练负荷：长期学习压力的累积，越高说明负荷越重，变化平缓</li>
               <li><b class="dot dot--purple"></b>疲劳度：近期学习压力的累积，变化较快</li>
+              <!-- 积累期档位补进图例（state/iphone/1）：负荷基座未成熟（mature=false，冷启动
+                   爬升期）时整体状态刻意显示「积累中」（见 toneOf 的 mature 分支，与
+                   /state/warnings、建议引擎同判据），只写三档阈值会让 -14.42「积累中」的
+                   用户按图例读成「需要休息」档——补一行积累期的说明 -->
               <li><b class="dot dot--green"></b>整体状态＝训练负荷 − 疲劳：≥40 精力充沛 · 20–39 最优训练区 · &lt;20 需要休息</li>
+              <li><b class="dot dot--blue"></b>数据积累期显示「积累中」，暂不定档</li>
               <li><b class="dot dot--amber"></b>保持规律学习让训练负荷平稳积累。疲劳偏高时安排休息，避免长期处于低状态区</li>
             </ul>
             </div><!-- /band__body -->
@@ -656,8 +664,11 @@ function zoneOfLsb(lsb: number | null, mature?: boolean): Zone | null {
   return { cls: 'risk', label: '高风险区' };
 }
 
-/* 窗口自适应：左侧从最早数据日 -2 天开始，今天右侧留 2 天余量（新值不贴右边缘） */
-const RIGHT_MARGIN = 2;
+/* 窗口自适应：左侧从最早数据日 -2 天开始；右侧裁到本地今天（state/iphone/5）——
+   旧版给今天右侧留 2 天「余量」，x 轴因此画出未来日期的空槽（11/06、11/07 实证），
+   回看型标题「近 N 天」把两天没有曲线/柱的未来也算进跨度，读起来像数据丢了。
+   右缘留白交给 SVG 自身 chartPad 承担，不再用未来的日期格子凑。 */
+const RIGHT_MARGIN = 0;
 
 const earliestDataOffset = computed(() => {
   let earliest = 0;
@@ -1135,6 +1146,11 @@ const skillCopy = computed<Record<string, any> | null>(() => {
 const reviewDiagnosis = computed(() => guidance.value?.review?.diagnosis || null);
 const reviewSource = computed(() => guidance.value?.review?.source || null);
 const reviewNarrative = computed(() => reviewDiagnosis.value?.narrative || '');
+/* 存量评审产物（bare/24）叙述里裸露内部字段名（「recentEvidence 为空」中英混杂）——
+   渲染层替换为人话；新生成的叙述 prompt 已修不再产生该措辞。 */
+const reviewNarrativeDisplay = computed(() =>
+  reviewNarrative.value.replace(/recentEvidence\s*为空/g, '近期课堂证据不足')
+);
 const reviewInsights = computed<Array<{ type: string; claim: string; action: string }>>(() =>
   Array.isArray(reviewDiagnosis.value?.insights) ? reviewDiagnosis.value.insights : []
 );
@@ -1144,6 +1160,16 @@ const reviewReliabilityText = computed(() => {
   if (!c || !c.n) return '';
   if (c.hitRate == null) return `参考过往 ${c.n} 次判断（样本偏少）`;
   return `参考过往 ${c.n} 次判断`;
+});
+/** 诊断自报无证据（state/iphone/6 + bare/24）：narrative 明说没有可依据的课堂证据时，
+    同卡建议的「采用建议」动作与具体掌握断言都失去依据——动作按钮撤下、建议降级为
+    参考口径，消除「断言具体掌握事实」与「自报无证据」同屏互斥。
+    正则同时兜住旧版措辞（「无法做出有证据支撑的判断」「recentEvidence 为空」——
+    字段名裸露句 prompt 已修，但存量 DB 里的评审产物仍是旧文本）。 */
+const reviewLacksEvidence = computed(() => {
+  const n = reviewNarrative.value;
+  if (!n) return false;
+  return /无法做出有证据支撑的判断|无法给出有证据支撑的判断|没有可依据的课堂证据|recentEvidence\s*为空/.test(n);
 });
 
 /* ---------- 学习调控（2026-09-27 重构）：待确认 / 已自动处理 / 已执行的调整 ----------
@@ -1408,9 +1434,11 @@ const guideActions = computed(() => {
 });
 
 /** 有可执行的待确认调整或今日动作时才显示主次按钮；
-    空态下按钮点了没有落点，只会让用户怀疑“点了没反应”。 */
+    空态下按钮点了没有落点，只会让用户怀疑“点了没反应”。
+    诊断自报无证据时一并撤下（state/iphone/6）：无证据支撑的调整不该被「采用」。 */
 const hasAdvisoryAction = computed(() =>
-  pendingAdjust.value.length > 0 || guideActions.value.length > 0
+  !reviewLacksEvidence.value
+  && (pendingAdjust.value.length > 0 || guideActions.value.length > 0)
 );
 
 /* 预警行（skill 模式下追加展示） */
@@ -1728,8 +1756,11 @@ function loadGuidance() {
 /* 进度条原语（原型 wf-bar 267-268）：6px 轨（--bar-track）+ 蓝→青渐变填充 */
 .wf-bar { height: 6px; border-radius: 999px; background: var(--bar-track, color-mix(in srgb, var(--line) 60%, transparent)); overflow: hidden; }
 .wf-bar > i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
-/* 待学习不是“进度”，不能抢已掌握/进行中的高亮蓝；用中性灰表达剩余量 */
-.rlist__row--pending .wf-bar > i { background: var(--line); }
+/* 待学习不是“进度”，不能抢已掌握/进行中的高亮蓝；用中性灰表达剩余量。
+   2026-11-05 UX 审计（state/iphone/2）：原 var(--line) 与 6px 轨（--line 60% 混合）
+   同一 RGB 只差透明度，97.6% 的填充肉眼读作空条、与「进行中 0」无异——换 --muted
+   中性灰（与轨道拉开一档明度），灰显意图不变、分布重新可读。 */
+.rlist__row--pending .wf-bar > i { background: var(--muted); }
 
 /* ---------- 原侧栏（原型该屏单列流，无 300px 侧栏）：并入主列后不再吸顶——
    单列里 sticky 只会在滚动时把两张说明卡悬在内容上，压住下方的复习/掌握卡 ---------- */
@@ -1803,6 +1834,8 @@ function loadGuidance() {
 .guide__sub { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.65; }
 /* 建议与调控互相引用（2026-09-27）：依据行把 AI 建议挂回到调控区的证据条目 */
 .guide__evidence { margin: 0; font-size: 12px; color: var(--faint); line-height: 1.6; }
+/* 无证据降级提示（state/iphone/6）：琥珀色与「预警」语言同族，区别于普通依据行 */
+.guide__evidence--warn { color: var(--amber-ink); }
 /* 说明句：警告优先（更具体），无警告时用副标——原来两者同屏 + 琥珀实底框，
    四层文本处理堆在一起显乱（2026-09-27 重排） */
 .guide__sub--warn {
@@ -1977,7 +2010,9 @@ function loadGuidance() {
 }
 /* 背景柱 500 条上限的口径说明（见模板 ff-trunc） */
 .ff-trunc { margin: 8px 0 0; font-size: 12px; color: var(--faint); }
-.ff-bar { fill: color-mix(in srgb, var(--blue) 14%, transparent); }
+/* 时长柱可见度（state/iphone/3）：14% 透明在 402px 视口（柱宽 ≈4.3px）下目检不可见，
+   图例声称的「柱为当日学习时长」通道形同虚设——提到 40%，与 100% 描边的曲线仍分层 */
+.ff-bar { fill: color-mix(in srgb, var(--blue) 40%, transparent); }
 /* 网格刻度线：压得比阈值线更淡（0.6 → 0.45），把「刻度」和「阈值参考线」的层级拉开（走查 2026-10-08 #78） */
 .ff-grid line { stroke: var(--line); stroke-width: 1; opacity: 0.45; }
 /* 状态阈值参考线（原型 wf-trend__zone 766）：绿色 + 4/4 虚线，与实线曲线分层；

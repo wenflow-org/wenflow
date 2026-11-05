@@ -348,6 +348,9 @@ describe('completed 硬阻断会话：重判仍被拦', () => {
     const internal = result.internal as GoalEnvelope;
     expect(internal.core.learningPath).toBeNull();
     expect(internal.core.stage).toBe('completed');
+    // 硬阻断终局标记（2026-11-05 UX 审计 P0）：缺此标记前端会把重判拒绝当普通完成，
+    // 重弹「路径已创建 · 生成中」假成功弹层（这正是阻断卡引导的补充重判退路）
+    expect((internal.core as { hardBlocked?: boolean }).hardBlocked).toBe(true);
     expect(internal.ext?.goalConversation?.responseTriage).toEqual(expect.objectContaining({ mode: 'referral' }));
 
     // 补充说明落库（不再零痕迹），会话保持 completed 终态

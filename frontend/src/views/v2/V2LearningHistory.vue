@@ -106,6 +106,12 @@
           {{ pageError }}
           <button type="button" class="errorbar__retry" @click="loadMore">重试本页</button>
         </div>
+        <!-- 日筛选空态（state/iphone/8）：筛到无记录的日期此前只剩通用尾标「已加载全部记录」，
+             语义误导（月视图有空态而日筛选没有）——明说该日无记录并给退路 -->
+        <div v-if="selectedDate && !visibleGroups.length" class="history__emptyday" role="status">
+          {{ dayDate(selectedDate) }} 没有学习记录。可以换一天，或
+          <button type="button" class="history__emptyday-clear" @click="selectedDate = ''">取消筛选查看全部</button>
+        </div>
         <section v-for="group in visibleGroups" :key="group.date" class="card history__day">
           <div class="history__day-head">
             <!-- 日期为主（原型 wf-hist__day-head 873-875：9月29日 周二），今昨为辅。
@@ -834,11 +840,39 @@ onMounted(async () => {
 
 /* 明细展开（同日同任务的每次会话） */
 .history__subs { margin-top: 4px; }
+/* 日筛选空态（state/iphone/8）：状态 + 退路一句话，弱化样式不抢列表 */
+.history__emptyday {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.history__emptyday-clear {
+  border: 0;
+  background: transparent;
+  padding: 4px 2px;
+  min-height: 24px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--blue-deep);
+  cursor: pointer;
+  text-decoration: underline;
+}
 .history__subs > summary {
   cursor: pointer;
   width: fit-content;
   font-size: 12px;
   color: var(--blue-deep);
+  /* 热区（state/iphone/7）：默认 summary 实测仅 87×18，是逐次会话明细的唯一入口、
+     低于 36px 触屏门禁——竖向 padding 扩命中高，负 margin 抵消占位不挤列表行距 */
+  padding: 9px 6px;
+  margin: -9px -6px;
   /* 系统三角退役：与全站 details 同用自绘 ▸（2026-10-27 收口） */
   list-style: none;
 }
