@@ -1074,5 +1074,34 @@ onBeforeUnmount(() => {
 }
 .paths__filter-tick { margin-left: auto; font-style: normal; color: var(--blue); font-weight: 800; }
 .paths__filter-opt.is-active b { margin-left: 0; color: var(--blue-deep); }
+
+/* PC 工具栏一行（2026-11-05 用户定稿「三行合成一行」）：
+   1101 以上 = 左状态筛选芯片 + 右「搜索 / 排序 / 新建」；两个中间行用 display:contents
+   拆掉，三个控件按 order 重排成搜索→排序→新建，与 chips 共用一行。
+   「共 N 条路径」在 PC 隐藏——左侧「全部 9」芯片已经写着同一个数字。
+   DOM 一字不改，移动端（≤1100）仍是原两行。 */
+@media (min-width: 1101px) {
+  .paths__main {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+  }
+  .filters { grid-column: 1; grid-row: 1; }
+  .paths__tools { grid-column: 2; grid-row: 1; }
+  .cards,
+  .empty { grid-column: 1 / -1; }
+  .paths__tools {
+    display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+    margin: 0;
+  }
+  .paths__row--main,
+  .paths__row--meta { display: contents; }
+  .paths__count { display: none; }
+  .paths__search { order: 1; flex: 0 1 280px; }
+  .paths__sort { order: 2; }
+  /* 新建＝本页唯一主操作：PC 用蓝底白字主按钮（窄屏保持 ghost——那里它贴在搜索框右手，
+     同一行已有搜索这个强控件，再放一颗实色主按钮会打架） */
+  .paths__new-goal { order: 3; min-height: 36px; border-color: transparent; background: var(--blue); color: var(--text-on-primary); }
+  .paths__new-goal:hover { border-color: transparent; background: var(--blue-deep); color: var(--text-on-primary); }
+}
 </style>
 

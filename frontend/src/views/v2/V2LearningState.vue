@@ -35,8 +35,8 @@
 
       <div class="state__grid">
         <div class="state__col" :class="{ 'state__col--empty': !hasAnyLoad }">
-          <!-- 趋势图 -->
-          <section class="card band">
+          <!-- 趋势图（PC 满宽：图表吃满容器，下方再切 60/40 双栏） -->
+          <section class="card band state__trend">
             <div class="band__head">
               <div class="band__title">
                 <strong>训练负荷 · 疲劳度 · 整体状态</strong>
@@ -220,7 +220,7 @@
                4px 琥珀左边条 + 琥珀星标 head + 正文（guide 结论 / 建议列表 / 预警列表全保留）
                + 主次双按钮 + 成功回执行。skill 生成块走 adaptive-guidance-copy，静态规则兜底。
                新用户空态时靠 order:-1 提到首屏（原 .state__col--empty 选择器改挂本卡） -->
-          <section class="card advisory">
+          <section class="card advisory state__adv">
             <div class="advisory__head">
               <svg class="advisory__star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z"/></svg>
               <strong>AI 调控建议</strong>
@@ -251,7 +251,11 @@
                 <h3 class="guide__title">{{ skillCopy.headline }}</h3>
                 <p class="guide__evidence">当前没有需要调整的安排。有需要时这里会出现建议与处理入口。</p>
               </div>
-              <template v-else>
+              <!-- PC 自查发现的自相矛盾（2026-11-05 用户截图）：诊断行取的是 skillCopy.warningCopy，
+                   而它属于「首页破冰话术」（"这条路径刚起步，还没到需要提醒疲劳的程度"），
+                   与下方真正的 /state/warnings 疲劳预警同屏打架。判据：有真预警时预警必须在场，
+                   破冰话术整段退场（它本来就只该出现在学习台）——有预警就不再渲染诊断/建议两行 -->
+              <template v-else-if="!warningRows.length">
               <!-- 2026-11-05 用户定稿「诊断 → 建议」两行对照：原先标题、橙色警告、带播放图标
                    和「继续」按钮的嵌套卡、下一步·节奏脚注四段车轱辘话说的是同一件事，
                    且「继续」与「采用建议/保持原计划」两排按钮打架——
@@ -409,10 +413,15 @@
             </div><!-- /advisory__sub -->
           </section><!-- /AI 调控建议 -->
 
-          <!-- 复习台账（原型 1984-1991 wf-reviewlist）：head = 标题 + 右侧 meta，
-               行 = 名称 + 84px 进度条 + 百分比。数据全部来自既有接口：
-               /ai-teaching/review/due（retention 0-1 → %）+ /ai-teaching/review/plan（课上带几条） -->
-          <section class="card band rlist">
+          <!-- 复习台账 / 掌握分布已移入右侧 .side 栏（2026-11-05 PC 双栏）：
+               PC 上右栏是一个独立堆叠容器，不再用显式 grid-row 摆放——
+               显式行会被跨行的左栏卡均分行高，右栏卡之间撑出大段空白（用户截图实证）。
+               移动端 DOM 顺序不变：趋势 → 建议 → 复习 → 分布 → 偏好 -->
+        </div>
+
+        <!-- 原侧栏（原型该屏是单列流，无 300px 侧栏）：并入主列，卡片内容与顺序原样保留 -->
+        <aside class="side">
+          <section class="card band rlist state__review">
             <div class="band__head">
               <div class="band__title">
                 <strong>复习清单</strong>
@@ -444,7 +453,7 @@
           <!-- 掌握分布（原型 1993-2000 wf-reviewlist）：数据 = 既有 /learning/concept-graph 节点按
                stability 分档（stable=已掌握 / developing·fragile=进行中 / 未测=待学习），
                与首页「已掌握知识点」同一数据源 -->
-          <section class="card band rlist">
+          <section class="card band rlist state__mastery">
             <div class="band__head">
               <div class="band__title">
                 <strong>掌握分布</strong>
@@ -483,10 +492,6 @@
               </template>
             </div>
           </section>
-        </div>
-
-        <!-- 原侧栏（原型该屏是单列流，无 300px 侧栏）：并入主列，卡片内容与顺序原样保留 -->
-        <aside class="side">
           <!-- P1 修复：learnerCenter 失败提示 -->
           <section v-if="learnerCenterLoadFailed" class="card sidecard" role="alert">
             <span class="kicker">学习记录</span>
@@ -1694,6 +1699,26 @@ function loadGuidance() {
 /* P2-11：新用户（指标为空）时把「AI 调控建议」提到最前，作为首屏主内容；图表空态降级为「积累中」说明
    （原选择器 .band--suggest 随旧卡结构改名，2026-09-30 挂到现役的 wf-advisory 卡） */
 .state__col--empty .advisory { order: -1; }
+/* PC 双栏看板（2026-11-05 用户定稿「拒绝 1100px 拉面条」）：
+   1101 以上左 60% 调控中心 / 右 40% 复习 + 掌握分布 + 学习偏好，趋势图满宽横贯顶部。
+   .state__col 用 display:contents 拆掉移动端的单列包裹层，让四块卡片直接进栅格——
+   DOM 顺序一字不改，移动端（≤1100）仍是原来的单列流。 */
+@media (min-width: 1101px) {
+  .state__grid {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: 18px;
+    align-items: start;
+  }
+  .state__col { display: contents; }
+  .state__trend { grid-column: 1 / -1; }
+  /* 用 state__adv 这个放置专用类别名，不写第二处 `.advisory {`：
+     grid-track 回归测试按「选择器后紧跟 {」扫源码取第一条规则，
+     多出来的 `.advisory {` 块会把它读到、误判轨道声明丢失 */
+  .state__adv { grid-column: 1; }
+  /* 右栏整列交给 .side 自己堆叠（display:grid），不用显式行——
+     显式行会被左栏卡的高度均分，右栏卡之间撑出大段空白（用户截图实证） */
+  .side { grid-column: 2; }
+}
 
 /* ---------- 趋势图 ----------
    2026-09-27 死 CSS 清理：.chart / .suggest 卡级容器模板已无（现役卡是 band），删除 */

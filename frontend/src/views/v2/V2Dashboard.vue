@@ -1596,6 +1596,31 @@ onMounted(loadAll);
 <style scoped>
 /* ---------- 本周节奏 ---------- */
 .dash__grid-week { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+/* PC 双栏一屏（2026-11-05 用户定稿「填补右上角大空洞」）：
+   1101 以上左 60% = 今日行动 + 路径副卡 + 今日安排，右 40% = 本周节奏整卡；
+   两个中间层 grid 用 display:contents 拆掉，子卡直接进 .dash__main 的栅格——
+   DOM 顺序一字不改，移动端（≤1100）仍是原来的单列流。
+   原来「今日行动」占 2 等分栅格的一格、右边空出半屏（active 态没有 path 副卡）。 */
+@media (min-width: 1101px) {
+  .dash__main {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: 16px;
+    align-items: start;
+  }
+  /* 兜底：页头/提示条/页脚等直接子块仍满宽 */
+  .dash__main > * { grid-column: 1 / -1; }
+  .dash__grid-main,
+  .dash__grid-week { display: contents; }
+  /* 显式排行：页头 1、提示条 2、然后左列三块与右列本周节奏并排。
+     不写行号的话，auto-placement 会把提示条排到跨 3 行的本周节奏之下（实测掉到页面中段）。 */
+  .greet { grid-row: 1; }
+  .tip { grid-row: 2; }
+  .action { grid-column: 1; grid-row: 3; align-self: start; }
+  .path { grid-column: 1; grid-row: 4; }
+  .agenda { grid-column: 1; grid-row: 5; }
+  .week { grid-column: 2; grid-row: 3 / span 3; }
+}
 .week { padding: 16px 20px; display: grid; gap: 12px; align-content: start; }
 .week__grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
 .day {

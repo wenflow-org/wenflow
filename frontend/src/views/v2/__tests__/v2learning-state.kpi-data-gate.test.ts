@@ -60,13 +60,13 @@ function trendsWithLsB() {
   return out;
 }
 
-function mockApi(opts: { sessions?: unknown[]; nodes?: unknown[] }) {
+function mockApi(opts: { sessions?: unknown[]; nodes?: unknown[]; warnings?: unknown[] }) {
   getMock.mockImplementation((url: string) => {
     const u = String(url);
     if (u.includes('/users/me/sessions')) return Promise.resolve({ success: true, data: opts.sessions ?? [] });
     if (u.includes('/learning/concept-graph')) return Promise.resolve({ success: true, data: { nodes: opts.nodes ?? [] } });
     if (u.includes('/state/trends')) return Promise.resolve({ success: true, data: { trends: trendsWithLsB(), range: 'recent' } });
-    if (u.includes('/state/warnings')) return Promise.resolve({ success: true, data: { warnings: [] } });
+    if (u.includes('/state/warnings')) return Promise.resolve({ success: true, data: { warnings: opts.warnings ?? [] } });
     if (u.includes('/ai-teaching/review/due')) return Promise.resolve({ success: true, data: { items: [] } });
     if (u.includes('/ai-teaching/review/plan')) return Promise.resolve({ success: true, data: { items: [] } });
     if (u.includes('/adaptive-guidance/copy')) {
@@ -124,5 +124,22 @@ describe('学习状态页数据门（#41）', () => {
     expect(w.find('.guide__title').text()).toBe('你已投入时间');
     expect(w.find('.advisory__sub').exists()).toBe(true);
     expect(w.text()).toContain('近期自动调控记录');
+  });
+
+  it('同时有真预警时：诊断/建议破冰话术退场，预警接管（2026-11-05 PC 自查矛盾修复）', async () => {
+    mockApi({
+      sessions: [{ startTime: new Date().toISOString(), durationMinutes: 30 }],
+      nodes: [],
+      warnings: [
+        { level: 'critical', title: '学习疲劳预警', message: '连续 3 天急性负荷高于适应基座' }
+      ]
+    });
+    const w = mount(V2LearningState);
+    await flushPromises();
+
+    // 破冰话术（"还没到需要提醒疲劳的程度"）不得与真预警同屏
+    expect(w.find('.guide__diag').exists()).toBe(false);
+    expect(w.find('.guide__plan').exists()).toBe(false);
+    expect(w.text()).toContain('学习疲劳预警');
   });
 });
