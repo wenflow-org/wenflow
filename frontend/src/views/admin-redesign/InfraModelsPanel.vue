@@ -131,11 +131,11 @@
             <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeEdit">✕</button>
           </div>
           <div class="mk-modal__body">
-            <!-- 与模型设置弹层同一套解剖（2026-11-05）：分区标题（模型 / 连接 / 参数）+ 两列栅格。
-                 连接方式那一组**保留**（用户「之前设计向量和重拍有一个沿用对话模型 api 端点和 key
-                 的设置，这个可以保留」）：复用时不出现地址与密钥，只说明复用的是哪条地址。
-                 注意连接是**按能力**一份，池子里所有模型共用——这里改一次，整池都跟着变。 -->
-                        <section class="infra-sec">
+            <!-- 与模型设置弹层同一套解剖（2026-11-05）：只留「模型」与「参数」两段。
+                 连接不在这里——2026-11-05 用户「配置里面还有 url，添加模型还有」：
+                 同一条连接原来能在两处填（行内「配置」与卡头「＋ 添加模型」的拉取），
+                 现在只留「＋ 添加模型」那一处，与对话卡「只保留添加模型」同一口径。 -->
+            <section class="infra-sec">
               <div class="infra-sec__head">
                 <h4 class="infra-sec__title">模型</h4>
               </div>
@@ -144,57 +144,6 @@
                    又开了一个换模型 / 拉清单的入口，与卡头的「＋ 添加模型」是同一件事的两个出口。 -->
               <p v-if="editingModel" class="infra-model-name mono" :title="editingModel">{{ editingModel }}</p>
               <p v-else class="infra-model-name infra-model-name--none">这条能力还没有模型</p>
-            </section>
-
-            <section class="infra-sec">
-              <div class="infra-sec__head">
-                <h4 class="infra-sec__title">连接</h4>
-              </div>
-              <!-- 两条路合成一枚勾选框（2026-11-05 用户「配置界面要改一下」）：
-                   原来是一对单选卡（复用对话模型的连接 / 独立服务），读起来像两个并列方案，
-                   其实默认那条没有可配的东西。现在默认走全局通道，要另起才勾。 -->
-              <label class="infra-own">
-                <input v-model="form.connectionMode" type="checkbox" true-value="own" false-value="inherit" />
-                <span>使用独立接口地址覆盖全局通道</span>
-              </label>
-
-              <p v-if="form.connectionMode === 'inherit'" class="infra-inherit">
-                地址与密钥取对话卡：<span class="mono">{{ view?.platformBaseUrl || '对话卡的服务地址' }}</span>
-              </p>
-              <template v-else>
-                <div class="infra-conn" :class="{ 'infra-conn--rerank': editKind === 'rerank' }">
-                  <!-- 地址口径与对话卡统一：填根地址，路径由这一层按能力拼（2026-11-05）——
-                       此前这一格要填带 /v1/embeddings 的完整端点，而对话卡填的是根域名，
-                       运营在同一页里面对两种填法。 -->
-                  <label class="mk-field">
-                    <span class="mk-field__label">服务地址</span>
-                    <input v-model="form.endpoint" class="mk-field__input mono" :title="form.endpoint" placeholder="https://api.example.com" />
-                  </label>
-                  <label v-if="editKind === 'rerank'" class="mk-field">
-                    <span class="mk-field__label">接口规范</span>
-                    <input class="mk-field__input" value="Cohere 兼容" disabled title="当前只支持 Cohere 兼容的重排协议" />
-                  </label>
-                  <label class="mk-field">
-                    <span class="mk-field__label">API Key</span>
-                    <input
-                      v-model="form.apiKey"
-                      class="mk-field__input"
-                      type="password"
-                      autocomplete="new-password"
-                      :placeholder="keyPlaceholder"
-                    />
-                  </label>
-                </div>
-                <!-- 实际请求地址放在两列之外单独一行（2026-11-05）：原来挂在「服务地址」格子里，
-                     那格只有 1.6fr，长一点的地址会被折成三行，把整行的输入框顶得高低不齐。 -->
-                <p class="infra-endpoint" :title="resolvedEndpoint">
-                  实际请求 <span class="mono">{{ resolvedEndpoint || '—' }}</span>
-                </p>
-                <label v-if="editEntry?.keySource === 'db'" class="infra-clearkey">
-                  <input v-model="form.clearKey" type="checkbox" />
-                  <span>清除已保存的密钥（仍可回落环境变量）</span>
-                </label>
-              </template>
             </section>
 
             <section class="infra-sec">
@@ -237,16 +186,100 @@
     </Teleport>
 
     <!-- 添加模型：与对话卡同一张上游清单弹窗（2026-11-04 用户「这两个拉取，弹窗怎么还不一样呢」）。
-         2026-11-05：多选——一次勾几个就进池子几个，其中第一个（或已有启用项）为启用态。 -->
+         2026-11-05 多选：一次勾几个就进池子几个。
+         2026-11-05 连接段并入本弹窗（用户「配置里面还有 url，添加模型还有」）：此前地址与密钥
+         只在行内「配置」里改，而卡头这颗按钮又拿已保存的连接去拉——想改地址得关掉弹窗、
+         开「配置」、存完再回来。现在连接只有这一处，拉清单可以直接用草稿连接。 -->
     <PullModelsDialog
       ref="pullDialog"
       :title="addTitle"
       :models="addModels"
       :registered="addRegistered"
       :allow-manual="false"
+      :loading="addLoading"
+      :error="addError"
+      :stale="addStale"
+      :state-line="addStateLine"
+      :state-line-title="addStateLineTitle"
+      :hidden-count="addHiddenCount"
+      :empty-text="addEmptyText"
+      :tester="testPicked"
       hint="勾选的模型都进这条连接的模型池，再用 ⋯「设为启用」决定运行时用哪个。"
       @confirm="addPicked"
-    />
+      @refetch="pullUpstream()"
+      @show-all="addShowAll = true"
+      @closed="onAddClosed"
+    >
+      <template #conn>
+        <p v-if="!addConnOpen" class="infra-conn-summary">
+          <span class="mono infra-conn-summary__addr" :title="addSummaryAddr">{{ addSummaryAddr }}</span>
+          <span class="infra-conn-summary__policy">{{ addSummaryPolicy }}</span>
+        </p>
+        <template v-else>
+          <label class="infra-own">
+            <input v-model="addConn.mode" type="checkbox" true-value="own" false-value="inherit" />
+            <span>使用独立接口地址覆盖全局通道</span>
+          </label>
+          <p v-if="addConn.mode === 'inherit'" class="infra-inherit">
+            地址与密钥取对话卡：<span class="mono">{{ view?.platformBaseUrl || '对话卡的服务地址' }}</span>
+          </p>
+          <template v-else>
+            <div class="infra-conn" :class="{ 'infra-conn--rerank': addKind === 'rerank' }">
+              <!-- 地址口径与对话卡统一：填根地址，路径由这一层按能力拼（2026-11-05）——
+                   此前这一格要填带 /v1/embeddings 的完整端点，而对话卡填的是根域名，
+                   运营在同一页里面对两种填法。 -->
+              <label class="mk-field">
+                <span class="mk-field__label">服务地址</span>
+                <input v-model="addConn.endpoint" class="mk-field__input mono" :title="addConn.endpoint" placeholder="https://api.example.com" />
+              </label>
+              <label v-if="addKind === 'rerank'" class="mk-field">
+                <span class="mk-field__label">接口规范</span>
+                <input class="mk-field__input" value="Cohere 兼容" disabled title="当前只支持 Cohere 兼容的重排协议" />
+              </label>
+              <label class="mk-field">
+                <span class="mk-field__label">API Key</span>
+                <input
+                  v-model="addConn.apiKey"
+                  class="mk-field__input"
+                  type="password"
+                  autocomplete="new-password"
+                  :placeholder="addKeyPlaceholder"
+                />
+              </label>
+            </div>
+            <!-- 实际请求地址放在两列之外单独一行（2026-11-05）：挂在「服务地址」格子里时
+                 那格只有 1.6fr，长一点的地址会被折成三行，把整行的输入框顶得高低不齐。 -->
+            <p class="infra-endpoint" :title="addResolvedEndpoint">
+              实际请求 <span class="mono">{{ addResolvedEndpoint || '—' }}</span>
+            </p>
+            <label v-if="addEntry?.keySource === 'db' && !addConn.apiKey.trim()" class="infra-clearkey">
+              <input v-model="addConn.clearKey" type="checkbox" />
+              <span>清除已保存的密钥（仍可回落环境变量）</span>
+            </label>
+          </template>
+        </template>
+      </template>
+
+      <template #conn-actions>
+        <button v-if="!addConnOpen" type="button" class="mk-link" @click="addConnOpen = true">修改连接</button>
+        <template v-else>
+          <button
+            type="button"
+            class="mk-link"
+            :disabled="addConnDirty"
+            :title="addConnDirty ? '还有未保存的改动' : '收起连接设置'"
+            @click="addConnOpen = false"
+          >收起</button>
+          <button
+            v-if="addConnDirty"
+            type="button"
+            class="mk-btn mk-btn--sm mk-btn--primary"
+            :disabled="saving"
+            @click="saveAddConn"
+          >{{ saving ? '保存中…' : '保存连接' }}</button>
+        </template>
+      </template>
+    </PullModelsDialog>
   </div>
 </template>
 
@@ -408,40 +441,233 @@ async function removeModel(kind: InfraKind, model: string) {
 
 /* ---------- 添加模型：与对话卡同一张上游清单弹窗（多选） ----------
    2026-11-04 用户「这两个拉取，弹窗怎么还不一样呢」：向量 / 重排与对话卡共用 PullModelsDialog。
-   2026-11-05：一次可以勾多个——「我拉去了四个，配置了四个，那我可以选择其中一个作为启用吧」。 */
+   2026-11-05：一次可以勾多个——「我拉去了四个，配置了四个，那我可以选择其中一个作为启用吧」。
+   2026-11-05：连接段也搬进本弹窗（用户「配置里面还有 url，添加模型还有」）——
+   同一条连接此前能在两处填，现在与对话卡同序：连在上、清单在下、一次提交。 */
 const pullDialog = ref<InstanceType<typeof PullModelsDialog> | null>(null)
 const addKind = ref<InfraKind | null>(null)
 const addEntry = ref<InfraModelEntryView | null>(null)
-const addModels = ref<string[]>([])
+/** 上游这次拉到的**全量**清单：卡面按用途筛一份，其余留在「显示全部」后面 */
+const addAll = ref<string[]>([])
+/** 显示全部（含没被识别出用途的模型）：筛选猜错名字时还有一条退路 */
+const addShowAll = ref(false)
+const addLoading = ref(false)
+const addError = ref('')
+const addEmpty = ref('')
+/** 清单是在哪条连接下拉的：勾选框改了就与它不符，清单随之过期 */
+const addFetchedSig = ref('')
+const addConnOpen = ref(false)
+const addConn = ref({
+  mode: 'inherit' as ConnectionMode,
+  /** 独立服务的**根地址**（路径由 addResolvedEndpoint 拼；存库时写完整端点） */
+  endpoint: '',
+  apiKey: '',
+  clearKey: false,
+})
 /** 弹窗标题：能力名本身已带「模型」（向量模型 / 重排模型），不再拼第二遍「模型」 */
 const addTitle = computed(() => (addKind.value ? `添加${kindLabel(addKind.value)}` : '添加模型'))
+const addKindLabel = computed(() => (addKind.value ? kindLabel(addKind.value) : '模型'))
 const addRegistered = computed(() => addEntry.value?.models ?? [])
+
+/** 这个能力的路径尾巴：与后端按类型拼路径同一口径 */
+function kindSuffix(kind: InfraKind): string {
+  return kind === 'rerank' ? '/v1/rerank' : '/v1/embeddings'
+}
+/** 已经带类型路径的地址原样用（自建服务可能不是 /v1），否则拼上标准路径 */
+function resolveEndpoint(kind: InfraKind, root: string): string {
+  const raw = String(root || '').trim().replace(/\/+$/, '')
+  if (!raw) return ''
+  if (/\/(embeddings|rerank)$/i.test(raw)) return raw
+  return raw + kindSuffix(kind)
+}
+const addResolvedEndpoint = computed(() => (addKind.value ? resolveEndpoint(addKind.value, addConn.value.endpoint) : ''))
+
+/** 按用途筛一份（名字里带 embedding / rerank 这类标记的）；「显示全部」时原样列 */
+const addModels = computed(() => {
+  if (!addKind.value || addShowAll.value) return addAll.value
+  const kind = addKind.value
+  return addAll.value.filter((id) => inferModelCapabilities(id).role === kind)
+})
+/** 被筛掉的条数：给弹窗底部的「显示全部」用 */
+const addHiddenCount = computed(() => (addShowAll.value ? 0 : addAll.value.length - addModels.value.length))
+const addEmptyText = computed(() => {
+  if (addEmpty.value) return addEmpty.value
+  if (addModels.value.length) return ''
+  return addAll.value.length ? `上游 ${addAll.value.length} 个模型里没有识别出${addKindLabel.value}，可点「显示全部」自己找` : ''
+})
+
+/** 当前连接草稿的指纹：拉取时记一份，勾选框一改就能看出清单过期 */
+const addConnSig = computed(() => `${addConn.value.mode}|${addConn.value.mode === 'own' ? addResolvedEndpoint.value : ''}`)
+const addStale = computed(() => Boolean(addFetchedSig.value) && addFetchedSig.value !== addConnSig.value)
+/** 连接是否有未保存改动（收起按钮与「保存连接」都看它） */
+const addConnDirty = computed(() => {
+  const entry = addEntry.value
+  if (!entry) return false
+  if (addConn.value.mode !== entry.connectionMode) return true
+  if (addConn.value.apiKey.trim() || addConn.value.clearKey) return true
+  return addConn.value.mode === 'own' && addConn.value.endpoint.trim() !== rootOf(entry.endpoint)
+})
+
+/** 弹窗标题下那行连接读数：能不能拉、接在哪，都在这句里 */
+const addStateLine = computed(() => {
+  if (!addKind.value) return ''
+  if (addConn.value.mode === 'inherit') {
+    return `地址与密钥取对话卡${view.value?.platformBaseUrl ? `（${view.value.platformBaseUrl}）` : ''}`
+  }
+  const entry = addEntry.value
+  const key = addConn.value.apiKey.trim()
+    ? '新密钥待保存'
+    : entry?.keySource === 'db'
+      ? `密钥已配置${entry.keyHint ? `（${entry.keyHint}）` : ''}`
+      : entry?.keySource === 'env'
+        ? '密钥来自环境变量'
+        : '还没有密钥'
+  return `独立地址 · ${key}`
+})
+const addStateLineTitle = computed(() => (addConn.value.mode === 'inherit'
+  ? '沿用对话卡那条通道的地址与密钥，拉到的是同一个上游的清单'
+  : `实际请求 ${addResolvedEndpoint.value || '—'}`))
+
+const addKeyPlaceholder = computed(() => {
+  const entry = addEntry.value
+  if (entry?.keySource === 'db') return `留空 = 沿用已配置${entry.keyHint ? `（${entry.keyHint}）` : ''}`
+  if (entry?.keySource === 'env') return '留空 = 沿用环境变量'
+  return '粘贴 API Key'
+})
+
+/** 连接摘要（收起时那一行）：接在哪 + 密钥从哪来 */
+const addSummaryAddr = computed(() => {
+  if (addConn.value.mode === 'inherit') return `取对话卡：${view.value?.platformBaseUrl || '对话卡的服务地址'}`
+  return addConn.value.endpoint.trim() || '未配置服务地址'
+})
+const addSummaryPolicy = computed(() => {
+  if (addConn.value.mode === 'inherit') return '密钥沿用对话卡'
+  if (addConn.value.apiKey.trim()) return '新密钥待保存'
+  const entry = addEntry.value
+  if (entry?.keySource === 'db') return '密钥已保存'
+  if (entry?.keySource === 'env') return '密钥来自环境变量'
+  return '还没有密钥'
+})
+
+/** 行内测试：向量 / 重排走自己这条连接（不是供应商，所以由宿主给测试函数） */
+async function testPicked(modelId: string): Promise<{ latency: string; text: string }> {
+  const kind = addKind.value
+  if (!kind) return { latency: '', text: '' }
+  const res = await adminInfraModelsApi.test(kind, modelId)
+  const data = (res.data?.data ?? {}) as { latencyMs?: number; dimensions?: number }
+  return {
+    latency: [
+      data.latencyMs != null ? `${data.latencyMs}ms` : '',
+      data.dimensions ? `${data.dimensions} 维` : '',
+    ].filter(Boolean).join(' · '),
+    text: '',
+  }
+}
+
+/** 拉上游清单。`background` = 开窗时顺带拉的那一次：失败只在弹窗里说，不弹 toast。 */
+async function pullUpstream(background = false): Promise<void> {
+  const kind = addKind.value
+  if (!kind || addLoading.value) return
+  if (addConn.value.mode === 'own' && !addConn.value.endpoint.trim()) {
+    addEmpty.value = '还没有服务地址：勾「使用独立接口地址覆盖全局通道」并填一条。'
+    if (!background) toast.error('先填服务地址')
+    return
+  }
+  addLoading.value = true
+  addError.value = ''
+  addEmpty.value = ''
+  try {
+    /* 带草稿连接去拉：填完地址与密钥就能直接拉，不必先保存一次（与对话卡同一顺序）。
+       沿用对话卡时不带草稿——让后端按平台那条通道解析。 */
+    const draft = addConn.value.mode === 'own'
+      ? { endpoint: addResolvedEndpoint.value, apiKey: addConn.value.apiKey.trim() }
+      : {}
+    const res = await adminInfraModelsApi.pull({ kind, ...draft })
+    const all = ((res.data?.data?.models ?? []) as unknown[]).map((m) => String(m))
+    addAll.value = all
+    addShowAll.value = false
+    addFetchedSig.value = addConnSig.value
+    if (!background) toast.success(all.length ? `获取到 ${all.length} 个模型` : '服务未返回模型列表')
+  } catch (e) {
+    addError.value = errMsg(e)
+    addAll.value = []
+    addFetchedSig.value = ''
+    if (!background) toast.error(`拉取失败：${errMsg(e)}`)
+  } finally {
+    addLoading.value = false
+  }
+}
+
+/** 连接草稿 → 写回字段：沿用对话卡时只写「用哪条」，独立地址才带地址与密钥 */
+function addConnPatch(): Record<string, unknown> {
+  if (addConn.value.mode === 'inherit') return { connectionMode: 'inherit' }
+  const patch: Record<string, unknown> = { connectionMode: 'own', endpoint: addResolvedEndpoint.value }
+  if (addConn.value.apiKey.trim()) patch.apiKey = addConn.value.apiKey.trim()
+  if (addConn.value.clearKey && !addConn.value.apiKey.trim()) patch.clearKey = true
+  return patch
+}
+
+/** 「保存连接」：只提交连接（弹窗里也能只改地址不挑模型） */
+async function saveAddConn(): Promise<void> {
+  const kind = addKind.value
+  if (!kind) return
+  if (addConn.value.mode === 'own' && !addConn.value.endpoint.trim()) {
+    toast.error('独立服务需要填写服务地址')
+    return
+  }
+  saving.value = true
+  const ok = await persist(kind, addConnPatch())
+  saving.value = false
+  if (!ok) return
+  addConn.value.apiKey = ''
+  addConn.value.clearKey = false
+  // 连接换了，手里这份清单就是旧连接拉的：清掉，等用户点「获取模型」
+  addAll.value = []
+  addFetchedSig.value = addConnSig.value
+  addEmpty.value = '连接已保存，点「获取模型」拉一份新清单。'
+  toast.success(`${kindLabel(kind)}的连接已保存`)
+}
+
+function onAddClosed(): void {
+  addConnOpen.value = false
+  addAll.value = []
+  addShowAll.value = false
+  addError.value = ''
+  addEmpty.value = ''
+  addFetchedSig.value = ''
+}
+
+function onAddOpened(entry: InfraModelEntryView): void {
+  addConn.value = {
+    mode: entry.connectionMode,
+    /* inherit 的 endpoint 是后端解析结果，不能回填成独立地址；own 的回填成根地址 */
+    endpoint: entry.connectionMode === 'own' ? rootOf(entry.endpoint) : '',
+    apiKey: '',
+    clearKey: false,
+  }
+  // 还没配过就展开连接：第一次进来就是要填地址与密钥
+  addConnOpen.value = !entry.configured
+}
 
 async function openAdd(entry: InfraModelEntryView) {
   addKind.value = entry.kind
   addEntry.value = entry
-  addModels.value = []
-  try {
-    const res = await adminInfraModelsApi.pull({ kind: entry.kind })
-    const all = ((res.data?.data?.models ?? []) as unknown[]).map((m) => String(m))
-    const matched = all.filter((id) => inferModelCapabilities(id).role === entry.kind)
-    addModels.value = matched
-    if (!matched.length) {
-      toast.error(all.length
-        ? `上游 ${all.length} 个模型里没识别出${kindLabel(entry.kind)}，可在「配置」里直接填模型 ID`
-        : '这次没有拉取到模型')
-    }
-    pullDialog.value?.openWith()
-  } catch (e) {
-    toast.error(`拉取失败：${errMsg(e)}`)
-    // 连接不通时落到配置弹层：那里能改地址 / 密钥，改完再拉
-    openEdit(entry, entry.model)
-  }
+  addAll.value = []
+  addShowAll.value = false
+  addError.value = ''
+  addEmpty.value = ''
+  addFetchedSig.value = ''
+  onAddOpened(entry)
+  pullDialog.value?.openWith()
+  /* 开窗顺带拉一次（只读）：连不通时这一行读数就在弹窗里，
+     用户当场就能展开连接改地址，不必先关弹窗再找别的入口。 */
+  void pullUpstream(true)
 }
 
-/** 勾选即入池：连接与参数沿用；池子原来是空的，就把第一个勾选的设为启用。
+/** 勾选即入池：参数沿用；池子原来是空的，就把第一个勾选的设为启用。
     以当前视图（最新写回结果）为基准合并，而不是弹窗打开时的快照——
-    弹窗开着期间池子可能已经被别的动作改过，拿旧快照合并会把那次改动覆盖掉。 */
+    弹窗开着期间池子可能已经被别的动作改过，拿旧快照合并会把那次改动覆盖掉。
+    连接的未保存改动随这次提交一起落盘（弹窗里只有这一个提交点）。 */
 async function addPicked(ids: string[]) {
   const kind = addKind.value
   if (!kind || !ids.length) return
@@ -450,49 +676,36 @@ async function addPicked(ids: string[]) {
   const merged = [...current.models]
   for (const id of ids) if (!merged.includes(id)) merged.push(id)
   const active = current.model || ids[0]
-  if (await updatePool(kind, merged, active)) {
+  saving.value = true
+  /* 参数与连接都沿用：只有连接被改过（勾选框 / 地址 / 密钥）才把那几个字段一起带上，
+     没改就一个字段都不发——PUT 是 partial 合并，多带等于替用户重写一遍连接。 */
+  const patch = { models: merged, model: active, ...(addConnDirty.value ? addConnPatch() : {}) }
+  const ok = await persist(kind, patch)
+  saving.value = false
+  if (ok) {
+    addConn.value.apiKey = ''
+    addConn.value.clearKey = false
     toast.success(`已加入 ${ids.length} 个${kindLabel(kind)}，当前启用 ${active}`)
   }
 }
 
-/* ---------- 配置弹层：连接 + 参数 + 这一个模型的 ID ---------- */
+/* ---------- 配置弹层：这一个模型的 ID（只读）+ 参数 ----------
+   连接不在这里：它归「＋ 添加模型」那张弹窗（2026-11-05 用户「配置里面还有 url，添加模型还有」）。 */
 const editKind = ref<InfraKind | null>(null)
 const editEntry = ref<InfraModelEntryView | null>(null)
 /** 打开时那一行的模型 id（空串 = 池子还没模型） */
 const editingModel = ref('')
 const editKindLabel = computed(() => (editKind.value ? kindLabel(editKind.value) : ''))
 const form = ref({
-  connectionMode: 'inherit' as ConnectionMode,
-  /** 独立服务的**根地址**（路径由 resolvedEndpoint 拼；存库时写完整端点） */
-  endpoint: '',
-  apiKey: '',
-  clearKey: false,
   timeoutMs: 20000,
   batchSize: 32,
   dimensions: null as number | null,
 })
 
-/** 这个能力的路径尾巴：与后端按类型拼路径同一口径 */
-const kindSuffix = computed(() => (editKind.value === 'rerank' ? '/v1/rerank' : '/v1/embeddings'))
-/** 已经带类型路径的地址原样用（自建服务可能不是 /v1），否则拼上标准路径 */
-const resolvedEndpoint = computed(() => {
-  const raw = form.value.endpoint.trim().replace(/\/+$/, '')
-  if (!raw) return ''
-  if (/\/(embeddings|rerank)$/i.test(raw)) return raw
-  return raw + kindSuffix.value
-})
 /** 回填时把完整端点还原成根地址（编辑一次不会把 /v1/embeddings 越叠越多） */
 function rootOf(value: string): string {
   return String(value || '').trim().replace(/\/(v\d+\/)?(embeddings|rerank)\/?$/i, '').replace(/\/+$/, '')
 }
-
-const keyPlaceholder = computed(() => {
-  const entry = editEntry.value
-  if (entry?.keySource === 'db') return `留空 = 沿用已配置${entry.keyHint ? `（${entry.keyHint}）` : ''}`
-  if (entry?.keySource === 'env') return '留空 = 沿用环境变量'
-  if (entry?.keySource === 'inherit') return '留空 = 沿用向量模型的密钥'
-  return '粘贴 API Key'
-})
 
 const panelRef = ref<HTMLElement | null>(null)
 const maskRef = ref<HTMLElement | null>(null)
@@ -500,17 +713,12 @@ useEscape(() => Boolean(editKind.value), closeEdit)
 useOverlay(computed(() => Boolean(editKind.value)), panelRef)
 useMaskClose(maskRef, closeEdit)
 
-/** 打开配置弹层：改这条能力的连接与参数（模型 ID 只读，加模型走卡头） */
+/** 打开配置弹层：改这一个模型的参数（模型 ID 与连接都不在这一层） */
 function openEdit(entry: InfraModelEntryView, model: string) {
   editKind.value = entry.kind
   editEntry.value = entry
   editingModel.value = model
   form.value = {
-    connectionMode: entry.connectionMode,
-    /* inherit 的 endpoint 是后端解析结果，不能回填成独立地址；own 的回填成根地址 */
-    endpoint: entry.connectionMode === 'own' ? rootOf(entry.endpoint) : '',
-    apiKey: '',
-    clearKey: false,
     timeoutMs: entry.timeoutMs,
     batchSize: entry.batchSize ?? 32,
     dimensions: entry.dimensions,
@@ -531,10 +739,6 @@ async function save() {
     toast.error('这条能力还没有模型，先在卡头「＋ 添加模型」里挑一个')
     return
   }
-  if (form.value.connectionMode === 'own' && !form.value.endpoint.trim()) {
-    toast.error('独立服务需要填写服务地址')
-    return
-  }
   if (!Number.isInteger(form.value.timeoutMs) || form.value.timeoutMs < 1000 || form.value.timeoutMs > 120000) {
     toast.error('超时必须是 1000-120000 之间的整数毫秒')
     return
@@ -543,8 +747,9 @@ async function save() {
     toast.error('批量大小必须是 1-128 之间的整数')
     return
   }
-  /* 模型 ID 只读（2026-11-05）：改名 / 换模型归卡头的「＋ 添加模型」，
-     这一层只改连接与参数。池子与启用项原样带回。 */
+  /* 模型 ID 只读（2026-11-05）：换模型归卡头的「＋ 添加模型」，
+     这一层只改参数。池子与启用项原样带回。
+     连接也不写：PUT 是 partial 合并，少传就保持库里的现值。 */
   const models = [...entry.models]
   const active = entry.model || editingModel.value
   if (!models.includes(editingModel.value)) models.push(editingModel.value)
@@ -552,17 +757,11 @@ async function save() {
 
   const rawDimensions = form.value.dimensions as number | string | null
   const patch: Record<string, unknown> = {
-    connectionMode: form.value.connectionMode,
     models,
     model: active,
     timeoutMs: form.value.timeoutMs,
     batchSize: kind === 'embedding' ? form.value.batchSize : null,
     dimensions: rawDimensions === null || rawDimensions === '' ? null : Number(rawDimensions),
-  }
-  if (form.value.connectionMode === 'own') {
-    patch.endpoint = resolvedEndpoint.value
-    if (form.value.apiKey.trim()) patch.apiKey = form.value.apiKey.trim()
-    if (form.value.clearKey) patch.clearKey = true
   }
   saving.value = true
   const ok = await persist(kind, patch)
@@ -663,6 +862,25 @@ onMounted(load)
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
 }
+/* 收起时的连接摘要：接在哪 + 密钥从哪来（与对话卡同一条解剖：地址左、状态右） */
+.infra-conn-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0;
+  min-width: 0;
+}
+.infra-conn-summary__addr {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--mk-ink);
+  font-size: var(--mk-fs-micro);
+}
+.infra-conn-summary__policy { color: var(--mk-muted); font-size: var(--mk-fs-micro); white-space: nowrap; }
 /* 独立接口地址：一枚勾选框（默认走全局通道，要另起才勾） */
 .infra-own {
   display: flex;

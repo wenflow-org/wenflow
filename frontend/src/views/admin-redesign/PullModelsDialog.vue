@@ -81,7 +81,7 @@
                   <span v-if="row.added" class="mk-badge mk-badge--muted">已添加</span>
                   <span v-else class="mk-badge mk-badge--ok">可添加</span>
                 </span>
-                <span v-if="providerId" class="pmd-row__probe">
+                <span v-if="providerId || tester" class="pmd-row__probe">
                   <button
                     type="button"
                     class="mk-link mk-link--hold pmd-row__test"
@@ -97,12 +97,23 @@
                   <span v-else class="pmd-row__res" aria-hidden="true"></span>
                 </span>
               </div>
-              <p v-if="!visibleRows.length" class="pmd-empty">{{ emptyText }}</p>
+              <p v-if="!visibleRows.length" class="pmd-empty">{{ emptyMessage }}</p>
             </template>
           </div>
 
           <div class="pmd-hint">
-            <span v-if="hint">{{ hint }}</span>
+            <span class="pmd-hint__left">
+              <span v-if="hint">{{ hint }}</span>
+              <!-- 宿主按用途筛过清单时（向量 / 重排卡）给一条「看全部」的退路：
+                   名字里没有 embedding / rerank 这类标记的模型会被筛掉，
+                   没有这条退路就只能眼睁睁少几个能挂的模型。 -->
+              <button
+                v-if="hiddenCount"
+                type="button"
+                class="mk-link"
+                @click="emit('showAll')"
+              >上游还有 {{ hiddenCount }} 个未被识别，显示全部</button>
+            </span>
             <label v-if="selectableVisibleRows.length" class="pmd-all">
               <input
                 type="checkbox"
@@ -176,6 +187,13 @@ const props = withDefaults(defineProps<{
   allowManual?: boolean
   /** 底栏说明；空串即不显示 */
   hint?: string
+  /** 宿主按用途筛掉了几条：给了就在清单下方多一条「显示全部」的出口 */
+  hiddenCount?: number
+  /** 清单为空时的说明（宿主自己有筛选口径时自己给：全量就是空 / 是被筛空了） */
+  emptyText?: string
+  /** 行内测试的实现：向量 / 重排的连接不是供应商，宿主传自己的测试函数过来；
+      不传就按 providerId 走供应商测试端点。 */
+  tester?: (modelId: string) => Promise<{ latency: string; text: string }>
 }>(), {
   providerId: '',
   title: '添加模型',
@@ -186,6 +204,9 @@ const props = withDefaults(defineProps<{
   stateLineTitle: '',
   allowManual: true,
   hint: '能力列表里没有，勾完引入时会让你逐项确认思考 / 推理强度 / 视觉。',
+  hiddenCount: 0,
+  emptyText: '',
+  tester: undefined,
 })
 
 const emit = defineEmits<{
@@ -195,6 +216,8 @@ const emit = defineEmits<{
   manual: []
   /** 「获取模型 / 重新获取」：拉清单是宿主的连接动作，弹窗只发意图 */
   refetch: []
+  /** 「显示全部」：把宿主筛掉的那些也要过来 */
+  showAll: []
   /** 弹窗关闭（取消 / 确认 / 手动录入都算）：宿主据此收起连接的编辑态 */
   closed: []
   /** 弹窗打开：宿主据此记一份「开窗前的连接」，用于关窗回滚未保存改动 */
@@ -236,10 +259,11 @@ const visibleRows = computed(() => {
 
 const selectableVisibleRows = computed(() => visibleRows.value.filter((row) => row.selectable))
 
-/** 空列表只有两种缘由：搜索无果，或者上游一个都没返回 / 都已经挂上了。 */
-const emptyText = computed(() => {
+/** 空列表只有两种缘由：搜索无果，或者上游一个都没返回 / 都已经挂上了。
+    宿主自己筛过清单时，它给的那句更准（是筛空了还是本来就没有）。 */
+const emptyMessage = computed(() => {
   if (query.value.trim()) return '没有匹配的模型'
-  if (!props.models.length) return '这次没有拉取到模型'
+  if (!props.models.length) return props.emptyText || '这次没有拉取到模型'
   return '上游模型都已添加'
 })
 const allVisibleSelected = computed(() =>
@@ -268,12 +292,17 @@ function openWith(): void {
   emit('opened')
 }
 
-/** 就地测试：复用供应商测试端点（用该供应商自己的地址与密钥真发一次），
+/** 就地测试：向量 / 重排用宿主给的测试函数（走那条连接），对话卡走供应商测试端点。
     结果只落在本行——勾选清单不该因为一个模型失败而整块变红。 */
 async function runTest(modelId: string): Promise<void> {
-  if (!props.providerId || testing.value) return
+  if ((!props.providerId && !props.tester) || testing.value) return
   testing.value = modelId
   try {
+    if (props.tester) {
+      const r = await props.tester(modelId)
+      results.value = { ...results.value, [modelId]: { ok: true, latency: r.latency, text: r.text || '连通正常' } }
+      return
+    }
     const res = await adminModelProvidersApi.test(props.providerId, { modelId })
     const data = res?.data?.data ?? {}
     results.value = {
@@ -416,6 +445,8 @@ defineExpose({ openWith, isOpen: () => open.value })
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
 }
+/* 说明与「显示全部」并排：两者之间要有缝，否则读成一句「…显示全部全选当前可添加的 5 个」 */
+.pmd-hint__left { display: inline-flex; align-items: center; gap: 4px 12px; flex-wrap: wrap; min-width: 0; }
 .pmd-all {
   display: inline-flex;
   align-items: center;
