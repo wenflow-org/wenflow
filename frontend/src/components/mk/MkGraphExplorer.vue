@@ -97,8 +97,19 @@
       <!-- 图卡：卡壳（border / radius / padding 10px 10px 4px）由宿主出——
            页面走 .km__card :deep(.mk-ge__card)，admin 嵌在 .mk-card 里不再套一层 -->
       <div class="mk-ge__card">
-        <!-- 工具条：左统计、右视图筛选。统计口径与画布着色一致，四档名见 utils/conceptBands -->
+        <!-- 工具条：左统计、右视图筛选。统计口径与画布着色一致，四档名见 utils/conceptBands
+             2026-11-05 PC 定稿：路径切换下拉并进本条最左——路径名长、9+ 条时平铺胶囊
+             一行只放得下 3 个，「更多」浮层还会盖住概览面板；收进下拉后永不溢出，
+             轨条行整体省 56px。窄屏（≤1100）仍用轨条（键盘漫游测试锁的是它）。 -->
         <div class="mk-ge__bar">
+          <MkSelect
+            v-if="showPathRail && paths.length > 1"
+            class="mk-ge__pathpick"
+            :model-value="pathId ?? null"
+            :options="railOptions"
+            aria-label="按学习路径筛选"
+            @update:model-value="selectPath"
+          />
           <div class="mk-ge__stats">
             <!-- 2026-10-31 二轮评审 P2：隐藏孤立点时写明「显示 X / Y」，不再让 24 与图例加总对不上 -->
             <span class="mk-ge__stat" :title="levelNodes.length !== listNodes.length ? `另有 ${levelNodes.length - listNodes.length} 个未评估的孤立概念未画出` : undefined">
@@ -294,6 +305,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ChevronDown } from 'lucide-vue-next'
 import MkGraph, { relationStyleOf } from './MkGraph.vue'
+import MkSelect from './MkSelect.vue'
 import { useIsDark } from '@/composables/useIsDark'
 import type { MkGraphConceptFacts, MkGraphEdge, MkGraphNode } from './MkGraph.vue'
 import { CONCEPT_BAND_LABEL, type ConceptBandKey } from '@/utils/conceptBands'
@@ -1084,6 +1096,14 @@ function onPractice() {
   align-items: center;
   justify-content: space-between;
   gap: var(--mk-space-3);
+}
+/* 路径切换双形态（2026-11-05 PC 定稿）：≥1101 用下拉（长路径名 + 9 条以上时
+   平铺胶囊放不下 3 个，「更多」浮层还会盖住概览面板），轨条整行退场省 56px；
+   ≤1100 仍用轨条——键盘漫游/横滚交互被 rail 测试锁住，窄屏也确实更需要「一眼可见」 */
+.mk-ge__pathpick { display: none; min-width: 0; }
+@media (min-width: 1101px) {
+  .mk-ge__pathpick { display: inline-flex; flex: 0 1 380px; }
+  .mk-ge__railrow { display: none; }
 }
 .mk-ge__stats {
   display: flex;

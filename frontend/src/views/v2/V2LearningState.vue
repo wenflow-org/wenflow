@@ -64,8 +64,9 @@
               <div v-if="showRangeSeg" class="band__extra">
                 <!-- role+aria-pressed（2026-09-27 a11y）：纯视觉的选中底色读屏听不出，与图谱页层级分段同口径 -->
                 <div class="seg" role="group" aria-label="趋势时间窗口">
-                  <button type="button" class="seg__item" :class="{ 'seg__item--on': range === 42 }" :aria-pressed="range === 42" @click="setRange(42)">42 天</button>
-                  <button type="button" class="seg__item" :class="{ 'seg__item--on': range === 90 }" :aria-pressed="range === 90" @click="setRange(90)">90 天</button>
+                  <button type="button" class="seg__item" :class="{ 'seg__item--on': effectiveRange === 7 }" :aria-pressed="effectiveRange === 7" @click="setRange(7)">近 7 天</button>
+                  <button type="button" class="seg__item" :class="{ 'seg__item--on': effectiveRange === 30 }" :aria-pressed="effectiveRange === 30" @click="setRange(30)">近 30 天</button>
+                  <button v-if="historyDays > 42" type="button" class="seg__item" :class="{ 'seg__item--on': effectiveRange === 90 }" :aria-pressed="effectiveRange === 90" @click="setRange(90)">近 90 天</button>
                 </div>
               </div>
             </div>
@@ -156,9 +157,16 @@
                   <!-- 横向网格线（2026-09-27 外部评审：原来没有任何坐标参照，曲线悬空感） -->
                   <g class="ff-grid">
                     <line
-                      v-for="i in 5" :key="i"
+                      v-for="t in yTicks" :key="`grid-${t.v}`"
                       :x1="plotX0" :x2="plotX1"
-                      :y1="(chartH / 4) * (i - 1)" :y2="(chartH / 4) * (i - 1)"
+                      :y1="(chartH * t.top) / 100" :y2="(chartH * t.top) / 100"
+                      vector-effect="non-scaling-stroke"
+                    />
+                    <!-- 0 基线（2026-11-05 用户定稿）：正负分界画实线，比网格线重一档 -->
+                    <line
+                      v-if="zeroY !== null"
+                      class="ff-zero"
+                      :x1="plotX0" :x2="plotX1" :y1="zeroY" :y2="zeroY"
                       vector-effect="non-scaling-stroke"
                     />
                   </g>
@@ -192,11 +200,14 @@
                 </svg>
                 <!-- X 轴日期：两根时长柱与曲线点各自对应哪一天，桌面/移动都不再只有一个悬停值 -->
                 <div class="ff-xaxis" aria-hidden="true">
-                  <span
-                    v-for="p in points"
-                    :key="`x-${p.date}`"
-                    :style="{ left: `${(p.x / chartW) * 100}%` }"
-                  >{{ p.date.slice(5).replace('-', '/') }}</span>
+                  <!-- 30 天档每 3~5 天出一个刻度（xTickEvery 按点数折算 ≤10 个），
+                       末位日期强制保留，别让「最新是哪天」丢掉 -->
+                  <template v-for="(p, i) in points" :key="`x-${p.date}`">
+                    <span
+                      v-if="i % xTickEvery === 0 || i === points.length - 1"
+                      :style="{ left: `${(p.x / chartW) * 100}%` }"
+                    >{{ p.date.slice(5).replace('-', '/') }}</span>
+                  </template>
                 </div>
               </div>
               <!-- 500 条上限的口径说明（2026-09-27）：凑满上限说明大概率被截断，
@@ -553,7 +564,11 @@ const current = ref<Record<string, any> | null>(null);
 const warnings = ref<Array<Record<string, any>>>([]);
 const trendLoading = ref(true);
 const trendError = ref(false);
-const range = ref<42 | 90>(42);
+/* 趋势窗口（2026-11-05 用户定稿）：近 7 天 / 近 30 天 / 近 90 天三档。
+   默认档跟着数据历史走——历史 ≤21 天给 7（用户点名：数据挤在右下角 15% 是因为
+   默认窗口远大于数据），否则 30。rangeChoice=null 表示「跟随默认」，
+   用户点过切换器后就固定住不再自动跳。 */
+const rangeChoice = ref<7 | 30 | 90 | null>(null);
 
 /* ---------- 卡片常显（2026-09-27）：本页所有 band 全部默认展开，折叠按钮退役——
    藏内容的成本（一次点击 + 预期管理）高于滚动成本（与学习台同口径）。仅
@@ -688,7 +703,7 @@ const earliestDataOffset = computed(() => {
 
 const windowStartOffset = computed(() => {
   // 数据少时窗口自动收缩（但至少约一周）；数据多时用满所选范围
-  const base = Math.min(range.value - 1, earliestDataOffset.value + 2);
+  const base = Math.min(effectiveRange.value - 1, earliestDataOffset.value + 2);
   return Math.max(base, 7);
 });
 
@@ -738,7 +753,14 @@ const activeSeries = computed(() => {
   return days.slice(Math.max(0, first - 2));
 });
 
-const valueDomain = computed(() => {
+/* 量程与刻度（2026-11-05 用户定稿「Y 轴整十刻度 + 0 基准线」）：
+   旧版把量程 5 等分取整，间隔 17.5 的 -26/-8/9/27/44 刻度谁也读不懂，0 基准还没线。
+   现在先挑步长（5/10/20/25/50 里取能覆盖量程且 ≤5 段的最小档），再把上下界吸附到
+   步长整倍数——刻度、网格线、0 基线全部落在同一坐标系上。
+   ① 下界强制含 0（rawLo ≤ 0）：时长背景柱的正数从 0 基线往上长，不再从负数轴底冒出来；
+   ② 上界锚 40「精力充沛」阈值线：数据最高 25 时撑到 40 即可（用户拍板），不再硬顶 44
+      把上半张图留成空白——40 线贴顶恰好成为上边界。 */
+const valueDomain = computed<{ lo: number; hi: number; step: number }>(() => {
   let lo = Infinity;
   let hi = -Infinity;
   for (const d of activeSeries.value) {
@@ -748,18 +770,24 @@ const valueDomain = computed(() => {
       if (v > hi) hi = v;
     }
   }
-  if (!Number.isFinite(lo)) return { lo: 0, hi: 100 };
-  const pad = Math.max(5, (hi - lo) * 0.18);
-  const loPad = lo - pad;
-  const hiPad = hi + pad;
+  if (!Number.isFinite(lo)) return { lo: 0, hi: 40, step: 10 };
+  const pad = Math.max(4, (hi - lo) * 0.12);
+  const rawLo = Math.min(lo - pad, 0);
+  const rawHi = Math.max(hi + pad, 40);
+  const step = [5, 10, 20, 25, 50, 100].find((s) => (rawHi - rawLo) / s <= 5) ?? 100;
   return {
-    // ① 数据含负值（LSB 可 <0）时不把下界 clamp 到 0——否则那几天的点画到画布外被裁掉、刻度也对不上。
-    // ② 量程必须包住语义锚点 40「精力充沛」/ 20「最优训练区」：阈值参考线与区间标签按原型口径
-    //    只在量程内绘制，锚点一出图，整张图就没有参照系了。上下各留 4 的余量（16/44），
-    //    免得 20 线正好压在画布底边、标签被裁掉一半。
-    lo: lo < 0 ? loPad : Math.max(0, Math.min(loPad, 16)),
-    hi: Math.max(hiPad, 44)
+    lo: Math.floor(rawLo / step) * step,
+    hi: Math.ceil(rawHi / step) * step,
+    step
   };
+});
+
+/* 0 基线（正负分界）：时长背景柱的锚点，也是读「状态在 0 上还是 0 下」的参照 */
+const zeroY = computed<number | null>(() => {
+  const { lo, hi } = valueDomain.value;
+  if (lo > 0 || hi < 0) return null;
+  const span = hi - lo || 1;
+  return chartH - ((0 - lo) / span) * chartH;
 });
 
 const maxMinutes = computed(() => Math.max(10, ...activeSeries.value.map((d) => d.minutes)));
@@ -778,7 +806,11 @@ const historyDays = computed(() => {
   if (Number.isNaN(first) || Number.isNaN(last)) return dates.length;
   return Math.round((last - first) / 86400000) + 1;
 });
-const showRangeSeg = computed(() => historyDays.value > 42);
+/* 生效窗口：用户显式选择优先；没选过就按历史长短自动给默认档 */
+const effectiveRange = computed<7 | 30 | 90>(() => rangeChoice.value ?? (historyDays.value <= 21 ? 7 : 30));
+/* 90 天档只在真的有 ≥42 天历史时出现（更短的历史里 30 与 90 画出同一条线，是假开关）；
+   7/30 两档对短历史也始终有意义（7 天视角 vs 30 天视角），切换器常显 */
+const showRangeSeg = computed(() => true);
 
 const points = computed<TrendPoint[]>(() => {
   const n = activeSeries.value.length;
@@ -791,6 +823,9 @@ const points = computed<TrendPoint[]>(() => {
   return activeSeries.value.map((d, i) => {
     const x = plotX0 + step * i;
     const bh = Math.min(barCap, (d.minutes / maxMinutes.value) * barCap);
+    // 背景柱锚在 0 基线（2026-11-05 用户定稿）：此前从量程下界（可能是 -26）往上长，
+    // 正数柱画在负数区间里读不懂。量程被强制含 0，所以 y0 恒存在。
+    const y0 = zeroY.value ?? chartH;
     return {
       ...d,
       x,
@@ -798,11 +833,15 @@ const points = computed<TrendPoint[]>(() => {
       ly: d.lf !== null ? yOf(d.lf) : null,
       sy: d.lsb !== null ? yOf(d.lsb) : null,
       bx: x - barW.value / 2,
-      by: chartH - bh,
+      by: y0 - bh,
       bh
     };
   });
 });
+
+/* X 轴日期抽稀（2026-11-05 用户定稿）：30 天全印是一排密密麻麻的小字——
+   最多 10 个刻度，其余日子靠悬停/键盘读数（ff-xaxis 的 span 只在步进点上渲染） */
+const xTickEvery = computed(() => Math.max(1, Math.ceil(activeSeries.value.length / 10)));
 
 const barW = computed(() => {
   const n = activeSeries.value.length || 1;
@@ -811,12 +850,13 @@ const barW = computed(() => {
 
 /* ---------- y 轴刻度（原型 4137-4145）：标签与 5 条网格线同位，值 = 量程按四等分取整 ---------- */
 const yTicks = computed(() => {
-  const { lo, hi } = valueDomain.value;
+  const { lo, hi, step } = valueDomain.value;
   const span = hi - lo || 1;
-  return [0, 1, 2, 3, 4].map((i) => ({
-    top: (i / 4) * 100,
-    text: String(Math.round(hi - span * (i / 4)))
-  }));
+  const count = Math.max(1, Math.round(span / step));
+  return Array.from({ length: count + 1 }, (_, i) => {
+    const v = hi - step * i;
+    return { v, top: ((hi - v) / span) * 100, text: String(v) };
+  });
 });
 
 /* ---------- 状态阈值参考线 + 区间标签（原型 766-772 / 4147-4157） ----------
@@ -1105,7 +1145,7 @@ async function loadTrends() {
   trendLoading.value = true;
   try {
     // 权威口径：后端 /state/trends（LSS/KTL/LF/LSB，与指标卡同源），替代前端自算 EWMA
-    const trendRes = await request.get('/state/trends', { params: { days: range.value, range: 'recent' } });
+    const trendRes = await request.get('/state/trends', { params: { days: effectiveRange.value, range: 'recent' } });
     if (seq !== trendSeq) return;
     const trendData = unwrap<{ trends?: Array<{ date: string; lss: number | null; ktl: number | null; lf: number | null; lsb: number | null; mature?: boolean }> }>(trendRes);
     stateTrends.value = (trendData?.trends || []).map((t) => ({
@@ -1128,8 +1168,8 @@ async function loadTrends() {
   }
 }
 
-function setRange(r: 42 | 90) {
-  range.value = r;
+function setRange(r: 7 | 30 | 90) {
+  rangeChoice.value = r;
   void loadTrends();
 }
 
@@ -1627,6 +1667,15 @@ function loadGuidance() {
   /* 13/8 → 8/6（2026-11-05 屏效比）：三张数字卡高度压扁约 30%，仍是 KPI 档视觉 */
   padding: 8px 6px; display: grid; justify-items: center; gap: 1px; text-align: center;
 }
+/* PC 横排（2026-11-05 用户定稿）：三框 500px 宽、数字居中上下堆，右侧全空。
+   改「数字左 + 标签右」水平紧凑排，数字抬到 24px KPI 档，高度再省 25% */
+@media (min-width: 768px) {
+  .kpi {
+    grid-auto-flow: column; justify-content: center; align-items: baseline; gap: 10px;
+    padding: 10px 16px;
+  }
+  .kpi strong { font-size: 24px; }
+}
 .kpi strong {
   /* P3-42（设计评审）：22px 是游离字号（不在 12/14/15/16/24/28 任何一档），
      且与 /user/account 同类统计 16px 不同档——归 16px 档（--wf-fs-title） */
@@ -1684,6 +1733,11 @@ function loadGuidance() {
 .vitals--meta b i { font-size: 12px; font-style: normal; font-weight: 600; color: var(--faint); }
 /* 分档标签改小方签（2026-11-05 全局去肥胖化）：4px 圆角、收内衬 */
 .metric__note { width: fit-content; font-size: 12px; font-weight: 800; padding: 2px 6px; border-radius: 4px; }
+/* PC 1 行 4 列（2026-11-05 用户定稿）：2×2 是窄屏的排法，PC 每格 500px 宽、
+   字挤在最左、右边空 80% 灰底。趋势卡满宽后 4 格一字排开正好填满横向。 */
+@media (min-width: 768px) {
+  .vitals--meta { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
 /* 胶囊底色用「前景 ink × 表面」混色：暗色主题自动降饱和（外部评审：原 rgba 撞色在暗底上刺眼） */
 .metric__note--green { color: var(--green-ink); background: color-mix(in srgb, var(--green-ink) 13%, var(--surface)); }
 .metric__note--blue { color: var(--blue-deep); background: color-mix(in srgb, var(--blue-deep) 13%, var(--surface)); }
@@ -2163,6 +2217,8 @@ function loadGuidance() {
 .ff-bar { fill: color-mix(in srgb, var(--blue) 40%, transparent); }
 /* 网格刻度线：压得比阈值线更淡（0.6 → 0.45），把「刻度」和「阈值参考线」的层级拉开（走查 2026-10-08 #78） */
 .ff-grid line { stroke: var(--line); stroke-width: 1; opacity: 0.45; }
+/* 0 基线（2026-11-05 用户定稿）：正负分界的实线，比网格线深一档、比阈值线细一档 */
+.ff-zero { stroke: color-mix(in srgb, var(--ink) 38%, transparent); stroke-width: 1.25; }
 /* 状态阈值参考线（原型 wf-trend__zone 766）：绿色 + 4/4 虚线，与实线曲线分层；
    2026-10-09 #78：窄屏刻度「12」紧贴下线（详见 .ff-legend__zone 注释），把线加粗到 1.5
    并从 55% 提到 70% 不透明，让「阈值虚线 = 绿色较实」和「刻度 = 灰色很淡」一眼分得开

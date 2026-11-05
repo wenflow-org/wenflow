@@ -145,8 +145,9 @@ interface GraphCallbackParams {
 
 const el = ref<HTMLElement | null>(null)
 let chart: echarts.ECharts | null = null
-/** 已点选的节点：右栏/底部详情接管信息，画布 tooltip 不再重复弹出 */
-let selectedId: string | null = null
+/** 已点选的节点：右栏/底部详情接管信息，画布 tooltip 不再重复弹出；
+ *  2026-11-05 用户定稿：点击选中后画布把无关节点压暗到 0.35（ref 化以便进 buildOption） */
+const selectedIdRef = ref<string | null>(null)
 /** 最近一次 buildOption 烘焙的「值得标注」节点集（批次四：graphRoam 缩放档回填标签用） */
 let lastLabelWorthy = new Set<string>()
 /** 缩放低于该值视为「看不清标签」档：全量收标（hover/emphasis 仍出词），放大恢复 */
@@ -240,7 +241,40 @@ function escapeHtml(text: string): string {
   ))
 }
 
-function buildOption(): EChartsCoreOption {
+/** 重建前抄下当前力导向坐标与缩放：选中/取消选中的重建若不带这些，
+ *  力导向从 circular 初值重新散开、缩放回 0.9——「点一下重排一次」不可接受 */
+function readGraphViewState(): {
+  positions: Map<string, { x: number; y: number }>
+  zoom?: number
+  center?: [number | string, number | string]
+} | null {
+  if (!chart) return null
+  try {
+    type GraphModel = {
+      /* getModel 是 ECharts 实例的私有方法（类型层未公开），运行时稳定存在；
+         走 unknown 中转拿力导向节点坐标——这是"选中压暗不重排"的关键 */
+      getModel: () => {
+        getSeriesByIndex: (i: number) => {
+          getGraph: () => { eachNode: (cb: (n: { id: string | number; getLayout: () => { x?: number; y?: number } | null }) => void) => void }
+        }
+      }
+      getOption: () => { series?: Array<{ zoom?: number; center?: [number | string, number | string] }> }
+    }
+    const model = chart as unknown as GraphModel
+    const positions = new Map<string, { x: number; y: number }>()
+    model.getModel().getSeriesByIndex(0).getGraph().eachNode((n) => {
+      const l = n.getLayout()
+      if (l && (l.x ?? 0) !== 0 && (l.y ?? 0) !== 0) positions.set(String(n.id), { x: l.x as number, y: l.y as number })
+    })
+    if (!positions.size) return null
+    const opt = model.getOption()
+    return { positions, zoom: opt.series?.[0]?.zoom, center: opt.series?.[0]?.center }
+  } catch {
+    return null
+  }
+}
+
+function buildOption(viewState?: { positions?: Map<string, { x: number; y: number }>; zoom?: number; center?: [number | string, number | string] } | null): EChartsCoreOption {
   const dark = resolvedTheme.value === 'dark'
   const nodes = visibleNodes.value
   const nodeIds = new Set(nodes.map((n) => n.id))
@@ -300,7 +334,7 @@ function buildOption(): EChartsCoreOption {
         const node = params?.data?.raw
         if (!node) return ''
         // 点选后详情已由右栏/底部面板承载，画布上不再重复弹卡遮挡邻接节点
-        if (selectedId && String(node.id) === selectedId) return ''
+        if (selectedIdRef.value && String(node.id) === selectedIdRef.value) return ''
         const mastery = node.masteryScore === null || node.masteryScore === undefined
           ? '未评估'
           : `${Math.round(node.masteryScore * 100)}%`
@@ -321,8 +355,8 @@ function buildOption(): EChartsCoreOption {
         // 约 8% 的留白：力导向只按节点符号收敛，标签（尤其右侧长概念名）会伸出画布。
         // 缩小 viewport 让最外圈节点离边留出标签宽度，避免被 canvas 裁掉。
         // 课堂浮窗有高亮节点时整体左移 4%：本节知识点标签在右侧，避免贴边被裁。
-        zoom: narrow ? 1 : 0.9,
-        center: [highlightSet.size ? '46%' : '50%', '50%'],
+        zoom: viewState?.zoom ?? (narrow ? 1 : 0.9),
+        center: viewState?.center ?? [highlightSet.size ? '46%' : '50%', '50%'],
         // 布局盒留边：四边都要给节点半径 + 底部标签留空间，否则力导向收边时
         // 最外圈节点会贴住画布边缘，底部标签被 canvas 的 overflow:clip 切掉。
         // 2026-11-05 知识图谱页走查（P2）：narrow 档余量不够两行标签——12px 字号 ×
@@ -359,7 +393,17 @@ function buildOption(): EChartsCoreOption {
         // 交错（见下方 data.label.position），两枚高亮标签不再互压，hideOverlap 得以
         // 常开：课堂上“判断动作性质”橙字直接叠在连线/非高亮标签上的压字被正常收掉。
         labelLayout: { hideOverlap: true },
-        emphasis: { focus: 'adjacency', label: { show: true, fontWeight: 'bold' } },
+        // 2026-11-05 用户定稿（图谱交互三刀之一）：hover 不再压暗全图——
+        // focus:'adjacency' 会在鼠标划过任意节点时把无关节点瞬变半透明，
+        // 找节点的沿途扫过十几个点、全图忽明忽暗（"高亮透明闪烁"的病根）。
+        // hover 只放大当前节点 1.25 倍 + 蓝描边 + 邻接线加粗；压暗留给点击选中。
+        emphasis: {
+          focus: 'none',
+          scale: 1.25,
+          label: { show: true, fontWeight: 'bold' },
+          itemStyle: { borderColor: '#2563eb', borderWidth: 3 },
+          lineStyle: { width: 3 }
+        },
         select: { label: { show: true }, itemStyle: { borderWidth: 2 } },
         lineStyle: { curveness: 0.08 },
         force: {
@@ -387,25 +431,36 @@ function buildOption(): EChartsCoreOption {
         },
         data: nodes.map((node) => {
           const highlighted = highlightSet.has(node.id)
-          const dimmed = highlightSet.size > 0 && !highlighted
+          // 选中压暗（2026-11-05 用户定稿）：点击锁定目标后无关节点 0.35（点击比 hover 的
+          // 0.15 留更多上下文）；课堂浮窗高亮维持原 0.48 档
+          const dimmedByHighlight = highlightSet.size > 0 && !highlighted
+          const dimmedBySelect = !!selectedIdRef.value && node.id !== selectedIdRef.value
+          const dimmed = dimmedByHighlight ? 'highlight' : dimmedBySelect ? 'select' : null
           const baseSize = Math.min(narrow ? 34 : 44, (narrow ? 12 : 15) + (degree.get(node.id) ?? 0) * 4)
           // 多个高亮时标签上下交错：第 1 枚在节点下方、第 2 枚起在上方——hideOverlap
           // 常开后（见上方 labelLayout 注释），交错保证两枚高亮标签不因互相重叠被吞
           const highlightIndex = props.highlightIds.indexOf(node.id)
+          // 重建前抄走的力导向坐标：带上则 force 从原位续跑，图不会因点击选中而重排
+          const pos = viewState?.positions?.get(node.id)
           return {
             id: node.id,
             name: node.label,
+            // 手势光标分离（2026-11-05 用户定稿）：节点/标签才是 pointer，
+            // 空白画布由容器 CSS 给 grab/grabbing（见 onMounted 的 zr 光标管理）
+            cursor: 'pointer',
+            x: pos?.x,
+            y: pos?.y,
             symbolSize: Math.min(narrow ? 38 : 48, baseSize + (highlighted ? 4 : 0)),
             itemStyle: {
               color: colorOf(node, dark),
               borderColor: highlighted ? (dark ? '#f6c453' : '#b45309') : (dark ? '#2a2c30' : '#ffffff'),
               borderWidth: highlighted ? 2.5 : 1.5,
-              opacity: dimmed ? 0.48 : 1
+              opacity: dimmed === 'highlight' ? 0.48 : dimmed === 'select' ? 0.35 : 1
             },
             // 层级：coreConcept 用圆、KC 用圆角方块，一眼区分粒度
             symbol: node.level === 'concept' ? 'circle' : 'roundRect',
             label: {
-              show: labelWorthy.has(node.id),
+              show: labelWorthy.has(node.id) || node.id === selectedIdRef.value,
               fontWeight: highlighted ? 'bold' : 'normal',
               color: highlighted ? (dark ? '#ffe08a' : '#8a4b00') : textColor,
               position: highlighted && highlightIndex > 0 ? 'top' : 'bottom'
@@ -416,13 +471,23 @@ function buildOption(): EChartsCoreOption {
         // 前置边后画（覆盖在"属于"虚线之上），让主结构更清楚
         links: [...edges]
           .sort((a, b) => (a.relation === 'prerequisite' ? 1 : 0) - (b.relation === 'prerequisite' ? 1 : 0))
-          .map((edge) => ({
-            source: edge.fromConceptId,
-            target: edge.toConceptId,
-            relation: edge.relation,
-            // 与 DOM 图例同源（见文件头 relationStyleOf 注释）
-            lineStyle: relationStyleOf(edge.relation, dark)
-          }))
+          .map((edge) => {
+            // 选中压暗：与选中节点无关的连线一起退到 0.25，选中节点的邻接结构才突得出来
+            const touchesSelected =
+              !selectedIdRef.value ||
+              edge.fromConceptId === selectedIdRef.value ||
+              edge.toConceptId === selectedIdRef.value
+            return {
+              source: edge.fromConceptId,
+              target: edge.toConceptId,
+              relation: edge.relation,
+              // 与 DOM 图例同源（见文件头 relationStyleOf 注释）
+              lineStyle: {
+                ...relationStyleOf(edge.relation, dark),
+                opacity: touchesSelected ? 1 : 0.25
+              }
+            }
+          })
       }
     ]
   }
@@ -444,20 +509,24 @@ function render() {
     // 不注解入参（交给 ECharts 的 ECElementEvent），内部按图节点形状取值——避免 any
     chart.on('click', (params) => {
       if (params?.dataType !== 'node') {
-        selectedId = null
+        selectedIdRef.value = null
         chart?.dispatchAction({ type: 'hideTip' })
         emit('select', null)
+        render()
         return
       }
       const data = params.data as { raw?: MkGraphNode } | undefined
-      selectedId = data?.raw?.id ? String(data.raw.id) : null
+      selectedIdRef.value = data?.raw?.id ? String(data.raw.id) : null
       chart?.dispatchAction({ type: 'hideTip' })
       emit('select', data?.raw ?? null)
+      // 选中/取消都要重建 option 把无关节点压暗；render() 会抄走当前坐标与缩放，
+      // 力导向从原位续跑，不发生"点一下重排一次"
+      render()
     })
     // 批次四 P2：缩放跨档收/放节点标签（setOption(notMerge) 重建会重置缩放档标志）
     chart.on('graphRoam', () => applyZoomLabels())
   }
-  chart.setOption(buildOption(), true)
+  chart.setOption(buildOption(readGraphViewState()), true)
   labelsHiddenByZoom = false
 }
 
@@ -481,6 +550,23 @@ onMounted(() => {
     }
   })
   if (el.value) ro.observe(el.value)
+  if (!chart) return
+  // 手势光标分离（2026-11-05 用户定稿）：空白画布=抓手、按住拖动=紧握、节点/标签=小手。
+  // zrender 在移出元素时会往画布写 inline 'default' 盖掉容器 CSS（Handler.js:95），
+  // 所以光标只能由这里跟着 mousemove 自己管：无 target → grab，拖拽中 → grabbing，
+  // 有 target 时不插手（节点的 pointer 来自 data item 的 cursor 字段，见 buildOption）
+  const zrender = chart.getZr()
+  let roaming = false
+  zrender.on('mousemove', (e: { target?: unknown }) => {
+    if (!el.value) return
+    el.value.style.cursor = roaming ? 'grabbing' : e.target ? '' : 'grab'
+  })
+  zrender.on('mousedown', (e: { target?: unknown }) => {
+    if (!el.value) return
+    if (!e.target) { roaming = true; el.value.style.cursor = 'grabbing' }
+  })
+  zrender.on('mouseup', () => { if (el.value) { roaming = false; el.value.style.cursor = 'grab' } })
+  zrender.on('globalout', () => { if (el.value) { roaming = false; el.value.style.cursor = '' } })
 })
 
 watch(() => [props.nodes, props.edges, resolvedTheme.value, props.hideIsolated], () => render(), { deep: true })
@@ -500,6 +586,9 @@ onBeforeUnmount(() => {
 .mk-graph {
   width: 100%;
   height: var(--mkg-h, 520px);
+  /* 手势光标基线（2026-11-05 用户定稿）：空白画布是抓手，节点悬浮由 data cursor 接管
+     （小手）、拖拽中由 onMounted 里的 zr 光标管理切成紧握 */
+  cursor: grab;
   /* roam:true 会接管画布手势，单指竖向拖动把页面滚动一起吞掉。pan-y 只把「竖向滑动」
      还给浏览器（页面照常滚，zrender 收 pointercancel 自然收手）；双指捏合不属于 pan-y，
      触摸事件照常到达 zrender，缩放不受影响。
