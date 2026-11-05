@@ -17,10 +17,12 @@
          「3 列 + 1 通栏」两种形状，读者得先分辨为什么第四张不一样宽。
          MCP 仍是带子资源的容器（服务列表挂在卡内），但它现在与其余三张同宽同形。 -->
     <section class="ac-section">
+      <!-- 区头只留区名（2026-11-05 用户「这种说明文案不要」）：右端那行
+           「4 项能力 · 6 个 Skill」是把下方四张卡再数一遍，读者扫一眼卡片就有答案。
+           保留的只有「启停状态未读取」——那是读失败，不读这一行看不出来。 -->
       <div class="ac-section__head">
         <h2 class="ac-section__title">可选能力</h2>
         <span v-if="pluginStateFailed" class="mk-badge mk-badge--warn">启停状态未读取</span>
-        <span class="ac-section__meta">{{ pluginRows.length }} 项能力 · {{ pluginMemberCount }} 个 Skill</span>
       </div>
       <div v-if="configsFailed" class="mk-alert mk-alert--row ac-error" role="alert">
         <span class="mk-alert__msg">{{ configErrorText }}</span>
@@ -555,8 +557,6 @@ const pluginRows = computed(() => {
   void liveSkillStatsMap.value
   return buildPluginRows(PLUGIN_GROUPS, mcpAvailability.value)
 })
-/** 卡头读数：几组能力、几个运行时 Skill（2026-10-21 重设计后卡头只放数据） */
-const pluginMemberCount = computed(() => pluginRows.value.reduce((n, p) => n + p.members.length, 0))
 
 async function loadMcpTools() {
   mcpLoading.value = true
@@ -983,13 +983,6 @@ function goLogs(skillId: string) {
 .ac-section { display: grid; gap: 12px; }
 .ac-section__head { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .ac-section__title { margin: 0; font-size: var(--mk-fs-emphasis); font-weight: 650; color: var(--mk-ink); }
-.ac-section__meta {
-  margin-left: auto;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
 .ac-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 /* 卡头沿用 .mk-card__head 的排版（12/16 + 发丝线）：一行装下「图标 + 能力名 + 最近调用 +
    成员 + 入口与开关」，与模型卡同址同形（2026-11-05 单列后不再需要第二行）。 */

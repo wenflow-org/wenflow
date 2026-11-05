@@ -147,6 +147,13 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     expect(wrapper.findAll('.ac-cap .mk-card__title')).toHaveLength(4);
     expect(wrapper.find('.ac-mcp-card').exists()).toBe(false);
     expect(wrapper.find('.ac-cap .ac-mcp__row').exists()).toBe(true);
+    /* 2026-11-05 用户「这种说明文案不要」：区头那行「4 项能力 · 6 个 Skill」是把下方
+       四张卡再数一遍，撤除；区头只剩区名（读失败的徽标才保留）。 */
+    const sectionHead = wrapper.find('.ac-section__head');
+    expect(sectionHead.text()).toBe('可选能力');
+    expect(sectionHead.find('.mk-badge').exists()).toBe(false);
+    expect(wrapper.find('.ac-section__meta').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('项能力 ·');
     // 顶栏刷新 = liveRefreshSeq 广播 → 本页与旧页头刷新钮同一入口重拉
     const calls = pluginConfigMock.mock.calls.length;
     liveRefreshSeq.value += 1;
