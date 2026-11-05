@@ -2011,7 +2011,10 @@ function shuffleScenes() {
   position: relative;
   grid-column: 1 / -1;
   display: grid; grid-template-columns: 16px 1fr; gap: 9px;
-  padding: 9px 0;
+  /* 右内衬 10（2026-11-05）：行是「标记列 + 文本列」两栏，左栏天然有 16px 呼吸，
+     右栏却直接顶到行尾——长描述的最后一行贴着「刚收录」底色带的右边缘，
+     读起来像挤出框。补 10px 让左右两侧的留白接近 */
+  padding: 9px 10px 9px 0;
   border-top: 1px solid var(--line);
 }
 .field:first-child { border-top: 0; }
@@ -2911,7 +2914,7 @@ function shuffleScenes() {
   /* 面板紧凑化（.field 已是原型 .wf-field 平铺发丝线行）：行内边距 9→7、gap 9→8、
      值 13→12.5；标记/徽章尺寸随桌面档（16px），只把绝对定位徽章对齐到新的行内边距；
      「待补充」行只有一行内容，标签与值并排（原先占两行纯属浪费，5 行白吃 ~110px）。 */
-  .field { padding: 7px 0; grid-template-columns: 16px 1fr; gap: 8px; }
+  .field { padding: 7px 10px 7px 0; grid-template-columns: 16px 1fr; gap: 8px; }
   .field__value { margin-top: 2px; font-size: 12.5px; }
   .field__value--todo { font-size: 12px; }
   .field--todo .field__body { display: flex; align-items: baseline; gap: 6px; }
