@@ -17,6 +17,7 @@ import {
   INFRA_SETTING_KEY,
   defaultInfraModelsConfig,
   mergeInfraModelsConfig,
+  migrateLegacyModelPool,
   resolveInfraEndpoint,
   toPersistedInfraModelsConfig,
   validateInfraModelsConfig,
@@ -125,7 +126,12 @@ async function readStoredConfig(): Promise<{ config: InfraModelsConfig | null; e
       return { config: null, errors: ['存储的基础设施配置不是合法 JSON'] };
     }
     return {
-      config: mergeInfraModelsConfig(defaultInfraModelsConfig(), parsed as Parameters<typeof mergeInfraModelsConfig>[1]),
+      config: mergeInfraModelsConfig(
+        defaultInfraModelsConfig(),
+        /* 旧记录只有单个 model、没有 models 池：先补成「只配了一个模型」的池子再合并，
+           否则默认配置里的 bge-m3 会被算进池子，凭空多出一个没配过的模型（2026-11-05）。 */
+        migrateLegacyModelPool(parsed) as Parameters<typeof mergeInfraModelsConfig>[1],
+      ),
       errors: [],
     };
   } catch (error) {
@@ -247,6 +253,7 @@ async function toView(
     connectionMode: entry.connectionMode,
     endpoint: entry.endpoint,
     model: entry.model,
+    models: [...entry.models],
     apiKeyEnv: entry.apiKeyEnv,
     timeoutMs: entry.timeoutMs,
     batchSize: entry.batchSize,

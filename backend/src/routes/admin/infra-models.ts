@@ -117,10 +117,18 @@ router.post('/pull', async (req, res) => {
 
 router.post('/test', async (req, res) => {
   const kind = req.body?.kind === 'rerank' ? 'rerank' : 'embedding';
+  /* 指定模型（2026-11-05 模型池）：一条连接可能挂着好几个模型，
+     行内「测试」测的必须是**那一行**的模型，否则 B 行会显示 A 的结果。
+     不传仍测当前启用项（连接级调用方保持原语义）。 */
+  const requestedModel = typeof req.body?.model === 'string' ? req.body.model.trim() : '';
+  const modelOverride = requestedModel ? { model: requestedModel } : {};
   setAuditAction(res, 'infra-models-test', { targetType: 'infra-models', targetId: kind });
   try {
     if (kind === 'embedding') {
-      const result = await embedTexts({ input: ['平台基础设施连通性测试'] }, { timeoutMs: 15_000 });
+      const result = await embedTexts(
+        { input: ['平台基础设施连通性测试'], ...modelOverride },
+        { timeoutMs: 15_000 },
+      );
       res.json({
         success: true,
         data: {
@@ -138,6 +146,7 @@ router.post('/test', async (req, res) => {
       {
         query: '学习动机',
         documents: ['自我决定理论认为胜任感、自主性与归属感影响内在动机。', '报名流程与缴费说明。'],
+        ...modelOverride,
       },
       { timeoutMs: 15_000 },
     );

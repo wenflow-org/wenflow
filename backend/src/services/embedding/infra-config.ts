@@ -27,7 +27,18 @@ export interface InfraModelEntry {
   /** 连接方式；inherit 时 endpoint 仅作切换回 own 的留档，运行时不使用 */
   connectionMode: InfraConnectionMode;
   endpoint: string;
+  /**
+   * 当前启用的模型：运行时只认这一个。
+   * 与 `models` 的关系是「池子里的一个」——切换模型只改这一个字段，不动池子。
+   */
   model: string;
+  /**
+   * 已配置的模型池（含启用中的那个）。
+   * 2026-11-05 用户「我拉去了四个，配置了四个，那我可以选择其中一个作为启用吧」：
+   * 一条连接可以配多个模型，其中一个是启用态。此前只存单个 model，换一个就等于把
+   * 上一个丢掉，运营还得重新拉清单重挑。
+   */
+  models: string[];
   apiKeyEnv: string;
   timeoutMs: number;
   /** 仅 embedding 使用；rerank 固定 null */
@@ -84,12 +95,15 @@ function positiveInt(value: unknown): number | null {
 
 /** 首次部署/未落库时的默认配置：全部来自环境变量（历史行为） */
 export function defaultInfraModelsConfig(env: NodeJS.ProcessEnv = process.env): InfraModelsConfig {
+  const embeddingModel = (env.EMBEDDING_MODEL || '').trim() || DEFAULT_EMBEDDING_MODEL;
+  const rerankModel = (env.RERANK_MODEL || '').trim() || DEFAULT_RERANK_MODEL;
   return {
     embedding: {
       provider: 'bge',
       connectionMode: 'own',
       endpoint: (env.EMBEDDING_API_URL || '').trim(),
-      model: (env.EMBEDDING_MODEL || '').trim() || DEFAULT_EMBEDDING_MODEL,
+      model: embeddingModel,
+      models: [embeddingModel],
       apiKeyEnv: 'EMBEDDING_API_KEY',
       timeoutMs: positiveInt(env.EMBEDDING_TIMEOUT_MS) ?? DEFAULT_INFRA_TIMEOUT_MS,
       batchSize: positiveInt(env.EMBEDDING_BATCH_SIZE) ?? DEFAULT_EMBEDDING_BATCH_SIZE,
@@ -99,7 +113,8 @@ export function defaultInfraModelsConfig(env: NodeJS.ProcessEnv = process.env): 
       provider: 'bge',
       connectionMode: 'own',
       endpoint: (env.RERANK_API_URL || '').trim(),
-      model: (env.RERANK_MODEL || '').trim() || DEFAULT_RERANK_MODEL,
+      model: rerankModel,
+      models: [rerankModel],
       // 当前 BGE 网关两接口共用一把 key；独立 key 用 RERANK_API_KEY，缺省回落 embedding key
       apiKeyEnv: 'RERANK_API_KEY',
       timeoutMs: positiveInt(env.EMBEDDING_TIMEOUT_MS) ?? DEFAULT_INFRA_TIMEOUT_MS,
@@ -119,15 +134,69 @@ function mergeInt(base: number | null, value: unknown): number | null {
   return n ?? base;
 }
 
+/**
+ * 模型池归一化：去空、去重、保持顺序，并保证启用项一定在池子里。
+ * 池子与 `model` 是「集合 + 当前项」的关系，两者不一致时以合并结果为准，
+ * 不把矛盾写进库里（否则界面上会出现「启用中的模型不在列表里」）。
+ */
+export function normalizeModelPool(models: readonly unknown[], active: string): string[] {
+  const seen = new Set<string>();
+  const pool: string[] = [];
+  for (const raw of models) {
+    const id = typeof raw === 'string' ? raw.trim() : '';
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    pool.push(id);
+  }
+  const activeId = String(active || '').trim();
+  if (activeId && !seen.has(activeId)) pool.push(activeId);
+  return pool;
+}
+
+/**
+ * 旧记录补池子（2026-11-05）：模型池上线前落库的记录只有单个 `model`。
+ * 读库时先把它当成「只配了一个模型」的池子再合并——不补的话，合并阶段
+ * 会把默认配置里的 bge-m3 也算进池子，凭空多出一个没配过的模型。
+ */
+export function migrateLegacyModelPool(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object') return raw;
+  const out: Record<string, unknown> = { ...(raw as Record<string, unknown>) };
+  for (const kind of ['embedding', 'rerank'] as const) {
+    const entry = out[kind];
+    if (!entry || typeof entry !== 'object') continue;
+    const record = entry as Record<string, unknown>;
+    if (Array.isArray(record.models)) continue;
+    const model = typeof record.model === 'string' ? record.model.trim() : '';
+    out[kind] = { ...record, models: model ? [model] : [] };
+  }
+  return out;
+}
+
 function mergeEntry(kind: InfraModelKind, base: InfraModelEntry, input: Partial<InfraModelEntry> | undefined): InfraModelEntry {
   if (!input) return base;
+  /* 池子与启用项一起解：两条更新路径都要能用——
+     ① 界面提交 `{ models, model }`（加模型 / 切启用 / 删模型；models = [] 即清空池子）；
+     ② 只提交 `{ model }`（旧客户端、只切模型）：池子沿用，新模型补进池里。
+     不变量：空池 ⟺ 未选择模型；启用项一定在池子里。 */
+  const explicitPool = Array.isArray(input.models) ? input.models : null;
+  // 空串等同于「没给」：与其他字段的合并口径一致（空值回落到已有值，不清空启用项）
+  const requestedModel = typeof input.model === 'string' && input.model.trim() ? input.model.trim() : null;
+  let active = requestedModel ?? base.model;
+  let pool = normalizeModelPool(explicitPool ?? [...base.models], '');
+  if (active && !pool.includes(active)) {
+    // 显式给了池子就以池子为准（切到一个池外 id = 落回池中第一个）；没给池子就把新模型补进池
+    if (explicitPool) active = pool[0] ?? '';
+    else pool = [...pool, active];
+  }
+  if (!pool.length) active = '';
   return {
     provider: input.provider === 'bge' ? 'bge' : base.provider,
     connectionMode: input.connectionMode === 'inherit' || input.connectionMode === 'own'
       ? input.connectionMode
       : base.connectionMode,
     endpoint: mergeText(base.endpoint, input.endpoint),
-    model: mergeText(base.model, input.model),
+    model: active,
+    models: pool,
     apiKeyEnv: mergeText(base.apiKeyEnv, input.apiKeyEnv),
     timeoutMs: mergeInt(base.timeoutMs, input.timeoutMs) ?? base.timeoutMs,
     batchSize: kind === 'embedding' ? mergeInt(base.batchSize, input.batchSize) : null,
@@ -164,8 +233,17 @@ export function validateInfraModelsConfig(config: InfraModelsConfig): string[] {
     if (!inherit && !entry.endpoint) {
       continue;
     }
-    if (!entry.model) {
-      errors.push(`${where}：模型 id 不能为空`);
+    /* 池子与启用项是一体的：有池子就必须有一个启用项；池子空 = 「还没选模型」，
+       是合法态（界面写「未选择模型」），不再当作配置错误。 */
+    if (entry.models.length || entry.model) {
+      if (!entry.model) {
+        errors.push(`${where}：模型 id 不能为空`);
+      } else if (!entry.models.includes(entry.model)) {
+        errors.push(`${where}：启用的模型「${entry.model}」不在已配置的模型里`);
+      }
+      if (new Set(entry.models).size !== entry.models.length) {
+        errors.push(`${where}：模型列表里有重复项`);
+      }
     }
     if (!inherit) {
       if (!/^https?:\/\//i.test(entry.endpoint)) {
@@ -193,8 +271,8 @@ export function validateInfraModelsConfig(config: InfraModelsConfig): string[] {
 /** 仅保留可落库字段：绝不让 apiKey 进入 platform_settings */
 export function toPersistedInfraModelsConfig(config: InfraModelsConfig): InfraModelsConfig {
   return {
-    embedding: { ...config.embedding },
-    rerank: { ...config.rerank },
+    embedding: { ...config.embedding, models: [...config.embedding.models] },
+    rerank: { ...config.rerank, models: [...config.rerank.models] },
     required: config.required,
   };
 }

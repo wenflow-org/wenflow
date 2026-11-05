@@ -149,13 +149,13 @@ describe('ModelProvidersPanel', () => {
     expect(w.find('.mk-card__head').text()).not.toContain('一条通道 =')
     // 状态徽标只出「能不能用」，这一档由下面的连接徽标回答 → 不出徽标
     expect(w.find('.mk-card__head').findAll('.mk-badge')).toHaveLength(0)
-    // 单列 + 连接上移卡头右组（2026-11-04 用户「还是不要左右结构了，把链接做到这个卡片右上角吧」）
+    /* 2026-11-05 用户「连接设置和添加模型合并到一起吧，只保留添加模型」：
+       卡头右组只剩「＋ 添加模型」——连接（地址 / 密钥 / 重试 / 重置）搬进了弹窗，
+       所以卡面既没有连接槽，也没有「连接设置」按钮。 */
     expect(w.findAll('.mpp-step, .mpp-step__no, .mpp-step__head')).toHaveLength(0)
     expect(w.find('.mpp-body > .mpp-side').exists()).toBe(false)
-    expect(w.find('.mpp-body > .mpp-conn').exists()).toBe(false)
-    expect(w.find('.mk-card__head > .mk-card__head-right.mpp-head__conn').exists()).toBe(true)
-    expect(w.find('#mpp-platform-panel-conn.mpp-conn').exists()).toBe(true)
-    expect(w.find('.mpp-head__conn #mpp-platform-panel-conn.mpp-conn').exists()).toBe(true)
+    expect(w.find('#mpp-platform-panel-conn').exists()).toBe(false)
+    expect(w.findAll('.mpp .ac-conn-open')).toHaveLength(0)
     expect(w.find('#mpp-platform-panel-models.mpp-models').exists()).toBe(true)
     expect(w.find('#mpp-platform-panel-models.mpp-models').classes()).not.toContain('mpp-side')
     // 独立的「上游清单 + 重新获取」已撤（2026-11-04 用户「多此一举」），
@@ -163,54 +163,53 @@ describe('ModelProvidersPanel', () => {
     expect(w.find('.mpp-upstream').exists()).toBe(false)
     expect(w.text()).not.toContain('上游清单')
     expect(w.find('.mpp-toolbar__meta').exists()).toBe(false)
-    // 2026-11-04 用户「这个彻底不要」：模型区不再有工具栏行——标题、条数、默认读数都没有了，
-    // 「＋ 添加模型」上移到卡头右组（与向量 / 重排卡同址）
+    // 2026-11-04 用户「这个彻底不要」：模型区不再有工具栏行
     expect(w.find('.mpp-toolbar').exists()).toBe(false)
     expect(w.find('.mpp-models__count').exists()).toBe(false)
     expect(w.findAll('.mpp-model-row')).toHaveLength(2)
-    // 添加入口只有这一颗主按钮（手动录入在浮窗底栏）
+    // 添加入口只有这一颗主按钮（手动录入在弹窗底栏）
     expect(w.findAll('.mpp-add')).toHaveLength(1)
     expect(w.find('.mpp-add').text()).toBe('＋ 添加模型')
-    expect(w.find('.mpp-head__conn .mpp-add').exists()).toBe(true)
     expect(w.text()).not.toContain('手动录入')
   })
 
-  it('「＋ 添加模型」是唯一入口：即使已有清单也先向上游重拉，再让宿主开勾选浮窗', async () => {
-    // 已有上游清单（旧实现会直接开浮窗、不重拉）——现在一律发 fetchUpstream 走「拉取 → 浮窗」
+  it('「＋ 添加模型」是唯一入口：开弹窗并请宿主向上游重拉', async () => {
     const w = await mountPanel({ upstream: ['deepseek-v4-flash', 'mystery-1'] })
     const addBtn = w.find('.mpp-add')
     await addBtn.trigger('click')
+    await nextTick()
+    // 弹窗（连接 + 清单）就在这一处打开；清单由宿主拉（它持有地址与密钥并负责落盘连接）
+    expect(w.find('.pmd').exists()).toBe(true)
     expect(w.emitted('fetchUpstream')).toHaveLength(1)
-    // 拉取由宿主完成（它要一起落盘连接），面板自己不开浮窗
-    expect(w.find('.pmd').exists()).toBe(false)
   })
 
-  it('模型为空时给下一步：平台通道直接去配置连接，不铺一张空表', async () => {
+  it('模型为空时给下一步：平台通道直接开添加弹窗，不铺一张空表', async () => {
     seedView({ providers: [providerView({ id: 'platform', name: '平台', models: [] })] })
     const w = await mountPanel()
     const setup = w.find('.mpp-setup')
     expect(setup.exists()).toBe(true)
     expect(setup.text()).toContain('还没有挂载模型')
-    expect(setup.text()).toContain('连接就绪后')
+    expect(setup.text()).toContain('填服务地址与密钥')
     // 2026-10-28 对话模型为空时不铺空列表；向量 / 重排已拆成宿主的独立能力卡
     expect(w.find('.mpp-models__list').exists()).toBe(false)
     expect(w.findAll('.mpp-model-row')).toHaveLength(0)
-    await btn(w, '去配置连接')!.trigger('click')
-    await flushPromises()
-    expect(w.find('#mpp-platform-panel-conn').exists()).toBe(true)
+    await btn(w, '添加模型')!.trigger('click')
+    await nextTick()
+    // 连接与清单都在这一张弹窗里，不必先去别处配连接
+    expect(w.find('.pmd').exists()).toBe(true)
+    expect(w.emitted('fetchUpstream')).toHaveLength(1)
   })
 
-  it('本卡只负责对话与推理：连接与挂载模型常驻，向量 / 重排已拆到宿主', async () => {
+  it('本卡只负责对话与推理：模型清单常驻，向量 / 重排已拆到宿主', async () => {
     const w = await mountPanel()
     // 2026-10-27 用户「把 tab 解散了」：没有二级页签，内容全在 DOM 里且都可见
     expect(w.findAll('.mpp-subtabs').length).toBe(0)
     expect(w.find('[role="tab"]').exists()).toBe(false)
-    expect(shown(w, '#mpp-platform-panel-conn')).toBe(true)
     expect(shown(w, '#mpp-platform-panel-models')).toBe(true)
     expect(w.find('#mpp-platform-panel-generation').exists()).toBe(false)
     // 2026-10-28 三卡重构：向量 / 重排不再嵌在对话卡里
     expect(w.find('#mpp-platform-panel-infra').exists()).toBe(false)
-    // 连接表单就在正下方：平台详情不再摆一颗点了几乎不动的「设置」
+    // 2026-11-05 合并弹窗：卡头不再有连接表单，也没有点了几乎不动的「设置」
     expect(w.findAll('.mpp .mk-card__head .mk-btn').some((b) => b.text() === '设置')).toBe(false)
     expect(w.emitted('focus-platform-connection')).toBeUndefined()
   })

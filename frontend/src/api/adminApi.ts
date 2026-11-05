@@ -867,7 +867,10 @@ export interface InfraModelEntryView {
   provider: 'bge';
   connectionMode: 'inherit' | 'own';
   endpoint: string;
+  /** 当前启用的模型（运行时只认这一个）；空串 = 尚未选择 */
   model: string;
+  /** 已配置的模型池（含启用项）：一条连接可配多个，⋯ 里切换启用 / 删除 */
+  models: string[];
   apiKeyEnv: string;
   timeoutMs: number;
   batchSize: number | null;
@@ -906,7 +909,9 @@ export interface InfraModelsUpdateInput {
 export const adminInfraModelsApi = {
   get: async () => adminAxios.get('/admin/infra-models'),
   update: async (data: InfraModelsUpdateInput) => adminAxios.put('/admin/infra-models', data),
-  test: async (kind: 'embedding' | 'rerank') => adminAxios.post('/admin/infra-models/test', { kind }),
+  /** 测试连通性：传 model 就测那一行（模型池里逐行测），不传测当前启用项 */
+  test: async (kind: 'embedding' | 'rerank', model?: string) =>
+    adminAxios.post('/admin/infra-models/test', model ? { kind, model } : { kind }),
   /** 用这条能力的连接向上游拉模型清单（P1 2026-11-04）：向量 / 重排不必手打模型 ID。
    *  独立服务可带草稿连接：填地址与密钥后直接拉，不必先保存一次。 */
   pull: async (data: { kind: 'embedding' | 'rerank'; endpoint?: string; apiKey?: string }) =>

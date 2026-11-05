@@ -11,6 +11,7 @@ import {
   DEFAULT_INFRA_TIMEOUT_MS,
   defaultInfraModelsConfig,
   mergeInfraModelsConfig,
+  migrateLegacyModelPool,
   resolveInfraEndpoint,
   resolveInfraModelsBaseUrl,
   validateInfraModelsConfig,
@@ -149,5 +150,89 @@ describe('resolveInfraModelsBaseUrl', () => {
   it('没有类型段时原样返回（已是 base 就别再削）', () => {
     expect(resolveInfraModelsBaseUrl('https://gw.example/v1')).toBe('https://gw.example/v1');
     expect(resolveInfraModelsBaseUrl('')).toBe('');
+  });
+});
+
+/*
+ * 模型池（2026-11-05 用户「我拉去了四个，配置了四个，那我可以选择其中一个作为启用吧」）：
+ * 一条连接可以配多个模型，其中一个是启用态。这里钉的是池子与启用项之间的不变量——
+ * 池子空 ⟺ 未选择模型；启用项一定在池子里；旧记录（只有单个 model）读出来是一个只含它的池子。
+ */
+describe('模型池', () => {
+  it('默认配置的池子里就是那一个默认模型', () => {
+    const config = defaultInfraModelsConfig(ENV);
+    expect(config.embedding.models).toEqual(['BAAI/bge-m3']);
+    expect(config.rerank.models).toEqual(['BAAI/bge-reranker-v2-m3']);
+  });
+
+  it('显式给池子：整体覆盖并保留顺序', () => {
+    const merged = mergeInfraModelsConfig(defaultInfraModelsConfig(ENV), {
+      embedding: { models: ['BAAI/bge-m3', 'BAAI/bge-large-zh-v1.5', 'text-embedding-3-large'], model: 'BAAI/bge-large-zh-v1.5' },
+    });
+    expect(merged.embedding.models).toEqual(['BAAI/bge-m3', 'BAAI/bge-large-zh-v1.5', 'text-embedding-3-large']);
+    expect(merged.embedding.model).toBe('BAAI/bge-large-zh-v1.5');
+  });
+
+  it('只切启用项（不传池子）：池子不变', () => {
+    const base = mergeInfraModelsConfig(defaultInfraModelsConfig(ENV), {
+      embedding: { models: ['BAAI/bge-m3', 'BAAI/bge-large-zh-v1.5'], model: 'BAAI/bge-m3' },
+    });
+    const merged = mergeInfraModelsConfig(base, { embedding: { model: 'BAAI/bge-large-zh-v1.5' } });
+    expect(merged.embedding.model).toBe('BAAI/bge-large-zh-v1.5');
+    expect(merged.embedding.models).toEqual(['BAAI/bge-m3', 'BAAI/bge-large-zh-v1.5']);
+  });
+
+  it('切到池子外的 id：落回池中第一个，不写矛盾状态', () => {
+    const merged = mergeInfraModelsConfig(defaultInfraModelsConfig(ENV), {
+      embedding: { models: ['BAAI/bge-m3', 'BAAI/bge-large-zh-v1.5'], model: 'not-configured' },
+    });
+    expect(merged.embedding.model).toBe('BAAI/bge-m3');
+    expect(merged.embedding.models).toEqual(['BAAI/bge-m3', 'BAAI/bge-large-zh-v1.5']);
+  });
+
+  it('清空池子 = 未选择模型（合法态）', () => {
+    const merged = mergeInfraModelsConfig(defaultInfraModelsConfig(ENV), {
+      embedding: { models: [], model: '' },
+    });
+    expect(merged.embedding.models).toEqual([]);
+    expect(merged.embedding.model).toBe('');
+    // 空池子是「还没选」，不是配置错误
+    const config = defaultInfraModelsConfig(ENV);
+    config.embedding.models = [];
+    config.embedding.model = '';
+    expect(validateInfraModelsConfig(config)).toEqual([]);
+  });
+
+  it('池子里重复的 id 去重，空串丢弃', () => {
+    const merged = mergeInfraModelsConfig(defaultInfraModelsConfig(ENV), {
+      embedding: { models: ['a', 'a', '', 'b'], model: 'a' },
+    });
+    expect(merged.embedding.models).toEqual(['a', 'b']);
+  });
+
+  it('旧记录（只有 model、没有 models）读出来是一个只含它的池子', () => {
+    const migrated = migrateLegacyModelPool({
+      embedding: { model: 'BAAI/bge-large-zh-v1.5' },
+      rerank: { model: '' },
+      required: true,
+    }) as { embedding: { models: string[] }; rerank: { models: string[] } };
+    expect(migrated.embedding.models).toEqual(['BAAI/bge-large-zh-v1.5']);
+    expect(migrated.rerank.models).toEqual([]);
+  });
+
+  it('已带 models 的记录原样通过迁移（不覆盖新数据）', () => {
+    const raw = { embedding: { model: 'a', models: ['a', 'b'] } };
+    const migrated = migrateLegacyModelPool(raw) as { embedding: { models: string[] } };
+    expect(migrated.embedding.models).toEqual(['a', 'b']);
+  });
+
+  it('校验：启用项不在池子里 / 池内有重复，都要拦下', () => {
+    const config = defaultInfraModelsConfig(ENV);
+    config.embedding.models = ['a', 'b'];
+    config.embedding.model = 'c';
+    expect(validateInfraModelsConfig(config).join('\n')).toContain('不在已配置的模型里');
+    config.embedding.model = 'a';
+    config.embedding.models = ['a', 'a'];
+    expect(validateInfraModelsConfig(config).join('\n')).toContain('重复项');
   });
 });

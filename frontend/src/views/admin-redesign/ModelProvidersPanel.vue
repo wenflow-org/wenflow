@@ -34,16 +34,13 @@
         <span v-if="headBadge" class="mk-badge" :class="headBadge.cls">{{ headBadge.label }}</span>
       </div>
       <div class="mk-card__head-right mpp-head__conn">
-        <!-- 连接（地址 / 密钥状态 / 上次获取 / 重试口径 +「连接设置」）：由宿主经此插槽注入。
-             未配置时宿主在这里给地址与密钥输入框（不必先进弹层填完再回来）。 -->
-        <div v-if="selected" id="mpp-platform-panel-conn" class="mpp-conn">
-          <slot name="platform-detail" />
-        </div>
         <button v-if="registry?.readOnly" type="button" class="mk-btn mk-btn--sm mk-btn--danger" disabled title="配置文件所在目录不可写，请在部署侧开放写权限">
           只读
         </button>
-        <!-- 2026-11-04 用户「这个彻底不要」：工具栏最后一行只剩一颗按钮后就近上移到卡头右组——
-             与向量 / 重排卡的「＋ 添加模型」同址（都在卡头右端），正文直接从清单开始。 -->
+        <!-- 2026-11-05 用户「连接设置和添加模型合并到一起吧，只保留添加模型」：
+             卡头右组只剩这一颗按钮。连接（地址 / 密钥 / 重试 / RPM / 重置此通道）
+             与上游模型清单一并收进弹窗——此前是「连接设置」与「添加模型」两个入口，
+             填地址、拉清单、挑模型本来是同一件事，却要分三处点。 -->
         <button
           v-if="selected"
           type="button"
@@ -87,17 +84,20 @@
           <!-- 上游异常（获取失败 / 有未保存清单）与卡头徽标同源，跟着列表一起看 -->
           <slot name="models-meta" />
 
-          <!-- 空模型时的下一步（2026-10-28 新人视角）：不丢一张空表，直接说清先做什么 -->
+          <!-- 空模型时的下一步（2026-10-28 新人视角）：不丢一张空表，直接说清先做什么。
+               2026-11-05 合并弹窗后，连接与模型清单在同一处，「去配置连接」不再指向卡头，
+               而是直接把那张弹窗打开。 -->
           <div v-if="selected.enabled && !selected.models.length" class="mpp-setup">
             <div class="mpp-setup__text">
               <strong>还没有挂载模型</strong>
-              <span>连接就绪后点「＋ 添加模型」，从上游清单里挑。清单里没有的（自建、别名），在弹窗底部手动录入模型 ID。</span>
+              <span>点「＋ 添加模型」填服务地址与密钥、拉到上游清单，再勾要挂的模型。手动录入在弹窗底部。</span>
             </div>
             <button
               type="button"
               class="mk-btn mk-btn--sm"
-              @click="scrollToConn"
-            >去配置连接</button>
+              :disabled="busy || registry?.readOnly"
+              @click="onPullAdd"
+            >添加模型</button>
           </div>
 
           <!-- 对话模型列表（2026-10-28 用户「喜欢下面的设计」）：与向量 / 重排区同一套
@@ -195,10 +195,23 @@
       :provider-id="selected?.id ?? ''"
       :models="fetchableModels"
       :registered="[...registeredIds]"
+      :loading="pullLoading"
+      :error="pullError"
+      :stale="pullStale"
+      :state-line="addStateLine"
+      :state-line-title="addStateLineTitle"
+      :allow-manual="!registry?.readOnly"
       @confirm="startCapabilityConfirm"
       @manual="openManualAdd"
-    />
-    <ModelCapabilityConfirmDialog ref="capabilityDialog" @confirm="addSelected" />
+      @refetch="emit('fetchUpstream')"
+      @opened="emit('addOpened')"
+      @closed="emit('addClosed')"
+    >
+      <!-- 2026-11-05 合并弹窗：连接段由宿主（持有地址 / 密钥 / 重试策略的那一侧）注入，
+           本面板只透传——它拿不到那条连接的编辑态，也不该拿。 -->
+      <template #conn><slot name="add-conn" /></template>
+      <template #conn-actions><slot name="add-conn-actions" /></template>
+    </PullModelsDialog>    <ModelCapabilityConfirmDialog ref="capabilityDialog" @confirm="addSelected" />
     <ModelEditorDialog ref="modelEditor" @saved="onModelSaved" />
   </section>
 </template>
@@ -248,7 +261,25 @@ const props = withDefaults(defineProps<{
   /** 平台默认模型：没单独指定模型的 Skill 都走它。空 = 未设置，运行时不可用。
       平台只有这一个默认（2026-11-04 用户「为什么还在区分默认推理和对话，没有这个了」）。 */
   defaultModel?: string
-}>(), { upstream: () => [], defaultModel: '' })
+  /** 上游清单正在拉取（宿主在执行「获取模型」）：弹窗列表区给进度 */
+  pullLoading?: boolean
+  /** 上一次拉取失败的人话原因（弹窗里清单空时显示） */
+  pullError?: string
+  /** 连接在清单之后被改过：清单过期，先重拉再选 */
+  pullStale?: boolean
+  /** 弹窗标题下的一行状态（连接就绪 / 密钥已配） */
+  addStateLine?: string
+  /** 那一行的悬停全文 */
+  addStateLineTitle?: string
+}>(), {
+  upstream: () => [],
+  defaultModel: '',
+  pullLoading: false,
+  pullError: '',
+  pullStale: false,
+  addStateLine: '',
+  addStateLineTitle: '',
+})
 
 const emit = defineEmits<{
   /** 注册表被改动（增删改）→ 宿主决定是否重取别名/默认解析 */
@@ -260,6 +291,10 @@ const emit = defineEmits<{
   /** ③ 点「添加模型」时清单还没拉过：请宿主先做 ②（拉取 + 落盘连接，成功后宿主会开勾选浮窗）。
       这条把原先「静默转手动录入」的死路补成一步可预期的动作。 */
   fetchUpstream: []
+  /** 添加模型弹窗打开：宿主记一份连接快照（关窗时回滚未保存的地址 / 密钥 / 策略） */
+  addOpened: []
+  /** 添加模型弹窗关闭：宿主收起连接的编辑态（未保存的地址 / 密钥随之回滚） */
+  addClosed: []
   /** 设为平台默认（P0）：默认模型存 DB platform_api_configs，不在注册表文件里，
       所以本面板只发意图，由宿主（持有 live 配置）落盘。平台只有一个默认——推理与否
       由 Skill 的思考模式 / 推理强度决定，不由换模型决定。 */
@@ -456,31 +491,33 @@ async function testModel(p: ProviderView, modelId: string): Promise<void> {
 /** ③ 入口一「从上游清单添加」：清单拉过就开勾选浮窗；没拉过就先把 ② 做掉
     （宿主拉取 → 落盘连接 → 成功后宿主自己开浮窗）。这条次序写在按钮悬停里，不藏。 */
 /**
- * 「＋ 添加模型」（2026-11-04 用户「在添加模型时候，就是拉取清单，然后从弹出的清单列表选择需要的模型」）：
- * 这一枚就是添加模型的**唯一入口**，且每次都向上游拉一份新清单，拉到后宿主直接开勾选浮窗
- * （宿主拉取 → 落盘连接 → 成功后宿主开浮窗；清单没拉过时也是这条路，不再有第二种可能）。
- * 之所以每次都拉、不复用会话里那份旧清单：上游新增的模型要能立刻看到，
- * 也正是这一点让「上游清单 + 重新获取」那块成了重复的第二条路，2026-11-04 一并撤掉。
+ * 「＋ 添加模型」（2026-11-05 用户「连接设置和添加模型合并到一起吧，只保留添加模型」）：
+ * 这一枚就是添加模型的**唯一入口**，打开的是「连接 + 上游清单」同一张弹窗。
+ * 每次打开都先向上游拉一份新清单（上游新增的模型要能立刻看到）；拉取由宿主做——
+ * 它持有地址与密钥，且拉成功后要把连接一起落盘。
  */
 function onPullAdd(): void {
+  if (!selected.value) return
+  pullDialog.value?.openWith()
   emit('fetchUpstream')
 }
 
-/** 打开拉取结果浮窗：清单只用于勾选，不再在详情里铺开 */
+/** 打开弹窗（清单只用于勾选，不在详情里铺开）。
+    已经没有「清单还没拉就不能开」这条限制：连接段就在弹窗里，空清单也能填地址重拉。 */
 function openPull(): void {
   if (!selected.value) return
-  if (!fetchableModels.value.length) {
-    actionError.value = '还没有拉取到模型'
-    return
-  }
+  if (pullDialog.value?.isOpen?.()) return
   pullDialog.value?.openWith()
 }
 
-/** 平台通道同步上游清单后直接弹浮窗。
-    2026-11-04：上游返回 0 个模型也开——手动录入只剩浮窗底栏这一处，不开窗就等于
-    「清单里没有」没有出口；空清单的说明由浮窗自己给（「这次没有拉取到模型」）。 */
+/** 宿主拉完清单后开弹窗。
+    2026-11-04：上游返回 0 个模型也开——手动录入只剩弹窗底栏这一处，不开窗就等于
+    「清单里没有」没有出口；空清单的说明由弹窗自己给（「这次没有拉取到模型」）。
+    2026-11-05：弹窗多半已经开着（入口就在弹窗里），此时只换清单不重开——
+    重开会把用户已经勾上的选择清掉。 */
 function openHostPull(): void {
   if (!selected.value) return
+  if (pullDialog.value?.isOpen?.()) return
   pullDialog.value?.openWith()
 }
 
@@ -519,16 +556,11 @@ async function addSelected(models: ConfirmedModelCapability[]): Promise<void> {
   }
 }
 
-/** 连接段常驻在模型表上方：空态里的「去配置连接」滚过去，不再需要切页签 */
-function scrollToConn(): void {
-  document.getElementById('mpp-platform-panel-conn')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
-}
-
 onMounted(() => {
   void refresh()
 })
 
-defineExpose({ refresh, openPull, openHostPull })
+defineExpose({ refresh, openPull, openHostPull, openAdd: onPullAdd })
 </script>
 
 <style scoped>
@@ -554,11 +586,10 @@ defineExpose({ refresh, openPull, openHostPull })
   flex: 1 1 auto;
   min-height: 0;
 }
-/* 卡头右组的连接块：地址 / 密钥与连接状态 / 重试口径 +「连接设置」。
-   它是宿主机注入的（连接编辑留在那边），所以内部的 .ac-conn-* 只能靠宿主自己的样式，
-   这里只负责让它在右组里不被压扁、窄屏可折行。 */
+/* 卡头右组：只剩「只读」与「＋ 添加模型」两颗按钮。连接块已经不在这里——
+   2026-11-05 用户「连接设置和添加模型合并到一起吧，只保留添加模型」后，
+   连接整段搬进了那张弹窗，右组只负责不被压扁、窄屏可折行。 */
 .mpp-head__conn { flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
-.mpp-conn { display: grid; min-width: 0; }
 
 .mpp-models { display: grid; gap: 10px; min-width: 0; }
 /* 卡头左组：通道名 + 类型 + 连接状态（2026-10-27 由详情头并入卡头） */

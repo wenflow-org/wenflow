@@ -2,19 +2,31 @@
   <!-- 上游模型清单（2026-10-28 用户「应用商店级的选择弹窗」）。
        2026-11-04 用户「文案不要…我们不做模型类型区分。不分什么对话非对话，这个页面就是拉取列表测试添加」：
        撤掉按用途分的页签与「建议归入向量/重排」的判词，清单原样列出——能勾的勾、已添加的置灰。
-       2026-11-04 用户「这两个拉取，弹窗怎么还不一样呢」：向量 / 重排卡的「＋ 添加模型」
-       也走这一张弹窗（single 单例模式：单选、无全选、无能力确认提示），两条拉取不要再是两种弹窗。 -->
+       2026-11-05 用户「连接设置和添加模型合并到一起吧，只保留添加模型」：
+       对话卡的连接（地址 / 密钥 / 重试 / RPM / 重置）搬到本弹窗顶部的 conn 槽里，
+       卡头不再另挂一个「连接设置」入口——一次弹窗既配连接又选模型。 -->
   <Teleport v-if="open" to="body">
     <div ref="maskRef" class="mk-modal">
       <div ref="panelRef" class="mk-modal__panel pmd" role="dialog" aria-modal="true" :aria-label="title">
         <div class="mk-modal__head">
           <div class="pmd-head">
             <h3 class="mk-modal__title">{{ title }}</h3>
+            <p v-if="stateLine" class="pmd-head__state" :title="stateLineTitle || undefined">{{ stateLine }}</p>
           </div>
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="close">✕</button>
         </div>
 
         <div class="mk-modal__body">
+          <!-- 连接段（宿主注入）：对话卡把服务地址 / 密钥 / 重试策略放在这里。
+               脚注动作（重置此通道等）也由宿主给，弹窗不拥有那条连接。 -->
+          <section v-if="$slots.conn" class="pmd-conn">
+            <div class="pmd-conn__head">
+              <h4 class="pmd-conn__title">连接</h4>
+              <span class="pmd-conn__actions"><slot name="conn-actions" /></span>
+            </div>
+            <slot name="conn" />
+          </section>
+
           <div class="pmd-toolbar">
             <input
               v-model="query"
@@ -23,6 +35,14 @@
               aria-label="搜索模型"
               autocomplete="off"
             />
+            <!-- 清单是「这次拉取」的快照：改了连接就重拉（2026-11-05 合并弹窗后，
+                 重拉与改连接同处一屏，不再需要回卡头找入口） -->
+            <button
+              type="button"
+              class="mk-btn mk-btn--sm"
+              :disabled="loading"
+              @click="emit('refetch')"
+            >{{ loading ? '拉取中…' : models.length ? '重新获取' : '获取模型' }}</button>
           </div>
 
           <!-- 没有「能力特性」列（2026-11-04 用户「能力特性我们也不知道吧，这个列表并不能获取这些，
@@ -34,60 +54,56 @@
             <span>状态</span>
             <span></span>
           </div>
-          <div class="pmd-list">
-            <div
-              v-for="row in visibleRows"
-              :key="row.id"
-              class="pmd-row"
-              :class="{ 'pmd-row--done': row.added, 'pmd-row--off': !row.selectable }"
-            >
-              <label class="pmd-row__pick">
-                <input
-                  v-if="single"
-                  type="radio"
-                  :name="`pmd-single-${title}`"
-                  :checked="selected[0] === row.id"
-                  :disabled="!row.selectable"
-                  @change="selectOne(row.id)"
-                />
-                <input
-                  v-else
-                  v-model="selected"
-                  type="checkbox"
-                  :value="row.id"
-                  :disabled="!row.selectable"
-                />
-                <span class="pmd-row__name">
-                  <span class="mono pmd-row__id" :title="row.id">{{ row.id }}</span>
-                  <small v-if="row.display" class="pmd-row__display">{{ row.display }}</small>
+          <div class="pmd-list" :class="{ 'pmd-list--stale': stale && !loading }">
+            <p v-if="loading" class="pmd-empty">正在向上游拉取模型清单…</p>
+            <p v-else-if="error && !models.length" class="pmd-empty pmd-empty--bad">{{ error }}</p>
+            <p v-else-if="stale" class="pmd-empty">连接已改动，清单还是上一次的。先点「重新获取」。</p>
+            <template v-else>
+              <div
+                v-for="row in visibleRows"
+                :key="row.id"
+                class="pmd-row"
+                :class="{ 'pmd-row--done': row.added, 'pmd-row--off': !row.selectable }"
+              >
+                <label class="pmd-row__pick">
+                  <input
+                    v-model="selected"
+                    type="checkbox"
+                    :value="row.id"
+                    :disabled="!row.selectable"
+                  />
+                  <span class="pmd-row__name">
+                    <span class="mono pmd-row__id" :title="row.id">{{ row.id }}</span>
+                    <small v-if="row.display" class="pmd-row__display">{{ row.display }}</small>
+                  </span>
+                </label>
+                <span class="pmd-row__status">
+                  <span v-if="row.added" class="mk-badge mk-badge--muted">已添加</span>
+                  <span v-else class="mk-badge mk-badge--ok">可添加</span>
                 </span>
-              </label>
-              <span class="pmd-row__status">
-                <span v-if="row.added" class="mk-badge mk-badge--muted">{{ single ? '使用中' : '已添加' }}</span>
-                <span v-else class="mk-badge mk-badge--ok">可添加</span>
-              </span>
-              <span v-if="providerId" class="pmd-row__probe">
-                <button
-                  type="button"
-                  class="mk-link pmd-row__test"
-                  :disabled="!!testing"
-                  @click="runTest(row.id)"
-                >{{ testing === row.id ? '测试中…' : '测试' }}</button>
-                <span
-                  v-if="results[row.id]"
-                  class="pmd-row__res"
-                  :class="results[row.id].ok ? 'is-ok' : 'is-bad'"
-                  :title="results[row.id].text"
-                >{{ results[row.id].ok ? `已连通 · ${results[row.id].latency}` : '连接失败' }}</span>
-                <span v-else class="pmd-row__res" aria-hidden="true"></span>
-              </span>
-            </div>
-            <p v-if="!visibleRows.length" class="pmd-empty">{{ emptyText }}</p>
+                <span v-if="providerId" class="pmd-row__probe">
+                  <button
+                    type="button"
+                    class="mk-link pmd-row__test"
+                    :disabled="!!testing"
+                    @click="runTest(row.id)"
+                  >{{ testing === row.id ? '测试中…' : '测试' }}</button>
+                  <span
+                    v-if="results[row.id]"
+                    class="pmd-row__res"
+                    :class="results[row.id].ok ? 'is-ok' : 'is-bad'"
+                    :title="results[row.id].text"
+                  >{{ results[row.id].ok ? `已连通 · ${results[row.id].latency}` : '连接失败' }}</span>
+                  <span v-else class="pmd-row__res" aria-hidden="true"></span>
+                </span>
+              </div>
+              <p v-if="!visibleRows.length" class="pmd-empty">{{ emptyText }}</p>
+            </template>
           </div>
 
           <div class="pmd-hint">
             <span v-if="hint">{{ hint }}</span>
-            <label v-if="!single && selectableVisibleRows.length" class="pmd-all">
+            <label v-if="selectableVisibleRows.length" class="pmd-all">
               <input
                 type="checkbox"
                 :checked="allVisibleSelected"
@@ -109,7 +125,7 @@
           <button
             type="button"
             class="mk-btn mk-btn--primary"
-            :disabled="!selected.length"
+            :disabled="!selected.length || loading || (stale && !selected.length)"
             @click="confirm"
           >确认引入</button>
         </div>
@@ -145,16 +161,29 @@ const props = withDefaults(defineProps<{
   registered: string[]
   /** 弹窗标题：对话卡「添加模型」/ 向量卡「添加向量模型」… */
   title?: string
-  /** 单选模式：向量 / 重排是单例引擎，只挑一个 */
-  single?: boolean
+  /** 清单正在重新拉取（宿主在「获取模型」时置位）：列表区给进度，不给一份过期清单 */
+  loading?: boolean
+  /** 上一次拉取失败的人话原因：清单空时直接显示在这里 */
+  error?: string
+  /** 连接在清单之后被改过：清单过期，先重拉再选（避免把旧端点的模型挂到新连接上） */
+  stale?: boolean
+  /** 标题下的一行状态（连接是否就绪 / 密钥是否已配）：合并连接段之后，
+      这一行是「能不能拉」的唯一读数 */
+  stateLine?: string
+  /** stateLine 的悬停全文（时间口径 / 不冒充实时探活那类说明） */
+  stateLineTitle?: string
   /** 底栏「手动录入」出口（向量 / 重排的配置弹层里本来就能填模型 ID） */
   allowManual?: boolean
-  /** 底栏说明；空串即不显示（单例模式没有「引入后确认能力」这一步） */
+  /** 底栏说明；空串即不显示 */
   hint?: string
 }>(), {
   providerId: '',
   title: '添加模型',
-  single: false,
+  loading: false,
+  error: '',
+  stale: false,
+  stateLine: '',
+  stateLineTitle: '',
   allowManual: true,
   hint: '能力列表里没有，勾完引入时会让你逐项确认思考 / 推理强度 / 读图。',
 })
@@ -164,6 +193,12 @@ const emit = defineEmits<{
   confirm: [ids: string[]]
   /** 上游没有需要的模型：转到手动录入 */
   manual: []
+  /** 「获取模型 / 重新获取」：拉清单是宿主的连接动作，弹窗只发意图 */
+  refetch: []
+  /** 弹窗关闭（取消 / 确认 / 手动录入都算）：宿主据此收起连接的编辑态 */
+  closed: []
+  /** 弹窗打开：宿主据此记一份「开窗前的连接」，用于关窗回滚未保存改动 */
+  opened: []
 }>()
 
 const open = ref(false)
@@ -215,11 +250,6 @@ const someVisibleSelected = computed(() =>
   selectableVisibleRows.value.some((row) => selected.value.includes(row.id))
 )
 
-/** 单例模式：选中即替换（向量 / 重排只挂一个模型） */
-function selectOne(id: string): void {
-  selected.value = [id]
-}
-
 function toggleAll(): void {
   const ids = selectableVisibleRows.value.map((row) => row.id)
   if (allVisibleSelected.value) {
@@ -235,6 +265,7 @@ function openWith(): void {
   results.value = {}
   testing.value = ''
   open.value = true
+  emit('opened')
 }
 
 /** 就地测试：复用供应商测试端点（用该供应商自己的地址与密钥真发一次），
@@ -257,30 +288,45 @@ async function runTest(modelId: string): Promise<void> {
 }
 
 function close(): void {
+  if (!open.value) return
   open.value = false
+  emit('closed')
 }
 
 function confirm(): void {
   if (!selected.value.length) return
   emit('confirm', [...selected.value])
-  open.value = false
+  close()
 }
 
 function manual(): void {
   emit('manual')
-  open.value = false
+  close()
 }
 
 useEscape(() => open.value, close)
 useOverlay(open, panelRef)
 useMaskClose(maskRef, close)
 
-defineExpose({ openWith })
+defineExpose({ openWith, isOpen: () => open.value })
 </script>
 
 <style scoped>
 .pmd.mk-modal__panel { width: min(980px, 96vw); max-width: none; }
 .pmd-head { display: grid; gap: 2px; min-width: 0; }
+/* 标题下那行连接读数（2026-11-05 合并弹窗）：填地址与密钥时正对着看，不是第二行标题 */
+.pmd-head__state { margin: 2px 0 0; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+/* 连接段：地址 / 密钥 / 重试策略。与下方清单用发丝线分开——
+   上面是「接在哪」，下面是「挂了哪些」，两件事不该读成一片。 */
+.pmd-conn {
+  display: grid;
+  gap: 10px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--mk-line);
+}
+.pmd-conn__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pmd-conn__title { margin: 0; color: var(--mk-ink); font-size: var(--mk-fs-body); font-weight: 700; }
+.pmd-conn__actions { display: inline-flex; align-items: center; gap: 8px; }
 .pmd-toolbar {
   display: flex;
   align-items: center;
@@ -357,6 +403,9 @@ defineExpose({ openWith })
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
 }
+.pmd-empty--bad { color: var(--mk-red); }
+/* 清单过期（连接改了还没重拉）：整块压暗，读起来像「这批不作数」而不是「可以选」 */
+.pmd-list--stale { background: var(--mk-surface-2); }
 .pmd-hint {
   display: flex;
   align-items: center;

@@ -154,3 +154,69 @@ describe('POST /admin/infra-models/pull', () => {
     expect(String(body.error)).toContain('401');
   });
 });
+
+/**
+ * `POST /admin/infra-models/test`（2026-11-05 模型池）：
+ * 一条连接可以挂多个模型，行内「测试」测的必须是**那一行**的模型。
+ * 不传 model 时保持原语义（测当前启用项），连接级调用方不受影响。
+ */
+describe('POST /admin/infra-models/test', () => {
+  const embeddingMock = jest.requireMock('../../../services/embedding') as {
+    embedTexts: jest.Mock;
+    rerankDocuments: jest.Mock;
+  };
+
+  beforeEach(() => {
+    embeddingMock.embedTexts.mockReset();
+    embeddingMock.rerankDocuments.mockReset();
+    embeddingMock.embedTexts.mockResolvedValue({
+      provider: 'bge',
+      model: 'BAAI/bge-large-zh-v1.5',
+      vectors: [{ index: 0, embedding: [0.1, 0.2, 0.3] }],
+      attempts: ['bge'],
+      latencyMs: 12,
+    });
+    embeddingMock.rerankDocuments.mockResolvedValue({
+      provider: 'bge',
+      model: 'BAAI/bge-reranker-v3',
+      results: [],
+      attempts: ['bge'],
+      latencyMs: 9,
+    });
+  });
+
+  async function testKind(body: Record<string, unknown>) {
+    const res = await fetch(`${base}/api/admin/infra-models/test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return (await res.json()) as { data?: { ok?: boolean; model?: string } };
+  }
+
+  it('带 model 就测那一行：请求里带的是池里指定的模型，不是启用项', async () => {
+    const body = await testKind({ kind: 'embedding', model: 'BAAI/bge-large-zh-v1.5' });
+
+    expect(embeddingMock.embedTexts).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'BAAI/bge-large-zh-v1.5' }),
+      expect.anything(),
+    );
+    expect(body.data).toMatchObject({ ok: true, model: 'BAAI/bge-large-zh-v1.5' });
+  });
+
+  it('重排同理：带 model 时透传给 rerankDocuments', async () => {
+    await testKind({ kind: 'rerank', model: 'BAAI/bge-reranker-v3' });
+
+    expect(embeddingMock.rerankDocuments).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'BAAI/bge-reranker-v3' }),
+      expect.anything(),
+    );
+  });
+
+  it('不传 model：不带 model 字段，测当前启用项（连接级调用方保持原语义）', async () => {
+    await testKind({ kind: 'embedding' });
+
+    const arg = embeddingMock.embedTexts.mock.calls[0][0] as Record<string, unknown>;
+    expect(arg).not.toHaveProperty('model');
+  });
+});

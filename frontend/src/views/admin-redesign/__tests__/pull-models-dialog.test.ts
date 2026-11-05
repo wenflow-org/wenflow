@@ -141,29 +141,87 @@ describe('PullModelsDialog', () => {
     expect(w.emitted('confirm')).toBeUndefined()
   })
 
-  /* 2026-11-04 用户「这两个拉取，弹窗怎么还不一样呢」：向量 / 重排复用这同一张弹窗，
-     single 模式 = 单选、无全选、无手动录入出口、当前在用的那行标「使用中」。 */
-  it('单选模式：一个 radio、无全选、无手动录入，当前在用的标「使用中」', async () => {
+  /* 2026-11-04 用户「这两个拉取，弹窗怎么还不一样呢」：向量 / 重排复用这同一张弹窗。
+     2026-11-05 模型池上线后它不再是单选——一次可以勾几个进池子，
+     所以这里钉的是「同形状 + 已有模型标已添加 + 不给手动录入」。 */
+  it('向量 / 重排也用这张弹窗：多选、已有模型标「已添加」、不给手动录入', async () => {
     const w = mount(PullModelsDialog, {
-      props: { title: '添加向量模型', models: ['BAAI/bge-m3', 'BAAI/bge-reranker-v2-m3'], registered: ['BAAI/bge-m3'], single: true, allowManual: false, hint: '' },
+      props: { title: '添加向量模型', models: ['BAAI/bge-m3', 'BAAI/bge-reranker-v2-m3'], registered: ['BAAI/bge-m3'], allowManual: false, hint: '' },
       global: { stubs: { teleport: true } },
     })
     await open(w)
     expect(w.find('.mk-modal__title').text()).toBe('添加向量模型')
-    expect(w.findAll('input[type="radio"]')).toHaveLength(2)
-    expect(w.findAll('input[type="checkbox"]')).toHaveLength(0)
-    expect(w.find('.pmd-all').exists()).toBe(false)
+    // 与对话卡同一张弹窗：勾选框、可全选、没有 radio
+    expect(w.findAll('input[type="radio"]')).toHaveLength(0)
+    expect(w.findAll('.pmd-row input[type="checkbox"]')).toHaveLength(2)
+    expect(w.find('.pmd-all').exists()).toBe(true)
     expect(w.find('.pmd-manual').exists()).toBe(false)
-    expect(w.find('.pmd-hint span').exists()).toBe(false)
-    expect(rowOf(w, 'BAAI/bge-m3').text()).toContain('使用中')
+    // hint 传空串：底栏说明不渲染（只剩全选那一枚）
+    expect(w.find('.pmd-hint').text()).toBe('全选当前可添加的 1 个模型')
+    expect(rowOf(w, 'BAAI/bge-m3').text()).toContain('已添加')
     expect(rowOf(w, 'BAAI/bge-m3').find('input').attributes('disabled')).toBeDefined()
 
-    // 单选：点第二个就替换第一个
-    await rowOf(w, 'BAAI/bge-reranker-v2-m3').find('input').trigger('change')
+    // 唯一还没挂上的那个可以勾，勾完回传
+    await rowOf(w, 'BAAI/bge-reranker-v2-m3').find('input').setValue(true)
     await nextTick()
     expect(w.find('.pmd-foot__count').text()).toContain('1')
     await w.findAll('.pmd button').find((b) => b.text() === '确认引入')!.trigger('click')
     expect(w.emitted('confirm')?.[0]).toEqual([['BAAI/bge-reranker-v2-m3']])
+  })
+
+  /* 2026-11-05 合并弹窗：连接段由宿主注入，弹窗只负责标题下那行读数与本段动作。 */
+  it('提供了 conn 槽时：连接段排在清单之前，标题下带连接读数', async () => {
+    const w = mount(PullModelsDialog, {
+      props: {
+        models: ['m-1'],
+        registered: [],
+        stateLine: '密钥已配置 · 上次获取模型：3 分钟前成功',
+      },
+      slots: { conn: '<div class="stub-conn">连接表单</div>', 'conn-actions': '<button class="stub-reset">重置此通道</button>' },
+      global: { stubs: { teleport: true } },
+    })
+    await open(w)
+    expect(w.find('.pmd-head__state').text()).toContain('密钥已配置')
+    expect(w.find('.pmd-conn .stub-conn').exists()).toBe(true)
+    expect(w.find('.pmd-conn__title').text()).toBe('连接')
+    expect(w.find('.pmd-conn__actions .stub-reset').text()).toBe('重置此通道')
+    // 连接段在清单之前
+    const html = w.find('.mk-modal__body').html()
+    expect(html.indexOf('pmd-conn')).toBeLessThan(html.indexOf('pmd-toolbar'))
+
+    // 不给 conn 槽时整段不渲染（向量 / 重排卡复用同一张弹窗）
+    const bare = mount(PullModelsDialog, {
+      props: { models: ['m-1'], registered: [] },
+      global: { stubs: { teleport: true } },
+    })
+    await open(bare)
+    expect(bare.find('.pmd-conn').exists()).toBe(false)
+    expect(bare.find('.pmd-head__state').exists()).toBe(false)
+  })
+
+  /* 合并弹窗后「获取模型 / 重新获取」在弹窗里：拉取归宿主（它持有地址与密钥），
+     弹窗只发意图；拉取中与过期时清单区说清状态，确认按钮点不动。 */
+  it('「获取模型」只发 refetch；拉取中与过期时清单区说清状态', async () => {
+    const w = mount(PullModelsDialog, {
+      props: { models: [], registered: [] },
+      global: { stubs: { teleport: true } },
+    })
+    await open(w)
+    await w.findAll('.pmd-toolbar button').find((b) => b.text() === '获取模型')!.trigger('click')
+    expect(w.emitted('refetch')).toHaveLength(1)
+
+    await w.setProps({ loading: true })
+    expect(w.find('.pmd-list').text()).toContain('正在向上游拉取模型清单')
+    // 拉取中不摆出旧行，确认按钮也点不动
+    expect(w.findAll('.pmd-row')).toHaveLength(0)
+    expect(w.findAll('.pmd-foot button').find((b) => b.text() === '确认引入')!.attributes('disabled')).toBeDefined()
+
+    await w.setProps({ loading: false, error: '连接被拒绝' })
+    expect(w.find('.pmd-empty--bad').text()).toBe('连接被拒绝')
+
+    await w.setProps({ error: '', models: ['m-1', 'm-2'], stale: true })
+    expect(w.find('.pmd-list--stale').text()).toContain('先点「重新获取」')
+    expect(w.findAll('.pmd-foot button').find((b) => b.text() === '确认引入')!.attributes('disabled')).toBeDefined()
   })
 
   it('全部已添加时不出现全选', async () => {
