@@ -271,6 +271,7 @@ node scripts/<名字>.mjs [参数]
 | `npm run prompts:sync` / `prompts:bootstrap` / `prompts:backfill-core` | 提示词入库 |
 | `npm run prompts:compile-all` | ⚠️ 全量编译（并行开发期间会盖别人 WIP） |
 | `npm run prompts:snapshots` / `prompts:self-intro` | 重生成快照 / 自述手册 |
+| `npm run pipeline:map` / `pipeline:map:check` | 全管线索引 + 提示词汇编：生成 / 漂移校验 |
 | `npm run boundaries:check` | 路由层 DB 边界 |
 | `npm run design:check` | 前端设计系统守卫 |
 | `npm run verify:kv-prefix-cache` | KV 前缀缓存验证 |
