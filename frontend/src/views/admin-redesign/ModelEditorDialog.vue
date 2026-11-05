@@ -18,14 +18,12 @@
             <span class="mk-alert__msg">{{ error }}</span>
           </div>
 
-          <!-- 主路径只留「模型身份 + 生成参数」；价格与能力/限额一起进高级设置
-               （2026-10-28 用户「单价不是很重要的东西」），不占新增模型的第一屏。
-               2026-11-04 用户「配置弹窗里面的东西还没改，还是老一套的」：分区标题下的说明行
-               全部撤除——让布局自己说话；需要解释的写进占位符。 -->
+          <!-- 首屏两行字段（身份 / 生成参数），价格与能力/限额一起进高级设置
+               （2026-10-28 用户「单价不是很重要的东西」）。
+               2026-11-04 先撤掉分区标题下的说明行；2026-11-05 用户「这个不要」把**分区标题
+               本身**也撤了——「模型 ID / 显示名称」「思考模式 / 推理强度」四个字段名已经把
+               这一屏说清楚了，再压一层「模型身份」「生成参数」是把同一件事说两遍。 -->
           <section class="med-sec">
-            <div class="med-sec__head">
-              <h4 class="med-sec__title">模型身份</h4>
-            </div>
             <div class="med-two">
               <label class="mk-field">
                 <span class="mk-field__label">模型 ID</span>
@@ -50,9 +48,6 @@
                现在每个模型可单独覆盖；「跟随默认」= 不写模型字段。
                2026-11-04 用户「输出格式这个功能先下掉」：输出格式一栏撤除。 -->
           <section class="med-sec med-gen">
-            <div class="med-sec__head">
-              <h4 class="med-sec__title">生成参数</h4>
-            </div>
             <div class="med-two">
               <label class="mk-field">
                 <span class="mk-field__label">思考模式</span>
@@ -405,23 +400,11 @@ defineExpose({ openWith, close })
 </script>
 
 <style scoped>
-/* 单列 + 折叠高级项：首屏只放模型身份与生成参数，其余默认收起 */
+/* 单列 + 折叠高级项：首屏两行字段，其余默认收起。
+   分区标题已于 2026-11-05 撤除（用户「这个不要」），组与组之间靠 18px 间距分组。 */
 .med-modal.mk-modal__panel--wide { width: min(720px, 96vw); max-width: none; }
 .med-sec { min-width: 0; }
 .med-sec + .med-sec { margin-top: 18px; }
-.med-sec__head {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 4px 8px;
-  margin-bottom: 10px;
-}
-.med-sec__title {
-  margin: 0;
-  color: var(--mk-ink);
-  font-size: var(--mk-fs-body);
-  font-weight: 700;
-}
 /* 已创建的模型 ID 是只读值，不是待填占位符（2026-11-02 评审：disabled 的弱化字色
    与「显示名称」白字并排，看起来像没填）。只读态回到正文色 + 次级底，读作「这里是值」 */
 .mk-field__input.med-id--locked {
