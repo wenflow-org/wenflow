@@ -113,8 +113,8 @@
         </template>
         <!-- 危险动作写明作用范围（只清本条通道的接入配置，不动全站策略与其它通道），
              并保留二次确认。它属于「连接」这一段，所以在弹窗的连接段标题右侧。
-             旁边的「保存连接」只在有未保存改动时可用：拉清单会自动连连接一起落盘，
-             但只改重试 / RPM 时不发任何请求，需要一个显式出口。 -->
+             旁边的「保存连接」只在有未保存改动时可用：用户点「获取模型 / 重新获取」会连连接
+             一起落盘（打开弹窗时那次拉取只读），但只改重试 / RPM 时不发任何请求，需要一个显式出口。 -->
         <template #add-conn-actions>
           <button
             v-if="connDirty"
@@ -268,8 +268,8 @@ function onPlatformModels(ids: string[]): void {
    连接不再有自己的入口与弹层，它成了「添加模型」弹窗的第一段。
    因此这里不再有「先开连接设置填地址」的分支——地址空着也直接发拉取，
    拉取前的校验在 fetchModels 里（地址为空 / 换了地址没重填密钥，都先给一句人话）。 */
-function onFetchClick() {
-  void fetchModels()
+function onFetchClick(source: 'open' | 'refetch' = 'refetch') {
+  void fetchModels(source)
 }
 
 /** 弹窗标题下那行连接读数（原「连接设置」弹层里的两枚徽标）：合并后它是「能不能拉」的唯一读数 */
@@ -279,7 +279,7 @@ const addStateLine = computed(
 /** 那行读数的悬停全文：说明「成功/失败」是什么时候、什么动作留下的，不冒充实时探活 */
 const addStateLineTitle = computed(() => connBadgeTitle.value)
 
-/** 连接段有未保存改动：拉清单会连连接一起落盘，但只改重试 / RPM 时得有个显式保存出口 */
+/** 连接段有未保存改动：用户主动拉清单会连连接一起落盘，但只改重试 / RPM 时得有个显式保存出口 */
 const connDirty = computed(() => dirty.value.has('conn') || dirty.value.has('reliability'))
 
 /**
@@ -576,16 +576,26 @@ function onAddClosed(): void {
   dirty.value = new Set([...dirty.value].filter((g) => g !== 'conn' && g !== 'reliability'))
 }
 
-async function fetchModels() {
+/**
+ * 拉一份上游清单。
+ *
+ * `source === 'open'` 是**打开弹窗时顺带拉的那一次**：它只读——不写连接、不弹成功提示
+ * （2026-11-05 用户「为什么每次点开添加模型右上角会这样」，那枚「已保存连接，获取到 36 个模型」
+ * 就是每次打开都落盘一次留下的）。只有用户自己点「获取模型 / 重新获取」才把连接一起落盘：
+ * 那是「填地址和 key → 获取」这条流程的提交点，选模型顺带改连接不该反过来变成写连接的时机。
+ */
+async function fetchModels(source: 'open' | 'refetch' = 'refetch'): Promise<void> {
   if (fetching.value) return
-  /* 合并弹窗后这里是唯一拉取入口，校验必须给话：地址空着点「获取模型」不能毫无反应 */
+  const background = source === 'open'
+  /* 合并弹窗后这里是唯一拉取入口，校验必须给话：地址空着点「获取模型」不能毫无反应。
+     打开弹窗的那一次不给——首次部署时地址本来就还是空的。 */
   if (!form.apiUrl.trim()) {
-    toast.error('先填服务地址')
+    if (!background) toast.error('先填服务地址')
     return
   }
   /* 流程第 1 步要求「填链接和 key」：换地址却没重填密钥时，不能拿旧密钥去试新端点 */
   if (keyHintNeeded.value) {
-    toast.error('更换服务地址后需重新输入 API Key')
+    if (!background) toast.error('更换服务地址后需重新输入 API Key')
     return
   }
   fetching.value = true
@@ -597,12 +607,14 @@ async function fetchModels() {
     connectionStatus.value = 'connected'
     connCheckedAt.value = new Date().toISOString()
     fetchError.value = ''
-    /* 获取即保存：用户流程是「填地址和 key → 获取模型」，不该再要求点一次保存。
-       保存失败时不再往下走——连接没落盘，配好的模型也用不上。 */
-    markDirty('conn')
-    const saved = await saveGroups(['conn'], { silent: true })
-    if (!saved) return
-    toast.success(list.length ? `已保存连接，获取到 ${list.length} 个模型` : '已保存连接，但服务未返回模型列表')
+    if (!background) {
+      /* 获取即保存：用户流程是「填地址和 key → 获取模型」，不该再要求点一次保存。
+         保存失败时不再往下走——连接没落盘，配好的模型也用不上。 */
+      markDirty('conn')
+      const saved = await saveGroups(['conn'], { silent: true })
+      if (!saved) return
+      toast.success(list.length ? `已保存连接，获取到 ${list.length} 个模型` : '已保存连接，但服务未返回模型列表')
+    }
     /* 2026-11-05 合并弹窗：清单换成这次拉到的，勾选面板原地刷新。
        走到这里时弹窗通常已经开着（入口就在弹窗里）；只有宿主从别处触发时才需要开。 */
     await nextTick()
@@ -611,7 +623,8 @@ async function fetchModels() {
     connectionStatus.value = 'failed'
     connCheckedAt.value = new Date().toISOString()
     fetchError.value = errMsg(e)
-    toast.error(`连接失败：${errMsg(e)}`)
+    // 打开弹窗时的那次失败不弹提示：弹窗里本来就有一行「连接失败：…」，再弹一遍是同一个事实说两次
+    if (!background) toast.error(`连接失败：${errMsg(e)}`)
   } finally {
     fetching.value = false
   }

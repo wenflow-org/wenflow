@@ -565,15 +565,25 @@ describe('ApiConfig P1 修复批', () => {
 
     const wrapper = await mountApiConfig();
     await openPlatformSettings(wrapper);
-    // 2026-11-04：拉清单并落盘连接的动作现在挂在「＋ 添加模型」上（独立的「获取模型 / 重新获取」已撤）
     const fetchBtn = wrapper.findAll('.mk-btn').find((b) => b.text().includes('添加模型'))!;
-    expect(fetchBtn, '「＋ 添加模型」应承接「拉清单 + 落盘连接」').toBeTruthy();
+    expect(fetchBtn).toBeTruthy();
     await fetchBtn.trigger('click');
     await flushPromises();
     await nextTick();
     await flushPromises();
 
-    // 获取即保存：请求带上了地址/密钥/清单与连接状态
+    /* 2026-11-05 用户「为什么每次点开添加模型右上角会这样」：打开弹窗顺带的那次拉取只读——
+       不写连接、不弹「已保存连接」。选模型不该反过来变成写连接的时机。 */
+    expect(testConnectionMock).toHaveBeenCalled();
+    expect(updateConfigMock).not.toHaveBeenCalled();
+
+    // 用户自己点「重新获取」才是这条流程的提交点：清单与连接状态一起落盘
+    const refetchBtn = wrapper.findAll('.mk-btn').find((b) => b.text().includes('重新获取'))!;
+    expect(refetchBtn, '弹窗里应有「重新获取」').toBeTruthy();
+    await refetchBtn.trigger('click');
+    await flushPromises();
+    await nextTick();
+    await flushPromises();
     expect(updateConfigMock).toHaveBeenCalledWith(expect.objectContaining({
       availableModels: ['m-1', 'm-2'],
       // 拉取结果随连接域落盘，刷新后「连接正常 · N 前」不再回退到旧时间

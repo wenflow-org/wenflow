@@ -211,7 +211,7 @@
       :allow-manual="!registry?.readOnly"
       @confirm="startCapabilityConfirm"
       @manual="openManualAdd"
-      @refetch="emit('fetchUpstream')"
+      @refetch="emit('fetchUpstream', 'refetch')"
       @opened="emit('addOpened')"
       @closed="emit('addClosed')"
     >
@@ -298,7 +298,8 @@ const emit = defineEmits<{
   platformModels: [ids: string[]]
   /** ③ 点「添加模型」时清单还没拉过：请宿主先做 ②（拉取 + 落盘连接，成功后宿主会开勾选浮窗）。
       这条把原先「静默转手动录入」的死路补成一步可预期的动作。 */
-  fetchUpstream: []
+  /** open = 打开弹窗时顺带拉的一次（只读）；refetch = 用户点「获取模型 / 重新获取」 */
+  fetchUpstream: [source: 'open' | 'refetch']
   /** 添加模型弹窗打开：宿主记一份连接快照（关窗时回滚未保存的地址 / 密钥 / 策略） */
   addOpened: []
   /** 添加模型弹窗关闭：宿主收起连接的编辑态（未保存的地址 / 密钥随之回滚） */
@@ -504,12 +505,13 @@ async function testModel(p: ProviderView, modelId: string): Promise<void> {
  * 「＋ 添加模型」（2026-11-05 用户「连接设置和添加模型合并到一起吧，只保留添加模型」）：
  * 这一枚就是添加模型的**唯一入口**，打开的是「连接 + 上游清单」同一张弹窗。
  * 每次打开都先向上游拉一份新清单（上游新增的模型要能立刻看到）；拉取由宿主做——
- * 它持有地址与密钥，且拉成功后要把连接一起落盘。
+ * 它持有地址与密钥。**这次拉取只读**：不写连接、不弹成功提示（2026-11-05 用户
+ * 「为什么每次点开添加模型右上角会这样」）；要落盘连接得用户自己点「获取模型 / 重新获取」。
  */
 function onPullAdd(): void {
   if (!selected.value) return
   pullDialog.value?.openWith()
-  emit('fetchUpstream')
+  emit('fetchUpstream', 'open')
 }
 
 /** 打开弹窗（清单只用于勾选，不在详情里铺开）。
