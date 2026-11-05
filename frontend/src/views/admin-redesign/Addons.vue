@@ -100,7 +100,7 @@
                   >
                     {{ discoveringId === t.id ? '发现中…' : (discoveredMap[t.id] ? `工具 ${discoveredMap[t.id].length}` : '发现工具') }}
                   </button>
-                  <button type="button" class="mk-link" :disabled="testingId === t.id" @click="testTool(t)">
+                  <button type="button" class="mk-link mk-link--hold mk-link--hold-test" :disabled="testingId === t.id" @click="testTool(t)">
                     {{ testingId === t.id ? '测试中…' : '测试' }}
                   </button>
                   <span v-if="testResult?.id === t.id" class="ac-mcp__test" :class="testResult.ok ? 'is-ok' : 'is-bad'">

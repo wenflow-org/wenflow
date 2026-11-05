@@ -84,7 +84,7 @@
                 <span v-if="providerId" class="pmd-row__probe">
                   <button
                     type="button"
-                    class="mk-link pmd-row__test"
+                    class="mk-link mk-link--hold pmd-row__test"
                     :disabled="!!testing"
                     @click="runTest(row.id)"
                   >{{ testing === row.id ? '测试中…' : '测试' }}</button>

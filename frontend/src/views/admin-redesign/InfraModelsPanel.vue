@@ -65,7 +65,7 @@
               <button
                 v-if="g.entry.configured"
                 type="button"
-                class="mk-link"
+                class="mk-link mk-link--hold mk-link--hold-test"
                 :disabled="testing === `${g.kind}|${m}`"
                 @click="test(g.kind, m)"
               >{{ testing === `${g.kind}|${m}` ? '测试中…' : '测试' }}</button>

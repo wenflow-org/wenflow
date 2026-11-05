@@ -151,7 +151,7 @@
                   title="配置这个模型的生成参数、能力、限额与价格"
                   @click="modelEditor?.openWith({ providerId: selected.id, model: m })"
                 >配置</button>
-                <button type="button" class="mk-link" :disabled="testingId === m.id" @click="testModel(selected, m.id)">{{ testingId === m.id ? '测试中…' : '测试' }}</button>
+                <button type="button" class="mk-link mk-link--hold mk-link--hold-test" :disabled="testingId === m.id" @click="testModel(selected, m.id)">{{ testingId === m.id ? '测试中…' : '测试' }}</button>
                 <div class="mk-menu">
                   <button
                     type="button"

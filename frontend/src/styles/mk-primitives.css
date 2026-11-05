@@ -1197,6 +1197,23 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   white-space: nowrap;
 }
 .mk-link:hover { background: var(--mk-hover-surface); }
+/* 文案会在忙碌时变长的链接按钮（测试 → 测试中…）：
+   用一条不可见的 ::after 把盒子撑到**最长文案**的宽度，两个状态同一尺寸，
+   切换时不再把左边那颗「配置」推走（2026-11-05 用户「测试中的时候宽度就变了」）。
+   各调用处只给最长文案，不写死像素——字号 / 密度档变了也不用改。
+   用法：class="mk-link mk-link--hold"，再给 `--mk-link-hold: '测试中…';`；
+   这一对文案（测试 / 测试中…）另有全局档 .mk-link--hold-test，四个页面共用，不必各写一遍。 */
+.mk-link--hold { display: inline-block; }
+.mk-link--hold::after {
+  content: var(--mk-link-hold, '');
+  display: block;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+}
+/* 「测试 / 测试中…」这一对在各页反复出现（模型行 / 向量重排行 / 添加模型弹窗 / 插件页），
+   写成全局档，免得四个组件各写一遍同样的 var（含测试结果的那两处卡片还会各自 scoped）。 */
+.mk-link--hold-test { --mk-link-hold: '测试中…'; }
 .mk-link--danger { color: var(--mk-red, #dc2626); }
 .mk-link--danger:hover { background: var(--mk-red-bg, #fef2f2); }
 /* 链接按钮「激活/展开中」态（ExecLogs 筛选、MkCols 列设置共用）。
