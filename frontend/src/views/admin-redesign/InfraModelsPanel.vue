@@ -17,11 +17,9 @@
           <div class="mpp-eng__id">
             <h3 class="mk-card__title">{{ g.label }}</h3>
             <span class="mpp-type">{{ g.kind === 'embedding' ? 'Embedding' : 'Reranker' }}</span>
-            <span
-              class="mk-badge"
-              :class="g.entry.configured ? 'mk-badge--ok' : 'mk-badge--bad'"
-              :title="sourceText(g.entry)"
-            >{{ g.entry.configured ? '已配置' : '未配置' }}</span>
+            <!-- 2026-11-05 用户「已配置这个 pill 不要了」：卡头不再挂状态徽标。
+                 「配没配好」由这一行自己说——未配置时模型位写「未选择模型」且没有「测试」，
+                 配好了就有模型 id 与「测试」。同一份事实两处上屏，徽标是多余的那一处。 -->
           </div>
           <!-- 每张卡自己的添加入口（2026-11-04 用户「每个区域单独可以添加模型吧」）：
                点它即按这条能力向上游拉一份清单并过滤成该用途，选一个填进模型 ID，
@@ -249,11 +247,6 @@ const testResults = ref<Record<InfraKind, { ok: boolean; text: string } | null>>
 
 function kindLabel(kind: InfraKind): string {
   return kind === 'embedding' ? MODEL_TYPE_LABEL.embedding : MODEL_TYPE_LABEL.rerank
-}
-
-function sourceText(entry: InfraModelEntryView): string {
-  if (entry.connectionMode === 'inherit') return '配置来源：对话模型的连接'
-  return entry.configSource === 'db' ? '配置来源：平台配置' : '配置来源：环境变量回落'
 }
 
 async function load() {

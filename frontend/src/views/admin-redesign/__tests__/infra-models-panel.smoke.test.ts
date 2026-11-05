@@ -2,7 +2,7 @@
  * 向量 / 重排单例引擎卡（2026-10-28 用户「全局单例引擎，不要套多模型卡片」）：
  * 1. 两张紧凑卡只回答「挂的哪个模型、走哪条连接、健不健康」，卡面不铺表单；
  * 2. 连接方式用两枚说明卡（复用对话模型连接 / 独立服务），与模型参数在同一弹层一次保存；
- * 3. 未配置时不出现测试动作；卡头的「＋ 添加模型」恒在；配置来源收进状态徽标 title。
+ * 3. 未配置时不出现测试动作；卡头的「＋ 添加模型」恒在；卡头不挂状态徽标（2026-11-05）。
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
@@ -100,7 +100,8 @@ describe('InfraModelsPanel', () => {
     expect(list.map((c) => c.find('.mk-card__title').text())).toEqual(['向量模型', '重排模型']);
     expect(list[0].text()).toContain('Embedding');
     expect(list[1].text()).toContain('Reranker');
-    expect(list[0].find('.mk-badge').text()).toBe('已配置');
+    // 2026-11-05 用户「已配置这个 pill 不要了」：卡头只有标题 + 类型，没有状态徽标
+    expect(list[0].find('.mk-badge').exists()).toBe(false);
     expect(list[0].find('.mpp-eng__model').text()).toBe('BAAI/bge-m3');
     // 2026-11-04「让布局自己说话」：模型行下不再有维度 / 连接归属这类次级说明行
     expect(wrapper.find('.mpp-eng__params').exists()).toBe(false);
@@ -252,19 +253,22 @@ describe('InfraModelsPanel', () => {
     await flushPromises();
     const rerank = cards(wrapper)[1];
 
-    expect(rerank.find('.mk-badge').text()).toBe('未配置');
+    // 未配置不再靠徽标表达：模型位写「未选择模型」，且没有「测试」动作
+    expect(rerank.find('.mk-badge').exists()).toBe(false);
+    expect(rerank.find('.mpp-eng__model').text()).toBe('未选择模型');
     const labels = rerank.findAll('button').map((b) => b.text());
     expect(labels).toEqual(['＋ 添加模型', '配置']);
     expect(labels).not.toContain('测试');
     wrapper.unmount();
   });
 
-  it('状态徽标的 title 区分复用的连接与平台配置', async () => {
+  it('卡头不再挂状态徽标，也没有「配置来源」的悬停说明', async () => {
     const wrapper = mountPanel();
     await flushPromises();
-    const [embedding, rerank] = cards(wrapper);
-    expect(embedding.find('.mk-badge').attributes('title')).toBe('配置来源：平台配置');
-    expect(rerank.find('.mk-badge').attributes('title')).toBe('配置来源：对话模型的连接');
+    for (const card of cards(wrapper)) {
+      expect(card.find('.mk-badge').exists()).toBe(false);
+      expect(card.text()).not.toContain('配置来源');
+    }
     wrapper.unmount();
   });
 

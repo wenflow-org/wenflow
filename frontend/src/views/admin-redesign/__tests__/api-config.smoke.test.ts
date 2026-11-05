@@ -373,7 +373,10 @@ describe('ApiConfig P1 修复批', () => {
     expect(wrapper.find('.ac-conn-modal input[type="password"]').attributes('placeholder')).toBe('留空 = 沿用已配置');
     // 2026-10-16 用户走查重排：原 30+ 枚模型胶囊（.ac-model）退役；2026-10-28 上游读数文案整行撤掉
     expect(wrapper.find('.ac-models-meta').exists()).toBe(false);
-    expect(wrapper.find('.ac-conn-body .mk-card .mk-badge').exists()).toBe(true);
+    /* 2026-11-05 用户「已配置这个 pill 不要了」：向量 / 重排卡的卡头不再挂状态徽标，
+       连带的「配置来源：…」悬停说明也一并撤除（配没配好由模型位与测试动作自己表达）。 */
+    expect(wrapper.find('.mpp-eng .mk-card__head .mk-badge').exists()).toBe(false);
+    expect(wrapper.find('.mpp-eng').text()).not.toContain('配置来源');
     wrapper.unmount();
   });
 
