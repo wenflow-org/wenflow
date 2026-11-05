@@ -223,6 +223,9 @@
         <!-- 不在整条消息流上挂 aria-live：流式重渲/每条新消息都会被读屏连播（含原始 JSON delta），
              收窄到下方等待条的 aria-live（P3） -->
         <div ref="scrollEl" class="chat__scroll" :class="{ 'chat__scroll--dim': showProposal, 'chat__scroll--pill': genPillVisibleInChat }" @scroll.passive="onScrollPin">
+          <!-- AI 生成声明（2026-11-05 屏效比改造）：从输入区元数据条迁到对话流顶部一次呈现，
+               移动端输入区下方的整条元数据带随之撤空；合规标识保留——随对话流滚动，进页首屏可见 -->
+          <div class="chat__ai-note"><AiContentNote /></div>
           <template v-for="km in keyedMessages" :key="km.key">
             <div v-if="km.msg.role === 'user'" class="msg msg--user" :class="{ 'msg--editing': editingMsgId === km.key }">
               <!-- 编辑态：textarea 替换气泡 -->
@@ -251,11 +254,10 @@
                 </div>
                 <div v-else class="msg__bubble">{{ km.msg.content }}</div>
               </template>
-              <div class="msg__meta">
-                你 · {{ km.msg.time }}
-                <!-- 编辑入口归 meta 行（与 AI 操作条同一语言）：不再悬浮在气泡外遮字 -->
+              <!-- 屏效比改造（2026-11-05）：「你 · 时间」戳撤除——功能性连续对话里单条时间无读者，
+                   meta 行只在确有可操作项时渲染（只剩编辑铅笔；编辑入口归 meta 行的既有语义不变） -->
+              <div v-if="!isProbeAnswer(km.msg.content) && canEditMessage(km.msg)" class="msg__meta">
                 <button
-                  v-if="!isProbeAnswer(km.msg.content) && canEditMessage(km.msg)"
                   type="button"
                   class="msg__edit-btn"
                   title="编辑这条消息"
@@ -295,9 +297,9 @@
                   @regenerate="regenerateMessage(km.msg)"
                   @feedback="(up) => sendMessageFeedback(km.msg, up)"
                 />
-                <div class="msg__meta">
-                  问流 · {{ km.msg.time }}
-                  <button v-if="km.msg.failed" type="button" class="msg__retry" @click="doRetry">重试</button>
+                <!-- 屏效比改造（2026-11-05）：「问流 · 时间」戳撤除；meta 行只在失败时渲染（只剩内联重试） -->
+                <div v-if="km.msg.failed" class="msg__meta">
+                  <button type="button" class="msg__retry" @click="doRetry">重试</button>
                 </div>
               </div>
             </div>
@@ -319,7 +321,7 @@
             <span class="msg__avatar"><img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="问流" /></span>
             <div class="msg__content msg__content--actions">
               <div class="msg__bubble msg__bubble--html msg__bubble--streaming" v-html="formatMessage(live.streamingText)"></div>
-              <div class="msg__meta">问流 · {{ chatWaitMeta }}</div>
+              <div class="msg__meta">{{ chatWaitMeta }}</div>
             </div>
           </div>
 
@@ -429,15 +431,17 @@
               <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
             </button>
           </div>
-          <!-- 底部提示只承载输入元数据：快捷键、字数与 AI 声明。
+          <!-- 底部提示只承载输入元数据：快捷键与字数（AI 声明已迁对话流顶部 .chat__ai-note，
+               字数计数 3500 起浮现——2026-11-05 屏效比改造）。
                「新目标」不塞进这里：它不是输入辅助信息，而是离开当前会话的导航动作；
                移动端点击底部「目标规划」会进入无参路由，route.params watcher 负责回到初始态，
                并保留「继续上次的规划」恢复入口。 -->
           <div class="composer__hint">
             <span class="composer__hint-right">
               <span class="composer__hint-shortcut">{{ SEND_SHORTCUT_HINT }}</span>
-              <span class="composer__count">{{ input.length }} / {{ INPUT_MAX }}</span>
-              <AiContentNote />
+              <!-- 字数计数渐进呈现（2026-11-05 屏效比）：绝大多数输入远达不到上限，
+                   空态的「0 / 4096」是常驻噪声；逼近上限时计数在原位浮现（12px 门禁字号不变） -->
+              <span v-if="input.length >= 3500" class="composer__count">{{ input.length }} / {{ INPUT_MAX }}</span>
             </span>
           </div>
         </div>
@@ -2063,7 +2067,9 @@ function shuffleScenes() {
    内边距 10/16 保留：移动端 .panel 的零占位锚点带高 47px，正是按这条头部带对齐的 */
 .chat__head {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 10px 16px;
+  /* 上下 10→6（2026-11-05 屏效比）：步条带 60→52；移动端「目标信息」药丸锚点带
+     （.panel 的 padding）与本值保持同一条上下 padding，两条带中线才重合（pill-align 门禁） */
+  padding: 6px 16px;
 }
 .stage-nav { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; }
 .chat__show-proposal {
@@ -2103,6 +2109,9 @@ function shuffleScenes() {
   display: flex; flex-direction: column; gap: 18px;
   transition: filter .2s ease, opacity .2s ease;
 }
+/* AI 生成声明（2026-11-05 屏效比改造自输入区元数据条迁来）：对话流顶部居中一行，
+   随内容滚动；消息少时由移动端「贴底」规则带着一起贴在最新消息上方 */
+.chat__ai-note { display: flex; justify-content: center; }
 /* 消息从上方开始、向下生长：桌面**刻意不做贴底**。
    2026-10-05 曾把窄屏那条贴底规则提到基础档（当时理由是「短会话消息与下方快捷块之间空一截」），
    结果桌面整段对话吊在底部：1440×1250 实测首条消息距对话区顶部 141px，看起来像对话从下往上长。
@@ -2293,7 +2302,7 @@ function shuffleScenes() {
 }
 .msg__meta { font-size: 12px; color: var(--faint); }
 .msg__retry {
-  margin-left: 8px;
+  /* 时间戳撤除后重试就是 meta 行首个子项，不再吃 8px 左偏移（2026-11-05 屏效比） */
   color: var(--red-ink); font-weight: 800;
   text-decoration: underline; cursor: pointer;
 }
@@ -2723,7 +2732,8 @@ function shuffleScenes() {
     grid-template-columns: 1fr;
     /* 信息面板在移动端改绝对定位（零占位锚点），chat 独占整行撑满 */
     grid-template-rows: minmax(0, 1fr);
-    padding: 8px 10px;
+    /* 上内边距 8→4（2026-11-05 屏效比）：导航栏与步骤条带之间不再多留一道缝 */
+    padding: 4px 10px;
     gap: 8px;
     overflow: hidden;
     min-height: 0;
@@ -2736,19 +2746,19 @@ function shuffleScenes() {
      展开态原先是流内限高 45dvh，380px 面板把 chat 压到 311px、消息区只剩 160px。 */
   .panel {
     position: absolute;
-    /* 与 chat 同框：top/left/right 就是 .work 的内边距（8/10/10）。
-       头部带高度**不能写死**：.chat__head = 上下 padding 10 + .stage-nav__item
-       min-height 40 = 60px。此前写死 47（早于「阶段导航抬到 40px 触控下限」那次改动），
+    /* 与 chat 同框：top/left/right 就是 .work 的内边距（4/10/10）。
+       头部带高度**不能写死**：.chat__head = 上下 padding 6 + .stage-nav__item
+       min-height 40 = 52px。此前写死 47（早于「阶段导航抬到 40px 触控下限」那次改动），
        两条带各自 align-items:center → 药丸中心实测 96.2、阶段导航中心 102.7，
        药丸比它该在的那一行高 6.5px，看起来是「浮」在阶段导航上方的孤立小卡。
-       改成与 .chat__head 同一条上下 padding（10），两条带的中线自动重合。 */
-    top: 8px; left: 10px; right: 10px;
+       改成与 .chat__head 同一条上下 padding（6），两条带的中线自动重合。 */
+    top: 4px; left: 10px; right: 10px;
     height: auto;
     display: flex; flex-direction: row; align-items: center; justify-content: flex-end;
-    /* 与 .chat__head 同一条上下 padding（10）。配合下方 .panel__head 的 min-height 40
-       （= .stage-nav__item 的 min-height），两条带的高度都是 10+40+10=60，
+    /* 与 .chat__head 同一条上下 padding（6）。配合下方 .panel__head 的 min-height 40
+       （= .stage-nav__item 的 min-height），两条带的高度都是 6+40+6=52，
        align-items:center 后药丸中心与阶段导航中心严格重合。 */
-    padding: 10px 0;
+    padding: 6px 0;
     border: 0;
     background: none;
     /* 桌面档给 .panel 上了 shadow-sm（对齐原型 .wf-goalinfo）：移动端这里是零占位锚点带，
@@ -2838,8 +2848,21 @@ function shuffleScenes() {
   /* chat 撑满第二行：内部滚动、composer 吸底 */
   .chat { min-height: 0; height: 100%; }
   /* overscroll-behavior:contain 隔断滚动链——列表滚到边缘时不再触发整页橡皮筋
-     （本页 height:100dvh 不随文档滚动，iOS 上链式滚动会把底部导航一起拽动） */
-  .chat__scroll { min-height: 0; overscroll-behavior: contain; }
+     （本页 height:100dvh 不随文档滚动，iOS 上链式滚动会把底部导航一起拽动）。
+     padding 16/20→10/16、消息间距 18→16（2026-11-05 屏效比）：对话区首屏多装半轮问答 */
+  .chat__scroll { min-height: 0; overscroll-behavior: contain; padding: 10px 16px 16px; gap: 16px; }
+  /* AI 头像左列撤除（2026-11-05 屏效比）：30px 圆 + 10px gap 把整段回复推开 40px 宽，
+     同样字数多折 2~3 行；品牌已由顶栏承载，气泡不再需要逐条自报家门 */
+  .msg__avatar { display: none; }
+  .msg--ai { max-width: 100%; }
+  /* 快捷补充改单行横滑（2026-11-05 屏效比）：3 个胶囊折两行吃 84px，单行省 ~46px；
+     右侧自然露出半颗胶囊表达「可横滑」，滚动条隐藏降噪 */
+  .replies,
+  .msg__replies { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .replies::-webkit-scrollbar,
+  .msg__replies::-webkit-scrollbar { display: none; }
+  .reply,
+  .msg__reply { flex: 0 0 auto; }
   /* 消息少时贴底：首个子项吃满剩余空间（等价 justify-content:flex-end，但溢出时不会把顶部
      推出可达范围——auto 外边距在无剩余空间时按 0 处理）。短会话下最新一条与快捷补充紧贴输入框，
      视线与拇指都不用上下跑。窄屏专属：桌面要从上往下长（见基础档注释）。 */
@@ -2853,16 +2876,16 @@ function shuffleScenes() {
      之间那道缝里。触屏没有键盘快捷键提示，隐藏之。 */
   .composer { position: relative; }
   /* 本档 .v2-page 已有 padding-bottom:72px 让位底部 tab 栏，不再叠 safe-area（会留出空缝）。
-     下内边距 46→30：那 46 是给「新目标」按钮（36px）预留的可点空间（LY10），
-     该按钮已移除，只剩 hint 行（hint 文本 19.2px + 距底 5px = 24.2px）要落在这段内边距里。
-     30 而非 22：22 时 hint 顶边（757.8）会压过输入框底边（760）2.2px（390 实测）。 */
-  .chat > .composer { padding: 10px 16px 30px; }
+     下内边距 30→22（2026-11-05 屏效比：AI 声明迁对话流顶部、快捷键隐藏、计数 3500 起
+     才浮现——hint 行常态为空，22px 只兜偶尔出现的计数：12px 字号行高 18 + 距底 3 = 21 ≤ 22）；
+     上内边距 10→6：输入区与消息区之间不再多垫一道白。 */
+  .chat > .composer { padding: 6px 16px 22px; }
   .composer__hint {
     position: absolute;
     /* left/right 取 .composer 的左右内边距（16），不是 0：绝对定位的包含块是 composer 的
-       padding box，写 0 会让 hint 比输入框右缘多探出 16px（390 实测 380 vs 364），
-       AI 声明于是贴到屏幕边上。对齐到输入框同一条列宽。 */
-    left: 16px; right: 16px; bottom: 5px;
+       padding box，写 0 会让 hint 比输入框右缘多探出 16px（390 实测 380 vs 364）。
+       对齐到输入框同一条列宽。 */
+    left: 16px; right: 16px; bottom: 3px;
     height: 0;
     /* 底部对齐：hint 行（0 高）里的内容向上生长，落进 composer 预留的下内边距里，
        不向下溢进底部导航。 */
