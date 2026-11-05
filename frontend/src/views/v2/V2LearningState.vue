@@ -2058,6 +2058,12 @@ function loadGuidance() {
 /* 学习偏好折叠头（details 的 summary 复用 .band__head 语言） */
 .pref-fold__head { cursor: pointer; list-style: none; }
 .pref-fold__head::-webkit-details-marker { display: none; }
+/* 折叠卡防溢出（2026-11-05 用户截图）：摘要一行 nowrap 的自然宽（~468px）顺着
+   flex/grid 两层 min-width:auto 一路顶破栅格轨道——402 实测卡 567、head 565，右缘越界 165px。
+   details（grid 容器）与 summary（grid 项）都要补 min-width:0 轨道才收得住；
+   摘要文本交给 .band__meta 已有的 ellipsis 收尾 */
+.pref-fold,
+.pref-fold__head { min-width: 0; }
 .pref-fold[open] .band__chev { transform: rotate(180deg); }
 .pref-fold .band__chev { transition: transform 0.16s ease; }
 /* 无调整时的紧凑引导行 */
@@ -2199,6 +2205,8 @@ function loadGuidance() {
   text-align: left;
 }
 .band__title strong, .band__title .kicker { font-size: 14px; }
+/* 标题/角标折行读作「本节知识 / 点」「学习偏 / 好」那种断词，比截断更难看，直接禁掉 */
+.band__title strong, .band__title .kicker { white-space: nowrap; }
 .band__meta { font-size: 12px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .band__chev { flex: 0 0 auto; color: var(--faint); transition: transform 0.2s ease; }
 .band__chev--open { transform: rotate(180deg); }
