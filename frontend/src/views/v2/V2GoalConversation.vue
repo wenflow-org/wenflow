@@ -518,19 +518,8 @@
           确认失败，请重试。<button type="button" class="errorbar__retry" @click="doConfirm">重试</button>
         </div>
 
-        <div v-if="supplementMode" class="proposal__supplement">
-          <textarea
-            v-model="supplementText"
-            class="proposal__supplement-input"
-            rows="2"
-            maxlength="300"
-            placeholder="比如：我只有 Windows 电脑，Excel 是 2016 版…"
-          ></textarea>
-        </div>
-
         <div class="proposal__note">
           <span v-if="materialCount">已上传 {{ materialCount }} 份资料，生成路径时按目标相关性选用，其余保留在资料库。</span>
-          <span v-if="!readOnlyReview">确认后在本页生成。失败可原地重试，信息不会丢。</span>
           <AiContentNote />
         </div>
         </div><!-- /.proposal__body（内容滚动区） -->
@@ -542,19 +531,11 @@
           <template v-if="readOnlyReview">
             <button type="button" class="btn-primary" @click="closeReadOnlyReview">返回</button>
           </template>
-          <template v-else-if="!supplementMode">
-            <button type="button" class="btn-ghost" @click="supplementMode = true">再补充点信息</button>
-            <button type="button" class="btn-primary btn-primary--lg" @click="doConfirm">确认，生成我的路径</button>
-          </template>
           <template v-else>
-            <button type="button" class="btn-ghost" @click="supplementMode = false">取消</button>
-            <button
-              type="button"
-              class="btn-primary"
-              :class="{ 'btn-primary--off': !supplementText.trim() || live.sending }"
-              :disabled="!supplementText.trim() || live.sending"
-              @click="doSupplement"
-            >{{ live.sending ? '提交中…' : '提交补充，更新方案' }}</button>
+            <!-- 「再补充点信息」改道聊天流（2026-11-05 用户裁定）：补充不开浮层内表单——
+                 退回聊天界面像发普通消息一样补充，AI 更新方案后从「查看方案」再回来确认 -->
+            <button type="button" class="btn-ghost" @click="supplementViaChat">再补充点信息</button>
+            <button type="button" class="btn-primary btn-primary--lg" @click="doConfirm">确认，生成我的路径</button>
           </template>
         </div>
       </div>
@@ -811,8 +792,6 @@ onBeforeUnmount(() => {
 function resetToEntry() {
   live.resetView();
   phase.value = 'preview';
-  supplementMode.value = false;
-  supplementText.value = '';
   input.value = '';
 }
 
@@ -1051,7 +1030,6 @@ function openReadOnlyReview() {
   if (!proposalSnapshot.value) return;
   reviewReturnPhase.value = phase.value === 'generating' ? 'generating' : 'done';
   readOnlyReview.value = true;
-  supplementMode.value = false;
   confirmError.value = false;
   proposalDismissed.value = false;
   proposalReviewRequested.value = false;
@@ -1095,8 +1073,6 @@ const genWaitText = computed(() => stageText(GEN_WAIT_STAGES));
 const chatWaitMeta = computed(() =>
   waitTick.value >= 5 ? `${chatWaitText.value} · 已等待 ${waitTick.value}s` : chatWaitText.value
 );
-const supplementMode = ref(false);
-const supplementText = ref('');
 /* 用户消息内联编辑（仅最后一条用户消息可编辑） */
 const editingMsgId = ref<string | null>(null);
 const editingText = ref('');
@@ -1388,7 +1364,7 @@ function onProposalKey(e: KeyboardEvent) {
     proposalReviewRequested.value = false;
   }
 }
-/** 点遮罩关闭：仅 done 态（preview 需用户显式选「确认/再补充」，generating 需等/停止） */
+/** 点遮罩关闭：仅 done 态（preview 需用户显式选「确认 / 再补充（回聊天）」，generating 需等/停止） */
 function onOverlayBackdrop() {
   if (phase.value === 'done') {
     proposalDismissed.value = true;
@@ -1506,26 +1482,12 @@ async function doConfirm() {
   }
 }
 
-async function doSupplement() {
-  const t = supplementText.value.trim();
-  if (!t || live.sending) return;
-  confirmError.value = false;
-  try {
-    await live.supplement(t);
-    supplementText.value = '';
-    supplementMode.value = false;
-    // 补充说明 = 一次普通回合：后端只更新方案（understanding / confirmedProposal）、
-    // **不生成路径**（生成须用户显式确认，README:113）。因此通常停在 preview 继续让用户确认；
-    // 仅当会话本身已完成（learningPath / isCompleted）时才进 done。
-    if (live.learningPath || live.isCompleted || live.stage === 'completed' || live.stage === 'ready') {
-      phase.value = 'done';
-    } else {
-      phase.value = 'preview';
-    }
-  } catch {
-    // 补充失败：保留已输入内容（不丢用户劳动），留在补充态，展示错误提示
-    toast.error('补充失败，请重试。输入的内容已保留。');
-  }
+/** 「再补充点信息」→ 退回聊天界面（2026-11-05 用户裁定）：方案本就活在对话流里，
+    补充 = 发一条普通消息让 AI 更新方案；关浮层并聚焦聊天输入框，之后可从「查看方案」重开确认 */
+function supplementViaChat() {
+  proposalDismissed.value = true;
+  proposalReviewRequested.value = false;
+  void nextTick(() => chatInputEl.value?.focus());
 }
 
 async function doRetry() {
