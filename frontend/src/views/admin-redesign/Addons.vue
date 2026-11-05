@@ -10,10 +10,12 @@
          不再另起一张同权卡；新建入口跟着 MCP 能力行走，页头不再挂全局「新建 MCP 服务」。 -->
     <MkPageHead title="插件" />
 
-    <!-- 可选能力（2026-10-27 bento 重设计）：
-         三张内置能力卡并排（联网 / 决策 / 生图），MCP 工具调用占一整行——
-         它不是第四张同形卡，而是带子资源的容器：能力头在下、服务列表挂在卡内。
-         这样「可选能力」回答开没开、最近用没用；MCP 卡再回答「接了哪些服务」。 -->
+    <!-- 可选能力（2026-11-05 用户「布局不采取分栏了吧 先保持一致」）：
+         单列堆叠，每张能力一张全宽卡，解剖与「系统设置」里的对话 / 向量 / 重排卡一致——
+         卡头（图标 + 能力名 + 最近调用 + 开关 + 入口），卡内一行成员。
+         此前是 bento：三张内置能力卡三列并排、MCP 占一整行；四个平级能力被拆成
+         「3 列 + 1 通栏」两种形状，读者得先分辨为什么第四张不一样宽。
+         MCP 仍是带子资源的容器（服务列表挂在卡内），但它现在与其余三张同宽同形。 -->
     <section class="ac-section">
       <div class="ac-section__head">
         <h2 class="ac-section__title">可选能力</h2>
@@ -24,27 +26,30 @@
         <span class="mk-alert__msg">{{ configErrorText }}</span>
         <button type="button" class="mk-alert__btn" @click="loadPluginConfigs">重试</button>
       </div>
-      <!-- 首载骨架：保持三卡 + 全宽 MCP 卡的位置，数据到达不跳版 -->
-      <div v-if="loading" class="ac-cap-grid" aria-hidden="true">
-        <div v-for="n in 3" :key="n" class="mk-skeleton ac-cap-skel"></div>
-        <div class="mk-skeleton ac-cap-skel ac-cap-skel--wide"></div>
+      <!-- 首载骨架：单列四卡，与最终形态同形，数据到达不跳版 -->
+      <div v-if="loading" class="ac-list" aria-hidden="true">
+        <div v-for="n in 4" :key="n" class="mk-skeleton ac-cap-skel"></div>
       </div>
-      <div v-else class="ac-cap-grid">
-        <article
+      <div v-else class="ac-list">
+        <section
           v-for="p in pluginRows"
           :key="p.id"
-          class="ac-cap"
-          :class="{ 'is-off': !pluginEnabled(p.id), 'ac-cap--wide': p.id === 'mcp' }"
+          class="mk-card ac-cap"
+          :class="{ 'is-off': !pluginEnabled(p.id) }"
         >
-          <header class="ac-cap__head">
-            <span class="ac-cap__glyph" aria-hidden="true">
-              <component :is="p.icon" :size="18" :stroke-width="1.8" />
-            </span>
+          <div class="mk-card__head ac-cap__head">
             <div class="ac-cap__id">
-              <strong>{{ p.name }}</strong>
-              <span class="ac-cap__last">{{ p.last === '从未' ? '从未调用' : `最近 ${p.last}` }}</span>
+              <span class="ac-cap__glyph" aria-hidden="true">
+                <component :is="p.icon" :size="15" :stroke-width="1.8" />
+              </span>
+              <h3 class="mk-card__title">{{ p.name }}</h3>
+              <span class="mk-card__meta">{{ p.last === '从未' ? '从未调用' : `最近 ${p.last}` }}</span>
+              <!-- 成员与可用性跟在标题后：这一行是「这个能力由哪些 Skill 组成」，
+                   不必为它单起一行（2026-11-05 全宽单列后，单行卡片比两行更紧凑） -->
+              <span v-if="membersText(p)" class="ac-cap__members">{{ membersText(p) }}</span>
+              <button v-if="p.errorCount > 0" type="button" class="mk-link ac-cap__fail" @click="goLogs(p.primary)">查失败</button>
             </div>
-            <div class="ac-cap__actions">
+            <div class="mk-card__head-right">
               <MkSwitch
                 :model-value="pluginEnabled(p.id)"
                 :state-text="pluginEnabled(p.id) ? '启用' : '停用'"
@@ -56,10 +61,6 @@
               <button v-if="p.id === 'mcp'" type="button" class="mk-btn mk-btn--sm" @click="openToolCreate">新建服务</button>
               <button v-else type="button" class="mk-btn mk-btn--sm" @click="openConfig(p)">配置</button>
             </div>
-          </header>
-          <div class="ac-cap__meta">
-            <span v-if="membersText(p)" class="ac-cap__members">{{ membersText(p) }}</span>
-            <button v-if="p.errorCount > 0" type="button" class="mk-link ac-cap__fail" @click="goLogs(p.primary)">查失败</button>
           </div>
 
           <!-- MCP 服务是 MCP 工具调用的子资源：同一张卡内展开，独立开关/测试/发现工具 -->
@@ -127,7 +128,7 @@
               @action="mcpFailed ? loadMcpTools() : openToolCreate()"
             />
           </div>
-        </article>
+        </section>
       </div>
     </section>
 
@@ -973,8 +974,9 @@ function goLogs(skillId: string) {
    与成本分析 / 健康中心同款），不再需要宿主 flex 列里的内滚容器。 */
 .mono { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); }
 
-/* 可选能力：三张内置能力卡 + 一张全宽 MCP 卡（2026-10-27 bento 重设计）。
-   auto-fit 280px：1280 档三列，窄屏自动两列/单列；MCP 卡始终整行。 */
+/* 可选能力：四张能力卡单列堆叠（2026-11-05 用户「布局不采取分栏了吧 先保持一致」）。
+   此前是三列 bento + 一张通栏 MCP 卡：四个平级能力被拆成两种形状，读者得先分辨
+   为什么第四张不一样宽；现在四张同宽同形，与「系统设置」里那三张模型卡同一节拍。 */
 .ac-section { display: grid; gap: 12px; }
 .ac-section__head { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .ac-section__title { margin: 0; font-size: var(--mk-fs-emphasis); font-weight: 650; color: var(--mk-ink); }
@@ -985,62 +987,28 @@ function goLogs(skillId: string) {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.ac-cap-grid {
-  display: grid;
-  /* 三张能力卡恒等分整行（2026-10-31 四轮评审 P2-8）：auto-fit 280px 在宽屏会多出空轨道——
-     三张卡只占约 3/4 行宽，右侧留一条尴尬空白，与下方通栏 MCP 卡右缘不齐。
-     宽屏恒 3 列（本组就是 3 张内置能力卡 + 一张通栏卡），窄屏回落 auto-fit 自然折行。 */
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  align-items: stretch;
-}
-@media (max-width: 1080px) {
-  .ac-cap-grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
-}
-.ac-cap {
-  display: grid;
-  align-content: start;
-  gap: 10px;
-  min-width: 0;
-  padding: 14px 16px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-xl);
-  background: var(--mk-surface);
-}
-.ac-cap--wide { grid-column: 1 / -1; container-type: inline-size; }
-.ac-cap__head { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.ac-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+/* 卡头沿用 .mk-card__head 的排版（12/16 + 发丝线）：一行装下「图标 + 能力名 + 最近调用 +
+   成员 + 入口与开关」，与模型卡同址同形（2026-11-05 单列后不再需要第二行）。 */
+.ac-cap { display: flex; flex-direction: column; flex: none; }
+.ac-cap__head { min-width: 0; }
+.ac-cap__id { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
 .ac-cap__glyph {
   flex: none;
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: var(--mk-radius-md);
+  width: 22px;
+  height: 22px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-surface-3);
   color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
 }
-.ac-cap__id { display: grid; gap: 2px; min-width: 0; flex: 1; }
-.ac-cap__id strong { font-size: var(--mk-fs-body); font-weight: 650; color: var(--mk-ink); line-height: 1.3; }
-.ac-cap__last { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; }
-.ac-cap__actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
-  flex: none;
-}
-.ac-cap__meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
-.ac-cap__members { font-size: var(--mk-fs-micro); color: var(--mk-faint); line-height: 1.45; }
+.ac-cap__members { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.45; }
 .ac-cap__fail { font-size: var(--mk-fs-micro); }
 /* 停用只压信息层，开关与按钮保持清晰可点 */
 .ac-cap.is-off .ac-cap__id,
-.ac-cap.is-off .ac-cap__glyph,
-.ac-cap.is-off .ac-cap__meta { opacity: 0.55; }
-.ac-cap-skel { height: 104px; border-radius: var(--mk-radius-xl); }
-.ac-cap-skel--wide { grid-column: 1 / -1; height: 168px; }
+.ac-cap.is-off .ac-cap__glyph { opacity: 0.55; }
+.ac-cap-skel { height: 50px; border-radius: var(--mk-radius-xl); }
 
 /* 资料采集口径说明行（P0-4）：与通道行同节奏的中性小字 */
 /* 联网：内置顺序的只读一行 */
@@ -1132,16 +1100,16 @@ function goLogs(skillId: string) {
 .ac-config-provider__foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 8px; }
 .ac-config-provider__foot .mk-link { font-size: var(--mk-fs-micro); }
 @media (max-width: 720px) {
-  .ac-cap { padding: 12px 14px; }
-  .ac-cap__head { flex-wrap: wrap; }
-  .ac-cap__actions { width: 100%; justify-content: flex-end; }
+  .ac-cap__head { flex-wrap: wrap; row-gap: 8px; }
+  .ac-cap__head .mk-card__head-right { width: 100%; justify-content: flex-end; }
 }
 
 /* 能力配置加载失败错误条：外形走 .mk-alert--row，本类只保留节内位置 */
 .ac-error { margin: 0; }
 
-/* MCP 子列表：挂在 MCP 工具调用卡内（cap--wide），不再另起卡或缩进到行外 */
-.ac-mcp__body { display: grid; gap: 8px; }
+/* MCP 子列表：挂在 MCP 工具调用卡内，与本卡其余内容同一 16px 槽。
+   卡头自带一条底边发丝线，这里只补纵向间距，不再画第二条线。 */
+.ac-mcp__body { display: grid; gap: 8px; padding: 12px 16px 14px; }
 .ac-mcp__list {
   container-type: inline-size;
   border: 1px solid var(--mk-line);

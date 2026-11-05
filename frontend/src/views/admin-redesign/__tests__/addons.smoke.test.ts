@@ -126,7 +126,7 @@ afterEach(() => {
 });
 
 describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () => {
-  it('独立页形态：三张内置能力卡 + 一张全宽 MCP 卡，刷新跟着顶栏广播走（2026-10-23 全站收口）', async () => {
+  it('独立页形态：四张能力卡单列同形，刷新跟着顶栏广播走（2026-10-23 全站收口）', async () => {
     const wrapper = await mountLive();
     expect(wrapper.find('.mk-page').exists()).toBe(true);
     const head = wrapper.find('.mk-pagehead');
@@ -135,11 +135,18 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     // 页头副文已删；2026-10-27 新建入口跟着 MCP 能力行走，页头不再挂全局动作
     expect(head.find('.mk-pagehead__sub').exists()).toBe(false);
     expect(head.findAll('.mk-pagehead__actions button')).toEqual([]);
-    // 三张内置能力卡 + 一张全宽 MCP 卡；MCP 服务不再是并列的第二张卡
+    /* 2026-11-05 用户「布局不采取分栏了吧 先保持一致」：四张能力卡单列堆叠、同宽同形。
+       此前是 bento（三列 + 一张通栏 MCP 卡），四个平级能力两种形状。 */
     expect(wrapper.findAll('.ac-cap')).toHaveLength(4);
-    expect(wrapper.findAll('.ac-cap--wide')).toHaveLength(1);
+    expect(wrapper.find('.ac-list').exists()).toBe(true);
+    expect(wrapper.find('.ac-cap-grid').exists()).toBe(false);
+    expect(wrapper.find('.ac-cap--wide').exists()).toBe(false);
+    // 每张卡都是 .mk-card：卡头 / 切面样式与「系统设置」里那三张模型卡同源
+    expect(wrapper.findAll('.ac-cap.mk-card')).toHaveLength(4);
+    expect(wrapper.findAll('.ac-cap .mk-card__head')).toHaveLength(4);
+    expect(wrapper.findAll('.ac-cap .mk-card__title')).toHaveLength(4);
     expect(wrapper.find('.ac-mcp-card').exists()).toBe(false);
-    expect(wrapper.find('.ac-cap--wide .ac-mcp__row').exists()).toBe(true);
+    expect(wrapper.find('.ac-cap .ac-mcp__row').exists()).toBe(true);
     // 顶栏刷新 = liveRefreshSeq 广播 → 本页与旧页头刷新钮同一入口重拉
     const calls = pluginConfigMock.mock.calls.length;
     liveRefreshSeq.value += 1;
@@ -251,13 +258,13 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     wrapper.unmount();
   });
 
-  it('MCP 服务挂在 MCP 全宽能力卡内：同卡子列表，不再另起卡', async () => {
+  it('MCP 服务挂在 MCP 能力卡内：同卡子列表，不再另起卡', async () => {
     const wrapper = await mountLive();
     const mcpCard = wrapper.findAll('.ac-cap').find((r) => r.text().includes('MCP 工具调用'))!;
-    expect(mcpCard.classes()).toContain('ac-cap--wide');
+    // 2026-11-05：与其他三张同宽同形（不再有 --wide 修饰类）
+    expect(mcpCard.classes()).toContain('mk-card');
     expect(mcpCard.findAll('.ac-mcp__row')).toHaveLength(3);
     expect(mcpCard.find('.ac-cap__head .mk-switch').exists()).toBe(true);
-    expect(wrapper.findAll('.ac-cap--wide')).toHaveLength(1);
     wrapper.unmount();
   });
 
