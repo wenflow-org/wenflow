@@ -115,7 +115,12 @@ describe('InfraModelsPanel', () => {
     expect(wrapper.text()).not.toContain('保存连接');
     // 每张卡自己一枚「＋ 添加模型」（卡头右组），模型行是「测试 / 配置」
     expect(list[0].find('.mk-card__head-right button').text()).toBe('＋ 添加模型');
-    expect(list[0].find('.mpp-eng__acts').findAll('button').map((b) => b.text())).toEqual(['测试', '配置']);
+    /* 2026-11-05 用户「里面的菜单按钮数量不一样啊」：与对话卡同序同形——
+       配置在前、测试在后，同为 mk-link 文字链接，且没有 ⋯ 菜单（单例没有设为默认/删除）。 */
+    const acts = list[0].find('.mpp-eng__acts').findAll('button');
+    expect(acts.map((b) => b.text())).toEqual(['配置', '测试']);
+    expect(acts.every((b) => b.classes().includes('mk-link'))).toBe(true);
+    expect(list[0].find('.mk-menu').exists()).toBe(false);
     wrapper.unmount();
   });
 

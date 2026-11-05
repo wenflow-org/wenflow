@@ -129,19 +129,12 @@
                   :title="testResults[m.id].text"
                 >{{ testResults[m.id].ok ? '调用通过' : '调用失败' }}<template v-if="testResults[m.id].latency"> · {{ testResults[m.id].latency }}</template></span>
               </div>
-              <div class="mpp-model-row__status">
-                <!-- 可调用（2026-11-04 用户「保留但弱化」）：此前是绿色描边的「● 可调用」徽标，
-                     读起来像一次刚做完的连通性测试结果。它其实只是一个常驻事实——这个模型在
-                     路由里能被选中——所以降成一枚小圆点：dot + title 说清口径，不给灰度文字，
-                     免得每行都挂一条可读噪声。
-                     2026-11-04 用户「去掉降级这个功能，不要」：冷却徽标随降级下线，状态列只剩
-                     告警徽标与这枚小圆点。 -->
-                <span
-                  class="mpp-dot"
-                  title="当前可被选中调用，不代表刚做过连通性测试。"
-                  aria-label="当前可被选中调用"
-                ></span>
-                <span v-if="modelWarnings(m).length" class="mk-badge mk-badge--warn mpp-label" :title="modelWarnings(m).join('\n')">⚠ {{ warningLabel(m) }}</span>
+              <!-- 2026-11-05 用户「这个小绿点代表什么」：那枚「当前可被选中调用」的小圆点删掉。
+                   它是**无条件渲染**的——2026-11-04 撤掉冷却徽标后条件那一侧就没了，
+                   于是每一行都亮着同一枚点，含义退化成「这一行存在」，等于没有信息。
+                   状态格此后只在真有告警时出现，没有告警就整格不渲染。 -->
+              <div v-if="modelWarnings(m).length" class="mpp-model-row__status">
+                <span class="mk-badge mk-badge--warn mpp-label" :title="modelWarnings(m).join('\n')">⚠ {{ warningLabel(m) }}</span>
               </div>
               <div class="mpp-rowacts">
                 <!-- 第一枚是正题（配这个模型的生成参数 / 能力 / 限额 / 价格），
@@ -570,17 +563,6 @@ defineExpose({ refresh, openPull, openHostPull })
 .mpp-models { display: grid; gap: 10px; min-width: 0; }
 /* 卡头左组：通道名 + 类型 + 连接状态（2026-10-27 由详情头并入卡头） */
 .mpp-head__id { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
-/* 「可调用」弱化后的状态点（2026-11-04）：不占文字位、不抢状态列的注意，
-   只在整行「配了什么」的右侧留一个安静的绿点；口径全靠 title。 */
-.mpp-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--mk-green);
-  opacity: 0.55;
-  flex: none;
-}
 /* 通道类型：平台内置 / 自建通道 */
 .mpp-type {
   padding: 1px 7px;

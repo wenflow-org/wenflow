@@ -334,16 +334,17 @@ describe('ModelProvidersPanel', () => {
     expect(result.attributes('title')).toContain('可以')
   })
 
-  it('状态读数：只给一枚弱化状态点（非连通性结论）', async () => {
+  it('状态列只在有告警时出现：没有那枚常驻小绿点', async () => {
     const w = await mountPanel()
     const rows = modelRows(w)
-    /* 2026-11-02：「可用」被读成「连通过了」，改成直说行为的「可调用」。
-       2026-11-04 用户「保留但弱化」：不再挂「● 可调用」绿徽标（与告警同档、看着像刚测过），
-       降成一枚小圆点，口径只进 title——所以这里断言点存在、且行内不再有那行文字。
-       2026-11-04 用户「去掉降级这个功能，不要」：冷却徽标随降级下线，行内不再有「冷却中」。 */
-    expect(rows[0].find('.mpp-dot').exists()).toBe(true)
-    expect(rows[1].find('.mpp-dot').exists()).toBe(true)
-    expect(rows[1].find('.mpp-dot').attributes('title')).toContain('可被选中调用')
+    /* 2026-11-02：「可用」被读成「连通过了」，改成直说行为的「可调用」；
+       2026-11-04 弱化成一枚小圆点；
+       2026-11-05 用户「这个小绿点代表什么」：小圆点整枚删除——它无条件渲染，
+       每一行都亮着同一枚点，含义退化成「这一行存在」，等于没有信息。
+       现在没有告警的模型行不渲染状态格，只有 ⚠ 徽标那一种状态。 */
+    expect(rows[0].find('.mpp-dot').exists()).toBe(false)
+    expect(rows[1].find('.mpp-dot').exists()).toBe(false)
+    expect(rows[1].find('.mpp-model-row__status').exists()).toBe(false)
     expect(rows[1].text()).not.toContain('可调用')
     expect(rows[1].find('.mk-badge--ok').exists()).toBe(false)
     expect(w.text()).not.toContain('冷却中')

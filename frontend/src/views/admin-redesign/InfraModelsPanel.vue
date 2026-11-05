@@ -46,6 +46,11 @@
               :class="{ 'is-bad': !testResults[g.kind]!.ok }"
               :title="testResults[g.kind]!.text"
             >{{ testResults[g.kind]!.ok ? '调用通过' : '调用失败' }}<template v-if="testResults[g.kind]!.text"> · {{ testResults[g.kind]!.text }}</template></span>
+            <!-- 2026-11-05 用户「里面的菜单按钮数量不一样啊」：动作集与对话卡对齐——
+                 顺序「配置 · 测试」、同为 `mk-link` 文字链接（此前这里是「测试 · 配置」，
+                 且「配置」是实心按钮：同一类动作在两张卡上是两种控件）。
+                 不加 ⋯ 菜单：单例没有「设为默认 / 删除」这两个池子才有的语义。 -->
+            <button type="button" class="mk-link" @click="openEdit(g.entry)">配置</button>
             <button
               v-if="g.entry.configured"
               type="button"
@@ -53,7 +58,6 @@
               :disabled="testing[g.kind]"
               @click="test(g.kind)"
             >{{ testing[g.kind] ? '测试中…' : '测试' }}</button>
-            <button type="button" class="mk-btn mk-btn--sm" @click="openEdit(g.entry)">配置</button>
           </div>
         </div>
       </section>
