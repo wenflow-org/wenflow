@@ -137,8 +137,10 @@
                         {{ model.capabilities.supportsThinking ? '支持' : '不支持' }}
                       </span>
                     </td>
-                    <td>
-                      <span v-if="model.capabilities.supportsReasoningEffort">支持</span>
+                    <!-- 强度是逐模型声明的挡位（2026-11-05）：只写「支持」看不出这台模型认哪几档，
+                         而运行时只发出它声明过的那几档。 -->
+                    <td class="mono">
+                      <template v-if="model.capabilities.reasoningEfforts.length">{{ model.capabilities.reasoningEfforts.join(' / ') }}</template>
                       <span v-else class="mk-na">—</span>
                     </td>
                     <td class="mono">
@@ -238,7 +240,7 @@ interface ModelRegistryOverviewData {
     providerName?: string
     hasOwnEndpoint: boolean
     keyConfigured: boolean | null
-    capabilities: { supportsThinking: boolean; supportsReasoningEffort: boolean }
+    capabilities: { supportsThinking: boolean; reasoningEfforts: string[] }
     limits: {
       maxOutputTokens: number | null
       defaultMaxTokens: number | null

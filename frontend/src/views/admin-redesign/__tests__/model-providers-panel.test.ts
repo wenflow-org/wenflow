@@ -69,7 +69,7 @@ function providerView(p: ProviderSpec): Record<string, unknown> {
       label: m.id,
       tier: m.tier ?? 'chat',
       supportsThinking: false,
-      supportsReasoningEffort: false,
+      reasoningEfforts: [],
       maxOutputTokens: null,
       defaultMaxTokens: null,
       reasoningReserveTokens: null,
@@ -222,7 +222,7 @@ describe('ModelProvidersPanel', () => {
     ] })
     platform.models = (platform.models as Array<Record<string, unknown>>).map((m) => {
       if (m.id === 'chat-read') return { ...m, vision: true }
-      if (m.id === 'think-fast') return { ...m, supportsThinking: true, supportsReasoningEffort: true }
+      if (m.id === 'think-fast') return { ...m, supportsThinking: true, reasoningEfforts: ['low', 'high'] }
       return m
     })
     seedView({ providers: [platform] })
@@ -236,7 +236,8 @@ describe('ModelProvidersPanel', () => {
     const caps = (i: number) => rows[i].findAll('.mpp-fn__chip').map((c) => c.text())
     expect(caps(0)).toEqual([])
     expect(caps(1)).toEqual(['读图'])
-    expect(caps(2)).toEqual(['思考', '推理强度'])
+    // 强度标签带档位读数（2026-11-05）：只写「推理强度」看不出这台模型认哪几档
+    expect(caps(2)).toEqual(['思考', '推理强度 low / high'])
     // 能力标签有可读文本，不只靠颜色
     expect(rows[1].findAll('.mpp-fn__chip').map((c) => c.text())).toEqual(['读图'])
   })
@@ -302,7 +303,8 @@ describe('ModelProvidersPanel', () => {
     expect(w.find('.mcc').text()).toContain('确认模型能力')
 
     // 用户把第二个模型的「读图」勾上（推断不出，默认未勾）→ 落盘值必须跟着用户
-    const vision = rows[1].findAll('input[type="checkbox"]')[2]
+    // 每行三组控件：思考、五档强度（.mcc-effort）、读图——按 aria-label 取，不数下标
+    const vision = rows[1].findAll('input[type="checkbox"]').find((i) => i.attributes('aria-label')?.endsWith('支持读图'))!
     await vision.setValue(true)
     await nextTick()
     await w.find('.mcc .mk-modal__foot .mk-btn--primary').trigger('click')
@@ -312,8 +314,8 @@ describe('ModelProvidersPanel', () => {
     const [providerId, models] = addModelsMock.mock.calls[0]
     expect(providerId).toBe('platform')
     expect(models).toEqual([
-      { id: 'mimo-v2.5-flash', supportsThinking: false, supportsReasoningEffort: false, vision: false },
-      { id: 'step-3.5-flash', supportsThinking: false, supportsReasoningEffort: false, vision: true }
+      { id: 'mimo-v2.5-flash', supportsThinking: false, reasoningEfforts: [], vision: false },
+      { id: 'step-3.5-flash', supportsThinking: false, reasoningEfforts: [], vision: true }
     ])
     // 引入后不再自动弹模型编辑弹层；选择器与能力确认层都已关闭
     expect(w.find('.med-modal').exists()).toBe(false)

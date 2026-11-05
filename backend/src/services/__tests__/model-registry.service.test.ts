@@ -127,7 +127,7 @@ describe('model-registry.service（只读总览）', () => {
   it('模型清单含能力与限额（不再有降级链字段）', async () => {
     const overview = await getModelRegistryOverview()
     const main = overview.models.find((model) => model.id === 'deepseek-v4.1-flash')!
-    expect(main.capabilities).toEqual({ supportsThinking: true, supportsReasoningEffort: true })
+    expect(main.capabilities).toEqual({ supportsThinking: true, reasoningEfforts: ['low', 'high', 'max'] })
     expect(main.limits.maxOutputTokens).toBe(131072)
     expect(main.limits.defaultMaxTokens).toBe(32768)
     // 降级功能整个下线（2026-11-04）：总览里不再有模型级 / 运行时级兜底链字段

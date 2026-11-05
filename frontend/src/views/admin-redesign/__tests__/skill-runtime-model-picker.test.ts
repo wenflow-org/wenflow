@@ -19,7 +19,7 @@ const CATALOG = [
     providerId: 'platform',
     providerName: '平台',
     supportsThinking: true,
-    supportsReasoningEffort: true,
+    reasoningEfforts: ['low', 'high', 'max'],
     pricing: { inputPer1M: 0.3, outputPer1M: 1.2 }
   },
   {

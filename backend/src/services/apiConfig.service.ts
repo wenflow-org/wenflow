@@ -20,7 +20,8 @@ export interface APIConfig {
   defaultMaxTokens?: number;
   /** 平台默认思考模式：default(跟随模型/上游) | enabled | disabled */
   defaultThinkingMode?: string;
-  /** 平台默认思考强度：default | high | max */
+  /** 平台默认思考强度：default | minimal | low | medium | high | max（实际哪几档能发由模型声明的
+   *  reasoningEfforts 决定，见 gateway/api-gateway/thinking-policy.ts） */
   defaultReasoningEffort?: string;
   /** 平台默认结构化输出：none（默认，行为不变）| json_object（json 媒介技能解码层强制 JSON） */
   defaultResponseFormat?: string;

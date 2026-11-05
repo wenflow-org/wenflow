@@ -50,7 +50,8 @@ export interface ModelRegistryOverview {
     keyConfigured: boolean | null;
     capabilities: {
       supportsThinking: boolean;
-      supportsReasoningEffort: boolean;
+      /** 这台模型接受哪几档 reasoning_effort（空数组 = 不支持该字段） */
+      reasoningEfforts: string[];
     };
     limits: {
       maxOutputTokens: number | null;
@@ -227,7 +228,7 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
       : null,
     capabilities: {
       supportsThinking: model.supportsThinking === true,
-      supportsReasoningEffort: model.supportsReasoningEffort === true
+      reasoningEfforts: model.reasoningEfforts ?? []
     },
     limits: {
       maxOutputTokens: model.maxOutputTokens ?? null,

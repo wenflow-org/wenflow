@@ -18,7 +18,7 @@
           "label": "DeepSeek V4.1 Flash",
           "tier": "chat",
           "supportsThinking": true,
-          "supportsReasoningEffort": true,
+          "reasoningEfforts": ["low", "high", "max"],
           "vision": true,
           "maxOutputTokens": 131072,
           "defaultMaxTokens": 32768,
@@ -35,7 +35,6 @@
           "label": "Agnes 2.5 Flash",
           "tier": "chat",
           "supportsThinking": false,
-          "supportsReasoningEffort": false,
           "pricing": {
             "inputPer1M": 0.03,
             "outputPer1M": 0.15
@@ -55,7 +54,7 @@
           "label": "DeepSeek V4.1 Flash（示例）",
           "tier": "chat",
           "supportsThinking": true,
-          "supportsReasoningEffort": true,
+          "reasoningEfforts": ["low", "high", "max"],
           "maxOutputTokens": 131072,
           "defaultMaxTokens": 32768,
           "reasoningReserveTokens": 8192
@@ -64,7 +63,6 @@
           "label": "Agnes 3.0 Flash（示例）",
           "tier": "chat",
           "supportsThinking": false,
-          "supportsReasoningEffort": false,
           "maxOutputTokens": 65536,
           "defaultMaxTokens": 32768
         }

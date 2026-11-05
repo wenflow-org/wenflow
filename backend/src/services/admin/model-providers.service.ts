@@ -19,11 +19,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  LEGACY_REASONING_EFFORTS,
   ModelPricing,
+  REASONING_EFFORT_LEVELS,
   getLlmRegistryStatus,
   parseLlmProvidersConfig,
+  parseReasoningEfforts,
   reloadLlmProvidersIfChanged,
-  resolveConfigPath
+  resolveConfigPath,
+  type ReasoningEffortLevel
 } from '../../config/models.config';
 import {
   deleteProviderSecret,
@@ -78,12 +82,14 @@ export interface ModelViewModel {
   label: string;
   tier: 'chat' | 'reasoning';
   supportsThinking: boolean;
-  supportsReasoningEffort: boolean;
+  /** 这台模型接受哪几档 reasoning_effort；空数组 = 不支持该字段。
+   *  管理台据此渲染挡位勾选，运行时据此裁剪请求（见 gateway/api-gateway/thinking-policy.ts）。 */
+  reasoningEfforts: ReasoningEffortLevel[];
   /** 声明可接收图片输入（见 models.config.ts ModelDefinition.vision） */
   vision: boolean;
   /** 模型级生成默认；null = 跟随平台默认（2026-10-24） */
   defaultThinkingMode: 'enabled' | 'disabled' | null;
-  defaultReasoningEffort: 'low' | 'high' | 'max' | null;
+  defaultReasoningEffort: ReasoningEffortLevel | null;
   defaultResponseFormat: 'none' | 'json_object' | null;
   maxOutputTokens: number | null;
   defaultMaxTokens: number | null;
@@ -123,6 +129,9 @@ export interface ModelInput {
   label?: string;
   tier?: string;
   supportsThinking?: boolean;
+  /** 挡位数组：传空数组 = 关掉这个能力；不传 = 不改动。 */
+  reasoningEfforts?: string[];
+  /** 历史入参（布尔）：true 折算成 low/high/max，保留只为兼容旧调用方。 */
   supportsReasoningEffort?: boolean;
   vision?: boolean;
   /** 'default' / null = 清除模型覆盖，跟随平台默认 */
@@ -373,13 +382,13 @@ function toModelView(raw: Record<string, unknown>, id: string): ModelViewModel {
     label: typeof raw.label === 'string' && raw.label.trim() ? raw.label.trim() : id,
     tier: raw.tier === 'reasoning' ? 'reasoning' : 'chat',
     supportsThinking: raw.supportsThinking === true,
-    supportsReasoningEffort: raw.supportsReasoningEffort === true,
+    reasoningEfforts: parseReasoningEfforts(raw.reasoningEfforts, raw.supportsReasoningEffort, id),
     vision: raw.vision === true,
     defaultThinkingMode: raw.defaultThinkingMode === 'enabled' || raw.defaultThinkingMode === 'disabled'
       ? raw.defaultThinkingMode
       : null,
-    defaultReasoningEffort: raw.defaultReasoningEffort === 'low' || raw.defaultReasoningEffort === 'high' || raw.defaultReasoningEffort === 'max'
-      ? raw.defaultReasoningEffort
+    defaultReasoningEffort: (REASONING_EFFORT_LEVELS as readonly string[]).includes(String(raw.defaultReasoningEffort))
+      ? raw.defaultReasoningEffort as ReasoningEffortLevel
       : null,
     defaultResponseFormat: raw.defaultResponseFormat === 'none' || raw.defaultResponseFormat === 'json_object'
       ? raw.defaultResponseFormat
@@ -469,6 +478,26 @@ function assertModelId(modelId: string, where: string): void {
   }
 }
 
+/** 挡位入参归一：按词表白名单校验、去重、保持上传顺序；未知词直接拒（错误落到编辑弹窗） */
+function validateEfforts(value: unknown): ReasoningEffortLevel[] {
+  if (!Array.isArray(value)) {
+    throw new RegistryEditError('推理强度挡位必须是一个数组。', 400, 'invalid');
+  }
+  const out: ReasoningEffortLevel[] = [];
+  for (const item of value) {
+    const normalized = typeof item === 'string' ? item.trim().toLowerCase() : '';
+    if (!(REASONING_EFFORT_LEVELS as readonly string[]).includes(normalized)) {
+      throw new RegistryEditError(
+        `推理强度挡位只能是 ${REASONING_EFFORT_LEVELS.join(' / ')}，实际 ${JSON.stringify(item)}。`,
+        400,
+        'invalid'
+      );
+    }
+    if (!out.includes(normalized as ReasoningEffortLevel)) out.push(normalized as ReasoningEffortLevel);
+  }
+  return out;
+}
+
 function positiveNumberOrNull(value: unknown, field: string): number | null {
   if (value == null || value === '') return null;
   const num = typeof value === 'number' ? value : Number(value);
@@ -480,7 +509,7 @@ function positiveNumberOrNull(value: unknown, field: string): number | null {
 
 /** 模型条目的规范字段顺序（写回文件的可读性靠它，而不是靠碰巧的插入顺序） */
 const MODEL_KEY_ORDER = [
-  'label', 'tier', 'supportsThinking', 'supportsReasoningEffort', 'vision',
+  'label', 'tier', 'supportsThinking', 'reasoningEfforts', 'vision',
   'defaultThinkingMode', 'defaultReasoningEffort', 'defaultResponseFormat',
   'maxOutputTokens', 'defaultMaxTokens',
   'reasoningReserveTokens', 'maxParallelRequests', 'pricing', 'description'
@@ -500,16 +529,24 @@ function buildModelEntry(input: ModelInput, existing: Record<string, unknown> | 
     merged.tier = input.tier;
   }
   if (input.supportsThinking !== undefined) merged.supportsThinking = input.supportsThinking === true;
-  if (input.supportsReasoningEffort !== undefined) merged.supportsReasoningEffort = input.supportsReasoningEffort === true;
+  // 挡位：数组即支持集，先按词表归一（未知词拒），再和 supportsThinking 对账。
+  // 旧的布尔键在这里就地删除——它是**读**兼容字段，写回只产出数组。
+  if (input.reasoningEfforts !== undefined) {
+    merged.reasoningEfforts = validateEfforts(input.reasoningEfforts);
+  } else if (input.supportsReasoningEffort !== undefined) {
+    merged.reasoningEfforts = input.supportsReasoningEffort === true ? [...LEGACY_REASONING_EFFORTS] : [];
+  }
+  delete merged.supportsReasoningEffort;
+  if (Array.isArray(merged.reasoningEfforts) && merged.reasoningEfforts.length === 0) delete merged.reasoningEfforts;
   // 图片理解是独立能力：不勾就显式写 false（上游不支持时运行时会拒图，不是静默丢图）
   if (input.vision !== undefined) merged.vision = input.vision === true;
-  if (merged.supportsReasoningEffort === true && merged.supportsThinking !== true) {
-    throw new RegistryEditError('勾了「支持推理强度」就必须同时支持思考模式（上游字段依赖该能力）。', 400, 'invalid');
+  if (Array.isArray(merged.reasoningEfforts) && merged.reasoningEfforts.length && merged.supportsThinking !== true) {
+    throw new RegistryEditError('填了推理强度挡位就必须同时支持思考模式（上游字段依赖该能力）。', 400, 'invalid');
   }
   // 模型级生成默认（2026-10-24）：'default' / 空 = 删除覆盖，跟随平台默认
   const enumFields: Array<[keyof ModelInput, string, readonly string[]]> = [
     ['defaultThinkingMode', '思考模式', ['default', 'enabled', 'disabled']],
-    ['defaultReasoningEffort', '思考强度', ['default', 'low', 'high', 'max']],
+    ['defaultReasoningEffort', '思考强度', ['default', ...REASONING_EFFORT_LEVELS]],
     ['defaultResponseFormat', '输出格式', ['default', 'none', 'json_object']]
   ];
   for (const [key, label, allowed] of enumFields) {
@@ -552,6 +589,18 @@ function buildModelEntry(input: ModelInput, existing: Record<string, unknown> | 
     const text = typeof input.description === 'string' ? input.description.trim() : '';
     if (text) merged.description = text;
     else delete merged.description;
+  }
+  // 默认档位必须落在本模型声明的挡位里（否则运行时那档会被 thinking-policy 裁掉，
+  // 「默认值」看上去生效但请求里根本没这个字段）
+  const declaredEfforts = Array.isArray(merged.reasoningEfforts) ? merged.reasoningEfforts as string[] : [];
+  if (typeof merged.defaultReasoningEffort === 'string'
+    && merged.defaultReasoningEffort !== 'default'
+    && !declaredEfforts.includes(merged.defaultReasoningEffort)) {
+    throw new RegistryEditError(
+      `默认推理强度「${merged.defaultReasoningEffort}」不在本模型声明的挡位（${declaredEfforts.join(' / ') || '未声明'}）里。`,
+      400,
+      'invalid'
+    );
   }
   // 已知键按规范顺序重排，未知键留尾部（不丢运维自己加的字段）
   const ordered: Record<string, unknown> = {};

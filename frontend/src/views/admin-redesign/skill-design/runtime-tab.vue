@@ -148,7 +148,7 @@ ${orderTitle}`">{{ baseModel }}</span>
                   <span>思考强度</span>
                   <MkSelect
                     v-model="rtForm.reasoningEffort"
-                    :options="REASONING_EFFORT_OPTIONS"
+                    :options="reasoningEffortOptions"
                     aria-label="推理强度"
                     block
                     :disabled="!rtForm.enabled || rtForm.thinkingMode === 'disabled'"
@@ -295,6 +295,7 @@ import { askConfirm } from '../useConfirm'
 import { useEscape } from '../useEscape'
 import { useOverlay, useMaskClose } from '../useOverlay'
 import { errText, callParamSourceLabel, thinkingCapabilityNotice, type ThinkingCapability } from './sdp-shared'
+import { REASONING_EFFORT_LEVELS, effortOptions, normalizeEfforts, type ReasoningEffortLevel } from '../reasoningEfforts'
 import { useModelCatalog } from '@/composables/useModelCatalog'
 import MkModelPicker from '@/components/mk/MkModelPicker.vue'
 import MkSwitch from '@/components/mk/MkSwitch.vue'
@@ -318,12 +319,15 @@ const THINKING_MODE_OPTIONS = [
   { value: 'enabled', label: '开启' },
   { value: 'disabled', label: '关闭' }
 ] as const
-const REASONING_EFFORT_OPTIONS = [
-  { value: 'default', label: INHERIT_DEFAULT_LABEL },
-  { value: 'low', label: 'low' },
-  { value: 'high', label: 'high' },
-  { value: 'max', label: 'max' }
-] as const
+/** 思考强度的候选**不由平台写死**（2026-11-05）：先取生效模型声明的挡位，
+ *  下拉只出这几档。模型不在目录（自定义通道 / 历史值）时退回词表全集，
+ *  由服务端的 thinking-policy 再按能力裁一次——这里少给一档，运营就选不到它。 */
+const reasoningEffortOptions = computed(() => {
+  const levels = effectiveModelCap.value?.efforts?.length
+    ? normalizeEfforts(effectiveModelCap.value.efforts)
+    : [...REASONING_EFFORT_LEVELS]
+  return effortOptions(levels, INHERIT_DEFAULT_LABEL)
+})
 const PARAM_MODE_OPTIONS = [
   { value: 'inherit', label: INHERIT_PROMPT_LABEL },
   { value: 'override', label: '覆盖' }
@@ -336,7 +340,7 @@ const emit = defineEmits<{ (e: 'dirty', p: { dirty: boolean; label: string }): v
 interface RuntimeForm {
   model: string
   thinkingMode: 'default' | 'enabled' | 'disabled'
-  reasoningEffort: 'default' | 'low' | 'high' | 'max'
+  reasoningEffort: 'default' | ReasoningEffortLevel
   requestTimeoutMs: number | null
   enabled: boolean
 }
@@ -437,7 +441,7 @@ const summaryCaps = computed(() => {
   const cap = effectiveModelCap.value
   return [
     cap?.thinking ? '支持思考' : '',
-    cap?.reasoning ? '支持推理强度' : '',
+    cap?.efforts.length ? `支持推理强度 ${cap.efforts.join(' / ')}` : '',
     opt?.vision ? '支持读图' : ''
   ].filter(Boolean)
 })
@@ -457,7 +461,7 @@ const effectiveModelCap = computed<ThinkingCapability | null>(() => {
   const id = String(rtForm.value.enabled && rtForm.value.model ? rtForm.value.model : generationParams.value?.model || '')
   if (!id) return null
   const opt = pickerOptions.value.find((o) => o.value === id)
-  return opt ? { thinking: opt.thinking, reasoning: opt.reasoning } : null
+  return opt ? { thinking: opt.thinking, efforts: opt.efforts } : null
 })
 const thinkingNotice = computed(() =>
   thinkingCapabilityNotice(
@@ -533,7 +537,11 @@ const primaryOption = computed(() => pickerOptions.value.find((o) => o.value ===
 const primaryMetaText = computed(() => {
   const o = primaryOption.value
   if (!o) return ''
-  const caps = [o.thinking ? '思考' : '', o.reasoning ? '推理强度' : '', o.vision ? '读图' : ''].filter(Boolean).join(' / ')
+  const caps = [
+    o.thinking ? '思考' : '',
+    o.efforts.length ? `推理强度 ${o.efforts.join(' / ')}` : '',
+    o.vision ? '读图' : ''
+  ].filter(Boolean).join(' / ')
   const price = o.priceIn != null || o.priceOut != null
     ? `入 ${o.priceIn ?? '—'} / 出 ${o.priceOut ?? '—'}`
     : ''

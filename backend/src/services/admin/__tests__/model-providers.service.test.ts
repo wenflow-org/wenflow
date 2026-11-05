@@ -225,7 +225,7 @@ describe('模型', () => {
       label: 'M New',
       tier: 'reasoning',
       supportsThinking: true,
-      supportsReasoningEffort: true,
+      reasoningEfforts: ['low', 'high', 'max'],
       maxOutputTokens: 131072,
       // 2026-11-04 用户「去掉降级这个功能，不要」：字段已从入参类型里下线，
       // 老客户端再传也只当没看见（下面断言它不落盘）
@@ -233,10 +233,39 @@ describe('模型', () => {
     });
     const entry = readFile().providers.platform.models['m-new'];
     expect(Object.keys(entry)).toEqual([
-      'label', 'tier', 'supportsThinking', 'supportsReasoningEffort', 'maxOutputTokens'
+      'label', 'tier', 'supportsThinking', 'reasoningEfforts', 'maxOutputTokens'
     ]);
+    expect(entry.reasoningEfforts).toEqual(['low', 'high', 'max']);
     expect(entry).not.toHaveProperty('fallbacks');
     expect(result.warnings.join(' ')).not.toContain('备用');
+  });
+
+  it('推理强度挡位：逐模型声明、去重保序、未知词拒、老布尔键折成三档且不再写回', async () => {
+    await addModel('custom', { id: 'cm-eff', tier: 'chat', supportsThinking: true, reasoningEfforts: ['high', 'low', 'high'] });
+    const entry = readFile().providers.custom.models['cm-eff'];
+    // 去重 + 保上传顺序（上屏顺序就是操作者勾的顺序）
+    expect(entry.reasoningEfforts).toEqual(['high', 'low']);
+
+    // 空数组 = 关掉这个能力：键整个删掉，不落一个空壳
+    await updateModel('custom', 'cm-eff', { reasoningEfforts: [] });
+    expect(readFile().providers.custom.models['cm-eff'].reasoningEfforts).toBeUndefined();
+
+    // 词表以外的词直接拒（上游不认的档位宁可编辑期报错，不在运行时静默丢）
+    await expectEditError(
+      () => updateModel('custom', 'cm-eff', { reasoningEfforts: ['ultra'] }),
+      400,
+      '推理强度挡位只能是'
+    );
+
+    // 老调用方仍传布尔：折算成历史三档；写回只产出数组，布尔键不会被留在文件里
+    await updateModel('custom', 'cm-eff', { supportsReasoningEffort: true });
+    const legacy = readFile().providers.custom.models['cm-eff'];
+    expect(legacy.reasoningEfforts).toEqual(['low', 'high', 'max']);
+    expect(legacy).not.toHaveProperty('supportsReasoningEffort');
+
+    const view = await buildProvidersView();
+    const model = view.providers.find((p) => p.id === 'custom')!.models.find((m) => m.id === 'cm-eff')!;
+    expect(model.reasoningEfforts).toEqual(['low', 'high', 'max']);
   });
 
   it('新增模型的拒绝面：重复 id / id 非法 / 勾强度没勾思考', async () => {
@@ -248,12 +277,12 @@ describe('模型', () => {
 
   it('批量引入：一次写入多个模型并带上推断出的能力标签', async () => {
     const result = await addModels(PLATFORM_PROVIDER_ID, [
-      { id: 'm-bulk-1', supportsThinking: true, supportsReasoningEffort: true },
+      { id: 'm-bulk-1', supportsThinking: true, reasoningEfforts: ['low', 'medium', 'high'] },
       { id: 'm-bulk-2', vision: true }
     ]);
     expect(result.modelIds).toEqual(['m-bulk-1', 'm-bulk-2']);
     const models = readFile().providers.platform.models;
-    expect(models['m-bulk-1']).toMatchObject({ tier: 'chat', supportsThinking: true, supportsReasoningEffort: true });
+    expect(models['m-bulk-1']).toMatchObject({ tier: 'chat', supportsThinking: true, reasoningEfforts: ['low', 'medium', 'high'] });
     expect(models['m-bulk-2']).toMatchObject({ tier: 'chat', vision: true });
   });
 
@@ -286,12 +315,17 @@ describe('模型', () => {
       id: 'cm-gen',
       label: 'CM Gen',
       tier: 'chat',
+      supportsThinking: true,
+      reasoningEfforts: ['low', 'max'],
       defaultThinkingMode: 'disabled',
       defaultReasoningEffort: 'max',
       defaultResponseFormat: 'json_object'
     });
     const entry = readFile().providers.custom.models['cm-gen'];
-    expect(Object.keys(entry)).toEqual(['label', 'tier', 'defaultThinkingMode', 'defaultReasoningEffort', 'defaultResponseFormat']);
+    expect(Object.keys(entry)).toEqual([
+      'label', 'tier', 'supportsThinking', 'reasoningEfforts',
+      'defaultThinkingMode', 'defaultReasoningEffort', 'defaultResponseFormat'
+    ]);
     expect(entry.defaultThinkingMode).toBe('disabled');
 
     let view = await buildProvidersView();

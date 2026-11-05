@@ -385,11 +385,13 @@ function warningLabel(m: ModelLike): string {
   return ws.length && ws.every((w) => w.includes('未被任何别名引用')) ? '未被引用' : '告警'
 }
 /** 未配单价 = 成本分析页这个模型的金额会显示「—」，是可在模型编辑高级设置里补的配置缺口 */
-/** 模型能力标签：能力列只列「有没有」，类型不在这张表里猜 */
+/** 模型能力标签：能力列只列「有没有」，类型不在这张表里猜。
+ *  推理强度带档位读数（2026-11-05）：一台模型认哪几档是它自己的事，
+ *  只写「推理强度」看不出这台模型到底能发 low 还是 max。 */
 function functionTags(m: ModelLike): string[] {
   const tags: string[] = []
   if (m.supportsThinking) tags.push('思考')
-  if (m.supportsReasoningEffort) tags.push('推理强度')
+  if (m.reasoningEfforts.length) tags.push(`推理强度 ${m.reasoningEfforts.join(' / ')}`)
   if (m.vision) tags.push('读图')
   return tags
 }

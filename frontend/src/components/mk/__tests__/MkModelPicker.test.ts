@@ -18,7 +18,7 @@ const OPTIONS: MkModelOption[] = [
     tier: 'chat',
     providerName: '平台',
     thinking: true,
-    reasoning: true,
+    efforts: ['low', 'high', 'max'],
     priceIn: 0.3,
     priceOut: 1.2
   },

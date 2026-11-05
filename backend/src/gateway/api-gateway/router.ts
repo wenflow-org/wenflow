@@ -6,7 +6,7 @@ import { getAgentRequestTimeoutInfo } from '../../services/agentRequestTimeout.s
 import { decryptSecret, SecretCryptoError } from '../../utils/secret-crypto';
 import { endpointsMatch } from '../../utils/endpoint-identity';
 import { selectModelForAlias } from './model-alias';
-import { reloadLlmProvidersIfChanged, resolveModelRef, supportsVision, getModelGenerationDefaults } from '../../config/models.config';
+import { reloadLlmProvidersIfChanged, resolveModelRef, supportsVision, getModelGenerationDefaults, REASONING_EFFORT_LEVELS, type ReasoningEffortLevel } from '../../config/models.config';
 import { resolveProviderApiKey } from '../../services/provider-secrets.service';
 
 const PLATFORM_KEY_CONTEXT = 'system.platform_api_configs.apiKey';
@@ -23,7 +23,7 @@ interface Config {
   vision?: boolean;
   reasoningModel?: string;
   thinkingMode?: 'default' | 'enabled' | 'disabled';
-  reasoningEffort?: 'default' | 'low' | 'high' | 'max';
+  reasoningEffort?: 'default' | ReasoningEffortLevel;
   /** 通道级结构化输出默认（user-provider 继承 platform 通道设置；skill paramOverrides 仍可覆盖） */
   responseFormat?: 'none' | 'json_object';
   temperature: number;
@@ -406,7 +406,7 @@ export class APIRouter {
       // （此前硬编码 'default' → 上游预思考开启，path-gen 类长任务被烧慢超时）
       let responseFormat: 'none' | 'json_object' = 'none';
       let thinkingMode: 'default' | 'enabled' | 'disabled' = 'default';
-      let reasoningEffort: 'default' | 'low' | 'high' | 'max' = 'default';
+      let reasoningEffort: 'default' | ReasoningEffortLevel = 'default';
       try {
         const plat = await systemPrisma.platform_api_configs.findUnique({
           where: { id: 'platform' },
@@ -508,12 +508,13 @@ export class APIRouter {
     return 'default';
   }
 
-  private normalizeReasoningEffort(value?: string | null): 'default' | 'low' | 'high' | 'max' {
+  private normalizeReasoningEffort(value?: string | null): 'default' | ReasoningEffortLevel {
     const normalized = (value || '').trim().toLowerCase();
-    if (normalized === 'low' || normalized === 'high' || normalized === 'max') {
-      return normalized;
+    // 词表以外的值（xhigh 等）按「未指定」处理；这一档发不发得出去由 thinking-policy
+    // 再按模型声明的 reasoningEfforts 裁一次——两处都放行才算数。
+    if ((REASONING_EFFORT_LEVELS as readonly string[]).includes(normalized)) {
+      return normalized as ReasoningEffortLevel;
     }
-    // medium/xhigh 等由上游映射处理，不在此归一；平台只显式表达 default/low/high/max
     return 'default';
   }
 

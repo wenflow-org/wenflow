@@ -63,7 +63,11 @@
             <span class="mk-mp__meta">
               <span class="mk-mp__tags">
                 <span v-if="row.opt.thinking" class="mk-badge mk-badge--muted" title="支持思考模式">思考</span>
-                <span v-if="row.opt.reasoning" class="mk-badge mk-badge--muted" title="支持推理强度">强度</span>
+                <span
+                  v-if="row.opt.efforts?.length"
+                  class="mk-badge mk-badge--muted"
+                  :title="`支持推理强度：${row.opt.efforts.join(' / ')}`"
+                >强度</span>
                 <span v-if="row.opt.vision" class="mk-badge mk-badge--muted" title="支持图片输入">视觉</span>
               </span>
               <span v-if="priceText(row.opt)" class="mk-mp__price mono">{{ priceText(row.opt) }}</span>
@@ -108,7 +112,8 @@ export interface MkModelOption {
   providerId?: string
   providerName?: string
   thinking?: boolean
-  reasoning?: boolean
+  /** 这台模型声明的推理强度挡位；空/缺省 = 不支持该字段 */
+  efforts?: string[]
   vision?: boolean
   priceIn?: number | null
   priceOut?: number | null

@@ -76,7 +76,7 @@ this.applyThinkingMode(route, requestBody);
 
 // executor.ts:905-915：仅当 supportsThinkingMode(modelId) 才发字段
 //   thinkingMode ∈ {enabled,disabled} → thinking: { type }
-//   thinkingMode !== 'disabled' 且 reasoningEffort ∈ {low,high,max} → reasoning_effort
+//   thinkingMode !== 'disabled' 且 reasoningEffort ∈ 该模型声明的 reasoningEfforts → reasoning_effort
 ```
 
 **无预算概念**：思考消耗与输出消耗共用 `max_tokens`。上游一旦把预算花在 reasoning 上，就出现 `finish_reason=length` + `content` 空。
@@ -162,7 +162,7 @@ export interface ModelDefinition {
   realModelId?: string;            // 上游真实模型名（默认 = id）
   // —— 能力 ——
   supportsThinking?: boolean;
-  supportsReasoningEffort?: boolean;
+  reasoningEfforts?: ReasoningEffortLevel[]; // 逐模型声明认哪几档（空 = 不支持该字段）
   supportsTools?: boolean;
   supportsResponseFormat?: boolean;
   vision?: boolean;                // 是否支持图片输入（OpenAI 兼容 image_url 内容块；2026-10-18 #123）
@@ -180,7 +180,7 @@ export interface ModelDefinition {
 }
 ```
 
-**裁剪记录（2026-09-24 对账）**：已实现的注册表是上述接口的**能力 + 限额 + 经济性半边**（`supportsThinking` / `supportsReasoningEffort` / `maxOutputTokens` / `defaultMaxTokens` / `reasoningReserveTokens` / `maxParallelRequests` / `pricing`；`fallbacks` 已于 2026-11-04 下线）。接入半边（`endpoint` / `apiKeyRef` / `realModelId` / `contextWindow` / `supportsTools` / `supportsResponseFormat` / `requestTimeoutMs` / `rpm`）**有意识地未实现**：当前部署是单一聚合网关（所有模型同 endpoint/apiKey），接入信息归平台层（`platform_api_configs`）；引入 per-provider 端点时再按本接口补齐。P0 的「已实现」以本记录为准。
+**裁剪记录（2026-09-24 对账）**：已实现的注册表是上述接口的**能力 + 限额 + 经济性半边**（`supportsThinking` / `reasoningEfforts` / `maxOutputTokens` / `defaultMaxTokens` / `reasoningReserveTokens` / `maxParallelRequests` / `pricing`；`fallbacks` 已于 2026-11-04 下线）。接入半边（`endpoint` / `apiKeyRef` / `realModelId` / `contextWindow` / `supportsTools` / `supportsResponseFormat` / `requestTimeoutMs` / `rpm`）**有意识地未实现**：当前部署是单一聚合网关（所有模型同 endpoint/apiKey），接入信息归平台层（`platform_api_configs`）；引入 per-provider 端点时再按本接口补齐。P0 的「已实现」以本记录为准。
 
 #### 4.1a 视觉能力（`vision`，2026-10-18 #123 落地）
 
@@ -258,6 +258,9 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
 ### 4.4 ④ 请求构造（能力驱动）
 
 - `thinking` / `reasoning_effort` 只在模型能力声明支持时发送（替代"白名单硬编码"）。
+  强度是**逐档**放行的（2026-11-05）：注册表 `reasoningEfforts` 里没声明的那一档同样不发——
+  上游各家强度词表不一致（OpenAI 系 minimal/low/medium/high，有的只认 low/high，有的没有这个字段），
+  平台此前把 low/high/max 三档写死在界面与校验里，等于替所有模型宣称同一个支持集。
 - **预算分离**：`thinking=enabled` 时 `max_tokens = min(声明输出 + reasoningReserveTokens, maxOutputTokens)`，避免推理吃光输出预算。
 - 多部署时按 `require_parameters` 思路过滤：**只有支持本次所需参数的部署参与本轮路由**（这解释了历史上 `thinking:{type:"disabled"}` 偶发 400——不是抖动，是路由到了不支持的部署）。
 
@@ -321,7 +324,7 @@ runtimeOverride 仍享豁免（调试/低耗可显式调小）
 **已实现（P2 ①③⑤）**：
 - ~~降级记账：`agent_call_logs.metadata.fallbackFrom`~~（2026-11-04 随降级下线不再写入）。
 - **只读总览**：`GET /api/admin/model-registry`（`services/model-registry.service.ts`）——读模型统一，汇聚
-  ①每个模型的能力与限额（`supportsThinking` / `supportsReasoningEffort` / 输出上限 / 缺省 / 推理预留 / 并发上限）、
+  ①每个模型的能力与限额（`supportsThinking` / `reasoningEfforts` 挡位数组 / 输出上限 / 缺省 / 推理预留 / 并发上限）、
   ②别名映射（成员、DB 覆盖声明、默认选中、`requireThinking` 下的选中与降级标记；这里的「降级」指别名成员能力不足时的回退选人，与已下线的模型降级无关）、
   ③平台默认模型的**解析结果与来源**（别名 / 具体 / 未配置）、
   ④~~降级链~~、⑤~~当前冷却中的部署~~（均随降级功能 2026-11-04 下线）、⑥配置漂移告警（未注册模型、别名为空、废弃 `prompt.model` 副本数；「模型未被任何别名引用」已于 2026-10-28 撤除——控制台不再维护别名，该告警不可行动）。

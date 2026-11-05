@@ -1,3 +1,5 @@
+import type { ReasoningEffortLevel } from '../../config/models.config';
+
 export interface CallerInfo {
   agentId?: string;
   skillId?: string;
@@ -54,7 +56,9 @@ export interface ResolvedRoute {
   /** 模型是否由 skill 级配置显式指定（true=skill_model_configs.model 非空；false=继承上层默认） */
   modelExplicit?: boolean;
   thinkingMode?: 'default' | 'enabled' | 'disabled';
-  reasoningEffort?: 'default' | 'low' | 'high' | 'max';
+  /** 推理强度：词表是上游的（minimal/low/medium/high/max），哪几档真能发由模型注册表
+   *  `reasoningEfforts` 决定 —— 路由只表达「调用方要什么」，裁剪在 thinking-policy。 */
+  reasoningEffort?: 'default' | ReasoningEffortLevel;
   /** 平台通道级「结构化输出」默认（platform_api_configs.defaultResponseFormat）：
    *  json_object = 对 json 媒介技能的请求附 response_format（解码层强制 JSON）。
    *  技能级 paramOverrides.responseFormat 可覆盖；'none' = 行为不变。 */

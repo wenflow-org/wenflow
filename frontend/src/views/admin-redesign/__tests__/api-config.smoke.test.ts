@@ -108,13 +108,13 @@ function providersView(): Record<string, unknown> {
         models: [
           {
             id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', tier: 'chat',
-            supportsThinking: true, supportsReasoningEffort: true, maxOutputTokens: 131072,
+            supportsThinking: true, reasoningEfforts: ['low', 'high', 'max'], maxOutputTokens: 131072,
             defaultMaxTokens: 32768, reasoningReserveTokens: 8192, maxParallelRequests: null,
             pricing: null, description: null
           },
           {
             id: 'agnes-3.0-flash', label: 'Agnes 3.0 Flash', tier: 'chat',
-            supportsThinking: false, supportsReasoningEffort: false, maxOutputTokens: 65536,
+            supportsThinking: false, reasoningEfforts: [], maxOutputTokens: 65536,
             defaultMaxTokens: 32768, reasoningReserveTokens: null, maxParallelRequests: null,
             pricing: null, description: null
           }
@@ -127,7 +127,7 @@ function providersView(): Record<string, unknown> {
         models: [
           {
             id: 'acme-chat', label: 'Acme Chat', tier: 'chat',
-            supportsThinking: false, supportsReasoningEffort: false, maxOutputTokens: null,
+            supportsThinking: false, reasoningEfforts: [], maxOutputTokens: null,
             defaultMaxTokens: null, reasoningReserveTokens: null, maxParallelRequests: 8,
             pricing: { inputPer1M: 0.3, outputPer1M: 0.6 }, description: null
           }
@@ -232,13 +232,13 @@ describe('ApiConfig P1 修复批', () => {
           models: [
             {
               id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', tier: 'chat', provider: 'deepseek',
-              capabilities: { supportsThinking: true, supportsReasoningEffort: true },
+              capabilities: { supportsThinking: true, reasoningEfforts: ['low', 'high', 'max'] },
               limits: { maxOutputTokens: 131072, defaultMaxTokens: 32768, reasoningReserveTokens: 8192, maxParallelRequests: null },
               pricingConfigured: false
             },
             {
               id: 'agnes-3.0-flash', label: 'Agnes 3.0 Flash', tier: 'chat', provider: 'agnes',
-              capabilities: { supportsThinking: false, supportsReasoningEffort: false },
+              capabilities: { supportsThinking: false, reasoningEfforts: [] },
               limits: { maxOutputTokens: 65536, defaultMaxTokens: 32768, reasoningReserveTokens: 0, maxParallelRequests: null },
               pricingConfigured: false
             }

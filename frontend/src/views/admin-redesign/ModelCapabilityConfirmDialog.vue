@@ -2,8 +2,9 @@
   <!-- 能力确认（P1 2026-11-04，用户「模型的思考啊强度啊以及能力这一块，也是让用户自己去勾选嘛，
        因为他自己一定要清楚他的模型有什么能力」）：
        批量添加时能力不再由模型名**静默推断落盘**——推断值只做预填，用户核对后才算数。
-       依据：注册表里的 supportsThinking / supportsReasoningEffort / vision 是运行时的硬闸门
-       （如请求带图片而模型未声明 vision 会被网关直接拒绝），猜错不会报错，会在真实调用里才炸。 -->
+       依据：注册表里的 supportsThinking / reasoningEfforts / vision 是运行时的硬闸门
+       （如请求带图片而模型未声明 vision 会被网关直接拒绝），猜错不会报错，会在真实调用里才炸。
+       强度是**逐档**声明的（2026-11-05）：勾哪几档就是这台模型的支持集，不再是一个总开关。 -->
   <Teleport v-if="open" to="body">
     <div ref="maskRef" class="mk-modal">
       <div ref="panelRef" class="mk-modal__panel mcc" role="dialog" aria-modal="true" aria-label="确认模型能力">
@@ -19,7 +20,7 @@
           <div class="mcc-cols" aria-hidden="true">
             <span>模型</span>
             <span>思考</span>
-            <span>推理强度</span>
+            <span>强度挡位</span>
             <span>读图</span>
           </div>
           <div class="mcc-list">
@@ -34,16 +35,30 @@
               <label class="mcc-row__cell">
                 <input v-model="row.supportsThinking" type="checkbox" :aria-label="`${row.id} 支持思考`" />
               </label>
-              <label class="mcc-row__cell">
-                <input v-model="row.supportsReasoningEffort" type="checkbox" :aria-label="`${row.id} 支持推理强度`" />
-              </label>
+              <div class="mcc-row__cell mcc-efforts">
+                <label
+                  v-for="level in EFFORT_LEVELS"
+                  :key="level"
+                  class="mcc-effort"
+                  :class="{ 'mcc-effort--on': row.reasoningEfforts.includes(level), 'mcc-effort--off': !row.supportsThinking }"
+                >
+                  <input
+                    v-model="row.reasoningEfforts"
+                    type="checkbox"
+                    :value="level"
+                    :disabled="!row.supportsThinking"
+                    :aria-label="`${row.id} 支持${effortShortText(level)}档推理强度`"
+                  />
+                  <span>{{ effortShortText(level) }}</span>
+                </label>
+              </div>
               <label class="mcc-row__cell">
                 <input v-model="row.vision" type="checkbox" :aria-label="`${row.id} 支持读图`" />
               </label>
             </div>
             <p v-if="!rows.length" class="mcc-empty">没有要引入的模型</p>
           </div>
-          <p class="mcc-hint">推断只认模型名，判不出的一律留空。留空是保守档：不发思考与读图参数，模型照常可用。</p>
+          <p class="mcc-hint">推断只认模型名，判不出的一律留空。留空是保守档：不发思考、强度与读图参数，模型照常可用。</p>
         </div>
 
         <div class="mk-modal__foot mcc-foot">
@@ -61,6 +76,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { inferModelCapabilities, inferenceLabels } from './modelCapabilityInference'
+import { REASONING_EFFORT_LEVELS, effortShortText, type ReasoningEffortLevel } from './reasoningEfforts'
 import { useEscape } from './useEscape'
 import { useMaskClose, useOverlay } from './useOverlay'
 
@@ -70,7 +86,8 @@ import { useMaskClose, useOverlay } from './useOverlay'
 export type ConfirmedModelCapability = {
   id: string
   supportsThinking: boolean
-  supportsReasoningEffort: boolean
+  /** 这台模型认哪几档推理强度；空数组 = 不支持该字段 */
+  reasoningEfforts: ReasoningEffortLevel[]
   vision: boolean
 }
 
@@ -82,6 +99,9 @@ interface Row extends ConfirmedModelCapability {
 const emit = defineEmits<{
   confirm: [models: ConfirmedModelCapability[]]
 }>()
+
+/** 挡位词表：与模型编辑弹层共用同一份（勾选项、文案、顺序都一致） */
+const EFFORT_LEVELS = REASONING_EFFORT_LEVELS
 
 const open = ref(false)
 const rows = ref<Row[]>([])
@@ -95,7 +115,7 @@ function openWith(ids: string[]): void {
     return {
       id,
       supportsThinking: inference.supportsThinking,
-      supportsReasoningEffort: inference.supportsReasoningEffort,
+      reasoningEfforts: [...inference.reasoningEfforts],
       vision: inference.vision,
       tags: inferenceLabels(inference),
     }
@@ -112,10 +132,11 @@ function confirm(): void {
   if (!rows.value.length) return
   emit(
     'confirm',
-    rows.value.map(({ id, supportsThinking, supportsReasoningEffort, vision }) => ({
+    rows.value.map(({ id, supportsThinking, reasoningEfforts, vision }) => ({
       id,
       supportsThinking,
-      supportsReasoningEffort,
+      // 没开思考的模型不该带着挡位落盘（后端会拒），这里先清掉
+      reasoningEfforts: supportsThinking ? reasoningEfforts : [],
       vision,
     })),
   )
@@ -136,7 +157,7 @@ defineExpose({ openWith })
 .mcc-cols,
 .mcc-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 72px 88px 72px;
+  grid-template-columns: minmax(0, 1fr) 64px minmax(0, 260px) 64px;
   align-items: center;
   gap: 12px;
 }
@@ -173,6 +194,21 @@ defineExpose({ openWith })
 }
 .mcc-row__none { color: var(--mk-faint); }
 .mcc-row__cell { display: flex; justify-content: center; cursor: pointer; }
+/* 挡位五选：一行五枚窄勾选，与模型编辑弹层同一副外观 */
+.mcc-efforts { justify-content: flex-start; flex-wrap: wrap; gap: 4px; cursor: default; }
+.mcc-effort {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-sm);
+  color: var(--mk-muted);
+  cursor: pointer;
+}
+.mcc-effort input[type='checkbox'] { margin: 0; flex: none; }
+.mcc-effort--on { border-color: var(--mk-blue); color: var(--mk-ink); }
+.mcc-effort--off { opacity: 0.45; cursor: not-allowed; }
 .mcc-empty { margin: 0; padding: 14px 12px; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 .mcc-hint { margin: 10px 0 0; color: var(--mk-muted); font-size: var(--mk-fs-micro); line-height: 1.5; }
 .mcc-foot { align-items: center; gap: 10px; }
@@ -180,6 +216,6 @@ defineExpose({ openWith })
 .mcc-foot__count b { color: var(--mk-ink); }
 @media (max-width: 640px) {
   .mcc-cols { display: none; }
-  .mcc-row { grid-template-columns: minmax(0, 1fr) 56px 64px 56px; }
+  .mcc-row { grid-template-columns: minmax(0, 1fr) 48px minmax(0, 1fr) 48px; }
 }
 </style>

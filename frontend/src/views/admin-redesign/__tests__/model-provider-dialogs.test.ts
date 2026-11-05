@@ -8,7 +8,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import ProviderEditorDialog from '../ProviderEditorDialog.vue'
 import ModelEditorDialog from '../ModelEditorDialog.vue'
-import { chooseMkSelect, mkSelectValue } from '@/components/mk/__tests__/mkSelect'
+import { chooseMkSelect, mkSelectBox, mkSelectLabels, mkSelectValue } from '@/components/mk/__tests__/mkSelect'
 
 const { createMock, updateMock, addModelMock, updateModelMock } = vi.hoisted(() => ({
   createMock: vi.fn(),
@@ -194,7 +194,7 @@ describe('ModelEditorDialog', () => {
     w.vm.openWith({
       providerId: 'platform',
       model: {
-        id: 'm-deep', label: 'm-deep', tier: 'reasoning', supportsThinking: true, supportsReasoningEffort: true, vision: false,
+        id: 'm-deep', label: 'm-deep', tier: 'reasoning', supportsThinking: true, reasoningEfforts: ['low', 'high'], vision: false,
         maxOutputTokens: null, defaultMaxTokens: null, reasoningReserveTokens: null, maxParallelRequests: null,
         pricing: null, description: null
       }
@@ -206,7 +206,7 @@ describe('ModelEditorDialog', () => {
     expect(updateModelMock).toHaveBeenCalledWith('platform', 'm-deep', expect.objectContaining({ tier: 'reasoning' }))
   })
 
-  it('高级设置：能力压成三个紧凑标签（思考 / 推理强度 / 读图）', async () => {
+  it('高级设置：能力两枚开关（思考 / 读图）+ 逐档强度勾选', async () => {
     const w = mount(ModelEditorDialog, mountOptions)
     w.vm.openWith({ providerId: 'acme-gateway', model: null })
     await flushPromises()
@@ -216,41 +216,38 @@ describe('ModelEditorDialog', () => {
     expect(w.text()).not.toContain('可调节思考深度')
     expect(w.text()).not.toContain('可读图与截图')
     const caps = w.findAll('.med-cap')
-    expect(caps).toHaveLength(3)
-    expect(caps.map((c) => c.text())).toEqual(['思考', '推理强度', '读图'])
+    expect(caps.map((c) => c.text())).toEqual(['思考', '读图'])
+    // 2026-11-05 用户「不同模型强度挡位也不一样啊」：强度不再是一个总开关，而是逐档勾
+    const levels = w.findAll('.med-effort')
+    expect(levels.map((l) => l.text())).toEqual(['最低', '低', '中', '高', '最高'])
+    expect(levels.every((l) => l.find('input').attributes('disabled') !== undefined)).toBe(true)
   })
 
-  it('勾了推理强度没勾思考：保存时就地拦下并说明依赖（不发请求）', async () => {
+  it('勾了挡位没勾思考：保存时就地拦下并说明依赖（不发请求）', async () => {
     const w = mount(ModelEditorDialog, mountOptions)
     w.vm.openWith({
       providerId: 'acme-gateway',
       model: {
-        id: 'acme-chat', label: 'acme-chat', tier: 'chat', supportsThinking: false, supportsReasoningEffort: false, vision: false,
+        id: 'acme-chat', label: 'acme-chat', tier: 'chat', supportsThinking: false, reasoningEfforts: ['high'], vision: false,
         maxOutputTokens: null, defaultMaxTokens: null, reasoningReserveTokens: null, maxParallelRequests: null,
         pricing: null, description: null
       }
     })
     await flushPromises()
-    const [thinking, effort] = w.findAll('.mk-field--switch input[type="checkbox"]')
-    // 强度仍可勾（不做一个「表面禁用、模型值却是 true」的假控件）
-    expect(effort.attributes('disabled')).toBeUndefined()
-    await effort.setValue(true)
-    await flushPromises()
-    expect((thinking.element as HTMLInputElement).checked).toBe(false)
-
     await btn(w, '保存').trigger('click')
     await flushPromises()
     expect(w.find('[role="alert"]').text()).toContain('必须同时支持思考模式')
     expect(updateModelMock).not.toHaveBeenCalled()
 
-    // 补勾思考后即可保存，两项一起提交
+    // 补勾思考后即可保存，挡位一起提交（勾着的那档原样带回）
+    const thinking = w.findAll('.med-cap input[type="checkbox"]')[0]
     await thinking.setValue(true)
     updateModelMock.mockResolvedValue({ data: { success: true, warnings: [] } })
     await btn(w, '保存').trigger('click')
     await flushPromises()
     expect(updateModelMock).toHaveBeenCalledWith('acme-gateway', 'acme-chat', expect.objectContaining({
       supportsThinking: true,
-      supportsReasoningEffort: true
+      reasoningEfforts: ['high']
     }))
   })
 
@@ -259,7 +256,7 @@ describe('ModelEditorDialog', () => {
     w.vm.openWith({
       providerId: 'platform',
       model: {
-        id: 'm-priced', label: 'm-priced', tier: 'chat', supportsThinking: false, supportsReasoningEffort: false, vision: false,
+        id: 'm-priced', label: 'm-priced', tier: 'chat', supportsThinking: false, reasoningEfforts: [], vision: false,
         maxOutputTokens: null, defaultMaxTokens: null, reasoningReserveTokens: null, maxParallelRequests: null,
         pricing: { inputPer1M: 0.3, cachedInputPer1M: 0.006, outputPer1M: 1.2 }, description: null
       }
@@ -283,9 +280,9 @@ describe('ModelEditorDialog', () => {
     w.vm.openWith({
       providerId: 'acme-gateway',
       model: {
-        id: 'acme-chat', label: 'Acme Chat', tier: 'chat', supportsThinking: true, supportsReasoningEffort: false, vision: false,
+        id: 'acme-chat', label: 'Acme Chat', tier: 'chat', supportsThinking: true, reasoningEfforts: [], vision: false,
         maxOutputTokens: 65536, defaultMaxTokens: 4096, reasoningReserveTokens: null, maxParallelRequests: 8,
-        pricing: { inputPer1M: 0.3 }, description: '主用'
+        pricing: { inputPer1M: 0.3 }
       }
     })
     await flushPromises()
@@ -298,8 +295,7 @@ describe('ModelEditorDialog', () => {
     expect(updateModelMock).toHaveBeenCalledWith('acme-gateway', 'acme-chat', expect.objectContaining({
       maxOutputTokens: 65536,
       defaultMaxTokens: 4096,
-      pricing: { inputPer1M: 0.3 },
-      description: '主用'
+      pricing: { inputPer1M: 0.3 }
     }))
   })
 
@@ -312,12 +308,29 @@ describe('ModelEditorDialog', () => {
     // 2026-11-04 用户「输出格式这个功能先下掉」：这一格连同它的下拉一起消失
     expect(w.text()).not.toContain('输出格式')
 
+    // 没勾任何挡位时下拉只剩一项、整项禁用，且那唯一一项自己说明原因
+    expect(mkSelectLabels(w, '推理强度')).toEqual(['这台模型没有声明挡位'])
+    expect(mkSelectBox(w, '推理强度').find('button').attributes('disabled')).toBeDefined()
+
+    // 挡位依赖思考能力：先勾上「思考」这一枚能力，挡位才可选
+    await w.findAll('.med-cap input[type="checkbox"]')[0].setValue(true)
+    await flushPromises()
+    // 勾上 low / high / max 后下拉才出现这三档
+    for (const label of ['低', '高', '最高']) {
+      const chip = w.findAll('.med-effort').find((c) => c.text() === label)!
+      await chip.find('input').setValue(true)
+    }
+    await flushPromises()
+    expect(mkSelectLabels(w, '推理强度')).toEqual(['跟随默认', '低（low）', '高（high）', '最高（max）'])
+
     await chooseMkSelect(w, '思考模式', 'disabled')
     await chooseMkSelect(w, '推理强度', 'max')
     addModelMock.mockResolvedValue({ data: { success: true, warnings: [] } })
     await btn(w, '保存').trigger('click')
     await flushPromises()
     expect(addModelMock).toHaveBeenCalledWith('platform', expect.objectContaining({
+      supportsThinking: true,
+      reasoningEfforts: ['low', 'high', 'max'],
       defaultThinkingMode: 'disabled',
       defaultReasoningEffort: 'max'
     }))

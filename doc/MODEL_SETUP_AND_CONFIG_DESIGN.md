@@ -77,7 +77,7 @@
 
 ### 2.6 能力元数据：现在是「按模型名猜完静默落盘」，与用户「让用户自己勾」相反
 
-- `modelCapabilityInference.ts:19-60` 用一串正则从模型 **id 字符串**猜 `role`（image/rerank/embedding/chat）与 `supportsThinking/supportsReasoningEffort/vision/code/tool`。
+- `modelCapabilityInference.ts:19-60` 用一串正则从模型 **id 字符串**猜 `role`（image/rerank/embedding/chat）与 `supportsThinking/reasoningEfforts/vision/code/tool`（强度是逐档预填，猜中思考标记就给历史三档 low/high/max）。
 - `ModelProvidersPanel.vue:534-542` 在批量「添加模型」时**直接把推断值写进注册表**（注释：「标签按模型名推断后随写入落盘」），用户**没有被逐模型确认**。
 - 但用户明确要求：「让用户自己去勾选，因为他自己一定要清楚他的模型有什么能力」。⇒ 推断应降级为**预填建议 + 一键确认**，而不是静默真相。
 

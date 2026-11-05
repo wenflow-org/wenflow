@@ -8,6 +8,7 @@ import type {
   virtual_learner_profiles,
   virtual_experiment_commands
 } from '@prisma/client'
+import type { ReasoningEffortLevel } from '../config/models.config'
 import type {
   BlackboxPublicTraceEntry,
   BlackboxRefereeTraceEntry,
@@ -87,7 +88,7 @@ export interface SimulatorRoute {
   model?: string
   privateNetworkPolicy?: 'runtime' | 'public-only'
   thinkingMode?: 'default' | 'enabled' | 'disabled'
-  reasoningEffort?: 'default' | 'low' | 'high' | 'max'
+  reasoningEffort?: 'default' | ReasoningEffortLevel
   timeoutMs?: number | null
   apiKey?: string
   credentialFingerprint?: string

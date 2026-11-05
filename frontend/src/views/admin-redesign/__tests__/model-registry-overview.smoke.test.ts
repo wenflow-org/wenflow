@@ -54,7 +54,7 @@ const OVERVIEW = {
       providerId: 'deepseek',
       hasOwnEndpoint: false,
       keyConfigured: true,
-      capabilities: { supportsThinking: true, supportsReasoningEffort: true },
+      capabilities: { supportsThinking: true, reasoningEfforts: ['low', 'high', 'max'] },
       limits: { maxOutputTokens: 131072, defaultMaxTokens: 32768, reasoningReserveTokens: 8192, maxParallelRequests: null },
       pricingConfigured: false
     },
@@ -66,7 +66,7 @@ const OVERVIEW = {
       providerId: 'agnes',
       hasOwnEndpoint: false,
       keyConfigured: true,
-      capabilities: { supportsThinking: false, supportsReasoningEffort: false },
+      capabilities: { supportsThinking: false, reasoningEfforts: [] },
       limits: { maxOutputTokens: 65536, defaultMaxTokens: 32768, reasoningReserveTokens: 0, maxParallelRequests: null },
       pricingConfigured: false
     }

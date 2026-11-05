@@ -42,6 +42,18 @@ export interface ModelPricing {
   outputPer1M?: number;
 }
 
+/**
+ * `reasoning_effort` 的合法挡位词表（上游 OpenAI 兼容协议口径）。
+ *
+ * 平台负责「认识这几个词」，具体哪台模型支持哪几档由注册表逐模型声明
+ * （`ModelDefinition.reasoningEfforts`）。此前这里是三档写死（low/high/max），
+ * 等于替所有模型宣称同一个支持集——2026-11-05 用户「不同模型强度挡位也不一样啊」。
+ */
+export const REASONING_EFFORT_LEVELS = ['minimal', 'low', 'medium', 'high', 'max'] as const;
+export type ReasoningEffortLevel = (typeof REASONING_EFFORT_LEVELS)[number];
+/** 历史默认档位：旧布尔字段折算成数组时用它，保持既有行为不变 */
+export const LEGACY_REASONING_EFFORTS: readonly ReasoningEffortLevel[] = ['low', 'high', 'max'];
+
 export interface ModelDefinition {
   id: string;
   label: string;
@@ -59,7 +71,20 @@ export interface ModelDefinition {
    */
   providerEndpoint?: { baseUrl: string; apiKeyEnv: string };
   supportsThinking?: boolean;
-  /** 是否支持 `reasoning_effort` 字段（不支持时即使 supportsThinking 也不发该字段） */
+  /**
+   * 这台模型接受哪几档 `reasoning_effort`（2026-11-05 用户「不同模型强度挡位也不一样啊」）。
+   *
+   * 为什么不再是一个布尔：挡位词表本来就是**上游**的（OpenAI 系 minimal/low/medium/high，
+   * 有的模型只认 low/high，有的连这个字段都没有）。平台此前把 low/high/max 三档写死在
+   * 界面与校验里，勾了「支持推理强度」就等于宣称这三档都可用——界面给的选择里可能有两档
+   * 上游根本不认，而"不支持"与"支持但不认这一档"在请求体上是同一件事：发了没用。
+   *
+   * 现在由注册表逐模型声明：数组即支持集，空/缺省 = 不支持该字段（等价于旧的 false）。
+   * 顺序即上屏顺序。写入时按 REASONING_EFFORT_LEVELS 校验，未知词直接拒。
+   */
+  reasoningEfforts?: ReasoningEffortLevel[];
+  /** 历史字段（布尔）：读入时折算成 reasoningEfforts，写回时不再产出。
+   *  保留只为兼容已经落盘的旧注册表——它不知道词表，只知道「支持 / 不支持」。 */
   supportsReasoningEffort?: boolean;
   /**
    * 是否支持图片输入（OpenAI 兼容 `content: [{type:'image_url',…}]`）。
@@ -101,7 +126,7 @@ export interface ModelDefinition {
    * 运行时优先级：Skill 显式配置 > 模型默认 > 平台默认。
    */
   defaultThinkingMode?: 'default' | 'enabled' | 'disabled';
-  defaultReasoningEffort?: 'default' | 'low' | 'high' | 'max';
+  defaultReasoningEffort?: 'default' | ReasoningEffortLevel;
   defaultResponseFormat?: 'default' | 'none' | 'json_object';
 }
 
@@ -197,18 +222,19 @@ function buildEmbeddedFallback(): RegistrySnapshot {
   const models: ModelDefinition[] = [
     {
       id: 'deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash', tier: 'chat', provider: 'deepseek', providerId: 'platform',
-      supportsThinking: true, supportsReasoningEffort: true, maxOutputTokens: 131072, defaultMaxTokens: 32768,
+      supportsThinking: true, reasoningEfforts: ['low', 'high', 'max'],
+      maxOutputTokens: 131072, defaultMaxTokens: 32768,
       reasoningReserveTokens: 8192,
       description: 'V4.1 Flash：标准运行模型（字面 id，2026-09-28 起全链统一）'
     },
     {
       id: 'agnes-3.0-flash', label: 'Agnes 3.0 Flash', tier: 'chat', provider: 'agnes', providerId: 'platform',
-      supportsThinking: false, supportsReasoningEffort: false, maxOutputTokens: 65536, defaultMaxTokens: 32768,
+      supportsThinking: false, maxOutputTokens: 65536, defaultMaxTokens: 32768,
       description: '轻量快速模型，TPS 高，适合 skill 高频调用'
     },
     {
       id: 'agnes-2.5-flash', label: 'Agnes 2.5 Flash', tier: 'chat', provider: 'agnes', providerId: 'platform',
-      supportsThinking: false, supportsReasoningEffort: false,
+      supportsThinking: false,
       description: '轻量快速模型（同族旧档）'
     }
   ];
@@ -313,8 +339,16 @@ function parseModelEntry(providerId: string, providerName: string, endpoint: { b
     return normalized as T;
   };
   const defaultThinkingMode = asEnum(b.defaultThinkingMode, ['default', 'enabled', 'disabled'] as const, 'defaultThinkingMode');
-  const defaultReasoningEffort = asEnum(b.defaultReasoningEffort, ['default', 'low', 'high', 'max'] as const, 'defaultReasoningEffort');
   const defaultResponseFormat = asEnum(b.defaultResponseFormat, ['default', 'none', 'json_object'] as const, 'defaultResponseFormat');
+  /* 推理强度挡位：新写法是数组（这台模型认哪几档）；旧写法是布尔（只知「支持 / 不支持」）。
+     两者都收：数组按词表校验并去重保序，布尔 true 折算成历史三档——迁移期不必手工改文件，
+     读出来的 ModelDefinition 恒为数组，下游只认一种形态。 */
+  const reasoningEfforts = parseReasoningEfforts(b.reasoningEfforts, b.supportsReasoningEffort, where);
+  const defaultReasoningEffort = asEnum(
+    b.defaultReasoningEffort,
+    ['default', ...REASONING_EFFORT_LEVELS] as const,
+    'defaultReasoningEffort',
+  );
   const def: ModelDefinition = {
     id: modelId,
     label: typeof b.label === 'string' && b.label.trim() ? b.label.trim() : modelId,
@@ -324,7 +358,7 @@ function parseModelEntry(providerId: string, providerName: string, endpoint: { b
     providerName,
     ...(endpoint ? { providerEndpoint: endpoint } : {}),
     ...(b.supportsThinking === true ? { supportsThinking: true } : b.supportsThinking === false ? { supportsThinking: false } : {}),
-    ...(b.supportsReasoningEffort === true ? { supportsReasoningEffort: true } : b.supportsReasoningEffort === false ? { supportsReasoningEffort: false } : {}),
+    ...(reasoningEfforts.length ? { reasoningEfforts } : {}),
     ...(b.vision === true ? { vision: true } : b.vision === false ? { vision: false } : {}),
     ...(b.maxOutputTokens != null ? { maxOutputTokens: asNumber(b.maxOutputTokens, 'maxOutputTokens', where) } : {}),
     ...(b.defaultMaxTokens != null ? { defaultMaxTokens: asNumber(b.defaultMaxTokens, 'defaultMaxTokens', where) } : {}),
@@ -336,10 +370,44 @@ function parseModelEntry(providerId: string, providerName: string, endpoint: { b
     ...(defaultReasoningEffort ? { defaultReasoningEffort } : {}),
     ...(defaultResponseFormat ? { defaultResponseFormat } : {})
   };
-  if (def.supportsReasoningEffort === true && def.supportsThinking !== true) {
-    throw new Error(`llm-providers.json：${where} 声明了 supportsReasoningEffort 但未开 supportsThinking（矛盾）`);
+  if (def.reasoningEfforts?.length && def.supportsThinking !== true) {
+    throw new Error(`llm-providers.json：${where} 声明了 reasoningEfforts 但未开 supportsThinking（矛盾）`);
+  }
+  /* 模型默认档位必须落在它自己声明的挡位里：写了 default 值却不声明该档，
+     运行时那个默认永远发不出去（能力裁剪会把它挡掉），是典型的"文件里有、永远不生效"。 */
+  if (def.defaultReasoningEffort && def.defaultReasoningEffort !== 'default'
+    && !def.reasoningEfforts?.includes(def.defaultReasoningEffort as ReasoningEffortLevel)) {
+    throw new Error(
+      `llm-providers.json：${where} 的 defaultReasoningEffort=${def.defaultReasoningEffort} 不在 reasoningEfforts（${def.reasoningEfforts?.join('/') || '未声明'}）里`,
+    );
   }
   return def;
+}
+
+/**
+ * 解析模型的推理强度挡位声明（两种写法归一成数组）。
+ * 数组 = 显式支持集（按词表校验、去重保序）；布尔 = 历史写法，true 折算成 low/high/max。
+ */
+export function parseReasoningEfforts(
+  rawEfforts: unknown,
+  rawLegacyFlag: unknown,
+  where: string,
+): ReasoningEffortLevel[] {
+  if (Array.isArray(rawEfforts)) {
+    const out: ReasoningEffortLevel[] = [];
+    for (const item of rawEfforts) {
+      const normalized = typeof item === 'string' ? item.trim().toLowerCase() : '';
+      if (!REASONING_EFFORT_LEVELS.includes(normalized as ReasoningEffortLevel)) {
+        throw new Error(
+          `llm-providers.json：${where} 的 reasoningEfforts 只能是 ${REASONING_EFFORT_LEVELS.join(' / ')}，实际 ${JSON.stringify(item)}`,
+        );
+      }
+      if (!out.includes(normalized as ReasoningEffortLevel)) out.push(normalized as ReasoningEffortLevel);
+    }
+    return out;
+  }
+  // 旧布尔字段：true = 历史默认三档；false / 缺省 = 不支持
+  return rawLegacyFlag === true ? [...LEGACY_REASONING_EFFORTS] : [];
 }
 
 /**
@@ -654,7 +722,7 @@ export function getModelDefaultMaxTokens(modelId: string): number | null {
  */
 export function getModelGenerationDefaults(modelId: string): {
   thinkingMode?: 'enabled' | 'disabled';
-  reasoningEffort?: 'low' | 'high' | 'max';
+  reasoningEffort?: ReasoningEffortLevel;
   responseFormat?: 'none' | 'json_object';
 } {
   const def = MODEL_MAP.get(modelId);
@@ -676,9 +744,19 @@ export function getModelReasoningReserveTokens(modelId: string): number {
   return MODEL_MAP.get(modelId)?.reasoningReserveTokens ?? 0;
 }
 
-/** 模型是否支持 `reasoning_effort` 字段。 */
+/** 模型声明的推理强度挡位（空数组 = 不支持该字段）。 */
+export function getModelReasoningEfforts(modelId: string): ReasoningEffortLevel[] {
+  return MODEL_MAP.get(modelId)?.reasoningEfforts ?? [];
+}
+
+/** 模型是否支持 `reasoning_effort` 字段（至少要声明一档）。 */
 export function supportsReasoningEffort(modelId: string): boolean {
-  return MODEL_MAP.get(modelId)?.supportsReasoningEffort ?? false;
+  return getModelReasoningEfforts(modelId).length > 0;
+}
+
+/** 模型是否接受某一具体挡位（传进来的值不在它声明的集合里 = 发了也没用）。 */
+export function modelAcceptsReasoningEffort(modelId: string, effort: string): boolean {
+  return getModelReasoningEfforts(modelId).includes(effort as ReasoningEffortLevel);
 }
 
 /**

@@ -18,7 +18,8 @@ describe('modelCapabilityInference', () => {
   it('从模型名推断思考、推理强度与读图', () => {
     const r1 = inferModelCapabilities('deepseek-r1')
     expect(r1.supportsThinking).toBe(true)
-    expect(r1.supportsReasoningEffort).toBe(true)
+    // 预填历史三档（low/high/max）：推断只是预填，用户核对后才落盘
+    expect(r1.reasoningEfforts).toEqual(['low', 'high', 'max'])
     expect(inferenceLabels(r1)).toEqual(['思考', '推理强度', 'Tool'])
 
     const vision = inferModelCapabilities('gpt-4o')

@@ -6,12 +6,15 @@
  * 不再把模型挡在添加清单之外，也不再给「建议归入哪张卡」的判词。
  */
 
+import { LEGACY_REASONING_EFFORTS, type ReasoningEffortLevel } from './reasoningEfforts'
+
 export type ModelRole = 'chat' | 'embedding' | 'rerank' | 'image'
 
 export interface ModelInference {
   role: ModelRole
   supportsThinking: boolean
-  supportsReasoningEffort: boolean
+  /** 推断出的档位：判断依据只有名字，能说的是「多半支持这几档」，具体以核对为准 */
+  reasoningEfforts: ReasoningEffortLevel[]
   vision: boolean
   code: boolean
   tool: boolean
@@ -53,7 +56,9 @@ export function inferModelCapabilities(id: string): ModelInference {
   return {
     role,
     supportsThinking: thinking,
-    supportsReasoningEffort: thinking,
+    // 名字里带推理标记就预填历史三档（low/high/max）——这是**预填**不是真相，
+    // 用户核对后才落盘；猜不出的一律留空（保守档：不发这个字段）。
+    reasoningEfforts: thinking ? [...LEGACY_REASONING_EFFORTS] : [],
     vision: chat && VISION_RE.test(name),
     code: chat && CODE_RE.test(name),
     tool: chat && TOOL_RE.test(name),
@@ -65,7 +70,7 @@ export function inferenceLabels(inference: ModelInference): string[] {
   if (inference.role !== 'chat') return []
   const labels: string[] = []
   if (inference.supportsThinking) labels.push('思考')
-  if (inference.supportsReasoningEffort) labels.push('推理强度')
+  if (inference.reasoningEfforts.length) labels.push('推理强度')
   if (inference.vision) labels.push('读图')
   if (inference.code) labels.push('代码')
   if (inference.tool) labels.push('Tool')

@@ -70,7 +70,10 @@ describe('llm-providers.json 加载器', () => {
        这里守的是「启用通道的模型 1:1 进运行时表、停用示例不进」 */
     const seedPlatform = getProviderCatalog().find((p) => p.id === 'platform');
     expect(MODEL_MAP.size).toBe(seedPlatform?.models.length);
-    expect(MODEL_MAP.size).toBeGreaterThanOrEqual(3);
+    /* 下界只守「非空」：2026-11-05 核对时平台通道只有 deepseek-v4.1-flash 与
+       agnes-2.5-flash 两条（v4-flash / v4-pro 已下线、agnes-3.0-flash 只留在示例里），
+       原先的 >=3 是下线前的读数，留着会变成一条与真实数据脱节的假闸门。 */
+    expect(MODEL_MAP.size).toBeGreaterThanOrEqual(2);
     expect(getLlmRegistryStatus().source).toBe('file');
     const platform = getProviderCatalog().find((p) => p.id === 'platform');
     expect(platform?.recommended).toBe(true);
