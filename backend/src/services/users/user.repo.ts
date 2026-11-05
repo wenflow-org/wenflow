@@ -117,12 +117,21 @@ export function listUserAgentLogsForExport(where: Prisma.agent_call_logsWhereInp
   });
 }
 
-export function findUserAgentLogById(logId: string, userId: string) {
+/**
+ * 真实主键的详情取数。
+ *
+ * #245：详情必须与列表同一可见口径。此前这里只按 id+userId 取，于是 `?success` 等筛选在详情
+ * 分支被整段忽略（对 success=true 的行发 `?success=false` 仍 200），默认列表不可见的行也能靠
+ * 猜 id 直接取到。scope 由 buildAgentLogWhere 生成（与列表同一个 where），传入即与列表同口径；
+ * 主键的精确匹配仍然优先，不改变「主键详情」的语义。
+ */
+export function findUserAgentLogById(
+  logId: string,
+  userId: string,
+  scope?: Prisma.agent_call_logsWhereInput
+) {
   return prisma.agent_call_logs.findFirst({
-    where: {
-      id: logId,
-      userId
-    }
+    where: { ...(scope || {}), id: logId, userId }
   });
 }
 

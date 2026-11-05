@@ -508,7 +508,7 @@ describe('users agent log routes', () => {
     expect(pathDetail.body?.data?.groupItems.map((i: any) => i.phase)).toEqual(['core', 'stageDesign']);
   });
 
-  it('真实主键 id 的详情仍走主键查询（#220 不改变非折叠行）', async () => {
+  it('真实主键 id 的详情走主键查询，并带上列表的可见/筛选口径（#220/#245）', async () => {
     agentLogMocks.findFirst.mockResolvedValue({ id: 'acl_real', agentId: 'skill:teaching-turn' });
     const res = createResponse();
 
@@ -518,13 +518,21 @@ describe('users agent log routes', () => {
       jest.fn()
     );
 
+    // #245 语义订正：此前详情只按 { id, userId } 取，绕过列表的可见口径（默认白名单与
+    // success/日期筛选在详情分支整段失效）。现在与列表同一个 buildAgentLogWhere，主键仍精确匹配。
+    // 该行无 traceId ⇒ 不需要补数查询，故 findMany 仍不应被调用。
     expect(agentLogMocks.findFirst).toHaveBeenCalledWith({
-      where: { id: 'acl_real', userId: 'user-1' }
+      where: expect.objectContaining({
+        id: 'acl_real',
+        userId: 'user-1',
+        agentId: { in: expect.any(Array) }
+      })
     });
     expect(agentLogMocks.findMany).not.toHaveBeenCalled();
     expect(res.body).toEqual({
       success: true,
-      data: { id: 'acl_real', agentId: 'skill:teaching-turn' }
+      // 无 traceId 也无可补模型 ⇒ 与列表一致地归一化为 null（不再是原始行原样返回）
+      data: { id: 'acl_real', agentId: 'skill:teaching-turn', model: null }
     });
   });
 

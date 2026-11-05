@@ -66,6 +66,42 @@ export function collectAgentLogTraceIds(logs: AgentLogModelSourceRow[]): string[
   return [...ids];
 }
 
+/**
+ * 模型索引：traceId → metadata.model。
+ *
+ * 模型名只写在 api-gateway 行上，而网关行不在默认口径的 userListed 白名单里、不在主取数集内，
+ * 调用方需按已选 traceId 另取回（#230）。先入先占：取数集内已有的模型优先，补数行只填空缺。
+ *
+ * #245：详情（非折叠组的真实主键行）与列表必须用**同一个**索引与解析函数——此前详情直接
+ * 原样返回原始行，跳过整条补数管线，于是同一个 id 在列表里是模型名、在详情里是 null。
+ */
+export function buildAgentLogModelIndex(rows: AgentLogModelSourceRow[]): Map<string, string> {
+  const index = new Map<string, string>();
+  for (const value of rows) {
+    const metadata = parseMetadata(value.metadata);
+    const model = typeof metadata.model === 'string' ? metadata.model.trim() : '';
+    const traceId = String(value.traceId || metadata.traceId || '');
+    if (model && traceId && !index.has(traceId)) index.set(traceId, model);
+  }
+  return index;
+}
+
+/**
+ * 单行模型：自身列 / 自身元数据优先，否则按 traceId 查模型索引；都没有则 null。
+ * 与折叠归一化（collapseAgentLogGroups 第 3 步）逐字段同一语义，供详情复用。
+ */
+export function resolveAgentLogModel(
+  log: AgentLogModelSourceRow & { model?: string | null },
+  modelIndex: Map<string, string>
+): string | null {
+  const ownMetadata = parseMetadata(log.metadata);
+  const model = (typeof log.model === 'string' && log.model.trim())
+    || (typeof ownMetadata.model === 'string' ? ownMetadata.model : '')
+    || modelIndex.get(String(log.traceId || ownMetadata.traceId || ''))
+    || '';
+  return model.trim() ? model : null;
+}
+
 function parseMetadata(metadata: string | null | undefined): Record<string, any> {
   if (!metadata) return {};
   try {
@@ -144,13 +180,7 @@ export function collapseAgentLogGroups(
      根本没有它——所以索引不能只看 logs，还要合入调用方按已选 traceId 另取回的
      modelSourceRows（user.repo.listAgentLogModelRowsByTraceIds）。取数集内已有的模型
      优先级更高（先入先占），补数行只填空缺。 */
-  const modelByTrace = new Map<string, string>();
-  for (const value of [...dedupeMap.values(), ...modelSourceRows]) {
-    const metadata = parseMetadata(value.metadata);
-    const model = typeof metadata.model === 'string' ? metadata.model.trim() : '';
-    const traceId = String(value.traceId || metadata.traceId || '');
-    if (model && traceId && !modelByTrace.has(traceId)) modelByTrace.set(traceId, model);
-  }
+  const modelByTrace = buildAgentLogModelIndex([...dedupeMap.values(), ...modelSourceRows]);
 
   // 2) 组：key=goal/path 会话；rep=组内优先级最高的代表日志；items=组内全部（去重后）调用明细
   const groupMap = new Map<string, { rep: any; items: any[] }>();
@@ -228,13 +258,6 @@ export function collapseAgentLogGroups(
 
   // 3) 最终归一化：代表行自身 model → 同 trace 网关行 model → null；按最近调用倒序
   return Array.from(collapsed.values())
-    .map((log) => {
-      const ownMetadata = parseMetadata(log.metadata);
-      const model = (typeof log.model === 'string' && log.model.trim())
-        || (typeof ownMetadata.model === 'string' ? ownMetadata.model : '')
-        || modelByTrace.get(String(log.traceId || ownMetadata.traceId || ''))
-        || '';
-      return { ...log, model: model.trim() ? model : null };
-    })
+    .map((log) => ({ ...log, model: resolveAgentLogModel(log, modelByTrace) }))
     .sort((a, b) => new Date(b.calledAt).getTime() - new Date(a.calledAt).getTime());
 }
