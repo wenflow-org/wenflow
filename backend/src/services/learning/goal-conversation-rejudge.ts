@@ -316,7 +316,11 @@ export async function rejudgeHardBlockedCompletion(
           stage: 'completed' as const,
           confidence: latestData.confidence || 0,
           isCompleted: true,
-          learningPath: null
+          learningPath: null,
+          // 与 buildHardBlockResult 同口径（2026-11-05 UX 审计 P0）：重判仍被拦也是
+          // 「completed 且无路径」终局，缺此标记前端会把它当普通完成弹「路径已创建」
+          // 假成功——这正是阻断卡引导的「回复补充说明重判」退路上，不可漏。
+          hardBlocked: true
         },
         ext: {
           goalConversation: {

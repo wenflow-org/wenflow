@@ -90,7 +90,7 @@ interface BuildInput {
 
 /** 概念名比较用归一：去空白与常见标点，避免「区分 A 与 B」和「区分A与B」判成不同。 */
 function normalizeConceptName(name: unknown): string {
-  return String(name ?? '').replace(/[\s，。、；：·\-—_（）()【】[\]]「」“”"']/g, '').toLowerCase();
+  return String(name ?? '').replace(/[\s，。、；：·\-—_（）()【】[\]「」“”"']/g, '').toLowerCase();
 }
 
 /**

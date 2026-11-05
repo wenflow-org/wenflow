@@ -64,6 +64,8 @@ export interface GoalConversationEnvelope {
         id: string;
         status?: string;
       } | null;
+      /** 分诊硬阻断终局（completed 且无路径，2026-11-05 P0）：前端据此展示阻断说明而非「路径已创建」 */
+      hardBlocked?: boolean;
     };
     ext: {
       goalConversation: {

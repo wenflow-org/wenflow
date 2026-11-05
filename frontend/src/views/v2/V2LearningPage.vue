@@ -166,7 +166,7 @@
       <div class="stage-card">
         <span class="spinner"></span>
         <h2>正在准备本节内容…</h2>
-        <p>问流正在为{{ taskTitle ? '「' + taskTitle + '」' : '这节课' }}组织讲解和练习，通常十几秒，偶尔要半分钟。</p>
+        <p>问流正在为{{ taskTitle ? '「' + taskTitle + '」' : '这节课' }}组织讲解和练习。</p>
         <div class="stage-card__skeleton"><i style="width: 82%"></i><i style="width: 64%"></i><i style="width: 74%"></i></div>
         <!-- 返回常驻（移动端头部返回键被隐藏）；长时间无响应再亮出重试，页面不无出口 -->
         <div class="stage-card__actions">

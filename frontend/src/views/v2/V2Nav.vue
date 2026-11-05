@@ -4,12 +4,14 @@
        窄屏左槽亮品牌 logo 与学习台先例一致 -->
   <header class="v2nav-bar" :data-notitle="titleHidden || undefined">
     <div class="v2nav-bar__left">
-      <router-link to="/dashboard" class="v2nav-bar__brand" aria-label="问流 WenFlow，返回工作台">
-        <img :src="isDark ? '/logo-dark.png' : '/logo.png'" alt="" class="v2nav-bar__logo" />
-      </router-link>
+      <!-- 返回钮放左组首位（bare/25）：原先夹在 logo 与页标题之间，无页标题的页面
+           （如资料库）「‹」孤悬 logo 右侧，读不出返回语义——贴左缘才是标准返回位 -->
       <button v-if="showBack" type="button" class="v2nav-back" aria-label="返回上一页" @click="goBack">
         <ChevronLeft :size="20" :stroke-width="2" aria-hidden="true" />
       </button>
+      <router-link to="/dashboard" class="v2nav-bar__brand" aria-label="问流 WenFlow，返回工作台">
+        <img :src="isDark ? '/logo-dark.png' : '/logo.png'" alt="" class="v2nav-bar__logo" />
+      </router-link>
       <strong v-if="pageTitle" class="v2nav-bar__title">{{ pageTitle }}</strong>
     </div>
 
@@ -159,7 +161,8 @@ const showBack = computed(() => !onTabSection.value && !route.path.startsWith('/
  */
 const titleHidden = computed(
   // 2026-11-04：学习状态窄屏同屏三处「学习状态」（导航高亮 + 顶栏标题 + 正文 H1，顶栏与 H1 相距 62px），按本集合 P2-23 同口径收进来
-  () => route.path.startsWith('/dashboard') || route.path.startsWith('/knowledge-map') || route.path.startsWith('/library') || route.path.startsWith('/learning-state')
+  // 2026-11-05 屏效比：目标规划进集合——底部 dock 已高亮同一 tab，顶栏标题与之同屏复读（页内还有步骤条承载阶段语境），窄屏左槽亮品牌
+  () => route.path.startsWith('/dashboard') || route.path.startsWith('/knowledge-map') || route.path.startsWith('/library') || route.path.startsWith('/learning-state') || route.path.startsWith('/goal-conversation')
 );
 const pageTitle = computed(() => {
   const t = route.meta?.title;

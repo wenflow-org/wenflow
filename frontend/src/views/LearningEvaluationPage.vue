@@ -58,7 +58,17 @@
 
       <section v-else-if="error" class="evaluation-error">
         <p>{{ error }}</p>
-        <div class="evaluation-error__actions">
+        <!-- 终态未完成（failed/discarded/superseded，2026-11-05 UX 审计）：重试只会重拉同一
+             份空态、发不出任何生成类请求（走查 resource 实证）——明说「无产物可重试」并
+             撤下误导性的「重试」按钮，退路给「返回学习路径」。进行中/结算中的错误态保留
+             重试（重拉确实可能在课堂结束后拿到新结果）。 -->
+        <template v-if="terminalIncompleteSession">
+          <p>本次课堂没有正常完成，评估没有可重试的产物。已保存的进度不会丢，可以返回学习路径。</p>
+          <div class="evaluation-error__actions">
+            <button type="button" class="btn-primary" @click="() => goBackToPath()">返回学习路径</button>
+          </div>
+        </template>
+        <div v-else class="evaluation-error__actions">
           <button type="button" class="btn-primary" @click="fetchEvaluation">重试</button>
           <button type="button" class="btn-ghost" @click="() => goBackToPath()">返回学习路径</button>
         </div>
@@ -71,6 +81,10 @@
           <strong v-else-if="wrapupSummaryDegraded">本次课堂总结为简化版本，可重新生成完整版</strong>
           <strong v-else>课堂总结已生成，详细表现分析暂不可用</strong>
           <p>不影响你保存进度、完成任务或查看本次对话。</p>
+          <!-- 课堂未正常完成（未完结、无总结产物）：「重试」只会重拉同一份空态、拉不出
+               新产物（实测仅重发一次 detail 请求）。明说事实并给退路，不再让用户在
+               同一空态里反复点重试（2026-11-05 UX 审计） -->
+          <p v-if="incompleteSession">本次课堂没有正常完成，评估没有可重试的产物。对话记录与已保存的进度都在，可以直接回看，或返回学习路径。</p>
           <!-- 降级 ≠ 终点（2026-10-12）：重试守卫与管理端同源（完结+退化+冷却），后台执行立即返回，
                前端按 regeneratedAt 变化轮询收结果，不挂长请求 -->
           <div v-if="canRetryWrapup" class="evaluation-degraded__actions">
@@ -355,6 +369,18 @@ const canRetryWrapup = computed(() => {
   const detail = sessionDetail.value;
   if (!detail?.wrapup) return false;
   return detail.status === 'completed' && (wrapupSummaryDegraded.value || evaluationDegraded.value);
+});
+/** 课堂未正常完成（未完结、无总结产物）：无可重试产物，评估页据此明示事实与退路 */
+const incompleteSession = computed(() => {
+  const detail = sessionDetail.value;
+  return !!detail && !detail.wrapup && detail.status !== 'completed';
+});
+/** 终态未完成（failed/discarded/superseded，2026-11-05 UX 审计）：这类错误态走 error
+    分支渲染（shouldContinuePolling 置 error），降级横幅整块被 v-else-if 遮住——「重试」
+    在此只会重拉同一空态（无生成类请求），据此在 error 分支明示并撤下重试按钮 */
+const terminalIncompleteSession = computed(() => {
+  const detail = sessionDetail.value;
+  return !!detail && !detail.wrapup && ['failed', 'discarded', 'superseded'].includes(detail.status);
 });
 const canSubmitSessionFeedback = computed(() => !isProjectionMode());
 const mainDialogueMessages = computed(() => (sessionDetail.value?.messages || []).filter((message) => message.role === 'user' || message.role === 'assistant'));
@@ -1032,6 +1058,9 @@ onUnmounted(() => {
   max-width: 1080px;
   margin: 0 auto;
   display: grid;
+  /* minmax(0,1fr)：与下方 transcript-list 同因——auto 轨道会被宽表格的 max-content
+     撑破（P0 修复的双保险层，根因注释见 .evaluation-transcript-list） */
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
 }
 
@@ -1464,6 +1493,8 @@ onUnmounted(() => {
   background: var(--surface);
   box-shadow: var(--wf-shadow-raised);
   display: grid;
+  /* minmax(0,1fr)：宽表格 max-content 撑破链的中间层（P0，根因注释见 .evaluation-transcript-list） */
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
 }
 
@@ -1505,6 +1536,11 @@ onUnmounted(() => {
 
 .evaluation-transcript-list {
   display: grid;
+  /* minmax(0,1fr)（2026-11-05 UX 审计 P0）：缺省 auto 轨道按 max-content 取宽，讲解消息里的
+     markdown 表格（width:max-content）会把整条轨道撑到 534px，连带页头/结算卡一起横向溢出
+     （402 视口实测 scrollWidth=600，正文右切、导出按钮出屏）。0 下限把轨道钳回容器宽，
+     表格自身的 display:block+overflow:auto 随即在容器内横向滚动而不是撑破页面。 */
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
 }
 
@@ -1574,6 +1610,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0; /* article 单轨 grid：子项 min-width:auto 会让表格 max-content 顶破轨道（走查 2026-11-05） */
 }
 
 .evaluation-transcript-item__meta strong {
@@ -1591,6 +1628,7 @@ onUnmounted(() => {
   font-size: 14px;
   line-height: 1.8;
   color: var(--muted);
+  min-width: 0; /* article 单轨 grid：子项 min-width:auto 会让表格 max-content 顶破轨道（走查 2026-11-05） */
 }
 
 /* 小测回放卡（只读）：高亮学生所选 + 通过/未通过判定；正确答案服务端不下发，不展示 */

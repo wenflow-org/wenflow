@@ -172,44 +172,69 @@ class AchievementService {
   > {
     try {
       // 获取用户已解锁的成就
-      const userAchievements = await prisma.achievements.findMany({
+      let userAchievements = await prisma.achievements.findMany({
         where: { userId }
       });
 
-      const unlockedSet = new Set(
+      let unlockedSet = new Set(
         userAchievements.map(a => `${a.type}-${a.title}`)
       );
 
       // 获取用户统计
       const stats = await this.getUserStats(userId);
 
-      // 返回所有成就及其状态
-      return ACHIEVEMENTS.map(achievement => {
-        const key = `${achievement.type}-${achievement.name}`;
-        const unlocked = unlockedSet.has(key);
+      const buildRows = () =>
+        ACHIEVEMENTS.map(achievement => {
+          const key = `${achievement.type}-${achievement.name}`;
+          const unlocked = unlockedSet.has(key);
 
-        const userAchievement = userAchievements.find(
-          a => a.type === achievement.type && a.title === achievement.name
+          const userAchievement = userAchievements.find(
+            a => a.type === achievement.type && a.title === achievement.name
+          );
+
+          // 计算进度
+          const progress = AchievementSystem.getAchievementProgress(
+            achievement,
+            stats
+          );
+
+          return {
+            id: achievement.id,
+            name: achievement.name,
+            description: achievement.description,
+            icon: achievement.icon,
+            xpReward: achievement.xpReward,
+            type: achievement.type,
+            unlocked,
+            progress,
+            earnedAt: userAchievement?.earnedAt
+          };
+        });
+
+      let rows = buildRows();
+
+      // 自愈补授（2026-11-05 UX 审计 P1 state/iphone/9）：解锁复评此前只挂在
+      // task_completed 事件——概念掌握达标（mastered_concepts 类，如「知识小成」3/3）
+      // 不触发复评，成就页出现「未解锁 · 3 / 3」、学习台周节奏卡同步显示
+      // 「即将解锁 · 进度 3/3」（unlocked 取持久化集合 vs progress 实时计算，两处口径脱节）。
+      // 读取时发现「实时已达标但未持久化解锁」就跑一次既有检测链补授（幂等：
+      // exists 过滤 + 稳定主键 P2002 claim），落库后本接口与学习台同时自愈；
+      // 口径一致时零额外开销。
+      const hasStaleUnlocked = rows.some(
+        r => !r.unlocked && r.progress && r.progress.total > 0 && r.progress.current >= r.progress.total
+      );
+      if (hasStaleUnlocked) {
+        await this.checkAndUnlockAchievements(userId);
+        userAchievements = await prisma.achievements.findMany({
+          where: { userId }
+        });
+        unlockedSet = new Set(
+          userAchievements.map(a => `${a.type}-${a.title}`)
         );
+        rows = buildRows();
+      }
 
-        // 计算进度
-        const progress = AchievementSystem.getAchievementProgress(
-          achievement,
-          stats
-        );
-
-        return {
-          id: achievement.id,
-          name: achievement.name,
-          description: achievement.description,
-          icon: achievement.icon,
-          xpReward: achievement.xpReward,
-          type: achievement.type,
-          unlocked,
-          progress,
-          earnedAt: userAchievement?.earnedAt
-        };
-      });
+      return rows;
     } catch (error) {
       logger.error('获取成就列表失败:', error);
       throw error;

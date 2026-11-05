@@ -1669,7 +1669,17 @@ async continueConversation(
       confirmedProposal: data.confirmedProposal || null,
       structuredData: data.structuredData || null,
       confidenceScores: data.confidenceScores || null,
+      // 合并取舍：保留本分支的 learningPath（已被 getPathCompletionProjection 增强过 status，
+      // develop 侧那行是未经投影的原始表达式，取它会丢掉 #228/#221 的状态投影），
+      // 同时接入 develop 新增的硬阻断终局标记。
       learningPath,
+      // 硬阻断终局标记（2026-11-05 UX 审计 P0）：与 buildCompletedConversationResult 同判据
+      // （completed + 无路径 + 分诊硬阻断）。GET 恢复信封缺此标记时，前端重进已完成会话
+      // 会把「completed 且 learningPath:null」当普通完成，重弹「路径已创建」假成功弹层。
+      hardBlocked:
+        conversation.status === 'completed'
+        && !conversation.learningPathId
+        && isHardBlockResponseTriage(resolveResponseTriageFromCollectedData(data), data.understanding || {}),
       confidence: data.confidence || 0,
       createdAt: conversation.createdAt,
       completedAt: conversation.completedAt

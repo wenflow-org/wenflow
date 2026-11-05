@@ -34,7 +34,11 @@
           <template v-if="lifecycleFailed">
             <div class="genbar__text">
               <strong>{{ lifecycle.retryType === 'stage_design' ? '课程准备失败' : '路径生成失败' }}</strong>
-              <p>{{ lifecycle.errorMessage || '目标和已确认信息已保留，重试一般能成功。' }}</p>
+              <!-- 保留语义对齐（paths/xiaomi/1）：后端重排/重试保留的是已完成任务与学习进度
+                   （preserveCompletedTasks/preserveCoreTasks），标题与描述会被重新生成——
+                   旧句「目标和已确认信息已保留」与事实不符（走查实证标题被改写）；
+                   也不承诺「一般能成功」，只说状态与动作（仓库文案口径） -->
+              <p>{{ lifecycle.errorMessage || '已完成的学习进度会保留，可以重试。' }}</p>
             </div>
             <button type="button" class="btn-primary" :class="{ 'btn-primary--off': retrying }" @click="doRetry">
               <span v-if="retrying" class="spinner spinner--sm"></span>
@@ -194,7 +198,10 @@
                   </span>
                   <div class="task__body">
                     <strong>{{ task.title || task.displayLabel }}</strong>
-                    <small>{{ taskKindText(task) }} · {{ task.estimatedMinutes ? `约 ${task.estimatedMinutes} 分钟` : '—' }}</small>
+                    <!-- 时长 nowrap（bare/15）：整行 small 在窄屏折行时会把「约 18 分钟」
+                         拆成「约 18 分/钟」孤字行（截图实证）；nowrap 让折行点只落在
+                         类型标签与时长之间 -->
+                    <small>{{ taskKindText(task) }} · <span class="task__mins">{{ task.estimatedMinutes ? `约 ${task.estimatedMinutes} 分钟` : '—' }}</span></small>
                     <small v-if="materialRefLabels(task).length" class="task__material">
                       资料：
                       <button
@@ -627,7 +634,19 @@
               </button>
             </div>
             <p v-if="!adjustText.trim() && !adjusting" class="adjust-form__hint">先写几句想怎么调整，再点{{ adjustConfirmText }}。</p>
-            <p class="adjust-form__hint adjust-form__hint--safety">调整前的安排会自动留存，之后可随时一键回退。</p>
+            <!-- 回退保障句跟随真实能力（paths/iphone/2）：AI 重排会留存快照 → 承诺成立并给
+                 就地入口（此前入口只挂 hero，审计全 UI 搜索不到「回退」）；无快照（如仅做过
+                 手动微调的旧路径）不再凭空承诺 -->
+            <p class="adjust-form__hint adjust-form__hint--safety">
+              <template v-if="rollbackAvailable">调整前的安排已留存，可随时一键回退。</template>
+              <template v-else>调整前的安排会自动留存，调整完成后可一键回退。</template>
+            </p>
+            <p v-if="rollbackAvailable" class="adjust-form__rollback">
+              <button type="button" class="btn-ghost" :disabled="rollingBack" @click="confirmRollback">
+                <span v-if="rollingBack" class="spinner spinner--sm"></span>
+                {{ rollingBack ? '正在回退…' : '回退上次调整' }}
+              </button>
+            </p>
           </template>
         </template>
       </div>
@@ -1125,6 +1144,9 @@ function openAdjustDialog() {
   blockingSessions.value = [];
   pendingAdjustRetry.value = null;
   clearedSessionIds.value = [];
+  // 回退可用性打开时刷新（paths/iphone/2）：面板内的「回退上次调整」入口与
+  // 保障句都要跟随最新快照状态，不吃页面加载时的旧值
+  void refreshRollbackAvailability();
   // recommendedMode 默认选中：直接落到推荐场景的填写步（场景选择页仍可「换一种方式」改选）
   const rec = recommendedEntry.value;
   if (rec && adjustEntryAllowed(rec)) adjustMode.value = rec;
@@ -1690,8 +1712,30 @@ function taskCls(task: Record<string, any>) {
   return curIdx >= 0 && myIdx > curIdx ? 'locked' : 'todo';
 }
 
+/** 任务类型枚举 → 中文标签（2026-11-05 UX 审计 P1）：手动插入的任务不写 displayLabel，
+    旧回退链把英文枚举（如 practice）直接亮在「进行到哪」主界面（截图实证），
+    与相邻课程的中文标签（理解核心原理/动手实践…）割裂。值域对齐后端
+    AITeachingCoordinator normalizeTaskType 的 11 种枚举；displayLabel（LLM 中文标签）
+    优先原样透传，未命中映射的枚举也原样兜底，不造新词。 */
+const TASK_TYPE_LABELS: Record<string, string> = {
+  reading: '阅读材料',
+  practice: '动手练习',
+  project: '项目实践',
+  quiz: '小测验',
+  acquire: '理解核心原理',
+  deconstruct: '拆解示范',
+  model: '模仿练习',
+  execute: '动手实操',
+  diagnose: '诊断纠错',
+  refine: '精进训练',
+  consolidate: '巩固复习',
+};
+
 function taskKindText(task: Record<string, any>) {
-  return task.displayLabel || task.taskType || task.knowledgeType || '任务';
+  const raw = task.displayLabel || task.taskType || task.knowledgeType;
+  if (!raw) return '任务';
+  const text = String(raw).trim();
+  return TASK_TYPE_LABELS[text] || text;
 }
 
 function goLearn(taskId: string) {
@@ -1938,6 +1982,8 @@ onBeforeUnmount(() => {
 .task--locked .task__icon { color: var(--faint); background: var(--canvas); opacity: .62; }
 .task__body strong { display: block; font-size: 13.5px; }
 .task__body small { display: block; margin-top: 2px; font-size: 12px; color: var(--faint); }
+/* 时长标签禁词中折行（bare/15）：「约 18 分钟」不拆成「约 18 分/钟」 */
+.task__mins { white-space: nowrap; }
 .task__cta {
   min-height: 36px;
   font-size: 12px; font-weight: 800; color: var(--blue-deep);
@@ -2170,11 +2216,15 @@ onBeforeUnmount(() => {
   border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent);
   vertical-align: 1px;
 }
-.adjust-form__hint-group { display: inline-flex; align-items: center; gap: 10px; }
+.adjust-form__hint-group { display: inline-flex; align-items: center; gap: 10px; margin-left: auto; }
 .adjust-form__rec { font-size: 12px; font-weight: 700; opacity: 0.9; }
-/* 选中场景后的头部提示 */
+/* 选中场景后的头部提示。
+   flex-wrap（bare/20）：窄屏（iPhone 402 实测）长模式说明与右侧「← 换一种方式」
+   挤同一行，按钮压在折行后的标题文字上；wrap 让按钮组在装不下时换行到下一行，
+   与文字分离。 */
 .adjust-form__mode-hint {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  flex-wrap: wrap;
   margin-bottom: 10px;
   padding: 7px 12px;
   font-size: 12.5px; font-weight: 700;
@@ -2210,6 +2260,12 @@ onBeforeUnmount(() => {
   margin-top: 4px;
   color: var(--faint);
 }
+/* 面板内回退入口（paths/iphone/2）：承诺「可一键回退」就必须可达，不再只挂 hero */
+.adjust-form__rollback {
+  margin: 8px 0 0;
+  display: flex;
+}
+.adjust-form__rollback .btn-ghost { min-height: 36px; font-size: 13px; }
 /* 挡路课堂清场视图 */
 .clear-sessions {
   display: grid;

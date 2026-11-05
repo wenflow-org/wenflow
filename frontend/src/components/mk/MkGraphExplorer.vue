@@ -135,7 +135,7 @@
               :theme="resolvedTheme"
               :height="height"
               :hide-isolated="hideIsolated"
-              @select="selected = $event"
+              @select="onCanvasSelect"
             />
             <!-- 图例走 DOM：画布内图例在 graph 系列里会误导（categories 是节点分组，不是关系） -->
             <div class="mk-ge__legend">
@@ -363,6 +363,22 @@ const LEVEL_OPTIONS = [
 const level = ref<'all' | 'concept' | 'kc'>('all')
 const hideIsolated = ref(true)
 const selected = ref<MkGraphNode | null>(null)
+
+/**
+ * 画布点选 → 侧栏切换（2026-11-05 UX 审计 P2）：
+ * - 再次点击已选节点 = 反选回「图谱概览」。详情卡此前没有任何关闭/收起控件（2026-10-09
+ *   刻意决定「侧栏非模态、无需显式关闭」），但其前提不成立：概览/详情二选一渲染、
+ *   点空白画布在部分触屏上点不中（审计实测 side-title 不变），概览一旦被详情替换，
+ *   同路径内只能靠切走再切回路径 chip 找回——不可发现。反选不引入新控件，不违原决定。
+ * - 点空白（node 为 null）维持原有回概览行为。
+ */
+function onCanvasSelect(node: MkGraphNode | null) {
+  if (node && selected.value && node.id === selected.value.id) {
+    selected.value = null
+    return
+  }
+  selected.value = node
+}
 
 /* ---------- 路径筛选轨（原型 wf-rail + wf-chip） ---------- */
 
@@ -1153,6 +1169,10 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   display: inline-flex;
   align-items: center;
   gap: var(--mk-space-1);
+  /* 组内禁折行（2026-11-05 UX 审计）：402px 视口下「属于（知识组件 → 核心概念）」
+     曾被拆成「核心概/念）」断在括号中间、符号悬在行首（截图实证）。外层 .mk-ge__legend
+     已有 flex-wrap，整组放不下时作为整体换行，组内文字不再词中拆断 */
+  white-space: nowrap;
 }
 .mk-ge__dot {
   display: inline-block;
@@ -1434,7 +1454,10 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
 .mk-ge__rel-item {
   display: block;
   width: 100%;
-  padding: 3px 7px;
+  /* 热区（2026-11-05 UX 审计 P1）：micro 字号 + 3px 上下距实测整行仅 24px，低于 36px
+     触屏门禁；关联概念行是详情卡内唯一的继续导航（6 行实测），误触即跳错概念。
+     上下 padding 抬到 10px → 命中高 ≈37px 达标，微字号视觉密度不变。 */
+  padding: 10px 7px;
   border: 0;
   border-radius: var(--mk-radius-sm, 8px);
   background: transparent;
