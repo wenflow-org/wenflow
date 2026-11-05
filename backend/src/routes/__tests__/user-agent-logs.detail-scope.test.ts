@@ -14,7 +14,7 @@ type RouteHandler = (...args: any[]) => any
 const routes: Record<string, RouteHandler> = {}
 
 const USER_ID = 'user-1'
-const USER_LISTED = ['skill:goal-conversation', 'skill:path-planning', 'path-agent']
+const USER_LISTED = ['skill:goal-conversation', 'skill:path-planning', 'path-agent', 'skill:teaching-turn']
 
 const listUserAgentLogsForGrouping = jest.fn()
 const listUserAgentLogsForExport = jest.fn()
@@ -273,10 +273,39 @@ describe('#225 agent-logs 详情与列表共用折叠管线', () => {
     expect(res.body.success).toBe(false)
   })
 
-  it('未折叠的普通主键仍走原来的单条查询', async () => {
+  it('未折叠的普通主键仍按主键查单条（不整批折叠），但走同一可见口径', async () => {
     findUserAgentLogById.mockResolvedValue({ id: 'acl_plain', agentId: 'skill:teaching-turn' })
     const res = await callDetail('acl_plain', {})
     expect(res.body.data.id).toBe('acl_plain')
     expect(listUserAgentLogsForGrouping).not.toHaveBeenCalled()
+    // #245：主键分支也必须带上列表的 where（此前详情整段忽略筛选，任何 id 都能取到）
+    expect(findUserAgentLogById).toHaveBeenCalledWith('acl_plain', USER_ID, expect.anything())
+  })
+
+  it('#245：acl_* 真实主键行的详情 model 与列表相等（行本身无 model，靠 traceId 关联网关行）', async () => {
+    // 生产形态：业务行 model 列恒为 null（全库 acl% 4223 行 model 非空 0 行），
+    // 模型名只写在同 trace 的 api-gateway 行 metadata 上，而网关行不在默认白名单里。
+    // 详情若原样返回 findFirst 的原始行，这里就会是 null —— 与列表/导出不一致。
+    // 选一个**未折叠**的业务行（skill:teaching-turn 不参与会话分组），即 UI 经 repLogId 走的路径。
+    useRows([
+      makeRow('acl_turn', 'skill:teaching-turn', '2026-10-04T10:00:00.000Z', {}, 'tr-turn'),
+      makeRow('acl_gw_turn', 'api-gateway', '2026-10-04T10:00:01.000Z', { model: 'deepseek-v4.1-flash' }, 'tr-turn'),
+    ])
+    findUserAgentLogById.mockImplementation(async (logId: string, userId: string) =>
+      userId === USER_ID ? { ...makeRow(logId, 'skill:teaching-turn', '2026-10-04T10:00:00.000Z', {}, 'tr-turn') } : null)
+
+    const listRes = await callList({})
+    const listRow = listRes.body.data.logs.find((log: { id: string; model?: string | null }) =>
+      log.id === 'acl_turn')
+    expect(listRow).toBeTruthy()
+    expect(listRow.model).toBe('deepseek-v4.1-flash')
+
+    const detailRes = await callDetail('acl_turn', {})
+    expect(detailRes.statusCode).toBe(200)
+    expect(detailRes.body.data.id).toBe('acl_turn')
+    // 核心断言：同一个 id，列表与详情的 model 必须逐字段相等
+    expect(detailRes.body.data.model).toBe(listRow.model)
+    // 且不是靠原始行自带 model 蒙对的——原始行没有 model 列值
+    expect(detailRes.body.data.model).toBe('deepseek-v4.1-flash')
   })
 })

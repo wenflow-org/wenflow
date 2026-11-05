@@ -20,6 +20,8 @@ import {
   parseAgentLogGroupId,
   collapseAgentLogGroups,
   collectAgentLogTraceIds,
+  buildAgentLogModelIndex,
+  resolveAgentLogModel,
 } from '../services/users/agent-log-grouping';
 import { rejectProjectionAccess } from '../middleware/projection-access.middleware';
 import { learnerSnapshotRefreshService } from '../services/learner/LearnerSnapshotRefreshService';
@@ -452,7 +454,9 @@ router.get('/me/sessions', async (req, res, next) => {
 });
 
 /* 调用日志「会话折叠」视图（#214/#225）：列表 GET /me/agent-logs、导出 /me/agent-logs/export
-   与详情 GET /me/agent-logs/:logId 共用本函数，折叠的**单一事实源**是
+   与详情 GET /me/agent-logs/:logId（组键分支）共用本函数；详情的真实主键分支不整批折叠，
+   但复用同一条模型补全（collectAgentLogTraceIds + listAgentLogModelRowsByTraceIds +
+   buildAgentLogModelIndex/resolveAgentLogModel，见 #245）。折叠的**单一事实源**是
    services/users/agent-log-grouping 的 collapseAgentLogGroups——去重 → 会话分组 → 组代表 →
    模型补全 → 排序全部由它完成，因此同一组键在三处的 groupCount/groupItems/model 逐字段一致。
 
@@ -582,13 +586,14 @@ router.get('/me/agent-logs/:logId', async (req, res, next) => {
     // #225：只共享 where 不够——列表的去重是跨会话的（key 不含会话），且模型名要从
     // 不带会话 id 的网关行补。任何一处单独实现都会让同一条折叠行的 groupCount /
     // groupItems / model 在列表与详情之间漂移，因此折叠只保留一份实现。
+    // #229：详情（组键与真实主键两条分支）都带同一组筛选（前端 buildFilterParams 复用），
+    // 未知 capabilityType 一律拒绝，否则 where 会退化成 { userId } 的全量取数。
+    const capability = parseCapabilityTypeQuery(req.query.capabilityType);
+    if (capability.error) return sendAgentLogValidationError(res, capability.error);
+    const scopeWhere = buildAgentLogWhere(userId, req.query, capability.capabilityType);
+
     const groupId = parseAgentLogGroupId(logId);
     if (groupId) {
-      // #229：组详情也带同一组筛选（前端 buildFilterParams 复用），未知 capabilityType 同样拒绝，
-      // 否则这里会用退化成 { userId } 的 where 全量取数（响应仍只返回一个组，但取数口径被放宽）。
-      const capability = parseCapabilityTypeQuery(req.query.capabilityType);
-      if (capability.error) return sendAgentLogValidationError(res, capability.error);
-      const scopeWhere = buildAgentLogWhere(userId, req.query, capability.capabilityType);
       const logs = await listUserAgentLogsForGrouping(scopeWhere);
       const group = (await buildAgentLogView(userId, logs)).find((entry) => entry.id === logId);
       if (!group) {
@@ -603,7 +608,7 @@ router.get('/me/agent-logs/:logId', async (req, res, next) => {
       });
     }
 
-    const log = await findUserAgentLogById(logId, userId);
+    const log = await findUserAgentLogById(logId, userId, scopeWhere);
 
     if (!log) {
       return res.status(404).json({
@@ -612,9 +617,19 @@ router.get('/me/agent-logs/:logId', async (req, res, next) => {
       });
     }
 
+    // #245：真实主键行（acl_*）的详情是 UI 的主路径——前端用 `log.repLogId || log.id` 拉详情，
+    // 折叠组都带 repLogId，所以连组行也走这里。业务行的 model 列在写侧恒为空，模型名只写在
+    // 同 trace 的 api-gateway 行 metadata 上，而网关行不在默认白名单内。此前本分支直接
+    // res.json(findFirst 原始行)，整条模型补数被跳过，同一个 id 在列表/导出有模型名、详情为 null。
+    // 这里复用折叠管线的同一套索引与解析（buildAgentLogModelIndex / resolveAgentLogModel），
+    // 让三处的 model 由构造一致，而不是各写一遍。
+    const logRows = [log];
+    const modelRows = await listAgentLogModelRowsByTraceIds(userId, collectAgentLogTraceIds(logRows));
+    const model = resolveAgentLogModel(log, buildAgentLogModelIndex([...logRows, ...modelRows]));
+
     res.json({
       success: true,
-      data: log
+      data: { ...log, model }
     });
   } catch (error) {
     next(error);
