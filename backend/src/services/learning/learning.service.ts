@@ -431,23 +431,27 @@ class LearningService {
       })));
     }
 
-    // #238：generating + activeGenerationRunId 非空、但该 run 已经终结（succeeded/cancelled）
+    // #238：generating + activeGenerationRunId 非空、但该 run 已经终结（succeeded/cancelled/failed）
     // 的行此前永不命中任何回收规则（上面的孤儿规则要求 activeGenerationRunId 为空，租约规则
     // 只扫 queued/processing），于是一条被 stageDesign/replan 抢占过的路径会永久卡在
     // 「生成中」——开不了课，接口互相矛盾。这里按 run 的终态把 status 归一：
     //   · succeeded（阶段设计完成）→ active（任务已全部落库，路径可学）
     //   · cancelled（被接管后释放）→ 有里程碑则 active，空壳才落 failed
-    // 留 60s 宽限，避免与正在进行的事务收尾抢写。
+    //   · failed（上面租约分支对 stageDesign 只写 _generation、不碰 path.status：进程崩溃
+    //     导致的租约过期同样会把行留在 generating）→ stageDesign 且已有里程碑则 active
+    //     （与失败收尾「骨架仍可学」同口径），core 或空壳落 failed
+    // 留 60s 宽限，避免与正在进行的事务收尾抢写。宽限读 **run 的 finishedAt** 而不是
+    // path.updatedAt：上面租约分支的 updatePathGenerationStatus 刚落过 _generation（会把
+    // path.updatedAt 顶到当前），用 path.updatedAt 判新鲜度会让刚被回收的 run 永远错过本规则。
     const settledGeneratingPaths = await prisma.learning_paths.findMany({
       where: {
         status: 'generating',
         activeGenerationRunId: { not: null },
-        activeGenerationRun: { status: { in: ['succeeded', 'cancelled'] } },
-        updatedAt: { lt: new Date(Date.now() - 60 * 1000) }
+        activeGenerationRun: { status: { in: ['succeeded', 'cancelled', 'failed'] } }
       },
       select: {
         id: true,
-        activeGenerationRun: { select: { id: true, status: true, phase: true } }
+        activeGenerationRun: { select: { id: true, status: true, phase: true, finishedAt: true } }
       }
     });
 
@@ -455,8 +459,15 @@ class LearningService {
     for (const path of settledGeneratingPaths) {
       const settledRun = path.activeGenerationRun;
       if (!settledRun) continue;
+      const settledAt = settledRun.finishedAt ? new Date(settledRun.finishedAt).getTime() : 0;
+      if (Number.isFinite(settledAt) && settledAt > Date.now() - 60 * 1000) continue;
       const milestoneCount = await prisma.milestones.count({ where: { learningPathId: path.id } });
-      const nextStatus = settledRun.status === 'succeeded' || milestoneCount > 0 ? 'active' : 'failed';
+      // core = 主结构：它失败（含租约过期）就没有可学的骨架，落 failed——即便库里还留着
+      // 上一轮的里程碑也不能谎称可学。其余情形沿用既有权重：成功，或有里程碑即 active
+      //（stageDesign 失败只毁阶段任务，骨架路径仍可学，与失败收尾同口径）。
+      const nextStatus = settledRun.status === 'failed' && settledRun.phase === 'core'
+        ? 'failed'
+        : (settledRun.status === 'succeeded' || milestoneCount > 0 ? 'active' : 'failed');
       const updated = await prisma.learning_paths.updateMany({
         where: {
           id: path.id,
@@ -475,10 +486,9 @@ class LearningService {
           nextStatus
         });
         if (nextStatus === 'failed') {
-          await this.updatePathGenerationStatus(path.id, {
-            core: 'failed',
-            lastError: 'GENERATION_RUN_SETTLED_WITHOUT_CONTENT'
-          });
+          await this.updatePathGenerationStatus(path.id, settledRun.phase === 'stageDesign'
+            ? { stageDesign: 'failed', lastError: 'GENERATION_RUN_SETTLED_WITHOUT_CONTENT' }
+            : { core: 'failed', lastError: 'GENERATION_RUN_SETTLED_WITHOUT_CONTENT' });
         }
       }
     }
