@@ -71,47 +71,60 @@
             <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeEdit">✕</button>
           </div>
           <div class="mk-modal__body">
-            <label class="mk-field">
-              <span class="mk-field__label">模型 ID</span>
-              <span class="infra-model-row">
-                <input
-                  v-model="form.model"
-                  class="mk-field__input"
-                  :placeholder="editKind === 'embedding' ? '例如：BAAI/bge-m3' : '例如：BAAI/bge-reranker-v2-m3'"
-                />
-                <!-- 拉取（P1 2026-11-04 用户「它每一个接口都独立的自己去拉就行了」）：
-                     向量 / 重排也向上游拉一份清单再挑，不必凭记忆手打模型 ID。
-                     独立服务时带草稿连接去拉——「填地址和 key → 拉取 → 选」是自然顺序。 -->
-                <button
-                  type="button"
-                  class="mk-btn mk-btn--sm infra-model-pull"
-                  :disabled="pulling"
-                  title="用这条能力的连接向上游拉模型清单（复用对话连接时取对话卡的地址与密钥）"
-                  @click="pullCandidates"
-                >{{ pulling ? '拉取中…' : '拉取' }}</button>
-              </span>
-            </label>
-            <!-- 拉取结果：只留这条能力用得上的那些，点一下填进模型 ID -->
-            <div v-if="candidates.length" class="infra-cands">
-              <div class="infra-cands__head">
-                <span>{{ candidateNote }}</span>
-                <button type="button" class="mk-link" @click="candidates = []">收起</button>
+            <!-- 2026-11-05 用户「llm 模型和下面向量重排的配置界面也不一样」：
+                 与模型设置弹层同一套解剖——分区标题（模型 / 连接 / 参数）+ 两列栅格。
+                 此前是一根平铺的字段流：模型 ID、两张连接单选卡、地址 / 密钥、超时 / 批量 / 维度
+                 依次码下来，和对话侧那个分段的弹层是两种东西。
+                 连接方式那一组**保留**（用户「之前设计向量和重拍有一个沿用对话模型 api 端点和 key
+                 的设置，这个可以保留」）：复用时不出现地址与密钥，只说明复用的是哪条地址。 -->
+            <section class="infra-sec">
+              <div class="infra-sec__head">
+                <h4 class="infra-sec__title">模型</h4>
               </div>
-              <div class="infra-cands__list">
-                <button
-                  v-for="c in candidates"
-                  :key="c.id"
-                  type="button"
-                  class="infra-cand"
-                  :class="{ 'is-on': c.id === form.model }"
-                  @click="form.model = c.id"
-                >{{ c.id }}</button>
+              <label class="mk-field">
+                <span class="mk-field__label">模型 ID</span>
+                <span class="infra-model-row">
+                  <input
+                    v-model="form.model"
+                    class="mk-field__input mono"
+                    :placeholder="editKind === 'embedding' ? '例如：BAAI/bge-m3' : '例如：BAAI/bge-reranker-v2-m3'"
+                  />
+                  <!-- 拉取（P1 2026-11-04 用户「它每一个接口都独立的自己去拉就行了」）：
+                       向量 / 重排也向上游拉一份清单再挑，不必凭记忆手打模型 ID。
+                       独立服务时带草稿连接去拉——「填地址和 key → 拉取 → 选」是自然顺序。 -->
+                  <button
+                    type="button"
+                    class="mk-btn mk-btn--sm infra-model-pull"
+                    :disabled="pulling"
+                    title="用这条能力的连接向上游拉模型清单（复用对话连接时取对话卡的地址与密钥）"
+                    @click="pullCandidates"
+                  >{{ pulling ? '拉取中…' : '拉取' }}</button>
+                </span>
+              </label>
+              <!-- 拉取结果：只留这条能力用得上的那些，点一下填进模型 ID -->
+              <div v-if="candidates.length" class="infra-cands">
+                <div class="infra-cands__head">
+                  <span>{{ candidateNote }}</span>
+                  <button type="button" class="mk-link" @click="candidates = []">收起</button>
+                </div>
+                <div class="infra-cands__list">
+                  <button
+                    v-for="c in candidates"
+                    :key="c.id"
+                    type="button"
+                    class="infra-cand"
+                    :class="{ 'is-on': c.id === form.model }"
+                    @click="form.model = c.id"
+                  >{{ c.id }}</button>
+                </div>
               </div>
-            </div>
-            <p v-else-if="pullNote" class="infra-cands__note">{{ pullNote }}</p>
+              <p v-else-if="pullNote" class="infra-cands__note">{{ pullNote }}</p>
+            </section>
 
-            <div class="mk-field">
-              <span class="mk-field__label">连接方式</span>
+            <section class="infra-sec">
+              <div class="infra-sec__head">
+                <h4 class="infra-sec__title">连接</h4>
+              </div>
               <div class="infra-choice" role="radiogroup" aria-label="连接方式">
                 <label class="infra-choice__opt" :class="{ 'is-on': form.connectionMode === 'inherit' }">
                   <input v-model="form.connectionMode" type="radio" value="inherit" />
@@ -128,66 +141,72 @@
                   </span>
                 </label>
               </div>
-            </div>
 
-            <p v-if="form.connectionMode === 'inherit'" class="infra-inherit">
-              当前复用 <span class="mono">{{ view?.platformBaseUrl || '对话卡的服务地址' }}</span>
-            </p>
-            <template v-else>
-              <div class="infra-conn" :class="{ 'infra-conn--rerank': editKind === 'rerank' }">
+              <p v-if="form.connectionMode === 'inherit'" class="infra-inherit">
+                当前复用 <span class="mono">{{ view?.platformBaseUrl || '对话卡的服务地址' }}</span>
+              </p>
+              <template v-else>
+                <div class="infra-conn" :class="{ 'infra-conn--rerank': editKind === 'rerank' }">
+                  <label class="mk-field">
+                    <span class="mk-field__label">服务地址</span>
+                    <input
+                      v-model="form.endpoint"
+                      class="mk-field__input mono"
+                      :title="form.endpoint"
+                      :placeholder="editKind === 'embedding' ? 'https://api.example.com/v1/embeddings' : 'https://api.example.com/v1/rerank'"
+                    />
+                  </label>
+                  <label v-if="editKind === 'rerank'" class="mk-field">
+                    <span class="mk-field__label">接口规范</span>
+                    <input class="mk-field__input" value="Cohere 兼容" disabled title="当前只支持 Cohere 兼容的重排协议" />
+                  </label>
+                  <label class="mk-field">
+                    <span class="mk-field__label">API Key</span>
+                    <input
+                      v-model="form.apiKey"
+                      class="mk-field__input"
+                      type="password"
+                      autocomplete="new-password"
+                      :placeholder="keyPlaceholder"
+                    />
+                  </label>
+                </div>
+                <label v-if="editEntry?.keySource === 'db'" class="infra-clearkey">
+                  <input v-model="form.clearKey" type="checkbox" />
+                  <span>清除已保存的密钥（仍可回落环境变量）</span>
+                </label>
+              </template>
+            </section>
+
+            <section class="infra-sec">
+              <div class="infra-sec__head">
+                <h4 class="infra-sec__title">参数</h4>
+              </div>
+              <div class="infra-formrow">
                 <label class="mk-field">
-                  <span class="mk-field__label">服务地址</span>
+                  <span class="mk-field__label">超时（毫秒）</span>
+                  <input v-model.number="form.timeoutMs" class="mk-field__input mono" type="number" min="1000" max="120000" step="1000" />
+                </label>
+                <label class="mk-field">
+                  <span class="mk-field__label">批量大小</span>
                   <input
-                    v-model="form.endpoint"
+                    v-if="editKind === 'embedding'"
+                    v-model.number="form.batchSize"
                     class="mk-field__input mono"
-                    :title="form.endpoint"
-                    :placeholder="editKind === 'embedding' ? 'https://api.example.com/v1/embeddings' : 'https://api.example.com/v1/rerank'"
+                    type="number"
+                    min="1"
+                    max="128"
                   />
-                </label>
-                <label v-if="editKind === 'rerank'" class="mk-field">
-                  <span class="mk-field__label">接口规范</span>
-                  <input class="mk-field__input" value="Cohere 兼容" disabled title="当前只支持 Cohere 兼容的重排协议" />
-                </label>
-                <label class="mk-field">
-                  <span class="mk-field__label">API Key</span>
-                  <input
-                    v-model="form.apiKey"
-                    class="mk-field__input"
-                    type="password"
-                    autocomplete="new-password"
-                    :placeholder="keyPlaceholder"
-                  />
+                  <input v-else class="mk-field__input" value="不适用" disabled />
                 </label>
               </div>
-              <label v-if="editEntry?.keySource === 'db'" class="infra-clearkey">
-                <input v-model="form.clearKey" type="checkbox" />
-                <span>清除已保存的密钥（仍可回落环境变量）</span>
+              <!-- 维度只对向量有意义（重排没有输出维度），所以单独一行、只在向量卡出现 -->
+              <label v-if="editKind === 'embedding'" class="mk-field">
+                <!-- 非必填不补「（可选）」：占位符「留空由上游返回」已说明留空后果 -->
+                <span class="mk-field__label">向量维度</span>
+                <input v-model.number="form.dimensions" class="mk-field__input mono" type="number" min="1" max="16384" placeholder="留空由上游返回" />
               </label>
-            </template>
-
-            <div class="infra-formrow">
-              <label class="mk-field">
-                <span class="mk-field__label">超时（毫秒）</span>
-                <input v-model.number="form.timeoutMs" class="mk-field__input" type="number" min="1000" max="120000" step="1000" />
-              </label>
-              <label class="mk-field">
-                <span class="mk-field__label">批量大小</span>
-                <input
-                  v-if="editKind === 'embedding'"
-                  v-model.number="form.batchSize"
-                  class="mk-field__input"
-                  type="number"
-                  min="1"
-                  max="128"
-                />
-                <input v-else class="mk-field__input" value="不适用" disabled />
-              </label>
-            </div>
-            <label v-if="editKind === 'embedding'" class="mk-field">
-              <!-- 非必填不补「（可选）」：占位符「留空由上游返回」已说明留空后果 -->
-              <span class="mk-field__label">向量维度</span>
-              <input v-model.number="form.dimensions" class="mk-field__input" type="number" min="1" max="16384" placeholder="留空由上游返回" />
-            </label>
+            </section>
           </div>
           <div class="mk-modal__foot">
             <button type="button" class="mk-btn" @click="closeEdit">取消</button>
@@ -532,6 +551,17 @@ onMounted(load)
 .mpp-eng__res.is-bad { color: var(--mk-red); font-weight: 600; }
 
 /* 连接方式用两枚说明卡，而不是一个裸复选框 */
+/* 弹层分区（2026-11-05）：与模型设置弹层同一套「分区标题 + 两列栅格」解剖——
+   此前是一根平铺的字段流，与对话侧的弹层是两种东西。 */
+.infra-sec { display: grid; gap: 10px; align-content: start; }
+.infra-sec + .infra-sec { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--mk-line); }
+.infra-sec__head { display: flex; align-items: baseline; gap: 8px; }
+.infra-sec__title {
+  margin: 0;
+  color: var(--mk-ink);
+  font-size: var(--mk-fs-body);
+  font-weight: 700;
+}
 .infra-choice { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .infra-choice__opt {
   display: flex;
