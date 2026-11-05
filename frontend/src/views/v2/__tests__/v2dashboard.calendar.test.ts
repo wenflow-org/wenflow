@@ -104,15 +104,16 @@ describe('V2Dashboard 日历口径（本地日期）', () => {
     expect(days[expectedIndex].classes()).toContain('day--today');
     expect(days[expectedIndex].find('.day__cell').text()).toBe(String(new Date().getDate()));
 
-    // 整月日历卡已按原型撤成一行摘要（月导航/7 列网格归学习历史页）
+    // 2026-11-05 改版：整月从「一行摘要」升级为真的 30 天打卡网格（方案 B），统计仍是同一行
     const toggle = w.findAll('button').find((b) => b.text().includes('展开整月'));
     expect(toggle).toBeTruthy();
     await toggle!.trigger('click');
     await flushPromises();
-    const summary = w.find('.month-summary');
+    const summary = w.find('.month__sum');
     expect(summary.exists()).toBe(true);
     expect(summary.text()).toContain('25 分钟');
     expect(summary.text()).toContain('1 天有学习');
     expect(summary.text()).toContain('1 次');
+    expect(w.findAll('.month__cell:not(.month__cell--blank)').length).toBe(30);
   });
 });

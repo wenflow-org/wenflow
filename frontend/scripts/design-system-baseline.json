@@ -44,7 +44,11 @@
     "src/views/v2/V2Dashboard.vue": [
       "day__cell--h1",
       "day__cell--h2",
-      "day__cell--h3"
+      "day__cell--h3",
+      "month__cell--h0",
+      "month__cell--h1",
+      "month__cell--h2",
+      "month__cell--h3"
     ],
     "src/views/v2/V2LearningHistory.vue": [
       "mday--h0",

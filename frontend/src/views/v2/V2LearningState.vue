@@ -79,16 +79,23 @@
             <!-- 当前状态四项（2026-11-05 屏效比「指标即图例」）：原「主指标 + 行内条」加下方
                  独立图例行，同一组指标名在一张卡里出现两遍；现改为 2×2 网格，图例圆点直接
                  标在指标名前——独立图例行随之删除，只留它独有的虚线阈值说明 -->
+            <!-- 双行小卡（2026-11-05 用户定稿）：上行=圆点+指标名，下行=数值+标签。
+                 此前四项单行 flex-wrap，长标签掉第二行、短标签不换行，左右两列一高一低；
+                 数值统一深色——圆点与标签承担颜色，数字不再跟折线颜色打架 -->
             <div v-if="hasAnyLoad" class="vitals vitals--meta">
               <div v-if="vitalsLoading" class="vitals__loading">
                 <SkeletonLoader variant="lines" :count="1" />
               </div>
               <template v-else>
                 <span v-for="m in metricCards" :key="m.key" class="vitals__item">
-                  <i class="ff-dot" :class="dotClsOf(m.key)" aria-hidden="true"></i>
-                  <small>{{ m.label }}</small>
-                  <b :style="{ color: m.color }">{{ m.value }}<i v-if="m.unit"> {{ m.unit }}</i></b>
-                  <span class="metric__note" :class="`metric__note--${m.tone}`">{{ m.note }}</span>
+                  <span class="vitals__head">
+                    <i class="ff-dot" :class="dotClsOf(m.key)" aria-hidden="true"></i>
+                    <small>{{ m.label }}</small>
+                  </span>
+                  <span class="vitals__foot">
+                    <b>{{ m.value }}<i v-if="m.unit"> {{ m.unit }}</i></b>
+                    <span class="metric__note" :class="`metric__note--${m.tone}`">{{ m.note }}</span>
+                  </span>
                 </span>
               </template>
             </div>
@@ -218,6 +225,9 @@
               <svg class="advisory__star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z"/></svg>
               <strong>AI 调控建议</strong>
               <span class="band__meta">{{ suggestSource }}</span>
+              <!-- 待确认角标（2026-11-05 用户定稿）：有可执行调整时亮出状态，
+                   与下方「采用建议 / 保持原计划」对上 -->
+              <span v-if="pendingAdjust.length" class="advisory__pending">待确认</span>
             </div>
             <!-- 加载失败常显（收起也不许吞掉错误，P1 口径）：guidance 失败可见提示、可原地重试，
                  不再冒充"没有数据" -->
@@ -242,32 +252,18 @@
                 <p class="guide__evidence">当前没有需要调整的安排。有需要时这里会出现建议与处理入口。</p>
               </div>
               <template v-else>
-              <!-- 2026-09-27 重排：一段结论（标题 + 一句说明）+ 一个动作 + 一行脚注。
-                   原来四层文本处理（副标 / 琥珀警告框 / 依据行 / 带标签的下一步·节奏两行）堆在一起，
-                   且副标与警告框语义重叠——现在副标与警告二选一（取更具体的警告），
-                   下一步·节奏合并成一行脚注。 -->
+              <!-- 2026-11-05 用户定稿「诊断 → 建议」两行对照：原先标题、橙色警告、带播放图标
+                   和「继续」按钮的嵌套卡、下一步·节奏脚注四段车轱辘话说的是同一件事，
+                   且「继续」与「采用建议/保持原计划」两排按钮打架——
+                   现在两行说清，动作入口收敛到下方那一对按钮 -->
               <div class="guide">
-                <h3 class="guide__title">{{ skillCopy.headline }}</h3>
-                <p v-if="skillWarning || skillCopy.subtitle" class="guide__sub" :class="{ 'guide__sub--warn': !!skillWarning }">
-                  <svg v-if="skillWarning" viewBox="0 0 24 24" width="13" height="13" aria-hidden="true"><path fill="currentColor" d="M12 2 1 21h22L12 2zm0 6 7 12H5l7-12zm-1 4v3h2v-3h-2zm0 4v2h2v-2h-2z"/></svg>
-                  {{ skillWarning || skillCopy.subtitle }}
+                <p class="guide__diag"><b>诊断</b><span>{{ adviceDiagnosis }}</span></p>
+                <p class="guide__plan">
+                  <b>建议</b>
+                  <span>{{ advicePlan }}<i v-if="advicePace">（{{ advicePace }}）</i></span>
                 </p>
               </div>
-              <div v-if="guideActions.length" class="suggest__list">
-                <article v-for="(a, i) in guideActions" :key="i" class="sug">
-                  <span class="sug__icon" :style="{ background: a.bg, color: a.ink }" v-html="a.icon"></span>
-                  <div class="sug__body">
-                    <strong>{{ a.title }}</strong>
-                    <p v-if="a.desc">{{ a.desc }}</p>
-                  </div>
-                  <router-link :to="a.resolved" class="sug__cta">{{ a.action || '前往' }}</router-link>
-                </article>
-              </div>
-              <p v-if="skillCopy.nextStep || skillCopy.paceHint" class="guide__foot">
-                <template v-if="skillCopy.nextStep">下一步：{{ skillCopy.nextStep }}</template>
-                <template v-if="skillCopy.nextStep && skillCopy.paceHint"> · </template>
-                <template v-if="skillCopy.paceHint">节奏：{{ skillCopy.paceHint }}</template>
-              </p>
+              <!-- 依据行保留：它是新信息（课堂证据），不在「重复说三遍」之列 -->
               <p v-if="evidenceHint" class="guide__evidence">依据：{{ evidenceHint }}</p>
               <!-- 诊断自报无证据时建议降级为参考口径（state/iphone/6）：明说建议不再是
                    调整依据，动作按钮已随 hasAdvisoryAction 撤下 -->
@@ -337,14 +333,9 @@
                  待你确认 / 已自动处理 / 已执行的调整。原「AI 决策记录」是纯日志；
                  现在待确认卡带 pathId + advisory 摘要，本页成为完课卡之外的第二确认入口。 -->
             <div v-if="hasKpiData" class="advisory__sub">
-              <div class="advisory__subhead">
-                <strong>学习调控</strong>
-                <!-- 2026-11-04：无待确认时区块头不再报「暂无待确认」——下方 ctl__empty 首句已述同一状态，
-                     同屏两处报空属重复；区块头只保留计数，空态作唯一状态出口 -->
-                <span v-if="pendingAdjust.length" class="band__meta">{{ pendingAdjust.length }} 条待确认</span>
-              </div>
-              <!-- P3-41（设计评审）：区块头已有「N 条待确认」计数，子块标签再带数字同屏双计数——
-                   子块改纯语义「待我处理」撤数字，计数只留区块头一处。
+              <!-- 区块头「学习调控」已撤（2026-11-05 用户定稿）：各小节标签自带语义与计数，
+                   头部那行只是又一层包装 -->
+              <!-- P3-41（设计评审）：子块改纯语义「待我处理」，计数跟在标签后。
                    2026-11-05 屏效比：无待确认时整块隐藏（原空态指引句占 ~70px 常驻）——
                    有待处理事项时它自然出现，空态不再占坑 -->
               <section v-if="pendingAdjust.length" class="ctl">
@@ -381,23 +372,13 @@
                 </article>
               </section>
 
-              <!-- 系统已自动处理：一句话一条，不再捕获/判断/动作三行铺开 -->
-              <section v-if="autoHandled.length" class="ctl">
-                <p class="ctl__label">系统已自动处理<b>{{ autoHandled.length }}</b></p>
+              <!-- 近期自动调控流水（2026-11-05 用户定稿）：「系统已自动处理」与「已执行的调整」
+                   合并为一条时间倒序流水，标签改 4px 小方签，不再各占一节双计数 -->
+              <section v-if="ctlLogRows.length" class="ctl">
+                <p class="ctl__label">近期自动调控记录<b>{{ ctlLogRows.length }}</b></p>
                 <ul class="ctl__rows">
-                  <li v-for="card in autoHandled" :key="card.id">
-                    <span class="dec__tag" :class="decisionKindMeta[card.kind]?.cls">{{ decisionKindMeta[card.kind]?.label }}</span>
-                    <span class="ctl__row-text">{{ card.captured }}。{{ card.action }}</span>
-                  </li>
-                </ul>
-              </section>
-
-              <!-- 已执行的调整：replan 历史 -->
-              <section v-if="replannedRows.length" class="ctl">
-                <p class="ctl__label">已执行的调整<b>{{ replannedRows.length }}</b></p>
-                <ul class="ctl__rows">
-                  <li v-for="card in replannedRows" :key="card.id">
-                    <span class="dec__tag dec__tag--purple">已调整</span>
+                  <li v-for="card in ctlLogRows" :key="card.id">
+                    <span class="dec__tag" :class="ctlLogTag(card).cls">{{ ctlLogTag(card).label }}</span>
                     <span class="ctl__row-text">{{ card.captured }}。{{ card.action }}</span>
                     <time v-if="decisionTime(card.at)" class="ctl__row-time">{{ decisionTime(card.at) }}</time>
                   </li>
@@ -1287,6 +1268,18 @@ const autoHandled = computed(() =>
 );
 const replannedRows = computed(() => decisions.value.filter((d) => d.kind === 'path-replanned'));
 
+/* 近期自动调控流水（2026-11-05 用户定稿）：「系统已自动处理」与「已执行的调整」原是
+   两个小节各带计数——同一种"已经发生的事"拆两处读；合并为一条时间倒序流水 */
+const ctlLogRows = computed(() => {
+  const rows: DecisionCard[] = [...autoHandled.value, ...replannedRows.value];
+  return rows.sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+});
+function ctlLogTag(card: DecisionCard): { label: string; cls: string } {
+  if (card.kind === 'path-replanned') return { label: '已调整', cls: 'dec__tag--purple' };
+  const meta = decisionKindMeta[card.kind];
+  return { label: meta?.label || '已处理', cls: meta?.cls || '' };
+}
+
 /* AI 建议区的依据行：与待确认调控互相引用（此前两块各自为政） */
 const evidenceHint = computed(() => pendingAdjust.value[0]?.captured || '');
 
@@ -1395,6 +1388,19 @@ const skillWarning = computed(() => {
   const w = skillCopy.value?.warningCopy;
   return w && w !== '当前没有明显风险。' ? w : '';
 });
+
+/* 诊断/建议两行文案（2026-11-05 用户定稿）：标题、橙色警告、嵌套动作卡、下一步·节奏
+   四段说的是同一件事——合并成「诊断 → 建议」两行对照：
+   诊断取警告（无警告退副标/标题），建议取第一个动作卡（无动作退下一步），节奏并入括号 */
+const adviceDiagnosis = computed(() =>
+  String(skillWarning.value || skillCopy.value?.subtitle || skillCopy.value?.headline || '').trim()
+);
+const advicePlan = computed(() => {
+  const a = guideActions.value[0];
+  if (a) return [a.title, a.desc].filter(Boolean).join('——');
+  return String(skillCopy.value?.nextStep || '').trim();
+});
+const advicePace = computed(() => String(skillCopy.value?.paceHint || '').trim());
 
 const svgPlay = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>';
 const svgLayers = '<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="m12 2 10 5-10 5L2 7l10-5zm0 7.6L18.9 7 12 4.4 5.1 7 12 9.6zM2 12l10 5 10-5v2l-10 5L2 14v-2zm0 5 10 5 10-5v2l-10 5L2 19v-2z" opacity=".9"/></svg>';
@@ -1649,20 +1655,30 @@ function loadGuidance() {
    圆点即折线图图例（.ff-dot 色与曲线同源），下方不再另起一行重复指标名。 */
 .vitals--meta {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px 14px;
+  gap: 8px;
   padding: 0 0 12px; margin-bottom: 12px;
   border-bottom: 1px dashed var(--line);
 }
 .vitals__loading { grid-column: 1 / -1; }
+/* 双行小卡（2026-11-05 用户定稿）：上行圆点+指标名、下行数值+标签，
+   两个固定行高让 2×2 永远严丝合缝；底色用 canvas（暗色主题自动换深底） */
 .vitals--meta .vitals__item {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0;
+  display: grid; gap: 7px; align-content: start; min-width: 0;
+  padding: 10px 12px;
+  border-radius: var(--mk-radius-lg);
+  background: var(--canvas);
 }
+.vitals--meta .vitals__head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.vitals--meta .vitals__foot { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 /* 未画线的学习压力给中性点（不与三条曲线的颜色混同） */
 .ff-dot--plain { background: var(--faint); }
-.vitals--meta small { font-size: 12px; color: var(--faint); font-weight: 700; }
-.vitals--meta b { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.vitals--meta small { font-size: 12px; color: var(--faint); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 数值统一深色（2026-11-05 用户定稿）：颜色只留给圆点与标签，数字不再各走一套
+   折线色——否则绿点配蓝数字、紫点配绿数字，看图时大脑对不上 */
+.vitals--meta b { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--ink); }
 .vitals--meta b i { font-size: 12px; font-style: normal; font-weight: 600; color: var(--faint); }
-.metric__note { width: fit-content; font-size: 12px; font-weight: 800; padding: 3px 9px; border-radius: var(--mk-radius-pill); }
+/* 分档标签改小方签（2026-11-05 全局去肥胖化）：4px 圆角、收内衬 */
+.metric__note { width: fit-content; font-size: 12px; font-weight: 800; padding: 2px 6px; border-radius: 4px; }
 /* 胶囊底色用「前景 ink × 表面」混色：暗色主题自动降饱和（外部评审：原 rgba 撞色在暗底上刺眼） */
 .metric__note--green { color: var(--green-ink); background: color-mix(in srgb, var(--green-ink) 13%, var(--surface)); }
 .metric__note--blue { color: var(--blue-deep); background: color-mix(in srgb, var(--blue-deep) 13%, var(--surface)); }
@@ -1734,16 +1750,24 @@ function loadGuidance() {
 .advisory {
   display: grid; grid-template-columns: minmax(0, 1fr); gap: 11px;
   padding: 14px 16px 16px;
-  border-left: 4px solid var(--amber);
+  /* 4px 琥珀左边条已撤（2026-11-05 用户定稿）：诊断/建议/调控日志全卡共染一色后，
+     「需要确认的」和「系统已办完的」分不出轻重；状态交给右上「待确认」角标 */
 }
 .advisory__head {
   display: flex; align-items: center; gap: 7px;
-  font-size: 12.5px; font-weight: 800; color: var(--amber-ink);
+  font-size: 12.5px; font-weight: 800; color: var(--ink);
 }
 .advisory__head strong { font-size: 14px; }
-.advisory__star { width: 15px; height: 15px; flex: 0 0 auto; }
+.advisory__star { width: 15px; height: 15px; flex: 0 0 auto; color: var(--amber); }
 /* 卡头右侧的来源标注（AI 生成 / 系统建议）：跟 head 同色会抢星标语义，压回 meta 灰 */
 .advisory__head .band__meta { margin-left: auto; font-weight: 600; color: var(--faint); }
+/* 待确认小方签（2026-11-05）：琥珀字 + 12% 底、4px 圆角，与全局方签语言一致 */
+.advisory__pending {
+  flex: 0 0 auto;
+  font-size: 12px; font-weight: 800; color: var(--amber-ink);
+  background: color-mix(in srgb, var(--amber-ink) 12%, var(--surface));
+  padding: 2px 6px; border-radius: 4px;
+}
 .advisory__body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 11px; }
 .advisory__actions { display: flex; gap: 9px; flex-wrap: wrap; }
 .advisory__multi { margin: 0; font-size: 12.5px; color: var(--muted); }
@@ -1756,9 +1780,7 @@ function loadGuidance() {
   margin-top: 2px; padding-top: 14px;
   border-top: 1px solid var(--line);
 }
-.advisory__subhead { display: flex; align-items: baseline; gap: 10px; }
-.advisory__subhead strong { font-size: 14px; }
-.advisory__subhead .band__meta { margin-left: auto; }
+/* 区块头「学习调控」已撤（2026-11-05）：.advisory__subhead 样式随之删除 */
 
 /* 主次双按钮（原型 wf-btn 279-286）：primary 蓝渐变 + 44 触控带，ghost 白底 line 描边 */
 .adv-btn {
@@ -1863,27 +1885,26 @@ function loadGuidance() {
 
 <style scoped>
 /* skill 引导块 */
-.guide { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+/* 「诊断 → 建议」两行对照（2026-11-05 用户定稿）：行首小标签像化验单，
+   一眼分清哪句是病灶、哪句是处方；标题/警告框/嵌套动作卡/下一步·节奏四段已并入这两行 */
+.guide { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .guide__title { margin: 0; font-size: 16px; letter-spacing: -0.01em; }
-.guide__sub { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.65; }
+.guide__diag,
+.guide__plan {
+  margin: 0;
+  display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 8px;
+  font-size: 13px; line-height: 1.65; color: var(--muted);
+}
+.guide__diag b,
+.guide__plan b { font-size: 12px; font-weight: 800; color: var(--faint); padding-top: 2px; }
+/* 建议行是全卡最重要的句子：颜色抬一档、字重抬一档 */
+.guide__plan { color: var(--ink); }
+.guide__plan span { font-weight: 600; }
+.guide__plan i { font-style: normal; font-weight: 400; color: var(--faint); }
 /* 建议与调控互相引用（2026-09-27）：依据行把 AI 建议挂回到调控区的证据条目 */
 .guide__evidence { margin: 0; font-size: 12px; color: var(--faint); line-height: 1.6; }
 /* 无证据降级提示（state/iphone/6）：琥珀色与「预警」语言同族，区别于普通依据行 */
 .guide__evidence--warn { color: var(--amber-ink); }
-/* 说明句：警告优先（更具体），无警告时用副标——原来两者同屏 + 琥珀实底框，
-   四层文本处理堆在一起显乱（2026-09-27 重排） */
-.guide__sub--warn {
-  display: inline-flex; align-items: flex-start; gap: 6px;
-  color: var(--amber-ink);
-}
-.guide__sub--warn svg { flex: 0 0 auto; margin-top: 3px; }
-.guide__foot {
-  margin: 0;
-  border-top: 1px dashed var(--line);
-  padding-top: 10px;
-  font-size: 12.5px; line-height: 1.7;
-  color: color-mix(in srgb, var(--ink) 72%, var(--muted));
-}
 .suggest__list--warnings { border-top: 1px dashed var(--line); padding-top: 12px; }
 
 /* ---------- AI 决策记录 ---------- */
@@ -1909,7 +1930,8 @@ function loadGuidance() {
 .ctl + .ctl { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
 .ctl__label { margin: 0; font-size: 12px; font-weight: 800; color: var(--faint); letter-spacing: 0.04em; }
 .ctl__label b { margin-left: 6px; color: var(--blue); }
-.ctl__empty { margin: 0; font-size: 12.5px; color: var(--faint); line-height: 1.6; }
+/* .ctl__empty 已删（2026-11-05）：空态段落在「无待确认整块隐藏」那一刀移除后，
+   这条样式靠模板注释里的类名残留存活；本轮注释重写后规则 7 正确判死，随之删除 */
 .ctl-card {
   display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px;
   padding: 13px 15px;
@@ -1958,7 +1980,7 @@ function loadGuidance() {
 .ctl__rows li { display: flex; align-items: baseline; gap: 10px; }
 .ctl__row-text { flex: 1; min-width: 0; font-size: 12.5px; color: color-mix(in srgb, var(--ink) 72%, var(--muted)); line-height: 1.6; }
 .ctl__row-time { font-size: 12px; color: var(--faint); white-space: nowrap; }
-.dec__tag { font-size: 12px; font-weight: 800; padding: 4px 10px; border-radius: var(--mk-radius-pill); white-space: nowrap; }
+.dec__tag { font-size: 12px; font-weight: 800; padding: 2px 6px; border-radius: 4px; white-space: nowrap; }
 .dec__tag--blue { color: var(--blue-ink); background: color-mix(in srgb, var(--blue-deep) 12%, var(--surface)); }
 .dec__tag--purple { color: var(--purple-ink); background: color-mix(in srgb, var(--purple-ink) 12%, var(--surface)); }
 .dec__tag--cyan { color: var(--wf-color-secondary-dark); background: color-mix(in srgb, var(--cyan) 12%, var(--surface)); }

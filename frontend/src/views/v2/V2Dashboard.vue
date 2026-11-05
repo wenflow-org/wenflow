@@ -279,7 +279,7 @@
           <section class="card week">
             <div class="card-head">
               <strong>本周节奏</strong>
-              <button type="button" v-if="hasAnyMinutes" class="link-muted" @click="monthOpen = !monthOpen">{{ monthOpen ? '收起整月 ›' : '展开整月 ›' }}</button>
+              <button type="button" v-if="hasAnyMinutes" class="link-muted" @click="monthOpen = !monthOpen">{{ monthOpen ? '收起整月 ▴' : '展开整月 ▾' }}</button>
             </div>
             <div v-if="sourceFailed.week" class="dash__source-fail">学习记录加载失败，节奏暂不可用。<button type="button" class="dash__source-retry" @click="loadAll">重试</button></div>
             <div v-else-if="hasAnyMinutes" class="week__grid">
@@ -313,12 +313,27 @@
                 <span>成就「{{ nearestAchievement.name }}」{{ nearestAchievement.achieved ? '即将解锁 · ' : '' }}{{ nearestAchievement.hint }}</span>
               </p>
             </div>
-            <!-- 整月日历卡整体移除（原型 1659 的一行摘要替位）：月导航/7 列网格/图例/右侧当日明细
-                 归学习历史页，这里只留一行 month-summary；「全部历史 ›」入口从被删的当日明细面板
-                 迁到本行，避免唯一入口随卡一起消失 -->
-            <div v-if="monthOpen && hasAnyMinutes" class="month-summary">
-              本月节奏：{{ monthTotals.minutes }} 分钟 · {{ monthTotals.days }} 天有学习 · {{ monthTotals.sessions }} 次
-              <router-link to="/user/learning-history" class="month-summary__more">全部历史 ›</router-link>
+            <!-- 整月打卡热力（2026-11-05 用户定稿方案 B）：原「展开整月」只是多显示一行
+                 摘要，点下去日历根本不变，用户读作「点了没反应」。现在真的把 7 天条展开成
+                 本月 30 天小方格矩阵——有学习的日期按同一套热力色阶涂蓝，无学习的浅灰，
+                 下方保留本月统计与「全部历史 ›」入口 -->
+            <div v-if="monthOpen && hasAnyMinutes" class="month">
+              <div class="month__head">
+                <strong>{{ monthLabel }}</strong>
+                <router-link to="/user/learning-history" class="month__more">全部历史 ›</router-link>
+              </div>
+              <div class="month__grid">
+                <span v-for="w in ['一','二','三','四','五','六','日']" :key="w" class="month__wk" aria-hidden="true">{{ w }}</span>
+                <span v-for="b in monthDays.lead" :key="'lead-' + b" class="month__cell month__cell--blank" aria-hidden="true"></span>
+                <span
+                  v-for="d in monthDays.days"
+                  :key="d.date"
+                  class="month__cell"
+                  :class="[`month__cell--h${d.level}`, { 'month__cell--today': d.isToday }]"
+                  :title="`${d.date} · ${d.minutes ? d.minutes + ' 分钟' : '未学习'}`"
+                >{{ d.dayNum }}</span>
+              </div>
+              <p class="month__sum">本月 {{ monthTotals.minutes }} 分钟 · {{ monthTotals.days }} 天有学习 · {{ monthTotals.sessions }} 次</p>
             </div>
           </section>
         </div>
@@ -358,35 +373,33 @@
               <div v-if="daySheet.count === 0" class="sheet__empty">{{ EMPTY_DAY_MSG }}</div>
 
               <article v-for="s in daySheet.sessions" :key="s.id" class="scard">
-                <div class="scard__head">
-                  <div class="scard__title">
-                    <strong>{{ s.title }}</strong>
-                    <small>{{ s.timeRange }}</small>
-                  </div>
-                  <span class="scard__duration">{{ s.durationText }}</span>
-                </div>
+                <!-- 会话卡三层结构（2026-11-05 用户定稿）：标题独占一行 → 时间/时长/状态
+                     合并一行小字 → 三个诊断标签一行 → 底栏左环节右课堂事件。
+                     节点：原先「20 分钟」是右上角一个胖蓝胶囊，挤掉标题宽度；
+                     六个彩色胶囊折两行；环节与课堂事件各占一行 -->
+                <strong class="scard__title">{{ s.title }}</strong>
+                <p class="scard__meta">
+                  <span>{{ s.timeRange }}</span>
+                  <span>{{ s.durationText }}</span>
+                  <span>{{ s.statusLabel }}</span>
+                </p>
 
-                <div class="scard__chips">
-                  <span class="chip">{{ s.statusLabel }}</span>
+                <div v-if="s.understanding !== null || s.engagement !== null || s.cognitiveLabel" class="scard__chips">
                   <span v-if="s.understanding !== null" class="chip chip--blue">理解 {{ s.understanding }}%</span>
                   <span v-if="s.engagement !== null" class="chip chip--cyan">投入 {{ s.engagement }}%</span>
                   <span v-if="s.cognitiveLabel" class="chip chip--purple">认知 · {{ s.cognitiveLabel }}</span>
                 </div>
 
-                <div v-if="s.confusions.length" class="scard__confuse">
-                  卡点：{{ s.confusions.join('、') }}
-                </div>
+                <p v-if="s.confusions.length" class="scard__confuse">卡点：{{ s.confusions.join('、') }}</p>
 
-                <div v-if="s.stages.length" class="scard__stages">
-                  <template v-for="(st, i) in s.stages" :key="i">
-                    <span class="scard__stage">{{ st.label }}</span>
-                    <span v-if="i < s.stages.length - 1" class="scard__stage-sep">›</span>
-                  </template>
+                <div v-if="s.stages.length || s.events.length" class="scard__foot">
+                  <span v-if="s.stages.length" class="scard__stages">
+                    环节：<template v-for="(st, i) in s.stages" :key="i"><span class="scard__stage">{{ st.label }}</span><span v-if="i < s.stages.length - 1" class="scard__stage-sep"> › </span></template>
+                  </span>
+                  <button v-if="s.events.length" type="button" class="scard__toggle" @click="toggleSessionEvents(s.id)">
+                    {{ openSessionEvents.has(s.id) ? '收起课堂事件 ⌃' : `课堂事件 ${s.events.length} 条 ▾` }}
+                  </button>
                 </div>
-
-                <button v-if="s.events.length" type="button" class="scard__toggle" @click="toggleSessionEvents(s.id)">
-                  {{ openSessionEvents.has(s.id) ? '收起课堂事件 ⌃' : `课堂事件 ${s.events.length} 条 ⌄` }}
-                </button>
                 <ol v-if="openSessionEvents.has(s.id)" class="scard__events">
                   <li v-for="(e, i) in s.events" :key="i">
                     <span class="scard__event-time">{{ e.time }}</span>
@@ -1042,6 +1055,30 @@ const monthTotals = computed(() => {
   return { minutes, days, sessions: sessionsCount };
 });
 
+/* 整月打卡热力（2026-11-05 用户定稿方案 B）：「展开整月」从「只多一行摘要」改成真的
+   展开本月 30 天网格。数据源与本周条同一条 minutesByDate（近 90 天窗口已含本月），
+   热力色阶直接复用 heatLevel，不额外拉接口。lead = 月初在周一制里的空位数，
+   让 1 号落在正确星期列。 */
+const monthDays = computed(() => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const first = new Date(year, month, 1);
+  const lead = (first.getDay() + 6) % 7; // 0=周一 … 6=周日
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const days: Array<{ dayNum: number; date: string; minutes: number; level: number; isToday: boolean }> = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = localDateKey(new Date(year, month, d));
+    const minutes = minutesByDate.value.get(date) ?? 0;
+    days.push({ dayNum: d, date, minutes, level: heatLevel(minutes), isToday: date === todayStr });
+  }
+  return { lead, days };
+});
+const monthLabel = computed(() => {
+  const now = new Date();
+  return `${now.getFullYear()} 年 ${now.getMonth() + 1} 月`;
+});
+
 /* 选中日：整月日历移除后，周节奏格是唯一的日期入口——点一天直接开当天复盘抽屉
    （原「整月日历 → 当天明细 › 查看当天明细」两级入口降级为一级）。
    会话集合已是近 90 天窗口，周格内日期恒在窗内；窗口外的日期才补拉该月并「合并」进集合
@@ -1618,23 +1655,39 @@ onMounted(loadAll);
 .week__note svg { flex-shrink: 0; color: var(--amber); }
 .week__note--achv svg { color: var(--accent); }
 
-/* ---------- 月度摘要（整月日历的替位：原型 1659 一行摘要） ----------
-   整月日历卡（月导航/7 列网格/图例/右侧当日明细）整体移交学习历史页，
-   这里只留一行统计 + 「全部历史 ›」入口。 */
-.month-summary {
-  margin-top: 4px;
+/* ---------- 整月打卡热力（2026-11-05 用户定稿方案 B） ----------
+   7 列 × 最多 5 行：有学习的日期按 week 条同一套色阶（h1 14% / h2 32% / h3 实色蓝），
+   未学习 = line 弱底，未来日期同样浅灰（不虚化，避免"缺格"）。 */
+.month {
   border-top: 1px solid var(--line);
   padding-top: 12px;
-  display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px;
-  font-size: 12.5px; color: var(--muted);
-  font-variant-numeric: tabular-nums;
+  display: grid; gap: 10px;
 }
-.month-summary__more {
-  margin-left: auto;
-  font-weight: 700; color: var(--blue-deep);
+.month__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.month__head strong { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.month__more {
+  font-size: 12px; font-weight: 700; color: var(--blue-deep);
   text-decoration: none; white-space: nowrap;
 }
-.month-summary__more:hover { text-decoration: underline; }
+.month__more:hover { text-decoration: underline; }
+.month__grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.month__wk { font-size: 12px; font-weight: 700; color: var(--faint); text-align: center; }
+.month__cell {
+  height: 34px;
+  display: grid; place-items: center;
+  border-radius: var(--mk-radius-sm);
+  font-size: 12px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: color-mix(in srgb, var(--line) 55%, transparent);
+  color: var(--muted);
+}
+.month__cell--blank { background: none; }
+.month__cell--h0 { color: var(--faint); }
+.month__cell--h1 { background: color-mix(in srgb, var(--blue) 14%, transparent); color: var(--blue-deep); }
+.month__cell--h2 { background: color-mix(in srgb, var(--blue) 32%, transparent); color: var(--blue-deep); }
+.month__cell--h3 { background: var(--blue); color: var(--text-on-primary); }
+.month__cell--today { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--blue) 55%, transparent); }
+.month__sum { margin: 0; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* ---------- 响应式 ---------- */
 @media (max-width: 1100px) {
@@ -1781,55 +1834,58 @@ a.btn-primary { text-decoration: none; }
   background: color-mix(in srgb, var(--surface) 70%, var(--canvas));
 }
 
-/* ---------- 会话卡 ---------- */
+/* ---------- 会话卡 ----------
+   三层结构（2026-11-05 用户定稿）：标题独占一行 → 时间/时长/状态一行小字 →
+   三个诊断标签一行 → 底栏左环节右课堂事件。原先 6 个彩色胶囊折两行、
+   「20 分钟」是右上角胖蓝胶囊挤掉标题宽度、环节与课堂事件各占一行 */
 .scard {
   border: 1px solid var(--line);
   border-radius: 12px; /* 圆角阶梯：面板 */
-  padding: 13px 14px;
-  display: grid; gap: 9px;
+  padding: 12px 14px;
+  display: grid; gap: 8px;
   background: color-mix(in srgb, var(--surface) 80%, var(--canvas));
 }
 .scard + .scard { margin-top: 4px; }
-.scard__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-.scard__title { min-width: 0; display: grid; gap: 3px; }
-.scard__title strong { font-size: 13.5px; line-height: 1.45; }
-.scard__title small { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
-.scard__duration {
-  flex: 0 0 auto;
-  font-size: 12px; font-weight: 800; color: var(--blue-deep);
-  background: color-mix(in srgb, var(--blue) 9%, transparent);
-  padding: 4px 10px; border-radius: var(--mk-radius-pill);
-  white-space: nowrap;
+.scard__title { font-size: 13.5px; line-height: 1.45; font-weight: 700; }
+.scard__meta {
+  margin: 0;
+  display: flex; flex-wrap: wrap; align-items: baseline;
+  font-size: 12px; color: var(--faint);
+  font-variant-numeric: tabular-nums;
 }
-/* 标签行收紧（2026-11-05 屏效比）：4 个胶囊原先折成两行——字号受 mobile:spec 的 12px
-   下限约束不能降，改收内边距与间距：3/9 → 2/7、gap 6 → 4，402 视口四个并排一行 */
-.scard__chips { display: flex; flex-wrap: wrap; gap: 4px; }
+/* 「·」分隔由 CSS 生成：模板里不用手写分隔符，空字段不会留下孤立的点 */
+.scard__meta > span + span::before { content: '·'; margin: 0 6px; }
+/* 标签行不换行（2026-11-05）：去掉状态胶囊后只剩三个诊断标签，
+   402 实测一行 ~240px，收住 flex-wrap 保证永远「整整齐齐一行」 */
+.scard__chips { display: flex; flex-wrap: nowrap; gap: 6px; overflow: hidden; }
+/* 状态标签改方签（2026-11-05 全局去肥胖化）：4px 圆角、不描边、10% 底色 */
 .chip {
   font-size: 12px; font-weight: 700;
-  padding: 2px 7px; border-radius: var(--mk-radius-pill);
+  padding: 2px 7px; border-radius: 4px;
   background: var(--canvas); color: var(--muted);
+  white-space: nowrap;
 }
 .chip--blue { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 10%, transparent); }
 .chip--cyan { color: var(--cyan-ink); background: color-mix(in srgb, var(--cyan) 14%, transparent); }
 .chip--purple { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+/* 卡点去盒子（2026-11-05）：原描边 + 底色的琥珀胶囊块在白卡里又厚又抢眼，
+   降为一行琥珀小字，信息不丢、体量减半 */
 .scard__confuse {
-  font-size: 12px; color: var(--amber); font-weight: 600;
-  background: color-mix(in srgb, var(--amber) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--amber) 28%, transparent);
-  border-radius: 8px; /* 圆角阶梯：控件 */
-  padding: 7px 10px;
-  line-height: 1.55;
+  margin: 0;
+  font-size: 12px; color: var(--amber); font-weight: 600; line-height: 1.55;
 }
-.scard__stages { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-.scard__stage {
-  font-size: 12px; font-weight: 700; color: var(--blue-deep);
-  background: color-mix(in srgb, var(--blue) 7%, transparent);
-  border: 1px solid color-mix(in srgb, var(--blue) 20%, transparent);
-  padding: 3px 8px; border-radius: var(--mk-radius-pill);
+/* 底栏：左环节流程、右课堂事件展开（2026-11-05 用户定稿，原各占一行） */
+.scard__foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  border-top: 1px dashed var(--line);
+  padding-top: 8px;
 }
-.scard__stage-sep { color: var(--faint); font-size: 12px; }
+.scard__stages { min-width: 0; font-size: 12px; color: var(--faint); }
+.scard__stage { color: var(--muted); font-weight: 600; }
+.scard__stage-sep { color: var(--faint); }
 .scard__toggle {
-  justify-self: start;
+  flex: 0 0 auto;
+  margin-left: auto;
   border: 0; background: transparent;
   color: var(--faint);
   font: inherit; font-size: 12px; font-weight: 700;
