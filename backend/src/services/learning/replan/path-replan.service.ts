@@ -57,6 +57,24 @@ import {
   updatePathGenerationStatus,
 } from '../generation/run-lifecycle';
 
+/**
+ * #250：「当前路径没有可重设计的阶段」是可预期的业务前置条件，不是服务器故障。
+ *
+ * previewOnly 分支早已把同一条件建模为 200 `no-signal`；非预览分支此前抛裸 Error，
+ * 落进 http-app 的 500 INTERNAL_ERROR。这里给它具名 + status=409 + PATH_ 前缀的 code，
+ * 与同模块 `createPathVersioningUnsupportedError`（PathMutationConflictError, 409）同形状，
+ * 路由的 `isPathMutationConflictError` 会认出并原样回 409+code（/replan 与 /regenerate 都已接）。
+ */
+export class PathReplanNoTargetStageError extends Error {
+  readonly status = 409;
+  readonly code = 'PATH_REPLAN_NO_TARGET_STAGE';
+
+  constructor() {
+    super('当前路径没有可重设计的阶段');
+    this.name = 'PathReplanNoTargetStageError';
+  }
+}
+
 /* ---------------- 重排规模锚（2026-10-15 双向化） ----------------
    背景（审计 §七）：重排此前**不向 stage-designer 传任务数锚**，designer 于是掉到「全缺默认 3-6 个」，
    而源阶段常只有 2 个 → 只能膨胀；且阶段学时段落是「改完任务后反向汇总」，没有任何"先定规模"的入口。
@@ -783,7 +801,7 @@ export async function requestPathReplan(data: PathReplanRequest) {
         },
       };
     }
-    throw new Error('当前路径没有可重设计的阶段');
+    throw new PathReplanNoTargetStageError();
   }
 
   if (data.previewOnly || (replanSignal?.shouldSuggest && data.requireConfirmation !== false)) {
