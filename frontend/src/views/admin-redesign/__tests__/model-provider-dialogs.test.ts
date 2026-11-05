@@ -1,6 +1,6 @@
 /**
  * 供应商 / 模型编辑弹层（2026-10-18 BYOK）：
- * 前端先按后端同一套规则拦一遍（id 格式、服务地址必填、勾强度没勾思考、改名），
+ * 前端先按后端同一套规则拦一遍（id 格式、服务地址必填、思考关掉时不给挡位、改名），
  * 后端再拦一次并把人话原因显示在弹层里；平台通道不出服务地址与密钥字段。
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
@@ -28,6 +28,14 @@ vi.mock('@/api/adminApi', () => ({
 
 function btn(w: ReturnType<typeof mount>, text: string) {
   return w.findAll('button').find((b) => b.text().includes(text))!
+}
+
+/** 按字段名取那一个字段（弹层改成四段平铺后，按下标取会随排版漂移） */
+function fieldOf(w: ReturnType<typeof mount>, label: string) {
+  return w.findAll('.mk-field').find((f) => {
+    const el = f.find('.mk-field__label')
+    return el.exists() && el.text() === label
+  })!
 }
 
 /** Teleport 就地渲染（弹层内容挂到 body 后就查不到了；这里只要断言弹层内部） */
@@ -159,12 +167,14 @@ describe('ModelEditorDialog', () => {
     updateModelMock.mockReset()
   })
 
-  it('新建：标识 / 生成参数 / 高级设置三段，提交时清空的限额不发 0', async () => {
+  it('新建：标识 / 能力 / 调用限制 / 价格四段平铺，提交时清空的限额不发 0', async () => {
     const w = mount(ModelEditorDialog, mountOptions)
     w.vm.openWith({ providerId: 'acme-gateway', model: null })
     await flushPromises()
     await w.find('.med-modal .med-two input').setValue('acme-chat')
-    await w.find('.med-adv-body .med-two input').setValue('65536')
+    // 2026-11-05：没有「高级设置」折叠了，限额就在同一屏
+    expect(w.text()).not.toContain('高级设置')
+    await fieldOf(w, '输出上限').find('input').setValue('65536')
 
     addModelMock.mockResolvedValue({ data: { success: true, warnings: ['保存时出现 2 条提示…'] } })
     await btn(w, '保存').trigger('click')
@@ -206,7 +216,7 @@ describe('ModelEditorDialog', () => {
     expect(updateModelMock).toHaveBeenCalledWith('platform', 'm-deep', expect.objectContaining({ tier: 'reasoning' }))
   })
 
-  it('高级设置：能力两枚开关（思考 / 视觉）+ 挡位手填输入框', async () => {
+  it('能力在上、默认值在下：思考关着时整块默认值不渲染（不是置灰）', async () => {
     const w = mount(ModelEditorDialog, mountOptions)
     w.vm.openWith({ providerId: 'acme-gateway', model: null })
     await flushPromises()
@@ -217,16 +227,21 @@ describe('ModelEditorDialog', () => {
     expect(w.text()).not.toContain('可看图片与截图')
     const caps = w.findAll('.med-cap')
     expect(caps.map((c) => c.text())).toEqual(['思考', '视觉'])
-    /* 2026-11-05 用户「写死了五档，但是后面的请求能对上吗，应该放开允许填写挡位」：
-       挡位不再是一组固定档，而是运营手填的词——新模型不预置任何挡，填一个进一个。 */
-    expect(w.findAll('.med-effort')).toHaveLength(0)
-    expect(w.find('.med-effort__input').attributes('placeholder')).toBe('先开思考')
-    // 挡位依赖思考已开：没开思考时输入框不可用
-    expect(w.find('.med-effort__input').attributes('disabled')).toBeDefined()
+
+    /* 2026-11-05 用户「能力开关与默认策略上下倒置」：挡位与两个默认项是思考的子配置，
+       开关关着就整块不渲染——置灰还会让人以为能填，填了又会被后端拒。 */
+    expect(w.find('.med-reasoning').exists()).toBe(false)
+    expect(w.find('.med-effort__input').exists()).toBe(false)
+
     await caps[0].find('input[type="checkbox"]').setValue(true)
     await flushPromises()
-    expect(w.find('.med-effort__input').attributes('disabled')).toBeUndefined()
+    expect(w.find('.med-reasoning').exists()).toBe(true)
+    // 新模型不预置任何挡（2026-11-05 挡位由运营手填）
+    expect(w.findAll('.med-effort')).toHaveLength(0)
     expect(w.find('.med-effort__input').attributes('placeholder')).toBe('添加挡位，如 xhigh')
+    // 两个默认项在能力下面，名字与挡位编辑器不再重名
+    expect(mkSelectValue(w, '默认思考模式')).toBe('default')
+    expect(mkSelectValue(w, '默认推理挡位')).toBe('default')
   })
 
   it('挡位填什么发什么：自定义词原样进请求体（只做小写与去空白），带空格的词就地拦下', async () => {
@@ -247,7 +262,7 @@ describe('ModelEditorDialog', () => {
     await input.trigger('keydown.enter')
     await flushPromises()
     expect(w.findAll('.med-effort__token').map((t) => t.text())).toEqual(['xhigh'])
-    expect(mkSelectLabels(w, '推理强度')).toEqual(['跟随默认', 'xhigh'])
+    expect(mkSelectLabels(w, '默认推理挡位')).toEqual(['不指定（按平台默认）', 'xhigh'])
 
     addModelMock.mockResolvedValue({ data: { success: true, warnings: [] } })
     await btn(w, '保存').trigger('click')
@@ -255,31 +270,39 @@ describe('ModelEditorDialog', () => {
     expect(addModelMock).toHaveBeenCalledWith('platform', expect.objectContaining({ reasoningEfforts: ['xhigh'] }))
   })
 
-  it('勾了挡位没勾思考：保存时就地拦下并说明依赖（不发请求）', async () => {
+  it('关掉思考后保存：挡位与两个默认值一并交空，表单里的值不抹', async () => {
     const w = mount(ModelEditorDialog, mountOptions)
     w.vm.openWith({
       providerId: 'acme-gateway',
       model: {
-        id: 'acme-chat', label: 'acme-chat', tier: 'chat', supportsThinking: false, reasoningEfforts: ['high'], vision: false,
+        id: 'acme-chat', label: 'acme-chat', tier: 'chat', supportsThinking: true, reasoningEfforts: ['high'], vision: false,
+        defaultThinkingMode: 'enabled', defaultReasoningEffort: 'high',
         maxOutputTokens: null, defaultMaxTokens: null, reasoningReserveTokens: null, maxParallelRequests: null,
         pricing: null, description: null
       }
     })
     await flushPromises()
-    await btn(w, '保存').trigger('click')
-    await flushPromises()
-    expect(w.find('[role="alert"]').text()).toContain('必须同时支持思考模式')
-    expect(updateModelMock).not.toHaveBeenCalled()
-
-    // 补勾思考后即可保存，挡位一起提交（勾着的那档原样带回）
     const thinking = w.findAll('.med-cap input[type="checkbox"]')[0]
+    // 关掉再开回来：填过的挡位还在（开关只决定这一程提交什么，不抹表单）
+    await thinking.setValue(false)
+    await flushPromises()
+    expect(w.find('.med-reasoning').exists()).toBe(false)
     await thinking.setValue(true)
+    await flushPromises()
+    expect(w.findAll('.med-effort__token').map((t) => t.text())).toEqual(['high'])
+
+    await thinking.setValue(false)
+    await flushPromises()
     updateModelMock.mockResolvedValue({ data: { success: true, warnings: [] } })
     await btn(w, '保存').trigger('click')
     await flushPromises()
+    /* 2026-11-05：能力与默认值同进同退——没开思考就交空，不落一份
+       「声明了挡位却不会思考」的配置（后端会拒，运行时也会被 thinking-policy 裁掉）。 */
     expect(updateModelMock).toHaveBeenCalledWith('acme-gateway', 'acme-chat', expect.objectContaining({
-      supportsThinking: true,
-      reasoningEfforts: ['high']
+      supportsThinking: false,
+      reasoningEfforts: [],
+      defaultThinkingMode: null,
+      defaultReasoningEffort: null
     }))
   })
 
@@ -331,40 +354,48 @@ describe('ModelEditorDialog', () => {
     }))
   })
 
-  it('生成参数：默认跟随平台，显式选择后随模型提交', async () => {
+  it('默认思考模式 / 默认推理挡位：不指定时交 null，显式选择后随模型提交', async () => {
     const w = mount(ModelEditorDialog, mountOptions)
     w.vm.openWith({ providerId: 'platform', model: null, presetId: 'm-gen' })
     await flushPromises()
-    expect(mkSelectValue(w, '思考模式')).toBe('default')
-    expect(mkSelectValue(w, '推理强度')).toBe('default')
     // 2026-11-04 用户「输出格式这个功能先下掉」：这一格连同它的下拉一起消失
     expect(w.text()).not.toContain('输出格式')
+    // 没开思考：两个默认项是思考的子配置，整块不渲染
+    expect(w.find('[aria-label="默认推理挡位"]').exists()).toBe(false)
 
-    // 没勾任何挡位时下拉只剩一项、整项禁用，且那唯一一项自己说明原因
-    expect(mkSelectLabels(w, '推理强度')).toEqual(['这台模型没有声明挡位'])
-    expect(mkSelectBox(w, '推理强度').find('button').attributes('disabled')).toBeDefined()
-
-    // 挡位依赖思考能力：先勾上「思考」这一枚能力，挡位才可选
     await w.findAll('.med-cap input[type="checkbox"]')[0].setValue(true)
     await flushPromises()
-    // 填进 low / high / max 后下拉才出现这三档
+    expect(mkSelectValue(w, '默认思考模式')).toBe('default')
+    expect(mkSelectValue(w, '默认推理挡位')).toBe('default')
+    // 一条挡位都没填时下拉只剩一项、整项禁用，且那唯一一项自己说明原因
+    expect(mkSelectLabels(w, '默认推理挡位')).toEqual(['这台模型没有声明挡位'])
+    expect(mkSelectBox(w, '默认推理挡位').find('button').attributes('disabled')).toBeDefined()
+
+    // 填进 low / high / max 后，默认挡位的候选就是这三个词
     const effortInput = w.find('.med-effort__input')
     for (const token of ['low', 'high', 'max']) {
       await effortInput.setValue(token)
       await effortInput.trigger('keydown.enter')
     }
     await flushPromises()
-    expect(mkSelectLabels(w, '推理强度')).toEqual(['跟随默认', '低（low）', '高（high）', '最高（max）'])
+    expect(mkSelectLabels(w, '默认推理挡位'))
+      .toEqual(['不指定（按平台默认）', '低（low）', '高（high）', '最高（max）'])
 
-    await chooseMkSelect(w, '思考模式', 'disabled')
-    await chooseMkSelect(w, '推理强度', 'max')
+    // 默认思考模式选「关闭」时，默认挡位没有意义：自动回「不指定」并整项禁用
+    await chooseMkSelect(w, '默认思考模式', 'disabled')
+    await flushPromises()
+    expect(mkSelectValue(w, '默认推理挡位')).toBe('default')
+    expect(mkSelectBox(w, '默认推理挡位').find('button').attributes('disabled')).toBeDefined()
+
+    await chooseMkSelect(w, '默认思考模式', 'enabled')
+    await chooseMkSelect(w, '默认推理挡位', 'max')
     addModelMock.mockResolvedValue({ data: { success: true, warnings: [] } })
     await btn(w, '保存').trigger('click')
     await flushPromises()
     expect(addModelMock).toHaveBeenCalledWith('platform', expect.objectContaining({
       supportsThinking: true,
       reasoningEfforts: ['low', 'high', 'max'],
-      defaultThinkingMode: 'disabled',
+      defaultThinkingMode: 'enabled',
       defaultReasoningEffort: 'max'
     }))
   })

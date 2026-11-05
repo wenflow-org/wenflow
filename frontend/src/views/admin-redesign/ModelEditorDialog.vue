@@ -18,11 +18,11 @@
             <span class="mk-alert__msg">{{ error }}</span>
           </div>
 
-          <!-- 首屏两行字段（身份 / 生成参数），价格与能力/限额一起进高级设置
-               （2026-10-28 用户「单价不是很重要的东西」）。
-               2026-11-04 先撤掉分区标题下的说明行；2026-11-05 用户「这个不要」把**分区标题
-               本身**也撤了——「模型 ID / 显示名称」「思考模式 / 推理强度」四个字段名已经把
-               这一屏说清楚了，再压一层「模型身份」「生成参数」是把同一件事说两遍。 -->
+          <!-- 字段按「先声明能力，再定默认值」排（2026-11-05 用户「能力开关与默认策略上下倒置」）：
+               决定这台模型*能*做什么的开关在上，消费这些能力的默认值在它下面，
+               且默认值只在对应能力开着时才出现——不给自己制造「填了也会被裁掉」的组合。
+               2026-11-04 撤掉分区说明行；2026-11-05 撤掉「模型身份 / 生成参数」两枚分区标题；
+               同日再撤「高级设置」折叠：能力与它的默认值必须同屏，一收起就看不见因果。 -->
           <section class="med-sec">
             <div class="med-two">
               <label class="mk-field">
@@ -44,138 +44,123 @@
             </div>
           </section>
 
-          <!-- 生成参数（2026-10-24 用户拍板「每个模型各自一套」）：原来只有平台级默认，
-               现在每个模型可单独覆盖；「跟随默认」= 不写模型字段。
-               2026-11-04 用户「输出格式这个功能先下掉」：输出格式一栏撤除。 -->
-          <section class="med-sec med-gen">
+          <!-- 能力：开关就是声明。默认值跟在开关下面同一屏，读完「它会不会想」再读「默认想多深」。
+               挡位由运营手填（2026-11-05）：填的就是请求体里那个字段的取值，原样发给上游；
+               平台不再固定五档——各家词表不一致，认哪些词只有运营知道。 -->
+          <section class="med-sec">
+            <div class="med-subrow">
+              <h5 class="med-sub">能力</h5>
+            </div>
+            <div class="med-checks">
+              <label class="mk-field mk-field--switch med-cap" :class="{ 'med-cap--on': form.supportsThinking }">
+                <input v-model="form.supportsThinking" type="checkbox" />
+                <span class="med-cap__text"><b>思考</b></span>
+              </label>
+              <label class="mk-field mk-field--switch med-cap" :class="{ 'med-cap--on': form.vision }">
+                <input v-model="form.vision" type="checkbox" />
+                <span class="med-cap__text"><b>视觉</b></span>
+              </label>
+            </div>
+            <!-- 思考的默认值：挡位（它认哪些词）+ 两个默认项（没被 Skill 指定时用哪一档）。
+                 开关一关整块收起——关掉思考后这两项本来就发不出去。 -->
+            <div v-if="form.supportsThinking" class="med-reasoning">
+              <div class="mk-field">
+                <span class="mk-field__label">支持的推理挡位</span>
+                <div class="med-efforts__list">
+                  <span v-for="level in form.reasoningEfforts" :key="level" class="med-effort">
+                    <span class="mono med-effort__token">{{ level }}</span>
+                    <button
+                      type="button"
+                      class="med-effort__del"
+                      :aria-label="`移除挡位 ${level}`"
+                      @click="removeEffort(level)"
+                    >✕</button>
+                  </span>
+                  <input
+                    v-model="effortDraft"
+                    class="med-effort__input mono"
+                    placeholder="添加挡位，如 xhigh"
+                    aria-label="添加推理强度挡位"
+                    autocomplete="off"
+                    @keydown.enter.prevent="addEffort"
+                    @blur="addEffort"
+                    @input="error = ''"
+                  />
+                </div>
+              </div>
+              <div class="med-two">
+                <label class="mk-field">
+                  <span class="mk-field__label">默认思考模式</span>
+                  <MkSelect
+                    v-model="form.defaultThinkingMode"
+                    :options="THINKING_MODE_OPTIONS"
+                    aria-label="默认思考模式"
+                    block
+                  />
+                </label>
+                <label class="mk-field">
+                  <span class="mk-field__label">默认推理挡位</span>
+                  <!-- 选项只来自上面填的挡位：没填任何挡位 = 没有这一项可选。
+                       不给未声明的档位，是因为发出去上游也不认。 -->
+                  <MkSelect
+                    v-model="form.defaultReasoningEffort"
+                    :options="effortSelectOptions"
+                    aria-label="默认推理挡位"
+                    block
+                    :disabled="!form.reasoningEfforts.length || form.defaultThinkingMode === 'disabled'"
+                  />
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <section class="med-sec">
+            <div class="med-subrow">
+              <h5 class="med-sub">调用限制</h5>
+            </div>
             <div class="med-two">
               <label class="mk-field">
-                <span class="mk-field__label">思考模式</span>
-                <MkSelect
-                  v-model="form.defaultThinkingMode"
-                  :options="THINKING_MODE_OPTIONS"
-                  aria-label="思考模式"
-                  block
-                />
+                <span class="mk-field__label">输出上限</span>
+                <input v-model.number="form.maxOutputTokens" class="mk-field__input mono" type="number" min="1" placeholder="默认" />
               </label>
               <label class="mk-field">
-                <span class="mk-field__label">推理强度</span>
-                <!-- 选项只来自「能力」里给这台模型勾的挡位：没勾任何挡位 = 没有这一项可选，
-                     下拉只剩「跟随默认」。不给未声明的档位，是因为发出去上游也不认。 -->
-                <MkSelect
-                  v-model="form.defaultReasoningEffort"
-                  :options="effortSelectOptions"
-                  aria-label="推理强度"
-                  block
-                  :disabled="form.defaultThinkingMode === 'disabled' || !form.reasoningEfforts.length"
-                />
+                <span class="mk-field__label">默认输出</span>
+                <input v-model.number="form.defaultMaxTokens" class="mk-field__input mono" type="number" min="1" placeholder="默认" />
+              </label>
+              <label class="mk-field">
+                <span class="mk-field__label">推理预留</span>
+                <input v-model.number="form.reasoningReserveTokens" class="mk-field__input mono" type="number" min="1" placeholder="默认" />
+              </label>
+              <label class="mk-field">
+                <span class="mk-field__label">并发上限</span>
+                <input v-model.number="form.maxParallelRequests" class="mk-field__input mono" type="number" min="1" placeholder="不限" />
               </label>
             </div>
           </section>
 
-          <details class="med-advanced">
-            <!-- 2026-11-02「让布局自己说话」：折叠头右侧原有列出本弹层分区名的一行小字，
-                 它只罗列本弹层自己的分区——展开后各分区标题（说明 / 能力 / 调用限制 /
-                 价格）已各说一次，属要收掉的那类。同一句改挂它描述的那个记号
-                 （summary）的 title，悬停与读屏仍拿得到，屏上不再占一段版面。 -->
-            <summary title="能力、调用限制、价格">
-              高级设置
-            </summary>
-            <div class="med-adv-body">
-              <div>
-                <div class="med-subrow">
-                  <h5 class="med-sub">能力</h5>
-                </div>
-                <div class="med-checks">
-                  <label class="mk-field mk-field--switch med-cap" :class="{ 'med-cap--on': form.supportsThinking }">
-                    <input v-model="form.supportsThinking" type="checkbox" />
-                    <span class="med-cap__text"><b>思考</b></span>
-                  </label>
-                  <label class="mk-field mk-field--switch med-cap" :class="{ 'med-cap--on': form.vision }">
-                    <input v-model="form.vision" type="checkbox" />
-                    <span class="med-cap__text"><b>视觉</b></span>
-                  </label>
-                </div>
-                <!-- 挡位由运营手填（2026-11-05 二稿）：填的就是请求体里那个字段的取值，
-                     原样发给上游。平台不再固定五档——各家词表不一致，认哪些词只有运营知道。
-                     一条都不填 = 这台模型不发这个字段（等价于旧的不支持）。 -->
-                <div class="med-efforts" :class="{ 'med-efforts--off': !form.supportsThinking }">
-                  <span class="med-efforts__k">{{ CAP_REASONING }}</span>
-                  <div class="med-efforts__list">
-                    <span v-for="level in form.reasoningEfforts" :key="level" class="med-effort">
-                      <span class="mono med-effort__token">{{ level }}</span>
-                      <button
-                        type="button"
-                        class="med-effort__del"
-                        :disabled="!form.supportsThinking"
-                        :aria-label="`移除挡位 ${level}`"
-                        @click="removeEffort(level)"
-                      >✕</button>
-                    </span>
-                    <input
-                      v-model="effortDraft"
-                      class="med-effort__input mono"
-                      :disabled="!form.supportsThinking"
-                      :placeholder="!form.supportsThinking ? '先开思考' : '添加挡位，如 xhigh'"
-                      aria-label="添加推理强度挡位"
-                      autocomplete="off"
-                      @keydown.enter.prevent="addEffort"
-                      @blur="addEffort"
-                      @input="error = ''"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <div class="med-subrow">
-                  <h5 class="med-sub">调用限制</h5>
-                </div>
-                <div class="med-two">
-                  <label class="mk-field">
-                    <span class="mk-field__label">输出上限</span>
-                    <input v-model.number="form.maxOutputTokens" class="mk-field__input mono" type="number" min="1" placeholder="默认" />
-                  </label>
-                  <label class="mk-field">
-                    <span class="mk-field__label">默认输出</span>
-                    <input v-model.number="form.defaultMaxTokens" class="mk-field__input mono" type="number" min="1" placeholder="默认" />
-                  </label>
-                  <label class="mk-field">
-                    <span class="mk-field__label">推理预留</span>
-                    <input v-model.number="form.reasoningReserveTokens" class="mk-field__input mono" type="number" min="1" placeholder="默认" />
-                  </label>
-                  <label class="mk-field">
-                    <span class="mk-field__label">并发上限</span>
-                    <input v-model.number="form.maxParallelRequests" class="mk-field__input mono" type="number" min="1" placeholder="不限" />
-                  </label>
-                </div>
-              </div>
-
-              <!-- 价格不是接入模型的关键路径（2026-10-28 用户「单价不是很重要的东西，
-                   可以在二级页面编辑」）：收进高级设置，只在成本分析需要时再填。 -->
-              <div>
-                <div class="med-subrow">
-                  <h5 class="med-sub">价格</h5>
-                  <!-- 单位与作用范围留一次；「选填」不写——三格各自再标一遍是同一提示四次上屏 -->
-                  <span class="med-sub__hint">USD / 1M tokens · 只影响成本分析</span>
-                </div>
-                <div class="med-price">
-                  <label class="mk-field">
-                    <span class="mk-field__label">输入</span>
-                    <input v-model.number="form.inputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" />
-                  </label>
-                  <label class="mk-field">
-                    <span class="mk-field__label">缓存命中</span>
-                    <input v-model.number="form.cachedInputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" />
-                  </label>
-                  <label class="mk-field">
-                    <span class="mk-field__label">输出</span>
-                    <input v-model.number="form.outputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" />
-                  </label>
-                </div>
-              </div>
+          <!-- 价格不是接入模型的关键路径（2026-10-28 用户「单价不是很重要的东西，
+               可以在二级页面编辑」）：只在成本分析需要时再填。 -->
+          <section class="med-sec">
+            <div class="med-subrow">
+              <h5 class="med-sub">价格</h5>
+              <!-- 单位与作用范围留一次；「选填」不写——三格各自再标一遍是同一提示四次上屏 -->
+              <span class="med-sub__hint">USD / 1M tokens · 只影响成本分析</span>
             </div>
-          </details>
+            <div class="med-price">
+              <label class="mk-field">
+                <span class="mk-field__label">输入</span>
+                <input v-model.number="form.inputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" />
+              </label>
+              <label class="mk-field">
+                <span class="mk-field__label">缓存命中</span>
+                <input v-model.number="form.cachedInputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" />
+              </label>
+              <label class="mk-field">
+                <span class="mk-field__label">输出</span>
+                <input v-model.number="form.outputPer1M" class="mk-field__input mono" type="number" min="0" step="0.001" />
+              </label>
+            </div>
+          </section>
         </div>
 
         <div class="mk-modal__foot">
@@ -256,26 +241,30 @@ const form = reactive({
   outputPer1M: null as number | null
 })
 
-/* 生成参数的下拉档位。
+/* 默认思考模式的下拉档位（2026-11-05 这个字段从「生成参数」区搬到「思考」开关下面，
+   并改名「默认思考模式」——它回答的是「没被 Skill 指定时用哪一档」）。
    2026-11-04 用户「输出格式这个功能先下掉」：输出格式档位随字段一并撤除，
    已存的值原样留在注册表里，这里不读也不写。
    2026-11-05 用户「思考强度为什么还强制开启？」：`enabled` 原写作「强制开启」，
    但它一点都不强制——优先级是 Skill 显式配置 > 模型默认 > 平台默认，
-   某个 Skill 自己选了「关闭」时，模型这一档根本不参与。它只是「没被另行指定时用哪一档」，
-   所以改回与人话一致的「开启」，与 Skill 运行时页同一个词（那一页写「开启」已经很久了）。 */
+   某个 Skill 自己选了「关闭」时，模型这一档根本不参与，所以改回「开启」。
+   首项从「跟随默认」改成「不指定」：它写的是「这一层不表态」，
+   接手的可能是平台默认（平台也没表态时请求里就不带这个字段）。 */
+/** 「这一层不表态」的那一项（三个下拉共用一句，同文件不重复抄第二遍——文案单源） */
+const NOT_SPECIFIED_LABEL = '不指定（按平台默认）'
 const THINKING_MODE_OPTIONS: Array<{ value: 'default' | 'enabled' | 'disabled'; label: string }> = [
-  { value: 'default', label: '跟随默认' },
+  { value: 'default', label: NOT_SPECIFIED_LABEL },
   { value: 'enabled', label: '开启' },
   { value: 'disabled', label: '关闭' }
 ]
 /**
- * 生成参数里的可选档位：只出这台模型在下面「能力」里填过的挡位。
- * 一条没填时下拉只有「跟随默认」，且整项禁用——没有挡位可选就是没有这一项。
+ * 「默认推理挡位」的可选档位：只出上面「支持的推理挡位」里填过的那几个词。
+ * 一条没填时下拉只剩一项并整项禁用——没有挡位可选就是没有这一项。
  */
 const effortSelectOptions = computed(() => effortOptions(
   form.reasoningEfforts,
-  // 一条都没填时那唯一一项要自己说明原因：否则「跟随默认」读起来像还有别的档位没展开
-  form.reasoningEfforts.length ? '跟随默认' : '这台模型没有声明挡位'
+  // 一条都没填时那唯一一项要自己说明原因：否则「不指定」读起来像还有别的档位没展开
+  form.reasoningEfforts.length ? NOT_SPECIFIED_LABEL : '这台模型没有声明挡位'
 ))
 /** 档位输入草稿（回车或失焦即添加；形态不对就地报错，不写进列表） */
 const effortDraft = ref('')
@@ -307,8 +296,14 @@ watch(
   },
   { deep: true }
 )
-/** 能力卡与生成参数同名（单一文案源：同文件出现两次会被文案门禁记复读） */
-const CAP_REASONING = '推理强度'
+/* 默认思考模式选「关闭」时，默认挡位没有意义：跟着回「不指定」，
+   免得界面上留着一个「关了思考却指定了强度」的组合（与 Skill 运行时页同一条规则）。 */
+watch(
+  () => form.defaultThinkingMode,
+  (mode) => {
+    if (mode === 'disabled') form.defaultReasoningEffort = 'default'
+  }
+)
 
 /** 用户一旦手改显示名称，就停止跟随模型 ID */
 function onLabelInput(): void {
@@ -331,13 +326,6 @@ const title = computed(() => {
   if (!isCreate.value) return `模型设置 · ${form.id}`
   return stepInfo.value ? `添加模型 · ${stepInfo.value.index}/${stepInfo.value.total}` : '添加模型'
 })
-/**
- * 勾了挡位没勾思考：就地拦在保存这一步，并给出原因。
- * 模板里已经把这些勾在「没开思考」时置灰——但置灰只挡新点击，改前就存在的值仍要拦，
- * 否则一份没开思考却声明了挡位的配置能存进去，运行时那几档全被 thinking-policy 裁掉。
- */
-const effortWithoutThinking = computed(() => form.reasoningEfforts.length > 0 && !form.supportsThinking)
-
 function openWith(target: { providerId: string; model: ModelLike | null; presetId?: string; step?: { index: number; total: number } }): void {
   isCreate.value = !target.model
   providerId.value = target.providerId
@@ -380,10 +368,6 @@ function numOrNull(value: number | null): number | null {
 }
 
 async function submit(): Promise<void> {
-  if (effortWithoutThinking.value) {
-    error.value = '填了推理强度挡位就必须同时支持思考模式。'
-    return
-  }
   busy.value = true
   error.value = ''
   try {
@@ -397,11 +381,15 @@ async function submit(): Promise<void> {
       tier: form.tier,
       supportsThinking: form.supportsThinking,
       vision: form.vision,
-      // 挡位数组即支持集：空数组 = 关掉该能力（后端把这个键整个删掉）
-      reasoningEfforts: form.reasoningEfforts,
+      /* 能力与默认值同进同退（2026-11-05）：没开思考时把挡位与两个默认项一并交空，
+         免得存进一份「声明了挡位却不会思考」的配置——后端会拒，运行时也会被裁掉。
+         开关关掉只影响这一程的提交，表单里的值不抹：再打开思考，填过的挡位还在。 */
+      reasoningEfforts: form.supportsThinking ? form.reasoningEfforts : [],
       // 'default' → null：后端删掉模型字段，运行时跟随平台默认
-      defaultThinkingMode: form.defaultThinkingMode === 'default' ? null : form.defaultThinkingMode,
-      defaultReasoningEffort: form.defaultReasoningEffort === 'default' ? null : form.defaultReasoningEffort,
+      defaultThinkingMode: form.supportsThinking && form.defaultThinkingMode !== 'default' ? form.defaultThinkingMode : null,
+      defaultReasoningEffort: form.supportsThinking && form.defaultThinkingMode !== 'disabled' && form.defaultReasoningEffort !== 'default'
+        ? form.defaultReasoningEffort
+        : null,
       maxOutputTokens: numOrNull(form.maxOutputTokens),
       defaultMaxTokens: numOrNull(form.defaultMaxTokens),
       reasoningReserveTokens: numOrNull(form.reasoningReserveTokens),
@@ -440,26 +428,6 @@ defineExpose({ openWith, close })
 }
 .med-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .med-price { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-/* 高级设置：默认收起，展开后按「能力 / 调用限制 / 价格」三段排 */
-.med-advanced {
-  margin-top: 20px;
-  padding-top: 14px;
-  border-top: 1px solid var(--mk-line);
-}
-.med-advanced > summary {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  color: var(--mk-ink);
-  font-size: var(--mk-fs-body);
-  font-weight: 700;
-  cursor: pointer;
-  list-style: none;
-}
-.med-advanced > summary::-webkit-details-marker { display: none; }
-.med-advanced > summary::before { content: '▸'; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
-.med-advanced[open] > summary::before { content: '▾'; }
-.med-adv-body { display: grid; gap: 18px; margin-top: 14px; }
 .med-subrow { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; margin-bottom: 8px; }
 .med-sub {
   margin: 0;
@@ -469,7 +437,6 @@ defineExpose({ openWith, close })
   letter-spacing: 0.04em;
 }
 .med-sub__hint { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
-.med-advanced .mk-field { align-content: start; }
 
 /* 能力：两枚紧凑勾选标签（思考 / 视觉），名称与模型表的功能列一致 */
 .med-checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -492,9 +459,17 @@ defineExpose({ openWith, close })
   background: color-mix(in srgb, var(--mk-blue) 6%, var(--mk-surface));
 }
 
+/* 思考的默认值（挡位 + 两个默认项）：整块淡底，表示它只在「思考」开着时存在——
+   关掉思考这一块直接不渲染，不留下一组会被后端裁掉的死值。 */
+.med-reasoning {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: var(--mk-radius-md);
+  background: var(--mk-surface-2);
+}
 /* 推理强度挡位：一排「词 + 删除」，末尾一个输入框（填的就是请求里发的那个值） */
-.med-efforts { margin-top: 8px; padding: 9px 10px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-md); }
-.med-efforts__k { display: block; margin-bottom: 8px; color: var(--mk-muted); font-size: var(--mk-fs-micro); font-weight: 600; }
 .med-efforts__list { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .med-effort {
   display: inline-flex;
@@ -524,7 +499,6 @@ defineExpose({ openWith, close })
   cursor: pointer;
 }
 .med-effort__del:hover:not(:disabled) { background: var(--mk-hover-surface); color: var(--mk-ink); }
-.med-effort__del:disabled { cursor: not-allowed; }
 .med-effort__input {
   flex: 1 1 150px;
   min-width: 120px;
@@ -538,8 +512,6 @@ defineExpose({ openWith, close })
 }
 .med-effort__input:focus { border-style: solid; border-color: var(--mk-blue); outline: none; }
 .med-effort__input:disabled { cursor: not-allowed; opacity: 0.5; }
-/* 没开思考时整组置灰：没有思考就没有强度可调 */
-.med-efforts--off { opacity: 0.6; }
 
 @media (max-width: 900px) {
   .med-modal.mk-modal__panel--wide { width: min(100%, 96vw); }
