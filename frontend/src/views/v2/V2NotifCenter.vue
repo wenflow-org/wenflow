@@ -123,14 +123,10 @@
               </div>
             </div>
 
-            <!-- 进行中任务 -->
+            <!-- 进行中任务（2026-11-06 走查 图5）：段标题「▶ 运行中」已删——tab 已写
+                 「AI 任务 · N 进行中」，卡片标题再说「正在生成学习路径」就是第三、四遍同一句。
+                 现在一条任务只说两层：标题=正在生成的路径方向名，副文=正在做什么。 -->
             <div v-if="busyItems.length" class="nc__section" :class="{ 'nc__section--border': liveSessions.length || idleSessions.length }">
-              <div class="nc__section-label">
-                <span class="nc__section-label-icon nc__section-label-icon--running" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" width="10" height="10"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
-                </span>
-                运行中
-              </div>
               <div v-for="item in busyItems" :key="item.key" class="nc__task nc__task--running">
                 <div class="nc__task-bar"></div>
                 <div class="nc__task-content">
@@ -410,12 +406,14 @@ async function collectBusy(): Promise<void> {
     );
     if (busyPath) {
       const lc = busyPath.generationLifecycle as Record<string, any>;
+      const stage = lc.phase === 'stage_design' && lc.totalStages
+        ? `正在规划阶段与课时…（${lc.completedStages ?? 0}/${lc.totalStages}）`
+        : '正在规划阶段与课时…';
       busyItems.value.push({
         key: `path-${busyPath.id}`,
-        title: '正在生成学习路径',
-        detail: lc.phase === 'stage_design' && lc.totalStages
-          ? `课程（${lc.completedStages ?? 0}/${lc.totalStages}）`
-          : '路径生成中'
+        // 标题写「哪条路径」而不是「正在生成学习路径」：后者在 tab/段标题/进度条上已重复到第四遍
+        title: busyPath.title || '学习路径',
+        detail: stage
       });
     }
   } catch { /* 忽略 */ }
@@ -589,19 +587,27 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
-/* AI 任务运行中：右下角 8px 蓝点，不再用整圈描边。
-   2026-11-04 走查：此前写成 top:7 与未读红点（top 9 / right 10）同叠右上角，
-   红蓝两点半透明互叠成脏点；按注释本意钉回右下角，双态并存时分角展示。 */
+/* AI 任务运行中：蓝点钉回铃铛右上角（2026-11-06 走查 图3）。
+   2026-11-04 曾把它挪到右下角来避让未读红点——但 44px 圆钮里右下角离铃铛字形太远，
+   截图里读作「掉到按钮外面」的排版错位。改回右上角（贴字形右上角 7px），
+   与未读红点并存时由下面那条规则把红点左移，两点横排不互叠。 */
 .nc__busy-dot {
   position: absolute;
-  bottom: 7px;
-  right: 7px;
-  width: 8px;
-  height: 8px;
+  top: 6px;
+  right: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--blue);
   box-shadow: 0 0 0 1.5px var(--surface);
   pointer-events: none;
+}
+/* 未读 + AI 任务进行中并存：蓝点占右上角，红点让到它左侧（横排两枚 7px 点） */
+.nc__bell--busy .nc__dot {
+  top: 6px;
+  right: 16px;
+  width: 7px;
+  height: 7px;
 }
 
 /* ================= 面板 ================= */
@@ -737,7 +743,7 @@ onBeforeUnmount(() => {
   color: var(--faint);
 }
 .nc__section-label-icon { display: grid; place-items: center; }
-.nc__section-label-icon--running { color: var(--blue); }
+/* .nc__section-label-icon--running 已随「运行中」段标题删除（2026-11-06 走查 图5） */
 .nc__section-label-icon--done { color: var(--green-ink); }
 .nc__task {
   display: flex;

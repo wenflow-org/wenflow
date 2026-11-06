@@ -80,15 +80,20 @@ describe('账户菜单：图标列与菜单头共用一条左栏', () => {
   const { descriptor, errors } = parse(source);
   const root = descriptor.template?.ast as unknown as TplNode | undefined;
 
-  it('菜单头左右内边距与菜单项一致（名字落在图标列那条竖线上）', () => {
+  it('菜单头名字左缘与下方图标列同一条竖线（2026-11-06 走查 图3）', () => {
+    /* 对齐目标不是「菜单项的 padding」，而是**图标左缘**：菜单项 = padding 左右 + 图标 margin。
+       此前菜单头也写 12，名义上「与菜单项一致」，实际比图标列还靠左 3.5px。 */
     const head = ruleAfter(source, '.v2nav__menu-head');
     const item = ruleAfter(source, '.v2nav__menu a');
+    const icon = ruleAfter(source, '.v2nav__menu a > svg');
     const headPad = (decl(head, 'padding') || '').split(/\s+/).map(px);
     const itemPad = (decl(item, 'padding') || '').split(/\s+/).map(px);
-    expect(headPad.length, '.v2nav__menu-head 没读到 padding').toBeGreaterThanOrEqual(2);
+    const iconMargin = (decl(icon, 'margin') || '').split(/\s+/).map(px);
+    expect(headPad.length, '菜单头不是四值 padding，左内边距无法单独表达').toBe(4);
     expect(itemPad.length).toBeGreaterThanOrEqual(2);
-    // padding: 上下 左右 → 左右取第 2 个值
-    expect(headPad[1], '菜单头左右内边距与菜单项不一致，名字会比图标列偏出').toBe(itemPad[1]);
+    expect(iconMargin.length, '图标 margin 应为两值形式').toBe(2);
+    const iconLeft = itemPad[1] + iconMargin[1];
+    expect(headPad[3], `菜单头左内距 ${headPad[3]} ≠ 图标列左缘 ${iconLeft}`).toBe(iconLeft);
   });
 
   it('六行图标全同规格：一律 15px 裸线图标，芯片不得复辟', () => {
@@ -118,6 +123,14 @@ describe('账户菜单：图标列与菜单头共用一条左栏', () => {
     expect(new Set(rowSizes), '菜单行图标尺寸不一致（主题行必须与其余行同规格）').toEqual(new Set(['15']));
     /* 芯片不得复辟：包裹 span + 独立图标类都不该再出现 */
     expect(source).not.toContain('v2nav__menu-theme-icon');
+    /* 头像去套娃（2026-11-06 走查 图3）：外层钮不许再自绘底色/圆环，hover 反馈只在内圆 */
+    const avatar = ruleAfter(source, '.v2nav__avatar {');
+    expect(decl(avatar, 'background')).toBe('transparent');
+    expect(source, '头像 hover 不得再给外层钮铺底色').not.toMatch(/\.v2nav__avatar:hover\s*\{/);
+    const inner = ruleAfter(source, '.v2nav__avatar i {');
+    expect(decl(inner, 'text-transform'), '首字母必须大写（小写 c 读作排版错误）').toBe('uppercase');
+    expect(px(decl(inner, 'width') || ''), '内圆 32：与桌面/窄屏同一档').toBe(32);
+    expect(decl(inner, 'line-height'), 'line-height:1 是 32px 圆里垂直居中的前提').toBe('1');
 
     const slot = ruleAfter(source, '.v2nav__menu a > svg');
     const margin = (decl(slot, 'margin') || '').split(/\s+/).map(px);

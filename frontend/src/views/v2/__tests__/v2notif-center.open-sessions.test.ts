@@ -129,7 +129,9 @@ describe('V2NotifCenter 课堂两档（进行中 / 空闲中）', () => {
     expect(w.find('.nc__bell').attributes('aria-label') || '').not.toContain('AI 任务进行中');
   });
 
-  it('真的后台任务（路径生成）仍然进「运行中」并亮忙态', async () => {
+  it('真的后台任务（路径生成）仍然亮忙态，且一条任务只说两层', async () => {
+    /* 2026-11-06 走查 图5：段标题「运行中」与卡片「正在生成学习路径 / 路径生成中」是同一句的
+       第三、四遍。卡片标题改说「哪条路径」，副文只说「正在做什么」。 */
     learning.getPaths.mockResolvedValue([
       { id: 'lp_1', title: '新路径', generationLifecycle: { phase: 'stage_design', status: 'running', completedStages: 1, totalStages: 4 } },
     ]);
@@ -137,8 +139,11 @@ describe('V2NotifCenter 课堂两档（进行中 / 空闲中）', () => {
     await w.find('.nc__bell').trigger('click');
     await flushPromises();
 
-    expect(w.text()).toContain('正在生成学习路径');
-    expect(w.text()).toContain('课程（1/4）');
+    expect(w.text(), '标题要是路径方向名').toContain('新路径');
+    expect(w.text(), '副文只描述正在做什么').toContain('正在规划阶段与课时…（1/4）');
+    expect(w.text(), '「正在生成学习路径」不得复活').not.toContain('正在生成学习路径');
+    expect(w.text(), '「路径生成中」与副文重复，不得复活').not.toContain('路径生成中');
+    expect(w.findAll('.nc__section-label').map((e) => e.text())).not.toContain('运行中');
     expect(w.find('.nc__busy-dot').exists()).toBe(true);
   });
 

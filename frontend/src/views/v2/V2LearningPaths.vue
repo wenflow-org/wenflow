@@ -3,14 +3,9 @@
     <V2Nav />
 
     <main class="paths__main">
-      <!-- 从目标页过来：生成提示 -->
-      <transition name="toast">
-        <div v-if="goalBanner && hasGenerating" class="goal-banner">
-          <span class="goal-banner__dot"></span>
-          这版路径正在生成。页面会自动刷新，也可以先离开。
-          <button type="button" class="goal-banner__close" @click="goalBanner = false">×</button>
-        </div>
-      </transition>
+      <!-- 顶部全宽蓝色横幅已删（2026-11-06 走查）：正下方第一张卡就是这条正在生成的路径，
+           横幅是同一句「生成中」的第四遍；「页面会自动刷新」又和卡里那颗手动「刷新状态」
+           按钮互相打架（一个说自动、一个让手动）。状态只说一次 = 卡片自己说。 -->
 
       <!-- 页头整块撤除（2026-11-05 屏效比）：顶栏已写「学习路径」，页内 h2「我的学习路径」是
            同一句复读；「新目标」按钮并入下方搜索/排序/筛选行（一条控制栏读完，省 2 行 ≈100px）。
@@ -182,9 +177,6 @@
                 <span class="spinner--sm spinner" style="border-color: color-mix(in srgb, var(--cyan) 30%, transparent); border-top-color: var(--cyan);"></span>
                 <span>{{ card.phaseText }}</span>
               </div>
-              <div class="pcard__actions">
-                <button type="button" class="btn-ghost" @click.stop="refreshStatus(card)">刷新状态</button>
-              </div>
             </template>
 
             <!-- failed：待重试 -->
@@ -301,9 +293,6 @@ const sort = ref<PathSortKey>('default');
 const retrying = ref('');
 const menuFor = ref('');
 const deleting = ref('');
-const goalBanner = ref(route.query.from === 'goal');
-/** 存在生成中卡才显示「正在生成」横幅：生成早已完成/列表为空时这条提示是误导 */
-const hasGenerating = computed(() => cards.value.some((c) => c.kind === 'generating'));
 /** 生成状态轮询连续失败计数（超过阈值停止空转） */
 const pollFailCount = ref(0);
 
@@ -449,25 +438,6 @@ async function pollOnce() {
     pollFailCount.value = 0;
   }
   schedulePolling();
-}
-
-async function refreshStatus(card: PathCard) {
-  // 手动刷新：重置断路器计数（用户主动重试应重新计数）
-  pollFailCount.value = 0;
-  try {
-    const lc = await learningAPI.getPathGenerationStatus(card.id);
-    if (lc.phase === 'ready') {
-      toast.success(`「${card.title}」${GEN_DONE_TAIL}`);
-      await load();
-    } else if (lc.status === 'failed' || lc.status === 'stale') {
-      toast.error(`「${card.title}」${GEN_FAIL_TAIL}`);
-      await load();
-    } else {
-      toast.info('仍在生成中…');
-    }
-  } catch {
-    toast.error('刷新失败，稍后再试');
-  }
 }
 
 async function doRetry(card: PathCard) {
@@ -624,9 +594,6 @@ function onPageScroll() {
 
 onMounted(() => {
   load();
-  if (goalBanner.value) {
-    window.setTimeout(() => (goalBanner.value = false), 9000);
-  }
   window.addEventListener('keydown', onMenuKey);
   window.addEventListener('click', onWindowClick);
   document.addEventListener('scroll', onPageScroll, { passive: true, capture: true });
@@ -653,12 +620,16 @@ onBeforeUnmount(() => {
    高度收敛 36（§1 工具栏控件 34–36 档）：与搜索框 / 排序触发器同一条基准线 */
 .paths__new-goal {
   display: inline-flex; align-items: center; gap: 6px;
-  min-height: 36px; padding: 0 12px;
+  min-height: 36px; padding: 0 14px;
   /* 16 → 8（2026-11-05 去肥胖化）：工具条里与搜索框同档控件圆角 */
   border: 1px solid var(--line); border-radius: var(--mk-radius-md);
   background: var(--surface); color: var(--muted);
   font-family: inherit; font-size: 13px; font-weight: 700;
   cursor: pointer;
+  /* 防折行/防压缩（2026-11-06 走查 图2）：窄屏 2×2 网格里 auto 轨道可被压到 min-content，
+     中文的 min-content 是 1 个字 →「新目标」被挤成竖排三行、按钮变窄高方块。
+     nowrap 同时把 min-content 抬回整句宽度，轨道再也压不动它。 */
+  white-space: nowrap; flex: 0 0 auto;
   transition: border-color 0.15s ease, color 0.15s ease;
 }
 .paths__new-goal:hover {
@@ -863,10 +834,8 @@ onBeforeUnmount(() => {
 .empty__illus span { width: 26px; height: 8px; border-radius: 999px; background: var(--line); }
 .empty__illus span:nth-child(2) { background: color-mix(in srgb, var(--blue) 30%, transparent); }
 
-/* .toast/.toast__icon 本体是死 CSS 已删：全局 toast 由 utils/toast 独立渲染，不落在本组件；
-   下面的 toast-enter/leave 是上方 goal-banner <transition name="toast"> 的过渡类，保留 */
-.toast-enter-active, .toast-leave-active { transition: .25s ease; }
-.toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-8px); }
+/* .toast/.toast__icon 与 toast-enter/leave 过渡类已随顶部横幅一并删除（2026-11-06 走查）：
+   全局 toast 由 utils/toast 独立渲染，本组件不再挂任何 toast 形态的元素 */
 
 @media (max-width: 1100px) {
   .paths__main { padding: 16px 14px 32px; }
@@ -938,24 +907,6 @@ onBeforeUnmount(() => {
 }
 .pcard__confirm-no:hover { color: var(--ink); border-color: color-mix(in srgb, var(--ink) 30%, transparent); }
 .paths__loading { display: grid; justify-items: center; gap: 12px; padding: 64px 0; color: var(--faint); font-size: 13px; }
-.goal-banner {
-  display: flex; align-items: center; gap: 10px;
-  padding: 11px 15px;
-  border-radius: var(--mk-radius-xl);
-  background: color-mix(in srgb, var(--blue) 7%, transparent);
-  border: 1px solid color-mix(in srgb, var(--blue) 25%, transparent);
-  color: var(--blue-deep);
-  font-size: 13px; font-weight: 600;
-}
-.goal-banner__dot {
-  width: 8px; height: 8px; border-radius: 50%;
-  background: var(--blue);
-  animation: goal-pulse 1.4s ease-in-out infinite;
-  flex: 0 0 auto;
-}
-@keyframes goal-pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
-.goal-banner__close { margin-left: auto; cursor: pointer; color: var(--faint); font-size: 16px; }
-.goal-banner__close:hover { color: var(--ink); }
 .paths__main { width: 100%; }
 </style>
 

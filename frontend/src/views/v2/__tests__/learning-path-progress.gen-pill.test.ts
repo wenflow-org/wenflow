@@ -71,9 +71,12 @@ describe('目标页接线（防回退）', () => {
   });
 
   it('跨刷新常驻：pathId 持久化 + 挂载恢复轮询（P22 缺陷2）', () => {
-    expect(goalSource).toContain('setGoalGenTracking(recentGoalsUserId.value, pathId)');
+    /* 2026-11-06 走查 图4：跟踪写入时一并记下会话 id——入口页要把状态挂回「最近会话」那一行。
+       入口态那颗独立 gen-pill 已删，跨刷新常驻能力本身不变。 */
+    expect(goalSource).toContain('setGoalGenTracking(recentGoalsUserId.value, pathId, cid)');
     expect(goalSource).toContain('void restoreGenTracking()');
-    expect(goalSource).toContain('gen-pill--entry');
+    expect(goalSource, '入口态独立胶囊已退役，状态并入最近会话行').not.toContain('gen-pill--entry');
+    expect(goalSource).toContain('isGeneratingRecent');
   });
 
   it('完成弹层注跟随真实状态，不再恒为「还在生成中」（P22 缺陷3）', () => {

@@ -75,7 +75,8 @@ describe('生成中进度文案只有一处来源（走查 2026-10-08 #15）', (
 
   it('首屏 normalize 与轮询 pollOnce 都走同一个 phaseTextOf', () => {
     expect(css.match(/phaseTextOf\(/g) ?? []).toHaveLength(3); // 定义 1 + 调用 2
-    const poll = css.slice(css.indexOf('async function pollOnce'), css.indexOf('async function refreshStatus'));
+    /* 边界函数：2026-11-06 起手动「刷新状态」整颗退役（纯自动轮询），pollOnce 后面接的是 doRetry */
+    const poll = css.slice(css.indexOf('async function pollOnce'), css.indexOf('async function doRetry'));
     expect(poll, '轮询没接上共享文案').toContain('phaseTextOf(lc)');
     expect(poll, '轮询里又自己拼了一份进度文案').not.toContain('生成中');
   });

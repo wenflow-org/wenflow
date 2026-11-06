@@ -44,7 +44,12 @@
               @click.prevent="openRecentGoal(r.id)"
             >
               <span class="recent__preview">{{ r.preview }}</span>
-              <span class="recent__time">{{ recentTime(r.at) }}</span>
+              <!-- 正在生成的那条：把时间位换成蓝色状态字（2026-11-06 走查 图4）——
+                   状态挂在「是哪条会话在生成」上，比一颗脱离上下文的孤立胶囊有信息量 -->
+              <span v-if="isGeneratingRecent(r)" class="recent__gen">
+                <i class="recent__gen-dot" aria-hidden="true"></i>生成路径中…
+              </span>
+              <span v-else class="recent__time">{{ recentTime(r.at) }}</span>
               <span class="recent__go" aria-hidden="true">›</span>
             </a>
           </li>
@@ -59,18 +64,10 @@
         已停止生成。<button type="button" class="errorbar__retry" @click="doRetry">重试</button>
       </div>
 
-      <!-- 生成跟踪 pill 的入口态位置（P22 缺陷2 跨刷新常驻）：确认后刷新/重进目标页
-           （本地无会话缓存）时，凭持久化的 pathId 恢复「正在生成」pill 与轮询——
-           生成要在后端跑约 7 分钟，只挂在会话态里会随刷新消失。点击回路径列表。 -->
-      <button
-        v-if="genPill"
-        type="button"
-        class="gen-pill gen-pill--entry"
-        :class="[`gen-pill--${genPill.tone}`]"
-        @click="onGenPillClick"
-      >
-        <span class="gen-pill__dot" aria-hidden="true"></span>{{ genPill.text }}
-      </button>
+      <!-- 入口态的独立生成胶囊已删（2026-11-06 走查 图4）：它悬在「最近会话」与
+           「试试这些方向」中间，既不说清是哪条会话在生成，也和上方列表抢同一块留白。
+           状态改由「最近会话」对应行的时间位承接（见 .recent__gen）。
+           跨刷新常驻的跟踪本身不变（genTrack/轮询/setGoalGenTracking 照旧）。 -->
 
       <div class="entry__cards">
           <div class="entry__cards-head">
@@ -625,16 +622,19 @@
              P22 缺陷3：句子跟随 generation-status 真实状态——生成完成后不再说
              「还在生成中」，换成完成/失败的事实（见 doneGenNote）。 -->
         <p class="proposal__generating-note">{{ doneGenNote }}</p>
-        <div class="proposal__actions proposal__actions--center">
-          <button type="button" class="btn-primary btn-primary--lg" @click="goPaths">查看我的路径</button>
-          <!-- 只在方案还在（stage=proposing）时给「返回方案」：否则点了只是关浮层，无路可回 -->
-          <button v-if="live.stage === 'proposing' && live.proposal" type="button" class="btn-ghost" @click="phase = 'preview'; proposalReviewRequested = false">返回方案</button>
-          <!-- 留在本页：done 态此前只有 Esc 一个退出途径（触屏无 Esc），补显式次级出口 -->
+        <!-- 完成态动作行（2026-11-06 走查 图1）：只留两颗等高并排钮——留在本页(35%) +
+             查看我的路径(65%)，同为 40px 高 / 8px 圆角。此前主钮走 --lg 档（≈52px）、
+             次钮是 32px 基座，并排却一高一矮；宽比表达主次，不再靠高度差。
+             「回看已确认的方案」整颗删除：用户 1 秒前刚在预览弹窗点过「确认，生成我的路径」，
+             不需要在同一个动作后立刻回看一遍刚确认过的东西。 -->
+        <div class="proposal__final">
           <button type="button" class="btn-ghost" @click="proposalDismissed = true; proposalReviewRequested = false">留在本页</button>
+          <button type="button" class="btn-primary" @click="goPaths">查看我的路径</button>
         </div>
+        <!-- 返回方案：只在方案还在（stage=proposing）时给，退到预览卡；无路可回时不给。
+             降为底部次级动作（原来挤在动作行里会打破 35/65 两栏版式） -->
+        <button v-if="live.stage === 'proposing' && live.proposal" type="button" class="proposal__stop" @click="phase = 'preview'; proposalReviewRequested = false">返回方案</button>
         </template>
-        <!-- 回看方案（同生成中态）：done 态方案数据已被确认消费，用页面快照承接只读回看 -->
-        <button v-if="!live.hardBlocked && proposalSnapshot" type="button" class="proposal__stop" @click="openReadOnlyReview">回看已确认的方案</button>
       </div>
     </div>
 
@@ -1182,6 +1182,9 @@ const stageLabel = computed(() => {
    会话 phase 只能证明「任务受理」，不能证明「生成完成」——pill 与完成弹层注一律以
    generation-status（复用 /learning-paths 的接口与 5s 节奏）为准。 */
 const genTrack = ref<{ pathId: string; lc: GenerationLifecycleDTO | null } | null>(null);
+/** 发起这次生成的会话 id（2026-11-06 走查 图4）：入口页据此把状态挂回「最近会话」那一行。
+    会话内在场时取 live.conversationId；跨刷新恢复时取持久键里存下的 cid。 */
+const genConversationId = ref('');
 let genPollTimer = 0;
 let genPollFails = 0;
 /** 轮询间隔与列表页 schedulePolling 同节奏 */
@@ -1219,11 +1222,13 @@ async function pollGenStatus() {
 }
 /** 会话内拿到 pathId（确认信封 / 恢复信封）即开始跟踪并持久化（跨刷新恢复用） */
 function trackPathGeneration(pathId: string) {
+  const cid = live.conversationId || getGoalConversationCid() || '';
+  if (cid) genConversationId.value = cid;
   if (genTrack.value?.pathId === pathId) return;
   stopGenPolling();
   genPollFails = 0;
   genTrack.value = { pathId, lc: null };
-  setGoalGenTracking(recentGoalsUserId.value, pathId);
+  setGoalGenTracking(recentGoalsUserId.value, pathId, cid);
   scheduleGenPolling();
 }
 /** 挂载/切号恢复（P22 缺陷2）：本地记着 pathId 且其仍在生成 → 重显 pill 并续轮询。
@@ -1242,6 +1247,8 @@ async function restoreGenTracking() {
     }
     genPollFails = 0;
     genTrack.value = { pathId: saved.pathId, lc };
+    // 恢复会话归属：优先持久键里记的 cid，老数据没有该字段时回落到本地 cid
+    genConversationId.value = saved.conversationId || getGoalConversationCid() || '';
     scheduleGenPolling();
   } catch {
     /* 状态不可得：不显示、不轮询，等下次挂载 */
@@ -1283,6 +1290,15 @@ const genPill = computed(() => {
   }
   return null;
 });
+
+/** 该「最近会话」是否就是当前正在生成路径的那条（2026-11-06 走查 图4）。
+    只在真进行态（tone=run）挂状态字：终态/失败态在列表行里没有动作可给，
+    挂在行上会让「点进去能干嘛」说不清——那两种态由路径列表承接。 */
+function isGeneratingRecent(r: RecentGoalEntry): boolean {
+  if (genPill.value?.tone !== 'run') return false;
+  const cid = genConversationId.value || getGoalConversationCid() || '';
+  return !!cid && r.id === cid;
+}
 
 /** pill 点击：done 去路径详情；fail 去路径列表（失败卡上有重试）；
     进行态回浮层面板（会话态）或去路径列表（入口态无浮层可回） */
@@ -1720,6 +1736,18 @@ function shuffleScenes() {
 .recent__item:hover { border-color: color-mix(in srgb, var(--blue) 45%, transparent); background: color-mix(in srgb, var(--blue) 5%, transparent); }
 .recent__preview { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
 .recent__time { flex: none; font-size: 12px; color: var(--faint); }
+/* 生成中行（2026-11-06 走查 图4）：时间位换成蓝色状态字 + 脉点，与 .gen-pill--run 同一语言。
+   宽度与时间字同档（12px），不把省略号压缩到挤字。 */
+.recent__gen {
+  flex: none; display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 700; color: var(--blue-deep);
+}
+.recent__gen-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--blue);
+  animation: recent-gen-pulse 1.4s ease-in-out infinite;
+}
+@keyframes recent-gen-pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
 .recent__go { flex: none; color: var(--faint); font-weight: 700; }
 
 .entry__hero {
@@ -2479,8 +2507,7 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
   width: 7px; height: 7px; border-radius: 50%;
   background: currentColor;
 }
-/* 入口态位置：.entry 是 28px 内缩的 flex 列（会话态是 16px 内缩的 chat 列），对齐各自列缘 */
-.gen-pill--entry { margin: 0; }
+/* 入口态那颗 gen-pill 已删（2026-11-06 走查 图4）：状态并入 .recent__gen，本次不再有入口态 pill */
 @media (prefers-reduced-motion: no-preference) {
   .gen-pill--run .gen-pill__dot { animation: gen-pill-pulse 1.6s ease-in-out infinite; }
 }
@@ -2716,6 +2743,21 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
   white-space: nowrap;
 }
 .v2-page .proposal__actions--center .btn-ghost { flex: 0 0 auto; justify-content: center; }
+/* 完成态动作行（2026-11-06 走查 图1）：35/65 两栏、等高 40 + 8px 同心圆角。
+   主次只由宽度表达——此前主钮吃 --lg 档（13/26 内衬 + 15px 字 ≈52px）、次钮 32px 基座，
+   两颗并排一高一矮，读作「排版错位」而不是「主次」。 */
+.proposal__final {
+  display: grid; grid-template-columns: 35fr 65fr; gap: 10px;
+  width: 100%;
+}
+.v2-page .proposal__final .btn-primary,
+.v2-page .proposal__final .btn-ghost {
+  width: 100%; height: 40px; min-height: 40px; padding: 0 12px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 8px;
+  font-size: 13px; font-weight: 700;
+  white-space: nowrap;
+}
 /* 主/次按钮基座不再在本页复制（2026-11-06 UI 排查 §1）：v2.css 的
    .v2-page .btn-primary / .btn-ghost 已是单源（32px / 0 14px / --mk-radius-md / 13px）。
    本页只留「大幅 CTA」这一档——--lg 不吃紧凑档，全局给它 height:auto + 16px 圆角，
