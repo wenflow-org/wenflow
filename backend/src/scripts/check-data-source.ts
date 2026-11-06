@@ -90,8 +90,9 @@ const CALL_SITE_MANIFEST: Record<string, CallSite[]> = {
     { file: 'backend/src/services/ai-teaching/teaching-session-lifecycle.ts', line: 628 },
   ],
   'adaptive-guidance-copy': [
-    { file: 'backend/src/services/learner/DashboardGuidanceSnapshotService.ts', line: 158 },
-    { file: 'backend/src/services/learner/LearningStateGuidanceService.ts', line: 106 },
+    // #187：两个 view 各有自己的调用点（不再只有 dashboard 一处，learning-state 借它的文案）
+    { file: 'backend/src/services/learner/DashboardGuidanceSnapshotService.ts', line: 178 },
+    { file: 'backend/src/services/learner/LearningStateGuidanceService.ts', line: 130 },
   ],
   'lesson-knowledge-enricher': [
     { file: 'backend/src/services/learner/LessonKnowledgeEnrichmentConsumer.ts', line: 44 },

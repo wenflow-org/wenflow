@@ -64,7 +64,7 @@ export function isRetiredSkill(skillId: string): boolean {
 
 /** W3-B 免检清单：coordinator.steps=[] 条目（notes 注明 service 侧接线，不进主链 steps） */
 export const W3_STEPS_EMPTY_EXEMPT: Record<string, string> = {
-  'adaptive-guidance-copy': 'dashboard 侧调用（services/learner/DashboardGuidanceSnapshotService），不在 ai-teaching.definition.ts steps 内；contracts 有登记',
+  'adaptive-guidance-copy': 'dashboard / learning-state 两侧各自在 service 层调用（DashboardGuidanceSnapshotService / LearningStateGuidanceService），不在 ai-teaching.definition.ts steps 内；contracts 有登记',
   'virtual-learner-persona-designer': '前置配置阶段（routes/admin/virtual-learners.ts），不在 simulation.definition.ts 主链 steps 内',
   'virtual-learner-scenario-designer': '前置配置阶段（同 persona-designer），不在主链 steps 内',
   'path-reviewer': 'service 侧调用（learning.service.ts 内联 CIDDP 评审），非 path.coordinator 编排，不在 path.definition.ts steps 内',

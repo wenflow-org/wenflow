@@ -26,11 +26,19 @@ inputs:
     ref: sandbox:teaching.session.wrapup
     desc: 最近一节的收束摘要（可选）——无历史时缺失
   # 另有两个**调用方直供**的载荷键（不在 inputs 里声明，因 inputs 的 ref 必填而它们无沙盘来源）：
-  #   · view：展示位置（dashboard / learning-state；模型侧恒为 dashboard，learning-state 主路径复用 dashboard 快照文案、缺失时才用本地静态兜底）
+  #   · view：展示位置（dashboard / learning-state）。**两个视图各自生成**：dashboard 由事件驱动快照
+  #     调用（DashboardGuidanceSnapshotService），learning-state 由页面按需生成（LearningStateGuidanceService）；
+  #     不存在「一个视图借用另一个视图文案」的路径（#187）。取值集合见 skills/adaptive-guidance-copy/views.ts。
   #   · path：路径投影（title/subject/estimatedHours/totalMilestones/completedMilestones/milestones）
   # 声明与载荷的对应关系以此注释为准，避免"声明 4 个 / 载荷 6 个"再被当成漂移。
 rules:
-  - 根据学习者状态和路径上下文，生成适合 Dashboard 页面展示的动态文案
+  # 2026-11-06（#187）：view 是**真实分支**，不是摆设——两页拿到的必须是各自口径的文案。
+  # 此前 rules 只写 dashboard，learning-state 页拿到 dashboard 快照的 copy：headline 是「欢迎回来…」
+  # 式问候，todayActions 第 2 条还是指回本页的「查看学习状态」自指深链（前端只能丢掉）。
+  - 先读输入里的 view，它决定这份文案出现在哪个页面；只按该视图的规则写，不得把另一页的口吻与动作搬过来：
+    · view=dashboard（学习台首屏）：接手式口吻——headline 可写「欢迎回来…」，todayActions 是从学习台出发的深链，第 2 条可以是「查看学习状态」（to 用 learning-state），目的是把学员引到下一步
+    · view=learning-state（学习状态页）：解读式口吻——headline 不写问候语，而是对当前状态的一句判断；内容回答「当前状态意味着什么、接下来怎么调」，不复述本页已有的指标卡读数，也不写「欢迎回来 / 从上次停下的位置接上」这类学习台首屏话术
+  - view=learning-state 时，todayActions 的 to **严禁**输出 learning-state：那是指向本页自身的自指深链，学员点了只是回到正在看的页面；该视图的可选目标只有 continue-learning / path-detail / achievements / create-goal。view=dashboard 不受此限
   - 你只负责"怎么说"，不负责做出路径调整、课程结束或成绩判定等强决策
   - 文案要简洁、自然、具体，不要像机器总结
   - 所有文案必须和输入中的学习状态一致，不能虚构用户已经完成了什么
@@ -62,7 +70,8 @@ fields:
     turn: true
     desc: |
       输出 1~3 条，按当前情境给最值得做的几条，凑满 3 条不是目标（没有第三件值得做的事就给 1~2 条）。
-      有 2 条以上时角色要区分：第 1 条主操作（to 用 continue-learning 或 path-detail），第 2 条次操作（与学习状态/节奏相关，to 用 learning-state），第 3 条弱操作（回顾/记录类，to 用 achievements 或 create-goal）。
+      view=dashboard 时按角色分：第 1 条主操作（to 用 continue-learning 或 path-detail），第 2 条次操作（与学习状态/节奏相关，to 用 learning-state），第 3 条弱操作（回顾/记录类，to 用 achievements 或 create-goal）。
+      view=learning-state 时这些动作从状态页出发：主操作可以是「看当前卡在哪 / 继续」这类调节动作（to 用 path-detail 或 continue-learning），**不得**出现 to=learning-state（指向本页自身）。
       多条时 title 必须互不相同，action 文字也不得雷同（常用：继续 / 查看状态 / 去看看 / 前往查看 / 开始规划 / 看进展）。
       每条 desc 必须是一句具体内容，不能为空字符串，不能只重复 title。
       每项结构 { "title": 行动标题, "desc": 一句具体说明, "action": 按钮文字, "to": "continue-learning|learning-state|achievements|create-goal|path-detail" }；to 只能输出语义化目标。
