@@ -8,7 +8,8 @@
 import prisma from '../../../config/database';
 import { withTransaction } from '../../../utils/with-transaction';
 import { logger } from '../../../utils/logger';
-import { executeSkill } from '../../../skills';
+import { executeSkill, executeSkillWithResult } from '../../../skills';
+import { kcMapperDefinition } from '../../../skills/kc-mapper';
 import { stageDesignerDefinition } from '../../../skills/stage-designer';
 import { getRequestContext, runWithContext } from '../../../gateway/api-gateway/context';
 import { assertGenerationRunFence, assertStageTasksPresent } from '../path-generation-status';
@@ -46,6 +47,15 @@ import { enqueueDomainEvent } from '../../../events/outbox.repository';
 import { learnerSnapshotRefreshService } from '../../learner/LearnerSnapshotRefreshService';
 import { dashboardGuidanceSnapshotService } from '../../learner/DashboardGuidanceSnapshotService';
 import { learnerProjectionService } from '../../learner/LearnerProjectionService';
+import { conceptRegistryService } from '../../learner/concept-registry.service';
+import { conceptGraphService } from '../../learner/concept-graph.service';
+import { buildPathSandboxPool, checkAgentSandboxRefs } from '../../sandbox-resolver.service';
+import { normalizeConceptKey } from '../../memory/concept-key';
+import {
+  bindKcLinksToSubtaskIds,
+  mergeKcStageAnnotation,
+  type KcAnnotation,
+} from '../generation/kc-annotation';
 import { runBackgroundTask } from '../../background-task-tracker.service';
 import {
   createAndClaimGenerationRun,
@@ -341,8 +351,120 @@ async function redesignMilestoneTasks(
   // 事务可能整体重试 → 在事务内重置，避免重复累加。
   const newAdjustabilityByTask: Record<string, 'core' | 'flexible'> = {};
 
+  // #168：重排重建任务后必须与生成链（stage-enrichment）同口径补齐三样东西，否则
+  // 「调整本阶段」会让新任务丢了 canonical 身份与教学侧消费的 sidecar：
+  //   ① subtasks.conceptId（图谱/掌握度 join 的键）——事务外预解析（SQLite 事务持写锁，
+  //      事务内再写 concepts/aliases 会撞锁，见 stage-enrichment 同段注释）；
+  //   ② aiPromptTemplate.materialRefs.byTask / misconceptionHints.byTask（按新 subtaskId）；
+  //   ③ aiPromptTemplate.kcAnnotation（taskKcLinks / conceptKcs / kcGraph）+ 概念图重物化，
+  //      否则新任务在 teaching 侧 resolveTaskKcsFromPath 恒为空（旧任务的死链还留在模板里）。
+  // 每个新任务分配稳定 taskKey（「阶段-序号」），随 kc-mapper 输入下发并要求逐字回显，
+  // 落库时据它把 taskKcLinks 绑到真实 subtasks.id（issue #179 的既有做法）。
+  const resolvedConcepts = newTasks.map((taskData: ReplanTaskDraft) =>
+    resolveTaskConcept(
+      typeof taskData.linkedConcept === 'string' ? taskData.linkedConcept : null,
+      pathCognitiveDesign,
+      typeof taskData.linkedConcept === 'string' ? taskData.linkedConcept : null,
+    )
+  );
+  const taskKeyOf = (index: number) => `replan-${milestone.stageNumber}-${index + 1}`;
+
+  const canonicalConceptIdsByName = new Map<string, string>();
+  try {
+    const conceptNames = resolvedConcepts
+      .map((resolved) => (resolved.conceptSource === 'linked-concept' ? resolved.linkedConceptName : null))
+      .filter((name): name is string => !!name && !!name.trim());
+    if (conceptNames.length > 0) {
+      const resolved = await conceptRegistryService.resolveMany(data.userId, conceptNames, {
+        source: 'write_time',
+        level: 'concept',
+        originPathId: path.id,
+      });
+      for (const [key, conceptId] of resolved) canonicalConceptIdsByName.set(key, conceptId);
+    }
+  } catch (error) {
+    logger.warn('[path-replan] 任务概念身份预解析失败（best-effort，conceptId 留空）', {
+      pathId: path.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  // kc-mapper：对本阶段新任务重跑映射（best-effort，失败不阻断重排）。
+  // 与生成链的渐进路径同口径：输入看全路径里程碑 + 本阶段新任务，结果按阶段增量合并进
+  // 既有 kcAnnotation（整包替换会抹掉其他阶段已设计的 taskKcLinks）。
+  const replanCognitiveCore = (parsedTemplate as any)?.cognitiveCore
+    || (parsedTemplate as any)?.cognitiveDesign
+    || null;
+  let stageKcAnnotation: KcAnnotation | null = null;
+  const kcMapperInput = {
+    cognitiveCore: replanCognitiveCore,
+    milestones: sortedMilestones.map((m: any) => ({
+      stageNumber: m.stageNumber,
+      title: m.title,
+      coreConcept: m.coreConceptName || m.coreConceptId,
+      description: m.description,
+      goal: m.goal,
+    })),
+    subtasks: newTasks.map((taskData: any, index: number) => ({
+      taskKey: taskKeyOf(index),
+      title: taskData.title,
+      type: taskData.type,
+      linkedConcept: taskData.linkedConcept,
+      knowledgeType: taskData.knowledgeType,
+      cognitiveLevel: taskData.cognitiveLevel,
+    })),
+    prerequisiteTree: (replanCognitiveCore as any)?.prerequisiteTree || null,
+  };
+  try {
+    const kcResult = await executeSkillWithResult(kcMapperDefinition, kcMapperInput);
+    stageKcAnnotation = kcResult?.success && kcResult?.output ? (kcResult.output as KcAnnotation) : null;
+  } catch (error) {
+    logger.warn('[path-replan] KC 映射失败（best-effort）', {
+      pathId: path.id,
+      stageNumber: milestone.stageNumber,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+  if (!stageKcAnnotation) {
+    logger.warn('[path-replan] KC 映射无有效输出，重排后新任务将没有 taskKcLinks', {
+      pathId: path.id,
+      stageNumber: milestone.stageNumber,
+    });
+  }
+
+  // #192：stage-designer / kc-mapper 纳入沙盘 ref 运行期对账（真实载荷即池）。
+  // 多阶段重排逐阶段调用本函数，只在首个阶段做一次（与 contentSnapshot 同口径）。
+  if (!skipContentSnapshot) {
+    try {
+      await checkAgentSandboxRefs(
+        'stage-designer',
+        'path',
+        buildPathSandboxPool((normalizedInput as any) || {}, stageDesignerInput as any),
+        { includeOptional: true, warnContext: { pathId: path.id, boundary: 'replan', stageNumber: milestone.stageNumber } }
+      );
+      await checkAgentSandboxRefs(
+        'kc-mapper',
+        'path',
+        buildPathSandboxPool((normalizedInput as any) || {}, kcMapperInput as any),
+        { warnContext: { pathId: path.id, boundary: 'replan', stageNumber: milestone.stageNumber } }
+      );
+    } catch {
+      // 对账是观测，不影响重排
+    }
+  }
+
+  // 任务级 sidecar 收集器（key = 新 subtaskId；声明在事务外，事务重试时在事务内清空重建）
+  const materialRefsByTask: Record<string, any[]> = {};
+  const misconceptionHintsByTask: Record<string, any[]> = {};
+  const subtaskIdByTaskKey = new Map<string, string>();
+  let mergedKcAnnotationForGraph: KcAnnotation | null = null;
+
   await withTransaction(async (tx) => {
     for (const key of Object.keys(newAdjustabilityByTask)) delete newAdjustabilityByTask[key];
+    for (const key of Object.keys(materialRefsByTask)) delete materialRefsByTask[key];
+    for (const key of Object.keys(misconceptionHintsByTask)) delete misconceptionHintsByTask[key];
+    subtaskIdByTaskKey.clear();
+    mergedKcAnnotationForGraph = null;
     await assertGenerationRunFence(tx, path.id, runId);
     await claimPathReplanSnapshot(tx, snapshot);
     await assertPathMutationSafe(tx, path.id, 'replan-stage', {
@@ -370,16 +492,28 @@ async function redesignMilestoneTasks(
 
     for (let index = 0; index < newTasks.length; index += 1) {
       const taskData = newTasks[index];
-      const resolvedConcept = resolveTaskConcept(
-        typeof taskData.linkedConcept === 'string' ? taskData.linkedConcept : null,
-        pathCognitiveDesign,
-        typeof taskData.linkedConcept === 'string' ? taskData.linkedConcept : null,
-      );
+      const resolvedConcept = resolvedConcepts[index];
       const displayLabel = generateDisplayLabel(taskData.knowledgeType || null, taskData.cognitiveLevel || null)
         || (taskData.knowledgeType && taskData.cognitiveLevel ? `${taskData.knowledgeType} + ${taskData.cognitiveLevel}` : null);
 
       const subtaskId = `st_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${milestone.stageNumber}_${index}`;
       newAdjustabilityByTask[subtaskId] = taskData.adjustability === 'flexible' ? 'flexible' : 'core';
+      subtaskIdByTaskKey.set(taskKeyOf(index), subtaskId);
+      // 任务 → 资料条目：按 subtaskId 落进 aiPromptTemplate.materialRefs.byTask（生成链同款）
+      if (Array.isArray((taskData as any).materialRefs) && (taskData as any).materialRefs.length) {
+        materialRefsByTask[subtaskId] = (taskData as any).materialRefs;
+      }
+      // 任务 → 迷思预判：规范化后按 subtaskId 落进 aiPromptTemplate.misconceptionHints.byTask
+      if (Array.isArray((taskData as any).anticipatedMisconceptions) && (taskData as any).anticipatedMisconceptions.length) {
+        misconceptionHintsByTask[subtaskId] = (taskData as any).anticipatedMisconceptions
+          .map((hint: any) => ({
+            conceptKey: typeof hint?.conceptKey === 'string' ? hint.conceptKey.trim() : '',
+            label: typeof hint?.label === 'string' ? hint.label.trim() : '',
+            why: typeof hint?.why === 'string' ? hint.why.trim() : '',
+          }))
+          .filter((hint: { conceptKey: string; label: string }) => hint.conceptKey && hint.label)
+          .slice(0, 2);
+      }
       await tx.subtasks.create({
         data: {
           id: subtaskId,
@@ -393,6 +527,8 @@ async function redesignMilestoneTasks(
           coreConcept: resolvedConcept.linkedConceptName || null,
           linkedConceptId: resolvedConcept.linkedConceptId || null,
           linkedConceptName: resolvedConcept.linkedConceptName || null,
+          // canonical 身份（#168）：事务外预解析；未命中留 null，回填脚本可补
+          conceptId: canonicalConceptIdsByName.get(normalizeConceptKey(resolvedConcept.linkedConceptName)) ?? null,
           knowledgeType: taskData.knowledgeType || null,
           cognitiveLevel: taskData.cognitiveLevel || null,
           icapLevel: taskData.icapLevel || null,
@@ -450,6 +586,53 @@ async function redesignMilestoneTasks(
     };
     for (const staleId of staleAdjustabilityIds) delete mergedAdjustabilityByTask[staleId];
 
+    // 资料引用 / 迷思预判 sidecar 合并（#168）：保留其他阶段的键，清掉被删任务的旧键，
+    // 写入本阶段新任务的键——此前重排只清 taskAdjustability，这两份 sidecar 会一直挂着已删
+    // subtaskId 的孤儿条目，而新任务零引用（教学侧读不到资料与迷思预判）。
+    const mergedMaterialRefsByTask: Record<string, any[]> = {
+      ...(((txParsed as any)?.materialRefs?.byTask && typeof (txParsed as any).materialRefs.byTask === 'object')
+        ? (txParsed as any).materialRefs.byTask
+        : {}),
+      ...materialRefsByTask,
+    };
+    const mergedMisconceptionHintsByTask: Record<string, any[]> = {
+      ...(((txParsed as any)?.misconceptionHints?.byTask && typeof (txParsed as any).misconceptionHints.byTask === 'object')
+        ? (txParsed as any).misconceptionHints.byTask
+        : {}),
+      ...misconceptionHintsByTask,
+    };
+    for (const staleId of staleAdjustabilityIds) {
+      delete mergedMaterialRefsByTask[staleId];
+      delete mergedMisconceptionHintsByTask[staleId];
+    }
+
+    // KC 标注（#168）：本阶段重映射结果按阶段增量合并（不整包替换，避免抹掉其他阶段），
+    // 并把 taskKcLinks 绑到新 subtasks.id；被删任务的死链一并清掉，
+    // 否则模板里持续堆积无主 taskKcLinks（读侧按 id/title 都不命中）。
+    let mergedKcAnnotation: KcAnnotation | null = (txParsed as any)?.kcAnnotation || null;
+    if (stageKcAnnotation) {
+      const merged = mergeKcStageAnnotation(
+        mergedKcAnnotation,
+        milestone.stageNumber,
+        stageKcAnnotation,
+      );
+      mergedKcAnnotation = bindKcLinksToSubtaskIds(merged, subtaskIdByTaskKey) as KcAnnotation | null;
+    }
+    // 无论 kc-mapper 是否成功，被删任务的死链都要清掉（否则模板里持续堆积无主 taskKcLinks，
+    // 读侧按 id/title 都不命中）。其他阶段的链接与无 taskId 的旧标注保持原样。
+    if (mergedKcAnnotation && Array.isArray(mergedKcAnnotation.taskKcLinks)) {
+      const staleIdSet = new Set(staleAdjustabilityIds);
+      mergedKcAnnotation = {
+        ...mergedKcAnnotation,
+        taskKcLinks: mergedKcAnnotation.taskKcLinks.filter((link: any) => {
+          const taskId = typeof link?.taskId === 'string' ? link.taskId : null;
+          return !taskId || !staleIdSet.has(taskId);
+        }),
+      };
+    }
+    // 仅在本次真的合并了新 KC 输出时重物化概念图（失败时沿用既有图，不做无意义重写）
+    mergedKcAnnotationForGraph = stageKcAnnotation ? mergedKcAnnotation : null;
+
     await tx.learning_paths.update({
       where: { id: path.id },
       data: {
@@ -486,6 +669,29 @@ async function redesignMilestoneTasks(
                 },
               }
             : {}),
+          // #168：资料引用 / 迷思预判 sidecar（按新 subtaskId 键控，已清旧键）
+          ...(Object.keys(mergedMaterialRefsByTask).length
+            ? {
+                materialRefs: {
+                  ...(((txParsed as any)?.materialRefs && typeof (txParsed as any).materialRefs === 'object')
+                    ? (txParsed as any).materialRefs
+                    : {}),
+                  byTask: mergedMaterialRefsByTask,
+                },
+              }
+            : {}),
+          ...(Object.keys(mergedMisconceptionHintsByTask).length
+            ? {
+                misconceptionHints: {
+                  ...(((txParsed as any)?.misconceptionHints && typeof (txParsed as any).misconceptionHints === 'object')
+                    ? (txParsed as any).misconceptionHints
+                    : {}),
+                  byTask: mergedMisconceptionHintsByTask,
+                },
+              }
+            : {}),
+          // #168：KC 标注（taskKcLinks 已绑新 subtasks.id；conceptKcs / kcGraph 同包）
+          ...(mergedKcAnnotation ? { kcAnnotation: mergedKcAnnotation } : {}),
           _generation: {
             ...(txParsed?._generation && typeof txParsed._generation === 'object' ? txParsed._generation : {}),
             stageDesign: 'succeeded',
@@ -534,6 +740,25 @@ async function redesignMilestoneTasks(
       }
     }));
   });
+
+  // #168：概念图重物化（best-effort）。kcAnnotation 已随模板落库，这里把 kcGraph 前置边与
+  // conceptKcs 的 part_of 嵌套搬进 concept_edges；失败不影响已提交的重排（与生成链同口径）。
+  if (mergedKcAnnotationForGraph) {
+    try {
+      await conceptGraphService.materializePathGraph({
+        userId: data.userId,
+        pathId: path.id,
+        kcAnnotation: mergedKcAnnotationForGraph,
+        cognitiveCore: replanCognitiveCore,
+      });
+    } catch (graphError) {
+      logger.warn('[path-replan] 概念图重物化失败（best-effort）', {
+        pathId: path.id,
+        stageNumber: milestone.stageNumber,
+        error: graphError instanceof Error ? graphError.message : String(graphError),
+      });
+    }
+  }
 
   return {
     pathId: path.id,

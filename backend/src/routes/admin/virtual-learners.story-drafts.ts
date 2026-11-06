@@ -8,7 +8,7 @@
  */
 
 import { type Router, type Request } from 'express';
-import { findRecentProfilesForHints, findProfileById, updateProfileJsonField } from '../../services/virtual-lab/virtual-learner-profile.repo';
+import { findRecentProfilesForHints, findProfileById, updateStoryPoolLocked } from '../../services/virtual-lab/virtual-learner-profile.repo';
 import { findSessionsForStoryUsage } from '../../services/virtual-lab/virtual-session.repo';
 import { logger } from '../../utils/logger';
 import { virtualLearnerPersonaDesignerDefinition } from '../../skills/virtual-learner-persona-designer';
@@ -310,9 +310,8 @@ router.post('/:id/draft-stories', async (req: Request, res) => {
         storyPool: [...existingStoryPool, storyWithStatus],
       });
       const updatedStoryPool = normalizedUpdated.storyPool;
-      const updatedProfile = normalizedUpdated.profileData;
 
-      await updateProfileJsonField(id, JSON.stringify(updatedProfile));
+      await updateStoryPoolLocked(id, updatedStoryPool);
 
       logger.info('[admin-generate-stories] 故事已自动持久化', {
         virtualProfileId: id,
@@ -428,9 +427,7 @@ router.put('/:id/stories/:storyIndex', async (req: Request, res) => {
       ...profileData,
       storyPool: updatedStoryPool,
     });
-    const updatedProfile = normalizedUpdated.profileData;
-
-    await updateProfileJsonField(id, JSON.stringify(updatedProfile));
+    await updateStoryPoolLocked(id, normalizedUpdated.storyPool);
 
     res.json({
       success: true,
@@ -488,9 +485,7 @@ router.delete('/:id/stories/:storyIndex', async (req: Request, res) => {
       ...profileData,
       storyPool: updatedStoryPool,
     });
-    const updatedProfile = normalizedUpdated.profileData;
-
-    await updateProfileJsonField(id, JSON.stringify(updatedProfile));
+    await updateStoryPoolLocked(id, normalizedUpdated.storyPool);
 
     res.json({
       success: true,

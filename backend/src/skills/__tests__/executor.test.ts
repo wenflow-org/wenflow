@@ -32,7 +32,7 @@ jest.mock('../../utils/logger', () => ({
   }
 }))
 
-import { getRequestContext, runWithContext } from '../../gateway/api-gateway/context'
+import { getRequestContext, runInAgentScope, runWithContext } from '../../gateway/api-gateway/context'
 import { consumeUpstreamAttempt } from '../../gateway/api-gateway/retry-budget'
 import { getAgentOfSkill } from '../../services/agent-manifest.service'
 import { executeSkillHandler } from '../executor'
@@ -88,6 +88,45 @@ describe('统一 Skill Executor', () => {
     const data = logCreate.mock.calls.at(-1)[0].data
     expect(data.agentId).toBe('skill:session-wrapup')
     expect(data.callerAgent).toBe('teaching-agent')
+  })
+
+  it('#185：跨阶段调用的 callerAgent 取真实执行边界，不是 skill 的静态 owner（归属扁平化）', async () => {
+    // 病灶复现：learning-predictor 静态归属 profile-agent，但在教学链（teaching-agent 作用域）
+    // 内被调用。旧实现（继承 simulation-agent 或直接写静态 owner）会写出
+    // simulation-agent / profile-agent -> skill:learning-predictor 的假边。
+    expect(getAgentOfSkill('skill:learning-predictor')?.id).toBe('profile-agent')
+    const result = await runWithContext({
+      userId: 'user-1',
+      sourceEntry: 'simulation',
+      callerAgent: 'simulation-agent' // 自动驾驶的运行来源
+    }, () => runInAgentScope('teaching-agent', () => executeSkillHandler(
+      { id: 'skill:learning-predictor' },
+      {},
+      async () => ({ success: true, output: 'ok', duration: 1 })
+    )))
+
+    expect(result.success).toBe(true)
+    const data = logCreate.mock.calls.at(-1)[0].data
+    expect(data.callerAgent).toBe('teaching-agent')
+    // 运行来源不被丢弃，落到 rootCallerAgent 供追溯
+    expect(JSON.parse(data.metadata).rootCallerAgent).toBe('simulation-agent')
+  })
+
+  it('#185：嵌套 skill 调用沿用所在 agent 边界，不被内层 skill 的静态 owner 改写', async () => {
+    const result = await runWithContext({
+      userId: 'user-1',
+      sourceEntry: 'simulation'
+    }, () => runInAgentScope('teaching-agent', () => executeSkillHandler(
+      { id: 'skill:learning-predictor' },
+      {},
+      async () => {
+        // 真实执行中的下一个调用：边界仍是 teaching-agent
+        expect(getRequestContext().agentScope).toBe('teaching-agent')
+        return { success: true, output: 'ok', duration: 1 }
+      }
+    )))
+
+    expect(result.success).toBe(true)
   })
 
   it('#185：无归属的 handler-only skill 不再借用上层 callerAgent（记为调用方未知）', async () => {
