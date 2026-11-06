@@ -57,10 +57,10 @@ export const registerUserSession = async (
  * 刷新轮换：校验旧令牌的会话登记并原子换新。
  * - 'rotated'：正常轮换完成，调用方可以下发新 token 对
  * - 'concurrent'：出示的恰是刚被轮换掉的上一代令牌，且命中容忍窗（#116 方案 A）
- *   ——并发双刷新落败方，会话未被吊销也未再轮换；调用方不得覆盖/清除 Cookie，
- *   以现有有效会话继续本次请求
+ *   ——并发双刷新落败方（含乐观锁竞争落败：读到时仍是当前代、写入时已被赢家换走），
+ *   会话未被吊销也未再轮换；调用方不得覆盖/清除 Cookie，以现有有效会话继续本次请求
  * - 'reuse-detected'：已轮换/已吊销令牌被重放（可能的盗用），会话已吊销，必须 401
- * - 'unknown-token'：无会话登记（部署前签发/伪造/更旧代已被覆盖/并发竞争落败），必须 401
+ * - 'unknown-token'：无会话登记（部署前签发/伪造/更旧代已被覆盖），必须 401
  */
 export const rotateUserSession = async (
   oldRefreshToken: string,
@@ -71,8 +71,10 @@ export const rotateUserSession = async (
   const newHash = hashRefreshToken(newRefreshToken);
   const now = new Date();
 
-  // 1) 命中当前代 → 原地轮换。乐观锁（tokenHash=oldHash）保证并发双刷新只有一个赢家，
-  //    输家按 unknown-token 处理（其一收到 401 重新登录，而非误判重用互杀）
+  // 1) 命中当前代 → 原地轮换。乐观锁（tokenHash=oldHash）保证并发双刷新只有一个赢家；
+  //    落败方不在这里直接判 unknown-token——那会让它 401 + 清 Cookie 被踢回登录页（#116）。
+  //    落败意味着赢家刚把旧哈希挪进 previousTokenHash，故继续走下面「上一代」判定：
+  //    该行可证明在容忍窗内 → 'concurrent'，否则仍按严格路径吊销/拒绝。
   const current = await prisma.user_sessions.findUnique({ where: { tokenHash: oldHash } });
   if (current) {
     if (current.revokedAt) {
@@ -97,7 +99,15 @@ export const rotateUserSession = async (
         expiresAt: refreshTokenExpiry(),
       }
     });
-    return updated.count === 1 ? 'rotated' : 'unknown-token';
+    if (updated.count === 1) {
+      return 'rotated';
+    }
+    // 乐观锁落败：赢家已在本次读取与写入之间完成轮换，旧哈希此刻是它的 previousTokenHash。
+    // 不返回，继续走步骤 2 的「上一代」判定（容忍窗内 → concurrent；无法证明 → reuse-detected）。
+    logger.info('[user-session] 乐观锁竞争落败，按上一代令牌复核是否在并发容忍窗内', {
+      userId: opts.userId,
+      sessionId: current.id,
+    });
   }
 
   // 2) 命中上一代 → 正常轮换后旧令牌又被出示：
