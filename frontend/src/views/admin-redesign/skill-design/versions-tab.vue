@@ -5,7 +5,7 @@
   <div class="sdp-pane">
     <section class="mk-card">
       <div class="mk-card__head">
-        <div class="mk-seg" role="group" aria-label="版本视图">
+        <div class="mk-seg sdp-seg" role="group" aria-label="版本视图">
           <button type="button" class="mk-seg__item" :class="{ 'mk-seg__item--active': seg === 'variant' }" @click="seg = 'variant'">变体</button>
           <button type="button" class="mk-seg__item" :class="{ 'mk-seg__item--active': seg === 'core' }" @click="seg = 'core'">核心文件</button>
           <button type="button" class="mk-seg__item" :class="{ 'mk-seg__item--active': seg === 'prompt' }" @click="seg = 'prompt'">Prompt</button>
@@ -691,6 +691,8 @@ watch(() => props.skillId, () => {
 .sdp-pane { display: grid; gap: 14px; align-content: start; }
 /* 卡身：与协议 / 工程 / 试跑同一档内边距 */
 .sdp-vers__body { display: grid; gap: 12px; align-content: start; padding: 12px 16px; }
+/* 卡头里的分段只占自己那么宽（mk-card__head 的子项会被拉满，分段拉成一条通栏） */
+.sdp-seg { flex: 0 0 auto; width: fit-content; }
 .sdp-versions-msg { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-green); font-weight: 600; display: flex; gap: 8px; align-items: center; }
 .sdp-versions-msg.is-err { color: var(--mk-red); }
 .sdp-table-wrap {
