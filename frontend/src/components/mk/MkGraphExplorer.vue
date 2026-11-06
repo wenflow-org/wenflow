@@ -756,19 +756,16 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   display: grid;
   grid-template-columns: minmax(0, 1fr) 280px;
   gap: var(--mk-space-4);
-  /* 收起侧栏（2026-11-06 走查）：单栏后画布吃满卡宽，100% 全屏看图 */
-}
-.mk-ge__body--full { grid-template-columns: minmax(0, 1fr); }
-.mk-ge__body--full .mk-ge__side { display: none; }
-/* 收起后的展开钮浮在画布右上（aside v-show 掉了，按钮随 aside 一起藏，所以这里
-   用画布内的固定入口）：挂在 canvas 右上角，不与右下缩放控件打架 */
-.mk-ge__canvas { position: relative; }
   /* 2026-11-05 PC 走查改回 stretch：用户点名概览卡「像块膏药」——短卡浮在画布右上，
      下面空一截。侧栏作为独立栏与画布等高（stretched），空白由栏内 flex 布局吸收；
      内容仍然顶对齐，不强行居中。 */
   align-items: stretch;
 }
+/* 收起侧栏（2026-11-06 走查）：单栏后画布吃满卡宽，100% 全屏看图 */
+.mk-ge__body--full { grid-template-columns: minmax(0, 1fr); }
+.mk-ge__body--full .mk-ge__side { display: none; }
 .mk-ge__canvas {
+  position: relative;
   min-width: 0;
 }
 .mk-ge__legend {
