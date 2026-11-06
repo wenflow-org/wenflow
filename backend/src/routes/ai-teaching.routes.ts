@@ -1436,7 +1436,9 @@ router.post('/sessions/:sessionId/peer/messages', async (req: any, res) => {
 
     const { message } = req.body;
 
-    if (!message) {
+    // #210：伴学端点与主消息端点同口径——纯空白不是一次真实回合，
+    // 裸判空会让 '' / '   ' / '\n\t ' 落库空消息并触发一次付费模型调用。
+    if (typeof message !== 'string' || message.trim().length === 0) {
       return sendValidationError(res, '缺少消息内容');
     }
 

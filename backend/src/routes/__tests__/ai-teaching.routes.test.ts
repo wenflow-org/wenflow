@@ -468,6 +468,25 @@ describe('ai-teaching routes', () => {
     }
   });
 
+  it('#210 伴学端点同样拒绝纯空白 message（此前裸判空 → 200 + 真实付费调用 + 落库空消息）', async () => {
+    const handler = getRouteHandler('/sessions/:sessionId/peer/messages');
+    for (const blankMessage of ['', '   ', "\n\n", "\t", " \n\t "]) {
+      const res = createResponse();
+      await handler({
+        user: { userId: 'user-1' },
+        params: { sessionId: 'session-1' },
+        body: { message: blankMessage },
+      }, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: expect.objectContaining({ code: 'VALIDATION_ERROR', message: '缺少消息内容' }),
+      });
+      // 空白输入必须在受理、落库、付费模型调用之前被拒
+      expect(mockCoordinator.processPeerMessage).not.toHaveBeenCalled();
+    }
+  });
   it('#224 恰好 800 字符（与前端 maxlength 同口径）→ 通过校验并受理', async () => {
     mockCoordinator.processStudentMessage.mockResolvedValue({
       aiResponse: '收到',
