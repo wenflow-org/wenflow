@@ -297,7 +297,7 @@ function layoutPoint(l: unknown): { x: number; y: number } | null {
 /** 布局稳定后自适应取景（2026-11-06 走查）：力导向收敛后把包围盒铺满画布（四周留 40px）。
  * 两个作用：① 互不相连的子图聚拢后不再留大片空洞；② 最外圈节点离画布底缘留出标签高度，
  * 不再撞上图例文字。选中/换主题的重建走 readGraphViewport 保留用户当前视角，不触发这里。 */
-function fitGraphView(padding = 40) {
+function fitGraphView(padding = 48) {
   if (!chart) return
   try {
     /* ECharts 的 graph 用 View 坐标系（coordinateSystem.rect 即画布内的取景盒），
@@ -763,6 +763,17 @@ onBeforeUnmount(() => {
   chart?.dispose()
   chart = null
 })
+
+/* 画布角落的 [ + ] [ - ] [ ⟲ ] 控件入口（宿主 MkGraphExplorer 渲染按钮，2026-11-06 走查）。
+   graphRoam 的 zoom 是相对倍率（内部与当前 zoom 相乘并夹在 scaleLimit 内）；
+   ⟲ 复用 fitGraphView 的包围盒取景，回到「铺满画布 + 四周 48px」的初始档。 */
+function zoomBy(factor: number) {
+  if (!chart) return
+  chart.dispatchAction({ type: 'graphRoam', seriesIndex: 0, zoom: factor })
+  applyZoomLabels()
+}
+
+defineExpose({ zoomBy, resetView: () => fitGraphView(48) })
 </script>
 
 <style scoped>

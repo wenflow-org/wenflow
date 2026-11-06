@@ -3,19 +3,10 @@
     <V2Nav />
 
     <main class="km__main">
-      <div class="km__hero">
-        <div>
-          <h1>知识图谱</h1>
-          <!-- 副标题「把你所有学习路径里的概念汇成一张图，颜色是掌握程度。」已删（2026-11-04）：
-               颜色语义 mk-ge__legend 图卡底部常驻在讲，条数/当前路径 km__note 条常驻在讲，
-               「汇成一张图」页面本身自明——三句全是别处已有的信息（同一 hero 里
-               图例/通栏按钮已因同款重复教学删过两轮） -->
-          <!-- 「怎么看这张图」折叠图例已删（2026-09-27）：图谱卡底部的 mk-ge__legend
-               常驻覆盖同一套语义（线型/颜色/形状），顶部那份是重复教学 -->
-          <!-- 「查看学习状态」通栏 ghost 已删（2026-10-09 用户反馈）：PC 顶导航与移动端底部
-               dock 都常驻「学习状态」入口，页尾整宽跳转是第三份重复；省下的纵向空间给图区 -->
-        </div>
-      </div>
+      <!-- 页面大标题行已删（2026-11-06 走查）：顶部导航已高亮「知识图谱」，卡上再印一行
+           21px 大字白吃 ~65px 高度。读屏与文档结构保留一个 visually-hidden 的 h1。
+           副标题/折叠图例/页尾 ghost 的历次撤除理由见 git 历史（副文审计三连）。 -->
+      <h1 class="visually-hidden">知识图谱</h1>
 
       <!-- 说明框已撤（2026-11-05 屏效比）：蓝边通栏 66px 只讲「共 N 条路径、N 个节点、
            当前展示哪条」——图卡统计行（mk-ge__stats）与路径轨已各自常驻同一组数字，
@@ -35,7 +26,7 @@
           :theme="theme"
           :loading="loading"
           :error="error"
-          height="clamp(500px, 57vh, 680px)"
+          height="max(560px, calc((100dvh - 216px) / var(--vp-zoom, 1)))"
           empty-hint="还没有可展示的概念图。学完一节课、或生成一条学习路径后，概念与关系会自动出现在这里。"
           error-action-text="重试"
           empty-action-text="开始学习"
@@ -173,26 +164,15 @@ onMounted(async () => {
 /* 2026-11-04 走查：此前 1180 死值是全站唯一不随宽屏加宽的内容容器（学习台等
    1140→1260@1440→1360@1680 三档），≥1440 起本页反而全场最窄。改成与学习台同一套
    阶梯：组件内 1140/1260@1440，≥1680 的 1360 由 v2.css 高分屏名单统一管。 */
+/* 宽屏工作台（2026-11-06 走查）：图谱页此前被关在全站 1140/1260 容器里，1920 下左右
+   各空 ~400px。本页主体只有一张图卡，横向直接铺到 1680 档。
+   写 100% + max-width 而不是 calc(100vw - 48px)：≥1600 档 .v2-page 有 zoom（v2.css 警告：
+   vw 不随 zoom 缩放，与页面其余部分脱钩），父宽百分比是安全的口径。 */
 .km__main {
-  max-width: 1140px;
+  width: 100%;
+  max-width: 1680px;
   margin: 0 auto;
-  padding: var(--mk-space-6) 28px var(--mk-space-8);
-}
-@media (min-width: 1440px) {
-  .km__main { max-width: 1260px; }
-}
-.km__hero {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--mk-space-4);
-  margin-bottom: var(--mk-space-5);
-}
-.km__hero h1 {
-  margin: 0;
-  /* 原型 .wf-km__hero h1 = 21px（全站 h1 档随原型走；移动端仍落 18px 全站约定） */
-  font-size: 21px;
+  padding: var(--mk-space-3) 24px var(--mk-space-4);
 }
 /* 说明框视觉已撤（2026-11-05 屏效比）：内容仅留给读屏（visually-hidden 全局类），
    不再占 66px 视觉高度——同屏第三份数字（图卡统计行 + 路径轨已各有） */
@@ -223,11 +203,7 @@ onMounted(async () => {
    图卡内边距不再按断点改：卡壳已移到 .mk-ge__card，两端统一吃原型固定档 10px 10px 4px。 */
 @media (max-width: 1100px) {
   .km__main {
-    padding: var(--mk-space-4) var(--mk-space-3) var(--mk-space-6);
-  }
-  /* 页面 h1 移动端全站 18px，只有这页漏了（桌面 21px 一直漏到手机上） */
-  .km__hero h1 {
-    font-size: var(--mk-fs-18);
+    padding: var(--mk-space-2) var(--mk-space-3) var(--mk-space-4);
   }
 }
 </style>

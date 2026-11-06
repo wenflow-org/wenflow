@@ -82,9 +82,10 @@
           </div>
         </div>
 
-        <div class="mk-ge__body">
+        <div class="mk-ge__body" :class="{ 'mk-ge__body--full': !sideOpen }">
           <div class="mk-ge__canvas">
             <MkGraph
+              ref="graphComp"
               :nodes="levelNodes"
               :edges="levelEdges"
               :theme="resolvedTheme"
@@ -92,6 +93,28 @@
               :hide-isolated="hideIsolated"
               @select="onCanvasSelect"
             />
+            <!-- 收起侧栏后的展开入口（sideOpen=false 时 aside 连同其上的开关一起消失） -->
+            <button
+              v-if="!sideOpen"
+              type="button"
+              class="mk-ge__side-reopen"
+              aria-label="展开侧栏"
+              title="展开侧栏"
+              @click="sideOpen = true"
+            >« 侧栏</button>
+            <!-- 缩放控件（2026-11-06 走查）：滚轮/双指之外给一颗可点的入口——触屏用户
+                 与不知道滚轮缩放的用户此前没有任何缩放手段。⟲ 回到 fitView 初始档。 -->
+            <div class="mk-ge__zoom" role="group" aria-label="图谱缩放">
+              <button type="button" class="mk-ge__zoom-btn" aria-label="放大" title="放大" @click="zoomBy(1.25)">
+                <svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M10 4v12M4 10h12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              </button>
+              <button type="button" class="mk-ge__zoom-btn" aria-label="缩小" title="缩小" @click="zoomBy(0.8)">
+                <svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M4 10h12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              </button>
+              <button type="button" class="mk-ge__zoom-btn" aria-label="适配居中" title="适配居中" @click="resetView">
+                <svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M6.5 3.5h-3v3M13.5 3.5h3v3M6.5 16.5h-3v-3M13.5 16.5h3v-3"/></svg>
+              </button>
+            </div>
             <!-- 图例走 DOM：画布内图例在 graph 系列里会误导（categories 是节点分组，不是关系）。
                  2026-11-05 PC 走查：四档状态点从底图例撤除——画布头统计行同屏已有同一套
                  「已掌握/进行中/记忆偏弱/待学习」计数（同一信息横竖各画一遍是重复），
@@ -118,7 +141,15 @@
 
           <!-- 侧栏详情随画布点选切换，对读屏是「远端变更」→ polite 播报摘要
                （画布的完整 AT 等价清单见下方 sr-only 概念清单——2026-09-27 a11y 走查，P2 收尾落地） -->
-          <aside class="mk-ge__side" aria-live="polite">
+          <aside v-show="sideOpen" class="mk-ge__side" aria-live="polite">
+            <button
+              type="button"
+              class="mk-ge__side-toggle"
+              :aria-expanded="sideOpen"
+              :title="sideOpen ? '收起侧栏' : '展开侧栏'"
+              :aria-label="sideOpen ? '收起侧栏' : '展开侧栏'"
+              @click="sideOpen = !sideOpen"
+            >{{ sideOpen ? '»' : '«' }}</button>
             <template v-if="selected">
               <!-- 标题 + 状态徽章（原型抽屉：h + wf-badge） -->
               <h4 class="mk-ge__side-title">{{ selected.label }}</h4>
@@ -316,6 +347,11 @@ const LEVEL_OPTIONS = [
 const level = ref<'all' | 'concept' | 'kc'>('all')
 const hideIsolated = ref(true)
 const selected = ref<MkGraphNode | null>(null)
+/** 侧栏收起态（2026-11-06 走查）：收起后画布吃满卡宽，全屏看图 */
+const sideOpen = ref(true)
+const graphComp = ref<{ zoomBy: (factor: number) => void; resetView: () => void } | null>(null)
+function zoomBy(factor: number) { graphComp.value?.zoomBy(factor) }
+function resetView() { graphComp.value?.resetView() }
 
 /**
  * 画布点选 → 侧栏切换（2026-11-05 UX 审计 P2）：
@@ -716,9 +752,17 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   cursor: pointer;
 }
 .mk-ge__body {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 280px;
   gap: var(--mk-space-4);
+  /* 收起侧栏（2026-11-06 走查）：单栏后画布吃满卡宽，100% 全屏看图 */
+}
+.mk-ge__body--full { grid-template-columns: minmax(0, 1fr); }
+.mk-ge__body--full .mk-ge__side { display: none; }
+/* 收起后的展开钮浮在画布右上（aside v-show 掉了，按钮随 aside 一起藏，所以这里
+   用画布内的固定入口）：挂在 canvas 右上角，不与右下缩放控件打架 */
+.mk-ge__canvas { position: relative; }
   /* 2026-11-05 PC 走查改回 stretch：用户点名概览卡「像块膏药」——短卡浮在画布右上，
      下面空一截。侧栏作为独立栏与画布等高（stretched），空白由栏内 flex 布局吸收；
      内容仍然顶对齐，不强行居中。 */
@@ -765,7 +809,61 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   .mk-ge__legend-mobile { display: inline; }
   .mk-ge__legend-tap { display: inline; }
 }
+/* 画布角落缩放控件（+ / - / ⟲）：38px 方钮竖排贴右下角图例上方 */
+.mk-ge__zoom {
+  position: absolute;
+  right: 10px;
+  bottom: 40px;
+  z-index: 5;
+  display: grid;
+  gap: 4px;
+}
+.mk-ge__zoom-btn {
+  width: 32px; height: 32px;
+  display: grid; place-items: center;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-sm);
+  background: var(--mk-surface);
+  color: var(--mk-muted);
+  cursor: pointer;
+  box-shadow: var(--mk-shadow-sm);
+}
+.mk-ge__zoom-btn:hover { color: var(--mk-ink); border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line)); }
+/* 收起态：画布右上角的展开钮 */
+.mk-ge__side-reopen {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 5;
+  min-height: 26px;
+  padding: 2px 10px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-sm);
+  background: var(--mk-surface);
+  color: var(--mk-muted);
+  font: inherit;
+  font-size: var(--mk-fs-micro);
+  cursor: pointer;
+  box-shadow: var(--mk-shadow-sm);
+}
+.mk-ge__side-reopen:hover { color: var(--mk-ink); border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line)); }
+/* 侧栏收起/展开开关：钉在侧栏右上 */
+.mk-ge__side-toggle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px; height: 26px;
+  display: grid; place-items: center;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-sm);
+  background: var(--mk-surface);
+  color: var(--mk-muted);
+  cursor: pointer;
+  font-size: 13px; line-height: 1;
+}
+.mk-ge__side-toggle:hover { color: var(--mk-ink); border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line)); }
 .mk-ge__side {
+  position: relative;
   padding: var(--mk-space-3);
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-md);

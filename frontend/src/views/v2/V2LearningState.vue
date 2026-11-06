@@ -3,36 +3,39 @@
     <V2Nav />
 
     <main class="state__main">
-      <!-- 页头：与学习台/学习路径/知识图谱一致，PC 不再直接从 KPI 卡开头 -->
+      <!-- 页头：三张 KPI 移到标题行右侧（2026-11-06 走查）——原独立一行三等分卡把
+           页头顶到 ~110px，PC 首屏为它多滚半屏。现在与「查看学习历史」同排收场；
+           全空态时不渲染 0 值胶囊（状态由下方 state__hero 整卡表达） -->
       <header class="state__head">
         <div>
           <h1>学习状态</h1>
           <p>训练负荷、疲劳度与掌握进度</p>
         </div>
-        <router-link to="/user/learning-history" class="btn-ghost">查看学习历史</router-link>
-      </header>
-      <!-- 全空态时不渲染三张 0 值卡：状态由下方 state__hero 整卡表达（2026-11-06 走查） -->
-      <div v-if="!stateEmpty" class="kpis">
-        <div class="kpis__grid" role="list" aria-label="学习状态概览">
-          <div v-if="kpiLoading" class="kpis__loading" role="listitem">
-            <SkeletonLoader variant="lines" :count="2" />
+        <div class="state__head-side">
+          <div v-if="!stateEmpty" class="kpis">
+            <div class="kpis__grid" role="list" aria-label="学习状态概览">
+              <div v-if="kpiLoading" class="kpis__loading" role="listitem">
+                <SkeletonLoader variant="lines" :count="2" />
+              </div>
+              <template v-else>
+                <div class="kpi" role="listitem">
+                  <strong>{{ kpiStreak ?? '—' }}</strong>
+                  <span>连续天数</span>
+                </div>
+                <div class="kpi" role="listitem">
+                  <strong>{{ kpiWeekMinutes ?? '—' }}</strong>
+                  <span>本周分钟</span>
+                </div>
+                <div class="kpi" role="listitem">
+                  <strong>{{ kpiMastered ?? '—' }}</strong>
+                  <span>已掌握知识点</span>
+                </div>
+              </template>
+            </div>
           </div>
-          <template v-else>
-            <div class="kpi" role="listitem">
-              <strong>{{ kpiStreak ?? '—' }}</strong>
-              <span>连续天数</span>
-            </div>
-            <div class="kpi" role="listitem">
-              <strong>{{ kpiWeekMinutes ?? '—' }}</strong>
-              <span>本周分钟</span>
-            </div>
-            <div class="kpi" role="listitem">
-              <strong>{{ kpiMastered ?? '—' }}</strong>
-              <span>已掌握知识点</span>
-            </div>
-          </template>
+          <router-link to="/user/learning-history" class="btn-ghost">查看学习历史</router-link>
         </div>
-      </div>
+      </header>
 
       <div class="state__grid">
         <!-- 全空态整卡（2026-11-06 走查）：趋势 / AI 建议 / 复习 / 掌握此前四张卡各说一遍
@@ -210,10 +213,6 @@
                     <circle v-if="p.ly !== null" class="ff-pt ff-pt--fatigue" :cx="p.x" :cy="p.ly" r="2.5" />
                     <circle v-if="p.sy !== null" class="ff-pt ff-pt--lsb" :cx="p.x" :cy="p.sy" r="2.5" />
                   </template>
-                  <!-- 前置无数据日的 0 基准虚线（口径见 leadPaths）：先画虚线、实线覆盖其上 -->
-                  <path v-if="leadPaths.lsb" :d="leadPaths.lsb" class="ff-lead ff-lead--lsb" />
-                  <path v-if="leadPaths.ktl" :d="leadPaths.ktl" class="ff-lead ff-lead--fitness" />
-                  <path v-if="leadPaths.lf" :d="leadPaths.lf" class="ff-lead ff-lead--fatigue" />
                   <path v-if="lsbLineD" :d="lsbLineD" class="ff-line ff-line--lsb" />
                   <path v-if="ktlLineD" :d="ktlLineD" class="ff-line ff-line--fitness" />
                   <path v-if="lfLineD" :d="lfLineD" class="ff-line ff-line--fatigue" />
@@ -764,6 +763,19 @@ const series = computed<Array<Omit<TrendPoint, 'x' | 'ky' | 'ly' | 'sy' | 'bx' |
       zone: zoneOfLsb(lsb, t?.mature)
     });
   }
+  /* 首次学习前的空白日补 0（2026-11-06 走查）：原实现留 null，折线从首个数据日才起笔——
+     单日数据画不出线，只剩一根孤点和一条竖着的虚线残段。补 0 后三条线从
+     (首前日, 0) 斜向爬升到真实值，「从 0 起步」的趋势在实线上读出来，
+     不再需要上一版的 0 基准虚线 lead（已随之删除）。 */
+  const firstWithData = days.findIndex((d) => d.ktl !== null || d.lf !== null || d.lsb !== null || d.minutes > 0);
+  if (firstWithData > 0) {
+    for (let i = 0; i < firstWithData; i += 1) {
+      days[i].ktl = 0;
+      days[i].lf = 0;
+      days[i].lsb = 0;
+      days[i].zone = zoneOfLsb(0);
+    }
+  }
   return days;
 });
 
@@ -947,28 +959,6 @@ function linePath(key: 'ktl' | 'lf' | 'lsb') {
 const ktlLineD = computed(() => linePath('ktl'));
 const lfLineD = computed(() => linePath('lf'));
 const lsbLineD = computed(() => linePath('lsb'));
-
-/* 前置无数据日的 0 基准虚线（2026-11-06 走查）：单日/少日数据时曲线只有右侧一小截，
-   左侧 95% 全空像图坏了。现在每条指标线从绘图区左缘的 0 基准画一条虚线走到首个数据日，
-   再竖直上到数据点——「从 0 起步」的趋势读得出来，画布也不再大面积空着。 */
-const leadPaths = computed<Record<'ktl' | 'lf' | 'lsb', string>>(() => {
-  const y0 = zeroY.value;
-  const empty = { ktl: '', lf: '', lsb: '' };
-  if (y0 === null) return empty;
-  const pts = points.value;
-  if (!pts.length) return empty;
-  const yOfKey = (key: 'ktl' | 'lf' | 'lsb', p: TrendPoint) => (key === 'ktl' ? p.ky : key === 'lf' ? p.ly : p.sy);
-  const out = { ...empty };
-  for (const key of ['ktl', 'lf', 'lsb'] as const) {
-    const first = pts.find((p) => yOfKey(key, p) !== null);
-    if (!first) continue;
-    const y = yOfKey(key, first) as number;
-    /* 首个数据点已在最左（数据从窗口第一天就有）时不画：没有「前置空白」可言 */
-    if (first.x <= plotX0 + 2) continue;
-    out[key] = `M${plotX0},${y0.toFixed(1)} L${first.x.toFixed(1)},${y0.toFixed(1)} L${first.x.toFixed(1)},${y.toFixed(1)}`;
-  }
-  return out;
-});
 
 /** 今天本地日期键（与 series 同格式）。图表右侧 2 天是刻意的留白（非真实数据日），
     「当前状态」必须落在今天而非留白日，否则会展示一个未来日期的空数据。 */
@@ -1708,6 +1698,13 @@ function loadGuidance() {
 .kicker { font-size: 12px; font-weight: 800; letter-spacing: .06em; color: var(--blue-deep); }
 
 /* ---------- 顶部三张 KPI（原型 wf-kpis/wf-kpi，748-755）：等权 3 卡、gap 9px、居中排版 ---------- */
+/* 页头右侧：KPI 胶囊 + 入口按钮同排（2026-11-06 走查） */
+.state__head-side {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
 .kpis { display: block; }
 /* PC（2026-11-06 走查）：三等分把每张框拉到 ~350px 宽、中间只有几个小字，两侧全是空地。
    改 flex 按内容收紧、靠左排；数字 24px/800 的 KPI 档不变。 */
@@ -2307,11 +2304,6 @@ function loadGuidance() {
   vector-effect: non-scaling-stroke;
 }
 .ff-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
-/* 前置无数据日的 0 基准虚线（见 leadPaths）：比实线细一档、虚线段短，颜色跟各自指标同族 */
-.ff-lead { fill: none; stroke-width: 1.5; stroke-dasharray: 4 4; stroke-linecap: round; vector-effect: non-scaling-stroke; opacity: 0.7; }
-.ff-lead--fitness { stroke: var(--blue); }
-.ff-lead--fatigue { stroke: var(--accent); }
-.ff-lead--lsb { stroke: var(--wf-color-success); }
 .ff-line--fitness { stroke: var(--blue); }
 .ff-line--fatigue { stroke: var(--accent); }
 .ff-line--lsb { stroke: var(--wf-color-success); }
@@ -2342,8 +2334,7 @@ function loadGuidance() {
      （grid flex-basis 460px 使卡片先吃满行宽；实测换行发生在约 616px 以下）。
      手机档改成整宽、居中、与卡片同宽，从「孤零零挂右边」变成一次有意的次级动作（2026-10-15 走查）。
      640 以上（平板/桌面）维持原「KPI 行 + 右侧入口」单行布局不动。 */
-  .kpis { flex-direction: column; align-items: stretch; gap: 10px; }
-  .kpis__grid { flex: 1 1 auto; width: 100%; }
+  /* KPI 已移入页头右侧（2026-11-06 走查）：窄屏 flex-wrap 自动换行，无需再给整行规则 */
 }
 @media (max-width: 1100px) {
   /* 体检卡随原卡结构退役：.vitals__value / .vitals{padding} 两条移动规则已无对应元素（死 CSS 清理），

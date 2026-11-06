@@ -84,12 +84,22 @@
               <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>
             </button>
 
-            <span class="ach-card__icon" :class="iconCls(a)" aria-hidden="true"><component :is="achIconOf(a)" /></span>
-            <strong class="ach-card__name">{{ a.name }}</strong>
-            <p class="ach-card__desc">{{ a.description }}</p>
+            <!-- 水平紧凑布局（2026-11-06 走查）：原「图标/标题/描述/状态」四行竖排，
+                 每张卡右半边 70% 全空、14 个成就滚一屏。现在左 40px 图标 + 右标题/描述并排，
+                 未解锁卡底部一条细进度条（1/3 这类读数已在状态行里，条只补视觉比例） -->
+            <div class="ach-card__main">
+              <span class="ach-card__icon" :class="iconCls(a)" aria-hidden="true"><component :is="achIconOf(a)" /></span>
+              <div class="ach-card__text">
+                <strong class="ach-card__name">{{ a.name }}</strong>
+                <p class="ach-card__desc">{{ a.description }}</p>
+              </div>
+            </div>
             <span class="ach-card__state" :class="{ 'ach-card__state--on': a.unlocked }">
               {{ stateText(a) }}<span v-if="a.unlocked && formatDate(a.earnedAt)" class="ach-card__date"> · {{ formatDate(a.earnedAt) }}</span>
             </span>
+            <div v-if="!a.unlocked" class="ach-card__progress" role="img" :aria-label="`解锁进度 ${progressPct(a)}%`">
+              <i :style="{ width: progressPct(a) + '%' }"></i>
+            </div>
           </article>
         </div>
         <div v-else class="empty">
@@ -328,11 +338,12 @@ onMounted(() => {
 .filter {
   /* P3-47（设计评审）：筛选 chips 是本页唯一筛选交互，36px 低于 44px 移动触控地板——
      抬到 44px 扩热区，视觉字号不动 */
+  /* 44px 热区保留（P3-47 触控地板）；只把大胶囊圆角收敛成 sm 方角档（2026-11-06 走查） */
   min-height: 44px;
   padding: 7px 14px;
   border: 1px solid var(--line);
   background: var(--surface);
-  border-radius: var(--mk-radius-pill);
+  border-radius: var(--mk-radius-sm);
   color: var(--muted);
   font: inherit; font-size: 13px; font-weight: 600;
   cursor: pointer;
@@ -344,23 +355,48 @@ onMounted(() => {
    撤掉本页自造的 auto-fill minmax(230px,1fr)——1080 宽下会铺成 4 列。 */
 .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 
-/* ── Achievement Card（原型 wf-ach 848-867）：icon → 标题 → 描述 → 一行状态，四行无分隔线 ── */
+/* ── Achievement Card（2026-11-06 走查改水平紧凑）：左 40px 图标 + 右标题/描述并排，
+   状态行与进度条贴底。原四行竖排右半边 70% 全空、一屏装不下 14 个。 ── */
 .ach-card {
   position: relative;
-  padding: 14px;
+  padding: 10px 12px;
   display: grid;
   gap: 4px;
-  justify-items: start;
   align-content: start;
   transition: none;
+}
+.ach-card__main {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+.ach-card__text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+/* 未解锁卡底部极细进度条：1/3 的比例感由条补，数字仍在状态行 */
+.ach-card__progress {
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  overflow: hidden;
+}
+.ach-card__progress i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--blue);
 }
 
 /* ── 42×42 类型色块（原型 wf-ach__icon 853-862）──
     P3-48：字标升双字（19px 单字 → 14px 双字），42px 块内两字 + 字距放得下 */
 .ach-card__icon {
-  width: 42px; height: 42px;
-  border-radius: 12px;
-  margin-bottom: 4px;
+  width: 40px; height: 40px;
+  flex: none;
+  border-radius: var(--mk-radius-lg);
   display: grid; place-items: center;
 }
 /* 图标尺寸：42px 块里放 20px 线稿（lucide 默认 24 偏满） */
@@ -382,7 +418,16 @@ onMounted(() => {
 .ach-card__icon--locked { color: var(--ink); }
 
 .ach-card__name { font-size: 14px; font-weight: 700; color: var(--ink); }
-.ach-card__desc { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.55; }
+.ach-card__desc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 /* 第四行状态：原型 wf-ach__state 11.5px，本仓字号下限 12px（规则 16） */
 .ach-card__state { margin-top: 4px; font-size: 12px; font-weight: 700; color: var(--faint); }
 .ach-card__state--on { color: var(--green-ink); }
@@ -443,10 +488,10 @@ onMounted(() => {
 @media (max-width: 640px) {
   .grid { grid-template-columns: 1fr; }
 }
-/* ≥1024 放 3 列（原型 wf-ach__grid 931）。放在 max-width:1100 之后：
-   1024–1100 区间两组同时命中，同权重下后声明者胜 → 3 列。 */
+/* ≥1024 放 4 列（2026-11-06 走查）：水平紧凑卡比竖排卡矮 ~35%，4 列让 14 个成就
+   一屏装下。放在 max-width:1100 之后：1024–1100 两组同时命中，后声明者胜 → 4 列。 */
 @media (min-width: 1024px) {
-  .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 }
 </style>
 

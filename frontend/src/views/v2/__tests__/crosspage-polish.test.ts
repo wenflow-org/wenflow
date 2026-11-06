@@ -85,11 +85,12 @@ describe('知识图谱：聚拢、取景与选中态', () => {
     expect(graph).toMatch(/gravity: narrow \? 0\.2 : \(denseGraph \? 0\.12 : 0\.16\)/);
   });
 
-  it('布局稳定后 fitGraphView 自适应取景，且只在换数据时触发', () => {
+  it('布局稳定后 fitGraphView 自适应取景（48px 安全边距），只在换数据时触发', () => {
     expect(strip(graph)).toContain('function fitGraphView(');
     expect(strip(graph)).toMatch(/if \(dataChanged\) fitGraphView\(\)/);
-    /* 选中/换主题重建沿用用户视角：默认 padding 40，节点不撞底缘图例 */
-    expect(graph).toContain('function fitGraphView(padding = 40)');
+    expect(graph).toContain('function fitGraphView(padding = 48)');
+    /* 画布角落有可点的缩放控件（+/−/⟲），⟲ 回 fitView 初始档 */
+    expect(graph).toContain('defineExpose({ zoomBy, resetView: () => fitGraphView(48) })');
   });
 
   it('选中态：非关联节点 0.42、连线 0.3，选中节点只亮蓝描边', () => {
@@ -112,10 +113,13 @@ describe('学习状态：单日折线图与卡头紧凑化', () => {
     expect(state).toContain('const x = n === 1 ? plotX0 + usableW / 2 : plotX0 + step * i;');
   });
 
-  it('前置无数据日画 0 基准虚线连至今日数据点', () => {
-    expect(strip(state)).toContain('const leadPaths = computed');
-    expect(strip(state)).toContain('class="ff-lead ff-lead--lsb"');
-    expect(has(ruleOf(state, '.ff-lead'), /stroke-dasharray:\s*4 4/)).toBe(true);
+  it('首次学习前的空白日数值补 0（折线从 0 斜向爬升，不再只有孤点+竖虚线）', () => {
+    const live = strip(state);
+    expect(live).toContain('const firstWithData = days.findIndex');
+    expect(live).toContain('days[i].ktl = 0;');
+    /* 补 0 方案取代了上一版的 0 基准虚线 lead（实线自带起步段） */
+    expect(live).not.toContain('leadPaths');
+    expect(live).not.toContain('.ff-lead');
   });
 
   it('窗口切换器是 26px 紧凑分段控件（不再换行独占一行）', () => {
@@ -150,12 +154,14 @@ describe('学习历史：Tab 栏、双栏与格子', () => {
     expect(strip(shell)).toContain('<slot name="seg-right" />');
   });
 
-  it('总计量移进 Tab 栏同一行（正文里不再单摆一行重复统计）', () => {
+  it('全量统计行整行删除（与日历卡内「本月」口径读成两遍）', () => {
     const live = strip(history);
-    expect(live).toContain('<template #seg-right>');
-    /* 正文 grid 里不再有 stats 行（只在插槽里出现一次） */
-    const body = live.slice(live.indexOf('class="history__body"'));
-    expect(body).not.toContain('class="history__stats"');
+    expect(live).not.toContain('history__stats');
+    expect(live).not.toContain('loadStats');
+    /* 全量口径出口只剩 /learning/stats 调用也随之撤除 */
+    expect(live).not.toContain("/learning/stats'");
+    /* 日历卡内的「本月」口径保留（它是日历的注脚） */
+    expect(live).toContain('本月 <b>{{ monthTotals.minutes }}</b> 分钟');
   });
 
   it('≥1024 左月历 38% + 右列表 62% 双栏', () => {
@@ -166,8 +172,11 @@ describe('学习历史：Tab 栏、双栏与格子', () => {
     expect(desk).toMatch(/\.history__body > \.history__list\s*\{[^}]*grid-column:\s*2/);
   });
 
-  it('无学习日有可见浅底（ink 4%），不再像渲染缺一半', () => {
-    expect(history).toMatch(/\.lg--0, \.mday--h0 \{ background: color-mix\(in srgb, var\(--ink\) 4%, transparent\)/);
+  it('日历明暗分层：非当月压到 0.22，当月无学习日不再带底框', () => {
+    expect(history).toMatch(/\.mday--outside, \.mday--future \{[^}]*opacity: 0\.22;/);
+    /* h0 与未来日同一份干净底，只高亮有学习时长的日期 */
+    expect(history).toMatch(/\.mday--h0 \{ background: none;/);
+    expect(history).toMatch(/\.lg--0 \{ background: color-mix\(in srgb, var\(--ink\) 4%, transparent\)/);
   });
 
   it('记录行状态标签与动作链接同一行（全宽度口径）', () => {

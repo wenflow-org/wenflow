@@ -60,10 +60,10 @@ describe('成就页未解锁图标', () => {
     for (const tone of ['--accent', '--amber-ink', '--green-ink', '--blue-deep', '--cyan-ink']) {
       expect(color, `锁定标签不该用带色相的 ${tone}`).not.toContain(tone);
     }
-    // 色块本体尺寸仍是 42×42（改文字色不该顺手改尺寸）
+    // 色块尺寸 2026-11-06 随水平卡片布局定档 40×40（用户走查给档）
     const base = ruleFor('.ach-card__icon {');
-    expect(decl(base, 'width')).toBe('42px');
-    expect(decl(base, 'height')).toBe('42px');
+    expect(decl(base, 'width')).toBe('40px');
+    expect(decl(base, 'height')).toBe('40px');
   });
 
   it('未解锁的类型色相由色块底色保留（文字转墨色后，底色就是类型编码）', () => {
