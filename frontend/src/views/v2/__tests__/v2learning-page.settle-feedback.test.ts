@@ -71,12 +71,17 @@ async function mountPage() {
   return w;
 }
 
-/** 打开 ⋯ 菜单并点「完成并结算任务」 */
+/**
+ * 点顶栏「完成本节」结算。
+ *
+ * 2026-11-06 走查：⋯ 菜单里原有一项「完成并结算任务」，与顶栏这颗「完成本节」是同一动作，
+ * 两处入口在菜单里占了双行、还把菜单撑高——菜单瘦身后整项撤除，结算只走顶栏这一个真入口。
+ * 本助手随之改为点顶栏按钮（覆盖面不变：仍走 completeAndSettle 的整套门禁/轮询/反馈分流）。
+ */
 async function clickCompleteAndSettle(w: Awaited<ReturnType<typeof mountPage>>) {
-  await w.find('.imm-menu__btn').trigger('click');
-  const item = w.findAll('.learn__menu-item').find((b) => b.text().includes('完成并结算任务'));
-  expect(item, '菜单里应有「完成并结算任务」').toBeTruthy();
-  await item!.trigger('click');
+  const btn = w.find('.learn__finishbtn');
+  expect(btn.exists(), '顶栏应有「完成本节」结算入口').toBe(true);
+  await btn.trigger('click');
   await flushPromises();
 }
 
@@ -408,10 +413,12 @@ describe('#115 结算进度与成功后的反馈入口', () => {
     await w.find('.imm-menu__btn').trigger('click');
     const labels = w.findAll('.learn__menu-item').map((b) => b.text());
     expect(labels.some((t) => t.includes('完成并结算任务')), '已结算不应再摆「完成并结算任务」').toBe(false);
+    expect(labels.some((t) => t.includes('完成本节')), '已结算不应再摆结算入口').toBe(false);
     expect(labels.some((t) => t.includes('结束学习')), '已结算不应再摆「结束学习」').toBe(false);
     expect(labels.some((t) => t.includes('查看本次学习反馈')), '已结算应给反馈入口').toBe(true);
-    // 「返回路径详情」仍在：已结算也要有离开课堂的出口
-    expect(labels.some((t) => t.includes('返回路径详情'))).toBe(true);
+    /* 离开课堂的出口在左上角返回钮上（.learn__back 带 aria-label「返回路径详情」），
+       2026-11-06 走查把菜单里那条重复的「返回路径详情」撤了 */
+    expect(w.find('.learn__back[aria-label="返回路径详情"]').exists(), '左上角应有返回出口').toBe(true);
 
     // 反馈入口：replace 到本会话的评估页（回退不该再回到终态教室）
     const feedback = w.findAll('.learn__menu-item').find((b) => b.text().includes('查看本次学习反馈'));

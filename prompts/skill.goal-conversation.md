@@ -1,6 +1,6 @@
 ---
 agentId: skill:goal-conversation
-coreHash: 4dba827d72a894d58e323b9347f80637c6fc461d6489e3d98fa846da4a8462c2
+coreHash: 0a0f1ee66bbf442ac697c797ab3630a049d042088cad5d9f88b69c49a62d3a29
 coreVersion: 17
 temperature: 0.7
 maxTokens: 64000
@@ -182,7 +182,7 @@ deltaOutput: true
   采集分流由下游执行：public → material-collector 联网；private → 跳过联网，等待用户上传。
   证据不足（只是泛泛想学好某领域）或用户没指定具体资料/版本时不填。
 - nextQuestions · string[] — 下一步要问的问题（当轮）
-- quickReplies · string[] — 快捷回复选项，每次 2-3 个；understanding 阶段优先给出（回答本轮问题）；**proposing 阶段只给「调整方向」的具体选项，不要给确认项**——界面上已有确认按钮，两处入口会让用户不知道该点哪个（2026-10-31 走查）；直接放在顶层，不用 hints 或 goalConversation 包装（当轮）
+- quickReplies · string[] — 快捷回复选项，每次 2-3 个；**每条 ≤8 个汉字**（如「通知格式不对」而不是「通知被退回，说格式不对」——界面渲染为紧凑小签，超长会在移动端被折行挤爆）；understanding 阶段优先给出（回答本轮问题）；**proposing 阶段只给「调整方向」的具体选项，不要给确认项**——界面上已有确认按钮，两处入口会让用户不知道该点哪个（2026-10-31 走查）；直接放在顶层，不用 hints 或 goalConversation 包装（当轮）
 - confirmedProposal · object? — 仅在 proposing 阶段输出，包含：
 · learning_direction（string）这一版路径先聚焦解决什么
 · first_deliverable（string）用户最先要拿到的最小结果；

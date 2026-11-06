@@ -50,10 +50,11 @@ function card(w: ReturnType<typeof mountCard>, key: string) {
     if (label.startsWith(key)) {
       return {
         label,
-        value: b.find('.metric-value').text(),
+        value: b.find('.metric-number').text(),
         level: b.find('.metric-badge').text(),
         tone: Array.from(b.classes()).find((c) => c.startsWith('metric-card--'))?.replace('metric-card--', '') || '',
-        desc: b.find('.metric-desc').text(),
+        /* 名词解释 2026-11-06 从「框内常驻一行」收进标题旁 ⓘ 的浮层（.metric-help__body） */
+        desc: b.find('.metric-help__body').text(),
       };
     }
   }

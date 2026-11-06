@@ -70,7 +70,7 @@ describe('LearningEvaluationPage 结算门禁恢复', () => {
     const w = mount(LearningEvaluationPage);
     await flushPromises();
 
-    w.findComponent({ name: 'CompletionCard' }).vm.$emit('action', 'complete-task');
+    await w.find('.evaluation-head__complete').trigger('click');
     await flushPromises();
 
     const block = w.find('.settle-block');
@@ -90,7 +90,7 @@ describe('LearningEvaluationPage 结算门禁恢复', () => {
     });
     const w = mount(LearningEvaluationPage);
     await flushPromises();
-    w.findComponent({ name: 'CompletionCard' }).vm.$emit('action', 'complete-task');
+    await w.find('.evaluation-head__complete').trigger('click');
     await flushPromises();
 
     await w.find('.settle-block .btn-primary').trigger('click');

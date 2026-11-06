@@ -3,19 +3,10 @@
     <V2Nav />
 
     <main class="km__main">
-      <div class="km__hero">
-        <div>
-          <h1>知识图谱</h1>
-          <!-- 副标题「把你所有学习路径里的概念汇成一张图，颜色是掌握程度。」已删（2026-11-04）：
-               颜色语义 mk-ge__legend 图卡底部常驻在讲，条数/当前路径 km__note 条常驻在讲，
-               「汇成一张图」页面本身自明——三句全是别处已有的信息（同一 hero 里
-               图例/通栏按钮已因同款重复教学删过两轮） -->
-          <!-- 「怎么看这张图」折叠图例已删（2026-09-27）：图谱卡底部的 mk-ge__legend
-               常驻覆盖同一套语义（线型/颜色/形状），顶部那份是重复教学 -->
-          <!-- 「查看学习状态」通栏 ghost 已删（2026-10-09 用户反馈）：PC 顶导航与移动端底部
-               dock 都常驻「学习状态」入口，页尾整宽跳转是第三份重复；省下的纵向空间给图区 -->
-        </div>
-      </div>
+      <!-- 页面大标题行已删（2026-11-06 走查）：顶部导航已高亮「知识图谱」，卡上再印一行
+           21px 大字白吃 ~65px 高度。读屏与文档结构保留一个 visually-hidden 的 h1。
+           副标题/折叠图例/页尾 ghost 的历次撤除理由见 git 历史（副文审计三连）。 -->
+      <h1 class="visually-hidden">知识图谱</h1>
 
       <!-- 说明框已撤（2026-11-05 屏效比）：蓝边通栏 66px 只讲「共 N 条路径、N 个节点、
            当前展示哪条」——图卡统计行（mk-ge__stats）与路径轨已各自常驻同一组数字，
@@ -35,7 +26,7 @@
           :theme="theme"
           :loading="loading"
           :error="error"
-          height="clamp(500px, 57vh, 680px)"
+          height="max(var(--km-h-floor, 600px), calc((100dvh - var(--km-h-reserve, 260px)) / var(--vp-zoom, 1)))"
           empty-hint="还没有可展示的概念图。学完一节课、或生成一条学习路径后，概念与关系会自动出现在这里。"
           error-action-text="重试"
           empty-action-text="开始学习"
@@ -170,29 +161,20 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* 2026-11-04 走查：此前 1180 死值是全站唯一不随宽屏加宽的内容容器（学习台等
-   1140→1260@1440→1360@1680 三档），≥1440 起本页反而全场最窄。改成与学习台同一套
-   阶梯：组件内 1140/1260@1440，≥1680 的 1360 由 v2.css 高分屏名单统一管。 */
+/* 容器宽度与全站同档（2026-11-07 二次走查）：上一版试过全幅工作台（width:100% 无帽），
+   用户判「满屏太难看、要和别的页一致」。口径回到与学习状态同一阶梯：组件内 880 居中，
+   ≥1680 由 v2.css 高分屏名单拓到 1360（1920@zoom1.08 实测 1469px，与状态页齐平）。
+   写父宽百分比而不是 calc(100vw - 80px)：≥1600 档 .v2-page 有 zoom（v2.css 警告：
+   vw 不随 zoom 缩放，与页面其余部分脱钩），百分比是安全口径。 */
+/* 顶部呼吸（2026-11-07 走查）：28/24 上下距，卡不再贴死 sticky 导航。画布高度预留
+   260px = 导航 64 + 上下距 52 + 卡内统计栏/图例 ~90 + 底部余白 ~52（120px 只扣导航
+   会整卡溢出视口 ~75px、页面滚起来；260 让上下留白 30/60 均衡）；600px 下限保底。≤1100 档回旧 216px 预留（移动端还要给
+   吸底 dock 留位）+ 560px 旧下限。zoom 档按 v2.css 硬规全部 / var(--vp-zoom,1)。 */
 .km__main {
-  max-width: 1140px;
+  width: 100%;
+  max-width: 880px;
   margin: 0 auto;
-  padding: var(--mk-space-6) 28px var(--mk-space-8);
-}
-@media (min-width: 1440px) {
-  .km__main { max-width: 1260px; }
-}
-.km__hero {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--mk-space-4);
-  margin-bottom: var(--mk-space-5);
-}
-.km__hero h1 {
-  margin: 0;
-  /* 原型 .wf-km__hero h1 = 21px（全站 h1 档随原型走；移动端仍落 18px 全站约定） */
-  font-size: 21px;
+  padding: 28px 28px 24px;
 }
 /* 说明框视觉已撤（2026-11-05 屏效比）：内容仅留给读屏（visually-hidden 全局类），
    不再占 66px 视觉高度——同屏第三份数字（图卡统计行 + 路径轨已各有） */
@@ -223,11 +205,11 @@ onMounted(async () => {
    图卡内边距不再按断点改：卡壳已移到 .mk-ge__card，两端统一吃原型固定档 10px 10px 4px。 */
 @media (max-width: 1100px) {
   .km__main {
-    padding: var(--mk-space-4) var(--mk-space-3) var(--mk-space-6);
-  }
-  /* 页面 h1 移动端全站 18px，只有这页漏了（桌面 21px 一直漏到手机上） */
-  .km__hero h1 {
-    font-size: var(--mk-fs-18);
+    /* 移动端：导航 + 吸底 dock 合计 ~200px，卡高预留回到旧 216 档、下限回 560，
+       桌面默认（600 下限 / 120 预留）只服务 PC 工作台 */
+    --km-h-floor: 560px;
+    --km-h-reserve: 216px;
+    padding: var(--mk-space-2) var(--mk-space-3) var(--mk-space-4);
   }
 }
 </style>

@@ -65,7 +65,7 @@ describe('LearningEvaluationPage「继续练习」入口（P27）', () => {
     const w = mount(LearningEvaluationPage);
     await flushPromises();
 
-    w.findComponent({ name: 'CompletionCard' }).vm.$emit('action', 'continue-task');
+    await w.find('.evaluation-head__continue').trigger('click');
     await flushPromises();
 
     expect(apiGetMock).toHaveBeenCalledWith('/learning/tasks/t1');
@@ -82,7 +82,7 @@ describe('LearningEvaluationPage「继续练习」入口（P27）', () => {
     const w = mount(LearningEvaluationPage);
     await flushPromises();
 
-    w.findComponent({ name: 'CompletionCard' }).vm.$emit('action', 'continue-task');
+    await w.find('.evaluation-head__continue').trigger('click');
     await flushPromises();
     expect(pushMock).toHaveBeenCalledWith('/learn/t1');
     w.unmount();
@@ -91,7 +91,7 @@ describe('LearningEvaluationPage「继续练习」入口（P27）', () => {
     apiGetMock.mockRejectedValue(new Error('网络错误'));
     const w2 = mount(LearningEvaluationPage);
     await flushPromises();
-    w2.findComponent({ name: 'CompletionCard' }).vm.$emit('action', 'continue-task');
+    await w2.find('.evaluation-head__continue').trigger('click');
     await flushPromises();
     expect(pushMock).toHaveBeenCalledWith('/learn/t1');
     w2.unmount();

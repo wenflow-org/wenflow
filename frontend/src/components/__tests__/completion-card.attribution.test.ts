@@ -198,20 +198,14 @@ describe('CompletionCard 知识点读数', () => {
  * 实测：评估页顶部写「本次学习已结束」，同页底部又给一颗「完成任务」并注明会推进路径进度，
  * 而路径页早已把这节算进完成（阶段 1 = 1/2）——同一件事像是没做完、还能再做一遍。
  */
-describe('CompletionCard 动作栏 · 已结算任务', () => {
-  it('taskCompleted=true 时不渲染「完成任务」，只留继续练习与返回路径', () => {
-    const w = mountCard(baseAdvisory, { taskCompleted: true });
-    const labels = w.findAll('.completion-actions__row button').map((b) => b.text());
-    expect(labels.some((t) => t.includes('完成任务'))).toBe(false);
-    expect(labels.some((t) => t.includes('继续练习'))).toBe(true);
-    expect(labels.some((t) => t.includes('返回学习路径'))).toBe(true);
-    expect(w.find('.completion-actions__hint').text()).toContain('已计入路径进度');
-  });
-
-  it('未结算（默认）仍渲染「完成任务」，提示句保持原口径', () => {
-    const w = mountCard(baseAdvisory);
-    const labels = w.findAll('.completion-actions__row button').map((b) => b.text());
-    expect(labels.some((t) => t.includes('完成任务'))).toBe(true);
-    expect(w.find('.completion-actions__hint').text()).toContain('完成任务会推进路径进度');
+describe('CompletionCard 不再自带动作区（2026-11-06 走查）', () => {
+  /* 卡尾那组「分割线 + 已计入路径进度的小字 + 继续练习/返回/完成任务」是报告最底下的 80px 小尾巴，
+     而同一批动作在页面顶部操作栏（PC）与窄屏吸底条里都有。现在整块撤除，卡只负责内容。
+     「已结算就不再递完成任务」这条口径随之移到页面入口（见 learning-evaluation.task-completed.test）。 */
+  it('卡内没有任何动作按钮，也没有那行状态提示', () => {
+    const w = mountCard(baseAdvisory, {});
+    expect(w.find('.completion-actions').exists()).toBe(false);
+    expect(w.find('.completion-actions__hint').exists()).toBe(false);
+    expect(w.findAll('.completion-actions__row button').length).toBe(0);
   });
 });

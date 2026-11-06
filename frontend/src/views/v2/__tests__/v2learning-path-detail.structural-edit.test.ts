@@ -93,10 +93,15 @@ describe('V2LearningPathDetail 任务微调', () => {
   });
 
   it('延长 / 缩短走 extend_task / shrink_task，带 10 分钟增量', async () => {
+    /* 2026-11-06 重构：啰嗦的「缩短/延长 10 分钟」换成步进器 —— [−10 分] 与 [+10 分] */
     const w = await mountDetail();
     await w.findAll('.task__edit')[0].trigger('click');
-    const buttons = w.findAll('.task-edit__btn');
-    await buttons[1].trigger('click'); // 延长 10 分钟
+    const steps = w.findAll('.task-edit__step');
+    expect(steps.length, '步进器应恰好两颗（−10 分 / +10 分）').toBe(2);
+    expect(steps[0].attributes('aria-label')).toBe('缩短 10 分钟');
+    expect(steps[1].attributes('aria-label')).toBe('延长 10 分钟');
+
+    await steps[1].trigger('click'); // +10 分
     await flushPromises();
     expect(applyStructuralEdit).toHaveBeenCalledWith('lp_test', {
       op: 'extend_task',
@@ -106,7 +111,7 @@ describe('V2LearningPathDetail 任务微调', () => {
 
     applyStructuralEdit.mockClear();
     await w.findAll('.task__edit')[0].trigger('click');
-    await w.findAll('.task-edit__btn')[0].trigger('click'); // 缩短 10 分钟
+    await w.findAll('.task-edit__step')[0].trigger('click'); // −10 分
     await flushPromises();
     expect(applyStructuralEdit).toHaveBeenCalledWith('lp_test', {
       op: 'shrink_task',
@@ -120,7 +125,7 @@ describe('V2LearningPathDetail 任务微调', () => {
     await w.findAll('.task__edit')[0].trigger('click');
     const input = w.find('.task-edit__input');
     await input.setValue('补一个练习');
-    await w.findAll('.task-edit__btn')[2].trigger('click'); // 插入
+    await w.find('.task-edit__submit').trigger('click'); // 插入
     await flushPromises();
     expect(applyStructuralEdit).toHaveBeenCalledWith('lp_test', {
       op: 'insert_task',
@@ -131,7 +136,7 @@ describe('V2LearningPathDetail 任务微调', () => {
 
     applyStructuralEdit.mockClear();
     await w.findAll('.task__edit')[0].trigger('click');
-    const dangerButton = w.findAll('.task-edit__btn').at(-1)!;
+    const dangerButton = w.find('.task-edit__danger');
     await dangerButton.trigger('click');
     await flushPromises();
     expect(askConfirm).toHaveBeenCalledTimes(1);

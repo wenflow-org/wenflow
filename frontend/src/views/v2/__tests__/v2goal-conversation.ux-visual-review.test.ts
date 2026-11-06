@@ -111,15 +111,9 @@ describe('目标规划页：用户侧视觉走查四条修复', () => {
     expect(block, '静态兜底文案又回来了：三屏同字的问题会复发').not.toContain('继续澄清中');
   });
 
-  it('#57 步骤条第 1 步挂「已收集 N/7」，且窄屏隐藏（该行余量只有 ~11px）', () => {
-    expect(source, '第 1 步没有随行计数，步骤条与 7 项清单无从对应').toContain('class="stage-nav__sub"');
-    expect(source).toContain('{{ live.filledCount }}/{{ live.totalFields }}');
-    // 基础档字号 ≥12（mobile:spec fonts 口径）
-    const sub = ruleOf(allStyles, '.stage-nav__sub');
-    expect(Number((decl(sub, 'font-size') || '').replace('px', ''))).toBeGreaterThanOrEqual(12);
-    // 隐藏规则必须在最后一个 <style> 块的 max-width 媒体查询里（写在中间会被后续桌面规则盖成死代码）
-    const narrow = mediaBlock(lastStyle, '(max-width: 1100px)');
-    expect(decl(ruleOf(narrow, '.stage-nav__sub'), 'display'), '窄屏没隐藏随行计数，会挤破阶段导航那一行').toBe('none');
+  it('2026-11-06 走查：步骤条随行计数退役（PC 左栏画像卡常驻同一读数，同屏两处计数是重复）', () => {
+    expect(source, 'stage-nav__sub 应整体移除：计数由左栏画像卡承担，移动端由面板角标承担').not.toContain('stage-nav__sub');
+    expect(source, '面板头计数仍要保留（唯一的已收集读数出口）').toContain('live.filledCount }} / {{ live.totalFields');
   });
 
   it('#60 完成态浮层动作行撑满、主按钮独占余宽（桌面档）', () => {

@@ -3,38 +3,57 @@
     <V2Nav />
 
     <main class="state__main">
-      <!-- 页头：与学习台/学习路径/知识图谱一致，PC 不再直接从 KPI 卡开头 -->
+      <!-- 页头：三张 KPI 移到标题行右侧（2026-11-06 走查）——原独立一行三等分卡把
+           页头顶到 ~110px，PC 首屏为它多滚半屏。现在与「查看学习历史」同排收场；
+           全空态时不渲染 0 值胶囊（状态由下方 state__hero 整卡表达） -->
       <header class="state__head">
         <div>
           <h1>学习状态</h1>
           <p>训练负荷、疲劳度与掌握进度</p>
         </div>
-        <router-link to="/user/learning-history" class="btn-ghost">查看学习历史</router-link>
-      </header>
-      <div class="kpis">
-        <div class="kpis__grid" role="list" aria-label="学习状态概览">
-          <div v-if="kpiLoading" class="kpis__loading" role="listitem">
-            <SkeletonLoader variant="lines" :count="2" />
+        <div class="state__head-side">
+          <div v-if="!stateEmpty" class="kpis">
+            <div class="kpis__grid" role="list" aria-label="学习状态概览">
+              <div v-if="kpiLoading" class="kpis__loading" role="listitem">
+                <SkeletonLoader variant="lines" :count="2" />
+              </div>
+              <template v-else>
+                <div class="kpi" role="listitem">
+                  <strong>{{ kpiStreak ?? '—' }}</strong>
+                  <span>连续天数</span>
+                </div>
+                <div class="kpi" role="listitem">
+                  <strong>{{ kpiWeekMinutes ?? '—' }}</strong>
+                  <span>本周分钟</span>
+                </div>
+                <div class="kpi" role="listitem">
+                  <strong>{{ kpiMastered ?? '—' }}</strong>
+                  <span>已掌握知识点</span>
+                </div>
+              </template>
+            </div>
           </div>
-          <template v-else>
-            <div class="kpi" role="listitem">
-              <strong>{{ kpiStreak ?? '—' }}</strong>
-              <span>连续天数</span>
-            </div>
-            <div class="kpi" role="listitem">
-              <strong>{{ kpiWeekMinutes ?? '—' }}</strong>
-              <span>本周分钟</span>
-            </div>
-            <div class="kpi" role="listitem">
-              <strong>{{ kpiMastered ?? '—' }}</strong>
-              <span>已掌握知识点</span>
-            </div>
-          </template>
+          <router-link to="/user/learning-history" class="btn-ghost">查看学习历史</router-link>
         </div>
-      </div>
+      </header>
 
       <div class="state__grid">
-        <div class="state__col" :class="{ 'state__col--empty': !hasAnyLoad }">
+        <!-- 全空态整卡（2026-11-06 走查）：趋势 / AI 建议 / 复习 / 掌握此前四张卡各说一遍
+             「完成第一次学习后…」，PC 双栏还因 advisory order:-1 提前产生两处空洞；
+             真新用户（无趋势数据且三 KPI 全 0）收成一张卡说完状态 + 唯一出口 -->
+        <section v-if="stateEmpty" class="state__hero">
+          <!-- 与图谱/学习路径同一套空态原语（2026-11-06 走查「空态设计不一样」）：
+               V2ResultState 66px 图标盘 + 标题 + 说明 + 胶囊主动作，画布上直接居中 -->
+          <V2ResultState
+            tone="empty"
+            title="学习状态正在积累中"
+            description="完成第一次学习后，这里会出现训练负荷曲线、AI 建议与掌握分布。"
+            action-text="去开始学习"
+            @action="router.push('/learning-paths')"
+          />
+        </section>
+        <template v-else>
+        <div class="state__col">
           <!-- 趋势图（PC 满宽：图表吃满容器，下方再切 60/40 双栏） -->
           <section class="card band state__trend">
             <div class="band__head">
@@ -58,8 +77,9 @@
                     <li><b class="dot dot--amber"></b>保持规律学习让训练负荷平稳积累。疲劳偏高时安排休息，避免长期处于低状态区</li>
                   </ul>
                 </details>
-                <!-- 空态不报「近 N 天」：无数据时没有跨度可言，写「近 10 天」会先承诺一张不存在的图 -->
-                <span v-if="hasAnyLoad" class="band__meta">{{ drawnSpanLabel }}</span>
+                <!-- 「近 N 天」实画跨度小字已删（2026-11-06 走查）：右侧就是 [近7天|近30天] 切换器，
+                     标题旁再写一份「近 3 天」（单日数据时的实画跨度）与切换器互相矛盾。
+                     实画天数仍保留在读屏口径 trendAriaLabel 里，没丢口径只是不双写 -->
               </div>
               <!-- 窗口选择器只在真的有图可切时出现（2026-11-06 审计 §5 + 空态口径）：
                    空态/加载中/加载失败时图区是一块说明，切换器切的是不存在的曲线（死开关）；
@@ -235,7 +255,7 @@
           <!-- AI 调控建议（原型 wf-advisory，788-793 / 1971-1982）：
                4px 琥珀左边条 + 琥珀星标 head + 正文（guide 结论 / 建议列表 / 预警列表全保留）
                + 主次双按钮 + 成功回执行。skill 生成块走 adaptive-guidance-copy，静态规则兜底。
-               新用户空态时靠 order:-1 提到首屏（原 .state__col--empty 选择器改挂本卡） -->
+               真新用户全空态由顶部 state__hero 整卡承接，本卡的空态只兜「有数据但暂无建议」 -->
           <section class="card advisory state__adv">
             <div class="advisory__head">
               <svg class="advisory__star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z"/></svg>
@@ -442,18 +462,22 @@
                 <!-- 2026-11-04：无到期时区块头不再报「暂无到期」——下方 chart__empty 首句既述状态，
                      区块头只留状态读数，空态作唯一状态出口（同屏重复走查） -->
                 <span v-if="reviewMeta" class="band__meta">{{ reviewMeta }}</span>
+                <!-- 空态直接落在卡头右侧（2026-11-06 走查）：「暂无待复习知识点」原本是 body 里
+                     独立的一行，加上卡头与内衬整卡 ~100px；现在标题左、状态右，一张卡 ~52px -->
+                <span
+                  v-else-if="!reviewLoading && !reviewLoadFailed && !reviewRows.length"
+                  class="band__meta"
+                >暂无待复习知识点</span>
               </div>
             </div>
-            <div class="band__body">
+            <!-- 有内容/在加载/失败才开 body：纯空态不再垫一层内衬 -->
+            <div v-if="reviewLoading || reviewLoadFailed || reviewRows.length" class="band__body">
               <div v-if="reviewLoading" class="chart__loading"><SkeletonLoader variant="lines" :count="3" /></div>
               <div v-else-if="reviewLoadFailed" class="chart__empty" role="alert">
                 <strong>复习清单暂时取不到</strong>
                 <p>{{ NETWORK_UNAVAILABLE_MSG }}</p>
                 <button type="button" class="chart__retry" @click="loadReviews">重试</button>
               </div>
-              <!-- 空态单行（2026-11-05 屏效比）：原大卡套虚线框两行字占 ~150px，压成一行 44px
-                   ——「暂无待复习」不是需要展开讲的状态 -->
-              <p v-else-if="!reviewRows.length" class="rlist__empty">暂无待复习知识点</p>
               <ul v-else class="rlist__rows">
                 <li v-for="r in reviewRows" :key="r.key" class="rlist__row">
                   <span class="rlist__name">{{ r.name }}</span>
@@ -529,6 +553,7 @@
             </div>
           </details>
         </aside>
+        </template>
       </div>
     </main>
 
@@ -555,6 +580,7 @@ import V2Nav from './V2Nav.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import V2Footer from './V2Footer.vue';
 import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
+import V2ResultState from '@/components/ui/V2ResultState.vue';
 import { localDateKey, localDateKeyFromIso } from '@/utils/date';
 import { computeStreakDays } from './streak';
 import { unwrap, unwrapArray } from './unwrap';
@@ -737,6 +763,19 @@ const series = computed<Array<Omit<TrendPoint, 'x' | 'ky' | 'ly' | 'sy' | 'bx' |
       zone: zoneOfLsb(lsb, t?.mature)
     });
   }
+  /* 首次学习前的空白日补 0（2026-11-06 走查）：原实现留 null，折线从首个数据日才起笔——
+     单日数据画不出线，只剩一根孤点和一条竖着的虚线残段。补 0 后三条线从
+     (首前日, 0) 斜向爬升到真实值，「从 0 起步」的趋势在实线上读出来，
+     不再需要上一版的 0 基准虚线 lead（已随之删除）。 */
+  const firstWithData = days.findIndex((d) => d.ktl !== null || d.lf !== null || d.lsb !== null || d.minutes > 0);
+  if (firstWithData > 0) {
+    for (let i = 0; i < firstWithData; i += 1) {
+      days[i].ktl = 0;
+      days[i].lf = 0;
+      days[i].lsb = 0;
+      days[i].zone = zoneOfLsb(0);
+    }
+  }
   return days;
 });
 
@@ -745,10 +784,13 @@ const hasAnyLoad = computed(() => stateTrends.value.some((t) => t.lsb !== null))
 const chartW = 760;
 const chartH = 240;
 const chartPad = 8;
+/* 右缘内边距（2026-11-06 走查）：原来 8px，单日数据时唯一的柱和三个点直接贴死图表右边框。
+   36px 让最末数据点与右壁之间始终有呼吸位（用户给的 32~48px 档取中）。 */
+const RIGHT_INSET = 36;
 /* 左侧 y 轴留白（原型 AXIS=52/812 ≈ 6.4%）：刻度标签贴这块留白，网格与阈值线从 plotX0 起画 */
 const AXIS_W = 46;
 const plotX0 = AXIS_W;
-const plotX1 = chartW - chartPad;
+const plotX1 = chartW - chartPad - RIGHT_INSET;
 
 /* 2026-09-27 外部视觉评审修复：
    ① 裁掉开头无数据日（原来 42 天窗口里曲线只占右侧 40%，左侧空旷悬空）；
@@ -804,12 +846,7 @@ const zeroY = computed<number | null>(() => {
 
 const maxMinutes = computed(() => Math.max(10, ...activeSeries.value.map((d) => d.minutes)));
 
-/* 口径诚实化（2026-09-27 外部走查）：标签按「图里实际画了几天」出，不再照抄请求窗口
-   （原来固定写「近 42 天」，数据只有 9 天时口径与图对不上）；历史短于 42 天时
-   42/90 两档窗口画出同一条线 → 切换器直接不出现，避免假开关。 */
-const drawnSpanLabel = computed(() =>
-  activeSeries.value.length ? `近 ${activeSeries.value.length} 天` : '暂无数据'
-);
+/* 「近 N 天」可见小字已随 band__meta 撤除（见模板注释）；实画天数仍在 trendAriaLabel。 */
 const historyDays = computed(() => {
   const dates = stateTrends.value.map((t) => t.date).filter(Boolean).slice().sort();
   if (dates.length < 2) return dates.length;
@@ -833,7 +870,8 @@ const points = computed<TrendPoint[]>(() => {
   const yOf = (v: number) => chartH - ((v - lo) / span) * chartH;
   const barCap = chartH * 0.28;
   return activeSeries.value.map((d, i) => {
-    const x = plotX0 + step * i;
+    /* 只有一天数据时点画在绘图区中央（2026-11-06 走查）：贴左或贴右都像渲染故障 */
+    const x = n === 1 ? plotX0 + usableW / 2 : plotX0 + step * i;
     const bh = Math.min(barCap, (d.minutes / maxMinutes.value) * barCap);
     // 背景柱锚在 0 基线（2026-11-05 用户定稿）：此前从量程下界（可能是 -26）往上长，
     // 正数柱画在负数区间里读不懂。量程被强制含 0，所以 y0 恒存在。
@@ -1092,6 +1130,9 @@ const hasKpiData = computed(
   () => sessionsOk.value && masteryOk.value
     && ((kpiStreak.value ?? 0) > 0 || (kpiWeekMinutes.value ?? 0) > 0 || (kpiMastered.value ?? 0) > 0)
 );
+/* 全空态（2026-11-06 走查）：无趋势数据且三 KPI 全 0 = 真新用户。
+   四张空卡收成一张 state__hero；有任一真实数据的学员仍走原布局。 */
+const stateEmpty = computed(() => !hasAnyLoad.value && !hasKpiData.value);
 
 /* ---------- 复习台账（既有 GET /ai-teaching/review/due + /review/plan，学习台同源） ----------
    due = 全部到期清单（上限 20），retention 0-1 就是条宽与百分比；
@@ -1657,11 +1698,21 @@ function loadGuidance() {
 .kicker { font-size: 12px; font-weight: 800; letter-spacing: .06em; color: var(--blue-deep); }
 
 /* ---------- 顶部三张 KPI（原型 wf-kpis/wf-kpi，748-755）：等权 3 卡、gap 9px、居中排版 ---------- */
-.kpis { display: block; }
-.kpis__grid {
-  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px;
+/* 页头右侧：KPI 胶囊 + 入口按钮同排（2026-11-06 走查） */
+.state__head-side {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
 }
-.kpis__loading { grid-column: 1 / -1; padding: 2px 0; }
+.kpis { display: block; }
+/* PC（2026-11-06 走查）：三等分把每张框拉到 ~350px 宽、中间只有几个小字，两侧全是空地。
+   改 flex 按内容收紧、靠左排；数字 24px/800 的 KPI 档不变。 */
+.kpis__grid {
+  display: flex; flex-wrap: wrap; gap: 9px; justify-content: flex-start;
+}
+.kpi { flex: 0 0 auto; min-width: 0; }
+.kpis__loading { flex: 1 1 100%; padding: 2px 0; }
 .kpi {
   background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--mk-radius-modal); box-shadow: var(--shadow-sm);
@@ -1677,6 +1728,7 @@ function loadGuidance() {
   }
   .kpi strong { font-size: 24px; }
 }
+/* 320~767：数字与标签纵向堆叠时保证居中观感（flex 化后 kpi 自身仍是 grid） */
 .kpi strong {
   /* P3-42（设计评审）：22px 是游离字号（不在 12/14/15/16/24/28 任何一档），
      且与 /user/account 同类统计 16px 不同档——归 16px 档（--wf-fs-title） */
@@ -1763,9 +1815,8 @@ function loadGuidance() {
 /* #118：隐式 auto 轨按 min-content 解算（390 宽实测 387.9px，容器仅 354px），
    卡片被撑到 388px 导致整页横向溢出；显式 minmax(0,1fr) 让子项可收缩 */
 .state__col { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
-/* P2-11：新用户（指标为空）时把「AI 调控建议」提到最前，作为首屏主内容；图表空态降级为「积累中」说明
-   （原选择器 .band--suggest 随旧卡结构改名，2026-09-30 挂到现役的 wf-advisory 卡） */
-.state__col--empty .advisory { order: -1; }
+/* 全空态容器（2026-11-06 走查）：视觉形态统一交给 V2ResultState（66px 图标盘那套），
+   本层只做栅格占位——移动端单列自然满宽；有数据时本节点不渲染，原布局不受影响 */
 /* PC 双栏看板（2026-11-05 用户定稿「拒绝 1100px 拉面条」）：
    1101 以上左 60% 调控中心 / 右 40% 复习 + 掌握分布 + 学习偏好，趋势图满宽横贯顶部。
    .state__col 用 display:contents 拆掉移动端的单列包裹层，让四块卡片直接进栅格——
@@ -1778,6 +1829,8 @@ function loadGuidance() {
   }
   .state__col { display: contents; }
   .state__trend { grid-column: 1 / -1; }
+  /* 全空态整卡横贯双栏（不占格子，避免 auto-placement 把 side 顶下去留两处空洞） */
+  .state__hero { grid-column: 1 / -1; }
   /* 用 state__adv 这个放置专用类别名，不写第二处 `.advisory {`：
      grid-track 回归测试按「选择器后紧跟 {」扫源码取第一条规则，
      多出来的 `.advisory {` 块会把它读到、误判轨道声明丢失 */
@@ -1791,12 +1844,16 @@ function loadGuidance() {
    2026-09-27 死 CSS 清理：.chart / .suggest 卡级容器模板已无（现役卡是 band），删除 */
 /* 42/90 天窗口切换 → 原型 wf-filter 胶囊语言（841-846）：白底 + 1px line 描边，
    选中态去描边 + 蓝 12% 底，不再用灰底轨道 + 内嵌投影（那是分段控件的老语法） */
-.seg { display: inline-flex; gap: 6px; }
+/* 窗口切换器（2026-11-06 走查）：36px 大胶囊在移动端换行独占一行。收成 26px 紧凑分段
+   控件（用户给档：26 高 / 6px 圆角 / 12px 字号），与卡片标题同一行右侧，省一整行高度。
+   （标题行 band__head 是 flex-wrap，同一行放得下就不再折行。） */
+.seg { display: inline-flex; gap: 4px; }
 .seg__item {
-  min-height: 36px; padding: 7px 14px;
+  min-height: 26px; padding: 2px 10px;
+  display: inline-flex; align-items: center;
   border: 1px solid var(--line); background: var(--surface);
-  border-radius: 999px;
-  font: inherit; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer;
+  border-radius: 6px;
+  font: inherit; font-size: 12px; font-weight: 600; color: var(--muted); cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 .seg__item:hover { color: var(--blue-deep); border-color: color-mix(in srgb, var(--blue) 35%, transparent); }
@@ -1935,7 +1992,7 @@ function loadGuidance() {
 @media (max-width: 1100px) {
   .state__main { padding: 16px 14px 32px; }
   /* 42/90 天分段控件是触屏主入口之一：药丸高度抬到触控口径（容器本身已 36px 基线） */
-  .seg__item { padding: 8px 12px; }
+  .seg__item { padding: 2px 8px; }
 }
 </style>
 
@@ -2133,12 +2190,6 @@ function loadGuidance() {
   background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--mk-radius-lg); box-shadow: var(--mk-shadow-modal);
 }
-/* 复习清单空态：单行 44px（原大卡套虚线框两行占 ~150px） */
-.rlist__empty {
-  margin: 0; min-height: 44px;
-  display: flex; align-items: center;
-  font-size: 12.5px; color: var(--faint);
-}
 /* 掌握分布三色分段条 */
 .mbar {
   display: flex; height: 8px; border-radius: 999px; overflow: hidden;
@@ -2283,8 +2334,7 @@ function loadGuidance() {
      （grid flex-basis 460px 使卡片先吃满行宽；实测换行发生在约 616px 以下）。
      手机档改成整宽、居中、与卡片同宽，从「孤零零挂右边」变成一次有意的次级动作（2026-10-15 走查）。
      640 以上（平板/桌面）维持原「KPI 行 + 右侧入口」单行布局不动。 */
-  .kpis { flex-direction: column; align-items: stretch; gap: 10px; }
-  .kpis__grid { flex: 1 1 auto; width: 100%; }
+  /* KPI 已移入页头右侧（2026-11-06 走查）：窄屏 flex-wrap 自动换行，无需再给整行规则 */
 }
 @media (max-width: 1100px) {
   /* 体检卡随原卡结构退役：.vitals__value / .vitals{padding} 两条移动规则已无对应元素（死 CSS 清理），
@@ -2298,9 +2348,7 @@ function loadGuidance() {
   /* 分段控件（42/90 天）与 AI 建议的 CTA 实测 34px，抬到 36（mobile:spec lt36 门禁）。
      .seg 容器自带 3px 内边距会跟着长高，视觉上仍是同一个药丸。 */
   .seg__item {
-    min-height: 36px;
-    display: inline-flex;
-    align-items: center;
+    min-height: 32px;
   }
   .sug__cta {
     min-height: 36px;

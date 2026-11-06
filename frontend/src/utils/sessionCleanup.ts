@@ -99,6 +99,9 @@ export function goalGenTrackingKey(userId: string): string {
 
 export interface GoalGenTrackingEntry {
   pathId: string;
+  /** 发起这次生成的会话 id（2026-11-06 走查 图4）：入口页要把「生成中」挂回
+      「最近会话」中对应的那一行，而不是另起一颗孤立胶囊。老数据没有该字段 → 可选。 */
+  conversationId?: string;
   at: number;
 }
 
@@ -111,17 +114,27 @@ export function getGoalGenTracking(userId: string | null): GoalGenTrackingEntry 
     const parsed = JSON.parse(raw) as Partial<GoalGenTrackingEntry>;
     const pathId = typeof parsed?.pathId === 'string' ? parsed.pathId.trim() : '';
     if (!pathId) return null;
-    return { pathId, at: typeof parsed?.at === 'number' && Number.isFinite(parsed.at) ? parsed.at : 0 };
+    const conversationId = typeof parsed?.conversationId === 'string' ? parsed.conversationId.trim() : '';
+    return {
+      pathId,
+      ...(conversationId ? { conversationId } : {}),
+      at: typeof parsed?.at === 'number' && Number.isFinite(parsed.at) ? parsed.at : 0
+    };
   } catch {
     return null;
   }
 }
 
 /** 确认拿到 pathId 时写入；生成仍在后端跑时刷新/离页后凭它恢复 pill */
-export function setGoalGenTracking(userId: string | null, pathId: string): void {
+export function setGoalGenTracking(userId: string | null, pathId: string, conversationId?: string | null): void {
   if (!userId || !pathId) return;
+  const cid = typeof conversationId === 'string' ? conversationId.trim() : '';
   try {
-    localStorage.setItem(goalGenTrackingKey(userId), JSON.stringify({ pathId, at: Date.now() } satisfies GoalGenTrackingEntry));
+    localStorage.setItem(goalGenTrackingKey(userId), JSON.stringify({
+      pathId,
+      ...(cid ? { conversationId: cid } : {}),
+      at: Date.now()
+    } satisfies GoalGenTrackingEntry));
   } catch { /* 隐私模式忽略 */ }
 }
 
