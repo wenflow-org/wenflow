@@ -178,7 +178,7 @@ sandbox:goal-agent.understanding.urgency
 | `dimensions` | object | path-agent |
 | `issues` | object[] | path-agent |
 | `passed` | boolean | path-agent |
-| `replanInstructions` | string? | path-agent, skill:path-planning |
+| `replanInstructions` | string? | path-agent |
 | `conceptKcs` | object[] | path-agent |
 | `taskKcLinks` | object[] | path-agent |
 | `kcGraph` | object | path-agent |
@@ -267,7 +267,7 @@ sandbox:path-agent.supplementRequest
 | `knowledge.points` | array<object> | teaching-agent |
 | `pedagogy.strategies` | array<string> | teaching-agent |
 | `control.isCompletionCandidate` | boolean | teaching-agent |
-| `control.shouldTriggerPeer` | boolean | skill:peer-reinforcement, teaching-agent |
+| `control.shouldTriggerPeer` | boolean | teaching-agent |
 | `control.checkpoint` | object | teaching-agent |
 | `control.completionCandidateEvidence` | object | teaching-agent |
 | `learner.learnerProjection` | object | skill:teaching-turn |
@@ -329,6 +329,7 @@ sandbox:teaching-agent.session.topic
 sandbox:teaching-agent.session.wrapup
 sandbox:teaching-agent.summary.knowledgeItems
 sandbox:teaching-agent.task.profile
+sandbox:teaching-agent.taskContext
 sandbox:teaching-agent.teachingState.classroomContext
 sandbox:teaching-agent.teachingState.classroomEventHistory
 sandbox:teaching-agent.teachingState.teachingControlContext

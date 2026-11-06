@@ -145,7 +145,7 @@ flowchart LR
 | --- | --- | --- | --- | --- | --- |
 | `adaptive-guidance-copy` | mainline | `prompts/core/adaptive-guidance-copy.yaml` | temp=0.6 / propagate | 4/8 | 0 |
 | `lesson-knowledge-enricher` | mainline | `prompts/core/lesson-knowledge-enricher.yaml` | temp=0.4 / propagate | 1/6 | 0 |
-| `learning-predictor` | mainline | `prompts/core/learning-predictor.yaml` | temp=0.2 / propagate | 0/7 | 0 |
+| `learning-predictor` | mainline | `prompts/core/learning-predictor.yaml` | temp=0.2 / propagate | 3/7 | 0 |
 
 > 「字段角色」= manifest `promptContract.fields` 的 direction/visibility 元数据；输出 schema 以 core.yaml 的 `fields` 为准，0 不代表没有输出契约。
 **不在 Agent steps 内、但登记在本阶段的 Skill**：

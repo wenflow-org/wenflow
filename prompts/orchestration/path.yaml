@@ -572,10 +572,10 @@ routings:
   - agentId: skill:path-reviewer
     fieldId: replanInstructions
     render: hidden
-    handoff: [path-agent, skill:path-planning]
+    handoff: [path-agent]
     internal: true
     accumulate: false
-    notes: 评审未过时的修订指令回传
+    notes: 评审未过时的修订指令回传。path-planning 并不直接收到 replanInstructions 这个键：重规划时它经 replan.reviewerFeedback（已声明 sandbox:path.replan）消费，故不声明为向 skill:path-planning 的直接交接（#199 实参对账）
 
   # === skill:kc-mapper（2026-10-24 契约同步批；代码侧物化为概念图/KC 注册表） ===
   - agentId: skill:kc-mapper

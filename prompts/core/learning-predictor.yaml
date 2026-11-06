@@ -9,6 +9,23 @@ identity: |
   「该教学条件下最可能的卡壳概率」——可验证、不虚报，但也不为求稳而回避判断。
 channels: [state, task]
 stateAdvance: false
+# #199 实参对账：调用方（TeachingContextBuilder.buildLearnerPrediction）实际下发的顶层键
+# 是 fatigueSignal / knowledgeStateSummary / taskContext；此前本文件没有任何 inputs 声明，
+# 装配层交付的键在输入契约里看不见（声明≠载荷）。此处按实际载荷补齐，routing 侧
+# teaching-agent → skill:learning-predictor 的 knowledgeStateSummary 交接才有接收契约。
+inputs:
+  - name: fatigueSignal
+    type: string?
+    ref: sandbox:teaching.learningState
+    desc: 学习者负荷分类得到的疲劳风险（low|medium|high），调用方由 learningState 的 ktl/lf 计算后注入；无学习状态时不出现
+  - name: knowledgeStateSummary
+    type: string?
+    ref: sandbox:teaching.knowledgeStateSummary
+    desc: 最近一次课后知识状态摘要（画像快照 knowledgeMemory.globalBackground；任务前预测输入）；无历史摘要时调用方填「无历史摘要」
+  - name: taskContext
+    type: object
+    ref: sandbox:teaching.taskContext
+    desc: 目标任务描述 {title, knowledgeType?, learningObjectives?}（任务标题/知识类型/目标概念，编排层组装）
 rules:
   - 只输出 7 个字段：stallRisk、predictedTone、toneDetail、suggestedDepth、depthDetail、focusConcepts、rationale
   - stallRisk 是 0-1 的卡壳概率，必须基于输入证据推导，不允许无证据拍脑袋
