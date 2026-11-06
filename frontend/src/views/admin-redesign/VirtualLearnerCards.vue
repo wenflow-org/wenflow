@@ -117,12 +117,15 @@
         action-text="去虚拟学习者"
         @action="goInstances"
       />
+      <!-- 2026-11-06 视觉走查：主操作改走 action-text（与全站空态同一条渲染路径），
+           并补上「为什么空」的一句——块级空态统一为「标题 + 一句为什么 + 可选动作」。 -->
       <MkEmptyState
         v-else-if="!cards.length"
         title="卡库还是空的"
-      >
-        <button type="button" class="mk-btn mk-btn--primary" @click="openImport">导入第一张卡</button>
-      </MkEmptyState>
+        description="导入一张身份卡后，就能从它派生虚拟学习者。"
+        action-text="导入第一张卡"
+        @action="openImport"
+      />
       <!-- 筛选后 0 行是「卡内列表」场景，按规范用一行式内联空态（MkEmptyState + --line 修饰）。 -->
       <MkEmptyState
         v-else-if="!filtered.length"

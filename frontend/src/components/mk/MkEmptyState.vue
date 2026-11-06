@@ -10,11 +10,13 @@
          并自带 role="alert"，不需要各页再写 --error 修饰与手拼重试按钮。 -->
     <!-- 图标底盘是空态的固定构件（2026-11-06 用户「有的空态是这样有的空态又是图二这样」）：
          此前只有少数页面传 icon，同页就会出现「有盘 / 无盘」两种；compact 档（卡内小槽位）
-         不占盘。不传 icon 时给统一的收件箱图形，而不是让页面各拼一个字符。 -->
+         不占盘。图形统一走这里的收件箱（错误态由 .mk-empty--error 换成红系）——
+         原 `icon` 属性传的是字符（◌ / ! / ⚠），在 66px 盘里读成一个细环，
+         与同页其它空态不是一种图形，已整体删除；要换图形请用 #icon 具名插槽传 SVG。 -->
     <span v-if="!compact" class="mk-empty__icon" aria-hidden="true">
       <slot name="icon">
-        <Inbox v-if="!icon" :size="24" :stroke-width="1.5" />
-        <template v-else>{{ icon }}</template>
+        <CloudOff v-if="tone === 'error'" :size="24" :stroke-width="1.5" />
+        <Inbox v-else :size="24" :stroke-width="1.5" />
       </slot>
     </span>
     <strong>{{ title }}</strong>
@@ -34,12 +36,10 @@
 </template>
 
 <script setup lang="ts">
-import { Inbox } from 'lucide-vue-next'
+import { CloudOff, Inbox } from 'lucide-vue-next'
 
 withDefaults(
   defineProps<{
-    /** 图标字符（简单场景）；复杂 SVG 用 #icon 具名插槽 */
-    icon?: string
     title: string
     /** 一句「为什么这里是空的」；错误态下放具体错误信息 */
     description?: string
@@ -57,7 +57,6 @@ withDefaults(
     compact?: boolean
   }>(),
   {
-    icon: '',
     description: '',
     actionText: '',
     actionBusy: false,

@@ -397,7 +397,6 @@
               <MkEmptyState
                 v-if="!goalConversationMessages.length"
                 compact
-                icon="◌"
                 title="尚未产生目标对话"
                 description="目标澄清尚未开始。"
               />

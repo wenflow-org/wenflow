@@ -1,7 +1,6 @@
 ﻿<template>
   <div v-if="detailError" class="mk-page vp">
     <MkEmptyState
-      icon="◌"
       title="画像加载失败"
       description="暂时无法获取该虚拟学习者的画像与故事池。"
       action-text="重试"

@@ -2,7 +2,6 @@
   <div v-if="detailError" class="mk-page ld">
     <!-- 返回入口在壳层顶栏（面包屑 back）；错误态保留重试 -->
     <MkEmptyState
-      icon="◌"
       tone="error"
       title="详情加载失败"
       description="暂时无法获取该学习者的完整档案。"
@@ -416,7 +415,6 @@
       </template>
       <MkEmptyState
         v-else
-        icon="◌"
         title="暂无认知画像数据"
         description="重算快照后自动生成，画像/派生洞察等卡将随快照一起更新。"
       />

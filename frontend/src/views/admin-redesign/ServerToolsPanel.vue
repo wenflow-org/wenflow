@@ -43,7 +43,6 @@
       <MkEmptyState
         v-else-if="deadFailed"
         tone="error"
-        icon="!"
         title="事件清单加载失败"
         action-text="重试"
         compact

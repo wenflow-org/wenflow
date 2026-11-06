@@ -378,7 +378,6 @@
         <!-- 空态：原型 .empty 词表（图标 + 结论 + 说明 + 行动入口），不再裸一句话 -->
         <MkEmptyState
           v-if="flow && !flow.steps.length && !flow.entry.length && !flow.exit.length"
-          icon="⇅"
           title="该阶段暂无字段路由数据"
           description="编排文件未声明字段路由，可在「字段路由」页编辑编排文件后回来。"
           action-text="刷新"

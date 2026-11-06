@@ -137,7 +137,6 @@
       <MkEmptyState
         v-else-if="liveLogsError && !logs.length"
         min
-        icon="◌"
         tone="error"
         title="日志加载失败"
         :description="liveLogsError"
@@ -372,7 +371,6 @@
       <MkEmptyState
         v-else
         min
-        icon="◌"
         :title="emptyTitle"
         :description="emptyDesc"
         :action-text="emptyActionText"

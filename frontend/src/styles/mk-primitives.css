@@ -1378,6 +1378,9 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   font-size: var(--mk-fs-body);
   line-height: 1.6;
   color: var(--mk-muted);
+  /* 中文断行均衡：40ch 按 0 宽算，中文实际一行只放得下 23 个字，
+     不均衡时最后一行常常只剩一个字（实测「…自动生 / 成。」） */
+  text-wrap: balance;
 }
 .mk-empty__icon {
   width: 66px;
@@ -1392,13 +1395,17 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   font-weight: 800;
 }
 .mk-empty__icon svg { display: block; }
+/* 主操作并进管理台按钮档（2026-11-06 视觉走查）：此前是 7px/16px + 6px 圆角 + 描边的
+   次级样（实测 39px 高），而插槽里写 mk-btn--primary 的空态是 32px / 8px——同一类动作两种按钮。
+   现在与 .mk-btn--primary 同形同高，插槽与 action-text 两条路径读起来一样。 */
 .mk-empty__action {
-  margin-top: 8px;
-  padding: 7px 16px;
-  border-radius: var(--mk-radius-sm);
-  border: 1px solid rgba(47, 106, 224, 0.3);
-  background: var(--mk-blue-bg);
-  color: var(--mk-blue);
+  margin-top: 10px;
+  min-height: 32px;
+  padding: 5px 14px;
+  border: 0;
+  border-radius: var(--mk-radius-md);
+  background: var(--mk-blue-fill, #2f6ae0);
+  color: var(--mk-on-fill);
   font: inherit;
   font-size: var(--mk-fs-body);
   font-weight: 700;

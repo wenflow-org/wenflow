@@ -143,7 +143,6 @@
         <MkEmptyState
           min
           tone="error"
-          icon="◌"
           title="学习者快照加载失败"
           :description="liveFailures.learners"
           action-text="重试"

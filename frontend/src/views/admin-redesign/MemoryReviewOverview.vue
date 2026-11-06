@@ -84,6 +84,7 @@
         v-else-if="!loading && !rows.length"
         min
         title="暂无记忆痕迹数据"
+        description="任何学习者产生记忆痕迹后，这里按到期紧急度排序。"
         action-text="查看教学会话"
         @action="goTeachingSessions"
       />

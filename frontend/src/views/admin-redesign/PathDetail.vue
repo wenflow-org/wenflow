@@ -9,12 +9,10 @@
   <div class="mk-page pdx">
     <MkEmptyState
       v-if="state === 'resolving'"
-      icon="◌"
       title="正在打开该路径所在的学习会话…"
     />
     <MkEmptyState
       v-else-if="state === 'error'"
-      icon="◌"
       tone="error"
       title="路径打开失败"
       :description="errorMsg"

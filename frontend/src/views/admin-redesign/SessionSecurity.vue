@@ -43,7 +43,6 @@
     <MkEmptyState
       v-if="loadError && !sessions.length"
       min
-      icon="◌"
       tone="error"
       title="会话列表加载失败"
       :description="loadError"
