@@ -2,9 +2,10 @@
   <div class="learn v2-page" :class="{ 'learn--quiz': !!checkpoint }">
     <!-- 沉浸式头部 -->
     <header class="learn__head">
-      <button type="button" class="learn__back" @click="goBack">
-        <span class="learn__back-arrow" aria-hidden="true">‹</span>
-        <span class="learn__back-text">返回路径详情</span>
+      <!-- 返回改为纯图标钮（2026-11-06 走查）：文字版与右侧两行标题只隔 18px，读成一坨；
+           现在 32×32 图标钮 + 右侧一条细竖线，标题有了自己的左边界 -->
+      <button type="button" class="learn__back" aria-label="返回路径详情" title="返回路径详情" @click="goBack">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M15 18l-6-6 6-6"/></svg>
       </button>
       <div class="learn__title">
         <strong>{{ taskTitle || '课堂' }}</strong>
@@ -30,7 +31,14 @@
           aria-controls="learn-kp-panel"
           @click="toggleKp"
         >知识点 <b>{{ masteredCount }}/{{ knowledgePoints.length }}</b></button>
-        <span class="learn__live learn__live--head" :class="{ 'learn__live--err': !!initError && !isLocked, 'learn__live--locked': isLocked }">{{ liveState }}</span>
+        <!-- 顶栏「学习中」裸绿字撤除（2026-11-06 走查）：用户本来就在课堂里，这行绿字
+             既不解释状态、又与两侧胶囊/按钮抢宽度。正常态整条让位；只有**异常**（开课失败
+             红字 / 锁定课琥珀字）才显形——那是用户必须知道的，藏在 ⋯ 菜单里不合适。 -->
+        <span
+          v-if="initError || isLocked"
+          class="learn__live learn__live--head"
+          :class="{ 'learn__live--err': !!initError && !isLocked, 'learn__live--locked': isLocked }"
+        >{{ liveState }}</span>
         <ImmersiveMenu>
           <!-- 窄屏把连接态收进 ⋯ 菜单（2026-10-08 用户侧走查：头部「学习中」与标题抢宽度，
                12 字任务名被挤成「11 字 + 末字孤行」）。桌面仍在头部常驻，见 .learn__live--head。 -->
@@ -282,11 +290,10 @@
               <template v-else>
                 <div class="msg__bubble">{{ m.text }}</div>
               </template>
-              <div class="msg__meta">
-                你 · {{ m.time }}
+              <!-- 单条时间戳撤除（2026-11-06 走查），meta 行只在有编辑入口时存在 -->
+              <div v-if="canEditMessage(m)" class="msg__meta">
                 <!-- 编辑入口归 meta 行（与 AI 操作条同一语言）：不再悬浮在气泡外遮字 -->
                 <button
-                  v-if="canEditMessage(m)"
                   type="button"
                   class="msg__edit-btn"
                   title="编辑这条消息"
@@ -296,7 +303,9 @@
               </div>
             </div>
             <div v-else class="msg msg--ai">
-              <span class="msg__avatar"><img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="问流" /></span>
+              <!-- AI 头像撤除（2026-11-06 走查）：30px 圆 + 10px gap 把气泡整体右推 40px，
+                   而下方的卡点标签 / 本回合提示 / 小测卡都贴最左——左侧出现三条不同的边界线。
+                   去掉头像后气泡与它们共用同一条左缘（与目标规划页同口径）。 -->
               <div class="msg__content msg__content--actions"
                 @mouseenter="onBubbleEnter(m.id || '')"
                 @mouseleave="onBubbleLeave"
@@ -346,17 +355,20 @@
                   @regenerate="regenerateMessage(m)"
                   @feedback="(up) => sendMessageFeedback(m, up)"
                 />
-                <span v-if="confusionDeltas[mi]?.length" class="msg__chip msg__chip--confuse">发现卡点：「{{ confusionDeltas[mi]?.join('、') }}」</span>
-                <div class="msg__meta">
-                  问流导师 · {{ m.time }}
-                  <button v-if="m.failed" type="button" class="msg__retry" @click="retryLast">重试</button>
+                <span v-if="confusionDeltas[mi]?.length" class="msg__chip msg__chip--confuse">
+                  <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M13 2 4 14h6l-1 8 9-12h-6l1-8z"/></svg>
+                  发现卡点：「{{ confusionDeltas[mi]?.join('、') }}」
+                </span>
+                <!-- 单条时间戳撤除（2026-11-06 走查）：「问流导师 · 17:54」每句底下一行、
+                     白吃 ~28px，把相邻气泡越推越远。meta 行只留真正可操作的东西（失败重试）。 -->
+                <div v-if="m.failed" class="msg__meta">
+                  <button type="button" class="msg__retry" @click="retryLast">重试</button>
                 </div>
               </div>
             </div>
           </template>
 
           <div v-if="typing && streamingBubbleIndex === -1" class="msg msg--ai">
-            <span class="msg__avatar"><img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="问流" /></span>
             <div class="msg__bubble msg__bubble--typing"><i></i><i></i><i></i></div>
           </div>
 
@@ -449,7 +461,20 @@
         <Transition name="cp">
           <div v-if="checkpoint && !completed" ref="checkpointEl" class="checkpoint" :class="{ 'checkpoint--attention': checkpointAttention }">
           <div class="checkpoint__head">
-            <span class="checkpoint__badge">小测</span>
+            <!-- 头部一行：左「小测」签 + 右「跳过」（2026-11-06 走查：原来跳过在底部
+                 与提交并排另占一行，一张小测卡被上下两条动作行夹住，高度近 40%） -->
+            <div class="checkpoint__head-top">
+              <span class="checkpoint__badge">小测</span>
+              <span
+                v-if="checkpoint.allowSkip !== false && !checkpointPending && !checkpointSubmitting"
+                class="checkpoint__skip"
+                role="button"
+                tabindex="0"
+                @click="skipCheckpoint"
+                @keydown.enter="skipCheckpoint"
+                @keydown.space.prevent="skipCheckpoint"
+              >跳过</span>
+            </div>
             <strong v-html="formatMessage(checkpointHeading)"></strong>
             <!-- 服务端下发的 title 是「题干截 20 字 + 省略号」（teaching-turn-engine.ts），
                  与紧随其后的完整题干重复；只在 title 不是题干前缀时才单独渲染（见 checkpointTitlePair）。
@@ -498,15 +523,6 @@
               @keydown.enter="submitCheckpointFromUi"
               @keydown.space.prevent="submitCheckpointFromUi"
             >{{ checkpointPending ? '判定中…' : '提交' }}</span>
-            <span
-              v-if="checkpoint.allowSkip !== false && !checkpointPending && !checkpointSubmitting"
-              class="btn-ghost"
-              role="button"
-              tabindex="0"
-              @click="skipCheckpoint"
-              @keydown.enter="skipCheckpoint"
-              @keydown.space.prevent="skipCheckpoint"
-            >跳过</span>
             <span
               v-if="checkpointSubmitting && !checkpointStreaming"
               class="btn-ghost"
@@ -600,7 +616,9 @@
               @input="interactionMeta.onInput(input.length)"
               @keydown.enter.exact.prevent="send"
             ></textarea>
-            <span class="composer__count">{{ input.length }} / 800</span>
+            <!-- 字数只在接近上限时出现（2026-11-06 走查）：没打字时右侧常年顶着「0 / 800」
+                 是纯噪音；600 字起渐进显示，够用户在撞 800 之前看到余量 -->
+            <span v-if="input.length > 600" class="composer__count">{{ input.length }} / 800</span>
             <!-- 发送/停止 同位置切换：导师流式中变停止（checkpointPending 判定中不可停止，保持禁用） -->
             <span
               v-if="!typing"
@@ -2823,7 +2841,7 @@ onBeforeUnmount(() => {
 
 /* ---------- 头部 ---------- */
 .learn__head {
-  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 18px;
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px;
   padding: 12px 24px;
   background: color-mix(in srgb, var(--surface) 94%, transparent);
   border-bottom: 1px solid var(--line);
@@ -2831,12 +2849,20 @@ onBeforeUnmount(() => {
   position: relative;
   z-index: 50;
 }
-/* min-height 36：返回路径详情是这一屏唯一的鼠标出口，13px 字行高下热区只有 87×20
-   （2026-10-08 用户侧走查 #62/#70）。文字仍垂直居中，页头高度由 44px 的 ⋯ 决定、不受影响。 */
-.learn__back { font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; white-space: nowrap; background: none; border: 0; padding: 0; min-height: 36px; display: inline-flex; align-items: center; gap: 4px; font-family: inherit; }
-.learn__back-arrow { font-size: 18px; line-height: 1; }
-.learn__back:hover { color: var(--blue-deep); }
-.learn__title { display: grid; gap: 3px; min-width: 0; }
+/* 返回钮：纯图标 32×32 / 8px（2026-11-06 走查）。原来它是一串「‹ 返回路径详情」文字，
+   与右侧两行标题只隔 18px，两条信息黏成一坨；现在是图标 + 标题左侧一条细竖线，
+   标题有了明确左边界，页头右侧的三颗控件也统一到 32/8 这一档。 */
+.learn__back {
+  width: 32px; height: 32px; flex: 0 0 auto;
+  display: inline-grid; place-items: center;
+  padding: 0;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface); color: var(--muted);
+  cursor: pointer;
+  transition: color 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+}
+.learn__back:hover { color: var(--blue-deep); border-color: color-mix(in srgb, var(--blue) 35%, var(--line)); }
+.learn__title { display: grid; gap: 3px; min-width: 0; border-left: 1px solid var(--line); padding-left: 16px; }
 .learn__title strong { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .learn__title small { font-size: 12px; color: var(--faint); }
 .learn__head-right { display: flex; align-items: center; gap: 10px; position: relative; }
@@ -2851,16 +2877,17 @@ onBeforeUnmount(() => {
 }
 .learn__state-link:hover { color: var(--blue-deep); border-color: color-mix(in srgb, var(--blue) 40%, transparent); background: color-mix(in srgb, var(--blue) 6%, transparent); }
 /* 知识点入口（头部精简：原型顶栏没有常驻状态胶囊，侧栏入口收成一颗轻量 chip） */
+/* 头部右侧三件套统一成 32 高 / 8px 小圆角矩形（2026-11-06 走查）：
+   此前是「深灰圆胶囊 + 蓝圆胶囊 + 绿色裸字 + 44px 大方块」四种长相并排。
+   触屏档在 ≤900 的媒体块里统一抬到 36（触控下沿）。 */
 .learn__kpbtn {
   display: inline-flex; align-items: center; gap: 6px;
   font: inherit; font-size: 12px; font-weight: 700; line-height: 1.4;
   color: var(--blue-deep);
   background: color-mix(in srgb, var(--blue) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--blue) 26%, transparent);
-  padding: 5px 11px; border-radius: var(--mk-radius-pill);
-  /* min-height 36：这是知识点浮窗的唯一入口，实测胶囊只有 82×26 / 86×28，
-     低于 36px 触控地板（2026-10-08 用户侧走查 #17/#21/#22/#70）。 */
-  min-height: 36px;
+  padding: 0 11px; border-radius: 8px;
+  height: 32px;
   cursor: pointer; white-space: nowrap;
   transition: background 0.14s ease, border-color 0.14s ease;
 }
@@ -2870,8 +2897,8 @@ onBeforeUnmount(() => {
 .learn__finishbtn {
   font: inherit; font-size: 12px; font-weight: 800; line-height: 1.4;
   color: var(--ink); background: var(--surface);
-  border: 1px solid var(--line); border-radius: var(--mk-radius-pill);
-  padding: 5px 12px; min-height: 36px; cursor: pointer; white-space: nowrap;
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 0 12px; height: 32px; cursor: pointer; white-space: nowrap;
 }
 .learn__finishbtn:hover { border-color: color-mix(in srgb, var(--blue) 35%, var(--line)); color: var(--blue-deep); }
 /* 连接态：降为纯文字（原型顶栏只有一行状态字，不再挂绿胶囊） */
@@ -2880,6 +2907,10 @@ onBeforeUnmount(() => {
 }
 .learn__menu-status { display: none; }
 .learn__menu-state { display: block; padding: 6px 12px; font-size: 13px; font-weight: 700; color: var(--green-ink); }
+.learn__head-right :deep(.imm-menu__btn) {
+  /* 与左右两颗按钮同档（组件默认 44 是给无标题页面的触控档；本页头部已有 32 档基准线） */
+  width: 32px; height: 32px; border-radius: 8px; font-size: 15px; padding: 0 0 1px;
+}
 .learn__head-right :deep(.imm-menu__btn:active) { background: color-mix(in srgb, var(--blue) 10%, var(--surface)); transform: scale(.97); }
 /* boot 失败态 (P2-25 核查 2026-10-04)：红字显式失败——正文已显「本节暂时开不了课」，
    顶栏不再绿显「连接中」假装还在连接 */
@@ -3301,14 +3332,6 @@ onBeforeUnmount(() => {
   border: 1px solid color-mix(in srgb, var(--text-on-primary) 35%, transparent); border-radius: 50%;
   background: rgba(15,23,42,.45); color: var(--text-on-primary); font-size: 16px; cursor: pointer;
 }
-.msg__avatar {
-  /* 原型 wf-msg__avatar：蓝 12% 扁平圆 + blue-deep 字（去蓝→紫渐变方块，2026-09-30 视觉收敛） */
-  width: 30px; height: 30px; border-radius: 50%;
-  background: color-mix(in srgb, var(--blue) 12%, transparent);
-  color: var(--blue-deep); font-size: 13px; font-weight: 800;
-  display: grid; place-items: center;
-  flex: 0 0 auto; margin-top: 2px;
-}
 /* P3-40（设计评审）：「问流导师 · 00:37」在 73px 窄容器折行断眉标——nowrap 单行；
    时间戳 tabular-nums 定宽不会撑破气泡 */
 .msg__meta { font-size: 12px; color: var(--faint); white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -3373,7 +3396,16 @@ onBeforeUnmount(() => {
   /* chip 放在 grid 布局的 msg__content 里时必须跨全列，否则被挤进窄列竖排 */
   grid-column: 1 / -1;
 }
-.msg__chip--confuse { color: var(--amber-ink); background: color-mix(in srgb, var(--wf-color-warning) 12%, transparent); border: 1px solid color-mix(in srgb, var(--wf-color-warning) 20%, transparent); margin-top: 6px; margin-bottom: 8px; }
+/* 卡点签（2026-11-06 走查）：全圆胶囊 → 6px 小圆角提示条 + 前置 ⚡，
+   与同屏的引用微签/小测选项同一套小圆角语言 */
+.msg__chip--confuse {
+  color: var(--amber-ink);
+  background: color-mix(in srgb, var(--wf-color-warning) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wf-color-warning) 20%, transparent);
+  border-radius: 6px;
+  margin-top: 6px; margin-bottom: 8px;
+}
+.msg__chip--confuse svg { flex: none; }
 
 /* 本回合仍在生成（流式中、final 未到）——消息流尾部的轻量状态 chip，诚实口径见模板注释 */
 .msg__turnstate { padding: 2px 0 6px; }
@@ -3630,9 +3662,10 @@ onBeforeUnmount(() => {
   .checkpoint__actions .checkpoint__peer {
     display: inline-flex; align-items: center; justify-content: center;
     min-height: 36px; padding: 0 12px;
-    border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
-    border-radius: var(--mk-radius-pill);
-    background: transparent; color: var(--accent);
+    /* 同卡同色系（2026-11-06 走查）：小测卡已全部转蓝，这颗「问小启」不再单独用紫 */
+    border: 1px solid color-mix(in srgb, var(--blue) 30%, var(--line));
+    border-radius: 8px;
+    background: transparent; color: var(--blue-deep);
     font-size: 13px; font-weight: 700; cursor: pointer;
   }
   .checkpoint__actions .checkpoint__peer:active { transform: scale(.98); }
@@ -3754,14 +3787,17 @@ onBeforeUnmount(() => {
 /* 暗色：底/描边已令牌化（raised 档自动翻转），原逐条字面量覆写退役 */
 
 /* ---------- 检查点（原型 .wf-checkpoint：紫框卡 + 11.5px 标签 + 44px 选项 + 对/错态） ---------- */
+/* 小测卡（2026-11-06 走查）：紫 → 品牌蓝。此前外框/选中态用 --accent（紫），
+   而卡片里的「提交」是 btn-primary（蓝）——紫框配蓝钮，同屏两套交互色。
+   高度同步压缩：内边距 13/14 → 12/14、行距 8 → 6，选项 44 → 36。 */
 .checkpoint {
   /* 与上方「发现卡点」chip 留出呼吸位：小测卡紧贴时会把 chip 下沿压掉一截 */
   margin: 8px 14px 0;
-  padding: 13px 14px;
-  border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent);
-  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--blue) 26%, transparent);
+  background: color-mix(in srgb, var(--blue) 5%, var(--surface));
   border-radius: var(--mk-radius-modal);
-  display: grid; gap: 8px;
+  display: grid; gap: 6px;
 }
 .checkpoint--attention {
   animation: cp-attention 1.6s ease;
@@ -3772,13 +3808,22 @@ onBeforeUnmount(() => {
   35% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--wf-color-warning) 28%, transparent); }
 }
 .checkpoint__head { display: grid; gap: 6px; }
+/* 头部一行：左「小测」签、右「跳过」——把原来独占一行的跳过收进标题行 */
+.checkpoint__head-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.checkpoint__skip {
+  font-size: 12px; font-weight: 600; color: var(--faint);
+  padding: 4px 6px; margin-right: -6px;
+  border-radius: var(--mk-radius-sm);
+  cursor: pointer;
+}
+.checkpoint__skip:hover { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 8%, transparent); }
 .checkpoint__head strong { font-size: 13.5px; line-height: 1.5; }
 .checkpoint__head code { background: color-mix(in srgb, var(--blue) 10%, transparent); color: var(--blue-deep); padding: 1px 6px; border-radius: var(--mk-radius-sm); font-size: 12.5px; }
-/* 标签是纯文字（原型 .wf-checkpoint__label 不做胶囊），紫字 + 字距 */
+/* 标签是纯文字（原型 .wf-checkpoint__label 不做胶囊），蓝字 + 字距 */
 .checkpoint__badge {
   width: fit-content;
   font-size: 12px; font-weight: 800; letter-spacing: .05em;
-  color: var(--purple-ink);
+  color: var(--blue-deep);
   padding: 0; border: 0; background: none;
 }
 .checkpoint__input {
@@ -3838,7 +3883,10 @@ onBeforeUnmount(() => {
    .v2-page :is(...):focus-visible 的 (0,3,0)。 */
 .composer__box .composer__textarea:focus-visible { outline: none; }
 .composer__send {
-  width: 42px; height: 42px; border-radius: 12px; /* 原型 .wf-composer__send 42×42/r12，与 54px 盒的内高对齐 */
+  /* 32×32 正圆（2026-11-06 走查）：原先 42×42/r12 是「大方块」，生成中的停止态同尺寸但
+     显色更重，看起来比盒子还大一圈；发送与停止现在完全同形，只换底色。
+     触屏档在 ≤900 媒体块里回到 40（触控下沿）。 */
+  width: 32px; height: 32px; border-radius: 50%;
   display: grid; place-items: center;
   /* 实色 --blue（蓝渐变与 28% 发光一并退役） */
   background: var(--blue);
@@ -3855,12 +3903,10 @@ onBeforeUnmount(() => {
 .composer__send--stop {
   background: var(--wf-color-danger-dark);
 }
-.composer__send--stop:hover {
-  background: var(--wf-color-danger);
-}
+.composer__send--stop:hover { background: var(--wf-color-danger-dark); filter: brightness(1.08); }
 .composer__send--stop:active { transform: scale(0.97); }
 .composer__hint {
-  display: flex; align-items: center; justify-content: flex-end;
+  display: flex; align-items: center; justify-content: center;
   gap: 12px; flex-wrap: wrap;
   width: min(100%, 760px);
   font-size: 12px; line-height: 1.5; color: var(--faint);
@@ -3868,8 +3914,10 @@ onBeforeUnmount(() => {
 .composer__hint :deep(.ai-note) {
   font-size: 12px; line-height: 1.5;
 }
-.composer__hint--single { justify-content: flex-end; }
-.composer__hint-note { flex: 0 0 auto; } /* flex:1 会撑满整行、把 flex-end 废掉——快捷键要与 AI 声明并排贴右 */
+.composer__hint--single { justify-content: center; }
+.composer__hint-note { flex: 0 0 auto; }
+/* 2026-11-06 走查：这一行原先 flex-end 贴右，读起来既没居中也没贴边（右侧还留着
+   与输入盒同宽的 760 上限，于是在宽屏上「偏在右半边」）。与输入盒同宽居中。 */
 /* 键盘提示只在有键盘的档位出现（原型 .wf-composer__hint 同款 ≥1024 才显示） */
 @media (max-width: 1023px) {
   .composer__hint > .composer__hint-note { display: none; }
@@ -4043,16 +4091,13 @@ onBeforeUnmount(() => {
   }
   .oscene__compact-title { max-width: 58%; }
   .oscene__compact-note { display: none; }
+  /* 触屏档返回钮 36×36（触控下沿），形状仍是桌面那枚 8px 小圆角方块 —
+     不再单独换成圆形（同一颗按钮在两档两种长相，正是本次走查要收的问题） */
   .learn__back {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 36px; height: 36px; min-height: 36px; padding: 0;
-    border-radius: 50%; flex: 0 0 auto;
-    background: var(--surface);
-    border: 1px solid var(--line);
+    width: 36px; height: 36px; padding: 0; flex: 0 0 auto;
+    border-radius: 8px;
   }
   .learn__back:hover { background: color-mix(in srgb, var(--blue) 8%, transparent); }
-  .learn__back-text { display: none; }
-  .learn__back-arrow { font-size: 24px; }
   /* 移动端 tutor 撑满可用高度：聊天区内部滚动、composer 吸底，消除滚动到底的底部空白 */
   .tutor { max-height: none; min-height: 0; flex: 1 1 auto; }
   /* overscroll-behavior:contain 隔断滚动链——消息列表滚到边缘时不再触发整页橡皮筋
@@ -4064,7 +4109,7 @@ onBeforeUnmount(() => {
      留 16px 防 iOS 聚焦缩放，只能压 placeholder——与目标对话页同款口径。 */
   .composer__textarea::placeholder { font-size: 15px; }
   .composer__attach { margin-top: 4px; }
-  .composer__send { width: 44px; height: 44px; } /* 触屏 hit area 44（原型桌面 42） */
+  .composer__send { width: 40px; height: 40px; } /* 触屏 hit area 40（桌面 32 圆形） */
   /* 触屏没有键盘快捷键提示：这行是「Enter 发送 · Shift+Enter 换行」+ AI 声明，不隐藏的话两者
      在 340px 里折成两行（hint 行 17→33px）。隐藏后只剩声明，居中与入口页 .goal__ai-note 一致。 */
   .composer__hint > .composer__hint-note { display: none; }
@@ -4076,7 +4121,9 @@ onBeforeUnmount(() => {
     gap: 0 8px;
     padding: 8px 10px;
   }
-  .learn__title { grid-column: 2; grid-row: 1; min-width: 0; }
+  /* 窄屏不画竖线（2026-11-06）：一行里已有「返回钮 36 + 标题 + 三颗控件」，
+     17px 的分隔内衬只会把任务名再挤掉两个字；桌面留白充裕时才用竖线分栏 */
+  .learn__title { grid-column: 2; grid-row: 1; min-width: 0; border-left: 0; padding-left: 0; }
   /* 窄屏标题放宽到两行（2026-10-08 用户侧走查）：单行截断下 24 字任务名实测需要 390px、
      只分到 178px，页头只能读到「解剖自己做过的那个功…」，而页头没有别的完整标题入口。
      用户口径是「宁可多占一行，也不要把文案压到读不全」，故两行后仍读不完才截断。
@@ -4112,17 +4159,8 @@ onBeforeUnmount(() => {
 </style>
 
 <style scoped>
-/* logo 头像 */
-.msg__avatar {
-  background: var(--surface) !important;
-  border: 1px solid var(--line);
-  box-shadow: var(--wf-shadow-raised); /* 悬浮档 */
-}
-.msg__avatar img {
-  width: 28px;  /* 24→28：与 goal 页同款，logo 更凸显（2026-09-27 用户反馈） */
-  height: 28px;
-  object-fit: contain;
-}
+/* .msg__avatar（AI 头像）整套撤除（2026-11-06 走查）：模板已摘，样式一并删除。
+   左侧现在只有一条边界线——气泡、卡点签、小测卡共用同一个左缘。 */
 </style>
 
 <style scoped>
@@ -4156,16 +4194,17 @@ onBeforeUnmount(() => {
 .checkpoint__option {
   position: relative;
   display: flex; align-items: center; gap: 10px;
-  min-height: 44px; padding: 10px 13px;
+  /* 44 → 36（2026-11-06 走查）：选项是最重复的一块，四个选项就是 176px 直接砍到 144 */
+  min-height: 36px; padding: 6px 12px;
   border: 1px solid var(--line);
-  border-radius: var(--mk-radius-lg);
+  border-radius: 8px;
   font-size: 13px; color: var(--ink);
   background: var(--surface);
   cursor: pointer;
   transition: border-color .14s ease, background .14s ease, color .14s ease;
 }
-.checkpoint__option:hover { border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
-.checkpoint__option:focus-within { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+.checkpoint__option:hover { border-color: color-mix(in srgb, var(--blue) 40%, transparent); }
+.checkpoint__option:focus-within { outline: 2px solid color-mix(in srgb, var(--blue) 55%, transparent); outline-offset: 2px; }
 /* 原生 radio/checkbox 保留在 DOM（a11y + 测试），视觉交给字母方块 */
 .checkpoint__option input {
   position: absolute; inset: 0;
@@ -4178,16 +4217,16 @@ onBeforeUnmount(() => {
   width: 22px; height: 22px;
   border-radius: 6px;
   font-size: 12px; font-weight: 800; line-height: 1;
-  color: var(--purple-ink);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 24%, transparent);
+  color: var(--blue-deep);
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--blue) 24%, transparent);
 }
 .checkpoint__text { flex: 1; min-width: 0; line-height: 1.5; }
 .checkpoint__option--on {
-  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
-  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  border-color: color-mix(in srgb, var(--blue) 55%, transparent);
+  background: color-mix(in srgb, var(--blue) 8%, var(--surface));
 }
-.checkpoint__option--on .checkpoint__key { background: var(--accent); border-color: transparent; color: #fff; /* on-accent 白字：紫族暂无配白令牌，登记规范缺口 */ }
+.checkpoint__option--on .checkpoint__key { background: var(--blue); border-color: transparent; color: var(--text-on-primary); }
 /* 裁决落地：被选中的那项标绿 / 标红（原型 .is-correct / .is-wrong） */
 .checkpoint__option--ok {
   border-color: var(--green);
@@ -4398,30 +4437,26 @@ onBeforeUnmount(() => {
   border-radius: 0;
 }
 /* 暗色：底/字已令牌化自动翻转，原字面量覆写退役 */
-.replies__row { display: flex; flex-direction: column; gap: 8px; }
+/* 快捷选项回归横向紧凑排（2026-11-06 走查）：此前是 width:100% 的竖排长条——
+   3 个 8 字选项各占一条近 1000px 的整行，右侧 85% 全是空，光这一块就吃掉 ~160px 高度。
+   现在与「目标规划」页同一套写法：flex-wrap 的短签，一行排得下就一行。 */
+.replies__row { display: flex; flex-direction: row; flex-wrap: wrap; gap: 8px; }
 .reply {
-  display: flex; align-items: flex-start; gap: 9px;
-  width: 100%;
-  min-height: 44px;
+  display: inline-flex; align-items: center;
+  width: fit-content; max-width: 100%;
+  min-height: 32px;
   text-align: left;
-  padding: 11px 14px;
-  border-radius: 12px;
+  padding: 0 14px;
+  border-radius: 8px;
   border: 1px solid color-mix(in srgb, var(--blue) 28%, transparent);
   background: color-mix(in srgb, var(--blue) 5%, transparent);
   color: var(--blue-deep);
-  font: inherit; font-size: 14px; font-weight: 600; line-height: 1.45;
+  font: inherit; font-size: 12.5px; font-weight: 600; line-height: 1.4;
   cursor: pointer;
   transition: background .14s ease, border-color .14s ease;
 }
-/* 原型的蓝点前缀：纯文本按钮 + ::before 圆点，不再带序号方块与箭头 */
-.reply::before {
-  content: ""; flex: none;
-  width: 6px; height: 6px;
-  margin-top: 7px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--blue) 55%, transparent);
-}
-.reply__text { flex: 1; min-width: 0; }
+/* 蓝点前缀与下划线感一并撤除（用户点名）：短签本身就是按钮，不需要再画一个项目符号 */
+.reply__text { min-width: 0; }
 .reply:hover {
   background: color-mix(in srgb, var(--blue) 11%, transparent);
   border-color: color-mix(in srgb, var(--blue) 46%, transparent);
@@ -4474,7 +4509,11 @@ onBeforeUnmount(() => {
 
 <style scoped>
 /* 暗色模式适配 */
-[data-theme='dark'] .msg__bubble {
+/* 暗色底只给 AI 气泡（2026-11-06 走查）：原选择器是 [data-theme='dark'] .msg__bubble，
+   与 .msg--user .msg__bubble（同为 0,2,0）同权重且源码在后 —— 暗色下用户气泡的
+   品牌蓝被整条覆盖成 surface 混色，于是「人说的」和「AI 说的」在深色里长得一模一样。
+   收窄到 .msg--ai 后用户气泡在任何主题都保持蓝底白字。 */
+[data-theme='dark'] .msg--ai .msg__bubble {
   background: color-mix(in srgb, var(--surface) 72%, var(--blue) 4%);
   color: var(--ink);
 }
@@ -4504,7 +4543,13 @@ onBeforeUnmount(() => {
   .replies { margin: 8px 14px 0; }
   .replies__question { margin-bottom: 2px; padding: 6px 9px; font-size: 12px; }
   .replies__row { gap: 6px; }
-  .reply { padding: 9px 12px; }
+  /* 触屏档：短签抬到 36 高（触控下沿），仍按内容宽横排 */
+  .reply { height: 36px; min-height: 36px; padding: 0 12px; }
+  /* 头部三件套在触屏档抬到 36 / ⋯ 回到 40（桌面是统一的 32/8px 档） */
+  .learn__kpbtn, .learn__finishbtn { height: 36px; }
+  .learn__head-right :deep(.imm-menu__btn) { width: 40px; height: 40px; }
+  /* 小测选项在触屏档回到 44（桌面 36）：选项是这一屏最常点的一类目标 */
+  .checkpoint__option { min-height: 44px; padding: 10px 12px; }
 }
 </style>
 

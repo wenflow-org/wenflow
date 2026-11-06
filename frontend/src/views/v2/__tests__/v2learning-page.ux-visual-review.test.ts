@@ -57,22 +57,26 @@ function narrowBlocks(): string[] {
 }
 
 describe('课堂页头部触控热区（#17/#21/#22/#62/#70）', () => {
-  it('「知识点 0/2」胶囊补到 ≥36px 高（知识点浮窗唯一入口）', () => {
-    const kpbtn = ruleHaving('.learn__kpbtn', 'min-height');
-    expect(decl(kpbtn, 'min-height')).toBe('36px');
+  it('「知识点 0/2」在桌面收进 32 档（2026-11-06 走查：头部三件套统一 32/8px）', () => {
+    const kpbtn = ruleHaving('.learn__kpbtn', 'height');
+    expect(decl(kpbtn, 'height')).toBe('32px');
+    expect(decl(kpbtn, 'border-radius')).toBe('8px');
   });
 
-  it('窄屏仍保留 36px 命中区（窄屏 padding 只给到 26px 高）', () => {
+  it('窄屏抬回 36px 命中区（触控下沿；桌面是 32 档）', () => {
     const hit = narrowBlocks().filter((b) => b.includes('.learn__kpbtn'));
     expect(hit, '窄屏没有任何 .learn__kpbtn 规则').not.toHaveLength(0);
     const last = hit[hit.length - 1];
-    expect(last).toMatch(/min-height\s*:\s*36px\s*;/);
+    expect(last).toMatch(/height\s*:\s*36px\s*;/);
   });
 
-  it('桌面「‹ 返回路径详情」补到 ≥36px 高且文字垂直居中', () => {
-    const back = ruleHaving('.learn__back', 'min-height');
-    expect(decl(back, 'min-height')).toBe('36px');
-    expect(decl(back, 'align-items'), '热区变高后文字没有垂直居中').toBe('center');
+  it('桌面返回钮是 32×32 图标方块（2026-11-06 走查：文字版退役）', () => {
+    const back = ruleHaving('.learn__back', 'height');
+    expect(decl(back, 'height')).toBe('32px');
+    expect(decl(back, 'width')).toBe('32px');
+    expect(decl(back, 'border-radius')).toBe('8px');
+    /* 图标靠 grid 居中，不再靠 align-items 给文字居中 */
+    expect(decl(back, 'place-items')).toBe('center');
   });
 
   it('知识点按钮有可被读屏读到的 aria-label（走查复看未确认的点，按 #78 补上）', () => {
