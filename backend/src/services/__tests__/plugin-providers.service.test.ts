@@ -88,72 +88,90 @@ describe('plugin-providers（插件外部服务配置）', () => {
     }
   });
 
-  it('没有界面配置时按环境变量展示：provider 已配置、链顺序来自环境变量', async () => {
+  it('没有界面配置时按环境变量展示：provider 已配置、内置地址不进视图', async () => {
     await loadPluginProviderConfig();
     const view = await getPluginProviderConfig('web');
     expect(view.channels.map((c) => c.id)).toEqual(['search', 'fetch']);
-    expect(view.channels[0].order).toEqual(['tinyfish', 'tavily']);
+    /* 2026-11-04 用户「其实这个是写死的，相当于只需要配 key 就行」：
+       搜索 / 抓取顺序由代码固定，环境变量与平台存档都不再参与。 */
+    expect(view.channels.every((c) => c.orderFixed)).toBe(true);
+    expect(view.channels[0].order).toEqual(['tinyfish', 'tavily', 'exa']);
     const tinyfish = view.providers.find((p) => p.id === 'tinyfish');
     expect(tinyfish?.configured).toBe(true);
     expect(tinyfish?.keySource).toBe('env');
     expect(tinyfish?.keyHint).toBe('····1234');
-    expect(tinyfish?.fields.find((f) => f.key === 'searchEndpoint')?.placeholder).toBe('https://api.search.tinyfish.ai');
+    // 上游地址是内置值：界面上只剩要填的那一项（密钥）
+    expect(tinyfish?.fields.map((f) => f.key)).toEqual(['apiKey']);
+    // 内置值仍按 环境变量 → 目录默认 解析（部署侧镜像的逃生口）
+    expect(readPluginProviderField('web', 'tinyfish', 'searchEndpoint')).toBe('https://api.search.tinyfish.ai');
     // 决策没配 key → 未配置；opencode 允许 public 默认值，单独判为可用
     const decision = await getPluginProviderConfig('decision');
     expect(decision.providers.find((p) => p.id === 'alibaba')?.configured).toBe(false);
     expect(decision.providers.find((p) => p.id === 'opencode')?.configured).toBe(true);
+    // 决策不是内置顺序：仍可由用户排
+    expect(decision.channels.some((c) => c.orderFixed)).toBe(false);
   });
 
-  it('保存：非密钥落平台设置，密钥落密文表，运行时 getter 立即生效', async () => {
+  it('保存：密钥落密文表，运行时 getter 立即生效', async () => {
     await loadPluginProviderConfig();
-    await savePluginProviderConfig('web', {
-      providers: {
-        tinyfish: { searchEndpoint: 'https://proxy.example/search', apiKey: 'secret-key-123' },
-        tavily: { searchEndpoint: '' },
-      },
-    });
+    await savePluginProviderConfig('web', { providers: { tinyfish: { apiKey: 'secret-key-123' } } });
 
     expect(setProviderSecret).toHaveBeenCalledWith('plugin:web:tinyfish', 'secret-key-123', 'SEARCH_API_KEY');
+    // 联网只剩密钥可写：没有非密钥字段，就不该给平台设置写出 provider 块
     const providerUpsert = upsert.mock.calls.find((c: any[]) => c[0].where.key === 'pluginProviders')!;
-    const stored = JSON.parse(providerUpsert[0].update.value);
-    expect(stored.web.tinyfish.searchEndpoint).toBe('https://proxy.example/search');
-    // 空串 = 删除覆盖，不该写进平台设置
-    expect(stored.web.tavily).toBeUndefined();
-
-    expect(readPluginProviderField('web', 'tinyfish', 'searchEndpoint')).toBe('https://proxy.example/search');
+    expect(JSON.parse(providerUpsert[0].update.value).web).toBeUndefined();
     // 密钥仍在环境变量里（mock 未返回 DB 密钥）
     expect(readPluginProviderSecret('web', 'tinyfish')).toBe('search-key-1234');
   });
 
-  /* ---------- 通道优先级（2026-10-26 用户「用户可以自己配置优先级」） ---------- */
-
-  it('通道优先级：保存后平台顺序优先于环境变量，并随视图下发', async () => {
+  it('联网的地址字段与通道顺序都不再允许改（内置）', async () => {
     await loadPluginProviderConfig();
-    // 环境变量是 tinyfish,tavily；用户把 tavily 设为搜索主用
-    await savePluginProviderConfig('web', { orders: { search: ['tavily', 'tinyfish'] } });
-    expect(readPluginChannelOrder('web', 'search')).toEqual(['tavily', 'tinyfish']);
-    // 抓取链没动，仍跟环境变量
-    expect(readPluginChannelOrder('web', 'fetch')).toEqual(['tinyfish', 'tavily']);
-    const view = await getPluginProviderConfig('web');
-    expect(view.channels.find((c) => c.id === 'search')?.order).toEqual(['tavily', 'tinyfish']);
+    await expect(
+      savePluginProviderConfig('web', { providers: { tinyfish: { searchEndpoint: 'https://proxy.example/search' } } })
+    ).rejects.toThrow(/由平台内置/);
+    await expect(savePluginProviderConfig('web', { orders: { search: ['tavily'] } }))
+      .rejects.toThrow(/顺序由平台内置/);
+    expect(upsert).not.toHaveBeenCalled();
   });
 
-  it('通道优先级：未知 provider / 未知通道被拒，空数组 = 删掉覆盖回落环境变量', async () => {
+  it('历史存档里的内置地址在下次保存时被清掉，且不再参与解析', async () => {
+    // 早期版本允许在界面改地址：这类残留值现在必须失效（否则界面说内置、运行时却在用旧值）
+    storedValue = JSON.stringify({ web: { tinyfish: { searchEndpoint: 'https://old-proxy.example/search' } } });
     await loadPluginProviderConfig();
-    await expect(savePluginProviderConfig('web', { orders: { search: ['bing'] } }))
+    expect(readPluginProviderField('web', 'tinyfish', 'searchEndpoint')).toBe('https://api.search.tinyfish.ai');
+
+    await savePluginProviderConfig('web', { providers: { tinyfish: { apiKey: 'k-12345678' } } });
+    const providerUpsert = upsert.mock.calls.find((c: any[]) => c[0].where.key === 'pluginProviders')!;
+    expect(JSON.parse(providerUpsert[0].update.value).web).toBeUndefined();
+  });
+
+  /* ---------- 通道优先级（2026-10-26 用户「用户可以自己配置优先级」） ----------
+     联网的搜索 / 抓取 2026-11-04 起顺序内置，这里改用决策通道（仍可排）验证同一套机制。 */
+
+  it('通道优先级：保存后平台顺序优先，并随视图下发', async () => {
+    await loadPluginProviderConfig();
+    await savePluginProviderConfig('decision', { orders: { decision: ['cloudflare', 'alibaba'] } });
+    expect(readPluginChannelOrder('decision', 'decision')).toEqual(['cloudflare', 'alibaba']);
+    const view = await getPluginProviderConfig('decision');
+    expect(view.channels.find((c) => c.id === 'decision')?.order).toEqual(['cloudflare', 'alibaba']);
+  });
+
+  it('通道优先级：未知 provider / 未知通道被拒，空数组 = 删掉覆盖回落默认', async () => {
+    await loadPluginProviderConfig();
+    await expect(savePluginProviderConfig('decision', { orders: { decision: ['bing'] } }))
       .rejects.toThrow(/未知 provider/);
-    await expect(savePluginProviderConfig('web', { orders: { nope: ['tavily'] } }))
+    await expect(savePluginProviderConfig('decision', { orders: { nope: ['alibaba'] } }))
       .rejects.toThrow(/未知通道/);
-    await savePluginProviderConfig('web', { orders: { search: ['tavily'] } });
-    expect(readPluginChannelOrder('web', 'search')).toEqual(['tavily']);
-    await savePluginProviderConfig('web', { orders: { search: [] } });
-    expect(readPluginChannelOrder('web', 'search')).toEqual(['tinyfish', 'tavily']);
+    await savePluginProviderConfig('decision', { orders: { decision: ['cloudflare'] } });
+    expect(readPluginChannelOrder('decision', 'decision')).toEqual(['cloudflare']);
+    await savePluginProviderConfig('decision', { orders: { decision: [] } });
+    expect(readPluginChannelOrder('decision', 'decision')).toEqual(['alibaba']);
   });
 
   it('通道优先级：重复 provider 只算一次', async () => {
     await loadPluginProviderConfig();
-    await savePluginProviderConfig('web', { orders: { search: ['tavily', 'tavily', 'tinyfish'] } });
-    expect(readPluginChannelOrder('web', 'search')).toEqual(['tavily', 'tinyfish']);
+    await savePluginProviderConfig('decision', { orders: { decision: ['cloudflare', 'cloudflare', 'alibaba'] } });
+    expect(readPluginChannelOrder('decision', 'decision')).toEqual(['cloudflare', 'alibaba']);
   });
 
   it('平台密文优先于环境变量，视图只回尾号', async () => {
@@ -173,8 +191,9 @@ describe('plugin-providers（插件外部服务配置）', () => {
 
   it('非法地址与未知字段被拒绝', async () => {
     await loadPluginProviderConfig();
+    // 地址字段只在非内置的插件上可写，校验照旧
     await expect(
-      savePluginProviderConfig('web', { providers: { tinyfish: { searchEndpoint: 'api.example.com' } } })
+      savePluginProviderConfig('image', { providers: { agnes: { endpoint: 'api.example.com' } } })
     ).rejects.toBeInstanceOf(PluginProviderConfigError);
     await expect(
       savePluginProviderConfig('web', { providers: { nope: { apiKey: 'x' } } })

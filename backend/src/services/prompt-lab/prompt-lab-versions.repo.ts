@@ -8,12 +8,6 @@ import type { SystemTransactionClient } from '../../utils/with-transaction';
  * coreVersion 推进、字段变更分级基准、版本历史与回滚翻转。
  */
 
-export function findPlatformReasoningDefaultModelRow() {
-  return systemPrisma.platform_api_configs.findFirst({
-    select: { defaultReasoningModel: true }
-  });
-}
-
 /** v4：查询某 agentId 的下一个 coreVersion（无历史则从 1 起） */
 export function findLatestCoreVersionRow(agentId: string) {
   return systemPrisma.agent_prompts.findFirst({

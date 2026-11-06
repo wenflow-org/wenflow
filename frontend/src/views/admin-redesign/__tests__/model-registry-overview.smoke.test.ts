@@ -1,7 +1,7 @@
 /**
  * ModelRegistryOverview 冒烟（只读总览；2026-10-15 供应商与能力限额合并后两分片）：
- * 1. 别名映射 / 供应商与能力限额（含状态列）两段渲染；合并块按供应商分组、表头列数自洽
- * 2. 状态列：命中部署冷却 → 冷却徽标（providerId + model 双键）；未命中 → 健康
+ * 1. 别名映射 / 供应商与能力限额两段渲染；合并块按供应商分组、表头列数自洽
+ * 2. 部署冷却 / 备用链列随降级整条下线（2026-11-04 用户「去掉降级这个功能，不要」）
  * 3. 行级 ⚠（模型级提示）与表尾注（非模型级提示 / 无则不渲染）
  * 4. 分片裁剪（parts）：只渲染指定分片，但 defaults/aliases 照常回传宿主
  * 5. 加载失败展示错误 + 重试；加载成功向宿主上报 { models, warnings }
@@ -54,9 +54,8 @@ const OVERVIEW = {
       providerId: 'deepseek',
       hasOwnEndpoint: false,
       keyConfigured: true,
-      capabilities: { supportsThinking: true, supportsReasoningEffort: true },
+      capabilities: { supportsThinking: true, reasoningEfforts: ['low', 'high', 'max'] },
       limits: { maxOutputTokens: 131072, defaultMaxTokens: 32768, reasoningReserveTokens: 8192, maxParallelRequests: null },
-      fallbacks: ['agnes-3.0-flash'],
       pricingConfigured: false
     },
     {
@@ -67,9 +66,8 @@ const OVERVIEW = {
       providerId: 'agnes',
       hasOwnEndpoint: false,
       keyConfigured: true,
-      capabilities: { supportsThinking: false, supportsReasoningEffort: false },
+      capabilities: { supportsThinking: false, reasoningEfforts: [] },
       limits: { maxOutputTokens: 65536, defaultMaxTokens: 32768, reasoningReserveTokens: 0, maxParallelRequests: null },
-      fallbacks: [],
       pricingConfigured: false
     }
   ],
@@ -101,10 +99,6 @@ const OVERVIEW = {
     defaultReasoningModelResolved: 'deepseek-v4-pro',
     defaultReasoningModelSource: 'alias'
   },
-  fallbackChains: [{ model: 'deepseek-v4-flash', fallbacks: ['agnes-3.0-flash'] }],
-  cooldowns: [
-    { key: 'deepseek|https://gw.example/v1|deepseek-v4-flash', providerId: 'deepseek', endpoint: 'https://gw.example/v1', model: 'deepseek-v4-flash', remainingMs: 21000 }
-  ],
   warnings: [
     '模型「agnes-3.0-flash」未配置价格，成本统计会缺失',
     '别名「chat」的 DB 覆盖含未注册模型（已忽略）：not-registered'
@@ -146,8 +140,7 @@ describe('ModelRegistryOverview（只读模型总览）', () => {
     const groups = wrapper.findAll('.ac-mr-pgroup');
     expect(groups[0].text()).toContain('DeepSeek');
 
-    // 限额表：表头 10 列（去掉独立「供应商」列，供应商已升为组头）必须与数据行格数一致；
-    // 只断言文本包含抓不到列错位
+    // 限额表：表头列数必须与数据行格数一致；只断言文本包含抓不到列错位
     const limitTable = wrapper.findAll('table').find((t) => t.text().includes('推理预留'));
     expect(limitTable).toBeTruthy();
     const thCount = limitTable!.findAll('thead th').length;
@@ -159,23 +152,15 @@ describe('ModelRegistryOverview（只读模型总览）', () => {
     wrapper.unmount();
   });
 
-  it('状态列：命中部署冷却显示剩余秒数，未命中显示健康', async () => {
+  it('降级相关读数整块下线：无「冷却中 / 健康」状态列，也无「备用模型」列', async () => {
     getModelRegistryMock.mockResolvedValue({ data: { data: OVERVIEW } });
     const wrapper = await mountOverview();
     const text = wrapper.text();
-    // 冷却按 providerId + model 双键匹配：deepseek-v4-flash 命中 21s，agnes 无冷却
-    expect(text).toContain('冷却中');
-    expect(text).toContain('21s');
-    expect(text).toContain('● 健康');
-    wrapper.unmount();
-  });
-
-  it('无冷却时状态列全绿，非模型级告警落表尾注', async () => {
-    getModelRegistryMock.mockResolvedValue({ data: { data: { ...OVERVIEW, cooldowns: [] } } });
-    const wrapper = await mountOverview();
-    const text = wrapper.text();
+    // 2026-11-04 用户「去掉降级这个功能，不要」：部署冷却（状态列）与备用链（列）都不再渲染
     expect(text).not.toContain('冷却中');
-    // 非模型级提示（别名类）→ 表尾注
+    expect(text).not.toContain('● 健康');
+    expect(text).not.toContain('备用模型');
+    // 非模型级提示（别名类）→ 表尾注仍在
     expect(text).toContain('未注册模型');
     wrapper.unmount();
   });

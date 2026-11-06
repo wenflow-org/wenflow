@@ -16,7 +16,7 @@
     <!-- 单页（2026-10-26 用户「我不知为啥还要有默认设置。不就是配置的模型吗，这个页面我觉得
          可以和前面的合并了」）：一级页签「接入 / 调用」撤除，本页自上而下两段——
          ① 供应商面板：左列表 / 右详情；平台详情的二级页签 = 模型 / 连接 / 基础设施 / 生成参数
-         ② 调用策略（尝试与降级、退避与超时、平台出站速率 + 近 1 小时 429 / 冷却读数）
+         ② 调用策略（尝试与重试、退避与超时、平台出站速率 + 近 1 小时 429 读数）
          「平台默认生成参数」并进平台详情第四个页签：它就是「这些模型默认怎么生成」，
          与模型表是同一个对象，此前单独一张卡叫「平台默认生成参数」，读起来像另一套设置。
          旧键 ?tab=routing / runtime / model-routing 仍归一到这里（TAB_ALIAS），书签不失效。 -->
@@ -29,151 +29,72 @@
       <ModelProvidersPanel
         ref="providersRef"
         :upstream="models"
+        :default-model="defaultModel"
+        :pull-loading="fetching"
+        :pull-error="fetchError"
+        :pull-stale="pullStale"
+        :add-state-line="addStateLine"
+        :add-state-line-title="addStateLineTitle"
         @registered="onProvidersRegistered"
+        @platform-models="onPlatformModels"
         @fetch-upstream="onFetchClick"
+        @add-opened="snapshotConn"
+        @add-closed="onAddClosed"
+        @set-default="onSetDefault"
+        @remove-model="onModelRemoved"
       >
         <!-- 2026-10-27 用户「这个重新设计，可以先放到第三个」：通道身份、连接状态与动作
-             统一收到卡头一行。2026-10-28：连接编辑收进弹层，卡头只留「获取模型」。 -->
+             统一收到卡头一行。2026-10-28：连接编辑收进弹层，卡头只留「添加模型」。 -->
         <!-- 2026-11-01 外部评审（二轮）：连接状态原挂在卡头标题旁，读起来像下面模型健康状态的
              「父级结论」——通道「未做过连接测试」+ 三个模型绿色「健康」被判成父子打架。
              两者本就不同源（一次「获取模型」的结果 vs 逐模型能力探测），因此把它下移到摘要行，
              与「密钥已配置 / 重试策略」并排，作为通道自身的一条事实。 -->
         <template #head-status />
 
-        <!-- 上游清单的出口（2026-11-03）：落在模型列表工具栏里，与「＋ 添加模型」同一行——
-             它俩是同一件事的两半（先有清单，才能挑）。用这条通道的地址与密钥获取模型，
-             成功后连接一并落盘，不再要求先点「保存连接」。 -->
-        <template #upstream-actions>
-          <button
-            type="button"
-            class="mk-btn mk-btn--sm"
-            :disabled="fetching || !providersReady"
-            :title="models.length ? '按当前服务地址与密钥向上游重新拉取模型清单' : '按当前服务地址与密钥向上游拉取模型清单'"
-            @click="onFetchClick"
-          >
-            <MkLoading v-if="fetching" inline text="获取中…" />
-            <span v-else>↻ {{ models.length ? '重新获取' : '获取模型' }}</span>
-          </button>
-        </template>
-        <template #platform-detail>
-          <!-- 第一块：灰底连接条（2026-11-03 两段式）。
-               未配置时它就是表单：Base URL + API Key 两格 +「保存并获取模型」，
-               不必先点「连接设置」弹层填完再回来（用户「如果尚未配置地址和密钥，
-               则在此处直接展示 Base URL 和 API Key 输入框及 [保存并获取模型] 按钮」）。
-               2026-11-03 评审：这行原先与下面的模型行长得一样（同样的字重、同样的发丝线），
-               父级网关与子级模型读不出主次。现收进一块浅底内嵌面板，右侧动作也升为描边次级按钮——
-               面板 = 「这条通道接在哪」，面板之下才是「挂了哪些模型」。 -->
-          <div v-if="connUnset" class="ac-conn-setup">
-            <label class="mk-field">
-              <span class="mk-field__label">Base URL</span>
-              <input
-                class="mk-field__input"
-                v-model="form.apiUrl"
-                placeholder="https://api.example.com/v1"
-                autocomplete="off"
-                @input="markDirty('conn')"
-              />
-            </label>
-            <label class="mk-field">
-              <span class="mk-field__label">API Key</span>
-              <input
-                class="mk-field__input"
-                :type="keyVisible ? 'text' : 'password'"
-                v-model="form.apiKey"
-                autocomplete="new-password"
-                placeholder="粘贴密钥"
-                @input="markDirty('conn')"
-              />
-            </label>
-            <button
-              type="button"
-              class="mk-btn mk-btn--primary"
-              :disabled="fetching || !providersReady || !form.apiUrl.trim()"
-              title="把地址与密钥落盘，并按它向上游拉取模型清单"
-              @click="onFetchClick"
-            >
-              <MkLoading v-if="fetching" inline text="获取中…" />
-              <span v-else>保存并获取模型</span>
-            </button>
-          </div>
-
-          <div v-else class="ac-conn-summary">
-            <span class="ac-conn-summary__url mono" :title="form.apiUrl">{{ form.apiUrl || '未配置服务地址' }}</span>
-            <span class="mk-badge" :class="keySet ? 'mk-badge--ok' : 'mk-badge--warn'">
-              {{ keySet ? '密钥已配置' : '未配置密钥' }}
-            </span>
-            <span class="mk-badge" :class="connBadge.cls" :title="connBadgeTitle">{{ connBadge.text }}</span>
-            <span v-if="reliability" class="ac-conn-summary__policy" :title="policyTitle">
-              重试 {{ reliability.maxUpstreamAttempts }} 次 · 间隔 {{ reliability.retryBaseDelayMs }}ms · RPM {{ reliability.platformRpmLimit || '不限' }}
-            </span>
-            <button type="button" class="mk-btn mk-btn--sm ac-conn-summary__edit" @click="openConnModal">连接设置</button>
-          </div>
-
-          <!-- 调用策略读取失败仍在卡面提示；重试预算告警跟着参数走，只在连接设置弹层里出现 -->
-          <div v-if="isLive && configLoadFailed && !reliability" class="ac-policy ac-policy--inline">
-            <div class="mk-alert mk-alert--row ac-config-error" role="alert">
-              <span class="mk-alert__msg">配置读取失败</span>
-              <button type="button" class="mk-alert__btn" @click="retryConfigLoad">重试</button>
-            </div>
-          </div>
-        </template>
-
-        <!-- 上游读数不常驻（2026-10-28 用户「文案不要」）：只留异常与未保存两种需要处理的状态 -->
-        <template #models-meta>
-          <p v-if="(fetchError && !models.length) || hasUnsavedModels" class="ac-models-meta ac-models__line">
-            <span v-if="fetchError && !models.length" :title="`错误原文：${fetchError}`">获取失败，请检查服务地址与密钥</span>
-            <span v-if="hasUnsavedModels" class="mk-badge mk-badge--warn">未保存</span>
+        <!-- 2026-11-05 用户「连接设置和添加模型合并到一起吧，只保留添加模型」：
+             连接的编辑不再有自己的入口，全部搬进「＋ 添加模型」那张弹窗。
+             同日再精简（用户「这个区域精简一下，占太多空间，下方的拉取模型是重点」）：
+             默认只显示一行摘要，点「修改连接」才展开表单——这张弹窗的正题是下面的清单，
+             连接是偶尔改一次的东西，不该常驻占掉三分之一屏。 -->
+        <template #add-conn>
+          <p v-if="!connOpen" class="ac-conn-summary">
+            <span class="mono ac-conn-summary__addr" :title="form.apiUrl || '未配置服务地址'">{{ form.apiUrl || '未配置服务地址' }}</span>
+            <span v-if="isLive && reliability" class="ac-conn-summary__policy">重试 {{ reliability.maxUpstreamAttempts }} 次 · {{ reliability.platformRpmLimit > 0 ? `RPM ${reliability.platformRpmLimit}` : 'RPM 不限' }}</span>
           </p>
-        </template>
-      </ModelProvidersPanel>
-
-      <!-- 2026-10-28 用户「按能力角色拆成三个独立卡片」：向量 / 重排不再嵌在对话卡里，
-           各自一张卡、各自一套连接（默认复用主通道，也可独立端点）。 -->
-      <InfraModelsPanel />
-
-    </div>
-
-    <!-- 连接设置：地址 / 密钥 / 重试 / RPM 全部收进弹层，卡面只留摘要。
-         一次「保存」同时写连接与调用策略，不再有分段保存钮。 -->
-    <Teleport to="body">
-      <div v-if="connOpen" ref="connMaskRef" class="mk-modal">
-        <div ref="connPanelRef" class="mk-modal__panel ac-conn-modal" role="dialog" aria-label="连接设置">
-          <div class="mk-modal__head">
-            <h3 class="mk-modal__title">连接设置</h3>
-            <button type="button" class="mk-modal__close" aria-label="关闭" @click="cancelConnModal">✕</button>
-          </div>
-          <div class="mk-modal__body">
-            <label class="mk-field">
-              <span class="mk-field__label">服务地址</span>
-              <input class="mk-field__input" v-model="form.apiUrl" placeholder="https://api.example.com/v1" @input="markDirty('conn')" />
-            </label>
-            <label class="mk-field">
-              <span class="mk-field__label">API Key</span>
-              <span class="ac-key-wrap">
-                <span class="ac-key-input-row">
-                  <input
-                    class="mk-field__input"
-                    :type="keyVisible ? 'text' : 'password'"
-                    v-model="form.apiKey"
-                    autocomplete="new-password"
-                    :placeholder="keySet ? '留空 = 沿用已配置' : '输入 API Key'"
-                    @input="markDirty('conn')"
-                  />
-                  <button
-                    v-if="keySet || form.apiKey"
-                    type="button"
-                    class="ac-key-toggle"
-                    :title="keyVisible ? '隐藏' : '显示'"
-                    @click="keyVisible = !keyVisible"
-                  ><Eye v-if="keyVisible" :size="15" :stroke-width="1.75" />
-                    <EyeOff v-else :size="15" :stroke-width="1.75" /></button>
+          <div v-else class="ac-conn-form">
+            <div class="ac-conn-pair">
+              <label class="mk-field">
+                <span class="mk-field__label">服务地址</span>
+                <input class="mk-field__input" v-model="form.apiUrl" placeholder="https://api.example.com/v1" @input="markDirty('conn')" />
+              </label>
+              <label class="mk-field">
+                <span class="mk-field__label">API Key</span>
+                <span class="ac-key-wrap">
+                  <span class="ac-key-input-row">
+                    <input
+                      class="mk-field__input"
+                      :type="keyVisible ? 'text' : 'password'"
+                      v-model="form.apiKey"
+                      autocomplete="new-password"
+                      :placeholder="keySet ? '留空 = 沿用已配置' : '输入 API Key'"
+                      @input="markDirty('conn')"
+                    />
+                    <button
+                      v-if="keySet || form.apiKey"
+                      type="button"
+                      class="ac-key-toggle"
+                      :title="keyVisible ? '隐藏' : '显示'"
+                      @click="keyVisible = !keyVisible"
+                    ><Eye v-if="keyVisible" :size="15" :stroke-width="1.75" />
+                      <EyeOff v-else :size="15" :stroke-width="1.75" /></button>
+                  </span>
+                  <em v-if="keyHintNeeded" class="ac-keyhint">更换服务地址需重新输入密钥</em>
                 </span>
-                <em v-if="keyHintNeeded" class="ac-keyhint">更换服务地址需重新输入密钥</em>
-              </span>
-            </label>
+              </label>
+            </div>
 
             <template v-if="isLive && reliability">
-              <div class="ac-conn-modal__policy">
+              <div class="ac-conn-policy">
                 <label class="mk-field">
                   <span class="mk-field__label">最大重试</span>
                   <input v-model.number="reliability.maxUpstreamAttempts" type="number" min="1" :max="limMax('maxUpstreamAttempts', 10)" class="mk-field__input" @input="markDirty('reliability')" />
@@ -195,31 +116,58 @@
               <span class="mk-alert__msg">调用策略读取失败</span>
               <button type="button" class="mk-alert__btn" @click="retryConfigLoad">重试</button>
             </div>
-            <div v-if="reliability && fallbackDisabled" class="mk-alert mk-alert--row" role="alert">
-              <span class="mk-alert__msg">当前重试预算下「模型降级」永远不会触发：同模型重试会先耗尽尝试次数，请把「最大重试」调大</span>
-            </div>
           </div>
-          <div class="mk-modal__foot ac-conn-modal__foot">
-            <!-- 危险动作写明作用范围（只清本条通道的接入配置，不动全站策略与其它通道），
-                 并保留二次确认 -->
-            <span class="ac-conn-modal__resetwrap">
-              <button
-                type="button"
-                class="mk-btn mk-btn--sm mk-btn--danger-ghost"
-                :disabled="resetting"
-                @click="resetConfig"
-              >{{ resetting ? '重置中…' : '重置此通道' }}</button>
-              <span class="ac-conn-modal__resethint">只清本条通道的地址、密钥与模型清单</span>
-            </span>
-            <span class="ac-conn-modal__spacer"></span>
-            <button type="button" class="mk-btn" @click="cancelConnModal">取消</button>
-            <button type="button" class="mk-btn mk-btn--primary" :disabled="saving" @click="saveConnModal">
-              {{ saving ? '保存中…' : '保存' }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
+        </template>
+        <!-- 危险动作写明作用范围（只清本条通道的接入配置，不动全站策略与其它通道），
+             并保留二次确认。它属于「连接」这一段，所以在弹窗的连接段标题右侧。
+             旁边的「保存连接」只在有未保存改动时可用：用户点「获取模型 / 重新获取」会连连接
+             一起落盘（打开弹窗时那次拉取只读），但只改重试 / RPM 时不发任何请求，需要一个显式出口。 -->
+        <template #add-conn-actions>
+          <button
+            v-if="!connOpen"
+            type="button"
+            class="mk-link"
+            @click="connOpen = true"
+          >修改连接</button>
+          <template v-else>
+            <button
+              type="button"
+              class="mk-link"
+              :disabled="connDirty"
+              :title="connDirty ? '还有未保存的改动' : '收起连接设置'"
+              @click="connOpen = false"
+            >收起</button>
+            <button
+              v-if="connDirty"
+              type="button"
+              class="mk-btn mk-btn--sm mk-btn--primary"
+              :disabled="saving"
+              @click="saveConnFromDialog"
+            >{{ saving ? '保存中…' : '保存连接' }}</button>
+            <button
+              type="button"
+              class="mk-btn mk-btn--sm mk-btn--danger-ghost ac-conn__danger"
+              :disabled="resetting"
+              title="只清本条通道的地址、密钥与模型清单"
+              @click="resetConfig"
+            >{{ resetting ? '重置中…' : '重置此通道' }}</button>
+          </template>
+        </template>
+
+        <!-- 上游读数不常驻（2026-10-28 用户「文案不要」）：只留异常与未保存两种需要处理的状态 -->
+        <template #models-meta>
+          <p v-if="(fetchError && !models.length) || hasUnsavedModels" class="ac-models-meta ac-models__line">
+            <span v-if="fetchError && !models.length" :title="`错误原文：${fetchError}`">获取失败，请检查服务地址与密钥</span>
+            <span v-if="hasUnsavedModels" class="mk-badge mk-badge--warn">未保存</span>
+          </p>
+        </template>
+      </ModelProvidersPanel>
+
+      <!-- 2026-10-28 用户「按能力角色拆成三个独立卡片」：向量 / 重排不再嵌在对话卡里，
+           各自一张卡、各自一套连接（默认复用主通道，也可独立端点）。 -->
+      <InfraModelsPanel />
+
+    </div>
   </div>
 </template>
 
@@ -235,8 +183,8 @@ import InfraModelsPanel from './InfraModelsPanel.vue'
 import {
   liveApiConfig as cfg,
   liveFetchModels,
-  liveLoading,
   liveSaveApiConfig,
+  liveSetDefaultModel,
   timeAgo,
   errMsg,
   liveFailures,
@@ -244,9 +192,6 @@ import {
 } from './live'
 import { adminPlatformSettingsApi, adminApiConfigApi } from '@/api/adminApi'
 import { askConfirm } from './useConfirm'
-import { useEscape } from './useEscape'
-import { useOverlay, useMaskClose } from './useOverlay'
-import MkLoading from '@/components/mk/MkLoading.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import { toast } from '@/utils/toast'
 
@@ -269,30 +214,117 @@ void props
 
 /** 供应商面板（BYOK）：页头「刷新注册表」与写后重取都走它的 refresh */
 const providersRef = ref<{ refresh?: (force?: boolean) => void; openHostPull?: () => void } | null>(null)
-/** 供应商面板首次回传即视为注册表已就绪：同步按钮按 apiUrl 判禁用，首屏地址未回填时点不动 */
-const providersLoaded = ref(false)
-function onProvidersRegistered() {
-  providersLoaded.value = true
-}
-/** 注册表已就绪：面板首次回传，或 live 配置已到（首屏未回填地址时按钮不该点不动） */
-const providersReady = computed(() => providersLoaded.value || !!cfg.value)
-/** 连接条未配置态（2026-11-03 两段式）：地址还空着、也不在读取中/读取失败——
-    这时连接条原地变成表单，省掉「先点连接设置」那一步。
-    读取中或读取失败不给表单：空地址不代表没配过（读取失败由卡内 alert 说清）。 */
-const connUnset = computed(() => !form.apiUrl.trim() && !liveLoading.value && !apiConfigFailed.value)
 
-function onFetchClick() {
-  if (!providersReady.value || !form.apiUrl) {
-    focusPlatformConnection()
+/* ---------- 平台默认模型（P0 2026-11-04） ----------
+   为什么这里要有：默认模型只认 DB `platform_api_configs.defaultModel`，文件里的 `defaults`
+   只是展示（MODEL_GATEWAY_DESIGN.md §0 补记）。2026-10-28 把「平台默认与别名」整块撤出后，
+   纯 UI 部署（不写 env AI_MODEL）走完「填地址 → 拉清单 → 挂模型」也没有落点，
+   运行时 `router.resolveModel` 直接抛 `AI model is not configured`——流程缺的正是这一步。 */
+const defaultModel = computed(() => cfg.value?.defaultModel ?? '')
+/** 已挂载的模型 id（面板回传）：默认只能在这些里选，删模型时也用它挑替补 */
+const mountedModelIds = ref<string[]>([])
+
+/**
+ * 首个挂载模型自动成为平台默认（只在默认为空时兜底一次）。
+ * 已有默认绝不改写——默认是「没单独配的 Skill 走哪个」的落点，静默换掉它等于换掉一批技能的行为。
+ * 失败不抛给用户：这是兜底便利，不是用户动作；他仍可在模型行的 ⋯ 里手动设。
+ */
+const defaultSeeded = ref(false)
+async function seedDefaultModel(): Promise<void> {
+  if (defaultSeeded.value || saving.value) return
+  // 连接设置还有未保存改动时先不种：写默认会重拉配置回显，把未保存的连接改动冲掉
+  if (dirty.value.has('conn')) return
+  if (!cfg.value || defaultModel.value || !mountedModelIds.value.length) return
+  if (!cfg.value.apiUrl) return
+  defaultSeeded.value = true
+  try {
+    const first = mountedModelIds.value[0]
+    await liveSetDefaultModel({ defaultModel: first })
+    toast.success(`已把「${first}」设为平台默认模型`)
+  } catch {
+    defaultSeeded.value = false
+  }
+}
+
+/** 显式设默认：连接设置还有未保存改动时先挡下——写默认会重新拉配置回显，
+    未保存的连接改动会被「丢弃未保存的配置修改?」拦一次，把一次点击变成一次意外提问。 */
+async function onSetDefault(modelId: string): Promise<void> {
+  if (saving.value) return
+  if (dirty.value.has('conn')) {
+    toast.error('连接设置还有未保存的改动，先保存再设默认模型')
     return
   }
-  void fetchModels()
+  try {
+    await liveSetDefaultModel({ defaultModel: modelId })
+    toast.success(`平台默认已设为 ${modelId}`)
+  } catch (e) {
+    toast.error(`设置默认模型失败：${errMsg(e)}`)
+  }
 }
-/* 2026-10-28 用户「表单不要直接裸露」：连接编辑收进弹层，卡面只留一行摘要。
-   「获取模型」在地址未就绪时直接打开连接设置。 */
-function focusPlatformConnection() {
-  openConnModal()
+
+/** 删掉默认模型后改指下一个可用模型：默认不能指向已不存在的 id，否则调用同样失败 */
+async function onModelRemoved(modelId: string): Promise<void> {
+  if (modelId !== defaultModel.value) return
+  const next = mountedModelIds.value.find((id) => id !== modelId) ?? ''
+  try {
+    await liveSetDefaultModel({ defaultModel: next })
+    toast.success(next ? `原默认模型已删除，平台默认改为 ${next}` : '原默认模型已删除，请另设平台默认模型')
+  } catch (e) {
+    toast.error(`更新默认模型失败：${errMsg(e)}`)
+  }
 }
+
+function onProvidersRegistered(): void {
+  /* 注册表就绪曾经用来解锁「保存并获取模型」按钮（首屏地址未回填时点不动）。
+     合并弹窗后这颗按钮在弹窗里、拉取地址取自连接段，不再需要这个就绪位；
+     保留处理器只为槽位契约不变（面板变更时仍会回传）。 */
+}
+
+/** 平台通道挂载的模型变更（增删后都会回传）：默认候选跟着它走，空默认时顺手种一个 */
+function onPlatformModels(ids: string[]): void {
+  mountedModelIds.value = ids
+  void seedDefaultModel()
+}
+
+/* 2026-11-05 用户「连接设置和添加模型合并到一起吧，只保留添加模型」：
+   连接不再有自己的入口与弹层，它成了「添加模型」弹窗的第一段。
+   因此这里不再有「先开连接设置填地址」的分支——地址空着也直接发拉取，
+   拉取前的校验在 fetchModels 里（地址为空 / 换了地址没重填密钥，都先给一句人话）。 */
+function onFetchClick(source: 'open' | 'refetch' = 'refetch') {
+  void fetchModels(source)
+}
+
+/** 弹窗标题下那行连接读数（原「连接设置」弹层里的两枚徽标）：合并后它是「能不能拉」的唯一读数 */
+const addStateLine = computed(
+  () => `${keySet.value ? '密钥已配置' : '未配置密钥'} · ${connBadge.value.text}`
+)
+/** 那行读数的悬停全文：说明「成功/失败」是什么时候、什么动作留下的，不冒充实时探活 */
+const addStateLineTitle = computed(() => connBadgeTitle.value)
+
+/** 连接段有未保存改动：用户主动拉清单会连连接一起落盘，但只改重试 / RPM 时得有个显式保存出口 */
+const connDirty = computed(() => dirty.value.has('conn') || dirty.value.has('reliability'))
+
+/**
+ * 手动保存连接（只改策略、没拉清单时用）。
+ * 「换了地址却没重填密钥」在这里也要拦：否则旧密钥会被存到新地址上，
+ * 之后每次调用都撞一个不属于它的端点。
+ */
+async function saveConnFromDialog(): Promise<void> {
+  if (!form.apiUrl.trim()) {
+    toast.error('服务地址不能为空')
+    return
+  }
+  if (keyHintNeeded.value) {
+    toast.error('请先重填 API Key 再保存')
+    return
+  }
+  await saveGroups(['conn', 'reliability'])
+}
+
+/** 清单是不是过期：拉来的那批属于另一个地址（换了地址但还没重拉），先用旧的选模型会挂错端点 */
+const pullStale = computed(
+  () => models.value.length > 0 && fetchedModelsEndpoint.value !== form.apiUrl.trim()
+)
 
 /** 宿主（系统设置）的页头「刷新注册表」经此转发，不必去摸供应商面板的子 ref */
 defineExpose({ refresh: () => providersRef.value?.refresh?.(true) })
@@ -377,16 +409,6 @@ function limMax(field: string, fallback: number): number {
 function limMin(field: string, fallback: number): number {
   return Number(reliabilityLimits.value?.[field] ?? fallback)
 }
-
-/** 当前重试配置下模型降级是否永不触发(executor 守卫语义:1 + 传输重试 < 上游最大尝试) */
-const fallbackDisabled = computed(() => {
-  const r = reliability.value
-  if (!r) return false
-  const upstream = Number(r.maxUpstreamAttempts)
-  const transport = Number(r.maxTransportRetries)
-  if (!Number.isInteger(upstream) || !Number.isInteger(transport)) return false
-  return upstream <= 1 || 1 + transport >= upstream
-})
 
 async function loadReliability() {
   try {
@@ -544,64 +566,64 @@ const saving = ref(false)
    通道级那枚绿勾既盖不住这种差异，又会与列表里逐模型的「测试」读成两套口径。
    现在通道层面只保留一件事：获取上游清单（它本身就要连一次上游），结果就是连接条上那枚读数。 */
 
-/* ---------- 连接设置弹层：一次保存连接 + 调用策略 ---------- */
-const connOpen = ref(false)
-const connPanelRef = ref<HTMLElement | null>(null)
-const connMaskRef = ref<HTMLElement | null>(null)
+/* 2026-11-05 用户「连接设置和添加模型合并到一起吧，只保留添加模型」：
+   「连接设置」弹层撤除——它整段成了「添加模型」弹窗的第一段（地址 / 密钥 / 重试 / RPM /
+   重置此通道）。快照与回滚因此改挂在那个弹窗的开合上：弹窗打开（opened）记一份已保存的连接，
+   关窗（closed）时若还有未保存改动就回到快照，与旧「取消即回滚」同一语义。 */
 const connBackup = ref<{ apiUrl: string; apiKey: string; reliability: Reliability | null } | null>(null)
+/** 连接段折叠（默认收起：这张弹窗的正题是下面的模型清单）。
+ *  没配地址时自动展开——首次部署进来就是要填它；有未保存改动时不许收。 */
+const connOpen = ref(false)
 
-useEscape(() => connOpen.value, cancelConnModal)
-useOverlay(connOpen, connPanelRef)
-useMaskClose(connMaskRef, cancelConnModal)
-
-const policyTitle = computed(() => {
-  const r = reliability.value
-  if (!r) return ''
-  return `最大重试 ${r.maxUpstreamAttempts} 次（含首次与备用模型）· 间隔 ${r.retryBaseDelayMs}ms · RPM 上限 ${r.platformRpmLimit || '不限'}`
-})
-
-function openConnModal(): void {
+function snapshotConn(): void {
+  // 每次打开弹窗回到「收起」：没配地址时展开（首次部署就是要填它）
+  connOpen.value = !form.apiUrl.trim()
+  if (connBackup.value) return
   connBackup.value = {
     apiUrl: form.apiUrl,
     apiKey: form.apiKey,
     reliability: reliability.value ? { ...reliability.value } : null
   }
-  connOpen.value = true
 }
 
-/** 取消即回滚：弹层里的改动没有旁路，关掉就回到已保存状态。 */
-function cancelConnModal(): void {
+/**
+ * 弹窗关闭：把没保存的连接改动退回去（有未保存改动才回滚）。
+ * 之所以是**静默回滚**而不是弹「丢弃未保存的修改?」：这两栏只在弹窗里可编辑，关窗就是
+ * 用户说的「算了」。已经保存过（拉清单会自动连连接一起落盘，或点了「保存连接」）时
+ * dirty 已清空，这里什么都不做——否则会把刚存下去的值又改回开窗前的旧值。
+ */
+function onAddClosed(): void {
+  connOpen.value = false
   const backup = connBackup.value
-  if (backup) {
-    form.apiUrl = backup.apiUrl
-    form.apiKey = backup.apiKey
-    if (reliability.value && backup.reliability) Object.assign(reliability.value, backup.reliability)
-  }
+  connBackup.value = null
+  if (!backup) return
+  if (!dirty.value.has('conn') && !dirty.value.has('reliability')) return
+  form.apiUrl = backup.apiUrl
+  form.apiKey = backup.apiKey
+  if (reliability.value && backup.reliability) Object.assign(reliability.value, backup.reliability)
   dirty.value = new Set([...dirty.value].filter((g) => g !== 'conn' && g !== 'reliability'))
-  connOpen.value = false
-  connBackup.value = null
 }
 
-async function saveConnModal(): Promise<void> {
+/**
+ * 拉一份上游清单。
+ *
+ * `source === 'open'` 是**打开弹窗时顺带拉的那一次**：它只读——不写连接、不弹成功提示
+ * （2026-11-05 用户「为什么每次点开添加模型右上角会这样」，那枚「已保存连接，获取到 36 个模型」
+ * 就是每次打开都落盘一次留下的）。只有用户自己点「获取模型 / 重新获取」才把连接一起落盘：
+ * 那是「填地址和 key → 获取」这条流程的提交点，选模型顺带改连接不该反过来变成写连接的时机。
+ */
+async function fetchModels(source: 'open' | 'refetch' = 'refetch'): Promise<void> {
+  if (fetching.value) return
+  const background = source === 'open'
+  /* 合并弹窗后这里是唯一拉取入口，校验必须给话：地址空着点「获取模型」不能毫无反应。
+     打开弹窗的那一次不给——首次部署时地址本来就还是空的。 */
   if (!form.apiUrl.trim()) {
-    toast.error('服务地址不能为空')
+    if (!background) toast.error('先填服务地址')
     return
   }
-  if (keyHintNeeded.value) {
-    toast.error('请先重填 API Key 再保存')
-    return
-  }
-  const ok = await saveGroups(['conn', 'reliability'])
-  if (!ok) return
-  connOpen.value = false
-  connBackup.value = null
-}
-
-async function fetchModels() {
-  if (fetching.value || !form.apiUrl) return
   /* 流程第 1 步要求「填链接和 key」：换地址却没重填密钥时，不能拿旧密钥去试新端点 */
   if (keyHintNeeded.value) {
-    toast.error('更换服务地址后需重新输入 API Key')
+    if (!background) toast.error('更换服务地址后需重新输入 API Key')
     return
   }
   fetching.value = true
@@ -613,22 +635,24 @@ async function fetchModels() {
     connectionStatus.value = 'connected'
     connCheckedAt.value = new Date().toISOString()
     fetchError.value = ''
-    /* 获取即保存：用户流程是「填地址和 key → 获取模型」，不该再要求点一次保存。
-       保存失败时不再往下走——连接没落盘，配好的模型也用不上。 */
-    markDirty('conn')
-    const saved = await saveGroups(['conn'], { silent: true })
-    if (!saved) return
-    toast.success(list.length ? `已保存连接，获取到 ${list.length} 个模型` : '已保存连接，但服务未返回模型列表')
-    // 拉到的清单直接进入勾选浮窗：选模型 → 逐个配置
-    if (list.length) {
-      await nextTick()
-      providersRef.value?.openHostPull?.()
+    if (!background) {
+      /* 获取即保存：用户流程是「填地址和 key → 获取模型」，不该再要求点一次保存。
+         保存失败时不再往下走——连接没落盘，配好的模型也用不上。 */
+      markDirty('conn')
+      const saved = await saveGroups(['conn'], { silent: true })
+      if (!saved) return
+      toast.success(list.length ? `已保存连接，获取到 ${list.length} 个模型` : '已保存连接，但服务未返回模型列表')
     }
+    /* 2026-11-05 合并弹窗：清单换成这次拉到的，勾选面板原地刷新。
+       走到这里时弹窗通常已经开着（入口就在弹窗里）；只有宿主从别处触发时才需要开。 */
+    await nextTick()
+    providersRef.value?.openHostPull?.()
   } catch (e) {
     connectionStatus.value = 'failed'
     connCheckedAt.value = new Date().toISOString()
     fetchError.value = errMsg(e)
-    toast.error(`连接失败：${errMsg(e)}`)
+    // 打开弹窗时的那次失败不弹提示：弹窗里本来就有一行「连接失败：…」，再弹一遍是同一个事实说两次
+    if (!background) toast.error(`连接失败：${errMsg(e)}`)
   } finally {
     fetching.value = false
   }
@@ -675,11 +699,12 @@ async function saveGroups(groups: string[], opts: { silent?: boolean } = {}): Pr
         return Number.isInteger(f) ? f : 0
       }
       const base = reliabilityBase.value ?? {}
-      /* 2026-10-26 界面只露「最大重试」（= maxUpstreamAttempts，含降级跳转的总尝试上限）。
+      /* 2026-10-26 界面只露「最大重试」（= maxUpstreamAttempts，本次调用的总尝试上限）。
          同模型重试数、超时、退避上限、抖动这几项不再上屏，但必须原样回传库里的现值：
          后端 PUT 是 partial 合并，少传一项就等于把它重置成默认值。
-         刻意不把「最大重试」联动到同模型重试数——执行器只在「上游尝试还有余量」时才会
-         跳到备用模型，把同模型重试顶到 上游-1 会让降级永远不触发（本卡上面那条告警就是它）。 */
+         刻意不把「最大重试」联动到同模型重试数：两者是各自独立的预算。
+         2026-11-04 用户「去掉降级这个功能，不要」：模型降级整条下线，原先「降级永不触发」
+         那条告警一并撤除。 */
       const sanitized = {
         maxUpstreamAttempts: intOr(reliability.value.maxUpstreamAttempts, base.maxUpstreamAttempts),
         maxTransportRetries: intOr(reliability.value.maxTransportRetries, base.maxTransportRetries),
@@ -723,7 +748,6 @@ async function resetConfig() {
     await loadLiveData(true)
     await loadReliability()
     dirty.value = new Set()
-    connOpen.value = false
     connBackup.value = null
     toast.success('配置已重置为默认值')
   } catch (e) {
@@ -775,50 +799,33 @@ async function resetConfig() {
 }
 /* 置顶告警（接入域读取失败）横跨全部列，不占卡位把卡片挤换行 */
 .ac-conn-body > .mk-alert { grid-column: 1 / -1; }
-/* 卡面连接摘要（2026-10-28 用户「表单不要直接裸露」）：一行回答连到哪、密钥是否就绪、
-   重试怎么配；地址 / 密钥 / 策略的编辑都在「连接设置」弹层里，一次保存。 */
-/* 父级网关摘要：包成一块浅底内嵌面板，与下方的模型列举区拉开父子层级（2026-11-03 评审）。
-   面板内的 URL 是这一整块的主语，故给正文色 + mono。 */
-/* 未配置时的连接条（2026-11-03 两段式）：同一条灰底，原地给两格 + 一颗主操作 */
-.ac-conn-setup {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: end;
-  padding: 10px 12px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-md);
-  background: var(--mk-surface-2);
-}
-@media (max-width: 900px) {
-  .ac-conn-setup { grid-template-columns: minmax(0, 1fr); }
-}
+
+/* ---------- 「添加模型」弹窗里的连接段（2026-11-05 用户「连接设置和添加模型合并到一起吧」） ----------
+   原来这一整块是独立弹层的正文。搬进弹窗后它排在模型清单之前：
+   地址与密钥先填、再往下挑模型，就是用户做这件事的自然顺序。 */
+.ac-conn-form { display: grid; gap: 12px; }
+/* 收起态：一行摘要（地址 + 策略），高度 ≈ 20px，把纵向空间让给下面的清单 */
 .ac-conn-summary {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  align-items: baseline;
+  gap: 12px;
   flex-wrap: wrap;
-  margin-top: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-md);
-  background: var(--mk-surface-2);
-  font-size: var(--mk-fs-micro);
-}
-.ac-conn-summary__url {
-  color: var(--mk-ink);
+  margin: 0;
   min-width: 0;
+}
+.ac-conn-summary__addr {
+  min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--mk-ink);
+  font-size: var(--mk-fs-micro);
 }
-.ac-conn-summary__policy { color: var(--mk-muted); }
-.ac-conn-summary__edit { margin-left: auto; }
-/* 连接块头右组：获取模型 */
-
-/* 连接设置弹层 */
-.ac-conn-modal { width: min(560px, 94vw); }
-.ac-conn-modal__policy {
+.ac-conn-summary__policy { color: var(--mk-muted); font-size: var(--mk-fs-micro); white-space: nowrap; }
+/* 地址与密钥并排：竖着排是 242px 里最费的两行 */
+.ac-conn-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.ac-conn-policy {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
@@ -828,16 +835,13 @@ async function resetConfig() {
    ① 没有提示行的那一列，多出来的高度全灌进输入框（实测 53px vs 另有提示的 39px）；
    ② 「重试间隔（毫秒）」比另两个标签长，在 163px 栏里折成两行，把输入框顶下 14px。
    所以既要把行钉在顶部，也要让标签不折行——单加 align-items:start 治不了②（2026-11-03 实测）。 */
-.ac-conn-modal__policy .mk-field { align-content: start; }
-.ac-conn-modal__policy .mk-field__label { white-space: nowrap; }
+.ac-conn-policy .mk-field { align-content: start; }
+.ac-conn-policy .mk-field__label { white-space: nowrap; }
 @media (max-width: 640px) {
-  .ac-conn-modal__policy { grid-template-columns: minmax(0, 1fr); }
+  .ac-conn-policy, .ac-conn-pair { grid-template-columns: minmax(0, 1fr); }
 }
-.ac-conn-modal__foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-/* 重置按钮与作用范围说明成组，避免红按钮孤零零贴着其它动作 */
-.ac-conn-modal__resetwrap { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.ac-conn-modal__resethint { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.ac-conn-modal__spacer { flex: 1 1 auto; }
+/* 「重置此通道」在连接段标题右侧：危险动作跟着它作用的那一段走，不混进弹窗统一底栏 */
+.ac-conn__danger { white-space: nowrap; }
 
 .ac-key-wrap { display: grid; gap: 4px; min-width: 0; }
 .ac-key-input-row { display: flex; align-items: center; gap: 6px; }
@@ -876,18 +880,6 @@ async function resetConfig() {
   flex-wrap: wrap;
   gap: 8px;
   margin: 0;
-}
-/* 调用策略异常（只在真有问题时出现） */
-.ac-policy {
-  display: grid;
-  gap: 18px;
-  padding-top: 14px;
-}
-.ac-policy--inline {
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px solid var(--mk-line);
-  gap: 10px;
 }
 
 

@@ -1,20 +1,37 @@
 <template>
   <section class="ac">
     <!-- 启动失败（非 401；401 由路由守卫与拦截器导向登录页） -->
+    <!-- 2026-11-04 用户「这个页面重新设计，诊断信息很奇怪的位置」：
+         原先是一张居中排版的小卡，三个按钮横排，诊断信息作为一枚裸 <details> 挂在按钮下面——
+         收起来只剩一个 ▸ 三角 + 一行灰字，展开后又把整块内容顶歪。现在按「错误页」该有的层级排：
+         图标 + 标题 + 一句人话说明 + 两个动作（重试 / 退出登录），诊断信息收进卡内独立的
+         带分隔线的区块（标题行右侧是复制），长文本限高滚动。 -->
     <div v-if="bootError" class="ac-error">
-      <div class="ac-error__card">
-        <strong>控制台暂时无法打开</strong>
-        <span>数据服务返回异常，所有页面受影响。可直接重试，若仍失败请复制诊断信息发给研发。</span>
-        <div class="ac-error__actions">
-          <button type="button" class="mk-btn mk-btn--primary" @click="boot">重试</button>
-          <button type="button" class="mk-btn" @click="copyDiagnostics">复制诊断信息</button>
-          <!-- 长故障兜底：会话可能已失效（否则重试应能恢复），退出重登不困在错误页 -->
-          <button type="button" class="mk-btn" @click="logoutFromError">退出登录</button>
+      <div class="ac-error__card" role="alert" aria-labelledby="ac-error-title">
+        <div class="ac-error__head">
+          <TriangleAlert class="ac-error__icon" :size="20" :stroke-width="2" aria-hidden="true" />
+          <h1 id="ac-error-title" class="ac-error__title">控制台暂时无法打开</h1>
         </div>
-        <details class="ac-error__diag">
-          <summary>诊断信息</summary>
-          <code>{{ bootError }}</code>
-        </details>
+        <p class="ac-error__lead">
+          {{ bootErrorIsAuth
+            ? '登录状态已经失效，重新登录就能继续。'
+            : '数据服务没有正常响应，所有页面都受影响。可以先重试。仍然打不开就退出重登，或把下面的诊断信息发给研发。' }}
+        </p>
+        <div class="ac-error__actions">
+          <!-- 登录失效时「重试」修不了问题，主按钮让给「重新登录」——别让人对着一个 403 反复点重试 -->
+          <button type="button" class="mk-btn" :class="{ 'mk-btn--primary': !bootErrorIsAuth }" @click="boot">重试</button>
+          <!-- 长故障兜底：会话可能已失效（否则重试应能恢复），退出重登不困在错误页 -->
+          <button type="button" class="mk-btn" :class="{ 'mk-btn--primary': bootErrorIsAuth }" @click="logoutFromError">
+            {{ bootErrorIsAuth ? '重新登录' : '退出登录' }}
+          </button>
+        </div>
+        <div class="ac-error__diag">
+          <div class="ac-error__diag-head">
+            <span>诊断信息</span>
+            <button type="button" class="mk-link" @click="copyDiagnostics">复制</button>
+          </div>
+          <code class="ac-error__diag-code">{{ bootError }}</code>
+        </div>
       </div>
     </div>
 
@@ -200,6 +217,7 @@ export const DETAIL_COMPONENTS: Readonly<Record<string, unknown>> = detailCompon
  */
 import { computed, defineAsyncComponent, h, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { TriangleAlert } from 'lucide-vue-next';
 import Shell from './Shell.vue';
 import HealthCenter from './HealthCenter.vue';
 import MockSkeletonTable from './SkeletonTable.vue';
@@ -217,6 +235,9 @@ useEscape(() => !!subPage.value, closeSubPage);
 const scene = ref('overview');
 const booting = ref(true);
 const bootError = ref('');
+/* 失败原因分两类：会话失效（403 / 「权限已失效」）与数据服务不可用。
+   前者重试没用、退出重登才有用，所以文案与主按钮都要跟着换（2026-11-04 实机踩到）。 */
+const bootErrorIsAuth = computed(() => /权限|登录|401|403|unauthori[sz]ed|forbidden/i.test(bootError.value));
 
 const currentComponent = computed(() => components[scene.value]);
 const detailComponent = computed(() => (subPage.value ? detailComponents[subPage.value.view] : null));
@@ -516,45 +537,63 @@ onMounted(() => {
   z-index: var(--mk-z-critical, 500);
   background: var(--mk-bg, #f7f8fa);
   display: grid;
-  place-content: center;
+  place-items: center;
+  padding: 24px;
 }
+/* 左对齐的单列卡：标题与说明读起来是一段话，而不是三行居中的标签 */
 .ac-error__card {
   display: grid;
-  gap: 10px;
-  justify-items: center;
-  padding: 32px 40px;
+  gap: 12px;
+  width: min(520px, 100%);
+  padding: 24px 26px;
   border: 1px solid var(--mk-line);
-  border-radius: 16px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-surface);
   box-shadow: var(--mk-shadow-modal);
 }
-.ac-error__card strong { font-size: var(--mk-fs-emphasis); color: var(--mk-ink); }
-.ac-error__card span { font-size: var(--mk-fs-body); color: var(--mk-muted); }
-.ac-error__actions { display: flex; gap: 10px; margin-top: 6px; }
-.ac-error__diag { max-width: 460px; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.ac-error__diag summary { cursor: pointer; list-style: none; }
-/* 系统三角退役：与全站 details（.mk-section__summary）同用自绘 ▸ */
-.ac-error__diag summary::-webkit-details-marker { display: none; }
-.ac-error__diag summary::before { content: '▸'; display: inline-block; margin-right: 6px; transition: transform 0.12s ease; }
-.ac-error__diag[open] summary::before { transform: rotate(90deg); }
-.ac-error__diag code {
+.ac-error__head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ac-error__icon { flex: none; color: var(--mk-red); }
+.ac-error__title { margin: 0; font-size: var(--mk-fs-emphasis); font-weight: 700; color: var(--mk-ink); }
+.ac-error__lead { margin: 0; font-size: var(--mk-fs-body); line-height: 1.6; color: var(--mk-muted); }
+.ac-error__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+/* 诊断信息：卡内独立区块，与动作之间一条发丝线隔开；标题行右侧才是复制 */
+.ac-error__diag {
+  display: grid;
+  gap: 6px;
+  margin-top: 2px;
+  padding-top: 12px;
+  border-top: 1px solid var(--mk-line);
+}
+.ac-error__diag-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--mk-faint);
+  font-size: var(--mk-fs-micro);
+}
+.ac-error__diag-code {
   display: block;
-  margin-top: 6px;
+  max-height: 96px;
+  overflow: auto;
+  margin: 0;
   padding: 8px 10px;
   border-radius: var(--mk-radius-sm);
   background: var(--mk-surface-3);
   color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
   word-break: break-all;
+  white-space: pre-wrap;
 }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15） ========== */
 @media (min-width: 2000px) {
-  .ac-error__card { gap: 12px; padding: 38px 48px; }
-  .ac-error__card strong { font-size: 18.5px; }
+  .ac-error__card { gap: 14px; padding: 30px 32px; }
+  .ac-error__title { font-size: 18.5px; }
 }
 @media (min-width: 2800px) {
-  .ac-error__card { gap: 14px; padding: 46px 58px; }
-  .ac-error__card strong { font-size: var(--mk-fs-emphasis); }
+  .ac-error__card { gap: 16px; padding: 36px 38px; }
+  .ac-error__title { font-size: var(--mk-fs-emphasis); }
 }
 
 /* 异步 tab 过渡态：错误卡（加载骨架已统一走 SkeletonTable） */

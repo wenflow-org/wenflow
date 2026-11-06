@@ -3204,7 +3204,7 @@ async function quietReload(id: string) {
   align-items: center;
   gap: 6px;
   padding: 2px 9px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-sm);
   border: 1px solid transparent;
   background: var(--mk-surface-3);
   font-size: var(--mk-fs-micro);
@@ -3226,7 +3226,7 @@ async function quietReload(id: string) {
   color: var(--mk-muted);
   background: var(--mk-surface-2);
   border: 1px solid var(--mk-line);
-  border-radius: 999px;
+  border-radius: var(--mk-radius-sm);
   padding: 2px 10px;
   white-space: nowrap;
   overflow: hidden;
@@ -3337,7 +3337,7 @@ async function quietReload(id: string) {
 /* 特征标签（原型 .chip 词汇：胶囊描边 + surface 底 + muted 字） */
 .vp-trait {
   padding: 4px 11px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-sm);
   border: 1px solid var(--mk-line);
   background: var(--mk-surface);
   color: var(--mk-muted);
@@ -3493,7 +3493,7 @@ async function quietReload(id: string) {
   background: var(--mk-amber-bg);
   border: 1px solid transparent;
   padding: 1px 8px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-sm);
   flex-shrink: 0;
   white-space: nowrap;
 }

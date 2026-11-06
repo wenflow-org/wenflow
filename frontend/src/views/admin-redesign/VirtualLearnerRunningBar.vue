@@ -150,7 +150,7 @@ function openRunningSession(s: Sample) {
   align-items: center;
   gap: 6px;
   padding: 2px 10px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-sm);
   border: 1px solid color-mix(in srgb, var(--mk-green) 35%, transparent);
   background: var(--mk-surface);
   color: var(--mk-green);

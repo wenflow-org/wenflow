@@ -2,15 +2,19 @@
  * 模型能力推断（2026-10-28 用户「元数据字典推断 / Zero-Config 引入」）。
  *
  * 只做「从上游 id 猜用途与能力」这一件事，猜不中的模型仍可手动编辑。
- * 用途判断优先于能力判断：向量 / 重排模型不应出现在对话模型的待选清单里。
+ * 2026-11-04 用户「我们不做模型类型区分」：判出的用途只服务「向量 / 重排卡按用途拉取」，
+ * 不再把模型挡在添加清单之外，也不再给「建议归入哪张卡」的判词。
  */
+
+import { LEGACY_REASONING_EFFORTS } from './reasoningEfforts'
 
 export type ModelRole = 'chat' | 'embedding' | 'rerank' | 'image'
 
 export interface ModelInference {
   role: ModelRole
   supportsThinking: boolean
-  supportsReasoningEffort: boolean
+  /** 推断出的档位：判断依据只有名字，能说的是「多半支持这几档」，具体以核对为准 */
+  reasoningEfforts: string[]
   vision: boolean
   code: boolean
   tool: boolean
@@ -52,31 +56,25 @@ export function inferModelCapabilities(id: string): ModelInference {
   return {
     role,
     supportsThinking: thinking,
-    supportsReasoningEffort: thinking,
+    // 名字里带推理标记就预填历史三档（low/high/max）——这是**预填**不是真相，
+    // 用户核对后才落盘；猜不出的一律留空（保守档：不发这个字段）。
+    reasoningEfforts: thinking ? [...LEGACY_REASONING_EFFORTS] : [],
     vision: chat && VISION_RE.test(name),
     code: chat && CODE_RE.test(name),
     tool: chat && TOOL_RE.test(name),
   }
 }
 
-/** 上屏的能力标签（顺序固定：思考 → 推理强度 → 读图 → 代码 → Tool）。 */
+/** 上屏的能力标签（顺序固定：思考 → 推理强度 → 视觉 → 代码 → Tool）。 */
 export function inferenceLabels(inference: ModelInference): string[] {
   if (inference.role !== 'chat') return []
   const labels: string[] = []
   if (inference.supportsThinking) labels.push('思考')
-  if (inference.supportsReasoningEffort) labels.push('推理强度')
-  if (inference.vision) labels.push('读图')
+  if (inference.reasoningEfforts.length) labels.push('推理强度')
+  if (inference.vision) labels.push('视觉')
   if (inference.code) labels.push('代码')
   if (inference.tool) labels.push('Tool')
   return labels
-}
-
-/** 模型类型建议：非对话模型在选择器里提示应去哪张卡配置。 */
-export function roleSuggestion(role: ModelRole): string {
-  if (role === 'embedding') return '建议归入向量模型'
-  if (role === 'rerank') return '建议归入重排模型'
-  if (role === 'image') return '图像 / 视频生成，不在此添加'
-  return ''
 }
 
 /** 从上游 id 派生的可读名（只用于选择器辅助识别，不落库、不替代真实 id）。 */

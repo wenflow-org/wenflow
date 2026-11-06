@@ -186,13 +186,14 @@ describe('Skill 目录 P1 修复批', () => {
     wrapper.unmount();
   });
 
-  it('对账面板口径 pill：「已上线 X / 总数」并列标注（户口簿全量口径）', async () => {
+  it('对账面板口径徽章：「已上线 X / 总数」并列标注（户口簿全量口径）', async () => {
     getReconciliationMock.mockResolvedValue({ data: { success: true, data: makeReport() } });
     const wrapper = await mountRecon();
-    // 对账面板（HealthCenter 内嵌的 SkillReconciliation）头部口径 pill
-    const pill = wrapper.find('.sk-rec__pills .mk-pill');
-    expect(pill.text()).toContain('已上线 2 / 4');
-    // 异常计数 pill：未注册 1
+    // 对账面板（HealthCenter 内嵌的 SkillReconciliation）头部口径读数
+    // 2026-11-05 去胶囊化：非交互读数从 .mk-pill（筛选触发器）改回 .mk-badge
+    const badge = wrapper.find('.sk-rec__pills .mk-badge');
+    expect(badge.text()).toContain('已上线 2 / 4');
+    // 异常计数徽章：未注册 1
     expect(wrapper.text()).toContain('未注册 1');
     wrapper.unmount();
   });

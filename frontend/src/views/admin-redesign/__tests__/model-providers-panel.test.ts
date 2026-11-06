@@ -1,7 +1,8 @@
 /**
  * 接入通道面板（ModelProvidersPanel，BYOK 2026-10-18；2026-10-27 收敛为单通道）：
  * 平台通道详情（页签 / 模型表 / 增删改）、后端人话原因可见、只读降级、上游清单登记、
- * 运行面读数（冷却/告警）。
+ * 运行面读数（告警）。
+ * 2026-11-04 用户「去掉降级这个功能，不要」：备用链 / 冷却读数随降级下线，用例同步收口。
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
@@ -41,7 +42,6 @@ interface ProviderSpec {
   models?: Array<{
     id: string
     tier?: 'chat' | 'reasoning'
-    fallbacks?: string[]
     /** 模型级生成默认（④ 的参数摘要读它）：null/缺省 = 不指定，由上游按自身默认处理 */
     defaultThinkingMode?: 'enabled' | 'disabled' | null
     defaultReasoningEffort?: 'low' | 'high' | 'max' | null
@@ -69,12 +69,11 @@ function providerView(p: ProviderSpec): Record<string, unknown> {
       label: m.id,
       tier: m.tier ?? 'chat',
       supportsThinking: false,
-      supportsReasoningEffort: false,
+      reasoningEfforts: [],
       maxOutputTokens: null,
       defaultMaxTokens: null,
       reasoningReserveTokens: null,
       maxParallelRequests: null,
-      fallbacks: m.fallbacks ?? [],
       defaultThinkingMode: m.defaultThinkingMode ?? null,
       defaultReasoningEffort: m.defaultReasoningEffort ?? null,
       defaultResponseFormat: m.defaultResponseFormat ?? null,
@@ -97,7 +96,7 @@ function seedView(extra?: Partial<{ readOnly: boolean; providers: Array<Record<s
     },
     providers: extra?.providers ?? [
       providerView({ id: 'platform', name: '平台', models: [{ id: 'deepseek-v4-flash' }, { id: 'agnes-3.0-flash' }] }),
-      providerView({ id: 'acme-gateway', name: 'Acme 网关', baseUrl: 'https://gw.acme.com/v1', apiKeyEnv: 'PROVIDER_ACME_GATEWAY_API_KEY', keyHint: '····9xQv', models: [{ id: 'acme-chat', fallbacks: ['acme-chat-2'] }, { id: 'acme-chat-2' }] })
+      providerView({ id: 'acme-gateway', name: 'Acme 网关', baseUrl: 'https://gw.acme.com/v1', apiKeyEnv: 'PROVIDER_ACME_GATEWAY_API_KEY', keyHint: '····9xQv', models: [{ id: 'acme-chat' }, { id: 'acme-chat-2' }] })
     ]
   }
   getMock.mockResolvedValue({ data: { data: view } })
@@ -106,13 +105,6 @@ function seedView(extra?: Partial<{ readOnly: boolean; providers: Array<Record<s
 /** 对话模型行（列表行，不是列头表格） */
 function modelRows(wrapper: Awaited<ReturnType<typeof mountPanel>>) {
   return wrapper.findAll('.mpp-model-row')
-}
-
-/** 切浮窗页签（默认「可引入」，2026-11-03 起按能否引入分拣） */
-async function switchPullTab(wrapper: Awaited<ReturnType<typeof mountPanel>>, label: string) {
-  const tab = wrapper.findAll('.pmd-tab').find((t) => t.text().startsWith(label))!
-  await tab.trigger('click')
-  await nextTick()
 }
 
 async function mountPanel(props: Record<string, unknown> = {}, slots: Record<string, string> = {}) {
@@ -139,7 +131,7 @@ describe('ModelProvidersPanel', () => {
     updateModelMock.mockReset()
     testMock.mockReset()
     getModelRegistryMock.mockReset()
-    getModelRegistryMock.mockResolvedValue({ data: { data: { models: [], cooldowns: [], warnings: [], runtime: { maxModelCandidates: 2 } } } })
+    getModelRegistryMock.mockResolvedValue({ data: { data: { models: [], warnings: [] } } })
     seedView()
   })
 
@@ -151,51 +143,73 @@ describe('ModelProvidersPanel', () => {
     // 自建通道仍在注册表里，但这一页不再提供它的入口
     expect(w.text()).not.toContain('Acme 网关')
     expect(w.text()).not.toContain('显示已停用')
-    // 卡头是能力卡身份：对话与推理模型 + LLM，连接状态由宿主注入
-    expect(w.find('.mk-card__head').text()).toContain('对话与推理模型')
+    // 卡头是能力卡身份：对话模型 + LLM，连接状态由宿主注入
+    expect(w.find('.mk-card__head').text()).toContain('对话模型')
     expect(w.find('.mk-card__head').find('.mpp-type').text()).toBe('LLM')
     expect(w.find('.mk-card__head').text()).not.toContain('一条通道 =')
     // 状态徽标只出「能不能用」，这一档由下面的连接徽标回答 → 不出徽标
     expect(w.find('.mk-card__head').findAll('.mk-badge')).toHaveLength(0)
-    // 两段式（2026-11-03）：上连接条 / 下模型列表，没有步号也没有步骤标题行
+    /* 2026-11-05 用户「连接设置和添加模型合并到一起吧，只保留添加模型」：
+       卡头右组只剩「＋ 添加模型」——连接（地址 / 密钥 / 重试 / 重置）搬进了弹窗，
+       所以卡面既没有连接槽，也没有「连接设置」按钮。 */
     expect(w.findAll('.mpp-step, .mpp-step__no, .mpp-step__head')).toHaveLength(0)
-    expect(w.find('#mpp-platform-panel-conn.mpp-conn').exists()).toBe(true)
+    expect(w.find('.mpp-body > .mpp-side').exists()).toBe(false)
+    expect(w.find('#mpp-platform-panel-conn').exists()).toBe(false)
+    expect(w.findAll('.mpp .ac-conn-open')).toHaveLength(0)
     expect(w.find('#mpp-platform-panel-models.mpp-models').exists()).toBe(true)
-    // 列表工具栏同一行：左条数，右出口
-    expect(w.find('.mpp-toolbar__title').text()).toContain('已挂载模型')
-    expect(w.find('.mpp-models__count').text()).toBe('(2)')
+    expect(w.find('#mpp-platform-panel-models.mpp-models').classes()).not.toContain('mpp-side')
+    // 独立的「上游清单 + 重新获取」已撤（2026-11-04 用户「多此一举」），
+    // 拉清单是「添加模型」自身的第一步，不另起第二条路
+    expect(w.find('.mpp-upstream').exists()).toBe(false)
+    expect(w.text()).not.toContain('上游清单')
+    expect(w.find('.mpp-toolbar__meta').exists()).toBe(false)
+    // 2026-11-04 用户「这个彻底不要」：模型区不再有工具栏行
+    expect(w.find('.mpp-toolbar').exists()).toBe(false)
+    expect(w.find('.mpp-models__count').exists()).toBe(false)
     expect(w.findAll('.mpp-model-row')).toHaveLength(2)
-    // 出口并列在工具栏右端：添加模型（主）+ 手动录入（轻量）
-    expect(w.findAll('.mpp-toolbar__acts .mk-btn').map((b) => b.text())).toEqual(['＋ 添加模型'])
-    expect(w.find('.mpp-toolbar__acts .mk-link').text()).toBe('手动录入')
+    // 添加入口只有这一颗主按钮（手动录入在弹窗底栏）
+    expect(w.findAll('.mpp-add')).toHaveLength(1)
+    expect(w.find('.mpp-add').text()).toBe('＋ 添加模型')
+    expect(w.text()).not.toContain('手动录入')
   })
 
-  it('模型为空时给下一步：平台通道直接去配置连接，不铺一张空表', async () => {
+  it('「＋ 添加模型」是唯一入口：开弹窗并请宿主向上游重拉', async () => {
+    const w = await mountPanel({ upstream: ['deepseek-v4-flash', 'mystery-1'] })
+    const addBtn = w.find('.mpp-add')
+    await addBtn.trigger('click')
+    await nextTick()
+    // 弹窗（连接 + 清单）就在这一处打开；清单由宿主拉（它持有地址与密钥并负责落盘连接）
+    expect(w.find('.pmd').exists()).toBe(true)
+    expect(w.emitted('fetchUpstream')).toHaveLength(1)
+  })
+
+  it('模型为空时给下一步：平台通道直接开添加弹窗，不铺一张空表', async () => {
     seedView({ providers: [providerView({ id: 'platform', name: '平台', models: [] })] })
     const w = await mountPanel()
     const setup = w.find('.mpp-setup')
     expect(setup.exists()).toBe(true)
     expect(setup.text()).toContain('还没有挂载模型')
-    expect(setup.text()).toContain('连接条上的地址与密钥就绪后')
+    expect(setup.text()).toContain('填服务地址与密钥')
     // 2026-10-28 对话模型为空时不铺空列表；向量 / 重排已拆成宿主的独立能力卡
     expect(w.find('.mpp-models__list').exists()).toBe(false)
     expect(w.findAll('.mpp-model-row')).toHaveLength(0)
-    await btn(w, '去配置连接')!.trigger('click')
-    await flushPromises()
-    expect(w.find('#mpp-platform-panel-conn').exists()).toBe(true)
+    await btn(w, '添加模型')!.trigger('click')
+    await nextTick()
+    // 连接与清单都在这一张弹窗里，不必先去别处配连接
+    expect(w.find('.pmd').exists()).toBe(true)
+    expect(w.emitted('fetchUpstream')).toHaveLength(1)
   })
 
-  it('本卡只负责对话与推理：连接与挂载模型常驻，向量 / 重排已拆到宿主', async () => {
+  it('本卡只负责对话与推理：模型清单常驻，向量 / 重排已拆到宿主', async () => {
     const w = await mountPanel()
     // 2026-10-27 用户「把 tab 解散了」：没有二级页签，内容全在 DOM 里且都可见
     expect(w.findAll('.mpp-subtabs').length).toBe(0)
     expect(w.find('[role="tab"]').exists()).toBe(false)
-    expect(shown(w, '#mpp-platform-panel-conn')).toBe(true)
     expect(shown(w, '#mpp-platform-panel-models')).toBe(true)
     expect(w.find('#mpp-platform-panel-generation').exists()).toBe(false)
     // 2026-10-28 三卡重构：向量 / 重排不再嵌在对话卡里
     expect(w.find('#mpp-platform-panel-infra').exists()).toBe(false)
-    // 连接表单就在正下方：平台详情不再摆一颗点了几乎不动的「设置」
+    // 2026-11-05 合并弹窗：卡头不再有连接表单，也没有点了几乎不动的「设置」
     expect(w.findAll('.mpp .mk-card__head .mk-btn').some((b) => b.text() === '设置')).toBe(false)
     expect(w.emitted('focus-platform-connection')).toBeUndefined()
   })
@@ -208,45 +222,45 @@ describe('ModelProvidersPanel', () => {
     ] })
     platform.models = (platform.models as Array<Record<string, unknown>>).map((m) => {
       if (m.id === 'chat-read') return { ...m, vision: true }
-      if (m.id === 'think-fast') return { ...m, supportsThinking: true, supportsReasoningEffort: true }
+      if (m.id === 'think-fast') return { ...m, supportsThinking: true, reasoningEfforts: ['low', 'high'] }
       return m
     })
     seedView({ providers: [platform] })
     const w = await mountPanel()
-    // 工具栏只留「区名 + 条数」，添加入口同排右端
-    expect(w.find('.mpp-toolbar__title').text()).toContain('已挂载模型')
-    expect(w.find('.mpp-models__count').text()).toBe('(3)')
+    // 没有「区名 + 条数」这种列表标题，能力标签直接跟在模型 id 后面
+    expect(w.find('.mpp-toolbar').exists()).toBe(false)
     expect(w.findAll('.mpp-group')).toHaveLength(0)
 
     const rows = modelRows(w)
     expect(rows).toHaveLength(3)
     const caps = (i: number) => rows[i].findAll('.mpp-fn__chip').map((c) => c.text())
     expect(caps(0)).toEqual([])
-    expect(caps(1)).toEqual(['读图'])
-    expect(caps(2)).toEqual(['思考', '推理强度'])
+    expect(caps(1)).toEqual(['视觉'])
+    // 强度标签带档位读数（2026-11-05）：只写「推理强度」看不出这台模型认哪几档
+    expect(caps(2)).toEqual(['思考', '推理强度 low / high'])
     // 能力标签有可读文本，不只靠颜色
-    expect(rows[1].findAll('.mpp-fn__chip').map((c) => c.text())).toEqual(['读图'])
+    expect(rows[1].findAll('.mpp-fn__chip').map((c) => c.text())).toEqual(['视觉'])
   })
 
-  it('④ 每行给参数摘要：设过的项逐条列出，一个都没设的给「参数全部跟随默认」', async () => {
+  /* 2026-11-04 用户「不要这种文案，上『Avoid unnecessary secondary labels and descriptions.
+     Let the layout do the explaining.』」：每行下面的参数摘要整行撤除，行上只有
+     id / 默认徽标 / 能力标签 / 动作——参数在「配置」弹层里。 */
+  it('模型行只有 id 与能力标签，没有参数摘要这类次级说明行', async () => {
     seedView({
       providers: [providerView({ id: 'platform', name: '平台', models: [
         { id: 'chat-plain' },
-        { id: 'think-configured', defaultThinkingMode: 'enabled', defaultReasoningEffort: 'high', fallbacks: ['fb-a', 'fb-b'], pricing: { inputPer1M: 1, outputPer1M: 2 } }
+        { id: 'think-configured', defaultThinkingMode: 'enabled', defaultReasoningEffort: 'high', pricing: { inputPer1M: 1, outputPer1M: 2 } }
       ] }) ]
     })
     const w = await mountPanel()
     const rows = modelRows(w)
-    // 这一行的正文就是它配了什么——④ 叫「模型与参数」，行里必须看得见参数
-    expect(rows[0].find('.mpp-model-params').text()).toBe('参数全部跟随默认')
-    const txt = rows[1].find('.mpp-model-params').text()
-    expect(txt).toContain('思考开启')
-    expect(txt).toContain('推理强度 high')
-    expect(txt).toContain('备用 2 个')
-    expect(txt).toContain('已配单价')
-    // 未设的项不凭空出现在摘要里
-    expect(txt).not.toContain('输出上限')
-    expect(rows[1].find('.mpp-model-params').attributes('title')).toContain('只列这个模型单独设过的项')
+    expect(w.find('.mpp-model-params').exists()).toBe(false)
+    expect(w.text()).not.toContain('参数全部跟随默认')
+    expect(w.text()).not.toContain('默认输出')
+    expect(w.text()).not.toContain('已配单价')
+    // 行正文只剩 id（与有能力的模型才有的胶囊）
+    expect(rows[0].find('.mpp-model-row__idline').text()).toBe('chat-plain')
+    expect(rows[1].find('.mpp-model-row__idline').text()).toContain('think-configured')
   })
 
   it('只读（配置文件不可写）：写入口全部禁用并给出说明', async () => {
@@ -269,7 +283,7 @@ describe('ModelProvidersPanel', () => {
     expect(removeItem.attributes('disabled')).toBeDefined()
   })
 
-  it('选择器确认后批量引入：能力标签随模型名推断，不再逐个弹配置框', async () => {
+  it('选择器确认后先过能力确认（推断只预填），确认才落盘', async () => {
     addModelsMock.mockResolvedValue({ data: { data: {} } })
     const w = await mountPanel({ upstream: ['mimo-v2.5-flash', 'step-3.5-flash'] })
     ;(w.vm as unknown as { openPull: () => void }).openPull()
@@ -280,19 +294,49 @@ describe('ModelProvidersPanel', () => {
     await w.findAll('.pmd-list .pmd-row input')[1].setValue(true)
     await nextTick()
     await w.findAll('.pmd .mk-modal__foot .mk-btn--primary')[0].trigger('click')
+    await nextTick()
+
+    /* P1（2026-11-04）用户「让用户自己去勾选，因为他自己一定要清楚他的模型有什么能力」：
+       勾完不直接落盘，先出能力确认层——预填来自推断，用户核对后才算数。 */
+    expect(addModelsMock).not.toHaveBeenCalled()
+    const rows = w.findAll('.mcc-row')
+    expect(rows).toHaveLength(2)
+    expect(w.find('.mcc').text()).toContain('确认模型能力')
+
+    // 用户把第二个模型的「视觉」勾上（推断不出，默认未勾）→ 落盘值必须跟着用户
+    // 每行三组控件：思考、强度挡位词输入框（.mcc-effort-input）、视觉——按 aria-label 取，不数下标
+    // 每次取行都重新查询：任一勾选变化会让列表重渲染，缓存的节点会脱离文档
+    const rowAt = (i: number) => w.findAll('.mcc-row')[i]
+    const cb = (i: number, label: string) =>
+      rowAt(i).findAll('input[type="checkbox"]').find((c) => c.attributes('aria-label')?.endsWith(label))!
+
+    await cb(1, '支持视觉').setValue(true)
+    /* 挡位是手填的词（2026-11-05 用户「应该放开允许填写挡位，和具体请求参数」）：
+       空格 / 逗号分隔、落盘前小写归一；没开思考的行填了也不提交（后端会拒）。 */
+    await cb(1, '支持思考').setValue(true)
+    await nextTick()
+    expect(rowAt(1).find('.mcc-effort-input').attributes('disabled')).toBeUndefined()
+    await rowAt(1).find('.mcc-effort-input').setValue('low, XHigh')
+    // 第一个模型填过挡位又关掉思考 → 挡位不随它落盘
+    await cb(0, '支持思考').setValue(true)
+    await nextTick()
+    await rowAt(0).find('.mcc-effort-input').setValue('high')
+    await cb(0, '支持思考').setValue(false)
+    await nextTick()
+    await w.find('.mcc .mk-modal__foot .mk-btn--primary').trigger('click')
     await flushPromises()
 
     expect(addModelsMock).toHaveBeenCalledTimes(1)
     const [providerId, models] = addModelsMock.mock.calls[0]
     expect(providerId).toBe('platform')
     expect(models).toEqual([
-      { id: 'mimo-v2.5-flash', supportsThinking: false, supportsReasoningEffort: false, vision: false },
-      { id: 'step-3.5-flash', supportsThinking: false, supportsReasoningEffort: false, vision: false }
+      { id: 'mimo-v2.5-flash', supportsThinking: false, reasoningEfforts: [], vision: false },
+      { id: 'step-3.5-flash', supportsThinking: true, reasoningEfforts: ['low', 'xhigh'], vision: true }
     ])
-    // 引入后不再自动弹模型编辑弹层
+    // 引入后不再自动弹模型编辑弹层；选择器与能力确认层都已关闭
     expect(w.find('.med-modal').exists()).toBe(false)
-    // 选择器确认后关闭
     expect(w.find('.pmd').exists()).toBe(false)
+    expect(w.find('.mcc').exists()).toBe(false)
   })
 
   it('单模型测试走真实调用，结果回显在该模型行内', async () => {
@@ -301,21 +345,26 @@ describe('ModelProvidersPanel', () => {
     await btn(w, '测试')!.trigger('click')
     await flushPromises()
     expect(testMock).toHaveBeenCalledWith('platform', { modelId: 'deepseek-v4-flash' })
-    const result = w.find('.mpp-rowtest')
+    const result = w.find('.mk-rowres')
     expect(result.text()).toContain('调用通过')
     expect(result.text()).toContain('1234ms')
     expect(result.attributes('title')).toContain('可以')
   })
 
-  it('状态读数：冷却中的模型标「冷却中」，其余标「可调用」（非连通性结论）', async () => {
-    getModelRegistryMock.mockResolvedValue({
-      data: { data: { models: [], cooldowns: [{ providerId: 'platform', model: 'deepseek-v4-flash', remainingMs: 30000 }], warnings: [], runtime: { maxModelCandidates: 2 } } }
-    })
+  it('状态列只在有告警时出现：没有那枚常驻小绿点', async () => {
     const w = await mountPanel()
     const rows = modelRows(w)
-    expect(rows[0].text()).toContain('冷却中')
-    /* 2026-11-02：「可用」仍被读成「连通过了」，改成直说行为的「可调用」 */
-    expect(rows[1].text()).toContain('可调用')
+    /* 2026-11-02：「可用」被读成「连通过了」，改成直说行为的「可调用」；
+       2026-11-04 弱化成一枚小圆点；
+       2026-11-05 用户「这个小绿点代表什么」：小圆点整枚删除——它无条件渲染，
+       每一行都亮着同一枚点，含义退化成「这一行存在」，等于没有信息。
+       现在没有告警的模型行不渲染状态格，只有 ⚠ 徽标那一种状态。 */
+    expect(rows[0].find('.mpp-dot').exists()).toBe(false)
+    expect(rows[1].find('.mpp-dot').exists()).toBe(false)
+    expect(rows[1].find('.mpp-model-row__status').exists()).toBe(false)
+    expect(rows[1].text()).not.toContain('可调用')
+    expect(rows[1].find('.mk-badge--ok').exists()).toBe(false)
+    expect(w.text()).not.toContain('冷却中')
   })
 
   it('配置告警不只给图标：别名未引用的模型在状态列写明「未被引用」，细节留在 title', async () => {
@@ -323,9 +372,7 @@ describe('ModelProvidersPanel', () => {
       data: {
         data: {
           models: [],
-          cooldowns: [],
-          warnings: ['模型「deepseek-v4-flash」未被任何别名引用（只能通过具体 id 使用）。'],
-          runtime: { maxModelCandidates: 2 }
+          warnings: ['模型「deepseek-v4-flash」未被任何别名引用（只能通过具体 id 使用）。']
         }
       }
     })
@@ -341,50 +388,93 @@ describe('ModelProvidersPanel', () => {
     expect(w.find('.pmd').exists()).toBe(false)
     ;(w.vm as unknown as { openPull: () => void }).openPull()
     await nextTick()
-    /* 浮窗默认落「可引入」（2026-11-03）：已添加的 deepseek-v4-flash 不在这一屏，
-       打开即是能直接勾的清单，不用在勾不动的行里扫雷 */
+    /* 2026-11-04 用户「不分什么对话非对话，这个页面就是拉取列表测试添加」：
+       清单原样列出，已添加的置灰并沉到末尾 */
     const rows = w.findAll('.pmd-row')
-    expect(rows).toHaveLength(2)
-    expect(rows.map((r) => r.find('.pmd-row__id').text())).toEqual(['mystery-1', 'mystery-2'])
+    expect(rows).toHaveLength(3)
+    expect(rows.map((r) => r.find('.pmd-row__id').text())).toEqual(['mystery-1', 'mystery-2', 'deepseek-v4-flash'])
     expect(rows[0].text()).not.toContain('已添加')
     expect(rows[0].find('input').attributes('disabled')).toBeUndefined()
-
-    await switchPullTab(w, '已添加')
-    const added = w.findAll('.pmd-row')
-    expect(added.map((r) => r.find('.pmd-row__id').text())).toEqual(['deepseek-v4-flash'])
-    expect(added[0].text()).toContain('已添加')
-    expect(added[0].find('input').attributes('disabled')).toBeDefined()
+    const added = rows[2]
+    expect(added.text()).toContain('已添加')
+    expect(added.find('input').attributes('disabled')).toBeDefined()
     expect(w.find('.mpp-chip').exists()).toBe(false)
   })
 
-  it('上游清单按用途给出建议：向量 / 重排 / 图像视频模型置灰并说明去向', async () => {
+  it('上游清单原样列出：向量 / 图像 / 视频模型不再置灰，也不劝去别的卡', async () => {
     const upstream = ['deepseek-v4-flash', 'BAAI/bge-m3', 'agnes-image-2.5-flash', 'jev-latest', 'agnes-video-2.5']
     const w = await mountPanel({ upstream })
     ;(w.vm as unknown as { openPull: () => void }).openPull()
     await nextTick()
-    /* 非对话模型不进「可引入」（2026-11-03 起它们在第三个页签里只作说明），
-       所以本页签只剩未挂载的对话模型 jev-latest */
-    const chat = w.findAll('.pmd-row')
-    expect(chat).toHaveLength(1)
-    expect(chat[0].text()).toContain('jev-latest')
-    expect(chat[0].find('input').attributes('disabled')).toBeUndefined()
-
-    await switchPullTab(w, '非对话模型')
     const rows = w.findAll('.pmd-row')
-    expect(rows).toHaveLength(3)
-    expect(rows.every((r) => r.find('input[type="checkbox"]').exists())).toBe(true)
+    expect(rows).toHaveLength(5)
+    expect(w.text()).not.toContain('建议归入')
+    expect(w.text()).not.toContain('不在此添加')
     const embedding = rows.find((r) => r.text().includes('BAAI/bge-m3'))!
-    expect(embedding.text()).toContain('建议归入向量模型')
-    expect(embedding.find('input').attributes('disabled')).toBeDefined()
-    /* 2026-11-02 评审：图像 / 视频生成模型此前被当成对话模型可勾选，
-       与「只有对话模型可以添加」自相矛盾；现在同样置灰并写明原因 */
+    expect(embedding.find('input').attributes('disabled')).toBeUndefined()
     const image = rows.find((r) => r.text().includes('agnes-image-2.5-flash'))!
-    expect(image.text()).toContain('图像 / 视频生成，不在此添加')
-    expect(image.find('input').attributes('disabled')).toBeDefined()
+    expect(image.find('input').attributes('disabled')).toBeUndefined()
     const video = rows.find((r) => r.text().includes('agnes-video-2.5'))!
-    expect(video.find('input').attributes('disabled')).toBeDefined()
+    expect(video.find('input').attributes('disabled')).toBeUndefined()
     expect(w.text()).not.toContain('基础设施配置')
     expect(w.text()).not.toContain('插件配置')
     expect(w.text()).not.toContain('暂未接入')
+  })
+
+  /* P0（2026-11-04）：平台默认模型是平台能不能跑起来的前提——没单独指定模型的 Skill
+     都走它，缺省时运行时直接抛 AI model is not configured。
+     2026-11-04 晚用户「这个彻底不要」：工具栏的「默认：<id>」读数撤除，
+     这条事实只由命中行的「默认」徽章承担。 */
+  describe('平台默认模型（P0）', () => {
+    it('卡头与正文都不复述默认；行内「默认」徽章只在命中的模型行出现', async () => {
+      const w = await mountPanel({ defaultModel: 'agnes-3.0-flash' })
+      expect(w.find('.mpp-toolbar').exists()).toBe(false)
+      expect(w.find('.mpp-models').text()).not.toContain('默认：')
+      const rows = modelRows(w)
+      const deepseekRow = rows.find((r) => r.text().includes('deepseek-v4-flash'))!
+      const agnesRow = rows.find((r) => r.text().includes('agnes-3.0-flash'))!
+      expect(deepseekRow.find('.mpp-default-chip').exists()).toBe(false)
+      expect(agnesRow.find('.mpp-default-chip').exists()).toBe(true)
+    })
+
+    it('默认缺省时不出现「未设置」读数（该事实由行徽章承担）', async () => {
+      const w = await mountPanel()
+      expect(w.find('.mpp-toolbar').exists()).toBe(false)
+      expect(w.find('.mpp-models').text()).not.toContain('未设置')
+      expect(w.findAll('.mpp-default-chip')).toHaveLength(0)
+    })
+
+    it('⋯ 菜单只有一枚「设为默认」；已是默认时禁用，点击只发意图', async () => {
+      const w = await mountPanel({ defaultModel: 'deepseek-v4-flash' })
+      const firstRow = modelRows(w)[0]
+      await firstRow.find('.mk-menu__btn').trigger('click')
+      await flushPromises()
+      const items = firstRow.findAll('.mk-menu__item')
+      // 2026-11-04 用户「为什么还在区分默认推理和对话，没有这个了」：只剩一枚
+      expect(items.map((b) => b.text())).toEqual(['设为默认', '删除'])
+      const setDefault = items[0]
+      // 已是平台默认 → 禁用（平台只一个默认，没有「某些档位还能再设一次」）
+      expect(setDefault.attributes('disabled')).toBeDefined()
+      // 面板自身不写注册表文件（默认存 DB，由宿主落盘）
+      expect(updateModelMock).not.toHaveBeenCalled()
+    })
+
+    it('非默认行点「设为默认」只发意图（不带档位参数）', async () => {
+      const w = await mountPanel({ defaultModel: 'deepseek-v4-flash' })
+      const secondRow = modelRows(w)[1]
+      await secondRow.find('.mk-menu__btn').trigger('click')
+      await flushPromises()
+      const setDefault = secondRow.findAll('.mk-menu__item')[0]
+      expect(setDefault.attributes('disabled')).toBeUndefined()
+      await setDefault.trigger('click')
+      await flushPromises()
+      expect(w.emitted('setDefault')).toEqual([['agnes-3.0-flash']])
+      expect(updateModelMock).not.toHaveBeenCalled()
+    })
+
+    it('平台通道模型 id 单独回传宿主（默认候选不含自建 / 停用供应商）', async () => {
+      const w = await mountPanel()
+      expect(w.emitted('platformModels')?.at(-1)).toEqual([['deepseek-v4-flash', 'agnes-3.0-flash']])
+    })
   })
 })

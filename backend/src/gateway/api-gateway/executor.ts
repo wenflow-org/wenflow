@@ -4,14 +4,7 @@ import { redactLogValue } from '../../utils/secret-redaction';
 import { ResolvedRoute, ChatRequest, ChatResponse, ExecutionContext, ChatMessageContent, messagesHaveImages } from './types';
 import { getDefaultAIRequestTimeoutMs } from '../../services/agentRequestTimeout.service';
 import { buildThinkingPolicy, type ReasoningEffort, type ThinkingMode } from './thinking-policy';
-import { getModelDefinition, getModelFallbacks, providerSupportsSystemRole, resolveModelRef, supportsVision } from '../../config/models.config';
-import {
-  clearCooldown,
-  deploymentKey,
-  isCoolingDown,
-  isFallbackWorthyCategory,
-  markCoolingDown
-} from './deployment-health';
+import { getModelDefinition, providerSupportsSystemRole, resolveModelRef, supportsVision } from '../../config/models.config';
 import { getModelMaxParallelRequests, releaseSlot, tryAcquireSlot } from './model-concurrency';
 import { safeHttpRequest, safeHttpStreamRequest, SafeHttpBodyLimitError, UnsafeUrlError } from '../../utils/safe-http';
 import { isEncryptedSecret } from '../../utils/secret-crypto';
@@ -57,10 +50,6 @@ export function resolveCacheSessionKey(context: ExecutionContext): string {
   }
   return key || 'wenflow-global';
 }
-/** 降级链最多候选数（主模型 + N 个 fallback），用于限制质量漂移与成本（见 §4.5） */
-/** 运行时模型候选上限（含主模型）：fallback 链超过部分静默截断，registry 据此展示有效链 */
-export const MAX_MODEL_CANDIDATES = 3;
-
 interface RequestResult {
   response: ChatResponse;
   statusCode: number;
@@ -170,11 +159,6 @@ export class APIExecutor {
     }
 
     const primaryModel = String(request.model || route.model || '');
-    const primaryHealthKey = deploymentKey({
-      providerId: route.providerId,
-      endpoint: route.endpoint,
-      model: primaryModel
-    });
     /** 定向重试时替换的请求体（如关闭思考）；默认即调用方请求 */
     let currentRequest: ChatRequest = request;
 
@@ -187,12 +171,10 @@ export class APIExecutor {
       const attemptStartedAt = new Date();
       try {
         // 本地 per-模型 并发闸门（未配置上限时不生效，零行为变化）：
-        // 超限与上游 429 同构，交回统一退避/降级链路（见 doc/MODEL_GATEWAY_DESIGN.md §4.6）。
-        const concurrencyKey = deploymentKey({
-          providerId: route.providerId,
-          endpoint: route.endpoint,
-          model: currentRequest.model || route.model
-        });
+        // 超限与上游 429 同构，交回统一退避链路（见 doc/MODEL_GATEWAY_DESIGN.md §4.6）。
+        // 部署键（provider + endpoint + model）此前由 deployment-health 提供；随降级功能下线，
+        // 那里只剩并发闸门这一个消费者，于是就地拼键。
+        const concurrencyKey = `${route.providerId || '-'}|${route.endpoint || '-'}|${currentRequest.model || route.model || '-'}`;
         const concurrencyLimit = getModelMaxParallelRequests(currentRequest.model || route.model);
         if (!tryAcquireSlot(concurrencyKey, concurrencyLimit)) {
           throw new GatewayExecutionError(
@@ -249,7 +231,6 @@ export class APIExecutor {
           attemptTelemetryComplete,
           maxAttempts
         );
-        clearCooldown(primaryHealthKey);
         return result.response;
       } catch (error) {
         lastError = this.normalizeExecutionError(error);
@@ -376,55 +357,6 @@ export class APIExecutor {
       attemptTelemetryComplete,
       maxAttempts
     );
-    // 降级：主候选在「值得换部署」的错误上耗尽重试 → 换 fallback 模型重跑。
-    // 见 doc/MODEL_GATEWAY_DESIGN.md §4.5（成熟参照：LiteLLM fallbacks + deployment cooldown）。
-    // 链来源优先级：skill 级声明（skill_model_configs.fallbackChain）> 模型注册表全局链。
-    // 支持最多 2 跳（MAX_MODEL_CANDIDATES=3）；fallbackTrail 防环并限制总尝试次数。
-    const fallbackTrail = normalizedContext.fallbackTrail || [];
-    const triedModels = new Set([...fallbackTrail, primaryModel]);
-    const fallbackModel = (fallbackTrail.length < MAX_MODEL_CANDIDATES - 1)
-      ? this.resolveModelCandidates(primaryModel, route.skillFallbackChain)
-          .find((candidate) => (
-            candidate !== primaryModel
-            && !triedModels.has(candidate)
-            && !isCoolingDown(deploymentKey({
-              providerId: route.providerId,
-              endpoint: route.endpoint,
-              model: candidate
-            }))
-          ))
-      : undefined;
-    const terminalError = lastError as GatewayExecutionError | null;
-    if (
-      fallbackModel
-      && !streamStarted
-      && terminalError
-      && isFallbackWorthyCategory(terminalError.category)
-      && retryBudget.used.upstreamAttempts < retryBudget.limits.maxUpstreamAttempts
-    ) {
-      markCoolingDown(primaryHealthKey);
-      logger.warn('[api-gateway] 主候选耗尽，降级到 fallback 模型', {
-        traceId,
-        llmRequestId,
-        primaryModel,
-        fallbackModel,
-        fallbackDepth: fallbackTrail.length + 1,
-        errorCategory: terminalError.category,
-        statusCode: lastStatusCode
-      });
-      return this.execute(
-        route,
-        { ...request, model: fallbackModel },
-        {
-          ...normalizedContext,
-          fallbackFrom: primaryModel,
-          fallbackTrail: [...fallbackTrail, primaryModel],
-          // 链来源记账：skill 级声明链 vs 模型注册表全局链（便于回看「空气兜底」治理效果）
-          fallbackChainSource: route.skillFallbackChain ? 'skill' : 'registry',
-        }
-      );
-    }
-
     throw finalError;
   }
 
@@ -773,8 +705,7 @@ export class APIExecutor {
     }
     // 视觉把关（2026-10-18 #123）：请求里含图片内容块时，**最终生效模型**必须声明 vision，
     // 否则明确拒绝（而不是把图发给不认识图的模型：上游要么 400，要么当没看见，两种都难排查）。
-    // 放在这里而不是路由层：fallback 换型（execute → {...request, model: fallbackModel}）也经过本函数，
-    // 保证降级候选同样按自己的能力声明受检。
+    // 放在这里而不是路由层：定向重试会替换请求体，最终生效模型都得按自己的能力声明受检。
     this.assertVisionAllowed(String(requestBody.model || ''), requestBody.messages);
     // 调用方**显式**声明 thinking 时以调用方为准（定向重试：截断空输出 → 关闭思考重试），
     // 否则按路由档位 + 模型能力推导。
@@ -813,21 +744,6 @@ export class APIExecutor {
         retryable: false
       }
     );
-  }
-
-  /** 降级候选链：主模型 + 声明的 fallback（去重、过滤未知模型、限量）。 */
-  private resolveModelCandidates(primaryModel: string, declaredFallbacks?: readonly string[] | null): string[] {
-    if (!primaryModel) return [primaryModel];
-    const candidates = [primaryModel];
-    // 优先用 skill 级声明链（route.skillFallbackChain，保存时已校验 registry/同 tier/通道可服务）；
-    // 未声明则回落到模型注册表全局链。
-    const fallbacks = declaredFallbacks ?? getModelFallbacks(primaryModel);
-    for (const fallback of fallbacks) {
-      if (candidates.length >= MAX_MODEL_CANDIDATES) break;
-      if (!getModelDefinition(fallback)) continue;
-      candidates.push(fallback);
-    }
-    return candidates;
   }
 
   /** 解析并校验完整 JSON chat completion 信封（缓冲路径与流式 JSON 回退共用） */
@@ -1137,10 +1053,6 @@ export class APIExecutor {
       metadata: JSON.stringify({
         layer: 'api-gateway-v2', executionLayer: 'api-gateway',
         executionMode,
-        // 降级记账：本次调用是作为 fallback 发起时的来源模型（P1，见 §4.5）
-        fallbackFrom: context.fallbackFrom || null,
-        fallbackTrail: context.fallbackTrail || null,
-        fallbackChainSource: context.fallbackChainSource || null,
         skillId: context.skillId || null, agentId: context.agentId || null,
         sessionId: context.sessionId || null,
         conversationId: context.conversationId || null,

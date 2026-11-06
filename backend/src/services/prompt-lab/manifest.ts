@@ -15,7 +15,6 @@ import {
   type SkillPromptContract,
 } from '../skill-prompt-contract';
 import { parsePromptFrontmatterMeta, PROMPTS_DIR } from '../../composers/prompt-files/loader';
-import { findPlatformReasoningDefaultModelRow } from './prompt-lab-versions.repo';
 
 // M3：prompts 目录复用 loader 的 PROMPTS_DIR 解析（支持 PROMPTS_DIR 环境变量覆盖），
 // prompts/manifests 与 prompts 同级存放于仓库根，避免 process.cwd() 双轨不一致。
@@ -287,14 +286,6 @@ export async function writeManifest(skillId: string, manifestInput: any, sourceC
   const filePath = path.join(MANIFESTS_DIR, `${skillId}.yaml`);
   await fs.mkdir(MANIFESTS_DIR, { recursive: true });
   await fs.writeFile(filePath, serializeManifest(manifest), 'utf-8');
-  return manifest;
+    return manifest;
 }
 
-export async function getPlatformReasoningDefaultModel() {
-  try {
-    const row = await findPlatformReasoningDefaultModelRow();
-    return sanitizeString(row?.defaultReasoningModel, '') || null;
-  } catch {
-    return null;
-  }
-}

@@ -8,7 +8,7 @@
  * - **默认不限**（未配置 `maxParallelRequests` 即不生效）——限值是运维决策，
  *   不靠猜；成熟参照：LiteLLM 的 `max_parallel_requests`（由 rpm/tpm 推导或显式配置）
  *
- * 进程内实现（与 deployment-health 一致，不引入 Redis）。
+ * 进程内实现（与缓存/限流等其余进程内状态一致，不引入 Redis）。
  */
 import { getModelDefinition } from '../../config/models.config';
 
