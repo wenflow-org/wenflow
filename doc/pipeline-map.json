@@ -1006,7 +1006,7 @@
             "task"
           ],
           "identity": "学习表现预测器。在新任务开始前，基于学习者最近的知识状态摘要、",
-          "inputs": 0,
+          "inputs": 3,
           "outputs": 7,
           "params": {
             "temperature": 0.2,
@@ -2187,7 +2187,7 @@
         "task"
       ],
       "identity": "学习表现预测器。在新任务开始前，基于学习者最近的知识状态摘要、",
-      "inputs": 0,
+      "inputs": 3,
       "outputs": 7,
       "params": {
         "temperature": 0.2,

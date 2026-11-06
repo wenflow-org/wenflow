@@ -137,6 +137,11 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     // 补声明后这两个「编排注入」键需登记，否则 prompts:check-handoff --strict 判 sandbox-path-unregistered。
     'session.knowledgeContext',
     'session.structure',
+    // #199：learning-predictor 的输入契约补齐后，其三个「编排注入」键需登记——
+    // knowledgeStateSummary/taskContext 由教学链现场组装（TeachingContextBuilder），
+    // fatigueSignal 由 learningState 分类派生；不登记会让 --strict 判 sandbox-path-unregistered。
+    'knowledgeStateSummary',
+    'taskContext',
   ],
   'profile-agent': [
     'snapshot.dynamicState',
