@@ -137,9 +137,9 @@ flowchart LR
 | 步 | 节点 | 类型 | 职责 | 条件 | 循环 |
 | --- | --- | --- | --- | --- | --- |
 | 1 | `LearnerEvidenceProjector` | service | learner-evidence-projection | when learner profile related events arrive | — |
-| 2 | `skill:lesson-knowledge-enricher` | skill | lesson-knowledge-enrichment | when lesson ends | — |
-| 3 | `LearnerProfileService` | service | learner-profile-cache-clear | after learner evidence is projected | — |
-| 4 | `LearnerSnapshotRefreshService` | service | learner-snapshot-refresh | after learner updates are applied | — |
+| 2 | `LearnerProfileService` | service | learner-profile-cache-clear | after learner evidence is projected | — |
+| 3 | `LearnerSnapshotRefreshService` | service | learner-snapshot-refresh | after profile cache is invalidated (skipped for teaching task:completed / goal:understanding:updated) | — |
+| 4 | `skill:lesson-knowledge-enricher` | skill | lesson-knowledge-enrichment | when lesson ends (enqueued asynchronously; the fast path does not await the LLM) | — |
 
 | Skill | 类型 | 提示词正文 | 参数 | 输入/输出 | 字段角色 |
 | --- | --- | --- | --- | --- | --- |
