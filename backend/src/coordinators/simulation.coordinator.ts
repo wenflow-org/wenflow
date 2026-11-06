@@ -61,6 +61,8 @@ import {
   isRetryableLearnUpstreamError,
   isRequestAborted,
   isTeachingSessionStaleError,
+  isTerminalTeachingSessionConflictError,
+  attachStaleRetryContext,
   boundTaskCompletionError,
   parseStageResultsPayload,
   buildGoalVisibleContext,
@@ -844,10 +846,23 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
       try {
         return await this.runTeachingTurnStepRetries({ ...params, teachingRevision: freshTeachingRevision });
       } catch (retryError: unknown) {
-        // #153：重试本身就是"中断窗口"的恢复动作，不能让重试把「可续跑」升级成终局——
-        // 例如重试期间课堂被并发收束 → 第二次 claim 报 TEACHING_SESSION_STATE_CHANGED（终局类）。
-        // 这里统一保留原始 STALE（属中断窗口冲突、上层归类为可续跑暂停）；真正的重试失败原因
-        // 留在日志里，下一轮 advance 会以干净的 revision 重新拿到它。
+        // #206：重试失败的真实原因不能被原始 STALE 覆盖。终局类课堂错误（课堂状态已变 /
+        // 收束被接管，见 isTerminalTeachingSessionConflictError）与「中断窗口」语义相反：
+        // 覆盖成 STALE 会让上层永远归类为可续跑暂停 → 反复空转、会话不升级，真实原因只剩一条
+        // warn。这里把「本次是 STALE 重试后的失败」作为附加信息挂上，主错误原样交给分类器。
+        if (isTerminalTeachingSessionConflictError(retryError)) {
+          attachStaleRetryContext(retryError, error);
+          logger.warn('[simulation-coordinator] 教学回合 revision 过期后重试撞终局类错误，交上层分类器', {
+            sessionId: params.sessionId,
+            teachingSessionId: params.teachingSessionId,
+            freshTeachingRevision,
+            retryError: asErrorLike(retryError).message || String(retryError),
+            retryErrorCode: (retryError as { code?: unknown } | null)?.code ?? null,
+            staleErrorCode: 'TEACHING_SESSION_STALE',
+          });
+          throw retryError;
+        }
+        // 其余（仍 STALE / BUSY / 上游突发）：保留原始 STALE，维持 #153 的可续跑语义。
         logger.warn('[simulation-coordinator] 教学回合 revision 过期后重试仍失败，按中断窗口（可续跑）处理', {
           sessionId: params.sessionId,
           teachingSessionId: params.teachingSessionId,

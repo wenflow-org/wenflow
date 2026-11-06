@@ -100,6 +100,8 @@ import { resolveLearnTurnBudget } from '../simulation.helpers'
 import { teachingSessionRepository } from '../../services/ai-teaching/TeachingSessionRepository'
 
 const recordLedgerSpy = jest.spyOn(teachingSessionRepository, 'recordDirectTaskCompletion')
+// #204：结算前必须先读授课会话状态，判断本次收尾是否还会产出 lesson:completed
+const getTeachingSessionSpy = jest.spyOn(teachingSessionRepository, 'getById')
 
 describe('SimulationOrchestrator durable task completion recovery', () => {
   let sessionRecord: any
@@ -198,6 +200,8 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
     })
     mockEndSession.mockResolvedValue({ status: 'completed', revision: 3 })
     recordLedgerSpy.mockResolvedValue('completed')
+    // #204 默认：授课会话仍 active（本次收尾会产出 lesson:completed → 刷新让它，不带标记）
+    getTeachingSessionSpy.mockResolvedValue({ id: 'teaching-1', status: 'active' } as any)
     mockStartSession.mockResolvedValue({
       sessionId: 'teaching-2',
       revision: 1,
@@ -419,6 +423,69 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
     expect(mockGetSessionDetail).not.toHaveBeenCalled()
   })
 
+  it('#204：结算前授课会话已 completed → completeTask 带 sessionClosedBeforeCompletion 自己补刷投影', async () => {
+    setLearningState(buildLearningState({
+      status: 'task_completion_pending',
+      taskId: 'task-1',
+      taskTitle: '任务一',
+      teachingSessionId: 'teaching-1',
+      teachingRevision: 3,
+      closureDecision: { canCompleteTask: true, reason: '已收束' },
+      finalizedAt: '2026-07-19T00:00:00.000Z',
+      error: 'transient',
+      updatedAt: '2026-07-19T00:00:01.000Z'
+    }))
+    // end_only 补结算 / complete_task 重试：课堂已被上一跳收束，endSession 只会走
+    // claimFinalization 的 completed 幂等分支，**不再产出 lesson:completed**；
+    // 事件消费者又按 sessionId 跳过 task:completed → 若不在此带上标记，该次收尾对
+    // 投影键 0 次刷新（#204）。标记由 completeTask 的 eager 路径兜底。
+    getTeachingSessionSpy.mockResolvedValue({
+      id: 'teaching-1',
+      status: 'completed',
+      teachingState: null
+    } as any)
+    mockCompleteTask.mockResolvedValue({
+      task: { id: 'task-1', status: 'completed', completedAt: '2026-07-19T00:00:02.000Z' }
+    })
+
+    const result = await coordinator.executeLearningStep('simulation-1')
+
+    expect(result).toEqual(expect.objectContaining({ success: true, taskCompleted: true }))
+    expect(getTeachingSessionSpy).toHaveBeenCalledWith('teaching-1')
+    expect(mockCompleteTask).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: 'task-1',
+      sessionId: 'teaching-1',
+      sessionClosedBeforeCompletion: true
+    }))
+  })
+
+  it('#204：结算前授课会话仍 active（本次收尾会产出 lesson:completed）→ 不带标记，不重复重算', async () => {
+    setLearningState(buildLearningState({
+      status: 'task_completion_pending',
+      taskId: 'task-1',
+      taskTitle: '任务一',
+      teachingSessionId: 'teaching-1',
+      teachingRevision: 3,
+      closureDecision: { canCompleteTask: true, reason: '已收束' },
+      finalizedAt: '2026-07-19T00:00:00.000Z',
+      error: 'transient'
+    }))
+    getTeachingSessionSpy.mockResolvedValue({
+      id: 'teaching-1',
+      status: 'active',
+      teachingState: null
+    } as any)
+    mockCompleteTask.mockResolvedValue({
+      task: { id: 'task-1', status: 'completed', completedAt: '2026-07-19T00:00:02.000Z' }
+    })
+
+    const result = await coordinator.executeLearningStep('simulation-1')
+
+    expect(result).toEqual(expect.objectContaining({ success: true, taskCompleted: true }))
+    expect(mockCompleteTask).toHaveBeenCalledTimes(1)
+    expect(mockCompleteTask.mock.calls[0][0]).not.toHaveProperty('sessionClosedBeforeCompletion')
+  })
+
   it('legacy error runtime 会依据已完成且 task 匹配的 Teaching 会话恢复', async () => {
     learningPath = buildPath(task('task-1', '任务一'), task('task-2', '任务二'))
     setLearningState({
@@ -439,6 +506,12 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
       endTime: new Date('2026-07-19T00:00:00.000Z'),
       revision: 4
     })
+    // 同一事实（课堂已 completed）也要让结算侧知道：本次收尾不会再产出 lesson:completed
+    getTeachingSessionSpy.mockResolvedValue({
+      id: 'teaching-1',
+      status: 'completed',
+      teachingState: null
+    } as any)
     let runtimeWhenCompleteTaskStarted: any
     mockCompleteTask.mockImplementation(async () => {
       runtimeWhenCompleteTaskStarted = getLearningState().taskRuntime
@@ -465,6 +538,12 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
       error: null
     }))
     expect(mockCompleteTask).toHaveBeenCalledTimes(1)
+    // #204：从「已 completed 课堂」恢复的结算必须自己补刷投影（不会再产出 lesson:completed）
+    expect(mockCompleteTask).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: 'task-1',
+      sessionId: 'teaching-1',
+      sessionClosedBeforeCompletion: true
+    }))
     expect(mockExecuteSkill).not.toHaveBeenCalled()
     expect(mockProcessStudentMessage).not.toHaveBeenCalled()
     // 恢复路径同样收束授课会话（endSession→finalization 生成 wrapup）——2026-10-02 端到端实证
