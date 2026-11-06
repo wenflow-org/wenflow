@@ -199,10 +199,14 @@ routings:
     notes: internal — 仅调试；manual — 仅 assisted 座舱手动评审触发（自动入口 PATH_DISLIKE_ENABLED=false）
 
   # === epistemic-grounding（物理两阶段第一段） ===
+  # 调用边（#185）：本 skill 与全部 VL 技能一样由仿真编排层（simulation-agent）在同一
+  # executeLearningStep 内调用，此前漏声明 simulation-agent → 运行日志被审计判成
+  # 「幽灵边 simulation-agent -> skill:virtual-learner-epistemic-grounding」。
+  # 数据交付方向（epistemicGrounding → learn-turn 模拟器）保持不变。
   - agentId: skill:virtual-learner-epistemic-grounding
     fieldId: epistemicGrounding
     render: visible
-    handoff: [skill:virtual-learner-learn-turn-simulator]
+    handoff: [simulation-agent, skill:virtual-learner-learn-turn-simulator]
     internal: false
     accumulate: false
 

@@ -141,6 +141,80 @@ describe('sandbox-resolver', () => {
       );
       expect(result.missingCount).toBe(0);
     });
+
+    it('#192 path 池：stage-designer 声明的 path 通道全部可解析（含本次未注入的显式 null 通道）', () => {
+      const pools = buildPathSandboxPool(
+        { learnerProfile: { surfaceGoal: '目标' } },
+        {
+          previousMilestone: { stageNumber: 1, title: '上一阶段' },
+          materials: [{ title: '资料', sections: [] }],
+          pathStageMap: { stageCount: 2, currentStageNumber: 2, stages: [] },
+          allPreviousStageTasks: [{ stageNumber: 1, tasks: ['a'] }],
+          repairHints: { replanRatio: 0.7 },
+        }
+      );
+      const result = checkSandboxRefs(
+        'path',
+        [
+          'previousMilestone',
+          'normalizedInput',
+          'materials',
+          'repairHints',
+          'supplementRequest',
+          'schoolAnchor',
+          'pathStageMap',
+          'allPreviousStageTasks',
+          'previousStageOutcome',
+        ],
+        pools
+      );
+      expect(result.missingCount).toBe(0);
+    });
+
+    it('#192：kc-mapper 声明的 path.subtasks 对账——真实载荷进池可解析，旧池（仅 normalizedInput）判缺失', async () => {
+      const withSubtasks = buildPathSandboxPool({}, { subtasks: [{ taskKey: 'task-1-0', title: '任务' }] });
+      const ok = await checkAgentSandboxRefs('kc-mapper', 'path', withSubtasks);
+      expect(ok).not.toBeNull();
+      expect(ok!.missingCount).toBe(0);
+      expect(ok!.resolvedCount).toBeGreaterThan(0);
+
+      // 旧的 path 池形状（只有 normalizedInput/replan/previousMilestone/previousStageOutcome）
+      // 就是 #192 的病灶：声明了 path.subtasks，池里没有 → 此前无人对账。
+      const loggerSpy = jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const legacy = await checkAgentSandboxRefs('kc-mapper', 'path', {
+        path: { normalizedInput: {}, replan: null, previousMilestone: null, previousStageOutcome: null },
+      });
+      expect(legacy!.missingCount).toBe(1);
+      expect(legacy!.refs[0].missing).toContain('subtasks');
+      expect(loggerSpy).toHaveBeenCalledWith(
+        '[sandbox-resolver] kc-mapper 沙盘声明键运行时不可解析（声明与装配脱节）',
+        expect.objectContaining({ agentAlias: 'path' })
+      );
+      loggerSpy.mockRestore();
+    });
+
+    it('#192：stage-designer 的可选 path 通道默认被跳过，includeOptional 后才纳入对账', async () => {
+      const withoutOptional = await extractSandboxRefsFromCore('stage-designer');
+      expect(withoutOptional.filter((r) => r.agentAlias === 'path')).toEqual([]);
+
+      const withOptional = await extractSandboxRefsFromCore('stage-designer', { includeOptional: true });
+      const paths = withOptional.filter((r) => r.agentAlias === 'path').map((r) => r.path);
+      expect(paths).toContain('materials');
+      expect(paths).toContain('repairHints');
+      expect(paths).toContain('pathStageMap');
+      expect(paths).toContain('allPreviousStageTasks');
+
+      const loggerSpy = jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const ok = await checkAgentSandboxRefs(
+        'stage-designer',
+        'path',
+        buildPathSandboxPool({}, { materials: [{ title: 'm' }] }),
+        { includeOptional: true }
+      );
+      expect(ok!.missingCount).toBe(0);
+      expect(loggerSpy).not.toHaveBeenCalled();
+      loggerSpy.mockRestore();
+    });
   });
 
   describe('checkAgentSandboxRefs（统一入口）', () => {

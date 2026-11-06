@@ -77,8 +77,15 @@ export function checkSandboxRefs(
  * 从 core 文件声明的 inputs 里提取 sandbox ref（拆分 agent 别名与池内路径）。
  * 动态读取声明，core yaml 变更后自动生效。
  * 例：`sandbox:goal.collectedData.state` → { agentAlias: 'goal', path: 'collectedData.state' }
+ *
+ * @param options.includeOptional 置 true 时连 `type: <t>?` 的可选输入一起纳入（stage-designer/
+ *   kc-mapper 这类「声明即通道」的 skill 用它做通道级对账：#192 之前可选键被整类跳过，
+ *   于是声明了一堆沙盘键、池里一个都没有也没人发现）。
  */
-export async function extractSandboxRefsFromCore(skillId: string): Promise<Array<{ agentAlias: string; path: string }>> {
+export async function extractSandboxRefsFromCore(
+  skillId: string,
+  options: { includeOptional?: boolean } = {}
+): Promise<Array<{ agentAlias: string; path: string }>> {
   try {
     const { scanCoreFiles } = await import('./prompt-lab/core-file-loader');
     const core = scanCoreFiles().files.find((file) => file.skillId === skillId);
@@ -86,10 +93,10 @@ export async function extractSandboxRefsFromCore(skillId: string): Promise<Array
     const refs: Array<{ agentAlias: string; path: string }> = [];
     for (const input of core.inputs) {
       if (input.kind !== 'sandbox' || !input.sandboxPath) continue;
-      // 可选输入（声明 type 以 ? 结尾，如 string?）不参与必填对账：
+      // 可选输入（声明 type 以 ? 结尾，如 string?）默认不参与必填对账：
       // 这类键只在特定场景注入（如 path 的 adjustments 只在「补充说明重规划」出现），
       // 普通流程缺失属正常，不应刷「声明与装配脱节」告警。
-      if (typeof input.type === 'string' && input.type.trim().endsWith('?')) continue;
+      if (!options.includeOptional && typeof input.type === 'string' && input.type.trim().endsWith('?')) continue;
       const dotIndex = input.sandboxPath.indexOf('.');
       if (dotIndex === -1) {
         refs.push({ agentAlias: input.sandboxPath, path: '' });
@@ -113,6 +120,8 @@ export async function extractSandboxRefsFromCore(skillId: string): Promise<Array
 export interface CheckAgentSandboxRefsOptions {
   /** 对账失败时 warn 日志的附加上下文 */
   warnContext?: Record<string, unknown>;
+  /** 连同 `type: <t>?` 的可选输入一起对账（见 extractSandboxRefsFromCore） */
+  includeOptional?: boolean;
 }
 
 /**
@@ -126,7 +135,7 @@ export async function checkAgentSandboxRefs(
   options: CheckAgentSandboxRefsOptions = {}
 ): Promise<SandboxRefsCheckResult | null> {
   try {
-    const refs = await extractSandboxRefsFromCore(skillId);
+    const refs = await extractSandboxRefsFromCore(skillId, { includeOptional: options.includeOptional });
     const agentRefs = refs.filter((ref) => ref.agentAlias === agentAlias);
     if (agentRefs.length === 0) return null;
 
@@ -251,25 +260,45 @@ export function buildTeachingSandboxPool(options: {
   };
 }
 
-/** path 链：path.coordinator.buildNormalizedGoalInput 确定性定帧结果 */
+/**
+ * stage 链（stage-designer / kc-mapper）在 path 池里声明的通道键。
+ *
+ * #192：这两个 skill 的真实载荷由编排层手工拼装（`stageDesignerInput` / kc-mapper 的
+ * `{subtasks, milestones, cognitiveCore, prerequisiteTree}`），从不经过 `normalizedInput`；
+ * 此前池里没有这些键 ⇒ 「声明 ≠ 载荷」，且这两个 skill 未纳入运行期对账，问题一直不可见。
+ * 现在：① 池按本清单显式登记通道（本次未注入的显式 null）；② 真实载荷（injected）覆盖同名键；
+ * ③ 调用点在 executeSkill 之前跑 checkAgentSandboxRefs 对账，声明/载荷一旦再次漂移就会 warn。
+ */
+export const PATH_STAGE_SANDBOX_KEYS = [
+  'milestones',
+  'subtasks',
+  'cognitiveCore',
+  'materials',
+  'repairHints',
+  'supplementRequest',
+  'schoolAnchor',
+  'pathStageMap',
+  'allPreviousStageTasks',
+  'previousStageOutcome',
+] as const;
+
+/** path 链：path.coordinator.buildNormalizedGoalInput 确定性定帧结果 + stage 链手工拼装载荷 */
 export function buildPathSandboxPool(
-  normalizedInputV1: object
+  normalizedInputV1: object,
+  /** stage-designer / kc-mapper 本次真实注入的载荷（键 ∪ PATH_STAGE_SANDBOX_KEYS） */
+  injected: Record<string, unknown> = {}
 ): Record<string, Record<string, unknown>> {
-  return {
-    path: {
-      normalizedInput: normalizedInputV1,
-      replan: null, // goal→path 生成场景无 replan（replan 走 learn 链）
-      // stage-designer 通道：真实值由 stage-enrichment 从 stageDesignerInput 手工注入，
-      // 不经本沙盘池，也**没有** stage 链的运行时对账（运行期对账 checkAgentSandboxRefs*
-      // 全仓只有 4 个调用点：path-planning / goal-conversation / teaching-turn / simulation）。
-      // stage-designer / kc-mapper 声明的这些 ref 只由**静态声明门禁**覆盖
-      // （validateSandboxPath + checkInputHandoffs，对沙盘路径注册表做校验），与本池无关。
-      previousMilestone: null,
-      // 动态规划（2026-10-17）：上一阶段真实学习信号，同为 stage-enrichment 手工注入，
-      // 亦仅由上述静态声明门禁覆盖，无 stage 链运行期对账。
-      previousStageOutcome: null,
-    },
+  const pathPool: Record<string, unknown> = {
+    normalizedInput: normalizedInputV1,
+    replan: null, // goal→path 生成场景无 replan（replan 走 learn 链）
+    previousMilestone: null,
+    previousStageOutcome: null,
   };
+  // 通道登记：声明了但本次未注入的键显式置 null（通道存在≠必须有值），
+  // 使 core 的 sandbox:path.* 声明在池里恒可解析；新声明未登记 → 对账 warn。
+  for (const key of PATH_STAGE_SANDBOX_KEYS) pathPool[key] = null;
+  for (const [key, value] of Object.entries(injected)) pathPool[key] = value;
+  return { path: pathPool };
 }
 
 // ============================================================
@@ -298,9 +327,9 @@ registerSandboxPoolProvider('teaching', (context) =>
   })
 );
 
-/** path 链：调用方 context = { normalizedInputV1 } */
+/** path 链：调用方 context = { normalizedInputV1, injected? } */
 registerSandboxPoolProvider('path', (context) =>
-  buildPathSandboxPool(context?.normalizedInputV1 || {})
+  buildPathSandboxPool(context?.normalizedInputV1 || {}, context?.injected || {})
 );
 
 /**

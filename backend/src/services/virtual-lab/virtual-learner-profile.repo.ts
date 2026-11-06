@@ -1,5 +1,6 @@
 import prisma from '../../config/database';
 import type { Prisma } from '@prisma/client';
+import { withKeyedLock } from '../../utils/keyed-lock';
 
 /**
  * 虚拟学习者画像/账号仓储（routes/admin/virtual-learners.ts 的取数层）。
@@ -96,11 +97,38 @@ export function findProfileJsonById(profileId: string) {
   return prisma.virtual_learner_profiles.findUnique({ where: { id: profileId }, select: { profile: true } });
 }
 
-/** 故事池整体回写（生成/编辑/删除故事共用） */
-export function updateProfileJsonField(id: string, profileJson: string) {
-  return prisma.virtual_learner_profiles.update({
+/**
+ * 故事池整体回写（生成/编辑/删除故事共用）。
+ *
+ * #170：profile 是整包 JSON，课后记忆回写会在同一行写 knownConcepts / recentCompleted /
+ * selfAssessmentAccuracy。调用方在锁外读到的 `updatedProfile` 是**旧快照**，直接整包写回会
+ * 回滚这段窗口内的记忆写入。这里与记忆写者共用 `vlab-profile:<userId>` 锁，并在锁内**重新读取**
+ * 画像，只把 storyPool 合并进去——其余键取最新值，不丢更新。
+ */
+export async function updateStoryPoolLocked(id: string, storyPool: unknown[]) {
+  const row = await prisma.virtual_learner_profiles.findUnique({
     where: { id },
-    data: { profile: profileJson },
+    select: { userId: true },
+  });
+  if (!row) throw new Error('虚拟用户不存在');
+
+  return withKeyedLock(`vlab-profile:${row.userId}`, async () => {
+    const fresh = await prisma.virtual_learner_profiles.findUnique({
+      where: { id },
+      select: { profile: true },
+    });
+    let profileData: Record<string, unknown> = {};
+    try {
+      profileData = JSON.parse(fresh?.profile || '{}') as Record<string, unknown>;
+    } catch {
+      profileData = {};
+    }
+    const next = { ...profileData, storyPool };
+    const updated = await prisma.virtual_learner_profiles.update({
+      where: { id },
+      data: { profile: JSON.stringify(next), updatedAt: new Date() },
+    });
+    return { ...updated, profileData: next };
   });
 }
 

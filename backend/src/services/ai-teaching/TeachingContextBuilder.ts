@@ -17,7 +17,8 @@ import { resolveSuccessBandVerdict } from '../learner/independent-success-band.s
 import type { TeachingLearnerProjection } from '../../agents/learner-model-agent/types';
 import { executeSkill } from '../../skills';
 import { learningPredictorDefinition, type LearningPredictorOutput } from '../../skills/learning-predictor';
-import { getRequestContext } from '../../gateway/api-gateway/context';
+import { getRequestContext, runInAgentScope } from '../../gateway/api-gateway/context';
+import { AI_TEACHING_AGENT_ID } from './teaching-turn-shared';
 import { predictionCalibrationService } from '../learner/PredictionCalibrationService';
 import { getActiveForConcepts } from '../learner/misconception-ledger.service';
 import type { ReviewPlan } from '../memory/review-plan.service';
@@ -73,6 +74,14 @@ export async function loadLearnerSnapshotForContext(
     : learnerSnapshotRefreshService.getLatest(input);
 }
 
+/**
+ * 教学场景上下文装配 —— **teaching-agent 的编排边界**。
+ *
+ * #185：本函数内会调用静态归属别的 agent 的 skill（`skill:learning-predictor` 归属
+ * profile-agent），但真实调用方是教学链。这里显式进入 teaching-agent 作用域，
+ * skill span 的 callerAgent 因此记 teaching-agent，而不是静态 owner——否则会被写成
+ * 「profile-agent → skill:learning-predictor」这种归属扁平化的假边。
+ */
 export async function buildTeachingScenarioContext(
   userId: string,
   taskId: string,
@@ -81,7 +90,30 @@ export async function buildTeachingScenarioContext(
   options?: {
     /**
      * #52 P-26 ①：终评（wrapup/收束）必须用**收束时刻重算**的快照，
-     * 不能复用本轮判「是否可完成」时读到的缓存快照。终评先于判完成的旧口径
+     * 不能复用本轮判「是否可完成」时读到缓存的快照。终评先于判完成的旧口径
+     * 会让「判完成看到的掌握度」与「终评写回的掌握度」错位。
+     */
+    forceLearnerSnapshotRefresh?: boolean;
+  }
+): Promise<TeachingScenarioContext> {
+  return runInAgentScope(AI_TEACHING_AGENT_ID, () => buildTeachingScenarioContextImpl(
+    userId,
+    taskId,
+    previousSession,
+    interactionMeta,
+    options,
+  ));
+}
+
+async function buildTeachingScenarioContextImpl(
+  userId: string,
+  taskId: string,
+  previousSession?: TeachingSessionRecord | null,
+  interactionMeta?: InteractionMetaRecord | null,
+  options?: {
+    /**
+     * #52 P-26 ①：终评（wrapup/收束）必须用**收束时刻重算**的快照，
+     * 不能复用本轮判「是否可完成」时读到缓存的快照。终评先于判完成的旧口径
      * 会让「判完成看到的掌握度」与「终评写回的掌握度」错位。
      */
     forceLearnerSnapshotRefresh?: boolean;

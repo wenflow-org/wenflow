@@ -45,6 +45,7 @@ import { buildAnchorGoalNote } from './school-anchor-goal';
 import { mapAndPersistKcAnnotation, mergeKcStageAnnotation, bindKcLinksToSubtaskIds, type KcAnnotation } from './kc-annotation';
 import { assembleStageDesignerChannels } from '../../field-dispatcher';
 import { extractPromptMaterials, STAGE_MATERIAL_LIMITS, collectMaterialSectionRefs } from '../../materials/material-prompt-projection';
+import { buildPathSandboxPool, checkAgentSandboxRefs } from '../../sandbox-resolver.service';
 import { buildSectionSemanticOrder } from '../../materials/material-semantic-order';
 import { summarizeSectionRefPositions } from '../../materials/material-refs';
 import { auditStageMaterialCoverage } from './stage-material-coverage-audit';
@@ -393,6 +394,9 @@ async function enrichLearningPathWithAndersonInner(
     // 这个键在代码里根本不存在）——跨阶段衔接与去重规则长期空转。串行下 Stage N 完成后
     // 存摘要，Stage N+1 注入 previousMilestone.tasks。
     const stageTaskSummaries = new Map<number, Array<{ title: string; type: string | null; estimatedMinutes: number | null }>>();
+    // #192：留一份 stage-designer 的真实载荷样本（任一阶段），供本轮沙盘 ref 对账
+    // ——core 声明的 sandbox:path.* 键必须能在池里解析（见 sandbox-resolver.buildPathSandboxPool）。
+    let stageSandboxSample: Record<string, unknown> | null = null;
 
     /**
      * 逐阶段任务锚（2026-09-28 去等分）：按**本阶段实际学时**反推该阶段该出几个任务，
@@ -587,6 +591,7 @@ async function enrichLearningPathWithAndersonInner(
         repairHints: null,
         ...(pathSchoolAnchor ? { schoolAnchor: pathSchoolAnchor } : {}),
       };
+      if (!stageSandboxSample) stageSandboxSample = stageDesignerInput;
       const stageResult = await executeSkill(stageDesignerDefinition, stageDesignerInput);
 
       const rawStageTasks = Array.isArray(stageResult?.subtasks) ? stageResult.subtasks : [];
@@ -916,6 +921,36 @@ async function enrichLearningPathWithAndersonInner(
 
     // 全路径材料覆盖体检（只告警，判据见 stage-material-coverage-audit）。
     auditStageMaterialCoverage({ pathId, stageMaterialAudit, normalizedInput });
+
+    // #192：把 stage-designer / kc-mapper 纳入沙盘 ref 运行期对账。
+    // 这两个 skill 的载荷由编排层手工拼装（不来自 normalizedInput），此前池里没有对应键、
+    // 也从不做对账 → 「声明了 sandbox:path.*，实际值走旁路注入」长期不可见。
+    // 这里用真实载荷构造 path 池（buildPathSandboxPool 已登记全部 stage 通道键），
+    // 声明/载荷再次漂移（新声明未登记、或注入键被删）就会 warn。
+    try {
+      await checkAgentSandboxRefs(
+        'stage-designer',
+        'path',
+        buildPathSandboxPool((normalizedInput as any) || {}, stageSandboxSample || {}),
+        // stage-designer 的 path 输入全部是可选通道（object?），必须 includeOptional 才看得见
+        { includeOptional: true, warnContext: { pathId, boundary: 'generation' } }
+      );
+      await checkAgentSandboxRefs(
+        'kc-mapper',
+        'path',
+        buildPathSandboxPool((normalizedInput as any) || {}, {
+          subtasks: stageDesignOutputs.flatMap((stage) => stage.subtasks),
+          milestones: learningPath.milestones.map((m: any) => ({
+            stageNumber: m.stageNumber,
+            title: m.title,
+            coreConcept: m.coreConceptName || m.coreConceptId,
+          })),
+        }),
+        { warnContext: { pathId, boundary: 'generation' } }
+      );
+    } catch {
+      // 对账是观测，不影响生成
+    }
 
     // KC 映射（kc-mapper）：stage-designer 全部完成后，将概念与子任务分解为知识组件 + 依赖图，
     // 写回 aiPromptTemplate.kcAnnotation，结束"写后无读者"，供 teaching-turn 按 KC 粒度消费。
