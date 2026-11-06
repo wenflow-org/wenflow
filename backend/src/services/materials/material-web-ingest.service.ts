@@ -8,6 +8,10 @@
  *
  * 设计约束：
  *   - 走 parseDocument('.md') 复用文本闸门 + 锚点抽取（与上传同一套确定性解析）；
+ *   - 入库前**洗掉抓取痕迹**：抓回来的 markdown 带着整页英文元数据头（Issued / Issuer /
+ *     Body (Chinese) 十几行）与「整章挤一行」的正文，不清洗会污染锚点、切片与展示
+ *     （2026-11-06 真机《党政机关公文处理工作条例》：英文 H1 被当成第一章，
+ *     5752 字长行把 8 章硬切成 6 块、块标题是行内碎片）；
  *   - 入库前**恢复章节结构**：抓取 provider 常返回扁平文本（无 ATX 标题），不补的话
  *     锚点恒为空、path 资料包只能读开头（2026-10-17 真机：50 份里 48 份如此）；
  *   - URL 规范化去重：同一来源同一用户只存一份（刷新 fetchedAt，不堆副本）；
@@ -21,6 +25,7 @@ import { MAX_MATERIAL_CHUNKS, chunkMaterialMarkdown } from './material-chunker';
 import { listMaterials, updateRecord, writeMaterial, type MaterialRecord } from './material-store';
 import { warmMaterialVectorIndex } from './material-semantic.service';
 import { normalizeWebTextStructure } from './material-web-structure';
+import { sanitizeWebMaterialText } from './material-web-clean';
 
 /**
  * 联网正文入库上限（字符）。
@@ -111,11 +116,22 @@ export async function ingestWebMaterial(input: IngestWebMaterialInput): Promise<
     return updated ? { record: updated, deduped: true } : null;
   }
 
-  // --- 截断 + 结构恢复 + 复用上传解析（文本闸门 + 锚点），与附件同一套确定性解析 ---
-  const overLong = text.length > MAX_WEB_TEXT_CHARS;
+  // --- 清洗抓取痕迹 + 截断 + 结构恢复 + 复用上传解析（文本闸门 + 锚点） ---
+  // 先洗再截：英文元数据头（实测 13 行，含整行英文 H1）不该占截断额度，更不该变成锚点
+  const cleaned = sanitizeWebMaterialText(text);
+  const overLong = cleaned.text.length > MAX_WEB_TEXT_CHARS;
   const bounded = overLong
-    ? `${text.slice(0, MAX_WEB_TEXT_CHARS)}\n\n<!-- 联网正文超长，已截断：仅保留前 ${MAX_WEB_TEXT_CHARS} 字 -->`
-    : text;
+    ? `${cleaned.text.slice(0, MAX_WEB_TEXT_CHARS)}\n\n<!-- 联网正文超长，已截断：仅保留前 ${MAX_WEB_TEXT_CHARS} 字 -->`
+    : cleaned.text;
+  if (cleaned.strippedHeaderLines > 0) {
+    logger.info('[material-web-ingest] 已剥离网页抓取头', {
+      userId,
+      url,
+      title,
+      strippedHeaderLines: cleaned.strippedHeaderLines,
+      clauseBreaks: cleaned.clauseBreaks,
+    });
+  }
   // 扁平正文补 ATX 标题：不做这一步 anchors 恒为空，path 资料包退化成"前 24 行"（真机根因）
   const structured = normalizeWebTextStructure(bounded);
   const parsed = await parseDocument(Buffer.from(structured.markdown, 'utf-8'), 'web-source.md');
@@ -151,7 +167,7 @@ export async function ingestWebMaterial(input: IngestWebMaterialInput): Promise<
     name: title,
     ext: '.md',
     format: 'web',
-    size: Buffer.byteLength(bounded, 'utf-8'),
+    size: Buffer.byteLength(structured.markdown, 'utf-8'),
     charCount: parsed.charCount,
     structure: parsed.structure,
     anchors: parsed.anchors,
