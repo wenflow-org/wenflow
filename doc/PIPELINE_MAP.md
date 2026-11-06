@@ -209,7 +209,7 @@ flowchart LR
 | `teaching-turn` | 教学阶段 | `teaching-agent` | mainline | 84/15（14） | `prompts/core/teaching-turn.yaml` | `prompts/manifests/teaching-turn.yaml` | 一位结构化教学回合生成器。 |
 | `peer-reinforcement` | 教学阶段 | `teaching-agent` | mainline | 12/4 | `prompts/core/peer-reinforcement.yaml` | `prompts/manifests/peer-reinforcement.yaml` | 学习伙伴，和学生一起探索问题。 |
 | `session-wrapup` | 教学阶段 | `teaching-agent` | mainline | 22/3（1） | `prompts/core/session-wrapup.yaml` | `prompts/manifests/session-wrapup.yaml` | 一位课后产出助手。请基于本节课的结构化证据生成课后总结与评估。 |
-| `adaptive-guidance-copy` | 画像阶段 | `profile-agent` | mainline | 12/2 | `prompts/core/adaptive-guidance-copy.yaml` | `prompts/manifests/adaptive-guidance-copy.yaml` | 一个学习产品的动态引导文案生成器。 |
+| `adaptive-guidance-copy` | 画像阶段 | `profile-agent` | mainline | 13/2 | `prompts/core/adaptive-guidance-copy.yaml` | `prompts/manifests/adaptive-guidance-copy.yaml` | 一个学习产品的动态引导文案生成器。 |
 | `learner-model` | 画像阶段 | `profile-agent` | handler-only | 0/0 | — | — | — |
 | `lesson-knowledge-enricher` | 画像阶段 | `profile-agent` | mainline | 10/2（1） | `prompts/core/lesson-knowledge-enricher.yaml` | `prompts/manifests/lesson-knowledge-enricher.yaml` | 课后知识增强器。一节课结束后，你基于课堂知识状态与变化量、wrapup 产物、 |
 | `learning-predictor` | 画像阶段 | `profile-agent` | mainline | 9/5 | `prompts/core/learning-predictor.yaml` | `prompts/manifests/learning-predictor.yaml` | 学习表现预测器。在新任务开始前，基于学习者最近的知识状态摘要、 |

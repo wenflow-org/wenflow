@@ -1,12 +1,15 @@
 /**
- * #187：adaptive-guidance-copy 的「4 个 view」实为 1 个可达。
+ * #187：adaptive-guidance-copy 的 view 契约——**声明几个视图，就真实受理几个**。
  *
- * 现状契约（唯一真源见 skills/adaptive-guidance-copy/index.ts 的 inputSchema 注释）：
- *  - 模型侧唯一真实调用是 dashboard（DashboardGuidanceSnapshotService，view 硬编码 'dashboard'）；
- *  - learning-state 主路径复用 dashboard 快照的 copy（载荷里以 copySourceView 自报），
- *    仅快照缺失时才本地静态兜底——**不**为 learning-state 再跑一次 skill；
- *  - path-list / path-detail 无任何调用方，路由对它们返回 400。
- * 本用例把「哪些 view 可达、复用来源是否可见」钉住，防止契约再次漂移回「声明 4 个、实际 1 个」。
+ * 病灶历史：skill 曾声明 dashboard / learning-state / path-list / path-detail 四个 view，
+ * 但模型侧只有一处调用且硬编码 view='dashboard'，learning-state 页拿的是 dashboard 快照文案，
+ * path 两个视图没有任何调用方——「声明 4 个 / 实际 1 个」。
+ *
+ * 现在收敛为两个真实视图（skills/adaptive-guidance-copy/views.ts 是唯一真源）：
+ *  - dashboard：DashboardGuidanceSnapshotService 生成（事件驱动快照）；
+ *  - learning-state：LearningStateGuidanceService 自己按 view='learning-state' 生成。
+ * 本用例钉住：GUIDANCE_VIEWS 里每一个都必须被路由受理（不是 400），且路由到**各自的**服务；
+ * 未声明的视图（如已退役的 path-list / path-detail）一律 400。
  */
 const mockDashboardGet = jest.fn()
 const mockLearningStateGet = jest.fn()
@@ -29,6 +32,7 @@ jest.mock('../../utils/logger', () => ({
 }))
 
 import router from '../adaptive-guidance.routes'
+import { GUIDANCE_VIEWS } from '../../skills/adaptive-guidance-copy/views'
 
 function getCopyHandler() {
   const layer = (router as any).stack.find((item: any) => item.route?.path === '/copy' && item.route?.methods?.get)
@@ -49,42 +53,62 @@ describe('adaptive-guidance /copy 视图契约（#187）', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockDashboardGet.mockResolvedValue(null)
-    mockLearningStateGet.mockResolvedValue({ copy: { headline: 'h' }, summary: {}, decisions: [], source: 'model' })
-  })
-
-  it.each(['path-list', 'path-detail'])('view=%s 无调用方 → 400（不再有永不产生文案的声明）', async (view) => {
-    const res = createResponse()
-    await handler({ query: { view }, user: { userId: 'u1' } }, res, jest.fn())
-
-    expect(res.status).toHaveBeenCalledWith(400)
-    expect(mockDashboardGet).not.toHaveBeenCalled()
-    expect(mockLearningStateGet).not.toHaveBeenCalled()
-  })
-
-  it('learning-state：返回载荷自报 copySourceView（复用 dashboard 快照时= dashboard）', async () => {
     mockLearningStateGet.mockResolvedValue({
-      copy: { headline: '复用来的' },
+      view: 'learning-state',
+      copy: { headline: 'h' },
       summary: {},
       decisions: [],
       source: 'model',
-      copySourceView: 'dashboard',
     })
+  })
+
+  it('声明的视图集合就是两个真实视图（dashboard / learning-state）', () => {
+    expect([...GUIDANCE_VIEWS]).toEqual(['dashboard', 'learning-state'])
+  })
+
+  it.each([...GUIDANCE_VIEWS])('view=%s 是声明视图 → 必须受理（不是 400）', async (view) => {
+    if (view === 'dashboard') {
+      mockDashboardGet.mockResolvedValue({ view: 'dashboard', copy: { headline: 'dash' }, summary: {}, decisions: [] })
+    }
+    const res = createResponse()
+    await handler({ query: { view }, user: { userId: 'u1' } }, res, jest.fn())
+
+    expect(res.status).not.toHaveBeenCalledWith(400)
+    const body = res.json.mock.calls[0][0]
+    expect(body.success).toBe(true)
+    expect(body.data.view).toBe(view)
+  })
+
+  it('learning-state 走本视图服务，**不**回落到 dashboard 快照（复用即 #187 复发）', async () => {
     const res = createResponse()
     await handler({ query: { view: 'learning-state' }, user: { userId: 'u1' } }, res, jest.fn())
 
     expect(mockLearningStateGet).toHaveBeenCalledWith('u1', { forceRefresh: false })
+    expect(mockDashboardGet).not.toHaveBeenCalled()
     const body = res.json.mock.calls[0][0]
-    expect(body.success).toBe(true)
-    expect(body.data.copySourceView).toBe('dashboard')
+    expect(body.data.view).toBe('learning-state')
+    expect(body.data.copy).toEqual({ headline: 'h' })
   })
 
-  it('默认（无 view）走 dashboard 快照，且只查快照、不触发 learning-state 生成', async () => {
-    mockDashboardGet.mockResolvedValue({ copy: { headline: 'dash' }, summary: {}, decisions: [] })
+  it('dashboard 只读快照，不触发 learning-state 生成', async () => {
+    mockDashboardGet.mockResolvedValue({ view: 'dashboard', copy: { headline: 'dash' }, summary: {}, decisions: [] })
     const res = createResponse()
     await handler({ query: {}, user: { userId: 'u1' } }, res, jest.fn())
 
     expect(mockDashboardGet).toHaveBeenCalledWith('u1')
     expect(mockLearningStateGet).not.toHaveBeenCalled()
     expect(res.json.mock.calls[0][0].data.copy).toEqual({ headline: 'dash' })
+  })
+
+  it.each(['path-list', 'path-detail'])('view=%s 未在任何声明中登记 → 400，且不调用任何生成路径', async (view) => {
+    const res = createResponse()
+    await handler({ query: { view }, user: { userId: 'u1' } }, res, jest.fn())
+
+    expect(res.status).toHaveBeenCalledWith(400)
+    expect(mockDashboardGet).not.toHaveBeenCalled()
+    expect(mockLearningStateGet).not.toHaveBeenCalled()
+    // 报错要列出真实支持的视图，避免再次出现「声明一份、受理另一份」
+    expect(res.json.mock.calls[0][0].error.message).toContain('dashboard')
+    expect(res.json.mock.calls[0][0].error.message).toContain('learning-state')
   })
 })

@@ -320,8 +320,8 @@ export interface LearnerStateReview {
 export interface AdaptiveGuidancePayload {
   copy: AdaptiveGuidanceCopy;
   summary: LearnerStateSummary;
-  /** #187：copy 的实际生成视图（learning-state 页复用 dashboard 快照文案时为 'dashboard'） */
-  copySourceView?: 'dashboard' | 'learning-state';
+  /** 生成这份 copy 的页面视图（#187：两个视图各生成各的，不再跨视图借用文案） */
+  view?: 'dashboard' | 'learning-state';
   review?: LearnerStateReview | null;
   debug?: {
     skillId: string;

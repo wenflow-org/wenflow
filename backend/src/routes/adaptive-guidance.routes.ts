@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { dashboardGuidanceSnapshotService } from '../services/learner/DashboardGuidanceSnapshotService';
 import { learningStateGuidanceService } from '../services/learner/LearningStateGuidanceService';
+import { GUIDANCE_VIEWS, isGuidanceView } from '../skills/adaptive-guidance-copy/views';
 import authService from '../services/auth/auth.service';
 import { logger } from '../utils/logger';
 
@@ -16,26 +17,35 @@ router.get('/copy', async (req: any, res) => {
       return res.status(401).json({ success: false, error: '未登录' });
     }
 
-    const view = typeof req.query.view === 'string' ? req.query.view : 'dashboard';
+    const requested = typeof req.query.view === 'string' ? req.query.view : 'dashboard';
     // 安全加固：不再信任客户端 X-Source-Entry 头，debug 决策仅基于服务端会话身份
     const debugOperatorId = req.user?.projection?.issuedByAdminId || userId;
     // req.user.isAdmin 为真时短路，避免多余查询
     const canIncludeDebug = req.user?.isAdmin === true
       || (debugOperatorId ? (await authService.isUserAdmin(debugOperatorId)) === true : false);
 
-    // adaptive-guidance-copy 现在只作为 dashboard snapshot 对外提供。
-    // 支持 dashboard（快照）与 learning-state（按需生成 + 内存缓存）两种视图
-    if (view === 'learning-state') {
+    // 视图白名单与 skill 声明同源（skills/adaptive-guidance-copy/views.ts）：声明几个视图就受理几个，
+    // 不再出现「声明 4 个 / 实际 1 个可达」或反向的假声明。
+    if (!isGuidanceView(requested)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: `adaptive-guidance/copy 仅支持 ${GUIDANCE_VIEWS.join(' / ')} 视图`,
+        },
+      });
+    }
+
+    if (requested === 'learning-state') {
       const forceRefresh = req.query.refresh === '1';
+      // 本视图的 copy 由 LearningStateGuidanceService 自己生成（view='learning-state'），
+      // 不是 dashboard 快照借来的——两页口径不同，载荷里也不再需要「来源视图」这类说明字段。
       const payload = await learningStateGuidanceService.get(userId, { forceRefresh });
       return res.json({
         success: true,
         data: payload
           ? {
+              view: payload.view,
               copy: payload.copy,
-              // #187：copy 的真实生成视图（复用 dashboard 快照 vs learning-state 本地兜底），
-              // 让「learning-state 页复用 dashboard 文案」成为可核对的事实而不是仅写在注释里
-              copySourceView: payload.copySourceView,
               summary: payload.summary,
               decisions: payload.decisions || [],
               review: payload.review ?? null,
@@ -47,20 +57,12 @@ router.get('/copy', async (req: any, res) => {
       });
     }
 
-    if (view !== 'dashboard') {
-      return res.status(400).json({
-        success: false,
-        error: {
-          message: 'adaptive-guidance/copy 目前仅支持 dashboard 与 learning-state 视图',
-        },
-      });
-    }
-
     const snapshot = await dashboardGuidanceSnapshotService.get(userId);
     return res.json({
       success: true,
       data: snapshot
         ? {
+            view: snapshot.view,
             copy: snapshot.copy,
             summary: snapshot.summary,
             review: snapshot.review ?? null,
