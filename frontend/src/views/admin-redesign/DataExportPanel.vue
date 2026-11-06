@@ -205,8 +205,9 @@ async function runExport() {
 </script>
 
 <style scoped>
+/* 内衬归宿主（2026-11-06 同上）：16px 是独立页面时代的遗留，嵌入「系统设置」后
+   卡片比同页其它页签窄 32px、整体右下错 16px。 */
 .exp-body {
-  padding: 16px;
   display: grid;
   gap: 16px;
   align-content: start;
