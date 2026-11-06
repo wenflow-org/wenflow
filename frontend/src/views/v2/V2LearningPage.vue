@@ -12,9 +12,13 @@
         <small>{{ pathName }}</small>
       </div>
       <div class="learn__head-right">
-        <!-- 显式结课入口：不再只藏在 ⋯ 菜单里；知识点未全掌握时仍允许计入进度 -->
+        <!-- 结课入口：2026-11-06 走查后成为**唯一**入口（⋯ 菜单里那条同名双行项已撤，
+             两者本就是同一个 completeAndSettle）。门槛与撤掉的那条完全对齐
+             （有活会话 + 未结算 + 非延伸学习），不再额外要求「已有一轮对话」——
+             否则这次合并等于悄悄收窄了可结算的范围。知识点未全掌握时仍可计入进度，
+             提示走 title（finishHint）。 -->
         <button
-          v-if="!extensionMode && !completed && msgs.length > 1"
+          v-if="session && !completed && !extensionMode"
           type="button"
           class="learn__finishbtn"
           :title="finishHint"
@@ -39,71 +43,41 @@
           class="learn__live learn__live--head"
           :class="{ 'learn__live--err': !!initError && !isLocked, 'learn__live--locked': isLocked }"
         >{{ liveState }}</span>
-        <ImmersiveMenu>
-          <!-- 窄屏把连接态收进 ⋯ 菜单（2026-10-08 用户侧走查：头部「学习中」与标题抢宽度，
-               12 字任务名被挤成「11 字 + 末字孤行」）。桌面仍在头部常驻，见 .learn__live--head。 -->
-          <div class="learn__menu-status">
-            <div class="learn__menu-group">
-              <span class="learn__menu-label">本节课状态</span>
-              <span class="learn__menu-state" :class="{ 'learn__live--err': !!initError && !isLocked, 'learn__live--locked': isLocked }">{{ liveState }}</span>
-            </div>
-            <div class="learn__menu-sep"></div>
-          </div>
+        <!-- ⋯ 菜单瘦身（2026-11-06 走查）：原来 6 项 + 3 个分组标题 + 每项双行解释，
+             手机上占掉大半个屏幕，且三处重复——
+             ① 「本节课状态 / 学习中」纯占行（用户就在课堂里）；
+             ② 「返回路径详情（不结束会话）」与「暂停并离开」都是离开，而左上角本来就有返回钮；
+             ③ 「完成并结算任务」与顶栏「完成本节」是同一动作。
+             现在只留 3 个单行项 + 已结算时的反馈入口，高度约减半。 -->
+        <ImmersiveMenu mask>
           <div class="learn__menu-group">
-              <span class="learn__menu-label">结束本节课</span>
-              <!-- 结算/结束只在真有活会话、且本节还没结算时才有意义（2026-11-03 锁课走查 + 教室 ⋯ 静默实锤）：
-                   本节课没开起来（未解锁 / 开课失败）时 session 为空，这两个入口点了必然无反应；
-                   本节已结算（completed）时更糟——确认框照常弹、点了「完成并结算」后 finish() 因
-                   completed 直接 return，等于摆了一个会骗人的按钮。两种情况都整组收起，换成一句状态说明。 -->
-              <button type="button" class="learn__menu-item learn__menu-item--primary" v-if="session && !completed && !extensionMode" @click="completeAndSettle()">
-                <span class="learn__menu-item-main"><strong>完成并结算任务</strong><small>{{ finishHint }}</small></span>
-              </button>
-              <button type="button" class="learn__menu-item" v-if="session && !completed" @click="endSession">
-                <span class="learn__menu-item-main"><strong>{{ END_WITHOUT_FINISH_LABEL }}</strong><small>生成本次总结，不推进任务进度</small></span>
-              </button>
-              <!-- 已结算：不给「说明文字」，给一个真动作（copy:check §6「变控件」。
-                   原来这里是一句「本节已结算…」，与 finish() 里兜底 toast 同一句话，同文件重复被拦下，
-                   而且已结算时用户真正要的是反馈页——入口比说明有用。 -->
-              <button type="button" class="learn__menu-item" v-if="session && completed" @click="goToFeedback">
-                <span class="learn__menu-item-main"><strong>查看本次学习反馈</strong><small>本节已结算，总结在反馈页</small></span>
-              </button>
-              <span v-if="!session" class="learn__menu-label">本节还没有开起来，先返回路径详情处理解锁或重开。</span>
-            </div>
-            <div class="learn__menu-sep"></div>
-            <div class="learn__menu-group">
-              <span class="learn__menu-label">暂离或重学</span>
-              <!-- 纯返回：移动端「‹ 返回」按钮被收起后，菜单里原本每个离开项都带副作用
-                   （暂停/结束/完成），没有「只是回去看看」的出口（2026-09-25 移动框架审查 A2） -->
-              <button type="button" class="learn__menu-item" @click="leaveWithoutSideEffect">
-                <span class="learn__menu-item-main"><strong>返回路径详情</strong><small>不结束会话，进度原样保留</small></span>
-              </button>
-              <button type="button" class="learn__menu-item" v-if="session" @click="pauseAndLeave">
-                <span class="learn__menu-item-main"><strong>暂停并离开</strong><small>进度保留，下次从这继续</small></span>
-              </button>
-              <!-- 重新开始同样依赖活会话（2026-11-03 锁课走查）：本节课没开起来时点它只会空转。 -->
-              <button type="button" class="learn__menu-item learn__menu-item--danger" v-if="session" @click="restart">
-                <span class="learn__menu-item-main"><strong>重新开始</strong><small>清空当前进度与消息</small></span>
-              </button>
-            </div>
+            <span v-if="!session" class="learn__menu-label">本节还没有开起来，先返回路径详情处理解锁或重开。</span>
+            <button type="button" class="learn__menu-item" v-if="session" @click="pauseAndLeave">暂停并离开</button>
+            <button type="button" class="learn__menu-item" v-if="session && !completed" @click="endSession">{{ END_WITHOUT_FINISH_LABEL }}</button>
+            <!-- 已结算：不给「说明文字」，给一个真动作（copy:check §6「变控件」） -->
+            <button type="button" class="learn__menu-item" v-if="session && completed" @click="goToFeedback">查看本次学习反馈</button>
+            <!-- 重新开始依赖活会话（2026-11-03 锁课走查）：没开起来时点它只会空转 -->
+            <button type="button" class="learn__menu-item learn__menu-item--danger" v-if="session" @click="restart">重新开始本节</button>
+          </div>
         </ImmersiveMenu>
         <!-- 知识点浮窗：锚在头部入口下方的非模态浮窗（不再是从左侧压满全高的抽屉）。
              放在 .learn__head-right 内 —— 该容器 position:relative，浮窗以它为定位框右对齐，
              宽度按视口收敛，移动端也不会从左侧溢出屏幕。 -->
+        <!-- 窄屏遮罩（2026-11-06 走查）：面板浮在聊天气泡上，边缘字压字；点遮罩即收起 -->
+        <div v-if="kpOpen" class="kp-mask" aria-hidden="true" @click="toggleKp"></div>
         <aside v-if="knowledgePoints.length" id="learn-kp-panel" ref="kpPanel" class="kp" :class="{ 'kp--open': kpOpen }">
           <button type="button" class="kp__head" :aria-expanded="kpOpen" @click="toggleKp">
             <span class="kp__head-main">
-              <svg class="kp__ring" viewBox="0 0 20 20" aria-hidden="true">
-                <circle class="kp__ring-track" cx="10" cy="10" r="8" />
-                <circle class="kp__ring-val" :class="{ 'kp__ring-val--none': !masteredCount }" cx="10" cy="10" r="8" :stroke-dasharray="kpRingDash" />
-              </svg>
+              <!-- 标题左侧的空心圆环撤除（2026-11-06 走查）：它和下方每条知识点前的进度圈
+                   长得一模一样，标题因此读成「一个列表项」；进度秤已在下面那条进度条里 -->
               <strong>本节知识点</strong>
             </span>
             <span class="kp__head-meta">
+              <!-- 外面按钮已写「知识点 0/2」；面板里只要纯文字读数，不要胶囊底与 ▾ 三角 -->
               <span
                 class="kp__chip kp__chip--mastered"
                 :class="{ 'kp__chip--empty': !masteredCount, 'kp__chip--none': !knowledgePoints.length }"
               >{{ masteredCount }}/{{ knowledgePoints.length }} 已掌握</span>
-              <span class="kp__caret" aria-hidden="true">{{ kpOpen ? '▾' : '▸' }}</span>
             </span>
           </button>
           <div class="kp__body">
@@ -717,18 +691,14 @@
                   @click="sendPeerDirect(q)"
                 >{{ q }}</button>
               </div>
-              <div class="peerdock__meta">
-                <span v-if="strategyLabelOf(p)" class="peerdock__strategy">{{ strategyLabelOf(p) }}</span>
-                <small>小启 · {{ p.time }}</small>
-              </div>
             </template>
-            <small v-else>你 · {{ p.time }}</small>
           </div>
           <div v-if="peerSending" class="peerdock__msg peerdock__msg--peer">
             <div class="peerdock__bubble peerdock__bubble--typing"><i></i><i></i><i></i></div>
           </div>
-          <div class="peerdock__ai-note"><AiContentNote /></div>
         </div>
+        <!-- 输入条与主界面同形（2026-11-06 走查）：原来是外挂一颗咖啡色椭圆「发送」文字钮，
+             现在发送键内嵌在输入框右端，圆形成一颗图标钮 -->
         <div class="peerdock__input">
           <input
             v-model="peerInput"
@@ -737,7 +707,16 @@
             placeholder="和小启聊聊你的卡点…"
             @keydown.enter.exact.prevent="sendPeer"
           />
-          <button type="button" :disabled="!peerInput.trim() || peerSending" @click="sendPeer">发送</button>
+          <button
+            type="button"
+            class="peerdock__send"
+            :disabled="!peerInput.trim() || peerSending"
+            aria-label="发送"
+            title="发送"
+            @click="sendPeer"
+          >
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M3 20v-6l8-2-8-2V4l19 8z"/></svg>
+          </button>
         </div>
       </div>
     </Transition>
@@ -1412,7 +1391,7 @@ watch(checkpoint, (cp) => {
   if (cp) postQuizReplies.value = [] // 新检查点到达：续接 chips 让位给小测卡
   if (!cp && settleBlock.value?.action === 'checkpoint') {
     /* P25（2026-11-01 走查实锤，后端日志 3×409 + 截图佐证）：小测提交内含一次教学回合（数十秒），
-       用户在回合落库前点「完成并结算任务」必吃 409 FINALIZATION_PENDING_CHECKPOINT，横幅刚亮起；
+       用户在回合落库前点「完成本节」必吃 409 FINALIZATION_PENDING_CHECKPOINT，横幅刚亮起；
        随后回合落库、卡片按通过态 1.2s 自动收起，这条 watcher 把刚亮的横幅一并抹掉——
        用户再点还是 409，全程零反馈只能干等。服务端亲口拒绝的门禁不随收卡消失：
        小测此刻已提交完成，横幅改述为「可再次结算」，直到结算成功（finish 成功路径清）或用户关闭。 */
@@ -1421,7 +1400,7 @@ watch(checkpoint, (cp) => {
         code: settleBlock.value.code,
         server: true,
         title: '小测已收起，可再次结算',
-        message: '刚才的结算被拦下：这道小测当时还没有处理完。再次点「完成并结算任务」即可继续结算。若仍不满足条件，会再次提示原因。',
+        message: '刚才的结算被拦下：这道小测当时还没有处理完。再次点「完成本节」即可继续结算。若仍不满足条件，会再次提示原因。',
         action: 'dismiss',
         actionLabel: '知道了'
       }
@@ -1610,7 +1589,7 @@ function pulseCheckpoint() {
 /* ---------- 伴学浮窗（角色「小启」，dock 式不占主对话区） ---------- */
 const {
   peerOpen, peerUnread, peerItems, peerInput, peerSending, peerScrollEl,
-  peerHeadline, strategyLabelOf, openPeerByUser, openPeerByTrigger, minimizePeer,
+  peerHeadline, openPeerByUser, openPeerByTrigger, minimizePeer,
   pushPeerItem, sendPeer, sendPeerDirect, resetPeer, restorePeerHistory, abortPeer
 } = usePeerAssistant(session)
 
@@ -2486,7 +2465,9 @@ async function completeAndSettle(opts: { confirmOpenQuestion?: boolean } = {}) {
     return;
   }
   const ok = await askConfirm({
-    title: '完成并结算任务',
+    /* 弹窗标题跟触发它的那颗按钮同名（顶栏「完成本节」）：入口改名后弹窗还叫旧名，
+       用户会以为自己点错了按钮（2026-11-06 走查） */
+    title: '完成本节',
     message: '确认当前任务已学完？将结算任务并计入里程碑与路径进度，同时生成本次学习总结。',
     confirmText: '完成并结算',
     danger: false,
@@ -2551,12 +2532,6 @@ async function pauseAndLeave() {
       if (typeof rev === 'number' && session.value) session.value.revision = rev;
     } catch { /* ignore */ }
   }
-  goBack();
-}
-
-/** 纯返回：不调任何接口，会话保持原状（in_progress 照旧，下次进来续上）。
-    「暂停并离开」会写 pause 状态，「结束/完成」会结算——都替用户做了决定。 */
-function leaveWithoutSideEffect() {
   goBack();
 }
 
@@ -2639,29 +2614,25 @@ const {
 
 /* 完课入口的位置（2026-10-06 用户指令「把完成本课放在这里，不合适吧」）：
    原先在快捷回复之后、composer 之前常驻一颗整宽「完成本课」（原型 #wfFinishLesson 带来的），
-   它与 ⋯ 菜单里的「完成并结算任务」是同一个 handler（completeAndSettle），属重复入口；
-   而且它压在输入流上方、与当前任务（上课）相逆 —— P2-28（2026-10-04 评审）当时已指出
+   它压在输入流上方、与当前任务（上课）相逆 —— P2-28（2026-10-04 评审）当时已指出
    「主 CTA 与当前任务相逆、压在输入流上方易误触」，但只降了材质（lesson-cta--damped）没动位置。
-   现改为：完课只保留 ⋯ 菜单一处（课级动作与「结束学习/暂离或重学」同组，语义正确），
-   并把「本课知识点尚未全部掌握」的信号带进该菜单项副文，不再丢信息。 */
+   2026-10-06 先挪进 ⋯ 菜单；2026-11-06 走查又把菜单里那条撤了 —— 顶栏「完成本节」与它同 handler
+   （completeAndSettle），菜单那条属重复入口且双行撑高菜单。完课入口最终只保留顶栏一处。
+   「本课知识点尚未全部掌握」的信号走 finishHint → title，不丢信息。 */
 const kpIncomplete = computed(() => {
   const total = knowledgePoints.value.length;
   return total > 0 && masteredCount.value < total;
 });
-/** ⋯ 菜单「完成并结算任务」副文：知识点未掌握时前置提示，其余为常规口径 */
+/** 顶栏「完成本节」的 title 副文：知识点未掌握时前置提示，其余为常规口径 */
 const finishHint = computed(() =>
   kpIncomplete.value
     ? '本课知识点尚未全部掌握 · 仍可计入进度并生成总结'
     : '计入进度 · 生成本次学习总结'
 );
 
-/* 头部掌握度小圆环：r=8 → 周长 2πr≈50.27，弧长 = 已掌握/总数（与「n/N 已掌握」胶囊同口径） */
-const KP_RING_C = 2 * Math.PI * 8;
-const kpRingDash = computed(() => {
-  const total = knowledgePoints.value.length;
-  const frac = total ? masteredCount.value / total : 0;
-  return `${(frac * KP_RING_C).toFixed(2)} ${KP_RING_C.toFixed(2)}`;
-});
+/* 头部掌握度小圆环已撤（2026-11-06 走查）：它和每条知识点前的进度圈同形，
+   标题因此读成列表项；掌握度读数由「n / N 已掌握」纯文字 + 下方进度条承担。
+   kpRingDash / KP_RING_C 随之删除。 */
 
 /* ---------- 知识点图谱（列表/图谱切换；图谱按需加载，只取当前路径） ---------- */
 const kpView = ref<'list' | 'graph'>('list')
@@ -2905,8 +2876,6 @@ onBeforeUnmount(() => {
 .learn__live {
   font-size: 12px; font-weight: 700; color: var(--green-ink);
 }
-.learn__menu-status { display: none; }
-.learn__menu-state { display: block; padding: 6px 12px; font-size: 13px; font-weight: 700; color: var(--green-ink); }
 .learn__head-right :deep(.imm-menu__btn) {
   /* 与左右两颗按钮同档（组件默认 44 是给无标题页面的触控档；本页头部已有 32 档基准线） */
   width: 32px; height: 32px; border-radius: 8px; font-size: 15px; padding: 0 0 1px;
@@ -2916,7 +2885,6 @@ onBeforeUnmount(() => {
    顶栏不再绿显「连接中」假装还在连接 */
 .learn__live--err { color: var(--red-ink); }
 .learn__live--locked { color: var(--amber-ink); }
-.learn__menu-state.learn__live--locked { color: var(--amber-ink); }
 /* ---------- 布局（原型 .wf-screen：单列、gap 14、≥1024 定宽 880 居中） ----------
    原型的课堂屏没有左侧栏：知识点从常驻列降级成「头部入口 + 浮窗」。 */
 .learn__body {
@@ -2980,23 +2948,25 @@ onBeforeUnmount(() => {
    左 = 掌握度小圆环 + 标题，右 = 语义色胶囊（掌握绿 / 进行中蓝，全空灰显），
    数据不再是裸文字平铺。 */
 .kp__head-main { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
-.kp__ring { width: 18px; height: 18px; flex-shrink: 0; transform: rotate(-90deg); }
-.kp__ring circle { fill: none; stroke-width: 3; }
-.kp__ring-track { stroke: var(--line); }
-.kp__ring-val { stroke: var(--green); stroke-linecap: round; transition: stroke-dasharray .4s ease; }
-/* 0 掌握时 round 端帽会在起点渲染出绿点（读作进度假象），整段隐藏 */
-.kp__ring-val--none { visibility: hidden; }
 .kp__head-meta { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
+/* 读数纯文字（2026-11-06 走查）：胶囊底 + ▾ 在「本体按钮已写 0/2」的前提下是第三遍复读 */
 .kp__chip {
-  font-size: 12px; font-weight: 800; line-height: 1;
-  padding: 4px 8px; border-radius: 999px; white-space: nowrap;
+  font-size: 12px; font-weight: 700; line-height: 1; white-space: nowrap;
+  color: var(--muted);
 }
-.kp__chip--mastered { color: var(--green-ink); background: color-mix(in srgb, var(--green) 12%, transparent); }
-/* 0 态也用蓝 chip（2026-09-27 用户反馈：进行中 chip 删除后，颜色转移到已掌握）：
-   有知识点在进行中（未全掌握且存在）时，0/N 本身就是「进行中」的信息 */
-.kp__chip--mastered.kp__chip--empty { color: var(--blue-ink); background: color-mix(in srgb, var(--blue) 10%, transparent); }
-.kp__chip--mastered.kp__chip--empty.kp__chip--none { color: var(--faint); background: var(--mk-surface-2); }
-.kp__caret { display: inline; font-size: 12px; color: var(--faint); flex-shrink: 0; }
+.kp__chip--mastered { color: var(--green-ink); }
+/* 0 态转蓝（原来靠胶囊底色表达「进行中」，现在靠文字色） */
+.kp__chip--mastered.kp__chip--empty { color: var(--blue-ink); }
+.kp__chip--mastered.kp__chip--empty.kp__chip--none { color: var(--faint); }
+/* 窄屏遮罩：面板 z-index 70，遮罩压在它下面一层 */
+.kp-mask { display: none; }
+@media (max-width: 1023px) {
+  .kp-mask {
+    display: block;
+    position: fixed; inset: 0; z-index: 69;
+    background: color-mix(in srgb, #000 35%, transparent);
+  }
+}
 .kp__body { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
 .kp__bar { height: 6px; border-radius: 999px; background: var(--bar-track); overflow: hidden; }
 .kp__bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width .4s ease; }
@@ -3184,14 +3154,16 @@ onBeforeUnmount(() => {
   /* 锚在输入区上方：原来 bottom:16px 是相对 .tutor 的底部，会压到输入框下方的
      「Enter 发送 · Shift+Enter 换行」提示。 */
   position: absolute; left: 50%; bottom: 128px; transform: translateX(-50%);
-  z-index: 5;
+  /* z-index 5 → 9（2026-11-06 走查）：浮标此前与滚动内容同层，底下的白色气泡文字
+     从胶囊上透出来读成重影；抬到消息层之上 + 实色底 + 明确描边/投影，彻底不透字 */
+  z-index: 9;
   padding: 7px 14px; border: 1px solid var(--line); border-radius: var(--mk-radius-pill);
   background: var(--surface); color: var(--muted);
   font: inherit; font-size: 12px; font-weight: 700;
   cursor: pointer;
   /* 悬浮在滚动内容之上的常驻控件，保留 raised 档让它读得出来；
      规则里唯一保留的 transform 是居中用的 translateX(-50%)，与抬升无关。 */
-  box-shadow: var(--wf-shadow-raised);
+  box-shadow: var(--wf-shadow-overlay);
   transition: transform 0.15s ease, color 0.15s ease;
 }
 /* hover 只变色，不抬升（translateX(-50%) 是居中必须保留的那一半） */
@@ -3524,75 +3496,61 @@ onBeforeUnmount(() => {
 }
 .peerdock__bubble--typing i:nth-child(2) { animation-delay: 0.15s; }
 .peerdock__bubble--typing i:nth-child(3) { animation-delay: 0.3s; }
-.peerdock__msg > small { font-size: 12px; color: var(--faint); padding: 0 2px; }
-/* 小启消息元信息行：学法徽章 + 时间戳 */
-.peerdock__meta {
-  display: flex; align-items: center; gap: 8px; min-width: 0;
-  padding: 0 2px;
-}
-.peerdock__meta small { font-size: 12px; color: var(--faint); }
-.peerdock__strategy {
-  font-size: 12px; font-weight: 700; color: var(--amber-ink);
-  background: color-mix(in srgb, var(--amber) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--amber) 25%, transparent);
-  padding: 1px 7px; border-radius: var(--mk-radius-pill);
-  line-height: 1.6;
-}
-/* 小启追问快选：轻量 chips，点一下直接发（与输入框发送等价） */
+/* .peerdock__meta / .peerdock__strategy / .peerdock__msg > small / .peerdock__ai-note 已删
+   （2026-11-06 走查）：伴学策略名已在浮窗副标题「随时找我聊卡点 · 类比迁移」里，每条消息
+   再挂一枚琥珀色胶囊 + 「小启 · 19:31」时间戳是同一信息的三四遍；小窗本就矮，
+   一屏的 1/4 被这些重复标签与免责声明吃掉。 */
+/* 小启追问快选：紧凑按钮（2026-11-06 走查）——原来是与气泡同形的大圆角长条，
+   分不清「这是消息还是能点的东西」；现在横排、8px 小圆角、带 ↳ 前缀，一眼是按钮 */
 .peerdock__follows {
-  display: flex; flex-direction: column; align-items: flex-start;
-  gap: 6px; margin-top: 2px; padding: 0 2px; width: 100%;
+  display: flex; flex-wrap: wrap; align-items: flex-start;
+  gap: 6px; margin-top: 4px; padding: 0 2px; width: 100%;
 }
 .peerdock__follow {
   text-align: left;
-  max-width: 92%; padding: 6px 11px;
-  font: inherit; font-size: 12px; line-height: 1.5; color: var(--amber-ink);
-  background: color-mix(in srgb, var(--surface) 82%, color-mix(in srgb, var(--amber) 35%, transparent));
-  border: 1px solid color-mix(in srgb, var(--wf-color-warning) 35%, transparent); border-radius: var(--mk-radius-xl);
+  max-width: 100%; padding: 4px 10px;
+  font: inherit; font-size: 12px; font-weight: 600; line-height: 1.5; color: var(--amber-ink);
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--wf-color-warning) 35%, transparent);
+  border-radius: 8px;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
+.peerdock__follow::before { content: '↳'; margin-right: 5px; color: var(--faint); }
 [data-theme='dark'] .peerdock__follow {
   background: color-mix(in srgb, var(--amber) 8%, transparent);
   color: var(--wf-color-warning-light);
 }
 .peerdock__follow:hover { background: color-mix(in srgb, var(--amber) 16%, transparent); border-color: color-mix(in srgb, var(--wf-color-warning) 55%, transparent); }
 .peerdock__follow:disabled { opacity: 0.5; cursor: default; }
-/* AI 生成合规提示：常驻滚动区底部，不打扰对话 */
-.peerdock__ai-note {
-  display: flex; justify-content: center;
-  padding: 2px 0 0;
-}
-.peerdock__ai-note :deep(.ai-note) { font-size: 12px; color: var(--faint); opacity: 0.75; }
+/* 输入条（2026-11-06 走查）：与主界面同形——发送键内嵌在输入盒右端，圆形成一颗图标钮 */
 .peerdock__input {
-  display: flex; gap: 8px; padding: 10px 12px;
+  display: flex; align-items: center; gap: 6px; padding: 8px 10px;
   border-top: 1px solid var(--line);
   background: var(--surface);
 }
 .peerdock__input input {
-  flex: 1; min-width: 0; padding: 8px 12px;
+  flex: 1; min-width: 0; height: 38px; padding: 0 12px;
   font: inherit; font-size: 13px;
-  border: 1px solid var(--line); border-radius: var(--mk-radius-pill);
+  border: 1px solid var(--line); border-radius: 8px;
   outline: none;
   background: var(--surface);
   color: var(--ink);
 }
 .peerdock__input input:focus { border-color: color-mix(in srgb, var(--wf-color-warning) 55%, transparent); box-shadow: var(--mk-focus-ring); }
-.peerdock__input button {
-  padding: 8px 14px; border: 0; border-radius: var(--mk-radius-pill);
-  font: inherit; font-size: 12.5px; font-weight: 700;
-  /* 批次 D：135deg 橙渐变（#ff9d4d→#ef7d1f）→ 纯色 #d97706。
-   为什么不是 --wf-color-efficient-dark：规范橙族的两个档对白字只有
-   2.19:1 / 2.82:1，均不足 AA；#d97706 是同色相下唯一达 4.52:1 的实底色。
-   按钮文字 12.5px/700 属小字，必须按 AA 正文 4.5:1 判，不能按大字 3:1 放行。
-   这是一处**规范缺口**：--wf-color-efficient 族缺一档「可配白字的实底色」。
-   已登记待体系包补档，补后此处改回令牌引用。 */
+/* 发送键：32 圆形实底（与主界面同形）。颜色用暖橙 #d97706 —— 小启的角色色。
+   （#d97706 对白字 4.52:1 达 AA；规范橙族两档都不足 AA，属已登记的令牌缺口。） */
+.peerdock__send {
+  flex: 0 0 auto;
+  width: 32px; height: 32px; padding: 0;
+  display: grid; place-items: center;
+  border: 0; border-radius: 50%;
   color: var(--mk-on-fill); background: #d97706;
   cursor: pointer;
   transition: filter 0.15s ease;
 }
-.peerdock__input button:hover:not(:disabled) { filter: brightness(1.05); }
-.peerdock__input button:disabled { opacity: 0.45; cursor: default; }
+.peerdock__send:hover:not(:disabled) { filter: brightness(1.05); }
+.peerdock__send:disabled { opacity: 0.45; cursor: default; }
 /* 小启悬浮球：暖橙 Q（区别于导师品牌蓝紫） */
 .peerfab {
   position: fixed; right: 22px; bottom: 22px; z-index: 59;
@@ -3642,13 +3600,15 @@ onBeforeUnmount(() => {
   border-top: 1px solid color-mix(in srgb, var(--wf-color-warning) 30%, var(--line));
   border-right: 1px solid color-mix(in srgb, var(--wf-color-warning) 30%, var(--line));
 }
-@media (max-width: 640px) {
-  /* 小启整体抬到 composer 上方（composer ≈90px 高）——此前 fab bottom:14 正压在发送键上、
-     dock 展开盖住整个输入区（2026-09-26 用户：「挡住了发送按钮」）；面板限高收一档 */
+/* 浮窗遮罩：宽度档从 640 提到 1023（2026-11-06 走查）——图 7 那种「小启直接压在
+   蓝色小测卡上、两个亮边框打架」的场景出现在手机宽度，而 641–1023 这档此前完全没有遮罩 */
+@media (max-width: 1023px) {
   .peer-backdrop {
     display: block; position: fixed; inset: 0; z-index: 78;
-    background: color-mix(in srgb, #000 42%, transparent);
+    background: color-mix(in srgb, #000 45%, transparent);
   }
+}
+@media (max-width: 640px) {
   .peerdock {
     left: 0; right: 0; bottom: 0; width: auto; z-index: 80;
     max-height: 78dvh;
@@ -3842,7 +3802,7 @@ onBeforeUnmount(() => {
 
 /* ---------- 完课入口 ----------
    整宽 .lesson-cta（原型 #wfFinishLesson：快捷回复之后、输入条之前）2026-10-06 退役：
-   与 ⋯ 菜单「完成并结算任务」重复，且压在输入流上方。完课入口现只在 ⋯ 菜单里。 */
+   压在输入流上方。完课入口最终收敛到顶栏「完成本节」一处（.learn__finishbtn）。 */
 
 /* ---------- 输入区（对齐原型 .wf-composer：760 居中收纳盒 + focus-within 光环） ---------- */
 .composer {
@@ -4169,26 +4129,24 @@ onBeforeUnmount(() => {
   color: var(--faint); font-size: 14px; padding: 80px 20px; text-align: center;
 }
 .learn__init-error { color: var(--red-ink); font-size: 14px; font-weight: 600; }
+/* ⋯ 菜单（2026-11-06 走查压缩）：原来每项 8px 上下内边距 + 双行「主文案 + 解释」，
+   4 项就顶到 240px。现在全是单行项，内边距收到 6px，单条约 30px 高。
+   .learn__menu-sep / .learn__menu-item-main / .learn__menu-status / .learn__menu-state
+   均随双行结构一起删除（模板不再引用）。 */
 .learn__menu-group { display: grid; gap: 1px; }
 .learn__menu-label {
   padding: 6px 12px 3px;
   font-size: 12px; font-weight: 800; letter-spacing: 0.06em;
   color: var(--faint);
 }
-.learn__menu-sep { height: 1px; background: var(--line); margin: 4px 6px; }
 .learn__menu-item {
-  padding: 8px 12px; border-radius: var(--mk-radius-md);
-  font-size: 13px; font-weight: 600; color: var(--muted);
+  padding: 6px 12px; border-radius: var(--mk-radius-md);
+  font-size: 13px; font-weight: 600; line-height: 1.4; color: var(--muted);
   cursor: pointer; white-space: nowrap;
   text-align: left;
   transition: background 0.15s ease, color 0.15s ease;
 }
-.learn__menu-item-main { display: grid; gap: 2px; }
-.learn__menu-item-main strong { font-size: 13px; font-weight: 700; color: inherit; }
-.learn__menu-item-main small { font-size: 12px; font-weight: 500; color: var(--faint); white-space: normal; }
 .learn__menu-item:hover { background: color-mix(in srgb, var(--surface) 96%, var(--ink)); color: var(--ink); }
-.learn__menu-item--primary { color: var(--blue); }
-.learn__menu-item--primary:hover { background: color-mix(in srgb, var(--blue) 8%, transparent); color: var(--blue); }
 .learn__menu-item--danger { color: var(--red-ink); }
 .learn__menu-item--danger:hover { background: color-mix(in srgb, var(--wf-color-danger) 10%, transparent); color: var(--red-ink); }
 .checkpoint__option {
@@ -4595,12 +4553,9 @@ onBeforeUnmount(() => {
 @media (max-width: 900px) {
   /* 知识点浮窗绝对定位，不占用头部/消息区布局高度；对话卡无需预留单独头部带。 */
   .composer { gap: 4px; padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px)); }
-  /* 窄屏头部三件套改两件（2026-10-08 用户侧走查 #61）：连接态「学习中」常驻时和标题抢宽度，
-     12 字任务名被挤成「11 字 + 末字孤行」（墨迹实测第一行 x15..177、第二行只剩一个字形）。
-     窄屏把状态文字收进 ⋯ 菜单（模板里的 .learn__menu-status），标题独占剩余宽度。
-     写在文件末尾：同权重下后出现者胜，早写会被上面的 ≤900 块盖掉。 */
-  .learn__live--head { display: none; }
-  .learn__menu-status { display: block; }
+  /* 窄屏头部不再藏状态字（2026-11-06 走查）：「学习中」常驻绿字已整条撤除，
+     顶栏只剩异常态（开课失败 / 锁课）才渲染它——那种话是用户必须看到的，
+     再塞进 ⋯ 菜单等于把报错藏起来。2026-10-08 那条「收进菜单」的规则随之退役。 */
   /* 知识点入口的 36px 命中区在窄屏同样保留——窄屏 padding 4px 9px 只能给到 26px 高
      （2026-10-08 用户侧走查 #17/#21）。 */
   .learn__kpbtn { padding: 4px 9px; min-height: 36px; }
