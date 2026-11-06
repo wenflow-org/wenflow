@@ -175,29 +175,31 @@
           <div class="panel__bar"><i :style="{ width: (live.filledCount / live.totalFields) * 100 + '%' }"></i></div>
           <div class="panel__confidence">{{ stageLabel }}</div>
 
+          <!-- 按状态分组（2026-11-06 走查「斑马纹」）：已收集的排上面、各成独立圆角浅灰块；
+               待补充的收拢到底部，2 列紧凑小标签（不再每项占两行高） -->
           <ul class="checklist">
             <li
-              v-for="f in live.fields"
+              v-for="f in doneFields"
               :key="f.key"
-              class="field"
-              :class="[`field--${f.status}`, { 'field--fresh': f.fresh }]"
+              class="field field--done"
+              :class="{ 'field--fresh': f.fresh }"
             >
-              <!-- 原型 .wf-field__mark：done = 绿 18% 浅底 + 绿字勾；未完成 = 灰空圆（无虚线内芯） -->
+              <!-- 原型 .wf-field__mark：done = 绿 18% 浅底 + 绿字勾 -->
               <span class="field__mark">
-                <svg v-if="f.status === 'done'" viewBox="0 0 24 24" width="11" height="11"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
+                <svg viewBox="0 0 24 24" width="11" height="11"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
               </span>
               <div class="field__body">
-                <div class="field__label">
-                  {{ f.label }}
-                  <!-- 「刚收录」不再额外出标记（2026-11-06 审计 §1）：左侧绿勾已表达「已收录」，
-                       行级 .field--fresh 的底色/文字脉冲再补一次「刚写入」，标签旁再排一颗
-                       一模一样的圆点只是重复噪声（上一版由 5 颗蓝胶囊收成 6px 蓝点，本次收净） -->
-                </div>
+                <div class="field__label">{{ f.label }}</div>
                 <div v-if="f.value" class="field__value">{{ f.value }}</div>
-                <div v-else class="field__value field__value--todo">待补充</div>
               </div>
             </li>
           </ul>
+          <div v-if="todoFields.length" class="todo">
+            <div class="todo__head">待补充维度（{{ todoFields.length }}）</div>
+            <ul class="todo__tags">
+              <li v-for="f in todoFields" :key="f.key" class="todo__tag"><span class="todo__o">○</span>{{ f.label }}</li>
+            </ul>
+          </div>
           </div>
           <!-- 移动端清空重聊入口（2026-11-05 UX 审计）：唯一入口 .chat__clear 在 ≤1100px
                被 display:none 后移动端无任何替代入口。窄屏头部一行已被阶段导航+学情画像
@@ -220,7 +222,9 @@
                  ≤1100 隐藏（见文件末样式块），移动端计数由面板角标承担。 -->
             <!-- 极简面包屑（2026-11-05 屏效比）：胶囊叠胶囊退役——步标 i 由 stageMark
                  给出（已完成=✓ / 进行中=呼吸蓝点 / 未开始=序号），步骤间 CSS「›」连接 -->
-            <li class="stage-nav__item" :class="stageCls(1)"><i>{{ stageMark(1) }}</i>澄清问题<span v-if="live.stageIndex === 1" class="stage-nav__sub">已收集 {{ live.filledCount }}/{{ live.totalFields }}</span></li>
+            <!-- 随行「已收集 N/7」已撤（2026-11-06 走查）：PC 左栏画像卡常驻同一读数，
+                 同屏两处计数是重复；移动端计数由面板角标承担（2026-10-08 判例随之退役） -->
+            <li class="stage-nav__item" :class="stageCls(1)"><i>{{ stageMark(1) }}</i>澄清问题</li>
             <li class="stage-nav__item" :class="stageCls(2)"><i>{{ stageMark(2) }}</i>确认方案</li>
             <li class="stage-nav__item" :class="stageCls(3)"><i>{{ stageMark(3) }}</i>生成路径</li>
           </ol>
@@ -247,8 +251,9 @@
         <!-- 不在整条消息流上挂 aria-live：流式重渲/每条新消息都会被读屏连播（含原始 JSON delta），
              收窄到下方等待条的 aria-live（P3） -->
         <div ref="scrollEl" class="chat__scroll" :class="{ 'chat__scroll--dim': showProposal, 'chat__scroll--pill': genPillVisibleInChat, 'chat__scroll--invite': proposalInviteVisible }" @scroll.passive="onScrollPin">
-          <!-- AI 生成声明（2026-11-05 屏效比改造）：从输入区元数据条迁到对话流顶部一次呈现，
-               移动端输入区下方的整条元数据带随之撤空；合规标识保留——随对话流滚动，进页首屏可见 -->
+          <!-- AI 生成声明（移动端）：贴对话流顶部随滚（窄屏输入区下方被 tab 栏接管，放不下）；
+               PC 档隐藏——声明已挪到输入框正下方与快捷键合并单行（2026-11-06 走查：
+               免责行顶在第一条消息头上像报错提示） -->
           <div class="chat__ai-note"><AiContentNote /></div>
           <template v-for="km in keyedMessages" :key="km.key">
             <div v-if="km.msg.role === 'user'" class="msg msg--user" :class="{ 'msg--editing': editingMsgId === km.key }">
@@ -452,19 +457,15 @@
               <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
             </button>
           </div>
-          <!-- 底部提示只承载输入元数据：快捷键与字数（AI 声明已迁对话流顶部 .chat__ai-note，
-               字数计数 3500 起浮现——2026-11-05 屏效比改造）。
-               「新目标」不塞进这里：它不是输入辅助信息，而是离开当前会话的导航动作；
-               移动端点击底部「目标规划」会进入无参路由，route.params watcher 负责回到初始态，
-               并保留「继续上次的规划」恢复入口。 -->
-          <div class="composer__hint">
-            <span class="composer__hint-right">
-              <span class="composer__hint-shortcut">{{ SEND_SHORTCUT_HINT }}</span>
-              <!-- 字数计数渐进呈现（2026-11-05 屏效比）：绝大多数输入远达不到上限，
-                   空态的「0 / 4096」是常驻噪声；逼近上限时计数在原位浮现（12px 门禁字号不变） -->
-              <span v-if="input.length >= 3500" class="composer__count">{{ input.length }} / {{ INPUT_MAX }}</span>
-            </span>
-          </div>
+        </div>
+        <!-- 输入框正下方的合并元数据行（2026-11-06 走查）：AI 声明 + 快捷键同一行居中浅灰小字；
+             字数计数 3500 起在此浮现（2026-11-05 判例沿用）。PC 档专属——移动端该位置被
+             底部导航接管，声明仍走对话流顶部的 .chat__ai-note -->
+        <div v-if="loggedIn && live.started" class="chat__under-hint">
+          <AiContentNote />
+          <span class="chat__under-hint-sep">·</span>
+          <span class="chat__under-hint-shortcut">{{ SEND_SHORTCUT_HINT }}</span>
+          <span v-if="input.length >= 3500" class="composer__count">{{ input.length }} / {{ INPUT_MAX }}</span>
         </div>
       </section>
     </main>
@@ -1210,6 +1211,9 @@ function messageHtml(m: LiveMessage): string {
   return cachedMessageHtml(box);
 }
 
+/* 学情画像按状态分组（2026-11-06 走查「斑马纹」）：已收集在上、待补充收拢底部 */
+const doneFields = computed(() => live.fields.filter((f) => f.status === 'done'));
+const todoFields = computed(() => live.fields.filter((f) => f.status !== 'done'));
 const stageLabel = computed(() => {
   /* generating 与 stageIndex 无关：stageIndex 只在 stage 落库时翻转（proposing→ready），
      而「确认，生成我的路径」按下时 stageIndex 仍是 3 —— 此时面板顶还写「可生成路径」，
@@ -1972,7 +1976,6 @@ function shuffleScenes() {
   gap: 12px;
   font-size: 12px; color: var(--faint); padding-left: 6px;
 }
-.composer__hint-right { display: inline-flex; align-items: center; gap: 10px; flex-shrink: 0; }
 /* 「聊到的内容会自动整理成这份清单。」tip 已删（2026-11-05 用户裁定）：
    面板里 7 项清单本身就是整理结果，这句机制说明是重复信息 */
 /* 清空重聊：桌面档隐藏（头部 .chat__clear 承担），≤1100 由面板底部的本按钮承担 */
@@ -2037,21 +2040,17 @@ function shuffleScenes() {
 .panel__bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width .4s ease; }
 .panel__confidence { font-size: 12px; color: var(--faint); }
 
-/* 目标信息字段行：原型 .wf-field —— 发丝线平铺行（去圆角悬浮底），
-   done = 绿 18% 浅底 + 绿字勾，未完成 = 灰空圆 */
-/* 单列平铺（2026-11-06 走查「不要分两列」：短字段并排小卡与整卡节奏打架，全部退回整行） */
-.checklist { list-style: none; margin: 0; padding: 0; }
+/* 目标信息字段：独立圆角浅灰块（2026-11-06 走查「斑马纹」改造）——
+   已收集项各成 8px 圆角小卡（墨 4% 浅底），块间距 8px，不再直角色块上下连排；
+   待补充项收拢到底部 todo__tags 两列小标签。发丝线平铺行判例（2026-11-05）随之退役 */
+.checklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .field {
   position: relative;
   display: grid; grid-template-columns: 16px 1fr; gap: 9px;
-  /* 右内衬 10（2026-11-05）：行是「标记列 + 文本列」两栏，左栏天然有 16px 呼吸，
-     右栏却直接顶到行尾——长描述的最后一行贴着「刚收录」底色带的右边缘，
-     读起来像挤出框。补 10px 让左右两侧的留白接近 */
-  padding: 9px 10px 9px 0;
-  border-top: 1px solid var(--line);
+  padding: 10px 12px;
+  border-radius: var(--mk-radius-md);
+  background: color-mix(in srgb, var(--ink) 4%, var(--surface));
 }
-.field:first-child { border-top: 0; }
-.field--done:hover { background: transparent; }
 .field__mark {
   width: 16px; height: 16px; border-radius: 50%;
   margin-top: 2px;
@@ -2065,7 +2064,17 @@ function shuffleScenes() {
 /* 正文常规字重（2026-11-05 用户裁定）：大段描述全用 600/700 会糊成一团、显得笨重；
    只留短标签/短数值的重音，正文回到 400 + 柔和浅色 + 1.5 行高 */
 .field__value { margin-top: 3px; font-size: 13px; font-weight: 400; line-height: 1.5; color: color-mix(in srgb, var(--ink) 84%, transparent); }
-.field__value--todo { color: var(--faint); font-size: 13px; font-weight: 400; }
+/* 待补充组：标题 + 两列紧凑小标签（○ 维度名），不再每项占两行高 */
+.todo__head { font-size: 12px; font-weight: 600; color: var(--faint); margin-bottom: 8px; }
+.todo__tags { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.todo__tag {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--mk-radius-md);
+  font-size: 12px; color: var(--faint);
+}
+.todo__o { flex: none; font-size: 12px; line-height: 1; opacity: .8; }
 /* 「刚收录」行内高亮（2026-11-06 审计 §1）：唯一的新增标记就靠这一条行级脉冲——
    左侧绿勾 + 行底色/文字短促变蓝，已经说清「这一项刚被收录」；
    原先标签旁的 6px 蓝点与其同义重复，已移除（.field__fresh 规则随之退役） */
@@ -2087,13 +2096,14 @@ function shuffleScenes() {
 
 <style scoped>
 /* ---------- 右：聊天区 ----------
-   原型 .wf-goal--chat 是画布直铺：阶段导航 / 目标信息 / 线程直接落在 canvas 上，
-   这里去掉原先的白卡壳（白底 + 1px 边框 + 圆角），改用留白与发丝线分区 */
+   画布直铺判例（原型 .wf-goal--chat 去卡壳）在 PC 档退役（2026-11-06 走查「灰底上贴
+   上下两块直角白膏药」）：头部白条 + 输入区白补丁 + 中间漏灰底，三截右缘还不齐。
+   方案 A——PC ≥1101 整体包回与左栏同族的白卡（等高顶底对齐由 .work 的 stretch 保证）；
+   ≤1100 维持画布直铺（移动端 composer 脱壳/贴 Canvas 判例不动） */
 .chat {
   position: relative;
   display: flex; flex-direction: column;
-  /* overflow hidden：锁高之后内容若比视口高，只允许在 chat 内部滚，不许把文档撑出滚动条
-     （这不是卡壳——卡壳指白底/1px 边框/圆角，已按原型去掉） */
+  /* overflow hidden：锁高之后内容若比视口高，只允许在 chat 内部滚，不许把文档撑出滚动条 */
   overflow: hidden;
   min-height: 0;
   height: 100%;
@@ -2106,6 +2116,26 @@ function shuffleScenes() {
   /* overflow:hidden：锁高之后内容若比视口高，只允许在 entry/chat 内部滚，
      不许把文档撑出滚动条 */
   .goal { height: calc(100dvh / var(--vp-zoom, 1)); min-height: 0; flex: 0 0 auto; overflow: hidden; }
+  /* 方案 A（2026-11-06 走查）：右侧整体包进一张白卡——头部/输入区的两块白底从此
+     同属一张卡，中间聊天流不再漏画布灰；与左栏画像卡同圆角/描边/投影同族等高 */
+  .chat {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--mk-radius-modal);
+    box-shadow: var(--shadow-sm);
+  }
+  /* 输入区底色交给卡底（96% 混色是移动端画布直铺时代的残影）；发丝线保留为卡内分区 */
+  .chat > .composer { background: var(--surface); }
+  /* AI 声明已挪输入框正下方（.chat__under-hint），对话流顶部的免责行 PC 不再重复 */
+  .chat__ai-note { display: none; }
+  /* 输入框正下方的合并元数据行：AI 声明 + 快捷键（+ ≥3500 字数计数）居中一行浅灰小字 */
+  .chat__under-hint {
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    flex: 0 0 auto;
+    padding: 0 16px 10px;
+    font-size: 12px; color: var(--faint);
+  }
+  .chat__under-hint-sep { opacity: .6; }
 }
 /* 原型 .wf-chathead：直接坐在画布上，无分隔线、无底色（分区靠留白）。
    内边距 10/16 保留：移动端 .panel 的零占位锚点带高 47px，正是按这条头部带对齐的 */
@@ -2175,8 +2205,6 @@ function shuffleScenes() {
   0%, 100% { opacity: 1; }
   50% { opacity: .35; }
 }
-/* 第 1 步右侧的「已收集 N/7」：把步骤条与左栏 7 项清单的对应关系写在同一步里 */
-.stage-nav__sub { font-size: 12px; font-weight: 600; color: var(--faint); }
 .chat__clear { font-size: 12px; font-weight: 600; color: var(--faint); cursor: pointer; }
 .chat__clear:hover { color: var(--red-ink); }
 
@@ -2409,8 +2437,7 @@ function shuffleScenes() {
 }
 
 /* ---------- 快捷补充（skill 每轮返回）：原型 .wf-replies / .wf-reply ----------
-   去白面板与面板头（replies-panel__head），整行蓝调按钮组：
-   1px 蓝 28% 描边 + 蓝 5% 底 + blue-deep 文字 + 前置 6px 蓝点；选中变 ✓ */
+   胶囊按钮组：1px 蓝 28% 描边 + 蓝 5% 底 + blue-deep 文字；选中加 ✓（前置蓝点已撤） */
 .replies {
   display: flex; flex-wrap: wrap; gap: 8px;
   margin-left: 40px;
@@ -2430,11 +2457,9 @@ function shuffleScenes() {
   cursor: pointer;
   transition: background 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
 }
-.reply::before {
-  content: ""; flex: none;
-  width: 6px; height: 6px; margin-top: 7px; border-radius: 50%;
-  background: color-mix(in srgb, var(--blue) 55%, transparent);
-}
+/* 前置 6px 蓝点已撤（2026-11-06 走查）：胶囊本体就是可点项，再挂一颗点只是噪声；
+   选中态的 ✓ 仍走 ::before（见 .reply--on）。左缘对齐：.replies 的 margin-left 40
+   = AI 头像 30 + 列间距 10，与上方 AI 气泡左缘同一条竖线 */
 .reply:hover {
   background: color-mix(in srgb, var(--blue) 11%, transparent);
   border-color: color-mix(in srgb, var(--blue) 46%, transparent);
@@ -2573,6 +2598,10 @@ function shuffleScenes() {
 /* 方案浮层打开期间（P21 走查）：遮罩本就物理挡住输入区，此前它却保持高亮可点的样子——
    点发送无请求、焦点落 overlay，看起来像坏了。与消息流（.chat__scroll--dim）同款哑火档，
    控件再配真实 disabled（读屏也不给假象）；不追加 blur：草稿隔着遮罩仍要能认出来 */
+/* 输入框正下方的合并元数据行（2026-11-06 走查）：AI 声明 + 快捷键（+ 字数计数）居中
+   一行浅灰小字；基础档隐藏（移动端位置被底部导航接管，声明走对话流顶部），PC 档显示 */
+/* PC 档显示规则在文件前段第一个 ≥1101 媒体块（与右侧白卡同块，见 .goal 处） */
+.chat__under-hint { display: none; }
 .composer--locked { opacity: .45; pointer-events: none; }
 /* ---------- 方案确认浮层 ---------- */
 /* 页面级模态（原型 .wf-modal / .wf-dialog）：fixed 铺满视口，
@@ -2986,14 +3015,12 @@ function shuffleScenes() {
     animation: panel-mask-in 0.16s ease-out both;
   }
   @keyframes panel-mask-in { from { opacity: 0; } to { opacity: 1; } }
-  /* 面板紧凑化（.field 已是原型 .wf-field 平铺发丝线行）：行内边距 9→7、gap 9→8、
-     值 13→12.5；标记/徽章尺寸随桌面档（16px），只把绝对定位徽章对齐到新的行内边距；
-     「待补充」行只有一行内容，标签与值并排（原先占两行纯属浪费，5 行白吃 ~110px）。 */
-  .field { padding: 7px 10px 7px 0; grid-template-columns: 16px 1fr; gap: 8px; }
+  /* 面板紧凑化（.field 已是圆角浅灰块）：块内边距 10→7、gap 9→8、值 13→12.5；
+     待补充已收拢为底部两列小标签（todo__tags），行内并排判例随之退役 */
+  .field { padding: 7px 10px; grid-template-columns: 16px 1fr; gap: 8px; }
   .field__value { margin-top: 2px; font-size: 12.5px; }
-  .field__value--todo { font-size: 12px; }
-  .field--todo .field__body { display: flex; align-items: baseline; gap: 6px; }
-  .field--todo .field__value { margin-top: 0; min-width: 0; }
+  .todo__tags { gap: 6px; }
+  .todo__tag { padding: 6px 8px; }
   .panel__bar { height: 5px; }
   /* 移动端信息清单默认折叠：头部横条可点，收起时隐藏进度条/清单/提示 */
   .panel__head { cursor: pointer; }
@@ -3033,9 +3060,9 @@ function shuffleScenes() {
      而这是整屏最常点的区域 */
   .replies { margin-left: 0; }
   /* 编辑按钮触屏即 40×40 本体（EG20 复验收口，见 (hover: none) 块），不再用 ::before 扩热区 */
-  /* 移动端 hint 行整体脱离文档流（0 高，原占 17px + gap 7px），内容挂到输入框与底部导航
-     之间那道缝里。触屏没有键盘快捷键提示，隐藏之。 */
-  .composer { position: relative; }
+  /* 旧「hint 行 dock 缝」整套退役（2026-11-06）：主输入区的元数据行已并入 PC 档
+     .chat__under-hint；触屏无快捷键提示，≥3500 的字数计数在手机上属极端边缘，
+     不再为其保留绝对定位缝。脱壳判例保留：胶囊直接浮在画布上 */
   /* 脱壳（2026-11-05 屏效比第 4 刀）：基础档的 border-top + 96% surface 背景在移动端
      是输入框外多套的一层矩形（暗色下色差尤其明显）——撤掉，胶囊直接浮在画布上；
      上下内边距收到 4/8（基础档的 safe-area padding-bottom 被本简写整体覆盖，
@@ -3045,33 +3072,6 @@ function shuffleScenes() {
     border-top: 0;
     background: transparent;
   }
-  .composer__hint {
-    position: absolute;
-    /* left/right 取 .composer 的左右内边距（16），不是 0：绝对定位的包含块是 composer 的
-       padding box，写 0 会让 hint 比输入框右缘多探出 16px（390 实测 380 vs 364）。
-       对齐到输入框同一条列宽。bottom 为负：常态为空的 hint 行不再占输入区高度，
-       偶尔浮现的计数（≥3500 字）落进输入框与底部导航之间的 dock 缝里，不与胶囊重叠 */
-    left: 16px; right: 16px; bottom: -14px;
-    height: 0;
-    /* 底部对齐：hint 行（0 高）里的内容向上生长，落进 composer 预留的下内边距里，
-       不向下溢进底部导航。 */
-    align-items: flex-end;
-    justify-content: flex-end;
-    flex-wrap: nowrap;
-    padding: 0;
-  }
-  .composer__hint-shortcut { display: none; }
-  /* 计数贴输入框左缘、AI 声明贴右缘：两者分别锚住输入框那条列宽的两端。
-     此前把两者并成一个右对齐簇，计数会被 226px 的声明顶到 x=81，在输入框里
-     找不到任何对齐关系（390 实测）。计数是这条里唯一随输入变化的数字，放左端
-     才与输入框左缘成一条竖线；固定文案的声明压到右端，不抢视线。
-     用 margin-right:auto 而不是 space-between：≤360 计数隐藏后只剩声明一项，
-     auto 边距随之失效、声明回落 flex-end 的右端；space-between 会把单项丢到左端。 */
-  .composer__hint-right {
-    display: inline-flex; align-items: baseline; gap: 10px;
-    width: 100%; justify-content: flex-end;
-  }
-  .composer__count { margin-right: auto; }
   /* iOS Safari 聚焦 <16px 的输入框会触发视口自动放大，打完字还要 pinch 收回——
      textarea 必须留 16px；想让空态看着轻一点只能压 placeholder（占位符字号不影响聚焦判定）。
      盒内继续收紧：外内边距左 12→8、gap 10→8、textarea 上下 10→8、发送键 40→36，盒高 62→54。
@@ -3222,7 +3222,6 @@ function shuffleScenes() {
 @media (max-width: 1100px) {
   /* 窄屏阶段导航一行放不下「澄清问题 + 已收集 5/7」（390 实测该行只有 ~11px 余量，
      与右上「目标信息」按钮共享）。移动端计数已由面板角标承担，这里隐藏随行计数。 */
-  .stage-nav__sub { display: none; }
 }
 
 /* 沉浸式顶栏（2026-11-05 屏效比第 5 刀·大胆档）：goal tab ≤768 撤品牌栏——
