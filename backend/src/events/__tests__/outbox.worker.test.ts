@@ -321,6 +321,47 @@ describe('DurableOutboxWorker 同用户有序 + 泳道分离', () => {
     expect(records.find(record => record.id === 'enr_lesson-src')?.status).toBe('pending')
   })
 
+  /* #146 复核残留（上一轮只拆了泳道、从泳道却从没 start）：
+     attachSecondary 只把从泳道推进数组，start() 里从未调用 secondary.start()，
+     增强泳道因此**没有自己的定时器**。增强失败后 dispatchAndSettle 只把 availableAt 推到未来
+     （退避重投），除主泳道转发的偶发 wake() 外没有任何 tick 会再来重拾这一行——它会长期停在
+     pending，走不到 8 次尝试后的死信分支，也不会出现在 /api/admin/devtools/outbox/dead。
+     本用例刻意**不**用 runOnce()、不手动 wake()：只接 start()，靠泳道自己的定时器跑到死信。 */
+  it('#146：增强泳道随主泳道 start() 自带定时器——失败退避到期无人唤醒也会重试到死信', async () => {
+    jest.useFakeTimers()
+    try {
+      const base = new Date(Date.now() - 10_000)
+      records.push(buildRecord('enr-stuck', 'user-1', base, 'lesson:knowledge-enrichment'))
+      const registry = { dispatch: jest.fn().mockRejectedValue(new Error('llm timeout')) }
+
+      const main = new DurableOutboxWorker(registry as any, { excludeEventTypes: ENRICHMENT_EVENT_TYPES })
+      const enrichment = new DurableOutboxWorker(registry as any, {
+        includeEventTypes: ENRICHMENT_EVENT_TYPES,
+        concurrency: 3,
+        ownsWakeListener: false
+      })
+      main.attachSecondary(enrichment)
+
+      main.start()
+      // 首轮 tick 已同步发起（不等第一个间隔）：失败一次，availableAt 被推到未来
+      await jest.advanceTimersByTimeAsync(0)
+      const row = records.find(record => record.id === 'enr-stuck')!
+      expect(row.attemptCount).toBe(1)
+      expect(row.status).toBe('pending')
+
+      // 没有任何新的入队 → 没有 wake()。只推进时间：泳道自己的定时器要把行一路重投到死信。
+      await jest.advanceTimersByTimeAsync(400_000)
+
+      expect(registry.dispatch).toHaveBeenCalledTimes(8)
+      expect(row.attemptCount).toBe(8)
+      expect(row.status).toBe('dead')
+
+      await main.stop()
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
   /* #144：增强泳道 3 路并发——第 4 个用户的增强不必等前 3 个 LLM 跑完（串行是原来的队头阻塞）。 */
   it('#144：增强泳道跨用户并发，一个慢增强不堵住其他用户的增强', async () => {
     const base = new Date(Date.now() - 10_000)
