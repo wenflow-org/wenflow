@@ -180,7 +180,7 @@
               v-for="f in live.fields"
               :key="f.key"
               class="field"
-              :class="[`field--${f.status}`, { 'field--fresh': f.fresh, 'field--short': SHORT_KEYS.has(f.key) }]"
+              :class="[`field--${f.status}`, { 'field--fresh': f.fresh }]"
             >
               <!-- 原型 .wf-field__mark：done = 绿 18% 浅底 + 绿字勾；未完成 = 灰空圆（无虚线内芯） -->
               <span class="field__mark">
@@ -701,7 +701,6 @@ const panelExpanded = computed(() => !isNarrow.value || panelOpen.value);
 const INPUT_MAX = 4096;
 /* 短字段双列（2026-11-05 用户裁定）：期望周期 / 可用时间通常只有「30 天」「25 分钟」几个字，
    各占一整行把面板撑到要滚动；这两项改半宽小卡并排，面板一屏更装得下 */
-const SHORT_KEYS = new Set(['time_horizon', 'time_per_session']);
 /* 双视图（初始态/会话态）各自渲染一份的错误条与输入提示，文案收成单源避免改一处漏一处 */
 const CONNECT_FAIL_MSG = '连接失败，没能开始对话。';
 const ATTACH_HINT = '添加资料：PDF / Word / PPT / Excel / TXT / Markdown，也可以直接拖到输入框';
@@ -2040,11 +2039,10 @@ function shuffleScenes() {
 
 /* 目标信息字段行：原型 .wf-field —— 发丝线平铺行（去圆角悬浮底），
    done = 绿 18% 浅底 + 绿字勾，未完成 = 灰空圆 */
-/* 双列栅格（2026-11-05）：长字段默认跨满两列，短字段（见 .field--short）各占半列并排 */
-.checklist { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 10px; }
+/* 单列平铺（2026-11-06 走查「不要分两列」：短字段并排小卡与整卡节奏打架，全部退回整行） */
+.checklist { list-style: none; margin: 0; padding: 0; }
 .field {
   position: relative;
-  grid-column: 1 / -1;
   display: grid; grid-template-columns: 16px 1fr; gap: 9px;
   /* 右内衬 10（2026-11-05）：行是「标记列 + 文本列」两栏，左栏天然有 16px 呼吸，
      右栏却直接顶到行尾——长描述的最后一行贴着「刚收录」底色带的右边缘，
@@ -2068,15 +2066,6 @@ function shuffleScenes() {
    只留短标签/短数值的重音，正文回到 400 + 柔和浅色 + 1.5 行高 */
 .field__value { margin-top: 3px; font-size: 13px; font-weight: 400; line-height: 1.5; color: color-mix(in srgb, var(--ink) 84%, transparent); }
 .field__value--todo { color: var(--faint); font-size: 13px; font-weight: 400; }
-/* 短字段双列（2026-11-05 用户裁定）：期望周期 / 可用时间各占半宽小卡并排 */
-.field--short {
-  grid-column: span 1;
-  margin: 4px 0;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: var(--mk-radius-md);
-}
-.field--short .field__value { margin-top: 2px; }
 /* 「刚收录」行内高亮（2026-11-06 审计 §1）：唯一的新增标记就靠这一条行级脉冲——
    左侧绿勾 + 行底色/文字短促变蓝，已经说清「这一项刚被收录」；
    原先标签旁的 6px 蓝点与其同义重复，已移除（.field__fresh 规则随之退役） */
@@ -3005,8 +2994,6 @@ function shuffleScenes() {
   .field__value--todo { font-size: 12px; }
   .field--todo .field__body { display: flex; align-items: baseline; gap: 6px; }
   .field--todo .field__value { margin-top: 0; min-width: 0; }
-  /* 短字段小卡（2026-11-05）：窄屏行内边距 7 上下，卡片左右再补 10，两列不贴边 */
-  .field--short { padding: 7px 10px; }
   .panel__bar { height: 5px; }
   /* 移动端信息清单默认折叠：头部横条可点，收起时隐藏进度条/清单/提示 */
   .panel__head { cursor: pointer; }
