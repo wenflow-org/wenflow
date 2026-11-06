@@ -431,8 +431,11 @@ const orderTitle =
   + '超时与逻辑重试：本 Skill 设置 → 平台默认\n'
   + '每一层只取第一个有值的字段，未填即跳过'
 /** 能力胶囊写成陈述句（2026-11-02 评审）：裸「思考 / 推理强度」被读成没有值的标签 */
-/** 能力标签：与「系统设置 → 模型与接入」的模型行同一套措辞与粒度
- *  （思考 / 推理强度 low / high / max / 视觉）——2026-11-06 用户「按照系统设置的展开页面进行新的设计」 */
+/** 能力标签：与「系统设置 → 模型与接入」的模型行同一套措辞
+ *  （思考 / 视觉）——2026-11-06 用户「按照系统设置的展开页面进行新的设计」。
+ *  2026-11-06 用户「有必要暴露强度在外面吗，配置那边也是」：不再把模型的挡位清单
+ *  （low / high / max）当胶囊印出来——挡位在弹层里有专门的「思考强度」下拉，
+ *  外面只需要知道这台模型支不支持思考、看不看图。 */
 /** 生效模型 id：本 Skill 没单独指定时就是平台默认那个（选择器的回显值） */
 const effectiveModelId = computed(() =>
   String((rtForm.value.enabled && rtForm.value.model) || generationParams.value?.model || '')
@@ -445,7 +448,6 @@ const capTags = computed(() => {
   const cap = effectiveModelCap.value
   return [
     cap?.thinking ? '思考' : '',
-    cap?.efforts.length ? `推理强度 ${cap.efforts.join(' / ')}` : '',
     opt?.vision ? '视觉' : ''
   ].filter(Boolean)
 })
