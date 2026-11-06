@@ -11,7 +11,8 @@ import prisma from '../../../config/database';
 import { logger } from '../../../utils/logger';
 import { withTransaction } from '../../../utils/with-transaction';
 import { executeSkill } from '../../../skills';
-import { getRequestContext, runWithContext } from '../../../gateway/api-gateway/context';
+import { runWithContext } from '../../../gateway/api-gateway/context';
+import { buildPathGenerationContext } from './generation-request-context';
 import { stageDesignerDefinition } from '../../../skills/stage-designer';
 import {
   clampHintsToOneSitting,
@@ -143,8 +144,16 @@ export async function enrichLearningPathWithAnderson(
   // 【A/B 归因修复 2026-10-01】后台生成链路原本没有 userId 请求上下文 → callPrompt 的
   // 变体分流键缺失（恒走基线，实测 44% stage-designer 调用如此）且 prompt_call_logs.userId
   // 空缺。此处用路径属主补齐上下文（保留既有字段），stage-designer/kc-mapper/补课全部继承。
-  return runWithContext({ ...getRequestContext(), userId: data.userId }, () =>
-    enrichLearningPathWithAndersonInner(pathId, runId, data, analysis, options)
+  // #248：这里也必须补 pathId——api-gateway 的调用日志只从 context.pathId 取
+  // metadata.pathId（gateway/api-gateway/executor.ts:1059），缺了它，同一次生成里
+  // path-agent 阶段流水带 pathId、网关行却是 null，path: 折叠组永远关联不到模型名。
+  return runWithContext(
+    buildPathGenerationContext({
+      userId: data.userId,
+      pathId,
+      sourceConversationId: data.sourceConversationId,
+    }),
+    () => enrichLearningPathWithAndersonInner(pathId, runId, data, analysis, options)
   );
 }
 

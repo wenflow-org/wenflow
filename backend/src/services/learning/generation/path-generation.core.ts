@@ -13,6 +13,8 @@ import { clampMilestonesWithLog } from './path-budget-clamp';
 import { ownerContextOverride } from './owner-context';
 import { withTransaction } from '../../../utils/with-transaction';
 import { executeSkill, executeSkillWithResult } from '../../../skills';
+import { runWithContext } from '../../../gateway/api-gateway/context';
+import { buildPathGenerationContext } from './generation-request-context';
 import { pathAgentDefinition } from '../../../skills/path-planning';
 import { pathReviewerDefinition } from '../../../skills/path-reviewer';
 import type { AgentInput } from '../../../agents/protocol';
@@ -1083,7 +1085,19 @@ export async function generateLearningPath(data: GeneratePathData) {
     };
   }
 
-  const { fullPath, analysis, firstMilestoneId } = await generateLearningPathCore(generationData);
+  // #248：把正在生成的 pathId 注入请求上下文再跑 core。api-gateway 的调用日志只从
+  // context.pathId 取 metadata.pathId（gateway/api-gateway/executor.ts:1059），而
+  // POST /paths/generate 在占位路径创建前就进了 withPathContext(req)（pathId 为空）——
+  // 结果是同一次生成里 path-agent 阶段流水带 pathId、path-planning/path-reviewer 的
+  // 网关行却是 null，path: 折叠组无法按 pathId 关联到模型名（#248 的写侧缺口）。
+  const { fullPath, analysis, firstMilestoneId } = await runWithContext(
+    buildPathGenerationContext({
+      userId: generationData.userId,
+      pathId: generationData.existingPathId,
+      sourceConversationId: generationData.sourceConversationId,
+    }),
+    () => generateLearningPathCore(generationData)
+  );
 
   const stageRunId = fullPath.activeGenerationRunId;
   if (!stageRunId) throw new Error('GENERATION_RUN_REQUIRED');

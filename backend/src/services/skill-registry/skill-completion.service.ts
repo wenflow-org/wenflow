@@ -172,12 +172,15 @@ export function computeCompletionState(input: ComputeCompletionInput): SkillComp
     fieldsSyncedDetail = `字段同步无缺项（状态：${input.fieldsSync.state}${warnParts.length ? `；${warnParts.join(' / ')} 仅警告不阻断` : ''}）`;
   }
 
-  const liveExempt = entry.noPromptFile === true;
+  // #235：live 档的豁免判据是「handler-only（逻辑在代码 handler，不依赖 DB prompt）」，
+  // 不是 noPromptFile——后者现在只表示「没有提示词文件」，board-designer 这类有独立提示词
+  // 产物、但同样不走 DB prompt 的 handler-only 仍必须豁免。
+  const liveExempt = entry.kind === 'handler-only';
   let liveOk: boolean;
   let liveDetail: string;
   if (liveExempt) {
     liveOk = true;
-    liveDetail = '豁免：无 prompt 文件（档位恒真）';
+    liveDetail = '豁免：handler-only（逻辑在代码 handler，档位恒真）';
   } else if (input.activePromptExists) {
     liveOk = true;
     liveDetail = `数据库存在 ACTIVE 行（agentId=skill:${entry.skillId}）`;

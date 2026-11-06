@@ -15,7 +15,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import { listAgentManifest } from '../../services/agent-manifest.service';
+import { listAgentManifest, listUserListedAgentIds } from '../../services/agent-manifest.service';
 
 const VUE_PATH = path.resolve(__dirname, '../../../../frontend/src/views/user/AgentLogs.vue');
 const CAPABILITY_GROUPS = ['Goal', 'Path', 'Teaching', 'Profile'];
@@ -125,5 +125,50 @@ describe('#218 用户侧 AgentLogs.vue 字典与 manifest 对齐', () => {
       .filter(Boolean);
     expect(optionIds.length).toBeGreaterThan(0);
     expect(optionIds.filter((id) => !manifestIds.has(id))).toEqual([]);
+  });
+
+  // #226 残余：tutoring 在 manifest 里没有监控组、profile 组内也没有 userListed 的 id，
+  // 这两项筛选**结构性恒空**。产品口径是「保留筛选项 + 专属空态文案」（见 issue #226
+  // 「二选一」的第二支），绝不能沿用通用的「暂无日志」——用户会把它读成加载或筛选出错。
+  // 本用例把这条口径钉成契约：后端映射为空的每个能力，前端下拉若仍提供，就必须有专属文案。
+  it('#226 结构性空的能力筛选项在前端有专属空态文案（不退化成通用「暂无日志」）', () => {
+    const userListed = new Set(listUserListedAgentIds());
+    const mappingGroups: Record<string, string> = {
+      goal: 'Goal',
+      path: 'Path',
+      teaching: 'Teaching',
+      profile: 'Profile'
+    };
+    const emptyCapabilities = new Set<string>();
+    for (const [capability, group] of Object.entries(mappingGroups)) {
+      const ids = manifest
+        .filter((entry) => entry.monitoringGroup === group && userListed.has(entry.id))
+        .map((entry) => entry.id);
+      if (ids.length === 0) emptyCapabilities.add(capability);
+    }
+    // manifest 里根本没有对应监控组的两类（routes/users.buildCapabilityAgentMap 显式置空）
+    emptyCapabilities.add('tutoring');
+    emptyCapabilities.add('tracking');
+
+    // 前端「活动类型」下拉提供的值
+    const optionsStart = source.indexOf('const CAPABILITY_OPTIONS = [');
+    expect(optionsStart).toBeGreaterThan(-1);
+    const optionsBlock = source.slice(optionsStart, source.indexOf('\n];', optionsStart));
+    const offered = [...optionsBlock.matchAll(/value: '([^']*)'/g)]
+      .map((match) => match[1])
+      .filter(Boolean);
+
+    // 专属空态文案字典（键是标识符，不带引号）
+    const structuralBlock = objectBlock(source, 'const STRUCTURAL_EMPTY_CAPABILITIES: Record<string, string> = {');
+    const structuralEntries = [...structuralBlock.matchAll(/(\w+):\s*'([^']*)'/g)]
+      .map((match) => [match[1], match[2]] as [string, string]);
+
+    const missing = offered
+      .filter((capability) => emptyCapabilities.has(capability))
+      .filter((capability) => {
+        const text = structuralEntries.find(([key]) => key === capability)?.[1] ?? '';
+        return !text.trim() || text.trim() === '暂无日志';
+      });
+    expect(missing).toEqual([]);
   });
 });

@@ -8,7 +8,8 @@
  *   F4   parentAgent ∈ manifest kind=agent 条目 id
  *   F5   handlerRef 文件存在（fs）
  *   F6   coreFile 存在（mainline/aux）+ 文件名约定
- *   F7   noPromptFile 一致性（handler-only 强制 true，其余禁 true）
+ *   F7   noPromptFile 一致性（mainline/aux 禁 true；handler-only 默认 true，
+ *        声明 promptArtifact=prompts/skill.<id>.md 时必须为 false，#235）
  *   F8   活跃集 ∩ RETIRED_SKILLS_ALL/PURGED = ∅（retired-skills.ts 执行权威）
  *   F9   alias 全表唯一 + 不与 skillId / manifest canonical / manifest alias 冲突
  *   F10  coordinator 可解析（agentId ∈ 顶层 agent；step 引用自身 skillId 合法）

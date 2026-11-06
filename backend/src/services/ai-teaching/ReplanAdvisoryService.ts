@@ -136,6 +136,34 @@ export const NO_ADVISORY: ReplanAdvisory = {
   },
 };
 
+/**
+ * 建议卡下发的选项键（单一事实源，见 build 的三处 ui.options）。
+ *
+ * #251：前端直接渲染 `advisory.ui.options` 并把 `option.key` 原样回传
+ * `POST /advisory-response`。端点若只认一个更窄的子集，就是「自己下发的按钮自己拒收」——
+ * 实测 keep/preview 能用，confirm/accelerate/reinforce/resequence 一律 400。
+ * 因此可接受动作必须由这个常量派生，而不是两处各写一份枚举。
+ */
+export const ADVISORY_UI_OPTION_KEYS = [
+  'keep',
+  'later',
+  'preview',
+  'confirm',
+  'accelerate',
+  'reinforce',
+  'resequence',
+] as const;
+export type AdvisoryUiOptionKey = (typeof ADVISORY_UI_OPTION_KEYS)[number];
+
+/**
+ * `/advisory-response` 可接受的处置动作 = 全部选项键 + `adopt`。
+ *
+ * `adopt` 不由建议卡下发：它只在「真执行了路径重排」之后由前端/虚拟学习者记账
+ * （P1-7 漏斗执行档），所以不属于 ui.options，但仍必须可落库。
+ */
+export const ADVISORY_RESPONSE_ACTIONS = [...ADVISORY_UI_OPTION_KEYS, 'adopt'] as const;
+export type AdvisoryResponseAction = (typeof ADVISORY_RESPONSE_ACTIONS)[number];
+
 /** 补救型建议动作：它们的语义前提是「这节课让人吃力」，故只在有吃力证据时才允许发出。 */
 export const REMEDIAL_ADVISORY_ACTIONS = ['reinforce', 'slow_down'] as const;
 

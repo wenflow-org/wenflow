@@ -1061,14 +1061,16 @@ router.get('/reconciliation', async (req: Request, res: Response) => {
       });
       const registered = registeredNames.has(entry.skillId);
       const registrationExempt = exemptRegistrationPoints.has(entry.registrationPoint || 'skillHandlers');
-      const active = entry.noPromptFile === true ? true : activeIds.has(`skill:${entry.skillId}`);
+      // #235：handler-only 不需要 DB ACTIVE prompt 即算「活跃」（逻辑在代码 handler）。
+      // 判据用 kind，不用 noPromptFile——后者现在只指「没有提示词文件」。
+      const active = entry.kind === 'handler-only' ? true : activeIds.has(`skill:${entry.skillId}`);
       if (registered) registeredCount += 1;
       if (active) activeCount += 1;
       byStatus[completion.status] = (byStatus[completion.status] || 0) + 1;
 
       let diff: 'unregistered' | 'active-missing' | null = null;
       if (!registered && !registrationExempt) diff = 'unregistered';
-      else if (!active && entry.noPromptFile !== true) diff = 'active-missing';
+      else if (!active && entry.kind !== 'handler-only') diff = 'active-missing';
 
       items.push({
         skillId: entry.skillId,
