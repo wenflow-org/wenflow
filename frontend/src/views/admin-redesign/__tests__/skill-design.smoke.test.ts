@@ -448,18 +448,27 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
     expect(live.text()).not.toContain('独立调整');
     expect(wrapper.find('.sdp-nav').exists()).toBe(false);
 
-    // 详细分段只在弹层里；打开后当前值仍读段头
+    // 详细分段只在弹层里
     expect(wrapper.find('#sdp-panel-request').exists()).toBe(false);
     const configBtn = wrapper.find('.sdp-pane').findAll('button').find((b) => b.text() === '配置')!;
     await configBtn.trigger('click');
     await settle();
     const modal = document.body.querySelector('.sdp-config-modal') as HTMLElement;
     expect(modal, '配置弹层应已打开').toBeTruthy();
-    expect(modal.querySelector('#sdp-panel-request .sdp-panel__state')?.textContent).toContain('30s');
+    /* 2026-11-06 用户「什么覆盖默认什么的，没意义」：弹层里每一格就是当前取值本身，
+       不写「按 Prompt 声明 / 用平台默认」这类来源说明——值已经在输入框里。 */
+    const tempInput = modal.querySelector('#sdp-panel-params input[aria-label="temperature"]') as HTMLInputElement;
+    expect(tempInput.value).toBe('0.4');
+    // Prompt 没声明 topP：输入框留空（placeholder 写「未设置」），不再有只读的来源列
+    const topPInput = modal.querySelector('#sdp-panel-params input[aria-label="topP"]') as HTMLInputElement;
+    expect(topPInput.value).toBe('');
+    expect(topPInput.placeholder).toBe('未设置');
+    const timeoutInput = modal.querySelector('#sdp-panel-request input[aria-label="请求超时毫秒数"]') as HTMLInputElement;
+    expect(timeoutInput.value).toBe('30000');
     const paramsHead = modal.querySelector('#sdp-panel-params .sdp-panel__state');
     expect(paramsHead?.textContent).toContain('T=0.4');
+    expect(modal.textContent ?? '').not.toContain('Prompt 文件声明');
     // 来源词人话化：后端枚举码不得直接露给运营
-    expect(paramsHead?.textContent).toContain('Prompt 文件声明');
     expect(wrapper.text()).not.toContain('active-prompt');
     expect(wrapper.text()).not.toContain('route-fallback');
     wrapper.unmount();
