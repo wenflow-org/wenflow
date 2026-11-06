@@ -1,11 +1,122 @@
 <template>
   <!-- 协议（core YAML · SSOT 编辑与发布） -->
   <div class="sdp-pw">
-    <!-- 左：core 编辑器 -->
-    <section class="sdp-block">
-      <header class="sdp-block__head">
-        <h4>核心文件 <code class="mono">prompts/core/{{ skillId }}.yaml</code></h4>
-        <span class="sdp-block__meta">
+    <!-- 2026-11-06 整合：宿主层原来另有一组只读卡（输入契约 / 输出契约 / 回合状态机 / 终止条件 /
+         System Prompt），与下面这个编辑器渲染的是同一份数据的两层。现在合成一张卡两态：
+         查看 = 只读呈现，编辑 = 核心文件表单 / 源码 / 预览。 -->
+    <div class="sdp-pw__bar">
+      <div class="mk-seg" role="group" aria-label="协议视图">
+        <button type="button" class="mk-seg__item" :class="{ 'mk-seg__item--active': viewMode === 'read' }" @click="viewMode = 'read'">查看</button>
+        <button type="button" class="mk-seg__item" :class="{ 'mk-seg__item--active': viewMode === 'edit' }" @click="viewMode = 'edit'">编辑</button>
+      </div>
+      <span class="sdp-pw__file mono">prompts/core/{{ skillId }}.yaml</span>
+    </div>
+
+    <!-- ===== 查看态：契约 / 流程 / 生效 Prompt ===== -->
+    <template v-if="viewMode === 'read'">
+      <div class="sdp-pw__grid">
+        <section class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">输入契约</h3>
+            <span class="mk-card__meta">{{ readInputs.length }} 字段</span>
+          </div>
+          <div class="sdp-pw__body">
+            <MkLoading v-if="!coreLoaded && !coreMissing" inline text="输入声明加载中…" />
+            <template v-else>
+              <div v-for="(f, i) in readInputs" :key="`${f.ref}-${i}`" class="sdp-crow">
+                <span class="mono sdp-crow__name" :title="f.name || f.ref">{{ f.name || '—' }}</span>
+                <span class="mk-badge mk-badge--muted" :title="`来源声明：${f.ref || '—'}`">{{ refSourceLabel(f.ref) }}</span>
+                <span class="sdp-crow__desc" :title="f.desc || f.note || ''">{{ f.desc || f.note || f.ref || '—' }}</span>
+                <span class="mono sdp-crow__type" :title="f.type || '—'">{{ f.type || '—' }}</span>
+              </div>
+              <p v-if="!readInputs.length" class="mk-empty--line">core YAML 未声明输入（inputs）。</p>
+            </template>
+          </div>
+        </section>
+        <section class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">输出契约</h3>
+            <span class="mk-card__meta">{{ readOutputs.length }} 字段</span>
+          </div>
+          <div class="sdp-pw__body">
+            <MkLoading v-if="contractLoading && !contractFields.length" inline text="字段契约加载中…" />
+            <p v-else-if="contractNotApplicable" class="mk-empty--line">该 Skill 为辅助类（无编排阶段归属），字段契约不适用。</p>
+            <div v-else-if="contractFailed" class="mk-alert mk-alert--row" role="alert">
+              <span class="mk-alert__msg">字段契约加载失败。</span>
+              <button type="button" class="mk-alert__btn" @click="loadContracts">重试</button>
+            </div>
+            <template v-else>
+              <div v-for="f in readOutputs" :key="f.fieldId" class="sdp-crow">
+                <span class="mono sdp-crow__name" :title="f.fieldId">{{ f.fieldId }}</span>
+                <span class="mk-badge" :class="f.promptRole ? `mk-badge--role-${f.promptRole}` : 'mk-badge--muted'">{{ roleLabel(f.promptRole) }}</span>
+                <span class="sdp-crow__desc" :title="f.description || ''">{{ f.description || '—' }}</span>
+                <span class="mono sdp-crow__type" :title="f.valueType || '—'">{{ f.valueType || '—' }}</span>
+              </div>
+              <p v-if="!readOutputs.length" class="mk-empty--line">该 Skill 暂无产出字段声明。</p>
+              <!-- 与「字段路由」那张表的分工：这张看契约本身，那张看每个字段流向哪、是否内部/累积 -->
+              <p class="mk-card__note">取编排产出行的全量，含隐式推断与控制信号这类内部出参。</p>
+            </template>
+          </div>
+        </section>
+      </div>
+
+      <!-- 流程：core 声明的状态机 / 终止条件与运行时清单的阶段集合合成一张卡。
+           此前两边各画一张卡、结论还互相打脸（core 说没声明，工程页写着阶段集合）。 -->
+      <section class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">流程</h3>
+          <span class="mk-card__meta">{{ flowMeta }}</span>
+        </div>
+        <div class="sdp-pw__body sdp-pw__flow">
+          <div v-if="coreStateNodes.length" class="sdp-flowrow">
+            <span class="sdp-flowrow__label">core 状态机</span>
+            <span class="sdp-flowrow__chips">
+              <span v-for="(n, i) in coreStateNodes" :key="`sn-${i}`" class="mk-badge mk-badge--muted mono">{{ n }}</span>
+            </span>
+          </div>
+          <div v-if="runtimePhases.length" class="sdp-flowrow">
+            <span class="sdp-flowrow__label">运行时阶段</span>
+            <span class="sdp-flowrow__chips">
+              <span
+                v-for="p in runtimePhases"
+                :key="p"
+                class="mk-badge mono"
+                :class="p === runtimeDefaultPhase ? 'mk-badge--info' : 'mk-badge--muted'"
+                :title="p === runtimeDefaultPhase ? '默认阶段' : ''"
+              >{{ p }}</span>
+            </span>
+          </div>
+          <div v-if="coreTerminations.length || runtimeTerminalPhases.length" class="sdp-flowrow">
+            <span class="sdp-flowrow__label">终止</span>
+            <span class="sdp-flowrow__chips">
+              <span v-for="(t, i) in coreTerminations" :key="`ct-${i}`" class="mk-badge mk-badge--muted">{{ t }}</span>
+              <span v-for="t in runtimeTerminalPhases" :key="`rt-${t}`" class="mk-badge mk-badge--muted mono">{{ t }}</span>
+            </span>
+          </div>
+          <p v-if="!hasFlow" class="mk-empty--line">core YAML 与运行时清单都没有声明阶段或终止条件。</p>
+        </div>
+      </section>
+
+      <section class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title">System Prompt</h3>
+          <div class="mk-card__head-right">
+            <span class="mk-card__meta">{{ promptState }}</span>
+            <button type="button" class="mk-btn mk-btn--sm" @click="emit('open-prompt')">查看 Prompt</button>
+          </div>
+        </div>
+        <div class="sdp-pw__body">
+          <pre class="sdp-pw__pre">{{ promptCap || '暂无生效 Prompt。' }}</pre>
+          <p v-if="promptTruncated" class="mk-card__note">已截断：仅显示前 1200 字（共 {{ systemPrompt.length }} 字）。</p>
+        </div>
+      </section>
+    </template>
+
+    <!-- ===== 编辑态：核心文件 ===== -->
+    <section v-else class="mk-card">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">核心文件 <code class="mono">prompts/core/{{ skillId }}.yaml</code></h3>
+        <div class="mk-card__head-right">
           <span v-if="coreEditorState.dirty" class="mk-badge mk-badge--muted">未保存</span>
           <button type="button" class="mk-link" :disabled="!coreLoaded || coreSaving || coreCompiling" @click="saveAndCompile">
             {{ coreSaving ? '保存中…' : '保存并编译' }}
@@ -13,33 +124,20 @@
           <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" :disabled="!coreLoaded || corePublishing || coreEditorState.dirty" :title="coreEditorState.dirty ? '有未保存修改，请先保存' : ''" @click="requestPublish">
             {{ corePublishing ? '发布中…' : '发布' }}
           </button>
-        </span>
-      </header>
-      <div class="sdp-pw__viewswitch">
-        <button
-          type="button"
-          class="sdp-pw__viewbtn"
-          :class="{ 'sdp-pw__viewbtn--active': coreViewMode === 'form' }"
-          @click="switchCoreView('form')"
-        >表单</button>
-        <button
-          type="button"
-          class="sdp-pw__viewbtn"
-          :class="{ 'sdp-pw__viewbtn--active': coreViewMode === 'raw' }"
-          @click="switchCoreView('raw')"
-        >源码</button>
-        <button
-          type="button"
-          class="sdp-pw__viewbtn"
-          :class="{ 'sdp-pw__viewbtn--active': coreViewMode === 'preview' }"
-          @click="switchCoreView('preview')"
-        >预览</button>
+        </div>
+      </div>
+      <div class="sdp-pw__views">
+        <div class="mk-seg" role="group" aria-label="核心文件视图">
+          <button type="button" class="mk-seg__item" :class="{ 'mk-seg__item--active': coreViewMode === 'form' }" @click="switchCoreView('form')">表单</button>
+          <button type="button" class="mk-seg__item" :class="{ 'mk-seg__item--active': coreViewMode === 'raw' }" @click="switchCoreView('raw')">源码</button>
+          <button type="button" class="mk-seg__item" :class="{ 'mk-seg__item--active': coreViewMode === 'preview' }" @click="switchCoreView('preview')">预览</button>
+        </div>
         <!-- 展开/收起（2026-10-31 四轮评审 P1-7）：teaching-turn 这类 2.7 万字的 Prompt
              在固定高（≈30 行）的编辑器里滚动阅读很吃力——给一个整屏档 -->
         <button
           v-if="coreViewMode === 'raw'"
           type="button"
-          class="sdp-pw__viewbtn sdp-pw__viewbtn--tall"
+          class="mk-link"
           :aria-pressed="coreRawTall"
           :title="coreRawTall ? '收起到常规高度' : '展开到整屏高度，便于通读长 Prompt'"
           @click="coreRawTall = !coreRawTall"
@@ -222,27 +320,18 @@
             <button type="button" class="sdp-pwform__cardhead" :aria-expanded="openFormSections.has('params')" aria-controls="core-sec-params" @click="toggleFormSection('params')">
               <span>生成参数</span><i class="sdp-pwform__caret" :class="{ 'is-open': openFormSections.has('params') }" aria-hidden="true">▾</i>
             </button>
+            <!-- 生成参数：2026-11-06 起只读（用户「有没有重叠功能部分」）。
+                 这三个值原本与运行时「模型与路由 → 配置」弹层各自可编辑、各自落盘，而运行时那份
+                 优先级更高（本 Skill 覆盖 → Prompt 文件声明 → 代码默认 → 平台默认）——在这里改
+                 temperature 会被运行时静默盖掉。现在本卡只报声明值，改值统一走运行时；
+                 要改核心文件自己的声明走「源码」视图。 -->
             <div id="core-sec-params" v-show="openFormSections.has('params')" class="sdp-pwform__cardbody">
-            <div class="sdp-pwform__row3">
-              <label class="sdp-pwform__field">
-                <span>temperature</span>
-                <input v-model.number="coreForm.params.temperature" type="number" step="0.1" min="0" max="2" class="mk-input" @input="markDirty" />
-              </label>
-              <label class="sdp-pwform__field">
-                <span>maxTokens</span>
-                <input v-model.number="coreForm.params.maxTokens" type="number" step="100" min="1" class="mk-input" @input="markDirty" />
-              </label>
-              <label class="sdp-pwform__field">
-                <span>failurePolicy</span>
-                <MkSelect
-                  v-model="coreForm.params.failurePolicy"
-                  :options="CORE_FAILURE_POLICY_OPTIONS"
-                  aria-label="失败策略"
-                  block
-                  @change="markDirty"
-                />
-              </label>
-            </div>
+              <div class="mk-facts mk-facts--rows">
+                <div><span>temperature</span><strong class="mono">{{ coreForm.params.temperature }}</strong></div>
+                <div><span>maxTokens</span><strong class="mono">{{ coreForm.params.maxTokens }}</strong></div>
+                <div><span>failurePolicy</span><strong class="mono">{{ coreForm.params.failurePolicy }}</strong></div>
+              </div>
+              <p class="mk-card__note">运行时以「模型与路由 → 配置」里的值为准，这里是核心文件的声明值。</p>
             </div>
           </section>
         </template>
@@ -296,11 +385,11 @@
          （2026-10-31 外部评审：右 1/3 纯黑真空 ~2900px）；收进「表单 / 源码 / 预览」
          视图切换后单栏铺满，无空洞。v-show 保留 DOM：门禁/产物状态不随切视图丢。 -->
     <div v-show="coreViewMode === 'preview'" class="sdp-pw__previewpane">
-      <header class="sdp-block__head">
+      <header class="mk-section__head">
         <h4>编译预览</h4>
         <!-- #126：保存（表单↔源码切换时的自动保存）只写盘、不编译，预览与磁盘可能不一致 →
              内容变更后显式标「待重新编译」 -->
-        <span class="sdp-block__meta">
+        <span>
           <span v-if="corePreviewStale" class="mk-badge mk-badge--warn">内容已变更，待重新编译</span>
         </span>
       </header>
@@ -358,18 +447,80 @@ import MkSelect from '@/components/mk/MkSelect.vue'
 
 hljs.registerLanguage('yaml', yaml)
 
-const props = defineProps<{ skillId: string; reloadTick: number }>()
-const emit = defineEmits<{ (e: 'published'): void }>()
+const props = defineProps<{
+  skillId: string
+  reloadTick: number
+  /** 生效 Prompt 全文（截断与来源文案在查看态里处理） */
+  systemPrompt: string
+  promptState: string
+  /** 运行时契约（Prompt 清单）：查看态的「流程」卡读它的阶段集合与终止阶段 */
+  runtimeContract: {
+    businessState?: { phases?: string[]; defaultPhase?: string; terminalPhases?: string[] }
+  } | null
+}>()
+const emit = defineEmits<{ (e: 'published'): void; (e: 'open-prompt'): void }>()
+
+/** 查看 / 编辑：同一个页签的两态（2026-11-06 整合，原宿主只读块与本编辑器是两层） */
+const viewMode = ref<'read' | 'edit'>('read')
+/** 页内截断上限与查看 Prompt 弹层一致 */
+const PROMPT_CAP = 1200
+const promptCap = computed(() => props.systemPrompt.slice(0, PROMPT_CAP))
+const promptTruncated = computed(() => props.systemPrompt.length > PROMPT_CAP)
+const runtimePhases = computed(() => props.runtimeContract?.businessState?.phases ?? [])
+const runtimeDefaultPhase = computed(() => props.runtimeContract?.businessState?.defaultPhase ?? '')
+const runtimeTerminalPhases = computed(() => props.runtimeContract?.businessState?.terminalPhases ?? [])
+
+/** 查看态·输入契约：core YAML 的 inputs 声明（与编辑态同一份数据，另加来源前缀人话） */
+const readInputs = computed(() => (coreForm.value?.inputs ?? []) as { name?: string; type?: string; ref?: string; desc?: string; note?: string }[])
+/** 查看态·输出契约：编排产出行的全量（含隐式推断与控制信号这类内部出参）——
+    与「字段路由」页签同源，但那张表看的是流向/渲染/内部标记，这张看的是契约本身
+    （2026-11-06 试过改读 core YAML 的 fields：真实数据里它只声明 1 个 object 字段，
+    整块 JSON schema 会糊成一团，11 行产出字段反而读不出来）。 */
+const readOutputs = computed(() => contractFields.value)
+function refSourceLabel(ref?: string): string {
+  const r = String(ref || '')
+  if (r.startsWith('skill:')) return '上游 Skill'
+  if (r.startsWith('sandbox:')) return '编排注入'
+  if (r.startsWith('user:')) return '用户 / 平台'
+  return '声明'
+}
+/** 原型 steps / ranklist 的字段名（当前 core schema 无这些字段 → 一律空态，防御式读取） */
+function toStringList(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw
+      .map((x) => {
+        if (x && typeof x === 'object') {
+          const o = x as Record<string, unknown>
+          return String(o.name ?? o.label ?? o.title ?? o.state ?? o.id ?? '')
+        }
+        return String(x)
+      })
+      .filter(Boolean)
+  }
+  if (raw && typeof raw === 'object') {
+    return Object.entries(raw as Record<string, unknown>).map(([k, v]) => `${k}：${v == null ? '—' : String(v)}`)
+  }
+  return raw == null ? [] : [String(raw)]
+}
+const coreStateNodes = computed(() => toStringList(coreSnap.value?.stateMachine ?? coreSnap.value?.states))
+const coreTerminations = computed(() => toStringList(coreSnap.value?.termination ?? coreSnap.value?.terminations ?? coreSnap.value?.limits))
+const hasFlow = computed(() =>
+  !!(coreStateNodes.value.length || coreTerminations.value.length || runtimePhases.value.length || runtimeTerminalPhases.value.length)
+)
+const flowMeta = computed(() => {
+  const parts: string[] = []
+  if (runtimePhases.value.length) parts.push(`${runtimePhases.value.length} 个运行时阶段`)
+  if (coreStateNodes.value.length) parts.push(`${coreStateNodes.value.length} 个 core 状态`)
+  return parts.join(' · ') || '无流程声明'
+})
 
 const CORE_CHANNELS = ['dialogue', 'state', 'task', 'evidence', 'learner', 'path'] as const
 
 const CORE_FIELD_TYPES = ['string', 'number', 'boolean', 'enum', 'object', 'object[]', 'string[]'] as const
-const CORE_FAILURE_POLICIES = ['retry', 'fallback', 'propagate'] as const
 const CORE_OUTPUT_MEDIA = ['json', 'markdown', 'text'] as const
 
 /* 下拉选项（MkSelect）：值 = 原 option 的 :value，文案 = 原 option 文本（逐字） */
 const CORE_FIELD_TYPE_OPTIONS: { value: string; label: string }[] = CORE_FIELD_TYPES.map((t) => ({ value: t, label: t }))
-const CORE_FAILURE_POLICY_OPTIONS: { value: string; label: string }[] = CORE_FAILURE_POLICIES.map((p) => ({ value: p, label: p }))
 const CORE_OUTPUT_MEDIA_OPTIONS: { value: string; label: string }[] = CORE_OUTPUT_MEDIA.map((m) => ({ value: m, label: m }))
 
 interface CoreFormState {
@@ -429,6 +580,8 @@ const coreViewMode = ref<'form' | 'raw' | 'preview'>('form')
 /** 源码视图整屏档（2026-10-31 四轮评审 P1-7）：长 Prompt 通读用；切回表单/预览不保留 */
 const coreRawTall = ref(false)
 const coreForm = ref<CoreFormState | null>(null)
+/** core YAML 原文对象：查看态的「流程」卡要读 stateMachine / termination（表单没覆盖这两个字段） */
+const coreSnap = ref<Record<string, unknown> | null>(null)
 /** 编译预览是否已过期（#126）：保存只写盘、不重编译，预览内容可能落后于磁盘 */
 const corePreviewStale = ref(false)
 let coreRequested = false
@@ -471,6 +624,7 @@ async function switchCoreView(mode: 'form' | 'raw' | 'preview') {
 
 /* ---------- 表单视图：CoreFile JSON → 表单状态 ---------- */
 function initCoreForm(core: Record<string, unknown> | null) {
+  coreSnap.value = core
   if (!core) {
     coreForm.value = null
     return
@@ -597,6 +751,7 @@ async function ensureCoreLoaded() {
   } catch (e) {
     if (id !== props.skillId) return
     coreText.value = ''
+    coreSnap.value = null
     coreLoaded.value = false
     coreMissing.value = true
     const status = (e as { response?: { status?: number } })?.response?.status
@@ -797,21 +952,22 @@ async function publishCore(confirmUncertain: boolean) {
   }
 }
 
-/* ===== 运行时契约只读投影（输入 / 输出契约卡 + 回合状态机 + 终止条件）=====
-   原 SkillDetail（二级技能详情页）的只读能力迁入，避免同一个 Skill 两套页签实现：
-   - 契约卡数据源 = field-routings（与「字段路由」页签同源，不再单独取一份）；按 promptRole 的
-     方向语义把字段拆进/出两侧（OUT_ROLES 与 Orchestrator 同一套口径）
-   - 状态机 / 终止条件读 core YAML（与编辑器共用同一次 getCore 响应）；当前 CoreFile schema 无
-     stateMachine / states / termination / limits → 一律空态，字段名按原型口径防御式读取 */
+/* ===== 输出契约的数据源：field-routings（与「字段路由」页签同源） =====
+   2026-11-06 整合时这段曾是「取了从不渲染」的死代码，现在查看态的「输出契约」卡读它。
+   422 + 「无编排阶段归属」= 辅助类技能不适用字段契约，不是「坏了」→ 分开标记，不给重试。 */
 interface ContractField { fieldId: string; promptRole?: string; valueType?: string; description?: string }
 interface RoleMetaItem { id: string; label: string; hint?: string }
 const contractFields = ref<ContractField[]>([])
 const roleMeta = ref<RoleMetaItem[]>([])
 const contractLoading = ref(false)
 const contractFailed = ref(false)
-/** 422「无编排阶段归属」= 辅助类技能不适用字段契约，不是「坏了」→ 分开标记，不给重试 */
 const contractNotApplicable = ref(false)
-
+/** 产出角色人话：后端 yaml-vocabulary 单源下发（promptRoleMeta） */
+const roleLabel = (roleId?: string) => {
+  if (!roleId) return '—'
+  const m = roleMeta.value.find((x) => x.id === roleId)
+  return m?.label || roleId
+}
 
 async function loadContracts() {
   const id = props.skillId
@@ -855,6 +1011,8 @@ watch(
     coreUncertain.value = null
     corePublishIssues.value = []
     coreViewMode.value = 'form'
+    viewMode.value = 'read'
+    coreSnap.value = null
     coreRawTall.value = false
     openFormSections.value = new Set(['identity', 'inputs', 'fields'])
     corePreviewStale.value = false
@@ -877,32 +1035,56 @@ watch(
 .sdp-pw {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 18px;
+  gap: 14px;
   align-items: start;
 }
-.sdp-block {
-  border: 1px solid var(--mk-line);
-  border-radius: 12px;
-  background: var(--mk-surface);
-  padding: 12px 14px;
-  display: grid;
-  gap: 10px;
-  align-content: start;
-}
-.sdp-block__head {
+/* 查看 / 编辑 两态的工具条：左分段控件，右核心文件名 */
+.sdp-pw__bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
+  flex-wrap: wrap;
 }
-.sdp-block__head h4 {
-  margin: 0;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--mk-faint);
+.sdp-pw__file { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+/* 查看态：输入 / 输出契约并排（宽屏两列，窄屏一列） */
+.sdp-pw__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
 }
-.sdp-block__meta { display: inline-flex; align-items: center; gap: 10px; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.sdp-pw__body {
+  display: grid;
+  gap: 2px;
+  align-content: start;
+  padding: 12px 16px;
+}
+/* 契约行：字段名 · 来源/类型小签 · 说明 · 类型 */
+.sdp-crow {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.1fr) auto minmax(0, 2fr) auto;
+  gap: 6px 10px;
+  align-items: baseline;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--mk-line);
+}
+.sdp-crow__name { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-ink); overflow-wrap: anywhere; }
+.sdp-crow__desc { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.55; overflow-wrap: anywhere; }
+.sdp-crow__type { font-size: var(--mk-fs-micro); color: var(--mk-faint); text-align: right; }
+/* 查看态·流程：一组一组的小签（core 状态机 / 运行时阶段 / 终止） */
+.sdp-pw__flow { gap: 10px; }
+.sdp-flowrow { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 4px 12px; align-items: baseline; }
+.sdp-flowrow__label { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-muted); }
+.sdp-flowrow__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+/* 编辑态：表单 / 源码 / 预览 分段（与顶部「查看·编辑」同一套 .mk-seg） */
+.sdp-pw__views {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px 6px;
+}
 .sdp-none { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .sdp-bad-text { color: var(--mk-red); font-weight: 700; }
 
@@ -1036,29 +1218,6 @@ watch(
 }
 
 /* ---------- 协议·表单视图 ---------- */
-.sdp-pw__viewswitch {
-  display: inline-flex;
-  gap: 4px;
-  background: var(--mk-surface-2);
-  border-radius: var(--mk-radius-xl);
-  padding: 3px;
-  margin: 0 18px 12px;
-  width: fit-content;
-}
-.sdp-pw__viewbtn {
-  border: 0;
-  background: transparent;
-  padding: 5px 14px;
-  border-radius: var(--mk-radius-sm);
-  font: inherit;
-  font-size: var(--mk-fs-micro);
-  font-weight: 600;
-  color: var(--mk-muted);
-  cursor: pointer;
-}
-.sdp-pw__viewbtn--active { background: var(--mk-surface); color: var(--mk-ink); box-shadow: inset 0 0 0 1px var(--mk-blue); }
-/* 展开/收起：同一容器内的工具钮，与三个视图档区分（虚线边） */
-.sdp-pw__viewbtn--tall { margin-left: 6px; border-left: 1px dashed var(--mk-line); border-radius: 0 var(--mk-radius-sm) var(--mk-radius-sm) 0; color: var(--mk-blue); }
 .sdp-pwform {
   display: grid;
   gap: 16px;
@@ -1204,7 +1363,17 @@ watch(
 
 /* ---------- 预览视图（编译门禁 + 产物，原右栏收编为「预览」视图） ---------- */
 .sdp-pw__previewpane { display: grid; gap: 10px; }
-.sdp-pw__previewpane .sdp-block__head { padding: 2px 2px 0; }
+.sdp-pw__previewpane .mk-section__head { padding: 12px 18px 0; }
+
+/* 查看态与编辑态在窄屏的收窄 */
+@media (max-width: 900px) {
+  .sdp-pw__grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 760px) {
+  .sdp-crow { grid-template-columns: minmax(0, 1fr); }
+  .sdp-crow__type { text-align: left; }
+  .sdp-flowrow { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* 4K：设计页放宽 + 编辑器字号跟随壳层放大 */
 @media (min-width: 2000px) {
@@ -1220,9 +1389,6 @@ watch(
   .sdp-pw__pre { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
-  .sdp-block { padding: 16px 18px; gap: 12px; }
-  .sdp-block__head h4 { font-size: var(--mk-fs-body); }
-  .sdp-block__meta { font-size: var(--mk-fs-body); }
   .sdp .mk-input { font-size: var(--mk-fs-emphasis); padding: 12px 15px; }
   .sdp-pw__textarea,
   .sdp-codehl__pre { font-size: var(--mk-fs-emphasis); }
@@ -1235,7 +1401,6 @@ watch(
   .sdp-pw__gate { font-size: var(--mk-fs-body); }
   .sdp-pw__gate-issue { font-size: var(--mk-fs-body); }
   .sdp-pw__meta { font-size: var(--mk-fs-body); }
-  .sdp-pw__viewbtn { font-size: var(--mk-fs-body); padding: 8px 20px; }
   .sdp-pwform__cardhead { font-size: var(--mk-fs-emphasis); }
   .sdp-pwform__card h5 { font-size: var(--mk-fs-emphasis); }
   .sdp-pwform__warn { font-size: var(--mk-fs-body); }
@@ -1247,11 +1412,8 @@ watch(
 }
 
 /* 暗色模式 */
-[data-theme='dark'] .sdp-pw__viewswitch { background: #202122; }
-[data-theme='dark'] .sdp-block { background: var(--wf-bg-subtle); }
 [data-theme='dark'] .sdp-pwform__card { background: var(--wf-bg-subtle); }
 [data-theme='dark'] .sdp-pw__textarea:not(.sdp-codehl__ta) { background: #19191a; color: #e6edf7; }
 [data-theme='dark'] .sdp-pw__textarea:disabled:not(.sdp-codehl__ta) { background: #202122; }
-[data-theme='dark'] .sdp-pw__viewbtn--active { background: #252627; box-shadow: inset 0 0 0 1px var(--mk-blue-hover); }
 
 </style>

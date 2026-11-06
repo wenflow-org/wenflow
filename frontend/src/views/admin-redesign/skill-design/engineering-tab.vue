@@ -1,122 +1,161 @@
 <template>
-  <!-- 工程：基础信息 / 运行时契约 / 协议视图 / Skill 规则总览（低频只读区块） -->
+  <!-- 工程：基础信息 / 依赖与发布 / 运行时契约 / 协议视图 / Skill 规则总览（低频只读区块）。
+       2026-11-06 整合：五块统一走卡 + 共享段头 + 共享键值（.mk-facts--rows），
+       原先手搓的 .sdp-kv 表（自带灰底列与硬编码色值）整套下线；
+       与宿主「工程信息」那张 kv 卡合并成一份（宿主那份已删）。 -->
   <div class="sdp-pane">
-    <section class="sdp-eng">
-      <header class="mk-section__head"><h4>基础信息</h4></header>
-      <table class="sdp-kv">
-        <tbody>
-          <tr><th title="kind">类型</th><td><code class="mono">{{ overview.kind }}</code></td></tr>
-          <tr><th title="agentId">Agent 标识</th><td><code class="mono">{{ overview.agentId }}</code></td></tr>
+    <section class="mk-card">
+      <div class="mk-card__head"><h3 class="mk-card__title">基础信息</h3></div>
+      <div class="sdp-eng__body">
+        <div class="mk-facts mk-facts--rows">
+          <div><span title="kind">类型</span><strong class="mono">{{ overview.kind }}</strong></div>
+          <div><span title="agentId">Agent 标识</span><strong class="mono">{{ overview.agentId }}</strong></div>
           <!-- 2026-11-02 评审：这一行是 core 编译出来的 Prompt 文件（agent-overview 的 file.path），
                不是可编辑的核心文件；标签写「文件路径」会与协议页签的 prompts/core/<id>.yaml 撞名。 -->
-          <tr v-if="overview.file"><th title="file.path">Prompt 文件路径</th><td><code class="mono" :title="overview.file.path">{{ overview.file.path }}</code></td></tr>
-          <tr v-if="overview.file?.hash"><th title="file.hash">Prompt 文件哈希</th><td><code class="mono" :title="`${overview.file.hash}（编译产物 prompts/${skillId}.md 的正文哈希）`">{{ shortHash(overview.file.hash) }}</code></td></tr>
-          <tr v-if="overview.db?.id"><th title="db.id">生效记录 ID</th><td><code class="mono">{{ overview.db.id }}</code></td></tr>
-          <tr v-if="overview.db?.version"><th title="db.version">生效版本</th><td><code class="mono">v{{ overview.db.version }}</code></td></tr>
+          <div v-if="overview.file">
+            <span title="file.path">Prompt 文件</span>
+            <strong class="mono" :title="overview.file.path">{{ overview.file.path }}</strong>
+          </div>
+          <div v-if="overview.file?.hash">
+            <span title="file.hash">Prompt 文件哈希</span>
+            <strong class="mono" :title="`${overview.file.hash}（编译产物 prompts/${skillId}.md 的正文哈希）`">{{ shortHash(overview.file.hash) }}</strong>
+          </div>
+          <div v-if="overview.db?.id">
+            <span title="db.id">生效记录 ID</span>
+            <strong class="mono">{{ overview.db.id }}</strong>
+          </div>
+          <div v-if="overview.db?.version">
+            <span title="db.version">生效版本</span>
+            <strong class="mono">v{{ overview.db.version }}</strong>
+          </div>
           <!-- B19-F7-3：agent_prompts.useCount 列（2026-10-31 四轮评审撤除）——
                该计数列后端从未递增（全库检索无任何 increment 写点），恒显 0，
                与运行时 KPI/版本页签的真实调用数（调用日志聚合 191 次）同屏打架。
                数据列启用前不再上屏「0」，避免把假零读成真没调用。 -->
-          <tr v-if="overview.db?.model"><th>默认模型</th><td><code class="mono">{{ overview.db.model }}</code></td></tr>
-          <tr v-if="overview.db?.publishedAt"><th>发布时间</th><td>{{ fmtTime(String(overview.db.publishedAt)) }}</td></tr>
-          <tr v-if="overview.drift">
-            <th>不一致状态</th>
-            <td>
-              <code class="mono" :class="overview.drift === 'in-sync' ? 'sdp-ok' : 'sdp-warn'">{{ driftLabel(overview.drift) }}</code>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-
-    <section class="sdp-eng">
-      <header class="mk-section__head">
-        <h4>依赖与发布</h4>
-        <span class="sdp-sec-meta">{{ coreDeps.length ? `${coreDeps.length} 项上游依赖` : '无依赖声明' }}</span>
-      </header>
-      <!-- 依赖取 core YAML inputs 的 skill: / sandbox: 引用（原型 renderSkillDetail 2367-2371 的 chips） -->
-      <div v-if="coreDeps.length" class="sdp-deps">
-        <span v-for="d in coreDeps" :key="d" class="mk-badge mk-badge--muted mono" :title="d">{{ d }}</span>
+          <!-- 2026-11-06：标签写「发布时记录的模型」——它是发布时写进 agent_prompts 的值，
+               运行时实际用哪个由「模型与路由」那张卡决定（两处口径不同，标签写「默认模型」
+               会被读成「现在跑的就是它」）。 -->
+          <div v-if="overview.db?.model">
+            <span>发布时记录的模型</span>
+            <strong class="mono" title="发布时记录下来的模型，运行时实际用哪个由「模型与路由」决定">{{ overview.db.model }}</strong>
+          </div>
+          <div v-if="overview.db?.publishedAt"><span>发布时间</span><strong>{{ fmtTime(String(overview.db.publishedAt)) }}</strong></div>
+          <div v-if="overview.drift">
+            <span>不一致状态</span>
+            <strong class="mono" :class="overview.drift === 'in-sync' ? 'sdp-ok' : 'sdp-warn'">{{ driftLabel(overview.drift) }}</strong>
+          </div>
+        </div>
       </div>
-      <p v-else-if="coreDepsFailed" class="sdp-none sdp-bad-text">核心文件读取失败，依赖清单不可得。</p>
-      <p v-else class="sdp-none" title="core YAML 未声明 inputs 的 skill: / sandbox: 引用">该 Skill 未声明输入依赖。</p>
-      <!-- 四段发布流（草稿/评审/灰度/回滚）后端无阶段状态接口 → 只说明真实存在的两步 -->
-      <p class="sdp-none" title="草稿 / 评审 / 灰度 / 回滚状态暂未提供">发布链：保存并编译 → 发布（暂无草稿 / 评审 / 灰度阶段状态）。</p>
     </section>
 
-    <section v-if="overview.runtimeContract" class="sdp-eng">
-      <header class="mk-section__head">
-        <h4>运行时契约</h4>
-        <span class="sdp-sec-meta mono">{{ overview.runtimeContractSource === 'manifest' ? 'prompts/manifests' : 'buildDefaultRuntimeContract' }}</span>
-      </header>
-      <table class="sdp-kv">
-        <tbody>
-          <tr><th title="version">契约版本</th><td><code class="mono">{{ overview.runtimeContract.version }}</code></td></tr>
-          <tr><th title="contextMode">上下文模式</th><td><code class="mono">{{ overview.runtimeContract.contextMode }}</code></td></tr>
-          <tr v-if="overview.runtimeContract.businessState?.domain"><th title="domain">业务域</th><td><code class="mono">{{ overview.runtimeContract.businessState.domain }}</code></td></tr>
-          <tr v-if="overview.runtimeContract.businessState?.phases"><th title="phases">阶段集合</th><td><code class="mono">{{ overview.runtimeContract.businessState.phases.join(', ') }}</code></td></tr>
-          <tr v-if="overview.runtimeContract.businessState?.defaultPhase"><th title="defaultPhase">默认阶段</th><td><code class="mono">{{ overview.runtimeContract.businessState.defaultPhase }}</code></td></tr>
-          <tr v-if="overview.runtimeContract.businessState?.terminalPhases"><th title="terminalPhases">终止阶段</th><td><code class="mono">{{ overview.runtimeContract.businessState.terminalPhases.join(', ') }}</code></td></tr>
-          <tr v-if="overview.runtimeContract.contextUpdate?.mode"><th title="contextUpdate.mode">上下文更新模式</th><td><code class="mono">{{ overview.runtimeContract.contextUpdate.mode }}</code></td></tr>
-          <tr><th title="outputEnvelope">输出封装</th><td><code class="mono">{{ overview.runtimeContract.outputEnvelope }}</code></td></tr>
-        </tbody>
-      </table>
-    </section>
-
-    <section class="sdp-eng">
-      <header class="mk-section__head">
-        <h4>协议视图</h4>
-        <span class="sdp-sec-meta">{{ protocols.length ? `${protocols.length} 组协议` : '' }}</span>
-      </header>
-      <!-- #116 三态互斥：加载中 / 失败 / 空。此前 engLoaded 只是普通变量、无 loading ref，
-           「暂无协议数据」在数据到达前就渲染，把「加载中」当「没有」呈现给用户 -->
-      <p v-if="engLoading" class="sdp-none"><MkLoading inline text="协议数据加载中…" /></p>
-      <div v-else-if="protocols.length" class="sdp-protocols">
-        <article v-for="p in protocols" :key="p.id" class="sdp-protocol">
-          <header>
-            <strong>{{ p.title }}</strong>
-            <span class="mk-badge mk-badge--muted">{{ p.statusLabel }}</span>
-          </header>
-          <p>{{ p.summary }}</p>
-          <span class="sdp-protocol__sites mono">{{ p.callSites }}</span>
-        </article>
+    <section class="mk-card">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">依赖与发布</h3>
+        <span class="mk-card__meta">{{ coreDeps.length ? `${coreDeps.length} 项上游依赖` : '无依赖声明' }}</span>
       </div>
-      <p v-else-if="engProtoFailed" class="sdp-none sdp-bad-text">协议数据加载失败。<button type="button" class="mk-link" @click="retryEngineering">重试</button></p>
-      <p v-else class="sdp-none">暂无协议数据。</p>
+      <div class="sdp-eng__body">
+        <!-- 依赖取 core YAML inputs 的 skill: / sandbox: 引用（原型 renderSkillDetail 2367-2371 的 chips） -->
+        <div v-if="coreDeps.length" class="sdp-deps">
+          <span v-for="d in coreDeps" :key="d" class="mk-badge mk-badge--muted mono" :title="d">{{ d }}</span>
+        </div>
+        <div v-else-if="coreDepsFailed" class="mk-alert mk-alert--row" role="alert">
+          <span class="mk-alert__msg">核心文件读取失败，依赖清单不可得。</span>
+        </div>
+        <p v-else class="mk-empty--line" title="core YAML 未声明 inputs 的 skill: / sandbox: 引用">该 Skill 未声明输入依赖。</p>
+        <!-- 四段发布流（草稿/评审/灰度/回滚）后端无阶段状态接口 → 只说明真实存在的两步 -->
+        <p class="mk-card__note" title="草稿 / 评审 / 灰度 / 回滚状态暂未提供">发布链：保存并编译 → 发布（暂无草稿 / 评审 / 灰度阶段状态）。</p>
+      </div>
     </section>
 
-    <section class="sdp-eng">
-      <header class="mk-section__head">
-        <h4>Skill 规则总览</h4>
+    <section v-if="overview.runtimeContract" class="mk-card">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">运行时契约</h3>
+        <span class="mk-card__meta mono">{{ overview.runtimeContractSource === 'manifest' ? 'prompts/manifests' : 'buildDefaultRuntimeContract' }}</span>
+      </div>
+      <div class="sdp-eng__body">
+        <!-- 阶段集合 / 默认阶段 / 终止阶段 三行 2026-11-06 移进「协议」页签的「流程」卡：
+             它们与 core 声明的状态机是同一件事的两个来源，摆在两页会互相打脸（协议说没声明、
+             这里列着两个阶段）。本卡只留与流程无关的技术封套。 -->
+        <div class="mk-facts mk-facts--rows">
+          <div><span title="version">契约版本</span><strong class="mono">{{ overview.runtimeContract.version }}</strong></div>
+          <div><span title="contextMode">上下文模式</span><strong class="mono">{{ overview.runtimeContract.contextMode }}</strong></div>
+          <div v-if="overview.runtimeContract.businessState?.domain">
+            <span title="domain">业务域</span>
+            <strong class="mono">{{ overview.runtimeContract.businessState.domain }}</strong>
+          </div>
+          <div v-if="overview.runtimeContract.contextUpdate?.mode">
+            <span title="contextUpdate.mode">上下文更新模式</span>
+            <strong class="mono">{{ overview.runtimeContract.contextUpdate.mode }}</strong>
+          </div>
+          <div><span title="outputEnvelope">输出封装</span><strong class="mono">{{ overview.runtimeContract.outputEnvelope }}</strong></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="mk-card">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">协议视图</h3>
+        <span class="mk-card__meta">{{ protocols.length ? `${protocols.length} 组协议` : '' }}</span>
+      </div>
+      <div class="sdp-eng__body">
+        <!-- #116 三态互斥：加载中 / 失败 / 空。此前 engLoaded 只是普通变量、无 loading ref，
+             「暂无协议数据」在数据到达前就渲染，把「加载中」当「没有」呈现给用户 -->
+        <MkLoading v-if="engLoading" inline text="协议数据加载中…" />
+        <div v-else-if="protocols.length" class="sdp-protocols">
+          <article v-for="p in protocols" :key="p.id" class="sdp-protocol">
+            <header>
+              <strong>{{ p.title }}</strong>
+              <span class="mk-badge mk-badge--muted">{{ p.statusLabel }}</span>
+            </header>
+            <p>{{ p.summary }}</p>
+            <span class="sdp-protocol__sites mono">{{ p.callSites }}</span>
+          </article>
+        </div>
+        <div v-else-if="engProtoFailed" class="mk-alert mk-alert--row" role="alert">
+          <span class="mk-alert__msg">协议数据加载失败。</span>
+          <button type="button" class="mk-alert__btn" @click="retryEngineering">重试</button>
+        </div>
+        <p v-else class="mk-empty--line">暂无协议数据。</p>
+      </div>
+    </section>
+
+    <section class="mk-card">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">Skill 规则总览</h3>
         <!-- 口径拆开说（2026-10-31 四轮评审）：本块是 R-XX-NN 登记表（Agent 提示词规则注册表），
              与本 Skill core YAML 里的执行规则（协议页签那份）是两个来源；登记表为空时
              不再裸显「0 规则 · 0 前缀」跟协议页的 83 条规则打架 -->
-        <span class="sdp-sec-meta" v-if="rulesOverview?.summary && (rulesOverview.summary.totalRules ?? 0) > 0">
+        <span class="mk-card__meta" v-if="rulesOverview?.summary && (rulesOverview.summary.totalRules ?? 0) > 0">
           {{ rulesOverview.summary.totalRules ?? 0 }} 规则 · {{ rulesOverview.summary.totalPrefixes ?? 0 }} 前缀
           <template v-if="(rulesOverview.summary.conflictPrefixCount ?? 0) > 0">
             · <b class="sdp-warn">{{ rulesOverview.summary.conflictPrefixCount }} 冲突</b>
           </template>
         </span>
-        <span v-else-if="!engLoading" class="sdp-sec-meta">R-XX-NN 登记表当前为空</span>
-      </header>
-      <div v-if="rulesOverview?.conflictPrefixes?.length" class="sdp-conflict">
-        <strong>prefix 冲突：</strong>
-        <span v-for="c in rulesOverview.conflictPrefixes" :key="c.prefix">
-          <code class="mono">{{ c.prefix }}</code> 同时被 <code class="mono">{{ c.agentIds.join(', ') }}</code> 使用
-        </span>
+        <span v-else-if="!engLoading" class="mk-card__meta">R-XX-NN 登记表当前为空</span>
       </div>
-      <p v-if="engLoading" class="sdp-none"><MkLoading inline text="规则数据加载中…" /></p>
-      <div v-else-if="nodeRules.length" class="sdp-rules">
-        <div v-for="r in nodeRules" :key="r.ruleId" class="sdp-rule">
-          <span class="sdp-rule__id mono">{{ r.ruleId }}</span>
-          <span class="sdp-rule__text">{{ r.text }}</span>
+      <div class="sdp-eng__body">
+        <div v-if="rulesOverview?.conflictPrefixes?.length" class="sdp-conflict">
+          <strong>prefix 冲突：</strong>
+          <span v-for="c in rulesOverview.conflictPrefixes" :key="c.prefix">
+            <code class="mono">{{ c.prefix }}</code> 同时被 <code class="mono">{{ c.agentIds.join(', ') }}</code> 使用
+          </span>
         </div>
+        <MkLoading v-if="engLoading" inline text="规则数据加载中…" />
+        <div v-else-if="nodeRules.length" class="sdp-rules">
+          <div v-for="r in nodeRules" :key="r.ruleId" class="sdp-rule">
+            <span class="sdp-rule__id mono">{{ r.ruleId }}</span>
+            <span class="sdp-rule__text">{{ r.text }}</span>
+          </div>
+        </div>
+        <div v-else-if="engRulesFailed" class="mk-alert mk-alert--row" role="alert">
+          <span class="mk-alert__msg">规则数据加载失败。</span>
+          <button type="button" class="mk-alert__btn" @click="retryEngineering">重试</button>
+        </div>
+        <p v-else-if="coreRulesCount > 0" class="mk-empty--line">
+          本节点没有登记 R-XX-NN 规则。执行规则 {{ coreRulesCount }} 条写在 core YAML 里。
+        </p>
+        <p v-else class="mk-empty--line">本节点没有登记规则。</p>
       </div>
-      <p v-else-if="engRulesFailed" class="sdp-none sdp-bad-text">规则数据加载失败。<button type="button" class="mk-link" @click="retryEngineering">重试</button></p>
-      <p v-else-if="coreRulesCount > 0" class="sdp-none">
-        本节点没有登记 R-XX-NN 规则（登记表当前为空）。本 Skill 的执行规则 {{ coreRulesCount }} 条来自 core YAML，见「协议」页签。
-      </p>
-      <p v-else class="sdp-none">本节点没有登记规则。</p>
     </section>
   </div>
 </template>
@@ -252,54 +291,20 @@ const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12
 .sdp-pane { display: grid; gap: 14px; align-content: start; }
 .sdp-ok { color: var(--mk-green); }
 .sdp-warn { color: var(--mk-amber); }
-.sdp-bad-text { color: var(--mk-red); font-weight: 700; }
-.sdp-none { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.sdp-eng { display: grid; gap: 8px; }
-/* 区块头走 .mk-section__head（shared.css） */
-.sdp-sec-meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); display: inline-flex; gap: 10px; align-items: center; }
-.sdp-kv {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--mk-fs-micro);
-  background: var(--mk-surface);
-  border: 1px solid var(--mk-line);
-  border-radius: 12px;
-  overflow: hidden;
-}
-.sdp-kv th {
-  text-align: left;
-  font-weight: 600;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
-  /* 2026-10-06 审核 #120：原 7px 12px → 行高 36-37px，17 行全部低于规范下限 40px；
-     提到与 .mk-table th/td 同档（10px 16px）后行高回到 ~44px */
-  padding: 10px 16px;
-  width: 180px;
-  background: #f8fafc;
-  border-right: 1px solid var(--mk-surface-3);
-  vertical-align: top;
-}
-.sdp-kv td {
-  padding: 10px 16px;
-  color: #334155;
-  border-bottom: 1px solid var(--mk-surface-3);
-  overflow-wrap: break-word;
-  word-break: normal;
-}
-.sdp-kv tr:last-child th, .sdp-kv tr:last-child td { border-bottom: none; }
-.sdp-kv code { font-size: var(--mk-fs-micro); }
+/* 卡身：与协议页签、运行时页签同一档内边距 */
+.sdp-eng__body { display: grid; gap: 10px; align-content: start; padding: 12px 16px; }
 .sdp-protocols { display: grid; gap: 8px; }
 .sdp-deps { display: flex; flex-wrap: wrap; gap: 6px; }
 .sdp-protocol {
-  border: 1px solid #e6ecf6;
+  border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-xl);
   padding: 10px 12px;
   display: grid;
   gap: 4px;
-  background: var(--mk-surface);
+  background: var(--mk-surface-2);
 }
 .sdp-protocol header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.sdp-protocol strong { font-size: var(--mk-fs-micro); font-weight: 600; color: #223252; }
+.sdp-protocol strong { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-ink); }
 .sdp-protocol p { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
 .sdp-protocol__sites { font-size: var(--mk-fs-micro); color: var(--mk-faint); overflow-wrap: break-word; word-break: normal; }
 .sdp-conflict {
@@ -318,21 +323,15 @@ const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12
   gap: 3px;
   padding: 7px 10px 7px 12px;
   border-left: 2px solid rgba(141, 107, 255, 0.45);
-  background: #faf9ff;
+  background: var(--mk-surface-2);
   border-radius: 0 var(--mk-radius-sm) var(--mk-radius-sm) 0;
   font-size: var(--mk-fs-micro);
 }
 .sdp-rule__id { color: var(--wf-color-accent); font-size: var(--mk-fs-micro); font-weight: 700; }
 .sdp-rule__text { color: var(--mk-ink); line-height: 1.55; }
 
-/* 4K：字号跟随壳层放大 */
+/* 4K：字号跟随壳层放大（键值走 .mk-facts，档位由原语自带） */
 @media (min-width: 3600px) {
-  .mk-section__head h4 { font-size: var(--mk-fs-body); }
-  .sdp-sec-meta { font-size: var(--mk-fs-body); }
-  .sdp-kv { font-size: var(--mk-fs-body); }
-  .sdp-kv th { font-size: var(--mk-fs-body); padding: 10px 16px; }
-  .sdp-kv td { padding: 10px 16px; }
-  .sdp-kv code { font-size: var(--mk-fs-body); }
   .sdp-protocol { padding: 14px 16px; }
   .sdp-protocol strong { font-size: var(--mk-fs-emphasis); }
   .sdp-protocol p { font-size: var(--mk-fs-body); }
@@ -342,14 +341,7 @@ const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12
   .sdp-rule__id { font-size: var(--mk-fs-body); }
 }
 
-/* 暗色模式：sdp 面板/表格浅色硬编码收敛 */
-[data-theme='dark'] .sdp-kv { background: var(--wf-bg-subtle); }
-[data-theme='dark'] .sdp-kv th { background: #202122; color: var(--mk-muted); }
-[data-theme='dark'] .sdp-kv td { color: #e6edf7; }
-[data-theme='dark'] .sdp-kv th, [data-theme='dark'] .sdp-kv td { border-color: #313235; }
-[data-theme='dark'] .sdp-protocol { background: var(--wf-bg-subtle); border-color: #313235; }
-[data-theme='dark'] .sdp-protocol strong { color: #e6edf7; }
+/* 暗色：色值全走 token 后只剩协议卡的两处紫调 */
 [data-theme='dark'] .sdp-rule { background: rgba(141, 107, 255, 0.08); }
-[data-theme='dark'] .sdp-rule__text { color: #dbdbdd; }
 
 </style>

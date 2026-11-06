@@ -29,116 +29,20 @@
     <section class="mk-card skd-body">
       <MkSubTabs :tabs="TABS" v-model="tab" />
       <div class="skd-pane">
-        <!-- ========== 协议（原型 protocol：输入/输出契约 vrow + System Prompt 代码卡） ========== -->
+        <!-- ========== 协议（查看 / 编辑两态：契约 · 流程 · 生效 Prompt ↔ 核心文件编辑） ========== -->
         <div v-if="designTabShown('protocol')" v-show="tab === 'protocol'" class="skd-bloc">
-          <div class="skd-grid">
-            <!-- 输入契约（2026-10-31 四轮评审 P0-2 重做）：字段路由的 fields 全部是本 Skill 的
-                 「产出」字段（编排文件注释「=== skill:xxx 产出 ===」），此前把非产出角色的
-                 隐式推断/控制信号误标成「入参」——真实输入契约在 core YAML 的 inputs 声明里
-                 （与协议表单「输入声明」、试跑默认载荷同一份）。 -->
-            <section class="mk-card">
-              <div class="mk-card__head">
-                <h3 class="mk-card__title">输入契约</h3>
-                <span class="mk-card__meta">{{ contractIns.length }} 字段</span>
-              </div>
-              <div class="skd-pad skd-rows">
-                <MkLoading v-if="coreInputsLoading" inline text="输入声明加载中…" />
-                <template v-else>
-                  <div v-for="(f, i) in contractIns" :key="`${f.ref}-${i}`" class="skd-vrow">
-                    <span class="mono skd-vrow__name" :title="f.name || f.ref">{{ f.name || '—' }}</span>
-                    <span class="mk-badge mk-badge--muted" :title="`来源声明：${f.ref || '—'}`">{{ refSourceLabel(f.ref) }}</span>
-                    <span class="skd-vrow__desc" :title="f.desc || f.note || ''">{{ f.desc || f.note || f.ref || '—' }}</span>
-                    <span class="mono skd-vrow__type" :title="f.type || '—'">{{ f.type || '—' }}</span>
-                  </div>
-                  <p v-if="!contractIns.length" class="mk-empty--line">该 Skill 的 core YAML 未声明输入（inputs）。</p>
-                  <p class="mk-card__note" title="来源说明：core 文件的 inputs 声明（name / type / ref / desc）">输入契约取 core 文件的 inputs 声明，ref 前缀标来源。</p>
-                </template>
-              </div>
-            </section>
-            <section class="mk-card">
-              <div class="mk-card__head">
-                <h3 class="mk-card__title">输出契约</h3>
-                <span class="mk-card__meta">{{ contractOuts.length }} 字段</span>
-              </div>
-              <div class="skd-pad skd-rows">
-                <MkLoading v-if="routingsLoading && !routings" inline text="字段契约加载中…" />
-                <template v-else-if="routingsNotApplicable">
-                  <p class="mk-empty--line">{{ AUX_CONTRACT_NA_TEXT }}</p>
-                </template>
-                <template v-else-if="routingsFailed">
-                  <div class="mk-alert mk-alert--row" role="alert">
-                    <span class="mk-alert__msg">字段契约加载失败。</span>
-                    <button type="button" class="mk-alert__btn" @click="load(true)">重试</button>
-                  </div>
-                </template>
-                <template v-else>
-                  <!-- 字段路由 fields 全量 = 本 Skill 的产出字段（含隐式推断/控制信号这类内部出参），
-                       角色徽标走后端 promptRoleMeta 单源人话，不再标「入参/出参」（方向已由卡题表达） -->
-                  <div v-for="f in contractOuts" :key="f.fieldId" class="skd-vrow">
-                    <span class="mono skd-vrow__name" :title="f.fieldId">{{ f.fieldId }}</span>
-                    <span class="mk-badge" :class="roleCls(f.promptRole)">{{ roleLabel(f.promptRole) }}</span>
-                    <span class="skd-vrow__desc" :title="f.description || ''">{{ f.description || '—' }}</span>
-                    <span class="mono skd-vrow__type" :title="f.valueType || '—'">{{ f.valueType || '—' }}</span>
-                  </div>
-                  <p v-if="!contractOuts.length" class="mk-empty--line">该 Skill 暂无产出字段声明。</p>
-                  <p class="mk-card__note" title="来源说明：字段路由的产出行（编排文件每个 skill:xxx 产出段）">输出契约取编排产出行的全量，含隐式推断与控制信号这类内部出参。core YAML 里声明的输出字段是另一份，见同页签的核心文件表单。</p>
-                </template>
-              </div>
-            </section>
-          </div>
-          <!-- 回合状态机：原型 renderSkillDetail 2384-2386（.steps/.step 圆点序列）；core YAML 无该字段 → 空态 -->
-          <section class="mk-card">
-            <div class="mk-card__head">
-              <h3 class="mk-card__title">回合状态机</h3>
-              <span class="mk-card__meta">{{ coreStateNodes.length ? `${coreStateNodes.length} 个状态` : '无状态机声明' }}</span>
-            </div>
-            <div class="skd-pad">
-              <div v-if="coreStateNodes.length" class="skd-steps">
-                <!-- #148：不再把第 1 个节点无条件标成「当前」——core YAML 无 stateMachine/states
-                     字段（也无「当前态」数据源），aria-current 与蓝染是自造状态；
-                     状态机只作序列展示，真实当前态等后端字段下发后再着色 -->
-                <div
-                  v-for="(n, i) in coreStateNodes"
-                  :key="`${n}-${i}`"
-                  class="skd-step"
-                >
-                  <span class="skd-step__n">{{ i + 1 }}</span>{{ n }}
-                </div>
-              </div>
-              <!-- 2026-11-02 评审：这里读的是 core YAML，而阶段集合写在 Prompt 清单的运行时契约里，
-                   两处结论同屏读作互相打脸。空态显式说清读的是哪份文件、另一份在哪个页签。 -->
-              <p v-else class="mk-empty--line" title="core YAML 没有 stateMachine / states 字段（回合阶段来自 Prompt 清单的运行时契约）">core YAML 未声明回合状态机。运行时的回合阶段集合见「工程」页签的运行时契约。</p>
-            </div>
-          </section>
-          <div class="skd-grid">
-            <!-- 终止条件：原型 renderSkillDetail 2388-2390（.ranklist/.rankrow）；core YAML 无该字段 → 空态 -->
-            <section class="mk-card">
-              <div class="mk-card__head">
-                <h3 class="mk-card__title">终止条件</h3>
-              </div>
-              <div class="skd-pad">
-                <div v-if="coreTerminations.length" class="skd-ranklist">
-                  <div v-for="(t, i) in coreTerminations" :key="`${t}-${i}`" class="skd-rankrow">{{ t }}</div>
-                </div>
-                <p v-else class="mk-empty--line" title="core YAML 没有 termination / limits 字段（终止阶段来自 Prompt 清单的运行时契约）">core YAML 未声明终止条件。运行时的终止阶段见「工程」页签的运行时契约。</p>
-              </div>
-            </section>
-            <section class="mk-card">
-              <div class="mk-card__head">
-                <h3 class="mk-card__title">System Prompt</h3>
-                <div class="mk-card__head-right">
-                  <span class="mk-card__meta">{{ promptStateText }}</span>
-                  <button type="button" class="mk-btn mk-btn--sm" @click="openPromptModal">查看 Prompt</button>
-                </div>
-              </div>
-              <div class="skd-pad">
-                <pre class="skd-code">{{ systemPromptCap || (promptFailed ? '生效 Prompt 加载失败，请刷新重试。' : '暂无生效 Prompt。') }}</pre>
-                <p v-if="promptTruncated" class="mk-card__note">已截断：仅显示前 1200 字（共 {{ promptLen }} 字），完整内容见本页签的核心文件编辑器。</p>
-              </div>
-            </section>
-          </div>
-          <!-- 设计页「协议」内容（核心 YAML 编辑与发布 + 编译预览 + 运行时契约投影） -->
-          <ProtocolTab :skill-id="skillId" :reload-tick="coreReloadTick" @published="onPublished" />
+          <!-- 2026-11-06 整合：这里原本平铺着 5 张只读卡（输入契约 / 输出契约 / 回合状态机 /
+               终止条件 / System Prompt），与下方编辑器渲染同一份数据的两层。只读呈现已下沉进
+               ProtocolTab 的查看态，宿主只负责喂它已经取到的数据（生效 Prompt、运行时契约）。 -->
+          <ProtocolTab
+            :skill-id="skillId"
+            :reload-tick="coreReloadTick"
+            :system-prompt="systemPromptText"
+            :prompt-state="promptStateText"
+            :runtime-contract="overviewItem?.runtimeContract ?? null"
+            @published="onPublished"
+            @open-prompt="openPromptModal"
+          />
         </div>
 
         <!-- ========== 试跑（原型 trial：样例输入 + 执行链路 + 输出 + 对比；唯一的输入/运行入口在 TrialTab） ========== -->
@@ -146,9 +50,7 @@
           <!-- 设计页「试跑」内容（表达试跑编辑器 + 当前生效 Prompt 参照 + 最近调用） -->
           <TrialTab
             :skill-id="skillId"
-            :file-path="coreFilePath"
             :refresh-tick="refreshTick"
-            @failures="recentFailures = $event"
             @dirty="(d) => onTabDirty('trial', d)"
           />
         </div>
@@ -224,27 +126,10 @@
           </section>
         </div>
 
-        <!-- ========== 工程（原型 engineering：工程信息 kv；依赖与发布见下方 EngineeringTab） ========== -->
+        <!-- ========== 工程（基础信息 · 依赖与发布 · 运行时契约 · 协议视图 · 规则总览） ========== -->
         <div v-if="designTabShown('engineering')" v-show="tab === 'engineering'" class="skd-bloc">
-          <div class="skd-grid">
-            <section class="mk-card">
-              <div class="mk-card__head">
-                <h3 class="mk-card__title">工程信息</h3>
-              </div>
-              <div class="skd-pad">
-                <div class="mk-facts">
-                  <div><span>Skill ID</span><strong class="mono" :title="view.id">{{ view.id }}</strong></div>
-                  <div><span>归属 Agent</span><strong>{{ view.agentName || view.agentId || '—' }}</strong></div>
-                  <div><span>类别</span><strong :title="`类别枚举：${view.category}（来源：${view.categorySource}）`">{{ categoryText(view.category) }}</strong></div>
-                  <div v-if="coreFilePath"><span>Prompt 文件</span><strong class="mono" :title="promptFilePathTitle">{{ coreFilePath }}</strong></div>
-                  <div><span>统计来源</span><strong>{{ statsNote || '—' }}</strong></div>
-                </div>
-              </div>
-            </section>
-          </div>
-          <!-- 设计页「工程」内容（基础信息 + 依赖与发布 + 运行时契约 + 协议视图 + Skill 规则总览）。
-               2026-10-23 走查：顶部原本还有一张「依赖与发布」卡，与 EngineeringTab 里的同名区块
-               同源同内容，同一页签出现两遍；卡片版撤除，依赖 chips / 发布链只留 EngineeringTab 一处。 -->
+          <!-- 2026-11-06 整合：这里原本还有一张「工程信息」kv 卡，与 EngineeringTab 的「基础信息」
+               是同一批事实的第二套呈现（且一套是 .mk-facts、一套是手搓表）。合成一套，只留页签内那份。 -->
           <EngineeringTab v-if="overviewItem" :skill-id="skillId" :overview="overviewItem" />
         </div>
 
@@ -255,17 +140,18 @@
           <!-- 2026-10-31 外部评审拍板：本页签原有两套 26 行大表同屏堆叠（只读流向表 +
                设计区块契约表）。两者语义不同不合并，改为页签内视图切换：默认流向视图（只读），
                「契约编辑」进设计区块（字段血缘 + 加字段向导）。 -->
-          <div class="skd-rswitch" role="group" aria-label="字段路由视图切换">
+          <!-- 2026-11-06：分段控件改用共享 .mk-seg（原 .skd-rswitch 是本页第三套分段方言） -->
+          <div class="mk-seg sdp-seg" role="group" aria-label="字段路由视图切换">
             <button
               type="button"
-              class="skd-rswitch__btn"
-              :class="{ 'skd-rswitch__btn--on': routingView === 'flow' }"
+              class="mk-seg__item"
+              :class="{ 'mk-seg__item--active': routingView === 'flow' }"
               @click="routingView = 'flow'"
             >流向视图</button>
             <button
               type="button"
-              class="skd-rswitch__btn"
-              :class="{ 'skd-rswitch__btn--on': routingView === 'contract' }"
+              class="mk-seg__item"
+              :class="{ 'mk-seg__item--active': routingView === 'contract' }"
               @click="routingView = 'contract'"
             >契约编辑</button>
           </div>
@@ -422,7 +308,6 @@ import {
   adminFieldRoutingsApi,
   adminAgentPromptsApi,
   adminPromptOpsApi,
-  adminPromptWorkbenchApi,
   adminAgentsApi
 } from '@/api/adminApi'
 import MkDetailHero from '@/components/mk/MkDetailHero.vue'
@@ -439,7 +324,7 @@ import { toast } from '@/utils/toast'
 /* 设计页能力平铺（2026-10-15 用户拍板：独立设计页退役，内容就地铺进本页）——
    6 个 tab 正文是自包含子组件（各自 scoped 样式），直接挂到本页各页签只读区块下方。
    各子组件的脏态经 @dirty 上报，离开守卫见文件尾（原 SkillDesignPage 的守卫整套迁入）。 */
-import { coreEditorState, callTimeFull, callTimeLabel, failureText, type TrialInputDecl } from './skill-design/sdp-shared'
+import { coreEditorState, callTimeFull, callTimeLabel, failureText } from './skill-design/sdp-shared'
 import ProtocolTab from './skill-design/protocol-tab.vue'
 import TrialTab from './skill-design/trial-tab.vue'
 import VersionsTab from './skill-design/versions-tab.vue'
@@ -447,9 +332,6 @@ import RuntimeTab from './skill-design/runtime-tab.vue'
 import EngineeringTab from './skill-design/engineering-tab.vue'
 import RoutingTab from './skill-design/routing-tab.vue'
 
-/* 文案单源：输入/输出契约两块空态共用一句（R6 复读单源化）；思考模式/思考强度
-   两个下拉的继承项共用一句。 */
-const AUX_CONTRACT_NA_TEXT = '该 Skill 为辅助类（无编排阶段归属），字段契约不适用。'
 
 /* ===== 6 页签（运行时置首：健康+证据先于配置，评审「结论埋深」）
    #149：键与设计页 ?tab= 深链键真对齐——「字段路由」设计页键是 routing，本页原写 fields
@@ -542,7 +424,6 @@ watch(tab, (t) => visited.add(t))
 const refreshTick = ref(0)
 const coreReloadTick = ref(0)
 /** 试跑页签上报的「近 8 条失败」计数（原设计页状态条用；本页暂无状态条，保留接收以免子组件报错） */
-const recentFailures = ref(0)
 /** 工程页签所需的完整 overview 条目（agent-overview 命中项；file/db/drift/runtimeContract 齐给）。
     形状与 skill-design/engineering-tab.vue 的 Overview 契约一致（该子组件按此取数）。 */
 interface OverviewItem {
@@ -784,28 +665,12 @@ const promptStateText = computed(() => {
   return '暂无生效版本'
 })
 const systemPromptText = computed(() => String(prompt.value?.prompt?.systemPrompt || ''))
-/** 页内截断上限与 SkillDrawer 一致（slice(0, 1200)），完整内容在设计页 */
-const PROMPT_CAP = 1200
-const systemPromptCap = computed(() => systemPromptText.value.slice(0, PROMPT_CAP))
-const promptLen = computed(() => systemPromptText.value.length)
-const promptTruncated = computed(() => promptLen.value > PROMPT_CAP)
+/* 截断与来源文案随只读卡下沉进协议页签的查看态（2026-11-06），宿主只传全文。 */
 
 /* ===== 生效模型（运行时「生效值」单点展示；hero 不再重复徽标） ===== */
 
 /* ===== 统计口径（运行时页签说明行）：指标数值来自 liveSkillStatsMap（随 Skill 列表「统计窗口」切换），
    此前照抄 meta.stats.range 造成「口径写全量、数字是 7 天窗口」的失真 → 说明对齐真实窗口 ===== */
-/** 来源枚举 → 人话（后端 UnifiedSkillStats.source：prompt_call_logs | agent_call_logs | none）。
-    F8-6：'none' = 窗口内没有可判源的日志（skills.ts:975 落字面量），不是口径名——
-    与未返回同义，一律回落「Skill 执行日志」，绝不把英文枚举印给运营；未知新枚举同样不裸直出。 */
-const STATS_SOURCE_TEXT: Record<string, string> = {
-  prompt_call_logs: 'Prompt 调用日志',
-  agent_call_logs: 'Skill 执行日志'
-}
-const statsNote = computed(() => {
-  const src = STATS_SOURCE_TEXT[String(meta.value?.stats?.source || '')] || 'Skill 执行日志'
-  // 窗口词已由 KPI 卡头右侧显示，这里只报来源，不重复窗口与「与列表一致」的解释
-  return src
-})
 
 /* ===== 指标（运行时页签 KPI 卡；0 与未知分开；阈值/精度走 rate-utils 单点） ===== */
 /** 成功率 tone → MkKpi 的 tone prop（'muted' 无数据档已由 MkKpi 支持 → 直通） */
@@ -831,26 +696,6 @@ const routingsFailed = ref(false)
 /** EG15：kind=aux 辅助类技能后端返回 422「无编排阶段归属」——这是「不适用」而非「加载失败」，
     分开标记以免把不适用呈现成坏了+重试。 */
 const routingsNotApplicable = ref(false)
-
-/** 输入契约 = core YAML 的 inputs 声明（2026-10-31 四轮评审 P0-2）：字段路由 fields 全部是
-    产出字段（编排文件单源口径「skill:xxx 产出」），隐式推断/控制信号也是出参——
-    此前按 OUT_ROLES 反选拆「输入契约」把内部出参误标成入参。真实输入在 core inputs。 */
-interface CoreInputRow { name?: string; type?: string; ref?: string; desc?: string; note?: string }
-const coreInputsLoading = ref(false)
-const contractIns = computed<CoreInputRow[]>(() => {
-  const rows = coreSnap.value?.inputs
-  return Array.isArray(rows) ? (rows as CoreInputRow[]) : []
-})
-const contractOuts = computed<FieldRow[]>(() => routings.value?.fields || [])
-
-/** ref 前缀 → 来源人话（与协议表单「输入声明」注记同一套语义） */
-function refSourceLabel(ref?: string): string {
-  const r = String(ref || '')
-  if (r.startsWith('skill:')) return '上游 Skill'
-  if (r.startsWith('sandbox:')) return '编排注入'
-  if (r.startsWith('user:')) return '用户 / 平台'
-  return '声明'
-}
 
 /** promptRole 人话：后端 yaml-vocabulary 单源下发（promptRoleMeta），前端不再各写一份 */
 const roleLabel = (roleId?: string) => {
@@ -916,64 +761,6 @@ const versionsFailed = ref(false)
 
 /* ===== core 文件路径（工程页签；prompt-ops agent-overview 真实字段） ===== */
 const coreFilePath = ref('')
-/** 工程页签这行路径是**编译产物**（prompt-ops agent-overview 的 file.path，形如
-    prompts/skill.<id>.md），而模拟可编辑的源文件是 prompts/core/<id>.yaml。此前这行叫
-    「核心文件」，与协议页签写的 prompts/core/<id>.yaml 同屏读作同一份文件的两个名字
-    （2026-11-02 评审 P0）。改叫 Prompt 文件，并在悬停里点明源文件是谁。 */
-const promptFilePathTitle = computed(() =>
-  coreFilePath.value
-    ? `编译产物（由核心文件 prompts/core/${skillId.value}.yaml 生成，不要直接改这里）`
-    : ''
-)
-
-/* ===== core YAML 投影（协议页签「回合状态机 / 终止条件」+ 工程页签「依赖」） =====
-   原型 SKILL_STATE_MACHINE / SKILL_TERMINATIONS / SKILL_ENGINEERING.deps（index.html 1229-1250）
-   的数据取 core YAML（prompt-lab getCore）；当前 CoreFile schema 无 stateMachine / states /
-   termination / limits 字段 → 一律空态，不硬造（字段名按原型口径做防御式读取，便于后续后端补齐）。 */
-interface CoreInputRef extends TrialInputDecl { ref?: string; kind?: string }
-interface CoreSnap {
-  stateMachine?: unknown
-  states?: unknown
-  termination?: unknown
-  terminations?: unknown
-  limits?: unknown
-  inputs?: CoreInputRef[]
-}
-const coreSnap = ref<CoreSnap | null>(null)
-
-/** 任意形状 → 字符串列表（原型 steps/ranklist 只吃字符串；对象键值转「键：值」，对象项取 name/label） */
-function toStringList(raw: unknown): string[] {
-  if (raw == null) return []
-  if (typeof raw === 'string') return raw.trim() ? [raw.trim()] : []
-  if (Array.isArray(raw)) {
-    return raw
-      .map((x) => {
-        if (x == null) return ''
-        if (typeof x === 'string') return x
-        if (typeof x === 'object') {
-          const o = x as Record<string, unknown>
-          return String(o.name ?? o.label ?? o.title ?? o.state ?? o.id ?? '')
-        }
-        return String(x)
-      })
-      .filter(Boolean)
-  }
-  if (typeof raw === 'object') {
-    return Object.entries(raw as Record<string, unknown>).map(([k, v]) => `${k}：${v == null ? '—' : String(v)}`)
-  }
-  return [String(raw)]
-}
-
-/** 回合状态机节点（原型 steps 圆点序列，index.html 2384-2386）；无字段 → [] */
-const coreStateNodes = computed<string[]>(() => {
-  const c = coreSnap.value
-  return c ? toStringList(c.stateMachine ?? c.states) : []
-})
-/** 终止条件（原型 ranklist，index.html 2388-2390）；无字段 → [] */
-const coreTerminations = computed<string[]>(() => {
-  const c = coreSnap.value
-  return c ? toStringList(c.termination ?? c.terminations ?? c.limits) : []
-})
 /* 上游依赖（原型 chips，index.html 2368）现由 EngineeringTab 单点渲染；
    2026-10-23 撤掉本页重复的卡片版后，这里不再自己算一份。 */
 
@@ -1074,19 +861,6 @@ async function load(force = false) {
         if (guard(true)) { coreFilePath.value = ''; overviewItem.value = null }
       }
     })(),
-    // core YAML 投影（协议页签输入契约/状态机/终止条件 + 工程页签依赖；prompt-lab getCore）
-    (async () => {
-      if (guard(true)) coreInputsLoading.value = true
-      try {
-        const res = await adminPromptWorkbenchApi.getCore(id)
-        if (!guard(true)) return
-        coreSnap.value = (res.data?.core ?? null) as CoreSnap | null
-      } catch {
-        if (guard(true)) coreSnap.value = null
-      } finally {
-        if (guard(true)) coreInputsLoading.value = false
-      }
-    })()
   ]
   await Promise.all(jobs)
   if (seq !== loadSeq || skillId.value !== id) return
@@ -1201,8 +975,6 @@ watch(
     versionsLoading.value = false
     versionsFailed.value = false
     coreFilePath.value = ''
-    coreSnap.value = null
-    coreInputsLoading.value = false
     overviewItem.value = null
     notFound.value = false
     // 深链保持：URL 明确带合法 ?tab= 时尊重它，否则回落运行时（健康+证据先于配置）
@@ -1328,124 +1100,9 @@ useEscape(
    .skd-tablewrap 的 overflow-x:auto 拿不到滚动条（右侧「属性/脱敏」列不可达）。
    与 mk-primitives 的 `.mk-page > * { min-width: 0 }` 同款修法，让子项可收缩、横滚真正接管。 */
 .skd-pane > * { min-width: 0; }
-/* 2026-11-02 评审：左右两张同类字段表（输入契约 7 行 / 输出契约 26 行）行高差数倍——
-   行数少的那张被同排更高的卡片拉到一样高，7 行摊在一张很高的卡里，行距看着像排版坏了。
-   align-items: start 让每张卡按内容高排，行距回到与行数无关的固定节奏。 */
-.skd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; align-items: start; }
-.skd-grid > .mk-card { box-shadow: none; }
 .skd-pad { padding: 12px 16px; display: grid; gap: 10px; align-content: start; }
 
-/* ===== 协议：vrow 契约行（原型 protoRow：mono 名 + 方向 pill + 描述 + 类型 + 必填 pill） ===== */
-/* 2026-11-04 二轮：容器的宽度才是这行的可用宽——同一视口下 .skd-grid 的 minmax(300px,1fr)
-   会把卡片切成两列（1100 视口时卡片仅 378px），与视口宽无关。容器 = 行列表自身（卡片宽减内边距）。 */
-.skd-rows { display: grid; gap: 0; container-type: inline-size; }
-.skd-vrow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--mk-line);
-  min-width: 0;
-}
-.skd-vrow:last-child { border-bottom: 0; }
-/* 字段名（行的标识）：2026-10-31 外部评审复检——line-clamp 两行折行会让
-   control.completionCandidateEvidence 这类无空格标识在末尾单字母处断头（`…Evidenc / e`）。
-   代码字段名绝不能折行：nowrap + ellipsis 截断，完整值在 title 悬停；放宽到 340px
-   兼顾 1080p 常见名完整可读，超长的由悬停承接。 */
-.skd-vrow__name {
-  font-weight: 700; flex: none; max-width: 340px;
-  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
-}
-/* 2026-11-04 1920 走查：描述列原本单行 nowrap + ellipsis，1920 下三条契约描述实测 626/506/460
-   的文案被 465/424/407 的盒截断——title 悬停只是兜底，正文读不全。描述是整句中文，不像字段名
-   那样怕断词，改成整行折行（与容器断档里的窄屏同一口径），行高随文案增高。 */
-.skd-vrow__desc { flex: 1; min-width: 0; color: var(--mk-muted); font-size: var(--mk-fs-micro); white-space: normal; overflow-wrap: anywhere; }
-/* 类型列可收缩：200 字符的内联对象类型在单行里也要退化成省略号（完整值在 title），
-   不能把整行撑出卡右缘被 overflow:clip 裁掉。 */
-.skd-vrow__type {
-  flex: 0 1 auto; min-width: 0;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  color: var(--mk-muted); font-size: var(--mk-fs-micro);
-}
-/* 2026-11-04 390 宽走查：协议页签契约行整行撑出卡片——name 是 flex:none + max-width:340px 不收缩，
-   desc 的 flex:1 被压到 0，尾部「类型」列越出卡右缘后被 .mk-card 的 overflow:clip 裁掉
-   （array<string> 这类类型整列读不到，该列原本也无 ellipsis 无 title、页面又无横滚可追）。
-   改成两行栅格：首行 = name（可收缩省略，已有 title）+ 徽标 + 类型（带省略号与 title 兜底），
-   描述换到第二行整行折行。
-   2026-11-04 二轮：原来断档看视口（≤900），901–1279 区间仍是单行——卡片被 .skd-grid 切成两列后
-   仅 378px，同样的裁切复现（type 越界 24px、desc 压到 0），且 900→901 有跳变。
-   改按容器（行列表）实际宽度断档：与视口无关，390 窄屏与 1100 两列卡片命中同一条。 */
-@container (max-width: 600px) {
-  .skd-vrow {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, auto);
-    align-items: baseline;
-    column-gap: 8px;
-    row-gap: 4px;
-  }
-  .skd-vrow__name { grid-column: 1; grid-row: 1; max-width: none; min-width: 0; }
-  .skd-vrow > .mk-badge { grid-column: 2; grid-row: 1; }
-  .skd-vrow__type {
-    grid-column: 3; grid-row: 1; min-width: 0;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
-  .skd-vrow__desc {
-    grid-column: 1 / -1; grid-row: 2;
-    white-space: normal; overflow: visible; text-overflow: clip;
-  }
-}
-
-/* ===== 协议：回合状态机 steps（原型 .steps/.step，index.html 434-439） ===== */
-.skd-steps { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.skd-step { display: flex; align-items: center; gap: 6px; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
-.skd-step__n {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--mk-surface-3);
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-}
-
-/* ===== 协议/试跑：ranklist 与 meterrow（原型 .ranklist/.rankrow/.meter，index.html 297-302 / 2340） ===== */
-.skd-ranklist { display: grid; gap: 2px; }
-.skd-rankrow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 0;
-  border-bottom: 1px solid var(--mk-line);
-  min-width: 0;
-  color: var(--mk-ink);
-  font-size: var(--mk-fs-micro);
-}
-.skd-rankrow:last-child { border-bottom: 0; }
-
 /* ===== 工程：依赖 chips（原型 .chips，index.html 2368） ===== */
-
-/* ===== 代码井（原型 .code：深底 mono 块；System Prompt / 试跑输出 / 探测预览共用） ===== */
-.skd-code {
-  margin: 0;
-  padding: 10px 12px;
-  border-radius: var(--mk-radius-xl);
-  background: var(--mk-code-bg);
-  border: 1px solid var(--mk-code-border);
-  color: var(--mk-code-fg);
-  font: var(--mk-fs-micro)/1.65 var(--mk-mono);
-  white-space: pre-wrap;
-  word-break: break-word;
-  /* 2026-11-02 评审：定高 300px 与行高（1.65 × 字号）不成整数倍，最后一行被下边框切掉半行，
-     框内既没有省略号也看不出能滚。改为按行盒计量（15 行）——可视区恒为整数行不切字；
-     content-box 让 max-height 只算文本区，不必把内边距算进去；
-     认不得 lh 的浏览器回落上面的 300px，行为与旧版一致。 */
-  box-sizing: content-box;
-  max-height: 300px;
-  max-height: 15lh;
-  overflow-y: auto;
-  scrollbar-width: thin;
-}
 
 /* ===== 试跑 ===== */
 .skd-ta { width: 100%; }
@@ -1456,24 +1113,8 @@ useEscape(
 .skd-tablewrap .mk-table th.skd-th-wrap { white-space: normal; }
 
 /* 字段路由页签内视图切换（2026-10-31 外部评审）：与协议页 sdp-pw__viewswitch 同语汇 */
-.skd-rswitch {
-  display: inline-flex;
-  gap: 2px;
-  padding: 3px;
-  border: 1px solid var(--mk-line);
-  border-radius: 8px;
-  background: var(--mk-surface-2);
-}
-.skd-rswitch__btn {
-  border: 0;
-  background: transparent;
-  padding: 5px 14px;
-  border-radius: 6px;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
-  cursor: pointer;
-}
-.skd-rswitch__btn--on { background: var(--mk-surface); color: var(--mk-ink); font-weight: 700; box-shadow: inset 0 0 0 1px var(--mk-line); }
+/* 字段路由页签内的分段：位置归位（与协议 / 版本 / 试跑同一套 .mk-seg） */
+.sdp-seg { width: fit-content; }
 
 /* ===== 运行时：指标卡（原型 metricCard 四张独立卡）走共享 MkKpi + .mk-kpi-grid（审核 #146），
    本文件的 .skd-metric* 私有实现已删（含值档与 4K 档覆写，原语自带全档位） ===== */
@@ -1533,15 +1174,12 @@ useEscape(
 
 /* ===== 大屏/4K 适配（全站 mk 体系档位） ===== */
 @media (min-width: 2000px) {
-  .skd-vrow__name { font-size: var(--mk-fs-micro); }
   .skd-call { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 2800px) {
-  .skd-vrow__name { font-size: var(--mk-fs-micro); }
   .skd-call { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 3600px) {
-  .skd-vrow__name { font-size: var(--mk-fs-body); }
   .skd-call { font-size: var(--mk-fs-emphasis); }
   .skd-call__ms { font-size: var(--mk-fs-body); }
 }
