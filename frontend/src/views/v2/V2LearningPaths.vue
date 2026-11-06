@@ -703,22 +703,10 @@ onBeforeUnmount(() => {
   color: var(--blue-deep);
 }
 
-.btn-primary {
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 11px 22px; border-radius: var(--mk-radius-xl);
-  /* 实色主按钮：蓝渐变 + 30% 蓝色发光投影一并退役 */
-  background: var(--blue);
-  color: var(--text-on-primary); font-size: 14px; font-weight: 700;
-  cursor: pointer; text-decoration: none;
-  transition: transform 0.18s ease, background 0.18s ease;
-}
-.btn-primary:not(:disabled):active { transform: scale(0.98); }
-.btn-ghost {
-  padding: 10px 18px; border-radius: var(--mk-radius-xl);
-  border: 1px solid var(--line); background: var(--surface);
-  font-size: 14px; font-weight: 700; color: var(--muted);
-  cursor: pointer;
-}
+/* 按钮基座单源：v2.css 的 .v2-page .btn-primary / .btn-ghost（32px 高 / 0 14px 内衬 /
+   --mk-radius-md / 13px 字）。本页原有一份 10~11px 竖内衬 + 16px 圆角的旧副本
+   （2026-11-06 UI 排查 §1），与全局同优先级 (0,2,0) 而后加载——实机上一直是这份旧值在赢。
+   删除后由全局统一定档，本页只留自己的变体（如 .proposal__foot 的定宽比例）。 */
 
 /* 状态筛选 chip 行（Vue 侧新增功能）：视觉压到原型 chip 语言——
    1px line 描边 + surface 底 + muted 字；选中态 border 透明 + blue 12% 底 + blue-deep 字 */
@@ -760,12 +748,15 @@ onBeforeUnmount(() => {
 .pcard__head-main { flex: 1; min-width: 0; }
 .pcard__head-right { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
 /* 状态徽章＝原型 wf-badge（216-238 / 301-304）：4×10 内边距、999 圆角、12px/800 */
-/* 状态标签（2026-11-05 去肥胖化 / 2026-11-06 §1）：原 4/10 内边距 + 全圆胶囊，
-   视觉面积压过标题。改紧凑小方签：高 20px、内边距 6px、4px 圆角、无描边（只留 11–14% 底色）
-   ——「进行中」不再冒充按钮。字号保 12px（mobile:spec 的 fonts 门禁硬下限，不许 11px）。 */
+/* 状态标签（2026-11-05 去肥胖化 / 2026-11-06 §1 两处补齐）：原 4/10 内边距 + 全圆胶囊，
+   视觉面积压过标题。改紧凑小方签、无描边（只留 11–14% 底色），「进行中」不再冒充按钮。
+   数值与学习台「路径状态签」(.badge)、v2.css 全局 .v2-page .badge 取同一组
+   ——22px 高 / 1px 6px / --mk-radius-sm：同一枚「进行中」在两页必须一样大，
+   20px + 4px 圆角是本页自己的旧值（终审 2026-11-06 比对两页时发现）。
+   字号固定 12px，不用 --mk-fs-micro（≥1440 档会是 12.5px，见 v2.css:690 的说明）。 */
 .pcard__badge {
   display: inline-flex; align-items: center;
-  height: 20px; padding: 0 6px; border-radius: 4px;
+  height: 22px; padding: 1px 6px; border-radius: var(--mk-radius-sm);
   font-size: 12px; font-weight: 800; line-height: 1; flex: 0 0 auto;
   border: 0;
 }

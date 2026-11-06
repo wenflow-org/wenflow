@@ -2650,17 +2650,17 @@ function shuffleScenes() {
 /* 底部双钮收形（2026-11-05 用户裁定）：15px 字 + 13px 竖内衬 + 16px 圆角在 40px 高度上
    读作两颗胖胶囊。改成 40px 定高 + 8px 同心圆角 + 左 1 : 右 2（次按钮「再补充点信息」是
    退路、主按钮「确认，生成我的路径」是终局，宽度比例应写进版式而不是靠字数自然形成）。
-   .proposal__foot 前缀：压过同组件基座的 .btn-primary--lg / .btn-ghost 内边距。 */
-.proposal__foot .btn-ghost,
-.proposal__foot .btn-primary {
+   加 .v2-page 前缀：与 v2.css 的 `.v2-page .btn-primary`（0,2,0）同权重时只靠加载顺序，
+   那是上一版「页面副本赢全局」的同一类坑——这里提到 (0,3,0)，谁后加载都不影响结果。 */
+.v2-page .proposal__foot .btn-ghost,
+.v2-page .proposal__foot .btn-primary {
   flex: 1 1 0; min-height: 40px; padding: 0 12px;
   justify-content: center;
   border-radius: var(--mk-radius-md);
   font-size: 14px;
 }
-/* .btn-ghost 基座是块级按钮（无 flex），文字要居中得先立起 flex */
-.proposal__foot .btn-ghost { display: inline-flex; align-items: center; }
-.proposal__foot .btn-primary { flex: 2 1 0; }
+/* 主按钮吃左 1 : 右 2（终局动作比退路宽），次按钮只按内容宽 */
+.v2-page .proposal__foot .btn-primary { flex: 2 1 0; }
 .proposal--center { position: relative; display: grid; justify-items: center; text-align: center; gap: 12px; padding: 34px 28px; overflow-y: auto; }
 .proposal__stream {
   width: 100%;
@@ -2782,30 +2782,17 @@ function shuffleScenes() {
    （flex:1 1 0）把「查看我的路径」压到 99px 折成「查看我的路/径」两行（双机实测），
    主 CTA 折词是可避免副作用。nowrap 保证 6 字标签永不折行；空间不足时 flex-wrap
    让次按钮落到第二行，不裁字。 */
-.proposal__actions--center .btn-primary {
+.v2-page .proposal__actions--center .btn-primary {
   flex: 1 1 auto; justify-content: center;
   min-width: fit-content;
   white-space: nowrap;
 }
-.proposal__actions--center .btn-ghost { flex: 0 0 auto; justify-content: center; }
-.btn-primary {
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 11px 22px; border-radius: var(--mk-radius-xl);
-  /* 实色主按钮：蓝渐变 + 30% 蓝色发光投影一并退役 */
-  background: var(--blue);
-  color: var(--text-on-primary); font-size: 14px; font-weight: 700;
-  cursor: pointer; text-decoration: none;
-  transition: transform 0.18s ease, background 0.18s ease;
-}
-.btn-primary:not(:disabled):active { transform: scale(0.98); }
-.btn-primary--lg { padding: 13px 26px; font-size: 15px; }
-.btn-primary--off { opacity: .55; cursor: default; }
-.btn-ghost {
-  padding: 11px 18px; border-radius: var(--mk-radius-xl);
-  border: 1px solid var(--line); background: var(--surface);
-  font-size: 14px; font-weight: 700; color: var(--muted);
-  cursor: pointer;
-}
+.v2-page .proposal__actions--center .btn-ghost { flex: 0 0 auto; justify-content: center; }
+/* 主/次按钮基座不再在本页复制（2026-11-06 UI 排查 §1）：v2.css 的
+   .v2-page .btn-primary / .btn-ghost 已是单源（32px / 0 14px / --mk-radius-md / 13px）。
+   本页只留「大幅 CTA」这一档——--lg 不吃紧凑档，全局给它 height:auto + 16px 圆角，
+   竖内衬与字号由这里给；加 .v2-page 前缀是为了稳定压过全局同名规则，而不是靠加载顺序。 */
+.v2-page .btn-primary--lg { padding: 13px 26px; font-size: 15px; }
 /* 原型 .wf-proposal__note：竖排四号字说明，不是「两端对齐的一行」 */
 .proposal__note {
   display: grid; gap: 4px;
@@ -3218,11 +3205,6 @@ function shuffleScenes() {
 /* .proposal__row / .pstep 暗色档（2026-09-30）：底色已改令牌派生
    （surface 92%+ink、var(--surface)），--mk-surface/--mk-ink 暗色自动翻转，
    原「白 3% 覆写」与逐主题字面量已冗余，随死 CSS 一并移除。 */
-[data-theme='dark'] .btn-ghost {
-  background: var(--surface);
-  border-color: var(--line);
-  color: var(--muted);
-}
 /* 暗色适配（scoped 确保优先级与组件样式一致）
    底色/描边/阴影已全部令牌化（--surface/--line/--bubble-ai-bg/--mk-shadow-* 与
    color-mix(--ink/--amber/--blue) 派生），随 [data-theme='dark'] 自动翻转——
@@ -3240,7 +3222,7 @@ function shuffleScenes() {
      原先动作行按内容宽（247px）居中在 620px 卡片里，主钮 142、次钮 93，左右各空 ~187px，
      下一步在视觉上没有重心（2026-10-08 用户侧走查 1440 实测）。桌面专属——窄屏浮层本就窄。 */
   .proposal__actions--center { width: 100%; }
-  .proposal__actions--center .btn-primary { flex: 1; justify-content: center; }
+  .v2-page .proposal__actions--center .btn-primary { flex: 1; justify-content: center; }
 }
 
 /* 4K zoom 档（≥2000，zoom 1.15/1.3）动作行收回对话框比例：flex:1 撑满 620 卡

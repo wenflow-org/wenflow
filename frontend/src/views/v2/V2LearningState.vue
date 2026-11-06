@@ -1694,12 +1694,10 @@ function loadGuidance() {
   box-shadow: var(--shadow-sm);
 }
 /* 2026-09-27 死 CSS 清理：.card-head / .muted 模板已无对应元素（卡头统一走 band__head） */
-.btn-ghost {
-  padding: 10px 18px; border-radius: var(--mk-radius-xl);
-  border: 1px solid var(--line); background: var(--surface);
-  font-size: 14px; font-weight: 700; color: var(--muted);
-  cursor: pointer;
-}
+/* 按钮基座单源：v2.css 的 .v2-page .btn-primary / .btn-ghost（32px 高 / 0 14px 内衬 /
+   --mk-radius-md / 13px 字）。本页原有一份 10~11px 竖内衬 + 16px 圆角的旧副本
+   （2026-11-06 UI 排查 §1），与全局同优先级 (0,2,0) 而后加载——实机上一直是这份旧值在赢。
+   删除后由全局统一定档，本页只留自己的变体（如 .proposal__foot 的定宽比例）。 */
 
 /* ---------- 状态四项 meta（原体检卡 vitals 的去向） ----------
    原型该屏只认三张 KPI 卡（连续天数 / 本周分钟 / 已掌握知识点），原 1.25fr+3×1fr 的体检卡撤掉：

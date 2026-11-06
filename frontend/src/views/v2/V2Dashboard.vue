@@ -1421,9 +1421,9 @@ onMounted(loadAll);
 /* 认知带宽签（负担轻 / 负担中 / 负担重）：与页内其它状态签同一组数值 */
 .budget__bw {
   display: inline-flex; align-items: center; flex: none;
-  height: 20px; padding: 1px 6px; border-radius: var(--mk-radius-sm);
+  height: 22px; padding: 1px 6px; border-radius: var(--mk-radius-sm);
   background: color-mix(in srgb, var(--green) 10%, transparent);
-  color: var(--green-ink); font-size: var(--mk-fs-micro); font-weight: 600; line-height: 1; white-space: nowrap;
+  color: var(--green-ink); font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap;
 }
 .budget__num { flex: none; color: var(--faint); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 /* 进度条：6px + 蓝→青渐变（原实色 #10b981 已退役） */
@@ -1526,7 +1526,7 @@ onMounted(loadAll);
   height: 22px; padding: 1px 6px;
   border: 0; border-radius: var(--mk-radius-sm);
   background: color-mix(in srgb, var(--line) 60%, transparent);
-  font-size: var(--mk-fs-micro); font-weight: 600; line-height: 1; color: var(--muted);
+  font-size: 12px; font-weight: 600; line-height: 1; color: var(--muted);
   white-space: nowrap; flex-shrink: 0;
 }
 .tag--blue { background: color-mix(in srgb, var(--blue) 10%, transparent); color: var(--blue-deep); }
@@ -1628,7 +1628,7 @@ onMounted(loadAll);
   display: inline-flex; align-items: center; flex: none;
   height: 22px; padding: 1px 6px;
   border: 0; border-radius: var(--mk-radius-sm);
-  font-size: var(--mk-fs-micro); font-weight: 600; line-height: 1; white-space: nowrap;
+  font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap;
 }
 .badge--blue { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 10%, transparent); }
 .badge--red { color: var(--red-ink); background: color-mix(in srgb, var(--wf-color-danger) 12%, transparent); }
@@ -1851,7 +1851,7 @@ a.btn-primary { text-decoration: none; }
   display: inline-flex; align-items: center; flex: 0 0 auto;
   height: 22px; padding: 1px 6px; border: 0;
   border-radius: var(--mk-radius-sm);
-  font-size: var(--mk-fs-micro); font-weight: 600; line-height: 1; white-space: nowrap;
+  font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap;
 }
 .sheet__zone--low { color: var(--cyan-ink); background: color-mix(in srgb, var(--cyan) 14%, transparent); }
 .sheet__zone--mid { color: var(--amber); background: color-mix(in srgb, var(--amber) 15%, transparent); }
@@ -1942,13 +1942,14 @@ a.btn-primary { text-decoration: none; }
    402 实测一行 ~240px，收住 flex-wrap 保证永远「整整齐齐一行」 */
 .scard__chips { display: flex; flex-wrap: nowrap; gap: 6px; overflow: hidden; }
 /* 状态标签改方签（2026-11-05 全局去肥胖化）：不描边、10% 底色；
-   2026-11-06 按任务单 §1 统一到 20px 高 / 1px 6px 内边距 / 6px 圆角，
-   三个诊断标签恒在一行；字号走 --mk-fs-micro（基准 12px，随全站档位缩放） */
+   2026-11-06 按任务单 §1 统一到 22px 高 / 1px 6px 内边距 / 6px 圆角，
+   三个诊断标签恒在一行；字号固定 12px——同页 .tag/.badge 已定 22px/12px，
+   本页不能再留 20px 的另一档（终审 2026-11-06 跨页比对时发现） */
 .chip {
   display: inline-flex; align-items: center;
-  height: 20px; padding: 1px 6px; border-radius: var(--mk-radius-sm);
+  height: 22px; padding: 1px 6px; border-radius: var(--mk-radius-sm);
   background: var(--canvas); color: var(--muted);
-  font-size: var(--mk-fs-micro); font-weight: 600; line-height: 1;
+  font-size: 12px; font-weight: 600; line-height: 1;
   white-space: nowrap;
 }
 .chip--blue { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 10%, transparent); }
