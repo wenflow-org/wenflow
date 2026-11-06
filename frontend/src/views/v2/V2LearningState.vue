@@ -74,8 +74,9 @@
                     <li><b class="dot dot--amber"></b>保持规律学习让训练负荷平稳积累。疲劳偏高时安排休息，避免长期处于低状态区</li>
                   </ul>
                 </details>
-                <!-- 空态不报「近 N 天」：无数据时没有跨度可言，写「近 10 天」会先承诺一张不存在的图 -->
-                <span v-if="hasAnyLoad" class="band__meta">{{ drawnSpanLabel }}</span>
+                <!-- 「近 N 天」实画跨度小字已删（2026-11-06 走查）：右侧就是 [近7天|近30天] 切换器，
+                     标题旁再写一份「近 3 天」（单日数据时的实画跨度）与切换器互相矛盾。
+                     实画天数仍保留在读屏口径 trendAriaLabel 里，没丢口径只是不双写 -->
               </div>
               <!-- 窗口选择器只在真的有图可切时出现（2026-11-06 审计 §5 + 空态口径）：
                    空态/加载中/加载失败时图区是一块说明，切换器切的是不存在的曲线（死开关）；
@@ -209,6 +210,10 @@
                     <circle v-if="p.ly !== null" class="ff-pt ff-pt--fatigue" :cx="p.x" :cy="p.ly" r="2.5" />
                     <circle v-if="p.sy !== null" class="ff-pt ff-pt--lsb" :cx="p.x" :cy="p.sy" r="2.5" />
                   </template>
+                  <!-- 前置无数据日的 0 基准虚线（口径见 leadPaths）：先画虚线、实线覆盖其上 -->
+                  <path v-if="leadPaths.lsb" :d="leadPaths.lsb" class="ff-lead ff-lead--lsb" />
+                  <path v-if="leadPaths.ktl" :d="leadPaths.ktl" class="ff-lead ff-lead--fitness" />
+                  <path v-if="leadPaths.lf" :d="leadPaths.lf" class="ff-lead ff-lead--fatigue" />
                   <path v-if="lsbLineD" :d="lsbLineD" class="ff-line ff-line--lsb" />
                   <path v-if="ktlLineD" :d="ktlLineD" class="ff-line ff-line--fitness" />
                   <path v-if="lfLineD" :d="lfLineD" class="ff-line ff-line--fatigue" />
@@ -458,18 +463,22 @@
                 <!-- 2026-11-04：无到期时区块头不再报「暂无到期」——下方 chart__empty 首句既述状态，
                      区块头只留状态读数，空态作唯一状态出口（同屏重复走查） -->
                 <span v-if="reviewMeta" class="band__meta">{{ reviewMeta }}</span>
+                <!-- 空态直接落在卡头右侧（2026-11-06 走查）：「暂无待复习知识点」原本是 body 里
+                     独立的一行，加上卡头与内衬整卡 ~100px；现在标题左、状态右，一张卡 ~52px -->
+                <span
+                  v-else-if="!reviewLoading && !reviewLoadFailed && !reviewRows.length"
+                  class="band__meta"
+                >暂无待复习知识点</span>
               </div>
             </div>
-            <div class="band__body">
+            <!-- 有内容/在加载/失败才开 body：纯空态不再垫一层内衬 -->
+            <div v-if="reviewLoading || reviewLoadFailed || reviewRows.length" class="band__body">
               <div v-if="reviewLoading" class="chart__loading"><SkeletonLoader variant="lines" :count="3" /></div>
               <div v-else-if="reviewLoadFailed" class="chart__empty" role="alert">
                 <strong>复习清单暂时取不到</strong>
                 <p>{{ NETWORK_UNAVAILABLE_MSG }}</p>
                 <button type="button" class="chart__retry" @click="loadReviews">重试</button>
               </div>
-              <!-- 空态单行（2026-11-05 屏效比）：原大卡套虚线框两行字占 ~150px，压成一行 44px
-                   ——「暂无待复习」不是需要展开讲的状态 -->
-              <p v-else-if="!reviewRows.length" class="rlist__empty">暂无待复习知识点</p>
               <ul v-else class="rlist__rows">
                 <li v-for="r in reviewRows" :key="r.key" class="rlist__row">
                   <span class="rlist__name">{{ r.name }}</span>
@@ -763,10 +772,13 @@ const hasAnyLoad = computed(() => stateTrends.value.some((t) => t.lsb !== null))
 const chartW = 760;
 const chartH = 240;
 const chartPad = 8;
+/* 右缘内边距（2026-11-06 走查）：原来 8px，单日数据时唯一的柱和三个点直接贴死图表右边框。
+   36px 让最末数据点与右壁之间始终有呼吸位（用户给的 32~48px 档取中）。 */
+const RIGHT_INSET = 36;
 /* 左侧 y 轴留白（原型 AXIS=52/812 ≈ 6.4%）：刻度标签贴这块留白，网格与阈值线从 plotX0 起画 */
 const AXIS_W = 46;
 const plotX0 = AXIS_W;
-const plotX1 = chartW - chartPad;
+const plotX1 = chartW - chartPad - RIGHT_INSET;
 
 /* 2026-09-27 外部视觉评审修复：
    ① 裁掉开头无数据日（原来 42 天窗口里曲线只占右侧 40%，左侧空旷悬空）；
@@ -822,12 +834,7 @@ const zeroY = computed<number | null>(() => {
 
 const maxMinutes = computed(() => Math.max(10, ...activeSeries.value.map((d) => d.minutes)));
 
-/* 口径诚实化（2026-09-27 外部走查）：标签按「图里实际画了几天」出，不再照抄请求窗口
-   （原来固定写「近 42 天」，数据只有 9 天时口径与图对不上）；历史短于 42 天时
-   42/90 两档窗口画出同一条线 → 切换器直接不出现，避免假开关。 */
-const drawnSpanLabel = computed(() =>
-  activeSeries.value.length ? `近 ${activeSeries.value.length} 天` : '暂无数据'
-);
+/* 「近 N 天」可见小字已随 band__meta 撤除（见模板注释）；实画天数仍在 trendAriaLabel。 */
 const historyDays = computed(() => {
   const dates = stateTrends.value.map((t) => t.date).filter(Boolean).slice().sort();
   if (dates.length < 2) return dates.length;
@@ -851,7 +858,8 @@ const points = computed<TrendPoint[]>(() => {
   const yOf = (v: number) => chartH - ((v - lo) / span) * chartH;
   const barCap = chartH * 0.28;
   return activeSeries.value.map((d, i) => {
-    const x = plotX0 + step * i;
+    /* 只有一天数据时点画在绘图区中央（2026-11-06 走查）：贴左或贴右都像渲染故障 */
+    const x = n === 1 ? plotX0 + usableW / 2 : plotX0 + step * i;
     const bh = Math.min(barCap, (d.minutes / maxMinutes.value) * barCap);
     // 背景柱锚在 0 基线（2026-11-05 用户定稿）：此前从量程下界（可能是 -26）往上长，
     // 正数柱画在负数区间里读不懂。量程被强制含 0，所以 y0 恒存在。
@@ -939,6 +947,28 @@ function linePath(key: 'ktl' | 'lf' | 'lsb') {
 const ktlLineD = computed(() => linePath('ktl'));
 const lfLineD = computed(() => linePath('lf'));
 const lsbLineD = computed(() => linePath('lsb'));
+
+/* 前置无数据日的 0 基准虚线（2026-11-06 走查）：单日/少日数据时曲线只有右侧一小截，
+   左侧 95% 全空像图坏了。现在每条指标线从绘图区左缘的 0 基准画一条虚线走到首个数据日，
+   再竖直上到数据点——「从 0 起步」的趋势读得出来，画布也不再大面积空着。 */
+const leadPaths = computed<Record<'ktl' | 'lf' | 'lsb', string>>(() => {
+  const y0 = zeroY.value;
+  const empty = { ktl: '', lf: '', lsb: '' };
+  if (y0 === null) return empty;
+  const pts = points.value;
+  if (!pts.length) return empty;
+  const yOfKey = (key: 'ktl' | 'lf' | 'lsb', p: TrendPoint) => (key === 'ktl' ? p.ky : key === 'lf' ? p.ly : p.sy);
+  const out = { ...empty };
+  for (const key of ['ktl', 'lf', 'lsb'] as const) {
+    const first = pts.find((p) => yOfKey(key, p) !== null);
+    if (!first) continue;
+    const y = yOfKey(key, first) as number;
+    /* 首个数据点已在最左（数据从窗口第一天就有）时不画：没有「前置空白」可言 */
+    if (first.x <= plotX0 + 2) continue;
+    out[key] = `M${plotX0},${y0.toFixed(1)} L${first.x.toFixed(1)},${y0.toFixed(1)} L${first.x.toFixed(1)},${y.toFixed(1)}`;
+  }
+  return out;
+});
 
 /** 今天本地日期键（与 series 同格式）。图表右侧 2 天是刻意的留白（非真实数据日），
     「当前状态」必须落在今天而非留白日，否则会展示一个未来日期的空数据。 */
@@ -1679,10 +1709,13 @@ function loadGuidance() {
 
 /* ---------- 顶部三张 KPI（原型 wf-kpis/wf-kpi，748-755）：等权 3 卡、gap 9px、居中排版 ---------- */
 .kpis { display: block; }
+/* PC（2026-11-06 走查）：三等分把每张框拉到 ~350px 宽、中间只有几个小字，两侧全是空地。
+   改 flex 按内容收紧、靠左排；数字 24px/800 的 KPI 档不变。 */
 .kpis__grid {
-  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px;
+  display: flex; flex-wrap: wrap; gap: 9px; justify-content: flex-start;
 }
-.kpis__loading { grid-column: 1 / -1; padding: 2px 0; }
+.kpi { flex: 0 0 auto; min-width: 0; }
+.kpis__loading { flex: 1 1 100%; padding: 2px 0; }
 .kpi {
   background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--mk-radius-modal); box-shadow: var(--shadow-sm);
@@ -1698,6 +1731,7 @@ function loadGuidance() {
   }
   .kpi strong { font-size: 24px; }
 }
+/* 320~767：数字与标签纵向堆叠时保证居中观感（flex 化后 kpi 自身仍是 grid） */
 .kpi strong {
   /* P3-42（设计评审）：22px 是游离字号（不在 12/14/15/16/24/28 任何一档），
      且与 /user/account 同类统计 16px 不同档——归 16px 档（--wf-fs-title） */
@@ -1813,12 +1847,16 @@ function loadGuidance() {
    2026-09-27 死 CSS 清理：.chart / .suggest 卡级容器模板已无（现役卡是 band），删除 */
 /* 42/90 天窗口切换 → 原型 wf-filter 胶囊语言（841-846）：白底 + 1px line 描边，
    选中态去描边 + 蓝 12% 底，不再用灰底轨道 + 内嵌投影（那是分段控件的老语法） */
-.seg { display: inline-flex; gap: 6px; }
+/* 窗口切换器（2026-11-06 走查）：36px 大胶囊在移动端换行独占一行。收成 26px 紧凑分段
+   控件（用户给档：26 高 / 6px 圆角 / 12px 字号），与卡片标题同一行右侧，省一整行高度。
+   （标题行 band__head 是 flex-wrap，同一行放得下就不再折行。） */
+.seg { display: inline-flex; gap: 4px; }
 .seg__item {
-  min-height: 36px; padding: 7px 14px;
+  min-height: 26px; padding: 2px 10px;
+  display: inline-flex; align-items: center;
   border: 1px solid var(--line); background: var(--surface);
-  border-radius: 999px;
-  font: inherit; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer;
+  border-radius: 6px;
+  font: inherit; font-size: 12px; font-weight: 600; color: var(--muted); cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 .seg__item:hover { color: var(--blue-deep); border-color: color-mix(in srgb, var(--blue) 35%, transparent); }
@@ -1957,7 +1995,7 @@ function loadGuidance() {
 @media (max-width: 1100px) {
   .state__main { padding: 16px 14px 32px; }
   /* 42/90 天分段控件是触屏主入口之一：药丸高度抬到触控口径（容器本身已 36px 基线） */
-  .seg__item { padding: 8px 12px; }
+  .seg__item { padding: 2px 8px; }
 }
 </style>
 
@@ -2155,12 +2193,6 @@ function loadGuidance() {
   background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--mk-radius-lg); box-shadow: var(--mk-shadow-modal);
 }
-/* 复习清单空态：单行 44px（原大卡套虚线框两行占 ~150px） */
-.rlist__empty {
-  margin: 0; min-height: 44px;
-  display: flex; align-items: center;
-  font-size: 12.5px; color: var(--faint);
-}
 /* 掌握分布三色分段条 */
 .mbar {
   display: flex; height: 8px; border-radius: 999px; overflow: hidden;
@@ -2275,6 +2307,11 @@ function loadGuidance() {
   vector-effect: non-scaling-stroke;
 }
 .ff-line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+/* 前置无数据日的 0 基准虚线（见 leadPaths）：比实线细一档、虚线段短，颜色跟各自指标同族 */
+.ff-lead { fill: none; stroke-width: 1.5; stroke-dasharray: 4 4; stroke-linecap: round; vector-effect: non-scaling-stroke; opacity: 0.7; }
+.ff-lead--fitness { stroke: var(--blue); }
+.ff-lead--fatigue { stroke: var(--accent); }
+.ff-lead--lsb { stroke: var(--wf-color-success); }
 .ff-line--fitness { stroke: var(--blue); }
 .ff-line--fatigue { stroke: var(--accent); }
 .ff-line--lsb { stroke: var(--wf-color-success); }
@@ -2320,9 +2357,7 @@ function loadGuidance() {
   /* 分段控件（42/90 天）与 AI 建议的 CTA 实测 34px，抬到 36（mobile:spec lt36 门禁）。
      .seg 容器自带 3px 内边距会跟着长高，视觉上仍是同一个药丸。 */
   .seg__item {
-    min-height: 36px;
-    display: inline-flex;
-    align-items: center;
+    min-height: 32px;
   }
   .sug__cta {
     min-height: 36px;

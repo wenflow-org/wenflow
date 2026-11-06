@@ -3,19 +3,27 @@
     <V2Nav />
 
     <main class="uc__main">
-      <!-- 页头=原型 2026-09-30 版整宽三分段器（wf-seg 同构），替代旧 kicker+h1+药丸 tabs -->
-      <nav class="uc__seg" aria-label="个人中心分区">
-        <router-link
-          v-for="t in tabs"
-          :key="t.to"
-          :to="t.to"
-          class="uc__seg__btn"
-          :class="{ 'uc__seg__btn--on': isActive(t) }"
-          :aria-current="ariaCurrent(t)"
-        >
-          {{ t.label }}
-        </router-link>
-      </nav>
+      <!-- 页头分段器（原型 wf-seg 同构）。2026-11-06 走查：整宽四等分把 2 个字的 tab
+           拉成 ~270px 宽的「巨型跑道」，改 fit-content 左对齐（36 高 / 8px 圆角）；
+           右侧插槽放页面级总计量（学习历史页的「累计 N 天 · N 次 · N 分钟」），
+           同行排布不再单独占一行。 -->
+      <div class="uc__segrow">
+        <nav class="uc__seg" aria-label="个人中心分区">
+          <router-link
+            v-for="t in tabs"
+            :key="t.to"
+            :to="t.to"
+            class="uc__seg__btn"
+            :class="{ 'uc__seg__btn--on': isActive(t) }"
+            :aria-current="ariaCurrent(t)"
+          >
+            {{ t.label }}
+          </router-link>
+        </nav>
+        <div v-if="$slots['seg-right']" class="uc__seg-right">
+          <slot name="seg-right" />
+        </div>
+      </div>
 
       <!-- 分段器只覆盖四个能力页；深页（调用日志）保留可见标题与动作区。
            走查 2026-11-01 P20：深页不再点亮父段——此前的 owns 归属会让
@@ -101,27 +109,42 @@ const onCapabilityTab = computed(() => tabs.some((t) => route.path === t.to))
   }
 }
 
-/* ===== 页头分段器（原型 wf-seg）：整宽三分格 + 白色激活胶囊 ===== */
+/* ===== 页头分段器：fit-content 左对齐（2026-11-06 走查改档） ===== */
+.uc__segrow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
 .uc__seg {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 4px;
-  padding: 4px;
+  display: inline-grid;
+  grid-template-columns: repeat(4, minmax(0, auto));
+  gap: 3px;
+  padding: 3px;
   background: color-mix(in srgb, var(--line) 45%, transparent);
-  border-radius: var(--mk-radius-pill);
+  border-radius: 8px;
 }
 
 .uc__seg__btn {
-  min-height: 40px;
-  display: flex;
+  min-height: 34px;
+  padding: 0 18px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--mk-radius-pill);
-  font-size: 13.5px;
+  border-radius: 6px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--muted);
   text-decoration: none;
   transition: background 0.15s ease, color 0.15s ease;
+}
+.uc__seg-right {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-left: auto;
+  min-width: 0;
 }
 
 .uc__seg__btn:hover { color: var(--ink); }
@@ -253,16 +276,16 @@ const onCapabilityTab = computed(() => tabs.some((t) => route.path === t.to))
     line-height: 1.55;
   }
 
-  .uc__tab {
-    /* 3 个分段（账户/成就/学习历史）在 390 下自然排成一行（撤掉 API 接入/调用日志后
-       宽度更宽松）；高度补到 36（mobile:spec 的 lt36 门禁）：只加最小高度与居中，
-       横向 padding 不动。 */
-    padding: 7px 10px;
-    min-height: 36px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+  /* 分段器窄屏：fit-content 本身就放得下 4 个 2 字 tab（~270px），内衬收一档即可 */
+  .uc__seg__btn {
+    min-height: 34px;
+    padding: 0 14px;
     font-size: 12.5px;
+  }
+
+  .uc__seg-right {
+    width: 100%;
+    margin-left: 0;
   }
 }
 </style>

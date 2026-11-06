@@ -3,17 +3,17 @@
        （2026-10-29 全站副文审计）：它把下方会话卡的表头逐项念了一遍，属自述装配 -->
   <CapabilityShell title="学习历史">
     <!-- 页头由 CapabilityShell 提供（个人中心 kicker + 标题） -->
-    <div class="history__body">
-      <!-- 统计行（批19）：三个数字合并为一行内联统计，不再三张等权卡片。
-           接口失败时整行隐藏——显 0 会让学习者误以为「没学过」。
-           P2-33（设计评审）：「N 天有学习」是全量口径，与日历卡的当月口径同词不同值——
-           加「累计」限定，量词口径分家 -->
+    <!-- 总计量放到顶部 Tab 栏同一行右侧（2026-11-06 走查）：原来它单独占一行，
+         与日历卡内的「本月 N 分钟 · N 天 · N 次」相隔仅 40px、读成两遍统计。
+         全量口径（累计）与月口径（本月）分家，但不再上下重复占两行。 -->
+    <template #seg-right>
       <div v-if="statsOk" class="history__stats">
         <span class="history__stat">学习 <strong>{{ totalSessions }}</strong> 次</span>
         <span class="history__stat">累计 <strong>{{ totalMinutes }}</strong> 分钟</span>
         <span class="history__stat">累计 <strong>{{ activeDays }}</strong> 天有学习</span>
       </div>
-
+    </template>
+    <div class="history__body">
       <!-- 整月日历（原型 wf-week/wf-day 382-405 的整月版；月导航/7 列格/图例归本页，
            看板侧只留 month-summary 一行）：点选格子筛当天，再点取消 -->
       <section v-if="!loading && !loadError && sessions.length" class="card history__month" aria-label="整月学习日历">
@@ -699,6 +699,35 @@ onMounted(async () => {
   gap: 16px;
   align-content: start;
 }
+/* PC 双栏（2026-11-06 走查）：单列时日历被拉到 1100px 宽，日期格子成了 140px 宽的
+   超扁长条，而且记录行标题与右端的动作链隔着近 900px。≥1024 改「左月历 38% +
+   右记录列表 62%」：格子收敛成 ~42px 小方格，标题与动作的视线距离回到一屏内。 */
+@media (min-width: 1024px) {
+  .history__body {
+    grid-template-columns: minmax(0, 38fr) minmax(0, 62fr);
+    align-items: start;
+  }
+  .history__month {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: start;
+  }
+  .history__body > .history__list {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  /* 错误横幅 / 加载态 / 全页空态：通栏，不塞半栏 */
+  .history__body > .errorbar,
+  .history__body > .history__loading {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  /* 只剩一个孩子（整页空态/错误）时通栏，不留半栏空洞 */
+  .history__body > :only-child {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+}
 
 /* 统计行（批19）：三个数字内联一行，不再三张等权卡 */
 .history__stats {
@@ -905,12 +934,13 @@ onMounted(async () => {
   overflow: hidden;
 }
 
-/* 右侧列：状态纯文字 + 动作文字链，右对齐同列 */
+/* 右侧列：状态纯文字 + 动作文字链同行右对齐（2026-11-06 走查）：
+   上下两列时「已完成」与「查看反馈 ›」隔着一行，单行并排扫读更快；窄屏原来也是这口径 */
 .history__aside {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
   flex: none;
   margin-left: auto;
 }
@@ -1058,7 +1088,10 @@ onMounted(async () => {
    #5b8def，白字压上去只有 3.2:1（2026-10-09 用户侧走查：暗色下 h3 被中和成中性灰底 + 近白字，
    与同行的灰日期文字撞色，>60 分档读不出；实测探针 .mday--h3 bg=rgb(107,107,107)）。
    --mk-blue-fill 明暗同值，白字 5.75:1，两档都不掉。 */
-.lg--0, .mday--h0 { background: var(--canvas); color: var(--muted); }
+/* h0（无学习日）也要有可见底色（2026-11-06 走查）：原来用 --canvas，暗色主题下与卡面同色，
+   有效日期一半有框一半裸奔、像渲染坏了一半。改 ink 4% 中性浅底，明暗主题都读得出格子；
+   图例色块 .lg--0 语义同档，跟着走同一份底色 */
+.lg--0, .mday--h0 { background: color-mix(in srgb, var(--ink) 4%, transparent); color: var(--muted); }
 .lg--1, .mday--h1 { background: color-mix(in srgb, var(--blue) 14%, transparent); color: var(--blue-deep); }
 .lg--2, .mday--h2 { background: color-mix(in srgb, var(--blue) 32%, transparent); color: var(--blue-deep); }
 .lg--3, .mday--h3 { background: var(--mk-blue-fill); color: var(--mk-on-fill); }
@@ -1140,13 +1173,6 @@ onMounted(async () => {
 
   .history__item-sub {
     font-size: 12px;
-  }
-
-  /* 右侧列在窄屏改成横排：状态文字与动作链一行放得下，列堆叠会把标题挤成两行 */
-  .history__aside {
-    flex-direction: row;
-    align-items: center;
-    gap: 6px;
   }
 
   .history__month {

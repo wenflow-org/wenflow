@@ -294,6 +294,58 @@ function layoutPoint(l: unknown): { x: number; y: number } | null {
  * 所以不需要喂坐标；不抄 zoom/center 则视图会跳回 0.9 / 居中（探针实测：带上读到的
  * zoom/center 重建位移 0px）。
  */
+/** 布局稳定后自适应取景（2026-11-06 走查）：力导向收敛后把包围盒铺满画布（四周留 40px）。
+ * 两个作用：① 互不相连的子图聚拢后不再留大片空洞；② 最外圈节点离画布底缘留出标签高度，
+ * 不再撞上图例文字。选中/换主题的重建走 readGraphViewport 保留用户当前视角，不触发这里。 */
+function fitGraphView(padding = 40) {
+  if (!chart) return
+  try {
+    /* ECharts 的 graph 用 View 坐标系（coordinateSystem.rect 即画布内的取景盒），
+       getItemLayout 给出的 x/y 就在这个坐标系里——center 用同坐标系的像素值 */
+    type GraphSeriesLike = {
+      getData?: () => { count: () => number; getItemLayout: (i: number) => [number, number] | undefined }
+      coordinateSystem?: { rect?: { width?: number; height?: number } }
+    }
+    const model = (chart as unknown as { getModel?: () => unknown }).getModel?.() as
+      | { getSeriesByIndex?: (i: number) => GraphSeriesLike | undefined }
+      | undefined
+    const series = model?.getSeriesByIndex?.(0)
+    const data = series?.getData?.()
+    if (!data || data.count() < 2) return
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+    for (let i = 0; i < data.count(); i += 1) {
+      const l = data.getItemLayout(i)
+      if (!l || !Number.isFinite(l[0]) || !Number.isFinite(l[1])) continue
+      if (l[0] < minX) minX = l[0]
+      if (l[0] > maxX) maxX = l[0]
+      if (l[1] < minY) minY = l[1]
+      if (l[1] > maxY) maxY = l[1]
+    }
+    if (!Number.isFinite(minX) || maxX - minX < 1 || maxY - minY < 1) return
+    const boxW = maxX - minX
+    const boxH = maxY - minY
+    const rect = series?.coordinateSystem?.rect
+    /* 有取景盒就按「盒内四周留 padding」算缩放；读不到时退化为 1（力导向本身在盒内收敛，
+       只居中、不缩放，也远好于缩在角落） */
+    const zoom = rect?.width && rect.height
+      ? Math.max(0.3, Math.min(1.5, Math.min((rect.width - padding * 2) / boxW, (rect.height - padding * 2) / boxH)))
+      : 1
+    chart.setOption({
+      series: [
+        {
+          center: [Math.round((minX + maxX) / 2), Math.round((minY + maxY) / 2)],
+          zoom: Number(zoom.toFixed(3))
+        }
+      ]
+    })
+  } catch {
+    /* 布局读取失败不阻断渲染 */
+  }
+}
+
 function readGraphViewport(): { zoom?: number; center?: [number | string, number | string] } | null {
   if (!chart) return null
   try {
@@ -485,7 +537,10 @@ function buildOption(viewState?: { zoom?: number; center?: [number | string, num
           edgeLength: narrow
             ? [36, 80]
             : (denseGraph ? [Math.round(90 * shrink), Math.round(170 * shrink)] : [80, 160]),
-          gravity: narrow ? 0.13 : (denseGraph ? 0.06 : 0.08),
+          /* 向心引力（2026-11-06 走查）：旧值（0.06~0.13）下两个互不相连的知识簇各自往外跑，
+             中间隔出 ~220px 的空洞、下一簇撞上画布底缘把图例文字切掉一半。
+             引力抬一倍让子图聚向中心；腾出的画布由 fitGraphView 再摊开（见 render）。 */
+          gravity: narrow ? 0.2 : (denseGraph ? 0.12 : 0.16),
           friction: 0.82,
           // 2026-11-04：关掉力导向动画。开动画时 ECharts 只在初始（节点尚未散开、大量重叠）
           // 的位置跑一次 labelLayout.hideOverlap，节点随后动画收敛到新位置却不再重算标签 →
@@ -516,9 +571,15 @@ function buildOption(viewState?: { zoom?: number; center?: [number | string, num
             symbolSize: Math.min(narrow ? 38 : 48, baseSize + (highlighted ? 4 : 0)),
             itemStyle: {
               color: colorOf(node, dark),
-              borderColor: highlighted ? (dark ? '#f6c453' : '#b45309') : (dark ? '#2a2c30' : '#ffffff'),
-              borderWidth: highlighted ? 2.5 : 1.5,
-              opacity: dimmed === 'highlight' ? 0.48 : dimmed === 'select' ? 0.35 : 1
+              /* 选中 = 只描边（2026-11-06 走查）：手机端选中节点曾用大描边+高亮底把名字盖住，
+                 现在选中只给蓝色描边，填充色保持掌握度原色 */
+              borderColor: selectedIdRef.value === node.id
+                ? '#2563eb'
+                : highlighted ? (dark ? '#f6c453' : '#b45309') : (dark ? '#2a2c30' : '#ffffff'),
+              borderWidth: selectedIdRef.value === node.id ? 3 : highlighted ? 2.5 : 1.5,
+              /* 非关联节点 0.42（2026-11-06 走查）：0.35 时用户想接着点旁边节点，
+                 其它节点的名字基本读不出来；0.42 仍能突出选中链，文字保得住 */
+              opacity: dimmed === 'highlight' ? 0.48 : dimmed === 'select' ? 0.42 : 1
             },
             // 层级：coreConcept 用圆、KC 用圆角方块，一眼区分粒度
             symbol: node.level === 'concept' ? 'circle' : 'roundRect',
@@ -547,7 +608,7 @@ function buildOption(viewState?: { zoom?: number; center?: [number | string, num
               // 与 DOM 图例同源（见文件头 relationStyleOf 注释）
               lineStyle: {
                 ...relationStyleOf(edge.relation, dark),
-                opacity: touchesSelected ? 1 : 0.25
+                opacity: touchesSelected ? 1 : 0.3
               }
             }
           })
@@ -590,9 +651,18 @@ function render() {
     chart.on('graphRoam', () => applyZoomLabels())
     bindZrInteractions(chart)
   }
+  /* 换数据才自适应取景：选中节点/切主题的重建沿用用户当前的视角与缩放
+     （props.nodes 引用在父组件重新加载时才会变） */
+  const dataSig = `${props.nodes.length}:${props.edges.length}`
+  const dataChanged = dataSig !== lastGraphSig
+  lastGraphSig = dataSig
   chart.setOption(buildOption(readGraphViewport()), true)
   labelsHiddenByZoom = false
+  if (dataChanged) fitGraphView()
 }
+
+/** 上一次渲染的数据规模签名（见 render 末尾的 fitGraphView 触发条件） */
+let lastGraphSig = ''
 
 let lastNarrow = false
 
