@@ -376,7 +376,8 @@ export type PeerStrategy = 'analogy' | 'counterexample' | 'debate' | 'encourage'
  *
  * 审计实证：引擎主路径 peerInput 无 peerHistory —— 4879 条伴学调用中 userPayload 含
  * 【此前伴学对话】0 条，规则 11「连续 3 问无进展即收手」的 3 问预算在主路径永不可达。
- * 取法对齐聊天路径（teaching-session-ops.ts:638-641 的 peer 标记消息），并补上引擎专有形态：
+ * 取法对齐聊天路径（teaching-session-ops 的 processPeerMessage 从 peer 标记消息恢复 peerHistory），
+ * 并补上引擎专有形态：
  * 引擎触发的伴学插话内嵌在老师消息的 peerMessage 旁挂字段里（见 engine 的 assistantMessage 构造）——
  * 按"伴学伙伴"单边恢复（老师原文不进伴学历史，否则会被当成伴学说过的话）。
  */

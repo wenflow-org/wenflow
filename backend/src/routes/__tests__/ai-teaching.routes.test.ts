@@ -64,9 +64,11 @@ jest.mock('../../services/ai-teaching/TeachingMessageIdempotencyService', () => 
   teachingOperationRequestHash: jest.fn(() => 'test-request-hash'),
 }));
 jest.mock('../../config/database', () => ({ __esModule: true, default: {} }));
+const mockRecordSessionEvent = jest.fn();
 jest.mock('../../services/ai-teaching/session-events.service', () => ({
   listSessionEvents: (...args: unknown[]) => mockListSessionEvents(...args),
-  recordSessionEvent: jest.fn(),
+  // 174-2：回合失败留痕断言需要拿到调用记录
+  recordSessionEvent: (...args: unknown[]) => mockRecordSessionEvent(...args),
 }));
 jest.mock('../../utils/logger', () => ({ logger: { error: jest.fn(), warn: jest.fn() } }));
 
@@ -647,6 +649,41 @@ describe('ai-teaching routes', () => {
     expect(joined).toContain('event: error\n');
     expect(joined).toContain('TEACHING_SESSION_STATE_CHANGED');
     expect(res.end).toHaveBeenCalled();
+    // 174-2：失败的回合必须落 turn.failed，否则会话时间线上只有 turn.committed、失败不可见
+    expect(mockRecordSessionEvent).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: 'session-1',
+      kind: 'turn.failed',
+      actor: 'system',
+      status: 'failed',
+      revision: 3,
+      payload: expect.objectContaining({ code: 'TEACHING_SESSION_STATE_CHANGED', streamed: true }),
+    }));
+  });
+
+  it('非流式回合失败同样落 turn.failed（带错误码与基线 revision）', async () => {
+    mockCoordinator.processStudentMessage.mockRejectedValue(
+      Object.assign(new Error('模型超时'), { code: 'TEACHING_TURN_TIMEOUT' })
+    );
+
+    const handler = getRouteHandler('/sessions/:sessionId/messages');
+    const res = createResponse();
+
+    await handler({
+      user: { userId: 'user-1' },
+      params: { sessionId: 'session-1' },
+      headers: { 'idempotency-key': 'non-stream-key' },
+      body: { message: '继续', revision: 7 },
+    }, res);
+
+    // 非流式出口仍按原语义回 5xx 错误体，同时时间线留下失败痕迹
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(mockRecordSessionEvent).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: 'session-1',
+      kind: 'turn.failed',
+      status: 'failed',
+      revision: 7,
+      payload: expect.objectContaining({ code: 'TEACHING_TURN_TIMEOUT', streamed: false }),
+    }));
   });
 
   it('SSE 流式：注入业务 sessionId 到请求上下文（执行日志/瀑布归组链路）', async () => {

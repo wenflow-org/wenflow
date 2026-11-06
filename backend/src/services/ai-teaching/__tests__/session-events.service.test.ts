@@ -16,6 +16,8 @@ jest.mock('../../../utils/logger', () => ({
 }));
 
 import { listSessionEvents, recordSessionEvent, trimSessionEventPayload } from '../session-events.service';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 describe('session events service', () => {
   beforeEach(() => {
@@ -86,5 +88,17 @@ describe('session events service', () => {
   it('listSessionEvents：空 kinds 不生成 in 过滤', async () => {
     await listSessionEvents('s1', { kinds: [] });
     expect(eventFindMany.mock.calls[0][0].where).toEqual({ sessionId: 's1' });
+  });
+
+  it('事件类型只保留有写入点的回合终态：turn.failed 在、turn.started 已删除（174-2）', () => {
+    // 类型成员本身在运行时不存在，这里直接读源码做静态断言：turn.started 全仓无写入点，
+    // 留着只会让调用方以为能查询「正在跑的回合」。若将来有人补回该成员，必须同时补写入点。
+    const source = readFileSync(join(__dirname, '..', 'session-events.service.ts'), 'utf8');
+    const kindBlock = source.slice(
+      source.indexOf('export type SessionEventKind'),
+      source.indexOf('export type SessionEventStatus')
+    );
+    expect(kindBlock).toContain("'turn.failed'");
+    expect(kindBlock).not.toContain("'turn.started'");
   });
 });

@@ -21,7 +21,7 @@ import {
 import { sessionFinalizationService } from '../services/ai-teaching/SessionFinalizationService';
 import { startWrapupRegeneration } from '../services/ai-teaching/teaching-wrapup-regen';
 import { projectActiveSession } from '../services/ai-teaching/session-activity';
-import { listSessionEvents, type SessionEventKind } from '../services/ai-teaching/session-events.service';
+import { listSessionEvents, recordSessionEvent, type SessionEventKind } from '../services/ai-teaching/session-events.service';
 import { buildTurnAnalysisView } from '../services/ai-teaching/teaching-session-views';
 import { reviewPlanService } from '../services/memory/review-plan.service';
 import { learnerExitService } from '../services/learner/LearnerExitService';
@@ -380,6 +380,12 @@ const sendTeachingError = (res: any, error: any, fallbackMessage: string) => {
   });
 };
 
+/** 回合失败留痕（174-2）：此前时间线上只有 turn.committed。失败不推进 revision → 记基线 revision；流式/非流式共用。 */
+const recordTurnFailed = (sessionId: string, revision: number, error: any, streamed: boolean) => {
+  const { code, message } = resolveTeachingError(error, '处理消息失败');
+  return recordSessionEvent({ sessionId, kind: 'turn.failed', actor: 'system', status: 'failed', revision, payload: { code, message, streamed } });
+};
+
 const sendUnauthorized = (res: any) =>
   res.status(401).json({ success: false, error: { message: '未登录', code: 'UNAUTHORIZED', status: 401 } });
 
@@ -533,14 +539,16 @@ const handleStreamingMessage = async (
     writeSseEvent(res, 'final', data);
     writeSseEvent(res, 'done', {});
   } catch (error: any) {
+    const errorCode = typeof error?.code === 'string' ? error.code : 'TEACHING_MESSAGE_FAILED';
     if (idempotencyKey) {
       await settleIdempotentOperation('fail', {
         sessionId,
         idempotencyKey,
-        errorCode: typeof error?.code === 'string' ? error.code : 'TEACHING_MESSAGE_FAILED',
+        errorCode,
       });
     }
     const { status, code, message: errorMessage } = resolveTeachingError(error, '处理消息失败');
+    await recordTurnFailed(sessionId, expectedRevision, error, true);
     writeSseEvent(res, 'error', { status, code, message: errorMessage });
   } finally {
     stopHeartbeat();
@@ -958,11 +966,14 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
       });
       return res.json({ success: true, data });
     } catch (error: any) {
+      const errorCode = typeof error?.code === 'string' ? error.code : 'TEACHING_MESSAGE_FAILED';
       await settleIdempotentOperation('fail', {
         sessionId,
         idempotencyKey,
-        errorCode: typeof error?.code === 'string' ? error.code : 'TEACHING_MESSAGE_FAILED',
+        errorCode,
       });
+      // 失败留痕：与流式出口同口径——非流式失败的回合也必须在会话时间线上可查（174-2）
+      await recordTurnFailed(sessionId, expectedRevision, error, false);
       throw error;
     }
   } catch (error: any) {
