@@ -11,6 +11,10 @@
     <div v-if="loading" class="session-feedback__loading" role="status">正在读取你的反馈…</div>
 
     <template v-else>
+      <!-- PC 一行三列（2026-11-06 走查）：原来「评分」「难度」「提交」各占一段，卡片空高 260px，
+           点 5 颗星要滚半屏。现在三者在 ≥901 宽度并排（含说明与按钮的窄列），卡高 ~90px。
+           「主要问题 / 补充说明」仍整行落在下面——它们是要填的内容，不能挤进决策行。 -->
+      <div class="session-feedback__main">
       <fieldset class="session-feedback__field">
         <legend>总体评分</legend>
         <!-- 滑动打星：原 5 个带文字标签的选项在窄屏是 2 列 3 行 ≈124px；星轨一行 ≈40px，
@@ -104,6 +108,7 @@
           <span v-if="submitting" class="spinner--sm feedback-btn__spinner" aria-hidden="true"></span>
           {{ saved ? '更新反馈' : '提交反馈' }}
         </button>
+      </div>
       </div>
     </template>
   </section>
@@ -550,6 +555,59 @@ onMounted(load)
   margin-right: 6px;
 }
 
+/* 桌面单行（2026-11-06 走查）：评分 / 难度 / 提交并排，卡片从 260px 压到约 90px。
+   提交列做成「一句状态 + 按钮」上下叠（宽度有限，横排会把按钮挤成两行）；
+   「主要问题 / 补充说明」整行落在下面，不进决策行。 */
+@media (min-width: 901px) {
+  .session-feedback {
+    padding: 16px 18px;
+  }
+
+  .session-feedback__main {
+    display: grid;
+    grid-template-columns: minmax(0, auto) minmax(0, auto) minmax(160px, 1fr);
+    align-items: end;
+    gap: 8px 24px;
+    margin-top: 16px;
+  }
+
+  .session-feedback__main .session-feedback__field {
+    margin: 0;
+  }
+
+  .session-feedback__main .session-feedback__field legend {
+    margin-bottom: 6px;
+  }
+
+  .session-feedback__main .session-feedback__details,
+  .session-feedback__main .session-feedback__error {
+    grid-column: 1 / -1;
+    margin-top: 12px;
+  }
+
+  .session-feedback__main .session-feedback__actions {
+    margin: 0;
+    padding: 0;
+    align-self: end;
+    align-items: flex-end;
+    justify-content: flex-end;
+    gap: 6px;
+    flex-wrap: nowrap;
+    border: 0;
+  }
+
+  .session-feedback__main .session-feedback__actions p {
+    text-align: right;
+  }
+
+  .session-feedback__main .feedback-btn {
+    height: 36px;
+    padding: 0 16px;
+    font-size: 13px;
+    border-radius: 8px;
+  }
+}
+
 @media (max-width: 640px) {
   /* 密度：卡片内边距 20/18→14/12、字段间距 22→14，选项 40→36px（仍高于 32px 触达下限） */
   .session-feedback {
@@ -600,8 +658,13 @@ onMounted(load)
     margin-top: 14px;
   }
 
+  /* 移动端提交键（2026-11-06 走查）：48px 全圆大胶囊在一张 90px 高的卡里像另一个页面的按钮；
+     收成 38px / 8px 方角，与报告页其余按钮同档 */
   .session-feedback__actions .feedback-btn {
     width: 100%;
+    height: 38px;
+    border-radius: 8px;
+    font-size: 13px;
   }
 }
 

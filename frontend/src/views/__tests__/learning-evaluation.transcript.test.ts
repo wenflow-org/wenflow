@@ -1,7 +1,10 @@
 /**
  * LearningEvaluationPage（当堂对话折叠）回归测试：
- * 长会话的讲解消息在移动端占好几屏，默认只回看最近两条；展开/收起可切换，
- * 且导出图片/打印前会临时全展开（导出的报告不能缺内容）。
+ * 2026-11-06 走查改为**默认整块折叠**（此前默认铺开最近两条）：用户进报告是看总结的，
+ * 不是把聊天记录再读一遍；长讲解一条就几百字，底部模块仍然占掉小半屏。
+ * 展开/收起可切换，且导出图片/打印前会临时全展开（导出的报告不能缺内容）。
+ * 同时锁住计数同源：卡头「N 条记录」与展开按钮必须来自同一条时间线
+ * （此前卡头数消息、按钮数「消息 + 小测卡」，出现过「47 条消息 / 展开更早的 54 条」）。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
@@ -75,21 +78,19 @@ describe('LearningEvaluationPage 当堂对话折叠', () => {
     getSessionDetailMock.mockResolvedValue(detail);
   });
 
-  it('默认只渲染最近两条消息，并给出展开入口', async () => {
+  it('默认整块折叠：一条都不渲染，只留标题行与展开入口', async () => {
     const w = await mountReady();
-    const items = w.findAll('.evaluation-transcript-item');
-    expect(items.length).toBe(2);
-    // 折叠态保留的是最新的两条（第 4、5 条）
-    expect(items[0].text()).toContain('这是我的判断');
-    expect(items[1].text()).toContain('第三条讲解');
+    expect(w.findAll('.evaluation-transcript-item').length).toBe(0);
 
     const toggle = w.find('.evaluation-transcript-toggle');
     expect(toggle.exists()).toBe(true);
-    expect(toggle.text()).toContain('展开更早的 3 条');
+    expect(toggle.text()).toContain('展开对话记录');
     expect(toggle.attributes('aria-expanded')).toBe('false');
+    /* 卡头计数与按钮同源：5 条消息 = 5 条记录（不再出现「47 条消息 / 展开 54 条」） */
+    expect(w.find('.evaluation-transcript-card__meta').text()).toBe('5 条记录');
   });
 
-  it('点击后在展开/收起之间切换，消息条数随之变化', async () => {
+  it('点击后在展开/收起之间切换，条目数随之变化', async () => {
     const w = await mountReady();
     const toggle = w.find('.evaluation-transcript-toggle');
 
@@ -99,15 +100,18 @@ describe('LearningEvaluationPage 当堂对话折叠', () => {
     expect(w.find('.evaluation-transcript-toggle').attributes('aria-expanded')).toBe('true');
 
     await w.find('.evaluation-transcript-toggle').trigger('click');
-    expect(w.findAll('.evaluation-transcript-item').length).toBe(2);
-    expect(w.find('.evaluation-transcript-toggle').text()).toContain('展开更早的 3 条');
+    expect(w.findAll('.evaluation-transcript-item').length).toBe(0);
+    expect(w.find('.evaluation-transcript-toggle').text()).toContain('展开对话记录');
   });
 
-  it('消息不超过预览条数时不出现折叠开关', async () => {
+  it('条目很少也保留展开开关（默认一律折叠，没有「预览条数」例外）', async () => {
     getSessionDetailMock.mockResolvedValue({ ...detail, messages: messages.slice(0, 2) });
     const w = await mountReady();
+    expect(w.findAll('.evaluation-transcript-item').length).toBe(0);
+    const toggle = w.find('.evaluation-transcript-toggle');
+    expect(toggle.exists()).toBe(true);
+    await toggle.trigger('click');
     expect(w.findAll('.evaluation-transcript-item').length).toBe(2);
-    expect(w.find('.evaluation-transcript-toggle').exists()).toBe(false);
   });
 
   it('带图消息内联回放课堂结构图与白板图（2026-11-04：此前只回放文字，图全丢）', async () => {
@@ -124,6 +128,7 @@ describe('LearningEvaluationPage 当堂对话折叠', () => {
     getSessionDetailMock.mockResolvedValue({ ...detail, messages: visualMessages });
 
     const w = await mountReady();
+    await w.find('.evaluation-transcript-toggle').trigger('click');
     const items = w.findAll('.evaluation-transcript-item');
     expect(items.length).toBe(2);
     // 图只挂在 assistant 带图消息内：白板图 + 结构图各一
@@ -149,7 +154,7 @@ describe('LearningEvaluationPage 当堂对话折叠', () => {
     anchorClick.mockRestore();
 
     expect(itemsAtExport).toBe(5);
-    expect(w.findAll('.evaluation-transcript-item').length).toBe(2);
+    expect(w.findAll('.evaluation-transcript-item').length, '导出后回到折叠态').toBe(0);
   });
 
   it('小测按 submittedAt 编进时间线（2026-11-04：此前评估页完全不回放小测）', async () => {

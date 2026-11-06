@@ -46,48 +46,6 @@
         <p class="section-content">{{ summary.topicSummary }}</p>
       </div>
 
-      <div v-if="progressHighlights.length" id="sec-progress" class="completion-section">
-        <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><Opportunity /></span>本节进展</h4>
-        <ul class="knowledge-list">
-          <li v-for="item in progressHighlights" :key="item.title" class="knowledge-item">
-            <div class="knowledge-head">
-              <span class="knowledge-name">{{ item.title }}</span>
-              <span class="status-tag" :class="tagClass(item.type)">{{ item.label }}</span>
-              <router-link
-                v-if="item.type === 'danger' && taskId"
-                :to="`/learn/${taskId}?mode=review`"
-                class="review-link"
-              >去复习 →</router-link>
-            </div>
-            <p class="knowledge-evidence">{{ item.text }}</p>
-          </li>
-        </ul>
-      </div>
-
-      <div v-if="evaluation" id="sec-perf" class="completion-section">
-        <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><DataAnalysis /></span>本节表现</h4>
-        <p class="section-hint">{{ sessionInterpretation }}</p>
-        <div class="metrics-grid metrics-grid--three">
-          <div v-for="item in sessionMetricCards" :key="item.key" class="metric-card" :class="`metric-card--${item.tone}`">
-            <div class="metric-head"><span class="metric-label">{{ item.label }}</span><span class="metric-badge">{{ item.level }}</span></div>
-            <div class="metric-value">{{ sessionCounters.display[item.key] ?? item.value }}</div>
-            <p class="metric-desc">{{ item.desc }}</p>
-          </div>
-        </div>
-      </div>
-
-      <div v-if="evaluation" id="sec-longterm" class="completion-section">
-        <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><TrendCharts /></span>长期学习状态</h4>
-        <p class="section-hint">{{ longTermInterpretation }}</p>
-        <div class="metrics-grid">
-          <div v-for="item in longTermMetricCards" :key="item.key" class="metric-card" :class="`metric-card--${item.tone}`">
-            <div class="metric-head"><span class="metric-label">{{ item.label }}</span><span class="metric-badge">{{ item.level }}</span></div>
-            <div class="metric-value">{{ longTermCounters.display[item.key] ?? item.value }}</div>
-            <p class="metric-desc">{{ item.desc }}</p>
-          </div>
-        </div>
-      </div>
-
       <div id="sec-knowledge" class="completion-section">
         <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><Collection /></span>知识点掌握</h4>
         <ul v-if="knowledgeItems.length" class="knowledge-list">
@@ -100,6 +58,39 @@
           </li>
         </ul>
         <p v-else class="section-content">{{ summary.knowledgeSummary }}</p>
+      </div>
+
+      <div v-if="evaluation" id="sec-perf" class="completion-section">
+        <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><DataAnalysis /></span>本节表现</h4>
+        <p class="section-hint">{{ sessionInterpretation }}</p>
+        <div class="metrics-grid metrics-grid--three">
+          <div v-for="item in sessionMetricCards" :key="item.key" class="metric-card" :class="`metric-card--${item.tone}`">
+            <!-- 每个数字底下那行固定名词解释（「即时学习产出，越高说明本节吸收越充分。」）2026-11-06 撤除：
+                 它不随数据变化、7 张卡各印一行，把 3+4 个读数撑成 1.5 屏。解释改挂标题右上 ⓘ，
+                 点开才看（与学习状态页「指标说明」同一套 details 交互）。 -->
+            <details class="metric-help">
+              <summary class="metric-help__btn" :aria-label="`${item.label}说明`" title="指标说明">ⓘ</summary>
+              <p class="metric-help__body">{{ item.desc }}</p>
+            </details>
+            <span class="metric-label">{{ item.label }}</span>
+            <span class="metric-value"><span class="metric-number">{{ sessionCounters.display[item.key] ?? item.value }}</span><span class="metric-badge">{{ item.level }}</span></span>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="evaluation" id="sec-longterm" class="completion-section">
+        <h4 class="section-title"><span class="completion-icon" aria-hidden="true"><TrendCharts /></span>长期学习状态</h4>
+        <p class="section-hint">{{ longTermInterpretation }}</p>
+        <div class="metrics-grid">
+          <div v-for="item in longTermMetricCards" :key="item.key" class="metric-card" :class="`metric-card--${item.tone}`">
+            <details class="metric-help">
+              <summary class="metric-help__btn" :aria-label="`${item.label}说明`" title="指标说明">ⓘ</summary>
+              <p class="metric-help__body">{{ item.desc }}</p>
+            </details>
+            <span class="metric-label">{{ item.label }}</span>
+            <span class="metric-value"><span class="metric-number">{{ longTermCounters.display[item.key] ?? item.value }}</span><span class="metric-badge">{{ item.level }}</span></span>
+          </div>
+        </div>
       </div>
 
       <div v-if="keyTakeaways.length" id="sec-takeaways" class="completion-section">
@@ -129,7 +120,9 @@
       <p class="completion-actions__hint">{{ taskCompleted ? '本节任务已计入路径进度。' : '完成任务会推进路径进度。' }}</p>
       <div class="completion-actions__row">
         <button type="button" class="completion-btn completion-btn--action completion-btn--default" :disabled="busy" @click="emit('action', 'continue-task')"><span class="completion-icon" aria-hidden="true"><VideoPlay /></span>继续练习</button>
-        <button type="button" class="completion-btn completion-btn--action completion-btn--link" :disabled="busy" @click="emit('action', 'end')"><span class="completion-icon" aria-hidden="true"><ArrowLeft /></span>返回学习路径</button>
+        <!-- 「返回学习路径」2026-11-06 撤除：页面顶部操作栏已固定一颗同名主按钮（以及窄屏 ⋮ 菜单里
+             的同名项），卡尾再来一颗，等于同一屏出现两处「离开」，还把卡尾动作行撑成三颗灰键。
+             离开课堂的出口统一走顶栏；这里只留「继续练习 / 完成任务」两个推进动作。 -->
         <!-- 已结算的任务不再给「完成任务」（2026-11-03 走查 S4-5 根因修复）：那一刻路径页早已把这节
              计入完成（阶段 1 = 1/2），再递一颗「完成任务」等于让同一件事做两遍；入口由课次状态
              （task.status === 'completed'）决定，而不是由页面自己猜。 -->
@@ -149,27 +142,23 @@ import { computed, h, onMounted, onUnmounted, reactive, watch } from 'vue';
 const ICONS: Record<string, string> = {
   CircleCheckFilled: `<circle cx="10" cy="10" r="8.2" fill="currentColor"/><path d="M6.1 10.4l2.6 2.6 5.2-5.4" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>`,
   VideoPlay: `<path d="M7.4 4.4l7.6 5.6-7.6 5.6z" fill="currentColor"/>`,
-  ArrowLeft: `<path d="M11.4 3.6L4.6 10l6.8 6.4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M4.6 10h11.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>`,
   Compass: `<circle cx="10" cy="10" r="7.4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M13.3 6.7l-1.9 4.7-4.7 1.9 1.9-4.7z" fill="currentColor"/>`,
   Document: `<path d="M6.1 2.6h5L15.3 6.8v10.6H6.1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M11 2.8v4.2h4.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>`,
   Collection: `<rect x="3" y="4.4" width="3.2" height="11.2" rx="1"/><rect x="8.4" y="4.4" width="3.2" height="11.2" rx="1"/><rect x="13.8" y="4.4" width="3.2" height="11.2" rx="1"/>`,
   TrendCharts: `<path d="M3 15.6l4.2-4.7 3 2.7 6.4-7.2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>`,
   DataAnalysis: `<rect x="3.8" y="10" width="3.2" height="7" rx="1"/><rect x="8.4" y="6.3" width="3.2" height="10.7" rx="1"/><rect x="13" y="3.2" width="3.2" height="13.8" rx="1"/>`,
   MagicStick: `<path d="M3.8 16.4L14.4 5.8" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M15.4 3.1l.7 1.6 1.6.7-1.6.7-.7 1.6-.7-1.6-1.6-.7 1.6-.7z"/>`,
-  Opportunity: `<path d="M10 2.7a5.3 5.3 0 0 0-3.1 9.6c.5.4.8.9.9 1.5h4.4c.1-.6.4-1.1.9-1.5A5.3 5.3 0 0 0 10 2.7z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8.3 15.7h3.4M8.9 17.9h2.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>`,
 };
 const icon = (name: string) => () =>
   h('svg', { viewBox: '0 0 20 20', width: '1em', height: '1em', 'aria-hidden': 'true', innerHTML: ICONS[name] ?? '' });
 const CircleCheckFilled = icon('CircleCheckFilled');
 const MagicStick = icon('MagicStick');
 const Document = icon('Document');
-const Opportunity = icon('Opportunity');
 const DataAnalysis = icon('DataAnalysis');
 const TrendCharts = icon('TrendCharts');
 const Collection = icon('Collection');
 const Compass = icon('Compass');
 const VideoPlay = icon('VideoPlay');
-const ArrowLeft = icon('ArrowLeft');
 import MarkdownRenderer from './MarkdownRenderer.vue';
 import type { ReplanAdvisory, WrapupArtifact } from '@/api/aiTeaching';
 import { learnerMetric } from '@/utils/learnerMetrics';
@@ -369,34 +358,9 @@ const hasHighlights = computed(() => {
 const sessionInterpretation = computed(() => summary.value?.metricInterpretation?.session || '本节表现反映本次课堂的即时投入和产出。');
 const longTermInterpretation = computed(() => summary.value?.metricInterpretation?.longTerm || '长期状态来自历史累计，不等于单节课程成绩。');
 
-const progressHighlights = computed(() => {
-  const result: Array<{ title: string; label: string; text: string; type: string }> = [];
-  if (props.wrapup.progress.newlyMastered.length > 0) {
-    result.push({
-      title: '已学会',
-      label: '进步',
-      text: props.wrapup.progress.newlyMastered.join('、'),
-      type: 'success',
-    });
-  }
-  if (props.wrapup.progress.movedToReview.length > 0) {
-    result.push({
-      title: '建议回看',
-      label: '提醒',
-      text: props.wrapup.progress.movedToReview.join('、'),
-      type: 'danger',
-    });
-  }
-  if (props.wrapup.progress.stillLearning.length > 0) {
-    result.push({
-      title: '继续练习',
-      label: '继续巩固',
-      text: props.wrapup.progress.stillLearning.join('、'),
-      type: 'warning',
-    });
-  }
-  return result;
-});
+/* 「本节进展」卡片 2026-11-06 撤销：它的三行（已学会 / 建议回看 / 继续练习）与紧随其后的
+   「知识点掌握」逐条重复——同一批知识点、同一组标签，只是换了措辞和顺序，读者要在两屏之间
+   对照才发现「说的是同一件事」。知识点掌握卡已上提到主题总结正下方，成为唯一的掌握度视图。 */
 
 const formatSentenceList = (items: string[] = []) => items.map((i) => i.replace(/[；;。]+$/g, '').trim()).filter(Boolean).join('；');
 const formattedStrengths = computed(() => (evaluationHighlights.value ? formatSentenceList(evaluationHighlights.value.strengths) : ''));
@@ -457,18 +421,35 @@ const tagClass = (type: string) => ({
 .section-hint { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
 /* 并进上一段时的行内形态：跟随正文的流，不再自带换行与下边距 */
 .section-hint--inline { display: inline; margin: 0 0 0 4px; }
-.review-link { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--red); text-decoration: none; }
-.review-link:hover { text-decoration: underline; }
 .section-content { margin: 0; font-size: 13px; line-height: 1.7; color: var(--ink); }
 .advisory-options { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
-.metrics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+/* 指标网格（2026-11-06 屏效比）：
+   本节表现 3 项 = 一行 3 列（任何宽度都不拆行）；长期状态 4 项 = PC 一行 4 列、窄屏 2×2。
+   此前窄屏把 7 个指标排成 7 行单列，光数字就吃掉近 2 个手机屏（实测 850px）。 */
+.metrics-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .metrics-grid--three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.metric-card { padding: 10px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--green) 20%, var(--line)); background: var(--surface); }
-.metric-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
-.metric-label { font-size: 12px; color: var(--muted); }
-.metric-badge { font-size: 12px; padding: 2px 6px; border-radius: var(--mk-radius-pill); background: color-mix(in srgb, var(--green) 10%, var(--surface)); color: var(--green); }
-.metric-value { margin-top: 6px; font-size: 22px; font-weight: 700; color: var(--green); }
-.metric-desc { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
+.metric-card { position: relative; padding: 10px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--green) 20%, var(--line)); background: var(--surface); }
+/* 标签给 ⓘ 让出右上角；读数与档位同一基线（此前档位在标签行，读数是孤立大数字） */
+.metric-label { display: block; padding-right: 18px; font-size: 12px; line-height: 1.35; color: var(--muted); }
+.metric-badge { flex: none; font-size: 12px; padding: 2px 6px; border-radius: var(--mk-radius-pill); background: color-mix(in srgb, var(--green) 10%, var(--surface)); color: var(--green); }
+.metric-value { margin-top: 4px; display: flex; align-items: baseline; gap: 6px; font-size: 22px; font-weight: 700; color: var(--green); }
+/* 指标说明 ⓘ：绝对定位在卡片右上角，不占行高；点开是浮层，不是常驻长句 */
+.metric-help { position: absolute; top: 4px; right: 4px; }
+.metric-help__btn {
+  display: grid; place-items: center;
+  width: 20px; height: 20px; border-radius: 50%;
+  font-size: 13px; line-height: 1; color: var(--faint);
+  cursor: pointer; list-style: none;
+}
+.metric-help__btn::-webkit-details-marker { display: none; }
+.metric-help__btn:hover, .metric-help[open] .metric-help__btn { color: var(--green); background: color-mix(in srgb, var(--green) 10%, transparent); }
+.metric-help__body {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 20;
+  width: min(240px, 70vw); margin: 0; padding: 8px 10px;
+  font-size: 12px; line-height: 1.55; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 8px; box-shadow: var(--mk-shadow-modal);
+}
 .metric-card--good { border-color: color-mix(in srgb, var(--green) 30%, var(--line)); }
 .metric-card--normal { border-color: color-mix(in srgb, var(--green) 30%, var(--line)); }
 .metric-card--warn { border-color: color-mix(in srgb, var(--red) 45%, var(--line)); }
@@ -477,10 +458,16 @@ const tagClass = (type: string) => ({
 .knowledge-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .knowledge-name { font-size: 13px; font-weight: 600; color: var(--ink); }
 .knowledge-evidence { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
-.ordered-list { margin: 0; padding-left: 0; list-style-position: inside; list-style-type: decimal; font-size: 13px; line-height: 1.6; color: var(--ink); }
+/* 有序列表（关键收获 = 纯文本；下一步建议 = MarkdownRenderer 包装）
+   2026-11-06 修复字号穿帮：下一步建议的正文走 markdown 渲染器，段落自带 17px/宽松行高，
+   于是同一张卡里「关键收获」是 13px、紧邻的「下一步建议」却是 17–18px 大白字——
+   比它自己的标题（14px）还大。两条列表统一到 14px，并把渲染器内部段落强制继承字号/颜色/行高。 */
+.ordered-list { margin: 0; padding-left: 0; list-style-position: inside; list-style-type: decimal; font-size: 14px; line-height: 1.6; color: var(--ink); }
 .ordered-list li { margin: 0 0 6px; overflow-wrap: anywhere; }
-.ordered-list li :deep(.markdown-renderer) { display: inline; }
-.ordered-list li :deep(.markdown-renderer > p) { display: inline; margin: 0; }
+.ordered-list li :deep(.markdown-renderer) { display: inline; font-size: inherit; color: inherit; line-height: inherit; }
+.ordered-list li :deep(.markdown-renderer > p) { display: inline; margin: 0; font-size: inherit; color: inherit; line-height: inherit; }
+.ordered-list li :deep(.markdown-renderer p),
+.ordered-list li :deep(.markdown-renderer li) { font-size: inherit; line-height: inherit; color: inherit; }
 .ordered-list li:last-child { margin-bottom: 0; }
 .evaluation-block { display: grid; gap: 8px; }
 .evaluation-line { margin: 0; font-size: 13px; line-height: 1.7; color: var(--ink); }
@@ -516,12 +503,19 @@ const tagClass = (type: string) => ({
 .completion-btn:disabled { cursor: not-allowed; }
 .completion-btn + .completion-btn { margin-left: 12px; }
 .completion-spinner { margin-right: 6px; }
-@media (max-width: 900px) { .metrics-grid--three { grid-template-columns: 1fr; } }
+/* 窄屏 4 项走 2×2（原先 1 列 = 4 行）；3 项保持一行 3 列 */
+@media (max-width: 900px) {
+  .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (max-width: 640px) {
-  .completion-summary,
-  .metrics-grid {
+  .completion-summary {
     grid-template-columns: 1fr;
   }
+
+  /* 3 列窄卡：内边距与读数各收一档，6 字标签 + ⓘ 才不折成三行 */
+  .metric-card { padding: 8px 8px 7px; }
+  .metric-value { font-size: 18px; gap: 4px; }
+  .metric-label { padding-right: 14px; }
 
   .completion-actions {
     flex-direction: column;

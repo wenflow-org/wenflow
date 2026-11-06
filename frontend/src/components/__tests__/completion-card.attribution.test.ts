@@ -199,12 +199,14 @@ describe('CompletionCard 知识点读数', () => {
  * 而路径页早已把这节算进完成（阶段 1 = 1/2）——同一件事像是没做完、还能再做一遍。
  */
 describe('CompletionCard 动作栏 · 已结算任务', () => {
-  it('taskCompleted=true 时不渲染「完成任务」，只留继续练习与返回路径', () => {
+  it('taskCompleted=true 时不渲染「完成任务」，只留继续练习', () => {
     const w = mountCard(baseAdvisory, { taskCompleted: true });
     const labels = w.findAll('.completion-actions__row button').map((b) => b.text());
     expect(labels.some((t) => t.includes('完成任务'))).toBe(false);
     expect(labels.some((t) => t.includes('继续练习'))).toBe(true);
-    expect(labels.some((t) => t.includes('返回学习路径'))).toBe(true);
+    /* 「返回学习路径」2026-11-06 从卡尾撤除：页面顶部操作栏已固定同名主按钮，
+       卡尾再来一颗是同一屏两处离开（也是三颗灰键的成因）。离开课堂统一走顶栏。 */
+    expect(labels.some((t) => t.includes('返回学习路径'))).toBe(false);
     expect(w.find('.completion-actions__hint').text()).toContain('已计入路径进度');
   });
 

@@ -557,7 +557,9 @@
             <div class="settle__card">
               <span class="settle__ring"><i class="settle__spin"></i></span>
               <h2 id="settle-title">正在完成课堂结算</h2>
-              <p class="settle__lead">{{ settleLead }}</p>
+              <!-- 副标题「正在关闭课堂并生成本次学习总结。」2026-11-06 撤除：它与步骤列表第 1 项
+                   （同名的「关闭课堂并生成本次总结」）只差两个字，标题下方再抄一遍；
+                   结算阶段 1→2 的推进本来就由步骤行的 done/active 状态表达。 -->
               <ol class="settle__steps">
                 <li
                   v-for="s in settleSteps"
@@ -1033,11 +1035,6 @@ const settleSlowHint = computed(() =>
   settleElapsedSec.value >= 60
     ? '仍在处理，完成后会自动进入学习反馈'
     : settleElapsedSec.value >= 30 ? '总结生成中' : ''
-)
-const settleLead = computed(() =>
-  settleStage.value === 'settle'
-    ? '课堂已结束，正在结算任务与路径进度。'
-    : '正在关闭课堂并生成本次学习总结。'
 )
 const settleSteps = computed<Array<{ key: string; label: string; state: 'done' | 'active' | 'pending' }>>(() => {
   const stage = settleStage.value
@@ -3990,7 +3987,6 @@ onBeforeUnmount(() => {
 .settle__spin--sm { width: 12px; height: 12px; border-width: 2px; }
 @keyframes settle-spin { to { transform: rotate(360deg); } }
 .settle__card h2 { margin: 0; font-size: 18px; }
-.settle__lead { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.6; }
 .settle__steps {
   width: 100%; margin: 2px 0 0; padding: 12px 14px;
   list-style: none; display: grid; gap: 10px;
