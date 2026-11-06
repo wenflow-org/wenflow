@@ -138,13 +138,18 @@
         <div class="lib-modal__scroll">
           <div v-if="preview.item?.brief" class="lib-preview__brief">
             <p v-if="preview.item.brief.overview">{{ preview.item.brief.overview }}</p>
-            <p v-if="preview.item.brief.toc?.length" class="lib-preview__toc">
-              目录：{{ preview.item.brief.toc.slice(0, 8).map((entry) => entry.title).join(' · ') }}
+            <!-- 目录去掉英文条目（2026-11-06 走查 图5）：联网资料的第一条目录常是
+                 抓取页的英文标题（Regulations Regarding…），列出来像章节名错位 -->
+            <p v-if="previewTocTitles.length" class="lib-preview__toc">
+              目录：{{ previewTocTitles.join(' · ') }}
             </p>
           </div>
           <p v-if="preview.loading" class="lib-preview__loading">正在读取原文…</p>
           <p v-else-if="preview.error" class="library__error">{{ preview.error }}</p>
-          <pre v-else class="lib-preview__text">{{ preview.markdown }}</pre>
+          <!-- 原文预览改渲染（2026-11-06 走查 图5/6/8）：此前是 <pre> 直出原始 markdown——
+               `## 第一章` 和 `*第一条*` 原样裸露、几千字挤成一坨。现在先清洗爬虫头、
+              再按 markdown 渲染，行高 1.75，条文各自成段。 -->
+          <div v-else class="lib-preview__text" v-html="previewHtml"></div>
           <p v-if="preview.truncated" class="lib-preview__note">仅预览前 60000 字，完整正文用于路径与课堂取回。</p>
         </div>
       </section>
@@ -184,6 +189,8 @@ import {
   type UploadedMaterial,
 } from '@/api/materials';
 import { toast } from '@/utils/toast';
+import { looksLikeEnglishTitle, normalizeMaterialMarkdown } from '@/utils/materialText';
+import { plainMessageHtml } from '@/utils/messageMarkdown';
 
 type FilterKey = 'all' | 'upload' | 'web';
 type SortKey = 'recent' | 'name';
@@ -220,6 +227,20 @@ const search = ref('');
 const filter = ref<FilterKey>('all');
 const sort = ref<SortKey>('recent');
 const usageFilter = ref<UsageFilterKey>('all');
+
+/* 原文预览渲染（2026-11-06 走查 图5/6/8）：清洗爬虫头 + markdown 渲染，
+   不再把原始源码铺在 <pre> 里。（纯展示层兜底；入库清洗归采集链路。） */
+const previewHtml = computed(() => {
+  const normalized = normalizeMaterialMarkdown(preview.markdown);
+  return normalized ? plainMessageHtml(normalized) : '';
+});
+/** 目录只列中文条目：联网资料的英文抓取标题不是章节 */
+const previewTocTitles = computed(() =>
+  (preview.item?.brief?.toc || [])
+    .map((entry) => String(entry?.title || '').trim())
+    .filter((title) => !!title && !looksLikeEnglishTitle(title))
+    .slice(0, 8)
+);
 
 const preview = reactive<{
   open: boolean;
@@ -321,6 +342,10 @@ function metaOf(item: UploadedMaterial): string {
   return parts.join(' · ');
 }
 
+/* 章节名：跳过英文抓取标题（2026-11-06 走查 图5）。
+   联网资料的 #1 锚点是抓取页自带的英文 H1（Regulations Regarding…），
+   它被列成第一章时，中文资料的章节行整个读成「标题错位」。
+   中文锚点一个都没有时保留原样 —— 宁可显示英文，也不要显示空。 */
 function headingsOf(item: UploadedMaterial): string[] {
   const seen = new Set<string>();
   const headings: string[] = [];
@@ -331,7 +356,8 @@ function headingsOf(item: UploadedMaterial): string[] {
     headings.push(heading);
     if (headings.length >= 4) break;
   }
-  return headings;
+  const zh = headings.filter((heading) => !looksLikeEnglishTitle(heading));
+  return zh.length ? zh : headings;
 }
 
 function usageHint(item: UploadedMaterial): string {
@@ -919,8 +945,26 @@ onMounted(load);
   font-family: var(--mk-sans);
   font-size: 12.5px;
   line-height: 1.75;
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+/* 渲染后的正文排版（2026-11-06 走查 图5/6/8）：markdown 已经把条文断成段，
+   这里只管段距与标题档。原先的 white-space: pre-wrap 已随 <pre> 一起撤除——
+   保留它会让每个 markdown 段落之间再叠一行空白。 */
+.lib-preview__text :deep(p) { margin: 0 0 10px; }
+.lib-preview__text :deep(h1),
+.lib-preview__text :deep(h2) { margin: 18px 0 9px; font-size: 14px; font-weight: 800; line-height: 1.45; }
+.lib-preview__text :deep(h3),
+.lib-preview__text :deep(h4) { margin: 14px 0 7px; font-size: 13px; font-weight: 800; line-height: 1.45; }
+.lib-preview__text :deep(h1:first-child),
+.lib-preview__text :deep(h2:first-child),
+.lib-preview__text :deep(h3:first-child) { margin-top: 0; }
+.lib-preview__text :deep(strong) { font-weight: 800; }
+.lib-preview__text :deep(ul),
+.lib-preview__text :deep(ol) { margin: 0 0 10px; padding-left: 20px; }
+.lib-preview__text :deep(blockquote) {
+  margin: 0 0 10px; padding: 4px 0 4px 10px;
+  border-left: 2px solid color-mix(in srgb, var(--blue) 45%, transparent);
+  color: var(--muted);
 }
 
 .lib-preview__loading,

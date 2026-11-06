@@ -176,15 +176,17 @@
                   </ul>
                   <p v-if="materialRefLabels(stage).length" class="stage__material">
                     本阶段依据资料：
+                    <!-- v-for 走 materialRefsOf：后端把同一章节切成多个切片时
+                         （实测「公文种类」×3），直接遍历原始数组会连排三颗同名引用 -->
                     <button
-                      v-for="(ref, ri) in stage.materialRefs"
+                      v-for="(ref, ri) in materialRefsOf(stage)"
                       :key="ri"
                       type="button"
                       class="material-ref"
                       :disabled="!refClickable(ref)"
                       :title="refTitle(ref)"
                       @click="openMaterialRef(ref)"
-                    >{{ refLabel(ref) }}</button>
+                    ><svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1.5V8h4.5L14 3.5zM8 12h8v1.5H8V12zm0 4h8v1.5H8V16z"/></svg>{{ refLabel(ref) }}</button>
                   </p>
                   <template v-for="task in stageTasks(stage)" :key="task.id">
                   <div
@@ -201,14 +203,14 @@
                     <small v-if="materialRefLabels(task).length" class="task__material">
                       资料：
                       <button
-                        v-for="(ref, ri) in task.materialRefs"
+                        v-for="(ref, ri) in materialRefsOf(task)"
                         :key="ri"
                         type="button"
                         class="material-ref"
                         :disabled="!refClickable(ref)"
                         :title="refTitle(ref)"
                         @click="openMaterialRef(ref)"
-                      >{{ refLabel(ref) }}</button>
+                      ><svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1.5V8h4.5L14 3.5zM8 12h8v1.5H8V12zm0 4h8v1.5H8V16z"/></svg>{{ refLabel(ref) }}</button>
                     </small>
                   </div>
                   <!-- 第二行（2026-11-06 屏效比定稿）：左「时长属性」、右「操作按钮」同一行两端对齐。
@@ -274,20 +276,10 @@
                「进行到哪」（当前任务 + 接下来合并）／「学习资料」（资料 + 原文预览合并）／
                「设计意图」（默认折叠，依据型信息）；「路径状态」空态卡删除（hero 指标已覆盖） -->
           <aside class="side">
-            <!-- 「进行到哪」卡已瘦身（2026-11-05 用户裁定）：当前任务 + 「继续学习」按钮 + 剩余数
-                 在 hero 与阶段 1 的高亮任务项里已经各出现一次，整块冗余；
-                 只保留「接下来」预告列表（它承载的是阶段 1 之外的信息） -->
-            <section v-if="nextTasks.length" class="card sidecard">
-              <span class="kicker">接下来</span>
-              <div class="sidecard__sub">
-                <ol class="next-list">
-                  <li v-for="t in nextTasks" :key="t.id">
-                    <strong>{{ t.title || t.displayLabel }}</strong>
-                    <small>{{ t.estimatedMinutes ? `${t.estimatedMinutes} 分钟` : '—' }}</small>
-                  </li>
-                </ol>
-              </div>
-            </section>
+            <!-- 「接下来」卡片整块删除（2026-11-06 走查 图1/2/3）：左栏阶段 1 展开后
+                 已经把同一批任务连标题带时长列了一遍，右栏再抄一次且序号对不上
+                 （复现缺第 1 条、原第 2 条被标成 1.）。分工改为——
+                 左栏只管「阶段与任务」，右栏只管「学习资料」与「设计意图」。 -->
 
             <section v-if="pathMaterials.length" class="card sidecard">
               <span class="kicker">学习资料</span>
@@ -306,19 +298,23 @@
                   >{{ openMaterial === mi ? '收起章节' : '查看章节' }}</button>
                 </li>
               </ul>
-              <!-- 资料原文预览：并入本卡（原独立「资料原文」卡），打开章节引用时在此展开 -->
-              <template v-if="materialPreview.open">
-                <div class="sidecard__sub">
-                  <span class="sidecard__sub-head">原文 · {{ materialPreview.title }}</span>
-                  <p v-if="materialPreview.loading" class="materials-note">正在读取…</p>
-                  <template v-else>
-                    <p v-if="materialPreview.sectionTitle" class="materials-note">对应章节：{{ materialPreview.sectionTitle }}</p>
-                    <p v-if="materialPreview.quote" class="materials-note">引文：{{ materialPreview.quote }}</p>
-                    <pre class="material-text">{{ materialPreview.text }}</pre>
-                  </template>
-                  <button type="button" class="materials-toggle" @click="materialPreview.open = false">收起原文</button>
-                </div>
-              </template>
+              <!-- 当前引用的资料（2026-11-06 走查 图3/4）：只讲一件事——用户点的这一条引用。
+                   原来这里「原文 · 公文种类」＋「对应章节：公文种类」两行复读同一件事，
+                   下面还塞了一个 280px 宽的 <pre> 全文滚动框（从整篇文档第 1 行的英文爬虫头开始
+                   显示 6000 字），窄侧栏里根本读不了。
+                   现在：一条引用行 + 左竖线引用块（引文本身最该被看见）+ 去大弹窗读全文的入口。 -->
+              <div v-if="materialPreview.open" class="sidecard__sub">
+                <p v-if="materialPreview.loading" class="materials-note">正在读取…</p>
+                <template v-else>
+                  <span class="sidecard__sub-head">当前引用：{{ materialPreview.sectionTitle || materialPreview.title }}</span>
+                  <blockquote v-if="materialPreview.quote" class="material-quote">{{ materialPreview.quote }}</blockquote>
+                  <p v-else class="materials-note">这一条没有可摘录的整句，直接看原文。</p>
+                </template>
+                <button type="button" class="materials-open" @click="openMaterialReader">
+                  查看完整章节原文 ↗
+                </button>
+                <button type="button" class="materials-toggle" @click="materialPreview.open = false">收起</button>
+              </div>
             </section>
 
             <section v-if="sceneSummary" class="card sidecard">
@@ -647,6 +643,33 @@
       </div>
     </div>
 
+    <!-- 全文阅读弹窗（2026-11-06 走查 图6）：侧栏卡片里那个 280px 宽的 <pre> 滚动框换成
+         这一张正经的阅读面——正文经 markdown 渲染（标题成标题、条文各自成段），
+         打开即滚到用户点的那一章。 -->
+    <div v-if="reader.open" class="reader" @click.self="closeMaterialReader">
+      <section
+        ref="readerCardRef"
+        class="reader__card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="reader-title"
+        tabindex="-1"
+      >
+        <header class="reader__head">
+          <div class="reader__head-main">
+            <h2 id="reader-title" class="reader__title">{{ reader.title || '资料原文' }}</h2>
+            <p v-if="reader.section" class="reader__meta">已定位到：{{ reader.section }}</p>
+          </div>
+          <button type="button" class="reader__close" aria-label="关闭原文" @click="closeMaterialReader">×</button>
+        </header>
+        <div ref="readerBodyRef" class="reader__body">
+          <p v-if="reader.loading" class="reader__note">正在读取原文…</p>
+          <p v-else-if="reader.error" class="reader__note reader__note--error">{{ reader.error }}</p>
+          <div v-else class="reader__text" v-html="reader.html"></div>
+        </div>
+      </section>
+    </div>
+
     <!-- AI 生成提示 + 页脚：一起沉底 -->
     <div class="detail__foot">
       <div class="detail__ai-note">
@@ -663,7 +686,9 @@ import { useRoute, useRouter } from 'vue-router';
 import { learningAPI } from '@/api/learning';
 import { aiTeachingAPI } from '@/api/aiTeaching';
 import { toast } from '@/utils/toast';
-import { readMaterial, readMaterialSection } from '@/api/materials';
+import { readMaterial } from '@/api/materials';
+import { dedupeMaterialRefs, normalizeMaterialMarkdown } from '@/utils/materialText';
+import { plainMessageHtml } from '@/utils/messageMarkdown';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
 import { pickCurrentTask } from '@/composables/useCurrentTask';
 import { buildGenerationProgress } from './learningPathProgress';
@@ -749,49 +774,100 @@ function webRefDomain(url: string): string {
   }
 }
 
-const materialPreview = ref<{ open: boolean; loading: boolean; title: string; sectionTitle: string; quote: string; text: string }>({
-  open: false, loading: false, title: '', sectionTitle: '', quote: '', text: '',
-});
+const materialPreview = ref<{
+  open: boolean; loading: boolean; title: string; sectionTitle: string; quote: string;
+}>({ open: false, loading: false, title: '', sectionTitle: '', quote: '' });
 
 /**
- * 「点开看原文」：优先按章节取回窗口（GET /materials/:id/section，标题优先、引文回退）——点「一、健康」直接看到那一章，而不是全文前 4000 字；
- * 端点失败时回退整篇读取（老行为）。联网资料（materialId=null）改为跳转原文链接。
+ * 同一章节会被后端切成多个文本切片（实测「公文种类」在同一条任务下挂 3 个），
+ * 直接遍历 materialRefs 会连排三颗同名引用。去重规则见 dedupeMaterialRefs
+ * （按章节身份，不按引文）——2026-11-06 走查 图1/2/3 的实测根因。
  */
-const openMaterialRef = async (ref: any) => {
+const materialRefsOf = (node: any): any[] => dedupeMaterialRefs(node?.materialRefs);
+
+/**
+ * 「点开查看引用」：只把用户点的那一条摆出来（章节名 + 精引文），不再在侧栏里
+ * 拉全文——全文由 openMaterialReader 打开阅读弹窗（2026-11-06 走查 图3/4）。
+ * 联网资料（materialId=null）没有可读原文，直接开外链。
+ */
+const openMaterialRef = (ref: any) => {
   if (!ref?.materialId) {
     const url = String(ref?.sourceUrl || '');
     if (url) window.open(url, '_blank', 'noopener');
     return;
   }
+  activeMaterialRef.value = ref;
   materialPreview.value = {
     open: true,
-    loading: true,
+    loading: false,
     title: String(ref.sectionTitle || '资料原文'),
     sectionTitle: String(ref.sectionTitle || ''),
     quote: String(ref.quote || ''),
-    text: '',
   };
-  try {
-    const section = await readMaterialSection(String(ref.materialId), {
-      title: ref.sectionTitle || null,
-      quote: ref.quote || null,
-    });
-    materialPreview.value.text = String(section?.excerpt || '') || '（正文为空）';
-  } catch {
-    try {
-      const material = await readMaterial(String(ref.materialId));
-      materialPreview.value.text = String(material?.markdown || '').slice(0, 4000) || '（正文为空）';
-    } catch (error) {
-      materialPreview.value.text = `读取失败：${String((error as { message?: string })?.message || error)}`;
-    }
-  } finally {
-    materialPreview.value.loading = false;
-  }
 };
 
+/* ---------- 全文阅读弹窗（2026-11-06 走查 图6） ---------- */
+const activeMaterialRef = ref<any>(null);
+const reader = ref<{ open: boolean; loading: boolean; title: string; section: string; html: string; error: string }>({
+  open: false, loading: false, title: '', section: '', html: '', error: '',
+});
+const readerCardRef = ref<HTMLElement | null>(null);
+const readerBodyRef = ref<HTMLElement | null>(null);
+
+function closeMaterialReader() {
+  reader.value = { open: false, loading: false, title: '', section: '', html: '', error: '' };
+}
+
+/** 打开全文并滚到当前引用那一章：先按章节标题找标题节点，找不到再退回按引文首句定位 */
+async function openMaterialReader() {
+  const ref = activeMaterialRef.value;
+  const materialId = ref?.materialId ? String(ref.materialId) : '';
+  reader.value = {
+    open: true,
+    loading: !!materialId,
+    title: String(ref?.sectionTitle || '资料原文'),
+    section: String(ref?.sectionTitle || ''),
+    html: '',
+    error: materialId ? '' : '这份资料没有可读取的原文，请点引用直接打开来源页。',
+  };
+  await nextTick();
+  readerCardRef.value?.focus();
+  if (!materialId) return;
+  try {
+    const material = await readMaterial(materialId);
+    const normalized = normalizeMaterialMarkdown(material?.markdown || '');
+    reader.value.html = normalized ? plainMessageHtml(normalized) : '';
+    if (!reader.value.html) reader.value.error = '（正文为空）';
+  } catch (error) {
+    reader.value.error = `读取失败：${String((error as { message?: string })?.message || error)}`;
+  } finally {
+    reader.value.loading = false;
+  }
+  await nextTick();
+  scrollReaderToSection();
+}
+
+function scrollReaderToSection() {
+  const body = readerBodyRef.value;
+  if (!body) return;
+  const wanted = String(reader.value.section || '').replace(/\s+/g, '');
+  if (!wanted) return;
+  const nodes = Array.from(body.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,p,li'));
+  const hit = nodes.find((el) => (el.textContent || '').replace(/\s+/g, '').includes(wanted));
+  if (hit) hit.scrollIntoView({ block: 'start', behavior: 'auto' });
+}
+
+function onReaderKey(e: KeyboardEvent) {
+  if (e.key === 'Escape') closeMaterialReader();
+}
+watch(() => reader.value.open, (open) => {
+  if (open) window.addEventListener('keydown', onReaderKey);
+  else window.removeEventListener('keydown', onReaderKey);
+});
+onBeforeUnmount(() => window.removeEventListener('keydown', onReaderKey));
+
 const materialRefLabels = (node: any): string[] => {
-  const refs = Array.isArray(node?.materialRefs) ? node.materialRefs : [];
-  return refs
+  return materialRefsOf(node)
     .map((ref: any) => String(ref?.sectionTitle || ref?.quote || '').trim())
     .filter((label: string) => !!label)
     .map((label: string) => (label.length > 20 ? `${label.slice(0, 20)}…` : label));
@@ -1620,12 +1696,6 @@ const currentStageNo = computed(() => {
   return idx >= 0 ? stageNo(stages.value[idx], idx) : 1;
 });
 
-const nextTasks = computed(() => {
-  if (!currentTask.value) return [];
-  const idx = allTasks.value.findIndex((t) => t.id === currentTask.value?.id);
-  return allTasks.value.slice(idx + 1, idx + 4);
-});
-
 const sceneSummary = computed(() => {
   const s = path.value?.sceneSummary;
   if (!s) return null;
@@ -2033,11 +2103,45 @@ onBeforeUnmount(() => {
 .materials-sections li { font-size: 12px; color: var(--muted); }
 .materials-toggle { align-self: flex-start; background: none; border: none; padding: 0; font-size: 12px; color: var(--blue); cursor: pointer; }
 .materials-note { margin: 10px 0 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
-.task__material { display: block; margin-top: 2px; font-size: 12px; color: var(--blue); }
+.task__material { display: block; margin-top: 4px; font-size: 12px; color: var(--muted); }
 .stage__material { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
-.material-ref { background: none; border: none; padding: 0 4px 0 0; font-size: 12px; color: var(--blue); cursor: pointer; text-decoration: underline; }
-.material-ref:disabled { color: var(--muted); text-decoration: none; cursor: default; }
-.material-text { margin: 8px 0 0; max-height: 220px; overflow: auto; white-space: pre-wrap; font-size: 12px; line-height: 1.6; color: var(--ink); }
+/* 资料引用＝胶囊微签（2026-11-06 走查 图1/2/3）：原生蓝字下划线像 90 年代网页，
+   而且一行三颗同名链接时下划线把字连成一条。4px 控件圆角 + 蓝 10% 底 + 文档小图标，
+   行内换行时每颗都是独立可点的胶囊。 */
+.material-ref {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin: 2px 6px 2px 0; padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--blue) 22%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
+  font-size: 12px; font-weight: 600; line-height: 1.4;
+  color: var(--blue-deep);
+  cursor: pointer;
+  text-decoration: none;
+}
+.material-ref:hover { background: color-mix(in srgb, var(--blue) 16%, transparent); }
+.material-ref svg { flex: none; opacity: .85; }
+.material-ref:disabled { color: var(--muted); background: var(--line); border-color: transparent; cursor: default; }
+/* 引文块（2026-11-06 走查 图3/4）：左竖线 + 浅底，用户最该看的就是这一句 */
+.material-quote {
+  margin: 0;
+  padding: 6px 0 6px 10px;
+  border-left: 2px solid color-mix(in srgb, var(--blue) 45%, transparent);
+  font-size: 12.5px; line-height: 1.7; color: var(--ink);
+}
+/* 去大弹窗读全文的轻量入口 */
+.materials-open {
+  align-self: flex-start;
+  display: inline-flex; align-items: center;
+  min-height: 30px; padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent);
+  border-radius: var(--mk-radius-sm);
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
+  font-family: inherit; font-size: 12px; font-weight: 700;
+  color: var(--blue-deep);
+  cursor: pointer;
+}
+.materials-open:hover { background: color-mix(in srgb, var(--blue) 16%, transparent); }
 /* 通用小签（§1）：同样收紧为紧凑小方签，不再全圆胶囊 */
 .tag {
   display: inline-flex; align-items: center;
@@ -2046,9 +2150,7 @@ onBeforeUnmount(() => {
   font-size: 12px; font-weight: 600; color: var(--muted);
 }
 .tag--blue { background: color-mix(in srgb, var(--blue) 9%, transparent); color: var(--blue-deep); }
-.next-list { margin: 0; padding: 0 0 0 18px; display: grid; gap: 9px; }
-.next-list strong { display: block; font-size: 13px; line-height: 1.45; }
-.next-list small { display: block; margin-top: 2px; font-size: 12px; color: var(--faint); }
+/* .next-list 随「接下来」卡片一并删除（2026-11-06 走查 图1/2/3） */
 .sidecard__sum { font-size: 12px; font-weight: 700; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 9px; }
 .sidecard__text { font-size: 13px; }
 .sidecard__intent-title {
@@ -2080,10 +2182,10 @@ onBeforeUnmount(() => {
 @media (max-width: 1100px) {
   .detail__main { padding: 14px 14px 32px; }
   .detail__grid { grid-template-columns: 1fr; }
-  /* 侧栏提前：aside 在 DOM 里位于阶段列表之后，单列下「进行到哪/学习资料」
-     会垫在 2-4 屏外（2026-09-25 移动框架审查）；order:-1 提到阶段列表之前，
-     桌面双列布局不受影响（order 只在单列时改变视觉顺序） */
-  .side { position: static; order: -1; }
+  /* 单列顺序改回 DOM 序（2026-11-06 走查 图7）：原先 order:-1 把「学习资料/设计意图」
+     提到阶段列表之前，一旦展开学习资料，阶段 1~4 就被挤到屏外最底下。
+     现在 = 概览卡 → 阶段与任务 → 学习资料 → 设计意图，任务永远排第一优先级。 */
+  .side { position: static; }
 }
 </style>
 
@@ -2578,5 +2680,86 @@ onBeforeUnmount(() => {
     display: inline-flex;
     align-items: center;
   }
+}
+</style>
+
+<style scoped>
+/* ===== 全文阅读弹窗（2026-11-06 走查 图6）=====
+   侧栏里那个 280px 宽、从整篇文档第一行英文爬虫头开始显示的 <pre> 滚动框，
+   字面意义上「没法读」：换成这张正经阅读面（宽度 760、行高 1.75、条文各自成段）。 */
+.reader {
+  position: fixed; inset: 0; z-index: 60;
+  display: grid; place-items: center;
+  padding: 24px;
+  background: var(--wf-overlay);
+}
+.reader__card {
+  width: min(760px, 100%);
+  max-height: min(86dvh, 900px);
+  display: flex; flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--mk-radius-modal);
+  box-shadow: var(--mk-shadow-modal);
+  overflow: hidden;
+}
+.reader__card:focus { outline: none; }
+.reader__head {
+  flex: none;
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.reader__title { margin: 0; font-size: 15px; font-weight: 800; line-height: 1.4; color: var(--ink); }
+.reader__meta { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.reader__close {
+  flex: none;
+  width: 32px; height: 32px;
+  display: grid; place-items: center;
+  border: 0; border-radius: var(--mk-radius-sm);
+  background: transparent;
+  font-size: 18px; line-height: 1; color: var(--muted);
+  cursor: pointer;
+}
+.reader__close:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.reader__body {
+  flex: 1 1 auto; min-height: 0;
+  overflow-y: auto;
+  padding: 16px 20px 28px;
+}
+.reader__note { margin: 0; font-size: 13px; color: var(--muted); }
+.reader__note--error { color: var(--red-ink); }
+/* 正文排版：1.75 行高 + 段落间距。条文由 normalizeMaterialMarkdown 在句末标点后断段，
+   标题由 markdown 渲染成 h1~h3，所以这里只管字距行距，不再碰内容。 */
+.reader__text { font-size: 13.5px; line-height: 1.75; color: var(--ink); }
+.reader__text :deep(p) { margin: 0 0 10px; }
+.reader__text :deep(h1),
+.reader__text :deep(h2) { margin: 20px 0 10px; font-size: 15px; font-weight: 800; line-height: 1.45; }
+.reader__text :deep(h3),
+.reader__text :deep(h4) { margin: 16px 0 8px; font-size: 14px; font-weight: 800; line-height: 1.45; }
+.reader__text :deep(h1:first-child),
+.reader__text :deep(h2:first-child),
+.reader__text :deep(h3:first-child) { margin-top: 0; }
+.reader__text :deep(strong) { font-weight: 800; }
+.reader__text :deep(ul),
+.reader__text :deep(ol) { margin: 0 0 10px; padding-left: 20px; }
+.reader__text :deep(blockquote) {
+  margin: 0 0 10px; padding: 4px 0 4px 10px;
+  border-left: 2px solid color-mix(in srgb, var(--blue) 45%, transparent);
+  color: var(--muted);
+}
+.reader__text :deep(code) {
+  padding: 1px 5px; border-radius: var(--mk-radius-sm);
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
+  font-size: 12.5px;
+}
+.reader__text :deep(pre) { margin: 0 0 10px; padding: 10px; border-radius: var(--mk-radius-md); background: var(--canvas); overflow-x: auto; }
+.reader__text :deep(a) { color: var(--blue-deep); }
+
+@media (max-width: 1100px) {
+  .reader { padding: 12px; }
+  .reader__card { max-height: 90dvh; }
+  .reader__head { padding: 14px 14px 10px; }
+  .reader__body { padding: 14px 14px 24px; }
 }
 </style>
