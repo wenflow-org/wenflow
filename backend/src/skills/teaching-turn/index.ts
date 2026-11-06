@@ -3393,7 +3393,7 @@ function buildUserMessageContent(args: {
   return [...withImages, { type: 'text', text: args.suffix }];
 }
 
-const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutput> = {
+export const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutput> = {
   agentId: AGENT_ID,
   defaultSystemPrompt: TEACHING_TURN_PROMPT,
   requireActivePrompt: true,
@@ -3411,7 +3411,26 @@ const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutp
   coerceParsedForContract: (parsed) => (parsed && typeof parsed === 'object' && !Array.isArray(parsed)
     ? { ...parsed, knowledge: resolveKnowledgeBlock(parsed) }
     : parsed),
-  validateParsedOutput: (parsed, input) => validateTeachingTurnOutput(parsed, input),
+  // #252：无板指代（TEACHING_TURN_BOARD_DEIXIS_WITHOUT_BOARD）从硬失败降为**软**失败。
+  // 硬失败时两次改写都救不回来就整轮 throw → 接口 500，而引擎只在成功路径提交回合状态，
+  // 学生这一轮输入随之丢失（实测：三连回合里两个回合 attempt2 改写成功、最后一个回合两次
+  // 都失败 → 500 + 消息不落库）。降为软失败后语义不变——仍是「先带改写指令重试」，
+  // 只是最后一次仍命中时按当前输出继续（prompt-composer 的软校验语义），
+  // 代价是极少数回合正文里残留一处不存在的板书指代，换掉「报错 + 丢输入」。
+  validateParsedOutput: (parsed, input) => {
+    const result = validateTeachingTurnOutput(parsed, input);
+    if (!result.valid && result.failureReason === 'TEACHING_TURN_BOARD_DEIXIS_WITHOUT_BOARD') {
+      return { valid: true as const };
+    }
+    return result;
+  },
+  softValidateParsedOutput: (parsed, input) => {
+    const result = validateTeachingTurnOutput(parsed, input);
+    if (!result.valid && result.failureReason === 'TEACHING_TURN_BOARD_DEIXIS_WITHOUT_BOARD') {
+      return result;
+    }
+    return { valid: true as const };
+  },
   mapEnvelope: (output, _input, runtimeContract) => {
     const isCompletion = !!output.control?.isCompletionCandidate;
     const phase = isCompletion ? 'completion-candidate' : 'turn-generated';
