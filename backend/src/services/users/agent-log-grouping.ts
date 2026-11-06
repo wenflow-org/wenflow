@@ -175,6 +175,18 @@ export function parseAgentLogGroupId(id: string): AgentLogGroupId | null {
 }
 
 /**
+ * #225：一条真实日志行若参与会话折叠，返回它所属的合成组键（否则 null）。
+ *
+ * 前端「详情」用的是 `log.repLogId || log.id`——折叠组也有 repLogId（见 routes/users.buildAgentLogView），
+ * 所以组详情实际总落在主键分支上。主键分支若只回原始单行，同一条折叠行在列表里有
+ * groupCount/groupItems、详情里却没有（「点进去数字变了」）。这里复用会话分组的同一判据，
+ * 让调用方按组键回到列表同一条折叠管线。
+ */
+export function agentLogGroupKeyOf(log: { agentId?: string | null; metadata?: string | null }): string | null {
+  return conversationGroupKeyOf(String(log?.agentId || ''), parseMetadata(log?.metadata));
+}
+
+/**
  * 列表的完整折叠管线：去重 → 源优先级 → 会话分组 → 组记录/未归组行 → 模型归一化 → 排序。
  *
  * 详情端点必须用同一个 where 取数后调用本函数，再按 id 取其中一条；这样两处的

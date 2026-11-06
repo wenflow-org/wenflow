@@ -25,6 +25,7 @@ import {
   buildAgentLogModelIndex,
   buildAgentLogModelIndexByPath,
   resolveAgentLogModel,
+  agentLogGroupKeyOf,
 } from '../services/users/agent-log-grouping';
 import { rejectProjectionAccess } from '../middleware/projection-access.middleware';
 import { learnerSnapshotRefreshService } from '../services/learner/LearnerSnapshotRefreshService';
@@ -657,6 +658,23 @@ router.get('/me/agent-logs/:logId', async (req, res, next) => {
         success: false,
         error: { message: '日志不存在' }
       });
+    }
+
+    // #225：详情解析的是**代表行的真实主键**，而同一行在列表里是折叠组（带 groupCount/
+    // groupItems）。若该行参与会话折叠，回到与列表完全相同的取数 + 折叠管线按组键取回，
+    // 否则用户展开折叠行会看到「列表 7 条、详情 1 条」——两处数字不同源的经典不信任来源。
+    // 组键取不到（单行组会被折叠管线按原始行输出）时退回主键详情，语义不变。
+    const groupKey = agentLogGroupKeyOf(log);
+    if (groupKey) {
+      const groupLogs = await listUserAgentLogsForGrouping(scopeWhere);
+      const group = (await buildAgentLogView(userId, groupLogs)).find((entry) => entry.id === groupKey);
+      if (group) {
+        // id 回显请求的那个主键（前端以为自己在看这一行），组数字与列表同源
+        return res.json({
+          success: true,
+          data: { ...group, id: log.id }
+        });
+      }
     }
 
     // #245：真实主键行（acl_*）的详情是 UI 的主路径——前端用 `log.repLogId || log.id` 拉详情，

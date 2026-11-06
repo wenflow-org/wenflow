@@ -320,6 +320,33 @@ describe('#225 agent-logs 详情与列表共用折叠管线', () => {
     expect(detailRes.body.data.model).toBe('deepseek-v4.1-flash')
   })
 
+  // #225 残余：前端「详情」用 `log.repLogId || log.id` 拉单条，而折叠组也带 repLogId，
+  // 所以组详情实际总走**主键分支**。修复前该分支只回原始单行（无 groupCount/groupItems），
+  // 同一条折叠行在列表里有组数字、详情里没有 —— 用户点进去「条数变了」。
+  it('#225 经列表给出的 repLogId 查详情，groupCount/groupItems/model 与列表逐项相同', async () => {
+    useRows(CONVERSION_AGENTS_FIXTURE)
+    const listRes = await callList({})
+    const listRow = listRes.body.data.logs.find((log: any) => log.id === 'path:conv-path-1')
+    expect(listRow.groupCount).toBe(2)
+    expect(listRow.repLogId).toBe('acl_p1')
+
+    // 真实 repo 的 findFirst：同一个 where 下按 id 取行（scope 由 buildAgentLogWhere 传入）
+    findUserAgentLogById.mockImplementation(async (logId: string, userId: string, scope: any) => {
+      const rows = await listUserAgentLogsForGrouping(scope)
+      return rows.find((row: any) => row.id === logId && row.userId === userId) ?? null
+    })
+
+    const detailRes = await callDetail(listRow.repLogId, {})
+    expect(detailRes.statusCode).toBe(200)
+    const detail = detailRes.body.data
+    // 修复前这两项都是 undefined（主键分支只回原始行）
+    expect(detail.groupCount).toBe(listRow.groupCount)
+    expect(detail.groupItems.map((item: any) => item.id)).toEqual(listRow.groupItems.map((item: any) => item.id))
+    expect(detail.model).toBe(listRow.model)
+    expect(detail.id).toBe(listRow.repLogId)
+  })
+
+
   // #248：path: 折叠组的代表行是无 traceId 的 path-agent 阶段流水（写侧不写 traceId，
   // metadata 里也没有 model）；模型名只写在同 pathId 的 api-gateway 行上，而网关行不在
   // 默认白名单、不在本次取数集内。此前补数只认 traceId，键在这批行上结构性不存在，

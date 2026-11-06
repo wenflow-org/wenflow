@@ -84,7 +84,7 @@ export interface ReadinessWarningItem {
 export interface W1Check {
   ok: boolean;
   activeCount: number;
-  /** 户口簿登记（noPromptFile !== true）但无 ACTIVE prompt */
+  /** 户口簿登记的非 handler-only 条目但无 ACTIVE prompt（#235：判据用 kind） */
   missingActive: string[];
   /** agent_prompts ACTIVE 的 skill:<x> 不在户口簿活跃集（差集僵尸） */
   zombieActive: string[];
@@ -173,7 +173,10 @@ export function analyzeW1(book: SkillsBook, activeRows: CoreHashParityActiveRow[
   const activePromptIds = new Set(activeRows.map((row) => row.agentId));
 
   const missingActive = book.skills
-    .filter((entry) => entry.noPromptFile !== true && !activePromptIds.has(`skill:${entry.skillId}`))
+    // #235：ACTIVE prompt 的豁免判据是「handler-only（代码 handler 实现）」，
+    // 不是 noPromptFile——后者现在只表示「没有提示词文件」，board-designer 这类
+    // 有独立提示词产物、但同样不走 DB prompt 的 handler-only 仍必须豁免。
+    .filter((entry) => entry.kind !== 'handler-only' && !activePromptIds.has(`skill:${entry.skillId}`))
     .map((entry) => entry.skillId)
     .sort();
 

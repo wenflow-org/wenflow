@@ -254,7 +254,7 @@ flowchart LR
 | `web-fetch` | handler-only | handler-only：无 LLM 提示词，逻辑在代码 handler |
 | `decision-gate` | handler-only | handler-only：无 LLM 提示词，逻辑在代码 handler |
 | `text-to-image` | handler-only | handler-only：无 LLM 提示词，逻辑在代码 handler |
-| `board-designer` | handler-only | handler-only：无 LLM 提示词，逻辑在代码 handler |
+| `board-designer` | handler-only | handler-only：提示词以独立产物 prompts/skill.board-designer.md 承载（无 core 源） |
 
 ## 5. 未在 skills.yaml 登记、但仍有 Manifest 的条目
 
