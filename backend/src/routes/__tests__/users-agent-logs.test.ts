@@ -273,8 +273,9 @@ describe('users agent log routes', () => {
 
   // #218/#229：两个契约同时成立——(a) 合法能力键必出该能力的集合，且不同能力集合互不重叠；
   // (b) 能力集合绝不包含 manifest 之外/平台底层 id（api-gateway / system-call / unknown）。
-  // 原「能力筛选 ⊆ 默认结果集」的断言是上一轮为解释 profile 恒空而引入的，已被复核推翻
-  // （system 这个合法键本来就不在默认白名单内），这里换成能抓住真实病灶的两条。
+  // 原「能力筛选 ⊆ 默认结果集」的断言是上一轮为解释 profile 恒空而引入的，已被产品口径
+  // 有意取代（system 这个合法键本来就不在默认白名单内）；它在下面单独改写为新契约用例，
+  // 这里换成能抓住真实病灶的两条。
   it('能力筛选 = 各自监控组的集合，互不重叠且不含平台底层 id（#218/#229）', async () => {
     agentLogMocks.findMany.mockResolvedValue([]);
     const request = async (query: Record<string, unknown>) => {
@@ -323,6 +324,39 @@ describe('users agent log routes', () => {
       const { status } = await request({ capabilityType });
       expect(status).toBe(400);
     }
+  });
+
+  // 旧契约「能力筛选 ⊆ 默认视图（userListed）」被产品口径**有意取代**（2026-11-06 定论，
+  // #218 × #226 子项 3）——不是被悄悄破坏，所以这里保留对旧不变式的说明、把它改写为对新
+  // 契约的明确断言，而不是删掉：
+  //   默认视图（不带 capabilityType）= manifest userListed；
+  //   显式指定 capabilityType      = 该监控组全量成员，**可以有意超出默认视图**。
+  // 取代理由：这条子集约束从来不是产品语义——system（['system-call','unknown']）早就是
+  // 「显式选择 = 放宽到默认视图之外」的先例；#218 的病灶恰恰是把它强加到 profile 上，
+  // 使 Profile 组（十条 manifest 全部非 userListed）恒空。用户点「学习者模型」是明确要
+  // 看这一类调用，内部 skill 照常出现（这正是 #226 子项 3 与 #218 的取舍：显式选择优先）。
+  it('显式能力筛选刻意放宽到默认视图之外：profile/system 含 userListed 默认集合看不到的成员（#218/#226 子项 3）', async () => {
+    agentLogMocks.findMany.mockResolvedValue([]);
+    const agentIdsFor = async (capabilityType: string): Promise<string[]> => {
+      const req: any = { user: { userId: 'user-1' }, query: { format: 'json', capabilityType } };
+      await routes['GET /me/agent-logs/export'](req, createResponse(), jest.fn());
+      return agentLogMocks.findMany.mock.calls.at(-1)?.[0]?.where?.agentId?.in as string[];
+    };
+
+    const userListed = listUserListedAgentIds();
+
+    // profile：能力集合 = Profile 组全量成员，刻意包含默认视图（userListed）看不到的内部 skill
+    const profile = await agentIdsFor('profile');
+    expect(profile).toEqual(expect.arrayContaining(['skill:learning-predictor', 'skill:learner-model']));
+    expect(userListed).not.toContain('skill:learning-predictor');
+    expect(userListed).not.toContain('skill:learner-model');
+    // 直接断言「确实不是默认视图的子集」：确有成员在默认集合之外（旧不变式在此被有意打破）
+    expect(profile.some((id) => !userListed.includes(id))).toBe(true);
+
+    // system：同一口径的既有先例——显式键本来就是「放宽到默认视图之外」
+    const system = await agentIdsFor('system');
+    expect(system).toEqual(['system-call', 'unknown']);
+    expect(system.every((id) => !userListed.includes(id))).toBe(true);
   });
 
   // #218：筛选结果必须真的能被用户看见——服务端筛出 skill:learning-predictor 的行后，

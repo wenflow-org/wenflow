@@ -1,23 +1,25 @@
 /**
  * 「活动类型」（capabilityType）筛选的单一事实源。
  *
- * #218 复现的病灶：Profile 监控组十条 manifest 没有一条 userListed，而能力筛选此前是
- * 「监控组 ∩ userListed」派生 → map.profile 恒为空数组，用户在页面上选「学习者模型」
- * forever 看到空列表，而后端确实有该类调用日志（skill:learning-predictor /
- * skill:learner-state-review / skill:learner-progress-report 等，均由 executeSkill
- * 以 `skill:<id>` 写 agent_call_logs，与 manifest 的 Profile 组成员一一对应）。
+ * ── 契约（2026-11-06 定论，#218 × #226 子项 3）────────────────────────────────
+ *   默认视图（不带 capabilityType，即「AI 任务记录」）= manifest `userListed` 白名单，
+ *   只放行用户发起的业务动作（见 routes/users.buildAgentLogWhere；#219 契约不变）。
  *
- * 修复后的口径（两条范围刻意分开）：
- *   - 不带 capabilityType（默认「AI 任务记录」）= manifest userListed 白名单，只放行
- *     用户发起的业务动作（见 routes/users.buildAgentLogWhere；#219 契约不变）；
- *   - 带 capabilityType = **显式的能力钻取**，取该能力在 manifest 里的全部成员
- *     （kind !== 'alias'），包含平台内部 skill。
+ *   显式指定 capabilityType = **该监控组在 manifest 里的全量成员**（kind !== 'alias'），
+ *   **可以有意超出默认视图**。用户点「学习者模型」就是明确要看这一类调用，平台内部
+ *   skill 也属于这一类，不该因为默认列表不展示它们就被筛掉。
  *
- * 为什么可以包含内部 skill：`system` 这个合法能力键早在 #229 就是同样的语义——
- * 它映射到 ['system-call', 'unknown']，这两个 id 本来就**不在** userListed 白名单里。
- * 也就是说「能力筛选 ⊆ 默认视图」从来不是本模块的约束（此前只在四个能力组上强行
- * 施加该约束，才把 profile 钉死成恒空）；显式选一个能力 = 明确要看这一类调用。
- * 前端「隐藏底层调用」开关管的是默认视图，不影响显式能力钻取。
+ *   两个例证：
+ *     - `system` → ['system-call', 'unknown']：这两个 id 从来不在 userListed 白名单里，
+ *       显式选「系统底层调用」一直是「放宽到默认视图之外」的既有语义；
+ *     - `profile` → Profile 组全量成员（skill:learning-predictor / skill:learner-model /
+ *       skill:learner-state-review 等，全部非 userListed）。#218 的病灶正是把能力筛选
+ *       写成「监控组 ∩ userListed」，于是 profile 恒空、用户永远筛不出真实存在的调用。
+ *
+ *   因此「能力筛选 ⊆ 默认视图」**不是**本模块的不变式，已被产品口径有意取代（不是被
+ *   悄悄破坏）；恢复它会把 profile 重新钉死成空数组（#218 回归）。旧不变式的说明与
+ *   新契约的断言见 routes/__tests__/users-agent-logs.test.ts（「显式能力筛选刻意放宽
+ *   到默认视图之外」）。前端「隐藏底层调用」开关只作用于默认视图，不影响显式能力钻取。
  *
  * 与之配套：前端 AgentLogs.vue 的 mapping 必须覆盖四个能力组的全部 manifest id，
  * 否则服务端筛出的行会在客户端二次过滤里被丢掉（守卫见
