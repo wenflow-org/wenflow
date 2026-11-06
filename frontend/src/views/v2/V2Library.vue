@@ -686,20 +686,30 @@ onMounted(load);
 
 .lib-card__main {
   display: flex;
+  /* flex-start 不能省（2026-11-06 走查）：默认 stretch 会把左边那枚格式签拉成
+     与卡片等高的「长 pill」——一列 200px 高的窄条只顶上写着 MD，读作破版 */
+  align-items: flex-start;
   gap: 12px;
   flex: 1;
   min-width: 0;
 }
 
+/* 格式签：30×30 小方砖（不是拉长的色条），失败/上传/联网同一形态 */
 .lib-card__ext {
   flex: 0 0 auto;
-  padding: 3px 6px;
+  display: inline-grid;
+  place-items: center;
+  /* 方块起步、按内容放宽：DOCX/PPTX 这类 4 字格式在 34px 里会顶到边 */
+  min-width: 34px;
+  height: 34px;
+  padding: 0 7px;
   border-radius: var(--mk-radius-sm);
   background: color-mix(in srgb, var(--blue) 10%, transparent);
   color: var(--blue-deep);
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.02em;
+  line-height: 1;
 }
 
 .lib-card__body {

@@ -37,3 +37,34 @@ describe('资料库章节名：脏锚点必须被收成可读标题', () => {
     expect(toc).toContain('materialHeadingOf(');
   });
 });
+
+describe('格式签：小方砖而不是与卡片等高的长 pill', () => {
+  const stripComments = (css: string): string => css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const ruleOf = (selector: string): string => {
+    const css = stripComments(source);
+    const start = css.indexOf(`${selector} {`);
+    expect(start, `样式里没有 ${selector} 规则`).toBeGreaterThan(-1);
+    let depth = 0;
+    for (let i = css.indexOf('{', start); i < css.length; i += 1) {
+      if (css[i] === '{') depth += 1;
+      else if (css[i] === '}') {
+        depth -= 1;
+        if (depth === 0) return css.slice(start, i + 1);
+      }
+    }
+    throw new Error(`${selector} 声明块不配平`);
+  };
+
+  it('卡片主行是 flex-start（stretch 会把格式签拉成整卡高的窄条）', () => {
+    const main = ruleOf('.lib-card__main');
+    expect(/(?:^|[;{\s])align-items\s*:\s*flex-start;/.test(main), '没写 flex-start → 格式签又被拉伸').toBe(true);
+  });
+
+  it('格式签是定高小方砖（方块起步、按内容放宽）', () => {
+    const ext = ruleOf('.lib-card__ext');
+    expect(/height\s*:\s*34px;/.test(ext)).toBe(true);
+    expect(/min-width\s*:\s*34px;/.test(ext)).toBe(true);
+    expect(/display\s*:\s*inline-grid;/.test(ext)).toBe(true);
+    expect(/place-items\s*:\s*center;/.test(ext)).toBe(true);
+  });
+});
