@@ -543,6 +543,9 @@ function normalizeStageAndConfidence(
   const STAGE_MINIMUMS = {
     understanding: 0.15,
     proposing: 0.75,
+    // TODO(172-1, 待拍板)：ready 的 confidence floor 0.95 会在 previousStage='ready' 时
+    // 把模型自报值抬到 ≥0.95。降级（ready→proposing）侧的 stage 权威源已收口，
+    // 但「confidence 该怎样随 stage 归一」属产品口径未定，勿自行改。
     ready: 0.95
   };
 

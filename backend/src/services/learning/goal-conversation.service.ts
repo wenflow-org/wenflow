@@ -20,6 +20,8 @@ import { isProposalConfirmationText, isExplicitRefusalText } from './goal-conver
 import { hasConfirmableProposal } from './goal-proposal-guard';
 import { mergeProbeAnswersIntoUnderstanding, normalizeProbeAnswerInput } from './goal-probe-answers';
 import { applyConversationLifecycle, type ConversationLifecycleDb } from './goal-conversation.lifecycle';
+// stage 权威源收口（172-1）：读只认持久化值，降级时三处副本同步（见模块头）
+import { resolveAuthoritativeGoalStage, syncDegradedGoalStage } from './goal-conversation.stage-authority';
 import systemPrisma from '../../config/system-database';
 import {
   DEFAULT_RESPONSE_TRIAGE_ENFORCEMENT,
@@ -243,7 +245,8 @@ class GoalConversationService {
 
     if (next) {
       return {
-        stage: next.stage || data?.stage || fallbackStage || 'understanding',
+        // 172-1：stage 只认持久化权威源；runtimeNextState.stage 是模型自报值副本，不能反向覆盖降级结果
+        stage: resolveAuthoritativeGoalStage(data, fallbackStage),
         confidence: typeof next.confidence === 'number' ? next.confidence : (typeof data?.confidence === 'number' ? data.confidence : 0),
         understanding: next.understanding || data?.understanding || {},
         collected: next.collected || data?.collected || {},
@@ -883,7 +886,9 @@ async continueConversation(
           status: 'active',
           completedAt: null,
           mutateCollectedData: (data) => {
-            data.stage = 'proposing';
+            // 172-1：降级必须同时改写 runtimeNextState / runtimeEnvelope 快照，
+            // 否则下一轮 buildPreviousState 会读回模型自报的 ready
+            syncDegradedGoalStage(data, 'proposing');
           }
         });
         logger.warn('模型自报 ready 已被回落为 proposing，等待用户显式确认', {
