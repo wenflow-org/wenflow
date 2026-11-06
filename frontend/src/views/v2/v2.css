@@ -347,9 +347,9 @@ html, body {
   opacity: 0.3;
 }
 
-/* 快捷补充面板暗色适配：三条 .replies-panel 规则随 2026-09-30 类名改版
-   （.replies/.reply）作废——暗色已由 --surface/--line token 自动翻转，
-   新类的投影覆写见本文件末尾 html[data-theme='dark'] .replies / .reply:hover。 */
+/* 快捷补充暗色适配：随 2026-11-06 快选改透明折行方签，末尾的暗色投影覆写已随
+   黑带 Bug 一并退役（透明容器上的大投影在暗色卡上读作一条黑色横带）；现在
+   暗色完全由 --blue/--blue-deep token 混色表达 */
 
 /* ================= 暗色模式：V2LearningPage 覆写 ================= */
 [data-theme='dark'] .learn__head {
@@ -1036,8 +1036,6 @@ html[data-theme='dark'] .history__stat { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2
 html[data-theme='dark'] .oscene { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 10px 28px rgba(0, 0, 0, 0.22); }
 html[data-theme='dark'] .finish__card { box-shadow: 0 16px 40px rgba(0, 0, 0, 0.42); }
 html[data-theme='dark'] .learn__menu-pop { box-shadow: 0 12px 30px rgba(0, 0, 0, 0.42); }
-html[data-theme='dark'] .replies { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 10px 28px rgba(0, 0, 0, 0.22); }
-html[data-theme='dark'] .reply:hover { box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3); }
 html[data-theme='dark'] .view-toggle__btn--active { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); }
 html[data-theme='dark'] .pcard { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 10px 28px rgba(0, 0, 0, 0.22); }
 html[data-theme='dark'] .pcard:hover { box-shadow: 0 14px 34px rgba(0, 0, 0, 0.4); }

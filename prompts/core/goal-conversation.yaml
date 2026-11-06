@@ -237,7 +237,7 @@ fields:
   - name: quickReplies
     type: "string[]"
     turn: true
-    desc: 快捷回复选项，每次 2-3 个；understanding 阶段优先给出（回答本轮问题）；**proposing 阶段只给「调整方向」的具体选项，不要给确认项**——界面上已有确认按钮，两处入口会让用户不知道该点哪个（2026-10-31 走查）；直接放在顶层，不用 hints 或 goalConversation 包装
+    desc: 快捷回复选项，每次 2-3 个；**每条 ≤8 个汉字**（如「通知格式不对」而不是「通知被退回，说格式不对」——界面渲染为紧凑小签，超长会在移动端被折行挤爆）；understanding 阶段优先给出（回答本轮问题）；**proposing 阶段只给「调整方向」的具体选项，不要给确认项**——界面上已有确认按钮，两处入口会让用户不知道该点哪个（2026-10-31 走查）；直接放在顶层，不用 hints 或 goalConversation 包装
   - name: confirmedProposal
     type: object?
     desc: |

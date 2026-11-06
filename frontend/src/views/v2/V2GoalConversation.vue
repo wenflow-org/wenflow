@@ -251,10 +251,6 @@
         <!-- 不在整条消息流上挂 aria-live：流式重渲/每条新消息都会被读屏连播（含原始 JSON delta），
              收窄到下方等待条的 aria-live（P3） -->
         <div ref="scrollEl" class="chat__scroll" :class="{ 'chat__scroll--dim': showProposal, 'chat__scroll--pill': genPillVisibleInChat, 'chat__scroll--invite': proposalInviteVisible }" @scroll.passive="onScrollPin">
-          <!-- AI 生成声明（移动端）：贴对话流顶部随滚（窄屏输入区下方被 tab 栏接管，放不下）；
-               PC 档隐藏——声明已挪到输入框正下方与快捷键合并单行（2026-11-06 走查：
-               免责行顶在第一条消息头上像报错提示） -->
-          <div class="chat__ai-note"><AiContentNote /></div>
           <template v-for="km in keyedMessages" :key="km.key">
             <div v-if="km.msg.role === 'user'" class="msg msg--user" :class="{ 'msg--editing': editingMsgId === km.key }">
               <!-- 编辑态：textarea 替换气泡 -->
@@ -296,7 +292,6 @@
               </div>
             </div>
             <div v-else class="msg msg--ai">
-              <span class="msg__avatar"><img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="问流" /></span>
               <div class="msg__content msg__content--actions"
                 @mouseenter="onBubbleEnter(km.key)"
                 @mouseleave="onBubbleLeave"
@@ -326,7 +321,6 @@
 
           <!-- typing：等待首个 delta 期间 -->
           <div v-if="live.sending && !live.streamingText" class="msg msg--ai">
-            <span class="msg__avatar"><img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="问流" /></span>
             <div class="msg__content">
               <div class="msg__bubble msg__bubble--typing"><i></i><i></i><i></i></div>
               <!-- 收窄后的 live region：只播报等待文案，不再让整条消息流进读屏队列 -->
@@ -337,7 +331,6 @@
           <!-- 流式渐进渲染：SSE delta 实时累积（goal skill 为 JSON 输出，展示原始模型文本；
                final 到达后由官方消息替换，避免双泡；方案浮层打开时不重复展示，浮层内已有流式进度） -->
           <div v-if="live.sending && live.streamingText && !showProposal" class="msg msg--ai">
-            <span class="msg__avatar"><img :src="isDark ? '/favicon-dark.png' : '/favicon.png'" alt="问流" /></span>
             <div class="msg__content msg__content--actions">
               <div class="msg__bubble msg__bubble--html msg__bubble--streaming" v-html="formatMessage(live.streamingText)"></div>
               <div class="msg__meta">{{ chatWaitMeta }}</div>
@@ -459,8 +452,8 @@
           </div>
         </div>
         <!-- 输入框正下方的合并元数据行（2026-11-06 走查）：AI 声明 + 快捷键同一行居中浅灰小字；
-             字数计数 3500 起在此浮现（2026-11-05 判例沿用）。PC 档专属——移动端该位置被
-             底部导航接管，声明仍走对话流顶部的 .chat__ai-note -->
+             字数计数 3500 起在此浮现（2026-11-05 判例沿用）。全断面唯一的 AI 声明出口
+             （对话流顶部免责行已随「移动端黑洞」走查退役） -->
         <div v-if="loggedIn && live.started" class="chat__under-hint">
           <AiContentNote />
           <span class="chat__under-hint-sep">·</span>
@@ -2124,10 +2117,7 @@ function shuffleScenes() {
     border-radius: var(--mk-radius-modal);
     box-shadow: var(--shadow-sm);
   }
-  /* 输入区底色交给卡底（96% 混色是移动端画布直铺时代的残影）；发丝线保留为卡内分区 */
-  .chat > .composer { background: var(--surface); }
-  /* AI 声明已挪输入框正下方（.chat__under-hint），对话流顶部的免责行 PC 不再重复 */
-  .chat__ai-note { display: none; }
+  /* AI 声明已在输入框正下方（.chat__under-hint），全断面对话流顶部不再重复 */
   /* 输入框正下方的合并元数据行：AI 声明 + 快捷键（+ ≥3500 字数计数）居中一行浅灰小字 */
   .chat__under-hint {
     display: flex; align-items: center; justify-content: center; gap: 6px;
@@ -2205,6 +2195,9 @@ function shuffleScenes() {
   0%, 100% { opacity: 1; }
   50% { opacity: .35; }
 }
+/* 深色模式：当前步呼吸点提亮（--blue #2f6ae0 在黑底上读作深藏青，叠呼吸 0.35 档几乎
+   隐形）；用暗色 hover 提亮档 #6a9cf3（token），与用户点名的 #60A5FA 同档 */
+html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-hover); }
 .chat__clear { font-size: 12px; font-weight: 600; color: var(--faint); cursor: pointer; }
 .chat__clear:hover { color: var(--red-ink); }
 
@@ -2223,7 +2216,6 @@ function shuffleScenes() {
 .chat__scroll::-webkit-scrollbar { display: none; }
 /* AI 生成声明（2026-11-05 屏效比改造自输入区元数据条迁来）：对话流顶部居中一行，
    随内容滚动；消息少时由移动端「贴底」规则带着一起贴在最新消息上方 */
-.chat__ai-note { display: flex; justify-content: center; }
 /* 消息从上方开始、向下生长：桌面**刻意不做贴底**。
    2026-10-05 曾把窄屏那条贴底规则提到基础档（当时理由是「短会话消息与下方快捷块之间空一截」），
    结果桌面整段对话吊在底部：1440×1250 实测首条消息距对话区顶部 141px，看起来像对话从下往上长。
@@ -2368,7 +2360,8 @@ function shuffleScenes() {
   border-top-left-radius: 4px; /* 圆角阶梯：内芯尾角 */
   box-shadow: var(--shadow-sm);
 }
-.msg--ai { flex-direction: row; align-items: flex-start; gap: 10px; max-width: 92%; }
+/* W 头像已全断面退役（2026-11-06 走查）：气泡与快选、输入框共用同一条左缘 */
+.msg--ai { max-width: 92%; }
 .msg--ai .msg__content { display: grid; gap: 5px; min-width: 0; }
 .msg--ai .msg__bubble b, .msg--ai .msg__bubble strong { color: var(--blue-deep); }
 .msg__bubble--html :deep(p) { margin: 0 0 8px; }
@@ -2421,14 +2414,7 @@ function shuffleScenes() {
 .msg__bubble--typing i:nth-child(2) { animation-delay: .15s; }
 .msg__bubble--typing i:nth-child(3) { animation-delay: .3s; }
 @keyframes typing { 0%, 60%, 100% { opacity: .3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
-.msg__avatar {
-  /* 原型 wf-msg__avatar：蓝 12% 扁平圆 + blue-deep 字（去蓝→紫渐变方块，2026-09-30 视觉收敛） */
-  width: 30px; height: 30px; border-radius: 50%;
-  background: color-mix(in srgb, var(--blue) 12%, transparent);
-  color: var(--blue-deep); font-size: 13px; font-weight: 800;
-  display: grid; place-items: center;
-  flex: 0 0 auto; margin-top: 2px;
-}
+
 .msg__meta { font-size: 12px; color: var(--faint); }
 .msg__retry {
   /* 时间戳撤除后重试就是 meta 行首个子项，不再吃 8px 左偏移（2026-11-05 屏效比） */
@@ -2440,29 +2426,30 @@ function shuffleScenes() {
    胶囊按钮组：1px 蓝 28% 描边 + 蓝 5% 底 + blue-deep 文字；选中加 ✓（前置蓝点已撤） */
 .replies {
   display: flex; flex-wrap: wrap; gap: 8px;
-  margin-left: 40px;
 }
 /* 2026-11-02 用户反馈「快选太宽」：整行大按钮改成自动宽度的胶囊，
    多个选项并排换行，不再一条占满一整行。（历史轮次 .msg__reply 已随「旧选项销毁」退役） */
+/* 紧凑方签（2026-11-06 走查）：8px 小圆角 + 30px 定高，全圆胖胶囊退役；
+   深浅色都走 token 混色（柔和半透明蓝底 + 细边框），不再依赖暗色投影 */
 .reply {
-  display: inline-flex; align-items: center; gap: 7px;
+  display: inline-flex; align-items: center;
   width: auto; max-width: 100%;
-  min-height: 38px; padding: 8px 14px;
-  border-radius: var(--mk-radius-pill);
+  min-height: 30px; padding: 5px 12px;
+  border-radius: var(--mk-radius-md);
   text-align: left;
-  border: 1px solid color-mix(in srgb, var(--blue) 28%, transparent);
-  background: color-mix(in srgb, var(--blue) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--blue) 25%, transparent);
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
   color: var(--blue-deep);
-  font: inherit; font-size: 13.5px; font-weight: 600; line-height: 1.45;
+  font: inherit; font-size: 12.5px; font-weight: 600; line-height: 1.45;
   cursor: pointer;
-  transition: background 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+  transition: background 0.14s ease, border-color 0.14s ease;
 }
 /* 前置 6px 蓝点已撤（2026-11-06 走查）：胶囊本体就是可点项，再挂一颗点只是噪声；
    选中态的 ✓ 仍走 ::before（见 .reply--on）。左缘对齐：.replies 的 margin-left 40
    = AI 头像 30 + 列间距 10，与上方 AI 气泡左缘同一条竖线 */
 .reply:hover {
-  background: color-mix(in srgb, var(--blue) 11%, transparent);
-  border-color: color-mix(in srgb, var(--blue) 46%, transparent);
+  background: color-mix(in srgb, var(--blue) 16%, transparent);
+  border-color: color-mix(in srgb, var(--blue) 40%, transparent);
 }
 .reply:disabled { cursor: default; opacity: .55; }
 /* 选中：边蓝 72% / 底蓝 15% / 内描边 1px 蓝 34%，前缀圆点变 ✓ */
@@ -2473,8 +2460,7 @@ function shuffleScenes() {
 }
 .reply--on::before {
   content: "✓";
-  width: auto; height: auto; margin-top: 0; border-radius: 0; background: none;
-  color: var(--blue); font-size: 13px; font-weight: 800; line-height: 1.45;
+  color: var(--blue); font-size: 12.5px; font-weight: 800; line-height: 1.45;
 }
 /* 历史轮次快捷补充（.msg__replies/.msg__reply）已随「旧选项销毁」改造退役（2026-11-05）：
    活快选由下方 .replies 常驻面板承担，样式同语言见 .reply */
@@ -2584,13 +2570,12 @@ function shuffleScenes() {
    靠 284px 空列把内容凑到对话列下面——一旦 .work 在宽屏放宽（≥1680 的 1180 档）或 zoom
    档生效，两套宽度立刻错开：1080P 实测气泡 821px、输入框 583px，输入区与对话割裂。
    宽度只有一处来源（= 对话列）才不会漂。 */
+/* 底部 Footer 透明无边框（2026-11-06 走查暗色）：96% 混色在暗色卡里读作「更黑一度的
+   直角条」并盖住卡底圆角；输入区直接浮在卡底上，与聊天区零色差 */
 .chat > .composer {
   flex: 0 0 auto;
-  /* 左右 16 = .chat__scroll 的左右内边距：输入框左右缘与上方气泡严格同一条竖线
-     （宽屏两者都吃 760 上限，窄屏两者都等于「对话列 − 32」）。 */
+  /* 左右 16 = .chat__scroll 的左右内边距：输入框左右缘与上方气泡严格同一条竖线 */
   padding: 12px 16px;
-  border-top: 1px solid var(--line);
-  background: color-mix(in srgb, var(--surface) 96%, transparent);
   /* 自带 safe-area：无底部导航的设备上输入条不压 home 指示条
      （移动端媒体查询里会改掉，因为那档有底部 tab 栏接管该区域） */
   padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
@@ -3031,19 +3016,16 @@ function shuffleScenes() {
   /* overscroll-behavior:contain 隔断滚动链——列表滚到边缘时不再触发整页橡皮筋
      （本页 height:100dvh 不随文档滚动，iOS 上链式滚动会把底部导航一起拽动）。
      padding 16/20→10/16、消息间距 18→16（2026-11-05 屏效比）：对话区首屏多装半轮问答 */
-  .chat__scroll { min-height: 0; overscroll-behavior: contain; padding: 10px 16px 40px; gap: 16px; }
+  .chat__scroll { min-height: 0; overscroll-behavior: contain; padding: 16px 16px 40px; gap: 16px; }
   /* AI 头像左列撤除（2026-11-05 屏效比）：30px 圆 + 10px gap 把整段回复推开 40px 宽，
      同样字数多折 2~3 行；品牌已由顶栏承载，气泡不再需要逐条自报家门 */
-  .msg__avatar { display: none; }
   .msg--ai { max-width: 100%; }
   /* AI 回复占满对话列宽（2026-11-05 屏效比第 2 刀）：内容自然宽会在右侧留出空白带，
      flex:1 让卡片与步条带/输入框同缘（≈屏宽 92%），长文再省 1~2 行 */
   .msg--ai .msg__content { flex: 1; }
-  /* 快捷补充改单行横滑（2026-11-05 屏效比）：3 个胶囊折两行吃 84px，单行省 ~46px；
-     右侧自然露出半颗胶囊表达「可横滑」，滚动条隐藏降噪 */
-  .replies { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
-  .replies::-webkit-scrollbar { display: none; }
-  .reply { flex: 0 0 auto; }
+  /* 横滑判例退役（2026-11-06 走查）：第 3 项截断成「说不…」等于废掉一个选项，
+     鼠标也没法左右滚；快选回归自适应折行（基础档 flex-wrap: wrap），配合
+     「单条 ≤8 字」的文案口径，三个短签一行排得下 */
   /* 操作条（👍👎🔄📋）收紧（2026-11-05 屏效比）：左对齐贴气泡下缘（不再偏右悬浮）、
      上下空隙收半——负边距只收视觉空隙，36×36 触控盒不缩（EG20 口径） */
   .chat .msg__content--actions > .msg-actions {
@@ -3051,14 +3033,9 @@ function shuffleScenes() {
     justify-content: flex-start;
     margin: -7px 0 -5px;
   }
-  /* 消息少时贴底：首个子项吃满剩余空间（等价 justify-content:flex-end，但溢出时不会把顶部
-     推出可达范围——auto 外边距在无剩余空间时按 0 处理）。短会话下最新一条与快捷补充紧贴输入框，
-     视线与拇指都不用上下跑。窄屏专属：桌面要从上往下长（见基础档注释）。 */
-  .chat__scroll > :first-child { margin-top: auto; }
+  /* 贴底判例退役（2026-11-06 走查）：消息少时首项吃 auto 空间，步骤条与首条消息之间
+     撑出 ~100px 空洞（暗色下是「大黑洞」）；消息流回归从顶部生长（桌面同款） */
   .msg { max-width: 96%; }
-  /* 快捷补充面板占满整宽：基础样式的 margin-left 40（对齐气泡正文）在手机上白丢 40px 宽度，
-     而这是整屏最常点的区域 */
-  .replies { margin-left: 0; }
   /* 编辑按钮触屏即 40×40 本体（EG20 复验收口，见 (hover: none) 块），不再用 ::before 扩热区 */
   /* 旧「hint 行 dock 缝」整套退役（2026-11-06）：主输入区的元数据行已并入 PC 档
      .chat__under-hint；触屏无快捷键提示，≥3500 的字数计数在手机上属极端边缘，
@@ -3154,16 +3131,6 @@ function shuffleScenes() {
 
 <style scoped>
 /* logo 头像 */
-.msg__avatar {
-  background: var(--surface) !important;
-  border: 1px solid var(--line);
-  box-shadow: var(--wf-shadow-raised); /* 悬浮档 */
-}
-.msg__avatar img {
-  width: 28px;  /* 24→28：34px 框内留 3px 呼吸边即可，logo 更凸显（2026-09-27 用户反馈） */
-  height: 28px;
-  object-fit: contain;
-}
 </style>
 
 <style scoped>

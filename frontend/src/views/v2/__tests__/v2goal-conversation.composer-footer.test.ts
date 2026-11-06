@@ -176,7 +176,8 @@ describe('输入区底部提示条：只放元数据，不放动作', () => {
     expect(source).toContain('<AiContentNote />');
     expect(source).toContain('SEND_SHORTCUT_HINT');
     expect(source).toContain('input.length >= 3500');
-    /* 对话流顶部的免责行只留给移动端（PC 由 under-hint 承担） */
-    expect(decl(ruleOf(wide, '.chat__ai-note'), 'display')).toBe('none');
+    /* 对话流顶部的免责行整体退役（2026-11-06 二次走查：移动端黑洞+免责行头顶）——
+       全断面声明唯一出口 = under-hint */
+    expect(source).not.toContain('chat__ai-note');
   });
 });
