@@ -344,7 +344,7 @@ describe('SimulationOrchestrator.runTeachingTurnWithStepRetry（#153 revision �
     expect(mockProcessStudentMessage).toHaveBeenCalledTimes(2)
   })
 
-  it('重试期间课堂被并发收束换码（STATE_CHANGED）→ 仍抛原始 STALE，不因重试把可续跑升级为终局', async () => {
+  it('重试期间课堂被并发收束换码（STATE_CHANGED）→ 抛真实终局码，不被原始 STALE 静默覆盖（#206）', async () => {
     mockGetSessionDetail.mockResolvedValue({ id: 'teach-1', status: 'active', revision: 8 })
     mockProcessStudentMessage
       .mockRejectedValueOnce(staleError())
@@ -353,22 +353,58 @@ describe('SimulationOrchestrator.runTeachingTurnWithStepRetry（#153 revision �
         category: 'conflict'
       }))
 
-    // 抛出的是中断窗口类的 STALE（上层 isTransientUpstreamLearnError=true → 可续跑暂停），
-    // 而不是把终局类的 STATE_CHANGED 漏给上层
-    await expect(coordinator.runTeachingTurnWithStepRetry({
-      sessionId: 'sim-1',
-      userId: 'user-1',
-      teachingSessionId: 'teach-1',
-      learnerMessage: '老师我有个疑问',
-      teachingRevision: 7,
-      pendingCheckpoint: null,
-      checkpointAnswer: null
-    })).rejects.toMatchObject({ code: 'TEACHING_SESSION_STALE' })
+    // #206：STATE_CHANGED 是「课堂本身已变」的终局类错误，与中断窗口语义相反——必须原样抛给
+    // 上层分类器（该终局化就终局化），否则会永远按可续跑暂停反复空转、真实原因只剩一条 warn。
+    // 原始 STALE 作为「已重试过」的附加信息保留（staleRetry），主错误码不变。
+    let caught: any
+    try {
+      await coordinator.runTeachingTurnWithStepRetry({
+        sessionId: 'sim-1',
+        userId: 'user-1',
+        teachingSessionId: 'teach-1',
+        learnerMessage: '老师我有个疑问',
+        teachingRevision: 7,
+        pendingCheckpoint: null,
+        checkpointAnswer: null
+      })
+    } catch (error: unknown) {
+      caught = error
+    }
+    expect(caught?.code).toBe('TEACHING_SESSION_STATE_CHANGED')
+    expect(caught?.staleRetry).toEqual(expect.objectContaining({ code: 'TEACHING_SESSION_STALE' }))
     expect(mockProcessStudentMessage).toHaveBeenCalledTimes(2)
     expect(logger.warn).toHaveBeenCalledWith(
-      '[simulation-coordinator] 教学回合 revision 过期后重试仍失败，按中断窗口（可续跑）处理',
+      '[simulation-coordinator] 教学回合 revision 过期后重试撞终局类错误，交上层分类器',
       expect.objectContaining({ retryErrorCode: 'TEACHING_SESSION_STATE_CHANGED' })
     )
+  })
+
+  it('重试期间收束租约被接管（FINALIZATION_LEASE_LOST）→ 同样抛真实终局码（#206）', async () => {
+    mockGetSessionDetail.mockResolvedValue({ id: 'teach-1', status: 'active', revision: 8 })
+    mockProcessStudentMessage
+      .mockRejectedValueOnce(staleError())
+      .mockRejectedValueOnce(Object.assign(new Error('课堂结束操作已被其他请求接管'), {
+        code: 'FINALIZATION_LEASE_LOST',
+        category: 'lease'
+      }))
+
+    let caught: any
+    try {
+      await coordinator.runTeachingTurnWithStepRetry({
+        sessionId: 'sim-1',
+        userId: 'user-1',
+        teachingSessionId: 'teach-1',
+        learnerMessage: '老师我有个疑问',
+        teachingRevision: 7,
+        pendingCheckpoint: null,
+        checkpointAnswer: null
+      })
+    } catch (error: unknown) {
+      caught = error
+    }
+    expect(caught?.code).toBe('FINALIZATION_LEASE_LOST')
+    expect(caught?.staleRetry).toEqual(expect.objectContaining({ code: 'TEACHING_SESSION_STALE' }))
+    expect(mockProcessStudentMessage).toHaveBeenCalledTimes(2)
   })
 
   it('非 revision 冲突类错误原样抛出，不做多余重试', async () => {

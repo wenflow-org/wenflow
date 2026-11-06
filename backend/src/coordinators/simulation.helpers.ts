@@ -165,6 +165,57 @@ export function isResumableTeachingSessionConflictError(error: unknown): boolean
 }
 
 /**
+ * #206：**终局类**课堂错误——课堂状态本身已经变了（并发收束/已结束 → `TEACHING_SESSION_STATE_CHANGED`），
+ * 或收束操作已被接管/失效（`FINALIZATION_*`）。它们与「中断窗口」相反：重试不会让它们变可续跑，
+ * 必须原样交给上层分类器（该终局化就终局化），不能被重试兜底里的原始 `STALE` 覆盖后静默。
+ */
+export function isTerminalTeachingSessionConflictError(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  if (typeof code !== 'string') return false;
+  return code === 'TEACHING_SESSION_STATE_CHANGED' || code.startsWith('FINALIZATION_');
+}
+
+/**
+ * #206：把一个错误的「重试来源」作为**附加信息**挂到终局错误上（非枚举属性，不改变主错误码/消息）。
+ * 用途：`STALE → 重试 → STATE_CHANGED` 抛出的仍是 `STATE_CHANGED`，但保留「本次是重试后的失败」
+ * 供上层/日志对账；不可写时不阻断（附加信息尽力而为）。
+ */
+export function attachStaleRetryContext(terminalError: unknown, staleError: unknown): void {
+  const target = terminalError as { staleRetry?: unknown } | null;
+  if (!target || typeof target !== 'object') return;
+  if (target.staleRetry !== undefined) return;
+  try {
+    Object.defineProperty(target, 'staleRetry', {
+      value: { code: 'TEACHING_SESSION_STALE', message: asErrorLike(staleError).message || String(staleError) },
+      enumerable: false,
+      configurable: true,
+      writable: true,
+    });
+  } catch {
+    // 附加信息尽力而为：不可写（冻结/宿主对象）时保留终局错误本身即可
+  }
+}
+
+/**
+ * #204：本函数所在收尾流程（`endSession(end_only)`）是否**仍会产出 `lesson:completed`**。
+ *
+ * 教学链路的 `task:completed`（带 `sessionId`）默认把投影键刷新让给同一次收尾的
+ * `lesson:completed`；一旦授课会话已经不处于「可再收束」状态（completed 幂等分支 / superseded /
+ * failed 等状态拒绝），endSession 只会幂等返回或抛 STATE_CHANGED，**不会再产出**
+ * `lesson:completed` —— 此时结算方必须自己补刷，否则该次收尾对投影键 0 次刷新（#204）。
+ *
+ * 判据与 `TeachingSessionRepository.claimFinalization` 的 `allowedStatuses`（end_only）同口径：
+ * active / paused / timeout / finalizing / finalization_failed 才可能真正收束并产出事件。
+ */
+export function willEmitLessonCompletedOnEnd(status: string | null | undefined): boolean {
+  return status === 'active'
+    || status === 'paused'
+    || status === 'timeout'
+    || status === 'finalizing'
+    || status === 'finalization_failed';
+}
+
+/**
  * 「上游突发不可用」类错误（**会话级**判定，2026-09-23 四学段测试 I-1）。
  *
  * 单次调用的重试预算被 5xx/超时/限流耗尽，说明的是"**这次上游没给到**"，而不是"这节课坏了"；
