@@ -442,6 +442,11 @@ export async function executeSingleStep(ctx: SimulationOrchestrator, input: Simu
     if (session.status === 'failed' || session.status === 'abandoned') {
       throw new Error(`会话已终止（${session.status}），无法继续执行`);
     }
+    // 阶段闸（175-4）：本函数只驱动 Goal 回合。驾驶舱 /step、/auto 只过模式检查，
+    // 任何已进入 path/teaching 的会话再被调用都会把 Goal 回合强行叠加到后继阶段上（阶段倒退）。
+    if (session.currentStage !== 'goal') {
+      throw new Error(`会话当前阶段为 ${session.currentStage}，仅 goal 阶段支持单步模拟推进`);
+    }
     if (!session.goalConversationId) {
       // 故事当次需求 → Goal 开场（写入 conversation.description）→ 正式 Path 只吃 Goal，不读 story
       // description 固定用 storyDemand.text，保证传递链不被模拟者改写；模拟者只负责后续轮次。
