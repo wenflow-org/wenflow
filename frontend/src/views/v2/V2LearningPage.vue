@@ -513,6 +513,13 @@
               @click="openPeerByUser"
             >问小启</button>
           </div>
+          <!-- 越过小测的后果说明（2026-11-06）：出题闸门在后端是硬拦
+               （teaching-checkpoint.ts「已有 pendingCheckpoint 就不再出题」），
+               用户不答直接继续聊 → 本节后面一道新小测都不会再出，而界面原先零提示。
+               触发取「有待答小测时用户又发了一条消息」这一确定信号，不引入计时器。 -->
+          <p v-if="checkpointWalkedPast" class="checkpoint__aside">
+            这道题先留着：答完或跳过之后，本节才会出新的小测。
+          </p>
           </div>
         </Transition>
 
@@ -1376,6 +1383,14 @@ function buildPostQuizReplies(): string[] {
 
 /** 小测答完后的续接动作（见 watch(checkpoint) 内注释）；发送任意消息即清 */
 const postQuizReplies = ref<string[]>([]);
+
+/* 待答小测被「越过」的标记（2026-11-06 走查）：
+   后端出题闸门是硬拦——只要会话里还挂着 pendingCheckpoint，本回合及后续回合都不会再出题
+   （teaching-checkpoint.ts checkCheckpointEmission）。所以「不答这道题直接继续聊」的真实后果是
+   本节后面再没有小测，而界面此前没有任何提示，用户只会觉得「后面怎么不考了」。
+   触发条件取「有待答小测时用户又发出一条消息」：这是唯一确定的「越过」信号，不引入计时器
+   （用户在读题时不会误报）。换题或卡片收起即复位。 */
+const checkpointWalkedPast = ref(false);
 const allKpMastered = computed(() => knowledgePoints.value.length > 0 && masteredCount.value >= knowledgePoints.value.length);
 
 /* 作答回显（2026-10-31 复验）：提交路径此前从不追加用户气泡，后端却把这条作答落了库
@@ -1387,7 +1402,12 @@ watch(lastAnswerEcho, (pending) => {
 })
 
 /* 结算门禁提示随条件解除：检查点卡片收起（作答 / 跳过 / 已处理）即撤掉，不再要求手动关 */
-watch(checkpoint, (cp) => {
+watch(checkpoint, (cp, prev) => {
+  /* 越过标记只跟「同一道题」走：收起（答完/跳过/已处理）或换到另一道题都复位。
+     同一 id 的重复下发（服务端不会在有待答时清 pending）必须保留提示，否则每发一条消息
+     提示就闪一下又消失。 */
+  if (!cp) checkpointWalkedPast.value = false
+  else if (prev && prev.id !== cp.id) checkpointWalkedPast.value = false
   if (cp) postQuizReplies.value = [] // 新检查点到达：续接 chips 让位给小测卡
   if (!cp && settleBlock.value?.action === 'checkpoint') {
     /* P25（2026-11-01 走查实锤，后端日志 3×409 + 截图佐证）：小测提交内含一次教学回合（数十秒），
@@ -2062,6 +2082,7 @@ async function send(e?: unknown) {
   // （服务端拒绝、消息不入库、误报失败，且陈旧重试会重复推送同一条用户消息）。
   // 结算中（finalizing）同样锁：finalize 含自动关课+wrapup，期间放行会打出面板后的幽灵教师回合。
   if (!t || typing.value || checkpointPending.value || !session.value || completed.value || finalizing.value) return;
+  if (checkpoint.value && !checkpointPassed.value) checkpointWalkedPast.value = true;
   input.value = '';
   assessTarget.value = null; // 用户已表态/新回合开始，快选确认清除
   confirmCheck.value = null;
@@ -2071,6 +2092,7 @@ async function send(e?: unknown) {
 
 async function sendDirect(text: string) {
   if (typing.value || !session.value || completed.value || finalizing.value) return;
+  if (checkpoint.value && !checkpointPassed.value) checkpointWalkedPast.value = true;
   postQuizReplies.value = []; // 点续接动作即接管
   assessTarget.value = null; // 点击快选确认/开场建议即表态，清除待确认
   collapseOpeningScene();
@@ -3780,6 +3802,11 @@ onBeforeUnmount(() => {
 .checkpoint__head strong { font-size: 13.5px; line-height: 1.5; }
 .checkpoint__head code { background: color-mix(in srgb, var(--blue) 10%, transparent); color: var(--blue-deep); padding: 1px 6px; border-radius: var(--mk-radius-sm); font-size: 12.5px; }
 /* 标签是纯文字（原型 .wf-checkpoint__label 不做胶囊），蓝字 + 字距 */
+/* 越过小测的后果说明：一行 12px 暖色提示（不是报错——没答也允许继续聊） */
+.checkpoint__aside {
+  margin: 0; padding: 2px 0 0;
+  font-size: 12px; line-height: 1.5; color: var(--amber-ink);
+}
 .checkpoint__badge {
   width: fit-content;
   font-size: 12px; font-weight: 800; letter-spacing: .05em;
