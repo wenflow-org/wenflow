@@ -268,11 +268,16 @@ export function buildTeachingSandboxPool(options: {
  * 此前池里没有这些键 ⇒ 「声明 ≠ 载荷」，且这两个 skill 未纳入运行期对账，问题一直不可见。
  * 现在：① 池按本清单显式登记通道（本次未注入的显式 null）；② 真实载荷（injected）覆盖同名键；
  * ③ 调用点在 executeSkill 之前跑 checkAgentSandboxRefs 对账，声明/载荷一旦再次漂移就会 warn。
+ *
+ * #192 复核残留：kc-mapper / path-reviewer 声明的它是**顶层** `prerequisiteTree`
+ * （载荷即 `kcMapperInput.prerequisiteTree` / path-generation 的评审入参），此前只在
+ * AgentContractView 登记了从不存在的 `normalizedInput.prerequisiteTree` ⇒ 声明恒不可解析。
  */
 export const PATH_STAGE_SANDBOX_KEYS = [
   'milestones',
   'subtasks',
   'cognitiveCore',
+  'prerequisiteTree',
   'materials',
   'repairHints',
   'supplementRequest',

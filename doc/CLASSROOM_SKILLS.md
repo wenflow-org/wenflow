@@ -299,7 +299,7 @@ label 必须是具体的错误理解陈述（如"以为整理就是把东西全�
 - 「cognitiveCore（object）」`skill:path-planning.cognitiveCore` — 认知核心（coreConcepts + cognitiveDomain）
 - 「milestones（object[]）」`skill:path-planning.milestones` — 里程碑骨架（title/coreConcept/description/goal）
 - 「subtasks（object[]）」`sandbox:path.subtasks`（编排注入） — 阶段子任务列表（title/type/linkedConcept/knowledgeType/cognitiveLevel）
-- 「prerequisiteTree（object?）」`sandbox:path.normalizedInput.prerequisiteTree`（编排注入） — RPKT 前提知识缺口链（可选，用于校验 KC 依赖是否覆盖已知缺口）
+- 「prerequisiteTree（object?）」`sandbox:path.prerequisiteTree`（编排注入） — RPKT 前提知识缺口链（可选，用于校验 KC 依赖是否覆盖已知缺口）
 
 #### 执行规则
 
@@ -372,7 +372,7 @@ label 必须是具体的错误理解陈述（如"以为整理就是把东西全�
 输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
 - 「pathPlan（object）」`skill:path-planning.milestones` — 已生成的路径规划（name/summary/cognitiveCore/milestones/estimatedHours）
 - 「goalContext（object）」`sandbox:path.normalizedInput`（编排注入） — 目标上下文（surfaceGoal/confirmedProposal/successCriteria/learnerProfile）
-- 「prerreqTree（object?）」`sandbox:path.normalizedInput.prerequisiteTree`（编排注入） — RPKT 前提知识缺口链（可选，存在时用于校验路径是否覆盖了已知缺口）
+- 「prerreqTree（object?）」`sandbox:path.prerequisiteTree`（编排注入） — RPKT 前提知识缺口链（可选，存在时用于校验路径是否覆盖了已知缺口）
 
 #### 执行规则
 

@@ -644,7 +644,9 @@ inputs:
     desc: 目标上下文（surfaceGoal/confirmedProposal/successCriteria/learnerProfile）
   - name: prerreqTree
     type: object?
-    ref: sandbox:path.normalizedInput.prerequisiteTree
+    # #192：与 kc-mapper 同一数据键——运行时以顶层 prerequisiteTree 注入
+    # （path-generation.core 评审调用），不在 normalizedInput 之下。
+    ref: sandbox:path.prerequisiteTree
     desc: RPKT 前提知识缺口链（可选，存在时用于校验路径是否覆盖了已知缺口）
 rules:
   - 只评审路径质量，不重写路径内容
@@ -734,7 +736,10 @@ inputs:
       taskKey 是该任务的**稳定键**（形如 task-1-0），只用于把 KC 链接对回任务，不参与语义判断。
   - name: prerequisiteTree
     type: object?
-    ref: sandbox:path.normalizedInput.prerequisiteTree
+    # #192：载荷由编排层以**顶层**键注入（stage-enrichment / path-replan.kc-sync 的
+    # kcMapperInput.prerequisiteTree）；normalizedInput 从不产出该键，原 ref 指向
+    # sandbox:path.normalizedInput.prerequisiteTree ⇒ 对账永远取不到值。
+    ref: sandbox:path.prerequisiteTree
     desc: RPKT 前提知识缺口链（可选，用于校验 KC 依赖是否覆盖已知缺口）
 rules:
   - 只做 KC 标注，不评价路径质量

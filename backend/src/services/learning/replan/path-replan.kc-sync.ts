@@ -20,7 +20,7 @@ import { kcMapperDefinition } from '../../../skills/kc-mapper';
 import { resolveTaskConcept } from '../learning.helpers';
 import { conceptRegistryService } from '../../learner/concept-registry.service';
 import { conceptGraphService } from '../../learner/concept-graph.service';
-import { buildPathSandboxPool, checkAgentSandboxRefs } from '../../sandbox-resolver.service';
+import { auditPathStageAgentsSandboxRefs } from '../generation/stage-sandbox-ref-audit';
 import { normalizeConceptKey } from '../../memory/concept-key';
 import {
   bindKcLinksToSubtaskIds,
@@ -133,22 +133,13 @@ export async function prepareReplanKcSync(input: {
   // #192：stage-designer / kc-mapper 纳入沙盘 ref 运行期对账（真实载荷即池）。
   // 多阶段重排逐阶段调用本函数，只在首个阶段做一次（与 contentSnapshot 同口径）。
   if (!input.skipSandboxAudit) {
-    try {
-      await checkAgentSandboxRefs(
-        'stage-designer',
-        'path',
-        buildPathSandboxPool(input.normalizedInput || {}, input.stageDesignerInput as any),
-        { includeOptional: true, warnContext: { pathId: input.pathId, boundary: 'replan', stageNumber: input.stageNumber } }
-      );
-      await checkAgentSandboxRefs(
-        'kc-mapper',
-        'path',
-        buildPathSandboxPool(input.normalizedInput || {}, kcMapperInput as any),
-        { warnContext: { pathId: input.pathId, boundary: 'replan', stageNumber: input.stageNumber } }
-      );
-    } catch {
-      // 对账是观测，不影响重排
-    }
+    await auditPathStageAgentsSandboxRefs({
+      pathId: input.pathId,
+      normalizedInput: input.normalizedInput,
+      stageDesignerPayload: (input.stageDesignerInput as any) || {},
+      kcMapperPayload: kcMapperInput as any,
+      warnContext: { boundary: 'replan', stageNumber: input.stageNumber },
+    });
   }
 
   // 任务级 sidecar 收集器（key = 新 subtaskId；声明在事务外，事务重试时在事务内清空重建）

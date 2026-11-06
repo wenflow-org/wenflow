@@ -12,7 +12,7 @@ import { logger } from '../../../utils/logger';
 import { withTransaction } from '../../../utils/with-transaction';
 import { executeSkill } from '../../../skills';
 import { runWithPathGenerationContext } from './generation-request-context';
-import { auditStageAgentSandboxRefs } from './stage-sandbox-ref-audit';
+import { auditPathStageAgentsSandboxRefs } from './stage-sandbox-ref-audit';
 import { stageDesignerDefinition } from '../../../skills/stage-designer';
 import {
   clampHintsToOneSitting,
@@ -916,7 +916,14 @@ async function enrichLearningPathWithAndersonInner(
     auditStageMaterialCoverage({ pathId, stageMaterialAudit, normalizedInput });
 
     // #192：把 stage-designer / kc-mapper 纳入沙盘 ref 运行期对账（载荷与判据见 stage-sandbox-ref-audit）。
-    await auditStageAgentSandboxRefs({ pathId, normalizedInput, stageDesignerSample: stageSandboxSample, stageDesignOutputs, learningPath });
+    await auditPathStageAgentsSandboxRefs({
+      pathId, normalizedInput, stageDesignerPayload: stageSandboxSample,
+      kcMapperPayload: {
+        subtasks: stageDesignOutputs.flatMap((stage) => stage.subtasks),
+        milestones: learningPath.milestones.map((m: any) => ({ stageNumber: m.stageNumber, title: m.title, coreConcept: m.coreConceptName || m.coreConceptId })),
+        prerequisiteTree: parsedTemplate?.cognitiveCore?.prerequisiteTree || parsedTemplate?.cognitiveDesign?.prerequisiteTree || null,
+      },
+    });
 
     // KC 映射（kc-mapper）：stage-designer 全部完成后，将概念与子任务分解为知识组件 + 依赖图，
     // 写回 aiPromptTemplate.kcAnnotation，结束"写后无读者"，供 teaching-turn 按 KC 粒度消费。

@@ -1,6 +1,6 @@
 ---
 agentId: skill:kc-mapper
-coreHash: 46dfa082bee1423a513014cab2ce39cac12185d971eae7410f67645b9eda2e75
+coreHash: 1113ae5be6aeb9e41c90920f7190ab75982ca019d5762ce05d44d082f4507906
 coreVersion: 3
 temperature: 0.3
 maxTokens: 64000
@@ -29,7 +29,7 @@ failurePolicy: propagate
 - 「cognitiveCore（object）」`skill:path-planning.cognitiveCore` — 认知核心（coreConcepts + cognitiveDomain）
 - 「milestones（object[]）」`skill:path-planning.milestones` — 里程碑骨架（title/coreConcept/description/goal）
 - 「subtasks（object[]）」`sandbox:path.subtasks`（编排注入） — 阶段子任务列表（taskKey/title/type/linkedConcept/knowledgeType/cognitiveLevel）。 taskKey 是该任务的**稳定键**（形如 task-1-0），只用于把 KC 链接对回任务，不参与语义判断。
-- 「prerequisiteTree（object?）」`sandbox:path.normalizedInput.prerequisiteTree`（编排注入） — RPKT 前提知识缺口链（可选，用于校验 KC 依赖是否覆盖已知缺口）
+- 「prerequisiteTree（object?）」`sandbox:path.prerequisiteTree`（编排注入） — RPKT 前提知识缺口链（可选，用于校验 KC 依赖是否覆盖已知缺口）
 
 ## 执行规则
 

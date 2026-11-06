@@ -192,7 +192,7 @@
 - **输入声明**：
   - `pathPlan`（`object`；来源 `skill:path-planning.milestones`）：已生成的路径规划（name/summary/cognitiveCore/milestones/estimatedHours）
   - `goalContext`（`object`；来源 `sandbox:path.normalizedInput`）：目标上下文（surfaceGoal/confirmedProposal/successCriteria/learnerProfile）
-  - `prerreqTree`（`object?`；来源 `sandbox:path.normalizedInput.prerequisiteTree`）：RPKT 前提知识缺口链（可选，存在时用于校验路径是否覆盖了已知缺口）
+  - `prerreqTree`（`object?`；来源 `sandbox:path.prerequisiteTree`）：RPKT 前提知识缺口链（可选，存在时用于校验路径是否覆盖了已知缺口）
 
 ### 我写什么
 
@@ -240,7 +240,7 @@
   - `cognitiveCore`（`object`；来源 `skill:path-planning.cognitiveCore`）：认知核心（coreConcepts + cognitiveDomain）
   - `milestones`（`object[]`；来源 `skill:path-planning.milestones`）：里程碑骨架（title/coreConcept/description/goal）
   - `subtasks`（`object[]`；来源 `sandbox:path.subtasks`）：阶段子任务列表（taskKey/title/type/linkedConcept/knowledgeType/cognitiveLevel）。 taskKey 是该任务的**稳定键**（形如 task-1-0），只用于把 KC 链接对回任务，不参与语义判断。
-  - `prerequisiteTree`（`object?`；来源 `sandbox:path.normalizedInput.prerequisiteTree`）：RPKT 前提知识缺口链（可选，用于校验 KC 依赖是否覆盖已知缺口）
+  - `prerequisiteTree`（`object?`；来源 `sandbox:path.prerequisiteTree`）：RPKT 前提知识缺口链（可选，用于校验 KC 依赖是否覆盖已知缺口）
 
 ### 我写什么
 
