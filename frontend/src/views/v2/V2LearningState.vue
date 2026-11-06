@@ -11,7 +11,8 @@
         </div>
         <router-link to="/user/learning-history" class="btn-ghost">查看学习历史</router-link>
       </header>
-      <div class="kpis">
+      <!-- 全空态时不渲染三张 0 值卡：状态由下方 state__hero 整卡表达（2026-11-06 走查） -->
+      <div v-if="!stateEmpty" class="kpis">
         <div class="kpis__grid" role="list" aria-label="学习状态概览">
           <div v-if="kpiLoading" class="kpis__loading" role="listitem">
             <SkeletonLoader variant="lines" :count="2" />
@@ -34,7 +35,22 @@
       </div>
 
       <div class="state__grid">
-        <div class="state__col" :class="{ 'state__col--empty': !hasAnyLoad }">
+        <!-- 全空态整卡（2026-11-06 走查）：趋势 / AI 建议 / 复习 / 掌握此前四张卡各说一遍
+             「完成第一次学习后…」，PC 双栏还因 advisory order:-1 提前产生两处空洞；
+             真新用户（无趋势数据且三 KPI 全 0）收成一张卡说完状态 + 唯一出口 -->
+        <section v-if="stateEmpty" class="card state__hero">
+          <span class="chart__empty-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 19V5" /><path d="M4 19h16" />
+              <path d="M7.5 15.5 11 11l3 2.5L19 7" />
+            </svg>
+          </span>
+          <strong>学习状态正在积累中</strong>
+          <p>完成第一次学习后，这里会出现训练负荷曲线、AI 建议与掌握分布。</p>
+          <router-link to="/learning-paths" class="chart__empty-cta">去开始学习</router-link>
+        </section>
+        <template v-else>
+        <div class="state__col">
           <!-- 趋势图（PC 满宽：图表吃满容器，下方再切 60/40 双栏） -->
           <section class="card band state__trend">
             <div class="band__head">
@@ -235,7 +251,7 @@
           <!-- AI 调控建议（原型 wf-advisory，788-793 / 1971-1982）：
                4px 琥珀左边条 + 琥珀星标 head + 正文（guide 结论 / 建议列表 / 预警列表全保留）
                + 主次双按钮 + 成功回执行。skill 生成块走 adaptive-guidance-copy，静态规则兜底。
-               新用户空态时靠 order:-1 提到首屏（原 .state__col--empty 选择器改挂本卡） -->
+               真新用户全空态由顶部 state__hero 整卡承接，本卡的空态只兜「有数据但暂无建议」 -->
           <section class="card advisory state__adv">
             <div class="advisory__head">
               <svg class="advisory__star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4z"/></svg>
@@ -529,6 +545,7 @@
             </div>
           </details>
         </aside>
+        </template>
       </div>
     </main>
 
@@ -1092,6 +1109,9 @@ const hasKpiData = computed(
   () => sessionsOk.value && masteryOk.value
     && ((kpiStreak.value ?? 0) > 0 || (kpiWeekMinutes.value ?? 0) > 0 || (kpiMastered.value ?? 0) > 0)
 );
+/* 全空态（2026-11-06 走查）：无趋势数据且三 KPI 全 0 = 真新用户。
+   四张空卡收成一张 state__hero；有任一真实数据的学员仍走原布局。 */
+const stateEmpty = computed(() => !hasAnyLoad.value && !hasKpiData.value);
 
 /* ---------- 复习台账（既有 GET /ai-teaching/review/due + /review/plan，学习台同源） ----------
    due = 全部到期清单（上限 20），retention 0-1 就是条宽与百分比；
@@ -1763,9 +1783,13 @@ function loadGuidance() {
 /* #118：隐式 auto 轨按 min-content 解算（390 宽实测 387.9px，容器仅 354px），
    卡片被撑到 388px 导致整页横向溢出；显式 minmax(0,1fr) 让子项可收缩 */
 .state__col { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
-/* P2-11：新用户（指标为空）时把「AI 调控建议」提到最前，作为首屏主内容；图表空态降级为「积累中」说明
-   （原选择器 .band--suggest 随旧卡结构改名，2026-09-30 挂到现役的 wf-advisory 卡） */
-.state__col--empty .advisory { order: -1; }
+/* 全空态整卡（2026-11-06 走查）：替代原「advisory order:-1 提前」的碎片空态
+   （P2-11 已随 state__col--empty 退役）；有数据时本卡不渲染，原布局不受影响 */
+.state__hero {
+  display: grid; justify-items: center; gap: 6px;
+  padding: 44px 20px 42px;
+  text-align: center;
+}
 /* PC 双栏看板（2026-11-05 用户定稿「拒绝 1100px 拉面条」）：
    1101 以上左 60% 调控中心 / 右 40% 复习 + 掌握分布 + 学习偏好，趋势图满宽横贯顶部。
    .state__col 用 display:contents 拆掉移动端的单列包裹层，让四块卡片直接进栅格——
@@ -1778,6 +1802,8 @@ function loadGuidance() {
   }
   .state__col { display: contents; }
   .state__trend { grid-column: 1 / -1; }
+  /* 全空态整卡横贯双栏（不占格子，避免 auto-placement 把 side 顶下去留两处空洞） */
+  .state__hero { grid-column: 1 / -1; }
   /* 用 state__adv 这个放置专用类别名，不写第二处 `.advisory {`：
      grid-track 回归测试按「选择器后紧跟 {」扫源码取第一条规则，
      多出来的 `.advisory {` 块会把它读到、误判轨道声明丢失 */
