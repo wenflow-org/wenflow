@@ -509,7 +509,10 @@ onMounted(load)
 .skc__table th:nth-child(6),
 .skc__table td:nth-child(6) { width: 84px; }
 .skc__apply { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.skc__apply .mk-input { max-width: 280px; }
+/* 行盒同高 32px：endpoint / apiKey 两个 .mk-input 是 8px 竖内衬（≈38px），
+   同一行的模型选择器（compact 32）与主按钮（32）比它们矮一截。
+   只收竖向内衬，横向内衬与字号保持原样。 */
+.skc__apply .mk-input { max-width: 280px; padding-top: 5px; padding-bottom: 5px; }
 .skc__apply .is-err { border-color: var(--mk-red); }
 /* 原型 .tbl td.wrap：长文本列（参数覆盖）换行不截断 */
 .skc__table td.skc__wrap { white-space: normal; overflow-wrap: anywhere; min-width: 140px; max-width: 240px; }
