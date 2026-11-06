@@ -166,11 +166,22 @@ export function diffRoutingInventory(
 
 /** 清单漂移的输出文本（脚本失败信息与测试共用） */
 export function formatRoutingInventoryDrift(drift: ReadonlyArray<RoutingInventoryDrift>): string {
-  const lines: string[] = [`routing 清单较基线有变化：${drift.length} 个阶段`];
+  const lines: string[] = [
+    `routing 清单较基线有变化：${drift.length} 个阶段`,
+    '  （声明 reachability 本身不会清掉漂移——它是「这条边是否可达」的答案；'
+    + '基线更新是「我确认这次变化」的签字，两步都要做）',
+  ];
   for (const item of drift) {
     lines.push(`  - [${item.stage}]`);
-    for (const pair of item.added) lines.push(`      + ${pair}  ← 新边：需声明 reachability（或 notes 记 auto — <入口>），或更新基线`);
-    for (const pair of item.removed) lines.push(`      - ${pair}  ← 已消失：确认是删边，然后更新基线`);
+    for (const pair of item.added) {
+      lines.push(
+        `      + ${pair}  ← 新边：先确认调用方（显式 reachability: manual|external，`
+        + '或 notes 记 auto — <入口>），再跑 npm run prompts:reachability:baseline:update',
+      );
+    }
+    for (const pair of item.removed) {
+      lines.push(`      - ${pair}  ← 已消失：确认确实删边，再跑 npm run prompts:reachability:baseline:update`);
+    }
   }
   return lines.join('\n');
 }

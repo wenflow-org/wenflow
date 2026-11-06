@@ -114,18 +114,36 @@ export class LearnerSnapshotRefreshService {
    *
    * 水位只活在进程里，而 `learner_projections` 的 10 分钟（getLatest）/ 60 分钟（列表）
    * 窗口不随进程消失：**进程在窗口内重启**（部署、崩溃重启）后水位为空，读路径就会把
-   * **失效前**那行旧画像载荷重新采用。所以失效必须落到持久层：行是缓存，删掉下次读自动重建。
+   * **失效前**那行旧画像载荷重新采用。所以失效必须落到持久层。
    *
-   * 顺带覆盖另一族：`LearnerStateReviewService`（scope='review'）直读投影表、从不经过本服务，
-   * 画像变更后同样会一直用旧画像派生出的评审载荷——按 userId 整族作废，不再只盯着快照的键。
+   * **必须按前缀白名单删，不能按 userId 整族删**（第二轮复核实测的口径事故）：
+   * 同表里还有不是缓存、而是**账本/状态**的行——当日复习额度 `reviewDailyQuotaKey`
+   * （读缺失即按空额度重置）、BKT 信念 `learner-concept-beliefs-v1`、洞察校准记录
+   * `learner-insight-records-v1`、归并审计 `consolidationAuditKey`。`invalidate` 由每条学习事件
+   * 触发，整族删除等于每次任务完成就清掉该用户的额度与信念。所以这里只列**派生自画像/证据、
+   * 删掉即可由读路径重建**的族；新增族要显式加进来（并想清楚它是不是缓存）。
    *
    * fire-and-forget：`invalidate` 的调用方（`updateProfile`、事件消费者）都在热路径上，
    * 不为一次缓存清理把链路改成 async；失败只记日志——同进程内还有水位兜着，
    * 跨进程由「行已被删」保证，二者其一失效不至于把旧画像端上桌。
    */
+  private static readonly INVALIDATABLE_PROJECTION_PREFIXES = [
+    /** 本服务的快照投影（纯缓存） */
+    'learner-snapshot-v1:',
+    /** 评审投影（LearnerStateReviewService 直读，从不经过本服务；同样派生自画像/证据） */
+    'learner-state-review-v1:',
+  ];
+
   private dropPersistedProjections(userId: string): void {
     void prisma.learner_projections
-      .deleteMany({ where: { userId } })
+      .deleteMany({
+        where: {
+          userId,
+          OR: LearnerSnapshotRefreshService.INVALIDATABLE_PROJECTION_PREFIXES.map((prefix) => ({
+            projectionKey: { startsWith: prefix },
+          })),
+        },
+      })
       .catch((error: unknown) => {
         logger.warn(
           `[learner-snapshot] 作废持久化投影失败（userId=${userId}）：`
@@ -134,8 +152,21 @@ export class LearnerSnapshotRefreshService {
       });
   }
 
+  /**
+   * 本轮读源是否发生在失效之前（#176-2 复核残留 3）：refresh 起跑时读了旧画像，
+   * 期间发生的 invalidate 已经把它作废，此时**不能**再把结果 upsert 回投影，
+   * 否则刚删掉的那行又被写回来，10 分钟窗口继续端旧画像。
+   * 用严格 `>`：同一毫秒起跑不算被作废。
+   */
+  private isWriteBlockedByInvalidation(userId: string, startedAt: number): boolean {
+    const mark = this.invalidatedAt.get(userId);
+    return mark !== undefined && mark > startedAt;
+  }
+
   async refresh(input: LearnerSnapshotRefreshInput): Promise<LearnerSnapshot> {
     const key = this.buildKey(input);
+    /** 本轮读源起跑时刻：用于判断结果是否已被期间发生的 invalidate 作废 */
+    const startedAt = Date.now();
     if (input.lastEventId) {
       const existing = await prisma.learner_projections.findUnique({ where: { projectionKey: key } });
       // 去重按事件 id 比对，但**画像类变更不产生事件 id**：invalidate 之后同一 lastEventId 的那行
@@ -159,6 +190,12 @@ export class LearnerSnapshotRefreshService {
       taskId: input.taskId,
       mode: input.scope,
     });
+
+    // 复核残留 3：本轮读源起跑于 invalidate 之前 → 结果是旧画像拼的，既不落库也不入内存缓存
+    // （调用方仍拿到它——那次请求本来就发生在失效之前），下次读由重建补齐。
+    if (this.isWriteBlockedByInvalidation(input.userId, startedAt)) {
+      return snapshot;
+    }
 
     await prisma.learner_projections.upsert({
       where: { projectionKey: key },

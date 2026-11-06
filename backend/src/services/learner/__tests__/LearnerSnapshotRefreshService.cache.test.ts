@@ -158,11 +158,40 @@ describe('#176-2 复核：invalidate 必须管住持久化投影（只删内存�
    * 进程在窗口内重启后旧画像那行会被重新采用。修法是把失效落到持久层——整族作废该用户的投影行
    * （顺带覆盖直读投影表、从不经过本服务的 scope='review' 那一族）。
    */
-  it('invalidate 把该用户的持久化投影整族作废（重启后没有旧行可读）', async () => {
+  it('invalidate 只作废「派生自画像的缓存族」，不动额度/信念/审计等账本行（复核误删）', async () => {
     learnerSnapshotRefreshService.invalidate('u-drop-1');
 
     expect(projectionsDeleteMany).toHaveBeenCalledTimes(1);
-    expect(projectionsDeleteMany.mock.calls[0][0]).toEqual({ where: { userId: 'u-drop-1' } });
+    const arg = projectionsDeleteMany.mock.calls[0][0];
+    expect(arg.where.userId).toBe('u-drop-1');
+    // 白名单：快照 + 评审两族；绝不能是裸 { userId }（那会连当日复习额度、BKT 信念、归并审计一起删）
+    expect(arg.where.OR).toEqual([
+      { projectionKey: { startsWith: 'learner-snapshot-v1:' } },
+      { projectionKey: { startsWith: 'learner-state-review-v1:' } },
+    ]);
+  });
+
+  it('refresh 在飞期间发生 invalidate → 不把旧画像拼出的结果写回投影（复核残留 3）', async () => {
+    let release: (value: unknown) => void = () => {};
+    const gate = new Promise((resolve) => { release = resolve; });
+    snapshotOf.mockImplementation(async (input: { userId: string }) => {
+      await gate;
+      return snapshotFor(input.userId);
+    });
+
+    const pending = learnerSnapshotRefreshService.refresh({ userId: 'u-race', scope: 'global' });
+    // 保证 invalidate 落在 refresh 起跑之后的毫秒（守卫用严格 >）
+    await new Promise((resolve) => setTimeout(resolve, 3));
+    learnerSnapshotRefreshService.invalidate('u-race');
+    release(null);
+    const snapshot = await pending;
+
+    expect(snapshot).toBeDefined();
+    expect(projectionsUpsert).not.toHaveBeenCalled();
+    // 也没进内存缓存：下一次读会重建
+    expect((learnerSnapshotRefreshService as any).cache.has(
+      ['learner-snapshot-v1', 'u-race', 'global', 'global', 'none', 'none'].join(':'),
+    )).toBe(false);
   });
 
   it('作废持久化失败只记日志，不把失效调用打成异常', async () => {
