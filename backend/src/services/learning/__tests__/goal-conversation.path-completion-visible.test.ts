@@ -119,3 +119,45 @@ describe('#228 路径完成态文案：GET 快照与 /reply 早退同口径', ()
     expect(result.userVisible).toBe(PATH_COMPLETED_USER_VISIBLE);
   });
 });
+
+/**
+ * #213：硬阻断终局的拒绝文案必须「当场返回」与「刷新重建」一致。
+ *
+ * 初判被拦（A）与补充说明重判仍被拦（B）是两段不同文案；重判分支现在把 B 落库（就地取代
+ * 模型原始回合），因此 GET 要优先回传历史里那一版，而不是一律按当前分诊重建 A——
+ * 否则用户补充说明后重载，B 里「结论不变」这句凭空消失，看起来像补充说明没被读到。
+ */
+describe('#213 硬阻断终局：GET 回传历史里已落库的那一版拒绝文案', () => {
+  const BLOCKED_DATA = JSON.stringify({
+    understanding: { platform_judgment: 'not_judgeable', skill_nature: 'physical_internalized' },
+    responseTriage: { mode: 'referral', confidence: 'high' },
+  });
+  const base = {
+    conversationId: 'gc-213',
+    status: 'completed',
+    collectedData: BLOCKED_DATA,
+    learningPathId: null,
+    learningPath: null,
+  };
+
+  it('历史里是重判版（B）→ 原样回传，不再按初判重建 A', () => {
+    const rejudged = '已结合你的补充说明重新判断，结论不变：平台无法客观判定这类目标的学习效果，这次仍不会生成学习路径。';
+    const text = resolveConversationUserVisible({
+      ...base,
+      messages: [
+        { role: 'user', content: '补充：器具都买齐了' },
+        { role: 'ai', content: '明白，方向不改。' },
+        { role: 'ai', content: rejudged },
+      ],
+    });
+    expect(text).toBe(rejudged);
+  });
+
+  it('历史里没有拒绝文案（旧数据）→ 按当前分诊重建初判文案', () => {
+    const text = resolveConversationUserVisible({
+      ...base,
+      messages: [{ role: 'user', content: '补充：器具都买齐了' }],
+    });
+    expect(text).toContain('这类目标当前不会生成学习路径');
+  });
+});

@@ -301,15 +301,33 @@ export async function rejudgeHardBlockedCompletion(
   const rejudgedTriage = resolveResponseTriageFromCollectedData(latestData)
     || triageGoalResponse(latestData.understanding || {});
   if (isHardBlockResponseTriage(rejudgedTriage, latestData.understanding)) {
-    // 仍被拦：恢复终态语义（stage 列写回 completed，status 保持 completed），返回更新后的拒绝文案
-    await deps.updateConversationLifecycle(conversation.id, 'completed', { status: 'completed' });
+    const rejudgedMessage = buildHardBlockMessage(rejudgedTriage, { rejudged: true });
+    // 仍被拦：恢复终态语义（stage 列写回 completed，status 保持 completed），返回更新后的拒绝文案。
+    // #213：这段文案必须落库——此前只进返回值，GET 会按初判重建另一段文案，重载后「结论不变」这句
+    // 凭空消失，用户以为补充说明没被读到。历史里紧邻的那条 ai 是模型原始回合（平台并不把原文交给用户），
+    // 用拒绝文案就地取代它，保持「user 补充 → ai 结论」的回合形状。
+    await deps.updateConversationLifecycle(conversation.id, 'completed', {
+      status: 'completed',
+      mutateCollectedData: (data) => {
+        const messages = Array.isArray(data.messages) ? (data.messages as Array<Record<string, unknown>>) : [];
+        for (let i = messages.length - 1; i >= 0; i -= 1) {
+          const role = messages[i]?.role;
+          if (role !== 'ai' && role !== 'assistant') continue;
+          messages[i] = { ...messages[i], content: rejudgedMessage };
+          data.messages = messages;
+          return;
+        }
+        messages.push({ role: 'ai', content: rejudgedMessage, time: new Date().toISOString() });
+        data.messages = messages;
+      },
+    });
     logger.info('[goal-conversation] 硬阻断重判仍不通过', {
       conversationId: conversation.id,
       mode: rejudgedTriage.mode,
       confidence: rejudgedTriage.confidence
     });
     return {
-      userVisible: buildHardBlockMessage(rejudgedTriage, { rejudged: true }),
+      userVisible: rejudgedMessage,
       internal: {
         core: {
           conversationId: conversation.id,

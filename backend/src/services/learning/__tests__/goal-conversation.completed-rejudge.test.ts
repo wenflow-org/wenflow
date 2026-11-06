@@ -370,6 +370,12 @@ describe('completed 硬阻断会话：重判仍被拦', () => {
       role: 'user',
       content: '我真的就是想学会手冲，器具都买齐了',
     }));
+    // #213：重判仍被拦截的拒绝文案必须落库（就地取代模型原始回合）。
+    // 此前只进返回值，GET 会按初判重建另一段文案，重载后「结论不变」这句凭空消失。
+    expect(persisted.messages[persisted.messages.length - 1]).toEqual(expect.objectContaining({
+      role: 'ai',
+      content: expect.stringContaining('仍不会生成学习路径'),
+    }));
     expect(conversationRecord.status).toBe('completed');
     expect(conversationRecord.stage).toBe('completed');
   });
