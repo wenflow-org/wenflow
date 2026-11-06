@@ -60,6 +60,7 @@ export interface DurableOutboxWorkerOptions {
 export class DurableOutboxWorker {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
+  private started = false;
   private stopping = false;
   private inFlight: Promise<void> | null = null;
   private nextDelayMs = POLL_MIN_MS;
@@ -95,13 +96,18 @@ export class DurableOutboxWorker {
         : null;
   }
 
-  /** 挂一条从泳道：主泳道 start/stop 时一并驱动（唤醒也由主泳道转发） */
+  /**
+   * 挂一条从泳道：主泳道 start/stop 时一并驱动（唤醒也由主泳道转发）。
+   * 若主泳道已在运行（attachSecondary 允许在 start 之后调用），补挂的从泳道立即启动。
+   */
   attachSecondary(worker: DurableOutboxWorker): void {
     this.secondaries.push(worker);
+    if (this.started && !this.stopping) worker.start();
   }
 
   start(): void {
-    if (this.timer) return;
+    if (this.started) return;
+    this.started = true;
     this.stopping = false;
     this.nextDelayMs = POLL_MIN_MS;
     // 入队侧唤醒（outbox-wake）：tick 已在跑则跳过本轮（互斥闸兜底），并把退避复位到下限
@@ -111,6 +117,11 @@ export class DurableOutboxWorker {
         for (const secondary of this.secondaries) secondary.wake();
       });
     }
+    // #146 收尾：从泳道必须有自己的定时器轮询，不能只靠主泳道转发的入队 wake()——
+    // 增强泳道失败后只把 availableAt 推到未来（dispatchAndSettle 的退避重投），
+    // 若从泳道没有自身轮询，就没有任何 tick 会来重拾这行：它会长期停在 pending，
+    // 既走不到 8 次尝试后的死信分支，也不会出现在 /api/admin/devtools/outbox/dead。
+    for (const secondary of this.secondaries) secondary.start();
     // 首轮同步启动（保持旧行为：start 后立即消费一次，不等第一个间隔）
     void this.runTickSafely().finally(() => this.scheduleNext());
   }
@@ -123,6 +134,7 @@ export class DurableOutboxWorker {
   }
 
   async stop(): Promise<void> {
+    this.started = false;
     this.stopping = true;
     if (this.ownsWakeListener) setOutboxWakeListener(null);
     if (this.timer) clearTimeout(this.timer);
