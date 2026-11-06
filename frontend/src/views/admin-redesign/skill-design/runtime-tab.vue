@@ -28,15 +28,9 @@
           class="sdp-head__switch"
           @update:model-value="onOverrideToggle"
         />
-        <!-- 2026-10-28 用户「skill 详情的模型也改一下」：卡面只留当前配置摘要，
-             模型 / 生成参数 / 请求容错收进「配置」弹层，一次保存。 -->
-        <button
-          type="button"
-          class="mk-btn mk-btn--sm"
-          :disabled="!rtForm.enabled"
-          :title="rtForm.enabled ? '编辑模型与路由' : '先开启覆盖平台默认'"
-          @click="openConfig"
-        >配置</button>
+        <!-- 「配置」从卡头挪到模型行右侧（2026-11-06 用户「按照系统设置的展开页面进行新的设计」）：
+             系统设置里每个模型行的动作都在行右缘（配置 · 测试 · ⋯），这里只有一行一个模型，
+             动作跟着行走，卡头只留覆盖开关。 -->
       </div>
       <!-- 卡头只保留标题/开关/保存；旧「Prompt 里声明了 model 时，本页模型不参与」已删：
            与运行时契约相反（route 优先于 prompt.model）。 -->
@@ -61,29 +55,29 @@
              此前两版的「基线 / 本 Skill 独立调整」是把机制讲给读者听，读者要的只是
              「这个 Skill 现在用哪个模型、参数是什么」；改值仍走卡头「配置」弹层。 -->
         <div class="sdp-live">
-          <div class="sdp-row">
-            <span class="sdp-row__k">模型</span>
-            <span class="sdp-row__v">
-              <span class="mono sdp-model" :title="`${baseModel}
+          <!-- 模型行：与「系统设置 → 模型与接入」的模型行同一套语言——
+               mono id + 能力小胶囊 + 行右缘的文字动作。 -->
+          <div class="sdp-modelrow">
+            <span class="mono sdp-model" :title="`${baseModel}
 
 ${orderTitle}`">{{ baseModel }}</span>
-              <!-- 能力 + 供应商/单价（primaryMetaText 在配置弹层里用，那里要连能力一起交代；
-                   卡面这一行能力已单独列，避免复读） -->
-              <span v-if="summaryCaps.length || summaryMeta" class="sdp-facts">
-                <span v-for="cap in summaryCaps" :key="cap">{{ cap }}</span>
-                <span v-if="summaryMeta">{{ summaryMeta }}</span>
-              </span>
+            <span class="sdp-caps">
+              <span v-for="tag in capTags" :key="tag" class="mk-badge mk-badge--muted sdp-cap">{{ tag }}</span>
+              <span v-if="summaryMeta" class="sdp-meta">{{ summaryMeta }}</span>
+            </span>
+            <span class="sdp-modelrow__acts">
+              <button
+                type="button"
+                class="mk-link"
+                :disabled="!rtForm.enabled"
+                :title="rtForm.enabled ? '改这个 Skill 的模型、生成参数与请求容错' : '先开启覆盖平台默认'"
+                @click="openConfig"
+              >配置</button>
             </span>
           </div>
 
-          <div v-if="rtForm.enabled" class="sdp-row">
-            <span class="sdp-row__k">参数</span>
-            <span class="sdp-row__v">
-              <span class="sdp-facts">
-                <span v-for="item in paramSummary" :key="item">{{ item }}</span>
-              </span>
-            </span>
-          </div>
+          <!-- 参数行：系统设置里模型行的第二行读数（测试结果）同一位置、同一档灰字 -->
+          <p v-if="rtForm.enabled" class="sdp-params">{{ paramSummary.join(' · ') }}</p>
           <!-- 覆盖关闭时这套设置不参与：只说清「现在按谁」，不列表单里那份用不上的值 -->
           <p v-else class="sdp-live__note">
             覆盖已关闭：模型与超时用平台默认，生成参数仍按 Prompt 文件声明取值。
@@ -440,13 +434,18 @@ const inheritedModelText = computed(() => {
   return `模型未单独指定，当前使用平台默认：${model}`
 })
 /** 能力胶囊写成陈述句（2026-11-02 评审）：裸「思考 / 推理强度」被读成没有值的标签 */
-const summaryCaps = computed(() => {
-  const opt = primaryOption.value
+/** 能力标签：与「系统设置 → 模型与接入」的模型行同一套措辞与粒度
+ *  （思考 / 推理强度 low / high / max / 视觉）——2026-11-06 用户「按照系统设置的展开页面进行新的设计」 */
+const capTags = computed(() => {
+  /* 用**生效模型**查目录（继承平台默认时 rtForm.model 是空的，primaryOption 会落空，
+     于是「视觉」这枚标签在继承档整个消失——与系统设置同一台模型的标签对不上）。 */
+  const id = String((rtForm.value.enabled && rtForm.value.model) || generationParams.value?.model || '')
+  const opt = pickerOptions.value.find((o) => o.value === id) ?? null
   const cap = effectiveModelCap.value
   return [
-    cap?.thinking ? '支持思考' : '',
-    cap?.efforts.length ? `支持推理强度 ${cap.efforts.join(' / ')}` : '',
-    opt?.vision ? '支持视觉' : ''
+    cap?.thinking ? '思考' : '',
+    cap?.efforts.length ? `推理强度 ${cap.efforts.join(' / ')}` : '',
+    opt?.vision ? '视觉' : ''
   ].filter(Boolean)
 })
 const summaryMeta = computed(() => {
@@ -807,19 +806,20 @@ watch(() => props.skillId, () => {
 .sdp-body { display: grid; gap: 16px; padding: 4px 16px 16px; }
 /* 取值顺序：一行说清「谁压谁」。原来这块是「生效值」只读摘要，把下面各分节的
    当前值又抄一遍（导航副文、分节页头、表单各一份），已删（2026-10-24 用户判定无意义）。 */
-/* 两行读数（2026-11-06 用户「没有什么基线之类的，只有切换模型，参数等等」）：
-   首列是字段名，第二列是值 + 一行灰字事实。那套「基线 / 本 Skill 独立调整」的说法
-   与样式（.sdp-base* / .sdp-diff* / .sdp-chip、宽屏双栏）整体删除。 */
-.sdp-live { display: grid; gap: 12px; }
+/* 模型行（2026-11-06 用户「按照系统设置的展开页面，进行新的设计」）：
+   与「系统设置 → 模型与接入」的模型行同构——mono id 打头、能力胶囊跟后、行右缘是文字动作，
+   下一行是该行的第二行读数（系统设置那里放测试结果，这里放当前参数值）。 */
+.sdp-live { display: grid; gap: 6px; }
 .sdp-live__note { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-amber); line-height: 1.6; }
-.sdp-row { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; align-items: baseline; }
-.sdp-row__k { color: var(--mk-muted); font-size: var(--mk-fs-micro); font-weight: 600; }
-.sdp-row__v { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; min-width: 0; }
+.sdp-modelrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
 /* 模型 id：卡面第一眼要读到的那个值 */
 .sdp-model { color: var(--mk-ink); font-weight: 700; font-size: var(--mk-fs-emphasis); overflow-wrap: anywhere; }
-/* 事实列表（能力 / 来源 / 参数）：灰字、「·」分隔，不占胶囊——它们都是陈述，不是控件 */
-.sdp-facts { display: flex; flex-wrap: wrap; gap: 0 2px; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
-.sdp-facts > * + *::before { content: '·'; margin: 0 6px 0 2px; color: var(--mk-faint); }
+.sdp-caps { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.sdp-cap { font-weight: 600; }
+.sdp-meta { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+.sdp-modelrow__acts { margin-left: auto; display: flex; align-items: center; gap: 12px; flex: none; }
+/* 参数行：与模型 id 同一左缘、不占动作列（系统设置里测试读数那一行的位置） */
+.sdp-params { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
 
 /* 控件同高 32px：这一屏的下拉（.mk-select__trigger）与按钮（.mk-btn）都是 32px，
    只有模型选择器还是 40px 的默认档，实测同一行三个高度（40 / 31 / 32）。

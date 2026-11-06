@@ -424,21 +424,22 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
     // 2026-10-28 用户「skill 详情的模型也改一下」：卡面先给当前值，表单收进弹层
     /* 2026-11-04 用户「他是在平台配置模型之下的，进行独立的调整」：
        卡面 = 基线（平台默认模型那一行）+ 差异（本 Skill 改过的项）。 */
-    /* 2026-11-06 用户「没有什么基线之类的，只有切换模型，参数等等」：
-       卡面收敛成两行——模型（id + 能力/单价事实）、参数（当前生效值连排）。
-       「基线 / 本 Skill 独立调整」两段与它们的样式一并删除。 */
+    /* 2026-11-06 用户「按照系统设置的展开页面，进行新的设计」：
+       卡面 = 系统设置里那张模型行的同构（mono id + 能力胶囊 + 行右缘文字动作），
+       下面一行是当前参数值（对应系统设置里放测试读数的那个位置）。
+       上一版「基线 / 独立调整」两段与那一套样式一并删除。 */
     const live = wrapper.find('.sdp-live');
     expect(live.exists()).toBe(true);
-    const rows = live.findAll('.sdp-row');
-    expect(rows.map((r) => r.find('.sdp-row__k').text())).toEqual(['模型', '参数']);
-    expect(rows[0].find('.sdp-model').text()).toContain('gpt-4o-mini');
-    // 能力与单价作为同一行的灰字事实（不各占一枚胶囊）。mock 的模型不在注册表目录里，
-    // 这两个值都查不到 → 该行不渲染事实块；这里只断言它不会变成另一种结构（胶囊/独立行）。
-    expect(rows[0].find('.sdp-chip').exists()).toBe(false);
+    // 模型行
+    const row = live.find('.sdp-modelrow');
+    expect(row.exists()).toBe(true);
+    expect(row.find('.sdp-model').text()).toContain('gpt-4o-mini');
     // 取值顺序（谁压谁）降成模型 id 的悬停说明，不占一行读数
-    expect(rows[0].find('.sdp-model').attributes('title') ?? '').toContain('本 Skill 指定');
-    // 参数行给的是生效值：mock 里超时由本 Skill 设为 30s，温度取 Prompt 声明值
-    const params = rows[1].find('.sdp-facts').text();
+    expect(row.find('.sdp-model').attributes('title') ?? '').toContain('本 Skill 指定');
+    // 行右缘的文字动作（系统设置里那枚「配置」）
+    expect(row.find('.sdp-modelrow__acts .mk-link').text()).toBe('配置');
+    // 参数行给生效值：mock 里超时由本 Skill 设为 30s，温度取 Prompt 声明值
+    const params = live.find('.sdp-params').text();
     expect(params).toContain('思考模式');
     expect(params).toContain('超时 30s');
     expect(params).toContain('温度 0.4');
