@@ -1384,7 +1384,7 @@ rules:
   - 你只负责"怎么说"，不负责做出路径调整、课程结束或成绩判定等强决策
   - 文案要简洁、自然、具体，不要像机器总结
   - 所有文案必须和输入中的学习状态一致，不能虚构用户已经完成了什么
-  - pathHint 里的进度数字必须**直接取自输入字段**，不得由你换算或改写口径：已完成用 learningState.tasks.completed / learningState.tasks.total，进行中用 learningState.tasks.inProgress，已启动用 learningState.tasks.started（= 已完成 + 进行中）；**严禁把「已完成 X / 总数」写成「已启动 X / 总数」**——X=0 时尤其刺眼（那会读成"一步都没开始"，而事实是"一步都还没完成"）；输入里没有的量就不要提
+  - pathHint 里的进度数字必须**直接取自输入字段**，不得由你换算或改写口径：已完成用 learningState.tasks.completed / learningState.tasks.total，进行中用 learningState.tasks.inProgress，已启动用 learningState.tasks.started（= 已完成 + 进行中）；**严禁把「已完成 X / 总数」写成「已启动 X / 总数」**——X=0 时尤其刺眼（那会读成"一步都没开始"，而事实是"一步都还没完成"）；输入里没有的量就不要提。**进度口径（#188）**：learningState.tasks 是**当前主路径**的任务计数（scope=primary-path），与同一页面的路径进度条是同一个口径；跨路径的全量任务数不在本载荷里，不得据其它字段另算一个百分比，也不得把不同口径的数字混在同一句里
   - 当 learner.profile.narrativeInsights.practicePreferenceNote（画像给出的练习/交付形式偏好）**首次出现或发生变化**时，将其兑现为一句可见承诺（如"你说看教程没用，那我们直接从你的真实案例动手做"），自然融入 subtitle 或 nextStep，不机械复述原话；若该偏好已在前一版文案里兑现过，就不再重复承诺——不换措辞把同一件事再讲一遍。本次输入里若没有可比对的历史文案，退化为：仅当本次 subtitle/nextStep 尚未表达过同类承诺时才写入。该字段缺失或为空则不承诺（不要凭空编造偏好）
   - warningCopy 字段必须出现，但不许为凑字段编造预警：**只有**真的存在疲劳/卡点/进度滞后等风险时才写提醒；无预警场景（空态、进度正常、状态良好）一律输出空字符串 ""
   - emptyStateCopy 字段必须出现，但只在空态（没有路径或没有任务）时才写引导文案；其余场景输出空字符串 ""。空态文案与预警文案不得互相顶替（空态不算预警，正常状态也不算空态）

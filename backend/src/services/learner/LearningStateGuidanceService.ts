@@ -24,6 +24,14 @@ const CACHE_TTL_MS = 15 * 60 * 1000;
 export interface LearningStateGuidancePayload {
   schemaVersion: 'learning-state-guidance-v1';
   view: 'learning-state';
+  /**
+   * copy 的**实际生成视图**（#187）：
+   * - `'dashboard'`：复用 dashboard 事件驱动快照的文案（本服务不发模型调用，两页同源同文案，
+   *   契约见 skills/adaptive-guidance-copy/index.ts 与 prompts/core/adaptive-guidance-copy.yaml）；
+   * - `'learning-state'`：快照缺失时由 buildFallback(view='learning-state') 本地静态生成。
+   * 此前这层复用只写在注释里、载荷上看不出来，消费方会误以为这是 learning-state 视图的模型文案。
+   */
+  copySourceView: 'dashboard' | 'learning-state';
   generatedAt: string;
   source: 'model' | 'fallback';
   copy: AdaptiveGuidanceCopyOutput;
@@ -114,9 +122,11 @@ class LearningStateGuidanceService {
       const dashSnapshot = await dashboardGuidanceSnapshotService.get(userId).catch(() => null);
       let copy: AdaptiveGuidanceCopyOutput;
       let source: 'model' | 'fallback';
+      let copySourceView: 'dashboard' | 'learning-state';
       if (dashSnapshot?.copy) {
         copy = dashSnapshot.copy;
         source = dashSnapshot.source === 'model' ? 'model' : 'fallback';
+        copySourceView = 'dashboard';
       } else {
         copy = buildFallback({
           view: 'learning-state',
@@ -126,6 +136,7 @@ class LearningStateGuidanceService {
           sessionWrapup: sessionWrapup ?? undefined,
         });
         source = 'fallback';
+        copySourceView = 'learning-state';
       }
 
       const decisions = learningDecisionFeedService.build({
@@ -139,6 +150,7 @@ class LearningStateGuidanceService {
       return {
         schemaVersion: 'learning-state-guidance-v1',
         view: 'learning-state',
+        copySourceView,
         generatedAt,
         source,
         copy,

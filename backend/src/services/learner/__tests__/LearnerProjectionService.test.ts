@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import yaml from 'js-yaml';
 import { learnerProjectionService } from '../LearnerProjectionService';
 function heavySnapshot() {
   return {
@@ -229,5 +232,73 @@ describe('toTeachingProjection · 概念身份接口（kcid 读取侧契约）',
     expect(bk.transferSignals.length).toBeGreaterThan(0);
     // conceptLedger 在课堂投影里以 recentConceptLedger 承载
     expect(bk.recentConceptLedger.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * #183：教学投影曾把「该减速 / 该重排 / 疲劳风险」三类跨课结论主动裁掉——
+ * liveState 无 fatigueRisk、teachingHints 只留 4 个键、整份投影没有 replanSignal。
+ * 结果：预测器与编排算出的结论永远到不了下一课（只进 dashboard 文案与路径重排）。
+ */
+describe('toTeachingProjection · 跨课结论送达（#183）', () => {
+  const replanSignal = {
+    shouldSuggest: true,
+    priority: 'high' as const,
+    recommendation: 'slow_down' as const,
+    scope: 'next_milestone' as const,
+    rationale: '连续两课疲劳度高于健康度',
+    reasonCodes: ['fatigue_high', 'lesson_imbalance'],
+  };
+
+  function snapshotWithConsequences() {
+    const snapshot = heavySnapshot();
+    snapshot.dynamicState.fatigueRisk = 'high';
+    snapshot.dynamicState.recommendedPacing = 'slow';
+    snapshot.teachingHints.riskFactors = ['连续高强度', '卡点未解'];
+    snapshot.replanSignal = replanSignal;
+    return snapshot;
+  }
+
+  it('fatigueRisk 随 liveState 送达（减速结论不再被裁）', () => {
+    const projection = learnerProjectionService.toTeachingProjection(snapshotWithConsequences());
+    expect(projection.liveState.fatigueRisk).toBe('high');
+    // 同一份 liveState 的节奏结论保持一致（两者同源，不应一有一无）
+    expect(projection.liveState.recommendedPacing).toBe('slow');
+  });
+
+  it('teachingHints.riskFactors 随投影送达（不再只保留 4 个键）', () => {
+    const projection = learnerProjectionService.toTeachingProjection(snapshotWithConsequences());
+    expect(projection.teachingHints.riskFactors).toEqual(['连续高强度', '卡点未解']);
+    // 原有 4 个键不因补齐而丢失
+    expect(projection.teachingHints).toEqual(expect.objectContaining({
+      promptEnhancement: 'p',
+      recommendedApproach: 'a',
+      emphasize: [],
+      avoid: [],
+    }));
+  });
+
+  it('replanSignal 随投影送达（重排结论不再是 dashboard 专属）', () => {
+    const projection = learnerProjectionService.toTeachingProjection(snapshotWithConsequences());
+    expect(projection.replanSignal).toEqual(replanSignal);
+    // 与重排投影同源同值：两处给下游的必须是同一个信号，不是各算一份
+    expect(learnerProjectionService.toReplanProjection(snapshotWithConsequences())?.signal).toEqual(projection.replanSignal);
+  });
+
+  it('投影键集 ⊇ 课堂提示词实际引用的 learner.<key>（防再次一处声明一处裁掉）', () => {
+    const projection = learnerProjectionService.toTeachingProjection(snapshotWithConsequences()) as unknown as Record<string, unknown>;
+    const promptPath = path.resolve(__dirname, '../../../../../prompts/core/teaching-turn.yaml');
+    const doc = yaml.load(fs.readFileSync(promptPath, 'utf8')) as { rules?: unknown[] };
+    const ruleText = (doc.rules || []).filter((rule): rule is string => typeof rule === 'string').join('\n');
+    const referenced = [...new Set([...ruleText.matchAll(/\blearner\.([A-Za-z_][A-Za-z0-9_]*)/g)].map((match) => match[1]))];
+
+    expect(referenced.length).toBeGreaterThan(0);
+    for (const key of referenced) {
+      expect(Object.keys(projection)).toContain(key);
+    }
+    // 提示词里疲劳/重排相关字段（#183 病灶）必须真的存在于投影里
+    expect(projection).toHaveProperty('liveState.fatigueRisk');
+    expect(projection).toHaveProperty('teachingHints.riskFactors');
+    expect(projection).toHaveProperty('replanSignal.recommendation');
   });
 });
