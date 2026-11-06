@@ -275,4 +275,38 @@ describe('listForAdmin staleOnly（#176-2：按 dataUpdatedAt 判陈旧）', () 
     expect(ids).toContain('u-stale-null');
     expect(ids).not.toContain('u-fresh-evidence');
   });
+
+  /**
+   * #176-2 复核：列表路径的 60 分钟保鲜窗是给「缓变趋势信号」的，但它同样能让
+   * **失效前落地**的那行投影继续被展示——画像变更后 invalidate 只清了内存键，
+   * 列表读到旧载荷又把它写回内存，失效等于空转。
+   */
+  it('invalidate 之后，列表不得再返回失效前落地的持久化投影（水位同样管住列表路径）', async () => {
+    usersFindMany.mockResolvedValue([baseUser({ id: 'u-wm-list' })]);
+    usersCount.mockResolvedValue(1);
+    stubFreshProjections();
+    const { learnerSnapshotService } = jest.requireMock('../LearnerSnapshotService');
+
+    // 无 active 路径 → global 口径的投影键（与 buildKey 一致）
+    const key = ['learner-snapshot-v1', 'u-wm-list', 'global', 'global', 'none', 'none'].join(':');
+    projectionsFindMany.mockResolvedValue([
+      { projectionKey: key, payload: JSON.stringify(baseSnapshot), generatedAt: new Date(Date.now() - 30_000) },
+    ]);
+
+    learnerSnapshotRefreshService.invalidate('u-wm-list');
+    await learnerSnapshotRefreshService.listForAdmin({ limit: 50, includeTest: true });
+
+    // 该行被判失效 → 走重建，而不是把它读出来展示
+    expect(learnerSnapshotService.getSnapshot).toHaveBeenCalled();
+
+    // 对照组：没有失效的用户命中同一行，不重建
+    (learnerSnapshotService.getSnapshot as jest.Mock).mockClear();
+    usersFindMany.mockResolvedValue([baseUser({ id: 'u-no-wm-list' })]);
+    const otherKey = ['learner-snapshot-v1', 'u-no-wm-list', 'global', 'global', 'none', 'none'].join(':');
+    projectionsFindMany.mockResolvedValue([
+      { projectionKey: otherKey, payload: JSON.stringify(baseSnapshot), generatedAt: new Date(Date.now() - 30_000) },
+    ]);
+    await learnerSnapshotRefreshService.listForAdmin({ limit: 50, includeTest: true });
+    expect(learnerSnapshotService.getSnapshot).not.toHaveBeenCalled();
+  });
 });

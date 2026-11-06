@@ -297,7 +297,11 @@ export class LearnerSnapshotRefreshService {
 
     for (const entry of entries) {
       const cached = this.cacheGet(entry.key);
-      if (cached && Date.now() - cached.cachedAt < LearnerSnapshotRefreshService.CACHE_TTL_MS) {
+      if (
+        cached &&
+        Date.now() - cached.cachedAt < LearnerSnapshotRefreshService.CACHE_TTL_MS &&
+        !this.isInvalidated(entry.user.id, cached.cachedAt)
+      ) {
         snapshotsByUser.set(entry.user.id, cached.snapshot);
       } else {
         if (cached) this.cache.delete(entry.key);
@@ -314,13 +318,16 @@ export class LearnerSnapshotRefreshService {
           projectionKey: { in: refreshQueue.map((entry) => entry.key) },
           generatedAt: { gte: new Date(Date.now() - LearnerSnapshotRefreshService.LIST_PROJECTION_FRESH_MS) },
         },
-        select: { projectionKey: true, payload: true },
+        select: { projectionKey: true, payload: true, generatedAt: true },
       });
       const rowByKey = new Map(persisted.map((row) => [row.projectionKey, row]));
       const stillMissing: typeof entries = [];
       for (const entry of refreshQueue) {
         const row = rowByKey.get(entry.key);
-        if (row) {
+        // 失效水位同样管住列表路径（#176-2 复核）：60 分钟保鲜窗是给「缓变趋势信号」的，
+        // 但画像变更后的那一行是**由旧画像算出来的**，不能借这个窗继续展示。
+        // 命中人数 = 本轮失效过的用户，量级极小，不会把整页重建的扇出拉回来。
+        if (row && !this.isInvalidated(entry.user.id, row.generatedAt.getTime())) {
           try {
             const snapshot = JSON.parse(row.payload) as LearnerSnapshot;
             this.cacheSet(entry.key, snapshot);
