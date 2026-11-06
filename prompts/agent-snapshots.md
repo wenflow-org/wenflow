@@ -337,12 +337,12 @@ sandbox:teaching-agent.teachingState.teachingControlContext
 
 | 字段 | 类型 | handoff |
 |---|---|---|
-| `conceptLedger` | object[] | profile-agent |
-| `reusableFoundations` | string[] | profile-agent |
-| `blockedFoundations` | string[] | profile-agent |
-| `transferSignals` | object[] | profile-agent |
-| `recurringConfusions` | object[] | profile-agent |
-| `knowledgeStateSummary` | string | profile-agent |
+| `conceptLedger` | object[] | — |
+| `reusableFoundations` | string[] | — |
+| `blockedFoundations` | string[] | — |
+| `transferSignals` | object[] | — |
+| `recurringConfusions` | object[] | — |
+| `knowledgeStateSummary` | string | — |
 | `snapshot.dynamicState` | object | — |
 | `snapshot.learningControlState` | object | — |
 | `snapshot.replanSignal` | object | — |
@@ -350,14 +350,14 @@ sandbox:teaching-agent.teachingState.teachingControlContext
 | `snapshot.knowledgeMemory.currentPath` | object | — |
 | `snapshot.knowledgeMemory.globalSignals` | object | — |
 | `profile.curriculumControls` | object | — |
-| `headline` | string | profile-agent |
-| `subtitle` | string | profile-agent |
-| `todayActions` | object[] | profile-agent |
-| `nextStep` | string | profile-agent |
-| `pathHint` | string | profile-agent |
-| `paceHint` | string | profile-agent |
-| `emptyStateCopy` | string | profile-agent |
-| `warningCopy` | string | profile-agent |
+| `headline` | string | — |
+| `subtitle` | string | — |
+| `todayActions` | object[] | — |
+| `nextStep` | string | — |
+| `pathHint` | string | — |
+| `paceHint` | string | — |
+| `emptyStateCopy` | string | — |
+| `warningCopy` | string | — |
 
 ### 合法沙盘键（sandbox: 对账注册表）
 
