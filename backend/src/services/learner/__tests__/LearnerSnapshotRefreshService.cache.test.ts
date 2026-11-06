@@ -97,3 +97,56 @@ describe('#176-2 缓存条数上限（LRU）', () => {
     expect(snapshotOf.mock.calls.length).toBe(callsBefore + 1);
   }, 60000);
 });
+
+describe('#176-2 复核：invalidate 必须管住持久化投影（只删内存键＝空转）', () => {
+  /** 一行「失效前落地」的持久化投影：仍在 10 分钟窗口内，但早于 invalidate */
+  const persistedRow = (snapshot: unknown, ageMs: number) => ({
+    projectionKey: 'unused',
+    payload: JSON.stringify(snapshot),
+    lastEventId: 'evt-1',
+    generatedAt: new Date(Date.now() - ageMs),
+  });
+
+  it('invalidate 后不得读回窗口内、失效前落地的持久化载荷', async () => {
+    projectionsFindUnique.mockResolvedValue(persistedRow({ ...snapshotFor('u-wm-a'), marker: 'old-profile' }, 30_000));
+
+    learnerSnapshotRefreshService.invalidate('u-wm-a');
+    const got = (await learnerSnapshotRefreshService.getLatest({ userId: 'u-wm-a', scope: 'global' })) as any;
+
+    expect(got.marker).toBeUndefined();
+    expect(snapshotOf).toHaveBeenCalledTimes(1);
+  });
+
+  it('未失效时仍走持久化窗口（水位不能把缓存打穿）', async () => {
+    projectionsFindUnique.mockResolvedValue(persistedRow({ ...snapshotFor('u-wm-b'), marker: 'persisted' }, 30_000));
+
+    const got = (await learnerSnapshotRefreshService.getLatest({ userId: 'u-wm-b', scope: 'global' })) as any;
+
+    expect(got.marker).toBe('persisted');
+    expect(snapshotOf).not.toHaveBeenCalled();
+  });
+
+  it('refresh 的事件去重也不能绕过水位（画像变更不产生事件 id）', async () => {
+    projectionsFindUnique.mockResolvedValue(persistedRow({ ...snapshotFor('u-wm-c'), marker: 'old-profile' }, 30_000));
+
+    learnerSnapshotRefreshService.invalidate('u-wm-c');
+    const got = (await learnerSnapshotRefreshService.refresh({
+      userId: 'u-wm-c',
+      scope: 'global',
+      lastEventId: 'evt-1',
+    })) as any;
+
+    expect(got.marker).toBeUndefined();
+    expect(snapshotOf).toHaveBeenCalledTimes(1);
+  });
+
+  it('invalidate 之后同一用户重算出的新快照可以正常复用（水位只挡失效前的）', async () => {
+    projectionsFindUnique.mockResolvedValue(null);
+
+    learnerSnapshotRefreshService.invalidate('u-wm-d');
+    await learnerSnapshotRefreshService.getLatest({ userId: 'u-wm-d', scope: 'global' });
+    await learnerSnapshotRefreshService.getLatest({ userId: 'u-wm-d', scope: 'global' });
+
+    expect(snapshotOf).toHaveBeenCalledTimes(1);
+  });
+});
