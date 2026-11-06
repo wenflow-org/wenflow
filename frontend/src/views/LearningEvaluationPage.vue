@@ -10,27 +10,37 @@
         <div class="evaluation-head__actions">
           <button type="button" class="btn-ghost" :disabled="exportingImage" @click="exportImage">{{ exportingImage ? '导出中…' : '导出图片' }}</button>
           <button type="button" class="btn-ghost" @click="exportPdf">{{ EXPORT_PDF_LABEL }}</button>
-          <button type="button" class="btn-primary" @click="() => goBackToPath()">返回学习路径</button>
+          <!-- 推进动作从卡尾上移到固定操作栏（2026-11-06 走查）：卡尾那组「分割线 + 已计入进度的
+               小字 + 孤零零一颗灰键」是报告最底下的 80px 尾巴，而页面顶部本来就常驻操作栏。
+               主次口径与窄屏吸底条一致：有「完成任务」时它是唯一主按钮，「继续练习」让位；
+               已结算（没有再推进的动作）时「继续练习」顶上主按钮位。 -->
+          <button
+            type="button"
+            class="btn-ghost evaluation-head__continue"
+            :class="{ 'btn-primary': taskCompleted }"
+            :disabled="completeTaskBusy"
+            @click="handleAction('continue-task')"
+          >继续练习</button>
+          <button
+            v-if="!taskCompleted"
+            type="button"
+            class="btn-primary evaluation-head__complete"
+            :disabled="completeTaskBusy"
+            @click="handleAction('complete-task')"
+          >完成任务</button>
+          <button type="button" class="btn-ghost" @click="() => goBackToPath()">返回学习路径</button>
         </div>
         <ImmersiveMenu>
           <button type="button" class="evaluation-head__pop-item" :disabled="exportingImage" @click="pickHeadMenu('image')">{{ exportingImage ? '导出中…' : '导出图片' }}</button>
           <button type="button" class="evaluation-head__pop-item" @click="pickHeadMenu('pdf')">{{ EXPORT_PDF_LABEL }}</button>
+          <button type="button" class="evaluation-head__pop-item" @click="pickHeadMenu('continue')">继续练习</button>
+          <button v-if="!taskCompleted" type="button" class="evaluation-head__pop-item" @click="pickHeadMenu('complete')">完成任务</button>
           <button type="button" class="evaluation-head__pop-item" @click="pickHeadMenu('back')">返回学习路径</button>
         </ImmersiveMenu>
       </header>
 
-      <!-- 页内目录：宽屏独立右栏；只列出当前报告真实存在的章节 -->
-      <nav class="eval-toc" aria-label="报告目录">
-        <button
-          v-for="item in visibleTocItems"
-          :key="item.id"
-          type="button"
-          class="eval-toc__link"
-          :class="{ 'is-active': activeToc === item.id }"
-          @click="scrollToToc(item.id)"
-        >{{ item.label }}</button>
-      </nav>
-
+      <!-- 页内目录条 2026-11-06 撤除：模块合并 + 高度压缩后报告只剩 ~1.5 屏，右侧常驻的
+           9 项锚点条比它索引的内容还长；章节自己就在一屏内，滚动定位的价值不抵它的视觉噪声。 -->
       <section v-if="loading" class="evaluation-loading">
         <div class="evaluation-loading__inner">
           <div class="evaluation-loading__head">
@@ -108,9 +118,7 @@
           :advisory="sessionDetail.advisory || null"
           :busy="completeTaskBusy"
           :blocked="!!settleBlocked"
-          :task-completed="taskCompleted"
           :knowledge-points="knowledgePoints"
-          @action="handleAction"
           @advisory-action="handleAdvisoryAction"
         />
 
@@ -161,13 +169,9 @@
               <p class="evaluation-transcript-card__kicker">本次学习</p>
               <h2>当堂对话</h2>
             </div>
-            <span class="evaluation-transcript-card__meta">{{ transcriptTotalCount }} 条记录</span>
-          </div>
-
-          <!-- 卡头的「本次学习 / 当堂对话 / N 条消息」已经说明这是本次课堂的对话回看，
-               不再补一句同义提要（2026-10-29 全站副文审计） -->
-
-          <div v-if="transcriptEntries.length" class="evaluation-transcript-list">
+            <!-- 折叠触发器进卡头（2026-11-06 走查）：原来卡头是一颗静态「56 条记录」胶囊，
+                 卡片里又单摆一根 100% 满宽、亮蓝描边的长条按钮——比页面任何按钮都抢戏，
+                 还把「记录数」和「展开入口」拆成两处。现在合成一颗轻量按钮：数量即入口。 -->
             <button
               v-if="transcriptEntries.length"
               type="button"
@@ -182,6 +186,12 @@
                 aria-hidden="true"
               ></span>
             </button>
+          </div>
+
+          <!-- 卡头的「本次学习 / 当堂对话 / N 条消息」已经说明这是本次课堂的对话回看，
+               不再补一句同义提要（2026-10-29 全站副文审计） -->
+
+          <div v-if="transcriptEntries.length" class="evaluation-transcript-list">
             <template v-for="(entry, index) in visibleTranscriptEntries" :key="entry.key">
               <article
                 v-if="entry.kind === 'message'"
@@ -258,7 +268,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
 // html2canvas 体积大，仅导出图片时动态加载
@@ -479,7 +489,7 @@ const visibleTranscriptEntries = computed(() => (
   transcriptExpanded.value ? transcriptEntries.value : []
 ));
 const transcriptToggleLabel = computed(() => (
-  transcriptExpanded.value ? '收起对话' : '展开对话记录'
+  transcriptExpanded.value ? '收起记录' : `展开 ${transcriptTotalCount.value} 条对话`
 ));
 /** 导出前展开全部对话（返回是否临时展开，便于导出后恢复用户原本的折叠状态） */
 const expandTranscriptForExport = async () => {
@@ -998,57 +1008,16 @@ const exportPdf = async () => {
 
 /* ── 头部 ⋮ 子菜单（ImmersiveMenu 接管开合/点外关闭/Esc） ── */
 
-/* ── 页内目录（≥1440 固定右栏）：滚动高亮当前章节 ── */
-/* 目录顺序 = 报告实际顺序（2026-11-06 消肿后）：
-   主题总结 → 知识点 → 本节表现 → 长期状态 → 关键收获 → 下一步建议 → 学习评价 → 你的感受 → 当堂对话。
-   「本节进展」整卡撤销（与「知识点掌握」逐条重复），目录同步删掉该锚点。 */
-const tocItems = [
-  { id: 'sec-topic', label: '主题总结' },
-  { id: 'sec-knowledge', label: '知识点' },
-  { id: 'sec-perf', label: '本节表现' },
-  { id: 'sec-longterm', label: '长期状态' },
-  { id: 'sec-takeaways', label: '关键收获' },
-  { id: 'sec-next', label: '下一步建议' },
-  { id: 'sec-evaluation', label: '学习评价' },
-  { id: 'sec-feedback', label: '你的感受' },
-  { id: 'sec-transcript', label: '当堂对话' },
-];
-/** 只展示当前报告真实渲染的章节：降级总结没有「本节表现 / 长期状态」时不列空锚点 */
-const tocAvailability = ref<Record<string, boolean>>({});
-const visibleTocItems = computed(() => tocItems.filter((item) => tocAvailability.value[item.id]));
-function refreshTocAvailability() {
-  const map: Record<string, boolean> = {};
-  for (const item of tocItems) map[item.id] = !!document.getElementById(item.id);
-  tocAvailability.value = map;
-}
-watch(sessionDetail, () => { void nextTick(refreshTocAvailability); }, { immediate: true });
-const activeToc = ref('');
-function scrollToToc(id: string) {
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-function updateTocActive() {
-  let current = '';
-  for (const item of visibleTocItems.value) {
-    const el = document.getElementById(item.id);
-    if (el && el.getBoundingClientRect().top <= 130) current = item.id;
-  }
-  activeToc.value = current;
-}
-let tocTick = false;
-function onTocScroll() {
-  if (tocTick) return;
-  tocTick = true;
-  requestAnimationFrame(() => { tocTick = false; updateTocActive(); });
-}
-function pickHeadMenu(kind: 'image' | 'pdf' | 'back') {
+function pickHeadMenu(kind: 'image' | 'pdf' | 'back' | 'continue' | 'complete') {
   if (kind === 'image') void exportImage();
   else if (kind === 'pdf') void exportPdf();
+  else if (kind === 'continue') void handleAction('continue-task');
+  else if (kind === 'complete') void handleAction('complete-task');
   else goBackToPath();
 }
 
 onMounted(() => {
   document.addEventListener('visibilitychange', handleVisibilityChange);
-  window.addEventListener('scroll', onTocScroll, { passive: true });
   void fetchEvaluation();
 });
 onUnmounted(() => {
@@ -1056,7 +1025,6 @@ onUnmounted(() => {
   stopPolling();
   stopRegenPolling();
   document.removeEventListener('visibilitychange', handleVisibilityChange);
-  window.removeEventListener('scroll', onTocScroll);
 });
 </script>
 
@@ -1185,6 +1153,8 @@ onUnmounted(() => {
 
 .evaluation-head__actions {
   display: flex;
+  /* 5 颗键（导出图片 / 打印 / 继续练习 / 完成任务 / 返回）在 641–900 会换行，允许折行而不是横向溢出 */
+  flex-wrap: wrap;
   gap: 8px;
   flex-shrink: 0;
 }
@@ -1444,13 +1414,8 @@ onUnmounted(() => {
   font-size: 26px;
   font-weight: 800;
   color: var(--ink);
-  margin-top: 8px;
-}
-
-.evaluation-shell :deep(.metric-desc) {
-  font-size: 12px;
-  color: var(--muted);
-  line-height: 1.5;
+  /* 标签与读数 6px 紧凑（2026-11-06）：原先 8px 且卡片被全局 text-align:center 拉成「标题居中、
+     读数在左下」的错位；对齐已在 CompletionCard 里显式锁定 text-align: left */
   margin-top: 6px;
 }
 
@@ -1535,19 +1500,6 @@ onUnmounted(() => {
   color: var(--ink);
 }
 
-.evaluation-transcript-card__meta {
-  display: inline-flex;
-  align-items: center;
-  min-height: 32px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--surface) 60%, var(--canvas));
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
 .evaluation-transcript-list {
   display: grid;
   /* minmax(0,1fr)（2026-11-05 UX 审计 P0）：缺省 auto 轨道按 max-content 取宽，讲解消息里的
@@ -1558,27 +1510,30 @@ onUnmounted(() => {
   gap: 14px;
 }
 
-/* 折叠开关：默认只回看最近两条消息（长讲解在手机上占好几屏）。选择器带上卡片类是因为
-   v2 的按钮 reset（.v2-page button:where(...)，权重 0-1-1）比单类选择器更高 */
+/* 折叠开关（2026-11-06 走查）：此前是卡内一根 100% 满宽、亮蓝描边的长条按钮——比页面任何
+   按钮都抢戏，而且和卡头那颗静态「N 条记录」胶囊说的是同一件事。现在合并进卡头右上角，
+   做成一颗轻量小胶囊（数量即入口）。选择器带卡片类是因为 v2 的按钮 reset
+   （.v2-page button:where(...)，权重 0-1-1）比单类选择器更高。 */
 .evaluation-transcript-card .evaluation-transcript-toggle {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   gap: 6px;
-  width: 100%;
-  min-height: 34px;
-  padding: 6px 12px;
-  border: 1px dashed var(--line);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--surface) 60%, var(--canvas));
-  color: var(--blue-deep);
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
   font-size: 12.5px;
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
 }
 
 .evaluation-transcript-card .evaluation-transcript-toggle:not(:disabled):hover {
   border-color: color-mix(in srgb, var(--blue) 35%, transparent);
+  color: var(--blue-deep);
 }
 
 .evaluation-transcript-toggle__caret {
@@ -1781,11 +1736,6 @@ onUnmounted(() => {
   /* 头部动作收进 ⋮ 子菜单：390 下三枚按钮换行堆叠，把头部撑到 154px 且主次不清；
      桌面（>640）仍是并排按钮，行为不变（2026-09-25 用户反馈） */
   .evaluation-head__actions {
-    display: none;
-  }
-
-  /* 卡内动作按钮隐藏（说明文字保留），决策统一走吸底动作条 */
-  .evaluation-shell :deep(.completion-actions__row) {
     display: none;
   }
 
@@ -2035,11 +1985,6 @@ onUnmounted(() => {
     font-size: 18px;
   }
 
-  .evaluation-transcript-card__meta {
-    min-height: 26px;
-    padding: 0 10px;
-  }
-
   .evaluation-transcript-list {
     gap: 10px;
   }
@@ -2167,39 +2112,4 @@ onUnmounted(() => {
   color: var(--text-on-primary);
 }
 
-/* ---------- 页内目录（≥1680 宽屏固定右缘；窄屏不渲染占位） ---------- */
-.eval-toc { display: none; }
-@media (min-width: 1680px) {
-  .eval-toc {
-    display: grid;
-    gap: 2px;
-    position: fixed;
-    right: 24px;
-    top: 96px;
-    width: 172px;
-    z-index: 10;
-  }
-}
-.eval-toc__link {
-  text-align: left;
-  padding: 7px 10px;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--muted);
-  background: none;
-  border: 0;
-  border-left: 2px solid var(--line);
-  border-radius: 0 var(--mk-radius-sm) var(--mk-radius-sm) 0;
-  cursor: pointer;
-  font-family: inherit;
-}
-.eval-toc__link:hover { color: var(--blue-deep); }
-.eval-toc__link.is-active {
-  color: var(--blue-deep);
-  border-left-color: var(--blue);
-  background: color-mix(in srgb, var(--blue) 7%, transparent);
-}
-/* 锚点落点留出呼吸空间 */
-#sec-topic, #sec-progress, #sec-perf, #sec-longterm, #sec-knowledge,
-#sec-next, #sec-evaluation, #sec-feedback, #sec-transcript { scroll-margin-top: 16px; }
 </style>

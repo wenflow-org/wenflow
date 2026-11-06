@@ -77,23 +77,24 @@ describe('结构消肿：重复的「本节进展」撤除，知识点掌握上�
     expect(live, 'progressHighlights 计算属性还留着').not.toContain('progressHighlights');
   });
 
-  it('知识点掌握紧跟主题总结（报告顺序 = 目录顺序）', () => {
+  it('主题总结并入概览卡，知识点掌握紧随其后（不再有独立主题卡）', () => {
     const live = strip(card);
-    const topic = live.indexOf('id="sec-topic"');
+    const summary = live.indexOf('class="completion-summary"');
+    const summaryTopic = live.indexOf('class="summary-topic"');
     const knowledge = live.indexOf('id="sec-knowledge"');
     const perf = live.indexOf('id="sec-perf"');
-    expect(topic).toBeGreaterThan(-1);
-    expect(knowledge, '知识点掌握没上提到主题总结下方').toBeGreaterThan(topic);
+    expect(live, '独立主题卡又回来了').not.toContain('id="sec-topic"');
+    expect(summary).toBeGreaterThan(-1);
+    expect(summaryTopic, '主题总结没并进概览卡').toBeGreaterThan(summary);
+    expect(knowledge, '知识点掌握没排在本节表现之前').toBeGreaterThan(summaryTopic);
     expect(perf).toBeGreaterThan(knowledge);
   });
 
-  it('目录同步：不再列「本节进展」，且顺序与报告一致', () => {
-    const toc = page.slice(page.indexOf('const tocItems'), page.indexOf('const tocAvailability'));
-    expect(toc).not.toContain('sec-progress');
-    const order = ['sec-topic', 'sec-knowledge', 'sec-perf', 'sec-longterm', 'sec-takeaways', 'sec-next', 'sec-evaluation', 'sec-feedback', 'sec-transcript'];
-    const at = order.map((id) => toc.indexOf(`'${id}'`));
-    expect(at.every((v) => v > -1), '目录缺章').toBe(true);
-    expect([...at].sort((a, b) => a - b), '目录顺序与报告顺序不一致').toEqual(at);
+  it('右侧悬浮目录条整条撤除（模块合并后只剩 ~1.5 屏）', () => {
+    const live = strip(page);
+    expect(live).not.toContain('eval-toc');
+    expect(live, '目录数据源还留着').not.toContain('tocItems');
+    expect(live, '滚动高亮监听还挂着').not.toContain('onTocScroll');
   });
 });
 
@@ -139,11 +140,12 @@ describe('当堂对话：默认整块折叠 + 计数同源', () => {
     expect(live).toContain('transcriptExpanded.value ? transcriptEntries.value : []');
   });
 
-  it('卡头计数与展开按钮同源（修 47 vs 54）', () => {
+  it('数量即入口：卡头不再单摆静态计数胶囊（修 47 vs 54）', () => {
     const live = strip(page);
-    expect(live).toContain('{{ transcriptTotalCount }} 条记录');
-    expect(live, '卡头还在数 mainDialogueMessages（只有消息，不含小测卡）').not.toContain('{{ mainDialogueMessages.length }} 条消息');
+    expect(live, '静态记录胶囊又回来了').not.toContain('evaluation-transcript-card__meta');
     expect(live, '按钮里又写死了条数，两边必然再次不一致').not.toContain('展开更早的');
+    expect(live, '切换键文案必须来自同一条时间线').toContain('展开 ${transcriptTotalCount.value} 条对话');
+    expect(live, '卡头还在数 mainDialogueMessages（只有消息，不含小测卡）').not.toContain('{{ mainDialogueMessages.length }} 条消息');
   });
 
   it('展开后的讲解/小测卡吃满卡宽，只有用户气泡收窄', () => {
@@ -193,6 +195,64 @@ describe('「你的感受」压缩：PC 三列一行，移动端 38px 方角提�
     const css = strip(feedback);
     const mobile = css.slice(css.indexOf('@media (max-width: 640px)'));
     expect(mobile).toMatch(/\.session-feedback__actions \.feedback-btn\s*\{[\s\S]*?height:\s*38px;[\s\S]*?border-radius:\s*8px;/);
+  });
+});
+
+describe('精细化：指标卡对齐、图标颜色、双栏、入口归位', () => {
+  it('指标卡显式左对齐（全局 .metric-card 的 text-align:center 不能漏进来）', () => {
+    const rule = ruleOf(card, '.metric-card');
+    expect(has(rule, /text-align:\s*left/), '没写 text-align: left → 标题会被全局 center 拉走，与左下角的读数错位').toBe(true);
+    expect(has(ruleOf(card, '.metric-value'), /margin-top:\s*6px/), '标签与读数间距应为 6px').toBe(true);
+    expect(has(ruleOf(card, '.metric-value'), /align-items:\s*flex-start/)).toBe(true);
+  });
+
+  it('标题图标每一种都带显式 fill（缺 fill 的 path/rect 默认纯黑，深色底上隐形）', () => {
+    const icons = card.slice(card.indexOf('const ICONS'), card.indexOf('const icon ='));
+    /* 逐条图标检查：允许用 <g fill="currentColor"> 包一组实心形状，但不许有「既不在带 fill 的分组里、
+       自己也没写 fill」的形状——那种形状会掉成 #000 */
+    const lines = icons.split('\n').filter((l) => /^\s{2}\w+: `/.test(l));
+    /* 2026-11-06 精简后只剩 6 种标题/头部图标；阈值取 4 即可挡住「解析不到任何图标」的假通过 */
+    expect(lines.length, '一条图标都没解析到，断言形同虚设').toBeGreaterThan(4);
+    const offenders: string[] = [];
+    for (const line of lines) {
+      const body = line.replace(/<g[^>]*>/g, '').replace(/<\/g>/g, '');
+      const grouped = /<g\s[^>]*fill=/.test(line);
+      const shapes = body.match(/<(?:path|rect|circle)[^>]*>/g) || [];
+      if (grouped) continue; // 整组已被外层 fill 覆盖
+      for (const s of shapes) {
+        if (!/[ \t]fill=/.test(s)) offenders.push(`${line.trim().slice(0, 24)}… ${s.slice(0, 40)}`);
+      }
+    }
+    expect(offenders, `这些形状没写 fill，会掉成 #000：\n${offenders.slice(0, 4).join('\n')}`).toEqual([]);
+  });
+
+  it('关键收获与下一步建议 PC ≥1024 左右双栏', () => {
+    const live = strip(card);
+    expect(live).toContain('class="completion-duo"');
+    expect(live, '两张卡必须同处一个双栏容器').toMatch(/completion-duo[\s\S]{0,400}id="sec-takeaways"[\s\S]{0,900}id="sec-next"/);
+    const desk = live.slice(live.indexOf('@media (min-width: 1024px)'));
+    /* 双栏规则取到第一个声明块结束（'}' + 换行）即可，不引入转义字符串 */
+    const deskRule = desk.slice(0, desk.indexOf('}\n') + 1);
+    expect(deskRule, '双栏规则缺失').toMatch(/\.completion-duo\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2/);
+  });
+
+  it('推进/离开动作统一在页面顶部操作栏，卡内不再有一套', () => {
+    const live = strip(card);
+    expect(live).not.toContain('completion-actions');
+    expect(live, '卡还在发 action 事件').not.toContain("emit('action'");
+    expect(page).toContain('evaluation-head__continue');
+    expect(page).toContain('evaluation-head__complete');
+    expect(page, '顶部返回钮仍要在').toContain('返回学习路径');
+  });
+
+  it('当堂对话切换键在卡头、轻量胶囊（不是满宽蓝框长条）', () => {
+    /* 卡头 = 从 __head 开始到列表容器之前的那一段 */
+    const live = strip(page);
+    const head = live.slice(live.indexOf('evaluation-transcript-card__head'), live.indexOf('evaluation-transcript-list'));
+    expect(head, '切换键没进卡头').toContain('evaluation-transcript-toggle');
+    const rule = ruleOf(page, '.evaluation-transcript-card .evaluation-transcript-toggle');
+    expect(has(rule, /width:\s*100%/), '又变回满宽长条了').toBe(false);
+    expect(has(rule, /border:\s*1px solid/)).toBe(true);
   });
 });
 

@@ -84,10 +84,11 @@ describe('LearningEvaluationPage 当堂对话折叠', () => {
 
     const toggle = w.find('.evaluation-transcript-toggle');
     expect(toggle.exists()).toBe(true);
-    expect(toggle.text()).toContain('展开对话记录');
+    expect(toggle.text()).toContain('展开 5 条对话');
     expect(toggle.attributes('aria-expanded')).toBe('false');
-    /* 卡头计数与按钮同源：5 条消息 = 5 条记录（不再出现「47 条消息 / 展开 54 条」） */
-    expect(w.find('.evaluation-transcript-card__meta').text()).toBe('5 条记录');
+    /* 数量即入口（2026-11-06）：卡头不再单摆一颗静态计数胶囊，按钮文案自带条数，
+       与展开的内容同源，不可能再出现「47 条消息 / 展开 54 条」 */
+    expect(w.find('.evaluation-transcript-card__meta').exists()).toBe(false);
   });
 
   it('点击后在展开/收起之间切换，条目数随之变化', async () => {
@@ -96,12 +97,12 @@ describe('LearningEvaluationPage 当堂对话折叠', () => {
 
     await toggle.trigger('click');
     expect(w.findAll('.evaluation-transcript-item').length).toBe(5);
-    expect(w.find('.evaluation-transcript-toggle').text()).toContain('收起对话');
+    expect(w.find('.evaluation-transcript-toggle').text()).toContain('收起记录');
     expect(w.find('.evaluation-transcript-toggle').attributes('aria-expanded')).toBe('true');
 
     await w.find('.evaluation-transcript-toggle').trigger('click');
     expect(w.findAll('.evaluation-transcript-item').length).toBe(0);
-    expect(w.find('.evaluation-transcript-toggle').text()).toContain('展开对话记录');
+    expect(w.find('.evaluation-transcript-toggle').text()).toContain('展开 5 条对话');
   });
 
   it('条目很少也保留展开开关（默认一律折叠，没有「预览条数」例外）', async () => {

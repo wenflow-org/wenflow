@@ -67,36 +67,32 @@ const finishedDetail = {
   },
 };
 
-function cardOf(w: ReturnType<typeof mount>) {
-  return w.findComponent({ name: 'CompletionCard' });
-}
-
 describe('LearningEvaluationPage 已结算任务的入口口径', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getSessionDetailMock.mockResolvedValue(finishedDetail);
   });
 
-  it('首屏加载即探测，课次已完成 → CompletionCard 收到 taskCompleted=true', async () => {
+  it('首屏加载即探测，课次已完成 → 桌面操作栏与窄屏吸底条都收起「完成任务」', async () => {
     apiGetMock.mockResolvedValue({ data: { status: 'completed' } });
     const w = mount(LearningEvaluationPage);
     await flushPromises();
 
     expect(apiGetMock).toHaveBeenCalledWith('/learning/tasks/t1');
-    expect(cardOf(w).props('taskCompleted')).toBe(true);
-    // 移动吸底条须与桌面卡口径一致：已结算即收起「完成任务」（2026-11-04）
+    /* 2026-11-06：推进动作从卡尾上移到页面顶部操作栏，卡不再接 taskCompleted prop；
+       口径断言改在入口本身（顶栏 + 吸底条，两处必须一致） */
+    expect(w.find('.evaluation-head__complete').exists()).toBe(false);
     const barBtns = w.findAll('.evaluation-ctabar button').map((b) => b.text());
     expect(barBtns).not.toContain('完成任务');
     expect(barBtns).toEqual(['继续练习', '返回']);
   });
 
-  it('课次未完成 → taskCompleted=false（照旧递「完成任务」）', async () => {
+  it('课次未完成 → 顶栏与吸底条都递「完成任务」', async () => {
     apiGetMock.mockResolvedValue({ data: { status: 'in_progress' } });
     const w = mount(LearningEvaluationPage);
     await flushPromises();
 
-    expect(cardOf(w).props('taskCompleted')).toBe(false);
-    // 未结算时吸底条仍递三键（含「完成任务」）
+    expect(w.find('.evaluation-head__complete').exists()).toBe(true);
     const barBtns = w.findAll('.evaluation-ctabar button').map((b) => b.text());
     expect(barBtns).toEqual(['继续练习', '返回', '完成任务']);
   });
@@ -106,6 +102,6 @@ describe('LearningEvaluationPage 已结算任务的入口口径', () => {
     const w = mount(LearningEvaluationPage);
     await flushPromises();
 
-    expect(cardOf(w).props('taskCompleted')).toBe(false);
+    expect(w.find('.evaluation-head__complete').exists()).toBe(true);
   });
 });
