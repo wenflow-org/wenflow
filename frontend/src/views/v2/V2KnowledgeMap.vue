@@ -26,7 +26,7 @@
           :theme="theme"
           :loading="loading"
           :error="error"
-          height="max(560px, calc((100dvh - 216px) / var(--vp-zoom, 1)))"
+          height="max(var(--km-h-floor, 600px), calc((100dvh - var(--km-h-reserve, 260px)) / var(--vp-zoom, 1)))"
           empty-hint="还没有可展示的概念图。学完一节课、或生成一条学习路径后，概念与关系会自动出现在这里。"
           error-action-text="重试"
           empty-action-text="开始学习"
@@ -161,18 +161,20 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* 2026-11-04 走查：此前 1180 死值是全站唯一不随宽屏加宽的内容容器（学习台等
-   1140→1260@1440→1360@1680 三档），≥1440 起本页反而全场最窄。改成与学习台同一套
-   阶梯：组件内 1140/1260@1440，≥1680 的 1360 由 v2.css 高分屏名单统一管。 */
-/* 宽屏工作台（2026-11-06 走查）：图谱页此前被关在全站 1140/1260 容器里，1920 下左右
-   各空 ~400px。本页主体只有一张图卡，横向直接铺到 1680 档。
-   写 100% + max-width 而不是 calc(100vw - 48px)：≥1600 档 .v2-page 有 zoom（v2.css 警告：
-   vw 不随 zoom 缩放，与页面其余部分脱钩），父宽百分比是安全的口径。 */
+/* 容器宽度与全站同档（2026-11-07 二次走查）：上一版试过全幅工作台（width:100% 无帽），
+   用户判「满屏太难看、要和别的页一致」。口径回到与学习状态同一阶梯：组件内 880 居中，
+   ≥1680 由 v2.css 高分屏名单拓到 1360（1920@zoom1.08 实测 1469px，与状态页齐平）。
+   写父宽百分比而不是 calc(100vw - 80px)：≥1600 档 .v2-page 有 zoom（v2.css 警告：
+   vw 不随 zoom 缩放，与页面其余部分脱钩），百分比是安全口径。 */
+/* 顶部呼吸（2026-11-07 走查）：28/24 上下距，卡不再贴死 sticky 导航。画布高度预留
+   260px = 导航 64 + 上下距 52 + 卡内统计栏/图例 ~90 + 底部余白 ~52（120px 只扣导航
+   会整卡溢出视口 ~75px、页面滚起来；260 让上下留白 30/60 均衡）；600px 下限保底。≤1100 档回旧 216px 预留（移动端还要给
+   吸底 dock 留位）+ 560px 旧下限。zoom 档按 v2.css 硬规全部 / var(--vp-zoom,1)。 */
 .km__main {
   width: 100%;
-  max-width: 1680px;
+  max-width: 880px;
   margin: 0 auto;
-  padding: var(--mk-space-3) 24px var(--mk-space-4);
+  padding: 28px 28px 24px;
 }
 /* 说明框视觉已撤（2026-11-05 屏效比）：内容仅留给读屏（visually-hidden 全局类），
    不再占 66px 视觉高度——同屏第三份数字（图卡统计行 + 路径轨已各有） */
@@ -203,6 +205,10 @@ onMounted(async () => {
    图卡内边距不再按断点改：卡壳已移到 .mk-ge__card，两端统一吃原型固定档 10px 10px 4px。 */
 @media (max-width: 1100px) {
   .km__main {
+    /* 移动端：导航 + 吸底 dock 合计 ~200px，卡高预留回到旧 216 档、下限回 560，
+       桌面默认（600 下限 / 120 预留）只服务 PC 工作台 */
+    --km-h-floor: 560px;
+    --km-h-reserve: 216px;
     padding: var(--mk-space-2) var(--mk-space-3) var(--mk-space-4);
   }
 }

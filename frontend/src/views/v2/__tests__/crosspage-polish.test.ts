@@ -8,6 +8,9 @@
  *    复习清单空态独占 ~100px；窗口切换器 36px 大胶囊在手机换行。
  * ③ 历史：顶部 4 个 tab 拉成 1100px 巨型跑道；总计量与日历卡内「本月」统计上下重复两遍；
  *    单列时日历格子被拉成 140px 超扁长条、无学习日没有底色像渲染缺了一半。
+ * ④ 图谱二次（2026-11-07 走查）：卡贴死 sticky 导航无顶距；侧栏 [»] 绝对定位盖住
+ *    16 字长标题；宽度一度改成全幅工作台（无帽满屏）被用户否掉，回到与学习状态同档
+ *    （组件内 880 居中 + ≥1680 名单 1360），护栏双向锁死不许再摆到任一极端。
  */
 import { describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
@@ -22,6 +25,9 @@ const read = (rel: string) => readFileSync(resolve(here, rel), 'utf8');
 const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/<!--[\s\S]*?-->/g, '');
 
 const graph = read('../../../components/mk/MkGraph.vue');
+const explorer = read('../../../components/mk/MkGraphExplorer.vue');
+const km = read('../V2KnowledgeMap.vue');
+const v2css = read('../v2.css');
 const state = read('../V2LearningState.vue');
 const history = read('../V2LearningHistory.vue');
 const shell = read('../../../components/user/CapabilityShell.vue');
@@ -97,6 +103,53 @@ describe('知识图谱：聚拢、取景与选中态', () => {
     expect(graph).toContain("dimmed === 'select' ? 0.42 : 1");
     expect(graph).toMatch(/touchesSelected \? 1 : 0\.3/);
     expect(graph).toMatch(/selectedIdRef\.value === node\.id\s*\n\s*\? '#2563eb'/);
+  });
+});
+
+describe('知识图谱容器与顶距（2026-11-07 走查/二次）：同档宽度、顶部呼吸、侧栏标题行', () => {
+  it('宽度与学习状态同档：组件内 880 居中，≥1680 名单拓 1360', () => {
+    const rule = ruleOf(km, '.km__main');
+    expect(has(rule, /max-width:\s*880px/), '基线宽度偏离学习状态的 880 档').toBe(true);
+    expect(has(rule, /margin:\s*0 auto/)).toBe(true);
+    /* 全幅工作台方案被用户否掉（满屏太难看）——不许回退成无帽 */
+    expect(has(rule, /max-width:\s*none/), '又变回全幅无帽了').toBe(false);
+    expect(has(rule, /width:\s*100%/)).toBe(true);
+    /* 高分屏名单必须仍收图谱页（与 .state__main 同一口径） */
+    expect(strip(v2css), '图谱被摘出 1360 名单，宽屏档会与状态页不一致').toContain('.v2-page.km .km__main');
+  });
+
+  it('顶部呼吸：上下距 28/24，卡不再贴死 sticky 导航', () => {
+    const rule = ruleOf(km, '.km__main');
+    expect(has(rule, /padding:\s*28px 28px 24px/)).toBe(true);
+  });
+
+  it('卡高预留含卡内统计栏/图例（整卡一屏放下、页面不滚）；600px 下限；≤1100 回移动档', () => {
+    expect(km).toContain('--km-h-floor, 600px');
+    /* 260 = 导航 64 + 上下距 52 + 卡内 bar/图例 ~90 + 底部余白；只扣导航会把整卡顶出视口 */
+    expect(km).toContain('--km-h-reserve, 260px');
+    const narrow = strip(km).slice(strip(km).indexOf('@media (max-width: 1100px)'));
+    expect(narrow).toMatch(/--km-h-floor:\s*560px/);
+    expect(narrow).toMatch(/--km-h-reserve:\s*216px/);
+  });
+
+  it('侧栏标题行 flex 化：标题弹性折行，[»] 固定宽不再截断长标题', () => {
+    const head = ruleOf(explorer, '.mk-ge__side-head');
+    expect(has(head, /display:\s*flex/)).toBe(true);
+    expect(has(head, /align-items:\s*flex-start/)).toBe(true);
+    expect(has(head, /justify-content:\s*space-between/)).toBe(true);
+    expect(has(head, /gap:\s*8px/)).toBe(true);
+    const title = ruleOf(explorer, '.mk-ge__side-title');
+    expect(has(title, /flex:\s*1/)).toBe(true);
+    expect(has(title, /min-width:\s*0/)).toBe(true);
+    expect(has(title, /word-break:\s*break-word/)).toBe(true);
+    const toggle = ruleOf(explorer, '.mk-ge__side-toggle');
+    expect(has(toggle, /flex:\s*none/)).toBe(true);
+    expect(has(toggle, /position:\s*absolute/), '按钮又绝对定位钉右上、盖住标题了').toBe(false);
+    /* 模板顺序：head 行先开、标题在左、按钮在右 */
+    const tpl = explorer.slice(0, explorer.indexOf('<script'));
+    expect(tpl.indexOf('mk-ge__side-head')).toBeGreaterThan(-1);
+    expect(tpl.indexOf('mk-ge__side-title')).toBeGreaterThan(tpl.indexOf('mk-ge__side-head'));
+    expect(tpl.indexOf('mk-ge__side-toggle')).toBeGreaterThan(tpl.indexOf('mk-ge__side-title'));
   });
 });
 

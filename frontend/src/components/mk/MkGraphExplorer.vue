@@ -142,17 +142,23 @@
           <!-- 侧栏详情随画布点选切换，对读屏是「远端变更」→ polite 播报摘要
                （画布的完整 AT 等价清单见下方 sr-only 概念清单——2026-09-27 a11y 走查，P2 收尾落地） -->
           <aside v-show="sideOpen" class="mk-ge__side" aria-live="polite">
-            <button
-              type="button"
-              class="mk-ge__side-toggle"
-              :aria-expanded="sideOpen"
-              :title="sideOpen ? '收起侧栏' : '展开侧栏'"
-              :aria-label="sideOpen ? '收起侧栏' : '展开侧栏'"
-              @click="sideOpen = !sideOpen"
-            >{{ sideOpen ? '»' : '«' }}</button>
+            <!-- 标题行（2026-11-07 走查）：折叠钮原来 absolute 钉右上，16 字长标题第一行
+                 正好钻到按钮底下被截断。标题与按钮改同一 flex 行：标题弹性占宽可折行，
+                 按钮固定不缩。详情态/概览态共用这一行（按钮在两态都常驻右上）。 -->
+            <div class="mk-ge__side-head">
+              <h4 v-if="selected" class="mk-ge__side-title">{{ selected.label }}</h4>
+              <h4 v-else class="mk-ge__side-title">图谱概览</h4>
+              <button
+                type="button"
+                class="mk-ge__side-toggle"
+                :aria-expanded="sideOpen"
+                :title="sideOpen ? '收起侧栏' : '展开侧栏'"
+                :aria-label="sideOpen ? '收起侧栏' : '展开侧栏'"
+                @click="sideOpen = !sideOpen"
+              >{{ sideOpen ? '»' : '«' }}</button>
+            </div>
             <template v-if="selected">
-              <!-- 标题 + 状态徽章（原型抽屉：h + wf-badge） -->
-              <h4 class="mk-ge__side-title">{{ selected.label }}</h4>
+              <!-- 状态徽章（原型抽屉：h + wf-badge） -->
               <div class="mk-ge__side-meta">
                 <span class="mk-badge" :class="selectedStatus.badge">{{ selectedStatus.label }}</span>
                 <span v-if="selected.taxonomy" class="mk-ge__side-sub">{{ selected.taxonomy }}</span>
@@ -216,7 +222,6 @@
               </div>
             </template>
             <div v-else class="mk-ge__overview">
-              <h4 class="mk-ge__side-title">图谱概览</h4>
               <!-- 未选中时侧栏不能只剩一句提示、把 800px 高的右栏留空（2026-10-29
                    像素级走查）：给最多 5 个「最该先看」的概念，点名字等同点画布节点，
                    侧栏即刻切到详情。原来的 2×2 分布数字块删去（2026-11-03 真机走查）：
@@ -844,11 +849,26 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   box-shadow: var(--mk-shadow-sm);
 }
 .mk-ge__side-reopen:hover { color: var(--mk-ink); border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line)); }
-/* 侧栏收起/展开开关：钉在侧栏右上 */
+/* 侧栏标题行（2026-11-07 走查）：标题占弹性宽、按钮固定宽——长标题在自己的轨道里
+   折行，不再钻到按钮底下。标题行下距由行容器统一出（原挂在 h4 上）。 */
+.mk-ge__side-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: var(--mk-space-2);
+}
+.mk-ge__side-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--mk-fs-body);
+  line-height: 1.5;
+  word-break: break-word;
+}
+/* 侧栏收起/展开开关：标题行右端，固定尺寸不随标题挤压 */
 .mk-ge__side-toggle {
-  position: absolute;
-  top: 8px;
-  right: 8px;
+  flex: none;
   width: 26px; height: 26px;
   display: grid; place-items: center;
   border: 1px solid var(--mk-line);
@@ -871,11 +891,6 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   display: flex; flex-direction: column;
   min-height: 0;
   box-sizing: border-box;
-}
-.mk-ge__side-title {
-  margin: 0 0 var(--mk-space-2);
-  font-size: var(--mk-fs-body);
-  line-height: 1.5;
 }
 /* 标题下的一行：状态徽章（原型 wf-badge）+ 分类副标题（原型 wf-drawer__sub 位） */
 .mk-ge__side-meta {

@@ -809,7 +809,9 @@ html, body {
   .v2-page.state .state__main,
   .v2-page.ach .ach__main,
   .v2-page.history .history__main,
-  /* 2026-11-04 走查补位：知识图谱此前钉 1180 不入名单，宽屏档全场最窄 */
+  /* 知识图谱（2026-11-07 二次走查）：当天曾试过「全幅工作台」把它摘出名单，
+     用户判满屏太难看、要与别的页一致——回到与学习状态同档：组件内 880 居中、
+     本档拓 1360（1920@zoom1.08 渲染 ≈1469px，和状态页齐平） */
   .v2-page.km .km__main,
   .v2-page.evaluation-page .evaluation-shell {
     max-width: 1360px;
