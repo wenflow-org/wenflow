@@ -66,11 +66,10 @@
               <span>资料库</span>
             </router-link>
             <button type="button" role="menuitem" class="v2nav__menu-theme" @click="toggleTheme">
-              <span class="v2nav__menu-theme-icon" aria-hidden="true">
-                <Sun v-if="isDark" :size="14" :stroke-width="2" />
-                <Moon v-else :size="14" :stroke-width="2" />
-              </span>
-              <span class="v2nav__menu-theme-label">{{ isDark ? '使用亮色模式' : '使用暗色模式' }}</span>
+              <!-- 图标与其余行同一规格（2026-11-06 走查：原 22px 键帽芯片与上下裸图标不一致） -->
+              <Sun v-if="isDark" :size="15" :stroke-width="1.75" aria-hidden="true" />
+              <Moon v-else :size="15" :stroke-width="1.75" aria-hidden="true" />
+              <span>{{ isDark ? '使用亮色模式' : '使用暗色模式' }}</span>
             </button>
             <button type="button" role="menuitem" class="v2nav__menu-danger" @click="handleLogout">
               <LogOut :size="15" :stroke-width="1.75" aria-hidden="true" />
@@ -386,11 +385,8 @@ onUnmounted(() => {
   text-decoration: none;
   cursor: pointer;
 }
-/* 行内直接子图标：染色 + 补齐 22px 图标槽。
-   ① 只用 `> svg`：写成 `a svg` 会连主题芯片里那个 14px 图标一起命中，而直接命中的规则
-      比继承更优先，芯片声明的 --blue-deep 会被无声盖成灰色（实测 rgb(175,177,182)）。
-   ② 补 3.5px 对称边距：主题项是 22px 键帽芯片，其余是 15px 线图标；不补的话那四行文字
-      会比「切换到亮色模式」左移 7px（390 实测 235.7 vs 242.7）。15 + 3.5×2 = 22。 */
+/* 行内直接子图标：统一 15px 裸线图标（主题切换与其余行同规格，2026-11-06 走查拆芯片），
+   染 muted + 3.5px 对称边距（图标槽 15 + 3.5×2 = 22，各行文字同一左缘） */
 .v2nav__menu a > svg,
 .v2nav__menu button > svg {
   color: var(--muted);
@@ -403,20 +399,6 @@ onUnmounted(() => {
 .v2nav__menu a:hover,
 .v2nav__menu button:hover {
   background: color-mix(in srgb, var(--blue) 8%, var(--surface));
-}
-.v2nav__menu-theme {
-  display: flex !important;
-  align-items: center;
-  gap: 8px;
-}
-.v2nav__menu-theme-icon {
-  display: grid;
-  place-items: center;
-  width: 22px; height: 22px;
-  border-radius: 6px; /* 圆角阶梯：芯片档 */
-  background: color-mix(in srgb, var(--blue) 10%, transparent);
-  color: var(--blue-deep);
-  flex-shrink: 0;
 }
 .v2nav__menu-danger {
   color: var(--red-ink) !important;

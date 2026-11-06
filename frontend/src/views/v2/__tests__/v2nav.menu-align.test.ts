@@ -1,18 +1,16 @@
 /**
- * 账户菜单的左对齐护栏（2026-10-08，390 实测）
+ * 账户菜单的左对齐护栏（2026-10-08 建立；2026-11-06 走查后改锁新方案）
  *
- * 病根：主题切换项是 22px 的键帽芯片（.v2nav__menu-theme-icon），其余四项是 15px 线图标。
- * 图标槽不等宽时，那四行的文字比「切换到亮色模式」左移 7px（实测 235.7 vs 242.7），
- * 菜单里最显眼的一处错行。补 3.5px 对称边距后，15px 图标落在与芯片同宽的 22px 槽里，
- * 五项文字同落 242.7，图标墨迹中心也同落 223.65。
+ * 2026-11-06 走查：主题切换项的 22px 键帽芯片（.v2nav__menu-theme-icon）与其余行的
+ * 15px 裸线图标长得不一样（蓝底方块 vs 灰线），同菜单两种图标语言。芯片拆除，
+ * 主题项与其余项完全同规格：15px 线图标 + muted 色 + 3.5px 对称边距。
  *
- * 附带：菜单头内边距原为 10px，比菜单项的 12px 还窄，名字左缘（210.7）比图标列左缘（212.7）
- * 靠左 2px。改为与菜单项同值后，名字落回图标列那条竖线（212.7）。
+ * 附带：菜单头内边距与菜单项同值（名字左缘落在图标列那条竖线上）。
  *
  * 本护栏锁两件事：
  *  1) 菜单头左右内边距 = 菜单项内边距（同一左栏，不许再各写各的）；
- *  2) 行内图标补齐到 22px 槽：模板里的菜单项图标是 15px，CSS 给 3.5px 对称边距，
- *     15 + 3.5×2 必须等于主题芯片宽度——三者任一改动都会让文字再次错行。
+ *  2) 六行图标全同规格：所有行内图标一律 15px、走 `> svg` 直接子选择器染色 muted、
+ *     对称两值 margin——任何一行再搞特殊图标（芯片/异色/异径）都会被这里拦下。
  */
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -93,7 +91,7 @@ describe('账户菜单：图标列与菜单头共用一条左栏', () => {
     expect(headPad[1], '菜单头左右内边距与菜单项不一致，名字会比图标列偏出').toBe(itemPad[1]);
   });
 
-  it('行内图标补齐到与主题芯片同宽（15 + 3.5×2 = 22）', () => {
+  it('六行图标全同规格：一律 15px 裸线图标，芯片不得复辟', () => {
     expect(errors).toEqual([]);
     const menuNode = (() => {
       let found: TplNode | undefined;
@@ -114,30 +112,20 @@ describe('账户菜单：图标列与菜单头共用一条左栏', () => {
       return out;
     };
     const rows = menuNode!.children || [];
-    const themeRow = rows.find((r) => classOf(r).includes('v2nav__menu-theme'));
-    expect(themeRow, '模板里找不到 .v2nav__menu-theme').toBeTruthy();
-
-    const rowSizes = rows.filter((r) => r !== themeRow).flatMap((r) => collectSizes(r));
-    expect(rowSizes.length, '菜单项里没读到图标尺寸').toBeGreaterThanOrEqual(4);
-    expect(new Set(rowSizes), '菜单项图标尺寸不一致').toEqual(new Set(['15']));
-    expect(new Set(collectSizes(themeRow!)), '主题芯片图标不是 14px').toEqual(new Set(['14']));
+    const rowSizes = rows.flatMap((r) => collectSizes(r));
+    expect(rowSizes.length, '菜单项里没读到图标尺寸').toBeGreaterThanOrEqual(5);
+    /* 含主题切换在内的每一行都是 15px——出现任何其它尺寸即错行 */
+    expect(new Set(rowSizes), '菜单行图标尺寸不一致（主题行必须与其余行同规格）').toEqual(new Set(['15']));
+    /* 芯片不得复辟：包裹 span + 独立图标类都不该再出现 */
+    expect(source).not.toContain('v2nav__menu-theme-icon');
 
     const slot = ruleAfter(source, '.v2nav__menu a > svg');
     const margin = (decl(slot, 'margin') || '').split(/\s+/).map(px);
     // margin: 上下 左右 —— 两值形式本身就保证左右对称；写成四值就可能不对称
     expect(margin.length, '图标槽的 margin 不是两值形式，左右可能不对称').toBe(2);
-
-    const chip = ruleAfter(source, '.v2nav__menu-theme-icon');
-    const chipW = px(decl(chip, 'width'));
-    expect(decl(chip, 'color'), '主题芯片应声明蓝色，图标需继承该颜色').toBe('var(--blue-deep)');
-    const rowIcons = ruleAfter(source, '.v2nav__menu a > svg');
-    expect(decl(rowIcons, 'color')).toBe('var(--muted)');
+    expect(decl(slot, 'color')).toBe('var(--muted)');
     expect(source).toContain('.v2nav__menu button > svg {');
     expect(source).not.toContain('.v2nav__menu button svg {');
     expect(source).not.toContain('.v2nav__menu a svg,');
-    expect(
-      Number(rowSizes[0]) + margin[1] * 2,
-      '图标 + 两侧边距 != 主题芯片宽度：五项文字会再次错行'
-    ).toBe(chipW);
   });
 });
