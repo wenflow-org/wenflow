@@ -428,3 +428,39 @@ describe('弃跑/非正常终态收束：只闭合状态机，不写正式轨', 
     }));
   });
 });
+/**
+ * #200：`lesson:completed` 事件载荷里的可见对话切片只带 role/content。
+ *
+ * 下游唯一消费者是 lesson-knowledge-enricher，其输入类型
+ * （skills/lesson-knowledge-enricher/index.ts:66）只有 `{ role, content }`；
+ * 曾经额外带 `analysis`（每回合的判读块），抽取后无人读取，只是把重复内容塞进持久化载荷。
+ * 这里直接读领域事件的 data，故能抓住"又有人把 analysis 加回去"。
+ */
+describe('#200 lesson:completed 载荷：可见对话切片只带 role/content', () => {
+  it('消息自带 analysis 判读块时不进入事件载荷', async () => {
+    mockClaimFinalization.mockResolvedValue({
+      status: 'claimed',
+      operationId: 'end-op-1',
+      leaseOwner: 'lease-1',
+      session: session({
+        status: 'finalizing',
+        messages: [
+          { role: 'user', content: '开始吧', analysis: { understanding: '浅层' } },
+          { role: 'assistant', content: '好', analysis: { loadIndex: 3 } },
+        ],
+      }),
+    });
+
+    await endSession('sess-abandon-1', 'manual-end', 7, 'end-op-dialogue');
+
+    // completeWithEvent(sessionId, operationId, leaseOwner, payload, event, metricCommit)
+    const event = mockCompleteWithEvent.mock.calls[0][4];
+    expect(event.type).toBe('lesson:completed');
+    const dialogue = event.data.visibleDialogueContext;
+    expect(dialogue).toHaveLength(2);
+    for (const item of dialogue) {
+      expect(Object.keys(item).sort()).toEqual(['content', 'role']);
+    }
+    expect(dialogue[0]).toEqual({ role: 'user', content: '开始吧' });
+  });
+});

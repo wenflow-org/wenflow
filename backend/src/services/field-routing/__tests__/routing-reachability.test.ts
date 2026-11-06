@@ -1,0 +1,67 @@
+/**
+ * #200：routing 可达性声明静态门禁的规则测试。
+ *
+ * 最后一条用例直接跑真实 prompts/orchestration/*.yaml（纯静态、零 DB），
+ * 所以「新加一条没声明可达性的 routing」在当前仓库里会红——包括 17 条靠缺省值的 live routing
+ * 未登记 notes 时的状态。
+ */
+import { loadOrchestrationFiles } from '../orchestration-file';
+import { collectRoutingReachabilityGaps, formatRoutingReachabilityReport } from '../routing-reachability';
+
+describe('collectRoutingReachabilityGaps（静态门禁规则）', () => {
+  it('受管辖阶段里没声明 reachability 也没在 notes 登记的 routing → 违规并列出 stage/agentId/fieldId', () => {
+    const report = collectRoutingReachabilityGaps([
+      {
+        stage: 'simulation',
+        routings: [
+          { agentId: 'skill:a', fieldId: 'ok', reachability: 'external', notes: 'external — 手动入口' },
+          { agentId: 'skill:b', fieldId: 'declared', notes: 'auto — 仿真核主链回合内自动调用' },
+          { agentId: 'skill:c', fieldId: 'ghost' },
+        ],
+      },
+    ]);
+
+    expect(report.governedStages).toEqual(['simulation']);
+    expect(report.violations).toEqual([{ stage: 'simulation', agentId: 'skill:c', fieldId: 'ghost' }]);
+    expect(formatRoutingReachabilityReport(report)).toContain('skill:c · ghost');
+  });
+
+  it('notes 里的 auto 登记：允许与既有备注以「；」并列，但必须有说明文字', () => {
+    const report = collectRoutingReachabilityGaps([
+      {
+        stage: 'simulation',
+        routings: [
+          { agentId: 'skill:a', fieldId: 'f1', reachability: 'manual' },
+          { agentId: 'skill:a', fieldId: 'f2', notes: 'internal — 仅调试；auto — 仿真核主链自动调用' },
+          { agentId: 'skill:a', fieldId: 'f3', notes: 'auto — 教学回合内编排层自动调用' },
+          { agentId: 'skill:a', fieldId: 'f4', notes: 'auto' },        // 无说明 → 不算登记
+          { agentId: 'skill:a', fieldId: 'f5', notes: 'auto（默认）' }, // 无分隔符 → 不算登记
+        ],
+      },
+    ]);
+
+    expect(report.violations.map((v) => v.fieldId)).toEqual(['f4', 'f5']);
+  });
+
+  it('未启用词表的阶段（全库无显式 reachability）不算违规，只单列公示', () => {
+    const report = collectRoutingReachabilityGaps([
+      { stage: 'goal', routings: [{ agentId: 'skill:goal-conversation', fieldId: 'understanding.x' }] },
+      { stage: 'simulation', routings: [{ agentId: 'skill:a', fieldId: 'f', reachability: 'external' }] },
+    ]);
+
+    expect(report.violations).toEqual([]);
+    expect(report.governedStages).toEqual(['simulation']);
+    expect(report.ungovernedStages).toEqual([{ stage: 'goal', routings: 1, declared: 0 }]);
+  });
+
+  it('真实编排文件全量通过：受管辖阶段每条 routing 都已声明（含 notes 的 auto 登记）', () => {
+    const stages = loadOrchestrationFiles();
+    const report = collectRoutingReachabilityGaps(stages);
+
+    // 失败时把违规逐条打出来，便于直接定位要补的 YAML 行
+    expect(formatRoutingReachabilityReport(report)).toBeDefined();
+    expect(report.violations).toEqual([]);
+    // simulation（#184 词表的来源阶段）必须仍在受管辖范围内，否则本门禁等于空转
+    expect(report.governedStages).toContain('simulation');
+  });
+});
