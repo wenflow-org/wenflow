@@ -208,13 +208,17 @@
           </article>
         </div>
 
-        <!-- 筛选/搜索空态 -->
-        <div v-else class="empty">
-          <div class="empty__illus"><span></span><span></span><span></span></div>
-          <p>{{ emptyText }}</p>
-          <router-link v-if="cards.length === 0" to="/goal-conversation" class="btn-primary">规划第一个目标</router-link>
-          <button v-else type="button" class="btn-ghost" @click="search ? (search = '') : (filter = 'all')">{{ search ? '清除搜索' : '查看全部' }}</button>
-        </div>
+        <!-- 筛选/搜索空态：走统一结果组件（图标盘 + 标题 + 说明 + 动作）。
+             原先这里自绘三条灰胶囊 + 一行小字，与「知识图谱」的空态不是一套
+             （2026-11-06 0 部署 UI 检查）。 -->
+        <V2ResultState
+          v-else
+          tone="empty"
+          :title="emptyText"
+          :description="emptyHint"
+          :action-text="emptyActionText"
+          @action="onEmptyAction"
+        />
       </template>
     </main>
 
@@ -536,10 +540,29 @@ watch(filterSheetOpen, (open) => {
 
 /** §7 空态微文案：≤20 字、去机制解释；三种空态各一句，不再补第二句因果或说明 */
 const emptyText = computed(() => {
-  if (search.value) return '没有匹配的路径，换个关键词试试';
-  if (cards.value.length === 0) return '还没有学习路径，先规划一个目标';
+  if (search.value) return '没有匹配的路径';
+  if (cards.value.length === 0) return '还没有学习路径';
   return '该状态下还没有路径';
 });
+
+/** 空态补一句「下一步能做什么」（标题保持 ≤20 字，说明行给动作指向） */
+const emptyHint = computed(() => {
+  if (search.value) return '换个关键词，或清空搜索看全部路径。';
+  if (cards.value.length === 0) return '说出最近想解决的一件事，就能开始规划。';
+  return '换一个状态筛选试试。';
+});
+const emptyActionText = computed(() => {
+  if (cards.value.length === 0) return '规划第一个目标';
+  return search.value ? '清除搜索' : '查看全部';
+});
+function onEmptyAction() {
+  if (cards.value.length === 0) {
+    router.push('/goal-conversation');
+    return;
+  }
+  if (search.value) search.value = '';
+  else filter.value = 'all';
+}
 
 const visibleCards = computed(() => {
   let list = cards.value;
@@ -846,15 +869,6 @@ onBeforeUnmount(() => {
 /* 失败：原因区弹性拉伸，重试按钮压底（与 ready 卡内容高度对齐） */
 .pcard--failed .pcard__fail-reason { flex: 1; display: grid; align-content: center; }
 
-.empty {
-  display: grid; justify-items: center; align-content: center; gap: 12px;
-  /* 空态留白优化：占用剩余视口空间并垂直居中，避免内容缩在顶部、下方大段空白 */
-  min-height: 52vh;
-  padding: 56px 0; color: var(--faint); font-size: 14px;
-}
-.empty__illus { display: flex; gap: 6px; }
-.empty__illus span { width: 26px; height: 8px; border-radius: 999px; background: var(--line); }
-.empty__illus span:nth-child(2) { background: color-mix(in srgb, var(--blue) 30%, transparent); }
 
 /* .toast/.toast__icon 本体是死 CSS 已删：全局 toast 由 utils/toast 独立渲染，不落在本组件；
    下面的 toast-enter/leave 是上方 goal-banner <transition name="toast"> 的过渡类，保留 */
@@ -976,7 +990,6 @@ onBeforeUnmount(() => {
   /* 卡标题 15 → 14：用户指着 15.5px 的路径卡标题说「这些就是大了」 */
   .pcard__title { font-size: 14px; }
   .pcard { padding: 14px 16px; gap: 10px; }
-  .empty { min-height: 40vh; padding: 32px 0; }
   .paths__loading { padding: 32px 0; }
 }
 
