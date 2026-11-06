@@ -63,9 +63,9 @@
         <table class="mk-table mk-table--nowrap">
           <thead>
             <tr>
-              <th>通知</th>
-              <th>接收用户</th>
-              <th>类型</th>
+              <th scope="col">通知</th>
+              <th scope="col">接收用户</th>
+              <th scope="col">类型</th>
               <th
                 scope="col"
                 class="mk-th--sortable"
@@ -78,7 +78,7 @@
                 :aria-sort="ntSortState('createdAt')"
                 @click="toggleNtSort('createdAt')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleNtSort('createdAt')">发送时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th class="mk-th--right mk-c-act">操作</th>
+              <th class="mk-th--right mk-c-act" scope="col">操作</th>
             </tr>
           </thead>
           <tbody>

@@ -42,6 +42,7 @@ import {
   buildProgressAfterTaskCompletion,
   parseStageResultsPayload,
   resolveScenarioBudget,
+  willEmitLessonCompletedOnEnd,
 } from './simulation.helpers';
 import {
   parseGoalConversationHistory,
@@ -77,6 +78,26 @@ export async function completeCheckpointedSimulationTask(
     : 'vl-assisted' as const;
   try {
     await ctx.assertCurrentSessionLeaseOwned(sessionId);
+    // #204：先判定「本次结算前授课会话是否已闭合」。教学链路（带 sessionId）默认把该投影键的
+    // 刷新让给同一节课的 lesson:completed；但会话已是 completed 时 endSession 只走 claimFinalization
+    // 的幂等分支、**不再产出 lesson:completed**（end_only 补结算 / complete_task 重试正是这条路），
+    // 消费者又按 sessionId 跳过 task:completed → 该次收尾对投影键 0 次刷新（静默陈旧至 getLatest
+    // 的 10 分钟兜底）。故只有「本次收尾仍会产出 lesson:completed」时才让路，否则自己补刷。
+    // 判据取库（taskRuntime 的 revision 快照不可靠）；读失败按「仍会收束」处理以保持既有让路语义。
+    let teachingSessionClosedBeforeCompletion = false;
+    if (wrapupTeachingSessionId) {
+      try {
+        const existingTeachingSession = await teachingSessionRepository.getById(wrapupTeachingSessionId);
+        teachingSessionClosedBeforeCompletion = !existingTeachingSession
+          || !willEmitLessonCompletedOnEnd(existingTeachingSession.status);
+      } catch (error: unknown) {
+        logger.warn('[simulation-coordinator] 读取授课会话状态失败，刷新仍让给 lesson:completed', {
+          sessionId,
+          teachingSessionId: wrapupTeachingSessionId,
+          error: asErrorLike(error).message || String(error)
+        });
+      }
+    }
     taskCompletionResult = await learningService.completeTask({
       taskId: taskMatch.task.id,
       userId: session.userId,
@@ -85,6 +106,7 @@ export async function completeCheckpointedSimulationTask(
       rating: 5,
       completionSource,
       sessionId: wrapupTeachingSessionId,
+      ...(teachingSessionClosedBeforeCompletion ? { sessionClosedBeforeCompletion: true } : {}),
       // 日期模拟：台账/streak 落在模拟日（无模拟上下文时不传 → 现网行为不变）
       ...(isSimulatedClockActive() ? { asOf: simulatedNowOr() } : {}),
     });

@@ -166,8 +166,8 @@
               <table v-if="routingRows.length" class="mk-table mk-table--nowrap">
                 <thead>
                   <tr>
-                    <th>字段</th><th>角色</th><th class="skd-th-wrap">说明</th><th>流向</th><th>渲染</th><th title="字段的两种属性：内部（不进用户可见回复）/ 累积（进学习者状态）">内部 / 累积</th>
-                    <th v-if="hasMaskedCol">脱敏</th>
+                    <th scope="col">字段</th><th scope="col">角色</th><th class="skd-th-wrap" scope="col">说明</th><th scope="col">流向</th><th scope="col">渲染</th><th title="字段的两种属性：内部（不进用户可见回复）/ 累积（进学习者状态）" scope="col">内部 / 累积</th>
+                    <th v-if="hasMaskedCol" scope="col">脱敏</th>
                   </tr>
                 </thead>
                 <tbody>

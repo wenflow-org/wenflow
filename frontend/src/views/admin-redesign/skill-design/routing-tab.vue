@@ -9,8 +9,8 @@
       <table v-else-if="lineage.length" class="mk-table mk-table--dense sdp-routing__table">
         <thead>
           <tr>
-            <th>字段</th>
-            <th>
+            <th scope="col">字段</th>
+            <th scope="col">
               消费者
               <span class="sdp-routing__scope">（{{ lineage.length }} 个字段有下游消费者，其余产出字段没有消费者，不在本表）</span>
             </th>

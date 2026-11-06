@@ -113,4 +113,41 @@ describe('收口闭合门禁 shouldDeferCompletionForClosure', () => {
     });
     expect(d.defer).toBe(true);
   });
+
+  // #164：回合门禁与收束入口同源——「无问号但在等学员交付」也要压住完成信号，
+  // 否则引擎宣布完成、用户点结算时被 complete_task 的同一判据 409。
+  describe('#164 末句判据与收束入口同源', () => {
+    it('客套收尾（有问题随时告诉我）→ 不延迟（不构成未闭合请求）', () => {
+      const d = shouldDeferCompletionForClosure({
+        reply: '今天这三个点你都自己走通了，今天就到这里，有问题随时告诉我。',
+        pendingCheckpoint: null,
+        checkpointEmittedThisTurn: false,
+        priorDeferrals: 0,
+      });
+      expect(d.defer).toBe(false);
+      expect(d.reason).toBeNull();
+    });
+
+    it('无问号但要求交付（把结果发给我）→ 延迟，reason=open-request', () => {
+      const d = shouldDeferCompletionForClosure({
+        reply: '今天就到这儿，把你整理好的三条线索发给我。',
+        pendingCheckpoint: null,
+        checkpointEmittedThisTurn: false,
+        priorDeferrals: 0,
+      });
+      expect(d.defer).toBe(true);
+      expect(d.reason).toBe('open-request');
+    });
+
+    it('open-request 同样受活力兜底约束（cap 到顶 + 宽限已用 → 放行）', () => {
+      const d = shouldDeferCompletionForClosure({
+        reply: '到这儿，把你整理好的三条线索发给我。',
+        pendingCheckpoint: null,
+        checkpointEmittedThisTurn: false,
+        priorDeferrals: COMPLETION_DEFERRAL_ABSOLUTE_CAP,
+        capGraceUsed: true,
+      });
+      expect(d.defer).toBe(false);
+    });
+  });
 });

@@ -37,6 +37,7 @@ jest.mock('../../services/learner/LearnerSnapshotRefreshService', () => ({
 }));
 
 import { parseDayKeyRange } from '../../services/time/day-boundary';
+import { listAgentManifest, listUserListedAgentIds } from '../../services/agent-manifest.service';
 
 import '../users';
 
@@ -222,25 +223,41 @@ describe('users agent log routes', () => {
     // mock 不模拟 SQL 过滤，因此这里只断言 where 构造正确
   });
 
-  it('capabilityType 分组从 manifest 派生且限定在用户可见集内（#218/#226）', async () => {
+  // #218 复核残余：能力筛选此前 = manifest 监控组 ∩ userListed，而 Profile 组十条 manifest
+  // 一条 userListed 都没有（学习模型 / 预测 / 状态复盘都是平台内部 skill），于是
+  // map.profile 恒为空数组——库里真实存在 skill:learning-predictor 等调用却永远筛不出来。
+  // 现在能力筛选 = 该监控组的 manifest 全量成员（kind !== 'alias'），默认视图仍是
+  // userListed 白名单（见上一个用例），两条范围解耦。
+  it('capabilityType 分组 = manifest 监控组全量成员；profile 不再恒空（#218）', async () => {
     agentLogMocks.findMany.mockResolvedValue([]);
     const agentIdsFor = async (capabilityType: string): Promise<string[]> => {
       const req: any = { user: { userId: 'user-1' }, query: { format: 'json', capabilityType } };
       await routes['GET /me/agent-logs/export'](req, createResponse(), jest.fn());
       return agentLogMocks.findMany.mock.calls.at(-1)?.[0]?.where?.agentId?.in as string[];
     };
+    const groupIdsOf = (group: string): string[] =>
+      listAgentManifest()
+        .filter((entry) => entry.monitoringGroup === group && entry.kind !== 'alias')
+        .map((entry) => entry.id);
 
     // 真实授课 id 是 skill:teaching-turn（manifest Teaching 组，线上 327 行）；
     // 旧硬编码 id ai-teaching-agent 线上 0 行，曾让该筛选恒空。
     const teaching = await agentIdsFor('teaching');
     expect(teaching).toContain('skill:teaching-turn');
     expect(teaching).not.toContain('ai-teaching-agent');
+    expect([...teaching].sort()).toEqual([...groupIdsOf('Teaching')].sort());
 
-    // #226：Profile 组内没有任何 userListed 的 id（learner-model / adaptive-guidance-copy
-    // 都是内部 skill），能力筛选在用户可见集内再筛后为空——不再把 86 行内部 skill
-    // 从筛选视图放出来（默认视图对它们本来就是 0 行）。
+    // 病灶断言：Profile 组必须非空，且必须带上真在写日志的 profile skill。
+    // 恒空（上一轮）会让 /me/agent-logs?capabilityType=profile 永远 0 行。
     const profile = await agentIdsFor('profile');
-    expect(profile).toEqual([]);
+    expect(profile.length).toBeGreaterThan(0);
+    expect(profile).toEqual(expect.arrayContaining([
+      'skill:learning-predictor',
+      'skill:learner-state-review',
+      'skill:learner-model',
+    ]));
+    expect([...profile].sort()).toEqual([...groupIdsOf('Profile')].sort());
+    // alias 节点不得混进集合（旧 id 线上 0 行，混进来只会白占 SQL in 列表）
     expect(profile).not.toContain('learner-model-agent');
 
     const path = await agentIdsFor('path');
@@ -254,7 +271,12 @@ describe('users agent log routes', () => {
     expect(await agentIdsFor('system')).toEqual(['system-call', 'unknown']);
   });
 
-  it('capabilityType 结果集 ⊆ 默认结果集：合法值出子集，未知值被拒（#226/#229）', async () => {
+  // #218/#229：两个契约同时成立——(a) 合法能力键必出该能力的集合，且不同能力集合互不重叠；
+  // (b) 能力集合绝不包含 manifest 之外/平台底层 id（api-gateway / system-call / unknown）。
+  // 原「能力筛选 ⊆ 默认结果集」的断言是上一轮为解释 profile 恒空而引入的，已被产品口径
+  // 有意取代（system 这个合法键本来就不在默认白名单内）；它在下面单独改写为新契约用例，
+  // 这里换成能抓住真实病灶的两条。
+  it('能力筛选 = 各自监控组的集合，互不重叠且不含平台底层 id（#218/#229）', async () => {
     agentLogMocks.findMany.mockResolvedValue([]);
     const request = async (query: Record<string, unknown>) => {
       const req: any = { user: { userId: 'user-1' }, query: { format: 'json', ...query } };
@@ -266,24 +288,106 @@ describe('users agent log routes', () => {
       };
     };
 
-    const defaultIds = (await request({})).agentIds as string[];
-    expect(defaultIds.length).toBeGreaterThan(0);
-
-    // 能力筛选 = 在用户可见集内按能力再筛：任何 X 的 id 集合都必须是默认口径的子集。
-    // 修复前 profile 会返回 skill:adaptive-guidance-copy 等内部 skill（默认视图不含）。
-    // #229：相邻的坑是「未知值不命中任何分支 → where 退化成 { userId }」，这里把合法性
-    // 检查做成 status 感知的，避免在 400 分支上读到上一条 mock 调用而假绿。
-    for (const capabilityType of ['goal', 'path', 'teaching', 'profile', 'Teaching', 'PROFILE', '']) {
+    const seen = new Map<string, string>();
+    for (const capabilityType of ['goal', 'path', 'teaching', 'profile']) {
       const { status, agentIds } = await request({ capabilityType });
       expect(status).toBeUndefined();
-      expect(agentIds.filter((id) => !defaultIds.includes(id))).toEqual([]);
+      expect(Array.isArray(agentIds)).toBe(true);
+      const ids = agentIds as string[];
+      expect(ids.length).toBeGreaterThan(0);
+      // 不越出 manifest 的已知 id（能力筛选不是全量出口）
+      for (const id of ids) {
+        expect(listAgentManifest().some((entry) => entry.id === id)).toBe(true);
+        expect(['api-gateway', 'system-call', 'unknown']).not.toContain(id);
+      }
+      // 不同能力集合互不重叠（同一个 id 只能属于一个监控组）
+      for (const id of ids) {
+        expect(seen.has(id)).toBe(false);
+        seen.set(id, capabilityType);
+      }
     }
+
+    // 大小写变体明确等价：同一集合（而不是被当成未知值 / 静默全量）
+    for (const [variant, canonical] of [['Teaching', 'teaching'], ['PROFILE', 'profile']] as const) {
+      const variantIds = (await request({ capabilityType: variant })).agentIds as string[];
+      const canonicalIds = (await request({ capabilityType: canonical })).agentIds as string[];
+      expect([...variantIds].sort()).toEqual([...canonicalIds].sort());
+    }
+
+    // 空串 = 不筛选，回到 userListed 默认白名单（不是「能力键被静默吞掉」）
+    const empty = await request({ capabilityType: '' });
+    expect(empty.status).toBeUndefined();
+    expect(empty.agentIds).toEqual(listUserListedAgentIds());
 
     // 未知值不再静默退化为 includeSystem 级别的全量，而是明确拒绝
     for (const capabilityType of ['x', 'tutoring2']) {
       const { status } = await request({ capabilityType });
       expect(status).toBe(400);
     }
+  });
+
+  // 旧契约「能力筛选 ⊆ 默认视图（userListed）」被产品口径**有意取代**（2026-11-06 定论，
+  // #218 × #226 子项 3）——不是被悄悄破坏，所以这里保留对旧不变式的说明、把它改写为对新
+  // 契约的明确断言，而不是删掉：
+  //   默认视图（不带 capabilityType）= manifest userListed；
+  //   显式指定 capabilityType      = 该监控组全量成员，**可以有意超出默认视图**。
+  // 取代理由：这条子集约束从来不是产品语义——system（['system-call','unknown']）早就是
+  // 「显式选择 = 放宽到默认视图之外」的先例；#218 的病灶恰恰是把它强加到 profile 上，
+  // 使 Profile 组（十条 manifest 全部非 userListed）恒空。用户点「学习者模型」是明确要
+  // 看这一类调用，内部 skill 照常出现（这正是 #226 子项 3 与 #218 的取舍：显式选择优先）。
+  it('显式能力筛选刻意放宽到默认视图之外：profile/system 含 userListed 默认集合看不到的成员（#218/#226 子项 3）', async () => {
+    agentLogMocks.findMany.mockResolvedValue([]);
+    const agentIdsFor = async (capabilityType: string): Promise<string[]> => {
+      const req: any = { user: { userId: 'user-1' }, query: { format: 'json', capabilityType } };
+      await routes['GET /me/agent-logs/export'](req, createResponse(), jest.fn());
+      return agentLogMocks.findMany.mock.calls.at(-1)?.[0]?.where?.agentId?.in as string[];
+    };
+
+    const userListed = listUserListedAgentIds();
+
+    // profile：能力集合 = Profile 组全量成员，刻意包含默认视图（userListed）看不到的内部 skill
+    const profile = await agentIdsFor('profile');
+    expect(profile).toEqual(expect.arrayContaining(['skill:learning-predictor', 'skill:learner-model']));
+    expect(userListed).not.toContain('skill:learning-predictor');
+    expect(userListed).not.toContain('skill:learner-model');
+    // 直接断言「确实不是默认视图的子集」：确有成员在默认集合之外（旧不变式在此被有意打破）
+    expect(profile.some((id) => !userListed.includes(id))).toBe(true);
+
+    // system：同一口径的既有先例——显式键本来就是「放宽到默认视图之外」
+    const system = await agentIdsFor('system');
+    expect(system).toEqual(['system-call', 'unknown']);
+    expect(system.every((id) => !userListed.includes(id))).toBe(true);
+  });
+
+  // #218：筛选结果必须真的能被用户看见——服务端筛出 skill:learning-predictor 的行后，
+  // 列表接口要把它们放进 data.logs（mock 不模拟 SQL 过滤，但能锁住「where 命中 + 响应透出」）。
+  it('capabilityType=profile 时列表返回学习模型类调用行（#218）', async () => {
+    const row = {
+      id: 'acl_predict',
+      agentId: 'skill:learning-predictor',
+      sourceEntry: 'platform',
+      calledAt: new Date('2026-11-05T02:00:00.000Z'),
+      success: true,
+      errorCode: null,
+      durationMs: 900,
+      metadata: JSON.stringify({ model: 'deepseek-v4.1-flash', layer: 'skill-executor' }),
+      traceId: 'trace-predict',
+    };
+    agentLogMocks.findMany.mockResolvedValue([row]);
+    const res = createResponse();
+    await routes['GET /me/agent-logs'](
+      { user: { userId: 'user-1' }, query: { capabilityType: 'profile' } } as any,
+      res,
+      jest.fn()
+    );
+
+    // 列表路径后面还会发模型补全查询（按 traceId/pathId 取网关行，where 不带 agentId），
+    // 所以取「带 agentId.in 的那次」而不是最后一次 mock 调用。
+    const mainCall = agentLogMocks.findMany.mock.calls
+      .find((call: any[]) => Array.isArray(call[0]?.where?.agentId?.in));
+    expect(mainCall).toBeTruthy();
+    expect(mainCall![0].where.agentId.in).toContain('skill:learning-predictor');
+    expect((res.body?.data?.logs ?? []).map((log: any) => log.agentId)).toContain('skill:learning-predictor');
   });
 
   // #229：`?capabilityType=x` / `Teaching` / `PROFILE` / `tutoring2` 修前既不命中
@@ -763,5 +867,49 @@ describe('users agent log routes', () => {
     expect(exported).toHaveLength(1);
     expect(exported[0].id).toBe('goal:gc_one');
     expect(exported[0].groupCount).toBe(24);
+  });
+
+  // #251②：CSV 导出此前是 7 列 + 原始 Date（join 调 toString 的本地化长串），
+  // 与列表两套口径（列表有模型/折叠条数、时间是格式化后的值）。
+  it('CSV 导出列与列表同口径：含 model/groupCount，时间走 ISO 8601（#251）', async () => {
+    const rows = [
+      {
+        id: 'acl_1',
+        agentId: 'skill:teaching-turn',
+        sourceEntry: 'platform',
+        calledAt: new Date(Date.UTC(2026, 10, 5, 2, 3, 4)),
+        success: true,
+        errorCode: null,
+        durationMs: 1200,
+        tokensUsed: 321,
+        metadata: JSON.stringify({ layer: 'skill-executor', model: 'deepseek-v4.1-flash' }),
+        traceId: 'trace-1',
+      },
+    ];
+    agentLogMocks.findMany.mockResolvedValue(rows);
+    const res = createResponse();
+    await routes['GET /me/agent-logs/export'](
+      { user: { userId: 'user-1' }, query: { format: 'csv' } } as any,
+      res,
+      jest.fn()
+    );
+
+    expect(res.headers['Content-Type']).toBe('text/csv');
+    const lines = String(res.body).split('\r\n');
+    const headers = lines[0].split(',');
+    // 列表里的「模型」「折叠条数」必须在导出里存在，否则用户核对页面数字对不上
+    expect(headers).toEqual(expect.arrayContaining(['model', 'groupCount', 'calledAt']));
+    expect(headers).toHaveLength(10);
+
+    const record = Object.fromEntries(
+      headers.map((header, index) => [header, lines[1].split(',')[index]])
+    );
+    // 时间必须是 ISO（UTC），不是 Date.toString() 的本地化长串
+    expect(record.calledAt).toBe('2026-11-05T02:03:04.000Z');
+    expect(record.model).toBe('deepseek-v4.1-flash');
+    expect(record.groupCount).toBe('1');
+    expect(record.tokensUsed).toBe('321');
+    expect(record.success).toBe('true');
+    expect(record.error).toBe('');
   });
 });

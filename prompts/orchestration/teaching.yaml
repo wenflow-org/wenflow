@@ -145,6 +145,13 @@ fields:
     valueType: object
     pathInRawOutput: teachingState.classroomContext
     description: 课堂上下文（上轮持久化）
+  # #185 调用归属：教学链在 teaching-agent 作用域内直调**画像阶段**的 learning-predictor
+  # （TeachingContextBuilder.buildLearnerPrediction，入参 knowledgeStateSummary），
+  # 运行日志因此记为 teaching-agent → skill:learning-predictor；本行声明该调用通道。
+  - fieldId: knowledgeStateSummary
+    promptRole: soft-info
+    valueType: string
+    description: 最近一次课后知识状态摘要（画像快照 globalBackground；任务前预测输入）
 
   # #193（实例 1）：scenario 是「编排层整块组装」的输入通道——buildTeachingTurnInput
   # （services/ai-teaching/teaching-turn-shared.ts）逐回合把 taskKcs/cognitiveFrame/materials/taskProfile/
@@ -457,6 +464,20 @@ routings:
     accumulate: false
     visibilityPreset: agent-internal
     notes: 回合输入通道（AITeachingOrchestrator 组装注入）
+
+  # teaching-agent → skill:learning-predictor 输入通道（#185 调用归属）。
+  # 预测器静态归属 profile-agent，但真实调用方是**教学链**（teaching-agent 作用域，
+  # TeachingContextBuilder.buildLearnerPrediction）；此前编排侧没有任何声明，
+  # audit-handoff-edges 把运行日志里的 teaching-agent → skill:learning-predictor 判成「幽灵边」。
+  # 本行即该调用边的声明：知识状态摘要由 teaching-agent 交给预测器做任务前预测。
+  - agentId: teaching-agent
+    fieldId: knowledgeStateSummary
+    render: hidden
+    handoff: [skill:learning-predictor]
+    internal: true
+    accumulate: false
+    visibilityPreset: agent-internal
+    notes: 任务前学习表现预测输入（TeachingContextBuilder 注入；#185 调用归属）
 
   # peer-reinforcement 输出
   - agentId: skill:peer-reinforcement

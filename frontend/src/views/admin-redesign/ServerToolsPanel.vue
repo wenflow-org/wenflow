@@ -59,13 +59,13 @@
           <table class="mk-table mk-table--nowrap stp-dead-table">
             <thead>
               <tr>
-                <th>事件</th>
-                <th>用户</th>
-                <th>关联对象</th>
-                <th class="mk-th--right">已试</th>
-                <th>最后一次错误</th>
-                <th>发生时间</th>
-                <th class="mk-th--right mk-c-act">操作</th>
+                <th scope="col">事件</th>
+                <th scope="col">用户</th>
+                <th scope="col">关联对象</th>
+                <th class="mk-th--right" scope="col">已试</th>
+                <th scope="col">最后一次错误</th>
+                <th scope="col">发生时间</th>
+                <th class="mk-th--right mk-c-act" scope="col">操作</th>
               </tr>
             </thead>
             <tbody>

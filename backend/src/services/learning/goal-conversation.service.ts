@@ -17,6 +17,7 @@ import {
 } from './learner-load-profile';
 import { selectGoalHistory, RECENT_CONTEXT_LIMIT } from './goal-conversation.context';
 import { isProposalConfirmationText, isExplicitRefusalText } from './goal-conversation.confirm-text';
+import { hasConfirmableProposal } from './goal-proposal-guard';
 import { mergeProbeAnswersIntoUnderstanding, normalizeProbeAnswerInput } from './goal-probe-answers';
 import { applyConversationLifecycle, type ConversationLifecycleDb } from './goal-conversation.lifecycle';
 import systemPrisma from '../../config/system-database';
@@ -36,6 +37,7 @@ import {
 import { assembleGoalHandoff } from '../../services/field-dispatcher';
 import { buildCompletedConversationResult, buildHardBlockMessage, buildHardBlockResult, PATH_COMPLETED_USER_VISIBLE, PATH_GENERATING_USER_VISIBLE, resolveConversationUserVisible, resolvePathCompletionUserVisible } from './goal-conversation.exit';
 import { getPathCompletionProjection } from './goal-conversation.path-projection';
+import { buildGoalConversationExt } from './goal-conversation.ext';
 import learningService from './learning.service';
 import { bindGeneratingPath, kickPathGeneration, rejudgeHardBlockedCompletion, type GoalConversationRejudgeDeps } from './goal-conversation-rejudge';
 import { createDomainEvent } from '../../events/contracts';
@@ -458,12 +460,10 @@ class GoalConversationService {
           learningPath: learningPath ? { id: learningPath.id, status: learningPath.status } : null
         },
         ext: {
-          goalConversation: {
-            understanding: data.understanding || {},
-            nextQuestions: [],
-            quickReplies: [],
-            collected: data.collected || {}
-          }
+          goalConversation: buildGoalConversationExt({
+            understanding: data.understanding,
+            collected: data.collected,
+          })
         }
       }
     };
@@ -642,6 +642,15 @@ async continueConversation(
           });
         }
 
+        // 提案内容门禁（#162）：确认通道此前只看 `stage==='proposing' && confirmProposal`，
+        // 从不看提案内容——模型这一轮没给提案（confirmedProposal=null）时，按钮/自然语言
+        // 照样确认，bindGeneratingPath 直接拿 null 生成一条「还没够就开始建路径」的路径。
+        // 没有可用提案时不代签，转向普通回合由模型先补提案（判据见 goal-proposal-guard）。
+        if (conversation.stage === 'proposing' && confirmProposal
+          && !hasConfirmableProposal(conversation.collectedData, { conversationId, userId, stage: conversation.stage })) {
+          confirmProposal = false;
+        }
+
         if (conversation.stage === 'proposing' && confirmProposal) {
           if (options?.confirmProposal !== true) {
             logger.info('[goal-conversation] 自然语言确认命中，按 confirmProposal 推进', {
@@ -751,13 +760,11 @@ async continueConversation(
                   isCompleted: false,
                 },
                 ext: {
-                  goalConversation: {
+                  goalConversation: buildGoalConversationExt({
                     understanding,
-                    nextQuestions: [],
-                    quickReplies: [],
-                    collected: data.collected || {},
+                    collected: data.collected,
                     responseTriage: pendingTriage,
-                  },
+                  }),
                 },
               },
             };
@@ -812,12 +819,10 @@ async continueConversation(
                   learningPath: { id: placeholderPath.id, status: 'generating' }
                 },
                 ext: {
-                  goalConversation: {
+                  goalConversation: buildGoalConversationExt({
                     understanding,
-                    nextQuestions: [],
-                    quickReplies: [],
-                    collected: data.collected || {}
-                  }
+                    collected: data.collected,
+                  })
                 }
               }
             };
@@ -834,7 +839,12 @@ async continueConversation(
       // 失败重试由 saveMessage 的回合级幂等（pendingUserTurn）护栏挡住重复写入。
       await this.saveMessage(conversation.id, 'user', userReply, options?.meta, { idempotentUserTurn: true });
 
-      const aiResponse = await this.callAI(conversation.id, userReply, false, userId, options, {
+      // 被门禁否决的确认（显式拒绝 / 会话内没有可用提案）不再当作确认喂给模型：
+      // 否则模型会按「用户已确认」推进，而本轮实际上只是在补提案（#162）。
+      const aiOptions = options?.confirmProposal === true && !confirmProposal
+        ? { ...options, confirmProposal: false }
+        : options;
+      const aiResponse = await this.callAI(conversation.id, userReply, false, userId, aiOptions, {
         excludeTrailingUserInput: true
       });
       const responseWithConversationId = this.withConversationId(aiResponse, conversationId);
@@ -1542,11 +1552,7 @@ async continueConversation(
             isCompleted: true
           },
           ext: {
-            goalConversation: {
-              understanding,
-              nextQuestions: [],
-              collected
-            }
+            goalConversation: buildGoalConversationExt({ understanding, collected })
           }
         }
       }, systemPromptOverrides);
@@ -1579,11 +1585,7 @@ async continueConversation(
             learningPath
           },
           ext: {
-            goalConversation: {
-              understanding,
-              nextQuestions: [],
-              collected
-            }
+            goalConversation: buildGoalConversationExt({ understanding, collected })
           }
         }
       };
@@ -1669,6 +1671,10 @@ async continueConversation(
       confirmedProposal: data.confirmedProposal || null,
       structuredData: data.structuredData || null,
       confidenceScores: data.confidenceScores || null,
+      // #251③：分诊结论（与 hardBlocked 同一判据的数据源）。GET 恢复信封要透出它，
+      // 此前服务层只把 responseTriage 写进 collectedData、返回值里没有该键，
+      // 路由层白名单重建也就无从携带。
+      responseTriage: resolveResponseTriageFromCollectedData(data),
       // 合并取舍：保留本分支的 learningPath（已被 getPathCompletionProjection 增强过 status，
       // develop 侧那行是未经投影的原始表达式，取它会丢掉 #228/#221 的状态投影），
       // 同时接入 develop 新增的硬阻断终局标记。

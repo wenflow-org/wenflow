@@ -223,7 +223,15 @@ function buildAiResponse(overrides: { userVisible?: string; understanding?: Reco
   };
 }
 
-function seedBlockedCompletedConversation() {
+/** 一份内容完备、可被 hasConfirmableProposal 放行的提案（重判通过后要生成路径的前提） */
+const CONFIRMABLE_PROPOSAL = {
+  learning_direction: '先掌握注水手法与粉水比，再练萃取判断',
+  first_deliverable: '一杯按参数冲出的手冲咖啡与记录',
+  key_stages: ['器具与参数认知', '注水手法练习', '萃取判断复盘'],
+  out_of_scope: [],
+};
+
+function seedBlockedCompletedConversation(overrides: { confirmedProposal?: unknown } = {}) {
   conversationRecord = {
     id: 'conv-1',
     userId: 'user-1',
@@ -242,6 +250,7 @@ function seedBlockedCompletedConversation() {
       confidence: 0.82,
       collected: {},
       responseTriage: BLOCKED_TRIAGE,
+      ...(overrides.confirmedProposal !== undefined ? { confirmedProposal: overrides.confirmedProposal } : {}),
     }),
     messages: '[]',
   };
@@ -259,6 +268,9 @@ beforeEach(() => {
 
 describe('completed 硬阻断会话：补充说明重判通过', () => {
   it('追加新消息进对话并重新分诊，通过后按确认链路生成路径并回写 learningPathId', async () => {
+    // #162：重判通过只是撤掉分诊闸门，生成路径还要求会话里有一份可确认的提案。
+    // 这里先备上完整提案——若缺了它，下面「通过后生成」的断言就会落到「回到 proposing」上。
+    seedBlockedCompletedConversation({ confirmedProposal: CONFIRMABLE_PROPOSAL });
     mockExecuteSkill.mockResolvedValue(buildAiResponse({
       userVisible: '明白，你想学的是可判定的冲煮知识本身。',
       understanding: REJUDGED_UNDERSTANDING,
@@ -303,6 +315,8 @@ describe('completed 硬阻断会话：补充说明重判通过', () => {
   });
 
   it('重复补充说明不重复建路：已绑路径后返回已有路径（同一会话只允许一条活路径）', async () => {
+    // 首次补充说明要能生成路径，同样需要完整提案（#162 后置门禁）
+    seedBlockedCompletedConversation({ confirmedProposal: CONFIRMABLE_PROPOSAL });
     mockExecuteSkill.mockResolvedValue(buildAiResponse({ understanding: REJUDGED_UNDERSTANDING }));
     await goalConversationService.continueConversation('conv-1', '其实我想学的是知识本身', 'user-1');
     expect(mockRunGoalAsync).toHaveBeenCalledTimes(1);
@@ -328,6 +342,60 @@ describe('completed 硬阻断会话：补充说明重判通过', () => {
     );
     const internal = second.internal as GoalEnvelope;
     expect(internal.core.learningPath).toEqual(expect.objectContaining({ id: boundPathId }));
+  });
+});
+
+describe('completed 硬阻断会话：重判通过但无可用提案（#162 另一条入口）', () => {
+  it('confirmedProposal 为空 → 不生成路径，回到 proposing，模型本轮回复原样透出', async () => {
+    // 默认种子没有 confirmedProposal：重判解除硬阻断后不得代签生成
+    mockExecuteSkill.mockResolvedValue(buildAiResponse({
+      userVisible: '我先按你说的方向整理出一版提案，你确认后我再生成学习路径。',
+      understanding: REJUDGED_UNDERSTANDING,
+    }));
+
+    const result = await goalConversationService.continueConversation(
+      'conv-1',
+      '其实我想学的是注水手法和粉水比这些知识本身',
+      'user-1'
+    );
+
+    // 关键：生成链路一次都不能被触发（不产 learning_paths 行、不 claim run、不 bind 路径）
+    expect(mockExecuteSkill).toHaveBeenCalledTimes(1);
+    expect(mockRunGoalAsync).not.toHaveBeenCalled();
+    expect(prismaMock.learning_paths.create).not.toHaveBeenCalled();
+    expect(mockClaimPathCoreGeneration).not.toHaveBeenCalled();
+    expect(conversationRecord.learningPathId).toBeNull();
+
+    // 回到 proposing：可继续推进（不是 completed 终局、也不是硬阻断）
+    const internal = result.internal as GoalEnvelope;
+    expect(internal.core.stage).toBe('proposing');
+    expect(internal.core.isCompleted).toBe(false);
+    expect(internal.core.learningPath).toBeNull();
+    expect((internal.core as { hardBlocked?: boolean }).hardBlocked).toBe(false);
+    expect(internal.ext?.goalConversation?.responseTriage).toEqual(expect.objectContaining({ mode: 'learning_path' }));
+
+    // 模型这一轮的回复原样交给用户（让模型先补提案，用户再确认）
+    expect(result.userVisible).toBe('我先按你说的方向整理出一版提案，你确认后我再生成学习路径。');
+
+    // 落库侧同步回到可推进态，避免下一次 /reply 又按 completed 短路
+    expect(conversationRecord.stage).toBe('proposing');
+    expect(conversationRecord.status).toBe('active');
+  });
+
+  it('confirmedProposal 半截（只有方向与交付物、没有阶段）→ 同样不生成路径，回到 proposing', async () => {
+    seedBlockedCompletedConversation({
+      confirmedProposal: { learning_direction: '先练注水手法', first_deliverable: '一杯手冲咖啡', key_stages: [] },
+    });
+    mockExecuteSkill.mockResolvedValue(buildAiResponse({ understanding: REJUDGED_UNDERSTANDING }));
+
+    const result = await goalConversationService.continueConversation('conv-1', '补充说明一下', 'user-1');
+
+    expect(mockRunGoalAsync).not.toHaveBeenCalled();
+    expect(prismaMock.learning_paths.create).not.toHaveBeenCalled();
+    expect(mockClaimPathCoreGeneration).not.toHaveBeenCalled();
+    const internal = result.internal as GoalEnvelope;
+    expect(internal.core.stage).toBe('proposing');
+    expect(internal.core.learningPath).toBeNull();
   });
 });
 
@@ -369,6 +437,12 @@ describe('completed 硬阻断会话：重判仍被拦', () => {
     expect(persisted.messages[persisted.messages.length - 2]).toEqual(expect.objectContaining({
       role: 'user',
       content: '我真的就是想学会手冲，器具都买齐了',
+    }));
+    // #213：重判仍被拦截的拒绝文案必须落库（就地取代模型原始回合）。
+    // 此前只进返回值，GET 会按初判重建另一段文案，重载后「结论不变」这句凭空消失。
+    expect(persisted.messages[persisted.messages.length - 1]).toEqual(expect.objectContaining({
+      role: 'ai',
+      content: expect.stringContaining('仍不会生成学习路径'),
     }));
     expect(conversationRecord.status).toBe('completed');
     expect(conversationRecord.stage).toBe('completed');

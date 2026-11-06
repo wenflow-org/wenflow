@@ -39,6 +39,7 @@ jest.mock('../../ai-teaching/teaching-session-message-store', () => ({
 }));
 
 import { assembleLearningState } from '../assemble-learning-state';
+import { learnerStateSummaryService } from '../LearnerStateSummaryService';
 import { learnerSnapshotRefreshService } from '../LearnerSnapshotRefreshService';
 
 const prisma = require('../../../config/database').default as {
@@ -140,5 +141,103 @@ describe('assembleLearningState · 无 active 路径不清零（#155）', () => 
     expect(assembled!.primaryPath).toBeNull();
     expect(assembled!.learnerSnapshot).toBeNull();
     expect(refresh).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * #188：同一载荷里曾有两套进度口径——learningState.tasks 数**全部路径**的 subtasks，
+ * 而 summary.path.progressPercent（页面进度条）按**主路径**算。多路径用户的进度条与
+ * 文案数字因此对不上，提示词也被硬绑到语义不同的那个源。
+ */
+describe('assembleLearningState · 进度口径统一到主路径（#188）', () => {
+  function pathWithTasks(id: string, statuses: string[]) {
+    return {
+      id,
+      userId: 'u1',
+      title: id,
+      name: id,
+      status: 'active',
+      deadline: null,
+      updatedAt: NOW,
+      milestones: [
+        {
+          id: `${id}-m1`,
+          title: 'M1',
+          stageNumber: 1,
+          subtasks: statuses.map((status, index) => ({
+            id: `${id}-t${index}`,
+            title: `T${index}`,
+            status,
+            estimatedMinutes: 10,
+            completedAt: null,
+          })),
+        },
+      ],
+    };
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    prisma.users.findUnique.mockResolvedValue({ id: 'u1', name: 'U', xp: 100 });
+    prisma.teaching_sessions.findMany.mockResolvedValue([]);
+    refresh.mockResolvedValue({
+      dynamicState: {
+        metrics: { lss: 4, ktl: 5, lf: 3, lsb: 1 },
+        recentTrend: 'stable',
+        fatigueRisk: 'low',
+        recommendedPacing: 'moderate',
+      },
+      knowledgeMemory: {
+        globalSignals: { masteredConcepts: [], fragileConcepts: [], strugglingConcepts: [] },
+        globalBackground: {},
+        // 快照的 currentPath 锚在主路径：4 个任务完成 1 个（= 25%）
+        currentPath: {
+          learningPathId: 'A',
+          pathTitle: 'A',
+          progress: { totalTasks: 4, completedTasks: 1 },
+          currentPosition: { milestoneTitle: 'M1', taskTitle: 'T1' },
+          prerequisiteGaps: [],
+        },
+      },
+    });
+    // 主路径 A：4 个任务完成 1 个；另一条 active 路径 B：3 个任务全完成
+    prisma.learning_paths.findMany.mockResolvedValue([
+      pathWithTasks('A', ['completed', 'in_progress', 'todo', 'todo']),
+      pathWithTasks('B', ['completed', 'completed', 'completed']),
+    ]);
+    // 全量 subtasks 查询（跨路径）：修复前 tasks.* 由它派生 → total=7
+    prisma.subtasks.findMany.mockResolvedValue([
+      ...['completed', 'in_progress', 'todo', 'todo'].map((status) => ({ status, estimatedMinutes: 10, completedAt: null })),
+      ...['completed', 'completed', 'completed'].map((status) => ({ status, estimatedMinutes: 10, completedAt: null })),
+    ]);
+  });
+
+  it('tasks 只数主路径（不再是全路径总和），并显式声明口径', async () => {
+    const assembled = await assembleLearningState('u1', { snapshotScope: 'path' });
+    const tasks = assembled!.learningState.tasks as any;
+
+    expect(tasks.scope).toBe('primary-path');
+    expect(tasks.total).toBe(4);          // 修复前 = 7（A+B）
+    expect(tasks.completed).toBe(1);      // 修复前 = 4
+    expect(tasks.inProgress).toBe(1);
+    expect(tasks.todo).toBe(2);
+    expect(tasks.completionRate).toBe(25);
+  });
+
+  it('同一载荷内 tasks 派生值与 summary.path.progressPercent 同口径', async () => {
+    const assembled = await assembleLearningState('u1', { snapshotScope: 'path' });
+    const tasks = assembled!.learningState.tasks as any;
+    const summary = learnerStateSummaryService.build({
+      learnerSnapshot: assembled!.learnerSnapshot,
+      learningState: assembled!.learningState,
+      path: assembled!.primaryPath,
+    });
+
+    const fromTasks = tasks.total > 0 ? Math.round((tasks.completed / tasks.total) * 100) : 0;
+    expect(summary.path?.progressPercent).toBe(25);
+    expect(fromTasks).toBe(summary.path!.progressPercent);
+    // 时间块的进度与 tasks 同源（同一载荷只允许一套完成任务百分比）
+    expect(assembled!.learningState.time.progress).toBe(tasks.completionRate);
+    expect(assembled!.learningState.time.completionRate).toBe('25.0');
   });
 });

@@ -102,7 +102,6 @@ router.get('/prompt-call-logs', async (req: Request, res: Response) => {
   const limit = Math.min(Math.max(Number(req.query.limit) || 30, 1), 200);
   const agentId = typeof req.query.agentId === 'string' && req.query.agentId.trim() ? req.query.agentId.trim() : null;
   const pathId = typeof req.query.pathId === 'string' && req.query.pathId.trim() ? req.query.pathId.trim() : null;
-  const pipelineRunId = typeof req.query.pipelineRunId === 'string' && req.query.pipelineRunId.trim() ? req.query.pipelineRunId.trim() : null;
   const traceId = typeof req.query.traceId === 'string' && req.query.traceId.trim() ? req.query.traceId.trim() : null;
   const parentExecutionId = typeof req.query.parentExecutionId === 'string' && req.query.parentExecutionId.trim()
     ? req.query.parentExecutionId.trim()
@@ -112,7 +111,6 @@ router.get('/prompt-call-logs', async (req: Request, res: Response) => {
   const rows = await listPromptCallLogs({
     agentId,
     pathId,
-    pipelineRunId,
     traceId,
     parentExecutionId,
     status,
@@ -146,8 +144,6 @@ router.get('/prompt-call-logs', async (req: Request, res: Response) => {
         pathId: row.pathId,
         userId: row.userId,
         conversationId: row.conversationId,
-        pipelineRunId: row.pipelineRunId,
-        pipelineStepIndex: row.pipelineStepIndex,
         traceId: (row as any).traceId,
         parentExecutionId: (row as any).parentExecutionId,
         promptAttemptCount: row.promptAttemptCount,

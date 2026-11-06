@@ -5,7 +5,7 @@
 > 需要时以 doc/ 根目录现行文档与代码为准。
 > **登记门禁（2026-09-28 起）**：新文档入库三件套 = 白名单 + 本表登记 + 状态头；实现与「不做」声明相悖须同提交改文档。
 
-## 总索引（doc/ 根 40 篇 · 全覆盖 · 2026-11-04）
+## 总索引（doc/ 根 41 篇 · 全覆盖 · 2026-11-06）
 
 > 每篇文档头部有状态行（📌 类型｜最后核验）。**收录范围**：`doc/` 根目录只收「设计原理 / 架构 / 理论基础」类文档；**报告、审计、快照、跑批留痕、已归档的决策留痕一律入 `doc/local/`、不进仓库**。**登记约定**：新增 doc/ 文档须同时 ①加入根 .gitignore 白名单 ②登记本表 ③写状态头；凡实现与文档「不做/待办」声明相悖的改动，须同一提交内更新该文档声明。审计详见 doc/local/DOC-TIMELINESS-AUDIT-2026-09-28（本机）。
 
@@ -13,8 +13,8 @@
 |---|---|---|
 | SKILL_PROTOCOL_V4.md | 活规范 | Skill 协议 SSOT（二级编译已退役） |
 | MODEL_GATEWAY_DESIGN.md | 活规范 | 网关 SSOT |
-| MODEL_SETUP_AND_CONFIG_DESIGN.md | 设计方案（待评审） | 从部署到 Skill 细调的模型配置设计；补「怎么把模型配进来」，含三块模型/插件降级 |
 | PROMPT_CACHE_OPTIMIZATION.md | 活规范 | 缓存优化（64k SSOT 已回写） |
+| MODEL_SETUP_AND_CONFIG_DESIGN.md | 设计方案（待评审） | 从部署到 Skill 细调的模型配置设计；补「怎么把模型配进来」（注：文内「三块模型/插件降级」已随 2026-11-05 降级链下线失效）
 | PROMPT_ADJUSTMENT_GUIDE.md | 活规范 | 提示词调整操作指南 |
 | SKILL_DEVELOPMENT_GUIDE.md | 活规范 | 新建/改造 Skill 指南（§2 CLI 优先） |
 | AGENT_SKILL_MANUAL.md | 活规范 | Agent/Skill 全景 why |
@@ -42,6 +42,7 @@
 | ADMIN_VISUAL_LAYER_SPEC.md | 活规范 | ⛔ 禁归档（守卫硬引用）｜v4 已接设计体系包，令牌层/圆角/阴影/材质收口完毕 |
 | NEWUI-PROTOTYPES.md | 活规范 | newui 原型登记与「原型值残留」规则（基准层级：tokens.css/spec v4 > 原型 > 历史文档） |
 | ADMIN_COLUMN_WIDTH_SPEC.md | 活规范 | 48/48 全中 |
+| ADMIN_TABLE_HEADER_SPEC.md | 活规范 | 表头区（卡头工具条 + 列头）唯一口径；守卫规则 20–22 钉死 |
 | DEV_SCRIPTS.md | 活规范 | 脚本唯一索引（86 条零失效） |
 | CLASSROOM_PIPELINE.md | 活规范 | 课堂管线与评价管线单文件口径（文件/函数可直接对照，基线 feat/teaching-figures @ 62108427） |
 | CLASSROOM_SKILLS.md | 活规范 | 课堂用到的提示词全文合集（配套 CLASSROOM_PIPELINE.md） |

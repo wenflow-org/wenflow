@@ -2,24 +2,34 @@
  * LearningStateGuidanceService
  *
  * 为 learning-state 页面组装引导负载（adaptive-guidance/copy?view=learning-state）。
- * 2026-09-27 行动建议统一：copy 复用 dashboard 事件驱动快照（不再独立跑 LLM），
- * 本服务专注 learning-state 独有的部分——决策流（LearningDecisionFeed）与状态评审诊断。
- * 快照缺失时 copy 回落 learning-state 静态文案；聚合结果保留 15 分钟内存缓存（stale-while-revalidate）。
+ *
+ * 2026-11-06（#187）：本服务此前复用 dashboard 事件驱动快照的 copy（2026-09-27「行动建议统一」），
+ * 实测后果是学习状态页拿到 dashboard 口径的文案——headline 是「欢迎回来…」式问候、
+ * todayActions 里还带一条指回本页的「查看学习状态」自指深链，而本页真正需要的是
+ * 「当前状态意味着什么 + 怎么调」。
+ *
+ * 现在本服务以 view='learning-state' 调用同一个 skill（skills/adaptive-guidance-copy），
+ * 由提示词里的视图专属规则产出本页口径；dashboard 侧仍走自己的快照（view='dashboard'）。
+ * 两个视图各有自己的生成路径与缓存，不再跨视图借文案。
+ * 聚合结果保留 15 分钟内存缓存（stale-while-revalidate）。
  */
 
 import {
   buildFallback,
+  adaptiveGuidanceCopyDefinition,
   type AdaptiveGuidanceCopyOutput,
 } from '../../skills/adaptive-guidance-copy';
+import { executeSkillWithResult } from '../../skills';
 import { learnerStateSummaryService, type LearnerStateSummaryOutput } from './LearnerStateSummaryService';
 import { learningDecisionFeedService, type LearningDecisionCard } from './LearningDecisionFeedService';
-import { dashboardGuidanceSnapshotService } from './DashboardGuidanceSnapshotService';
 import { assembleLearningState } from './assemble-learning-state';
 import { learnerProjectionService } from './LearnerProjectionService';
 import { learnerStateReviewService, type LearnerStateReviewPayload } from './LearnerStateReviewService';
 import { logger } from '../../utils/logger';
 
 const CACHE_TTL_MS = 15 * 60 * 1000;
+/** 本视图的取值（与 skills/adaptive-guidance-copy/views.ts 的 GUIDANCE_VIEWS 同源） */
+const LEARNING_STATE_VIEW = 'learning-state' as const;
 
 export interface LearningStateGuidancePayload {
   schemaVersion: 'learning-state-guidance-v1';
@@ -108,24 +118,49 @@ class LearningStateGuidanceService {
       // 呈现层投影：裁剪与文案无关的大字段（path 整行 / knowledgeMemory 明细），避免上下文膨胀
       const guidanceProjection = learnerProjectionService.toGuidanceProjection(learnerSnapshot, primaryPath);
 
-      // 2026-09-27 行动建议统一：复用 dashboard 事件驱动快照的 copy（两页字面完全一致，
-      // 消除「同 skill 两份生成、两页建议重叠且措辞不一」）；快照缺失时用 learning-state
-      // 静态文案兜底（纯本地构造，不再为兜底跑 LLM）。
-      const dashSnapshot = await dashboardGuidanceSnapshotService.get(userId).catch(() => null);
+      // #187：按本页视图（learning-state）生成，不再借用 dashboard 快照的 copy——
+      // 两页语义不同（这里要的是状态解读与调节动作，不是首页问候与「继续上次学习」）。
+      // 失败策略与 gateway 一致：executeSkillWithResult 抛错时用本视图静态兜底（buildFallback 同 view），
+      // 不把整段引导吞掉。
       let copy: AdaptiveGuidanceCopyOutput;
       let source: 'model' | 'fallback';
-      if (dashSnapshot?.copy) {
-        copy = dashSnapshot.copy;
-        source = dashSnapshot.source === 'model' ? 'model' : 'fallback';
-      } else {
+      let debug: LearningStateGuidancePayload['debug'] = null;
+      const startedAt = Date.now();
+      try {
+        const result = await executeSkillWithResult(adaptiveGuidanceCopyDefinition, {
+          view: LEARNING_STATE_VIEW,
+          learnerSnapshot: guidanceProjection.learnerSnapshot,
+          learningState,
+          path: guidanceProjection.path ?? undefined,
+          sessionWrapup: sessionWrapup ?? undefined,
+          userId,
+        });
+        copy = result.output as AdaptiveGuidanceCopyOutput;
+        // 与 dashboard 侧同口径：quality 存在时以它为准（'cache' 视同 model），缺失才看 cached
+        source = result.quality
+          ? (result.quality === 'model' || result.quality === 'cache' ? 'model' : 'fallback')
+          : result.cached ? 'fallback' : 'model';
+        debug = {
+          skillId: result.debug?.skillId || 'adaptive-guidance-copy',
+          model: result.debug?.model || null,
+          systemPromptVersion: result.debug?.systemPromptVersion || null,
+          durationMs: result.debug?.durationMs || result.duration || Date.now() - startedAt,
+          cached: result.cached === true,
+          generatedAt: new Date().toISOString(),
+        };
+      } catch (error: any) {
         copy = buildFallback({
-          view: 'learning-state',
+          view: LEARNING_STATE_VIEW,
           learnerSnapshot: guidanceProjection.learnerSnapshot,
           learningState,
           path: guidanceProjection.path ?? undefined,
           sessionWrapup: sessionWrapup ?? undefined,
         });
         source = 'fallback';
+        logger.warn('[learning-state-guidance] skill failed, using static copy', {
+          userId,
+          error: error?.message || String(error),
+        });
       }
 
       const decisions = learningDecisionFeedService.build({
@@ -138,14 +173,14 @@ class LearningStateGuidanceService {
       const generatedAt = new Date().toISOString();
       return {
         schemaVersion: 'learning-state-guidance-v1',
-        view: 'learning-state',
+        view: LEARNING_STATE_VIEW,
         generatedAt,
         source,
         copy,
         summary,
         decisions,
         review: await loadLatestReview(userId, primaryPath?.id ?? null),
-        debug: null,
+        debug,
       };
     } catch (error: any) {
       logger.warn('[learning-state-guidance] refresh failed', { userId, error: error?.message || String(error) });

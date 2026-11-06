@@ -286,7 +286,7 @@
           "artifactKind": "generation",
           "interactionMode": "snapshot",
           "contractFields": 0,
-          "ruleCount": 52,
+          "ruleCount": 53,
           "constraintCount": 4,
           "conditionalRuleCount": 0,
           "phases": [
@@ -424,8 +424,8 @@
         "skill:session-wrapup",
         "teaching-agent"
       ],
-      "fieldCount": 48,
-      "routingCount": 57,
+      "fieldCount": 49,
+      "routingCount": 58,
       "codeEntry": [
         {
           "label": "教学会话状态机（开课/回合/收束）",
@@ -943,7 +943,7 @@
           "artifactKind": "copy",
           "interactionMode": "snapshot",
           "contractFields": 0,
-          "ruleCount": 10,
+          "ruleCount": 13,
           "constraintCount": 2,
           "conditionalRuleCount": 0,
           "phases": [
@@ -1018,7 +1018,7 @@
           "interactionMode": "snapshot",
           "contractFields": 0,
           "ruleCount": 9,
-          "constraintCount": 4,
+          "constraintCount": 5,
           "conditionalRuleCount": 0,
           "phases": [
             "predicted"
@@ -1799,7 +1799,7 @@
       "artifactKind": "generation",
       "interactionMode": "snapshot",
       "contractFields": 0,
-      "ruleCount": 52,
+      "ruleCount": 53,
       "constraintCount": 4,
       "conditionalRuleCount": 0,
       "phases": [
@@ -2090,7 +2090,7 @@
       "artifactKind": "copy",
       "interactionMode": "snapshot",
       "contractFields": 0,
-      "ruleCount": 10,
+      "ruleCount": 13,
       "constraintCount": 2,
       "conditionalRuleCount": 0,
       "phases": [
@@ -2199,7 +2199,7 @@
       "interactionMode": "snapshot",
       "contractFields": 0,
       "ruleCount": 9,
-      "constraintCount": 4,
+      "constraintCount": 5,
       "conditionalRuleCount": 0,
       "phases": [
         "predicted"
@@ -2927,7 +2927,7 @@
       "artifactKind": "distillation",
       "interactionMode": "snapshot",
       "contractFields": 0,
-      "ruleCount": 6,
+      "ruleCount": 8,
       "constraintCount": 2,
       "conditionalRuleCount": 0,
       "phases": [
@@ -3274,7 +3274,7 @@
       "skillId": "board-designer",
       "kind": "handler-only",
       "displayName": "课堂板书设计器 Skill",
-      "reason": "handler-only：无 LLM 提示词，逻辑在代码 handler"
+      "reason": "handler-only：提示词以独立产物 prompts/skill.board-designer.md 承载（无 core 源）"
     }
   ],
   "counts": {

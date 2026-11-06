@@ -383,7 +383,7 @@ async function clearModelOverride() {
   const count = selected.value.length
   const ok = await askConfirm({
     title: '用平台默认模型',
-// 2026-11-04 文案口径：删尾巴「可随时在 Skill 运行时重新指定模型」——教用法/自我宣告，只留状态陈述
+    // 2026-11-04 文案口径：删尾巴「可随时在 Skill 运行时重新指定模型」——教用法/自我宣告，只留状态陈述
     message: `将清空选中的 ${count} 个技能单独指定的模型，改用平台默认模型。通道与参数覆盖保持不变。`,
     confirmText: '清空模型覆盖',
     busy: true,
@@ -509,10 +509,7 @@ onMounted(load)
 .skc__table th:nth-child(6),
 .skc__table td:nth-child(6) { width: 84px; }
 .skc__apply { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-/* 行盒同高 32px：endpoint / apiKey 两个 .mk-input 是 8px 竖内衬（≈38px），
-   同一行的模型选择器（compact 32）与主按钮（32）比它们矮一截。
-   只收竖向内衬，横向内衬与字号保持原样。 */
-.skc__apply .mk-input { max-width: 280px; padding-top: 5px; padding-bottom: 5px; }
+.skc__apply .mk-input { max-width: 280px; }
 .skc__apply .is-err { border-color: var(--mk-red); }
 /* 原型 .tbl td.wrap：长文本列（参数覆盖）换行不截断 */
 .skc__table td.skc__wrap { white-space: normal; overflow-wrap: anywhere; min-width: 140px; max-width: 240px; }

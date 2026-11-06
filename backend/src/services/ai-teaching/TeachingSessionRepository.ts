@@ -24,6 +24,7 @@ import {
 } from '../../virtual-lab/lease-protocol';
 import { completeTeachingOperation } from './TeachingMessageIdempotencyService';
 import { recordSessionEvent } from './session-events.service';
+import type { AdvisoryResponseAction } from './ReplanAdvisoryService';
 
 /**
  * 课堂操作租约（P2）：原为 30 分钟且无心跳——进程重启/请求挂起会把这个会话锁死很久
@@ -632,14 +633,15 @@ export class TeachingSessionRepository {
   }
 
   /**
-   * 调整建议处置埋点：记录学习者对「保留 / 稍后再看 / 预览 / 已采用」的动作。
+   * 调整建议处置埋点：记录学习者对建议卡动作的处置。
    * 只追加 advisory.learnerResponse，不改任何执行语义（真调整动作走 replan 链）。
-   * 审计口径：建议生成后是「没处置 / 保留 / 推迟 / 预览过 / 真执行」，此前只可见前四项。
+   * 动作集合由 ReplanAdvisoryService 的 ADVISORY_RESPONSE_ACTIONS 定义（#251）：
+   * 必须是建议卡自己下发的选项键的子集 ∪ {adopt}，否则界面按钮点下去会被端点拒收。
    */
   async recordAdvisoryResponse(
     sessionId: string,
     userId: string,
-    action: 'keep' | 'later' | 'preview' | 'adopt'
+    action: AdvisoryResponseAction
   ): Promise<{ status: 'ok' | 'not_found' | 'no_advisory'; advisory?: Record<string, any> }> {
     const session = await this.getById(sessionId);
     if (!session || session.userId !== userId) {

@@ -205,7 +205,6 @@ sandbox:path-agent.normalizedInput.planningHints.milestoneRange
 sandbox:path-agent.normalizedInput.planningHints.paceSignal
 sandbox:path-agent.normalizedInput.planningHints.subtaskMinutesRange
 sandbox:path-agent.normalizedInput.planningHints.subtasksPerStageRange
-sandbox:path-agent.normalizedInput.prerequisiteTree
 sandbox:path-agent.normalizedInput.problemSpace.currentPainPoint
 sandbox:path-agent.normalizedInput.problemSpace.realProblem
 sandbox:path-agent.normalizedInput.problemSpace.scenario
@@ -217,6 +216,7 @@ sandbox:path-agent.path.name
 sandbox:path-agent.path.summary
 sandbox:path-agent.pathStageMap
 sandbox:path-agent.planningHints
+sandbox:path-agent.prerequisiteTree
 sandbox:path-agent.previousMilestone
 sandbox:path-agent.previousStageOutcome
 sandbox:path-agent.repairHints
@@ -238,6 +238,7 @@ sandbox:path-agent.supplementRequest
 | `sandbox:teaching-agent.knowledge.state` | `knowledge.state` | object | session.knowledgeState |
 | `sandbox:teaching-agent.controls.teachingControlContext` | `controls.teachingControlContext` | object | teachingState.teachingControlContext |
 | `sandbox:teaching-agent.classroomContext` | `classroomContext` | object | teachingState.classroomContext |
+| `sandbox:teaching-agent.knowledgeStateSummary` | `knowledgeStateSummary` | string | — |
 
 ### 输出/交付字段
 
@@ -273,6 +274,7 @@ sandbox:path-agent.supplementRequest
 | `knowledge.state` | object | skill:teaching-turn |
 | `controls.teachingControlContext` | object | skill:teaching-turn |
 | `classroomContext` | object | skill:teaching-turn |
+| `knowledgeStateSummary` | string | skill:learning-predictor |
 | `message` | string | teaching-agent |
 | `followUpQuestions` | string[]? | teaching-agent |
 | `summary.topicSummary` | string | teaching-agent |
@@ -307,6 +309,7 @@ sandbox:teaching-agent.evaluation.sessionLss
 sandbox:teaching-agent.interactionProfile
 sandbox:teaching-agent.knowledge.points
 sandbox:teaching-agent.knowledge.state
+sandbox:teaching-agent.knowledgeStateSummary
 sandbox:teaching-agent.learner.learnerProjection
 sandbox:teaching-agent.learner.persona
 sandbox:teaching-agent.learnerPrediction
@@ -337,12 +340,12 @@ sandbox:teaching-agent.teachingState.teachingControlContext
 
 | 字段 | 类型 | handoff |
 |---|---|---|
-| `conceptLedger` | object[] | profile-agent |
-| `reusableFoundations` | string[] | profile-agent |
-| `blockedFoundations` | string[] | profile-agent |
-| `transferSignals` | object[] | profile-agent |
-| `recurringConfusions` | object[] | profile-agent |
-| `knowledgeStateSummary` | string | profile-agent |
+| `conceptLedger` | object[] | — |
+| `reusableFoundations` | string[] | — |
+| `blockedFoundations` | string[] | — |
+| `transferSignals` | object[] | — |
+| `recurringConfusions` | object[] | — |
+| `knowledgeStateSummary` | string | — |
 | `snapshot.dynamicState` | object | — |
 | `snapshot.learningControlState` | object | — |
 | `snapshot.replanSignal` | object | — |
@@ -350,14 +353,14 @@ sandbox:teaching-agent.teachingState.teachingControlContext
 | `snapshot.knowledgeMemory.currentPath` | object | — |
 | `snapshot.knowledgeMemory.globalSignals` | object | — |
 | `profile.curriculumControls` | object | — |
-| `headline` | string | profile-agent |
-| `subtitle` | string | profile-agent |
-| `todayActions` | object[] | profile-agent |
-| `nextStep` | string | profile-agent |
-| `pathHint` | string | profile-agent |
-| `paceHint` | string | profile-agent |
-| `emptyStateCopy` | string | profile-agent |
-| `warningCopy` | string | profile-agent |
+| `headline` | string | — |
+| `subtitle` | string | — |
+| `todayActions` | object[] | — |
+| `nextStep` | string | — |
+| `pathHint` | string | — |
+| `paceHint` | string | — |
+| `emptyStateCopy` | string | — |
+| `warningCopy` | string | — |
 
 ### 合法沙盘键（sandbox: 对账注册表）
 

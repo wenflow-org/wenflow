@@ -34,6 +34,10 @@ import {
   teachingOperationRequestHash,
 } from '../services/ai-teaching/TeachingMessageIdempotencyService';
 import { dashboardGuidanceSnapshotService } from '../services/learner/DashboardGuidanceSnapshotService';
+import {
+  ADVISORY_RESPONSE_ACTIONS,
+  type AdvisoryResponseAction,
+} from '../services/ai-teaching/ReplanAdvisoryService';
 
 const router = Router();
 
@@ -816,7 +820,7 @@ router.post('/sessions/:sessionId/resume', async (req: any, res) => {
 });
 
 /**
- * 调整建议处置埋点（保留 / 稍后再看 / 预览）
+ * 调整建议处置埋点（保留 / 稍后再看 / 预览 / 确认调整…）
  * POST /api/ai-teaching/sessions/:sessionId/advisory-response
  * 轻量记账：只写 advisory.learnerResponse{action,at}，不触发任何调整执行（真动作走 replan 链）。
  */
@@ -829,14 +833,17 @@ router.post('/sessions/:sessionId/advisory-response', async (req: any, res) => {
 
     const { sessionId } = req.params;
     const action = String(req.body?.action || '');
-    if (!['keep', 'later', 'preview', 'adopt'].includes(action)) {
+    // #251：可接受动作由建议服务下发的选项键派生（ADVISORY_RESPONSE_ACTIONS）——
+    // 此前是另一张手写白名单 ['keep','later','preview','adopt']，漏掉 confirm/accelerate/
+    // reinforce/resequence，于是界面自己渲染的按钮点下去恒 400「无效的建议处置动作」。
+    if (!(ADVISORY_RESPONSE_ACTIONS as readonly string[]).includes(action)) {
       return res.status(400).json({
         success: false,
         error: { message: '无效的建议处置动作', code: 'INVALID_ADVISORY_ACTION' },
       });
     }
 
-    const result = await teachingSessionRepository.recordAdvisoryResponse(sessionId, userId, action as 'keep' | 'later' | 'preview' | 'adopt');
+    const result = await teachingSessionRepository.recordAdvisoryResponse(sessionId, userId, action as AdvisoryResponseAction);
     if (result.status === 'not_found') {
       return res.status(404).json({
         success: false,
@@ -1436,7 +1443,9 @@ router.post('/sessions/:sessionId/peer/messages', async (req: any, res) => {
 
     const { message } = req.body;
 
-    if (!message) {
+    // #210：伴学端点与主消息端点同口径——纯空白不是一次真实回合，
+    // 裸判空会让 '' / '   ' / '\n\t ' 落库空消息并触发一次付费模型调用。
+    if (typeof message !== 'string' || message.trim().length === 0) {
       return sendValidationError(res, '缺少消息内容');
     }
 

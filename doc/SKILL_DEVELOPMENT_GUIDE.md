@@ -28,7 +28,7 @@
 |---|---|---|---|
 | 定位 | 阶段主流程产出（goal/path/teaching/profile/simulation 五阶段） | 旁挂能力（开场文案/课程设计/评估等），经 runAux 框架执行 | 无 LLM prompt 的纯函数/工具（learner-model、mcp-tool） |
 | 进字段路由 | ✅ 是（编排文件 routings 有 `skill:<id>` 产出行） | ❌ 否（不进字段路由） | ❌ 否 |
-| 户口簿必填 | `kind` + `stage`（∈ 五阶段）+ `parentAgent` + `handlerRef` + `coreFile` | `kind` + `coreFile` + `handlerRef`（stage/parentAgent 可选） | `kind` + `handlerRef`（**禁填 coreFile**，自动 `noPromptFile: true`） |
+| 户口簿必填 | `kind` + `stage`（∈ 五阶段）+ `parentAgent` + `handlerRef` + `coreFile` | `kind` + `coreFile` + `handlerRef`（stage/parentAgent 可选） | `kind` + `handlerRef`（**禁填 coreFile**；默认 `noPromptFile: true`，有独立提示词产物 `prompts/skill.<id>.md` 时填 `promptArtifact` 且 `noPromptFile: false`，#235） |
 | 编排文件 | 必须出现在对应 stage 的 `contracts`（F3 铁律，双向校验） | 不要求 | 不要求 |
 | 注册点 | `skillHandlers`（skills/index.ts）+ manifest（F12） | `v4-aux-skills/index.ts` 的 META 表 + `auxSkillHandlers` | `skillHandlers` + manifest（F12） |
 | 运行时 prompt | 发布 core → agent_prompts ACTIVE | 发布 core → agent_prompts ACTIVE | 无（豁免） |

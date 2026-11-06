@@ -17,6 +17,7 @@
  * 并保留「字段缺席」形态作为回落判据的回归。
  */
 import {
+  teachingTurnPromptSpec,
   validateTeachingTurnOutput,
   type TeachingTurnInput,
 } from '../index';
@@ -188,5 +189,40 @@ describe('无板回合看板指代守卫', () => {
       expect(result.valid).toBe(false);
       expect(result.failureReason).toBe('TEACHING_TURN_BOARD_DEIXIS_WITHOUT_BOARD');
     }
+  });
+});
+
+/**
+ * #252：守卫本身保留（纯函数仍判失败），但 spec 接线把它从**硬**失败降为**软**失败——
+ * 先带改写指令重试一次，最后一次仍命中就按当前输出继续。硬失败时两次改写都失败会整轮 throw，
+ * 接口 500，而引擎只在成功路径提交回合状态，学生这一轮输入随之丢失（实测traceId
+ * 1793903123327-mkldlqa8g：两次 attempt 全败 → 500 + 消息未落库）。
+ */
+describe('无板指代在 spec 上是软失败（#252）', () => {
+  const deictic = parsedWith('你看左边那栏的第二条，右边第 4 条其实给了个答案。');
+
+  it('硬校验放行——不再整轮失败', () => {
+    const result = teachingTurnPromptSpec.validateParsedOutput!(deictic, productionBoardlessInput);
+    expect(result.valid).toBe(true);
+  });
+
+  it('软校验仍然拦下——保留「带改写指令重试」的那一次机会', () => {
+    const result = teachingTurnPromptSpec.softValidateParsedOutput!(deictic, productionBoardlessInput);
+    expect(result.valid).toBe(false);
+    expect(result.failureReason).toBe('TEACHING_TURN_BOARD_DEIXIS_WITHOUT_BOARD');
+  });
+
+  it('其它失败原因不受影响：硬校验照旧失败、软校验不重复报', () => {
+    const missingAnalysis = { reply: '好，我们继续。' } as any;
+    const hard = teachingTurnPromptSpec.validateParsedOutput!(missingAnalysis, productionBoardlessInput);
+    expect(hard.valid).toBe(false);
+    const soft = teachingTurnPromptSpec.softValidateParsedOutput!(missingAnalysis, productionBoardlessInput);
+    expect(soft.valid).toBe(true);
+  });
+
+  it('有板回合的正当指代不会被软校验拦下', () => {
+    const withBoard: TeachingTurnInput = { ...baseInput, boardContext: '【白板】两栏对照', boardPresent: true };
+    const result = teachingTurnPromptSpec.softValidateParsedOutput!(parsedWith('左边那栏是条件，右边是做法。'), withBoard);
+    expect(result.valid).toBe(true);
   });
 });

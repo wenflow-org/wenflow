@@ -420,7 +420,17 @@ export interface TeachingLearnerProjection {
     lsb: number;
     recentTrend: string;
     recommendedPacing: string;
+    /**
+     * 疲劳风险（low/medium/high）。#183：此前只在 toReplanProjection 里出现，
+     * 课堂投影裁掉它 ⇒「该减速」结论到不了下一课。
+     */
+    fatigueRisk: 'low' | 'medium' | 'high';
   };
+  /**
+   * 重排信号（阈值召回 + 归因）。#183：与 toReplanProjection.signal 同源，
+   * 让「该重排」结论随课堂载荷送达下一课，而不是只进 dashboard 文案与路径重排。
+   */
+  replanSignal: LearnerReplanSignal;
   pathContext: {
     pathTitle: string;
     pathSummary?: string | null;
@@ -464,6 +474,8 @@ export interface TeachingLearnerProjection {
     recommendedApproach: string;
     emphasize: string[];
     avoid: string[];
+    /** 画像判定的风险因子。#183：教学投影此前只保留前四个键，riskFactors 被裁掉 */
+    riskFactors: string[];
   };
 }
 

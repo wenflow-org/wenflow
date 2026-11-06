@@ -1039,16 +1039,17 @@ describe('SessionCockpit 双模式', () => {
     const q = '针对「完成5道错题重做」这条建议，它预设的动机状态是什么？';
     expect(wrapper.findAll('.cp-transcript__message').some((m) => m.text().includes(q))).toBe(false);
     /* 2026-10-19 用户走查「检查点怎么在下方，不符合课堂阅读顺序」期望把检查点按 submittedAt
-       内联进课堂列（.cp-checkpoint--inline）。该断言随 11cfde30 入库，但组件侧的内联实现
-       从未落地（全仓无 .cp-checkpoint--inline 类），故按现状断言末尾汇总块；
-       待内联实现落地后改回：.cp-checkpoints 不存在 + .cp-checkpoint--inline 存在。 */
-    const block = wrapper.find('.cp-checkpoints');
-    expect(block.exists()).toBe(true);
-    expect(block.text()).toContain('检查点');
-    expect(block.text()).toContain(q);
-    expect(block.text()).toContain('未通过');
-    expect(block.text()).toContain('理解度 75%');
-    expect(block.text()).toContain('识别隐含动机假设');
+       内联进课堂列（.cp-checkpoint--inline）。内联实现已落地，这里按终态断言：
+       末尾汇总块不存在，题目/判分/理解度都随发生的那一回合出现在课堂列里。 */
+    expect(wrapper.find('.cp-checkpoints').exists()).toBe(false);
+    const inline = wrapper.findAll('.cp-checkpoint--inline');
+    expect(inline.length).toBeGreaterThan(0);
+    const inlineText = inline.map((el) => el.text()).join('\n');
+    expect(inlineText).toContain('检查点');
+    expect(inlineText).toContain(q);
+    expect(inlineText).toContain('未通过');
+    expect(inlineText).toContain('理解度 75%');
+    expect(inlineText).toContain('识别隐含动机假设');
 
     wrapper.unmount();
   });
@@ -1085,11 +1086,14 @@ describe('SessionCockpit 双模式', () => {
     await nextTick();
 
     expect(wrapper.findAll('.cp-checkpoint')).toHaveLength(1);
-    const block = wrapper.find('.cp-checkpoints');
-    expect(block.text()).toContain('1 个 · 2 次作答');
-    expect(block.text()).toContain('尝试 2 次');
+    /* 内联时间轴落位（2026-10-19 走查）：检查点不再整块挂转录末尾（.cp-checkpoints 已退场），
+       随发生的那一回合出现在课堂列里；归并与尝试次数语义不变。 */
+    expect(wrapper.find('.cp-checkpoints').exists()).toBe(false);
+    const inline = wrapper.find('.cp-checkpoint--inline');
+    expect(inline.exists()).toBe(true);
+    expect(inline.text()).toContain('尝试 2 次');
     // 展示最新一次裁决
-    expect(block.text()).toContain('通过');
+    expect(inline.text()).toContain('通过');
 
     wrapper.unmount();
   });

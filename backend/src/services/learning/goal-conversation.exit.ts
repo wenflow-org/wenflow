@@ -10,6 +10,7 @@ import {
   resolveResponseTriageFromCollectedData,
   type ResponseTriage,
 } from './response-triage';
+import { buildGoalConversationExt } from './goal-conversation.ext';
 
 export interface GoalExitContext {
   conversationId: string;
@@ -68,13 +69,11 @@ export function buildHardBlockResult(ctx: GoalExitContext, triage: ResponseTriag
         hardBlocked: true,
       },
       ext: {
-        goalConversation: {
+        goalConversation: buildGoalConversationExt({
           understanding: ctx.understanding,
-          nextQuestions: [] as string[],
-          quickReplies: [] as string[],
           collected: ctx.collected,
           responseTriage: triage,
-        },
+        }),
       },
     },
   };
@@ -134,12 +133,12 @@ export async function buildCompletedConversationResult(input: {
         learningPath,
       },
       ext: {
-        goalConversation: {
-          understanding: data.understanding || {},
-          nextQuestions: [] as string[],
-          quickReplies: [] as string[],
-          collected: data.collected || {},
-        },
+        goalConversation: buildGoalConversationExt({
+          understanding: data.understanding,
+          collected: data.collected,
+          // #251③：优先用落库的分诊值；缺失时由 helper 按 understanding 纯函数兜底
+          responseTriage: triage,
+        }),
       },
     },
   };
@@ -194,8 +193,8 @@ export function resolvePathCompletionUserVisible(input: {
  * - 已完成 + 已绑路径：按 `learningPath.lifecycle` 分档（见 resolvePathCompletionUserVisible）——
  *   只有 ready 才说「学习路径已生成：<名字>」；生成中（core / stage design 窗口）说正在生成；
  *   失败（含 stage design 失败）如实报失败。只用 status 判定会在阶段设计窗口谎称已生成（#228）；
- * - 已完成 + 未绑路径 + 存档分诊判硬阻断：复用 /reply 同源的 buildHardBlockResult
- *   重建拒绝文案（#213：保证「当场返回」与「刷新重建」逐字一致）；
+ * - 已完成 + 未绑路径 + 存档分诊判硬阻断：优先回传历史里已落库的拒绝文案（初判 A / 重判仍拦截 B，
+ *   后者由重判分支落库，#213）；历史里没有拒绝文案时才按当前分诊重建，保证「当场返回」与「刷新重建」一致；
  * - 已完成 + 未绑路径 + 非硬阻断：返回 null（无用户可见的终局文案，不臆造）；
  * - 进行中：返回最后一条 assistant 消息文本（用户看到的就是它），没有则 null。
  *
@@ -224,6 +223,11 @@ export function resolveConversationUserVisible(input: {
     const data = JSON.parse(input.collectedData || '{}');
     const triage = resolveResponseTriageFromCollectedData(data);
     if (!isHardBlockResponseTriage(triage, data.understanding)) return null;
+    // #213：重判仍被拦截时 /reply 返回的是 B（「已结合你的补充说明重新判断，结论不变…」），
+    // 若这里一律按初判重建 A，重载后 B 就消失了。两版文案都含同一句标记，故以「历史里已落库的
+    // 那一版」为准；只有历史里根本没有拒绝文案（旧数据）时才重建。
+    const persistedRefusal = lastAssistantText(input.messages);
+    if (persistedRefusal && persistedRefusal.includes(HARD_BLOCK_REFUSAL_MARKER)) return persistedRefusal;
     return buildHardBlockResult(
       {
         conversationId: input.conversationId,
@@ -235,9 +239,19 @@ export function resolveConversationUserVisible(input: {
     ).userVisible;
   }
 
-  const messages = Array.isArray(input.messages) ? input.messages : [];
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const message = messages[i];
+  return lastAssistantText(input.messages);
+}
+
+/** 硬阻断拒绝文案的稳定片段：初判版与重判版都含这一句（#213 用它区分「拒绝文案」与普通 AI 回合）。 */
+const HARD_BLOCK_REFUSAL_MARKER = '不会生成学习路径';
+
+/** 历史里最后一条非空 assistant/ai 文本；取不到返回 null。 */
+function lastAssistantText(
+  messages: Array<{ role?: unknown; content?: unknown }> | null | undefined,
+): string | null {
+  const list = Array.isArray(messages) ? messages : [];
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    const message = list[i];
     if (message?.role !== 'ai' && message?.role !== 'assistant') continue;
     const content = typeof message.content === 'string' ? message.content.trim() : '';
     if (content) return content;

@@ -66,7 +66,7 @@
 |---|---|---|---|
 | **mainline** | 阶段主链的决策/产出节点 | ✅ 是（编排 `contracts` + `routings`） | ✅ `core.yaml` |
 | **aux** | 旁挂能力（开场/诊断/归并/守门），`runAux` 执行 | ❌ 否 | ✅ `core.yaml`（多数） |
-| **handler-only** | 纯函数/查库/工具执行器 | ❌ 否 | ❌ `noPromptFile: true` |
+| **handler-only** | 纯函数/查库/工具执行器 | ❌ 否 | ❌ `noPromptFile: true`（有独立提示词产物时，改填 `promptArtifact` + `noPromptFile: false`，#235） |
 
 ### 0.3 五阶段数据旅程（一句话）
 

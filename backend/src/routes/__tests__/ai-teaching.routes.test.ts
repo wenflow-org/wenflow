@@ -72,6 +72,8 @@ jest.mock('../../utils/logger', () => ({ logger: { error: jest.fn(), warn: jest.
 
 import router from '../ai-teaching.routes';
 import { requestContextStorage, runWithContext } from '../../gateway/api-gateway/context';
+// #251：往返用例直接遍历建议服务下发的选项键（不另抄一份枚举）
+import { ADVISORY_UI_OPTION_KEYS } from '../../services/ai-teaching/ReplanAdvisoryService';
 
 function getRouteHandler(path: string, method: 'get' | 'post' = 'post') {
   const layer = (router as any).stack.find((item: any) => item.route?.path === path && item.route?.methods?.[method]);
@@ -468,6 +470,25 @@ describe('ai-teaching routes', () => {
     }
   });
 
+  it('#210 伴学端点同样拒绝纯空白 message（此前裸判空 → 200 + 真实付费调用 + 落库空消息）', async () => {
+    const handler = getRouteHandler('/sessions/:sessionId/peer/messages');
+    for (const blankMessage of ['', '   ', "\n\n", "\t", " \n\t "]) {
+      const res = createResponse();
+      await handler({
+        user: { userId: 'user-1' },
+        params: { sessionId: 'session-1' },
+        body: { message: blankMessage },
+      }, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: expect.objectContaining({ code: 'VALIDATION_ERROR', message: '缺少消息内容' }),
+      });
+      // 空白输入必须在受理、落库、付费模型调用之前被拒
+      expect(mockCoordinator.processPeerMessage).not.toHaveBeenCalled();
+    }
+  });
   it('#224 恰好 800 字符（与前端 maxlength 同口径）→ 通过校验并受理', async () => {
     mockCoordinator.processStudentMessage.mockResolvedValue({
       aiResponse: '收到',
@@ -1000,14 +1021,34 @@ describe('ai-teaching routes', () => {
       }));
     });
 
-    it('非法动作（如未经执行链的 confirm）→ 400 且不触达 repository', async () => {
+    it('非法动作 → 400 且不触达 repository', async () => {
       const handler = getRouteHandler('/sessions/:sessionId/advisory-response');
       const res = createResponse();
 
-      await handler({ user: { userId: 'user-1' }, params: { sessionId: 'session-1' }, body: { action: 'confirm' } }, res);
+      await handler({ user: { userId: 'user-1' }, params: { sessionId: 'session-1' }, body: { action: 'bogus-action' } }, res);
 
       expect(mockTeachingSessionRepository.recordAdvisoryResponse).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(400);
+    });
+
+    // #251：端点此前只认 keep/later/preview/adopt 四个手写键，而建议服务自己下发的
+    // ui.options 里还有 confirm/accelerate/reinforce/resequence —— 界面渲染什么按钮，
+    // 那个键就必须能被本端点接受（自己下发的按钮不许自己拒收）。
+    it('#251 建议卡下发的每个选项键都能被端点接受（往返）', async () => {
+      mockTeachingSessionRepository.recordAdvisoryResponse.mockResolvedValue({ status: 'ok', advisory: {} });
+      const handler = getRouteHandler('/sessions/:sessionId/advisory-response');
+
+      for (const action of ADVISORY_UI_OPTION_KEYS) {
+        mockTeachingSessionRepository.recordAdvisoryResponse.mockClear();
+        const res = createResponse();
+
+        await handler({ user: { userId: 'user-1' }, params: { sessionId: 'session-1' }, body: { action } }, res);
+
+        // 未被 400 拦下（status 未调用即 200 分支），且 action 原样落库
+        expect([action, res.status.mock.calls.length]).toEqual([action, 0]);
+        expect(mockTeachingSessionRepository.recordAdvisoryResponse)
+          .toHaveBeenCalledWith('session-1', 'user-1', action);
+      }
     });
 
     it('无待处置建议的会话 → 409 ADVISORY_NOT_FOUND', async () => {
