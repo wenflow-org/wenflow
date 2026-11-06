@@ -33,8 +33,6 @@ export interface PromptCallContext {
    * 体积提示：data URL 很大，调用方应先下采样；无有效图片时自动回退纯文本。
    */
   images?: Array<{ url: string; detail?: 'auto' | 'low' | 'high' }>;
-  pipelineRunId?: string;
-  pipelineStepIndex?: number;
   traceId?: string;
   parentExecutionId?: string;
   /** 调用来源，仅用于 Gateway telemetry 与排障。 */

@@ -124,8 +124,6 @@ model prompt_call_logs {
   /// 教学/学习会话归因（真列；此前只能经 conversationId 间接反推）
   sessionId           String?
   conversationId      String?
-  pipelineRunId       String?
-  pipelineStepIndex   Int?
   traceId             String?
   parentExecutionId   String?
   promptAttemptCount  Int      @default(1)
@@ -143,7 +141,6 @@ model prompt_call_logs {
   // Skill 统计覆盖索引（2026-10-04 性能批）：列序 agentId+createdAt 承载窗口范围，
   // success/durationMs 尾列让 AVG/COUNT 索引内完成（避免宽行根页随机读，实测 35s→毫秒）
   @@index([agentId, createdAt, success, durationMs])
-  @@index([pipelineRunId])
   @@index([pathId])
   @@index([userId])
   @@index([sessionId, createdAt])

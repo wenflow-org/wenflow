@@ -384,11 +384,13 @@ const displayLogs = computed(() => {
 });
 
 /* 平台里结构性没有对应 agent 的能力类：筛选必然为空，不能沿用通用「暂无日志」
-   （会被读成筛选或加载出错）。#226：tutoring 在 manifest 中无监控组；
-   profile 组内也没有 userListed 的 id（能力筛选只在用户可见集内再筛）。 */
+   （会被读成筛选或加载出错）。只有 tutoring 属于这一类——manifest 里没有任何
+   辅导类 Agent/Skill（backend services/users/capability-groups 显式映射为空集）。
+   profile 不在此列：#218 复核确认库里确有该类调用（skill:learning-predictor /
+   skill:learner-state-review 等），后端能力筛选按 Profile 监控组全量成员派生，
+   因此不能再写「平台暂无学习者模型类调用记录」这种与事实相反的文案。 */
 const STRUCTURAL_EMPTY_CAPABILITIES: Record<string, string> = {
-  tutoring: '平台暂无辅导类调用记录',
-  profile: '平台暂无学习者模型类调用记录'
+  tutoring: '平台暂无辅导类调用记录'
 };
 const structuralEmptyText = computed(() => STRUCTURAL_EMPTY_CAPABILITIES[filters.capabilityType] || '');
 const emptyStateTitle = computed(() => structuralEmptyText.value || '暂无日志');

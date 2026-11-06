@@ -10,6 +10,7 @@ import {
   resolveResponseTriageFromCollectedData,
   type ResponseTriage,
 } from './response-triage';
+import { buildGoalConversationExt } from './goal-conversation.ext';
 
 export interface GoalExitContext {
   conversationId: string;
@@ -68,13 +69,11 @@ export function buildHardBlockResult(ctx: GoalExitContext, triage: ResponseTriag
         hardBlocked: true,
       },
       ext: {
-        goalConversation: {
+        goalConversation: buildGoalConversationExt({
           understanding: ctx.understanding,
-          nextQuestions: [] as string[],
-          quickReplies: [] as string[],
           collected: ctx.collected,
           responseTriage: triage,
-        },
+        }),
       },
     },
   };
@@ -134,12 +133,12 @@ export async function buildCompletedConversationResult(input: {
         learningPath,
       },
       ext: {
-        goalConversation: {
-          understanding: data.understanding || {},
-          nextQuestions: [] as string[],
-          quickReplies: [] as string[],
-          collected: data.collected || {},
-        },
+        goalConversation: buildGoalConversationExt({
+          understanding: data.understanding,
+          collected: data.collected,
+          // #251③：优先用落库的分诊值；缺失时由 helper 按 understanding 纯函数兜底
+          responseTriage: triage,
+        }),
       },
     },
   };
