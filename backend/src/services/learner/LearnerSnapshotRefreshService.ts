@@ -34,6 +34,34 @@ export class LearnerSnapshotRefreshService {
   /** 缓存键前缀（buildKey 的第 0 段），invalidate 按 `前缀 + userId + ':'` 精确匹配用户 */
   private static readonly CACHE_KEY_PREFIX = 'learner-snapshot-v1';
 
+  /**
+   * 失效水位（#176-2 复核）：`userId → invalidate 时刻`。**早于该时刻落地**的快照一律不许再被读出——
+   * 无论它躺在内存缓存里，还是躺在 `learner_projections` 的持久化窗口里。
+   *
+   * 只删内存键是不够的（复核实测）：`getLatest` 在内存未命中后会回落到持久化投影的 10 分钟窗口，
+   * 把那行**由旧画像算出**的载荷重新读出并写回内存，于是「主动失效」在最要紧的场景里近乎空转——
+   * `learner-model-agent/index.ts:196-197` 的 `updateProfile` 清了画像 + 图快照，**并没有**接着 refresh
+   * 任何键；此后任意读路径（`TeachingContextBuilder.ts:74`、`admin/learner-models.ts:76,141`）拿到的
+   * 仍是旧画像拼出的快照，最长 10 分钟。
+   *
+   * 事件驱动的那几处（`learner-event-consumer.ts:54`、`schedulers.ts:97`、`LessonKnowledgeEnrichmentConsumer.ts:52`）
+   * 是「invalidate + 只 refresh 一个键」，同一用户其它作用域键（path / teaching / global）同样只剩这条水位兜着。
+   *
+   * 仅在进程内维护：与内存缓存同生命周期（重启后两者一起丢，不存在「内存没了但水位还在」的错配）。
+   */
+  private invalidatedAt = new Map<string, number>();
+  /** 水位表的用户数上限：只记住最近失效的用户，避免长跑进程里只增不减（与缓存同口径） */
+  private static readonly INVALIDATION_MAX_USERS = 2000;
+
+  /**
+   * 该时刻落地的快照是否已失效（严格早于水位）。
+   * 用 `<` 而非 `<=`：invalidate 与随后的 refresh 可能落在同一毫秒，那不是「失效前落地的」。
+   */
+  private isInvalidated(userId: string, at: number): boolean {
+    const mark = this.invalidatedAt.get(userId);
+    return mark !== undefined && at < mark;
+  }
+
   /** LRU 读：命中即移到队尾（Map 保持插入序，淘汰从队首取最久未用） */
   private cacheGet(key: string): { snapshot: LearnerSnapshot; cachedAt: number } | undefined {
     const entry = this.cache.get(key);
@@ -55,18 +83,27 @@ export class LearnerSnapshotRefreshService {
   }
 
   /**
-   * 主动失效（#176-2）：画像/证据变化后清掉该用户的**所有作用域**缓存键。
-   * 此前只能等 5 分钟 TTL 或读路径自愈，调用方（learnerProfileService.clear 的调用点）
-   * 清了画像缓存却留着由旧画像算出的快照。
+   * 主动失效（#176-2）：画像/证据变化后清掉该用户的**所有作用域**缓存键，并抬高失效水位，
+   * 让持久化投影里那行旧载荷也读不出来。此前只能等 5 分钟 TTL 或读路径自愈，调用方
+   * （learnerProfileService.clear 的调用点）清了画像缓存却留着由旧画像算出的快照。
    */
   invalidate(userId?: string): void {
+    const mark = Date.now();
     if (!userId) {
       this.cache.clear();
+      this.invalidatedAt.clear();
       return;
     }
     const prefix = `${LearnerSnapshotRefreshService.CACHE_KEY_PREFIX}:${userId}:`;
     for (const key of [...this.cache.keys()]) {
       if (key.startsWith(prefix)) this.cache.delete(key);
+    }
+    this.invalidatedAt.delete(userId);
+    this.invalidatedAt.set(userId, mark);
+    while (this.invalidatedAt.size > LearnerSnapshotRefreshService.INVALIDATION_MAX_USERS) {
+      const oldest = this.invalidatedAt.keys().next().value;
+      if (oldest === undefined) break;
+      this.invalidatedAt.delete(oldest);
     }
   }
 
@@ -74,7 +111,10 @@ export class LearnerSnapshotRefreshService {
     const key = this.buildKey(input);
     if (input.lastEventId) {
       const existing = await prisma.learner_projections.findUnique({ where: { projectionKey: key } });
-      if (existing?.lastEventId === input.lastEventId) {
+      // 去重按事件 id 比对，但**画像类变更不产生事件 id**：invalidate 之后同一 lastEventId 的那行
+      // 载荷仍是旧画像算出来的，不能再短路返回（否则 refresh 也读回陈旧值）。
+      const dedupable = existing !== null && !this.isInvalidated(input.userId, existing.generatedAt.getTime());
+      if (dedupable && existing.lastEventId === input.lastEventId) {
         try {
           const snapshot = JSON.parse(existing.payload) as LearnerSnapshot;
           this.cacheSet(key, snapshot);
@@ -124,12 +164,21 @@ export class LearnerSnapshotRefreshService {
   async getLatest(input: LearnerSnapshotRefreshInput): Promise<LearnerSnapshot> {
     const key = this.buildKey(input);
     const entry = this.cacheGet(key);
-    if (entry && Date.now() - entry.cachedAt < LearnerSnapshotRefreshService.CACHE_TTL_MS) {
+    // 失效水位：#176-2 复核抓到的空转——只删内存键时，下面那段持久化回落会把旧载荷读回来并重新入缓存。
+    if (
+      entry &&
+      Date.now() - entry.cachedAt < LearnerSnapshotRefreshService.CACHE_TTL_MS &&
+      !this.isInvalidated(input.userId, entry.cachedAt)
+    ) {
       return entry.snapshot;
     }
     this.cache.delete(key);
     const persisted = await prisma.learner_projections.findUnique({ where: { projectionKey: key } });
-    if (persisted && Date.now() - persisted.generatedAt.getTime() < 10 * 60 * 1000) {
+    if (
+      persisted &&
+      Date.now() - persisted.generatedAt.getTime() < 10 * 60 * 1000 &&
+      !this.isInvalidated(input.userId, persisted.generatedAt.getTime())
+    ) {
       try {
         const snapshot = JSON.parse(persisted.payload) as LearnerSnapshot;
         this.cacheSet(key, snapshot);
