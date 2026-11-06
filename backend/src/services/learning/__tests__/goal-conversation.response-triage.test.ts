@@ -260,7 +260,11 @@ describe('advisory 默认仍推进路径生成（零行为变化）', () => {
       collectedData: JSON.stringify({
         messages: [],
         understanding: { real_problem: '不知道复盘要回答哪几个问题' },
-        confirmedProposal: { learning_direction: '复盘写作', key_stages: ['S1'] },
+        confirmedProposal: {
+          learning_direction: '复盘写作',
+          first_deliverable: '一份月度复盘初稿',
+          key_stages: ['梳理结论', '组织表达'],
+        },
         responseTriage: { mode: 'combination', confidence: 'medium', reasons: [] },
       }),
     });
@@ -286,7 +290,11 @@ describe('显式拒绝不得代签（2026-10-08 真人面守门，R6 P1-12 镜�
       collectedData: JSON.stringify({
         messages: [],
         understanding: { real_problem: '不知道复盘要回答哪几个问题' },
-        confirmedProposal: { learning_direction: '复盘写作', key_stages: ['S1'] },
+        confirmedProposal: {
+          learning_direction: '复盘写作',
+          first_deliverable: '一份月度复盘初稿',
+          key_stages: ['梳理结论', '组织表达'],
+        },
       }),
     });
     mockExecuteSkill.mockResolvedValue(buildAiResponse({
@@ -320,7 +328,11 @@ describe('显式拒绝不得代签（2026-10-08 真人面守门，R6 P1-12 镜�
       collectedData: JSON.stringify({
         messages: [],
         understanding: { real_problem: '不知道复盘要回答哪几个问题' },
-        confirmedProposal: { learning_direction: '复盘写作', key_stages: ['S1'] },
+        confirmedProposal: {
+          learning_direction: '复盘写作',
+          first_deliverable: '一份月度复盘初稿',
+          key_stages: ['梳理结论', '组织表达'],
+        },
       }),
     });
     mockExecuteSkill.mockResolvedValue(buildAiResponse({
@@ -347,7 +359,11 @@ describe('显式拒绝不得代签（2026-10-08 真人面守门，R6 P1-12 镜�
       collectedData: JSON.stringify({
         messages: [],
         understanding: { real_problem: '不知道复盘要回答哪几个问题' },
-        confirmedProposal: { learning_direction: '复盘写作', key_stages: ['S1'] },
+        confirmedProposal: {
+          learning_direction: '复盘写作',
+          first_deliverable: '一份月度复盘初稿',
+          key_stages: ['梳理结论', '组织表达'],
+        },
       }),
     });
 
@@ -372,7 +388,11 @@ describe('显式拒绝不得代签（2026-10-08 真人面守门，R6 P1-12 镜�
       collectedData: JSON.stringify({
         messages: [],
         understanding: { real_problem: '不知道复盘要回答哪几个问题' },
-        confirmedProposal: { learning_direction: '复盘写作', key_stages: ['S1'] },
+        confirmedProposal: {
+          learning_direction: '复盘写作',
+          first_deliverable: '一份月度复盘初稿',
+          key_stages: ['梳理结论', '组织表达'],
+        },
       }),
     });
 
@@ -395,7 +415,11 @@ describe('gated 模式：非学习路径不自动推进', () => {
       collectedData: JSON.stringify({
         messages: [],
         understanding: { real_problem: '没权限，走不通审批', platform_judgment: 'not_judgeable', skill_nature: 'physical_internalized' },
-        confirmedProposal: { learning_direction: '复盘写作', key_stages: ['S1'] },
+        confirmedProposal: {
+          learning_direction: '复盘写作',
+          first_deliverable: '一份月度复盘初稿',
+          key_stages: ['梳理结论', '组织表达'],
+        },
         responseTriage: { mode: 'referral', confidence: 'medium', reasons: [] },
       }),
     });
@@ -422,7 +446,11 @@ describe('gated 模式：非学习路径不自动推进', () => {
       collectedData: JSON.stringify({
         messages: [],
         understanding: { real_problem: '没权限，走不通审批', platform_judgment: 'not_judgeable', skill_nature: 'physical_internalized' },
-        confirmedProposal: { learning_direction: '复盘写作', key_stages: ['S1'] },
+        confirmedProposal: {
+          learning_direction: '复盘写作',
+          first_deliverable: '一份月度复盘初稿',
+          key_stages: ['梳理结论', '组织表达'],
+        },
         responseTriage: { mode: 'referral', confidence: 'medium', reasons: [] },
         responseTriagePending: { mode: 'referral', confidence: 'medium', reasons: [] },
       }),
@@ -445,7 +473,11 @@ describe('gated 模式：非学习路径不自动推进', () => {
       collectedData: JSON.stringify({
         messages: [],
         understanding: { real_problem: '没权限但自己能补材料' },
-        confirmedProposal: { learning_direction: '复盘写作', key_stages: ['S1'] },
+        confirmedProposal: {
+          learning_direction: '复盘写作',
+          first_deliverable: '一份月度复盘初稿',
+          key_stages: ['梳理结论', '组织表达'],
+        },
         responseTriage: { mode: 'combination', confidence: 'medium', reasons: [] },
       }),
     });
@@ -470,7 +502,11 @@ describe('gated 模式：非学习路径不自动推进', () => {
       collectedData: JSON.stringify({
         messages: [],
         understanding: { real_problem: '没权限但自己能补材料' },
-        confirmedProposal: { learning_direction: '复盘写作', key_stages: ['S1'] },
+        confirmedProposal: {
+          learning_direction: '复盘写作',
+          first_deliverable: '一份月度复盘初稿',
+          key_stages: ['梳理结论', '组织表达'],
+        },
         responseTriage: { mode: 'combination', confidence: 'medium', reasons: [] },
         responseTriagePending: { mode: 'combination', confidence: 'medium', reasons: [] },
       }),
@@ -520,7 +556,11 @@ describe('普通 referral 仍走 gated（F15 合规自查不能被硬阻断）',
       collectedData: JSON.stringify({
         messages: [],
         understanding: { real_problem: '要按条例自查上报，但部门不配合', platform_judgment: 'judgeable_output', skill_nature: 'knowledge_structure' },
-        confirmedProposal: { learning_direction: '合规自查', key_stages: ['S1'] },
+        confirmedProposal: {
+          learning_direction: '合规自查',
+          first_deliverable: '一份合规自查清单',
+          key_stages: ['对照条例自查', '整理上报材料'],
+        },
         responseTriage: { mode: 'referral', confidence: 'medium', reasons: [] },
       }),
     });
