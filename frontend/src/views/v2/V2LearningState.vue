@@ -38,16 +38,16 @@
         <!-- 全空态整卡（2026-11-06 走查）：趋势 / AI 建议 / 复习 / 掌握此前四张卡各说一遍
              「完成第一次学习后…」，PC 双栏还因 advisory order:-1 提前产生两处空洞；
              真新用户（无趋势数据且三 KPI 全 0）收成一张卡说完状态 + 唯一出口 -->
-        <section v-if="stateEmpty" class="card state__hero">
-          <span class="chart__empty-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M4 19V5" /><path d="M4 19h16" />
-              <path d="M7.5 15.5 11 11l3 2.5L19 7" />
-            </svg>
-          </span>
-          <strong>学习状态正在积累中</strong>
-          <p>完成第一次学习后，这里会出现训练负荷曲线、AI 建议与掌握分布。</p>
-          <router-link to="/learning-paths" class="chart__empty-cta">去开始学习</router-link>
+        <section v-if="stateEmpty" class="state__hero">
+          <!-- 与图谱/学习路径同一套空态原语（2026-11-06 走查「空态设计不一样」）：
+               V2ResultState 66px 图标盘 + 标题 + 说明 + 胶囊主动作，画布上直接居中 -->
+          <V2ResultState
+            tone="empty"
+            title="学习状态正在积累中"
+            description="完成第一次学习后，这里会出现训练负荷曲线、AI 建议与掌握分布。"
+            action-text="去开始学习"
+            @action="router.push('/learning-paths')"
+          />
         </section>
         <template v-else>
         <div class="state__col">
@@ -572,6 +572,7 @@ import V2Nav from './V2Nav.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import V2Footer from './V2Footer.vue';
 import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
+import V2ResultState from '@/components/ui/V2ResultState.vue';
 import { localDateKey, localDateKeyFromIso } from '@/utils/date';
 import { computeStreakDays } from './streak';
 import { unwrap, unwrapArray } from './unwrap';
@@ -1783,13 +1784,8 @@ function loadGuidance() {
 /* #118：隐式 auto 轨按 min-content 解算（390 宽实测 387.9px，容器仅 354px），
    卡片被撑到 388px 导致整页横向溢出；显式 minmax(0,1fr) 让子项可收缩 */
 .state__col { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
-/* 全空态整卡（2026-11-06 走查）：替代原「advisory order:-1 提前」的碎片空态
-   （P2-11 已随 state__col--empty 退役）；有数据时本卡不渲染，原布局不受影响 */
-.state__hero {
-  display: grid; justify-items: center; gap: 6px;
-  padding: 44px 20px 42px;
-  text-align: center;
-}
+/* 全空态容器（2026-11-06 走查）：视觉形态统一交给 V2ResultState（66px 图标盘那套），
+   本层只做栅格占位——移动端单列自然满宽；有数据时本节点不渲染，原布局不受影响 */
 /* PC 双栏看板（2026-11-05 用户定稿「拒绝 1100px 拉面条」）：
    1101 以上左 60% 调控中心 / 右 40% 复习 + 掌握分布 + 学习偏好，趋势图满宽横贯顶部。
    .state__col 用 display:contents 拆掉移动端的单列包裹层，让四块卡片直接进栅格——

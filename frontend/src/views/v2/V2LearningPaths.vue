@@ -208,12 +208,22 @@
           </article>
         </div>
 
+        <!-- 页面级空态（2026-11-06 走查「空态设计不一样」）：与图谱/学习历史同一套
+             V2ResultState——66px 图标盘 + 标题 + 说明 + 主动作；搜索/筛选无结果仍是行内轻量态 -->
+        <V2ResultState
+          v-else-if="cards.length === 0"
+          tone="empty"
+          title="还没有学习路径"
+          description="规划一个目标，问流会把它变成可执行的学习路径。"
+          action-text="规划第一个目标"
+          @action="router.push('/goal-conversation')"
+        />
+
         <!-- 筛选/搜索空态 -->
         <div v-else class="empty">
           <div class="empty__illus"><span></span><span></span><span></span></div>
           <p>{{ emptyText }}</p>
-          <router-link v-if="cards.length === 0" to="/goal-conversation" class="btn-primary">规划第一个目标</router-link>
-          <button v-else type="button" class="btn-ghost" @click="search ? (search = '') : (filter = 'all')">{{ search ? '清除搜索' : '查看全部' }}</button>
+          <button type="button" class="btn-ghost" @click="search ? (search = '') : (filter = 'all')">{{ search ? '清除搜索' : '查看全部' }}</button>
         </div>
       </template>
     </main>
@@ -534,12 +544,9 @@ watch(filterSheetOpen, (open) => {
   }
 });
 
-/** §7 空态微文案：≤20 字、去机制解释；三种空态各一句，不再补第二句因果或说明 */
-const emptyText = computed(() => {
-  if (search.value) return '没有匹配的路径，换个关键词试试';
-  if (cards.value.length === 0) return '还没有学习路径，先规划一个目标';
-  return '该状态下还没有路径';
-});
+/** §7 空态微文案：≤20 字、去机制解释；轻量态（搜索/筛选无结果）各一句。
+ *  页面级零路径空态已上收 V2ResultState（标题/说明/动作在模板里）。 */
+const emptyText = computed(() => (search.value ? '没有匹配的路径，换个关键词试试' : '该状态下还没有路径'));
 
 const visibleCards = computed(() => {
   let list = cards.value;
