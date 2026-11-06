@@ -62,12 +62,13 @@ const { descriptor, errors } = parse(source);
 const root = descriptor.template?.ast as unknown as TplNode | undefined;
 
 describe('资料引用：同一章节只渲染一次', () => {
-  it('两处引用循环都走 materialRefsOf（不直接遍历原始 materialRefs）', () => {
+  it('引用循环走 materialRefsOf（不直接遍历原始 materialRefs）', () => {
     expect(errors).toEqual([]);
-    expect(source).toContain('in materialRefsOf(stage)');
+    /* 2026-11-06 二次走查：阶段头的「本阶段依据资料」整行删除（与任务行引用重复），
+       现在只剩任务行一处引用渲染 */
     expect(source).toContain('in materialRefsOf(task)');
-    expect(source, '直接遍历原始数组会连排同名引用').not.toContain('in stage.materialRefs');
-    expect(source).not.toContain('in task.materialRefs');
+    expect(source, '阶段级引用行已删').not.toContain('in materialRefsOf(stage)');
+    expect(source, '直接遍历原始数组会连排同名引用').not.toContain('in task.materialRefs');
   });
 
   it('去重走共享纯函数（按章节身份，不按引文）', () => {

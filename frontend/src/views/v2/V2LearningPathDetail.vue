@@ -174,20 +174,9 @@
                   <ul v-if="objectivesOf(stage).length" class="objectives">
                     <li v-for="(o, oi) in objectivesOf(stage)" :key="oi">{{ o }}</li>
                   </ul>
-                  <p v-if="materialRefLabels(stage).length" class="stage__material">
-                    本阶段依据资料：
-                    <!-- v-for 走 materialRefsOf：后端把同一章节切成多个切片时
-                         （实测「公文种类」×3），直接遍历原始数组会连排三颗同名引用 -->
-                    <button
-                      v-for="(ref, ri) in materialRefsOf(stage)"
-                      :key="ri"
-                      type="button"
-                      class="material-ref"
-                      :disabled="!refClickable(ref)"
-                      :title="refTitle(ref)"
-                      @click="openMaterialRef(ref)"
-                    ><svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1.5V8h4.5L14 3.5zM8 12h8v1.5H8V12zm0 4h8v1.5H8V16z"/></svg>{{ refLabel(ref) }}</button>
-                  </p>
+                  <!-- 阶段级「本阶段依据资料：[📄 公文种类]」整行删除（2026-11-06 二次走查）：
+                       它与每个任务自己的引用签是同一批（实测阶段 1 的 2 个任务都挂同一个「公文种类」），
+                       同屏读作上下复读机；引用已经挂在任务行上，阶段头再报一遍没有新增信息。 -->
                   <template v-for="task in stageTasks(stage)" :key="task.id">
                   <div
                     class="task"
@@ -200,24 +189,27 @@
                   </span>
                   <div class="task__body">
                     <strong>{{ task.title || task.displayLabel }}</strong>
-                    <small v-if="materialRefLabels(task).length" class="task__material">
-                      资料：
+                  </div>
+                  <!-- 任务行（2026-11-06 二次走查·三行压两行）：左「类型 · 时长 · 资料签」、
+                       右「操作按钮」同一行两端对齐。
+                       资料签从独占一行的「资料：[📄 公文种类]」并进本行——它的信息维度与
+                       「类型 · 时长」同级（都是这条任务的属性），单占一行纯属浪费高度。
+                       时长 nowrap（bare/15）：「约 18 分钟」不拆成「约 18 分/钟」孤字行。 -->
+                  <div class="task__line">
+                    <span class="task__meta">
+                      {{ taskKindText(task) }} · <span class="task__mins">{{ task.estimatedMinutes ? `约 ${task.estimatedMinutes} 分钟` : '—' }}</span>
+                      <!-- 引用签（v-for 走 materialRefsOf：后端按 sectionId|quote 去重，
+                           同一章节的不同引文会并存 → 不去重就连排三颗同名签） -->
                       <button
                         v-for="(ref, ri) in materialRefsOf(task)"
                         :key="ri"
                         type="button"
-                        class="material-ref"
+                        class="material-ref material-ref--inline"
                         :disabled="!refClickable(ref)"
                         :title="refTitle(ref)"
                         @click="openMaterialRef(ref)"
                       ><svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1.5V8h4.5L14 3.5zM8 12h8v1.5H8V12zm0 4h8v1.5H8V16z"/></svg>{{ refLabel(ref) }}</button>
-                    </small>
-                  </div>
-                  <!-- 第二行（2026-11-06 屏效比定稿）：左「时长属性」、右「操作按钮」同一行两端对齐。
-                       时长从正文块里挪出来与按钮同排，标题与元信息各占一行，窄屏不会被按钮挤成竖条。
-                       时长 nowrap（bare/15）：「约 18 分钟」不拆成「约 18 分/钟」孤字行。 -->
-                  <div class="task__line">
-                    <span class="task__meta">{{ taskKindText(task) }} · <span class="task__mins">{{ task.estimatedMinutes ? `约 ${task.estimatedMinutes} 分钟` : '—' }}</span></span>
+                    </span>
                     <div class="task__ops">
                   <button type="button" v-if="task.id === currentTask?.id && canLearn" class="task__cta" @click="goLearn(task.id)">
                     {{ task.status === 'in_progress' ? '继续学习' : '开始学习' }}
@@ -237,32 +229,64 @@
                     class="task__edit"
                     :aria-expanded="editingTaskId === task.id"
                     @click="toggleTaskEditor(task.id)"
-                  >微调</button>
+                  >{{ editingTaskId === task.id ? '收起 ▴' : '微调' }}</button>
                   </div>
                   </div>
-                  </div>
-                  <!-- #64 P-39：手动结构编辑（插 / 延 / 缩 / 删）。顺序权威=subtasks.order，保存后静默刷新。 -->
+                  <!-- #64 P-39：手动结构编辑（时长步进 / 插 / 删）。顺序权威=subtasks.order，保存后静默刷新。
+                       2026-11-06 二次走查：面板从「卡片外的虚线框」收进任务卡内部
+                       （同一张高亮卡、底部一条细分割线），并把三类操作拆成上下两行——
+                       此前 6 个控件挤一排，红色「删除」与「插入」只隔 6px，手一抖就删错任务。 -->
                   <div v-if="editingTaskId === task.id" class="task-edit" role="group" aria-label="任务微调">
-                    <span class="task-edit__minutes">时长 {{ task.estimatedMinutes || 30 }} 分钟</span>
-                    <button type="button" class="task-edit__btn" :disabled="structuralEditBusy" @click="changeTaskMinutes(task, -10)">缩短 10 分钟</button>
-                    <button type="button" class="task-edit__btn" :disabled="structuralEditBusy" @click="changeTaskMinutes(task, 10)">延长 10 分钟</button>
-                    <span class="task-edit__insert">
+                    <!-- 第一行：时长步进器（左） + 删除（独立在右端，远离下面的插入键） -->
+                    <div class="task-edit__row task-edit__row--split">
+                      <span class="task-edit__field">
+                        <span class="task-edit__label">预计时长</span>
+                        <button
+                          type="button"
+                          class="task-edit__step"
+                          :disabled="structuralEditBusy"
+                          aria-label="缩短 10 分钟"
+                          @click="changeTaskMinutes(task, -10)"
+                        >−10 分</button>
+                        <strong class="task-edit__minutes">{{ task.estimatedMinutes || 30 }} 分钟</strong>
+                        <button
+                          type="button"
+                          class="task-edit__step"
+                          :disabled="structuralEditBusy"
+                          aria-label="延长 10 分钟"
+                          @click="changeTaskMinutes(task, 10)"
+                        >+10 分</button>
+                      </span>
+                      <button
+                        v-if="task.status === 'todo'"
+                        type="button"
+                        class="task-edit__danger"
+                        :disabled="structuralEditBusy"
+                        @click="deleteTask(task)"
+                      >
+                        <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M9 3h6l1 2h4v2H4V5h4l1-2zM6 8h12l-1 12a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 8zm3 3v8h2v-8H9zm4 0v8h2v-8h-2z"/></svg>
+                        删除此任务
+                      </button>
+                    </div>
+                    <!-- 第二行：插入新任务（输入框吃满整行，插入键内嵌右端） -->
+                    <div class="task-edit__insert">
+                      <span class="task-edit__plus" aria-hidden="true">+</span>
                       <input
                         v-model="insertTitle"
                         class="task-edit__input"
                         maxlength="120"
-                        placeholder="在这之后插入一个任务"
+                        placeholder="在此之后插入一个新任务…"
+                        aria-label="插入新任务的内容"
                         @keyup.enter="insertTaskAfter(stage, task)"
                       />
-                      <button type="button" class="task-edit__btn" :disabled="structuralEditBusy || !insertTitle.trim()" @click="insertTaskAfter(stage, task)">插入</button>
-                    </span>
-                    <button
-                      v-if="task.status === 'todo'"
-                      type="button"
-                      class="task-edit__btn task-edit__btn--danger"
-                      :disabled="structuralEditBusy"
-                      @click="deleteTask(task)"
-                    >删除</button>
+                      <button
+                        type="button"
+                        class="task-edit__submit"
+                        :disabled="structuralEditBusy || !insertTitle.trim()"
+                        @click="insertTaskAfter(stage, task)"
+                      >插入</button>
+                    </div>
+                  </div>
                   </div>
                   </template>
                 </div>
@@ -866,12 +890,6 @@ watch(() => reader.value.open, (open) => {
 });
 onBeforeUnmount(() => window.removeEventListener('keydown', onReaderKey));
 
-const materialRefLabels = (node: any): string[] => {
-  return materialRefsOf(node)
-    .map((ref: any) => String(ref?.sectionTitle || ref?.quote || '').trim())
-    .filter((label: string) => !!label)
-    .map((label: string) => (label.length > 20 ? `${label.slice(0, 20)}…` : label));
-};
 const openMaterial = ref<number | null>(null);
 const heroDescription = computed(() => String(path.value?.summary || path.value?.description || '').trim());
 const descExpanded = ref(false);
@@ -2009,7 +2027,19 @@ onBeforeUnmount(() => {
   margin-top: 2px;
 }
 /* 时长属性（左）：类型标签 + 时长，与右侧操作按钮同基线 */
-.task__meta { min-width: 0; font-size: 12px; color: var(--faint); }
+/* 属性行（左）：类型 · 时长 · 引用签同一行，窄屏自动折行 */
+.task__meta {
+  min-width: 0; font-size: 12px; color: var(--faint);
+  display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px 6px;
+}
+/* 行内引用签（2026-11-06 二次走查）：贴着属性行，不再独占一行；
+   前置一个「·」把它和「约 45 分钟」隔开，与原型写法一致 */
+.task__meta .material-ref--inline:first-of-type::before {
+  content: '·';
+  margin-right: 6px;
+  color: var(--faint);
+}
+.material-ref--inline { margin: 0; padding: 1px 7px; }
 .task__ops {
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
   margin-left: auto;
@@ -2024,27 +2054,73 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 .task__edit:hover, .task__edit[aria-expanded="true"] { color: var(--blue); }
+
+/* ---------- 任务微调抽屉（2026-11-06 二次走查重构） ----------
+   原先它是任务卡**外面**的一个虚线框（夹在任务 1 与任务 2 之间），既不归属任何任务、
+   又读作「未完成占位」；内部 6 个控件挤一排，红色「删除」与「插入」只隔 6px。
+   现在：收进任务卡内部（grid-column 1/-1 整宽）、底部一条细分割线表示「正在微调这一条」，
+   并拆成上下两行——第一行时长步进器 + 右端删除，第二行插入（独占整行，远离删除键）。
+   分割线用 color-mix(--ink 8%) 而不是写死的 rgba(255,255,255,.08)：后者在亮色主题下
+   是一条看不见的白线，暗色才对。 */
 .task-edit {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
-  margin: -2px 0 6px 45px; padding: 8px 10px;
-  border: 1px dashed var(--line); border-radius: var(--mk-radius-lg);
+  grid-column: 1 / -1;
+  display: grid; gap: 8px;
+  margin-top: 8px; padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
   font-size: 12px; color: var(--faint);
 }
-.task-edit__minutes { font-weight: 600; color: var(--ink); }
-/* 微调面板内的行内按钮/输入：同 §1 内嵌按钮档（高 32px / 圆角 8px） */
-.task-edit__btn {
-  font: inherit; font-size: 12px; height: 32px; padding: 0 10px;
+.task-edit__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.task-edit__row--split { justify-content: space-between; }
+.task-edit__field { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.task-edit__label { color: var(--faint); }
+/* 数值居中定宽：加减各按一次时数字不左右横跳 */
+.task-edit__minutes {
+  min-width: 54px; text-align: center;
+  font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums;
+}
+/* 步进键：比「缩短 10 分钟」这种 5 字按钮窄一半，宽度留给真正要读的东西 */
+.task-edit__step {
+  font: inherit; font-size: 12px; height: 32px; padding: 0 8px;
   display: inline-flex; align-items: center;
   border-radius: var(--mk-radius-md); border: 1px solid var(--line);
   background: var(--surface); color: var(--ink); cursor: pointer;
 }
-.task-edit__btn:disabled { opacity: .55; cursor: not-allowed; }
-.task-edit__btn--danger { color: var(--red); border-color: color-mix(in srgb, var(--red) 30%, var(--line)); }
-.task-edit__insert { display: inline-flex; gap: 6px; align-items: center; }
-.task-edit__input {
-  width: 200px; height: 32px; padding: 0 8px; border-radius: var(--mk-radius-md);
-  border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-size: 12px;
+.task-edit__step:hover:not(:disabled) { border-color: color-mix(in srgb, var(--blue) 35%, var(--line)); color: var(--blue-deep); }
+.task-edit__step:disabled { opacity: .55; cursor: not-allowed; }
+/* 删除是这条抽屉里唯一的破坏性动作：独立在右端，与下面的「插入」上下错开 */
+.task-edit__danger {
+  font: inherit; font-size: 12px; height: 32px; padding: 0 10px;
+  display: inline-flex; align-items: center; gap: 5px;
+  border-radius: var(--mk-radius-md);
+  border: 1px solid color-mix(in srgb, var(--red) 30%, var(--line));
+  background: transparent; color: var(--red-ink); cursor: pointer;
 }
+.task-edit__danger:hover:not(:disabled) { background: color-mix(in srgb, var(--red) 8%, transparent); }
+.task-edit__danger:disabled { opacity: .55; cursor: not-allowed; }
+/* 插入：组合输入框占满整行，插入键内嵌在右端（不额外吃一行） */
+.task-edit__insert {
+  display: flex; align-items: stretch; min-height: 32px;
+  border: 1px solid var(--line); border-radius: var(--mk-radius-md);
+  background: var(--surface); overflow: hidden;
+}
+.task-edit__insert:focus-within { border-color: var(--blue); box-shadow: var(--mk-focus-ring); }
+.task-edit__plus { display: inline-flex; align-items: center; padding-left: 9px; color: var(--faint); }
+.task-edit__input {
+  flex: 1 1 auto; min-width: 0;
+  padding: 0 8px; border: 0; background: none;
+  font: inherit; font-size: 12px; color: var(--ink);
+}
+.task-edit__input::placeholder { color: var(--faint); }
+.task-edit__input:focus { outline: none; }
+.task-edit__submit {
+  flex: none; padding: 0 14px;
+  border: 0; border-left: 1px solid var(--line);
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
+  font: inherit; font-size: 12px; font-weight: 700; color: var(--blue-deep);
+  cursor: pointer;
+}
+.task-edit__submit:hover:not(:disabled) { background: color-mix(in srgb, var(--blue) 16%, transparent); }
+.task-edit__submit:disabled { color: var(--faint); background: transparent; cursor: not-allowed; }
 .task--current { background: color-mix(in srgb, var(--blue) 6%, transparent); border-color: color-mix(in srgb, var(--blue) 20%, transparent); }
 /* 锁定态（2026-10-08 走查 #65）：原 `.task--locked { opacity: .62 }` 把整行连文字一起压暗，
    --faint 对卡面只剩 2.45:1（亮）/ 2.91:1（暗），任务名与「待解锁」读不清；
@@ -2103,8 +2179,8 @@ onBeforeUnmount(() => {
 .materials-sections li { font-size: 12px; color: var(--muted); }
 .materials-toggle { align-self: flex-start; background: none; border: none; padding: 0; font-size: 12px; color: var(--blue); cursor: pointer; }
 .materials-note { margin: 10px 0 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
-.task__material { display: block; margin-top: 4px; font-size: 12px; color: var(--muted); }
-.stage__material { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+/* .task__material / .stage__material 随「资料」独占行一并删除（2026-11-06 二次走查）：
+   引用签已并入 .task__meta，阶段头那行「本阶段依据资料」与任务行重复 */
 /* 资料引用＝胶囊微签（2026-11-06 走查 图1/2/3）：原生蓝字下划线像 90 年代网页，
    而且一行三颗同名链接时下划线把字连成一条。4px 控件圆角 + 蓝 10% 底 + 文档小图标，
    行内换行时每颗都是独立可点的胶囊。 */
@@ -2666,8 +2742,12 @@ onBeforeUnmount(() => {
      守住仓库 mobile:spec「可点元素任何一维 ≥36px」（lt36 预算 0）的硬线，
      375 实测口径下不再新增不足 36 的点击目标；字号维持 12px 不动。 */
   .task__cta, .task__edit, .task__done-label { height: 40px; padding: 0 14px; }
-  /* 微调面板（点开后才出现在 DOM 里）：行内按钮/输入同抬到 40px，避免触屏上出现 <36 的目标 */
-  .task-edit__btn, .task-edit__input { height: 40px; }
+  /* 微调抽屉（点开后才出现在 DOM 里）：步进键 / 删除 / 插入组合框同抬到 40px，
+     避免触屏上出现 <36 的目标（lt36 预算 0）；字号维持 12px 不动。 */
+  .task-edit__step,
+  .task-edit__danger,
+  .task-edit__insert { height: 40px; }
+  .task-edit__input { height: 38px; }
   .adjust-dialog-mask { padding: 14px; }
   .adjust-dialog { padding: 16px 18px; }
   /* 26×26 对拇指偏小（弹窗右上角唯一退出路径），抬到 36 */
