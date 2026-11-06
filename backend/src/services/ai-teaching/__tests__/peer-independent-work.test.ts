@@ -109,7 +109,7 @@ describe('伴学载荷：独立作业进行中【策略要求】降级为鼓励�
 });
 
 describe('伴学历史转发 collectPeerHistory（P2-11）', () => {
-  it('从 peer 标记消息恢复（与聊天路径 teaching-session-ops.ts:638-641 同口径）', () => {
+  it('从 peer 标记消息恢复（与聊天路径 processPeerMessage 的 peerHistory 同口径）', () => {
     const history = collectPeerHistory([
       { role: 'user', content: '学生问' },
       { role: 'user', content: '小启我懂了', peer: true },

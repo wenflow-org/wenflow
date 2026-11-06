@@ -24,7 +24,11 @@ export type SessionEventKind =
   | 'session.paused'
   | 'session.resumed'
   | 'session.completed'
-  | 'turn.started'
+  // 回合边界只记**终态**：`turn.committed`（成功）/ `turn.failed`（失败）。
+  // `turn.started` 自建表起就没有任何写入点（全仓无对应的 recordSessionEvent 调用），却留在类型里
+  // 让调用方以为能查询「正在跑的回合」——实际恒为空。补齐写入点意味着每回合多一次旁路写，且幂等
+  // 重试/租约抢占时还会重复写入；而回合起止可由相邻的 committed/failed 与 revision 配对推导。
+  // 因此 2026-11-06 直接删除该类型成员，而不是加一个没人消费的写入点。
   | 'turn.committed'
   | 'turn.failed'
   | 'checkpoint.submitted'

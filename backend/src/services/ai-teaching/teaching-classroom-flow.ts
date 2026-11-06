@@ -381,28 +381,14 @@ export function buildTeachingStateWithArtifacts(
   };
 }
 
-export async function withTimeout<T>(promise: Promise<T>, ms: number, errorMessage: string): Promise<T> {
-  let timer: NodeJS.Timeout | null = null;
-  // 超时取消钩子：调用方可传入 controller，超时 reject 的同时 abort 底层 LLM 调用，
-  // 避免"上层已超时、底层流仍在跑"的幽灵 CALLER_ABORTED 日志与 token 浪费。
-  const controller = new AbortController();
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        timer = setTimeout(() => {
-          controller.abort();
-          reject(new Error(errorMessage));
-        }, ms);
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
 /**
- * 同 withTimeout，但把超时取消信号暴露给调用方（传给 gateway.execute 的 abortSignal）。
+ * wall-clock 超时 + **协作式取消**：promise(signal) 拿到的 signal 在 ms 到点时先 abort、随后 reject。
+ *
+ * 为什么参数是一段函数而不是现成的 Promise：只有让调用方在**构造底层调用时**就拿到同一个 signal，
+ * 才能把它透传给 gateway.execute（executeSkill 的 abortSignal），超时才会真正停掉底层模型调用。
+ * 若像旧版 withTimeout 那样自己 new 一个 controller 却没人消费，超时只是「上层不再等」——
+ * 底层还在跑，调用方却已释放操作租约，后续请求会与新回合并发烧同一份预算（175-3）。
+ * 因此调用方必须把 signal 交给底层；本函数自身不做任何「取消」，只负责发出信号。
  */
 export async function withTimeoutSignal<T>(
   promise: (signal: AbortSignal) => Promise<T>,
