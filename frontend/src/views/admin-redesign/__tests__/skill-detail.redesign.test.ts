@@ -413,7 +413,7 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     w.unmount()
   })
 
-  it('协议页签：输入/输出契约 vrow（真实字段拆分）+ 回合状态机/终止条件空态 + System Prompt 代码卡', async () => {
+  it('协议页签：查看态 = 输入/输出契约 · 流程 · 生效 Prompt（编辑态另起一张卡）', async () => {
     const w = mountDetail()
     await settle()
     // 运行时已置首：协议页签需显式切入（第 2 个）
@@ -421,40 +421,56 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     await nextTick()
 
     // 平铺后 .skd-pane 内有多个 .skd-bloc（运行时默认块 + 协议块，各 v-show）；
-    // 协议块是模板里的第一个（index 0）。只读概览断言全部限定在协议块内。
+    // 协议块是模板里的第一个（index 0）。断言全部限定在协议块内。
     const bloc = w.findAll('.skd-bloc')[0]
+    /* 2026-11-06 整合：宿主原来在页签上方另画一组只读卡（输入契约 / 输出契约 / 回合状态机 /
+       终止条件 / System Prompt），与下面的编辑器是两层。现在合成一张卡两态——查看态四块：
+       输入契约 · 输出契约 · 流程 · System Prompt。 */
     const cards = bloc.findAll('.mk-card__title').map((t) => t.text())
-    expect(cards).toEqual(['输入契约', '输出契约', '回合状态机', '终止条件', 'System Prompt'])
+    expect(cards).toEqual(['输入契约', '输出契约', '流程', 'System Prompt'])
 
-    // 输入契约 = core YAML 的 inputs 声明（2026-10-31 四轮评审 P0-2 重做）：
-    // 字段路由 fields 全部是产出字段，隐式推断/控制信号也是出参——不能再按「非产出角色」反选成入参
-    const inCard = bloc.findAll('.skd-grid > .mk-card')[0]
-    const inRows = inCard.findAll('.skd-vrow')
+    // 输入契约 = core YAML 的 inputs 声明（ref 前缀标来源：sandbox: → 编排注入 / user: → 用户 / 平台）
+    const inCard = bloc.findAll('.mk-card')[0]
+    const inRows = inCard.findAll('.sdp-crow')
     expect(inRows.length).toBe(2)
     expect(inRows[0].text()).toContain('learner')
     expect(inRows[0].text()).toContain('编排注入')
     expect(inRows[1].text()).toContain('用户 / 平台')
 
-    // 输出契约 = 字段路由全量产出（含隐式推断出参），角色徽标走 promptRoleMeta 单源人话
-    const outCard = bloc.findAll('.skd-grid > .mk-card')[1]
-    const outRows = outCard.findAll('.skd-vrow')
-    expect(outRows.length).toBe(4)
-    expect(outCard.text()).toContain('public_reply')
-    expect(outCard.text()).toContain('公开回复')
-    expect(outCard.text()).toContain('analysis.confusion')
-    expect(outCard.text()).toContain('隐式推断')
+    /* 输出契约 2026-11-06 二稿：不再逐行重复字段路由那张表（同一批行、同样的说明）——
+       只给「角色 + 各几个 + 字段名」，逐字段的说明 / 流向 / 渲染 / 内部标记归字段路由页签。 */
+    const outCard = bloc.findAll('.mk-card')[1]
+    expect(outCard.findAll('.sdp-crow').length).toBe(0)
+    const roles = outCard.findAll('.sdp-rolecount .mk-badge').map((b) => b.text())
+    expect(roles).toEqual(['必填入参 1', '公开回复 1', '方案产出 1', '隐式推断 1'])
+    // 字段名清单保留（读者要知道它产出哪些字段），但不再带说明列
+    const names = outCard.find('.sdp-outnames').text()
+    expect(names).toContain('public_reply')
+    expect(names).toContain('analysis.confusion')
+    expect(names).not.toContain('隐式推断出参')
+    // 输入契约不混入产出字段（真实输入只在 core inputs 里）
     expect(inCard.text()).not.toContain('analysis.confusion')
 
+    // 流程：core 与运行时清单都没声明阶段/终止 → 一行空态（此前是两张整宽卡各写一句空话，
+    // 还各自指路到「工程」页签的运行时契约）
+    const flowCard = bloc.findAll('.mk-card')[2]
+    expect(flowCard.find('.mk-card__title').text()).toBe('流程')
+    expect(flowCard.find('.sdp-flowrow').exists()).toBe(false)
+    expect(flowCard.text()).toContain('core YAML 与运行时清单都没有声明阶段或终止条件。')
+
     // System Prompt：生效内容代码卡 + 截断说明不误报
-    expect(bloc.find('.skd-code').text()).toContain('SYSTEM PROMPT BODY')
+    expect(bloc.find('.sdp-pw__pre').text()).toContain('SYSTEM PROMPT BODY')
     expect(bloc.text()).not.toContain('已截断')
-    // 回合状态机 / 终止条件：core YAML 无 stateMachine/states/termination/limits → 明确空态（不硬造）。
-    // 2026-11-02 评审：空态必须说清读的是哪份文件——运行时阶段集合写在 Prompt 清单的运行时契约里
-    // （工程页签），两处同屏读作结论相反。
-    expect(bloc.text()).toContain('回合状态机')
-    expect(bloc.text()).toContain('core YAML 未声明回合状态机')
-    expect(bloc.text()).toContain('终止条件')
-    expect(bloc.text()).toContain('core YAML 未声明终止条件')
+    // 查看态不含编辑态的东西（保存并编译 / 发布 / 源码视图）
+    expect(bloc.text()).not.toContain('保存并编译')
+    expect(bloc.text()).not.toContain('编译预览')
+
+    // 切到编辑态：核心文件表单与发布动作才出现
+    const editBtn = bloc.findAll('.mk-seg__item').find((b) => b.text() === '编辑')!
+    await editBtn.trigger('click')
+    await nextTick()
+    expect(bloc.text()).toContain('核心文件')
+    expect(bloc.text()).toContain('保存并编译')
 
     w.unmount()
   })
@@ -560,9 +576,12 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     await w.findAll('.mk-subtab')[3].trigger('click') // 版本（第 4 个）
     await nextTick()
 
-    expect(w.find('.sdp-versions').exists()).toBe(true)
-    // 2026-10-30 外部评审：顶部与页签内各画一遍 Prompt 版本，删掉顶部那份
-    expect(w.find('.skd-bloc .mk-card__title').text()).not.toBe('Prompt 版本')
+    // 2026-11-06 整合：三段（变体 / 核心文件 / Prompt）同处一张卡，卡头分段切换
+    const versionsBloc = w.findAll('.skd-bloc').find((b) => b.find('.mk-seg').exists())
+    expect(versionsBloc, '版本页签应已渲染').toBeTruthy()
+    expect(versionsBloc!.findAll('.mk-seg__item').map((b) => b.text())).toEqual(['变体', '核心文件', 'Prompt'])
+    // 只有一个版本入口：卡内不出现第二个「Prompt 版本」标题
+    expect(versionsBloc!.findAll('.mk-card__title').length).toBe(0)
 
     w.unmount()
   })
@@ -596,8 +615,8 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     expect(w.findAll('button').some((b) => b.text() === '配置')).toBe(true)
     // 2026-10-24 用户「生效值没意义，拿掉」：只读摘要删掉，换成「谁压谁」的说明
     expect(w.text()).not.toContain('只读 · 当前实际生效')
-    // 2026-11-04「基线 + 差异」：第一行是基线模型（悬停仍是「谁压谁」那套说明）
-    expect(w.find('.sdp-base__model').attributes('title') ?? '').toContain('本 Skill 指定')
+    // 2026-11-06 两行摘要：模型 id 的悬停仍是「谁压谁」那套说明
+    expect(w.find('.sdp-model').attributes('title') ?? '').toContain('本 Skill 指定')
     // 2026-11-04：模型测试块已从本页撑出去——连通性测试在「模型与接入」页每个模型上都有
     expect(w.text()).not.toContain('开始探测')
     expect(w.find('#sdp-panel-test').exists()).toBe(false)
@@ -621,7 +640,10 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     await w.findAll('.mk-subtab')[4].trigger('click') // 工程（第 5 个）
     await nextTick()
 
-    expect(w.text()).toContain('工程信息')
+    /* 2026-11-06 整合：宿主的「工程信息」kv 卡与页签内的「基础信息」是同一批事实的两套呈现，
+       已合成一套（.mk-facts--rows），只剩页签内这份。 */
+    expect(w.text()).toContain('基础信息')
+    expect(w.text()).not.toContain('工程信息')
     expect(w.text()).toContain('skill-a')
     expect(w.text()).toContain('教学 Agent')
     expect(w.text()).toContain('prompts/skill.teaching.md')
@@ -643,9 +665,11 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     await w.findAll('.mk-subtab')[5].trigger('click') // 字段路由（第 6 个）
     await nextTick()
 
-    // 2026-10-31 外部评审拍板：页签内加「流向视图 / 契约编辑」切换器，默认流向
-    expect(w.find('.skd-rswitch').exists()).toBe(true)
-    expect(w.text()).toContain('流向视图')
+    // 2026-10-31 外部评审拍板：页签内加「流向视图 / 契约编辑」切换器，默认流向。
+    // 2026-11-06：分段控件改用共享 .mk-seg（原 .skd-rswitch 是本页第三套分段方言）
+    const vSwitch = w.findAll('.mk-seg').find((s) => s.text().includes('流向视图'))
+    expect(vSwitch, '字段路由页签应有流向/契约分段').toBeTruthy()
+    expect(vSwitch!.findAll('.mk-seg__item').map((b) => b.text())).toEqual(['流向视图', '契约编辑'])
     expect(w.text()).toContain('契约编辑')
 
     // 默认流向视图：只读概览表（角色人话/流向/渲染/属性）
@@ -660,7 +684,7 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     // 设计区块默认不挂载（切到契约编辑才拉数据）
     expect(w.find('.sdp-routing').exists()).toBe(false)
 
-    await w.find('.skd-rswitch__btn:nth-child(2)').trigger('click')
+    await vSwitch!.findAll('.mk-seg__item')[1].trigger('click')
     await nextTick()
     expect(w.find('.sdp-routing').exists()).toBe(true)
 

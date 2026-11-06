@@ -28,15 +28,9 @@
           class="sdp-head__switch"
           @update:model-value="onOverrideToggle"
         />
-        <!-- 2026-10-28 用户「skill 详情的模型也改一下」：卡面只留当前配置摘要，
-             模型 / 生成参数 / 请求容错收进「配置」弹层，一次保存。 -->
-        <button
-          type="button"
-          class="mk-btn mk-btn--sm"
-          :disabled="!rtForm.enabled"
-          :title="rtForm.enabled ? '编辑模型与路由' : '先开启覆盖平台默认'"
-          @click="openConfig"
-        >配置</button>
+        <!-- 「配置」从卡头挪到模型行右侧（2026-11-06 用户「按照系统设置的展开页面进行新的设计」）：
+             系统设置里每个模型行的动作都在行右缘（配置 · 测试 · ⋯），这里只有一行一个模型，
+             动作跟着行走，卡头只留覆盖开关。 -->
       </div>
       <!-- 卡头只保留标题/开关/保存；旧「Prompt 里声明了 model 时，本页模型不参与」已删：
            与运行时契约相反（route 优先于 prompt.model）。 -->
@@ -56,34 +50,37 @@
              再只列**这个 Skill 改过的**项，每一项后面标注它在没改时会取什么。
              此前是五项读数平铺，读者看不出哪几项是本 Skill 的决定、哪几项只是继承；
              模型那一行还写着「未单独指定，跟随平台默认」，与卡头「覆盖平台默认 已开启」读作打架。 -->
+        <!-- 卡面只两行（2026-11-06 用户「没有什么基线之类的，只有切换模型，参数等等」）：
+             模型一行（id + 能力陈述），参数一行（当前生效值连排）。
+             此前两版的「基线 / 本 Skill 独立调整」是把机制讲给读者听，读者要的只是
+             「这个 Skill 现在用哪个模型、参数是什么」；改值仍走卡头「配置」弹层。 -->
         <div class="sdp-live">
-          <div class="sdp-base">
-            <span class="sdp-base__k">基线</span>
-            <span class="mono sdp-base__model" :title="`${baseModel}
+          <!-- 模型行：与「系统设置 → 模型与接入」的模型行同一套语言——
+               mono id + 能力小胶囊 + 行右缘的文字动作。 -->
+          <div class="sdp-modelrow">
+            <span class="mono sdp-model" :title="`${baseModel}
 
 ${orderTitle}`">{{ baseModel }}</span>
-            <!-- 能力做成**陈述句**（2026-11-02 评审：原来只写 思考 / 推理强度 两个裸词，
-                 被读成「只有标签、值还没填」）。 -->
-            <span v-for="cap in summaryCaps" :key="cap" class="sdp-chip">{{ cap }}</span>
-            <span v-if="summaryMeta" class="sdp-base__meta">{{ summaryMeta }}</span>
-            <span class="sdp-base__src">{{ baseModelSource }}</span>
+            <span class="sdp-caps">
+              <span v-for="tag in capTags" :key="tag" class="mk-badge mk-badge--muted sdp-cap">{{ tag }}</span>
+              <span v-if="summaryMeta" class="sdp-meta">{{ summaryMeta }}</span>
+            </span>
+            <span class="sdp-modelrow__acts">
+              <button
+                type="button"
+                class="mk-link"
+                :disabled="!rtForm.enabled"
+                :title="rtForm.enabled ? '改这个 Skill 的模型、生成参数与请求容错' : '先开启覆盖平台默认'"
+                @click="openConfig"
+              >配置</button>
+            </span>
           </div>
 
-          <template v-if="rtForm.enabled">
-            <div class="sdp-diff">
-              <p class="sdp-diff__k">本 Skill 独立调整</p>
-              <ul class="sdp-diff__list">
-                <li v-for="row in changedRows" :key="row.label">
-                  <span class="sdp-diff__label">{{ row.label }}</span>
-                  <strong class="sdp-diff__val">{{ row.value }}</strong>
-                  <em class="sdp-diff__base" :title="row.baseTitle">{{ row.base }}</em>
-                </li>
-              </ul>
-              <p v-if="!changedRows.length" class="sdp-diff__none">没有单独调整的项，全部沿用基线</p>
-            </div>
-          </template>
+          <!-- 参数行：系统设置里模型行的第二行读数（测试结果）同一位置、同一档灰字 -->
+          <p v-if="rtForm.enabled" class="sdp-params">{{ paramSummary.join(' · ') }}</p>
+          <!-- 覆盖关闭时这套设置不参与：只说清「现在按谁」，不列表单里那份用不上的值 -->
           <p v-else class="sdp-live__note">
-            覆盖已关闭：模型与超时按基线，生成参数仍按 Prompt 文件声明取值。
+            覆盖已关闭：模型与超时用平台默认，生成参数仍按 Prompt 文件声明取值。
           </p>
         </div>
 
@@ -103,23 +100,25 @@ ${orderTitle}`">{{ baseModel }}</span>
           </header>
             <div class="sdp-form__grid">
               <label class="sdp-field sdp-field--wide">
-                <!-- 不再写「模型」字段标签：分节名与面板标题都是「模型」，第三遍纯复读 -->
+                <!-- 不再写「模型」字段标签：分节名与面板标题都是「模型」，第三遍纯复读。
+                     选择器只列真实模型、不再出「用平台默认模型」那一项（2026-11-06 用户
+                     「什么覆盖默认什么的，没意义」）：显示的就是它在跑的模型；
+                     本 Skill 没单独指定时显示生效的默认模型，改选即钉住，
+                     想回到不单独指定用「恢复默认」。 -->
                 <MkModelPicker
                   aria-label="模型"
-                  :model-value="rtForm.model"
+                  :model-value="rtForm.model || effectiveModelId"
                   :options="pickerOptions"
-                  allow-inherit
-                  inherit-label="用平台默认模型"
                   :disabled="!rtForm.enabled"
                   @update:model-value="rtForm.model = $event"
                 />
-                <!-- 选中项的能力与价格就地核对（Azure Foundry 的部署行形态）：不必再回接入页查 -->
-                <span v-if="!inheritingModel && primaryMetaText" class="sdp-model-meta">{{ primaryMetaText }}</span>
-                <!-- 用平台默认时，把「实际在跑哪个模型」写出来：否则这一屏只有「平台默认」一个词，
-                     运营无法确认线上究竟是 deepseek 还是别的。
-                     2026-11-02 评审：本弹层里没有「覆盖」开关，句子原先带「覆盖已开启 / 已关闭」，
-                     读者在这个上下文里既看不到也改不了那个状态——只陈述这一项的事实。 -->
-                <span v-else-if="inheritedModelText" class="sdp-model-meta">{{ inheritedModelText }}</span>
+                <!-- 能力胶囊（2026-11-06 用户「不要这么设计，什么覆盖默认什么的，没意义」）：
+                     不再写「模型未单独指定，当前使用平台默认：…」那类机制说明——选中项就是它在跑的
+                     模型，能力与单价就地核对即可。 -->
+                <span v-if="capTags.length" class="sdp-cap-row">
+                  <span v-for="tag in capTags" :key="tag" class="mk-badge mk-badge--muted">{{ tag }}</span>
+                  <span v-if="summaryMeta" class="sdp-cap-row__meta">{{ summaryMeta }}</span>
+                </span>
               </label>
             </div>
           </section>
@@ -127,12 +126,9 @@ ${orderTitle}`">{{ baseModel }}</span>
             <section id="sdp-panel-params" class="sdp-panel">
               <header class="sdp-panel__head">
                 <h4>生成参数</h4>
-                <!-- 段头只留这一屏拿不到的第二份信息：T 的取值与来源。
-                     「思考模式」不再出现在段头——下面第一行就是它的下拉与当前值，
-                     段头再复读一遍等于同一件事写两遍（2026-11-06 走查）。
-                     每行的取值另在各行右侧给（2026-11-02 评审：原先四行都写「按 Prompt 声明」，
-                     唯一的数字只在这里，每行看不到自己的取值）。 -->
-                <span class="sdp-panel__state">T={{ generationParams?.temperature ?? INHERIT_PROMPT_LABEL }}<template v-if="generationParams?.temperature != null">（{{ sourceLabel('temperature') }}）</template></span>
+                <!-- 段头只留 T 的取值：来源（Prompt 文件 / 平台默认）属于机制，不摊在界面上
+                     （2026-11-06 用户「什么覆盖默认什么的，没意义」）。 -->
+                <span class="sdp-panel__state">T={{ generationParams?.temperature ?? '—' }}</span>
               </header>
               <div class="sdp-form__grid">
                 <label class="sdp-field">
@@ -160,65 +156,49 @@ ${orderTitle}`">{{ baseModel }}</span>
                    裁剪是静默的，所以必须在配置处说明「写了也不会发」。模型不在目录时不猜、不提示。 -->
               <p v-if="rtForm.enabled && thinkingNotice" class="sdp-cap-note" role="status">{{ thinkingNotice }}</p>
 
-              <div class="sdp-subhead">
-                <span>参数覆盖</span>
-                <em>未覆盖的字段沿用 Prompt 默认</em>
-              </div>
               <div class="sdp-params">
                 <div class="sdp-param">
                   <span class="sdp-param__label">temperature<span class="sdp-param__range">0–2</span></span>
                   <div class="sdp-param__ctl">
-                    <MkSelect
-                      v-model="paramT.mode"
-                      :options="PARAM_MODE_OPTIONS"
-                      aria-label="temperature 参数生效方式"
-                      block
-                      :disabled="!rtForm.enabled"
+                    <input
+                      v-model.number="temperatureInput"
+                      type="number" min="0" max="2" step="0.1"
+                      class="mk-input mono" :disabled="!rtForm.enabled"
+                      placeholder="未设置" aria-label="temperature"
                     />
-                    <input v-if="paramT.mode === 'override'" v-model.number="paramT.value" type="number" min="0" max="2" step="0.1" class="mk-input mono" :disabled="!rtForm.enabled" aria-label="temperature 覆盖值" />
-                    <span v-else class="mono sdp-param__val" :title="paramValTitle('temperature')">{{ paramValText('temperature') }}</span>
                   </div>
                 </div>
                 <div class="sdp-param">
                   <span class="sdp-param__label">topP<span class="sdp-param__range">0–1</span></span>
                   <div class="sdp-param__ctl">
-                    <MkSelect
-                      v-model="paramTopP.mode"
-                      :options="PARAM_MODE_OPTIONS"
-                      aria-label="topP 参数生效方式"
-                      block
-                      :disabled="!rtForm.enabled"
+                    <input
+                      v-model.number="topPInput"
+                      type="number" min="0.01" max="1" step="0.05"
+                      class="mk-input mono" :disabled="!rtForm.enabled"
+                      placeholder="未设置" aria-label="topP"
                     />
-                    <input v-if="paramTopP.mode === 'override'" v-model.number="paramTopP.value" type="number" min="0.01" max="1" step="0.05" class="mk-input mono" :disabled="!rtForm.enabled" aria-label="topP 覆盖值" />
-                    <span v-else class="mono sdp-param__val" :title="paramValTitle('topP')">{{ paramValText('topP') }}</span>
                   </div>
                 </div>
                 <div class="sdp-param">
                   <span class="sdp-param__label">maxTokens<span class="sdp-param__range">256–131072</span></span>
                   <div class="sdp-param__ctl">
-                    <MkSelect
-                      v-model="paramMax.mode"
-                      :options="PARAM_MODE_OPTIONS"
-                      aria-label="maxTokens 参数生效方式"
-                      block
-                      :disabled="!rtForm.enabled"
+                    <input
+                      v-model.number="maxTokensInput"
+                      type="number" min="256" max="131072" step="1000"
+                      class="mk-input mono" :disabled="!rtForm.enabled"
+                      placeholder="未设置" aria-label="maxTokens"
                     />
-                    <input v-if="paramMax.mode === 'override'" v-model.number="paramMax.value" type="number" min="256" max="131072" step="1000" class="mk-input mono" :disabled="!rtForm.enabled" aria-label="maxTokens 覆盖值" />
-                    <span v-else class="mono sdp-param__val" :title="paramValTitle('maxTokens')">{{ paramValText('maxTokens') }}</span>
                   </div>
                 </div>
                 <div class="sdp-param">
                   <span class="sdp-param__label">maxAttempts<span class="sdp-param__range">1–5</span></span>
                   <div class="sdp-param__ctl">
-                    <MkSelect
-                      v-model="paramAttempts.mode"
-                      :options="PARAM_MODE_OPTIONS"
-                      aria-label="maxAttempts 参数生效方式"
-                      block
-                      :disabled="!rtForm.enabled"
+                    <input
+                      v-model.number="maxAttemptsInput"
+                      type="number" min="1" max="5" step="1"
+                      class="mk-input mono" :disabled="!rtForm.enabled"
+                      placeholder="未设置" aria-label="maxAttempts"
                     />
-                    <input v-if="paramAttempts.mode === 'override'" v-model.number="paramAttempts.value" type="number" min="1" max="5" step="1" class="mk-input mono" :disabled="!rtForm.enabled" aria-label="maxAttempts 覆盖值" />
-                    <span v-else class="mono sdp-param__val" :title="paramValTitle('maxAttempts')">{{ paramValText('maxAttempts') }}</span>
                   </div>
                 </div>
               </div>
@@ -227,37 +207,27 @@ ${orderTitle}`">{{ baseModel }}</span>
             <section id="sdp-panel-request" class="sdp-panel">
               <header class="sdp-panel__head">
                 <h4>请求与容错</h4>
-                <span class="sdp-panel__state">超时 {{ rtForm.requestTimeoutMs ? Math.round(rtForm.requestTimeoutMs / 1000) + 's' : '平台默认' }} · 重试 {{ effectiveLogicalRetries }} 次</span>
               </header>
               <div class="sdp-form__grid">
                 <label class="sdp-field">
-                  <!-- 2026-11-02 评审：原来是一枚带上下微调箭头的数字框，框内显示文字「平台默认」
-                       （占位符），读者把它当成当前取值，打开时它还顶着自动聚焦的焦点环。
-                       改成与紧邻的「逻辑重试」同形：先选用不用平台默认，再在自定义档里填毫秒数。 -->
+                  <!-- 只填毫秒数，留空就是平台的；不再先选「用平台默认 / 自定义」再填 -->
                   <span>请求超时（ms）</span>
-                  <div class="sdp-param__ctl">
-                    <MkSelect
-                      v-model="timeoutMode"
-                      :options="TIMEOUT_MODE_OPTIONS"
-                      aria-label="请求超时"
-                      block
-                      :disabled="!rtForm.enabled"
-                    />
-                    <input v-if="timeoutMode === 'custom'" v-model.number="rtForm.requestTimeoutMs" type="number" min="10000" max="300000" step="10000" class="mk-input mono" :disabled="!rtForm.enabled" placeholder="例如 60000" aria-label="请求超时毫秒数" />
-                  </div>
+                  <input
+                    v-model.number="timeoutInput"
+                    type="number" min="10000" max="300000" step="10000"
+                    class="mk-input mono" :disabled="!rtForm.enabled"
+                    placeholder="未设置" aria-label="请求超时毫秒数"
+                  />
                 </label>
-                <div class="sdp-field">
-                  <span>逻辑重试<em>平台默认 {{ platformLogicalRetries }} 次，可单独设置</em></span>
-                  <div class="sdp-param__ctl">
-                    <MkSelect
-                      v-model="logicalRetryMode"
-                      :options="logicalRetryOptions"
-                      aria-label="逻辑重试"
-                      block
-                    />
-                    <input v-if="logicalRetryMode === 'custom'" v-model.number="customLogicalRetries" type="number" :min="1" :max="platformLogicalRetries" step="1" class="mk-input mono" aria-label="最大逻辑重试次数" />
-                  </div>
-                </div>
+                <label class="sdp-field">
+                  <span>逻辑重试（次）</span>
+                  <input
+                    v-model.number="retriesInput"
+                    type="number" min="0" :max="platformLogicalRetries" step="1"
+                    class="mk-input mono" :disabled="!rtForm.enabled"
+                    :aria-label="`逻辑重试次数，平台默认 ${platformLogicalRetries} 次`"
+                  />
+                </label>
               </div>
             </section>
                 </div>
@@ -295,7 +265,7 @@ import { adminPlatformSettingsApi, adminSkillsApi } from '@/api/adminApi'
 import { askConfirm } from '../useConfirm'
 import { useEscape } from '../useEscape'
 import { useOverlay, useMaskClose } from '../useOverlay'
-import { errText, callParamSourceLabel, thinkingCapabilityNotice, type ThinkingCapability } from './sdp-shared'
+import { errText, thinkingCapabilityNotice, type ThinkingCapability } from './sdp-shared'
 import { COMMON_REASONING_EFFORTS, effortOptions, normalizeEfforts } from '../reasoningEfforts'
 import { useModelCatalog } from '@/composables/useModelCatalog'
 import MkModelPicker from '@/components/mk/MkModelPicker.vue'
@@ -311,8 +281,7 @@ loadModelCatalog()
    2026-10-26 用户「不太想走继承这个说法」：这些下拉的「不填」各自指向不同来源，直说来源即可——
    · 思考模式/强度：不填 = 按模型自身默认（模型支持就按它的默认走）
    · 参数覆盖：不填 = 按 Prompt 文件声明取值（Prompt 优先于平台默认，是另一层） */
-const INHERIT_DEFAULT_LABEL = '按模型默认'
-const INHERIT_PROMPT_LABEL = '按 Prompt 声明'
+const INHERIT_DEFAULT_LABEL = '由模型决定'
 
 /* MkSelect 选项：值与原 <option> 的 value 一致，文案逐字保留 */
 const THINKING_MODE_OPTIONS = [
@@ -329,11 +298,6 @@ const reasoningEffortOptions = computed(() => {
     : [...COMMON_REASONING_EFFORTS]
   return effortOptions(levels, INHERIT_DEFAULT_LABEL)
 })
-const PARAM_MODE_OPTIONS = [
-  { value: 'inherit', label: INHERIT_PROMPT_LABEL },
-  { value: 'override', label: '覆盖' }
-] as const
-
 const props = defineProps<{ skillId: string; refreshTick: number }>()
 /* #118：运行时配置的未保存改动上报宿主（此前只有协议编辑器有脏态，切 Skill/离开页面会静默丢弃） */
 const emit = defineEmits<{ (e: 'dirty', p: { dirty: boolean; label: string }): void }>()
@@ -361,23 +325,9 @@ const dirtyNow = ref(false)
 const platformLogicalRetries = ref(1)
 const logicalRetryMode = ref<'inherit' | 'disabled' | 'custom'>('inherit')
 const customLogicalRetries = ref(1)
-/** 「自定义」在原 <option> 上按平台上限禁用；MkSelect 无逐项禁用，改为上限为 0 时不出该项
- *  （已选 custom 时仍保留，避免回显空白）。 */
-const logicalRetryOptions = computed<Array<{ value: 'inherit' | 'disabled' | 'custom'; label: string }>>(() => [
-  { value: 'inherit', label: '用平台默认' },
-  { value: 'disabled', label: '禁用' },
-  ...(platformLogicalRetries.value > 0 || logicalRetryMode.value === 'custom'
-    ? [{ value: 'custom' as const, label: '自定义' }]
-    : [])
-])
-/** 请求超时两态（与紧邻的逻辑重试同形）：沿用平台默认，或本 Skill 单独指定毫秒数。
- *  2026-11-02 评审：原先是数字框靠占位符写「平台默认」，框里显出文字又被当成当前取值。
- *  独立的状态位（不从值反推）：选了「自定义」还没填数时，下拉不能被值反推回去。 */
+/** 超时的两态仍在内部保留：值框留空 = inherit，填了数 = custom。
+ *  界面不再让用户先选这个状态（2026-11-06 用户「什么覆盖默认什么的，没意义」）。 */
 type TimeoutMode = 'inherit' | 'custom'
-const TIMEOUT_MODE_OPTIONS = [
-  { value: 'inherit', label: '用平台默认' },
-  { value: 'custom', label: '自定义' }
-]
 const timeoutMode = ref<TimeoutMode>('inherit')
 const generationParams = ref<{ model?: string | null; temperature?: number | null; topP?: number | null; maxTokens?: number | null; sources?: Record<string, string>; owner?: string } | null>(null)
 
@@ -388,6 +338,68 @@ const paramT = ref<ParamField>({ mode: 'inherit', value: null })
 const paramTopP = ref<ParamField>({ mode: 'inherit', value: null })
 const paramMax = ref<ParamField>({ mode: 'inherit', value: null })
 const paramAttempts = ref<ParamField>({ mode: 'inherit', value: null })
+
+/* ---------- 「只填值」的绑定层（2026-11-06 用户「不要这么设计，什么覆盖默认什么的，没意义」） ----------
+   弹层里每一行只有一个输入框：显示的是**当前生效值**（本 Skill 覆盖过就用覆盖值，否则用 Prompt
+   声明值），留空即不设。用户不再先选「按 Prompt 声明 / 覆盖」再填数。
+   底下仍是原来那套 mode + value：值没动过 → 仍是 inherit（保存不发这个键，Prompt 改了会跟着变）；
+   填了数 → override。 */
+type ParamFieldKey = 'temperature' | 'topP' | 'maxTokens' | 'maxAttempts'
+const paramFieldRefs: Record<ParamFieldKey, typeof paramT> = {
+  temperature: paramT,
+  topP: paramTopP,
+  maxTokens: paramMax,
+  maxAttempts: paramAttempts
+}
+/** 各字段的 Prompt 声明值（生效链里本 Skill 不覆盖时取的那个） */
+const promptParamValues = computed<Record<ParamFieldKey, number | null>>(() => ({
+  temperature: generationParams.value?.temperature ?? null,
+  topP: generationParams.value?.topP ?? null,
+  maxTokens: generationParams.value?.maxTokens ?? null,
+  // 该字段不随配置接口返回（见 paramValText 的说明），留空由后端按自身默认
+  maxAttempts: null
+}))
+function readParamInput(k: ParamFieldKey): number | null {
+  const f = paramFieldRefs[k].value
+  if (f.mode === 'override' && f.value != null) return Number(f.value)
+  const pe = promptParamValues.value[k]
+  return pe == null ? null : Number(pe)
+}
+function writeParamInput(k: ParamFieldKey, raw: unknown): void {
+  const n = raw === '' || raw == null || !Number.isFinite(Number(raw)) ? null : Number(raw)
+  paramFieldRefs[k].value = n == null ? { mode: 'inherit', value: null } : { mode: 'override', value: n }
+}
+const temperatureInput = computed({ get: () => readParamInput('temperature'), set: (v) => writeParamInput('temperature', v) })
+const topPInput = computed({ get: () => readParamInput('topP'), set: (v) => writeParamInput('topP', v) })
+const maxTokensInput = computed({ get: () => readParamInput('maxTokens'), set: (v) => writeParamInput('maxTokens', v) })
+const maxAttemptsInput = computed({ get: () => readParamInput('maxAttempts'), set: (v) => writeParamInput('maxAttempts', v) })
+
+/** 超时：只填毫秒数，留空＝按平台默认（原先是「用平台默认 / 自定义」两档下拉） */
+const timeoutInput = computed<number | null>({
+  get: () => rtForm.value.requestTimeoutMs ?? null,
+  set: (v) => {
+    const n = v == null || !Number.isFinite(Number(v)) ? null : Number(v)
+    rtForm.value.requestTimeoutMs = n
+    timeoutMode.value = n == null ? 'inherit' : 'custom'
+  }
+})
+/** 逻辑重试：填 0 = 关掉重试；等于平台默认值即不单独设置（保存不发这个键） */
+const retriesInput = computed<number | null>({
+  get: () => effectiveLogicalRetries.value,
+  set: (v) => {
+    const n = v == null || !Number.isFinite(Number(v)) ? null : Number(v)
+    if (n == null || n === platformLogicalRetries.value) {
+      logicalRetryMode.value = 'inherit'
+      return
+    }
+    if (n <= 0) {
+      logicalRetryMode.value = 'disabled'
+      return
+    }
+    logicalRetryMode.value = 'custom'
+    customLogicalRetries.value = n
+  }
+})
 // 加载时该 skill 是否已有覆盖（决定保存时是发对象、发 null 清空、还是不发）
 const hadParamOverrides = ref(false)
 
@@ -397,7 +409,6 @@ const effectiveLogicalRetries = computed(() =>
 const thinkingLabel = computed(() =>
   rtForm.value.thinkingMode === 'enabled' ? '开启' : rtForm.value.thinkingMode === 'disabled' ? '关闭' : '按模型默认'
 )
-const sourceLabel = (k: string) => callParamSourceLabel(generationParams.value?.sources?.[k])
 /** 继承档的生效取值：只读展示合并链（Prompt 文件声明 → 代码默认 → 平台默认）算出来的数。
  *  2026-11-02 评审：四行都写「按 Prompt 声明」，每行看不到自己到底取了多少。
  *  maxAttempts 不在配置接口的生效值投影里（后端只投 temperature/topP/maxTokens），显 — 不猜。 */
@@ -406,11 +417,6 @@ function paramValText(k: EffectiveParamKey): string {
   if (k === 'maxAttempts') return '—'
   const v = generationParams.value?.[k]
   return v == null ? '—' : String(v)
-}
-function paramValTitle(k: EffectiveParamKey): string {
-  if (k === 'maxAttempts') return '该字段的生效取值未随配置接口返回，需要核对 Prompt 文件'
-  const v = paramValText(k)
-  return v === '—' ? '当前没有取到生效取值' : `当前实际取值 ${v} · 来源：${sourceLabel(k)}`
 }
 /** 卡头开关的悬停全文：说清「覆盖什么」与「关掉之后谁生效」——
  *  「独立配置」只说明它独立，说不出独立于谁，运营没法据此判断该不该开。 */
@@ -424,26 +430,25 @@ const orderTitle =
   + '生成参数（T / topP / Max）：本 Skill 覆盖 → Prompt 文件声明 → 代码默认 → 平台默认\n'
   + '超时与逻辑重试：本 Skill 设置 → 平台默认\n'
   + '每一层只取第一个有值的字段，未填即跳过'
-/** 模型沿用平台默认（开关关闭 或 模型留空）——此时表单里可能还留着上次选的模型值，
- *  但真正在跑的是平台默认模型，模型段要显示后者 */
-const inheritingModel = computed(() => !(rtForm.value.enabled && rtForm.value.model))
-/** 跟随平台默认时实际在跑的模型：补上「平台默认」到底是谁。
- *  2026-11-02 评审：这句原先带「覆盖已开启 / 已关闭」，而它出现在配置弹层的模型区里——
- *  那个弹层没有「覆盖」开关，读者既看不到也改不了该状态。这里只陈述这一项的事实。 */
-const inheritedModelText = computed(() => {
-  if (!inheritingModel.value) return ''
-  const model = String(generationParams.value?.model || '')
-  if (!model) return ''
-  return `模型未单独指定，当前使用平台默认：${model}`
-})
 /** 能力胶囊写成陈述句（2026-11-02 评审）：裸「思考 / 推理强度」被读成没有值的标签 */
-const summaryCaps = computed(() => {
-  const opt = primaryOption.value
+/** 能力标签：与「系统设置 → 模型与接入」的模型行同一套措辞
+ *  （思考 / 视觉）——2026-11-06 用户「按照系统设置的展开页面进行新的设计」。
+ *  2026-11-06 用户「有必要暴露强度在外面吗，配置那边也是」：不再把模型的挡位清单
+ *  （low / high / max）当胶囊印出来——挡位在弹层里有专门的「思考强度」下拉，
+ *  外面只需要知道这台模型支不支持思考、看不看图。 */
+/** 生效模型 id：本 Skill 没单独指定时就是平台默认那个（选择器的回显值） */
+const effectiveModelId = computed(() =>
+  String((rtForm.value.enabled && rtForm.value.model) || generationParams.value?.model || '')
+)
+const capTags = computed(() => {
+  /* 用**生效模型**查目录（继承平台默认时 rtForm.model 是空的，primaryOption 会落空，
+     于是「视觉」这枚标签在继承档整个消失——与系统设置同一台模型的标签对不上）。 */
+  const id = String((rtForm.value.enabled && rtForm.value.model) || generationParams.value?.model || '')
+  const opt = pickerOptions.value.find((o) => o.value === id) ?? null
   const cap = effectiveModelCap.value
   return [
-    cap?.thinking ? '支持思考' : '',
-    cap?.efforts.length ? `支持推理强度 ${cap.efforts.join(' / ')}` : '',
-    opt?.vision ? '支持视觉' : ''
+    cap?.thinking ? '思考' : '',
+    opt?.vision ? '视觉' : ''
   ].filter(Boolean)
 })
 const summaryMeta = computed(() => {
@@ -482,73 +487,25 @@ const baseModel = computed(() => {
   if (rtForm.value.enabled && rtForm.value.model) return rtForm.value.model
   return String(generationParams.value?.model || '平台默认模型')
 })
-/** 基线这一行的来源句：换模型这件事本身有没有做 */
-const baseModelSource = computed(() => {
-  if (!rtForm.value.enabled) return '平台默认模型'
-  return rtForm.value.model ? '本 Skill 指定' : '平台默认模型'
+/** 参数行：这一屏直接给「现在是什么值」，不再与基线逐项对照（2026-11-06 用户
+ *  「没有什么基线之类的，只有切换模型，参数等等」）。取的是生效值：
+ *  覆盖开启时用本 Skill 的值，未覆盖的字段取 Prompt 文件声明的值；超时与重试取平台默认。 */
+const paramSummary = computed(() => {
+  const out: string[] = [`思考模式 ${thinkingLabel.value}`]
+  // 只在显式设过挡位时才列出：思考模式是「按模型默认」时，强度也跟着默认，再写一行是复读
+  if (rtForm.value.reasoningEffort !== 'default') out.push(`推理强度 ${cfgEffortLabel.value}`)
+  const tp = paramT.value
+  const temp = tp.mode === 'override' && tp.value != null
+    ? String(tp.value)
+    : String(generationParams.value?.temperature ?? paramValText('temperature'))
+  out.push(`温度 ${temp}`)
+  out.push(`超时 ${rtForm.value.requestTimeoutMs ? `${Math.round(rtForm.value.requestTimeoutMs / 1000)}s` : '平台默认'}`)
+  out.push(`重试 ${effectiveLogicalRetries.value} 次`)
+  return out
 })
-interface DiffRow { label: string; value: string; base: string; baseTitle: string; changed: boolean }
-/** 五项读数逐条与基线对比；覆盖关闭时这套设置不参与，不列差异 */
-const diffRows = computed<DiffRow[]>(() => {
-  if (!rtForm.value.enabled) return []
-  const t = paramT.value
-  return [
-    {
-      label: '思考模式',
-      value: thinkingLabel.value,
-      base: INHERIT_DEFAULT_LABEL,
-      baseTitle: '这一项不单独设置时，由模型自身决定要不要思考',
-      changed: rtForm.value.thinkingMode !== 'default'
-    },
-    {
-      label: '推理强度',
-      value: cfgEffortLabel.value,
-      base: INHERIT_DEFAULT_LABEL,
-      baseTitle: '这一项不单独设置时，由模型自身决定思考的深度',
-      changed: rtForm.value.thinkingMode !== 'disabled' && rtForm.value.reasoningEffort !== 'default'
-    },
-    {
-      label: 'temperature',
-      value: t.mode === 'override' && t.value != null ? String(t.value) : String(generationParams.value?.temperature ?? '—'),
-      base: INHERIT_PROMPT_LABEL,
-      baseTitle: '这一项不覆盖时，取 Prompt 文件里声明的值',
-      changed: t.mode === 'override'
-    },
-    {
-      label: '请求超时',
-      value: rtForm.value.requestTimeoutMs ? `${Math.round(rtForm.value.requestTimeoutMs / 1000)}s` : '平台默认',
-      base: '平台默认',
-      baseTitle: '这一项不单独设置时，用平台的请求超时',
-      changed: rtForm.value.requestTimeoutMs != null
-    },
-    {
-      label: '逻辑重试',
-      value: `${effectiveLogicalRetries.value} 次`,
-      base: `平台默认 ${platformLogicalRetries.value} 次`,
-      baseTitle: '这一项不单独设置时，用平台的逻辑重试次数',
-      changed: logicalRetryMode.value !== 'inherit'
-    }
-  ]
-})
-const changedRows = computed(() => diffRows.value.filter((r) => r.changed))
 
 /** 主模型在目录里的条目：用于就地核对能力与价格（2026-11-04 起不再收窄备用候选） */
 const primaryOption = computed(() => pickerOptions.value.find((o) => o.value === rtForm.value.model) ?? null)
-const primaryMetaText = computed(() => {
-  const o = primaryOption.value
-  if (!o) return ''
-  const caps = [
-    o.thinking ? '思考' : '',
-    o.efforts.length ? `推理强度 ${o.efforts.join(' / ')}` : '',
-    o.vision ? '视觉' : ''
-  ].filter(Boolean).join(' / ')
-  const price = o.priceIn != null || o.priceOut != null
-    ? `入 ${o.priceIn ?? '—'} / 出 ${o.priceOut ?? '—'}`
-    : ''
-  // 2026-11-04：不再把目录里的档位枚举（chat / reasoning）印在这一行——它是目录分类，
-  // 不是运营要在这里做的选择；能力与价格才是就地核对的对象。
-  return [o.providerName, caps, price].filter(Boolean).join(' · ')
-})
 
 watch(
   () => rtForm.value.thinkingMode,
@@ -837,38 +794,20 @@ watch(() => props.skillId, () => {
 .sdp-body { display: grid; gap: 16px; padding: 4px 16px 16px; }
 /* 取值顺序：一行说清「谁压谁」。原来这块是「生效值」只读摘要，把下面各分节的
    当前值又抄一遍（导航副文、分节页头、表单各一份），已删（2026-10-24 用户判定无意义）。 */
-/* 卡面「基线 + 差异」（2026-11-04）：第一段是基线（平台默认模型那一行），
-   第二段只列本 Skill 改过的项。 */
-.sdp-live { display: grid; gap: 14px; }
+/* 模型行（2026-11-06 用户「按照系统设置的展开页面，进行新的设计」）：
+   与「系统设置 → 模型与接入」的模型行同构——mono id 打头、能力胶囊跟后、行右缘是文字动作，
+   下一行是该行的第二行读数（系统设置那里放测试结果，这里放当前参数值）。 */
+.sdp-live { display: grid; gap: 6px; }
 .sdp-live__note { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-amber); line-height: 1.6; }
-.sdp-base { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
-/* 「基线」这枚词是这一行的角色标签，不是值：做成小字灰标签，别抢模型 id 的第一眼 */
-.sdp-base__k {
-  padding: 1px 7px;
-  border-radius: var(--mk-radius-sm);
-  background: var(--mk-surface-2);
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
-  font-weight: 600;
-  line-height: 1.7;
-}
-/* 主角：基线模型 id（比读数高一级，卡面第一眼先读它） */
-.sdp-base__model { color: var(--mk-ink); font-weight: 700; font-size: var(--mk-fs-emphasis); overflow-wrap: anywhere; }
-.sdp-base__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.sdp-base__src { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.sdp-diff { display: grid; gap: 8px; }
-.sdp-diff__k { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); font-weight: 700; letter-spacing: 0.04em; }
-.sdp-diff__list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
-/* 一行三格：项名 / 本 Skill 的取值 / 未调整时会取什么。第三格是差异的对照面，
-   亮度降一档，读起来像脚注而不是第二个值。 */
-.sdp-diff__list > li { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: 10px; align-items: baseline; min-width: 0; }
-.sdp-diff__label { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.sdp-diff__val { color: var(--mk-ink); font-weight: 700; overflow-wrap: anywhere; }
-.sdp-diff__base { color: var(--mk-faint); font-size: var(--mk-fs-micro); font-style: normal; }
-.sdp-diff__none { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-@media (max-width: 720px) {
-  .sdp-diff__list > li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
-}
+.sdp-modelrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+/* 模型 id：卡面第一眼要读到的那个值 */
+.sdp-model { color: var(--mk-ink); font-weight: 700; font-size: var(--mk-fs-emphasis); overflow-wrap: anywhere; }
+.sdp-caps { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.sdp-cap { font-weight: 600; }
+.sdp-meta { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+.sdp-modelrow__acts { margin-left: auto; display: flex; align-items: center; gap: 12px; flex: none; }
+/* 参数行：与模型 id 同一左缘、不占动作列（系统设置里测试读数那一行的位置） */
+.sdp-params { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
 
 /* 控件同高 32px：这一屏的下拉（.mk-select__trigger）与按钮（.mk-btn）都是 32px，
    只有模型选择器还是 40px 的默认档，实测同一行三个高度（40 / 31 / 32）。
@@ -895,18 +834,6 @@ watch(() => props.skillId, () => {
 .sdp-panel__head h4 { margin: 0; font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
 .sdp-panel__state { font-size: var(--mk-fs-micro); color: var(--mk-faint); overflow-wrap: anywhere; }
 
-
-.sdp-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: var(--mk-radius-sm);
-  background: var(--mk-surface-2);
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
-  font-weight: 600;
-}
 /* 卡头：覆盖开关与配置入口同处右组；标题左，动作右 */
 .sdp-card__head { flex-wrap: wrap; }
 .sdp-head__switch { margin-left: auto; }
@@ -916,24 +843,12 @@ watch(() => props.skillId, () => {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
-/* 参数覆盖：一行一个字段（标签 / 模式 / 值），三行对齐成一张小表 */
-.sdp-subhead {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 2px;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  color: var(--mk-ink);
-}
-.sdp-subhead em { font-style: normal; font-weight: 400; color: var(--mk-faint); }
+/* 生成参数：一行一个字段（标签 + 数字输入框），四行对齐成一张小表；
+   留空即取 Prompt 声明 / 平台默认值（2026-11-06 起不再有「模式 + 取值」两列） */
 .sdp-params { display: grid; gap: 8px; }
 .sdp-param {
   display: grid;
-  /* 两列：标签 + 控件。第三列（128px）原留给「继承」二字，但下拉框选中的文案就是
-     「按 Prompt 声明」——同一个事实说两遍，还白占 128px（2026-10-26 走查实见）。
-     选「覆盖」时数值输入框接在控件列里，行高不变。 */
+  /* 两列：标签 + 控件。 */
   grid-template-columns: minmax(140px, 1fr) minmax(170px, 1.2fr);
   gap: 8px;
   align-items: center;
@@ -945,12 +860,9 @@ watch(() => props.skillId, () => {
   .sdp-param { grid-template-columns: minmax(0, 1fr) 128px; }
   .sdp-param__label { grid-column: 1 / -1; }
 }
-.sdp-param__ctl { display: grid; grid-template-columns: minmax(0, 1fr) 128px; gap: 8px; align-items: center; }
-.sdp-param__ctl > :only-child { grid-column: 1 / -1; }
-/* 继承档的生效取值（只读）：与右侧输入框同宽同位，切到「覆盖」时被输入框顶替，行高不变 */
-.sdp-param__val { font-size: var(--mk-fs-micro); color: var(--mk-ink); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sdp-param__ctl { display: grid; gap: 8px; min-width: 0; }
 @media (max-width: 700px) {
-  /* 窄屏：参数行整行放模式选择 */
+  /* 窄屏：参数行整行放输入框 */
   .sdp-param { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 860px) {
@@ -960,7 +872,6 @@ watch(() => props.skillId, () => {
 .sdp-field--wide { grid-column: 1 / -1; }
 .sdp-field > span { font-size: var(--mk-fs-micro); color: var(--mk-muted); font-weight: 600; }
 .sdp-field > span em { font-style: normal; font-weight: 400; color: var(--mk-faint); margin-left: 6px; }
-.sdp-model-meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); overflow-wrap: anywhere; }
 .sdp-form__footer {
   display: flex;
   justify-content: flex-end;
@@ -990,7 +901,6 @@ watch(() => props.skillId, () => {
 
 /* 4K：字号跟随壳层放大 */
 @media (min-width: 3600px) {
-  .sdp-chip { font-size: var(--mk-fs-body); padding: 4px 12px; }
   .sdp-body { gap: 18px; padding: 6px 20px 20px; }
   .sdp-field > span { font-size: var(--mk-fs-body); }
   .sdp-pane .mk-input { font-size: var(--mk-fs-emphasis); padding: 12px 15px; }

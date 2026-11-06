@@ -296,7 +296,6 @@
     <MkEmptyState
       v-else
       min
-      icon="◌"
       :title="wfEmpty.title"
       :description="wfEmpty.description"
       :action-text="wfEmpty.actionText"

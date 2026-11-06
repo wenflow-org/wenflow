@@ -107,16 +107,19 @@ describe('Skill 运行时 · 模型选择', () => {
     vi.clearAllMocks()
   })
 
-  it('主模型显示当前目录条目；「用平台默认模型」是显式选项', async () => {
+  it('主模型回显当前模型；选择器只列真实模型，不出「用平台默认模型」', async () => {
     const w = await mountTab()
-    // 2026-11-04「基线 + 差异」：卡面第一行是基线模型 id
-    expect(w.find('.sdp-base__model').text()).toContain('deepseek-v4.1-flash')
+    // 2026-11-06 两行摘要：卡面第一行（「模型」）就是当前在跑的模型 id
+    expect(w.find('.sdp-model').text()).toContain('deepseek-v4.1-flash')
     await openConfig(w)
     const control = w.find('.sdp-form__grid .mk-mp')
     expect(control.text()).toContain('deepseek-v4.1-flash')
 
+    /* 2026-11-06 用户「什么覆盖默认什么的，没意义」：弹层不再讲「继承平台默认」，
+       选择器只列目录里的真实模型。 */
     await openPicker(w, '.sdp-form__grid .mk-mp .mk-mp__control')
-    expect(optionIds(w)[0]).toBe('用平台默认模型')
+    expect(optionIds(w)[0]).toBe('deepseek-v4.1-flash')
+    expect(optionIds(w)).not.toContain('用平台默认模型')
     w.unmount()
   })
 
@@ -132,7 +135,7 @@ describe('Skill 运行时 · 模型选择', () => {
     await flushPromises()
 
     // 2026-11-04：摘要只陈述供应商 / 能力 / 价格，不再把目录档位枚举印出来
-    const meta = w.find('.sdp-model-meta').text()
+    const meta = w.find('.sdp-meta').text()
     expect(meta).toContain('Acme 网关')
     expect(meta).not.toContain('reasoning')
     expect(w.text()).not.toContain('推理档')
@@ -152,10 +155,14 @@ describe('Skill 运行时 · 模型选择', () => {
     const panels = w.findAll('.sdp-sections > .sdp-panel')
     expect(panels.map((p) => p.find('h4').text())).toEqual(['模型', '生成参数', '请求与容错'])
     expect(w.find('#sdp-panel-params .sdp-panel__state').text()).toContain('T=')
-    // 2026-11-02 评审：四行原先都只写「按 Prompt 声明」，每行看不到自己的取值——
-    // 现在继承档各行的取值都摆出来（只读，来源在悬停里）
-    expect(w.find('#sdp-panel-params .sdp-param__val').exists()).toBe(true)
-    expect(w.find('#sdp-panel-request .sdp-panel__state').text()).toContain('重试')
+    /* 2026-11-06 用户「什么覆盖默认什么的，没意义」：四行不再是「来源 + 只读取值」，
+       每行就是一个可填的数字输入框（留空＝取 Prompt 声明 / 平台默认）。 */
+    expect(w.find('#sdp-panel-params input[aria-label="temperature"]').exists()).toBe(true)
+    expect(w.find('#sdp-panel-params input[aria-label="topP"]').exists()).toBe(true)
+    expect(w.find('#sdp-panel-params input[aria-label="maxTokens"]').exists()).toBe(true)
+    expect(w.find('#sdp-panel-params input[aria-label="maxAttempts"]').exists()).toBe(true)
+    expect(w.find('#sdp-panel-request input[aria-label="请求超时毫秒数"]').exists()).toBe(true)
+    expect(w.find('#sdp-panel-request .sdp-panel__state').exists()).toBe(false)
     w.unmount()
   })
 

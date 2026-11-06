@@ -22,7 +22,6 @@
       <!-- 一致（正向后空态）：原型 .empty 词表，图标 + 结论 -->
       <MkEmptyState
         v-else-if="drift.items.length === 0"
-        icon="✓"
         title="无不一致"
         compact
       />
@@ -69,7 +68,6 @@
            而「刷新」是列表动作、不是空态结论。动作移到下面的列表脚，与「在审计日志看全部」并列。 -->
       <MkEmptyState
         v-else
-        icon="⇄"
         title="暂无变更记录"
         compact
       />

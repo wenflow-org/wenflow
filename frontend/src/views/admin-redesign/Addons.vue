@@ -135,7 +135,6 @@
             <MkEmptyState
               v-else
               :tone="mcpFailed ? 'error' : 'neutral'"
-              :icon="mcpFailed ? '!' : ''"
               :title="mcpFailed ? 'MCP 服务加载失败' : '暂无 MCP 服务'"
               :description="mcpFailed ? mcpErrorText : ''"
               :action-text="mcpFailed ? '重试' : '新建服务'"

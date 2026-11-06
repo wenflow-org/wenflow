@@ -10,7 +10,6 @@
     <MkEmptyState
       v-if="failed"
       tone="error"
-      icon="!"
       title="健康报告加载失败"
       :description="errorText"
       action-text="重试"

@@ -90,7 +90,6 @@
 
   <div v-else-if="detailError" class="ud-root">
     <MkEmptyState
-      icon="◌"
       tone="error"
       title="详情加载失败"
       :description="detailErrorMsg || '暂时无法获取该用户的完整信息。'"

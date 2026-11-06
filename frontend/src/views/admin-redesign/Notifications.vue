@@ -144,7 +144,6 @@
       <MkEmptyState
         v-else-if="failed"
         min
-        icon="!"
         title="通知加载失败"
         tone="error"
         description="无法加载通知列表，请稍后重试。"
@@ -153,7 +152,6 @@
       />
       <MkEmptyState
         v-else-if="isFiltered"
-        icon="◌"
         min
         title="当前筛选无匹配"
         action-text="清除筛选"
@@ -161,7 +159,6 @@
       />
       <MkEmptyState
         v-else
-        icon="◌"
         min
         title="还没有通知"
         :action-text="embedded ? '' : '发送第一条通知'"

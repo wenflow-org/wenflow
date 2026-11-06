@@ -9,7 +9,6 @@
     <!-- 首载失败：错误态 + 重试（MkEmptyState tone=error，判例 UserDetail） -->
     <MkEmptyState
       v-if="loadError && !d"
-      icon="◌"
       tone="error"
       title="路径内容加载失败"
       :description="loadError"
@@ -69,7 +68,6 @@
            总进度 % 与双分母口径注释是重复噪音；工程标识（路径 id / 生成运行 id）不进运营页面。 -->
       <MkEmptyState
         v-if="!stages.length"
-        icon="◌"
         title="该路径尚未拆解出阶段"
         description="目标对话生成路径后，阶段与任务会出现在这里。"
       />

@@ -238,7 +238,6 @@
       <MkEmptyState
         v-else-if="topoFailure"
         tone="error"
-        icon="⚠"
         title="编排阶段数据加载失败"
         :description="topoFailure"
         action-text="重试"

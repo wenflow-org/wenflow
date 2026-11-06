@@ -10,7 +10,6 @@
       v-else-if="error"
       compact
       tone="error"
-      icon="!"
       :title="error"
       description="日期模拟数据加载失败，可重试。"
       action-text="重试"
@@ -23,7 +22,6 @@
     <MkEmptyState
       v-else-if="!clock"
       compact
-      icon="◌"
       title="暂无模拟时钟数据"
       description="该会话尚未开启日期模拟。"
       action-text="去开启日期模拟"
@@ -79,7 +77,6 @@
       <MkEmptyState
         v-if="!days.length"
         compact
-        icon="◌"
         title="暂无按天数据"
         description="该会话在此时间窗口内没有可读的按天记录。"
       />

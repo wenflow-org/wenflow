@@ -73,7 +73,6 @@
         v-else-if="loadFailed"
         min
         tone="error"
-        icon="◌"
         title="数据加载失败"
         action-text="重试"
         @action="retryLoad"
@@ -203,7 +202,6 @@
       <MkEmptyState
         v-else
         min
-        icon="◌"
         :title="isDeletedView ? '暂无已删除账号' : isFiltered ? '当前筛选无用户' : '暂无账号'"
         :action-text="isDeletedView || isFiltered ? '显示全部用户' : '新建用户'"
         @action="isDeletedView || isFiltered ? clearFilters() : openCreate()"

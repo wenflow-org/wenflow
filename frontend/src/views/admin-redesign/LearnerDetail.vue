@@ -2,7 +2,6 @@
   <div v-if="detailError" class="mk-page ld">
     <!-- 返回入口在壳层顶栏（面包屑 back）；错误态保留重试 -->
     <MkEmptyState
-      icon="◌"
       tone="error"
       title="详情加载失败"
       description="暂时无法获取该学习者的完整档案。"
@@ -416,7 +415,6 @@
       </template>
       <MkEmptyState
         v-else
-        icon="◌"
         title="暂无认知画像数据"
         description="重算快照后自动生成，画像/派生洞察等卡将随快照一起更新。"
       />
@@ -892,7 +890,7 @@
       <section v-if="memoryPaneRows.length" class="mk-card">
         <div class="mk-card__head">
           <!-- 与侧栏「记忆与复习」同名不同粒度：这里按概念逐项做 FSRS 普查，那边按用户汇总待复习量 -->
-          <h3 class="mk-card__title" :title="`${MEMORY_PANE_TITLE}：本账号按概念逐项做的 FSRS 普查。平台按用户汇总待复习量见侧栏「记忆与复习」`">{{ MEMORY_PANE_TITLE }}</h3>
+          <h3 class="mk-card__title" :title="memoryPaneTitle">{{ MEMORY_PANE_TITLE }}</h3>
           <span class="mk-card__meta">{{ memMetaText }}</span>
         </div>
         <!-- 视角（按复习状态分档）：把「待复习」这一档单独拎出来看，是这张表唯一的可动作子集。
@@ -957,7 +955,17 @@
           </table>
         </div>
       </section>
-      <MkEmptyState v-else icon="◌" title="暂无记忆数据" description="该学习者还没有记忆记录，完成教学回合后自动生成。" />
+      <!-- 空态进卡（2026-11-06 用户「有的空态是这样有的空态又是图二这样」）：
+           这一段平时是一张带卡头的 mk-card（含普查口径 meta），空态却裸在页面底色上，
+           与相邻的「图谱」页签（空态在图卡里）读成两套。空态占据被替换内容的容器，
+           卡头保留——它交代这张表是什么，不因没有数据而消失。 -->
+      <section v-else class="mk-card">
+        <div class="mk-card__head">
+          <h3 class="mk-card__title" :title="memoryPaneTitle">{{ MEMORY_PANE_TITLE }}</h3>
+          <span class="mk-card__meta">暂无记录</span>
+        </div>
+        <MkEmptyState title="暂无记忆数据" description="该学习者还没有记忆记录，完成教学回合后自动生成。" />
+      </section>
       <!-- 调度与治理（温故计划/归并审计/回滚）已拆到「记忆调度」页签（2026-10-12 拍板） -->
     </div>
 
@@ -1056,6 +1064,8 @@ const SIG_TIER_NOTE = '概念信号按掌握度分档（来自学习证据与课
 const CALIB_META_TITLE = '预测与实际情况的吻合率（非学习者自评）'
 const GRAPH_TRUNCATED_NOTE = '仅显示部分概念，共'
 const MEMORY_PANE_TITLE = '记忆与复习'
+/* 卡头悬停全文单源：空态卡与满数据卡共用同一句（文案守卫 R6 同文件重复） */
+const memoryPaneTitle = `${MEMORY_PANE_TITLE}：本账号按概念逐项做的 FSRS 普查。平台按用户汇总待复习量见侧栏「记忆与复习」`
 /** 路径 stage 兜底文案（快照 / 列表两处同源） */
 const milestoneStageText = (p: { completedMilestones?: unknown; totalMilestones?: unknown }) =>
   String(p.totalMilestones ? `已完成 ${p.completedMilestones ?? 0}/${p.totalMilestones} 个里程碑` : '')
