@@ -250,7 +250,7 @@
 
         <!-- 不在整条消息流上挂 aria-live：流式重渲/每条新消息都会被读屏连播（含原始 JSON delta），
              收窄到下方等待条的 aria-live（P3） -->
-        <div ref="scrollEl" class="chat__scroll" :class="{ 'chat__scroll--dim': showProposal, 'chat__scroll--pill': genPillVisibleInChat, 'chat__scroll--invite': proposalInviteVisible }" @scroll.passive="onScrollPin">
+        <div ref="scrollEl" class="chat__scroll" :class="{ 'chat__scroll--dim': showProposal }" @scroll.passive="onScrollPin">
           <template v-for="km in keyedMessages" :key="km.key">
             <div v-if="km.msg.role === 'user'" class="msg msg--user" :class="{ 'msg--editing': editingMsgId === km.key }">
               <!-- 编辑态：textarea 替换气泡 -->
@@ -292,25 +292,13 @@
               </div>
             </div>
             <div v-else class="msg msg--ai">
-              <div class="msg__content msg__content--actions"
-                @mouseenter="onBubbleEnter(km.key)"
-                @mouseleave="onBubbleLeave"
-              >
-                <div class="msg__bubble msg__bubble--html msg__bubble--relative" v-html="messageHtml(km.msg)"></div>
-                <!-- 历史轮次的快捷补充不再内联渲染（2026-11-05 屏效比「旧选项销毁」）：
-                     胶囊完成点选使命后滞留历史既占空间又与用户已发出的回答重复，
-                     唯一的活快选由下方 .replies 常驻面板承担（只挂最新 AI 轮） -->
-                <!-- streaming 复用为「不可重生成」口径（同 V2LearningPage）：失败气泡的
-                     恢复动作只留内联「重试」——它对 start/confirm/supplement/reply 四种
-                     失败都能正确重放，而悬浮「重新生成」遇到无前驱用户消息的失败
-                     （如 start 失败）只会 toast「找不到对应的问题」死路 -->
-                <MessageActions
-                  :show="hoveredMsgId === km.key"
-                  :streaming="live.sending || km.msg.failed"
-                  :copy-handler="() => copyMessage(km.msg.content)"
-                  @regenerate="regenerateMessage(km.msg)"
-                  @feedback="(up) => sendMessageFeedback(km.msg, up)"
-                />
+              <div class="msg__content">
+                <div class="msg__bubble msg__bubble--html" v-html="messageHtml(km.msg)"></div>
+                <!-- 消息反馈栏（👍👎🔄📋）在目标规划页整体退役（2026-11-06 走查）：
+                     澄清期 AI 的职责是连续追问 3~4 轮，问句不需要「复制/重新生成」；
+                     每轮挂一排图标在手机上白吃 ~36px，PC hover 还顶出方块底。
+                     该组件仍服务课堂学习/知识问答页（V2LearningPage）。
+                     失败恢复只留内联「重试」（start/confirm/supplement/reply 四种失败都能重放）。 -->
                 <!-- 屏效比改造（2026-11-05）：「问流 · 时间」戳撤除；meta 行只在失败时渲染（只剩内联重试） -->
                 <div v-if="km.msg.failed" class="msg__meta">
                   <button type="button" class="msg__retry" @click="doRetry">重试</button>
@@ -331,7 +319,7 @@
           <!-- 流式渐进渲染：SSE delta 实时累积（goal skill 为 JSON 输出，展示原始模型文本；
                final 到达后由官方消息替换，避免双泡；方案浮层打开时不重复展示，浮层内已有流式进度） -->
           <div v-if="live.sending && live.streamingText && !showProposal" class="msg msg--ai">
-            <div class="msg__content msg__content--actions">
+            <div class="msg__content">
               <div class="msg__bubble msg__bubble--html msg__bubble--streaming" v-html="formatMessage(live.streamingText)"></div>
               <div class="msg__meta">{{ chatWaitMeta }}</div>
             </div>
@@ -355,6 +343,12 @@
             >{{ q.text }}</button>
           </div>
         </div>
+        <!-- 贴底坞（2026-11-06 走查·严格 flex 三段）：pill / 待确认条 / 输入区 / 元数据行
+             全部收进同一个 flex 子项，滚动区在坞上方自然结束。此前三者是 .chat 的并列
+             flex 子项，且靠 ::before 渐变「假装」分隔——渐变在暗色下读成一条黑带、
+             在亮色下读成灰蓝带，还盖掉了气泡下缘的描边（本次核心 Bug）。
+             坞本身透明无边框无分割线：层次由留白与卡片边界表达。 -->
+        <div class="chat__dock">
         <!-- 生成状态 pill（走查 2026-11-01 P22 / 2026-11-02 P22 复验）：确认生成后选「留在本页」关掉浮层，
              页面上除步条第 3 步高亮外没有任何持续状态，用户不知道生成还在不在走。
              2026-11-02 起跟真实状态：拿到 pathId 后轮询 generation-status（复用 /learning-paths
@@ -460,6 +454,7 @@
           <span class="chat__under-hint-shortcut">{{ SEND_SHORTCUT_HINT }}</span>
           <span v-if="input.length >= 3500" class="composer__count">{{ input.length }} / {{ INPUT_MAX }}</span>
         </div>
+        </div><!-- /.chat__dock -->
       </section>
     </main>
 
@@ -543,9 +538,11 @@
           确认失败，请重试。<button type="button" class="errorbar__retry" @click="doConfirm">重试</button>
         </div>
 
-        <div class="proposal__note">
-          <span v-if="materialCount">已上传 {{ materialCount }} 份资料，生成路径时按目标相关性选用，其余保留在资料库。</span>
-          <AiContentNote />
+        <!-- 弹窗内的 ⓘ「内容由 AI 生成」整行已删（2026-11-06 走查）：弹窗是确认动作的
+             单一焦点，声明与「确认/再补充」抢同一块视觉重量；全断面唯一的 AI 声明出口
+             是输入框正下方的 .chat__under-hint（移动端由底部导航档接管） -->
+        <div v-if="materialCount" class="proposal__note">
+          <span>已上传 {{ materialCount }} 份资料，生成路径时按目标相关性选用，其余保留在资料库。</span>
         </div>
         </div><!-- /.proposal__body（内容滚动区） -->
 
@@ -664,15 +661,12 @@ import { forgetRecentGoalForUser, loadRecentGoalsForUser, rememberRecentGoalForU
 import { isProbeAnswer, probeAnswerParts } from './probeAnswer';
 import V2Nav from './V2Nav.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
-import MessageActions from '@/components/chat/MessageActions.vue';
 import MaterialUploadArea from '@/components/learning/MaterialUploadArea.vue';
 import { hasUserSession } from '@/utils/api';
 import { useUserStore } from '@/stores/user';
 import { currentUserId, dropLegacyRecentGoalsStorage, getGoalConversationCid, clearGoalGenTracking, getGoalGenTracking, setGoalGenTracking } from '@/utils/sessionCleanup';
 import { cachedMessageHtml, plainMessageHtml } from '@/utils/messageMarkdown';
 import { toast } from '@/utils/toast';
-import { copyText } from '@/utils/clipboard';
-import { feedbackApi } from '@/api/feedback';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
 import { isAwaitingAnswer, proposalEntryCopy } from './goalStageCopy';
 import { learningAPI, type GenerationLifecycleDTO } from '@/api/learning';
@@ -1114,32 +1108,10 @@ const editingMsgId = ref<string | null>(null);
 const editingText = ref('');
 const confirmError = ref(false);
 
-/* ---------- 消息操作 ---------- */
-const hoveredMsgId = ref<string | null>(null);
-function onBubbleEnter(id: string) { hoveredMsgId.value = id; }
-function onBubbleLeave() { hoveredMsgId.value = null; }
-
-/** 复制消息正文（与课堂侧同口径：局域网 http 下 Clipboard API 不可用，回退 execCommand） */
-async function copyMessage(text: string): Promise<boolean> {
-  const ok = await copyText(text);
-  if (ok) toast.success('已复制到剪贴板');
-  else toast.error('复制失败：浏览器未授予剪贴板权限，请手动选中文字复制');
-  return ok;
-}
-
-/** 消息级点赞/点踩上报：内容去重（后端按内容哈希 key），失败静默不打扰 */
-async function sendMessageFeedback(msg: LiveMessage, thumbsUp: boolean) {
-  if (!live.conversationId || !msg.content) return;
-  try {
-    await feedbackApi.submitMessage({
-      sessionId: live.conversationId,
-      messageText: msg.content,
-      thumbsUp
-    });
-  } catch {
-    /* 反馈失败不影响对话，静默 */
-  }
-}
+/* ---------- 消息操作 ----------
+   悬浮追踪、复制正文、点赞点踩上报、重新生成四个处理器随反馈栏组件一并退役
+   （2026-11-06 走查：目标规划页不再挂 👍👎🔄📋）。
+   失败恢复仍由气泡内联「重试」（doRetry）承担；用户消息编辑走 saveEdit（重发整轮）。 */
 
 /* ---------- 用户消息内联编辑（仅最后一条用户消息可编辑） ---------- */
 function canEditMessage(msg: LiveMessage): boolean {
@@ -1169,22 +1141,6 @@ async function saveEdit(msg: LiveMessage) {
   editingText.value = '';
   try {
     await live.send(t, true);
-  } catch { /* handled by live.failed */ }
-}
-
-async function regenerateMessage(msg: LiveMessage) {
-  if (live.sending) return;
-  // Find the user message preceding this AI message
-  const idx = live.messages.indexOf(msg);
-  let lastUser = '';
-  for (let i = idx - 1; i >= 0; i--) {
-    if (live.messages[i].role === 'user') { lastUser = live.messages[i].content; break; }
-  }
-  if (!lastUser) { toast.info('找不到对应的问题'); return; }
-  // Remove the current AI message and re-send（不重复 push 用户消息）
-  live.messages.splice(idx, 1);
-  try {
-    await live.send(lastUser, true);
   } catch { /* handled by live.failed */ }
 }
 
@@ -1356,11 +1312,6 @@ const doneGenNote = computed(() => {
   return `阶段与任务还在生成中 · ${genStageLabel(lc)}。`;
 });
 
-/** 会话态生成 pill 出现且不在浮层下（浮层打开时 pill 本身隐藏，无需让位）。
-    滚动区据此在底部留出 pill 高度的让位空间——实测（小米 441×952 截图） pill 会
-    压在贴底消息的最后一行上，让位后末行文字不再被胶囊遮住。 */
-const genPillVisibleInChat = computed(() => live.started && !!genPill.value);
-
 /** Escape 关闭方案浮层（状态保留，对话可继续）。
     【2026-10-31 一锤定音修复】proposing 阶段不再自动弹浮层：方案先在对话流里完整落地
     （AI 本来就以「你看要不要调整？」收尾，后端非确认回复会再出新方案——多轮协商本就存在），
@@ -1374,10 +1325,9 @@ const showProposal = computed(
   () => !proposalDismissed.value && (proposalReviewRequested.value || phase.value === 'generating' || phase.value === 'done')
 );
 /** 底部「学习方案 · 待确认」条可见（判据与模板 v-if 同源）。
- *  该条已排在 .chat 的 Flex 底流里（flex:0 0 auto，不是浮层），但出现的那一刻滚动视口
- *  会被顶矮约一条的高度：贴底的最后一行因此被挤出可视区，读起来像「被悬浮条截断」。
- *  滚动区据此动态补出条高的底衬（.chat__scroll--invite），并在它出现时重新贴底
- *  （2026-11-06 审计 §4 底部悬浮栏遮挡修复）。 */
+ *  2026-11-06 起该条与输入区同属 .chat__dock（严格 flex 三段），出现时滚动视口仍会
+ *  被顶矮约一条的高度：贴底的最后一行因此被挤出可视区，读起来像「被悬浮条截断」。
+ *  这里在它出现时重新贴底（不再补底衬 padding——布局本身已保证不重叠）。 */
 const proposalInviteVisible = computed(
   () => loggedIn && live.started && !live.sending && live.stage === 'proposing' && !!live.proposal && !showProposal.value
 );
@@ -1843,20 +1793,10 @@ function shuffleScenes() {
 
 /* ---------- 输入区 ---------- */
 .composer { display: grid; gap: 7px; }
-/* 底部渐隐（2026-11-05 用户裁定）：消息滚到底边是被滚动视口「硬切」一行——
-   切边正好贴着方案卡/输入框顶边，读起来像「被卡片盖住」。在底部固定区上方铺一层
-   透明→画布的 26px 渐变，让滑过的文字自己化开；配套 .chat__scroll 的 40px 底衬，
-   滚到底时最后一行停在渐变之上，不会被长期压淡。
-   .proposal-invite 抬 z-index：它是不透明卡，压在 composer 的渐变之上，两处渐变同色不叠印。 */
-.composer,
-.proposal-invite { position: relative; }
-.proposal-invite { z-index: 1; }
-.composer::before,
-.proposal-invite::before {
-  content: ''; position: absolute; left: 0; right: 0; bottom: 100%;
-  height: 26px; pointer-events: none;
-  background: linear-gradient(180deg, transparent, var(--canvas));
-}
+/* 底部渐隐遮罩整套退役（2026-11-06 走查）：26px「透明→--canvas」渐变铺在固定区上方，
+   深色下是「黑带」、浅色下是灰蓝脏带，还盖住贴底气泡的末行与下边框（用户三图实证）。
+   改为严格 Flex 三段：滚动区在 .chat__dock 上方自然结束（不重叠、无遮罩、无分割线，
+   仅 10px 空白），最新一条消息恒停在 dock 之上 —— 不遮挡是布局保证，不靠渐变粉饰。 */
 .composer__box {
   position: relative;
   display: flex; align-items: flex-end; gap: 10px;
@@ -2204,9 +2144,8 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
 .chat__scroll {
   flex: 1;
   overflow-y: auto;
-  /* 画布直铺：不再有白卡内边距，左右与 .chat__head 的 16px 对齐 */
-  /* 底衬 20→32（2026-11-05）：给滚动边缘的 26px 渐隐让位，滚到底时最后一行不吃渐变 */
-  padding: 16px 16px 32px;
+  /* 左右与 .chat__head 的 16px 对齐；底衬 16 —— 渐隐遮罩退役后不再需要为它让位 */
+  padding: 16px 16px 16px;
   display: flex; flex-direction: column; gap: 18px;
   transition: filter .2s ease, opacity .2s ease;
   /* 原生滚动条隐藏（2026-11-05 屏效比）：桌面 Windows 的经典粗滚动条在移动视口仿真里
@@ -2222,16 +2161,14 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
    2026-10-06 用户否掉（「消息不应该是从上面往下面走吗」），回退为窄屏专属（见 ≤1100 档）。 */
 
 .chat__scroll--dim { filter: blur(2px); opacity: .45; pointer-events: none; }
-/* 生成 pill 让位（2026-11-05 UX 审计）：pill 出现时（浮层关闭态）在滚动区底部留出
-   一条 pill 高度的呼吸带，贴底的最后一行消息不再被胶囊压住（小米 441×952 实测截图）。
-   pill 隐藏（浮层打开/无 pill）时回落 20px 原值，不占空。
-   2026-11-06：选择器改成复合类（.chat__scroll.chat__scroll--pill）——基础档的单类规则
-   会被 ≤1100 块里位置更靠后的 `.chat__scroll { padding: … }` 按同权重盖掉，pill 让位在
-   手机上其实一直没生效；复合类权重更高，两档都真的留出底衬。 */
-.chat__scroll.chat__scroll--pill { padding-bottom: 60px; }
-/* 「学习方案 · 待确认」条让位（2026-11-06 审计 §4）：条虽在底流里（非浮层），出现时仍会
-   顶矮滚动视口，贴底的 AI 消息末行被挤出可视区。底衬 = 条高(~54) + 条间距(8) + 底缘渐隐(26)。 */
-.chat__scroll.chat__scroll--invite { padding-bottom: 88px; }
+/* pill / 待确认条的「底部让位底衬」判例退役（2026-11-06 走查）：两者都是 .chat 的
+   普通 flex 子项（现收进 .chat__dock），滚动区本就在它们上方结束，不需要再用 padding
+   假装留白——需要的是不重叠的布局，不是补偿性的底衬。 */
+.chat__dock {
+  flex: 0 0 auto;
+  display: flex; flex-direction: column; gap: 10px;
+  background: transparent;
+}
 
 .msg { display: flex; flex-direction: column; gap: 5px; max-width: 78%; } /* 82→78：随两栏同步收窄后的读感档（2026-09-27 三改） */
 /* 三改：聊天列本身已收窄，气泡 74% 配合 work 1000px 总宽即可 */
@@ -2388,22 +2325,9 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
   0%, 100% { opacity: 1; }
   50% { opacity: 0.2; }
 }
-/* MessageActions 定位容器 */
-.msg__bubble--relative { position: relative; }
-.msg__content--actions { position: relative; }
-/* meta 行与操作条同行（左 meta / 右操作条），配合组件的 visibility 占位隐藏：
-   hover 出现/消失时布局零跳动 */
-.msg__content--actions {
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-auto-flow: dense;
-}
-.msg__content--actions > .msg__bubble { grid-column: 1 / -1; }
-.msg__content--actions > .msg-actions {
-  grid-column: 2;
-  align-self: center;
-  margin-top: 0;
-}
-.msg__content--actions > .msg__meta { grid-column: 1; align-self: center; }
+/* MessageActions（👍👎🔄📋）已在本页退役（2026-11-06 走查）：
+   定位容器 / hover 占位网格 / 双列操作条三组规则随之删除——AI 气泡回归单列 grid，
+   meta 行只剩失败时的内联「重试」。 */
 
 .msg__bubble--typing { display: inline-flex; gap: 5px; align-items: center; padding: 14px 16px; }
 .msg__bubble--typing i {
@@ -2477,7 +2401,7 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
    左提示（回复可继续调整）+ 右按钮（打开方案卡审阅）。宽度同对话列，贴输入区上方。 */
 .proposal-invite {
   flex: 0 0 auto;
-  margin: 0 16px 8px;
+  margin: 0 16px;
   padding: 6px 10px 6px 12px;
   display: flex;
   align-items: center;
@@ -2523,7 +2447,8 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
 .gen-pill {
   flex: 0 0 auto;
   align-self: flex-start;
-  margin: 0 16px 8px;
+  /* 收进 .chat__dock：条间留白由坞的 gap 统一给，自己不再带下外边距 */
+  margin: 0 16px;
   display: inline-flex; align-items: center; gap: 7px;
   min-height: 36px; padding: 0 12px;
   /* 8px 控件圆角（2026-11-06 审计 §1 去肥胖化）：状态条不再用全圆胶囊；
@@ -2572,7 +2497,7 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
    宽度只有一处来源（= 对话列）才不会漂。 */
 /* 底部 Footer 透明无边框（2026-11-06 走查暗色）：96% 混色在暗色卡里读作「更黑一度的
    直角条」并盖住卡底圆角；输入区直接浮在卡底上，与聊天区零色差 */
-.chat > .composer {
+.chat__dock > .composer {
   flex: 0 0 auto;
   /* 左右 16 = .chat__scroll 的左右内边距：输入框左右缘与上方气泡严格同一条竖线 */
   padding: 12px 16px;
@@ -3016,7 +2941,7 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
   /* overscroll-behavior:contain 隔断滚动链——列表滚到边缘时不再触发整页橡皮筋
      （本页 height:100dvh 不随文档滚动，iOS 上链式滚动会把底部导航一起拽动）。
      padding 16/20→10/16、消息间距 18→16（2026-11-05 屏效比）：对话区首屏多装半轮问答 */
-  .chat__scroll { min-height: 0; overscroll-behavior: contain; padding: 16px 16px 40px; gap: 16px; }
+  .chat__scroll { min-height: 0; overscroll-behavior: contain; padding: 16px 16px 16px; gap: 16px; }
   /* AI 头像左列撤除（2026-11-05 屏效比）：30px 圆 + 10px gap 把整段回复推开 40px 宽，
      同样字数多折 2~3 行；品牌已由顶栏承载，气泡不再需要逐条自报家门 */
   .msg--ai { max-width: 100%; }
@@ -3026,13 +2951,6 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
   /* 横滑判例退役（2026-11-06 走查）：第 3 项截断成「说不…」等于废掉一个选项，
      鼠标也没法左右滚；快选回归自适应折行（基础档 flex-wrap: wrap），配合
      「单条 ≤8 字」的文案口径，三个短签一行排得下 */
-  /* 操作条（👍👎🔄📋）收紧（2026-11-05 屏效比）：左对齐贴气泡下缘（不再偏右悬浮）、
-     上下空隙收半——负边距只收视觉空隙，36×36 触控盒不缩（EG20 口径） */
-  .chat .msg__content--actions > .msg-actions {
-    grid-column: 1;
-    justify-content: flex-start;
-    margin: -7px 0 -5px;
-  }
   /* 贴底判例退役（2026-11-06 走查）：消息少时首项吃 auto 空间，步骤条与首条消息之间
      撑出 ~100px 空洞（暗色下是「大黑洞」）；消息流回归从顶部生长（桌面同款） */
   .msg { max-width: 96%; }
@@ -3044,7 +2962,7 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
      是输入框外多套的一层矩形（暗色下色差尤其明显）——撤掉，胶囊直接浮在画布上；
      上下内边距收到 4/8（基础档的 safe-area padding-bottom 被本简写整体覆盖，
      移动端底部有 tab 栏接管该区域，不留双份空缝） */
-  .chat > .composer {
+  .chat__dock > .composer {
     padding: 4px 16px 8px;
     border-top: 0;
     background: transparent;
@@ -3063,13 +2981,13 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
   /* 会话态底条比入口态更紧凑：入口态是首屏 hero 输入，保留 44 触控档（它也是 mobile:spec
      的量测态，改动会动到门禁口径）；会话态是常驻底条，控件收到 36 后输入盒由 61 收到 ≈49，
      盒子贴着单行文字，不再被回形针撑出一圈死白，红色停止键也不再是整条最重的一块。 */
-  .chat > .composer .composer__box { min-height: 48px; }
-  .chat > .composer .composer__attach { width: 36px; height: 36px; }
-  .chat > .composer .composer__send { width: 36px; height: 36px; }
-  .chat > .composer .composer__textarea { padding: 6px 0; }
+  .chat__dock > .composer .composer__box { min-height: 48px; }
+  .chat__dock > .composer .composer__attach { width: 36px; height: 36px; }
+  .chat__dock > .composer .composer__send { width: 36px; height: 36px; }
+  .chat__dock > .composer .composer__textarea { padding: 6px 0; }
   /* 图标随按钮同档放大到 16：14px 图标落在 36 的键里会显得更小、与发送键不同权重 */
-  .chat > .composer .composer__attach svg,
-  .chat > .composer .composer__send:not(.composer__send--stop) svg { width: 16px; height: 16px; }
+  .chat__dock > .composer .composer__attach svg,
+  .chat__dock > .composer .composer__send:not(.composer__send--stop) svg { width: 16px; height: 16px; }
   /* 方案确认卡（三段 head/body/foot，body 内部滚动、foot 已贴底固定）：
      窄屏收紧三段内边距（24/28 在 320 下只剩 250px 内容宽）。
      旧的 `.proposal { padding }` + `.proposal__actions { position:sticky }` 补丁已废——

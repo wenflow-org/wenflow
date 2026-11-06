@@ -17,6 +17,9 @@
  *  2) 会话态盒 min-height 收到 48、回形针与发送键同档 36；
  *  3) 入口态的 .composer__send 仍是 44（不许把门禁量测态一起收小）；
  *  4) 会话态 textarea 上下内边距与 36 控件档配套（6px → 内容 36，三者中线重合）。
+ *
+ * 2026-11-06 走查：会话态输入区收进 .chat__dock（严格 flex 三段），
+ * 四条钩子选择器由 `.chat > .composer …` 改为 `.chat__dock > .composer …`。
  */
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -76,8 +79,8 @@ describe('会话态移动输入盒：控件贴中线、盒子贴文字', () => {
   });
 
   it('会话态收紧到 36 档，入口态仍保留 44 触控尺寸（后者是 mobile:spec 的量测态）', () => {
-    expect(decl(ruleOf(mobile, '.chat > .composer .composer__box'), 'min-height')).toBe('48px');
-    for (const selector of ['.chat > .composer .composer__attach', '.chat > .composer .composer__send']) {
+    expect(decl(ruleOf(mobile, '.chat__dock > .composer .composer__box'), 'min-height')).toBe('48px');
+    for (const selector of ['.chat__dock > .composer .composer__attach', '.chat__dock > .composer .composer__send']) {
       const rule = ruleOf(mobile, selector);
       expect(decl(rule, 'width'), `${selector} 宽度没收紧`).toBe('36px');
       expect(decl(rule, 'height'), `${selector} 高度没收紧`).toBe('36px');
@@ -88,7 +91,7 @@ describe('会话态移动输入盒：控件贴中线、盒子贴文字', () => {
   });
 
   it('会话态 textarea 上下内边距与 36 控件档配套（内容 36 → 三者中线重合）', () => {
-    expect(decl(ruleOf(mobile, '.chat > .composer .composer__textarea'), 'padding')).toBe('6px 0');
+    expect(decl(ruleOf(mobile, '.chat__dock > .composer .composer__textarea'), 'padding')).toBe('6px 0');
   });
 
   it('输入盒四边内边距等距（左 16 让回形针一侧多缩进 8px，整条控件重心偏左）', () => {
