@@ -107,7 +107,14 @@ export function mergeUnderstanding(previousUnderstanding: any, parsedJson: any):
     available_resources: { ...(understanding.available_resources || {}), ...(nextUnderstanding.available_resources || {}) },
     success_criteria: { ...(understanding.success_criteria || {}), ...(nextUnderstanding.success_criteria || {}) },
     current_baseline: { ...(understanding.current_baseline || {}), ...(nextUnderstanding.current_baseline || {}) },
-    time_dimensions: { ...(understanding.time_dimensions || {}), ...(nextUnderstanding.time_dimensions || {}) }
+    time_dimensions: { ...(understanding.time_dimensions || {}), ...(nextUnderstanding.time_dimensions || {}) },
+    // 同为「静默累积」的对象容器，且都有下游读取方：
+    // - sdt_needs（prompts/core/goal-conversation.yaml:175 明写「静默累积」）供 proposal 设计参考；
+    // - school_anchor（:96 明写「静默累积」）由 path.coordinator 读进 schoolAnchor（path.coordinator.ts:395）。
+    // 上面 `...nextUnderstanding` 会整包覆盖这两个容器：本轮只补其中一项时兄弟项丢失
+    //（只给 competence 则 autonomy 消失、只给 examScope 则 textbook 消失）。
+    sdt_needs: { ...(understanding.sdt_needs || {}), ...(nextUnderstanding.sdt_needs || {}) },
+    school_anchor: { ...(understanding.school_anchor || {}), ...(nextUnderstanding.school_anchor || {}) }
   }
 }
 

@@ -575,8 +575,13 @@ function hasThinProposalPayload(payload: {
   const confirmedProposal = payload.confirmedProposal || {};
   const structuredData = payload.structuredData || {};
 
-  // V3 §10 P1.7: 优先从 routing 表（cache）取硬必需字段，回落到硬编码
-  const requiredFields = getCachedHardRequiredFields();
+  // V3 §10 P1.7: 优先从 routing 表（cache）取门禁字段，回落到硬编码。
+  // 门禁 = hard-required（推进的硬条件）+ proposal-output（提案本身的内容），
+  // 后者此前只有渲染用途、无人校验，于是「理解够了、模型没给提案」也进 proposing（#162）。
+  const gateFields = getCachedGateFields();
+  const requiredFields = gateFields
+    ? [...gateFields.hardRequired, ...gateFields.proposalOutput]
+    : null;
 
   // 取嵌套路径值
   const valueAt = (obj: any, path: string): any => {
@@ -703,9 +708,16 @@ function hasThinProposalPayload(payload: {
   return { thin, missing };
 }
 
-// V3 §10 P1.7: 模块级缓存——hard-required 字段清单
-let _hardRequiredCache: string[] | null = null;
-let _hardRequiredLoadingAt = 0;
+// V3 §10 P1.7: 模块级缓存——门禁字段清单（hard-required + proposal-output）
+interface GoalGateFieldRouting {
+  /** routing 表里 promptRole=hard-required 的 understanding 字段（推进的硬条件） */
+  hardRequired: string[];
+  /** routing 表里 promptRole=proposal-output 的 confirmedProposal 字段（提案本身） */
+  proposalOutput: string[];
+}
+
+let _goalGateFieldsCache: GoalGateFieldRouting | null = null;
+let _goalGateFieldsLoadingAt = 0;
 const HARD_REQUIRED_CACHE_TTL_MS = 30_000;
 
 // jest 下跳过模块级异步预热：fire-and-forget 的 import() 链会在测试环境拆除后执行，
@@ -713,30 +725,45 @@ const HARD_REQUIRED_CACHE_TTL_MS = 30_000;
 // 该缓存为尽力而为（冷缓存回落硬编码校验），跳过不影响任何断言语义。
 const isUnderJest = process.env.JEST_WORKER_ID !== undefined;
 
-function getCachedHardRequiredFields(): string[] | null {
+function getCachedGateFields(): GoalGateFieldRouting | null {
   // 同步访问；过期时间到了启动后台刷新（但不阻塞）
   const now = Date.now();
-  if (_hardRequiredCache && now - _hardRequiredLoadingAt < HARD_REQUIRED_CACHE_TTL_MS) {
-    return _hardRequiredCache;
+  if (_goalGateFieldsCache && now - _goalGateFieldsLoadingAt < HARD_REQUIRED_CACHE_TTL_MS) {
+    return _goalGateFieldsCache;
   }
-  if (!isUnderJest && now - _hardRequiredLoadingAt > HARD_REQUIRED_CACHE_TTL_MS) {
-    _hardRequiredLoadingAt = now;
-    void refreshHardRequiredCache();
+  if (!isUnderJest && now - _goalGateFieldsLoadingAt > HARD_REQUIRED_CACHE_TTL_MS) {
+    _goalGateFieldsLoadingAt = now;
+    void refreshGateFieldsCache();
   }
-  return _hardRequiredCache;
+  return _goalGateFieldsCache;
 }
 
-async function refreshHardRequiredCache(): Promise<void> {
+/**
+ * 由 routing 行装配门禁字段清单；导出供单测注入（生产只由 refreshGateFieldsCache 调用）。
+ *
+ * proposal-output 行（confirmedProposal.learning_direction / first_deliverable /
+ * key_stages / out_of_scope / scope_size）此前**只用于渲染 supplement**——routing 加载后
+ * 门禁只校验 hard-required 的 4 个 understanding 字段，于是「理解够了但模型没给提案」
+ * 照样进入 proposing，确认后生成一条 confirmedProposal=null 的路径（#162）。
+ */
+export function applyGoalGateRoutingRows(
+  rows: Array<{ fieldId: string; promptRole?: string | null }>
+): void {
+  _goalGateFieldsCache = {
+    hardRequired: rows.filter((r) => r.promptRole === 'hard-required').map((r) => r.fieldId),
+    proposalOutput: rows.filter((r) => r.promptRole === 'proposal-output').map((r) => r.fieldId),
+  };
+  _goalGateFieldsLoadingAt = Date.now();
+}
+
+async function refreshGateFieldsCache(): Promise<void> {
   try {
     const { getAgentRoutings } = await import('../../services/field-dispatcher');
     const rows = await getAgentRoutings('goal-conversation');
-    const ids = rows
-      .filter((r) => r.promptRole === 'hard-required')
-      .map((r) => r.fieldId);
     // 允许清空：admin 移除全部 hard-required 后缓存必须同步更新（旧守卫会永久保留旧清单）
-    _hardRequiredCache = ids;
+    applyGoalGateRoutingRows(rows);
   } catch (err) {
-    logger.debug('[skill:goal-conversation] refresh hard-required cache failed', {
+    logger.debug('[skill:goal-conversation] refresh gate field cache failed', {
       error: (err as Error).message,
     });
   }
@@ -744,7 +771,7 @@ async function refreshHardRequiredCache(): Promise<void> {
 
 // 启动时预热一次（不 await）；jest 下跳过（见 isUnderJest 说明）
 if (!isUnderJest) {
-  void refreshHardRequiredCache();
+  void refreshGateFieldsCache();
 }
 
 /**
@@ -887,7 +914,15 @@ export function parseGoalConversationResponse(
   stage = stageControl.stage;
   confidence = stageControl.confidence;
 
-  const thinCheck = hasThinProposalPayload({ understanding, confirmedProposal, structuredData });
+  // 提案的跨轮口径是「缺席=不变」：模型本轮没复述 confirmedProposal（delta 模式常态，
+  // 或只是没再贴一遍）时，门禁要看上一轮落库的那份，否则同一个已有提案的会话会在
+  // 每轮不复述时被误判「提案为空」而压回 understanding（#159 同类跨轮语义）。
+  const previousConfirmedProposal = stageControlOptions?.previousState?.confirmedProposal ?? null;
+  const thinCheck = hasThinProposalPayload({
+    understanding,
+    confirmedProposal: confirmedProposal ?? previousConfirmedProposal,
+    structuredData,
+  });
   if (stage === 'proposing' && thinCheck.thin) {
     stage = 'understanding';
     confidence = Math.min(confidence, 0.78);

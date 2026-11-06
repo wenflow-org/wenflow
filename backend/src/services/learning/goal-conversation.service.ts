@@ -66,6 +66,24 @@ interface GoalConversationOptions {
 }
 
 /**
+ * 「可确认的提案」判据（#162）。
+ *
+ * 确认通道要能放行，前提是会话里**真的有一份提案**：模型某轮没产出 confirmedProposal
+ * （或只给了半截）时，确认按钮/自然语言确认都不应代签，否则 bindGeneratingPath 拿到的
+ * confirmedProposal 是 null，直接生成一条从未被确认过的路径。
+ * 字段口径与 skill 侧 proposal-output 门禁一致（learning_direction / first_deliverable /
+ * key_stages，后者至少 2 个有效阶段）。
+ */
+function isConfirmableProposal(proposal: any): boolean {
+  if (!proposal || typeof proposal !== 'object' || Array.isArray(proposal)) return false;
+  const direction = typeof proposal.learning_direction === 'string' && proposal.learning_direction.trim().length > 0;
+  const deliverable = typeof proposal.first_deliverable === 'string' && proposal.first_deliverable.trim().length > 0;
+  const stages = Array.isArray(proposal.key_stages)
+    && proposal.key_stages.filter((stage: any) => typeof stage === 'string' && stage.trim().length > 0).length >= 2;
+  return direction && deliverable && stages;
+}
+
+/**
  * 问题穿透对话系统设计 V2：
  *
  * 1. 角色定位：学习规划顾问（规划"学什么"），不是咨询师（告诉"怎么做"）
@@ -642,6 +660,30 @@ async continueConversation(
           });
         }
 
+        // 提案内容门禁（#162）：确认通道此前只看 `stage==='proposing' && confirmProposal`，
+        // 从不看提案内容——模型这一轮没给提案（confirmedProposal=null）时，按钮/自然语言
+        // 照样确认，bindGeneratingPath 直接拿 null 生成一条「还没够就开始建路径」的路径。
+        // 判据与 skill 侧门禁同源（promptRole=proposal-output 的 learning_direction /
+        // first_deliverable / key_stages；见 skills/goal-conversation 的 proposal-output 门禁）。
+        // 没有可用提案时不代签，转向普通回合由模型先补提案。
+        if (conversation.stage === 'proposing' && confirmProposal) {
+          let snapshotProposal: any = null;
+          try {
+            snapshotProposal = JSON.parse(conversation.collectedData || '{}')?.confirmedProposal ?? null;
+          } catch {
+            snapshotProposal = null;
+          }
+          if (!isConfirmableProposal(snapshotProposal)) {
+            logger.warn('[goal-conversation] 确认收到但本会话没有可用提案，不生成路径，按普通回合补提案', {
+              conversationId,
+              userId,
+              stage: conversation.stage,
+              hasProposal: snapshotProposal !== null,
+            });
+            confirmProposal = false;
+          }
+        }
+
         if (conversation.stage === 'proposing' && confirmProposal) {
           if (options?.confirmProposal !== true) {
             logger.info('[goal-conversation] 自然语言确认命中，按 confirmProposal 推进', {
@@ -834,7 +876,12 @@ async continueConversation(
       // 失败重试由 saveMessage 的回合级幂等（pendingUserTurn）护栏挡住重复写入。
       await this.saveMessage(conversation.id, 'user', userReply, options?.meta, { idempotentUserTurn: true });
 
-      const aiResponse = await this.callAI(conversation.id, userReply, false, userId, options, {
+      // 被门禁否决的确认（显式拒绝 / 会话内没有可用提案）不再当作确认喂给模型：
+      // 否则模型会按「用户已确认」推进，而本轮实际上只是在补提案（#162）。
+      const aiOptions = options?.confirmProposal === true && !confirmProposal
+        ? { ...options, confirmProposal: false }
+        : options;
+      const aiResponse = await this.callAI(conversation.id, userReply, false, userId, aiOptions, {
         excludeTrailingUserInput: true
       });
       const responseWithConversationId = this.withConversationId(aiResponse, conversationId);
