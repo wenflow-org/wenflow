@@ -52,6 +52,8 @@ export interface RoutingReachabilityReport {
   ungovernedStages: UngovernedStage[];
   /** 既没接入词表、又没在登记表里认领的阶段；非空即门禁失败（#200-2 复核补的洞） */
   unregisteredStages: UngovernedStage[];
+  /** 同一个 stage 名出现在多个编排文件里；非空即门禁失败（复核绕过 2） */
+  duplicateStages: string[];
 }
 
 /**
@@ -77,9 +79,11 @@ export function collectRoutingReachabilityGaps(
   const violations: UndeclaredRouting[] = [];
   const ungovernedStages: UngovernedStage[] = [];
   const unregisteredStages: UngovernedStage[] = [];
+  const stageNameCount = new Map<string, number>();
 
   for (const stage of stages) {
     const stageName = String(stage?.stage ?? '').trim() || '(unknown)';
+    stageNameCount.set(stageName, (stageNameCount.get(stageName) ?? 0) + 1);
     const routings = Array.isArray(stage?.routings) ? stage!.routings! : [];
     const declaredCount = routings.filter((routing) => isRoutingReachabilityDeclared(routing)).length;
     // 受管辖判据只看**显式** reachability：notes 的 auto 登记是「我已确认默认」，不是启用词表的信号
@@ -104,7 +108,71 @@ export function collectRoutingReachabilityGaps(
     }
   }
 
-  return { governedStages, violations, ungovernedStages, unregisteredStages };
+  const duplicateStages = [...stageNameCount.entries()]
+    .filter(([, count]) => count > 1)
+    .map(([name]) => name)
+    .sort();
+
+  return { governedStages, violations, ungovernedStages, unregisteredStages, duplicateStages };
+}
+
+/** routing 的稳定标识：agentId · fieldId（清单与漂移比对都用它） */
+export function routingPairKey(routing: { agentId?: string | null; fieldId?: string | null }): string {
+  return `${String(routing?.agentId ?? '(missing)')}|${String(routing?.fieldId ?? '(missing)')}`;
+}
+
+/**
+ * 逐阶段的 routing 清单（#200-2 复核绕过 1）。
+ *
+ * 阶段粒度登记只拦得住「新 stage 名」：往已登记的 goal / path / teaching / profile 里
+ * 加一条永远不被调用的 routing，门禁原样放行（复核实测 78→79 只进公示计数）。
+ * 这里把清单快照下来做**棘轮**（与 layering:check 的超大文件基线同一套路数）：
+ * 任何新增/删除/改名都会让门禁红，作者必须显式二选一——
+ * 给这条边声明 reachability（或 notes 记 `auto — 入口`），或者更新基线表示「已知情」。
+ */
+export function buildRoutingInventory(
+  stages: ReadonlyArray<RoutingReachabilityStageLike>,
+): Record<string, string[]> {
+  const inventory: Record<string, string[]> = {};
+  for (const stage of stages ?? []) {
+    const stageName = String(stage?.stage ?? '').trim() || '(unknown)';
+    const pairs = (Array.isArray(stage?.routings) ? stage!.routings! : []).map(routingPairKey);
+    inventory[stageName] = [...(inventory[stageName] ?? []), ...pairs].sort();
+  }
+  return inventory;
+}
+
+export interface RoutingInventoryDrift {
+  stage: string;
+  added: string[];
+  removed: string[];
+}
+
+export function diffRoutingInventory(
+  baseline: Readonly<Record<string, readonly string[]>>,
+  current: Readonly<Record<string, readonly string[]>>,
+): RoutingInventoryDrift[] {
+  const stages = [...new Set([...Object.keys(baseline ?? {}), ...Object.keys(current ?? {})])].sort();
+  const drift: RoutingInventoryDrift[] = [];
+  for (const stage of stages) {
+    const before = new Set(baseline?.[stage] ?? []);
+    const after = new Set(current?.[stage] ?? []);
+    const added = (current?.[stage] ?? []).filter((pair) => !before.has(pair));
+    const removed = (baseline?.[stage] ?? []).filter((pair) => !after.has(pair));
+    if (added.length > 0 || removed.length > 0) drift.push({ stage, added, removed });
+  }
+  return drift;
+}
+
+/** 清单漂移的输出文本（脚本失败信息与测试共用） */
+export function formatRoutingInventoryDrift(drift: ReadonlyArray<RoutingInventoryDrift>): string {
+  const lines: string[] = [`routing 清单较基线有变化：${drift.length} 个阶段`];
+  for (const item of drift) {
+    lines.push(`  - [${item.stage}]`);
+    for (const pair of item.added) lines.push(`      + ${pair}  ← 新边：需声明 reachability（或 notes 记 auto — <入口>），或更新基线`);
+    for (const pair of item.removed) lines.push(`      - ${pair}  ← 已消失：确认是删边，然后更新基线`);
+  }
+  return lines.join('\n');
 }
 
 /** 门禁输出文本（脚本与测试共用，保证失败信息一致） */
@@ -117,6 +185,13 @@ export function formatRoutingReachabilityReport(report: RoutingReachabilityRepor
         `  - [${violation.stage}] ${violation.agentId} · ${violation.fieldId}`
         + '  ← 需 reachability: manual|external，或在 notes 里登记 auto — <入口说明>',
       );
+    }
+    return lines.join('\n');
+  }
+  if (report.duplicateStages.length > 0) {
+    lines.push(`stage 名重复：${report.duplicateStages.length} 个（同名出现在多个编排文件里）`);
+    for (const stage of report.duplicateStages) {
+      lines.push(`  - ${stage}  ← 同名阶段会被分头加载/覆盖，登记表以 stage 字符串为键将失去意义`);
     }
     return lines.join('\n');
   }

@@ -9,6 +9,7 @@ export {}
 
 const projectionsFindUnique = jest.fn();
 const projectionsUpsert = jest.fn();
+const projectionsDeleteMany = jest.fn();
 
 jest.mock('../../../config/database', () => ({
   __esModule: true,
@@ -16,6 +17,7 @@ jest.mock('../../../config/database', () => ({
     learner_projections: {
       findUnique: (...args: any[]) => projectionsFindUnique(...args),
       upsert: (...args: any[]) => projectionsUpsert(...args),
+      deleteMany: (...args: any[]) => projectionsDeleteMany(...args),
     },
   },
 }));
@@ -42,6 +44,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   projectionsFindUnique.mockResolvedValue(null);
   projectionsUpsert.mockResolvedValue({});
+  projectionsDeleteMany.mockResolvedValue({ count: 0 });
   snapshotOf.mockImplementation(async (input: { userId: string }) => snapshotFor(input.userId));
 });
 
@@ -148,5 +151,31 @@ describe('#176-2 复核：invalidate 必须管住持久化投影（只删内存�
     await learnerSnapshotRefreshService.getLatest({ userId: 'u-wm-d', scope: 'global' });
 
     expect(snapshotOf).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * 复核残留 1：水位只活在进程里。持久化投影的 10 / 60 分钟窗口不随进程消失，
+   * 进程在窗口内重启后旧画像那行会被重新采用。修法是把失效落到持久层——整族作废该用户的投影行
+   * （顺带覆盖直读投影表、从不经过本服务的 scope='review' 那一族）。
+   */
+  it('invalidate 把该用户的持久化投影整族作废（重启后没有旧行可读）', async () => {
+    learnerSnapshotRefreshService.invalidate('u-drop-1');
+
+    expect(projectionsDeleteMany).toHaveBeenCalledTimes(1);
+    expect(projectionsDeleteMany.mock.calls[0][0]).toEqual({ where: { userId: 'u-drop-1' } });
+  });
+
+  it('作废持久化失败只记日志，不把失效调用打成异常', async () => {
+    projectionsDeleteMany.mockRejectedValue(new Error('database is locked'));
+
+    expect(() => learnerSnapshotRefreshService.invalidate('u-drop-2')).not.toThrow();
+    // 让 fire-and-forget 的 catch 落地，避免未处理拒绝污染后续用例
+    await new Promise((resolve) => setImmediate(resolve));
+  });
+
+  it('invalidate() 不带 userId：清空内存缓存，但不下发全表删除', async () => {
+    learnerSnapshotRefreshService.invalidate();
+
+    expect(projectionsDeleteMany).not.toHaveBeenCalled();
   });
 });

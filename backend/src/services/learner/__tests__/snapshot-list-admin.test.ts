@@ -32,7 +32,12 @@ jest.mock('../../../config/database', () => ({
     learning_paths: {
       findMany: (...args: any[]) => learningPathsFindMany(...args),
     },
-    learner_projections: { findMany: projectionsFindMany, findUnique: projectionsFindUnique, upsert: projectionsUpsert },
+    learner_projections: {
+      findMany: projectionsFindMany,
+      findUnique: projectionsFindUnique,
+      upsert: projectionsUpsert,
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    },
   },
 }));
 

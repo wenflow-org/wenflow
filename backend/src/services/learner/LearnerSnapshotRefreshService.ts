@@ -1,6 +1,7 @@
 import prisma from '../../config/database';
 import { learnerSnapshotService } from './LearnerSnapshotService';
 import { buildNonVirtualUserWhere, isTestAccountUser } from '../../utils/test-account';
+import { logger } from '../../utils/logger';
 import type { LearnerSnapshot } from '../../agents/learner-model-agent/types';
 
 /**
@@ -105,6 +106,32 @@ export class LearnerSnapshotRefreshService {
       if (oldest === undefined) break;
       this.invalidatedAt.delete(oldest);
     }
+    this.dropPersistedProjections(userId);
+  }
+
+  /**
+   * 作废该用户落库的投影行（#176-2 复核残留 1）。
+   *
+   * 水位只活在进程里，而 `learner_projections` 的 10 分钟（getLatest）/ 60 分钟（列表）
+   * 窗口不随进程消失：**进程在窗口内重启**（部署、崩溃重启）后水位为空，读路径就会把
+   * **失效前**那行旧画像载荷重新采用。所以失效必须落到持久层：行是缓存，删掉下次读自动重建。
+   *
+   * 顺带覆盖另一族：`LearnerStateReviewService`（scope='review'）直读投影表、从不经过本服务，
+   * 画像变更后同样会一直用旧画像派生出的评审载荷——按 userId 整族作废，不再只盯着快照的键。
+   *
+   * fire-and-forget：`invalidate` 的调用方（`updateProfile`、事件消费者）都在热路径上，
+   * 不为一次缓存清理把链路改成 async；失败只记日志——同进程内还有水位兜着，
+   * 跨进程由「行已被删」保证，二者其一失效不至于把旧画像端上桌。
+   */
+  private dropPersistedProjections(userId: string): void {
+    void prisma.learner_projections
+      .deleteMany({ where: { userId } })
+      .catch((error: unknown) => {
+        logger.warn(
+          `[learner-snapshot] 作废持久化投影失败（userId=${userId}）：`
+          + `${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
   }
 
   async refresh(input: LearnerSnapshotRefreshInput): Promise<LearnerSnapshot> {

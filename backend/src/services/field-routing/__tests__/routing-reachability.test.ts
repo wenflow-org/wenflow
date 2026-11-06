@@ -5,10 +5,14 @@
  * 所以「新加一条没声明可达性的 routing」在当前仓库里会红——包括 17 条靠缺省值的 live routing
  * 未登记 notes 时的状态。
  */
-import { loadOrchestrationFiles } from '../orchestration-file';
+import fs from 'fs';
+import path from 'path';
+import { ORCHESTRATION_DIR, loadOrchestrationFiles } from '../orchestration-file';
 import {
   UNGOVERNED_STAGE_REGISTRY,
+  buildRoutingInventory,
   collectRoutingReachabilityGaps,
+  diffRoutingInventory,
   formatRoutingReachabilityReport,
 } from '../routing-reachability';
 
@@ -85,8 +89,51 @@ describe('collectRoutingReachabilityGaps（静态门禁规则）', () => {
     // #200-2 复核：未接入词表的阶段集合必须与登记表逐字相同——
     // 谁新加一个 stage 文件（或改了 stage 名），这里立刻红，不再静默落进公示计数。
     expect(report.unregisteredStages).toEqual([]);
+    expect(report.duplicateStages).toEqual([]);
     expect(report.ungovernedStages.map((s) => s.stage).sort()).toEqual(
       Object.keys(UNGOVERNED_STAGE_REGISTRY).sort(),
     );
+  });
+
+  it('#200-2 复核绕过 2：同一个 stage 名出现在多个编排文件里 → 违规（登记表以 stage 为键，重名即失效）', () => {
+    const report = collectRoutingReachabilityGaps([
+      { stage: 'goal', routings: [{ agentId: 'skill:a', fieldId: 'f1' }] },
+      { stage: 'goal', routings: [{ agentId: 'skill:b', fieldId: 'f2' }] },
+      { stage: 'simulation', routings: [{ agentId: 'skill:c', fieldId: 'f3', reachability: 'external' }] },
+    ]);
+
+    expect(report.duplicateStages).toEqual(['goal']);
+    expect(formatRoutingReachabilityReport(report)).toContain('stage 名重复');
+  });
+});
+
+describe('#200-2 复核绕过 1：清单棘轮（往已登记阶段里加边也要显式认领）', () => {
+  it('buildRoutingInventory 逐阶段收集 agentId|fieldId 并排序', () => {
+    const inventory = buildRoutingInventory([
+      { stage: 'goal', routings: [{ agentId: 'skill:b', fieldId: 'z' }, { agentId: 'skill:a', fieldId: 'a' }] },
+      { stage: 'path', routings: [] },
+    ]);
+
+    expect(inventory).toEqual({ goal: ['skill:a|a', 'skill:b|z'], path: [] });
+  });
+
+  it('diffRoutingInventory 报出新增与删除，两边都没有变化的阶段不出现', () => {
+    const baseline = { goal: ['a|x', 'b|y'], teaching: ['c|z'] };
+    const current = { goal: ['a|x', 'b|y', 'd|new'], path: ['e|p'] };
+
+    expect(diffRoutingInventory(baseline, current)).toEqual([
+      { stage: 'goal', added: ['d|new'], removed: [] },
+      { stage: 'path', added: ['e|p'], removed: [] },
+      { stage: 'teaching', added: [], removed: ['c|z'] },
+    ]);
+  });
+
+  it('真实清单必须与 prompts/orchestration/_reachability-baseline.json 一致（加边即在 CI 红）', () => {
+    const baselinePath = path.join(ORCHESTRATION_DIR, '_reachability-baseline.json');
+    const baseline = JSON.parse(fs.readFileSync(baselinePath, 'utf8')) as Record<string, string[]>;
+    const current = buildRoutingInventory(loadOrchestrationFiles());
+
+    // 失败时逐条列出新增/删除的边；确认无误后用 npm run prompts:reachability:baseline:update 更新
+    expect(diffRoutingInventory(baseline, current)).toEqual([]);
   });
 });
