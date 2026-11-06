@@ -69,6 +69,135 @@ html, body {
   color: var(--ink);
 }
 
+/* ================= 全局滚动条（SPEC §6：极简化 / 去箭头） =================
+   design-system.css 的「html 滚动条 none」只作用于文档滚动容器——scrollbar-width
+   不是继承属性，所以聊天流 / 弹窗 / 下拉面板 / 抽屉这些内部滚动容器仍是 Chromium
+   默认的粗灰槽 + Windows 上下三角箭头（用户走查点名的「粗大原生滚动条」）。
+   这里把学员侧所有滚动容器统一成：
+   · WebKit（Chrome / Edge / Safari）：4px 宽、半透明圆角滑块、轨道透明、去箭头；
+   · Firefox（不认 ::-webkit-scrollbar）：标准属性 thin + 同色滑块。
+
+   ⚠ 前置修复（2026-11-06 复核）：scrollbar-color 是**继承属性**，design-system.css
+   在 html 上给了非 auto 的浅灰（`html { scrollbar-color: var(--neutral-400) transparent }`），
+   后代即使自己没写也会继承到这个非 auto 值；Chromium 据此忽略 ::-webkit-scrollbar
+   整族——所以下面每条 WebKit 自绘规则在 Chrome/Edge 里原本都不会生效。必须先把本侧
+   容器的 scrollbar-color 显式重置回 auto，4px 滑块才落得下来。
+
+   覆盖清单：.v2-page 及其后代（聊天流/弹窗/抽屉/页面内下拉）、导航菜单与 dock、
+   通知面板，以及两个 Teleport 到 body 的放大弹层（TeachingFigure / TeachingDiagram
+   的 __canvas，挂在 .v2-page 之外，必须单独点名，否则放大图仍是宽滚动条）。
+   MkSelect 的下拉弹层 .mk-listbox-pop 也单列：它自己写着 scrollbar-width:auto
+   （styles/mk-select.css:28，刻意要标准宽度），不点名就绕过 .v2-page 的覆盖；
+   admin 侧 LearnerDetail 复用同一下拉，一并极简化。 */
+:is(
+  .v2-page,
+  .v2-page *,
+  .v2nav__menu,
+  .v2nav__dock,
+  .nc__panel,
+  .figure-zoom__canvas,
+  .diagram-zoom__canvas,
+  .mk-listbox-pop
+) {
+  /* 重置继承来的非 auto 值，恢复 WebKit 自绘能力；Firefox 分支（文末）会重新给出
+     thin + 同色滑块，同权重后出现，覆盖这条。 */
+  scrollbar-color: auto;
+}
+:is(
+  .v2-page,
+  .v2-page *,
+  .v2nav__menu,
+  .v2nav__dock,
+  .nc__panel,
+  .figure-zoom__canvas,
+  .diagram-zoom__canvas,
+  .mk-listbox-pop
+)::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+:is(
+  .v2-page,
+  .v2-page *,
+  .v2nav__menu,
+  .v2nav__dock,
+  .nc__panel,
+  .figure-zoom__canvas,
+  .diagram-zoom__canvas,
+  .mk-listbox-pop
+)::-webkit-scrollbar-track,
+:is(
+  .v2-page,
+  .v2-page *,
+  .v2nav__menu,
+  .v2nav__dock,
+  .nc__panel,
+  .figure-zoom__canvas,
+  .diagram-zoom__canvas,
+  .mk-listbox-pop
+)::-webkit-scrollbar-corner {
+  background: transparent;
+  border-radius: var(--mk-radius-pill);
+}
+:is(
+  .v2-page,
+  .v2-page *,
+  .v2nav__menu,
+  .v2nav__dock,
+  .nc__panel,
+  .figure-zoom__canvas,
+  .diagram-zoom__canvas,
+  .mk-listbox-pop
+)::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--ink) 22%, transparent);
+  border-radius: var(--mk-radius-pill);
+}
+:is(
+  .v2-page,
+  .v2-page *,
+  .v2nav__menu,
+  .v2nav__dock,
+  .nc__panel,
+  .figure-zoom__canvas,
+  .diagram-zoom__canvas,
+  .mk-listbox-pop
+)::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--ink) 34%, transparent);
+}
+/* Windows 原生滚动槽的上下三角箭头：一旦自绘滑块就必须显式移除 */
+:is(
+  .v2-page,
+  .v2-page *,
+  .v2nav__menu,
+  .v2nav__dock,
+  .nc__panel,
+  .figure-zoom__canvas,
+  .diagram-zoom__canvas,
+  .mk-listbox-pop
+)::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+/* Firefox：@supports not selector(::-webkit-scrollbar) 在部分版本会把 -webkit- 伪元素
+   当合法选择器，判定不可靠；这里用只有 Firefox 认的 -moz-appearance 做特征检测。
+   Firefox 里 scrollbar-width 不继承 → 不写就回落到 auto（粗），故显式 thin。 */
+@supports (-moz-appearance: none) {
+  :is(
+    .v2-page,
+    .v2-page *,
+    .v2nav__menu,
+    .v2nav__dock,
+    .nc__panel,
+    .figure-zoom__canvas,
+    .diagram-zoom__canvas,
+    .mk-listbox-pop
+  ) {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--ink) 22%, transparent) transparent;
+  }
+}
+
 /* ====== .v2-page 布局（不再需要重新定义变量，:root 已提供） ====== */
 .v2-page {
   /* 公告条在 #app 外层占流（App.vue #app 为 flex column），
@@ -308,14 +437,38 @@ html, body {
   cursor: pointer;
 }
 
+/* MkSelect 默认触发器（工具条形态）的 §1 控件档（2026-11-06，页面组请求）：
+   MkSelect 原语自带的 md 档是 32px 高 + 6px 圆角（styles/mk-select.css:76/82），
+   低于 §1 的「34~36px 高、8px 圆角」。该文件不在本组可改范围，故在全局层按同等
+   角色覆写：
+   · --sm 是表格内紧凑档，用 :where() 排除且不抬权重（保持自身 30px）；
+   · .uc-field（42px，表单对齐）与 .filter-select（36px，筛选行）是更专用的档，
+     同权重、写在后面，按层叠顺序继续生效；
+   · 只在 ≥901px 生效：≤900 由 mk-select.css 的移动块统一 36px（mobile:spec
+     的 lt36 硬下沿），不能被这里的 34px 反压。
+   顺带覆盖 --borderless（无底色/描边版）的 6px 圆角 → 8px（悬停浮出底色时才可见）。 */
+@media (min-width: 901px) {
+  .v2-page .mk-select:where(:not(.mk-select--sm)) .mk-select__trigger {
+    height: 34px;
+    border-radius: var(--mk-radius-md);
+  }
+}
+
 /* 表单语境里的自绘下拉（2026-10-28）：MkSelect 默认 32px/6px 是工具条形态，
-   放进 .uc-field 或调用日志的筛选行，会和 44px 的 .uc-field__input 错位。
-   这里统一成用户侧输入框的高度与圆角；工具条（资料库排序等）保持紧凑形态。 */
-.v2-page .uc-field .mk-select__trigger,
-.v2-page .filter-select .mk-select__trigger {
+   放进 .uc-field 会和 ~43px 的 .uc-field__input 错位，所以 .uc-field 里的下拉保持
+   42px/xl——这是**表单字段**语境的对齐钩子，不属 §1 说的「搜索框 / 筛选下拉触发器」。
+   2026-11-06 §1 控件收敛：筛选行（.filter-select，调用日志页）是工具栏触发器，
+   收敛到 36px 高 / 8px 圆角；同排日期输入一起收，筛选行不出现高低不齐。 */
+.v2-page .uc-field .mk-select__trigger {
   height: 42px;
   padding: 0 12px;
   border-radius: var(--mk-radius-xl);
+  font-size: 14px;
+}
+.v2-page .filter-select .mk-select__trigger {
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--mk-radius-md);
   font-size: 14px;
 }
 .v2-page .uc-field .mk-mp--compact .mk-mp__control {
@@ -323,6 +476,13 @@ html, body {
   padding: 9px 34px 9px 14px;
   border-radius: var(--mk-radius-xl);
   font-size: 14px;
+}
+/* 配套：筛选行的日期输入与触发器同档（36px / 8px）。AgentLogs.vue 的 scoped
+   `.filter-dates input { height: 42px }` 权重是 (0,2,1)，这条带 .uc-field__input
+   类提到 (0,3,1) 才压得住（与按钮副本同性质的跨页对齐钩子，只影响 .filter-dates）。 */
+.v2-page .filter-dates input.uc-field__input {
+  height: 36px;
+  border-radius: var(--mk-radius-md);
 }
 
 .v2-page > main {
@@ -368,15 +528,20 @@ html, body {
 .v2-page .btn-primary {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 7px;
-  padding: 11px 22px;
+  /* SPEC §1 控件档：默认主按钮 32px 高 / 0 14px 内边距 / 8px 圆角 / 13px 字。
+     --mk-radius-md 就是 token 表里「按钮 / 输入 / 菜单项」的控件圆角档；不再用
+     11px 22px 内边距撑出的「肥大胶囊」（32px 落在 30~34px 档内，13px 落在 12~13px 档内）。 */
+  height: 32px;
+  padding: 0 14px;
   border: 0;
-  border-radius: var(--mk-radius-xl);
+  border-radius: var(--mk-radius-md);
   /* 主按钮纯色 --blue（原 135deg 蓝→深蓝渐变已退役）：
      「友好而平」规定主操作是实色，渐变制造的高光感与暖平基调相冲。 */
   background: var(--blue);
   color: var(--wf-text-on-primary);
-  font-size: 14px;
+  font-size: 13px;
   font-family: inherit;
   font-weight: 700;
   /* 无投影：发光边框式光晕已全量下线（按钮不需要抬升层级，层级由字号/留白表达） */
@@ -384,6 +549,14 @@ html, body {
   text-decoration: none;
   /* 原型 wf-btn 悬停无抬升（仅 :active scale(.98)）——去掉旧的 -2px 悬浮 */
   transition: transform 0.2s ease, background 0.2s ease;
+}
+/* 独立尺寸角色不吃上面的紧凑档，恢复自身高度与卡片同级的 16px 圆角：
+   --block 是表单全宽提交键（认证页 12px 内边距 / 14.5px 字）、--lg 是大幅 CTA（13px 26px /
+   15px 字）。若被 32px 档吃掉，14.5~15px 文字会被压进 32px 高、12~13px 内边距的盒子里。 */
+.v2-page .btn-primary--block,
+.v2-page .btn-primary--lg {
+  height: auto;
+  border-radius: var(--mk-radius-xl);
 }
 .v2-page .btn-primary:not(:disabled):hover {
   background: var(--wf-color-primary-dark);
@@ -399,11 +572,18 @@ html, body {
 }
 
 .v2-page .btn-ghost {
-  padding: 10px 18px;
-  border-radius: var(--mk-radius-xl);
+  /* SPEC §1 控件档：次级按钮与主按钮同档 —— 32px 高 / 0 14px 内边距 / 8px 圆角 / 13px 字。
+     inline-flex + 居中：与主按钮同一基线，图标与文字不再各自漂移。 */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--mk-radius-md);
   border: 1px solid var(--line);
   background: var(--surface);
-  font-size: 14px;
+  font-size: 13px;
   font-family: inherit;
   font-weight: 700;
   color: var(--muted);
@@ -502,11 +682,38 @@ html, body {
   }
 }
 
-/* 徽章/药丸类：禁止换行与压缩（长标题会挤压导致竖排） */
+/* 状态标签 = 紧凑小方签（SPEC §1，2026-11-06 全局去肥胖化）。
+   非点击类状态标签（进行中/积累中/适中/较低/刚收录/待确认/持续关注/课程延续/已调整…）
+   严禁再用 rounded-full(9999px) + 大内边距冒充按钮——统一 22px 高 / 1px 6px 内边距 /
+   12px 字 / 6px 圆角（--mk-radius-sm）/ 无描边，底色与文字色由各语义变体
+   （.badge--blue / .tag--red / .pcard__badge--cyan …）提供。
+   字号固定 12px，**不用 --mk-fs-micro**：该 token 在 ≥1440 档是 12.5px、≥1920 档是 13px
+   （styles/main.css:337-351），宽屏下会顶破 §1 的「11px~12px」上限；标签字号不该随视口
+   半像素跳档，12px 也是 mobile:spec 的 fonts 硬下限（scripts/check-mobile-spec.mjs）。
+   .uc-badge 一并纳入（用户中心徽章此前只有 components/user/uc.css:277-289 的
+   999px 药丸档，且 uc.css 只在部分路由按需 import；这里给出全站统一的紧凑基座，
+   页面 scoped 覆写仍可按各自需要压过它）。
+   长标题不得把标签挤成竖排：nowrap + flex-shrink:0（原规则的职责保留）。 */
 .v2-page .badge,
 .v2-page .pcard__badge,
-.v2-page .streak,
-.v2-page .tag {
+.v2-page .tag,
+.v2-page .uc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 1px 6px;
+  border: 0;
+  border-radius: var(--mk-radius-sm);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* 「连续学习 N 天」是计数条（带描边的实底药丸），不属于状态签，不参与上面的方签收敛，
+   只保 nowrap / 不被压缩 */
+.v2-page .streak {
   white-space: nowrap;
   flex-shrink: 0;
 }

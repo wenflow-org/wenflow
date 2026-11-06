@@ -192,8 +192,9 @@ function handleFeedback(thumbsUp: boolean) {
   background: var(--color-success-bg);
 }
 .msg-actions__btn--sent-down {
-  /* #c0454a 无对应令牌（--mk-red/#c81e1e 更深），保留登记 */
-  color: #c0454a;
+  /* 令牌化（2026-11-06 审计约束：颜色只用 var(--*)）：原硬编码 #c0454a 换成
+     规范里的深危险档（#d95054），在 5% 红底上对比度与原来同档且随主题自适配 */
+  color: var(--wf-color-danger-dark);
   background: var(--wf-color-danger-bg);
 }
 

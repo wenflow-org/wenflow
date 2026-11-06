@@ -134,9 +134,9 @@ describe('模型级生成参数优先级', () => {
     expect(route.responseFormat).toBe('json_object')
   })
 
-  /* #177：平台 DB 未配默认时落到 env AI_MODEL 兜底——目录外的 env 值在运行时无可用渠道，
-     不得生效，应回落文件声明默认（启动/热重载归一化只覆盖 DB，env 只能在取值点拦）。 */
-  it('#177：平台默认未配 + env AI_MODEL 目录外 → 回落文件声明默认', async () => {
+  /* 2026-11-05 产品决定下线 #177 目录外默认门禁，见 CHANGELOG：
+     平台默认未配时，env AI_MODEL 即使不在注册表内也原样生效——运行期不再把它拦回文件默认。 */
+  it('#177 已下线：平台默认未配 + env AI_MODEL 目录外 → env 值原样生效', async () => {
     platformConfigFindFirst.mockResolvedValue({
       apiUrl: 'https://platform.example/v1',
       apiKey: 'platform-key',
@@ -153,16 +153,16 @@ describe('模型级生成参数优先级', () => {
     try {
       const { APIRouter } = await import('../router')
       const route = await new APIRouter().resolve({ agentId: 'a' })
-      expect(route.model).toBe('m-model')
+      expect(route.model).toBe('out-of-catalog-judge')
     } finally {
       if (previous === undefined) delete process.env.AI_MODEL
       else process.env.AI_MODEL = previous
     }
   })
 
-  /* #177：③ 直接手改 llm-providers.json（绕过管理台写入门禁）使目录收缩后，热重载即在解析前
-     按新目录归一化平台默认——目录外默认不再在运行期生效。 */
-  it('#177：手改目录收缩后热重载 → 立即归一化平台默认', async () => {
+  /* 2026-11-05 产品决定下线 #177 目录外默认门禁，见 CHANGELOG：
+     手改目录收缩后热重载不再把平台默认归一化到目录内，DB 里的 defaultModel 原样参与路由。 */
+  it('#177 已下线：手改目录收缩后热重载 → 平台默认不再被归一化', async () => {
     const { APIRouter } = await import('../router')
     platformConfigFindUnique.mockResolvedValue({
       defaultModel: 'm-model',
@@ -185,11 +185,11 @@ describe('模型级生成参数优先级', () => {
       }), 'utf-8')
       fs.utimesSync(tempConfig, new Date(), new Date(Date.now() + 3_600_000))
 
-      await new APIRouter().resolve({ agentId: 'a' })
+      const route = await new APIRouter().resolve({ agentId: 'a' })
 
-      expect(platformConfigUpdate).toHaveBeenCalledWith(expect.objectContaining({
-        data: expect.objectContaining({ defaultModel: 'm-plain' })
-      }))
+      // 不再回写 platform_api_configs；目录外的平台默认（m-model）仍按字面透传。
+      expect(platformConfigUpdate).not.toHaveBeenCalled()
+      expect(route.model).toBe('m-model')
     } finally {
       fs.writeFileSync(tempConfig, original, 'utf-8')
       fs.utimesSync(tempConfig, new Date(), new Date(Date.now() + 7_200_000))

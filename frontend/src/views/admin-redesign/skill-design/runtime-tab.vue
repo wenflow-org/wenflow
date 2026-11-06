@@ -127,10 +127,12 @@ ${orderTitle}`">{{ baseModel }}</span>
             <section id="sdp-panel-params" class="sdp-panel">
               <header class="sdp-panel__head">
                 <h4>生成参数</h4>
-                <!-- 段头是这一段的小结（思考档 + T 与来源）；每行的取值另在各行右侧给
-                     （2026-11-02 评审：原先四行都写「按 Prompt 声明」，唯一的数字只在这里，
-                     每行看不到自己的取值） -->
-                <span class="sdp-panel__state">思考模式 {{ thinkingLabel }} · T={{ generationParams?.temperature ?? INHERIT_PROMPT_LABEL }}<template v-if="generationParams?.temperature != null">（{{ sourceLabel('temperature') }}）</template></span>
+                <!-- 段头只留这一屏拿不到的第二份信息：T 的取值与来源。
+                     「思考模式」不再出现在段头——下面第一行就是它的下拉与当前值，
+                     段头再复读一遍等于同一件事写两遍（2026-11-06 走查）。
+                     每行的取值另在各行右侧给（2026-11-02 评审：原先四行都写「按 Prompt 声明」，
+                     唯一的数字只在这里，每行看不到自己的取值）。 -->
+                <span class="sdp-panel__state">T={{ generationParams?.temperature ?? INHERIT_PROMPT_LABEL }}<template v-if="generationParams?.temperature != null">（{{ sourceLabel('temperature') }}）</template></span>
               </header>
               <div class="sdp-form__grid">
                 <label class="sdp-field">
@@ -868,6 +870,11 @@ watch(() => props.skillId, () => {
   .sdp-diff__list > li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
 }
 
+/* 控件同高 32px：这一屏的下拉（.mk-select__trigger）与按钮（.mk-btn）都是 32px，
+   只有模型选择器还是 40px 的默认档，实测同一行三个高度（40 / 31 / 32）。
+   只收竖向内衬、保留字号与右侧 38px 的清除位——MkModelPicker 的 compact 档会把字号
+   连带降到 micro（12.5px），高度齐了字号又跳一档。 */
+.sdp-config-modal :deep(.mk-mp__control) { min-height: 32px; padding-top: 5px; padding-bottom: 5px; }
 .sdp-config-modal { width: min(720px, 96vw); }
 .sdp-config-modal__foot { display: flex; align-items: center; gap: 8px; }
 .sdp-config-modal__spacer { flex: 1 1 auto; }

@@ -34,7 +34,7 @@
         <span v-if="headBadge" class="mk-badge" :class="headBadge.cls">{{ headBadge.label }}</span>
       </div>
       <div class="mk-card__head-right mpp-head__conn">
-        <button v-if="registry?.readOnly" type="button" class="mk-btn mk-btn--sm mk-btn--danger" disabled title="配置文件所在目录不可写，请在部署侧开放写权限">
+        <button v-if="registry?.readOnly" type="button" class="mk-btn mk-btn--sm mk-btn--danger" disabled title="当前为只读状态，无法在本页修改，请让部署人员开放写权限">
           只读
         </button>
         <!-- 2026-11-05 用户「连接设置和添加模型合并到一起吧，只保留添加模型」：
@@ -60,7 +60,7 @@
       <span class="mk-alert__msg">{{ w }}</span>
     </div>
     <p v-if="registry?.readOnly" class="mpp-note">
-      注册表文件所在目录当前不可写，页面只能查看。请由部署侧开放写权限后再编辑。
+      当前为只读状态，只能查看。请让部署人员开放写权限后再编辑。
     </p>
 
     <MkLoading v-if="loading && !view" inline text="读取接入通道…" />
@@ -191,7 +191,7 @@
             </div>
           </div>
           <p v-if="!selected.enabled" class="mpp-empty">
-            这条通道当前停用，模型不参与路由。
+            这条通道已停用，其中的模型不会被调用。
           </p>
         </section>
       </template>
@@ -341,7 +341,7 @@ const selected = computed(() => providers.value.find((p) => p.id === 'platform')
 const registryPathTitle = computed(() => {
   const r = view.value?.registry
   if (!r) return ''
-  const parts = [`目录文件：${r.path}`]
+  const parts = [`配置文件：${r.path}`]
   if (r.lastError) parts.push(`最近更新失败：${r.lastError}`)
   return parts.join('\n')
 })
@@ -451,7 +451,7 @@ function adopt(payload: unknown, warnings: string[]): void {
 async function removeModel(m: ModelLike): Promise<void> {
   const ok = await askConfirm({
     title: `删除模型「${m.id}」`,
-    message: '从模型目录里删掉它，此后不再参与路由。若它正被默认路由或别名引用，系统会拦下并说明。',
+    message: '删除后它不再参与模型调用。若它正被默认模型或别名引用，系统会拦下并提示。',
     confirmText: '删除模型'
   })
   if (ok !== true) return

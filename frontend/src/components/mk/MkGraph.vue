@@ -154,6 +154,17 @@ let lastLabelWorthy = new Set<string>()
 const ZOOM_LABEL_OFF = 0.85
 let labelsHiddenByZoom = false
 
+/**
+ * 节点点击热区半径（§5 2026-11-06 用户定稿：r >= 20px）。
+ *
+ * 为什么不直接放大 symbolSize：ECharts 的 graph 符号只有一个 symbolSize，它同时决定
+ * 视觉大小与命中范围，没有「透明扩大命中框」参数——把 12~15px 的节点抬到 40px 会让
+ * 24 概念图糊成一团（标签互压）。所以热区在事件层实现：点在空白处时按屏幕像素距离
+ * （≤ 20px）取最近的节点，等价于给每颗节点套了一个不可见的 r=20 圆。
+ * 文字标签本身挂在节点符号上（zrender 的 __hostTarget 链），点标签即点节点，无需另做。
+ */
+const NODE_HIT_RADIUS = 20
+
 /** graphRoam 缩放跨档时翻转节点标签：低于阈值全收（密集区字压字不可读），回升恢复 labelWorthy 常显集合 */
 function applyZoomLabels() {
   if (!chart) return
@@ -241,40 +252,93 @@ function escapeHtml(text: string): string {
   ))
 }
 
-/** 重建前抄下当前力导向坐标与缩放：选中/取消选中的重建若不带这些，
- *  力导向从 circular 初值重新散开、缩放回 0.9——「点一下重排一次」不可接受 */
-function readGraphViewState(): {
-  positions: Map<string, { x: number; y: number }>
-  zoom?: number
-  center?: [number | string, number | string]
-} | null {
+/** ECharts 实例的私有取模型面（类型层未公开，运行时稳定）：力导向节点布局的唯一来源。
+ *  getLayout 的返回值按 unknown 收——实测是数组 `[x, y]`（见 layoutPoint），不是对象。 */
+type GraphModel = {
+  getModel: () => {
+    getSeriesByIndex: (i: number) => {
+      getGraph: () => { eachNode: (cb: (n: { id: string | number; getLayout: () => unknown }) => void) => void }
+    }
+  }
+  getOption: () => { series?: Array<{ zoom?: number; center?: [number | string, number | string] }> }
+}
+
+/**
+ * 力导向节点布局 → {x, y}。
+ *
+ * 形状实测（2026-11-06，node + jsdom + SVG renderer 探针打 echarts 6.1.0）：graph 的
+ * `getLayout()` 返回**数组** `[x, y]`（data/Graph.js:462 的 getLayout → data.getItemLayout；
+ * circular/force/simple 三个布局助手都用 `setLayout([x, y])`）。旧代码按 `l.x` 取值，
+ * `typeof l.x` 恒为 undefined，点击热区与「重建抄坐标」整段失效——所以这里两种形状都收，
+ * 数组为主、对象只为兼容将来/第三方的 layout 写法。
+ */
+function layoutPoint(l: unknown): { x: number; y: number } | null {
+  if (Array.isArray(l)) {
+    const [x, y] = l as [unknown, unknown]
+    return typeof x === 'number' && typeof y === 'number' ? { x, y } : null
+  }
+  if (l && typeof l === 'object') {
+    const p = l as { x?: unknown; y?: unknown }
+    return typeof p.x === 'number' && typeof p.y === 'number' ? { x: p.x, y: p.y } : null
+  }
+  return null
+}
+
+/**
+ * 重建前抄下当前缩放与视图中心。
+ *
+ * 只抄这两项、**不抄节点坐标**：graph 的 view 坐标系用 data 的 x/y 算包围盒
+ * （chart/graph/createView.js 的 `data.mapArray([+x, +y])`），把上一轮布局坐标当 x/y 回填
+ * 会让整张图按新包围盒重新投影——8 节点探针实测位移 ~207px。而力导向重建本身是确定性的
+ * （同一 option 连续两次 `setOption(notMerge)` 像素级 0px 差），点击选中本来就不会重排，
+ * 所以不需要喂坐标；不抄 zoom/center 则视图会跳回 0.9 / 居中（探针实测：带上读到的
+ * zoom/center 重建位移 0px）。
+ */
+function readGraphViewport(): { zoom?: number; center?: [number | string, number | string] } | null {
   if (!chart) return null
   try {
-    type GraphModel = {
-      /* getModel 是 ECharts 实例的私有方法（类型层未公开），运行时稳定存在；
-         走 unknown 中转拿力导向节点坐标——这是"选中压暗不重排"的关键 */
-      getModel: () => {
-        getSeriesByIndex: (i: number) => {
-          getGraph: () => { eachNode: (cb: (n: { id: string | number; getLayout: () => { x?: number; y?: number } | null }) => void) => void }
-        }
-      }
-      getOption: () => { series?: Array<{ zoom?: number; center?: [number | string, number | string] }> }
-    }
-    const model = chart as unknown as GraphModel
-    const positions = new Map<string, { x: number; y: number }>()
-    model.getModel().getSeriesByIndex(0).getGraph().eachNode((n) => {
-      const l = n.getLayout()
-      if (l && (l.x ?? 0) !== 0 && (l.y ?? 0) !== 0) positions.set(String(n.id), { x: l.x as number, y: l.y as number })
-    })
-    if (!positions.size) return null
-    const opt = model.getOption()
-    return { positions, zoom: opt.series?.[0]?.zoom, center: opt.series?.[0]?.center }
+    const opt = (chart as unknown as GraphModel).getOption()
+    return { zoom: opt.series?.[0]?.zoom, center: opt.series?.[0]?.center }
   } catch {
     return null
   }
 }
 
-function buildOption(viewState?: { positions?: Map<string, { x: number; y: number }>; zoom?: number; center?: [number | string, number | string] } | null): EChartsCoreOption {
+/**
+ * click 热区命中（§5：r >= 20px）：给定屏幕像素点，返回半径内最近的节点。
+ *
+ * 坐标链：节点布局由布局助手写在 layout（graph 的 view 坐标系，未含 roam 的缩放/平移），
+ * `convertToPixel` 按 seriesIndex 取同一坐标系把布局点换算成画布像素（roam 的 zoom/center
+ * 已在内），所以拖拽/缩放之后热区仍然贴着节点。探针实测：[389.9, 317.3] → [390.0, 315.6]。
+ * 取最近的一颗：热圈重叠时选择「更近」的那个，不会随遍历顺序跳变。
+ */
+function nodeNearPixel(x: number, y: number, radius: number): MkGraphNode | null {
+  if (!chart) return null
+  try {
+    const model = chart as unknown as GraphModel
+    const byId = new Map(visibleNodes.value.map((n) => [n.id, n]))
+    let best: MkGraphNode | null = null
+    let bestDist = Infinity
+    model.getModel().getSeriesByIndex(0).getGraph().eachNode((n) => {
+      const p = layoutPoint(n.getLayout())
+      if (!p) return
+      const px = chart!.convertToPixel({ seriesIndex: 0 }, [p.x, p.y]) as number[] | null
+      if (!Array.isArray(px)) return
+      const dist = Math.hypot(px[0] - x, px[1] - y)
+      if (dist > radius || dist >= bestDist) return
+      const found = byId.get(String(n.id))
+      if (found) {
+        best = found
+        bestDist = dist
+      }
+    })
+    return best
+  } catch {
+    return null
+  }
+}
+
+function buildOption(viewState?: { zoom?: number; center?: [number | string, number | string] } | null): EChartsCoreOption {
   const dark = resolvedTheme.value === 'dark'
   const nodes = visibleNodes.value
   const nodeIds = new Set(nodes.map((n) => n.id))
@@ -440,16 +504,15 @@ function buildOption(viewState?: { positions?: Map<string, { x: number; y: numbe
           // 多个高亮时标签上下交错：第 1 枚在节点下方、第 2 枚起在上方——hideOverlap
           // 常开后（见上方 labelLayout 注释），交错保证两枚高亮标签不因互相重叠被吞
           const highlightIndex = props.highlightIds.indexOf(node.id)
-          // 重建前抄走的力导向坐标：带上则 force 从原位续跑，图不会因点击选中而重排
-          const pos = viewState?.positions?.get(node.id)
+          // 刻意不回填 x/y：graph 的 view 坐标系用 data 的 x/y 算包围盒，回填上一轮布局
+          // 坐标会把整张图重投影（探针实测位移 ~207px）；力导向重建本身确定性（0px），
+          // 所以点击选中不会重排，见 readGraphViewport。
           return {
             id: node.id,
             name: node.label,
             // 手势光标分离（2026-11-05 用户定稿）：节点/标签才是 pointer，
-            // 空白画布由容器 CSS 给 grab/grabbing（见 onMounted 的 zr 光标管理）
+            // 空白画布由 bindZrInteractions 在 zrender 的 viewport 元素上给 grab/grabbing
             cursor: 'pointer',
-            x: pos?.x,
-            y: pos?.y,
             symbolSize: Math.min(narrow ? 38 : 48, baseSize + (highlighted ? 4 : 0)),
             itemStyle: {
               color: colorOf(node, dark),
@@ -525,12 +588,82 @@ function render() {
     })
     // 批次四 P2：缩放跨档收/放节点标签（setOption(notMerge) 重建会重置缩放档标志）
     chart.on('graphRoam', () => applyZoomLabels())
+    bindZrInteractions(chart)
   }
-  chart.setOption(buildOption(readGraphViewState()), true)
+  chart.setOption(buildOption(readGraphViewport()), true)
   labelsHiddenByZoom = false
 }
 
 let lastNarrow = false
+
+/**
+ * 画布交互（§5 2026-11-05/11-06 用户定稿）：手势光标 + 点击热区。
+ *
+ * 为什么绑在实例创建处而不是 onMounted：切主题会 dispose 重建实例（见 render 顶部），
+ * 新的 zrender 实例不会继承旧监听——放在这里，每次重建后手势与热区都还在。
+ */
+function bindZrInteractions(instance: echarts.ECharts) {
+  const zrender = instance.getZr()
+  // 手势光标分离：空白画布=抓手、按住拖动=紧握、节点/标签=小手。
+  // ⚠ 光标必须写在 **zrender 自己的 viewport 元素** 上：Handler.mousemove 每次都会
+  // HandlerProxy.setCursor → 往 painter.getViewportRoot()（canvas/Painter.js:121 新建并
+  // append 到本组件 div 的子 div）写 inline 'default'，子 div 的 inline 值会盖掉外层
+  // .mk-graph 的 cursor: grab——写在外层组件 div 上等于没写（2026-11-06 复核实证）。
+  // 分工：拖动中 → grabbing（优先，哪怕正划过节点）；空白 → grab（覆盖 zrender 的
+  // default）；有 target（节点/文字标签）→ 不插手，保留 zrender 按 data cursor 写的 pointer。
+  const cursorTarget: HTMLElement | null = zrender.painter.getViewportRoot() || el.value
+  let roaming = false
+  zrender.on('mousemove', (e: { target?: unknown }) => {
+    if (!cursorTarget) return
+    if (roaming) {
+      cursorTarget.style.cursor = 'grabbing'
+      return
+    }
+    if (e.target) return
+    cursorTarget.style.cursor = 'grab'
+  })
+  zrender.on('mousedown', (e: { target?: unknown }) => {
+    if (!cursorTarget) return
+    if (!e.target) {
+      roaming = true
+      cursorTarget.style.cursor = 'grabbing'
+    }
+  })
+  // 拖拽结束：拖动期间 grabbing 一直压着 zrender 的 pointer，这里按鼠标下的元素恢复
+  zrender.on('mouseup', (e: { target?: unknown }) => {
+    if (!cursorTarget || !roaming) return
+    roaming = false
+    const target = e.target as { cursor?: string } | undefined
+    cursorTarget.style.cursor = target ? target.cursor || 'pointer' : 'grab'
+  })
+  zrender.on('globalout', () => {
+    roaming = false
+    if (cursorTarget) cursorTarget.style.cursor = ''
+  })
+
+  // 点击热区（§5：r >= 20px）+ 空白点击回概览。
+  // 节点/文字标签/连线的点击有 target，由 ECharts 自己的 click 处理（标签经 __hostTarget
+  // 归属到节点符号，点文字即点节点）；这里只接「点在空白处」这一档：先按 20px 找最近节点
+  // （热区命中就当选中它），半径内没有节点才取消选中。空白的 chart click 不会触发
+  // （ECharts 对无 target 的点击不派发事件），所以回概览也必须在这里落地。
+  zrender.on('click', (e: { target?: unknown; offsetX?: number; offsetY?: number }) => {
+    if (e.target) return
+    const x = Number(e.offsetX)
+    const y = Number(e.offsetY)
+    const hot = Number.isFinite(x) && Number.isFinite(y) ? nodeNearPixel(x, y, NODE_HIT_RADIUS) : null
+    if (hot) {
+      selectedIdRef.value = hot.id
+      instance.dispatchAction({ type: 'hideTip' })
+      emit('select', hot)
+      render()
+      return
+    }
+    if (!selectedIdRef.value) return
+    selectedIdRef.value = null
+    emit('select', null)
+    render()
+  })
+}
 
 onMounted(() => {
   width.value = el.value?.clientWidth ?? 0
@@ -550,23 +683,6 @@ onMounted(() => {
     }
   })
   if (el.value) ro.observe(el.value)
-  if (!chart) return
-  // 手势光标分离（2026-11-05 用户定稿）：空白画布=抓手、按住拖动=紧握、节点/标签=小手。
-  // zrender 在移出元素时会往画布写 inline 'default' 盖掉容器 CSS（Handler.js:95），
-  // 所以光标只能由这里跟着 mousemove 自己管：无 target → grab，拖拽中 → grabbing，
-  // 有 target 时不插手（节点的 pointer 来自 data item 的 cursor 字段，见 buildOption）
-  const zrender = chart.getZr()
-  let roaming = false
-  zrender.on('mousemove', (e: { target?: unknown }) => {
-    if (!el.value) return
-    el.value.style.cursor = roaming ? 'grabbing' : e.target ? '' : 'grab'
-  })
-  zrender.on('mousedown', (e: { target?: unknown }) => {
-    if (!el.value) return
-    if (!e.target) { roaming = true; el.value.style.cursor = 'grabbing' }
-  })
-  zrender.on('mouseup', () => { if (el.value) { roaming = false; el.value.style.cursor = 'grab' } })
-  zrender.on('globalout', () => { if (el.value) { roaming = false; el.value.style.cursor = '' } })
 })
 
 watch(() => [props.nodes, props.edges, resolvedTheme.value, props.hideIsolated], () => render(), { deep: true })
@@ -587,7 +703,8 @@ onBeforeUnmount(() => {
   width: 100%;
   height: var(--mkg-h, 520px);
   /* 手势光标基线（2026-11-05 用户定稿）：空白画布是抓手，节点悬浮由 data cursor 接管
-     （小手）、拖拽中由 onMounted 里的 zr 光标管理切成紧握 */
+     （小手）、拖拽中由 bindZrInteractions 切成紧握。注意运行时真正生效的 inline 值写在
+     zrender 的 viewport 子 div 上（它继承本行的 grab 作为首帧基线），见 bindZrInteractions */
   cursor: grab;
   /* roam:true 会接管画布手势，单指竖向拖动把页面滚动一起吞掉。pan-y 只把「竖向滑动」
      还给浏览器（页面照常滚，zrender 收 pointercancel 自然收手）；双指捏合不属于 pan-y，

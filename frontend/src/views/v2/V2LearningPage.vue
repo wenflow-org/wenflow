@@ -3875,23 +3875,10 @@ onBeforeUnmount(() => {
   .composer__hint > .composer__hint-note { display: none; }
 }
 
-.btn-primary {
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 10px 20px; border-radius: var(--mk-radius-xl);
-  /* 实色主按钮：蓝渐变 + 30% 蓝色发光投影一并退役 */
-  background: var(--blue);
-  color: var(--text-on-primary); font-size: 13.5px; font-weight: 700;
-  cursor: pointer; text-decoration: none;
-  transition: transform 0.16s ease, background 0.16s ease;
-}
-.btn-primary:not(:disabled):active { transform: scale(0.98); }
-.btn-primary--off { opacity: .55; cursor: default; }
-.btn-ghost {
-  padding: 9px 16px; border-radius: var(--mk-radius-xl);
-  border: 1px solid var(--line); background: var(--surface);
-  font-size: 13.5px; font-weight: 700; color: var(--muted);
-  cursor: pointer;
-}
+/* 按钮基座单源：v2.css 的 .v2-page .btn-primary / .btn-ghost（32px 高 / 0 14px 内衬 /
+   --mk-radius-md / 13px 字）。本页原有一份 10~11px 竖内衬 + 16px 圆角的旧副本
+   （2026-11-06 UI 排查 §1），与全局同优先级 (0,2,0) 而后加载——实机上一直是这份旧值在赢。
+   删除后由全局统一定档，本页只留自己的变体（如 .proposal__foot 的定宽比例）。 */
 
 /* ---------- 完成浮层 ---------- */
 .finish {

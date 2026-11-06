@@ -156,8 +156,11 @@
         <button type="button" class="panel__head" :aria-expanded="panelExpanded" @click="togglePanel">
           <!-- 「学情」+可折叠「画像」（2026-11-05 用户裁定）：这 7 项是给规划用的背景信息
                （想解决的问题 / 动机 / 经验 / 卡点 / 周期 / 时间 / 成功标准），不是 7 个学习目标；
-               旧文案「目标 6/7」会让用户读成「我有 7 个目标」 -->
-          <strong>学情<span class="panel__head-ext">画像</span></strong>
+               旧文案「目标 6/7」会让用户读成「我有 7 个目标」。
+               2026-11-06 审计 §4：窄屏那行只留「画像」二字（桌面仍是「学情画像」）——
+               右上角读作「画像 6/7」，与审计要求的措辞一致；字数不变，不挤占
+               与阶段导航共享的那一行。 -->
+          <strong><span class="panel__head-lead">学情</span><span class="panel__head-ext">画像</span></strong>
           <span class="panel__count"><span class="panel__count-k">已收集</span> {{ live.filledCount }} / {{ live.totalFields }}</span>
           <span class="panel__caret" aria-hidden="true">{{ panelExpanded ? '▾' : '▸' }}</span>
         </button>
@@ -186,9 +189,9 @@
               <div class="field__body">
                 <div class="field__label">
                   {{ f.label }}
-                  <!-- 「刚收录」徽章 → 6px 小蓝点（2026-11-05 用户裁定）：5 个一模一样的蓝胶囊
-                       竖着排下来抢走全部注意力，而左侧绿勾已经表达了「已收录」 -->
-                  <span v-if="f.fresh" class="field__fresh" title="刚收录"><span class="visually-hidden">刚收录</span></span>
+                  <!-- 「刚收录」不再额外出标记（2026-11-06 审计 §1）：左侧绿勾已表达「已收录」，
+                       行级 .field--fresh 的底色/文字脉冲再补一次「刚写入」，标签旁再排一颗
+                       一模一样的圆点只是重复噪声（上一版由 5 颗蓝胶囊收成 6px 蓝点，本次收净） -->
                 </div>
                 <div v-if="f.value" class="field__value">{{ f.value }}</div>
                 <div v-else class="field__value field__value--todo">待补充</div>
@@ -243,7 +246,7 @@
 
         <!-- 不在整条消息流上挂 aria-live：流式重渲/每条新消息都会被读屏连播（含原始 JSON delta），
              收窄到下方等待条的 aria-live（P3） -->
-        <div ref="scrollEl" class="chat__scroll" :class="{ 'chat__scroll--dim': showProposal, 'chat__scroll--pill': genPillVisibleInChat }" @scroll.passive="onScrollPin">
+        <div ref="scrollEl" class="chat__scroll" :class="{ 'chat__scroll--dim': showProposal, 'chat__scroll--pill': genPillVisibleInChat, 'chat__scroll--invite': proposalInviteVisible }" @scroll.passive="onScrollPin">
           <!-- AI 生成声明（2026-11-05 屏效比改造）：从输入区元数据条迁到对话流顶部一次呈现，
                移动端输入区下方的整条元数据带随之撤空；合规标识保留——随对话流滚动，进页首屏可见 -->
           <div class="chat__ai-note"><AiContentNote /></div>
@@ -1374,6 +1377,14 @@ const proposalReviewRequested = ref(false);
 const showProposal = computed(
   () => !proposalDismissed.value && (proposalReviewRequested.value || phase.value === 'generating' || phase.value === 'done')
 );
+/** 底部「学习方案 · 待确认」条可见（判据与模板 v-if 同源）。
+ *  该条已排在 .chat 的 Flex 底流里（flex:0 0 auto，不是浮层），但出现的那一刻滚动视口
+ *  会被顶矮约一条的高度：贴底的最后一行因此被挤出可视区，读起来像「被悬浮条截断」。
+ *  滚动区据此动态补出条高的底衬（.chat__scroll--invite），并在它出现时重新贴底
+ *  （2026-11-06 审计 §4 底部悬浮栏遮挡修复）。 */
+const proposalInviteVisible = computed(
+  () => loggedIn && live.started && !live.sending && live.stage === 'proposing' && !!live.proposal && !showProposal.value
+);
 /* 焦点管理（P2）：浮层打开把焦点移入对话框（读屏按 dialog 播报、Esc 立即可用），
    关闭时归还原焦点，键盘用户不至于被「丢」在页面里 */
 const overlayRef = ref<HTMLElement | null>(null);
@@ -1478,6 +1489,11 @@ watch(() => live.streamingText, () => {
   const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
   if (nearBottom) void scrollToBottom();
 });
+/* 底部「学习方案 · 待确认」条出现/消失时，滚动视口高度随之变化：若用户本就在贴底阅读，
+   重新贴底让最新一条 AI 消息的末尾保持在可视区内（2026-11-06 审计 §4 遮挡修复）。 */
+watch(proposalInviteVisible, () => {
+  if (pinToBottom) void scrollToBottom();
+});
 
 // 快捷补充：新快选到达时刷新（数组换新视为新一轮）
 watch(
@@ -1498,6 +1514,10 @@ async function doSend(e?: unknown) {
   if (!t || live.sending) return;
   input.value = '';
   clearDraft();
+  /* 历史回合的快捷胶囊随用户回复立即退场（2026-11-06 审计 §4）：本轮快选的使命是「点选填入」，
+     用户既然已经发出回复，上一轮选项就与用户自己的话重复、只占空间。这里同步清空面板数据，
+     不等下一轮 AI 回合的快选到达——避免同一份选项在后端回同样的值时被 deep watch 漏掉而不刷新。 */
+  currentQuickReplies.value = [];
   try {
     await live.send(t);
   } catch {
@@ -2057,21 +2077,14 @@ function shuffleScenes() {
   border-radius: var(--mk-radius-md);
 }
 .field--short .field__value { margin-top: 2px; }
-/* 刚收录 = 6px 蓝点（2026-11-05 用户裁定）：原「刚收录」蓝胶囊竖排 5 个抢焦点，
-   与左侧绿勾重复表达同一件事 */
-.field__fresh {
-  display: inline-block;
-  width: 6px; height: 6px; border-radius: 50%;
-  background: var(--blue);
-  flex: none;
-}
-/* 「刚收录」行内高亮：对齐原型 .wf-field__fresh —— 蓝色（原先绿底白勾同源的绿系） */
+/* 「刚收录」行内高亮（2026-11-06 审计 §1）：唯一的新增标记就靠这一条行级脉冲——
+   左侧绿勾 + 行底色/文字短促变蓝，已经说清「这一项刚被收录」；
+   原先标签旁的 6px 蓝点与其同义重复，已移除（.field__fresh 规则随之退役） */
 .field--fresh { background: color-mix(in srgb, var(--blue) 6%, transparent); }
 /* 刚收录闪显：值写入时一次蓝色高亮脉冲（reduced-motion 下被全局规则压掉） */
 @media (prefers-reduced-motion: no-preference) {
   .field--fresh { animation: field-flash 1.4s ease-out 1; }
   .field--fresh .field__value { animation: field-value-flash 1.4s ease-out 1; }
-  .field__fresh { animation: field-badge-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
 }
 @keyframes field-flash {
   0% { box-shadow: inset 0 0 0 999px color-mix(in srgb, var(--blue) 14%, transparent); }
@@ -2080,10 +2093,6 @@ function shuffleScenes() {
 @keyframes field-value-flash {
   0%, 30% { color: var(--blue-deep); }
   100% { color: var(--ink); }
-}
-@keyframes field-badge-pop {
-  from { opacity: 0; transform: scale(0.6); }
-  to { opacity: 1; transform: scale(1); }
 }
 </style>
 
@@ -2124,11 +2133,18 @@ function shuffleScenes() {
   z-index: 6;
 }
 .stage-nav { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; }
+/* 「查看方案」是步条带里的次级动作（2026-11-06 审计 §1 去肥胖化）：
+   原全圆胶囊 + 4/12 内衬在 25px 高度上读作一颗胖药丸；改 8px 控件圆角 + 30px 定高。
+   高度与同一行的 .stage-nav__item 严格相等（桌面都 30、窄屏都 36，见 ≤1100 块）：
+   此前写成 36 而基础档导航只有 ~24，按钮一出现就把 .chat__head 撑高约 12px、
+   对话区跟着上下跳——等高的两件东西才不会改变头部带的高度（2026-11-06 复核）。 */
 .chat__show-proposal {
   margin-left: auto;
-  border: 1px solid color-mix(in srgb, var(--blue) 35%, transparent);
-  background: color-mix(in srgb, var(--blue) 10%, var(--surface)); color: var(--blue-deep);
-  border-radius: var(--mk-radius-pill); padding: 4px 12px;
+  display: inline-flex; align-items: center;
+  min-height: 30px; padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent);
+  background: color-mix(in srgb, var(--blue) 8%, var(--surface)); color: var(--blue-deep);
+  border-radius: var(--mk-radius-md);
   font-size: 12px; font-weight: 700; cursor: pointer;
 }
 .chat__show-proposal:hover { background: color-mix(in srgb, var(--blue) 18%, var(--surface)); }
@@ -2137,6 +2153,9 @@ function shuffleScenes() {
 .stage-nav__item {
   display: inline-flex; align-items: center; gap: 5px;
   position: relative;
+  /* min-height 基线（2026-11-06 复核）：与 .chat__show-proposal 同档 30，
+     两者任一出现/消失都不改变 .chat__head 的高度；窄屏档统一抬到 36（触控下沿） */
+  min-height: 30px;
   font-size: 12px; font-weight: 600; color: var(--faint);
   padding: 5px 2px;
 }
@@ -2196,8 +2215,14 @@ function shuffleScenes() {
 .chat__scroll--dim { filter: blur(2px); opacity: .45; pointer-events: none; }
 /* 生成 pill 让位（2026-11-05 UX 审计）：pill 出现时（浮层关闭态）在滚动区底部留出
    一条 pill 高度的呼吸带，贴底的最后一行消息不再被胶囊压住（小米 441×952 实测截图）。
-   pill 隐藏（浮层打开/无 pill）时回落 20px 原值，不占空。 */
-.chat__scroll--pill { padding-bottom: 60px; }
+   pill 隐藏（浮层打开/无 pill）时回落 20px 原值，不占空。
+   2026-11-06：选择器改成复合类（.chat__scroll.chat__scroll--pill）——基础档的单类规则
+   会被 ≤1100 块里位置更靠后的 `.chat__scroll { padding: … }` 按同权重盖掉，pill 让位在
+   手机上其实一直没生效；复合类权重更高，两档都真的留出底衬。 */
+.chat__scroll.chat__scroll--pill { padding-bottom: 60px; }
+/* 「学习方案 · 待确认」条让位（2026-11-06 审计 §4）：条虽在底流里（非浮层），出现时仍会
+   顶矮滚动视口，贴底的 AI 消息末行被挤出可视区。底衬 = 条高(~54) + 条间距(8) + 底缘渐隐(26)。 */
+.chat__scroll.chat__scroll--invite { padding-bottom: 88px; }
 
 .msg { display: flex; flex-direction: column; gap: 5px; max-width: 78%; } /* 82→78：随两栏同步收窄后的读感档（2026-09-27 三改） */
 /* 三改：聊天列本身已收窄，气泡 74% 配合 work 1000px 总宽即可 */
@@ -2220,7 +2245,16 @@ function shuffleScenes() {
   border: 1px solid color-mix(in srgb, var(--blue) 26%, transparent);
   color: var(--ink);
 }
-.msg__probe-tag { font-size: 12px; font-weight: 800; letter-spacing: .04em; color: var(--blue-deep); }
+/* 「快速自测」是状态标签（2026-11-06 审计 §1）：紧凑小方签——20px 高 / 1px 6px 内衬 /
+   4px 圆角 / 柔和半透明蓝底、无描边；不再用 800 粗字直接压在卡面上（那既像正文又抢焦点） */
+.msg__probe-tag {
+  justify-self: start;
+  display: inline-flex; align-items: center;
+  height: 20px; padding: 1px 6px;
+  border-radius: var(--mk-radius-xs);
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
+  font-size: 12px; font-weight: 700; letter-spacing: .02em; color: var(--blue-deep);
+}
 .msg__probe-answer { font-size: 13px; font-weight: 600; line-height: 1.5; }
 .msg__probe-q {
   font-size: 12px; line-height: 1.5; color: var(--muted);
@@ -2283,9 +2317,11 @@ function shuffleScenes() {
 }
 .msg__edit-actions { display: flex; gap: 8px; justify-content: flex-end; }
 .msg__edit-save, .msg__edit-cancel {
+  display: inline-flex; align-items: center;
+  min-height: 30px; padding: 0 12px;
   font-size: 12px; font-weight: 700;
-  padding: 5px 14px;
-  border-radius: var(--mk-radius-pill);
+  /* 8px 控件圆角（2026-11-06 审计 §1）：编辑动作是紧凑内嵌按钮，不是全圆胶囊 */
+  border-radius: var(--mk-radius-md);
   cursor: pointer;
 }
 .msg__edit-save {
@@ -2489,8 +2525,10 @@ function shuffleScenes() {
   align-self: flex-start;
   margin: 0 16px 8px;
   display: inline-flex; align-items: center; gap: 7px;
-  min-height: 36px; padding: 6px 12px;
-  border-radius: var(--mk-radius-pill);
+  min-height: 36px; padding: 0 12px;
+  /* 8px 控件圆角（2026-11-06 审计 §1 去肥胖化）：状态条不再用全圆胶囊；
+     36 是仓库「可点元素 ≥36px」硬下沿，高度不动 */
+  border-radius: var(--mk-radius-md);
   font: inherit; font-size: 12px; font-weight: 700;
   cursor: pointer;
   transition: background 0.15s ease;
@@ -2612,17 +2650,17 @@ function shuffleScenes() {
 /* 底部双钮收形（2026-11-05 用户裁定）：15px 字 + 13px 竖内衬 + 16px 圆角在 40px 高度上
    读作两颗胖胶囊。改成 40px 定高 + 8px 同心圆角 + 左 1 : 右 2（次按钮「再补充点信息」是
    退路、主按钮「确认，生成我的路径」是终局，宽度比例应写进版式而不是靠字数自然形成）。
-   .proposal__foot 前缀：压过同组件基座的 .btn-primary--lg / .btn-ghost 内边距。 */
-.proposal__foot .btn-ghost,
-.proposal__foot .btn-primary {
+   加 .v2-page 前缀：与 v2.css 的 `.v2-page .btn-primary`（0,2,0）同权重时只靠加载顺序，
+   那是上一版「页面副本赢全局」的同一类坑——这里提到 (0,3,0)，谁后加载都不影响结果。 */
+.v2-page .proposal__foot .btn-ghost,
+.v2-page .proposal__foot .btn-primary {
   flex: 1 1 0; min-height: 40px; padding: 0 12px;
   justify-content: center;
   border-radius: var(--mk-radius-md);
   font-size: 14px;
 }
-/* .btn-ghost 基座是块级按钮（无 flex），文字要居中得先立起 flex */
-.proposal__foot .btn-ghost { display: inline-flex; align-items: center; }
-.proposal__foot .btn-primary { flex: 2 1 0; }
+/* 主按钮吃左 1 : 右 2（终局动作比退路宽），次按钮只按内容宽 */
+.v2-page .proposal__foot .btn-primary { flex: 2 1 0; }
 .proposal--center { position: relative; display: grid; justify-items: center; text-align: center; gap: 12px; padding: 34px 28px; overflow-y: auto; }
 .proposal__stream {
   width: 100%;
@@ -2641,14 +2679,17 @@ function shuffleScenes() {
   max-height: 120px; overflow-y: auto;
   white-space: pre-wrap;
 }
+/* 卡片内嵌按钮（2026-11-06 审计 §1 同心圆角）：外卡 16/12 圆角里不再塞全圆胶囊，
+   改 8px 控件圆角；高度保 34（审计档 30~34 的上限）——它落在 .proposal--center
+   卡片里、窄屏生成态也可见，不去碰 36 触控档（本钮不出现在移动端门禁量测的入口态） */
 .proposal__stop {
   display: inline-flex; align-items: center; gap: 6px;
+  min-height: 34px; padding: 0 14px;
   font: inherit; font-size: 12px; font-weight: 700;
   color: var(--blue-deep);
   background: color-mix(in srgb, var(--blue) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--blue) 35%, transparent);
-  border-radius: var(--mk-radius-pill);
-  padding: 6px 14px;
+  border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent);
+  border-radius: var(--mk-radius-md);
   cursor: pointer;
   transition: background 0.15s ease;
 }
@@ -2741,30 +2782,17 @@ function shuffleScenes() {
    （flex:1 1 0）把「查看我的路径」压到 99px 折成「查看我的路/径」两行（双机实测），
    主 CTA 折词是可避免副作用。nowrap 保证 6 字标签永不折行；空间不足时 flex-wrap
    让次按钮落到第二行，不裁字。 */
-.proposal__actions--center .btn-primary {
+.v2-page .proposal__actions--center .btn-primary {
   flex: 1 1 auto; justify-content: center;
   min-width: fit-content;
   white-space: nowrap;
 }
-.proposal__actions--center .btn-ghost { flex: 0 0 auto; justify-content: center; }
-.btn-primary {
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 11px 22px; border-radius: var(--mk-radius-xl);
-  /* 实色主按钮：蓝渐变 + 30% 蓝色发光投影一并退役 */
-  background: var(--blue);
-  color: var(--text-on-primary); font-size: 14px; font-weight: 700;
-  cursor: pointer; text-decoration: none;
-  transition: transform 0.18s ease, background 0.18s ease;
-}
-.btn-primary:not(:disabled):active { transform: scale(0.98); }
-.btn-primary--lg { padding: 13px 26px; font-size: 15px; }
-.btn-primary--off { opacity: .55; cursor: default; }
-.btn-ghost {
-  padding: 11px 18px; border-radius: var(--mk-radius-xl);
-  border: 1px solid var(--line); background: var(--surface);
-  font-size: 14px; font-weight: 700; color: var(--muted);
-  cursor: pointer;
-}
+.v2-page .proposal__actions--center .btn-ghost { flex: 0 0 auto; justify-content: center; }
+/* 主/次按钮基座不再在本页复制（2026-11-06 UI 排查 §1）：v2.css 的
+   .v2-page .btn-primary / .btn-ghost 已是单源（32px / 0 14px / --mk-radius-md / 13px）。
+   本页只留「大幅 CTA」这一档——--lg 不吃紧凑档，全局给它 height:auto + 16px 圆角，
+   竖内衬与字号由这里给；加 .v2-page 前缀是为了稳定压过全局同名规则，而不是靠加载顺序。 */
+.v2-page .btn-primary--lg { padding: 13px 26px; font-size: 15px; }
 /* 原型 .wf-proposal__note：竖排四号字说明，不是「两端对齐的一行」 */
 .proposal__note {
   display: grid; gap: 4px;
@@ -2888,9 +2916,11 @@ function shuffleScenes() {
      而它承载的只是一个次要计数。改成柔和的蓝底蓝字，并加一圈 surface 描边（用
      box-shadow 而非 border，不占布局尺寸），让角标与药丸之间有一道干净的呼吸缝。 */
   .panel__count-k { display: none; }
-  /* 「目标 6/7 ▸」（2026-11-05 极简进度条）：6/7 从右上角悬浮角标收进胶囊内部——
-     角标读作「未读消息」且把顶部撑出一截鼓包；内联后省 ~20px 宽、消掉鼓包 */
-  .panel__head-ext { display: none; }
+  /* 「画像 6/7 ▸」（2026-11-05 极简进度条 / 2026-11-06 审计 §4）：6/7 从右上角悬浮角标
+     收进胶囊内部——角标读作「未读消息」且把顶部撑出一截鼓包；内联后省 ~20px 宽、消掉鼓包。
+     窄屏只留「画像」二字（与「目标 6/7」划清界线），桌面仍是完整的「学情画像」；
+     两字与「学情」等宽，不改变与阶段导航共享那一行的余量。 */
+  .panel__head-lead { display: none; }
   .panel__count {
     position: static;
     min-width: 0; padding: 0;
@@ -2951,12 +2981,19 @@ function shuffleScenes() {
     text-align: center;
   }
   .panel__clear:hover { color: var(--red-ink); }
-  /* 面板遮罩（2026-11-05 用户裁定）：浮层直接盖在聊天字上、右缘还露半截气泡，
-     压暗一层后面板才是唯一焦点；z-index 取 21（> 步条带 6 / 消息流，< 面板 26），
-     点击即收起（悬浮层点外部关闭是默认心智，不需要再找 ▾） */
+  /* 面板遮罩（2026-11-05 用户裁定 / 2026-11-06 审计 §4）：浮层直接盖在聊天字上、右缘还露
+     半截气泡，压暗一层后面板才是唯一焦点；z-index 取 21（> 步条带 6 / 消息流，< 面板 26），
+     点击即收起（悬浮层点外部关闭是默认心智，不需要再找 ▾）。
+     pointer-events:auto 不能省：.panel 锚点带整体是 pointer-events:none（否则空带会挡住
+     下方阶段导航），子元素不单独声明就收不到点击——此前的「点遮罩收起」实际是哑的。
+     底色走 --wf-overlay（tokens.css 定义的模态压暗档，亮 rgba(15,23,42,.45) / 暗
+     rgba(3,7,14,.62)），与 .mk-drawer__mask / .sheet-mask / 同页 .overlay 同一族：
+     原先取 --ink 混色，而 --ink 在暗色档是近白（--wf-text-primary #efeff0），
+     深色下把整个视口刷成 58% 白纱，与「压暗一层」的注释正好相反（2026-11-06 复核）。 */
   .panel__mask {
     position: fixed; inset: 0; z-index: 21;
-    background: color-mix(in srgb, var(--ink) 58%, transparent);
+    pointer-events: auto;
+    background: var(--wf-overlay);
     animation: panel-mask-in 0.16s ease-out both;
   }
   @keyframes panel-mask-in { from { opacity: 0; } to { opacity: 1; } }
@@ -3093,6 +3130,9 @@ function shuffleScenes() {
   /* 40→36（2026-11-05 去肥胖化）：36 是 mobile:spec 的硬触控下沿，顶栏得以收 4px；
      与 .panel__head 同高（pill-align 门禁等式）；左右 padding 去掉（无胶囊底） */
   .stage-nav__item { padding: 4px 2px; font-size: 12px; gap: 4px; min-height: 36px; }
+  /* 窄屏「查看方案」与阶段导航同抬到 36（触控下沿 + 头部带等高，2026-11-06 复核）：
+     基础档两者都是 30，这里必须同步改，否则按钮一出现仍会把这一条顶高 6px */
+  .chat__show-proposal { min-height: 36px; }
   /* ≤360：非当前阶段只留序号（那三个字的宽度换 4 字标签+计数角标的位置） */
   @media (max-width: 360px) {
     .stage-nav__item:not(.stage-nav__item--current) { font-size: 0; gap: 0; padding: 4px 3px; }
@@ -3165,11 +3205,6 @@ function shuffleScenes() {
 /* .proposal__row / .pstep 暗色档（2026-09-30）：底色已改令牌派生
    （surface 92%+ink、var(--surface)），--mk-surface/--mk-ink 暗色自动翻转，
    原「白 3% 覆写」与逐主题字面量已冗余，随死 CSS 一并移除。 */
-[data-theme='dark'] .btn-ghost {
-  background: var(--surface);
-  border-color: var(--line);
-  color: var(--muted);
-}
 /* 暗色适配（scoped 确保优先级与组件样式一致）
    底色/描边/阴影已全部令牌化（--surface/--line/--bubble-ai-bg/--mk-shadow-* 与
    color-mix(--ink/--amber/--blue) 派生），随 [data-theme='dark'] 自动翻转——
@@ -3187,7 +3222,7 @@ function shuffleScenes() {
      原先动作行按内容宽（247px）居中在 620px 卡片里，主钮 142、次钮 93，左右各空 ~187px，
      下一步在视觉上没有重心（2026-10-08 用户侧走查 1440 实测）。桌面专属——窄屏浮层本就窄。 */
   .proposal__actions--center { width: 100%; }
-  .proposal__actions--center .btn-primary { flex: 1; justify-content: center; }
+  .v2-page .proposal__actions--center .btn-primary { flex: 1; justify-content: center; }
 }
 
 /* 4K zoom 档（≥2000，zoom 1.15/1.3）动作行收回对话框比例：flex:1 撑满 620 卡
@@ -3216,19 +3251,22 @@ function shuffleScenes() {
   }
 }
 
-/* 内部滚动层统一隐去原生滚动槽（2026-11-05 去肥胖化补）：
-   目标面板浮层 / 方案预览浮层 / 入口叙事块都自带 overflow，Windows Chromium 会在
-   内容右缘画一条 15px 经典滚动槽（灰杠 + 上下箭头）——它把行内文字挤窄一截，还会和
-   面板自己的渐隐遮罩叠成「双边框」，读起来像内容没对齐。与 .chat__scroll 同一口径；
-   滚轮 / 触控 / 键盘滚动、焦点滚入视野均不变。 */
+/* 内部滚动层统一隐去原生滚动槽（2026-11-05 去肥胖化补 / 2026-11-06 审计 §6）：
+   目标面板浮层 / 方案预览浮层 / 生成进度文本 / 入口叙事块都自带 overflow，Windows Chromium
+   会在内容右缘画一条 15px 经典滚动槽（灰杠 + 上下箭头）——它把行内文字挤窄一截，还会和
+   面板自己的渐隐遮罩叠成「双边框」，读起来像内容没对齐。与 .chat__scroll 同一口径
+   （审计允许「隐藏或极简化」，这里取更干净的隐藏：内容外缘不被滚动槽再切一刀，
+   滚轮 / 触控 / 键盘滚动、焦点滚入视野均不变）。 */
 .panel,
 .panel__body,
 .proposal__body,
 .proposal--center,
+.proposal__stream-text,
 .entry { scrollbar-width: none; }
 .panel::-webkit-scrollbar,
 .panel__body::-webkit-scrollbar,
 .proposal__body::-webkit-scrollbar,
 .proposal--center::-webkit-scrollbar,
+.proposal__stream-text::-webkit-scrollbar,
 .entry::-webkit-scrollbar { width: 0; height: 0; }
 </style>

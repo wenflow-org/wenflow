@@ -99,11 +99,14 @@ describe('总览完课量 KPI（#105）', () => {
     expect(card!.find('.mk-kpi__hint').exists()).toBe(false);
   });
 
-  it('title 说明主值走非虚拟口径、虚拟单列不计入', async () => {
+  it('title 说明只统计真实账号、虚拟单列不计入', async () => {
     const wrapper = await mountOverview();
 
     const title = closureCard(wrapper)!.attributes('title') || '';
-    expect(title).toContain('非虚拟口径');
+    /* 2026-11-06 文案排查 §7：原句的「非虚拟口径 / 与上方…同源」被改写成直说事实
+       （分号拼接 + 隔空指路「上方」+ 内部词「口径」三条一并消除），断言随之更新。 */
+    expect(title).toContain('只统计真实账号');
+    expect(title).toContain('两项相加即总数');
     expect(title).toContain('不计入');
     expect(title).not.toContain('不回填');
     expect(title).not.toContain('通道构成');

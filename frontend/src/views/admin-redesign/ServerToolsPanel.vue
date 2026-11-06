@@ -265,8 +265,11 @@ defineExpose({ refresh, reload: loadDead })
 </script>
 
 <style scoped>
+/* 内衬归宿主（2026-11-06 用户「系统设置里面 tab 的几个页面卡片大小好像不一样」）：
+   本面板只作为「系统设置」页签嵌入，16px 内衬是它还当独立页面时的遗留——嵌进去以后
+   成了二次内缩，实测卡片 1108px / x=296，比同页其它页签的 1140px / x=280 窄 32px、
+   整体右下各错 16px，与页头也对不齐。 */
 .stp-body {
-  padding: 16px;
   display: grid;
   gap: 12px;
   align-content: start;

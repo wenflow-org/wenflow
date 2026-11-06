@@ -183,7 +183,6 @@ router.put('/', async (req, res) => {
     };
     const invalidDefaults = ([
       ['默认模型', defaultModel],
-      // 2026-11-04 起 defaultReasoningModel 退役（思考由 skill 的 thinkingMode / reasoningEffort 决定）
       ['评估默认模型', defaultEvaluationModel],
     ] as const)
       .filter(([, value]) => typeof value === 'string' && value.trim() !== ''

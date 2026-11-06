@@ -198,10 +198,6 @@
                   </span>
                   <div class="task__body">
                     <strong>{{ task.title || task.displayLabel }}</strong>
-                    <!-- 时长 nowrap（bare/15）：整行 small 在窄屏折行时会把「约 18 分钟」
-                         拆成「约 18 分/钟」孤字行（截图实证）；nowrap 让折行点只落在
-                         类型标签与时长之间 -->
-                    <small>{{ taskKindText(task) }} · <span class="task__mins">{{ task.estimatedMinutes ? `约 ${task.estimatedMinutes} 分钟` : '—' }}</span></small>
                     <small v-if="materialRefLabels(task).length" class="task__material">
                       资料：
                       <button
@@ -215,10 +211,12 @@
                       >{{ refLabel(ref) }}</button>
                     </small>
                   </div>
-                  <!-- 操作区（2026-11-05 屏效比「按行重排」）：原按钮与标题同排（24px 1fr auto auto），
-                       窄屏两枚按钮把标题挤成 4 行竖条——标题独占整宽，按钮统一落到任务项末尾的
-                       .task__ops 行（右对齐），标题 4 行→2 行 -->
-                  <div class="task__ops">
+                  <!-- 第二行（2026-11-06 屏效比定稿）：左「时长属性」、右「操作按钮」同一行两端对齐。
+                       时长从正文块里挪出来与按钮同排，标题与元信息各占一行，窄屏不会被按钮挤成竖条。
+                       时长 nowrap（bare/15）：「约 18 分钟」不拆成「约 18 分/钟」孤字行。 -->
+                  <div class="task__line">
+                    <span class="task__meta">{{ taskKindText(task) }} · <span class="task__mins">{{ task.estimatedMinutes ? `约 ${task.estimatedMinutes} 分钟` : '—' }}</span></span>
+                    <div class="task__ops">
                   <button type="button" v-if="task.id === currentTask?.id && canLearn" class="task__cta" @click="goLearn(task.id)">
                     {{ task.status === 'in_progress' ? '继续学习' : '开始学习' }}
                   </button>
@@ -238,6 +236,7 @@
                     :aria-expanded="editingTaskId === task.id"
                     @click="toggleTaskEditor(task.id)"
                   >微调</button>
+                  </div>
                   </div>
                   </div>
                   <!-- #64 P-39：手动结构编辑（插 / 延 / 缩 / 删）。顺序权威=subtasks.order，保存后静默刷新。 -->
@@ -450,7 +449,7 @@
               {{ retryingAfterClear ? '正在继续调整…' : `全部结束（${blockingSessions.length}）并继续` }}
             </button>
           </div>
-          <p class="clear-sessions__hint">按「结束」会把未完成的课堂标记为放弃：不计入学习进度，对话内容仍保留在学习历史中。</p>
+          <p class="clear-sessions__hint">按「结束」会把未完成的课堂标记为放弃，不计入学习进度，对话内容仍保留在学习历史中。</p>
         </div>
 
         <!-- 场景选择：按 adjustmentPolicy.allowedModes 门控（禁用 + 原因），推荐场景带引导标记 -->
@@ -1794,14 +1793,24 @@ onBeforeUnmount(() => {
   box-shadow: var(--shadow-sm);
 }
 .kicker { font-size: 12px; font-weight: 800; letter-spacing: .06em; color: var(--blue-deep); }
-.badge { padding: 4px 10px; border-radius: var(--mk-radius-pill); font-size: 12px; font-weight: 800; }
+/* 状态标签（2026-11-06 §1 标签规范）：非点击类标签禁「全圆胶囊 + 大内边距」，
+   收敛为紧凑小方签——高 22px、内边距 1px 6px、半径 6px（--mk-radius-sm）、
+   12px 常规偏中字重（原 800 过重），柔和半透明底、无描边。 */
+.badge {
+  display: inline-flex; align-items: center;
+  height: 22px; padding: 1px 6px;
+  border-radius: var(--mk-radius-sm);
+  font-size: 12px; font-weight: 600;
+  border: 0;
+}
 .badge--blue { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 10%, transparent); }
 .badge--muted { color: var(--muted); background: color-mix(in srgb, var(--ink) 7%, transparent); }
 
 .hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; padding: 26px 28px; align-items: center; }
 .hero__tags { display: flex; align-items: center; gap: 10px; }
 .hero h1 { margin: 8px 0 6px; font-size: 20px; letter-spacing: -0.01em; }
-.hero p { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.7; }
+/* 描述性正文（2026-11-06 §4）：常规字重 400（未声明即默认）+ 行高 1.5 */
+.hero p { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.5; }
 /* Hero 描述：默认 3 行截断，展开后完整显示（老数据无 summary 时兜底原文，避免整段糊屏） */
 .hero__desc {
   display: -webkit-box;
@@ -1832,22 +1841,11 @@ onBeforeUnmount(() => {
 }
 .metric b { font-size: 13.5px; color: var(--ink); font-variant-numeric: tabular-nums; }
 .hero__actions { display: flex; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
-.btn-primary {
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 11px 22px; border-radius: var(--mk-radius-xl);
-  /* 实色主按钮：蓝渐变 + 30% 蓝色发光投影一并退役 */
-  background: var(--blue);
-  color: var(--text-on-primary); font-size: 14px; font-weight: 700;
-  cursor: pointer; text-decoration: none;
-  transition: transform 0.18s ease, background 0.18s ease;
-}
-.btn-primary:not(:disabled):active { transform: scale(0.98); }
-.btn-ghost {
-  padding: 10px 18px; border-radius: var(--mk-radius-xl);
-  border: 1px solid var(--line); background: var(--surface);
-  font-size: 14px; font-weight: 700; color: var(--muted);
-  cursor: pointer;
-}
+/* 主/次按钮不再在本页复制一份：本文件曾自带 .btn-primary（11px 22px / 16px 圆角 / 14px 字，
+   实测约 39px 高）与 .btn-ghost 副本，与 .card / .adjust-dialog 的 16px 圆角同档，正是 §1
+   要消除的「内层与外层同圆角 + 肥大」；且页内 scoped 副本晚于入口样式表加载，会把
+   v2.css 已统一的控件档（32px / 0 14px / --mk-radius-md / 13px，移动档 44px）压回去。
+   删除副本后由 v2.css「SPEC §1 控件档」唯一承载，hero、生成失败横幅、调整弹窗页脚同规格。 */
 .hero__ring { position: relative; width: 120px; height: 120px; }
 /* svg 铺满容器而不是写死 120：窄屏容器收到 96 时，写死宽高的 svg 会被裁成 96×120、
    环图与居中文字错位（2026-10-15 移动端重设计实测）。 */
@@ -1924,26 +1922,35 @@ onBeforeUnmount(() => {
 }
 .stage__body--open .stage__body-inner { padding: 8px 12px 12px; opacity: 1; }
 .task {
-  /* 两行结构（2026-11-05 屏效比）：图标 + 正文占第一行（标题独占整宽），
-     操作按钮落到第二行的 .task__ops（右对齐）——原 4 列同排让窄屏标题只剩一半宽，
-     被按钮挤成 4 行竖条。改行后标题 4 行→2 行，任务项变矮 */
+  /* 两行结构（2026-11-06 定稿）：第一行「图标 + 完整标题」（标题独占整宽，不被按钮挤压）；
+     第二行 .task__line 左放时长属性、右放操作按钮。 */
   display: grid; grid-template-columns: 24px minmax(0, 1fr);
-  align-items: start; gap: 6px 11px;
+  align-items: start; gap: 4px 11px;
   padding: 9px 10px;
   border-radius: 12px; /* 圆角阶梯：面板 */
   border: 1px solid transparent;
 }
-.task__ops {
+.task__body { grid-column: 2; min-width: 0; }
+/* 第二行：两端对齐；装不下时按钮整枚换行，靠 margin-left:auto 仍贴右缘 */
+.task__line {
   grid-column: 2;
-  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
-  margin-top: 4px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; flex-wrap: wrap;
+  margin-top: 2px;
 }
-.task__ops:has(> :only-child) { justify-content: flex-start; }
-/* #64 P-39：任务微调入口（只在校验通过的任务上出现；第 4 列在无按钮的行自动塌成 0 宽） */
+/* 时长属性（左）：类型标签 + 时长，与右侧操作按钮同基线 */
+.task__meta { min-width: 0; font-size: 12px; color: var(--faint); }
+.task__ops {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  margin-left: auto;
+}
+/* #64 P-39：任务微调入口（只在校验通过的任务上出现）
+   尺寸（2026-11-06 §1 内嵌按钮）：高 32px、圆角 8px（卡面 16px 的同心内档）、12px 字号 */
 .task__edit {
   font: inherit; font-size: 12px; color: var(--muted);
   background: var(--surface); border: 1px solid var(--line);
-  border-radius: 8px; padding: 6px 11px; min-height: 36px;
+  border-radius: 8px; padding: 0 11px; height: 32px;
+  display: inline-flex; align-items: center;
   cursor: pointer;
 }
 .task__edit:hover, .task__edit[aria-expanded="true"] { color: var(--blue); }
@@ -1954,8 +1961,10 @@ onBeforeUnmount(() => {
   font-size: 12px; color: var(--faint);
 }
 .task-edit__minutes { font-weight: 600; color: var(--ink); }
+/* 微调面板内的行内按钮/输入：同 §1 内嵌按钮档（高 32px / 圆角 8px） */
 .task-edit__btn {
-  font: inherit; font-size: 12px; padding: 5px 9px;
+  font: inherit; font-size: 12px; height: 32px; padding: 0 10px;
+  display: inline-flex; align-items: center;
   border-radius: var(--mk-radius-md); border: 1px solid var(--line);
   background: var(--surface); color: var(--ink); cursor: pointer;
 }
@@ -1963,7 +1972,7 @@ onBeforeUnmount(() => {
 .task-edit__btn--danger { color: var(--red); border-color: color-mix(in srgb, var(--red) 30%, var(--line)); }
 .task-edit__insert { display: inline-flex; gap: 6px; align-items: center; }
 .task-edit__input {
-  width: 200px; padding: 5px 8px; border-radius: var(--mk-radius-md);
+  width: 200px; height: 32px; padding: 0 8px; border-radius: var(--mk-radius-md);
   border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-size: 12px;
 }
 .task--current { background: color-mix(in srgb, var(--blue) 6%, transparent); border-color: color-mix(in srgb, var(--blue) 20%, transparent); }
@@ -1983,23 +1992,24 @@ onBeforeUnmount(() => {
 /* 时长标签禁词中折行（bare/15）：「约 18 分钟」不拆成「约 18 分/钟」 */
 .task__mins { white-space: nowrap; }
 .task__cta {
-  min-height: 36px;
-  font-size: 12px; font-weight: 800; color: var(--blue-deep);
+  height: 32px;
+  display: inline-flex; align-items: center;
+  font-size: 12px; font-weight: 600; color: var(--blue-deep);
   /* 主区 hero 已有唯一实心 CTA；任务行这颗降为描边，和相邻「微调」同高同圆角 */
   background: color-mix(in srgb, var(--blue) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--blue) 30%, var(--line));
-  padding: 6px 13px; border-radius: 8px; /* 圆角阶梯：控件 */
+  padding: 0 12px; border-radius: 8px; /* 圆角阶梯：控件 */
   cursor: pointer;
   transition: transform 0.16s ease, background 0.16s ease;
 }
 .task__cta:not(:disabled):active { transform: scale(0.98); }
-.task__done-label { font-size: 12px; font-weight: 600; color: var(--green); cursor: pointer; display: inline-block; padding: 12px 0; min-width: 44px; text-align: center; }
+.task__done-label { font-size: 12px; font-weight: 600; color: var(--green); cursor: pointer; display: inline-flex; align-items: center; height: 32px; padding: 0 8px; min-width: 44px; border-radius: 8px; }
 .task__lock-label, .task__todo-label { font-size: 12px; color: var(--faint); }
 
 .side { display: grid; gap: 12px; position: sticky; top: 16px; }
 .sidecard { padding: 16px 18px; display: grid; gap: 10px; align-content: start; }
 .sidecard strong { font-size: 15px; line-height: 1.5; }
-.sidecard p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.65; }
+.sidecard p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
 /* 侧栏折叠头（设计意图，2026-09-25）：与问题背景的 bg-head 同款箭头语言 */
 .sidecard__head {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
@@ -2028,12 +2038,14 @@ onBeforeUnmount(() => {
 .material-ref { background: none; border: none; padding: 0 4px 0 0; font-size: 12px; color: var(--blue); cursor: pointer; text-decoration: underline; }
 .material-ref:disabled { color: var(--muted); text-decoration: none; cursor: default; }
 .material-text { margin: 8px 0 0; max-height: 220px; overflow: auto; white-space: pre-wrap; font-size: 12px; line-height: 1.6; color: var(--ink); }
+/* 通用小签（§1）：同样收紧为紧凑小方签，不再全圆胶囊 */
 .tag {
-  padding: 4px 10px; border-radius: var(--mk-radius-pill);
-  background: var(--line); border: 1px solid var(--line);
+  display: inline-flex; align-items: center;
+  height: 20px; padding: 1px 6px; border-radius: var(--mk-radius-sm);
+  background: var(--line);
   font-size: 12px; font-weight: 600; color: var(--muted);
 }
-.tag--blue { background: color-mix(in srgb, var(--blue) 9%, transparent); border-color: color-mix(in srgb, var(--blue) 30%, transparent); color: var(--blue-deep); }
+.tag--blue { background: color-mix(in srgb, var(--blue) 9%, transparent); color: var(--blue-deep); }
 .next-list { margin: 0; padding: 0 0 0 18px; display: grid; gap: 9px; }
 .next-list strong { display: block; font-size: 13px; line-height: 1.45; }
 .next-list small { display: block; margin-top: 2px; font-size: 12px; color: var(--faint); }
@@ -2050,20 +2062,20 @@ onBeforeUnmount(() => {
 .sidecard__intent-title--expanded { display: block; overflow: visible; }
 .sidecard__rows { margin: 0; display: grid; gap: 8px; }
 .sidecard__row { display: grid; gap: 2px; }
-.sidecard__row dt { font-size: 12px; font-weight: 800; color: var(--faint); letter-spacing: 0.03em; }
-.sidecard__row dd { margin: 0; font-size: 12.5px; line-height: 1.65; color: var(--muted); }
+.sidecard__row dt { font-size: 12px; font-weight: 600; color: var(--faint); letter-spacing: 0.03em; }
+.sidecard__row dd { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
 .sidecard__bg { border-top: 1px dashed var(--line); padding-top: 8px; }
 /* 调整历史卡：来源路径链接 + 与快照回退区的互引说明 */
 .lineage-link { font-size: 12px; font-weight: 600; color: var(--blue); text-decoration: underline; }
-.lineage-note { margin: 0; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 12px; line-height: 1.6; color: var(--faint); }
+.lineage-note { margin: 0; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 12px; line-height: 1.5; color: var(--faint); }
 .sidecard__bg-head {
   display: inline-flex; align-items: center; gap: 5px;
-  font-size: 12px; font-weight: 800; letter-spacing: 0.03em; color: var(--faint);
+  font-size: 12px; font-weight: 600; letter-spacing: 0.03em; color: var(--faint);
 }
 .sidecard__bg-head:hover { color: var(--blue-deep); }
 .sidecard__bg-chev { font-size: 12px; transition: transform 0.15s ease; }
 .sidecard__bg-chev--open { transform: rotate(180deg); }
-.sidecard__bg-text { margin: 6px 0 0; font-size: 12px; line-height: 1.65; color: var(--muted); white-space: pre-wrap; }
+.sidecard__bg-text { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted); white-space: pre-wrap; }
 
 @media (max-width: 1100px) {
   .detail__main { padding: 14px 14px 32px; }
@@ -2088,13 +2100,13 @@ onBeforeUnmount(() => {
 .genbar--muted { border-color: var(--line); }
 .genbar__text { flex: 1; }
 .genbar__text strong { font-size: 14px; }
-.genbar__text p { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); }
+.genbar__text p { margin: 4px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
 .objectives {
   margin: 0 0 8px; padding: 10px 12px 10px 28px;
   background: var(--canvas); border: 1px solid var(--line); border-radius: var(--mk-radius-lg);
   display: grid; gap: 4px;
 }
-.objectives li { font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+.objectives li { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
 .task--current .task__todo-label { color: var(--blue-deep); font-weight: 700; }
 .detail__main { width: 100%; }
 </style>
@@ -2148,7 +2160,7 @@ onBeforeUnmount(() => {
 .adjust-dialog__desc {
   margin: 0 0 14px;
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.5;
   color: var(--muted);
 }
 .adjust-dialog__head {
@@ -2172,7 +2184,8 @@ onBeforeUnmount(() => {
   display: flex; align-items: center; gap: 12px;
   width: 100%;
   padding: 12px 14px;
-  border: 1px solid var(--line); border-radius: var(--mk-radius-xl);
+  /* 同心圆角（2026-11-06 §1）：外层弹窗 16px → 内层选项 12px，不再与弹窗同档 */
+  border: 1px solid var(--line); border-radius: var(--mk-radius-lg);
   background: var(--surface); text-align: left;
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
@@ -2193,21 +2206,22 @@ onBeforeUnmount(() => {
 }
 .adjust-mode__body { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .adjust-mode__body strong { font-size: 13.5px; color: var(--ink); }
-.adjust-mode__body small { font-size: 12px; line-height: 1.55; color: var(--mk-faint); }
+.adjust-mode__body small { font-size: 12px; line-height: 1.5; color: var(--mk-faint); }
 .adjust-mode__arrow { color: var(--faint); font-size: 16px; }
 /* 策略禁用的场景入口：压暗 + 原因副文案（amber 一档，与整建警示同色语言） */
 .adjust-mode:disabled { opacity: 0.55; cursor: not-allowed; }
 .adjust-mode:disabled:hover { border-color: var(--line); background: var(--surface); box-shadow: none; }
 .adjust-mode__blocked { color: var(--amber-ink); }
-/* 策略推荐引导标记：场景卡标题角标 + 填写步提示条内文案 */
+/* 策略推荐引导标记：场景卡标题角标 + 填写步提示条内文案
+   （2026-11-06 §1）：胶囊 → 紧凑小方签，去掉 1px 描边，只留柔和半透明底 */
 .adjust-mode__rec {
   margin-left: 6px;
-  padding: 1px 7px;
-  border-radius: var(--mk-radius-pill);
-  font-size: var(--mk-fs-micro); font-weight: 800;
+  display: inline-flex; align-items: center;
+  height: 20px; padding: 1px 6px;
+  border-radius: var(--mk-radius-sm);
+  font-size: 12px; font-weight: 600;
   color: var(--blue-deep);
   background: color-mix(in srgb, var(--blue) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent);
   vertical-align: 1px;
 }
 .adjust-form__hint-group { display: inline-flex; align-items: center; gap: 10px; margin-left: auto; }
@@ -2215,14 +2229,15 @@ onBeforeUnmount(() => {
 /* 选中场景后的头部提示。
    flex-wrap（bare/20）：窄屏（iPhone 402 实测）长模式说明与右侧「← 换一种方式」
    挤同一行，按钮压在折行后的标题文字上；wrap 让按钮组在装不下时换行到下一行，
-   与文字分离。 */
+   与文字分离。
+   圆角（2026-11-06 §1）：整条通栏提示条不用胶囊，收敛为 8px 控件档。 */
 .adjust-form__mode-hint {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 10px;
   padding: 7px 12px;
   font-size: 12.5px; font-weight: 700;
-  border-radius: var(--mk-radius-pill);
+  border-radius: var(--mk-radius-md);
   color: var(--blue-ink); background: color-mix(in srgb, var(--blue) 10%, transparent);
 }
 .adjust-form__mode-hint--rebuild { color: var(--amber-ink); background: color-mix(in srgb, var(--amber) 14%, transparent); }
@@ -2237,7 +2252,7 @@ onBeforeUnmount(() => {
 .adjust-form__warn {
   margin: 0 0 10px;
   padding: 9px 12px;
-  font-size: 12.5px; line-height: 1.6;
+  font-size: 12.5px; line-height: 1.5;
   color: var(--amber-ink);
   background: color-mix(in srgb, var(--amber) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--amber) 35%, transparent);
@@ -2254,12 +2269,12 @@ onBeforeUnmount(() => {
   margin-top: 4px;
   color: var(--faint);
 }
-/* 面板内回退入口（paths/iphone/2）：承诺「可一键回退」就必须可达，不再只挂 hero */
+/* 面板内回退入口（paths/iphone/2）：承诺「可一键回退」就必须可达，不再只挂 hero。
+   尺寸交给 v2.css 的控件档（电脑 32px / 移动 44px），本页不再单独写 min-height 把它压到 36px */
 .adjust-form__rollback {
   margin: 8px 0 0;
   display: flex;
 }
-.adjust-form__rollback .btn-ghost { min-height: 36px; font-size: 13px; }
 /* 挡路课堂清场视图 */
 .clear-sessions {
   display: grid;
@@ -2271,15 +2286,16 @@ onBeforeUnmount(() => {
 }
 .clear-sessions__tag {
   justify-self: start;
-  font-size: 12px; font-weight: 800;
+  display: inline-flex; align-items: center;
+  height: 20px; padding: 1px 6px;
+  font-size: 12px; font-weight: 600;
   color: var(--amber-ink);
   background: color-mix(in srgb, var(--amber) 14%, transparent);
-  border: 1px solid color-mix(in srgb, var(--amber) 35%, transparent);
-  padding: 2px 8px; border-radius: var(--mk-radius-pill);
+  border-radius: var(--mk-radius-sm);
 }
 .clear-sessions__head p {
   margin: 0;
-  font-size: 12.5px; line-height: 1.6;
+  font-size: 12.5px; line-height: 1.5;
   color: var(--muted);
 }
 .clear-sessions__list {
@@ -2310,16 +2326,32 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.clear-sessions__item-main .uc-badge { justify-self: start; }
+/* 课堂状态标签（2026-11-06 §1）：类名来自全站通用壳（本仓无全局底样式），
+   这里按「状态标签=紧凑小方签」给底色，不再是一行裸文字（进行中/已暂停/收尾中…） */
+.clear-sessions__item-main .uc-badge {
+  justify-self: start;
+  display: inline-flex; align-items: center;
+  height: 20px; padding: 1px 6px;
+  font-size: 12px; font-weight: 600;
+  border-radius: var(--mk-radius-sm);
+  color: var(--muted);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+.clear-sessions__item-main .uc-badge--warn {
+  color: var(--amber-ink);
+  background: color-mix(in srgb, var(--amber) 14%, transparent);
+}
 .clear-sessions__hint {
   margin: 0;
-  font-size: 12px; line-height: 1.6;
+  font-size: 12px; line-height: 1.5;
   color: var(--faint);
 }
+/* 行内主按钮（清场列表）：§1 内嵌按钮档——高 32px、圆角 8px、12px 字号 */
 .btn-primary--sm {
   flex: 0 0 auto;
+  height: 32px;
   font-size: 12px;
-  padding: 7px 12px;
+  padding: 0 12px;
   border-radius: var(--mk-radius-md);
 }
 
@@ -2330,7 +2362,7 @@ onBeforeUnmount(() => {
 .adjust-scope__label {
   margin: 0 0 6px;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
   color: var(--muted);
 }
 .adjust-scope__opts {
@@ -2370,40 +2402,42 @@ onBeforeUnmount(() => {
   max-width: 300px;
   min-width: 0;
 }
-/* AI 诊断建议卡（auto 场景） */
+/* AI 建议卡的嵌套面板（2026-11-06 §1）：与弹窗内层同档 12px，不同档于外层弹窗 */
 .ai-advice {
   display: grid;
   gap: 8px;
   padding: 14px;
   border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
   background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 6%, transparent), color-mix(in srgb, var(--blue) 4%, transparent));
-  border-radius: var(--mk-radius-xl);
+  border-radius: var(--mk-radius-lg);
 }
 .ai-advice__head {
   display: flex;
   align-items: center;
   gap: 8px;
 }
+/* 「AI 诊断」标签 + 诊断依据/卡点小签（2026-11-06 §1）：一律紧凑小方签 */
 .ai-advice__tag {
   flex: 0 0 auto;
-  font-size: 12px; font-weight: 800;
+  display: inline-flex; align-items: center;
+  height: 20px; padding: 1px 6px;
+  font-size: 12px; font-weight: 600;
   color: var(--purple-ink);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-  padding: 2px 8px; border-radius: var(--mk-radius-pill);
+  border-radius: var(--mk-radius-sm);
 }
 .ai-advice__verdict {
-  font-size: 14px; font-weight: 800;
+  font-size: 14px; font-weight: 700;
   color: var(--purple-ink);
 }
 .ai-advice__verdict--ok { color: var(--green-ink); }
 .ai-advice__rationale {
   margin: 0;
-  font-size: 13px; line-height: 1.6;
+  font-size: 13px; line-height: 1.5;
   color: var(--ink);
 }
 .ai-advice__detail {
-  font-size: 12.5px; line-height: 1.6;
+  font-size: 12.5px; line-height: 1.5;
   color: var(--muted);
   background: color-mix(in srgb, var(--surface) 55%, transparent);
   border-radius: var(--mk-radius-md);
@@ -2420,16 +2454,16 @@ onBeforeUnmount(() => {
   color: var(--faint);
 }
 .ai-advice__chip {
+  display: inline-flex; align-items: center;
+  height: 20px; padding: 1px 6px;
   font-size: 12px; font-weight: 600;
   color: var(--blue-ink);
   background: color-mix(in srgb, var(--blue) 10%, transparent);
-  border-radius: var(--mk-radius-pill);
-  padding: 2px 9px;
+  border-radius: var(--mk-radius-sm);
 }
 .ai-advice__chip--warn {
   color: var(--amber-ink);
   background: color-mix(in srgb, var(--amber) 14%, transparent);
-  border: 1px solid color-mix(in srgb, var(--amber) 30%, transparent);
 }
 .ai-advice__meta {
   font-size: 12px;
@@ -2526,6 +2560,12 @@ onBeforeUnmount(() => {
   /* 失败横幅主 CTA「重新准备阶段任务」在窄屏换行成两行、与左侧文案不齐（LY16）：
      窄屏让按钮独占一行、通栏居中，并禁止文字换行 */
   .genbar--failed .btn-primary { width: 100%; justify-content: center; white-space: nowrap; }
+  /* 任务行操作钮：电脑档按 §1 收到 32px（30–34 档），触屏档回到 40px——
+     守住仓库 mobile:spec「可点元素任何一维 ≥36px」（lt36 预算 0）的硬线，
+     375 实测口径下不再新增不足 36 的点击目标；字号维持 12px 不动。 */
+  .task__cta, .task__edit, .task__done-label { height: 40px; padding: 0 14px; }
+  /* 微调面板（点开后才出现在 DOM 里）：行内按钮/输入同抬到 40px，避免触屏上出现 <36 的目标 */
+  .task-edit__btn, .task-edit__input { height: 40px; }
   .adjust-dialog-mask { padding: 14px; }
   .adjust-dialog { padding: 16px 18px; }
   /* 26×26 对拇指偏小（弹窗右上角唯一退出路径），抬到 36 */

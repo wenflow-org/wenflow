@@ -6,9 +6,7 @@ import { getAgentRequestTimeoutInfo } from '../../services/agentRequestTimeout.s
 import { decryptSecret, SecretCryptoError } from '../../utils/secret-crypto';
 import { endpointsMatch } from '../../utils/endpoint-identity';
 import { selectModelForAlias } from './model-alias';
-import { reloadLlmProvidersIfChanged, resolvesToRegisteredModel, getModelDefaults, resolveModelRef, supportsVision, getModelGenerationDefaults } from '../../config/models.config';
-import { normalizePlatformModelDefaults } from '../../services/seed-skill-model-configs';
-const warnedOutOfCatalogEnvModels = new Set<string>();
+import { reloadLlmProvidersIfChanged, resolveModelRef, supportsVision, getModelGenerationDefaults } from '../../config/models.config';
 import { resolveProviderApiKey } from '../../services/provider-secrets.service';
 
 const PLATFORM_KEY_CONTEXT = 'system.platform_api_configs.apiKey';
@@ -142,37 +140,12 @@ export class APIRouter {
   }
 
   private resolveModel(configModel?: string | null, aliasOverrides?: Record<string, string[]> | null): string {
-    const configured = (configModel || '').trim();
-    const model = (configured || process.env.AI_MODEL || '').trim();
+    const model = (configModel || process.env.AI_MODEL || '').trim();
     if (!model) {
       throw new Error('AI model is not configured. Set admin defaultModel or AI_MODEL.');
     }
     // 逻辑别名（chat / light …）展开为具体部署；具体模型 id 原样返回
-    const resolved = selectModelForAlias(model, { overrides: aliasOverrides })?.model ?? model;
-    // env 兜底（DB 未配默认）过目录护栏（#177）；显式配置值保持原样
-    return configured ? resolved : this.guardEnvFallbackModel(resolved, aliasOverrides);
-  }
-
-  /**
-   * #177 运行期护栏（env 兜底）：平台 DB 未配默认时，平台路由落 env `AI_MODEL`。
-   * env 没有写入门禁（管理台默认模型的写入门禁管不到它），指向 llm-providers.json 目录外的值
-   * （历史遗留评测 id、已删模型的 id）在运行时无可用渠道，原样透传上游只会 transport 失败。
-   * 这里在取值点兜住：解析不到注册目录就改用文件声明的默认并告警（同一坏值只告警一次）。
-   * 只作用于平台通道默认——用户自带 provider / skill 显式绑定的模型身份不属于平台目录，保持原样。
-   */
-  private guardEnvFallbackModel(model: string, aliasOverrides?: Record<string, string[]> | null): string {
-    if (resolvesToRegisteredModel(model, aliasOverrides)) return model;
-    const declared = getModelDefaults();
-    const fallback = declared.chat;
-    if (!fallback || !resolvesToRegisteredModel(fallback, aliasOverrides)) return model;
-    if (!warnedOutOfCatalogEnvModels.has(model)) {
-      warnedOutOfCatalogEnvModels.add(model);
-      logger.warn?.('[api-gateway] env 兜底默认模型不在已注册目录（llm-providers.json），改用文件声明默认', {
-        envModel: model,
-        fallback,
-      });
-    }
-    return fallback;
+    return selectModelForAlias(model, { overrides: aliasOverrides })?.model ?? model;
   }
 
   /* 2026-11-04 用户「为什么还在区分默认推理和对话，没有这个了。所谓的推理，是取决于使用者
@@ -212,19 +185,6 @@ export class APIRouter {
     } else if (!reload.error && this.lastLoggedReloadError) {
       this.lastLoggedReloadError = null;
       logger.info('[api-gateway] llm-providers.json 已恢复并热重载成功');
-    }
-
-    // #177 运行期归一化：直接手改 llm-providers.json（绕过管理台写入门禁）后目录收缩，可能让平台
-    // 默认指向的模型从目录里消失——运行期继续用列表外的 id 会无可用渠道 transport 失败。
-    // 目录确实变了就地按新目录重新归一化平台默认（与启动期同一 File-as-Truth 口径），
-    // 在本次解析使用之前消除故障本身；无变化（常态）不走 DB。
-    if (reload.reloaded) {
-      await normalizePlatformModelDefaults(systemPrisma).catch((err) => {
-        // 不静默：这是目录收缩后唯一的运行期修复通路，失败必须留痕（下一次解析仍会重试）
-        logger.warn('[api-gateway] 目录热重载后平台默认归一化失败（本次解析未修复，待下次重试）', {
-          errorMessage: err instanceof Error ? err.message : String(err),
-        });
-      });
     }
 
     if (caller.skillId) {

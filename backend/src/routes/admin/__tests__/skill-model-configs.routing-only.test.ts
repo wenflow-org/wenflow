@@ -180,20 +180,20 @@ describe('skill-model-configs routing-only write path', () => {
     expect(mockUpsert.mock.calls[0][1]).not.toHaveProperty('fallbackChain')
   })
 
-  /* #177：未自带 endpoint 的 skill 走继承通道，显式钉目录外模型会在运行期无可用渠道。 */
-  it('PUT 拒绝未自带 endpoint 时钉目录外模型', async () => {
+  /* 2026-11-05 产品决定下线 #177 目录外默认门禁，见 CHANGELOG：
+     未自带 endpoint 的 skill 也不再被禁止钉目录外模型，值原样保存。 */
+  it('#177 已下线：允许未自带 endpoint 的 skill 钉目录外模型', async () => {
     mockGet.mockResolvedValue({ skillId: 'goal-conversation', enabled: true, model: null, endpoint: null, apiKey: null })
+    mockUpsert.mockImplementation(async (_id: string, data: any) => ({ skillId: 'goal-conversation', ...data }))
     const handler = getHandler('put', '/:skillId')
     const res = createRes()
     await handler(
       { params: { skillId: 'goal-conversation' }, body: { enabled: true, model: 'totally-unknown-model' } },
       res
     )
-    expect(res.status).toHaveBeenCalledWith(400)
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-      error: expect.stringContaining('totally-unknown-model'),
-    }))
-    expect(mockUpsert).not.toHaveBeenCalled()
+    expect(res.status).not.toHaveBeenCalledWith(400)
+    expect(mockUpsert).toHaveBeenCalledTimes(1)
+    expect(mockUpsert.mock.calls[0][1]).toEqual(expect.objectContaining({ model: 'totally-unknown-model' }))
   })
 
   it('自带 endpoint 的 skill 允许钉该独立通道的模型（不受平台目录约束）', async () => {
@@ -270,13 +270,18 @@ describe('bulk-apply：清空模型覆盖（跟随平台默认）', () => {
     expect(res.status).toHaveBeenCalledWith(400)
   })
 
-  /* #177：批量套用未提供独立 endpoint 时，同样不能把目录外模型钉给走继承通道的 skill。 */
-  it('未提供 endpoint 时拒绝批量套用目录外模型', async () => {
+  /* 2026-11-05 产品决定下线 #177 目录外默认门禁，见 CHANGELOG：
+     批量套用也不再校验目录成员，目录外模型照常写入。 */
+  it('#177 已下线：未提供 endpoint 也允许批量套用目录外模型', async () => {
     const handler = getHandler('post', '/bulk-apply')
     const res = createRes()
     await handler({ body: { skillIds: ['a', 'b'], model: 'totally-unknown-model' } } as any, res)
-    expect(res.status).toHaveBeenCalledWith(400)
-    expect(mockUpsert).not.toHaveBeenCalled()
+    expect(res.status).not.toHaveBeenCalledWith(400)
+    expect(mockUpsert).toHaveBeenCalledTimes(2)
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      success: true,
+      data: expect.objectContaining({ applied: 2, failed: 0 }),
+    }))
   })
 })
 

@@ -14,7 +14,7 @@
 | SKILL_PROTOCOL_V4.md | 活规范 | Skill 协议 SSOT（二级编译已退役） |
 | MODEL_GATEWAY_DESIGN.md | 活规范 | 网关 SSOT |
 | PROMPT_CACHE_OPTIMIZATION.md | 活规范 | 缓存优化（64k SSOT 已回写） |
-| MODEL_SETUP_AND_CONFIG_DESIGN.md | 设计方案（待评审） | 从部署到 Skill 细调的模型配置设计；补「怎么把模型配进来」 |
+| MODEL_SETUP_AND_CONFIG_DESIGN.md | 设计方案（待评审） | 从部署到 Skill 细调的模型配置设计；补「怎么把模型配进来」（注：文内「三块模型/插件降级」已随 2026-11-05 降级链下线失效）
 | PROMPT_ADJUSTMENT_GUIDE.md | 活规范 | 提示词调整操作指南 |
 | SKILL_DEVELOPMENT_GUIDE.md | 活规范 | 新建/改造 Skill 指南（§2 CLI 优先） |
 | AGENT_SKILL_MANUAL.md | 活规范 | Agent/Skill 全景 why |

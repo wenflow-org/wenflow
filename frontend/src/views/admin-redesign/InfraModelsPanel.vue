@@ -219,7 +219,7 @@
       :hidden-count="addHiddenCount"
       :empty-text="addEmptyText"
       :tester="testPicked"
-      hint="勾选的模型都进这条连接的模型池，再用 ⋯「设为启用」决定运行时用哪个。"
+      hint="勾选以添加可用模型，⋯ 里挑一个设为启用，它决定这条连接运行时用哪个。"
       @confirm="addPicked"
       @refetch="pullUpstream()"
       @show-all="addShowAll = true"
@@ -269,7 +269,7 @@
             </p>
             <label v-if="addEntry?.keySource === 'db' && !addConn.apiKey.trim()" class="infra-clearkey">
               <input v-model="addConn.clearKey" type="checkbox" />
-              <span>清除已保存的密钥（仍可回落环境变量）</span>
+              <span>清除已保存的密钥（之后改用环境变量中的密钥）</span>
             </label>
           </template>
         </template>

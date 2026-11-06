@@ -661,7 +661,7 @@ onMounted(load);
   border-radius: var(--mk-radius-sm);
   background: color-mix(in srgb, var(--blue) 10%, transparent);
   color: var(--blue-deep);
-  font-size: var(--mk-fs-micro);
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.02em;
 }
@@ -708,12 +708,18 @@ onMounted(load);
   margin-top: 8px;
 }
 
+/* 徽章 = 非点击类状态标签，走 §1 的紧凑小方签（22px / 1px 6px / --mk-radius-sm / 12px），
+   与 v2.css 全局 .v2-page .badge 同一组；原 2px 7px + 999px 药丸已退役。
+   字号固定 12px，不用 --mk-fs-micro（宽屏会涨到 12.5px，顶破 §1 的 11~12px 上限）。 */
 .lib-badge {
-  padding: 2px 7px;
-  border-radius: var(--mk-radius-pill);
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 1px 6px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-surface-2);
   color: var(--muted);
-  font-size: var(--mk-fs-micro);
+  font-size: 12px;
   font-weight: 700;
 }
 
