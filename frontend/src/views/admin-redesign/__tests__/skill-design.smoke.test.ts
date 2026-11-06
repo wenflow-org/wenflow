@@ -424,25 +424,27 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
     // 2026-10-28 用户「skill 详情的模型也改一下」：卡面先给当前值，表单收进弹层
     /* 2026-11-04 用户「他是在平台配置模型之下的，进行独立的调整」：
        卡面 = 基线（平台默认模型那一行）+ 差异（本 Skill 改过的项）。 */
+    /* 2026-11-06 用户「没有什么基线之类的，只有切换模型，参数等等」：
+       卡面收敛成两行——模型（id + 能力/单价事实）、参数（当前生效值连排）。
+       「基线 / 本 Skill 独立调整」两段与它们的样式一并删除。 */
     const live = wrapper.find('.sdp-live');
     expect(live.exists()).toBe(true);
-    expect(live.find('.sdp-base__model').text()).toContain('gpt-4o-mini');
-    /* 2026-11-06：「基线」不再是灰底胶囊、能力不再是胶囊，来源与能力收进同一行灰字
-       （.sdp-base__facts，· 分隔）——它们都是事实陈述，不是控件。 */
-    expect(live.find('.sdp-base__facts').text()).toContain('本 Skill 指定');
-    // 取值顺序（谁压谁）降成基线模型 id 的悬停说明，不占一行读数
-    expect(live.find('.sdp-base__model').attributes('title') ?? '').toContain('本 Skill 指定');
-    // 只列改过的项：mock 里 Skill 只单独设了 requestTimeoutMs=30000；
-    // T=0.4 是 Prompt 声明值（generationParams），不算这个 Skill 的改动
-    const diff = live.findAll('.sdp-diff__list > li');
-    expect(diff.map((li) => li.find('.sdp-diff__label').text())).toEqual(['请求超时']);
-    // 第三格是「不单独设置时会取什么」，前缀「基线」说明它是对照值而非第二个值
-    expect(diff[0].find('.sdp-diff__base').text()).toBe('基线 平台默认');
-    expect(diff[0].find('.sdp-diff__val').text()).toBe('30s');
-    // 2026-11-05 用户「不要这种文案，这属于什么文案」：没改的项不再逐一点名——
-    // 基线行已写明基线是谁、差异列表已只列改过的项，再把「其余」数一遍属自述装配（负空间复述）。
-    expect(live.find('.sdp-diff__rest').exists()).toBe(false);
-    expect(live.text()).not.toContain('其余沿用基线');
+    const rows = live.findAll('.sdp-row');
+    expect(rows.map((r) => r.find('.sdp-row__k').text())).toEqual(['模型', '参数']);
+    expect(rows[0].find('.sdp-model').text()).toContain('gpt-4o-mini');
+    // 能力与单价作为同一行的灰字事实（不各占一枚胶囊）。mock 的模型不在注册表目录里，
+    // 这两个值都查不到 → 该行不渲染事实块；这里只断言它不会变成另一种结构（胶囊/独立行）。
+    expect(rows[0].find('.sdp-chip').exists()).toBe(false);
+    // 取值顺序（谁压谁）降成模型 id 的悬停说明，不占一行读数
+    expect(rows[0].find('.sdp-model').attributes('title') ?? '').toContain('本 Skill 指定');
+    // 参数行给的是生效值：mock 里超时由本 Skill 设为 30s，温度取 Prompt 声明值
+    const params = rows[1].find('.sdp-facts').text();
+    expect(params).toContain('思考模式');
+    expect(params).toContain('超时 30s');
+    expect(params).toContain('温度 0.4');
+    // 不再出现「基线 / 独立调整」那套词
+    expect(live.text()).not.toContain('基线');
+    expect(live.text()).not.toContain('独立调整');
     expect(wrapper.find('.sdp-nav').exists()).toBe(false);
 
     // 详细分段只在弹层里；打开后当前值仍读段头

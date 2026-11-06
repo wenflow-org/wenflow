@@ -56,47 +56,37 @@
              再只列**这个 Skill 改过的**项，每一项后面标注它在没改时会取什么。
              此前是五项读数平铺，读者看不出哪几项是本 Skill 的决定、哪几项只是继承；
              模型那一行还写着「未单独指定，跟随平台默认」，与卡头「覆盖平台默认 已开启」读作打架。 -->
-        <div class="sdp-live" :class="{ 'sdp-live--split': rtForm.enabled }">
-          <!-- 基线行（2026-11-06 用户「这个设计的不好」重做）：
-               此前「基线」是一枚灰底胶囊 → 读作状态标签；能力各是一枚胶囊 → 读作可点的筛选项；
-               「平台默认模型」孤零零挂在行尾 → 不知道它是来源还是值。
-               现在：首列是与差异表同一档的文字标签，模型 id 当主角，来源与能力收成同一行灰字，
-               用「·」分隔、不占胶囊——它们都是**事实陈述**，不是控件。 -->
-          <div class="sdp-base">
-            <span class="sdp-base__k">基线</span>
-            <span class="sdp-base__main">
-              <span class="mono sdp-base__model" :title="`${baseModel}
+        <!-- 卡面只两行（2026-11-06 用户「没有什么基线之类的，只有切换模型，参数等等」）：
+             模型一行（id + 能力陈述），参数一行（当前生效值连排）。
+             此前两版的「基线 / 本 Skill 独立调整」是把机制讲给读者听，读者要的只是
+             「这个 Skill 现在用哪个模型、参数是什么」；改值仍走卡头「配置」弹层。 -->
+        <div class="sdp-live">
+          <div class="sdp-row">
+            <span class="sdp-row__k">模型</span>
+            <span class="sdp-row__v">
+              <span class="mono sdp-model" :title="`${baseModel}
 
 ${orderTitle}`">{{ baseModel }}</span>
-              <!-- 能力做成**陈述句**（2026-11-02 评审：原来只写 思考 / 推理强度 两个裸词，
-                   被读成「只有标签、值还没填」）。 -->
-              <span class="sdp-base__facts">
-                <span>{{ baseModelSource }}</span>
+              <!-- 能力 + 供应商/单价（primaryMetaText 在配置弹层里用，那里要连能力一起交代；
+                   卡面这一行能力已单独列，避免复读） -->
+              <span v-if="summaryCaps.length || summaryMeta" class="sdp-facts">
                 <span v-for="cap in summaryCaps" :key="cap">{{ cap }}</span>
                 <span v-if="summaryMeta">{{ summaryMeta }}</span>
               </span>
             </span>
           </div>
 
-          <template v-if="rtForm.enabled">
-            <div class="sdp-diff">
-              <p class="sdp-diff__k">
-                本 Skill 独立调整
-                <span v-if="changedRows.length" class="sdp-diff__count">{{ changedRows.length }} 项</span>
-              </p>
-              <ul class="sdp-diff__list">
-                <li v-for="row in changedRows" :key="row.label">
-                  <span class="sdp-diff__label">{{ row.label }}</span>
-                  <strong class="sdp-diff__val">{{ row.value }}</strong>
-                  <!-- 对照值紧跟取值（不是被 1fr 顶到卡片右缘）：一行读完「改成了什么 / 没改是什么」 -->
-                  <em class="sdp-diff__base" :title="row.baseTitle">基线 {{ row.base }}</em>
-                </li>
-              </ul>
-              <p v-if="!changedRows.length" class="sdp-diff__none">没有单独调整的项，全部沿用基线</p>
-            </div>
-          </template>
+          <div v-if="rtForm.enabled" class="sdp-row">
+            <span class="sdp-row__k">参数</span>
+            <span class="sdp-row__v">
+              <span class="sdp-facts">
+                <span v-for="item in paramSummary" :key="item">{{ item }}</span>
+              </span>
+            </span>
+          </div>
+          <!-- 覆盖关闭时这套设置不参与：只说清「现在按谁」，不列表单里那份用不上的值 -->
           <p v-else class="sdp-live__note">
-            覆盖已关闭：模型与超时按基线，生成参数仍按 Prompt 文件声明取值。
+            覆盖已关闭：模型与超时用平台默认，生成参数仍按 Prompt 文件声明取值。
           </p>
         </div>
 
@@ -495,55 +485,22 @@ const baseModel = computed(() => {
   if (rtForm.value.enabled && rtForm.value.model) return rtForm.value.model
   return String(generationParams.value?.model || '平台默认模型')
 })
-/** 基线这一行的来源句：换模型这件事本身有没有做 */
-const baseModelSource = computed(() => {
-  if (!rtForm.value.enabled) return '平台默认模型'
-  return rtForm.value.model ? '本 Skill 指定' : '平台默认模型'
+/** 参数行：这一屏直接给「现在是什么值」，不再与基线逐项对照（2026-11-06 用户
+ *  「没有什么基线之类的，只有切换模型，参数等等」）。取的是生效值：
+ *  覆盖开启时用本 Skill 的值，未覆盖的字段取 Prompt 文件声明的值；超时与重试取平台默认。 */
+const paramSummary = computed(() => {
+  const out: string[] = [`思考模式 ${thinkingLabel.value}`]
+  // 只在显式设过挡位时才列出：思考模式是「按模型默认」时，强度也跟着默认，再写一行是复读
+  if (rtForm.value.reasoningEffort !== 'default') out.push(`推理强度 ${cfgEffortLabel.value}`)
+  const tp = paramT.value
+  const temp = tp.mode === 'override' && tp.value != null
+    ? String(tp.value)
+    : String(generationParams.value?.temperature ?? paramValText('temperature'))
+  out.push(`温度 ${temp}`)
+  out.push(`超时 ${rtForm.value.requestTimeoutMs ? `${Math.round(rtForm.value.requestTimeoutMs / 1000)}s` : '平台默认'}`)
+  out.push(`重试 ${effectiveLogicalRetries.value} 次`)
+  return out
 })
-interface DiffRow { label: string; value: string; base: string; baseTitle: string; changed: boolean }
-/** 五项读数逐条与基线对比；覆盖关闭时这套设置不参与，不列差异 */
-const diffRows = computed<DiffRow[]>(() => {
-  if (!rtForm.value.enabled) return []
-  const t = paramT.value
-  return [
-    {
-      label: '思考模式',
-      value: thinkingLabel.value,
-      base: INHERIT_DEFAULT_LABEL,
-      baseTitle: '这一项不单独设置时，由模型自身决定要不要思考',
-      changed: rtForm.value.thinkingMode !== 'default'
-    },
-    {
-      label: '推理强度',
-      value: cfgEffortLabel.value,
-      base: INHERIT_DEFAULT_LABEL,
-      baseTitle: '这一项不单独设置时，由模型自身决定思考的深度',
-      changed: rtForm.value.thinkingMode !== 'disabled' && rtForm.value.reasoningEffort !== 'default'
-    },
-    {
-      label: 'temperature',
-      value: t.mode === 'override' && t.value != null ? String(t.value) : String(generationParams.value?.temperature ?? '—'),
-      base: INHERIT_PROMPT_LABEL,
-      baseTitle: '这一项不覆盖时，取 Prompt 文件里声明的值',
-      changed: t.mode === 'override'
-    },
-    {
-      label: '请求超时',
-      value: rtForm.value.requestTimeoutMs ? `${Math.round(rtForm.value.requestTimeoutMs / 1000)}s` : '平台默认',
-      base: '平台默认',
-      baseTitle: '这一项不单独设置时，用平台的请求超时',
-      changed: rtForm.value.requestTimeoutMs != null
-    },
-    {
-      label: '逻辑重试',
-      value: `${effectiveLogicalRetries.value} 次`,
-      base: `平台默认 ${platformLogicalRetries.value} 次`,
-      baseTitle: '这一项不单独设置时，用平台的逻辑重试次数',
-      changed: logicalRetryMode.value !== 'inherit'
-    }
-  ]
-})
-const changedRows = computed(() => diffRows.value.filter((r) => r.changed))
 
 /** 主模型在目录里的条目：用于就地核对能力与价格（2026-11-04 起不再收窄备用候选） */
 const primaryOption = computed(() => pickerOptions.value.find((o) => o.value === rtForm.value.model) ?? null)
@@ -850,53 +807,19 @@ watch(() => props.skillId, () => {
 .sdp-body { display: grid; gap: 16px; padding: 4px 16px 16px; }
 /* 取值顺序：一行说清「谁压谁」。原来这块是「生效值」只读摘要，把下面各分节的
    当前值又抄一遍（导航副文、分节页头、表单各一份），已删（2026-10-24 用户判定无意义）。 */
-/* 卡面「基线 + 差异」（2026-11-04）：第一段是基线（平台默认模型那一行），
-   第二段只列本 Skill 改过的项。 */
-.sdp-live { display: grid; gap: 14px; }
-/* 宽屏双栏（2026-11-06 用户「这个设计的不好」）：基线一段、差异一段，此前竖排两行只占左侧
-   700px，右边 400px 全空。≥1024 改成「基线 | 独立调整」两栏，中间一条发丝线——
-   两段本来就是「是谁 / 改了什么」的对照关系，并排读比上下读更快。
-   窄屏回单栏（上下排），差异表不挤。 */
-@media (min-width: 1024px) {
-  .sdp-live--split {
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-    column-gap: 32px;
-    align-items: start;
-  }
-  .sdp-live--split .sdp-diff {
-    align-self: stretch;
-    border-left: 1px solid var(--mk-line);
-    padding-left: 32px;
-  }
-}
+/* 两行读数（2026-11-06 用户「没有什么基线之类的，只有切换模型，参数等等」）：
+   首列是字段名，第二列是值 + 一行灰字事实。那套「基线 / 本 Skill 独立调整」的说法
+   与样式（.sdp-base* / .sdp-diff* / .sdp-chip、宽屏双栏）整体删除。 */
+.sdp-live { display: grid; gap: 12px; }
 .sdp-live__note { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-amber); line-height: 1.6; }
-/* 「基线」是这一行的角色标签，与下方差异表的首列同一档：纯文字、无底色——
-   做成灰底胶囊会被读成状态标签（2026-11-06 用户「这个设计的不好」）。 */
-.sdp-base { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; align-items: baseline; }
-.sdp-base__k { color: var(--mk-muted); font-size: var(--mk-fs-micro); font-weight: 600; }
-.sdp-base__main { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; min-width: 0; }
-/* 来源与能力是同一句话里的几个事实：灰字 + 「·」分隔，不各占一枚胶囊 */
-.sdp-base__facts { display: flex; flex-wrap: wrap; gap: 0 2px; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
-.sdp-base__facts > * + *::before { content: '·'; margin: 0 6px 0 2px; color: var(--mk-faint); }
-/* 主角：基线模型 id（比读数高一级，卡面第一眼先读它） */
-.sdp-base__model { color: var(--mk-ink); font-weight: 700; font-size: var(--mk-fs-emphasis); overflow-wrap: anywhere; }
-.sdp-diff { display: grid; gap: 8px; }
-.sdp-diff__k { display: flex; align-items: baseline; gap: 8px; margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); font-weight: 700; letter-spacing: 0.04em; }
-.sdp-diff__count { color: var(--mk-faint); font-weight: 600; letter-spacing: 0; }
-.sdp-diff__list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
-/* 一行三格：项名 / 本 Skill 的取值 / 未调整时会取什么。第三格是差异的对照面，
-   亮度降一档，读起来像脚注而不是第二个值。 */
-/* 三列左对齐成簇：项名 96 / 取值按内容宽 / 对照值紧随其后。
-   此前第三列是 auto，被中间的 1fr 顶到卡片右缘——1140px 宽的卡上，
-   「思考模式 关闭」与「按模型默认」隔着 1200px，读一行要横跨整屏。 */
-.sdp-diff__list > li { display: grid; grid-template-columns: 96px max-content minmax(0, 1fr); gap: 10px; align-items: baseline; min-width: 0; }
-.sdp-diff__label { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.sdp-diff__val { color: var(--mk-ink); font-weight: 700; overflow-wrap: anywhere; }
-.sdp-diff__base { color: var(--mk-faint); font-size: var(--mk-fs-micro); font-style: normal; }
-.sdp-diff__none { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-@media (max-width: 720px) {
-  .sdp-diff__list > li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
-}
+.sdp-row { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; align-items: baseline; }
+.sdp-row__k { color: var(--mk-muted); font-size: var(--mk-fs-micro); font-weight: 600; }
+.sdp-row__v { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; min-width: 0; }
+/* 模型 id：卡面第一眼要读到的那个值 */
+.sdp-model { color: var(--mk-ink); font-weight: 700; font-size: var(--mk-fs-emphasis); overflow-wrap: anywhere; }
+/* 事实列表（能力 / 来源 / 参数）：灰字、「·」分隔，不占胶囊——它们都是陈述，不是控件 */
+.sdp-facts { display: flex; flex-wrap: wrap; gap: 0 2px; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+.sdp-facts > * + *::before { content: '·'; margin: 0 6px 0 2px; color: var(--mk-faint); }
 
 /* 控件同高 32px：这一屏的下拉（.mk-select__trigger）与按钮（.mk-btn）都是 32px，
    只有模型选择器还是 40px 的默认档，实测同一行三个高度（40 / 31 / 32）。

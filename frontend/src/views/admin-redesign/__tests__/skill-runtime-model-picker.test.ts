@@ -109,8 +109,8 @@ describe('Skill 运行时 · 模型选择', () => {
 
   it('主模型显示当前目录条目；「用平台默认模型」是显式选项', async () => {
     const w = await mountTab()
-    // 2026-11-04「基线 + 差异」：卡面第一行是基线模型 id
-    expect(w.find('.sdp-base__model').text()).toContain('deepseek-v4.1-flash')
+    // 2026-11-06 两行摘要：卡面第一行（「模型」）就是当前在跑的模型 id
+    expect(w.find('.sdp-model').text()).toContain('deepseek-v4.1-flash')
     await openConfig(w)
     const control = w.find('.sdp-form__grid .mk-mp')
     expect(control.text()).toContain('deepseek-v4.1-flash')
