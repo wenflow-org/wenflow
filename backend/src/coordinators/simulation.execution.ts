@@ -43,6 +43,7 @@ import {
   parseStageResultsPayload,
   resolveScenarioBudget,
   willEmitLessonCompletedOnEnd,
+  isAbortLikeLearnError,
 } from './simulation.helpers';
 import {
   parseGoalConversationHistory,
@@ -325,6 +326,43 @@ export async function completeCheckpointedSimulationTask(
       });
     } catch (error: unknown) {
       const rawMessage = boundTaskCompletionError(error);
+      // #137（第三条漏网路径）：客户端断开 / 请求级取消会让 `transitionToNextLearningTask` 里的
+      // `retryLearnUpstream` 立刻抛 `request_aborted`（simulation.coordinator.ts:568-572）。
+      // 旧实现把它与「不可恢复失败」共用 `persistLearningFailure` → 会话被打成终态 failed，
+      // 整节课不可续（2026-10-25 夜批 w01/w05 实证：唯一一条 phase:error 就是这句 abort 文案）。
+      // 非终局语义：本课**已经结算并持久化**（上方已把 currentTaskId 推进到下一课），只是下一课的
+      // 课堂没开起来。这里保留 `taskRuntime.status='completed'` + 新 currentTaskId，
+      // 让 `executeLearningStep` 的「完成 → 下一课开课」恢复分支（simulation.learn-phase.ts:614-646）
+      // 在下一次 advance-day 直接续开下一课；只落可续跑暂停标记，不写终态。
+      if (isAbortLikeLearnError(error)) {
+        await ctx.persistTeachingPauseMarker(sessionId, error, { code: 'LEARN_REQUEST_ABORTED_PAUSED' });
+        logs.push({
+          timestamp: new Date().toISOString(),
+          phase: 'teaching-interrupted',
+          details: {
+            error: rawMessage,
+            output: {
+              action: 'start-next-learning-task-interrupted',
+              completedTaskId: taskMatch.task.id,
+              nextTaskId: nextProgress.progress.currentTaskId,
+              retryable: true
+            }
+          }
+        });
+        return {
+          success: false,
+          milestoneProgress: {
+            currentMilestone: taskMatch.milestoneIdx + 1,
+            totalMilestones: milestones.length,
+            currentTask: taskMatch.task.title
+          },
+          isPathCompleted: false,
+          taskCompleted: true,
+          currentTaskStopped: true,
+          logs,
+          error: rawMessage
+        };
+      }
       // 预算耗尽且本课已完成：文案明确「本课已学完、调高预算后可续传」，
       // 避免用户误以为学习失败；续传从下一课继续，不丢本课进度。
       const isBudget = /retry_budget_exhausted|budget_exhausted/i.test(rawMessage);

@@ -411,10 +411,10 @@ routings:
   - agentId: skill:teaching-turn
     fieldId: control.shouldTriggerPeer
     render: visible
-    handoff: [skill:peer-reinforcement, teaching-agent]
+    handoff: [teaching-agent]
     internal: false
     accumulate: false
-    notes: 触发 peer 流程的信号
+    notes: 触发 peer 流程的信号。由 teaching-agent 的 PeerTriggerService 读取后决定是否调起伴学；peer-reinforcement 的实参（peerInput）不含 control，故不声明为向 skill:peer-reinforcement 的直接交接（#199 实参对账）
   - agentId: skill:teaching-turn
     fieldId: control.checkpoint
     render: visible

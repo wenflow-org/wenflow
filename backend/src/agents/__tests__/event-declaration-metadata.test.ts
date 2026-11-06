@@ -9,6 +9,9 @@
  *
  * 同时 path-planning 的新注释「全仓无对应 dispatch 调用点」对它的 publishes 是假话——
  * path:created / path:adjusted / path:completed 都有真实 emit 点。本测试把这两条事实钉住。
+ *
+ * #150：另加「声明处必须写明不参与运行时分发」的全仓守卫——降级方案（不写派发器）只有在标注
+ * 齐全时才成立，否则字段照旧被界面/文档当成真实拓扑读。
  */
 import * as fs from 'fs';
 import * as path from 'path';
@@ -46,6 +49,55 @@ describe('#208 skill:learner-model 不得挂别人（事件链）的消费集', 
     const consumerSource = readSource('events/learner-event-consumer.ts');
     expect(consumerSource).not.toContain('learner-model');
     expect(consumerSource).not.toContain('learnerModelAgent');
+  });
+});
+
+/**
+ * #150 验收（二选一的「降级」支路）：字段可以保留，但**声明处必须明确写出不参与运行时分发**。
+ * 此前只有零散两三处注释，其余定义照着抄字段却没有标注，界面/文档仍会被当成真实拓扑读。
+ */
+describe('#150 每个声明式 subscribes / publishes 字段都自带「不参与分发」标注', () => {
+  const SKIPPED_DIRS = new Set(['generated', '__tests__', 'node_modules']);
+  const NON_DISPATCH_MARKERS = ['不参与运行时分发', '不参与运行时发布'];
+
+  it('非测试、非生成代码里的定义字段上方都能读到不参与分发的说明', () => {
+    const violations: string[] = [];
+    const files = fs.readdirSync(BACKEND_SRC, { recursive: true, encoding: 'utf8' })
+      .filter((name) => name.endsWith('.ts'))
+      .filter((name) => !name.split(/[\\/]/).some((part) => SKIPPED_DIRS.has(part)));
+
+    for (const name of files) {
+      const lines = fs.readFileSync(path.join(BACKEND_SRC, name), 'utf8').split('\n');
+      lines.forEach((line, index) => {
+        if (!/^\s*(subscribes|publishes):/.test(line)) return;
+        // agent-registry 的 JSON.stringify/parse 是序列化点，不是声明处
+        if (/JSON\.(stringify|parse)/.test(line)) return;
+        const context = lines.slice(Math.max(0, index - 40), index).join('\n');
+        if (!NON_DISPATCH_MARKERS.some((marker) => context.includes(marker))) {
+          violations.push(`${name}:${index + 1}`);
+        }
+      });
+    }
+
+    expect(violations).toEqual([]);
+  });
+
+  it('learner-model 声明的两个发布事件在全仓仍无 emit 点（注释与事实一致，勿据此排障）', () => {
+    const roots = ['agents', 'services', 'coordinators', 'events', 'skills', 'bootstrap', 'gateway'];
+    const hits: string[] = [];
+    for (const root of roots) {
+      const dir = path.join(BACKEND_SRC, root);
+      const files = fs.readdirSync(dir, { recursive: true, encoding: 'utf8' })
+        .filter((name) => name.endsWith('.ts') && !name.endsWith('.test.ts'));
+      for (const name of files) {
+        const source = fs.readFileSync(path.join(dir, name), 'utf8');
+        for (const eventType of learnerModelAgentDefinition.publishes) {
+          // 只找 emit 形态（type: '…'）；声明式数组里的字面量不算
+          if (source.includes(`type: '${eventType}'`)) hits.push(`${root}/${name}:${eventType}`);
+        }
+      }
+    }
+    expect(hits).toEqual([]);
   });
 });
 

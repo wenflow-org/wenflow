@@ -2092,7 +2092,8 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
       await ctx.persistTeachingPauseMarker(
         sessionId,
         outerFailureMessage,
-        transientFailure ? { code: 'LEARN_UPSTREAM_TRANSIENT_PAUSED' } : {}
+        // 中止类与上游突发共用「非终局暂停」，但分诊码不同（#137：abort 单独可数）
+        { code: abortLikeFailure ? 'LEARN_REQUEST_ABORTED_PAUSED' : 'LEARN_UPSTREAM_TRANSIENT_PAUSED' }
       );
       logs.push({
         timestamp: new Date().toISOString(),

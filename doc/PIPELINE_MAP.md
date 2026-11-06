@@ -137,15 +137,15 @@ flowchart LR
 | 步 | 节点 | 类型 | 职责 | 条件 | 循环 |
 | --- | --- | --- | --- | --- | --- |
 | 1 | `LearnerEvidenceProjector` | service | learner-evidence-projection | when learner profile related events arrive | — |
-| 2 | `skill:lesson-knowledge-enricher` | skill | lesson-knowledge-enrichment | when lesson ends | — |
-| 3 | `LearnerProfileService` | service | learner-profile-cache-clear | after learner evidence is projected | — |
-| 4 | `LearnerSnapshotRefreshService` | service | learner-snapshot-refresh | after learner updates are applied | — |
+| 2 | `LearnerProfileService` | service | learner-profile-cache-clear | after learner evidence is projected | — |
+| 3 | `LearnerSnapshotRefreshService` | service | learner-snapshot-refresh | after profile cache is invalidated (skipped for teaching task:completed / goal:understanding:updated) | — |
+| 4 | `skill:lesson-knowledge-enricher` | skill | lesson-knowledge-enrichment | when lesson ends (enqueued asynchronously; the fast path does not await the LLM) | — |
 
 | Skill | 类型 | 提示词正文 | 参数 | 输入/输出 | 字段角色 |
 | --- | --- | --- | --- | --- | --- |
 | `adaptive-guidance-copy` | mainline | `prompts/core/adaptive-guidance-copy.yaml` | temp=0.6 / propagate | 4/8 | 0 |
 | `lesson-knowledge-enricher` | mainline | `prompts/core/lesson-knowledge-enricher.yaml` | temp=0.4 / propagate | 1/6 | 0 |
-| `learning-predictor` | mainline | `prompts/core/learning-predictor.yaml` | temp=0.2 / propagate | 0/7 | 0 |
+| `learning-predictor` | mainline | `prompts/core/learning-predictor.yaml` | temp=0.2 / propagate | 3/7 | 0 |
 
 > 「字段角色」= manifest `promptContract.fields` 的 direction/visibility 元数据；输出 schema 以 core.yaml 的 `fields` 为准，0 不代表没有输出契约。
 **不在 Agent steps 内、但登记在本阶段的 Skill**：
