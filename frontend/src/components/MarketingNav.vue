@@ -60,8 +60,11 @@
           @click="closeMenu"
         >愿景</router-link>
         <a href="https://github.com/wenflow-org/wenflow" target="_blank" rel="noreferrer" class="mknav__link" @click="closeMenu">GitHub</a>
-        <router-link :to="secondaryPath" class="mknav__btn mknav__btn--ghost" @click="closeMenu">{{ secondaryLabel }}</router-link>
-        <router-link :to="primaryPath" class="mknav__btn mknav__btn--primary" @click="closeMenu">{{ primaryLabel }}</router-link>
+        <!-- 两颗 CTA 同排（2026-11-06 走查：移动端抽屉里上下两行太占高，页头本来也是同排） -->
+        <div class="mknav__cta-row">
+          <router-link :to="secondaryPath" class="mknav__btn mknav__btn--ghost" @click="closeMenu">{{ secondaryLabel }}</router-link>
+          <router-link :to="primaryPath" class="mknav__btn mknav__btn--primary" @click="closeMenu">{{ primaryLabel }}</router-link>
+        </div>
       </div>
     </Transition>
   </header>
@@ -363,6 +366,17 @@ onUnmounted(() => {
   .mknav__drawer .mknav__link.is-on {
     color: var(--blue-deep);
     background: color-mix(in srgb, var(--blue) 10%, transparent);
+  }
+  /* 两颗 CTA 并排各占半格：次级 ghost 在左、主 primary 在右（与页头同序） */
+  .mknav__cta-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .mknav__cta-row .mknav__btn {
+    width: 100%;
+    min-width: 0;
+    padding: 0 8px;
   }
 }
 
