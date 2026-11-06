@@ -1347,13 +1347,17 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
 .tab__count { margin-left: 5px; color: var(--mk-faint); font-weight: 600; }
 .tab[aria-selected='true'] .tab__count { color: inherit; opacity: 0.72; }
 
-/* ----- 空态 ----- */
+/* ----- 空态 -----
+   2026-11-06 用户「有的空态是这样有的空态又是图二这样，全站的空态都要检查」：
+   统一到一套解剖——图标盘 + 标题 + 一句为什么 + 可选动作。数值与学习者侧
+   V2ResultState（.v2result__art 66 / 标题 16px 800 / 说明 13.5px 1.6）同源，
+   两个外壳不再各长一副样子。compact 档不渲染图标盘（卡内小槽位）。 */
 .mk-empty {
-  padding: 48px 20px;
+  padding: 44px 20px;
   text-align: center;
-  color: var(--mk-faint);
+  color: var(--mk-muted);
   display: grid;
-  gap: 6px;
+  gap: 8px;
   justify-items: center;
 }
 /* 一行式空态（CM7）：卡内表格/列表筛选后 0 行的内联空态——
@@ -1367,20 +1371,27 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   font-size: var(--mk-fs-body);
   text-align: left;
 }
-.mk-empty strong { color: var(--mk-muted); font-size: var(--mk-fs-emphasis); }
-.mk-empty span { font-size: var(--mk-fs-body); }
+.mk-empty strong { color: var(--mk-ink); font-size: 16px; font-weight: 800; }
+/* 说明行：排除图标盘（它也是 <span>，纯元素选择器会连图标一起改字号/颜色） */
+.mk-empty > span:not(.mk-empty__icon) {
+  max-width: 40ch;
+  font-size: var(--mk-fs-body);
+  line-height: 1.6;
+  color: var(--mk-muted);
+}
 .mk-empty__icon {
-  width: 46px;
-  height: 46px;
-  margin-bottom: 6px;
+  width: 66px;
+  height: 66px;
+  margin-bottom: 8px;
   border-radius: var(--mk-radius-xl);
   background: var(--mk-surface-2);
-  color: var(--mk-faint);
+  color: var(--mk-blue);
   display: grid;
   place-items: center;
-  font-size: 19px;
+  font-size: 22px;
   font-weight: 800;
 }
+.mk-empty__icon svg { display: block; }
 .mk-empty__action {
   margin-top: 8px;
   padding: 7px 16px;

@@ -8,8 +8,14 @@
          统一全站空态的骨架，避免各页自行拼文案导致「空壳化」。
          R3 三态里的「错误态」走 tone="error"：标题转正文色、图标转红系，
          并自带 role="alert"，不需要各页再写 --error 修饰与手拼重试按钮。 -->
-    <span v-if="icon || $slots.icon" class="mk-empty__icon" aria-hidden="true">
-      <slot name="icon">{{ icon }}</slot>
+    <!-- 图标底盘是空态的固定构件（2026-11-06 用户「有的空态是这样有的空态又是图二这样」）：
+         此前只有少数页面传 icon，同页就会出现「有盘 / 无盘」两种；compact 档（卡内小槽位）
+         不占盘。不传 icon 时给统一的收件箱图形，而不是让页面各拼一个字符。 -->
+    <span v-if="!compact" class="mk-empty__icon" aria-hidden="true">
+      <slot name="icon">
+        <Inbox v-if="!icon" :size="24" :stroke-width="1.5" />
+        <template v-else>{{ icon }}</template>
+      </slot>
     </span>
     <strong>{{ title }}</strong>
     <span v-if="description">{{ description }}</span>
@@ -28,6 +34,8 @@
 </template>
 
 <script setup lang="ts">
+import { Inbox } from 'lucide-vue-next'
+
 withDefaults(
   defineProps<{
     /** 图标字符（简单场景）；复杂 SVG 用 #icon 具名插槽 */
