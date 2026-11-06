@@ -33,6 +33,8 @@
             </template>
           </div>
         </section>
+        <!-- 右栏：输出契约（摘要）+ 流程，两卡同行与左栏的输入契约等高对望 -->
+        <div class="sdp-pw__col">
         <section class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">输出契约</h3>
@@ -46,24 +48,22 @@
               <button type="button" class="mk-alert__btn" @click="loadContracts">重试</button>
             </div>
             <template v-else>
-              <div v-for="f in readOutputs" :key="f.fieldId" class="sdp-crow">
-                <span class="mono sdp-crow__name" :title="f.fieldId">{{ f.fieldId }}</span>
-                <span class="mk-badge" :class="f.promptRole ? `mk-badge--role-${f.promptRole}` : 'mk-badge--muted'">{{ roleLabel(f.promptRole) }}</span>
-                <span class="sdp-crow__desc" :title="f.description || ''">{{ f.description || '—' }}</span>
-                <span class="mono sdp-crow__type" :title="f.valueType || '—'">{{ f.valueType || '—' }}</span>
+              <!-- 2026-11-06 二稿：这张卡不再逐行重复字段路由那张表（同一批 11 行、同样的说明）。
+                   这里只给「什么角色、各几个、叫什么」，逐字段的说明 / 流向 / 渲染 / 内部标记归字段路由。 -->
+              <div v-if="outputRoleCounts.length" class="sdp-rolecount">
+                <span v-for="rc in outputRoleCounts" :key="rc.label" class="mk-badge mk-badge--muted">{{ rc.label }} {{ rc.count }}</span>
               </div>
-              <p v-if="!readOutputs.length" class="mk-empty--line">该 Skill 暂无产出字段声明。</p>
-              <!-- 与「字段路由」那张表的分工：这张看契约本身，那张看每个字段流向哪、是否内部/累积 -->
-              <p class="mk-card__note">取编排产出行的全量，含隐式推断与控制信号这类内部出参。</p>
+              <p v-if="readOutputs.length" class="sdp-outnames mono">{{ readOutputs.map((f) => f.fieldId).join(' · ') }}</p>
+              <p v-else class="mk-empty--line">该 Skill 暂无产出字段声明。</p>
+              <p class="mk-card__note">按产出角色归组。逐字段的说明、流向与内部标记在字段路由页签。</p>
             </template>
           </div>
         </section>
-      </div>
 
       <!-- 流程：core 声明的状态机 / 终止条件与运行时清单的阶段集合合成一张卡。
            此前两边各画一张卡、结论还互相打脸（core 说没声明，工程页写着阶段集合）。 -->
-      <section class="mk-card">
-        <div class="mk-card__head">
+        <section class="mk-card">
+          <div class="mk-card__head">
           <h3 class="mk-card__title">流程</h3>
           <span class="mk-card__meta">{{ flowMeta }}</span>
         </div>
@@ -95,7 +95,9 @@
           </div>
           <p v-if="!hasFlow" class="mk-empty--line">core YAML 与运行时清单都没有声明阶段或终止条件。</p>
         </div>
-      </section>
+        </section>
+        </div>
+      </div>
 
       <section class="mk-card">
         <div class="mk-card__head">
@@ -477,6 +479,17 @@ const readInputs = computed(() => (coreForm.value?.inputs ?? []) as { name?: str
     （2026-11-06 试过改读 core YAML 的 fields：真实数据里它只声明 1 个 object 字段，
     整块 JSON schema 会糊成一团，11 行产出字段反而读不出来）。 */
 const readOutputs = computed(() => contractFields.value)
+/** 角色 → 产出字段数（顺序按首次出现，稳定不跳） */
+const outputRoleCounts = computed(() => {
+  const out: Array<{ label: string; count: number }> = []
+  for (const f of contractFields.value) {
+    const label = roleLabel(f.promptRole)
+    const hit = out.find((x) => x.label === label)
+    if (hit) hit.count += 1
+    else out.push({ label, count: 1 })
+  }
+  return out
+})
 function refSourceLabel(ref?: string): string {
   const r = String(ref || '')
   if (r.startsWith('skill:')) return '上游 Skill'
@@ -1060,6 +1073,8 @@ watch(
   align-content: start;
   padding: 12px 16px;
 }
+/* 右栏：两张卡竖排（与左栏的输入契约并排对望） */
+.sdp-pw__col { display: grid; gap: 14px; align-content: start; }
 /* 契约行：字段名 · 来源/类型小签 · 说明 · 类型 */
 .sdp-crow {
   display: grid;
@@ -1077,6 +1092,9 @@ watch(
 .sdp-flowrow { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 4px 12px; align-items: baseline; }
 .sdp-flowrow__label { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-muted); }
 .sdp-flowrow__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+/* 输出契约：角色计数徽标 + 字段名清单（明细在字段路由页签） */
+.sdp-rolecount { display: flex; flex-wrap: wrap; gap: 6px; }
+.sdp-outnames { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.9; overflow-wrap: anywhere; }
 /* 编辑态：表单 / 源码 / 预览 分段（与顶部「查看·编辑」同一套 .mk-seg） */
 .sdp-pw__views {
   display: flex;

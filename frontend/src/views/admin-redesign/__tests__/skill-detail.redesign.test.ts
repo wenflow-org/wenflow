@@ -437,15 +437,17 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     expect(inRows[0].text()).toContain('编排注入')
     expect(inRows[1].text()).toContain('用户 / 平台')
 
-    // 输出契约 = 编排产出行的全量（含隐式推断/控制信号这类内部出参），角色徽标走 promptRoleMeta 单源人话。
-    // 与「字段路由」页签同源，但那张表看的是流向/渲染/内部标记，这张看契约本身。
+    /* 输出契约 2026-11-06 二稿：不再逐行重复字段路由那张表（同一批行、同样的说明）——
+       只给「角色 + 各几个 + 字段名」，逐字段的说明 / 流向 / 渲染 / 内部标记归字段路由页签。 */
     const outCard = bloc.findAll('.mk-card')[1]
-    const outRows = outCard.findAll('.sdp-crow')
-    expect(outRows.length).toBe(4)
-    expect(outCard.text()).toContain('public_reply')
-    expect(outCard.text()).toContain('公开回复')
-    expect(outCard.text()).toContain('analysis.confusion')
-    expect(outCard.text()).toContain('隐式推断')
+    expect(outCard.findAll('.sdp-crow').length).toBe(0)
+    const roles = outCard.findAll('.sdp-rolecount .mk-badge').map((b) => b.text())
+    expect(roles).toEqual(['必填入参 1', '公开回复 1', '方案产出 1', '隐式推断 1'])
+    // 字段名清单保留（读者要知道它产出哪些字段），但不再带说明列
+    const names = outCard.find('.sdp-outnames').text()
+    expect(names).toContain('public_reply')
+    expect(names).toContain('analysis.confusion')
+    expect(names).not.toContain('隐式推断出参')
     // 输入契约不混入产出字段（真实输入只在 core inputs 里）
     expect(inCard.text()).not.toContain('analysis.confusion')
 
