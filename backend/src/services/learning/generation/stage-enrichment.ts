@@ -11,8 +11,8 @@ import prisma from '../../../config/database';
 import { logger } from '../../../utils/logger';
 import { withTransaction } from '../../../utils/with-transaction';
 import { executeSkill } from '../../../skills';
-import { runWithContext } from '../../../gateway/api-gateway/context';
-import { buildPathGenerationContext } from './generation-request-context';
+import { runWithPathGenerationContext } from './generation-request-context';
+import { auditStageAgentSandboxRefs } from './stage-sandbox-ref-audit';
 import { stageDesignerDefinition } from '../../../skills/stage-designer';
 import {
   clampHintsToOneSitting,
@@ -45,7 +45,6 @@ import { buildAnchorGoalNote } from './school-anchor-goal';
 import { mapAndPersistKcAnnotation, mergeKcStageAnnotation, bindKcLinksToSubtaskIds, type KcAnnotation } from './kc-annotation';
 import { assembleStageDesignerChannels } from '../../field-dispatcher';
 import { extractPromptMaterials, STAGE_MATERIAL_LIMITS, collectMaterialSectionRefs } from '../../materials/material-prompt-projection';
-import { buildPathSandboxPool, checkAgentSandboxRefs } from '../../sandbox-resolver.service';
 import { buildSectionSemanticOrder } from '../../materials/material-semantic-order';
 import { summarizeSectionRefPositions } from '../../materials/material-refs';
 import { auditStageMaterialCoverage } from './stage-material-coverage-audit';
@@ -145,15 +144,9 @@ export async function enrichLearningPathWithAnderson(
   // 【A/B 归因修复 2026-10-01】后台生成链路原本没有 userId 请求上下文 → callPrompt 的
   // 变体分流键缺失（恒走基线，实测 44% stage-designer 调用如此）且 prompt_call_logs.userId
   // 空缺。此处用路径属主补齐上下文（保留既有字段），stage-designer/kc-mapper/补课全部继承。
-  // #248：这里也必须补 pathId——api-gateway 的调用日志只从 context.pathId 取
-  // metadata.pathId（gateway/api-gateway/executor.ts:1059），缺了它，同一次生成里
-  // path-agent 阶段流水带 pathId、网关行却是 null，path: 折叠组永远关联不到模型名。
-  return runWithContext(
-    buildPathGenerationContext({
-      userId: data.userId,
-      pathId,
-      sourceConversationId: data.sourceConversationId,
-    }),
+  // #248：这里也必须补 pathId（口径见 generation-request-context.runWithPathGenerationContext）。
+  return runWithPathGenerationContext(
+    { userId: data.userId, pathId, sourceConversationId: data.sourceConversationId },
     () => enrichLearningPathWithAndersonInner(pathId, runId, data, analysis, options)
   );
 }
@@ -922,35 +915,8 @@ async function enrichLearningPathWithAndersonInner(
     // 全路径材料覆盖体检（只告警，判据见 stage-material-coverage-audit）。
     auditStageMaterialCoverage({ pathId, stageMaterialAudit, normalizedInput });
 
-    // #192：把 stage-designer / kc-mapper 纳入沙盘 ref 运行期对账。
-    // 这两个 skill 的载荷由编排层手工拼装（不来自 normalizedInput），此前池里没有对应键、
-    // 也从不做对账 → 「声明了 sandbox:path.*，实际值走旁路注入」长期不可见。
-    // 这里用真实载荷构造 path 池（buildPathSandboxPool 已登记全部 stage 通道键），
-    // 声明/载荷再次漂移（新声明未登记、或注入键被删）就会 warn。
-    try {
-      await checkAgentSandboxRefs(
-        'stage-designer',
-        'path',
-        buildPathSandboxPool((normalizedInput as any) || {}, stageSandboxSample || {}),
-        // stage-designer 的 path 输入全部是可选通道（object?），必须 includeOptional 才看得见
-        { includeOptional: true, warnContext: { pathId, boundary: 'generation' } }
-      );
-      await checkAgentSandboxRefs(
-        'kc-mapper',
-        'path',
-        buildPathSandboxPool((normalizedInput as any) || {}, {
-          subtasks: stageDesignOutputs.flatMap((stage) => stage.subtasks),
-          milestones: learningPath.milestones.map((m: any) => ({
-            stageNumber: m.stageNumber,
-            title: m.title,
-            coreConcept: m.coreConceptName || m.coreConceptId,
-          })),
-        }),
-        { warnContext: { pathId, boundary: 'generation' } }
-      );
-    } catch {
-      // 对账是观测，不影响生成
-    }
+    // #192：把 stage-designer / kc-mapper 纳入沙盘 ref 运行期对账（载荷与判据见 stage-sandbox-ref-audit）。
+    await auditStageAgentSandboxRefs({ pathId, normalizedInput, stageDesignerSample: stageSandboxSample, stageDesignOutputs, learningPath });
 
     // KC 映射（kc-mapper）：stage-designer 全部完成后，将概念与子任务分解为知识组件 + 依赖图，
     // 写回 aiPromptTemplate.kcAnnotation，结束"写后无读者"，供 teaching-turn 按 KC 粒度消费。

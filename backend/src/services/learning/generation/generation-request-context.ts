@@ -1,4 +1,4 @@
-import { getRequestContext, type RequestContext } from '../../../gateway/api-gateway/context';
+import { getRequestContext, runWithContext, type RequestContext } from '../../../gateway/api-gateway/context';
 
 /**
  * #248：路径生成期的请求上下文。
@@ -24,4 +24,22 @@ export function buildPathGenerationContext(input: {
     pathId: input.pathId || base.pathId,
     ...(input.sourceConversationId ? { conversationId: input.sourceConversationId } : {}),
   };
+}
+
+/**
+ * 在「路径生成期的请求上下文」里执行生成体。
+ *
+ * 生成入口（stage-enrichment / path-generation.core）都必须走这里补 pathId：
+ * 只补 userId 时，agent_call_logs 的阶段流水带 pathId、网关行却是 null，
+ * path: 折叠组永远关联不到模型名（见 buildPathGenerationContext 头注）。
+ */
+export function runWithPathGenerationContext<T>(
+  input: {
+    userId?: string | null;
+    pathId?: string | null;
+    sourceConversationId?: string | null;
+  },
+  fn: () => Promise<T>,
+): Promise<T> {
+  return runWithContext(buildPathGenerationContext(input), fn);
 }
