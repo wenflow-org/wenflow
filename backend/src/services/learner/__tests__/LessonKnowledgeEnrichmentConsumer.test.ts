@@ -22,7 +22,11 @@ jest.mock('../LearnerProfileService', () => ({
 }));
 jest.mock('../LearnerSnapshotRefreshService', () => ({
   __esModule: true,
-  learnerSnapshotRefreshService: { refresh: (input: unknown) => mockSnapshotRefresh(input) }
+  // #176-2：清画像缓存时同源失效快照缓存
+  learnerSnapshotRefreshService: {
+    refresh: (input: unknown) => mockSnapshotRefresh(input),
+    invalidate: jest.fn()
+  }
 }));
 
 import { LessonKnowledgeEnrichmentConsumer } from '../LessonKnowledgeEnrichmentConsumer';

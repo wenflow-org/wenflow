@@ -50,6 +50,8 @@ export async function handleLearnerEvent(event: DurableDomainEvent): Promise<voi
 
   if (event.userId) {
     learnerProfileService.clear(event.userId);
+    // #176-2：画像缓存清了，由旧画像算出的快照缓存也必须一起失效，否则读路径继续返回旧画像拼出的快照。
+    learnerSnapshotRefreshService.invalidate(event.userId);
     const data = event.data || {};
     // #147：教学的 task:completed 带 sessionId（见 task-completion.service 的 completionContext）。
     // 它的投影键（teaching:path:milestone:task）与同一节课的 lesson:completed 完全相同，本次刷新

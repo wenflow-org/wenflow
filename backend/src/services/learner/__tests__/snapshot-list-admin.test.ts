@@ -225,3 +225,54 @@ describe('listForAdmin dataUpdatedAt（学习证据最后变化时刻）', () =>
     expect(data.items[0].dataUpdatedAt).toBeNull();
   });
 });
+
+/**
+ * #176-2：staleOnly 的陈旧判定改读 dataUpdatedAt（学习证据最后变化时刻）。
+ * 病灶：旧实现按 generatedAt 判——列表一次请求会把过期投影整批重建，
+ * 于是「刚被重建过的老用户」看起来最新被过滤掉，真正长期没学习的反而被隐藏。
+ */
+describe('listForAdmin staleOnly（#176-2：按 dataUpdatedAt 判陈旧）', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('重建时刻很新但 dataUpdatedAt 很旧/为空 → 仍是陈旧用户；只有真正有近期证据的才被过滤', async () => {
+    const { learnerSnapshotService } = jest.requireMock('../LearnerSnapshotService');
+    const freshEvidence = new Date(Date.now() - 60 * 1000).toISOString();
+    const staleEvidence = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString();
+    const basedOnByUser: Record<string, Record<string, string>> = {
+      'u-stale-evidence': { latestTaskCompletionAt: staleEvidence },
+      'u-stale-null': {},
+      'u-fresh-evidence': { latestTaskCompletionAt: freshEvidence },
+    };
+
+    usersFindMany.mockResolvedValue([
+      baseUser({ id: 'u-stale-evidence' }),
+      baseUser({ id: 'u-stale-null' }),
+      baseUser({ id: 'u-fresh-evidence' }),
+    ]);
+    usersCount.mockResolvedValue(3);
+    projectionsFindMany.mockResolvedValue([]);
+    projectionsFindUnique.mockResolvedValue(null);
+    projectionsUpsert.mockResolvedValue({});
+    // generatedAt 三者相同且都是"刚刚"（模拟列表整批重建）：旧实现会把三人都判成最新。
+    learnerSnapshotService.getSnapshot.mockImplementation(async (input: { userId: string }) => ({
+      ...baseSnapshot,
+      freshness: {
+        ...baseSnapshot.freshness,
+        generatedAt: new Date().toISOString(),
+        basedOn: basedOnByUser[input.userId],
+      },
+    }));
+
+    const data = await learnerSnapshotRefreshService.listForAdmin({
+      limit: 50,
+      includeTest: true,
+      staleOnly: true,
+    });
+
+    const ids = data.items.map((item: { userId: string }) => item.userId);
+    expect(ids).toContain('u-stale-evidence');
+    // dataUpdatedAt 为 null 视为最陈旧，不能被当成最新
+    expect(ids).toContain('u-stale-null');
+    expect(ids).not.toContain('u-fresh-evidence');
+  });
+});

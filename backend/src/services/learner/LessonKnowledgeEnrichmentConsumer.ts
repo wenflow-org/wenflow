@@ -48,6 +48,8 @@ export class LessonKnowledgeEnrichmentConsumer {
     if (!userId) return;
     const data = lessonEvent.data || {};
     learnerProfileService.clear(userId);
+    // #176-2：增强证据刚落库，旧画像算出的快照缓存与画像缓存一起失效，随后立刻重算。
+    learnerSnapshotRefreshService.invalidate(userId);
     await learnerSnapshotRefreshService.refresh({
       userId,
       pathId: data.pathId || undefined,

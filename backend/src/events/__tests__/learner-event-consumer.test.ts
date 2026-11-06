@@ -25,7 +25,11 @@ jest.mock('../../services/learner/LearnerProfileService', () => ({
 }))
 jest.mock('../../services/learner/LearnerSnapshotRefreshService', () => ({
   __esModule: true,
-  learnerSnapshotRefreshService: { refresh: (input: unknown) => mockSnapshotRefresh(input) }
+  // #176-2：清画像缓存时同源失效快照缓存
+  learnerSnapshotRefreshService: {
+    refresh: (input: unknown) => mockSnapshotRefresh(input),
+    invalidate: jest.fn()
+  }
 }))
 jest.mock('../../utils/logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }

@@ -3,6 +3,18 @@ import { learnerSnapshotService } from './LearnerSnapshotService';
 import { buildNonVirtualUserWhere, isTestAccountUser } from '../../utils/test-account';
 import type { LearnerSnapshot } from '../../agents/learner-model-agent/types';
 
+/**
+ * 内存快照缓存条数上限（#176-2）。
+ *
+ * 此前只有 5 分钟 TTL，**没有容量上限、没有失效入口**：每个 (user, scope, path,
+ * milestone, task) 组合都留下一条，删除只发生在「同 key 过期」和列表分支的顺带清理，
+ * 长跑进程里只增不减。这里按 LRU 封顶。
+ *
+ * TODO(#176-2)：具体条数属容量口径（单条快照 payload 数十 KB），待产品确认；
+ * 当前取 1000，约与列表窗口上限（2000）同量级、避免一次整页预热把自己全淘汰。
+ */
+export const LEARNER_SNAPSHOT_CACHE_MAX_ENTRIES = 1000;
+
 export interface LearnerSnapshotRefreshInput {
   userId: string;
   pathId?: string;
@@ -19,6 +31,45 @@ export class LearnerSnapshotRefreshService {
   /** 列表路径可接受的投影陈旧度：60 分钟（2026-10-04，原 10 分钟在 500 窗口下每页加载都全量重建） */
   private static readonly LIST_PROJECTION_FRESH_MS = 60 * 60 * 1000;
 
+  /** 缓存键前缀（buildKey 的第 0 段），invalidate 按 `前缀 + userId + ':'` 精确匹配用户 */
+  private static readonly CACHE_KEY_PREFIX = 'learner-snapshot-v1';
+
+  /** LRU 读：命中即移到队尾（Map 保持插入序，淘汰从队首取最久未用） */
+  private cacheGet(key: string): { snapshot: LearnerSnapshot; cachedAt: number } | undefined {
+    const entry = this.cache.get(key);
+    if (!entry) return undefined;
+    this.cache.delete(key);
+    this.cache.set(key, entry);
+    return entry;
+  }
+
+  /** LRU 写：超出条数上限时淘汰队首（最久未用） */
+  private cacheSet(key: string, snapshot: LearnerSnapshot): void {
+    this.cache.delete(key);
+    this.cache.set(key, { snapshot, cachedAt: Date.now() });
+    while (this.cache.size > LEARNER_SNAPSHOT_CACHE_MAX_ENTRIES) {
+      const oldest = this.cache.keys().next().value;
+      if (oldest === undefined) break;
+      this.cache.delete(oldest);
+    }
+  }
+
+  /**
+   * 主动失效（#176-2）：画像/证据变化后清掉该用户的**所有作用域**缓存键。
+   * 此前只能等 5 分钟 TTL 或读路径自愈，调用方（learnerProfileService.clear 的调用点）
+   * 清了画像缓存却留着由旧画像算出的快照。
+   */
+  invalidate(userId?: string): void {
+    if (!userId) {
+      this.cache.clear();
+      return;
+    }
+    const prefix = `${LearnerSnapshotRefreshService.CACHE_KEY_PREFIX}:${userId}:`;
+    for (const key of [...this.cache.keys()]) {
+      if (key.startsWith(prefix)) this.cache.delete(key);
+    }
+  }
+
   async refresh(input: LearnerSnapshotRefreshInput): Promise<LearnerSnapshot> {
     const key = this.buildKey(input);
     if (input.lastEventId) {
@@ -26,7 +77,7 @@ export class LearnerSnapshotRefreshService {
       if (existing?.lastEventId === input.lastEventId) {
         try {
           const snapshot = JSON.parse(existing.payload) as LearnerSnapshot;
-          this.cache.set(key, { snapshot, cachedAt: Date.now() });
+          this.cacheSet(key, snapshot);
           return snapshot;
         } catch {
           // Rebuild malformed projections from source facts.
@@ -66,13 +117,13 @@ export class LearnerSnapshotRefreshService {
         generatedAt: new Date(snapshot.freshness.generatedAt)
       }
     });
-    this.cache.set(key, { snapshot, cachedAt: Date.now() });
+    this.cacheSet(key, snapshot);
     return snapshot;
   }
 
   async getLatest(input: LearnerSnapshotRefreshInput): Promise<LearnerSnapshot> {
     const key = this.buildKey(input);
-    const entry = this.cache.get(key);
+    const entry = this.cacheGet(key);
     if (entry && Date.now() - entry.cachedAt < LearnerSnapshotRefreshService.CACHE_TTL_MS) {
       return entry.snapshot;
     }
@@ -81,7 +132,7 @@ export class LearnerSnapshotRefreshService {
     if (persisted && Date.now() - persisted.generatedAt.getTime() < 10 * 60 * 1000) {
       try {
         const snapshot = JSON.parse(persisted.payload) as LearnerSnapshot;
-        this.cache.set(key, { snapshot, cachedAt: Date.now() });
+        this.cacheSet(key, snapshot);
         return snapshot;
       } catch {
         // Rebuild malformed projections from source facts.
@@ -196,7 +247,7 @@ export class LearnerSnapshotRefreshService {
     const refreshQueue: typeof entries = [];
 
     for (const entry of entries) {
-      const cached = this.cache.get(entry.key);
+      const cached = this.cacheGet(entry.key);
       if (cached && Date.now() - cached.cachedAt < LearnerSnapshotRefreshService.CACHE_TTL_MS) {
         snapshotsByUser.set(entry.user.id, cached.snapshot);
       } else {
@@ -223,7 +274,7 @@ export class LearnerSnapshotRefreshService {
         if (row) {
           try {
             const snapshot = JSON.parse(row.payload) as LearnerSnapshot;
-            this.cache.set(entry.key, { snapshot, cachedAt: Date.now() });
+            this.cacheSet(entry.key, snapshot);
             snapshotsByUser.set(entry.user.id, snapshot);
             continue;
           } catch {
@@ -299,8 +350,16 @@ export class LearnerSnapshotRefreshService {
 
     const filtered = snapshots.filter((item) => {
       if (params?.staleOnly) {
-        const ageMs = Date.now() - new Date(item.generatedAt).getTime();
-        if (ageMs < 10 * 60 * 1000) return false;
+        /* 陈旧判定读 dataUpdatedAt（学习证据最后变化时刻），不再读 generatedAt（#176-2）：
+           列表一次请求会把过期投影整批重建，generatedAt 是**本次重建**时刻，于是
+           「刚被重建过的老用户」看起来最新、被 staleOnly 过滤掉，而真正长期没学习的
+           反而被藏在后面——正是这个筛选器要抓的人。
+           dataUpdatedAt 为 null（无任何学习证据/未开始）视为**最陈旧**，不能被当成最新。 */
+        const updatedAtMs = item.dataUpdatedAt ? new Date(item.dataUpdatedAt).getTime() : null;
+        const isFresh = updatedAtMs !== null
+          && Number.isFinite(updatedAtMs)
+          && Date.now() - updatedAtMs < 10 * 60 * 1000;
+        if (isFresh) return false;
       }
       if (params?.riskOnly) {
         if (item.fatigueRisk === 'low' && item.fragileConcepts.length === 0 && item.strugglingConcepts.length === 0) {
