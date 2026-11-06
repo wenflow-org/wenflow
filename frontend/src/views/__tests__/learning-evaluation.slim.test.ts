@@ -19,7 +19,10 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const read = (rel: string) => readFileSync(resolve(here, rel), 'utf8');
+/* 源码按行解析的断言（下面的 '}\n' / '\n}\n' 切片）必须先归一换行：仓库
+   core.autocrlf=true，git 每次检出/合并会把工作区文件写成 CRLF，'\n' 切片
+   会切出空串（2026-11-07 合并 develop 时实测踩到）。 */
+const read = (rel: string) => readFileSync(resolve(here, rel), 'utf8').replace(/\r\n/g, '\n');
 
 const card = read('../../components/CompletionCard.vue');
 const page = read('../LearningEvaluationPage.vue');
