@@ -59,6 +59,7 @@ import {
 import {
   buildProgressAfterTaskCompletion,
   isRetryableLearnUpstreamError,
+  isAbortLikeLearnError,
   isRequestAborted,
   isTeachingSessionStaleError,
   isTerminalTeachingSessionConflictError,
@@ -1103,6 +1104,19 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
 
   /** 上游 Learn 调用耗尽重试后的终态记录；checkpoint 恢复分支不会走这里。 */
   async persistLearningFailure(sessionId: string, error: unknown, _logs: SimulationLogEntry[]) {
+    // #137 最后防线：中止类错误（客户端断开 / 请求级取消 in-flight 上游）在任何调用点都不是
+    // 「这节课坏了」，而是「这一段被打断了」。内层教学回合 catch 与最外层步骤 catch 已各自
+    // 识别 abort-like，但「本课已结算、开下一课时中断」等路径由别的 catch 直接调本方法——
+    // 一旦某个调用点漏判就会重演 2026-10-25 夜批的终态 failed（整节课不可续）。
+    // 因此在**终态唯一写入口**统一兜底：abort-like 改写为可续跑暂停标记，不写 failed。
+    if (isAbortLikeLearnError(error)) {
+      logger.warn('[simulation-coordinator] Learn 失败被判定为中止类，改写为可续跑暂停标记（不终局化）', {
+        sessionId,
+        error: boundTaskCompletionError(error)
+      });
+      await this.persistTeachingPauseMarker(sessionId, error, { code: 'LEARN_REQUEST_ABORTED_PAUSED' });
+      return;
+    }
     const message = boundTaskCompletionError(error);
     try {
       const session = await this.getVirtualSession(sessionId);
