@@ -122,6 +122,60 @@ describe('goal-conversation public route contracts', () => {
     });
   });
 
+  // #251③：分诊结论（responseTriage）服务层已经算出来并落 collectedData，但路由的
+  // 白名单重建只挑 7 个 ext 字段，把它整条丢掉——前端与分诊命中率遥测拿不到本轮 mode。
+  // 这里锁住「服务层给了就必须透出」，同时保持缺席时公开 DTO 形状不变（上个用例）。
+  it('#251③ POST /start 信封透出 responseTriage（服务层已产出时）', async () => {
+    const triage = { mode: 'learning_path', confidence: 'high', reasons: ['阻塞类型为 capability'] };
+    const result = goalResult({
+      internal: {
+        ...goalResult().internal,
+        ext: {
+          goalConversation: {
+            ...goalResult().internal.ext.goalConversation,
+            responseTriage: triage,
+          },
+        },
+      },
+    });
+    mockRequirementOrchestrator.start.mockResolvedValue(result);
+    const handler = getRouteHandler('/start');
+    const res = createResponse();
+
+    await handler({
+      user: { userId: 'user-1' },
+      body: { input: { text: '学习 TypeScript' } },
+    }, res);
+
+    const envelope = res.json.mock.calls[0][0];
+    expect(envelope.data.internal.ext.goalConversation.responseTriage).toEqual(triage);
+    // 原 7 个字段不丢（透出而不是替换）
+    expect(envelope.data.internal.ext.goalConversation.understanding).toEqual({ subject: 'TypeScript' });
+  });
+
+  it('#251③ GET 恢复信封同样透出 responseTriage', async () => {
+    const triage = { mode: 'referral', confidence: 'high', reasons: ['平台不可判定'] };
+    mockRequirementOrchestrator.getConversation.mockResolvedValue({
+      id: 'gc-1',
+      stage: 'completed',
+      status: 'completed',
+      confidence: 0.6,
+      userVisible: null,
+      messages: [],
+      collected: {},
+      understanding: {},
+      nextQuestions: [],
+      learningPath: null,
+      responseTriage: triage,
+    });
+    const handler = getRouteHandler('/:conversationId', 'get');
+    const res = createResponse();
+
+    await handler({ user: { userId: 'user-1' }, params: { conversationId: 'gc-1' } }, res);
+
+    expect(res.json.mock.calls[0][0].data.internal.ext.goalConversation.responseTriage).toEqual(triage);
+  });
+
   it('uses the route conversation ID when POST /:conversationId/reply output omits it', async () => {
     const result = goalResult({
       internal: {

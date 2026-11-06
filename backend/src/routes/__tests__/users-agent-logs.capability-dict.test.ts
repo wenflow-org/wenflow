@@ -15,7 +15,7 @@
 import fs from 'fs';
 import path from 'path';
 
-import { listAgentManifest, listUserListedAgentIds } from '../../services/agent-manifest.service';
+import { listAgentManifest } from '../../services/agent-manifest.service';
 
 const VUE_PATH = path.resolve(__dirname, '../../../../frontend/src/views/user/AgentLogs.vue');
 const CAPABILITY_GROUPS = ['Goal', 'Path', 'Teaching', 'Profile'];
@@ -127,12 +127,12 @@ describe('#218 用户侧 AgentLogs.vue 字典与 manifest 对齐', () => {
     expect(optionIds.filter((id) => !manifestIds.has(id))).toEqual([]);
   });
 
-  // #226 残余：tutoring 在 manifest 里没有监控组、profile 组内也没有 userListed 的 id，
-  // 这两项筛选**结构性恒空**。产品口径是「保留筛选项 + 专属空态文案」（见 issue #226
-  // 「二选一」的第二支），绝不能沿用通用的「暂无日志」——用户会把它读成加载或筛选出错。
-  // 本用例把这条口径钉成契约：后端映射为空的每个能力，前端下拉若仍提供，就必须有专属文案。
-  it('#226 结构性空的能力筛选项在前端有专属空态文案（不退化成通用「暂无日志」）', () => {
-    const userListed = new Set(listUserListedAgentIds());
+  // #226/#218：结构性空的能力筛选项在前端必须有专属空态文案（不退化成通用「暂无日志」），
+  // 反之**非空的能力不许写「平台暂无…」**——#218 复核就是抓到 profile 明明有
+  // skill:learning-predictor 等调用、文案却写死「平台暂无学习者模型类调用记录」。
+  // 这里的「是否结构性空」必须与后端 services/users/capability-groups 同一口径：
+  // 能力集合 = 该监控组的 manifest 全量成员（kind !== 'alias'），不再与 userListed 求交。
+  it('#218 能力筛选的空态文案与后端能力集合一致（非空的不许写「暂无」）', () => {
     const mappingGroups: Record<string, string> = {
       goal: 'Goal',
       path: 'Path',
@@ -140,15 +140,19 @@ describe('#218 用户侧 AgentLogs.vue 字典与 manifest 对齐', () => {
       profile: 'Profile'
     };
     const emptyCapabilities = new Set<string>();
+    const nonEmptyCapabilities = new Set<string>();
     for (const [capability, group] of Object.entries(mappingGroups)) {
       const ids = manifest
-        .filter((entry) => entry.monitoringGroup === group && userListed.has(entry.id))
+        .filter((entry) => entry.monitoringGroup === group && entry.kind !== 'alias')
         .map((entry) => entry.id);
-      if (ids.length === 0) emptyCapabilities.add(capability);
+      (ids.length === 0 ? emptyCapabilities : nonEmptyCapabilities).add(capability);
     }
-    // manifest 里根本没有对应监控组的两类（routes/users.buildCapabilityAgentMap 显式置空）
+    // manifest 里根本没有对应监控组的两类（capability-groups.buildCapabilityAgentMap 显式置空）
     emptyCapabilities.add('tutoring');
     emptyCapabilities.add('tracking');
+
+    // 病灶断言：profile 属于非空能力（后端确实能筛出日志）
+    expect(nonEmptyCapabilities.has('profile')).toBe(true);
 
     // 前端「活动类型」下拉提供的值
     const optionsStart = source.indexOf('const CAPABILITY_OPTIONS = [');
@@ -162,13 +166,26 @@ describe('#218 用户侧 AgentLogs.vue 字典与 manifest 对齐', () => {
     const structuralBlock = objectBlock(source, 'const STRUCTURAL_EMPTY_CAPABILITIES: Record<string, string> = {');
     const structuralEntries = [...structuralBlock.matchAll(/(\w+):\s*'([^']*)'/g)]
       .map((match) => [match[1], match[2]] as [string, string]);
+    const textOf = (capability: string) =>
+      structuralEntries.find(([key]) => key === capability)?.[1] ?? '';
 
+    // (a) 结构性空的：必须有专属文案，且不是通用「暂无日志」
     const missing = offered
       .filter((capability) => emptyCapabilities.has(capability))
       .filter((capability) => {
-        const text = structuralEntries.find(([key]) => key === capability)?.[1] ?? '';
-        return !text.trim() || text.trim() === '暂无日志';
+        const text = textOf(capability).trim();
+        return !text || text === '暂无日志';
       });
     expect(missing).toEqual([]);
+
+    // (b) 非空的：不许挂「平台暂无…」文案（谎报「没有该类记录」）
+    const lying = offered
+      .filter((capability) => nonEmptyCapabilities.has(capability))
+      .filter((capability) => textOf(capability).trim().length > 0);
+    expect(lying).toEqual([]);
+
+    // (c) 具体那条假文案必须从空态字典里消失（注释里提到旧文案不算）
+    expect(structuralBlock).not.toContain('平台暂无学习者模型类调用记录');
+    expect(structuralEntries.some(([key]) => key === 'profile')).toBe(false);
   });
 });

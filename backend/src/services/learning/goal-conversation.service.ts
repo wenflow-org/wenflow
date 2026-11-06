@@ -37,6 +37,7 @@ import {
 import { assembleGoalHandoff } from '../../services/field-dispatcher';
 import { buildCompletedConversationResult, buildHardBlockMessage, buildHardBlockResult, PATH_COMPLETED_USER_VISIBLE, PATH_GENERATING_USER_VISIBLE, resolveConversationUserVisible, resolvePathCompletionUserVisible } from './goal-conversation.exit';
 import { getPathCompletionProjection } from './goal-conversation.path-projection';
+import { buildGoalConversationExt } from './goal-conversation.ext';
 import learningService from './learning.service';
 import { bindGeneratingPath, kickPathGeneration, rejudgeHardBlockedCompletion, type GoalConversationRejudgeDeps } from './goal-conversation-rejudge';
 import { createDomainEvent } from '../../events/contracts';
@@ -459,12 +460,10 @@ class GoalConversationService {
           learningPath: learningPath ? { id: learningPath.id, status: learningPath.status } : null
         },
         ext: {
-          goalConversation: {
-            understanding: data.understanding || {},
-            nextQuestions: [],
-            quickReplies: [],
-            collected: data.collected || {}
-          }
+          goalConversation: buildGoalConversationExt({
+            understanding: data.understanding,
+            collected: data.collected,
+          })
         }
       }
     };
@@ -761,13 +760,11 @@ async continueConversation(
                   isCompleted: false,
                 },
                 ext: {
-                  goalConversation: {
+                  goalConversation: buildGoalConversationExt({
                     understanding,
-                    nextQuestions: [],
-                    quickReplies: [],
-                    collected: data.collected || {},
+                    collected: data.collected,
                     responseTriage: pendingTriage,
-                  },
+                  }),
                 },
               },
             };
@@ -822,12 +819,10 @@ async continueConversation(
                   learningPath: { id: placeholderPath.id, status: 'generating' }
                 },
                 ext: {
-                  goalConversation: {
+                  goalConversation: buildGoalConversationExt({
                     understanding,
-                    nextQuestions: [],
-                    quickReplies: [],
-                    collected: data.collected || {}
-                  }
+                    collected: data.collected,
+                  })
                 }
               }
             };
@@ -1557,11 +1552,7 @@ async continueConversation(
             isCompleted: true
           },
           ext: {
-            goalConversation: {
-              understanding,
-              nextQuestions: [],
-              collected
-            }
+            goalConversation: buildGoalConversationExt({ understanding, collected })
           }
         }
       }, systemPromptOverrides);
@@ -1594,11 +1585,7 @@ async continueConversation(
             learningPath
           },
           ext: {
-            goalConversation: {
-              understanding,
-              nextQuestions: [],
-              collected
-            }
+            goalConversation: buildGoalConversationExt({ understanding, collected })
           }
         }
       };
@@ -1684,6 +1671,10 @@ async continueConversation(
       confirmedProposal: data.confirmedProposal || null,
       structuredData: data.structuredData || null,
       confidenceScores: data.confidenceScores || null,
+      // #251③：分诊结论（与 hardBlocked 同一判据的数据源）。GET 恢复信封要透出它，
+      // 此前服务层只把 responseTriage 写进 collectedData、返回值里没有该键，
+      // 路由层白名单重建也就无从携带。
+      responseTriage: resolveResponseTriageFromCollectedData(data),
       // 合并取舍：保留本分支的 learningPath（已被 getPathCompletionProjection 增强过 status，
       // develop 侧那行是未经投影的原始表达式，取它会丢掉 #228/#221 的状态投影），
       // 同时接入 develop 新增的硬阻断终局标记。

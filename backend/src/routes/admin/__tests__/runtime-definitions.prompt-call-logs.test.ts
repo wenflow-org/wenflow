@@ -6,7 +6,8 @@
  * - 小文本 / 正常 JSON 列不变（normalizedOutput 完整时仍解析为对象）
  * - normalizedOutput 截断后 parseJson 失败 → 回退返回截断文本预览
  * - limit 参数透传与钳制（1..200）
- * - 过滤条件透传（agentId/status/traceId/pathId/pipelineRunId/parentExecutionId）
+ * - 过滤条件透传（agentId/status/traceId/pathId/parentExecutionId）
+ * - #251①：已删除的「管道」维度（pipelineRunId/pipelineStepIndex）不再出现在筛选与响应里
  * - attemptTrace → attempts 解析
  */
 const mockPromptLogsFindMany = jest.fn();
@@ -71,8 +72,6 @@ function makeRow(overrides: Record<string, unknown> = {}) {
     pathId: null,
     userId: null,
     conversationId: null,
-    pipelineRunId: null,
-    pipelineStepIndex: null,
     traceId: 'trace-1',
     parentExecutionId: null,
     promptAttemptCount: 1,
@@ -146,7 +145,7 @@ describe('GET /prompt-call-logs 大文本裁剪', () => {
     expect(mockPromptLogsFindMany.mock.calls[2][0].take).toBe(30);
   });
 
-  it('过滤条件透传：agentId/status/traceId/pathId/pipelineRunId/parentExecutionId', async () => {
+  it('过滤条件透传：agentId/status/traceId/pathId/parentExecutionId', async () => {
     const handler = getRouteHandler('/prompt-call-logs');
     mockPromptLogsFindMany.mockResolvedValue([]);
 
@@ -157,7 +156,6 @@ describe('GET /prompt-call-logs 大文本裁剪', () => {
           status: 'error',
           traceId: 't9',
           pathId: 'p9',
-          pipelineRunId: 'pr9',
           parentExecutionId: 'pe9',
         },
       },
@@ -167,10 +165,40 @@ describe('GET /prompt-call-logs 大文本裁剪', () => {
       agentId: 'skill:goal-conversation',
       traceId: 't9',
       pathId: 'p9',
-      pipelineRunId: 'pr9',
       parentExecutionId: 'pe9',
       success: false,
     });
+  });
+
+  // #251①：pipelineRunId / pipelineStepIndex 自建表起就没有写入方（RequestContext 无该字段、
+  // composer 恒写 null），管理台却一直暴露这个永远匹配不到行的筛选维度、响应里也永远回 null。
+  // 现在整个维度已删除（schema + 迁移 + 路由 + 前端 API），这里锁住「不再暴露」。
+  it('#251① 已删除的 pipeline 维度不再接受筛选、也不再出现在响应里', async () => {
+    const handler = getRouteHandler('/prompt-call-logs');
+    mockPromptLogsFindMany.mockResolvedValue([makeRow()]);
+
+    const res = createResponse();
+    await handler(
+      {
+        query: {
+          traceId: 't9',
+          pipelineRunId: 'pr9',
+          pipelineStepIndex: '3',
+        },
+      },
+      res,
+    );
+
+    // 不再把它当作筛选条件（否则用户会以为该维度可用）
+    const where = mockPromptLogsFindMany.mock.calls[0][0].where;
+    expect(where).not.toHaveProperty('pipelineRunId');
+    expect(where).not.toHaveProperty('pipelineStepIndex');
+    expect(where).toEqual({ traceId: 't9' });
+
+    // 响应体也不再回该字段（此前恒为 null，前端下拉/表格据此渲染出一个假维度）
+    const row = res.json.mock.calls[0][0].data[0];
+    expect(row).not.toHaveProperty('pipelineRunId');
+    expect(row).not.toHaveProperty('pipelineStepIndex');
   });
 
   it('attemptTrace → attempts 数组解析；其余字段原样透传', async () => {

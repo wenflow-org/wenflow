@@ -584,7 +584,6 @@ export const adminRuntimeDefinitionsApi = {
     limit?: number;
     agentId?: string;
     pathId?: string;
-    pipelineRunId?: string;
     traceId?: string;
     parentExecutionId?: string;
     status?: 'success' | 'error' | 'drift';
