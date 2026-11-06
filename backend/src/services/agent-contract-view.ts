@@ -65,8 +65,11 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     'normalizedInput.problemSpace.realProblem',
     'normalizedInput.learnerProfile.surfaceGoal',
     'normalizedInput.confirmedProposal',
-    'normalizedInput.prerequisiteTree',
     'normalizedInput.understanding.adjustments',
+    // #192 复核残留：kc-mapper / path-reviewer 的 prerequisiteTree ref 指向**顶层**通道
+    // （载荷是 kcMapperInput.prerequisiteTree / path-generation 评审入参）；normalizedInput
+    // 从不产出该键，此前登记的 `normalizedInput.prerequisiteTree` 是永不存在的路径。
+    'prerequisiteTree',
     // stage-designer 声明 ref: sandbox:path.materials（路径关联资料包，附件在前、联网在后）。
     // 此前未登记 ⇒ prompts:check-handoff:strict 判失败（sandbox-path-unregistered）。
     'materials',

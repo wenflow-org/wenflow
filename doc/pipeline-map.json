@@ -424,8 +424,8 @@
         "skill:session-wrapup",
         "teaching-agent"
       ],
-      "fieldCount": 48,
-      "routingCount": 57,
+      "fieldCount": 49,
+      "routingCount": 58,
       "codeEntry": [
         {
           "label": "教学会话状态机（开课/回合/收束）",

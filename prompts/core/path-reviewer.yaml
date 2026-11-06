@@ -20,7 +20,9 @@ inputs:
     desc: 目标上下文（surfaceGoal/confirmedProposal/successCriteria/learnerProfile）
   - name: prerreqTree
     type: object?
-    ref: sandbox:path.normalizedInput.prerequisiteTree
+    # #192：与 kc-mapper 同一数据键——运行时以顶层 prerequisiteTree 注入
+    # （path-generation.core 评审调用），不在 normalizedInput 之下。
+    ref: sandbox:path.prerequisiteTree
     desc: RPKT 前提知识缺口链（可选，存在时用于校验路径是否覆盖了已知缺口）
 rules:
   - 只评审路径质量，不重写路径内容
