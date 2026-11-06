@@ -19,6 +19,7 @@ import {
   ProfileUpdateSource
 } from './types';
 import { learnerSnapshotService } from '../../services/learner/LearnerSnapshotService';
+import { learnerSnapshotRefreshService } from '../../services/learner/LearnerSnapshotRefreshService';
 import { learnerExitService } from '../../services/learner/LearnerExitService';
 import { learnerProfileService } from '../../services/learner/LearnerProfileService';
 import { logger } from '../../utils/logger';
@@ -192,6 +193,8 @@ class LearnerModelAgent {
     const updateResult = await profileAggregator.applyUpdate(userId, source);
     if (!updateResult.success) throw new Error('LEARNER_PROFILE_UPDATE_FAILED');
     learnerProfileService.clear(userId);
+    // #176-2：快照缓存由旧画像算出，画像更新后必须一起失效。
+    learnerSnapshotRefreshService.invalidate(userId);
     const result = await learnerProfileService.getProfile(userId);
     
     return { profile: result.profile, changes: updateResult.changes };
@@ -232,6 +235,8 @@ class LearnerModelAgent {
   
   clearCache(userId?: string): void {
     learnerProfileService.clear(userId);
+    // #176-2：画像缓存与快照缓存同源失效（无 userId 时两边一起清空）。
+    learnerSnapshotRefreshService.invalidate(userId);
   }
 }
 

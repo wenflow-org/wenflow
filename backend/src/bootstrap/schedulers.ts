@@ -93,6 +93,8 @@ export function startOutboxWorker(): DurableOutboxWorker {
     // 会话所属路径随事件 payload 带出（warmup-writeback），旧事件无 pathId → 回落 global。
     if (event.userId) {
       learnerProfileService.clear(event.userId);
+      // #176-2：与清画像缓存同源——快照缓存里是旧画像算出的结果，必须一起失效。
+      learnerSnapshotRefreshService.invalidate(event.userId);
       const data = (event.data || {}) as { pathId?: string | null };
       await learnerSnapshotRefreshService.refresh({
         userId: event.userId,

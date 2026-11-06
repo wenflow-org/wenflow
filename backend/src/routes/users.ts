@@ -161,7 +161,8 @@ router.get('/me/learner-center', async (req, res, next) => {
   try {
     const userId = req.user.userId;
     const requestedPathId = typeof req.query.pathId === 'string' ? req.query.pathId : undefined;
-    const scope = req.query.scope === 'path' || req.query.scope === 'teaching' ? req.query.scope : 'global';
+    let scope: 'global' | 'path' | 'teaching' =
+      req.query.scope === 'path' || req.query.scope === 'teaching' ? req.query.scope : 'global';
 
     let pathId = requestedPathId;
 
@@ -170,6 +171,10 @@ router.get('/me/learner-center', async (req, res, next) => {
       const activePath = await findActivePathIdByUpdatedAt(userId);
 
       pathId = activePath?.id;
+      // #176-2：补了 active 路径就必须按 path 口径落键（与 listForAdmin 同口径：
+      // `scope: anchored?.id ? 'path' : 'global'`），否则 buildKey 会写成 `global:<pathId>`
+      // 的悬空行——列表读 `global:global` / `path:<pathId>`，这条行永远没人读。
+      if (pathId) scope = 'path';
     }
 
     const snapshot = await learnerSnapshotRefreshService.refresh({
