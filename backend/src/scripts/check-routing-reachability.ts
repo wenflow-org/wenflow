@@ -12,7 +12,7 @@
  *   二者皆无 → 失败并逐条列出（stage / agentId / fieldId）。
  *
  * 范围与口径见 services/field-routing/routing-reachability.ts（受管辖阶段 = 已启用词表的阶段；
- * 未启用词表的阶段仅计数公示，不算违规）。
+ * 未接入词表的阶段必须登记在 UNGOVERNED_STAGE_REGISTRY 里，未登记即失败）。
  *
  * 用法：npm run prompts:reachability:check（已挂入 prompts:check:all → check:quality）
  */
@@ -28,11 +28,14 @@ function main(): void {
   const stages = loadOrchestrationFiles();
   const report = collectRoutingReachabilityGaps(stages);
 
-  if (report.violations.length > 0) {
+  if (report.violations.length > 0 || report.unregisteredStages.length > 0) {
     for (const line of formatRoutingReachabilityReport(report).split('\n')) {
       console.error(`${TAG} ${line}`);
     }
-    console.error(`${TAG} FAIL：${report.violations.length} 条 routing 未声明可达性`);
+    console.error(
+      `${TAG} FAIL：${report.violations.length} 条 routing 未声明可达性`
+      + `、${report.unregisteredStages.length} 个阶段未登记口径`,
+    );
     process.exitCode = 1;
     return;
   }

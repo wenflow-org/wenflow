@@ -13,8 +13,9 @@
  *
  * 门禁范围：**已启用词表的阶段**（该阶段至少有一条 routing 带显式 reachability）。
  * 一个阶段一旦开始声明可达性，该阶段全部 routing 都必须声明——否则「新增一条忘标注的边」
- * 正好落在缺省 auto 的盲区，门禁等于没用。尚未启用词表的阶段（goal/path/teaching/profile）
- * 不计违规，但会在报告里单列计数，不作为静默豁免隐藏：
+ * 正好落在缺省 auto 的盲区，门禁等于没用。尚未接入词表的阶段必须出现在
+ * UNGOVERNED_STAGE_REGISTRY（显式登记 + 理由）里；**没登记就出现 ⇒ 违规**，
+ * 避免「自动推导管辖范围」把新阶段/新边静默放行（#200-2 复核）。
  * TODO(#200)：其余阶段是否也要接入该词表属产品口径（词表语义偏「仿真核自动链」），未拍板前不扩大范围。
  */
 import { isRoutingReachabilityDeclared } from '../yaml-vocabulary';
@@ -47,9 +48,27 @@ export interface RoutingReachabilityReport {
   governedStages: string[];
   /** 未声明的 routing；非空即门禁失败 */
   violations: UndeclaredRouting[];
-  /** 词表尚未启用的阶段（不在门禁范围内，仅计数公示） */
+  /** 已登记「本期不接入词表」的阶段（不在门禁范围内，仅计数公示） */
   ungovernedStages: UngovernedStage[];
+  /** 既没接入词表、又没在登记表里认领的阶段；非空即门禁失败（#200-2 复核补的洞） */
+  unregisteredStages: UngovernedStage[];
 }
+
+/**
+ * 「本期不接入 reachability 词表」的阶段登记表（#200-2 复核）。
+ *
+ * 原实现按「该阶段是否已出现显式 reachability」**自动**推导管辖范围，于是未接入的阶段是
+ * **静默豁免**：新增一个 stage 文件、或在既有未接入阶段里加十条 routing，门禁都只把它们
+ * 算进公示计数，没人会被拦下。这里把「哪些阶段可以不接入」钉成显式登记 + 理由，并规定
+ * **没登记就出现 = 违规**——词表语义（仿真核自动链）要不要外扩仍是产品口径（见上方 TODO），
+ * 但「悄悄多出一个没人认领的阶段」不再可能。
+ */
+export const UNGOVERNED_STAGE_REGISTRY: Readonly<Record<string, string>> = {
+  goal: '目标对话回合驱动（services/learning/goal-conversation.*），词表未接入',
+  path: '路径生成/重规划的编排驱动（services/learning/generation、replan），词表未接入',
+  teaching: '教学回合引擎驱动（services/ai-teaching），词表未接入',
+  profile: '事件消费者与调度驱动（events/、bootstrap/schedulers），词表未接入',
+};
 
 export function collectRoutingReachabilityGaps(
   stages: ReadonlyArray<RoutingReachabilityStageLike>,
@@ -57,6 +76,7 @@ export function collectRoutingReachabilityGaps(
   const governedStages: string[] = [];
   const violations: UndeclaredRouting[] = [];
   const ungovernedStages: UngovernedStage[] = [];
+  const unregisteredStages: UngovernedStage[] = [];
 
   for (const stage of stages) {
     const stageName = String(stage?.stage ?? '').trim() || '(unknown)';
@@ -66,7 +86,10 @@ export function collectRoutingReachabilityGaps(
     const usesVocabulary = routings.some((routing) => !!routing?.reachability);
 
     if (!usesVocabulary) {
-      ungovernedStages.push({ stage: stageName, routings: routings.length, declared: declaredCount });
+      const bucket = Object.prototype.hasOwnProperty.call(UNGOVERNED_STAGE_REGISTRY, stageName)
+        ? ungovernedStages
+        : unregisteredStages;
+      bucket.push({ stage: stageName, routings: routings.length, declared: declaredCount });
       continue;
     }
 
@@ -81,7 +104,7 @@ export function collectRoutingReachabilityGaps(
     }
   }
 
-  return { governedStages, violations, ungovernedStages };
+  return { governedStages, violations, ungovernedStages, unregisteredStages };
 }
 
 /** 门禁输出文本（脚本与测试共用，保证失败信息一致） */
@@ -97,9 +120,19 @@ export function formatRoutingReachabilityReport(report: RoutingReachabilityRepor
     }
     return lines.join('\n');
   }
+  if (report.unregisteredStages.length > 0) {
+    lines.push(`阶段未登记可达性口径：${report.unregisteredStages.length} 个（既无显式 reachability，也不在 UNGOVERNED_STAGE_REGISTRY 里）`);
+    for (const stage of report.unregisteredStages) {
+      lines.push(
+        `  - ${stage.stage}：routing ${stage.routings} 条，已声明 ${stage.declared} 条`
+        + '  ← 要么给该阶段补 reachability 声明，要么在 UNGOVERNED_STAGE_REGISTRY 里登记理由',
+      );
+    }
+    return lines.join('\n');
+  }
   lines.push(`routing 可达性声明完整：受管辖阶段 ${report.governedStages.join(', ') || '(无)'} 全部已声明`);
   if (report.ungovernedStages.length > 0) {
-    lines.push('未接入 reachability 词表的阶段（不在门禁范围内，仅公示）：');
+    lines.push('未接入 reachability 词表的阶段（已登记，仅公示）：');
     for (const stage of report.ungovernedStages) {
       lines.push(`  - ${stage.stage}：routing ${stage.routings} 条，其中已声明 ${stage.declared} 条`);
     }

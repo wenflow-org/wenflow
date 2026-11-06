@@ -6,7 +6,11 @@
  * 未登记 notes 时的状态。
  */
 import { loadOrchestrationFiles } from '../orchestration-file';
-import { collectRoutingReachabilityGaps, formatRoutingReachabilityReport } from '../routing-reachability';
+import {
+  UNGOVERNED_STAGE_REGISTRY,
+  collectRoutingReachabilityGaps,
+  formatRoutingReachabilityReport,
+} from '../routing-reachability';
 
 describe('collectRoutingReachabilityGaps（静态门禁规则）', () => {
   it('受管辖阶段里没声明 reachability 也没在 notes 登记的 routing → 违规并列出 stage/agentId/fieldId', () => {
@@ -52,6 +56,21 @@ describe('collectRoutingReachabilityGaps（静态门禁规则）', () => {
     expect(report.violations).toEqual([]);
     expect(report.governedStages).toEqual(['simulation']);
     expect(report.ungovernedStages).toEqual([{ stage: 'goal', routings: 1, declared: 0 }]);
+    expect(report.unregisteredStages).toEqual([]);
+  });
+
+  it('#200-2 复核：既没接入词表、又没登记理由的阶段 → 违规（不再静默放行）', () => {
+    const report = collectRoutingReachabilityGaps([
+      { stage: 'brand-new-stage', routings: [{ agentId: 'skill:x', fieldId: 'f1' }, { agentId: 'skill:x', fieldId: 'f2' }] },
+      { stage: 'goal', routings: [{ agentId: 'skill:goal-conversation', fieldId: 'understanding.x' }] },
+    ]);
+
+    expect(report.ungovernedStages).toEqual([{ stage: 'goal', routings: 1, declared: 0 }]);
+    expect(report.unregisteredStages).toEqual([{ stage: 'brand-new-stage', routings: 2, declared: 0 }]);
+    const text = formatRoutingReachabilityReport(report);
+    expect(text).toContain('阶段未登记可达性口径');
+    expect(text).toContain('brand-new-stage');
+    expect(text).toContain('UNGOVERNED_STAGE_REGISTRY');
   });
 
   it('真实编排文件全量通过：受管辖阶段每条 routing 都已声明（含 notes 的 auto 登记）', () => {
@@ -63,5 +82,11 @@ describe('collectRoutingReachabilityGaps（静态门禁规则）', () => {
     expect(report.violations).toEqual([]);
     // simulation（#184 词表的来源阶段）必须仍在受管辖范围内，否则本门禁等于空转
     expect(report.governedStages).toContain('simulation');
+    // #200-2 复核：未接入词表的阶段集合必须与登记表逐字相同——
+    // 谁新加一个 stage 文件（或改了 stage 名），这里立刻红，不再静默落进公示计数。
+    expect(report.unregisteredStages).toEqual([]);
+    expect(report.ungovernedStages.map((s) => s.stage).sort()).toEqual(
+      Object.keys(UNGOVERNED_STAGE_REGISTRY).sort(),
+    );
   });
 });
