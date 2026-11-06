@@ -427,15 +427,17 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
     const live = wrapper.find('.sdp-live');
     expect(live.exists()).toBe(true);
     expect(live.find('.sdp-base__model').text()).toContain('gpt-4o-mini');
-    expect(live.find('.sdp-base__src').text()).toBe('本 Skill 指定');
+    /* 2026-11-06：「基线」不再是灰底胶囊、能力不再是胶囊，来源与能力收进同一行灰字
+       （.sdp-base__facts，· 分隔）——它们都是事实陈述，不是控件。 */
+    expect(live.find('.sdp-base__facts').text()).toContain('本 Skill 指定');
     // 取值顺序（谁压谁）降成基线模型 id 的悬停说明，不占一行读数
     expect(live.find('.sdp-base__model').attributes('title') ?? '').toContain('本 Skill 指定');
     // 只列改过的项：mock 里 Skill 只单独设了 requestTimeoutMs=30000；
     // T=0.4 是 Prompt 声明值（generationParams），不算这个 Skill 的改动
     const diff = live.findAll('.sdp-diff__list > li');
     expect(diff.map((li) => li.find('.sdp-diff__label').text())).toEqual(['请求超时']);
-    // 第三格是「不单独设置时会取什么」
-    expect(diff[0].find('.sdp-diff__base').text()).toBe('平台默认');
+    // 第三格是「不单独设置时会取什么」，前缀「基线」说明它是对照值而非第二个值
+    expect(diff[0].find('.sdp-diff__base').text()).toBe('基线 平台默认');
     expect(diff[0].find('.sdp-diff__val').text()).toBe('30s');
     // 2026-11-05 用户「不要这种文案，这属于什么文案」：没改的项不再逐一点名——
     // 基线行已写明基线是谁、差异列表已只列改过的项，再把「其余」数一遍属自述装配（负空间复述）。

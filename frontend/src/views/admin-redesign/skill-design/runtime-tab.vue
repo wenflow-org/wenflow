@@ -56,27 +56,40 @@
              再只列**这个 Skill 改过的**项，每一项后面标注它在没改时会取什么。
              此前是五项读数平铺，读者看不出哪几项是本 Skill 的决定、哪几项只是继承；
              模型那一行还写着「未单独指定，跟随平台默认」，与卡头「覆盖平台默认 已开启」读作打架。 -->
-        <div class="sdp-live">
+        <div class="sdp-live" :class="{ 'sdp-live--split': rtForm.enabled }">
+          <!-- 基线行（2026-11-06 用户「这个设计的不好」重做）：
+               此前「基线」是一枚灰底胶囊 → 读作状态标签；能力各是一枚胶囊 → 读作可点的筛选项；
+               「平台默认模型」孤零零挂在行尾 → 不知道它是来源还是值。
+               现在：首列是与差异表同一档的文字标签，模型 id 当主角，来源与能力收成同一行灰字，
+               用「·」分隔、不占胶囊——它们都是**事实陈述**，不是控件。 -->
           <div class="sdp-base">
             <span class="sdp-base__k">基线</span>
-            <span class="mono sdp-base__model" :title="`${baseModel}
+            <span class="sdp-base__main">
+              <span class="mono sdp-base__model" :title="`${baseModel}
 
 ${orderTitle}`">{{ baseModel }}</span>
-            <!-- 能力做成**陈述句**（2026-11-02 评审：原来只写 思考 / 推理强度 两个裸词，
-                 被读成「只有标签、值还没填」）。 -->
-            <span v-for="cap in summaryCaps" :key="cap" class="sdp-chip">{{ cap }}</span>
-            <span v-if="summaryMeta" class="sdp-base__meta">{{ summaryMeta }}</span>
-            <span class="sdp-base__src">{{ baseModelSource }}</span>
+              <!-- 能力做成**陈述句**（2026-11-02 评审：原来只写 思考 / 推理强度 两个裸词，
+                   被读成「只有标签、值还没填」）。 -->
+              <span class="sdp-base__facts">
+                <span>{{ baseModelSource }}</span>
+                <span v-for="cap in summaryCaps" :key="cap">{{ cap }}</span>
+                <span v-if="summaryMeta">{{ summaryMeta }}</span>
+              </span>
+            </span>
           </div>
 
           <template v-if="rtForm.enabled">
             <div class="sdp-diff">
-              <p class="sdp-diff__k">本 Skill 独立调整</p>
+              <p class="sdp-diff__k">
+                本 Skill 独立调整
+                <span v-if="changedRows.length" class="sdp-diff__count">{{ changedRows.length }} 项</span>
+              </p>
               <ul class="sdp-diff__list">
                 <li v-for="row in changedRows" :key="row.label">
                   <span class="sdp-diff__label">{{ row.label }}</span>
                   <strong class="sdp-diff__val">{{ row.value }}</strong>
-                  <em class="sdp-diff__base" :title="row.baseTitle">{{ row.base }}</em>
+                  <!-- 对照值紧跟取值（不是被 1fr 顶到卡片右缘）：一行读完「改成了什么 / 没改是什么」 -->
+                  <em class="sdp-diff__base" :title="row.baseTitle">基线 {{ row.base }}</em>
                 </li>
               </ul>
               <p v-if="!changedRows.length" class="sdp-diff__none">没有单独调整的项，全部沿用基线</p>
@@ -840,28 +853,43 @@ watch(() => props.skillId, () => {
 /* 卡面「基线 + 差异」（2026-11-04）：第一段是基线（平台默认模型那一行），
    第二段只列本 Skill 改过的项。 */
 .sdp-live { display: grid; gap: 14px; }
-.sdp-live__note { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-amber); line-height: 1.6; }
-.sdp-base { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
-/* 「基线」这枚词是这一行的角色标签，不是值：做成小字灰标签，别抢模型 id 的第一眼 */
-.sdp-base__k {
-  padding: 1px 7px;
-  border-radius: var(--mk-radius-sm);
-  background: var(--mk-surface-2);
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
-  font-weight: 600;
-  line-height: 1.7;
+/* 宽屏双栏（2026-11-06 用户「这个设计的不好」）：基线一段、差异一段，此前竖排两行只占左侧
+   700px，右边 400px 全空。≥1024 改成「基线 | 独立调整」两栏，中间一条发丝线——
+   两段本来就是「是谁 / 改了什么」的对照关系，并排读比上下读更快。
+   窄屏回单栏（上下排），差异表不挤。 */
+@media (min-width: 1024px) {
+  .sdp-live--split {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    column-gap: 32px;
+    align-items: start;
+  }
+  .sdp-live--split .sdp-diff {
+    align-self: stretch;
+    border-left: 1px solid var(--mk-line);
+    padding-left: 32px;
+  }
 }
+.sdp-live__note { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-amber); line-height: 1.6; }
+/* 「基线」是这一行的角色标签，与下方差异表的首列同一档：纯文字、无底色——
+   做成灰底胶囊会被读成状态标签（2026-11-06 用户「这个设计的不好」）。 */
+.sdp-base { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; align-items: baseline; }
+.sdp-base__k { color: var(--mk-muted); font-size: var(--mk-fs-micro); font-weight: 600; }
+.sdp-base__main { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; min-width: 0; }
+/* 来源与能力是同一句话里的几个事实：灰字 + 「·」分隔，不各占一枚胶囊 */
+.sdp-base__facts { display: flex; flex-wrap: wrap; gap: 0 2px; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+.sdp-base__facts > * + *::before { content: '·'; margin: 0 6px 0 2px; color: var(--mk-faint); }
 /* 主角：基线模型 id（比读数高一级，卡面第一眼先读它） */
 .sdp-base__model { color: var(--mk-ink); font-weight: 700; font-size: var(--mk-fs-emphasis); overflow-wrap: anywhere; }
-.sdp-base__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.sdp-base__src { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .sdp-diff { display: grid; gap: 8px; }
-.sdp-diff__k { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); font-weight: 700; letter-spacing: 0.04em; }
+.sdp-diff__k { display: flex; align-items: baseline; gap: 8px; margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); font-weight: 700; letter-spacing: 0.04em; }
+.sdp-diff__count { color: var(--mk-faint); font-weight: 600; letter-spacing: 0; }
 .sdp-diff__list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 /* 一行三格：项名 / 本 Skill 的取值 / 未调整时会取什么。第三格是差异的对照面，
    亮度降一档，读起来像脚注而不是第二个值。 */
-.sdp-diff__list > li { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: 10px; align-items: baseline; min-width: 0; }
+/* 三列左对齐成簇：项名 96 / 取值按内容宽 / 对照值紧随其后。
+   此前第三列是 auto，被中间的 1fr 顶到卡片右缘——1140px 宽的卡上，
+   「思考模式 关闭」与「按模型默认」隔着 1200px，读一行要横跨整屏。 */
+.sdp-diff__list > li { display: grid; grid-template-columns: 96px max-content minmax(0, 1fr); gap: 10px; align-items: baseline; min-width: 0; }
 .sdp-diff__label { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .sdp-diff__val { color: var(--mk-ink); font-weight: 700; overflow-wrap: anywhere; }
 .sdp-diff__base { color: var(--mk-faint); font-size: var(--mk-fs-micro); font-style: normal; }
@@ -895,18 +923,6 @@ watch(() => props.skillId, () => {
 .sdp-panel__head h4 { margin: 0; font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
 .sdp-panel__state { font-size: var(--mk-fs-micro); color: var(--mk-faint); overflow-wrap: anywhere; }
 
-
-.sdp-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: var(--mk-radius-sm);
-  background: var(--mk-surface-2);
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
-  font-weight: 600;
-}
 /* 卡头：覆盖开关与配置入口同处右组；标题左，动作右 */
 .sdp-card__head { flex-wrap: wrap; }
 .sdp-head__switch { margin-left: auto; }
@@ -990,7 +1006,6 @@ watch(() => props.skillId, () => {
 
 /* 4K：字号跟随壳层放大 */
 @media (min-width: 3600px) {
-  .sdp-chip { font-size: var(--mk-fs-body); padding: 4px 12px; }
   .sdp-body { gap: 18px; padding: 6px 20px 20px; }
   .sdp-field > span { font-size: var(--mk-fs-body); }
   .sdp-pane .mk-input { font-size: var(--mk-fs-emphasis); padding: 12px 15px; }
