@@ -55,6 +55,8 @@ describe('LearningStateGuidanceService', () => {
     expect(dashboardGuidanceSnapshotService.get).toHaveBeenCalledWith('u1')
     expect(payload?.copy).toEqual({ headline: 'H', subtitle: 's' })
     expect(payload?.source).toBe('model')
+    // #187：复用是**显式**的——载荷自报「这段 copy 实际由 dashboard 视图生成」
+    expect(payload?.copySourceView).toBe('dashboard')
     expect(payload?.review).toBeNull()
   })
 
@@ -64,6 +66,8 @@ describe('LearningStateGuidanceService', () => {
     expect(buildFallback).toHaveBeenCalledWith(expect.objectContaining({ view: 'learning-state' }))
     expect(payload?.copy).toEqual({ headline: '先看清当前状态，再决定下一步', subtitle: 's' })
     expect(payload?.source).toBe('fallback')
+    // #187：兜底文案才是 learning-state 视图自己生成的
+    expect(payload?.copySourceView).toBe('learning-state')
   })
 
   it('新学习者没有 learnerSnapshot：返回 null，不进入摘要/投影（避免 dynamicState 空引用）', async () => {

@@ -9,6 +9,7 @@ import { learnerProjectionService } from './LearnerProjectionService';
 import { learnerStateReviewService, type LearnerStateReviewPayload } from './LearnerStateReviewService';
 import stateTrackingService from '../learning/learning-state.service';
 import { logger } from '../../utils/logger';
+import { buildNonVirtualUserWhere } from '../../utils/test-account';
 import { runBackgroundTask } from '../background-task-tracker.service';
 
 export type DashboardGuidanceTrigger =
@@ -76,15 +77,23 @@ class DashboardGuidanceSnapshotService {
     });
   }
 
+  /**
+   * 给「还没生成过引导快照的活跃用户」补跑一次刷新（管理端回填任务）。
+   *
+   * #186：虚拟学习者（VL）此前同样命中本查询 → 对每个 VL 用户跑一次 refresh →
+   * executeSkillWithResult 触发真实 LLM 调用（凭空烧钱），且 VL 数据混进真实用户口径。
+   * 口径与非虚拟统计同源（utils/test-account.buildNonVirtualUserWhere）：VL 归自己的域。
+   */
   async backfillMissingForActiveUsers(limit = 100): Promise<{ total: number; refreshed: number }> {
-    const users = await prisma.users.findMany({
-      where: {
-        deletedAt: null,
-        dashboardGuidanceSnapshot: null,
-        learning_paths: {
-          some: { status: 'active' },
-        },
+    const where = await buildNonVirtualUserWhere({
+      deletedAt: null,
+      dashboardGuidanceSnapshot: null,
+      learning_paths: {
+        some: { status: 'active' },
       },
+    });
+    const users = await prisma.users.findMany({
+      where,
       select: { id: true },
       take: Math.max(1, Math.min(500, limit)),
       orderBy: { updatedAt: 'desc' },

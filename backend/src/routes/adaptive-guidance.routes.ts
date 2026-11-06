@@ -33,6 +33,9 @@ router.get('/copy', async (req: any, res) => {
         data: payload
           ? {
               copy: payload.copy,
+              // #187：copy 的真实生成视图（复用 dashboard 快照 vs learning-state 本地兜底），
+              // 让「learning-state 页复用 dashboard 文案」成为可核对的事实而不是仅写在注释里
+              copySourceView: payload.copySourceView,
               summary: payload.summary,
               decisions: payload.decisions || [],
               review: payload.review ?? null,

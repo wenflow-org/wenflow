@@ -1,9 +1,10 @@
 const findUnique = jest.fn()
 const update = jest.fn()
+const findMany = jest.fn()
 
 jest.mock('../../../config/database', () => ({
   __esModule: true,
-  default: { users: { findUnique, update } },
+  default: { users: { findUnique, update, findMany } },
 }))
 jest.mock('../../../skills', () => ({ executeSkillWithResult: jest.fn() }))
 jest.mock('../../../skills/adaptive-guidance-copy', () => ({
@@ -127,5 +128,40 @@ describe('DashboardGuidanceSnapshotService', () => {
     expect(skillInput.learnerSnapshot.knowledgeMemory.globalBackground.transferSignals).toEqual([
       { conceptKey: 't1', label: 'T1', readiness: 'high', confidence: 0.8 },
     ])
+  })
+
+  /**
+   * #186：回填任务此前只按 deletedAt/snapshot 缺失/有 active 路径筛人，**没有 VL 过滤**——
+   * 实测 228 个虚拟学习者被纳入回填，每个都会跑一次 refresh 并触发真实 LLM 调用（凭空烧钱）。
+   * 本用例让 findMany 按 where 里的 isVirtualLearner 谓词过滤（模拟 Prisma 下推），
+   * 修复前 where 无该谓词 ⇒ VL 也会被 refresh。
+   */
+  describe('backfillMissingForActiveUsers · 虚拟学习者不进回填（#186）', () => {
+    beforeEach(() => {
+      findMany.mockImplementation(async (args: any) =>
+        [
+          { id: 'virtual_1', isVirtualLearner: true },
+          { id: 'u-real', isVirtualLearner: false },
+        ]
+          .filter((row) => (args?.where?.isVirtualLearner === false ? !row.isVirtualLearner : true))
+          .map((row) => ({ id: row.id }))
+      )
+    })
+
+    it('回填查询带上非虚拟口径（VL 不再触发 LLM 调用）', async () => {
+      const result = await dashboardGuidanceSnapshotService.backfillMissingForActiveUsers(50)
+
+      const where = findMany.mock.calls[0][0].where
+      expect(where.isVirtualLearner).toBe(false)
+      expect(where.deletedAt).toBeNull()
+      expect(where.dashboardGuidanceSnapshot).toBeNull()
+      expect(where.learning_paths).toEqual({ some: { status: 'active' } })
+      expect(findMany.mock.calls[0][0].take).toBe(50)
+
+      // 行为面：只有真实用户被 refresh；VL 不产生 skill 调用
+      expect(result).toEqual({ total: 1, refreshed: 1 })
+      expect(executeSkillWithResult).toHaveBeenCalledTimes(1)
+      expect((executeSkillWithResult as jest.Mock).mock.calls[0][1].userId).toBe('u-real')
+    })
   })
 })
