@@ -309,7 +309,7 @@
             <div class="msg__content">
               <div class="msg__bubble msg__bubble--typing"><i></i><i></i><i></i></div>
               <!-- 收窄后的 live region：只播报等待文案，不再让整条消息流进读屏队列 -->
-              <div class="msg__meta" aria-live="polite">{{ chatWaitMeta }}</div>
+              <div class="msg__meta" aria-live="polite">{{ chatWaitText }}</div>
             </div>
           </div>
 
@@ -318,7 +318,7 @@
           <div v-if="live.sending && live.streamingText && !showProposal" class="msg msg--ai">
             <div class="msg__content">
               <div class="msg__bubble msg__bubble--html msg__bubble--streaming" v-html="formatMessage(live.streamingText)"></div>
-              <div class="msg__meta">{{ chatWaitMeta }}</div>
+              <div class="msg__meta">{{ chatWaitText }}</div>
             </div>
           </div>
 
@@ -1099,10 +1099,10 @@ function stageText(stages: Array<[number, string]>) {
 }
 const chatWaitText = computed(() => stageText(CHAT_WAIT_STAGES));
 const genWaitText = computed(() => stageText(GEN_WAIT_STAGES));
-/** 等待 5 秒后才显示已等待秒数：短回合不闪数字，长回合用户能看到确实在走 */
-const chatWaitMeta = computed(() =>
-  waitTick.value >= 5 ? `${chatWaitText.value} · 已等待 ${waitTick.value}s` : chatWaitText.value
-);
+/* 等待态只报「现在在做什么」（正在梳理关键信息… / 正在拆解阶段…），不报秒数
+   （2026-11-06 用户裁定：去掉「· 已等待 11s」）。阶段文案本身随 tick 推进就已经说明
+   「还在走」；一串一直在涨的秒数只增加焦虑，不增加信息。故 chatWaitMeta 整层撤除，
+   模板直接读 chatWaitText。 */
 /* 用户消息内联编辑（仅最后一条用户消息可编辑） */
 const editingMsgId = ref<string | null>(null);
 const editingText = ref('');
