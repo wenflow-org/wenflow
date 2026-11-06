@@ -1,5 +1,6 @@
 const mockEvidenceHandle = jest.fn()
 const mockEnrichmentHandle = jest.fn()
+const mockEnqueueEnrichment = jest.fn()
 const mockProfileClear = jest.fn()
 const mockSnapshotRefresh = jest.fn()
 
@@ -7,9 +8,16 @@ jest.mock('../../services/learner/LearnerEvidenceProjector', () => ({
   __esModule: true,
   learnerEvidenceProjector: { handle: (event: unknown) => mockEvidenceHandle(event) }
 }))
+// 保留这个 mock：若有人把「同步 await 课后增强」重新塞回关键路径，下面的 #144 用例会立即变红。
 jest.mock('../../services/learner/LessonKnowledgeEnrichmentConsumer', () => ({
   __esModule: true,
   lessonKnowledgeEnrichmentConsumer: { handle: (event: unknown) => mockEnrichmentHandle(event) }
+}))
+jest.mock('../lesson-enrichment-event', () => ({
+  __esModule: true,
+  LESSON_ENRICHMENT_EVENT_TYPE: 'lesson:knowledge-enrichment',
+  lessonEnrichmentEventId: (lessonEventId: string) => `enr_${lessonEventId}`,
+  enqueueLessonEnrichmentEvent: (event: unknown) => mockEnqueueEnrichment(event)
 }))
 jest.mock('../../services/learner/LearnerProfileService', () => ({
   __esModule: true,
@@ -38,22 +46,38 @@ const buildEvent = (overrides: Record<string, unknown> = {}) => ({
   ...overrides
 }) as any
 
-describe('handleLearnerEvent（课后增强失败不得阻断画像快照刷新，审计 §6.1）', () => {
+describe('handleLearnerEvent（快路径：投影 + 清缓存 + 快照刷新，课后增强拆为独立事件）', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockEvidenceHandle.mockResolvedValue(undefined)
     mockEnrichmentHandle.mockResolvedValue(undefined)
+    mockEnqueueEnrichment.mockResolvedValue(undefined)
     mockProfileClear.mockReturnValue(undefined)
     mockSnapshotRefresh.mockResolvedValue(undefined)
   })
 
-  it('增强失败：清缓存与快照刷新照常执行，且错误在链尾重抛给 outbox 退避重投', async () => {
-    mockEnrichmentHandle.mockRejectedValue(new Error('llm timeout'))
+  it('#144：LLM 不在关键路径上——lesson:completed 消费不再调用课后增强消费者', async () => {
+    await expect(handleLearnerEvent(buildEvent())).resolves.toBeUndefined()
 
-    await expect(handleLearnerEvent(buildEvent())).rejects.toThrow('llm timeout')
-
-    // 关键回归：增强 throw 之后，清缓存与快照刷新仍必须发生
+    // 旧实现这里 await lessonKnowledgeEnrichmentConsumer.handle(event)（一次 10–20s 的 LLM）
+    expect(mockEnrichmentHandle).not.toHaveBeenCalled()
+    // 改为登记一条独立的增强事件，由 outbox 的增强泳道消费
+    expect(mockEnqueueEnrichment).toHaveBeenCalledTimes(1)
+    expect(mockEnqueueEnrichment).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'evt-1',
+      type: 'lesson:completed',
+      userId: 'user-1',
+    }))
+    // 快路径本身照常落地
+    expect(mockEvidenceHandle).toHaveBeenCalledTimes(1)
     expect(mockProfileClear).toHaveBeenCalledWith('user-1')
+    expect(mockSnapshotRefresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('#146：增强失败不再「吞下再重抛」——本消费者链尾不抛错，快照只刷新一次', async () => {
+    // 旧断言是「增强失败仍在链尾重抛」，那正是 #146 的病灶（重投 → 整链重跑最多 8 次）
+    await expect(handleLearnerEvent(buildEvent())).resolves.toBeUndefined()
+    expect(mockSnapshotRefresh).toHaveBeenCalledTimes(1)
     expect(mockSnapshotRefresh).toHaveBeenCalledWith(expect.objectContaining({
       userId: 'user-1',
       pathId: 'path-1',
@@ -61,25 +85,40 @@ describe('handleLearnerEvent（课后增强失败不得阻断画像快照刷新�
       scope: 'teaching',
       lastEventId: 'evt-1',
     }))
+    // 增强消费者（唯一会 throw 的 LLM 入口）根本不在本链路上
+    expect(mockEnrichmentHandle).not.toHaveBeenCalled()
   })
 
-  it('增强成功：链路完整且不抛错', async () => {
-    await expect(handleLearnerEvent(buildEvent())).resolves.toBeUndefined()
+  it('登记增强事件失败（快路径基础设施错误）仍抛给 outbox 重投', async () => {
+    mockEnqueueEnrichment.mockRejectedValue(new Error('sqlite busy'))
+
+    await expect(handleLearnerEvent(buildEvent())).rejects.toThrow('sqlite busy')
+    // 投影与刷新已执行（幂等：evidenceKey + upsert / lastEventId 短路），重投只补登记
     expect(mockEvidenceHandle).toHaveBeenCalledTimes(1)
-    expect(mockEnrichmentHandle).toHaveBeenCalledTimes(1)
-    expect(mockProfileClear).toHaveBeenCalledWith('user-1')
     expect(mockSnapshotRefresh).toHaveBeenCalledTimes(1)
   })
 
-  it('顺序固定：证据投影 → 课后增强 → 清缓存/快照刷新', async () => {
+  it('#144：非 lesson:completed 事件不触发增强登记', async () => {
+    // 登记函数的类型/userId 早退由 lesson-enrichment-event.test.ts 覆盖；此处锁定调用点只对
+    // lesson:completed 之后的快路径无副作用（本消费者不因其他事件多出一次真实 upsert）。
+    mockEnqueueEnrichment.mockImplementation(async () => undefined)
+
+    await handleLearnerEvent(buildEvent({ id: 'evt-task', type: 'task:completed', aggregateType: 'task' }))
+
+    // 消费者对 task:completed 仍会调用登记函数，但真实实现按 type 早退——这里断言投影/刷新不受影响
+    expect(mockSnapshotRefresh).toHaveBeenCalledTimes(1)
+    expect(mockEvidenceHandle).toHaveBeenCalledTimes(1)
+  })
+
+  it('顺序固定：证据投影 → 清缓存/快照刷新 → 登记增强事件', async () => {
     const order: string[] = []
     mockEvidenceHandle.mockImplementation(async () => { order.push('evidence') })
-    mockEnrichmentHandle.mockImplementation(async () => { order.push('enrichment') })
     mockSnapshotRefresh.mockImplementation(async () => { order.push('refresh') })
+    mockEnqueueEnrichment.mockImplementation(async () => { order.push('enqueue-enrichment') })
 
     await handleLearnerEvent(buildEvent())
 
-    expect(order).toEqual(['evidence', 'enrichment', 'refresh'])
+    expect(order).toEqual(['evidence', 'refresh', 'enqueue-enrichment'])
   })
 
   it('无 userId：跳过清缓存与快照，且不因缺少 userId 报错', async () => {

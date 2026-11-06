@@ -14,18 +14,31 @@ jest.mock('../../utils/logger', () => ({
 
 import { DurableOutboxWorker } from '../outbox.worker'
 import { runWithContext, getRequestContext } from '../../gateway/api-gateway/context'
+import type { DurableEventType } from '../contracts'
 
-describe('DurableOutboxWorker same-user ordering', () => {
+/** 课后增强泳道（#144）：与生产装配一致——只拾取增强事件、并发执行 */
+const ENRICHMENT_EVENT_TYPES: ReadonlySet<DurableEventType> = new Set(['lesson:knowledge-enrichment'])
+
+describe('DurableOutboxWorker 同用户有序 + 泳道分离', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     records.length = 0
-    mockPrisma.domain_event_outbox.findMany.mockImplementation(async () => records
-      .filter(record => record.status === 'pending'
-        && record.availableAt <= new Date()
-        && (!record.scheduledAt || record.scheduledAt <= new Date()))
-      .sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime()
-        || a.createdAt.getTime() - b.createdAt.getTime()
-        || a.id.localeCompare(b.id)))
+    mockPrisma.domain_event_outbox.findMany.mockImplementation(async ({ where }: any = {}) => {
+      const typeFilter = where?.eventType
+      return records
+        .filter(record => record.status === 'pending'
+          && record.availableAt <= new Date()
+          && (!record.scheduledAt || record.scheduledAt <= new Date()))
+        .filter(record => {
+          if (!typeFilter) return true
+          if (Array.isArray(typeFilter.in)) return typeFilter.in.includes(record.eventType)
+          if (Array.isArray(typeFilter.notIn)) return !typeFilter.notIn.includes(record.eventType)
+          return true
+        })
+        .sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime()
+          || a.createdAt.getTime() - b.createdAt.getTime()
+          || a.id.localeCompare(b.id))
+    })
     mockPrisma.domain_event_outbox.findFirst.mockImplementation(async ({ where }: any) => records
       .filter(record => (Array.isArray(where.eventType?.in)
           ? where.eventType.in.includes(record.eventType)
@@ -224,6 +237,136 @@ describe('DurableOutboxWorker same-user ordering', () => {
     expect(seenAborted).toBeUndefined()
     expect(seenUserId).toBe('user-request')
     expect(records[0].status).toBe('published')
+  })
+
+  /* #145：课后增强失败原先让整条 lesson:completed 退避重投（≈182s），同用户所有后续学习者线事件
+     都卡在这条队头之后。拆成独立事件后，增强有自己的泳道，不进 ORDERED_EVENT_TYPES。 */
+  it('#145：增强事件连续失败不阻塞同用户后续有序事件', async () => {
+    const base = new Date(Date.now() - 10_000)
+    records.push(
+      buildRecord('enr-lesson-1', 'user-1', base, 'lesson:knowledge-enrichment'),
+      buildRecord('task-after', 'user-1', new Date(base.getTime() + 1000), 'task:completed')
+    )
+    const registry = {
+      dispatch: jest.fn(async (event: any) => {
+        if (event.type === 'lesson:knowledge-enrichment') throw new Error('llm timeout')
+      })
+    }
+    const main = new DurableOutboxWorker(registry as any, { excludeEventTypes: ENRICHMENT_EVENT_TYPES })
+    const enrichment = new DurableOutboxWorker(registry as any, {
+      includeEventTypes: ENRICHMENT_EVENT_TYPES,
+      concurrency: 3,
+      ownsWakeListener: false
+    })
+
+    // 增强连续失败 3 次（退避重试期）
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const row = records.find(record => record.id === 'enr-lesson-1')!
+      row.availableAt = new Date(Date.now() - 1)
+      await enrichment.runOnce()
+      expect(row.attemptCount).toBe(attempt)
+      expect(row.status).toBe('pending')
+    }
+    expect(records.find(record => record.id === 'enr-lesson-1')?.status).toBe('pending')
+
+    // 同用户的后续有序事件仍在下一次主泳道 tick 被消费——延迟不随增强重试次数增长
+    await main.runOnce()
+    expect(records.find(record => record.id === 'task-after')?.status).toBe('published')
+    // 主泳道从不拾取增强行（否则它会再次进入退避并把 attemptCount 推到 4）
+    expect(records.find(record => record.id === 'enr-lesson-1')?.attemptCount).toBe(3)
+  })
+
+  /* #146：旧实现里增强失败 → 链尾重抛 → 整条 lesson:completed 从头重跑最多 8 次。
+     拆分后源事件一次 published，增强按自己的尝试计数单独重试。 */
+  it('#146：增强失败不再让 lesson:completed 整链重跑（源事件只消费一次）', async () => {
+    const base = new Date(Date.now() - 10_000)
+    records.push(
+      buildRecord('lesson-src', 'user-1', base, 'lesson:completed'),
+      buildRecord('enr_lesson-src', 'user-1', new Date(base.getTime() + 1), 'lesson:knowledge-enrichment')
+    )
+    let lessonDispatches = 0
+    const registry = {
+      dispatch: jest.fn(async (event: any) => {
+        if (event.type === 'lesson:completed') {
+          lessonDispatches += 1
+          return
+        }
+        throw new Error('llm timeout')
+      })
+    }
+    const main = new DurableOutboxWorker(registry as any, { excludeEventTypes: ENRICHMENT_EVENT_TYPES })
+    const enrichment = new DurableOutboxWorker(registry as any, {
+      includeEventTypes: ENRICHMENT_EVENT_TYPES,
+      concurrency: 1,
+      ownsWakeListener: false
+    })
+
+    await main.runOnce()
+    expect(lessonDispatches).toBe(1)
+    expect(records.find(record => record.id === 'lesson-src')).toEqual(expect.objectContaining({
+      status: 'published',
+      attemptCount: 0
+    }))
+
+    // 增强重试 3 轮，源事件不再被重投 → 投影/清缓存/快照刷新不会跟着重跑
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const row = records.find(record => record.id === 'enr_lesson-src')!
+      row.availableAt = new Date(Date.now() - 1)
+      await enrichment.runOnce()
+      expect(row.attemptCount).toBe(attempt)
+    }
+    await main.runOnce()
+
+    expect(lessonDispatches).toBe(1)
+    expect(records.find(record => record.id === 'enr_lesson-src')?.status).toBe('pending')
+  })
+
+  /* #144：增强泳道 3 路并发——第 4 个用户的增强不必等前 3 个 LLM 跑完（串行是原来的队头阻塞）。 */
+  it('#144：增强泳道跨用户并发，一个慢增强不堵住其他用户的增强', async () => {
+    const base = new Date(Date.now() - 10_000)
+    for (let index = 0; index < 4; index += 1) {
+      records.push(buildRecord(
+        `enr-lesson-${index}`,
+        `user-${index}`,
+        new Date(base.getTime() + index),
+        'lesson:knowledge-enrichment'
+      ))
+    }
+    const started: string[] = []
+    const gates: Array<() => void> = []
+    const registry = {
+      dispatch: jest.fn((event: any) => new Promise<void>((resolve) => {
+        started.push(event.id)
+        gates.push(() => resolve())
+      }))
+    }
+    const enrichment = new DurableOutboxWorker(registry as any, {
+      includeEventTypes: ENRICHMENT_EVENT_TYPES,
+      concurrency: 3,
+      ownsWakeListener: false
+    })
+
+    const run = enrichment.runOnce()
+    await new Promise(resolve => setImmediate(resolve))
+
+    // 3 个不同用户同时在跑 LLM（旧实现：必须等第 1 个 10–20s 跑完才轮到第 2 个）
+    expect(started).toEqual(['enr-lesson-0', 'enr-lesson-1', 'enr-lesson-2'])
+
+    gates.forEach(release => release())
+    await new Promise(resolve => setImmediate(resolve))
+    expect(started).toHaveLength(4)
+
+    gates.slice(3).forEach(release => release())
+    await run
+
+    expect(records.every(record => record.status === 'published')).toBe(true)
+  })
+
+  it('#145：并发泳道不允许承载有序事件（构造期拒绝，避免绕过同用户队首保护）', () => {
+    expect(() => new DurableOutboxWorker({ dispatch: jest.fn() } as any, {
+      includeEventTypes: new Set<DurableEventType>(['lesson:knowledge-enrichment', 'lesson:completed']),
+      concurrency: 3
+    })).toThrow(/并发泳道不得承载有序事件类型/)
   })
 })
 
