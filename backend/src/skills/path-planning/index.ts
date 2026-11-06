@@ -778,7 +778,15 @@ export const pathAgentDefinition: AgentDefinition = {
   ],
   
   // 文档性元数据，不参与运行时分发/发布（语义见 agents/protocol.ts 的 AgentDefinition.subscribes）：
-  // 下列事件名均为描述性说明，全仓无对应 dispatch 调用点，请勿据此排查真实订阅关系。
+  // 全仓没有任何调度器读取 subscribes/publishes 做派发，两个字段都只是描述性说明。
+  //
+  // #208：但不要因此把两段写成同一回事——
+  // - `subscribes` 的 5 个 `learning:*` 事件名在全仓**没有**任何 emit 点/消费者（纯描述性，勿据此排障）；
+  // - `publishes` 的 3 个事件是**真实存在**的：本 skill 的生成/重规划/完成链路经 outbox 发出
+  //   path:created（services/learning/generation/path-generation.core.ts）、
+  //   path:adjusted（services/learning/replan/path-replan.service.ts 两处）、
+  //   path:completed（services/learning/tasks/task-completion.service.ts）。
+  //   旧注释笼统写成「全仓无对应 dispatch 调用点」，对 publishes 是假话，会误导排障。
   subscribes: [
     'learning:speed:change',
     'learning:focus:shift',

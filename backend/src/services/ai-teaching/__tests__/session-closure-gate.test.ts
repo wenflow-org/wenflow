@@ -244,3 +244,70 @@ describe('buildClosureAudit / appendClosureFollowUp', () => {
     expect(audit.question).toBeNull()
   })
 })
+
+/**
+ * #164：回合门禁（引擎：本回合要不要宣布完成）与收束入口（complete_task 能不能结算）
+ * 必须同源。旧实现的僵局：末句「今天就到这里，有问题随时告诉我」不含问号 → 引擎判完成、
+ * 前端展示完成入口 → 用户点「完成任务」→ 收束入口的 detectOpenRequest 命中「告诉我」→ 409，
+ * 而产品内没有第二个出口，任务结算被卡死。
+ */
+describe('#164 收束入口与回合门禁同源', () => {
+  const courtesy = '今天就到这里，有问题随时告诉我。'
+
+  it('客套收尾（有问题随时告诉我）→ 可结算（修复前 409 FINALIZATION_OPEN_QUESTION）', () => {
+    const decision = evaluateSessionClosable({
+      messages: [{ role: 'assistant', content: courtesy }],
+      teachingState: {},
+    })
+    expect(decision).toEqual({ closable: true })
+  })
+
+  it('真·开放请求（请把结果发给我）→ 仍 409（同源不等于放宽）', () => {
+    const decision = evaluateSessionClosable({
+      messages: [{ role: 'assistant', content: '今天就到这里，请把整理好的三条线索发给我。' }],
+      teachingState: {},
+    })
+    expect(decision.closable).toBe(false)
+    expect(decision.code).toBe('FINALIZATION_OPEN_QUESTION')
+  })
+
+  it('客套与真请求同段相邻 → 仍判未闭合（逐句判定，客套句不吞掉请求句）', () => {
+    const decision = evaluateSessionClosable({
+      messages: [{
+        role: 'assistant',
+        content: '今天先收在这儿。有问题随时告诉我。请把整理好的三条线索发给我。',
+      }],
+      teachingState: {},
+    })
+    expect(decision.code).toBe('FINALIZATION_OPEN_QUESTION')
+  })
+
+  it('引擎延迟预算耗尽后（deferrals=cap 且宽限已用）→ 收束入口同样放行', () => {
+    const decision = evaluateSessionClosable({
+      messages: [{ role: 'assistant', content: '最后核对一处：先乘哪一个？' }],
+      teachingState: { completionDeferrals: 6, completionCapGraceUsed: true },
+    })
+    expect(decision).toEqual({ closable: true })
+  })
+
+  it('预算耗尽不放行客观待答：未答检查点仍 409', () => {
+    const decision = evaluateSessionClosable({
+      messages: [{ role: 'assistant', content: '最后核对一处：先乘哪一个？' }],
+      teachingState: {
+        completionDeferrals: 6,
+        completionCapGraceUsed: true,
+        pendingCheckpoint: { id: 'cp-1', question: '先乘哪一个？' },
+      },
+    })
+    expect(decision.closable).toBe(false)
+    expect(decision.code).toBe('FINALIZATION_PENDING_CHECKPOINT')
+  })
+
+  it('预算未耗尽（宽限未用）→ 末问照旧拦，不提前放行', () => {
+    const decision = evaluateSessionClosable({
+      messages: [{ role: 'assistant', content: '最后核对一处：先乘哪一个？' }],
+      teachingState: { completionDeferrals: 5, completionCapGraceUsed: false },
+    })
+    expect(decision.code).toBe('FINALIZATION_OPEN_QUESTION')
+  })
+})
