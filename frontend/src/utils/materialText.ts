@@ -111,3 +111,36 @@ export function looksLikeEnglishTitle(value: string | null | undefined): boolean
   if (!text || CJK.test(text)) return false;
   return /[a-z]/i.test(text);
 }
+
+/** 结构标记：第X章/节/篇/部/编 */
+const STRUCT_TOKEN = /^(第[〇零一二三四五六七八九十百千]+[章节篇部编])/;
+/** 条文编号：章节名到「第X条」为止（锚点里标题与正文被挤在同一行时靠它切） */
+const CLAUSE_CUT = /\s*第[〇零一二三四五六七八九十百千]+条/;
+const HEADING_MAX = 20;
+
+/**
+ * 锚点标题 → 卡片上可读的章节名。
+ *
+ * 实测病根：抓取页把「第一章 总则」与后续全部条文挤在同一个 markdown 行里，
+ * `document-parser` 抽出的锚点标题就是那 5752 字的整行，资料库卡片直接把它铺成
+ * 两行长文（还带着裸露的 `*第一条*`）。展示层只做一件事：切到第一个「第X条」为止、
+ * 去掉 markdown 标记、压掉汉字间空格、超长截断。
+ */
+export function materialHeadingOf(raw: string | null | undefined): string {
+  let text = String(raw ?? '').replace(/^#{1,6}\s*/, '');
+  text = text.replace(/[*_`>]/g, '').replace(/[\s\u3000]+/g, ' ').trim();
+  if (!text) return '';
+
+  const token = STRUCT_TOKEN.exec(text);
+  if (token) {
+    // 结构标记之后到「第X条」之间是章节名：章节名内部不保留空白（「总 则」→「总则」）
+    const rest = text.slice(token[1].length).split(CLAUSE_CUT)[0].replace(/\s+/g, '');
+    const heading = `${token[1]}${rest ? ` ${rest}` : ''}`.trim();
+    return heading.length > HEADING_MAX ? `${heading.slice(0, HEADING_MAX)}…` : heading;
+  }
+
+  // 没有结构标记：多半是锚点把正文首句当成了标题——切到第一个句末标点，再截断
+  const firstSentence = text.split(/[。；;]/)[0].trim();
+  const heading = firstSentence || text;
+  return heading.length > HEADING_MAX ? `${heading.slice(0, HEADING_MAX)}…` : heading;
+}

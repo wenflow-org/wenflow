@@ -8,7 +8,7 @@
  *  3) 法条只在句末标点后断段——「依照本条例第十条规定」这种句中引用不许被劈开。
  */
 import { describe, expect, it } from 'vitest';
-import { dedupeMaterialRefs, looksLikeEnglishTitle, normalizeMaterialMarkdown, stripCrawlMetadata } from '../materialText';
+import { dedupeMaterialRefs, looksLikeEnglishTitle, materialHeadingOf, normalizeMaterialMarkdown, stripCrawlMetadata } from '../materialText';
 
 const CRAWLED = `Institutions of Democratic Governance
 Major Law
@@ -120,5 +120,29 @@ describe('dedupeMaterialRefs：同一章节只留一条引用', () => {
     expect(dedupeMaterialRefs([])).toEqual([]);
     expect(dedupeMaterialRefs(null)).toEqual([]);
     expect(dedupeMaterialRefs(undefined)).toEqual([]);
+  });
+});
+
+describe('materialHeadingOf：脏锚点标题收成可读章节名', () => {
+  it('把「第一章 总则 + 全部条文」的整行锚点切到章节名', () => {
+    const giant = '第一章　总　　则 *第一条*　为了适应中国共产党机关和国家行政机关工作需要，推进党政机关公文处理工作科学化、制度化、规范化，制定本条例。 　　*第二条*　本条例适用于…';
+    expect(materialHeadingOf(giant)).toBe('第一章 总则');
+  });
+
+  it('去掉 markdown 标记与汉字间空格，正常标题原样保留', () => {
+    expect(materialHeadingOf('## 第二章 公文种类')).toBe('第二章 公文种类');
+    expect(materialHeadingOf('*第三章* 公文格式')).toBe('第三章 公文格式');
+  });
+
+  it('无结构标记的正文型锚点切到首句并截断', () => {
+    const preview = '映情况，回复上级机关的询问。（十一）请示适用于向上级机关请求指示、批准。';
+    expect(materialHeadingOf(preview)).toBe('映情况，回复上级机关的询问');
+  });
+
+  it('超长标题截断补省略号，空值返回空串', () => {
+    const long = '第一章 一个非常非常长的章节标题超过了二十个字符的限制等等等';
+    expect(materialHeadingOf(long).endsWith('…')).toBe(true);
+    expect(materialHeadingOf('').length).toBe(0);
+    expect(materialHeadingOf(null).length).toBe(0);
   });
 });

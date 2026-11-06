@@ -189,7 +189,7 @@ import {
   type UploadedMaterial,
 } from '@/api/materials';
 import { toast } from '@/utils/toast';
-import { looksLikeEnglishTitle, normalizeMaterialMarkdown } from '@/utils/materialText';
+import { looksLikeEnglishTitle, materialHeadingOf, normalizeMaterialMarkdown } from '@/utils/materialText';
 import { plainMessageHtml } from '@/utils/messageMarkdown';
 
 type FilterKey = 'all' | 'upload' | 'web';
@@ -237,7 +237,7 @@ const previewHtml = computed(() => {
 /** 目录只列中文条目：联网资料的英文抓取标题不是章节 */
 const previewTocTitles = computed(() =>
   (preview.item?.brief?.toc || [])
-    .map((entry) => String(entry?.title || '').trim())
+    .map((entry) => materialHeadingOf(String(entry?.title || '')))
     .filter((title) => !!title && !looksLikeEnglishTitle(title))
     .slice(0, 8)
 );
@@ -337,27 +337,37 @@ function metaOf(item: UploadedMaterial): string {
   const pages = item.structure?.pageCount ?? item.structure?.slideCount ?? item.structure?.sheetCount ?? 0;
   const parts = [formatBytes(item.size), `${item.charCount} 字`];
   if (pages > 0) parts.push(`${pages} 页/节`);
-  if (item.structure?.headingCount > 0) parts.push(`${item.structure.headingCount} 章`);
+  /* 章节数按「清洗后的章节名」算（2026-11-06 走查）：联网资料的 headingCount 把英文 H1
+     也算进去（实测该文档 =2），卡片却只显示中文那一章，读起来自相矛盾 */
+  const headingCount = headingListOf(item).length || item.structure?.headingCount || 0;
+  if (headingCount > 0) parts.push(`${headingCount} 章`);
   if (item.origin === 'web') parts.push('联网采集');
   return parts.join(' · ');
 }
 
-/* 章节名：跳过英文抓取标题（2026-11-06 走查 图5）。
-   联网资料的 #1 锚点是抓取页自带的英文 H1（Regulations Regarding…），
-   它被列成第一章时，中文资料的章节行整个读成「标题错位」。
-   中文锚点一个都没有时保留原样 —— 宁可显示英文，也不要显示空。 */
-function headingsOf(item: UploadedMaterial): string[] {
+/* 章节名清洗（2026-11-06 走查）：联网资料的锚点有两类脏数据——
+   ① #1 锚点是抓取页自带的英文 H1（Regulations Regarding…）；
+   ② 后续锚点标题是「第一章 总则 + 全部条文」的整行（实测 5752 字），
+      直接铺出来就是卡片上那条两行长文，还带裸露的 `*第一条*`。
+   两步处理后才是可读章节名：materialHeadingOf 切到章节名/首句并截断，
+   再滤掉英文。中文锚点一个都没有时保留原样——宁可显示英文，也不要显示空。 */
+function headingListOf(item: UploadedMaterial): string[] {
   const seen = new Set<string>();
   const headings: string[] = [];
   for (const anchor of item.anchors || []) {
-    const heading = String(anchor?.heading || '').trim();
-    if (!heading || heading === '（无标题）' || seen.has(heading)) continue;
+    const raw = String(anchor?.heading || '').trim();
+    if (!raw || raw === '（无标题）') continue;
+    const heading = materialHeadingOf(raw);
+    if (!heading || seen.has(heading)) continue;
     seen.add(heading);
     headings.push(heading);
-    if (headings.length >= 4) break;
   }
   const zh = headings.filter((heading) => !looksLikeEnglishTitle(heading));
   return zh.length ? zh : headings;
+}
+
+function headingsOf(item: UploadedMaterial): string[] {
+  return headingListOf(item).slice(0, 4);
 }
 
 function usageHint(item: UploadedMaterial): string {
