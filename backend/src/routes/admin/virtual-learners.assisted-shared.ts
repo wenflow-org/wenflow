@@ -176,9 +176,12 @@ export class AssistedOperationInFlightError extends Error {
  * 为什么进程内：与黑盒 `virtual_experiment_commands` 不同，这里**不新增 DB 表**（schema.prisma
  * 本轮未改）；同实例内的网关超时重试可达回放。跨实例不共享（多副本部署需换 DB 表，注释在此，不在本轮范围）。
  *
- * 设计：以 `(sessionId, kind, key)` 为键——kind 区分 step/teaching-step/auto-learning，避免同一把键
- * 在不同推进入口间误回放。命中且 kind 一致 → 回放上次结果（不重跑模型/不重推回合）；命中但 kind 不一致
- * → 409 `ASSISTED_IDEMPOTENCY_KEY_REUSED`。
+ * 设计：以 `(sessionId, kind, key)` 为键——kind 区分 step/teaching-step/auto-learning，同一把键
+ * 在不同推进入口间**互不相通**（各自独立账目，不会误回放）。
+ * 命中且请求体一致 → 回放上次结果（不重跑模型/不重推回合）；命中但**请求体不一致**
+ * → 409 `ASSISTED_IDEMPOTENCY_KEY_REUSED`（同一把键用于不同请求，必须换新键）。
+ * （复核更正：此前注释写「命中但 kind 不一致 → 409」，但 kind 已是复合键的一部分、该分支不可达；
+ * 真正触发 409 的是 requestHash 不等。）
  *
  * 记录必须设 **TTL + 容量上限**（避免重演无界增长）：
  *  - TTL：完成态 30 分钟内可回放，过期后同键再次进入会重新执行（与黑盒「失败/过期可重试」同口径）；

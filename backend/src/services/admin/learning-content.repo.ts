@@ -2,6 +2,8 @@ import prisma from '../../config/database';
 import type { Prisma } from '@prisma/client';
 import { buildNonVirtualUserWhere } from '../../utils/test-account';
 import { withTransaction } from '../../utils/with-transaction';
+import { logger } from '../../utils/logger';
+import { cleanupPathLearningData } from '../learning/path-learning-data-cleanup';
 
 /**
  * 学习内容治理仓储（routes/admin/learning-content.ts 的取数层）。
@@ -195,6 +197,11 @@ export function deleteLearningPath(id: string) {
     await tx.goal_conversations.updateMany({ where: { learningPathId: id }, data: { learningPathId: null } });
     await tx.teaching_sessions.updateMany({ where: { learningPathId: id }, data: { learningPathId: null } });
     await tx.virtual_sessions.updateMany({ where: { learningPathId: id }, data: { learningPathId: null } });
+    // #176-3：path 级学习事实随路径删除；用户级记忆保留（memory_traces 只置空 pathId）。
+    const cleaned = await cleanupPathLearningData(tx, id);
+    if (cleaned.evidenceDeleted || cleaned.projectionsDeleted || cleaned.tracesDetached || cleaned.pathEdgesDeleted) {
+      logger.info('[learning-content] 删除路径：已清理该路径的学习事实', { pathId: id, ...cleaned });
+    }
     return tx.learning_paths.delete({ where: { id } });
   }, { label: 'admin.learning-content.deleteLearningPath' });
 }
