@@ -201,13 +201,13 @@ export function analyzeW1(book: SkillsBook, activeRows: CoreHashParityActiveRow[
     ...missingActive.map((skillId) => ({
       code: 'W1' as const,
       skillId,
-      message: '户口簿登记但缺"当前生效"的 prompt 版本（有文件未同步）',
+      message: '技能注册表有登记，但缺少「当前生效」的 prompt 版本（有文件未同步）',
       hint: '执行编译 + 同步（prompts:compile-all + prompts:sync）',
     })),
     ...zombieActive.map((skillId) => ({
       code: 'W1' as const,
       skillId,
-      message: '数据库有"当前生效"版本但户口簿活跃集已无此技能（幽灵残留）',
+      message: '数据库有「当前生效」版本，但技能注册表里已没有这个技能（残留记录）',
       hint: '登记回户口簿或清理残留',
     })),
   ];
@@ -247,13 +247,13 @@ export function analyzeW2(book: SkillsBook, registrations: Array<{ name: string 
     ...missingRegistration.map((skillId) => ({
       code: 'W2' as const,
       skillId,
-      message: '户口簿登记但系统注册表无行（启动注册静默跳过）',
+      message: '技能注册表有登记，但系统注册表里没有对应行（启动注册时被跳过）',
       hint: '注册片段未落 skills/index.ts：补充注册后重启',
     })),
     ...zombieRegistration.map((name) => ({
       code: 'W2' as const,
       skillId: name,
-      message: '系统注册表行不在户口簿活跃集（幽灵残留，启动时会重载）',
+      message: '系统注册表里有这一行，但技能注册表里没有这个技能（残留记录，启动时会重载）',
       hint: '手工清理或纳入退役名单',
     })),
   ];
@@ -318,13 +318,13 @@ export function analyzeW3(
     ...stepWithoutBook.map((target) => ({
       code: 'W3' as const,
       skillId: target.split(' → ')[1],
-      message: `coordinator 定义 steps 引用 ${target} 不在户口簿活跃集`,
+      message: `coordinator 定义里的步骤引用了 ${target}，但技能注册表里没有它`,
       hint: '登记回 skills.yaml 或移除 definition steps 引用',
     })),
     ...bookWithoutStep.map((skillId) => ({
       code: 'W3' as const,
       skillId,
-      message: '户口簿 coordinator.steps 非空但对应 definition steps 无该 skill（未接线）',
+      message: '技能注册表声明了 coordinator.steps，但对应的 definition steps 里没有这个 skill（未接线）',
       hint: '在 coordinator definition.ts 补 steps 或改 notes 说明 service 侧接线',
     })),
   ];

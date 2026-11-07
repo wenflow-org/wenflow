@@ -93,11 +93,11 @@ function findBtn(wrapper: ReturnType<typeof mount>, text: string) {
   return b;
 }
 
-/** 「按 ID 定位」钮（2026-10-26：弹层只剩 Trace ID / 会话 ID 两个精确定位项，
+/** 「精确 ID」钮（2026-11-07 从独立浮层收进搜索框旁；2026-10-26 起弹层只有 Trace ID / 会话 ID 两项，
     节点与时间档已提上主行）：按文本开头精确认这颗 */
 function findFilterBtn(wrapper: ReturnType<typeof mount>) {
-  const b = wrapper.findAll('button').find((x) => x.text().trim().startsWith('按 ID 定位'));
-  if (!b) throw new Error('button not found: 按 ID 定位');
+  const b = wrapper.findAll('button').find((x) => x.text().trim().startsWith('精确 ID'));
+  if (!b) throw new Error('button not found: 精确 ID');
   return b;
 }
 
@@ -186,7 +186,7 @@ describe('ExecLogs 传统分页（方案 A）', () => {
     await findBtn(w, '下一页').trigger('click');
     await flushPromises();
     expect(liveLogsPage.value).toBe(2);
-    await chooseFilter(w as never, '状态', '失败');
+    await chooseFilter(w as never, '状态', '仅失败');
     await flushPromises();
     const last = h.reload.mock.calls.at(-1)!;
     expect(last[0]).toMatchObject({ status: 'error' });
@@ -221,7 +221,7 @@ describe('ExecLogs 传统分页（方案 A）', () => {
     await nextTick();
     await findBtn(w, '下一页').trigger('click');
     await flushPromises();
-    // Trace ID 收进「按 ID 定位」弹层（v-show 常驻 DOM，jsdom 直接可寻址）
+    // Trace ID 收进「精确 ID」弹层（v-show 常驻 DOM，jsdom 直接可寻址）
     const input = w.find<HTMLInputElement>('input[aria-label="链路 ID"]');
     await input.setValue('tr:abc');
     await input.trigger('keydown.enter');
@@ -229,6 +229,31 @@ describe('ExecLogs 传统分页（方案 A）', () => {
     const last = h.reload.mock.calls.at(-1)!;
     expect(last[0]).toMatchObject({ traceId: 'tr:abc' });
     expect(liveLogsPage.value).toBe(1);
+  });
+
+  /* 2026-11-07 用户「把『按 ID 定位』合并进搜索框」：搜索框得真的认 ID。
+     后端 keyword 只搜 input/output/error，搜 ID 必然 0 行，所以 ID 要转成 trace 检索参数。 */
+  it('搜索框粘链路 ID 回车：转成 trace 检索参数，且不再同时带关键词（否则两边 AND 必然 0 行）', async () => {
+    liveLogsTotal.value = 1;
+    liveLogsFiltered.value = [fakeSpan(1)];
+    const w = await mountExec();
+    await nextTick();
+    const input = w.find<HTMLInputElement>('.mk-card__head-right input');
+    // 库里 traceId 不带前缀：tr:/se: 剥掉
+    await input.setValue('tr:1793988614707-l9ta1th54');
+    await input.trigger('keydown.enter');
+    await flushPromises();
+    expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ traceId: '1793988614707-l9ta1th54' });
+    expect((h.reload.mock.calls.at(-1)![0] as Record<string, unknown>).keyword).toBeUndefined();
+    /* 没有 traceId 的记录在表格里显示为 log:<id>：保留前缀（后端按主键查）。
+       独立挂载：trace 参数已生效时不再被搜索框覆盖（那是「精确定位」不该被模糊输入打断）。 */
+    const w2 = await mountExec();
+    await nextTick();
+    const input2 = w2.find<HTMLInputElement>('.mk-card__head-right input');
+    await input2.setValue('log:acl_1794047896321_8yxjf5pf');
+    await input2.trigger('keydown.enter');
+    await flushPromises();
+    expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ traceId: 'log:acl_1794047896321_8yxjf5pf' });
   });
 
   it('P2 Tokens 列（列设置开启）：有传输层统计 → 展示「输入 x / 输出 y」实际值（tooltip 不暴露表名）', async () => {
@@ -340,7 +365,7 @@ describe('P0：testFilter 服务端化（修「只滤当前页」）与 URL 同�
     liveLogsFiltered.value = [fakeSpan(1)];
     const { w, router } = await mountExecAt('/admin/execution-logs');
     await nextTick();
-    await chooseFilter(w as never, '状态', '失败');
+    await chooseFilter(w as never, '状态', '仅失败');
     await flushPromises();
     expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ status: 'error' });
     expect(router.currentRoute.value.query.status).toBe('err');
@@ -419,8 +444,8 @@ describe('P1#24：执行日志筛选（15m/1h 自定义窗 / 失败 pill 单源 
     const { w } = await mountExecAt('/admin/execution-logs');
     await nextTick();
     expect(w.findAll('button').some((b) => b.text().includes('只看失败'))).toBe(false);
-    expect(filterOption(w as never, '状态', '失败')).toBeTruthy();
-    await chooseFilter(w as never, '状态', '失败');
+    expect(filterOption(w as never, '状态', '仅失败')).toBeTruthy();
+    await chooseFilter(w as never, '状态', '仅失败');
     await flushPromises();
     expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ status: 'error' });
     await chooseFilter(w as never, '状态', '全部');
@@ -518,20 +543,22 @@ describe('2026-10-04 状态条退役（ExecLogs）', () => {
     return w;
   }
 
-  it('护栏：页头无 .mk-status；KPI 带是列表页统一的三张 MkKpi 卡（成功率 / P50 / P99），来源在维度下拉', async () => {
+  it('护栏：页头无 .mk-status；KPI 带是列表页统一的四张 MkKpi 卡（调用总数 / 成功率 / P50 / P99），来源在维度下拉', async () => {
     liveLogStats.value = { total: 200, success: 190, timeout: 4, error: 6, canary: 5 };
     liveLogsTotal.value = 378;
     liveLogsFiltered.value = [fakeSpan(1), fakeSpan(2)];
     const w = await mountExecAt('/admin/execution-logs');
     await nextTick();
     expect(w.find('.mk-status').exists()).toBe(false);
-    // KPI 带：失败数不占卡（状态下拉的单选项与 KPI 不重复计数）
+    /* 2026-11-07 用户「同组三页指标卡数量不齐」：执行日志补上第 1 张「调用总数（含失败数）」，
+       与审计日志 / 健康中心统一为 4 列。 */
     expect(w.find('.mk-kpi-grid').exists()).toBe(true);
     expect(w.find('.mk-stat-strip').exists(), '页级读数不再用详情页的 MkStatStrip').toBe(false);
     const kpis = w.findAll('.mk-kpi');
-    expect(kpis.map((k) => k.find('.mk-kpi__label').text().trim())).toEqual(['成功率', '耗时 P50', '耗时 P99']);
-    expect(kpis[0].find('.mk-kpi__num').text()).toContain('95%');
-    expect(kpis[0].classes()).not.toContain('mk-kpi--bad');
+    expect(kpis.map((k) => k.find('.mk-kpi__label').text().trim())).toEqual(['调用总数', '成功率', '耗时 P50', '耗时 P99']);
+    expect(kpis[0].find('.mk-kpi__num').text()).toBe('200（失败 6）');
+    expect(kpis[1].find('.mk-kpi__num').text()).toContain('95%');
+    expect(kpis[1].classes()).not.toContain('mk-kpi--bad');
     // 2026-10-27：常驻 chip 组退场，来源是维度下拉（计数在 option 文案里）
     expect(w.find('.mk-card__head .mk-pills').exists()).toBe(false);
     expect(filterOptions(w as never, '来源')).toEqual(['全部来源', '仅测试调用（5）']);
@@ -546,7 +573,7 @@ describe('2026-10-04 状态条退役（ExecLogs）', () => {
     liveLogsFiltered.value = [fakeSpan(1), fakeSpan(2)];
     const w = await mountExecAt('/admin/execution-logs');
     await nextTick();
-    expect(w.findAll('.mk-kpi')[0].classes()).toContain('mk-kpi--bad');
+    expect(w.findAll('.mk-kpi')[1].classes()).toContain('mk-kpi--bad');
   });
 
   it('无日志时 KPI 卡常驻、数值为「—」（不隐藏也不给 0），成功率按 muted 不染色', async () => {
@@ -554,9 +581,10 @@ describe('2026-10-04 状态条退役（ExecLogs）', () => {
     await nextTick();
     expect(w.find('.mk-status').exists()).toBe(false);
     const kpis = w.findAll('.mk-kpi');
-    expect(kpis).toHaveLength(3);
-    expect(kpis.map((k) => k.find('.mk-kpi__num').text())).toEqual(['—', '—', '—']);
+    expect(kpis).toHaveLength(4);
+    expect(kpis.map((k) => k.find('.mk-kpi__num').text())).toEqual(['—', '—', '—', '—']);
     expect(kpis[0].classes()).toContain('mk-kpi--muted');
+    expect(kpis[1].classes()).toContain('mk-kpi--muted');
     // 来源维度常驻可点，计数未就绪时 option 不带数字（不把未知读成 0）
     expect(filterOptions(w as never, '来源')).toEqual(['全部来源', '仅测试调用']);
   });
