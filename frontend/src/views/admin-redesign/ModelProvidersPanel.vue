@@ -105,7 +105,7 @@
                2026-11-03：每行补一行参数摘要——行里必须看得见配了什么，
                否则「配置」仍是一枚通向未知的按钮。 -->
           <div v-if="selected.models.length" class="mpp-models__list">
-            <div v-for="m in selected.models" :key="m.id" class="mpp-model-row" :class="{ 'mpp-model-row--menu': openMenu === m.id }">
+            <div v-for="m in selected.models" :key="m.id" class="mpp-model-row">
               <div class="mpp-model-row__main">
                 <div class="mpp-model-row__idline">
                   <span class="mono mpp-model-row__id" :title="m.id">{{ m.id }}</span>
@@ -145,9 +145,17 @@
                 <span class="mk-badge mk-badge--warn mpp-label" :title="modelWarnings(m).join('\n')">⚠ {{ warningLabel(m) }}</span>
               </div>
               <div class="mpp-rowacts">
-                <!-- 第一枚是正题（配这个模型的生成参数 / 能力 / 限额 / 价格），
-                     第二枚是只读的连通性验证；删除低频且不可撤销，收进 ⋯ 菜单
-                     ——与公告、账号、虚拟学习者同一套行内操作层级（useRowMenu 同源）。 -->
+                <!-- 2026-11-07 用户「设置为默认从 ⋯ 里提出来」：行内四枚平铺，
+                     不用先点 ⋯ 再猜里面有什么。已是默认的那一行不渲染「设为默认」——
+                     它此刻无动作可做，禁用一枚不能点的链接只会制造噪音。 -->
+                <button
+                  v-if="!isDefaultModel(m)"
+                  type="button"
+                  class="mk-link"
+                  :disabled="busy || registry?.readOnly"
+                  title="没单独指定模型的 Skill 都走这个模型"
+                  @click="requestDefault(m)"
+                >设为默认</button>
                 <button
                   type="button"
                   class="mk-link"
@@ -156,37 +164,17 @@
                   @click="modelEditor?.openWith({ providerId: selected.id, model: m })"
                 >配置</button>
                 <button type="button" class="mk-link mk-link--hold mk-link--hold-test" :disabled="testingId === m.id" @click="testModel(selected, m.id)">{{ testingId === m.id ? '测试中…' : '测试' }}</button>
-                <div class="mk-menu">
-                  <button
-                    type="button"
-                    class="mk-menu__btn"
-                    aria-label="更多操作"
-                    aria-haspopup="menu"
-                    :aria-expanded="openMenu === m.id"
-                    @click.stop="toggleMenu(m.id)"
-                  >⋯</button>
-                  <div v-if="openMenu === m.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
-                    <!-- 平台默认（P0 2026-11-04；2026-11-04 用户「为什么还在区分默认推理和对话，没有这个了。
-                         所谓的推理，是取决于使用者开启的思考强度」→ 收成一枚）：
-                         平台只有**一个**默认模型；某个 Skill 要不要长思考，由它的思考模式 / 推理强度决定，
-                         不是换一个模型。低频但必做一次，所以收进 ⋯ 而不是行内第三枚链接。 -->
-                    <button
-                      type="button"
-                      class="mk-menu__item"
-                      role="menuitem"
-                      :disabled="busy || registry?.readOnly || isDefaultModel(m)"
-                      title="没单独指定模型的 Skill 都走这个模型"
-                      @click="requestDefault(m)"
-                    >设为默认</button>
-                    <button
-                      type="button"
-                      class="mk-menu__item mk-menu__item--danger"
-                      role="menuitem"
-                      :disabled="busy || registry?.readOnly"
-                      @click="removeModel(m)"
-                    >删除</button>
-                  </div>
-                </div>
+                <!-- 删除（不可撤销）与上面三枚拉开一段距离（准则 2 防误触）。
+                     默认模型直接置灰：后端必然会拒绝（默认指向已删模型 = 全平台路由落空），
+                     不该让用户在确认弹窗里走完一遍才被告知。 -->
+                <button
+                  type="button"
+                  class="mk-link mk-link--danger mpp-rowacts__danger"
+                  :disabled="busy || registry?.readOnly || isDefaultModel(m)"
+                  :title="isDefaultModel(m) ? '当前为默认模型，请先将其他模型设为默认后再删除' : '删除这个模型'"
+                  :aria-label="isDefaultModel(m) ? `删除 ${m.id}（当前为默认模型，需先改默认）` : `删除 ${m.id}`"
+                  @click="removeModel(m)"
+                >删除</button>
               </div>
             </div>
           </div>
@@ -206,20 +194,14 @@
       :loading="pullLoading"
       :error="pullError"
       :stale="pullStale"
-      :state-line="addStateLine"
-      :state-line-title="addStateLineTitle"
       :allow-manual="!registry?.readOnly"
-      @confirm="startCapabilityConfirm"
+      @confirm="addSelected"
       @manual="openManualAdd"
       @refetch="emit('fetchUpstream', 'refetch')"
-      @opened="emit('addOpened')"
-      @closed="emit('addClosed')"
     >
-      <!-- 2026-11-05 合并弹窗：连接段由宿主（持有地址 / 密钥 / 重试策略的那一侧）注入，
-           本面板只透传——它拿不到那条连接的编辑态，也不该拿。 -->
-      <template #conn><slot name="add-conn" /></template>
-      <template #conn-actions><slot name="add-conn-actions" /></template>
-    </PullModelsDialog>    <ModelCapabilityConfirmDialog ref="capabilityDialog" @confirm="addSelected" />
+      <!-- 2026-11-07 连接配置提回页顶（用户「提回去」）：本面板不再往弹窗里透传
+           连接段——一处事实一个控件，连接只属于页顶那张「服务连接」卡。 -->
+    </PullModelsDialog>
     <ModelEditorDialog ref="modelEditor" @saved="onModelSaved" />
   </section>
 </template>
@@ -230,10 +212,10 @@ import { adminApiConfigApi, adminModelProvidersApi } from '@/api/adminApi'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import ModelEditorDialog, { type ModelLike } from './ModelEditorDialog.vue'
-import ModelCapabilityConfirmDialog, { type ConfirmedModelCapability } from './ModelCapabilityConfirmDialog.vue'
 import PullModelsDialog from './PullModelsDialog.vue'
+import { inferModelCapabilities } from './modelCapabilityInference'
+import { normalizeEfforts } from './reasoningEfforts'
 import { askConfirm } from './useConfirm'
-import { useRowMenu } from './useRowMenu'
 import { errMsg } from './live'
 import { toast } from '@/utils/toast'
 
@@ -275,18 +257,12 @@ const props = withDefaults(defineProps<{
   pullError?: string
   /** 连接在清单之后被改过：清单过期，先重拉再选 */
   pullStale?: boolean
-  /** 弹窗标题下的一行状态（连接就绪 / 密钥已配） */
-  addStateLine?: string
-  /** 那一行的悬停全文 */
-  addStateLineTitle?: string
 }>(), {
   upstream: () => [],
   defaultModel: '',
   pullLoading: false,
   pullError: '',
   pullStale: false,
-  addStateLine: '',
-  addStateLineTitle: '',
 })
 
 const emit = defineEmits<{
@@ -300,10 +276,6 @@ const emit = defineEmits<{
       这条把原先「静默转手动录入」的死路补成一步可预期的动作。 */
   /** open = 打开弹窗时顺带拉的一次（只读）；refetch = 用户点「获取模型 / 重新获取」 */
   fetchUpstream: [source: 'open' | 'refetch']
-  /** 添加模型弹窗打开：宿主记一份连接快照（关窗时回滚未保存的地址 / 密钥 / 策略） */
-  addOpened: []
-  /** 添加模型弹窗关闭：宿主收起连接的编辑态（未保存的地址 / 密钥随之回滚） */
-  addClosed: []
   /** 设为平台默认（P0）：默认模型存 DB platform_api_configs，不在注册表文件里，
       所以本面板只发意图，由宿主（持有 live 配置）落盘。平台只有一个默认——推理与否
       由 Skill 的思考模式 / 推理强度决定，不由换模型决定。 */
@@ -325,11 +297,9 @@ const testingId = ref('')
 /** 单模型测试结果（按模型 id 落在行内，不再用卡上方一条全局结果条） */
 const testResults = ref<Record<string, { ok: boolean; latency: string; text: string }>>({})
 /** 行内 ⋯ 菜单（低频/危险操作）：与公告、账号、虚拟学习者同一套实现 */
-const { openMenu, toggleMenu, popStyle } = useRowMenu()
 
 const modelEditor = ref<InstanceType<typeof ModelEditorDialog> | null>(null)
 const pullDialog = ref<InstanceType<typeof PullModelsDialog> | null>(null)
-const capabilityDialog = ref<InstanceType<typeof ModelCapabilityConfirmDialog> | null>(null)
 
 const providers = computed(() => view.value?.providers ?? [])
 /** 目录文件状态（路径/可写/最近一次热重载错误）：模板里多处按它决定是否禁用编辑 */
@@ -451,7 +421,7 @@ function adopt(payload: unknown, warnings: string[]): void {
 async function removeModel(m: ModelLike): Promise<void> {
   const ok = await askConfirm({
     title: `删除模型「${m.id}」`,
-    message: '删除后它不再参与模型调用。若它正被默认模型或别名引用，系统会拦下并提示。',
+    message: '删除后它不再参与模型调用。若它仍被别名引用，系统会拦下并提示。',
     confirmText: '删除模型'
   })
   if (ok !== true) return
@@ -540,27 +510,45 @@ function openManualAdd(): void {
 }
 
 /**
- * 选择器确认（P1 2026-11-04）：不直接落盘，先过一道能力确认。
- * 此前是「按模型名推断后随写入落盘」（静默真相）——用户明确要求「让用户自己去勾选，
- * 因为他自己一定要清楚他的模型有什么能力」，所以推断降级为预填，核对过才算数。
+ * 勾选即引入（2026-11-07 用户「砍掉」二层「确认模型能力」弹窗）。
+ *
+ * 历史：2026-11-04 曾要求「让用户自己去勾选能力」，于是引入前多一层核对弹窗。
+ * 实测那次点击的收益远小于成本——弹窗本体是四列表格 + 一个手敲档位的输入框，
+ * 与「配置」里那套胶囊选择器还不是同一种语言；而真正要调能力的人本来就会去点「配置」。
+ * 现在按模型名预判的能力**直接入库**，一次点击完成引入；要精修就去行内「配置」。
+ *
+ * 风险已知并接受：supportsThinking / reasoningEfforts / vision 是运行时的硬闸门，
+ * 预判错了不会立刻报错（会在带图 / 带思考参数的调用上才暴露）。缓解手段是引入时的
+ * toast 明说「按模型名预判」，且每行都有「配置」可当场改。
  */
-function startCapabilityConfirm(ids: string[]): void {
-  if (!ids.length) return
-  capabilityDialog.value?.openWith(ids)
+function inferredCapabilities(ids: string[]): Array<{
+  id: string
+  supportsThinking: boolean
+  reasoningEfforts: string[]
+  vision: boolean
+}> {
+  return ids.map((id) => {
+    const inf = inferModelCapabilities(id)
+    return {
+      id,
+      supportsThinking: inf.supportsThinking,
+      // 没开思考的模型不该带着档位落盘（后端会拒）
+      reasoningEfforts: inf.supportsThinking ? normalizeEfforts(inf.reasoningEfforts) : [],
+      vision: inf.vision,
+    }
+  })
 }
 
-/**
- * 能力确认后的批量引入：写的是**用户核对过的**能力值，不再是推断结果。
- * 不再逐个弹配置框——勾完即可在列表里直接测试。
- */
-async function addSelected(models: ConfirmedModelCapability[]): Promise<void> {
-  if (!selected.value || !models.length) return
+/** 批量引入：能力按模型名预判后直接写入，不再有第二层确认 */
+async function addSelected(ids: string[]): Promise<void> {
+  if (!selected.value || !ids.length) return
+  const models = inferredCapabilities(ids)
   busy.value = true
   actionError.value = ''
   try {
     const res = await adminModelProvidersApi.addModels(selected.value.id, models)
     adopt(res?.data, res?.data?.warnings ?? [])
-    toast.success(`已引入 ${models.length} 个模型`)
+    toast.success(`已引入 ${models.length} 个模型（能力按模型名预判，可在「配置」里调整）`)
   } catch (e) {
     actionError.value = errMsg(e)
   } finally {
@@ -643,7 +631,6 @@ defineExpose({ refresh, openPull, openHostPull, openAdd: onPullAdd })
 .mpp-model-row:last-child { border-bottom: 0; }
 /* 菜单打开时给所属行留底（2026-11-02 评审）：菜单浮在行与行之间，
    没有行高亮就分不清它是从哪一行的 ⋯ 打开的 */
-.mpp-model-row--menu { background: var(--mk-table-row-hover-bg); }
 .mpp-model-row__main { display: grid; gap: 3px; min-width: 0; flex: 1 1 auto; }
 .mpp-model-row__idline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
 /* 名称列定宽：能力胶囊因此各行同一起点，不再随模型名长短而参差（2026-11-03 评审）。
@@ -676,5 +663,7 @@ defineExpose({ refresh, openPull, openHostPull, openAdd: onPullAdd })
    （与 .mk-btn--primary 同款坑，见 mk-primitives.css:1631）。 */
 .mpp-default-chip { background: var(--mk-blue-fill, #2f6ae0); color: var(--mk-on-fill); }
 .mpp-rowacts { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+/* 删除与上面三枚之间多留一段空白：不可撤销动作不贴着高频正向动作放（准则 2 防误触） */
+.mpp-rowacts__danger { margin-left: 12px; }
 .mpp-empty { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 </style>

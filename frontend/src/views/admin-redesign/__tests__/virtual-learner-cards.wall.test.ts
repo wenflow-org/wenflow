@@ -278,11 +278,14 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     }));
     const w = await mountPage();
     const chips = w.findAll('.vlc-card__tags .mk-badge');
-    // 2026-10-24 用户「preset:… 是无意义信息，要加就换点数据」：枚举转中文，内部标记全部撤掉
-    expect(chips.map((c) => c.text())).toEqual(['学习', '考试备战']);
+    /* 2026-11-07：来源徽标从卡头挪到卡脚这一行（「合成 / 预置」与档位、卡号同一行底栏），
+       所以这里第一枚是来源，后面才是卡标签。 */
+    expect(chips.map((c) => c.text())).toEqual(['预置', '学习', '考试备战']);
     // 2026-10-26：标签不再挂「场景类型 / 目标类型」注释型 title
-    expect(chips[0].attributes('title')).toBeUndefined();
+    // （首枚是来源徽标，它自带来源释义的 title；卡标签在它之后）
+    expect(chips[0].text()).toBe('预置');
     expect(chips[1].attributes('title')).toBeUndefined();
+    expect(chips[2].attributes('title')).toBeUndefined();
     expect(w.find('.vlc-card__tags').text()).not.toContain('preset:');
     expect(w.find('.vlc-card__tags').text()).not.toContain('hash:');
     expect(w.find('.vlc-card__more').exists()).toBe(false);
@@ -302,7 +305,8 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
       },
     }));
     const w = await mountPage();
-    expect(w.findAll('.vlc-card__tags .mk-badge').map((c) => c.text())).toEqual(['数学', '高一']);
+    // 首枚是来源（2026-11-07 移入底栏），其后是卡自带的标签（最多两枚）
+    expect(w.findAll('.vlc-card__tags .mk-badge').map((c) => c.text())).toEqual(['web', '数学', '高一']);
     w.unmount();
   });
 
