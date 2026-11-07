@@ -140,11 +140,14 @@ describe('AI 声明只有一个出口（输入框正下方）', () => {
     }
   });
 
-  it('全模板只剩两处 AiContentNote：会话态 under-hint + 入口态页脚', () => {
+  it('全模板只剩两处 AiContentNote：会话态 under-hint + 入口态输入框提示行', () => {
     const all = nodes(root as TplNode, (n) => n.tag === 'AiContentNote');
     expect(all.length, '声明出口应恰好两处（会话态 1 + 入口态 1）').toBe(2);
     expect(source).toContain('class="chat__under-hint"');
-    expect(source).toContain('class="goal__ai-note"');
+    /* 2026-11-07 走查 图2：入口态原先另有一份沉在 .goal__foot（margin-top:auto 贴视口最底），
+       1440p 下离输入框几百像素；现并入输入框下方那行（与「Enter 发送 · Shift+Enter 换行」同行）。 */
+    expect(source).toContain('class="composer__hint"');
+    expect(source, '入口态页脚那份声明应已撤除').not.toContain('goal__ai-note');
   });
 });
 

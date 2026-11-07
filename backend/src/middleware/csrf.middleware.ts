@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { randomBytes } from 'crypto';
 import { logger } from '../utils/logger';
-import { parseAllowedOrigins } from '../config/allowed-origins';
+import { parseAllowedOrigins, isSameOriginRequest } from '../config/allowed-origins';
 
 const normalizeOrigin = (value?: string): string => {
   if (!value) {
@@ -47,6 +47,15 @@ export const csrfMiddleware = (
       return rejectCsrf(res, req, 'missing_origin_and_referer', { message: '缺少请求来源信息' });
     }
 
+    /* 同一台机器换设备访问（2026-11-07 用户报「局域网访问变成了请求来源不被允许」）：
+       Origin 与本次请求的 Host 完全一致、且 Host 是本机/私网时，属同源请求，直接放行。
+       白名单只装得下枚举出来的 IP:端口；局域网 / DHCP 换号后名单立刻过期，
+       表现为页面能开、一登录就 403。判定与安全边界见 isSameOriginRequest 注释。 */
+    if (isSameOriginRequest(origin || undefined, req.headers.host)) {
+      next();
+      return;
+    }
+
     if (origin && !allowedOrigins.includes(origin)) {
       return rejectCsrf(res, req, 'origin_not_allowed', { message: '请求来源不被允许', origin, allowedOrigins });
     }
@@ -54,7 +63,7 @@ export const csrfMiddleware = (
     if (referer) {
       try {
         const refererOrigin = normalizeOrigin(new URL(referer).origin);
-        if (!allowedOrigins.includes(refererOrigin)) {
+        if (!allowedOrigins.includes(refererOrigin) && !isSameOriginRequest(refererOrigin, req.headers.host)) {
           return rejectCsrf(res, req, 'referer_origin_not_allowed', { message: '请求来源不被允许', refererOrigin, allowedOrigins });
         }
       } catch {

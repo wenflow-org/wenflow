@@ -19,7 +19,7 @@
         </div>
 
         <aside class="hn-stage" aria-label="产品示意" ref="stageEl">
-          <div class="hn-stage__chat" :class="{ 'is-fading': phase === 7 }">
+          <div class="hn-stage__chat">
             <div class="hn-stage__bar">
               <span>目标规划</span>
               <span class="hn-chip">澄清问题</span>
@@ -217,9 +217,15 @@ function syncAuthState() {
   loggedIn.value = hasUserSession()
 }
 
-/* Hero 对话演示：用户提问 → 正在输入 → AI 回复 → 选中标签 → 高亮结果 → 淡出重播。
+/* Hero 对话演示：用户提问 → 正在输入 → AI 回复 → 选中标签 → 高亮结果，然后停在结果上。
    phase 99 = 全部静态可见（reduced-motion 时的兜底，不跑时间轴）。
-   phase 7 为淡出过渡（整卡上浮淡出），随后回到 phase 0 重播。 */
+
+   2026-11-07 用户反馈「首页这个地方循环播放了」：原先播完两轮会整卡淡出（phase 7）
+   再回到 phase 0 重播，淡出那一帧整张卡变成半透明灰（截图里就是这一帧）——落地页
+   反复闪一下再重来，读起来像卡住重启，而不是演示。现在只播一遍并停在完成态：
+   - 去掉 phase 7 淡出与回 0 的循环项（不再有半透明帧）；
+   - 时间轴跑完即停（demoDone），IntersectionObserver 重进视口也不再重播；
+   - 观察视口只为「进视口才开始播」（首屏以下的访客滑动到舞台时才启动），不是循环开关。 */
 const phase = ref(
   typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
     ? 99
@@ -232,16 +238,14 @@ const demoTimeline: Array<[number, number]> = [
   [3, 600],   // AI 回复
   [4, 550],   // 选中标签
   [5, 450],   // 高亮结果
-  [6, 1300],  // 停留
-  [7, 300],   // 整卡淡出
-  [0, 250]    // 回到起点，循环
+  [6, 1300]   // 停留（终态，不再淡出/重播）
 ]
 
 const stageEl = ref<HTMLElement | null>(null)
 let demoTimer: ReturnType<typeof setTimeout> | null = null
 let demoIndex = 0
-let demoLoops = 0
-let demoVisible = true
+let demoDone = false
+let demoVisible = false
 let demoObserver: IntersectionObserver | null = null
 
 function stopDemo() {
@@ -252,16 +256,13 @@ function stopDemo() {
 }
 
 function runDemoStep() {
-  if (!demoVisible || phase.value === 99) return
-  const [nextPhase, delay] = demoTimeline[demoIndex % demoTimeline.length]
-  demoIndex++
-  // 循环上限：播完 2 轮后停在完成态（phase 5 高亮结果），不再重播（4K 高视口下 hero 常驻视口，
-  // 无限循环会造成持续动画干扰）
-  if (nextPhase === 0) demoLoops++
-  if (demoLoops >= 2 && nextPhase > 5) {
-    phase.value = 5
+  if (!demoVisible || demoDone || phase.value === 99) return
+  if (demoIndex >= demoTimeline.length) {
+    demoDone = true
     return
   }
+  const [nextPhase, delay] = demoTimeline[demoIndex]
+  demoIndex++
   demoTimer = setTimeout(() => {
     if (!demoVisible) return
     phase.value = nextPhase
@@ -273,16 +274,15 @@ onMounted(() => {
   syncAuthState()
   window.addEventListener('storage', syncAuthState)
   if (phase.value === 99) return
-  // 舞台离开视口时暂停时间轴，回到视口再继续，避免后台空转
+  /* 只在舞台首次进入视口时启动时间轴；播完即停（不重播，见上方注释）。
+     离屏期间不必暂停——时间轴最多 4 秒就跑完，没有常驻空转。 */
   demoObserver = new IntersectionObserver(
     (entries) => {
-      const visible = entries.some((e) => e.isIntersecting)
-      demoVisible = visible
-      if (visible) {
-        runDemoStep()
-      } else {
-        stopDemo()
-      }
+      if (!entries.some((e) => e.isIntersecting)) return
+      demoVisible = true
+      runDemoStep()
+      // 时间轴只走一遍：进视口一次后就不再需要观察
+      demoObserver?.disconnect()
     },
     { threshold: 0.15 }
   )
@@ -498,12 +498,10 @@ main {
   padding: 18px;
 }
 .hn-stage__chat {
+  /* 静态倾斜即可：卡本身不再变透明度/位移（is-fading 与它的 opacity/transform 过渡
+     一并退役，2026-11-07 用户反馈「循环播放」——截图那张半透明灰卡就是过渡帧）。
+     内部气泡的进出仍由 .hn-bubble 自己的过渡负责。 */
   transform: rotate(-1deg);
-  transition: opacity 0.5s var(--ease), transform 0.5s var(--ease);
-}
-.hn-stage__chat.is-fading {
-  opacity: 0;
-  transform: rotate(-1deg) translateY(-14px);
 }
 .hn-stage__desk {
   transform: rotate(1.2deg) translateX(18px);

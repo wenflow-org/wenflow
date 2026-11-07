@@ -71,7 +71,7 @@
 
 ### 2.5 三块模型的现状：只有「对话」是「拉取 + 勾选」，向量/重排是「手填 + 固定 bge」
 
-- 对话：`获取模型` → `POST /admin/api-config/test` 拉 `/v1/models`（`apiConfig.service.ts:236-249`，`normalizeBase` 补 `/v1/models`），成功后**顺便把连接落盘**再开挑选弹窗（`ApiConfig.vue` 的 `fetchModels`）。挑选弹窗是**一张平铺清单**（2026-11-04 起，用户「我们不做模型类型区分」「能力特性我们也不知道吧」）：搜索 + 清单（模型标识 / 状态 / 测试），已添加的置灰并沉到末尾，不再有「可引入 / 已添加 / 非对话模型」页签，也不再按模型名猜能力列——能力在引入后的「确认模型能力」里由运营勾（`PullModelsDialog.vue`）。
+- 对话：`获取模型` → `POST /admin/api-config/test` 拉 `/v1/models`（`apiConfig.service.ts:236-249`，`normalizeBase` 补 `/v1/models`），成功后**顺便把连接落盘**再开挑选弹窗（`ApiConfig.vue` 的 `fetchModels`）。挑选弹窗是**一张平铺清单**（2026-11-04 起，用户「我们不做模型类型区分」「能力特性我们也不知道吧」）：搜索 + 清单（模型标识 / 状态 / 测试），已添加的置灰并沉到末尾，不再有「可引入 / 已添加 / 非对话模型」页签，也不再按模型名猜能力列——能力改为引入时按模型名预判直接入库（2026-11-07 撤掉了「确认模型能力」核对层，要改去行内「配置」）。
 - 向量/重排：`InfraModelsPanel.vue` 两张单例卡，**没有「拉取」**，模型 ID 手填，默认 `BAAI/bge-m3` / `BAAI/bge-reranker-v2-m3`（`infra-config.ts:46-47`），provider 只支持 `bge`（`infra-config.ts:143-145`）。
 - ⇒ 用户要的「三块各自独立拉取」，现状只实现了 1/3。**这是本设计要补的第二块（P1）。**
 
@@ -233,7 +233,7 @@
 | 阶段 | 内容 | 涉及文件 |
 |---|---|---|
 | **P0（阻塞）✅ 2026-11-04 已实现** | 恢复「平台默认模型」钉选：模型行 ⋯ 菜单出「设为默认」（2026-11-04 稍后撤掉「（对话）/（推理）」两档，只留一档），行内出「默认」徽章，工具栏出「默认：<id>」（缺省时琥珀警示）；**首个挂载模型自动成为默认**（只在默认为空时兜底，已有默认绝不改写）；删掉当前默认时自动改指下一个可用模型。写 `platform_api_configs.defaultModel`（`liveSetDefaultModel` 走既有 `PUT /api/admin/api-config`；`defaultReasoningModel` 同批下架）。实测：把默认清空 → 刷新页面 → 自动种回 `deepseek-v4.1-flash`；行菜单改指 `agnes-3.0-flash` → 徽章与读数同步；连接有未保存改动时挡下设默认 | `ApiConfig.vue`、`ModelProvidersPanel.vue`、`live.ts` |
-| **P1（能力确认）✅ 2026-11-04 已实现** | 能力从「按模型名推断后静默落盘」改为「推断只预填 + 用户核对确认」（用户「让用户自己去勾选，因为他自己一定要清楚他的模型有什么能力」）。批量添加走 `PullModelsDialog → ModelCapabilityConfirmDialog`：逐模型列出 思考 / 推理强度 / 视觉 三项（强度那一格按空格或逗号填挡位词，2026-11-05 从固定五档勾选放开），预填推断值、可改，确认后才写入注册表；手动录入仍走模型编辑器的能力区（本来就是用户自己勾） | `ModelProvidersPanel.vue`、新增 `ModelCapabilityConfirmDialog.vue` |
+| **P1（能力确认）⛔ 2026-11-07 已撤（用户「砍掉」）**：勾完「确认引入」直接按模型名预判入库，要精修去行内「配置」——一次额外点击的收益远小于成本（四列表格 + 手敲档位，且与配置里的胶囊选择器不是同一套语言）。以下是撤除前的实现记录 | 能力从「按模型名推断后静默落盘」改为「推断只预填 + 用户核对确认」（用户「让用户自己去勾选，因为他自己一定要清楚他的模型有什么能力」）。批量添加走 `PullModelsDialog → ModelCapabilityConfirmDialog`：逐模型列出 思考 / 推理强度 / 视觉 三项（强度那一格按空格或逗号填挡位词，2026-11-05 从固定五档勾选放开），预填推断值、可改，确认后才写入注册表；手动录入仍走模型编辑器的能力区（本来就是用户自己勾） | `ModelProvidersPanel.vue`、新增 `ModelCapabilityConfirmDialog.vue` |
 | **P1（向量/重排拉取）✅ 2026-11-04 已实现（2026-11-05 撤销弹层内入口，拉取只从卡头「＋ 添加模型」走）** | 向量 / 重排卡补「拉取」：配置弹层的模型 ID 旁加「拉取」，用这条能力的连接拉一份上游 `/v1/models`，按用途过滤（与对话侧同一套 `inferModelCapabilities`）后点选填入；独立服务可带草稿连接直接拉（不必先保存一次），但换地址后留空密钥一律拒绝、不回退旧密钥。新增 `POST /admin/infra-models/pull` + 纯函数 `resolveInfraModelsBaseUrl`（从 `…/v1/embeddings` 这类带类型路径的端点反推 base） | 新增 `routes/admin/__tests__/infra-models.pull.test.ts`（真实 express + fetch，6 例）；`InfraModelsPanel.vue`、`infra-models.ts`、`infra-config.ts`、`adminApi.ts` |
 | **P2（部署脚本）✅ 2026-11-04 已实现** | 部署脚本闭环：`setup-env.ps1` / `docker-start.sh` 的默认模型 id 从**已下线**的 `deepseek-v4-flash` / `deepseek-v4-pro` 改为 `deepseek-v4.1-flash`（写入 `.env` 后启动会命中「已下线」归一化）；两个脚本与 `.env.production.example` 补 embedding / rerank 三个变量（**留空即不启用语义层，不影响启动**，只作首次部署种子与回落） | `setup-env.ps1`、`docker-start.sh`、`backend/.env.production.example` |
 | **P2（插件）✅ 无需改造（2026-11-04 复核）** | 四个插件通道**都已经**是「有序 provider 链 = 降级」：配置面 `orders` 按插件分通道持久化、界面可拖「主用→备用」，运行面四处服务都按链逐个尝试、失败自动降级。初稿把它记成「decision/image 缺多 provider 降级」是**错的**，已在 §2.8 更正。剩下的是文案说清（决策默认链只放一家、生图只有一个已实现 provider） | —（如需文案，`Addons.vue` + `capabilityCatalog.ts`） |

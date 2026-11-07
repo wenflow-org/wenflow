@@ -94,19 +94,17 @@ const onCapabilityTab = computed(() => tabs.some((t) => route.path === t.to))
 
 .uc.v2-page > main.uc__main {
   flex: 1;
-  width: min(1080px, calc(100% - 40px));
+  /* 与全站标准看板同一档（2026-11-07 全站巡检 准则1 + DPI 缩放专项）：
+     此前 1080 封顶、1680 才拓 1360，1536×864（1080p 开 125%）下只占 70%，
+     1280 下 84%。改成连续档：笔记本用满 92vw，大屏封顶 --vp-container
+     （1360 基准；≥2000 抬 1520、≥2800 抬 1680。定义在 v2.css，全局加载，
+     本页不重复写数字——上限只改一处）。 */
+  width: min(92vw, var(--vp-container));
   margin: 0 auto;
   padding: 22px 0 40px;
   display: grid;
   gap: 16px;
   align-content: start;
-}
-
-/* 与 v2 页面一致：≥1680px 加宽 */
-@media (min-width: 1680px) {
-  .uc.v2-page > main.uc__main {
-    width: min(1360px, calc(100% - 40px));
-  }
 }
 
 /* ===== 页头分段器：fit-content 左对齐（2026-11-06 走查改档） ===== */

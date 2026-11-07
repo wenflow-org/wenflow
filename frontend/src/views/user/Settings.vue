@@ -1101,15 +1101,14 @@ const handleDeactivate = async () => {
 }
 
 /* ==================== 我的 MCP 工具 ==================== */
+/* 空列表不再画虚线占位框（2026-11-07 全站巡检 准则4）：单句空态套 18px 内衬 + 虚线边框
+   实测 57px，越过「空态不高于 56px」的上限，也把一句事实读成一块面板。
+   压成单行轻量提示，与「没有配置」这件事的份量相称。 */
 .mcp-empty {
   margin: 0;
-  padding: 18px;
-  border: 1px dashed var(--line, #e3e9f4);
-  border-radius: 12px;
-  background: var(--canvas, #f3f6fb);
+  padding: 0;
   font-size: 13px;
-  color: var(--muted, #5b6577);
-  text-align: center;
+  color: var(--faint, #8a93a3);
 }
 
 .mcp-list {

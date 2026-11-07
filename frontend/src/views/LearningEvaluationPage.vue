@@ -1036,8 +1036,11 @@ onUnmounted(() => {
 }
 
 .evaluation-shell {
-  width: calc(100% - 64px);
-  max-width: 1080px;
+  /* 与全站标准看板同一档（2026-11-07 全站巡检 准则1）：此前 1080 封顶，
+     1280 占 84%、1536 只占 70%；1500+ 才拓到 1240，中间是空档。
+     上限走全局 --vp-container（1360 基准；≥2000 抬 1480、≥2800 抬 1560），
+     不在本组件重复写数字。 */
+  width: min(92vw, var(--vp-container));
   margin: 0 auto;
   display: grid;
   /* minmax(0,1fr)：与下方 transcript-list 同因——auto 轨道会被宽表格的 max-content
@@ -1046,11 +1049,10 @@ onUnmounted(() => {
   gap: 20px;
 }
 
-/* 宽屏（≥1500px）：1080 报告在 2K/4K 下两侧大片空白、信息密度骤降
-   （手动流程问题测试 2026-09-26）；只加宽报告，目录在更宽的断点独立定位。 */
+/* 宽屏（≥1500px）：报告已在 1360 封顶，只把块间距松一档
+   （原 1080→1240 的加宽由上面的弹性档接管）。 */
 @media (min-width: 1500px) {
   .evaluation-shell {
-    max-width: 1240px;
     gap: 24px;
   }
 }
