@@ -2,7 +2,9 @@
   <div class="dash v2-page">
     <V2Nav />
 
-    <main class="dash__main">
+    <!-- dash--empty：新手态（无任何路径）。仅用于 PC 双栏两卡等高（见文件末 ≥1024 档），
+         有数据的两三卡堆叠仍按内容定高，不跟着拉伸。 -->
+    <main class="dash__main" :class="{ 'dash--empty': pageState === 'empty' }">
       <!-- 问候栏（headline/subtitle 由学习者 skill 回填）：原型两行结构（newui wf-greet）——
            21px 问候独占一行 + 下方 12.5px 日期行；副标是 Vue 多出的功能，降级为日期行内的
            行内续写（不新增第三行），整行排不下时靠日期行的省略号截断 -->
@@ -178,12 +180,21 @@
           <!-- 新手态：引导卡（占满双列——原右侧「还没有学习路径」占位卡与这里同屏
                说两遍同一件事，走查 2026-09-27 冗余项，合并为一处，行动留给本卡） -->
           <section v-else class="card action action--empty">
-            <!-- 图标盘（原型 wf-empty__art 形态）：66px 圆角盘 + 30px 图标，卡片其余结构保留 -->
-            <span class="action__art" aria-hidden="true"><Box :size="30" :stroke-width="1.6" /></span>
-            <h2 class="action__title">用 2 分钟，理出一条能执行的路径</h2>
-            <p class="action__desc">{{ guidanceEmptyText }}</p>
+            <!-- 图标盘与标题同行（2026-11-07 用户走查 图3/图4）：原 66px 图标盘独占一整行，
+                 右侧 90% 全空，卡片顶部白吃 64px。收到 40px 挪到标题左侧，与「标题 + 副标题」
+                 组成一行（flex items-center gap-3 那一档）。 -->
+            <div class="action__head">
+              <span class="action__art" aria-hidden="true"><Box :size="20" :stroke-width="1.7" /></span>
+              <div class="action__head-text">
+                <h2 class="action__title">用 2 分钟，理出一条能执行的路径</h2>
+                <p class="action__desc">{{ guidanceEmptyText }}</p>
+              </div>
+            </div>
             <div class="action__examples">
-              <router-link v-for="e in examples" :key="e.text" :to="{ path: '/goal-conversation', query: { seed: e.seed } }" class="example">{{ e.text }}</router-link>
+              <router-link v-for="e in examples" :key="e.text" :to="{ path: '/goal-conversation', query: { seed: e.seed } }" class="example">
+                <span>{{ e.text }}</span>
+                <ArrowUpRight :size="13" :stroke-width="2.2" aria-hidden="true" />
+              </router-link>
             </div>
             <div class="action__footer">
               <router-link to="/goal-conversation" class="btn-primary">开始规划目标</router-link>
@@ -283,7 +294,12 @@
               <button type="button" v-if="hasAnyMinutes" class="link-muted" @click="monthOpen = !monthOpen">{{ monthOpen ? '收起整月 ▴' : '展开整月 ▾' }}</button>
             </div>
             <div v-if="sourceFailed.week" class="dash__source-fail">学习记录加载失败，节奏暂不可用。<button type="button" class="dash__source-retry" @click="loadAll">重试</button></div>
-            <div v-else-if="hasAnyMinutes" class="week__grid">
+            <!-- 7 天打卡条常驻（2026-11-07 用户走查 图3/图4）：原先 0 分钟时整条日历被
+                 换成「完成第一次学习后，这里会显示每日时长」的虚线空框——今天依然是
+                 11月7日周六，把日历藏起来只让首页像个没数据的毛坯房，还让 PC 双栏的
+                 左卡高、右卡矮、底边不齐。现在永远渲染真实日历：无记录的日子显示「—」，
+                 今天显示「待点亮」并带蓝色描边，一眼就能看出「这一格在等我点亮」。 -->
+            <div v-else class="week__grid">
               <button
                 v-for="d in weekDays"
                 :key="d.date"
@@ -294,12 +310,9 @@
               >
                 <span class="day__label">{{ d.weekLabel }}</span>
                 <span class="day__cell" :class="`day__cell--h${d.level}`">{{ d.dayNum }}</span>
-                <span class="day__min">{{ d.minutes ? d.minutes + '分' : '—' }}</span>
+                <span class="day__min">{{ d.minutes ? d.minutes + '分' : (d.isToday ? '待点亮' : '—') }}</span>
               </button>
             </div>
-            <!-- 空态给出口（R6D）：照抄今日行动卡的开始学习入口逻辑（todayTask 有则 goLearn，
-                 没有则去路径页），文字链复用 .link-muted（同「数据源失败 + 重试」的行内先例） -->
-            <div v-else class="week__empty">完成第一次学习后，这里会显示每日时长。 <button v-if="todayTask" type="button" class="link-muted" @click="goLearn">开始学习</button><router-link v-else to="/learning-paths" class="link-muted">查看全部路径</router-link></div>
             <div v-if="hasAnyMinutes" class="week__stats">
               <span>本周 <b>{{ weekTotal }}</b> 分钟</span>
               <span><b>{{ weekActiveDays }}</b> 天有学习</span>
@@ -427,7 +440,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { Box, Flame, Medal, Sparkles } from 'lucide-vue-next';
+import { Box, Flame, Medal, Sparkles, ArrowUpRight } from 'lucide-vue-next';
 import request from '@/utils/api';
 import { learningAPI } from '@/api/learning';
 import { toast } from '@/utils/toast';
@@ -489,10 +502,14 @@ const dateText = computed(() => {
   return `${d.getMonth() + 1}月${d.getDate()}日 ${['周日', '周一', '周二', '周三', '周四', '周五', '周六'][d.getDay()]}`;
 });
 
+/* 起步示例（2026-11-07 用户要求换掉与物理世界发生交互的场景）：
+   「练口语 / 乐器 / 手工 / 画画 / 面试开口」这类目标的练习场在现实里（要张嘴、动手、当面练），
+   本产品能给的是讲解、反馈与路径——教不了、也验不了，列出来等于承诺做不到的事。
+   换成整条链都在屏幕内完成的三类：写脚本、查数据、整理信息。 */
 const examples = [
   { text: '用 Python 自动化处理 Excel 报表', seed: '我想用 Python 自动化处理 Excel 报表，每天能节省时间' },
-  { text: '提升职场沟通和表达能力', seed: '我想提升职场沟通和表达能力，在工作里更从容' },
-  { text: '用 AI 工具做自媒体副业', seed: '我想用 AI 工具做自媒体副业，提高内容创作效率' },
+  { text: '用 SQL 自己查数，不再等数据组', seed: '我想学会用 SQL 自己查数，不再每次都等数据组排期' },
+  { text: '用 AI 把会议记录整理成行动项', seed: '我想用 AI 把零散的会议记录整理成带责任人和截止时间的行动项' },
 ];
 
 /* ================= 数据加载 ================= */
@@ -1465,10 +1482,16 @@ onMounted(loadAll);
   padding: 16px;
   gap: 9px;
 }
-/* 空态图标盘（原型 wf-empty__art 1376-1381）：66px 圆角盘 + 30px 图标 */
+/* 空态图标盘 + 标题同行（2026-11-07 用户走查）：原 66px 盘独占一行、30px 图标，
+   卡片顶部 64px 只有一块灰方块。收到 40px 与标题并排。
+   圆角用 12px 而不是 10px：本仓圆角阶梯只有 4/6/8/12/16/999（规则 14 棘轮），10px 会当场
+   记一枚档外值。 */
+.action__head { display: flex; align-items: center; gap: 12px; }
+.action__head-text { display: grid; gap: 4px; min-width: 0; }
 .action__art {
-  width: 66px; height: 66px;
-  border-radius: 16px; /* 圆角阶梯：空态图标底 */
+  width: 40px; height: 40px;
+  flex: none;
+  border-radius: 12px; /* 圆角阶梯：图标底（40px 盘收一档） */
   display: grid; place-items: center;
   background: color-mix(in srgb, var(--surface) 92%, var(--ink));
   color: var(--blue);
@@ -1605,14 +1628,23 @@ onMounted(loadAll);
 .action__today-bar { flex: 1; min-width: 0; height: 6px; border-radius: 999px; background: color-mix(in srgb, var(--line) 55%, transparent); overflow: hidden; }
 .action__today-bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); }
 .action__examples { display: flex; gap: 8px; flex-wrap: wrap; }
-/* 快捷示例（空态卡的点击建议）：与内嵌按钮同尺寸语言，不再是全圆胶囊 */
+/* 快捷示例（空态卡的点击建议）：2026-11-07 用户走查两处——
+   ① 虚线边框（dashed）在 UI 语言里是「未添加 / 拖拽上传占位」，不是「可点的快捷入口」，
+      改实线细边 + 淡蓝底；
+   ② 高度 32 → 36：check-mobile-spec 的 lt36 预算恒为 0，芯片类走本文件登记的
+      「紧凑芯片 36-40」档（v2.css 的移动端 44px 兜底只覆盖 .btn-primary/.btn-ghost，
+      明确不含芯片），32px 在新手态手机上会当场越阈。
+   行尾补一个 ↗：说明「点了会带着这句话去开始规划」。 */
 .example {
-  display: inline-flex; align-items: center;
-  height: 32px; padding: 0 12px; border-radius: var(--mk-radius-md);
-  border: 1px dashed color-mix(in srgb, var(--blue) 40%, transparent);
-  background: color-mix(in srgb, var(--blue) 5%, transparent);
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 36px; padding: 0 12px; border-radius: var(--mk-radius-md);
+  border: 1px solid color-mix(in srgb, var(--blue) 24%, var(--line));
+  background: color-mix(in srgb, var(--blue) 6%, transparent);
   color: var(--blue-deep); font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
+.example:hover { border-color: color-mix(in srgb, var(--blue) 45%, transparent); background: color-mix(in srgb, var(--blue) 10%, transparent); }
+.example svg { flex: none; opacity: .7; }
 
 /* ---------- 路径进度卡 ---------- */
 /* 双列等高：右侧路径卡随左卡拉齐底边，避免下方留 100px+ 凹陷（2026-10-29 外部评审）。
@@ -1663,6 +1695,14 @@ onMounted(loadAll);
   .tip { grid-row: 2; }
   .dash__left { grid-column: 1; grid-row: 3; }
   .week { grid-column: 2; grid-row: 3; }
+  /* 新手态两卡等高（2026-11-07 用户走查 图4）：左卡（行动引导）与右卡（本周节奏）
+     同处第 3 行，默认 align-items:start 各按内容定高——左卡 3 条示例 + 页脚，右卡只有
+     日历 + 两行注，底边差出一截。这里只在空态把这一行拉齐：两卡都填满行高，左卡靠
+     已有的 .action__footer{margin-top:auto} 把动作行压到底，右卡用 space-between
+     把注释沉到卡底，两条底边对齐。有数据时不做（多张卡按内容定高更自然）。 */
+  .dash--empty { align-items: stretch; }
+  .dash--empty .dash__left { align-items: stretch; }
+  .dash--empty .week { align-content: space-between; }
 }
 .week { padding: 16px 20px; display: grid; gap: 12px; align-content: start; }
 .week__grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
@@ -1690,10 +1730,6 @@ onMounted(loadAll);
 .day__cell--h1 { background: color-mix(in srgb, var(--blue) 14%, transparent); color: var(--blue-deep); }
 .day__cell--h2 { background: color-mix(in srgb, var(--blue) 32%, transparent); color: var(--blue-deep); }
 .day__cell--h3 { background: var(--blue); color: var(--text-on-primary); }
-.week__empty {
-  padding: 26px 0; text-align: center; color: var(--faint); font-size: 13px;
-  border: 1px dashed var(--line); border-radius: var(--mk-radius-xl); background: color-mix(in srgb, var(--surface) 70%, var(--canvas));
-}
 /* 区块级数据源失败提示（区别于空态：失败可见，不伪装成无数据） */
 .dash__source-fail {
   padding: 14px 16px;
@@ -2065,7 +2101,6 @@ a.btn-primary { text-decoration: none; }
   .action__control { min-height: 44px; }
   .path { padding: 14px 16px; gap: 12px; }
   .path__title strong { font-size: 14px; }
-  .week__empty { padding: 18px 0; }
   .dash__loading { padding: 32px 0; }
   .sheet__head { padding: 14px 16px 12px; }
   .sheet__scroll { padding: 12px 14px 20px; }
@@ -2073,6 +2108,9 @@ a.btn-primary { text-decoration: none; }
   .sheet__close { width: 36px; height: 36px; }
   /* 桌面 12px、移动块里被压到 11px —— 移动端规则自己写到了下限以下，抬回 12px */
   .day__cell { font-size: 12px; }
+  /* 列间距 5→3：375 下七列每格从 40.6 放到 42.3，今天那格的「待点亮」（12px 三字 = 36px）
+     才装得下——否则差 0.8px 被 text-overflow: ellipsis 切成「待点…」。 */
+  .week__grid { column-gap: 3px; }
 }
 
 /* ---------- ≤1100 密度补齐（2026-09-25 移动框架批8） ----------

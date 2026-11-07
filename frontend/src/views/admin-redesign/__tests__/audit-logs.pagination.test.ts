@@ -225,21 +225,21 @@ describe('AuditLogs 传统分页（方案 A）', () => {
     await flushPromises();
     expect(h.getLogs.mock.calls.at(-1)![0]).toMatchObject({ success: false });
     expect(filterValue(w, '失败动作')).toBe('');
-    expect(filterOptions(w, '失败动作')).toEqual(['全部失败', 'user.delete 5']);
+    expect(filterOptions(w, '失败动作')).toEqual(['全部动作', 'user.delete 5']);
   });
 
-  it('失败动作下拉：按动作下钻；清空回「全部失败」而不是退出失败域', async () => {
+  it('失败动作下拉：按动作下钻；清空只退动作维度，仍留在失败域', async () => {
     h.getStats.mockResolvedValue({
       data: { data: { stats: { total: 378, failed: 7 }, failureByAction: [{ action: 'user.delete', count: 5 }] } }
     });
     const w = await mountAudit();
     await flushPromises();
     await nextTick();
-    expect(filterOptions(w, '失败动作')).toEqual(['不过滤', 'user.delete 5']);
+    expect(filterOptions(w, '失败动作')).toEqual(['全部动作', 'user.delete 5']);
     await chooseFilter(w, '失败动作', 'user.delete');
     await flushPromises();
     expect(h.getLogs.mock.calls.at(-1)![0]).toMatchObject({ success: false, keyword: 'user.delete' });
-    await chooseFilter(w, '失败动作', '全部失败');
+    await chooseFilter(w, '失败动作', '全部动作');
     await flushPromises();
     const last = h.getLogs.mock.calls.at(-1)![0] as Record<string, unknown>;
     expect(last).toMatchObject({ success: false });

@@ -54,16 +54,16 @@ describe('重复操作入口守卫', () => {
     expect(src).toContain('async function onOverrideToggle')
   })
 
-  /* 2026-11-05 用户「连接设置和添加模型合并到一起吧，只保留添加模型」：
-     连接段搬进「添加模型」弹窗后，它的保存钮仍是**唯一一颗**（拉清单会自动落盘，
-     这颗只服务「只改了重试 / RPM」那一路），页面上依然没有整页保存条。 */
-  it('接入页：连接与策略只有弹窗里一颗保存钮，不再有整页保存条', () => {
+  /* 2026-11-07 用户「提回去」：连接卡回到页顶常驻，但它仍然只有**一颗**保存钮
+     （拉清单会自动落盘，这颗只服务「只改了重试 / RPM」那一路），页面上依然没有整页保存条。 */
+  it('接入页：连接与策略只有页顶卡里一颗保存钮，不再有整页保存条', () => {
     const src = read('ApiConfig.vue')
     expect(src).not.toContain('class="ac-save"')
     expect(src).not.toContain('showSaveBar')
-    expect(src.match(/@click="saveConnFromDialog"/g) ?? []).toHaveLength(1)
-    // 每个域各保存一次：连接 + 全站策略
-    expect(src.match(/saveGroups\(\[/g) ?? []).toHaveLength(2)
+    expect(src.match(/@click="saveConn"/g) ?? []).toHaveLength(1)
+    /* 三处调用点：连接卡保存（conn + reliability）、「保存清单」只提交 conn。
+       注意 saveModelList 里那次是单域保存，不是第二颗按钮。 */
+    expect(src.match(/saveGroups\(\[/g) ?? []).toHaveLength(3)
   })
 
   it('供应商设置弹窗不再重复行内的启用开关与密钥输入（仅创建时出现）', () => {
@@ -84,7 +84,7 @@ describe('重复操作入口守卫', () => {
     expect(src).not.toContain('按会话归组查看')
   })
 
-  it('审计日志：时间范围与动作都在主栏，卡头不再有「筛选」弹层', () => {
+  it('审计日志：时间范围进页头、动作与状态在卡头主栏，没有「筛选」弹层', () => {
     const src = read('AuditLogs.vue')
     /* 2026-10-27：动作维度从弹层上提到主栏后，这一页没有弹层了——
        同类别的多个筛选不得收进菜单/下拉（Carbon），只装一项的弹层更是纯隐藏。 */
@@ -93,7 +93,10 @@ describe('重复操作入口守卫', () => {
     // 2026-10-24 用户「时间范围和筛选重新设计一下」：胶囊里是真 select，不再是不可点的 <span>
     // 2026-10-26 卡头统一：形态收进共享 MkPillSelect（.mk-pill + 透明 select）
     expect(src).toContain('<MkPillSelect')
-    expect(src).toContain('v-model="timeRange"')
+    // 2026-11-07 用户「执行日志的时间范围在页头，审计日志却掉到表格工具栏」：改到页头 actions
+    expect(src).toContain(':model-value="timeRange"')
+    expect(src).toContain('aria-label="时间范围"')
+    expect(src).toContain('aria-label="按状态筛选"')
     expect(src).toContain('aria-label="按动作筛选"')
     // 页内不再自带 .al-range 私有类（三页逐字重复的同一段 CSS 已删）
     expect(src).not.toMatch(/^\.al-range/m)

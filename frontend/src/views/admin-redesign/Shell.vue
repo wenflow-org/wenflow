@@ -763,10 +763,12 @@ watch(
 <style scoped>
 .mshell {
   display: grid;
-  /* 侧栏宽度 244px = newui「UI-分支优化设计」原型 --nav-w。原 208px 是按「子项缩进 24px」
-     那套层级量出来的；原型改成扁平导航（项与分组标签同一起点、图标自带 10px 间隙），
-     244px 才能让标签+计数在同一行不折行。折叠轨仍 64px（--nav-w-min）。 */
-  grid-template-columns: 244px minmax(0, 1fr);
+  /* 底色档 244 → 200（2026-11-07 用户「左侧太宽了的感觉，收一下」）。
+     依据是实测余量：导航最宽标签 73px，行尾却挂着 97px 空白带（trailingGap）——
+     244 是照原型 --nav-w 定死的 px，与实际内容（图标 17 + gap 10 + 标签 73 + 徽标）
+     无关。200 = 图标列 + 标签 + 计数徽标（Skill 目录 29）刚好排下，右侧留 ~30 兜底。
+     标签是 nowrap：再往下收（<190）「学习者卡库」会被裁。 */
+  grid-template-columns: 200px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   height: 100dvh;
   min-height: 0;
@@ -1282,10 +1284,14 @@ watch(
   overflow-y: auto;
   overflow-x: hidden;
 }
+/* 大屏内容居中限宽见 admin-theme.css 末尾的「高分屏内容区限宽」块：
+   本文件是 scoped，`:root { --mshell-container }` 会编译成 `:root[data-v-x]`
+   而永不命中 <html>（2026-11-07 实测：写完上限仍读到 none）。 */
 
-/* 1440px 中间档：侧栏适度放大（幅度约为 2000 档一半） */
+/* 1440px 中间档：侧栏适度放大（幅度约为 2000 档一半）。
+   260 → 216（2026-11-07 收窄，实测该档 trailingGap 97px）：收的是纯空白，标签不缩。 */
 @media (min-width: 1440px) {
-  .mshell { grid-template-columns: 260px minmax(0, 1fr); }
+  .mshell { grid-template-columns: 216px minmax(0, 1fr); }
   .mshell__item { font-size: var(--mk-fs-body); padding: 8px 11px; }
   .mshell__caption { font-size: var(--mk-fs-micro); }
   .mshell__item-badge { font-size: var(--mk-fs-micro); }
@@ -1295,7 +1301,8 @@ watch(
 /* 大屏（2000+）：侧栏加宽、字号放大；2800+（4K）再升一档（zoom 之上叠加）。
    宽度只随内容（字号）增长、不随屏宽膨胀——短标签配宽侧栏会在行右拉出大片空洞 */
 @media (min-width: 1920px) {
-  .mshell { grid-template-columns: 276px minmax(0, 1fr); }
+  /* 276 → 232（2026-11-07 收窄，实测该档 trailingGap 110px） */
+  .mshell { grid-template-columns: 232px minmax(0, 1fr); }
   .mshell__item { font-size: var(--mk-fs-body); padding: 8px 12px; }
   .mshell__caption { font-size: var(--mk-fs-micro); }
   .mshell__item-badge { font-size: var(--mk-fs-micro); }
@@ -1303,7 +1310,8 @@ watch(
 }
 @media (min-width: 2000px) {
   .mshell {
-    grid-template-columns: 284px minmax(0, 1fr);
+    /* 284 → 240（2026-11-07 收窄：该档每侧内衬 14×2 = 28，行宽 212 仍容得下标签+徽标） */
+    grid-template-columns: 240px minmax(0, 1fr);
   }
   .mshell__side { padding: 16px 14px 12px; gap: 10px; }
   .mshell__logo-full { height: 40px; }
@@ -1315,7 +1323,8 @@ watch(
 }
 @media (min-width: 2800px) {
   .mshell {
-    grid-template-columns: 324px minmax(0, 1fr);
+    /* 324 → 276（2026-11-07 收窄：zoom 1.15 下渲染 ~317，实测该档 trailingGap 127px） */
+    grid-template-columns: 276px minmax(0, 1fr);
   }
   .mshell__side { padding: 18px 16px 12px; gap: 12px; }
   .mshell__logo-full { height: 44px; }
@@ -1329,7 +1338,8 @@ watch(
 @media (min-width: 3600px) {
   /* 4K（zoom 1.3 档）：侧栏再加宽、字号继续放大 */
   .mshell {
-    grid-template-columns: 372px minmax(0, 1fr);
+    /* 372 → 316（2026-11-07 收窄：zoom 1.3 下渲染 ~411，实测该档 trailingGap 201px） */
+    grid-template-columns: 316px minmax(0, 1fr);
   }
   .mshell__side { padding: 20px 18px 14px; gap: 14px; }
   .mshell__logo-full { height: 52px; }

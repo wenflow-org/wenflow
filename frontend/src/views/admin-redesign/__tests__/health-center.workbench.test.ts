@@ -59,7 +59,7 @@ function makeItem(
   return {
     id, label: `检查项 ${id}`, base: 'bidirectional', semantics: 'consistency',
     severity, status: severity === 'ok' ? 'clean' : severity === 'warn' ? 'drifted' : 'drifted',
-    count, detail, cause: `cause ${id}`, action: 'none', fixHint: '', source: 'test',
+    count, detail, cause: `cause ${id}`, okNote: `ok ${id}`, action: 'none', fixHint: '', source: 'test',
   };
 }
 

@@ -1,6 +1,6 @@
 /**
  * 卡详情二级页（2026-10-06 抽屉退役）：?view=card&id=<profileId> 标准二级页，
- * 全字段可视（概览事实/人设/故事池/资料/标签备注）；卡=静态身份模板，只提供「创建虚拟学习者」。
+ * 全字段可视（概览事实/人设/故事池/随卡资料/标签）；卡=静态身份模板，只提供「创建虚拟学习者」。
  */
 import { describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
@@ -81,7 +81,11 @@ describe('CardDetailPage（卡详情二级页）', () => {
     expect(t).toContain('平时函数作业完成情况如何');
     expect(t).toContain('人教版必修一');
     expect(t).toContain('c1@vl.local');
-    expect(t).toContain('E2E 素材');
+    expect(t).toContain('人教版必修一');
+    /* 2026-11-07：「资料与备注」整块撤除——notes 在卡库里恒为「Frontier-100 · …（设计情景）」
+       这类批次说明，与「概览 · 来源」重复；随卡资料有内容时才单独成卡。 */
+    expect(t).not.toContain('资料与备注');
+    expect(t).not.toContain('E2E 素材');
     // 面包屑回填：深链/从卡墙进入时 subPage 只有 id，加载出名字后写回（否则面包屑是裸 UUID）
     expect(setSubPageLabelMock).toHaveBeenCalledWith('高一学生小陈');
   });

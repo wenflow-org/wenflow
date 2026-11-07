@@ -5,6 +5,18 @@
          页头之下补 4 卡 KPI 带（记录总数 / 失败记录 / 失败率 / 失败动作）。 -->
     <MkPageHead title="审计日志">
       <template #actions>
+        <!-- 2026-11-07 用户「时间范围在执行日志里在页头，到审计日志却掉到表格下方工具栏」：
+             它同时管顶部 4 张统计卡与下方表格，位置必须与执行日志一致（页头，导出左侧）。 -->
+        <div class="logs-window">
+          <MkPillSelect
+            :model-value="timeRange"
+            label="时间范围"
+            aria-label="时间范围"
+            :options="timeRangeOptions"
+            :active="timeRange !== 'all'"
+            @update:model-value="applyFilters"
+          />
+        </div>
         <button type="button" class="mk-btn mk-btn--sm" @click="goExport">导出</button>
       </template>
     </MkPageHead>
@@ -73,14 +85,16 @@
       <!-- 筛选卡片头（关键词 / 时间范围 / 列） -->
       <div class="mk-card__head">
         <div class="mk-filter">
-          <!-- 时间范围常驻可操作，默认「全部」：默认「今天」时首屏是空态，会被读成「没有异常」 -->
+          <!-- 2026-11-07 用户「执行日志叫『状态 全部状态』、审计日志叫『失败动作 不过滤』」：
+               这里补一枚真状态筛选，与执行日志同名同项（全部 / 仅成功 / 仅失败）。
+               时间范围已上提到页头（它同时管 KPI 与表格）。 -->
           <MkPillSelect
-            v-model="timeRange"
-            label="时间范围"
-            aria-label="时间范围"
-            :options="timeRangeOptions"
-            :active="timeRange !== 'all'"
-            @update:model-value="applyFilters"
+            :model-value="statusFilter"
+            label="状态"
+            aria-label="按状态筛选"
+            :options="statusFilterOptions"
+            :active="!!statusFilter"
+            @update:model-value="applyStatusFilter"
           />
           <!-- 动作快筛（2026-10-27 从「筛选」弹层提到主栏）：Carbon 的筛选模式禁止把类别
                收进菜单/下拉——这里原本是一个只装单项的弹层，收起后只剩数字角标。选项仍是
@@ -213,13 +227,19 @@
                   <template v-if="log.targetType">{{ targetTypeText(log.targetType) }}</template>
                   <span v-else class="mk-na">—</span>
                 </td>
-                <td v-if="colVisible('target')" class="log-target mono" :title="log.targetId || ''">
+                <td v-if="colVisible('target')" class="log-target mono" :title="targetTitle(log)">
+                  <!-- 2026-11-07 用户「目标类型与目标两列都是 —，看不出动了哪个模块」：
+                       只有「登记了目标类型」的 id 才是可读对象（用户/会话/插件…）；
+                       没登记类型的 id（如探活接口把 provider 名写进 targetId）对外行没有意义，
+                       一律回退到请求所属的模块名（由接口路径反推），原始 id 留在悬停里。 -->
                   <button
-                    v-if="log.targetId && targetLinkOf(log)"
+                    v-if="log.targetType && log.targetId && targetLinkOf(log)"
                     type="button"
                     class="al-target-link al-ellipsis"
                     @click.stop="openTarget(log)"
                   >{{ shortId(log.targetId) }}</button>
+                  <span v-else-if="log.targetType && log.targetId" class="al-ellipsis">{{ shortId(log.targetId) }}</span>
+                  <span v-else-if="moduleOf(log)" class="log-target-module al-ellipsis">{{ moduleOf(log) }}</span>
                   <span v-else-if="log.targetId" class="al-ellipsis">{{ shortId(log.targetId) }}</span>
                   <span v-else class="mk-na">—</span>
                 </td>
@@ -229,8 +249,10 @@
                   <div class="log-result-line">
                     <span class="mk-badge" :class="log.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ log.success ? '成功' : '失败' }}</span>
                     <span v-if="log.statusCode || log.durationMs != null" class="log-result-meta mono" :title="resultMetaTitle(log)">
-                      <span v-if="log.statusCode">{{ log.statusCode }}</span>
-                      <span v-if="log.durationMs != null">{{ fmtMs(log.durationMs) }}</span>
+                      <!-- 2026-11-07 用户「200 240ms 粘在一起像六位数」：状态码深色、耗时浅灰，中间一个圆点 -->
+                      <span v-if="log.statusCode" class="log-result-code">{{ log.statusCode }}</span>
+                      <span v-if="log.statusCode && log.durationMs != null" class="log-result-sep" aria-hidden="true">·</span>
+                      <span v-if="log.durationMs != null" class="log-result-dur">{{ fmtMs(log.durationMs) }}</span>
                     </span>
                   </div>
                 </td>
@@ -442,6 +464,62 @@ function actionLabelOf(log: AuditLogRow): string {
   return /\/api\//.test(raw) || String(log.action || '').startsWith('/') ? RAW_ACTION_FALLBACK : log.action || log.path || mapped
 }
 
+/**
+ * 请求所属模块（2026-11-07 用户「目标类型 —、目标 —，看不出改了哪个模块」）。
+ * 审计行只记 targetType/targetId；大量自动化接口（探活、拉模型、配置保存）两个字段都为空，
+ * 于是连着两列白卷。这里用接口路径的稳定前缀反推模块名——它不编数据，只把路径说成人话：
+ * 取 `/api/admin/<segment>` 与侧栏同名（`/api/admin/api-config` → 接入配置）。
+ */
+const PATH_MODULE_TEXT: Record<string, string> = {
+  'api-config': '接入配置',
+  'model-providers': '模型供应商',
+  'infra-models': '基础模型',
+  plugins: '插件',
+  'health-center': '健康中心',
+  skills: 'Skill 目录',
+  'skill-model-configs': 'Skill 模型配置',
+  'field-routings': '字段路由',
+  'agent-prompts': 'Prompt 管理',
+  'prompt-ops': 'Prompt 评测',
+  'prompt-lab': 'Prompt 实验台',
+  'runtime-definitions': '运行时定义',
+  users: '用户账号',
+  sessions: '会话',
+  'session-console': '会话座舱',
+  announcements: '公告',
+  notifications: '站内通知',
+  mcp: 'MCP 服务',
+  'virtual-learners': '虚拟学习者',
+  'goal-conversations': '目标对话',
+  'learning-content': '学习内容',
+  'token-cost': '成本分析',
+  'memory-review': '复习积压',
+  'memory-traces': '记忆链路',
+  'content-review': '内容审核',
+  presets: '预置库',
+  'session-audits': '会话审计',
+  'model-registry': '模型目录',
+  achievements: '成就',
+  feedback: '反馈',
+  export: '数据导出',
+  'batch-experiments': '批量实验',
+  glossary: '术语表',
+}
+/** 路径 → 模块名；非 /api/admin/... 的请求返回空串（不猜） */
+function moduleOf(log: AuditLogRow): string {
+  const path = String(log.path || '').split('?')[0]
+  const m = /^\/api\/admin\/([^/]+)/.exec(path)
+  if (!m) return ''
+  return PATH_MODULE_TEXT[m[1]] || ''
+}
+/** 目标列悬停：登记了 targetId 就露全 id；否则说明这行的目标是接口本身 */
+function targetTitle(log: AuditLogRow): string {
+  if (log.targetType && log.targetId) return log.targetId
+  const mod = moduleOf(log)
+  if (mod) return log.targetId ? `${mod} · ${log.targetId}` : `${mod}（该操作没有登记具体对象）`
+  return log.targetId || ''
+}
+
 /* —— 动作快筛（2026-10-05 重设计）：当前页动作聚合 → keyword 下钻 ——
    刷屏根因是自动化调用与人工操作混排（「推进虚拟会话」单动作可占当前页 70%）；
    给动作维度一个免打字的入口。下钻词取 path 稳定尾段（/wrapup /restart 这类）：
@@ -520,8 +598,23 @@ if (route.query.tab === 'login') tab.value = 'login'
 const logs = ref<AuditLogRow[]>([])
 const attempts = ref<LoginAttemptRow[]>([])
 const total = ref(0)
-/** 失败域下钻态：success=false（后端白名单参数）+ 可选动作关键词 */
-const failedOnly = ref(false)
+/** 状态筛选（2026-11-07 与执行日志统一为「全部 / 仅成功 / 仅失败」）。
+    此前只有「失败域」（failedOnly 布尔），没有「仅成功」；现在一个状态值同时表达三档，
+    failedOnly 变成它的派生读法（KPI 卡、失败域提示、stats 都还按失败域语义消费）。 */
+const statusFilter = ref<'' | 'ok' | 'err'>('')
+const failedOnly = computed(() => statusFilter.value === 'err')
+/** 状态下拉选项：与执行日志同名同项（计数只在失败侧有权威读数，成功侧不编数字） */
+const statusFilterOptions = computed(() => [
+  { value: '', label: '全部' },
+  { value: 'ok', label: '仅成功' },
+  { value: 'err', label: failedCount.value > 0 ? `仅失败（${failedCount.value}）` : '仅失败' }
+])
+function applyStatusFilter(v: string) {
+  statusFilter.value = v === 'ok' || v === 'err' ? v : ''
+  if (statusFilter.value !== 'err') failedAction.value = ''
+  keyword.value = ''
+  void applyFilters()
+}
 const failedAction = ref('')
 /** P2-16：失败按动作聚合 TOP（后端 /stats 返回），作为「失败动作」下拉的下钻入口 */
 const failureByAction = ref<Array<{ action: string; count: number }>>([])
@@ -535,9 +628,9 @@ const statsLoading = ref(false)
 const failedRate = computed(() =>
   total.value > 0 ? `${Math.round((failedCount.value / total.value) * 100)}%` : '—'
 )
-/** 失败动作下拉：空值的文案随失败域变化——在失败域里=「全部失败」，否则=「不过滤」 */
+/** 失败动作下拉：空值 = 不按动作下钻。状态档已由「状态」下拉表达，这里只说动作维度。 */
 const failureSelectOptions = computed(() => [
-  { value: '', label: failedOnly.value ? '全部失败' : '不过滤' },
+  { value: '', label: '全部动作' },
   ...failureByAction.value.map((f) => ({
     value: f.action,
     label: `${failureLabel(f.action)} ${f.count}`,
@@ -622,8 +715,8 @@ function buildParams(nextPage: number, scopeOverride?: typeof tab.value): AuditL
     timeRange: timeRange.value === 'all' ? undefined : timeRange.value,
     sort: (alSortKey.value || undefined) as AuditLogQuery['sort'],
     order: alSortDir.value,
-    /* 失败域下钻（KPI 卡 / 失败动作下拉）：后端 parseSuccess 白名单 true/false */
-    success: failedOnly.value ? false : undefined,
+    /* 状态筛选（全部 / 仅成功 / 仅失败）：后端 parseSuccess 白名单 true/false */
+    success: statusFilter.value === 'err' ? false : statusFilter.value === 'ok' ? true : undefined,
   }
 }
 
@@ -722,13 +815,12 @@ function failureKeyword(action: string): string {
 /** KPI「失败记录」卡：一键进入/退出失败域。若当前正按某动作下钻，先回到「全部失败」。 */
 function toggleFailureOnly() {
   if (failedOnly.value && !failedAction.value) {
-    failedOnly.value = false
-    keyword.value = ''
+    statusFilter.value = ''
   } else {
-    failedOnly.value = true
+    statusFilter.value = 'err'
     failedAction.value = ''
-    keyword.value = ''
   }
+  keyword.value = ''
   void applyFilters()
 }
 
@@ -737,7 +829,7 @@ function toggleFailureOnly() {
 function applyFailureFilter(action: string) {
   failedAction.value = action
   if (action) {
-    failedOnly.value = true
+    statusFilter.value = 'err'
     keyword.value = failureKeyword(action)
   } else {
     keyword.value = ''
@@ -817,11 +909,11 @@ watch([alSortKey, alSortDir], () => {
 /* 顶栏刷新：重取当前页（与旧页头钮同一语义，保留页码与列表） */
 watch(liveRefreshSeq, () => { void refreshPage() })
 
-const isFiltered = computed(() => !!keyword.value.trim() || timeRange.value !== 'all' || failedOnly.value)
+const isFiltered = computed(() => !!keyword.value.trim() || timeRange.value !== 'all' || !!statusFilter.value)
 function clearFilters() {
   keyword.value = ''
   timeRange.value = 'all'
-  failedOnly.value = false
+  statusFilter.value = ''
   failedAction.value = ''
   void applyFilters()
 }
@@ -861,13 +953,15 @@ const timeRangeOptions = (['all', 'today', 'yesterday', 'week', 'month'] as cons
    此前只有 ?tab=login 入 URL，关键词/时间/失败下钻/页码切场景或返回即复位；
    与执行日志（全量筛选入 URL）同级不同规则。键：q / range / failed / action / page / size，
    缺省值不写（today / 无关键词 / 第 1 页 / 30 条）。 */
-const AUDIT_FILTER_KEYS = ['q', 'range', 'failed', 'action', 'page', 'size'] as const
+const AUDIT_FILTER_KEYS = ['q', 'range', 'failed', 'status', 'action', 'page', 'size'] as const
 const AUDIT_SIZES = [15, 30, 50, 100] as const
 function readFiltersFromRoute() {
   keyword.value = typeof route.query.q === 'string' ? route.query.q : ''
   const r = typeof route.query.range === 'string' ? route.query.range : ''
   timeRange.value = (TIME_RANGES as readonly string[]).includes(r) ? (r as typeof timeRange.value) : 'all'
-  failedOnly.value = route.query.failed === '1'
+  const st = typeof route.query.status === 'string' ? route.query.status : ''
+  /* 老的 ?failed=1 仍认（深链/收藏）；新写法 ?status=ok|err */
+  statusFilter.value = st === 'ok' || st === 'err' ? st : route.query.failed === '1' ? 'err' : ''
   failedAction.value = typeof route.query.action === 'string' ? route.query.action : ''
   const p = Number(route.query.page)
   page.value = Number.isInteger(p) && p > 0 ? p : 1
@@ -875,14 +969,15 @@ function readFiltersFromRoute() {
   pageSize.value = (AUDIT_SIZES as readonly number[]).includes(sz) ? sz : 30
 }
 function auditFilterSig(): string {
-  return [keyword.value.trim(), timeRange.value, failedOnly.value ? '1' : '', failedAction.value, page.value, pageSize.value].join('|')
+  return [keyword.value.trim(), timeRange.value, statusFilter.value, failedAction.value, page.value, pageSize.value].join('|')
 }
 function syncFiltersToRoute() {
   const q = { ...route.query }
   for (const k of AUDIT_FILTER_KEYS) delete q[k]
   if (keyword.value.trim()) q.q = keyword.value.trim()
   if (timeRange.value !== 'all') q.range = timeRange.value
-  if (failedOnly.value) q.failed = '1'
+  if (statusFilter.value === 'err') q.failed = '1'
+  if (statusFilter.value === 'ok') q.status = 'ok'
   if (failedAction.value) q.action = failedAction.value
   if (page.value > 1) q.page = String(page.value)
   if (pageSize.value !== 30) q.size = String(pageSize.value)
@@ -979,6 +1074,8 @@ function goExport() {
 .al-login-table .mk-c-act { width: 116px !important; }
 /* fixed 档列宽即契约：行内 max-width 会顶出单元格，改成随列收缩 + 省略号 */
 .al-table .log-target, .al-table .log-ip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+/* 目标列回退的模块名：中文说明，走正文无衬线（父格是 mono） */
+.log-target-module { font-family: inherit; color: var(--mk-muted); }
 /* td 上的 text-overflow 在表格单元里不生效（2026-10-22 实测仍切字）：内层 span 承担截断 */
 .al-ellipsis { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 目标可点（用户 / 会话）：继承单元格字号，只染字色，不撑行高 */
