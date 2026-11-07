@@ -37,6 +37,16 @@ describe('isProposalConfirmText（方案卡展示时键入确认短语 = 确认�
     expect(isProposalConfirmText('就这么定')).toBe(true);
   });
 
+  it('前后端口径对齐（2026-11-07 分叉修复）：领先确认词 + 方向族短语复合句前后端同义', () => {
+    // 后端 CONFIRM_SEGMENT_PATTERNS 按逗号切段，「没问题」与「就按这个方向走」两段分别命中；
+    // 前端此前因未在 PROPOSAL_CONFIRM_STRIP_HEAD 收「没问题」，整句落空 → false。现补齐。
+    expect(isProposalConfirmText('没问题，就按这个方向走')).toBe(true);
+    expect(isProposalConfirmText('好嘞，就按这个方向走')).toBe(true);
+    expect(isProposalConfirmText('可以呀，按你说的办')).toBe(true);
+    // 仍不得把带调整意图的复合句误判成确认
+    expect(isProposalConfirmText('没问题，不过方向想再调一下')).toBe(false);
+  });
+
   it('调整/疑问意图一律不确认，走普通回复', () => {
     expect(isProposalConfirmText('可以，但想先练怎么接话')).toBe(false);
     expect(isProposalConfirmText('按这个来，不过换成周日')).toBe(false);

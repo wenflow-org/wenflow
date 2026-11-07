@@ -291,11 +291,12 @@ export function useCheckpointFlow(
       if (!judgementArrived) scheduleCardCollapse();
     } catch (e: any) {
       if (isCheckpointAlreadyHandled(e)) {
-        // 服务端已消费（重复提交 / 响应丢失后重试）：不算失败，收起卡片并向前同步
+        // 服务端已消费 / 已作废 / 响应丢失后重试（「理解检查不存在或已处理」= 404 语义）：
+        // 不算失败——受控收卡 + 向前同步 revision，用一句「翻篇」把状态说清，不弹错。
         resetCheckpointUi();
         clearDraft();
         await resyncSessionRevision();
-        toast.info('这个检查点已经提交过了，已为你同步进度');
+        toast.info('这道题已经翻篇了，我们接着往下');
       } else {
         // 判错路径已经「上锁 + 只有继续按钮」，若此后流断掉（讲解没到 final），
         // 必须把讲解中状态清掉，否则状态行会一直挂着（子代理回归走查发现的边界）。

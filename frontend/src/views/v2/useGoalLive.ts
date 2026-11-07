@@ -147,12 +147,24 @@ export function normalizeFieldValue(raw: unknown): string {
 /** 方案确认短语（normalize 后全等命中才确认；带调整/疑问意图的一律不确认） */
 const PROPOSAL_CONFIRM_HEADS = [
   '按这个来', '就按这个来', '按这个方案来', '就按这个方案', '按这个走', '就按这个走',
-  '按这版来', '就按这版', '就这版', '这版可以', '就这么定', '这么定', '就这样定',
+  '按这版来', '就按这版', '这版可以', '这么定', '就这么定', '就这样定',
   '确认生成', '确认并生成路径', '生成路径', '生成', '可以生成', '生成吧', '确认',
   '同意', '没问题', '可以了', '就这个', '行就这个', '就按这个',
+  // 与后端 goal-conversation.confirm-text.ts CONFIRM_SEGMENT_PATTERNS 同族对齐（2026-11-07 分叉修复）：
+  // 后端「纯确认短语白名单」含以下头部，前端此前缺，导致同句在前端=false、后端=true 的口径分叉。
+  '好', '好嘞', '好啊', '哦了', '行的', '可以呀', '没毛病', '赞同', '确定', '定了', '就这么定了', 'okay', 'yes',
 ];
-const PROPOSAL_CONFIRM_STRIP_HEAD = /^(好的?|行|可以|ok|嗯+|好呀|行呀)[，,。!！\s]+/;
+// 与后端 goal-conversation.confirm-text.ts CONFIRM_SEGMENT_PATTERNS 的「纯确认短语白名单」逐段对齐：
+// 后端按标点/换行切段后每段整段匹配，故「没问题，就按这个方向走」中「没问题」与「就按这个方向走」分别命中；
+// 前端此处先剥「领先确认词 + 标点」前缀（镜像后端的领先确认词集合），残留 directing 短语再交给 PROPOSAL_CONFIRM_FAMILY_RE 判。
+const PROPOSAL_CONFIRM_STRIP_HEAD = /^(好(的|嘞|啊)?|行(的|呀)?|可以(呀)?|ok(ay)?|嗯+|哦了|没问题|没毛病|赞同|确定|定了|就这么定了|yes)[，,。!！\s]+/;
 const PROPOSAL_CONFIRM_STRIP_TAIL = /[吧呢啊了呗哦～~。!！\s]+$/g;
+/**
+ * 「按这个方向走」族确认短语（与后端 goal-conversation.confirm-text.ts 的
+ * CONFIRM_SEGMENT_PATTERNS 同族——改一处必须对一眼另一处）。
+ * 2026-11-07 实证：用户原话「可以，就按这个方向走」两侧都判不中，用户被迫点按钮。
+ */
+const PROPOSAL_CONFIRM_FAMILY_RE = /^[那就]{0,2}按?(这(个|样)?|此)(方向|思路|说法|方案|路线|框架|路子)(走|来|定|办|执行|生成)?$|^[那就]{0,2}按你说的(来|办|做|走|执行|生成)?$/;
 const PROPOSAL_ADJUST_RE = /但是|不过|想调|调整|改成|换一|换下|先别|不要|再想|补充|还想|另外|或者|不如|如果|是不是|吗|？|\?/;
 
 /**
@@ -167,7 +179,8 @@ export function isProposalConfirmText(raw: string): boolean {
   if (PROPOSAL_ADJUST_RE.test(t)) return false;
   // 先查原串（"可以了"这类剥后缀会变义），再查剥应答词后的串（"按这个来吧"→"按这个来"）
   const stripped = t.replace(PROPOSAL_CONFIRM_STRIP_HEAD, '').replace(PROPOSAL_CONFIRM_STRIP_TAIL, '').trim();
-  return PROPOSAL_CONFIRM_HEADS.includes(t) || PROPOSAL_CONFIRM_HEADS.includes(stripped);
+  if (PROPOSAL_CONFIRM_HEADS.includes(t) || PROPOSAL_CONFIRM_HEADS.includes(stripped)) return true;
+  return PROPOSAL_CONFIRM_FAMILY_RE.test(t) || PROPOSAL_CONFIRM_FAMILY_RE.test(stripped);
 }
 
 const fields = computed<LiveField[]>(() =>
