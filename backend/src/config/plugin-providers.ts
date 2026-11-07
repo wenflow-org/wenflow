@@ -24,9 +24,10 @@ export interface PluginProviderField {
   /** true = 走 provider_secrets 密文表 */
   secret?: boolean;
   /**
-   * 内置值（2026-11-04 用户「其实这个是写死的，相当于只需要配 key 就行」）：
-   * 上游服务地址由代码写死，界面上不再呈现、保存也不再接受改动（改传即 400）。
-   * 解析仍保留环境变量这一层（部署侧镜像/代理的逃生口），但平台设置里存过的旧值不再生效。
+   * 内置值：上游服务地址由代码写死，界面上不呈现、保存也不接受改动（改传即 400）。
+   * 2026-11-04 联网三家曾按此处理（「其实这个是写死的，相当于只需要配 key 就行」）；
+   * 2026-11-07 用户要求换成第三方兼容端点，联网字段已全部放开——
+   * 现在目录里没有字段用它，服务端逻辑保留，供以后确实不该改的字段（如平台固定的网关地址）复用。
    */
   builtin?: boolean;
 }
@@ -44,8 +45,9 @@ export interface PluginChannelDef {
   orderEnv: string;
   defaultOrder: readonly string[];
   /**
-   * 顺序由代码固定（2026-11-04 同批）：界面上不再让用户排「主用 / 备用」，
-   * 平台保存过的顺序与环境变量都不再参与解析，一律用 defaultOrder。
+   * 顺序由代码固定：界面上不让用户排「主用 / 备用」，保存过的顺序与环境变量都不参与解析，
+   * 一律用 defaultOrder。2026-11-04 同批曾把联网的搜索/抓取两条链锁成固定顺序，
+   * 2026-11-07 用户要求可排，已全部放开——现在目录里没有通道用它。
    */
   orderFixed?: boolean;
 }
@@ -75,14 +77,12 @@ export const PLUGIN_CONFIGS: readonly PluginConfigDef[] = [
         label: '搜索',
         orderEnv: 'SEARCH_PROVIDER',
         defaultOrder: ['tinyfish', 'tavily', 'exa'],
-        orderFixed: true,
       },
       {
         id: 'fetch',
         label: '抓取',
         orderEnv: 'FETCH_PROVIDER',
         defaultOrder: ['tinyfish', 'tavily', 'exa'],
-        orderFixed: true,
       },
     ],
     providers: [
@@ -90,8 +90,8 @@ export const PLUGIN_CONFIGS: readonly PluginConfigDef[] = [
         id: 'tinyfish',
         label: 'TinyFish',
         fields: [
-          { key: 'searchEndpoint', label: '搜索地址', type: 'text', env: ['SEARCH_API_URL'], fallback: 'https://api.search.tinyfish.ai', builtin: true },
-          { key: 'fetchEndpoint', label: '抓取地址', type: 'text', env: ['FETCH_API_URL'], fallback: 'https://api.fetch.tinyfish.ai', builtin: true },
+          { key: 'searchEndpoint', label: '搜索地址', type: 'text', env: ['SEARCH_API_URL'], fallback: 'https://api.search.tinyfish.ai' },
+          { key: 'fetchEndpoint', label: '抓取地址', type: 'text', env: ['FETCH_API_URL'], fallback: 'https://api.fetch.tinyfish.ai' },
           apiKeyField(['SEARCH_API_KEY', 'FETCH_API_KEY']),
         ],
       },
@@ -99,8 +99,8 @@ export const PLUGIN_CONFIGS: readonly PluginConfigDef[] = [
         id: 'tavily',
         label: 'Tavily',
         fields: [
-          { key: 'searchEndpoint', label: '搜索地址', type: 'text', env: ['TAVILY_API_URL'], fallback: 'https://api.tavily.com/search', builtin: true },
-          { key: 'fetchEndpoint', label: '抓取地址', type: 'text', env: ['TAVILY_EXTRACT_URL'], fallback: 'https://api.tavily.com/extract', builtin: true },
+          { key: 'searchEndpoint', label: '搜索地址', type: 'text', env: ['TAVILY_API_URL'], fallback: 'https://api.tavily.com/search' },
+          { key: 'fetchEndpoint', label: '抓取地址', type: 'text', env: ['TAVILY_EXTRACT_URL'], fallback: 'https://api.tavily.com/extract' },
           apiKeyField(['TAVILY_API_KEY']),
         ],
       },
@@ -108,8 +108,8 @@ export const PLUGIN_CONFIGS: readonly PluginConfigDef[] = [
         id: 'exa',
         label: 'Exa',
         fields: [
-          { key: 'searchEndpoint', label: '搜索地址', type: 'text', env: ['EXA_API_URL'], fallback: 'https://api.exa.ai/search', builtin: true },
-          { key: 'fetchEndpoint', label: '抓取地址', type: 'text', env: ['EXA_CONTENTS_URL'], fallback: 'https://api.exa.ai/contents', builtin: true },
+          { key: 'searchEndpoint', label: '搜索地址', type: 'text', env: ['EXA_API_URL'], fallback: 'https://api.exa.ai/search' },
+          { key: 'fetchEndpoint', label: '抓取地址', type: 'text', env: ['EXA_CONTENTS_URL'], fallback: 'https://api.exa.ai/contents' },
           apiKeyField(['EXA_API_KEY']),
         ],
       },
