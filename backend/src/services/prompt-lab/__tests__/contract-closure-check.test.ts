@@ -11,11 +11,14 @@
 
 import {
   checkContractClosure,
+  checkDeclaredInputDelivery,
   checkHandoffConsumers,
   checkProducerContracts,
+  checkSandboxRefs,
   checkSkillInputArgs,
   declaredInputKeys,
   SKILL_INPUT_ARG_EXEMPTIONS,
+  SKILL_INPUT_DEAD_EDGE_EXEMPTIONS,
   type ClosureCoreLike,
   type ClosureInputLike,
   type ClosureStageLike,
@@ -229,6 +232,146 @@ describe('checkProducerContracts（产出-消费闭环）', () => {
     const issues = checkProducerContracts(cores);
     expect(issues).toHaveLength(1);
     expect(issues[0].code).toBe('input-producer-core-missing');
+  });
+});
+
+describe('checkDeclaredInputDelivery（#199 盲区 1 反向死声明）', () => {
+  const stages: ClosureStageLike[] = [
+    {
+      stage: 'teaching',
+      contracts: [{ agentId: 'teaching-agent' }],
+      // teaching-turn 自动链产出 reply，但 handoff 只给 path-planning，
+      // 不给下面声明消费的 peer-reinforcement ⇒ 反向死声明
+      routings: [
+        { agentId: 'skill:teaching-turn', fieldId: 'reply', handoff: ['skill:path-planning'] },
+        // 这一行自动链产出 reply 且 handoff 给 peer-reinforcement ⇒ 正向用例
+        { agentId: 'skill:teaching-turn', fieldId: 'analysis.levelScore', handoff: ['skill:peer-reinforcement'] },
+      ],
+    },
+  ];
+
+  it('正向：声明的 skill 输入确实在自动链上被 handoff 给本 skill → 通过', () => {
+    const cores: ClosureCoreLike[] = [
+      core({ skillId: 'teaching-turn', fields: [{ name: 'analysis' }] }),
+      core({
+        skillId: 'peer-reinforcement',
+        fields: [],
+        inputs: [input({ kind: 'skill', skill: 'teaching-turn', fieldPath: 'analysis.levelScore', ref: 'skill:teaching-turn.analysis.levelScore' })],
+      }),
+    ];
+    expect(checkDeclaredInputDelivery(stages, cores)).toEqual([]);
+    // 同时确认整体闭环零告警（reverse 方向不污染前向判断）
+    expect(checkContractClosure({ stages, cores })).toEqual([]);
+  });
+
+  it('反向：声明消费 skill:teaching-turn.reply，但自动链从不 handoff 给本 skill → skill-input-dead-declaration', () => {
+    const cores: ClosureCoreLike[] = [
+      core({
+        skillId: 'peer-reinforcement',
+        fields: [],
+        inputs: [input({ kind: 'skill', skill: 'teaching-turn', fieldPath: 'reply', ref: 'skill:teaching-turn.reply' })],
+      }),
+    ];
+    const issues = checkDeclaredInputDelivery(stages, cores);
+    expect(issues).toHaveLength(1);
+    expect(issues[0].code).toBe('skill-input-dead-declaration');
+    expect(issues[0].message).toContain('peer-reinforcement');
+    expect(issues[0].message).toContain('reply');
+  });
+
+  it('非自动边（reachability: manual）产出、从不 handoff 给本 skill → 不报错（非自动链口径）', () => {
+    const manualStages: ClosureStageLike[] = [
+      {
+        stage: 'teaching',
+        contracts: [{ agentId: 'teaching-agent' }],
+        routings: [
+          { agentId: 'skill:teaching-turn', fieldId: 'reply', handoff: ['skill:path-planning'], reachability: 'manual' },
+        ],
+      },
+    ];
+    const cores: ClosureCoreLike[] = [
+      core({
+        skillId: 'peer-reinforcement',
+        fields: [],
+        inputs: [input({ kind: 'skill', skill: 'teaching-turn', fieldPath: 'reply', ref: 'skill:teaching-turn.reply' })],
+      }),
+    ];
+    // 该根只有 manual 产出行，不属于「自动链从不交付」口径 ⇒ 放行
+    expect(checkDeclaredInputDelivery(manualStages, cores)).toEqual([]);
+  });
+
+  it('豁免可放行（与 SKILL_INPUT_ARG_EXEMPTIONS 同机制）', () => {
+    const before = SKILL_INPUT_DEAD_EDGE_EXEMPTIONS['peer-reinforcement'];
+    (SKILL_INPUT_DEAD_EDGE_EXEMPTIONS as Record<string, readonly string[]>)['peer-reinforcement'] = ['reply'];
+    try {
+      const cores: ClosureCoreLike[] = [
+        core({
+          skillId: 'peer-reinforcement',
+          fields: [],
+          inputs: [input({ kind: 'skill', skill: 'teaching-turn', fieldPath: 'reply', ref: 'skill:teaching-turn.reply' })],
+        }),
+      ];
+      expect(checkDeclaredInputDelivery(stages, cores)).toEqual([]);
+    } finally {
+      if (before === undefined) delete (SKILL_INPUT_DEAD_EDGE_EXEMPTIONS as Record<string, readonly string[]>)['peer-reinforcement'];
+      else (SKILL_INPUT_DEAD_EDGE_EXEMPTIONS as Record<string, readonly string[]>)['peer-reinforcement'] = before;
+    }
+  });
+
+  it('sandbox / user 输入不参与反向死声明（避免编排注入式交付误报）', () => {
+    const cores: ClosureCoreLike[] = [
+      core({
+        skillId: 'peer-reinforcement',
+        fields: [],
+        inputs: [input({ name: 'snapshot', ref: 'sandbox:profile.snapshot.dynamicState', sandboxPath: 'profile.snapshot.dynamicState' })],
+      }),
+    ];
+    // 不报错：sandbox 投影键的存在性由 checkSandboxRefs 负责，本判据只治 skill→skill
+    expect(checkDeclaredInputDelivery(stages, cores)).toEqual([]);
+  });
+});
+
+describe('checkSandboxRefs（#199 盲区 3 sandbox ref 语义）', () => {
+  const registry = new Map<string, Set<string>>([
+    ['teaching-agent', new Set(['scenario', 'scenario.interactionProfile', 'learner.learnerProjection'])],
+    ['profile-agent', new Set(['snapshot.dynamicState', 'snapshot.learningControlState'])],
+  ]);
+
+  const sandboxInput = (path: string): ClosureInputLike =>
+    input({ name: 'k', ref: `sandbox:${path}`, sandboxPath: path });
+
+  it('正向：ref 命中已登记键（精确）通过；未登记的子段/拼错 → 唯一告警', () => {
+    const cores: ClosureCoreLike[] = [
+      core({ skillId: 'demo', fields: [], inputs: [sandboxInput('teaching.scenario')] }),
+      core({ skillId: 'demo', fields: [], inputs: [sandboxInput('teaching.scenario.interactionProfile')] }),
+      // 以下两个未登记 ⇒ 告警
+      core({ skillId: 'demo', fields: [], inputs: [sandboxInput('teaching.scenario.extra')] }),
+      core({ skillId: 'demo', fields: [], inputs: [sandboxInput('profile.snapshot')] }),
+    ];
+    const issues = checkSandboxRefs([], cores, registry);
+    expect(issues).toHaveLength(2);
+    expect(issues.map((i) => i.message).join('\n')).toContain('teaching.scenario.extra');
+    expect(issues.map((i) => i.message).join('\n')).toContain('profile.snapshot');
+  });
+
+  it('反向：ref 指向不存在的 agent / 缺键 / 未登记键 → sandbox-ref-unregistered', () => {
+    const cores: ClosureCoreLike[] = [
+      core({ skillId: 'demo', fields: [], inputs: [sandboxInput('nope.x')] }),
+      core({ skillId: 'demo', fields: [], inputs: [sandboxInput('teaching.ghost')] }),
+      core({ skillId: 'demo', fields: [], inputs: [sandboxInput('teaching.')] }),
+    ];
+    const issues = checkSandboxRefs([], cores, registry);
+    expect(issues).toHaveLength(3);
+    expect(issues.every((i) => i.code === 'sandbox-ref-unregistered')).toBe(true);
+    expect(issues.map((i) => i.message).join('\n')).toContain('nope');
+    expect(issues.map((i) => i.message).join('\n')).toContain('ghost');
+  });
+
+  it('canonical agent 名（<stage>-agent）也被接受', () => {
+    const cores: ClosureCoreLike[] = [
+      core({ skillId: 'demo', fields: [], inputs: [sandboxInput('teaching-agent.scenario')] }),
+    ];
+    expect(checkSandboxRefs([], cores, registry)).toEqual([]);
   });
 });
 

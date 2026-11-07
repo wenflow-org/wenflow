@@ -9,7 +9,13 @@
  * 其根必须能在本文件声明层定位到，或已在 RULE_KEY_SOURCES 登记归属与证据。
  * 另含「契约闭环」对账（#199）：实参（装配层 handoff 交付键）↔ 输入声明、
  * handoff 目标的消费者存在性、被消费字段的产出方契约——把门禁从声明层推进到
- * 声明↔装配↔产出三方。
+ * 声明↔装配↔产出三方。另补两条纯函数判据：
+ *   4) 盲区 1 反向死声明：core 声明消费某字段、自动链上该字段有产出行却从不 handoff
+ *      给该 skill/所属 agent ⇒ skill-input-dead-declaration；
+ *   5) 盲区 3 sandbox ref 语义：sandbox: ref 的 agent 必须是顶层 5 agent，键必须解析到
+ *      已登记的投影/快照键 ⇒ sandbox-ref-unregistered。
+ * 已知 debt：盲区 2（manifest 登记但无真实装配代码）本轮不做，静态判据看不到
+ * 「声明→TS 代码」，见 contract-closure-check.ts 头注释。
  * - 默认模式（--strict 缺省关闭）：问题以 warn 输出，退出码 0
  * - --strict：任何问题都失败（退出码 1），供 CI / 发布门禁用
  *

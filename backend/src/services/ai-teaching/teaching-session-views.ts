@@ -35,19 +35,53 @@ import type { TeachingOpening } from './AITeachingCoordinator';
 import type { TeachingSessionRecord } from './TeachingSessionRepository';
 import type { TeachingScenarioContext } from './TeachingContextBuilder';
 
+/**
+ * 未结算暂停段的时长（pausedAt → 暂停段实际结束的时刻）。
+ *
+ * 判暂停只认 artifacts.pausedAt：pausedAt 非空 = 有一段暂停还没结算
+ * （resumeSession / 复用开课 resume 结算时把它清零，并把时长并进 pausedDurationMs），
+ * **与 session.status 无关**。原因见 computeEffectiveDurationMinutes 内 #172-4 注释。
+ *
+ * 终点（取「不超过当前时刻」的最早信号，全部是 artifacts，不碰 status）：
+ *  1. endTime 已落库（会话闭合） → 收束时刻。收束受理时 endTime 仍为 null，此刻「当前」即收束时刻。
+ *  2. pausedAt 之后还有消息 → 暂停早已结束而账没结（典型：paused 超 24h 被 timeoutIfPaused 降级，
+ *     之后由教学回合直接恢复——只把 status 改回 active，不清 pausedAt）。这种悬挂段若按 now 扣，
+ *     会随时钟越扣越多、把真实会话压成 1 分钟，故其结束点取首条「暂停后消息」时间戳。
+ *  3. 以上都不存在 → 当前时刻（收束路径上即收束时刻）。
+ * 都不存在且 endTime 也在未来等异常情形：Math.max(0, …) 兜底为 0。
+ */
+function resolveOpenPauseDurationMs(
+  session: TeachingSessionRecord,
+  sessionArtifacts: Record<string, any>,
+): number {
+  if (typeof sessionArtifacts.pausedAt !== 'string') return 0;
+  const pausedAtMs = new Date(sessionArtifacts.pausedAt).getTime();
+  if (!Number.isFinite(pausedAtMs)) return 0;
+
+  const messages = Array.isArray(session.messages) ? session.messages : [];
+  const resumedAfterPauseMs = messages
+    .map((m) => (m?.timestamp ? new Date(m.timestamp).getTime() : NaN))
+    .filter((t) => Number.isFinite(t) && t > pausedAtMs)
+    .sort((a, b) => a - b)[0];
+  const endedAtMs = session.endTime instanceof Date ? session.endTime.getTime() : NaN;
+
+  const endMs = Number.isFinite(resumedAfterPauseMs)
+    ? (Number.isFinite(endedAtMs) ? Math.min(resumedAfterPauseMs, endedAtMs) : resumedAfterPauseMs)
+    : (Number.isFinite(endedAtMs) ? endedAtMs : simulatedNowOr().getTime());
+
+  return Math.max(0, endMs - pausedAtMs);
+}
+
 export function computeEffectiveDurationMinutes(session: TeachingSessionRecord) {
   const sessionArtifacts = parseSessionArtifacts(session.teachingState);
   let pausedDurationMs = Number(sessionArtifacts.pausedDurationMs || 0);
   if (!Number.isFinite(pausedDurationMs) || pausedDurationMs < 0) pausedDurationMs = 0;
 
-  // 暂停中直接收束：当前暂停段（pausedAt → now）一并计入暂停，避免把切走时间算入
-  if (session.status === 'paused' && typeof sessionArtifacts.pausedAt === 'string') {
-    const pausedAtMs = new Date(sessionArtifacts.pausedAt).getTime();
-    if (Number.isFinite(pausedAtMs)) {
-      pausedDurationMs += Math.max(0, Date.now() - pausedAtMs);
-    }
-  }
-
+  // 暂停中直接收束：当前暂停段（pausedAt → 暂停实际结束的时刻）一并计入暂停。
+  // #172-4：判暂停只认 artifacts.pausedAt，不再依赖 session.status——收束受理（claimFinalization）
+  // 在受理时就把状态置 finalizing，原 `status === 'paused'` 分支在收束路径恒不成立，导致
+  // pausedAt → 收束这段时间整段没被扣，最多污染约 60 分钟（wrapup.duration / durationMinutes）。
+  pausedDurationMs += resolveOpenPauseDurationMs(session, sessionArtifacts);
   const rawDuration = Math.max(1, Math.round((simulatedNowOr().getTime() - session.startTime.getTime() - pausedDurationMs) / 60000));
 
   // idle 封顶：按消息时间戳间隔估算活跃时长（间隔 > 30 分钟视为暂停，与 timeout-fallback 规则一致），

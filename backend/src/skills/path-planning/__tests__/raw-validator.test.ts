@@ -1,5 +1,7 @@
 import { validatePathPlanningOutput, validateScopeBinding } from '../index';
 import { resolveSubjectScope } from '../../../services/learning/subject-scopes';
+import { normalizeMilestonesWithConcepts } from '../../../services/learning/generation/path-generation.core';
+import { logger } from '../../../utils/logger';
 
 describe('path-planning raw validator', () => {
   const validOutput = {
@@ -177,7 +179,8 @@ describe('整条路径都是元认知 → 拒绝（2026-10-20 理综实跑）', 
     name: '理综物理大题限时止损与转场',
     totalMilestones: titles.length,
     cognitiveCore: { coreConcepts: conceptNames.map((n, i) => ({ id: `concept-${i + 1}`, name: n, role: i === 0 ? 'hub' : 'supporting' })) },
-    milestones: titles.map((t, i) => ({ stageNumber: i + 1, title: t, description: t, goal: t, coreConcept: conceptNames[i] })),
+    // #171-3：里程碑只能用已声明的概念 id 绑定（名字绑定已被拒），所以这里改用 id 表达。
+    milestones: titles.map((t, i) => ({ stageNumber: i + 1, title: t, description: t, goal: t, coreConcept: `concept-${i + 1}` })),
   });
 
   it('四节课全在讲自检/归类/清单 → 判为元认知路径', () => {
@@ -196,6 +199,84 @@ describe('整条路径都是元认知 → 拒绝（2026-10-20 理综实跑）', 
       ['对照 ZooKeeper 拆出省掉的是另一次独立共识', '用事件簿复盘提交规则'],
     );
     expect(validatePathPlanningOutput(parsed).valid).toBe(true);
+  });
+});
+
+describe('#171-3 收紧：空 coreConcepts / 名字绑定被拒', () => {
+  const baseOutput = {
+    name: '前端入门路径',
+    milestones: [{ stageNumber: 1, title: '识别布局关系', coreConcept: 'concept-1' }],
+    cognitiveCore: {
+      cognitiveDomain: 'understand',
+      coreConcepts: [{ id: 'concept-1', name: '布局关系的识别与稳定控制', role: 'hub' }],
+    },
+  }
+
+  it('coreConcepts 为空 → PATH_PLANNING_COGNITIVE_CORE_EMPTY（不再静默放过两段校验）', () => {
+    const parsed = {
+      ...baseOutput,
+      cognitiveCore: { cognitiveDomain: 'understand', coreConcepts: [] },
+    };
+    const result = validatePathPlanningOutput(parsed) as { valid: boolean; failureReason?: string };
+    expect(result.valid).toBe(false);
+    expect(result.failureReason).toBe('PATH_PLANNING_COGNITIVE_CORE_EMPTY');
+  });
+
+  it('名字绑定被拒：milestone.coreConcept 写概念「名字」而非已声明 id → PATH_PLANNING_MILESTONE_CONCEPT_UNBOUND', () => {
+    const parsed = {
+      ...baseOutput,
+      cognitiveCore: {
+        cognitiveDomain: 'understand',
+        coreConcepts: [
+          { id: 'concept-1', name: '布局关系的识别与稳定控制', role: 'hub' },
+          { id: 'concept-2', name: '受力分析拆解', role: 'supporting' },
+        ],
+      },
+      milestones: [
+        { stageNumber: 1, title: 't1', description: 'd1', goal: 'g1', coreConcept: '布局关系的识别与稳定控制' },
+        { stageNumber: 2, title: 't2', description: 'd2', goal: 'g2', coreConcept: '受力分析拆解' },
+      ],
+    };
+    const result = validatePathPlanningOutput(parsed) as { valid: boolean; failureReason?: string };
+    expect(result.valid).toBe(false);
+    expect(result.failureReason).toBe('PATH_PLANNING_MILESTONE_CONCEPT_UNBOUND');
+  });
+});
+
+describe('#171-3 落库层：去掉 conceptIds[0] 静默回退（不塌缩到 concept-1）', () => {
+  const cognitiveDesign = {
+    cognitiveDomain: 'understand',
+    coreConcepts: [
+      { id: 'concept-1', name: '布局关系', role: 'hub' as const },
+      { id: 'concept-2', name: '受力分析', role: 'supporting' as const },
+    ],
+  };
+
+  it('命中已声明 id 时正常绑定；未命中时置空（非 conceptIds[0]）并记 warning 暴露塌缩', () => {
+    const warnSpy = jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    try {
+      const milestones = [
+        { stageNumber: 1, title: 't1', coreConcept: 'concept-1' },
+        // 未命中任何已声明 id：旧实现会静默回退到 concept-1，造成整条路径概念塌缩
+        { stageNumber: 2, title: 't2', coreConcept: 'ghost-9' },
+        // 缺 coreConcept 字段：同样不应被回退
+        { stageNumber: 3, title: 't3' },
+      ];
+      const result = normalizeMilestonesWithConcepts(milestones, cognitiveDesign as any);
+      // 命中的保留原 id
+      expect(result[0].coreConcept).toBe('concept-1');
+      // 未命中的不再被静默塌缩到 concept-1，而是暴露为空
+      expect(result[1].coreConcept).toBeNull();
+      expect(result[2].coreConcept).toBeNull();
+      expect(result[1].coreConcept).not.toBe('concept-1');
+      // 塌缩被「看见」：对未命中阶段记了告警
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('不再静默塌缩到 conceptIds[0]'),
+        expect.any(Object),
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });
 describe('范围绑定（Scope）：阶段概念必须落在学习范围内', () => {

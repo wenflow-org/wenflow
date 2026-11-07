@@ -349,6 +349,16 @@ export async function processStudentMessage(
   const operationLeaseGuard = new TeachingOperationLeaseGuard(sessionId, operationClaim.operationId);
   operationLeaseGuard.start();
   let committed = false;
+  /**
+   * #173-1①：回合证据写入延后到 `commitTurnState` 成功之后执行。
+   *
+   * 此前三处证据写（checkpoint:result / anchor:result / checkpoint:attempt）都在提交**之前**，
+   * 而它们各自 best-effort 吞错 ⇒ 提交失败回滚后「证据在、状态不在」：证据表里记了一次作答，
+   * 教学状态却退回作答前（重试会再记一次，成功率分母与校准样本双双失真）。
+   * 口径对齐同文件 `recordMisconceptions`（提交成功后写、失败只 warn）：接受「提交后崩溃丢证据」，
+   * 比留下无法对账的孤儿证据更可控。
+   */
+  const deferredEvidence: Array<{ kind: string; write: () => Promise<unknown> }> = [];
 
   try {
     const session = operationClaim.session;
@@ -1641,19 +1651,26 @@ export async function processStudentMessage(
         understanding: Number.isFinite(Number(rawUnderstanding)) ? Number(rawUnderstanding) : null,
       });
 
-      // 检查点结果留痕（learner_evidence）：独立传感器的原始观测，供 §7 P1-1 的成功率带与控制律消费
-      void recordCheckpointResultEvidence(session, submittedCheckpoint, {
-        passed,
-        judgedBy,
-        detail: codeJudgement?.detail ?? null,
-        submission: { selectedOptionIds: options.checkpointSubmission?.selectedOptionIds },
-        prediction,
+      // 检查点结果留痕（learner_evidence）：独立传感器的原始观测，供 §7 P1-1 的成功率带与控制律消费。
+      // #173-1①：入队，提交成功后写（此前在提交前 void 写，回滚会留孤儿证据）。
+      deferredEvidence.push({
+        kind: `checkpoint:result:${submittedCheckpoint.id}`,
+        write: () => recordCheckpointResultEvidence(session, submittedCheckpoint, {
+          passed,
+          judgedBy,
+          detail: codeJudgement?.detail ?? null,
+          submission: { selectedOptionIds: options.checkpointSubmission?.selectedOptionIds },
+          prediction,
+        }),
       });
 
       // 独立锚题探针（Q13/B4）：仅对带 purpose='anchor' 的检查点、且**代码裁决**（纪律 1）时
       // 另写一行 anchor:result 作为"待复核"信号；只标记、不改写掌握/难度/BKT（纪律 2）。
       if (submittedCheckpoint.purpose === 'anchor' && judgedBy === 'code') {
-        void recordAnchorProbeResult(session, submittedCheckpoint, passed);
+        deferredEvidence.push({
+          kind: `anchor:result:${submittedCheckpoint.id}`,
+          write: () => recordAnchorProbeResult(session, submittedCheckpoint, passed),
+        });
       }
 
       // 仅答对时消费检查点；答错保留 pendingCheckpoint（同一 cpId 可重答，
@@ -1691,9 +1708,13 @@ export async function processStudentMessage(
         });
         // H1 失败留痕：到顶强消是「未解决收场」的终局标记——每笔答错已有 checkpoint:result，
         // 此前终局只写日志、测量层不可见（实测重答上限可被绕过 27 次）。只留痕、不改写。
-        await recordCheckpointAttemptEvidence(session, submittedCheckpoint, {
-          outcome: 'attempts_exhausted',
-          attempts: sameCheckpointAttempts,
+        // #173-1①：同样延后到提交成功后写。
+        deferredEvidence.push({
+          kind: `checkpoint:attempt:${submittedCheckpoint.id}`,
+          write: () => recordCheckpointAttemptEvidence(session, submittedCheckpoint, {
+            outcome: 'attempts_exhausted',
+            attempts: sameCheckpointAttempts,
+          }),
         });
       }
       teachingState.checkpointHistory = checkpointHistory.slice(-20);
@@ -1765,6 +1786,21 @@ export async function processStudentMessage(
     });
     committed = true;
 
+    // #173-1①：状态已提交成功，现在才写回合证据（checkpoint:result / anchor:result / checkpoint:attempt）。
+    // 提交前写会留下「证据在、状态不在」的孤儿行；此处写与 `recordMisconceptions` 同口径：
+    // 提交后进程崩溃会丢证据，但绝不产生无法对账的孤立证据。证据写入 best-effort（各自内部已吞错），
+    // 这里再包一层 catch 确保任一证据写失败都不影响已提交的课堂状态与响应。
+    for (const evidence of deferredEvidence) {
+      try {
+        await evidence.write();
+      } catch (error) {
+        logger.warn('[AITeaching] 回合证据写入失败（已提交的课堂状态不受影响）', {
+          sessionId,
+          kind: evidence.kind,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
 
     // 误解台账（G-R-R Phase 2）：异步记录本轮结构化误解，best-effort 不阻断回合。
     // 失败路由占位键治理（F1 修复轮 c，R2 复现 concept-1/concept-2 占位入账）：模型给的

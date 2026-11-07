@@ -529,26 +529,30 @@ function applyPrerequisiteProbeAnswerKey(understanding: any, confirmedProposal: 
   return changed ? { ...understanding, prerequisiteCheckResults: resolved } : understanding;
 }
 
+/**
+ * 各 stage 的置信度档位上下界（172-1 的单一置信度口径）。
+ *
+ * 降级回合（模型自报 ready/completed → 平台回落 proposing）必须把 confidence 一并重算进
+ * proposing 档，不能沿用模型自报的 ready 档值，否则会出现「stage=proposing 且 confidence≥0.95」
+ * 的自相矛盾组合（stage 的结构性双源已由 goal-conversation.stage-authority 收口，只剩置信度口径）。
+ *
+ * proposing 的上界 0.94 刻意严格低于 ready 的下界 0.95：两档不重叠，
+ * 「proposing + ≥0.95」在结构上不再可能出现（降级重算与常规归一都走这张表）。
+ */
+const STAGE_CONFIDENCE_BANDS = {
+  understanding: { min: 0.15, max: 0.92 },
+  proposing: { min: 0.75, max: 0.94 },
+  ready: { min: 0.95, max: 0.98 }
+} as const;
+
+/** 置信度档位表（只读导出）：服务层降级重算与这里同口径，测试用它做一致性校验。 */
+export const GOAL_STAGE_CONFIDENCE_BANDS = STAGE_CONFIDENCE_BANDS;
+
 function normalizeStageAndConfidence(
   stage: 'understanding' | 'proposing' | 'ready' | 'completed',
   confidence: number,
   options?: StageControlOptions
 ): { stage: 'understanding' | 'proposing' | 'ready' | 'completed'; confidence: number } {
-  const STAGE_CAPS = {
-    understanding: 0.92,
-    proposing: 0.95,
-    ready: 0.98
-  };
-
-  const STAGE_MINIMUMS = {
-    understanding: 0.15,
-    proposing: 0.75,
-    // TODO(172-1, 待拍板)：ready 的 confidence floor 0.95 会在 previousStage='ready' 时
-    // 把模型自报值抬到 ≥0.95。降级（ready→proposing）侧的 stage 权威源已收口，
-    // 但「confidence 该怎样随 stage 归一」属产品口径未定，勿自行改。
-    ready: 0.95
-  };
-
   let normalizedStage = stage;
   let normalizedConfidence = Number.isFinite(confidence) ? confidence : 0.2;
 
@@ -558,10 +562,11 @@ function normalizeStageAndConfidence(
     normalizedStage = 'ready';
   }
 
-  const cap = STAGE_CAPS[normalizedStage] || 0.92;
-  const floor = STAGE_MINIMUMS[normalizedStage] || 0.15;
-  normalizedConfidence = Math.min(normalizedConfidence, cap);
-  normalizedConfidence = Math.max(normalizedConfidence, floor);
+  // completed 不在档位表内：沿用历史兜底口径（cap 0.92 / floor 0.15），行为不变。
+  const band = STAGE_CONFIDENCE_BANDS[normalizedStage as keyof typeof STAGE_CONFIDENCE_BANDS]
+    || STAGE_CONFIDENCE_BANDS.understanding;
+  normalizedConfidence = Math.min(normalizedConfidence, band.max);
+  normalizedConfidence = Math.max(normalizedConfidence, band.min);
 
   return {
     stage: normalizedStage,

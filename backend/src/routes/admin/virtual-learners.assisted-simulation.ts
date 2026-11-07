@@ -5,7 +5,7 @@
 import type { Router, Request } from 'express';
 import { logger } from '../../utils/logger';
 import { findProfileJsonById } from '../../services/virtual-lab/virtual-learner-profile.repo';
-import { updateSessionStageResults } from '../../services/virtual-lab/virtual-session.repo';
+import { findSessionById, updateSessionStageResults } from '../../services/virtual-lab/virtual-session.repo';
 import {
   simulatedDayService,
   resolveSimulationClock,
@@ -13,6 +13,7 @@ import {
   explainPlanFailure,
   resolveDayWindow,
   shouldAdvanceSimulationClock,
+  assertDateSimulationAllowedForSession,
 } from '../../services/virtual-lab/simulated-day.service';
 import { runWithSimulatedClock } from '../../services/virtual-lab/simulation-clock-context';
 import { getVirtualLabSettings, DEFAULT_VIRTUAL_LAB_SETTINGS } from '../../services/virtual-lab-settings.service';
@@ -72,6 +73,16 @@ router.put('/sessions/:sessionId/simulation-config', async (req: Request, res) =
       }
       if (simulationClock.autoAdvance !== undefined && typeof simulationClock.autoAdvance !== 'boolean') {
         return res.status(400).json({ success: false, error: 'simulationClock.autoAdvance 必须是布尔值' });
+      }
+    }
+    // 黑盒轨边界（#172-5b）：blackbox-runner 全程不绑模拟钟、时间戳一律取真实墙钟，
+    // 「黑盒会话 + 开启日期模拟」会让同一会话出现两套时间口径（见
+    // simulated-day.service 的 assertDateSimulationAllowedForSession 注释）。
+    // 显式拒绝而不是静默一半生效；关闭（enabled=false）不拦，便于清掉历史脏配置。
+    if (simulationClock && simulationClock.enabled === true) {
+      const target = await findSessionById(sessionId);
+      if (target) {
+        assertDateSimulationAllowedForSession(parseJson<StageResults>(target.stageResults, {}));
       }
     }
 
@@ -191,6 +202,13 @@ router.post('/sessions/:sessionId/advance-day', async (req: Request, res) => {
         error: 'runTasks 模式一次只能推进 1 天；如需一次推进多天请用 runTasks=false（仅推进时钟）',
       });
     }
+    // 黑盒轨边界（#172-5b）：黑盒会话不参与日期模拟（blackbox-runner 不绑模拟钟、
+    // 一律写真实墙钟），推进模拟日对它只是造出双钟数据。这里先给出专门的可读报错
+    // （比「辅助模式接口」的通用 409 更明确），再走后面的租约/推进逻辑。
+    const targetSession = await findSessionById(sessionId);
+    if (targetSession) {
+      assertDateSimulationAllowedForSession(parseJson<StageResults>(targetSession.stageResults, {}));
+    }
 
     const result = await runAssistedSessionMutation(sessionId, async (session, assertLeaseOwned) => {
       const settings = await getVirtualLabSettings().catch(() => ({ ...DEFAULT_VIRTUAL_LAB_SETTINGS }));
@@ -225,7 +243,10 @@ router.post('/sessions/:sessionId/advance-day', async (req: Request, res) => {
 
       let learning: { started: boolean; chunks: number; error?: string } | null = null;
       if (runTasks) {
-        // 模拟日窗口内跑当天学习：写入点（课堂/记忆/指标）用该 asOf，落在模拟日
+        // 模拟日窗口内跑当天学习：写入点（课堂/记忆/指标）用该 asOf，落在模拟日。
+        // 这条绑定同时是**注入侧**的 asOf 来源（#172-5）：时钟要在运行块之后才
+        // mergeSessionStageResults 落库，`getTemporalContext` 若只读库内 clock 会把
+        // 「推进前」的 dayIndex 注入当天课堂。它由模拟钟上下文取本绑定，读侧与写侧同钟。
         learning = await runWithSimulatedClock(dayWindow.asOf, () =>
           runDayLearning(sessionId, {
             lessonsPerDay: clock.lessonsPerDay,

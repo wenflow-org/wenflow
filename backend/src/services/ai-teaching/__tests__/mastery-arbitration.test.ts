@@ -15,6 +15,7 @@
  */
 const mockCreate = jest.fn(async (..._args: any[]) => undefined)
 const mockUpsert = jest.fn(async (..._args: any[]) => undefined)
+const mockFindUnique = jest.fn(async (..._args: any[]) => null)
 
 jest.mock('../../../config/database', () => ({
   __esModule: true,
@@ -22,6 +23,7 @@ jest.mock('../../../config/database', () => ({
     learner_evidence: {
       create: (...args: any[]) => mockCreate(...(args as [])),
       upsert: (...args: any[]) => mockUpsert(...(args as [])),
+      findUnique: (...args: any[]) => mockFindUnique(...(args as [])),
     },
   },
 }))
@@ -117,8 +119,10 @@ describe('F1-a 检查点概念归属（发出与证据写入带键）', () => {
       submission: { selectedOptionIds: ['A'] },
     })
 
-    expect(mockCreate).toHaveBeenCalledTimes(1)
-    const payload = JSON.parse((mockCreate.mock.calls[0][0] as any).data.payload)
+    // #173-1②：稳定 eventId + upsert（不再 create，重试不叠加）
+    expect(mockCreate).not.toHaveBeenCalled()
+    expect(mockUpsert).toHaveBeenCalledTimes(1)
+    const payload = JSON.parse((mockUpsert.mock.calls[0][0] as any).create.payload)
     expect(payload).toEqual(expect.objectContaining({
       checkpointId: 'cp-att-1',
       passed: false,
@@ -161,7 +165,7 @@ describe('F1-a 检查点概念归属（发出与证据写入带键）', () => {
       detail: null,
       submission: {},
     })
-    const payload = JSON.parse((mockCreate.mock.calls[0][0] as any).data.payload)
+    const payload = JSON.parse((mockUpsert.mock.calls[0][0] as any).create.payload)
     expect(payload.conceptKey).toBeUndefined()
     expect(payload.conceptName).toBeUndefined()
     expect(payload.conceptSource).toBeUndefined()

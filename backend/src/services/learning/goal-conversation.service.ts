@@ -6,7 +6,7 @@ import { logger } from '../../utils/logger';
 import { withTransaction } from '../../utils/with-transaction';
 import { executeSkill } from '../../skills';
 import { goalConversationAgentDefinition } from '../../skills/goal-conversation';
-import { collectGoalUploadedMaterialSummaries } from './goal-material-summaries.service';
+import { collectGoalUploadedMaterialSummaries, clearGoalMaterialRankCache } from './goal-material-summaries.service';
 import pathOrchestrator, { GoalPathRequest } from '../../coordinators/path.coordinator';
 import { buildGoalPathVisibleSummary } from './goal-path-visible-summary';
 import { derivePlannedOutline, deriveTriageHint, type LearnerLoadProfile, type TriageHint } from './path-planning-hints';
@@ -161,9 +161,6 @@ class GoalConversationService {
     return /(不过|但是|但我|但还是|我担心|还是担心|还有个问题|还有一个问题|我还想问|我还想补充|能先说一下|能不能先说一下|具体怎么|要是|如果到时候|万一)/.test(text || '');
   }
 
-
-
-
   private static readonly GOAL_STAGES = ['understanding', 'proposing', 'ready', 'completed'] as const;
 
   private getCore(internal: any): { stage: string; confidence: number; isCompleted: boolean; conversationId?: string | null; learningPath?: any } {
@@ -301,6 +298,7 @@ class GoalConversationService {
 
   private toServiceResult(aiResponse: any, conversationId: string, overrides?: {
     stage?: string;
+    confidence?: number;
     isCompleted?: boolean;
     learningPath?: any;
     userVisible?: string;
@@ -313,7 +311,7 @@ class GoalConversationService {
     fallbackGoalExt?: { confirmedProposal?: any; structuredData?: any; confidenceScores?: any } | null;
   }) {
     const stage = overrides?.stage || this.resolveStageFromResponse(aiResponse);
-    const confidence = this.resolveConfidenceFromResponse(aiResponse);
+    const confidence = typeof overrides?.confidence === 'number' ? overrides.confidence : this.resolveConfidenceFromResponse(aiResponse);
     const goalExt = this.getGoalExt(aiResponse?.internal);
     const fallback = overrides?.fallbackGoalExt || null;
     const resolvedGoalExt = {
@@ -390,7 +388,7 @@ class GoalConversationService {
       expectedRevision?: number;
     } = {}
   ): Promise<boolean> {
-    return applyConversationLifecycle(
+    const result = await applyConversationLifecycle(
       prisma as unknown as ConversationLifecycleDb,
       conversationId,
       {
@@ -411,6 +409,8 @@ class GoalConversationService {
         }
       }
     );
+    if (result && stage === 'completed') clearGoalMaterialRankCache(conversationId); // #176-4：会话收尾清排序缓存
+    return result;
   }
 
   /**
@@ -882,21 +882,26 @@ async continueConversation(
       // 模型自报 ready/completed 不产生学习路径：路径生成只能由用户通过 UI 按钮显式确认触发
       // （见上方 confirmProposal 硬规则路径）。模型自报一律回落 proposing，等待用户确认方案。
       if (stage === 'ready' || stage === 'completed') {
+        // 172-1：降级按 proposing 档（0.75~0.94）重算 confidence，不沿用 ready 档自报值（floor 0.95）
+        const degradedConfidence = Math.min(Math.max(Number.isFinite(confidence) ? confidence : 0.75, 0.75), 0.94);
         await this.updateConversationLifecycle(conversationId, 'proposing', {
           status: 'active',
           completedAt: null,
           mutateCollectedData: (data) => {
-            // 172-1：降级必须同时改写 runtimeNextState / runtimeEnvelope 快照，
-            // 否则下一轮 buildPreviousState 会读回模型自报的 ready
             syncDegradedGoalStage(data, 'proposing');
+            for (const target of [data, data.runtimeNextState, data.runtimeEnvelope?.contextUpdate?.nextState]) {
+              if (target && typeof target === 'object') target.confidence = degradedConfidence;
+            }
           }
         });
         logger.warn('模型自报 ready 已被回落为 proposing，等待用户显式确认', {
           conversationId,
-          userId
+          userId,
+          confidence: { reported: confidence, degraded: degradedConfidence }
         });
         return this.toServiceResult(responseWithConversationId, conversationId, {
           stage: 'proposing',
+          confidence: degradedConfidence,
           isCompleted: false,
           fallbackGoalExt,
         });
@@ -1038,7 +1043,10 @@ async continueConversation(
         systemPromptOverride: options?.systemPromptOverrides?.goalAgent,
         // 已上传资料清单（元信息 + 理解摘要）：让 goal-agent 知道用户提供了什么、资料讲什么，
         // 避免答出「没有收到文件」这类与事实不符的话；无上传=空数组=payload 无该键
-        uploadedMaterials: await collectGoalUploadedMaterialSummaries(userId, materialSelectionQuery)
+        uploadedMaterials: await collectGoalUploadedMaterialSummaries(userId, materialSelectionQuery, {
+          conversationId,
+          surfaceGoal: (previousUnderstanding as { surface_goal?: string }).surface_goal,
+        })
       }, {
         // 会话标识进 envelope（与教学链 A6 同模式）：此前只有 SSE 流式路由在 ALS 注入
         // conversationId，非流式路径（API 直连/驱动）恒 null → prompt_call_logs 缺值、
@@ -1617,6 +1625,7 @@ async continueConversation(
       await prisma.goal_conversations.delete({
         where: { id: conversationId }
       });
+      clearGoalMaterialRankCache(conversationId); // #176-4：会话已删除，排序缓存一并清掉
 
       logger.info('对话已删除', { conversationId, userId });
 
