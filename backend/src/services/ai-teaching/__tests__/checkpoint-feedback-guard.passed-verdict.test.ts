@@ -56,6 +56,21 @@ describe('repairContradictedPassedVerdict', () => {
     expect(repairContradictedPassedVerdict(reply)).toBe(reply);
   });
 
+  it('逗号分隔设问不误杀：「对不对」含子串不对', () => {
+    const reply = '这道题的答案对不对，你再确认一下然后我们继续。';
+    expect(repairContradictedPassedVerdict(reply)).toBe(reply);
+  });
+
+  it('逗号分隔让步不误杀：「就不对了」含子串不对', () => {
+    const reply = '如果这道选 C 就不对了，我们再来一遍。';
+    expect(repairContradictedPassedVerdict(reply)).toBe(reply);
+  });
+
+  it('OPENING 疑问句豁免：首句「这道题不对吗？」不修', () => {
+    const reply = '这道题不对吗？我们再核对一遍选项。';
+    expect(repairContradictedPassedVerdict(reply)).toBe(reply);
+  });
+
   it('退化输入原样返回', () => {
     expect(repairContradictedPassedVerdict('')).toBe('');
     expect(repairContradictedPassedVerdict(null)).toBe(null);

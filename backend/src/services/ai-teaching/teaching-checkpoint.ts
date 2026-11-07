@@ -238,23 +238,40 @@ export function summarizeCheckpointHistory(raw: unknown): {
   passed: number;
   failed: number;
   skipped: number;
+  voided: number;
   recent: Array<{ title: string; passed: boolean; skipped?: boolean; understanding?: number }>;
 } | null {
   const rows = Array.isArray(raw) ? raw : [];
   if (rows.length === 0) return null;
-  const passed = rows.filter((row) => row?.passed === true).length;
-  const skipped = rows.filter((row) => row?.skipped === true).length;
+  // 作废行（control.voidCheckpoint，2026-11-07）：教师侧撤销的题**既非通过也非失败**。
+  // 此前 voided 行无 skipped 标记 → 被算进 failed、并落进 recent 的 passed:false，而本摘要
+  // 是**唯一**会把检查点历史变成模型可见文本的出口（teaching-turn-shared.ts:145 注入
+  // scenario.checkpointHistory），提示词又要求「对 recent 里 passed=false 的点…改用另一种表征
+  // 再确认一次」（teaching-turn.yaml 的 checkpointHistory 条）——于是作废回合的下一轮，模型会把
+  // 刚作废的题换个说法再问一遍，正是作废通道要消除的形态。
+  // 口径：先按 voided 把行分成互斥两组（作废行只计入 voided，不再参与 passed/skipped/failed），
+  // 保证 total = passed + failed + skipped + voided 且 failed 永不为负；作废行也**不进 recent**
+  // （不构成“再确认”候选）。同题复问防护仍由 isDuplicateCheckpointQuestion 直读原始
+  // checkpointHistory 兜底，不依赖本摘要。skip（学生跳过）语义不变，仍留在 recent 里。
+  const voidedRows = rows.filter((row) => row?.voided === true);
+  const activeRows = rows.filter((row) => row?.voided !== true);
+  const passed = activeRows.filter((row) => row?.passed === true).length;
+  const skipped = activeRows.filter((row) => row?.skipped === true).length;
+  const voided = voidedRows.length;
   return {
     total: rows.length,
     passed,
-    failed: rows.length - passed - skipped,
+    failed: activeRows.length - passed - skipped,
     skipped,
-    recent: rows.slice(-5).map((row) => ({
-      title: String(row?.title ?? row?.checkpointId ?? ''),
-      passed: row?.passed === true,
-      ...(row?.skipped === true ? { skipped: true } : {}),
-      ...(typeof row?.understanding === 'number' ? { understanding: row.understanding } : {}),
-    })),
+    voided,
+    recent: activeRows
+      .slice(-5)
+      .map((row) => ({
+        title: String(row?.title ?? row?.checkpointId ?? ''),
+        passed: row?.passed === true,
+        ...(row?.skipped === true ? { skipped: true } : {}),
+        ...(typeof row?.understanding === 'number' ? { understanding: row.understanding } : {}),
+      })),
   };
 }
 

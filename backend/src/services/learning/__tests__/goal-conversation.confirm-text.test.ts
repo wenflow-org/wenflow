@@ -17,6 +17,23 @@ describe('isProposalConfirmationText（自然语言确认探测）', () => {
     expect(isProposalConfirmationText('目标期末语法正确率 80%。可以，出方案吧。'.replace('出方案', '生成'))).toBe(true);
   });
 
+  it('「按这个方向走」族命中（2026-11-07 真人走查实证：lp_1793957582347_jm6v754）', () => {
+    // 用户原话两句确认，此前两侧都判不中 → 模型只能说「我这边不能替你按」，用户被迫点按钮
+    expect(isProposalConfirmationText('可以，就按这个方向走')).toBe(true);
+    expect(isProposalConfirmationText('好，就按这个方向走')).toBe(true);
+    expect(isProposalConfirmationText('那就按这个方向')).toBe(true);
+    expect(isProposalConfirmationText('就按这个方向走')).toBe(true);
+    expect(isProposalConfirmationText('按这个思路来')).toBe(true);
+    expect(isProposalConfirmationText('没问题，按你说的办')).toBe(true);
+    expect(isProposalConfirmationText('可以，就按这个方向走。')).toBe(true);
+    // 2026-11-07 独立复核指出：前端 white-list 含「按这个走」，后端此前不含（两表分叉）
+    expect(isProposalConfirmationText('按这个走')).toBe(true);
+    expect(isProposalConfirmationText('就按这个走')).toBe(true);
+    // 反向：仍不得把带调整意图的句子误判成确认
+    expect(isProposalConfirmationText('可以，但方向要改一下')).toBe(false);
+    expect(isProposalConfirmationText('就按这个方向走，但是预算改成每天 1 小时')).toBe(false);
+  });
+
   it('常见确认短语命中', () => {
     expect(isProposalConfirmationText('确认')).toBe(true);
     expect(isProposalConfirmationText('没问题')).toBe(true);

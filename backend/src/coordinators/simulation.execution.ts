@@ -594,12 +594,18 @@ export async function executeSingleStep(ctx: SimulationOrchestrator, input: Simu
         {
           systemPromptOverrides: getSessionPromptOverrides(session),
           // 平台硬规则：proposing 阶段只有显式确认动作才会收束并触发 Path 生成。
-          // 黑盒有 confirm_proposal 动作映射；辅助模式由协调器根据虚拟学习者
-          // 自评的 readyToAdvance 代发确认，否则 Goal 会永远停在 proposing。
-          // P1-12/GD-1：代发依据诚实状态——readyToAdvance 必须是模型显式同意位，
-          // 且 readyToProceed!==false / wantsClarification!==true（显式拒绝不得代签）。
-          // 防卡死由 goal agent 侧轮次上限承担，不伪造学习者同意。
-          confirmProposal: shouldAutoConfirmGoalProposal(currentGoalLearnerState)
+          // 确认信号归学习者自己（2026-11-07 用户裁定）：模拟器在判断方案可行时用自己的
+          // 口吻把确认说出来（提示词真源 virtual-learner-goal-dialogue-simulator.yaml），
+          // 后端按确认文本判定——白名单快路径 / confirmIntent 模型判意图（goal-conversation
+          // 侧已上线并经真机验证）。协调器不再按 readyToAdvance 代发：双方互为黑盒，
+          // agent 只认学习者实际说出的话。
+          // 旧跑数工具（batch-experiment / autopilot）若依赖代发确认，设
+          // VIRTUAL_LEARNER_PROXY_CONFIRM=1 恢复旧行为——此时仍按诚实状态代发：
+          // readyToAdvance===true 且 readyToProceed!==false 且 wantsClarification!==true
+          //（显式拒绝不得代签），防卡死仍由 goal agent 侧轮次上限承担。
+          ...(process.env.VIRTUAL_LEARNER_PROXY_CONFIRM === '1'
+            ? { confirmProposal: shouldAutoConfirmGoalProposal(currentGoalLearnerState) }
+            : {})
         }
       )
     );

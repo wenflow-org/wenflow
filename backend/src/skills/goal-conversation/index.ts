@@ -51,6 +51,8 @@ export interface GoalConversationInternal {
     confidence: number;
     isCompleted: boolean;
     learningPath?: any;
+    /** 确认意图（hidden，布尔，可缺省）：模型对「用户最后一段话是否同意按本方案继续/开始排路径」的结构化判定，供服务端在快路径未命中时据以推进；缺省/非 true 一律不推进 */
+    confirmIntent?: boolean;
   };
   ext: {
     goalConversation: {
@@ -932,7 +934,12 @@ export function parseGoalConversationResponse(
       core: {
         stage,
         confidence,
-        isCompleted: stage === 'ready' || stage === 'completed'
+        isCompleted: stage === 'ready' || stage === 'completed',
+        // 确认意图（hidden，布尔，可缺省）：模型对「用户最后一段话是否同意按本方案继续/开始排路径」的结构化判定；
+        // 仅当为显式 true 时才由服务端推进，undefined/false 一律不推进（见 goal-conversation.yaml 规则「确认意图判定」）。
+        ...(typeof (parsedJson?.state?.confirmIntent ?? parsedJson?.confirmIntent) === 'boolean'
+          ? { confirmIntent: (parsedJson.state?.confirmIntent ?? parsedJson.confirmIntent) as boolean }
+          : {})
       },
       ext: {
         goalConversation: {
