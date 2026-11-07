@@ -424,7 +424,7 @@
         "skill:session-wrapup",
         "teaching-agent"
       ],
-      "fieldCount": 49,
+      "fieldCount": 51,
       "routingCount": 58,
       "codeEntry": [
         {

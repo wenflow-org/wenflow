@@ -189,7 +189,17 @@ async function discardLosingPlaceholder(pathId: string, runId: string): Promise<
   }
 }
 
-/** 确认链路共用段：绑定成功后异步跑 Path 生成（失败回调作废占位路径，供 markActiveGenerationFailed 兜底）。 */
+/**
+ * 确认链路共用段：绑定成功后异步跑 Path 生成（失败回调作废占位路径，供 markActiveGenerationFailed 兜底）。
+ *
+ * #175 实例 1：`buildGoalPathRequest` 原先直接写在 `runGoalAsync` 的**实参展开**里，
+ * 因此先于 `runGoalAsync` 求值——它一抛错就逃出本函数：`onError` 只覆盖异步运行失败，
+ * 调用方的 catch 又只 rethrow，于是留下「会话已 completed + 路径停在 generating」，
+ * 用户拿到 500 并要等 5 分钟租约过期才被 `recoverStaleGeneratingPaths` 兜住。
+ * 现把「准备请求」与「投递」一起纳入 try：准备阶段失败就**就地**把该 run 标失败
+ * （`markActiveGenerationFailed` 按 activeRunId 幂等/fenced，可安全重入），
+ * 让路径立刻落到 failed + 可重试文案，而不是靠租约兜底。
+ */
 export async function kickPathGeneration(
   deps: GoalConversationRejudgeDeps,
   input: {
@@ -200,22 +210,41 @@ export async function kickPathGeneration(
     systemPromptOverrides?: RejudgeConversationOptions['systemPromptOverrides'];
   }
 ) {
-  pathOrchestrator.runGoalAsync(
-    {
-      ...await deps.buildGoalPathRequest(input.conversation, input.seedResult, input.pathId, input.systemPromptOverrides),
+  type GoalPathRequest = Awaited<ReturnType<GoalConversationRejudgeDeps['buildGoalPathRequest']>> & {
+    generationRunId: string;
+    createdPlaceholder: boolean;
+  };
+  let request: GoalPathRequest;
+  try {
+    request = {
+      ...(await deps.buildGoalPathRequest(
+        input.conversation,
+        input.seedResult,
+        input.pathId,
+        input.systemPromptOverrides
+      )),
       generationRunId: input.runId,
       createdPlaceholder: true
+    };
+  } catch (prepareError) {
+    logger.error('硬规则触发：路径生成请求准备失败，就地置该 run 为失败', {
+      conversationId: input.conversation.id,
+      pathId: input.pathId,
+      error: String(prepareError)
+    });
+    await learningService.markActiveGenerationFailed(input.pathId, prepareError, input.runId);
+    return;
+  }
+
+  pathOrchestrator.runGoalAsync(request, {
+    onSuccess: () => {
+      logger.info('硬规则触发：异步学习路径生成成功', { conversationId: input.conversation.id, pathId: input.pathId });
     },
-    {
-      onSuccess: () => {
-        logger.info('硬规则触发：异步学习路径生成成功', { conversationId: input.conversation.id, pathId: input.pathId });
-      },
-      onError: async (pathError) => {
-        logger.error('硬规则触发：异步学习路径生成失败', { conversationId: input.conversation.id, pathId: input.pathId, error: String(pathError) });
-        await learningService.markActiveGenerationFailed(input.pathId, pathError, input.runId);
-      }
+    onError: async (pathError) => {
+      logger.error('硬规则触发：异步学习路径生成失败', { conversationId: input.conversation.id, pathId: input.pathId, error: String(pathError) });
+      await learningService.markActiveGenerationFailed(input.pathId, pathError, input.runId);
     }
-  );
+  });
 }
 
 /**

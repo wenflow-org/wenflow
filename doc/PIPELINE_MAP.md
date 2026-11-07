@@ -37,7 +37,7 @@ flowchart LR
 | --- | --- | --- | --- | --- | --- |
 | 1 | 澄清阶段 | `goal-agent` | `goal-conversation` | 48 / 78 | `prompts/orchestration/goal.yaml` |
 | 2 | 规划阶段 | `path-agent` | `path-planning` → `stage-designer` | 47 / 53 | `prompts/orchestration/path.yaml` |
-| 3 | 教学阶段 | `teaching-agent` | `teaching-opening-generator` → `teaching-turn` → `peer-reinforcement` → `session-wrapup` | 49 / 58 | `prompts/orchestration/teaching.yaml` |
+| 3 | 教学阶段 | `teaching-agent` | `teaching-opening-generator` → `teaching-turn` → `peer-reinforcement` → `session-wrapup` | 51 / 58 | `prompts/orchestration/teaching.yaml` |
 | 4 | 画像阶段 | `profile-agent` | `lesson-knowledge-enricher` | 21 / 33 | `prompts/orchestration/profile.yaml` |
 | 5 | 仿真阶段 | `simulation-agent` | `virtual-learner-goal-dialogue-simulator` → `goal-conversation` → `virtual-learner-path-evaluator` → `virtual-learner-learn-turn-simulator` → `virtual-learner-referee` → `virtual-learner-actor-auditor` → `virtual-learner-memory-curator` | 20 / 30 | `prompts/orchestration/simulation.yaml` |
 
@@ -98,7 +98,7 @@ flowchart LR
 授课执行：Teaching Turn → Peer/Checkpoint → Wrapup
 
 - **Agent**：`teaching-agent` — AI Teaching Agent
-- **编排声明**：`prompts/orchestration/teaching.yaml`（49 字段 / 58 条路由）
+- **编排声明**：`prompts/orchestration/teaching.yaml`（51 字段 / 58 条路由）
 - **代码入口**：
   - 教学会话状态机（开课/回合/收束）：`backend/src/services/ai-teaching/AITeachingCoordinator.ts`
   - 课堂上下文构建（五输入通道）：`backend/src/services/ai-teaching/TeachingContextBuilder.ts`

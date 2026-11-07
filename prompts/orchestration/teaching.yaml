@@ -117,7 +117,20 @@ fields:
   - fieldId: control.checkpoint
     promptRole: control-signal
     valueType: object
-    description: 检查点（question/type/options/hint），间隔满足时可选输出
+    description: 检查点（question/type/options/hint/correctOptionIds/expectedKeywords），间隔满足时可选输出
+  # #174（实例 1）：检查点的两个**答案键**此前只存在于代码里（teaching-turn/index.ts 的
+  # normalizeCheckpoint 与 teaching-checkpoint.ts 的类型），声明只写了 question/type/options/hint，
+  # 于是「代码裁决不依赖模型自报」的关键字段在契约地图上看不见。答案键由服务端持有、
+  # 读侧剥离后不下发学生（coordinator 侧负责剥离），故只登记 fields 行、不另设 routings 通道行
+  # ——routing 粒度是**整个** `control.checkpoint` 对象（已有整对象通道行），这两个子键不是独立输入通道。
+  - fieldId: control.checkpoint.correctOptionIds
+    promptRole: control-signal
+    valueType: array<string>
+    description: 选择题答案键（服务端私有；只保留真实存在于 options 里的 id 并去重，单选只留一个，读侧剥离，不下发学生）
+  - fieldId: control.checkpoint.expectedKeywords
+    promptRole: control-signal
+    valueType: array<string>
+    description: 简答题答案键（服务端私有；1-4 条、每条 ≤40 字，代码按包含判定，读侧剥离，不下发学生）
   - fieldId: control.completionCandidateEvidence
     promptRole: derived-presentation
     valueType: object
