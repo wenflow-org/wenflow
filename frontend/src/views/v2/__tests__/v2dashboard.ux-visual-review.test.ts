@@ -132,8 +132,8 @@ describe('学习台成就提示口径（走查 2026-10-08 #75）', () => {
  */
 describe('学习台新手态：日历常驻 / 图标同行 / 芯片实线 / 双栏等高（走查 2026-11-07）', () => {
   it('① 7 天打卡条常驻（不再被 hasAnyMinutes 换成虚线空框）', () => {
-    expect(html, '.week__grid 又被 hasAnyMinutes 门槛挡住：0 分钟的新用户看不到日历').not.toMatch(/v-else-if="hasAnyMinutes"\s*\n?\s*class="week__grid"/);
-    expect(html, '日历条不在模板里').toContain('class="week__grid"');
+    expect(html, '.cal 又被 hasAnyMinutes 门槛挡住：0 分钟的新用户看不到日历').not.toMatch(/v-else-if="hasAnyMinutes"\s*\n?\s*class="cal"/);
+    expect(html, '日历条不在模板里').toContain('class="cal"');
     expect(source, '虚线空态 .week__empty 应整块退役').not.toContain('week__empty');
     expect(html, '今日 0 分钟应给「待点亮」，否则又是一个没有任何提示的空格').toContain("d.isToday ? '待点亮' : '—'");
   });
@@ -166,6 +166,6 @@ describe('学习台新手态：日历常驻 / 图标同行 / 芯片实线 / 双�
   });
 
   it('移动端「待点亮」不被省略号切掉（列间距收到 3px）', () => {
-    expect(css, '窄屏列间距没收，三字的「待点亮」会溢出成「待点…」').toContain('.week__grid { column-gap: 3px; }');
+    expect(css, '窄屏列间距没收，三字的「待点亮」会溢出成「待点…」').toContain('.cal__grid { column-gap: 3px; }');
   });
 });

@@ -286,12 +286,12 @@
 
         <!-- 学习节奏常显（2026-09-27）：信噪比重设计后主区已收敛，折叠开关失去存在
              意义——藏内容的成本（一次点击+预期管理）高于滚动成本，本周节奏直接展开。
-             「展开整月」保留（任务单 §3）：它不再只是多显示一行摘要，而是真的展开
-             本月 30 天打卡矩阵（见下方 .month）；统计行随矩阵一起出现，属于低频回看的第二档。 -->
+             「展开整月」保留（任务单 §3）但 2026-11-08 改成交互重做：不再是「周条下面
+             再接一块月历」（同屏两份表头、两份 2~8 号、多 120px），而是把同一个网格从
+             1 行展开成整月 6 行，表头唯一、每格可点开当日抽屉。 -->
         <section class="card week">
             <div class="card-head">
               <strong>本周节奏</strong>
-              <button type="button" v-if="hasAnyMinutes" class="link-muted" @click="monthOpen = !monthOpen">{{ monthOpen ? '收起整月 ▴' : '展开整月 ▾' }}</button>
             </div>
             <div v-if="sourceFailed.week" class="dash__source-fail">学习记录加载失败，节奏暂不可用。<button type="button" class="dash__source-retry" @click="loadAll">重试</button></div>
             <!-- 7 天打卡条常驻（2026-11-07 用户走查 图3/图4）：原先 0 分钟时整条日历被
@@ -299,21 +299,58 @@
                  11月7日周六，把日历藏起来只让首页像个没数据的毛坯房，还让 PC 双栏的
                  左卡高、右卡矮、底边不齐。现在永远渲染真实日历：无记录的日子显示「—」，
                  今天显示「待点亮」并带蓝色描边，一眼就能看出「这一格在等我点亮」。 -->
-            <div v-else class="week__grid">
-              <button
-                v-for="d in weekDays"
-                :key="d.date"
-                type="button"
-                class="day"
-                :class="{ 'day--today': d.isToday, 'day--selected': selectedDate === d.date }"
-                @click="selectDay(d.date)"
-              >
-                <span class="day__label">{{ d.weekLabel }}</span>
-                <span class="day__cell" :class="`day__cell--h${d.level}`">{{ d.dayNum }}</span>
-                <span class="day__min">{{ d.minutes ? d.minutes + '分' : (d.isToday ? '待点亮' : '—') }}</span>
-              </button>
+            <!-- 日历（2026-11-08 走查重做）：周视图与月视图**共用一个网格**，不再上下画两遍。
+                 原先「展开整月」在 7 天条下方又画一份「一二三四五六日 + 2~8」，同屏两份
+                 星期表头、两份 2~8 号，白吃 120px；且月历格子是纯静态 span，点不开抽屉。
+                 现在 monthOpen 只决定网格密度：一行 7 格（本周）↔ 整月 6 行；表头唯一，
+                 所有格子都是 button，点谁开谁的抽屉，选中日带白色描边高亮。
+                 11/1「失踪」真相：它一直在（2026-11-01 是周日，落在第一行最后一个格），
+                 但前面 6 个空位 + 全月最淡的 --faint 色，视觉上像被吃掉；本月第一天的
+                 空位改画「上月尾日」的浅灰占位，并把首日当天数据格抬到普通可读色。 -->
+            <div v-else class="cal">
+              <div class="cal__head">
+                <span class="cal__title">{{ monthOpen ? monthLabel : '本周' }}</span>
+                <button type="button" v-if="hasAnyMinutes" class="link-muted" @click="monthOpen = !monthOpen">{{ monthOpen ? '收起整月 ▴' : '展开整月 ▾' }}</button>
+              </div>
+              <div class="cal__wks" aria-hidden="true">
+                <span v-for="w in ['一','二','三','四','五','六','日']" :key="w">{{ w }}</span>
+              </div>
+              <div class="cal__grid" :class="{ 'cal__grid--month': monthOpen }">
+                <template v-if="monthOpen">
+                  <span v-for="b in monthDays.lead" :key="'lead-' + b" class="cal__cell cal__cell--out" aria-hidden="true">{{ monthDays.leadDays[b - 1] }}</span>
+                  <button
+                    v-for="d in monthDays.days"
+                    :key="d.date"
+                    type="button"
+                    class="cal__cell"
+                    :class="[`cal__cell--h${d.level}`, { 'cal__cell--today': d.isToday, 'cal__cell--selected': selectedDate === d.date }]"
+                    :title="`${d.date} · ${d.minutes ? d.minutes + ' 分钟' : '未学习'}`"
+                    :aria-label="`${d.date} ${d.minutes ? d.minutes + ' 分钟' : '未学习'}`"
+                    @click="selectDay(d.date)"
+                  ><b>{{ d.dayNum }}</b><i v-if="d.minutes">{{ d.minutes }}</i></button>
+                </template>
+                <template v-else>
+                  <button
+                    v-for="d in weekCells"
+                    :key="d.date"
+                    type="button"
+                    class="cal__cell"
+                    :class="[`cal__cell--h${d.level}`, { 'cal__cell--today': d.isToday, 'cal__cell--selected': selectedDate === d.date }]"
+                    :title="`${d.date} · ${d.minutes ? d.minutes + ' 分钟' : '未学习'}`"
+                    :aria-label="`${d.date} ${d.minutes ? d.minutes + ' 分钟' : '未学习'}`"
+                    @click="selectDay(d.date)"
+                  ><b>{{ d.dayNum }}</b><span class="cal__min">{{ d.minutes ? d.minutes + '分' : (d.isToday ? '待点亮' : '—') }}</span></button>
+                </template>
+              </div>
+              <div v-if="monthOpen" class="cal__foot">
+                <p class="cal__sum">本月 {{ monthTotals.minutes }} 分钟 · {{ monthTotals.days }} 天有学习 · {{ monthTotals.sessions }} 次</p>
+                <router-link to="/user/learning-history" class="link-muted">全部历史 ›</router-link>
+              </div>
             </div>
-            <div v-if="hasAnyMinutes" class="week__stats">
+            <!-- 本月与本周两组统计不同时上屏（2026-11-08）：月视图展开时卡上已是「本月」口径，
+                 再叠一行「本周」就是两组同形状数字上下并排（本月只有本周有记录时两行数字一样，
+                 用户读作重复渲染）。统计随视图切换：周视图=本周，月视图=本月。 -->
+            <div v-if="hasAnyMinutes && !monthOpen" class="week__stats">
               <span>本周 <b>{{ weekTotal }}</b> 分钟</span>
               <span><b>{{ weekActiveDays }}</b> 天有学习</span>
             </div>
@@ -326,28 +363,6 @@
                 <Medal :size="14" :stroke-width="1.75" aria-hidden="true" />
                 <span>成就「{{ nearestAchievement.name }}」{{ nearestAchievement.achieved ? '即将解锁 · ' : '' }}{{ nearestAchievement.hint }}</span>
               </p>
-            </div>
-            <!-- 整月打卡热力（2026-11-05 用户定稿方案 B）：原「展开整月」只是多显示一行
-                 摘要，点下去日历根本不变，用户读作「点了没反应」。现在真的把 7 天条展开成
-                 本月 30 天小方格矩阵——有学习的日期按同一套热力色阶涂蓝，无学习的浅灰，
-                 下方保留本月统计与「全部历史 ›」入口 -->
-            <div v-if="monthOpen && hasAnyMinutes" class="month">
-              <div class="month__head">
-                <strong>{{ monthLabel }}</strong>
-                <router-link to="/user/learning-history" class="month__more">全部历史 ›</router-link>
-              </div>
-              <div class="month__grid">
-                <span v-for="w in ['一','二','三','四','五','六','日']" :key="w" class="month__wk" aria-hidden="true">{{ w }}</span>
-                <span v-for="b in monthDays.lead" :key="'lead-' + b" class="month__cell month__cell--blank" aria-hidden="true"></span>
-                <span
-                  v-for="d in monthDays.days"
-                  :key="d.date"
-                  class="month__cell"
-                  :class="[`month__cell--h${d.level}`, { 'month__cell--today': d.isToday }]"
-                  :title="`${d.date} · ${d.minutes ? d.minutes + ' 分钟' : '未学习'}`"
-                >{{ d.dayNum }}</span>
-              </div>
-              <p class="month__sum">本月 {{ monthTotals.minutes }} 分钟 · {{ monthTotals.days }} 天有学习 · {{ monthTotals.sessions }} 次</p>
             </div>
           </section>
       </template>
@@ -1057,6 +1072,9 @@ const weekDays = computed(() => {
 const hasAnyMinutes = computed(() => [...minutesByDate.value.values()].some((m) => m > 0));
 const weekTotal = computed(() => weekDays.value.reduce((s, d) => s + d.minutes, 0));
 const weekActiveDays = computed(() => weekDays.value.filter((d) => d.minutes > 0).length);
+/* 周视图格子（2026-11-08）：与月视图同一个网格组件，所以统一成 cal__cell 的形状
+   （日号 + 分钟/待点亮），周几由共用表头承担，不再每格左上角各印一个「一/二/三」 */
+const weekCells = computed(() => weekDays.value);
 
 /* 月度数据游标已退役（2026-10-05）：sessions 改拉「近 90 天」滚动窗口，
    月度摘要按当前自然月从窗口内过滤，不再靠翻月重拉。 */
@@ -1075,10 +1093,12 @@ const monthTotals = computed(() => {
   return { minutes, days, sessions: sessionsCount };
 });
 
-/* 整月打卡热力（2026-11-05 用户定稿方案 B）：「展开整月」从「只多一行摘要」改成真的
-   展开本月 30 天网格。数据源与本周条同一条 minutesByDate（近 90 天窗口已含本月），
-   热力色阶直接复用 heatLevel，不额外拉接口。lead = 月初在周一制里的空位数，
-   让 1 号落在正确星期列。 */
+/* 整月打卡热力（2026-11-08 走查重做）：与周视图共用同一个 .cal__grid，monthOpen
+   只切换网格密度（1 行 7 格 ↔ 整月 6 行），不再在周条下面又画一份表头 + 2~8 号。
+   - lead：月初在周一制里的空位数（2026-11-01 是周日 → lead=6，1 号落在第一行末格）
+   - leadDays：那 6 个空位画成「上月尾日」的浅灰占位，让第一行看起来是完整一周，
+     不再是一片空白把 1 号衬得像丢了（用户的「1 号失踪」其实是这么读出来的）
+   - 所有日期格都是 button，点击走与周视图同一个 selectDay（开当日抽屉） */
 const monthDays = computed(() => {
   const now = new Date();
   const year = now.getFullYear();
@@ -1086,13 +1106,16 @@ const monthDays = computed(() => {
   const first = new Date(year, month, 1);
   const lead = (first.getDay() + 6) % 7; // 0=周一 … 6=周日
   const daysInMonth = new Date(year, month + 1, 0).getDate();
+  // 上月尾日：从 first 往回推 lead 天，给占位格填真实日号
+  const prevMonthLast = new Date(year, month, 0).getDate();
+  const leadDays = Array.from({ length: lead }, (_, i) => prevMonthLast - lead + i + 1);
   const days: Array<{ dayNum: number; date: string; minutes: number; level: number; isToday: boolean }> = [];
   for (let d = 1; d <= daysInMonth; d++) {
     const date = localDateKey(new Date(year, month, d));
     const minutes = minutesByDate.value.get(date) ?? 0;
     days.push({ dayNum: d, date, minutes, level: heatLevel(minutes), isToday: date === todayStr });
   }
-  return { lead, days };
+  return { lead, leadDays, days };
 });
 const monthLabel = computed(() => {
   const now = new Date();
@@ -1135,6 +1158,17 @@ const selectedInfo = computed(() => {
 });
 
 /* ================= 当天学习复盘抽屉 ================= */
+/* 课堂事件文案兜底（2026-11-08）：老会话落库的 summary 残留内部算法记号（θ−d），
+   后端同日起已改发自然语言；这里对存量文本做同义改写，新旧口径同一个落点。
+   新增改写规则时同步补 backend classroom-flow-reason-copy 护栏对面的前端断言。 */
+const EVENT_SUMMARY_REWRITES: Array<[RegExp, string]> = [
+  [/知识状态低于任务难度（θ−d），进入干预/g, '当前任务略超掌握度，已切入针对性辅导'],
+];
+function rewriteEventSummary(text: string): string {
+  let out = text;
+  for (const [re, to] of EVENT_SUMMARY_REWRITES) out = out.replace(re, to);
+  return out;
+}
 const daySheetOpen = ref(false);
 const openSessionEvents = ref<Set<string>>(new Set());
 const daySheetRef = ref<HTMLElement | null>(null);
@@ -1227,7 +1261,7 @@ const daySheet = computed(() => {
       ? ps.classroomEventHistory
           .filter((e: Record<string, any>) => e.summary)
           .slice(0, 12)
-          .map((e: Record<string, any>) => ({ time: fmtTime(e.occurredAt), summary: e.summary }))
+          .map((e: Record<string, any>) => ({ time: fmtTime(e.occurredAt), summary: rewriteEventSummary(e.summary) }))
       : [];
     return {
       id: s.id,
@@ -1705,31 +1739,54 @@ onMounted(loadAll);
   .dash--empty .week { align-content: space-between; }
 }
 .week { padding: 16px 20px; display: grid; gap: 12px; align-content: start; }
-.week__grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
-.day {
-  display: grid; gap: 4px; justify-items: center;
-  padding: 6px 0 4px;
-  border-radius: var(--mk-radius-xl); border: 1px solid transparent;
-  background: transparent; font: inherit; cursor: pointer;
-  transition: color 0.14s ease, background 0.14s ease, border-color 0.14s ease;
+
+/* ---------- 日历（周视图/月视图共用一套网格，2026-11-08） ----------
+   同一张卡里只保留一份星期表头；月视图是把 1 行 7 格换成 6 行，不是另起一块。
+   所有格子都是 button（原来月历是静态 span，点不开抽屉）。 */
+.cal { display: grid; gap: 6px; }
+.cal__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.cal__title { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.cal__wks {
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px;
+  font-size: 12px; font-weight: 700; color: var(--faint); text-align: center;
 }
-.day:hover { background: color-mix(in srgb, var(--blue) 6%, var(--surface)); }
-.day--today { border-color: color-mix(in srgb, var(--blue) 45%, transparent); background: color-mix(in srgb, var(--blue) 5%, transparent); }
-.day--selected { border-color: var(--blue); box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 12%, transparent); }
-/* label 与分钟同走一档微字：原为 11px，规则 16 收口到 12px 下限（原棘轮槽位释放） */
-.day__label, .day__min { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
-.day__label { font-weight: 700; }
-.day__cell {
-  width: 30px; height: 30px; border-radius: var(--mk-radius-lg);
-  display: grid; place-items: center;
-  font-size: 12px; font-weight: 800;
-  background: color-mix(in srgb, var(--line) 55%, transparent); color: var(--muted);
+.cal__grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+.cal__cell {
+  display: grid; place-items: center; gap: 2px;
+  min-height: 46px; padding: 5px 2px;
+  border: 1px solid transparent; border-radius: var(--mk-radius-lg);
+  background: color-mix(in srgb, var(--line) 45%, transparent);
+  color: var(--muted); font: inherit; font-size: 12px; font-weight: 700;
+  cursor: pointer;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
 }
-.day__min { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* 脏数据（如单日 1622 分）不破格 */
-/* 热力色阶（原型 394-396）：基础档 = line 弱底，h1 14% / h2 32% / h3 实色蓝 */
-.day__cell--h1 { background: color-mix(in srgb, var(--blue) 14%, transparent); color: var(--blue-deep); }
-.day__cell--h2 { background: color-mix(in srgb, var(--blue) 32%, transparent); color: var(--blue-deep); }
-.day__cell--h3 { background: var(--blue); color: var(--text-on-primary); }
+.cal__cell b { font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.cal__cell i {
+  font-style: normal; font-size: 12px; font-weight: 600; opacity: 0.9;
+  font-variant-numeric: tabular-nums;
+}
+.cal__min {
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 12px; font-weight: 400; color: var(--faint); font-variant-numeric: tabular-nums;
+} /* 脏数据（如单日 1622 分）不破格 */
+.cal__cell:hover { border-color: color-mix(in srgb, var(--blue) 30%, transparent); }
+/* 月视图格子压矮：6 行 × 46px 会把卡撑高 120px，月模式下让位给行数 */
+.cal__grid--month .cal__cell { min-height: 38px; padding: 3px 2px; }
+/* 选中日：白色高对比描边（周/月两视图同一条规则） */
+.cal__cell--selected { border-color: color-mix(in srgb, var(--blue) 70%, transparent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--blue) 20%, transparent); }
+.cal__cell--today { border-color: color-mix(in srgb, var(--blue) 45%, transparent); }
+/* 当月首日前的空位：画成上月尾日的浅灰占位。原先留 6 个纯空格，11/1 落在
+   第一行最后一个格、又吃全月最淡的色，用户读成「1 号被吃掉了」 */
+.cal__cell--out { background: none; color: color-mix(in srgb, var(--faint) 45%, transparent); cursor: default; }
+/* 热力色阶（原型 394-396）：h1 14% / h2 32% / h3 实色蓝；h0 = 无记录仍给可读灰 */
+.cal__cell--h0 { color: color-mix(in srgb, var(--muted) 85%, transparent); }
+.cal__cell--h0 b { color: var(--muted); }
+.cal__cell--h1 { background: color-mix(in srgb, var(--blue) 14%, transparent); color: var(--blue-deep); }
+.cal__cell--h2 { background: color-mix(in srgb, var(--blue) 32%, transparent); color: var(--blue-deep); }
+.cal__cell--h3 { background: var(--blue); color: var(--text-on-primary); }
+.cal__cell--h3 .cal__min, .cal__cell--h3 i { color: var(--text-on-primary); opacity: 0.85; }
+.cal__foot { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.cal__sum { margin: 0; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 /* 区块级数据源失败提示（区别于空态：失败可见，不伪装成无数据） */
 .dash__source-fail {
   padding: 14px 16px;
@@ -1758,40 +1815,6 @@ onMounted(loadAll);
 }
 .week__note svg { flex-shrink: 0; color: var(--amber); }
 .week__note--achv svg { color: var(--accent); }
-
-/* ---------- 整月打卡热力（2026-11-05 用户定稿方案 B） ----------
-   7 列 × 最多 5 行：有学习的日期按 week 条同一套色阶（h1 14% / h2 32% / h3 实色蓝），
-   未学习 = line 弱底，未来日期同样浅灰（不虚化，避免"缺格"）。 */
-.month {
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
-  display: grid; gap: 10px;
-}
-.month__head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.month__head strong { font-size: 12.5px; font-weight: 700; color: var(--muted); }
-.month__more {
-  font-size: 12px; font-weight: 700; color: var(--blue-deep);
-  text-decoration: none; white-space: nowrap;
-}
-.month__more:hover { text-decoration: underline; }
-.month__grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
-.month__wk { font-size: 12px; font-weight: 700; color: var(--faint); text-align: center; }
-.month__cell {
-  height: 34px;
-  display: grid; place-items: center;
-  border-radius: var(--mk-radius-sm);
-  font-size: 12px; font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  background: color-mix(in srgb, var(--line) 55%, transparent);
-  color: var(--muted);
-}
-.month__cell--blank { background: none; }
-.month__cell--h0 { color: var(--faint); }
-.month__cell--h1 { background: color-mix(in srgb, var(--blue) 14%, transparent); color: var(--blue-deep); }
-.month__cell--h2 { background: color-mix(in srgb, var(--blue) 32%, transparent); color: var(--blue-deep); }
-.month__cell--h3 { background: var(--blue); color: var(--text-on-primary); }
-.month__cell--today { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--blue) 55%, transparent); }
-.month__sum { margin: 0; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 /* ---------- 响应式 ---------- */
 /* 断点取 1023：与 PC 双栏（min-width: 1024）严丝合缝。若仍留在 1100，
@@ -2070,10 +2093,8 @@ a.btn-primary { text-decoration: none; }
    min-height ≥44 并垂直铺满（手势目标=整格），格子视觉（28px 数字块）不变。 */
 @media (max-width: 1100px) {
   .week { padding: 16px 14px; }
-  .week__grid { gap: 5px; }
-  .day { padding: 6px 2px 8px; min-height: 44px; align-content: space-between; }
-  /* 字号不随窄屏下调：基座 12px 已是下限（密度块另有 12px 兜底），缩的只有格子 */
-  .day__cell { width: 28px; height: 28px; border-radius: var(--mk-radius-md); }
+  .cal__grid { gap: 5px; }
+  .cal__cell { padding: 6px 2px 8px; min-height: 44px; align-content: space-between; }
 }
 </style>
 
@@ -2106,11 +2127,10 @@ a.btn-primary { text-decoration: none; }
   .sheet__scroll { padding: 12px 14px 20px; }
   /* 30px 对拇指偏小（贴弹层右上角、周边无别的手势目标），抬到 36px */
   .sheet__close { width: 36px; height: 36px; }
-  /* 桌面 12px、移动块里被压到 11px —— 移动端规则自己写到了下限以下，抬回 12px */
-  .day__cell { font-size: 12px; }
   /* 列间距 5→3：375 下七列每格从 40.6 放到 42.3，今天那格的「待点亮」（12px 三字 = 36px）
      才装得下——否则差 0.8px 被 text-overflow: ellipsis 切成「待点…」。 */
-  .week__grid { column-gap: 3px; }
+  .cal__grid { column-gap: 3px; }
+  .cal__wks { column-gap: 3px; }
 }
 
 /* ---------- ≤1100 密度补齐（2026-09-25 移动框架批8） ----------

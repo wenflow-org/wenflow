@@ -107,13 +107,19 @@ const onCapabilityTab = computed(() => tabs.some((t) => route.path === t.to))
   align-content: start;
 }
 
-/* ===== 页头分段器：fit-content 左对齐（2026-11-06 走查改档） ===== */
+/* ===== 页头分段器：与顶部主导航同一中轴（2026-11-08 走查） =====
+   此前 fit-content 左对齐：tab 栏只有 ~260px 宽、孤零零贴在左边，右边空 1000px；
+   而全站顶部 5 个主导航是水平居中的——上下两条轴明显错开，没页面大标题压阵时
+   头重脚轻。改居中 + 放宽单个 tab 内距，让两者中轴重合、上下呼应。
+   seg-right 插槽存在时仍靠右（学习历史页的总计量），此时整行回到 space-between。 */
 .uc__segrow {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 16px;
   flex-wrap: wrap;
 }
+.uc__segrow:has(.uc__seg-right) { justify-content: space-between; }
 .uc__seg {
   display: inline-grid;
   grid-template-columns: repeat(4, minmax(0, auto));
@@ -125,12 +131,12 @@ const onCapabilityTab = computed(() => tabs.some((t) => route.path === t.to))
 
 .uc__seg__btn {
   min-height: 34px;
-  padding: 0 18px;
+  padding: 6px 20px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--muted);
   text-decoration: none;

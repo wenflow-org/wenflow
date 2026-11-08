@@ -139,4 +139,13 @@ describe('CapabilityShell 分段器激活判定（走查 2026-11-01 P20）', () 
     expect(accountSeg(history).classes()).not.toContain('uc__seg__btn--on');
     expect(segButtons(history)[2].attributes('aria-current')).toBe('page');
   });
+
+  it('分段器水平居中（与顶部主导航同一中轴），Tab 内距/字号放宽', () => {
+    const css = source.slice(source.indexOf('<style'));
+    const row = css.match(/\.uc__segrow\s*\{[^}]*\}/)?.[0] ?? '';
+    expect(row, '取不到 .uc__segrow 规则').toContain('justify-content: center;');
+    const btn = css.match(/\.uc__seg__btn\s*\{[^}]*\}/)?.[0] ?? '';
+    expect(btn, '取不到 .uc__seg__btn 规则').toContain('padding: 6px 20px;');
+    expect(btn).toContain('font-size: 14px;');
+  });
 });

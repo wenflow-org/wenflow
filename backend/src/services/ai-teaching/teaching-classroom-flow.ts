@@ -265,7 +265,7 @@ export function determineNextStage(params: {
   }
 
   if (peerTriggered || understanding < 0.35 || emotion === 'frustrated' || evidencedConfusions >= 2 || (highLoad && understanding < 0.6) || (ktStruggle && understanding < 0.6)) {
-    return { stage: 'intervention', reason: highLoad ? '认知负荷过高，进入干预降载' : ktStruggle ? '知识状态低于任务难度（θ−d），进入干预' : '学生出现明显卡点，进入干预阶段' };
+    return { stage: 'intervention', reason: highLoad ? '认知负荷过高，进入干预降载' : ktStruggle ? '当前任务略超掌握度，已切入针对性辅导' : '学生出现明显卡点，进入干预阶段' };
   }
 
   if (currentStage === 'opening' && learnerMessage.trim()) {
