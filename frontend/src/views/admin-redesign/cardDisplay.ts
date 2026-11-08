@@ -14,6 +14,80 @@
 /** 卡名里那层「想…」的叙述前缀（只这两类在卡库数据里成规模出现） */
 const WANT_PREFIX_RE = /^想(?:解决|搞懂|学会|了解|改变|摆脱|提升)\s*/
 
+/**
+ * 合成卡的「昵称」其实是学习诉求句（2026-11-08 用户「虚拟学习者的名称也太逗了」）：
+ * 400 张合成卡的 nickname / account.displayName / persona.nameHint 三处写的是同一句
+ * `想解决2024新《公司法》认缴制`，于是虚拟学习者列表整列读作「想解决…」。
+ * 预置卡（presets.yaml）用的是真人名（陈默 / 周敏 / 赵鹏），只有合成卡是这样。
+ * 判定：以「想解决 / 想搞懂…」开头即视为诉求句，不是人名。
+ */
+export function isWantSentence(name: string): boolean {
+  return WANT_PREFIX_RE.test(String(name || '').trim())
+}
+
+/**
+ * 合成卡的人名池（2026-11-08）：合成卡没有真人名，展示时按人设短语稳定派生一个。
+ *
+ * 为什么是池子而不是从开场白抽职业：实测 400 张卡里只有 35% 的开场白带「我是 X」式身份
+ * （「以前习惯配 tailwind.config.js」「公司要把数据同步到海外」这类根本没有身份），
+ * 抽不出来的 65% 仍会退回诉求句，列表还是参差不齐。
+ */
+const SURNAMES = [
+  '陈', '林', '周', '赵', '苏', '李', '孙', '吴', '沈', '韩', '徐', '王', '刘', '黄', '何',
+  '郭', '罗', '高', '梁', '宋', '唐', '许', '邓', '冯', '曾', '彭', '蒋', '蔡', '潘', '田',
+]
+const GIVEN_NAMES = [
+  '默', '敏', '鹏', '芮', '昊', '浩', '倩', '舟', '磊', '慧', '婷', '晨', '宇', '宁', '然',
+  '嘉', '铭', '瑶', '岚', '澈', '衡', '睿', '澜', '瑾', '越', '望', '珩', '澄', '钧', '棠',
+  '书', '言', '洲', '乔', '知', '远', '砚', '青', '朔', '昀', '弈', '安然', '之遥', '思源',
+]
+
+/** 32 位字符串哈希（FNV-1a）：同一 cardKey 恒定同值，不依赖运行环境 */
+function hash32(s: string): number {
+  let h = 0x811c9dc5
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i)
+    h = Math.imul(h, 0x01000193) >>> 0
+  }
+  return h >>> 0
+}
+
+/**
+ * 合成卡展示名：按「人设短语」文本派生稳定人名。
+ *
+ * 种子为什么是文本而不是卡号（2026-11-08 二次修正）：同一张身份模板在「学习者卡库」
+ * 与「虚拟学习者实例」里是**两行不同数据**——实测卡库 200 张卡（cardKey 形如
+ * `frontier-F99`）与学习者实例（cardKey 形如 `vl-3f2a19c4`）的 profileId 零重叠。
+ * 按卡号派生会让同一个人在两处拿到两个名字（同一个「想解决纯行政审批…」在卡库是人名 A、
+ * 在实例列表是人名 B），而按诉求句派生与运营直觉一致：一个人一个名，诉求句即其身份。
+ *
+ * 稳定性：对归一后的文本取哈希取模，任意页面、任意次渲染、列表与详情都得同一个名字
+ * （同一张卡在 VirtualLearners 列表、VirtualProfile 详情两处必须同字符串）。
+ */
+export function syntheticPersonaName(seedText: string): string {
+  const k = String(seedText || '').replace(/\s+/g, '')
+  if (!k) return ''
+  const h = hash32(k)
+  const surname = SURNAMES[h % SURNAMES.length]
+  const given = GIVEN_NAMES[Math.floor(h / SURNAMES.length) % GIVEN_NAMES.length]
+  return surname + given
+}
+
+/**
+ * 虚拟学习者 / 卡面的展示名（2026-11-08）：
+ * - 名字是「想…」诉求句（合成卡）→ 按诉求句派生稳定人名；
+ * - 其余（预置卡真人名、自建卡自定义名、人名）原样返回。
+ *
+ * 调用点必须成对：`VirtualLearners 列表`（live.ts）与 `VirtualProfile 详情`（同名者点进去）
+ * 传的是同一句 `personaSeed.nickname`，因此必然得到同一个名字；卡库（VirtualLearnerCards /
+ * CardDetailPage）面向卡池、标题读内容句，走 `cardDisplayTitle`，不参与这条链。
+ */
+export function personaDisplayName(name: string): string {
+  const raw = String(name || '').trim()
+  if (!isWantSentence(raw)) return raw
+  return syntheticPersonaName(raw) || raw
+}
+
 const norm = (s: string) => String(s || '').replace(/\s+/g, '')
 
 /**
