@@ -9,21 +9,6 @@
       <div class="sdp-eng__body">
         <div class="mk-facts mk-facts--rows">
           <div><span title="kind">类型</span><strong class="mono">{{ overview.kind }}</strong></div>
-          <div><span title="agentId">Agent 标识</span><strong class="mono">{{ overview.agentId }}</strong></div>
-          <!-- 2026-11-02 评审：这一行是 core 编译出来的 Prompt 文件（agent-overview 的 file.path），
-               不是可编辑的核心文件；标签写「文件路径」会与协议页签的 prompts/core/<id>.yaml 撞名。 -->
-          <div v-if="overview.file">
-            <span title="file.path">Prompt 文件</span>
-            <strong class="mono" :title="overview.file.path">{{ overview.file.path }}</strong>
-          </div>
-          <div v-if="overview.file?.hash">
-            <span title="file.hash">Prompt 文件哈希</span>
-            <strong class="mono" :title="`${overview.file.hash}（编译产物 prompts/${skillId}.md 的正文哈希）`">{{ shortHash(overview.file.hash) }}</strong>
-          </div>
-          <div v-if="overview.db?.id">
-            <span title="db.id">生效记录 ID</span>
-            <strong class="mono">{{ overview.db.id }}</strong>
-          </div>
           <div v-if="overview.db?.version">
             <span title="db.version">生效版本</span>
             <strong class="mono">v{{ overview.db.version }}</strong>
@@ -45,6 +30,31 @@
             <strong class="mono" :class="overview.drift === 'in-sync' ? 'sdp-ok' : 'sdp-warn'">{{ driftLabel(overview.drift) }}</strong>
           </div>
         </div>
+
+        <!-- 开发者底层工程元数据（2026-11-08 用户「把 TypeScript 代码文件路径和行号、数据库种子 ID
+             全摆在明面上」）：机器标识（Agent 标识 / Prompt 文件路径 / 文件哈希 / 生效记录 ID）
+             折进默认收起的抽屉，日常读「这个 Skill 是什么、发布的哪一版」不需要它们，
+             排障要时再展开。 -->
+        <details class="sdp-adv">
+          <summary class="sdp-adv__sum">开发者底层工程元数据</summary>
+          <div class="mk-facts mk-facts--rows sdp-adv__body">
+            <div><span title="agentId">Agent 标识</span><strong class="mono">{{ overview.agentId }}</strong></div>
+            <!-- 2026-11-02 评审：这一行是 core 编译出来的 Prompt 文件（agent-overview 的 file.path），
+                 不是可编辑的核心文件；标签写「文件路径」会与协议页签的 prompts/core/<id>.yaml 撞名。 -->
+            <div v-if="overview.file">
+              <span title="file.path">Prompt 文件</span>
+              <strong class="mono" :title="overview.file.path">{{ overview.file.path }}</strong>
+            </div>
+            <div v-if="overview.file?.hash">
+              <span title="file.hash">Prompt 文件哈希</span>
+              <strong class="mono" :title="`${overview.file.hash}（编译产物 prompts/${skillId}.md 的正文哈希）`">{{ shortHash(overview.file.hash) }}</strong>
+            </div>
+            <div v-if="overview.db?.id">
+              <span title="db.id">生效记录 ID</span>
+              <strong class="mono">{{ overview.db.id }}</strong>
+            </div>
+          </div>
+        </details>
       </div>
     </section>
 
@@ -293,6 +303,20 @@ const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12
 .sdp-warn { color: var(--mk-amber); }
 /* 卡身：与协议页签、运行时页签同一档内边距 */
 .sdp-eng__body { display: grid; gap: 10px; align-content: start; padding: 12px 16px; }
+/* 开发者底层工程元数据抽屉（2026-11-08）：默认收起，展开后与原 kv 表同形 */
+.sdp-adv { border-top: 1px solid var(--mk-line); padding-top: 8px; }
+.sdp-adv__sum {
+  cursor: pointer;
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-muted);
+  list-style: none;
+  user-select: none;
+}
+.sdp-adv__sum::-webkit-details-marker { display: none; }
+.sdp-adv__sum::before { content: '▸ '; }
+.sdp-adv[open] > .sdp-adv__sum::before { content: '▾ '; }
+.sdp-adv__sum:hover { color: var(--mk-ink); }
+.sdp-adv__body { margin-top: 8px; }
 .sdp-protocols { display: grid; gap: 8px; }
 .sdp-deps { display: flex; flex-wrap: wrap; gap: 6px; }
 .sdp-protocol {

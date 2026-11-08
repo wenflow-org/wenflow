@@ -55,8 +55,8 @@
           />
         </div>
 
-        <!-- ========== 版本（原型 versions：.tbl 表格；日期/作者/变更说明有字段才补列） ========== -->
-        <div v-if="designTabShown('versions')" v-show="tab === 'versions'" class="skd-bloc">
+        <!-- ========== 版本与信息（原「版本」+「工程」合并；2026-11-08 用户「6 个页签合为 4 个」） ========== -->
+        <div v-if="designTabShown('info')" v-show="tab === 'info'" class="skd-bloc">
           <!-- 设计页「版本」内容（在线变体 A/B + 核心文件版本回滚 + Prompt 版本 diff） -->
           <VersionsTab
             :skill-id="skillId"
@@ -126,17 +126,19 @@
           </section>
         </div>
 
-        <!-- ========== 工程（基础信息 · 依赖与发布 · 运行时契约 · 协议视图 · 规则总览） ========== -->
-        <div v-if="designTabShown('engineering')" v-show="tab === 'engineering'" class="skd-bloc">
+        <!-- ========== 工程（基础信息 · 依赖与发布 · 运行时契约 · 协议视图 · 规则总览）
+             2026-11-08 并入「版本与信息」页签：底层代码路径 / DB 种子 ID / 哈希折进可折叠的
+             开发者元数据，默认不摊在明面上（用户「把 TypeScript 代码文件路径和行号全摆在明面上」）。 ========== -->
+        <div v-if="designTabShown('info')" v-show="tab === 'info'" class="skd-bloc">
           <!-- 2026-11-06 整合：这里原本还有一张「工程信息」kv 卡，与 EngineeringTab 的「基础信息」
                是同一批事实的第二套呈现（且一套是 .mk-facts、一套是手搓表）。合成一套，只留页签内那份。 -->
           <EngineeringTab v-if="overviewItem" :skill-id="skillId" :overview="overviewItem" />
         </div>
 
-        <!-- ========== 字段路由（原型 fields：字段流转表格 + note）
+        <!-- ========== 字段路由（原独立页签，2026-11-08 并入「指令与字段」）
              列形差异：原型 5 列 = 字段/来源/目标/转换规则/脱敏（index.html 2374-2377）；
              本表 6 列把「来源+目标」并在「流向」、把脱敏并进属性 badges；仅当后端下发 masked 布尔才补「脱敏」列。 ========== -->
-        <div v-if="designTabShown('routing')" v-show="tab === 'routing'" class="skd-bloc">
+        <div v-if="designTabShown('protocol')" v-show="tab === 'protocol'" class="skd-bloc">
           <!-- 2026-10-31 外部评审拍板：本页签原有两套 26 行大表同屏堆叠（只读流向表 +
                设计区块契约表）。两者语义不同不合并，改为页签内视图切换：默认流向视图（只读），
                「契约编辑」进设计区块（字段血缘 + 加字段向导）。 -->
@@ -157,13 +159,31 @@
           </div>
           <section v-if="routingView === 'flow'" class="mk-card">
             <div class="mk-card__head">
-              <h3 class="mk-card__title">字段路由</h3>
+              <h3 class="mk-card__title">字段流向</h3>
               <div class="mk-card__head-right">
                 <span class="mk-card__meta">{{ routingRowsStateText }}</span>
               </div>
             </div>
+            <!-- 角色筛选（2026-11-08 用户「把 [全部 48][必填 4][方案产出 5]… 做成表格顶部的点击筛选」）：
+                 48 行一次平铺读不完，先按产出角色收窄。 -->
+            <div v-if="routingRows.length" class="mk-seg sdp-seg skd-rolefilter" role="group" aria-label="按字段角色筛选">
+              <button
+                type="button"
+                class="mk-seg__item"
+                :class="{ 'mk-seg__item--active': routingRoleFilter === '' }"
+                @click="routingRoleFilter = ''"
+              >全部 {{ routingRows.length }}</button>
+              <button
+                v-for="c in routingRoleChips"
+                :key="c.id"
+                type="button"
+                class="mk-seg__item"
+                :class="{ 'mk-seg__item--active': routingRoleFilter === c.id }"
+                @click="routingRoleFilter = c.id"
+              >{{ c.label }} {{ c.count }}</button>
+            </div>
             <div class="skd-tablewrap">
-              <table v-if="routingRows.length" class="mk-table mk-table--nowrap">
+              <table v-if="routingRowsFiltered.length" class="mk-table mk-table--nowrap">
                 <thead>
                   <tr>
                     <th scope="col">字段</th><th scope="col">角色</th><th class="skd-th-wrap" scope="col">说明</th><th scope="col">流向</th><th scope="col">渲染</th><th title="字段的两种属性：内部（不进用户可见回复）/ 累积（进学习者状态）" scope="col">内部 / 累积</th>
@@ -171,7 +191,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="r in routingRows" :key="`${r.agentId}:${r.fieldId}`">
+                  <tr v-for="r in routingRowsFiltered" :key="`${r.agentId}:${r.fieldId}`">
                     <td class="mono">{{ r.fieldId }}</td>
                     <td><span v-if="r.roleLabel" class="mk-badge" :class="r.roleCls">{{ r.roleLabel }}</span><span v-else class="mk-na">—</span></td>
                     <td class="skd-td-wrap">
@@ -333,23 +353,31 @@ import EngineeringTab from './skill-design/engineering-tab.vue'
 import RoutingTab from './skill-design/routing-tab.vue'
 
 
-/* ===== 6 页签（运行时置首：健康+证据先于配置，评审「结论埋深」）
-   #149：键与设计页 ?tab= 深链键真对齐——「字段路由」设计页键是 routing，本页原写 fields
-   导致跨页互跳时该档丢失（被归一到默认档）。现统一为 routing；已分享的旧链 ?tab=fields
-   由 normalizeSkdTab 做别名兼容，不失效。 ===== */
+/* ===== 4 页签（2026-11-08 用户「6 个重叠晦涩的页签合并为 4 个」）=====
+   原 6 档里两对在自己抄自己：
+     · 协议 vs 字段路由 —— 协议页右栏那堵「输出契约 48 字段」的纯英文变量墙，
+       与字段路由页的中英对照表是同一批字段；
+     · 版本 vs 工程 —— 工程页把 TypeScript 代码路径与行号、DB 种子 ID 摆在明面。
+   合并后：
+     运行概览   = 原「运行时」（指标 + 模型与路由 + 最近调用）
+     指令与字段 = 原「协议」+「字段路由」（查看/编辑契约、流程、Prompt ↔ 逐字段流向表）
+     在线试跑   = 原「试跑」
+     版本与信息 = 原「版本」+「工程」（底层代码路径/哈希折进可折叠的开发者元数据）
+   旧深链键（protocol/versions/engineering/routing/fields）由 normalizeSkdTab 别名兼容，不失效。 */
 const TABS: Array<{ key: string; label: string }> = [
-  { key: 'runtime', label: '运行时' },
-  { key: 'protocol', label: '协议' },
-  { key: 'trial', label: '试跑' },
-  { key: 'versions', label: '版本' },
-  { key: 'engineering', label: '工程' },
-  { key: 'routing', label: '字段路由' }
+  { key: 'runtime', label: '运行概览' },
+  { key: 'protocol', label: '指令与字段' },
+  { key: 'trial', label: '在线试跑' },
+  { key: 'info', label: '版本与信息' }
 ]
 const DEFAULT_TAB = 'runtime'
 const tab = ref(DEFAULT_TAB)
-/* 字段路由页签内视图：流向（只读）/ 契约编辑（设计区块）。默认流向——
+/* 「指令与字段」页签内视图：流向（只读）/ 契约编辑（设计区块）。默认流向——
    评审判例：两套大表不再同屏堆叠（2026-10-31 外部评审拍板） */
 const routingView = ref<'flow' | 'contract'>('flow')
+/* 字段流向表的角色筛选（2026-11-08 用户「把 [全部 48] [必填 4] [方案产出 5]… 做成表格顶部的
+   点击筛选按钮，默认只看核心的必填与公开回复，不用一次看 48 行」）：'' = 全部 */
+const routingRoleFilter = ref('')
 
 /* ?skdTab= 写/读（tab 路由化，判例 LearnerDetail P0-2 / Orchestrator ?stage=&tab=）：
    深链/刷新/前进后退保持所在页签——此前页签不写 URL，刷新即回协议页。
@@ -358,18 +386,25 @@ const routingView = ref<'flow' | 'contract'>('flow')
    （详情内切页签 → 列表键被写成 versions → Esc 关闭后列表被静默重置）。 */
 const tabRoute = useRoute()
 const TAB_KEYS = new Set(TABS.map((t) => t.key))
-/** #149：旧深链别名——本页「字段路由」历史键 fields（设计页键是 routing），
-    归一读取以免已分享链接失效；写回一律用 routing */
-const TAB_ALIASES: Record<string, string> = { fields: 'routing' }
+/** #149 + 2026-11-08 合并：旧深链一律归一读取，以免已分享链接失效。
+    fields / routing → 指令与字段；versions / engineering → 版本与信息 */
+const TAB_ALIASES: Record<string, string> = {
+  fields: 'protocol',
+  routing: 'protocol',
+  versions: 'info',
+  engineering: 'info',
+}
 function normalizeSkdTab(t: unknown): string {
   if (typeof t !== 'string') return DEFAULT_TAB
   const key = TAB_ALIASES[t] || t
   return TAB_KEYS.has(key) ? key : DEFAULT_TAB
 }
-/* 2026-10-24 修键冲突：编排图用 ?tab=routing 表示「字段路由」子视图，本页也有同键页签。
-   此前无 skdTab 时无条件回退读 ?tab=，从编排图点进详情会误落「字段路由」。
-   现在只兼容宿主列表/旧链的历史键，且显式排除 routing。 */
-const LEGACY_TAB_KEYS = new Set(['runtime', 'protocol', 'trial', 'versions', 'engineering', 'fields'])
+/* 2026-10-24 修键冲突：编排图用 ?tab=routing 表示「字段路由」子视图，本页也曾有同键页签。
+   现在只兼容宿主列表/旧链的历史键，且显式排除 routing（它归编排图）。
+   2026-11-08 修自伤：合并页签后本页多一个键 info（versions / engineering 都归一到它），
+   它必须也在认领集合里，否则「从旧链进入 → 点『版本与信息』」会写回 ?tab=info、重读时不认领，
+   页面自己弹回默认页「运行概览」。集合口径 =「所有会被写回 ?tab= 的键」，即全部合法页签键。 */
+const LEGACY_TAB_KEYS = new Set(['runtime', 'protocol', 'trial', 'versions', 'engineering', 'fields', 'info'])
 /** 读：优先本页自己的 skdTab；旧深链（?tab=versions 等）仍兼容，但不读 routing */
 function readTabFromQuery(): string {
   const q = tabRoute?.query
@@ -715,6 +750,8 @@ const routingRows = computed(() => {
     return {
       agentId: r.agentId,
       fieldId: r.fieldId,
+      /** 角色 id（筛选用；label 只用于显示） */
+      roleId: String(f?.promptRole || ''),
       roleLabel: roleLabel(f?.promptRole),
       roleCls: roleCls(f?.promptRole),
       desc: r.notes || f?.description || '',
@@ -727,6 +764,30 @@ const routingRows = computed(() => {
     }
   })
 })
+/** 角色筛选项（2026-11-08）：按后端下发的 promptRoleMeta 顺序给出「角色 → 命中数」，
+    只列真的出现在本表里的角色；表头「全部 N」始终第一枚。 */
+const routingRoleChips = computed(() => {
+  const rows = routingRows.value
+  if (!rows.length) return [] as Array<{ id: string; label: string; count: number }>
+  const order = (routings.value?.promptRoleMeta || []).map((m) => m.id)
+  const seen = new Map<string, { id: string; label: string; count: number }>()
+  for (const r of rows) {
+    const id = r.roleId || ''
+    if (!id) continue
+    const hit = seen.get(id)
+    if (hit) hit.count += 1
+    else seen.set(id, { id, label: r.roleLabel, count: 1 })
+  }
+  return [...seen.values()].sort((a, b) => {
+    const ai = order.indexOf(a.id)
+    const bi = order.indexOf(b.id)
+    return (ai < 0 ? 999 : ai) - (bi < 0 ? 999 : bi)
+  })
+})
+/** 应用角色筛选后的行 */
+const routingRowsFiltered = computed(() =>
+  routingRoleFilter.value ? routingRows.value.filter((r) => r.roleId === routingRoleFilter.value) : routingRows.value
+)
 /** 原型字段路由 5 列（字段/来源/目标/转换规则/脱敏）vs 本表 6 列（来源+目标并在「流向」、脱敏变属性 badges）：
    仅当后端真的下发了 masked 布尔才补出「脱敏」列，否则保持现状并省略（无数据不硬造）。 */
 const hasMaskedCol = computed(() => routingRows.value.some((r) => typeof r.masked === 'boolean'))
@@ -1115,6 +1176,8 @@ useEscape(
 /* 字段路由页签内视图切换（2026-10-31 外部评审）：与协议页 sdp-pw__viewswitch 同语汇 */
 /* 字段路由页签内的分段：位置归位（与协议 / 版本 / 试跑同一套 .mk-seg） */
 .sdp-seg { width: fit-content; }
+/* 角色筛选条（2026-11-08）：贴在字段流向表上方，窄屏可换行不挤成一团 */
+.skd-rolefilter { width: auto; max-width: 100%; flex-wrap: wrap; margin: 0 16px 12px; }
 
 /* ===== 运行时：指标卡（原型 metricCard 四张独立卡）走共享 MkKpi + .mk-kpi-grid（审核 #146），
    本文件的 .skd-metric* 私有实现已删（含值档与 4K 档覆写，原语自带全档位） ===== */

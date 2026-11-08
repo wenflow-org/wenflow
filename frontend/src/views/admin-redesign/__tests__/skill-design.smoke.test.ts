@@ -262,13 +262,14 @@ describe('Skill 详情页·设计能力平铺冒烟', () => {
     document.body.innerHTML = '';
   });
 
-  it('单层 6 tab 导航，无双层 pill', async () => {
+  it('单层 4 tab 导航，无双层 pill', async () => {
     const { wrapper } = await mountPage();
     const pills = tabButtons(wrapper);
-    // 详情页默认落「运行时」（健康+证据先于配置）；页签顺序 = 详情页既有顺序
-    expect(pills.map((p) => p.text())).toEqual(['运行时', '协议', '试跑', '版本', '工程', '字段路由']);
-    // 切到协议页签（设计页默认档；平铺后需显式切）
-    await pills.find((b) => b.text() === '协议')!.trigger('click');
+    // 详情页默认落「运行概览」（健康+证据先于配置）
+    // 2026-11-08 用户「6 个重叠晦涩的页签合并为 4 个」：协议+字段路由 → 指令与字段；版本+工程 → 版本与信息
+    expect(pills.map((p) => p.text())).toEqual(['运行概览', '指令与字段', '在线试跑', '版本与信息']);
+    // 切到「指令与字段」页签（设计页默认档；平铺后需显式切）
+    await pills.find((b) => b.text() === '指令与字段')!.trigger('click');
     await settle();
     // 协议区块（.sdp-pw）内不再有「版本历史 / 字段血缘」子 pill（双层导航已压平）
     expect(wrapper.find('.sdp-pw__pills').exists()).toBe(false);
@@ -287,7 +288,7 @@ describe('Skill 详情页·设计能力平铺冒烟', () => {
 
   it('版本 tab = 单一入口：变体 / 核心文件 / Prompt 三段同卡分段切换', async () => {
     const { wrapper } = await mountPage();
-    await tabButtons(wrapper).find((b) => b.text() === '版本')!.trigger('click');
+    await tabButtons(wrapper).find((b) => b.text() === '版本与信息')!.trigger('click');
     await settle();
     /* 2026-11-06 整合：三张同构表竖堆（页高 1020）收成一张卡 + 卡头分段。
        默认「变体」段；核心文件与 Prompt 各自切换后渲染，回滚 / 对比生效版仍在各段内。 */
@@ -311,7 +312,7 @@ describe('Skill 详情页·设计能力平铺冒烟', () => {
 
   it('字段路由 tab：切「契约编辑」后血缘折叠块 + 向导组件同页', async () => {
     const { wrapper } = await mountPage();
-    await tabButtons(wrapper).find((b) => b.text() === '字段路由')!.trigger('click');
+    await tabButtons(wrapper).find((b) => b.text() === '指令与字段')!.trigger('click');
     await settle();
     await wrapper.findAll('.mk-seg__item').find((b) => b.text() === '契约编辑')!.trigger('click');
     await settle();
@@ -334,7 +335,7 @@ describe('Skill 详情页·设计能力平铺冒烟', () => {
 
   it('发布链第 1 步：保存并编译 = 一次保存 + 一次编译（无独立编译预览步）', async () => {
     const { wrapper } = await mountPage();
-    await tabButtons(wrapper).find((b) => b.text() === '协议')!.trigger('click');
+    await tabButtons(wrapper).find((b) => b.text() === '指令与字段')!.trigger('click');
     await settle();
     await openProtocolEdit(wrapper);
     const saveBtn = wrapper.findAll('button').find((b) => b.text() === '保存并编译')!;
@@ -348,7 +349,7 @@ describe('Skill 详情页·设计能力平铺冒烟', () => {
 
   it('发布链第 2 步：safe 分类先过确认框，确认后才发布（无开发确认步），发布后刷新 overview', async () => {
     const { wrapper } = await mountPage();
-    await tabButtons(wrapper).find((b) => b.text() === '协议')!.trigger('click');
+    await tabButtons(wrapper).find((b) => b.text() === '指令与字段')!.trigger('click');
     await settle();
     await openProtocolEdit(wrapper);
     await wrapper.findAll('button').find((b) => b.text() === '发布')!.trigger('click');
@@ -369,7 +370,7 @@ describe('Skill 详情页·设计能力平铺冒烟', () => {
 
   it('发布链第 2 步：确认框取消 → 不发布', async () => {
     const { wrapper } = await mountPage();
-    await tabButtons(wrapper).find((b) => b.text() === '协议')!.trigger('click');
+    await tabButtons(wrapper).find((b) => b.text() === '指令与字段')!.trigger('click');
     await settle();
     await openProtocolEdit(wrapper);
     await wrapper.findAll('button').find((b) => b.text() === '发布')!.trigger('click');
@@ -389,7 +390,7 @@ describe('Skill 详情页·设计能力平铺冒烟', () => {
         return err;
       })());
     const { wrapper } = await mountPage();
-    await tabButtons(wrapper).find((b) => b.text() === '协议')!.trigger('click');
+    await tabButtons(wrapper).find((b) => b.text() === '指令与字段')!.trigger('click');
     await settle();
     await openProtocolEdit(wrapper);
     await wrapper.findAll('button').find((b) => b.text() === '发布')!.trigger('click');
@@ -448,7 +449,7 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
 
   it('运行时 tab：卡面只留摘要，详细配置进「配置」弹层', async () => {
     const { wrapper } = await mountPage();
-    await gotoTab(wrapper, '运行时');
+    await gotoTab(wrapper, '运行概览');
     // 2026-10-28 用户「skill 详情的模型也改一下」：卡面先给当前值，表单收进弹层
     /* 2026-11-04 用户「他是在平台配置模型之下的，进行独立的调整」：
        卡面 = 基线（平台默认模型那一行）+ 差异（本 Skill 改过的项）。 */
@@ -506,7 +507,7 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
      平台「模型与接入」页每个模型上都有，这一页只负责「这个 Skill 改了什么」。 */
   it('运行时 tab：模型测试块已不在本页，也不发探测请求', async () => {
     const { wrapper } = await mountPage();
-    await gotoTab(wrapper, '运行时');
+    await gotoTab(wrapper, '运行概览');
     const pane = wrapper.find('.sdp-pane');
     expect(pane.findAll('button').some((b) => b.text() === '开始探测')).toBe(false);
     expect(pane.find('.sdp-testbar').exists()).toBe(false);
@@ -517,11 +518,11 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
 
   it('试跑 tab：执行链路渲染逐步明细（OK/ERR + 步骤名 + ms）', async () => {
     const { wrapper } = await mountPage();
-    await gotoTab(wrapper, '试跑');
+    await gotoTab(wrapper, '在线试跑');
     const steps = wrapper.find('.sdp-steps');
     expect(steps.exists()).toBe(true);
     expect(steps.find('h4').text()).toBe('执行链路');
-    const runBtn = wrapper.findAll('button').find((b) => b.text() === '运行预览')!;
+    const runBtn = wrapper.findAll('button').find((b) => b.text() === '▶ 开始试跑')!;
     await runBtn.trigger('click');
     await settle();
     expect(apiMocks.testSkill).toHaveBeenCalledTimes(1);
@@ -536,36 +537,38 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
 
   it('试跑 tab：只负责跑一次——调用历史与生效 Prompt 都不在本页', async () => {
     const { wrapper } = await mountPage();
-    await gotoTab(wrapper, '试跑');
+    await gotoTab(wrapper, '在线试跑');
     /* 2026-11-06 整合：试跑页原来还有「当前生效 Prompt」和自带一份「最近调用」（8 条、带重跑/
        填入试跑），与运行时页签那份是同一批日志的第二份渲染。现在 Prompt 在协议查看态、
        历史在运行时页签，本页只剩输入 + 执行链路 + 输出。 */
     // 只断言试跑页签自己那块（其余页签 v-show 常驻，全文 text() 会带上运行时的「最近调用」）
-    const trialBloc = wrapper.findAll('.skd-bloc').find((b) => b.text().includes('运行预览'));
+    const trialBloc = wrapper.findAll('.skd-bloc').find((b) => b.text().includes('开始试跑'));
     expect(trialBloc, '试跑页签应已渲染').toBeTruthy();
     expect(trialBloc!.text()).not.toContain('当前生效 Prompt');
     expect(trialBloc!.text()).not.toContain('最近调用');
     expect(trialBloc!.find('.sdp-log').exists()).toBe(false);
     // 唯一的运行入口仍是 TrialTab 的「运行预览」
-    expect(wrapper.findAll('button').filter((b) => b.text() === '运行预览').length).toBe(1);
+    expect(wrapper.findAll('button').filter((b) => b.text() === '▶ 开始试跑').length).toBe(1);
     wrapper.unmount();
   });
 
   it('协议 tab：不再重复渲染契约与状态机（详情页签顶部已有，2026-10-31 外部评审删底部重复卡）', async () => {
     const { wrapper } = await mountPage();
-    await gotoTab(wrapper, '协议');
+    await gotoTab(wrapper, '指令与字段');
     // 底部「状态机与终止条件」投影卡已整体删除：同一页头尾各画一遍的第三处残留清零
     expect(wrapper.find('.sdp-proj').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('状态机与终止条件');
-    // 输入/输出契约只在页签顶部渲染一遍
+    // 输入契约只在页签顶部渲染一遍
     expect(wrapper.findAll('h3').filter((h) => h.text() === '输入契约').length).toBe(1);
-    expect(wrapper.findAll('h3').filter((h) => h.text() === '输出契约').length).toBe(1);
+    /* 2026-11-08 用户「删掉图 4 右边那堵 20 行纯英文变量墙」：查看态的「输出契约」卡整张删除，
+       逐字段中英对照改由同页签下方的「字段流向」表承载（带说明/角色/流向）。 */
+    expect(wrapper.findAll('h3').filter((h) => h.text() === '输出契约').length).toBe(0);
     wrapper.unmount();
   });
 
   it('协议 tab：回合状态机/终止条件无声明即空态（不硬造状态）', async () => {
     const { wrapper } = await mountPage();
-    await gotoTab(wrapper, '协议');
+    await gotoTab(wrapper, '指令与字段');
     /* 2026-11-06 整合：状态机 / 终止条件与运行时清单的阶段集合并成查看态的一张「流程」卡，
        两边都没声明时只给一行空态——此前是两张整宽卡片各写一句空话，还互相指路到工程页签。 */
     const flow = wrapper.findAll('.mk-card').find((c) => c.find('.mk-card__title').text() === '流程');
@@ -594,7 +597,7 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
       }
     }));
     const { wrapper } = await mountPage();
-    await gotoTab(wrapper, '协议');
+    await gotoTab(wrapper, '指令与字段');
     // core 声明的状态机与终止条件进「流程」卡的两行小签
     const flow = wrapper.findAll('.mk-card').find((c) => c.find('.mk-card__title').text() === '流程');
     expect(flow, '协议查看态应有「流程」卡').toBeTruthy();
@@ -606,7 +609,7 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
 
   it('工程 tab：依赖与发布取 core inputs 的 skill:/sandbox: 引用（全量不截断、去重）', async () => {
     const { wrapper } = await mountPage();
-    await gotoTab(wrapper, '工程');
+    await gotoTab(wrapper, '版本与信息');
     const deps = wrapper.findAll('.sdp-deps .mk-badge');
     const texts = deps.map((d) => d.text());
     // 依赖标签取完整 ref（到空白为止）—— 旧正则在首个「.」截断过，此处即回归位

@@ -6,9 +6,11 @@
  *    （2026-10-14 方案 B：原「设计」小钮撤除、行不再开 skill 二级页）；Orchestrator.vue
  *    编排图节点点击 openSubPage('skill')；两者均不再引用 SkillDrawer
  *  - hero：S 头像 / 技能名 / 归属 Agent · 类别副文 / 健康+类别+模型+版本 pills / 真实动作
- *  - 6 页签（运行时 / 协议 / 试跑 / 版本 / 工程 / 字段路由；2026-10 运行时置首：健康+证据先于配置；
- *    页签写/读 ?tab=，深链/刷新可寻址）
- *  - 协议：输入/输出契约 vrow（真实字段路由 fields 拆分）+ 回合状态机/终止条件空态 + System Prompt 代码卡
+ *  - 4 页签（运行概览 / 指令与字段 / 在线试跑 / 版本与信息；2026-11-08 由 6 档合并：
+ *    协议+字段路由 → 指令与字段，版本+工程 → 版本与信息）；运行概览置首：健康+证据先于配置；
+ *    页签写/读 ?tab=，旧键（versions/engineering/routing/fields）别名归一，深链/刷新可寻址
+ *  - 指令与字段：输入契约 vrow + 流程空态 + 全文 System Prompt（英文「输出契约」墙已删，
+ *    逐字段中英对照改由同页签下方的字段流向表承载）
  *  - Prompt 编辑是弹层（原型 openPromptModal：modal modal--wide），Esc/关闭可收
  *  - 原型有而后端没有数据源的展示块一律空态/省略（回合状态机 / 终止条件 / 执行链路 /
  *    试跑对比 / 依赖与发布 / 运行时限制 / 版本日期作者 / 脱敏列），不硬造
@@ -383,51 +385,73 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     w.unmount()
   })
 
-  it('6 页签：运行时 / 协议 / 试跑 / 版本 / 工程 / 字段路由（运行时置首，默认选中）', async () => {
+  /** 2026-11-08 用户「6 个重叠晦涩的页签合并为 4 个」：协议+字段路由 → 指令与字段；版本+工程 → 版本与信息。 */
+  it('4 页签：运行概览 / 指令与字段 / 在线试跑 / 版本与信息（运行概览置首，默认选中）', async () => {
     const w = mountDetail()
     await settle()
 
     const tabs = w.findAll('.mk-subtab')
-    expect(tabs.map((t) => t.text())).toEqual(['运行时', '协议', '试跑', '版本', '工程', '字段路由'])
+    expect(tabs.map((t) => t.text())).toEqual(['运行概览', '指令与字段', '在线试跑', '版本与信息'])
     expect(tabs[0].attributes('aria-selected')).toBe('true')
     w.unmount()
   })
 
-  it('?tab= 写/读：深链带合法 tab 直达该页签；点击页签回写 URL（刷新/分享可寻址）', async () => {
+  it('?tab= 写/读：深链带合法 tab 直达该页签；旧键（versions/engineering）别名归一到新页签', async () => {
     subPage.value = { view: 'skill', id: 'skill-a' }
     const router = createRouter({
       history: createMemoryHistory(),
       routes: [{ path: '/admin/:page?', component: { template: '<div />' } }]
     })
+    // 旧深链 ?tab=versions 仍可寻址：归一落到「版本与信息」（最后一个页签）
     await router.push('/admin/people?view=skill&id=skill-a&tab=versions')
     await router.isReady()
     const w = mount(SkillDetail, { global: { plugins: [router] } })
     await settle()
-
-    // 深链读：versions（第 4 个页签）选中
     expect(w.findAll('.mk-subtab')[3].attributes('aria-selected')).toBe('true')
-    // 点击写：切「工程」→ URL ?tab=engineering（router.replace 为异步导航，需 flushPromises）
-    await w.findAll('.mk-subtab')[4].trigger('click')
+
+    // 点击写：切「在线试跑」→ URL 回写（router.replace 为异步导航，需 flushPromises）
+    await w.findAll('.mk-subtab')[2].trigger('click')
     await flushPromises()
-    expect(router.currentRoute.value.query.tab).toBe('engineering')
+    expect(router.currentRoute.value.query.tab).toBe('trial')
     w.unmount()
   })
 
-  it('协议页签：查看态 = 输入/输出契约 · 流程 · 生效 Prompt（编辑态另起一张卡）', async () => {
+  /* 回归（2026-11-08 自伤）：合并页签后多了键 `info`，但认领集合漏了它。
+     从旧深链（?tab=runtime 等本页认领的旧键）进入后点「版本与信息」→ 写回 ?tab=info →
+     重读时不认领 → 落回默认页「运行概览」，页签自己弹回。 */
+  it('从旧深链进入后点「版本与信息」：停在该页签，不被读回默认页', async () => {
+    subPage.value = { view: 'skill', id: 'skill-a' }
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/admin/:page?', component: { template: '<div />' } }]
+    })
+    await router.push('/admin/people?view=skill&id=skill-a&tab=runtime')
+    await router.isReady()
+    const w = mount(SkillDetail, { global: { plugins: [router] } })
+    await settle()
+    expect(w.findAll('.mk-subtab')[0].attributes('aria-selected')).toBe('true')
+
+    await w.findAll('.mk-subtab')[3].trigger('click')
+    await settle()
+    expect(router.currentRoute.value.query.tab).toBe('info')
+    // 关键断言：URL 写回后不能被读回默认页
+    expect(w.findAll('.mk-subtab')[3].attributes('aria-selected')).toBe('true')
+    w.unmount()
+  })
+
+  it('指令与字段页签：查看态 = 输入契约 · 流程 · 全文生效 Prompt（英文输出契约墙已删）', async () => {
     const w = mountDetail()
     await settle()
-    // 运行时已置首：协议页签需显式切入（第 2 个）
+    // 运行概览已置首：指令与字段需显式切入（第 2 个）
     await w.findAll('.mk-subtab')[1].trigger('click')
     await nextTick()
 
-    // 平铺后 .skd-pane 内有多个 .skd-bloc（运行时默认块 + 协议块，各 v-show）；
-    // 协议块是模板里的第一个（index 0）。断言全部限定在协议块内。
+    // 平铺后 .skd-pane 内有多个 .skd-bloc（各 v-show）；协议块是模板里的第一个（index 0）。
     const bloc = w.findAll('.skd-bloc')[0]
-    /* 2026-11-06 整合：宿主原来在页签上方另画一组只读卡（输入契约 / 输出契约 / 回合状态机 /
-       终止条件 / System Prompt），与下面的编辑器是两层。现在合成一张卡两态——查看态四块：
-       输入契约 · 输出契约 · 流程 · System Prompt。 */
+    /* 2026-11-08 用户「图 4 右边塞了一堵 20 行纯英文变量墙，根本没法读」：
+       「输出契约」卡整张删除——逐字段中英对照改由同页签下方的字段流向表承载。 */
     const cards = bloc.findAll('.mk-card__title').map((t) => t.text())
-    expect(cards).toEqual(['输入契约', '输出契约', '流程', 'System Prompt'])
+    expect(cards).toEqual(['输入契约', '流程', 'System Prompt'])
 
     // 输入契约 = core YAML 的 inputs 声明（ref 前缀标来源：sandbox: → 编排注入 / user: → 用户 / 平台）
     const inCard = bloc.findAll('.mk-card')[0]
@@ -437,28 +461,13 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     expect(inRows[0].text()).toContain('编排注入')
     expect(inRows[1].text()).toContain('用户 / 平台')
 
-    /* 输出契约 2026-11-06 二稿：不再逐行重复字段路由那张表（同一批行、同样的说明）——
-       只给「角色 + 各几个 + 字段名」，逐字段的说明 / 流向 / 渲染 / 内部标记归字段路由页签。 */
-    const outCard = bloc.findAll('.mk-card')[1]
-    expect(outCard.findAll('.sdp-crow').length).toBe(0)
-    const roles = outCard.findAll('.sdp-rolecount .mk-badge').map((b) => b.text())
-    expect(roles).toEqual(['必填入参 1', '公开回复 1', '方案产出 1', '隐式推断 1'])
-    // 字段名清单保留（读者要知道它产出哪些字段），但不再带说明列
-    const names = outCard.find('.sdp-outnames').text()
-    expect(names).toContain('public_reply')
-    expect(names).toContain('analysis.confusion')
-    expect(names).not.toContain('隐式推断出参')
-    // 输入契约不混入产出字段（真实输入只在 core inputs 里）
-    expect(inCard.text()).not.toContain('analysis.confusion')
-
-    // 流程：core 与运行时清单都没声明阶段/终止 → 一行空态（此前是两张整宽卡各写一句空话，
-    // 还各自指路到「工程」页签的运行时契约）
-    const flowCard = bloc.findAll('.mk-card')[2]
+    // 流程：core 与运行时清单都没声明阶段/终止 → 一行空态
+    const flowCard = bloc.findAll('.mk-card')[1]
     expect(flowCard.find('.mk-card__title').text()).toBe('流程')
     expect(flowCard.find('.sdp-flowrow').exists()).toBe(false)
     expect(flowCard.text()).toContain('core YAML 与运行时清单都没有声明阶段或终止条件。')
 
-    // System Prompt：生效内容代码卡 + 截断说明不误报
+    // System Prompt：全文代码卡（2026-11-08 改容器内滚动），不再有「已截断」的半句话
     expect(bloc.find('.sdp-pw__pre').text()).toContain('SYSTEM PROMPT BODY')
     expect(bloc.text()).not.toContain('已截断')
     // 查看态不含编辑态的东西（保存并编译 / 发布 / 源码视图）
@@ -524,7 +533,7 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     expect(ta.exists()).toBe(true)
     await ta.setValue(JSON.stringify({ input: '讲讲 p 值' }))
     // 唯一运行入口在 TrialTab 卡头（宿主旧的「样例输入 + 试跑」副本已撤）
-    const runBtn = w.findAll('button').find((b) => b.text().includes('运行预览'))!
+    const runBtn = w.findAll('button').find((b) => b.text().includes('开始试跑'))!
     await runBtn.trigger('click')
     await settle()
 
@@ -562,7 +571,7 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     const ta = w.find('.sdp-json')
     expect(JSON.parse((ta.element as HTMLTextAreaElement).value)).toEqual({ milestone: {}, cognitiveCore: {} })
 
-    const runBtn = w.findAll('button').find((b) => b.text().includes('运行预览'))!
+    const runBtn = w.findAll('button').find((b) => b.text().includes('开始试跑'))!
     await runBtn.trigger('click')
     await settle()
     expect(testSkillMock).toHaveBeenCalledWith('skill-a', { milestone: {}, cognitiveCore: {} })
@@ -634,10 +643,10 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     w.unmount()
   })
 
-  it('工程页签：工程信息事实区（真实 meta/overview 字段），仓库/值班/SLO 无源不渲染', async () => {
+  it('版本与信息：工程信息事实区（真实 meta/overview 字段），仓库/值班/SLO 无源不渲染', async () => {
     const w = mountDetail()
     await settle()
-    await w.findAll('.mk-subtab')[4].trigger('click') // 工程（第 5 个）
+    await w.findAll('.mk-subtab')[3].trigger('click') // 版本与信息（原「版本」+「工程」）
     await nextTick()
 
     /* 2026-11-06 整合：宿主的「工程信息」kv 卡与页签内的「基础信息」是同一批事实的两套呈现，
@@ -646,6 +655,8 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     expect(w.text()).not.toContain('工程信息')
     expect(w.text()).toContain('skill-a')
     expect(w.text()).toContain('教学 Agent')
+    // 底层机器标识（Prompt 文件路径 / 哈希 / 生效记录 ID）折进默认收起的开发者抽屉
+    expect(w.text()).toContain('开发者底层工程元数据')
     expect(w.text()).toContain('prompts/skill.teaching.md')
     // 依赖与发布：core YAML 无 inputs / 发布流后端无阶段状态 → 空态（依赖 chips 与 feed 不硬造）。
     // 文案 2026-10-04 P3-21（设计评审）人话化：人话领句「该 Skill 未声明…」，schema 细节挪 title
@@ -659,10 +670,10 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     w.unmount()
   })
 
-  it('字段路由页签：默认流向视图（只读表）；「契约编辑」切设计区块——两套大表不再同屏堆叠', async () => {
+  it('指令与字段：字段流向表默认流向视图；「契约编辑」切设计区块——两套大表不再同屏堆叠', async () => {
     const w = mountDetail()
     await settle()
-    await w.findAll('.mk-subtab')[5].trigger('click') // 字段路由（第 6 个）
+    await w.findAll('.mk-subtab')[1].trigger('click') // 指令与字段（原「协议」+「字段路由」）
     await nextTick()
 
     // 2026-10-31 外部评审拍板：页签内加「流向视图 / 契约编辑」切换器，默认流向。
