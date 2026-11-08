@@ -795,7 +795,10 @@ const {
 })
 
 function currentQuery(): SpanQuery {
-  const status = statusFilter.value === 'err' ? 'error' : statusFilter.value === 'warn' ? 'timeout' : statusFilter.value === 'ok' ? 'success' : undefined
+  /* 'err' → status=failed（未成功，含超时）：与胶囊「仅失败（error+timeout）」逐行相等。
+     渲染层仍按行标签区分 超时 / 失败（后端 statusText），所以「失败」这个词在这里是
+     「没成功」的统称，「超时」是其中一类——与总览 usage.failed7d / 失败归因同口径。 */
+  const status = statusFilter.value === 'err' ? 'failed' : statusFilter.value === 'warn' ? 'timeout' : statusFilter.value === 'ok' ? 'success' : undefined
   const range = timeRange.value
   const base: SpanQuery = {
     keyword: keyword.value.trim() || undefined,
@@ -1168,23 +1171,28 @@ const successRate = computed(() => {
 })
 /* 调用总数卡（2026-11-07）：值 = 窗口内总条数，失败数写在同一张卡的读数上——
    「70 · 失败 4」让「成功率 94%」有分母可对，不必再回头数表格行。
-   stats 未就绪时读「—」（与成功率同纪律：不拿上一窗口或本页样本冒充）。 */
+   stats 未就绪时读「—」（与成功率同纪律：不拿上一窗口或本页样本冒充）。
+   2026-11-08 审计：这里的失败数 = **未成功**（error + timeout），与同屏「仅失败」胶囊、
+   成功率分母、总览「失败 N 次」四处同口径；此前只数 error，与胶囊/下钻三处不同数。 */
 const callsTotalText = computed(() => {
   const st = liveStats.value
-  if (st) return st.error > 0 ? `${st.total}（失败 ${st.error}）` : `${st.total}`
+  if (st) {
+    const failed = st.error + st.timeout
+    return failed > 0 ? `${st.total}（失败 ${failed}）` : `${st.total}`
+  }
   if (statsPending.value) return '—'
   if (!logs.value.length) return '—'
-  const failed = logs.value.filter((l) => l.status === 'err').length
+  const failed = logs.value.filter((l) => l.status !== 'ok').length
   return failed > 0 ? `${logs.value.length}（失败 ${failed}）` : `${logs.value.length}`
 })
 const callsTotalTone = computed<'ok' | 'bad' | 'muted'>(() => {
   const st = liveStats.value
   if (!st) return 'muted'
-  if (st.error > 0) return 'bad'
+  if (st.error + st.timeout > 0) return 'bad'
   return 'ok'
 })
 const callsTotalTitle = computed(() => (liveStats.value
-  ? '当前时间窗与筛选下的全部调用（含失败与超时）'
+  ? '当前时间窗与筛选下的全部调用（失败 = 未成功，含超时）'
   : '按当前页样本估算，翻页或筛选后随之变化'))
 
 /** KPI 显示值：数字档补 %；未就绪档直接「—」（不出现「—%」这种残缺读数） */
@@ -1303,15 +1311,21 @@ const sourceSelectOptions = computed(() => [
 ])
 /** 卡头「状态」下拉：计数取当前窗口 stats；未就绪时不显计数（不把未知读成 0） */
 /* 2026-11-07 用户「执行日志叫『状态 全部状态』、审计日志叫『失败动作 不过滤』，两页各一套」：
-   统一成「状态 · 全部 / 仅成功 / 仅失败」。超时档并进失败——对运营它是「没成功」，不是第三种结果；
-   计数仍只出现在选项文案里（同一读数不在别处再渲染）。 */
+   统一成「状态 · 全部 / 仅成功 / 仅失败 / 仅超时」。
+   2026-11-08 修口径（审计）：口径按平台统一的那一条走——**「失败」= 没成功（含超时）**，
+   超时是失败的原因分类（失败归因里的 provider_timeout 桶），不是并列的第三档；
+   总览「今日/近 7 天失败 N 次」下钻过来必须拿到同一批行，故「仅失败」发 status=failed（未成功）。
+   旧写法发 status=error（后端用 NOT buildTimeoutCondition() 排除超时）→ 胶囊写 7、列表出 4 行，
+   且与总览的数对不上。「仅超时」保留为更窄的快捷档（行内状态列本就区分 超时/失败 两种标签），
+   它让超时既能被单看、也不会因为并进失败而找不到。 */
 const statusSelectOptions = computed(() => {
   const st = liveStats.value
   const failed = st ? st.error + st.timeout : null
   return [
     { value: '', label: '全部' },
     { value: 'ok', label: st?.success != null ? `仅成功（${st.success}）` : '仅成功' },
-    { value: 'err', label: failed != null ? `仅失败（${failed}）` : '仅失败' }
+    { value: 'err', label: failed != null ? `仅失败（${failed}）` : '仅失败' },
+    { value: 'warn', label: st?.timeout != null ? `仅超时（${st.timeout}）` : '仅超时' }
   ]
 })
 

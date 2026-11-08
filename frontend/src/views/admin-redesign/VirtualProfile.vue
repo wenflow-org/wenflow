@@ -1073,6 +1073,7 @@ import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { statusText } from './statusText'
 import { subPage, openSubPage, setSubPageLabel, isLive } from './store'
 import { liveGetVirtualDetail, liveVirtuals, timeAgo, errMsg } from './live'
+import { personaDisplayName } from './cardDisplay'
 import { adminVirtualLearnersApi, adminLearnerModelsApi } from '@/api/adminApi'
 import { clearProjectionToken, setProjectionToken } from '@/utils/projection'
 import { LEARNER_METRICS } from '@/utils/learnerMetrics'
@@ -1923,12 +1924,14 @@ async function loadDetail(id?: string, quiet = false) {
       selectedStoryId.value = null
     }
 
-    /* 显示名链与「学习者卡库」/ 虚拟学习者列表同源（#66）：personaSeed.nickname →
-       nickname → name → nameHint → userName → id；三处同一字符串，vlAvatar 哈希
-       「同一人恒定同色」才成立。 */
+    /* 显示名链与「虚拟学习者列表」（live.ts 同一处口径）同源（2026-11-08 二次修正）：
+       personaSeed.nickname → nickname → name → nameHint → userName → id，末层再过
+       personaDisplayName——合成卡的 nickname 是诉求句（「想解决…」），要在**两处**都
+       派生成同一个人名，否则从列表点进详情名字就变了。卡库面向卡池、标题读内容句
+       （cardDisplayTitle），是另一批数据行，不在这条链上。 */
     const personaSeed = (p.personaSeed || {}) as Record<string, unknown>
     liveDetail.value = {
-      name: String(personaSeed.nickname || p.nickname || p.name || p.nameHint || raw.userName || id),
+      name: personaDisplayName(String(personaSeed.nickname || p.nickname || p.name || p.nameHint || raw.userName || id)),
       archetype: String(p.occupation || p.archetype || '自定义样本'),
       story: String(p.background || raw.notes || '（未填写故事）'),
       goal: String(raw.learningGoal || ''),

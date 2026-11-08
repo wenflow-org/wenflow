@@ -769,6 +769,13 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
     if (status) {
       if (status === 'success') {
         where.AND.push({ success: true });
+      } else if (status === 'failed') {
+        /* 未成功（含超时）：平台口径里「失败」= 没成功，超时是它的一个**原因分类**
+           （失败归因的 provider_timeout 桶），不是并列的第三档——总览 usage.failed7d
+           与归因之和恒等这条不变式就建立在此（platform-overview-stats.test.ts）。
+           执行日志的「仅失败」档必须用它：总览「今日/近 7 天失败 N 次」下钻过来时，
+           旧写法（status=error 排除超时）会少掉超时那几行（2026-11-08 审计）。 */
+        where.AND.push({ success: false });
       } else if (status === 'error') {
         where.AND.push({ success: false });
         where.AND.push({ NOT: buildTimeoutCondition() });

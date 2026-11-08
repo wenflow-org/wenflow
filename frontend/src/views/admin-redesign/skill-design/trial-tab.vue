@@ -8,9 +8,15 @@
       <div class="mk-card__head">
         <h3 class="mk-card__title">试跑</h3>
         <div class="mk-card__head-right">
-          <button type="button" class="mk-link" :disabled="!trialInput.trim()" @click="formatTrialJson">格式化</button>
+          <!-- 「填入示例输入」（2026-11-08 用户「让管理员手写冷冰冰的 JSON 太难用了」）：
+               骨架值全是类型占位（""/0/false），直接点上跑必然失败。这里按输入契约给一组
+               能跑通的示例值，点一下即填好，随后可直接「开始试跑」。 -->
+          <button type="button" class="mk-link" :disabled="trialRunning" title="按输入契约填入一组可直接试跑的示例值" @click="fillSampleInput">填入示例输入</button>
+          <button type="button" class="mk-link" :disabled="!trialInput.trim() || trialRunning" @click="formatTrialJson">格式化</button>
+          <!-- 按钮文案只由「是否真的在跑」决定（2026-11-08 用户截图里的「运行中…」是旧版把
+               disabled 误当 isRunning 的写法，本处已按 trialRunning 单一判据）。 -->
           <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" :disabled="trialRunning" @click="runTrial">
-            {{ trialRunning ? '运行中…' : '运行预览' }}
+            {{ trialRunning ? '运行中…' : '▶ 开始试跑' }}
           </button>
         </div>
       </div>
@@ -116,6 +122,28 @@ function formatTrialJson() {
 function clearTrial() {
   trialResult.value = null
   trialError.value = ''
+}
+
+/** 填入示例输入（2026-11-08）：优先用该 Skill 最近一次成功真实调用的载荷——
+    生产里真吃过的形状，粘进去就能跑；一条都没有时才回落契约骨架（并说明来历）。 */
+async function fillSampleInput() {
+  const id = props.skillId
+  if (!id || trialRunning.value) return
+  try {
+    const res = await adminSkillsApi.getSampleInput(id)
+    if (id !== props.skillId) return
+    const sample = (res.data?.data ?? null) as { json?: string; origin?: string; calledAt?: string } | null
+    if (sample?.json) {
+      trialInput.value = sample.json
+      toast.success('已填入最近一次真实调用用过的输入')
+      return
+    }
+    // 无真实调用：回落契约骨架（loadTrialDefault 同一份）
+    await loadTrialDefault(id)
+    toast.info('该 Skill 暂无成功调用记录，已按输入契约填入骨架，请按其提示补全')
+  } catch (e) {
+    toast.error(`填入示例输入失败：${errText(e)}`)
+  }
 }
 
 /** 执行链路（原型 vrow：OK/ERR pill + 步骤名 + ms）：testSkill 只回最终输出 → 多为空态，

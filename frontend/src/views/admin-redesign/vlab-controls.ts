@@ -201,14 +201,22 @@ export function deriveVsLifecycleState(input: {
 
 /** 画像级派生：从会话流水聚合出「这个人现在处于哪一态」（多会话取最活跃的一条）。
  *  与单会话版同住本文件，保证状态语义与可用动作矩阵永远同源。
- *  failed/abandoned 在 tone=bad 下合并展示（既有产品取舍）。 */
+ *  failed/abandoned 在 tone=bad 下合并展示（既有产品取舍）。
+ *
+ *  优先级（2026-11-08 审计统一）：**在推进的会话优先**——只要有一条在跑就是「进行中」，
+ *  只有在跑的会话全被冻结时才是「已暂停」。此前是 paused 优先（任一条 paused 即判 paused），
+ *  与列表页 `runPhaseOf`（读后端 classifySessionRunPhase 的计数，running → stalled → paused）
+ *  反向：一个学习者「1 条在推进 + 1 条被冻结」在列表读「进行中」、点进详情读「已暂停」，
+ *  同一个人的两页两态。三票都指向 running 优先：列表页、后端分类、以及本函数的注释原文
+ *  「多会话取最活跃的一条」（paused 优先等于取最不活跃的一条）。单会话语义不变。 */
 export function deriveVsLifecycleStateFromRuns(
   runs: ReadonlyArray<{ result?: string | null; tone?: string | null; paused?: boolean | null }>
 ): VsLifecycleState {
   if (!runs.length) return 'idle'
   const live = (r: { result?: string | null }) => r.result === 'running' || r.result === 'created'
-  if (runs.some((r) => r.paused && live(r))) return 'paused'
-  if (runs.some(live)) return 'running'
+  const liveRuns = runs.filter(live)
+  if (liveRuns.some((r) => !r.paused)) return 'running'
+  if (liveRuns.length) return 'paused'
   if (runs.some((r) => r.tone === 'bad')) return 'failed'
   if (runs.some((r) => r.tone === 'ok')) return 'completed'
   return 'idle'

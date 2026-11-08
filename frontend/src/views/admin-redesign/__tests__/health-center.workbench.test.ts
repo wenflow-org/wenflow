@@ -136,6 +136,36 @@ describe('健康中心（G1）', () => {
     dataSource.value = 'live';
   });
 
+  /* 2026-11-08 审计：读不到（status=unavailable）被判成 info 不进异常组，会掉进「正常」分支
+     把 okNote 原样印出来——同一条明细里却写着「读取失败…不能据此判定」，上下自相矛盾。 */
+  it('读取失败的观测项不印正常话术：行内写「未判定」，okNote 一个字都不出现', async () => {
+    const report = makeReport();
+    report.health.items.push({
+      ...makeItem('runtime-degradation', 'info', 0, ['degradation_events 读取失败或表尚未创建；不能据此判定「没有降级」']),
+      status: 'unavailable',
+      okNote: '近 7 天没有降级事件',
+    });
+    getSummaryMock.mockResolvedValue({ data: { success: true, data: report } });
+    const wrapper = await mountWorkbench();
+    const text = wrapper.text();
+    expect(text).toContain('本次读取失败，未判定');
+    expect(text).not.toContain('近 7 天没有降级事件');
+    wrapper.unmount();
+  });
+
+  it('正常项的 okNote 照常渲染（这条新分支不能吃掉正常态说明）', async () => {
+    const report = makeReport();
+    report.health.items.push({
+      ...makeItem('runtime-degradation', 'info', 0, []),
+      status: 'recorded',
+      okNote: '近 7 天没有降级事件',
+    });
+    getSummaryMock.mockResolvedValue({ data: { success: true, data: report } });
+    const wrapper = await mountWorkbench();
+    expect(wrapper.text()).toContain('近 7 天没有降级事件');
+    wrapper.unmount();
+  });
+
   it('live + summary mock：概要卡四张 + 计数口径 + 健康检查分组', async () => {
     getSummaryMock.mockResolvedValue({ data: { success: true, data: makeReport() } });
     const wrapper = await mountWorkbench();

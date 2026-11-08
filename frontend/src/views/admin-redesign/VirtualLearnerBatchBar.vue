@@ -1,31 +1,50 @@
 <template>
-  <!-- 批量操作条（全局 mk-batchbar：选中后底部浮现） -->
+  <!-- 底部命令栏（全局 mk-batchbar：选中 ≥1 人后由父页 v-if 挂出）
+       2026-11-08 用户走查（图2「一串冰糖葫芦 / 一排红色自毁按钮」）：
+       ① 去掉每颗按钮重复的「批量」前缀——左侧「已选 N 项」已说明这是批量动作；
+       ② 按语义分三档并加竖线隔离：正向主操作（启动故事，蓝底白字）→ 常规（开/停自动驾驶，
+          中性灰底）→ 危险区（终止 / 删除，红字细框 / 实心红）；
+       ③ 「清理无响应」是全局维护动作（右上角「维护」菜单里已有），且只在勾选含无响应项时才有意义，
+          不再常驻命令栏——见父页 reclaim 入口；
+       ④ 进度读数单独成弱化文本，不再把每颗按钮的文案都替换成「处理中…」而看不出谁在跑。 -->
   <div class="mk-batchbar">
-    <span>已选 {{ selected.length }} 人</span>
-    <button type="button" class="mk-link" @click="emit('update:selected', [])">取消选择</button>
-    <button type="button" class="mk-batchbar__btn" :disabled="batchActionBusy" :title="'为每个选中的虚拟学习者启动其全部故事的实验会话（一个故事一个会话）'" @click="batchLaunchAllStories">
-      {{ batchActionBusy ? `处理中${batchProgress}…` : '启动全部故事' }}
+    <span class="mk-batchbar__count">已选 {{ selected.length }} 项</span>
+    <button type="button" class="mk-link mk-batchbar__cancel" @click="emit('update:selected', [])">取消选择</button>
+    <span v-if="batchActionBusy" class="mk-batchbar__progress">处理中{{ batchProgress }}</span>
+    <span class="mk-batchbar__sep" aria-hidden="true"></span>
+    <button type="button" class="mk-batchbar__primary" :disabled="batchActionBusy" :title="'为每个选中的虚拟学习者启动其全部故事的实验会话（一个故事一个会话）'" @click="batchLaunchAllStories">
+      ▶ 启动故事
     </button>
     <button type="button" class="mk-batchbar__btn" :disabled="batchActionBusy" :title="'对选中虚拟人全部故事的最新会话开启自动驾驶（不新建会话，已运行的自动跳过）'" @click="batchAutopilotStart">
-      {{ batchActionBusy ? `处理中${batchProgress}…` : '批量启动自动驾驶' }}
+      开启自动驾驶
     </button>
     <button type="button" class="mk-batchbar__btn" :disabled="batchActionBusy" :title="'停止选中虚拟人全部故事最新会话的自动驾驶（学习进度保留，可随时再启动）'" @click="batchAutopilotStop">
-      {{ batchActionBusy ? `处理中${batchProgress}…` : '批量停止自动驾驶' }}
+      停止自动驾驶
     </button>
-    <button type="button" class="mk-batchbar__btn" :disabled="batchActionBusy" @click="batchTerminate">
-      {{ batchActionBusy ? '处理中…' : '批量终止' }}
+    <!-- 全局维护性质的「清理无响应」只在勾选行里真有卡死会话时才出现（2026-11-08 用户：
+         旧版对「已停止」的行也常驻这颗按钮，点了什么都不会发生，读作误操作） -->
+    <button
+      v-if="stalledSelectedCount"
+      type="button"
+      class="mk-batchbar__btn"
+      :disabled="batchActionBusy"
+      :title="`对选中的 ${stalledSelectedCount} 个含无响应会话的虚拟学习者先列清单再确认回收`"
+      @click="batchReclaim"
+    >
+      清理无响应（{{ stalledSelectedCount }}）
     </button>
-    <button type="button" class="mk-batchbar__btn" :disabled="batchActionBusy" @click="batchReclaim">
-      {{ batchActionBusy ? '处理中…' : '批量清理无响应' }}
+    <span class="mk-batchbar__sep" aria-hidden="true"></span>
+    <button type="button" class="mk-batchbar__danger-ghost" :disabled="batchActionBusy" title="终止选中虚拟人的全部未结束会话（标记为已放弃，数据保留，不可撤销）" @click="batchTerminate">
+      终止
     </button>
-    <button type="button" class="mk-batchbar__danger" :disabled="batchActionBusy" @click="batchDelete">
-      批量删除
+    <button type="button" class="mk-batchbar__danger" :disabled="batchActionBusy" title="删除选中虚拟学习者及其全部会话 / 学习数据（不可撤销）" @click="batchDelete">
+      删除
     </button>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { loadLiveData, errMsg } from './live'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
@@ -50,6 +69,11 @@ const batchProgress = ref('')
 
 /** 批量域「故事列表拉取失败」日志前缀（R6 单源：批量启动/自动驾驶/停止三处同用一句） */
 const storyListFailLog = (name: string) => `获取「${name}」故事列表失败:`
+
+/** 选中行里含「无响应」卡死会话的人数——只有这时才给「清理无响应」入口（避免对静止行点了没反应的按钮） */
+const stalledSelectedCount = computed(() =>
+  props.selected.filter((id) => (props.samples.find((x) => x.id === id)?.stalledCount ?? 0) > 0).length
+)
 
 /** 批量启动全部故事：为每个选中的虚拟学习者启动其全部故事的实验会话（一个故事一个会话），
  *  并自动开启自动驾驶（target=final 直达 Path 全部完成），无需手动逐个启动 */
