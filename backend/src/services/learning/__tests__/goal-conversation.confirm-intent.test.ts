@@ -167,7 +167,7 @@ function seedProposingConversation() {
       messages: [{ role: 'ai', content: '这版方向先聚焦复盘结论提炼，你看哪块要调？' }],
       understanding: { real_problem: '不知道复盘要回答哪几个问题' },
       stage: 'proposing',
-      confirmedProposal: { learning_direction: '复盘写作', key_stages: ['S1'] },
+      confirmedProposal: { learning_direction: '复盘写作', first_deliverable: '一份能直接用的月度复盘提纲', key_stages: ['S1 复盘框架', 'S2 结论提炼'] },
     }),
   };
 }
@@ -231,6 +231,26 @@ describe('打字确认裁决（goal-confirm-adjudicator）', () => {
     expect(mockRecordDegradation).toHaveBeenCalledTimes(1);
     expect(mockExecuteSkill).toHaveBeenCalledTimes(1);
     expect(mockRunGoalAsync).not.toHaveBeenCalled();
+    expect(result.internal.core.stage).toBe('proposing');
+  });
+
+  it('d-2) #162 提案内容门禁：提案不完整（缺 first_deliverable/stages<2）→ flag 也不代签，走正常回合补提案', async () => {
+    seedProposingConversation();
+    conversationRecord.collectedData = JSON.stringify({
+      messages: [{ role: 'ai', content: '这版方向先聚焦复盘结论提炼，你看哪块要调？' }],
+      understanding: { real_problem: '不知道复盘要回答哪几个问题' },
+      stage: 'proposing',
+      confirmedProposal: { learning_direction: '复盘写作', key_stages: ['S1'] },
+    });
+    mockExecuteSkill.mockResolvedValue(buildAiResponse({
+      userVisible: '先把提案补完整：每次复盘先回答哪三个问题？',
+      stage: 'proposing',
+    }));
+
+    const result = await goalConversationService.continueConversation('conv-1', '确认并生成路径', 'user-1', { confirmProposal: true });
+
+    expect(mockRunGoalAsync).not.toHaveBeenCalled();
+    expect(mockExecuteSkill).toHaveBeenCalledTimes(1);
     expect(result.internal.core.stage).toBe('proposing');
   });
 
