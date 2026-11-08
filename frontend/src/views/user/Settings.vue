@@ -58,6 +58,11 @@
           </div>
           <p v-if="!apiConfig.enabled" class="settings-off__hint">
             当前使用内置模型服务，无需填写端点或密钥。
+            <!-- 收起态摘要（对齐管理台「服务连接」折叠口径）：已保存过端点时把事实亮出来，
+                 不让「内置模式」读成「我之前配的全丢了」 -->
+            <template v-if="apiConfig.endpoint">
+              已保存端点 <b>{{ apiConfig.endpoint }}</b>（{{ hasSavedApiKey ? '密钥已配置' : '未配置密钥' }}）。
+            </template>
           </p>
           <div v-show="apiConfig.enabled || settingsFormOpen" class="api-form">
             <label class="uc-field">
@@ -117,10 +122,24 @@
               <button type="button" class="uc-btn" :disabled="busy" @click="testConnection">
                 {{ testing ? '测试中…' : '测试连接' }}
               </button>
-              <button type="button" class="uc-btn" :disabled="busy" @click="loadModels">
+              <button
+                type="button"
+                class="uc-btn"
+                :disabled="busy"
+                :title="formDirty ? '拉取可用模型并保存配置' : '拉取可用模型（有改动会一并保存）'"
+                @click="loadModels"
+              >
                 {{ loadingModels ? '获取中…' : '获取模型' }}
               </button>
-              <button type="button" class="uc-btn uc-btn--primary" :disabled="busy" @click="saveApiConfig">
+              <!-- 保存常驻（对齐管理台口径）：无改动时也在、只是禁用——「脏了才出现」
+                   会让人以为这段表单根本不能保存（管理台 2026-11-07 同判例） -->
+              <button
+                type="button"
+                class="uc-btn uc-btn--primary"
+                :disabled="busy || !formDirty"
+                :title="formDirty ? '保存端点、密钥与模型选择' : '没有未保存的改动'"
+                @click="saveApiConfig()"
+              >
                 {{ saving ? '保存中…' : '保存配置' }}
               </button>
               <button v-if="apiConfig.enabled" type="button" class="uc-btn uc-btn--danger" :disabled="busy" @click="disableConfig">
@@ -386,6 +405,7 @@ const loadApiConfig = async () => {
     hasSavedApiKey.value = !!data.hasApiKey;
     apiConfig.chatModel = data.chatModel || 'deepseek-v4.1-flash';
     apiConfig.reasoningModel = data.reasoningModel || 'deepseek-v4.1-flash';
+    snapshotSaved();
   } catch {
     loadError.value = '无法读取已保存的配置，请检查网络或服务状态。';
     toast.error('加载 API 配置失败');
@@ -403,6 +423,24 @@ const isValidEndpoint = (endpoint: string) => {
     return false;
   }
 };
+
+/* ---------- 脏检查（对齐管理台「保存常驻、无改动禁用」口径，2026-11-08） ----------
+   快照 = 最近一次落库/载入的服务端现值；输入新 Key 也算改动（留空 = 沿用不算）。 */
+const savedSnapshot = ref({ endpoint: '', chatModel: '', reasoningModel: '' });
+function snapshotSaved() {
+  savedSnapshot.value = {
+    endpoint: apiConfig.endpoint,
+    chatModel: apiConfig.chatModel,
+    reasoningModel: apiConfig.reasoningModel,
+  };
+}
+const formDirty = computed(
+  () =>
+    apiConfig.endpoint !== savedSnapshot.value.endpoint ||
+    apiConfig.chatModel !== savedSnapshot.value.chatModel ||
+    apiConfig.reasoningModel !== savedSnapshot.value.reasoningModel ||
+    !!apiConfig.apiKey.trim()
+);
 
 const testConnection = async () => {
   if (!apiConfig.endpoint) {
@@ -461,7 +499,12 @@ const loadModels = async () => {
     // 未填模型时自动填充第一个可用模型，减少手填
     if (!apiConfig.chatModel && models.length) apiConfig.chatModel = models[0];
     if (!apiConfig.reasoningModel && models.length) apiConfig.reasoningModel = models[0];
-    toast.success(`获取到 ${models.length} 个可用模型`);
+    /* 获取即保存（对齐管理台口径）：用户流程是「填端点和 Key → 获取模型」，
+       这一步本身就是提交点，不该再要求单独点一次「保存配置」。
+       保存失败不弹成功——配置没落盘，拉到的模型也用不上。 */
+    const saved = await saveApiConfig({ silent: true });
+    if (!saved) return;
+    toast.success(`已保存配置，获取到 ${models.length} 个可用模型`);
   } catch (error: any) {
     modelOptions.value = [];
     toast.error(error?.message || '获取模型列表失败');
@@ -470,7 +513,7 @@ const loadModels = async () => {
   }
 };
 
-const saveApiConfig = async (): Promise<boolean> => {
+const saveApiConfig = async (opts: { silent?: boolean } = {}): Promise<boolean> => {
   if (!apiConfig.endpoint) {
     toast.warning('请先填写模型端点');
     return false;
@@ -496,11 +539,12 @@ const saveApiConfig = async (): Promise<boolean> => {
       reasoningModel: apiConfig.reasoningModel,
     });
 
-    toast.success('配置已保存');
+    if (!opts.silent) toast.success('配置已保存');
     if (apiConfig.apiKey) {
       hasSavedApiKey.value = true;
       apiConfig.apiKey = '';
     }
+    snapshotSaved();
     return true;
   } catch (error: any) {
     toast.error(`保存失败：${error.message}`);

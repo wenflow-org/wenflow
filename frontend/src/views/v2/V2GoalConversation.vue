@@ -381,7 +381,7 @@
           <div class="proposal-invite__text">
             <strong class="proposal-invite__title">学习方案 · 待确认</strong>
             <span v-if="entryCopy.hint" class="proposal-invite__sub">{{ entryCopy.hint }}</span>
-            <span v-else-if="live.proposal?.stages?.length" class="proposal-invite__sub">共 {{ live.proposal.stages.length }} 个阶段 · {{ live.proposal?.outcome || '方向已成形，点开即可确认' }}</span>
+            <span v-else-if="live.proposal?.stages?.length" class="proposal-invite__sub">共 {{ live.proposal.stages.length }} 个阶段 · {{ live.proposal?.outcome || '方向已成形，打开即可确认' }}</span>
           </div>
           <button type="button" class="btn-primary proposal-invite__btn" @click="openProposalReview">{{ entryCopy.button }}</button>
         </div>
