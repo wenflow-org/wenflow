@@ -48,6 +48,10 @@ rules:
   - 有资料时，每个 milestone 都要给 `materialRefs`（1-2 条）指向它依据的资料条目：`sectionId` 取资料 sections[].id，`quote` **逐字**复制该条目的原文片段（cite/章节标题），不要翻译、不要概括、不要编造——代码会逐字核对，编的会被丢弃
   - 资料必须**服务于当前诉求**：只采用与 normalizedInput 的诉求/问题相关的资料；**与诉求明显无关的附件要忽略**（不要为了"长在资料上"而把路径主题换成资料的主题，也不要把无关资料的章节名塞进里程碑）；多份资料时以诉求为主线取舍，宁可用得少，也不要用错
   - 目标取向（normalizedInput.learnerProfile.goalOrientation 为自由描述）：偏掌握型（想搞懂原理、知其所以然）→ 路径可给更高挑战与失败容忍空间，milestone 的 zpdDistance 可设更远、可含开放探索；偏表现型（想做出成果、证明自己、怕落后）→ 首阶段必须给快速成功小任务建立信心，first_deliverable 更小更早可见、首阶段 loadTarget 保持 low、避免开局高挑战；未提供时不改变默认设计
+  - 「动机分流」（normalizedInput.learnerProfile.motivation 一路传到本层，但此前没有任何规则读它——2026-11-07 实证：纯兴趣用户拿到的路径与应试用户同构，19 节课 / 9.1 小时，课名全是「挂回骨架 / 写讲述稿 / 合上材料复述」）：
+    · motivation 含「纯兴趣 / 就是想了解 / 爱好 / 随便看看 / 通勤听 / 没考虑过用在哪」且无 deadline → 按**通识阅读**设计：milestone 数量取允许区间下限、每阶段课时按「一次坐下能看完一小段」估，**禁止按应试型总量铺排**；milestone title 必须点名**本学科的具体标的**（真实产品名、可查事件、公开争议、具体案例），禁止只写「建立…框架」「区分…边界」「把…挂回…骨架」这类只有结构没有内容的方法论阶段名；**「一件 / 几件 / 三件 / 某个 + 类别名」不构成点名**（「从一件近期 AI 教育产品发布里拆出…」指向性仍是空的——2026-11-07 A/B 实证 concreteRatio 0→0）：标的必须落在可查证的真实名称上，或把「选定标的」本身定为第一课任务（如「刷出 3 条近期报道、当场选定 1 条作为全程标本」）并在后续 milestone 沿用该名称；**阶段 1 的第一个 milestone 必须落在近期的一手案例或事件上**（可点名产品/事件），不得从年代起点顺叙开场；**禁止把「写讲述稿 / 合上材料复述 / 背诵」设成每阶段的固定收口**——收尾改成「拿一个刚出现的情形判断一次」（用户明确要求讲课/备考/面试时才允许把讲述稿当交付物）。
+    · motivation 含「考试 / 考证 / 提分 / 过线 / 转行 / 换岗 / 求职 / 工作要用 / 汇报」或有 deadline → 保持现有考纲 / 岗位能力面组织，不受本条影响。
+    · motivation 缺失或无法归类 → 不改变默认设计。
   - normalizedInput 中包含的场景、痛点和背景信息必须优先用于锚定路径场景、命名和范围边界
   - 前提知识递归发现（RPKT）：先识别目标的核心概念，再对照 normalizedInput.learnerProfile（backgroundExperience/currentBaseline）与 conversationHistory 判断哪些前置知识已知、哪些未知；对未知前置递归追问"要理解 X 必须先懂什么"，最大深度 3 层，直至触及学习者已确认的知识边界。将发现的前置缺口纳入 cognitiveCore.prerequisiteTree，且 milestone 顺序必须匹配缺口链的深度顺序（从基础到高级，禁止跳过基础直接进入高级应用）。若用户明显为零基础（背景缺失），不得假设其已掌握前置，须显式补基础认知框架
   - 前置探测结果硬约束（normalizedInput.prerequisiteCheckResults）：若输入提供该字段（goal 层前置知识探测的作答结果），它是用户实际作答的硬证据，优先级高于 RPKT 的 LLM 推断——isCorrect=true 的 targetConcept 必须写入 prerequisiteTree.knownConcepts（不得仍当作未知）；isCorrect=false 的 targetConcept 必须写入 prerequisiteTree.unknownConcepts 并标注对应 depth；探测结果与 RPKT 推断冲突时以探测结果为准

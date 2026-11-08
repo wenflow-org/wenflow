@@ -380,3 +380,55 @@ describe('useGoalLive 流式渐进渲染', () => {
     expect(live.droppedProbeAnswers).toBe(0);
   });
 });
+
+describe('confirm 的 probeAnswers 携带（2026-11-07：每条确认推进路径都带题）', () => {
+  it('传输层失败回退非流式时，probeAnswers 与流式路径同权携带（不静默丢题）', async () => {
+    const live = useGoalLive();
+    live.reset();
+    apiMock.getGoalConversation.mockResolvedValueOnce(makeEnvelope({
+      internal: {
+        core: { conversationId: 'gc_1', stage: 'proposing', confidence: 0.8, isCompleted: false },
+        ext: {
+          goalConversation: {
+            understanding: {},
+            confirmedProposal: {
+              real_problem: '问题',
+              first_deliverable: '产出',
+              key_stages: ['阶段一'],
+              prerequisiteDiagnostics: [{
+                probeId: 'probe-1',
+                targetConcept: '社会领域',
+                question: '哪个说法更接近大模型的运作方式？',
+                options: [{ id: 'A', text: '概率预测' }, { id: 'B', text: '规则检索' }],
+                correctOption: 'A',
+              }],
+            },
+          },
+        },
+      },
+    }));
+    await live.resumeById('gc_1');
+    const probe = live.proposal?.probes?.[0];
+    expect(probe?.probeId).toBe('probe-1');
+    live.answerProbe(probe!, 'A');
+
+    apiMock.streamReplyGoalConversation.mockRejectedValueOnce({ transport: true });
+    apiMock.replyGoalConversation.mockResolvedValueOnce(makeEnvelope({
+      internal: {
+        core: { conversationId: 'gc_1', stage: 'proposing', confidence: 0.8, isCompleted: false },
+        ext: { goalConversation: { understanding: {}, quickReplies: [] } },
+      },
+    }));
+
+    await live.confirm();
+
+    const expectedProbeAnswers = [{ probeId: 'probe-1', userAnswer: 'A', targetConcept: '社会领域' }];
+    expect(apiMock.streamReplyGoalConversation).toHaveBeenCalledWith(
+      'gc_1', '确认并生成路径', { confirmProposal: true, probeAnswers: expectedProbeAnswers }, expect.anything(),
+    );
+    // 回退路径曾丢题（只带 { confirmProposal: true }）：非流式重发必须同样携带
+    expect(apiMock.replyGoalConversation).toHaveBeenCalledWith(
+      'gc_1', '确认并生成路径', { confirmProposal: true, probeAnswers: expectedProbeAnswers },
+    );
+  });
+});

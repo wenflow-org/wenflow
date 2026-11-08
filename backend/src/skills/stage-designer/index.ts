@@ -2,13 +2,14 @@ import {
   SkillDefinition,
   SkillExecutionResult,
 } from '../protocol';
-import { getAPIGateway, CallerInfo, ChatMessage } from '../../gateway/api-gateway';
-import { AgentConfigService } from '../../services/agentConfig.service';
 import { callPrompt } from '../../composers/prompt-composer';
 import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 import { loadPromptFile } from '../../composers/prompt-files/loader';
 import { normalizeMaterialRefs } from '../../services/materials/material-refs';
-import { assessStageMaterialCompleteness } from '../../services/materials/subtask-material-completeness';
+import {
+  assessStageMaterialCompleteness,
+  assessStageMaterialCompletenessByModel,
+} from '../../services/materials/subtask-material-completeness';
 import { assessStageMetaLessons } from '../../services/learning/generation/stage-subtask-quality';
 import { assessMaterialRefCoverage } from '../../services/materials/material-ref-coverage.service';
 import type { PromptMaterial } from '../../services/materials/material-prompt-projection';
@@ -213,7 +214,8 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
         [task?.title, task?.description, task?.acceptanceHint].filter(Boolean).join(' ')
       )),
     ].filter(Boolean).join(' ');
-    const result = await callPrompt<any, { subtasks: any[] }>({
+    // 生成一次（repairHintsOverride 非空时把它并进 repairHints；供材料语义判定失败后的带反馈重试）
+    const callStagePrompt = (repairHintsOverride: Record<string, unknown> | null = null) => callPrompt<any, { subtasks: any[] }>({
       agentId: 'skill:stage-designer',
       defaultSystemPrompt: STAGE_DESIGNER_PROMPT,
       requireActivePrompt: true,
@@ -295,6 +297,8 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
       // 三关**并列收集**而非首关即返回（2026-11-02 实测缺陷）：此前一旦材料本体不过就 early return，
       // 同一阶段里成片的伪课（M1 两节「整理判别卡 / 归因修订判别卡」）根本没机会被判定，反馈里
       // 也永远只字不提。并列后一次重试能拿到全部问题。
+      // 注意：本回调是**同步契约**，全仓有同步消费方（见 teaching-turn board-deixis-guard 测试）。
+      // 「材料语义判定」（2026-11-07）是一次模型调用，不能塞进来——它放在下方生成流程的异步段里。
       softValidateParsedOutput: (parsed) => {
         const subtasks = Array.isArray(parsed?.subtasks) ? parsed.subtasks : [];
         const problems: Array<{ failureReason: string; violations?: string[] }> = [];
@@ -363,10 +367,46 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
           return blocks.filter(Boolean).join('\n\n');
         },
       },
-    }, input);
+    }, repairHintsOverride
+      ? {
+          ...input,
+          repairHints: {
+            ...(input && typeof input === 'object' && input.repairHints && typeof input.repairHints === 'object'
+              ? input.repairHints
+              : {}),
+            ...repairHintsOverride,
+          },
+        }
+      : input);
+
+    let result = await callStagePrompt();
 
     if (!result.success || !result.output) {
       throw new Error(result.error?.message || 'STAGE_DESIGNER_INVALID');
+    }
+
+    // 材料自足性的**语义判定**（2026-11-07）：正则认不出「几件 AI 教育事件」「给你二十一个句子」
+    // 这类中文数词/不定量词悬空引用，改由模型判。这一步刻意放在**本来就异步的生成流程**里，
+    // 而不是塞进同步的 softValidateParsedOutput——后者有同步消费方（teaching-turn），
+    // 把它的返回类型放宽成 Promise 等于逼全仓做一次同步→异步迁移。
+    // 命中则把 violations 作为 repairHints 带反馈重试一次；仍失败保留首轮输出（不阻塞）。
+    const generatedSubtasks = Array.isArray(result.output.subtasks) ? result.output.subtasks : [];
+    if (generatedSubtasks.length > 0) {
+      const semanticMaterial = await assessStageMaterialCompletenessByModel(generatedSubtasks, {
+        stageTitle: milestone.title,
+      });
+      if (!semanticMaterial.valid) {
+        logger.warn('[stage-designer] 材料语义判定命中，带反馈重试一次', {
+          milestone: milestone.title,
+          violations: semanticMaterial.violations,
+        });
+        const retry = await callStagePrompt({ materialBodyViolations: semanticMaterial.violations });
+        if (retry.success && retry.output) {
+          result = retry;
+        } else {
+          logger.warn('[stage-designer] 材料语义判定重试未成功，保留首轮输出', { milestone: milestone.title });
+        }
+      }
     }
 
     return {

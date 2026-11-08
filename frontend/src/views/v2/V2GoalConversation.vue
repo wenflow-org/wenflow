@@ -372,14 +372,16 @@
         <!-- 方案协商入口（2026-10-31 一锤定音修复）：proposing 不再自动盖 modal，
              方案先在对话流里完整呈现、可直接回复继续调整（一轮二轮都行）；
              这颗按钮是显式确认入口——点开方案卡审阅，确认动作仍只发生在卡内 -->
-        <!-- 方案预览微卡片（2026-11-05 用户裁定方案 A）：左侧填方案摘要（此前 70% 空黑读作渲染 Bug），
-             副行优先承接 entryCopy.hint（导师追问/自测未答的语境），就绪态给阶段摘要 -->
+        <!-- 方案预览微卡片（2026-11-05 用户裁定方案 A）：左侧填方案摘要，
+             副行优先承接 entryCopy.hint（自测未答语境），否则给阶段摘要；
+             按钮恒定「查看并确认」（2026-11-08 用户裁定）：模型 proposing 文本指引「点确认」，
+             入口条必须带确认入口，确认面板从这里点开——打字确认只是对话流的次通道 -->
         <div v-if="loggedIn && live.started && !live.sending && live.stage === 'proposing' && live.proposal && !showProposal" class="proposal-invite">
           <span class="proposal-invite__doc" aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1.5V8h4.5L14 3.5zM8 12h8v1.5H8V12zm0 4h8v1.5H8V16z"/></svg></span>
           <div class="proposal-invite__text">
             <strong class="proposal-invite__title">学习方案 · 待确认</strong>
             <span v-if="entryCopy.hint" class="proposal-invite__sub">{{ entryCopy.hint }}</span>
-            <span v-else-if="live.proposal?.stages?.length" class="proposal-invite__sub">共 {{ live.proposal.stages.length }} 个阶段 · {{ live.proposal?.outcome || '可直接确认生成路径' }}</span>
+            <span v-else-if="live.proposal?.stages?.length" class="proposal-invite__sub">共 {{ live.proposal.stages.length }} 个阶段 · {{ live.proposal?.outcome || '方向已成形，点开即可确认' }}</span>
           </div>
           <button type="button" class="btn-primary proposal-invite__btn" @click="openProposalReview">{{ entryCopy.button }}</button>
         </div>
@@ -672,7 +674,7 @@ import { currentUserId, dropLegacyRecentGoalsStorage, getGoalConversationCid, cl
 import { cachedMessageHtml, plainMessageHtml } from '@/utils/messageMarkdown';
 import { toast } from '@/utils/toast';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
-import { isAwaitingAnswer, proposalEntryCopy } from './goalStageCopy';
+import { proposalEntryCopy } from './goalStageCopy';
 import { learningAPI, type GenerationLifecycleDTO } from '@/api/learning';
 import { genPillCopy, genStageLabel, isGenerationSettled } from './learningPathProgress';
 
@@ -745,20 +747,14 @@ const keyedMessages = computed(() =>
 const repliesActive = computed(
   () => live.messages.length > 0 && live.messages[live.messages.length - 1]?.role === 'ai'
 );
-/* 本轮导师是否还在提问（2026-10-31 用户走查）：proposing 轮的提问会让「方案已就绪」与
-   「我还有个问题」同时成立——用户不知道该回答还是该确认。判据见 goalStageCopy.ts。 */
-const awaitingAnswer = computed(() => {
-  for (let i = live.messages.length - 1; i >= 0; i -= 1) {
-    if (live.messages[i].role === 'ai') return isAwaitingAnswer(live.stage, String(live.messages[i].content || ''));
-  }
-  return false;
-});
-/** 未作答的自测题数（0 = 没有题或已答完）：入口条据此把「有题可答」挑明 */
+/* 未作答的自测题数（0 = 没有题或已答完）：入口条据此把「有题可答」挑明。
+   入口条本体谦卑化（2026-11-08 确认动作减重）：恒定「查看方案」，不再区分
+   确认式/信息式问句、不宣称就绪；确认动作在方案卡内完成。 */
 const unansweredProbes = computed(() => {
   const { answered, total } = live.probeProgress();
   return Math.max(0, total - answered);
 });
-const entryCopy = computed(() => proposalEntryCopy(awaitingAnswer.value, unansweredProbes.value));
+const entryCopy = computed(() => proposalEntryCopy(unansweredProbes.value));
 /* 快选行不再显示可见标签（2026-11-03 用户反馈「直接不要这个提示」）：
    「也可以直接选（点选填入输入框，可多选）」及按阶段变体、只教一次的逻辑一并移除，
    用法说明只保留给读屏器。 */

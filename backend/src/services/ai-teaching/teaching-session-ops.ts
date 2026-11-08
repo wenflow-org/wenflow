@@ -21,6 +21,7 @@ import {
   CheckpointSubmitResult,
   getPendingCheckpoint,
   judgeCheckpointAnswer,
+  resolveCheckpointJudgement,
   normalizeCheckpointShape,
   projectMessagesForClient,
   recordCheckpointAttemptEvidence,
@@ -305,7 +306,7 @@ export async function submitCheckpoint(
         operationClaim,
         checkpointId,
         // 代码裁决（答案键存在时）：把"对错"从模型自评里剥离出来（审计 §7 P1-1）
-        checkpointJudgement: judgeCheckpointAnswer(checkpoint, payload),
+        checkpointJudgement: await resolveCheckpointJudgement(checkpoint, payload, judgeCheckpointAnswer(checkpoint, payload)),
         checkpointSubmission: {
           selectedOptionIds: payload.selectedOptionIds,
           // 简答不落原文（可能含学生隐私细节），只留长度特征
@@ -353,6 +354,9 @@ export async function judgeCheckpointSubmission(
   if (!checkpoint || checkpoint.id !== checkpointId) return null;
   const judgement = judgeCheckpointAnswer(checkpoint, payload);
   if (!judgement) return null;
+  // 简答词面未全命中时不提前下结论（2026-11-08 分级判分）：模型 rubric 语义复核在主流程
+  // 做一次即可，这里返回 null ⇒ 客户端照旧等 final，避免同一作答两次裁决调用。
+  if (judgement.passed === false && checkpoint.type === 'short_answer') return null;
   return {
     passed: judgement.passed === true,
     judgedBy: judgement.judgedBy,

@@ -121,8 +121,12 @@ const NEGATIVE_VERDICT_OPENING =
 // 开头锚定会漏修。改为只看首句（到第一个句末标点），且首句本身是问句时不修
 // （「答错了吗？」是提问，不是给已判对的答案盖章）。
 // 否定词前有「没/不/未」时不算否决：「你没答错」「这次没选错」是肯定。
+// 「不对」加结构边界，避免未锚定子串误杀：
+//   - (?<!对) 排除「对不(对)?」设问（「这道题的答案对不对…」里的「不对」是子串）；
+//   - (?!了) 排除「…不对了」让步/条件（「如果这道选 C 就不对了…」不是对作答的否决）。
+// 纯结构匹配，不引入语义判断；「这道题不对/答案不对」等真否决仍命中。
 const NEGATIVE_VERDICT_IN_SENTENCE =
-  /(?:(?:这道|这题|这一题|这次|这个)(?:题|答案|选项)?|答案|选项)?\s*(?:不对|(?<!没)(?<!不)(?<!未)错了|(?<!没)(?<!不)(?<!未)答错|(?<!没)(?<!不)(?<!未)选错|(?<!没)(?<!不)(?<!未)填错|没答对|没答到|没选对)/;
+  /(?:(?:这道|这题|这一题|这次|这个)(?:题|答案|选项)?|答案|选项)?\s*(?:(?<!对)不对(?!了)|(?<!没)(?<!不)(?<!未)错了|(?<!没)(?<!不)(?<!未)答错|(?<!没)(?<!不)(?<!未)选错|(?<!没)(?<!不)(?<!未)填错|没答对|没答到|没选对)/;
 
 /** 首句（含句末标点）；无标点时整段即首句。 */
 function leadingSentence(text: string): string {
@@ -136,8 +140,11 @@ export function repairContradictedPassedVerdict(reply: unknown): string {
   const text = value.trim();
   if (!text) return value;
   const head = leadingSentence(text);
-  const contradicted = NEGATIVE_VERDICT_OPENING.test(text)
-    || (NEGATIVE_VERDICT_IN_SENTENCE.test(head) && !/[？?]\s*$/.test(head));
+  // 首句（head）以问号结尾即视为问句，不开头否定裁决——与文件注释「首句是问句时不修」一致。
+  // 该豁免对 OPENING 与 IN_SENTENCE 两路都生效，避免「这道题不对吗？」被替换成自相矛盾回复。
+  const isQuestionHead = /[？?]\s*$/.test(head);
+  const contradicted = (NEGATIVE_VERDICT_OPENING.test(text) && !isQuestionHead)
+    || (NEGATIVE_VERDICT_IN_SENTENCE.test(head) && !isQuestionHead);
   if (!contradicted) return value;
   const questions = [...text.matchAll(/[^。！？\n]{0,80}[？?]/g)];
   const question = questions.length ? questions[questions.length - 1][0].trim() : '';

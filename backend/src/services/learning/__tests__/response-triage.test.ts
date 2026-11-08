@@ -362,6 +362,16 @@ describe('感官技能分类漂移兜底（R5 F96）', () => {
     });
     expect(t.mode).toBe('learning_path');
   });
+
+  it('单字通道词不再命中：「能听懂英语播客」不触发 referral（2026-11-08 真机误拦实证）', () => {
+    const t = triageGoalResponse({
+      surface_goal: '能听懂英语播客，听懂日常语速的讨论',
+      primary_block_type: 'capability',
+      platform_judgment: 'not_judgeable',
+      skill_nature: 'cognitive_internalized',
+    });
+    expect(t.mode).not.toBe('referral');
+  });
 });
 
 describe('情绪场景不被当日一次性操作覆盖（R5 F100）', () => {

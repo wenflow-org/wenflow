@@ -300,7 +300,16 @@ export function triageGoalResponse(input: ResponseTriageInput | null | undefined
     ...painPoints,
   ].filter(Boolean).join('；');
   const sensoryInternalized = skillNature === 'cognitive_internalized'
-    && /(喝|尝|闻|嗅|口感|风味|气味|味觉|嗅觉|听|音色|手感|笔锋|触感|摸)/.test(sensoryText);
+    // 2026-11-08 收紧：两路命中才算「感官判定对象」——
+    // ① 感官对象名词（口感/风味/音色…，天然 ≥2 字）独立成立；
+    // ② 单字通道词（听/喝/摸/闻/嗅/尝）必须与**辨别类动词**（分辨/听出/尝出…）共现。
+    // 旧口径「听」一个字命中即 referral，把「能听懂英语播客」这类可判定认知技能误终局
+    // （真机实证）；「喝一口咖啡就分辨烘焙」这类真感官判定仍命中（喝×分辨）。
+    && (
+      /(口感|风味|气味|味觉|嗅觉|音色|笔锋|手感|触感)/.test(sensoryText)
+      || (/(喝|尝|闻|嗅|听|摸)/.test(sensoryText)
+        && /(分辨|区分|辨认|听出|尝出|闻出|品出|辨出)/.test(sensoryText))
+    );
   if (platformJudgment === 'not_judgeable'
     && (skillNature === 'physical_internalized' || sensoryInternalized)) {
     return {

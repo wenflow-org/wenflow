@@ -12,6 +12,12 @@ const mockClaimPathCoreGeneration = jest.fn();
 const mockMarkActiveGenerationFailed = jest.fn();
 const mockAssembleGoalHandoff = jest.fn();
 const mockPlatformSettingFindUnique = jest.fn();
+const mockAdjudicateGoalConfirm = jest.fn();
+
+jest.mock('../../../skills/goal-confirm-adjudicator', () => ({
+  __esModule: true,
+  adjudicateGoalConfirm: (...args: any[]) => mockAdjudicateGoalConfirm(...args),
+}));
 
 // 会话状态（整包读改写模拟）
 let conversationRecord: any;
@@ -283,8 +289,8 @@ describe('advisory 默认仍推进路径生成（零行为变化）', () => {
   });
 });
 
-describe('显式拒绝不得代签（2026-10-08 真人面守门，R6 P1-12 镜像）', () => {
-  it('flag=true 但文本明示犹豫 → 不生成路径，走普通模型回合', async () => {
+describe('确认通道（2026-11-08 减重：flag 直推 + 打字裁决）', () => {
+  it('flag=true（UI 按钮）+ 文本明示犹豫 → 仍直接推进：按钮是最强信号，文本否决已退役', async () => {
     seedConversation({
       stage: 'proposing',
       collectedData: JSON.stringify({
@@ -297,10 +303,6 @@ describe('显式拒绝不得代签（2026-10-08 真人面守门，R6 P1-12 镜�
         },
       }),
     });
-    mockExecuteSkill.mockResolvedValue(buildAiResponse({
-      userVisible: '好，我们不着急，你想先调整哪部分？',
-      stage: 'proposing',
-    }));
 
     const result = await goalConversationService.continueConversation(
       'conv-1',
@@ -309,20 +311,19 @@ describe('显式拒绝不得代签（2026-10-08 真人面守门，R6 P1-12 镜�
       { confirmProposal: true }
     );
 
-    // C 轨探针 C 实锤过的路径：旧代码当轮生成路径；现在拒绝文本压过 flag
-    expect(mockRunGoalAsync).not.toHaveBeenCalled();
-    expect(result.internal.core.stage).toBe('proposing');
-    // 同意计量落库（拍板 #2）：否决事件可查询（channel=flag-vetoed-by-text + refusalVetoed）
+    // 旧口径（2026-10-08）是拒绝文本压过 flag（flag-vetoed-by-text）；
+    // 2026-11-08 减重后按钮 flag 直接推进（UI 按钮发送固定话术，否决只对 API 驱动方有意义）。
+    // 真人犹豫场景由打字裁决通道承接（见下一用例）。
+    expect(mockRunGoalAsync).toHaveBeenCalledTimes(1);
+    expect(result.internal.core.stage).toBe('completed');
     const persisted = JSON.parse(conversationRecord.collectedData);
     expect(persisted.lastConfirmation).toEqual(expect.objectContaining({
-      channel: 'flag-vetoed-by-text',
-      refusalVetoed: true,
-      replyPreview: '再想想吧',
+      channel: 'flag',
+      refusalVetoed: false,
     }));
-    expect(persisted.confirmationLog).toHaveLength(1);
   });
 
-  it('C 轨探针原文「再让我考虑一下。今天先不生成。」→ 全段扫描命中否决（此前末段锚定被打穿）', async () => {
+  it('打字犹豫（无 flag）→ 裁决 confirm=false → 不推进，走普通模型回合由模型接住', async () => {
     seedConversation({
       stage: 'proposing',
       collectedData: JSON.stringify({
@@ -339,18 +340,18 @@ describe('显式拒绝不得代签（2026-10-08 真人面守门，R6 P1-12 镜�
       userVisible: '好，我们不着急，你想先调整哪部分？',
       stage: 'proposing',
     }));
+    mockAdjudicateGoalConfirm.mockResolvedValue({ confirm: false, source: 'adjudicator' });
 
     const result = await goalConversationService.continueConversation(
       'conv-1',
       '再让我考虑一下。今天先不生成。',
-      'user-1',
-      { confirmProposal: true }
+      'user-1'
     );
 
+    expect(mockAdjudicateGoalConfirm).toHaveBeenCalledTimes(1);
+    expect(mockExecuteSkill).toHaveBeenCalledTimes(1);
     expect(mockRunGoalAsync).not.toHaveBeenCalled();
     expect(result.internal.core.stage).toBe('proposing');
-    const persisted = JSON.parse(conversationRecord.collectedData);
-    expect(persisted.lastConfirmation.channel).toBe('flag-vetoed-by-text');
   });
 
   it('flag=true 且确认文本 → 照常生成（首选通道不受影响）+ 计量 channel=flag', async () => {
@@ -382,7 +383,7 @@ describe('显式拒绝不得代签（2026-10-08 真人面守门，R6 P1-12 镜�
     }));
   });
 
-  it('自然语言确认（无 flag）→ 照常生成 + 计量 channel=text', async () => {
+  it('自然语言确认（无 flag）→ 裁决命中 → 照常生成 + 计量 channel=text', async () => {
     seedConversation({
       stage: 'proposing',
       collectedData: JSON.stringify({
@@ -395,6 +396,7 @@ describe('显式拒绝不得代签（2026-10-08 真人面守门，R6 P1-12 镜�
         },
       }),
     });
+    mockAdjudicateGoalConfirm.mockResolvedValue({ confirm: true, source: 'adjudicator' });
 
     await goalConversationService.continueConversation('conv-1', '就按这个来，确认', 'user-1');
 

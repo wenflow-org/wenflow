@@ -11,6 +11,7 @@
  */
 import { dropCrossStageDuplicates } from './stage-subtask-quality';
 import { logger } from '../../../utils/logger';
+import { recordDegradation } from '../../../skills/degradation-telemetry';
 
 /**
  * 阈值（2026-11-02）：0.72 与 `detectCrossStageFiller` 的观测阈值(0.7)同量级，
@@ -79,6 +80,19 @@ export function applyCrossStageDedup(input: {
     samples: dedup.dropped.slice(0, 5).map(
       (dropped) => `M${dropped.stageNumber}「${dropped.title.slice(0, 22)}」≈M${dropped.duplicateOfStage}(${dropped.similarity})`,
     ),
+  });
+  // 删课留痕（2026-11-08）：此前被删任务只进 logger，内容随内存对象无声蒸发——
+  // 用户看不到「为什么少了课」，运营查不到删了什么。降级台账落全量被删标题，可查询。
+  recordDegradation({
+    source: 'generation/stage-cross-stage-dedup',
+    faultCategory: 'CONTENT_DEDUP_DROPPED',
+    severity: 'P3_NOTICE',
+    impactedDimensions: ['stage-tasks'],
+    mitigationApplied: 'drop-cross-stage-duplicate-titles',
+    rootCauseMessage: `pathId=${pathId} dropped=${dedup.dropped.length}: ${dedup.dropped
+      .slice(0, 10)
+      .map((dropped) => `M${dropped.stageNumber}「${dropped.title}」≈M${dropped.duplicateOfStage}(${dropped.similarity})`)
+      .join('；')}`,
   });
   return dedup.dropped.length;
 }

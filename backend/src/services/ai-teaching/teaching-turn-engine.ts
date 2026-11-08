@@ -20,7 +20,8 @@ import { fenceLearnerMessagesForModel } from './input-fence';
 import { memoryTraceService } from '../memory/memory-trace.service';
 import { recordMisconceptions, rerouteMisconceptionConceptKey } from '../learner/misconception-ledger.service';
 import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
-import { CHECKPOINT_MAX_ATTEMPTS, checkpointRhythmMinTurns, parseSessionArtifacts, resolveCheckpointConceptAttribution, resolveUnderstandingReading } from './checkpoint-shared';
+import { checkpointRhythmMinTurns, parseSessionArtifacts, resolveCheckpointConceptAttribution, resolveUnderstandingReading } from './checkpoint-shared';
+import { applyVoidPendingCheckpoint } from './checkpoint-void';
 import { shouldDeferCompletionForClosure } from './teaching-closure';
 import {
   promoteSupplementSlot,
@@ -1489,10 +1490,18 @@ export async function processStudentMessage(
     // 出题节奏分档（拍板 #10）：与提示词闸共用同一口径（理解度<0.6 → 2 条消息优先探测），
     // 防两处数值漂移；理解度取上一轮分析（与 shouldEmitCheckpoint 的 gate 同基准），无读数按常规节奏。
     const previousTurnAnalysis = [...session.messages].reverse().find((message) => message?.analysis)?.analysis;
+    const pendingBeforeTurn = previousTeachingState.pendingCheckpoint;
+    // 作废通道：语义边界与两条护栏见 ./checkpoint-void.ts；作废不授权本轮出题，出题时机只认 controls.emitCheckpoint。
+    const voidedPendingCheckpoint = teachingOutput.control?.voidCheckpoint === true && !submittedCheckpoint && !!pendingBeforeTurn;
+    if (voidedPendingCheckpoint && pendingBeforeTurn) {
+      applyVoidPendingCheckpoint(teachingState, pendingBeforeTurn, session.id);
+    }
     // #50：答错重答时若模型给出了新题面，替换 pendingCheckpoint 的内容（保留 cpId，
     // 因此重答上限仍按同一检查点累计），而不是把旧题原样再发一遍。
-    const pendingBeforeTurn = previousTeachingState.pendingCheckpoint;
-    if (pendingBeforeTurn && checkpointCandidate?.question) {
+    // 作废回合不做这种「就地换题面」：那道题已被撤销，绝不能让旧 cpId 带着新题面复活
+    //（否则 voided 留痕与一道复活的旧题同时存在）。模型若同时给了新题面，本轮也不落库——
+    // 出题闸的待答票（pending 仍在）会拦下它；新题留到后续满足出题时机的回合。
+    if (!voidedPendingCheckpoint && pendingBeforeTurn && checkpointCandidate?.question) {
       const changedQuestion = normalizeForKeywordMatch(pendingBeforeTurn.question) !== normalizeForKeywordMatch(checkpointCandidate.question);
       if (changedQuestion && !isDuplicateCheckpointQuestion(previousTeachingState.checkpointHistory, checkpointCandidate)) {
         teachingState.pendingCheckpoint = normalizeCheckpointWithTelemetry({
@@ -1514,6 +1523,14 @@ export async function processStudentMessage(
       && !completionReady
       && !endIntent.isEndIntent
       && !!checkpointCandidate
+      // 出题时机**只有一个权威**：编排层的 controls.emitCheckpoint（由 shouldEmitCheckpoint 按
+      // pending/阶段/节奏算出，teaching-turn-shared.ts:210 注入本轮模型输入）。此处真正读它：
+      // 为 false 时本轮**任何** checkpoint 都不落库——引擎不再自带一套可越权的旁路，作废回合也不例外
+      // （作废发生在 pending 还在的回合，该死时 shouldEmitCheckpoint 必为 false）。下面两道票是与它
+      // 同向的保守兜底（防两处实现漂移时被放宽），其余回合语义不变：
+      //  ① 待答票：本轮若已有待答检查点（作废被撤销前它就在），不得再落新题；
+      //  ② 节奏票：距上次出题不足 checkpointRhythmMinTurns 时不得落新题。
+      && turnInput.controls?.emitCheckpoint === true
       && !previousTeachingState.pendingCheckpoint
       && (previousTeachingState.lastCheckpointTurn === undefined
         || updatedMessages.length - previousTeachingState.lastCheckpointTurn
@@ -1588,7 +1605,7 @@ export async function processStudentMessage(
       applyCheckpointQuestionVisibility(checkpointCandidate.question);
     }
 
-    let checkpointResolution: { passed: boolean; understanding: number | null; judgedBy: 'code' | 'model-reference' } | undefined;
+    let checkpointResolution: { passed: boolean; understanding: number | null; judgedBy: 'code' | 'model-rubric' | 'model-reference' } | undefined;
     if (submittedCheckpoint) {
       const rawUnderstanding = teachingOutput.analysis?.understanding;
       // 无读数记 null，不记 0（2026-11-01）：`Number(null ?? 0)` 会把「不可观测」写成「理解度 0」，
@@ -1598,10 +1615,14 @@ export async function processStudentMessage(
       const modelDerivedPassed = completionReady || !!currentPoint && mergedKnowledge.some(
         (point) => point.name.trim().toLowerCase() === currentPoint && point.status === 'mastered'
       );
-      // 独立传感器优先（2026-09-17）：有答案键就按**代码裁决**，否则退回模型派生并如实标注来源
+      // 独立传感器优先（2026-09-17；2026-11-08 分级判分）：有答案键就按裁决通道——code（答案键
+      // 确定性/词面全命中）或 model-rubric（简答词面未全命中后的模型语义复核）——否则退回模型
+      // 派生并如实标注来源
       const codeJudgement = options.checkpointJudgement ?? null;
-      const judgedBy: 'code' | 'model-reference' = codeJudgement?.judgedBy === 'code' ? 'code' : 'model-reference';
-      const passed = judgedBy === 'code' ? codeJudgement!.passed : modelDerivedPassed;
+      const judgedBy: 'code' | 'model-rubric' | 'model-reference' = codeJudgement
+        ? codeJudgement.judgedBy
+        : 'model-reference';
+      const passed = codeJudgement ? codeJudgement.passed : modelDerivedPassed;
       const checkpointHistory = Array.isArray(teachingState.checkpointHistory)
         ? [...teachingState.checkpointHistory]
         : [];

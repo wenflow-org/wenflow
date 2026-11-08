@@ -23,4 +23,20 @@ describe('LLM 调用边界', () => {
       await fs.rm(fixtureDir, { recursive: true, force: true });
     }
   });
+
+  // 2026-11-07 回归：守卫正则原为 `\bgateway\.execute\s*\(`，抓不到 `getAPIGateway().execute(`
+  // ——于是「直连被禁止」这条规则被违反时守卫仍是绿的。这条自测钉住两种接收者形态都抓得到。
+  it('报告 getAPIGateway().execute( 形态（守卫漏匹配回归）', async () => {
+    const fixtureDir = path.join(os.tmpdir(), '.tmp-llm-call-boundary-test-getapigateway');
+    await fs.mkdir(fixtureDir, { recursive: true });
+    const fixturePath = path.join(fixtureDir, 'caller.ts');
+    try {
+      await fs.writeFile(fixturePath, 'const output = await getAPIGateway().execute({});\n', 'utf-8');
+      await expect(findDirectGatewayCallViolations(fixtureDir)).resolves.toEqual([
+        expect.objectContaining({ filePath: 'caller.ts', line: 1 }),
+      ]);
+    } finally {
+      await fs.rm(fixtureDir, { recursive: true, force: true });
+    }
+  });
 });
