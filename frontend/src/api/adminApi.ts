@@ -550,7 +550,8 @@ export const adminAgentsApi = {
     agentId?: string;
     traceId?: string;
     sessionId?: string;
-    status?: 'success' | 'error' | 'timeout';
+    /** failed = 未成功（含超时，平台口径的「失败」）；error = 非超时的失败；timeout = 仅超时 */
+    status?: 'success' | 'failed' | 'error' | 'timeout';
     keyword?: string;
     timeRange?: 'today' | 'yesterday' | 'week' | 'month' | 'all';
     sourceEntry?: string;
@@ -969,6 +970,8 @@ export interface HealthCenterItem {
   count: number;
   detail: string[];
   cause: string;
+  /** 正常态的行内说明（异常态才读 cause）。后端逐项声明，前端不再拿 cause 当常驻副标题。 */
+  okNote: string;
   action: 'fixable' | 'manual' | 'none';
   fixHint: string;
   source: string;
@@ -1298,6 +1301,15 @@ export const adminPluginsApi = {
       providers,
       ...(orders ? { orders } : {})
     });
+  },
+  /**
+   * 单个 provider 的连通性测试（2026-11-07）：只探点名的这一家、不进降级链，
+   * 失败时后端把上游原文放在 error 里（网关 / 额度 / 鉴权各有各的说法，前端不再包装）。
+   */
+  testProvider: async (pluginId: string, providerId: string) => {
+    return adminAxios.post(
+      `/admin/plugins/config/${encodeURIComponent(pluginId)}/providers/${encodeURIComponent(providerId)}/test`
+    );
   }
 };
 
@@ -1374,6 +1386,11 @@ export const adminSkillsApi = {
 
   testSkill: async (skillId: string, input: unknown) => {
     return adminAxios.post(`/admin/skills/${encodeURIComponent(skillId)}/test`, input);
+  },
+
+  /** 试跑页「填入示例输入」：取该 Skill 最近一次成功真实调用的载荷（无则 data=null，前端用契约骨架兜底） */
+  getSampleInput: async (skillId: string) => {
+    return adminAxios.get(`/admin/skills/${encodeURIComponent(skillId)}/sample-input`);
   },
 
   /* 2026-11-04：`probeSkillChannel` 与 `modelProbe` 一并撤除——前者指向的

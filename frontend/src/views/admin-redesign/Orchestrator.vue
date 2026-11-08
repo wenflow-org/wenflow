@@ -132,13 +132,16 @@
                   :title="contractChipTitle(s.id, kind)"
                 >{{ contractChipText(s.id, kind) }}</span>
               </div>
-              <!-- 产出字段 chip 流式排列（2026-10-31 四轮评审）：此前是一整串用「 · 」拼的文本 +
-                   overflow-wrap:anywhere，英文驼峰名在单词中间被劈开（…first_delive / rable）。
-                   改成逐字段一枚 chip：各 chip 自己 nowrap + 省略，超长名整体省略并给 title。 -->
-              <div class="orch-odg-fields" :title="contractOf(s.id).outs.join(' · ')">
-                <span v-for="f in contractOf(s.id).outs.slice(0, 4)" :key="f" class="orch-odg-field" :title="f">{{ f }}</span>
-                <span v-if="contractOf(s.id).outs.length > 4" class="orch-odg-field orch-odg-field--more">+{{ contractOf(s.id).outs.length - 4 }}</span>
-              </div>
+              <!-- 2026-11-08 用户「每列底下挂了一大串像乱码一样的英文路径（normalizedInput.confirmed
+                   Proposal.fir… / control.completionCandidateEvidence）」：管线总览默认**不再**把产出
+                   字段名平铺出来——那一层的读者要的是「这一列有哪些子模块、进多少出多少」。
+                   字段明细改由悬停列脚展开（用中文描述，见 stageFieldNamesOf），
+                   真要看逐字段中英对照去「字段路由」页签。 -->
+              <div
+                v-if="contractOf(s.id).loaded && !contractOf(s.id).failed"
+                class="orch-odg-fields orch-odg-fields--summary"
+                :title="stageFieldNamesOf(s.id)"
+              >{{ stageFieldSummaryOf(s.id) }}</div>
             </footer>
           </div>
         </div>
@@ -543,9 +546,11 @@ const odgSvgEl = ref<SVGSVGElement | null>(null)
    入 = hard-required（必填，缺了本阶段无法推进；部分阶段确无必填 → 入 0 属实）；
    出 = proposal-output + public-reply + derived-presentation（方案产出/公开回复/派生展示，
    对外可见或可供下游消费的产出，展示在列脚 outs 行）。 */
+/** 产出字段：label = 中文描述（字段注册表 description，运营读得懂），slug = 英文标识（对代码/日志） */
+interface OutField { label: string; slug: string }
 interface StageFieldContract {
   ins: string[]
-  outs: string[]
+  outs: OutField[]
   /** 字段契约是否已加载（此前加载完成前按 0 渲染：「入 0」与「真无必填」不可分辨，评审「状态三态缺失」） */
   loaded?: boolean
   /** 该阶段契约拉取失败的原因（失败与「加载中」必须可分辨） */
@@ -590,13 +595,19 @@ async function loadStageFieldContracts(ids: string[]) {
         return
       }
       const data = r.value.data?.data
-      const fields = (data?.fields ?? []) as Array<{ promptRole?: string; camelName?: string | null; fieldId: string }>
+      const fields = (data?.fields ?? []) as Array<{ promptRole?: string; camelName?: string | null; fieldId: string; description?: string | null }>
       if (!meta.length && Array.isArray(data?.promptRoleMeta) && data.promptRoleMeta.length) {
         meta = data.promptRoleMeta
       }
       map[ids[i]] = {
         ins: fields.filter((f) => f.promptRole === 'hard-required').map((f) => f.camelName || f.fieldId),
-        outs: fields.filter((f) => OUT_ROLES.includes(f.promptRole || '')).map((f) => f.camelName || f.fieldId),
+        outs: fields
+          .filter((f) => OUT_ROLES.includes(f.promptRole || ''))
+          .map((f) => ({
+            // 中文优先：字段注册表的 description（人写的业务名）；无描述时才回落英文标识
+            label: String(f.description || '').trim() || f.camelName || f.fieldId,
+            slug: f.camelName || f.fieldId,
+          })),
         loaded: true,
       }
     })
@@ -644,6 +655,23 @@ function contractChipTitle(id: string, kind: 'in' | 'out'): string {
   if (c.failed) return `字段契约未加载：${c.failed}`
   if (!c.loaded) return '字段契约加载中'
   return contractTitle(kind, kind === 'in' ? c.ins.length : c.outs.length)
+}
+
+/** 列脚一行读数（2026-11-08）：只报「进/出各多少项」，不再平铺英文变量名 */
+function stageFieldSummaryOf(id: string): string {
+  const c = contractOf(id)
+  const ins = c.ins.length
+  const outs = c.outs.length
+  return `入 ${ins} 项 · 出 ${outs} 项`
+}
+/** 列脚悬停：把产出字段的**中文名**排出来（英文标识也带上，便于对代码/日志）；
+    无产出字段时给出人话说明，不留空 title。 */
+function stageFieldNamesOf(id: string): string {
+  const c = contractOf(id)
+  if (c.failed) return `字段契约未加载：${c.failed}`
+  if (!c.loaded) return '字段契约加载中…'
+  if (!c.outs.length) return '本阶段暂无对外产出字段'
+  return `产出字段（${c.outs.length}）：\n` + c.outs.map((o) => `· ${o.label}（${o.slug}）`).join('\n')
 }
 
 /** 画布重算：列位置量出后画三次贝塞尔连线（仅箭头；字段明细不在边上渲染，
@@ -1117,24 +1145,19 @@ html[data-theme='dark'] {
 .orch-odg-chip--out { background: color-mix(in srgb, var(--mk-green, #15803d) 12%, transparent); color: var(--mk-green, #15803d); }
 /* 契约拉取失败：红字显式说出「未加载」，与「加载中 …」和「真 0 个」在视觉上可分辨 */
 .orch-odg-chip--failed { background: color-mix(in srgb, var(--mk-red, #dc2626) 10%, transparent); color: var(--mk-red, #dc2626); }
-/* 列脚产出字段：逐字段 chip（2026-10-31 四轮评审 P-断词）——
-   原实现是一整串 nowrap 文本 + overflow-wrap:anywhere，英文驼峰名会在单词中间被劈开
-   （confirmedProposal.first_delive / rable）。chip 自带省略号：超长名整体省略，全文在 title。 */
-.orch-odg-fields { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
-.orch-odg-field {
-  max-width: 100%;
-  padding: 1px 6px;
-  border-radius: var(--mk-radius-sm, 6px);
-  border: 1px solid var(--mk-line, #e6ebf4);
-  background: var(--mk-surface, #fff);
-  font-family: var(--mk-mono);
+/* 列脚读数（2026-11-08 用户「每列底下挂了一大串像乱码一样的英文路径」）：
+   默认只留一行「入 N 项 · 出 N 项」——总览层读者要的是「这一列进多少出多少」，
+   逐字段的中英对照在「字段路由」页签。字段名改由悬停整行展开（stageFieldNamesOf），
+   所以这里不再有逐字段 chip。 */
+.orch-odg-fields--summary {
+  min-width: 0;
   font-size: var(--mk-fs-micro, 12px);
   color: var(--mk-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: default;
 }
-.orch-odg-field--more { color: var(--mk-faint); }
 /* 审核 #110：1440 档卡内可用宽约 1136px，而 5×232 + 4×100 = 1560 必横滚约 448px 才见第 4-5 列，
    卡题「管线总览 · 五阶段字段血缘」的全貌在标准视野内不成立。1599 档收窄列宽与列间距
    （5×196 + 4×48 + 24 ≈ 1196，接近卡宽；仍略超则保留少量内横滚）。1920 起沿用原全展开档。

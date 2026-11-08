@@ -211,6 +211,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
   display: block;
   max-width: none;
   height: auto;
+  /* 窄图居中（2026-11-08 外评 #2）：结构图自然宽常只有 300-400px，贴左会让宽卡右侧
+     整块暗区空着；宽图（>卡宽）不受影响，仍由横向滚动承接。 */
+  margin: 0 auto;
 }
 /* 手机档没有横向拖拽的余量：按卡宽等比缩到 100%，否则宽图右侧被裁、点开放大又太重。
    桌面仍按自然尺寸横向滚动，保证标签可读。 */

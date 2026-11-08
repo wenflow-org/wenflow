@@ -135,9 +135,12 @@
           <span class="sk-dot" :class="`sk-dot--${s.health}`" role="img" :aria-label="healthLabel(s.health)" :title="healthLabel(s.health)"></span>
           <div class="sk-itemmain">
             <div class="sk-titleline">
-              <!-- 英文主行（2026-10-25 用户「以英文为主」）：canonical id 是身份，中文 displayName 是别名 -->
-              <button type="button" class="sk-name-main sk-name-main--id sk-name-link mk-ellipsis" :title="nameTitleOf(s)" @click.stop="openDesign(s.id)">{{ s.id }}</button>
-              <span v-if="sublineOf(s)" class="sk-alias" :title="nameTitleOf(s)">{{ sublineOf(s) }}</span>
+              <!-- 2026-11-08 用户「每一行最醒目的蓝色大字全是长串英文 ID，中文名却缩在后面：
+                   把中文名提拔为主标题，英文 ID 降为浅灰等宽副标题」（主次对调）。
+                   主标题去掉末尾重复的「 Skill」——29 行每行都印一遍同一个词只占宽。
+                   目录没有登记中文名时回落 id 作主标题（不空着）。 -->
+              <button type="button" class="sk-name-main sk-name-link mk-ellipsis" :class="{ 'sk-name-main--id': !skTitleOf(s) }" :title="nameTitleOf(s)" @click.stop="openDesign(s.id)">{{ skTitleOf(s) || s.id }}</button>
+              <span v-if="skTitleOf(s)" class="sk-alias sk-alias--mono" :title="`内部标识：${s.id}`">{{ s.id }}</span>
               <span v-if="s.agentId" class="sk-agent-tag" :title="s.agentId"><span class="sk-agent-tag__text">{{ s.agentName || s.agentId }}</span></span>
               <span v-else class="mk-badge mk-badge--sm mk-badge--muted">未归属</span>
               <span class="sk-model-chip" :title="routingTitleOf(s.id)">{{ routingOf(s.id) }}</span>
@@ -846,12 +849,16 @@ async function refreshCoverage(): Promise<void> {
 function descOf(skillId: string): string {
   return skillMetaById.value.get(skillId)?.description || ''
 }
-/** 副行 = 中文别名（displayName）。别名与 id 相同（目录未登记中文名）或为空则不渲染。
-    2026-10-25 用户「以英文为主」：主行是 canonical id，中文名降为副行（与详情页 hero 同口径）；
-    同日「功能简介搬到详情页」：副行只留身份，不再拼 description。 */
-function sublineOf(s: { id: string; name?: string }): string {
+/**
+ * 列表行主标题（2026-11-08 用户「把中文名提拔为主标题」）：
+ * 取目录登记的中文 displayName，去掉末尾重复的「 Skill」——29 行每行都印一遍同一个词。
+ * 目录未登记中文名（name 为空或等于 id）时返回空串，调用方回落 canonical id 作主标题，
+ * 副行此时不渲染（避免同一个 id 上下印两遍）。
+ */
+function skTitleOf(s: { id: string; name?: string }): string {
   const alias = (s.name || '').trim()
-  return alias && alias !== s.id ? alias : ''
+  if (!alias || alias === s.id) return ''
+  return alias.replace(/\s*Skill\s*$/i, '').trim() || alias
 }
 /** 名称格悬停全文：id + 中文别名 + description。可见副行只留别名，简介靠这里与详情页看全 */
 function nameTitleOf(s: { id: string; name?: string }): string {
@@ -969,6 +976,8 @@ const primaryCoverageText = computed(() =>
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* 副行的英文 ID（2026-11-08 主次对调）：等宽 + 浅灰，读者一眼知道那是内部标识不是名字 */
+.sk-alias--mono { font-family: var(--mk-mono); }
 /* 路由模型：与归属 Agent 的胶囊同层，长模型名省略、全名走 title */
 .sk-model-chip {
   flex: none;

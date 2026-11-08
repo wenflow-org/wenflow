@@ -301,7 +301,7 @@ function selfCheck(parsedRoot: Root, snapshotText: string): string[] {
     if (!enabledBare.has(value) && !enabledQualified.has(value)) {
       throw new RegistryEditError(
         `默认${tier === 'chat' ? '对话' : '推理'}模型「${value}」解析不到已启用供应商提供的模型，保存会让全平台默认路由落空。`
-          + '请先在「路由与调用」把默认模型改到别处，或恢复提供该模型的供应商。',
+          + '请在「模型与接入」的对话模型列表里把默认模型改到别的模型，或恢复提供该模型的供应商。',
         400,
         'invalid'
       );
@@ -835,13 +835,20 @@ export async function deleteModel(providerId: string, modelId: string): Promise<
   if (!((entry.models ?? {}) as Record<string, unknown>)[modelId]) {
     throw new RegistryEditError(`供应商「${providerId}」下没有模型「${modelId}」。`, 404, 'not-found');
   }
+  /* 只挡**注册表文件**的 defaults（本文件是它的写源；删掉它会让文件自身不自洽、
+     selfCheck 也会拒存）。平台 DB 默认（platform_api_configs.defaultModel）**有意不挡**：
+     #177（2026-11-05）下线了「运行期引用门禁」一族，DB 默认是可修复的——管理台删掉它之后
+     会把默认改指下一个已挂载模型（见 ApiConfig.vue onModelRemoved），所以不该在这里拦。
+     两处写源实测值不同（文件 deepseek-v4.1-flash / DB agnes-2.5-flash，2026-11-08 核验），
+     前端删除按钮必须与这里同一判据（ModelProvidersPanel.defaultRefOf）。 */
   const rawDefaults = (root.defaults ?? {}) as Record<string, unknown>;
   for (const tier of ['chat', 'reasoning'] as const) {
     const value = typeof rawDefaults[tier] === 'string' ? String(rawDefaults[tier]).trim() : '';
     if (value === modelId || value === `${providerId}/${modelId}`) {
       throw new RegistryEditError(
-        `模型「${modelId}」正被默认${tier === 'chat' ? '对话' : '推理'}模型引用，删掉会让全平台默认路由落空。`
-          + '请先在「路由与调用」把默认模型改到别处。',
+        `模型「${modelId}」正被默认${tier === 'chat' ? '对话' : '推理'}模型引用`
+          + `（注册表文件 defaults.${tier}），删掉会让别名档位与 /api/config 的默认值落空。`
+          + '请先把那一处默认改到别的模型，再删除。',
         400,
         'invalid'
       );

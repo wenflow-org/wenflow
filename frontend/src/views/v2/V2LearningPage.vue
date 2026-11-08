@@ -2356,6 +2356,12 @@ async function applyTurnResult(r: Record<string, any>, aiMsg?: { role: string; t
     checkpointSubmitting.value = false;
     assessTarget.value = null; // 有客观验证题，不再弹快选确认
     confirmCheck.value = null;
+  } else {
+    // 服务端本轮没有下发 checkpoint（作废 / 已消费 / 完课回合）：把本地旧卡收起来。
+    // 入户实证：模型在正文宣布弃题、话题已推进，但单槽 pendingCheckpoint 让旧卡在屏幕上
+    // 继续可点约 65 分钟；服务端撤销后本轮 checkpoint 为 null，这里必须同步收卡，
+    // 否则学生点提交只会拿到「理解检查不存在或已处理」。
+    checkpoint.value = null;
   }
   if (r.isCompletion) {
     // 延伸课不自动结算（#124）：服务端延伸会话已抑制完成信号，这里再兜一层旧载荷——

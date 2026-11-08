@@ -30,32 +30,6 @@
         </button>
       </div>
 
-      <!-- 最近会话（D14）：此前目标规划没有任何产品内回访入口——入口页无历史列表，
-           其它页面只挂裸 /goal-conversation，深链 /goal-conversation/:id 可达但无处可点。
-           本地记录最近几次会话的 id + 首句摘要，给出可点的深链回访入口。
-           恢复卡正在显示的那条要从这里剔除：两块入口指向同一会话会让用户以为有两个规划。 -->
-      <div v-if="visibleRecentGoals().length" class="recent">
-        <span class="recent__title">最近会话</span>
-        <ul class="recent__list">
-          <li v-for="r in visibleRecentGoals()" :key="r.id">
-            <a
-              :href="`/goal-conversation/${r.id}`"
-              class="recent__item"
-              @click.prevent="openRecentGoal(r.id)"
-            >
-              <span class="recent__preview">{{ r.preview }}</span>
-              <!-- 正在生成的那条：把时间位换成蓝色状态字（2026-11-06 走查 图4）——
-                   状态挂在「是哪条会话在生成」上，比一颗脱离上下文的孤立胶囊有信息量 -->
-              <span v-if="isGeneratingRecent(r)" class="recent__gen">
-                <i class="recent__gen-dot" aria-hidden="true"></i>生成路径中…
-              </span>
-              <span v-else class="recent__time">{{ recentTime(r.at) }}</span>
-              <span class="recent__go" aria-hidden="true">›</span>
-            </a>
-          </li>
-        </ul>
-      </div>
-
       <!-- stopped 与 failed 并行：主动停止不是「连接失败」，用独立文案（useGoalLive.stopped） -->
       <div v-if="live.failed === 'start' && !live.stopped" class="errorbar">
         {{ CONNECT_FAIL_MSG }}<button type="button" class="errorbar__retry" @click="doRetry">重试</button>
@@ -69,22 +43,11 @@
            状态改由「最近会话」对应行的时间位承接（见 .recent__gen）。
            跨刷新常驻的跟踪本身不变（genTrack/轮询/setGoalGenTracking 照旧）。 -->
 
-      <div class="entry__cards">
-          <div class="entry__cards-head">
-            <span class="entry__cards-title">试试这些方向</span>
-            <button type="button" class="cards-nav__btn" title="换一批" aria-label="换一批" :disabled="live.sending" @click="shuffleScenes">
-              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
-            </button>
-          </div>
-        <button v-for="c in displayScenes" :key="c.title" type="button" class="scene-card" :disabled="live.sending" :title="c.desc" @click="startWith(c.seed)">
-          <span class="scene-card__icon" aria-hidden="true" :style="{ background: c.bg, color: c.ink }" v-html="c.icon"></span>
-          <span class="scene-card__body">
-            <strong>{{ c.title }}</strong>
-          </span>
-          <span class="scene-card__go" aria-hidden="true">›</span>
-        </button>
-      </div>
-
+      <!-- 顺序重排（2026-11-07 用户走查）：原序「标题 → 示例方向 → 输入框」里，
+           「试试这些方向」横在引导语与输入框之间——用户顺着标题往下找输入框，半路先撞上
+           一排示例，视线被引走去读例子、再折回输入框。输入框是这一页唯一的主操作，
+           必须紧贴标题（现代 AI 首页范式：居中标题 → 大输入卡 → 底部轻量胶囊）。
+           示例方向随之下移成一行 32px 浅胶囊，与 110px 的输入大卡拉开 ~3:1 体量差。 -->
       <!-- 资料附件层：回形针内置输入框，已传资料以 chips 浮在输入框上方；输入框本身是拖放目标 -->
       <div
         class="composer composer--entry"
@@ -142,7 +105,52 @@
         </div>
         <div v-if="!isNarrow" class="composer__hint">
           <span class="composer__hint-shortcut">{{ SEND_SHORTCUT_HINT }}</span>
+          <!-- AI 声明并入输入框下方这一行（2026-11-07 用户走查 图2）：此前初始态另有一份
+               沉在 .goal__foot（margin-top:auto 贴视口最底），1440p 高屏上离输入框几百像素，
+               两句同义小字被拉成上下两团。这里与快捷键同行居中，全页只剩这一处声明。 -->
+          <span class="composer__hint-sep" aria-hidden="true">·</span>
+          <AiContentNote />
         </div>
+      </div>
+
+      <!-- 灵感胶囊：标签 + 3 条方向 + 换一批，同一行居中轻量排布（样式见 .entry__cards） -->
+      <div class="entry__cards">
+        <span class="entry__cards-title">试试这些</span>
+        <button v-for="c in displayScenes" :key="c.title" type="button" class="scene-card" :disabled="live.sending" :title="c.desc" :style="{ color: c.ink, '--sc-bg': c.bg }" @click="startWith(c.seed)">
+          <span class="scene-card__icon" aria-hidden="true" v-html="c.icon"></span>
+          <span class="scene-card__body"><strong>{{ c.title }}</strong></span>
+        </button>
+        <button type="button" class="cards-nav__btn" title="换一批" aria-label="换一批" :disabled="live.sending" @click="shuffleScenes">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+        </button>
+      </div>
+
+      <!-- 最近会话（D14）：此前目标规划没有任何产品内回访入口——入口页无历史列表，
+           其它页面只挂裸 /goal-conversation，深链 /goal-conversation/:id 可达但无处可点。
+           本地记录最近几次会话的 id + 首句摘要，给出可点的深链回访入口。
+           恢复卡正在显示的那条要从这里剔除：两块入口指向同一会话会让用户以为有两个规划。
+           2026-11-07 用户走查：位置由输入框上方降为灵感胶囊下方的弱化单行条目——
+           回访是次级动作，不该插在「标题 → 输入框」这条主动线中间。 -->
+      <div v-if="visibleRecentGoals().length" class="recent">
+        <span class="recent__title">最近会话</span>
+        <ul class="recent__list">
+          <li v-for="r in visibleRecentGoals()" :key="r.id">
+            <a
+              :href="`/goal-conversation/${r.id}`"
+              class="recent__item"
+              @click.prevent="openRecentGoal(r.id)"
+            >
+              <span class="recent__preview">{{ r.preview }}</span>
+              <!-- 正在生成的那条：把时间位换成蓝色状态字（2026-11-06 走查 图4）——
+                   状态挂在「是哪条会话在生成」上，比一颗脱离上下文的孤立胶囊有信息量 -->
+              <span v-if="isGeneratingRecent(r)" class="recent__gen">
+                <i class="recent__gen-dot" aria-hidden="true"></i>生成路径中…
+              </span>
+              <span v-else class="recent__time">{{ recentTime(r.at) }}</span>
+              <span class="recent__go" aria-hidden="true">›</span>
+            </a>
+          </li>
+        </ul>
       </div>
     </main>
 
@@ -364,14 +372,16 @@
         <!-- 方案协商入口（2026-10-31 一锤定音修复）：proposing 不再自动盖 modal，
              方案先在对话流里完整呈现、可直接回复继续调整（一轮二轮都行）；
              这颗按钮是显式确认入口——点开方案卡审阅，确认动作仍只发生在卡内 -->
-        <!-- 方案预览微卡片（2026-11-05 用户裁定方案 A）：左侧填方案摘要（此前 70% 空黑读作渲染 Bug），
-             副行优先承接 entryCopy.hint（导师追问/自测未答的语境），就绪态给阶段摘要 -->
+        <!-- 方案预览微卡片（2026-11-05 用户裁定方案 A）：左侧填方案摘要，
+             副行优先承接 entryCopy.hint（自测未答语境），否则给阶段摘要；
+             按钮恒定「查看并确认」（2026-11-08 用户裁定）：模型 proposing 文本指引「点确认」，
+             入口条必须带确认入口，确认面板从这里点开——打字确认只是对话流的次通道 -->
         <div v-if="loggedIn && live.started && !live.sending && live.stage === 'proposing' && live.proposal && !showProposal" class="proposal-invite">
           <span class="proposal-invite__doc" aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1.5V8h4.5L14 3.5zM8 12h8v1.5H8V12zm0 4h8v1.5H8V16z"/></svg></span>
           <div class="proposal-invite__text">
             <strong class="proposal-invite__title">学习方案 · 待确认</strong>
             <span v-if="entryCopy.hint" class="proposal-invite__sub">{{ entryCopy.hint }}</span>
-            <span v-else-if="live.proposal?.stages?.length" class="proposal-invite__sub">共 {{ live.proposal.stages.length }} 个阶段 · {{ live.proposal?.outcome || '可直接确认生成路径' }}</span>
+            <span v-else-if="live.proposal?.stages?.length" class="proposal-invite__sub">共 {{ live.proposal.stages.length }} 个阶段 · {{ live.proposal?.outcome || '方向已成形，点开即可确认' }}</span>
           </div>
           <button type="button" class="btn-primary proposal-invite__btn" @click="openProposalReview">{{ entryCopy.button }}</button>
         </div>
@@ -638,15 +648,11 @@
       </div>
     </div>
 
-    <!-- AI 生成提示：沉底。营销页脚（V2Footer）已移除——这是对话工作台，
-         和 ChatGPT/Linear 一样应当满视口、零文档滚动；愿景/文档/GitHub 入口
-         导航与 /docs 都有，不需要在这里再给一条（2026-09-27 用户反馈
+    <!-- AI 生成提示已并入输入框下方那行（2026-11-07 用户走查 图2）：初始态原先在这里
+         沉底（margin-top:auto），1440p 下与输入框相隔数百像素；现在与「Enter 发送」同行。
+         营销页脚（V2Footer）已移除——这是对话工作台，和 ChatGPT/Linear 一样应当满视口、
+         零文档滚动；愿景/文档/GitHub 入口导航与 /docs 都有（2026-09-27 用户反馈
          「窗口为什么还滚动了，页脚还得往下滑」）。 -->
-    <div v-if="!live.started" class="goal__foot">
-      <div class="goal__ai-note">
-        <AiContentNote />
-      </div>
-    </div>
   </div>
 </template>
 
@@ -668,7 +674,7 @@ import { currentUserId, dropLegacyRecentGoalsStorage, getGoalConversationCid, cl
 import { cachedMessageHtml, plainMessageHtml } from '@/utils/messageMarkdown';
 import { toast } from '@/utils/toast';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
-import { isAwaitingAnswer, proposalEntryCopy } from './goalStageCopy';
+import { proposalEntryCopy } from './goalStageCopy';
 import { learningAPI, type GenerationLifecycleDTO } from '@/api/learning';
 import { genPillCopy, genStageLabel, isGenerationSettled } from './learningPathProgress';
 
@@ -741,20 +747,14 @@ const keyedMessages = computed(() =>
 const repliesActive = computed(
   () => live.messages.length > 0 && live.messages[live.messages.length - 1]?.role === 'ai'
 );
-/* 本轮导师是否还在提问（2026-10-31 用户走查）：proposing 轮的提问会让「方案已就绪」与
-   「我还有个问题」同时成立——用户不知道该回答还是该确认。判据见 goalStageCopy.ts。 */
-const awaitingAnswer = computed(() => {
-  for (let i = live.messages.length - 1; i >= 0; i -= 1) {
-    if (live.messages[i].role === 'ai') return isAwaitingAnswer(live.stage, String(live.messages[i].content || ''));
-  }
-  return false;
-});
-/** 未作答的自测题数（0 = 没有题或已答完）：入口条据此把「有题可答」挑明 */
+/* 未作答的自测题数（0 = 没有题或已答完）：入口条据此把「有题可答」挑明。
+   入口条本体谦卑化（2026-11-08 确认动作减重）：恒定「查看方案」，不再区分
+   确认式/信息式问句、不宣称就绪；确认动作在方案卡内完成。 */
 const unansweredProbes = computed(() => {
   const { answered, total } = live.probeProgress();
   return Math.max(0, total - answered);
 });
-const entryCopy = computed(() => proposalEntryCopy(awaitingAnswer.value, unansweredProbes.value));
+const entryCopy = computed(() => proposalEntryCopy(unansweredProbes.value));
 /* 快选行不再显示可见标签（2026-11-03 用户反馈「直接不要这个提示」）：
    「也可以直接选（点选填入输入框，可多选）」及按阶段变体、只教一次的逻辑一并移除，
    用法说明只保留给读屏器。 */
@@ -1567,14 +1567,23 @@ const SCENE_BATCH_SIZE = 3;
 /**
  * 场景池：默认展示前 3 个，覆盖应试 / 职业转型 / 学业 / 兴趣 / 资料驱动五类起点。
  * seed 自带「现状 + 约束 + 想要的结果」，让目标澄清从具体场景开始，而不是先被反问四五轮。
- */
+ *
+ * 2026-11-07 用户要求：不与物理世界发生交互的场景。原先的「面试开口卡壳 / 英语开会开不了口 /
+ * 在职考电工中级证」三张要在现实里张嘴、动手、现场练——本产品给的是讲解、反馈与路径，
+ * 教不了也验不了这类练习，摆出来等于承诺做不到的事。
+ * 后续又按同一条口径换掉两张「纸面做题」：「考研数学卡在 90 分」「初二几何证明没思路」——
+ * 卷面推导虽不碰实物，但练习场也不在屏幕内（本产品的反馈只落在文字/代码/表格这类可提交的产出物上）。
+ * 现在十张全部是「读 / 写 / 代码 / 数据 / 文档」型：产出物能交出来、平台能对照判。
+ * 五类起点：应试（行测 / 软考）、职业转型（会计转数据 / 后端进阶）、学业（数据结构 / 初二 Python）、
+ * 兴趣（心理学）、资料与写作（公文 / 资料学成课）。 */
 const scenePool = [
   {
-    title: '考公面试开口卡壳',
-    desc: '30 天，练到能完整答完结构化面试',
-    seed: '我笔试过了，但面试一开口就卡壳，还有 30 天，想练到能完整答完结构化面试',
+    title: '行测资料分析总超时',
+    desc: '20 题做不完，想稳到 90% 正确率',
+    seed: '我行测资料分析 20 题总是做不完，想练到 90% 正确率以上',
     bg: 'color-mix(in srgb, var(--accent) 13%, transparent)', ink: 'var(--purple-ink)',
-    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM7 9h10v2H7V9zm6 5H7v-2h6v2zm4-6H7V6h10v2z"/></svg>'
+    /* 图标随场景换（原气泡图标是给「面试开口」画的）：资料分析＝表格与图表 */
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M5 9.2h3V19H5V9.2zM10.6 5h2.8v14h-2.8V5zm5.6 8H19v6h-2.8v-6z"/></svg>'
   },
   {
     title: '会计转数据分析',
@@ -1591,39 +1600,43 @@ const scenePool = [
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2a7 7 0 0 0-4 12.74V17h8v-2.26A7 7 0 0 0 12 2zM8 19h8v2H8v-2z"/></svg>'
   },
   {
-    title: '考研数学卡在 90 分',
-    desc: '12 月考试，每天 2 小时补薄弱章节',
-    seed: '我是二战考研，数学二卡在 90 分上不去，12 月底考试，每天能学 2 小时',
+    title: '数据结构期末要补过',
+    desc: '挂过一次，想把树和图真的写出来',
+    seed: '我数据结构期末挂过一次，树和图总是似懂非懂，想真的搞懂并能自己写出代码',
     bg: 'color-mix(in srgb, var(--blue) 12%, transparent)', ink: 'var(--blue-deep)',
-    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>'
+    /* 图标：数据结构＝底层结构（芯片），原文档图标是给「纸面做题」考的卷面画的 */
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M15 9H9v6h6V9zm-2 4h-2v-2h2v2zm8-2V9h-2V7c0-1.1-.9-2-2-2h-2V3h-2v2h-2V3H9v2H7c-1.1 0-2 .9-2 2v2H3v2h2v2H3v2h2v2c0 1.1.9 2 2 2h2v2h2v-2h2v2h2v-2h2c1.1 0 2-.9 2-2v-2h2v-2h-2v-2h2zm-4 6H7V7h10v10z"/></svg>'
   },
   {
-    title: '在职考电工中级证',
-    desc: '每晚 1 小时，理论题不再靠死记',
-    seed: '我在职考电工中级证，每晚只有 1 小时，理论题总是记不住',
+    title: '软考中级要一次过',
+    desc: '每晚 1 小时，理论题不靠死记',
+    seed: '我报了软考中级，每晚只有 1 小时，理论题总是记不住',
     bg: 'rgba(49,177,111,.12)' /* 场景卡专用绿基色：等价 var(--wf-color-success-bg) 家族 */, ink: 'var(--green-ink)',
-    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm9 1.5V8h4.5L15 3.5zM8 13h8v-1.5H8V13zm0 4h8v-1.5H8V17z"/></svg>'
+    /* 图标：考证＝认证徽章（与「资料学成课」的文档图标区分开） */
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M23 12l-2.44-2.79.34-3.69-3.61-.82-1.89-3.2L12 2.96 8.6 1.5 6.71 4.69 3.1 5.5l.34 3.7L1 12l2.44 2.79-.34 3.7 3.61.82L8.6 22.5l3.4-1.47 3.4 1.46 1.89-3.19 3.61-.82-.34-3.69L23 12zm-12.91 4.72l-3.8-3.81 1.48-1.48 2.32 2.33 5.85-5.87 1.48 1.48-7.33 7.35z"/></svg>'
   },
   {
-    title: '初二几何证明没思路',
-    desc: '月考 70 分，想把证明题提到 90',
-    seed: '我上初二，几何证明题总是没思路，月考 70 分左右，想提到 90 分',
+    title: '初二想学 Python 小工具',
+    desc: '学校学过一点，想自己写出完整脚本',
+    seed: '我上初二，想学 Python 自己做点小工具，学校学过一点但没写出过完整的东西',
     bg: 'rgba(240,101,149,.12)', ink: '#d1456f',
-    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M4 4h7v7H4V4zm2 2v3h3V6H6zm7-2h7v7h-7V4zm2 2v3h3V6h-3zM4 13h7v7H4v-7zm2 2v3h3v-3H6zm7-2h7v7h-7v-7zm2 2v3h3v-3h-3z"/></svg>'
+    /* 图标：写小工具＝扳手，原九宫格图标是给「几何证明」的图感画的 */
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/></svg>'
   },
   {
     title: '后端进阶分布式',
     desc: '做了 3 年 CRUD，想真正搞懂一致性',
-    seed: '我做了 3 年 CRUD，想系统搞懂分布式一致性，也能应对大厂面试',
+    seed: '我做了 3 年 CRUD，想系统搞懂分布式一致性，遇到线上问题能自己定位',
     bg: 'color-mix(in srgb, var(--blue) 12%, transparent)', ink: 'var(--blue-deep)',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M14.6 16.6 19.2 12l-4.6-4.6 1.4-1.4L22 12l-5.9 5.9-1.5-1.3zm-5.2 0L7.8 18l-5.8-6 5.8-6 1.6 1.4L4.8 12l4.6 4.6z"/></svg>'
   },
   {
-    title: '英语开会开不了口',
-    desc: '看得懂文档，要能讲清项目进展',
-    seed: '工作要用英语开会，文档看得懂但开不了口，想练到能讲清项目进展',
+    title: '英文文档读得太慢',
+    desc: '能猜懂大意，但要读得准而快',
+    seed: '工作要读英文技术文档，能猜懂大意但读得慢，想读到能直接抓要点',
     bg: 'rgba(49,177,111,.12)' /* 场景卡专用绿基色：等价 var(--wf-color-success-bg) 家族 */, ink: 'var(--green-ink)',
-    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zM7 9h10v2H7V9zm6 5H7v-2h6v2zm4-6H7V6h10v2z"/></svg>'
+    /* 图标随场景换（原气泡图标是给「英语开会开口」画的）：读文档＝成排的文字行 */
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M4 4h16v2H4V4zm0 5h16v2H4V9zm0 5h11v2H4v-2zm0 5h11v2H4v-2z"/></svg>'
   },
   {
     title: '公文写作总被退回',
@@ -1665,21 +1678,13 @@ function shuffleScenes() {
   min-height: 0;
   overflow: auto;
 }
-/* 统一内容列：hero 文字 / 场景卡 / 输入框（含资料 chips 层）共用 640 一条列，
-   不再 hero 通栏左对齐、卡片居中的混搭（比例失调的根源） */
-.entry__hero { max-width: 640px; width: 100%; margin: 0 auto; }
+/* 输入大卡紧贴标题（2026-11-07 用户走查）：.entry 的 18px 列间距 + hero 的下外边距 10px
+   = 副标题与输入框之间 28px，把「引导语 → 主操作」连成一段；灵感胶囊另由下方
+   .entry__cards 的 margin-top 承担 20px。 */
 .entry .composer--entry {
   max-width: 640px; width: 100%; margin: 0 auto;
-  /* 原 46 补白为卡片间距服务；现在资料区在两者之间，由 gap 接管 */
-  margin-top: 2px;
 }
 
-.goal__foot { margin-top: auto; }
-.goal__ai-note {
-  display: flex; justify-content: center;
-  padding: 10px 28px 4px;
-}
-.goal__ai-note :deep(.ai-note) { font-size: 12px; opacity: 0.75; }
 .login-gate {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -1715,9 +1720,11 @@ function shuffleScenes() {
 .resume__body small { font-size: 12px; color: var(--muted); }
 .resume__go { font-size: 13px; font-weight: 800; color: var(--blue-deep); }
 
-/* 最近会话列表（D14）：入口页回访入口；与 hero 同栏限宽，条目 ≥44px 触控带 */
-.recent { width: 100%; max-width: 640px; margin: 4px auto 0; }
-.recent__title { display: block; margin-bottom: 8px; font-size: 12px; font-weight: 800; letter-spacing: 0.04em; color: var(--faint); }
+/* 最近会话列表（D14）：入口页回访入口；与 hero 同栏限宽，条目 ≥44px 触控带。
+   2026-11-07 用户走查：整块降到灵感胶囊下方并「弱化」——去掉卡片描边与白底（那是
+   主内容件的材质），只留单行文字 + 行尾时间，回访是次级动作，不与输入大卡争材质。 */
+.recent { width: 100%; max-width: 640px; margin: 2px auto 0; }
+.recent__title { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 800; letter-spacing: 0.04em; color: var(--faint); text-align: center; }
 /* minmax(0, 1fr) 不能省成隐式 auto 轨（2026-10-07 实测 390 视口）：
    grid 的 auto 轨按**内容最小宽**撑开，而 .recent__preview 是 nowrap —— 标题整句的
    min-content 有 525px，轨道于是被撑到 525px，比 358px 的容器宽出 167px：
@@ -1728,13 +1735,15 @@ function shuffleScenes() {
 .recent__list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
 .recent__item {
   display: flex; align-items: center; gap: 10px;
-  min-height: 44px; padding: 9px 12px;
-  border: 1px solid var(--line); border-radius: var(--mk-radius-lg);
-  background: var(--surface); color: var(--ink); text-decoration: none;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  min-height: 44px; padding: 9px 10px;
+  /* 弱化（2026-11-07 用户走查）：无描边、无底色，只有 hover 时一层极浅的灰——
+     它与输入大卡/胶囊不在一个材质层级上（见 .recent 注释） */
+  border: 0; border-radius: var(--mk-radius-lg);
+  background: transparent; color: var(--ink); text-decoration: none;
+  transition: background 0.15s ease;
 }
-.recent__item:hover { border-color: color-mix(in srgb, var(--blue) 45%, transparent); background: color-mix(in srgb, var(--blue) 5%, transparent); }
-.recent__preview { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; }
+.recent__item:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.recent__preview { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; color: var(--muted); }
 .recent__time { flex: none; font-size: 12px; color: var(--faint); }
 /* 生成中行（2026-11-06 走查 图4）：时间位换成蓝色状态字 + 脉点，与 .gen-pill--run 同一语言。
    宽度与时间字同档（12px），不把省略号压缩到挤字。 */
@@ -1750,16 +1759,26 @@ function shuffleScenes() {
 @keyframes recent-gen-pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
 .recent__go { flex: none; color: var(--faint); font-weight: 700; }
 
+/* 居中 hero（2026-11-07 用户走查）：整页是一段「居中标题 → 大输入卡 → 底部轻量胶囊」的
+   单列叙事；标题左对齐时整块浮在屏幕中央会头重脚轻（用户原话「缩在左上角而且字号偏小」）。
+   改为整列居中——标题/副标题/恢复卡同轴。恢复卡（有历史会话时才出现）随之落到副标题下方，
+   不再横在标题右侧。
+   列宽同「hero 文字 / 输入大卡 / 灵感胶囊（含资料 chips 层）」共用 640 一条列，
+   不再 hero 通栏左对齐、卡片居中的混搭（比例失调的根源）。 */
 .entry__hero {
-  display: flex; align-items: flex-end; justify-content: space-between;
-  gap: 20px; flex-wrap: wrap;
+  max-width: 640px; width: 100%; margin: 0 auto 10px;
+  display: flex; flex-direction: column; align-items: center;
+  gap: 16px; text-align: center;
 }
-.entry__hero-text { display: grid; gap: 10px; }
-.entry__hero h1 { margin: 0; /* 桌面档 goal 页登记上限 20（check-mobile-spec）：原 clamp(22,3.6vw,30) 越阈 */ font-size: clamp(18px, 2vw, 20px); font-weight: 800; letter-spacing: -0.012em; }
+.entry__hero-text { display: grid; gap: 10px; justify-items: center; }
+/* 主标题抬到 24px（2026-11-07 用户走查要求 26~28px）：24 是全站桌面比例档的上限
+   （check-mobile-spec 桌面档 max ≤ 24，「使用者侧不允许出现展示字」），故取 24 而不再越档；
+   该页登记值随之从 20 抬到 24（见 check-mobile-spec DESKTOP 的 goal 条目）。 */
+.entry__hero h1 { margin: 0; font-size: clamp(20px, 2.4vw, 24px); font-weight: 800; letter-spacing: -0.012em; }
 /* 副标题与同列的卡片/输入框共用 640 这条列宽（.entry__cards / .entry .composer--entry 同值）。
    原 52ch ≈412px @13.5px，比卡片窄 228px：整句被挤成两行，第二行只剩「段安排。」4 字，
    还把「第一阶段安排」拆到两行（2026-10-08 用户侧走查实测）。 */
-.entry__hero p { margin: 0; font-size: 13.5px; color: var(--muted); max-width: 640px; line-height: 1.7; }
+.entry__hero p { margin: 0; font-size: 14px; color: var(--muted); max-width: 640px; line-height: 1.7; }
 
 .errorbar {
   display: flex; align-items: center; gap: 8px;
@@ -1773,11 +1792,15 @@ function shuffleScenes() {
 .errorbar__retry { text-decoration: underline; cursor: pointer; font-weight: 800; }
 .chat__errorbar { margin: 8px 4px 0; }
 
+/* 灵感胶囊（2026-11-07 用户走查）：示例方向从「同宽、同底色、同圆角的卡片」降为一行
+   轻量胶囊——原样式与正上方输入框长得几乎一样（白底 + 细灰框 + 左图标 + 右动作），
+   一列叠下来分不出主次。现在：输入大卡 110px 高 + 纯 --surface + 悬浮影占据 C 位，
+   胶囊 32px 高、透明底、只有一圈细描边，体量差约 3:1。标签与「换一批」同在行内居中。 */
 .entry__cards {
-  display: grid; grid-template-columns: 1fr; gap: 12px;
-  max-width: 640px; width: 100%; margin: 0 auto;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: center;
+  gap: 8px;
+  max-width: 640px; width: 100%; margin: 2px auto 0;
 }
-.entry__cards-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .entry__cards-title { font-size: 12px; font-weight: 700; color: var(--faint); }
 .cards-nav__btn {
   display: inline-flex; align-items: center; justify-content: center;
@@ -1792,32 +1815,29 @@ function shuffleScenes() {
 }
 .cards-nav__btn:disabled { opacity: .4; cursor: default; }
 .scene-card {
-  display: flex; align-items: center; gap: 12px;
-  padding: 12px 14px;
-  background: var(--surface);
+  display: inline-flex; align-items: center; gap: 6px;
+  /* 36 而不是 32：check-mobile-spec 的 lt36 预算恒为 0（「任何可点元素都不许低于 36px」），
+     量的是元素盒子而不是视觉高度，32px 的胶囊会当场把该页打红。36 仍在「紧凑芯片 36-40」
+     这一档里，与行尾「换一批」的 36 同高。 */
+  height: 36px; padding: 0 12px;
+  background: transparent;
   border: 1px solid var(--line);
-  border-radius: 16px; /* 圆角阶梯：卡片 */
-  font: inherit; text-align: left; cursor: pointer;
+  border-radius: 999px; /* 胶囊档 */
+  font: inherit; font-size: 13px; cursor: pointer;
   transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
 }
-/* hover 不再抬升（原 translateY(-1px) 已删），淡蓝发光换成中性 raised 档 */
+/* hover：底色用回该场景自己的浅色调（--sc-bg 由模板按 c.bg 注入，静止态保持透明、
+   不抢输入框的底色） */
 .scene-card:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--blue) 45%, transparent);
-  box-shadow: var(--wf-shadow-raised);
+  background: var(--sc-bg);
 }
 .scene-card:disabled { opacity: .55; cursor: default; }
-.scene-card__icon { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; flex: 0 0 auto; }
-.scene-card__body { flex: 1; min-width: 0; }
-.scene-card__body strong {
-  display: block; font-size: 14px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.scene-card__go {
-  font-size: 18px; line-height: 1;
-  color: var(--faint); flex: 0 0 auto;
-  transition: color 0.16s ease, transform 0.16s ease;
-}
-.scene-card:hover:not(:disabled) .scene-card__go { color: var(--blue-deep); transform: translateX(2px); }
+.scene-card__icon { display: grid; place-items: center; flex: 0 0 auto; }
+/* 图标是池子里 width/height=18 的 <svg>：字号收窄必须落在 svg 上，否则 18px 会撑高胶囊 */
+.scene-card__icon svg { width: 15px; height: 15px; }
+.scene-card__body { min-width: 0; }
+.scene-card__body strong { font-size: 13px; font-weight: 600; line-height: 1; white-space: nowrap; }
 
 /* ---------- 输入区 ---------- */
 .composer { display: grid; gap: 7px; }
@@ -1903,6 +1923,15 @@ function shuffleScenes() {
   max-height: 120px;
   align-self: center;
 }
+/* 键盘焦点环：本 textarea 自己不再画。
+   病根（2026-11-07 用户走查 图1）：mk-primitives.css 的 `:root :focus-visible`
+   （特异度 0,2,0）给全站焦点元素画 `outline: 2px solid rgba(47,106,224,.85)`，
+   比本文件的 `.composer__textarea { outline: none }`（0,1,0）高一级——而文本框
+   在鼠标点击时也命中 :focus-visible，于是圆角输入大卡里套出一个直角蓝色方框。
+   这里写成 :focus-visible 变体（编译后 0,3,0）稳定压过它。焦点可见性没有丢：
+   外层的 .composer__box:focus-within 会亮起规范里「全站唯一一圈」的 --mk-focus-ring，
+   环跟随大卡自身的 12/16px 圆角。会话态底条同款受益。 */
+.composer__textarea:focus-visible { outline: none; }
 /* 44→42：原型 .wf-composer__send 42px 方键（移动端媒体查询仍保留 44 的触控档） */
 .composer__send {
   width: 42px; height: 42px; border-radius: var(--mk-radius-xl);
@@ -1933,15 +1962,41 @@ function shuffleScenes() {
 }
 .composer__send--stop:active { transform: scale(0.97); }
 .composer__hint {
-  display: flex; align-items: center; justify-content: flex-end;
-  gap: 12px;
-  font-size: 12px; color: var(--faint); padding-left: 6px;
+  /* 居中（2026-11-07 用户走查 图2：与「Enter 发送 · Shift+Enter 换行」合并为同一行居中浅灰小字）；
+     与会话态 .chat__under-hint 的居中口径一致，两个态之间切换不再一左一右。 */
+  display: flex; align-items: center; justify-content: center;
+  gap: 8px;
+  font-size: 12px; color: var(--faint);
+  flex-wrap: wrap;
 }
+.composer__hint-sep { opacity: .6; }
+.composer__hint :deep(.ai-note) { font-size: 12px; opacity: .85; }
 /* 「聊到的内容会自动整理成这份清单。」tip 已删（2026-11-05 用户裁定）：
    面板里 7 项清单本身就是整理结果，这句机制说明是重复信息 */
 /* 清空重聊：桌面档隐藏（头部 .chat__clear 承担），≤1100 由面板底部的本按钮承担 */
 .panel__clear { display: none; }
 .composer__count { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* 入口态输入大卡（2026-11-07 用户走查）：这一页的 C 位，把它从 54px 扁条升级为百来像素的
+   「多行输入面板」——上半幅整幅留给输入（textarea 占满一行），下半行左侧回形针、右侧发送键。
+   移动端同款（用户要求两档一致）。
+   模板里三者是「回形针 → textarea → 发送」一行布局（会话态底条仍是那一档，不能动），
+   这里用 flex order 把 textarea 提到最前：它一旦 basis 100% 就独占首行，剩下两个动作自然
+   落到第二行，再靠 space-between 贴到卡片左右下角。纯 CSS 完成，模板不分叉。
+   两点位置讲究：
+   ① 选择器带 `.entry` 前缀而不是塞进 ≥1101 媒体查询——≤1100 档有 `.composer__box{padding:6px}`
+      这类会话态专用的窄屏覆写，同特异性、后出现，会把这里的 14/16 内衬顶掉；
+      (0,3,0) 前缀在任何顺序下都赢。
+   ② 整块必须排在基础 `.composer__box` / `.composer__textarea` 规则**之后**：两条源文本里都
+      含 `.composer__box {` 子串，靠 indexOf 取规则的源码锁（composer-box / composer-footer
+      两个测试）会先命中我这里，把它们测的基础规则挤掉。 */
+.entry .composer--entry .composer__box {
+  flex-wrap: wrap; justify-content: space-between; align-content: space-between;
+  min-height: 110px; padding: 14px 16px; border-radius: 16px;
+}
+.entry .composer--entry .composer__textarea { order: 0; flex: 1 0 100%; align-self: stretch; min-height: 52px; padding: 0; }
+.entry .composer--entry .composer__attach { order: 1; }
+.entry .composer--entry .composer__send { order: 2; }
 /* 「新目标」不属于 composer 元数据条：移动端由底部「目标规划」导航回到无参路由，
    route.params watcher 负责 resetToEntry，并保留「继续上次的规划」恢复入口。 */
 
@@ -3043,11 +3098,16 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
   /* 整行铺满后「继续 ›」原本紧跟两行正文、悬在正文中线高度上，读起来像个孤立标签；
      推到行尾后成为标准的「列表行 + 行尾动作」。 */
   .resume__go { margin-left: auto; }
-  .entry__cards { grid-template-columns: 1fr; }
-  /* 初始态移动端：基线 justify-content:center 会留下上下两块对称死白（composer 与 AI 声明之间 135px）。
-     改为整页均布：hero / 方向卡 / composer 等间距铺满视口，底部收敛为
-     composer → 声明 → 底部导航 的稳定叠层；登录门只有单子元素，均布对其仍是居中。 */
-  .entry { padding: 28px 16px; justify-content: space-evenly; }
+  /* 灵感胶囊在窄屏自然换行（.entry__cards 是 flex + wrap）。手机档把「试试这些」标签
+     顶到自己一行：与胶囊同处一行时它会占掉首个位置，3 枚胶囊被挤成「1+2」，
+     行尾的「换一批」还会单独掉到第三行。 */
+  @media (max-width: 640px) { .entry__cards-title { flex-basis: 100%; text-align: center; } }
+  /* 初始态窄屏：基线 justify-content:center 会留下上下两块对称死白——旧结构
+     （标题左对齐 + 单行输入）内容本来就矮，靠 space-evenly 才把两块留白摊开。
+     2026-11-07 重排后内容变成「居中标题 → 大输入卡 → 胶囊」的紧凑单列，space-evenly
+     反而把输入框与胶囊顶到视口两端（用户走查 图2：中间断开 ~180px 大白洞）。
+     回到 center：整块居中、内部间距就是各处声明的固定值（标题→输入 28、输入→胶囊 20）。 */
+  .entry { padding: 28px 16px; justify-content: center; }
   /* 阶段导航在窄屏收紧，给右上角的目标信息按钮腾位置（390 下两者刚好共处一行，
      合计 ~325px ≤ 头部带内容宽 336px） */
   .stage-nav { gap: 2px; }

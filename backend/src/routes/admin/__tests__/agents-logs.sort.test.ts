@@ -111,6 +111,24 @@ describe('执行日志服务端排序', () => {
   })
 })
 
+/* 2026-11-07：表格里显示/复制的链路 ID 对无 traceId 的记录是合成值 `log:<id>`
+   （live.ts mapLogsToSpans 的兜底）。运维把它粘回来定位时必须能命中——按主键 contains 查。 */
+describe('链路 ID 直达：log: 前缀按主键查', () => {
+  it('traceId=log:<id> → 查 id 列，不查 traceId 列', async () => {
+    const res = await run(handler(), { query: { traceId: 'log:acl_123_abc' } })
+    expect(res.statusCode).toBe(200)
+    const where = JSON.stringify(findMany.mock.calls[0][0].where)
+    expect(where).toContain('acl_123_abc')
+    expect(where).not.toContain('log:')
+  })
+
+  it('traceId=tr:<id> → 仍按 traceId 列模糊查', async () => {
+    const res = await run(handler(), { query: { traceId: 'tr:abc' } })
+    expect(res.statusCode).toBe(200)
+    expect(JSON.stringify(findMany.mock.calls[0][0].where)).toContain('tr:abc')
+  })
+})
+
 /* FN1 闭环：列表回传派生错误类别，供前端错误摘要条 chip 聚合与下钻同源（此前漏选 errorCategory
    → 前端整列兜底「其他」→ 点 chip 查询 0 行空态）。 */
 describe('执行日志错误类别回传（FN1）', () => {

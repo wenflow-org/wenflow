@@ -43,26 +43,15 @@
         <div class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
           <MkFilterSearch v-model="keyword" placeholder="搜索昵称 / 邮箱 / ID" />
-          <!-- 勾选列默认隐藏（2026-10-17 用户走查「这个多选，默认不出来吧」）：批量删除/导出属
-               低频动作，常驻一整列勾选框会顶在身份列前面，也容易被读成每行都要勾。
-               入口不再只藏在「列」菜单里：卡头明面给一枚「批量操作」，点开即显示勾选列并进入选择态，
-               再点一次收起（并清空已选）。
-               2026-10-19：注册时间本就存在，只是与勾选列一起被默认隐藏了——现在只默认隐藏勾选列。
-               存储键 v5：v4 存下的隐藏集含 created，不升版新默认对已访问过的浏览器不生效。 -->
-          <button
-            v-if="isLive && !isNarrow"
-            type="button"
-            class="mk-link"
-            :class="{ 'mk-link--active': checkVisible }"
-            :aria-pressed="checkVisible"
-            :title="checkVisible ? '收起勾选列并清空已选' : '显示勾选列进入选择态，勾选后才会出现批量操作条'"
-            @click="toggleBatchMode"
-          >{{ checkVisible ? '退出批量' : '批量操作' }}</button>
+          <!-- 2026-11-08 用户走查（图1「已选 0 人 空弹条 / 操作列空白」）：
+               ① 删掉卡头「批量操作 / 退出批量」按钮——勾选列 ☐ 现在常驻，无需切换模式；
+               ② 选中 ≥1 行时底部命令栏才挂出（已选 0 时彻底隐藏），见下方 .mk-batchbar 的 v-if；
+               ③ 右侧「操作」列任何状态下都常驻渲染（不再在批量模式下整列变空白）。 -->
           <MkCols
             :col-defs="ulColDefs"
             :fixed-cols="['用户', '操作']"
-            storage-key="wf_users_hidden_cols_v5"
-            :default-hidden="['check']"
+            storage-key="wf_users_hidden_cols_v6"
+            :default-hidden="['created']"
             v-model:hidden="hiddenCols"
           />
         </div>
@@ -77,7 +66,7 @@
         action-text="重试"
         @action="retryLoad"
       />
-      <div v-else-if="filtered.length" class="mk-table-scroll" :class="{ 'ul-scroll--batch': checkVisible }">
+      <div v-else-if="filtered.length" class="mk-table-scroll" :class="{ 'ul-scroll--batch': selected.length > 0 }">
         <!-- 固定列宽（2026-10-22 与教学组三表同判例）：自动布局下用户/邮箱两列按当页最长内容
              分宽，翻页整表跳动；改 fixed + 逐列表头宽度，余量按权重摊开。
              单元格 nowrap 不变，长邮箱/长昵称仍由 max-width 截断兜底 -->
@@ -168,9 +157,9 @@
             <td v-if="showCol('created')"><span :class="u.createdAt === '从未' ? 'mk-na' : ''">{{ u.createdAt }}</span></td>
             <td v-if="showCol('lastlogin')"><span :class="u.lastLogin === '从未' ? 'mk-na' : ''">{{ u.lastLogin }}</span></td>
             <td>
-              <!-- 批量模式下隐藏行内动作（2026-11-02 评审）：勾选列与「编辑 / ⋯」并排，
-                   一行里同时给出两种操作态，容易误点。退出批量后行内动作即回来。 -->
-              <div v-if="!checkVisible" class="mk-actions">
+              <!-- 2026-11-08 用户走查：操作列任何状态下都渲染（不再在批量模式下整列变空白）。
+                   勾选列与编辑/⋯ 并排是管理台表格常态，优先保证列不为空、表头有「操作」二字下方有内容。 -->
+              <div class="mk-actions">
                 <!-- 行点击进详情，操作列留给这页唯一的处置动作：编辑（改昵称 / 邮箱 / 角色、重置密码）。
                      已删除行不给编辑（账号不可登录，先恢复再改），恢复直接露出来——
                      此前只在「⋯」里，已删除视图整列只有一个省略号（2026-11-02 评审）。 -->
@@ -218,18 +207,20 @@
       />
     </div>
 
-    <!-- 批量操作条（全局 mk-batchbar）——只要处于批量模式就常驻（2026-11-02 评审：
-           删除后已选清空，浮条随之消失，页面停在「有勾选框、有退出批量、却没有操作条」的半截状态）。
-           退出批量与右上角同一出口、同一文案（2026-11-02 评审：同一屏两个退出入口两种说法）。 -->
-    <div v-if="isLive && checkVisible" class="mk-batchbar">
+    <!-- 底部命令栏（全局 mk-batchbar）：仅在「已选 ≥ 1」时挂出（2026-11-08 用户：
+           已选 0 时不得弹出空条）；取消选择即收起。出口统一为「取消选择」，不再有冗余的
+           「退出批量」双入口。 -->
+    <div v-if="isLive && selected.length" class="mk-batchbar">
       <!-- 审核 #13（2026-10-06）：手动跨页勾选时批量条如实标注未显示页行数，
            否则「已选 304 人」在只看得见 15 行的屏上会被读成「全在眼前」
            （2026-10-11 起表头全选只管当前页，跨页集合只能来自手动逐个勾） -->
-      <span>已选 {{ selected.length }} 人<template v-if="selectedOffPage">（含未显示页 {{ selectedOffPage }} 行）</template></span>
-      <button type="button" class="mk-link" @click="toggleBatchMode">退出批量</button>
-      <button type="button" class="mk-link" :disabled="batchBusy || !selected.length" @click="exportSelected">导出 CSV</button>
+      <span class="mk-batchbar__count">已选 {{ selected.length }} 项<template v-if="selectedOffPage">（含未显示页 {{ selectedOffPage }} 行）</template></span>
+      <button type="button" class="mk-link mk-batchbar__cancel" @click="selected = []">取消选择</button>
+      <span class="mk-batchbar__sep" aria-hidden="true"></span>
+      <button type="button" class="mk-batchbar__btn" :disabled="batchBusy || !selected.length" @click="exportSelected">导出 CSV</button>
+      <span class="mk-batchbar__sep" aria-hidden="true"></span>
       <button type="button" class="mk-batchbar__danger" :disabled="batchBusy || !selected.length" @click="batchDelete">
-        {{ batchBusy ? '删除中…' : '批量删除' }}
+        {{ batchBusy ? '删除中…' : '删除' }}
       </button>
     </div>
 
@@ -422,9 +413,9 @@ const users = computed<UserRow[]>(() => {
    列表 = 全部非虚拟账号；测试/审计账号照常列出，行内以「测试」备注标识。 */
 
 /* D3 表格增强：列显隐（公共组件 MkCols 接管：菜单 + localStorage 持久化；列可隐藏，用户/操作列固定）。
-   默认列集对齐原型 .tbl（用户/邮箱/角色/路径会话/最后登录/操作）：「选择框」「注册时间」默认隐藏
-   （列菜单可恢复）。首访默认隐藏走 MkCols :default-hidden 单源（与 LearnerCenter/ExecLogs 同判例）；
-   页面不再私设 v-model 初值——否则 localStorage 已存在时会被双源钉死。 */
+   2026-11-08 用户走查：勾选列 ☐ 改为**默认常驻**（不再需要「批量操作」按钮进入选择态），
+   「注册时间」仍默认隐藏（列菜单可恢复）。存储键升 v6：v5 存下的隐藏集含 check，
+   不升版新默认对已访问过的浏览器不生效。页面不私设 v-model 初值——否则 localStorage 已存在时会被双源钉死。 */
 const ulColDefs = [
   { key: 'check', label: '选择框（批量操作）' },
   { key: 'email', label: '邮箱' },
@@ -447,18 +438,8 @@ const showCol = (key: string) =>
   !(isMedium.value && MEDIUM_HIDDEN_COLS.has(key)) &&
   !(isNarrow.value && MOBILE_HIDDEN_COLS.has(key))
 
-/** 卡头「批量操作」：打开勾选列并进入选择态；再点收起并清空已选 */
-const checkVisible = computed(() => isLive.value && showCol('check'))
-function toggleBatchMode() {
-  if (checkVisible.value) {
-    selected.value = []
-    hiddenCols.value = new Set([...hiddenCols.value, 'check'])
-  } else {
-    const next = new Set(hiddenCols.value)
-    next.delete('check')
-    hiddenCols.value = next
-  }
-}
+/** 勾选列 ☐ 常驻（2026-11-08 用户走查）：无需「批量操作」模式切换，选中 ≥1 行即弹出底部命令栏，
+   取消选择即收起。勾选列显隐由「列」菜单控制（不再默认隐藏）。 */
 
 
 /** live 用户域拉取失败（且列表为空）→ 错误态；空态只在真正无数据时展示 */

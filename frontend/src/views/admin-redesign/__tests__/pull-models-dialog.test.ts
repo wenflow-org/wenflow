@@ -104,8 +104,8 @@ describe('PullModelsDialog', () => {
     await open(w)
     // 默认 8 个上游模型里 1 个已添加 → 可添加 7 个
     expect(w.find('.pmd-all').text()).toContain('全选当前可添加的 7 个模型')
-    // 能力在哪里填：引入后逐项确认（清单本身不猜）
-    expect(w.text()).toContain('引入时会让你逐项确认')
+    // 能力在哪里改：引入后点「配置」（清单本身不猜；不再有逐项确认层）
+    expect(w.text()).toContain('引入后可点该行的「配置」调整')
 
     const empty = mount(PullModelsDialog, {
       props: { models: [], registered: [] },
@@ -170,33 +170,18 @@ describe('PullModelsDialog', () => {
   })
 
   /* 2026-11-05 合并弹窗：连接段由宿主注入，弹窗只负责标题下那行读数与本段动作。 */
-  it('提供了 conn 槽时：连接段排在清单之前，标题下带连接读数', async () => {
+  /* 2026-11-07：弹窗只做「搜索并勾选模型」——连接回页顶的「服务连接」卡，
+     弹窗里既没有 conn 槽也没有标题下那行连接读数（两处同一事实会互相打架）。 */
+  it('弹窗不含连接段与连接读数：连接只属于页顶那张卡', async () => {
     const w = mount(PullModelsDialog, {
-      props: {
-        models: ['m-1'],
-        registered: [],
-        stateLine: '密钥已配置 · 上次获取模型：3 分钟前成功',
-      },
-      slots: { conn: '<div class="stub-conn">连接表单</div>', 'conn-actions': '<button class="stub-reset">重置此通道</button>' },
-      global: { stubs: { teleport: true } },
-    })
-    await open(w)
-    expect(w.find('.pmd-head__state').text()).toContain('密钥已配置')
-    expect(w.find('.pmd-conn .stub-conn').exists()).toBe(true)
-    expect(w.find('.pmd-conn__title').text()).toBe('连接')
-    expect(w.find('.pmd-conn__actions .stub-reset').text()).toBe('重置此通道')
-    // 连接段在清单之前
-    const html = w.find('.mk-modal__body').html()
-    expect(html.indexOf('pmd-conn')).toBeLessThan(html.indexOf('pmd-toolbar'))
-
-    // 不给 conn 槽时整段不渲染（向量 / 重排卡复用同一张弹窗）
-    const bare = mount(PullModelsDialog, {
       props: { models: ['m-1'], registered: [] },
       global: { stubs: { teleport: true } },
     })
-    await open(bare)
-    expect(bare.find('.pmd-conn').exists()).toBe(false)
-    expect(bare.find('.pmd-head__state').exists()).toBe(false)
+    await open(w)
+    expect(w.find('.pmd-conn').exists()).toBe(false)
+    expect(w.find('.pmd-head__state').exists()).toBe(false)
+    // 标题行只剩标题本身
+    expect(w.find('.pmd-head').text()).toBe(w.find('.mk-modal__title').text())
   })
 
   /* 合并弹窗后「获取模型 / 重新获取」在弹窗里：拉取归宿主（它持有地址与密钥），

@@ -59,6 +59,9 @@
       role="tabpanel"
       aria-labelledby="ss-tab-export"
     />
+    <!-- 五个页签一律单列通栏（2026-11-07 用户撤回左右分栏：「会话安全 访问与注册的双栏
+         不要了，换成之前的」）。此前的「左说明 + 右表单」只给会话安全/访问与注册做过，
+         实测左侧说明列把可用宽度压掉 30%，卡片反而更窄，不如通栏。 -->
     <SessionSecurity
       v-if="tab === 'security'"
       id="ss-panel-security"
@@ -203,7 +206,6 @@ defineExpose({ pageLabel })
   min-height: 0;
   overflow-y: auto;
 }
-.ss-host > .acl-host--embedded { flex: 1 1 auto; min-height: 0; }
 
 /* 窄屏：面板内部滚动会缩成一条缝，退回内容高度交给页面滚 */
 @media (max-width: 900px) {

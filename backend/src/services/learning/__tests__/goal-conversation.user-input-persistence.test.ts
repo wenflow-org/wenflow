@@ -424,21 +424,7 @@ describe('#160 终局路径清理回合级幂等标记（标记不得永久残�
     expect(data.stage).toBe('proposing');
   });
 
-  it('否决计量等中途 lifecycle 写入不清标记：失败回合的重试去重不被破坏', async () => {
-    const refusal = '再想想吧';
-    seedProposing({});
-    mockExecuteSkill.mockRejectedValue(new Error('upstream gateway 502'));
-
-    // 第一发失败：这句由本回合落库（落库时写入标记并被保留，供重试去重）
-    await expect(
-      goalConversationService.continueConversation('conv-1', refusal, 'user-1', { confirmProposal: true })
-    ).rejects.toThrow('upstream gateway 502');
-    // 重试同一句：中途的否决计量 lifecycle 写不得清掉标记，否则这句话会被当新回合重复追加
-    await expect(
-      goalConversationService.continueConversation('conv-1', refusal, 'user-1', { confirmProposal: true })
-    ).rejects.toThrow('upstream gateway 502');
-
-    const copies = persistedMessages().filter((m) => m.role === 'user' && m.content === refusal);
-    expect(copies).toHaveLength(1);
-  });
+  // 「否决计量等中途 lifecycle 写入不清标记」用例已随否决机制退役（2026-11-08 确认动作减重：
+  // 按钮不再做文本否决，打字走 goal-confirm-adjudicator 裁决）。回合级幂等标记的守卫
+  // （失败回合重试不重复追加用户消息）由上方「先落库再调模型」与终局清理两类用例覆盖。
 });

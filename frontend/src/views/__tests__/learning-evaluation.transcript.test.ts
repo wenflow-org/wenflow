@@ -205,6 +205,47 @@ describe('LearningEvaluationPage 当堂对话折叠', () => {
     expect(texts[cpIndex + 1]).toContain('第二条讲解');
   });
 
+  it('题面在讲解正文里时，小测卡锚回提问消息正下方（2026-11-08 外评 #1：先批改后出题的倒序）', async () => {
+    const questionText = '你项目里「下单接口」这一侧，当时是怎么把消息送出去的？';
+    getSessionDetailMock.mockResolvedValue({
+      ...detail,
+      messages: [
+        { role: 'assistant', content: `先看板上左栏那 4 行。\n\n${questionText}`, timestamp: '2026-09-23T02:54:00.000Z' },
+        { role: 'user', content: '我的答案：A. 下单接口直接调通知服务的接口', timestamp: '2026-09-23T02:55:00.000Z' },
+        { role: 'assistant', content: '对，这道答对了——A 就是那条链的硬依赖。', timestamp: '2026-09-23T02:55:40.000Z' }
+      ],
+      state: {
+        checkpointHistory: [
+          {
+            checkpointId: 'cp_live',
+            title: questionText,
+            question: questionText,
+            type: 'single_choice',
+            options: [
+              { id: 'A', text: '下单接口直接调通知服务的接口' },
+              { id: 'B', text: '下单接口把消息写进中间存储' }
+            ],
+            selectedOptionIds: ['A'],
+            passed: true,
+            // 结算时刻晚于 AI 点评消息——旧排序会把小测卡推到点评之后
+            submittedAt: '2026-09-23T02:55:30.000Z'
+          }
+        ]
+      }
+    });
+
+    const w = await mountReady();
+    await w.find('.evaluation-transcript-toggle').trigger('click');
+    const items = w.findAll('.evaluation-transcript-item');
+    const texts = items.map((i) => i.text());
+    const cpIndex = items.findIndex((i) => i.classes().includes('evaluation-transcript-item--checkpoint'));
+    expect(cpIndex).toBeGreaterThan(-1);
+    // 锚定语义：小测卡紧贴提问消息（前一条），位于学生作答与 AI 点评之前
+    expect(texts[cpIndex - 1]).toContain('先看板上左栏那 4 行');
+    expect(texts[cpIndex + 1]).toContain('我的答案：A');
+    expect(texts[cpIndex + 2]).toContain('对，这道答对了');
+  });
+
   it('未通过的小测给「未通过」判定且不高亮正确项（服务端不下发答案键）', async () => {
     getSessionDetailMock.mockResolvedValue({
       ...detail,

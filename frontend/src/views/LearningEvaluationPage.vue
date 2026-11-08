@@ -445,40 +445,89 @@ const transcriptEntries = computed<TranscriptEntry[]>(() => {
   const boardSig = (figure: { boardRevision?: number; spec?: unknown }): string => (
     figure.boardRevision != null ? `r${figure.boardRevision}` : JSON.stringify(figure.spec ?? null)
   );
-  const entries: TranscriptEntry[] = [
-    ...mainDialogueMessages.value.map((message, index) => {
-      // 无条件过滤：filter 天然放行首次出现的快照（同时登记签名），其后同版快照被剔
-      const freshFigures = (message.figures || []).filter((f) => {
-        const sig = 'b' + boardSig(f);
-        if (seenBoardSigs.has(sig)) return false;
-        seenBoardSigs.add(sig);
-        return true;
+  /* 小测回放锚点（2026-11-08 外评 #1）：checkpointHistory 只带 submittedAt（结算时刻），
+     直接按它全局排序，小测卡会排到学生作答气泡与 AI 点评之后——「先批改完、最后才出题卡」
+     的因果倒置。回放改为按题面文本把小测卡锚回提问的那条 assistant 消息正下方（出题正文 →
+     学生作答 → 判定卡的自然顺序）；题面对不上的旧数据退回 submittedAt 排序。 */
+  const normForAnchor = (text: unknown): string => String(text ?? '').replace(/[\s*#>`「」『』]/g, '');
+  const anchoredByMessage = new Map<number, TranscriptCheckpoint[]>();
+  const unanchoredCheckpoints: TranscriptCheckpoint[] = [];
+  let anchorCursor = 0;
+  for (const checkpoint of transcriptCheckpoints.value) {
+    const q = normForAnchor(checkpoint.question || checkpoint.title);
+    let matchedAt = -1;
+    if (q) {
+      const messages = mainDialogueMessages.value;
+      for (let i = anchorCursor; i < messages.length; i += 1) {
+        const candidate = messages[i];
+        if (candidate.role === 'assistant' && normForAnchor(candidate.content).includes(q)) {
+          matchedAt = i;
+          break;
+        }
+      }
+    }
+    if (matchedAt >= 0) {
+      anchorCursor = matchedAt + 1;
+      const bucket = anchoredByMessage.get(matchedAt) || [];
+      bucket.push(checkpoint);
+      anchoredByMessage.set(matchedAt, bucket);
+    } else {
+      unanchoredCheckpoints.push(checkpoint);
+    }
+  }
+  const entries: TranscriptEntry[] = [];
+  mainDialogueMessages.value.forEach((message, index) => {
+    // 无条件过滤：filter 天然放行首次出现的快照（同时登记签名），其后同版快照被剔
+    const freshFigures = (message.figures || []).filter((f) => {
+      const sig = 'b' + boardSig(f);
+      if (seenBoardSigs.has(sig)) return false;
+      seenBoardSigs.add(sig);
+      return true;
+    });
+    const freshDiagrams = (message.diagrams || []).filter((d) => {
+      const sig = 'm' + d.code;
+      if (seenBoardSigs.has(sig)) return false;
+      seenBoardSigs.add(sig);
+      return true;
+    });
+    const dropped = freshFigures.length !== (message.figures || []).length
+      || freshDiagrams.length !== (message.diagrams || []).length;
+    const view = dropped ? { ...message, figures: freshFigures, diagrams: freshDiagrams } : message;
+    entries.push({
+      kind: 'message' as const,
+      key: `m-${index}-${message.timestamp || ''}`,
+      ts: toTs(message.timestamp),
+      message: view,
+    });
+    for (const checkpoint of anchoredByMessage.get(index) || []) {
+      entries.push({
+        kind: 'checkpoint' as const,
+        key: `cp-${index}-${checkpoint.checkpointId || checkpoint.submittedAt || ''}`,
+        ts: toTs(checkpoint.submittedAt),
+        checkpoint,
       });
-      const freshDiagrams = (message.diagrams || []).filter((d) => {
-        const sig = 'm' + d.code;
-        if (seenBoardSigs.has(sig)) return false;
-        seenBoardSigs.add(sig);
-        return true;
-      });
-      const dropped = freshFigures.length !== (message.figures || []).length
-        || freshDiagrams.length !== (message.diagrams || []).length;
-      const view = dropped ? { ...message, figures: freshFigures, diagrams: freshDiagrams } : message;
-      return {
-        kind: 'message' as const,
-        key: `m-${index}-${message.timestamp || ''}`,
-        ts: toTs(message.timestamp),
-        message: view,
-      };
-    }),
-    ...transcriptCheckpoints.value.map((checkpoint, index) => ({
-      kind: 'checkpoint' as const,
-      key: `cp-${index}-${checkpoint.checkpointId || checkpoint.submittedAt || ''}`,
-      ts: toTs(checkpoint.submittedAt),
-      checkpoint,
-    })),
-  ];
-  // 同时刻消息在前、小测在后（出题正文 → 学生作答 → 判定卡的自然顺序）
-  return entries.sort((a, b) => a.ts - b.ts || (a.kind === 'message' ? -1 : 1));
+    }
+  });
+  // 锚不上的旧课数据：按 submittedAt 稳定插回时间线（同刻消息在前，与旧排序口径一致）。
+  // 不能整体重排——锚定卡的真实位置（紧跟题面）优先于它的结算时间戳。
+  const fallbackEntries: TranscriptEntry[] = unanchoredCheckpoints.map((checkpoint, index) => ({
+    kind: 'checkpoint' as const,
+    key: `cp-fb-${index}-${checkpoint.checkpointId || checkpoint.submittedAt || ''}`,
+    ts: toTs(checkpoint.submittedAt),
+    checkpoint,
+  }));
+  fallbackEntries.sort((a, b) => a.ts - b.ts);
+  const merged: TranscriptEntry[] = [];
+  let fallbackCursor = 0;
+  for (const entry of entries) {
+    while (fallbackCursor < fallbackEntries.length && fallbackEntries[fallbackCursor].ts < entry.ts) {
+      merged.push(fallbackEntries[fallbackCursor]);
+      fallbackCursor += 1;
+    }
+    merged.push(entry);
+  }
+  merged.push(...fallbackEntries.slice(fallbackCursor));
+  return merged;
 });
 /* 计数同源（2026-11-06 修 bug）：卡头此前报 mainDialogueMessages.length（只有 user/assistant
    消息），而展开按钮报 transcriptEntries.length - 2（消息 + 小测回放卡），于是出现过
@@ -1036,8 +1085,11 @@ onUnmounted(() => {
 }
 
 .evaluation-shell {
-  width: calc(100% - 64px);
-  max-width: 1080px;
+  /* 与全站标准看板同一档（2026-11-07 全站巡检 准则1）：此前 1080 封顶，
+     1280 占 84%、1536 只占 70%；1500+ 才拓到 1240，中间是空档。
+     上限走全局 --vp-container（1360 基准；≥2000 抬 1480、≥2800 抬 1560），
+     不在本组件重复写数字。 */
+  width: min(92vw, var(--vp-container));
   margin: 0 auto;
   display: grid;
   /* minmax(0,1fr)：与下方 transcript-list 同因——auto 轨道会被宽表格的 max-content
@@ -1046,11 +1098,10 @@ onUnmounted(() => {
   gap: 20px;
 }
 
-/* 宽屏（≥1500px）：1080 报告在 2K/4K 下两侧大片空白、信息密度骤降
-   （手动流程问题测试 2026-09-26）；只加宽报告，目录在更宽的断点独立定位。 */
+/* 宽屏（≥1500px）：报告已在 1360 封顶，只把块间距松一档
+   （原 1080→1240 的加宽由上面的弹性档接管）。 */
 @media (min-width: 1500px) {
   .evaluation-shell {
-    max-width: 1240px;
     gap: 24px;
   }
 }

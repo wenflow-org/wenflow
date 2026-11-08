@@ -214,12 +214,14 @@ export interface TeachingTurnInput {
      * 只读参考：与课堂实况冲突时以实况为准；不得在 reply 里向学生复述内部诊断。
      */
     learnerInsights?: Array<{ type?: string; claim?: string; action?: string }> | null;
-    /** 本节课理解检查点历史摘要（2026-09-17 起被消费）：未通过/跳过的点用于换表征再确认 */
+    /** 本节课理解检查点历史摘要（2026-09-17 起被消费）：未通过/跳过的点用于换表征再确认；作废点不计入未通过、也不进 recent */
     checkpointHistory?: {
       total: number;
       passed: number;
       failed: number;
       skipped: number;
+      /** 教师侧被 control.voidCheckpoint 撤销的点（2026-11-07）：既非通过也非失败，只作节奏参考 */
+      voided: number;
       recent: Array<{ title: string; passed: boolean; skipped?: boolean; understanding?: number }>;
     } | null;
     /**
@@ -411,6 +413,19 @@ export interface TeachingTurnOutput {
   control: {
     isCompletionCandidate: boolean;
     shouldTriggerPeer: boolean;
+    /**
+     * 检查点**作废**信号（2026-11-07 入户实证）：模型判定刚发出/仍待答的检查点应当撤销时置 true——
+     * 题干或选项有误、学生已明确表示跳过、话题已推进到别的教学点。引擎据此清掉 pendingCheckpoint
+     * （同时清 `sessionArtifacts.pendingCheckpoint`）、往 `checkpointHistory` 追加一条 `voided:true` 留痕。
+     * **作废不授权本轮出题**：出题时机只有一个权威 `controls.emitCheckpoint`，作废回合它通常为 false
+     * （待答检查点还在），因此本轮不得再输出 control.checkpoint，新题在后续回合按正常时机再出。
+     * **只在 reply 正文写「这道跳过」不会真的跳过**。
+     *
+     * 安全性：引擎侧只在**非作答回合**（无 checkpointId）生效——真实提交回合把 checkpointId 与
+     * checkpointJudgement 一起送入，`submittedCheckpoint` 恒为真，作废分支被护栏挡下，
+     * 因此不会打断「答错保留、答对消费」的既有语义。
+     */
+    voidCheckpoint?: boolean;
     completionCandidateEvidence?: {
       hasCriteria: boolean;
       acceptanceCriteria: string | null;
@@ -869,6 +884,9 @@ export function normalizeOutput(parsed: Record<string, any>, input: TeachingTurn
     control: {
       isCompletionCandidate: resolvedCompletionCandidate,
       shouldTriggerPeer: !!control.shouldTriggerPeer,
+      // 检查点作废通道（2026-11-07）：本出口是 control 的白名单投影，未在此声明的字段会被静默丢弃——
+      // 模型输出的 control.voidCheckpoint 必须显式透传，否则引擎永远收不到作废信号。
+      ...(control.voidCheckpoint === true ? { voidCheckpoint: true } : {}),
       completionCandidateEvidence: acceptanceEvidence.hasCriteria
         ? acceptanceEvidence
         : {

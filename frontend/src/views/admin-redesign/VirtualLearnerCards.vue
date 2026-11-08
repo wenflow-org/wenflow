@@ -66,6 +66,17 @@
           <span v-if="keyword" class="mk-card__meta">命中 {{ filtered.length }} / 共 {{ cards.length }} 张</span>
         </div>
         <div class="mk-card__head-right">
+          <!-- 档位筛选（2026-11-07 用户「搜索框左边加个分类/档位筛选」）：
+               只列墙上真实存在的档位，不印一份固定词表。
+               「全部档位」= 不过滤，与搜索互不干扰（条件取与）。 -->
+          <MkSelect
+            v-if="tierOptions.length > 2"
+            v-model="tier"
+            :options="tierOptions"
+            size="sm"
+            borderless
+            aria-label="按档位筛选"
+          />
           <MkFilterSearch v-model="keyword" placeholder="搜索名称 / 目标 / 场景" />
           <label v-if="pagedCards.length" class="vlc-pick-all">
             <input
@@ -160,9 +171,11 @@
                 @change="togglePick(c.profileId)"
               />
             </label>
-            <span class="vlc-avatar" :class="`vlc-avatar--${vlAvatarIndexOf(cardName(c))}`" aria-hidden="true">{{ cardName(c).slice(0, 1) }}</span>
-            <strong class="vlc-card__name" :title="cardName(c)">{{ cardName(c) }}</strong>
-            <span class="mk-badge" :class="sourceBadge(c)" :title="sourceTitle(c)">{{ sourceText(c) }}</span>
+            <!-- 首字头像已撤（2026-11-07 用户「200 张卡片印着 200 个『想』字」）：
+                 卡库 name 恒为「想解决 + 目标」，取首字等于给每张卡印同一个字——
+                 既没有区分度，又白吃 34px 横向宽度，把标题挤成两行半。
+                 色彩区分改由卡脚的来源 / 档位徽标承担。 -->
+            <strong class="vlc-card__name" :title="cardTitle(c)">{{ cardTitle(c) }}</strong>
             <!-- 已派生标识（2026-10-31 三轮评审 P3）：派生实例归虚拟学习者列表，卡面只报数 -->
             <span v-if="(c.derivedCount || 0) > 0" class="mk-badge mk-badge--ok" title="该卡已派生出虚拟学习者实例（实例在虚拟学习者列表）">已派生 {{ c.derivedCount }}</span>
           </header>
@@ -178,23 +191,25 @@
             <span class="vlc-card__task-k">场景</span>{{ c.firstTaskTitle }}
           </p>
           <p v-if="c.opening" class="vlc-card__opening" :title="c.opening">{{ c.opening }}</p>
-          <!-- 标签与卡号同处一行（2026-10-27 密度收口）：卡号只有自定义卡才有区分度，
-               「builtin」这类占位值不上卡面（同 internal tag 判例）。 -->
-          <div v-if="wallTags(c).length || showCardKey(c)" class="vlc-card__tags">
-            <span v-for="t in wallTags(c)" :key="t.text" class="mk-badge mk-badge--muted">{{ t.text }}</span>
-            <span v-if="showCardKey(c)" class="vlc-card__key" :title="c.cardKey || ''">{{ c.cardKey }}</span>
-          </div>
+          <!-- 底栏一行到底（2026-11-07 用户「标签一行、编号一行、按钮一行，三层台阶占高 56px」）：
+               左 = 来源 + 标签 + 卡号 + 读数（有区分度的才印），右 = 卡的唯一动作。
+               卡号只有自定义卡才有区分度，「builtin」这类占位值不上卡面（同 internal tag 判例）。 -->
           <footer class="vlc-card__foot">
-            <!-- 任务数是「创建学习者」时要做的选择（勾几节课），比难度更有决策价值：
-                整面墙难度相同时只留任务数；混级时两者并列 -->
-            <span v-if="taskText(c)" class="vlc-card__count">{{ taskText(c) }}</span>
-            <span v-if="showLevel" class="vlc-card__level">{{ levelText(c.knowledgeLevel) }}</span>
-            <!-- 卡面主操作（2026-10-26 从 12px 链接升为卡脚按钮）：这页的主操作此前藏在卡脚小字里，
-                 而页头 primary 是「导入卡」。卡整体是 role=button，故 stop 冒泡。 -->
+            <div class="vlc-card__tags">
+              <span class="mk-badge" :class="sourceBadge(c)" :title="sourceTitle(c)">{{ sourceText(c) }}</span>
+              <span v-for="t in wallTags(c)" :key="t.text" class="mk-badge mk-badge--muted">{{ t.text }}</span>
+              <span v-if="showCardKey(c)" class="vlc-card__key" :title="c.cardKey || ''">{{ shortCardKey(c.cardKey || '') }}</span>
+              <!-- 任务数是「创建学习者」时要做的选择（勾几节课），比难度更有决策价值：
+                   整面墙难度相同时只留任务数；混级时两者并列 -->
+              <span v-if="taskText(c)" class="vlc-card__count">{{ taskText(c) }}</span>
+              <span v-if="showLevel" class="vlc-card__level">{{ levelText(c.knowledgeLevel) }}</span>
+            </div>
+            <!-- 卡面主操作：默认浅蓝底蓝字（同屏 18 个实心主色按钮＝18 块蓝膏药），
+                 悬停/聚焦本卡时才转实心主色。卡整体是 role=button，故 stop 冒泡。 -->
             <button
               type="button"
-              class="mk-btn mk-btn--sm mk-btn--primary vlc-card__derive"
-              :aria-label="`从「${cardName(c)}」创建虚拟学习者`"
+              class="mk-btn mk-btn--sm vlc-card__derive"
+              :aria-label="`从「${cardTitle(c)}」创建虚拟学习者`"
               @click.stop="openDeriveFor(c)"
               @keydown.stop
             >创建学习者</button>
@@ -238,12 +253,13 @@ import { Plus } from 'lucide-vue-next'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
+import MkSelect from '@/components/mk/MkSelect.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import Pagination from './Pagination.vue'
 import VirtualLearnerCreate from './VirtualLearnerCreate.vue'
 import CardDeriveDialog from './CardDeriveDialog.vue'
-import { vlAvatarIndexOf } from '@/components/mk/vlAvatar'
+import { cardDisplayTitle, shortCardKey, cardTier, compareTier, isWallHiddenTag } from './cardDisplay'
 import { isInternalTag, isPlaceholderCardKey } from './cardTags'
 import { openSubPage } from './store'
 import { errMsg, liveRefreshSeq } from './live'
@@ -294,6 +310,12 @@ const indexLoading = ref(false)
 /** 索引拉取失败原因（非空 = 渲染持久错误态 + 重试入口，而不是把失败画成空态） */
 const indexError = ref('')
 const keyword = ref('')
+/** 档位筛选（空串 = 全部）：选项从墙上真实存在的标签里算，不维护固定词表 */
+const tier = ref('')
+const tierOptions = computed(() => {
+  const tiers = [...new Set(cards.value.map((c) => cardTier(c.tags || [])).filter(Boolean))].sort(compareTier)
+  return [{ value: '', label: '全部档位' }, ...tiers.map((t) => ({ value: t, label: t }))]
+})
 
 /** 卡墙只放身份卡（2026-10-24 层级收口）：实例归「虚拟学习者」。
  *  接口已过滤，这里再挡一次——旧缓存或别处回放的数据里若仍带 derivedFrom，也不进墙。 */
@@ -301,6 +323,7 @@ const filtered = computed(() => {
   const kw = keyword.value.trim().toLowerCase()
   return cards.value.filter((c) => {
     if (c.derivedFrom) return false
+    if (tier.value && cardTier(c.tags || []) !== tier.value) return false
     if (!kw) return true
     // 搜索只认卡面能看见的标签（场景 / 目标的中文名 + 自定义卡的原样标签）；
     // preset: / hash: 这些内部标记不上墙，也就不该在搜索里命中（2026-10-24）
@@ -322,7 +345,7 @@ const pagedCards = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filtered.value.slice(start, start + pageSize.value)
 })
-watch([keyword, cards], () => {
+watch([keyword, tier, cards], () => {
   page.value = 1
 })
 /* 页码收敛：改大 pageSize 或数据缩减后 current page 超界时回落（单页时页码器不渲染，
@@ -456,6 +479,11 @@ function onProduced() {
 function cardName(c: CardWallEntry): string {
   return c.name || c.cardKey || c.email || '未命名卡'
 }
+/** 卡面标题（2026-11-07）：name 常是「想解决 + 目标」，goal 是「领域：具体场景」——
+  两者取信息更全的一条，避免上下两行同一句话印两遍。 */
+function cardTitle(c: CardWallEntry): string {
+  return cardDisplayTitle(cardName(c), c.goal || '')
+}
 function sourceText(c: Pick<CardWallEntry, 'preset' | 'sourceKind'>): string {
   if (c.preset) return '预置'
   if (c.sourceKind === 'web') return 'web'
@@ -504,6 +532,7 @@ function wallTags(c: CardWallEntry): WallTag[] {
   const out: WallTag[] = []
   for (const tag of c.tags) {
     if (isInternalTag(tag)) continue
+    if (isWallHiddenTag(tag)) continue
     const text = SOURCE_TAG_LABELS[tag] || GOAL_TAG_LABELS[tag] || tag
     if (!out.some((x) => x.text === text)) out.push({ text })
     if (out.length === 2) break
@@ -542,13 +571,13 @@ function normText(s: string): string {
 function showGoal(c: CardWallEntry): boolean {
   const g = normText(c.goal || '')
   if (!g) return false
-  return !normText(cardName(c)).includes(g)
+  return !normText(cardTitle(c)).includes(g)
 }
 /** 任务行：与卡名 / 目标行同值（story.title 恒等于 goalSeed.domain）时不再复述 */
 function showTask(c: CardWallEntry): boolean {
   const t = normText(c.firstTaskTitle || '')
   if (!t) return false
-  const n = normText(cardName(c))
+  const n = normText(cardTitle(c))
   if (t === n || n.includes(t)) return false
   const g = normText(c.goal || '')
   return !(g && (t === g || g.includes(t) || t.includes(g)))
@@ -670,9 +699,19 @@ watch(liveRefreshSeq, () => {
   cursor: pointer;
 }
 /* ===== 卡墙（2026-10-05 卡库改版）：自适应卡网格，260px 起步、窄档降列 ===== */
+/* 顶部两枚读数（2026-11-07 用户「两个大白框占了近 100px」）：
+   只压内边距与数字字号，不套 MkKpi 的 compact——那一档会把「预置 1 / 自建 1」
+   的构成拆分一起藏掉，而这两枚拆分正是这排卡里唯一读得比 200 更细的信息。 */
+.vlc-summary :deep(.mk-kpi) { padding: 8px 14px; }
+.vlc-summary :deep(.mk-kpi__num) { font-size: 20px; line-height: 1.25; }
+
 .vlc-wall {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  /* 260 → 320（2026-11-07 用户「6 列把卡挤成 230px，标题只剩两行半」）：
+     按 admin 实际内容宽算（侧栏 240 + 4K zoom 1.15），
+     1920 落地 4 列（每卡≈361px）、2560 落地 5 列（≈381px），
+     正好落在用户要的 4~5 列；280/300 在 2560 仍是 6 列，等于没改。 */
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 12px;
   padding: 16px;
 }
@@ -701,28 +740,6 @@ watch(liveRefreshSeq, () => {
    hash 条横跨到下一列）。卡片是固定网格轨，子项必须允许收缩，再由各自省略号收尾。 */
 .vlc-card > * { min-width: 0; }
 .vlc-card__head { display: flex; align-items: center; gap: 8px; min-width: 0; }
-/* 首字头像：与虚拟学习者/画像页同 8 色板（--mk-vl-avatar-*，CM3 单源） */
-.vlc-avatar {
-  flex: none;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--mk-on-fill);
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  flex: none;
-}
-.vlc-avatar--0 { background: var(--mk-vl-avatar-0); }
-.vlc-avatar--1 { background: var(--mk-vl-avatar-1); }
-.vlc-avatar--2 { background: var(--mk-vl-avatar-2); }
-.vlc-avatar--3 { background: var(--mk-vl-avatar-3); }
-.vlc-avatar--4 { background: var(--mk-vl-avatar-4); }
-.vlc-avatar--5 { background: var(--mk-vl-avatar-5); }
-.vlc-avatar--6 { background: var(--mk-vl-avatar-6); }
-.vlc-avatar--7 { background: var(--mk-vl-avatar-7); }
 .vlc-card__name {
   font-size: var(--mk-fs-body);
   color: var(--mk-ink);
@@ -814,7 +831,7 @@ watch(liveRefreshSeq, () => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.vlc-card__tags .vlc-card__key { margin-left: auto; max-width: 45%; }
+.vlc-card__tags .vlc-card__key { max-width: 45%; }
 /* 勾选框：卡整体是 role=button，勾选框是它内部唯一的交互子控件，故撑到可点面积（≥24px 触控基准） */
 .vlc-card__pick {
   flex: none;
@@ -836,18 +853,32 @@ watch(liveRefreshSeq, () => {
 .vlc-card__foot {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  /* 左读数、右动作：标签 / 卡号 / 任务数 / 难度全在左，按钮吃掉剩余宽度靠右 */
+  justify-content: space-between;
   gap: 8px;
   /* 钉底（2026-10-27）：卡被同行拉高时，按钮落到卡底同一基线，不再随内容行数浮动 */
   margin-top: auto;
   padding-top: 4px;
+  min-width: 0;
 }
-/* 卡脚左侧的读数（任务数 / 难度）可有可无，按钮恒靠右 */
+/* 卡脚左侧的读数（任务数 / 难度）沿着一行排，换行也不新起台阶 */
 .vlc-card__count,
 .vlc-card__level { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .vlc-card__count + .vlc-card__level::before { content: '·'; margin-right: 4px; }
-/* 卡面主操作：卡脚右侧一位 */
-.vlc-card__derive { flex: none; margin-left: auto; }
+/* 卡面主操作（2026-11-07）：默认浅蓝底蓝字，只有本卡被悬停 / 聚焦时才转实心主色——
+   整面墙 18 张卡同时亮着实心主色按钮，读起来像 18 个同等优先级的主动作。 */
+.vlc-card__derive {
+  flex: none;
+  border: 1px solid transparent;
+  background: var(--mk-blue-bg);
+  color: var(--mk-blue);
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.vlc-card:hover .vlc-card__derive,
+.vlc-card:focus-within .vlc-card__derive {
+  background: var(--mk-blue-fill, #2f6ae0);
+  color: var(--mk-on-fill);
+}
 /* 创建结果条：卡墙顶部常驻，一句结果 + 一个出口 */
 .vlc-created {
   display: flex;

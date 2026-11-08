@@ -427,3 +427,106 @@ describe('inheritTeachingState：跨回合继承顶层状态（18 号报告 N2�
     expect(inheritTeachingState(undefined, { a: 1 })).toEqual({ a: 1 });
   });
 });
+/* ───────────── 简答分级判分（2026-11-08）───────────── */
+
+import { resolveCheckpointJudgement, buildCheckpointCodeArbitration } from '../teaching-checkpoint';
+import { recordDegradation } from '../../../skills/degradation-telemetry';
+
+jest.mock('../../../skills/degradation-telemetry', () => ({
+  __esModule: true,
+  recordDegradation: jest.fn(),
+  degradationCause: (e: unknown) => (e instanceof Error ? e.message : String(e)),
+}));
+
+const shortAnswerCheckpoint = {
+  type: 'short_answer' as const,
+  question: '为什么「手动」这个词不适合当判分要点？',
+  expectedKeywords: ['重新|再来一次', '手动|人工'],
+};
+
+describe('resolveCheckpointJudgement：简答分级判分', () => {
+  it('code 词面全命中 → 直接采纳确定性正证据，不调模型', async () => {
+    const judgeCall = jest.fn();
+    const base = {
+      judgedBy: 'code' as const,
+      passed: true,
+      detail: '作答包含全部要点',
+    };
+    const result = await resolveCheckpointJudgement(
+      shortAnswerCheckpoint,
+      { answerText: '我觉得应该重新跑一遍，而且手动核对结果' },
+      base,
+      judgeCall,
+    );
+    expect(result).toBe(base);
+    expect(judgeCall).not.toHaveBeenCalled();
+  });
+
+  it('code 判负 + 模型复核 pass → judgedBy=model-rubric、passed=true（同义改写不再误杀）', async () => {
+    const judgeCall = jest.fn().mockResolvedValue('{"passed": true, "reason": "重跑一遍与再核对都覆盖了"}');
+    const base = { judgedBy: 'code' as const, passed: false, detail: '缺少要点：手动/人工' };
+    const result = await resolveCheckpointJudgement(
+      shortAnswerCheckpoint,
+      { answerText: '答案就是你得自己再复制一份重填一遍，别指望自动同步' },
+      base,
+      judgeCall,
+    );
+    expect(result?.judgedBy).toBe('model-rubric');
+    expect(result?.passed).toBe(true);
+    expect(judgeCall).toHaveBeenCalledTimes(1);
+  });
+
+  it('模型复核也判负 → model-rubric、passed=false', async () => {
+    const judgeCall = jest.fn().mockResolvedValue('{"passed": false, "reason": "没提到任何一个要点"}');
+    const base = { judgedBy: 'code' as const, passed: false, detail: '缺少要点：重新/再来一次' };
+    const result = await resolveCheckpointJudgement(
+      shortAnswerCheckpoint,
+      { answerText: '不知道，可能就是多看看吧' },
+      base,
+      judgeCall,
+    );
+    expect(result?.judgedBy).toBe('model-rubric');
+    expect(result?.passed).toBe(false);
+  });
+
+  it('模型复核失败 → fail-open 保守回退 code 负裁决 + P3 降级留痕', async () => {
+    const judgeCall = jest.fn().mockRejectedValue(new Error('RUBRIC_JUDGE_OUTPUT_NOT_JSON'));
+    const base = { judgedBy: 'code' as const, passed: false, detail: '缺少要点：手动/人工' };
+    const result = await resolveCheckpointJudgement(
+      shortAnswerCheckpoint,
+      { answerText: '随便写两句' },
+      base,
+      judgeCall,
+    );
+    expect(result).toBe(base);
+    expect(recordDegradation).toHaveBeenCalledTimes(1);
+  });
+
+  it('选择题 code 判负 → 不升级（确定性比对保留）', async () => {
+    const judgeCall = jest.fn();
+    const base = { judgedBy: 'code' as const, passed: false, detail: '选项集合不一致' };
+    const result = await resolveCheckpointJudgement(
+      { type: 'single_choice' as const, question: 'q', expectedKeywords: [] },
+      { selectedOptionIds: ['A'] },
+      base,
+      judgeCall,
+    );
+    expect(result).toBe(base);
+    expect(judgeCall).not.toHaveBeenCalled();
+  });
+});
+
+describe('buildCheckpointCodeArbitration：model-rubric 行计入独立裁决证据', () => {
+  it('model-rubric 负证据与 code 同权（简答升级后它是唯一裁决来源）', () => {
+    const arbitration = buildCheckpointCodeArbitration(
+      [
+        { judgedBy: 'model-rubric', passed: false, conceptName: '自动对数' },
+        { judgedBy: 'model-reference', passed: false, conceptName: '不应计入' },
+      ],
+      { judgedBy: 'model-rubric', passed: true },
+      { conceptName: '模板固化' },
+    );
+    expect(arbitration.codeFailedConceptNames).toEqual(['自动对数']);
+    expect(arbitration.codeJudgedConceptNames).toEqual(['自动对数', '模板固化']);
+  });
+});

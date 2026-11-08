@@ -10,7 +10,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { logger } from '../utils/logger';
-import { parseAllowedOrigins } from '../config/allowed-origins';
+import { parseAllowedOrigins, isSameOriginRequest } from '../config/allowed-origins';
 import { resolveTrustProxySetting, assessAdminAllowlistRisk } from '../utils/trust-proxy';
 import { adminApiLimiter, globalApiLimiter, writeApiLimiter } from '../middleware/api-rate-limit.middleware';
 import { csrfMiddleware } from '../middleware/csrf.middleware';
@@ -87,14 +87,26 @@ export function createHttpApp({ lifecycle, readinessService }: HttpAppDeps): exp
     // 属配置漂移信号——显式告警提醒补配，而不是默默用开发值
     logger.warn('[http-app] 生产环境未配置 CORS_ORIGIN，CORS/CSRF 白名单回退到 localhost 开发值，请尽快补配');
   }
-  const corsOptions = {
-    origin: parseAllowedOrigins(process.env.CORS_ORIGIN),
-    credentials: true,
-    optionsSuccessStatus: 200,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Idempotency-Key'],
-  };
-  app.use(cors(corsOptions));
+  app.use(cors((req, callback) => {
+    const origin = req.headers.origin;
+    /* 白名单之外再放行「同源的本机/私网请求」（2026-11-07：局域网换设备访问时
+       Origin 是 http://192.168.x.x:5183，而白名单只枚举了 localhost 的几个端口，
+       预检直接失败）。判定与 CSRF 同一份实现，边界见 config/allowed-origins.ts。
+       用 delegate 形式而不是固定 origin 数组：只有它能同时看到 Origin 与本次请求的
+       Host，才做得出「同源」这个判断。 */
+    const allowed = !origin
+      || parseAllowedOrigins(process.env.CORS_ORIGIN).includes(origin.replace(/\/$/, ''))
+      || isSameOriginRequest(origin, req.headers.host);
+    callback(null, allowed
+      ? {
+          origin,
+          credentials: true,
+          optionsSuccessStatus: 200,
+          methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+          allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Idempotency-Key'],
+        }
+      : { origin: false });
+  }));
 
   // 请求体上限:默认 100kb 会把长文本导入/批量接口/大 prompt 编辑等正常 JSON 拒之门外(413);
   // 与 nginx 层 client_max_body_size 2m 对齐

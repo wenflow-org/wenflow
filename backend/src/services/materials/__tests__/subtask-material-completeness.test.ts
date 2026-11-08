@@ -10,8 +10,18 @@
  */
 import {
   assessStageMaterialCompleteness,
+  assessStageMaterialCompletenessByModel,
   assessSubtaskMaterialCompleteness,
+  collectSubtaskMaterialFacts,
 } from '../subtask-material-completeness';
+
+const mockRecordDegradation = jest.fn();
+
+// 语义判定失败时的遥测：mock 掉，避免落库、并可直接断言
+jest.mock('../../../skills/degradation-telemetry', () => ({
+  recordDegradation: (...args: unknown[]) => mockRecordDegradation(...args),
+  degradationCause: (error: unknown) => (error instanceof Error ? error.message : String(error)),
+}));
 
 describe('assessSubtaskMaterialCompleteness：只给特征词 = 材料本体缺失', () => {
   it('实测反例：6 个句子只列了 already / yesterday 这类词 → 判缺失', () => {
@@ -114,5 +124,76 @@ describe('assessStageMaterialCompleteness：阶段级汇总', () => {
     expect(assessStageMaterialCompleteness([
       { title: '比较两种策略', description: '结合你的记录比较。' },
     ]).valid).toBe(true);
+  });
+});
+
+describe('assessStageMaterialCompletenessByModel：语义判断交给模型（mock 模型返回值）', () => {
+  const judgeReturning = (content: string) => jest.fn(async () => content);
+
+  it('模型判缺失 → valid=false，violations 原样可进纠错提示', async () => {
+    const result = await assessStageMaterialCompletenessByModel(
+      [{ title: '拆解争议事件', description: '把三件 AI 教育事件各写一句「它到底在替课堂做哪件事」' }],
+      {
+        callModel: judgeReturning(JSON.stringify({
+          valid: false,
+          violations: ['任务 1「拆解争议事件」：承诺了「三件 AI 教育事件」，却没给出这三件事件是什么'],
+        })),
+      },
+    );
+    expect(result.valid).toBe(false);
+    expect(result.failureReason).toContain('MATERIAL_BODY_MISSING_STAGE');
+    expect(result.violations).toEqual([
+      '任务 1「拆解争议事件」：承诺了「三件 AI 教育事件」，却没给出这三件事件是什么',
+    ]);
+  });
+
+  it('模型判通过（含 ```json 代码围栏）→ valid=true', async () => {
+    const result = await assessStageMaterialCompletenessByModel(
+      [{ title: '判断边界', description: '区分合规与不合规行为' }],
+      { callModel: judgeReturning('```json\n{"valid":true,"violations":[]}\n```') },
+    );
+    expect(result.valid).toBe(true);
+    expect(result.violations).toBeUndefined();
+  });
+
+  it('valid=false 但没列 violations → 按通过处理（无可操作细节，不触发无意义重试）', async () => {
+    const result = await assessStageMaterialCompletenessByModel(
+      [{ title: 'x', description: 'y' }],
+      { callModel: judgeReturning('{"valid":false}') },
+    );
+    expect(result.valid).toBe(true);
+  });
+
+  it('模型调用报错 → 不阻塞（valid=true）并记一条降级遥测', async () => {
+    mockRecordDegradation.mockClear();
+    const result = await assessStageMaterialCompletenessByModel(
+      [{ title: 'x', description: 'y' }],
+      { callModel: jest.fn(async () => { throw new Error('upstream 500'); }) },
+    );
+    expect(result.valid).toBe(true);
+    expect(mockRecordDegradation).toHaveBeenCalledTimes(1);
+    expect(mockRecordDegradation.mock.calls[0][0]).toMatchObject({
+      source: 'materials/subtask-material-completeness',
+      mitigationApplied: 'continue-without-material-semantic-gate',
+    });
+  });
+
+  it('模型返回非 JSON → 不阻塞（valid=true）并记 PARSE_FAILED', async () => {
+    mockRecordDegradation.mockClear();
+    const result = await assessStageMaterialCompletenessByModel(
+      [{ title: 'x', description: 'y' }],
+      { callModel: judgeReturning('抱歉，这条我判断不了。') },
+    );
+    expect(result.valid).toBe(true);
+    expect(mockRecordDegradation.mock.calls[0][0]).toMatchObject({ faultCategory: 'PARSE_FAILED' });
+  });
+
+  it('结构性事实随任务透传（materialRefs / 编号列表 / 序号）', () => {
+    const facts = collectSubtaskMaterialFacts([
+      { title: 't', description: '1. a\n2. b', materialRefs: [{ quote: 'x' }] },
+    ]);
+    expect(facts[0].index).toBe(1);
+    expect(facts[0].hasMaterialRefs).toBe(true);
+    expect(facts[0].numberedListLines).toBeGreaterThanOrEqual(2);
   });
 });

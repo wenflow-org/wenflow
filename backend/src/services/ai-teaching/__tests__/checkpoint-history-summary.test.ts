@@ -41,4 +41,38 @@ describe('summarizeCheckpointHistory', () => {
     ])!;
     expect(summary.recent[0]).toMatchObject({ passed: false, skipped: true });
   });
+
+  // 2026-11-07 独立复核发现：作废行（control.voidCheckpoint）此前无 skipped 标记 → 被计成
+  // failed 且落进 recent 的 passed:false，下一轮模型会被提示词指使「对 recent 里 passed=false
+  // 的点换表征再确认」——把刚作废的题换个说法重问，正是作废通道要消除的形态。
+  it('作废行（voided）不计入未通过、也不进 recent（不作再确认候选）', () => {
+    const summary = summarizeCheckpointHistory([
+      { checkpointId: 'cp1', title: '被作废的题', passed: false, voided: true },
+      { checkpointId: 'cp2', title: '真没过的题', passed: false },
+    ])!;
+    expect(summary).toMatchObject({ total: 2, passed: 0, failed: 1, skipped: 0, voided: 1 });
+    expect(summary.recent.map((r) => r.title)).toEqual(['真没过的题']);
+    expect(summary.recent.some((r) => r.title === '被作废的题')).toBe(false);
+  });
+
+  it('只有作废行时 failed=0、recent 为空（模型没有被指使重问）', () => {
+    const summary = summarizeCheckpointHistory([
+      { checkpointId: 'cp1', title: 't', passed: false, voided: true },
+    ])!;
+    expect(summary).toMatchObject({ total: 1, passed: 0, failed: 0, skipped: 0, voided: 1 });
+    expect(summary.recent).toEqual([]);
+  });
+
+  it('作废行不得让 failed 变成负数：四类互斥、total 恒等于四者之和', () => {
+    // 脏行同时带 skipped+voided（过渡期/手工数据）也不得双扣到负
+    const summary = summarizeCheckpointHistory([
+      { checkpointId: 'cp1', title: '通过', passed: true },
+      { checkpointId: 'cp2', title: '跳过', passed: false, skipped: true },
+      { checkpointId: 'cp3', title: '作废', passed: false, voided: true },
+      { checkpointId: 'cp4', title: '脏行', passed: false, skipped: true, voided: true },
+    ])!;
+    expect(summary.failed).toBeGreaterThanOrEqual(0);
+    expect(summary.failed).toBe(0);
+    expect(summary.passed + summary.failed + summary.skipped + summary.voided).toBe(summary.total);
+  });
 });

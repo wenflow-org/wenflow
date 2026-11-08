@@ -132,24 +132,12 @@
           <MkFilterSearch v-model="keyword" placeholder="搜索名称 / 倾向" />
           <!-- CP1：筛选命中数单源住在分页器（「共 N 条」），卡头不再渲染「X / N 人」；
                截断警示仍在此（数据完整性事实，与行数同格就近） -->
-          <!-- 批量入口（2026-10-26）：从「列」菜单挪到卡头一枚按钮。列菜单此前是唯一入口，
-               且入口只写一个「列」字，第一次进这页的人读不出这页能批量跑。
-               多选默认仍不出来（2026-10-17 用户拍板），按钮只负责把勾选列打开。 -->
-          <!-- 2026-11-04：0 实例时批量无对象可勾，按钮置灰（此前仍可点，只揭开一片空勾选表头，
-               读作死键）；空态已由「从卡库派生」CTA 承接下一步 -->
-          <button
-            v-if="isLive && !isNarrow"
-            type="button"
-            class="mk-btn mk-btn--sm vl-batch-toggle"
-            :class="{ 'vl-batch-toggle--on': batchMode }"
-            :aria-pressed="batchMode"
-            :disabled="!samples.length"
-            @click="toggleBatchMode"
-          >批量</button>
+          <!-- 勾选列 ☐ 默认常驻（2026-11-08 用户走查，取代「卡头批量按钮 + 多选默认隐藏」）：
+               选中 ≥1 行即弹出底部命令栏，取消选择即收起；勾选列显隐交给「列」菜单。 -->
           <MkCols
             :col-defs="vlColDefs"
-            storage-key="wf_vl_hidden_cols_v3"
-            :default-hidden="['check', 'sessions']"
+            storage-key="wf_vl_hidden_cols_v4"
+            :default-hidden="['sessions']"
             v-model:hidden="hiddenCols"
           />
           <span v-if="isLive && liveVirtualsTotal > samples.length" class="mk-card__meta vl-truncated">
@@ -232,10 +220,8 @@
             <td v-if="isLive && !isNarrow && !hiddenCols.has('check')"><input v-model="selected" type="checkbox" :value="s.id" :aria-label="`选择 ${s.name}`" @click.stop /></td>
             <td>
               <div class="vl-cell vl-cell--click" role="button" tabindex="0" :title="s.name" @click="openSubPage('virtual', s.id)" @keydown.enter="openSubPage('virtual', s.id)" @keydown.space.prevent="openSubPage('virtual', s.id)">
-                <!-- 2026-10-15 用户拍板：撤本页私造的「身份哈希八色」头像，改与教学组同款共享原语
-                     MkCellAvatar（虚拟学习者=紫）。头像在 .mk-cell-main 外（同 Skills / 教学组名称格结构）：
-                     mk-cell-main strong 的 display:block 高特异性会压过 strong 上的 flex，头像留格内会跌回块流 -->
-                <MkCellAvatar :name="s.name" tone="virtual" />
+                <!-- 2026-11-08 用户走查（图2）：卡库派生出的虚拟学习者名多以「想解决…」开头，
+                     头像取首字恒为「想」，一排 [想] 方块既无辨识度又显重复，直接去掉，名称格只留文字 -->
                 <div class="mk-cell-main">
                   <strong :title="s.name">{{ s.name }}</strong>
                 </div>
@@ -417,7 +403,6 @@ import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
-import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import { useTableSort } from './useTableSort'
 import { statusText } from './statusText'
@@ -1049,17 +1034,8 @@ const failureTitle = computed(() => {
 
 /* ===== A1 批量操作：复选框（批量条拆分为 VirtualLearnerBatchBar 子组件） ===== */
 const selected = ref<string[]>([])
-/** 多选态 = 勾选列可见。默认不显示（2026-10-17 用户拍板），卡头「批量」按钮负责打开。 */
-const batchMode = computed(() => !hiddenCols.value.has('check'))
-function toggleBatchMode() {
-  const next = new Set(hiddenCols.value)
-  if (next.has('check')) next.delete('check')
-  else {
-    next.add('check')
-    selected.value = []
-  }
-  hiddenCols.value = next
-}
+/* 勾选列 ☐ 默认常驻（2026-11-08 用户走查，取代 2026-10-17 的「默认不显示 + 卡头批量按钮」）：
+   无需模式切换，选中 ≥1 行即弹出底部命令栏，取消选择即收起；勾选列显隐交给「列」菜单。 */
 
 /* 表头全选 = 当前页全选（2026-10-11 用户拍板，与用户页同规则：跨页全量勾选对批量
    终止/删除太易误伤）。再点一次只清当前页；跨页仍可手动逐个勾（selected 保留）。 */
@@ -1213,8 +1189,6 @@ function onBatchReclaim(ids: string[]) {
 /* 2026-10-31 二轮评审 P2：菜单底边常落在列表卡工具栏（批量/列）上，半截按钮文字
    读成「穿透破损」。加低度暗化遮罩，页面明确退为背景层，叠压即成正常前景语义。 */
 .vl-headmenu__pop { z-index: calc(var(--mk-z-menu) + 1); top: calc(100% + 6px); }
-/* 批量态：蓝色只给「选中/可交互」——开着的批量按钮与勾选列同一状态 */
-.vl-batch-toggle--on { border-color: var(--mk-blue); background: var(--mk-blue-bg); color: var(--mk-blue); }
 /* 表格已换自动布局（原型 .tbl 词汇），fixed/colgroup 的列宽变量覆写随之删除；
    长内容截断上限收敛到共享原语（.mk-cell-text / .mk-cell-main strong） */
 .vl-truncated { color: var(--mk-amber); font-weight: 700; }
@@ -1223,9 +1197,8 @@ function onBatchReclaim(ids: string[]) {
    实测高 23px 低于 24px 可点下限——本页 :deep 提最小高度补足 1px，padding 不动、视觉不变 */
 .vl-running :deep(.vl-running__chip) { min-height: 24px; }
 
-/* 名称头像（2026-10-15 用户拍板）：撤本页私造的「身份哈希八色」，改与教学组同款共享原语
-   MkCellAvatar（虚拟学习者=紫）。本页私有 .vl-avatar / .vl-avatar--N 退役；
-   mk/vlAvatar.ts 与 --mk-vl-avatar-* 仍由学习者卡库（VirtualLearnerCards）消费，保留 */
+/* 名称列头像已撤（2026-11-08 用户走查：卡库派生的名字多以「想解决…」开头，首字头像恒为「想」，
+   一排重复方块无辨识度）。mk/vlAvatar.ts 与 --mk-vl-avatar-* 仍由学习者卡库消费，保留 */
 /* 名称列可点击进二级（整行不再监听点击，避免多选勾选时误触） */
 .vl-cell--click { cursor: pointer; border-radius: 6px; transition: background 0.12s ease; }
 .vl-cell--click:hover { background: color-mix(in srgb, var(--mk-blue) 6%, transparent); }

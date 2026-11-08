@@ -124,3 +124,102 @@ describe('目标规划页：用户侧视觉走查四条修复', () => {
     expect(decl(primary, 'justify-content'), '拉满后按钮文字没居中').toBe('center');
   });
 });
+
+/**
+ * 入口态「现代 AI 首页范式」重排（2026-11-07 用户走查第二轮）：
+ *
+ * 用户原话：「顺序反了（『试试这些方向』挡在了标题和输入框中间，喧宾夺主）」「输入框太单薄
+ * （和上面 3 个框高度一模一样）」「标题左对齐导致头重脚轻」。要求改成
+ * 居中标题 → 大号多行输入卡 → 底部轻量灵感胶囊。
+ *
+ * 本 describe 逐条锁死新结构：
+ *  ① 视觉顺序 = 标题/副标题 → 输入大卡 → 灵感胶囊 → 最近会话（回访降为次级）；
+ *  ② 标题居中且抬到 24px（全站桌面比例档上限），副标题 14px 居中；
+ *  ③ 桌面档输入框升级 110px 多行面板（textarea 独占一行 + 底部动作行）；
+ *  ④ 示例方向降为 32px 透明胶囊（圆角 999），与输入卡形成 ~3:1 体量差；
+ *  ⑤ 旧的「3 列小方卡 / 行尾 › / 卡片灰底」整层退役（不留死样式）。
+ */
+describe('入口态：居中标题 → 大输入卡 → 轻量胶囊（2026-11-07 走查）', () => {
+  /** 模板里某个字面量首次出现的位置（用于断言视觉顺序） */
+  const at = (needle: string) => source.indexOf(needle);
+
+  it('① 视觉顺序：标题 → 输入大卡 → 灵感胶囊 → 最近会话', () => {
+    const hero = at('class="entry__hero"');
+    const composer = at('class="composer composer--entry"');
+    const cards = at('class="entry__cards"');
+    const recent = at('class="recent"');
+    expect(hero).toBeGreaterThan(-1);
+    expect(composer, '输入大卡不在模板里').toBeGreaterThan(-1);
+    expect(cards, '灵感胶囊不在模板里').toBeGreaterThan(-1);
+    expect(recent, '最近会话不在模板里').toBeGreaterThan(-1);
+    expect(composer, '「试试这些」又插到标题与输入框之间了（本轮要修的就是这个）').toBeGreaterThan(hero);
+    expect(cards, '灵感胶囊应排在输入大卡之后').toBeGreaterThan(composer);
+    expect(recent, '最近会话应排到胶囊之后（回访是次级动作）').toBeGreaterThan(cards);
+  });
+
+  it('② 标题居中并抬到 24px，副标题 14px 居中', () => {
+    const hero = ruleOf(allStyles, '.entry__hero');
+    expect(decl(hero, 'flex-direction'), 'hero 退回横排：恢复卡会横在标题右侧').toBe('column');
+    expect(decl(hero, 'align-items'), 'hero 没居中').toBe('center');
+    expect(decl(hero, 'text-align'), '标题仍左对齐（用户原话「缩在左上角」）').toBe('center');
+    const h1 = ruleOf(allStyles, '.entry__hero h1');
+    expect(decl(h1, 'font-size'), '标题仍是 20px 以下，压不住整页').toBe('clamp(20px, 2.4vw, 24px)');
+    const p = ruleOf(allStyles, '.entry__hero p');
+    expect(decl(p, 'font-size')).toBe('14px');
+    expect(decl(p, 'max-width'), '#55 的 640 列护栏不能动').toBe('640px');
+  });
+
+  it('③ 输入框是百来像素的多行面板（textarea 独占一行 + 底部动作行，两档同款）', () => {
+    /* 选择器必须带 .entry 前缀：≤1100 档的 `.composer__box { padding: 6px }`（会话态底条用）
+       后出现且同特异性，只用 `.composer--entry .composer__box` 会被它顶掉内衬 */
+    const box = ruleOf(allStyles, '.entry .composer--entry .composer__box');
+    expect(decl(box, 'min-height'), '输入框还是 54px 扁条，与胶囊同高').toBe('110px');
+    expect(decl(box, 'padding'), '内衬被窄屏档顶掉，卡片又瘪回去').toBe('14px 16px');
+    expect(decl(box, 'border-radius'), '输入大卡圆角没到 16px').toBe('16px');
+    expect(decl(box, 'flex-wrap'), '不换行就无法把 textarea 顶成独立一行').toBe('wrap');
+    const ta = ruleOf(allStyles, '.entry .composer--entry .composer__textarea');
+    expect(decl(ta, 'flex'), 'textarea 没占满首行').toBe('1 0 100%');
+    expect(decl(ta, 'min-height'), '首行输入区太矮，没有「多行面板」的体量').toBe('52px');
+    expect(decl(ta, 'order'), 'order 不是 0：DOM 里回形针在前，会折成三行').toBe('0');
+    expect(decl(ruleOf(allStyles, '.entry .composer--entry .composer__send'), 'order')).toBe('2');
+  });
+
+  it('③b 焦点环画在外层大卡上，textarea 自己不再套直角蓝框', () => {
+    /* mk-primitives 的 `:root :focus-visible`（0,2,0）会盖住 `.composer__textarea`（0,1,0）
+       的 outline: none，在圆角卡里套出一个直角蓝框（用户 图1）。必须用 :focus-visible 变体
+       把特异度提到 0,3,0 才压得住。 */
+    expect(allStyles, 'textarea 又会被 :root :focus-visible 套上直角蓝框').toContain('.composer__textarea:focus-visible');
+    const rule = ruleOf(allStyles, '.composer__textarea:focus-visible');
+    expect(decl(rule, 'outline')).toBe('none');
+    // 焦点可见性由外层大卡的 focus-within 环承担（同一圈 --mk-focus-ring）
+    const box = ruleOf(allStyles, '.composer__box:focus-within');
+    expect(box, '外层大卡没有焦点环：去掉内层 outline 后键盘用户将看不到焦点').toContain('var(--mk-focus-ring)');
+  });
+
+  it('③c 窄屏固定间距（不再 space-evenly 把胶囊顶到视口底部）', () => {
+    const narrow = mediaBlock(allStyles, '(max-width: 1100px)');
+    const entry = ruleOf(narrow, '.entry');
+    expect(decl(entry, 'justify-content'), 'space-evenly 又把输入框与胶囊撑到两端（图2 的 180px 白洞）').toBe('center');
+  });
+
+  it('④ 示例方向是 32px 透明胶囊（不再是同宽同底色的卡片）', () => {
+    const row = ruleOf(allStyles, '.entry__cards');
+    expect(decl(row, 'display'), '胶囊行退回 grid 三列').toBe('flex');
+    expect(decl(row, 'flex-wrap')).toBe('wrap');
+    expect(decl(row, 'justify-content'), '胶囊行没居中').toBe('center');
+    const card = ruleOf(allStyles, '.scene-card');
+    expect(decl(card, 'height'), 'lt36 预算恒为 0：胶囊盒子不许低于 36px').toBe('36px');
+    expect(decl(card, 'border-radius'), '没做成胶囊（999）').toBe('999px');
+    expect(decl(card, 'background'), '胶囊不该有实底：会和输入框抢材质').toBe('transparent');
+    expect(decl(card, 'font-size')).toBe('13px');
+    // 池子里的图标是 18px 的 svg，字号必须落在 svg 上
+    expect(ruleOf(allStyles, '.scene-card__icon svg')).toContain('width: 15px');
+  });
+
+  it('⑤ 上一版「3 列小方卡」整层退役（不留死样式）', () => {
+    expect(source, '行尾 › 已从模板移除，样式/媒体查询也要一并删').not.toContain('scene-card__go');
+    expect(source, '旧的三列头（标题 + 换一批独占一行）已并入胶囊行').not.toContain('entry__cards-head');
+    expect(source, '重复保留的深色卡片底色覆写已无对象').not.toContain("[data-theme='dark'] .scene-card");
+    expect(source, '旧的三列网格已撤').not.toContain('repeat(3, minmax(0, 1fr))');
+  });
+});

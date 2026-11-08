@@ -106,6 +106,10 @@ export interface HealthCenterItem {
   count: number;
   detail: string[];
   cause: string;
+  /** 正常态（severity=ok 或计数为 0）时行内那句说明。
+      2026-11-07 用户走查「0 正常，底下却印着过期了、查不到」：cause 写的是**故障时的原因**，
+      正常态照印就是拿故障文案吓人。正常态改读本字段（一句「查了什么、结论是什么」）。 */
+  okNote: string;
   action: HealthCenterAction;
   fixHint: string;
   source: string;
@@ -254,9 +258,9 @@ export function buildParamsConsistencyCheck(): ParamsConsistencyResult {
 
 function buildItem(
   id: string,
-  fields: Omit<HealthCenterItem, 'id'>,
+  fields: Omit<HealthCenterItem, 'id' | 'okNote'> & { okNote?: string },
 ): HealthCenterItem {
-  return { id, ...fields };
+  return { id, okNote: fields.okNote ?? '检查通过：声明与登记一致', ...fields };
 }
 
 /**
@@ -473,6 +477,7 @@ export function assembleHealthCenterItems(data: HealthCenterScanData): HealthCen
       count: w4.drifted.length,
       detail: w4Detail,
       cause: '核心文件（core.yaml）已改动，但编译产物与数据库 ACTIVE 版本没跟着更新——线上仍在跑旧版 prompt',
+      okNote: '核心文件、编译产物、数据库 ACTIVE 三者的哈希一致（线上跑的就是当前声明）',
       action: 'fixable',
       fixHint: '点此一键修复：自动重新编译产物并同步数据库；若产物是代码库跟踪文件，完成后需提交代码',
       source: 'check-core-hash-parity.ts + compile-core-files.ts + seed-core-agent-prompts.ts',
@@ -486,6 +491,7 @@ export function assembleHealthCenterItems(data: HealthCenterScanData): HealthCen
       count: contractDrift.length,
       detail: formatDrift(contractDrift),
       cause: '编排契约声明与数据库登记的契约不一致：声明改了但库里没同步（以 manifest 契约文件为唯一基准）',
+      okNote: '编排契约声明与数据库登记一致',
       action: 'fixable',
       fixHint: '点此一键修复：按编排契约基准全量对账数据库（admin 手工改过的行自动跳过保护）',
       source: 'field-routing-bootstrap.service.ts（detectFieldRoutingDrift kind=contract）',
@@ -499,6 +505,7 @@ export function assembleHealthCenterItems(data: HealthCenterScanData): HealthCen
       count: fieldRoutingDrift.length,
       detail: formatDrift(fieldRoutingDrift),
       cause: '编排文件（数据面声明）与数据库中的字段/路由登记不一致：声明改了但库里没同步',
+      okNote: '编排文件的字段与路由声明，与数据库登记一致',
       action: 'fixable',
       fixHint: '点此一键修复：以编排文件为准全量对账数据库（admin 手工改过的行自动跳过保护）',
       source: 'field-routing-bootstrap.service.ts（detectFieldRoutingDrift kind=field/routing）',
@@ -520,6 +527,7 @@ export function assembleHealthCenterItems(data: HealthCenterScanData): HealthCen
           ? ['若差异行是 admin 手工编辑的覆盖行，契约同步会跳过它，需人工确认后再处理。']
           : []),
       cause: '契约文件（manifest）与数据库登记的契约元数据不一致：缺失或非法即判定失败，不回退默认值',
+      okNote: '契约文件与数据库登记的契约元数据逐条一致',
       action: 'manual',
       fixHint: '需开发处理：定位差异后执行契约同步（DB 从 manifest 收敛），或经 w4 一键修复的数据库同步后复查',
       source: 'check-prompt-runtime-contract-metadata-parity.ts',
@@ -535,21 +543,23 @@ export function assembleHealthCenterItems(data: HealthCenterScanData): HealthCen
         .slice(0, 20)
         .map((s) => `${s.orchestratorName} 第 ${s.step} 步 agentId=${s.agentId}${s.role ? `（${s.role}）` : ''}`),
       cause: '编排定义里的步骤引用的 agent 或技能，在 Agent 名册与辅助技能表里都查不到：该步骤运行时不可路由——通常是引用了未注册的 agent，或 agent 改名后编排没同步（服务类步骤与 v4 辅助技能按约定不计入本项）',
+      okNote: '编排里每个步骤引用的 agent 与技能，在名册里都查得到（运行时都可路由）',
       action: 'manual',
       fixHint: '需开发处理：把该 agent/技能注册进名册，或把编排步骤改指到已注册的参与方；编排图页「字段旅程」可定位到具体阶段',
       source: 'orchestration-steps.service.ts（与 runtime-definitions orchestrators 端点同口径，排除服务步骤与辅助技能）',
     }),
     buildItem('snapshots', {
-      label: '沙盘说明书（agent-snapshots.md）',
+      label: '编排快照文档（agent-snapshots.md）',
       base: 'file:orchestration',
       semantics: 'baseline-drift',
       severity: snapshotCheck.drifted ? 'error' : 'ok',
       status: snapshotCheck.drifted ? 'drifted' : 'clean',
       count: snapshotCheck.drifted ? 1 : 0,
       detail: snapshotCheck.drifted ? [snapshotCheck.detail] : [],
-      cause: '自动生成的沙盘说明书（agent-snapshots.md）与编排文件 + core 字段声明不一致：说明书过期了',
+      cause: '自动生成的编排快照文档（agent-snapshots.md）与编排文件 + core 字段声明不一致：文档过期了',
+      okNote: '编排快照文档与当前编排声明、core 字段声明一致',
       action: 'fixable',
-      fixHint: '点此一键修复：重新生成沙盘说明书（先备份；生成物需提交代码）',
+      fixHint: '点此一键修复：重新生成编排快照文档（先备份；生成物需提交代码）',
       source: 'generate-agent-snapshots.ts',
     }),
     buildItem('yaml-crosscheck', {
@@ -561,6 +571,7 @@ export function assembleHealthCenterItems(data: HealthCenterScanData): HealthCen
       count: yamlCheck.errors.length,
       detail: yamlCheck.errors.slice(0, 20),
       cause: '核心文件的运行参数（温度/token/失败策略）与契约文件的镜像声明不一致：同一参数写了两份',
+      okNote: '核心文件与契约文件的运行参数镜像一致',
       action: 'manual',
       fixHint: '需开发处理：以核心文件为准对齐契约文件后重新生成；长期建议按 DRIFT_BASELINE_SURVEY §5.1 消除这份手写镜像',
       source: 'check-yaml-vocabulary.ts',
@@ -587,6 +598,7 @@ export function assembleHealthCenterItems(data: HealthCenterScanData): HealthCen
         ...paramsCheck.missingDeclarations.slice(0, 20).map((n) => `[提示] ${n}`),
       ],
       cause: '模型参数（temperature/maxTokens）在核心文件与代码声明（definition.ts）两处不一致：同一条参数有两个值',
+      okNote: '模型参数在核心文件与代码声明两处逐条一致',
       action: 'manual',
       fixHint: '需开发处理：统一两处声明后重新生成（definition.ts 是代码，不可一键修；长期建议按 DRIFT_BASELINE_SURVEY §5.1 改为从 core 派生）',
       source: 'core-file-loader.ts + coordinators/definitions-registry.ts',
@@ -615,45 +627,49 @@ export function assembleHealthCenterItems(data: HealthCenterScanData): HealthCen
         ...fieldsSyncTypeMismatch.map((t) => `[警告] 类型不一致 ${t.fieldId}：core=${t.coreType} → 期望 ${t.expectedValueType}，编排=${t.routingValueType}`),
       ].slice(0, 30),
       cause: 'core 声明的字段与编排产出的字段对不上（缺项/孤儿/类型不一致）：两边分别维护，漏改了一方',
+      okNote: 'core 声明的字段与编排产出的字段逐条对齐（无缺项、无孤儿、类型一致）',
       action: 'manual',
       fixHint: '需开发决策：补编排路由、登记豁免，或明确接受存量孤儿',
       source: 'check-core-fields-sync.ts',
     }),
     buildItem('w1-active', {
-      label: 'ACTIVE 检查（W1，双向差集偏户口簿）',
+      label: '生效版本检查（W1 · 活跃技能版本比对）',
       base: 'file:skills.yaml',
       semantics: 'consistency',
       severity: w1.items.length > 0 ? 'warn' : 'ok',
       status: w1.items.length > 0 ? 'unregistered' : 'clean',
       count: w1.items.length,
       detail: w1.items.map((i) => `W1 ${i.skillId || ''}：${i.message}`),
-      cause: '户口簿里的活跃技能与数据库 ACTIVE 版本对不上：有技能缺"当前生效版"，或数据库残留已下架技能',
+      cause: '技能注册表里的活跃技能与数据库 ACTIVE 版本对不上：有技能缺"当前生效版"，或数据库残留已下架技能',
+      okNote: '技能注册表里的每个活跃技能，在数据库里都有且只有一个生效版本',
       action: 'manual',
       fixHint: '需开发处理：执行"编译+同步"补缺侧，或登记/清理残留侧',
       source: 'skills-readiness.service.ts',
     }),
     buildItem('w2-registration', {
-      label: '注册对账（W2，双向差集偏户口簿）',
+      label: '技能注册对账（W2 · 注册表与数据库比对）',
       base: 'file:skills.yaml',
       semantics: 'consistency',
       severity: w2.items.length > 0 ? 'warn' : 'ok',
       status: w2.items.length > 0 ? 'unregistered' : 'clean',
       count: w2.items.length,
       detail: w2.items.map((i) => `W2 ${i.skillId || ''}：${i.message}`),
-      cause: '户口簿与数据库注册表对不上：有技能没注册，或数据库有多出来的"幽灵注册"',
+      cause: '技能注册表与数据库注册表对不上：有技能没注册，或数据库里有多出来的注册记录',
       action: 'manual',
-      fixHint: '需开发处理：补注册片段（skills/index.ts），或清理幽灵行',
+      okNote: '技能注册表与数据库注册表一一对应',
+      fixHint: '需开发处理：补注册片段（skills/index.ts），或清理多余的注册记录',
       source: 'skills-readiness.service.ts',
     }),
     buildItem('w3-wiring', {
-      label: '接线对账（W3，双向对等无派生）',
+      label: '接线对账（W3 · 步骤与声明比对）',
       base: 'bidirectional',
       semantics: 'consistency',
       severity: w3.items.length > 0 ? 'warn' : 'ok',
       status: w3.items.length > 0 ? 'unwired' : 'clean',
       count: w3.items.length,
       detail: w3.items.map((i) => `W3 ${i.skillId || ''}：${i.message}`),
-      cause: '运行时定义的执行步骤与户口簿的 coordinator 声明对不上：接线两边各维护了一份',
+      cause: '运行时定义的执行步骤与技能注册表的 coordinator 声明对不上：接线两边各维护了一份',
+      okNote: '运行时定义的执行步骤与技能注册表的声明一致',
       action: 'manual',
       fixHint: '需开发处理：在 coordinator 定义里补 steps、登记豁免，或移除引用',
       source: 'skills-readiness.service.ts',
@@ -675,6 +691,7 @@ export function assembleHealthCenterItems(data: HealthCenterScanData): HealthCen
           ]
         : ['当前无覆盖行（三表均为代码托管）——漂移计数不为零即真实文件/DB 背离，与覆盖无关'],
       cause: 'admin 在后台手工改过的配置行清单：覆盖权高于文件基准，对账时自动跳过',
+      okNote: '当前没有被手工改过的配置行（字段/路由/契约三表都是代码托管）',
       action: 'none',
       fixHint: '只读展示：当前 0 条覆盖行；如需撤销覆盖，需开发将行恢复为代码托管后重新对账',
       source: 'field-routing-bootstrap.service.ts（三表 where managedByCode=false）',
@@ -693,6 +710,7 @@ export function assembleHealthCenterItems(data: HealthCenterScanData): HealthCen
         ? [runtimeDriftRows.note]
         : groupRuntimeDriftRows(runtimeDriftRows.rows),
       cause: '运行时遥测：每次 LLM 调用时比对"代码侧 prompt 与数据库 ACTIVE 版本"是否一致，记录异常',
+      okNote: '近 7 天的调用里，代码侧 prompt 与数据库生效版本始终一致',
       action: 'none',
       fixHint: '只读观察项：出现漂移时，修复=重新同步数据库（w4 一键修复覆盖）',
       source: 'prompt-composer.ts（detectPromptDrift）+ prompt_call_logs',
