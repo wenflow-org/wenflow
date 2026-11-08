@@ -1,5 +1,5 @@
 <template>
-  <figure class="teaching-figure" :class="{ 'teaching-figure--spec': !isPositionLine }" :style="cardStyle">
+  <figure ref="rootEl" class="teaching-figure" :class="{ 'teaching-figure--spec': !isPositionLine }" :style="cardStyle">
     <button
       v-if="isPositionLine"
       type="button"
@@ -164,7 +164,35 @@ const specRendered = computed(() => {
   if (isPositionLine.value) return null;
   return renderSpecFigure(props.figure?.kind || '', props.figure?.spec, {
     palette: props.figure?.palette as never,
+    // 宿主卡片实测宽度（2026-11-08 外评 #2）：写死 620 的看板在宽卡里右侧留白、
+    // 左侧列宽不够 CJK 一行。实测前为 0 → 渲染器按自然宽出图，ResizeObserver 回来后重排。
+    targetWidth: hostWidth.value || undefined,
   });
+});
+
+/**
+ * 看板自然宽随消息卡宽走（外评 #2）：渲染是纯函数，宽度作为参数传入而不是渲染器猜。
+ * 只测不裁：上限钳制交给各渲染器自身（1040/460/520），这里只负责把卡内可用宽报上去。
+ */
+const rootEl = ref<HTMLElement | null>(null);
+const hostWidth = ref(0);
+let hostResizeObserver: ResizeObserver | null = null;
+onMounted(() => {
+  window.addEventListener('keydown', onKeydown);
+  if (rootEl.value && typeof ResizeObserver !== 'undefined') {
+    hostResizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const next = Math.max(0, Math.round(entry.contentRect.width) - 26);
+        if (next !== hostWidth.value) hostWidth.value = next;
+      }
+    });
+    hostResizeObserver.observe(rootEl.value);
+  }
+});
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown);
+  hostResizeObserver?.disconnect();
+  hostResizeObserver = null;
 });
 
 /**
@@ -199,8 +227,6 @@ const zoomed = ref(false);
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape' && zoomed.value) zoomed.value = false;
 }
-onMounted(() => window.addEventListener('keydown', onKeydown));
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
 
 const domain = computed(() => {
   const min = props.figure?.axis?.min ?? 0;

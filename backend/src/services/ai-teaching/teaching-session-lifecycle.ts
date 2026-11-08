@@ -227,6 +227,13 @@ export function buildReplanAttributionEvidence(input: {
     ? (wrapup as any).progress.stillLearning
     : [];
   push('wrapup:still-learning', 'still_learning', unresolved.slice(0, 4).join('、'));
+  // 本节已学会名单（2026-11-08 外评 #3）：归因只看不稳一路时，会产出与评估数据
+  // 「2/2 已学会」当面打架的文案（「几个关键点还没稳」vs「全部学会」）。把已学会
+  // 一起给到归因器，理由必须写清这种张力（哪几个是本课新学会、哪些旧点仍挂着）。
+  const newlyMastered = Array.isArray((wrapup as any)?.progress?.newlyMastered)
+    ? (wrapup as any).progress.newlyMastered
+    : [];
+  push('wrapup:mastered', 'newly_mastered', newlyMastered.slice(0, 4).join('、'));
   const confusions = Array.isArray((wrapup as any)?.evidence?.topConfusionPoints)
     ? (wrapup as any).evidence.topConfusionPoints
     : [];
