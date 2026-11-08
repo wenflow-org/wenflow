@@ -165,14 +165,14 @@
                 >配置</button>
                 <button type="button" class="mk-link mk-link--hold mk-link--hold-test" :disabled="testingId === m.id" @click="testModel(selected, m.id)">{{ testingId === m.id ? '测试中…' : '测试' }}</button>
                 <!-- 删除（不可撤销）与上面三枚拉开一段距离（准则 2 防误触）。
-                     默认模型直接置灰：后端必然会拒绝（默认指向已删模型 = 全平台路由落空），
-                     不该让用户在确认弹窗里走完一遍才被告知。 -->
+                     被任一「默认模型」写源引用就置灰：后端必然会拒绝（默认指向已删模型 =
+                     对应路由落空），不该让用户在确认弹窗里走完一遍才被告知。 -->
                 <button
                   type="button"
                   class="mk-link mk-link--danger mpp-rowacts__danger"
-                  :disabled="busy || registry?.readOnly || isDefaultModel(m)"
-                  :title="isDefaultModel(m) ? '当前为默认模型，请先将其他模型设为默认后再删除' : '删除这个模型'"
-                  :aria-label="isDefaultModel(m) ? `删除 ${m.id}（当前为默认模型，需先改默认）` : `删除 ${m.id}`"
+                  :disabled="busy || registry?.readOnly || !!defaultRefOf(m)"
+                  :title="defaultRefOf(m) ? `${defaultRefOf(m)}，请先把那一处默认模型改到别的模型再删除` : '删除这个模型'"
+                  :aria-label="defaultRefOf(m) ? `删除 ${m.id}（正被${defaultRefOf(m)}引用，需先改默认）` : `删除 ${m.id}`"
                   @click="removeModel(m)"
                 >删除</button>
               </div>
@@ -239,10 +239,11 @@ interface ProvidersView {
   registry: { path: string; source: 'file' | 'embedded-fallback'; mtimeMs: number | null; lastError: string | null; readOnly: boolean }
   providers: ProviderView[]
 }
-/** 运行面读数（GET /admin/model-registry 的子集）：告警 */
+/** 运行面读数（GET /admin/model-registry 的子集）：告警 + 文件默认（删除守卫的第二处写源） */
 interface RegistryHealth {
   models: Array<{ id: string; providerId: string }>
   warnings: string[]
+  registry?: { fileDefaults?: { chat: string; reasoning: string } }
 }
 
 const props = withDefaults(defineProps<{
@@ -324,9 +325,26 @@ const fetchableModels = computed(() => props.upstream)
 const pullAddTitle = '按当前服务地址与密钥向上游拉取模型清单，拉到后勾选要挂载的模型'
 
 /* ---------- 平台默认模型（P0 2026-11-04） ---------- */
-/** 行内「默认」徽章的判据：平台默认就是这个模型 */
+/** 行内「默认」徽章的判据：平台默认就是这个模型（只认运行时那个源 = DB） */
 function isDefaultModel(m: ModelLike): boolean {
   return !!props.defaultModel && m.id === props.defaultModel
+}
+/**
+ * 删除守卫的「这个模型被哪一处默认引用」（空串 = 可以删）。判据必须与后端 deleteModel 一致。
+ *
+ * - **注册表文件 `defaults.chat/reasoning`**：后端会拒（它删掉文件自身就不自洽，selfCheck 也过不去），
+ *   所以这里置灰，别让用户走完确认弹窗才被告知。
+ * - **平台 DB 默认（这个模型的「默认」徽章判据）有意不挡**：后端 #177（2026-11-05）下线了
+ *   「运行期引用门禁」一族，DB 默认是可修复的——删完 onModelRemoved 会把默认改指下一个已挂载模型。
+ *   此前这里连 DB 默认一起置灰，等于把 #177 决定允许、且下面已经写好修复流程的动作又锁死，
+ *   而且提示语指向错的源（说「请先将其他模型设为默认」，用户照着做也解不开文件那一处）。
+ *
+ * 数据来自本面板已拉取的 `/admin/model-registry`（`registry.fileDefaults`），不加请求。
+ */
+function defaultRefOf(m: ModelLike): string {
+  const fd = health.value?.registry?.fileDefaults
+  if (fd && (m.id === fd.chat || m.id === fd.reasoning)) return '注册表文件里的默认模型'
+  return ''
 }
 /** 「设为默认」只发意图：默认模型存 DB，由持有 live 配置的宿主落盘 */
 function requestDefault(m: ModelLike): void {
