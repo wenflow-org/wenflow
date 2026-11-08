@@ -18,6 +18,9 @@ const DIMENSION_WEIGHTS: Record<string, number> = {
   pertinence: 0.15,
 };
 
+/** 评审通过阈值（与 score 同源，#172-6）：finalScore < 此值即判未通过，由 path-generation.core 复用同一定义。 */
+export const PATH_REVIEW_PASS_THRESHOLD = 0.75;
+
 export const pathReviewerDefinition: SkillDefinition = {
   name: 'path-reviewer',
   displayName: '路径质量评审器',
@@ -120,12 +123,16 @@ export async function pathReviewer(input: any): Promise<SkillExecutionResult<any
           }),
       normalizeOutput: (parsed, _payload) => {
         const dims = normalizeDimensions(parsed?.dimensions);
-        const overall = clamp01(parsed?.score);
+        const modelScore = clamp01(parsed?.score);
+        // 确定性兜底：模型自报总分若与分项加权偏差 >0.05，则以分项重新加权为准（防自报总分与分项不一致）。
+        const recomputedOverall = computeOverall(dims);
+        const finalScore = Math.abs(modelScore - recomputedOverall) > 0.05 ? recomputedOverall : modelScore;
         return {
-          score: overall,
+          score: finalScore,
           dimensions: dims,
           issues: normalizeIssues(parsed?.issues),
-          passed: typeof parsed?.passed === 'boolean' ? parsed.passed : overall >= 0.75,
+          // #172-6①：passed 与 score 同源——用确定性重算的 finalScore 判定，不再采信模型自报的 passed。
+          passed: finalScore >= PATH_REVIEW_PASS_THRESHOLD,
           replanInstructions: typeof parsed?.replanInstructions === 'string' ? parsed.replanInstructions.trim() : null,
         };
       },
@@ -161,7 +168,9 @@ export async function pathReviewer(input: any): Promise<SkillExecutionResult<any
         score: finalScore,
         dimensions: result.output.dimensions,
         issues: result.output.issues,
-        passed: result.output.passed,
+        // #172-6①：passed 与 score 同源——用确定性重算的 finalScore 判定，不再采信模型自报的 passed。
+        // 模型若自报 passed=true 但 finalScore<0.75，这里照样判未通过。
+        passed: finalScore >= PATH_REVIEW_PASS_THRESHOLD,
         replanInstructions: result.output.replanInstructions,
         runtimeEnvelope: result.runtimeEnvelope,
         _debug: {

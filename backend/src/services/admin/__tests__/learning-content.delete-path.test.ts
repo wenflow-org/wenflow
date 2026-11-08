@@ -11,6 +11,11 @@ const mockTx = {
   teaching_sessions: { updateMany: jest.fn() },
   virtual_sessions: { updateMany: jest.fn() },
   learning_paths: { delete: jest.fn() },
+  // #176-3：path 级学习事实清理
+  memory_traces: { updateMany: jest.fn() },
+  concept_edges: { deleteMany: jest.fn() },
+  learner_projections: { deleteMany: jest.fn() },
+  learner_evidence: { deleteMany: jest.fn() },
 };
 
 const mockPrisma = {
@@ -34,6 +39,11 @@ describe('deleteLearningPath（#90 删路径同事务清软指针）', () => {
     mockTx.teaching_sessions.updateMany.mockResolvedValue({ count: 2 });
     mockTx.virtual_sessions.updateMany.mockResolvedValue({ count: 3 });
     mockTx.learning_paths.delete.mockResolvedValue({ id: 'lp-1' });
+    // #176-3：path 级清理的返回值（{count} 形式，供 journal 计数）
+    mockTx.memory_traces.updateMany.mockResolvedValue({ count: 3 });
+    mockTx.concept_edges.deleteMany.mockResolvedValue({ count: 4 });
+    mockTx.learner_projections.deleteMany.mockResolvedValue({ count: 2 });
+    mockTx.learner_evidence.deleteMany.mockResolvedValue({ count: 5 });
   });
 
   it('三张软指针表都按 learningPathId 置 null', async () => {

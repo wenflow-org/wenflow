@@ -199,7 +199,11 @@ export class LearnerProjectionService {
         lsb: snapshot.dynamicState.metrics.lsb,
         recentTrend: snapshot.dynamicState.recentTrend,
         recommendedPacing: snapshot.dynamicState.recommendedPacing,
+        // #183：「该减速」的结论此前被裁掉——课堂看不到疲劳风险，减速规则在真实载荷里不可满足
+        fatigueRisk: snapshot.dynamicState.fatigueRisk,
       },
+      // #183：「该重排」的结论此前完全不在课堂投影里，只进 dashboard 文案与路径重排
+      replanSignal: snapshot.replanSignal,
       pathContext: {
         pathTitle: currentPath?.pathTitle || '当前学习路径',
         pathSummary: currentPath?.pathSummary,
@@ -232,6 +236,8 @@ export class LearnerProjectionService {
         recommendedApproach: snapshot.teachingHints.recommendedApproach,
         emphasize: snapshot.teachingHints.emphasize,
         avoid: snapshot.teachingHints.avoid,
+        // #183：画像判定的风险因子同样被裁掉，补回（与 avoid/emphasize 同源、同口径透传）
+        riskFactors: snapshot.teachingHints.riskFactors,
       },
     };
   }

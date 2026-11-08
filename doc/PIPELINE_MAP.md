@@ -37,7 +37,7 @@ flowchart LR
 | --- | --- | --- | --- | --- | --- |
 | 1 | 澄清阶段 | `goal-agent` | `goal-conversation` | 48 / 78 | `prompts/orchestration/goal.yaml` |
 | 2 | 规划阶段 | `path-agent` | `path-planning` → `stage-designer` | 47 / 53 | `prompts/orchestration/path.yaml` |
-| 3 | 教学阶段 | `teaching-agent` | `teaching-opening-generator` → `teaching-turn` → `peer-reinforcement` → `session-wrapup` | 48 / 57 | `prompts/orchestration/teaching.yaml` |
+| 3 | 教学阶段 | `teaching-agent` | `teaching-opening-generator` → `teaching-turn` → `peer-reinforcement` → `session-wrapup` | 51 / 58 | `prompts/orchestration/teaching.yaml` |
 | 4 | 画像阶段 | `profile-agent` | `lesson-knowledge-enricher` | 21 / 33 | `prompts/orchestration/profile.yaml` |
 | 5 | 仿真阶段 | `simulation-agent` | `virtual-learner-goal-dialogue-simulator` → `goal-conversation` → `virtual-learner-path-evaluator` → `virtual-learner-learn-turn-simulator` → `virtual-learner-referee` → `virtual-learner-actor-auditor` → `virtual-learner-memory-curator` | 20 / 30 | `prompts/orchestration/simulation.yaml` |
 
@@ -98,7 +98,7 @@ flowchart LR
 授课执行：Teaching Turn → Peer/Checkpoint → Wrapup
 
 - **Agent**：`teaching-agent` — AI Teaching Agent
-- **编排声明**：`prompts/orchestration/teaching.yaml`（48 字段 / 57 条路由）
+- **编排声明**：`prompts/orchestration/teaching.yaml`（51 字段 / 58 条路由）
 - **代码入口**：
   - 教学会话状态机（开课/回合/收束）：`backend/src/services/ai-teaching/AITeachingCoordinator.ts`
   - 课堂上下文构建（五输入通道）：`backend/src/services/ai-teaching/TeachingContextBuilder.ts`
@@ -137,15 +137,15 @@ flowchart LR
 | 步 | 节点 | 类型 | 职责 | 条件 | 循环 |
 | --- | --- | --- | --- | --- | --- |
 | 1 | `LearnerEvidenceProjector` | service | learner-evidence-projection | when learner profile related events arrive | — |
-| 2 | `skill:lesson-knowledge-enricher` | skill | lesson-knowledge-enrichment | when lesson ends | — |
-| 3 | `LearnerProfileService` | service | learner-profile-cache-clear | after learner evidence is projected | — |
-| 4 | `LearnerSnapshotRefreshService` | service | learner-snapshot-refresh | after learner updates are applied | — |
+| 2 | `LearnerProfileService` | service | learner-profile-cache-clear | after learner evidence is projected | — |
+| 3 | `LearnerSnapshotRefreshService` | service | learner-snapshot-refresh | after profile cache is invalidated (skipped for teaching task:completed / goal:understanding:updated) | — |
+| 4 | `skill:lesson-knowledge-enricher` | skill | lesson-knowledge-enrichment | when lesson ends (enqueued asynchronously; the fast path does not await the LLM) | — |
 
 | Skill | 类型 | 提示词正文 | 参数 | 输入/输出 | 字段角色 |
 | --- | --- | --- | --- | --- | --- |
 | `adaptive-guidance-copy` | mainline | `prompts/core/adaptive-guidance-copy.yaml` | temp=0.6 / propagate | 4/8 | 0 |
 | `lesson-knowledge-enricher` | mainline | `prompts/core/lesson-knowledge-enricher.yaml` | temp=0.4 / propagate | 1/6 | 0 |
-| `learning-predictor` | mainline | `prompts/core/learning-predictor.yaml` | temp=0.2 / propagate | 0/7 | 0 |
+| `learning-predictor` | mainline | `prompts/core/learning-predictor.yaml` | temp=0.2 / propagate | 3/7 | 0 |
 
 > 「字段角色」= manifest `promptContract.fields` 的 direction/visibility 元数据；输出 schema 以 core.yaml 的 `fields` 为准，0 不代表没有输出契约。
 **不在 Agent steps 内、但登记在本阶段的 Skill**：
@@ -209,7 +209,7 @@ flowchart LR
 | `teaching-turn` | 教学阶段 | `teaching-agent` | mainline | 84/15（14） | `prompts/core/teaching-turn.yaml` | `prompts/manifests/teaching-turn.yaml` | 一位结构化教学回合生成器。 |
 | `peer-reinforcement` | 教学阶段 | `teaching-agent` | mainline | 12/4 | `prompts/core/peer-reinforcement.yaml` | `prompts/manifests/peer-reinforcement.yaml` | 学习伙伴，和学生一起探索问题。 |
 | `session-wrapup` | 教学阶段 | `teaching-agent` | mainline | 22/3（1） | `prompts/core/session-wrapup.yaml` | `prompts/manifests/session-wrapup.yaml` | 一位课后产出助手。请基于本节课的结构化证据生成课后总结与评估。 |
-| `adaptive-guidance-copy` | 画像阶段 | `profile-agent` | mainline | 12/2 | `prompts/core/adaptive-guidance-copy.yaml` | `prompts/manifests/adaptive-guidance-copy.yaml` | 一个学习产品的动态引导文案生成器。 |
+| `adaptive-guidance-copy` | 画像阶段 | `profile-agent` | mainline | 13/2 | `prompts/core/adaptive-guidance-copy.yaml` | `prompts/manifests/adaptive-guidance-copy.yaml` | 一个学习产品的动态引导文案生成器。 |
 | `learner-model` | 画像阶段 | `profile-agent` | handler-only | 0/0 | — | — | — |
 | `lesson-knowledge-enricher` | 画像阶段 | `profile-agent` | mainline | 10/2（1） | `prompts/core/lesson-knowledge-enricher.yaml` | `prompts/manifests/lesson-knowledge-enricher.yaml` | 课后知识增强器。一节课结束后，你基于课堂知识状态与变化量、wrapup 产物、 |
 | `learning-predictor` | 画像阶段 | `profile-agent` | mainline | 9/5 | `prompts/core/learning-predictor.yaml` | `prompts/manifests/learning-predictor.yaml` | 学习表现预测器。在新任务开始前，基于学习者最近的知识状态摘要、 |
@@ -254,7 +254,7 @@ flowchart LR
 | `web-fetch` | handler-only | handler-only：无 LLM 提示词，逻辑在代码 handler |
 | `decision-gate` | handler-only | handler-only：无 LLM 提示词，逻辑在代码 handler |
 | `text-to-image` | handler-only | handler-only：无 LLM 提示词，逻辑在代码 handler |
-| `board-designer` | handler-only | handler-only：无 LLM 提示词，逻辑在代码 handler |
+| `board-designer` | handler-only | handler-only：提示词以独立产物 prompts/skill.board-designer.md 承载（无 core 源） |
 
 ## 5. 未在 skills.yaml 登记、但仍有 Manifest 的条目
 

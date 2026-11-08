@@ -529,12 +529,28 @@ function checkpointConceptPayloadFields(checkpoint: TeachingCheckpoint): Record<
 }
 
 /**
+ * `checkpoint:result` 证据的幂等键（确定性派生，不含时间戳）。
+ *
+ * 键空间与同域两条证据互不重叠：`checkpoint:result:<id>`（本键）、
+ * `checkpoint-attempt:<id>`、`anchor:<id>`——三者同属 @@unique([eventId, evidenceKey]) 命名空间，
+ * 必须逐字母不同，否则一次 upsert 会覆盖另一类证据。
+ */
+export function checkpointResultEventId(checkpointId: string): string {
+  return `checkpoint:${checkpointId}`;
+}
+
+/**
  * 检查点结果留痕（`learner_evidence` type=`checkpoint:result`）。
  *
  * 为什么单独留痕：这是**独立于 LLM 自评**的第一手观测（`judgedBy='code'` 时）——
  * 第 3 步的"目标成功率带"（§7 P1-1）与效度检验（§8 E5）都以它为输入。
  * 无答案键时也照记，但标 `judgedBy='model-reference'`，**不得**混进独立信号。
  * 置信度按来源给：code=0.95（可复算）、model-reference=0.6（模型派生，含自证风险）。
+ *
+ * 幂等（#173-1②）：`(eventId, evidenceKey)` 完全由 checkpointId 派生（**不含时间戳**），
+ * 重试/重放走 upsert 只更新同一行。此前 eventId 带 `at.getTime()`：网关超时后同一次提交重试
+ * 会新建一行，同一道题在证据表里叠加多条（成功率分母虚高、重放无法识别）。代价是同题的
+ * 多次作答收敛为「最新一次结果」这一行（历史逐次样本不再各自成行，见 #173-1 口径）。
  */
 export async function recordCheckpointResultEvidence(
   session: TeachingSessionRecord,
@@ -556,42 +572,51 @@ export async function recordCheckpointResultEvidence(
   },
 ): Promise<void> {
   try {
-    const at = new Date();
-    await prisma.learner_evidence.create({
-      data: {
-        id: `lev_cp_${checkpoint.id}_${at.getTime()}`,
-        eventId: `checkpoint:${checkpoint.id}:${at.getTime()}`,
-        evidenceKey: `checkpoint:result:${checkpoint.id}`,
+    // 时间戳只进 `occurredAt`（观测时刻），**不进**幂等键：同 key 的重试必须命中同一行。
+    const at = simulatedNowOr();
+    const eventId = checkpointResultEventId(checkpoint.id);
+    const evidenceKey = `checkpoint:result:${checkpoint.id}`;
+    const payload = JSON.stringify({
+      checkpointId: checkpoint.id,
+      type: checkpoint.type,
+      passed: result.passed,
+      judgedBy: result.judgedBy,
+      detail: result.detail,
+      /** 判定通道置信度：code 可复算 0.95；model-rubric 为独立 rubric 复核 0.85（2026-11-08 分级判分）；model-reference 含自证风险 0.6（与行级 confidence 同源） */
+      judgeConfidence: result.judgedBy === 'code' ? 0.95 : result.judgedBy === 'model-rubric' ? 0.85 : 0.6,
+      // 概念归属（F1 修复轮 a）：失败证据知道自己是哪个概念的
+      ...checkpointConceptPayloadFields(checkpoint),
+      ...(result.submission.selectedOptionIds?.length
+        ? { selectedOptionIds: result.submission.selectedOptionIds }
+        : {}),
+      // #96：判分前的系统预测（用于校准表/阈值拟合）；source='none' 时 predictedMastery 为 null
+      ...(result.prediction
+        ? {
+            predictedMastery: result.prediction.predictedMastery,
+            predictionSource: result.prediction.source,
+            understanding: result.prediction.understanding,
+          }
+        : {}),
+    });
+    const confidence = result.judgedBy === 'code' ? 0.95 : result.judgedBy === 'model-rubric' ? 0.85 : 0.6;
+    await prisma.learner_evidence.upsert({
+      where: { eventId_evidenceKey: { eventId, evidenceKey } },
+      create: {
+        // 行 id 同键派生：重试不再产生第二个 `lev_cp_...` 副本
+        id: `lev_cp_${checkpoint.id}`,
+        eventId,
+        evidenceKey,
         userId: session.userId,
         pathId: session.learningPathId ?? null,
         taskId: session.taskId ?? null,
         sessionId: session.id,
         evidenceType: 'checkpoint:result',
-        payload: JSON.stringify({
-          checkpointId: checkpoint.id,
-          type: checkpoint.type,
-          passed: result.passed,
-          judgedBy: result.judgedBy,
-          detail: result.detail,
-          /** 判定通道置信度：code 可复算 0.95；model-rubric 为独立 rubric 复核 0.85（2026-11-08 分级判分）；model-reference 含自证风险 0.6（与行级 confidence 同源） */
-          judgeConfidence: result.judgedBy === 'code' ? 0.95 : result.judgedBy === 'model-rubric' ? 0.85 : 0.6,
-          // 概念归属（F1 修复轮 a）：失败证据知道自己是哪个概念的
-          ...checkpointConceptPayloadFields(checkpoint),
-          ...(result.submission.selectedOptionIds?.length
-            ? { selectedOptionIds: result.submission.selectedOptionIds }
-            : {}),
-          // #96：判分前的系统预测（用于校准表/阈值拟合）；source='none' 时 predictedMastery 为 null
-          ...(result.prediction
-            ? {
-                predictedMastery: result.prediction.predictedMastery,
-                predictionSource: result.prediction.source,
-                understanding: result.prediction.understanding,
-              }
-            : {}),
-        }),
-        confidence: result.judgedBy === 'code' ? 0.95 : result.judgedBy === 'model-rubric' ? 0.85 : 0.6,
+        payload,
+        confidence,
         occurredAt: at,
       },
+      // 答错重答 = 同一道题的下一次观测，按最新一次结果覆盖（唯一行，不叠加）
+      update: { payload, confidence, occurredAt: at },
     });
     logger.info('[AITeaching] 检查点结果留痕', {
       sessionId: session.id,
@@ -616,8 +641,50 @@ export async function recordCheckpointResultEvidence(
  *
  * 纪律：**只留痕、不改写**——不参与掌握/难度/信念判定，也不被现有信号消费（与锚题纪律一致）。
  * 幂等：同一 checkpointId 的终局唯一——(eventId, evidenceKey) 由 checkpointId 派生并命中唯一约束，
- * 收尾重试/重复触发只保留第一行（update 为空，终局不可变）。
+ * 收尾重试/重复触发只保留一行。
+ *
+ * 终局可升级（#173-1③）：此前 `update: {}` 让**第一行**永占——`unresolved`（收尾时仍挂起）
+ * 先落，则之后同一道题真答到顶的 `attempts_exhausted` 永远写不进去，「答不上来」被永久记成
+ * 「没等到作答」（测量口径失真：分母里这题的终局无法更正）。现在按终局强度单调升级：
+ * unresolved（最弱，仅表示没等到作答）< skipped / attempts_exhausted（学员侧终局）。
+ * 同级只保留第一行（不覆盖，重复触发仍幂等）。
  */
+const ATTEMPT_OUTCOME_RANK: Record<'skipped' | 'attempts_exhausted' | 'unresolved', number> = {
+  unresolved: 0,
+  skipped: 1,
+  attempts_exhausted: 1,
+};
+
+/** 读出口径的终局（payload 解析失败/形状异常 → null，按"无既有终局"处理）。 */
+export function parseAttemptOutcome(payload: unknown): 'skipped' | 'attempts_exhausted' | 'unresolved' | null {
+  if (typeof payload !== 'string' || !payload) return null;
+  try {
+    const parsed = JSON.parse(payload) as { outcome?: unknown };
+    const outcome = parsed?.outcome;
+    return outcome === 'skipped' || outcome === 'attempts_exhausted' || outcome === 'unresolved'
+      ? outcome
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 读已有 `checkpoint:attempt` 行的终局（读失败一律视为「无既有终局」）。
+ * best-effort 留痕域：读不到不该阻断写入——upsert 本身对同一 (eventId, evidenceKey) 幂等。
+ */
+async function readPriorAttemptOutcome(eventId: string, evidenceKey: string) {
+  try {
+    const existing = await prisma.learner_evidence.findUnique({
+      where: { eventId_evidenceKey: { eventId, evidenceKey } },
+      select: { payload: true },
+    });
+    return existing ? parseAttemptOutcome(existing.payload) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function recordCheckpointAttemptEvidence(
   session: TeachingSessionRecord,
   checkpoint: TeachingCheckpoint,
@@ -632,6 +699,27 @@ export async function recordCheckpointAttemptEvidence(
     const at = simulatedNowOr();
     const eventId = `checkpoint-attempt:${checkpoint.id}`;
     const evidenceKey = `checkpoint:attempt:${checkpoint.id}`;
+    const payload = JSON.stringify({
+      checkpointId: checkpoint.id,
+      type: checkpoint.type,
+      title: checkpoint.title,
+      outcome: result.outcome,
+      // 概念归属（F1 修复轮 a）：attempts_exhausted/skipped/unresolved 终局同样带归属
+      ...checkpointConceptPayloadFields(checkpoint),
+      ...(typeof result.attempts === 'number' ? { attempts: result.attempts } : {}),
+    });
+    // 终局强度单调：先看已有行的终局，弱于本次才允许升级（#173-1③）。
+    // 同级重复触发直接返回（幂等），更强的一行不被更弱的终局降级。
+    const priorOutcome = await readPriorAttemptOutcome(eventId, evidenceKey);
+    if (priorOutcome && ATTEMPT_OUTCOME_RANK[priorOutcome] >= ATTEMPT_OUTCOME_RANK[result.outcome]) {
+      logger.info('[AITeaching] 检查点尝试留痕已存在且终局不弱于本次，保留原行（幂等）', {
+        sessionId: session.id,
+        checkpointId: checkpoint.id,
+        priorOutcome,
+        outcome: result.outcome,
+      });
+      return;
+    }
     await prisma.learner_evidence.upsert({
       where: { eventId_evidenceKey: { eventId, evidenceKey } },
       create: {
@@ -643,21 +731,21 @@ export async function recordCheckpointAttemptEvidence(
         taskId: session.taskId ?? null,
         sessionId: session.id,
         evidenceType: 'checkpoint:attempt',
-        payload: JSON.stringify({
-          checkpointId: checkpoint.id,
-          type: checkpoint.type,
-          title: checkpoint.title,
-          outcome: result.outcome,
-          // 概念归属（F1 修复轮 a）：attempts_exhausted/skipped/unresolved 终局同样带归属
-          ...checkpointConceptPayloadFields(checkpoint),
-          ...(typeof result.attempts === 'number' ? { attempts: result.attempts } : {}),
-        }),
+        payload,
         confidence: 1,
         occurredAt: at,
       },
-      // 终局不可变：重复触发只保留第一行
-      update: {},
+      // 终局可升级（#173-1③）：unresolved → skipped/attempts_exhausted 就地更正同一行。
+      update: { payload, confidence: 1, occurredAt: at },
     });
+    if (priorOutcome) {
+      logger.info('[AITeaching] 检查点尝试留痕终局升级', {
+        sessionId: session.id,
+        checkpointId: checkpoint.id,
+        from: priorOutcome,
+        to: result.outcome,
+      });
+    }
     logger.info('[AITeaching] 检查点尝试留痕', {
       sessionId: session.id,
       checkpointId: checkpoint.id,

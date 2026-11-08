@@ -25,12 +25,18 @@ import {
   buildAgentLogModelIndex,
   buildAgentLogModelIndexByPath,
   resolveAgentLogModel,
+  agentLogGroupKeyOf,
 } from '../services/users/agent-log-grouping';
 import { rejectProjectionAccess } from '../middleware/projection-access.middleware';
 import { learnerSnapshotRefreshService } from '../services/learner/LearnerSnapshotRefreshService';
 import { getLevelFromXp } from '../services/learner/level.util';
 import { normalizeSessionDurationMinutes } from '../services/learning/learning.helpers';
-import { listAgentManifest, listUserListedAgentIds, type MonitoringGroupName } from '../services/agent-manifest.service';
+import { listUserListedAgentIds } from '../services/agent-manifest.service';
+import {
+  buildCapabilityAgentMap,
+  parseCapabilityTypeQuery,
+} from '../services/users/capability-groups';
+import { buildAgentLogCsv } from '../services/users/agent-log-csv';
 import { parseDayKeyRange } from '../services/time/day-boundary';
 import { loadTeachingMessagesForIds } from '../services/ai-teaching/teaching-session-message-store';
 import { projectMessagesForClient, stripCheckpointAnswerKeys } from '../services/ai-teaching/teaching-checkpoint';
@@ -40,82 +46,15 @@ const INVALID_LOGIN_PASSWORD_HASH = '$2b$10$OAioDMuBkv4OiDj1OPaJse/r3xbZoGaxLWtB
 
 const router = express.Router();
 
-// capabilityType（前端「活动类型」筛选键）→ manifest 监控组。
-// agent id 的单一事实源是 manifest：此前这里是一张手写 id 表，teaching/tutoring/profile
-// 挂的是已废弃 id（ai-teaching-agent / ai-tutor / learner-model-agent，线上 0 行），
-// 真实授课 id 是 skill:teaching-turn（Teaching 组），于是按这三类筛选恒空。
-const CAPABILITY_MONITORING_GROUPS: Record<string, MonitoringGroupName> = {
-  goal: 'Goal',
-  path: 'Path',
-  teaching: 'Teaching',
-  profile: 'Profile'
-};
-
-// #229：capabilityType 的合法键 = manifest 派生的四个能力组 + 三个显式键（tutoring/tracking/system）。
-// 修复前未知值（`x` / `tutoring2`）与大小写变体（`Teaching` / `PROFILE`）既不命中能力分支、
-// 又因是「真值」而跳过默认白名单，where 退化成 { userId }，等价于 includeSystem=true 的全量日志
-// （api-gateway 与内部 skill 全部漏出）。现在大小写变体归一后按合法键处理（明确等价），
-// 其余未知值明确拒绝（400 VALIDATION_ERROR）并回列允许值——静默退化是最差的选项。
-const CAPABILITY_TYPES = [
-  ...Object.keys(CAPABILITY_MONITORING_GROUPS),
-  'tutoring',
-  'tracking',
-  'system'
-];
-
-// 用可选字段而非 `ok: true/false` 判别式联合：本仓库 strictNullChecks=false，
-// 布尔字面量判别式在这套 tsconfig 下不做收窄（已用 tsc 验证），读 `message` 会编译报错。
-type CapabilityTypeParseResult = { capabilityType?: string; error?: string };
-
-/**
- * 校验并归一化 capabilityType 查询参数。
- * - 未传 / 空串（含纯空白）= 不筛选，走默认 userListed 白名单（既有口径，`capabilityType=` 与不传同义）；
- * - 大小写变体按小写归一后命中合法键（`Teaching` ≡ `teaching`，明确等价而非静默全量）；
- * - 其余（含非字符串，如重复参数成数组）= 未知值，返回可回给调用方的 400 消息。
- */
-function parseCapabilityTypeQuery(raw: unknown): CapabilityTypeParseResult {
-  const allowed = CAPABILITY_TYPES.join('、');
-  if (raw === undefined || raw === null) return { capabilityType: undefined };
-  if (typeof raw !== 'string') {
-    return { error: `capabilityType 只能是单个字符串。允许值：${allowed}` };
-  }
-  const normalized = raw.trim().toLowerCase();
-  if (!normalized) return { capabilityType: undefined };
-  if (!CAPABILITY_TYPES.includes(normalized)) {
-    return { error: `capabilityType 无效：${raw}。允许值：${allowed}` };
-  }
-  return { capabilityType: normalized };
-}
+// capabilityType 的校验、合法键与「能力 → agent id 集合」的派生统一在
+// services/users/capability-groups：能力筛选 = manifest 监控组全量成员（#218：与默认
+// userListed 白名单解耦，否则 Profile 组无 userListed 成员时筛选恒空）。
 
 function sendAgentLogValidationError(res: any, message: string) {
   return res.status(400).json({
     success: false,
     error: { message, code: 'VALIDATION_ERROR', status: 400 }
   });
-}
-
-function buildCapabilityAgentMap(): Record<string, string[]> {
-  const manifest = listAgentManifest();
-  const userListed = new Set(listUserListedAgentIds());
-  const map: Record<string, string[]> = {};
-  for (const [capabilityType, group] of Object.entries(CAPABILITY_MONITORING_GROUPS)) {
-    // #226：能力筛选 = 在用户可见集内再按能力筛。此前这里直接取整个监控组，
-    // 于是 profile 把 userListed=false 的内部 skill（skill:adaptive-guidance-copy 等）
-    // 全放出来——默认视图 0 行、筛选视图 86 行，两个视图各有各的可见集。
-    map[capabilityType] = manifest
-      .filter((entry) => entry.monitoringGroup === group && userListed.has(entry.id))
-      .map((entry) => entry.id);
-  }
-  // tutoring / tracking 在 manifest 里没有对应监控组（没有辅导、进度追踪 Agent），
-  // 显式保留空数组，维持「筛该项返回空」的既有行为，这一条现在由 #229 的两道保险共同守住：
-  // parseCapabilityTypeQuery 认它们是**合法键**，所以键必须映射到一个（空）集合——
-  // 若删掉键，合法请求会落到 `{ in: undefined }`（Prisma 报错），而不是像修复前那样退化成全量。
-  map.tutoring = [];
-  map.tracking = [];
-  // 平台底层调用不是 manifest 里的 agent/skill（也就不在 userListed 白名单里），
-  // 「系统底层调用」是刻意独立于默认视图的显式范围（同 includeSystem），保持原有口径
-  map.system = ['system-call', 'unknown'];
-  return map;
 }
 
 /**
@@ -142,8 +81,9 @@ function buildAgentLogWhere(userId: string, query: any, capabilityType?: string)
   } else if (agentId) {
     where.agentId = agentId;
   } else if (capabilityType) {
-    // #229：合法键必在 map 里。四个能力组的集合本身就是在 listUserListedAgentIds() 内再筛
-    // （见 buildCapabilityAgentMap），所以「能力筛选 ⊆ 默认白名单」由构造保证，不靠两条 if 恰好配合。
+    // #218：合法键必在 map 里，集合 = 该能力监控组的 manifest 全量成员（见
+    // services/users/capability-groups——不再与 userListed 求交，否则 Profile 组
+    // 无 userListed 成员时该筛选恒空，而库里确有 skill:learning-predictor 等日志）。
     where.agentId = { in: capabilityAgents[capabilityType] };
   } else if (includeSystem !== 'true') {
     // 默认「AI 任务记录」口径：只放行真实写日志的业务动作（manifest userListed）。
@@ -221,7 +161,8 @@ router.get('/me/learner-center', async (req, res, next) => {
   try {
     const userId = req.user.userId;
     const requestedPathId = typeof req.query.pathId === 'string' ? req.query.pathId : undefined;
-    const scope = req.query.scope === 'path' || req.query.scope === 'teaching' ? req.query.scope : 'global';
+    let scope: 'global' | 'path' | 'teaching' =
+      req.query.scope === 'path' || req.query.scope === 'teaching' ? req.query.scope : 'global';
 
     let pathId = requestedPathId;
 
@@ -230,6 +171,10 @@ router.get('/me/learner-center', async (req, res, next) => {
       const activePath = await findActivePathIdByUpdatedAt(userId);
 
       pathId = activePath?.id;
+      // #176-2：补了 active 路径就必须按 path 口径落键（与 listForAdmin 同口径：
+      // `scope: anchored?.id ? 'path' : 'global'`），否则 buildKey 会写成 `global:<pathId>`
+      // 的悬空行——列表读 `global:global` / `path:<pathId>`，这条行永远没人读。
+      if (pathId) scope = 'path';
     }
 
     const snapshot = await learnerSnapshotRefreshService.refresh({
@@ -587,19 +532,9 @@ router.get('/me/agent-logs/export', async (req, res, next) => {
     const logs = await buildAgentLogView(userId, await listUserAgentLogsForExport(where));
 
     if (format === 'csv') {
-      const headers = ['id', 'agentId', 'success', 'durationMs', 'tokensUsed', 'error', 'calledAt'];
-      const csv = [
-        headers.join(','),
-        ...logs.map(log => 
-          headers.map(h => {
-            const value = (log as any)[h];
-            if (typeof value === 'string' && /[",\r\n]/.test(value)) {
-              return `"${value.replace(/"/g, '""')}"`;
-            }
-            return value ?? '';
-          }).join(',')
-        )
-      ].join('\n');
+      // #251②：列与列表口径同源（含模型 / 折叠条数），时间统一 ISO 8601。
+      // 此前是 7 列 + 原始 Date（toString 的本地化长串），与页面两套口径。
+      const csv = buildAgentLogCsv(logs);
 
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', `attachment; filename=agent-logs-${userId}.csv`);
@@ -657,6 +592,23 @@ router.get('/me/agent-logs/:logId', async (req, res, next) => {
         success: false,
         error: { message: '日志不存在' }
       });
+    }
+
+    // #225：详情解析的是**代表行的真实主键**，而同一行在列表里是折叠组（带 groupCount/
+    // groupItems）。若该行参与会话折叠，回到与列表完全相同的取数 + 折叠管线按组键取回，
+    // 否则用户展开折叠行会看到「列表 7 条、详情 1 条」——两处数字不同源的经典不信任来源。
+    // 组键取不到（单行组会被折叠管线按原始行输出）时退回主键详情，语义不变。
+    const groupKey = agentLogGroupKeyOf(log);
+    if (groupKey) {
+      const groupLogs = await listUserAgentLogsForGrouping(scopeWhere);
+      const group = (await buildAgentLogView(userId, groupLogs)).find((entry) => entry.id === groupKey);
+      if (group) {
+        // id 回显请求的那个主键（前端以为自己在看这一行），组数字与列表同源
+        return res.json({
+          success: true,
+          data: { ...group, id: log.id }
+        });
+      }
     }
 
     // #245：真实主键行（acl_*）的详情是 UI 的主路径——前端用 `log.repLogId || log.id` 拉详情，

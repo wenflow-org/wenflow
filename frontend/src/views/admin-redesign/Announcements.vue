@@ -129,7 +129,6 @@
         v-else-if="liveFailed"
         min
         tone="error"
-        icon="!"
         title="公告加载失败"
         description="公告列表加载失败，请重试。"
         action-text="重试"

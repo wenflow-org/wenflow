@@ -1,6 +1,6 @@
 ---
 agentId: skill:learning-predictor
-coreHash: 4ca24f386955f1c5bce459a914a2df325bc86db8d340974850b7d9e2ecce167e
+coreHash: 2463b8cea59355500347a6ad7fb39b03d39fdd409d25ffd515b22a64fa1704c1
 coreVersion: 1
 temperature: 0.2
 maxTokens: 64000
@@ -19,6 +19,11 @@ failurePolicy: propagate
 
 - state（不推进）：平台维护的主记忆快照（当前值，含 stage）
 - task：当前任务 / 场景 / 控制指令
+
+输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
+- 「fatigueSignal（string?）」`sandbox:teaching.learningState`（编排注入） — 学习者负荷分类得到的疲劳风险（low|medium|high），调用方由 learningState 的 ktl/lf 计算后注入；无学习状态时不出现
+- 「knowledgeStateSummary（string?）」`sandbox:teaching.knowledgeStateSummary`（编排注入） — 最近一次课后知识状态摘要（画像快照 knowledgeMemory.globalBackground；任务前预测输入）；无历史摘要时调用方填「无历史摘要」
+- 「taskContext（object）」`sandbox:teaching.taskContext`（编排注入） — 目标任务描述 {title, knowledgeType?, learningObjectives?}（任务标题/知识类型/目标概念，编排层组装）
 
 ## 执行规则
 

@@ -296,7 +296,13 @@ function layoutPoint(l: unknown): { x: number; y: number } | null {
  */
 /** 布局稳定后自适应取景（2026-11-06 走查）：力导向收敛后把包围盒铺满画布（四周留 40px）。
  * 两个作用：① 互不相连的子图聚拢后不再留大片空洞；② 最外圈节点离画布底缘留出标签高度，
- * 不再撞上图例文字。选中/换主题的重建走 readGraphViewport 保留用户当前视角，不触发这里。 */
+ * 不再撞上图例文字。选中/换主题的重建走 readGraphViewport 保留用户当前视角，不触发这里。
+ *
+ * 2026-11-07 全站巡检 准则6 修正：包围盒此前只按**节点中心**算（getItemLayout 返回圆心），
+ * 于是「留 48px」其实是从圆心起算——半径 24 + 下方两行标签（12px×2 + 间距 ≈ 40px）
+ * 全部落在 48 里甚至外面，1024 视口实测最外圈节点连标签一起被画布边缘切掉。
+ * 现在把节点视觉尺寸（半径 + 标签两侧/下方占位）先并入包围盒，再按真实画布尺寸取景；
+ * 另外 rect 读不到时回落到 chart.getWidth/getHeight()，避免退化成 zoom=1 直接溢出。 */
 function fitGraphView(padding = 48) {
   if (!chart) return
   try {
@@ -325,13 +331,20 @@ function fitGraphView(padding = 48) {
       if (l[1] > maxY) maxY = l[1]
     }
     if (!Number.isFinite(minX) || maxX - minX < 1 || maxY - minY < 1) return
-    const boxW = maxX - minX
-    const boxH = maxY - minY
+    /* 节点视觉外扩：半径上限 24（symbolSize ≤ 48 的一半）+ 标签占位
+       （X 向取 6~9 字两行的半宽 ≈ 44；Y 向标签在圆心下方，取 24+两行 ≈ 56）。 */
+    const EXTENT_X = 24 + 44
+    const EXTENT_Y = 24 + 56
+    const boxW = maxX - minX + EXTENT_X * 2
+    const boxH = maxY - minY + EXTENT_Y * 2
     const rect = series?.coordinateSystem?.rect
+    const chartLike = chart as unknown as { getWidth?: () => number; getHeight?: () => number }
+    const viewW = rect?.width || chartLike.getWidth?.() || 0
+    const viewH = rect?.height || chartLike.getHeight?.() || 0
     /* 有取景盒就按「盒内四周留 padding」算缩放；读不到时退化为 1（力导向本身在盒内收敛，
        只居中、不缩放，也远好于缩在角落） */
-    const zoom = rect?.width && rect.height
-      ? Math.max(0.3, Math.min(1.5, Math.min((rect.width - padding * 2) / boxW, (rect.height - padding * 2) / boxH)))
+    const zoom = viewW && viewH
+      ? Math.max(0.3, Math.min(1.5, Math.min((viewW - padding * 2) / boxW, (viewH - padding * 2) / boxH)))
       : 1
     chart.setOption({
       series: [

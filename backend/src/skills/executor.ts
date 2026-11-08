@@ -206,16 +206,19 @@ export async function executeSkillHandler(
     retryBudget.limits.maxLogicalRetries
   );
   const agentId = parentContext.agentId || parentAgent;
-  // #185：skill span 的 callerAgent 只认「本 skill 所属 agent」这一个真实边界，不再继承上层的
-  // callerAgent。上层写入的 callerAgent（autopilot / blackbox 的 'simulation-agent'、
-  // batch-experiment 的任务名、acp-context 中间件的 X-Caller-Agent 客户端身份）是「本次运行从哪来」，
-  // 不是编排交接的调用方；一旦继承，simulation-agent 会盖住整条真实教学链的 span——实测
-  // skill:session-wrapup 被记成 simulation-agent -> session-wrapup（同一 skill 的 LLM 行早已
-  // 按自身声明的 caller.agentId 记为 teaching-agent）；无归属的 handler-only/aux skill
-  // （getAgentOfSkill 为空）则借用该标记，把 learner-state-review 这类教学链内诊断调用
-  // 记成仿真调用。运行来源本就由 sourceEntry / experimentId / runId 承载，无需 callerAgent 兜底。
-  // 无归属 skill 记为「调用方未知」（null），与真实用户/管理端窗口下的既有记录口径一致。
-  const callerAgent = parentAgent;
+  // #185：交接边的 callerAgent = **当前执行所在的 agent 边界**，不是 skill 的静态归属，
+  // 也不是上层写进来的「运行来源」。
+  //   - 上层已用 runInAgentScope 进入某 agent 边界（教学链、仿真链…）→ 以该 agent 为准：
+  //     教学链调用 profile 阶段的 learning-predictor 记 teaching-agent，而不是它的静态 owner
+  //     profile-agent（归属扁平化会写出 profile-agent -> skill:learning-predictor 这种假边）。
+  //   - 没有边界时 retreat 到该 skill 的归属 agent（顶层直接调用，归属即调用方）。
+  //   - autopilot / blackbox 的 'simulation-agent'、batch-experiment 的任务名、acp-context 的
+  //     X-Caller-Agent 是「本次运行从哪来」，不再冒充调用方（否则 simulation-agent 会盖住整条
+  //     真实教学链，实测写出 simulation-agent -> session-wrapup 幽灵边），改为落到
+  //     rootCallerAgent 保留追溯；无归属的 handler-only/aux skill 则记为「调用方未知」(null)。
+  const callerAgent = parentContext.agentScope || parentAgent;
+  const rootCallerAgent = parentContext.rootCallerAgent || parentContext.callerAgent || callerAgent;
+  const agentScope = parentContext.agentScope || parentAgent;
   const parentExecutionId = parentContext.executionLogId;
   const rootExecutionId = parentContext.rootExecutionId || parentContext.executionLogId || executionLogId;
   const contextEnvelope = buildSkillContextEnvelope({
@@ -235,6 +238,8 @@ export async function executeSkillHandler(
     userId,
     agentId,
     callerAgent,
+    agentScope,
+    rootCallerAgent,
     skillId,
     executionLogId,
     parentExecutionId,
@@ -476,6 +481,9 @@ async function recordSkillSpan(
         timeZone: ctx.contextEnvelope?.locale?.timeZone || null,
         experimentId: ctx.experimentId || null,
         runId: ctx.runId || null,
+        // #185：运行来源（autopilot / blackbox / 客户端）不再写进 callerAgent（那是交接边口径），
+        // 保留在 metadata 供追溯，避免「运行来源」信息丢失。
+        rootCallerAgent: ctx.rootCallerAgent || null,
       }),
     });
   } catch {

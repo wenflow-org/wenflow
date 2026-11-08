@@ -44,6 +44,11 @@ function makeTx() {
     goal_conversations: { updateMany: jest.fn(async () => ({ count: 1 })) },
     teaching_sessions: { updateMany: jest.fn(async () => ({ count: 2 })) },
     virtual_sessions: { updateMany: jest.fn(async () => ({ count: 0 })) },
+    // #176-3：path 级学习事实清理
+    memory_traces: { updateMany: jest.fn(async () => ({ count: 3 })) },
+    concept_edges: { deleteMany: jest.fn(async () => ({ count: 4 })) },
+    learner_projections: { deleteMany: jest.fn(async () => ({ count: 2 })) },
+    learner_evidence: { deleteMany: jest.fn(async () => ({ count: 5 })) },
   };
 }
 
@@ -88,5 +93,33 @@ describe('deleteLearningPath（#90 用户侧同事务清软指针）', () => {
     tx.learning_paths.findUnique.mockResolvedValue(null);
     await expect(deleteLearningPath('lp-1', 'u-1')).rejects.toThrow('学习路径不存在');
     expect(tx.learning_paths.delete).not.toHaveBeenCalled();
+  });
+
+  // #176-3（2026-11-07 拍板）：path 级学习事实随路径删除，用户级记忆保留。
+  it('删路径同事务清理 path 级证据/投影/边，且 traces 只置空不删行', async () => {
+    await deleteLearningPath('lp-1', 'u-1');
+
+    expect(tx.learner_evidence.deleteMany).toHaveBeenCalledWith({ where: { pathId: 'lp-1' } });
+    expect(tx.learner_projections.deleteMany).toHaveBeenCalledWith({
+      where: { pathId: 'lp-1', scope: 'path' },
+    });
+    expect(tx.concept_edges.deleteMany).toHaveBeenCalledWith({
+      where: { pathId: 'lp-1', scope: 'path' },
+    });
+    // 用户级记忆不随路径消失：只置空来源路径，绝不删行
+    expect(tx.memory_traces.updateMany).toHaveBeenCalledWith({
+      where: { pathId: 'lp-1' },
+      data: { pathId: null },
+    });
+
+    // 清理必须在删路径行之前（删行后 pathId 已无从匹配），且仍在同一事务内
+    const cleanOrder = Math.max(
+      tx.learner_evidence.deleteMany.mock.invocationCallOrder[0],
+      tx.learner_projections.deleteMany.mock.invocationCallOrder[0],
+      tx.concept_edges.deleteMany.mock.invocationCallOrder[0],
+      tx.memory_traces.updateMany.mock.invocationCallOrder[0],
+    );
+    expect(cleanOrder).toBeLessThan(tx.learning_paths.delete.mock.invocationCallOrder[0]);
+    expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
   });
 });

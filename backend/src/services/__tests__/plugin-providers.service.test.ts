@@ -92,16 +92,17 @@ describe('plugin-providers（插件外部服务配置）', () => {
     await loadPluginProviderConfig();
     const view = await getPluginProviderConfig('web');
     expect(view.channels.map((c) => c.id)).toEqual(['search', 'fetch']);
-    /* 2026-11-04 用户「其实这个是写死的，相当于只需要配 key 就行」：
-       搜索 / 抓取顺序由代码固定，环境变量与平台存档都不再参与。 */
-    expect(view.channels.every((c) => c.orderFixed)).toBe(true);
-    expect(view.channels[0].order).toEqual(['tinyfish', 'tavily', 'exa']);
+    /* 2026-11-07 用户「支持自定义第三方端点 / 调整尝试顺序」：
+       2026-11-04 写死的顺序恢复可排，优先级回到「平台保存 → 通道环境变量 → 目录默认」。
+       本用例设了 SEARCH_PROVIDER=tinyfish,tavily，所以 exa 不在链上。 */
+    expect(view.channels.every((c) => c.orderFixed)).toBe(false);
+    expect(view.channels[0].order).toEqual(['tinyfish', 'tavily']);
     const tinyfish = view.providers.find((p) => p.id === 'tinyfish');
     expect(tinyfish?.configured).toBe(true);
     expect(tinyfish?.keySource).toBe('env');
     expect(tinyfish?.keyHint).toBe('····1234');
-    // 上游地址是内置值：界面上只剩要填的那一项（密钥）
-    expect(tinyfish?.fields.map((f) => f.key)).toEqual(['apiKey']);
+    // 端点恢复可写：界面给「密钥 + 搜索地址 + 抓取地址」三项
+    expect(tinyfish?.fields.map((f) => f.key)).toEqual(['searchEndpoint', 'fetchEndpoint', 'apiKey']);
     // 内置值仍按 环境变量 → 目录默认 解析（部署侧镜像的逃生口）
     expect(readPluginProviderField('web', 'tinyfish', 'searchEndpoint')).toBe('https://api.search.tinyfish.ai');
     // 决策没配 key → 未配置；opencode 允许 public 默认值，单独判为可用
@@ -124,25 +125,27 @@ describe('plugin-providers（插件外部服务配置）', () => {
     expect(readPluginProviderSecret('web', 'tinyfish')).toBe('search-key-1234');
   });
 
-  it('联网的地址字段与通道顺序都不再允许改（内置）', async () => {
+  it('联网的端点与通道顺序都可改，且运行时立即读到新值', async () => {
     await loadPluginProviderConfig();
-    await expect(
-      savePluginProviderConfig('web', { providers: { tinyfish: { searchEndpoint: 'https://proxy.example/search' } } })
-    ).rejects.toThrow(/由平台内置/);
-    await expect(savePluginProviderConfig('web', { orders: { search: ['tavily'] } }))
-      .rejects.toThrow(/顺序由平台内置/);
-    expect(upsert).not.toHaveBeenCalled();
+    await savePluginProviderConfig('web', {
+      providers: { tinyfish: { searchEndpoint: 'https://proxy.example/search' } },
+      orders: { search: ['tavily', 'tinyfish'] },
+    });
+    // 端点：写进平台设置，运行时 getter 立刻返回覆盖值（第三方 / 反代 / 自建都走这一条）
+    expect(readPluginProviderField('web', 'tinyfish', 'searchEndpoint')).toBe('https://proxy.example/search');
+    // 抓取地址没改过，仍按目录默认解析
+    expect(readPluginProviderField('web', 'tinyfish', 'fetchEndpoint')).toBe('https://api.fetch.tinyfish.ai');
+    // 顺序：先 Tavily 再 TinyFish
+    expect(readPluginChannelOrder('web', 'search')).toEqual(['tavily', 'tinyfish']);
   });
 
-  it('历史存档里的内置地址在下次保存时被清掉，且不再参与解析', async () => {
-    // 早期版本允许在界面改地址：这类残留值现在必须失效（否则界面说内置、运行时却在用旧值）
+  it('清空端点 = 回到目录默认（不把空串写成覆盖值）', async () => {
     storedValue = JSON.stringify({ web: { tinyfish: { searchEndpoint: 'https://old-proxy.example/search' } } });
     await loadPluginProviderConfig();
-    expect(readPluginProviderField('web', 'tinyfish', 'searchEndpoint')).toBe('https://api.search.tinyfish.ai');
+    expect(readPluginProviderField('web', 'tinyfish', 'searchEndpoint')).toBe('https://old-proxy.example/search');
 
-    await savePluginProviderConfig('web', { providers: { tinyfish: { apiKey: 'k-12345678' } } });
-    const providerUpsert = upsert.mock.calls.find((c: any[]) => c[0].where.key === 'pluginProviders')!;
-    expect(JSON.parse(providerUpsert[0].update.value).web).toBeUndefined();
+    await savePluginProviderConfig('web', { providers: { tinyfish: { searchEndpoint: '' } } });
+    expect(readPluginProviderField('web', 'tinyfish', 'searchEndpoint')).toBe('https://api.search.tinyfish.ai');
   });
 
   /* ---------- 通道优先级（2026-10-26 用户「用户可以自己配置优先级」） ----------

@@ -294,6 +294,9 @@ const PATH_VALIDATION_REPAIR_HINTS: Record<string, string> = {
     + '把自检/清单/校准降级为任务的验收标准，而不是阶段概念。请按这个骨架重出：' + PATH_OUTPUT_SKELETON,
   PATH_PLANNING_COGNITIVE_CORE_MISSING:
     `上一次缺少 cognitiveCore。请严格按这个骨架重出：${PATH_OUTPUT_SKELETON}`,
+  PATH_PLANNING_COGNITIVE_CORE_EMPTY:
+    `上一次的 cognitiveCore.coreConcepts 是空的——没有核心概念，整条路径就无法落点（阶段概念会被塌缩成同一个）。`
+    + `请在 coreConcepts 里至少声明 1 个 hub 与若干支撑概念（id 形如 "concept-1"，role 只能是 hub/supporting）：${PATH_OUTPUT_SKELETON}`,
 };
 
 /** 按失败原因（含「fields contract violation: xxx」这类前缀包裹）取修复提示。 */
@@ -640,7 +643,13 @@ export function validatePathPlanningOutput(
   const coreConcepts = Array.isArray(parsed.cognitiveCore.coreConcepts)
     ? parsed.cognitiveCore.coreConcepts.filter((c: any) => c && typeof c === 'object')
     : [];
-  if (coreConcepts.length > 0) {
+  // #171-3：coreConcepts 为空时，下面的 hub / 绑定 / 复用校验全部被跳过（模型可以只给一个空壳
+  // cognitiveCore 就过门），落库层随后把每个阶段的 coreConcept 静默回退到 concept-1 ⇒ 全路径概念
+  // 塌缩成一个。这里改硬错误：没有核心概念就没有可绑定的阶段概念。
+  if (coreConcepts.length === 0) {
+    return { valid: false as const, failureReason: 'PATH_PLANNING_COGNITIVE_CORE_EMPTY' };
+  }
+  {
     const hubCount = coreConcepts.filter((c: any) => c.role === 'hub').length;
     if (hubCount === 0) {
       return { valid: false as const, failureReason: 'PATH_PLANNING_HUB_CONCEPT_MISSING' };
@@ -655,9 +664,18 @@ export function validatePathPlanningOutput(
   const META_CONCEPT_MARKERS = /(元认知|自检|清单|挂起|复盘|策略|校准|漏判|误判|信号化|止损|转场|时间分配|答题节奏|分类判别|决策规则)/;
   {
     const concepts = coreConcepts.map((c: any) => String(c?.name || c?.description || '')).join(' ');
+    // #171-3：coreConcept 现在强制绑 id（名字绑定已被拒）。阶段文本里挂的若是 id 而非概念名，
+    // 必须回解成概念名才能判定「整条路径都是元认知」，否则 id 绑定会让这条守卫失效。
+    const conceptNameById = new Map<string, string>();
+    for (const c of coreConcepts) {
+      if (typeof c?.id === 'string' && c.id && typeof c?.name === 'string' && c.name) {
+        conceptNameById.set(c.id, c.name);
+      }
+    }
     const stages = Array.isArray(parsed.milestones) ? parsed.milestones : [];
     const metaStages = stages.filter((m: any) => {
-      const text = [String(m?.coreConcept || ''), String(m?.title || ''), String(m?.goal || '')].join(' ');
+      const boundName = typeof m?.coreConcept === 'string' ? (conceptNameById.get(m.coreConcept) || '') : '';
+      const text = [m?.coreConcept || '', boundName, String(m?.title || ''), String(m?.goal || '')].join(' ');
       return META_CONCEPT_MARKERS.test(text);
     }).length;
     if (stages.length > 0 && metaStages * 2 >= stages.length && META_CONCEPT_MARKERS.test(concepts)) {
@@ -666,11 +684,13 @@ export function validatePathPlanningOutput(
   }
 
   const conceptIds = new Set<string>();
-  const conceptNames = new Set<string>();
+  const conceptNameById = new Map<string, string>();
   let hubConceptId: string | null = null;
   for (const concept of coreConcepts) {
-    if (typeof concept.id === 'string' && concept.id) conceptIds.add(concept.id);
-    if (typeof concept.name === 'string' && concept.name) conceptNames.add(concept.name);
+    if (typeof concept.id === 'string' && concept.id) {
+      conceptIds.add(concept.id);
+      if (typeof concept.name === 'string' && concept.name) conceptNameById.set(concept.id, concept.name);
+    }
     if (concept.role === 'hub') hubConceptId = concept.id;
   }
   let hubReuseCount = 0;
@@ -682,8 +702,11 @@ export function validatePathPlanningOutput(
     if (milestone.subtasks !== undefined || milestone.acceptanceCriteria !== undefined) {
       return { valid: false as const, failureReason: 'PATH_PLANNING_LEGACY_TASK_FIELDS' };
     }
-    if (conceptIds.size > 0 && typeof milestone.coreConcept === 'string' && milestone.coreConcept
-      && !conceptIds.has(milestone.coreConcept) && !conceptNames.has(milestone.coreConcept)) {
+    // #171-3：只认已声明的概念 id。此前 `conceptNames.has(...)` 让 milestone 用概念「名字」写进
+    // coreConcept 即可过校验，随后落库层把未命中 id 的阶段静默回退到 conceptIds[0]（concept-1），
+    // 整条路径的概念塌缩成一个。名字绑定现在一律判未绑定。
+    if (typeof milestone.coreConcept === 'string' && milestone.coreConcept
+      && !conceptIds.has(milestone.coreConcept)) {
       return { valid: false as const, failureReason: 'PATH_PLANNING_MILESTONE_CONCEPT_UNBOUND' };
     }
     // hub 复用统计（rule 66：hub 必须被"非首阶段"milestone 显式复用，不含首阶段）
@@ -778,7 +801,15 @@ export const pathAgentDefinition: AgentDefinition = {
   ],
   
   // 文档性元数据，不参与运行时分发/发布（语义见 agents/protocol.ts 的 AgentDefinition.subscribes）：
-  // 下列事件名均为描述性说明，全仓无对应 dispatch 调用点，请勿据此排查真实订阅关系。
+  // 全仓没有任何调度器读取 subscribes/publishes 做派发，两个字段都只是描述性说明。
+  //
+  // #208：但不要因此把两段写成同一回事——
+  // - `subscribes` 的 5 个 `learning:*` 事件名在全仓**没有**任何 emit 点/消费者（纯描述性，勿据此排障）；
+  // - `publishes` 的 3 个事件是**真实存在**的：本 skill 的生成/重规划/完成链路经 outbox 发出
+  //   path:created（services/learning/generation/path-generation.core.ts）、
+  //   path:adjusted（services/learning/replan/path-replan.service.ts 两处）、
+  //   path:completed（services/learning/tasks/task-completion.service.ts）。
+  //   旧注释笼统写成「全仓无对应 dispatch 调用点」，对 publishes 是假话，会误导排障。
   subscribes: [
     'learning:speed:change',
     'learning:focus:shift',

@@ -63,7 +63,6 @@ import {
   detectEndIntent,
   determineNextStage,
   extractTeachingStateMetrics,
-  withTimeout,
   withTimeoutSignal,
 } from './teaching-classroom-flow';
 import {
@@ -351,6 +350,16 @@ export async function processStudentMessage(
   const operationLeaseGuard = new TeachingOperationLeaseGuard(sessionId, operationClaim.operationId);
   operationLeaseGuard.start();
   let committed = false;
+  /**
+   * #173-1①：回合证据写入延后到 `commitTurnState` 成功之后执行。
+   *
+   * 此前三处证据写（checkpoint:result / anchor:result / checkpoint:attempt）都在提交**之前**，
+   * 而它们各自 best-effort 吞错 ⇒ 提交失败回滚后「证据在、状态不在」：证据表里记了一次作答，
+   * 教学状态却退回作答前（重试会再记一次，成功率分母与校准样本双双失真）。
+   * 口径对齐同文件 `recordMisconceptions`（提交成功后写、失败只 warn）：接受「提交后崩溃丢证据」，
+   * 比留下无法对账的孤儿证据更可控。
+   */
+  const deferredEvidence: Array<{ kind: string; write: () => Promise<unknown> }> = [];
 
   try {
     const session = operationClaim.session;
@@ -537,9 +546,12 @@ export async function processStudentMessage(
   // 超时走 releaseOperation + 客户端重试路径（revision 未递增，重试安全）。
   // 阈值对齐 platform_settings.aiReliability.defaultRequestTimeoutMs（300s）：
   // 旧值 90s 会误杀正常回合——教学回合含 2 次 LLM 调用（模拟器 + teaching-turn），上游慢时单次即可超 90s。
+  // 175-3：必须用 withTimeoutSignal 把超时信号透传进 executeSkill（→ callPrompt → gateway）——
+  // 旧写法 withTimeout 自建的 controller 无人消费，超时 reject 后底层模型调用仍在跑，而 finally 已经
+  // releaseOperation，于是「租约已释放但仍在烧 token」，并发新请求会与幽灵回合双花同一份预算。
   const turnStartedAt = Date.now();
-  const turnResult = await withTimeout(
-    executeSkill(teachingTurnAgentDefinition, turnInput, {
+  const turnResult = await withTimeoutSignal(
+    (signal) => executeSkill(teachingTurnAgentDefinition, turnInput, {
       contextEnvelope: {
         schemaVersion: 'context-envelope/v1',
         principal: { userId: session.userId },
@@ -547,6 +559,7 @@ export async function processStudentMessage(
         // 供 resolveCacheSessionKey 做前缀缓存会话亲和，缺省会退化为 agentId（全体用户共享暖前缀）。
         session: { sessionId: session.id, conversationId: session.id, taskId: session.taskId },
       },
+      abortSignal: signal,
     }),
     300_000,
     'TEACHING_TURN_TIMEOUT: 教学回合执行超过 300 秒'
@@ -576,13 +589,15 @@ export async function processStudentMessage(
           // 照 supplementaryMaterial 的既有注入风格：scenario 上挂修复指令（模板条款「若输入
           // scenario.repairInstruction 存在」承接），重调共享前缀 → KV 缓存命中率高。
           (turnInput.scenario as Record<string, unknown>).repairInstruction = `你上一条回复中的算式被确定性复算判定有误：${describeMismatchesForRepair(mismatches)}。本轮必须输出修正后的完整回复：只修正上述算式及受其影响的数值与结论表述，其余内容（知识看板、检查点、control 字段、语气、篇幅）原样保留；不得缩短回复或趁机改写无关内容；绝不可向学生提及任何校验或系统检查。`;
-          const repairResult = await withTimeout(
-            executeSkill(teachingTurnAgentDefinition, turnInput, {
+          const repairResult = await withTimeoutSignal(
+            (signal) => executeSkill(teachingTurnAgentDefinition, turnInput, {
               contextEnvelope: {
                 schemaVersion: 'context-envelope/v1',
                 principal: { userId: session.userId },
                 session: { sessionId: session.id, conversationId: session.id, taskId: session.taskId },
               },
+              // 175-3：修复重调同样要能取消——超时后放行原回复，但底层重调必须停，不能继续占租约外的 token。
+              abortSignal: signal,
             }),
             ARITHMETIC_REPAIR_TIMEOUT_MS,
             'ARITHMETIC_REPAIR_TIMEOUT: 算式修复重调超时'
@@ -867,8 +882,9 @@ export async function processStudentMessage(
   if (peerTriggered) {
     // P2-11 修复（审计 §2.2）：伴学历史主路径此前从不转发——引擎 peerInput 无 peerHistory，
     // 伴学每次触发都看不到自己说过什么，规则 11「连续 3 问无进展即收手」的 3 问预算不可达
-    // （DB：4879 条中 userPayload 含【此前伴学对话】0 条）。与聊天路径（teaching-session-ops.ts:638-641）
-    // 对齐取法：从已落库消息恢复（peer 标记消息 + 内嵌在老师消息里的 peerMessage 插话，见 collectPeerHistory）。
+    // （DB：4879 条中 userPayload 含【此前伴学对话】0 条）。与聊天路径（teaching-session-ops 的
+    // processPeerMessage：从 peer 标记消息恢复 peerHistory）对齐取法：从已落库消息恢复
+    // （peer 标记消息 + 内嵌在老师消息里的 peerMessage 插话，见 collectPeerHistory）。
     const peerHistory = collectPeerHistory(session.messages);
     const peerInput = {
       topic: session.topic,
@@ -1656,19 +1672,26 @@ export async function processStudentMessage(
         understanding: Number.isFinite(Number(rawUnderstanding)) ? Number(rawUnderstanding) : null,
       });
 
-      // 检查点结果留痕（learner_evidence）：独立传感器的原始观测，供 §7 P1-1 的成功率带与控制律消费
-      void recordCheckpointResultEvidence(session, submittedCheckpoint, {
-        passed,
-        judgedBy,
-        detail: codeJudgement?.detail ?? null,
-        submission: { selectedOptionIds: options.checkpointSubmission?.selectedOptionIds },
-        prediction,
+      // 检查点结果留痕（learner_evidence）：独立传感器的原始观测，供 §7 P1-1 的成功率带与控制律消费。
+      // #173-1①：入队，提交成功后写（此前在提交前 void 写，回滚会留孤儿证据）。
+      deferredEvidence.push({
+        kind: `checkpoint:result:${submittedCheckpoint.id}`,
+        write: () => recordCheckpointResultEvidence(session, submittedCheckpoint, {
+          passed,
+          judgedBy,
+          detail: codeJudgement?.detail ?? null,
+          submission: { selectedOptionIds: options.checkpointSubmission?.selectedOptionIds },
+          prediction,
+        }),
       });
 
       // 独立锚题探针（Q13/B4）：仅对带 purpose='anchor' 的检查点、且**代码裁决**（纪律 1）时
       // 另写一行 anchor:result 作为"待复核"信号；只标记、不改写掌握/难度/BKT（纪律 2）。
       if (submittedCheckpoint.purpose === 'anchor' && judgedBy === 'code') {
-        void recordAnchorProbeResult(session, submittedCheckpoint, passed);
+        deferredEvidence.push({
+          kind: `anchor:result:${submittedCheckpoint.id}`,
+          write: () => recordAnchorProbeResult(session, submittedCheckpoint, passed),
+        });
       }
 
       // 仅答对时消费检查点；答错保留 pendingCheckpoint（同一 cpId 可重答，
@@ -1706,9 +1729,13 @@ export async function processStudentMessage(
         });
         // H1 失败留痕：到顶强消是「未解决收场」的终局标记——每笔答错已有 checkpoint:result，
         // 此前终局只写日志、测量层不可见（实测重答上限可被绕过 27 次）。只留痕、不改写。
-        await recordCheckpointAttemptEvidence(session, submittedCheckpoint, {
-          outcome: 'attempts_exhausted',
-          attempts: sameCheckpointAttempts,
+        // #173-1①：同样延后到提交成功后写。
+        deferredEvidence.push({
+          kind: `checkpoint:attempt:${submittedCheckpoint.id}`,
+          write: () => recordCheckpointAttemptEvidence(session, submittedCheckpoint, {
+            outcome: 'attempts_exhausted',
+            attempts: sameCheckpointAttempts,
+          }),
         });
       }
       teachingState.checkpointHistory = checkpointHistory.slice(-20);
@@ -1780,6 +1807,21 @@ export async function processStudentMessage(
     });
     committed = true;
 
+    // #173-1①：状态已提交成功，现在才写回合证据（checkpoint:result / anchor:result / checkpoint:attempt）。
+    // 提交前写会留下「证据在、状态不在」的孤儿行；此处写与 `recordMisconceptions` 同口径：
+    // 提交后进程崩溃会丢证据，但绝不产生无法对账的孤立证据。证据写入 best-effort（各自内部已吞错），
+    // 这里再包一层 catch 确保任一证据写失败都不影响已提交的课堂状态与响应。
+    for (const evidence of deferredEvidence) {
+      try {
+        await evidence.write();
+      } catch (error) {
+        logger.warn('[AITeaching] 回合证据写入失败（已提交的课堂状态不受影响）', {
+          sessionId,
+          kind: evidence.kind,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
 
     // 误解台账（G-R-R Phase 2）：异步记录本轮结构化误解，best-effort 不阻断回合。
     // 失败路由占位键治理（F1 修复轮 c，R2 复现 concept-1/concept-2 占位入账）：模型给的

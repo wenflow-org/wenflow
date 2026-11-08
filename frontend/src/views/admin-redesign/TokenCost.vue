@@ -33,7 +33,6 @@
          并给重试按钮 actionBusy 反馈（与 ExecLogs 失败态对齐） -->
     <MkEmptyState
       v-if="loadFailed && !summary"
-      icon="◌"
       tone="error"
       min
       title="Token 成本数据加载失败"
@@ -68,7 +67,6 @@
       <MkEmptyState
         v-if="summaryEmpty"
         min
-        icon="◌"
         title="这个时间窗没有调用"
         :action-text="days !== 90 ? '看近 90 天' : '去执行日志'"
         @action="days !== 90 ? (days = 90) : goExecLogs()"

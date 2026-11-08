@@ -110,6 +110,12 @@ export interface ConceptGraphDeps {
    * 可选依赖：缺省不登记（旧测试 fake 零改动）。
    */
   registerKcAnchor?(data: { userId: string; pathId: string; kcId: string; conceptId: string }): Promise<void>;
+  /**
+   * 清掉该路径**此前物化**的边（#173-2）：按 `(userId, pathId)` 删 `scope='path'` 行，返回删除行数。
+   * 不删 `scope='user'`（pathId=null）的行——那是跨路径共享聚合，不归属任何单条路径。
+   * 可选依赖：缺省时不清边（旧测试 fake 零改动）；生产 defaultDeps 已实现。
+   */
+  deletePathEdges?(userId: string, pathId: string): Promise<number>;
 }
 
 const defaultDeps: ConceptGraphDeps = {
@@ -162,6 +168,14 @@ const defaultDeps: ConceptGraphDeps = {
       create: data,
       update: { source: data.source },
     });
+  },
+  // #173-2：本路径此前的物化边按 (userId, pathId) 整批清掉，再按当前标注重建。
+  // 只删 scope='path'：user 级行（pathId=null）是跨路径聚合，不归属单条路径。
+  deletePathEdges: async (userId, pathId) => {
+    const deleted = await prisma.concept_edges.deleteMany({
+      where: { userId, pathId, scope: SCOPE_PATH },
+    });
+    return deleted.count;
   },
   listEdges: async (where) => prisma.concept_edges.findMany({
     where: {
@@ -261,6 +275,14 @@ export class ConceptGraphService {
    * - `part_of`：来自 `conceptKcs` 嵌套（父 = coreConcept，子 = 各 KC），代码推导
    * - `prerequisite`（概念级投影）：把上一条的两端各自折叠到所属 coreConcept，跳过自环；
    *   原因见 `SOURCE_PREREQUISITE_PROJECTION` 注释
+   *
+   * **重建语义（#173-2）**：写之前先按 `(userId, pathId)` 清掉本路径此前的 `scope='path'` 边，
+   * 故物化结果恒等于「当前标注的图」，而不是与历次物化**叠加**。此前只 upsert：
+   * replace-path / 重跑 kc-mapper 之后，旧 KC 的边按同一 pathId 残留成幽灵边
+   * （上游闭包 / 邻域 / 图视图读侧会把它们算进来）。范围只到 path 级行——`scope='user'`
+   * （pathId=null）的跨路径聚合边不属于任何单条路径，不清。
+   * 注：`aiPromptTemplate.kcAnnotation` 的落库仍在生成事务之外（stage-enrichment 的 SQLite 写锁取舍），
+   * 本方法只负责表侧的清+建。
    */
   async materializePathGraph(params: {
     userId: string;
@@ -271,6 +293,12 @@ export class ConceptGraphService {
     const { userId, pathId, kcAnnotation, cognitiveCore } = params;
     const result: MaterializeResult = { prerequisite: 0, partOf: 0, prerequisiteConcept: 0, prerequisiteUser: 0, skipped: 0 };
     if (!userId || !pathId || !kcAnnotation) return result;
+
+    // 清旧边（#173-2）：失败按本模块的 best-effort 纪律交给调用方（generation / replan 链均只 warn），
+    // 不在这里吞错——半清半写比整轮失败更难排查。
+    if (this.deps.deletePathEdges) {
+      await this.deps.deletePathEdges(userId, pathId);
+    }
 
     const conceptKcs = Array.isArray(kcAnnotation.conceptKcs) ? kcAnnotation.conceptKcs! : [];
 

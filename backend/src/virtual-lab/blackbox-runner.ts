@@ -120,6 +120,46 @@ const CRASH_STALE_COMMAND_MS = (() => {
 const BLACKBOX_SIMULATOR_RETRY_ATTEMPTS = 3
 const BLACKBOX_SIMULATOR_RETRY_DELAY_MS = 750
 /**
+ * 黑盒 stageResults 单行字节护栏（#176-1）。
+ *
+ * stageResults 是追加式 JSON：每条命令都把整个 publicTrace/refereeTrace 重新 stringify 写回，
+ * 单行实测可达数十 MB（写放大 O(n²)，且 VACUUM 收不回仍存活的大字段）。
+ * 阈值口径对齐模拟日志写入期预算（2 MB），可用 BLACKBOX_STAGE_RESULTS_MAX_BYTES 覆盖。
+ */
+export const DEFAULT_BLACKBOX_STAGE_RESULTS_MAX_BYTES = 2 * 1024 * 1024
+
+export function resolveBlackboxStageResultsMaxBytes(
+  env: Record<string, string | undefined> = process.env
+): number {
+  const raw = env.BLACKBOX_STAGE_RESULTS_MAX_BYTES
+  if (!raw || raw.trim() === '') return DEFAULT_BLACKBOX_STAGE_RESULTS_MAX_BYTES
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed) || parsed < 64 * 1024) return DEFAULT_BLACKBOX_STAGE_RESULTS_MAX_BYTES
+  return Math.floor(parsed)
+}
+
+/**
+ * 轨迹首尾保留的默认配比：头部 20 条 + 尾部 180 条。
+ *
+ * 为什么不能只留尾部：Goal/Path 阶段的起步观测只在头部（goal→path 迁移证据），
+ * 审计输入（buildSharedAuditTrace）与当前课历史（visibleLessonHistory）都依赖这段头部；
+ * 纯 slice(-n) 会让"这段实验怎么开始的"从状态里消失。
+ */
+const BLACKBOX_TRACE_HEAD_KEEP = 20
+const BLACKBOX_TRACE_TAIL_KEEP = 180
+const BLACKBOX_TRACE_ENTRY_LIMIT = BLACKBOX_TRACE_HEAD_KEEP + BLACKBOX_TRACE_TAIL_KEEP
+/** 字节护栏逐级收紧的备选配比（head, tail 总数由 head+tail 决定） */
+const BLACKBOX_TRACE_SHRINK_PLANS: ReadonlyArray<readonly [number, number]> = [
+  [BLACKBOX_TRACE_HEAD_KEEP, BLACKBOX_TRACE_TAIL_KEEP],
+  [12, 80],
+  [8, 40],
+  [4, 16],
+  [2, 6]
+]
+// TODO(#176-1)：轨迹封顶后，乐观并发令牌 `expectedTraceCount`（前端 SessionCockpit 与
+// autopilot 都从 `publicTrace.length` 推导）在达到上限后退化为常量，不再能识别"中途被并发追加"。
+// 是否把该令牌改读 `publicTraceSequence`（需同步 routes/admin + frontend）属产品口径，未在本次拍板。
+/**
  * 延伸意愿（#124）每会话最多放行次数：达标后 VL 可表示「还想深入」，平台继续陪学；
  * 有上限才能防止把收束点拖成无限轮（#46 的 40 轮空转教训）。
  */
@@ -226,6 +266,7 @@ export class BlackboxVirtualLearnerRunner {
   private readonly sessionLocks = new Map<string, Promise<void>>()
   private readonly commandContexts = new Map<string, CommandContext>()
   private readonly leaseContexts = new Map<string, LeaseContext>()
+  private readonly stageResultsMaxBytes = resolveBlackboxStageResultsMaxBytes()
 
   async runExclusive<T>(sessionId: string, work: () => Promise<T>): Promise<T> {
     const previous = this.sessionLocks.get(sessionId) || Promise.resolve()
@@ -1162,16 +1203,24 @@ export class BlackboxVirtualLearnerRunner {
       Object.entries({ ...previousControl, ...result.control }).filter(([, value]) => value !== undefined)
     ) as PlatformControlReceipt
     if (control.terminalReason === 'completed' && control.runCompleted !== true) delete control.terminalReason
-    const publicTrace = [...(latestState.blackbox?.publicTrace || []), {
-      timestamp: new Date().toISOString(),
-      observation: result.observation,
+    // 单调轨迹序号（#176-1）：publicTrace 做首尾保留压缩后长度会封顶，
+    // 不能再拿 publicTrace.length 当序号（会回绕/重复）。序号持久在 nextState 里，
+    // 老会话没有该字段时以当前长度为首个基线。
+    const previousTraceSequence = this.currentTraceSequence(latestState)
+    const publicTraceSequence = previousTraceSequence + 1
+    const observedAt = new Date().toISOString()
+    // 写入侧归一化（#176-1）：存 sanitize 后的观测（读侧历史数据仍会在读时再 sanitize），
+    // 并把两条轨迹压到首尾保留上限，避免整行随命令数无界增长。
+    const publicTrace = this.compactTrace([...(latestState.blackbox?.publicTrace || []), {
+      timestamp: observedAt,
+      observation: this.sanitizeObservation(result.observation),
       control: result.control
-    }]
-    const refereeTrace = [...(latestState.blackbox?.refereeTrace || []), {
-      timestamp: new Date().toISOString(),
+    }], BLACKBOX_TRACE_ENTRY_LIMIT, BLACKBOX_TRACE_HEAD_KEEP)
+    const refereeTrace = this.compactTrace([...(latestState.blackbox?.refereeTrace || []), {
+      timestamp: observedAt,
       traceId: result.control.rawTraceId || null,
       diagnostic: result.diagnostic || null
-    }]
+    }], BLACKBOX_TRACE_ENTRY_LIMIT, BLACKBOX_TRACE_HEAD_KEEP)
     const nextState = {
       ...latestState,
       blackbox: {
@@ -1179,6 +1228,7 @@ export class BlackboxVirtualLearnerRunner {
         control,
         publicTrace,
         refereeTrace,
+        publicTraceSequence,
         ...(projectionCommandId
           ? { projectedCommandIds: [...projectedCommandIds, projectionCommandId].slice(-200) }
           : {})
@@ -1205,7 +1255,7 @@ export class BlackboxVirtualLearnerRunner {
         entry?.stage === 'teaching' && entry?.taskId === completedTaskId && entry?.transition === 'task_completed'
       )
       nextState.blackbox.learnerPrivateStateTrace = (alreadyArchived ? privateStateTrace : [...privateStateTrace, {
-        sequence: publicTrace.length,
+        sequence: publicTraceSequence,
         stage: 'teaching',
         taskId: completedTaskId,
         state: completedTaskState,
@@ -1236,11 +1286,56 @@ export class BlackboxVirtualLearnerRunner {
         currentStage: abandoned || completed ? 'completed' : failed ? 'error' : result.observation.stage,
         status: abandoned ? 'abandoned' : completed ? 'completed' : failed ? 'failed' : 'running',
         completedAt: abandoned || completed || failed ? new Date() : null,
-        stageResults: JSON.stringify(nextState),
+        stageResults: this.serializeBoundedStageResults(nextState, session.id),
         updatedAt: new Date()
       }
     })
     return result
+  }
+
+  /**
+   * 当前轨迹序号（#176-1）：publicTrace 封顶后长度不再是序号，读持久在 nextState 里的
+   * 单调计数器；老会话没有该字段时以当时的 publicTrace.length 作为基线。
+   */
+  private currentTraceSequence(state: StageResults): number {
+    const persisted = state.blackbox?.publicTraceSequence
+    return Number.isFinite(persisted)
+      ? Math.floor(Number(persisted))
+      : (state.blackbox?.publicTrace?.length || 0)
+  }
+
+  /**
+   * stageResults 单行字节护栏（#176-1）。
+   *
+   * 常规路径（首尾保留已生效）直接序列化返回；只有当整行仍超过预算时才逐级收紧两条轨迹，
+   * 并 warn 一次留痕。收紧只作用于**落库内容**，调用方内存里的 nextState 不受影响。
+   */
+  private serializeBoundedStageResults(state: StageResults, sessionId: string): string {
+    const budget = this.stageResultsMaxBytes
+    const serialized = JSON.stringify(state)
+    if (Buffer.byteLength(serialized, 'utf8') <= budget) return serialized
+    let bounded = state
+    let boundedSerialized = serialized
+    for (const [head, tail] of BLACKBOX_TRACE_SHRINK_PLANS) {
+      bounded = {
+        ...state,
+        blackbox: {
+          ...(state.blackbox || {}),
+          publicTrace: this.compactTrace(state.blackbox?.publicTrace || [], head + tail, head),
+          refereeTrace: this.compactTrace(state.blackbox?.refereeTrace || [], head + tail, head)
+        }
+      }
+      boundedSerialized = JSON.stringify(bounded)
+      if (Buffer.byteLength(boundedSerialized, 'utf8') <= budget) break
+    }
+    logger.warn('[Blackbox] stageResults 超过单行字节护栏，已压缩轨迹后落库', {
+      sessionId,
+      bytes: Buffer.byteLength(boundedSerialized, 'utf8'),
+      budget,
+      publicTraceCount: bounded.blackbox?.publicTrace?.length || 0,
+      refereeTraceCount: bounded.blackbox?.refereeTrace?.length || 0
+    })
+    return boundedSerialized
   }
 
   private async projectPlatformResult(
@@ -2603,10 +2698,16 @@ export class BlackboxVirtualLearnerRunner {
     return { rawPublic, publicTrace, control, summary }
   }
 
-  private compactTrace<T>(items: T[], limit: number): T[] {
+  /**
+   * 首尾保留压缩：头部保 `head` 条、尾部保 `limit - head` 条。
+   * 默认 head = limit/2（保持历史调用方「上下各半」的口径不变）。
+   */
+  private compactTrace<T>(items: T[], limit: number, head = Math.floor(limit / 2)): T[] {
+    if (!Array.isArray(items)) return []
     if (items.length <= limit) return items
-    const edge = Math.floor(limit / 2)
-    return [...items.slice(0, edge), ...items.slice(-edge)]
+    const headCount = Math.max(0, Math.min(head, limit))
+    const tailCount = Math.max(0, limit - headCount)
+    return [...items.slice(0, headCount), ...items.slice(-tailCount)]
   }
 
   // 私有状态轨迹（learnerPrivateStateTrace）的展示序列化：去掉 state 内部的大对象重影，
@@ -2664,6 +2765,13 @@ export class BlackboxVirtualLearnerRunner {
     return createHash('sha256').update(JSON.stringify(value) ?? String(value)).digest('hex')
   }
 
+  /**
+   * 观测面归一化：既用于读侧展示，也用于**写入侧落库**（#176-1）。
+   *
+   * 写入侧复用的前提是「不许丢下游要用的字段」——`visibleCheckpoint` 是 autoStep
+   * 出题作答动作的唯一来源（buildCheckpointAction），这里必须原样保留（只是裁长度）。
+   * 其余字段按上限裁剪，保证单条观测字节有界。
+   */
   private sanitizeObservation(value: unknown): LearnerObservation {
     const v = (value ?? {}) as {
       stage?: string
@@ -2671,10 +2779,15 @@ export class BlackboxVirtualLearnerRunner {
       visibleChoices?: unknown[]
       visiblePath?: LearnerObservation['visiblePath']
       visibleTask?: LearnerObservation['visibleTask']
+      visibleCheckpoint?: LearnerObservation['visibleCheckpoint']
       availableActions?: string[]
       lastActionResult?: LearnerObservation['lastActionResult']
     }
     const stage = ['goal', 'path', 'teaching', 'completed', 'error'].includes(v?.stage || '') ? v.stage : 'error'
+    const path = v?.visiblePath
+    const task = v?.visibleTask
+    const checkpoint = v?.visibleCheckpoint
+    const lastAction = v?.lastActionResult
     return {
       stage: stage as LearnerObservation['stage'],
       visibleMessages: (Array.isArray(v?.visibleMessages) ? v.visibleMessages : []).slice(0, 30).map((item) => ({
@@ -2682,10 +2795,49 @@ export class BlackboxVirtualLearnerRunner {
         content: String(item?.content || '').slice(0, 1200)
       })),
       visibleChoices: Array.isArray(v?.visibleChoices) ? v.visibleChoices.map((item) => String(item).slice(0, 160)).slice(0, 12) : undefined,
-      visiblePath: v?.visiblePath || undefined,
-      visibleTask: v?.visibleTask || undefined,
-      availableActions: (Array.isArray(v?.availableActions) ? v.availableActions : []) as LearnerAction['type'][],
-      lastActionResult: v?.lastActionResult || undefined
+      visiblePath: path
+        ? {
+            id: String(path.id || '').slice(0, 120),
+            title: String(path.title || '').slice(0, 200),
+            description: path.description == null ? path.description : String(path.description).slice(0, 600),
+            status: path.status == null ? path.status : String(path.status).slice(0, 64),
+            milestones: (Array.isArray(path.milestones) ? path.milestones : []).slice(0, 20).map((item) => ({
+              title: String(item?.title || '').slice(0, 200),
+              description: item?.description == null ? item.description : String(item.description).slice(0, 600)
+            }))
+          }
+        : undefined,
+      visibleTask: task
+        ? {
+            id: String(task.id || '').slice(0, 120),
+            title: String(task.title || '').slice(0, 200),
+            description: task.description == null ? task.description : String(task.description).slice(0, 600),
+            linkedConcept: task.linkedConcept == null ? task.linkedConcept : String(task.linkedConcept).slice(0, 200)
+          }
+        : undefined,
+      visibleCheckpoint: checkpoint
+        ? {
+            id: String(checkpoint.id || '').slice(0, 120),
+            type: checkpoint.type,
+            question: String(checkpoint.question || '').slice(0, 1200),
+            options: Array.isArray(checkpoint.options)
+              ? checkpoint.options.slice(0, 12).map((item) => ({
+                  id: String(item?.id || '').slice(0, 120),
+                  text: String(item?.text || '').slice(0, 300)
+                }))
+              : undefined,
+            allowSkip: checkpoint.allowSkip === true
+          }
+        : undefined,
+      availableActions: (Array.isArray(v?.availableActions) ? v.availableActions : [])
+        .filter((item): item is LearnerAction['type'] => typeof item === 'string')
+        .slice(0, 20) as LearnerAction['type'][],
+      lastActionResult: lastAction
+        ? {
+            status: lastAction.status === 'error' ? 'error' : 'success',
+            visibleMessage: String(lastAction.visibleMessage || '').slice(0, 1200)
+          }
+        : undefined
     }
   }
 
@@ -2743,7 +2895,7 @@ export class BlackboxVirtualLearnerRunner {
         [stage]: privateState
       },
       learnerPrivateStateTrace: [...trace, {
-        sequence: (latestState.blackbox?.publicTrace || []).length,
+        sequence: this.currentTraceSequence(latestState),
         stage,
         taskId: stage === 'teaching' ? latestState.blackbox?.control?.taskId || fresh.currentTaskId || null : null,
         state: privateState,

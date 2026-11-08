@@ -64,7 +64,7 @@ export function isRetiredSkill(skillId: string): boolean {
 
 /** W3-B 免检清单：coordinator.steps=[] 条目（notes 注明 service 侧接线，不进主链 steps） */
 export const W3_STEPS_EMPTY_EXEMPT: Record<string, string> = {
-  'adaptive-guidance-copy': 'dashboard 侧调用（services/learner/DashboardGuidanceSnapshotService），不在 ai-teaching.definition.ts steps 内；contracts 有登记',
+  'adaptive-guidance-copy': 'dashboard / learning-state 两侧各自在 service 层调用（DashboardGuidanceSnapshotService / LearningStateGuidanceService），不在 ai-teaching.definition.ts steps 内；contracts 有登记',
   'virtual-learner-persona-designer': '前置配置阶段（routes/admin/virtual-learners.ts），不在 simulation.definition.ts 主链 steps 内',
   'virtual-learner-scenario-designer': '前置配置阶段（同 persona-designer），不在主链 steps 内',
   'path-reviewer': 'service 侧调用（learning.service.ts 内联 CIDDP 评审），非 path.coordinator 编排，不在 path.definition.ts steps 内',
@@ -84,7 +84,7 @@ export interface ReadinessWarningItem {
 export interface W1Check {
   ok: boolean;
   activeCount: number;
-  /** 户口簿登记（noPromptFile !== true）但无 ACTIVE prompt */
+  /** 户口簿登记的非 handler-only 条目但无 ACTIVE prompt（#235：判据用 kind） */
   missingActive: string[];
   /** agent_prompts ACTIVE 的 skill:<x> 不在户口簿活跃集（差集僵尸） */
   zombieActive: string[];
@@ -173,7 +173,10 @@ export function analyzeW1(book: SkillsBook, activeRows: CoreHashParityActiveRow[
   const activePromptIds = new Set(activeRows.map((row) => row.agentId));
 
   const missingActive = book.skills
-    .filter((entry) => entry.noPromptFile !== true && !activePromptIds.has(`skill:${entry.skillId}`))
+    // #235：ACTIVE prompt 的豁免判据是「handler-only（代码 handler 实现）」，
+    // 不是 noPromptFile——后者现在只表示「没有提示词文件」，board-designer 这类
+    // 有独立提示词产物、但同样不走 DB prompt 的 handler-only 仍必须豁免。
+    .filter((entry) => entry.kind !== 'handler-only' && !activePromptIds.has(`skill:${entry.skillId}`))
     .map((entry) => entry.skillId)
     .sort();
 
@@ -198,13 +201,13 @@ export function analyzeW1(book: SkillsBook, activeRows: CoreHashParityActiveRow[
     ...missingActive.map((skillId) => ({
       code: 'W1' as const,
       skillId,
-      message: '户口簿登记但缺"当前生效"的 prompt 版本（有文件未同步）',
+      message: '技能注册表有登记，但缺少「当前生效」的 prompt 版本（有文件未同步）',
       hint: '执行编译 + 同步（prompts:compile-all + prompts:sync）',
     })),
     ...zombieActive.map((skillId) => ({
       code: 'W1' as const,
       skillId,
-      message: '数据库有"当前生效"版本但户口簿活跃集已无此技能（幽灵残留）',
+      message: '数据库有「当前生效」版本，但技能注册表里已没有这个技能（残留记录）',
       hint: '登记回户口簿或清理残留',
     })),
   ];
@@ -244,13 +247,13 @@ export function analyzeW2(book: SkillsBook, registrations: Array<{ name: string 
     ...missingRegistration.map((skillId) => ({
       code: 'W2' as const,
       skillId,
-      message: '户口簿登记但系统注册表无行（启动注册静默跳过）',
+      message: '技能注册表有登记，但系统注册表里没有对应行（启动注册时被跳过）',
       hint: '注册片段未落 skills/index.ts：补充注册后重启',
     })),
     ...zombieRegistration.map((name) => ({
       code: 'W2' as const,
       skillId: name,
-      message: '系统注册表行不在户口簿活跃集（幽灵残留，启动时会重载）',
+      message: '系统注册表里有这一行，但技能注册表里没有这个技能（残留记录，启动时会重载）',
       hint: '手工清理或纳入退役名单',
     })),
   ];
@@ -315,13 +318,13 @@ export function analyzeW3(
     ...stepWithoutBook.map((target) => ({
       code: 'W3' as const,
       skillId: target.split(' → ')[1],
-      message: `coordinator 定义 steps 引用 ${target} 不在户口簿活跃集`,
+      message: `coordinator 定义里的步骤引用了 ${target}，但技能注册表里没有它`,
       hint: '登记回 skills.yaml 或移除 definition steps 引用',
     })),
     ...bookWithoutStep.map((skillId) => ({
       code: 'W3' as const,
       skillId,
-      message: '户口簿 coordinator.steps 非空但对应 definition steps 无该 skill（未接线）',
+      message: '技能注册表声明了 coordinator.steps，但对应的 definition steps 里没有这个 skill（未接线）',
       hint: '在 coordinator definition.ts 补 steps 或改 notes 说明 service 侧接线',
     })),
   ];

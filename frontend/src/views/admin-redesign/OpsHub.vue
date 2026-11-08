@@ -501,6 +501,41 @@ onMounted(() => {
    每条 = 严重度色条 + 事项/说明 + 一个出口；清零项压成底部署名行。
    计数只在上方页级读数带讲，队列不重复数字。 */
 .oh-queue__list { margin: 0; padding: 0; list-style: none; }
+/* 待办条目：宽屏下排成双列卡片（2026-11-07 用户指令）。
+   病根：这一块永远是单列长条，外框满幅后每行被拉到整屏宽——一行只有
+   「事项名 + 去处理」两个元素，中间空出几千像素；而外框不能收窄（左侧是固定导航，
+   一旦居中就脱离导航/面包屑轴线，4K 实测裂出灰沟）。
+   做法：外层卡片维持满幅，内部列表改 auto-fill 多列，每项 420px 起，
+   宽屏自然成 2~3 列；行内「去处理 →」跟到卡片右缘，不再悬在长线尽头。
+   ≥1200 才分行：再窄每列不足 420，hint 会被挤成三行。
+   用**确定的列数**而不是 auto-fit/auto-fill：待办类目固定 4 类（反馈 / 路径生成 /
+   事件投递 / 公告），auto 系列在「轨道上限 620px」时会塌到 1 列（实测 1440 下
+   auto-fit 只开 1 条轨道，4 项全竖排），在无上限时又会开 5 条空轨道（3840 实测
+   5 列 4 项、末位空洞）。4 类固定 → 2 列 / 4 列两档最稳，永远不会剩孤行：
+   1200–1599 两列（1440 CSS 1139 → 每卡 563），≥1600 四列（2.5K CSS 1900 → 625、
+   4K CSS 2540 → 635），单卡宽度始终落在 550~640 的理想区间。 */
+@media (min-width: 1200px) {
+  .oh-queue__list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    padding: 12px 16px;
+  }
+  /* 网格化后每张卡自带完整描边：原先浮在整卡上的左侧色条同步收细，
+     免得与卡片边框叠成两条平行竖线。 */
+  .oh-queue__list .oh-task {
+    border: 1px solid var(--mk-line);
+    border-radius: var(--mk-radius-lg);
+    padding: 12px 14px;
+  }
+}
+@media (min-width: 1600px) {
+  .oh-queue__list { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+/* 基础档是「列表行」：只有一条上分割线，行本身无描边无圆角。
+   ≥1200 的网格卡版本在上方 @media 里用 `.oh-queue__list .oh-task`（0,2,0）整体改成
+   四边描边 + 圆角 + 收紧内衬；这条基础规则的 `border-top`（0,1,0）本来就会被它盖掉，
+   但 `:first-child { border-top: 0 }`（0,2,1）会反过来压过网格版——所以它要排除网格档。 */
 .oh-task {
   display: flex;
   align-items: center;
@@ -509,6 +544,9 @@ onMounted(() => {
   border-top: 1px solid var(--mk-line);
 }
 .oh-queue__list .oh-task:first-child { border-top: 0; }
+@media (min-width: 1200px) {
+  .oh-queue__list .oh-task:first-child { border-top: 1px solid var(--mk-line); }
+}
 .oh-task__bar {
   flex: none;
   width: 3px;

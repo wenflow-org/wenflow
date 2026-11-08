@@ -600,13 +600,17 @@ skills:
     kind: handler-only
     handlerRef: backend/src/services/ai-teaching/board-designer.service.ts
     registrationPoint: none
-    noPromptFile: true
+    # #235：它**有**提示词（prompts/skill.board-designer.md），只是没有 core yaml 源。
+    # noPromptFile 问的是「有没有提示词文件」，此前写 true 与文件系统直接矛盾，
+    # 也让 pipeline map 把它当成「无提示词的纯代码 handler」而隐藏了这份板面 spec 契约。
+    noPromptFile: false
+    promptArtifact: prompts/skill.board-designer.md
     displayName: 课堂板书设计器 Skill
     description: 按本轮教学意图生成课堂白板（认知减负区）的板面 spec，经 teaching-turn 归一化后上墙
     dataSource:
       db: []
       sandbox: []
-    notes: handler-only 外挂能力（照 material-collector 混合成例）——主接口是确定性 service（teaching-turn-engine 按轮内意图直调 backend/src/services/ai-teaching/board-designer.service.ts 的 designBoard，不进 skillHandlers 派发表，registrationPoint=none），内含一个 LLM 绘图环节；其 prompt 以独立产物 prompts/skill.board-designer.md 承载（board-probe 跑通的成文，无 core yaml 源，运行时 DB ACTIVE 优先、loadPromptFile 兜底），故户口簿按 F7 登记 handler-only 形态、不填 coreFile；输出经 teaching-turn 归一化（图型白名单 + spec 契约）保证前端渲染安全，失败 fail-open 返回 null 由引擎保持旧板。三条硬规则：标题只点题不写结论 / 减负区画完整形态不留 ? / 只输出一个 figure JSON
+    notes: handler-only 外挂能力（照 material-collector 混合成例）——主接口是确定性 service（teaching-turn-engine 按轮内意图直调 backend/src/services/ai-teaching/board-designer.service.ts 的 designBoard，不进 skillHandlers 派发表，registrationPoint=none），内含一个 LLM 绘图环节。**两个维度分开看（#235）**：有提示词产物 prompts/skill.board-designer.md（board-probe 跑通的成文，运行时 DB ACTIVE 优先、loadPromptFile 兜底），但没有 core yaml 源（prompts/core/board-designer.yaml 不存在）——「无提示词」与「无 core 源」不是一回事，故 noPromptFile=false + promptArtifact 声明，户口簿按 F7 登记 handler-only 形态、不填 coreFile。输出经 teaching-turn 归一化（图型白名单 + spec 契约）保证前端渲染安全，失败 fail-open 返回 null 由引擎保持旧板。三条硬规则：标题只点题不写结论 / 减负区画完整形态不留 ? / 只输出一个 figure JSON
 
   # ============ aux（10 条，不进字段路由；v4-aux-skills 注册） ============
   - skillId: teaching-opening-generator

@@ -1,7 +1,20 @@
 import prisma from '../../config/database';
 import { learnerSnapshotService } from './LearnerSnapshotService';
 import { buildNonVirtualUserWhere, isTestAccountUser } from '../../utils/test-account';
+import { logger } from '../../utils/logger';
 import type { LearnerSnapshot } from '../../agents/learner-model-agent/types';
+
+/**
+ * 内存快照缓存条数上限（#176-2）。
+ *
+ * 此前只有 5 分钟 TTL，**没有容量上限、没有失效入口**：每个 (user, scope, path,
+ * milestone, task) 组合都留下一条，删除只发生在「同 key 过期」和列表分支的顺带清理，
+ * 长跑进程里只增不减。这里按 LRU 封顶。
+ *
+ * TODO(#176-2)：具体条数属容量口径（单条快照 payload 数十 KB），待产品确认；
+ * 当前取 1000，约与列表窗口上限（2000）同量级、避免一次整页预热把自己全淘汰。
+ */
+export const LEARNER_SNAPSHOT_CACHE_MAX_ENTRIES = 1000;
 
 export interface LearnerSnapshotRefreshInput {
   userId: string;
@@ -19,14 +32,150 @@ export class LearnerSnapshotRefreshService {
   /** 列表路径可接受的投影陈旧度：60 分钟（2026-10-04，原 10 分钟在 500 窗口下每页加载都全量重建） */
   private static readonly LIST_PROJECTION_FRESH_MS = 60 * 60 * 1000;
 
+  /** 缓存键前缀（buildKey 的第 0 段），invalidate 按 `前缀 + userId + ':'` 精确匹配用户 */
+  private static readonly CACHE_KEY_PREFIX = 'learner-snapshot-v1';
+
+  /**
+   * 失效水位（#176-2 复核）：`userId → invalidate 时刻`。**早于该时刻落地**的快照一律不许再被读出——
+   * 无论它躺在内存缓存里，还是躺在 `learner_projections` 的持久化窗口里。
+   *
+   * 只删内存键是不够的（复核实测）：`getLatest` 在内存未命中后会回落到持久化投影的 10 分钟窗口，
+   * 把那行**由旧画像算出**的载荷重新读出并写回内存，于是「主动失效」在最要紧的场景里近乎空转——
+   * `learner-model-agent/index.ts:196-197` 的 `updateProfile` 清了画像 + 图快照，**并没有**接着 refresh
+   * 任何键；此后任意读路径（`TeachingContextBuilder.ts:74`、`admin/learner-models.ts:76,141`）拿到的
+   * 仍是旧画像拼出的快照，最长 10 分钟。
+   *
+   * 事件驱动的那几处（`learner-event-consumer.ts:54`、`schedulers.ts:97`、`LessonKnowledgeEnrichmentConsumer.ts:52`）
+   * 是「invalidate + 只 refresh 一个键」，同一用户其它作用域键（path / teaching / global）同样只剩这条水位兜着。
+   *
+   * 仅在进程内维护：与内存缓存同生命周期（重启后两者一起丢，不存在「内存没了但水位还在」的错配）。
+   */
+  private invalidatedAt = new Map<string, number>();
+  /** 水位表的用户数上限：只记住最近失效的用户，避免长跑进程里只增不减（与缓存同口径） */
+  private static readonly INVALIDATION_MAX_USERS = 2000;
+
+  /**
+   * 该时刻落地的快照是否已失效（严格早于水位）。
+   * 用 `<` 而非 `<=`：invalidate 与随后的 refresh 可能落在同一毫秒，那不是「失效前落地的」。
+   */
+  private isInvalidated(userId: string, at: number): boolean {
+    const mark = this.invalidatedAt.get(userId);
+    return mark !== undefined && at < mark;
+  }
+
+  /** LRU 读：命中即移到队尾（Map 保持插入序，淘汰从队首取最久未用） */
+  private cacheGet(key: string): { snapshot: LearnerSnapshot; cachedAt: number } | undefined {
+    const entry = this.cache.get(key);
+    if (!entry) return undefined;
+    this.cache.delete(key);
+    this.cache.set(key, entry);
+    return entry;
+  }
+
+  /** LRU 写：超出条数上限时淘汰队首（最久未用） */
+  private cacheSet(key: string, snapshot: LearnerSnapshot): void {
+    this.cache.delete(key);
+    this.cache.set(key, { snapshot, cachedAt: Date.now() });
+    while (this.cache.size > LEARNER_SNAPSHOT_CACHE_MAX_ENTRIES) {
+      const oldest = this.cache.keys().next().value;
+      if (oldest === undefined) break;
+      this.cache.delete(oldest);
+    }
+  }
+
+  /**
+   * 主动失效（#176-2）：画像/证据变化后清掉该用户的**所有作用域**缓存键，并抬高失效水位，
+   * 让持久化投影里那行旧载荷也读不出来。此前只能等 5 分钟 TTL 或读路径自愈，调用方
+   * （learnerProfileService.clear 的调用点）清了画像缓存却留着由旧画像算出的快照。
+   */
+  invalidate(userId?: string): void {
+    const mark = Date.now();
+    if (!userId) {
+      this.cache.clear();
+      this.invalidatedAt.clear();
+      return;
+    }
+    const prefix = `${LearnerSnapshotRefreshService.CACHE_KEY_PREFIX}:${userId}:`;
+    for (const key of [...this.cache.keys()]) {
+      if (key.startsWith(prefix)) this.cache.delete(key);
+    }
+    this.invalidatedAt.delete(userId);
+    this.invalidatedAt.set(userId, mark);
+    while (this.invalidatedAt.size > LearnerSnapshotRefreshService.INVALIDATION_MAX_USERS) {
+      const oldest = this.invalidatedAt.keys().next().value;
+      if (oldest === undefined) break;
+      this.invalidatedAt.delete(oldest);
+    }
+    this.dropPersistedProjections(userId);
+  }
+
+  /**
+   * 作废该用户落库的投影行（#176-2 复核残留 1）。
+   *
+   * 水位只活在进程里，而 `learner_projections` 的 10 分钟（getLatest）/ 60 分钟（列表）
+   * 窗口不随进程消失：**进程在窗口内重启**（部署、崩溃重启）后水位为空，读路径就会把
+   * **失效前**那行旧画像载荷重新采用。所以失效必须落到持久层。
+   *
+   * **必须按前缀白名单删，不能按 userId 整族删**（第二轮复核实测的口径事故）：
+   * 同表里还有不是缓存、而是**账本/状态**的行——当日复习额度 `reviewDailyQuotaKey`
+   * （读缺失即按空额度重置）、BKT 信念 `learner-concept-beliefs-v1`、洞察校准记录
+   * `learner-insight-records-v1`、归并审计 `consolidationAuditKey`。`invalidate` 由每条学习事件
+   * 触发，整族删除等于每次任务完成就清掉该用户的额度与信念。所以这里只列**派生自画像/证据、
+   * 删掉即可由读路径重建**的族；新增族要显式加进来（并想清楚它是不是缓存）。
+   *
+   * fire-and-forget：`invalidate` 的调用方（`updateProfile`、事件消费者）都在热路径上，
+   * 不为一次缓存清理把链路改成 async；失败只记日志——同进程内还有水位兜着，
+   * 跨进程由「行已被删」保证，二者其一失效不至于把旧画像端上桌。
+   */
+  private static readonly INVALIDATABLE_PROJECTION_PREFIXES = [
+    /** 本服务的快照投影（纯缓存） */
+    'learner-snapshot-v1:',
+    /** 评审投影（LearnerStateReviewService 直读，从不经过本服务；同样派生自画像/证据） */
+    'learner-state-review-v1:',
+  ];
+
+  private dropPersistedProjections(userId: string): void {
+    void prisma.learner_projections
+      .deleteMany({
+        where: {
+          userId,
+          OR: LearnerSnapshotRefreshService.INVALIDATABLE_PROJECTION_PREFIXES.map((prefix) => ({
+            projectionKey: { startsWith: prefix },
+          })),
+        },
+      })
+      .catch((error: unknown) => {
+        logger.warn(
+          `[learner-snapshot] 作废持久化投影失败（userId=${userId}）：`
+          + `${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
+  }
+
+  /**
+   * 本轮读源是否发生在失效之前（#176-2 复核残留 3）：refresh 起跑时读了旧画像，
+   * 期间发生的 invalidate 已经把它作废，此时**不能**再把结果 upsert 回投影，
+   * 否则刚删掉的那行又被写回来，10 分钟窗口继续端旧画像。
+   * 用严格 `>`：同一毫秒起跑不算被作废。
+   */
+  private isWriteBlockedByInvalidation(userId: string, startedAt: number): boolean {
+    const mark = this.invalidatedAt.get(userId);
+    return mark !== undefined && mark > startedAt;
+  }
+
   async refresh(input: LearnerSnapshotRefreshInput): Promise<LearnerSnapshot> {
     const key = this.buildKey(input);
+    /** 本轮读源起跑时刻：用于判断结果是否已被期间发生的 invalidate 作废 */
+    const startedAt = Date.now();
     if (input.lastEventId) {
       const existing = await prisma.learner_projections.findUnique({ where: { projectionKey: key } });
-      if (existing?.lastEventId === input.lastEventId) {
+      // 去重按事件 id 比对，但**画像类变更不产生事件 id**：invalidate 之后同一 lastEventId 的那行
+      // 载荷仍是旧画像算出来的，不能再短路返回（否则 refresh 也读回陈旧值）。
+      const dedupable = existing !== null && !this.isInvalidated(input.userId, existing.generatedAt.getTime());
+      if (dedupable && existing.lastEventId === input.lastEventId) {
         try {
           const snapshot = JSON.parse(existing.payload) as LearnerSnapshot;
-          this.cache.set(key, { snapshot, cachedAt: Date.now() });
+          this.cacheSet(key, snapshot);
           return snapshot;
         } catch {
           // Rebuild malformed projections from source facts.
@@ -41,6 +190,12 @@ export class LearnerSnapshotRefreshService {
       taskId: input.taskId,
       mode: input.scope,
     });
+
+    // 复核残留 3：本轮读源起跑于 invalidate 之前 → 结果是旧画像拼的，既不落库也不入内存缓存
+    // （调用方仍拿到它——那次请求本来就发生在失效之前），下次读由重建补齐。
+    if (this.isWriteBlockedByInvalidation(input.userId, startedAt)) {
+      return snapshot;
+    }
 
     await prisma.learner_projections.upsert({
       where: { projectionKey: key },
@@ -66,22 +221,31 @@ export class LearnerSnapshotRefreshService {
         generatedAt: new Date(snapshot.freshness.generatedAt)
       }
     });
-    this.cache.set(key, { snapshot, cachedAt: Date.now() });
+    this.cacheSet(key, snapshot);
     return snapshot;
   }
 
   async getLatest(input: LearnerSnapshotRefreshInput): Promise<LearnerSnapshot> {
     const key = this.buildKey(input);
-    const entry = this.cache.get(key);
-    if (entry && Date.now() - entry.cachedAt < LearnerSnapshotRefreshService.CACHE_TTL_MS) {
+    const entry = this.cacheGet(key);
+    // 失效水位：#176-2 复核抓到的空转——只删内存键时，下面那段持久化回落会把旧载荷读回来并重新入缓存。
+    if (
+      entry &&
+      Date.now() - entry.cachedAt < LearnerSnapshotRefreshService.CACHE_TTL_MS &&
+      !this.isInvalidated(input.userId, entry.cachedAt)
+    ) {
       return entry.snapshot;
     }
     this.cache.delete(key);
     const persisted = await prisma.learner_projections.findUnique({ where: { projectionKey: key } });
-    if (persisted && Date.now() - persisted.generatedAt.getTime() < 10 * 60 * 1000) {
+    if (
+      persisted &&
+      Date.now() - persisted.generatedAt.getTime() < 10 * 60 * 1000 &&
+      !this.isInvalidated(input.userId, persisted.generatedAt.getTime())
+    ) {
       try {
         const snapshot = JSON.parse(persisted.payload) as LearnerSnapshot;
-        this.cache.set(key, { snapshot, cachedAt: Date.now() });
+        this.cacheSet(key, snapshot);
         return snapshot;
       } catch {
         // Rebuild malformed projections from source facts.
@@ -196,8 +360,12 @@ export class LearnerSnapshotRefreshService {
     const refreshQueue: typeof entries = [];
 
     for (const entry of entries) {
-      const cached = this.cache.get(entry.key);
-      if (cached && Date.now() - cached.cachedAt < LearnerSnapshotRefreshService.CACHE_TTL_MS) {
+      const cached = this.cacheGet(entry.key);
+      if (
+        cached &&
+        Date.now() - cached.cachedAt < LearnerSnapshotRefreshService.CACHE_TTL_MS &&
+        !this.isInvalidated(entry.user.id, cached.cachedAt)
+      ) {
         snapshotsByUser.set(entry.user.id, cached.snapshot);
       } else {
         if (cached) this.cache.delete(entry.key);
@@ -214,16 +382,19 @@ export class LearnerSnapshotRefreshService {
           projectionKey: { in: refreshQueue.map((entry) => entry.key) },
           generatedAt: { gte: new Date(Date.now() - LearnerSnapshotRefreshService.LIST_PROJECTION_FRESH_MS) },
         },
-        select: { projectionKey: true, payload: true },
+        select: { projectionKey: true, payload: true, generatedAt: true },
       });
       const rowByKey = new Map(persisted.map((row) => [row.projectionKey, row]));
       const stillMissing: typeof entries = [];
       for (const entry of refreshQueue) {
         const row = rowByKey.get(entry.key);
-        if (row) {
+        // 失效水位同样管住列表路径（#176-2 复核）：60 分钟保鲜窗是给「缓变趋势信号」的，
+        // 但画像变更后的那一行是**由旧画像算出来的**，不能借这个窗继续展示。
+        // 命中人数 = 本轮失效过的用户，量级极小，不会把整页重建的扇出拉回来。
+        if (row && !this.isInvalidated(entry.user.id, row.generatedAt.getTime())) {
           try {
             const snapshot = JSON.parse(row.payload) as LearnerSnapshot;
-            this.cache.set(entry.key, { snapshot, cachedAt: Date.now() });
+            this.cacheSet(entry.key, snapshot);
             snapshotsByUser.set(entry.user.id, snapshot);
             continue;
           } catch {
@@ -299,8 +470,16 @@ export class LearnerSnapshotRefreshService {
 
     const filtered = snapshots.filter((item) => {
       if (params?.staleOnly) {
-        const ageMs = Date.now() - new Date(item.generatedAt).getTime();
-        if (ageMs < 10 * 60 * 1000) return false;
+        /* 陈旧判定读 dataUpdatedAt（学习证据最后变化时刻），不再读 generatedAt（#176-2）：
+           列表一次请求会把过期投影整批重建，generatedAt 是**本次重建**时刻，于是
+           「刚被重建过的老用户」看起来最新、被 staleOnly 过滤掉，而真正长期没学习的
+           反而被藏在后面——正是这个筛选器要抓的人。
+           dataUpdatedAt 为 null（无任何学习证据/未开始）视为**最陈旧**，不能被当成最新。 */
+        const updatedAtMs = item.dataUpdatedAt ? new Date(item.dataUpdatedAt).getTime() : null;
+        const isFresh = updatedAtMs !== null
+          && Number.isFinite(updatedAtMs)
+          && Date.now() - updatedAtMs < 10 * 60 * 1000;
+        if (isFresh) return false;
       }
       if (params?.riskOnly) {
         if (item.fatigueRisk === 'low' && item.fragileConcepts.length === 0 && item.strugglingConcepts.length === 0) {

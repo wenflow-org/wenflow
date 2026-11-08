@@ -17,6 +17,7 @@ import { deriveActiveRuns, deriveRecentRuns, deriveRunProgress } from '../../ser
 import { findSessionWithProfileAndUser, findGoalConversationById, getSessionStatusAggregates, getPerProfileStatusAggregates, findStaleSessionsByProfiles, findStaleSessionCandidates, findStaleSessionsForStats, findLiveSessionsByProfiles, findLiveSessionsAll, findTerminalSessions, countTodayVirtualAgentCalls } from '../../services/virtual-lab/virtual-session.repo';
 import { hydrateSessionLogsField as hydrateVirtualSessionLogsField } from '../../services/virtual-lab/virtual-session-log-store';
 import { logger } from '../../utils/logger';
+import { withKeyedLock } from '../../utils/keyed-lock';
 import { teachingSessionRepository } from '../../services/ai-teaching/TeachingSessionRepository';
 import { findTeachingSessionsByPathId } from '../../services/admin/session-console.repo';
 import { teachingSessionHistoryOf } from './session-console';
@@ -652,58 +653,65 @@ router.put('/:id', async (req: Request, res) => {
       });
     }
     
-    const updateData: Record<string, unknown> = {};
+    // #170：画像 profile 是整包 JSON 读改写，且与课后记忆回写共用同一行（后者的临界区是
+    // `vlab-profile:<userId>`）。锁外读旧包再整包写回会静默回滚同期写入的
+    // knownConcepts / recentCompleted / selfAssessmentAccuracy，故把「读→合并→写」整体
+    // 放进同一把锁，并在锁内重新读取画像作为合并 base。
+    const updated = await withKeyedLock(`vlab-profile:${profile.userId}`, async () => {
+      const current = (await findProfileById(id)) || profile;
+      const updateData: Record<string, unknown> = {};
     
-    if (req.body.profile) {
-      const existingProfile = parseJson<Record<string, unknown>>(profile.profile, {});
-      updateData.profile = JSON.stringify({ ...existingProfile, ...req.body.profile });
-    }
-    if (typeof req.body.name === 'string' && req.body.name.trim()) {
-      await updateUserName(profile.userId, req.body.name.trim());
-    }
-    // learningGoal 的产品语义已降为可选长期倾向；请求显式携带空串时也要允许清空。
-    if (typeof req.body.learningGoal === 'string') updateData.learningGoal = req.body.learningGoal.trim();
-    if (req.body.knowledgeLevel) updateData.knowledgeLevel = req.body.knowledgeLevel;
-    if (req.body.knownConcepts) updateData.knownConcepts = JSON.stringify(req.body.knownConcepts);
-    if (req.body.struggleConcepts) updateData.struggleConcepts = JSON.stringify(req.body.struggleConcepts);
-    if (req.body.simulationPrompt) updateData.simulationPrompt = req.body.simulationPrompt;
-    if (req.body.simulationModel) updateData.simulationModel = req.body.simulationModel;
-    if (req.body.simulationTemperature) updateData.simulationTemperature = req.body.simulationTemperature;
-    if (req.body.personalityTraits) updateData.personalityTraits = JSON.stringify(req.body.personalityTraits);
-    if (req.body.tags) updateData.tags = JSON.stringify(req.body.tags);
-    if (req.body.notes) updateData.notes = req.body.notes;
-    // simulationBudget 写入 profile JSON（以虚拟学习者为单位的 LLM 重试预算）
-    // 注意：与 runtimePrefs 共用同一 profile JSON，必须从同一 base 叠加，避免相互覆盖
-    let nextProfileJson = profile.profile;
-    if (req.body.simulationBudget) {
-      const base = parseJson<Record<string, unknown>>(nextProfileJson, {});
-      const existingBudget = (base.simulationBudget || {}) as Record<string, unknown>;
-      const newBudget = { ...existingBudget, ...req.body.simulationBudget };
-      // 钳制数值范围（与前端输入框 min/max 一致），防止手误写入超大值导致近无限重试
-      newBudget.maxRetriesPerStep = clampBudgetValue(newBudget.maxRetriesPerStep, 8, 1, 20);
-      newBudget.maxRetriesTotal = clampBudgetValue(newBudget.maxRetriesTotal, 600, 1, 1000);
-      // 保留已消耗的 consumedRetries（不能被前端覆盖）
-      newBudget.consumedRetries = existingBudget.consumedRetries || 0;
-      nextProfileJson = JSON.stringify({ ...base, simulationBudget: newBudget });
-    }
-    // runtimePrefs 写入 profile JSON（虚拟人运行偏好：每课回合上限 / 默认难度；
-    // 新会话创建时作为 simulationConfig 初始值，三级驾驶舱可临时覆盖）
-    if (req.body.runtimePrefs && typeof req.body.runtimePrefs === 'object') {
-      const base = parseJson<Record<string, unknown>>(nextProfileJson, {});
-      const existingPrefs = (base.runtimePrefs || {}) as Record<string, unknown>;
-      const newPrefs: Record<string, unknown> = { ...existingPrefs, ...req.body.runtimePrefs };
-      if (Number.isFinite(Number(newPrefs.turnCapPerLesson))) {
-        newPrefs.turnCapPerLesson = Math.min(100, Math.max(1, Math.round(Number(newPrefs.turnCapPerLesson))));
+      if (req.body.profile) {
+        const existingProfile = parseJson<Record<string, unknown>>(current.profile, {});
+        updateData.profile = JSON.stringify({ ...existingProfile, ...req.body.profile });
       }
-      if (newPrefs.frictionBudget !== undefined) {
-        const friction = String(newPrefs.frictionBudget);
-        newPrefs.frictionBudget = (SIMULATION_FRICTION_BUDGETS as readonly string[]).includes(friction) ? friction : 'normal';
+      if (typeof req.body.name === 'string' && req.body.name.trim()) {
+        await updateUserName(profile.userId, req.body.name.trim());
       }
-      nextProfileJson = JSON.stringify({ ...base, runtimePrefs: newPrefs });
-    }
-    if (nextProfileJson !== profile.profile) updateData.profile = nextProfileJson;
+      // learningGoal 的产品语义已降为可选长期倾向；请求显式携带空串时也要允许清空。
+      if (typeof req.body.learningGoal === 'string') updateData.learningGoal = req.body.learningGoal.trim();
+      if (req.body.knowledgeLevel) updateData.knowledgeLevel = req.body.knowledgeLevel;
+      if (req.body.knownConcepts) updateData.knownConcepts = JSON.stringify(req.body.knownConcepts);
+      if (req.body.struggleConcepts) updateData.struggleConcepts = JSON.stringify(req.body.struggleConcepts);
+      if (req.body.simulationPrompt) updateData.simulationPrompt = req.body.simulationPrompt;
+      if (req.body.simulationModel) updateData.simulationModel = req.body.simulationModel;
+      if (req.body.simulationTemperature) updateData.simulationTemperature = req.body.simulationTemperature;
+      if (req.body.personalityTraits) updateData.personalityTraits = JSON.stringify(req.body.personalityTraits);
+      if (req.body.tags) updateData.tags = JSON.stringify(req.body.tags);
+      if (req.body.notes) updateData.notes = req.body.notes;
+      // simulationBudget 写入 profile JSON（以虚拟学习者为单位的 LLM 重试预算）
+      // 注意：与 runtimePrefs 共用同一 profile JSON，必须从同一 base 叠加，避免相互覆盖
+      let nextProfileJson = current.profile;
+      if (req.body.simulationBudget) {
+        const base = parseJson<Record<string, unknown>>(nextProfileJson, {});
+        const existingBudget = (base.simulationBudget || {}) as Record<string, unknown>;
+        const newBudget = { ...existingBudget, ...req.body.simulationBudget };
+        // 钳制数值范围（与前端输入框 min/max 一致），防止手误写入超大值导致近无限重试
+        newBudget.maxRetriesPerStep = clampBudgetValue(newBudget.maxRetriesPerStep, 8, 1, 20);
+        newBudget.maxRetriesTotal = clampBudgetValue(newBudget.maxRetriesTotal, 600, 1, 1000);
+        // 保留已消耗的 consumedRetries（不能被前端覆盖）
+        newBudget.consumedRetries = existingBudget.consumedRetries || 0;
+        nextProfileJson = JSON.stringify({ ...base, simulationBudget: newBudget });
+      }
+      // runtimePrefs 写入 profile JSON（虚拟人运行偏好：每课回合上限 / 默认难度；
+      // 新会话创建时作为 simulationConfig 初始值，三级驾驶舱可临时覆盖）
+      if (req.body.runtimePrefs && typeof req.body.runtimePrefs === 'object') {
+        const base = parseJson<Record<string, unknown>>(nextProfileJson, {});
+        const existingPrefs = (base.runtimePrefs || {}) as Record<string, unknown>;
+        const newPrefs: Record<string, unknown> = { ...existingPrefs, ...req.body.runtimePrefs };
+        if (Number.isFinite(Number(newPrefs.turnCapPerLesson))) {
+          newPrefs.turnCapPerLesson = Math.min(100, Math.max(1, Math.round(Number(newPrefs.turnCapPerLesson))));
+        }
+        if (newPrefs.frictionBudget !== undefined) {
+          const friction = String(newPrefs.frictionBudget);
+          newPrefs.frictionBudget = (SIMULATION_FRICTION_BUDGETS as readonly string[]).includes(friction) ? friction : 'normal';
+        }
+        nextProfileJson = JSON.stringify({ ...base, runtimePrefs: newPrefs });
+      }
+      if (nextProfileJson !== current.profile) updateData.profile = nextProfileJson;
     
-    const updated = await updateProfileFields(id, updateData);
+      return updateProfileFields(id, updateData);
+    });
     
     res.json({
       success: true,

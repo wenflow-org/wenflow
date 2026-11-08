@@ -13,14 +13,17 @@ import { clampMilestonesWithLog } from './path-budget-clamp';
 import { ownerContextOverride } from './owner-context';
 import { withTransaction } from '../../../utils/with-transaction';
 import { executeSkill, executeSkillWithResult } from '../../../skills';
+import { runWithContext } from '../../../gateway/api-gateway/context';
+import { buildPathGenerationContext } from './generation-request-context';
 import { pathAgentDefinition } from '../../../skills/path-planning';
-import { pathReviewerDefinition } from '../../../skills/path-reviewer';
+import { pathReviewerDefinition, PATH_REVIEW_PASS_THRESHOLD } from '../../../skills/path-reviewer';
 import type { AgentInput } from '../../../agents/protocol';
 import { normalizeAgentOutput } from '../../../agents/output-normalizer';
 import { buildFramedNormalizedInput } from '../path-planning-hints';
 import { normalizePathDifficulty } from '../path-difficulty';
 import { sanitizeUserFacingText, detectBoilerplateClause } from '../user-facing-text';
 import { buildPathReviewerGoalContext } from '../path-reviewer-context';
+import { reviewPathWithAutoReplan, MAX_PATH_REPLAN_DEPTH } from './path-review-replan';
 import {
   assertGenerationRunFence,
   PATH_GENERATION_LEASE_MS,
@@ -141,13 +144,13 @@ function normalizeMilestoneTasks(
   tasks: any[],
   conceptIds: string[]
 ): NormalizedPathTask[] {
-  const fallbackConceptId = conceptIds[0];
-
   return (Array.isArray(tasks) ? tasks : []).map((task: any) => {
     const requestedConceptId = typeof task?.linkedConcept === 'string' ? task.linkedConcept.trim() : '';
+    // #171-3②：不再用 conceptIds[0] 静默兜底——未命中已声明概念的任务概念直接置空，
+    // 由阶段概念（下方 normalizeMilestonesWithConcepts 的 coreConcept）兜底，避免塌缩到 concept-1。
     const linkedConcept = requestedConceptId && conceptIds.includes(requestedConceptId)
       ? requestedConceptId
-      : fallbackConceptId;
+      : undefined;
 
     return {
       title: task?.title || '',
@@ -161,20 +164,30 @@ function normalizeMilestoneTasks(
 }
 
 
-function normalizeMilestonesWithConcepts(milestonesData: any[], cognitiveDesign: PathCognitiveDesign): NormalizedPathMilestone[] {
+export function normalizeMilestonesWithConcepts(milestonesData: any[], cognitiveDesign: PathCognitiveDesign): NormalizedPathMilestone[] {
   const conceptIds = Array.isArray(cognitiveDesign.coreConcepts)
     ? cognitiveDesign.coreConcepts.map((concept) => concept.id)
     : [];
-  const fallbackConceptId = conceptIds[0] || null;
 
   return (Array.isArray(milestonesData) ? milestonesData : []).map((milestone: any, index: number) => {
     const requestedCoreConcept = typeof milestone?.coreConcept === 'string' ? milestone.coreConcept.trim() : '';
     const inferredCoreConcept = inferMilestoneConceptFromTasks(milestone?.tasks || []);
-    const coreConcept = requestedCoreConcept && conceptIds.includes(requestedCoreConcept)
-      ? requestedCoreConcept
-      : inferredCoreConcept && conceptIds.includes(inferredCoreConcept)
-        ? inferredCoreConcept
-        : fallbackConceptId;
+    let coreConcept: string | null = null;
+    if (requestedCoreConcept && conceptIds.includes(requestedCoreConcept)) {
+      coreConcept = requestedCoreConcept;
+    } else if (inferredCoreConcept && conceptIds.includes(inferredCoreConcept)) {
+      coreConcept = inferredCoreConcept;
+    }
+    // #171-3②：未命中已声明 id 时不再静默回退 conceptIds[0]（会把所有阶段概念塌缩成同一个 concept-1）。
+    // 改为置空并告警，让塌缩「可见」——调用方（validator 已拒绝名字绑定 / 空 coreConcepts，正常不应走到这里）。
+    if (coreConcept === null && (requestedCoreConcept || inferredCoreConcept)) {
+      logger.warn('[path-generation] 阶段核心概念未命中已声明概念，已置空（不再静默塌缩到 conceptIds[0]）', {
+        stageNumber: milestone?.stageNumber ?? index + 1,
+        requestedCoreConcept,
+        inferredCoreConcept,
+        declaredConceptIds: conceptIds,
+      });
+    }
     const tasks = normalizeMilestoneTasks(milestone?.tasks || [], conceptIds).map((task) => ({
       ...task,
       linkedConcept: task.linkedConcept || coreConcept || undefined,
@@ -460,6 +473,7 @@ async function analyzePathWithAgent(data: GeneratePathData): Promise<any> {
     throw new Error(`PATH_GENERATION_FAILED: ${agentError?.message || 'unknown error'}`);
   }
 }
+
 
 async function persistGeneratedPath(data: GeneratePathData, analysis: any, milestonesData: any[], runId?: string) {
   const cognitiveDesign = buildPathCognitiveDesign(data, analysis);
@@ -825,85 +839,11 @@ async function generateLearningPathCore(data: GeneratePathData) {
 
   try {
     logger.info('开始生成学习路径...', { userId: data.userId, goal: data.description });
-    let analysis = await analyzePathWithAgent(data);
-    // 路径评审（CIDDP 五维度）：best-effort，不阻断路径生成
-    let pathReview: any = null;
-    try {
-      // 契约：executeSkill 返回已解包 output（无 success/output 包装），此处必须走
-      // executeSkillWithResult 才能拿到评审成功标志；误检 executeSkill 的 success 会让
-      // 评审结论恒被丢弃、CIDDP 自动重规划永不生效（2026-10-22 审计 P1-1）。
-      const reviewResult = await executeSkillWithResult(pathReviewerDefinition, {
-        pathPlan: {
-          name: analysis.pathName,
-          summary: analysis.summary,
-          cognitiveCore: analysis.cognitiveCore || analysis.cognitiveDesign,
-          milestones: analysis.suggestedMilestones,
-          estimatedHours: analysis.estimatedTotalHours,
-        },
-        // 目标上下文（含 successCriteria——yaml 声明且 Practicality 评分要用，此前漏传，§3.19 P1⑥）
-        goalContext: buildPathReviewerGoalContext({
-          description: (data as any).description,
-          confirmedProposal: (data as any).confirmedProposal,
-          learnerProfile: (data as any).userProfile?.learnerProfile,
-          analysis,
-        }),
-        prerequisiteTree: ((analysis.cognitiveCore || analysis.cognitiveDesign) as any)?.prerequisiteTree,
-      });
-      if (reviewResult?.success && reviewResult?.output) {
-        pathReview = reviewResult.output;
-        if (pathReview.passed === false && pathReview.replanInstructions) {
-          logger.info('[path-reviewer] 路径未通过评审，触发一次自动重规划', {
-            score: pathReview.score,
-            replanInstructions: pathReview.replanInstructions,
-          });
-          try {
-            const replanData: GeneratePathData = {
-              ...data,
-              source: 'replan',
-              mode: 'replan',
-              userProfile: {
-                ...(data.userProfile || {}),
-                replan: {
-                  ...(data.userProfile?.replan || {}),
-                  triggerSource: 'path-reviewer',
-                  reviewerFeedback: pathReview.replanInstructions,
-                  // 被调整的原路径：此前只传反馈、不传旧路径，模型无从对照 ⇒ 规则「逐条修正评审反馈」
-                  // 失效、退化成同样输入的再次采样（审计 P0 §1.3）。只带渲染需要的字段，避免载荷膨胀。
-                  previousPlan: {
-                    name: analysis.pathName,
-                    summary: analysis.summary,
-                    cognitiveCore: analysis.cognitiveCore || analysis.cognitiveDesign,
-                    milestones: (Array.isArray(analysis.suggestedMilestones) ? analysis.suggestedMilestones : []).map((m: any) => ({
-                      title: m?.title ?? m?.name ?? null,
-                      goal: m?.goal ?? null,
-                    })),
-                  },
-                },
-              },
-            };
-            const replannedAnalysis = await analyzePathWithAgent(replanData);
-            if (replannedAnalysis?.suggestedMilestones?.length) {
-              analysis = replannedAnalysis;
-              pathReview = { ...pathReview, replanned: true };
-              logger.info('[path-reviewer] 自动重规划完成，采用重规划结果', {
-                score: pathReview.score,
-                replanInstructions: pathReview.replanInstructions,
-              });
-            } else {
-              logger.warn('[path-reviewer] 重规划结果为空，保留原路径', { score: pathReview.score });
-            }
-          } catch (replanError) {
-            logger.warn('[path-reviewer] 自动重规划失败（best-effort，保留原路径）', {
-              error: replanError instanceof Error ? replanError.message : String(replanError),
-            });
-          }
-        }
-      }
-    } catch (reviewError) {
-      logger.warn('[path-reviewer] 评审调用失败（best-effort，不阻断生成）', {
-        error: reviewError instanceof Error ? reviewError.message : String(reviewError),
-      });
-    }
+    // 路径评审（CIDDP 五维度）+ 一次自动重规划：best-effort，不阻断路径生成。
+    // 重规划结果会重新评审（#172-6③），深度由 MAX_PATH_REPLAN_DEPTH 护栏限制。
+    const reviewed = await reviewPathWithAutoReplan(data, await analyzePathWithAgent(data), analyzePathWithAgent);
+    const analysis = reviewed.analysis;
+    const pathReview = reviewed.pathReview;
     if (data.existingPathId && coreRunId) {
       await heartbeatGenerationRun(data.existingPathId, coreRunId, { progress: 50 });
     }
@@ -1083,7 +1023,19 @@ export async function generateLearningPath(data: GeneratePathData) {
     };
   }
 
-  const { fullPath, analysis, firstMilestoneId } = await generateLearningPathCore(generationData);
+  // #248：把正在生成的 pathId 注入请求上下文再跑 core。api-gateway 的调用日志只从
+  // context.pathId 取 metadata.pathId（gateway/api-gateway/executor.ts:1059），而
+  // POST /paths/generate 在占位路径创建前就进了 withPathContext(req)（pathId 为空）——
+  // 结果是同一次生成里 path-agent 阶段流水带 pathId、path-planning/path-reviewer 的
+  // 网关行却是 null，path: 折叠组无法按 pathId 关联到模型名（#248 的写侧缺口）。
+  const { fullPath, analysis, firstMilestoneId } = await runWithContext(
+    buildPathGenerationContext({
+      userId: generationData.userId,
+      pathId: generationData.existingPathId,
+      sourceConversationId: generationData.sourceConversationId,
+    }),
+    () => generateLearningPathCore(generationData)
+  );
 
   const stageRunId = fullPath.activeGenerationRunId;
   if (!stageRunId) throw new Error('GENERATION_RUN_REQUIRED');

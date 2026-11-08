@@ -52,6 +52,28 @@ export const ROUTING_REACHABILITY = ['manual', 'external'] as const;
 export type RoutingReachability = (typeof ROUTING_REACHABILITY)[number];
 
 /**
+ * routing.notes 里「默认 = 主链自动触发」的登记标记（#200 静态门禁）。
+ *
+ * 缺省 reachability 等于 auto，但「缺省」与「想过、确认是 auto」在同一份 YAML 里无法区分——
+ * 后者才是审计结论。故要求 auto 的 routing 在 notes 里以 `auto — <入口说明>` 登记
+ * （与既有 `manual — ...` / `external — ...` 写法对称，可多条以「；」分隔）。
+ * 正则要求标记后必须跟非空说明，防止只写一个 `auto` 了事。
+ *
+ * 消费方：services/field-routing/routing-reachability（纯函数）+ scripts/check-routing-reachability
+ * （prompts:check:all 里的静态门禁）。
+ */
+export const ROUTING_DEFAULT_NOTES_PATTERN = /(?:^|[；;])\s*auto\s*[—\-–:：]\s*\S/u;
+
+/** routing 是否已声明可达性：显式 reachability，或 notes 里登记了 auto（默认主链）。 */
+export function isRoutingReachabilityDeclared(routing: {
+  reachability?: string | null;
+  notes?: string | null;
+}): boolean {
+  if (routing.reachability) return true;
+  return ROUTING_DEFAULT_NOTES_PATTERN.test(routing.notes ?? '');
+}
+
+/**
  * core params.failurePolicy（业务意图词表，SKILL_PROTOCOL_V4 §2.4.4）
  * 2026-08-11：fallback 已退役（纯重试+明确失败改造）；
  * 2026-09-18：从**可写词表**移除，新 core 文件必须用 retry | propagate。

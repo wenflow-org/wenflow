@@ -11,22 +11,11 @@
         <div class="mk-modal__head">
           <div class="pmd-head">
             <h3 class="mk-modal__title">{{ title }}</h3>
-            <p v-if="stateLine" class="pmd-head__state" :title="stateLineTitle || undefined">{{ stateLine }}</p>
           </div>
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="close">✕</button>
         </div>
 
         <div class="mk-modal__body">
-          <!-- 连接段（宿主注入）：对话卡把服务地址 / 密钥 / 重试策略放在这里。
-               脚注动作（重置此通道等）也由宿主给，弹窗不拥有那条连接。 -->
-          <section v-if="$slots.conn" class="pmd-conn">
-            <div class="pmd-conn__head">
-              <h4 class="pmd-conn__title">连接</h4>
-              <span class="pmd-conn__actions"><slot name="conn-actions" /></span>
-            </div>
-            <slot name="conn" />
-          </section>
-
           <div class="pmd-toolbar">
             <input
               v-model="query"
@@ -45,9 +34,10 @@
             >{{ loading ? '拉取中…' : models.length ? '重新获取' : '获取模型' }}</button>
           </div>
 
-          <!-- 没有「能力特性」列（2026-11-04 用户「能力特性我们也不知道吧，这个列表并不能获取这些，
-               需要运营者添加模型后勾选填写」）：`/v1/models` 只回模型 id，按名字猜出来的能力
-               摆在这里等同平台假装知道；能力留给引入后的「确认模型能力」逐项勾。 -->
+          <!-- 没有「能力特性」列（2026-11-04 用户「能力特性我们也不知道吧，这个列表并不能获取这些」）：
+               `/v1/models` 只回模型 id，按名字猜出来的能力摆在这里等同平台假装知道。
+               引入时按名字预判一版写库（2026-11-07 用户「砍掉」了引入后的逐项确认层），
+               要精修去该行的「配置」——那里才是能力与参数的正经编辑器。 -->
           <div class="pmd-cols" aria-hidden="true">
             <span></span>
             <span>模型标识</span>
@@ -74,7 +64,6 @@
                   />
                   <span class="pmd-row__name">
                     <span class="mono pmd-row__id" :title="row.id">{{ row.id }}</span>
-                    <small v-if="row.display" class="pmd-row__display">{{ row.display }}</small>
                   </span>
                 </label>
                 <span class="pmd-row__status">
@@ -112,7 +101,7 @@
                 type="button"
                 class="mk-link"
                 @click="emit('showAll')"
-              >上游还有 {{ hiddenCount }} 个未被识别，显示全部</button>
+              >显示全部模型（{{ models.length + hiddenCount }}）</button>
             </span>
             <label v-if="selectableVisibleRows.length" class="pmd-all">
               <input
@@ -178,11 +167,6 @@ const props = withDefaults(defineProps<{
   error?: string
   /** 连接在清单之后被改过：清单过期，先重拉再选（避免把旧端点的模型挂到新连接上） */
   stale?: boolean
-  /** 标题下的一行状态（连接是否就绪 / 密钥是否已配）：合并连接段之后，
-      这一行是「能不能拉」的唯一读数 */
-  stateLine?: string
-  /** stateLine 的悬停全文（时间口径 / 不冒充实时探活那类说明） */
-  stateLineTitle?: string
   /** 底栏「手动录入」出口（向量 / 重排的配置弹层里本来就能填模型 ID） */
   allowManual?: boolean
   /** 底栏说明；空串即不显示 */
@@ -202,10 +186,8 @@ const props = withDefaults(defineProps<{
   loading: false,
   error: '',
   stale: false,
-  stateLine: '',
-  stateLineTitle: '',
   allowManual: true,
-  hint: '能力列表里没有，勾完引入时会让你逐项确认思考 / 推理强度 / 视觉。',
+  hint: '能力按模型名预判，引入后可点该行的「配置」调整思考 / 推理强度 / 视觉。',
   hiddenCount: 0,
   labels: () => ({}),
   emptyText: '',
@@ -347,19 +329,6 @@ defineExpose({ openWith, isOpen: () => open.value })
 <style scoped>
 .pmd.mk-modal__panel { width: min(980px, 96vw); max-width: none; }
 .pmd-head { display: grid; gap: 2px; min-width: 0; }
-/* 标题下那行连接读数（2026-11-05 合并弹窗）：填地址与密钥时正对着看，不是第二行标题 */
-.pmd-head__state { margin: 2px 0 0; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
-/* 连接段：地址 / 密钥 / 重试策略。与下方清单用发丝线分开——
-   上面是「接在哪」，下面是「挂了哪些」，两件事不该读成一片。 */
-.pmd-conn {
-  display: grid;
-  gap: 10px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--mk-line);
-}
-.pmd-conn__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.pmd-conn__title { margin: 0; color: var(--mk-ink); font-size: var(--mk-fs-body); font-weight: 700; }
-.pmd-conn__actions { display: inline-flex; align-items: center; gap: 8px; }
 .pmd-toolbar {
   display: flex;
   align-items: center;
@@ -370,6 +339,9 @@ defineExpose({ openWith, isOpen: () => open.value })
   border-bottom: 1px solid var(--mk-line);
 }
 .pmd-filter { width: 320px; }
+/* 搜索框：撤掉浏览器原生那圈粗蓝 outline（与外层输入框边框叠成双层框），
+   焦点改用本站口径——描边变蓝（2026-11-07 用户「把搜索框那圈粗大的原生蓝色 outline 焦点框去掉」） */
+.pmd-filter:focus-visible { outline: none; border-color: var(--mk-blue); }
 .pmd-cols {
   display: grid;
   grid-template-columns: 26px minmax(0, 1fr) 132px 92px;
@@ -409,7 +381,6 @@ defineExpose({ openWith, isOpen: () => open.value })
 }
 .pmd-row--off .pmd-row__pick { cursor: default; }
 .pmd-row__name { display: grid; gap: 1px; min-width: 0; }
-.pmd-row__display { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 .pmd-row__status { display: flex; }
 .pmd-row__probe { display: inline-flex; align-items: center; gap: 8px; justify-content: flex-end; }
 .pmd-row__test { width: 32px; flex: none; font-size: var(--mk-fs-micro); text-align: left; }

@@ -19,6 +19,7 @@ import {
   ProfileUpdateSource
 } from './types';
 import { learnerSnapshotService } from '../../services/learner/LearnerSnapshotService';
+import { learnerSnapshotRefreshService } from '../../services/learner/LearnerSnapshotRefreshService';
 import { learnerExitService } from '../../services/learner/LearnerExitService';
 import { learnerProfileService } from '../../services/learner/LearnerProfileService';
 import { logger } from '../../utils/logger';
@@ -39,18 +40,14 @@ export const learnerModelAgentDefinition: AgentDefinition = {
   ],
   
   // 文档性元数据，不参与运行时分发（语义见 agents/protocol.ts 的 AgentDefinition.subscribes）。
-  // 本 Agent 的真实执行体是 bootstrap/schedulers.ts 里注册的 handleLearnerEvent(LEARNER_EVENT_TYPES)
-  // （见 events/learner-event-consumer.ts），其消费集合即下列 7 类；此处按真实集合对齐，
-  // 不再声明全仓查无的 learning:completed / content:generated。
-  subscribes: [
-    'goal:understanding:updated',
-    'task:completed',
-    'lesson:completed',
-    'path:created',
-    'path:generated',
-    'path:adjusted',
-    'path:completed'
-  ],
+  //
+  // #208：本 Agent 是**拉取式**执行体——由 gateway 按 action（get / get-snapshot / update /
+  // get-personalization / get-exit）调用，**不消费任何 durable 事件**，也不在事件链内。
+  // 此前这里挂的是 LEARNER_EVENT_TYPES 的 7 类事件，那实际是 profile-agent 的 outbox 执行体
+  // （bootstrap/schedulers.ts 注册的 handleLearnerEvent，序列见 events/learner-event-consumer.ts），
+  // 与 skill:learner-model 无关（该消费者不引用本 Agent）。把别人的消费集挂在这里，等于把
+  // 「声明≠真实执行」修成了「换了对象的错误声明」，比原来更危险。
+  subscribes: [],
   
   // 文档性元数据，不参与运行时发布：以下两个事件在全仓没有任何 emit 点，Agent 执行体也不会发出，
   // 保留仅为描述性说明，请勿据此排查真实事件的发出方。
@@ -196,6 +193,8 @@ class LearnerModelAgent {
     const updateResult = await profileAggregator.applyUpdate(userId, source);
     if (!updateResult.success) throw new Error('LEARNER_PROFILE_UPDATE_FAILED');
     learnerProfileService.clear(userId);
+    // #176-2：快照缓存由旧画像算出，画像更新后必须一起失效。
+    learnerSnapshotRefreshService.invalidate(userId);
     const result = await learnerProfileService.getProfile(userId);
     
     return { profile: result.profile, changes: updateResult.changes };
@@ -236,6 +235,8 @@ class LearnerModelAgent {
   
   clearCache(userId?: string): void {
     learnerProfileService.clear(userId);
+    // #176-2：画像缓存与快照缓存同源失效（无 userId 时两边一起清空）。
+    learnerSnapshotRefreshService.invalidate(userId);
   }
 }
 

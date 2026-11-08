@@ -14,7 +14,7 @@
           <span class="mk-badge mk-badge--muted" :title="`已上线数 / 登记册全量（登记册含插件，多于目录）`">已上线 {{ recReport.summary.byStatus.live || 0 }} / {{ recReport.summary.total }}</span>
           <span v-if="recReport.summary.unregistered" class="mk-badge mk-badge--bad">未注册 {{ recReport.summary.unregistered }}</span>
           <span v-if="recReport.summary.activeMissing" class="mk-badge mk-badge--warn" :title="ACTIVE_MISSING_HINT">无生效版本 {{ recReport.summary.activeMissing }}</span>
-          <span v-if="recReport.summary.orphanRegistrations" class="mk-badge mk-badge--bad" title="登记册已删除/不存在，但注册记录仍残留（幽灵注册）">失效注册 {{ recReport.summary.orphanRegistrations }}</span>
+          <span v-if="recReport.summary.orphanRegistrations" class="mk-badge mk-badge--bad" title="技能注册表里已没有它，但数据库注册记录仍残留">失效注册 {{ recReport.summary.orphanRegistrations }}</span>
           <span v-else class="mk-pill" :title="recReport.summary.orphanRetiredExempt ? `无失效注册。退役技能另有 ${recReport.summary.orphanRetiredExempt} 项注册行按「不动历史数据」保留、不计异常` : '无失效注册'">
             失效注册 0
           </span>

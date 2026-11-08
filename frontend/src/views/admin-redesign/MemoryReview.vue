@@ -71,7 +71,7 @@
             </tbody>
           </table>
           </div>
-          <p v-else class="mr__sub">当前没有需要在本节接住的记忆点。</p>
+          <p v-else class="mk-empty--line">当前没有需要在本节接住的记忆点。</p>
 
           <div v-if="detail.reviewPlan?.relearnSuggestions.length" class="mr__warn">
             <strong>建议回路径重学：</strong>
@@ -134,7 +134,7 @@
         </div>
 
         <!-- 未观察：卡内一行空态（动作钮「重新观察」在面板栏，那里是唯一入口） -->
-        <p v-if="!detail.audit" class="mr__sub">尚未观察过这个用户的记忆归并。</p>
+        <p v-if="!detail.audit" class="mk-empty--line">尚未观察过这个用户的记忆归并。</p>
 
         <template v-if="detail.audit">
           <!-- 归并处理条（2026-10-19 用户走查「这个重新设计一下」）：原实现是三枚小按钮飘在
@@ -517,7 +517,11 @@
           </tbody>
         </table>
         </div>
-        <MkEmptyState v-else title="当前没有到期点" description="该用户的记忆痕迹都还没到复习时间；到期后会在这里列出前 20 条。" />
+        <!-- 卡内空态走单行档（2026-11-06 视觉走查）：本页四张并列卡，此前三张是一行 12.5px
+             裸句、这张是 16px 居中块，同一屏读成两种语言。整盘只留给「整页/主内容就是空的」
+             （学员详情·记忆与复习、图谱画布、复习积压页），卡内一律 mk-empty--line：
+             左对齐一行、14.5px、muted，与其它三张同字形同内衬。 -->
+        <p v-else class="mk-empty--line">当前没有到期点，该用户的记忆痕迹都还没到复习时间。</p>
       </section>
 
       <!-- 4. 同族重复：措辞不同、说的是同一件事（归并的输入） -->
@@ -526,7 +530,7 @@
           <h3 class="mk-card__title">同族重复</h3>
           <!-- 2026-10-23：撤掉「措辞不同、含义相同的记录」——卡名已是这件事，下面每一行就是同义成员本身 -->
         </div>
-        <p v-if="!detail.duplicatedFamilies.length" class="mr__sub">没有同族重复。</p>
+        <p v-if="!detail.duplicatedFamilies.length" class="mk-empty--line">没有同族重复。</p>
         <div v-else class="mk-table-scroll">
           <table class="mk-table">
           <thead><tr><th scope="col">重复组</th><th class="mk-num" scope="col">条数</th><th scope="col">成员</th></tr></thead>
@@ -553,7 +557,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { adminMemoryReviewApi } from '@/api/adminApi'
-import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkStatStrip from '@/components/mk/MkStatStrip.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 import type { MkStatItem } from '@/components/mk/MkStatStrip.vue'

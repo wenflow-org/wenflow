@@ -7,12 +7,20 @@
            横幅是同一句「生成中」的第四遍；「页面会自动刷新」又和卡里那颗手动「刷新状态」
            按钮互相打架（一个说自动、一个让手动）。状态只说一次 = 卡片自己说。 -->
 
-      <!-- 页头整块撤除（2026-11-05 屏效比）：顶栏已写「学习路径」，页内 h2「我的学习路径」是
-           同一句复读；「新目标」按钮并入下方搜索/排序/筛选行（一条控制栏读完，省 2 行 ≈100px）。
-           失败态仍隐藏（与失败原因同屏会互相矛盾）。
+      <!-- 页头（2026-11-07 恢复）：2026-11-05 曾整块撤除（理由：顶栏已写「学习路径」，
+           页内 h2「我的学习路径」是同一句复读），但空态页因此顶部只剩一块居中图标，
+           与「知识图谱」空态并排看时本页秃一截（用户「我喜欢图谱的空态设计，上面有点文案」）。
+           现按图谱模板恢复，且只留 h1 = 页名 + 一行副标题，不再出现「我的学习路径」
+           这种复读式 h2；「新目标」仍只在下方控制栏，页头不放按钮。
            「新建目标」每屏只保留一个入口（2026-10-09 用户反馈：空态 CTA、列表尾虚线条
            与页头短钮三处并存是重复）——空态显示居中「规划第一个目标」，有路径后本按钮
            是唯一入口（原列表尾 wf-newpath 虚线条已随本次反馈移除）。 -->
+      <header class="paths__head">
+        <div>
+          <h1>学习路径</h1>
+          <p>目标拆成的阶段、任务与完成进度</p>
+        </div>
+      </header>
 
       <!-- 加载 -->
       <div v-if="loading" class="paths__loading">
@@ -201,22 +209,30 @@
         </div>
 
         <!-- 页面级空态（2026-11-06 走查「空态设计不一样」）：与图谱/学习历史同一套
-             V2ResultState——66px 图标盘 + 标题 + 说明 + 主动作；搜索/筛选无结果仍是行内轻量态 -->
+             V2ResultState——66px 图标盘 + 标题 + 说明 + 主动作。
+             说明句 2026-11-07 改写：原句 23 字在 36ch（≈21 个汉字）的说明列上折成
+             「…学习路 / 径。」，末行只剩一个字（孤字）；新句 31 字折成 20/11 两行，
+             且不再与下方按钮「规划第一个目标」重复同一句开头。 -->
         <V2ResultState
           v-else-if="cards.length === 0"
           tone="empty"
           title="还没有学习路径"
-          description="规划一个目标，问流会把它变成可执行的学习路径。"
+          description="问流会把你规划的目标拆成可执行的阶段与任务，再带你逐步学下去。"
           action-text="规划第一个目标"
           @action="router.push('/goal-conversation')"
         />
 
-        <!-- 筛选/搜索空态 -->
-        <div v-else class="empty">
-          <div class="empty__illus"><span></span><span></span><span></span></div>
-          <p>{{ emptyText }}</p>
-          <button type="button" class="btn-ghost" @click="search ? (search = '') : (filter = 'all')">{{ search ? '清除搜索' : '查看全部' }}</button>
-        </div>
+        <!-- 筛选/搜索空态：同样并入统一结果组件（图标盘 + 标题 + 说明 + 动作）。
+             原先这里自绘三条灰胶囊 + 一行小字，与「知识图谱」的空态不是一套
+             （2026-11-06 0 部署 UI 检查）。 -->
+        <V2ResultState
+          v-else
+          tone="empty"
+          :title="emptyText"
+          :description="emptyHint"
+          :action-text="emptyActionText"
+          @action="onEmptyAction"
+        />
       </template>
     </main>
 
@@ -514,9 +530,31 @@ watch(filterSheetOpen, (open) => {
   }
 });
 
-/** §7 空态微文案：≤20 字、去机制解释；轻量态（搜索/筛选无结果）各一句。
- *  页面级零路径空态已上收 V2ResultState（标题/说明/动作在模板里）。 */
-const emptyText = computed(() => (search.value ? '没有匹配的路径，换个关键词试试' : '该状态下还没有路径'));
+/** §7 空态微文案：≤20 字、去机制解释；三种空态各一句，不再补第二句因果或说明 */
+const emptyText = computed(() => {
+  if (search.value) return '没有匹配的路径';
+  if (cards.value.length === 0) return '还没有学习路径';
+  return '该状态下还没有路径';
+});
+
+/** 空态补一句「下一步能做什么」（标题保持 ≤20 字，说明行给动作指向） */
+const emptyHint = computed(() => {
+  if (search.value) return '换个关键词，或清空搜索看全部路径。';
+  if (cards.value.length === 0) return '说出最近想解决的一件事，就能开始规划。';
+  return '换一个状态筛选试试。';
+});
+const emptyActionText = computed(() => {
+  if (cards.value.length === 0) return '规划第一个目标';
+  return search.value ? '清除搜索' : '查看全部';
+});
+function onEmptyAction() {
+  if (cards.value.length === 0) {
+    router.push('/goal-conversation');
+    return;
+  }
+  if (search.value) search.value = '';
+  else filter.value = 'all';
+}
 
 const visibleCards = computed(() => {
   let list = cards.value;
@@ -614,8 +652,18 @@ onBeforeUnmount(() => {
   padding: 24px 28px 48px;
   display: grid; gap: 18px;
 }
-/* 页头已撤除（2026-11-05 屏效比：页内 h2「我的学习路径」与顶栏「学习路径」复读）；
-   「新目标」并入下方搜索/排序控制行 */
+/* 页头（2026-11-07 恢复，解剖对齐 V2KnowledgeMap 的 .km__head）：
+   h1 是文档里唯一可见的一级标题，主 Tab 切换时本页顶边与学习状态/知识图谱同一条线。
+   副标题只讲本页独有的东西（阶段/任务/进度），不复述页名。 */
+.paths__head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 2px;
+}
+.paths__head h1 { margin: 0; font-size: 22px; font-weight: 800; color: var(--ink); }
+.paths__head p { margin: 3px 0 0; font-size: 13px; color: var(--muted); }
 /* ghost「新目标」＝原型 wf-btn--ghost（surface 底 + line 描边 + muted 字）
    高度收敛 36（§1 工具栏控件 34–36 档）：与搜索框 / 排序触发器同一条基准线 */
 .paths__new-goal {
@@ -824,15 +872,6 @@ onBeforeUnmount(() => {
 /* 失败：原因区弹性拉伸，重试按钮压底（与 ready 卡内容高度对齐） */
 .pcard--failed .pcard__fail-reason { flex: 1; display: grid; align-content: center; }
 
-.empty {
-  display: grid; justify-items: center; align-content: center; gap: 12px;
-  /* 空态留白优化：占用剩余视口空间并垂直居中，避免内容缩在顶部、下方大段空白 */
-  min-height: 52vh;
-  padding: 56px 0; color: var(--faint); font-size: 14px;
-}
-.empty__illus { display: flex; gap: 6px; }
-.empty__illus span { width: 26px; height: 8px; border-radius: 999px; background: var(--line); }
-.empty__illus span:nth-child(2) { background: color-mix(in srgb, var(--blue) 30%, transparent); }
 
 /* .toast/.toast__icon 与 toast-enter/leave 过渡类已随顶部横幅一并删除（2026-11-06 走查）：
    全局 toast 由 utils/toast 独立渲染，本组件不再挂任何 toast 形态的元素 */
@@ -934,7 +973,6 @@ onBeforeUnmount(() => {
   /* 卡标题 15 → 14：用户指着 15.5px 的路径卡标题说「这些就是大了」 */
   .pcard__title { font-size: 14px; }
   .pcard { padding: 14px 16px; gap: 10px; }
-  .empty { min-height: 40vh; padding: 32px 0; }
   .paths__loading { padding: 32px 0; }
 }
 

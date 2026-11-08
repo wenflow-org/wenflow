@@ -42,6 +42,8 @@ import {
   buildProgressAfterTaskCompletion,
   parseStageResultsPayload,
   resolveScenarioBudget,
+  willEmitLessonCompletedOnEnd,
+  isAbortLikeLearnError,
 } from './simulation.helpers';
 import {
   parseGoalConversationHistory,
@@ -77,6 +79,26 @@ export async function completeCheckpointedSimulationTask(
     : 'vl-assisted' as const;
   try {
     await ctx.assertCurrentSessionLeaseOwned(sessionId);
+    // #204：先判定「本次结算前授课会话是否已闭合」。教学链路（带 sessionId）默认把该投影键的
+    // 刷新让给同一节课的 lesson:completed；但会话已是 completed 时 endSession 只走 claimFinalization
+    // 的幂等分支、**不再产出 lesson:completed**（end_only 补结算 / complete_task 重试正是这条路），
+    // 消费者又按 sessionId 跳过 task:completed → 该次收尾对投影键 0 次刷新（静默陈旧至 getLatest
+    // 的 10 分钟兜底）。故只有「本次收尾仍会产出 lesson:completed」时才让路，否则自己补刷。
+    // 判据取库（taskRuntime 的 revision 快照不可靠）；读失败按「仍会收束」处理以保持既有让路语义。
+    let teachingSessionClosedBeforeCompletion = false;
+    if (wrapupTeachingSessionId) {
+      try {
+        const existingTeachingSession = await teachingSessionRepository.getById(wrapupTeachingSessionId);
+        teachingSessionClosedBeforeCompletion = !existingTeachingSession
+          || !willEmitLessonCompletedOnEnd(existingTeachingSession.status);
+      } catch (error: unknown) {
+        logger.warn('[simulation-coordinator] 读取授课会话状态失败，刷新仍让给 lesson:completed', {
+          sessionId,
+          teachingSessionId: wrapupTeachingSessionId,
+          error: asErrorLike(error).message || String(error)
+        });
+      }
+    }
     taskCompletionResult = await learningService.completeTask({
       taskId: taskMatch.task.id,
       userId: session.userId,
@@ -85,6 +107,7 @@ export async function completeCheckpointedSimulationTask(
       rating: 5,
       completionSource,
       sessionId: wrapupTeachingSessionId,
+      ...(teachingSessionClosedBeforeCompletion ? { sessionClosedBeforeCompletion: true } : {}),
       // 日期模拟：台账/streak 落在模拟日（无模拟上下文时不传 → 现网行为不变）
       ...(isSimulatedClockActive() ? { asOf: simulatedNowOr() } : {}),
     });
@@ -303,6 +326,43 @@ export async function completeCheckpointedSimulationTask(
       });
     } catch (error: unknown) {
       const rawMessage = boundTaskCompletionError(error);
+      // #137（第三条漏网路径）：客户端断开 / 请求级取消会让 `transitionToNextLearningTask` 里的
+      // `retryLearnUpstream` 立刻抛 `request_aborted`（simulation.coordinator.ts:568-572）。
+      // 旧实现把它与「不可恢复失败」共用 `persistLearningFailure` → 会话被打成终态 failed，
+      // 整节课不可续（2026-10-25 夜批 w01/w05 实证：唯一一条 phase:error 就是这句 abort 文案）。
+      // 非终局语义：本课**已经结算并持久化**（上方已把 currentTaskId 推进到下一课），只是下一课的
+      // 课堂没开起来。这里保留 `taskRuntime.status='completed'` + 新 currentTaskId，
+      // 让 `executeLearningStep` 的「完成 → 下一课开课」恢复分支（simulation.learn-phase.ts:614-646）
+      // 在下一次 advance-day 直接续开下一课；只落可续跑暂停标记，不写终态。
+      if (isAbortLikeLearnError(error)) {
+        await ctx.persistTeachingPauseMarker(sessionId, error, { code: 'LEARN_REQUEST_ABORTED_PAUSED' });
+        logs.push({
+          timestamp: new Date().toISOString(),
+          phase: 'teaching-interrupted',
+          details: {
+            error: rawMessage,
+            output: {
+              action: 'start-next-learning-task-interrupted',
+              completedTaskId: taskMatch.task.id,
+              nextTaskId: nextProgress.progress.currentTaskId,
+              retryable: true
+            }
+          }
+        });
+        return {
+          success: false,
+          milestoneProgress: {
+            currentMilestone: taskMatch.milestoneIdx + 1,
+            totalMilestones: milestones.length,
+            currentTask: taskMatch.task.title
+          },
+          isPathCompleted: false,
+          taskCompleted: true,
+          currentTaskStopped: true,
+          logs,
+          error: rawMessage
+        };
+      }
       // 预算耗尽且本课已完成：文案明确「本课已学完、调高预算后可续传」，
       // 避免用户误以为学习失败；续传从下一课继续，不丢本课进度。
       const isBudget = /retry_budget_exhausted|budget_exhausted/i.test(rawMessage);
@@ -381,6 +441,11 @@ export async function executeSingleStep(ctx: SimulationOrchestrator, input: Simu
     // 管理面终态（批量终止/僵尸回收/失败）的会话不可再推进：防止执行器复活会话
     if (session.status === 'failed' || session.status === 'abandoned') {
       throw new Error(`会话已终止（${session.status}），无法继续执行`);
+    }
+    // 阶段闸（175-4）：本函数只驱动 Goal 回合。驾驶舱 /step、/auto 只过模式检查，
+    // 任何已进入 path/teaching 的会话再被调用都会把 Goal 回合强行叠加到后继阶段上（阶段倒退）。
+    if (session.currentStage !== 'goal') {
+      throw new Error(`会话当前阶段为 ${session.currentStage}，仅 goal 阶段支持单步模拟推进`);
     }
     if (!session.goalConversationId) {
       // 故事当次需求 → Goal 开场（写入 conversation.description）→ 正式 Path 只吃 Goal，不读 story

@@ -141,6 +141,117 @@ describe('sandbox-resolver', () => {
       );
       expect(result.missingCount).toBe(0);
     });
+
+    it('#192 path 池：stage-designer 声明的 path 通道全部可解析（含本次未注入的显式 null 通道）', () => {
+      const pools = buildPathSandboxPool(
+        { learnerProfile: { surfaceGoal: '目标' } },
+        {
+          previousMilestone: { stageNumber: 1, title: '上一阶段' },
+          materials: [{ title: '资料', sections: [] }],
+          pathStageMap: { stageCount: 2, currentStageNumber: 2, stages: [] },
+          allPreviousStageTasks: [{ stageNumber: 1, tasks: ['a'] }],
+          repairHints: { replanRatio: 0.7 },
+        }
+      );
+      const result = checkSandboxRefs(
+        'path',
+        [
+          'previousMilestone',
+          'normalizedInput',
+          'materials',
+          'repairHints',
+          'supplementRequest',
+          'schoolAnchor',
+          'pathStageMap',
+          'allPreviousStageTasks',
+          'previousStageOutcome',
+        ],
+        pools
+      );
+      expect(result.missingCount).toBe(0);
+    });
+
+    it('#192：kc-mapper 声明的 path.subtasks 对账——真实载荷进池可解析，旧池（仅 normalizedInput）判缺失', async () => {
+      const withSubtasks = buildPathSandboxPool({}, { subtasks: [{ taskKey: 'task-1-0', title: '任务' }] });
+      const ok = await checkAgentSandboxRefs('kc-mapper', 'path', withSubtasks);
+      expect(ok).not.toBeNull();
+      expect(ok!.missingCount).toBe(0);
+      expect(ok!.resolvedCount).toBeGreaterThan(0);
+
+      // 旧的 path 池形状（只有 normalizedInput/replan/previousMilestone/previousStageOutcome）
+      // 就是 #192 的病灶：声明了 path.subtasks，池里没有 → 此前无人对账。
+      const loggerSpy = jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const legacy = await checkAgentSandboxRefs('kc-mapper', 'path', {
+        path: { normalizedInput: {}, replan: null, previousMilestone: null, previousStageOutcome: null },
+      });
+      expect(legacy!.missingCount).toBe(1);
+      expect(legacy!.refs[0].missing).toContain('subtasks');
+      expect(loggerSpy).toHaveBeenCalledWith(
+        '[sandbox-resolver] kc-mapper 沙盘声明键运行时不可解析（声明与装配脱节）',
+        expect.objectContaining({ agentAlias: 'path' })
+      );
+      loggerSpy.mockRestore();
+    });
+
+    it('#192 复核残留：kc-mapper 的 prerequisiteTree 声明在**顶层**通道，且必须 includeOptional 才进对账', async () => {
+      // ① 声明指向真实载荷落点（编排层注入的顶层 prerequisiteTree），
+      //    而不是从不存在的 normalizedInput.prerequisiteTree（原病灶）。
+      const withOptional = await extractSandboxRefsFromCore('kc-mapper', { includeOptional: true });
+      expect(withOptional).toContainEqual({ agentAlias: 'path', path: 'prerequisiteTree' });
+      expect(withOptional).not.toContainEqual({ agentAlias: 'path', path: 'normalizedInput.prerequisiteTree' });
+
+      // ② prerequisiteTree 是 `object?` 可选通道：默认口径整类跳过 ⇒
+      //    两处对账若漏传 includeOptional，该声明恒不进对账（原病灶）。
+      const withoutOptional = await extractSandboxRefsFromCore('kc-mapper');
+      expect(withoutOptional).not.toContainEqual({ agentAlias: 'path', path: 'prerequisiteTree' });
+
+      // ③ 真实载荷（subtasks + prerequisiteTree）进池 → 两条 sandbox 声明都可解析
+      const payload = {
+        subtasks: [{ taskKey: 'task-1-0', title: '任务' }],
+        milestones: [{ stageNumber: 1, title: '阶段' }],
+        prerequisiteTree: { rootConcept: '汇报表达', unknownConcepts: [{ concept: '问题结构' }] },
+      };
+      const loggerSpy = jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const ok = await checkAgentSandboxRefs('kc-mapper', 'path', buildPathSandboxPool({}, payload), {
+        includeOptional: true,
+      });
+      expect(ok!.missingCount).toBe(0);
+      expect(ok!.resolvedCount).toBe(2);
+      expect(loggerSpy).not.toHaveBeenCalled();
+      loggerSpy.mockRestore();
+
+      // ④ 通道登记：本次未注入时也必须登记为显式 null（「没注入」≠「声明缺失」），
+      //    否则只有带 prerequisiteTree 的路径对得上，其余路径刷假告警。
+      expect(buildPathSandboxPool({}, {}).path).toHaveProperty('prerequisiteTree', null);
+
+      // ⑤ 反证：原声明落点（normalizedInput.prerequisiteTree）在真实池里解析不到
+      const legacyRef = checkSandboxRefs('path', ['normalizedInput.prerequisiteTree'], buildPathSandboxPool({}, payload));
+      expect(legacyRef.missingCount).toBe(1);
+      expect(legacyRef.refs[0].missing).toContain('prerequisiteTree');
+    });
+
+    it('#192：stage-designer 的可选 path 通道默认被跳过，includeOptional 后才纳入对账', async () => {
+      const withoutOptional = await extractSandboxRefsFromCore('stage-designer');
+      expect(withoutOptional.filter((r) => r.agentAlias === 'path')).toEqual([]);
+
+      const withOptional = await extractSandboxRefsFromCore('stage-designer', { includeOptional: true });
+      const paths = withOptional.filter((r) => r.agentAlias === 'path').map((r) => r.path);
+      expect(paths).toContain('materials');
+      expect(paths).toContain('repairHints');
+      expect(paths).toContain('pathStageMap');
+      expect(paths).toContain('allPreviousStageTasks');
+
+      const loggerSpy = jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const ok = await checkAgentSandboxRefs(
+        'stage-designer',
+        'path',
+        buildPathSandboxPool({}, { materials: [{ title: 'm' }] }),
+        { includeOptional: true }
+      );
+      expect(ok!.missingCount).toBe(0);
+      expect(loggerSpy).not.toHaveBeenCalled();
+      loggerSpy.mockRestore();
+    });
   });
 
   describe('checkAgentSandboxRefs（统一入口）', () => {

@@ -41,4 +41,39 @@ describe('mergeUnderstanding · canonical 容器跨轮合并', () => {
     expect(merged.success_criteria).toEqual({ observable_result: '能独立完成一次汇报' });
     expect(merged.real_problem).toBe('诊断结论更具体了');
   });
+
+  // #161 补口：canonical 四容器之外还有两个「静默累积」的对象容器，同样不能被
+  // `...nextUnderstanding` 整包覆盖（sdt_needs 供 proposal 设计参考、
+  // school_anchor 由 path.coordinator 读进 schoolAnchor）。修复前：
+  // merged.sdt_needs = {competence}（autonomy 丢）、merged.school_anchor = {examScope}（textbook 丢）。
+  it('静默累积容器（sdt_needs / school_anchor）本轮只给子集时，兄弟键仍在', () => {
+    const merged = mergeUnderstanding(
+      {
+        sdt_needs: { autonomy: '想自己决定节奏', competence: '怕学不会' },
+        school_anchor: { textbook: '人教版八年级上册 Unit 5', schoolPace: '每两周一单元' },
+      },
+      {
+        understanding: {
+          sdt_needs: { competence: '更怕答错被看见' },
+          school_anchor: { examScope: '期中覆盖 Unit 1-5' },
+        },
+      }
+    );
+
+    expect(merged.sdt_needs).toEqual({ autonomy: '想自己决定节奏', competence: '更怕答错被看见' });
+    expect(merged.school_anchor).toEqual({
+      textbook: '人教版八年级上册 Unit 5',
+      schoolPace: '每两周一单元',
+      examScope: '期中覆盖 Unit 1-5',
+    });
+  });
+
+  it('静默累积容器本轮缺席时整体沿用上一轮', () => {
+    const merged = mergeUnderstanding(
+      { school_anchor: { textbook: '人教A版必修第一册' } },
+      { understanding: { surface_goal: '补数学' } }
+    );
+
+    expect(merged.school_anchor).toEqual({ textbook: '人教A版必修第一册' });
+  });
 });

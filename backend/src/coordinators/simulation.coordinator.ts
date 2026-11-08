@@ -59,8 +59,11 @@ import {
 import {
   buildProgressAfterTaskCompletion,
   isRetryableLearnUpstreamError,
+  isAbortLikeLearnError,
   isRequestAborted,
   isTeachingSessionStaleError,
+  isTerminalTeachingSessionConflictError,
+  attachStaleRetryContext,
   boundTaskCompletionError,
   parseStageResultsPayload,
   buildGoalVisibleContext,
@@ -844,10 +847,23 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
       try {
         return await this.runTeachingTurnStepRetries({ ...params, teachingRevision: freshTeachingRevision });
       } catch (retryError: unknown) {
-        // #153：重试本身就是"中断窗口"的恢复动作，不能让重试把「可续跑」升级成终局——
-        // 例如重试期间课堂被并发收束 → 第二次 claim 报 TEACHING_SESSION_STATE_CHANGED（终局类）。
-        // 这里统一保留原始 STALE（属中断窗口冲突、上层归类为可续跑暂停）；真正的重试失败原因
-        // 留在日志里，下一轮 advance 会以干净的 revision 重新拿到它。
+        // #206：重试失败的真实原因不能被原始 STALE 覆盖。终局类课堂错误（课堂状态已变 /
+        // 收束被接管，见 isTerminalTeachingSessionConflictError）与「中断窗口」语义相反：
+        // 覆盖成 STALE 会让上层永远归类为可续跑暂停 → 反复空转、会话不升级，真实原因只剩一条
+        // warn。这里把「本次是 STALE 重试后的失败」作为附加信息挂上，主错误原样交给分类器。
+        if (isTerminalTeachingSessionConflictError(retryError)) {
+          attachStaleRetryContext(retryError, error);
+          logger.warn('[simulation-coordinator] 教学回合 revision 过期后重试撞终局类错误，交上层分类器', {
+            sessionId: params.sessionId,
+            teachingSessionId: params.teachingSessionId,
+            freshTeachingRevision,
+            retryError: asErrorLike(retryError).message || String(retryError),
+            retryErrorCode: (retryError as { code?: unknown } | null)?.code ?? null,
+            staleErrorCode: 'TEACHING_SESSION_STALE',
+          });
+          throw retryError;
+        }
+        // 其余（仍 STALE / BUSY / 上游突发）：保留原始 STALE，维持 #153 的可续跑语义。
         logger.warn('[simulation-coordinator] 教学回合 revision 过期后重试仍失败，按中断窗口（可续跑）处理', {
           sessionId: params.sessionId,
           teachingSessionId: params.teachingSessionId,
@@ -1088,6 +1104,19 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
 
   /** 上游 Learn 调用耗尽重试后的终态记录；checkpoint 恢复分支不会走这里。 */
   async persistLearningFailure(sessionId: string, error: unknown, _logs: SimulationLogEntry[]) {
+    // #137 最后防线：中止类错误（客户端断开 / 请求级取消 in-flight 上游）在任何调用点都不是
+    // 「这节课坏了」，而是「这一段被打断了」。内层教学回合 catch 与最外层步骤 catch 已各自
+    // 识别 abort-like，但「本课已结算、开下一课时中断」等路径由别的 catch 直接调本方法——
+    // 一旦某个调用点漏判就会重演 2026-10-25 夜批的终态 failed（整节课不可续）。
+    // 因此在**终态唯一写入口**统一兜底：abort-like 改写为可续跑暂停标记，不写 failed。
+    if (isAbortLikeLearnError(error)) {
+      logger.warn('[simulation-coordinator] Learn 失败被判定为中止类，改写为可续跑暂停标记（不终局化）', {
+        sessionId,
+        error: boundTaskCompletionError(error)
+      });
+      await this.persistTeachingPauseMarker(sessionId, error, { code: 'LEARN_REQUEST_ABORTED_PAUSED' });
+      return;
+    }
     const message = boundTaskCompletionError(error);
     try {
       const session = await this.getVirtualSession(sessionId);

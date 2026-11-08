@@ -101,3 +101,62 @@ describe('#212 bindGeneratingPath：CAS 落败方不留占位路径', () => {
     expect(mockMarkActiveGenerationFailed.mock.calls[0][0]).toBe('lp-loser');
   });
 });
+
+/**
+ * #175 实例 1 回归：`kickPathGeneration` 里「准备请求」抛错必须**就地**置该 run 失败。
+ *
+ * 病灶：`buildGoalPathRequest` 原先写在 `runGoalAsync` 的实参展开里，先于投递求值，
+ * 一抛错就逃出 kick（onError 只覆盖异步运行失败，调用方 catch 只 rethrow）→
+ * 会话 completed 而路径停在 generating，用户吃 500，要等 5 分钟租约过期才被 stale 恢复兜住。
+ */
+describe('#175-1 kickPathGeneration：请求准备失败就地置失败', () => {
+  it('buildGoalPathRequest 抛错 → 调 markActiveGenerationFailed 且不投递生成', async () => {
+    const pathCoordinator = require('../../../coordinators/path.coordinator').default;
+    mockMarkActiveGenerationFailed.mockClear();
+    pathCoordinator.runGoalAsync.mockClear();
+
+    const deps = makeDeps({
+      buildGoalPathRequest: jest.fn(async () => {
+        throw new Error('seed payload unavailable');
+      }),
+    });
+
+    const { kickPathGeneration } = require('../goal-conversation-rejudge');
+    await kickPathGeneration(deps, {
+      conversation: { id: 'conv-1' },
+      seedResult: { ok: true },
+      pathId: 'lp-kick',
+      runId: 'run-kick',
+    });
+
+    expect(mockMarkActiveGenerationFailed).toHaveBeenCalledTimes(1);
+    expect(mockMarkActiveGenerationFailed.mock.calls[0][0]).toBe('lp-kick');
+    expect(mockMarkActiveGenerationFailed.mock.calls[0][2]).toBe('run-kick');
+    // 准备都没成功，不该投递一次注定失败的生成
+    expect(pathCoordinator.runGoalAsync).not.toHaveBeenCalled();
+  });
+
+  it('准备成功 → 正常投递，且不误标失败', async () => {
+    const pathCoordinator = require('../../../coordinators/path.coordinator').default;
+    mockMarkActiveGenerationFailed.mockClear();
+    pathCoordinator.runGoalAsync.mockClear();
+
+    const deps = makeDeps({
+      buildGoalPathRequest: jest.fn(async () => ({ goal: { subject: '测试' } } as never)),
+    });
+
+    const { kickPathGeneration } = require('../goal-conversation-rejudge');
+    await kickPathGeneration(deps, {
+      conversation: { id: 'conv-1' },
+      seedResult: { ok: true },
+      pathId: 'lp-kick',
+      runId: 'run-kick',
+    });
+
+    expect(mockMarkActiveGenerationFailed).not.toHaveBeenCalled();
+    expect(pathCoordinator.runGoalAsync).toHaveBeenCalledTimes(1);
+    const [request] = pathCoordinator.runGoalAsync.mock.calls[0];
+    expect(request.generationRunId).toBe('run-kick');
+    expect(request.createdPlaceholder).toBe(true);
+  });
+});

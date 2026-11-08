@@ -351,6 +351,7 @@
         v-else
         min
         :title="samples.length ? '当前筛选无虚拟学习者' : '还没有派生过虚拟学习者'"
+        :description="samples.length ? '换一个状态或清空搜索词再看。' : '从学习者卡库派生一个，用来跑仿真教学。'"
         :action-text="isFiltered && samples.length ? '清除筛选' : '从卡库派生'"
         @action="isFiltered && samples.length ? clearFilters() : openDerivePicker()"
       />

@@ -199,15 +199,59 @@ describe('user-session.service（M2 refresh token 会话化）', () => {
       expect(sessions.updateMany).not.toHaveBeenCalled();
     });
 
-    it('乐观锁竞争落败（updateMany count=0）→ unknown-token 而非误判重用', async () => {
+    it('乐观锁竞争落败且无上一代登记 → unknown-token（fail-closed 保留，不误判重用）', async () => {
       sessions.findUnique.mockResolvedValue({
         id: 's-1', userId: 'user-1', tokenHash: hash('old'), revokedAt: null
       });
       sessions.updateMany.mockResolvedValue({ count: 0 });
+      // 无任何行以它为 previousTokenHash（部署前签发/更旧代），无从证明并发
 
       const result = await rotateUserSession('old', 'new', { userId: 'user-1', tokenVersion: 0 });
 
       expect(result).toBe('unknown-token');
+      expect(sessions.updateMany).toHaveBeenCalledTimes(1); // 只有落败的那次写入尝试，无吊销
+    });
+
+    it('乐观锁竞争落败且赢家刚轮换（#116）：上一代在容忍窗内 → concurrent，不吊销不再轮换', async () => {
+      // 真实并发双刷新：两请求都读到「当前代」，赢家先写入新哈希；
+      // 落败方 updateMany count=0，但此时旧哈希已是赢家的 previousTokenHash。
+      // 修复前这里直接返回 unknown-token → 路由 401 + 清 Cookie → 前端跳登录（#116）。
+      sessions.findUnique.mockResolvedValue({
+        id: 's-1', userId: 'user-1', tokenHash: hash('old'), revokedAt: null
+      });
+      sessions.updateMany.mockResolvedValue({ count: 0 });
+      sessions.findFirst.mockResolvedValue({
+        id: 's-1', userId: 'user-1', previousTokenHash: hash('old'), revokedAt: null,
+        rotatedAt: new Date(Date.now() - 15) // 赢家 15ms 前完成轮换
+      });
+
+      const result = await rotateUserSession('old', 'new', { userId: 'user-1', tokenVersion: 0 });
+
+      expect(result).toBe('concurrent');
+      // 只发生落败的那次写入尝试；不吊销、不再轮换该行
+      expect(sessions.updateMany).toHaveBeenCalledTimes(1);
+      expect(sessions.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: 's-1', tokenHash: hash('old') }
+      }));
+    });
+
+    it('乐观锁竞争落败且上一代已超窗 → 不按并发放行，严格吊销并 reuse-detected', async () => {
+      sessions.findUnique.mockResolvedValue({
+        id: 's-1', userId: 'user-1', tokenHash: hash('old'), revokedAt: null
+      });
+      sessions.updateMany.mockResolvedValueOnce({ count: 0 });
+      sessions.findFirst.mockResolvedValue({
+        id: 's-1', userId: 'user-1', previousTokenHash: hash('old'), revokedAt: null,
+        rotatedAt: new Date(Date.now() - 5 * 60 * 1000)
+      });
+
+      const result = await rotateUserSession('old', 'new', { userId: 'user-1', tokenVersion: 0 });
+
+      expect(result).toBe('reuse-detected');
+      expect(sessions.updateMany).toHaveBeenCalledWith({
+        where: { id: 's-1', revokedAt: null },
+        data: { revokedAt: expect.any(Date) }
+      });
     });
   });
 

@@ -1,248 +1,251 @@
 <template>
-  <!-- 版本：核心文件版本（协议发布） + Prompt 版本（单一入口，原协议 pill 已并入） -->
-  <div class="sdp-versions">
-    <!-- A/B 实验变体（2026-10-01）：活着的版本；分流按 userId 分桶，指标近 7 天 -->
-    <section class="sdp-eng">
-      <header class="mk-section__head">
-        <h4>在线变体（A/B 实验）</h4>
-        <span class="sdp-sec-meta">
-          指标为近 7 天
-        </span>
-      </header>
-      <p v-if="variantMsg" class="sdp-versions-msg" :class="{ 'is-err': variantErr }">{{ variantMsg }}</p>
-      <div class="sdp-table-wrap">
-        <table class="mk-table">
-          <thead>
-            <tr>
-              <th scope="col">变体</th>
-              <th scope="col">版本</th>
-              <th title="占在线流量百分比，基线=各对照臂之外的剩余流量" scope="col">权重</th>
-              <th class="mk-num" title="近 7 天按版本归因" scope="col">近7天调用</th>
-              <th class="mk-num" scope="col">成功率</th>
-              <th class="mk-num" scope="col">均耗时</th>
-              <th class="mk-th--right mk-col--actions-wide" scope="col">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="variantBaseline">
-              <td><span class="mk-badge mk-badge--ok">基线</span></td>
-              <td><span class="sdp-vtag mono">v{{ variantBaseline.version }}</span></td>
-              <!-- 基线不给权重：它吃的是各对照臂之外的剩余流量。
-                   2026-11-02 评审：这一格只写「剩余 100%」，与新建臂表单里默认的 10% 并排
-                   读作「110%」。补悬停说清基线的权重不是自己设的，下面表单再给出建臂后的剩余值。 -->
-              <td class="mk-na" title="基线不单独设权重，取各对照臂之外的剩余流量">剩余 {{ baselineRemainder }}%</td>
-              <td class="mk-num">{{ variantBaseline.metrics.calls }}</td>
-              <td class="mk-num">{{ fmtRate(variantBaseline.metrics.successRate) }}</td>
-              <td class="mk-num">{{ fmtDur(variantBaseline.metrics.avgDurationMs) }}</td>
-              <!-- 操作列留空（2026-10-31 外部评审）：「当前生效」是状态不是操作，
-                   基线徽章已表达，不再在操作列复读 -->
-              <td><span class="mk-na">—</span></td>
-            </tr>
-            <tr v-for="v in variantArms" :key="v.id">
-              <td><span class="mk-badge">{{ v.variant }}</span></td>
-              <td><span class="sdp-vtag mono">v{{ v.version }}</span></td>
-              <td>
-                <input
-                  v-model.number="variantWeightEdit[v.id]"
-                  class="sdp-var__w"
-                  :class="{ 'sdp-var__w--err': weightInvalid(v) }"
-                  type="number"
-                  min="1"
-                  max="99"
-                  :aria-invalid="weightInvalid(v)"
-                  :title="weightInvalid(v) ? '权重需为 1–99 的整数（留空保存会被拦下）' : ''"
-                  :disabled="variantBusy === v.id"
-                  @keydown.enter.prevent="saveVariantWeight(v)"
+  <!-- 版本：变体 / 核心文件 / Prompt 三段同处一张卡（2026-11-06 整合）。
+       此前三段是三张同构表竖着堆：列几乎一样、各有各的段头，页高 1020 且同一个 v2 在三张表里各写一遍。
+       现在一段一屏，切换在卡头；建对照臂收进「变体」段内。 -->
+  <div class="sdp-pane">
+    <section class="mk-card">
+      <div class="mk-card__head">
+        <div class="mk-seg sdp-seg" role="group" aria-label="版本视图">
+          <button type="button" class="mk-seg__item" :class="{ 'mk-seg__item--active': seg === 'variant' }" @click="seg = 'variant'">变体</button>
+          <button type="button" class="mk-seg__item" :class="{ 'mk-seg__item--active': seg === 'core' }" @click="seg = 'core'">核心文件</button>
+          <button type="button" class="mk-seg__item" :class="{ 'mk-seg__item--active': seg === 'prompt' }" @click="seg = 'prompt'">Prompt</button>
+        </div>
+        <span class="mk-card__meta">{{ segMeta }}</span>
+      </div>
+      <div class="sdp-vers__body">
+        <!-- ===== 变体（A/B 实验）：活着的版本，分流按 userId 分桶，指标近 7 天 ===== -->
+        <template v-if="seg === 'variant'">
+          <p v-if="variantMsg" class="sdp-versions-msg" :class="{ 'is-err': variantErr }">{{ variantMsg }}</p>
+          <div class="sdp-table-wrap">
+            <table class="mk-table">
+              <thead>
+                <tr>
+                  <th scope="col">变体</th>
+                  <th scope="col">版本</th>
+                  <th scope="col" title="占在线流量百分比，基线=各对照臂之外的剩余流量">权重</th>
+                  <th scope="col" class="mk-num" title="近 7 天按版本归因">近7天调用</th>
+                  <th scope="col" class="mk-num">成功率</th>
+                  <th scope="col" class="mk-num">均耗时</th>
+                  <th scope="col" class="mk-th--right mk-col--actions-wide">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="variantBaseline">
+                  <td><span class="mk-badge mk-badge--ok">基线</span></td>
+                  <td><span class="mono">v{{ variantBaseline.version }}</span></td>
+                  <!-- 基线不给权重：它吃的是各对照臂之外的剩余流量。
+                       2026-11-02 评审：这一格只写「剩余 100%」，与新建臂表单里默认的 10% 并排
+                       读作「110%」。补悬停说清基线的权重不是自己设的，下面表单再给出建臂后的剩余值。 -->
+                  <td class="mk-na" title="基线不单独设权重，取各对照臂之外的剩余流量">剩余 {{ baselineRemainder }}%</td>
+                  <td class="mk-num">{{ variantBaseline.metrics.calls }}</td>
+                  <td class="mk-num">{{ fmtRate(variantBaseline.metrics.successRate) }}</td>
+                  <td class="mk-num">{{ fmtDur(variantBaseline.metrics.avgDurationMs) }}</td>
+                  <!-- 操作列留空（2026-10-31 外部评审）：「当前生效」是状态不是操作，
+                       基线徽章已表达，不再在操作列复读 -->
+                  <td><span class="mk-na">—</span></td>
+                </tr>
+                <tr v-for="v in variantArms" :key="v.id">
+                  <td><span class="mk-badge">{{ v.variant }}</span></td>
+                  <td><span class="mono">v{{ v.version }}</span></td>
+                  <td>
+                    <input
+                      v-model.number="variantWeightEdit[v.id]"
+                      class="sdp-var__w"
+                      :class="{ 'sdp-var__w--err': weightInvalid(v) }"
+                      type="number"
+                      min="1"
+                      max="99"
+                      :aria-invalid="weightInvalid(v)"
+                      :title="weightInvalid(v) ? '权重需为 1–99 的整数（留空保存会被拦下）' : ''"
+                      :disabled="variantBusy === v.id"
+                      @keydown.enter.prevent="saveVariantWeight(v)"
+                    />
+                    <button
+                      type="button"
+                      class="mk-link"
+                      :disabled="variantBusy === v.id || weightInvalid(v) || Number(variantWeightEdit[v.id]) === Number(v.trafficWeight)"
+                      @click="saveVariantWeight(v)"
+                    >保存</button>
+                  </td>
+                  <td class="mk-num">{{ v.metrics.calls }}</td>
+                  <td class="mk-num">{{ fmtRate(v.metrics.successRate) }}</td>
+                  <td class="mk-num">{{ fmtDur(v.metrics.avgDurationMs) }}</td>
+                  <td>
+                    <div class="mk-actions">
+                      <button type="button" class="mk-link" :disabled="variantBusy === v.id" @click="promoteVariant(v)">晋级为基线</button>
+                      <button type="button" class="mk-link" :disabled="variantBusy === v.id" @click="stopVariant(v)">停止</button>
+                    </div>
+                  </td>
+                </tr>
+                <tr v-if="variantsLoading">
+                  <td colspan="7"><MkLoading inline text="变体加载中…" /></td>
+                </tr>
+                <tr v-else-if="!variantBaseline && !variantArms.length">
+                  <td colspan="7"><span class="mk-na">该 skill 暂无线上生效版本，先在协议页签发布一次</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- 建变体：源版本默认为当前基线；新内容必须先经协议发布成为版本。
+               2026-11-02 评审：这一行把「变体键 / 权重% / 源版本 / 创建」和一句说明全挤在同一行，
+               标签对不齐、也看不出新建后基线会剩多少——拆成字段栅格，说明另起一行。 -->
+          <div v-if="variantBaseline" class="sdp-var__create">
+            <div class="mk-section__head">
+              <h4>建对照臂</h4>
+            </div>
+            <div class="sdp-var__create-grid">
+              <label class="sdp-var__field">
+                <span>变体键</span>
+                <input v-model.trim="variantNewKey" class="sdp-var__key" placeholder="B" maxlength="8" />
+              </label>
+              <label class="sdp-var__field">
+                <span>权重%</span>
+                <input v-model.number="variantNewWeight" class="sdp-var__w" type="number" min="1" max="99" />
+                <em class="sdp-var__field-hint">建好后基线剩余 {{ remainderAfterCreate }}%</em>
+              </label>
+              <label class="sdp-var__field">
+                <span>源版本</span>
+                <MkSelect
+                  v-model="variantNewSource"
+                  :options="variantSourceSelectOptions"
+                  aria-label="源版本"
                 />
+              </label>
+              <div class="sdp-var__create-actions">
+                <button type="button" class="mk-btn mk-btn--sm" :disabled="variantCreating" @click="createVariant">
+                  {{ variantCreating ? '创建中…' : '创建变体' }}
+                </button>
                 <button
                   type="button"
-                  class="mk-link"
-                  :disabled="variantBusy === v.id || weightInvalid(v) || Number(variantWeightEdit[v.id]) === Number(v.trafficWeight)"
-                  @click="saveVariantWeight(v)"
-                >保存</button>
-              </td>
-              <td class="mk-num">{{ v.metrics.calls }}</td>
-              <td class="mk-num">{{ fmtRate(v.metrics.successRate) }}</td>
-              <td class="mk-num">{{ fmtDur(v.metrics.avgDurationMs) }}</td>
-              <td>
-                <div class="mk-actions">
-                  <button type="button" class="mk-link" :disabled="variantBusy === v.id" @click="promoteVariant(v)">晋级为基线</button>
-                  <button type="button" class="mk-link" :disabled="variantBusy === v.id" @click="stopVariant(v)">停止</button>
-                </div>
-              </td>
-            </tr>
-            <tr v-if="variantsLoading">
-              <td colspan="7"><MkLoading inline text="变体加载中…" /></td>
-            </tr>
-            <tr v-else-if="!variantBaseline && !variantArms.length">
-              <td colspan="7"><span class="mk-na">该 skill 暂无线上生效版本，先在协议页签发布一次</span></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+                  class="mk-btn mk-btn--sm"
+                  :disabled="variantCorePublishing || !variantNewKey"
+                  title="需先在协议页签保存核心文件"
+                  @click="publishCoreAsVariant"
+                >
+                  {{ variantCorePublishing ? '发布中…' : '把当前核心文件改动发布为变体' }}
+                </button>
+              </div>
+            </div>
+            <p class="sdp-var__create-note">评测时可以指定虚拟学习者按某个变体试跑。</p>
+          </div>
+        </template>
 
-      <!-- 建变体：源版本默认为当前基线；新内容必须先经协议发布成为版本。
-           2026-11-02 评审：这一行把「变体键 / 权重% / 源版本 / 创建」和一句说明全挤在同一行，
-           标签对不齐、也看不出新建后基线会剩多少——拆成字段栅格，说明另起一行。 -->
-      <div v-if="variantBaseline" class="sdp-var__create">
-        <span class="sdp-var__create-title">建对照臂</span>
-        <div class="sdp-var__create-grid">
-          <label class="sdp-var__field">
-            <span>变体键</span>
-            <input v-model.trim="variantNewKey" class="sdp-var__key" placeholder="B" maxlength="8" />
-          </label>
-          <label class="sdp-var__field">
-            <span>权重%</span>
-            <input v-model.number="variantNewWeight" class="sdp-var__w" type="number" min="1" max="99" />
-            <em class="sdp-var__field-hint">建好后基线剩余 {{ remainderAfterCreate }}%</em>
-          </label>
-          <label class="sdp-var__field">
-            <span>源版本</span>
-            <MkSelect
-              v-model="variantNewSource"
-              :options="variantSourceSelectOptions"
-              aria-label="源版本"
-            />
-          </label>
-          <div class="sdp-var__create-actions">
-            <button type="button" class="mk-btn mk-btn--sm" :disabled="variantCreating" @click="createVariant">
-              {{ variantCreating ? '创建中…' : '创建变体' }}
-            </button>
-            <button
-              type="button"
-              class="mk-btn mk-btn--sm"
-              :disabled="variantCorePublishing || !variantNewKey"
-              title="需先在协议页签保存核心文件"
-              @click="publishCoreAsVariant"
-            >
-              {{ variantCorePublishing ? '发布中…' : '把当前核心文件改动发布为变体' }}
+        <!-- ===== 核心文件版本（协议发布） ===== -->
+        <template v-else-if="seg === 'core'">
+          <div class="sdp-table-wrap">
+            <!-- #121：改用共享 .mk-table（原私有 .sdp-pw__table padding 6px 8px 无 hover、
+                 操作列空表头，行高 34px 低于 40px 下限）——同页三张表统一语汇 -->
+            <table class="mk-table">
+              <thead>
+                <tr><th scope="col">版本</th><th scope="col" title="核心文件哈希值">核心哈希</th><th scope="col" title="核心文件版本号">核心版本</th><th scope="col">状态</th><th scope="col">发布者</th><th scope="col" class="mk-th--right mk-col--actions-wide">操作</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="v in coreVersions" :key="v.version" :class="{ 'sdp-pw__table-active': v.status === 'ACTIVE' }">
+                  <td class="mono">v{{ v.version }}</td>
+                  <td class="mono" :title="v.coreHash ?? undefined">{{ coreShortHash(v.coreHash) }}</td>
+                  <td class="mono">{{ v.coreVersion ?? '—' }}</td>
+                  <!-- 状态列走胶囊（2026-10-31 外部评审）：与 Prompt 版本表同一语汇，
+                       纯文字「当前生效」读不出主次 -->
+                  <td>
+                    <span class="mk-badge" :class="v.status === 'ACTIVE' ? 'mk-badge--ok' : 'mk-badge--muted'">{{ versionStatusText(v.status) }}</span>
+                  </td>
+                  <td>{{ v.createdBy }}</td>
+                  <td>
+                    <div class="mk-actions">
+                      <button
+                        v-if="v.status !== 'ACTIVE' && v.rollbackable"
+                        type="button"
+                        class="mk-link"
+                        :disabled="coreRollbacking"
+                        @click="rollbackCore(v.version)"
+                      >回滚</button>
+                      <span v-else-if="v.status !== 'ACTIVE'" class="sdp-just-audit" title="该历史版本没有可验证的源文件快照，只保留审计用途">仅审计</span>
+                      <!-- 无可操作项的行给一个「—」（2026-11-02 评审：当前生效版本占满整列时，
+                           操作列只剩表头，看着像按钮没渲染出来） -->
+                      <span v-else class="mk-na">—</span>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p v-if="!coreVersionsLoading && !coreVersions.length" class="mk-empty--line">暂无核心文件版本记录</p>
+        </template>
+
+        <!-- ===== Prompt 版本 ===== -->
+        <template v-else>
+          <p v-if="versionMsg" class="sdp-versions-msg" :class="{ 'is-err': versionErr }">{{ versionMsg }}</p>
+          <div class="sdp-table-wrap">
+            <table class="mk-table">
+              <thead>
+                <tr>
+                  <th scope="col">版本</th>
+                  <th scope="col">状态</th>
+                  <th scope="col">名称</th>
+                  <th scope="col" class="mk-th--right mk-col--actions-wide">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="v in promptVersions" :key="v.id">
+                  <td><span class="mono">v{{ v.version }}</span></td>
+                  <td>
+                    <span class="mk-badge" :class="v.status === 'ACTIVE' ? 'mk-badge--ok' : 'mk-badge--muted'">{{ versionStatusText(v.status) }}</span>
+                  </td>
+                  <td><span class="sdp-vname" :title="v.name">{{ v.name || '—' }}</span></td>
+                  <td>
+                    <!-- 不可操作行留空（2026-10-31 外部评审）：ACTIVE 的状态词只住状态列胶囊，
+                         不再在操作列复读一遍。
+                         2026-11-02 评审：整列都是 ACTIVE 时操作列只剩表头，补一个「—」表明
+                         「这行确实没有可做的动作」，而不是按钮没渲染。 -->
+                    <div class="mk-actions">
+                      <button
+                        v-if="v.status !== 'ACTIVE'"
+                        type="button"
+                        class="mk-link"
+                        :disabled="versionBusy === v.id"
+                        @click="compareWithActive(v)"
+                      >
+                        {{ compareLoading === v.id ? '对比中…' : '对比生效版' }}
+                      </button>
+                      <span v-else class="mk-na">—</span>
+                    </div>
+                  </td>
+                </tr>
+                <tr v-if="!promptVersions.length">
+                  <td colspan="4"><span class="mk-na">暂无版本记录</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <!-- #122：第 13 条起的版本此前完全不可见（无分页/加载更多）→ 补「加载更多」 -->
+          <div v-if="promptVersions.length < promptVersionTotal" class="sdp-versions-more">
+            <button type="button" class="mk-btn mk-btn--sm" @click="loadMorePromptVersions">
+              加载更多（剩余 {{ promptVersionTotal - promptVersions.length }} 个）
             </button>
           </div>
-        </div>
-        <p class="sdp-var__create-note">评测时可以指定虚拟学习者按某个变体试跑。</p>
-      </div>
-    </section>
-    <section class="sdp-eng">
-      <header class="mk-section__head">
-        <h4>核心文件版本（协议发布）</h4>
-        <span class="sdp-sec-meta">{{ coreVersions.length }} 个 · 回滚会替换磁盘文件与线上生效版本</span>
-      </header>
-      <div class="sdp-table-wrap">
-        <!-- #121：改用共享 .mk-table（原私有 .sdp-pw__table padding 6px 8px 无 hover、
-             操作列空表头，行高 34px 低于 40px 下限）——同页三张表统一语汇 -->
-        <table class="mk-table">
-          <thead>
-            <tr><th scope="col">版本</th><th title="核心文件哈希值" scope="col">核心哈希</th><th title="核心文件版本号" scope="col">核心版本</th><th scope="col">状态</th><th scope="col">发布者</th><th class="mk-th--right mk-col--actions-wide" scope="col">操作</th></tr>
-          </thead>
-          <tbody>
-            <tr v-for="v in coreVersions" :key="v.version" :class="{ 'sdp-pw__table-active': v.status === 'ACTIVE' }">
-              <td class="mono">v{{ v.version }}</td>
-              <td class="mono" :title="v.coreHash ?? undefined">{{ coreShortHash(v.coreHash) }}</td>
-              <td class="mono">{{ v.coreVersion ?? '—' }}</td>
-              <!-- 状态列走胶囊（2026-10-31 外部评审）：与 Prompt 版本表同一语汇，
-                   纯文字「当前生效」读不出主次 -->
-              <td>
-                <span class="mk-badge" :class="v.status === 'ACTIVE' ? 'mk-badge--ok' : 'mk-badge--muted'">{{ versionStatusText(v.status) }}</span>
-              </td>
-              <td>{{ v.createdBy }}</td>
-              <td>
-                <div class="mk-actions">
-                  <button
-                    v-if="v.status !== 'ACTIVE' && v.rollbackable"
-                    type="button"
-                    class="mk-link"
-                    :disabled="coreRollbacking"
-                    @click="rollbackCore(v.version)"
-                  >回滚</button>
-                  <span v-else-if="v.status !== 'ACTIVE'" class="sdp-pw__audit" title="该历史版本没有可验证的源文件快照，只保留审计用途">仅审计</span>
-                  <!-- 无可操作项的行给一个「—」（2026-11-02 评审：当前生效版本占满整列时，
-                       操作列只剩表头，看着像按钮没渲染出来） -->
-                  <span v-else class="mk-na">—</span>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <p v-if="!coreVersionsLoading && !coreVersions.length" class="sdp-none">暂无核心文件版本记录</p>
-    </section>
 
-    <section class="sdp-eng">
-      <header class="mk-section__head">
-        <h4>Prompt 版本</h4>
-        <!-- #122：接口总数被切片丢弃过——区头写「N 个版本」而 N=切片长度（12），
-             等于把窗口当总数对外宣称；现披露「共 N · 显示最近 M」并给「加载更多」 -->
-        <span class="sdp-sec-meta">共 {{ promptVersionTotal }} 个 · 显示最近 {{ promptVersions.length }} 个</span>
-      </header>
-      <p v-if="versionMsg" class="sdp-versions-msg" :class="{ 'is-err': versionErr }">{{ versionMsg }}</p>
-      <div class="sdp-table-wrap">
-        <table class="mk-table">
-          <thead>
-            <tr>
-              <th scope="col">版本</th>
-              <th scope="col">状态</th>
-              <th scope="col">名称</th>
-              <th class="mk-th--right mk-col--actions-wide" scope="col">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="v in promptVersions" :key="v.id">
-              <td><span class="sdp-vtag mono">v{{ v.version }}</span></td>
-              <td>
-                <span class="mk-badge" :class="v.status === 'ACTIVE' ? 'mk-badge--ok' : 'mk-badge--muted'">{{ versionStatusText(v.status) }}</span>
-              </td>
-              <td><span class="sdp-vname" :title="v.name">{{ v.name || '—' }}</span></td>
-              <td>
-                <!-- 不可操作行留空（2026-10-31 外部评审）：ACTIVE 的状态词只住状态列胶囊，
-                     不再在操作列复读一遍。
-                     2026-11-02 评审：整列都是 ACTIVE 时操作列只剩表头，补一个「—」表明
-                     「这行确实没有可做的动作」，而不是按钮没渲染。 -->
-                <div class="mk-actions">
-                  <button
-                    v-if="v.status !== 'ACTIVE'"
-                    type="button"
-                    class="mk-link"
-                    :disabled="versionBusy === v.id"
-                    @click="compareWithActive(v)"
-                  >
-                    {{ compareLoading === v.id ? '对比中…' : '对比生效版' }}
-                  </button>
-                  <span v-else class="mk-na">—</span>
-                </div>
-              </td>
-            </tr>
-            <tr v-if="!promptVersions.length">
-              <td colspan="4"><span class="mk-na">暂无版本记录</span></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <!-- #122：第 13 条起的版本此前完全不可见（无分页/加载更多）→ 补「加载更多」 -->
-      <div v-if="promptVersions.length < promptVersionTotal" class="sdp-versions-more">
-        <button type="button" class="mk-btn mk-btn--sm" @click="loadMorePromptVersions">
-          加载更多（剩余 {{ promptVersionTotal - promptVersions.length }} 个）
-        </button>
-      </div>
-
-      <!-- 对比结果 -->
-      <div v-if="compareResult" class="sdp-diff">
-        <div class="sdp-diff__head">
-          <span class="mono">{{ compareResult.aLabel }} ↔ {{ compareResult.bLabel }}</span>
-          <span class="sdp-diff__count" :class="{ 'is-clean': compareResult.changedLines === 0 }">
-            {{ compareResult.changedLines ? `${compareResult.changedLines} 行变更` : '内容一致' }}
-          </span>
-          <button type="button" class="mk-link" @click="compareResult = null">收起</button>
-        </div>
-        <div class="sdp-diff__body mono">
-          <template v-for="(grp, gi) in compareResult.groups" :key="gi">
-            <div v-if="grp.gap" class="sdp-diff__gap">…</div>
-            <div v-for="(line, li) in grp.lines" :key="li" class="sdp-diff__line" :class="`is-${line.type}`">
-              <span class="sdp-diff__no">{{ line.no }}</span>
-              <span class="sdp-diff__text">{{ line.text }}</span>
+          <!-- 对比结果 -->
+          <div v-if="compareResult" class="sdp-diff">
+            <div class="sdp-diff__head">
+              <span class="mono">{{ compareResult.aLabel }} ↔ {{ compareResult.bLabel }}</span>
+              <span class="sdp-diff__count" :class="{ 'is-clean': compareResult.changedLines === 0 }">
+                {{ compareResult.changedLines ? `${compareResult.changedLines} 行变更` : '内容一致' }}
+              </span>
+              <button type="button" class="mk-link" @click="compareResult = null">收起</button>
             </div>
-          </template>
-          <p v-if="!compareResult.groups.length && compareResult.changedLines === 0" class="sdp-diff__same">两版本内容完全一致。</p>
-        </div>
+            <div class="sdp-diff__body mono">
+              <template v-for="(grp, gi) in compareResult.groups" :key="gi">
+                <div v-if="grp.gap" class="sdp-diff__gap">…</div>
+                <div v-for="(line, li) in grp.lines" :key="li" class="sdp-diff__line" :class="`is-${line.type}`">
+                  <span class="sdp-diff__no">{{ line.no }}</span>
+                  <span class="sdp-diff__text">{{ line.text }}</span>
+                </div>
+              </template>
+              <p v-if="!compareResult.groups.length && compareResult.changedLines === 0" class="sdp-diff__same">两版本内容完全一致。</p>
+            </div>
+          </div>
+        </template>
       </div>
     </section>
   </div>
@@ -250,8 +253,9 @@
 
 <script setup lang="ts">
 /**
- * 版本 tab（单一版本入口）：顶层版本 tab 吸收原「协议·版本历史」pill，
- * 双份版本数据按「核心文件版本（协议发布） / Prompt 版本」分区展示。
+ * 版本 tab（单一版本入口）：顶层版本 tab 吸收原「协议·版本历史」pill。
+ * 三段数据（在线变体 / 核心文件版本 / Prompt 版本）2026-11-06 收进一张卡 + 卡头分段：
+ * 此前三张同构表竖堆，列几乎一样、各有各的段头，同一个 v2 在三张表里各写一遍。
  */
 import { computed, ref, watch } from 'vue'
 import { adminAgentPromptsApi, adminPromptWorkbenchApi } from '@/api/adminApi'
@@ -265,6 +269,15 @@ import MkSelect from '@/components/mk/MkSelect.vue'
 
 const props = defineProps<{ skillId: string; refreshTick: number }>()
 const emit = defineEmits<{ (e: 'core-rolled-back'): void; (e: 'dirty', p: { dirty: boolean; label: string }): void }>()
+
+/** 三段互斥（变体 / 核心文件 / Prompt）：三种版本仍是三份数据、各自的操作不混，页高收在一屏 */
+const seg = ref<'variant' | 'core' | 'prompt'>('variant')
+/** 卡头读数随分段走（原来每段自己一行段头 + 一句口径） */
+const segMeta = computed(() => {
+  if (seg.value === 'variant') return '指标为近 7 天'
+  if (seg.value === 'core') return `${coreVersions.value.length} 个 · 回滚会替换磁盘文件与线上生效版本`
+  return `共 ${promptVersionTotal.value} 个 · 显示最近 ${promptVersions.value.length} 个`
+})
 
 /* 文案单源（R6 复读单源化）：A/B 变体表单上报宿主脏态的标签，多处 emit 共用一份 */
 const VARIANT_DIRTY_LABEL = '变体权重/建变体表单'
@@ -675,7 +688,11 @@ watch(() => props.skillId, () => {
 
 <style scoped>
 /* ---------- 版本 ---------- */
-.sdp-versions { display: grid; gap: 16px; }
+.sdp-pane { display: grid; gap: 14px; align-content: start; }
+/* 卡身：与协议 / 工程 / 试跑同一档内边距 */
+.sdp-vers__body { display: grid; gap: 12px; align-content: start; padding: 12px 16px; }
+/* 卡头里的分段只占自己那么宽（mk-card__head 的子项会被拉满，分段拉成一条通栏） */
+.sdp-seg { flex: 0 0 auto; width: fit-content; }
 .sdp-versions-msg { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-green); font-weight: 600; display: flex; gap: 8px; align-items: center; }
 .sdp-versions-msg.is-err { color: var(--mk-red); }
 .sdp-table-wrap {
@@ -683,14 +700,6 @@ watch(() => props.skillId, () => {
   border-radius: 12px;
   overflow-x: auto;
   background: var(--mk-surface);
-}
-.sdp-vtag {
-  display: inline-block;
-  padding: 1px 6px;
-  border-radius: var(--mk-radius-sm);
-  background: var(--mk-surface-2);
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
 }
 /* Prompt 版本名称列：上限 420px（原 656px 占半屏无上限）+ ellipsis + title 全值 */
 .sdp-vname {
@@ -749,7 +758,7 @@ watch(() => props.skillId, () => {
 
 /* 核心文件版本表（#121）：改用共享 .mk-table 语汇；只保留 ACTIVE 行高亮与「仅审计」微字 */
 .sdp-pw__table-active { background: var(--mk-green-bg); }
-.sdp-pw__audit { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.sdp-just-audit { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
 /* A/B 变体区：行内权重输入 + 建变体表单 */
 .sdp-var__w { width: 56px; padding: 2px 6px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-sm); font-size: var(--mk-fs-micro); }
@@ -758,8 +767,7 @@ watch(() => props.skillId, () => {
 .sdp-var__key { width: 56px; padding: 2px 6px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-sm); font-size: var(--mk-fs-micro); }
 /* 建对照臂：标题 + 字段栅格 + 说明（2026-11-02 评审：原为一行 flex，标签与控件全挤在一起，
    字段名对不齐，说明也混在按钮之间） */
-.sdp-var__create { display: grid; gap: 10px; padding: 10px 12px; border: 1px dashed var(--mk-line); border-radius: 12px; background: var(--mk-surface); }
-.sdp-var__create-title { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-ink); }
+.sdp-var__create { display: grid; gap: 10px; padding: 10px 12px; border: 1px dashed var(--mk-line); border-radius: 12px; background: var(--mk-surface-2); }
 .sdp-var__create-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 14px; align-items: start; }
 .sdp-var__create-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; align-self: end; }
 .sdp-var__create-note { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
@@ -767,22 +775,13 @@ watch(() => props.skillId, () => {
 .sdp-var__field { display: grid; gap: 5px; font-size: var(--mk-fs-micro); color: var(--mk-muted); font-weight: 600; }
 .sdp-var__field-hint { font-style: normal; font-weight: 400; color: var(--mk-faint); }
 
-/* 分区头 */
-.sdp-eng { display: grid; gap: 8px; }
-/* 区块头走 .mk-section__head（shared.css） */
-.sdp-sec-meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); display: inline-flex; gap: 10px; align-items: center; }
-.sdp-none { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-
 /* 4K：字号跟随壳层放大 */
 @media (min-width: 3600px) {
-  .mk-section__head h4 { font-size: var(--mk-fs-body); }
-  .sdp-sec-meta { font-size: var(--mk-fs-body); }
   .sdp-versions-msg { font-size: var(--mk-fs-body); }
-  .sdp-vtag { font-size: var(--mk-fs-body); padding: 2px 9px; }
   .sdp-diff__head { font-size: var(--mk-fs-body); padding: 12px 16px; }
   .sdp-diff__body { font-size: var(--mk-fs-body); max-height: 460px; }
   .sdp-diff__same { font-size: var(--mk-fs-body); }
-  .sdp-pw__audit { font-size: var(--mk-fs-body); }
+  .sdp-just-audit { font-size: var(--mk-fs-body); }
 }
 
 /* 暗色模式 */

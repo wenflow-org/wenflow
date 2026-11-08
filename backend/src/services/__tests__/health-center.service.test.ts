@@ -188,6 +188,37 @@ describe('健康中心聚合（基准体系版）', () => {
       .toEqual(['fixable', 'fixable', 'fixable', 'fixable', 'manual', 'manual']);
   });
 
+  /* 2026-11-07 用户走查「0 [正常] 底下却印着过期了、查不到、对不上」：
+     cause 是**故障时**的原因，正常态照印就是拿故障文案吓人。现在每项都带 okNote，
+     正常态只读它，且 okNote 里不得出现故障语（过期 / 查不到 / 对不上 / 不一致…）。 */
+  it('正常态说明（okNote）：每项都有，且不写故障语', async () => {
+    const report = await buildHealthCenterReport(EMPTY_DB);
+    const failureWords = ['过期', '查不到', '对不上', '缺失', '残留', '不一致'];
+    const problems: string[] = [];
+    for (const item of report.items) {
+      if (typeof item.okNote !== 'string' || !item.okNote.trim()) problems.push(`${item.id}: okNote 缺失`);
+      for (const word of failureWords) {
+        if (String(item.okNote).includes(word)) problems.push(`${item.id}: okNote 含故障语「${word}」`);
+      }
+    }
+    expect(problems).toEqual([]);
+  });
+
+  /* 术语规范（2026-11-07 用户「户口簿、幽灵注册这种内部黑话别出现在后台」）：
+     运维读的是「技能注册表」，不是自己的记名录。 */
+  it('全页文案不含内部俚语（户口簿 / 幽灵）', async () => {
+    const report = await buildHealthCenterReport(EMPTY_DB);
+    const problems: string[] = [];
+    for (const item of report.items) {
+      const texts = [item.label, item.cause, item.okNote, item.fixHint, ...item.detail];
+      for (const text of texts) {
+        if (text.includes('户口簿')) problems.push(`${item.id}: 含「户口簿」`);
+        if (text.includes('幽灵')) problems.push(`${item.id}: 含「幽灵」`);
+      }
+    }
+    expect(problems).toEqual([]);
+  });
+
   it('文案运营语守卫：label/cause/fixHint 不再包含源码内部锚点（file:line / 表名 / 内部编号）', async () => {
     const report = await buildHealthCenterReport(EMPTY_DB);
     const sourceAnchors = ['deriveContract(', 'managedByCode', 'prompt_call_logs', 'B3', 'B5', 'P4 ', 'P5', 'zombie', 'file:line', 'diff', 'EXEMPT_PLATFORM_ROOTS', 'W3_STEPS_EMPTY_EXEMPT', 'registrationPoint', 'base='];

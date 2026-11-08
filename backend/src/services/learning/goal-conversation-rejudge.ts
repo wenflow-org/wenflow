@@ -20,6 +20,7 @@ import {
 } from './response-triage';
 import { buildCompletedConversationResult, buildHardBlockMessage } from './goal-conversation.exit';
 import { getPathCompletionProjection } from './goal-conversation.path-projection';
+import { hasConfirmableProposal } from './goal-proposal-guard';
 import learningService from './learning.service';
 
 /** service 侧 GoalConversationOptions 的结构子集（重判链路只读 meta / systemPromptOverrides 并原样透传） */
@@ -188,7 +189,17 @@ async function discardLosingPlaceholder(pathId: string, runId: string): Promise<
   }
 }
 
-/** 确认链路共用段：绑定成功后异步跑 Path 生成（失败回调作废占位路径，供 markActiveGenerationFailed 兜底）。 */
+/**
+ * 确认链路共用段：绑定成功后异步跑 Path 生成（失败回调作废占位路径，供 markActiveGenerationFailed 兜底）。
+ *
+ * #175 实例 1：`buildGoalPathRequest` 原先直接写在 `runGoalAsync` 的**实参展开**里，
+ * 因此先于 `runGoalAsync` 求值——它一抛错就逃出本函数：`onError` 只覆盖异步运行失败，
+ * 调用方的 catch 又只 rethrow，于是留下「会话已 completed + 路径停在 generating」，
+ * 用户拿到 500 并要等 5 分钟租约过期才被 `recoverStaleGeneratingPaths` 兜住。
+ * 现把「准备请求」与「投递」一起纳入 try：准备阶段失败就**就地**把该 run 标失败
+ * （`markActiveGenerationFailed` 按 activeRunId 幂等/fenced，可安全重入），
+ * 让路径立刻落到 failed + 可重试文案，而不是靠租约兜底。
+ */
 export async function kickPathGeneration(
   deps: GoalConversationRejudgeDeps,
   input: {
@@ -199,22 +210,41 @@ export async function kickPathGeneration(
     systemPromptOverrides?: RejudgeConversationOptions['systemPromptOverrides'];
   }
 ) {
-  pathOrchestrator.runGoalAsync(
-    {
-      ...await deps.buildGoalPathRequest(input.conversation, input.seedResult, input.pathId, input.systemPromptOverrides),
+  type GoalPathRequest = Awaited<ReturnType<GoalConversationRejudgeDeps['buildGoalPathRequest']>> & {
+    generationRunId: string;
+    createdPlaceholder: boolean;
+  };
+  let request: GoalPathRequest;
+  try {
+    request = {
+      ...(await deps.buildGoalPathRequest(
+        input.conversation,
+        input.seedResult,
+        input.pathId,
+        input.systemPromptOverrides
+      )),
       generationRunId: input.runId,
       createdPlaceholder: true
+    };
+  } catch (prepareError) {
+    logger.error('硬规则触发：路径生成请求准备失败，就地置该 run 为失败', {
+      conversationId: input.conversation.id,
+      pathId: input.pathId,
+      error: String(prepareError)
+    });
+    await learningService.markActiveGenerationFailed(input.pathId, prepareError, input.runId);
+    return;
+  }
+
+  pathOrchestrator.runGoalAsync(request, {
+    onSuccess: () => {
+      logger.info('硬规则触发：异步学习路径生成成功', { conversationId: input.conversation.id, pathId: input.pathId });
     },
-    {
-      onSuccess: () => {
-        logger.info('硬规则触发：异步学习路径生成成功', { conversationId: input.conversation.id, pathId: input.pathId });
-      },
-      onError: async (pathError) => {
-        logger.error('硬规则触发：异步学习路径生成失败', { conversationId: input.conversation.id, pathId: input.pathId, error: String(pathError) });
-        await learningService.markActiveGenerationFailed(input.pathId, pathError, input.runId);
-      }
+    onError: async (pathError) => {
+      logger.error('硬规则触发：异步学习路径生成失败', { conversationId: input.conversation.id, pathId: input.pathId, error: String(pathError) });
+      await learningService.markActiveGenerationFailed(input.pathId, pathError, input.runId);
     }
-  );
+  });
 }
 
 /**
@@ -226,8 +256,10 @@ export async function kickPathGeneration(
  *   1. 新消息照常入对话（用户补充 + 模型回合都落库）；
  *   2. 模型按「原目标 + 补充说明」重新提取 understanding，updateCollectedData 内重算分诊；
  *   3. 仍硬阻断 → 返回更新后的拒绝文案（明说重判仍不通过，建议换知识型框架重开对话）；
- *      硬阻断解除 → 复用确认链路生成路径并回写 learningPathId（同一会话只允许一条活路径，
- *      learningPathId 回写 + CAS 双保险，重复补充说明只会拿到已有路径）。
+ *      硬阻断解除 → **再过后置提案门禁**（#162 的另一条入口，与 service 确认通道同一道
+ *      hasConfirmableProposal），确有可用提案才复用确认链路生成路径并回写 learningPathId
+ *      （同一会话只允许一条活路径，learningPathId 回写 + CAS 双保险，重复补充说明只会拿到
+ *      已有路径）；没有可用提案则回到 proposing，让模型先把提案补出来（用户再确认）。
  *
  * 返回 null = 不适用重判（存档分诊非硬阻断），调用方回落既有 completed 行为（不回归）。
  * 与 proposing 确认分支「不允许再次确认放行」的关系：那条规则拦的是对同一份旧证据的重复
@@ -353,7 +385,44 @@ export async function rejudgeHardBlockedCompletion(
     };
   }
 
-  // 重判通过：复用确认链路生成路径（硬阻断是唯一无条件闸门，解除即放行，
+  // 提案门禁（#162 的另一条入口）：硬阻断解除只撤掉「分诊」这一道闸，不等于会话里已经有
+  // 一份可确认的提案。与 service 确认通道（goal-conversation.service.ts 的 proposing 分支）
+  // 复用同一判据 hasConfirmableProposal，避免这里成为「从没被确认过的路径」的旁路：
+  // 没有可用提案（confirmedProposal 为空/半截）时不 bindGeneratingPath，回到 proposing 由
+  // 模型先补提案，模型本轮回复原样交给用户（用户看到的是模型在继续推进，而非凭空成功）。
+  if (!hasConfirmableProposal(latest.collectedData, {
+    conversationId: conversation.id,
+    userId,
+    stage: latest.stage,
+  })) {
+    await deps.updateConversationLifecycle(conversation.id, 'proposing', { status: 'active' });
+    return {
+      userVisible: aiResponse.userVisible,
+      internal: {
+        core: {
+          conversationId: conversation.id,
+          stage: 'proposing' as const,
+          confidence: latestData.confidence || 0,
+          isCompleted: false,
+          learningPath: null,
+          // 与硬阻断终局的 hardBlocked 标记同形状但取反：这是「可继续推进」的普通回合，
+          // 前端据此不弹「路径已创建」假成功、也不显示阻断卡。
+          hardBlocked: false
+        },
+        ext: {
+          goalConversation: {
+            understanding: latestData.understanding || {},
+            nextQuestions: [] as string[],
+            quickReplies: [] as string[],
+            collected: latestData.collected || {},
+            responseTriage: rejudgedTriage
+          }
+        }
+      }
+    };
+  }
+
+  // 重判通过且提案门禁已过：复用确认链路生成路径（硬阻断解除 + 确有可确认提案后即放行，
   // 与 generate 直连入口同口径；confirmProposal 的确认计量不适用本链路，不落 lastConfirmation）
   const { bound, placeholderPath, runId, seedResult } = await bindGeneratingPath(deps, {
     conversation: latest,

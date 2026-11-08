@@ -1,19 +1,25 @@
 /**
  * 学习者线事件消费者（`goal:understanding:updated` / `task:completed` / `lesson:completed` / `path:*`）。
  *
- * 固定顺序：证据投影 → 课后知识增强 → 清画像缓存 → 快照重算。
+ * 固定顺序：证据投影 → 清画像缓存 → 快照重算 →（仅 lesson:completed）登记课后知识增强事件。
  *
- * 关键语义（2026-09-17 审计 §6.1 修复）：课后知识增强是**增强层**，不是快照刷新的依赖。
- * 旧实现把它和「清缓存 + 快照刷新」放在同一个 consumer 回调里顺序 await，增强层一旦 `throw`
- * 就会中断后面两步——快照只能等读路径自愈（`getLatest` 超过 TTL 才重建）才刷新。
- * 现在增强失败被吞下并**在链尾重新抛出**：既保证清缓存/快照照常执行，又保留 outbox 的退避重投语义
- * （增强消费本身按 `domain_event_inbox` receipt 幂等，重投不会重复写证据）。
+ * 关键语义（2026-09-17 审计 §6.1 + #144/#145/#146）：
+ *
+ * 1. 课后知识增强是**增强层**，不是快照刷新的依赖——旧实现把它和「清缓存 + 快照刷新」放在同一个
+ *    consumer 回调里顺序 await，增强层一旦 `throw` 就会中断后面两步。
+ * 2. 但「吞下异常、刷新完再在链尾重抛」也不对（#146）：outbox 重投会从头再跑整条链（证据投影 →
+ *    课后增强 → 清缓存 → 快照重算），最多 8 次；而这 8 次里每一次都不含本课的知识增量。
+ * 3. 现在是**拆事件**（#144）：本消费者只跑快路径，然后为 `lesson:completed` 登记一条独立的
+ *    `lesson:knowledge-enrichment` 事件（events/lesson-enrichment-event.ts）。增强的 LLM
+ *    由 outbox 的独立泳道消费（不在这条有序事件的批处理路径上，失败也不会挡住该用户的后续事件），
+ *    成功后由增强消费者自己把增量推进画像。
+ *
+ * 因此本函数对 `lesson:completed` 的耗时与 LLM 时长无关：一次收课不再占用唯一 worker 的批处理时间。
  */
 import { learnerEvidenceProjector } from '../services/learner/LearnerEvidenceProjector';
-import { lessonKnowledgeEnrichmentConsumer } from '../services/learner/LessonKnowledgeEnrichmentConsumer';
+import { enqueueLessonEnrichmentEvent } from './lesson-enrichment-event';
 import { learnerProfileService } from '../services/learner/LearnerProfileService';
 import { learnerSnapshotRefreshService } from '../services/learner/LearnerSnapshotRefreshService';
-import { logger } from '../utils/logger';
 import type { DurableDomainEvent, DurableEventType } from './contracts';
 
 /**
@@ -42,20 +48,10 @@ export const LEARNER_EVENT_TYPES: DurableEventType[] = [
 export async function handleLearnerEvent(event: DurableDomainEvent): Promise<void> {
   await learnerEvidenceProjector.handle(event);
 
-  let enrichmentError: unknown = null;
-  try {
-    await lessonKnowledgeEnrichmentConsumer.handle(event);
-  } catch (error) {
-    enrichmentError = error;
-    logger.warn('课后知识增强失败：不阻断画像快照刷新（outbox 将退避重投）', {
-      eventId: event.id,
-      eventType: event.type,
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
-
   if (event.userId) {
     learnerProfileService.clear(event.userId);
+    // #176-2：画像缓存清了，由旧画像算出的快照缓存也必须一起失效，否则读路径继续返回旧画像拼出的快照。
+    learnerSnapshotRefreshService.invalidate(event.userId);
     const data = event.data || {};
     // #147：教学的 task:completed 带 sessionId（见 task-completion.service 的 completionContext）。
     // 它的投影键（teaching:path:milestone:task）与同一节课的 lesson:completed 完全相同，本次刷新
@@ -80,6 +76,7 @@ export async function handleLearnerEvent(event: DurableDomainEvent): Promise<voi
     }
   }
 
-  // 增强失败在链尾重抛：快照已刷新，但事件仍需重投以补齐增强产物
-  if (enrichmentError) throw enrichmentError;
+  // 快路径落定后再登记课后增强（#144）：登记本身只是一次 outbox upsert（幂等 id），
+  // LLM 在独立泳道执行——本事件不必等它，也不会因它失败而重投。
+  await enqueueLessonEnrichmentEvent(event);
 }

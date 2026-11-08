@@ -301,7 +301,7 @@ function selfCheck(parsedRoot: Root, snapshotText: string): string[] {
     if (!enabledBare.has(value) && !enabledQualified.has(value)) {
       throw new RegistryEditError(
         `默认${tier === 'chat' ? '对话' : '推理'}模型「${value}」解析不到已启用供应商提供的模型，保存会让全平台默认路由落空。`
-          + '请先在「路由与调用」把默认模型改到别处，或恢复提供该模型的供应商。',
+          + '请在「模型与接入」的对话模型列表里把默认模型改到别的模型，或恢复提供该模型的供应商。',
         400,
         'invalid'
       );
@@ -841,7 +841,7 @@ export async function deleteModel(providerId: string, modelId: string): Promise<
     if (value === modelId || value === `${providerId}/${modelId}`) {
       throw new RegistryEditError(
         `模型「${modelId}」正被默认${tier === 'chat' ? '对话' : '推理'}模型引用，删掉会让全平台默认路由落空。`
-          + '请先在「路由与调用」把默认模型改到别处。',
+          + '请先将列表中的其他模型设为默认后再删除。',
         400,
         'invalid'
       );

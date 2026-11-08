@@ -40,11 +40,11 @@
              下拉用 MkSelect（工具栏/表单下拉原语）：键盘 ↑↓ / Home / End / Enter 选中、Esc/点外部
              关闭、选中后焦点归还触发器，语义为 combobox + listbox（原 radiogroup 的能力不缩水）。 -->
         <div class="mk-ge__bar">
-          <div
-            v-if="showPathRail && paths.length > 1"
-            ref="pathpickEl"
-            class="mk-ge__pathpick"
-          >
+          <!-- 路径归属恒常驻（2026-11-07 用户走查 图4）：此前只在 `paths.length > 1` 时
+               出下拉，只有 1 条路径的用户左上角什么都没有——看不出当前看的是哪条路径的图。
+               现在：多条 → 下拉（可切「全部路径」）；恰好 1 条 → 静态标签直接写路径名
+               （没有可切项，下拉是假控件）。两者占同一格、同一字号基线，切换路径条数不跳动。 -->
+          <div v-if="showPathRail && paths.length > 1" ref="pathpickEl" class="mk-ge__pathpick">
             <MkSelect
               block
               :model-value="pathId ?? null"
@@ -53,6 +53,10 @@
               aria-label="按学习路径筛选"
               @update:model-value="selectPath"
             />
+          </div>
+          <div v-else-if="showPathRail && paths.length === 1" class="mk-ge__pathonly">
+            <span class="mk-ge__pathonly-label">当前路径</span>
+            <strong :title="paths[0].title || '未命名路径'">{{ paths[0].title || '未命名路径' }}</strong>
           </div>
           <div class="mk-ge__stats">
             <!-- 2026-10-31 二轮评审 P2：隐藏孤立点时写明「显示 X / Y」，不再让 24 与图例加总对不上 -->
@@ -675,6 +679,27 @@ function onPractice() {
   min-width: 0;
   max-width: 100%;
 }
+/* 单路径时的静态归属标签（2026-11-07 走查 图4）：与下拉同一格、同一高度基线，
+   但不是控件——没有可选项（1 条路径），做成下拉会是假控件。
+   标题超长省略，不挤中间统计与右侧筛选。 */
+.mk-ge__pathonly {
+  flex: 0 1 320px;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.mk-ge__pathonly-label { flex: 0 0 auto; color: var(--faint); font-size: 12px; }
+.mk-ge__pathonly strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-weight: 700;
+}
 /* 图卡内层：壳（border / radius / 10px 10px 4px padding）由宿主出，这里只排版 */
 .mk-ge__card {
   display: flex;
@@ -693,6 +718,8 @@ function onPractice() {
    下拉自己一行，不再被压成一条缝（旧轨在这里还会占 44px 高 + 横滚） */
 @media (max-width: 1100px) {
   .mk-ge__pathpick { flex: 1 1 100%; }
+  /* 单路径静态标签同样整行铺开，与下拉同一断点行为 */
+  .mk-ge__pathonly { flex: 1 1 100%; }
 }
 .mk-ge__stats {
   display: flex;

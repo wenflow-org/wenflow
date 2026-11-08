@@ -8,6 +8,7 @@ import {
   getPluginProviderConfigs,
   savePluginProviderConfig,
 } from '../../services/plugin-providers.service';
+import { probePluginProvider } from '../../services/plugin-provider-probe.service';
 import { setAuditAction, setAuditAfter } from '../../middleware/audit-context';
 
 const router = Router();
@@ -66,6 +67,27 @@ router.put('/config/:pluginId', async (req, res) => {
       return;
     }
     res.status(500).json({ success: false, error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+/**
+ * 单个 provider 的连通性测试（2026-11-07 用户「每个 provider 给一个测试」）。
+ *
+ * 只探测点名的这一家、不进降级链：改了端点/密钥后要能立刻知道「这一家通不通」，
+ * 而走主链会拿到「换一家还是成功了」的假信号。失败时把上游原文回给前端。
+ */
+router.post('/config/:pluginId/providers/:providerId/test', async (req, res) => {
+  const pluginId = String(req.params.pluginId || '');
+  const providerId = String(req.params.providerId || '');
+  if (!isPluginConfigId(pluginId)) {
+    res.status(400).json({ success: false, error: `该插件没有服务配置：${pluginId}` });
+    return;
+  }
+  try {
+    const result = await probePluginProvider(pluginId, providerId);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error instanceof Error ? error.message : String(error) });
   }
 });
 

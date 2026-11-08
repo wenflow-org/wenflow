@@ -15,9 +15,12 @@ import { dashboardGuidanceSnapshotService } from '../services/learner/DashboardG
 import { DurableEventConsumerRegistry } from '../events/consumer-registry';
 import { DurableOutboxWorker } from '../events/outbox.worker';
 import { handleLearnerEvent, LEARNER_EVENT_TYPES } from '../events/learner-event-consumer';
+import { LESSON_ENRICHMENT_EVENT_TYPE } from '../events/lesson-enrichment-event';
+import { lessonKnowledgeEnrichmentConsumer } from '../services/learner/LessonKnowledgeEnrichmentConsumer';
 import { reviewCompletedConsumer } from '../services/learner/ReviewCompletedConsumer';
 import { learnerProfileService } from '../services/learner/LearnerProfileService';
 import { learnerSnapshotRefreshService } from '../services/learner/LearnerSnapshotRefreshService';
+import type { DurableEventType } from '../events/contracts';
 import { autopilotService } from '../virtual-lab/autopilot.service';
 import { startBatchExperimentScheduler } from '../services/virtual-lab/batch-experiment.service';
 import { startSimulatedDayScheduler } from '../services/virtual-lab/simulated-day-scheduler';
@@ -66,7 +69,18 @@ export async function runVirtualLabStartupRecovery(): Promise<void> {
   startRpmLimitSync();
 }
 
-/** outbox 事件消费：注册 durable consumers 并启动 worker */
+/** 课后增强泳道拾取的事件类型（#144：与学习者线分开取数，不占主泳道的批处理时间） */
+const ENRICHMENT_EVENT_TYPES: ReadonlySet<DurableEventType> = new Set([LESSON_ENRICHMENT_EVENT_TYPE]);
+
+/**
+ * 课后增强泳道的并发度（#144）。
+ *
+ * 一次增强是 10–20s 的 LLM 调用：串行时第 N 个收课的用户要等前面 N-1 次跑完（线性积压）。
+ * 3 路并发足以让「并发收课」不再线性排队，同时不给上游 LLM 配额添压力。
+ */
+const ENRICHMENT_LANE_CONCURRENCY = 3;
+
+/** outbox 事件消费：注册 durable consumers 并启动 worker（主泳道 + 课后增强泳道） */
 export function startOutboxWorker(): DurableOutboxWorker {
   const durableConsumers = new DurableEventConsumerRegistry();
   durableConsumers.register(['task:completed'], reconcileTaskCompletionMetric);
@@ -79,6 +93,8 @@ export function startOutboxWorker(): DurableOutboxWorker {
     // 会话所属路径随事件 payload 带出（warmup-writeback），旧事件无 pathId → 回落 global。
     if (event.userId) {
       learnerProfileService.clear(event.userId);
+      // #176-2：与清画像缓存同源——快照缓存里是旧画像算出的结果，必须一起失效。
+      learnerSnapshotRefreshService.invalidate(event.userId);
       const data = (event.data || {}) as { pathId?: string | null };
       await learnerSnapshotRefreshService.refresh({
         userId: event.userId,
@@ -90,7 +106,20 @@ export function startOutboxWorker(): DurableOutboxWorker {
     }
   });
   durableConsumers.register(LEARNER_EVENT_TYPES, handleLearnerEvent);
-  const worker = new DurableOutboxWorker(durableConsumers);
+  // #144：课后知识增强的 LLM 不在学习者线链路上——它由独立的增强事件驱动（见 events/lesson-enrichment-event.ts）
+  durableConsumers.register([LESSON_ENRICHMENT_EVENT_TYPE], (event) =>
+    lessonKnowledgeEnrichmentConsumer.handleEnrichmentEvent(event));
+
+  // 主泳道：串行，保持批内同用户队头语义；排除增强事件（增强另有泳道，不抢同一行）
+  const worker = new DurableOutboxWorker(durableConsumers, {
+    excludeEventTypes: ENRICHMENT_EVENT_TYPES,
+  });
+  // 增强泳道：只拾取增强事件，并发执行；唤醒由主泳道转发、关闭由主泳道一并停
+  worker.attachSecondary(new DurableOutboxWorker(durableConsumers, {
+    includeEventTypes: ENRICHMENT_EVENT_TYPES,
+    concurrency: ENRICHMENT_LANE_CONCURRENCY,
+    ownsWakeListener: false,
+  }));
   worker.start();
   return worker;
 }

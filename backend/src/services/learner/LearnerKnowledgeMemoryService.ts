@@ -71,6 +71,12 @@ const NAMESPACED_KEY_RE = /^[A-Za-z0-9]+(?::[A-Za-z0-9_-]+)+$/;
 
 /** 卡点判定线（2026-10-15 F3/F4 定档）：证据均分低于它算「卡点」。 */
 export const STRUGGLING_MASTERY_THRESHOLD = 0.55;
+/**
+ * 「反复困惑」的最小出现次数（#172-3）：只有 struggle 信号真实出现 >= 2 次才配叫 recurring。
+ * 旧口径 `struggleCountByKey.get(label) || 1` 把只出现过一次（甚至 0 次）的信号兜底成 1，
+ * 由确定性通道凭空造出一条「反复」困惑行；单次信号不是反复，不生成。
+ */
+export const RECURRING_CONFUSION_MIN_COUNT = 2;
 /** 高严重度卡点线：低于它才允许触发「压缩/加速」这类减法动作（struggling 常态档挡不住它们）。 */
 export const SEVERE_STRUGGLING_MASTERY_THRESHOLD = 0.3;
 /**
@@ -1076,11 +1082,31 @@ export class LearnerKnowledgeMemoryService {
       .slice(-5);
 
     // #93：globalSignals 是用户级视角（跨路径并集），不用 currentPath 子集。
+    // #172-2 一致性过滤：mastered 与 fragile / blocked 名单必须互斥。确定性与模型蒸馏是两套
+    // 独立来源，同一概念身份可能被一侧判「已掌握」、另一侧判「高风险/阻塞」。已掌握是更强的正面
+    // 结论，这里在名单组装处统一排除（conceptId 优先、归一化名字兜底），避免下游路径规划同时看到
+    // 「可复用地基」与「阻塞地基」自相矛盾。台账行本身仍按 #156 的「最新证据取胜」口径保留。
     const masteredConcepts = globalConceptStates
       .filter((concept) => concept.stability === 'stable' || concept.status === 'mastered')
       .map((concept) => concept.label);
+    const masteredConceptIds = new Set(
+      globalConceptStates
+        .filter((concept) => concept.stability === 'stable' || concept.status === 'mastered')
+        .map((concept) => concept.conceptId)
+        .filter((id): id is string => !!id),
+    );
+    const masteredRefKeys = new Set<string>(
+      masteredConcepts.map((label) => normalizeConceptKey(label)).filter(Boolean) as string[],
+    );
+    /** 名单项/台账行以名字或概念键引用概念时，判断该身份是否已被判为 mastered。 */
+    const isMasteredRef = (ref: string | null | undefined, conceptId?: string | null): boolean => {
+      if (conceptId && masteredConceptIds.has(conceptId)) return true;
+      const normalized = normalizeConceptKey(ref);
+      return !!normalized && masteredRefKeys.has(normalized);
+    };
     const fragileConcepts = globalConceptStates
       .filter((concept) => concept.stability === 'fragile' || concept.status === 'review')
+      .filter((concept) => !isMasteredRef(concept.label, concept.conceptId))
       .map((concept) => concept.label);
     // 卡点两档（2026-10-15 P0-2 F3/F4）：<0.55 = 卡点（名单/文案用）；<0.3 = 高严重度卡点
     //（加速/压缩这类"减法"动作的判据用——刚学完的概念天然 <0.55，只挡真没学会的）。
@@ -1183,13 +1209,14 @@ export class LearnerKnowledgeMemoryService {
 
     const deterministicConceptLedger: LearnerBackgroundConceptLedgerItem[] = globalConceptStates
       .map((concept) => {
-        const familiarity: LearnerBackgroundConceptLedgerItem['familiarity'] = concept.status === 'mastered'
+        // #172-2：familiarity 与 misconceptionRisk 必须同源（都只认 stability），否则同一行会出现
+        // 「understood + misconceptionRisk=high」（issue 实测 136 条投影中 116 条）。
+        // stable→stable / developing|fragile→practiced / 其它→seen；risk: fragile→high / developing→medium。
+        const familiarity: LearnerBackgroundConceptLedgerItem['familiarity'] = concept.stability === 'stable'
           ? 'stable'
-          : concept.status === 'review'
-            ? 'understood'
-            : concept.status === 'learning'
-              ? 'practiced'
-              : 'seen';
+          : concept.stability === 'developing' || concept.stability === 'fragile'
+            ? 'practiced'
+            : 'seen';
         const transferReadiness: LearnerBackgroundConceptLedgerItem['transferReadiness'] = concept.stability === 'stable'
           ? 'high'
           : concept.stability === 'developing'
@@ -1197,7 +1224,7 @@ export class LearnerKnowledgeMemoryService {
             : 'low';
         const misconceptionRisk: LearnerBackgroundConceptLedgerItem['misconceptionRisk'] = concept.stability === 'fragile'
           ? 'high'
-          : concept.status === 'learning'
+          : concept.stability === 'developing'
             ? 'medium'
             : 'low';
         // 证据计数走倒排索引（label 与 conceptKey 命中的下标并集去重，等价于旧的
@@ -1225,14 +1252,47 @@ export class LearnerKnowledgeMemoryService {
     // 60 条里剩余的 20 个额度，且排序是任务插入序而非证据新旧。改为不截断，交给合并后的
     // 「按 lastSeenAt 排序 + slice(0,60)」（见下方 conceptLedger），口径统一为「越新越优先」。
 
-    const deterministicConfusions: LearnerRecurringConfusion[] = fragileConcepts.slice(0, 12).map((label) => ({
-      conceptKey: label,
-      label,
-      pattern: '近期多次出现 review / fragile 信号，后续新目标与新路径中应视为不稳定前置。',
-      confidence: 0.7,
-      count: struggleCountByKey.get(label) || 1,
-      lastSeenAt: globalConceptStates.find((concept) => concept.label === label)?.lastSeenAt,
-    }));
+    // #172-3：单次困惑不是「反复困惑」。旧口径用 `|| 1` 把 0/1 次兜底成 1，凭空造出「多次」；
+    // 现只保留真实出现 >= RECURRING_CONFUSION_MIN_COUNT 次的概念，count 取真实值。
+    //
+    // 计数源（复核补修）：两条通道有重叠——会话知识看板既进 conceptSignals，也经 pushEvidence
+    // 进 globalRecentEvidence；且同一 canonical 的不同写法（概念丙/概念丁）必须合起来算一次反复。
+    // 故按**概念身份**聚合 conceptSignals 的 fragile/review 条数，与证据侧 struggle 次数取 max
+    // （不是相加，避免同一件事数两遍）。仍是「≥2 次才叫反复、1 次不生成」，只去掉 `|| 1` 兜底。
+    const identityOfRow = (row: { state: { conceptId?: string; conceptKey: string; label: string } }): string =>
+      row.state.conceptId ?? row.state.conceptKey ?? row.state.label;
+    const confusionCountByIdentity = new Map<string, number>();
+    const identityByLabel = new Map<string, string>();
+    for (const row of conceptStateRows) {
+      const identity = identityOfRow(row);
+      identityByLabel.set(row.state.label, identity);
+      identityByLabel.set(row.state.conceptKey, identity);
+      const confusionSignals = row.allSignals.filter(
+        (signal) => signal.stability === 'fragile' || signal.status === 'review'
+      );
+      if (confusionSignals.length === 0) continue;
+      confusionCountByIdentity.set(identity, (confusionCountByIdentity.get(identity) ?? 0) + confusionSignals.length);
+    }
+    const deterministicConfusions: LearnerRecurringConfusion[] = fragileConcepts
+      .map((label) => ({
+        label,
+        // 两通道有重叠（会话看板同进 conceptSignals 与 globalRecentEvidence），故取 max 而非相加或单选：
+        // ① 概念信号侧（痕迹 + 看板）条数，② 证据行 struggle 次数；哪个更能代表「真实发生了几次」取哪个。
+        count: Math.max(
+          confusionCountByIdentity.get(identityByLabel.get(label) ?? label) ?? 0,
+          struggleCountByKey.get(label) ?? 0,
+        ),
+      }))
+      .filter(({ count }) => count >= RECURRING_CONFUSION_MIN_COUNT)
+      .slice(0, 12)
+      .map(({ label, count }) => ({
+        conceptKey: label,
+        label,
+        pattern: '近期多次出现 review / fragile 信号，后续新目标与新路径中应视为不稳定前置。',
+        confidence: 0.7,
+        count,
+        lastSeenAt: globalConceptStates.find((concept) => concept.label === label)?.lastSeenAt,
+      }));
 
     const deterministicTransferSignals: LearnerTransferSignal[] = deterministicConceptLedger
       .filter((concept) => concept.transferReadiness !== 'low')
@@ -1382,6 +1442,22 @@ export class LearnerKnowledgeMemoryService {
     }
     const transferSignals = Array.from(transferMap.values()).slice(0, 30);
 
+    // #172-2：blockedFoundations 是「已掌握 vs 阻塞」的第二处双源矛盾入口——它把台账里
+    // misconceptionRisk='high' 的行与模型自带 blockedFoundations 自由文本名单并集。台账行可能由
+    // 模型行取胜（familiarity='stable' 却仍带 high risk），模型名单也可能把已掌握概念写回来。
+    // 与上方 fragileConcepts 同口径过滤：先补齐「台账自认已掌握」的键，再按 mastered 身份剔除。
+    for (const row of conceptLedger) {
+      if (row.familiarity !== 'stable') continue;
+      for (const ref of [row.label, row.conceptKey]) {
+        const normalized = normalizeConceptKey(ref);
+        if (normalized) masteredRefKeys.add(normalized);
+      }
+    }
+    const blockedFoundations = dedupe([
+      ...conceptLedger.filter((concept) => concept.misconceptionRisk === 'high').map((concept) => concept.label),
+      ...enrichedBlockedFoundations
+    ]).filter((label) => !isMasteredRef(label, conceptIdByLedgerKey.get(label))).slice(0, 20);
+
     const globalBackground: LearnerGlobalBackgroundKnowledge = {
       conceptLedger,
       recurringConfusions,
@@ -1389,10 +1465,7 @@ export class LearnerKnowledgeMemoryService {
         ...conceptLedger.filter((concept) => concept.transferReadiness === 'high').map((concept) => concept.label),
         ...enrichedReusableFoundations
       ]).slice(0, 20),
-      blockedFoundations: dedupe([
-        ...conceptLedger.filter((concept) => concept.misconceptionRisk === 'high').map((concept) => concept.label),
-        ...enrichedBlockedFoundations
-      ]).slice(0, 20),
+      blockedFoundations,
       transferSignals,
       ...(enrichedKnowledgeStateSummary ? { knowledgeStateSummary: enrichedKnowledgeStateSummary } : {}),
     };

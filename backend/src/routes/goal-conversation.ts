@@ -175,6 +175,10 @@ function envelopeGoalConversation(result: any, fallbackConversationId?: string) 
           structuredData: goalExt.structuredData,
           confirmedProposal: goalExt.confirmedProposal,
           confidenceScores: goalExt.confidenceScores,
+          // #251③：分诊结论（triageGoalResponse 产物，服务层已落 collectedData.responseTriage）
+          // 此前被这条白名单重建丢掉——信封只剩 7 个 ext 字段，前端与分诊命中率遥测拿不到本轮
+          // mode。仅在服务层确实产出时携带（缺席 = 该分支不适用，公开 DTO 形状不变）。
+          ...(goalExt.responseTriage ? { responseTriage: goalExt.responseTriage } : {}),
           collected: goalExt.collected || {}
         }
       }
@@ -505,6 +509,9 @@ router.get('/:conversationId', authMiddleware, async (req: Request, res: Respons
               structuredData: conversation.structuredData || null,
               confirmedProposal: conversation.confirmedProposal || null,
               confidenceScores: conversation.confidenceScores || null,
+              // #251③：恢复信封同样透出分诊结论（与 POST /reply 的 final 信封同口径），
+              // 否则用户重进已完成会话时前端拿不到本轮 responseTriage.mode。
+              ...(conversation.responseTriage ? { responseTriage: conversation.responseTriage } : {}),
               collected: conversation.collected || {}
             }
           }

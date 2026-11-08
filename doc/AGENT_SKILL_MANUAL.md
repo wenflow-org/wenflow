@@ -66,7 +66,7 @@
 |---|---|---|---|
 | **mainline** | 阶段主链的决策/产出节点 | ✅ 是（编排 `contracts` + `routings`） | ✅ `core.yaml` |
 | **aux** | 旁挂能力（开场/诊断/归并/守门），`runAux` 执行 | ❌ 否 | ✅ `core.yaml`（多数） |
-| **handler-only** | 纯函数/查库/工具执行器 | ❌ 否 | ❌ `noPromptFile: true` |
+| **handler-only** | 纯函数/查库/工具执行器 | ❌ 否 | ❌ `noPromptFile: true`（有独立提示词产物时，改填 `promptArtifact` + `noPromptFile: false`，#235） |
 
 ### 0.3 五阶段数据旅程（一句话）
 
@@ -152,6 +152,7 @@ goal-agent     path-agent           teaching-agent        profile-agent         
 - **编排什么 Skill**：`skill:lesson-knowledge-enricher`（step2，`when lesson ends`）；`learner.definition.ts` 的其余步骤都是确定性 service（step1 `LearnerEvidenceProjector` 证据投影、step3 `LearnerProfileService` 清画像缓存、step4 `LearnerSnapshotRefreshService` 快照重算，真实序列见 `backend/src/events/learner-event-consumer.ts`）。`skill:learner-model` 不在事件链 steps 内——它是按 `action` 取快照/写增量的拉取式 API（`agents/learner-model-agent/index.ts`）；`learning-predictor` 不在 `learner.definition.ts` steps 内，由 `TeachingContextBuilder` 任务前调用（`skills.yaml` notes）；`adaptive-guidance-copy`（2026-10-14 由 teaching 阶段迁入）也不在 steps 内，由 dashboard 侧 `DashboardGuidanceSnapshotService` 调用，登记在 `profile.yaml contracts`。`profile.yaml` 的 routing 终点为 `handoff: []`（画像终点，写 snapshot 与 projection）。
 - **输入/输出**：输入 = `goal:understanding:updated` / `path:generated` / `lesson:completed` / `task:completed` / `path:adjusted` 事件；输出 = `snapshot.dynamicState` / `snapshot.learningControlState` / `snapshot.replanSignal` / `snapshot.teachingHints` / `snapshot.knowledgeMemory.*` / `profile.curriculumControls`（全部 `render: hidden`，内部沉淀）。
 - **边界与不负责**：不生成课堂回复/路径结构、不直接改写路径；admin v1 **只读 + 重算**，不做人工编辑 snapshot / mastery / teaching hints（[`LEARNER_MODEL_ARCHITECTURE.md`](./LEARNER_MODEL_ARCHITECTURE.md) §10.1）。
+- **画像概念字段契约（#151，2026-11-07 拍板）**：`virtual_learner_profiles.knownConcepts` / `struggleConcepts` 是**虚拟学习者专用**字段——真实学习者**没有本表行**（该表随虚拟学习者档案创建，受 `isVirtualLearner` 门约束），因此这两列对真人是 **N/A**，不是「写了但为空」。真实侧概念台账的权威由 `memory_traces` / `misconception_ledger` / `learner_evidence` 聚合承担（`snapshot.knowledgeMemory.*` 与 `lesson-knowledge-enricher` 的 `conceptLedger`）。**禁止**给真实用户在本表建行补写概念：会造成双写双源，并污染卡库导出、故事与投影。（注：`backend/src/coordinators/simulation.memory.ts` 的 `persistProfileConcepts` 已无生产调用点、仅测试引用，按弃用对待；现行写入路径是 `backend/src/virtual-lab/learner-memory.ts` 的 `writeProfileConceptsAfterLesson`。）
 - **失败/降级行为**：事件驱动刷新 + 按需读取；`learning-predictor` 进入校准闭环，样本 `n<5` 不展示置信度（[`LEARNER_STATE_REVIEW_DESIGN.md`](./LEARNER_STATE_REVIEW_DESIGN.md) §6.5）。已知真静默降级点（如 `learner-memory.ts`）正在补结构化降级标记（[`UPGRADE_DIRECTION_20Q.md`](./UPGRADE_DIRECTION_20Q.md) §2 Q3、§8 第一波）。BKT 参数有启动校验，`pKnowL` 只做**有界**消费（信念背离→回路径重学建议），**不驱动间隔/难度**（审计 §4.2(3)、§7 P1-3）。
 
 ### 2.5 simulation-agent（Simulation 阶段）

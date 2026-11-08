@@ -10,7 +10,6 @@
     <MkEmptyState
       v-if="failed"
       tone="error"
-      icon="!"
       title="健康报告加载失败"
       :description="errorText"
       action-text="重试"
@@ -165,7 +164,9 @@
                         <strong>{{ item.label }}</strong>
                         <span v-if="item.detail.length" class="hc-check__caret" aria-hidden="true">{{ detailOpen(item.id) ? '▾' : '▸' }}</span>
                       </span>
-                      <span>{{ item.cause }}</span>
+                      <!-- 2026-11-07 用户走查「0 正常，底下却印着过期了、查不到」：
+                           cause 写的是故障原因，只该在异常时出现；正常态读 okNote（查了什么、结论是什么）。 -->
+                      <span>{{ itemNote(item) }}</span>
                     </span>
                   </button>
                   <span class="hc-check__metrics">
@@ -177,8 +178,14 @@
                     <button v-if="item.action === 'fixable' && item.severity !== 'ok'" type="button" class="mk-btn mk-btn--sm" :disabled="fixingId === item.id" @click="fix(item.id)">{{ fixingId === item.id ? '修复中…' : '修复' }}</button>
                     <button v-else-if="item.action === 'manual' && item.severity !== 'ok' && canJumpAway(item.id)" type="button" class="mk-btn mk-btn--sm" @click="jump(item.id)">查看 →</button>
                   </span>
+                  <!-- 明细只给异常项：正常项的 detail 是「无覆盖 / 当前无差异」这类说明，
+                       展开后没有可行动内容；异常项里技术差异行（field=… ≠ DB=…）走等宽代码块 -->
                   <div v-if="detailOpen(item.id) && item.detail.length" class="hc-check__detail">
-                    <p v-for="(d, i) in visibleDetail(item)" :key="i">{{ d }}</p>
+                    <p
+                      v-for="(d, i) in visibleDetail(item)"
+                      :key="i"
+                      :class="{ 'hc-check__code': isTechnicalDetail(d) }"
+                    >{{ d }}</p>
                     <p v-if="detailTruncated(item)" class="hc-check__detail-more">{{ detailMoreText(item) }}</p>
                   </div>
                 </div>
@@ -631,6 +638,20 @@ function detailMoreText(item: HealthCenterItem): string {
   return `共 ${item.detail.length} 条明细，仅显示前 ${DETAIL_LIMIT} 条`
 }
 
+/* ---------- 正常态说明 ---------- */
+/** 行内说明：异常项读故障原因，正常项读 okNote（后端逐项声明，缺字段时回落到中性说明） */
+function itemNote(item: HealthCenterItem): string {
+  return isHealthAbnormal(item) ? item.cause : (item.okNote || '检查通过')
+}
+/**
+ * 技术差异行（`field profile/... ≠ DB=null`、`W2 xxx：…`、`agentId status=drifted`）：
+ * 等宽 + 浅底，与自然语言说明区分开——它们是给开发逐字核对用的读数，不是给运营读的句子。
+ */
+const TECHNICAL_DETAIL_RE = /(^|[^\w])(?:[\w-]+=|≠|status=|core=|DB=)/
+function isTechnicalDetail(line: string): boolean {
+  return TECHNICAL_DETAIL_RE.test(line)
+}
+
 /* ---------- 数字带单位 + 语义标签提示 ---------- */
 const COUNT_UNITS: Record<string, string> = {
   'baseline-drift': '处不一致',
@@ -946,6 +967,17 @@ defineExpose({ refresh })
 /* 检查明细是中文说明 + 数值混排，走正文无衬线（等宽只给 id/代码类机器串） */
 .hc-check__detail p { margin: 0; font-size: var(--mk-fs-micro); line-height: 1.5; color: var(--mk-muted); overflow-wrap: anywhere; }
 .hc-check__detail-more { color: var(--mk-amber) !important; }
+/* 技术差异行：等宽 + 浅底 + 可横向滚动，与中文说明分色分体 */
+.hc-check__code {
+  padding: 3px 8px !important;
+  border-radius: var(--mk-radius-sm);
+  background: var(--mk-surface-2);
+  font-family: var(--mk-mono) !important;
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-ink) !important;
+  overflow-x: auto;
+  white-space: pre;
+}
 
 /* 窄屏：动作区（跳转/修复钮）改到行下方，否则固定列把标题挤成一字一行 */
 @media (max-width: 700px) {

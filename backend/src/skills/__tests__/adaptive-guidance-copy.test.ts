@@ -96,3 +96,79 @@ describe('adaptiveGuidanceCopy', () => {
     expect(result.output?.headline).toBe('欢迎回来，小明')
   })
 })
+
+/**
+ * #187 视图口径：同一个 skill 服务两个视图，**各按传入的 view 生成**。
+ *
+ * 修前的形状是「唯一模型调用硬编码 view='dashboard'」——learning-state 页拿到 dashboard 口径的
+ * 文案（问候式 headline + 指回本页的「查看学习状态」自指深链）。这里钉住两件事：
+ * ① 调用方的 view 真的进入模型载荷；② learning-state 视图的输出里不出现自指深链。
+ */
+describe('adaptiveGuidanceCopy · 视图口径（#187）', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  const LS_INPUT = { ...INPUT, view: 'learning-state' as const }
+  const SELF_LINK_ACTIONS = [
+    { title: '查看学习状态', desc: '看看当前节奏和负荷。', action: '查看状态', to: 'learning-state' },
+    { title: '继续学习', desc: '状态稳定就继续完成当前最小任务。', action: '继续', to: 'continue-learning' },
+  ]
+
+  it('把调用方的 view 透传给模型载荷（learning-state 不再被写成 dashboard）', async () => {
+    mockCallPrompt.mockImplementation(async (spec: any) => {
+      const payload = JSON.parse(spec.buildUserPayload(LS_INPUT, {}))
+      expect(payload.view).toBe('learning-state')
+      return {
+        success: true,
+        output: spec.normalizeOutput(PROMPT_ALIGNED_LLM_OUTPUT, LS_INPUT),
+        debug: {},
+      }
+    })
+
+    const result = await adaptiveGuidanceCopy(LS_INPUT)
+
+    expect(result.success).toBe(true)
+    expect(mockCallPrompt).toHaveBeenCalledTimes(1)
+  })
+
+  it('learning-state：裁掉指向本页自身的 todayActions（自指深链）', async () => {
+    mockCallPrompt.mockImplementation(async (spec: any) => ({
+      success: true,
+      output: spec.normalizeOutput({ ...PROMPT_ALIGNED_LLM_OUTPUT, todayActions: SELF_LINK_ACTIONS }, LS_INPUT),
+      debug: {},
+    }))
+
+    const result = await adaptiveGuidanceCopy(LS_INPUT)
+
+    expect(result.output.todayActions.map((item) => item.to)).toEqual(['continue-learning'])
+  })
+
+  it('learning-state：模型只给自指动作时，回落本视图兜底动作（不把列表裁成空）', async () => {
+    mockCallPrompt.mockImplementation(async (spec: any) => ({
+      success: true,
+      output: spec.normalizeOutput({
+        ...PROMPT_ALIGNED_LLM_OUTPUT,
+        todayActions: [SELF_LINK_ACTIONS[0]],
+      }, LS_INPUT),
+      debug: {},
+    }))
+
+    const result = await adaptiveGuidanceCopy(LS_INPUT)
+
+    expect(result.output.todayActions.length).toBeGreaterThan(0)
+    expect(result.output.todayActions.every((item) => item.to !== 'learning-state')).toBe(true)
+  })
+
+  it('dashboard：to=learning-state 的「查看学习状态」是合法动作，不受 learning-state 过滤影响', async () => {
+    mockCallPrompt.mockImplementation(async (spec: any) => ({
+      success: true,
+      output: spec.normalizeOutput({ ...PROMPT_ALIGNED_LLM_OUTPUT, todayActions: SELF_LINK_ACTIONS }, INPUT),
+      debug: {},
+    }))
+
+    const result = await adaptiveGuidanceCopy(INPUT)
+
+    expect(result.output.todayActions.map((item) => item.to)).toEqual(['learning-state', 'continue-learning'])
+  })
+})

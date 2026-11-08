@@ -8,6 +8,7 @@
 import { randomUUID as uuidv4 } from 'crypto';
 import prisma from '../config/database';
 import blackboxVirtualLearnerRunner from './blackbox-runner';
+import { withKeyedLock } from '../utils/keyed-lock';
 
 export const SIMULATION_FRICTION_BUDGETS = ['none', 'low', 'normal', 'high', 'stress_test'] as const;
 export type SimulationFrictionBudget = typeof SIMULATION_FRICTION_BUDGETS[number];
@@ -82,18 +83,35 @@ export function normalizeStoryPoolData(profileData: any) {
 }
 
 export async function ensureProfileStoryPool(profile: any) {
-  const profileData = parseJson<any>(profile?.profile, {});
-  const normalized = normalizeStoryPoolData(profileData);
+  const profileId = profile?.id;
+  const fallbackNormalized = () => normalizeStoryPoolData(parseJson<any>(profile?.profile, {}));
+  if (!profileId) return fallbackNormalized();
 
-  if (normalized.changed && profile?.id) {
-    await prisma.virtual_learner_profiles.update({
-      where: { id: profile.id },
-      data: { profile: JSON.stringify(normalized.profileData) },
+  // #170：与课后记忆回写（`vlab-profile:<userId>` 锁）共用同一行画像 JSON。
+  // 锁内重新读取画像再归一化 storyPool，避免拿锁外的旧快照整包写回、回滚同期写入的记忆字段。
+  const userId = profile.userId || (await prisma.virtual_learner_profiles.findUnique({
+    where: { id: profileId },
+    select: { userId: true },
+  }))?.userId;
+  if (!userId) return fallbackNormalized();
+
+  return withKeyedLock(`vlab-profile:${userId}`, async () => {
+    const fresh = await prisma.virtual_learner_profiles.findUnique({
+      where: { id: profileId },
+      select: { profile: true },
     });
-    profile.profile = JSON.stringify(normalized.profileData);
-  }
+    const normalized = normalizeStoryPoolData(parseJson<any>(fresh?.profile ?? profile?.profile, {}));
 
-  return normalized;
+    if (normalized.changed) {
+      await prisma.virtual_learner_profiles.update({
+        where: { id: profileId },
+        data: { profile: JSON.stringify(normalized.profileData) },
+      });
+      profile.profile = JSON.stringify(normalized.profileData);
+    }
+
+    return normalized;
+  });
 }
 
 export function buildStorySignature(story: any) {

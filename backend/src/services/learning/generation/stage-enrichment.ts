@@ -11,7 +11,8 @@ import prisma from '../../../config/database';
 import { logger } from '../../../utils/logger';
 import { withTransaction } from '../../../utils/with-transaction';
 import { executeSkill } from '../../../skills';
-import { getRequestContext, runWithContext } from '../../../gateway/api-gateway/context';
+import { runWithPathGenerationContext } from './generation-request-context';
+import { auditPathStageAgentsSandboxRefs } from './stage-sandbox-ref-audit';
 import { stageDesignerDefinition } from '../../../skills/stage-designer';
 import {
   clampHintsToOneSitting,
@@ -143,8 +144,10 @@ export async function enrichLearningPathWithAnderson(
   // 【A/B 归因修复 2026-10-01】后台生成链路原本没有 userId 请求上下文 → callPrompt 的
   // 变体分流键缺失（恒走基线，实测 44% stage-designer 调用如此）且 prompt_call_logs.userId
   // 空缺。此处用路径属主补齐上下文（保留既有字段），stage-designer/kc-mapper/补课全部继承。
-  return runWithContext({ ...getRequestContext(), userId: data.userId }, () =>
-    enrichLearningPathWithAndersonInner(pathId, runId, data, analysis, options)
+  // #248：这里也必须补 pathId（口径见 generation-request-context.runWithPathGenerationContext）。
+  return runWithPathGenerationContext(
+    { userId: data.userId, pathId, sourceConversationId: data.sourceConversationId },
+    () => enrichLearningPathWithAndersonInner(pathId, runId, data, analysis, options)
   );
 }
 
@@ -384,6 +387,9 @@ async function enrichLearningPathWithAndersonInner(
     // 这个键在代码里根本不存在）——跨阶段衔接与去重规则长期空转。串行下 Stage N 完成后
     // 存摘要，Stage N+1 注入 previousMilestone.tasks。
     const stageTaskSummaries = new Map<number, Array<{ title: string; type: string | null; estimatedMinutes: number | null }>>();
+    // #192：留一份 stage-designer 的真实载荷样本（任一阶段），供本轮沙盘 ref 对账
+    // ——core 声明的 sandbox:path.* 键必须能在池里解析（见 sandbox-resolver.buildPathSandboxPool）。
+    let stageSandboxSample: Record<string, unknown> | null = null;
 
     /**
      * 逐阶段任务锚（2026-09-28 去等分）：按**本阶段实际学时**反推该阶段该出几个任务，
@@ -578,6 +584,7 @@ async function enrichLearningPathWithAndersonInner(
         repairHints: null,
         ...(pathSchoolAnchor ? { schoolAnchor: pathSchoolAnchor } : {}),
       };
+      if (!stageSandboxSample) stageSandboxSample = stageDesignerInput;
       const stageResult = await executeSkill(stageDesignerDefinition, stageDesignerInput);
 
       const rawStageTasks = Array.isArray(stageResult?.subtasks) ? stageResult.subtasks : [];
@@ -907,6 +914,16 @@ async function enrichLearningPathWithAndersonInner(
 
     // 全路径材料覆盖体检（只告警，判据见 stage-material-coverage-audit）。
     auditStageMaterialCoverage({ pathId, stageMaterialAudit, normalizedInput });
+
+    // #192：把 stage-designer / kc-mapper 纳入沙盘 ref 运行期对账（载荷与判据见 stage-sandbox-ref-audit）。
+    await auditPathStageAgentsSandboxRefs({
+      pathId, normalizedInput, stageDesignerPayload: stageSandboxSample,
+      kcMapperPayload: {
+        subtasks: stageDesignOutputs.flatMap((stage) => stage.subtasks),
+        milestones: learningPath.milestones.map((m: any) => ({ stageNumber: m.stageNumber, title: m.title, coreConcept: m.coreConceptName || m.coreConceptId })),
+        prerequisiteTree: parsedTemplate?.cognitiveCore?.prerequisiteTree || parsedTemplate?.cognitiveDesign?.prerequisiteTree || null,
+      },
+    });
 
     // KC 映射（kc-mapper）：stage-designer 全部完成后，将概念与子任务分解为知识组件 + 依赖图，
     // 写回 aiPromptTemplate.kcAnnotation，结束"写后无读者"，供 teaching-turn 按 KC 粒度消费。

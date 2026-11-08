@@ -12,6 +12,7 @@ import { logger } from '../../../utils/logger';
 import { withTransaction } from '../../../utils/with-transaction';
 import { dayKeyOf } from '../../time/day-boundary';
 import { advanceStreak } from './streak';
+import { cleanupPathLearningData } from '../path-learning-data-cleanup';
 import achievementService from '../../achievements/achievement.service';
 import { dashboardGuidanceSnapshotService } from '../../learner/DashboardGuidanceSnapshotService';
 import { learnerStateReviewService } from '../../learner/LearnerStateReviewService';
@@ -173,6 +174,12 @@ export async function deleteLearningPath(pathId: string, userId: string) {
       await tx.goal_conversations.updateMany({ where: { learningPathId: pathId }, data: { learningPathId: null } });
       await tx.teaching_sessions.updateMany({ where: { learningPathId: pathId }, data: { learningPathId: null } });
       await tx.virtual_sessions.updateMany({ where: { learningPathId: pathId }, data: { learningPathId: null } });
+      // #176-3：证据/投影的 pathId 也是无 FK 普通列，读侧只按现存路径取数——不清理会留下
+      // 「永久读不到但仍占库」的孤儿行。path 级学习事实随路径删除，用户级记忆保留（traces 只置空）。
+      const cleaned = await cleanupPathLearningData(tx, pathId);
+      if (cleaned.evidenceDeleted || cleaned.projectionsDeleted || cleaned.tracesDetached || cleaned.pathEdgesDeleted) {
+        logger.info('删除学习路径：已清理该路径的学习事实', { pathId, ...cleaned });
+      }
       await tx.learning_paths.delete({
         where: { id: pathId }
       });

@@ -1,6 +1,6 @@
 ---
 agentId: skill:path-reviewer
-coreHash: 51a1e7b6a4a5f79b4a290b8f067c7e08fe80602b3b2a730421fd7ce44f97d009
+coreHash: 740c9208ec0175c15c6fa18dc4e04dcc0b7f3c01405b841b38138c1c85c9022c
 coreVersion: 3
 temperature: 0.3
 maxTokens: 64000
@@ -22,7 +22,7 @@ failurePolicy: propagate
 输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
 - 「pathPlan（object）」`skill:path-planning.milestones` — 已生成的路径规划（name/summary/cognitiveCore/milestones/estimatedHours）
 - 「goalContext（object）」`sandbox:path.normalizedInput`（编排注入） — 目标上下文（surfaceGoal/confirmedProposal/successCriteria/learnerProfile）
-- 「prerreqTree（object?）」`sandbox:path.normalizedInput.prerequisiteTree`（编排注入） — RPKT 前提知识缺口链（可选，存在时用于校验路径是否覆盖了已知缺口）
+- 「prerreqTree（object?）」`sandbox:path.prerequisiteTree`（编排注入） — RPKT 前提知识缺口链（可选，存在时用于校验路径是否覆盖了已知缺口）
 
 ## 执行规则
 

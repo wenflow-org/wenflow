@@ -26,9 +26,17 @@ export interface AssembledLearningState {
   learningState: {
     user: { id: string; name: string | null; xp: number; level: number };
     tasks: {
+      /**
+       * 计数口径（#188）：**主路径**——与页面进度条（路径 percent）和 summary.path.progressPercent
+       * 同源。此前这里数的是该用户**全部路径**的 subtasks，而进度条按主路径算，
+       * 多路径用户在同一载荷里读到两套百分比（进度条 N% / 文案 M%），提示词也被绑到语义不同的源。
+       * 需要跨路径总量时显式另立字段，不要混进 tasks。
+       */
+      scope: 'primary-path';
       total: number;
       completed: number;
       inProgress: number;
+      started: number;
       todo: number;
       completionRate: number;
     };
@@ -41,6 +49,8 @@ export interface AssembledLearningState {
       avgDailyMinutes: number;
       progress: number;
       completionRate: string;
+      /** 时长/天数按**全部路径**的会话累计（与 tasks 的主路径口径不同，标签须区分） */
+      sessionScope: 'all-paths';
     };
     state: any | null;
     suggestion: any | null;
@@ -223,10 +233,17 @@ export async function assembleLearningState(
   const currentState = await stateTrackingService.getCurrentStateDisplay(userId).catch(() => null);
   const suggestion = currentState ? stateTrackingService.generateDisplaySuggestion(currentState) : null;
 
-  const completedSubtasks = subtasks.filter((task: any) => task.status === 'completed');
-  const inProgressSubtasks = subtasks.filter((task: any) => task.status === 'in_progress');
-  const todoSubtasks = subtasks.filter((task: any) => task.status === 'todo');
-  const totalEstimatedMinutes = subtasks.reduce((sum: number, task: any) => sum + (task.estimatedMinutes || 0), 0);
+  // #188：任务进度统一到**主路径**口径——页面进度条与 summary.path.progressPercent 都是主路径，
+  // 此处不能再数全部路径（否则同一载荷两套百分比）。`subtasks` 全量仍随载荷返回，供跨路径用途。
+  const primarySubtasks: any[] = (primaryPath.milestones || []).flatMap((milestone: any) => milestone?.subtasks || []);
+  const primaryCompleted = primarySubtasks.filter((task: any) => task.status === 'completed');
+  const primaryInProgress = primarySubtasks.filter((task: any) => task.status === 'in_progress');
+  const primaryTodo = primarySubtasks.filter((task: any) => task.status === 'todo');
+  const primaryTotal = primarySubtasks.length;
+  const primaryCompletionRate = primaryTotal > 0
+    ? Number((primaryCompleted.length / primaryTotal * 100).toFixed(1))
+    : 0;
+  const totalEstimatedMinutes = primarySubtasks.reduce((sum: number, task: any) => sum + (task.estimatedMinutes || 0), 0);
   const totalMinutes = timeSessionsHydrated.reduce((sum: number, session: any) => sum + normalizeSessionDurationMinutes(session), 0);
   const activeLearningDays = new Set(timeSessions.map((session: any) => dayKeyOf(session.startTime))).size;
   const avgDailyMinutes = activeLearningDays > 0 ? Number((totalMinutes / activeLearningDays).toFixed(1)) : 0;
@@ -239,14 +256,15 @@ export async function assembleLearningState(
       level: getLevelFromXp(user.xp),
     },
     tasks: {
-      total: subtasks.length,
-      completed: completedSubtasks.length,
-      inProgress: inProgressSubtasks.length,
+      scope: 'primary-path' as const,
+      total: primaryTotal,
+      completed: primaryCompleted.length,
+      inProgress: primaryInProgress.length,
       // 已启动 = 已完成 + 进行中：给文案层一个**可直接引用**的口径，
       // 避免把 completed/total 说成「已启动 X/总」（走查 P10）
-      started: completedSubtasks.length + inProgressSubtasks.length,
-      todo: todoSubtasks.length,
-      completionRate: subtasks.length > 0 ? Number((completedSubtasks.length / subtasks.length * 100).toFixed(1)) : 0,
+      started: primaryCompleted.length + primaryInProgress.length,
+      todo: primaryTodo.length,
+      completionRate: primaryCompletionRate,
     },
     paths: {
       total: paths.length,
@@ -257,8 +275,10 @@ export async function assembleLearningState(
       totalCompleted: totalMinutes,
       activeLearningDays,
       avgDailyMinutes,
-      progress: subtasks.length > 0 ? Number((completedSubtasks.length / subtasks.length * 100).toFixed(1)) : 0,
-      completionRate: subtasks.length > 0 ? (completedSubtasks.length / subtasks.length * 100).toFixed(1) : '0',
+      // 进度与 tasks 同源同口径（#188）：同一载荷里只允许一套完成任务百分比
+      progress: primaryCompletionRate,
+      completionRate: primaryTotal > 0 ? (primaryCompleted.length / primaryTotal * 100).toFixed(1) : '0',
+      sessionScope: 'all-paths' as const,
     },
     state: currentState,
     suggestion,

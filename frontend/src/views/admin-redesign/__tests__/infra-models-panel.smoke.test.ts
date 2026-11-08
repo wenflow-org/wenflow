@@ -101,17 +101,6 @@ async function openConfig(wrapper: ReturnType<typeof mountPanel>, index: number,
   await flushPromises();
 }
 
-async function openRowMenu(wrapper: ReturnType<typeof mountPanel>, index: number, row = 0) {
-  await rows(wrapper, index)[row].find('.mk-menu__btn').trigger('click');
-  await flushPromises();
-}
-
-async function menuItem(wrapper: ReturnType<typeof mountPanel>, label: string) {
-  const item = wrapper.findAll('.mk-menu__item').find((b) => b.text() === label);
-  expect(item, `菜单里应有「${label}」`).toBeTruthy();
-  return item!;
-}
-
 describe('InfraModelsPanel', () => {
   beforeEach(() => {
     getMock.mockReset();
@@ -135,7 +124,8 @@ describe('InfraModelsPanel', () => {
     expect(list[0].text()).toContain('Embedding');
     expect(list[1].text()).toContain('Reranker');
     // 2026-11-05 用户「已配置这个 pill 不要了」：卡头只有标题 + 类型
-    expect(list[0].find('.mk-badge').exists()).toBe(false);
+    // （行内的「默认」徽标不算卡头徽标，故限定到 .mk-card__head）
+    expect(list[0].find('.mk-card__head .mk-badge').exists()).toBe(false);
     expect(rows(wrapper, 0)[0].find('.mpp-eng__model').text()).toBe('BAAI/bge-m3');
     // 2026-11-04「让布局自己说话」：模型行下没有维度 / 连接归属这类次级说明行
     expect(wrapper.find('.mpp-eng__params').exists()).toBe(false);
@@ -149,7 +139,7 @@ describe('InfraModelsPanel', () => {
 
   /* 2026-11-05 用户「为什么没有三个点的默认模型的操作了」：
      一条连接可配多个模型，其中一个启用；⋯ 里切换启用 / 删除。 */
-  it('模型池：一行一个模型，启用项挂徽标，行内是 配置 · 测试 · ⋯', async () => {
+  it('模型池：一行一个模型，默认项挂「默认」徽标，动作与对话卡完全一致', async () => {
     getMock.mockResolvedValue({ data: { data: pooledView() } });
     const wrapper = mountPanel();
     await flushPromises();
@@ -159,29 +149,33 @@ describe('InfraModelsPanel', () => {
     expect(list.map((r) => r.find('.mpp-eng__model').text())).toEqual([
       'BAAI/bge-m3', 'BAAI/bge-large-zh-v1.5', 'text-embedding-3-large',
     ]);
-    // 只有启用中的那一个带徽标，且写明是「启用」而不是「已配置」
+    // 只有默认那一个带徽标，且与对话卡同一枚「默认」（2026-11-07 用户「没标默认」）
     expect(list.map((r) => r.find('.mpp-eng__on').exists())).toEqual([false, true, false]);
-    expect(list[1].find('.mpp-eng__on').text()).toBe('启用');
+    expect(list[1].find('.mpp-eng__on').text()).toBe('默认');
+    expect(list[1].find('.mpp-eng__on').classes()).toContain('mpp-default-chip');
 
-    // 与对话卡同序同形（2026-11-05 用户「里面的菜单按钮数量不一样啊」）
-    const acts = list[0].find('.mpp-eng__acts').findAll('button');
-    expect(acts.map((b) => b.text())).toEqual(['配置', '测试', '⋯']);
-    expect(acts.slice(0, 2).every((b) => b.classes().includes('mk-link'))).toBe(true);
+    /* 动作与对话卡同序同形：非默认行四枚平铺，默认行没有「设为默认」、删除置灰。
+       ⋯ 菜单整块撤除（2026-11-07 用户「向量/重排没和上面对齐」）。 */
+    const acts = (i: number) => list[i].find('.mpp-eng__acts').findAll('button').map((b) => b.text());
+    expect(acts(0)).toEqual(['设为默认', '配置', '测试', '删除']);
+    expect(acts(1)).toEqual(['配置', '测试', '删除']);
+    expect(list[1].findAll('.mpp-eng__acts .mk-link').find((b) => b.text() === '删除')!.attributes('disabled'))
+      .toBeDefined();
+    expect(wrapper.find('.mk-menu__btn').exists(), '⋯ 菜单已撤').toBe(false);
     wrapper.unmount();
   });
 
-  it('⋯「设为启用」：只切启用项，模型池原样保留', async () => {
+  it('行内「设为默认」：只切默认项，模型池原样保留；默认行不渲染这枚', async () => {
     getMock.mockResolvedValue({ data: { data: pooledView() } });
     updateMock.mockResolvedValue({ data: { data: { ...pooledView(), embedding: { ...pooledView().embedding, model: 'BAAI/bge-m3' } } } });
     const wrapper = mountPanel();
     await flushPromises();
 
-    await openRowMenu(wrapper, 0, 1); // 当前启用的那一行
-    // 已经是启用项：这一枚不可点（没有「再设一次」的意义）
-    expect((await menuItem(wrapper, '设为启用')).attributes('disabled')).toBeDefined();
+    const list = rows(wrapper, 0);
+    // 已经是默认：这一枚不渲染（没有「再设一次」的意义）
+    expect(list[1].findAll('.mpp-eng__acts button').map((b) => b.text())).not.toContain('设为默认');
 
-    await openRowMenu(wrapper, 0, 2);
-    await (await menuItem(wrapper, '设为启用')).trigger('click');
+    await list[2].findAll('.mpp-eng__acts button').find((b) => b.text() === '设为默认')!.trigger('click');
     await flushPromises();
 
     const payload = updateMock.mock.calls[0][0];
@@ -192,7 +186,7 @@ describe('InfraModelsPanel', () => {
     wrapper.unmount();
   });
 
-  it('⋯「删除」：删掉当前启用项时自动改用池里下一个；删备选不动启用项', async () => {
+  it('默认项的删除置灰并说明原因；删备选不动默认项', async () => {
     getMock.mockResolvedValue({ data: { data: pooledView() } });
     updateMock.mockResolvedValue({ data: { data: pooledView() } });
     const wrapper = mountPanel();
@@ -201,18 +195,16 @@ describe('InfraModelsPanel', () => {
     // 确认框默认放行
     askConfirmMock.mockResolvedValue(true);
 
-    await openRowMenu(wrapper, 0, 1); // 启用中的 BAAI/bge-large-zh-v1.5
-    await (await menuItem(wrapper, '删除')).trigger('click');
+    const list = rows(wrapper, 0);
+    // 默认项（BAAI/bge-large-zh-v1.5）：置灰 + 写清要先改默认（与对话卡同一句）
+    const delDefault = list[1].findAll('.mpp-eng__acts button').find((b) => b.text() === '删除')!;
+    expect(delDefault.attributes('disabled')).toBeDefined();
+    expect(delDefault.attributes('title')).toBe('当前为默认模型，请先将其他模型设为默认后再删除');
+
+    // 备选 text-embedding-3-large：可删，默认项不受影响
+    await list[2].findAll('.mpp-eng__acts button').find((b) => b.text() === '删除')!.trigger('click');
     await flushPromises();
     expect(updateMock.mock.calls[0][0].embedding).toEqual({
-      models: ['BAAI/bge-m3', 'text-embedding-3-large'],
-      model: 'BAAI/bge-m3',
-    });
-
-    await openRowMenu(wrapper, 0, 2); // 备选 text-embedding-3-large
-    await (await menuItem(wrapper, '删除')).trigger('click');
-    await flushPromises();
-    expect(updateMock.mock.calls[1][0].embedding).toEqual({
       models: ['BAAI/bge-m3', 'BAAI/bge-large-zh-v1.5'],
       model: 'BAAI/bge-large-zh-v1.5',
     });
@@ -355,69 +347,64 @@ describe('InfraModelsPanel', () => {
     wrapper.unmount();
   });
 
-  it('添加模型弹窗：连接段在里面，摘要一行、点「修改连接」展开，地址填根路径', async () => {
+  it('卡片里的连接行：默认一行摘要，点「修改连接」展开，地址填根路径', async () => {
     pullMock.mockResolvedValue({ data: { data: { models: ['BAAI/bge-m3'] } } });
     const wrapper = mountPanel();
     await flushPromises();
-    await cards(wrapper)[0].find('.mk-card__head-right button').trigger('click');
+
+    // 收起态：一行说明（这条能力接在哪），不常驻输入框
+    const card = cards(wrapper)[0];
+    expect(card.find('.mpp-eng__conn-text').text()).toBe('连接：独立地址 https://gw.example/v1/embeddings');
+    expect(card.find('.mpp-eng__conn-form').exists()).toBe(false);
+
+    await card.find('.mpp-eng__conn button').trigger('click');
     await flushPromises();
 
-    const dialog = wrapper.find('.pmd');
-    expect(dialog.find('.pmd-conn__title').text()).toBe('连接');
-    // 已配过连接：先给一行摘要（接在哪 + 密钥从哪来），不常驻三个输入框
-    expect(dialog.find('.infra-conn-summary').text()).toContain('https://gw.example');
-    expect(dialog.find('.infra-own').exists()).toBe(false);
-    await dialog.findAll('.pmd-conn__actions button').find((b) => b.text() === '修改连接')!.trigger('click');
-    await flushPromises();
-
-    const conn = wrapper.find('.pmd');
-    expect((conn.find('.infra-own input').element as HTMLInputElement).checked).toBe(true);
+    const form = wrapper.find('.mpp-eng__conn-form');
+    expect((form.find('.infra-own input').element as HTMLInputElement).checked).toBe(true);
     // 回填成根地址；实际请求地址由这一层拼，和对话卡填根域名的口径一致
-    expect((conn.find('.infra-conn input.mk-field__input').element as HTMLInputElement).value)
+    expect((form.find('.infra-conn input.mk-field__input').element as HTMLInputElement).value)
       .toBe('https://gw.example');
-    expect(conn.find('.infra-endpoint').text()).toContain('https://gw.example/v1/embeddings');
+    expect(form.find('.infra-endpoint').text()).toContain('https://gw.example/v1/embeddings');
     wrapper.unmount();
   });
 
-  it('添加模型弹窗：沿用对话卡时只说明取哪条地址，不给地址与密钥输入', async () => {
-    pullMock.mockResolvedValue({ data: { data: { models: [] } } });
+  it('卡片里的连接行：沿用对话卡时只说明取哪条地址，不给地址与密钥输入', async () => {
     const wrapper = mountPanel();
     await flushPromises();
-    await cards(wrapper)[1].find('.mk-card__head-right button').trigger('click');
+
+    const card = cards(wrapper)[1]; // 重排默认 inherit
+    expect(card.find('.mpp-eng__conn-text').text()).toContain('沿用对话模型');
+    await card.find('.mpp-eng__conn button').trigger('click');
     await flushPromises();
 
-    expect(wrapper.find('.pmd .infra-conn-summary').text()).toContain('取对话卡');
-    await wrapper.find('.pmd .pmd-conn__actions button').trigger('click');
-    await flushPromises();
-    const dialog = wrapper.find('.pmd');
-    expect((dialog.find('.infra-own input').element as HTMLInputElement).checked).toBe(false);
-    expect(dialog.find('.infra-conn').exists()).toBe(false);
-    expect(dialog.find('.infra-inherit').text()).toContain('https://newapi.wenflow.org');
+    const form = wrapper.find('.mpp-eng__conn-form');
+    expect((form.find('.infra-own input').element as HTMLInputElement).checked).toBe(false);
+    expect(form.find('.infra-conn').exists()).toBe(false);
+    expect(form.find('.infra-inherit').text()).toContain('https://newapi.wenflow.org');
     wrapper.unmount();
   });
 
-  it('弹窗里「保存连接」：只提交连接字段，不碰池子与参数', async () => {
-    pullMock.mockResolvedValue({ data: { data: { models: ['BAAI/bge-m3'] } } });
+  it('卡片里「保存连接」：只提交连接字段，不碰池子与参数', async () => {
     updateMock.mockResolvedValue({ data: { data: view({ rerank: 'own' }) } });
     const wrapper = mountPanel();
     await flushPromises();
-    await cards(wrapper)[1].find('.mk-card__head-right button').trigger('click');
-    await flushPromises();
-    await wrapper.find('.pmd .pmd-conn__actions button').trigger('click');
-    await flushPromises();
 
-    await wrapper.find('.pmd .infra-own input').setValue(true);
+    const card = cards(wrapper)[1];
+    await card.find('.mpp-eng__conn button').trigger('click');
     await flushPromises();
-    const inputs = wrapper.find('.pmd').findAll('.infra-conn input.mk-field__input');
-    // 重排多一列「接口规范」（只读）：服务地址 / 接口规范 / API Key
-    expect(inputs.length).toBe(3);
+    await wrapper.find('.mpp-eng__conn-form .infra-own input').setValue(true);
+    await flushPromises();
+    const inputs = wrapper.findAll('.mpp-eng__conn-form .infra-conn input.mk-field__input');
+    // 地址 + API Key 两列（接口规范那列只读展示已撤）
+    expect(inputs.length).toBe(2);
     await inputs[0].setValue('https://api.siliconflow.cn');
-    await inputs[2].setValue('sk-live');
+    await inputs[1].setValue('sk-live');
     await flushPromises();
 
-    const saveConn = wrapper.find('.pmd').findAll('.pmd-conn__actions button').find((b) => b.text() === '保存连接');
-    expect(saveConn, '有未保存改动时才出现「保存连接」').toBeTruthy();
-    await saveConn!.trigger('click');
+    const saveConn = wrapper.find('.mpp-eng__conn-form button.mk-btn--primary');
+    expect(saveConn.attributes('disabled'), '有改动才可保存').toBeUndefined();
+    await saveConn.trigger('click');
     await flushPromises();
 
     expect(updateMock.mock.calls[0][0]).toEqual({
@@ -430,21 +417,23 @@ describe('InfraModelsPanel', () => {
     wrapper.unmount();
   });
 
-  it('弹窗里改了地址：清单标成过期，先「重新获取」再选', async () => {
-    pullMock.mockResolvedValue({ data: { data: { models: ['BAAI/bge-m3'] } } });
+  it('卡片里改回「沿用对话卡」并保存：卡面摘要换成取哪条地址', async () => {
+    const inherited = view({ embedding: 'inherit' });
+    inherited.embedding.endpoint = 'https://newapi.wenflow.org/v1/embeddings';
+    updateMock.mockResolvedValue({ data: { data: inherited } });
     const wrapper = mountPanel();
     await flushPromises();
-    await cards(wrapper)[0].find('.mk-card__head-right button').trigger('click');
-    await flushPromises();
-    expect(wrapper.find('.pmd-list--stale').exists()).toBe(false);
 
-    await wrapper.find('.pmd .pmd-conn__actions button').trigger('click');
+    const card = cards(wrapper)[0];
+    await card.find('.mpp-eng__conn button').trigger('click');
     await flushPromises();
-    await wrapper.find('.pmd .infra-conn input.mk-field__input').setValue('https://other.example');
+    await wrapper.find('.mpp-eng__conn-form .infra-own input').setValue(false);
+    await flushPromises();
+    await wrapper.find('.mpp-eng__conn-form button.mk-btn--primary').trigger('click');
     await flushPromises();
 
-    expect(wrapper.find('.pmd-list--stale').exists()).toBe(true);
-    expect(wrapper.find('.pmd-list').text()).toContain('先点「重新获取」');
+    expect(updateMock.mock.calls[0][0]).toEqual({ embedding: { connectionMode: 'inherit' } });
+    expect(cards(wrapper)[0].find('.mpp-eng__conn-text').text()).toBe('连接：沿用对话模型');
     wrapper.unmount();
   });
 
@@ -459,7 +448,10 @@ describe('InfraModelsPanel', () => {
 
     expect(wrapper.findAll('.pmd-row .pmd-row__id').map((r) => r.text())).toEqual(['BAAI/bge-m3']);
     const more = wrapper.findAll('.pmd button').find((b) => b.text().includes('显示全部'))!;
-    expect(more.text()).toContain('2 个');
+    // 2026-11-07：指路文案换成「显示全部模型（N）」——⋯ 菜单已经不存在，不再讲「⋯ 里挑一个」
+    expect(more.text()).toBe('显示全部模型（3）');
+    expect(wrapper.find('.pmd').text()).toContain('已自动筛选匹配的向量模型');
+    expect(wrapper.find('.pmd').text()).not.toContain('向量模型模型');
     await more.trigger('click');
     await flushPromises();
     expect(wrapper.findAll('.pmd-row')).toHaveLength(3);
@@ -482,20 +474,11 @@ describe('InfraModelsPanel', () => {
     wrapper.unmount();
   });
 
-  it('勾选引入时把连接的未保存改动一起落盘', async () => {
+  it('勾选引入只写模型池：没动连接就不带任何连接字段', async () => {
     pullMock.mockResolvedValue({ data: { data: { models: ['BAAI/bge-m3', 'BAAI/bge-large-zh-v1.5'] } } });
     const wrapper = mountPanel();
     await flushPromises();
     await cards(wrapper)[0].find('.mk-card__head-right button').trigger('click');
-    await flushPromises();
-
-    // 把连接切到「沿用对话卡」→ 旧清单过期，先重新获取
-    await wrapper.find('.pmd .pmd-conn__actions button').trigger('click');
-    await flushPromises();
-    await wrapper.find('.pmd .infra-own input').setValue(false);
-    await flushPromises();
-    expect(wrapper.find('.pmd-list--stale').exists()).toBe(true);
-    await wrapper.findAll('.pmd-toolbar button').find((b) => b.text() === '重新获取')!.trigger('click');
     await flushPromises();
 
     await wrapper.findAll('.pmd-row').find((r) => r.text().includes('BAAI/bge-large-zh-v1.5'))!
@@ -508,7 +491,6 @@ describe('InfraModelsPanel', () => {
       embedding: {
         models: ['BAAI/bge-m3', 'BAAI/bge-large-zh-v1.5'],
         model: 'BAAI/bge-m3',
-        connectionMode: 'inherit',
       },
     });
     wrapper.unmount();
@@ -548,7 +530,7 @@ describe('InfraModelsPanel', () => {
     wrapper.unmount();
   });
 
-  it('未配置（池子空）时只留添加与配置，没有测试与 ⋯', async () => {
+  it('未配置（池子空）时只留添加与配置，没有设为默认 / 测试 / 删除', async () => {
     const data = view();
     data.rerank = { ...data.rerank, configured: false, model: '', models: [], keySource: 'none' as const };
     getMock.mockResolvedValue({ data: { data } });
@@ -559,7 +541,7 @@ describe('InfraModelsPanel', () => {
     expect(rerank.find('.mk-badge').exists()).toBe(false);
     expect(rerank.find('.mpp-eng__model').text()).toBe('未选择模型');
     const labels = rerank.findAll('button').map((b) => b.text());
-    expect(labels).toEqual(['＋ 添加模型', '配置']);
+    expect(labels).toEqual(['＋ 添加模型', '配置', '修改连接']);
     wrapper.unmount();
   });
 

@@ -127,6 +127,181 @@ export function getBlackboxCommandId(req: express.Request) {
   return String(header || bodyValue || '').trim();
 }
 
+/**
+ * 自动驾驶（assisted）入口的幂等键：沿用黑盒（`getBlackboxCommandId`）同一约定——
+ * 优先读 `Idempotency-Key` 头，回退读 `body.commandId`，trim 后返回。空串表示「未带幂等键」。
+ *
+ * 与黑盒不同：assisted 侧**不强制**带键（老前端/脚本可能不发）——缺省按「不幂等」直通，
+ * 保持既有行为零变化；只有显式带键的调用（网关超时重试）才走幂等回放。
+ */
+export function getAssistedCommandId(req: express.Request): string {
+  const header = typeof req?.get === 'function' ? req.get('Idempotency-Key') : undefined;
+  const bodyValue = typeof req?.body?.commandId === 'string' ? req.body.commandId : '';
+  return String(header || bodyValue || '').trim();
+}
+
+export class AssistedIdempotencyKeyTooLongError extends Error {
+  readonly code = 'ASSISTED_IDEMPOTENCY_KEY_TOO_LONG';
+  readonly statusCode = 400;
+
+  constructor(keyLength: number) {
+    super(`幂等键过长（${keyLength} > 128）`);
+    this.name = 'AssistedIdempotencyKeyTooLongError';
+  }
+}
+
+export class AssistedIdempotencyKeyReusedError extends Error {
+  readonly code = 'ASSISTED_IDEMPOTENCY_KEY_REUSED';
+  readonly statusCode = 409;
+
+  constructor() {
+    super('同一 Idempotency-Key 被用于不同请求体，请换一个新的幂等键');
+    this.name = 'AssistedIdempotencyKeyReusedError';
+  }
+}
+
+export class AssistedOperationInFlightError extends Error {
+  readonly code = 'ASSISTED_OPERATION_IN_FLIGHT';
+  readonly statusCode = 409;
+
+  constructor() {
+    super('该操作仍在处理中，请等待完成后重试同一 Idempotency-Key');
+    this.name = 'AssistedOperationInFlightError';
+  }
+}
+
+/**
+ * 自动驾驶推进操作的进程内幂等账本（#173-3，方案 B）。
+ *
+ * 为什么进程内：与黑盒 `virtual_experiment_commands` 不同，这里**不新增 DB 表**（schema.prisma
+ * 本轮未改）；同实例内的网关超时重试可达回放。跨实例不共享（多副本部署需换 DB 表，注释在此，不在本轮范围）。
+ *
+ * 设计：以 `(sessionId, kind, key)` 为键——kind 区分 step/teaching-step/auto-learning，同一把键
+ * 在不同推进入口间**互不相通**（各自独立账目，不会误回放）。
+ * 命中且请求体一致 → 回放上次结果（不重跑模型/不重推回合）；命中但**请求体不一致**
+ * → 409 `ASSISTED_IDEMPOTENCY_KEY_REUSED`（同一把键用于不同请求，必须换新键）。
+ * （复核更正：此前注释写「命中但 kind 不一致 → 409」，但 kind 已是复合键的一部分、该分支不可达；
+ * 真正触发 409 的是 requestHash 不等。）
+ *
+ * 记录必须设 **TTL + 容量上限**（避免重演无界增长）：
+ *  - TTL：完成态 30 分钟内可回放，过期后同键再次进入会重新执行（与黑盒「失败/过期可重试」同口径）；
+ *  - 容量：最多 1000 条，超出按插入顺序 FIFO 淘汰最旧（Map 保留插入序）。
+ */
+const ASSISTED_IDEMPOTENCY_TTL_MS = 30 * 60 * 1000;
+const ASSISTED_IDEMPOTENCY_MAX_ENTRIES = 1000;
+
+interface AssistedIdempotencyEntry {
+  sessionId: string;
+  kind: string;
+  requestHash: string;
+  completedAt: number;
+  result: unknown;
+}
+
+const assistedIdempotencyStore = new Map<string, AssistedIdempotencyEntry>();
+
+function assistedIdempotencyCompositeKey(sessionId: string, kind: string, key: string): string {
+  return `${sessionId}\u0000${kind}\u0000${key}`;
+}
+
+function assistedRequestHash(payload: unknown): string {
+  try {
+    return JSON.stringify(payload ?? null);
+  } catch {
+    return String(payload ?? null);
+  }
+}
+
+/** 清理过期条目；容量超限按插入序淘汰最旧（Map 的键迭代顺序 = 插入/刷新顺序）。 */
+function pruneAssistedIdempotency(now: number): void {
+  for (const [compositeKey, entry] of assistedIdempotencyStore) {
+    if (now - entry.completedAt > ASSISTED_IDEMPOTENCY_TTL_MS) {
+      assistedIdempotencyStore.delete(compositeKey);
+    }
+  }
+  while (assistedIdempotencyStore.size > ASSISTED_IDEMPOTENCY_MAX_ENTRIES) {
+    const oldest = assistedIdempotencyStore.keys().next().value as string | undefined;
+    if (oldest === undefined) break;
+    assistedIdempotencyStore.delete(oldest);
+  }
+}
+
+/** 测试/复用入口：清空账本（幂等记录是进程级单例，测试间需要隔离）。 */
+export function resetAssistedIdempotencyStore(): void {
+  assistedIdempotencyStore.clear();
+}
+
+/**
+ * 在会话租约锁内执行一次自动驾驶推进操作，并按 `(sessionId, kind, key)` 做幂等回放。
+ *
+ * 调用方必须把本函数放在 `runAssistedSessionMutationWithSimClock` 的 work 回调里——即**锁内**，
+ * 这样并发的同键请求会被租约串行化：第二个请求进锁时第一个已完成并落账，直接回放；第一个失败时
+ * 没有落账，第二个会真正重跑（失败允许同键重试）。
+ *
+ * 返回 `{ result, reused }`：`reused=true` 表示命中回放（未重跑）。`key` 为空串时直接执行、不记账、
+ * 不回放（`reused=false`），保持老客户端零变化。
+ */
+export async function runAssistedIdempotentMutation<T>(
+  sessionId: string,
+  key: string,
+  kind: string,
+  request: unknown,
+  work: () => Promise<T>,
+): Promise<{ result: T; reused: boolean }> {
+  if (key.length > 128) {
+    throw new AssistedIdempotencyKeyTooLongError(key.length);
+  }
+  // 缺省（未带键）：不幂等，直通。
+  if (!key) {
+    const result = await work();
+    return { result, reused: false };
+  }
+  const now = Date.now();
+  pruneAssistedIdempotency(now);
+  const requestHash = assistedRequestHash(request);
+  const compositeKey = assistedIdempotencyCompositeKey(sessionId, kind, key);
+  const existing = assistedIdempotencyStore.get(compositeKey);
+  if (existing) {
+    if (existing.requestHash !== requestHash) {
+      throw new AssistedIdempotencyKeyReusedError();
+    }
+    // 在途（同进程内极小概率：锁外并发同键）：直接 409，不要回放 undefined。
+    if (existing.completedAt === Number.NEGATIVE_INFINITY) {
+      throw new AssistedOperationInFlightError();
+    }
+    return { result: existing.result as T, reused: true };
+  }
+  // 标记在途：同进程内并发同键（锁外极小概率）进锁前看到 in-flight 直接 409。
+  assistedIdempotencyStore.set(compositeKey, {
+    sessionId,
+    kind,
+    requestHash,
+    completedAt: Number.NEGATIVE_INFINITY,
+    result: undefined,
+  });
+  try {
+    const result = await work();
+    // 只记成功结果：失败（success=false 或抛错）不入账，允许同键按业务重试。
+    const succeeded = !(result && typeof result === 'object' && (result as { success?: unknown }).success === false);
+    if (succeeded) {
+      assistedIdempotencyStore.set(compositeKey, {
+        sessionId,
+        kind,
+        requestHash,
+        completedAt: Date.now(),
+        result,
+      });
+    } else {
+      assistedIdempotencyStore.delete(compositeKey);
+    }
+    return { result, reused: false };
+  } catch (error) {
+    // 失败不入账：同键重试会真正重跑，而不是回放一个失败结果。
+    assistedIdempotencyStore.delete(compositeKey);
+    throw error;
+  }
+}
+
 export function getExpectedBlackboxTraceCount(req: express.Request) {
   const header = req.get('X-Expected-Trace-Count');
   const bodyValue = req.body?.expectedTraceCount;

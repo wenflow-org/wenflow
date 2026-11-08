@@ -742,7 +742,15 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
     }
 
     if (traceId) {
-      where.AND.push({ traceId: { contains: String(traceId) } });
+      const traceNeedle = String(traceId);
+      /* 前端对「没有链路 ID 的记录」显示合成值 `log:<记录 id>`（live.ts mapLogsToSpans 的兜底：
+         网关行有 traceId，skill 行常常没有）。运维从表格里复制到的是这个值，直接按 traceId 列查
+         必然 0 行（实测），所以带 log: 前缀时按主键查。 */
+      where.AND.push(
+        traceNeedle.startsWith('log:')
+          ? { id: { contains: traceNeedle.slice(4) } }
+          : { traceId: { contains: traceNeedle } }
+      );
     }
 
     if (sessionId) {

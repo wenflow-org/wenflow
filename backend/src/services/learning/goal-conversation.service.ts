@@ -6,7 +6,7 @@ import { logger } from '../../utils/logger';
 import { withTransaction } from '../../utils/with-transaction';
 import { executeSkill } from '../../skills';
 import { goalConversationAgentDefinition } from '../../skills/goal-conversation';
-import { collectGoalUploadedMaterialSummaries } from './goal-material-summaries.service';
+import { collectGoalUploadedMaterialSummaries, clearGoalMaterialRankCache } from './goal-material-summaries.service';
 import pathOrchestrator, { GoalPathRequest } from '../../coordinators/path.coordinator';
 import { buildGoalPathVisibleSummary } from './goal-path-visible-summary';
 import { derivePlannedOutline, deriveTriageHint, type LearnerLoadProfile, type TriageHint } from './path-planning-hints';
@@ -17,8 +17,11 @@ import {
 } from './learner-load-profile';
 import { selectGoalHistory, RECENT_CONTEXT_LIMIT } from './goal-conversation.context';
 import { adjudicateGoalConfirm } from '../../skills/goal-confirm-adjudicator';
+import { hasConfirmableProposal } from './goal-proposal-guard';
 import { mergeProbeAnswersIntoUnderstanding, normalizeProbeAnswerInput } from './goal-probe-answers';
 import { applyConversationLifecycle, type ConversationLifecycleDb } from './goal-conversation.lifecycle';
+// stage 权威源收口（172-1）：读只认持久化值，降级时三处副本同步（见模块头）
+import { resolveAuthoritativeGoalStage, syncDegradedGoalStage } from './goal-conversation.stage-authority';
 import systemPrisma from '../../config/system-database';
 import {
   DEFAULT_RESPONSE_TRIAGE_ENFORCEMENT,
@@ -36,6 +39,7 @@ import {
 import { assembleGoalHandoff } from '../../services/field-dispatcher';
 import { buildCompletedConversationResult, buildHardBlockMessage, buildHardBlockResult, PATH_COMPLETED_USER_VISIBLE, PATH_GENERATING_USER_VISIBLE, resolveConversationUserVisible, resolvePathCompletionUserVisible } from './goal-conversation.exit';
 import { getPathCompletionProjection } from './goal-conversation.path-projection';
+import { buildGoalConversationExt } from './goal-conversation.ext';
 import learningService from './learning.service';
 import { bindGeneratingPath, kickPathGeneration, rejudgeHardBlockedCompletion, type GoalConversationRejudgeDeps } from './goal-conversation-rejudge';
 import { createDomainEvent } from '../../events/contracts';
@@ -157,9 +161,6 @@ class GoalConversationService {
     return /(不过|但是|但我|但还是|我担心|还是担心|还有个问题|还有一个问题|我还想问|我还想补充|能先说一下|能不能先说一下|具体怎么|要是|如果到时候|万一)/.test(text || '');
   }
 
-
-
-
   private static readonly GOAL_STAGES = ['understanding', 'proposing', 'ready', 'completed'] as const;
 
   private getCore(internal: any): { stage: string; confidence: number; isCompleted: boolean; conversationId?: string | null; learningPath?: any } {
@@ -241,7 +242,8 @@ class GoalConversationService {
 
     if (next) {
       return {
-        stage: next.stage || data?.stage || fallbackStage || 'understanding',
+        // 172-1：stage 只认持久化权威源；runtimeNextState.stage 是模型自报值副本，不能反向覆盖降级结果
+        stage: resolveAuthoritativeGoalStage(data, fallbackStage),
         confidence: typeof next.confidence === 'number' ? next.confidence : (typeof data?.confidence === 'number' ? data.confidence : 0),
         understanding: next.understanding || data?.understanding || {},
         collected: next.collected || data?.collected || {},
@@ -296,6 +298,7 @@ class GoalConversationService {
 
   private toServiceResult(aiResponse: any, conversationId: string, overrides?: {
     stage?: string;
+    confidence?: number;
     isCompleted?: boolean;
     learningPath?: any;
     userVisible?: string;
@@ -308,7 +311,7 @@ class GoalConversationService {
     fallbackGoalExt?: { confirmedProposal?: any; structuredData?: any; confidenceScores?: any } | null;
   }) {
     const stage = overrides?.stage || this.resolveStageFromResponse(aiResponse);
-    const confidence = this.resolveConfidenceFromResponse(aiResponse);
+    const confidence = typeof overrides?.confidence === 'number' ? overrides.confidence : this.resolveConfidenceFromResponse(aiResponse);
     const goalExt = this.getGoalExt(aiResponse?.internal);
     const fallback = overrides?.fallbackGoalExt || null;
     const resolvedGoalExt = {
@@ -385,7 +388,7 @@ class GoalConversationService {
       expectedRevision?: number;
     } = {}
   ): Promise<boolean> {
-    return applyConversationLifecycle(
+    const result = await applyConversationLifecycle(
       prisma as unknown as ConversationLifecycleDb,
       conversationId,
       {
@@ -406,6 +409,8 @@ class GoalConversationService {
         }
       }
     );
+    if (result && stage === 'completed') clearGoalMaterialRankCache(conversationId); // #176-4：会话收尾清排序缓存
+    return result;
   }
 
   /**
@@ -458,12 +463,10 @@ class GoalConversationService {
           learningPath: learningPath ? { id: learningPath.id, status: learningPath.status } : null
         },
         ext: {
-          goalConversation: {
-            understanding: data.understanding || {},
-            nextQuestions: [],
-            quickReplies: [],
-            collected: data.collected || {}
-          }
+          goalConversation: buildGoalConversationExt({
+            understanding: data.understanding,
+            collected: data.collected,
+          })
         }
       }
     };
@@ -626,12 +629,16 @@ async continueConversation(
         //   **不跑主对话回合**（比旧 confirmIntent 通道快一个完整回合）；false（调整/拒绝/提问）
         //   落库走正常回合，由模型自然接住。裁决失败一律 fail-open 按非确认处理——
         //   行为与旧白名单未命中完全一致，不阻塞对话。
+        // 提案内容门禁（#162，develop 侧修复并入）：没有可用提案时不代签——按钮与裁决都
+        // 不该对着 null/半截提案生成路径，转普通回合由模型先补提案（判据见 goal-proposal-guard）。
         const collected = JSON.parse(conversation.collectedData || '{}');
-        if (conversation.stage === 'proposing' && options?.confirmProposal === true) {
+        const proposalConfirmable = conversation.stage === 'proposing'
+          && hasConfirmableProposal(conversation.collectedData, { conversationId, userId, stage: conversation.stage });
+        if (conversation.stage === 'proposing' && options?.confirmProposal === true && proposalConfirmable) {
           // 推进收口到 advanceConfirmedProposal；saveUserTurn=true=用户消息尚未落库。
           return this.advanceConfirmedProposal(conversationId, conversation, userReply, options, collected, true);
         }
-        if (conversation.stage === 'proposing' && collected?.confirmedProposal) {
+        if (proposalConfirmable) {
           // 纵深防御：adjudicateGoalConfirm 自带 fail-open（内部 catch → 非确认），
           // 但 service 不假设它永不抛——任何意外异常也按非确认走正常回合，不阻塞对话。
           let verdict = { confirm: false };
@@ -668,7 +675,15 @@ async continueConversation(
       // 失败重试由 saveMessage 的回合级幂等（pendingUserTurn）护栏挡住重复写入。
       await this.saveMessage(conversation.id, 'user', userReply, options?.meta, { idempotentUserTurn: true });
 
-      const aiResponse = await this.callAI(conversation.id, userReply, false, userId, options, {
+      // 被门禁否决的确认（会话内没有可用提案）不再当作确认喂给模型：
+      // 否则模型会按「用户已确认」推进，而本轮实际上只是在补提案（#162，develop 侧语义并入）。
+      const guardVetoedFlag = conversation.stage === 'proposing'
+        && options?.confirmProposal === true
+        && !proposalConfirmable;
+      const aiOptions = guardVetoedFlag
+        ? { ...options, confirmProposal: false }
+        : options;
+      const aiResponse = await this.callAI(conversation.id, userReply, false, userId, aiOptions, {
         excludeTrailingUserInput: true
       });
       const responseWithConversationId = this.withConversationId(aiResponse, conversationId);
@@ -704,19 +719,26 @@ async continueConversation(
       // 模型自报 ready/completed 不产生学习路径：路径生成只能由用户通过 UI 按钮显式确认触发
       // （见上方 confirmProposal 硬规则路径）。模型自报一律回落 proposing，等待用户确认方案。
       if (stage === 'ready' || stage === 'completed') {
+        // 172-1：降级按 proposing 档（0.75~0.94）重算 confidence，不沿用 ready 档自报值（floor 0.95）
+        const degradedConfidence = Math.min(Math.max(Number.isFinite(confidence) ? confidence : 0.75, 0.75), 0.94);
         await this.updateConversationLifecycle(conversationId, 'proposing', {
           status: 'active',
           completedAt: null,
           mutateCollectedData: (data) => {
-            data.stage = 'proposing';
+            syncDegradedGoalStage(data, 'proposing');
+            for (const target of [data, data.runtimeNextState, data.runtimeEnvelope?.contextUpdate?.nextState]) {
+              if (target && typeof target === 'object') target.confidence = degradedConfidence;
+            }
           }
         });
         logger.warn('模型自报 ready 已被回落为 proposing，等待用户显式确认', {
           conversationId,
-          userId
+          userId,
+          confidence: { reported: confidence, degraded: degradedConfidence }
         });
         return this.toServiceResult(responseWithConversationId, conversationId, {
           stage: 'proposing',
+          confidence: degradedConfidence,
           isCompleted: false,
           fallbackGoalExt,
         });
@@ -1043,7 +1065,10 @@ async continueConversation(
         systemPromptOverride: options?.systemPromptOverrides?.goalAgent,
         // 已上传资料清单（元信息 + 理解摘要）：让 goal-agent 知道用户提供了什么、资料讲什么，
         // 避免答出「没有收到文件」这类与事实不符的话；无上传=空数组=payload 无该键
-        uploadedMaterials: await collectGoalUploadedMaterialSummaries(userId, materialSelectionQuery)
+        uploadedMaterials: await collectGoalUploadedMaterialSummaries(userId, materialSelectionQuery, {
+          conversationId,
+          surfaceGoal: (previousUnderstanding as { surface_goal?: string }).surface_goal,
+        })
       }, {
         // 会话标识进 envelope（与教学链 A6 同模式）：此前只有 SSE 流式路由在 ALS 注入
         // conversationId，非流式路径（API 直连/驱动）恒 null → prompt_call_logs 缺值、
@@ -1562,11 +1587,7 @@ async continueConversation(
             isCompleted: true
           },
           ext: {
-            goalConversation: {
-              understanding,
-              nextQuestions: [],
-              collected
-            }
+            goalConversation: buildGoalConversationExt({ understanding, collected })
           }
         }
       }, systemPromptOverrides);
@@ -1599,11 +1620,7 @@ async continueConversation(
             learningPath
           },
           ext: {
-            goalConversation: {
-              understanding,
-              nextQuestions: [],
-              collected
-            }
+            goalConversation: buildGoalConversationExt({ understanding, collected })
           }
         }
       };
@@ -1630,6 +1647,7 @@ async continueConversation(
       await prisma.goal_conversations.delete({
         where: { id: conversationId }
       });
+      clearGoalMaterialRankCache(conversationId); // #176-4：会话已删除，排序缓存一并清掉
 
       logger.info('对话已删除', { conversationId, userId });
 
@@ -1689,6 +1707,10 @@ async continueConversation(
       confirmedProposal: data.confirmedProposal || null,
       structuredData: data.structuredData || null,
       confidenceScores: data.confidenceScores || null,
+      // #251③：分诊结论（与 hardBlocked 同一判据的数据源）。GET 恢复信封要透出它，
+      // 此前服务层只把 responseTriage 写进 collectedData、返回值里没有该键，
+      // 路由层白名单重建也就无从携带。
+      responseTriage: resolveResponseTriageFromCollectedData(data),
       // 合并取舍：保留本分支的 learningPath（已被 getPathCompletionProjection 增强过 status，
       // develop 侧那行是未经投影的原始表达式，取它会丢掉 #228/#221 的状态投影），
       // 同时接入 develop 新增的硬阻断终局标记。

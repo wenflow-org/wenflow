@@ -10,6 +10,7 @@ import {
   getParentAgentMembers,
   resolveRegistrationPoint,
 } from '../skills-file';
+import { listAgentManifest } from '../../agent-manifest.service';
 
 const TMP_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'skills-file-test-'));
 
@@ -38,7 +39,11 @@ describe('skills-file loader（P0 户口簿）', () => {
     expect([...new Set(mainlineStages)].sort()).toEqual(['goal', 'path', 'profile', 'simulation', 'teaching']);
 
     const handlerOnly = byKind('handler-only');
-    expect(handlerOnly.every((entry) => entry.noPromptFile === true)).toBe(true);
+    // #235：noPromptFile 是「有没有提示词文件」的字面语义，不再恒等于 handler-only。
+    // 声明了独立提示词产物（promptArtifact）的 handler-only 必须为 false，其余默认 true。
+    expect(handlerOnly.every((entry) => (
+      entry.promptArtifact ? entry.noPromptFile === false : entry.noPromptFile === true
+    ))).toBe(true);
     // 与文件头"计数不硬编码"一致：只断言已知成员存在，新增 handler-only 不再需要改本测试
     expect(handlerOnly.map((entry) => entry.skillId)).toEqual(
       expect.arrayContaining(['learner-model', 'mcp-tool', 'web-search'])
@@ -168,6 +173,51 @@ skills:
 `)).toThrow(/noPromptFile=true 与 kind=mainline 冲突/);
   });
 
+  // #235：noPromptFile 现在只表示「没有提示词文件」。handler-only 若真有独立提示词产物，
+  // 必须同时声明 promptArtifact 并把 noPromptFile 置 false；两个字段不许互相打脸。
+  it('#235 promptArtifact 与 noPromptFile 的一致性 fail-fast', () => {
+    // handler-only 声称有提示词却不指出文件 → 无法证明，拒绝
+    expect(() => validateSkillsContent(`
+version: 1
+skills:
+  - skillId: x-test
+    kind: handler-only
+    handlerRef: backend/src/skills/x-test/index.ts
+    noPromptFile: false
+`)).toThrow(/promptArtifact/);
+    // 声明了提示词产物又说自己没有提示词文件 → 自相矛盾（board-designer 修复前的形态）
+    expect(() => validateSkillsContent(`
+version: 1
+skills:
+  - skillId: x-test
+    kind: handler-only
+    handlerRef: backend/src/skills/x-test/index.ts
+    noPromptFile: true
+    promptArtifact: prompts/skill.x-test.md
+`)).toThrow(/promptArtifact 冲突/);
+    // 产物路径必须是该 skill 自己的规范路径
+    expect(() => validateSkillsContent(`
+version: 1
+skills:
+  - skillId: x-test
+    kind: handler-only
+    handlerRef: backend/src/skills/x-test/index.ts
+    promptArtifact: prompts/skill.other.md
+`)).toThrow(/promptArtifact 必须为/);
+    // mainline 的提示词走 coreFile，不许另挂产物
+    expect(() => validateSkillsContent(`
+version: 1
+skills:
+  - skillId: x-test
+    kind: mainline
+    stage: goal
+    parentAgent: goal-agent
+    handlerRef: backend/src/skills/x-test/index.ts
+    coreFile: prompts/core/x-test.yaml
+    promptArtifact: prompts/skill.x-test.md
+`)).toThrow(/promptArtifact 只用于 kind=handler-only/);
+  });
+
   it('F8：活跃集与退役名单（retired-skills.ts）互斥 fail-fast', () => {
     expect(() => validateSkillsContent(`
 version: 1
@@ -286,5 +336,73 @@ skills:
     coreFile: prompts/core/x-test.yaml
     bogusField: 1
 `)).toThrow(/未知字段/);
+  });
+});
+
+/**
+ * #235：声明与文件系统必须一致。
+ *
+ * `noPromptFile: true` 的字面含义是「没有提示词文件」。board-designer 修复前
+ * 一边写 true、一边让运行期 `loadPromptFile('skill:board-designer')` 读
+ * prompts/skill.board-designer.md（130 行板面 spec 契约）——这是同一件事的两份
+ * 互相否定的声明。判据按「提示词产物是否唯一载体」：
+ *   - 有 prompts/skill.<id>.md 且**无** prompts/core/<id>.yaml → 这份 .md 就是提示词本身，
+ *     不许声明 noPromptFile: true；
+ *   - 有 core yaml 的 handler-only（material-collector / material-brief）其提示词由 core 承载，
+ *     产物是编译结果，可以继续以 noPromptFile 表示「户口簿没有 coreFile」。
+ */
+describe('#235 noPromptFile 与文件系统一致', () => {
+  const REPO_ROOT = path.resolve(__dirname, '..', '..', '..', '..', '..');
+  const PROMPTS_DIR = path.join(REPO_ROOT, 'prompts');
+  const book = parseSkillsFile(SKILLS_FILE_PATH);
+
+  const artifactSkillIds = new Set(
+    fs.readdirSync(PROMPTS_DIR)
+      .filter((file) => /^skill\..+\.md$/.test(file))
+      .map((file) => file.replace(/^skill\./, '').replace(/\.md$/, ''))
+  );
+  const coreSkillIds = new Set(
+    fs.readdirSync(path.join(PROMPTS_DIR, 'core'))
+      .filter((file) => /\.ya?ml$/.test(file))
+      .map((file) => file.replace(/\.ya?ml$/, ''))
+  );
+
+  it('提示词产物是唯一载体时，不得声明 noPromptFile: true', () => {
+    const contradictory = book.skills
+      .filter((entry) => entry.noPromptFile === true
+        && artifactSkillIds.has(entry.skillId)
+        && !coreSkillIds.has(entry.skillId))
+      .map((entry) => entry.skillId);
+    expect(contradictory).toEqual([]);
+  });
+
+  it('声明 promptArtifact 的条目：文件存在、noPromptFile=false', () => {
+    const declared = book.skills.filter((entry) => entry.promptArtifact);
+    expect(declared.length).toBeGreaterThan(0);
+    for (const entry of declared) {
+      expect({
+        skillId: entry.skillId,
+        exists: fs.existsSync(path.join(REPO_ROOT, entry.promptArtifact!)),
+        noPromptFile: entry.noPromptFile,
+      }).toEqual({ skillId: entry.skillId, exists: true, noPromptFile: false });
+    }
+  });
+
+  it('board-designer：有提示词产物、无 core 源（#235 的具体形态）', () => {
+    const entry = book.skills.find((item) => item.skillId === 'board-designer')!;
+    expect(entry.noPromptFile).toBe(false);
+    expect(entry.promptArtifact).toBe('prompts/skill.board-designer.md');
+    expect(fs.existsSync(path.join(PROMPTS_DIR, 'skill.board-designer.md'))).toBe(true);
+    expect(fs.existsSync(path.join(PROMPTS_DIR, 'core', 'board-designer.yaml'))).toBe(false);
+  });
+
+  it('运行时 manifest 的同一条声明也必须与文件系统一致（不止户口簿）', () => {
+    const contradictions = listAgentManifest()
+      .map((item) => ({ item, skillId: item.id.replace(/^skill:/, '') }))
+      .filter(({ item, skillId }) => item.noPromptFile === true
+        && artifactSkillIds.has(skillId)
+        && !coreSkillIds.has(skillId))
+      .map(({ item }) => item.id);
+    expect(contradictions).toEqual([]);
   });
 });

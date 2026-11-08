@@ -64,14 +64,18 @@ jest.mock('../../services/ai-teaching/TeachingMessageIdempotencyService', () => 
   teachingOperationRequestHash: jest.fn(() => 'test-request-hash'),
 }));
 jest.mock('../../config/database', () => ({ __esModule: true, default: {} }));
+const mockRecordSessionEvent = jest.fn();
 jest.mock('../../services/ai-teaching/session-events.service', () => ({
   listSessionEvents: (...args: unknown[]) => mockListSessionEvents(...args),
-  recordSessionEvent: jest.fn(),
+  // 174-2：回合失败留痕断言需要拿到调用记录
+  recordSessionEvent: (...args: unknown[]) => mockRecordSessionEvent(...args),
 }));
 jest.mock('../../utils/logger', () => ({ logger: { error: jest.fn(), warn: jest.fn() } }));
 
 import router from '../ai-teaching.routes';
 import { requestContextStorage, runWithContext } from '../../gateway/api-gateway/context';
+// #251：往返用例直接遍历建议服务下发的选项键（不另抄一份枚举）
+import { ADVISORY_UI_OPTION_KEYS } from '../../services/ai-teaching/ReplanAdvisoryService';
 
 function getRouteHandler(path: string, method: 'get' | 'post' = 'post') {
   const layer = (router as any).stack.find((item: any) => item.route?.path === path && item.route?.methods?.[method]);
@@ -645,6 +649,41 @@ describe('ai-teaching routes', () => {
     expect(joined).toContain('event: error\n');
     expect(joined).toContain('TEACHING_SESSION_STATE_CHANGED');
     expect(res.end).toHaveBeenCalled();
+    // 174-2：失败的回合必须落 turn.failed，否则会话时间线上只有 turn.committed、失败不可见
+    expect(mockRecordSessionEvent).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: 'session-1',
+      kind: 'turn.failed',
+      actor: 'system',
+      status: 'failed',
+      revision: 3,
+      payload: expect.objectContaining({ code: 'TEACHING_SESSION_STATE_CHANGED', streamed: true }),
+    }));
+  });
+
+  it('非流式回合失败同样落 turn.failed（带错误码与基线 revision）', async () => {
+    mockCoordinator.processStudentMessage.mockRejectedValue(
+      Object.assign(new Error('模型超时'), { code: 'TEACHING_TURN_TIMEOUT' })
+    );
+
+    const handler = getRouteHandler('/sessions/:sessionId/messages');
+    const res = createResponse();
+
+    await handler({
+      user: { userId: 'user-1' },
+      params: { sessionId: 'session-1' },
+      headers: { 'idempotency-key': 'non-stream-key' },
+      body: { message: '继续', revision: 7 },
+    }, res);
+
+    // 非流式出口仍按原语义回 5xx 错误体，同时时间线留下失败痕迹
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(mockRecordSessionEvent).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: 'session-1',
+      kind: 'turn.failed',
+      status: 'failed',
+      revision: 7,
+      payload: expect.objectContaining({ code: 'TEACHING_TURN_TIMEOUT', streamed: false }),
+    }));
   });
 
   it('SSE 流式：注入业务 sessionId 到请求上下文（执行日志/瀑布归组链路）', async () => {
@@ -1019,14 +1058,34 @@ describe('ai-teaching routes', () => {
       }));
     });
 
-    it('非法动作（如未经执行链的 confirm）→ 400 且不触达 repository', async () => {
+    it('非法动作 → 400 且不触达 repository', async () => {
       const handler = getRouteHandler('/sessions/:sessionId/advisory-response');
       const res = createResponse();
 
-      await handler({ user: { userId: 'user-1' }, params: { sessionId: 'session-1' }, body: { action: 'confirm' } }, res);
+      await handler({ user: { userId: 'user-1' }, params: { sessionId: 'session-1' }, body: { action: 'bogus-action' } }, res);
 
       expect(mockTeachingSessionRepository.recordAdvisoryResponse).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(400);
+    });
+
+    // #251：端点此前只认 keep/later/preview/adopt 四个手写键，而建议服务自己下发的
+    // ui.options 里还有 confirm/accelerate/reinforce/resequence —— 界面渲染什么按钮，
+    // 那个键就必须能被本端点接受（自己下发的按钮不许自己拒收）。
+    it('#251 建议卡下发的每个选项键都能被端点接受（往返）', async () => {
+      mockTeachingSessionRepository.recordAdvisoryResponse.mockResolvedValue({ status: 'ok', advisory: {} });
+      const handler = getRouteHandler('/sessions/:sessionId/advisory-response');
+
+      for (const action of ADVISORY_UI_OPTION_KEYS) {
+        mockTeachingSessionRepository.recordAdvisoryResponse.mockClear();
+        const res = createResponse();
+
+        await handler({ user: { userId: 'user-1' }, params: { sessionId: 'session-1' }, body: { action } }, res);
+
+        // 未被 400 拦下（status 未调用即 200 分支），且 action 原样落库
+        expect([action, res.status.mock.calls.length]).toEqual([action, 0]);
+        expect(mockTeachingSessionRepository.recordAdvisoryResponse)
+          .toHaveBeenCalledWith('session-1', 'user-1', action);
+      }
     });
 
     it('无待处置建议的会话 → 409 ADVISORY_NOT_FOUND', async () => {

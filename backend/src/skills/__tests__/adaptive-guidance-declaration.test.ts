@@ -16,7 +16,7 @@ jest.mock('../../composers/prompt-composer', () => ({
 import fs from 'node:fs'
 import path from 'node:path'
 import yaml from 'js-yaml'
-import { adaptiveGuidanceCopy } from '../adaptive-guidance-copy'
+import { adaptiveGuidanceCopy, adaptiveGuidanceCopyDefinition, GUIDANCE_VIEWS } from '../adaptive-guidance-copy'
 
 const INPUT = {
   view: 'dashboard',
@@ -58,5 +58,34 @@ describe('adaptive-guidance-copy 声明与载荷对齐', () => {
     // 调用方直供、无沙盘 ref 的两个键：以 yaml 注释为凭，不入 inputs
     expect(keys).toEqual(expect.arrayContaining(['view', 'path']))
     expect(doc.inputs.map((i) => i.name)).not.toContain('view')
+  })
+
+  /**
+   * #187：skill 的 view 是**真实分支**。此前 rules 只写 dashboard（"生成适合 Dashboard 页面展示的
+   * 动态文案"），learning-state 页只能拿 dashboard 口径的 copy。声明与提示词必须同时覆盖两个视图，
+   * 且 learning-state 视图禁止输出指回本页的自指深链——否则「4 个 view」又会退化成一句空话。
+   */
+  it('#187：提示词规则与产出口径覆盖两个视图，learning-state 禁自指深链', () => {
+    const yamlPath = path.resolve(__dirname, '../../../../prompts/core/adaptive-guidance-copy.yaml')
+    const doc = yaml.load(fs.readFileSync(yamlPath, 'utf8')) as {
+      rules: string[]
+      fields: Array<{ name: string; desc?: string }>
+    }
+    const rules = doc.rules.join('\n')
+
+    expect(rules).toContain('view=dashboard')
+    expect(rules).toContain('view=learning-state')
+    // 自指深链禁令必须写在规则里（不只是代码兜底）
+    expect(rules).toMatch(/严禁[\s\S]{0,80}learning-state/)
+    // 旧的「统一到 dashboard」口径不得再出现在规则里
+    expect(rules).not.toContain('复用 dashboard')
+
+    const todayActionsDesc = doc.fields.find((field) => field.name === 'todayActions')?.desc || ''
+    expect(todayActionsDesc).toContain('view=dashboard')
+    expect(todayActionsDesc).toContain('view=learning-state')
+  })
+
+  it('#187：skill 入参 schema 声明的 view 枚举与 views.ts 同源', () => {
+    expect(adaptiveGuidanceCopyDefinition.inputSchema.properties.view.enum).toEqual([...GUIDANCE_VIEWS])
   })
 })

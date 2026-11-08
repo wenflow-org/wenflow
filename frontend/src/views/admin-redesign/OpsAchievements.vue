@@ -45,7 +45,6 @@
       </div>
       <MkEmptyState
         v-else-if="defsFailed"
-        icon="!"
         title="成就定义加载失败"
         description="无法读取成就定义清单，读数可能不完整。"
         action-text="重试"
@@ -54,7 +53,6 @@
       <!-- 原先缺 v-else 兜底：后端返回空数组时卡内什么都不渲染（审计 附 A #10） -->
       <MkEmptyState
         v-else
-        icon="◌"
         title="暂无成就定义"
         description="还没有配置任何成就。定义来自成就目录，配置后学习者达成时自动发放。"
         action-text="刷新"
@@ -131,7 +129,6 @@
       <MkEmptyState
         v-else-if="recordsFailed"
         min
-        icon="!"
         title="解锁记录加载失败"
         description="无法读取解锁记录，读数可能不完整。"
         action-text="重试"
@@ -139,7 +136,6 @@
       />
       <MkEmptyState
         v-else
-        icon="◌"
         :title="isRecordsFiltered ? '没有符合筛选条件的解锁记录' : '还没有解锁记录'"
         :description="isRecordsFiltered
           ? '当前搜索/筛选条件下无匹配记录，可清除筛选查看全部。'

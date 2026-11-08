@@ -199,8 +199,8 @@ function getStrategyInstruction(strategy: PeerDiscussionInput['strategy']): stri
  * 老师本轮在布置独立作业/等学生作答时，不论调用方传了什么 strategy，一律降级为 encourage。
  * 单一实现、四处共用（载荷、【策略要求】、返回回显 result.strategy、runtimeEnvelope 与 handler 的
  * internal.ext.peer.strategy），保证**回显/落库/前端标签**与载荷实际下发的手法一致——
- * 聊天路径（teaching-session-ops.ts:647）只传 cognitiveLevel、不传 tutorLatestReply，
- * 若不在此统一，会出现"载荷按鼓励式生成、回显却写着反例挑战"的口径分裂。
+ * 聊天路径（teaching-session-ops 的 processPeerMessage）只按 cognitiveLevel 选策略，
+ * 是否该降级为鼓励式一律由这里裁决；若不在此统一，会出现"载荷按鼓励式生成、回显却写着反例挑战"的口径分裂。
  */
 export function resolveEffectivePeerStrategy(input: PeerDiscussionInput): PeerDiscussionInput['strategy'] {
   return detectAwaitingLearnerWork(input?.tutorLatestReply).awaiting ? 'encourage' : input.strategy;

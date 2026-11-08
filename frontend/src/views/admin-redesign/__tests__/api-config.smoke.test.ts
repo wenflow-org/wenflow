@@ -179,29 +179,22 @@ async function openPlatformSettings(wrapper: Awaited<ReturnType<typeof mountApiC
 }
 
 /**
- * 打开「添加模型」弹窗（2026-11-05 用户「连接设置和添加模型合并到一起吧，只保留添加模型」）：
- * 连接（地址 / 密钥 / 重试 / RPM / 重置此通道）现在是这张弹窗的第一段。
- * 这里走面板的 openPull——只开窗、不触发拉取，正是「宿主拉完清单后开窗」的形态，
- * 便于单看连接段本身。
+ * 展开页顶「服务连接」卡的表单（2026-11-07 用户「提回去」）：
+ * 连接不再是「添加模型」弹窗的第一段，而是页面最上方一张常驻卡片。
+ * 已配好的通道默认收起成一行摘要，点「修改连接」才展开；没配地址时直接展开。
  */
 async function openConnSettings(wrapper: Awaited<ReturnType<typeof mountApiConfig>>) {
-  const panel = wrapper.findComponent(ModelProvidersPanel)
-  ;(panel.vm as unknown as { openPull: () => void }).openPull()
-  await nextTick();
-  await flushPromises();
-  expect(wrapper.find('.pmd').exists(), '弹窗应已打开').toBe(true);
-  /* 2026-11-05 用户「这个区域精简一下，占太多空间，下方的拉取模型是重点」：
-     已配好的通道默认收起成一行摘要，点「修改连接」才展开；没配地址时直接展开。 */
-  if (wrapper.find('.ac-conn-summary').exists()) {
+  if (!wrapper.find('.ac-conn-form').exists()) {
     await wrapper.findAll('button').find((b) => b.text() === '修改连接')!.trigger('click');
     await nextTick();
+    await flushPromises();
   }
   expect(wrapper.find('.ac-conn-form').exists(), '展开后应有连接表单').toBe(true);
 }
 
-/** 弹窗连接段里的保存钮（只改策略、没拉清单时的显式出口） */
+/** 服务连接卡里的保存钮（常驻，无改动时禁用） */
 function connSaveBtn(wrapper: Awaited<ReturnType<typeof mountApiConfig>>) {
-  return wrapper.findAll('.pmd-conn__actions button').find((b) => b.text().startsWith('保存'))!;
+  return wrapper.findAll('.ac-conn-form .mk-btn').find((b) => b.text().startsWith('保存'))!;
 }
 
 describe('ApiConfig P1 修复批', () => {
@@ -323,9 +316,9 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
-  /* 2026-11-05 用户「连接设置和添加模型合并到一起吧，只保留添加模型」：
-     连接与调用策略共用弹窗里的「保存连接」，关窗未保存就回滚。 */
-  it('连接段默认收起成一行摘要，点「修改连接」才展开；有未保存改动时不许收起', async () => {
+  /* 2026-11-07 用户「提回去」：连接卡回到页面最上方常驻。
+     折叠态 = 一行摘要（地址 · 密钥 · 重试策略），展开态 = 表单 + 常驻保存 + 贴右端的重置。 */
+  it('服务连接卡常驻页顶：默认收起成一行摘要，点「修改连接」才展开；有未保存改动时不许收起', async () => {
     liveApiConfig.value = {
       apiUrl: 'https://api.example.com/v1',
       apiKeyConfigured: true,
@@ -339,14 +332,17 @@ describe('ApiConfig P1 修复批', () => {
       networkPolicy: { adminAccessMode: 'private' as const, adminAllowedIps: [], allowPrivateNetwork: true, privateNetworkHosts: [] }
     };
     const wrapper = await mountApiConfig();
-    const panel = wrapper.findComponent(ModelProvidersPanel);
-    (panel.vm as unknown as { openPull: () => void }).openPull();
-    await nextTick();
-    await flushPromises();
 
-    // 收起态：一行摘要（地址 + 策略），表单不渲染——纵向空间留给下面的清单
+    // 卡在页顶、主列表之前
+    const card = wrapper.find('.ac-conn');
+    expect(card.exists()).toBe(true);
+    const order = wrapper.findAll('#ac-panel-access > *').map((n) => n.classes().join(' '));
+    expect(order.findIndex((c) => c.includes('ac-conn'))).toBeLessThan(order.findIndex((c) => c.includes('mpp')));
+
+    // 收起态：一行摘要（地址 + 密钥 + 策略），表单不渲染
     const summary = wrapper.find('.ac-conn-summary');
     expect(summary.text()).toContain('https://api.example.com/v1');
+    expect(summary.text()).toContain('密钥已配置');
     expect(summary.text()).toContain('重试');
     expect(wrapper.find('.ac-conn-form').exists()).toBe(false);
     // 危险动作（重置此通道）只在展开时出现
@@ -357,14 +353,21 @@ describe('ApiConfig P1 修复批', () => {
     await nextTick();
     expect(wrapper.find('.ac-conn-form').exists()).toBe(true);
 
+    // 保存按钮常驻（2026-11-07：它此前只在「脏了」之后才出现，用户看不出这段表单能保存）
+    expect(connSaveBtn(wrapper).text()).toBe('保存连接配置');
+    expect(connSaveBtn(wrapper).attributes('disabled')).toBeDefined();
+
     // 改了连接：收起被挡下（改动不能藏在一个折起来的段里）
     await wrapper.find('.ac-conn-form input[placeholder="https://api.example.com/v1"]').setValue('https://new.example.com/v1');
     await nextTick();
-    expect(wrapper.findAll('button').find((b) => b.text() === '收起')!.attributes('disabled')).toBeDefined();
+    await toggle().trigger('click');
+    await nextTick();
+    expect(wrapper.find('.ac-conn-form').exists(), '有未保存改动时不许收起').toBe(true);
+    expect(connSaveBtn(wrapper).attributes('disabled')).toBeUndefined();
     wrapper.unmount();
   });
 
-  it('添加模型弹窗里的连接段：保存连接与调用策略，取消回滚', async () => {
+  it('服务连接卡的保存：连接与调用策略一次落盘', async () => {
     const wrapper = await mountApiConfig();
     await openConnSettings(wrapper);
     expect(wrapper.find('.ac-conn-form').exists()).toBe(true);
@@ -381,28 +384,20 @@ describe('ApiConfig P1 修复批', () => {
     await flushPromises();
     expect(updateConfigMock).toHaveBeenCalledTimes(1);
     expect(updateReliabilityMock).toHaveBeenCalledTimes(1);
-    // 保存不动弹窗本身（用户还在挑模型）
-    expect(wrapper.find('.pmd').exists()).toBe(true);
     wrapper.unmount();
   });
 
-  it('关闭弹窗会回滚未保存的地址与策略', async () => {
+  /* 连接搬回页顶后，「关窗回滚」这条语义整个消失：连接不再挂在任何弹窗上。
+     取而代之的护栏是——添加模型弹窗里**不许**再出现第二份连接表单（一处事实一个控件）。 */
+  it('添加模型弹窗里不再有连接段：连接只属于页顶那张卡', async () => {
     const wrapper = await mountApiConfig();
-    await openConnSettings(wrapper);
-    const before = (wrapper.find('.ac-conn-form input[placeholder="https://api.example.com/v1"]').element as HTMLInputElement).value;
-    await wrapper.find('.ac-conn-form input[type="number"]').setValue('9');
+    const panel = wrapper.findComponent(ModelProvidersPanel);
+    (panel.vm as unknown as { openPull: () => void }).openPull();
     await nextTick();
-
-    await wrapper.findAll('.pmd .mk-modal__foot button').find((b) => b.text() === '取消')!.trigger('click');
     await flushPromises();
-    expect(updateConfigMock).not.toHaveBeenCalled();
-    expect(updateReliabilityMock).not.toHaveBeenCalled();
-    expect(wrapper.find('.pmd').exists()).toBe(false);
-
-    // 再打开：地址与重试都是已保存的那份（未被上一步的改动污染）
-    await openConnSettings(wrapper);
-    expect((wrapper.find('.ac-conn-form input[placeholder="https://api.example.com/v1"]').element as HTMLInputElement).value).toBe(before);
-    expect((wrapper.find('.ac-conn-policy input[type="number"]').element as HTMLInputElement).value).not.toBe('9');
+    expect(wrapper.find('.pmd').exists(), '弹窗应已打开').toBe(true);
+    expect(wrapper.find('.pmd-conn').exists(), '弹窗里不该再出现连接段').toBe(false);
+    expect(wrapper.findAll('.pmd .ac-conn-form')).toHaveLength(0);
     wrapper.unmount();
   });
 
@@ -461,9 +456,9 @@ describe('ApiConfig P1 修复批', () => {
     const detail = wrapper.find('.mpp .mk-card__head');
     expect(detail.text()).toContain('对话模型');
     expect(detail.find('.mpp-type').text()).toBe('LLM');
-    // 2026-11-05 合并弹窗：卡面不再有连接表单，也没有「连接设置」入口——连接在「＋ 添加模型」里
-    expect(wrapper.find('.ac-conn').exists()).toBe(false);
-    expect(wrapper.find('.ac-conn-summary').exists()).toBe(false);
+    // 2026-11-07 用户「提回去」：连接回到页顶常驻卡，模型卡面上不再重复地址
+    expect(wrapper.find('.ac-conn').exists()).toBe(true);
+    expect(wrapper.find('.ac-conn-summary').text()).toContain('https://api.example.com/v1');
     expect(wrapper.find('.ac-ps').exists()).toBe(false);
     expect(wrapper.find('.ac-conn-open').exists()).toBe(false);
     expect(wrapper.find('.ac-conn-setup').exists()).toBe(false);
@@ -506,19 +501,19 @@ describe('ApiConfig P1 修复批', () => {
 
   /* 2026-10-27 用户「把 tab 解散了」：平台详情不再分二级页签，按接入顺序平铺；
      2026-10-28 基础设施并入模型表、平台默认整块撤出。 */
-  it('单页三卡：连接 / 挂载模型 / 向量与重排能力卡常驻', async () => {
+  it('单页四卡：服务连接 / 对话模型 / 向量与重排能力卡常驻', async () => {
     const wrapper = await mountApiConfig();
     await flushPromises();
     // 一级页签已撤；供应商面板与调用策略同屏
     expect(wrapper.find('.ac-tabs').exists()).toBe(false);
     expect(wrapper.find('.mpp').exists()).toBe(true);
-    // 2026-11-05 合并弹窗：连接参数在「＋ 添加模型」的弹窗里，卡面没有任何连接控件
+    // 2026-11-07 用户「提回去」：连接参数回到页顶常驻卡，不再藏进弹窗
     expect(wrapper.text()).not.toContain('全站调用策略');
     expect(wrapper.findAll('.ac-policy__num')).toHaveLength(0);
-    expect(wrapper.find('.ac-conn-open').exists()).toBe(false);
+    expect(wrapper.find('.ac-conn').exists()).toBe(true);
     expect(wrapper.find('#mpp-platform-panel-conn').exists()).toBe(false);
-    // 2026-10-28 用户「按能力角色拆成三个独立卡片」：对话卡 + 向量卡 + 重排卡
-    expect(wrapper.findAll('#ac-panel-access .mk-card')).toHaveLength(3);
+    // 2026-10-28 用户「按能力角色拆成三个独立卡片」：连接 + 对话卡 + 向量卡 + 重排卡
+    expect(wrapper.findAll('#ac-panel-access .mk-card')).toHaveLength(4);
     expect(wrapper.find('.mpp #mpp-platform-panel-models').exists()).toBe(true);
     expect(wrapper.find('.mpp-config').exists()).toBe(false);
     // 单列（2026-11-04 用户「还是不要左右结构了，把链接做到这个卡片右上角吧」）：
@@ -641,6 +636,47 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount();
   });
 
+  /* 2026-11-07：那枚贴在列表第 1 行上方的「未保存」，主语一直是「本次拉到的上游清单」，
+     却被读成「这一行 / 设为默认没存上」。现在把主语写全，并就地给唯一的解法按钮。 */
+  it('清单未落盘：徽章写清主语「清单未保存」并就地给「保存清单」', async () => {
+    const savedCfg = {
+      apiUrl: 'https://api.example.com/v1',
+      apiKeyConfigured: true,
+      availableModels: ['model-a'],
+      defaultModel: 'model-a',
+      defaultEvaluationModel: 'model-a',
+      defaultThinkingMode: 'default' as const,
+      defaultReasoningEffort: 'default' as const,
+      connectionStatus: 'connected',
+      lastCheckedAt: '2026-08-13T09:00:00.000Z',
+      networkPolicy: { adminAccessMode: 'private' as const, adminAllowedIps: [], allowPrivateNetwork: true, privateNetworkHosts: [] }
+    };
+    liveApiConfig.value = savedCfg;
+    // 打开弹窗那次拉取只读：拉到的清单比库里的多一个 → 未落盘
+    testConnectionMock.mockResolvedValue({ data: { data: { connected: true, modelsCount: 2, models: ['model-a', 'model-b'] } } });
+    updateConfigMock.mockResolvedValue({ data: { data: {} } });
+
+    const wrapper = await mountApiConfig();
+    await wrapper.find('.mpp-add').trigger('click');
+    await flushPromises();
+    await nextTick();
+    await flushPromises();
+    expect(updateConfigMock).not.toHaveBeenCalled();
+
+    const meta = wrapper.find('.ac-models-meta');
+    expect(meta.exists()).toBe(true);
+    expect(meta.text()).toContain('清单未保存');
+    expect(meta.text()).toContain('本次拉到的 2 个模型还没落盘');
+    // 旧文案（一枚孤立的「未保存」）不许写回
+    expect(meta.text()).not.toBe('未保存');
+    const saveList = meta.findAll('button').find((b) => b.text() === '保存清单')!;
+    expect(saveList, '徽章旁边应有就地保存入口').toBeTruthy();
+    await saveList.trigger('click');
+    await flushPromises();
+    expect(updateConfigMock).toHaveBeenCalledWith(expect.objectContaining({ availableModels: ['model-a', 'model-b'] }));
+    wrapper.unmount();
+  });
+
   /* 2026-11-04 用户「只保留添加模型，手动录入放到添加模型的页面里面」：
      手动录入只剩勾选浮窗底栏一处，所以上游返回 0 个模型时也必须开窗——
      否则「清单里没有」这件事在页面上就没有出口了。 */
@@ -699,24 +735,32 @@ describe('ApiConfig P1 修复批', () => {
     await flushPromises();
     expect(testConnectionMock).not.toHaveBeenCalled();
     expect(updateConfigMock).not.toHaveBeenCalled();
-    // 弹窗保持打开，运营可以看到「更换服务地址需重新输入密钥」
-    expect(wrapper.find('.pmd').exists()).toBe(true);
+    // 卡片保持展开，运营可以看到「更换服务地址需重新输入密钥」
+    expect(wrapper.find('.ac-conn-form').exists()).toBe(true);
     expect(wrapper.find('.ac-keyhint').text()).toContain('重新输入密钥');
     wrapper.unmount();
   });
 
   /* 2026-10-27 用户「不再做独立连通性验证」：不维护测试用模型下拉。
-     2026-11-03 用户「只有模型级别的连通性」：通道级测试整块撤除——连通性只由
-     列表里逐模型的「测试」回答；通道层面只保留「获取上游清单」这一件事。 */
-  it('连通性只在模型级别：连接段没有测试钮，也不出现测试用模型下拉', async () => {
+     2026-11-03 用户「只有模型级别的连通性」：那枚「绿勾结论」撤除。
+     2026-11-07 用户新指令要求页顶摘要行有「测试连接」，故以**新语义**回来：
+     只回答「这个地址 + 密钥能不能连上」，用 toast 说结果，不进徽章、不写库、
+     不冒充「上次获取模型」。逐模型能不能调，仍然只看行内「测试」。 */
+  it('通道测试只探活：说了算的是 toast，不写连接状态、不出现「测试连通性」结论', async () => {
     const wrapper = await mountApiConfig();
     await flushPromises();
     expect(wrapper.text()).not.toContain('测试用模型');
     expect(wrapper.find('.ac-test').exists()).toBe(false);
-    await openConnSettings(wrapper);
     expect(wrapper.text()).not.toContain('测试连通性');
     expect(wrapper.find('.ac-conn-modal__test').exists()).toBe(false);
-    expect(wrapper.text()).not.toContain('运行测试');
+    // 摘要行的那枚「测试连接」在，且只读（不落盘）
+    const testBtn = wrapper.findAll('.ac-conn-summary button').find((b) => b.text() === '测试连接')!;
+    expect(testBtn).toBeTruthy();
+    testConnectionMock.mockResolvedValue({ data: { data: { connected: true, modelsCount: 2, models: ['m-1', 'm-2'] } } });
+    await testBtn.trigger('click');
+    await flushPromises();
+    expect(testConnectionMock).toHaveBeenCalledTimes(1);
+    expect(updateConfigMock, '测试连接不写配置').not.toHaveBeenCalled();
     wrapper.unmount();
   });
 
@@ -746,7 +790,7 @@ describe('ApiConfig P1 修复批', () => {
     wrapper.unmount()
   })
 
-  it('P1：页头干净；添加模型即拉清单，重置在弹窗连接段里，卡头无刷新钮', async () => {
+  it('P1：页头干净；添加模型即拉清单，重置在页顶连接卡里，卡头无刷新钮', async () => {
     const wrapper = await mountApiConfig();
     await flushPromises();
     // 页头不再有任何动作（用户「最右上角那个多余的按钮…保持顶部干净」）
@@ -760,19 +804,19 @@ describe('ApiConfig P1 修复批', () => {
     // 模型区没有第二颗保存 / 重置，避免「先点哪个」的分裂
     expect(wrapper.find('.mpp-models').text()).not.toContain('重置此通道')
     expect(wrapper.find('.mpp-models').text()).not.toContain('保存')
-    // 重置此通道跟着「连接」这一段走：在弹窗连接段的标题右侧，不在弹窗统一底栏
+    // 重置此通道跟着「连接」这一段走：在页顶连接卡的保存行右端，不在模型卡里
     await openConnSettings(wrapper)
-    expect(wrapper.find('.pmd-conn__actions').text()).toContain('重置此通道')
-    expect(wrapper.find('.pmd-foot').text()).not.toContain('重置此通道')
+    expect(wrapper.find('.ac-conn__foot').text()).toContain('重置此通道')
+    expect(wrapper.find('.mpp').text()).not.toContain('重置此通道')
     wrapper.unmount()
   })
 
   /* #13：后端 POST /admin/api-config/reset 能力早已存在；2026-10-27 P1 从页头收进通道详情 */
-  it('#13：重置入口在弹窗连接段，确认后调用 reset API；取消则不调用', async () => {
+  it('#13：重置入口在页顶连接卡，确认后调用 reset API；取消则不调用', async () => {
     const wrapper = await mountApiConfig();
     await openConnSettings(wrapper)
-    const btn = wrapper.findAll('.pmd-conn__actions button').find((b) => b.text() === '重置此通道');
-    expect(btn, '连接段里应有重置入口').toBeTruthy();
+    const btn = wrapper.findAll('.ac-conn__foot button').find((b) => b.text() === '重置此通道');
+    expect(btn, '连接卡里应有重置入口').toBeTruthy();
 
     // 取消 → 不触发
     await btn!.trigger('click');
@@ -818,28 +862,27 @@ describe('ApiConfig P1 修复批', () => {
   });
 
   /* 2026-10-20 用户「这个 tab 重新思考」；2026-10-26 探针下线；2026-10-28 读数整块撤出；
-     2026-11-05 用户「连接设置和添加模型合并到一起吧，只保留添加模型」：
-     连接与调用策略成了添加模型弹窗的第一段，卡面不留任何连接控件。 */
-  it('连接与调用策略在添加模型弹窗里：卡面无表单，参数在弹窗连接段', async () => {
+     2026-11-07 用户「提回去」：连接与调用策略回到页顶常驻卡，模型卡面不含连接控件。 */
+  it('连接与调用策略在页顶卡里：模型卡面无表单，参数在服务连接卡', async () => {
     const wrapper = await mountApiConfig();
     await flushPromises();
 
-    // 页面上只有对话能力这一张业务卡
-    const cards = wrapper.findAll('#ac-panel-access > .mk-card');
-    expect(cards).toHaveLength(1);
-    expect(cards[0].classes()).toContain('mpp');
-    // 卡面没有输入框，也没有第二颗连接入口
+    // 页顶是连接卡；模型卡（.mpp）里没有任何连接控件
+    expect(wrapper.find('#ac-panel-access > .ac-conn').exists()).toBe(true);
     expect(wrapper.find('.mpp .ac-conn-form').exists()).toBe(false);
     expect(wrapper.find('.mpp input[placeholder="https://api.example.com/v1"]').exists()).toBe(false);
-    expect(wrapper.find('.ac-conn-summary').exists()).toBe(false);
+    expect(wrapper.find('.mpp .ac-conn-summary').exists()).toBe(false);
     expect(wrapper.find('.ac-conn-open').exists()).toBe(false);
     expect(wrapper.find('.mpp .ac-policy--inline').exists()).toBe(false);
 
+    /* 收起态才印摘要：展开后同一组事实就在输入框里，右上再印一遍是同屏复读
+       （2026-11-07 用户「展开态还重复印着一长串」）。 */
+    expect(wrapper.find('.ac-conn-summary').text()).toContain('密钥已配置');
     await openConnSettings(wrapper);
-    // 地址 / 重试口径都在连接段里；连接状态读数在弹窗标题下
+    expect(wrapper.find('.ac-conn-summary__addr').exists(), '展开后摘要文本不再渲染').toBe(false);
+    // 地址 / 重试口径都在连接卡里
     expect((wrapper.find('.ac-conn-form input[placeholder="https://api.example.com/v1"]').element as HTMLInputElement).value)
       .toBe('https://api.example.com/v1');
-    expect(wrapper.find('.pmd-head__state').text()).toContain('密钥已配置');
     expect(wrapper.find('.ac-conn-form').text()).toContain('最大重试');
     const policy = wrapper.findAll('.ac-conn-policy .mk-field');
     expect(policy).toHaveLength(3);
@@ -848,11 +891,11 @@ describe('ApiConfig P1 修复批', () => {
     // 2026-11-02 评审：「0 = 不限」「含首次」原先只藏在标签 title 里，改成每个字段下的可见提示
     expect(policy[0].find('.mk-field__hint').text()).toContain('含首次调用');
     expect(policy[2].find('.mk-field__hint').text()).toContain('0 表示不限');
-    const dialogText = wrapper.find('.pmd').text();
-    expect(dialogText).not.toContain('所有供应商共用');
-    expect(dialogText).not.toContain('传输重试');
-    expect(dialogText).not.toContain('Retry-After');
-    expect(dialogText).not.toContain('随机抖动');
+    const connText = wrapper.find('.ac-conn').text();
+    expect(connText).not.toContain('所有供应商共用');
+    expect(connText).not.toContain('传输重试');
+    expect(connText).not.toContain('Retry-After');
+    expect(connText).not.toContain('随机抖动');
     // 2026-10-28 读数整块撤出：健康读数归健康中心，跑批读数归虚拟学习者页
     expect(wrapper.find('.ac-policy__side').exists()).toBe(false);
     expect(wrapper.find('.ac-stat').exists()).toBe(false);

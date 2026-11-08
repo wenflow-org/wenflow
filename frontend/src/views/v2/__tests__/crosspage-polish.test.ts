@@ -29,6 +29,7 @@ const explorer = read('../../../components/mk/MkGraphExplorer.vue');
 const km = read('../V2KnowledgeMap.vue');
 const v2css = read('../v2.css');
 const state = read('../V2LearningState.vue');
+const paths = read('../V2LearningPaths.vue');
 const history = read('../V2LearningHistory.vue');
 const shell = read('../../../components/user/CapabilityShell.vue');
 const listbox = read('../../../components/mk/useListbox.ts');
@@ -106,30 +107,53 @@ describe('知识图谱：聚拢、取景与选中态', () => {
   });
 });
 
-describe('知识图谱容器与顶距（2026-11-07 走查/二次）：同档宽度、顶部呼吸、侧栏标题行', () => {
-  it('宽度与学习状态同档：组件内 880 居中，≥1680 名单拓 1360', () => {
+describe('知识图谱容器与顶距（2026-11-07 走查/二次/三次）：同档宽度、标题行、黄金画布高', () => {
+  /* 2026-11-07 三次走查（用户裁决「以学习状态为全站标准模板」）：
+     上一版是「组件内 880 + ≥1680 拓 1360」的老阶梯，在 1280/1536 下只占 54~89%，
+     与邻页不齐；现改为与状态页完全同档——共享 v2.css 的 min(92vw, 1360px)。 */
+  it('容器不再自钉宽度：交给 v2.css 的 min(92vw,1360) 统一档', () => {
     const rule = ruleOf(km, '.km__main');
-    expect(has(rule, /max-width:\s*880px/), '基线宽度偏离学习状态的 880 档').toBe(true);
-    expect(has(rule, /margin:\s*0 auto/)).toBe(true);
-    /* 全幅工作台方案被用户否掉（满屏太难看）——不许回退成无帽 */
-    expect(has(rule, /max-width:\s*none/), '又变回全幅无帽了').toBe(false);
+    expect(has(rule, /max-width:\s*880px/), '本地仍钉着 880，与状态页的 1360 档不齐').toBe(false);
+    expect(has(rule, /max-width:\s*none/), '不许退回全幅无帽').toBe(false);
     expect(has(rule, /width:\s*100%/)).toBe(true);
-    /* 高分屏名单必须仍收图谱页（与 .state__main 同一口径） */
-    expect(strip(v2css), '图谱被摘出 1360 名单，宽屏档会与状态页不一致').toContain('.v2-page.km .km__main');
+    expect(has(rule, /margin:\s*0 auto/)).toBe(true);
+    expect(strip(v2css), 'v2.css 的弹性容器没覆盖到页面 main').toContain('.v2-page > main[class]:not(.entry):not(.work)');
+    /* 三个自管宽度的壳必须排除（2026-11-07 用户报「登录怎么跑左侧去了」）：
+       auth/ob 是满宽盒 + 内部居中，削宽后盒子贴左 → 整页左移；
+       docs 自带 780 阅读列，被顶掉后正文拉到 1360。 */
+    expect(strip(v2css), '认证/引导壳没排除，登录页会被推到左边').toContain(':not(.auth__main):not(.ob__main):not(.docs-main)');
   });
 
-  it('顶部呼吸：上下距 28/24，卡不再贴死 sticky 导航', () => {
+  it('恢复可见标题行：h1 与副标题同 .state__head 解剖', () => {
+    /* 5 个主 Tab 切换时不能只有本页没有标题行（重心跳动） */
+    expect(km).toContain('class="km__head"');
+    expect(km).toMatch(/<h1>知识图谱<\/h1>/);
+    expect(km).not.toMatch(/<h1 class="visually-hidden">知识图谱<\/h1>/);
+    const head = ruleOf(km, '.km__head');
+    expect(has(head, /display:\s*flex/)).toBe(true);
+    const h1 = ruleOf(km, '.km__head h1');
+    expect(has(h1, /font-size:\s*22px/)).toBe(true);
+    expect(has(h1, /font-weight:\s*800/)).toBe(true);
+  });
+
+  it('顶部呼吸与卡片内边距同状态页：24/28/48', () => {
     const rule = ruleOf(km, '.km__main');
-    expect(has(rule, /padding:\s*28px 28px 24px/)).toBe(true);
+    expect(has(rule, /padding:\s*24px 28px 48px/)).toBe(true);
   });
 
-  it('卡高预留含卡内统计栏/图例（整卡一屏放下、页面不滚）；600px 下限；≤1100 回移动档', () => {
-    expect(km).toContain('--km-h-floor, 600px');
-    /* 260 = 导航 64 + 上下距 52 + 卡内 bar/图例 ~90 + 底部余白；只扣导航会把整卡顶出视口 */
-    expect(km).toContain('--km-h-reserve, 260px');
+  it('画布高改黄金比例 clamp(520px, 62vh, 680px)：2.5K 下不再拉成竖塔', () => {
+    /* 原先 height="max(floor, calc(100dvh - reserve))" 在 2560×1440 下把画布拉到 ~1200px */
+    expect(km).toContain('height="clamp(520px, 62vh, 680px)"');
+    expect(km, '不许再用视口高度撑满画布').not.toContain('100dvh - var(--km-h-reserve');
     const narrow = strip(km).slice(strip(km).indexOf('@media (max-width: 1100px)'));
-    expect(narrow).toMatch(/--km-h-floor:\s*560px/);
-    expect(narrow).toMatch(/--km-h-reserve:\s*216px/);
+    expect(narrow, '移动档不该再改画布高度变量（高度已由 prop 的 clamp 统一）').not.toMatch(/--km-h-floor:/);
+  });
+
+  it('单条路径也显示路径归属：静态标签（不是假下拉）', () => {
+    expect(explorer).toContain('mk-ge__pathonly');
+    expect(explorer).toContain('当前路径');
+    /* 多条仍走下拉 */
+    expect(explorer).toContain('showPathRail && paths.length > 1');
   });
 
   it('侧栏标题行 flex 化：标题弹性折行，[»] 固定宽不再截断长标题', () => {
@@ -237,5 +261,43 @@ describe('学习历史：Tab 栏、双栏与格子', () => {
     expect(has(aside, /flex-direction:\s*row/)).toBe(true);
     /* 旧「窄屏才横排」的例外规则已并入基础规则 */
     expect(strip(history)).not.toMatch(/\.history__aside\s*\{[^}]*flex-direction:\s*column/);
+  });
+});
+
+describe('学习路径页头（2026-11-07）：与知识图谱同构，空态上方有文案', () => {
+  /* 2026-11-05 曾以「顶栏已写页名」为由把页头整块删掉，结果空态页顶部只剩一块居中图标，
+     与知识图谱并排看秃一截（用户「我喜欢图谱的空态设计，上面有点文案」）。
+     这里双向锁死：页头必须在，且解剖必须与 .km__head 同档。 */
+  it('可见 h1 + 副标题，解剖对齐 .km__head', () => {
+    expect(paths).toContain('class="paths__head"');
+    expect(paths).toMatch(/<h1>学习路径<\/h1>/);
+    const head = ruleOf(paths, '.paths__head');
+    expect(has(head, /display:\s*flex/)).toBe(true);
+    expect(has(head, /padding-bottom:\s*2px/)).toBe(true);
+    const h1 = ruleOf(paths, '.paths__head h1');
+    expect(has(h1, /font-size:\s*22px/)).toBe(true);
+    expect(has(h1, /font-weight:\s*800/)).toBe(true);
+    const sub = ruleOf(paths, '.paths__head p');
+    expect(has(sub, /font-size:\s*13px/)).toBe(true);
+    /* 与图谱的对照：两边 h1 都是 22/800，副标题都是 13px（只比声明块，不比选择器名） */
+    const decls = (rule: string) => rule.slice(rule.indexOf('{'));
+    expect(decls(ruleOf(km, '.km__head h1'))).toBe(decls(ruleOf(paths, '.paths__head h1')));
+    expect(decls(ruleOf(km, '.km__head p'))).toBe(decls(ruleOf(paths, '.paths__head p')));
+  });
+
+  it('页头是 main 的首个子元素：加载 / 失败 / 空态三种情况下都在', () => {
+    const stripped = strip(paths);
+    const tpl = stripped.slice(0, stripped.indexOf('<script'));
+    const head = tpl.indexOf('paths__head');
+    expect(head).toBeGreaterThan(tpl.indexOf('main class="paths__main"'));
+    /* 放在 loading 之前 = 三种状态（loading / loadError / 列表与空态）共用同一页头 */
+    expect(head).toBeLessThan(tpl.indexOf('paths__loading'));
+  });
+
+  it('空态说明句不再折出单字孤行（36ch ≈ 21 个汉字）', () => {
+    /* 原句 23 字，末行只剩「径。」——用户会在截图里直接看到这个孤字。
+       这里只锁「别写回那句」，折行本身由浏览器决定，不做像素断言。 */
+    expect(paths).not.toContain('规划一个目标，问流会把它变成可执行的学习路径。');
+    expect(paths).toContain('问流会把你规划的目标拆成可执行的阶段与任务，再带你逐步学下去。');
   });
 });

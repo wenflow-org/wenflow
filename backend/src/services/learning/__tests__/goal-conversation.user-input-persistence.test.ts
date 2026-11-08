@@ -163,6 +163,9 @@ function seedConversation() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // mockExecuteSkill 的 mockResolvedValue/mockRejectedValue 实现不被 clearAllMocks 复位，
+  // 上一用例的 mockRejectedValue 会串到本套件里「不调用 executeSkill」的终局用例上，显式复位。
+  mockExecuteSkill.mockReset();
   seedConversation();
   failCollectedDataCommit = false;
   mockAssembleGoalHandoff.mockResolvedValue(null);
@@ -376,6 +379,11 @@ describe('#160 终局路径清理回合级幂等标记（标记不得永久残�
         stage: 'proposing',
         confidence: 0.5,
         collected: {},
+        confirmedProposal: {
+          learning_direction: '手冲咖啡入门',
+          first_deliverable: '一杯能入口的手冲',
+          key_stages: ['器具与参数', '注水与萃取'],
+        },
         ...extra,
       }),
       messages: '[]',

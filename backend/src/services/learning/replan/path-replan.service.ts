@@ -31,7 +31,6 @@ import {
   parsePathCognitiveDesign,
   parsePathPromptTemplate,
   resolvePersistedNormalizedInput,
-  resolveTaskConcept,
 } from '../learning.helpers';
 import {
   appendReplanSnapshot,
@@ -46,6 +45,14 @@ import { enqueueDomainEvent } from '../../../events/outbox.repository';
 import { learnerSnapshotRefreshService } from '../../learner/LearnerSnapshotRefreshService';
 import { dashboardGuidanceSnapshotService } from '../../learner/DashboardGuidanceSnapshotService';
 import { learnerProjectionService } from '../../learner/LearnerProjectionService';
+import {
+  buildReplanKcAnnotationPatch,
+  materializeReplanConceptGraph,
+  prepareReplanKcSync,
+  recordReplanTaskSidecars,
+  resetReplanSyncCollectors,
+  resolveReplanCanonicalConceptId,
+} from './path-replan.kc-sync';
 import { runBackgroundTask } from '../../background-task-tracker.service';
 import {
   createAndClaimGenerationRun,
@@ -341,8 +348,16 @@ async function redesignMilestoneTasks(
   // 事务可能整体重试 → 在事务内重置，避免重复累加。
   const newAdjustabilityByTask: Record<string, 'core' | 'flexible'> = {};
 
+  // #168 / #192：canonical 身份预解析、KC 重映射与沙盘对账都是事务外的 best-effort 准备，
+  // 具体共径口径见 path-replan.kc-sync 模块头注。
+  const kcSync = await prepareReplanKcSync({
+    userId: data.userId, pathId: path.id, stageNumber: milestone.stageNumber, newTasks, pathCognitiveDesign,
+    parsedTemplate, sortedMilestones, normalizedInput, stageDesignerInput, skipSandboxAudit: skipContentSnapshot,
+  });
+
   await withTransaction(async (tx) => {
     for (const key of Object.keys(newAdjustabilityByTask)) delete newAdjustabilityByTask[key];
+    resetReplanSyncCollectors(kcSync);
     await assertGenerationRunFence(tx, path.id, runId);
     await claimPathReplanSnapshot(tx, snapshot);
     await assertPathMutationSafe(tx, path.id, 'replan-stage', {
@@ -370,16 +385,13 @@ async function redesignMilestoneTasks(
 
     for (let index = 0; index < newTasks.length; index += 1) {
       const taskData = newTasks[index];
-      const resolvedConcept = resolveTaskConcept(
-        typeof taskData.linkedConcept === 'string' ? taskData.linkedConcept : null,
-        pathCognitiveDesign,
-        typeof taskData.linkedConcept === 'string' ? taskData.linkedConcept : null,
-      );
+      const resolvedConcept = kcSync.resolvedConcepts[index];
       const displayLabel = generateDisplayLabel(taskData.knowledgeType || null, taskData.cognitiveLevel || null)
         || (taskData.knowledgeType && taskData.cognitiveLevel ? `${taskData.knowledgeType} + ${taskData.cognitiveLevel}` : null);
 
       const subtaskId = `st_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${milestone.stageNumber}_${index}`;
       newAdjustabilityByTask[subtaskId] = taskData.adjustability === 'flexible' ? 'flexible' : 'core';
+      recordReplanTaskSidecars(kcSync, index, subtaskId, taskData);
       await tx.subtasks.create({
         data: {
           id: subtaskId,
@@ -393,6 +405,7 @@ async function redesignMilestoneTasks(
           coreConcept: resolvedConcept.linkedConceptName || null,
           linkedConceptId: resolvedConcept.linkedConceptId || null,
           linkedConceptName: resolvedConcept.linkedConceptName || null,
+          conceptId: resolveReplanCanonicalConceptId(kcSync, resolvedConcept.linkedConceptName),
           knowledgeType: taskData.knowledgeType || null,
           cognitiveLevel: taskData.cognitiveLevel || null,
           icapLevel: taskData.icapLevel || null,
@@ -450,6 +463,7 @@ async function redesignMilestoneTasks(
     };
     for (const staleId of staleAdjustabilityIds) delete mergedAdjustabilityByTask[staleId];
 
+    // #168：资料引用 / 迷思预判 sidecar 与 KC 标注的合并（清旧键、绑新 subtaskId）收口在 path-replan.kc-sync。
     await tx.learning_paths.update({
       where: { id: path.id },
       data: {
@@ -486,6 +500,8 @@ async function redesignMilestoneTasks(
                 },
               }
             : {}),
+          // #168：资料引用 / 迷思预判 sidecar + KC 标注（已清旧键、taskKcLinks 已绑新 subtasks.id）
+          ...buildReplanKcAnnotationPatch(txParsed, kcSync, staleAdjustabilityIds, milestone.stageNumber),
           _generation: {
             ...(txParsed?._generation && typeof txParsed._generation === 'object' ? txParsed._generation : {}),
             stageDesign: 'succeeded',
@@ -534,6 +550,8 @@ async function redesignMilestoneTasks(
       }
     }));
   });
+
+  await materializeReplanConceptGraph(kcSync, { userId: data.userId, pathId: path.id, stageNumber: milestone.stageNumber });
 
   return {
     pathId: path.id,

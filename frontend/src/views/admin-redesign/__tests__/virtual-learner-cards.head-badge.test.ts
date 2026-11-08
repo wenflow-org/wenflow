@@ -21,9 +21,19 @@ describe('卡墙卡头 · 长标题与徽章', () => {
     expect(name).toContain('min-width: 0')
   })
 
-  it('头像与勾选框不参与压缩，避免长标题把圆形头像挤扁', () => {
-    expect(rule('.vlc-avatar')).toContain('flex: none')
+  /* 2026-11-07 用户「200 张卡片印着 200 个『想』字」：首字头像整块撤除，
+     横向空间全部还给标题（标题是卡头里唯一可伸缩项）。勾选框保留且不参与压缩。 */
+  it('首字头像已撤；勾选框不参与压缩，标题吃满剩余宽度', () => {
+    expect(Source).not.toContain('vlc-avatar')
     expect(rule('.vlc-card__pick')).toContain('flex: none')
+    expect(rule('.vlc-card__name')).toContain('flex: 1 1 auto')
+  })
+
+  /* 来源徽标从卡头移入卡脚的一行底栏（2026-11-07「三行台阶合一」）：
+     卡脚里的徽章同样要能收缩省略，长来源词不许把按钮挤出去。 */
+  it('卡脚标签行可换行且能收缩，按钮固定不缩', () => {
+    expect(rule('.vlc-card__tags')).toContain('flex-wrap: wrap')
+    expect(rule('.vlc-card__derive')).toContain('flex: none')
   })
 
   /* 2026-11-04 评审：1920 下卡墙列更窄，长概念名被压到 161px 单行省略，只剩半句。

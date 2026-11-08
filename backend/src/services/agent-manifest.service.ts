@@ -271,7 +271,9 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     runtimeEnabled: true,
     userVisible: false,
     monitoringGroup: 'Teaching',
-    noPromptFile: true,
+    // #235：它**有**提示词（prompts/skill.board-designer.md），只是没有 core yaml 源。
+    // 这里原先写 true 与 skills.yaml 的声明一起构成「同一件事的两份互相否定声明」。
+    noPromptFile: false,
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.2, maxTokens: 16000 }
   },

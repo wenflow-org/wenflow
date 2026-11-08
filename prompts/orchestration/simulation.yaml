@@ -126,6 +126,9 @@ fields:
     valueType: object
     description: 本轮认知判决（sampledCorrectness/blockedConcept/errorPattern/masteryProb，物理两阶段第一段产出）
 
+# 可达性声明（#200 静态门禁 prompts:reachability:check）：本阶段已启用 reachability 词表，
+# 故**每条** routing 必须显式声明其一——manual/external（非自动链入口），
+# 或在 notes 里以 `auto — <入口说明>` 登记「已确认默认 auto，入口是 X」。缺任何一项门禁失败。
 routings:
   # === persona-designer ===
   - agentId: skill:virtual-learner-persona-designer
@@ -134,6 +137,8 @@ routings:
     handoff: [simulation-agent]
     internal: false
     accumulate: false
+    reachability: manual
+    notes: manual — 仅 admin 虚拟学员管理台手动生成（POST /api/admin/virtual-learners/generate-persona 与 /:id/draft-profile，virtual-learners.story-drafts.ts:161/216）；仿真核主链不调用
 
   # === scenario-designer ===
   - agentId: skill:virtual-learner-scenario-designer
@@ -142,6 +147,8 @@ routings:
     handoff: [simulation-agent]
     internal: false
     accumulate: false
+    reachability: manual
+    notes: manual — 仅 admin 虚拟学员管理台手动生成故事（POST /api/admin/virtual-learners/:id/draft-stories，virtual-learners.story-drafts.ts:287）；仿真核主链不调用
 
   # === goal-dialogue ===
   - agentId: skill:virtual-learner-goal-dialogue-simulator
@@ -150,25 +157,28 @@ routings:
     handoff: [simulation-agent]
     internal: false
     accumulate: false
+    notes: auto — 仿真核主链第 1 步 goal-rounds 回合内由 simulation-agent 自动调用（simulation.coordinator.ts:942）
   - agentId: skill:virtual-learner-goal-dialogue-simulator
     fieldId: emotion
     render: visible
     handoff: [simulation-agent]
     internal: false
     accumulate: false
+    notes: auto — 仿真核主链第 1 步 goal-rounds 回合内由 simulation-agent 自动调用（simulation.coordinator.ts:942）
   - agentId: skill:virtual-learner-goal-dialogue-simulator
     fieldId: learnerState
     render: visible
     handoff: [simulation-agent]
     internal: false
     accumulate: false
+    notes: auto — 仿真核主链第 1 步 goal-rounds 回合内由 simulation-agent 自动调用（simulation.coordinator.ts:942）
   - agentId: skill:virtual-learner-goal-dialogue-simulator
     fieldId: debug
     render: hidden
     handoff: [simulation-agent]
     internal: true
     accumulate: false
-    notes: internal — 仅调试
+    notes: internal — 仅调试；auto — 仿真核主链 goal-rounds 回合内自动调用（simulation.coordinator.ts:942）
 
   # === path-evaluator ===
   # manual（#184）— 唯一人工入口是 assisted 座舱「路径评审」（SessionCockpit.vue:801，!isBlackbox）；
@@ -199,12 +209,17 @@ routings:
     notes: internal — 仅调试；manual — 仅 assisted 座舱手动评审触发（自动入口 PATH_DISLIKE_ENABLED=false）
 
   # === epistemic-grounding（物理两阶段第一段） ===
+  # 调用边（#185）：本 skill 与全部 VL 技能一样由仿真编排层（simulation-agent）在同一
+  # executeLearningStep 内调用，此前漏声明 simulation-agent → 运行日志被审计判成
+  # 「幽灵边 simulation-agent -> skill:virtual-learner-epistemic-grounding」。
+  # 数据交付方向（epistemicGrounding → learn-turn 模拟器）保持不变。
   - agentId: skill:virtual-learner-epistemic-grounding
     fieldId: epistemicGrounding
     render: visible
-    handoff: [skill:virtual-learner-learn-turn-simulator]
+    handoff: [simulation-agent, skill:virtual-learner-learn-turn-simulator]
     internal: false
     accumulate: false
+    notes: auto — 学习回合内由 simulation-agent 作为物理两阶段第一段自动调用（simulation.learn-phase.ts:923）
 
   # === learn-turn ===
   - agentId: skill:virtual-learner-learn-turn-simulator
@@ -213,38 +228,42 @@ routings:
     handoff: [simulation-agent]
     internal: false
     accumulate: false
+    notes: auto — 仿真核主链第 5 步 teaching-turns 回合内自动调用（simulation.learn-phase.ts:989）
   - agentId: skill:virtual-learner-learn-turn-simulator
     fieldId: emotion
     render: visible
     handoff: [simulation-agent]
     internal: false
     accumulate: false
+    notes: auto — 仿真核主链第 5 步 teaching-turns 回合内自动调用（simulation.learn-phase.ts:989）
   - agentId: skill:virtual-learner-learn-turn-simulator
     fieldId: learnerState
     render: visible
     handoff: [simulation-agent]
     internal: false
     accumulate: false
+    notes: auto — 仿真核主链第 5 步 teaching-turns 回合内自动调用（simulation.learn-phase.ts:989）
   - agentId: skill:virtual-learner-learn-turn-simulator
     fieldId: learnerFeedback
     render: visible
     handoff: [simulation-agent]
     internal: false
     accumulate: false
+    notes: auto — 仿真核主链第 5 步 teaching-turns 回合内自动调用（simulation.learn-phase.ts:989）
   - agentId: skill:virtual-learner-learn-turn-simulator
     fieldId: debug
     render: hidden
     handoff: [simulation-agent]
     internal: true
     accumulate: false
-    notes: internal — 仅调试
+    notes: internal — 仅调试；auto — 仿真核主链 teaching-turns 回合内自动调用（simulation.learn-phase.ts:989）
   - agentId: skill:virtual-learner-learn-turn-simulator
     fieldId: checkpointAnswer
     render: hidden
     handoff: [simulation-agent]
     internal: true
     accumulate: false
-    notes: internal — 编排层提交检查点使用
+    notes: internal — 编排层提交检查点使用；auto — 仿真核主链 teaching-turns 回合内自动调用（simulation.learn-phase.ts:989）
 
   # === referee ===
   # external（#184）— 仅 POST /api/admin/session-audits/sessions/:id/evaluations（routes/admin/session-audits.ts）
@@ -340,21 +359,25 @@ routings:
     handoff: [simulation-agent]
     internal: false
     accumulate: false
+    notes: auto — 任务完成后由仿真执行链自动触发（simulation.definition.ts 第 9 步，simulation.execution.ts:115 → simulation.memory.ts:308）
   - agentId: skill:virtual-learner-memory-curator
     fieldId: struggleConcepts
     render: visible
     handoff: [simulation-agent]
     internal: false
     accumulate: false
+    notes: auto — 任务完成后由仿真执行链自动触发（simulation.definition.ts 第 9 步，simulation.execution.ts:115 → simulation.memory.ts:308）
   - agentId: skill:virtual-learner-memory-curator
     fieldId: selfCalibration
     render: visible
     handoff: [simulation-agent]
     internal: false
     accumulate: false
+    notes: auto — 任务完成后由仿真执行链自动触发（simulation.definition.ts 第 9 步，simulation.execution.ts:115 → simulation.memory.ts:308）
   - agentId: skill:virtual-learner-memory-curator
     fieldId: memoryDelta
     render: visible
     handoff: [simulation-agent]
     internal: false
     accumulate: false
+    notes: auto — 任务完成后由仿真执行链自动触发（simulation.definition.ts 第 9 步，simulation.execution.ts:115 → simulation.memory.ts:308）

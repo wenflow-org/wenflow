@@ -1054,10 +1054,12 @@ export async function endSession(
         transferGoal: context?.cognitiveFrame?.transferGoal || null,
         performance: evaluationResult ? persistedEvaluation : null,
         knowledgeState: session.knowledgeState,
+        // 只带 role/content：下游唯一消费者是 lesson-knowledge-enricher，其输入类型
+        // （skills/lesson-knowledge-enricher/index.ts:66）只有这两键；曾额外带 analysis，
+        // 抽取后无人读取，只是把每回合的判读块重复塞进事件的持久化载荷（#200 清理）。
         visibleDialogueContext: session.messages.slice(-16).map((message) => ({
           role: message.role,
           content: message.content,
-          analysis: message.analysis || null,
         })),
         classroomEventHistory,
         wrapup: finalWrapup,
