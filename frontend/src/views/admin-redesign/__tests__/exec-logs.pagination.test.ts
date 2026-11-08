@@ -189,7 +189,7 @@ describe('ExecLogs 传统分页（方案 A）', () => {
     await chooseFilter(w as never, '状态', '仅失败');
     await flushPromises();
     const last = h.reload.mock.calls.at(-1)!;
-    expect(last[0]).toMatchObject({ status: 'error' });
+    expect(last[0]).toMatchObject({ status: 'failed' });
     expect(last[1]).toBeUndefined();
     expect(liveLogsPage.value).toBe(1);
   });
@@ -327,7 +327,7 @@ describe('P0：testFilter 服务端化（修「只滤当前页」）与 URL 同�
     return { w, router };
   }
 
-  it('深链 ?agent=&status=err&test=only → 服务端查询带 agentId/status/sourceEntry（页码与筛选口径一致）', async () => {
+  it('深链 ?agent=&status=err&test=only → 服务端查询带 agentId/status=failed/sourceEntry（页码与筛选口径一致）', async () => {
     liveLogsTotal.value = 5;
     const { w, router } = await mountExecAt('/admin/execution-logs?agent=api-gateway&status=err&test=only');
     await nextTick();
@@ -335,7 +335,7 @@ describe('P0：testFilter 服务端化（修「只滤当前页」）与 URL 同�
     expect(filterValue(w as never, '来源')).toBe('only');
     expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({
       agentId: 'api-gateway',
-      status: 'error',
+      status: 'failed',
       sourceEntry: 'system-canary'
     });
     // 深链参数不被筛选→URL 回写抹掉
@@ -367,7 +367,7 @@ describe('P0：testFilter 服务端化（修「只滤当前页」）与 URL 同�
     await nextTick();
     await chooseFilter(w as never, '状态', '仅失败');
     await flushPromises();
-    expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ status: 'error' });
+    expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ status: 'failed' });
     expect(router.currentRoute.value.query.status).toBe('err');
   });
 });
@@ -447,7 +447,7 @@ describe('P1#24：执行日志筛选（15m/1h 自定义窗 / 失败 pill 单源 
     expect(filterOption(w as never, '状态', '仅失败')).toBeTruthy();
     await chooseFilter(w as never, '状态', '仅失败');
     await flushPromises();
-    expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ status: 'error' });
+    expect(h.reload.mock.calls.at(-1)![0]).toMatchObject({ status: 'failed' });
     await chooseFilter(w as never, '状态', '全部');
     await flushPromises();
     expect((h.reload.mock.calls.at(-1)![0] as Record<string, unknown>).status).toBeUndefined();
@@ -556,7 +556,9 @@ describe('2026-10-04 状态条退役（ExecLogs）', () => {
     expect(w.find('.mk-stat-strip').exists(), '页级读数不再用详情页的 MkStatStrip').toBe(false);
     const kpis = w.findAll('.mk-kpi');
     expect(kpis.map((k) => k.find('.mk-kpi__label').text().trim())).toEqual(['调用总数', '成功率', '耗时 P50', '耗时 P99']);
-    expect(kpis[0].find('.mk-kpi__num').text()).toBe('200（失败 6）');
+    /* 2026-11-08 审计：失败数 = 未成功（error 6 + timeout 4 = 10），与同屏「仅失败」胶囊、
+       成功率分母、总览「失败 N 次」同口径；旧写法只数 error（6），下钻对不上（见 status=failed）。 */
+    expect(kpis[0].find('.mk-kpi__num').text()).toBe('200（失败 10）');
     expect(kpis[1].find('.mk-kpi__num').text()).toContain('95%');
     expect(kpis[1].classes()).not.toContain('mk-kpi--bad');
     // 2026-10-27：常驻 chip 组退场，来源是维度下拉（计数在 option 文案里）

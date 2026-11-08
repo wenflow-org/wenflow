@@ -35,6 +35,7 @@ import {
 import { EXTRA_COMPONENT_VISIBLE_SKILLS } from './capabilityCatalog'
 import { TERMS, humanizeHttpError } from './terms'
 import { errorCategoryText } from './statusText'
+import { personaDisplayName } from './cardDisplay'
 
 /** 与生产 Skill 目录同口径：外挂能力 Skill 不在主目录展示（归外挂组件页） */
 const isExtraSkill = (id: string) => EXTRA_COMPONENT_VISIBLE_SKILLS.has(id.replace(/^skill:/, ''))
@@ -579,7 +580,8 @@ export interface SpanQuery {
   agentName?: string
   /** 节点过滤走 agentId（服务端做 skill:/agent: 前缀规范化，兼容裸名）；agentName 保留给分组名场景 */
   agentId?: string
-  status?: 'success' | 'error' | 'timeout'
+  /** 状态档：failed = 未成功（含超时，平台口径的「失败」）/ error = 非超时的失败 / timeout = 仅超时 */
+  status?: 'success' | 'failed' | 'error' | 'timeout'
   traceId?: string
   sessionId?: string
   /** 错误类别筛选（失败归因/异常流跳转；后端按列值 + 空类别启发式归并） */
@@ -985,6 +987,8 @@ export function buildOverviewHead(input: {
   const badByRate = todaySuccessRate < 80 && todayFailed >= 3
   // 结论行只写状态词，不带读数（2026-10-22 用户：标题就是「需要关注」，其他内容放明细行）
   const rateAttentionHeadline = '需要关注'
+  /* todayFailed = 未成功（含超时）——超时是失败的原因分类，所以本句已经覆盖了「全是超时」的
+     那一天，不需要再单独列超时读数（单列会与同屏「今日调用 · 超时 N」重复报同一件事）。 */
   const rateAttentionSubline = `今日 ${todayCalls} 次调用 · ${todayFailed} 次失败。`
   if (todayCalls === 0) {
     if (todayOnlySimulated) {
@@ -1042,6 +1046,9 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
   /* 虚拟/测试调用独立口径：后端 overview/stats 已返回（总览不展示，预留供「虚拟学习者」仿真看板使用） */
   // 后端可能返回字符串或非法值（0/0 场景），统一收敛为有限数
   const todaySuccessRate = Number.isFinite(Number(agents.todaySuccessRate ?? 100)) ? Number(agents.todaySuccessRate ?? 100) : 100
+  /* 今日「失败」= 未成功（含超时），由成功率反推——与总览 usage.failed7d / 失败归因同一口径
+     （platform-overview-stats.test.ts 固化了「归因之和 == failed7d，无分叉」这条不变式）。
+     超时是失败的一个原因分类（provider_timeout 桶），不是并列的第三档，所以这里不减 todayTimeouts。 */
   const todayFailed = Math.max(0, Math.round(todayCalls * (1 - todaySuccessRate / 100)))
   const activeUsers = Number(users.activeToday || 0)
 
@@ -1838,18 +1845,23 @@ async function fetchLiveVirtuals(): Promise<void> {
     })
     return {
       id: String(p.id),
-      /* 显示名链必须与「学习者卡库」同源（2026-10-06 审核 §主题 5）：
-         卡库用 card-import.service 的 nickname || personaSeed.nameHint || cleanDisplayName(users.name) || key || email；
-         此处此前只用 profile.name || profile.nameHint || userName || id —— 两链对同一张卡给出不同字符串，
-         vlAvatar 哈希（「同一人恒定同色」）随之分裂：480 张卡实测 235 张两页显示名不同、
-         205 张首字不同、207 张色档不同。优先取 personaSeed.nickname（卡的人设短语），与卡库 nickname 同源。 */
-      name: String(
-        (profile.personaSeed as Record<string, unknown> | undefined)?.nickname
-        || profile.nickname
-        || profile.name
-        || profile.nameHint
-        || p.userName
-        || p.id
+      /* 显示名链与「VirtualProfile 详情」同源（2026-11-08 二次修正）：名字是「想…」诉求句时
+         按诉求句派生人名，详情页（VirtualProfile.vue 同一条链）传同一句才算同一个人——
+         否则从列表点进详情就改名。学习者卡库（VirtualLearnerCards / CardDetailPage）面向卡池、
+         标题读内容句，走 cardDisplayTitle；实测卡库（frontier-*）与实例（vl-*）的 profileId
+         零重叠，是两批数据行，不承诺同名同色（见 cardDisplay.ts syntheticPersonaName 注释）。
+         2026-11-08：合成卡把「学习诉求」写进了 nickname（400 张全是「想解决…/想搞懂…」），
+         整列表读作「想解决2024新《公司法》认缴制」。诉求句不是人名，改按诉求句派生稳定人名；
+         预置卡 / 自建卡的真人名原样保留。 */
+      name: personaDisplayName(
+        String(
+          (profile.personaSeed as Record<string, unknown> | undefined)?.nickname
+          || profile.nickname
+          || profile.name
+          || profile.nameHint
+          || p.userName
+          || p.id
+        )
       ),
       goal: String(p.learningGoal || '未设置目标'),
       level: String(p.knowledgeLevel || ''),
@@ -2357,11 +2369,14 @@ export const liveNavBadges = computed<Record<string, string>>(() => {
   // 事故信号：近 7 天失败数（>0 时侧栏亮红）。2026-10-28 数据审计 P1：用后端全量
   // stats.error（与角标落地页 ?range=week&status=err 的「失败（N）」同源）；旧后端
   // 无 stats 时回退 200 行采样（Shell 的 title 会如实标注）。
-  // （并集：远程分支未见过本地这条修，不得随徽标口径一起退回 spans 采样）
-  const bootErrorCount = liveBootLogStats.value?.error
-  const failed = typeof bootErrorCount === 'number' && bootErrorCount > 0
-    ? bootErrorCount
-    : (liveSpans.value || []).filter((s) => s.status === 'err').length
+  // 2026-11-08 口径：失败 = 未成功（error + timeout）——落地页的「仅失败」发 status=failed，
+  // 只数 error 会让角标比落地页少一批超时行。（并集：远程分支未见过本地这条修，
+  // 不得随徽标口径一起退回 spans 采样）
+  const bootStats = liveBootLogStats.value
+  const bootFailed = bootStats ? Number(bootStats.error || 0) + Number(bootStats.timeout || 0) : NaN
+  const failed = Number.isFinite(bootFailed) && bootFailed > 0
+    ? bootFailed
+    : (liveSpans.value || []).filter((s) => s.status !== 'ok').length
   if (failed > 0) out['execution-logs'] = String(failed)
   return out
 })

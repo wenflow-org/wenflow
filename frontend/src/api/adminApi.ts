@@ -550,7 +550,8 @@ export const adminAgentsApi = {
     agentId?: string;
     traceId?: string;
     sessionId?: string;
-    status?: 'success' | 'error' | 'timeout';
+    /** failed = 未成功（含超时，平台口径的「失败」）；error = 非超时的失败；timeout = 仅超时 */
+    status?: 'success' | 'failed' | 'error' | 'timeout';
     keyword?: string;
     timeRange?: 'today' | 'yesterday' | 'week' | 'month' | 'all';
     sourceEntry?: string;
@@ -1385,6 +1386,11 @@ export const adminSkillsApi = {
 
   testSkill: async (skillId: string, input: unknown) => {
     return adminAxios.post(`/admin/skills/${encodeURIComponent(skillId)}/test`, input);
+  },
+
+  /** 试跑页「填入示例输入」：取该 Skill 最近一次成功真实调用的载荷（无则 data=null，前端用契约骨架兜底） */
+  getSampleInput: async (skillId: string) => {
+    return adminAxios.get(`/admin/skills/${encodeURIComponent(skillId)}/sample-input`);
   },
 
   /* 2026-11-04：`probeSkillChannel` 与 `modelProbe` 一并撤除——前者指向的

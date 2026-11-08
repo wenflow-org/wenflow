@@ -639,8 +639,17 @@ function detailMoreText(item: HealthCenterItem): string {
 }
 
 /* ---------- 正常态说明 ---------- */
-/** 行内说明：异常项读故障原因，正常项读 okNote（后端逐项声明，缺字段时回落到中性说明） */
+/**
+ * 行内说明：读不到 → 直说「未判定」；异常项读故障原因；正常项读 okNote（后端逐项声明，
+ * 缺字段时回落到中性说明）。
+ *
+ * 为什么单列 unavailable（2026-11-08 审计）：这类项的 severity 是 info（不进异常组，
+ * 免得高亮行数 > KPI 异常数），此前就掉进正常分支、把 okNote 原样印成
+ * 「近 7 天没有降级事件」——而同一条明细里写着「读取失败…不能据此判定『没有降级』」，
+ * 上下自相矛盾。读不到就是没结论，不能借正常话术来说。
+ */
 function itemNote(item: HealthCenterItem): string {
+  if (item.status === 'unavailable') return '本次读取失败，未判定（不能据此认为该项正常）'
   return isHealthAbnormal(item) ? item.cause : (item.okNote || '检查通过')
 }
 /**

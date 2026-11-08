@@ -414,19 +414,36 @@ describe('ModelProvidersPanel', () => {
       expect(w.findAll('.mpp-default-chip')).toHaveLength(0)
     })
 
-    it('默认行不渲染「设为默认」；删除置灰并写明原因（2026-11-07 平铺动作后）', async () => {
+    it('默认行不渲染「设为默认」；删除**不**置灰（#177：删除默认模型是允许的）', async () => {
       const w = await mountPanel({ defaultModel: 'deepseek-v4-flash' })
       const firstRow = modelRows(w)[0]
       const acts = firstRow.findAll('.mpp-rowacts .mk-link').map((b) => b.text())
-      /* 已是默认 → 这枚动作没有可做的事，直接不渲染；删除必须置灰——
-         后端一定会拒绝（默认指向已删模型 = 全平台路由落空），
-         不该让用户走完确认弹窗才被告知。 */
+      /* 已是默认 → 「设为默认」没有可做的事，直接不渲染。
+         删除**可点**：后端 #177（2026-11-05）下线了「运行期引用门禁」，DB 默认是可修复的——
+         删完宿主 onModelRemoved 会把默认改指下一个已挂载模型（ApiConfig.vue）。
+         此前这里连 DB 默认一起置灰，等于把 #177 允许、且修复流程已写好的动作锁死，
+         提示语还指向错的源（「先设为默认」照做也解不开）。 */
       expect(acts).toEqual(['配置', '测试', '删除'])
       const del = firstRow.findAll('.mpp-rowacts .mk-link').find((b) => b.text() === '删除')!
-      expect(del.attributes('disabled')).toBeDefined()
-      expect(del.attributes('title')).toContain('当前为默认模型，请先将其他模型设为默认后再删除')
+      expect(del.attributes('disabled')).toBeUndefined()
+      expect(del.attributes('title')).toBe('删除这个模型')
       // 面板自身不写注册表文件（默认存 DB，由宿主落盘）
       expect(updateModelMock).not.toHaveBeenCalled()
+    })
+
+    it('被注册表文件 defaults 引用的行：删除置灰并点名是哪一处（后端会拒）', async () => {
+      getModelRegistryMock.mockResolvedValue({
+        data: { data: { models: [], warnings: [], registry: { fileDefaults: { chat: 'deepseek-v4-flash', reasoning: 'deepseek-v4-flash' } } } }
+      })
+      const w = await mountPanel({ defaultModel: 'agnes-3.0-flash' })
+      const fileDefaultRow = modelRows(w).find((r) => r.text().includes('deepseek-v4-flash'))!
+      const del = fileDefaultRow.findAll('.mpp-rowacts .mk-link').find((b) => b.text() === '删除')!
+      expect(del.attributes('disabled')).toBeDefined()
+      expect(del.attributes('title')).toContain('注册表文件里的默认模型')
+      // 而 DB 默认那一行仍可删（两处判据不同，不能互相顶替）
+      const dbDefaultRow = modelRows(w).find((r) => r.text().includes('agnes-3.0-flash'))!
+      const del2 = dbDefaultRow.findAll('.mpp-rowacts .mk-link').find((b) => b.text() === '删除')!
+      expect(del2.attributes('disabled')).toBeUndefined()
     })
 
     it('非默认行点「设为默认」只发意图（不带档位参数）', async () => {

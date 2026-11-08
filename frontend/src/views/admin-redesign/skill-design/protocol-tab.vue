@@ -33,35 +33,12 @@
             </template>
           </div>
         </section>
-        <!-- 右栏：输出契约（摘要）+ 流程，两卡同行与左栏的输入契约等高对望 -->
+        <!-- 右栏：流程（core 声明的状态机 / 终止条件与运行时清单的阶段集合合成一张卡）。
+             2026-11-08 用户「图 4 右边塞了一堵 20 行密密麻麻的纯英文变量墙（输出契约 48 字段），
+             连个中文解释都没有，根本没法读」——那张「输出契约」卡整张删除：它的逐字段中英对照
+             就在同一页签下方的「字段流向」表里（带说明 / 角色 / 流向），这里再平铺一遍纯英文名
+             既读不动也是重复。 -->
         <div class="sdp-pw__col">
-        <section class="mk-card">
-          <div class="mk-card__head">
-            <h3 class="mk-card__title">输出契约</h3>
-            <span class="mk-card__meta">{{ readOutputs.length }} 字段</span>
-          </div>
-          <div class="sdp-pw__body">
-            <MkLoading v-if="contractLoading && !contractFields.length" inline text="字段契约加载中…" />
-            <p v-else-if="contractNotApplicable" class="mk-empty--line">该 Skill 为辅助类（无编排阶段归属），字段契约不适用。</p>
-            <div v-else-if="contractFailed" class="mk-alert mk-alert--row" role="alert">
-              <span class="mk-alert__msg">字段契约加载失败。</span>
-              <button type="button" class="mk-alert__btn" @click="loadContracts">重试</button>
-            </div>
-            <template v-else>
-              <!-- 2026-11-06 二稿：这张卡不再逐行重复字段路由那张表（同一批 11 行、同样的说明）。
-                   这里只给「什么角色、各几个、叫什么」，逐字段的说明 / 流向 / 渲染 / 内部标记归字段路由。 -->
-              <div v-if="outputRoleCounts.length" class="sdp-rolecount">
-                <span v-for="rc in outputRoleCounts" :key="rc.label" class="mk-badge mk-badge--muted">{{ rc.label }} {{ rc.count }}</span>
-              </div>
-              <p v-if="readOutputs.length" class="sdp-outnames mono">{{ readOutputs.map((f) => f.fieldId).join(' · ') }}</p>
-              <p v-else class="mk-empty--line">该 Skill 暂无产出字段声明。</p>
-              <p class="mk-card__note">按产出角色归组。逐字段的说明、流向与内部标记在字段路由页签。</p>
-            </template>
-          </div>
-        </section>
-
-      <!-- 流程：core 声明的状态机 / 终止条件与运行时清单的阶段集合合成一张卡。
-           此前两边各画一张卡、结论还互相打脸（core 说没声明，工程页写着阶段集合）。 -->
         <section class="mk-card">
           <div class="mk-card__head">
           <h3 class="mk-card__title">流程</h3>
@@ -108,8 +85,9 @@
           </div>
         </div>
         <div class="sdp-pw__body">
-          <pre class="sdp-pw__pre">{{ promptCap || '暂无生效 Prompt。' }}</pre>
-          <p v-if="promptTruncated" class="mk-card__note">已截断：仅显示前 1200 字（共 {{ systemPrompt.length }} 字）。</p>
+          <!-- 2026-11-08 用户「图 5 印了一半被截断的 System Prompt（截断在「11. 连 半个字上」）」：
+               改为容器内滚动展示全文（max-height + overflow-y），不再在 1200 字处硬切半句话。 -->
+          <pre class="sdp-pw__pre sdp-pw__pre--scroll">{{ systemPrompt || '暂无生效 Prompt。' }}</pre>
         </div>
       </section>
     </template>
@@ -440,7 +418,7 @@ import { computed, ref, watch } from 'vue'
 import hljs from 'highlight.js/lib/core'
 import yaml from 'highlight.js/lib/languages/yaml'
 import 'highlight.js/styles/github-dark.css'
-import { adminFieldRoutingsApi, adminPromptWorkbenchApi } from '@/api/adminApi'
+import { adminPromptWorkbenchApi } from '@/api/adminApi'
 import { askConfirm } from '../useConfirm'
 import { toast } from '@/utils/toast'
 import { coreEditorState, coreShortHash, errText, toFormField, toCoreFieldPayload, type CoreFormField } from './sdp-shared'
@@ -464,32 +442,12 @@ const emit = defineEmits<{ (e: 'published'): void; (e: 'open-prompt'): void }>()
 
 /** 查看 / 编辑：同一个页签的两态（2026-11-06 整合，原宿主只读块与本编辑器是两层） */
 const viewMode = ref<'read' | 'edit'>('read')
-/** 页内截断上限与查看 Prompt 弹层一致 */
-const PROMPT_CAP = 1200
-const promptCap = computed(() => props.systemPrompt.slice(0, PROMPT_CAP))
-const promptTruncated = computed(() => props.systemPrompt.length > PROMPT_CAP)
 const runtimePhases = computed(() => props.runtimeContract?.businessState?.phases ?? [])
 const runtimeDefaultPhase = computed(() => props.runtimeContract?.businessState?.defaultPhase ?? '')
 const runtimeTerminalPhases = computed(() => props.runtimeContract?.businessState?.terminalPhases ?? [])
 
 /** 查看态·输入契约：core YAML 的 inputs 声明（与编辑态同一份数据，另加来源前缀人话） */
 const readInputs = computed(() => (coreForm.value?.inputs ?? []) as { name?: string; type?: string; ref?: string; desc?: string; note?: string }[])
-/** 查看态·输出契约：编排产出行的全量（含隐式推断与控制信号这类内部出参）——
-    与「字段路由」页签同源，但那张表看的是流向/渲染/内部标记，这张看的是契约本身
-    （2026-11-06 试过改读 core YAML 的 fields：真实数据里它只声明 1 个 object 字段，
-    整块 JSON schema 会糊成一团，11 行产出字段反而读不出来）。 */
-const readOutputs = computed(() => contractFields.value)
-/** 角色 → 产出字段数（顺序按首次出现，稳定不跳） */
-const outputRoleCounts = computed(() => {
-  const out: Array<{ label: string; count: number }> = []
-  for (const f of contractFields.value) {
-    const label = roleLabel(f.promptRole)
-    const hit = out.find((x) => x.label === label)
-    if (hit) hit.count += 1
-    else out.push({ label, count: 1 })
-  }
-  return out
-})
 function refSourceLabel(ref?: string): string {
   const r = String(ref || '')
   if (r.startsWith('skill:')) return '上游 Skill'
@@ -965,45 +923,9 @@ async function publishCore(confirmUncertain: boolean) {
   }
 }
 
-/* ===== 输出契约的数据源：field-routings（与「字段路由」页签同源） =====
-   2026-11-06 整合时这段曾是「取了从不渲染」的死代码，现在查看态的「输出契约」卡读它。
-   422 + 「无编排阶段归属」= 辅助类技能不适用字段契约，不是「坏了」→ 分开标记，不给重试。 */
-interface ContractField { fieldId: string; promptRole?: string; valueType?: string; description?: string }
-interface RoleMetaItem { id: string; label: string; hint?: string }
-const contractFields = ref<ContractField[]>([])
-const roleMeta = ref<RoleMetaItem[]>([])
-const contractLoading = ref(false)
-const contractFailed = ref(false)
-const contractNotApplicable = ref(false)
-/** 产出角色人话：后端 yaml-vocabulary 单源下发（promptRoleMeta） */
-const roleLabel = (roleId?: string) => {
-  if (!roleId) return '—'
-  const m = roleMeta.value.find((x) => x.id === roleId)
-  return m?.label || roleId
-}
-
-async function loadContracts() {
-  const id = props.skillId
-  contractLoading.value = true
-  contractFailed.value = false
-  contractNotApplicable.value = false
-  try {
-    const res = await adminFieldRoutingsApi.getSkillRoutings(id)
-    if (id !== props.skillId) return
-    const body = (res.data?.data ?? res.data ?? {}) as { fields?: ContractField[]; promptRoleMeta?: RoleMetaItem[] }
-    contractFields.value = Array.isArray(body.fields) ? body.fields : []
-    roleMeta.value = Array.isArray(body.promptRoleMeta) ? body.promptRoleMeta : []
-  } catch (e) {
-    if (id !== props.skillId) return
-    contractFields.value = []
-    roleMeta.value = []
-    const status = (e as { response?: { status?: number } })?.response?.status
-    if (status === 422) contractNotApplicable.value = true
-    else contractFailed.value = true
-  } finally {
-    if (id === props.skillId) contractLoading.value = false
-  }
-}
+/* ===== （2026-11-08 撤）输出契约数据源：原查看态「输出契约」卡读 field-routings，
+   该卡已整张删除（用户「删掉那堵 20 行纯英文变量墙」），逐字段中英对照改由同页签下方的
+   「字段流向」表承载（带说明 / 角色 / 流向 / 渲染），故此处的取数与角色归纳一并删除。 ===== */
 
 /* 切换 skill / 回滚后：复位编辑器并从磁盘重拉 */
 watch(
@@ -1030,12 +952,7 @@ watch(
     openFormSections.value = new Set(['identity', 'inputs', 'fields'])
     corePreviewStale.value = false
     coreFormIssue.value = null
-    contractFields.value = []
-    roleMeta.value = []
-    contractFailed.value = false
-    contractNotApplicable.value = false
     void ensureCoreLoaded()
-    void loadContracts()
   },
   { immediate: true }
 )
@@ -1093,8 +1010,8 @@ watch(
 .sdp-flowrow__label { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-muted); }
 .sdp-flowrow__chips { display: flex; flex-wrap: wrap; gap: 6px; }
 /* 输出契约：角色计数徽标 + 字段名清单（明细在字段路由页签） */
-.sdp-rolecount { display: flex; flex-wrap: wrap; gap: 6px; }
-.sdp-outnames { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.9; overflow-wrap: anywhere; }
+/* 查看态 System Prompt：容器内滚动展示全文（2026-11-08 不再在 1200 字处硬截断） */
+.sdp-pw__pre--scroll { max-height: 460px; overflow-y: auto; }
 /* 编辑态：表单 / 源码 / 预览 分段（与顶部「查看·编辑」同一套 .mk-seg） */
 .sdp-pw__views {
   display: flex;
