@@ -2268,58 +2268,147 @@ body.admin-route pre { border: 0; }
   }
 }
 
-/* ----- 批量操作条（列表页选中后底部浮现的统一形态；Users/VirtualLearners/Batch 共用） ----- */
+/* ----- 批量操作条（列表页选中后底部浮现的统一形态；Users/VirtualLearners 共用） -----
+ * 2026-11-08 用户走查（图1/图2「一串冰糖葫芦 / 一排红色自毁按钮」）：
+ *   ① 旧版整条外框与每颗按钮都写死红描边 + 999px 胶囊，正向动作（启动故事 / 开启自动驾驶）
+ *      也被涂成危险色，色彩语义完全错乱；外框胶囊里再套 6 颗小胶囊，造型也蠢。
+ *   ② 现在改「底部命令栏」（Linear / 飞书 Command Bar）：外框 12px 圆角 + 中性描边 +
+ *      浮起阴影，内部按钮 32px 高 / 8px 圆角，按语义分三档：
+ *        --primary  正向主操作（启动故事）        = 品牌蓝底白字
+ *        --btn      常规批量动作（开/停自动驾驶、导出）= 中性灰底 + 细描边
+ *        --danger   破坏性动作（终止、删除）        = 红字细框 / 实心红底，且前置竖线隔离
+ *   ③ 竖线 `.mk-batchbar__sep` 与「已选 N 项 / 取消选择」同排，把危险区与常规区在空间上分开，
+ *      危险按钮不再与高频正向按钮紧挨（准则 2「防误触」）。
+ *   ④ 只在「已选 ≥ 1」时由页面 v-if 挂出（2026-11-08 用户：已选 0 时不得弹出空条）。 */
 .mk-batchbar {
   position: sticky;
   bottom: 12px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   width: fit-content;
+  max-width: 100%;
   margin: 0 auto;
-  padding: 8px 12px 8px 16px;
-  border-radius: 999px;
-  border: 1px solid rgba(220, 38, 38, 0.25);
+  padding: 8px 14px;
+  border-radius: var(--mk-radius-lg);
+  border: 1px solid var(--mk-line);
   background: var(--mk-surface);
   box-shadow: var(--mk-shadow-pop);
+  font-size: var(--mk-fs-body);
+}
+/* 「已选 N 项」读数：正文色、常规字重；不参与按钮组，用右侧内衬与按钮拉开 */
+.mk-batchbar__count {
   font-weight: 600;
-  font-size: var(--mk-fs-body);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
+/* 取消选择：文字链，不占按钮位（与右侧动作组之间用 --sep 分隔） */
+.mk-batchbar__cancel { flex-shrink: 0; white-space: nowrap; }
+/* 竖线分隔：危险区 / 常规区 / 读数区之间各一条（1px，中性色） */
+.mk-batchbar__sep {
+  flex-shrink: 0;
+  align-self: stretch;
+  width: 1px;
+  margin: 2px 4px;
+  background: var(--mk-line);
+}
+/* 常规批量动作：中性灰底 + 细描边（非危险色） */
 .mk-batchbar__btn {
-  padding: 6px 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(220, 38, 38, 0.35);
-  background: transparent;
-  color: var(--mk-red, #dc2626);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--mk-radius-md);
+  border: 1px solid var(--mk-line);
+  background: var(--mk-surface-2);
+  color: var(--mk-ink);
   font: inherit;
-  font-size: var(--mk-fs-body);
-  font-weight: 700;
+  font-size: var(--mk-fs-micro);
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
   cursor: pointer;
   transition: background 0.12s ease;
 }
-.mk-batchbar__btn:hover:not(:disabled) { background: rgba(220, 38, 38, 0.08); }
+.mk-batchbar__btn:hover:not(:disabled) { background: var(--mk-btn-hover-bg); }
 .mk-batchbar__btn:disabled { opacity: 0.6; cursor: default; }
-.mk-batchbar__danger {
-  padding: 6px 14px;
-  border-radius: 999px;
-  border: 0;
-  background: var(--mk-red-fill, #dc2626);
-  color: var(--mk-batchbar-danger-fg);
+/* 正向主操作：品牌蓝底白字（与 .mk-btn--primary 同族；暗色下仍白字，不反转） */
+.mk-batchbar__primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--mk-radius-md);
+  border: 1px solid var(--mk-blue-fill);
+  background: var(--mk-blue-fill);
+  color: var(--mk-on-fill);
   font: inherit;
-  font-size: var(--mk-fs-body);
-  font-weight: 700;
+  font-size: var(--mk-fs-micro);
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
   cursor: pointer;
   transition: background 0.12s ease;
 }
-.mk-batchbar__danger:hover:not(:disabled) { background: var(--mk-batchbar-danger-hover-bg); }
-.mk-batchbar__danger:disabled { opacity: 0.45; cursor: not-allowed; }
+.mk-batchbar__primary:hover:not(:disabled) { background: var(--mk-blue-fill-hover); border-color: var(--mk-blue-fill-hover); }
+.mk-batchbar__primary:disabled { opacity: 0.6; cursor: default; }
+/* 破坏性动作 · 低强调：红字细红框（终止类：有后果但可恢复） */
+.mk-batchbar__danger-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--mk-radius-md);
+  border: 1px solid var(--mk-red);
+  background: transparent;
+  color: var(--mk-red);
+  font: inherit;
+  font-size: var(--mk-fs-micro);
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.mk-batchbar__danger-ghost:hover:not(:disabled) { background: var(--mk-red-bg); }
+.mk-batchbar__danger-ghost:disabled { opacity: 0.55; cursor: not-allowed; }
+/* 破坏性动作 · 高强调：实心红底白字（删除类：不可撤销） */
+.mk-batchbar__danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--mk-radius-md);
+  border: 1px solid var(--mk-red-fill);
+  background: var(--mk-red-fill);
+  color: var(--mk-on-fill);
+  font: inherit;
+  font-size: var(--mk-fs-micro);
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.mk-batchbar__danger:hover:not(:disabled) { background: var(--mk-red-fill-strong); border-color: var(--mk-red-fill-strong); }
+.mk-batchbar__danger:disabled { opacity: 0.55; cursor: not-allowed; }
+/* 进度读数（「处理中(2/5)…」）：弱化色，不抢按钮 */
+.mk-batchbar__progress { color: var(--mk-muted); font-size: var(--mk-fs-micro); white-space: nowrap; flex-shrink: 0; }
+/* 窄屏：命令栏允许换行，按钮组不折字（准则 3 防竖排） */
+@media (max-width: 720px) {
+  .mk-batchbar { flex-wrap: wrap; justify-content: center; row-gap: 6px; bottom: 8px; }
+}
 @media (min-width: 2000px) {
-  .mk-batchbar { gap: 11px; padding: 10px 14px 10px 18px; }
-  .mk-batchbar__btn, .mk-batchbar__danger { padding: 7px 16px; }
+  .mk-batchbar { gap: 10px; padding: 10px 16px; }
+  .mk-batchbar__btn, .mk-batchbar__primary, .mk-batchbar__danger-ghost, .mk-batchbar__danger { height: 34px; padding: 0 15px; }
 }
 @media (min-width: 2800px) {
-  .mk-batchbar { gap: 13px; padding: 12px 17px 12px 21px; }
-  .mk-batchbar__btn, .mk-batchbar__danger { padding: 8px 19px; }
+  .mk-batchbar { gap: 12px; padding: 12px 20px; }
+  .mk-batchbar__btn, .mk-batchbar__primary, .mk-batchbar__danger-ghost, .mk-batchbar__danger { height: 36px; padding: 0 17px; }
 }
 
 /* ===== 数据说话三原语（2026-09-26 全面设计方案批B）：时间/耗时/量表三类语义的统一形态 ===== */
