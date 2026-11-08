@@ -17,6 +17,9 @@ const { getUserApiConfigMock, updateUserApiConfigMock, disableUserApiConfigMock,
   toastMock: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }
 }));
 
+/* 功能开关 mock 成翻开：这三套行为回归锁保护的是「开关翻开后的页面」，
+   默认隐藏态的断言在 settings.api-flow.test.ts */
+vi.mock('../settings-features', () => ({ SHOW_CUSTOM_MODEL_API: true, SHOW_MCP_TOOLS: true }));
 vi.mock('@/api/userCustom', () => ({
   getUserApiConfig: getUserApiConfigMock,
   updateUserApiConfig: updateUserApiConfigMock,

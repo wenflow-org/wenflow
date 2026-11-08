@@ -8,7 +8,11 @@
            不再用裸「启用/禁用」贴在标题右侧（会被读成「内置模型服务 禁用」）——走查 2026-10-08 #10。
            2026-11-04 走查：标签再挂「：开/关」是把标题已说的状态复述第二遍（同屏重复），
            故标签只留对象名，开合由开关轨道本身表达——状态句仍只由标题一处承载。 -->
-      <div class="settings-status">
+      <!-- 2026-11-08 产品裁决：模型接入是平台级配置（管理台「模型与接入」统一管），
+           学员侧暂不开放——状态开关 / API 接入 / MCP 工具三块整体隐藏。
+           代码与流程保留（本批刚对齐过管理台口径），翻开下面两个开关即整块回来；
+           隐藏期间不发起 api-config / mcp 的加载请求。 -->
+      <div v-if="SHOW_CUSTOM_MODEL_API" class="settings-status">
         <div class="settings-status__left">
           <div>
             <strong>{{ apiConfig.enabled ? '自定义模型服务已启用' : '内置模型服务已启用' }}</strong>
@@ -28,19 +32,19 @@
         </label>
       </div>
 
-      <div v-if="loadError" class="uc-errorbar" role="alert">
+      <div v-if="SHOW_CUSTOM_MODEL_API && loadError" class="uc-errorbar" role="alert">
         {{ loadError }}
         <button type="button" class="uc-errorbar__retry" @click="loadApiConfig">重新加载</button>
       </div>
 
-      <div v-if="loading" class="uc-card">
+      <div v-if="SHOW_CUSTOM_MODEL_API && loading" class="uc-card">
         <div class="uc-loading">
           <span class="uc-spinner"></span>
           加载配置…
         </div>
       </div>
 
-      <div v-else-if="!loadError" class="settings-cols" :class="{ 'settings-cols--off': !apiConfig.enabled }">
+      <div v-else-if="SHOW_CUSTOM_MODEL_API && !loadError" class="settings-cols" :class="{ 'settings-cols--off': !apiConfig.enabled }">
         <!-- 左：配置表单（关闭态只显示一张紧凑说明卡 + 「展开配置」；展开后仍可先填端点/密钥再开开关） -->
         <article class="uc-card" :class="{ 'settings-off': !apiConfig.enabled }">
           <div class="uc-card__head">
@@ -219,8 +223,8 @@
         </article>
       </div>
 
-      <!-- 我的 MCP 工具（独立于自定义 API 的加载状态） -->
-      <article class="uc-card">
+      <!-- 我的 MCP 工具（独立于自定义 API 的加载状态；2026-11-08 随模型接入一并隐藏） -->
+      <article v-if="SHOW_MCP_TOOLS" class="uc-card">
         <div class="uc-card__head">
           <div>
             <h3>我的 MCP 工具</h3>
@@ -362,6 +366,12 @@ const SAVED_KEY_HINT = '已保存，留空继续使用';
 const ENDPOINT_FORMAT_MSG = '模型端点格式不正确，请输入以 http:// 或 https:// 开头的 URL';
 const API_KEY_REQUIRED_MSG = '请先填写 API Key';
 
+/* 2026-11-08 产品裁决：模型接入是平台级配置（管理台「模型与接入」统一管），学员侧
+   暂不开放——状态开关 / API 接入 / MCP 三块模板已挂 v-if 整体隐藏，这里只控制
+   「隐藏期间不发配置请求」。代码与流程本批刚对齐过管理台口径，翻开即整块回来。
+   开关收在 settings-features.ts（测试可 mock 翻开跑行为回归），两个开关独立。 */
+import { SHOW_CUSTOM_MODEL_API, SHOW_MCP_TOOLS } from './settings-features';
+
 const saving = ref(false);
 const testing = ref(false);
 const loading = ref(false);
@@ -390,7 +400,11 @@ const apiConfig = reactive({
 });
 
 onMounted(async () => {
-  await Promise.all([loadApiConfig(), loadMcpConfig()]);
+  /* 两块隐藏期间不白发起配置请求（后端照常可用，翻开开关即恢复加载） */
+  const jobs: Array<Promise<void>> = [];
+  if (SHOW_CUSTOM_MODEL_API) jobs.push(loadApiConfig());
+  if (SHOW_MCP_TOOLS) jobs.push(loadMcpConfig());
+  await Promise.all(jobs);
 });
 
 const loadApiConfig = async () => {

@@ -13,7 +13,26 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { flushPromises, mount } from '@vue/test-utils';
+
+const { getUserApiConfigMock, getUserMcpConfigMock } = vi.hoisted(() => ({
+  getUserApiConfigMock: vi.fn(async () => ({ data: { enabled: false } })),
+  getUserMcpConfigMock: vi.fn(async () => ({ data: { tools: [] } }))
+}));
+
+vi.mock('@/api/userCustom', () => ({
+  getUserApiConfig: getUserApiConfigMock,
+  updateUserApiConfig: vi.fn(async () => ({ data: {} })),
+  disableUserApiConfig: vi.fn(async () => ({ data: {} })),
+  testApiConnection: vi.fn(async () => ({ data: {} })),
+  fetchApiModels: vi.fn(async () => ({ data: { models: [] } })),
+  getUserMcpConfig: getUserMcpConfigMock,
+  updateUserMcpConfig: vi.fn(async () => ({ data: {} })),
+  executeMcpTool: vi.fn(async () => ({ data: {} }))
+}));
+vi.mock('@/utils/toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() } }));
+vi.mock('@/components/user/CapabilityShell.vue', () => ({ default: { template: '<div class="stub-shell"><slot /></div>' } }));
 
 const here = dirname(fileURLToPath(import.meta.url));
 const source = readFileSync(resolve(here, '../Settings.vue'), 'utf8').replace(/\r\n/g, '\n');
@@ -40,5 +59,45 @@ describe('API 接入流程对齐管理台', () => {
   it('内置模式收起态带已保存端点/密钥摘要（不再读成「配过的全丢了」）', () => {
     expect(source).toContain('已保存端点');
     expect(source).toContain("hasSavedApiKey ? '密钥已配置' : '未配置密钥'");
+  });
+});
+
+describe('模型接入 / MCP 学员侧隐藏（2026-11-08 产品裁决）', () => {
+  beforeEach(() => {
+    getUserApiConfigMock.mockClear();
+    getUserMcpConfigMock.mockClear();
+  });
+
+  async function mountSettings() {
+    const { default: Settings } = await import('../Settings.vue');
+    const w = mount(Settings);
+    await flushPromises();
+    return w;
+  }
+
+  it('默认隐藏：状态开关 / API 接入 / MCP 三块都不渲染，只留密码与注销', async () => {
+    const w = await mountSettings();
+    expect(w.find('.settings-status').exists()).toBe(false);
+    /* 密码/注销区也用 .settings-cols（--security 档），要排除 */
+    expect(w.find('.settings-cols:not(.settings-cols--security)').exists()).toBe(false);
+    expect(w.text()).not.toContain('我的 MCP 工具');
+    expect(w.text()).toContain('修改密码');
+    expect(w.text()).toContain('注销账号');
+    w.unmount();
+  });
+
+  it('隐藏期间不发起 api-config / mcp 配置请求', async () => {
+    const w = await mountSettings();
+    expect(getUserApiConfigMock).not.toHaveBeenCalled();
+    expect(getUserMcpConfigMock).not.toHaveBeenCalled();
+    w.unmount();
+  });
+
+  it('模板三块挂了开关 v-if，开关收在可 mock 的 settings-features', () => {
+    expect(source).toContain("import { SHOW_CUSTOM_MODEL_API, SHOW_MCP_TOOLS } from './settings-features'");
+    expect(source).toContain('v-if="SHOW_CUSTOM_MODEL_API"');
+    expect(source).toMatch(/<article v-if="SHOW_MCP_TOOLS" class="uc-card">/);
+    expect(source).toMatch(/if \(SHOW_CUSTOM_MODEL_API\) jobs\.push\(loadApiConfig\(\)\)/);
+    expect(source).toMatch(/if \(SHOW_MCP_TOOLS\) jobs\.push\(loadMcpConfig\(\)\)/);
   });
 });
