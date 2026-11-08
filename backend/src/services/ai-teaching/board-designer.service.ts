@@ -36,6 +36,18 @@ export interface BoardDesignRequest {
 }
 
 /**
+ * 载荷投影（2026-11-08 全 skill 缓存调查）：提示词的「输入说明」只声明了
+ * task / scenario / studentSays / kindHint / questionIntent / lastTeacherReply
+ * （另加退板契约用的顶层 instruction），而 questionIntent 里还挂着 reason——
+ * 那是给日志与老师侧看的**确定性解释串**（见 board-intent.ts 的 reasonParts），
+ * 提示词零引用，属审计元数据泄漏进载荷，逐轮剥掉。
+ */
+function toBoardDesignPayload(request: BoardDesignRequest): Record<string, unknown> {
+  const { reason: _reason, ...intent } = (request.questionIntent || {}) as BoardIntent & { reason?: string };
+  return { ...request, questionIntent: intent };
+}
+
+/**
  * board-designer 的输出规格统一是 `{kind, spec}`，但 position-line 的契约（以及 teaching-turn
  * 的归一化器）要求 axis/marks/spans 在**顶层**。模型按统一规格把它们塞进 spec，归一化会
  * 整块拒绝（f10 实测：消费金额排队那张板因此没上墙）。这里只对 position-line 做拆包。
@@ -139,7 +151,7 @@ export async function designBoard(
         defaultSystemPrompt: BOARD_DESIGNER_PROMPT,
         requireActivePrompt: true,
         caller: { skillId: 'board-designer' },
-        buildUserPayload: (payload) => payload,
+        buildUserPayload: (payload) => toBoardDesignPayload(payload),
         normalizeOutput: (parsed) => parsed,
       }, requestForAttempt, {
         ...context,

@@ -129,6 +129,103 @@ describe('LessonKnowledgeEnrichmentConsumer', () => {
     expect(tx.domain_event_inbox.create).toHaveBeenCalledTimes(1);
   });
 
+  it('wrapup 走共用投影：审计/运行时块不进载荷，收束语义字段保留', async () => {
+    inboxFindUnique.mockResolvedValue(null);
+    executeSkill.mockResolvedValue({
+      conceptLedger: [],
+      reusableFoundations: [],
+      blockedFoundations: [],
+      transferSignals: [],
+      recurringConfusions: []
+    });
+    const tx = {
+      domain_event_inbox: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({})
+      },
+      learner_evidence: { createMany: jest.fn().mockResolvedValue({ count: 2 }) }
+    };
+    transaction.mockImplementation(async (callback: any) => callback(tx));
+
+    await new LessonKnowledgeEnrichmentConsumer().handle(createDomainEvent({
+      id: 'evt-lesson-wrapup-projection',
+      type: 'lesson:completed',
+      aggregateType: 'lesson',
+      aggregateId: 'session-3',
+      userId: 'user-1',
+      source: 'test',
+      data: {
+        sessionId: 'session-3',
+        taskId: 'task-3',
+        knowledgeState: [],
+        visibleDialogueContext: [],
+        wrapup: {
+          summary: '本节完成了闭包复述',
+          progress: { newlyMastered: ['闭包'] },
+          // 以下均为持久化 wrapup 里的审计/运行时块（提示词零引用）
+          runtimeEnvelope: { model: 'x', elapsedMs: 1234 },
+          shadowDeterministic: { llm: { sessionLss: 'mid' } },
+          closureAudit: { openQuestion: '为什么会捕获' },
+          extensionObservability: { kind: 'extension' },
+          sources: { summary: 'llm' },
+          summarySource: 'llm',
+          evaluationSource: 'llm'
+        }
+      }
+    }) as never);
+
+    const skillInput = executeSkill.mock.calls[0][1] as Record<string, any>;
+    // 收束语义保留
+    expect(skillInput.wrapup).toEqual({
+      summary: '本节完成了闭包复述',
+      progress: { newlyMastered: ['闭包'] }
+    });
+    expect(skillInput.knowledgeDelta).toEqual({
+      newlyMastered: ['闭包'],
+      movedToReview: [],
+      stillLearning: [],
+      unchangedMastered: []
+    });
+    // 审计/运行时块一个都不进载荷
+    for (const key of [
+      'runtimeEnvelope', 'shadowDeterministic', 'closureAudit', 'extensionObservability',
+      'sources', 'summarySource', 'evaluationSource'
+    ]) {
+      expect(skillInput.wrapup).not.toHaveProperty(key);
+    }
+  });
+
+  it('wrapup 全部键都被投影剔除时按「无 wrapup」传递（null 语义不退化）', async () => {
+    inboxFindUnique.mockResolvedValue(null);
+    executeSkill.mockResolvedValue({ conceptLedger: [], recurringConfusions: [] });
+    const tx = {
+      domain_event_inbox: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({})
+      },
+      learner_evidence: { createMany: jest.fn().mockResolvedValue({ count: 2 }) }
+    };
+    transaction.mockImplementation(async (callback: any) => callback(tx));
+
+    await new LessonKnowledgeEnrichmentConsumer().handle(createDomainEvent({
+      id: 'evt-lesson-wrapup-all-dropped',
+      type: 'lesson:completed',
+      aggregateType: 'lesson',
+      aggregateId: 'session-4',
+      userId: 'user-1',
+      source: 'test',
+      data: {
+        sessionId: 'session-4',
+        taskId: 'task-4',
+        knowledgeState: [],
+        visibleDialogueContext: [],
+        wrapup: { runtimeEnvelope: { model: 'x' }, shadowDeterministic: {}, closureAudit: {} }
+      }
+    }) as never);
+
+    expect((executeSkill.mock.calls[0][1] as Record<string, any>).wrapup).toBeNull();
+  });
+
   it('transferGoal 缺失/为空时不传给 skill（老事件兼容）', async () => {
     inboxFindUnique.mockResolvedValue(null);
     executeSkill.mockResolvedValue({

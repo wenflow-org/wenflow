@@ -842,3 +842,65 @@ describe('APIExecutor onWireRequest（最终请求体测试缝）', () => {
     ])
   })
 })
+
+/**
+ * #缓存口径（2026-11-08）：上游 DeepSeek 新版只回 prompt_tokens_details.cached_tokens，
+ * 不回 uncached_tokens —— 实测 2305/3675 行 promptCacheMissTokens 为 NULL。
+ * 量测脚本用 hit/(hit+miss) 时 NULL 被当 0，命中率虚报成 100%。
+ * 护栏锁：上游缺 miss 时必须由 prompt_tokens - cached 推导，且上游真给了 miss 时不得覆盖。
+ */
+describe('前缀缓存 miss 推导（#缓存口径）', () => {
+  const baseResponse = (usage: Record<string, unknown>) => jsonResponse(200, {
+    id: 'completion-cache',
+    model: 'test-model',
+    choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+    usage: { prompt_tokens: 1000, completion_tokens: 8, total_tokens: 1008, ...usage },
+  })
+
+  beforeEach(() => {
+    jest.restoreAllMocks()
+    safeHttpRequestMock.mockReset()
+    agentLogCreate.mockReset().mockResolvedValue({})
+    attemptCreate.mockReset().mockResolvedValue({})
+  })
+
+  const lastAttemptData = () => attemptCreate.mock.calls.at(-1)?.[0].data as Record<string, unknown>;
+
+  async function run(usage: Record<string, unknown>) {
+    safeHttpRequestMock.mockResolvedValue(baseResponse(usage));
+    await new APIExecutor().execute(
+      route,
+      { messages: [{ role: 'user', content: 'hello' }] },
+      { traceId: 'trace-cache-miss' }
+    );
+    return lastAttemptData();
+  }
+
+  it('上游只回 cached_tokens 时，miss = prompt_tokens - hit（不再留 NULL）', async () => {
+    const data = await run({ prompt_tokens_details: { cached_tokens: 640 } });
+    expect(data.promptCacheHitTokens).toBe(640);
+    expect(data.promptCacheMissTokens).toBe(360);
+  });
+
+  it('上游确实给了 uncached_tokens 时优先用上游值，不重复推导', async () => {
+    const data = await run({ prompt_tokens_details: { cached_tokens: 640, uncached_tokens: 300 } });
+    expect(data.promptCacheMissTokens).toBe(300);
+  });
+
+  it('旧版 prompt_cache_miss_tokens 形态同样优先', async () => {
+    const data = await run({ prompt_cache_hit_tokens: 512, prompt_cache_miss_tokens: 488 });
+    expect(data.promptCacheHitTokens).toBe(512);
+    expect(data.promptCacheMissTokens).toBe(488);
+  });
+
+  it('完全没有缓存字段时不臆造 miss（保持 null）', async () => {
+    const data = await run({});
+    expect(data.promptCacheHitTokens).toBeNull();
+    expect(data.promptCacheMissTokens).toBeNull();
+  });
+
+  it('hit 大于 prompt_tokens 的异常值不产生负数 miss', async () => {
+    const data = await run({ prompt_tokens: 100, prompt_tokens_details: { cached_tokens: 200 } });
+    expect(data.promptCacheMissTokens).toBeNull();
+  });
+});

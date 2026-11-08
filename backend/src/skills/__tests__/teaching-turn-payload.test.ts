@@ -83,13 +83,13 @@ describe('teaching-turn payload snapshot parity', () => {
       'knowledge',
       'latestLearnerMessage',
       'learner',
-      'promptDirectives',
       'scenario',
     ])
     expect(payload.interactionProfile).toBeNull()
+    // promptDirectives 已于 2026-11-08 作为零引用键从载荷删除（见载荷审计注释）
+    expect(payload).not.toHaveProperty('promptDirectives')
     expect(payload).toMatchSnapshot({
       latestLearnerMessage: expect.any(String),
-      promptDirectives: expect.any(Object),
     })
   })
 
@@ -130,7 +130,6 @@ describe('teaching-turn payload snapshot parity', () => {
       'controls',
       'interactionProfile',
       'latestLearnerMessage',
-      'promptDirectives',
       'scenario',
     ])
     for (const key of declaredInputs) expect(payload).toHaveProperty(key)

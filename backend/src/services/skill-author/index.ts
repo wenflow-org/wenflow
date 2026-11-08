@@ -143,7 +143,16 @@ export async function compileSkill(input: CompileSkillInput): Promise<CompileSki
   let modelUsed: string | undefined;
   try {
     const result = await executeSkillWithResult(auxSkillDefinitionMap['skill-compiler'], {
-      ...input,
+      systemPrompt: input.systemPrompt,
+      requiredFieldIds: input.requiredFieldIds,
+      testUserPrompt: input.testUserPrompt,
+      // 生成参数走 runAux 的识别通道（model/temperature/maxTokens）——它们会被提升为调用点级
+      // 覆盖，并从载荷里剥掉。2026-11-08 全 skill 缓存调查修正：此前 `...input` 把带 Override
+      // 后缀的三个键原样带进载荷——runAux 不识别该命名（覆盖根本不生效），
+      // 却又把它们当业务字段发给了模型（skill-compiler 的 buildUserPayload 是恒等透传）。
+      ...(input.modelOverride !== undefined ? { model: input.modelOverride } : {}),
+      ...(input.temperatureOverride !== undefined ? { temperature: input.temperatureOverride } : {}),
+      ...(input.maxTokensOverride !== undefined ? { maxTokens: input.maxTokensOverride } : {}),
       __prompt: { requestPath: '/services/skill-author/compile' },
     });
     rawOutput = result.output?.rawOutput || result.debug?.rawModelOutput || '';

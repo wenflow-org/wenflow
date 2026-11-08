@@ -50,6 +50,94 @@ const heavyPath = {
 };
 
 describe('LearnerProjectionService.toGuidanceProjection', () => {
+  // 2026-11-08 前缀缓存优化：guidance 载荷此前把整个 profile（narratives/history/认知行为情绪）
+  // 与 freshness（逐次变化的 generatedAt）一并发给模型。这两块没有任何提示词规则引用，
+  // 却会因逐次变化把整段前缀缓存打断。以下锁「裁掉什么」与「必须留下什么」。
+  it('裁掉 profile 长叙述与 freshness（前缀缓存杀手），保留规则真正读取的字段', () => {
+    const snapshot = heavySnapshot();
+    snapshot.profile = {
+      userId: 'u1',
+      name: '林同学',
+      learning: { level: 3 },
+      narratives: { long: 'N'.repeat(3000) },
+      history: { events: ['h1', 'h2'] },
+      narrativeInsights: { practicePreferenceNote: '更愿意在真实表格上试', surfaceGoal: '两周内出交叉表' },
+    };
+    snapshot.dynamicState = {
+      metrics: { lss: 4, ktl: 5, lf: 3, lsb: 1 },
+      recentTrend: 'stable',
+      fatigueRisk: 'low',
+      recommendedPacing: 'moderate',
+      srlPhase: 'perform',
+      recentSessionQuality: 'Q'.repeat(500),
+      recommendedInteraction: { style: 'socratic' },
+    };
+
+    const { learnerSnapshot } = learnerProjectionService.toGuidanceProjection(snapshot, null);
+    const s: any = learnerSnapshot;
+
+    expect(s.freshness).toBeUndefined();
+    expect(s.profile.narratives).toBeUndefined();
+    expect(s.profile.history).toBeUndefined();
+    expect(s.dynamicState.recentSessionQuality).toBeUndefined();
+    expect(s.dynamicState.recommendedInteraction).toBeUndefined();
+
+    // 规则 7 读取的偏好字段必须留下
+    expect(s.profile.narrativeInsights.practicePreferenceNote).toBe('更愿意在真实表格上试');
+    // 规则 11/12 判定负荷与节奏所需的状态位
+    expect(s.dynamicState.fatigueRisk).toBe('low');
+    expect(s.dynamicState.recommendedPacing).toBe('moderate');
+    expect(s.dynamicState.metrics).toEqual({ lss: 4, ktl: 5, lf: 3, lsb: 1 });
+    // 规则 10/36 的卡点预警依据、规则 13 的迁移信号
+    expect(s.knowledgeMemory.globalBackground.blockedFoundations).toEqual(['b1']);
+    expect(s.knowledgeMemory.globalBackground.transferSignals).toEqual([{ conceptKey: 't1' }]);
+  });
+
+  it('toGuidanceWrapup 剔除运行时/审计元数据，保留收束语义字段', () => {
+    const wrapup = {
+      status: 'completed',
+      summary: '本节完成了行头识别',
+      progress: { completed: 3 },
+      evidence: ['e1'],
+      runtimeEnvelope: { big: 'R'.repeat(5000) },
+      shadowDeterministic: { big: 'D'.repeat(500) },
+      closureAudit: { checks: ['c1'] },
+      sources: ['model'],
+      summarySource: 'model',
+      evaluationSource: 'model',
+    };
+    const out: any = learnerProjectionService.toGuidanceWrapup(wrapup);
+    for (const dropped of ['runtimeEnvelope', 'shadowDeterministic', 'closureAudit', 'sources', 'summarySource', 'evaluationSource']) {
+      expect(out[dropped]).toBeUndefined();
+    }
+    expect(out.summary).toBe('本节完成了行头识别');
+    expect(out.progress).toEqual({ completed: 3 });
+    expect(out.evidence).toEqual(['e1']);
+    expect(out.status).toBe('completed');
+  });
+
+  it('toGuidanceWrapup 对 null / undefined 输入返回 null（不抛错）', () => {
+    expect(learnerProjectionService.toGuidanceWrapup(null)).toBeNull();
+    expect(learnerProjectionService.toGuidanceWrapup(undefined)).toBeNull();
+  });
+
+  it('toGuidanceWrapup 全键都被剔除时返回 null（不是空对象）', () => {
+    // 若返回 {}，调用方的 `?? undefined` 对空对象不生效（{} 非 nullish），
+    // 会让「本来没有收束摘要」与「有但被投影成空」在载荷里表现不同（{} vs 缺键）。
+    const out = learnerProjectionService.toGuidanceWrapup({
+      runtimeEnvelope: { big: 'R'.repeat(100) },
+      shadowDeterministic: { big: 'D'.repeat(100) },
+      closureAudit: {},
+      sources: ['model'],
+      summarySource: 'model',
+      evaluationSource: 'model',
+      extensionObservability: {},
+    });
+    expect(out).toBeNull();
+    // 由此 `?? undefined` 也确实收敛成 undefined
+    expect(out ?? undefined).toBeUndefined();
+  });
+
   it('裁剪掉 path.aiPromptTemplate（上下文膨胀主因）', () => {
     const { path } = learnerProjectionService.toGuidanceProjection(heavySnapshot(), heavyPath);
     expect(path).not.toHaveProperty('aiPromptTemplate');
