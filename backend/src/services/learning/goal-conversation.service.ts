@@ -16,7 +16,7 @@ import {
   resolvePrerequisiteCheckResultsFromUnderstanding,
 } from './learner-load-profile';
 import { selectGoalHistory, RECENT_CONTEXT_LIMIT } from './goal-conversation.context';
-import { isProposalConfirmationText, isExplicitRefusalText } from './goal-conversation.confirm-text';
+import { adjudicateGoalConfirm } from '../../skills/goal-confirm-adjudicator';
 import { mergeProbeAnswersIntoUnderstanding, normalizeProbeAnswerInput } from './goal-probe-answers';
 import { applyConversationLifecycle, type ConversationLifecycleDb } from './goal-conversation.lifecycle';
 import systemPrisma from '../../config/system-database';
@@ -162,15 +162,14 @@ class GoalConversationService {
 
   private static readonly GOAL_STAGES = ['understanding', 'proposing', 'ready', 'completed'] as const;
 
-  private getCore(internal: any): { stage: string; confidence: number; isCompleted: boolean; conversationId?: string | null; learningPath?: any; confirmIntent?: boolean } {
+  private getCore(internal: any): { stage: string; confidence: number; isCompleted: boolean; conversationId?: string | null; learningPath?: any } {
     const core = internal?.core || {};
     return {
       stage: core.stage || 'understanding',
       confidence: typeof core.confidence === 'number' ? core.confidence : 0,
       isCompleted: !!core.isCompleted,
       conversationId: core.conversationId ?? null,
-      learningPath: core.learningPath || null,
-      confirmIntent: typeof core.confirmIntent === 'boolean' ? core.confirmIntent : undefined
+      learningPath: core.learningPath || null
     };
   }
 
@@ -560,7 +559,8 @@ class GoalConversationService {
         this.throwStructuredOutputInvalid(responseWithConversationId);
       }
 
-      await this.saveMessage(conversation.id, 'ai', aiResponse.userVisible, null, { quickReplies: this.getGoalExt(aiResponse.internal).quickReplies });
+      const openingGoalExt = this.getGoalExt(aiResponse.internal);
+      await this.saveMessage(conversation.id, 'ai', aiResponse.userVisible, null, { quickReplies: openingGoalExt.quickReplies });
 
       // 更新收集的数据（stage 优先取 runtimeEnvelope.phase）
       await this.updateCollectedData(conversation.id, responseWithConversationId);
@@ -618,41 +618,47 @@ async continueConversation(
           });
         }
 
-        // 确认双通道（2026-09-27 绕圈缺陷修复）：①UI 显式标志（首选，优先级不变）；
-        // ②自然语言确认（快捷选项/打字）——原先只认标志，proposing 阶段 AI 连续 5 轮
-        // 重复"请在下面点一下确认"而用户回「就按这个来，确认」永远推不动（confidence 卡 0.88）。
-        // 文本探测是高精度白名单（只认最后一个语义段的纯确认短语，否决/改需求尾缀一律不认，
-        // 见 goal-conversation.confirm-text.ts 文件头），误确认面收得很窄。
-        // 显式拒绝不得代签（2026-10-08，R6 P1-12 真人面镜像）：标志仍首选，但文本明示
-        // 拒绝/犹豫时（C 轨探针实锤「再想想吧」+ flag=true 当轮生成路径）不再代签，
-        // 按普通回复推进由模型接住犹豫——误确认生成没人要的路径，比不确认伤。
-        let confirmProposal = options?.confirmProposal === true || isProposalConfirmationText(userReply);
-        if (options?.confirmProposal === true && isExplicitRefusalText(userReply)) {
-          confirmProposal = false;
-          logger.info('[goal-conversation] 显式拒绝文本压过 confirmProposal 标志，按普通回复推进', {
-            conversationId,
-            userId,
-            replyPreview: userReply.slice(0, 40),
-          });
-          // 同意计量落库（拍板 #2，2026-10-08）：否决事件可查询、可计数（口径见 lastConfirmation）。
-          // 只 mutate 不 appendMessage——用户消息由下方普通回合链路落库，避免双写。
-          await this.updateConversationLifecycle(conversationId, conversation.stage as 'understanding' | 'proposing' | 'ready', {
-            mutateCollectedData: (currentData) => {
-              this.recordConfirmationMetering(currentData, 'flag-vetoed-by-text', true, userReply);
-            },
-          });
+        // 确认两通道（2026-11-08 确认动作减重）：
+        // ①UI 按钮 flag——最强信号，直接推进，不再做文本否决（按钮确认发送固定话术，
+        //   旧「拒绝文本压过 flag」只对 API 驱动方/VL legacy 开关有意义，删）；
+        // ②打字——proposing 阶段先过一次裁决 skill（goal-confirm-adjudicator，temperature 0，
+        //   只回答「这句话是否表达就要这个方案、开始排路径」）：confirm=true 直接推进，
+        //   **不跑主对话回合**（比旧 confirmIntent 通道快一个完整回合）；false（调整/拒绝/提问）
+        //   落库走正常回合，由模型自然接住。裁决失败一律 fail-open 按非确认处理——
+        //   行为与旧白名单未命中完全一致，不阻塞对话。
+        const collected = JSON.parse(conversation.collectedData || '{}');
+        if (conversation.stage === 'proposing' && options?.confirmProposal === true) {
+          // 推进收口到 advanceConfirmedProposal；saveUserTurn=true=用户消息尚未落库。
+          return this.advanceConfirmedProposal(conversationId, conversation, userReply, options, collected, true);
         }
-
-        if (conversation.stage === 'proposing' && confirmProposal) {
-          if (options?.confirmProposal !== true) {
-            logger.info('[goal-conversation] 自然语言确认命中，按 confirmProposal 推进', {
+        if (conversation.stage === 'proposing' && collected?.confirmedProposal) {
+          // 纵深防御：adjudicateGoalConfirm 自带 fail-open（内部 catch → 非确认），
+          // 但 service 不假设它永不抛——任何意外异常也按非确认走正常回合，不阻塞对话。
+          let verdict = { confirm: false };
+          try {
+            verdict = await adjudicateGoalConfirm({
+              userUtterance: userReply,
+              proposal: {
+                learning_direction: collected.confirmedProposal?.learning_direction,
+                first_deliverable: collected.confirmedProposal?.first_deliverable,
+              },
+              lastAssistantExcerpt: this.lastAssistantExcerpt(collected),
+            });
+          } catch (error) {
+            logger.warn('[goal-conversation] 确认裁决调用异常，按非确认走正常回合', {
+              conversationId,
+              userId,
+              error: (error as Error).message,
+            });
+          }
+          if (verdict.confirm) {
+            logger.info('[goal-conversation] 裁决命中确认，直接推进', {
               conversationId,
               userId,
               replyPreview: userReply.slice(0, 40),
             });
+            return this.advanceConfirmedProposal(conversationId, conversation, userReply, options, collected, true);
           }
-          // 推进收口到 advanceConfirmedProposal；saveUserTurn=true=用户消息尚未落库。
-          return this.advanceConfirmedProposal(conversationId, conversation, userReply, options, JSON.parse(conversation.collectedData || '{}'), true);
         }
 
       // 本轮用户消息**先落库再调模型**（#160）：落库与调用解耦后，任何失败路径用户输入都不丢。
@@ -678,20 +684,8 @@ async continueConversation(
         this.throwStructuredOutputInvalid(responseWithConversationId);
       }
 
-      // 模型确认意图通道（confirmIntent）：快路径未命中时按模型结构化信号推进（覆盖「行，就照你说的办」这类无「确认」字样的语义确认）。
-      // 仅在 proposing + 显式 true + 非显式拒绝时推进；本轮模型回合已在上方完成，不二次调用。
-      if (conversation.stage === 'proposing'
-        && this.getCore(responseWithConversationId?.internal).confirmIntent === true
-        && !isExplicitRefusalText(userReply)) {
-        // 先持久化本轮理解（自增 revision），再以最新 revision 重取会话交给推进方法（saveUserTurn=false：用户消息已落库）。
-        const persistedData = await this.updateCollectedData(conversation.id, responseWithConversationId);
-        const freshConversation = await prisma.goal_conversations.findFirst({ where: { id: conversationId, userId } });
-        if (!freshConversation) throw new Error('对话会话不存在');
-        logger.info('[goal-conversation] 模型 confirmIntent 命中，按结构化信号推进', { conversationId, userId, replyPreview: userReply.slice(0, 40) });
-        return this.advanceConfirmedProposal(conversationId, freshConversation, userReply, options, persistedData, false);
-      }
-
-      await this.saveMessage(conversation.id, 'ai', aiResponse.userVisible, null, { quickReplies: this.getGoalExt(aiResponse.internal).quickReplies });
+      const replyGoalExt = this.getGoalExt(aiResponse.internal);
+      await this.saveMessage(conversation.id, 'ai', aiResponse.userVisible, null, { quickReplies: replyGoalExt.quickReplies });
 
       // 更新收集的数据（stage 优先取 runtimeEnvelope.phase）
       const persistedData = await this.updateCollectedData(conversation.id, responseWithConversationId);
@@ -741,7 +735,19 @@ async continueConversation(
     }
   }
 
-  /** 确认推进（UI 标志 / 文本 / 模型 confirmIntent 三通道共用）。saveUserTurn 控制用户消息是否由 appendMessage 落库（快路径 true；模型通道 false，回合前已落）。 */
+  /** 导师上一条回复的尾部摘录（确认裁决输入）：取 collectedData.messages 最后一条 ai 的内容尾段。 */
+  private lastAssistantExcerpt(data: any): string {
+    const messages = Array.isArray(data?.messages) ? data.messages : [];
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const m = messages[i];
+      if (m?.role === 'ai' && typeof m.content === 'string' && m.content.trim()) {
+        return m.content.slice(-300);
+      }
+    }
+    return '';
+  }
+
+  /** 确认推进（UI flag / 打字裁决两通道共用出口）。saveUserTurn 控制用户消息是否由 appendMessage 落库（两通道都是回合前未落 → true）。 */
   private async advanceConfirmedProposal(
     conversationId: string,
     conversation: any,

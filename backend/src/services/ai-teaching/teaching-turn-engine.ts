@@ -1589,7 +1589,7 @@ export async function processStudentMessage(
       applyCheckpointQuestionVisibility(checkpointCandidate.question);
     }
 
-    let checkpointResolution: { passed: boolean; understanding: number | null; judgedBy: 'code' | 'model-reference' } | undefined;
+    let checkpointResolution: { passed: boolean; understanding: number | null; judgedBy: 'code' | 'model-rubric' | 'model-reference' } | undefined;
     if (submittedCheckpoint) {
       const rawUnderstanding = teachingOutput.analysis?.understanding;
       // 无读数记 null，不记 0（2026-11-01）：`Number(null ?? 0)` 会把「不可观测」写成「理解度 0」，
@@ -1599,10 +1599,14 @@ export async function processStudentMessage(
       const modelDerivedPassed = completionReady || !!currentPoint && mergedKnowledge.some(
         (point) => point.name.trim().toLowerCase() === currentPoint && point.status === 'mastered'
       );
-      // 独立传感器优先（2026-09-17）：有答案键就按**代码裁决**，否则退回模型派生并如实标注来源
+      // 独立传感器优先（2026-09-17；2026-11-08 分级判分）：有答案键就按裁决通道——code（答案键
+      // 确定性/词面全命中）或 model-rubric（简答词面未全命中后的模型语义复核）——否则退回模型
+      // 派生并如实标注来源
       const codeJudgement = options.checkpointJudgement ?? null;
-      const judgedBy: 'code' | 'model-reference' = codeJudgement?.judgedBy === 'code' ? 'code' : 'model-reference';
-      const passed = judgedBy === 'code' ? codeJudgement!.passed : modelDerivedPassed;
+      const judgedBy: 'code' | 'model-rubric' | 'model-reference' = codeJudgement
+        ? codeJudgement.judgedBy
+        : 'model-reference';
+      const passed = codeJudgement ? codeJudgement.passed : modelDerivedPassed;
       const checkpointHistory = Array.isArray(teachingState.checkpointHistory)
         ? [...teachingState.checkpointHistory]
         : [];

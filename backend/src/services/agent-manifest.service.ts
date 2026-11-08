@@ -580,6 +580,17 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Tool',
     noPromptFile: true
+  },
+  {
+    id: 'skill:goal-confirm-adjudicator',
+    name: 'goal 确认裁决器 Skill',
+    description: 'goal 会话打字确认的唯一语义裁决通道：只回答「用户这句话是否表达就要这个方案、开始排路径」，fail-open 按非确认（2026-11-08 确认动作减重）',
+    category: 'tool',
+    kind: 'skill',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Tool',
+    noPromptFile: true
   }
 ];
 

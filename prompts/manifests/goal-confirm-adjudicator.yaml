@@ -1,0 +1,46 @@
+version: prompt-lab-manifest/v1
+skillId: goal-confirm-adjudicator
+agentId: skill:goal-confirm-adjudicator
+
+name: default-skill-goal-confirm-adjudicator
+archetype: extractor
+description: goal 会话确认裁决器——只回答「用户这句话是否表达就要这个方案、开始排路径」
+
+acceptableAgentIds:
+  - skill:goal-confirm-adjudicator
+
+publish:
+  enabled: true
+  exportTargets:
+    - platform-prompts
+
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: extraction
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar }
+  failurePolicy: retry
+
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState:
+    domain: goal-confirm-adjudication
+    phases: [adjudicated]
+    defaultPhase: adjudicated
+    terminalPhases: [adjudicated]
+    statusValues: [succeeded, partial, blocked, failed]
+  contextUpdate: { mode: none, stateOwner: none }
+  outputEnvelope: adapter
+
+ownership:
+  tier: production
+  visibility: internal
+
+tags:
+  - core-skill
+  - extractor
+  - handler-only

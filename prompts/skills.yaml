@@ -585,6 +585,17 @@ skills:
       sandbox: []
     notes: handler-only 外挂能力——handler 委托 backend/src/services/image（provider 抽象 + 降级链），外部 HTTP 经 safeHttpRequest（SSRF/超时/大小限制）；provider 与密钥由 IMAGE_PROVIDER / IMAGE_API_URL / IMAGE_API_KEY / IMAGE_MODEL 等环境变量承担，无 DB 直读，dataSource.db 保持空
 
+  - skillId: goal-confirm-adjudicator
+    kind: handler-only
+    handlerRef: backend/src/skills/goal-confirm-adjudicator/index.ts
+    noPromptFile: true
+    displayName: goal 确认裁决器 Skill
+    description: goal 会话打字确认的唯一语义裁决通道——只回答「用户这句话是否表达就要这个方案、开始排路径」，fail-open 按非确认（2026-11-08 确认动作减重，替代白名单+confirmIntent+拒绝正则三件套）
+    dataSource:
+      db: []
+      sandbox: []
+    notes: handler-only 外挂能力（照 material-collector 混合成例）——主接口是裁决 handler（不进 agentMembers、不进字段路由），内含一个 LLM 裁决环节，prompt 以 v4 核心文件 prompts/core/goal-confirm-adjudicator.yaml 编译产物承载（同时具备 coreFile 产物与 prompts/manifests/goal-confirm-adjudicator.yaml）。调用方 goal-conversation.service 在 proposing 阶段收到打字消息时先裁决：confirm=true 直接推进（不跑主对话回合），false 落库走正常回合；任何失败 fail-open 按非确认并留 P3 降级痕。硬规则：拿不准一律 false，不得替用户拍板。**定位声明（2026-11-08）**：本 skill 走平台基础模型与标准网关链路（callPrompt），与 decision 插件（decision-gate / services/decision）无关——决策模型是可选插件、不是平台基础建设，任何业务链路不得硬依赖它；若将来要给本裁决换快模型，用 skill_model_configs 的 per-skill 配置，不引入插件依赖。
+
   - skillId: board-designer
     kind: handler-only
     handlerRef: backend/src/services/ai-teaching/board-designer.service.ts

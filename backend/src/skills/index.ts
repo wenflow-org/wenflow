@@ -57,6 +57,11 @@ export { decisionGateDefinition } from './decision-gate';
 import { decisionGateDefinition } from './decision-gate';
 import { executeDecisionGate as executeDecisionGateFn } from './decision-gate';
 
+// goal 会话确认裁决器（handler-only 小 skill：打字确认的唯一语义裁决通道，fail-open 按非确认）
+export { goalConfirmAdjudicatorDefinition, executeGoalConfirmAdjudicator, adjudicateGoalConfirm, GOAL_CONFIRM_ADJUDICATOR_PROMPT } from './goal-confirm-adjudicator';
+import { goalConfirmAdjudicatorDefinition } from './goal-confirm-adjudicator';
+import { executeGoalConfirmAdjudicator as executeGoalConfirmAdjudicatorFn } from './goal-confirm-adjudicator';
+
 // 资料采集编排器（非 LLM 外挂能力；确定性编排 search→选源→fetch，LLM 仅抽取带引文要点）
 export { materialCollectorDefinition, executeMaterialCollector, collectMaterialPack, collectMaterialForGoal, hasMaterialNeed } from './material-collector';
 export { materialBriefDefinition, generateMaterialBriefDraft, normalizeMaterialBrief, MATERIAL_BRIEF_PROMPT } from './material-brief';
@@ -166,6 +171,7 @@ export const allSkillDefinitions: SkillDefinition[] = [
   textToImageDefinition,
   decisionGateDefinition,
   materialCollectorDefinition,
+  goalConfirmAdjudicatorDefinition,
   materialBriefDefinition,
   ...auxSkillDefinitions,
   // 核心 LLM 能力单元（注册为 Skill 以确保 agent-registry 可见）
@@ -254,6 +260,7 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'text-to-image': executeTextToImageFn,
   'decision-gate': executeDecisionGateFn,
   'material-collector': executeMaterialCollectorFn,
+  'goal-confirm-adjudicator': executeGoalConfirmAdjudicatorFn,
   'material-brief': (input: any) => generateMaterialBriefFn(input),
   ...auxSkillHandlers,
   // 核心 LLM 能力单元（原 agents/，已迁入 skills/）

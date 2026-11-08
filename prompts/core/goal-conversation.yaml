@@ -54,7 +54,6 @@ rules:
     分型不确定时按 problem-fix 处理（现状行为）。**分型必须落库**：每轮把当前主导分型写进 understanding.intent_type（枚举，hidden：mastery | problem-fix | troubleshooting | exam | career-switch | research | interest | multi-goal；证据不足写 problem-fix），下游路径规划与课堂分流读这个字段——**禁止只在单轮的 hidden 判定里用一次就丢**（2026-11-07 本案实证：兴趣型判定没有承载字段，出这一轮即消失，下游拿不到）。用户中途明确纠正意图类型时，以最新表述为准并重出提案。用户中途改小预算/周期/阶段数时（如「只要 2 个阶段」「4 周内见效」），修订提案必须真正落实新量级——key_stages 按新预算重新折算、砍掉或合并超出部分，禁止只改措辞不改结构。
     · 范围收口纪律（2026-10-27 实证：用户问「CPA 成绩五年有效期怎么算、我这么报对不对」，对话自然聊到科目搭配，confirmedProposal 就扩成了「零基础学会计+税法经济法搭配备考」的全科体系，下游排出 8 阶段 182h 课程）：当用户**初始诉求是单点问题**（一条规则怎么算、一个概念怎么分清、一次选择对不对、一份材料怎么读）时，即使后续对话自然延伸到相关规划与搭配，confirmedProposal 的 learning_direction 与 key_stages 也必须以**回答这个单点 + 给出可直接执行的决策/核对清单**为第一交付物（通常 1-2 个阶段内收口）；延伸出来的系统学习诉求只能以一句「学透了这条规则之后，可以另开一条系统学习的路径」提及，**不得纳入本次确认范围**——只有用户明确说出「我要系统学/从零学/完整学 X」时才允许升级为学科课程提案。
   - state.stage 只有在用户通过界面确认按钮明确确认方案后才能输出 ready（系统侧已对该信号强制校验）；仅凭用户自然语言（如"可以""好的""就按这个来"）不得输出 ready，应保持在 proposing。**但"不能 ready"不等于"要继续追问"**：用户出现确认/授权表述（"可以""好的""就按这个来""就按这个方向走""按你说的办"）时，reply 只做两件事——一句话确认方向已定 + 把确认动作指给界面确认按钮，**本轮 reply 不得再出现任何问句**（尤其禁止「你更想先动哪一块」这类对已定事项的再确认）；**禁止把平台限制说给用户听**：不得出现「我这边替你按不了」「得麻烦你在界面上点一下按钮」「我这边不能替你按」这类话术，直接说「这版方向就定住了；你点确认我就开始排路径，想再调直接说」即可。proposing 阶段**不要再输出「确认/生成路径/就按这个来」这类确认项快选**，快选只用来提供具体的调整方向（没有可执行的调整项就不给快选）。
-  - 「确认意图判定（confirmIntent，hidden 布尔，可缺省）」：当且仅当 state.stage == proposing 且用户**最后一段话**是在表达「按这版方案继续 / 开始排路径」（如「就按你说的办」「明白了，那就这么干」「行，就照你说的办」「没问题，就按这个方向走」）时，在 state.confirmIntent 输出 true；表达拒绝、犹豫、改需求、抛新问题、或只是普通回复时，confirmIntent 必须**缺省（不输出该键）或 false**；你**拿不准时必须缺省，不得猜**。这一判定看**语义**不看字面——上面列举的「就照你说的办」「明白了那就这么干」这类不出现「确认/按这个来」字样的句子，只要语义是认可方案、同意开始排路径，就应判 true；反之「我先想想」「再调整一下」「这个方向不对」即便不含「拒绝」二字也要判 false 或留缺省。confirmIntent 与界面确认按钮是两条等价的确认通道；输出 true 后平台会代为生成路径，**不要**在 reply 里再说「我这边不能替你按」「你点确认按钮」之类话术（见上条规则）。
   - proposing 阶段给出 confirmedProposal 前先自检方案质量（SMART 五维：具体 / 可衡量 / 可达成 / 与真实问题相关 / 有时间边界）；明显不足时在 reply 中给 1 句改善建议（聚焦/可衡量/时间边界三者优先），但不阻断用户确认
   - 推进 proposing 的硬条件（4 项必须全部齐全）：surface_goal 用户原始诉求、real_problem 诊断结论、available_resources 至少含 time_horizon 或 time_budget、success_criteria 至少 1 条可观察结果
   - 软信息（current_baseline、background_experience、constraints_and_boundaries）不阻止收敛
@@ -117,7 +116,7 @@ fields:
       引导用户确认或调整，proposal 是可调整的初版方向，不是终稿。ready 阶段：只确认，不展开完整路径。
   - name: state
     type: object
-    desc: '回合状态 { "stage": "understanding | proposing | ready", "confidence": 0-0.99, "done": false, "motivation_signal": { "change_talk_score": -3..+3 }, "mi_frames": { "GoalFrame": {}, "ProblemFrame": {}, "ExperienceFrame": {}, "PlanFrame": {} } }；motivation_signal / mi_frames 是上面规则要求的 hidden 静默累积字段（不外露给用户，无证据就留空），与 stage/confidence/done 同处 state 下；ready 只在用户通过界面按钮显式确认后输出，模型不得自行宣布 ready；confirmIntent（hidden，布尔，可缺省）：本轮用户最后一段话是否表达「按这版方案继续 / 开始排路径」，判定口径见规则「确认意图判定（confirmIntent）」'
+    desc: '回合状态 { "stage": "understanding | proposing | ready", "confidence": 0-0.99, "done": false, "motivation_signal": { "change_talk_score": -3..+3 }, "mi_frames": { "GoalFrame": {}, "ProblemFrame": {}, "ExperienceFrame": {}, "PlanFrame": {} } }；motivation_signal / mi_frames 是上面规则要求的 hidden 静默累积字段（不外露给用户，无证据就留空），与 stage/confidence/done 同处 state 下；ready 只在用户通过界面按钮显式确认后输出，模型不得自行宣布 ready（用户自然语言确认由平台侧裁决器识别，不占用本回合结构化字段）'
   - name: understanding
     type: object
     desc: |

@@ -144,44 +144,9 @@ export function normalizeFieldValue(raw: unknown): string {
   return s.toLowerCase() === 'unknown' ? '' : s;
 }
 
-/** 方案确认短语（normalize 后全等命中才确认；带调整/疑问意图的一律不确认） */
-const PROPOSAL_CONFIRM_HEADS = [
-  '按这个来', '就按这个来', '按这个方案来', '就按这个方案', '按这个走', '就按这个走',
-  '按这版来', '就按这版', '这版可以', '这么定', '就这么定', '就这样定',
-  '确认生成', '确认并生成路径', '生成路径', '生成', '可以生成', '生成吧', '确认',
-  '同意', '没问题', '可以了', '就这个', '行就这个', '就按这个',
-  // 与后端 goal-conversation.confirm-text.ts CONFIRM_SEGMENT_PATTERNS 同族对齐（2026-11-07 分叉修复）：
-  // 后端「纯确认短语白名单」含以下头部，前端此前缺，导致同句在前端=false、后端=true 的口径分叉。
-  '好', '好嘞', '好啊', '哦了', '行的', '可以呀', '没毛病', '赞同', '确定', '定了', '就这么定了', 'okay', 'yes',
-];
-// 与后端 goal-conversation.confirm-text.ts CONFIRM_SEGMENT_PATTERNS 的「纯确认短语白名单」逐段对齐：
-// 后端按标点/换行切段后每段整段匹配，故「没问题，就按这个方向走」中「没问题」与「就按这个方向走」分别命中；
-// 前端此处先剥「领先确认词 + 标点」前缀（镜像后端的领先确认词集合），残留 directing 短语再交给 PROPOSAL_CONFIRM_FAMILY_RE 判。
-const PROPOSAL_CONFIRM_STRIP_HEAD = /^(好(的|嘞|啊)?|行(的|呀)?|可以(呀)?|ok(ay)?|嗯+|哦了|没问题|没毛病|赞同|确定|定了|就这么定了|yes)[，,。!！\s]+/;
-const PROPOSAL_CONFIRM_STRIP_TAIL = /[吧呢啊了呗哦～~。!！\s]+$/g;
-/**
- * 「按这个方向走」族确认短语（与后端 goal-conversation.confirm-text.ts 的
- * CONFIRM_SEGMENT_PATTERNS 同族——改一处必须对一眼另一处）。
- * 2026-11-07 实证：用户原话「可以，就按这个方向走」两侧都判不中，用户被迫点按钮。
- */
-const PROPOSAL_CONFIRM_FAMILY_RE = /^[那就]{0,2}按?(这(个|样)?|此)(方向|思路|说法|方案|路线|框架|路子)(走|来|定|办|执行|生成)?$|^[那就]{0,2}按你说的(来|办|做|走|执行|生成)?$/;
-const PROPOSAL_ADJUST_RE = /但是|不过|想调|调整|改成|换一|换下|先别|不要|再想|补充|还想|另外|或者|不如|如果|是不是|吗|？|\?/;
-
-/**
- * 纯文本是否等价于「确认方案」：方案卡在展示时，用户键入这类短语
- * 应走 confirmProposal 通道（与确认按钮同权），否则模型永远只能复述方案
- * ——goal 阶段绕圈圈的根因。命中口径刻意收窄：归一后全等短语表 +
- * 剥离前后缀应答词，含任何调整/疑问意图直接放行为普通回复。
- */
-export function isProposalConfirmText(raw: string): boolean {
-  const t = String(raw || '').trim().toLowerCase();
-  if (!t || t.length > 16) return false;
-  if (PROPOSAL_ADJUST_RE.test(t)) return false;
-  // 先查原串（"可以了"这类剥后缀会变义），再查剥应答词后的串（"按这个来吧"→"按这个来"）
-  const stripped = t.replace(PROPOSAL_CONFIRM_STRIP_HEAD, '').replace(PROPOSAL_CONFIRM_STRIP_TAIL, '').trim();
-  if (PROPOSAL_CONFIRM_HEADS.includes(t) || PROPOSAL_CONFIRM_HEADS.includes(stripped)) return true;
-  return PROPOSAL_CONFIRM_FAMILY_RE.test(t) || PROPOSAL_CONFIRM_FAMILY_RE.test(stripped);
-}
+/* 打字确认的前端白名单已退役（2026-11-08 确认动作减重）：键入文本一律走普通 reply，
+   「这句话是不是确认」由后端 goal-confirm-adjudicator 一次语义裁决——命中直接推进
+   （不跑主对话回合），未命中由模型正常接住。前端不再维护第二份确认词表。 */
 
 const fields = computed<LiveField[]>(() =>
   FIELD_DEFS.map((def) => {
@@ -473,7 +438,9 @@ async function run(
         if (action === 'start') {
           env = await startGoalConversation(text, { meta });
         } else if (action === 'confirm') {
-          env = await replyGoalConversation(conversationId.value, text, { confirmProposal: true });
+          // 传输层失败回退到非流式：probeAnswers 必须与流式路径（上方）同权携带——
+          // 回退路径丢题会让「确认前自测」作答静默蒸发，后端确定性判分键缺失
+          env = await replyGoalConversation(conversationId.value, text, { confirmProposal: true, probeAnswers: turnOptions?.probeAnswers });
         } else if (action === 'supplement') {
           env = await regenerateGoalConversation(conversationId.value, text);
         } else {
@@ -540,15 +507,9 @@ async function send(text: string, skipUserPush = false) {
   const meta = metaTracker.collect(t);
   if (!conversationId.value) {
     await run('start', t, meta);
-  } else if (
-    (stage.value === 'proposing' || stage.value === 'ready')
-    && proposal.value
-    && isProposalConfirmText(t)
-  ) {
-    // 方案卡在展示时键入确认短语 = 与确认按钮同权的显式确认；
-    // 不路由的话模型只能复述方案（硬规则禁模型自报 ready）→ goal 阶段绕圈圈
-    await run('confirm', t, undefined, { probeAnswers: pendingProbeAnswers() });
   } else {
+    // 打字一律走普通 reply：是否「确认方案」由后端 goal-confirm-adjudicator 裁决
+    // （2026-11-08 减重——前端白名单路由已退役，前端不再猜语义）
     await run('reply', t, meta);
   }
 }

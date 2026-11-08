@@ -51,8 +51,6 @@ export interface GoalConversationInternal {
     confidence: number;
     isCompleted: boolean;
     learningPath?: any;
-    /** 确认意图（hidden，布尔，可缺省）：模型对「用户最后一段话是否同意按本方案继续/开始排路径」的结构化判定，供服务端在快路径未命中时据以推进；缺省/非 true 一律不推进 */
-    confirmIntent?: boolean;
   };
   ext: {
     goalConversation: {
@@ -452,10 +450,9 @@ function enforceSingleQuestionForUnderstanding(text: string, stage: 'understandi
  * 「确认动作仍只发生在卡内」。快选再给一条「就按这个方向来」= 同屏两个并列的确认动作，
  * 用户不知道点哪个（用户原话：「又有快选，又有确认方案，到底让用户干什么」）。
  *
- * 而且那条快选点下去**并不会确认**：前端 `isProposalConfirmText` / 后端
- * `isProposalConfirmationText` 都是"整段等于确认短语"的白名单，认的是「就按这个走」「按这个来」，
- * 不认「就按这个方向来」——照原样发出去只是普通回复，模型自报 ready 又被强制回落 proposing，
- * 用户看到的是点了没反应。
+ * 而且那条快选点下去**并不会确认**：快选文本照原样发出后只是普通回复（打字确认由
+ * goal-confirm-adjudicator 裁决，模型不猜字面），模型自报 ready 又被强制回落 proposing，
+ * 用户看到的是点了没反应。剔除确认类快选让「确认动作只发生在卡内」，入口与出口一致。
  *
  * 判据取实测语料（prompt_call_logs 里 136 个 proposing 回合的快选原文）：
  * 确认项都以「就按这个…/方向对…/可以，就按…」这类确认意图开头，调整项则不带；
@@ -568,7 +565,7 @@ function normalizeStageAndConfidence(
   };
 }
 
-function hasThinProposalPayload(payload: {
+export function hasThinProposalPayload(payload: {
   understanding?: any;
   confirmedProposal?: any;
   structuredData?: any;
@@ -589,15 +586,26 @@ function hasThinProposalPayload(payload: {
   const isNonEmptyArray = (v: any): boolean =>
     Array.isArray(v) && v.filter((item) => typeof item === 'string' && item.trim().length > 0).length >= 2;
 
-  // real_problem 必须是具体诊断：过短（<6 字）视为症状级；与 surface_goal 重叠率 ≥0.75
-  // 视为同义改写（未完成诊断），两者都不能满足推进硬条件
+  // real_problem 必须是具体诊断：过短（<6 字）视为症状级；与 surface_goal 的**二字组重叠率**
+  // ≥0.6 视为同义改写（未完成诊断），两者都不能满足推进硬条件。二字组（character bigram）
+  // 比旧的单字包含稳：逐字符 includes 把「的/是/我」这类高频虚词也计入重叠，真诊断容易被
+  // 误判成改写（2026-11-08 thinCheck 判据升级，此前零测试锁定）。
   const isSubstantiveRealProblem = (real: any, surface: any): boolean => {
     if (!isNonEmptyString(real) || !isNonEmptyString(surface)) return isNonEmptyString(real);
     const r = real.trim().replace(/\s+/g, '');
     if (r.length < 6) return false;
     const s = surface.trim().replace(/\s+/g, '');
-    const overlap = [...r].filter((ch) => s.includes(ch)).length;
-    return overlap / r.length < 0.75;
+    const bigrams = (text: string): Set<string> => {
+      const set = new Set<string>();
+      for (let i = 0; i < text.length - 1; i += 1) set.add(text.slice(i, i + 2));
+      return set;
+    };
+    const rg = bigrams(r);
+    const sg = bigrams(s);
+    if (rg.size === 0) return true;
+    let hit = 0;
+    for (const g of rg) if (sg.has(g)) hit += 1;
+    return hit / rg.size < 0.6;
   };
 
   // 时间字段"未明确/不清楚/不知道/无"不满足硬条件
@@ -667,7 +675,9 @@ function hasThinProposalPayload(payload: {
   }
 
   // 兜底：原硬编码逻辑
-  const hasRealProblem = typeof understanding.real_problem === 'string' && understanding.real_problem.trim().length > 0;
+  // real_problem 与路由分支同口径用实质性判据（2026-11-08 一致性修复：症状级/同义改写
+  // 的豁免不能因走哪份字段清单而不同）
+  const hasRealProblem = isSubstantiveRealProblem(understanding.real_problem, understanding.surface_goal);
   const hasTimeBudget = isUsableTime(valueAt(understanding, 'available_resources.time_budget'));
   const hasTimeHorizon = isUsableTime(valueAt(understanding, 'available_resources.time_horizon'));
   const hasSuccessCriteria = typeof understanding.success_criteria?.observable_result === 'string'
@@ -934,12 +944,7 @@ export function parseGoalConversationResponse(
       core: {
         stage,
         confidence,
-        isCompleted: stage === 'ready' || stage === 'completed',
-        // 确认意图（hidden，布尔，可缺省）：模型对「用户最后一段话是否同意按本方案继续/开始排路径」的结构化判定；
-        // 仅当为显式 true 时才由服务端推进，undefined/false 一律不推进（见 goal-conversation.yaml 规则「确认意图判定」）。
-        ...(typeof (parsedJson?.state?.confirmIntent ?? parsedJson?.confirmIntent) === 'boolean'
-          ? { confirmIntent: (parsedJson.state?.confirmIntent ?? parsedJson.confirmIntent) as boolean }
-          : {})
+        isCompleted: stage === 'ready' || stage === 'completed'
       },
       ext: {
         goalConversation: {

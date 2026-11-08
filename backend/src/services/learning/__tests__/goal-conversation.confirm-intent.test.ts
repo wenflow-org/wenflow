@@ -1,14 +1,12 @@
 /**
- * 模型结构化确认意图（confirmIntent）驱动推进（2026-11-07 切片「自然语言确认改由模型判意图」）：
- *  - 快路径（UI confirmProposal 标志 / isProposalConfirmationText 文本白名单）未命中、但本轮模型
- *    结构化输出 confirmIntent===true 且文本非显式拒绝时，走与快路径同一个 advanceConfirmedProposal
- *    推进方法（不复制逻辑、不二次调用模型）。
- *  - confirmIntent 看语义不看字面：覆盖「行，就照你说的办」这类不出现「确认/按这个来」字样的确认；
- *    但本测试用「快路径白名单之外、语义仍是确认」的短语（如「我听你的安排」）来隔离验证模型信号通道，
- *    因为白名单已覆盖的短语会走快路径、不再触发本轮模型回合的 confirmIntent 分支。
- *  - confirmIntent===true 但文本明示拒绝/犹豫 → 不推进（isExplicitRefusalText 守门）。
- *  - 既有 isProposalConfirmationText / isExplicitRefusalText 用例（goal-conversation.confirm-text.test.ts）
- *    与此处互不干扰，白名单一个字不少。
+ * goal 打字确认裁决（2026-11-08 确认动作减重）：
+ * 六通道合并为两通道后的服务层行为——
+ *  - UI 按钮 flag（confirmProposal:true）= 最强信号，直接推进，不再做文本否决、不再调裁决；
+ *  - 打字 = proposing 阶段先过 goal-confirm-adjudicator 一次语义裁决：
+ *      confirm=true → 直接推进（**不跑主对话回合**，executeSkill 零调用）；
+ *      confirm=false → 落库走正常回合，由模型接住（调整/拒绝/提问）；
+ *      裁决失败 → fail-open 按非确认（走正常回合）+ P3 降级留痕。
+ *  - 旧的文本白名单快路径、confirmIntent hidden 布尔、拒绝否决正则全部退役（confirm-text.ts 已删）。
  */
 const mockExecuteSkill = jest.fn();
 const mockRunGoalAsync = jest.fn();
@@ -17,6 +15,8 @@ const mockClaimPathCoreGeneration = jest.fn();
 const mockMarkActiveGenerationFailed = jest.fn();
 const mockAssembleGoalHandoff = jest.fn();
 const mockPlatformSettingFindUnique = jest.fn();
+const mockCallPrompt = jest.fn();
+const mockRecordDegradation = jest.fn();
 
 // 会话状态（整包读改写模拟）
 let conversationRecord: any;
@@ -70,6 +70,17 @@ jest.mock('../../../skills', () => ({
   __esModule: true,
   executeSkill: (...args: any[]) => mockExecuteSkill(...args),
 }));
+// 不 mock goal-confirm-adjudicator 模块本身——mock 它的 callPrompt 依赖，
+// 让「裁决失败 → 内部 catch → recordDegradation → fail-open」整条链真实走一遍。
+jest.mock('../../../composers/prompt-composer', () => ({
+  ...jest.requireActual('../../../composers/prompt-composer'),
+  callPrompt: (...args: any[]) => mockCallPrompt(...args),
+}));
+jest.mock('../../../skills/degradation-telemetry', () => ({
+  __esModule: true,
+  recordDegradation: (...args: any[]) => mockRecordDegradation(...args),
+  degradationCause: (e: unknown) => (e instanceof Error ? e.message : String(e)),
+}));
 jest.mock('../../../skills/goal-conversation', () => ({
   __esModule: true,
   goalConversationAgentDefinition: { id: 'goal-conversation' },
@@ -119,8 +130,6 @@ function buildAiResponse(overrides: {
   understanding?: Record<string, unknown>;
   confirmedProposal?: any;
   stage?: string;
-  /** 模型结构化确认意图（hidden 布尔，可缺省）；仅在显式 true 时驱动推进 */
-  confirmIntent?: boolean;
 }) {
   return {
     userVisible: overrides.userVisible ?? '这一版方向先聚焦复盘结论提炼。',
@@ -130,7 +139,6 @@ function buildAiResponse(overrides: {
         stage: overrides.stage ?? 'proposing',
         confidence: 0.8,
         isCompleted: false,
-        ...(typeof overrides.confirmIntent === 'boolean' ? { confirmIntent: overrides.confirmIntent } : {}),
       },
       ext: {
         goalConversation: {
@@ -146,60 +154,45 @@ function buildAiResponse(overrides: {
   };
 }
 
-function seedConversation(overrides: Record<string, unknown> = {}) {
+function seedProposingConversation() {
   conversationRecord = {
     id: 'conv-1',
     userId: 'user-1',
     description: '月度复盘写不好',
-    stage: 'understanding',
+    stage: 'proposing',
     status: 'active',
     revision: 1,
     learningPathId: null,
     collectedData: JSON.stringify({
-      messages: [{ role: 'user', content: '月度复盘写不好' }],
-      understanding: { real_problem: '写不出结论' },
-      stage: 'understanding',
+      messages: [{ role: 'ai', content: '这版方向先聚焦复盘结论提炼，你看哪块要调？' }],
+      understanding: { real_problem: '不知道复盘要回答哪几个问题' },
+      stage: 'proposing',
+      confirmedProposal: { learning_direction: '复盘写作', key_stages: ['S1'] },
     }),
-    ...overrides,
   };
 }
 
 beforeEach(() => {
   jest.clearAllMocks();
-  seedConversation();
+  seedProposingConversation();
   mockAssembleGoalHandoff.mockResolvedValue(null);
   mockPlatformSettingFindUnique.mockResolvedValue(null); // 无记录 → 默认 advisory
   mockClaimPathCoreGeneration.mockResolvedValue('run-1');
   mockMarkActiveGenerationFailed.mockResolvedValue(undefined);
 });
 
-describe('模型 confirmIntent 驱动推进（快路径未命中时）', () => {
-  it('a) 快路径未命中 + 模型 confirmIntent=true → 推进路径生成（与快路径同方法、不二次调模型）', async () => {
-    seedConversation({
-      stage: 'proposing',
-      collectedData: JSON.stringify({
-        messages: [],
-        understanding: { real_problem: '不知道复盘要回答哪几个问题' },
-        confirmedProposal: { learning_direction: '复盘写作', key_stages: ['S1'] },
-      }),
-    });
-    // 文本「我听你的安排」语义是确认，但不在 isProposalConfirmationText 白名单 → 快路径不命中；
-    // 模型结构化输出 confirmIntent=true 触发推进。
-    mockExecuteSkill.mockResolvedValue(buildAiResponse({
-      userVisible: '好的，那我就按这版方向开始排路径了。',
-      stage: 'proposing',
-      confirmIntent: true,
-      understanding: { real_problem: '不知道复盘要回答哪几个问题' },
-      confirmedProposal: { learning_direction: '复盘写作', key_stages: ['S1'] },
-    }));
+describe('打字确认裁决（goal-confirm-adjudicator）', () => {
+  it('a) 裁决 confirm=true → 直接推进，不跑主对话回合（executeSkill 零调用）', async () => {
+    mockCallPrompt.mockResolvedValue({ success: true, output: { confirm: true } });
 
-    const result = await goalConversationService.continueConversation('conv-1', '我听你的安排', 'user-1');
+    const result = await goalConversationService.continueConversation('conv-1', '行，就照你说的办', 'user-1');
 
-    // 关键：仅一次模型调用（continueConversation 内唯一 callAI），推进与快路径共用 advanceConfirmedProposal
-    expect(mockExecuteSkill).toHaveBeenCalledTimes(1);
+    // 关键：裁决命中即推进——主对话回合（executeSkill）一次都不跑，比旧 confirmIntent 通道快一个回合
+    expect(mockCallPrompt).toHaveBeenCalledTimes(1);
+    expect(mockExecuteSkill).not.toHaveBeenCalled();
     expect(mockRunGoalAsync).toHaveBeenCalledTimes(1);
     expect(result.internal.core.stage).toBe('completed');
-    // 同意计量落地（自然语言确认通道 = text）
+    // 同意计量：打字确认通道 = text
     const persisted = JSON.parse(conversationRecord.collectedData);
     expect(persisted.lastConfirmation).toEqual(expect.objectContaining({
       channel: 'text',
@@ -207,73 +200,51 @@ describe('模型 confirmIntent 驱动推进（快路径未命中时）', () => {
     }));
   });
 
-  it('a-对照) 同句但模型 confirmIntent 缺省 → 不推进，停留在 proposing', async () => {
-    seedConversation({
-      stage: 'proposing',
-      collectedData: JSON.stringify({
-        messages: [],
-        understanding: { real_problem: '不知道复盘要回答哪几个问题' },
-        confirmedProposal: { learning_direction: '复盘写作', key_stages: ['S1'] },
-      }),
-    });
-    mockExecuteSkill.mockResolvedValue(buildAiResponse({
-      userVisible: '这版方向你还有想调的地方吗？',
-      stage: 'proposing',
-      // 不输出 confirmIntent（缺省）
-      understanding: { real_problem: '不知道复盘要回答哪几个问题' },
-      confirmedProposal: { learning_direction: '复盘写作', key_stages: ['S1'] },
-    }));
-
-    const result = await goalConversationService.continueConversation('conv-1', '我听你的安排', 'user-1');
-
-    expect(mockRunGoalAsync).not.toHaveBeenCalled();
-    expect(result.internal.core.stage).toBe('proposing');
-  });
-
-  it('b) confirmIntent=true 但文本明示拒绝/犹豫 → 不推进（isExplicitRefusalText 守门）', async () => {
-    seedConversation({
-      stage: 'proposing',
-      collectedData: JSON.stringify({
-        messages: [],
-        understanding: { real_problem: '不知道复盘要回答哪几个问题' },
-        confirmedProposal: { learning_direction: '复盘写作', key_stages: ['S1'] },
-      }),
-    });
-    // 模型虽输出 confirmIntent=true，但用户本轮文本是明确犹豫（「先别，我再想想」），
-    // 文本否决压过模型信号，不生成路径。
+  it('b) 裁决 confirm=false（调整/拒绝/提问）→ 落库走正常回合，由模型接住', async () => {
+    mockCallPrompt.mockResolvedValue({ success: true, output: { confirm: false } });
     mockExecuteSkill.mockResolvedValue(buildAiResponse({
       userVisible: '好，我们不着急，你想先调整哪部分？',
       stage: 'proposing',
-      confirmIntent: true,
-      understanding: { real_problem: '不知道复盘要回答哪几个问题' },
-      confirmedProposal: { learning_direction: '复盘写作', key_stages: ['S1'] },
     }));
 
     const result = await goalConversationService.continueConversation('conv-1', '先别，我再想想', 'user-1');
 
+    expect(mockCallPrompt).toHaveBeenCalledTimes(1);
+    expect(mockExecuteSkill).toHaveBeenCalledTimes(1);
+    expect(mockRunGoalAsync).not.toHaveBeenCalled();
+    expect(result.internal.core.stage).toBe('proposing');
+    // 用户与 AI 消息都落库（普通回合链路）
+    const persisted = JSON.parse(conversationRecord.collectedData);
+    const roles = persisted.messages.map((m: any) => m.role);
+    expect(roles).toEqual(expect.arrayContaining(['user', 'ai']));
+  });
+
+  it('c) 裁决失败 → fail-open 按非确认（走正常回合）+ P3 降级留痕，不阻塞对话', async () => {
+    mockCallPrompt.mockRejectedValue(new Error('GOAL_CONFIRM_ADJUDICATOR_TIMEOUT'));
+    mockExecuteSkill.mockResolvedValue(buildAiResponse({
+      userVisible: '收到，这版方向你可以先看看，想调随时说。',
+      stage: 'proposing',
+    }));
+
+    const result = await goalConversationService.continueConversation('conv-1', '随便说点什么', 'user-1');
+
+    expect(mockRecordDegradation).toHaveBeenCalledTimes(1);
+    expect(mockExecuteSkill).toHaveBeenCalledTimes(1);
     expect(mockRunGoalAsync).not.toHaveBeenCalled();
     expect(result.internal.core.stage).toBe('proposing');
   });
 
-  it('b-对照) 文本拒绝 + flag=true（既有守门回归，不受影响）', async () => {
-    seedConversation({
-      stage: 'proposing',
-      collectedData: JSON.stringify({
-        messages: [],
-        understanding: { real_problem: '不知道复盘要回答哪几个问题' },
-        confirmedProposal: { learning_direction: '复盘写作', key_stages: ['S1'] },
-      }),
-    });
-    mockExecuteSkill.mockResolvedValue(buildAiResponse({
-      userVisible: '好，我们不着急，你想先调整哪部分？',
-      stage: 'proposing',
-    }));
+  it('d) UI 按钮 flag → 直接推进，不调裁决（按钮是最强信号，不再做文本否决）', async () => {
+    const result = await goalConversationService.continueConversation('conv-1', '确认并生成路径', 'user-1', { confirmProposal: true });
 
-    const result = await goalConversationService.continueConversation('conv-1', '再想想吧', 'user-1', { confirmProposal: true });
-
-    expect(mockRunGoalAsync).not.toHaveBeenCalled();
-    expect(result.internal.core.stage).toBe('proposing');
+    expect(mockCallPrompt).not.toHaveBeenCalled();
+    expect(mockExecuteSkill).not.toHaveBeenCalled();
+    expect(mockRunGoalAsync).toHaveBeenCalledTimes(1);
+    expect(result.internal.core.stage).toBe('completed');
     const persisted = JSON.parse(conversationRecord.collectedData);
-    expect(persisted.lastConfirmation.channel).toBe('flag-vetoed-by-text');
+    expect(persisted.lastConfirmation).toEqual(expect.objectContaining({
+      channel: 'flag',
+      refusalVetoed: false,
+    }));
   });
 });

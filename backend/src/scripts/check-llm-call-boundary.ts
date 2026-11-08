@@ -11,6 +11,10 @@ const ALLOWED_DIRECT_CALLERS = new Set([
   // agent/prompt manifest 条目属于扩大范围；故在此登记为受控直连。userId/traceId/sessionId 由
   // APIGateway.execute 从 getRequestContext() 继承，不丢追溯。
   'services/materials/subtask-material-completeness.ts',
+  // 检查点简答 rubric 语义复核（2026-11-08 分级判分）：简答要点词面未全命中时的一次瞬态
+  // 复核调用（要点键为出题时预注册 + 防泄漏过滤后的 rubric，temperature 0，只回 {passed,reason}）。
+  // 同材料判定一个理由：为瞬态判定新增 agent/prompt manifest 条目属于扩大范围；受控直连登记。
+  'services/ai-teaching/teaching-checkpoint.ts',
 ]);
 const FORBIDDEN_IMPORT_PATTERNS = [
   /inline-prompt-call/,
