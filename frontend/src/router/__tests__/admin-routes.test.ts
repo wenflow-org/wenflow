@@ -197,11 +197,16 @@ describe('Admin 路由重定向', () => {
       expect(router.currentRoute.value.path, `tab=${t}`).toBe('/admin/system-settings');
       expect(router.currentRoute.value.query.tab, `tab=${t}`).toBe(t);
     }
-    // 内容运营五页签仍留在运营中心
-    for (const t of ['todo', 'feedback', 'achievements', 'announce', 'inapp']) {
+    // 内容运营四页签仍留在运营中心（2026-11-09 空壳「运营待办」下线后为四个）
+    for (const t of ['feedback', 'achievements', 'announce', 'inapp']) {
       await router.push(`/admin/ops-hub?tab=${t}`);
       expect(router.currentRoute.value.path, `tab=${t}`).toBe('/admin/ops-hub');
+      expect(router.currentRoute.value.query.tab, `tab=${t}`).toBe(t);
     }
+    // 老深链 ?tab=todo 改投默认「反馈」页签（页签已删，书签不留空壳）
+    await router.push('/admin/ops-hub?tab=todo');
+    expect(router.currentRoute.value.path).toBe('/admin/ops-hub');
+    expect(router.currentRoute.value.query.tab).toBe('feedback');
   });
 
   it('已下线场景 /admin/prompt-eval 本身也改投 Skill 目录', async () => {

@@ -533,14 +533,14 @@ watch(
   border: 1px solid currentColor;
   opacity: 0.85;
 }
-.schcell__state--active { color: var(--mk-blue); }
+.schcell__state--active { color: var(--mk-blue-text); }
 .schcell__state--done { color: var(--mk-green); }
 .schcell__state--skip { color: var(--mk-muted); }
 .schcell__day { font-weight: 700; font-size: var(--mk-fs-micro); color: var(--mk-ink); }
 .schcell__slot { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .schcell__scene { display: flex; flex-wrap: wrap; gap: 4px; font-size: var(--mk-fs-micro); }
 .schcell__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.schcell--active .schcell__meta { color: var(--mk-blue); font-weight: 600; }
+.schcell--active .schcell__meta { color: var(--mk-blue-text); font-weight: 600; }
 
 .dt-cell__head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
 .dt-cell__detail { display: grid; gap: 6px; margin-top: 4px; min-width: 0; }
@@ -549,7 +549,7 @@ watch(
 .dt-chip { font-size: var(--mk-fs-micro); padding: 1px 8px; border-radius: var(--mk-radius-sm); background: var(--mk-surface-3); color: var(--mk-muted); }
 .dt-chip--warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
 .dt-chip--pace-slow { background: var(--mk-amber-bg); color: var(--mk-amber-fill); }
-.dt-chip--pace-fast { background: var(--mk-blue-bg); color: var(--mk-blue); }
+.dt-chip--pace-fast { background: var(--mk-blue-bg); color: var(--mk-blue-text); }
 
 /* 读数行：等宽数字（原型 .meterrow / .kpi__value 的 tabular-nums 口径） */
 .dt-metrics { display: flex; flex-wrap: wrap; gap: 12px; font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; min-width: 0; max-width: 100%; }

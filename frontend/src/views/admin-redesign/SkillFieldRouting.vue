@@ -164,7 +164,9 @@
                   <span v-else class="mk-badge mk-badge--core-declared" :title="row.coreStateTitle">已声明</span>
                 </td>
                 <td class="sfr__ops">
-                  <button type="button" class="mk-btn mk-btn--sm" :disabled="!canEditRow(row)" :title="editTitleOf(row)" @click="openEdit(row)">编辑</button>
+                  <!-- 2026-11-09 设计语言收敛：同一格里「删除」是文字链接、「编辑」却是描边按钮，
+                       一行两个动作两种皮。表格行内动作统一走 mk-link（危险动作用 --danger）。 -->
+                  <button type="button" class="mk-link" :disabled="!canEditRow(row)" :title="editTitleOf(row)" @click="openEdit(row)">编辑</button>
                   <button type="button" class="mk-link mk-link--danger" :disabled="!canDeleteRow(row)" :title="deleteTitleOf(row)" @click="onDelete(row)">删除</button>
                 </td>
               </tr>

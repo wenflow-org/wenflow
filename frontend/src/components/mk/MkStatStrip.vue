@@ -116,10 +116,10 @@ defineEmits<{ select: [key: string | undefined] }>()
 }
 .mk-stat--clickable:hover { background: color-mix(in srgb, var(--mk-blue) 8%, transparent); }
 .mk-stat--clickable:hover .mk-stat__label,
-.mk-stat--clickable:hover .mk-stat__value { color: var(--mk-blue); }
+.mk-stat--clickable:hover .mk-stat__value { color: var(--mk-blue-text); }
 .mk-stat--on { background: color-mix(in srgb, var(--mk-blue) 12%, transparent); }
 .mk-stat--on .mk-stat__label,
-.mk-stat--on .mk-stat__value { color: var(--mk-blue); }
+.mk-stat--on .mk-stat__value { color: var(--mk-blue-text); }
 
 /* 布局变体 grid：实体页头「一行四格读数条」（原型 .statstrip）。label 在上、数值在下，
    格子等宽 auto-fit、竖分隔在右（与 inline 的分隔在左互不干扰）。数值固定 18px 展示档

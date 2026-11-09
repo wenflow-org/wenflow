@@ -154,7 +154,9 @@ describe('Skill 运行时 · 模型选择', () => {
     await openConfig(w)
     const panels = w.findAll('.sdp-sections > .sdp-panel')
     expect(panels.map((p) => p.find('h4').text())).toEqual(['模型', '生成参数', '请求与容错'])
-    expect(w.find('#sdp-panel-params .sdp-panel__state').text()).toContain('T=')
+    // 2026-11-09 设计语言收敛：段头不再悬浮「T=…」读数（temperature 就在下面表单里，
+    // 同一项两个出口）；段头只留段名。
+    expect(w.find('#sdp-panel-params .sdp-panel__state').exists()).toBe(false)
     /* 2026-11-06 用户「什么覆盖默认什么的，没意义」：四行不再是「来源 + 只读取值」，
        每行就是一个可填的数字输入框（留空＝取 Prompt 声明 / 平台默认）。 */
     expect(w.find('#sdp-panel-params input[aria-label="temperature"]').exists()).toBe(true)

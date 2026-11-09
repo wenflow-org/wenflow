@@ -186,7 +186,7 @@
   border-radius: var(--mk-radius-sm);
   border: 1px solid var(--mk-line);
   background: var(--mk-surface);
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
   font: inherit;
   font-size: var(--mk-fs-micro);
   font-weight: 700;
@@ -212,7 +212,7 @@
   border-radius: var(--mk-radius-sm);
   transition: color 0.12s ease, background 0.12s ease;
 }
-.mk-status__meta-link:hover { color: var(--mk-blue); background: rgba(47, 106, 224, 0.08); }
+.mk-status__meta-link:hover { color: var(--mk-blue-text); background: rgba(47, 106, 224, 0.08); }
 .mk-status__meta-link--on { color: var(--mk-meta-link-on-fg); background: var(--mk-meta-link-on-bg); }
 /* 暗色等价色：原为 LearnerCenter 页面私有补丁，收敛为全局。
    其余 5 处计数锚点此前无暗色覆盖 → rgba(47,106,224,.08) 落在深底上几乎不可见。 */
@@ -405,7 +405,7 @@ html[data-theme='dark'] .mk-status__meta-link:hover { background: rgba(91, 141, 
   content: '▸';
   display: inline-block;
   margin-right: 6px;
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
   transition: transform 0.16s ease;
 }
 details[open] > .mk-section__summary::before { transform: rotate(90deg); }
@@ -417,7 +417,7 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
   color: var(--mk-ink);
   transition: color 0.14s ease;
 }
-.mk-section__summary:not(.mk-card__head):hover { color: var(--mk-blue); }
+.mk-section__summary:not(.mk-card__head):hover { color: var(--mk-blue-text); }
 /* 弱化档：次级折叠头（原 orch/frt 的 muted 基调） */
 .mk-section__summary--muted:not(.mk-card__head) { color: var(--mk-muted); }
 /* 结论行：一句话，加粗，常驻可见 */
@@ -578,7 +578,7 @@ details[open] > .mk-section__summary::before { transform: rotate(90deg); }
 .mk-table th.mk-th--sortable[aria-sort='ascending'] .mk-th__caret,
 .mk-table th.mk-th--sortable[aria-sort='descending'] .mk-th__caret {
   opacity: 1;
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
 }
 .mk-table th.mk-th--sortable[aria-sort='descending'] .mk-th__caret {
   border-bottom: 0;
@@ -775,6 +775,28 @@ html[data-theme='dark'] .mk-menu__pop { background: var(--mk-surface-2); }
 /* 数字列表头必须显式右对齐：.mk-table th 的 text-align:left（特异性 0,1,1）压过 .mk-num（0,1,0），
    否则表头靠左、数字靠右各站一边——全站所有 <th class="mk-num"> 都受影响。 */
 .mk-table th.mk-num { text-align: right; }
+/* 右对齐数字列的右邻是左对齐文字列时，两者视觉粘连（「62%」紧贴「间隔到期」、「1」紧贴「—」）。
+   右对齐本身没有错（数字列要竖向对齐），缺的是列间缓冲：给「跟在数字列后面的单元格」补一段左内衬。
+   用相邻选择器精确定位，不动数字列自身的右内衬，也不影响两侧都是数字列的排布。 */
+.mk-table td.mk-num + td { padding-left: 24px; }
+html[data-density='compact'] .mk-table td.mk-num + td { padding-left: 20px; }
+/* ----- 率值计量格（条形 + 数值，同一行；2026-11-09 设计语言收敛）-----
+   同一页两张表都在说「记忆强度」这一个字段，却各写一套：一张是「左条 + 右百分比」横排、
+   左对齐；另一张是「上百分比 + 下短条」上下堆叠、右对齐——相距 150px 的两种读法。
+   收进原语：横排（条子吃剩余宽度、数值固定槽右对齐），左对齐落在单元格里。
+   数值槽固定宽度，上下行的小数/整数混排时条子右端不抖。 */
+.mk-meter { display: inline-flex; align-items: center; gap: 8px; width: 100%; min-width: 96px; }
+.mk-meter__bar { flex: 1 1 auto; }
+.mk-meter__val {
+  flex: none;
+  min-width: 40px;
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.mk-meter__val--warn { color: var(--mk-amber); }
+.mk-meter__val--muted { font-weight: 400; color: var(--mk-faint); }
 /* fixed 表里列宽即契约，min-width 反而越权：min-width 48 + 单元格左右 padding 24 = 72px，
    把 56px 的 --mk-col-num 列撑溢出 16px，右对齐的数字因此越过本列右缘 ~4px、
    挤进邻列的 padding——多个数字列并排时列间隙看起来忽宽忽窄。 */
@@ -888,6 +910,24 @@ html[data-theme='dark'] .mk-menu__pop { background: var(--mk-surface-2); }
 .mk-badge--self { background: var(--mk-blue-bg-strong); color: var(--mk-accent-deep, #1f57cc); }
 /* 已删除标记：灰色 */
 .mk-badge--deleted { background: var(--mk-badge-deleted-bg); color: var(--mk-badge-deleted-fg); }
+/* 默认 / 当前生效项（2026-11-09 设计语言收敛）：全站唯一一枚「这一个是默认」的实心主色徽章。
+   此前同一个语义在「对话模型」卡是蓝底胶囊，在「向量 / 重排模型」卡却是裸白字——
+   因为 ModelProvidersPanel 的 .mpp-default-chip 只写在它自己的 scoped 块里，
+   InfraModelsPanel 复用同名类却拿不到样式，元素只剩 .mk-badge 的空壳。
+   统一收进原语：凡「默认 / 当前 / 推荐」这类「被选中」语义，一律用 --default，
+   不再允许各页自造同义 class。 */
+.mk-badge--default { background: var(--mk-blue-fill, #2f6ae0); color: var(--mk-on-fill); }
+
+/* ----- 可选卡片（2026-11-09 设计语言收敛）-----
+   全站「点一下选中这张卡」的统一语法：默认描边 = 卡线；选中 = 蓝描边 + 淡蓝底。
+   此前有三套互不兼容的写法：
+     · 数据导出 .exp-item--on   → 蓝描边 + --mk-blue-bg；
+     · 虚拟学习者 .vlc-card--selected → 蓝描边 + --mk-blue-bg（与上者同形，只是名字不同）；
+     · 访问与注册 .ac-opt--on   → 蓝描边 + --mk-surface-2（选中在暗色档几乎看不出来）。
+   统一收进本原语，页面只保留自己的排版（栅格跨列、单选点、复选框），不再自造选中色。
+   注意：提示/风险不许借用本原语的描边通道（见 AccessControl 2026-11-09 注释）。 */
+.mk-choice { border-color: var(--mk-card-line); }
+.mk-choice--on { border-color: var(--mk-blue); background: var(--mk-blue-bg); }
 
 /* ----- 迷你进度条（进度量化统一表达：控制台评估维度条 / Goal 置信度条共用，ADMIN_DEEP_SESSION_AUDIT 4.3） ----- */
 .mk-minibar {
@@ -935,7 +975,7 @@ html[data-theme='dark'] .mk-menu__pop { background: var(--mk-surface-2); }
 /* ----- 业务徽章档位（mk-badge 扩展：字段路由角色 / render / 流转 / 锁定 / core / 完成度五档） -----
    SkillFieldRouting / FieldRoutingTable / Skills 三处收敛共用；色值全部走 token */
 .mk-badge--role-hard-required { background: var(--mk-red-bg); color: var(--mk-red-strong); }
-.mk-badge--role-soft-info { background: var(--mk-blue-bg); color: var(--mk-blue); }
+.mk-badge--role-soft-info { background: var(--mk-blue-bg); color: var(--mk-blue-text); }
 .mk-badge--role-hidden-inference { background: var(--mk-badge-hidden-bg); color: var(--mk-badge-hidden-fg); }
 .mk-badge--role-public-reply { background: var(--mk-green-bg); color: var(--mk-green); }
 .mk-badge--role-proposal-output { background: var(--mk-badge-proposal-bg); color: var(--mk-teal); }
@@ -1057,7 +1097,7 @@ html[data-theme='dark'] .mk-menu__pop { background: var(--mk-surface-2); }
   transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
 }
 .mk-pill:hover {
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
   border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line));
 }
 /* 胶囊里的图标（多选开关激活时的勾、已应用视图的叉）：文字两侧各留 4px，
@@ -1144,7 +1184,7 @@ html[data-theme='dark'] .mk-pill__count { background: var(--mk-surface-3); }
 /* 激活态（= 该维偏离默认值）：整枚胶囊走 .mk-pill--active 的浅蓝底；
    值本身也跟随主色，避免「底变了字没变」的半个激活态 */
 .mk-pill--active > .mk-pillselect__pick > .mk-pillselect__txt { color: var(--mk-pill-active-fg); }
-.mk-pillselect:hover .mk-pillselect__txt { color: var(--mk-blue); }
+.mk-pillselect:hover .mk-pillselect__txt { color: var(--mk-blue-text); }
 .mk-pill--active:hover > .mk-pillselect__pick > .mk-pillselect__txt { color: var(--mk-pill-active-fg); }
 .mk-pillselect:focus-visible { outline: none; border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line)); }
 .mk-pillselect__pick > svg {
@@ -1196,6 +1236,13 @@ html[data-theme='dark'] .mk-card__meta { color: var(--mk-muted); }
 html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
 
 /* ----- 链接按钮 ----- */
+/* 2026-11-09 设计语言收敛 · 动作变体规范（唯一判据，不再按页面手感挑）：
+     1) 会改服务状态的命令 → .mk-btn / .mk-btn--sm（测试连接、保存、修复、新建、导入、发布）；
+     2) 只是跳转 / 展开收起 / 打开表单 / 表格行内操作 → .mk-link（查看、编辑、配置、删除、
+        重试、修改连接、详情、收起），危险动作用 .mk-link--danger；
+     3) 选中语义（默认 / 当前 / 推荐）→ .mk-badge--default，不写裸文字也不自造同义类。
+   反例（本次清掉的）：同一个「修改连接」在对话卡是描边按钮、在向量卡是文字链接；
+   字段路由同一格里「编辑」是按钮、「删除」是链接——同标签、同层级必须同一种皮。 */
 /* 返回按钮：子页面顶部"← 返回"统一样式（原散落在 ud-back/ld-back/vp-back 三处局部定义） */
 .mk-back {
   border: 0;
@@ -1217,7 +1264,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
 .mk-link {
   border: 0;
   background: transparent;
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
   font: inherit;
   font-weight: 700;
   font-size: var(--mk-fs-body);
@@ -1227,6 +1274,13 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   white-space: nowrap;
 }
 .mk-link:hover { background: var(--mk-hover-surface); }
+/* 2026-11-09 全站巡检 准则5（深色模式对比度）：--mk-blue 在暗色档被「主按钮蓝底白字」
+   决策固定成 #2f6ae0（白字 4.9:1 达 AA），但这个 token 同时被当链接文字色用——
+   #2f6ae0 压暗色卡面 #202124 只有 2.6:1，审计日志等页的「详情」读不清。
+   链接文字在暗色下改用 --mk-accent-deep（#7aa2ff，#202124 上 6.5:1），与
+   .mk-badge--self 等既有的「亮色前景提亮到 accent-deep」判例一致；浅色档不变。 */
+html[data-theme='dark'] .mk-link,
+.dark .mk-link { color: var(--mk-accent-deep, var(--mk-blue)); }
 /* 文案会在忙碌时变长的链接按钮（测试 → 测试中…）：
    用一条不可见的 ::after 把盒子撑到**最长文案**的宽度，两个状态同一尺寸，
    切换时不再把左边那颗「配置」推走（2026-11-05 用户「测试中的时候宽度就变了」）。
@@ -1281,7 +1335,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.mk-user-link:hover { color: var(--mk-blue); }
+.mk-user-link:hover { color: var(--mk-blue-text); }
 /* 图标按钮：操作列高频操作改为 SVG 图标 + tooltip，节省列宽 */
 .mk-icon-btn {
   display: inline-flex;
@@ -1304,17 +1358,14 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
 .mono { font-family: var(--mk-mono); }
 .mk-th--right { text-align: right; }
 .mk-table th.mk-th--right { text-align: right; }
-/* 右对齐可排序列：caret 绝对定位进 th 右内边距带——表头**文字**右缘与数据右缘对齐
-   （判例=用户与学习者「路径 / 会话」：caret 占位使数字越过表头末字 12px，视觉读作错位）。
-   锚定在 .mk-th__btn（relative）而非 th——th 在滚动表里是 sticky，改 relative 会碎吸顶 */
-.mk-table th.mk-th--right .mk-th__btn,
-.mk-table th.mk-num .mk-th__btn { position: relative; }
-/* 数字列同样按右对齐处理：隐藏态 caret 原占 8px 布局宽（border 4+4），
-   把表头文字整体左推 8px，与右侧数字错位（2026-10-24 记忆与复习走查）。 */
-/* 右对齐列的 caret 放在文字左侧：若放右侧，隐藏态虽不占布局，可见态仍会伸出
-   数值右缘 12px，读作「表头比数字更靠右」（2026-10-24 记忆与复习复核）。 */
+/* 可排序表头的 caret 一律跟在文字右侧（2026-11-09 用户走查）：此前右对齐列把 caret
+   绝对定位到 `left: -12px`，同一张表里首尾列箭头在右、中间数字列箭头在左，读起来像
+   两套排序控件。改为全部走 `.mk-th__btn` 的行内 inline-flex 顺序（文字 → caret）：
+   右对齐列整组贴右缘，caret 仍在文字右侧，跨列位置一致。
+   代价：右对齐表头文字比数据右缘内缩一个 caret 宽（8px + gap 5px），这是
+   「箭头统一在右」的必要取舍（文字仍贴右，箭头在其后）。 */
 .mk-table th.mk-th--right .mk-th__caret,
-.mk-table th.mk-num .mk-th__caret { position: absolute; right: auto; left: -12px; top: 50%; transform: translateY(-50%); }
+.mk-table th.mk-num .mk-th__caret { position: static; right: auto; left: auto; top: auto; transform: none; }
 .mk-empty--compact { padding: 24px 16px; }
 
 /* ----- 页面级视图切换页签（原型 .tabs）-----
@@ -1343,7 +1394,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   transition: color 0.14s ease, border-color 0.14s ease;
 }
 .tab:hover { color: var(--mk-ink); }
-.tab[aria-selected='true'] { color: var(--mk-blue); border-bottom-color: var(--mk-blue); }
+.tab[aria-selected='true'] { color: var(--mk-blue-text); border-bottom-color: var(--mk-blue-text); }
 .tab__count { margin-left: 5px; color: var(--mk-faint); font-weight: 600; }
 .tab[aria-selected='true'] .tab__count { color: inherit; opacity: 0.72; }
 
@@ -1388,7 +1439,7 @@ html[data-theme='dark'] .mk-card__note { color: var(--mk-muted); }
   margin-bottom: 8px;
   border-radius: var(--mk-radius-xl);
   background: var(--mk-surface-2);
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
   display: grid;
   place-items: center;
   font-size: 22px;
@@ -2001,6 +2052,11 @@ html[data-theme='dark'] {
      改用暗色 --mk-badge-info-fg（#9db8f5，同族已验 ≥5:1）作前景，底色不动。 */
   .mk-badge--role-soft-info,
   .mk-badge--flow-handoff { color: var(--mk-badge-info-fg); }
+  /* 红色徽章暗色对比度（2026-11-09 全站巡检 准则5）：「失败」等 --mk-badge--bad 用
+     --mk-red(#f87171) 压 14% 红 tint 底，深渊下实测 3.8:1 < 4.5。
+     暗色档把前景向白提亮 35%（→ 约 #fca5a5，同底 6.87:1），底色不动——
+     与上方蓝系徽章同一修法；用 color-mix 派生，不引入新的硬编码色值。 */
+  .mk-badge--bad { color: color-mix(in srgb, var(--mk-red) 65%, white); }
   /* 暗色遮罩加深：浅色遮罩 rgba(15,23,42,.36) 在深底上分离度不足 */
   .mk-modal, .mk-drawer__mask { background: var(--wf-overlay); }
 }

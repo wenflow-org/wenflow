@@ -1391,6 +1391,9 @@ export interface LiveLearner {
   pathTitle: string | null
   /** 在学路径总数（后端 activePathCount；列表只展示最近更新的一条） */
   activePathCount?: number | null
+  /** 无 active 路径时的兜底路径（已下线 / 已完成 / 生成失败等）；active 路径存在时为 null。
+     含历史完成进度（completedTasks / totalTasks），绝不参与快照锚点。 */
+  fallbackPath?: { status: string; completedTasks: number; totalTasks: number } | null
   currentTask: string | null
   currentMilestone: string | null
   trend: 'up' | 'down' | 'flat'
@@ -1438,6 +1441,9 @@ async function fetchLiveLearners(): Promise<void> {
     pathId: (m.pathId as string) || undefined,
     pathTitle: (m.pathTitle as string) || null,
     activePathCount: typeof m.activePathCount === 'number' ? m.activePathCount : null,
+    fallbackPath: m.fallbackPath
+      ? (m.fallbackPath as { status: string; completedTasks: number; totalTasks: number })
+      : null,
     currentTask: (m.currentTask as string) || null,
     currentMilestone: (m.currentMilestone as string) || null,
     trend: mapTrend(m.recentTrend as string),

@@ -128,11 +128,14 @@ describe('TeachingSessions · 筛选 ↔ URL（O2c）', () => {
   });
 });
 
-describe('TeachingSessions · 行内动作（2026-10-19 下线链路 / 2026-10-26 撤重复详情钮）', () => {
-  it('行内不再有「详情」钮（行点击已是同一动作），也没有「链路」入口', async () => {
+describe('TeachingSessions · 操作列（2026-11-09 对齐全站表格操作规范）', () => {
+  it('操作列有「详情」主操作（与行点击同一挂载点），仍没有「链路」入口', async () => {
     const { wrapper } = await mountTs('/admin/teaching-sessions');
-    const btns = wrapper.findAll('button').filter((b) => ['链路', '详情'].includes(b.text()));
-    expect(btns).toHaveLength(0);
+    expect(wrapper.find('th.mk-c-act').text()).toBe('操作');
+    const detail = wrapper.findAll('tbody .mk-actions button.mk-link').filter((b) => b.text() === '详情');
+    expect(detail.length).toBeGreaterThan(0);
+    const traceBtns = wrapper.findAll('button').filter((b) => b.text() === '链路');
+    expect(traceBtns).toHaveLength(0);
     wrapper.unmount();
   });
 

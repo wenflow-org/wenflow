@@ -14,9 +14,22 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import SessionCockpit from '../SessionCockpit.vue';
 import { subPage } from '../store';
 import { confirmState, settleConfirm } from '../useConfirm';
+
+// 组件源码路径（用于「栅格规则 / 绑定是否仅真实模式」的静态回归断言）。
+// import.meta.url 在部分 vitest 环境下非 file 协议，故用 dirname 兜底到 cwd。
+const SESSION_COCKPIT_SRC = (() => {
+  try {
+    return resolve(dirname(fileURLToPath(import.meta.url)), '../SessionCockpit.vue');
+  } catch {
+    return resolve(process.cwd(), 'src/views/admin-redesign/SessionCockpit.vue');
+  }
+})();
 
 const { stableVirtualApi, apiObject } = vi.hoisted(() => {
   const stableVirtualApi = {
@@ -231,20 +244,22 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     expect(sub).toContain('Python 入门');
     expect(sub).toContain('开始于');
 
-    // 回合 pill 撤（2026-10-04 批次五 P3#13）：回合数单源=「阶段推进」卡 statstrip「已用回合」格
+    // 2026-11-09 头部降噪：阶段 pill（只写阶段名的蓝胶囊）撤——当前阶段由 stepper 高亮瓦片表达；
+    // 「正课」这类默认课堂类型也不再挂标签。剩下的 pill 只报状态与只读声明。
     const pills = w.findAll('.mk-hero__pills .mk-badge').map((b) => b.text());
     expect(pills[0]).toBe('进行中');
-    expect(pills[1]).toBe('学习');
     // 只读声明（原顶栏 meta 迁入，2026-10-11 走查：真实会话不再渲染 .cp-topbar）
-    expect(pills[2]).toBe('真实课堂 · 只读监控');
-    expect(pills).toHaveLength(3);
+    expect(pills[1]).toBe('真实课堂 · 只读监控');
+    expect(pills).toHaveLength(2);
 
     // 真实会话只读：hero 动作区只剩确定性出口——刷新已收归顶栏一颗（2026-10-19 用户走查
     // 「刷新重复了吧」，页内改为 watch liveRefreshSeq 接住顶栏刷新），无生命周期控制、
     // 原型假钮（导出日志）与危险动作（中断会话）不出现。
     // 2026-10-26：异常会话的唯一排查出口「执行日志」放在座舱里（列表侧不摆第二颗钮）。
+    // 2026-11-09 头部降噪：返回钮（← 教学会话列表）撤——壳层面包屑左侧的「‹」同目标同语义；
+    // 学习者入口并入 pills 行徽章。动作区只剩确定性出口。
     const acts = w.findAll('.mk-hero__actions button').map((b) => b.text());
-    expect(acts).toEqual(['执行日志', '← 教学会话列表']);
+    expect(acts).toEqual(['执行日志']);
     expect(w.text()).not.toContain('导出日志');
     expect(w.text()).not.toContain('中断会话');
 
@@ -433,7 +448,7 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     real.unmount();
   });
 
-  it('阶段推进：stepper done/active/idle 三态 + 卡头 N/4 + statstrip 三读数；步点点击切换阶段页签', async () => {
+  it('阶段推进：stepper done/active/idle 三态（紧凑步骤条，无外层卡与卡头）；步点点击切换阶段页签', async () => {
     stableVirtualApi.getVirtualSession.mockResolvedValue(virtualLearningPayload());
     const w = await mountCockpit('session', 'vs_1');
 
@@ -452,15 +467,13 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     expect(steps[0].find('.cp-stp__meta').text()).toBe('学习者发言 1');
     expect(steps[1].find('.cp-stp__meta').text()).toBe('已完成');
 
-    // 卡头右侧完成计数（2026-11-01 外部评审 P1：改「阶段已推进 N / 4」——与下方
-    // 「0/15 课已完成」同屏时，旧的「已完成 N / 4 阶段」会被读成「学习阶段完成＝课学完」）
-    expect(w.find('.cp-stepcard').text()).toContain('阶段已推进');
-    expect(w.find('.cp-stepcard').text()).toContain('/ 4');
-
-    // 2026-10-12 重设计：卡下方的 MkStatStrip 三读数（当前阶段/已用回合/下一阶段）撤——
-    // 前两者步点阵自身已表达，「已用回合」与 Goal 步点「学习者发言 N」近重复且两次被误读
+    // 2026-11-09 头部降噪：外层卡与整个卡头（标题 /「阶段已推进 N / 4」/ 下游直达按钮）撤除，
+    // 阶段条压成一行 40px 的分段步骤条；完成口径改由本条 title 承担。
+    expect(w.find('.cp-stepcard').exists()).toBe(false);
+    expect(w.find('.cp-stepjumps').exists()).toBe(false);
+    expect(w.find('.cp-stepper').attributes('title')).toContain('阶段完成');
+    expect(w.findAll('.cp-stepper .mk-stat')).toHaveLength(0);
     expect(w.find('.cp-stepstrip').exists()).toBe(false);
-    expect(w.findAll('.cp-stepcard .mk-stat')).toHaveLength(0);
 
     // stepper 步点即阶段页签（原 cp-stage tab 导航收敛至此）：点击 Goal → Goal 对话卡出现
     await steps[0].trigger('click');
@@ -571,6 +584,79 @@ describe('SessionCockpit 会话监控页（renderSessionDetail 骨架落点）',
     expect(w.find('.cp-advisory').exists()).toBe(true);
     expect(w.find('.cp-advisory').text()).toContain('节奏偏慢');
 
+    w.unmount();
+  });
+
+  it('微调（图2 目标阶段）：四字段栅格为单行四列 + 字段/title 完好', async () => {
+    // 静态源码断言：本座舱目标理解栅格锁定 4 列（作用域 .cp-goal-u .cp-goal-u__facts，不覆写全局 .mk-facts）
+    const src = readFileSync(SESSION_COCKPIT_SRC, 'utf8');
+    expect(src).toMatch(/\.cp-goal-u\s+\.cp-goal-u__facts\s*\{\s*grid-template-columns:\s*repeat\(4\b/);
+
+    // 注入 goalUnderstanding（四个时间字段 + 截止日）让目标理解卡渲染
+    const payload = realTeachingPayload();
+    payload.data.goal.understanding = {
+      timeDimensions: { objectiveScopeHours: 12, sessionsLengthMin: 90, deadlineDate: '2026-12-31' },
+      availableResources: { timeBudget: '约 3 周', timeHorizon: '2026 Q4' }
+    };
+    stableVirtualApi.getRealSessionConsole.mockResolvedValue(payload);
+    const w = await mountCockpit('session-real', 'ts_re_1');
+    await w.findAll('.cp-stp')[0].trigger('click'); // 目标对话页签
+    await settle();
+
+    const facts = w.find('.cp-goal-u__facts');
+    expect(facts.exists()).toBe(true);
+    // 钩子类携带（与源码规则对应）
+    expect(facts.classes()).toContain('cp-goal-u__facts');
+
+    const factsText = facts.text();
+    // 四个命名字段（客观体量/单次时长/时间预算/时间范围）连同截止日全部保留，文案不被改动
+    expect(factsText).toContain('客观体量');
+    expect(factsText).toContain('单次时长');
+    expect(factsText).toContain('时间预算');
+    expect(factsText).toContain('时间范围');
+    expect(factsText).toContain('截止日');
+    // title 提示完好（客观体量 / 单次时长 / 截止日 都有 title）
+    const spans = facts.findAll('span');
+    expect(spans.some((s) => s.text() === '客观体量' && (s.attributes('title') || '').includes('客观内容体量')));
+    expect(spans.some((s) => s.text() === '单次时长' && (s.attributes('title') || '').includes('单次学习分钟')));
+
+    w.unmount();
+  });
+
+  it('微调（图4 学习阶段）：真实模式课堂对话——学习者卡带 is-real-learner、教师卡不带', async () => {
+    stableVirtualApi.getRealSessionConsole.mockResolvedValue(realTeachingPayload());
+    const w = await mountCockpit('session-real', 'ts_re_1');
+    const learn = w.findAll('.cp-stp').find((el) => el.find('.cp-stp__name').text() === '学习')!;
+    await learn.trigger('click');
+    await settle();
+
+    const learners = w.findAll('.cp-transcript__message.is-learner');
+    expect(learners.length).toBeGreaterThan(0);
+    // 每条学习者卡都带真实模式修饰类（右缩 + 深蓝底的钩子）
+    expect(learners.every((el) => el.classes().includes('is-real-learner'))).toBe(true);
+    // 教师卡（is-teacher）不得带该修饰类，保持原样
+    const teachers = w.findAll('.cp-transcript__message.is-teacher');
+    expect(teachers.length).toBeGreaterThan(0);
+    expect(teachers.every((el) => !el.classes().includes('is-real-learner'))).toBe(true);
+
+    w.unmount();
+  });
+
+  it('微调（图4）回归：学习者卡修饰类严格绑定 isRealMode——虚拟控制台（session）绝不带 is-real-learner', async () => {
+    // 同用 .cp-transcript__message.is-learner 的虚拟控制台，若绑定不是「仅真实模式」，就会被误伤；
+    // 源码断言保证修饰类只在 isRealMode 为真时出现，虚拟分支回落为纯 'is-learner'。
+    const src = readFileSync(SESSION_COCKPIT_SRC, 'utf8');
+    expect(src).toMatch(/isRealMode\s*\?\s*'is-learner is-real-learner'\s*:\s*'is-learner'/);
+
+    // 真发一个虚拟挂载做对照：虚拟模式学习者卡确实不带该修饰类
+    stableVirtualApi.getVirtualSession.mockResolvedValue(virtualLearningPayload());
+    const w = await mountCockpit('session', 'vs_1');
+    const learn = w.findAll('.cp-stp').find((el) => el.find('.cp-stp__name').text() === '学习')!;
+    await learn.trigger('click');
+    await settle();
+    const learners = w.findAll('.cp-transcript__message.is-learner');
+    // 虚拟课堂即便无转录也不应误带；有转录时同样不能带
+    expect(learners.every((el) => !el.classes().includes('is-real-learner'))).toBe(true);
     w.unmount();
   });
 });

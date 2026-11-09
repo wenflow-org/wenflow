@@ -13,6 +13,7 @@ import {
 } from './reliability-settings.service';
 import { UPSTREAM_FAILURE_CATEGORIES } from '../gateway/api-gateway/upstream-failure';
 import skillModelConfigService from './skillModelConfig.service';
+import { loadCoreFile } from './prompt-lab/core-file-loader';
 
 export type SkillStatsRange = '24h' | '7d' | '30d' | 'all';
 
@@ -456,6 +457,34 @@ function isSlimPayload(raw: string): boolean {
 }
 
 /**
+ * 该 Skill 输入契约声明的字段名集合（`name` 别名优先，无别名时取 ref 末段）。
+ *
+ * 用途：校验「最近一次真实调用」的载荷**形状**是否落在本 Skill 的输入面上。
+ * 契约读不到（没有 core 文件 / 未声明 inputs）时返回 null = 无法校验、不拦。
+ */
+function declaredInputNames(skillId: string): Set<string> | null {
+  try {
+    const loaded = loadCoreFile(skillId);
+    const inputs = loaded?.core?.inputs ?? [];
+    if (!inputs.length) return null;
+    const names = new Set<string>();
+    for (const input of inputs) {
+      const name = String(input.name || '').trim();
+      if (name) {
+        names.add(name);
+        continue;
+      }
+      // 无别名：用 ref 末段（goal:collectedData.state → state；latestMessage → latestMessage）
+      const tail = String(input.ref || '').split(/[.:]/).filter(Boolean).pop();
+      if (tail) names.add(tail);
+    }
+    return names.size ? names : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * 给「试跑」页取一组能直接跑的示例输入（2026-11-08 用户「让管理员手写冷冰冰的 JSON 太难用了」）。
  *
  * 取材优先级：
@@ -463,12 +492,21 @@ function isSlimPayload(raw: string): boolean {
  *     只取未被遥测瘦身（__slim）的那几条；JSON.parse 失败也跳过（旧行可能是文本）。
  *  2. 一条都没有时回落 null，由前端用输入契约生成的骨架兜底（已有行为）。
  *
+ * **形状校验（2026-11-09 走查修复）**：库里的 demo/演示行不是"真实调用"——例如
+ * `seedpcl_*` 那批把 `{"seed":true,"step":N}` 写在 `skill:goal-conversation` 名下，
+ * 而该 Skill 的输入契约是 userInput/state/conversationContext。此前不校验形状，
+ * 于是「填入示例输入」把仿真参数当成示例填进编辑器，紧接着点「开始试跑」必然
+ * 报输入形状错误（试跑页真正需要的骨架兜底反倒被绕过了）。现在：载荷键与该 Skill
+ * 声明的输入名**一个都不重合**就跳过，继续往下找；都不合格即回落骨架。
+ * （契约读不到时不校验——宁可能填不完美，也不能因为读不到契约就彻底不给示例。）
+ *
  * 只读、不改任何数据；失败一律返回 null，不抛——「填示例」是便利功能，不该成为新的错误面。
  */
 export async function getSkillSampleInput(skillId: string): Promise<SkillSampleInput | null> {
   const short = toShortSkillId(skillId);
   if (!short) return null;
   const agentIds = [`skill:${short}`, short];
+  const declared = declaredInputNames(short);
   try {
     const rows = await prisma.prompt_call_logs.findMany({
       // 只取成功调用；userPayload 在 schema 里是必填 String，不需要（也不能）再写 { not: null } ——
@@ -485,6 +523,8 @@ export async function getSkillSampleInput(skillId: string): Promise<SkillSampleI
         const parsed = JSON.parse(raw);
         // 只接受对象载荷：数组/标量不是可编辑的输入形状
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
+        // 形状对不上（demo 行、串了 agentId 的载荷）→ 继续找下一条
+        if (declared && !Object.keys(parsed).some((k) => declared.has(k))) continue;
         return { json: JSON.stringify(parsed, null, 2), origin: 'real-call', calledAt: row.createdAt };
       } catch {
         continue;

@@ -18,10 +18,14 @@
             <span class="mpp-type">{{ g.kind === 'embedding' ? 'Embedding' : 'Reranker' }}</span>
             <!-- 2026-11-05 用户「已配置这个 pill 不要了」：卡头不挂状态徽标——
                  「配没配好」由下面的模型行自己说。 -->
+            <!-- 2026-11-09 用户「隐藏具体 URL」：这条能力接在哪收进一枚轻量标签，
+                 完整地址进 title 与「连接配置」弹窗，卡面不再拖一条尾栏。 -->
+            <span class="mk-badge mk-badge--muted" :title="connLineText(g.entry)">{{ connBadgeText(g.entry) }}</span>
           </div>
           <!-- 每张卡自己的添加入口（2026-11-04 用户「每个区域单独可以添加模型吧」）：
                点它按这条能力拉一份上游清单，勾几个就加进这条连接的模型池。 -->
           <div class="mk-card__head-right">
+            <button type="button" class="mk-link" @click="openConnEditor(g.entry)">连接配置</button>
             <button
               type="button"
               class="mk-btn mk-btn--sm mk-btn--primary"
@@ -49,7 +53,7 @@
                      恰好只有一个不等于没有默认。 -->
                 <span
                   v-if="m === g.entry.model"
-                  class="mk-badge mpp-default-chip mpp-eng__on"
+                  class="mk-badge mk-badge--default mpp-eng__on"
                   title="这条能力当前调用的模型"
                 >默认</span>
               </div>
@@ -111,57 +115,68 @@
         </div>
 
         <!-- 这条能力接在哪（2026-11-07 用户「弹窗里别再塞连接」）：
-             默认沿用对话卡那条通道；只有自建向量 / 重排服务才需要独立地址，
-             所以它是一条紧凑说明 + 折叠表单，不占挑选模型弹窗的位置。 -->
-        <div class="mpp-eng__conn">
-          <span class="mpp-eng__conn-text">连接：{{ connLineText(g.entry) }}</span>
-          <button type="button" class="mk-link" @click="toggleConnEditor(g.entry)">{{ isConnEditor(g.kind) ? '收起' : '修改连接' }}</button>
-        </div>
-        <div v-if="isConnEditor(g.kind)" class="mpp-eng__conn-form">
-          <label class="infra-own">
-            <input v-model="addConn.mode" type="checkbox" true-value="own" false-value="inherit" />
-            <span>使用独立接口地址覆盖全局通道</span>
-          </label>
-          <p v-if="addConn.mode === 'inherit'" class="infra-inherit">
-            地址与密钥取对话卡：<span class="mono">{{ view?.platformBaseUrl || '对话卡的服务地址' }}</span>
-          </p>
-          <template v-else>
-            <div class="infra-conn" :class="{ 'infra-conn--rerank': g.kind === 'rerank' }">
-              <label class="mk-field">
-                <span class="mk-field__label">服务地址</span>
-                <input v-model="addConn.endpoint" class="mk-field__input mono" :title="addConn.endpoint" placeholder="https://api.example.com" />
-              </label>
-              <label class="mk-field">
-                <span class="mk-field__label">API Key</span>
-                <input
-                  v-model="addConn.apiKey"
-                  class="mk-field__input"
-                  type="password"
-                  autocomplete="new-password"
-                  :placeholder="addKeyPlaceholder"
-                />
-              </label>
-            </div>
-            <p class="infra-endpoint" :title="addResolvedEndpoint">
-              实际请求 <span class="mono">{{ addResolvedEndpoint || '—' }}</span>
-            </p>
-            <label v-if="addEntry?.keySource === 'db' && !addConn.apiKey.trim()" class="infra-clearkey">
-              <input v-model="addConn.clearKey" type="checkbox" />
-              <span>清除已保存的密钥（之后改用环境变量中的密钥）</span>
-            </label>
-          </template>
-          <div class="mpp-eng__conn-foot">
-            <button
-              type="button"
-              class="mk-btn mk-btn--sm mk-btn--primary"
-              :disabled="saving || !addConnDirty"
-              :title="addConnDirty ? '保存这条能力的连接' : '没有未保存的改动'"
-              @click="saveCardConn"
-            >保存连接</button>
-          </div>
-        </div>
+             默认沿用对话卡那条通道；只有自建向量 / 重排服务才需要独立地址。
+             2026-11-09 用户「隐藏具体 URL 和参数细节」：连接状态收进卡头标签，
+             编辑搬到「连接配置」弹窗（原先在卡片底部原地展开表单 + 一条常驻地址尾栏）。 -->
 
       </section>
+
+      <!-- 配置这条能力的连接（2026-11-09）：与页顶「配置服务连接」同族的小号弹窗，
+           落在卡片外部（Teleport），卡面不再被表单撑高。 -->
+      <Teleport to="body">
+        <div v-if="connEditorKind" ref="connMaskRef" class="mk-modal">
+          <div ref="connPanelRef" class="mk-modal__panel mpp-conn-dlg" role="dialog" aria-modal="true" :aria-label="`配置${connKindLabel}连接`">
+            <div class="mk-modal__head">
+              <h3 class="mk-modal__title">配置{{ connKindLabel }}连接</h3>
+              <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeConnEditor">✕</button>
+            </div>
+            <div class="mk-modal__body">
+              <label class="infra-own">
+                <input v-model="addConn.mode" type="checkbox" true-value="own" false-value="inherit" />
+                <span>使用独立接口地址覆盖全局通道</span>
+              </label>
+              <p v-if="addConn.mode === 'inherit'" class="infra-inherit">
+                地址与密钥取对话卡：<span class="mono">{{ view?.platformBaseUrl || '对话卡的服务地址' }}</span>
+              </p>
+              <template v-else>
+                <div class="infra-conn" :class="{ 'infra-conn--rerank': connEditorKind === 'rerank' }">
+                  <label class="mk-field">
+                    <span class="mk-field__label">服务地址</span>
+                    <input v-model="addConn.endpoint" class="mk-field__input mono" :title="addConn.endpoint" placeholder="https://api.example.com" />
+                  </label>
+                  <label class="mk-field">
+                    <span class="mk-field__label">API Key</span>
+                    <input
+                      v-model="addConn.apiKey"
+                      class="mk-field__input"
+                      type="password"
+                      autocomplete="new-password"
+                      :placeholder="addKeyPlaceholder"
+                    />
+                  </label>
+                </div>
+                <p class="infra-endpoint" :title="addResolvedEndpoint">
+                  实际请求 <span class="mono">{{ addResolvedEndpoint || '—' }}</span>
+                </p>
+                <label v-if="addEntry?.keySource === 'db' && !addConn.apiKey.trim()" class="infra-clearkey">
+                  <input v-model="addConn.clearKey" type="checkbox" />
+                  <span>清除已保存的密钥（之后改用环境变量中的密钥）</span>
+                </label>
+              </template>
+            </div>
+            <div class="mk-modal__foot">
+              <button type="button" class="mk-btn" @click="closeConnEditor">取消</button>
+              <button
+                type="button"
+                class="mk-btn mk-btn--primary"
+                :disabled="saving || !addConnDirty"
+                :title="addConnDirty ? '保存这条能力的连接' : '没有未保存的改动'"
+                @click="saveCardConn"
+              >{{ saving ? '保存中…' : '保存连接' }}</button>
+            </div>
+          </div>
+        </div>
+      </Teleport>
     </template>
 
     <Teleport to="body">
@@ -433,7 +448,7 @@ const addError = ref('')
 const addEmpty = ref('')
 /** 清单是在哪条连接下拉的：勾选框改了就与它不符，清单随之过期 */
 const addFetchedSig = ref('')
-/** 哪张卡正在编辑连接（一次只开一个）：连接从弹窗搬回卡片后的唯一状态 */
+/** 哪张卡的连接弹窗开着（一次只开一个）；null = 都关着（2026-11-09 由卡内展开改弹窗） */
 const connEditorKind = ref<InfraKind | null>(null)
 const addConn = ref({
   mode: 'inherit' as ConnectionMode,
@@ -442,8 +457,13 @@ const addConn = ref({
   apiKey: '',
   clearKey: false,
 })
-/** 弹窗标题：能力名本身已带「模型」（向量模型 / 重排模型），不再拼第二遍「模型」 */
-const addTitle = computed(() => (addKind.value ? `添加${kindLabel(addKind.value)}` : '添加模型'))
+/** 弹窗标题带上文（2026-11-09）：能力名本身已带「模型」（向量模型 / 重排模型），
+    再补一枚类型标签，与对话卡「添加对话模型（LLM）」同一形态，一眼知道在给哪条能力挑模型。 */
+const addTitle = computed(() =>
+  addKind.value
+    ? `添加${kindLabel(addKind.value)}（${addKind.value === 'embedding' ? 'Embedding' : 'Reranker'}）`
+    : '添加模型',
+)
 const addKindLabel = computed(() => (addKind.value ? kindLabel(addKind.value) : '模型'))
 const addRegistered = computed(() => addEntry.value?.models ?? [])
 
@@ -493,25 +513,30 @@ const addKeyPlaceholder = computed(() => {
   return '粘贴 API Key'
 })
 
-/** 卡片里的连接行：一句话说清这条能力接在哪 */
+/** 卡片里的连接行文案：一句话说清这条能力接在哪（现在挂在卡头标签的 title 上） */
 function connLineText(entry: InfraModelEntryView): string {
   if (entry.connectionMode === 'own') {
     return entry.endpoint ? `独立地址 ${entry.endpoint}` : '独立地址未配置'
   }
   /* 不把平台地址再写一遍：页顶「服务连接」卡上就是同一个地址，
-     同屏两处同一串只会让人疑心它们是不是两条连接。展开态里那句
+     同屏两处同一串只会让人疑心它们是不是两条连接。弹窗里那句
      「地址与密钥取对话卡：…」才是需要看到具体值的地方。 */
   return '沿用对话模型'
 }
-function isConnEditor(kind: InfraKind): boolean {
-  return connEditorKind.value === kind
+/** 卡头标签：这条能力接在哪（弹窗里改，卡面只留这一枚轻量标签） */
+function connBadgeText(entry: InfraModelEntryView): string {
+  return entry.connectionMode === 'own' ? '独立连接' : '跟随全局'
 }
-/** 打开 / 收起卡片里的连接表单：种子直接复用弹窗时代那套（模式 / 根地址 / 密钥） */
-function toggleConnEditor(entry: InfraModelEntryView): void {
-  if (connEditorKind.value === entry.kind) {
-    connEditorKind.value = null
-    return
-  }
+/** 连接弹窗的标题用哪张卡（一次只开一个） */
+const connKindLabel = computed(() => (connEditorKind.value ? kindLabel(connEditorKind.value) : '模型'))
+const connMaskRef = ref<HTMLElement | null>(null)
+const connPanelRef = ref<HTMLElement | null>(null)
+useEscape(() => Boolean(connEditorKind.value), closeConnEditor)
+useOverlay(computed(() => Boolean(connEditorKind.value)), connPanelRef)
+useMaskClose(connMaskRef, closeConnEditor)
+
+/** 打开连接弹窗：种子直接复用弹窗时代那套（模式 / 根地址 / 密钥） */
+function openConnEditor(entry: InfraModelEntryView): void {
   connEditorKind.value = entry.kind
   addKind.value = entry.kind
   addEntry.value = entry
@@ -522,14 +547,37 @@ function toggleConnEditor(entry: InfraModelEntryView): void {
     clearKey: false,
   }
 }
-/** 保存卡片里的连接（与弹窗时代同一个提交路径，只是触发点换了） */
+/** 关窗：有未保存的连接改动先问一句（原内联态是「收起」——改动不能藏进一次关闭里） */
+function closeConnEditor(): void {
+  if (!connEditorKind.value) return
+  if (!addConnDirty.value) {
+    discardConnEditor()
+    return
+  }
+  void (async () => {
+    const ok = await askConfirm({
+      title: '关闭并放弃连接改动?',
+      message: '关闭后未保存的地址 / 密钥改动会丢弃，确定关闭?',
+      confirmText: '放弃改动'
+    })
+    if (ok) discardConnEditor()
+  })()
+}
+/** 真正落关（确认过、或本来就没改动）：单独一枚，免得 confirm 回来时又被守卫拦一次 */
+function discardConnEditor(): void {
+  connEditorKind.value = null
+}
+/** 保存连接弹窗里的改动（与弹窗时代同一个提交路径，只是触发点换了） */
 async function saveCardConn(): Promise<void> {
   const kind = connEditorKind.value
   if (!kind) return
   addKind.value = kind
   addEntry.value = view.value?.[kind] ?? addEntry.value
   await saveAddConn()
-  if (!addConnDirty.value) connEditorKind.value = null
+  /* 脏位要按**写回后**的那份配置重判：saveAddConn 里 persist 已经把 view 换成后端结果，
+     拿保存前的 entry 比会把「服务器按自己的口径存的地址」读成未保存改动，弹窗关不上。 */
+  addEntry.value = view.value?.[kind] ?? addEntry.value
+  if (!addConnDirty.value) discardConnEditor()
 }
 
 /** 弹窗底部那句筛选说明：别再讲「⋯ 里挑一个设为启用」（那份菜单已经不存在） */
@@ -811,20 +859,10 @@ onMounted(load)
 .mpp-eng__acts { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; margin-left: auto; }
 /* 删除与前三枚拉开距离（与对话卡同一口径） */
 .mpp-eng__danger { margin-left: 12px; }
-/* 卡片级连接行（2026-11-07）：一句话 + 一个「修改连接」，默认不占高度 */
-.mpp-eng__conn {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 16px 10px;
-  border-top: 1px solid var(--mk-line);
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
-}
-.mpp-eng__conn-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mpp-eng__conn-form { display: grid; gap: 10px; padding: 0 16px 14px; }
-.mpp-eng__conn-foot { display: flex; justify-content: flex-end; }
+/* 卡片级连接（2026-11-09）：卡头一枚轻量标签 [独立连接] / [跟随全局]，
+   完整地址进标签 title 与「连接配置」弹窗——卡面不再拖尾栏。
+   配置弹窗与页顶「配置服务连接」同宽（小号窗，不随全站断点长到半屏）。 */
+.mpp-conn-dlg.mk-modal__panel { width: min(560px, 100%); max-width: none; }
 /* 类型标识（Embedding / Reranker）：与对话卡那枚 LLM 徽标同一套蓝调（2026-11-05 用户
    「不喜欢这个灰色」）——三张卡同处一层，一个是蓝底、两个是灰底，读起来像两种来历。
    这里不引 .mpp-type--platform（那是对话卡局部的修饰类），直接给出同一组值。 */
@@ -832,7 +870,7 @@ onMounted(load)
   padding: 1px 7px;
   border-radius: var(--mk-radius-sm);
   background: color-mix(in srgb, var(--mk-blue) 10%, transparent);
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
   font-size: var(--mk-fs-micro);
   font-weight: 600;
   line-height: 1.5;

@@ -8,7 +8,9 @@
     <section class="mk-card exp-panel">
       <div class="mk-card__head">
         <div class="exp-head">
-          <h4 class="mk-card__title">数据导出</h4>
+          <!-- 2026-11-09 设计语言收敛（容器层级）：卡题原为「数据导出」，与页签名逐字重复。
+               页签已经说了这一页是什么，卡头该说的是这张卡要你做什么——这里是「选哪些表」。 -->
+          <h4 class="mk-card__title">选择导出内容</h4>
           <!-- 副标题（2026-11-06 文案排查 §7.2）：说清产物形态 + 业务表单表上限；
                原先只有「每张表生成一个 CSV 文件」，上限只散落在每张卡片里重复渲染，
                现统一收到这一句，卡片内不再复读「最近 20000 条 / 最近 1000 行」。 -->
@@ -37,8 +39,8 @@
             <label
               v-for="item in g.items"
               :key="item.key"
-              class="exp-item"
-              :class="{ 'exp-item--on': exportSel.includes(item.key), 'exp-item--busy': exporting !== '' }"
+              class="exp-item mk-choice"
+              :class="{ 'mk-choice--on': exportSel.includes(item.key), 'exp-item--busy': exporting !== '' }"
             >
               <input
                 type="checkbox"
@@ -253,14 +255,15 @@ async function runExport() {
   padding: 12px 14px;
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-lg);
-  background: var(--mk-surface);
   cursor: pointer;
   transition: border-color 0.12s, background 0.12s;
 }
+/* 默认面 / 选中面走全局 .mk-choice / .mk-choice--on（2026-11-09 收敛）；
+   本类只在未选中时落默认底色，避免 scoped 压掉原语的选中底色。 */
+.exp-item:not(.mk-choice--on) { border-color: var(--mk-line); background: var(--mk-surface); }
 /* hover 只微抬描边（2026-10-31 外部评审二轮：--mk-muted 全亮灰在暗色下读成「蓝色焦点框/
    已选中」，截图指针停过就穿帮）——用 line→muted 的中间值，可感知但不抢选中态（蓝框专属） */
-.exp-item:hover { border-color: color-mix(in srgb, var(--mk-muted) 45%, var(--mk-line)); }
-.exp-item--on { border-color: var(--mk-blue); background: var(--mk-blue-bg); }
+.exp-item:not(.mk-choice--on):hover { border-color: color-mix(in srgb, var(--mk-muted) 45%, var(--mk-line)); }
 .exp-item--busy { cursor: default; opacity: 0.7; }
 .exp-item__box {
   flex: none;

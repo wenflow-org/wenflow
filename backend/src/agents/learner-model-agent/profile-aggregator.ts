@@ -736,17 +736,32 @@ export class ProfileAggregator {
     const hasLf = has(profile.observed.learning, 'lf');
 
     const goalNarrative = goal?.realProblem || goal?.surfaceGoal || '';
-    const backgroundContextNote = [
+    /* 2026-11-09 走查实测两条脏文案（叙述洞察「背景与现状」段）：
+       ① 段间用「；」拼接，而各段自带句末「。」——实测产出「……精力已耗尽。；当前自述水平」，
+          一个句号一个分号连排；拼之前先削掉段尾句读。
+       ② currentLevel 是英文枚举（beginner/intermediate/advanced），整句直接透出，
+          界面写着「当前自述水平：intermediate」——与全站等级词汇（入门/进阶/高级）不一致。
+       合并注（2026-11-10）：只取 develop 的标点与等级中文化；它那两句兜底文案
+       （「背景信息还不充分…」「当前更多依赖兴趣或外部目标驱动」）正是本次核查要去掉的
+       无条件断言，不采纳。 */
+    const LEVEL_ZH: Record<string, string> = { beginner: '入门', intermediate: '进阶', advanced: '高级' };
+    const levelZh = (v?: string) => (v ? LEVEL_ZH[String(v).trim().toLowerCase()] || String(v) : '');
+    const joinClauses = (parts: Array<string | undefined | false>): string =>
+      parts
+        .map((p) => (p ? String(p).trim().replace(/[。；;，,、\s]+$/, '') : ''))
+        .filter(Boolean)
+        .join('；');
+    const backgroundContextNote = joinClauses([
       goal?.backgroundExperience,
-      goal?.currentLevel ? `当前自述水平：${goal.currentLevel}` : '',
+      goal?.currentLevel ? `当前自述水平：${levelZh(goal.currentLevel)}` : '',
       Array.isArray(goal?.painPoints) && goal?.painPoints.length > 0 ? `主要卡点：${goal.painPoints.join('、')}` : ''
-    ].filter(Boolean).join('；');
+    ]);
     const motivationNarrative = goal?.motivation || '';
     const timeConstraintNote = goal?.availableTime
       ? `可投入时间大致为 ${goal.availableTime}，课程任务需要和这个节奏匹配。`
       : '';
     const selfAssessmentNote = goal?.currentLevel
-      ? `学习者当前自述水平为 ${goal.currentLevel}，需要持续对比真实任务表现修正难度。`
+      ? `学习者当前自述水平为 ${levelZh(goal.currentLevel)}，需要持续对比真实任务表现修正难度。`
       : '';
 
     const contentReceptionPattern = !(hasPreferredStyle || hasThinkingStyle)

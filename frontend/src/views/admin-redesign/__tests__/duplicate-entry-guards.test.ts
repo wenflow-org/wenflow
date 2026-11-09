@@ -128,16 +128,14 @@ describe('重复操作入口守卫', () => {
     expect(src).toContain("'orchestration-steps',")
   })
 
-  it('目标对话：行点击进座舱，路径页签入口只留在 ⋯ 菜单', () => {
-    // 2026-10-27 用户「这两个按钮也重复吧，本身点这个条目就可以跳进去了」：
-    // 行点击已落默认页签，操作列不再重复「详情」；路径页签入口收进 ⋯ 菜单，
-    // 操作列只留溢出菜单，不再出现整行可见的文本链接。
-    // 2026-11-02 P2-3：行内仍不留按钮，但 ⋯ 菜单补回一条「查看详情」——
-    // 行点击这个入口本身没有文字，菜单里得有它的可见同义词（判据仍是「行内没有详情按钮」）。
+  it('目标对话：行点击与一级「详情」同落座舱，路径页签入口只留在 ⋯ 菜单', () => {
+    // 2026-11-09 用户走查「只有孤零零一个 ⋯，最常用的详情被藏进二级菜单」：
+    // 操作列恢复「详情」一级按钮（与学习路径/复习积压同构），⋯ 只留次级动作；
+    // 路径页签入口继续只留在 ⋯ 菜单里，不新增第二个可见路径入口。
     const src = read('GoalConversations.vue')
     expect(src).toContain('@click="openDetail(r)"')
-    expect(src).not.toContain('>详情</button>')
-    expect(src).not.toContain('@click.stop="openDetail(r)"')
+    expect(src).toContain('@click.stop="openDetail(r)"')
+    expect(src).toContain('>详情</button>')
     expect(src).toContain('>查看路径</button>')
     expect(src).toContain('menuOpenPath(r)')
     expect(src).not.toContain('@click.stop="openPathStage(r)"')

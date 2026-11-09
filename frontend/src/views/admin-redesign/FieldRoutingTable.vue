@@ -680,7 +680,7 @@ defineExpose({ openOrchestration });
   font-size: var(--mk-fs-micro);
   line-height: 1.55;
 }
-.note--info { background: var(--mk-blue-bg); color: var(--mk-blue); }
+.note--info { background: var(--mk-blue-bg); color: var(--mk-blue-text); }
 /* 暗色对比度（2026-10-06 复核）：--mk-blue(#5b8def) 压在 --mk-blue-bg(16% 蓝 tint，合成 #293244)
    上仅 3.98:1 < 4.5。暗色覆写文字色为同族提亮档 --mk-badge-info-fg(#9db8f5，实测 6.49:1)，底色不动。 */
 html[data-theme='dark'] .note--info { color: var(--mk-badge-info-fg); }
@@ -706,7 +706,7 @@ html[data-theme='dark'] .note--info { color: var(--mk-badge-info-fg); }
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
 }
-.frt__orch-summary .mono { color: var(--mk-blue); font-weight: 600; }
+.frt__orch-summary .mono { color: var(--mk-blue-text); font-weight: 600; }
 .frt__orch-textarea {
   width: 100%;
   min-height: 420px;
@@ -819,7 +819,7 @@ html[data-theme='dark'] .note--info { color: var(--mk-badge-info-fg); }
   margin-top: 8px;
   color: var(--mk-muted);
 }
-.frt__orch-quick-title { font-weight: 800; color: var(--mk-blue); }
+.frt__orch-quick-title { font-weight: 800; color: var(--mk-blue-text); }
 .frt__orch-quick-item b { margin-right: 4px; color: var(--mk-ink); }
 
 @media (min-width: 2000px) {

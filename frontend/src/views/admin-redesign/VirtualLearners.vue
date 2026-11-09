@@ -113,7 +113,13 @@
       :running-samples="runningSamples"
     />
 
-    <div class="mk-card mk-card--fill">
+    <!-- 2026-11-09 审计 C：卡片此前恒挂 mk-card--fill，flex:1 把卡片撑到视口底——
+         只有 5 行时下半张卡是一大片空暗区（「黑洞」），分页条也被顶到视口外。
+         现用 vl-cardwrap（flex:1 占满页面剩余高度）+ vl-card（flex:0 1 auto + max-height:100%）：
+         行数少 → 卡片随内容增高、分页条紧贴内容，无黑洞；行数多 → 卡片封顶在可用高度，
+         表格区内滚、分页条恒在卡尾可见。mk-card--fill 保留（它提供 flex 列骨架）。 -->
+    <div class="vl-cardwrap">
+    <div class="mk-card mk-card--fill vl-card">
       <div class="mk-card__head">
         <div class="mk-filter">
           <!-- 生命周期筛选（原页头状态条的 meta-link 迁入，2026-10-04；2026-10-27 统一）：
@@ -125,6 +131,16 @@
             aria-label="按生命周期筛选"
             :options="stateSelectOptions"
             :active="stateFilter !== 'all'"
+          />
+          <!-- 2026-11-09 审计 D：原「异常」列头漏斗图标（全站唯一、且把排序 caret 挤到左侧）
+               退役，筛选触发器迁回标准筛选行——与「状态」同为胶囊下拉，口径一致。
+               维度是「是否只看有异常」，偏离默认（全部）→ 浅蓝激活态。 -->
+          <MkPillSelect
+            v-model="abnormalSelect"
+            label="异常"
+            aria-label="按异常筛选"
+            :options="abnormalOptions"
+            :active="onlyAbnormal"
           />
         </div>
         <div class="mk-card__head-right">
@@ -189,7 +205,10 @@
               @click="toggleVlSort('sessions')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('sessions')">累计运行<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <!-- 失败与无响应合并成一列「异常」（2026-10-21 用户「这都是什么，是运营看的吗」）：
-                 两个都是问题信号、又各自大多为 0，分两列时整片「0 0」最响；合并后只在非零时出声。 -->
+                 两个都是问题信号、又各自大多为 0，分两列时整片「0 0」最响；合并后只在非零时出声。
+                 2026-11-09 审计 D：列头内的漏斗图标已撤——全站只有这一处把筛选触发器塞进
+                 表头，且它把排序 caret 挤到左侧。「只看有异常」改由卡头筛选行的胶囊承载
+                 （与「状态」下拉同组，见上方 mk-filter）。 -->
             <th
               v-if="!isNarrow && !hiddenCols.has('abnormal')"
               scope="col"
@@ -197,14 +216,7 @@
               :title="ABNORMAL_COL_TITLE"
               :aria-sort="vlSortState('abnormal')"
               @click="toggleVlSort('abnormal')"
-            ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('abnormal')">异常<span class="mk-th__caret" aria-hidden="true"></span></button><button
-              type="button"
-              class="vl-th-filter"
-              :class="{ 'vl-th-filter--on': onlyAbnormal }"
-              :aria-pressed="onlyAbnormal"
-              title="只看有失败、无响应或自动驾驶故障的学习者"
-              @click.stop="onlyAbnormal = !onlyAbnormal"
-            ><Filter :size="13" :stroke-width="1.75" /></button></th>
+            ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('abnormal')">异常<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th
               v-if="!isNarrow && !isCompact && !hiddenCols.has('created')"
               scope="col"
@@ -342,15 +354,18 @@
         @action="isFiltered && samples.length ? clearFilters() : openDerivePicker()"
       />
       <!-- 客户端分页（统一 mk-pagination 页码器）：筛选后按页切片。
-           单页容得下时不渲染（与卡库页同款守卫）：2 条数据时整行页码器只有禁用钮。 -->
+           2026-11-09 审计 C：只要列表有行就渲染（哪怕只有 1 页）——此前守卫是
+           `filtered.length > pageSize`，5 行数据时整条「共 N 条 · 第 1 / 1 页」不出现，
+           读者看不到总数也无从判断列表是否完整。0 行仍由 Pagination 自身不渲染（空态已说明）。 -->
       <Pagination
-        v-if="filtered.length > pageSize"
+        v-if="filtered.length"
         v-model:page="page"
         v-model:pageSize="pageSize"
         :total="filtered.length"
         :showTotal="true"
         unit="位学习者"
       />
+    </div>
     </div>
 
     <!-- 容量与实验环境已收进页头「维护」菜单 → 右侧抽屉（2026-10-26 用户「这个设计一下，
@@ -387,7 +402,7 @@
 <script setup lang="ts">
 import { computed, ref, reactive, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
-import { CirclePlay, Filter, Pause, Play } from 'lucide-vue-next'
+import { CirclePlay, Pause, Play } from 'lucide-vue-next'
 import { openSubPage, intent, isLive } from './store'
 import { liveVirtuals, refreshLiveVirtuals, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats, liveAutopilotConcurrency, liveVirtualStatsLoading, liveVirtualStatsError, retryLiveVirtualStats, virtualsStaleAfterMutation } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
@@ -596,8 +611,21 @@ function failCellTitle(failed: number, abandoned: number): string {
 }
 /** 状态过滤（轴 A 生命周期）：与「运行状态」列同源 */
 const stateFilter = ref('all')
-/** 异常列的「只看有异常」开关（原「曾失败」pill，2026-10-21 迁到列头） */
+/** 异常列的「只看有异常」开关（原「曾失败」pill，2026-10-21 迁到列头；
+ *  2026-11-09 审计 D 从列头漏斗迁回卡头筛选行的胶囊下拉，与状态维度同语言） */
 const onlyAbnormal = ref(false)
+/** 胶囊下拉的字符串代理：'abnormal' = 只看有异常，'all' = 全部 */
+const abnormalSelect = computed<string>({
+  get: () => (onlyAbnormal.value ? 'abnormal' : 'all'),
+  set: (v) => { onlyAbnormal.value = v === 'abnormal' }
+})
+const abnormalOptions = computed(() => {
+  const n = samples.value.filter((s) => s.failedCount > 0 || s.stalledCount > 0).length
+  return [
+    { value: 'all', label: '全部' },
+    { value: 'abnormal', label: `只看有异常（${n}）` }
+  ]
+})
 const stateFilterOptions = computed(() => {
   const failed = statsState.value === 'error'
   const n = (v: number) => (failed ? '—' : v)
@@ -1092,6 +1120,17 @@ function onBatchReclaim(ids: string[]) {
 </script>
 
 <style scoped>
+/* 卡片高度（2026-11-09 审计 C）：
+   .vl-cardwrap 占满页面剩余高度（.mk-page--fill 的 flex 列），卡片本身 flex:0 1 auto ——
+   行数少时随内容增高（不撑满、无「黑洞」），行数多时被 max-height:100% 封顶，
+   表格区内滚、分页条恒在卡尾可见。mk-card--fill 的 flex:1 由这里改写成 0 1 auto。 */
+.vl-cardwrap { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.vl-card { flex: 0 1 auto; max-height: 100%; }
+/* 窄屏（≤900）退回整页滚动（与 mk-primitives 的 fill 降级同档）：wrap 不再占剩余高度 */
+@media (max-width: 900px) {
+  .vl-cardwrap { flex: none; height: auto; }
+  .vl-card { max-height: none; }
+}
 /* 固定列宽（2026-10-22 与教学组三表同判例）：虚拟学习者 / 长期倾向 / 进行中三列在
    auto 布局下按当页最长内容分宽，翻页整表跳动；fixed 后按表头定死，余量按权重摊开。
    宽度按 1280 现值校准并留余量，1200 档无横滚。 */
@@ -1181,24 +1220,7 @@ function onBatchReclaim(ids: string[]) {
 }
 /* 页头两枚下拉（维护 / 新建）：触发钮 + 与工具条同一套弹层。
    遮罩用 fixed 铺满视口接外点，层级压在弹层下一档（--mk-z-menu 是 60） */
-/* 异常列表头的「只看有异常」开关：24px 方形点击区，开着时蓝描边 */
-.vl-th-filter {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  margin-left: 6px;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: var(--mk-radius-xs);
-  background: transparent;
-  color: var(--mk-muted);
-  cursor: pointer;
-  vertical-align: middle;
-}
-.vl-th-filter:hover { background: var(--mk-surface-2); color: var(--mk-ink); }
-.vl-th-filter--on { border-color: var(--mk-blue); background: var(--mk-blue-bg); color: var(--mk-blue); }
+/* 2026-11-09 审计 D：「异常」列头的漏斗开关样式已撤，筛选迁回卡头筛选行。 */
 .vl-headmenu { position: relative; display: inline-flex; }
 .vl-headmenu__mask { position: fixed; inset: 0; z-index: var(--mk-z-menu); background: rgba(0, 0, 0, 0.4); }
 /* 2026-10-31 二轮评审 P2：菜单底边常落在列表卡工具栏（批量/列）上，半截按钮文字

@@ -223,3 +223,17 @@ describe('入口态：居中标题 → 大输入卡 → 轻量胶囊（2026-11-0
     expect(source, '旧的三列网格已撤').not.toContain('repeat(3, minmax(0, 1fr))');
   });
 });
+
+describe('目标规划页：初始态中间档宽度（2026-11-09 全站巡检 准则1/DRI）', () => {
+  it('1024–1679 之间内容列用连续 clamp 档，不再把 640 硬塞进 1080 容器里', () => {
+    // 实测（1280/1366/1536）修复前 hero/cards/composer 恒 640、容器 1080，两侧各空 220~360px
+    const last = stripComments(lastStyle)
+    const i = last.indexOf('@media (min-width: 1024px) and (max-width: 1679.98px)')
+    expect(i, '缺中间档媒体查询：1280~1679 会回到「640 内容 + 1080 容器」的空洞').toBeGreaterThan(-1)
+    const seg = last.slice(i, last.indexOf('}', last.indexOf('clamp', i)) + 1)
+    for (const sel of ['.entry__hero', '.entry__cards', '.entry .composer--entry', '.entry__hero p']) {
+      expect(seg, `${sel} 未纳入中间档，仍钉 640`).toContain(sel)
+    }
+    expect(seg, '中间档必须用连续 clamp，不要又一个死值').toContain('clamp(640px, 62vw, 960px)')
+  })
+})

@@ -234,7 +234,8 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
     const w = mount(Skills, { global: { plugins: [router] } })
     await settle()
 
-    const row = w.find('.sk-item')
+    // 2026-11-09 目录改为固定列宽表：行选择器从 .sk-item 换成表格行
+    const row = w.find('.sk-catalog tbody tr')
     expect(row.exists()).toBe(true)
     await row.trigger('click')
     await settle()

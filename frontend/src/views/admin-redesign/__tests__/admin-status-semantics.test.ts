@@ -27,7 +27,12 @@ const h = vi.hoisted(() => ({
 }))
 
 vi.mock('@/api/adminApi', () => ({
-  adminFeedbackApi: { list: h.feedbackList },
+  adminFeedbackApi: {
+    list: h.feedbackList,
+    /* 默认页签改成「反馈」后 Feedback 挂载时会拉 30 天趋势；缺它会让 load 抛错落进失败态，
+       把「读数是否如实」这类断言搅浑。 */
+    getTrend: vi.fn(async () => ({ data: { data: [] } })),
+  },
   adminLearningContentApi: { getStats: h.contentStats },
   adminDevtoolsApi: { getOutboxDead: h.outboxDead },
   adminAxios: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
@@ -48,6 +53,12 @@ vi.mock('../live', async () => {
     timeAgo: () => 'x',
     errMsg: (e: unknown) => (e instanceof Error ? e.message : String(e)),
     shortId: (s: string) => s,
+    /* 2026-11-09 默认页签改成「反馈」后 Feedback 会随宿主挂载，它要读这两个页缓存接口
+       （此前默认落运营待办、Feedback 不挂载，mock 里没有它们也不会被访问）。 */
+    isPageCacheFresh: () => false,
+    markPageFetched: vi.fn(),
+    /* Feedback 内嵌 Pagination，分页器挂载即读 totalPagesOf。 */
+    totalPagesOf: (total: number, pageSize: number) => Math.max(1, Math.ceil(total / Math.max(1, pageSize))),
   }
 })
 vi.mock('../opsShared', async () => {
@@ -97,15 +108,11 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     expect(w.findAll('.mk-kpi[title*="加载失败"]')).toHaveLength(3)
     const zeroValues = w.findAll('.mk-kpi__num').filter((v) => v.text() === '0')
     expect(zeroValues).toHaveLength(1)
-    // 2026-10-27：页签内是行动队列——失败行保留但不可操作，清零项压成底部署名
-    expect(w.findAll('.oh-task')).toHaveLength(3)
-    expect(w.findAll('.oh-task--failed')).toHaveLength(3)
-    for (const row of w.findAll('.oh-task--failed')) {
-      expect(row.text()).toContain('加载失败')
-      expect(row.find('button').exists()).toBe(false)
-    }
-    // 清零点名行已撤（2026-11-03）：草稿公告的 0 由上方读数卡回答，队列尾部不再复述
-    expect(w.find('.oh-queue__cleared').exists()).toBe(false)
+    /* 2026-11-09「运营待办」空壳页签下线：页签体内不再有行动队列/失败行，
+       失败信号全部由页级错误条 + 读数卡（「—」/bad 档/title）承载。 */
+    expect(w.findAll('.oh-task')).toHaveLength(0)
+    expect(w.find('.oh-queue').exists()).toBe(false)
+    expect(w.find(`[role="tab"][aria-selected="true"]`).text()).toBe('反馈')
     const failedCards = w.findAll('.mk-kpi').filter((c) => c.find('.mk-kpi__num').text() === '—')
     for (const card of failedCards) {
       expect(card.classes()).not.toContain('mk-kpi--clickable')
@@ -116,7 +123,7 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     w.unmount()
   })
 
-  it('三个待办域成功且全为 0 → 读数带四卡显 0，页签内收成一行「没有待处理项」', async () => {
+  it('三个待办域成功且全为 0 → 读数带四卡显 0，默认落「反馈」页签（空壳待办页签已下线）', async () => {
     // D16：mock 换 live 信封（后端体为 { success, data: [...], pagination: {...} }，pagination 与 data 平级），
     // 旧 mock 的 { data: {}, pagination } 形状与真实不符，会让「解析错位」在任何测试里不可见。
     h.feedbackList.mockResolvedValue({ data: { success: true, data: [], pagination: { total: 0 } } })
@@ -132,16 +139,14 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     // 读数如实显示 0（真实 0 可以显；四卡：未处理反馈/生成失败路径/事件投递失败/草稿公告）
     const values = w.findAll('.mk-kpi__num').map((v) => v.text())
     expect(values).toEqual(['0', '0', '0', '0'])
-    // 2026-10-27：全部清零时不再渲染 4 个空行，改一行空态；清零名单不再需要
-    expect(w.findAll('.mk-card')).toHaveLength(1)
+    /* 2026-11-09：「运营待办」页签删除后，页签体只剩嵌入子页（反馈默认），
+       不再有「没有待处理项」空态卡——清零结论由上方四个 0 直接承担。 */
     expect(w.findAll('.oh-task')).toHaveLength(0)
-    expect(w.find('.oh-queue__empty').exists()).toBe(true)
-    expect(w.find('.oh-queue__empty').text()).toContain('没有待处理项')
-    expect(w.find('.oh-queue__cleared').exists()).toBe(false)
-    /* 2026-10-29 冗余副文审计：全清零时卡头不再复述结论、空态不再点名四类待办——
-       同一事实只由页级四个 0 与「没有待处理项」承担（此前一屏说了四遍）。 */
-    expect(w.find('.mk-card__meta').exists()).toBe(false)
-    expect(w.find('.oh-queue__empty').text()).not.toContain('都已处理完')
+    expect(w.find('.oh-queue').exists()).toBe(false)
+    expect(w.find('.oh-queue__empty').exists()).toBe(false)
+    expect(w.find(`[role="tab"][aria-selected="true"]`).text()).toBe('反馈')
+    const tabLabels = w.findAll('.tabs .tab').map((t) => t.text())
+    expect(tabLabels).toEqual(['反馈', '成就', '公告', '站内通知'])
 
     w.unmount()
   })

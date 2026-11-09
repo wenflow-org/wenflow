@@ -32,7 +32,7 @@
     <section class="mk-kpi-grid" aria-label="审计日志统计" :aria-busy="statsLoading || undefined">
       <MkKpi
         label="记录总数"
-        :value="statsLoading ? '—' : total"
+        :value="statsLoading || statsError ? '—' : total"
       />
       <MkKpi
         clickable
@@ -100,7 +100,7 @@
                收进菜单/下拉——这里原本是一个只装单项的弹层，收起后只剩数字角标。选项仍是
                当前页动作聚合（口径如实写在「全部动作」之后），下钻走 keyword 搜索。 -->
           <MkPillSelect
-            v-if="tab === 'operation'"
+            v-if="tab === 'operation' && !failedOnly"
             :model-value="activeActionValue"
             label="动作"
             aria-label="按动作筛选"
@@ -109,18 +109,26 @@
             @update:model-value="applyActionFilter"
           />
           <!-- 失败动作下钻（2026-10-27）：替代原先「失败 N + 每个动作一枚胶囊」的常驻行。
-               计数只随选项出现；空选项在失败域里读作「全部失败」，不在失败域时读作「不过滤」。 -->
+               2026-11-09 审计（图 6）：此前「动作」与「失败动作」并排常驻、默认值同为「全部动作」，
+               读者分不清两者是 AND 还是 OR，而「状态」里已经有「仅失败」。
+               两者过滤的其实是同一字段（都写 keyword 下钻），只是取值域不同——
+               失败动作 = 失败记录里的动作名。故改为条件联动：只有状态 = 仅失败时才出现，
+               且此时只留这一枚（「动作」让位），默认值改读「全部失败动作」。
+               计数只随选项出现；空选项在失败域里读作「全部失败」。 -->
           <MkPillSelect
-            v-if="tab === 'operation' && failureByAction.length"
+            v-if="tab === 'operation' && failedOnly && failureByAction.length"
             :model-value="failedAction"
             label="失败动作"
-            aria-label="按失败动作筛选"
+            aria-label="按失败动作筛选（状态为仅失败时可用）"
             :options="failureSelectOptions"
-            :active="failedOnly && !!failedAction"
+            :active="!!failedAction"
             @update:model-value="applyFailureFilter"
           />
-          <!-- 失败 TOP 常驻主行：先看到「最近什么在失败」，再点 chip 下钻 -->
-          <div v-if="statsError" class="mk-alert mk-alert--row al-stats-error" role="alert">
+          <!-- 失败 TOP 常驻主行：先看到「最近什么在失败」，再点 chip 下钻。
+               2026-11-09 审计（图 5）：列表本身也失败时，下方 MkEmptyState 的「重试」已经同时
+               重取列表与统计（applyFilters），这里再挂一枚红「重试」就是同屏第二个入口。
+               故列表失败时让位，只留下方那一枚；统计单独失败（列表仍在）时才显示本条。 -->
+          <div v-if="statsError && !loadError" class="mk-alert mk-alert--row al-stats-error" role="alert">
             <span class="mk-alert__msg">失败统计不可用</span>
             <button type="button" class="mk-alert__btn" :disabled="statsLoading" @click="fetchStats">{{ statsLoading ? '重试中…' : '重试' }}</button>
           </div>
@@ -186,7 +194,10 @@
                 @click="toggleAlSort('success')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleAlSort('success')">结果<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th v-if="colVisible('ip')" scope="col" class="al-c-ip">IP</th>
-              <th class="mk-th--right al-c-expand" aria-hidden="true" scope="col"></th>
+              <!-- 2026-11-09 审计（图 6）：此前是 aria-hidden 的空表头 + 一枚缩小深灰 ▸，
+                   看不出这一列是什么、也没有可读名。改为带「详情」表头的操作列，
+                   行内一枚真按钮（aria-expanded 指向本行详情区），行点击仍可展开。 -->
+              <th scope="col" class="mk-th--right mk-c-act al-c-expand">详情</th>
             </tr>
           </thead>
           <tbody>
@@ -260,7 +271,18 @@
                   <span v-if="(log.ip || '').trim()" class="al-ellipsis">{{ ipText(log.ip) }}</span>
                   <span v-else class="mk-na">—</span>
                 </td>
-                <td class="mk-th--right log-arrow" aria-hidden="true"><span class="log-arrow__i">▸</span></td>
+                <td class="mk-th--right al-act">
+                  <div class="mk-actions">
+                    <button
+                      type="button"
+                      class="mk-link"
+                      :aria-expanded="openId === log.id"
+                      :aria-controls="`audit-payload-${log.id}`"
+                      :aria-label="`查看这条审计记录的详情（${fmtTime(log.createdAt)}）`"
+                      @click.stop="openId = openId === log.id ? '' : log.id"
+                    >{{ openId === log.id ? '收起' : '详情' }}</button>
+                  </div>
+                </td>
               </tr>
               <tr v-if="openId === log.id" class="log-payload-row">
                 <td :colspan="visibleAlCols">
@@ -628,9 +650,11 @@ const statsLoading = ref(false)
 const failedRate = computed(() =>
   total.value > 0 ? `${Math.round((failedCount.value / total.value) * 100)}%` : '—'
 )
-/** 失败动作下拉：空值 = 不按动作下钻。状态档已由「状态」下拉表达，这里只说动作维度。 */
+/** 失败动作下拉：空值 = 不按动作下钻。状态档已由「状态」下拉表达，这里只说动作维度。
+    2026-11-09 审计（图 6）：空值文案改「全部失败动作」——它只在状态 = 仅失败时出现，
+    与「动作」下拉的「全部动作」区分开，不再两枚下拉默认值同名。 */
 const failureSelectOptions = computed(() => [
-  { value: '', label: '全部动作' },
+  { value: '', label: '全部失败动作' },
   ...failureByAction.value.map((f) => ({
     value: f.action,
     label: `${failureLabel(f.action)} ${f.count}`,
@@ -860,7 +884,8 @@ function syncTabQuery(id: TabId) {
   const next = { ...route.query }
   if (id === 'login') next.tab = 'login'
   else delete next.tab
-  void router.replace({ query: next })
+  /* 显式带 path（2026-11-09）：无 path 的 replace 以「当前 route」解析——场景切换在途时会写回旧路径 */
+  void router.replace({ path: AUDIT_SCENE_PATH, query: next })
 }
 
 function switchTab(id: TabId) {
@@ -953,6 +978,8 @@ const timeRangeOptions = (['all', 'today', 'yesterday', 'week', 'month'] as cons
    此前只有 ?tab=login 入 URL，关键词/时间/失败下钻/页码切场景或返回即复位；
    与执行日志（全量筛选入 URL）同级不同规则。键：q / range / failed / action / page / size，
    缺省值不写（today / 无关键词 / 第 1 页 / 30 条）。 */
+/** 本场景的规范路径（侧栏 id → URL 的唯一映射，见 AdminConsole 的 `scene → /admin/${s}`） */
+const AUDIT_SCENE_PATH = '/admin/audit-logs'
 const AUDIT_FILTER_KEYS = ['q', 'range', 'failed', 'status', 'action', 'page', 'size'] as const
 const AUDIT_SIZES = [15, 30, 50, 100] as const
 function readFiltersFromRoute() {
@@ -972,6 +999,12 @@ function auditFilterSig(): string {
   return [keyword.value.trim(), timeRange.value, statusFilter.value, failedAction.value, page.value, pageSize.value].join('|')
 }
 function syncFiltersToRoute() {
+  /* 2026-11-09 走查修复（地址栏停在上一页，必现）：场景切换由 AdminConsole 的 scene watch 异步 push，
+     本组件挂在 push 落地之前——此刻 route 仍是上一页，而**不带 path** 的 replace 会以旧 path 解析，
+     把在途的 push 顶掉：点侧栏「审计日志」后页面切了、地址栏却还停在 /admin/overview
+     （刷新/复制链接/后退全落错页，且上一页的 query 被原样带走）。
+     路径还没落到本场景时直接不写回；等用户改筛选时（route 已就位）再写。 */
+  if (route.path !== AUDIT_SCENE_PATH) return
   const q = { ...route.query }
   for (const k of AUDIT_FILTER_KEYS) delete q[k]
   if (keyword.value.trim()) q.q = keyword.value.trim()
@@ -981,7 +1014,7 @@ function syncFiltersToRoute() {
   if (failedAction.value) q.action = failedAction.value
   if (page.value > 1) q.page = String(page.value)
   if (pageSize.value !== 30) q.size = String(pageSize.value)
-  void router.replace({ query: q })
+  void router.replace({ path: AUDIT_SCENE_PATH, query: q })
 }
 /* 外部改动（返回/前进/手改地址）才重查：本页写回的同值改动不触发第二笔请求 */
 watch(
@@ -1067,7 +1100,9 @@ function goExport() {
 /* 结果列从纯徽章升级为「结果 + HTTP 状态 + 耗时」单行，宽度相应让出 */
 .al-c-result { width: 130px; }
 .al-c-ip { width: 134px; }
-.al-c-expand { width: 34px; }
+/* 详情列（2026-11-09 审计，图 6）：原为 34px 的 aria-hidden 空表头 + 缩小深灰 ▸，
+   现在是一枚真按钮（详情 / 收起），宽度按按钮文案给足 */
+.al-c-expand { width: 96px; }
 .al-c-reason { width: 280px; }
 /* 登录审计：操作列在 fixed 布局里被挤到 67px，95px 的「查看会话 →」会顶出表格右缘 23px。
    锁定最小宽后由固定布局从其他列回收空间，1920 下不再横向溢出。 */
@@ -1084,7 +1119,7 @@ function goExport() {
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
   font: inherit;
   font-size: var(--mk-fs-micro);
   text-align: left;
@@ -1109,7 +1144,6 @@ function goExport() {
 .log-tr { cursor: pointer; }
 .log-tr--err { background: var(--mk-red-bg); }
 .log-tr--open td { background: var(--mk-blue-bg); }
-.log-tr--open .log-arrow__i { transform: rotate(90deg); }
 
 /* 展开的 payload 行：整行铺开，不参与行点击 */
 .log-payload-row { cursor: default; }
@@ -1219,7 +1253,7 @@ function goExport() {
   border-radius: var(--mk-radius-sm);
   padding: 1px 8px;
   background: var(--mk-blue-bg);
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1255,35 +1289,10 @@ function goExport() {
   text-overflow: ellipsis;
   max-width: 320px;
 }
-/* 展开指示：行末箭头，展开时旋转 90°。
-   箭头列显式定宽 + 居中：auto 布局下表头空列宽度随内容抖动（用户反馈展开后箭头与邻列视觉重叠）。
-   2026-10-19 用户走查「旋转后大小不对了」：原先 rotate 直接挂在 <td> 上——格子是 36×41.4 的
-   非正方盒，rotate(90deg) 后外接盒变成 42.1×36（实测），箭头连背景一起横向撑出列 6px、纵向缩
-   5px，字形还因为绕格心而非自身中心旋转右移约 10px。改法：格子里放 1em 正方、字形居中的内层盒，
-   只转内层——正方盒绕自身中心旋转外接盒不变，字形中心也不动。
-   2026-10-31 外部评审复检（展开行右侧深色竖块 100% 复现）：此前 .log-arrow 还带了
-   display:block——td 被踢出单元格布局后，表格按表头算出的末列在该行没有 td 落位，
-   行背景（含 .log-tr--open 的蓝底）盖不到那一格，露出表格底色成「深色竖块」。
-   去掉 display:block/margin（旋转早改在内层盒上，这两个属性已无用），恢复普通单元格。 */
-.mk-table-scroll table th:last-child { width: 36px; }
-.log-arrow {
-  width: 36px;
-  /* 水平内衬清零：mk-table 的 td 有 16px 左右内衬，36px 定宽格里内容盒只剩 4px，
-     比内容还窄的居中会退化成「贴内容盒左缘」（实测箭头偏列心右 4.25px）。 */
-  padding-left: 0;
-  padding-right: 0;
-  text-align: center;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
-}
-.log-arrow__i {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1em;
-  height: 1em;
-  transition: transform 0.15s ease;
-}
+/* 详情列（2026-11-09 审计，图 6）：原为 36px 的 aria-hidden 空表头 + 一枚缩小深灰 ▸，
+   读者看不出这一列是什么。改为带「详情」表头的操作列，行内主操作按钮与全站列表页
+   （.mk-actions > .mk-link）同形。宽度由 .al-c-expand 给出（见上方列宽组），
+   按钮文案「详情 / 收起」两字宽一致，列宽不随展开态跳动。 */
 
 .log-payload { display: grid; gap: 8px; }
 /* 请求行与客户端一行读；2026-10-19 用户走查「文案位置不对」：原先 space-between 把 UA 甩到
@@ -1347,7 +1356,6 @@ function goExport() {
   .log-label { font-size: var(--mk-fs-micro); }
   .log-payload pre { font-size: var(--mk-fs-micro); }
   .log-payload-row td { padding-left: 84px !important; }
-  .log-arrow { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 2800px) {
   .log-time,
@@ -1365,7 +1373,6 @@ function goExport() {
   .log-ua { font-size: var(--mk-fs-micro); }
   .log-label { font-size: var(--mk-fs-micro); }
   .log-payload pre { font-size: var(--mk-fs-micro); }
-  .log-arrow { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 3600px) {
   .log-time,
@@ -1384,7 +1391,6 @@ function goExport() {
   .log-label { font-size: var(--mk-fs-body); }
   .log-payload pre { font-size: var(--mk-fs-body); }
   .log-payload-row td { padding-left: 100px !important; }
-  .log-arrow { font-size: var(--mk-fs-body); }
 }
 
 /* 本页空态撑满主区剩余高度的覆写（P1-1「空态利用」→ 审核 #156 改为 flex:1 + min-height:0）

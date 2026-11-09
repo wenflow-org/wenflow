@@ -117,10 +117,13 @@
                 :aria-sort="ocSortState('difficulty')"
                 @click="toggleOcSort('difficulty')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('difficulty')">难度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <!-- 2026-11-09 用户走查（图 2）：「~21h」原为右对齐、右邻「进度」左对齐，
+                   数字贴左列的右缘、表头却站最左——和复习积压同一处「左空右撞」。
+                   短指标列一律左对齐（判例：教学会话的「12 分钟」）。 -->
               <th
                 v-if="!hiddenCols.has('hours')"
                 scope="col"
-                class="mk-th--sortable mk-th--right oc-c-hours"
+                class="mk-th--sortable oc-c-hours"
                 :aria-sort="ocSortState('hours')"
                 @click="toggleOcSort('hours')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('hours')">预计时长<span class="mk-th__caret" aria-hidden="true"></span></button></th>
@@ -201,7 +204,8 @@ ${p.user?.email}` : (p.user?.name || '—')">{{ p.user?.name || '—' }}</strong
                      一律显示「未知」，原文进 title，不把半句话当难度展示 -->
                 <span class="oc-diff">{{ difficultyText(p.difficulty) }}</span>
               </td>
-              <td v-if="!hiddenCols.has('hours')" class="mk-num">
+              <td v-if="!hiddenCols.has('hours')">
+                <!-- 等宽数字由 .mk-table td 的 tabular-nums 承担，不再需要私有类 -->
                 <span v-if="p.estimatedHours">~{{ p.estimatedHours }}h</span>
                 <span v-else class="mk-na">—</span>
               </td>
@@ -395,7 +399,8 @@ const ocStatusPills = computed<Array<{ key: string; name: string; n: number | nu
 })
 /** 卡头「状态」下拉：计数与分布带同源（byStatus 全平台）；未就绪时不显计数 */
 const ocStatusOptions = computed(() => [
-  { value: 'all', label: '全部状态' },
+  /* 「全部状态」→「全部」：触发器已带「状态」label，选项不再复述（2026-11-09 走查）。 */
+  { value: 'all', label: '全部' },
   ...ocStatusPills.value
     .filter((p) => p.key !== 'all')
     .map((p) => ({ value: p.key, label: p.n != null ? `${p.name}（${p.n}）` : p.name }))
@@ -785,7 +790,10 @@ defineExpose({ reload: () => void reload(true) })
 /* 2026-10-24 视觉修复：状态/最近活动这类短列此前吃掉 90/104px，路径主列只剩 170px
    被省略号截断；把富余宽度让回路径列，总宽不变（fixed 表不新增横滚）。 */
 /* 2026-10-26：操作列放宽到 140px 以容纳一级「重试生成」，宽度从预计时长（78px，默认收起）让出 */
-.oc-table .oc-c-path { width: 260px; }
+/* 2026-11-09 用户走查（图 2）：1920 下首列占 31%（512px），用户列被推到右侧留白。
+   主标识列改百分比 + 上限封顶（28–32% 且 ≤440px），判例与教学会话 .ts-c-topic、
+   目标对话 .gc-c-summary 一致；其余列保持像素宽度，整表在 1280 仍不横滚。 */
+.oc-table .oc-c-path { width: 30%; min-width: 260px; max-width: 440px; }
 .oc-table .oc-c-user { width: 150px; }
 .oc-table .oc-c-status { width: 72px; }
 .oc-table .oc-c-difficulty { width: 60px; }
@@ -806,8 +814,9 @@ defineExpose({ reload: () => void reload(true) })
 
 /* 难度：三个语义值 + 未知；未知降一档灰，不抢视觉 */
 .oc-diff { font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; }
-/* 时长：右对齐等宽数字（与表头 mk-th--right 对齐） */
-/* 时长格直出 .mk-num（oc-hours 双层叠写退役，2026-10-03）；右对齐由 .mk-num 承担 */
+/* 时长（2026-11-09 用户走查图 2）：改左对齐后不再吃 .mk-num（右对齐）——
+   表头与数据原先各站一边，数字又贴着右邻「进度」。等宽数字由 .mk-table td 的
+   tabular-nums 承担，本格不再需要私有类（oc-hours 属全域退役方言）。 */
 
 /* 结构详情抽屉已退役（2026-10-01 行点击改走 PathDetail 二级页）；本页只保留列表自身样式 */
 

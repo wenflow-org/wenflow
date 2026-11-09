@@ -161,7 +161,7 @@ describe('数据导出面板（原系统工具 Tab2）', () => {
     expect(go?.attributes('disabled')).toBeDefined()
     await boxes[0]!.setValue(true)
     await boxes[1]!.setValue(true)
-    expect(w.findAll('.exp-item--on').map((c) => c.find('.exp-item__title').text())).toEqual(['用户', '教学会话'])
+    expect(w.findAll('.exp-item.mk-choice--on').map((c) => c.find('.exp-item__title').text())).toEqual(['用户', '教学会话'])
     expect(w.text()).toContain('已选 2 项')
     const go2 = w.findAll('button').find((b) => b.text() === '开始导出')
     expect(go2?.attributes('disabled')).toBeUndefined()
@@ -184,13 +184,13 @@ describe('数据导出面板（原系统工具 Tab2）', () => {
   })
 })
 
-describe('运营中心宿主：只剩内容运营五页签', () => {
+describe('运营中心宿主：只剩内容运营四页签', () => {
   beforeEach(() => { vi.clearAllMocks() })
 
-  it('四个系统页签已迁出（2026-11-01 → 系统设置），本页不再渲染它们', async () => {
+  it('四个系统页签已迁出（2026-11-01 → 系统设置）；空壳「运营待办」也已下线（2026-11-09）', async () => {
     const w = await mountWithRouter(OpsHub)
     const tabs = w.findAll('.tabs .tab').map((t) => t.text())
-    expect(tabs).toEqual(['运营待办', '反馈', '成就', '公告', '站内通知'])
+    expect(tabs).toEqual(['反馈', '成就', '公告', '站内通知'])
     // 页签不挂计数角标（2026-10-27 用户「tab 里面的数字不要了」）
     expect(w.findAll('.tab__count')).toHaveLength(0)
     expect(w.find('.mk-status').exists(), '宿主无状态条（信息各归其位）').toBe(false)
@@ -198,8 +198,8 @@ describe('运营中心宿主：只剩内容运营五页签', () => {
   })
 
   it('旧 ?tab=access 不再在本页挂载访问与注册面板（改投在路由层）', async () => {
-    /* OpsHub 自己的 watch 会把不认识的 tab 静默回落 todo；真正的改投见
-       router/__tests__/admin-routes.test.ts。这里只锁「本页不再有这些面板」。 */
+    /* OpsHub 自己的 watch 会把不认识的 tab 静默回落到默认页签（feedback）；
+       真正的改投见 router/__tests__/admin-routes.test.ts。这里只锁「本页不再有这些面板」。 */
     const w = await mountWithRouter(OpsHub, '/admin/ops-hub?tab=access')
     expect(w.findComponent(AccessControl).exists()).toBe(false)
     expect(w.find('#oh-panel-access').exists()).toBe(false)

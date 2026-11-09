@@ -384,15 +384,18 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     expect(failureTitle).toContain('人为终止 1');
     expect(failureTitle).toContain('两类合计占 40%');
     expect(failureTitle).toContain('已完成 6 · 共 10 场');
-    // 单页（1 行 ≤ 15）不渲染页码器：此前 2 条数据也占一行全禁用的页码器
-    expect(w.find('.mk-pagination').exists()).toBe(false);
+    // 2026-11-09 审计 C：有行即渲染页码器（单页也显「共 N 条 · 第 1 / 1 页」，总数可见）
+    expect(w.find('.mk-pagination').exists()).toBe(true);
     expect(w.text()).not.toContain('行数为虚拟学习者数');
   });
 
-  it('分页器：单页不渲染，多页出现且单位是「位学习者」', async () => {
+  it('分页器：有行即渲染（单页也显示总数），多页单位是「位学习者」', async () => {
+    /* 2026-11-09 审计 C：守卫由 `filtered.length > pageSize` 改为 `filtered.length`——
+       5 行数据时「共 N 条 · 第 1 / 1 页」此前整条消失，读者看不到总数也无从判断列表是否完整。 */
     liveVirtuals.value = [makeVirtual(1)];
     const one = await mountPage();
-    expect(one.find('.mk-pagination').exists()).toBe(false);
+    expect(one.find('.mk-pagination').exists()).toBe(true);
+    expect(one.find('.mk-pagination__total').text()).toContain('第 1 / 1 页');
     one.unmount();
 
     liveVirtuals.value = Array.from({ length: 16 }, (_, i) => makeVirtual(i + 1));

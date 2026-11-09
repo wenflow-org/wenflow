@@ -409,7 +409,9 @@ const statusPills = computed(() => {
 })
 /** 卡头「状态」下拉：计数取当前已载入行 */
 const statusSelectOptions = computed(() => [
-  { value: '', label: '全部状态' },
+  /* 「全部状态」→「全部」（2026-11-09 走查）：MkPillSelect 触发器把 label（状态）与选中项并排渲染，
+     选项再写「全部状态」就是「状态 全部状态」——同一句话说了两遍。 */
+  { value: '', label: '全部' },
   ...statusPills.value.map((p) => ({ value: p.id, label: `${p.label}（${p.count}）` }))
 ])
 
@@ -559,7 +561,7 @@ function clearFilters() {
 /* 状态筛选 ↔ URL（?status=）（F5-3 审核）：URL → 筛选由本组件读取（刷新/后退/复制链接
    复原「待处理」预筛）；筛选 → URL 交由宿主统一写（emit('status')，见 OpsHub.onFeedbackStatus）——
    本组件自写会合并尚未落地的旧 route.query.tab，把宿主在途的 ?tab= replace 覆盖掉（实测竞态：
-   地址栏最终停在 ?tab=todo&status=new，内容与地址脱节）。单测可无 router 挂载，访问保持可选 */
+   地址栏最终停在旧页签值 + status=new，内容与地址脱节）。单测可无 router 挂载，访问保持可选 */
 const route = useRoute()
 const FB_STATUS_VALUES = ['new', 'triaged', 'resolved', 'dismissed'] as const
 watch(

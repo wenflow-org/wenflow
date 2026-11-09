@@ -287,7 +287,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     // 四运维关注量 + 完结率住 MkKpi 卡带（值 = attentionCount / abnormal / missing / advisory / 已完成占比）
     const tiles = wrapper.findAll('.mk-kpi-grid .mk-kpi');
     expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['需关注', '异常', '缺总结', '有建议', '完结率']);
-    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['1', '1', '1', '0', '0%']);
+    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['1', '1', '1', '0', '0%已完成 0/2']);
     /* 2026-10-27 用户「去掉这个 pill，综合设计 KPI 面板和筛选」：KPI 是读数唯一出处，
        也是快捷筛选入口；卡头不再有常驻 chip 组——筛选生效时只出现「已应用」胶囊。 */
     expect(wrapper.find('.mk-card__head .mk-pills').exists()).toBe(false);
@@ -414,11 +414,12 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       }
     });
     const wrapper = await mountLive();
-    // 2026-10-27 用户「还是太多数据了」：建议处置不再占行内位置，只进总结格 title
     expect(wrapper.find('.ts-adv-note').exists()).toBe(false);
     const out = wrapper.find('tbody tr .ts-out');
-    // 进行中会话没有总结：行内只显示空值占位，建议细节在 title
-    expect(out.text()).toBe('—');
+    /* 2026-11-09 用户走查（图 3）：顶部「有建议 14」在列里没有落点——总结格就地透出
+       「有建议」徽章（处置细节仍只在 title），KPI 读数因此能逐行对上。 */
+    expect(out.text()).toBe('—有建议');
+    expect(out.find('.mk-badge').classes()).toContain('mk-badge--bad');
     const title = out.attributes('title') || '';
     expect(title).toContain('未生成');
     expect(title).toContain('高优先级');
@@ -469,7 +470,10 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     });
     const wrapper = await mountLive();
     const out = wrapper.find('tbody tr .ts-out');
-    expect(out.text()).toBe('—');
+    /* 2026-11-09：建议信号上屏后，已处置态与「仍需人看」在行内分开——
+       学员已选择保持原计划出灰色「已保持计划」，不再与待确认建议同色。 */
+    expect(out.text()).toBe('—已保持计划');
+    expect(out.find('.mk-badge').classes()).toContain('mk-badge--muted');
     expect(out.attributes('title')).toContain('处置：学员选择保持原计划');
     wrapper.unmount();
   });
@@ -546,7 +550,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     expect(wrapper.find('.stageband').exists()).toBe(false);
     // 2 条里 0 条 completed → 完结率 0%
     const rate = wrapper.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '完结率')!;
-    expect(rate.find('.mk-kpi__num').text()).toBe('0%');
+    expect(rate.find('.mk-kpi__num-note').text()).toBe('已完成 0/2');
     wrapper.unmount();
   });
 
@@ -590,7 +594,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     expect(filterTrigger(wrapper as never, '状态').exists()).toBe(true);
     // 2026-11-02 P2-1：每档带当前窗口的条数（与 KPI 同源；本夹具两行：failed / active 各 1）
     expect(filterOptions(wrapper as never, '状态')).toEqual([
-      '全部状态',
+      '全部',
       '异常（失败 · 超时）（1）',
       '初始化中（0）',
       '进行中（1）',
@@ -604,12 +608,14 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
       '已废弃（0）'
     ]);
     // 总结三档筛选（总览「评估失败 / 降级总结」的落地入口）也在主栏
-    expect(filterOptions(wrapper as never, '总结')).toEqual(['全部总结', '降级总结', '评估失败', '缺总结']);
+    // 2026-11-09 走查：四个维度的空值项统一写「全部」（此前是「全部总结 / 全部课型 / 全部时间」，
+    // 触发器已带维度前缀，读出来是「总结 全部总结」结巴）
+    expect(filterOptions(wrapper as never, '总结')).toEqual(['全部', '降级总结', '评估失败', '缺总结']);
     /* 2026-10-27：课型 / 开始时间从「筛选」弹层提到主栏——Carbon 的筛选模式明确
        「多个类别不得收进菜单/下拉」；卡头不再有弹层触发器，维度一维一枚胶囊下拉。 */
     expect(wrapper.find('.mk-adv').exists()).toBe(false);
-    expect(filterOptions(wrapper as never, '课型')).toEqual(['全部课型', '正课', '复习课', '延伸课']);
-    expect(filterOptions(wrapper as never, '开始时间')).toEqual(['全部时间', '近 7 天', '近 30 天']);
+    expect(filterOptions(wrapper as never, '课型')).toEqual(['全部', '正课', '复习课', '延伸课']);
+    expect(filterOptions(wrapper as never, '开始时间')).toEqual(['全部', '近 7 天', '近 30 天']);
     // 卡头不再有常驻 chip 组：KPI 是读数与入口，筛选区只留维度下拉 + 已应用视图胶囊
     expect(wrapper.find('.mk-card__head .mk-pills').exists()).toBe(false);
     expect(wrapper.find('.mk-card__head .ts-view-chip').exists()).toBe(false);
@@ -622,8 +628,8 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     expect(wrapper.findAll('.mk-filter .mk-link').some((b) => b.text() === '清除筛选')).toBe(false);
     await chooseFilter(wrapper as never, '开始时间', '近 7 天');
     expect(filterValue(wrapper as never, '开始时间')).toBe('7d');
-    await chooseFilter(wrapper as never, '状态', '全部状态');
-    await chooseFilter(wrapper as never, '开始时间', '全部时间');
+    await chooseFilter(wrapper as never, '状态', '全部');
+    await chooseFilter(wrapper as never, '开始时间', '全部');
     expect(filterValue(wrapper as never, '状态')).toBe('');
     expect(filterValue(wrapper as never, '开始时间')).toBe('');
     expect(wrapper.findAll('tbody tr')).toHaveLength(2);

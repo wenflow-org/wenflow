@@ -135,7 +135,7 @@ const dismissToast = (item: ToastItem) => {
 }
 
 .toast-icon--info {
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
   background: color-mix(in srgb, var(--mk-blue) 14%, transparent);
 }
 

@@ -224,4 +224,17 @@ describe('GET /prompt-call-logs 大文本裁剪', () => {
     expect(row.errorCode).toBe('LLM_TIMEOUT');
     expect(row.errorMessage).toBe('timeout after 30s');
   });
+
+  it('DB 读取抛错（如脏数据 P2023）不再冒泡成未捕获拒绝，降级为 500', async () => {
+    // 2026-11-09 全站巡检实测：prompt_call_logs 曾把 'v1' 写进 Int 列，Prisma 读时抛 P2023；
+    // 当时本路由是裸 async，Express 4 不接异步拒绝 → unhandledRejection 直接把整个后端关停。
+    const boom = Object.assign(new Error('Could not convert value "v1"'), { code: 'P2023' });
+    mockPromptLogsFindMany.mockRejectedValue(boom);
+    const handler = getRouteHandler('/prompt-call-logs');
+    const res = createResponse();
+    // 若没有 try/catch，这里会 reject（等价于生产里的进程关停）
+    await expect(handler({ query: {} }, res)).resolves.toBeUndefined();
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json.mock.calls[0][0]).toMatchObject({ success: false });
+  });
 });

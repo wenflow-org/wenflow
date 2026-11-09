@@ -222,6 +222,7 @@ import Shell from './Shell.vue';
 import HealthCenter from './HealthCenter.vue';
 import MockSkeletonTable from './SkeletonTable.vue';
 import { intent, intentQueryParams, subPage, closeSubPage, liveSpans, asSubPageStage, type SubPageView, type SubPageStage } from './store';
+import { MOCK_SCENES } from './manifest';
 import { loadLiveData } from './live';
 import { clearAdminSession } from '@/api/adminApi';
 import { useEscape } from './useEscape';
@@ -261,6 +262,15 @@ function crumbChain(): string[] {
   while (from) {
     chain.unshift(crumbPart(from.label, from.id))
     from = from.parent
+  }
+  /* 2026-11-09 走查（面包屑与左侧菜单对不上）：链根若不是当前栏目，就把当前栏目接到最前。
+     典型是「会话监控」——它是一个下钻页，左侧菜单里根本没有这一栏，于是顶栏副行写着
+     「会话监控」而菜单高亮「目标对话」，读者不知道自己在哪一节。顶栏副行读的就是链首，
+     补上栏目后两处一致；返回目标仍是链尾那条真实来源页（from 没动）。
+     链已经到 CRUMB_MAX_DEPTH 时不补——否则三级链会被挤成「… / x / y」，把有用的层级挤掉。 */
+  const sectionLabel = MOCK_SCENES.find((s) => s.id === scene.value)?.label
+  if (sectionLabel && chain[0] !== sectionLabel && chain.length < CRUMB_MAX_DEPTH) {
+    chain.unshift(sectionLabel)
   }
   return chain
 }

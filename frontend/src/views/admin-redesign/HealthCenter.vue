@@ -176,7 +176,9 @@
                   <span v-if="rowJumpLabel(item) || item.severity !== 'ok'" class="hc-check__actions">
                     <button v-if="rowJumpLabel(item)" type="button" class="mk-link" @click="runRowJump(item)">{{ rowJumpLabel(item) }}</button>
                     <button v-if="item.action === 'fixable' && item.severity !== 'ok'" type="button" class="mk-btn mk-btn--sm" :disabled="fixingId === item.id" @click="fix(item.id)">{{ fixingId === item.id ? '修复中…' : '修复' }}</button>
-                    <button v-else-if="item.action === 'manual' && item.severity !== 'ok' && canJumpAway(item.id)" type="button" class="mk-btn mk-btn--sm" @click="jump(item.id)">查看 →</button>
+                    <!-- 2026-11-09 设计语言收敛：紧挨着的「修复」是命令（改状态，留 mk-btn--sm），
+                         「查看 →」只是跳转，跟本行左边的普通跳转同一个 mk-link 形态。 -->
+                    <button v-else-if="item.action === 'manual' && item.severity !== 'ok' && canJumpAway(item.id)" type="button" class="mk-link" @click="jump(item.id)">查看 →</button>
                   </span>
                   <!-- 明细只给异常项：正常项的 detail 是「无覆盖 / 当前无差异」这类说明，
                        展开后没有可行动内容；异常项里技术差异行（field=… ≠ DB=…）走等宽代码块 -->

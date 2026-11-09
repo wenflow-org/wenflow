@@ -1182,7 +1182,7 @@ watch(
   text-align: left;
   cursor: pointer;
 }
-.sdp-pwform__cardhead:hover { color: var(--mk-blue); }
+.sdp-pwform__cardhead:hover { color: var(--mk-blue-text); }
 .sdp-pwform__cardhead b { color: var(--mk-faint); font-weight: 600; }
 .sdp-pwform__caret {
   font-style: normal;

@@ -142,8 +142,10 @@ describe('访问与注册（拆页后的独立页）', () => {
     expect(saveButton(w).text()).toBe('保存策略');
 
     const titles = w.findAll('.mk-card__title').map((t) => t.text());
-    // 入站来源、出站白名单与注册同属一张设置卡，段间用分隔线区分
-    expect(titles).toEqual(['访问与注册设置']);
+    // 入站来源、出站白名单与注册同属一张设置卡，段间用分隔线区分。
+    // 卡头不再有标题（2026-11-09 设计语言收敛）：页签已经叫「访问与注册」，
+    // 卡头再印一遍「访问与注册设置」是同屏两行字说一件事；三段自己的标题才是内容层级。
+    expect(titles).toEqual([]);
     expect(w.text()).toContain('管理后台访问控制');
     expect(w.text()).toContain('服务端出站访问');
     expect(w.text()).toContain('注册设置');
@@ -180,7 +182,11 @@ describe('访问与注册（拆页后的独立页）', () => {
     const anyOpt = () => w.findAll('.ac-opt').find((o) => o.text().includes('不限制'))!;
     await anyOpt().trigger('click');
     await nextTick();
-    expect(anyOpt().classes()).toContain('ac-opt--risk');
+    // 2026-11-09 设计语言收敛：选中态走全站原语 mk-choice--on（蓝描边 + 淡蓝底），
+    // 不再额外叠一个琥珀描边类——选中与警示抢同一个通道时，
+    // 「这张是选中的」和「这张有问题」互相抵消。
+    expect(anyOpt().classes()).toContain('mk-choice--on');
+    expect(anyOpt().classes()).not.toContain('ac-opt--risk');
     expect(anyOpt().find('.ac-opt__warn').classes()).not.toContain('ac-opt__warn--idle');
     // 警示仍只在卡内，不是回到「贯穿整屏的红条」
     expect(w.findAll('.ac-risk')).toHaveLength(0);
@@ -318,7 +324,7 @@ describe('访问与注册（拆页后的独立页）', () => {
 
   it('注册开关与配额在加载完成前不渲染（null = 未加载，不伪装成关）', async () => {
     const w = await mountPage();
-    expect(w.findAll('.mk-card__title').map((t) => t.text())).toEqual(['访问与注册设置']);
+    expect(w.findAll('.mk-card__title').map((t) => t.text())).toEqual([]);
     expect(w.text()).toContain('服务端出站访问');
     w.unmount();
   });
@@ -330,7 +336,9 @@ describe('访问与注册（拆页后的独立页）', () => {
     expect(w.find('.mk-pagehead').exists()).toBe(false);
     expect(w.classes()).toContain('acl-host--embedded');
     const head = w.find('.mk-card__head');
-    expect(head.find('.mk-card__title').text()).toBe('访问与注册设置');
+    // 嵌入态卡头无标题，只承载右侧状态（生效档 / 未保存），与「会话安全」同页签同形
+    expect(head.find('.mk-card__title').exists()).toBe(false);
+    expect(head.find('.mk-badge').text()).toContain('当前生效');
     const foot = w.find('.ac-foot');
     expect(foot.find('button').text()).toBe('保存策略');
     expect(foot.find('button').attributes('disabled')).toBeDefined();

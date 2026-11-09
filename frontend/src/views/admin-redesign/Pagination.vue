@@ -249,7 +249,7 @@ watch(
   .mk-pagination__btn:hover:not(:disabled),
   .mk-pagination__num:hover:not(:disabled):not(.mk-pagination__num--active) {
     border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line));
-    color: var(--mk-blue);
+    color: var(--mk-blue-text);
   }
 }
 .mk-pagination__btn:disabled,

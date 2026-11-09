@@ -111,7 +111,9 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     const kpis = w.findAll('.mk-kpi');
     expect(kpis.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['需关注', '异常', '缺总结', '有建议', '完结率']);
     const rate = kpis.find((c) => c.find('.mk-kpi__label').text() === '完结率')!;
-    expect(rate.find('.mk-kpi__num').text()).toBe('14%');
+    // 2026-11-09 用户走查「KPI 缺口径副文」：完结率数值行补「已完成 X/Y」，
+    // 与目标对话同构（只读卡也说明分母是当前列表窗口）。
+    expect(rate.find('.mk-kpi__num').text()).toBe('14%已完成 1/7');
     // 异常 = 失败 + 超时 = 2，点 KPI 卡即筛
     expect(w.find('.mk-status').exists(), '本页状态条已退役').toBe(false);
     const abnormalCard = kpis.find((c) => c.find('.mk-kpi__label').text().trim() === '异常')!;
@@ -136,7 +138,7 @@ describe('教学组 buckets 构成带（2026-10-04 统一形态）', () => {
     expect(w.find('.mk-distband').exists()).toBe(false);
     // pills 恒显全部档位（含零值「已下线 0」），枚举外 custom_state 归「其它」；「全部」不显数
     const opts = filterOptions(w as never, '状态');
-    expect(opts).toEqual(['全部状态', '学习中（4）', '已完成（3）', '生成失败（2）', '已下线（0）', '其它（1）']);
+    expect(opts).toEqual(['全部', '学习中（4）', '已完成（3）', '生成失败（2）', '已下线（0）', '其它（1）']);
     w.unmount();
   });
 

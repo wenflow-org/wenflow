@@ -1547,7 +1547,7 @@ html[data-theme='dark'] .loop__fail { background: var(--mk-surface-2); }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .rankrow--link { cursor: pointer; }
-.rankrow--link:hover .rankrow__grow { color: var(--mk-blue); }
+.rankrow--link:hover .rankrow__grow { color: var(--mk-blue-text); }
 .rankrow__bar { width: 48px; flex: none; }
 .rankrow__val { flex: none; font-variant-numeric: tabular-nums; font-weight: 600; font-size: var(--mk-fs-micro); color: var(--mk-ink); }
 /* 调用/失败两列（评审 2026-10-10）：右对齐定宽成列；失败非零红字提示，零给「–」保列形。
@@ -1578,7 +1578,7 @@ html[data-theme='dark'] .loop__fail { background: var(--mk-surface-2); }
   border: 0; background: none; padding: 4px 8px;
   border-radius: var(--mk-radius-sm);
   font: inherit; font-size: var(--mk-fs-micro); font-weight: 700;
-  color: var(--mk-blue); cursor: pointer; white-space: nowrap;
+  color: var(--mk-blue-text); cursor: pointer; white-space: nowrap;
 }
 .todo-act:hover { background: var(--mk-blue-bg); }
 

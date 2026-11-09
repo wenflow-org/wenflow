@@ -10,7 +10,8 @@
  *  - ts-summary-preview → .mk-cell-sub.ts-summary
  *  - gc-summary / oc-subject → .mk-cell-text
  *  - gc-stage-cell__tl → .mk-cell-sub
- *  - mr__due-bar / mr-pct__bar / mr__strength-bar 自绘条 → .mk-minibar（data-tone）+ .mr__bar 尺寸钩子
+ *  - mr__due-bar / mr-pct__bar / mr__strength-bar 自绘条 → .mk-minibar（data-tone）+ 尺寸钩子
+  - mr-pct（上数值 + 下短条、右对齐）→ 全站 .mk-meter（条 + 数值同一行，2026-11-09 收敛）
  *  - oc-hours 双层叠写 → td.mk-num 直出
  *  - gc-row / oc-row 行点击 → table.mk-table--click（ts-row 保留：att 色条与列选择器锚点）
  *  - 页内 scoped .stageband/.sbl 拷贝 → mk-primitives 全局原语
@@ -33,9 +34,10 @@ const RETIRED: Array<{ cls: string; instead: string }> = [
   { cls: 'gc-summary', instead: '.mk-cell-text' },
   { cls: 'oc-subject', instead: '.mk-cell-text' },
   { cls: 'gc-stage-cell__tl', instead: '.mk-cell-sub' },
-  { cls: 'mr__due-bar', instead: '.mk-minibar + .mr__bar' },
-  { cls: 'mr-pct__bar', instead: '.mk-minibar + .mr__bar--sm' },
-  { cls: 'mr__strength-bar', instead: '.mk-minibar + .mr__bar' },
+  { cls: 'mr__due-bar', instead: '.mk-minibar + .mk-meter__bar' },
+  { cls: 'mr-pct__bar', instead: '.mk-minibar + .mk-meter__bar' },
+  { cls: 'mr__strength-bar', instead: '.mk-minibar + .mk-meter__bar' },
+  { cls: 'mr-pct', instead: '.mk-meter（条 + 数值同一行）' },
   { cls: 'oc-hours', instead: 'td.mk-num 直出' },
   { cls: 'class="gc-row"', instead: 'table.mk-table--click' },
   { cls: 'class="oc-row"', instead: 'table.mk-table--click' },

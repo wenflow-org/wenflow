@@ -329,7 +329,10 @@ export class LearnerKnowledgeMemoryService {
           },
         })
       : // 无 pathId（如 admin 证据端点场景）时自动定位用户最新 active 路径，
-        // 否则 currentPath 恒空、recentEvidence/conceptLedger 等画像数据前端永远看不到
+        // 否则 currentPath 恒空、recentEvidence/conceptLedger 等画像数据前端永远看不到。
+        // 注意：#205 决定「非 active 路径不得被伪造成 currentPath」（否则学员端会给出
+        // 「继续学习一条已下线路径」）。管理台要展示「他有路径、但已下线 + 真实进度」时，
+        // 走 admin 详情路由的 fallback 字段（learner-models.ts），不放宽这里。
         await prisma.learning_paths.findFirst({
           where: { userId: input.userId, status: 'active' },
           orderBy: { updatedAt: 'desc' },

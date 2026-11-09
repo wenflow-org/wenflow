@@ -354,8 +354,11 @@ describe('虚拟学习者：自动驾驶故障（activeError）是异常列的�
     const w = mount(VirtualLearners)
     await flushPromises()
     await nextTick()
-    const filterBtn = w.findAll('thead th button').find((b) => (b.attributes('title') ?? '').includes('只看有'))!
-    await filterBtn.trigger('click')
+    // 2026-11-09 巡检批次：筛选触发器从列头漏斗迁到筛选行胶囊（与「状态」同组）
+    const pill = w.findAll('button[role="combobox"]').find((b) => b.attributes('aria-label') === '按异常筛选')!
+    await pill.trigger('click')
+    const opt = w.findAll('.mk-listbox-opt').find((o) => o.attributes('data-value') === 'abnormal')!
+    await opt.trigger('click')
     await nextTick()
     const names = w.findAll('tbody tr').map((tr) => tr.text())
     expect(names.some((t) => t.includes('只在目标阶段炸过'))).toBe(true)

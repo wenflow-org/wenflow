@@ -494,8 +494,8 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
     expect(topPInput.placeholder).toBe('未设置');
     const timeoutInput = modal.querySelector('#sdp-panel-request input[aria-label="请求超时毫秒数"]') as HTMLInputElement;
     expect(timeoutInput.value).toBe('30000');
-    const paramsHead = modal.querySelector('#sdp-panel-params .sdp-panel__state');
-    expect(paramsHead?.textContent).toContain('T=0.4');
+    // 2026-11-09 设计语言收敛：段头不再重复印 T 读数，温度的唯一年出口就是输入框
+    expect(modal.querySelector('#sdp-panel-params .sdp-panel__state')).toBeNull();
     expect(modal.textContent ?? '').not.toContain('Prompt 文件声明');
     // 来源词人话化：后端枚举码不得直接露给运营
     expect(wrapper.text()).not.toContain('active-prompt');
