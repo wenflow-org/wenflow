@@ -225,13 +225,30 @@ export class LearnerSnapshotRefreshService {
     return snapshot;
   }
 
-  async getLatest(input: LearnerSnapshotRefreshInput): Promise<LearnerSnapshot> {
+  /**
+   * 读最新快照（内存 → 持久化投影 → 重算）。
+   *
+   * `opts.maxAgeMs` 收紧可接受的陈旧度（2026-11-09 画像链路核查）：
+   * 默认行为不变（内存 5 min / 投影 10 min），但**教学开课**这类「一次课只取一次、且要看到
+   * 上节课刚产生的证据」的调用可以传 60s——超过就重算，避免用 10 分钟前的掌握度做开场决策。
+   * 只收不放：传入值不会让缓存比默认更旧。
+   */
+  async getLatest(
+    input: LearnerSnapshotRefreshInput,
+    opts?: { maxAgeMs?: number },
+  ): Promise<LearnerSnapshot> {
     const key = this.buildKey(input);
+    const cacheLimitMs = opts?.maxAgeMs == null
+      ? LearnerSnapshotRefreshService.CACHE_TTL_MS
+      : Math.min(LearnerSnapshotRefreshService.CACHE_TTL_MS, Math.max(0, opts.maxAgeMs));
+    const persistedLimitMs = opts?.maxAgeMs == null
+      ? 10 * 60 * 1000
+      : Math.min(10 * 60 * 1000, Math.max(0, opts.maxAgeMs));
     const entry = this.cacheGet(key);
     // 失效水位：#176-2 复核抓到的空转——只删内存键时，下面那段持久化回落会把旧载荷读回来并重新入缓存。
     if (
       entry &&
-      Date.now() - entry.cachedAt < LearnerSnapshotRefreshService.CACHE_TTL_MS &&
+      Date.now() - entry.cachedAt < cacheLimitMs &&
       !this.isInvalidated(input.userId, entry.cachedAt)
     ) {
       return entry.snapshot;
@@ -240,7 +257,7 @@ export class LearnerSnapshotRefreshService {
     const persisted = await prisma.learner_projections.findUnique({ where: { projectionKey: key } });
     if (
       persisted &&
-      Date.now() - persisted.generatedAt.getTime() < 10 * 60 * 1000 &&
+      Date.now() - persisted.generatedAt.getTime() < persistedLimitMs &&
       !this.isInvalidated(input.userId, persisted.generatedAt.getTime())
     ) {
       try {

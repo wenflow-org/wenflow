@@ -6,7 +6,14 @@ import { lessonKnowledgeEnricher } from '../index';
 import type { LessonKnowledgeEnricherInput } from '../index';
 
 const input: LessonKnowledgeEnricherInput = {
-  knowledgeState: [{ name: 'A', status: 'mastered', progress: 100 }],
+  // 2026-11-09：台账新增「可追溯」硬约束——概念必须在知识看板或输入文本里出现，
+  // 否则不进台账（模型凭空造的概念会让「N 个概念」不可复现）。这里给出 A/B/C
+  // 三个看板概念，让「不注入伪值」的用例仍能覆盖全部三条输出。
+  knowledgeState: [
+    { name: 'A', status: 'mastered', progress: 100 },
+    { name: 'B', status: 'learning', progress: 50 },
+    { name: 'C', status: 'learning', progress: 50 },
+  ],
   knowledgeDelta: { newlyMastered: ['A'] },
   taskContext: { learningPathId: 'path-1', taskId: 'task-1' },
 };

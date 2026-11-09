@@ -321,3 +321,64 @@ describe('虚拟学习者：运行状态列只回答在不在跑', () => {
     w.unmount()
   });
 });
+
+/**
+ * 2026-11-09 运营流程核查：目标/路径阶段的会话自动驾驶失败（如渠道 503）不进 failedCount
+ * （那是终态计数），行上唯一的问题信号就是 activeError。异常列要渲染它，
+ * 「只看有异常」与异常列排序也必须把它算进去，否则唯一能报错的行会被筛掉。
+ */
+describe('虚拟学习者：自动驾驶故障（activeError）是异常列的一等信号', () => {
+  const apError = 'Provider request retry budget exhausted'
+
+  beforeEach(() => {
+    liveVirtuals.value = [
+      baseRow({ id: 'p-ap', name: '只在目标阶段炸过', activeError: apError }),
+      baseRow({ id: 'p-fail', name: '有过失败运行', failedCount: 1 }),
+      baseRow({ id: 'p-clean', name: '一切正常' })
+    ] as unknown as typeof liveVirtuals.value
+  })
+
+  it('异常列渲染「自动驾驶错误」徽标，原因进 title', async () => {
+    const w = mount(VirtualLearners)
+    await flushPromises()
+    await nextTick()
+    const badge = rowByName(w, '只在目标阶段炸过').find('.vl-abn')
+    expect(badge.text()).toBe('自动驾驶错误')
+    expect(badge.attributes('title')).toContain(apError)
+    // 干净的行整格「—」不出声
+    expect(rowByName(w, '一切正常').find('.vl-abn').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('「只看有异常」保留只有自动驾驶故障的行（不只看失败/无响应计数）', async () => {
+    const w = mount(VirtualLearners)
+    await flushPromises()
+    await nextTick()
+    const filterBtn = w.findAll('thead th button').find((b) => (b.attributes('title') ?? '').includes('只看有'))!
+    await filterBtn.trigger('click')
+    await nextTick()
+    const names = w.findAll('tbody tr').map((tr) => tr.text())
+    expect(names.some((t) => t.includes('只在目标阶段炸过'))).toBe(true)
+    expect(names.some((t) => t.includes('有过失败运行'))).toBe(true)
+    expect(names.some((t) => t.includes('一切正常'))).toBe(false)
+    w.unmount()
+  })
+
+  it('异常列排序把自动驾驶故障算作异常信号（升序时它不会被当成「零异常」）', async () => {
+    const w = mount(VirtualLearners)
+    await flushPromises()
+    await nextTick()
+    const th = w.findAll('thead th').find((t) => t.text().trim() === '异常')!
+    await th.trigger('click') // 首击 desc
+    await th.trigger('click') // 再击 asc：异常少的在前
+    await nextTick()
+    const names = w.findAll('tbody tr').map((tr) => tr.text())
+    const apIdx = names.findIndex((t) => t.includes('只在目标阶段炸过'))
+    const cleanIdx = names.findIndex((t) => t.includes('一切正常'))
+    /* 若 activeError 不计入，ap 行与干净行同为 0：稳定排序会保持声明顺序（ap 在前），
+       这条断言即失败 —— 正是修复前的情形。 */
+    expect(cleanIdx).toBeGreaterThanOrEqual(0)
+    expect(cleanIdx).toBeLessThan(apIdx)
+    w.unmount()
+  })
+})

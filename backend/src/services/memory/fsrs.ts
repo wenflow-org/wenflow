@@ -167,7 +167,11 @@ export interface FsrsScheduleResult {
  * @param prev 上一次记忆状态（null = 新概念）
  * @param grade 本次复习成绩（Again/Hard/Good/Easy）
  * @param now 复习发生时间
- * @param desiredRetention 目标保留率（0-1，缺省 0.9；考试目标可上调至 0.95）
+ * @param desiredRetention 目标保留率（0-1，缺省 0.9）。
+ *   ⚠️ 本实现用 `round(stability)` 当间隔，只在 **0.9** 目标下近似成立
+ *   （实测与 ts-fsrs 的 scheduled_days 仍差约 1 天）；传入非 0.9 值会系统性偏离
+ *   真实间隔（0.95 偏长约 2×、0.8 偏短），生产路径请保持默认。
+ *   若确要支持其它目标保留率，应改用 `result.card.scheduled_days`。
  */
 export function fsrsSchedule(
   prev: FsrsMemoryState | null,

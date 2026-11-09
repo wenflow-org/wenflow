@@ -202,7 +202,7 @@
               class="vl-th-filter"
               :class="{ 'vl-th-filter--on': onlyAbnormal }"
               :aria-pressed="onlyAbnormal"
-              title="只看有失败或无响应运行的学习者"
+              title="只看有失败、无响应或自动驾驶故障的学习者"
               @click.stop="onlyAbnormal = !onlyAbnormal"
             ><Filter :size="13" :stroke-width="1.75" /></button></th>
             <th
@@ -369,7 +369,7 @@
          2026-10-25：「新建 / 批量新建」两个弹窗随「不播种、都派生」一起退役——建号只在卡库
          （导入卡 / 平台生产 / 预置一键加载 + 选角派生），本页不再有第二条创建路径。 -->
     <VirtualLearnerReclaim ref="reclaimRef" @done="onReclaimDone" />
-    <VirtualLearnerCleanup ref="cleanupRef" :samples="samples" @done="onReclaimDone" />
+    <VirtualLearnerCleanup ref="cleanupRef" @done="onReclaimDone" />
     <VirtualLearnerLaunch ref="launchRef" />
     <VirtualLearnerPromptTest ref="promptRef" />
     <VirtualLearnerSettingsDrawer
@@ -385,7 +385,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, reactive, watch, onMounted, onUnmounted } from 'vue'
+import { computed, ref, reactive, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { CirclePlay, Filter, Pause, Play } from 'lucide-vue-next'
 import { openSubPage, intent, isLive } from './store'
 import { liveVirtuals, refreshLiveVirtuals, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats, liveAutopilotConcurrency, liveVirtualStatsLoading, liveVirtualStatsError, retryLiveVirtualStats, virtualsStaleAfterMutation } from './live'
@@ -423,7 +424,7 @@ const STATS_RETRY_TITLE = '运行统计拉取失败：点击重试'
 const STATS_UNAVAILABLE_HINT = '统计不可用 · 点击重试'
 /* 列头口径（表头 title 与「列」菜单共用同一句，避免同页两处漂移） */
 const SESSIONS_COL_TITLE = '累计运行数（全部运行，含终态）'
-const ABNORMAL_COL_TITLE = '系统失败的运行数 + 当前无响应的运行数。人为终止不计入'
+const ABNORMAL_COL_TITLE = '系统失败的运行数 + 当前无响应的运行数 + 自动驾驶最近故障。人为终止不计入'
 const samples = computed<Sample[]>(() =>
   liveVirtuals.value.map((v) => ({
     id: v.id,
@@ -636,8 +637,10 @@ const { toggle: toggleVlSort, sortState: vlSortState, sortRows: sortVlRows } = u
     sessions: (s) => s.sessions,
     /* 「运行状态」列按活跃总数排序（运行 + 暂停），避免暂停多的行被排到已停止区 */
     running: (s) => s.runningCount + (s.pausedCount ?? 0),
-    /* 「异常」= 失败运行数 + 当前无响应运行数：两个字都是问题信号，合计排序让有事的行冒头 */
-    abnormal: (s) => s.failedCount + s.stalledCount,
+    /* 「异常」= 失败运行数 + 当前无响应运行数 + 有自动驾驶故障：都是问题信号，合计排序让有事的行冒头。
+       activeError 必须计入（2026-11-09）：目标/路径阶段的会话失败时不进 failedCount（那是终态计数），
+       只剩这一枚信号——不计入的话「只看有异常」会把唯一能报错的行筛掉。 */
+    abnormal: (s) => s.failedCount + s.stalledCount + (s.activeError ? 1 : 0),
     created: (s) => (s.createdAt ? new Date(s.createdAt).getTime() : null)
   },
   storageKey: 'wf_virtual_learners_sort'
@@ -652,7 +655,9 @@ const filtered = computed(() => {
   if (sf === 'running' || sf === 'paused' || sf === 'stalled' || sf === 'stopped') {
     list = list.filter((s) => runPhaseOf(s) === sf)
   }
-  if (onlyAbnormal.value) list = list.filter((s) => s.failedCount > 0 || s.stalledCount > 0)
+  /* 「有异常」与异常列同源：失败 + 无响应 + 自动驾驶故障（activeError）
+     ——只看前两项会让「只在目标阶段炸过」的行被漏掉（2026-11-09 口径对齐）。 */
+  if (onlyAbnormal.value) list = list.filter((s) => s.failedCount > 0 || s.stalledCount > 0 || !!s.activeError)
   return sortVlRows(list)
 })
 
@@ -694,6 +699,10 @@ watch([keyword, stateFilter], () => {
 })
 
 /* ===== 拆分子组件引用与父侧触发入口（弹窗状态在子组件内，父页面只发指令） ===== */
+/** 深链参数：?open=settings（来自 DayTimeline 空态「去开启日期模拟」）。
+ *  用 useRouter().currentRoute 而不是 useRoute()：本组件此前不依赖路由注入，
+ *  多个单测直接 mount 且只 mock 了 useRouter——一律可空访问，缺路由上下文时静默跳过。 */
+const router = useRouter()
 /** 页头维护菜单展开态；点遮罩关闭 */
 const headMenu = ref<'' | 'maint'>('')
 function toggleHeadMenu(key: 'maint') {
@@ -815,6 +824,12 @@ onUnmounted(() => { if (freshTimer) clearTimeout(freshTimer) })
    单域重拉一次；无创建标记时命中 live 层 TTL 语义不重复请求，也不引入轮询。 */
 onMounted(() => {
   if (virtualsStaleAfterMutation()) void refreshLiveVirtuals()
+  /* 2026-11-09：DayTimeline 空态「去开启日期模拟」带 ?open=settings 跳到本页——
+     直接展开维护抽屉，运营不必自己找右上角「维护」再点「容量与实验环境」。 */
+  if (router?.currentRoute?.value?.query?.open === 'settings') {
+    headMenu.value = ''
+    void nextTick(() => settingsDrawerRef.value?.open())
+  }
 })
 /* 运行中每 30s 轻刷（2026-10-31 三轮评审 P1）：自动驾驶在后台推进，页面停留时
    「今日调用」/运行状态/正在运行 chips 若只靠进页取一次，读数会长期停滞在启动前 */

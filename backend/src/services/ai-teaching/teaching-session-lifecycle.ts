@@ -248,7 +248,9 @@ export function buildReplanAttributionEvidence(input: {
     push('signal:metrics', 'session_metrics',
       `sessionKtl=${evaluation.sessionKtl ?? '—'} sessionLss=${evaluation.sessionLss ?? '—'} sessionLf=${evaluation.sessionLf ?? '—'}`);
   }
-  push('signal:trend', 'recent_trend', String(learnerReplanProjection?.dynamicState?.recentTrend || ''));
+  // 2026-11-09 画像链路核查：`LearnerReplanProjection` 没有 dynamicState 段，趋势在 `risk.recentTrend`
+  // （见 LearnerProjectionService.toReplanProjection）。旧路径恒 undefined → 这里永远推入一条空证据。
+  push('signal:trend', 'recent_trend', String(learnerReplanProjection?.risk?.recentTrend || ''));
   push('signal:fragile', 'fragile_concepts',
     (learnerReplanProjection?.mastery?.fragileConcepts ?? []).slice(0, 6).join('、'));
   push('signal:struggling', 'struggling_concepts',

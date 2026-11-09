@@ -5,6 +5,8 @@ import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 import { conceptGraphService } from './concept-graph.service';
 // 注册表口径的归一化（比本文件的本地 normalizeConceptKey 更强：还去引号/冒号从句/尾部标点）。
 // 查别名表必须用它，否则会 miss——本文件那个本地版只做 trim+空白压缩。
+import { isKtGhostTrace } from '../memory/kt-ghost';
+import { resolveMasteryScore } from './concept-mastery';
 import { normalizeConceptKey as normalizeConceptKeyCanonical } from '../memory/concept-key';
 import type {
   LearnerBackgroundConceptLedgerItem,
@@ -455,6 +457,25 @@ export class LearnerKnowledgeMemoryService {
     // （focusConcepts 回写 prediction_records）。故摘要必须按**当前路径**取；其它路径的摘要
     // 不参与（跨路径概念仍以 conceptLedger/recurringConfusions 等结构化字段用户级聚合）。
     let enrichedKnowledgeStateSummary: string | undefined;
+    /* 蒸馏 / 对话提取也是「提到某概念的证据行」，但它们的载荷不进 globalRecentEvidence
+       （那张表还喂反复困惑的 struggle 计数与 currentPath.recentEvidence，塞进去会改变
+       那两个读数与教学上下文载荷）。这里单开一个只服务「台账证据条数」的倒排索引：
+       key → 命中该键的蒸馏/提取行 id 集合（id 形如 d<序号>，与主索引的数字下标不相交）。 */
+    const enrichedEvidenceRowIdsByKey = new Map<string, Set<string>>();
+    let enrichedEvidenceRowSeq = 0;
+    const recordEnrichedEvidenceRow = (items: any[], rowId: string) => {
+      for (const item of items) {
+        for (const key of dedupe([item?.label, item?.conceptKey, item?.name])) {
+          if (!key) continue;
+          let ids = enrichedEvidenceRowIdsByKey.get(key);
+          if (!ids) {
+            ids = new Set<string>();
+            enrichedEvidenceRowIdsByKey.set(key, ids);
+          }
+          ids.add(rowId);
+        }
+      }
+    };
 
     for (const evidence of allPersistedEvidence) {
       const evidencePathId = evidence.pathId ?? undefined;
@@ -472,6 +493,10 @@ export class LearnerKnowledgeMemoryService {
           enrichedLedger.push(...payload.conceptLedger.map((item: any) => businessAtIso
             ? { ...item, firstSeenAt: item?.firstSeenAt ?? businessAtIso, lastSeenAt: businessAtIso }
             : item));
+          // 台账「证据条数」把这条蒸馏证据也算上（2026-11-09）：此前证据倒排索引只收
+          // task:completed / lesson:completed 两类行 ⇒ 只有蒸馏/提取证据的概念恒显 ev=0，
+          // 运营读成「没证据」。行 id 用 `d<序号>` 与主索引的数字下标天然不相交。
+          recordEnrichedEvidenceRow(payload.conceptLedger, `d${enrichedEvidenceRowSeq++}`);
         }
         if (Array.isArray(payload.reusableFoundations)) enrichedReusableFoundations.push(...payload.reusableFoundations);
         if (Array.isArray(payload.blockedFoundations)) enrichedBlockedFoundations.push(...payload.blockedFoundations);
@@ -492,6 +517,7 @@ export class LearnerKnowledgeMemoryService {
           enrichedConfusions.push(...payload.recurringConfusions.map((item: any) => businessAtIso
             ? { ...item, lastSeenAt: businessAtIso }
             : item));
+          recordEnrichedEvidenceRow(payload.recurringConfusions, `d${enrichedEvidenceRowSeq++}`);
         }
         if (Array.isArray(payload.transferSignals)) enrichedTransferSignals.push(...payload.transferSignals);
         continue;
@@ -528,6 +554,17 @@ export class LearnerKnowledgeMemoryService {
     // （旧口径 O(概念数×证据数×includes)。key → 命中该键的证据行下标集合，Set 保证同一条
     // 证据同时含 label 与 conceptKey 时只计一次；struggle 计数按 (证据行, 键) 记账，与旧口径一致。
     const evidenceIndicesByKey = new Map<string, Set<number>>();
+    /* 台账「证据条数」的可复算口径（2026-11-09 修）：主索引（task/lesson 两类证据行）
+       ∪ 蒸馏/提取证据行，两个 id 空间不相交，故可放进同一个 Set 去重。 */
+    const ledgerEvidenceCount = (keys: Iterable<string>): number => {
+      const ids = new Set<string>();
+      for (const key of keys) {
+        if (!key) continue;
+        for (const index of evidenceIndicesByKey.get(key) ?? []) ids.add(`t${index}`);
+        for (const rowId of enrichedEvidenceRowIdsByKey.get(key) ?? []) ids.add(rowId);
+      }
+      return ids.size;
+    };
     const struggleCountByKey = new Map<string, number>();
     for (let i = 0; i < globalRecentEvidence.length; i += 1) {
       const item = globalRecentEvidence[i];
@@ -785,10 +822,9 @@ export class LearnerKnowledgeMemoryService {
     for (const trace of memoryTraces) {
       const conceptKey = normalizeConceptKey(trace.conceptKey);
       if (!isRealConceptKey(conceptKey)) continue;
-      // #59/#60 第 1/3 条：KT 幽灵痕（applyKtEstimate 创建、从未真正提取过）没有资格进掌握判定。
+      // #59/#60 第 1/3 条：KT 幽灵痕没有资格进掌握判定（判定口径见 services/memory/kt-ghost.ts）。
       // 它承载的是模型估计而非学习证据；此前以 masteryScore=0.3 冒充「学过一半」，直接制造 fragile。
-      const isKtGhost = trace.source === 'kt-estimate' && (Number(trace.extractionCount) || 0) === 0;
-      if (isKtGhost) continue;
+      if (isKtGhostTrace(trace)) continue;
       const mastery = trace.masteryScore ?? 0.5;
       const extractionCount = Number(trace.extractionCount) || 0;
       const lastSeenMs = trace.lastSeenAt ? new Date(trace.lastSeenAt).getTime() : null;
@@ -864,11 +900,11 @@ export class LearnerKnowledgeMemoryService {
       // 等权算术平均，同一概念在会话 1=0.4、会话 2=1.0 会得 0.7——与 status 的「最近一条说了算」
       // 判据不一致（旧课稀释新课），正是本条要消除的失真。无任何带业务时间的证据时（旧数据/测试桩）
       // 退回原等权均值，与上方 status 的 OR 回退口径配套，行为不变。
-      const masteryScore = latestTimed
-        ? clamp(latestTimed.score, 0, 1)
-        : masteryEvidence.length > 0
-          ? clamp(masteryEvidence.reduce((sum, signal) => sum + signal.score, 0) / masteryEvidence.length, 0, 1)
-          : 0;
+      // 2026-11-09 口径统一：数值解析与概念图谱共用 services/learner/concept-mastery.ts 的单一实现
+      // （最新业务时间优先，全无时间戳退回等权均值），避免两页各算一套。
+      const masteryScore = resolveMasteryScore(
+        masteryEvidence.map((signal) => ({ masteryScore: signal.score, seenAt: signal.seenAt })),
+      );
 
       const statusFromLatest: 'pending' | 'learning' | 'mastered' | 'review' | null = latestTimed
         ? latestTimed.status === 'review' || latestTimed.stability === 'fragile'
@@ -1217,6 +1253,8 @@ export class LearnerKnowledgeMemoryService {
           : concept.stability === 'developing' || concept.stability === 'fragile'
             ? 'practiced'
             : 'seen';
+        // 迁移就绪三档是**工程启发式映射**，不是标准化测量（2026-11-09 核查）：学习科学里没有
+        // 「可迁移/待巩固/不宜迁移」的公认分类，对外应理解为「就绪度粗分」而非效度已验的测量。
         const transferReadiness: LearnerBackgroundConceptLedgerItem['transferReadiness'] = concept.stability === 'stable'
           ? 'high'
           : concept.stability === 'developing'
@@ -1228,17 +1266,19 @@ export class LearnerKnowledgeMemoryService {
             ? 'medium'
             : 'low';
         // 证据计数走倒排索引（label 与 conceptKey 命中的下标并集去重，等价于旧的
-        // globalRecentEvidence.filter(item => conceptKeys.includes(label) || includes(key)).length）
-        const evidenceCount = new Set<number>([
-          ...(evidenceIndicesByKey.get(concept.label) ?? []),
-          ...(evidenceIndicesByKey.get(concept.conceptKey) ?? []),
-        ]).size;
+        // globalRecentEvidence.filter(item => conceptKeys.includes(label) || includes(key)).length）；
+        // 2026-11-09 起并入蒸馏/对话提取证据行（只有蒸馏证据的概念不再恒显 ev=0）。
+        const evidenceCount = ledgerEvidenceCount([concept.label, concept.conceptKey]);
         return {
           conceptKey: concept.conceptKey,
           label: concept.label,
           familiarity,
           transferReadiness,
           misconceptionRisk,
+          /* 数值掌握度（2026-11-09 补）：三档 familiarity 看不出「0.9 掉到 0.35」的退化。
+             `concept.masteryScore` 已由 resolveMasteryScore 按业务时间取最新信号算出（见上游
+             #195），此处只是把它带出去，不再另算一份口径。 */
+          masteryScore: clamp(concept.masteryScore, 0, 1),
           firstSeenAt: concept.lastSeenAt,
           lastSeenAt: concept.lastSeenAt,
           sourcePaths: pathIdsByConceptKey.get(concept.conceptKey)?.length
@@ -1353,7 +1393,8 @@ export class LearnerKnowledgeMemoryService {
           ...item,
           sourcePaths: dedupe([...(merged.sourcePaths || []), ...(item.sourcePaths || [])]),
           sourceTasks: dedupe([...(merged.sourceTasks || []), ...(item.sourceTasks || [])]),
-          evidenceCount: Math.max(merged.evidenceCount || 0, item.evidenceCount || 0),
+          // evidenceCount 不在此合并：组内所有行归并完后由下方的可复算计数统一覆盖
+          // （旧口径 Math.max 会让模型自报值抬高读数）。
         };
         const curFirst = seenMs(firstSeenAt);
         const itemFirst = seenMs(item.firstSeenAt);
@@ -1369,11 +1410,33 @@ export class LearnerKnowledgeMemoryService {
         const itemLast = seenMs(item.lastSeenAt);
         if (itemLast !== null && (winnerLast === null || itemLast >= winnerLast)) winner = item;
       }
+      // 证据条数**只认可复算值**（2026-11-09 运营字段真值核查）：
+      // 模型自报的 evidenceCount 在提示词里只有一个结构占位（`"evidenceCount": 0`），
+      // 没有任何计数规则；实测同一输入连跑 3 次对同一概念给出 3/2/17，且旧合并口径
+      // `Math.max(确定性, 模型)` 让它只能抬高、不能压低。改为：把组内所有身份键
+      // （slug / 中文 label）在证据倒排索引里的命中行求并集，用**真实证据行数**覆盖。
+      // 模型独有概念（输入里没有对应证据行）因此得 0——没有可核对证据就是 0。
+      const groupKeys = new Set<string>();
+      for (const item of group) {
+        if (item.conceptKey) groupKeys.add(item.conceptKey);
+        if (item.label) groupKeys.add(item.label);
+      }
       merged = {
         ...merged,
         familiarity: winner.familiarity ?? merged.familiarity,
         transferReadiness: winner.transferReadiness ?? merged.transferReadiness,
         misconceptionRisk: winner.misconceptionRisk ?? merged.misconceptionRisk,
+        evidenceCount: ledgerEvidenceCount(groupKeys),
+        /* 数值掌握度只认确定性通道的测量值（2026-11-09 补）：组内有数就按业务时间取最新那条，
+           组内一个数都没有（纯模型行）→ 字段缺省而不是 0，避免把「没测到」读成「测出来是 0」。 */
+        masteryScore: (() => {
+          const measured = group.filter((item) => Number.isFinite(Number(item.masteryScore)));
+          if (!measured.length) return undefined;
+          return resolveMasteryScore(measured.map((item) => ({
+            masteryScore: Number(item.masteryScore),
+            seenAt: item.lastSeenAt,
+          })));
+        })(),
         firstSeenAt,
         lastSeenAt,
       };

@@ -307,8 +307,9 @@ export const SCIENTIFIC_CONSTANTS: ScientificConstant[] = [
     key: 'review.fsrs.desiredRetention',
     value: 0.9,
     source: '文献',
-    ref: 'FSRS / Anki 默认目标保留率 0.9（考试目标可上调至 0.95）',
-    note: '间隔由"降到该保留率所需天数"反推。',
+    ref: 'FSRS / Anki 默认目标保留率 0.9',
+    note: '间隔由"降到该保留率所需天数"反推。当前实现只对 0.9 近似成立；'
+      + '非 0.9 目标需改用 ts-fsrs 的 scheduled_days（见 fsrs.ts 的 desiredRetention 说明）。',
     resolve: () => FSRS_DEFAULT_RETENTION,
   },
   {

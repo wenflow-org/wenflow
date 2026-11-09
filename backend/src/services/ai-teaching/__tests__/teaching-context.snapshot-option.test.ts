@@ -33,7 +33,9 @@ describe('loadLearnerSnapshotForContext', () => {
 
   it('默认走 getLatest（常规回合复用缓存，不每回合重建）', async () => {
     await expect(loadLearnerSnapshotForContext(input)).resolves.toEqual({ id: 'cached' });
-    expect(mockGetLatest).toHaveBeenCalledWith(input);
+    /* 2026-11-09 画像链路核查：开课要看到上节课刚写入的证据，可接受陈旧度收紧到 60s
+       （默认持久化投影允许 10 分钟）。缓存复用语义不变，只是超龄即重算。 */
+    expect(mockGetLatest).toHaveBeenCalledWith(input, { maxAgeMs: 60_000 });
     expect(mockRefresh).not.toHaveBeenCalled();
   });
 

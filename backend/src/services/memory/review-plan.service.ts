@@ -461,7 +461,9 @@ export async function buildReviewPlan(
     if (!family) continue;
     // 范围过滤（只当前路径）：来源明确且不是本节路径的旧知不进本节队列
     if (scopePathId && trace.pathId && trace.pathId !== scopePathId) continue;
-    // 从未被真正提取过的点没有可回捞的记忆（kt-estimate 孤儿等），不进队列
+    // 从未被真正提取过的点没有可回捞的记忆，不进队列。
+    // 这里刻意比 isKtGhostTrace 更宽：任何 extractionCount=0 的痕迹都没有可回捞证据，
+    // 不只是 kt-estimate（见 services/memory/kt-ghost.ts 的口径说明）。
     if (trace.extractionCount === 0) continue;
     if (leechKeys.has(family)) {
       if (!relearn.has(family)) {

@@ -24,13 +24,14 @@ import { teachingSessionHistoryOf } from './session-console';
 import { signProjectionToken } from '../../utils/projection-token';
 import { autopilotService } from '../../virtual-lab/autopilot.service';
 import { parseSessionAutopilotOption, startSessionAutopilot } from '../../virtual-lab/session-autopilot';
-import { classifySessionRunPhase } from '../../services/virtual-lab/session-run-phase';
+import { classifySessionRunPhase, collectAutopilotErrors } from '../../services/virtual-lab/session-run-phase';
 import { virtualSessionReclaimService } from '../../virtual-lab/session-reclaim.service';
 import { simulatedDayService } from '../../services/virtual-lab/simulated-day.service';
 import { resolveSessionBudget } from '../../virtual-lab/session-budget';
 import { getVirtualLabSettings, updateVirtualLabSettings } from '../../services/virtual-lab-settings.service';
 import { applyRpmLimitsFromSettings, getRpmLimitStats } from '../../services/rpm-limit-config.service';
 import { virtualCleanupService } from '../../services/virtual-lab/virtual-cleanup.service';
+import { stopLiveRunsForProfile } from './virtual-learners.assisted-shared';
 import { ensureCardKey } from '../../services/virtual-lab/card-import.service';
 import { safeJsonParse } from '../../utils/safe-json';
 import type { SimulationLogEntry } from '../../coordinators/simulation.types';
@@ -280,6 +281,11 @@ router.get('/', async (req: Request, res) => {
       m.set(key, (m.get(key) ?? 0) + 1);
     };
     const stalledSessionIds = new Set<string>();
+    /* 异常列的最后一次自动驾驶错误：取「非终态会话」全集（含 created 会话），
+       不能只扫样本里 status='running' 的会话——会话在 goal/path 阶段是 created，
+       自动驾驶在那一阶段失败（如渠道 503）时 status 永远不会变成 running，错误就丢了。
+       与 findLiveSessionsByProfiles 同源，与逐画像三档分类口径一致。 */
+    const liveErrorByProfile = collectAutopilotErrors(liveSessions);
     for (const s of liveSessions) {
       const phase = classifySessionRunPhase(s, staleBefore);
       phaseBySessionId.set(s.id, phase);
@@ -332,17 +338,9 @@ router.get('/', async (req: Request, res) => {
       const runningSessions = sessionSample.filter((s) => s.status === 'running' && !autopilotStoppedIds.has(s.id));
       const pausedSessions = sessionSample.filter((s) => s.status === 'running' && autopilotStoppedIds.has(s.id));
       /* 2026-10-31 五轮评审 P8：活跃会话自动驾驶最后一次错误（如僵尸会话自动回收）透传列表，
-         「异常」列与座舱日志同源；进程重启导致的「自动驾驶已中断」是预期态不算异常 */
-      const activeError = (() => {
-        for (const s of sessionSample) {
-          if (s.status !== 'running') continue;
-          try {
-            const err = JSON.parse(String(s.stageResults || '{}'))?.autopilot?.lastError;
-            if (err && !/进程重启/.test(String(err))) return String(err);
-          } catch { /* 坏 JSON 不阻断列表 */ }
-        }
-        return null;
-      })();
+         「异常」列与座舱日志同源；进程重启导致的「自动驾驶已中断」是预期态不算异常。
+         2026-11-09：判据从「样本里的 running 会话」换成「非终态会话全集」——见 liveErrorByProfile。 */
+      const activeError = liveErrorByProfile.get(p.id) ?? null;
       // 阶段进度（轴 B）：没有活跃会话时回落到最近一次会话（历史进度，前端标「最近」）。
       const latestSession = runningSessions[0] || pausedSessions[0] || sessionSample[0];
       const stageProgress = latestSession ? deriveRunProgress(latestSession) : null;
@@ -741,6 +739,15 @@ router.put('/:id', async (req: Request, res) => {
 router.delete('/:id', async (req: Request, res) => {
   try {
     const { id } = req.params;
+    /* 删除前先叫停该学习者的活跃运行（撤租约 + 停自动驾驶）——见 stopLiveRunsForProfile：
+       级联删除不给内存里的循环任何通知，删完它还会占并发额度、继续调模型。 */
+    const stoppedRuns = await stopLiveRunsForProfile(id).catch((error) => {
+      logger.warn('[virtual-learners] 删除前叫停活跃运行失败（不阻断删除）', {
+        profileId: id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return 0;
+    });
     const manifest = await virtualCleanupService.cascadeDeleteProfile(id, {
       adminId: req.user?.userId ?? null,
       adminName: req.user?.email ?? null
@@ -751,6 +758,7 @@ router.delete('/:id', async (req: Request, res) => {
       userId: manifest.userId,
       deletedSessions: manifest.virtualSessions.length,
       deletedTeachingSessions: manifest.teachingSessions,
+      stoppedRuns,
       deletedBy: req.user?.userId
     });
 

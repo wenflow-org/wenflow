@@ -37,6 +37,7 @@ import { isTestAccountUser } from '../../utils/test-account';
 import { logger } from '../../utils/logger';
 import { normalizeConceptKey } from '../../services/memory/memory-trace.service';
 import { reviewPlanService } from '../../services/memory/review-plan.service';
+import { resolveUserSimulatedNow } from '../../services/virtual-lab/simulation-clock-resolver';
 import {
   conceptConsolidatorService,
   CONSOLIDATION_AUDIT_PROJECTION_SCOPE,
@@ -90,7 +91,7 @@ function retentionOf(trace: {
   masteryScore: number;
   extractionCount: number;
   lastSeenAt: Date | null;
-}): number {
+}, asOf: Date = new Date()): number {
   if (!trace.lastSeenAt) return 1;
   const state: FsrsMemoryState = trace.fsrsStability !== null && trace.fsrsStability !== undefined
     ? {
@@ -101,7 +102,9 @@ function retentionOf(trace: {
         lastReviewAt: trace.lastSeenAt,
       }
     : fsrsStateFromLegacy(trace.masteryScore, trace.extractionCount, trace.lastSeenAt);
-  return Math.round(fsrsRetrievability(state, new Date()) * 100) / 100;
+  /* 基准时刻可传（2026-11-09）：虚拟学习者的记忆池要按**模拟时刻**算可提取率——
+     跨用户总览不传（默认真实 now，那里默认不含虚拟账号），学习者详情传解析出的 now。 */
+  return Math.round(fsrsRetrievability(state, asOf) * 100) / 100;
 }
 
 /* ---------- 跨用户总览：排序键与「薄弱/平均强度/最近复习」聚合 ---------- */
@@ -164,7 +167,9 @@ router.get('/', async (req, res) => {
        做一次痕迹聚合——只在被请求时加载，默认翻页不多查一遍库。 */
     const sortKey: OverviewSortKey = isOverviewSortKey(req.query.sort) ? req.query.sort : 'due';
     const sortOrder: 'asc' | 'desc' = req.query.order === 'asc' ? 'asc' : 'desc';
-    // 模拟钟单点（#68 P-43）：VL 管理视角的到期/积压必须与写入侧同一时间基准
+    /* 跨用户总览按**真实 now** 聚合（2026-11-09 说明）：这一屏是跨账号的积压排行，账号之间有
+       不同的模拟日（甚至有的没有），没有一个「当前模拟时刻」能同时适用于所有行；且默认已把虚拟
+       学习者排除在外。逐账号的到期/额度在 `GET /:userId` 里按该账号的模拟时刻算（见那里的 now）。 */
     const now = simulatedNowOr();
 
     let baseWhere: Record<string, unknown>;
@@ -461,8 +466,15 @@ router.get('/:userId', async (req, res) => {
       return res.status(404).json({ success: false, error: { message: '用户不存在' } });
     }
 
+    /* 模拟钟单点（2026-11-09）：虚拟学习者的记忆池此前按**真实今天**判到期/可提取率/今日额度，
+       而它自己的模拟日可能在真实今天之后（跨日推进过的实例）——同一页面上「复习到期」与
+       学习进度各说一套。这里解析该用户的模拟时刻（会话钟 > 画像钟 > 无 = 真实墙钟），
+       显式下传给计划与到期清单；非虚拟账号解析为 null，行为与现状完全一致。 */
+    const simulatedAsOf = await resolveUserSimulatedNow(userId).catch(() => null);
+    const now = simulatedAsOf ?? simulatedNowOr();
+
     const [plan, traces, audit] = await Promise.all([
-      reviewPlanService.buildReviewPlan(userId).catch(() => null),
+      reviewPlanService.buildReviewPlan(userId, { now }).catch(() => null),
       listUserMemoryTraces(userId),
       conceptConsolidatorService.getAudit(userId).catch(() => null),
     ]);
@@ -510,14 +522,13 @@ router.get('/:userId', async (req, res) => {
         .map(toAliasView),
     };
 
-    // 模拟钟单点（#68 P-43）：VL 管理视角的到期/积压必须与写入侧同一时间基准
-    const now = simulatedNowOr();
+    // 到期清单与可提取率同基准：`now` 在入口解析（该用户的模拟时刻，非虚拟账号 = 真实墙钟）
     const dueTraces = traces
       .filter((trace) => trace.dueAt && trace.dueAt <= now && trace.extractionCount > 0)
       .map((trace) => ({
         conceptKey: trace.conceptKey,
         label: trace.label || trace.conceptKey,
-        retention: retentionOf(trace),
+        retention: retentionOf(trace, now),
         masteryScore: trace.masteryScore,
         extractionCount: trace.extractionCount,
         dueAt: trace.dueAt,

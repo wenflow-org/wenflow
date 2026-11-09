@@ -32,6 +32,7 @@ import {
   ConfidenceLevel
 } from './types';
 import { logger } from '../../utils/logger';
+import { classifyLoad } from '../../services/learning/learning-load-verdict';
 
 /** 入参里「真的有值」的字段名：null/undefined/空串不算（画像 merge 也按这个判空回落默认常量）。
  *  behavioral 走的是 `data.x || DEFAULT.x`，0 同样会落默认，故单独开 truthyOnly。 */
@@ -193,9 +194,29 @@ export class ProfileAggregator {
     const preferences = this.mergePreferences(goalConversation?.preferences, changes);
     const emotional = this.mergeEmotional(goalConversation?.emotional, changes);
     const history = this.mergeHistory(sessions, changes);
+    // 逐字段来源（2026-11-02 P1-8）：merge* 在没有数据时回落到 DEFAULT_*，这里按「入参里有没有这个字段」
+    // 如实记录；派生读数按它的输入是否实测判定，规则文本类（建议方式/优势/风险因素）不是实测口径，不列。
+    // 2026-11-09 真值核查：该计算上移到 narrative 之前——叙述洞察现在按「这一格的输入是否被观测」逐字段
+    // 决定输出还是留空，不再用「有没有目标对话」这种粗代理。
+    const cognitiveObserved = observedFieldKeys(goalConversation?.cognitive);
+    // 校准偏差命中时 selfAssessmentAccuracy 由 memory_traces 实测覆盖，属于有数据支撑
+    if (calibrationBias !== 'accurate' && !cognitiveObserved.includes('selfAssessmentAccuracy')) {
+      cognitiveObserved.push('selfAssessmentAccuracy');
+    }
+    const behavioralObserved = observedFieldKeys(baseline, true);
+    const learningObserved = observedFieldKeys(metrics);
+    /* 单次时长是 inferSessionLength 推出来的：没有时间预算时它同样返回 'medium'（兜底值），
+       不能当成实测——否则学员会看到「中（约 30 分钟）」后面没有默认值标注。 */
+    const preferenceObserved = observedFieldKeys(goalConversation?.preferences)
+      .filter((key) => key !== 'sessionLength' || !!goalConversation?.background?.availableTime);
+    const emotionalObserved = observedFieldKeys(goalConversation?.emotional);
+
     // 画像叙述由 buildNarrativeInsights 确定性产出；原 goal-profile-inference / learning-pattern-distiller
     // LLM 增强已移除（输入与输出同字段、换措辞零增量，2026-08 去 LLM 化）
-    const narrativeInsights = this.buildNarrativeInsights({ goalConversation, cognitive, preferences, emotional, learning, history });
+    const narrativeInsights = this.buildNarrativeInsights({
+      goalConversation, cognitive, preferences, emotional, learning, history,
+      observed: { cognitive: cognitiveObserved, preferences: preferenceObserved, emotional: emotionalObserved, learning: learningObserved },
+    });
     const curriculumControls = this.buildCurriculumControls({ preferences, emotional, learning, narrativeInsights });
     
     const derivedInsights = this.calculateDerivedInsights({
@@ -225,6 +246,9 @@ export class ProfileAggregator {
       ...(goalConversation?.narratives ? { narratives: goalConversation.narratives } : {}),
       // 叙述出处：让「背景与现状」这类单对话观测在界面上可溯源，不被误读成该学习者的全部背景
       narrativeSource: goalConversation?.source ?? null,
+      // 人设字段采集时点（认知/偏好/情绪/叙述同源）：界面据此标「来自哪次目标对话」，
+      // 而不是把冻结的旧快照读成当前状态（2026-11-09 画像链路核查）。
+      personaCapturedAt: goalConversation?.capturedAt ?? null,
       derivedInsights
     };
     
@@ -233,21 +257,7 @@ export class ProfileAggregator {
     /* 逐字段来源（2026-11-02 P1-8）：merge* 在没有数据时回落到 DEFAULT_*，这里按「入参里有没有这个字段」
        如实记录；派生读数按它的输入是否实测判定，规则文本类（建议方式/优势/风险因素）不是实测口径，不列。
        界面据此逐格标「初始默认值」，不再用一个全局的「证据为空」条件把两张卡一起标掉。 */
-    const cognitiveObserved = observedFieldKeys(goalConversation?.cognitive);
-    // 校准偏差命中时 selfAssessmentAccuracy 由 memory_traces 实测覆盖，属于有数据支撑
-    if (calibrationBias !== 'accurate' && !cognitiveObserved.includes('selfAssessmentAccuracy')) {
-      cognitiveObserved.push('selfAssessmentAccuracy');
-    }
-    const behavioralObserved = observedFieldKeys(baseline, true);
-    const learningObserved = observedFieldKeys(metrics);
-    /* 单次时长是 inferSessionLength 推出来的：没有时间预算时它同样返回 'medium'（兜底值），
-       不能当成实测——否则学员会看到「中（约 30 分钟）」后面没有默认值标注。 */
-    const preferenceObserved = observedFieldKeys(goalConversation?.preferences)
-      .filter((key) => key !== 'sessionLength' || !!goalConversation?.background?.availableTime);
-    const emotionalObserved = observedFieldKeys(goalConversation?.emotional);
     const derivedObserved: string[] = [];
-    const anyProfileInputObserved = cognitiveObserved.length > 0 || preferenceObserved.length > 0
-      || emotionalObserved.length > 0 || learningObserved.length > 0;
     if (learningObserved.includes('ktl') || learningObserved.includes('recentProgress')) derivedObserved.push('learningVelocity');
     if (preferenceObserved.includes('sessionLength') || behavioralObserved.includes('avgInteractionInterval')) {
       derivedObserved.push('optimalSessionLength');
@@ -255,7 +265,9 @@ export class ProfileAggregator {
     if (learningObserved.length > 0 || cognitiveObserved.includes('metacognitionLevel')) {
       derivedObserved.push('recommendedDifficulty');
     }
-    if (anyProfileInputObserved) derivedObserved.push('suggestedApproach');
+    /* suggestedApproach 是规则拼装的文本，不是测量值——按本段契约不列入 sources（同 strengths/riskFactors）。
+       界面改为在「输入有观测」时标「规则推导」，而不是硬塞进「实测」或一律标「初始默认值」。
+       旧实现在任一画像输入有观测时就 push 它，导致通用兜底文案「采用平衡的学习方式」也带实测语义。 */
     /* 课程控制是规则产出：只有它读的那几个输入有实测值时才不算默认（buildCurriculumControls 的判据） */
     const curriculumObserved: string[] = [];
     if (preferenceObserved.includes('sessionLength') || learningObserved.includes('lf')) {
@@ -293,6 +305,8 @@ export class ProfileAggregator {
     };
     narratives?: LearnerGoalNarratives;
     source?: LearnerModelProfile['narrativeSource'];
+    /** 这组人设字段的采集时点：优先取理解证据时间，其次取已完成对话的完成时间 */
+    capturedAt?: string | null;
   } | null> {
     try {
       const [goalEvidence, conversation] = await Promise.all([
@@ -366,6 +380,11 @@ export class ProfileAggregator {
             || understanding.background?.available_time
         },
         source,
+        capturedAt: goalEvidence?.occurredAt
+          ? new Date(goalEvidence.occurredAt).toISOString()
+          : conversation?.completedAt
+            ? new Date(conversation.completedAt).toISOString()
+            : null,
       };
     } catch (error) {
       logger.error('[profile-aggregator] failed to fetch goal conversation data', { userId, error });
@@ -380,7 +399,7 @@ export class ProfileAggregator {
     return null;
   }
   
-  private async fetchMetricsData(userId: string): Promise<LearningState | null> {
+  private async fetchMetricsData(userId: string): Promise<Partial<LearningState> | null> {
     try {
       // 学习者级状态 = 按路径保守聚合 + 当日课量疲劳加成（不再取"最近一条行"）
       const [aggregated, trends] = await Promise.all([
@@ -397,14 +416,15 @@ export class ProfileAggregator {
         metrics: aggregated.metrics,
       });
 
+      // 2026-11-09 运营字段真值核查：masteryByTopic / streak 此前写死为 {} / 0。
+      // 它们不在这里返回（由 mergeLearning 的 DEFAULT_LEARNING_STATE 补齐），
+      // 否则 observedFieldKeys 会把 0 和 {} 判成「已观测」，界面把死值标成实测而非默认。
       return {
         ktl: aggregated.metrics.ktl,
         lf: aggregated.metrics.lf,
         lss: aggregated.metrics.lss,
         lsb: aggregated.metrics.lsb,
-        masteryByTopic: {},
         recentProgress: this.inferProgress(trends),
-        streak: 0
       };
     } catch (error) {
       logger.error('[profile-aggregator] failed to fetch metrics data', { userId, error });
@@ -429,14 +449,18 @@ export class ProfileAggregator {
       if (sessions.length === 0) return null;
 
       const totalDuration = sessions.reduce((sum, s) => sum + (s.duration || 0), 0);
-      const [totalMessages, conceptsStruggled, conceptsMastered] = await Promise.all([
+      const [totalSessions, totalMessages, conceptsStruggled, conceptsMastered] = await Promise.all([
+        // 2026-11-09 画像链路核查：totalSessions 原先是 `sessions.length`，而 sessions 带 `take: 50`，
+        // 于是「总课堂数」在 50 节以上会被截成 50。总数改用独立 count；消息数/时长仍是最近 50 节窗口
+        // （它们要逐会话聚合，全量代价高，且标签已注明「近 50 节」）。
+        prisma.teaching_sessions.count({ where: { userId } }),
         this.countSessionMessages(sessions.map((s) => s.id)),
         this.fetchStruggledConcepts(userId),
         this.fetchMasteredConcepts(userId)
       ]);
 
       return {
-        totalSessions: sessions.length,
+        totalSessions,
         totalMessages,
         avgSessionDuration: sessions.length > 0 ? totalDuration / sessions.length : 0,
         topicsExplored: Array.from(new Set(sessions.map((s) => (s.topic || '').trim()).filter(Boolean))).slice(0, MAX_HISTORY_LABELS),
@@ -524,9 +548,11 @@ export class ProfileAggregator {
   
   private mergeBehavioral(
     data: BehavioralBaseline | null,
-    changes: string[]
-  ): BehavioralBaseline {
-    if (!data) return DEFAULT_BEHAVIORAL;
+    _changes: string[]
+  ): BehavioralBaseline | null {
+    // 2026-11-09 真值核查：没有观测就返回 null，不再用 DEFAULT_BEHAVIORAL 冒充读数。
+    // 前端据此隐藏「学习行为基线」子卡；下游一律 `behavioral?.x`，null 时不参与判断。
+    if (!data) return null;
     
     return {
       avgResponseTime: data.avgResponseTime || DEFAULT_BEHAVIORAL.avgResponseTime,
@@ -538,7 +564,7 @@ export class ProfileAggregator {
   }
   
   private mergeLearning(
-    metrics: LearningState | null,
+    metrics: Partial<LearningState> | null,
     background: { currentLevel?: string; availableTime?: string } | undefined,
     changes: string[]
   ): LearningState {
@@ -548,28 +574,36 @@ export class ProfileAggregator {
     };
   }
   
+  /* 2026-11-09 画像链路核查：这两个合并原先用对象 spread，而 fetchGoalConversationData 返回的对象
+     **显式带有值为 undefined 的键**（例如目标对话没填 learning_style 时的 preferredStyle）。
+     spread 会把 undefined 一起展开、覆盖 DEFAULT_*，于是类型承诺非空的字段实际变成 undefined，
+     下游 `preferences.preferredStyle === 'visual'` 之类的判断会静默落到兜底分支。
+     改为与 mergeCognitive 相同的逐键判空口径：undefined / null / '' 一律保留默认值。 */
   private mergePreferences(
     data: Partial<LearningPreferences> | undefined,
-    changes: string[]
+    _changes: string[]
   ): LearningPreferences {
     if (!data) return DEFAULT_PREFERENCES;
-    
-    return {
-      ...DEFAULT_PREFERENCES,
-      ...data
-    };
+    return this.mergeDefined(DEFAULT_PREFERENCES, data);
   }
   
   private mergeEmotional(
     data: Partial<EmotionalProfile> | undefined,
-    changes: string[]
+    _changes: string[]
   ): EmotionalProfile {
     if (!data) return DEFAULT_EMOTIONAL;
-    
-    return {
-      ...DEFAULT_EMOTIONAL,
-      ...data
-    };
+    return this.mergeDefined(DEFAULT_EMOTIONAL, data);
+  }
+
+  /** 逐键合并：只有「确实给了值」的键才覆盖默认值。 */
+  private mergeDefined<T extends object>(base: T, data: Partial<T>): T {
+    const merged = { ...base };
+    for (const [key, value] of Object.entries(data)) {
+      if (value !== undefined && value !== null && value !== '') {
+        (merged as Record<string, unknown>)[key] = value;
+      }
+    }
+    return merged;
   }
   
   private mergeHistory(
@@ -611,20 +645,25 @@ export class ProfileAggregator {
   private calculateOptimalSessionLength(profile: Partial<LearnerModelProfile>): number {
     if (profile.preferences?.sessionLength === 'short') return 20;
     if (profile.preferences?.sessionLength === 'long') return 60;
-    if (profile.behavioral?.avgInteractionInterval) {
-      return Math.min(45, Math.max(15, profile.behavioral.avgInteractionInterval * 5));
-    }
+    // 2026-11-09 运营字段真值核查：avgInteractionInterval 来自已退役的 EMA 基线
+    // （fetchBaselineData 恒 return null → 恒为常量 5），旧分支因此恒算出 25 分钟，
+    // 是把死常量当个性化读数。没有真实交互间隔就退回通用默认 30。
     return 30;
   }
   
+  /* 2026-11-09 口径统一：难度建议原先用绝对阈值 `lf > 6 / ktl > 6`，而课内真正的难度调整
+     （TaskDifficultyAdjustmentService）与快照的疲劳/节奏都走 `classifyLoad` 的相对量 ACWR。
+     同一份 metrics 因此会出现「画像说 easy、课内挑战上限是 high」的矛盾。改为共用同一判据：
+     明显超载 → easy；有余力且元认知强 → hard；其余 medium。 */
   private recommendDifficulty(profile: Partial<LearnerModelProfile>): 'easy' | 'medium' | 'hard' {
     if (!profile.learning || !profile.cognitive) return 'medium';
-    
+
     const { ktl = 0, lf = 0 } = profile.learning;
     const { metacognitionLevel } = profile.cognitive;
-    
-    if (lf > 6 || metacognitionLevel === 'low') return 'easy';
-    if (ktl > 6 && metacognitionLevel === 'high') return 'hard';
+    const verdict = classifyLoad({ ktl, lf });
+
+    if (verdict.pacing === 'slow' || metacognitionLevel === 'low') return 'easy';
+    if (verdict.pacing === 'fast' && metacognitionLevel === 'high') return 'hard';
     return 'medium';
   }
   
@@ -643,7 +682,8 @@ export class ProfileAggregator {
     if (profile.emotional?.confidenceLevel === 'anxious') {
       parts.push('增加正向反馈和小目标');
     }
-    if (profile.learning?.lf && profile.learning.lf > 5) {
+    // 与 fatigueRisk 同口径（ACWR ≥ 1.5 才算高疲劳）；旧的 `lf > 5` 会把相对甜区误判成过载。
+    if (profile.learning && classifyLoad(profile.learning).fatigueRisk !== 'low') {
       parts.push('注意休息，降低学习强度');
     }
     
@@ -668,46 +708,86 @@ export class ProfileAggregator {
     emotional: EmotionalProfile;
     learning: LearningState;
     history: InteractionHistory;
+    /** 逐字段实测来源（与 profileSources 同口径）：叙述句只在该格的输入真被观测时才输出。 */
+    observed: {
+      cognitive: readonly string[];
+      preferences: readonly string[];
+      emotional: readonly string[];
+      learning: readonly string[];
+    };
   }): LearnerNarrativeInsights {
     const goal = profile.goalConversation?.narratives;
-    const goalNarrative = goal?.realProblem || goal?.surfaceGoal || '当前目标还需要在真实问题层面继续收缩。';
+    /* 2026-11-09 运营字段真值核查：这里的句子不是「空值兜底」，而是**无条件断言学习者特质**
+       （「当前更多依赖兴趣或外部目标驱动」「当前没有特别突出的认知摩擦模式」）。它们会：
+       ① 在运营后台「叙述洞察」卡上被当成真实洞察展示（该卡没有「初始默认值」徽标）；
+       ② 经 personalization.ts / TeachingContextBuilder 作为 learnerPersona 注入教学提示词。
+       零证据账号因此会以一句话人设进入教学。修法：只有该字段的**输入真的被观测到**才输出，
+       否则返回空串——前端 narrativeSections 的 .filter((s) => s) 会自然不渲染。 */
+    // 逐字段观测判定（2026-11-09 真值核查）：每一句只在它读的那几个输入真被观测时才输出，
+    // 不再用「有没有目标对话」或「有没有会话」这种粗代理——那会让「有目标对话但没填偏好」
+    // 的学员仍收到按默认偏好拼出的断言。
+    const has = (list: readonly string[], key: string) => list.includes(key);
+    const hasConfusionPattern = has(profile.observed.cognitive, 'confusionPattern');
+    const hasThinkingStyle = has(profile.observed.cognitive, 'thinkingStyle');
+    const hasPreferredStyle = has(profile.observed.preferences, 'preferredStyle');
+    const hasTheoryVsPractice = has(profile.observed.preferences, 'theoryVsPractice');
+    const hasSessionLength = has(profile.observed.preferences, 'sessionLength');
+    const hasConfidenceLevel = has(profile.observed.emotional, 'confidenceLevel');
+    const hasLf = has(profile.observed.learning, 'lf');
+
+    const goalNarrative = goal?.realProblem || goal?.surfaceGoal || '';
     const backgroundContextNote = [
       goal?.backgroundExperience,
       goal?.currentLevel ? `当前自述水平：${goal.currentLevel}` : '',
       Array.isArray(goal?.painPoints) && goal?.painPoints.length > 0 ? `主要卡点：${goal.painPoints.join('、')}` : ''
-    ].filter(Boolean).join('；') || '背景信息还不充分，后续需要结合学习表现继续补齐。';
-    const motivationNarrative = goal?.motivation || (profile.emotional.motivationTrigger === 'problem-solving' ? '更偏问题驱动，适合围绕真实任务推进。' : '当前更多依赖兴趣或外部目标驱动。');
+    ].filter(Boolean).join('；');
+    const motivationNarrative = goal?.motivation || '';
     const timeConstraintNote = goal?.availableTime
       ? `可投入时间大致为 ${goal.availableTime}，课程任务需要和这个节奏匹配。`
-      : '时间约束还不够明确，建议优先按中等节奏安排。';
+      : '';
     const selfAssessmentNote = goal?.currentLevel
       ? `学习者当前自述水平为 ${goal.currentLevel}，需要持续对比真实任务表现修正难度。`
-      : '当前还缺少稳定的自评基线，需要通过后续学习表现补足。';
+      : '';
 
-    const contentReceptionPattern = profile.preferences.preferredStyle === 'practice'
-      ? '边学边做更容易进入状态，纯讲解不宜过长。'
-      : profile.cognitive.thinkingStyle === 'visual'
-        ? '更容易通过可视化示例和结构图进入理解。'
-        : '先建立概念，再配合例子验证，整体更稳。';
-    const practicePreferenceNote = profile.preferences.theoryVsPractice === 'practice-first'
-      ? '更适合先做一个小任务，再回头解释原理。'
-      : '更适合先把概念讲清，再安排验证性练习。';
-    const frictionPatternNote = profile.cognitive.confusionPattern === 'application-difficulty'
-      ? '概念本身未必难，但一到迁移应用就容易卡住，需要更多变式练习。'
-      : profile.cognitive.confusionPattern === 'concept-confusion'
-        ? '容易在相近概念之间混淆，需要先做概念边界辨析。'
-        : profile.learning.lf > 5
-          ? '高负荷时理解质量会下降，应避免单次引入过多新概念。'
-          : '当前没有特别突出的认知摩擦模式，但仍需持续观察真实学习证据。';
-    const effectiveTeachingPattern = profile.preferences.theoryVsPractice === 'practice-first'
-      ? '先给一个具体任务切入口，再补原理说明，最后立刻做一个小验证。'
-      : '先讲清当前核心概念，再用一个短练习确认是否真的理解。';
-    const supportStyleNote = profile.emotional.confidenceLevel === 'anxious'
-      ? '需要更温和的纠错和更高频的小反馈，避免连续追问带来额外压力。'
-      : '可以接受正常强度的追问和挑战，但仍建议每次只聚焦一个关键问题。';
-    const taskGranularityNote = profile.preferences.sessionLength === 'short' || profile.learning.lf > 4
-      ? '任务宜拆成 15-25 分钟的小闭环，优先保证完成感和理解稳定。'
-      : '任务可以保持中等粒度，但仍建议每个任务只有一个主要认知目标。';
+    const contentReceptionPattern = !(hasPreferredStyle || hasThinkingStyle)
+      ? ''
+      : profile.preferences.preferredStyle === 'practice'
+        ? '边学边做更容易进入状态，纯讲解不宜过长。'
+        : profile.cognitive.thinkingStyle === 'visual'
+          ? '更容易通过可视化示例和结构图进入理解。'
+          : '先建立概念，再配合例子验证，整体更稳。';
+    const practicePreferenceNote = !hasTheoryVsPractice
+      ? ''
+      : profile.preferences.theoryVsPractice === 'practice-first'
+        ? '更适合先做一个小任务，再回头解释原理。'
+        : '更适合先把概念讲清，再安排验证性练习。';
+    const frictionPatternNote = !(hasConfusionPattern || hasLf)
+      ? ''
+      : profile.cognitive.confusionPattern === 'application-difficulty'
+        ? '概念本身未必难，但一到迁移应用就容易卡住，需要更多变式练习。'
+        : profile.cognitive.confusionPattern === 'concept-confusion'
+          ? '容易在相近概念之间混淆，需要先做概念边界辨析。'
+          // 2026-11-09 口径统一（收尾）：这里原先是绝对阈值 `lf > 5`，与 fatigueRisk 的
+          // ACWR 判据不同源，会出现「画像说高负荷、dynamicState.fatigueRisk 说 low」。
+          : classifyLoad(profile.learning).fatigueRisk !== 'low'
+            ? '高负荷时理解质量会下降，应避免单次引入过多新概念。'
+            : '';
+    const effectiveTeachingPattern = !hasTheoryVsPractice
+      ? ''
+      : profile.preferences.theoryVsPractice === 'practice-first'
+        ? '先给一个具体任务切入口，再补原理说明，最后立刻做一个小验证。'
+        : '先讲清当前核心概念，再用一个短练习确认是否真的理解。';
+    const supportStyleNote = !hasConfidenceLevel
+      ? ''
+      : profile.emotional.confidenceLevel === 'anxious'
+        ? '需要更温和的纠错和更高频的小反馈，避免连续追问带来额外压力。'
+        : '可以接受正常强度的追问和挑战，但仍建议每次只聚焦一个关键问题。';
+    const taskGranularityNote = !(hasSessionLength || hasLf)
+      ? ''
+      // 同口径（收尾）：原为绝对阈值 `lf > 4`，与 curriculumControls 的 ACWR 判据不一致。
+      : profile.preferences.sessionLength === 'short' || classifyLoad(profile.learning).fatigueRisk !== 'low'
+        ? '任务宜拆成 15-25 分钟的小闭环，优先保证完成感和理解稳定。'
+        : '';
 
     return {
       ...DEFAULT_NARRATIVE_INSIGHTS,
@@ -731,19 +811,25 @@ export class ProfileAggregator {
     learning: LearningState;
     narrativeInsights: LearnerNarrativeInsights;
   }): LearnerCurriculumControls {
+    /* 2026-11-09 口径统一：课程控制原先用一组绝对阈值（lf>4.5 / lf>5 / lf>4 / ktl>6），
+       与快照 fatigueRisk/recommendedPacing 的相对量 ACWR 判据不同源。改为全部由 classifyLoad
+       派生：超载→更小粒度/更低密度/更高复习频率；有余力且基座成熟→反向。 */
+    const verdict = classifyLoad(profile.learning);
+    const capacity = verdict.mature && verdict.fatigueRisk === 'low';
+
     const taskGranularityLevel: LearnerCurriculumControls['taskGranularityLevel'] =
-      profile.preferences.sessionLength === 'short' || profile.learning.lf > 4.5 ? 'small'
-        : profile.preferences.sessionLength === 'long' && profile.learning.ktl > 5 ? 'large'
+      profile.preferences.sessionLength === 'short' || verdict.pacing === 'slow' ? 'small'
+        : profile.preferences.sessionLength === 'long' && capacity ? 'large'
           : 'medium';
 
     const conceptDensityLevel: LearnerCurriculumControls['conceptDensityLevel'] =
-      profile.learning.lf > 5 || profile.emotional.confidenceLevel === 'anxious' ? 'low'
-        : profile.learning.ktl > 6 ? 'high'
+      verdict.pacing === 'slow' || profile.emotional.confidenceLevel === 'anxious' ? 'low'
+        : capacity ? 'high'
           : 'medium';
 
     const reviewFrequencyLevel: LearnerCurriculumControls['reviewFrequencyLevel'] =
-      profile.learning.lf > 4 || profile.preferences.theoryVsPractice === 'practice-first' ? 'high'
-        : profile.learning.ktl > 6 ? 'low'
+      verdict.fatigueRisk !== 'low' || profile.preferences.theoryVsPractice === 'practice-first' ? 'high'
+        : capacity ? 'low'
           : 'medium';
 
     const progressionStrategyNote = taskGranularityLevel === 'small'
@@ -764,7 +850,8 @@ export class ProfileAggregator {
   private identifyRiskFactors(profile: Partial<LearnerModelProfile>): string[] {
     const risks: string[] = [];
     
-    if (profile.learning?.lf && profile.learning.lf > 7) {
+    // 与 dynamicState.fatigueRisk 同口径（ACWR ≥ 1.5）；旧的 `lf > 7` 是绝对量、尺度相关。
+    if (profile.learning && classifyLoad(profile.learning).fatigueRisk === 'high') {
       risks.push('疲劳度过高，可能影响学习效果');
     }
     if (profile.emotional?.confidenceLevel === 'anxious') {
@@ -786,7 +873,10 @@ export class ProfileAggregator {
     if (profile.cognitive?.metacognitionLevel === 'high') {
       strengths.push('元认知能力强，善于自我反思');
     }
-    if (profile.learning?.ktl && profile.learning.ktl > 6) {
+    // 「积累扎实」= 适应基座已成熟且当前无高疲劳；旧的 `ktl > 6` 是绝对量，PMC 口径下会误判。
+    if (profile.learning && classifyLoad(profile.learning).mature
+      && classifyLoad(profile.learning).fatigueRisk === 'low'
+      && profile.learning.recentProgress !== 'declining') {
       strengths.push('学习积累扎实');
     }
     if (profile.behavioral?.consistencyScore && profile.behavioral.consistencyScore > 0.7) {

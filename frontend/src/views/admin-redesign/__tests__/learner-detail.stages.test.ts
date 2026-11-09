@@ -1095,7 +1095,7 @@ describe('LearnerDetail 画像 KV：分档词表 / 量纲 / 逐格来源（P1-8�
         emotional: ['confidenceLevel'],
         history: [],
         curriculumControls: [],
-        derivedInsights: ['suggestedApproach'],
+        derivedInsights: ['recommendedDifficulty'],
       },
     };
   }
@@ -1113,9 +1113,9 @@ describe('LearnerDetail 画像 KV：分档词表 / 量纲 / 逐格来源（P1-8�
   function kvRow(w: Awaited<ReturnType<typeof mountProfile>>, label: string) {
     return w.findAll('.ld-kv__row').find((r) => r.find('span').text() === label)!;
   }
-  /** 读数文本（不含紧随其后的「初始默认值」标注） */
+  /** 读数文本（不含紧随其后的「初始默认值 / 规则推导」标注） */
   function kvValue(w: Awaited<ReturnType<typeof mountProfile>>, label: string) {
-    return kvRow(w, label).find('strong').text().replace('初始默认值', '');
+    return kvRow(w, label).find('strong').text().replace('初始默认值', '').replace('规则推导', '');
   }
 
   it('枚举翻成中文分档，比率标成百分比并带量纲说明', async () => {
@@ -1127,8 +1127,8 @@ describe('LearnerDetail 画像 KV：分档词表 / 量纲 / 逐格来源（P1-8�
       expect(kvValue(w, '困惑模式')).toBe('暂无明显模式');
       expect(kvValue(w, '是否偏好提示')).toBe('需要提示');
       expect(kvValue(w, '自信水平')).toBe('容易紧张');
-      // 0.5 不再裸上屏；量纲写在 title
-      expect(kvValue(w, '投入度')).toBe('50%');
+      // 行为基线数据源已退役：无来源时不再把默认常量渲染成读数（priorAsDash → —）
+      expect(kvValue(w, '投入度')).toBe('—');
       expect(kvRow(w, '投入度').find('strong').attributes('title')).toBe('课堂互动的投入程度，0-100%');
       expect(kvValue(w, '学习速度')).toBe('50%');
       w.unmount();
@@ -1151,8 +1151,8 @@ describe('LearnerDetail 画像 KV：分档词表 / 量纲 / 逐格来源（P1-8�
         expect(kvRow(w, label).find('.ld-kv__prior').text()).toBe('初始默认值');
       }
       expect(kvRow(w, '学习速度').find('.ld-kv__prior').exists()).toBe(true);
-      // 规则建议（非实测非默认）不标
-      expect(kvRow(w, '建议方式').find('.ld-kv__prior').exists()).toBe(false);
+      // 规则建议不是测量值，也不是默认值：标「规则推导」（2026-11-09 口径修正）
+      expect(kvRow(w, '建议方式').find('.ld-kv__prior').text()).toBe('规则推导');
       // 旧的整卡徽章撤除
       expect(w.text()).not.toContain('初始默认值 · 暂无学习记录');
       w.unmount();

@@ -69,9 +69,13 @@ export async function loadLearnerSnapshotForContext(
   input: LearnerSnapshotRefreshInput,
   options?: { forceLearnerSnapshotRefresh?: boolean },
 ) {
+  /* 2026-11-09 画像链路核查：教学开课默认走 getLatest，而它的持久化投影允许 10 分钟陈旧——
+     一次课只取一次快照，却可能看不到上节课刚写入的掌握度/证据。这里把可接受陈旧度收紧到 60s：
+     一节课的启动成本可以接受一次重算，但不能用旧画像做开场与难度决策。
+     收束终评仍走 forceLearnerSnapshotRefresh（无条件重算）。 */
   return options?.forceLearnerSnapshotRefresh
     ? learnerSnapshotRefreshService.refresh(input)
-    : learnerSnapshotRefreshService.getLatest(input);
+    : learnerSnapshotRefreshService.getLatest(input, { maxAgeMs: 60_000 });
 }
 
 /**

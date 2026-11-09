@@ -1,5 +1,6 @@
 import prisma from '../../config/database';
 import type { Prisma } from '@prisma/client';
+import { INSTANCE_SESSION_WHERE } from './instance-scope';
 
 /**
  * 虚拟模拟会话仓储（routes/admin/virtual-learners.ts 的取数层）。
@@ -138,15 +139,15 @@ export function createAdminAuditLog(args: { data: Prisma.admin_audit_logsCreateI
 }
 
 /**
- * 会话读侧范围：只认派生实例的会话（2026-10-25「不播种，都派生」）。
+ * 会话读侧范围：只认实例的会话（2026-10-25「不播种，都派生」）。
  *
- * 身份池里的模板卡与派生实例同表（`virtual_learner_profiles`），模板卡理论上不该有运行记录，
- * 但历史库里有（预置卡当年直接当过学习者跑过）。列表既然只列派生实例，全量聚合（状态条 /
+ * 身份池里的模板卡与实例同表（`virtual_learner_profiles`），模板卡理论上不该有运行记录，
+ * 但历史库里有（预置卡当年直接当过学习者跑过）。列表既然只列实例，全量聚合（状态条 /
  * 仿真看板 / 卡死候选 / 平均时长）也必须同范围，否则会出现「列表 0 人、完成率却有数」。
- * 判据与 `virtual-learner-profile.repo` 的 DERIVED_INSTANCE_WHERE 同源（profile JSON 含 derivedFrom）。
+ * 判据与列表侧同源：共用 `instance-scope.ts` 的 `INSTANCE_PROFILE_WHERE`
+ * （2026-11-09 收敛：此前两处各写一份字面量，且漏了批量实验这条建号路径）。
  */
-const DERIVED_PROFILE_FILTER = { profile: { contains: '"derivedFrom"' } } as const
-const DERIVED_SESSION_SCOPE = { virtual_learner_profiles: DERIVED_PROFILE_FILTER } as const
+const DERIVED_SESSION_SCOPE = INSTANCE_SESSION_WHERE
 
 /** 全量会话状态聚合（列表状态条 / 仿真看板共用；范围=派生实例） */
 export function getSessionStatusAggregates() {
