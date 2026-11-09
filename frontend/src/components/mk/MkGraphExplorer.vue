@@ -135,7 +135,13 @@
                 />属于（知识组件 → 核心概念）
               </span>
               <span class="mk-ge__legend-group mk-ge__legend-hint">
-                圆点=核心概念 · 方块=知识组件 ·
+                <!-- 形状与大小都要有出处（2026-11-09 走查）：图上同时出现圆/圆角方块与大小两档，
+                     而图例此前只在头行解释了颜色，读者只能猜「方块是不是没学会」。
+                     形状 = 粒度（圆点=核心概念 / 方块=知识组件，与 MkGraph 的 symbol 一致）；
+                     大小 = 该节点在图里的关系条数（MkGraph 的 baseSize 由 degree 推）。 -->
+                <i class="mk-ge__shape mk-ge__shape--round" aria-hidden="true" />圆点=核心概念 ·
+                <i class="mk-ge__shape mk-ge__shape--square" aria-hidden="true" />方块=知识组件 ·
+                节点越大=关系越多 ·
                 <span class="mk-ge__legend-desktop">拖动/滚轮可缩放</span>
                 <span class="mk-ge__legend-mobile">双指可缩放</span>
                 <span class="mk-ge__legend-tap"> · 点节点看名称</span>
@@ -322,6 +328,11 @@ const props = withDefaults(
     /** 概念台账事实（可迁移 / 误解风险 / 证据数），按概念名索引；不传 = 节点详情不渲染这组行
      *  （用户侧知识图谱没有学习者模型台账，保持原样） */
     conceptFacts?: Record<string, MkGraphConceptFacts>
+    /** 初始是否隐藏「无关系的孤立概念」（默认 true，勾选框仍可切）。
+     *  2026-11-09 学习者详情传 false：它的图是一条路径的完整概念网，未学习节点也要以暗灰
+     *  留在图上——否则只剩几个薄弱孤点、连线全断（实测 8 / 21 个概念 · 0 条关系，
+     *  读者看不出这 8 个薄弱点在整张知识网里的位置）。 */
+    defaultHideIsolated?: boolean
   }>(),
   {
     paths: () => [],
@@ -336,6 +347,7 @@ const props = withDefaults(
     emptyActionText: '',
     practiceActionText: '',
     conceptFacts: () => ({}),
+    defaultHideIsolated: true,
   }
 )
 
@@ -354,7 +366,7 @@ const LEVEL_OPTIONS = [
 ]
 
 const level = ref<'all' | 'concept' | 'kc'>('all')
-const hideIsolated = ref(true)
+const hideIsolated = ref(props.defaultHideIsolated)
 const selected = ref<MkGraphNode | null>(null)
 /** 侧栏收起态（2026-11-06 走查）：收起后画布吃满卡宽，全屏看图 */
 const sideOpen = ref(true)
@@ -826,6 +838,18 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   border-top-width: 2px;
 }
 /* 线色不再写死在 CSS：图例与画布同源取 relationStyleOf（见 script legendLines） */
+/* 形状图例（2026-11-09）：与画布上 MkGraph 的 symbol 同形——圆点=核心概念、圆角方块=知识组件。
+   色走当前文字色（图例是说明文字的一部分，不引入第五种语义色）。 */
+.mk-ge__shape {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 3px;
+  background: currentColor;
+  vertical-align: -1px;
+}
+.mk-ge__shape--round { border-radius: 50%; }
+.mk-ge__shape--square { border-radius: 2px; }
 .mk-ge__legend-hint {
   display: block;
   opacity: 0.8;
@@ -1160,7 +1184,7 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
 .mk-ge__rel-label b {
   margin-left: 5px;
   font-weight: 600;
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
 }
 .mk-ge__rel-list {
   margin: 0;
@@ -1191,7 +1215,7 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
 }
 .mk-ge__rel-item:hover {
   background: var(--mk-surface-3);
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
 }
 @media (max-width: 900px) {
   .mk-ge__body {

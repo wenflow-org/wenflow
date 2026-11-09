@@ -529,6 +529,13 @@ router.beforeEach(async (to, _from, next) => {
       next({ path: '/admin/system-settings', query });
       return;
     }
+    /* 2026-11-09「运营待办」空壳页签下线（顶部四张读数卡已承载待办数）：
+       老书签/外链 ?tab=todo 路由级改投默认的「反馈」页签，?status= 等定位参数原样带走。 */
+    if (to.query.tab === 'todo') {
+      const query = { ...to.query, tab: 'feedback' };
+      next({ path: '/admin/ops-hub', query, replace: true });
+      return;
+    }
   }
   /* 复习积压的单用户明细（?userId=）落在学习者详情的「记忆与复习」页签：
      复习积压列表读的是 FSRS 普查（记忆痕迹 / 待复习 / 记忆强度），与同名页签同源；
@@ -544,7 +551,8 @@ router.beforeEach(async (to, _from, next) => {
   /* 运营中心的 ?status= 只认当前页签的枚举：别的页签留下的值（反馈的 new 落到公告）
      会把列表筛成空表。非法值丢弃，页签与其余参数照旧。 */
   if (to.path === '/admin/ops-hub' && typeof to.query.status === 'string' && to.query.status) {
-    const tab = typeof to.query.tab === 'string' ? to.query.tab : 'todo';
+    /* 默认页签 = feedback（2026-11-09 运营待办下线后）：裸 ?status=new 深链仍合法。 */
+    const tab = typeof to.query.tab === 'string' ? to.query.tab : 'feedback';
     const allowed: Record<string, readonly string[]> = {
       feedback: ['new', 'triaged', 'resolved', 'dismissed'],
       announce: ['published', 'expired', 'draft', 'archived'],

@@ -238,7 +238,7 @@ onMounted(async () => {
 
 .markdown-renderer :deep(a) {
   /* 蓝 = 全站唯一交互色（--mk-blue）：GitHub 蓝 #0969da 退役，暗色由令牌自翻转 */
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
   text-decoration: none;
 }
 

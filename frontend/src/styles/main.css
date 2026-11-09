@@ -84,6 +84,12 @@
   --mk-surface-2: #eef2fa;          /* 次级表面。规范 --wf-bg-subtle 为 #f1f4f9，
                                        值不同故暂不转接 → 批次 D 收口 */
   --mk-blue: var(--wf-color-primary);
+  /* 2026-11-09 全站巡检 准则5：--mk-blue 在暗色档被「主按钮蓝底白字」钉死在 #2f6ae0，
+     而它同时被大量文字/链接前景色复用——深底上仅 3.26:1（AA 需 4.5）。
+     拆出「前景蓝」token：浅色档与 --mk-blue 同值（不改现有观感），
+     暗色档在 dark 块覆盖为 --mk-accent-deep(#7aa2ff，6.5:1)。
+     规则：文字/链接/图标前景用 --mk-blue-text；实心底、描边、焦点环仍用 --mk-blue。 */
+  --mk-blue-text: var(--mk-blue);
   /* 绿色文字基线：白底 5.0:1。文字级要更深用 v2.css 的 --green-ink；
      不要自造更亮的绿当文字色（如规范 --wf-color-success #31b16f 仅 2.75:1，走查 2026-09-27）。
      规范缺「语义文字色」这一档，故 --mk-green/amber/red 保留字面量。
@@ -490,14 +496,19 @@ html[data-theme='dark'] {
   color-scheme: dark;
   /* ---- 弱化文字：规范无对应物，保留字面量（待规范补「弱化文字」档） ---- */
   /* #7a7e85→#90949b（2026-10-03）：旧值对卡面 #202124 仅 3.95:1（<4.5 AA，11-12px 微字）；
-     新值 card 5.29 / surface-2 4.83 全过，且仍低于 --mk-muted 7.5 一档保持层级 */
-  --mk-faint: #90949b;
+     新值 card 5.29 / surface-2 4.83 全过，且仍低于 --mk-muted 7.5 一档保持层级。
+     2026-11-09 全站巡检再抬一档到 #9aa0a6：13px 微字压 surface-3(#34363b) 实测 3.97
+     （审计日志时间列 / 结果码、筛选器维度名），低于 4.5；新值同底 4.58，card 6.10。 */
+  --mk-faint: #9aa0a6;
   --mk-faint-soft: #a2a5a9;     /* 弱化文字亮档（暗色下可读性补足） */
   --mk-surface-2: #27282c;      /* 次级表面（亮色 #eef2fa 的暗色等价物）。与规范的
                                    --wf-bg-subtle(#1b1c1f) 值不同 → batch D 收口 */
   /* ---- 交互蓝派生：规范暗色 primary-dark 为 #3f74d6，本仓 hover 实测为更亮的 #6a9cf3。
          值不同故保留字面量，待规范确认「暗色 hover 提亮」是否为一档 → batch D ---- */
   --mk-accent-deep: #7aa2ff;
+  /* 前景蓝暗色档（2026-11-09 全站巡检 准则5）：--mk-blue 固定 #2f6ae0 供实心底配白字，
+     文字复用它在深底仅 3.26:1。这里提亮到 #7aa2ff（对 #202124 6.47:1 / #141415 7.40:1）。 */
+  --mk-blue-text: #7aa2ff;
   --mk-blue-hover: #6a9cf3;
   --mk-green: #4ade80;
   --mk-green-bg: rgba(74, 222, 128, 0.14);

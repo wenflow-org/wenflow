@@ -212,7 +212,7 @@ function resetToDefault() {
   font: inherit;
   font-size: var(--mk-fs-micro);
   font-weight: 700;
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
   cursor: pointer;
   text-align: left;
 }

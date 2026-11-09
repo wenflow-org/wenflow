@@ -498,7 +498,7 @@ const tagClass = (type: string) => ({
 .completion-btn--small { height: 36px; padding: 5px 13px; font-size: 12px; }
 .completion-btn--default { background: var(--bg-surface); border-color: var(--border-default); color: var(--text-primary); font-weight: 600; }
 /* 底部动作按钮此前走 el-button 默认型（灰色文字），非 --default 型；对齐其视觉 */
-.completion-btn--default:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--mk-blue); color: var(--mk-blue); }
+.completion-btn--default:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--mk-blue); color: var(--mk-blue-text); }
 /* 平面化：主按钮保持实心 --mk-blue，去掉配套的蓝色发光投影 */
 .completion-btn--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: var(--text-on-primary); font-weight: var(--font-medium); }
 .completion-btn--primary:hover:not(:disabled) { background: var(--mk-accent-deep); border-color: var(--mk-accent-deep); color: var(--text-on-primary); box-shadow: var(--wf-shadow-raised); }

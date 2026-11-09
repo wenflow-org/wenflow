@@ -3002,7 +3002,7 @@ onBeforeUnmount(() => {
 .kp__hint { margin: 0; font-size: 12px; line-height: 1.5; color: var(--faint); }
 .kp__hint--err { color: var(--red-ink); }
 /* 通向「知识图谱」聚合页的桥：学习页这里只画当前路径，想看全部路径要去聚合页 */
-.kp__more { margin-left: 6px; color: var(--mk-blue); text-decoration: none; white-space: nowrap; }
+.kp__more { margin-left: 6px; color: var(--mk-blue-text); text-decoration: none; white-space: nowrap; }
 .kp__more:hover { text-decoration: underline; }
 .kp__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .kp__item {
