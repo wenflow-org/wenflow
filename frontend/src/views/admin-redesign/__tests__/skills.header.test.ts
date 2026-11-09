@@ -224,23 +224,26 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
       },
     })
     const w = await mountSkills()
-    // 2026-10-28 目录改为列表：不再有表头/列，「完成度」「类别」不会以列形式出现
-    expect(w.find('.sk-table').exists()).toBe(false)
-    expect(w.findAll('th')).toHaveLength(0)
-    expect(w.find('.sk-list').text()).not.toContain('完成度')
+    // 2026-11-09 目录恢复为固定列宽表：有 thead，但「完成度」「类别」两列不在列集里
+    // （完成度只喂「已上线」KPI；类别此前已撤）
+    expect(w.find('.sk-catalog').exists()).toBe(true)
+    expect(w.findAll('th').map((t) => t.text())).not.toContain('完成度')
+    expect(w.find('.sk-catalog').text()).not.toContain('完成度')
     // 对账数据没白拉：仍驱动「已上线」KPI（2 行里 1 行 live）
     const live = kpiOf(w, '已上线')!
     expect(live.find('.mk-kpi__num').text()).toBe('1')
     w.unmount()
   })
 
-  it('失败行「查看失败记录」：挂在 Skill 身份副行，携 agent+status intent 深链执行日志', async () => {
+  it('失败行「查看失败记录」：在 操作 列，携 agent+status intent 深链执行日志', async () => {
     const w = await mountSkills()
     // 默认按失败数降序：第一行 = skill:a（30 失败）
     // 2026-11-02 评审：标签由「查失败」改成「查看失败记录」——三个字的旧标签读不出是动作还是状态标记
-    const rowBtns = w.findAll('.sk-list .sk-item')[0].findAll('button').map((b) => b.text())
+    // 2026-11-09 操作列：该链接从 Skill 信息副行提到 操作 列
+    const firstRow = w.findAll('.sk-catalog tbody tr')[0]
+    const rowBtns = firstRow.findAll('button').map((b) => b.text())
     expect(rowBtns).toContain('查看失败记录')
-    const failBtn = w.findAll('.sk-list .sk-item')[0].findAll('button').find((b) => b.text() === '查看失败记录')!
+    const failBtn = firstRow.findAll('button').find((b) => b.text() === '查看失败记录')!
     expect(failBtn.classes()).toContain('sk-fail-link')
     await failBtn.trigger('click')
     expect(intent.scene).toBe('execution-logs')
@@ -252,25 +255,25 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     intent.statusFilter = ''
   })
 
-  it('Skill 主行是可点的蓝色链接（整行仍可点），不再有操作列', async () => {
+  it('Skill 主行是可点的蓝色链接（整行仍可点），操作列含 详情/查看失败记录', async () => {
     const w = await mountSkills()
-    const row = w.findAll('.sk-list .sk-item')[0]
+    const row = w.findAll('.sk-catalog tbody tr')[0]
     const link = row.find('.sk-name-link')
     expect(link.exists()).toBe(true)
     expect(link.element.tagName).toBe('BUTTON')
     // 2026-11-08 主次对调：主标题是目录里的展示名（fixture 里 skill:a 的展示名为 A）
     expect(link.text()).toBe('A')
-    // 操作列与表头一起退役：列表没有 thead
-    expect(w.find('.sk-table').exists()).toBe(false)
-    expect(w.find('thead').exists()).toBe(false)
+    // 2026-11-09 目录恢复为固定列宽表：有 thead，操作列在末位
+    expect(w.find('.sk-catalog thead').exists()).toBe(true)
+    expect(w.findAll('.sk-catalog thead th').map((t) => t.text())).toContain('操作')
     w.unmount()
   })
 
-  it('列表不再保留表格列（P95 等占位列随宽表一起退役）', async () => {
+  it('目录为固定列宽表：7 列头（Skill 信息 / 归属 Agent / 路由模型 / 最近更新 / 调用次数 / 成功率 / 操作）', async () => {
     const w = await mountSkills()
-    expect(w.find('.sk-table').exists()).toBe(false)
-    expect(w.findAll('th')).toHaveLength(0)
-    expect(w.find('.sk-list').exists()).toBe(true)
+    expect(w.find('.sk-catalog').exists()).toBe(true)
+    const heads = w.findAll('.sk-catalog thead th').map((t) => t.text())
+    expect(heads).toEqual(['Skill 信息', '归属 Agent', '路由模型', '最近更新', '调用次数', '成功率', '操作'])
     w.unmount()
   })
 
@@ -326,10 +329,13 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
       },
     })
     const w = await mountSkills()
-    const cells = w.findAll('.sk-list .sk-version-link')
-    expect(cells.map((c) => c.text())).toEqual(['v4', '—', 'v7'])
+    // 有版本的是蓝色按钮链接，无版本的是弱化「—」占位（不是按钮），两处都要断言
+    const versionText = w.findAll('.sk-catalog tbody tr').map((r) =>
+      r.find('.sk-version-link').exists() ? r.find('.sk-version-link').text() : r.find('.sk-ver-na')?.text() ?? ''
+    )
+    expect(versionText).toEqual(['v4', '—', 'v7'])
+    const cells = w.findAll('.sk-catalog tbody tr .sk-version-link')
     expect(cells[0].attributes('title')).toContain('v4-default-skill.a')
-    expect(cells[1].attributes('title')).toContain('暂无线上生效 Prompt')
     w.unmount()
   })
 
@@ -342,7 +348,7 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
       profiles: [{ id: 'goal-conversation', name: '目标对话 Skill', agentId: 'goal-agent', agentName: '目标 Agent', category: 'teaching' }],
       stats: { 'goal-conversation': { calls: 10, errors: 0, avgMs: 100, lastAt: '刚刚' } },
     })
-    const row = w.find('.sk-list .sk-item')
+    const row = w.find('.sk-catalog tbody tr')
     const main = row.find('.sk-name-main')
     // 主标题是中文名，且末尾重复的「 Skill」被剥掉
     expect(main.text()).toBe('目标对话')
@@ -365,7 +371,7 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
       profiles: [{ id: 'teaching-turn', name: 'teaching-turn', agentId: 'teaching-agent', agentName: '教学 Agent', category: 'teaching' }],
       stats: { 'teaching-turn': { calls: 5, errors: 0, avgMs: 100, lastAt: '刚刚' } },
     })
-    const row = w.find('.sk-list .sk-item')
+    const row = w.find('.sk-catalog tbody tr')
     expect(row.find('.sk-name-main').text()).toBe('teaching-turn')
     // 无中文名时主标题走等宽（id 是机器串），且不再印第二遍
     expect(row.find('.sk-name-main').classes()).toContain('sk-name-main--id')

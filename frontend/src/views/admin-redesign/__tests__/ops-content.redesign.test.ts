@@ -236,9 +236,13 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     w.findAll('.oc-diff').forEach((e) => expect(e.attributes('title')).toBeUndefined());
 
     // 时长：有值带 ~，无值给 —
-    expect(w.findAll('td.mk-num').map((e) => e.text())).toEqual(['~21h', '—', '~9h']);
-    // 数字列右对齐（表头 mk-th--right + 单元格 mk-num）
-    expect(w.findAll('thead th').some((t) => t.text() === '预计时长' && t.classes().includes('mk-th--right'))).toBe(true);
+    expect(w.findAll('tbody tr').map((tr) => tr.findAll('td')[4].text())).toEqual(['~21h', '—', '~9h']);
+    /* 2026-11-09 用户走查（图 2）：短指标列改左对齐——表头与数据同一条垂直基准线，
+       原先表头在最左、数字在最右，中间一整列空白，数字又紧贴右邻「进度」。 */
+    const hoursTh = w.findAll('thead th').find((t) => t.text() === '预计时长')!;
+    expect(hoursTh.classes()).not.toContain('mk-th--right');
+    expect(hoursTh.classes()).not.toContain('mk-num');
+    expect(w.findAll('tbody tr')[0].findAll('td')[4].classes()).not.toContain('mk-num');
 
     w.unmount();
   });
@@ -316,7 +320,7 @@ describe('OpsContent 学习路径 tab 重设计骨架', () => {
     expect(opt('学习中')).toBe('学习中（1）');
     expect(opt('已完成')).toBe('已完成（1）');
     expect(opt('生成失败')).toBe('生成失败（1）');
-    expect(opt('全部')).toBe('全部状态');
+    expect(opt('全部')).toBe('全部');
 
     // 进度条三态：100% = 绿（ok）/ 进行中 = 默认中性（无 warn 琥珀）/ 失败 = 红（bad）
     const tones = w.findAll('tbody .mk-minibar__fill').map((el) => el.attributes('data-tone') || '');

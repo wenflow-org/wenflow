@@ -103,7 +103,11 @@
 
     <!-- 按管理员分组的标准表格 -->
     <div v-else-if="groups.length" class="ss-body">
-      <div v-for="{ g, active } in visibleGroups" :key="g.adminId" class="mk-card ss-group">
+      <!-- 2026-11-09 设计语言收敛（容器层级）：分组原先是「外层 mk-card--fill 里再套一层
+           mk-card.ss-group」——同页其余四个页签都只有一层卡，只有这里生成卡中卡，
+           内外两层圆角也各转各的。分组不再自带卡壳，复用外层卡的边框与底色；
+           多管理员时用一条分隔线分区，视觉层级仍清楚。 -->
+      <div v-for="{ g, active } in visibleGroups" :key="g.adminId" class="ss-group">
         <!-- 组头（2026-10-27 用户「这个也不要了」）：单管理员是常态，身份/计数与卡头动作重复，
              整行撤除让表格直接起读；多管理员时仍保留一行用于区分是谁的会话。 -->
         <div v-if="groups.length > 1" class="mk-card__head">
@@ -156,6 +160,10 @@
                     <strong class="ss-device">
                       <span class="ss-dot" :class="`ss-dot--${deviceOf(s).kind}`" aria-hidden="true"></span>
                       <span class="ss-browser">{{ deviceOf(s).browser }}</span>
+                      <!-- 2026-11-09 设计语言收敛：当前会话标记原先落在最右侧「操作」列，
+                           与「用户账号」把「当前账号」放身份列的做法相反——同一件事两页两个位置。
+                           统一到首列、贴身份后面，并与那边同一枚 mk-badge--self。 -->
+                      <span v-if="s.id === currentId" class="mk-badge mk-badge--sm mk-badge--self" :title="CURRENT_TAB_HINT">当前</span>
                     </strong>
                     <span class="mk-cell-sub">{{ deviceOf(s).os || '未知系统' }}<template v-if="s.remember"> · 记住我</template></span>
                   </div>
@@ -173,16 +181,16 @@
                 <td class="ss-time mono" :class="{ 'ss-time--soon': expiringSoon(s) }" :title="expiryTitle(s)">
                   <div class="mk-cell-main">
                     <span>{{ fmtDateTime(s.expiresAt) }}</span>
-                    <!-- F6-5：24h 内过期行给出可读剩余时长（颜色只是辅助，文字才是信号） -->
+                    <!-- F6-5：快到期（≤2h）的行给出可读剩余时长（颜色只是辅助，文字才是信号） -->
                     <span v-if="expiringSoon(s)" class="ss-expiry-soon">剩 {{ remainText(s) }}</span>
                   </div>
                 </td>
                 <td><span class="mk-badge" :class="statusClass(s)">{{ statusTextOf(s) }}</span></td>
                 <td class="mk-th--right">
                   <div class="mk-actions">
-                    <span v-if="s.id === currentId" class="ss-current" :title="CURRENT_TAB_HINT">当前</span>
+                    <!-- 当前会话不可下线：标记已上移到首列身份行，这里只留「无可用动作」的占位 -->
                     <button
-                      v-else-if="statusOf(s) === 'active'"
+                      v-if="s.id !== currentId && statusOf(s) === 'active'"
                       type="button"
                       class="mk-btn mk-btn--danger-ghost mk-btn--sm"
                       @click="revoke(s)"
@@ -239,6 +247,7 @@
                       <strong class="ss-device">
                         <span class="ss-dot" :class="`ss-dot--${deviceOf(s).kind}`" aria-hidden="true"></span>
                         <span class="ss-browser">{{ deviceOf(s).browser }}</span>
+                        <span v-if="s.id === currentId" class="mk-badge mk-badge--sm mk-badge--self" :title="CURRENT_TAB_HINT">当前</span>
                       </strong>
                       <span class="mk-cell-sub">{{ deviceOf(s).os || '未知系统' }}<template v-if="s.remember"> · 记住我</template></span>
                     </div>
@@ -254,9 +263,8 @@
                   <td><span class="mk-badge" :class="statusClass(s)">{{ statusTextOf(s) }}</span></td>
                   <td class="mk-th--right">
                     <div class="mk-actions">
-                      <span v-if="s.id === currentId" class="ss-current" :title="CURRENT_TAB_HINT">当前</span>
                       <button
-                        v-else-if="statusOf(s) === 'active'"
+                        v-if="s.id !== currentId && statusOf(s) === 'active'"
                         type="button"
                         class="mk-btn mk-btn--danger-ghost mk-btn--sm"
                         @click="revoke(s)"
@@ -447,7 +455,8 @@ const statusSelect = computed({
   set: (v: string) => { statusFilter.value = (v as '' | SessionStatus) }
 })
 const statusSelectOptions = computed(() => [
-  { value: '', label: '全部状态' },
+  /* 「全部状态」→「全部」：触发器已带「状态」label，选项不再复述（2026-11-09 走查）。 */
+  { value: '', label: '全部' },
   ...statusPills.map((p) => ({ value: p.id, label: `${p.label}（${countOf(p.id)}）` }))
 ])
 
@@ -645,13 +654,17 @@ function uaFull(s: AdminSessionRow): string {
   return s.userAgent || '未知设备'
 }
 
-/** 24 小时内过期的活跃会话高亮提示 */
+/** 即将过期的活跃会话高亮阈值（2026-11-09 设计语言收敛）。
+    原为 24h：本页绝大多数会话就是 24h 到期，于是几乎每一行都被标成琥珀色，
+    颜色不再是「注意这一行」的信号，而是整列底色。降到 2h —— 只剩真正快到期、
+    需要管理员决定「续不续」的那几行才亮，其余走常规时间色。 */
+const EXPIRING_SOON_MS = 2 * 60 * 60 * 1000
 function expiringSoon(s: AdminSessionRow): boolean {
   if (statusOf(s) !== 'active') return false
-  return new Date(s.expiresAt).getTime() - Date.now() <= 24 * 60 * 60 * 1000
+  return new Date(s.expiresAt).getTime() - Date.now() <= EXPIRING_SOON_MS
 }
 /** 剩余时长（F6-5）：安全运维关心「还有多久过期」，给可读文字而非仅颜色差。
-    24h 内按小时、<1h 按分钟（向上取整，最小 1 分钟），避免出现「剩 0 小时」。 */
+    <1h 按分钟（向上取整，最小 1 分钟，不出现「剩 0 小时」），其余按小时。 */
 function remainText(s: AdminSessionRow): string {
   const ms = new Date(s.expiresAt).getTime() - Date.now()
   if (ms <= 0) return '已到期'
@@ -824,9 +837,12 @@ onMounted(async () => {
 /* 有旧行时刷新失败的行内 alert（审核 #179）：贴卡头下方，保留表格可读 */
 .ss-stale-alert { margin: 10px 14px 0; }
 
-.ss-body { display: grid; gap: var(--mk-space-4); }
+/* 分组之间不再各套一张卡（2026-11-09 设计语言收敛）：同页其余页签只有一层卡，
+   这里用一条分隔线区隔多管理员的分组，单管理员（常态）时无任何多余分隔。 */
+.ss-body { display: grid; gap: 0; }
+.ss-group + .ss-group { border-top: 1px solid var(--mk-line); }
 
-/* 分组卡在 fill 布局里被拉到可用高度：活跃表在上，历史折叠条作为卡脚贴底。
+/* 分组在 fill 布局里被拉到可用高度：活跃表在上，历史折叠条作为卡脚贴底。
    否则折叠条紧跟活跃行、其下留 300+px 空白，像表格里混进了一条无主行（2026-10-30 人工复查）。 */
 .ss-group { display: flex; flex-direction: column; }
 .ss-group > .mk-table-scroll { flex: none; }
@@ -910,19 +926,6 @@ onMounted(async () => {
      本档把时间文本降到 micro 角色（≈12px→77px），与 ≥2800 档 .ss-time 同一字号口径。 */
   .ss-time { font-size: var(--mk-fs-micro); }
 }
-.ss-current {
-  display: inline-flex;
-  align-items: center;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  border-radius: var(--mk-radius-xs);
-  padding: 2px 9px;
-  /* 实底 surface（而非与当前行底同色 16% 蓝）：胶囊形状与行底分层；文字 accent-deep
-     对 surface 复算 ~6.5:1（原同色叠同色在暗色下胶囊消失、文字仅 4.11:1） */
-  background: var(--mk-surface);
-  color: var(--mk-accent-deep, #1f57cc);
-  white-space: nowrap;
-}
 .ss-na { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 
 /* 过期/已撤销折叠组（默认收起，summary 行可点击展开）
@@ -950,7 +953,6 @@ onMounted(async () => {
 @media (min-width: 2000px) {
   .ss-group__email { font-size: var(--mk-fs-micro); }
   .ss-group__count { font-size: var(--mk-fs-micro); }
-  .ss-current { font-size: var(--mk-fs-micro); }
   .ss-na { font-size: var(--mk-fs-micro); }
   .ss-time--soon { font-size: var(--mk-fs-micro); }
   .ss-ip { font-size: var(--mk-fs-micro); }
@@ -958,7 +960,6 @@ onMounted(async () => {
 @media (min-width: 2800px) {
   .ss-group__email { font-size: var(--mk-fs-micro); }
   .ss-group__count { font-size: var(--mk-fs-micro); }
-  .ss-current { font-size: var(--mk-fs-micro); }
   .ss-na { font-size: var(--mk-fs-micro); }
   .ss-time,
   .ss-time--soon { font-size: var(--mk-fs-micro); }
@@ -967,7 +968,6 @@ onMounted(async () => {
 @media (min-width: 3600px) {
   .ss-group__email { font-size: var(--mk-fs-micro); }
   .ss-group__count { font-size: var(--mk-fs-body); }
-  .ss-current { font-size: var(--mk-fs-micro); }
   .ss-na { font-size: var(--mk-fs-body); }
   .ss-time--soon { font-size: var(--mk-fs-micro); }
   .ss-ip { font-size: var(--mk-fs-body); }

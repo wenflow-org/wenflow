@@ -3486,7 +3486,7 @@ async function quietReload(id: string) {
   cursor: pointer;
   border-radius: var(--mk-radius-xs);
 }
-.vp-story__title:hover { color: var(--mk-blue); }
+.vp-story__title:hover { color: var(--mk-blue-text); }
 .vp-story__title:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
 .vp-story__budget-badge {
   font-size: var(--mk-fs-micro);

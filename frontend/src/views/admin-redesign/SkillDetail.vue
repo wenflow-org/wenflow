@@ -514,6 +514,22 @@ function onCoreRolledBack() {
      - 确认：置放行标记并真正关闭 / 切到目标 skill。
    真正的跨记录导航（登出、跳公开页）仍由下方 onBeforeRouteLeave 兜底；刷新/关窗由 beforeunload 兜底。 */
 let allowLeave = false
+/** 本详情所在的场景路径（侧栏 id → URL 的唯一映射，见 AdminConsole 的 scene → /admin/<id>）。
+    取消守卫时用它把地址栏拉回本页——2026-11-09 走查：取消后曾出现「地址栏平台总览 + 正文还是
+    Skill 详情 + 侧栏高亮平台总览」的半移动态（刷新即丢失详情）。 */
+const SKILL_SCENE_PATH = '/admin/skills'
+/** 未保存改动的离开确认：两条离开通道（子页关闭/切 Skill，与跨页面离开）共用同一份文案。
+    2026-11-09：原先两处各写一份逐字相同的文案，同一句话在一个文件里存了两份；
+    文案只留这一处，标题按是否有落点区分（切 Skill / 离开详情）。
+    返回类型跟 askConfirm 一致（真值即放行），调用方按真值判断。 */
+function askDirtyLeave(target: unknown) {
+  return askConfirm({
+    title: target ? '切换 Skill' : '离开 Skill 详情',
+    message: `当前 Skill 有未保存的修改（${dirtySummary()}），离开后将丢失，确定离开？`,
+    confirmText: '离开并放弃修改',
+    danger: false
+  })
+}
 watch(
   subPage,
   (sp, prev) => {
@@ -521,15 +537,20 @@ watch(
     const leaving = !sp || sp.view !== 'skill' || sp.id !== prev.id
     if (!leaving || !anyDirty()) return
     const target = sp // 想去哪：null=关闭；否则=新落点（切 skill 或跳别的二级页）
+    /* 取消时要把地址栏还原成的那份 query：此刻 route 还没被宿主的 push 改掉（push 是排队执行、
+       subPage 是同步复原），所以这里读到的就是离开前的形态（含所在页签 ?skdTab=）。 */
+    const keepQuery = { ...tabRoute.query, view: 'skill', id: prev.id }
     subPage.value = prev // 同步复原，阻止卸载
     void (async () => {
-      const ok = await askConfirm({
-        title: target ? '切换 Skill' : '离开 Skill 详情',
-        message: `当前 Skill 有未保存的修改（${dirtySummary()}），离开后将丢失，确定离开？`,
-        confirmText: '离开并放弃修改',
-        danger: false
-      })
-      if (!ok) return
+      const ok = await askDirtyLeave(target)
+      if (!ok) {
+        /* 取消 = 留在本页：子页复原了，但宿主已经把 scene/URL 切到目标场景（侧栏点别的栏目时），
+           只复原 subPage 会留下「地址栏与侧栏在目标页、正文还在本详情」的半移动态，刷新即丢详情。
+           把 URL 显式拉回本场景 + 本详情的 query：宿主的 URL → scene 通道随后会把侧栏高亮也带回来
+           （scene 与 route 一致时那条 watch 不清 subPage，见 AdminConsole 的同场景分支）。 */
+        void router.replace({ path: SKILL_SCENE_PATH, query: keepQuery })
+        return
+      }
       allowLeave = true
       if (target) subPage.value = target
       else closeSubPage()
@@ -542,12 +563,7 @@ watch(
    确认放行时置 allowLeave，避免 AdminConsole 清页后再触发上面的 subPage 守卫双确认。 */
 onBeforeRouteLeave(async () => {
   if (!anyDirty()) return true
-  const ok = await askConfirm({
-    title: '离开 Skill 详情',
-    message: `当前 Skill 有未保存的修改（${dirtySummary()}），离开后将丢失，确定离开？`,
-    confirmText: '离开并放弃修改',
-    danger: false
-  })
+  const ok = await askDirtyLeave(null)
   if (ok) allowLeave = true
   return ok === true
 })
@@ -1230,7 +1246,7 @@ useEscape(
   padding: 8px 12px;
   border-radius: var(--mk-radius-sm);
   background: var(--mk-blue-bg);
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
   font-size: var(--mk-fs-micro);
   font-weight: 600;
 }

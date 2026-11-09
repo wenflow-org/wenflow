@@ -346,7 +346,7 @@ async function doImport() {
 .ci-text-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .ci-format { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; }
 /* 示例：折起来，一眼能看出是「参考资料」而不是已填进框里的内容 */
-.ci-sample > summary { cursor: pointer; font-size: var(--mk-fs-micro); color: var(--mk-blue); list-style: none; width: fit-content; }
+.ci-sample > summary { cursor: pointer; font-size: var(--mk-fs-micro); color: var(--mk-blue-text); list-style: none; width: fit-content; }
 .ci-sample > summary::-webkit-details-marker { display: none; }
 .ci-sample > summary::before { content: '▸'; margin-right: 6px; }
 .ci-sample[open] > summary::before { content: '▾'; }
@@ -371,7 +371,7 @@ async function doImport() {
 .ci-actions .mk-btn--primary:disabled:not(.mk-btn--danger-ghost) {
   background: var(--mk-blue-bg);
   border-color: color-mix(in srgb, var(--mk-blue) 40%, transparent);
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
 }
 .ci-back { margin-left: auto; font-size: var(--mk-fs-micro); }
 .ci-key { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-ink); }

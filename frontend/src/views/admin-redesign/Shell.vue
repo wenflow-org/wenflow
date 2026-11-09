@@ -882,7 +882,7 @@ watch(
 .mshell__item:focus-visible { outline: 2px solid var(--mk-blue, #2f6ae0); outline-offset: -2px; }
 .mshell__item--active {
   background: var(--mk-blue-bg);
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
   font-weight: 600;
 }
 /* 图标常显（newui 原型壳：展开态=图标+文字，折叠轨=仅图标）。
@@ -1146,7 +1146,7 @@ watch(
 .mshell__search-hit--active { background: var(--mk-hover-surface); }
 .mshell__search-hit-group { margin-left: auto; color: var(--mk-faint); font-weight: 500; }
 /* 命中高亮：只提亮字形，不铺底色——弹层本身就是浮层，再叠一层色块会把「这是一项可点的结果」读淡 */
-.mshell__search-hit-mark { background: transparent; color: var(--mk-blue); font-weight: 800; }
+.mshell__search-hit-mark { background: transparent; color: var(--mk-blue-text); font-weight: 800; }
 .mshell__search-hit-why {
   padding: 1px 6px;
   border-radius: var(--mk-radius-pill);

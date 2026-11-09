@@ -1555,7 +1555,7 @@ function stepHue(step: FlowStep): string {
 /* 长程端口徽标（跨多卡不画线，点击滚动聚焦） */
 .dfg-step__port {
   flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px;
-  font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-blue);
+  font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-blue-text);
   background: var(--mk-graph-port-bg); border: 1px solid var(--mk-graph-port-line); border-radius: 999px;
   padding: 1px 7px; cursor: pointer; max-width: 160px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -1602,9 +1602,9 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
   font: inherit; font-size: var(--mk-fs-body); font-weight: 800; color: var(--mk-ink);
   background: none; border: 0; padding: 0; cursor: pointer; text-align: left;
 }
-.dfg-gate__src:hover { color: var(--mk-blue); text-decoration: underline; text-underline-offset: 2px; }
+.dfg-gate__src:hover { color: var(--mk-blue-text); text-decoration: underline; text-underline-offset: 2px; }
 .dfg-gate__jump { color: var(--mk-faint); }
-.dfg-gate__src:hover .dfg-gate__jump { color: var(--mk-blue); }
+.dfg-gate__src:hover .dfg-gate__jump { color: var(--mk-blue-text); }
 .dfg-gate__count {
   flex-shrink: 0; font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-muted);
   background: var(--mk-graph-badge-bg); padding: 2px 9px; border-radius: var(--mk-radius-xs); font-variant-numeric: tabular-nums;
@@ -1652,7 +1652,7 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 /* 卡题可点（进 Skill 详情）：蓝字 = 可交互，其余排版与相邻纯文本卡题一致 */
 .dfg-step__name--link {
   padding: 0; border: 0; background: none; font-family: inherit; line-height: inherit;
-  color: var(--mk-blue); cursor: pointer; text-align: left;
+  color: var(--mk-blue-text); cursor: pointer; text-align: left;
 }
 .dfg-step__name--link:hover { text-decoration: underline; }
 .dfg-step__badge {
@@ -1679,7 +1679,7 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 }
 .dfg-step__role { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); }
 .dfg-step__stage {
-  flex-shrink: 0; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue);
+  flex-shrink: 0; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue-text);
   cursor: pointer; background: var(--mk-blue-bg); border-radius: 6px; padding: 1px 7px;
   border: 0; margin: 0; font-family: inherit; line-height: inherit; appearance: none;
 }
@@ -1713,7 +1713,7 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 .dfg-chip--in { background: color-mix(in srgb, var(--hz) 5%, var(--mk-graph-inset)); }
 .dfg-chip--more {
   border-style: dashed; border-color: var(--mk-line); border-left-width: 3px;
-  background: var(--mk-graph-node-bg); color: var(--mk-blue); font-weight: 700;
+  background: var(--mk-graph-node-bg); color: var(--mk-blue-text); font-weight: 700;
 }
 .dfg-chip--more:hover { border-color: var(--mk-blue); background: var(--mk-blue-bg); }
 .dfg-chip.is-dimmed { opacity: 0.3; filter: saturate(0.35); }
@@ -1738,7 +1738,7 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 }
 .dfg-chip__flag--accum { color: var(--fam-knowledge); background: var(--mk-amber-bg); }
 .dfg-chip__to {
-  flex-shrink: 0; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue);
+  flex-shrink: 0; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue-text);
   background: var(--mk-blue-bg); border-radius: 6px; padding: 0 6px; line-height: 1.8;
   /* 上限 160px（2026-11-02 评审）：原 110px 把最常见的目的地都截了
        （「→ stage-designer」实测 134px →「stage-des…」，chip 上的去向等于没写）。
@@ -1768,7 +1768,7 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 .dfg-legend__item i { width: 8px; height: 8px; border-radius: 50%; }
 .dfg-legend__item b { font-weight: 800; color: var(--mk-faint); font-variant-numeric: tabular-nums; }
 .dfg-legend__item:hover { background: var(--mk-blue-bg); }
-.dfg-legend__item.is-on { border-color: var(--mk-blue); background: var(--mk-blue-bg); color: var(--mk-blue); }
+.dfg-legend__item.is-on { border-color: var(--mk-blue); background: var(--mk-blue-bg); color: var(--mk-blue-text); }
 
 /* 空态走 MkEmptyState（原型 .empty 词表），此处无本地样式 */
 
@@ -1802,7 +1802,7 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 .dfg-flow__chip { padding: 2px 9px; border-radius: var(--mk-radius-sm); background: var(--mk-blue); color: var(--mk-graph-on-accent); font-size: var(--mk-fs-micro); font-weight: 700; }
 .dfg-flow__chip--soft { background: var(--mk-graph-flow-soft-bg); color: var(--mk-accent-deep); }
 .dfg-flow__chip--out { background: var(--mk-graph-flow-out); }
-.dfg-flow__arrow { color: var(--mk-blue); font-weight: 800; }
+.dfg-flow__arrow { color: var(--mk-blue-text); font-weight: 800; }
 .dfg-flow__hint { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.5; }
 
 /* 行级编辑本体（卡体/卡头由共享 mk-card 提供，此处只留排列与 field 行） */
@@ -1815,11 +1815,11 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 .dfg-note { margin: 0; padding: 10px 12px; border-radius: var(--mk-radius-xl); background: var(--mk-surface-3); color: var(--mk-muted); font-size: var(--mk-fs-micro); line-height: 1.6; }
 .dfg-edit__pills { display: inline-flex; gap: 4px; padding: 2px; background: var(--mk-graph-pills-bg); border-radius: var(--mk-radius-sm); width: fit-content; }
 .dfg-pill { padding: 4px 12px; border: 0; border-radius: 6px; background: transparent; font: inherit; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); cursor: pointer; }
-.dfg-pill.is-on { background: var(--mk-graph-pill-on-bg); color: var(--mk-blue); }
+.dfg-pill.is-on { background: var(--mk-graph-pill-on-bg); color: var(--mk-blue-text); }
 .dfg-edit__input { padding: 6px 10px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-sm); font: inherit; font-size: var(--mk-fs-micro); background: var(--mk-graph-field); outline: none; }
 .dfg-edit__input:focus { border-color: var(--mk-blue); }
 .dfg-check { display: inline-flex; align-items: center; gap: 6px; font-size: var(--mk-fs-micro); color: var(--mk-muted); cursor: pointer; }
-.dfg-edit__msg { margin: 0; padding: 8px 10px; border-radius: var(--mk-radius-sm); background: var(--mk-graph-flow-bg); color: var(--mk-blue); font-size: var(--mk-fs-micro); font-weight: 600; }
+.dfg-edit__msg { margin: 0; padding: 8px 10px; border-radius: var(--mk-radius-sm); background: var(--mk-graph-flow-bg); color: var(--mk-blue-text); font-size: var(--mk-fs-micro); font-weight: 600; }
 .dfg-edit__msg.is-error { background: var(--mk-red-bg); color: var(--mk-red); }
 
 /* ================= 暗色模式 ================= */

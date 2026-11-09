@@ -115,7 +115,7 @@
                        颜色要压得住右边的能力胶囊（两者此前都是蓝 tint 底，实测 rgba .18 / .16，看不出差别）。 -->
                   <span
                     v-if="isDefaultModel(m)"
-                    class="mk-badge mpp-default-chip"
+                    class="mk-badge mk-badge--default"
                     title="平台当前默认，未单独配模型的 Skill 都继承它"
                   >默认</span>
                   <span v-for="tag in functionTags(m)" :key="tag" class="mk-badge mk-badge--muted mpp-fn__chip">{{ tag }}</span>
@@ -191,6 +191,7 @@
       :provider-id="selected?.id ?? ''"
       :models="fetchableModels"
       :registered="[...registeredIds]"
+      title="添加对话模型（LLM）"
       :loading="pullLoading"
       :error="pullError"
       :stale="pullStale"
@@ -624,7 +625,7 @@ defineExpose({ refresh, openPull, openHostPull, openAdd: onPullAdd })
 }
 .mpp-type--platform {
   background: color-mix(in srgb, var(--mk-blue) 10%, transparent);
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
 }
 .mpp-label {
   margin-left: 6px;
@@ -679,7 +680,6 @@ defineExpose({ refresh, openPull, openHostPull, openAdd: onPullAdd })
 /* 默认徽章：实心主色 + 白字，全行唯一高亮。
    不用 --mk-blue 当底：它在暗色档被有意提亮成 #5b8def，白字只有 3.23:1
    （与 .mk-btn--primary 同款坑，见 mk-primitives.css:1631）。 */
-.mpp-default-chip { background: var(--mk-blue-fill, #2f6ae0); color: var(--mk-on-fill); }
 .mpp-rowacts { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 /* 删除与上面三枚之间多留一段空白：不可撤销动作不贴着高频正向动作放（准则 2 防误触） */
 .mpp-rowacts__danger { margin-left: 12px; }

@@ -8,8 +8,9 @@
       <span class="tc-c tc-c--num" role="columnheader">失败次数</span>
       <span class="tc-c tc-c--tok" role="columnheader">Token 用量</span>
       <!-- 成本列（审核 #112）：接口 RankEntry 已带成本桶，此前 user/model 排行未渲染，与页头
-           「按模型、Skill 与时间维度追踪模型调用成本」承诺不符 -->
-      <span class="tc-c tc-c--cost" role="columnheader">成本</span>
+           「按模型、Skill 与时间维度追踪模型调用成本」承诺不符。2026-11-09 走查：币种与 ≈
+           上提到表头，单元格只放纯数字（formatUsd 固定 4 位小数、tabular-nums 对齐）。 -->
+      <span class="tc-c tc-c--cost" role="columnheader">预估成本 (USD)</span>
       <!-- 排行表占比 = Token 占比（成本另有独立列），与导出 CSV 的 Token占比% 对齐 -->
       <span class="tc-c tc-c--share" role="columnheader">Token 占比</span>
     </div>
@@ -98,6 +99,7 @@ export interface RankRow {
 <script setup lang="ts">
 import { computed } from 'vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
+import { formatUsd } from './costFormat'
 
 const props = withDefaults(
   defineProps<{
@@ -147,16 +149,13 @@ function failRate(r: RankRow): string {
    2026-10-14 用户评审：未定价行原显「单价未配置」五个字（亮白、挤在 140px 列里接着占比条），
    现在是占位符——原因走行 title 与页顶卡 hint（同一状态不在三张表里各念一遍）。 */
 function fmtCostUsd(v: number): string {
-  if (!Number.isFinite(v) || v <= 0) return '0'
-  if (v >= 1) return v.toFixed(2)
-  if (v >= 0.01) return v.toFixed(4)
-  return v.toFixed(6)
+  return formatUsd(v)
 }
 function hasCost(r: RankRow): boolean {
   return typeof r.usd === 'number'
 }
 function costText(r: RankRow): string {
-  return hasCost(r) ? `≈ $${fmtCostUsd(r.usd as number)}` : '—'
+  return hasCost(r) ? formatUsd(r.usd as number) : '—'
 }
 /** 成本口径全称（行 title / 读屏用）：占位符本身不带原因，原因必须另有出口 */
 function costDesc(r: RankRow): string {
@@ -262,7 +261,7 @@ function rowTitle(r: RankRow): string {
 }
 .tc-c--share {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 40px;
+  grid-template-columns: minmax(0, 1fr) 44px;
   align-items: center;
   gap: 8px;
   /* 与左侧金额列的分隔 = 列间距 10 + 14 = 24px（2026-10-14 用户实测：金额文字右缘

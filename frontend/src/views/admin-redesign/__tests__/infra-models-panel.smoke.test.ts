@@ -4,8 +4,8 @@
  * 1. 两张卡只回答「配了哪些模型、哪个在用、健不健康」，卡面不铺表单；
  * 2. 一条连接可配多个模型，其中一个是启用态——行内动作与对话卡同序同形（配置 · 测试 · ⋯），
  *    ⋯ 里是「设为启用 / 删除」；
- * 3. 连接默认走全局通道，勾「使用独立接口地址覆盖全局通道」才展开地址与密钥（2026-11-05）；
- * 4. 卡头不挂状态徽标（2026-11-05）。
+ * 3. 连接默认走全局通道，卡头标签写「独立连接 / 跟随全局」，编辑走「连接配置」弹窗（2026-11-09）；
+ * 4. 卡头的徽标只讲连接归属，不讲「配没配好」（2026-11-05 / 2026-11-09）。
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
@@ -101,6 +101,34 @@ async function openConfig(wrapper: ReturnType<typeof mountPanel>, index: number,
   await flushPromises();
 }
 
+/** 卡头右组的添加入口（2026-11-09：左邻多了「连接配置」，它不再是右组第一枚） */
+function addBtn(wrapper: ReturnType<typeof mountPanel>, index: number) {
+  const btn = cards(wrapper)[index]
+    .find('.mk-card__head-right')
+    .findAll('button')
+    .find((b) => b.text() === '＋ 添加模型');
+  expect(btn, '卡头应有「＋ 添加模型」').toBeTruthy();
+  return btn!;
+}
+
+/** 卡头的连接归属标签：[独立连接] / [跟随全局]，完整地址进 title */
+function connChip(wrapper: ReturnType<typeof mountPanel>, index: number) {
+  return cards(wrapper)[index].find('.mpp-eng__id .mk-badge');
+}
+
+/** 打开某张卡的连接配置弹窗（2026-11-09：原先是卡内原地展开的表单） */
+async function openConn(wrapper: ReturnType<typeof mountPanel>, index: number) {
+  const btn = cards(wrapper)[index]
+    .find('.mk-card__head-right')
+    .findAll('button')
+    .find((b) => b.text() === '连接配置');
+  expect(btn, '卡头应有「连接配置」').toBeTruthy();
+  await btn!.trigger('click');
+  await flushPromises();
+  expect(wrapper.find('.mpp-conn-dlg').exists(), '点开后应有连接配置弹窗').toBe(true);
+  return wrapper.find('.mpp-conn-dlg');
+}
+
 describe('InfraModelsPanel', () => {
   beforeEach(() => {
     getMock.mockReset();
@@ -114,7 +142,7 @@ describe('InfraModelsPanel', () => {
     updateMock.mockResolvedValue({ data: { data: view() } });
   });
 
-  it('两张卡各一行模型，卡面没有输入框，卡头不挂状态徽标', async () => {
+  it('两张卡各一行模型，卡面没有输入框，卡头只有连接归属标签', async () => {
     const wrapper = mountPanel();
     await flushPromises();
 
@@ -123,17 +151,24 @@ describe('InfraModelsPanel', () => {
     expect(list.map((c) => c.find('.mk-card__title').text())).toEqual(['向量模型', '重排模型']);
     expect(list[0].text()).toContain('Embedding');
     expect(list[1].text()).toContain('Reranker');
-    // 2026-11-05 用户「已配置这个 pill 不要了」：卡头只有标题 + 类型
-    // （行内的「默认」徽标不算卡头徽标，故限定到 .mk-card__head）
-    expect(list[0].find('.mk-card__head .mk-badge').exists()).toBe(false);
+    /* 2026-11-05 用户「已配置这个 pill 不要了」：卡头不挂**状态**徽标；
+       2026-11-09 用户走查：卡头只多一枚**连接归属**标签（它讲的是「接在哪」）。
+       （行内的「默认」徽标不算卡头徽标，故限定到 .mk-card__head） */
+    expect(list[0].findAll('.mk-card__head .mk-badge').map((b) => b.text())).toEqual(['独立连接']);
+    expect(list[1].findAll('.mk-card__head .mk-badge').map((b) => b.text())).toEqual(['跟随全局']);
+    expect(list[0].find('.mk-card__head').text()).not.toContain('已配置');
     expect(rows(wrapper, 0)[0].find('.mpp-eng__model').text()).toBe('BAAI/bge-m3');
     // 2026-11-04「让布局自己说话」：模型行下没有维度 / 连接归属这类次级说明行
     expect(wrapper.find('.mpp-eng__params').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('维度由上游返回');
     expect(wrapper.find('.mpp-eng input').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('未保存');
-    // 每张卡自己一枚「＋ 添加模型」（卡头右组）
-    expect(list[0].find('.mk-card__head-right button').text()).toBe('＋ 添加模型');
+    // 2026-11-09：连接细节收进卡头「连接配置」弹窗，卡面不再有常驻地址尾栏
+    expect(wrapper.find('.mpp-eng__conn').exists()).toBe(false);
+    expect(wrapper.find('.mpp-conn-dlg').exists()).toBe(false);
+    // 每张卡自己一枚「＋ 添加模型」（卡头右组，左邻是「连接配置」）
+    expect(list[0].find('.mk-card__head-right').findAll('button').map((b) => b.text()))
+      .toEqual(['连接配置', '＋ 添加模型']);
     wrapper.unmount();
   });
 
@@ -152,7 +187,9 @@ describe('InfraModelsPanel', () => {
     // 只有默认那一个带徽标，且与对话卡同一枚「默认」（2026-11-07 用户「没标默认」）
     expect(list.map((r) => r.find('.mpp-eng__on').exists())).toEqual([false, true, false]);
     expect(list[1].find('.mpp-eng__on').text()).toBe('默认');
-    expect(list[1].find('.mpp-eng__on').classes()).toContain('mpp-default-chip');
+    // 2026-11-09 设计语言收敛：默认徽章走全局原语 .mk-badge--default（此前是各页自造的 mpp-default-chip，
+    // 在向量卡里因 scoped 作用域拿不到样式，渲染成裸白字）
+    expect(list[1].find('.mpp-eng__on').classes()).toContain('mk-badge--default');
 
     /* 动作与对话卡同序同形：非默认行四枚平铺，默认行没有「设为默认」、删除置灰。
        ⋯ 菜单整块撤除（2026-11-07 用户「向量/重排没和上面对齐」）。 */
@@ -219,19 +256,23 @@ describe('InfraModelsPanel', () => {
     });
     const wrapper = mountPanel();
     await flushPromises();
-    await cards(wrapper)[0].find('.mk-card__head-right button').trigger('click');
+    await addBtn(wrapper, 0).trigger('click');
     await flushPromises();
 
     expect(pullMock).toHaveBeenCalledWith(expect.objectContaining({ kind: 'embedding' }));
-    const dialog = wrapper.find('.pmd');
-    expect(dialog.exists()).toBe(true);
-    expect(dialog.find('.mk-modal__title').text()).toBe('添加向量模型');
-    expect(dialog.findAll('.pmd-row .pmd-row__id').map((r) => r.text())).toEqual(['BAAI/bge-m3']);
+    expect(wrapper.find('.pmd').exists()).toBe(true);
+    // 标题带上文（2026-11-09）：一眼知道在给哪条能力挑模型
+    expect(wrapper.find('.pmd .mk-modal__title').text()).toBe('添加向量模型（Embedding）');
+    // 2026-11-09：默认只看未添加——上游 3 个里只有一个被识别成向量，而它已经挂上了
+    expect(wrapper.findAll('.pmd-row')).toHaveLength(0);
+    // 切视图会重建弹窗内的 DOM，切完要从根重新取（别攥着切换前的 wrapper）
+    await wrapper.findAll('.pmd-view .mk-seg__item').find((b) => b.text().startsWith('全部'))!.trigger('click');
+    expect(wrapper.findAll('.pmd-row .pmd-row__id').map((r) => r.text())).toEqual(['BAAI/bge-m3']);
     // 2026-11-05 模型池：多选（不是单选），已有模型标「已添加」
-    expect(dialog.find('input[type="checkbox"]').exists()).toBe(true);
-    expect(dialog.find('input[type="radio"]').exists()).toBe(false);
+    expect(wrapper.find('.pmd input[type="checkbox"]').exists()).toBe(true);
+    expect(wrapper.find('.pmd input[type="radio"]').exists()).toBe(false);
     // 手填走「配置」，弹窗底栏不给手动录入
-    expect(dialog.find('.pmd-manual').exists()).toBe(false);
+    expect(wrapper.find('.pmd-manual').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -239,7 +280,7 @@ describe('InfraModelsPanel', () => {
     pullMock.mockResolvedValue({ data: { data: { models: ['BAAI/bge-large-zh-v1.5'] } } });
     const wrapper = mountPanel();
     await flushPromises();
-    await cards(wrapper)[0].find('.mk-card__head-right button').trigger('click');
+    await addBtn(wrapper, 0).trigger('click');
     await flushPromises();
 
     await wrapper.find('.pmd-row input[type="checkbox"]').setValue(true);
@@ -276,7 +317,7 @@ describe('InfraModelsPanel', () => {
     await flushPromises();
 
     // 第一轮：加 bge-large-zh-v1.5
-    await cards(wrapper)[0].find('.mk-card__head-right button').trigger('click');
+    await addBtn(wrapper, 0).trigger('click');
     await flushPromises();
     expect(updateMock).toHaveBeenCalledTimes(0);
     await wrapper.findAll('.pmd-row').find((r) => r.text().includes('BAAI/bge-large-zh-v1.5'))!
@@ -287,7 +328,7 @@ describe('InfraModelsPanel', () => {
     expect(updateMock.mock.calls[0][0].embedding.models).toEqual(['BAAI/bge-m3', 'BAAI/bge-large-zh-v1.5']);
 
     // 第二轮：重新开窗（此时视图已是最新池子），再加 Qwen3
-    await cards(wrapper)[0].find('.mk-card__head-right button').trigger('click');
+    await addBtn(wrapper, 0).trigger('click');
     await flushPromises();
     await wrapper.findAll('.pmd-row').find((r) => r.text().includes('Qwen3-Embedding-0.6B'))!
       .find('input').setValue(true);
@@ -347,62 +388,62 @@ describe('InfraModelsPanel', () => {
     wrapper.unmount();
   });
 
-  it('卡片里的连接行：默认一行摘要，点「修改连接」展开，地址填根路径', async () => {
+  /* 2026-11-09 用户走查（图 1）：卡片底部那条「连接：独立地址 https://… [修改连接]」尾栏
+     和点开后原地展开的表单一起撤掉——卡头一枚轻量标签说接在哪，编辑走「连接配置」弹窗。 */
+  it('连接归属：卡头标签说接在哪，点「连接配置」在弹窗里改地址（地址填根路径）', async () => {
     pullMock.mockResolvedValue({ data: { data: { models: ['BAAI/bge-m3'] } } });
     const wrapper = mountPanel();
     await flushPromises();
 
-    // 收起态：一行说明（这条能力接在哪），不常驻输入框
-    const card = cards(wrapper)[0];
-    expect(card.find('.mpp-eng__conn-text').text()).toBe('连接：独立地址 https://gw.example/v1/embeddings');
-    expect(card.find('.mpp-eng__conn-form').exists()).toBe(false);
+    // 收起态：卡头一枚标签，完整地址进 title，弹窗不渲染
+    expect(connChip(wrapper, 0).text()).toBe('独立连接');
+    expect(connChip(wrapper, 0).attributes('title')).toBe('独立地址 https://gw.example/v1/embeddings');
+    expect(wrapper.find('.mpp-conn-dlg').exists()).toBe(false);
 
-    await card.find('.mpp-eng__conn button').trigger('click');
-    await flushPromises();
-
-    const form = wrapper.find('.mpp-eng__conn-form');
-    expect((form.find('.infra-own input').element as HTMLInputElement).checked).toBe(true);
+    const dlg = await openConn(wrapper, 0);
+    expect(dlg.find('.mk-modal__title').text()).toBe('配置向量模型连接');
+    expect((dlg.find('.infra-own input').element as HTMLInputElement).checked).toBe(true);
     // 回填成根地址；实际请求地址由这一层拼，和对话卡填根域名的口径一致
-    expect((form.find('.infra-conn input.mk-field__input').element as HTMLInputElement).value)
+    expect((dlg.find('.infra-conn input.mk-field__input').element as HTMLInputElement).value)
       .toBe('https://gw.example');
-    expect(form.find('.infra-endpoint').text()).toContain('https://gw.example/v1/embeddings');
+    expect(dlg.find('.infra-endpoint').text()).toContain('https://gw.example/v1/embeddings');
     wrapper.unmount();
   });
 
-  it('卡片里的连接行：沿用对话卡时只说明取哪条地址，不给地址与密钥输入', async () => {
+  it('连接归属：沿用对话卡时标签是「跟随全局」，弹窗里只说明取哪条地址', async () => {
     const wrapper = mountPanel();
     await flushPromises();
 
-    const card = cards(wrapper)[1]; // 重排默认 inherit
-    expect(card.find('.mpp-eng__conn-text').text()).toContain('沿用对话模型');
-    await card.find('.mpp-eng__conn button').trigger('click');
-    await flushPromises();
+    // 重排默认 inherit
+    expect(connChip(wrapper, 1).text()).toBe('跟随全局');
+    expect(connChip(wrapper, 1).attributes('title')).toBe('沿用对话模型');
+    const dlg = await openConn(wrapper, 1);
 
-    const form = wrapper.find('.mpp-eng__conn-form');
-    expect((form.find('.infra-own input').element as HTMLInputElement).checked).toBe(false);
-    expect(form.find('.infra-conn').exists()).toBe(false);
-    expect(form.find('.infra-inherit').text()).toContain('https://newapi.wenflow.org');
+    expect((dlg.find('.infra-own input').element as HTMLInputElement).checked).toBe(false);
+    expect(dlg.find('.infra-conn').exists()).toBe(false);
+    expect(dlg.find('.infra-inherit').text()).toContain('https://newapi.wenflow.org');
     wrapper.unmount();
   });
 
-  it('卡片里「保存连接」：只提交连接字段，不碰池子与参数', async () => {
-    updateMock.mockResolvedValue({ data: { data: view({ rerank: 'own' }) } });
+  it('弹窗里「保存连接」：只提交连接字段，不碰池子与参数；存完自动关窗', async () => {
+    const saved = view({ rerank: 'own' });
+    saved.rerank.endpoint = 'https://api.siliconflow.cn/v1/rerank';
+    updateMock.mockResolvedValue({ data: { data: saved } });
     const wrapper = mountPanel();
     await flushPromises();
 
-    const card = cards(wrapper)[1];
-    await card.find('.mpp-eng__conn button').trigger('click');
+    const dlg = await openConn(wrapper, 1);
+    await dlg.find('.infra-own input').setValue(true);
     await flushPromises();
-    await wrapper.find('.mpp-eng__conn-form .infra-own input').setValue(true);
-    await flushPromises();
-    const inputs = wrapper.findAll('.mpp-eng__conn-form .infra-conn input.mk-field__input');
+    const inputs = wrapper.findAll('.mpp-conn-dlg .infra-conn input.mk-field__input');
     // 地址 + API Key 两列（接口规范那列只读展示已撤）
     expect(inputs.length).toBe(2);
     await inputs[0].setValue('https://api.siliconflow.cn');
     await inputs[1].setValue('sk-live');
     await flushPromises();
 
-    const saveConn = wrapper.find('.mpp-eng__conn-form button.mk-btn--primary');
+    const saveConn = wrapper.find('.mpp-conn-dlg .mk-modal__foot button.mk-btn--primary');
+    expect(saveConn.text()).toBe('保存连接');
     expect(saveConn.attributes('disabled'), '有改动才可保存').toBeUndefined();
     await saveConn.trigger('click');
     await flushPromises();
@@ -414,26 +455,48 @@ describe('InfraModelsPanel', () => {
         apiKey: 'sk-live',
       },
     });
+    // 存成功即关窗（没改动留着弹窗没有意义）
+    expect(wrapper.find('.mpp-conn-dlg').exists()).toBe(false);
+    expect(connChip(wrapper, 1).text()).toBe('独立连接');
     wrapper.unmount();
   });
 
-  it('卡片里改回「沿用对话卡」并保存：卡面摘要换成取哪条地址', async () => {
+  it('弹窗里改回「沿用对话卡」并保存：卡头标签换成「跟随全局」', async () => {
     const inherited = view({ embedding: 'inherit' });
     inherited.embedding.endpoint = 'https://newapi.wenflow.org/v1/embeddings';
     updateMock.mockResolvedValue({ data: { data: inherited } });
     const wrapper = mountPanel();
     await flushPromises();
 
-    const card = cards(wrapper)[0];
-    await card.find('.mpp-eng__conn button').trigger('click');
+    const dlg = await openConn(wrapper, 0);
+    await dlg.find('.infra-own input').setValue(false);
     await flushPromises();
-    await wrapper.find('.mpp-eng__conn-form .infra-own input').setValue(false);
-    await flushPromises();
-    await wrapper.find('.mpp-eng__conn-form button.mk-btn--primary').trigger('click');
+    await wrapper.find('.mpp-conn-dlg .mk-modal__foot button.mk-btn--primary').trigger('click');
     await flushPromises();
 
     expect(updateMock.mock.calls[0][0]).toEqual({ embedding: { connectionMode: 'inherit' } });
-    expect(cards(wrapper)[0].find('.mpp-eng__conn-text').text()).toBe('连接：沿用对话模型');
+    expect(connChip(wrapper, 0).text()).toBe('跟随全局');
+    expect(connChip(wrapper, 0).attributes('title')).toBe('沿用对话模型');
+    wrapper.unmount();
+  });
+
+  it('连接弹窗改脏后关窗：先问一句「放弃改动」，拒绝则留在弹窗里', async () => {
+    const wrapper = mountPanel();
+    await flushPromises();
+    const dlg = await openConn(wrapper, 0);
+    await dlg.find('.infra-own input').setValue(false);
+    await flushPromises();
+
+    askConfirmMock.mockResolvedValueOnce(false);
+    await wrapper.find('.mpp-conn-dlg .mk-modal__close').trigger('click');
+    await flushPromises();
+    expect(askConfirmMock).toHaveBeenCalled();
+    expect(wrapper.find('.mpp-conn-dlg').exists(), '拒绝放弃后弹窗保持打开').toBe(true);
+
+    askConfirmMock.mockResolvedValueOnce(true);
+    await wrapper.find('.mpp-conn-dlg .mk-modal__close').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('.mpp-conn-dlg').exists(), '确认放弃后关窗').toBe(false);
     wrapper.unmount();
   });
 
@@ -443,10 +506,11 @@ describe('InfraModelsPanel', () => {
     });
     const wrapper = mountPanel();
     await flushPromises();
-    await cards(wrapper)[0].find('.mk-card__head-right button').trigger('click');
+    await addBtn(wrapper, 0).trigger('click');
     await flushPromises();
 
-    expect(wrapper.findAll('.pmd-row .pmd-row__id').map((r) => r.text())).toEqual(['BAAI/bge-m3']);
+    // 未添加视图里没有可挂的（唯一被识别成向量的那个已经挂上了）
+    expect(wrapper.findAll('.pmd-row')).toHaveLength(0)
     const more = wrapper.findAll('.pmd button').find((b) => b.text().includes('显示全部'))!;
     // 2026-11-07：指路文案换成「显示全部模型（N）」——⋯ 菜单已经不存在，不再讲「⋯ 里挑一个」
     expect(more.text()).toBe('显示全部模型（3）');
@@ -454,21 +518,23 @@ describe('InfraModelsPanel', () => {
     expect(wrapper.find('.pmd').text()).not.toContain('向量模型模型');
     await more.trigger('click');
     await flushPromises();
-    expect(wrapper.findAll('.pmd-row')).toHaveLength(3);
+    // 放开的两个（对话模型）都还没挂上；已挂上的 bge-m3 仍在「未添加」之外
+    expect(wrapper.findAll('.pmd-row .pmd-row__id').map((r) => r.text()))
+      .toEqual(['deepseek-v4.1-flash', 'gpt-4o']);
     wrapper.unmount();
   });
 
   it('弹窗里的行内测试走这条能力的连接（不是供应商端点）', async () => {
-    pullMock.mockResolvedValue({ data: { data: { models: ['BAAI/bge-m3'] } } });
+    pullMock.mockResolvedValue({ data: { data: { models: ['BAAI/bge-large-zh-v1.5'] } } });
     testMock.mockResolvedValue({ data: { data: { ok: true, latencyMs: 95, dimensions: 1024 } } });
     const wrapper = mountPanel();
     await flushPromises();
-    await cards(wrapper)[0].find('.mk-card__head-right button').trigger('click');
+    await addBtn(wrapper, 0).trigger('click');
     await flushPromises();
 
     await wrapper.find('.pmd-row__test').trigger('click');
     await flushPromises();
-    expect(testMock).toHaveBeenCalledWith('embedding', 'BAAI/bge-m3');
+    expect(testMock).toHaveBeenCalledWith('embedding', 'BAAI/bge-large-zh-v1.5');
     expect(wrapper.find('.pmd-row__res').text()).toContain('已连通');
     expect(wrapper.find('.pmd-row__res').text()).toContain('95ms');
     wrapper.unmount();
@@ -478,7 +544,7 @@ describe('InfraModelsPanel', () => {
     pullMock.mockResolvedValue({ data: { data: { models: ['BAAI/bge-m3', 'BAAI/bge-large-zh-v1.5'] } } });
     const wrapper = mountPanel();
     await flushPromises();
-    await cards(wrapper)[0].find('.mk-card__head-right button').trigger('click');
+    await addBtn(wrapper, 0).trigger('click');
     await flushPromises();
 
     await wrapper.findAll('.pmd-row').find((r) => r.text().includes('BAAI/bge-large-zh-v1.5'))!
@@ -538,10 +604,12 @@ describe('InfraModelsPanel', () => {
     await flushPromises();
     const rerank = cards(wrapper)[1];
 
-    expect(rerank.find('.mk-badge').exists()).toBe(false);
+    // 卡头只有连接归属标签（它讲「接在哪」，不是「配没配好」）
+    expect(rerank.findAll('.mk-card__head .mk-badge').map((b) => b.text())).toEqual(['跟随全局']);
+    expect(rerank.find('.mk-card__head').text()).not.toContain('已配置');
     expect(rerank.find('.mpp-eng__model').text()).toBe('未选择模型');
     const labels = rerank.findAll('button').map((b) => b.text());
-    expect(labels).toEqual(['＋ 添加模型', '配置', '修改连接']);
+    expect(labels).toEqual(['连接配置', '＋ 添加模型', '配置']);
     wrapper.unmount();
   });
 

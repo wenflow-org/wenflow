@@ -176,10 +176,11 @@ describe('Skill 目录 P1 修复批', () => {
     };
     const wrapper = await mountSkills();
     expect(getReconciliationMock).toHaveBeenCalled();
-    // 2026-10-24「完成度有什么实际意义吗」：列已撤；2026-10-28 目录改为列表，不再有表格列
-    expect(wrapper.find('.sk-list .mk-badge--rec-live').exists()).toBe(false);
-    expect(wrapper.find('.sk-table').exists()).toBe(false);
-    expect(wrapper.findAll('th')).toHaveLength(0);
+    // 2026-10-24「完成度有什么实际意义吗」：完成度列已撤。2026-11-09 目录恢复为固定列宽表，
+    // 但列集里没有完成度——它只喂「已上线」KPI
+    expect(wrapper.find('.sk-catalog .mk-badge--rec-live').exists()).toBe(false);
+    expect(wrapper.find('.sk-catalog').exists()).toBe(true);
+    expect(wrapper.findAll('th').map((t) => t.text())).not.toContain('完成度');
     // 数据没白拉：仍按对账 status=live 计「已上线」KPI（3 行档案里 1 行 live）
     const live = wrapper.findAll('.mk-kpi').find((k) => k.text().includes('已上线'))!;
     expect(live.find('.mk-kpi__num').text()).toBe('1');

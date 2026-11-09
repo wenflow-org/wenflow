@@ -325,7 +325,7 @@ defineExpose({ open })
 .pt-prompt__title { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); }
 .pt-prompt__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .pt-prompt__state { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.pt-prompt__box > summary { cursor: pointer; font-size: var(--mk-fs-micro); color: var(--mk-blue); list-style: none; width: fit-content; }
+.pt-prompt__box > summary { cursor: pointer; font-size: var(--mk-fs-micro); color: var(--mk-blue-text); list-style: none; width: fit-content; }
 .pt-prompt__box > summary::-webkit-details-marker { display: none; }
 .pt-prompt__box > summary::before { content: '▸'; margin-right: 6px; }
 .pt-prompt__box[open] > summary::before { content: '▾'; }

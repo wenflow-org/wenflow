@@ -103,17 +103,21 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
     /* 教学组列序统一（2026-10-16）：身份 → 用户 → 状态 → 过程 → 时间 → 操作。
        原先把「最近活动」紧跟状态列（当状态伴侣），与同组其它页「时间列在过程之后」不一致；
        现移到澄清轮次之后、创建时间之前，两列时间收在表尾。约束条件默认隐藏（MkCols），不进可见表头。
-       2026-10-27：路径列并入状态列（已完成即已生成），可见表头再少一列。 */
+       2026-10-27：路径列并入状态列（已完成即已生成），可见表头再少一列。
+       2026-11-09 走查（图 1）：「未生成路径 2」在列里看不见——「学习路径」改为默认可见并紧跟
+       状态列（状态 → 路径 → 过程 → 时间），它回答的是「有没有生成」，与状态并排读得懂。 */
     const ths = wrapper.findAll('thead th').map((t) => t.text());
-    expect(ths.slice(0, 6)).toEqual(['目标摘要', '用户', '状态', '澄清轮次', '最近活动', '操作']);
+    expect(ths.slice(0, 7)).toEqual(['目标摘要', '用户', '状态', '学习路径', '澄清轮次', '最近活动', '操作']);
     expect(ths.at(-1)).toBe('操作');
-    // 2026-10-22 默认收起创建时间与约束条件（列菜单仍可开）
+    // 2026-10-22 默认收起创建时间与约束条件（列菜单仍可开）；2026-11-09 学习路径转为默认可见
     expect(ths).not.toContain('创建时间');
+    expect(ths).toContain('学习路径');
     const colsBtn = wrapper.find('.mk-cols__trigger');
     await colsBtn.trigger('click');
     const menu = wrapper.findAll('.mk-cols__item').map((x) => x.text());
     expect(menu).toContain('创建时间');
     expect(menu).toContain('约束条件');
+    expect(menu).toContain('学习路径');
     // 四步过程点条退役（2026-10-22）
     expect(wrapper.find('.gc-stage-cell__dot').exists()).toBe(false);
     wrapper.unmount();

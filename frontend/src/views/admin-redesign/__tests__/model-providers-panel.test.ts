@@ -359,13 +359,18 @@ describe('ModelProvidersPanel', () => {
     ;(w.vm as unknown as { openPull: () => void }).openPull()
     await nextTick()
     /* 2026-11-04 用户「不分什么对话非对话，这个页面就是拉取列表测试添加」：
-       清单原样列出，已添加的置灰并沉到末尾 */
+       清单原样列出，可勾的都列出来；
+       2026-11-09 用户走查：默认只看「未添加」——已添加的沉到「全部」里并置灰 */
     const rows = w.findAll('.pmd-row')
-    expect(rows).toHaveLength(3)
-    expect(rows.map((r) => r.find('.pmd-row__id').text())).toEqual(['mystery-1', 'mystery-2', 'deepseek-v4-flash'])
+    expect(rows).toHaveLength(2)
+    expect(rows.map((r) => r.find('.pmd-row__id').text())).toEqual(['mystery-1', 'mystery-2'])
     expect(rows[0].text()).not.toContain('已添加')
     expect(rows[0].find('input').attributes('disabled')).toBeUndefined()
-    const added = rows[2]
+
+    await w.findAll('.pmd-view .mk-seg__item').find((b) => b.text().startsWith('全部'))!.trigger('click')
+    const allRows = w.findAll('.pmd-row')
+    expect(allRows.map((r) => r.find('.pmd-row__id').text())).toEqual(['mystery-1', 'mystery-2', 'deepseek-v4-flash'])
+    const added = allRows.find((r) => r.text().includes('deepseek-v4-flash'))!
     expect(added.text()).toContain('已添加')
     expect(added.find('input').attributes('disabled')).toBeDefined()
     expect(w.find('.mpp-chip').exists()).toBe(false)
@@ -376,8 +381,9 @@ describe('ModelProvidersPanel', () => {
     const w = await mountPanel({ upstream })
     ;(w.vm as unknown as { openPull: () => void }).openPull()
     await nextTick()
+    // 未添加视图：5 个里只有 deepseek-v4-flash 是已挂上的
     const rows = w.findAll('.pmd-row')
-    expect(rows).toHaveLength(5)
+    expect(rows).toHaveLength(4)
     expect(w.text()).not.toContain('建议归入')
     expect(w.text()).not.toContain('不在此添加')
     const embedding = rows.find((r) => r.text().includes('BAAI/bge-m3'))!
@@ -403,15 +409,15 @@ describe('ModelProvidersPanel', () => {
       const rows = modelRows(w)
       const deepseekRow = rows.find((r) => r.text().includes('deepseek-v4-flash'))!
       const agnesRow = rows.find((r) => r.text().includes('agnes-3.0-flash'))!
-      expect(deepseekRow.find('.mpp-default-chip').exists()).toBe(false)
-      expect(agnesRow.find('.mpp-default-chip').exists()).toBe(true)
+      expect(deepseekRow.find('.mk-badge--default').exists()).toBe(false)
+      expect(agnesRow.find('.mk-badge--default').exists()).toBe(true)
     })
 
     it('默认缺省时不出现「未设置」读数（该事实由行徽章承担）', async () => {
       const w = await mountPanel()
       expect(w.find('.mpp-toolbar').exists()).toBe(false)
       expect(w.find('.mpp-models').text()).not.toContain('未设置')
-      expect(w.findAll('.mpp-default-chip')).toHaveLength(0)
+      expect(w.findAll('.mk-badge--default')).toHaveLength(0)
     })
 
     it('默认行不渲染「设为默认」；删除**不**置灰（#177：删除默认模型是允许的）', async () => {

@@ -56,6 +56,8 @@
       <MkKpi
         label="完结率"
         :value="completionRate"
+        :value-note="completedSessionNote"
+        :title="`已结束（完成 / 失败 / 超时 / 已废弃 / 收尾失败）会话里已完成 ${completedSessionCount} 节，占已加载 ${rows.length} 节`"
       />
     </section>
 
@@ -147,7 +149,7 @@
       <MockSkeletonTable v-if="refreshing && !rows.length" :cols="tsVisibleColCount" />
       <!-- 0 行不渲染滚动容器（2026-10-24 全站空态收齐）：它带 flex:1 会吃满卡高，把空态顶到卡底
            （实测文案上方 603px 空白）；空态改挂卡级 + min，吃掉卡内剩余高度并居中 -->
-      <div v-else-if="filtered.length" class="mk-table-scroll">
+      <div v-else-if="filtered.length" class="mk-table-scroll ts-table-scroll">
         <!-- 固定列宽（2026-10-22 用户「翻页不同页码时候，列宽怎么还在变呢」）：自动布局下课堂/用户
              两列按当页最长内容分宽，翻页就跳；改 fixed + 逐列表头宽度，课堂列吸收余量。
              单元格 nowrap 不变，长内容仍由 .mk-cell-main / .mk-cell-sub 的 max-width 截断兜底。 -->
@@ -202,6 +204,10 @@
                 :aria-sort="tsSortState('start')"
                 @click="toggleTsSort('start')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleTsSort('start')">开始时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <!-- 操作列（2026-11-09 对齐图 1 学习路径 / 全站表格操作规范）：每行一枚主操作「详情」，
+                   进与行点击同一个只读座舱（openSessionCockpit）；本页无次级动作，故只露「详情」。
+                   列宽走全局 .mk-c-act（140px），与图 1 / 目标对话一致；课堂 / 操作在 MkCols 固定不可隐藏。 -->
+              <th scope="col" class="mk-th--right mk-c-act">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -225,8 +231,9 @@
                 </div>
               </td>
               <td v-if="!tsHiddenCols.has('user')">
-                <!-- 2026-10-27 用户「还是太多数据了」：用户格只留头像 + 姓名；
-                     邮箱 / 用户 ID 收进姓名的 title，不再每行各占一条副行。 -->
+                <!-- 2026-11-09 跨页一致性：用户格统一「姓名 + 副行（邮箱 / 截断 ID）」双行结构
+                     （对齐图 1/2/3/5）。重名用户（如两个「林见微」）靠邮箱区分；
+                     uxcheck 这类无邮箱账号退化为截断后的用户 ID，副行不再空白。 -->
                 <div class="ts-user">
                   <MkCellAvatar :name="r.userName" :tone="avatarTone(r)" />
                   <div class="mk-cell-main">
@@ -238,7 +245,10 @@
                       @click.stop="openLearner(r.userId)"
                       @keydown.enter.stop.prevent="openLearner(r.userId)"
                     >{{ r.userName }}</button>
-                    <span v-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test">测试</span>
+                    <span v-if="userSubline(r) || r.isTestAccount" class="mk-cell-subline">
+                      <span v-if="userSubline(r)" class="mk-cell-sub" :title="userSublineFull(r)">{{ userSubline(r) }}</span>
+                      <span v-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test">测试</span>
+                    </span>
                   </div>
                 </div>
               </td>
@@ -287,6 +297,25 @@
                   <span v-if="wrapupTier(r) === 'complete'" class="mk-badge mk-badge--ok">有总结</span>
                   <span v-else-if="wrapupTier(r) === 'missing'" class="mk-badge mk-badge--warn">缺总结</span>
                   <span v-else class="mk-na">—</span>
+                  <!-- 2026-11-09 用户走查（图 3）：顶部「异常 2 / 有建议 14」在列里找不到落点——
+                       这两条信号就地透出（徽章，不再只住在 title 里），KPI 数字因此可以逐行对上。
+                       异常与状态列同源（失败 / 收尾失败 / 超时），这里只做「属于异常档」的一次显式标注；
+                       有建议是课后建议（附注），处置细节仍走悬停。 -->
+                  <span
+                    v-if="ABNORMAL_STATUSES.has(r.status)"
+                    class="mk-badge mk-badge--sm mk-badge--bad"
+                    title="失败 / 收尾失败 / 超时：与顶部「异常」卡是同一批课"
+                  >异常</span>
+                  <!-- 建议信号（2026-11-09 用户走查图 3）：顶部「有建议 14」原先在列里没有落点，
+                       只有 title 里半句话。这里按处置态出徽章：仍需人看 = 「有建议」（按优先级着色），
+                       学员已选择保持原计划 = 「已保持计划」（灰）。两态同属 KPI 的「有建议」计数，
+                       逐行徽章数因此能对上顶部读数；处置细节（原因/范围/建议动作）仍在 title。 -->
+                  <span
+                    v-if="r.hasAdvisory"
+                    class="mk-badge mk-badge--sm"
+                    :class="advisoryOpsBadgeCls(r.advisory)"
+                    :title="advisoryOpsTitle(r.advisory)"
+                  >{{ r.advisory?.learnerResponse?.action === 'keep' ? '已保持计划' : '有建议' }}</span>
                 </div>
               </td>
               <td v-if="!tsHiddenCols.has('attention')">
@@ -298,6 +327,41 @@
               <td v-if="!isTableCompact && !tsHiddenCols.has('start')">
                 <span v-if="r.startAt" class="mk-cell-sub" :title="startAbsTitle(r)">{{ r.startAt }}</span>
                 <span v-else class="mk-na">—</span>
+              </td>
+              <!-- 操作列（课堂 / 操作为 MkCols 固定列）：主操作「详情」与行点击进同一个只读座舱。
+                   2026-11-09 用户走查（图 3）「右侧操作列只有 详情，建议和图 1、图 2 一样保持
+                   详情 ...」：补 ⋯ 菜单，把「看这个人 / 看这次课的总结」这类点名动作收进来
+                   （仍不放执行日志入口——2026-10-19 用户拍板：工程排查面不进运营列表）。
+                   详情 stop 冒泡，避免连带触发行点击进座舱两次。 -->
+              <td>
+                <div class="mk-actions">
+                  <button
+                    type="button"
+                    class="mk-link"
+                    :disabled="!r.id"
+                    @click.stop="openSessionCockpit(r.id)"
+                    @keydown.enter.stop.prevent="openSessionCockpit(r.id)"
+                  >详情</button>
+                  <div class="mk-menu">
+                    <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === r.id" @click.stop="toggleMenu(r.id)">⋯</button>
+                    <div v-if="openMenu === r.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
+                      <button
+                        type="button"
+                        class="mk-menu__item"
+                        role="menuitem"
+                        :disabled="!r.userId"
+                        @click="goLearner(r)"
+                      >查看学习者</button>
+                      <button
+                        type="button"
+                        class="mk-menu__item"
+                        role="menuitem"
+                        :disabled="!r.id"
+                        @click="goWrapupTab(r)"
+                      >查看课后总结</button>
+                    </div>
+                  </div>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -328,10 +392,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { dataSource, openSubPage } from './store'
 import { isDegradedWrapup } from './cockpitWrapup'
 import { useSessionDrill } from './useSessionDrill'
+import { useRowMenu } from './useRowMenu'
 import { useIsNarrow } from './useIsNarrow'
 import { useListQueryState } from './learner-profile'
-import { timeAgo, isPageCacheFresh, liveRefreshSeq, markPageFetched } from './live'
-import { statusText, sessionProgressTitle, taskTypeText, taskTypeTitle, sessionStatusBadgeCls as statusBadge, closureSourceText, sessionModeText, advisoryOpsTitle } from './statusText'
+import { timeAgo, isPageCacheFresh, liveRefreshSeq, markPageFetched, shortId } from './live'
+import { statusText, sessionProgressTitle, taskTypeText, taskTypeTitle, sessionStatusBadgeCls as statusBadge, closureSourceText, sessionModeText, advisoryOpsTitle, advisoryOpsBadgeCls } from './statusText'
 import type { SessionProgress, OpsAdvisoryLike } from './statusText'
 import { adminTeachingSessionsApi } from '@/api/adminApi'
 import { useSafePolling } from '@/composables/useSafePolling'
@@ -653,8 +718,8 @@ const tsHiddenCols = ref<Set<string>>(new Set<string>(TS_DEFAULT_HIDDEN))
 const isTableCompact = useIsNarrow(1439)
 /** 视口强制收起、菜单里以禁用态呈现的列（见上注；仅「开始时间」，P41） */
 const tsUnavailableCols = computed<string[]>(() => (isTableCompact.value ? ['start'] : []))
-/* 首载骨架列数 = 当前可见列数（+操作列），避免骨架到真表横向跳一格 */
-const tsVisibleColCount = computed(() => 1 + tsColDefs.filter((c) => !tsHiddenCols.value.has(c.key) && !tsUnavailableCols.value.includes(c.key)).length)
+/* 首载骨架列数 = 当前可见列数（+ 课堂列 + 操作列），避免骨架到真表横向跳一格 */
+const tsVisibleColCount = computed(() => 2 + tsColDefs.filter((c) => !tsHiddenCols.value.has(c.key) && !tsUnavailableCols.value.includes(c.key)).length)
 /* 视图态（2026-10-27 筛选重建）：原先「焦点 chips」把三个不同维度的东西并成一组单选胶囊
    （进行中 = 状态的一档、需关注 = 派生视图、缺总结 = 总结的一档），和右侧维度下拉各自背一份
    同一个数（选 chip「缺总结」时「总结」下拉仍显示「全部总结」）。现在真正派生的口径只剩
@@ -703,25 +768,28 @@ const statusOptionCounts = computed<Record<string, number>>(() => {
 const statusSelectOptions = computed(() => {
   const withCount = (label: string, count: number) => (rows.value.length ? `${label}（${count}）` : label)
   return [
-    { value: '', label: '全部状态' },
+    { value: '', label: '全部' },
     { value: 'abnormal', label: withCount('异常（失败 · 超时）', abnormalSessionCount.value) },
     ...statusOptions.map((o) => ({ value: o.value, label: withCount(o.label, statusOptionCounts.value[o.value] || 0) }))
   ]
 })
+/* 空值项一律写「全部」（2026-11-09 走查）：此前是「全部总结 / 全部课型 / 全部时间」，
+   而触发器本身已经带维度前缀（「总结 全部总结」），读出来是结巴；三个下拉的「不筛选」
+   语义也本该同名——同一枚控件（MkPillSelect）里只有「状态」写的是「全部」。 */
 const wrapSelectOptions = [
-  { value: '', label: '全部总结' },
+  { value: '', label: '全部' },
   { value: 'degraded', label: '降级总结' },
   { value: 'eval-failed', label: '评估失败' },
   { value: 'missing', label: '缺总结' },
 ]
 const modeSelectOptions = [
-  { value: '', label: '全部课型' },
+  { value: '', label: '全部' },
   { value: 'tutor', label: '正课' },
   { value: 'review', label: '复习课' },
   { value: 'extension', label: '延伸课' },
 ]
 const dateSelectOptions = [
-  { value: '', label: '全部时间' },
+  { value: '', label: '全部' },
   { value: '7d', label: '近 7 天' },
   { value: '30d', label: '近 30 天' },
 ]
@@ -741,6 +809,11 @@ const completionRate = computed(() => {
   if (!total) return '—'
   return `${Math.round((rows.value.filter((r) => r.status === 'completed').length / total) * 100)}%`
 })
+
+/* 完结率副注（2026-11-09 推广图 5 指标卡副文案）：已完结 / 已加载总数，与 KPI 数字同源同批 rows。
+   分母取已加载窗口（与 completionRate 同一口径），后端未回 total 时也无可用全量，故不臆造。 */
+const completedSessionCount = computed(() => rows.value.filter((r) => r.status === 'completed').length)
+const completedSessionNote = computed(() => (rows.value.length ? `已完成 ${completedSessionCount.value}/${rows.value.length}` : ''))
 
 /* 客户端排序：数据全量在客户端（全量拉取）→ 排序诚实；默认保持服务端顺序。 */
 const {
@@ -903,6 +976,12 @@ const statusTitle = (r: Row): string => [statusNote(r), progressTitle(r)].filter
 /* 用户格悬停：邮箱 / 用户 ID 只留一处可查，不再每行铺一条副行。 */
 const userMetaTitle = (r: Row): string | undefined => [r.email, r.userId].filter(Boolean).join(' · ') || undefined
 
+/* 用户格副行（2026-11-09 跨页一致性）：统一「姓名 + 副行（邮箱 / 截断 ID）」双行结构。
+   有邮箱显示邮箱（重名用户如两个「林见微」靠邮箱区分）；无邮箱退化为截断后的用户 ID
+   （uxcheck 这类特殊账号也能落到可读副行，不再空白）。 */
+const userSubline = (r: Row): string => (r.email ? r.email : (r.userId ? shortId(r.userId) : ''))
+const userSublineFull = (r: Row): string => r.email || r.userId || ''
+
 /* P3（设计评审 4.3-9）：异常态（失败/收尾失败/超时）会话列副行是后端降级模板句
    「本次会话未正常结束，为你保留了基础学习记录。」——与状态徽章同事实且首屏多行同文。
    命中模板句时改显行内已有的增量信息（时长优先，缺时长用开始时间；两者皆缺撤副行不硬凑）。
@@ -983,7 +1062,9 @@ function closeDetail() {
 /** 真实教学会话与控制台数据契约不兼容（座舱仅服务虚拟会话）：轻量深链 = 学习者详情 / 只读座舱。
     链路（Trace 按 sessionId 归组）行内入口已下线（2026-10-19 用户拍板：工程排查面不进运营列表），
     故这里不再取 goTrace。 */
-const { goConsole } = useSessionDrill(closeDetail)
+const { goConsole, goLearner } = useSessionDrill(closeDetail)
+/** 行内 ⋯ 菜单（2026-11-09 走查图 3：操作列补齐「详情 ...」，与目标对话 / 学习路径同构） */
+const { openMenu, toggleMenu, popStyle } = useRowMenu()
 
 /** 行点击落点：缺总结的课堂直接落座舱总结页签（否则默认页签看不到该处理的东西） */
 function openRow(r: Row) {
@@ -994,6 +1075,22 @@ function openRow(r: Row) {
     return
   }
   goConsole(r)
+}
+
+/** 操作列「详情」：与行点击进同一个只读座舱（openRow），按会话 id 定位行后落点一致。
+   本页无次级动作，故不挂 ⋯ 菜单；按钮 stop 冒泡，避免与行点击的座舱跳转叠加。 */
+function openSessionCockpit(id: string) {
+  if (!id) return
+  const r = rows.value.find((x) => x.id === id)
+  if (r) openRow(r)
+}
+
+/** ⋯ 菜单「查看课后总结」：直接落座舱的总结页签（不重跑 openRow 的缺总结分支判断，
+ *  否则「有总结」的课会被带进默认页签、需要再点一次）。 */
+function goWrapupTab(r: Row) {
+  if (!r.id) return
+  closeDetail()
+  openSubPage('session-real', r.id, { stage: 'wrapup' })
 }
 
 /* 状态映射统一走共享字典（对齐后端枚举：initializing/active/paused/timeout/superseded/failed/finalizing/finalization_failed/completed/discarded） */
@@ -1052,38 +1149,29 @@ defineExpose({ refreshNow })
    的宽度不参与分配。 */
 /* 2026-10-24 视觉修复：状态（204）/课后总结（190）/开始时间（92）在多数行是短内容，
    富余宽度让给课堂主列；状态列仍够放下「已完成 + x/y」一行。 */
+/* 固定列宽（2026-10-22 用户「翻页不同页码时候，列宽怎么还在变呢」）：fixed 档下按表头宽度定死，
+   余量按各列宽度权重摊开；隐藏列（显隐集 / 窄档 unavailable）的宽度不参与分配。
+   2026-11-09 宽屏失衡修复：课堂列改用百分比 + 上限封顶（28–32% 且 ≤460px），不再随宽屏无限吞掉
+   余量把用户列顶到右侧留大片空白；其余列给固定像素宽度，整行信息分布更匀称。
+   所有列宽度之和恒 ≤ 容器宽（百分比 + 固定像素），1280 起不出现横向滚动。 */
 .ts-c-user { width: 150px; }
 .ts-c-status { width: 150px; }
 .ts-c-track { width: 84px; }
-.ts-c-dur { width: 90px; }
+.ts-c-dur { width: 96px; }
 .ts-c-msg { width: 66px; }
 .ts-c-kp { width: 62px; }
 /* 课型去徽章后是纯文本（最长「复习课」3 字），宽度从 88 收到 72，让给时长列。 */
 .ts-c-mode { width: 72px; }
-.ts-c-out { width: 150px; }
+/* 2026-11-09 走查（图 3）：课后总结列除「有总结/缺总结」外就地透出「异常」「有建议」两枚信号徽章，
+   三枚并排 150px 会换行成三行；放到 190px，两行内收敛（徽章 flex-wrap 仍在）。 */
+.ts-c-out { width: 190px; }
 .ts-c-att { width: 50px; }
 .ts-c-start { width: 80px; }
-/* 课堂列宽度随断点给基准值，余量由 fixed 布局按各列宽度权重摊开（不再是单列吃掉全部余量，
-   否则 1920 下课堂列 ~480px、右侧留大片空白）。全表 11 列（课堂 + 10 可显隐，行点击进详情
-   无操作列）；默认视图 6 列（<1440 时「开始时间」由 unavailable 收起 → 5 列）。
-   2026-11-01 P41 起用户可在任意宽度勾开默认收起的列（多出宽度走 .mk-table-scroll 横滚），
-   档位只约束默认视图。 */
-.ts-c-topic { width: 190px; }
-/* 1200 档（125% 缩放的 1440 屏）也要无横滚：八列合计须 ≤914，短列同步收一点 */
-@media (max-width: 1279px) {
-  .ts-c-topic { width: 260px; }
-  .ts-c-user { width: 140px; }
-  .ts-c-status { width: 150px; }
-  .ts-c-dur { width: 86px; }
-  .ts-c-msg { width: 64px; }
-  .ts-c-out { width: 150px; }
-}
-/* 1280 起默认只显示 7–8 列（完成方式/消息/知识点/关注已默认收起）：
-   课堂列是主标识列，优先吃足宽度；状态/总结/开始时间等短列让位。 */
-@media (min-width: 1280px) { .ts-c-topic { width: 330px; } }
-@media (min-width: 1440px) { .ts-c-topic { width: 330px; } }
-@media (min-width: 1500px) { .ts-c-topic { width: 300px; } }
-@media (min-width: 1700px) { .ts-c-topic { width: 300px; } }
+/* 操作列宽与全站表（目标对话 / 学习路径）一致，走全局 .mk-c-act（140px + 右对齐），
+   本页不再私写 xx-c-act 宽度（list-cell-dialect 契约）。 */
+/* 课堂列：主标识列。百分比（28–32%）吸收大部分余量，min/max 兜底——
+   min 防止窄屏被压成单行截断，max 封顶（460px）防止 1920 下吞掉全部余量、右侧留白失衡。 */
+.ts-c-topic { width: 30%; min-width: 260px; max-width: 460px; }
 /* 课堂列吸收余量后可能远超 .mk-cell-main 的 300/360 上限，让文本跟着列宽走（否则右侧留空白）。
    选择器必须落到表体的 td：ts-c-topic 只挂在 th 上，写成 `.ts-c-topic .mk-cell-main strong`
    时从不命中单元格，主行仍按 --mk-cell-main-max 的 300px 截断，而这一列可宽到 ~520px——
@@ -1091,6 +1179,14 @@ defineExpose({ refreshNow })
 .ts-row td:first-child .mk-cell-main strong, .ts-row td:first-child .mk-cell-sub { max-width: 100%; }
 /* 固定列内不允许内容越界挤压邻列（徽章/按钮按内容裁切，悬停 title 仍在） */
 .ts-table td { overflow: hidden; }
+/* 2026-11-09 审计 #1（底部腰斩）：表格滚动区底部加渐隐遮罩与留白，最后一行不被分页栏切掉一半。
+   保留内部滚动——mk-card--fill 锁卡片高度，改页面级滚动会让表格溢出卡体而非整页滚动（同
+   LearnerCenter .lc-tablewrap 判例）。留白 16px 大于渐隐 12px，渐隐只落在空白区、不裁字形。 */
+.ts-table-scroll {
+  padding-bottom: 16px;
+  -webkit-mask-image: linear-gradient(to bottom, var(--mk-ink) 0, var(--mk-ink) calc(100% - 12px), transparent 100%);
+  mask-image: linear-gradient(to bottom, var(--mk-ink) 0, var(--mk-ink) calc(100% - 12px), transparent 100%);
+}
 /* 用户格（对齐 Users.ul-user / GoalConversations.gc-user 头像判例）：头像 + 主副行 */
 .ts-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .ts-user .mk-cell-main { min-width: 0; flex: 1; }

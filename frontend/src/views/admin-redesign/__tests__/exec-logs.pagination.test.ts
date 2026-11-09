@@ -557,8 +557,11 @@ describe('2026-10-04 状态条退役（ExecLogs）', () => {
     const kpis = w.findAll('.mk-kpi');
     expect(kpis.map((k) => k.find('.mk-kpi__label').text().trim())).toEqual(['调用总数', '成功率', '耗时 P50', '耗时 P99']);
     /* 2026-11-08 审计：失败数 = 未成功（error 6 + timeout 4 = 10），与同屏「仅失败」胶囊、
-       成功率分母、总览「失败 N 次」同口径；旧写法只数 error（6），下钻对不上（见 status=failed）。 */
-    expect(kpis[0].find('.mk-kpi__num').text()).toBe('200（失败 10）');
+       成功率分母、总览「失败 N 次」同口径；旧写法只数 error（6），下钻对不上（见 status=failed）。
+       2026-11-09 审计（图 4）：主值只放总数，失败数拆到 valueNote（行内注记），
+       主值不再整串染红——见下方「失败数走 valueNote」用例。 */
+    expect(kpis[0].find('.mk-kpi__num').text()).toBe('200失败 10');
+    expect(kpis[0].find('.mk-kpi__num-note').text()).toBe('失败 10');
     expect(kpis[1].find('.mk-kpi__num').text()).toContain('95%');
     expect(kpis[1].classes()).not.toContain('mk-kpi--bad');
     // 2026-10-27：常驻 chip 组退场，来源是维度下拉（计数在 option 文案里）
@@ -585,7 +588,10 @@ describe('2026-10-04 状态条退役（ExecLogs）', () => {
     const kpis = w.findAll('.mk-kpi');
     expect(kpis).toHaveLength(4);
     expect(kpis.map((k) => k.find('.mk-kpi__num').text())).toEqual(['—', '—', '—', '—']);
-    expect(kpis[0].classes()).toContain('mk-kpi--muted');
+    /* 2026-11-09（图 4）：调用总数卡不再传 tone（tone 会连主值一起染色），未就绪档
+       由主值「—」本身表达；成功率卡仍走 muted。 */
+    expect(kpis[0].classes()).not.toContain('mk-kpi--bad');
+    expect(kpis[0].find('.mk-kpi__num-note').exists()).toBe(false);
     expect(kpis[1].classes()).toContain('mk-kpi--muted');
     // 来源维度常驻可点，计数未就绪时 option 不带数字（不把未知读成 0）
     expect(filterOptions(w as never, '来源')).toEqual(['全部来源', '仅测试调用']);

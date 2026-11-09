@@ -17,10 +17,11 @@ const getMemoryTraces = vi.hoisted(() => vi.fn());
 const getLearnerEvidence = vi.hoisted(() => vi.fn().mockResolvedValue({ items: [], domain: [], loadCurve: [] }));
 
 const routeQuery = vi.hoisted(() => ({ tab: 'sessions' } as Record<string, string>));
+const routerReplace = vi.hoisted(() => vi.fn());
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({ query: routeQuery }),
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), replace: routerReplace }),
 }));
 vi.mock('../store', async () => {
   const { ref } = await import('vue');
@@ -34,6 +35,8 @@ vi.mock('../live', async () => {
   const { ref } = await import('vue');
   return {
     liveLearners: ref([{ userId: 'u1', name: '测试学习者', pathId: 'lp1' }]),
+    // 用户域：概览「账号信息」卡复用（与 UserAccountPane 同源），不新增接口
+    liveUsers: ref([]),
     // 虚拟档案列表：boot 全量载入，学习者详情用它反查「虚拟档案 →」互跳入口（默认空 = 真人账号）
     liveVirtuals: ref([]),
   liveGetLearnerDetail: vi.fn().mockResolvedValue({
@@ -317,21 +320,26 @@ describe('LearnerDetail 记忆与复习 pane（2026-10-11 深设计）', () => {
     getMemoryTraces.mockReset();
   });
 
-  it('操作列已撤（无单点复习接口）；列方言=知识点/记忆强度/复习到期/提取史/状态；调度面板拆到「记忆调度」页签（2026-10-12 拍板）', async () => {
+  it('记忆与调度页签：FSRS 普查表列方言含掌握度；调度面板随页签合并挂载（2026-11-09 页签裁并）', async () => {
     const w = await mountMemory([trace({})]);
+    // 合并后单一页签：普查表列 = 知识点 / 掌握度 / 记忆强度 / 复习到期 / 提取史 / 状态
     expect(w.findAll('#ld-panel-memory thead th').map((t) => t.text())).toEqual([
-      '知识点', '记忆强度', '复习到期', '提取史', '状态',
+      '知识点', '掌握度', '记忆强度', '复习到期', '提取史', '状态',
     ]);
-    // 记忆与复习页签 = FSRS 普查（读数）；调度面板（温故计划/归并审计/回滚）在「记忆调度」页签
+    // 操作列已撤（无单点复习接口）；调度面板（温故计划/归并审计/回滚）随 MemoryReview 一并进入本页签
     expect(w.findAll('#ld-panel-memory tbody button').length).toBe(0);
     expect(w.find('#ld-panel-memory .mk-card__head .mk-link').exists()).toBe(false);
-    expect(w.find('#ld-panel-memory .mr-panels').exists()).toBe(false);
+    expect(w.find('#ld-panel-memory .mr-panels').exists(), '合并后页签应渲染调度面板').toBe(true);
+    // 本夹具的 review-detail mock 返回 null → 面板显示暂无兜底（栏与卡片按明细有无渲染）
+    expect(w.find('#ld-panel-memory .mr-panels').text()).toContain('暂无可复盘的记忆数据');
+  });
 
+  it('旧深链 ?tab=memory-ops 回落到合并后的「记忆」页签（normalizeLdTab 别名）', async () => {
     routeQuery.tab = 'memory-ops';
     const ops = await mountMemory([trace({})]);
-    expect(ops.find('#ld-panel-memory-ops .mr-panels').exists(), '记忆调度页签应渲染调度面板').toBe(true);
-    // 本夹具的 review-detail mock 返回 null → 面板显示暂无兜底（栏与卡片按明细有无渲染）
-    expect(ops.find('#ld-panel-memory-ops .mr-panels').text()).toContain('暂无可复盘的记忆数据');
+    // 合并后不再有独立 memory-ops 面板；旧深链落 memory，调度面板就在 memory 页签里
+    expect(ops.find('#ld-panel-memory-ops').exists()).toBe(false);
+    expect(ops.find('#ld-panel-memory .mr-panels').exists(), '旧深链应回落 memory 并渲染调度面板').toBe(true);
   });
 
   it('排序：待复习（逾期最久在前）→ 有痕迹未到期 → 未初始化压尾', async () => {
@@ -434,6 +442,51 @@ describe('LearnerDetail FSRS 到期三态（timeAgo 未来时间失真修复）'
     expect(html).toContain('3 天后');
     expect(html).toContain('已逾期 2 天');
     expect(html).not.toContain('>刚刚<');
+  });
+});
+
+describe('LearnerDetail 证据时间线分段切换（2026-11-09 纵向压缩）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    routeQuery.tab = 'evidence';
+    listSessions.mockReset().mockResolvedValue({ data: { data: { items: [] } } });
+    getMemoryTraces.mockReset().mockResolvedValue([]);
+    getLearnerEvidence.mockReset();
+  });
+
+  it('默认展示事件时间线；切到「校准记录」后展示校准行、隐藏事件列表', async () => {
+    getLearnerEvidence.mockResolvedValue({
+      items: [
+        { type: 'task-completed', detail: '完成练习', signal: 'mastery', score: 0.8, happenedAt: '2026-10-01T08:00:00Z', conceptKeys: ['概念甲'] },
+      ],
+      domain: [],
+      loadCurve: [],
+      calibrationDetails: [
+        { type: 'prediction', detail: '判分前预测：卡壳风险 40%', happenedAt: '2026-10-01T09:00:00Z' },
+      ],
+    });
+    const w = await mountLd([]);
+
+    // 卡顶分段切换：事件时间线 (N) / 校准记录 (N)
+    const seg = w.findAll('#ld-panel-evidence .mk-seg__item');
+    const labels = seg.map((b) => b.text());
+    expect(labels.some((t) => t.startsWith('事件时间线'))).toBe(true);
+    expect(labels.some((t) => t.startsWith('校准记录'))).toBe(true);
+
+    // 默认 = 事件时间线：事件行在，校准块不在
+    expect(w.find('#ld-panel-evidence .ld-evidence').exists()).toBe(true);
+    expect(w.find('#ld-panel-evidence .ld-calib').exists()).toBe(false);
+
+    // 切到校准记录：校准行出现，事件列表让位
+    const calibBtn = w.findAll('#ld-panel-evidence .mk-seg__item').find((b) => b.text().startsWith('校准记录'))!;
+    await calibBtn.trigger('click');
+    await nextTick();
+    expect(w.find('#ld-panel-evidence .ld-calib').exists()).toBe(true);
+    expect(w.find('#ld-panel-evidence .ld-calib').text()).toContain('判分前预测');
+    expect(w.find('#ld-panel-evidence .ld-evidence').exists()).toBe(false);
+
+    // 列表容器限高内滚（源码级已锁 440px，这里锁容器存在）
+    expect(w.find('#ld-panel-evidence .ld-ev-scroll').exists()).toBe(true);
   });
 });
 
@@ -706,8 +759,10 @@ describe('LearnerDetail 路径视角（页级作用域开关）', () => {
       },
     ]);
     const w = await mountLd([]);
-    await chooseMkSelect(w as never, '路径范围', 'lp2');
     await flushPromises();
+    // 记忆页签不渲染路径作用域控件（2026-11-09 走查：数据本来就不随它走，
+    // 控件摆在这里只会和卡上「不随『路径范围』收窄」的说明自相矛盾）
+    expect(w.find('#ld-scope-path').exists()).toBe(false);
     const meta = w.find('#ld-panel-memory .mk-card__meta');
     expect(meta.text()).toContain('跨全部路径');
     // 2026-10-22 用户裁定：作用域由短标表达，卡头不再挂长释
@@ -925,9 +980,80 @@ describe('LearnerDetail 进度卡路径状态徽章（P1-1）', () => {
   });
 });
 
+/* 2026-11-09 用户实测（user_sim19）：路径已下线（archived）时后端下发顶层 displayPath 作展示兜底，
+   快照 currentPath 为空。此前 hasSnapshotPath 把顶层 model.pathTitle 也当 active 路径 → 徽章「进行中」、
+   进度卡无「（已下线）」后缀，与真实状态矛盾。锁住只认快照锚点：路径名带「（已下线）」、徽章「已下线」、
+   pct 与里程碑取 displayPath，且路径范围下拉选中同一条路径。 */
+describe('LearnerDetail 已下线兜底路径（user_sim19 回归）', () => {
+  function archivedDetail() {
+    return {
+      model: {
+        name: '测试学习者',
+        // 顶层 pathTitle 是展示兜底（不是 active 锚点）——不能据此判 active
+        pathTitle: '行测资料分析速算 25 分钟做完 20 题',
+        knowledgeMemory: {
+          // 快照只锚 active 路径 → 已下线时无 pathTitle；里程碑读数仍从 progress 取
+          currentPath: { progress: { completedMilestones: 5, totalMilestones: 15 }, conceptStates: [] },
+          globalSignals: {},
+        },
+      },
+      displayPath: {
+        id: 'lp-archived',
+        title: '行测资料分析速算 25 分钟做完 20 题',
+        status: 'archived',
+        totalTasks: 15,
+        completedTasks: 5,
+      },
+    };
+  }
+
+  it('徽章读「已下线」、路径名带（已下线）后缀、进度取 displayPath、作用域回填该路径', async () => {
+    const detailMock = vi.mocked(liveGetLearnerDetail);
+    const origDetail = detailMock.getMockImplementation();
+    // 真实场景（user_sim19）：路径已下线 → 学习者列表行不带 pathId / pathTitle，
+    // 展示信息只能来自详情接口的 displayPath。清空列表行的路径兜底才能复现。
+    const origLearners = JSON.parse(JSON.stringify(liveLearners.value));
+    liveLearners.value = [{ userId: 'u1', name: '测试学习者', pathId: undefined, pathTitle: null, email: '', currentTask: null, currentMilestone: null, trend: 'flat', fatigue: '低', confidence: 0.8, generatedAt: '2026-10-01T08:00:00Z', struggling: [], fragile: [] } as never];
+    setActivePinia(createPinia());
+    routeQuery.tab = 'overview';
+    listSessions.mockReset().mockResolvedValue({ data: { data: { items: [] } } });
+    getMemoryTraces.mockReset().mockResolvedValue([]);
+    listPaths.mockReset().mockResolvedValue({
+      data: { data: { paths: [{ id: 'lp-archived', title: '行测资料分析速算 25 分钟做完 20 题', status: 'archived', updatedAt: '2026-09-01T00:00:00Z' }] } },
+    });
+    detailMock.mockResolvedValue(archivedDetail() as never);
+    try {
+      const w = await mountLd([]);
+      const card = w.findAll('.mk-card').find((c) => c.find('.mk-card__title').text() === '当前进度');
+      expect(card, '当前进度卡应存在').toBeTruthy();
+      // 徽章：真实状态 archived → 「已下线」，不得误读成「进行中/学习中」
+      const badge = card!.find('.mk-badge');
+      expect(badge.text()).toBe('已下线');
+      expect(badge.text()).not.toBe('进行中');
+      // 路径名带（已下线）后缀，并保留原路径名
+      const pathText = card!.find('.ld-progress strong').text();
+      expect(pathText).toContain('行测资料分析速算 25 分钟做完 20 题');
+      expect(pathText).toContain('已下线');
+      // 里程碑分母取 displayPath 的 5/15
+      expect(card!.text()).toContain('里程碑 5/15');
+      // pct 33% = 5/15，落在进度条填充宽度上（不是文本）
+      const fill = card!.find('.ld-progress__bar .mk-minibar__fill');
+      expect(fill.attributes('style')).toContain('width: 33%');
+      // 路径范围下拉已回填该路径（不再停在「该学习者暂无学习路径」占位）
+      const opts = mkSelectLabels(w as never, '路径范围');
+      expect(opts.some((t) => t.includes('行测资料分析速算 25 分钟做完 20 题'))).toBe(true);
+      w.unmount();
+    } finally {
+      liveLearners.value = origLearners;
+      if (origDetail) detailMock.mockImplementation(origDetail);
+      routeQuery.tab = 'sessions';
+    }
+  });
+});
+
 /* 2026-11-02 P1-2：概览「概念掌握」与证据「全局信号与背景」原先在「当前路径」标签下摆的
    是学习者级概念清单（同页图谱才是路径级），掌握分档还各叫一套名字。这里锁住：
-   （a）两张概念卡把真实作用域写进可见卡头，（b）四档名与图谱同源（utils/conceptBands）。 */
+   （a）两张卡片把真实作用域写进可见卡头，（b）四档名与图谱同源（utils/conceptBands）。 */
 describe('LearnerDetail 概念卡作用域与分档名（P1-2）', () => {
   function ledgerDetail() {
     // 与真实响应同形：接口把快照摊在 data 顶层（route 里读 snapshot.knowledgeMemory），
@@ -1113,9 +1239,9 @@ describe('LearnerDetail 画像 KV：分档词表 / 量纲 / 逐格来源（P1-8�
   function kvRow(w: Awaited<ReturnType<typeof mountProfile>>, label: string) {
     return w.findAll('.ld-kv__row').find((r) => r.find('span').text() === label)!;
   }
-  /** 读数文本（不含紧随其后的「初始默认值」标注） */
+  /** 读数文本（默认值不再缀胶囊，值本身就是读数） */
   function kvValue(w: Awaited<ReturnType<typeof mountProfile>>, label: string) {
-    return kvRow(w, label).find('strong').text().replace('初始默认值', '');
+    return kvRow(w, label).find('strong').text();
   }
 
   it('枚举翻成中文分档，比率标成百分比并带量纲说明', async () => {
@@ -1138,27 +1264,52 @@ describe('LearnerDetail 画像 KV：分档词表 / 量纲 / 逐格来源（P1-8�
     }
   });
 
-  it('逐格标「初始默认值」：实测格不标，默认格每行都标，不再用整卡徽章兜底', async () => {
+  it('默认值改用「灰字 + 卡头一句图例」：不再逐格挂胶囊，实测格不上灰', async () => {
     const w = await mountProfile();
     const detailMock = vi.mocked(liveGetLearnerDetail);
     const origDetail = detailMock.getMockImplementation();
     try {
-      // 实测：不标
-      expect(kvRow(w, '元认知水平').find('.ld-kv__prior').exists()).toBe(false);
-      expect(kvRow(w, '自信水平').find('.ld-kv__prior').exists()).toBe(false);
-      // 默认：逐格标
-      for (const label of ['困惑模式', '平均响应（秒）', '平均消息长度（字）', '互动间隔（分钟）', '投入度', '一致性']) {
-        expect(kvRow(w, label).find('.ld-kv__prior').text()).toBe('初始默认值');
+      // 实测：正常墨色
+      expect(kvRow(w, '元认知水平').find('.ld-kv__val--prior').exists()).toBe(false);
+      expect(kvRow(w, '自信水平').find('.ld-kv__val--prior').exists()).toBe(false);
+      // 默认：读数格上灰（同屏 11 枚「初始默认值」胶囊已撤）
+      for (const label of ['困惑模式', '平均响应（秒）', '平均消息长度（字）', '互动间隔（分钟）', '投入度', '一致性', '学习速度']) {
+        expect(kvRow(w, label).find('strong').classes()).toContain('ld-kv__val--prior');
       }
-      expect(kvRow(w, '学习速度').find('.ld-kv__prior').exists()).toBe(true);
-      // 规则建议（非实测非默认）不标
-      expect(kvRow(w, '建议方式').find('.ld-kv__prior').exists()).toBe(false);
-      // 旧的整卡徽章撤除
-      expect(w.text()).not.toContain('初始默认值 · 暂无学习记录');
+      // 规则建议（非实测非默认）不上灰
+      expect(kvRow(w, '建议方式').find('.ld-kv__val--prior').exists()).toBe(false);
+      // 图例在卡头说一次，不再逐格复读标签文字
+      expect(w.text()).toContain('灰字 = 初始默认值');
+      expect(w.findAll('.ld-kv__prior')).toHaveLength(0);
       w.unmount();
     } finally {
       if (origDetail) detailMock.mockImplementation(origDetail);
       routeQuery.tab = 'sessions';
     }
+  });
+});
+
+describe('LearnerDetail · 页签 URL 同步（2026-11-09 走查）', () => {
+  it('从 ?tab=evidence 进来后点「概览」：URL 里的 tab 参数被删掉，不再「界面在概览、URL 在证据」', async () => {
+    routeQuery.tab = 'evidence';
+    routerReplace.mockClear();
+    const w = await mountLd([]);
+    await flushPromises();
+    expect(w.find('#ld-panel-evidence').exists()).toBe(true);
+
+    await w.find('#ld-tab-overview').trigger('click');
+    await flushPromises();
+    expect(w.find('#ld-panel-overview').exists()).toBe(true);
+    // 回默认页签 = 从 query 里删掉 tab（早前用展开空对象的方式删，旧值原地留着）
+    const lastCall = routerReplace.mock.calls.at(-1)!;
+    expect(lastCall[0]).toEqual({ query: {} });
+
+    // 非默认页签仍写着 tab=…
+    routeQuery.tab = 'overview';
+    routerReplace.mockClear();
+    await w.find('#ld-tab-graph').trigger('click');
+    await flushPromises();
+    expect(routerReplace.mock.calls.at(-1)![0]).toEqual({ query: { tab: 'graph' } });
+    w.unmount();
   });
 });

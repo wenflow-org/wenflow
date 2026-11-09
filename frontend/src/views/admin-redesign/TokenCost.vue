@@ -1,5 +1,5 @@
 <template>
-  <div class="mk-page">
+  <div class="mk-page tc-page">
     <!-- 页头：页名 + 动作区（时间窗 / 读数时刻 / 导出）。读数归下方 KPI 卡，页头不复述 -->
     <MkPageHead title="成本分析">
       <template #actions>
@@ -143,10 +143,11 @@
           <OvBars
             v-if="trend.length"
             :cols="trendCols"
-            :bar-width="days <= 7 ? 44 : days <= 30 ? 20 : 10"
+            :bar-width="days <= 7 ? 36 : days <= 30 ? 16 : 8"
             :show-nums="days <= 30"
             :label-every="days <= 7 ? 1 : days <= 30 ? 4 : 12"
             :min-bars-height="150"
+            :gridlines="4"
           />
         </div>
         <!-- 趋势卡尾 note（审核 #111）：原由 trend.reduce 求和，与 KPI 的 totals 在非整日窗口
@@ -182,12 +183,12 @@
         <div v-if="skillRows.length" class="tc-skilltable" :class="{ 'tc-skilltable--cost': skillCostTotal > 0 }" role="table" :aria-label="SKILL_COST_TITLE">
           <div class="tc-skilltable__head" role="row">
             <span role="columnheader">Skill</span>
-            <span role="columnheader">调用次数</span>
-            <span role="columnheader">Token 用量</span>
+            <span role="columnheader" class="tc-th--sortable" :aria-sort="skillAria('calls')" @click="toggleSkillSort('calls')">调用次数<i class="tc-th__caret" :class="skillCaret('calls')"></i></span>
+            <span role="columnheader" class="tc-th--sortable" :aria-sort="skillAria('tokens')" @click="toggleSkillSort('tokens')">Token 用量<i class="tc-th__caret" :class="skillCaret('tokens')"></i></span>
             <span role="columnheader">输入</span>
             <span role="columnheader">输出</span>
             <span role="columnheader">均次 Token</span>
-            <span role="columnheader">成本</span>
+            <span role="columnheader" class="tc-th--sortable" :aria-sort="skillAria('usd')" @click="toggleSkillSort('usd')">预估成本 (USD)<i class="tc-th__caret" :class="skillCaret('usd')"></i></span>
             <!-- 文案保持「占比」（表格契约锁定），口径用 title 说清：已定价按成本、未定价按 Token；
                  导出 CSV 已拆成「Token占比% / 成本占比%」两列。 -->
             <!-- 可见文案由 .tc-share-head 的伪元素补成「成本占比 / Token 占比」；
@@ -278,6 +279,7 @@ import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import { toast } from '@/utils/toast'
+import { formatUsd } from './costFormat'
 
 /* 文案单源（R6 复读单源化）：卡标题与成本表的 aria-label 共用一份 */
 const SKILL_COST_TITLE = '按 Skill 成本明细'
@@ -426,7 +428,41 @@ const totalTokens = computed(() => summary.value?.totals.tokens || 0)
 /* 空窗口判据：后端 getSummary 恒返回对象（totals 全 0），「!summary」整页空态不可达；
    以 calls === 0 判空，筛选项（时间窗/测试流量）切换后用户仍可换窗自救 */
 const summaryEmpty = computed(() => !!summary.value && summary.value.totals.calls === 0)
-const skillRows = computed(() => bySkill.value.slice(0, skillAll.value ? bySkill.value.length : skillLimit))
+/* 2026-11-09 走查：表名叫「按 Skill 成本明细」，行序却是按调用次数——第 5 行金额高于第 4 行、
+   却排在后面，且表头无任何排序指示。改为默认按成本降序，三个数值列表头可点切换（aria-sort 同步）。 */
+type SkillSortKey = 'calls' | 'tokens' | 'usd'
+const skillSortKey = ref<SkillSortKey>('usd')
+const skillSortDir = ref<'asc' | 'desc'>('desc')
+function toggleSkillSort(k: SkillSortKey) {
+  if (skillSortKey.value === k) {
+    skillSortDir.value = skillSortDir.value === 'desc' ? 'asc' : 'desc'
+  } else {
+    skillSortKey.value = k
+    skillSortDir.value = 'desc'
+  }
+}
+function skillSortVal(r: SkillCostRow, k: SkillSortKey): number {
+  if (k === 'usd') return typeof r.usd === 'number' ? r.usd : Number.NEGATIVE_INFINITY
+  if (k === 'tokens') return r.tokens || 0
+  return r.calls || 0
+}
+function skillAria(k: SkillSortKey): 'ascending' | 'descending' | 'none' {
+  if (skillSortKey.value !== k) return 'none'
+  return skillSortDir.value === 'desc' ? 'descending' : 'ascending'
+}
+function skillCaret(k: SkillSortKey): string {
+  if (skillSortKey.value !== k) return 'tc-th__caret--off'
+  return skillSortDir.value === 'desc' ? 'tc-th__caret--desc' : 'tc-th__caret--asc'
+}
+const skillSorted = computed(() => {
+  const dir = skillSortDir.value === 'desc' ? -1 : 1
+  return [...bySkill.value].sort(
+    (a, b) => (skillSortVal(a, skillSortKey.value) - skillSortVal(b, skillSortKey.value)) * dir
+  )
+})
+const skillRows = computed(() =>
+  skillSorted.value.slice(0, skillAll.value ? skillSorted.value.length : skillLimit)
+)
 const userRows = computed(() => byUser.value.slice(0, userAll.value ? byUser.value.length : userLimit))
 
 
@@ -435,7 +471,7 @@ const skillCostTotal = computed(() =>
   bySkill.value.reduce((acc, r) => acc + (typeof r.usd === 'number' ? r.usd : 0), 0)
 )
 function skillRowCost(r: SkillCostRow): string {
-  return typeof r.usd === 'number' ? `≈ $${fmtCostUsd(r.usd)}` : '—'
+  return typeof r.usd === 'number' ? formatUsd(r.usd) : '—'
 }
 /** 有无已定价金额（决定成本列占位色：无 → 暗灰） */
 function hasCost(r: SkillCostRow): boolean {
@@ -593,12 +629,10 @@ const pricingMissing = computed(
 )
 
 /* P1#25 金额格式：固定 6 位小数改有效数字——固定 6 位对大额是噪音、对微额首屏
-   全是 0.000000 读不出量级。≥1 两位小数 / ≥0.01 四位 / 更小保留 6 位；0 与非法值显「0」 */
+   全是 0.000000 读不出量级。2026-11-09 走查统一：成本页三张表 + 调用成本卡共用 formatUsd
+   （固定 4 位小数、极小额显 <0.0001），单元格不再重复 ≈ $ 前缀，币种归表头。 */
 function fmtCostUsd(v: number): string {
-  if (!Number.isFinite(v) || v <= 0) return '0'
-  if (v >= 1) return v.toFixed(2)
-  if (v >= 0.01) return v.toFixed(4)
-  return v.toFixed(6)
+  return formatUsd(v)
 }
 
 /* 已加载数据对应的窗口键（D4）：缓存命中只在「同一窗口」时短路。
@@ -738,13 +772,17 @@ const trendCols = computed(() => trend.value.map((d) => ({
 </script>
 
 <style scoped>
+/* 2026-11-09 走查：成本页内容较长（KPI + 趋势 + 三张明细/排行），最后一张「用户用量排行」
+   卡片在窄视口下易贴底被裁。.mk-page 全局已留 48px 呼吸位；这里再兜底一层最小底部留白，
+   确保最后一行的 3px 不被视口/外层容器直接截断（不引入二次滚动）。 */
+.tc-page { padding-bottom: calc(var(--mk-page-pad-b) + 16px); }
 /* 窗口 pill 随页头动作区排布（2026-10-16）：与「导出报表/刷新」同一行，窄屏由
    MkPageHead__actions 的 flex-wrap 自动折行；不再有独立的描边筛选条。 */
 /* 读数时刻：后端 5 分钟缓存，金额不是实时值 */
 .tc-stats-at { white-space: nowrap; }
 /* 未配置单价是可点动作（与「调用成本」卡同落点），徽章外观 + 手型 */
 .tc-unpriced { border: 0; font-family: inherit; cursor: pointer; }
-.tc-unpriced:hover { color: var(--mk-blue); }
+.tc-unpriced:hover { color: var(--mk-blue-text); }
 /* KPI 区已改用共享 .mk-kpi-grid（2026-09-29 重设：原私有 .tc-overview
    repeat(4,1fr)/gap14 与全站 KPI 栅格不是同一套；.tc-status--bad 随状态条
    去数字一并退役 → 见下方模板注释 */
@@ -787,7 +825,7 @@ const trendCols = computed(() => trend.value.map((d) => ({
   font: inherit;
   font-size: var(--mk-fs-micro);
   font-weight: 700;
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
   border-radius: 6px;
   cursor: pointer;
   transition: background 0.12s;
@@ -865,6 +903,21 @@ const trendCols = computed(() => trend.value.map((d) => ({
   color: var(--mk-faint);
 }
 .tc-skilltable__head > span:not(:first-child) { text-align: right; }
+/* 2026-11-09 走查：数值列表头可点排序（默认成本降序），caret 紧跟文字右侧。
+   用空 <i> 画三角，不向表头 .text() 注入字符，保证表头文案契约（成本 (USD)）不被破坏。 */
+.tc-th--sortable { cursor: pointer; user-select: none; }
+.tc-th--sortable:hover { color: var(--mk-faint); }
+.tc-th__caret {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  margin-left: 4px;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+}
+.tc-th__caret--off { border-bottom: 5px solid var(--mk-faint); opacity: 0.35; }
+.tc-th__caret--desc { border-bottom: 5px solid var(--mk-blue); }
+.tc-th__caret--asc { border-top: 5px solid var(--mk-blue); }
 /* 占比口径上屏（2026-10-24）：表头 DOM 文案因测试契约保持「占比」，
    用伪元素补出「成本 / Token」，与导出 CSV 的两列同义。 */
 .tc-skilltable__head .tc-share-head::before { content: 'Token '; }

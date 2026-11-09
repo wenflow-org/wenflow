@@ -16,12 +16,11 @@
          只有本页与「模型与接入」被收窄，切页签会一宽一窄地跳。 -->
     <section class="mk-card ac-card">
         <div class="mk-card__head">
-          <h3 class="mk-card__title">访问与注册设置</h3>
-          <!-- 卡头右侧 = 生效档 + 脏值徽章（2026-11-03 用户「感觉和其他页面 UI 都不一样」）：
-               同页其余四个页签的卡头都是「左标题 + 右状态/动作」，只有本卡头只有一个标题；
-               而「当前生效：X」原先挂在入站段标题后当灰字尾巴、脏值再缀一句「有未保存的改动」，
-               两处都跟别处不同形。现按同页既有判例收进卡头：生效档是中性徽章，
-               脏值用「模型与接入」同款的 mk-badge--warn「未保存」。 -->
+          <!-- 2026-11-09 设计语言收敛（容器层级）：卡题原为「访问与注册设置」，与页签名
+               「访问与注册」逐字重复——页签已经在说这一页是什么，卡头再说一遍就是两行字说一件事。
+               正文三段（管理后台访问控制 / 服务端出站访问 / 注册设置）各有自己的标题，
+               卡头不再需要标题，只留右侧状态：生效档 + 脏值。
+               同页「会话安全」的卡头本来就是无标题的工具条形态，这里向它看齐。 -->
           <div class="mk-card__head-right">
             <span class="mk-badge">当前生效：{{ accessModeText }}</span>
             <span v-if="policyDirty" class="mk-badge mk-badge--warn">未保存</span>
@@ -40,11 +39,10 @@
                 :ref="(el) => setAccessRef(el, i)"
                 type="button"
                 role="radio"
-                class="ac-opt ac-opt--third"
+                class="ac-opt mk-choice ac-opt--third"
                 :class="{
-                  'ac-opt--on': policy.adminAccessMode === opt.id,
+                  'mk-choice--on': policy.adminAccessMode === opt.id,
                   'ac-opt--off': opt.disabled,
-                  'ac-opt--risk': policy.adminAccessMode === opt.id && !!opt.warn,
                 }"
                 :tabindex="policy.adminAccessMode === opt.id ? 0 : -1"
                 :aria-checked="policy.adminAccessMode === opt.id"
@@ -98,10 +96,9 @@
                 :ref="(el) => setOutboundRef(el, i)"
                 type="button"
                 role="radio"
-                class="ac-opt ac-opt--half"
+                class="ac-opt mk-choice ac-opt--half"
                 :class="{
-                  'ac-opt--on': policy.allowPrivateNetwork === opt.value,
-                  'ac-opt--risk': policy.allowPrivateNetwork === opt.value && !!opt.warn,
+                  'mk-choice--on': policy.allowPrivateNetwork === opt.value,
                 }"
                 :tabindex="policy.allowPrivateNetwork === opt.value ? 0 : -1"
                 :aria-checked="policy.allowPrivateNetwork === opt.value"
@@ -641,16 +638,18 @@ onMounted(() => { if (isLive.value) void loadRegistrationStatus() })
   padding: 12px 14px;
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-md);
-  background: var(--mk-surface);
   color: var(--mk-muted);
   text-align: left;
   cursor: pointer;
   transition: border-color 0.12s var(--mk-ease-out), background 0.12s var(--mk-ease-out);
 }
+/* 底色与选中色都交给全局原语（2026-11-09 收敛）：默认面写在本类，选中面由 .mk-choice--on 给；
+   这里只补一处 scoped 覆盖——选中时正文提到 --mk-ink（原 .ac-opt--on 的职责）。 */
+.ac-opt:not(.mk-choice--on) { border-color: var(--mk-line); background: var(--mk-surface); }
 .ac-opt--third { grid-column: span 2; }
-.ac-opt:hover { border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line)); }
+.ac-opt:not(.mk-choice--on):hover { border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line)); }
 .ac-opt:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
-.ac-opt--on { border-color: var(--mk-blue); background: var(--mk-surface-2); color: var(--mk-ink); }
+.ac-opt.mk-choice--on { color: var(--mk-ink); }
 .ac-opt--off { cursor: not-allowed; opacity: 0.55; }
 .ac-opt--off:hover { border-color: var(--mk-line); }
 .ac-opt__head { display: flex; align-items: center; gap: 7px; }
@@ -668,13 +667,13 @@ onMounted(() => { if (isLive.value) void loadRegistrationStatus() })
   border-radius: 50%;
   background: var(--mk-surface);
 }
-.ac-opt--on .ac-opt__radio { border-color: var(--mk-blue); background: var(--mk-blue); box-shadow: inset 0 0 0 3px var(--mk-surface); }
+.ac-opt.mk-choice--on .ac-opt__radio { border-color: var(--mk-blue); background: var(--mk-blue); box-shadow: inset 0 0 0 3px var(--mk-surface); }
 .ac-opt--off .ac-opt__radio { opacity: 0.5; }
 .ac-opt__tag {
   padding: 1px 6px;
   border-radius: var(--mk-radius-sm);
   background: color-mix(in srgb, var(--mk-blue) 12%, transparent);
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
   font-size: var(--mk-fs-micro);
   font-style: normal;
   font-weight: 700;
@@ -694,8 +693,11 @@ onMounted(() => { if (isLive.value) void loadRegistrationStatus() })
 }
 .ac-opt__warn svg { flex: none; }
 .ac-opt__warn--idle { visibility: hidden; }
-/* 选中且带警示：整张卡的描边转琥珀，警示话跟着亮——不弹额外横幅，高度不变 */
-.ac-opt--risk { border-color: var(--mk-amber); }
+/* 2026-11-09 设计语言收敛（可选卡片）：删掉「选中且带警示 → 整卡描边转琥珀」。
+   选中态与警示态原先抢同一个通道（border-color），结果选中一张高风险卡时蓝色选中边
+   被琥珀覆盖，读者分不清「这张是选中的」还是「这张有问题」——两者语义互相抵消。
+   现在各走各的通道：选中 = 蓝描边 + 实心单选点（全站唯一选中语法），
+   风险 = 卡内那行琥珀警示文字（本来就常驻占位，切档不抽高度）。 */
 
 /* 档位相关的子字段（额外允许的客户端 IP / 允许的 Host / IP）：只在自己那一档出现。
    宽度对齐上方「两列卡片」的列宽（而不是给一个随手定的上限）：右缘与出站/注册卡片

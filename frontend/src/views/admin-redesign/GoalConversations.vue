@@ -104,7 +104,7 @@
           <MkFilterSearch v-model="keyword" placeholder="搜索用户 / 邮箱 / 目标摘要" />
           <MkCols
             :col-defs="gcColDefsFiltered"
-            storage-key="wf_goal_hidden_cols_v2"
+            storage-key="wf_goal_hidden_cols_v3"
             :default-hidden="GC_DEFAULT_HIDDEN"
             :fixed-cols="['用户', '操作']"
             v-model:hidden="gcHiddenCols"
@@ -149,16 +149,18 @@
               :aria-sort="gcSortState('status')"
               @click="toggleGcSort('status')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            <!-- 学习路径：紧挨状态列（2026-11-09 用户「顶部有未生成路径 2，表格列里看不出来」）。
+                 路径生成状态与状态列是同一件事的两个面（进行中才可能未生成），并排放便于对照；
+                 默认可见（不再是「列」菜单里才有的隐藏列），路径名进副行。 -->
+            <th v-if="showCol('path')" scope="col" class="gc-c-path">学习路径</th>
             <th
               v-if="showCol('turns')"
               scope="col"
-              class="mk-th--sortable mk-th--right gc-c-turns"
+              class="mk-th--sortable gc-c-turns"
               :aria-sort="gcSortState('turns')"
               @click="toggleGcSort('turns')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('turns')">澄清轮次<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th v-if="showCol('constraints')" scope="col" class="gc-c-constraints">约束条件</th>
-            <!-- 2026-11-01 外部评审 P1：让「未生成路径 N」能在列表里落地（默认隐藏，列菜单可开） -->
-            <th v-if="showCol('path')" scope="col" class="gc-c-path">关联路径</th>
             <th
               v-if="showCol('stageDate')"
               scope="col"
@@ -237,8 +239,24 @@ ${r.userEmail}` : r.userName"
                 :title="statusCellTitle(r)"
               >{{ isOngoingStatus(r.status) ? '进行中' : statusLabel(r.status) }}</span>
             </td>
-            <td v-if="showCol('turns')" class="mk-num">
-              <span v-if="r.turns != null" class="mk-num">{{ r.turns }} 轮</span>
+            <td v-if="showCol('path')">
+              <!-- 路径生成状态（2026-11-09 用户「顶部有未生成路径 2，但表格列里看不出来」）：
+                   只回答「有没有生成」这件事，路径名进 title（长路径名会把整列撑歪，也是
+                   2026-10-27「这个列还是重复了」的根子——重复的是**状态**，不是生成与否）。 -->
+              <span
+                v-if="r.hasPath"
+                class="mk-cell-sub"
+                :title="r.pathCell ? `已生成学习路径：${r.pathCell}` : '已生成学习路径'"
+              >已生成</span>
+              <span
+                v-else-if="isPathPendingRow(r)"
+                class="mk-badge mk-badge--sm mk-badge--warn"
+                title="进行中但还没有生成学习路径"
+              >未生成</span>
+              <span v-else class="mk-na" title="会话已结束，不再生成学习路径">—</span>
+            </td>
+            <td v-if="showCol('turns')">
+              <span v-if="r.turns != null" class="gc-turns">{{ r.turns }} 轮</span>
               <span v-else class="mk-na">—</span>
             </td>
             <td v-if="showCol('constraints')">
@@ -246,10 +264,6 @@ ${r.userEmail}` : r.userName"
                 <span v-for="cst in r.constraints" :key="cst" class="mk-badge mk-badge--muted">{{ cst }}</span>
               </div>
               <span v-else class="mk-na">—</span>
-            </td>
-            <td v-if="showCol('path')">
-              <span v-if="!r.hasPath" class="mk-badge mk-badge--sm mk-badge--warn">未生成</span>
-              <span v-else class="mk-cell-sub" :title="r.pathCell">{{ r.pathCell || '已生成' }}</span>
             </td>
             <td v-if="showCol('stageDate')">
               <span v-if="r.timelineDate" :title="`阶段时间线 ${r.timeline}
@@ -260,15 +274,14 @@ ${r.userEmail}` : r.userName"
             <td v-if="showCol('created')"><span class="mk-cell-sub" :title="r.createdAtAbs">{{ r.createdAt }}</span></td>
             <td>
               <div class="mk-actions">
-                <!-- 2026-10-27 用户「这两个按钮也重复吧，本身点这个条目就可以跳进去了」：
-                     操作列不再单列「详情」；路径入口收进 ⋯ 菜单，操作列只留溢出菜单。
-                     2026-11-02 P2-3：行点击这个入口本身没有文字，菜单里得留一条同义项，
-                     否则「这行能点开」在界面上无处可读（同 OpsContent 的 ⋯ 菜单也留了「详情」）。
-                     菜单文案一律动词短语，且不写工程侧术语「链路」——那是执行日志里的 Trace 视图。 -->
+                <!-- 2026-11-09 用户走查「只有孤零零一个 ⋯，最常用的详情被藏进二级菜单」：
+                     操作列统一为「主操作 + 溢出菜单」——详情回到一级（与学习路径/复习积压同构），
+                     菜单只留查看路径 / 执行日志 / 重建 / 删除这些次级动作。
+                     行点击仍是同一入口（整行可点，详情按钮只是把这条能力显式写出来）。 -->
+                <button type="button" class="mk-link" @click.stop="openDetail(r)">详情</button>
                 <div class="mk-menu">
                   <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === r.id" @click.stop="toggleMenu(r.id)">⋯</button>
                   <div v-if="openMenu === r.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
-                    <button type="button" class="mk-menu__item" role="menuitem" @click="menuOpenDetail(r)">查看详情</button>
                     <button v-if="r.hasPath" type="button" class="mk-menu__item" role="menuitem" @click="menuOpenPath(r)">查看路径</button>
                     <button type="button" class="mk-menu__item" role="menuitem" @click="menuOpenTrace(r)">查看执行日志</button>
                     <button
@@ -426,7 +439,9 @@ const gcStatusPills = computed<Array<{ key: string; label: string; n: number | n
 })
 /** 卡头「状态」下拉：每档带服务端全量计数（stats 未取到时不显，不把未知写成 0） */
 const gcStatusOptions = computed(() => [
-  { value: '', label: '全部状态' },
+  /* 「全部状态」→「全部」：MkPillSelect 的触发器把 label（状态）与选中项并排渲染，
+     选项再写「全部状态」就是「状态 全部状态」——同一句话说了两遍（2026-11-09 走查）。 */
+  { value: '', label: '全部' },
   ...gcStatusPills.value
     .filter((p) => p.key !== 'all')
     .map((p) => ({ value: p.key, label: p.n != null ? `${p.label}（${p.n}）` : p.label }))
@@ -470,15 +485,17 @@ const gcAppliedViews = computed(() => {
    2026-10-27 用户「这个列还是重复了」：路径列并入状态（已完成即已生成），路径入口
    收进操作列（有路径时显示「路径」），不再单列重复。
    两项仍可在「列」菜单打开；存储键升 v2，旧本地配置不覆盖新默认。
-   2026-11-01 外部评审 P1：「关联路径」列同理由默认隐藏、可在「列」菜单打开——
-   默认表宽与用户 2026-10-27 拍板的五列不变，但「未生成路径 N」有地方可落地。 */
-const GC_DEFAULT_HIDDEN = ['constraints', 'created', 'path'] as const
+   2026-11-01 外部评审 P1：「关联路径」列同理由默认隐藏、可在「列」菜单打开。
+   2026-11-09 用户走查（图 1）：KPI 说「未生成路径 2」，列里却指不出是哪 2 条——「学习路径」
+   列改为默认可见，并紧挨状态列（见模板注）。列序同步为「摘要 → 用户 → 状态 → 学习路径 →
+   澄清轮次 → 约束 → 时间 → 操作」。 */
+const GC_DEFAULT_HIDDEN = ['constraints', 'created'] as const
 const gcColDefs = [
   { key: 'summary', label: '目标摘要' },
   { key: 'status', label: '状态' },
+  { key: 'path', label: '学习路径' },
   { key: 'turns', label: '澄清轮次' },
   { key: 'constraints', label: '约束条件' },
-  { key: 'path', label: '关联路径' },
   { key: 'stageDate', label: '最近活动' },
   { key: 'created', label: '创建时间' },
 ] as const
@@ -550,12 +567,6 @@ function menuRemove(r: Row) {
 function menuOpenPath(r: Row) {
   closeMenu()
   openPathStage(r)
-}
-/** 菜单里的动作都要先收菜单（与 menuOpenPath / menuRemove 同一写法）；行内没有「详情」文字，
-    这条就是它的可见同名入口（2026-11-02 P2-3） */
-function menuOpenDetail(r: Row) {
-  closeMenu()
-  openDetail(r)
 }
 function menuOpenTrace(r: Row) {
   closeMenu()
@@ -963,16 +974,21 @@ onMounted(() => {
    在 auto 布局下按当页最长文本分宽，翻页跳动；fixed 后按表头宽度定死，余量按权重摊到各列。
    宽度取 1280 下的现值再留一点余量，保证 1200 档不出横滚。 */
 /* 2026-10-24 视觉修复：状态（100）/创建时间（84）让出的宽度归目标摘要主列，
-   摘要两行档不再在 240px 里只露出语义碎片。 */
-.gc-c-summary { width: 330px; }
-.gc-c-user { width: 160px; }
-.gc-c-status { width: 84px; }
-.gc-c-turns { width: 68px; }
+   摘要两行档不再在 240px 里只露出语义碎片。
+   2026-11-09 用户走查（图 1）「1920 下首列占 38%,用户列被推到右边」：主列改百分比 +
+   上限封顶（28–34% 且 ≤390px，与教学会话 .ts-c-topic 同一判例），余量摊给各指标列；
+   下限 28%（≈240px）仍是两行摘要读得懂语义骨架的宽度。
+   fixed 档下 min-width/max-width 同时生效意味着列宽 = clamp(240, 30%, 390)，
+   表格余量仍按各列 width 权重分摊，不会全堆进首列。 */
+.gc-c-summary { width: 30%; min-width: 240px; max-width: 390px; }
+.gc-c-user { width: 170px; }
+.gc-c-status { width: 96px; }
+/* 学习路径：只放「已生成 / 未生成」一倍徽章，路径名走 title */
+.gc-c-path { width: 96px; }
+.gc-c-turns { width: 84px; }
 .gc-c-constraints { width: 140px; }
-/* 关联路径（2026-11-01 外部评审 P1，默认隐藏）：够放「未生成」徽标与常见路径名片段 */
-.gc-c-path { width: 150px; }
-.gc-c-stage-date { width: 78px; }
-.gc-c-created { width: 72px; }
+.gc-c-stage-date { width: 92px; }
+.gc-c-created { width: 84px; }
 /* 操作列宽度由全局 .mk-c-act 统一（2026-10-27） */
 /* fixed 档里列宽即契约：行内 min-width 会把内容顶出单元格，统一归零由截断兜底 */
 .gc-table .gc-user { min-width: 0; }
@@ -981,6 +997,10 @@ onMounted(() => {
    2026-10-22 之前给过 200/176px 兜底，是为自动布局下防被长摘要挤扁；fixed 后
    min-width 只会把内容顶出单元格，已由上方 .gc-table .gc-user 归零 */
 .gc-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
+/* 澄清轮次（2026-11-09 用户走查图 1）：「7 轮」是短读数，右对齐会让表头与数据分站两侧、
+   并与左侧「最近活动」只隔 200px 空白却被读成黏在一起。改跟表头一起左对齐
+   （判例：教学会话的「12 分钟」），等宽数字保住竖向读数对齐。 */
+.gc-turns { font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* 分布条已退役（2026-10-17）：原页面级分布带连同 .gc-distband 类一起下线，
    卡头状态 pills 与「未生成路径」快筛并列；页面级间距仍由 .mk-page 的 --mk-stack-gap 统一供 */
 .gc-user .mk-cell-main { min-width: 0; flex: 1; }

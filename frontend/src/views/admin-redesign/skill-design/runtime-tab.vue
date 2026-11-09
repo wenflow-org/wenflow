@@ -126,9 +126,9 @@ ${orderTitle}`">{{ baseModel }}</span>
             <section id="sdp-panel-params" class="sdp-panel">
               <header class="sdp-panel__head">
                 <h4>生成参数</h4>
-                <!-- 段头只留 T 的取值：来源（Prompt 文件 / 平台默认）属于机制，不摊在界面上
-                     （2026-11-06 用户「什么覆盖默认什么的，没意义」）。 -->
-                <span class="sdp-panel__state">T={{ generationParams?.temperature ?? '—' }}</span>
+                <!-- 2026-11-09 设计语言收敛：段头原先悬浮一枚「T=0.7」读数，而同一个
+                     temperature 就在下面表单里——同一屏两个出口，且那个值只是某一项的复制。
+                     读数撤除，段头只留段名，与同弹窗另两段一致。 -->
               </header>
               <div class="sdp-form__grid">
                 <label class="sdp-field">
@@ -156,51 +156,47 @@ ${orderTitle}`">{{ baseModel }}</span>
                    裁剪是静默的，所以必须在配置处说明「写了也不会发」。模型不在目录时不猜、不提示。 -->
               <p v-if="rtForm.enabled && thinkingNotice" class="sdp-cap-note" role="status">{{ thinkingNotice }}</p>
 
-              <div class="sdp-params">
-                <div class="sdp-param">
-                  <span class="sdp-param__label">temperature<span class="sdp-param__range">0–2</span></span>
-                  <div class="sdp-param__ctl">
-                    <input
-                      v-model.number="temperatureInput"
-                      type="number" min="0" max="2" step="0.1"
-                      class="mk-input mono" :disabled="!rtForm.enabled"
-                      placeholder="未设置" aria-label="temperature"
-                    />
-                  </div>
-                </div>
-                <div class="sdp-param">
-                  <span class="sdp-param__label">topP<span class="sdp-param__range">0–1</span></span>
-                  <div class="sdp-param__ctl">
-                    <input
-                      v-model.number="topPInput"
-                      type="number" min="0.01" max="1" step="0.05"
-                      class="mk-input mono" :disabled="!rtForm.enabled"
-                      placeholder="未设置" aria-label="topP"
-                    />
-                  </div>
-                </div>
-                <div class="sdp-param">
-                  <span class="sdp-param__label">maxTokens<span class="sdp-param__range">256–131072</span></span>
-                  <div class="sdp-param__ctl">
-                    <input
-                      v-model.number="maxTokensInput"
-                      type="number" min="256" max="131072" step="1000"
-                      class="mk-input mono" :disabled="!rtForm.enabled"
-                      placeholder="未设置" aria-label="maxTokens"
-                    />
-                  </div>
-                </div>
-                <div class="sdp-param">
-                  <span class="sdp-param__label">maxAttempts<span class="sdp-param__range">1–5</span></span>
-                  <div class="sdp-param__ctl">
-                    <input
-                      v-model.number="maxAttemptsInput"
-                      type="number" min="1" max="5" step="1"
-                      class="mk-input mono" :disabled="!rtForm.enabled"
-                      placeholder="未设置" aria-label="maxAttempts"
-                    />
-                  </div>
-                </div>
+              <!-- 2026-11-09 设计语言收敛（弹窗表单）：这四个数字原先走 .sdp-param 的
+                   「左标签 + 右输入框」横排，而同弹窗上面两项（思考模式 / 强度）和下面
+                   请求与容错都是顶标签网格——同一个弹窗里两种表单语法。
+                   统一成 .sdp-field 顶标签、两列网格，与「模型设置」弹窗同一套骨架。 -->
+              <div class="sdp-form__grid">
+                <label class="sdp-field">
+                  <span>temperature <em class="sdp-field__range">0–2</em></span>
+                  <input
+                    v-model.number="temperatureInput"
+                    type="number" min="0" max="2" step="0.1"
+                    class="mk-input mono" :disabled="!rtForm.enabled"
+                    placeholder="未设置" aria-label="temperature"
+                  />
+                </label>
+                <label class="sdp-field">
+                  <span>topP <em class="sdp-field__range">0–1</em></span>
+                  <input
+                    v-model.number="topPInput"
+                    type="number" min="0.01" max="1" step="0.05"
+                    class="mk-input mono" :disabled="!rtForm.enabled"
+                    placeholder="未设置" aria-label="topP"
+                  />
+                </label>
+                <label class="sdp-field">
+                  <span>maxTokens <em class="sdp-field__range">256–131072</em></span>
+                  <input
+                    v-model.number="maxTokensInput"
+                    type="number" min="256" max="131072" step="1000"
+                    class="mk-input mono" :disabled="!rtForm.enabled"
+                    placeholder="未设置" aria-label="maxTokens"
+                  />
+                </label>
+                <label class="sdp-field">
+                  <span>maxAttempts <em class="sdp-field__range">1–5</em></span>
+                  <input
+                    v-model.number="maxAttemptsInput"
+                    type="number" min="1" max="5" step="1"
+                    class="mk-input mono" :disabled="!rtForm.enabled"
+                    placeholder="未设置" aria-label="maxAttempts"
+                  />
+                </label>
               </div>
             </section>
 
@@ -832,7 +828,6 @@ watch(() => props.skillId, () => {
   flex-wrap: wrap;
 }
 .sdp-panel__head h4 { margin: 0; font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
-.sdp-panel__state { font-size: var(--mk-fs-micro); color: var(--mk-faint); overflow-wrap: anywhere; }
 
 /* 卡头：覆盖开关与配置入口同处右组；标题左，动作右 */
 .sdp-card__head { flex-wrap: wrap; }
@@ -843,28 +838,9 @@ watch(() => props.skillId, () => {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
-/* 生成参数：一行一个字段（标签 + 数字输入框），四行对齐成一张小表；
-   留空即取 Prompt 声明 / 平台默认值（2026-11-06 起不再有「模式 + 取值」两列） */
-.sdp-params { display: grid; gap: 8px; }
-.sdp-param {
-  display: grid;
-  /* 两列：标签 + 控件。 */
-  grid-template-columns: minmax(140px, 1fr) minmax(170px, 1.2fr);
-  gap: 8px;
-  align-items: center;
-  min-width: 0;
-}
-.sdp-param__label { display: flex; align-items: baseline; gap: 6px; font-size: var(--mk-fs-micro); color: var(--mk-muted); font-weight: 600; }
-.sdp-param__range { font-weight: 400; color: var(--mk-faint); }
-@media (max-width: 900px) {
-  .sdp-param { grid-template-columns: minmax(0, 1fr) 128px; }
-  .sdp-param__label { grid-column: 1 / -1; }
-}
-.sdp-param__ctl { display: grid; gap: 8px; min-width: 0; }
-@media (max-width: 700px) {
-  /* 窄屏：参数行整行放输入框 */
-  .sdp-param { grid-template-columns: minmax(0, 1fr); }
-}
+/* 数值字段的取值范围：跟标签同一行、同一档灰字（原 .sdp-param__range 的语义，
+   随顶标签网格收进字段自己的标签里）。留空即取 Prompt 声明 / 平台默认值。 */
+.sdp-field__range { font-style: normal; font-weight: 400; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 @media (max-width: 860px) {
   .sdp-form__grid { grid-template-columns: 1fr; }
 }

@@ -60,6 +60,18 @@
              （「在全部用户里排好再分页，不是只排当前页」「快速筛选只作用于当前页」），
              既不是读数也不是可操作信息。页码与每页条数由底部 Pagination 自明，排序由列头
              caret 表达——这里整块撤掉，不再另写一行说明。 -->
+        <!-- 2026-10-26 用户走查「搜索框 + 列 该有」：复习积压是学习组五张列表里唯一缺搜索与列设置的
+             （图 2 走查）——用户量一大无法定位特定用户。右组补 MkFilterSearch + MkCols，
+             与学习组其它列表同形态；搜索只在当前页命中（服务端分页只回本页行），
+             列收起只控表头 / 行渲染。 -->
+        <div class="mk-card__head-right">
+          <MkFilterSearch v-model="keyword" placeholder="搜索名称 / 邮箱 / ID" aria-label="搜索用户" />
+          <MkCols
+            :col-defs="mrColDefs"
+            storage-key="wf_memory_review_hidden_cols"
+            v-model:hidden="mrHiddenCols"
+          />
+        </div>
       </div>
       <!-- 取数失败不得渲染成「暂无数据」（R2）：有旧行时保留旧行并给带重试的 .mk-alert -->
       <div v-if="error && rows.length" class="mk-alert mk-alert--row" role="alert">
@@ -91,35 +103,51 @@
       <!-- 用户列表（行点击跳学习者详情，EG1：回车不劫持行内按钮）。
            0 行不渲染滚动容器（2026-10-24 全站空态收齐）：它带 flex:1 会吃满卡高，
            空态在容器内只能贴顶；改挂卡级 + min，与上面「整页无数据」同一形态。 -->
-      <div v-else-if="visibleRows.length" class="mk-table-scroll">
+      <div v-else-if="filteredRows.length" class="mk-table-scroll">
         <table class="mk-table mk-table--click mk-table--fixed mr-table">
           <!-- 列集（2026-10-17 二次调整）：相邻列各画一条比例条会读成一排「重叠的条」，
                重要读数一律给独立列——待复习只留数字（颜色表达压力），记忆强度单独一列带条，
-               最近复习与需关注也各自成列，不再把两项塞进同一格上下叠放。 -->
+               最近复习与需关注也各自成列，不再把两项塞进同一格上下叠放。
+               2026-11-09 用户走查（图 5）按「运营处理优先级」重排列序：
+               用户 → 待复习（最核心积压数）→ 需关注（人工确认项）→ 记忆痕迹（总量）→
+               记忆强度（掌握质量）→ 待合并同义词 / 未归类记忆（异常待整理）→ 最近复习 → 操作。
+               同期对齐统一改左：短指标列（记忆痕迹 / 待复习 / 未归类记忆 / 记忆强度）原为右对齐，
+               与左对齐表头各站一边、又与相邻左对齐列挤在一起（「9」紧贴「待确认 4」、
+               「66%」紧贴「9 天前」），逐列左对齐后表头与数据共用一条垂直基准线。 -->
           <thead>
             <tr>
               <th scope="col" class="mk-th--sortable mr-c-user" :aria-sort="userSortState('name')"
+                v-if="!mrHiddenCols.has('user')"
                 @click="toggleUserSort('name')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('name')">用户<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th scope="col" class="mk-num mk-th--sortable mr-c-traces" :aria-sort="userSortState('traces')"
-                @click="toggleUserSort('traces')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('traces')">记忆痕迹<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th scope="col" class="mk-num mk-th--sortable mr-c-due" :aria-sort="userSortState('due')"
+              <th scope="col" class="mk-th--sortable mr-c-due" :aria-sort="userSortState('due')"
+                v-if="!mrHiddenCols.has('due')"
                 @click="toggleUserSort('due')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('due')">待复习<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th scope="col" class="mk-th--right mk-th--sortable mr-c-weak" :aria-sort="userSortState('weak')"
+              <!-- 2026-11-09 走查 P2：需关注 是状态列（薄弱 / 待确认），不再右对齐（mk-th--right 撤除） -->
+              <th scope="col" class="mk-th--sortable mr-c-weak" :aria-sort="userSortState('weak')"
+                v-if="!mrHiddenCols.has('weak')"
                 @click="toggleUserSort('weak')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('weak')">需关注<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th scope="col" class="mk-num mk-th--sortable mr-c-prop" :aria-sort="userSortState('proposed')"
-                @click="toggleUserSort('proposed')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('proposed')">待合并同义词<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th scope="col" class="mk-num mk-th--sortable mr-c-scatter" :aria-sort="userSortState('scatter')"
-                @click="toggleUserSort('scatter')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('scatter')">未归类记忆<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th scope="col" class="mk-num mk-th--sortable mr-c-strength" :aria-sort="userSortState('strength')"
+              <th scope="col" class="mk-th--sortable mr-c-traces" :aria-sort="userSortState('traces')"
+                v-if="!mrHiddenCols.has('traces')"
+                @click="toggleUserSort('traces')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('traces')">记忆痕迹<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th scope="col" class="mk-th--sortable mr-c-strength" :aria-sort="userSortState('strength')"
+                v-if="!mrHiddenCols.has('strength')"
                 @click="toggleUserSort('strength')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('strength')">记忆强度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <!-- 2026-11-09 走查 P2：待合并同义词 含「未观察」等文字态，按状态列左对齐（mk-num 撤除） -->
+              <th scope="col" class="mk-th--sortable mr-c-prop" :aria-sort="userSortState('proposed')"
+                v-if="!mrHiddenCols.has('prop')"
+                @click="toggleUserSort('proposed')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('proposed')">待合并同义词<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <th scope="col" class="mk-th--sortable mr-c-scatter" :aria-sort="userSortState('scatter')"
+                v-if="!mrHiddenCols.has('scatter')"
+                @click="toggleUserSort('scatter')"
+              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('scatter')">未归类记忆<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th scope="col" class="mk-th--sortable mr-c-last" :aria-sort="userSortState('lastReviewed')"
+                v-if="!mrHiddenCols.has('last')"
                 @click="toggleUserSort('lastReviewed')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('lastReviewed')">最近复习<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th scope="col" class="mk-th--right mk-c-act">操作</th>
@@ -127,14 +155,14 @@
           </thead>
           <tbody>
             <tr
-              v-for="row in visibleRows"
+              v-for="row in filteredRows"
               :key="row.userId"
               :data-mr-row="row.userId"
               tabindex="0"
               @click="openLearner(row.userId)"
               @keydown.enter.self.prevent="openLearner(row.userId)"
             >
-              <td>
+              <td v-if="!mrHiddenCols.has('user')">
                 <div class="mr__user">
                   <MkCellAvatar :name="row.name" :tone="row.isVirtualLearner ? 'virtual' : 'default'" />
                   <div class="mk-cell-main">
@@ -157,8 +185,36 @@ ${row.email}` : (row.name || '未命名')">{{ row.name || '未命名' }}</strong
               </td>
               <!-- 2026-11-01 外部评审 P1：「记忆痕迹 4」与「记忆强度 83%」并排时，
                    83% 其实是 3 条的平均（未初始化的痕迹没有强度、不计入平均），
-                   读者会以为 4 条都参与了平均。把未计入平均的条数就地标出来。 -->
-              <td class="mk-num">
+                   读者会以为 4 条都参与了平均。把未计入平均的条数就地标出来。
+                   2026-11-09 用户走查（图 5）：按运营处理优先级重排——待复习（积压数）最前，
+                   需关注（人工确认项）次之，记忆痕迹（总量）与记忆强度（质量）随后。
+                   同期四个短指标列去 mk-num 改左对齐：右对齐时表头在左、数字在右各站一边，
+                   又与相邻左对齐列挤在一起（「9」紧贴「待确认 4」、「66%」紧贴「9 天前」）。 -->
+              <td v-if="!mrHiddenCols.has('due')">
+                <!-- 只留数字：比例条移到「记忆强度」列，避免与相邻列的另一条并排读成一条 -->
+                <b class="mr__due-num" :class="`mr__due-num--${dueTone(row)}`">{{ row.due }}</b>
+              </td>
+              <!-- 2026-11-09 走查 P2：需关注 状态列（含「无」单字），去掉 mk-num 左对齐 -->
+              <td v-if="!mrHiddenCols.has('weak')">
+                <div v-if="row.weak > 0 || row.audit?.ambiguous" class="mr__focus">
+                  <span v-if="row.weak > 0" class="mk-badge mk-badge--sm mk-badge--warn">薄弱 {{ row.weak }}</span>
+                  <!-- 待人工确认的同义归并：确认 / 驳回在「记忆调度」页签，点数字直达。
+                       2026-11-02 走查：title 原为「…记忆条目：点击到「记忆调度」确认或驳回」，
+                       后半句是操作说明 + 隔空指路（去哪一页改），撤除；只留对读数的定义——
+                       「待确认 N」去掉定义就无从解读，且定义不描述本页版面。 -->
+                  <!-- 2026-11-09 走查 P3：待确认 N 原是蓝色链接（mk-link），读起来像普通操作、失去警示感；
+                       改成带琥珀底色的警告徽章（与同格「薄弱」徽章同一语义族），仍 @click.stop 可达记忆调度 -->
+                  <button
+                    v-if="row.audit?.ambiguous"
+                    type="button"
+                    class="mk-badge mk-badge--sm mk-badge--warn mr__act-badge"
+                    title="模型判定为同义、等待人工确认合并的记忆条目"
+                    @click.stop="openOps(row.userId)"
+                  >待确认 {{ row.audit.ambiguous }}</button>
+                </div>
+                <span v-else class="mr__none">无</span>
+              </td>
+              <td v-if="!mrHiddenCols.has('traces')">
                 <b>{{ row.traces }}</b>
                 <span
                   v-if="uninitializedTraces(row) > 0"
@@ -166,28 +222,23 @@ ${row.email}` : (row.name || '未命名')">{{ row.name || '未命名' }}</strong
                   :title="`${row.traces} 条记忆痕迹里，有 ${uninitializedTraces(row)} 条还没有记忆强度（未初始化），不计入「记忆强度」的平均值`"
                 >未初始化 {{ uninitializedTraces(row) }}</span>
               </td>
-              <td class="mk-num">
-                <!-- 只留数字：比例条移到「记忆强度」列，避免与相邻列的另一条并排读成一条 -->
-                <b class="mr__due-num" :class="`mr__due-num--${dueTone(row)}`">{{ row.due }}</b>
+              <td v-if="!mrHiddenCols.has('strength')">
+                <!-- 2026-11-09 用户走查（图 5）+ 设计语言收敛：本页与「记忆调度」页
+                     （MemoryReview.vue）都在讲「记忆强度」这一个字段，原先是两套读法
+                     （这里「条 + 右对齐 %」、那里「.mk-meter 横排」）。统一走全站原语
+                     .mk-meter：条子吃剩余宽度、数值固定槽，左对齐落在单元格里。 -->
+                <span
+                  v-if="row.avgStrength != null"
+                  class="mk-meter"
+                  :title="`按 ${row.tracesWithStrength ?? row.traces} 条有强度的痕迹取平均（另有 ${uninitializedTraces(row)} 条未初始化，不计入）`"
+                >
+                  <span class="mk-minibar mk-meter__bar" aria-hidden="true"><i class="mk-minibar__fill" :style="{ width: strengthPct(row) + '%' }"></i></span>
+                  <em class="mk-meter__val">{{ strengthPct(row) }}%</em>
+                </span>
+                <span v-else class="mk-na">—</span>
               </td>
-              <td class="mk-num">
-                <div v-if="row.weak > 0 || row.audit?.ambiguous" class="mr__focus">
-                  <span v-if="row.weak > 0" class="mk-badge mk-badge--sm mk-badge--warn">薄弱 {{ row.weak }}</span>
-                  <!-- 待人工确认的同义归并：确认 / 驳回在「记忆调度」页签，点数字直达。
-                       2026-11-02 走查：title 原为「…记忆条目：点击到「记忆调度」确认或驳回」，
-                       后半句是操作说明 + 隔空指路（去哪一页改），撤除；只留对读数的定义——
-                       「待确认 N」去掉定义就无从解读，且定义不描述本页版面。 -->
-                  <button
-                    v-if="row.audit?.ambiguous"
-                    type="button"
-                    class="mk-link mr__act"
-                    title="模型判定为同义、等待人工确认合并的记忆条目"
-                    @click.stop="openOps(row.userId)"
-                  >待确认 {{ row.audit.ambiguous }}</button>
-                </div>
-                <span v-else class="mr__none">无</span>
-              </td>
-              <td class="mk-num">
+              <!-- 2026-11-09 走查 P2：待合并同义词 含「未观察」文字态，去掉 mk-num 左对齐 -->
+              <td v-if="!mrHiddenCols.has('prop')">
                 <!-- 0 与「没观察」必须分开：审计投影是按用户跑观察才有的 -->
                 <span v-if="row.audit === null" class="mr__none">未观察</span>
                 <button
@@ -198,7 +249,7 @@ ${row.email}` : (row.name || '未命名')">{{ row.name || '未命名' }}</strong
                 >{{ row.proposed }}</button>
                 <span v-else class="mr__none">0</span>
               </td>
-              <td class="mk-num">
+              <td v-if="!mrHiddenCols.has('scatter')">
                 <button
                   v-if="row.scatter"
                   type="button"
@@ -207,18 +258,7 @@ ${row.email}` : (row.name || '未命名')">{{ row.name || '未命名' }}</strong
                 >{{ row.scatter }}</button>
                 <span v-else class="mr__none">0</span>
               </td>
-              <td class="mk-num">
-                <span
-                  v-if="row.avgStrength != null"
-                  class="mr__strength"
-                  :title="`按 ${row.tracesWithStrength ?? row.traces} 条有强度的痕迹取平均（另有 ${uninitializedTraces(row)} 条未初始化，不计入）`"
-                >
-                  <span class="mk-minibar mr__bar" aria-hidden="true"><i class="mk-minibar__fill" :style="{ width: strengthPct(row) + '%' }"></i></span>
-                  <b class="mr__strength-pct">{{ strengthPct(row) }}%</b>
-                </span>
-                <span v-else class="mk-na">—</span>
-              </td>
-              <td :title="row.lastReviewedAt ? fullTime(row.lastReviewedAt) : undefined">
+              <td :title="row.lastReviewedAt ? fullTime(row.lastReviewedAt) : undefined" v-if="!mrHiddenCols.has('last')">
                 <span v-if="row.lastReviewedAt" class="mk-cell-sub">{{ timeAgo(row.lastReviewedAt) }}</span>
                 <span v-else class="mr__none">未复习</span>
               </td>
@@ -239,18 +279,19 @@ ${row.email}` : (row.name || '未命名')">{{ row.name || '未命名' }}</strong
           </tbody>
         </table>
       </div>
-      <!-- 快筛筛空：给一个回「全部」的出口即可 -->
+      <!-- 快筛 / 搜索筛空：给一个回「全部 + 清空搜索」的出口即可 -->
       <MkEmptyState
         v-else
         min
         title="没有符合条件的用户"
         action-text="显示全部"
-        @action="mrPill = 'all'"
+        @action="mrPill = 'all'; keyword = ''"
       />
       <!-- 服务端分页（审核 #41）：total=后端全量有痕迹用户数（totals.users）；v-model:pageSize 接住条数变更。
            0 行不渲染（2026-10-24 用户「空数据的时候页面很奇怪」）：此前空数据页挂着
            「共 0 条 · 第 1 / 1 页」+ 每页条数下拉，指着一个没有任何行的列表翻页。
-           快筛只作用于当前页 → note 常驻写明范围，总数与计数才不会被读成同一件事。 -->
+           快筛只作用于当前页 → 2026-11-09 走查把 note 改成带本页命中数的实话（见 scopeNote），
+           否则「共 6 位用户」与表格 5 行同屏对不上。 -->
       <Pagination
         v-if="totals.users > 0"
         v-model:page="userPage"
@@ -258,7 +299,7 @@ ${row.email}` : (row.name || '未命名')">{{ row.name || '未命名' }}</strong
         :total="totals.users"
         :loading="loading"
         unit="位用户"
-        :note="mrPill !== 'all' ? '筛选范围：当前页' : ''"
+        :note="scopeNote"
       />
     </div>
   </div>
@@ -273,6 +314,8 @@ import MkKpi from '@/components/mk/MkKpi.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkPillSelect from '@/components/mk/MkPillSelect.vue'
+import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
+import MkCols from '@/components/mk/MkCols.vue'
 import { emailSubline } from '@/components/mk/avatarName'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
@@ -354,7 +397,13 @@ watch([userSortKey, userSortDir], () => {
 const rows = ref<OverviewRow[]>([])
 /* 用户列表服务端分页（审核 #41）：页码驱动 offset，totals.users 作分页 total */
 const userPage = ref(1)
-const userPageSize = ref(50)
+/* 2026-11-09 走查 P4：默认每页条数与学习组其它列表对齐（15），不再是 50。
+   初值必须与下面 useListQueryState 的 defaultPageSize 同值，否则首次进入会被改写成 15 并多打一次请求。 */
+const userPageSize = ref(15)
+/* 表头搜索（2026-11-09 走查 P2：学习组列表里唯一缺搜索的，用户量大时无法定位）：纯客户端、
+   只命中当前页（服务端分页只回本页行），按 姓名 / 邮箱 / 短 id 匹配。声明提到快筛 watch 之前，
+   否则 watch([mrPill, keyword]) 会读到未声明的 keyword。 */
+const keyword = ref('')
 watch(userPage, () => {
   void loadOverview()
 })
@@ -377,14 +426,18 @@ const mrPill = ref<MrPill>('all')
 useListQueryState(
   {
     pill: mrPill,
+    /* 2026-11-09：本页补了搜索框，搜索词一并 URL 化（进详情返回 / 刷新后仍保留，与学习组其它列表同口径） */
+    keyword,
     page: userPage,
     pageSize: userPageSize,
     allowedPills: ['all', 'due', 'unreviewed', 'attention'],
-    defaultPageSize: 50
+    defaultPageSize: 15
   },
   { pill: 'mr' }
 )
-watch(mrPill, () => {
+/* 切筛选 / 搜索回第 1 页：否则停留在旧页读到的是别的筛选结果（与学习组其它列表同口径）。
+   搜索只作用于当前页，回到第 1 页才能看到本页全部命中行。 */
+watch([mrPill, keyword], () => {
   if (userPage.value !== 1) userPage.value = 1
 })
 const mrPills = computed<Array<{ key: MrPill; label: string; n: number | null }>>(() => {
@@ -416,6 +469,48 @@ const visibleRows = computed(() => {
   if (mrPill.value === 'attention') return rows.value.filter((r) => r.weak > 0 || !!r.audit?.ambiguous)
   return rows.value
 })
+
+/* 表头搜索（2026-11-09 走查 P2：五张学习组列表里唯一缺搜索的，用户量大时无法定位）：
+   纯客户端、只命中当前页（服务端分页只回本页行，与快筛同口径）；按 姓名 / 邮箱 / 短 id 匹配，
+   大小写不敏感且去空。筛选 / 搜索都只作用于当前页，因此都为空时才落到「没有符合条件的用户」。
+   keyword 的声明已提到快筛 watch 之前，这里只接过滤计算。 */
+const filteredRows = computed(() => {
+  const list = visibleRows.value
+  const kw = keyword.value.trim().toLowerCase()
+  if (!kw) return list
+  return list.filter((r) => {
+    const sub = (r.name ?? '').toLowerCase().includes(kw)
+    const email = (r.email ?? '').toLowerCase().includes(kw)
+    const id = shortId(r.userId).toLowerCase().includes(kw)
+    return sub || email || id
+  })
+})
+
+/* 分页器的口径补充（2026-11-09 走查）：快筛与搜索都只作用**本页行**，而分页器的
+   「共 N 位用户」是后端全量（服务端分页只回 limit 条）——两个数不同口径却挨着渲染。
+   实测：切「有待复习（5）」后表格 5 行、页脚仍写「共 6 位用户」，读起来像少了一行。
+   这里把本页命中数写出来，与旁边的全量数各自可对：共 6 位用户 · 本页命中 5 位。 */
+const scopeNote = computed(() => {
+  const narrowed = mrPill.value !== 'all' || !!keyword.value.trim()
+  if (!narrowed) return ''
+  return `筛选只作用本页 · 本页命中 ${filteredRows.value.length} 位`
+})
+
+/* 列显隐（P1-3 公共组件 MkCols）：除固定「操作」列外均可收起，键 localStorage 持久化。
+   2026-11-09 补齐：此前复习积压是学习组列表里唯一没有列设置的。
+   2026-11-09 走查（图 5）：列序与表头同步按运营处理优先级重排（待复习 → 需关注 → 记忆痕迹
+   → 记忆强度 → 待合并同义词 → 未归类记忆 → 最近复习），列菜单顺序与表列一致。 */
+const mrHiddenCols = ref<Set<string>>(new Set<string>())
+const mrColDefs = [
+  { key: 'user', label: '用户' },
+  { key: 'due', label: '待复习' },
+  { key: 'weak', label: '需关注' },
+  { key: 'traces', label: '记忆痕迹' },
+  { key: 'strength', label: '记忆强度' },
+  { key: 'prop', label: '待合并同义词' },
+  { key: 'scatter', label: '未归类记忆' },
+  { key: 'last', label: '最近复习' }
+] as const
 const totals = ref({
   users: 0,
   traces: 0,
@@ -665,14 +760,16 @@ onMounted(async () => {
    九列合计 1052 超出行宽 985，1280 下表底出现横滚条、且被切掉的正好是「详情 / 重新观察」
    （要横向滚动才能点到行操作）。按各列实测所需重分余量：身份 207 / 痕迹 83 / 待复习 72 /
    需关注 72 / 待合并同义词 98 / 未归类记忆 86 / 记忆强度 134 / 最近复习 86 / 操作 132，
-   合计 978 ≤ 985，1280 无横滚。 */
+   合计 978 ≤ 985，1280 无横滚。
+   2026-11-09 用户走查（图 5）：列序改为运营处理优先级（待复习 → 需关注 → 痕迹 → 强度 →
+   同义词 → 未归类 → 最近复习），各列所需宽度不变，只把声明顺序跟上。 */
 .mr-c-user { width: 216px; }
-.mr-c-traces { width: 92px; }
 .mr-c-due { width: 74px; }
 .mr-c-weak { width: 74px; }
+.mr-c-traces { width: 92px; }
+.mr-c-strength { width: 132px; }
 .mr-c-prop { width: 92px; }
 .mr-c-scatter { width: 76px; }
-.mr-c-strength { width: 132px; }
 .mr-c-last { width: 88px; }
 /* 操作列宽度由全局 .mk-c-act 统一（2026-10-27） */
 
@@ -682,27 +779,31 @@ onMounted(async () => {
 .mr__user { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .mr__user .mk-cell-main { min-width: 0; flex: 1; }
 
-/* 待复习：只出数字，颜色表达压力（0=弱化 / 琥珀=提醒 / 红=重压）；占比口径进 title */
-.mr__due-num { font-variant-numeric: tabular-nums; font-weight: 700; }
+/* 待复习：只出数字，颜色表达压力（0=弱化 / 琥珀=提醒 / 琥珀加粗=重压）；占比口径进 title。
+   2026-11-09 走查 P3 色彩语义闭环：到期压力统一琥珀系，与 KPI「当前到期」的琥珀警示同族
+   （红色是「失败」语义，会读成两回事）；重压档用加粗与提醒档区分，不引入第二种色。 */
+.mr__due-num { font-variant-numeric: tabular-nums; }
 .mr__due-num--none { color: var(--mk-faint); font-weight: 400; }
 .mr__due-num--warn { color: var(--mk-amber); }
-.mr__due-num--high { color: var(--mk-red-strong); }
+.mr__due-num--high { color: var(--mk-amber); font-weight: 700; }
 
 /* 需关注：薄弱徽章 + 待确认入口（后者可点直达「记忆调度」）；无事项出一行「无」，不留空列 */
 .mr__focus { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .mr__none { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 /* 行内数字按钮：读数是可点的入口，样式仍按数字（tabular-nums），只借 .mk-link 的交互语义 */
 .mr__act { padding: 0; font-size: var(--mk-fs-micro); font-variant-numeric: tabular-nums; }
+/* 待确认徽章按钮：借 .mk-badge--warn 的底/边/色（字号字重由它给），只补原生 button 缺的指针；
+   font-family / color 已由 main.css 的 button 归一承接，不再重复写 font:inherit（会把徽章字号盖掉） */
+.mr__act-badge { cursor: pointer; }
 /* 可点 KPI 的选中态：蓝只给可交互与选中 */
 .mr-kpi--on { border-color: var(--mk-blue); }
 
-/* 记忆强度：全表唯一一条比例条。% 盒定宽（2026-10-15 判例）：数值宽窄不同会让条起点
-   逐行横跳，定为 38px 后条起点对齐，数值右缘仍与右对齐表头同侧。 */
-.mr__strength { display: inline-flex; align-items: center; gap: 8px; }
-.mr__strength-pct { font-variant-numeric: tabular-nums; font-weight: 700; width: 38px; text-align: right; }
+/* 记忆强度已收进全站原语 .mk-meter（2026-11-09 设计语言收敛）：
+   私有 .mr__strength / .mr__strength-pct / .mr__bar 三件套随之退役——
+   与「记忆调度」页的同一字段不再各写一套读法。 */
 /* 未初始化痕迹的角标（2026-11-01 外部评审 P1）：弱色小字，压在痕迹数下面，不与数字抢视线 */
 .mr__traces-sub { display: block; font-size: var(--mk-fs-micro); }
-.mr__bar { width: 64px; }
+
 
 /* 窄屏（2026-10-17 实测）：八张 KPI 卡竖排后高于视口，fill 布局把列表卡压成 1px 高，
    表格整块不可达（页面滚到底也看不到）。窄屏让卡片按内容高度展开，改由页面容器滚动。

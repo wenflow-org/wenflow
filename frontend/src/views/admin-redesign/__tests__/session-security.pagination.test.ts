@@ -229,13 +229,23 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     expect(h.getSessions).toHaveBeenCalledTimes(2);
   });
 
-  it('24h 内过期的活跃行给出可读剩余时长（F6-5）', async () => {
+  it('2h 内过期的活跃行给出可读剩余时长；20h 这种还早的不再标黄（F6-5 + 2026-11-09 收敛）', async () => {
     const soon = fakeSession(1);
-    soon.expiresAt = new Date(Date.now() + 20 * 3600_000).toISOString();
+    soon.expiresAt = new Date(Date.now() + 50 * 60_000).toISOString();
     const w = await mountSS([soon]);
     const label = w.find('.ss-expiry-soon');
     expect(label.exists()).toBe(true);
-    expect(label.text()).toContain('剩 20 小时');
+    expect(label.text()).toContain('剩 50 分钟');
+    w.unmount();
+
+    // 阈值原为 24h：本页会话基本都是 24h 到期，几乎每行都被标成琥珀色，
+    // 颜色失去「注意这一行」的意义。现在只有 ≤2h 才亮。
+    const later = fakeSession(1);
+    later.expiresAt = new Date(Date.now() + 20 * 3600_000).toISOString();
+    const w2 = await mountSS([later]);
+    expect(w2.find('.ss-expiry-soon').exists()).toBe(false);
+    expect(w2.find('.ss-time--soon').exists()).toBe(false);
+    w2.unmount();
   });
 
   it('过期时间列 title 含剩余时长（非仅颜色差）', async () => {
@@ -244,6 +254,20 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     const w = await mountSS([soon]);
     const cell = w.find('.ss-time--soon');
     expect(cell.attributes('title')).toContain('后过期');
+  });
+
+  it('「当前」标记在首列身份行（与「用户账号」同位置、同一枚 mk-badge--self），操作列留占位', async () => {
+    const w = await mountSS([fakeSession(1), fakeSession(2)]);
+    const rows = w.findAll('.ss-tr');
+    const currentRow = rows.find((r) => r.text().includes('当前'))!;
+    // 首列（设备）里带标记
+    expect(currentRow.findAll('td')[0].find('.mk-badge--self').exists()).toBe(true);
+    expect(currentRow.findAll('td')[0].text()).toContain('当前');
+    // 操作列不再重复「当前」，也不给下线按钮
+    const actCell = currentRow.findAll('td').at(-1)!;
+    expect(actCell.text()).not.toContain('当前');
+    expect(actCell.find('button').exists()).toBe(false);
+    w.unmount();
   });
 
   it('过期/已撤销历史收进折叠组，不计入分页总数', async () => {
