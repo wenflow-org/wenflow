@@ -579,23 +579,21 @@ function buildUserPayload(input: LearnLearnerSimulationInput) {
       guidance: friction.guidance
     },
     personaAnchorHint: PERSONA_FIELD_ANCHORS_HINT,
-    task: {
-      requirements: [
-        'reply only as the learner, in 1-2 short sentences',
-        'apply friction.guidance to calibrate adversarial/failure/emotional patterns this turn',
-        'let personaAnchorHint fields implicitly steer reply style (especially verbosity, confusionStyle, helpSeekingPattern)',
-        'you may naturally reference your learnerMemory (things you previously learned or completed) when relevant, but never name the field',
-        'when pendingCheckpoint is present, answer it via checkpointAnswer (pick real option ids, never invent); otherwise omit checkpointAnswer'
-      ]
-    },
+    // 2026-11-08 全 skill 缓存调查：删掉整键 `task`。它**只装** task.requirements——5 条英文硬指令，
+    // 在提示词里全部有（且更详细）的对应规则，而 `requirements` 本身在正文/写源里引用数为 0：
+    //   "reply only as the learner, in 1-2 short sentences"   → 规则 11（长度规则，含列举/分点例外）
+    //   "apply friction.guidance ..."                          → 规则 5（friction 硬约束）
+    //   "let personaAnchorHint fields implicitly steer ..."    → 规则 6
+    //   "you may naturally reference your learnerMemory ..."   → 规则 16
+    //   "when pendingCheckpoint is present, answer it via ..." → 规则 23
+    // 本键也不在提示词的 12 项输入契约声明内。
     ...(pendingCheckpoint ? { pendingCheckpoint } : {})
   };
 
-  // 稳定前缀（默认启用；PAYLOAD_STABLE_PREFIX=0 回退旧序）：常量/慢变块（task/personaAnchorHint/story/learner 去易变概念数组）前置，
+  // 稳定前缀（默认启用；PAYLOAD_STABLE_PREFIX=0 回退旧序）：常量/慢变块（personaAnchorHint/story/learner 去易变概念数组）前置，
   // 逐回合变化块后置。knownConcepts/struggleConcepts 每回合被画像回写，从 learner 剥离到尾部 conceptProgress
   if (process.env.PAYLOAD_STABLE_PREFIX !== '0') {
     return {
-      task: body.task,
       personaAnchorHint: body.personaAnchorHint,
       story: body.story,
       learner: stableLearner,

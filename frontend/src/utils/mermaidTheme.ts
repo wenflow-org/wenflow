@@ -28,7 +28,9 @@ export function buildMermaidConfig(options: {
       : undefined,
   };
   if (naturalSize) {
-    config.flowchart = { useMaxWidth: false };
+    // wrappingWidth 放宽（2026-11-08 外评 #2）：默认 200px 下「下单接口写库成功」8 个字
+    // 正好触顶被折成「…写库成/功」——末字孤行。280px 保证 8-10 字教学短语一行放下。
+    config.flowchart = { useMaxWidth: false, wrappingWidth: 280 };
     config.sequence = { useMaxWidth: false };
     config.class = { useMaxWidth: false };
     config.state = { useMaxWidth: false };

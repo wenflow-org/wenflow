@@ -180,7 +180,8 @@ class DashboardGuidanceSnapshotService {
         learnerSnapshot: guidanceProjection.learnerSnapshot,
         learningState,
         path: guidanceProjection.path,
-        sessionWrapup,
+        // 收束摘要同样走投影：剔除 runtimeEnvelope 等运行时元数据（实测占 wrapup 的 5.6KB/12.8KB）
+        sessionWrapup: learnerProjectionService.toGuidanceWrapup(sessionWrapup),
         advisory,
         userId,
       });

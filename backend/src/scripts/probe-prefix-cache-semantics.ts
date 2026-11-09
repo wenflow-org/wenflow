@@ -85,11 +85,13 @@ async function main(): Promise<void> {
       const hit = Number(usage.prompt_cache_hit_tokens ?? 0);
       const miss = Number(usage.prompt_cache_miss_tokens ?? 0);
       const prompt = Number(usage.prompt_tokens ?? 0);
-      const total = hit + miss;
+      // 口径（2026-11-08）：命中率 = hit / promptTokens。
+      // 禁用 hit/(hit+miss)——上游常只回 cached_tokens、不回 miss，NULL 当 0 会把分母压塌、
+      // 命中率虚报成 100%（见 doc/PROMPT_CACHE_OPTIMIZATION.md 的禁止条款）。
       console.log(
         `${shot.tag.padEnd(26)} ${shot.purpose.padEnd(22)} `
         + `prompt=${String(prompt).padEnd(7)} hit=${String(hit).padEnd(7)} miss=${String(miss).padEnd(7)} `
-        + `hitRate=${total > 0 ? ((hit / total) * 100).toFixed(1) + '%' : '-'} `
+        + `hitRate=${prompt > 0 ? ((hit / prompt) * 100).toFixed(1) + '%' : '-'} `
         + `cost=${Date.now() - started}ms`,
       );
       if (Object.keys(usage).length) console.log('  usage fields:', JSON.stringify(usage));

@@ -14,12 +14,27 @@ export interface PayloadStabilitySpec {
   readonly stable: readonly string[];
   /** 为什么这些键稳定（供人审阅） */
   readonly note: string;
+  /**
+   * 迁移窗口：上一版声明（键已从载荷删除，但存量遥测仍是旧键序）。
+   *
+   * 门禁拿**真实遥测**判定，而遥测由**已部署的代码**产出——代码改了、实例没换的这段时间里，
+   * 最新一条遥测必然是旧键序。若只在 stable 里写新声明，门禁会在整个迁移窗口里恒红，
+   * 既拦不住真回归、又逼人把声明改回说谎状态。故显式登记旧稳定段：
+   * 命中其一即算合规（真回归 = 两段都不匹配，仍被拦住）。
+   *
+   * **上线后必须删除本字段**（遥测全部刷新为新键序后即为死配置）。
+   */
+  readonly retiredStable?: readonly string[];
 }
 
 export const PAYLOAD_STABILITY: Readonly<Record<string, PayloadStabilitySpec>> = {
   'teaching-turn': {
-    stable: ['scenario', 'promptDirectives', 'learner'],
-    note: 'scenario(洁)/promptDirectives/learner 跨回合稳定；controls/knowledge/对话等逐回合变化后置',
+    // 2026-11-08 全 skill 载荷审计：删掉零引用键 promptDirectives
+    // （见 skills/teaching-turn/index.ts 的载荷审计注释），稳定前缀由三键收窄为两键。
+    // retiredStable = 旧键序，供存量遥测过渡；上线并刷新遥测后删除。
+    stable: ['scenario', 'learner'],
+    retiredStable: ['scenario', 'promptDirectives', 'learner'],
+    note: 'scenario(洁)/learner 跨回合稳定；controls/knowledge/对话等逐回合变化后置',
   },
   'stage-designer': {
     stable: ['cognitiveCore', 'normalizedInput', 'materials'],
@@ -34,8 +49,11 @@ export const PAYLOAD_STABILITY: Readonly<Record<string, PayloadStabilitySpec>> =
     note: '视图名与路径投影逐次稳定；learner/learningState/wrapup/advisory 后置',
   },
   'virtual-learner-learn-turn-simulator': {
-    stable: ['task', 'personaAnchorHint', 'story', 'learner'],
-    note: '任务说明/人设锚点/故事/画像为常量或慢变；回合状态后置',
+    // 2026-11-08 全 skill 载荷审计：删掉零引用键 task（只装 task.requirements，5 条硬指令
+    // 提示词里都有对应规则），稳定前缀由四键收窄为三键。
+    stable: ['personaAnchorHint', 'story', 'learner'],
+    retiredStable: ['task', 'personaAnchorHint', 'story', 'learner'],
+    note: '人设锚点/故事/画像为常量或慢变；回合状态后置',
   },
   'virtual-learner-goal-dialogue-simulator': {
     stable: ['personaAnchorHint', 'task', 'learner', 'story'],
@@ -111,5 +129,9 @@ export function isStablePrefix(skillId: string, keys: readonly string[]): boolea
   const spec = PAYLOAD_STABILITY[skillId];
   if (!spec) return true;
   if (!Array.isArray(keys) || keys.length < spec.stable.length) return false;
-  return spec.stable.every((key, index) => keys[index] === key);
+  const matches = (declared: readonly string[]) =>
+    keys.length >= declared.length && declared.every((key, index) => keys[index] === key);
+  if (matches(spec.stable)) return true;
+  // 迁移窗口：存量遥测仍是旧键序（见 retiredStable 文档），上线后删除该字段。
+  return spec.retiredStable ? matches(spec.retiredStable) : false;
 }
