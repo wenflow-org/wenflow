@@ -324,16 +324,37 @@ export class LearnerSnapshotRefreshService {
     // #205：无 active 路径的用户，行内「路径」此前恒空（active-only 过滤）。这里单独取一次「最近的非
     // abandoned 路径」仅用于展示身份，不参与快照锚定。独立取值（而非放宽上面的嵌套 where）保证不会
     // 漏掉 active 路径，也把「身份」与「锚点」两件事分开。
+    /* 2026-11-09 用户走查：路径已下线、但学员实际学过 30%~40% 的行，列表「当前进度」主标题仍写
+       「未开始」——与同一行的路径名、教学会话页的已完成课堂互相打脸。这里把兜底路径的**状态与
+       真实完成度**一并带出（只读展示，不写快照锚点，#205 不变），前端据此区分「从未开始」与
+       「学过但路径已下线」。 */
     const usersWithoutPath = users.filter((user) => user.learning_paths.length === 0).map((user) => user.id);
     const fallbackTitleByUser = new Map<string, string>();
+    const fallbackPathByUser = new Map<string, {
+      status: string;
+      completedTasks: number;
+      totalTasks: number;
+    }>();
     if (usersWithoutPath.length > 0) {
       const fallbackPaths = await prisma.learning_paths.findMany({
         where: { userId: { in: usersWithoutPath }, status: { not: 'abandoned' } },
         orderBy: { updatedAt: 'desc' },
-        select: { userId: true, title: true },
+        select: {
+          userId: true,
+          title: true,
+          status: true,
+          milestones: { select: { subtasks: { select: { status: true } } } },
+        },
       });
       for (const row of fallbackPaths) {
         if (row.title && !fallbackTitleByUser.has(row.userId)) fallbackTitleByUser.set(row.userId, row.title);
+        if (fallbackPathByUser.has(row.userId)) continue;
+        const subtasks = (row.milestones ?? []).flatMap((m) => m.subtasks ?? []);
+        fallbackPathByUser.set(row.userId, {
+          status: row.status,
+          completedTasks: subtasks.filter((t) => t.status === 'completed').length,
+          totalTasks: subtasks.length,
+        });
       }
     }
 
@@ -452,6 +473,9 @@ export class LearnerSnapshotRefreshService {
         /** 路径身份展示（#205）：无 active 路径时回退到最近的非 abandoned 路径名，
             不再让「有路径但无 active」的用户显示空白路径。 */
         pathTitle: path?.title || fallbackTitleByUser.get(user.id) || null,
+        /** 兜底路径（无 active 时）的状态与真实完成度：仅用于列表展示
+            「学过但路径已下线」与「从未开始」的区分，不参与快照锚定（#205）。 */
+        fallbackPath: fallbackPathByUser.get(user.id) || null,
         /** 在学路径总数（列表列只展示其中最近更新的一条，>1 时前端标「共 N 条」） */
         activePathCount: user._count?.learning_paths ?? (path ? 1 : 0),
         /** 快照重建时刻（排查用；列表的「数据更新」列读 dataUpdatedAt） */

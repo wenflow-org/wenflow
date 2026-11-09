@@ -82,8 +82,12 @@ describe('画像叙述：单对话观测 + 出处', () => {
     const { profile } = await new ProfileAggregator().aggregateProfile('u1');
 
     expect(profile.narrativeInsights.backgroundContextNote).toContain('幼儿园在职人员');
-    expect(profile.narrativeInsights.backgroundContextNote).toContain('当前自述水平：beginner');
+    // 2026-11-09 走查修：level 枚举不再原样透出，按全站等级词汇出中文
+    expect(profile.narrativeInsights.backgroundContextNote).toContain('当前自述水平：入门');
+    expect(profile.narrativeInsights.backgroundContextNote).not.toContain('beginner');
     expect(profile.narrativeInsights.backgroundContextNote).toContain('时间很紧');
+    // 段间拼接不再出现「。；」这种句读连排（各段自带句末「。」）
+    expect(profile.narrativeInsights.backgroundContextNote).not.toMatch(/[。；]\s*；/);
     expect(profile.narratives?.painPoints).toEqual(['之前完全没接触过这份指南', '时间很紧']);
     // 只查一条（findFirst），不拉全量做并集
     expect(mockGoalFindFirst).toHaveBeenCalledTimes(1);

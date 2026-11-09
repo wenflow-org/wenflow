@@ -396,5 +396,39 @@ describe('skill-runtime-contract.service', () => {
       mockPromptFindMany.mockRejectedValue(new Error('db down'))
       expect(await getSkillSampleInput('stage-designer')).toBeNull()
     })
+
+    /* 2026-11-09 走查修复：库里存在「演示/探针行」——`seedpcl_*` 把 {"seed":true,"step":N}
+       写在 skill:goal-conversation 名下，而该 Skill 的输入契约是 userInput/state/conversationContext。
+       此前按「最新一条非瘦身成功行」直接返回，于是「填入示例输入」把仿真参数填进编辑器，
+       紧接着点「开始试跑」必然报输入形状错误，真正该用的契约骨架反倒被绕过。 */
+    it('载荷键与该 Skill 输入契约一个都不重合 → 跳过，继续找下一条可用的', async () => {
+      mockPromptFindMany.mockResolvedValue([
+        { userPayload: '{"seed":true,"step":40}', createdAt: new Date('2026-11-08') },
+        { userPayload: '{"userInput":"我不想学数学了","state":{"confidence":0.4}}', createdAt: new Date('2026-11-07') },
+      ])
+
+      const sample = await getSkillSampleInput('goal-conversation')
+
+      expect(sample?.origin).toBe('real-call')
+      expect(JSON.parse(sample!.json)).toEqual({ userInput: '我不想学数学了', state: { confidence: 0.4 } })
+    })
+
+    it('只有形状不符的行时返回 null（由前端回落输入契约骨架）', async () => {
+      mockPromptFindMany.mockResolvedValue([
+        { userPayload: '{"seed":true,"step":87}', createdAt: new Date('2026-11-08') },
+        { userPayload: '{"seed":true,"step":29}', createdAt: new Date('2026-11-07') },
+      ])
+
+      expect(await getSkillSampleInput('goal-conversation')).toBeNull()
+    })
+
+    it('契约读不到（无 core 文件）时不按形状拦：宁可给得不够完美，也不能彻底不给', async () => {
+      mockPromptFindMany.mockResolvedValue([
+        { userPayload: '{"whatever":1}', createdAt: new Date('2026-11-08') },
+      ])
+
+      const sample = await getSkillSampleInput('no-such-skill-xyz')
+      expect(JSON.parse(sample!.json)).toEqual({ whatever: 1 })
+    })
   })
 })

@@ -2,7 +2,7 @@ import express from 'express';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { learnerSnapshotRefreshService } from '../../services/learner/LearnerSnapshotRefreshService';
 import { predictionCalibrationService } from '../../services/learner/PredictionCalibrationService';
-import { findCalibrationEvidence } from '../../services/admin/learner-models.repo';
+import { findCalibrationEvidence, findDisplayPathFallback } from '../../services/admin/learner-models.repo';
 import learningStateService from '../../services/learning/learning-state.service';
 import { dayKeyOf } from '../../services/time/day-boundary';
 import { checkIsAdmin } from '../../services/admin-access.service';
@@ -83,19 +83,49 @@ router.get('/:userId', async (req, res) => {
     const pathProgress = currentPath?.progress;
     const globalSignals = snapshot.knowledgeMemory.globalSignals;
 
+    /* 「当前进度」的展示兜底（2026-11-08 审计）：快照只锚 active 路径（#205），学习者路径一旦
+       被下线（status=archived），currentPath 恒空 → 管理台「当前进度」显示「尚未开始学习」，
+       而同一页下方照常列着他 5 节已完成的课堂——同一份数据自相矛盾。
+       这里单独查一次「最近一条非 abandoned 路径」的**真实完成度**，只用于管理端展示：
+       不写进快照锚点，学员端仍不会被引导去继续学一条已下线的路径（#205 保持）。 */
+    const fallbackPath = currentPath ? null : await findDisplayPathFallback(req.params.userId);
+    const fallbackProgress = fallbackPath
+      ? (() => {
+          const all = fallbackPath.milestones.flatMap((m) => m.subtasks);
+          const done = all.filter((t) => t.status === 'completed').length;
+          const current = fallbackPath.milestones.find((m) => m.subtasks.some((t) => t.status !== 'completed'))
+            || fallbackPath.milestones[fallbackPath.milestones.length - 1];
+          return { totalTasks: all.length, completedTasks: done, stage: current?.title || '' };
+        })()
+      : null;
+
     return res.json({
       success: true,
       data: {
         ...snapshot,
         progress: pathProgress?.totalTasks
           ? Number(((pathProgress.completedTasks / pathProgress.totalTasks) * 100).toFixed(1))
-          : 0,
+          : fallbackProgress?.totalTasks
+            ? Number(((fallbackProgress.completedTasks / fallbackProgress.totalTasks) * 100).toFixed(1))
+            : 0,
         concepts: {
           mastered: globalSignals.masteredConcepts,
           struggling: globalSignals.strugglingConcepts,
           fragile: globalSignals.fragileConcepts,
         },
-        pathTitle: currentPath?.pathTitle || null,
+        pathTitle: currentPath?.pathTitle || fallbackPath?.title || null,
+        /* 管理端展示用的路径身份（含已下线）：前端据此在「当前进度」与「路径范围」下拉里
+           说出「已下线」而不是「暂无路径」。字段独立于快照锚点，不参与任何路由决策。 */
+        displayPath: fallbackPath
+          ? {
+              id: fallbackPath.id,
+              title: fallbackPath.title,
+              status: fallbackPath.status,
+              stage: fallbackProgress?.stage || '',
+              totalTasks: fallbackProgress?.totalTasks || 0,
+              completedTasks: fallbackProgress?.completedTasks || 0,
+            }
+          : null,
       },
     });
   } catch (error: any) {
