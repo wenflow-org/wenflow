@@ -94,10 +94,11 @@ describe('知识图谱：聚拢、取景与选中态', () => {
 
   it('布局稳定后 fitGraphView 自适应取景（48px 安全边距），只在换数据时触发', () => {
     expect(strip(graph)).toContain('function fitGraphView(');
-    expect(strip(graph)).toMatch(/if \(dataChanged\) fitGraphView\(\)/);
+    /* 2026-11-09：换数据时先复位「用户动过视角」标记再取景；纯 resize 走 RO 那条分支 */
+    expect(strip(graph)).toMatch(/if \(dataChanged\) \{\s*userRoamed = false\s*fitGraphView\(\)/);
     expect(graph).toContain('function fitGraphView(padding = 48)');
     /* 画布角落有可点的缩放控件（+/−/⟲），⟲ 回 fitView 初始档 */
-    expect(graph).toContain('defineExpose({ zoomBy, resetView: () => fitGraphView(48) })');
+    expect(strip(graph)).toMatch(/resetView: \(\) => \{\s*userRoamed = false\s*fitGraphView\(48\)/);
   });
 
   it('选中态：非关联节点 0.42、连线 0.3，选中节点只亮蓝描边', () => {

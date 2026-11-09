@@ -50,13 +50,15 @@ describe('知识图谱：节点标签可辨认性', () => {
     expect(Number(perLine![2])).toBeLessThanOrEqual(8);
   });
 
-  it('窄屏密集图不常显标签（画布放不下 7 个标签，点按看详情）', () => {
-    // 2026-10-29 像素级走查：320–370px 宽 + 20 多个节点时，无论 4 个还是 6 个常显
-    // 标签都会叠字、最右一列被 canvas 裁掉。改为窄屏密集图一个都不常显；
-    // 桌面密集图仍保留枢纽 + 薄弱节点。
-    expect(source, '窄屏分支应跳过 labelWorthy 填充').toMatch(
-      /if \(!denseGraph\)[\s\S]*?\} else if \(!narrow\) \{/
-    );
-    expect(source).toContain('窄屏密集图刻意一个常显标签都不放');
+  it('每颗可见点都常显名字（重叠交给 hideOverlap，不再只标枢纽）', () => {
+    /* 2026-11-10 用户走查：「一部分点是灰的、没字，得点一下才出名字」。
+       旧策略只给「枢纽 6 + 薄弱 + 孤立」标名，其余节点是没有任何文字的灰点。 */
+    expect(source, '节点 label 应常显').toMatch(/label:\s*\{[\s\S]*?show: true/);
+    expect(source, '重叠标签靠 labelLayout.hideOverlap 收').toContain('labelLayout: { hideOverlap: true }');
+    expect(source, '不再按 labelWorthy 决定常显').not.toContain('show: labelWorthy.has(node.id)');
+  });
+
+  it('缩得很小时只留关键子集（关键集仍由 labelWorthy 决定）', () => {
+    expect(source).toMatch(/show: hide \? lastLabelWorthy\.has\(String\(d\.id \?\? ''\)\) : true/);
   });
 });

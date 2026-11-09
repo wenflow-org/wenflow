@@ -60,11 +60,15 @@ describe('知识图谱：点击热区 r>=20（布局是 [x,y] 数组，不能按
     expect(body, 'layoutPoint 没有认数组形状：graph 的 getLayout() 就是 [x, y]').toContain('Array.isArray');
   });
 
-  it('热区命中用 layoutPoint 取坐标，且按半径参数判定', () => {
+  it('坐标解析走 layoutPoint（数组安全），热区按半径参数判定', () => {
+    /* 2026-11-09：坐标解析挪进 symbolPixels()（本体命中与空白热区共用同一份像素坐标，
+       免得两处各算一套而慢慢分叉）——判据不变，仍然必须经 layoutPoint 读数组布局。 */
+    const pixels = bodyOf('function symbolPixels(): Array<{ id: string; x: number; y: number; half: number }> {');
+    expect(pixels, '坐标解析没有走 layoutPoint：按 l.x 读会恒 undefined，整段跳过').toContain('layoutPoint(');
+    expect(pixels, '仍在按 l.x 读布局（数组形状下恒 undefined）').not.toMatch(/\bl\.x\b/);
     const body = bodyOf(NODE_NEAR_SIGNATURE);
-    expect(body, '热区没有走 layoutPoint：按 l.x 读会恒 undefined，整段跳过').toContain('layoutPoint(');
     expect(body, '热区没有用半径参数判定距离').toContain('radius');
-    expect(body, '仍在按 l.x 读布局（数组形状下恒 undefined）').not.toMatch(/\bl\.x\b/);
+    expect(body, '热区改从别处取坐标了：应与本体命中同源').toContain('symbolPixels(');
   });
 
   it('热区判定传入 NODE_HIT_RADIUS（20px）', () => {
@@ -76,6 +80,34 @@ describe('知识图谱：点击热区 r>=20（布局是 [x,y] 数组，不能按
     const body = bodyOf('function bindZrInteractions(instance: echarts.ECharts) {');
     expect(body, '没有 zr click 兜底：空白处的点击到不了 chart.on(click)').toContain("zrender.on('click'");
     expect(body).toContain('nodeNearPixel');
+  });
+  it('点本体在捕获阶段先判：命中就接管，不让标签抢走这一点（2026-11-09）', () => {
+    const body = bodyOf('function bindZrInteractions(instance: echarts.ECharts) {');
+    // 点在节点本体上 → 自己 select 并拦住后续（否则 ECharts 会按上层的标签再报一次）
+    expect(body, '点本体没有用 symbolAtPixel 判定').toContain('symbolAtPixel(');
+    expect(body, '点本体命中后没有拦下 ECharts 的那一次（同一下会先报标签宿主、再报本体）').toContain(
+      'stopImmediatePropagation()'
+    );
+    // 三条命中路径收敛到同一个出口，避免就地重写「压暗 + emit + render」
+    expect(source, '选中出口没有收敛成 selectNode()').toContain('function selectNode(');
+    const zrClick = bodyOf("zrender.on('click', (e: { target?: unknown; offsetX?: number; offsetY?: number }) => {");
+    expect(zrClick, 'zrender 的 click 里也要先判本体（触摸端的点击是合成事件，捕获阶段听不到）').toContain(
+      'symbolAtPixel('
+    );
+    expect(zrClick, '空白热区那一档必须保留').toContain('nodeNearPixel(x, y, NODE_HIT_RADIUS)');
+  });
+
+  it('拖动过的不当点击（平移画布后不该顺手选中一颗点）', () => {
+    const body = bodyOf('function bindZrInteractions(instance: echarts.ECharts) {');
+    expect(body, '没有记录按下的位置，松手时无从判断是否拖过').toContain("addEventListener('mousedown'");
+    expect(body, '没有位移容差：拖过之后的松开会被当点击').toContain('CLICK_SLOP');
+    expect(body, '拖过的判定没接在点击里').toContain('roaming || moved');
+  });
+
+  it('触摸端不重复处理浏览器补派的 click（否则同一下点了两遍 = 选中又取消）', () => {
+    const body = bodyOf('function bindZrInteractions(instance: echarts.ECharts) {');
+    expect(body, '没有记录触摸发生时间').toContain('TOUCH_CLICK_GUARD_MS');
+    expect(body, '没有在 touchstart 里打点').toContain("addEventListener('touchstart'");
   });
 });
 
