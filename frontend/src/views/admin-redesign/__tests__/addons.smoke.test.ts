@@ -61,7 +61,8 @@ function webConfig() {
     id: 'web',
     label: '联网',
     channels: [
-      { id: 'search', label: '搜索', order },
+      // 搜索不做链式降级（与后端 single 对齐），抓取仍是降级链
+      { id: 'search', label: '搜索', order: [order[0]], single: true },
       { id: 'fetch', label: '抓取', order }
     ],
     providers: [
@@ -213,8 +214,11 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     const webFacts = rows[0].find('.ac-cap__facts').text();
     expect(webFacts).toContain('主用');
     expect(webFacts).toContain('TinyFish');
-    expect(webFacts).toContain('备选');
-    expect(webFacts).toContain('Tavily · Exa');
+    // 搜索已改单档（无备选），抓取仍是降级链：摘要里用「→」列出备选顺序
+    expect(webFacts).toContain('抓取');
+    expect(webFacts).toContain('→');
+    // 抓取链的备选按降级顺序列出（TinyFish → Tavily → Exa）
+    expect(webFacts).toContain('Tavily → Exa');
     // 没有配置数据的卡（决策 / 生图 fixture 里为空）不渲染空摘要
     expect(rows[1].find('.ac-cap__facts').exists()).toBe(false);
     expect(rows[0].find('.ac-cap__calls').text()).toContain('累计 0 次调用');
@@ -272,7 +276,11 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     expect(dialog.text()).toContain('联网 · 服务配置');
     // 搜索 / 抓取两条链都在界面上，主用可换（不再是一行只读的「尝试顺序」）
     expect(dialog.findAll('.ac-prio')).toHaveLength(2);
-    expect(dialog.findAll('.ac-prio')[0].text()).toContain('主用');
+    // 搜索：不做链式降级 → 只有一个选择位（无「主用/备用」）
+    expect(dialog.findAll('.ac-prio')[0].text()).not.toContain('备用');
+    expect(dialog.findAll('.ac-prio')[0].findAll('.ac-prio__item')).toHaveLength(1);
+    // 抓取：仍是降级链，第一枚是主用
+    expect(dialog.findAll('.ac-prio')[1].text()).toContain('主用');
     expect(dialog.find('.ac-config-order').exists()).toBe(false);
     const cards = dialog.findAll('.ac-config-provider');
     expect(cards.map((c) => c.find('.ac-config-provider__name').text())).toEqual(['TinyFish', 'Tavily', 'Exa']);
@@ -302,15 +310,16 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     await tavily().findAll('input')[1].setValue('https://proxy.example/search');
     await tavily().find('.ac-config-provider__primary').trigger('click');
     await flushPromises();
-    // 设为主用 = 把它提到所在链的第一位（联网两条链一起提）
-    expect(dialog().findAll('.ac-prio')[0].find('.ac-prio__name').text()).toBe('Tavily');
+    // 设为主用 = 把它提到所在链的第一位；搜索已是单档（不参与主用/备用），只有抓取链会变
+    expect(dialog().findAll('.ac-prio')[0].find('.ac-prio__name').text()).toBe('TinyFish');
     expect(dialog().findAll('.ac-prio')[1].find('.ac-prio__name').text()).toBe('Tavily');
     await dialog().findAll('button').find((b) => b.text() === '保存')!.trigger('click');
     await flushPromises();
     expect(pluginSaveMock).toHaveBeenCalledWith(
       'web',
       { tavily: { searchEndpoint: 'https://proxy.example/search' } },
-      { search: ['tavily', 'tinyfish', 'exa'], fetch: ['tavily', 'tinyfish', 'exa'] }
+      // 搜索单档只提交选中的那一家；抓取按「设为主用」提到 Tavily
+      { search: ['tinyfish'], fetch: ['tavily', 'tinyfish', 'exa'] }
     );
     wrapper.unmount();
   });

@@ -246,6 +246,24 @@
             <div v-for="channel in configTarget?.channels ?? []" :key="channel.id" class="ac-prio">
               <span class="ac-prio__k">{{ channel.label }}</span>
               <div class="ac-prio__list">
+                <!-- 不做链式降级的通道（搜索 / 决策）：只有一个「用哪一家」的选择位，
+                     没有备用、没有排序——运行时也只取这一家，失败即报错（2026-11-10 用户裁决） -->
+                <template v-if="channel.single">
+                  <span
+                    class="ac-prio__item"
+                    :title="providerConfiguredOf(orderOf(channel.id)[0]) ? '已配置' : '缺少密钥'"
+                  >
+                    <strong class="ac-prio__name">{{ providerLabelOf(orderOf(channel.id)[0]) }}</strong>
+                  </span>
+                  <MkSelect
+                    :model-value="orderOf(channel.id)[0] || ''"
+                    :options="channelProviderOptions()"
+                    aria-label="选择服务"
+                    size="sm"
+                    @update:model-value="setSingleProvider(channel.id, $event)"
+                  />
+                </template>
+                <template v-else>
                 <span
                   v-for="(pid, i) in orderOf(channel.id)"
                   :key="pid"
@@ -279,6 +297,7 @@
                   size="sm"
                   @change="onAddToOrder(channel.id, $event)"
                 />
+                </template>
               </div>
             </div>
             <!-- 字段只给链上的 provider（其余不参与调用，也不占版面）。
@@ -503,8 +522,9 @@ interface PluginProvider {
 interface PluginConfig {
   id: string
   label: string
-  /** orderFixed = 顺序由代码固定（联网），界面不给排 */
-  channels: Array<{ id: string; label: string; order: string[]; orderFixed?: boolean }>
+  /** orderFixed = 顺序由代码固定（联网），界面不给排；
+      single = 不做链式降级（搜索 / 决策），界面只给「用哪一家」 */
+  channels: Array<{ id: string; label: string; order: string[]; orderFixed?: boolean; single?: boolean }>
   providers: PluginProvider[]
 }
 
@@ -799,7 +819,10 @@ function orderedFields(provider: PluginProvider): PluginProviderField[] {
 }
 /** 该 provider 是否已在它所在的每条链上排第一（是则不再给「设为主用」） */
 function isPrimaryOf(providerId: string): boolean {
-  const channels = (configTarget.value?.channels ?? []).filter((ch) => orderOf(ch.id).includes(providerId))
+  /* 只看降级链通道：单档通道（搜索 / 决策）没有主用概念，不参与这个判断——
+     否则搜索选中 Tavily 时，TinyFish 卡头会挂一个「设为主用」按钮，点下去什么也不会发生 */
+  const channels = (configTarget.value?.channels ?? [])
+    .filter((ch) => !ch.single && orderOf(ch.id).includes(providerId))
   return channels.length > 0 && channels.every((ch) => orderOf(ch.id)[0] === providerId)
 }
 /** 设为主用：把该 provider 提到它所在链的第一位（联网有搜索/抓取两条链，两条一起提）。
@@ -807,6 +830,8 @@ function isPrimaryOf(providerId: string): boolean {
 function setPrimaryOf(providerId: string) {
   const next: Record<string, string[]> = { ...orderDraft.value }
   for (const channel of configTarget.value?.channels ?? []) {
+    /* 单档通道没有主用/备用之分：换家走「选择服务」下拉，这里不动它 */
+    if (channel.single) continue
     const list = orderOf(channel.id)
     if (!list.includes(providerId)) continue
     next[channel.id] = [providerId, ...list.filter((id) => id !== providerId)]
@@ -818,6 +843,16 @@ function providerConfiguredOf(providerId: string): boolean {
 }
 function setOrder(channelId: string, next: string[]) {
   orderDraft.value = { ...orderDraft.value, [channelId]: next }
+}
+/* 不做链式降级的通道（搜索 / 决策，2026-11-10 用户「都不做链式降级了」）：
+   界面上只有一个选择位，换一家直接替换整个顺序，不存在备用。 */
+function setSingleProvider(channelId: string, id: string) {
+  if (!id) return
+  setOrder(channelId, [id])
+}
+/** 单档通道的候选 = 该插件的全部 provider（换回原来那家也要能选到） */
+function channelProviderOptions() {
+  return (configTarget.value?.providers ?? []).map((p) => ({ value: p.id, label: p.label }))
 }
 function moveInOrder(channelId: string, index: number, delta: number) {
   const list = [...orderOf(channelId)]
@@ -894,8 +929,9 @@ async function saveConfig() {
     if (clearKeys.value[provider.id]) patch.clearKey = true
     if (Object.keys(patch).length) providers[provider.id] = patch
   }
+  /* 单档通道只提交选中的那一家：界面上没有备用位，多提交也没有执行语义 */
   const orders = ordersDirty.value
-    ? Object.fromEntries(cfg.channels.map((ch) => [ch.id, orderOf(ch.id)]))
+    ? Object.fromEntries(cfg.channels.map((ch) => [ch.id, ch.single ? orderOf(ch.id).slice(0, 1) : orderOf(ch.id)]))
     : undefined
   if (!Object.keys(providers).length && !orders) {
     closeConfig()
