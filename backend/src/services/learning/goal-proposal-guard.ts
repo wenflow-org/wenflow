@@ -9,12 +9,15 @@
  */
 import { logger } from '../../utils/logger';
 
-export function isConfirmableProposal(proposal: any): boolean {
+export function isConfirmableProposal(proposal: unknown): boolean {
   if (!proposal || typeof proposal !== 'object' || Array.isArray(proposal)) return false;
-  const direction = typeof proposal.learning_direction === 'string' && proposal.learning_direction.trim().length > 0;
-  const deliverable = typeof proposal.first_deliverable === 'string' && proposal.first_deliverable.trim().length > 0;
-  const stages = Array.isArray(proposal.key_stages)
-    && proposal.key_stages.filter((stage: any) => typeof stage === 'string' && stage.trim().length > 0).length >= 2;
+  const record = proposal as Record<string, unknown>;
+  const direction = typeof record.learning_direction === 'string' && record.learning_direction.trim().length > 0;
+  const deliverable = typeof record.first_deliverable === 'string' && record.first_deliverable.trim().length > 0;
+  const stages = Array.isArray(record.key_stages)
+    && (record.key_stages as unknown[]).filter(
+      (stage) => typeof stage === 'string' && (stage as string).trim().length > 0
+    ).length >= 2;
   return direction && deliverable && stages;
 }
 
@@ -30,7 +33,7 @@ export function hasConfirmableProposal(
   collectedData: string | null | undefined,
   logContext: { conversationId: string; userId: string; stage: string },
 ): boolean {
-  let snapshotProposal: any = null;
+  let snapshotProposal: unknown = null;
   try {
     snapshotProposal = JSON.parse(collectedData || '{}')?.confirmedProposal ?? null;
   } catch {

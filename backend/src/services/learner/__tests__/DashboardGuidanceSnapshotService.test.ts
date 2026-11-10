@@ -103,7 +103,7 @@ describe('DashboardGuidanceSnapshotService', () => {
   // （adaptive-guidance-copy）提示词规则读取 learner.knowledgeMemory.globalBackground.transferSignals，
   // 故该字段必须真的随投影送到 skill 输入——否则规则读到的永远是空数组（读取方名义存在、实际空转）。
   it('guidance 侧消费：transferSignals 随投影送入 adaptive-guidance-copy 输入', async () => {
-    ;(assembleLearningState as jest.Mock).mockResolvedValue({
+    (assembleLearningState as jest.Mock).mockResolvedValue({
       primaryPath: { id: 'lp1', title: 'T' },
       learnerSnapshot: {
         freshness: { basedOn: {} },

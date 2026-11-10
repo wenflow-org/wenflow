@@ -52,8 +52,8 @@ describe('API 接入流程对齐管理台', () => {
   });
 
   it('保存成功后刷新快照（否则保存按钮永远亮着）', () => {
-    expect(source).toMatch(/snapshotSaved\(\);\n    return true;/);
-    expect(source).toMatch(/snapshotSaved\(\);\n  } catch \{/);
+    expect(source).toMatch(/snapshotSaved\(\);\n {4}return true;/);
+    expect(source).toMatch(/snapshotSaved\(\);\n {2}} catch \{/);
   });
 
   it('内置模式收起态带已保存端点/密钥摘要（不再读成「配过的全丢了」）', () => {

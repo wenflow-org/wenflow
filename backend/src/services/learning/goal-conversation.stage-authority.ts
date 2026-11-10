@@ -15,7 +15,7 @@
  * STAGE_MINIMUMS 的 TODO）。
  */
 
-type GoalStateRecord = Record<string, any>;
+type GoalStateRecord = Record<string, unknown>;
 
 /**
  * 读取下一轮要交给模型的 previousStage：只认持久化权威源。
@@ -25,7 +25,9 @@ export function resolveAuthoritativeGoalStage(
   data: GoalStateRecord | null | undefined,
   fallbackStage?: string | null
 ): string {
-  return data?.stage || fallbackStage || 'understanding';
+  const stage = data?.stage;
+  if (typeof stage === 'string' && stage.length > 0) return stage;
+  return fallbackStage || 'understanding';
 }
 
 /**
@@ -37,11 +39,14 @@ export function syncDegradedGoalStage(data: GoalStateRecord, stage: 'proposing' 
 
   const nextState = data.runtimeNextState;
   if (nextState && typeof nextState === 'object') {
-    nextState.stage = stage;
+    (nextState as Record<string, unknown>).stage = stage;
   }
 
-  const envelopeNextState = data.runtimeEnvelope?.contextUpdate?.nextState;
+  const envelope = data.runtimeEnvelope;
+  const envelopeNextState = envelope && typeof envelope === 'object'
+    ? ((envelope as Record<string, unknown>).contextUpdate as Record<string, unknown> | undefined)?.nextState
+    : undefined;
   if (envelopeNextState && typeof envelopeNextState === 'object') {
-    envelopeNextState.stage = stage;
+    (envelopeNextState as Record<string, unknown>).stage = stage;
   }
 }

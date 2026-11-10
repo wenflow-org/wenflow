@@ -89,7 +89,7 @@ describe('LearningStateGuidanceService（#187 视图口径）', () => {
   })
 
   it('skill 抛错：回落本视图静态兜底（buildFallback 的 view=learning-state），source=fallback', async () => {
-    ;(executeSkillWithResult as jest.Mock).mockRejectedValue(new Error('plugin disabled'))
+    (executeSkillWithResult as jest.Mock).mockRejectedValue(new Error('plugin disabled'))
 
     const payload = await learningStateGuidanceService.refresh('u2')
 
@@ -100,7 +100,7 @@ describe('LearningStateGuidanceService（#187 视图口径）', () => {
   })
 
   it('新学习者没有 learnerSnapshot：返回 null，不进入摘要/投影（避免 dynamicState 空引用）', async () => {
-    ;(assembleLearningState as jest.Mock).mockResolvedValue({
+    (assembleLearningState as jest.Mock).mockResolvedValue({
       paths: [],
       sessions: [],
       primaryPath: null,

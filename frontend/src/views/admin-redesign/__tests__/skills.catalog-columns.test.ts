@@ -148,10 +148,10 @@ describe('Skill 目录 · 列结构（图 3 走查 A/B）', () => {
     const heads = w.findAll('.sk-catalog thead th');
     const callsTh = heads.find((t) => t.text() === '调用次数')!;
     await callsTh.trigger('click');
-    expect((w.vm as any).sortKey).toBe('calls');
+    expect((w.vm as unknown as { sortKey: string }).sortKey).toBe('calls');
     const rateTh = w.findAll('.sk-catalog thead th').find((t) => t.text() === '成功率')!;
     await rateTh.trigger('click');
-    expect((w.vm as any).sortKey).toBe('rate');
+    expect((w.vm as unknown as { sortKey: string }).sortKey).toBe('rate');
     expect(rateTh.attributes('aria-sort')).toBe('descending');
     w.unmount();
   });

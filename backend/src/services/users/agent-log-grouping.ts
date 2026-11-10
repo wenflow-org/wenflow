@@ -42,14 +42,30 @@ export interface AgentLogGroupRow {
   durationMs?: number | null;
   errorCode?: string | null;
   metadata?: string | null;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 /** 参与模型补全的行：#230 补数查询只需 traceId + metadata，不必带展示字段 */
 export interface AgentLogModelSourceRow {
   traceId?: string | null;
   metadata?: string | null;
-  [key: string]: any;
+  [key: string]: unknown;
+}
+
+/** 折叠管线输出行：原始行字段（去重时附 logSource）+ 折叠组附加的 model/groupCount/groupItems */
+export interface AgentLogCollapsedRow extends AgentLogGroupRow {
+  logSource?: string;
+  model?: string | null;
+  groupCount?: number;
+  groupItems?: Array<{
+    id: string;
+    agentId: string;
+    calledAt: Date | string;
+    success: boolean;
+    durationMs?: number | null;
+    errorCode?: string | null;
+    phase?: string | null;
+  }>;
 }
 
 /**
@@ -137,10 +153,10 @@ export function resolveAgentLogModel(
   return model.trim() ? model : null;
 }
 
-function parseMetadata(metadata: string | null | undefined): Record<string, any> {
+function parseMetadata(metadata: string | null | undefined): Record<string, unknown> {
   if (!metadata) return {};
   try {
-    return JSON.parse(metadata) as Record<string, any>;
+    return JSON.parse(metadata) as Record<string, unknown>;
   } catch {
     return {};
   }
@@ -153,14 +169,14 @@ function logSourceOf(log: { id: string; agentId: string }): string {
 }
 
 /** 会话级 agent + metadata 中的会话 id → 组键 */
-function conversationGroupKeyOf(agentId: string, metadata: Record<string, any>): string | null {
+function conversationGroupKeyOf(agentId: string, metadata: Record<string, unknown>): string | null {
   if (!CONVERSATION_AGENTS.has(agentId)) return null;
   const conv = metadata.sourceConversationId
     || metadata.conversationId
     || metadata.sessionId
     || null;
   if (!conv) return null;
-  return agentId === 'skill:goal-conversation' ? `goal:${conv}` : `path:${conv}`;
+  return agentId === 'skill:goal-conversation' ? `goal:${String(conv)}` : `path:${String(conv)}`;
 }
 
 /**
@@ -201,14 +217,14 @@ export function agentLogGroupKeyOf(log: { agentId?: string | null; metadata?: st
 export function collapseAgentLogGroups(
   logs: AgentLogGroupRow[],
   modelSourceRows: AgentLogModelSourceRow[] = []
-): any[] {
+): AgentLogCollapsedRow[] {
   // 1) 去重：同 traceId + agentId + 秒级时间视为同一次调用的重复落库。
   //    注意这是**跨会话**去重（key 不含会话），列表一直如此；详情若按会话去重会多出条目。
   //    #246：无 traceId 时（path-agent 阶段流水写侧不写 traceId）退化键必须带上事件身份
   //    （metadata.phase + metadata.status）。此前退化键只有 agentId + 秒，把语义降级成
   //    「同秒同 agent 即重复」——父阶段 succeeded 与子阶段 started 常只差几十毫秒、必然同秒，
   //    于是两条真实事件互撞、后入的一条被静默丢弃（groupCount 少 1），且谁被丢由行序决定。
-  const dedupeMap = new Map<string, any>();
+  const dedupeMap = new Map<string, AgentLogCollapsedRow>();
   for (const log of logs) {
     const metadata = parseMetadata(log.metadata);
     const traceId = log.traceId || metadata.traceId || '';
@@ -240,7 +256,7 @@ export function collapseAgentLogGroups(
   const modelByPath = buildAgentLogModelIndexByPath([...dedupeMap.values(), ...modelSourceRows]);
 
   // 2) 组：key=goal/path 会话；rep=组内优先级最高的代表日志；items=组内全部（去重后）调用明细
-  const groupMap = new Map<string, { rep: any; items: any[] }>();
+  const groupMap = new Map<string, { rep: AgentLogCollapsedRow; items: AgentLogCollapsedRow[] }>();
   for (const value of dedupeMap.values()) {
     const metadata = parseMetadata(value.metadata);
     const agent = String(value.agentId || '');
@@ -260,7 +276,7 @@ export function collapseAgentLogGroups(
     }
   }
 
-  const collapsed = new Map<string, any>();
+  const collapsed = new Map<string, AgentLogCollapsedRow>();
   for (const [groupKey, { rep, items }] of groupMap) {
     if (items.length <= 1) {
       collapsed.set(groupKey, rep);

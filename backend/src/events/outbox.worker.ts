@@ -6,6 +6,9 @@ import { setOutboxWakeListener } from './outbox-wake';
 import { runWithContext, getRequestContext } from '../gateway/api-gateway/context';
 import type { DurableEventType } from './contracts';
 
+/** 出库行类型：从 findMany 返回值推导，随 schema 单一真相源演进，不手抄字段。 */
+type OutboxRow = Awaited<ReturnType<typeof prisma.domain_event_outbox.findMany>>[number];
+
 /** 兜底轮询区间（架构优化批 #5）：空闲指数退避 1s→30s；入队唤醒/有产出时复位到下限 */
 const POLL_MIN_MS = 1000;
 const POLL_MAX_MS = 30_000;
@@ -257,7 +260,7 @@ export class DurableOutboxWorker {
 
     // 并发泳道（仅限不含有序事件的类型，构造期已校验）：先整批 claim，再用并发池跑 LLM，
     // 让「第 N 个用户的课后增强」不必等前面 N-1 个 LLM 跑完。
-    const claimed: any[] = [];
+    const claimed: OutboxRow[] = [];
     for (const record of records) {
       if (this.stopping) break;
       if (!(await this.claim(record, staleLock))) continue;
@@ -282,7 +285,7 @@ export class DurableOutboxWorker {
    * 只对主泳道的串行路径生效（并发泳道不得承载有序事件）。学习者线对顺序敏感：
    * 快照刷新按 `lastEventId` 幂等回写，后到事件若先消费，会用更旧的事件回填画像。
    */
-  private async passesSameUserHeadGate(record: any, orderedUsersSeen: Set<string>): Promise<boolean> {
+  private async passesSameUserHeadGate(record: OutboxRow, orderedUsersSeen: Set<string>): Promise<boolean> {
     if (!ORDERED_EVENT_TYPES.has(record.eventType) || !record.userId) return true;
     // 同用户只放行队首——**跨类型也算序**（18 号报告 N7）：学习者的快照刷新按 `lastEventId`
     // 幂等回写，若「后到的 task:completed」先于「更早的 lesson:completed」消费，
@@ -302,7 +305,7 @@ export class DurableOutboxWorker {
   }
 
   /** 抢锁：只有把这一行从 pending（或锁过期的 processing）推进到 processing 成功的 worker 才有权消费 */
-  private async claim(record: any, staleLock: Date): Promise<boolean> {
+  private async claim(record: OutboxRow, staleLock: Date): Promise<boolean> {
     const claimed = await prisma.domain_event_outbox.updateMany({
       where: {
         id: record.id,
@@ -317,7 +320,7 @@ export class DurableOutboxWorker {
   }
 
   /** 消费一条已抢到锁的事件，落 published；失败按既有退避/死信策略回写 */
-  private async dispatchAndSettle(record: any): Promise<void> {
+  private async dispatchAndSettle(record: OutboxRow): Promise<void> {
     try {
       await this.registry.dispatch(mapOutboxRecord(record));
       await prisma.domain_event_outbox.updateMany({

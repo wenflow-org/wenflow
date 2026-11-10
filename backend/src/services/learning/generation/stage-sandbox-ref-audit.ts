@@ -29,16 +29,19 @@ export async function auditPathStageAgentsSandboxRefs(input: PathStageSandboxAud
     const warnContext = { pathId: input.pathId, ...(input.warnContext || {}) };
     // includeOptional：两个 skill 的 path 通道多为 `object?` 可选（#192），
     // 不传则整类声明被跳过、恒不进对账。
+    const normalizedInput = typeof input.normalizedInput === 'object' && input.normalizedInput
+      ? input.normalizedInput
+      : {};
     await checkAgentSandboxRefs(
       'stage-designer',
       'path',
-      buildPathSandboxPool((input.normalizedInput as any) || {}, input.stageDesignerPayload || {}),
+      buildPathSandboxPool(normalizedInput, input.stageDesignerPayload || {}),
       { includeOptional: true, warnContext }
     );
     await checkAgentSandboxRefs(
       'kc-mapper',
       'path',
-      buildPathSandboxPool((input.normalizedInput as any) || {}, input.kcMapperPayload),
+      buildPathSandboxPool(normalizedInput, input.kcMapperPayload),
       { includeOptional: true, warnContext }
     );
   } catch {

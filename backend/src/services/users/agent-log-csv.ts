@@ -51,7 +51,7 @@ function escapeCsvField(field: string): string {
  * 折叠视图行 → CSV 文本（含表头，CRLF 换行；无数据时只有表头）。
  * @param logs collapseAgentLogGroups 的输出（id/agentId/…/model/groupCount/calledAt）
  */
-export function buildAgentLogCsv(logs: Array<Record<string, any>>): string {
+export function buildAgentLogCsv(logs: Array<Record<string, unknown>>): string {
   const header = AGENT_LOG_CSV_HEADERS.join(',');
   const rows = logs.map((log) =>
     AGENT_LOG_CSV_HEADERS.map((key) => {
