@@ -162,60 +162,75 @@
     <!-- MCP 服务编辑弹窗 -->
     <Teleport to="body">
     <div v-if="toolOpen" ref="maskRef" class="mk-modal">
-      <div ref="panelRef" class="mk-modal__panel" role="dialog" aria-label="MCP 服务">
+      <div ref="panelRef" class="mk-modal__panel mk-modal__panel--wide" role="dialog" aria-label="MCP 服务">
         <div class="mk-modal__head">
           <h3 class="mk-modal__title">{{ toolEditingId ? '编辑 MCP 服务' : '新建 MCP 服务' }}</h3>
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="toolOpen = false">✕</button>
         </div>
-        <div class="mk-modal__body">
-          <label class="mk-field" :class="{ 'mk-field--error': toolErrors.id }">
-            <!-- 编辑态：ID 是主键不可改（输入框禁用），红星撤下、改挂锁定说明——
-                 否则禁用框带必填星号会被读成「该填但填不了」（2026-10-31 四轮评审 P0-3） -->
-            <span class="mk-field__label">
-              工具 ID
-              <em v-if="!toolEditingId" class="mk-field__req">*</em>
-              <!-- 加全角括号并复用字段次级提示档：不写括号时它和「工具 ID」同字号同色位，
-                   整行会被读成一个连写的长标签，看不出后半句是对字段的说明 -->
-              <span v-else class="mk-field__opt">（创建后不可修改）</span>
-            </span>
-            <input v-model="toolForm.id" class="mk-field__input" placeholder="例如：web-search / text-to-image" :disabled="!!toolEditingId" />
-            <span v-if="toolErrors.id" class="mk-field__err">{{ toolErrors.id }}</span>
-          </label>
-          <label class="mk-field" :class="{ 'mk-field--error': toolErrors.name }">
-            <span class="mk-field__label">名称 <em class="mk-field__req">*</em></span>
-            <input v-model="toolForm.name" class="mk-field__input" placeholder="例如：网页搜索" />
-            <span v-if="toolErrors.name" class="mk-field__err">{{ toolErrors.name }}</span>
-          </label>
-          <div class="ac-mcp__formrow">
-            <label class="mk-field">
-              <span class="mk-field__label">连接方式</span>
-              <MkSelect v-model="toolForm.transport" :options="TRANSPORT_OPTIONS" aria-label="连接方式" block />
-            </label>
-            <label class="mk-field">
-              <span class="mk-field__label">类型</span>
-              <MkSelect
-                v-model="toolForm.type"
-                :options="TOOL_TYPE_OPTIONS"
-                aria-label="类型"
-                :disabled="toolForm.transport === 'mcp'"
-                block
-              />
-            </label>
-          </div>
-          <label class="mk-field" :class="{ 'mk-field--error': toolErrors.endpoint }">
-            <span class="mk-field__label">服务地址 <em class="mk-field__req">*</em></span>
-            <input
-              v-model="toolForm.endpoint"
-              class="mk-field__input"
-              :placeholder="toolForm.transport === 'mcp' ? 'https://…/mcp' : 'https://…'"
-            />
-            <span v-if="toolErrors.endpoint" class="mk-field__err">{{ toolErrors.endpoint }}</span>
-          </label>
-          <label class="mk-field">
+        <!-- 2026-11-10 用户「统一」：与插件服务配置弹层同一套骨架——宽版 + 段名 +
+             两列字段网格。此前是窄弹层、五个字段一路竖排，与隔壁那张弹层像两个产品。 -->
+        <div class="mk-modal__body ac-config">
+          <section class="ac-sec">
+            <h4 class="mk-section__title">基本信息</h4>
+            <div class="ac-form">
+              <label class="mk-field" :class="{ 'mk-field--error': toolErrors.id }">
+                <!-- 编辑态：ID 是主键不可改（输入框禁用），红星撤下、改挂锁定说明——
+                     否则禁用框带必填星号会被读成「该填但填不了」（2026-10-31 四轮评审 P0-3） -->
+                <span class="mk-field__label">
+                  工具 ID
+                  <em v-if="!toolEditingId" class="mk-field__req">*</em>
+                  <!-- 加全角括号并复用字段次级提示档：不写括号时它和「工具 ID」同字号同色位，
+                       整行会被读成一个连写的长标签，看不出后半句是对字段的说明 -->
+                  <span v-else class="mk-field__opt">（创建后不可修改）</span>
+                </span>
+                <input v-model="toolForm.id" class="mk-field__input" placeholder="例如：web-search / text-to-image" :disabled="!!toolEditingId" />
+                <span v-if="toolErrors.id" class="mk-field__err">{{ toolErrors.id }}</span>
+              </label>
+              <label class="mk-field" :class="{ 'mk-field--error': toolErrors.name }">
+                <span class="mk-field__label">名称 <em class="mk-field__req">*</em></span>
+                <input v-model="toolForm.name" class="mk-field__input" placeholder="例如：网页搜索" />
+                <span v-if="toolErrors.name" class="mk-field__err">{{ toolErrors.name }}</span>
+              </label>
+            </div>
+          </section>
+
+          <section class="ac-sec">
+            <h4 class="mk-section__title">连接</h4>
+            <div class="ac-form">
+              <label class="mk-field">
+                <span class="mk-field__label">连接方式</span>
+                <MkSelect v-model="toolForm.transport" :options="TRANSPORT_OPTIONS" aria-label="连接方式" block />
+              </label>
+              <label class="mk-field">
+                <span class="mk-field__label">类型</span>
+                <MkSelect
+                  v-model="toolForm.type"
+                  :options="TOOL_TYPE_OPTIONS"
+                  aria-label="类型"
+                  :disabled="toolForm.transport === 'mcp'"
+                  block
+                />
+              </label>
+              <label class="mk-field mk-field--full" :class="{ 'mk-field--error': toolErrors.endpoint }">
+                <span class="mk-field__label">服务地址 <em class="mk-field__req">*</em></span>
+                <input
+                  v-model="toolForm.endpoint"
+                  class="mk-field__input"
+                  :placeholder="toolForm.transport === 'mcp' ? 'https://…/mcp' : 'https://…'"
+                />
+                <span v-if="toolErrors.endpoint" class="mk-field__err">{{ toolErrors.endpoint }}</span>
+              </label>
+            </div>
+          </section>
+
+          <section class="ac-sec">
+            <h4 class="mk-section__title">说明</h4>
             <!-- 必填项已带 *，非必填不再追加「（可选）」 -->
-            <span class="mk-field__label">描述</span>
-            <textarea v-model="toolForm.description" class="mk-field__textarea" rows="2"></textarea>
-          </label>
+            <label class="mk-field">
+              <span class="mk-field__label">描述</span>
+              <textarea v-model="toolForm.description" class="mk-field__textarea" rows="2"></textarea>
+            </label>
+          </section>
         </div>
         <div class="mk-modal__foot">
           <button type="button" class="mk-btn" @click="toolOpen = false">取消</button>
@@ -1360,7 +1375,12 @@ function goLogs(skillId: string) {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.ac-mcp__formrow { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+/* 弹层字段网格（2026-11-10 统一）：服务配置与 MCP 编辑共用——两列，整行字段挂 --full */
+.ac-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+.ac-form > .mk-field--full { grid-column: 1 / -1; }
+@media (max-width: 720px) {
+  .ac-form { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* MCP 子列表作为容器：行按「子列表自身宽度」重排，而非视口宽度
    （窄屏缩进后子列表可用宽度更小，视口断点不触发） */
@@ -1378,9 +1398,6 @@ function goLogs(skillId: string) {
   .ac-mcp__dot { grid-area: dot; }
   .ac-mcp__main { grid-area: main; }
   .ac-mcp__row .ac-ctl { grid-area: ctl; justify-self: end; }
-}
-@media (max-width: 800px) {
-  .ac-mcp__formrow { grid-template-columns: 1fr; }
 }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
