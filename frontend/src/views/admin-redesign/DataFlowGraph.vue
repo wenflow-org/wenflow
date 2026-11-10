@@ -91,7 +91,7 @@
                 :d="e.d"
                 fill="none"
                 :stroke="e.hue"
-                :stroke-width="e.highlight ? 2.2 : 1.2"
+                :stroke-width="e.highlight ? 2.4 : 1.6"
                 :opacity="e.op"
                 :class="{ 'is-hot': e.highlight }"
                 stroke-linecap="round"
@@ -1082,6 +1082,21 @@ function renderEdges() {
   // 走廊：所有卡同宽同右缘，busX 在卡片右缘与管道右缘之间（lane 分散防叠）
   const outs: EdgeGeom[] = []
   const farAgg = new Map<string, Map<string, 'out' | 'in'>>()
+  /* 卡片 → 每行最右芯片的右缘（行 = 芯片纵向中心，±4px 容差）。
+     宽卡里同一行并排两三枚芯片，源锚点取行内最右那枚才能贴着字段又不横穿邻居。 */
+  const rowsByCard = new Map<string, Array<{ cy: number; right: number }>>()
+  for (const [key, r] of nodeRects.value) {
+    const card = slotCard.get(key)
+    if (!card) continue
+    const row = rowsByCard.get(card) || []
+    row.push({ cy: r.top + r.height / 2, right: r.right })
+    rowsByCard.set(card, row)
+  }
+  const rowRightOf = (card: string, cy: number) => {
+    let best = 0
+    for (const r of rowsByCard.get(card) || []) if (Math.abs(r.cy - cy) <= 4 && r.right > best) best = r.right
+    return best || null
+  }
   let lane = 0
   for (const e of edgeSet.value) {
     const fromSlot = e.kind === 'entry' ? `${e.from}|entry` : `${e.from}|out`
@@ -1105,9 +1120,18 @@ function renderEdges() {
     const sameCol = Math.abs(srcCard.left - dstCard.left) < 2
     const dstIsRight = dstCard.left > srcCard.left + 2
     const dstAnchorLeft = !sameCol && dstIsRight
-    const x1 = srcCard.right
     const y1 = clamp(srcChip.top + srcChip.height / 2, srcCard.top + 4, srcCard.bottom - 4)
-    const x2 = dstAnchorLeft ? dstCard.left : dstCard.right
+    /* 源的锚点也贴回字段：同一行里排在最右的那枚芯片的右缘 +3。
+       整卡取卡片右缘时，宽卡（同一行并排两三枚芯片）的点会落在离字段很远的空白里，
+       同样读成「没连上」。只取行内最右芯片，横线才不会从同排其它芯片身上穿过去；
+       同列仍走右侧走廊，锚点保持卡片右缘（busX 依赖它，挪进来会插进卡内）。 */
+    const rowRight = sameCol ? null : rowRightOf(srcCardKey!, srcChip.top + srcChip.height / 2)
+    const x1 = rowRight ? Math.min(srcCard.right, rowRight + 3) : srcCard.right
+    /* 跨列箭头落在目标芯片的左缘，而不是卡片边界：卡片内边距 20–30px，锚在边界上箭头
+       就悬在留白里，看着像没连到字段（2026-11-10 用户「位置对不上」）。
+       同列走右侧走廊，本来就贴着卡片右缘进出，仍以卡片右缘为锚——改到芯片会在卡内横穿
+       同排的其它芯片（窄档折回单列时整卡都是芯片）。 */
+    const x2 = dstAnchorLeft ? dstChip.left - 3 : dstCard.right
     const y2 = clamp(dstChip.top + dstChip.height / 2, dstCard.top + 4, dstCard.bottom - 4)
     const linked = relatedIds.value.has(e.from) && relatedIds.value.has(e.to)
     const highlight = linked
@@ -1118,9 +1142,11 @@ function renderEdges() {
     /* far 只对同列成立：跨列边线是横向贝塞尔（永远贴着走廊横向走，不沿卡片栈竖排），
        不该被「纵向跨度大」降级成端口徽标——那是把「交给下游」这条主线藏起来。 */
     const mode: EdgeMode = sameCol && spanY > FAR_SPAN ? 'far' : 'near'
-    const baseOp = edgeFaded.value ? 0.22 : 0
-    const op = highlight ? 0.95 : dimmed ? 0.05 : baseOp
-    const dotOp = highlight ? 0.95 : dimmed ? 0.08 : edgeFaded.value ? 0.4 : 0.15
+    /* 静态连线是这个页面的主体（字段从哪来到哪去），不能淡到看不见：
+       原 0.22 / 1.2px 在浅色底上几乎断成虚影（2026-11-10 用户「箭头几乎不可见」）。 */
+    const baseOp = edgeFaded.value ? 0.55 : 0
+    const op = highlight ? 0.95 : dimmed ? 0.12 : baseOp
+    const dotOp = highlight ? 0.95 : dimmed ? 0.15 : edgeFaded.value ? 0.75 : 0.35
     if (mode === 'far') {
       // 不画线：登记端口徽标（双向：源卡「下游」，目标卡「上游」）
       if (!farAgg.has(srcCardKey!)) farAgg.set(srcCardKey!, new Map())

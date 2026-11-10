@@ -109,6 +109,14 @@ describe('path 阶段（入口 24 字段；闸口分发 normalizedInput；内部
     expect(DataFlowGraphSource).toContain('v-if="step.summary" class="dfg-step__summary"')
     expect(DataFlowGraphSource).toContain('v-if="step.role && !step.summary"')
   })
+  /* 2026-11-10 用户「箭头几乎不可见，而且位置对不上」：
+     静态连线原为 0.22 透明度 / 1.2px，浅色底上几乎断成虚影；跨列箭头锚在卡片左边界，
+     离字段还有 20–30px 内边距，看着像没连上。两处都钉住，别再退回去。 */
+  it('跨列箭头落在目标字段左缘；静态连线足够可见', () => {
+    expect(DataFlowGraphSource).toContain('const x2 = dstAnchorLeft ? dstChip.left - 3 : dstCard.right')
+    expect(DataFlowGraphSource).toContain('edgeFaded.value ? 0.55 : 0')
+    expect(DataFlowGraphSource).toContain("e.highlight ? 2.4 : 1.6")
+  })
   /* 2026-11-10 用户「未解析是怎么回事」：代码服务（确定性实现、无 LLM 步骤）本就不进
      Agent 名册，后端 resolveStepAgent 会置 unresolved——但那是设计如此，不是故障。
      健康中心「步骤解析」检查项也排除 service；旅程卡上挂「未解析」会被读成服务坏了。 */
