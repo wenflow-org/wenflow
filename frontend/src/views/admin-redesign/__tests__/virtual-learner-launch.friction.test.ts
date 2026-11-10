@@ -1,10 +1,11 @@
 /**
- * 启动弹层（VirtualLearnerLaunch）与提示词试跑（VirtualLearnerPromptTest）的对抗度口径（2026-10-26）：
+ * 启动弹层（VirtualLearnerLaunch）与用人设模拟试跑（skill-design/persona-trial）的对抗度口径（2026-10-26；
  * - 同一个后端枚举 frictionBudget 此前两处两套词（「无摩擦 / 压力测试」vs「配合 / 极端」），
  *   运营读成两个参数；词表收到 vlab.ts 的 FRICTION_OPTIONS，两处共用。
  * - 启动弹层收成「故事 + 启动」一行，运行模式与对抗预算折进「更多设置」并保留默认值。
  *
- * 两个组件都 Teleport 到 body，查询走 document.body（cleanup / batch 测试同判例）。
+ * 2026-11-10 试跑入口从虚拟学习者行菜单迁到 Skill 详情 → 试跑，组件换成 persona-trial）：
+ * 启动弹层 Teleport 到 body，查询走 document.body（cleanup / batch 测试同判例）。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
@@ -37,14 +38,22 @@ vi.mock('@/api/adminApi', () => ({
   }
 }));
 vi.mock('@/utils/toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), close: vi.fn() } }));
-vi.mock('../live', () => ({ errMsg: (e: unknown) => String(e), refreshLiveVirtuals: vi.fn() }));
+vi.mock('../live', async () => {
+  const { ref } = await import('vue');
+  return {
+    errMsg: (e: unknown) => String(e),
+    refreshLiveVirtuals: vi.fn(),
+    // 人设试跑的面板从这份全量清单取「虚拟学习者」选项
+    liveVirtuals: ref([{ id: 'p1', name: '小陈' }]),
+  };
+});
 vi.mock('../store', async () => {
   const { ref } = await import('vue');
   return { isLive: ref(true), openSubPage: vi.fn() };
 });
 
 import VirtualLearnerLaunch from '../VirtualLearnerLaunch.vue';
-import VirtualLearnerPromptTest from '../VirtualLearnerPromptTest.vue';
+import PersonaTrial from '../skill-design/persona-trial.vue';
 import { FRICTION_OPTIONS } from '../vlab';
 import { mkSelectLabels } from '@/components/mk/__tests__/mkSelect';
 
@@ -93,10 +102,9 @@ describe('启动弹层：故事 + 启动，低频调参折进更多设置', () =
   });
 });
 
-describe('提示词试跑：对抗度同一套中文词', () => {
+describe('用人设模拟试跑：对抗度同一套中文词', () => {
   it('下拉选项 = FRICTION_OPTIONS（不再出现「无摩擦 / 压力测试」）', async () => {
-    const w = mount(VirtualLearnerPromptTest, mountOpts);
-    (w.vm as unknown as { open: (s: unknown) => void }).open({ id: 'p1', name: '小陈' });
+    const w = mount(PersonaTrial, { props: { skillId: 'goal-conversation' } });
     await flushPromises();
     expect(mkSelectLabels(w as never, '学习者对抗度')).toEqual(EXPECTED_LABELS);
     w.unmount();

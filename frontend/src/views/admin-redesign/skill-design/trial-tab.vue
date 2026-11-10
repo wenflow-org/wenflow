@@ -8,19 +8,28 @@
       <div class="mk-card__head">
         <h3 class="mk-card__title">试跑</h3>
         <div class="mk-card__head-right">
+          <!-- 两档（2026-11-10 用户「提示词试跑挂在虚拟学习者列表不合适」）：
+               直接跑一次给 JSON；或用人设模拟——那条入口原来在虚拟学习者行菜单里，
+               测的其实是本页提示词，挪回提示词自己的页面。 -->
+          <div v-if="supportsPersona" class="mk-seg" role="group" aria-label="试跑方式">
+            <button type="button" class="mk-seg__item" :class="{ 'mk-seg__item--active': trialMode === 'manual' }" @click="trialMode = 'manual'">手动输入</button>
+            <button type="button" class="mk-seg__item" :class="{ 'mk-seg__item--active': trialMode === 'persona' }" @click="trialMode = 'persona'">用人设模拟</button>
+          </div>
           <!-- 「填入示例输入」（2026-11-08 用户「让管理员手写冷冰冰的 JSON 太难用了」）：
                骨架值全是类型占位（""/0/false），直接点上跑必然失败。这里按输入契约给一组
                能跑通的示例值，点一下即填好，随后可直接「开始试跑」。 -->
-          <button type="button" class="mk-link" :disabled="trialRunning" title="按输入契约填入一组可直接试跑的示例值" @click="fillSampleInput">填入示例输入</button>
-          <button type="button" class="mk-link" :disabled="!trialInput.trim() || trialRunning" @click="formatTrialJson">格式化</button>
-          <!-- 按钮文案只由「是否真的在跑」决定（2026-11-08 用户截图里的「运行中…」是旧版把
-               disabled 误当 isRunning 的写法，本处已按 trialRunning 单一判据）。 -->
-          <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" :disabled="trialRunning" @click="runTrial">
-            {{ trialRunning ? '运行中…' : '▶ 开始试跑' }}
-          </button>
+          <template v-if="trialMode === 'manual'">
+            <button type="button" class="mk-link" :disabled="trialRunning" title="按输入契约填入一组可直接试跑的示例值" @click="fillSampleInput">填入示例输入</button>
+            <button type="button" class="mk-link" :disabled="!trialInput.trim() || trialRunning" @click="formatTrialJson">格式化</button>
+            <!-- 按钮文案只由「是否真的在跑」决定（2026-11-08 用户截图里的「运行中…」是旧版把
+                 disabled 误当 isRunning 的写法，本处已按 trialRunning 单一判据）。 -->
+            <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" :disabled="trialRunning" @click="runTrial">
+              {{ trialRunning ? '运行中…' : '▶ 开始试跑' }}
+            </button>
+          </template>
         </div>
       </div>
-      <div class="sdp-trial__body">
+      <div v-if="trialMode === 'manual'" class="sdp-trial__body">
         <!-- 试跑输入（JSON 语法高亮覆盖层） -->
         <div class="sdp-codehl sdp-codehl--json">
           <pre class="sdp-codehl__pre mono" aria-hidden="true"><code v-html="trialHighlighted"></code></pre>
@@ -74,6 +83,7 @@
           </p>
         </div>
       </div>
+      <PersonaTrial v-else :skill-id="skillId" />
     </section>
   </div>
 </template>
@@ -90,11 +100,17 @@ import 'highlight.js/styles/github-dark.css'
 import { adminPromptWorkbenchApi, adminSkillsApi } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
 import { errText, buildTrialInputFromContract, type TrialInputDecl } from './sdp-shared'
+import PersonaTrial from './persona-trial.vue'
 
 hljs.registerLanguage('json', json)
 
 const props = defineProps<{ skillId: string; refreshTick: number }>()
 const emit = defineEmits<{ (e: 'dirty', p: { dirty: boolean; label: string }): void }>()
+
+/* 两档试跑：手动给 JSON / 用人设模拟（2026-11-10 从「虚拟学习者」行菜单迁入）。
+   只有评测适配器认识的两个 Skill 才有第二档——其余 Skill 塞人设也跑不通。 */
+const trialMode = ref<'manual' | 'persona'>('manual')
+const supportsPersona = computed(() => ['goal-conversation', 'path-planning'].includes(props.skillId))
 
 /* ---------- 试跑 ---------- */
 /* 默认载荷由该 Skill 的输入契约（core.yaml inputs）生成，见 loadTrialDefault（#15）：

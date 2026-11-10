@@ -314,8 +314,9 @@
                       role="menuitem"
                       @click="openLaunch(s)"
                     >再跑一次</button>
-                    <button type="button" class="mk-menu__item" role="menuitem" @click="openPromptTest(s)">提示词试跑</button>
-                    <div class="mk-menu__sep" aria-hidden="true"></div>
+                    <!-- 分隔线跟随上一组：提示词试跑已迁到 Skill 详情 → 试跑（2026-11-10），
+                         「再跑一次」不渲染时这里若还留着会变成菜单顶部的一条悬空分隔线 -->
+                    <div v-if="rowActionOf(s).key !== 'launch' && s.storyCount > 0" class="mk-menu__sep" aria-hidden="true"></div>
                     <button type="button" class="mk-menu__item" role="menuitem" @click="menuOpenSourceCard(s)">查看来源卡</button>
                     <div class="mk-menu__sep" aria-hidden="true"></div>
                     <button
@@ -387,7 +388,6 @@
     <VirtualLearnerReclaim ref="reclaimRef" @done="onReclaimDone" />
     <VirtualLearnerCleanup ref="cleanupRef" @done="onReclaimDone" />
     <VirtualLearnerLaunch ref="launchRef" />
-    <VirtualLearnerPromptTest ref="promptRef" />
     <VirtualLearnerSettingsDrawer
       ref="settingsDrawerRef"
       :concurrency="concurrency"
@@ -430,7 +430,6 @@ import VirtualLearnerReclaim from './VirtualLearnerReclaim.vue'
 import VirtualLearnerCleanup from './VirtualLearnerCleanup.vue'
 import VirtualLearnerLaunch from './VirtualLearnerLaunch.vue'
 import VirtualLearnerBatchBar from './VirtualLearnerBatchBar.vue'
-import VirtualLearnerPromptTest from './VirtualLearnerPromptTest.vue'
 import VirtualLearnerSettingsDrawer from './VirtualLearnerSettingsDrawer.vue'
 import CardDeriveDialog from './CardDeriveDialog.vue'
 import type { VirtualLearnerRow as Sample } from './virtualLearnersTypes'
@@ -751,15 +750,10 @@ function openReclaimFromMenu() {
 const launchRef = ref<InstanceType<typeof VirtualLearnerLaunch> | null>(null)
 const reclaimRef = ref<InstanceType<typeof VirtualLearnerReclaim> | null>(null)
 const cleanupRef = ref<InstanceType<typeof VirtualLearnerCleanup> | null>(null)
-const promptRef = ref<InstanceType<typeof VirtualLearnerPromptTest> | null>(null)
 
 function openReclaimModal() { void reclaimRef.value?.open() }
 function onReclaimDone() { selected.value = [] }
 function openLaunch(s: Sample) { void launchRef.value?.open(s) }
-function openPromptTest(s: Sample) {
-  closeMenu()
-  promptRef.value?.open(s)
-}
 
 async function removeSample(s: Sample) {
   const ok = await askConfirm({

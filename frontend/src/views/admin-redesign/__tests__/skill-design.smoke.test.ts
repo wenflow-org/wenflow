@@ -535,6 +535,24 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
     wrapper.unmount();
   });
 
+  /* 2026-11-10 用户「提示词试跑挂在虚拟学习者列表肯定不合适」：入口迁到提示词自己的页面。
+     「用人设模拟」只对评测适配器认识的 Skill 开放（后端 runSkillEvalCase 只实现了
+     goal-conversation / path-planning），其余 Skill 塞人设也跑不通，不出这一档。 */
+  it('试跑 tab：评测适配器认识的 Skill 有「手动输入 / 用人设模拟」两档', async () => {
+    const { wrapper } = await mountPage('goal-conversation');
+    await gotoTab(wrapper, '在线试跑');
+    const modes = wrapper.find('.sdp-pane').findAll('.mk-seg__item').map((b) => b.text());
+    expect(modes).toEqual(['手动输入', '用人设模拟']);
+    wrapper.unmount();
+  });
+
+  it('试跑 tab：其余 Skill 只有手动输入（不出现跑不通的人设档）', async () => {
+    const { wrapper } = await mountPage();
+    await gotoTab(wrapper, '在线试跑');
+    expect(wrapper.find('.sdp-pane').findAll('.mk-seg__item').map((b) => b.text())).not.toContain('用人设模拟');
+    wrapper.unmount();
+  });
+
   it('试跑 tab：只负责跑一次——调用历史与生效 Prompt 都不在本页', async () => {
     const { wrapper } = await mountPage();
     await gotoTab(wrapper, '在线试跑');
