@@ -100,6 +100,23 @@ describe('path 阶段（入口 24 字段；闸口分发 normalizedInput；内部
     expect(svc!.kind).toBe('service')
     expect(svc!.outputs).toHaveLength(0)
   })
+  /* 2026-11-10 用户「未解析是怎么回事」：代码服务（确定性实现、无 LLM 步骤）本就不进
+     Agent 名册，后端 resolveStepAgent 会置 unresolved——但那是设计如此，不是故障。
+     健康中心「步骤解析」检查项也排除 service；旅程卡上挂「未解析」会被读成服务坏了。 */
+  it('代码服务步骤不挂「未解析」；真查不到的 Agent 才标注', () => {
+    const withFlags = buildStageFlow(
+      'path',
+      (detailsById as any).path,
+      detailsById as any,
+      [
+        { step: 1, agentId: 'PathCoordinator.buildFramedNormalizedInput', resolved: { displayName: 'input-framing', kind: 'service', unresolved: true } },
+        { step: 2, agentId: 'skill:path-planning', resolved: { displayName: '路径规划', kind: 'skill', unresolved: true } },
+      ],
+      stageNames,
+    )
+    expect(withFlags.steps.find((x) => x.kind === 'service')!.unresolved).toBe(false)
+    expect(withFlags.steps.find((x) => x.agentId === 'skill:path-planning')!.unresolved).toBe(true)
+  })
   it('orphan 步骤：已注册 agent 但无字段契约（0 routing 行 + 不在 defSteps）→ kind=orphan', () => {
     if (f.steps.some((s) => s.agentId === 'skill:kc-mapper')) {
       const o = f.steps.find((s) => s.agentId === 'skill:kc-mapper')!

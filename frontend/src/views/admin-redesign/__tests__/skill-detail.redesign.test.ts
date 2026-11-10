@@ -27,8 +27,6 @@ import SkillDetail from '../SkillDetail.vue'
 import Skills from '../Skills.vue'
 import { subPage, closeSubPage, dataSource, liveSkillStatsMap } from '../store'
 import { liveSkillProfiles } from '../live'
-// 阶段页签断言消费画布列头同一份译名表（决策：页签与列头同名，取同一数据源）
-import { STAGE_ORDER, STAGE_LABELS } from '../dataFlow'
 
 const { apiObject, metaMock, promptMock, cfgMock, routingsMock, versionsMock, overviewMock, coreMock, testSkillMock, probeMock } =
   vi.hoisted(() => ({
@@ -321,22 +319,16 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
     expect(OrchestratorSource).toContain("qTab === 'field-routings'")
   })
 
-  it('编排图阶段页签用中文（2026-10-26 评审：与画布列头同名，不再英中对照）', () => {
+  /* 2026-11-10 用户「阶段换成英文名，和 agent 一样」：页签与画布列头都用阶段 id，
+     中文全名只留在悬停 title 里（与 goal-agent 同一语言，读起来是一对）。 */
+  it('编排图阶段名用英文 id，中文全名退到悬停', () => {
     expect(OrchestratorSource).toContain('{{ stageTabLabel(s) }}')
-    /* 2026-11-02 评审：名以列头 / 字段旅程页头那份为准——后端显示名去「阶段」，
-       与 DataFlowGraph 的 stageNames（同为 displayName 去「阶段」）同一数据源。
-       断言数据源与回退，不钉某个常量名：常量改名不该让决策失守。 */
-    expect(OrchestratorSource).toContain("(s.name || '').replace(/阶段$/, '')")
-    // 拿不到后端显示名才回退 dataFlow 的共享中文译名表（画布列头用的同一份），不裸出英文 id
-    expect(OrchestratorSource).toContain('STAGE_LABELS[s.id]')
-    // 第二份手写译名表已撤：同一阶段不再有两个叫法
-    expect(OrchestratorSource).not.toContain('const STAGE_TAB_LABEL')
-    // 共享译名表覆盖全部阶段且均为中文 → 回退路径不会把 s.id（英文）露出来
-    for (const id of STAGE_ORDER) {
-      const label = STAGE_LABELS[id]
-      expect(label, `STAGE_LABELS[${id}] 应有中文名`).toBeTruthy()
-      expect(/[A-Za-z]/.test(label), `STAGE_LABELS[${id}] 不应含英文 id`).toBe(false)
-    }
+    expect(OrchestratorSource).toContain('const stageTabLabel = (s: Stage) => s.id')
+    // 列头：可见文本 = s.id，title 仍给中文全名
+    expect(OrchestratorSource).toContain('class="orch-odg-colname" :title="s.name">{{ s.id }}')
+    // 悬停仍是业务名（中文）在先
+    expect(OrchestratorSource).toContain('function stageTabTitle(s: Stage): string')
+    expect(OrchestratorSource).toContain('return [s.name,')
   })
 
   it('编排图悬停信息双层结构（2026-10-14 用户：业务名 + 技术查验）', () => {

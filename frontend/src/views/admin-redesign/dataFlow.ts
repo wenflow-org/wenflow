@@ -7,7 +7,8 @@
  *
  * 事实源与语义（与后端字段路由矩阵一致，不造数据）：
  * - routing 行 = 「agentId 产出的 fieldId，handoff 交给哪些目标」（agentId ∈ skill:* 或 &lt;stage&gt;-agent）
- * - 步骤顺序 = 编排文件 defSteps（服务步骤如实标注 unresolved，与状态条「未解析」同口径）
+ * - 步骤顺序 = 编排文件 defSteps（代码服务 step 不置 unresolved：服务本就不在 Agent 名册，
+ *   挂「未解析」会被读成故障；真正查不到的 agent 才标注）
  * - 调用统计 = 运行时 agent/skill 节点（liveTopoNodes），桥接 agent 为其下 skill 聚合
  */
 import { shortName, type StageDetailLike } from './fieldFlowLayout'
@@ -344,7 +345,9 @@ export function buildStageFlow(
       role: def?.role,
       loopOver: def?.loopOver,
       condition: def?.condition,
-      unresolved: Boolean(def?.resolved?.unresolved),
+      // 代码服务不在 Agent 名册是设计如此（健康中心「步骤解析」检查项同样排除 service 步骤），
+      // 不参与「未解析」标注；其余步骤查不到定义 = 运行时不可路由，如实标注。
+      unresolved: Boolean(def?.resolved?.unresolved) && kind !== 'service',
       inputs,
       outputs,
       fromStage: owner || undefined,

@@ -93,7 +93,9 @@
           <div v-for="(s, i) in stages" :key="s.id" class="orch-odg-col">
             <header class="orch-odg-colhead">
               <span class="orch-odg-no">{{ i + 1 }}</span>
-              <span class="orch-odg-colname" :title="s.name">{{ s.name }}</span>
+              <!-- 2026-11-10 用户「阶段换成英文名，和 agent 一样」：列头用阶段 id（goal/path/…），
+                   中文全名退到悬停 title；与右侧 goal-agent 同一语言，读起来是一对。 -->
+              <span class="orch-odg-colname" :title="s.name">{{ s.id }}</span>
               <span class="orch-odg-agent mono" :title="s.agentId">{{ s.agentId }}</span>
             </header>
             <div class="orch-odg-body">
@@ -797,7 +799,9 @@ async function retryStages() {
  *  2026-11-02 评审：页签此前另挂一份手写译名（目标 / 路径 / 学习者），与列头和旅程页头
  *  （澄清 / 规划 / 画像，均取后端显示名）对不上——同一阶段在一屏里有两个叫法。
  *  名以列头那份为准（后端显示名去「阶段」），拿不到显示名才回退 dataFlow 的阶段译名。 */
-const stageTabLabel = (s: Stage) => (s.name || '').replace(/阶段$/, '') || STAGE_LABELS[s.id] || s.id
+/** 页签同样用阶段 id（2026-11-10 用户「阶段换成英文名，和 agent 一样」）；
+    中文全名仍在 title（stageTabTitle）里，悬停可读。 */
+const stageTabLabel = (s: Stage) => s.id || STAGE_LABELS[s.id] || ''
 
 function stageTabTitle(s: Stage): string {
   return [s.name, `Agent: ${s.agentId}`, `Skill: ${s.skills.length} 个`].join('\n')

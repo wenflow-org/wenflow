@@ -19,7 +19,8 @@
       <div class="dfg-toolbar">
         <div class="dfg-toolbar__status">
           <span class="dfg-stage-dot" :style="{ background: toneOf(flow?.stageId || '').hue }"></span>
-          <strong class="dfg-title">{{ flow?.stageName || '' }}&nbsp;<span class="dfg-title__agent mono">{{ flow?.agentId }}</span></strong>
+          <!-- 阶段名走 id（2026-11-10 与总览列头同语言），中文全名留在下方入口/出口的悬停句里 -->
+          <strong class="dfg-title">{{ flow?.stageId || '' }}&nbsp;<span class="dfg-title__agent mono">{{ flow?.agentId }}</span></strong>
           <span class="dfg-meta">{{ flow ? flow.fieldCount : '—' }} 字段 · {{ flow ? flow.steps.length : '—' }} 步</span>
           <!-- 搜索命中反馈（审核 #114）：无命中此前与空闲态完全一致（画布原样、无提示），
                用户分不清「没这个字段」还是「搜索没生效」；有输入即报命中数，0 命中给醒目提示。
@@ -119,7 +120,7 @@
                 class="dfg-gate__src"
                 :title="`前往 ${flow.entryFrom?.stageName}（${flow.entryFrom?.stageId}-agent），看这些字段在那边是怎么产出的`"
                 @click="switchStage(flow.entryFrom!.stageId)"
-              >入口 · 来自 {{ flow.entryFrom?.stageName }}<span class="dfg-gate__jump">↗</span></button>
+              >入口 · 来自 {{ flow.entryFrom?.stageId }}<span class="dfg-gate__jump">↗</span></button>
               <!-- 入口卡与出口卡同构：字段数由右侧「N 字段」徽章给出，对端 agent 由上面卡题
                    title 给出——此处不再复读一句「N 个字段经 X-agent 移交本阶段」
                    （2026-11-02 走查：出口卡那句已同批删除） -->
@@ -213,7 +214,7 @@
               <span v-else class="dfg-step__badge dfg-step__badge--warn" title="该 Skill 已注册，但没有声明任何字段的产出与输入，未接入数据流转">无字段路由</span>
               <span v-if="step.unresolved" class="dfg-step__badge dfg-step__badge--warn" :title="UNRESOLVED_HINT">未解析</span>
               <!-- 阶段名是中文，等宽只留给 agentId 这类机器串 -->
-              <button v-if="step.fromStage" type="button" class="dfg-step__stage" @click="switchStage(step.fromStage!)" title="跳到该阶段">→ {{ stageNameOf(step.fromStage) }}</button>
+              <button v-if="step.fromStage" type="button" class="dfg-step__stage" @click="switchStage(step.fromStage!)" title="跳到该阶段">→ {{ step.fromStage }}</button>
               <span v-if="step.role" class="dfg-step__role">{{ step.role }}</span>
               <template v-if="step.kind === 'orphan'">
                 <span class="dfg-step__agent mono">{{ step.agentId }}</span>
@@ -340,7 +341,7 @@
                 class="dfg-gate__src"
                 :title="`前往 ${flow.exitTo?.stageName}（${flow.exitTo?.stageId}-agent），看这些字段在那边是怎么被消费的`"
                 @click="switchStage(flow.exitTo!.stageId)"
-              >出口 · 交给 {{ flow.exitTo?.stageName }}<span class="dfg-gate__jump">↗</span></button>
+              >出口 · 交给 {{ flow.exitTo?.stageId }}<span class="dfg-gate__jump">↗</span></button>
             </div>
             <span class="dfg-gate__count">{{ flow.exit.length }} 字段</span>
             <button type="button" v-for="p in farPorts['__exit__'] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">来自 {{ p.peerLabel }}<b>{{ p.count }}</b></button>
@@ -557,7 +558,11 @@ const props = defineProps<{ stage: string }>()
 const emit = defineEmits<{ changed: []; stage: [string] }>()
 
 /* 文案单源（R6 复读单源化）：工具步骤卡与 Skill 步骤卡的「未解析」悬停释共用一份 */
-const UNRESOLVED_HINT = '编排文件里没有解析到这一步的定义'
+/* 未解析 = 这一步的 agentId 在 Agent 名册里查不到 → 运行时无法路由。
+   代码服务（kind=service）本来就不进名册（确定性实现，无 LLM 步骤），不算缺陷，
+   故数据层对 service 步骤不置 unresolved（2026-11-10：否则「代码服务」卡上还挂
+   「未解析」，读成服务坏了）。 */
+const UNRESOLVED_HINT = '这一步引用的 Agent 不在 Agent 名册里，运行时无法路由（多半是改名或删除后编排没同步）'
 
 /* ================= 状态 ================= */
 const loading = ref(false)
