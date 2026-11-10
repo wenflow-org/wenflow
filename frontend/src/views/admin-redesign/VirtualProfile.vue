@@ -1290,7 +1290,7 @@ async function batchRunStories() {
   // 属于高成本、难回滚的操作，先让用户确认数量与预算消耗，避免误点批量勾选
   const ok = await askConfirm({
     title: '批量运行故事',
-    message: `将为勾选的 ${targets.length} 个故事各创建一个真实 LLM 运行并自动运行，将消耗 AI 调用预算。确定继续？`,
+    message: `将为勾选的 ${targets.length} 个故事各创建一个真实 LLM 运行并自动运行，将消耗 AI 调用预算。`,
     confirmText: '批量运行',
     danger: false
   })

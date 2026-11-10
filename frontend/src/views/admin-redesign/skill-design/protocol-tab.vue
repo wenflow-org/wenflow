@@ -856,7 +856,9 @@ async function requestPublish() {
     const ok = await askConfirm({
       title: '发布到运行时',
       message: `确认发布 ${props.skillId} 的核心文件？\n发布后确定性编译为五块 Prompt（skill.${props.skillId}.md + 数据库线上生效版本），运行时立即生效。如需回退，可在「版本」页签回滚到历史版本。`,
-      confirmText: '发布'
+      confirmText: '发布',
+      /* 与公告页「发布公告」同判据：发布是正向动作（版本页签可回滚），不吃默认红底 */
+      danger: false
     })
     if (!ok) return
   }

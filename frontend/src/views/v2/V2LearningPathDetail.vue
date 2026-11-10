@@ -1590,7 +1590,7 @@ function insertTaskAfter(stage: Record<string, any>, task: Record<string, any>) 
 
 async function deleteTask(task: Record<string, any>) {
   const confirmed = await askConfirm({
-    title: '删除这个任务？',
+    title: '删除这个任务',
     message: `「${task.title || task.displayLabel || '该任务'}」会从本阶段移除，顺序自动重排。只允许删除尚未开始的任务。`,
     confirmText: '删除',
     danger: true,

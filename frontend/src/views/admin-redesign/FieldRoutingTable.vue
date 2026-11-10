@@ -498,7 +498,7 @@ async function closeOrchestration() {
   if (orchOpen.value && orchDirty.value) {
     // 脏检查兜底：此前四个关闭路径都直连 orchOpen=false，编辑中的 YAML 改动会被静默丢弃
     const ok = await askConfirm({
-      title: '放弃未保存的修改？',
+      title: '放弃未保存的修改',
       message: '编排文件内容已被修改且尚未保存到文件，关闭将丢弃这些改动。',
       confirmText: '丢弃并关闭',
       /* danger:false = 「放弃未保存修改」统一档（2026-10-06 审核 §主题 7）：

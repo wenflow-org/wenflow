@@ -192,7 +192,7 @@ async function runExport() {
   // 按勾选顺序列出本次会落盘的个人数据（Set 去重：两张日志表说明不同，但未来加表可能撞词）
   const contents = [...new Set(keys.map((k) => EXPORT_DATA_NOTES[k] || k))]
   const ok = await askConfirm({
-    title: '确认导出',
+    title: '导出数据',
     message: `将导出 ${labels.join('、')}（共 ${keys.length} 项，${ranges.join('，')}）。文件包含${contents.join('、')}，请按数据安全规范保存。`,
     confirmText: '开始导出',
     // 导出是只读取数、不改动任何数据，不该沿用破坏性操作的红色警示按钮

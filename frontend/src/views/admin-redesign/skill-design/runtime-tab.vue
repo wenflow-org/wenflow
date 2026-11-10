@@ -716,7 +716,7 @@ async function resetRuntime() {
   if (rtSaving.value) return
   const ok = await askConfirm({
     title: '恢复默认配置',
-    message: '确定恢复该 Skill 的默认模型配置吗？\n本 Skill 的覆盖配置将被删除，改为用平台默认。',
+    message: '确认恢复该 Skill 的默认模型配置？\n本 Skill 的覆盖配置将被删除，改为用平台默认。',
     confirmText: '恢复默认'
   })
   if (!ok) return

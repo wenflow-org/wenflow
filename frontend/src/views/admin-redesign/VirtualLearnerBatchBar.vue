@@ -92,7 +92,7 @@ async function batchLaunchAllStories() {
   }
   const ok = await askConfirm({
     title: '启动全部故事（含自动驾驶）',
-    message: `将为选中的 ${ids.length} 个虚拟学习者启动其全部故事的实验会话，共约 ${totalStories} 个会话，并自动开启自动驾驶（直达路径全部完成）。\n注意：并发多个自动驾驶对 LLM 压力较大，建议分批（每批 1-2 人）。确认启动？`,
+    message: `将为选中的 ${ids.length} 个虚拟学习者启动其全部故事的实验会话，共约 ${totalStories} 个会话，并自动开启自动驾驶（直达路径全部完成）。\n注意：并发多个自动驾驶对 LLM 压力较大，建议分批（每批 1-2 人）。`,
     confirmText: `启动 ${totalStories} 个会话`,
     danger: false
   })
@@ -173,7 +173,7 @@ async function batchAutopilotStart() {
   }
   const ok = await askConfirm({
     title: '批量启动自动驾驶',
-    message: `将为选中的 ${ids.length} 个虚拟学习者、约 ${candidates} 个最新会话开启自动驾驶（直达路径全部完成）。\n已在运行自动驾驶的会话会自动跳过，不会重复启动。确认启动？`,
+    message: `将为选中的 ${ids.length} 个虚拟学习者、约 ${candidates} 个最新会话开启自动驾驶（直达路径全部完成）。\n已在运行自动驾驶的会话会自动跳过，不会重复启动。`,
     confirmText: `启动 ${candidates} 个会话的自动驾驶`,
     danger: false
   })
@@ -225,7 +225,7 @@ async function batchAutopilotStop() {
   if (!ids.length || batchActionBusy.value) return
   const ok = await askConfirm({
     title: '批量停止自动驾驶',
-    message: `将停止选中的 ${ids.length} 个虚拟学习者全部故事最新会话的自动驾驶。\n学习进度与对话保留，可随时再次启动。确认停止？`,
+    message: `将停止选中的 ${ids.length} 个虚拟学习者全部故事最新会话的自动驾驶。\n学习进度与对话保留，可随时再次启动。`,
     confirmText: `停止 ${ids.length} 人`,
     danger: false
   })

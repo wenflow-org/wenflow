@@ -1736,7 +1736,7 @@ async function onLessonClick(l: LearnLesson) {
   if (!id || busy.value) return
   const ok = await askConfirm({
     title: '从该课开始学习',
-    message: `将从「第 ${lessonNumber(l.taskId)} 课 · ${l.title}」开始学习（跳过当前卡住的课）。\n已完成课程进度保留，未开始课程不会受影响。确认？`,
+    message: `将从「第 ${lessonNumber(l.taskId)} 课 · ${l.title}」开始学习（跳过当前卡住的课）。\n已完成课程进度保留，未开始课程不会受影响。`,
     confirmText: '开始学习',
     danger: false
   })
@@ -3078,7 +3078,7 @@ async function act(kind: string) {
     if (kind === 'rerun') {
       const ok = await askConfirm({
         title: '按原输入重跑',
-        message: '将用原输入新建一个会话并重跑一遍，会消耗新的 AI 调用。\n当前会话与它的记录保留，不会被覆盖。确认重跑？',
+        message: '将用原输入新建一个会话并重跑一遍，会消耗新的 AI 调用。\n当前会话与它的记录保留，不会被覆盖。',
         confirmText: '重跑'
       })
       if (!ok) return
@@ -3094,7 +3094,7 @@ async function act(kind: string) {
     if (kind === 'resetPath') {
       const ok = await askConfirm({
         title: '重建学习路径',
-        message: '将删除当前路径方案并重新生成（目标上下文保留）。\n已有教学历史或进度时会拒绝执行。确认？',
+        message: '将删除当前路径方案并重新生成（目标上下文保留）。\n已有教学历史或进度时会拒绝执行。',
         confirmText: '重建路径',
         danger: false
       })
@@ -3103,7 +3103,7 @@ async function act(kind: string) {
     if (kind === 'replanPath') {
       const ok = await askConfirm({
         title: '按评审意见重规划',
-        message: '将按当前评审意见重新规划路径方案，替换现有方案（目标上下文保留）。\n确认？',
+        message: '将按当前评审意见重新规划路径方案，替换现有方案（目标上下文保留）。',
         confirmText: '重新规划',
         danger: false
       })

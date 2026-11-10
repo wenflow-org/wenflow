@@ -582,9 +582,9 @@ function deleteErrText(e: unknown): string {
 async function onDelete(row: Record<string, any>) {
   if (deleting.value) return
   const ok = await askConfirm({
-    title: `删除字段 ${row.fieldId}？`,
-    message: `将同时删除该字段的核心声明、编排字段/路由与数据库记录（原文件会自动备份，可恢复）。\n\n删除前请确认没有下游引用：若其他 Agent 路由或 Skill 仍引用它，后端会拒绝删除并列出引用方。`,
-    confirmText: '确认删除（不可恢复）'
+    title: '删除字段',
+    message: `将删除字段 ${row.fieldId} 的核心声明、编排字段/路由与数据库记录（原文件会自动备份，可恢复）。\n\n删除前请确认没有下游引用：若其他 Agent 路由或 Skill 仍引用它，后端会拒绝删除并列出引用方。`,
+    confirmText: '删除'
   })
   if (!ok) return
   deleting.value = true

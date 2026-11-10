@@ -485,7 +485,7 @@ async function savePolicy(): Promise<void> {
     const ok = await askConfirm({
       title: '开放公网访问',
       message: '你正在将 Admin 后台开放到公网/任意来源访问。\n任何能访问该服务地址的人都能看到管理入口，请确认已了解风险。',
-      confirmText: '确认开放',
+      confirmText: '开放',
     })
     if (!ok) return
   } else if (isTightening()) {
@@ -495,7 +495,7 @@ async function savePolicy(): Promise<void> {
       title: '收紧后台访问来源',
       message: `保存后只接受「${MODE_TEXT[policy.adminAccessMode]}」进来的请求。
 如果你现在不是从这类来源访问后台，保存会立刻把自己挡在门外（要到服务器上改配置才能恢复）。`,
-      confirmText: '我已确认当前来源',
+      confirmText: '继续保存',
     })
     if (!ok) return
   }
@@ -515,7 +515,7 @@ onBeforeRouteLeave(async () => {
   if (!policyDirty.value) return true
   const ok = await askConfirm({
     title: '有未保存的访问策略',
-    message: '离开将丢弃这些修改，确认离开？',
+    message: '离开将丢弃这些修改。',
     confirmText: '丢弃并离开',
   })
   return ok === true

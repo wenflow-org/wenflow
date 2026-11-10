@@ -697,7 +697,7 @@ async function revoke(s: AdminSessionRow) {
   const d = deviceOf(s)
   const confirmed = await askConfirm({
     title: '强制下线该会话',
-    message: `确定强制下线此会话吗？\n设备：${[d.browser, d.os, s.remember ? '记住我' : ''].filter(Boolean).join(' · ')}\nIP：${ipText(s.ip)}\n登录时间：${fmtDateTime(s.issuedAt)}`,
+    message: `确认强制下线此会话？\n设备：${[d.browser, d.os, s.remember ? '记住我' : ''].filter(Boolean).join(' · ')}\nIP：${ipText(s.ip)}\n登录时间：${fmtDateTime(s.issuedAt)}`,
     confirmText: '强制下线',
     busy: true,
   })
@@ -723,7 +723,7 @@ async function revokeAllSessions() {
   const scope = bulkScope.value
   const confirmed = await askConfirm({
     title: `下线${scope.label}全部活跃会话`,
-    message: `将强制下线${scope.label}的全部活跃会话（共 ${count} 个，当前登录标签页除外），确定吗？`,
+    message: `将强制下线${scope.label}的全部活跃会话（共 ${count} 个，当前登录标签页除外）。`,
     confirmText: '全部下线',
     busy: true,
   })
@@ -749,7 +749,7 @@ async function cleanupAllHistory() {
   const scope = bulkScope.value
   const confirmed = await askConfirm({
     title: `清理${scope.label}的历史会话`,
-    message: `将删除${scope.label}的 ${count} 条已结束会话记录（已过期或已下线），登录审计记录保留。此操作不可撤销，确定吗？`,
+    message: `将删除${scope.label}的 ${count} 条已结束会话记录（已过期或已下线），登录审计记录保留。此操作不可撤销。`,
     confirmText: '清理历史',
     danger: true,
     busy: true,

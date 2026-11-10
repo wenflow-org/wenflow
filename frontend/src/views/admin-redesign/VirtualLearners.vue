@@ -530,7 +530,7 @@ async function terminateSample(s: Sample) {
   const ok = await askConfirm({
     title: '终止会话',
     message: `「${s.name}」还有 ${n} 条未结束的会话。
-终止后标记为「已放弃」，数据保留，不可撤销。确认终止？`,
+终止后标记为「已放弃」，数据保留，不可撤销。`,
     confirmText: '终止',
     danger: true
   })

@@ -556,8 +556,8 @@ function closeConnEditor(): void {
   }
   void (async () => {
     const ok = await askConfirm({
-      title: '关闭并放弃连接改动?',
-      message: '关闭后未保存的地址 / 密钥改动会丢弃，确定关闭?',
+      title: '关闭并放弃连接改动',
+      message: '关闭后未保存的地址 / 密钥改动会丢弃。',
       confirmText: '放弃改动'
     })
     if (ok) discardConnEditor()

@@ -503,7 +503,7 @@ watch(
     const pendingGroups = [...dirty.value].filter((g) => !savingGroups.value.has(g))
     if (pendingGroups.length > 0) {
       const ok = await askConfirm({
-        title: '丢弃未保存的配置修改?',
+        title: '丢弃未保存的配置修改',
         message: `配置数据已刷新,继续将覆盖以下未保存的修改:${pendingGroups.map((g) => DIRTY_GROUP_LABELS[g] || g).join(' / ')}。`,
         confirmText: '覆盖'
       })
@@ -521,7 +521,7 @@ onBeforeRouteLeave(async () => {
   if (dirty.value.size === 0) return true
   const ok = await askConfirm({
     title: '有未保存的配置修改',
-    message: `尚未保存的配置组:${dirtyGroups.value.join(' / ')}。离开将丢弃这些修改,确认离开?`,
+    message: `尚未保存的配置组:${dirtyGroups.value.join(' / ')}。离开将丢弃这些修改。`,
     confirmText: '丢弃并离开'
   })
   return ok === true
@@ -621,8 +621,8 @@ function closeConnDialog(): void {
   }
   void (async () => {
     const ok = await askConfirm({
-      title: '关闭并放弃连接改动?',
-      message: '关闭后未保存的服务地址 / 密钥 / 重试策略改动会丢弃，确定关闭?',
+      title: '关闭并放弃连接改动',
+      message: '关闭后未保存的服务地址 / 密钥 / 重试策略改动会丢弃。',
       confirmText: '放弃改动'
     })
     if (!ok) return
@@ -790,7 +790,7 @@ async function resetConfig() {
   const ok = await askConfirm({
     title: '重置平台通道的接入配置',
     message: '将删除平台通道已保存的服务地址、API Key、模型清单与平台默认生成参数。此操作不可撤销。',
-    confirmText: '确认重置'
+    confirmText: '重置'
   })
   if (!ok) return
   resetting.value = true

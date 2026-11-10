@@ -525,7 +525,7 @@ const SKILL_SCENE_PATH = '/admin/skills'
 function askDirtyLeave(target: unknown) {
   return askConfirm({
     title: target ? '切换 Skill' : '离开 Skill 详情',
-    message: `当前 Skill 有未保存的修改（${dirtySummary()}），离开后将丢失，确定离开？`,
+    message: `当前 Skill 有未保存的修改（${dirtySummary()}），离开后将丢失。`,
     confirmText: '离开并放弃修改',
     danger: false
   })

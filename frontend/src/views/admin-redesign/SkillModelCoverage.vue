@@ -427,7 +427,7 @@ async function applyBulk() {  if (bulkSaving.value || !selected.value.length) re
   }
   const ok = await askConfirm({
     title: '批量套用通道配置',
-    message: `将把 endpoint 与 apiKey 覆盖到选中的 ${selected.value.length} 个技能（model 留空则不覆盖）。\n这会替换这些技能已有的独立通道与密钥，且不可撤销。确定继续？`,
+    message: `将把 endpoint 与 apiKey 覆盖到选中的 ${selected.value.length} 个技能（model 留空则不覆盖）。\n这会替换这些技能已有的独立通道与密钥，且不可撤销。`,
     confirmText: '覆盖套用',
     busy: true,
   })

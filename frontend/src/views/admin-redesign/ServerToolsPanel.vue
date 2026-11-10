@@ -180,7 +180,7 @@ async function requeueAll() {
   // 重发会重新投递事件、产生真实副作用：执行前确认（与 HealthCenter 修复/会话下线同策略）
   const ok = await askConfirm({
     title: '重新发送全部失败事件',
-    message: `将把全部 ${deadCount.value} 条投递失败的事件再发送一次，可能产生重复的业务副作用。确定继续？`,
+    message: `将把全部 ${deadCount.value} 条投递失败的事件再发送一次，可能产生重复的业务副作用。`,
     confirmText: '全部重发',
     danger: true,
   })
@@ -196,7 +196,7 @@ async function requeueAll() {
     if (code === 'OUTBOX_DEAD_LETTER_ROOT_CAUSE') {
       const force = await askConfirm({
         title: '存在已知根因的失败事件',
-        message: '这些事件带有已知根因（如非法 FSRS 状态），直接重发会再次失败。确认根因已修复后，仍要强制重发吗？',
+        message: '这些事件带有已知根因（如非法 FSRS 状态），直接重发会再次失败，请先确认根因已修复。',
         confirmText: '强制重发',
         danger: true,
       })
@@ -224,7 +224,7 @@ async function requeueOne(eventType: string) {
   const count = deadItems.value.filter((i) => i.eventType === eventType).length
   const ok = await askConfirm({
     title: '重新发送这类事件',
-    message: `将把「${eventType}」类全部投递失败的事件再发送一次（当前清单内 ${count} 条），可能产生重复的业务副作用。确定继续？`,
+    message: `将把「${eventType}」类全部投递失败的事件再发送一次（当前清单内 ${count} 条），可能产生重复的业务副作用。`,
     confirmText: '重发这类',
     danger: true,
   })

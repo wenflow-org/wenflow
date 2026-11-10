@@ -571,8 +571,8 @@ const saveApiConfig = async (opts: { silent?: boolean } = {}): Promise<boolean> 
 const disableConfig = async () => {
   const ok = await askConfirm({
     title: '禁用自定义 API',
-    message: '禁用后将立即改用内置模型，已保存的端点和 API Key 会保留。确认继续吗？',
-    confirmText: '确认禁用',
+    message: '禁用后将立即改用内置模型，已保存的端点和 API Key 会保留。',
+    confirmText: '禁用',
     danger: true,
     busy: true
   })
@@ -841,8 +841,8 @@ const handleDeactivate = async () => {
   }
   const ok = await askConfirm({
     title: '注销账号',
-    message: '注销后账号将被标记为已删除，学习数据将无法继续访问。此操作不可自助撤销。确定注销吗？',
-    confirmText: '确认注销',
+    message: '注销后账号将被标记为已删除，学习数据将无法继续访问。此操作不可自助撤销。',
+    confirmText: '注销',
     danger: true,
     busy: true,
   });
