@@ -120,14 +120,11 @@
                       {{ testResult.ok ? `通过 · ${testResult.latencyMs}ms` : `失败 · ${testResult.error || ''}` }}
                     </span>
                     <!-- 配置从 ⋯ 菜单提到行内（2026-11-07 用户「启用 | 测试 | 配置」）：
-                         编辑是最常用的动作，藏进菜单等于每次多点一次 -->
+                         编辑是最常用的动作，藏进菜单等于每次多点一次。
+                         2026-11-10 用户「统一一下」：删除同样提到行内（与用户账号页同一裁决），
+                         行尾不再留一只只装一项的 ⋯ 菜单。 -->
                     <button type="button" class="mk-link" @click="openToolEdit(t)">配置</button>
-                    <div class="mk-menu">
-                      <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === t.id" @click.stop="toggleMenu(t.id)">⋯</button>
-                      <div v-if="openMenu === t.id" class="mk-menu__pop" :style="popStyle" @click.stop>
-                        <button type="button" class="mk-menu__item mk-menu__item--danger" @click="menuRemove(t)">删除</button>
-                      </div>
-                    </div>
+                    <button type="button" class="mk-link mk-link--danger" @click="removeTool(t)">删除</button>
                   </div>
                 </div>
               </div>
@@ -396,7 +393,6 @@ import { adminMcpApi, adminPluginsApi } from '@/api/adminApi'
 import { PLUGIN_GROUPS, type PluginGroup, type PluginId } from './capabilityCatalog'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
-import { useRowMenu } from './useRowMenu'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
@@ -1047,6 +1043,7 @@ async function toggleToolEnabled(t: McpTool, enabled: boolean) {
   }
 }
 
+/** 删除是行内动作（2026-11-10）：不再经过 ⋯ 菜单 */
 async function removeTool(t: McpTool) {
   const ok = await askConfirm({
     title: '删除 MCP 服务',
@@ -1069,15 +1066,6 @@ async function removeTool(t: McpTool) {
 /* ---------- 连通性测试 ---------- */
 const testingId = ref('')
 const testResult = ref<{ id: string; ok: boolean; latencyMs?: number; error?: string } | null>(null)
-
-/* 行内 ⋯ 菜单（2026-11-07）：配置提到行内后菜单只剩删除——破坏性动作仍在菜单里，
-   与「测试 / 配置」这类常用动作分开。 */
-const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
-
-function menuRemove(t: McpTool) {
-  closeMenu()
-  void removeTool(t)
-}
 
 async function testTool(t: McpTool) {
   if (testingId.value) return
