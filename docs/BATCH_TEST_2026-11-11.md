@@ -18,6 +18,7 @@
 | 3 | 财务异常 | 非学术真名透镜 + 文本任务 | 3 阶段：净利 vs 现金 / 分项同步性 / 费用反推；30-35 分钟/任务 | pass 4 |
 | 3 | Python 流水分析 | tool_operation 认知路径 | 3 阶段：退款记法 / 基线分层 / 相对偏离；脚本+透视表+文本判断 | pass 4 |
 | 3 | 游泳换气 | 物理边界：拒绝排课 | `referral`，讲原理 + 明确「不排课表/线上替代不了真人」，不生成路径 | N/A（预期拒绝） |
+| 4 | 合同（渐进式设计） | stage 1 设计后 stage 2 留空，完成后用 `previousStageOutcome` 设计 | 三处抢跑修复后：stage 1 有 2 任务、stage 2 0 任务且 locked；stage 1 完成后（19:01）才触发 stage 2 设计，产出「四条换过说法的条款连判 / 改成能原样发给人事的话」——是迁移与交付推进，不是 stage 1 复读 | 通过（结构复验） |
 
 ## 批次暴露并修复的 6 处真机缺陷
 
@@ -27,6 +28,8 @@
 4. **阶段透镜重复**（`4b62cda5`）：盘库 v1 两个阶段 `coreConcept` 完全相同，等于同一阶段教两遍。`path-planning` 增加「透镜互异」：任意两阶段 coreConcept 不得相同/同义，重复即合并或换芯。
 5. **认知课被排成线下体力任务**（`4b62cda5`）：盘库 v1 出现「去收银台贴便签」「把零食饮料区的实物真正点一遍」。`stage-designer` 增加「执行面铁律」：课堂动作必须能在文字/数字/原文里完成；线下材料只能作输入素材。判官同步增加执行面审计（`79800cf5`）。
 6. **wrapup 迁移种子被开场丢弃**（`425bbb87`）：`session-wrapup` 已把「下一课开场先判这个现场…」写进 `actionPlan[0]`（`retrievalCue`），但 `teaching-opening-generator` 旧规则允许「不必每课承接」，合同案例下一课开场只做中性承接。已改为「retrievalCue 是可判定具体情境时，开场第一段必须让学习者当场判一次」，并禁止改写成定义复述。
+7. **渐进式备课被三处自愈路径抢跑**（`97f52eae` / `2b6964a8` / `69bfc366`）：`PROGRESSIVE_STAGE_DESIGN=1` 下 stage 2 本应留空到 stage 1 完成，但真机连续三次复现 stage 2 被提前设计——分别是冷启动 `retryPathEnrichment` 全量枚举空阶段、自动重试 `retryOnePreparedPath` 走 replace、`queuePathEnrichmentAppend` 收了目标阶段却只传 `appendOnly`。三处统一为「渐进模式只看最早未完成阶段；当前阶段有任务即不重试；append 必须带 `restrictMilestoneIds`」。真机复验：stage 1 有 2 任务、stage 2 0 任务且 locked。
+8. **判官双模型**：见下节。
 
 ## 判官校准与判官自身缺陷
 
@@ -44,14 +47,21 @@
 - 检查点：批 3 财务/Python 的首题均带概念归属，单焦点唯一题 ≤1；批 1 盘库 v1 的 3 题问题已由上述三层修复覆盖。
 - 课堂质量 spot-check：合同课「先给分档规则 → 学生贴原文 → 判错后指出档位差一档 → 回到原文缺口」；考研课「学生先判 A/C → 教师只指出核对顺序 → 学生自己补 B/D」；心理课「用真实两句原话拆三帧 → 学生自己说出半拍位置」。均符合 Meno 闸与「判断由学习者做」。
 
+## 质量门
+
+- 后端全量 jest：**769 suites / 7130 tests 全绿**（3 suites / 9 tests skipped），`npm run typecheck` 绿。
+- 定向：`response-triage` 53/53；`ai-teaching` 96 suites / 935 tests；checkpoint 33/33；learning 全量 77 suites / 802 tests 全绿。
+- `prompts:compile-all` 32 skills 成功；`prompts:core:check` hasErrors=false；`prompts:sync` 后 system DB ACTIVE 版本已含全部新规则（goal-conversation v87、path-planning v74、stage-designer v72、teaching-opening-generator v33）。
+
 ## 残留问题（下一批继续）
 
-1. **单日跑不完一个阶段**：B 块（lesson-knowledge-enricher + replan-attribution）与下一阶段生成未被端到端触发，判官 B 块多为 `path-planning-fallback`。下一批跑 3-5 天，验证「阶段收口 → wrapup → replan → 下一阶段」闭环与判官 B/C 全量材料。
-2. **判官 provider 偶发失败**：双判官批跑出现一次 `Provider request retry budget exhausted`（psych2 首轮），需加单例重试/退避；当前单例重跑可恢复。
-3. **路径文本对资源的指代**：考研任务写「一篇真题阅读」但未注明「平台提供」；判官会追问资源来源。可在任务 description 加一句「课堂会提供原文/题目」。
-4. **物理拒绝文案的示例不贴场景**：游泳案例的拒绝文案举「风味、手感、笔锋、音色」，与游泳语境不符；属于通用文案，可改为按领域取例。
-5. **oneoff 的 harness 判定**：蓝屏案例 14 步仍在 goal（用户在持续抢修），产品行为正确但 harness 记 `goal-not-converged`；需要「预期不排课」用例类型，避免把正确行为计为失败。
-6. **`prompts:check:all` 既有告警**：`virtual-learner-learn-turn-simulator` 的 payload-prefix 历史违规与本次改动无关，CI 空库下 SKIP；未在本次处理。
+1. **渐进式设计仍为灰度开关**：本次验证用 `PROGRESSIVE_STAGE_DESIGN=1` 启动后端；代码路径已修复并验证（stage 2 留空 → stage 1 完成后设计），但默认仍关。是否默认开启需产品拍板——开启后首课启动窗口对「未来阶段为空」的判定必须保持本次修复后的语义（只看最早未完成阶段）。
+2. **单日跑不完一个阶段**：批 1-3 多为一课即到 max-days，B 块（lesson-knowledge-enricher + replan-attribution）覆盖有限；批 4 已跑完 stage 1 → stage 2 的完整衔接，但「多阶段连续收口 + replan 触发重排」还需更长批次。
+3. **判官 provider 偶发失败**：双判官批跑出现一次 `Provider request retry budget exhausted`（psych2 首轮），需加单例重试/退避；当前单例重跑可恢复。
+4. **路径文本对资源的指代**：考研任务写「一篇真题阅读」但未注明「平台提供」；判官会追问资源来源。可在任务 description 加一句「课堂会提供原文/题目」。
+5. **物理拒绝文案的示例不贴场景**：游泳案例的拒绝文案举「风味、手感、笔锋、音色」，与游泳语境不符；属于通用文案，可改为按领域取例。
+6. **oneoff 的 harness 判定**：蓝屏案例 14 步仍在 goal（用户在持续抢修），产品行为正确但 harness 记 `goal-not-converged`；需要「预期不排课」用例类型，避免把正确行为计为失败。
+7. **提示词门禁已全绿**：`prompts:check:all` 退出码 0、payload-prefix 违规 0；此前 `virtual-learner-learn-turn-simulator` 的历史违规已随重编译消失，不再是残留项。
 
 ## 复现命令
 
