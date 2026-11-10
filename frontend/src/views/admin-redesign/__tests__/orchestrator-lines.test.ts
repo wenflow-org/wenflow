@@ -44,6 +44,16 @@ describe('编排图连线', () => {
     expect(OrchestratorSource).not.toMatch(/\.orch-odg-body\s*\{[^}]*flex:\s*1 1 auto/)
   })
 
+  /* 2026-11-10 用户「教学画像入为什么是 0」：旧口径把 promptRole=hard-required 记作「入」，
+     而那是模型必须产出的字段；教学/画像/仿真没有它，于是恒显示「入 0」，像链路断了。
+     现在 chip 是字段交接（handoff）数，契约口径（必填/产出）单独一行。 */
+  it('列脚 chip 统计字段交接，而不是 hard-required 条数', () => {
+    expect(OrchestratorSource).toContain('computeStageFlow')
+    expect(OrchestratorSource).toContain('function flowChipTitle')
+    expect(OrchestratorSource).not.toContain('入 0（无必填）')
+    expect(OrchestratorSource).toContain('必填 ${c.ins.length} · 产出 ${c.outs.length}')
+  })
+
   it('阶段内三枚页签并列：字段旅程不再靠「再点一次阶段页签」回程（2026-10-26 评审）', () => {
     expect(OrchestratorSource).toContain("{ id: 'journey', label: '字段旅程' }")
     // 回程特殊分支已删：点当前阶段页签与点别的阶段同一条路径
@@ -55,7 +65,7 @@ describe('编排图连线', () => {
   it('字段契约失败可分辨、可重试：列脚显红字「未加载」，卡头给重试（2026-10-26 评审）', () => {
     // 失败与「加载中 …」必须两态可分辨；重试入口接回同一加载器
     expect(OrchestratorSource).toContain('orch-odg-chip--failed')
-    expect(OrchestratorSource).toContain('function contractCountText')
+    expect(OrchestratorSource).toContain('function flowChipText')
     expect(OrchestratorSource).toContain("if (c.failed) return '未加载'")
     expect(OrchestratorSource).toContain('async function retryStageContracts')
     expect(OrchestratorSource).toContain('@click="retryStageContracts"')

@@ -119,8 +119,9 @@
               </button>
             </div>
             <footer class="orch-odg-foot">
-              <!-- 字段契约三态：未加载显「…」（不按 0 渲染——加载完成前「入 0」与「真无必填」不可分辨；
-                   部分阶段确无必填入参，加载后「入 0」属实）。
+              <!-- 字段契约三态：未加载显「…」（不按 0 渲染——加载完成前「入 0」与「真无交接」不可分辨）。
+                   2026-11-10：两枚 chip 改为**字段交接**数（上游 → 本阶段 / 本阶段 → 下游），
+                   悬停列出具体字段；契约口径（必填 / 产出）挪到下一行摘要。
                    2026-10-24：计数单独一行，字段名另占一行并允许两行——不再用 nowrap+ellipsis
                    把唯一字段信息裁成一条。 -->
               <div class="orch-odg-counts">
@@ -129,8 +130,8 @@
                   :key="kind"
                   class="orch-odg-chip"
                   :class="contractOf(s.id).failed ? 'orch-odg-chip--failed' : `orch-odg-chip--${kind}`"
-                  :title="contractChipTitle(s.id, kind)"
-                >{{ contractChipText(s.id, kind) }}</span>
+                  :title="flowChipTitle(s.id, kind)"
+                >{{ flowChipText(s.id, kind) }}</span>
               </div>
               <!-- 2026-11-08 用户「每列底下挂了一大串像乱码一样的英文路径（normalizedInput.confirmed
                    Proposal.fir… / control.completionCandidateEvidence）」：管线总览默认**不再**把产出
@@ -199,12 +200,13 @@
         <!-- meta 换同源口径（2026-10-05 页签重设计）：原「输入 0/0 · 输出 0/0」来自
              liveSkillCatalog 的阶段级变量流——catalog 对多数阶段为空，出假零，与表内
              25 行字段同页打架。改用字段契约 stageFieldContract（与画布 chips
-             同源同数）：必填入参 = hard-required，产出 = 三产出角色；未加载显「…」 -->
+             同源同数）：必填 = hard-required（模型必须产出的字段），产出 = 三产出角色；
+             未加载显「…」 -->
         <span class="mk-card__meta">
           <!-- 未加载显「…」（与画布 chips 同一三态约定；规则 5 禁内联「加载中」文案） -->
           <template v-if="contractOf(active).failed">字段契约未加载</template>
           <template v-else-if="!contractOf(active).loaded">…</template>
-          <template v-else>必填入参 {{ contractOf(active).ins.length }} · 产出 {{ contractOf(active).outs.length }}</template>
+          <template v-else>必填 {{ contractOf(active).ins.length }} · 产出 {{ contractOf(active).outs.length }}</template>
         </span>
       </div>
       <FieldRoutingTable ref="routingRef" :stage="active" @changed="onRoutingChanged" />
@@ -269,6 +271,7 @@ import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 import { STAGE_LABELS } from './dataFlow'
+import { computeStageFlow, type StageFlow } from './orchFlow'
 import { onTabRowKeydown } from '@/utils/rovingTablist'
 
 /** 阶段工作区子面板：总览（五阶段全貌，缺省）+ 阶段内三枚子视图（字段旅程 / 字段路由 / 治理）。
@@ -542,10 +545,12 @@ const stages = computed<Stage[]>(() => {
 const odgCanvasEl = ref<HTMLElement | null>(null)
 const odgSvgEl = ref<SVGSVGElement | null>(null)
 
-/* 入/出口径来自字段路由注册表（真数据源，后端词表）：
-   入 = hard-required（必填，缺了本阶段无法推进；部分阶段确无必填 → 入 0 属实）；
-   出 = proposal-output + public-reply + derived-presentation（方案产出/公开回复/派生展示，
-   对外可见或可供下游消费的产出，展示在列脚 outs 行）。 */
+/* 列脚两枚 chip = 字段级**交接**（routing.handoff）：入 = 从上游阶段交接进来的字段数，
+   出 = 交给下游阶段的字段数。回答的是「数据从哪来、到哪去」。
+   第二行摘要才是**契约**口径：必填 = hard-required（模型必须产出的字段），
+   产出 = proposal-output + public-reply + derived-presentation。
+   2026-11-10 用户「教学画像入为什么是 0」：旧实现把 hard-required 当成入参，教学/画像/仿真
+   没有 hard-required 就恒显示「入 0」，看着像链路断了——两者是不同的东西，必须分开摆。 */
 /** 产出字段：label = 中文描述（字段注册表 description，运营读得懂），slug = 英文标识（对代码/日志） */
 interface OutField { label: string; slug: string }
 interface StageFieldContract {
@@ -558,6 +563,8 @@ interface StageFieldContract {
 }
 const OUT_ROLES = ['proposal-output', 'public-reply', 'derived-presentation']
 const stageFieldContract = ref<Record<string, StageFieldContract>>({})
+/** 字段交接统计（orchFlow.computeStageFlow）：与契约分开存，失败阶段不出数字 */
+const stageFlow = ref<Record<string, StageFlow>>({})
 /** 字段契约整体失败（任一阶段失败即给卡头「字段契约重试」） */
 const contractFailed = computed(() => Object.values(stageFieldContract.value).some((c) => c.failed))
 /** promptRole 人话（后端 yaml-vocabulary 单源下发；前端不写第二份）——悬停时把「入/出」的
@@ -568,7 +575,7 @@ const roleMetaById = ref<Record<string, { label: string; hint: string }>>({})
 function contractTitle(kind: 'in' | 'out', n: number): string {
   if (kind === 'in') {
     const m = roleMetaById.value['hard-required']
-    return `必填入参 ${n} 个${m ? ` · ${m.label}：${m.hint}` : ''}`
+    return `必填字段 ${n} 个${m ? ` · ${m.label}：${m.hint}` : ''}`
   }
   const roles = OUT_ROLES.map((r) => roleMetaById.value[r]?.label || r).join(' / ')
   return `产出字段 ${n} 个 · 统计含：${roles}`
@@ -588,6 +595,8 @@ async function loadStageFieldContracts(ids: string[]) {
       ids.map((id) => adminFieldRoutingsApi.getStageDetail(id)),
     )
     const map: Record<string, StageFieldContract> = {}
+    /** 交接统计要跨阶段看 handoff（目标可能是阶段 id 或下游 Agent id），故先留原始 detail */
+    const details: Record<string, { agents: Array<{ agentId?: string; id?: string }>; fields: Array<{ promptRole?: string; camelName?: string | null; fieldId: string; description?: string | null }>; routings: Array<{ fieldId?: string; handoff?: string[] }> }> = {}
     let meta: Array<{ id: string; label: string; hint: string }> = []
     results.forEach((r, i) => {
       if (r.status !== 'fulfilled') {
@@ -596,6 +605,11 @@ async function loadStageFieldContracts(ids: string[]) {
       }
       const data = r.value.data?.data
       const fields = (data?.fields ?? []) as Array<{ promptRole?: string; camelName?: string | null; fieldId: string; description?: string | null }>
+      details[ids[i]] = {
+        agents: (data?.agents ?? []) as Array<{ agentId?: string; id?: string }>,
+        fields,
+        routings: (data?.routings ?? []) as Array<{ fieldId?: string; handoff?: string[] }>,
+      }
       if (!meta.length && Array.isArray(data?.promptRoleMeta) && data.promptRoleMeta.length) {
         meta = data.promptRoleMeta
       }
@@ -613,6 +627,10 @@ async function loadStageFieldContracts(ids: string[]) {
     })
     // 已加载的阶段覆盖旧值，失败阶段保留失败态；成功阶段不因同批其他失败而回退成「加载中」
     stageFieldContract.value = { ...stageFieldContract.value, ...map }
+    // 交接统计：只按本批成功加载的阶段重算（阶段名取当前拓扑，缺省回落 id）
+    const nameOf = (id: string) => stages.value.find((st) => st.id === id)?.name || id
+    const computedFlow = computeStageFlow(ids, nameOf, details)
+    stageFlow.value = { ...stageFlow.value, ...computedFlow }
     if (meta.length) {
       roleMetaById.value = Object.fromEntries(meta.map((m) => [m.id, { label: m.label, hint: m.hint }]))
     }
@@ -635,43 +653,41 @@ async function retryStageContracts() {
 function contractOf(id: string): StageFieldContract {
   return stageFieldContract.value[id] ?? { ins: [], outs: [], loaded: false }
 }
-/** 列脚读数三态：失败 → 「未加载」；未完成 → 「…」；就绪 → 数字 */
-function contractCountText(id: string, kind: 'in' | 'out'): string {
+/** 列脚 chip：字段级交接数（2026-11-10 取代「入 = hard-required」的旧口径） */
+function flowChipText(id: string, kind: 'in' | 'out'): string {
   const c = contractOf(id)
   if (c.failed) return '未加载'
   if (!c.loaded) return '…'
-  return String(kind === 'in' ? c.ins.length : c.outs.length)
+  const f = stageFlow.value[id]
+  if (!f) return '…'
+  return `${kind === 'in' ? '入' : '出'} ${kind === 'in' ? f.inCount : f.outCount}`
 }
-/** 列脚 chip 全文（2026-10-31 四轮评审）：阶段 3/4/5 的「入 0」被读成「不接收任何上游输入」——
- *  就绪且为 0 时补一句「无必填」，点明口径是「没有 hard-required 必填项」而非「无输入」。
- *  该口径本身属实：教学/画像/仿真阶段的入参在编排里被归为隐式推断（见 contractTitle 注释）。 */
-function contractChipText(id: string, kind: 'in' | 'out'): string {
-  const text = contractCountText(id, kind)
-  if (kind === 'in' && text === '0') return '入 0（无必填）'
-  return `${kind === 'in' ? '入' : '出'} ${text}`
-}
-function contractChipTitle(id: string, kind: 'in' | 'out'): string {
+function flowChipTitle(id: string, kind: 'in' | 'out'): string {
   const c = contractOf(id)
   if (c.failed) return `字段契约未加载：${c.failed}`
-  if (!c.loaded) return '字段契约加载中'
-  return contractTitle(kind, kind === 'in' ? c.ins.length : c.outs.length)
+  const f = stageFlow.value[id]
+  if (!c.loaded || !f) return '字段契约加载中'
+  const head = kind === 'in' ? '上游交接进来的字段' : '交给下游的字段'
+  return `${head} · 按字段路由的交接记录统计（上下文注入不计入）
+${kind === 'in' ? f.inDetail : f.outDetail}`
 }
 
-/** 列脚一行读数（2026-11-08）：只报「进/出各多少项」，不再平铺英文变量名 */
+/** 列脚一行读数：契约口径（必填 / 产出），与上面的交接数分开——两者不是一件事 */
 function stageFieldSummaryOf(id: string): string {
   const c = contractOf(id)
-  const ins = c.ins.length
-  const outs = c.outs.length
-  return `入 ${ins} 项 · 出 ${outs} 项`
+  if (c.failed) return '字段契约未加载'
+  if (!c.loaded) return '…'
+  return `必填 ${c.ins.length} · 产出 ${c.outs.length}`
 }
-/** 列脚悬停：把产出字段的**中文名**排出来（英文标识也带上，便于对代码/日志）；
-    无产出字段时给出人话说明，不留空 title。 */
+/** 列脚摘要悬停：契约口径的字段清单（必填 + 产出），中文名优先、英文标识便于对代码/日志 */
 function stageFieldNamesOf(id: string): string {
   const c = contractOf(id)
   if (c.failed) return `字段契约未加载：${c.failed}`
   if (!c.loaded) return '字段契约加载中…'
-  if (!c.outs.length) return '本阶段暂无对外产出字段'
-  return `产出字段（${c.outs.length}）：\n` + c.outs.map((o) => `· ${o.label}（${o.slug}）`).join('\n')
+  const parts = [contractTitle('in', c.ins.length), contractTitle('out', c.outs.length)]
+  if (c.ins.length) parts.push(`必填字段：\n` + c.ins.map((n) => `· ${n}`).join('\n'))
+  if (c.outs.length) parts.push(`产出字段：\n` + c.outs.map((o) => `· ${o.label}（${o.slug}）`).join('\n'))
+  return parts.join('\n')
 }
 
 /** 画布重算：列位置量出后画三次贝塞尔连线（仅箭头；字段明细不在边上渲染，
