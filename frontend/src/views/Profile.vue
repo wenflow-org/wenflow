@@ -116,6 +116,7 @@ import { toast } from '@/utils/toast'
 import request from '@/utils/api'
 import { learningAPI } from '@/api/learning'
 import { unwrapArray } from '@/views/v2/unwrap'
+import { conceptBandOf } from '@/utils/graphSemantics'
 import { computeStreakDays } from '@/views/v2/streak'
 import { localDateKeyFromIso } from '@/utils/date'
 import { useUserStore } from '../stores/user'
@@ -154,9 +155,13 @@ async function loadKpis() {
       kpi.value.achievements = items.filter((a) => a.unlocked).length
     } catch { kpiFailed.value = true }
     try {
-      const graph = (await learningAPI.getConceptGraph()) as { nodes?: Array<{ stability?: string | null }> } | null
+      const graph = (await learningAPI.getConceptGraph()) as {
+        nodes?: Array<{ stability?: string | null; masteryScore?: number | null; extractionCount?: number }>
+      } | null
       const nodes = Array.isArray(graph?.nodes) ? graph!.nodes! : []
-      kpi.value.mastery = nodes.filter((n) => n.stability === 'stable').length
+      /* 与学习状态页/知识图谱同一判据（conceptBandOf）：只认 stability 会让
+         「developing + 0.9」这类概念在这里不计数、在图谱里算已掌握 */
+      kpi.value.mastery = nodes.filter((n) => conceptBandOf(n) === 'stable').length
     } catch { kpiFailed.value = true }
   } finally {
     kpiLoading.value = false

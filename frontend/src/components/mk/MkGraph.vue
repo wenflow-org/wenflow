@@ -134,7 +134,7 @@ export function nearestSymbolHit(
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useIsDark } from '@/composables/useIsDark'
-import { hasMasterySignal } from '@/utils/graphSemantics'
+import { conceptBandOf, hasMasterySignal } from '@/utils/graphSemantics'
 import { wrapGraphLabel } from '@/utils/graphLabel'
 import * as echarts from 'echarts/core'
 import { GraphChart } from 'echarts/charts'
@@ -282,13 +282,13 @@ const isolatedCount = computed(() => props.nodes.length - visibleNodes.value.len
  *  读成灰/待学习，图例却承诺黄色（🟡进行中 1 画布上永远找不到黄点）。补琥珀档，
  *  色值与图例 --mk-amber 同族（亮 #b45309 系 / 暗 #fbbf24 系，做柔化与红/绿拉开）。 */
 function colorOf(node: MkGraphNode, dark: boolean): string {
-  /* 0 分 + 没有提取证据 = 上游「没测过」的哨兵值，按未评估画中性灰
-     （与档案页 masteryPctOf 同一判据，见 utils/graphSemantics） */
-  if (!hasMasterySignal(node)) return dark ? '#5b5f66' : '#a8adb7'
-  const score = node.masteryScore ?? 0
-  if (node.stability === 'fragile' || score < 0.45) return dark ? '#c2726a' : '#b4544a'
-  if (node.stability === 'stable' || score >= 0.8) return dark ? '#6f8f86' : '#4f7d70'
-  return dark ? '#d09a3e' : '#b08020'
+  /* 分档走 conceptBandOf（单一判据）；这里只负责「档 → 色」 */
+  switch (conceptBandOf(node)) {
+    case 'unknown': return dark ? '#5b5f66' : '#a8adb7'
+    case 'fragile': return dark ? '#c2726a' : '#b4544a'
+    case 'stable': return dark ? '#6f8f86' : '#4f7d70'
+    default: return dark ? '#d09a3e' : '#b08020'
+  }
 }
 
 /**

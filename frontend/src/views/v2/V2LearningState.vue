@@ -576,6 +576,7 @@ import { metricsAPI } from '@/api/metrics';
 import { learningAPI } from '@/api/learning';
 import { aiTeachingAPI } from '@/api/aiTeaching';
 import { adjustmentModeBlockReason, replanModeForRecommendation, type PathAdjustmentPolicyLike } from '@/utils/replanSignal';
+import { conceptBandOf } from '@/utils/graphSemantics';
 import V2Nav from './V2Nav.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import V2Footer from './V2Footer.vue';
@@ -1077,6 +1078,8 @@ const kpiWeekMinutes = computed<number | null>(() => {
 /* ---------- 掌握分布 +「已掌握知识点」（既有 GET /learning/concept-graph，个人中心同源） ---------- */
 interface GraphNode {
   stability?: string | null;
+  masteryScore?: number | null;
+  extractionCount?: number;
 }
 
 const masteryNodes = ref<GraphNode[]>([]);
@@ -1096,13 +1099,18 @@ async function loadMastery() {
   }
 }
 
-/* 三档分账（原型 1996-1998）：stable=已掌握、developing/fragile=进行中、未测(null/unknown)=待学习。
-   条宽按各档占总数的百分比，右侧数字是「个数」——与原型一致（原型也是 18 / 8 / 8 的计数） */
+/* 三档分账（原型 1996-1998）：已掌握 / 进行中 / 待学习。
+   判据走 utils/graphSemantics.conceptBandOf（与知识图谱同一份阈值）——此前只认
+   stability==='stable'，于是 developing 但掌握度 0.9 的概念在图谱算「已掌握」、在本页算
+   「进行中」，同一个数两页对不上。条宽按各档占比，右侧数字是个数。 */
 const masteryBuckets = computed(() => {
   const nodes = masteryNodes.value;
   const total = nodes.length;
-  const mastered = nodes.filter((n) => n.stability === 'stable').length;
-  const learning = nodes.filter((n) => n.stability === 'developing' || n.stability === 'fragile').length;
+  const mastered = nodes.filter((n) => conceptBandOf(n) === 'stable').length;
+  const learning = nodes.filter((n) => {
+    const band = conceptBandOf(n);
+    return band === 'learning' || band === 'fragile';
+  }).length;
   const pending = Math.max(total - mastered - learning, 0);
   const widthOf = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0);
   return {

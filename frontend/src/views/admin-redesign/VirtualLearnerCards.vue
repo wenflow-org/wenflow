@@ -297,6 +297,8 @@ interface CardWallEntry {
   email: string | null
   /** 来源身份卡名（2026-10-16 卡=身份模板）：非空即本卡是从另一张卡创建的实例 */
   derivedFrom: string | null
+  /** 实例标记（后端 instance-scope 同判据）：derivedFrom 或 origin——旧服务端无此字段 */
+  isInstance?: boolean
   /** 故事池任务数（2026-10-27）：创建实例时按任务勾选，卡面先答「这张卡能开几节课」 */
   taskCount?: number
   /** 首个任务标题（2026-10-27）：卡面上真正会被开的那节课叫什么 */
@@ -321,11 +323,15 @@ const tierOptions = computed(() => {
 
 /** 卡墙只放身份卡（2026-10-24 层级收口）：实例归「虚拟学习者」。
  *  接口已过滤，这里再挡一次——旧缓存或别处回放的数据里若仍带 derivedFrom，也不进墙。 */
-const wallCards = computed(() => cards.value.filter((c) => !c.derivedFrom))
+/* 实例判据与后端 instance-scope.INSTANCE_MARKER_KEYS 对齐：
+   derivedFrom（身份克隆）或 origin（批量实验建号）任一存在即实例，不进身份池。
+   旧服务端没有 isInstance 字段时才退回只看 derivedFrom。 */
+const isInstanceCard = (c: CardWallEntry) => c.isInstance ?? !!c.derivedFrom
+const wallCards = computed(() => cards.value.filter((c) => !isInstanceCard(c)))
 const filtered = computed(() => {
   const kw = keyword.value.trim().toLowerCase()
   return cards.value.filter((c) => {
-    if (c.derivedFrom) return false
+    if (isInstanceCard(c)) return false
     if (tier.value && cardTier(c.tags || []) !== tier.value) return false
     if (!kw) return true
     // 搜索只认卡面能看见的标签（场景 / 目标的中文名 + 自定义卡的原样标签）；

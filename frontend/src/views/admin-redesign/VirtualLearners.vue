@@ -364,6 +364,7 @@
         :total="filtered.length"
         :showTotal="true"
         unit="位学习者"
+        :note="liveVirtualsTotal > samples.length ? `已载入 ${samples.length} 位内统计` : ''"
       />
     </div>
     </div>

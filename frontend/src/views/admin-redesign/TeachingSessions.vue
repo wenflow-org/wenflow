@@ -381,6 +381,7 @@
         v-model:pageSize="pageSize"
         :total="filtered.length"
         :showTotal="true"
+        :note="truncated ? `已载入 ${rows.length} 条内统计` : ''"
       />
     </div>
   </div>

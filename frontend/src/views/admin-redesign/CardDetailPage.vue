@@ -185,6 +185,8 @@ const PRESET_SYNC_NOTE = '平台预置角色（卡库内「一键加载」同步
 
 interface CardDetail {
   profileId: string
+  /** 本卡已派生实例数（后端与卡墙同一聚合）；旧服务端无此字段时前端自行统计 */
+  derivedCount?: number
   /** 模板卡是纯档案（2026-10-29），没有账号 → null */
   userId: string | null
   cardKey: string | null
@@ -253,7 +255,10 @@ async function load() {
     // 深链/刷新/从卡墙进入时 subPage 只有 id（面包屑退化成裸 ID），加载出名字后回填。
     // id 守卫：慢响应返回时用户可能已切到别的实体详情，不能把别家的面包屑改名。
     if (d.value?.name && subPage.value?.id === pid) setSubPageLabel(d.value.name)
-    void loadDerivedCount(pid)
+    /* 同源读数优先：后端 cardsDetail 直接给全表聚合，前端不再拉 1000 条自己数
+       （超过 1000 或该请求失败时，旧路径会让详情与卡墙「已派生 N」对不上） */
+    if (typeof d.value?.derivedCount === 'number') derivedCount.value = d.value.derivedCount
+    else void loadDerivedCount(pid)
   } catch (e) {
     const msg = errMsg(e) || '卡详情加载失败'
     toast.error(msg)

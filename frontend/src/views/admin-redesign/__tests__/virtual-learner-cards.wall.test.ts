@@ -537,7 +537,9 @@ describe('批量派生上限与选中清理（2026-11-10）', () => {
   })
 
   it('「身份池已派空」用身份卡底册判断，不吃档位/关键词筛选', () => {
-    expect(Source).toContain('const wallCards = computed(() => cards.value.filter((c) => !c.derivedFrom))')
+    expect(Source).toContain('const wallCards = computed(() => cards.value.filter((c) => !isInstanceCard(c)))')
+    // 实例判据与后端 instance-scope 对齐：derivedFrom ∪ origin（旧服务端无 isInstance 才退回 derivedFrom）
+    expect(Source).toContain('c.isInstance ?? !!c.derivedFrom')
     expect(Source).toContain('v-else-if="!wallCards.length && summary?.derived"')
     expect(Source).not.toContain('v-else-if="!filtered.length && !keyword.trim() && summary?.derived"')
   })

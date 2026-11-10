@@ -304,7 +304,7 @@ import MkSelect from './MkSelect.vue'
 import { useIsDark } from '@/composables/useIsDark'
 import type { MkGraphConceptFacts, MkGraphEdge, MkGraphNode } from './MkGraph.vue'
 import { CONCEPT_BAND_LABEL, type ConceptBandKey } from '@/utils/conceptBands'
-import { hasMasterySignal } from '@/utils/graphSemantics'
+import { conceptBandOf, hasMasterySignal } from '@/utils/graphSemantics'
 import SkeletonLoader from '../ui/SkeletonLoader.vue'
 import V2ResultState from '../ui/V2ResultState.vue'
 
@@ -513,12 +513,9 @@ const STATUS_BADGE: Record<StatusKey, string> = {
 
 /** 与画布着色同一套阈值（四档名见 utils/conceptBands），避免"图上红一片、统计说都好" */
 function statusKeyOf(node: MkGraphNode | null): StatusKey {
-  /* 0 分且无提取证据 = 未评估（与画布着色、档案页同一判据，见 utils/graphSemantics） */
-  if (!node || !hasMasterySignal(node)) return 'unknown'
-  const score = node.masteryScore ?? 0
-  if (node.stability === 'fragile' || score < 0.45) return 'fragile'
-  if (node.stability === 'stable' || score >= 0.8) return 'stable'
-  return 'learning'
+  /* 判据单源（utils/graphSemantics.conceptBandOf）：0 分且无证据 = 未评估，
+     已掌握/记忆偏弱阈值 0.8/0.45 与画布着色、学员端学习状态、个人中心同一份 */
+  return conceptBandOf(node)
 }
 
 /** 记忆强度枚举（后端 MemoryStability: unknown|fragile|developing|stable）→ 用户可读。
