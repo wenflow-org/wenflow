@@ -739,7 +739,11 @@ watch(liveRefreshSeq, () => {
    撑出卡宽，内容直接画到卡框外、被下一张卡整块盖住（走查：来源/版本角标被邻卡遮没、
    hash 条横跨到下一列）。卡片是固定网格轨，子项必须允许收缩，再由各自省略号收尾。 */
 .vlc-card > * { min-width: 0; }
-.vlc-card__head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* 2026-11-10 用户走查「派生那个 pill 在卡片上的高度都不一致」：卡头原是 center——
+   标题折成两行时，右侧「已派生 N」徽章跟着沉到两行中线（57px 卡头里居中 → 比单行卡低 12px），
+   一排卡扫过去徽章高低错落。改 flex-start：徽章与勾选框都钉在标题首行，行与行之间才对得齐。
+   （标题行高 24.75 / 徽章 23.34，首行内垂直差 <1px，肉眼不可见） */
+.vlc-card__head { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
 .vlc-card__name {
   font-size: var(--mk-fs-body);
   color: var(--mk-ink);

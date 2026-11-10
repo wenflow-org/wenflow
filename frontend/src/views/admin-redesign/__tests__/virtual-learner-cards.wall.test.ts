@@ -503,3 +503,17 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     w.unmount();
   });
 });
+
+/**
+ * 2026-11-10 用户走查：「派生那个 pill 在卡片上的高度都不一致」。
+ * 根因是卡头 align-items:center——标题折成两行时，「已派生 N」徽章与勾选框跟着沉到两行中线
+ * （57px 卡头里比单行卡低 ≈12px），同一排卡扫过去徽章高低错落。
+ * 改 flex-start 后两者都钉在标题首行（行高 24.75 vs 徽章 23.34，首行内差 <1px）。
+ */
+describe('卡头徽章对齐（2026-11-10）', () => {
+  it('卡头顶部对齐：标题折行时徽章/勾选框不再往卡头中线沉', () => {
+    const rule = Source.match(/\.vlc-card__head \{[^}]*\}/)?.[0] ?? '';
+    expect(rule).toContain('align-items: flex-start');
+    expect(rule, 'center 会让两行标题的卡把徽章压到中线').not.toContain('align-items: center');
+  });
+});
