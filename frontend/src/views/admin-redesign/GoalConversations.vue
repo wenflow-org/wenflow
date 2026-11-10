@@ -106,7 +106,6 @@
             :col-defs="gcColDefsFiltered"
             storage-key="wf_goal_hidden_cols_v3"
             :default-hidden="GC_DEFAULT_HIDDEN"
-            :fixed-cols="['用户', '操作']"
             v-model:hidden="gcHiddenCols"
           />
           <!-- 卡头 meta 只放分页器没有的事实：口径（真实/测试）由页头那个开关自明，

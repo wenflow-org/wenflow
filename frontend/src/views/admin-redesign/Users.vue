@@ -49,7 +49,6 @@
                ③ 右侧「操作」列任何状态下都常驻渲染（不再在批量模式下整列变空白）。 -->
           <MkCols
             :col-defs="ulColDefs"
-            :fixed-cols="['用户', '操作']"
             storage-key="wf_users_hidden_cols_v6"
             :default-hidden="['created']"
             v-model:hidden="hiddenCols"

@@ -134,7 +134,6 @@
             storage-key="wf_teaching_hidden_cols_v3"
             :default-hidden="TS_DEFAULT_HIDDEN"
             :unavailable="tsUnavailableCols"
-            :fixed-cols="['课堂', '操作']"
             v-model:hidden="tsHiddenCols"
           />
           <span v-if="truncated" class="mk-card__meta">共 {{ listTotal }} 条 · 当前显示最近 {{ LIST_LIMIT }} 条</span>

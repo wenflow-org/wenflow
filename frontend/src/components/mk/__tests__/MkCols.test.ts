@@ -10,6 +10,8 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { defineComponent, ref } from 'vue'
 import MkCols from '../MkCols.vue'
 
@@ -86,5 +88,27 @@ describe('MkCols 列显隐', () => {
     const w = harness(['c'])
     await w.vm.$nextTick()
     expect([...w.vm.hidden]).toEqual(['a'])
+  })
+})
+
+describe('菜单只放可做的事，不写机制自述', () => {
+  /* 2026-11-10 用户指着列菜单底部「固定列 用户、操作 始终显示」：「没有意义，删除吧」。
+     列本来就在屏幕上、菜单本来就在展开——解释控件自身规则属于说明书，不是文案。
+     护栏：菜单里只剩勾选项与「恢复默认」，不再出现任何解释性段落。 */
+  it('菜单只有勾选项 + 恢复默认，没有脚注 / 说明段', async () => {
+    const w = harness([], 'wf_test_hidden_cols_r8')
+    await w.find('.mk-cols__trigger').trigger('click')
+    const menu = w.find('.mk-cols__menu')
+    expect(menu.exists()).toBe(true)
+    expect(menu.findAll('p').length).toBe(0)
+    expect(menu.text()).not.toMatch(/始终(?:显示|可见)|不可隐藏|无法隐藏|固定列/)
+    expect(menu.findAll('.mk-cols__item').length).toBe(DEFS.length)
+    w.unmount()
+  })
+
+  it('组件不再接受 fixed-cols 这类「解释为什么」的入参', () => {
+    const src = readFileSync(resolve(__dirname, '../MkCols.vue'), 'utf8')
+    expect(src).not.toContain('fixedCols')
+    expect(src).not.toContain('mk-cols__fixed')
   })
 })
