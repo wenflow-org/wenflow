@@ -275,6 +275,33 @@ describe('成本页 · 下钻口径（2026-10-26 评审）', () => {
   });
 });
 
+describe('排行表 · 失败次数列（2026-11-10 用户「失败次数的字体大小不对」）', () => {
+  const rows = [
+    { key: 'u1', display: 'u1', name: '甲', tokens: 60, calls: 21, failed: 2, usd: 2, pricedCalls: 21, callsMissingPricing: 0 },
+    { key: 'u2', display: 'u2', name: '乙', tokens: 30, calls: 3, failed: 0, usd: 1, pricedCalls: 3, callsMissingPricing: 0 },
+    { key: 'u3', display: 'u3', name: '丙', tokens: 10, calls: 400, failed: 1, usd: 1, pricedCalls: 400, callsMissingPricing: 0 }
+  ]
+  const mountTable = () => mount(TcRankTable, { props: { variant: 'user', totalTokens: 100, items: rows } })
+
+  it('次数走数值档、失败率走副行：不再把两个字号拼成「210%」', () => {
+    const w = mountTable()
+    const bad = w.findAll('.tc-fail')[0]
+    // 次数 = 值；失败率 = 副行（与 Token 用量同一套「值 + 副读数」结构）
+    expect(bad.find('.tc-fail__count').text()).toBe('2')
+    expect(bad.find('.tc-c__sub').text()).toBe('失败率 10%')
+    expect(bad.text().replace(/\s+/g, '')).not.toContain('210')
+    // 0 失败只留一个 0，不占副行
+    expect(w.findAll('.tc-fail')[1].find('.tc-c__sub').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('有失败但不足 1%：写 <1%，不写 0%（红字次数旁边挂 0% 自相矛盾）', () => {
+    const w = mountTable()
+    expect(w.findAll('.tc-fail')[2].find('.tc-c__sub').text()).toBe('失败率 <1%')
+    w.unmount()
+  })
+})
+
 describe('成本页 · 失败三态（#72 P-47）', () => {
   it('刷新失败保留旧数时：显式提示「以下为上次结果」，失败数与总 Token 不落成 0', async () => {
     const { adminTokenCostApi } = await import('@/api/adminApi');
