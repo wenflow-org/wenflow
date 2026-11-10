@@ -66,6 +66,7 @@ import {
   markActiveGenerationFailed,
 } from './generation/path-generation.core';
 import { enrichLearningPathWithAnderson } from './generation/stage-enrichment';
+import { isProgressiveStageDesignEnabled } from './generation/progressive-design';
 import { ownerContextOverride } from './generation/owner-context';
 import { MANUAL_PATH_PROMPT_TEMPLATE } from './path-generation-gate';
 import {
@@ -128,7 +129,23 @@ class LearningService {
     pathUpdatedAt: Date
   ): Promise<string[]> {
     if (isAppendBlockedByInFlightGeneration(generationStatus, activeRun, pathUpdatedAt)) return [];
-    return this.listEmptyMilestoneIds(pathId);
+    return this.limitEmptyMilestonesForProgressive(await this.listEmptyMilestoneIds(pathId));
+  }
+
+  /**
+   * 渐进式设计下，冷启动/追加自愈只能补**最早一个**空阶段（stage N 完成后才设计 N+1）。
+   * 2026-11-11 真机实证：PROGRESSIVE_STAGE_DESIGN=1 时 stage 2 本应留空，但首课启动窗口
+   * 里 `retryPathEnrichment` 把所有空阶段一次性补齐，stage 2 在 stage 1 未完成时就被设计，
+   * previousStageOutcome 无从注入，等于退回 eager 全量设计。
+   */
+  private async limitEmptyMilestonesForProgressive(emptyIds: string[]): Promise<string[]> {
+    if (!isProgressiveStageDesignEnabled() || emptyIds.length <= 1) return emptyIds;
+    const first = await prisma.milestones.findFirst({
+      where: { id: { in: emptyIds } },
+      orderBy: { stageNumber: 'asc' },
+      select: { id: true }
+    });
+    return first ? [first.id] : [];
   }
   /**
    * 路径归属者是虚拟学习者 → 后台任务显式打 simulation 标。
@@ -754,7 +771,9 @@ class LearningService {
       || (generationStatus?.stageDesign === 'processing'
         && !isStageDesignStale(generationStatus, path.updatedAt));
     if (!generationInFlight) {
-      const emptyMilestoneIds = await this.listEmptyMilestoneIds(path.id);
+      const emptyMilestoneIds = await this.limitEmptyMilestonesForProgressive(
+        await this.listEmptyMilestoneIds(path.id)
+      );
       if (emptyMilestoneIds.length > 0) {
         const queued = await this.queuePathEnrichmentAppend(path, generationStatus, emptyMilestoneIds);
         return {
