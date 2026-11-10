@@ -21,7 +21,6 @@ import {
 import { simulatedNowOr } from '../../services/virtual-lab/simulation-clock-context';
 import {
   CHECKPOINT_MAX_ATTEMPTS,
-  checkpointRhythmMinTurns,
   normalizeForKeywordMatch,
   parseSessionArtifacts,
   resolveUnderstandingReading,
@@ -93,7 +92,15 @@ export interface CheckpointSubmitResult {
 }
 
 export function shouldEmitCheckpoint(
-  session: { messages: Array<{ role: string; analysis?: any }> },
+  session: {
+    messages: Array<{
+      role: string;
+      analysis?: any;
+      /** 兼容真实 TeachingSessionMessage：字符串标签（不是对象） */
+      knowledgePoint?: string | null;
+      knowledgePoints?: Array<{ name?: unknown; status?: unknown; progress?: unknown }> | null;
+    }>;
+  },
   teachingState: Record<string, any> | null | undefined,
 ): boolean {
   if (getPendingCheckpoint(teachingState)) return false;
@@ -101,24 +108,42 @@ export function shouldEmitCheckpoint(
   if (stage === 'wrapup') return false;
   // 首个教学回合不出题（2026-11-08 p-π案例外评实证：学生选了「先讲要点，再拿例子练」，
   // 第一条教师回复就被编排层要求出题，学生什么都没学到先挨两道审讯题）。结构事实：
-  // 除开场欢迎语外教师还没有任何一条教学回复时，本节尚无可考的内容——出题节奏顺延，
-  // 从第二个教学回合起按常规 rhythm 走。先猜后揭类开场不受影响（那是 reply 正文提问，
-  // 不依赖 control.checkpoint）。
+  // 除开场欢迎语外教师还没有任何一条教学回复时，本节尚无可考的内容——出题节奏顺延。
   const assistantCount = session.messages.filter((message) => message?.role === 'assistant').length;
   if (assistantCount <= 1) return false;
   const lastAnalysis = [...session.messages].reverse().find((message) => message?.analysis)?.analysis;
   // 一条可依据的观测都没有（还没产生过 analysis）→ 不出题（沿用旧行为）。
   if (!lastAnalysis) return false;
-  // 有 analysis 但理解度读数为空 = 本轮**不可观测**（2026-11-01 修复）：不再等于「理解度低」，
-  // 因此**不加速**出题节奏（checkpointRhythmMinTurns(null) 回常规 4 条），也**不否决**出题——
-  // 「测不出来就不测」与拍板 #10 否掉的 0.6 硬闸是同一类测量盲区。
+  // ── 2026-11-11 第二刀：显性小测降频为「单焦点通关守门员」 ──
+  // 旧逻辑「understanding<0.6 → 2 条消息加速出题」已删除：学生懵的时候需要的是支架
+  // （scaffold/demonstrate），越懵越弹考题只会把挫败感拉满（CLT 反着用）。
+  // 新口径：每个当前焦点最多出 1 道「通关证明」，且只在上一轮已基本走通、准备收口时出；
+  // 过程验证交给隐性对话互动（co-create 判对即推进看板，见 teaching-turn 回合意图三分）。
   const understanding = resolveUnderstandingReading(lastAnalysis.understanding);
-  // 出题时机与自评解耦（拍板 #10，2026-10-08）：理解度只调节奏、不再否决出题——
-  // <0.6 缩到 2 条消息优先探测（恰是此前 0.6 硬闸造成 0.71% vs 52.3% 候选率差的盲区），
-  // ≥0.6 与无读数均维持 4 条消息常规节奏。
-  const lastTurn = Number(teachingState?.lastCheckpointTurn);
-  if (Number.isFinite(lastTurn)
-    && session.messages.length - lastTurn < checkpointRhythmMinTurns(understanding)) return false;
+  const lastAssistant = [...session.messages].reverse().find((message) => message?.role === 'assistant');
+  const points = Array.isArray(lastAssistant?.knowledgePoints) ? lastAssistant.knowledgePoints : [];
+  const focusPoint = points.length > 0 ? points[points.length - 1] : null;
+  const focusName = typeof focusPoint?.name === 'string'
+    ? focusPoint.name
+    : (typeof lastAssistant?.knowledgePoint === 'string' ? lastAssistant.knowledgePoint : '');
+  const focusStatus = typeof focusPoint?.status === 'string' ? focusPoint.status : '';
+  const focusProgress = Number(focusPoint?.progress);
+  // ① 已收口（mastered）的焦点不再出题：答案已判，补一张卡只会多一次审讯。
+  if (focusStatus === 'mastered') return false;
+  // ② 单焦点一次：该焦点在本会话已经出过题（checkpointHistory 按概念归属匹配）→ 不再出。
+  const history = Array.isArray(teachingState?.checkpointHistory) ? teachingState.checkpointHistory : [];
+  const focusKey = normalizeForKeywordMatch(focusName);
+  if (focusKey && history.some((row: any) => {
+    const rowName = String(row?.conceptName ?? row?.conceptKey ?? '');
+    return rowName.length > 0 && normalizeForKeywordMatch(rowName) === focusKey;
+  })) return false;
+  // ③ 收口信号（以上一轮输出为准）：理解度 ≥ 0.7，或当前焦点 progress ≥ 60。
+  //    读数不可观测（null）时不用低值否决也不加速——无信号即不出题。
+  const nearClosure = (typeof understanding === 'number' && understanding >= 0.7)
+    || (Number.isFinite(focusProgress) && focusProgress >= 60);
+  if (!nearClosure) return false;
+  // ④ 待答票已在上方闸掉；「与 isCompletionCandidate 同轮」由引擎侧 `!completionReady`
+  //    兜底（teaching-turn-engine 的 checkpointEmissionEligible），此处不重复实现。
   return true;
 }
 

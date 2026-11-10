@@ -59,17 +59,25 @@ describe('wrapup 会话证据：解法尝试台账 rsmAttempts（2026-09-17 起�
   });
 });
 
-describe('shouldEmitCheckpoint：出题触发由代码给（2026-09-17）', () => {
-  const session = (understanding: number | null, messageCount = 10) => ({
+describe('shouldEmitCheckpoint：单焦点通关守门员（2026-11-11 第二刀）', () => {
+  const session = (
+    understanding: number | null,
+    messageCount = 10,
+    focus: { name: string; status: string; progress: number } = { name: '判别口径', status: 'learning', progress: 30 },
+  ) => ({
     messages: [
       // 开场欢迎语（assistant）——「首个教学回合不出题」结构闸要求教师至少已有一条教学回复
       { role: 'assistant' as const },
       ...Array.from({ length: Math.max(0, messageCount - 2) }, () => ({ role: 'user' as const })),
-      { role: 'assistant' as const, ...(understanding === null ? {} : { analysis: { understanding } }) },
+      {
+        role: 'assistant' as const,
+        ...(understanding === null ? {} : { analysis: { understanding } }),
+        knowledgePoints: [focus],
+      },
     ],
   });
 
-  it('无待处理题 + 有进展 + 不在收尾 → 出题', () => {
+  it('上一轮已基本走通（understanding ≥ 0.7）且焦点未出过题 → 出 1 道通关证明', () => {
     expect(shouldEmitCheckpoint(session(0.8), {})).toBe(true);
   });
 
@@ -77,24 +85,29 @@ describe('shouldEmitCheckpoint：出题触发由代码给（2026-09-17）', () =
     expect(shouldEmitCheckpoint(session(0.8), { pendingCheckpoint: { id: 'cp1' } })).toBe(false);
   });
 
-  it('距上次检查点不足 4 条消息 → 不出（与事后门一致）', () => {
-    expect(shouldEmitCheckpoint(session(0.8, 10), { lastCheckpointTurn: 8 })).toBe(false);
-    expect(shouldEmitCheckpoint(session(0.8, 10), { lastCheckpointTurn: 5 })).toBe(true);
+  it('低理解度不再加速出题（学生懵时给支架不弹卡）', () => {
+    expect(shouldEmitCheckpoint(session(0.4), {})).toBe(false);
   });
 
-  it('低理解度快节奏（拍板 #10：理解度只调节奏不否决出题）', () => {
-    // 无历史检查点 + 有读数 → 直接可探测（0.6 硬闸退役）
-    expect(shouldEmitCheckpoint(session(0.4), {})).toBe(true);
-    // 距上次 2 条消息即可再探测（常规节奏 4 条会被拦）
-    expect(shouldEmitCheckpoint(session(0.4, 10), { lastCheckpointTurn: 8 })).toBe(true);
-    expect(shouldEmitCheckpoint(session(0.4, 10), { lastCheckpointTurn: 9 })).toBe(false);
-  });
-
-  it('无理解度读数 → 不出（没有可依据的观测）', () => {
+  it('读数不可观测（null）→ 不出（无信号即不出）', () => {
     expect(shouldEmitCheckpoint(session(null), {})).toBe(false);
   });
 
-  it('ready_to_close 可以出题（18 号报告 N3：它正是"待收尾确认"的落点）；wrapup 不出', () => {
+  it('同一焦点已出过题 → 不出（checkpointHistory 按概念归属拦）', () => {
+    expect(shouldEmitCheckpoint(session(0.8), {
+      checkpointHistory: [{ conceptName: '判别口径', passed: true }],
+    })).toBe(false);
+  });
+
+  it('焦点已 mastered → 不出（答案已判，不补审讯）', () => {
+    expect(shouldEmitCheckpoint(session(0.8, 10, { name: '判别口径', status: 'mastered', progress: 100 }), {})).toBe(false);
+  });
+
+  it('理解度读数缺省但焦点 progress ≥ 60 → 出（收口信号从看板读）', () => {
+    expect(shouldEmitCheckpoint(session(0.5, 10, { name: '判别口径', status: 'learning', progress: 65 }), {})).toBe(true);
+  });
+
+  it('ready_to_close 可以出题（正是「待收尾确认」的落点）；wrapup 不出', () => {
     expect(shouldEmitCheckpoint(session(0.8), { classroomContext: { stage: { current: 'ready_to_close' } } })).toBe(true);
     expect(shouldEmitCheckpoint(session(0.8), { classroomContext: { stage: { current: 'wrapup' } } })).toBe(false);
   });

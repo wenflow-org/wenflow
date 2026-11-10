@@ -21,7 +21,8 @@
  *     evidence / real_problem / pain_points 命中**高精度**「可学习成分」词（方法/思路/框架/模板/…）→ combination。
  *     注意：这里**不用**宽模式，因为 `技能|流程|配置|使用|操作|工具` 既是这两类阻塞自身的定义词，
  *     又常出现在命名实体里（如"职业技能鉴定"），会把权限类案例误抬成 combination（宁可漏判不误报）。
- *  5. oneoff_operation → combination（一次性操作含少量可学习成分）。
+ *  5. oneoff_operation → answer_then_hook（一次性操作/排障：先给现成解法 + 尾部转化钩子，不排课；
+ *     2026-11-11 方案二起，用户明确要学则由上游改判 capability 重新分诊）。
  *  6. urgency 极高且 constraints_and_boundaries 非空 → confidence 降一档，并写入 reasons。
  *  7. 第二轴 support_need（none | emotional | referral，"除学习外是否还需要别的支持"）叠加：
  *     非 none 时把 learning_path 抬升为 combination；emotional_support × referral / referral × emotional
@@ -57,6 +58,7 @@ export const RESPONSE_TRIAGE_MODES = [
   'emotional_support',
   'referral',
   'answer_only',
+  'answer_then_hook',
 ] as const;
 
 export type ResponseTriageMode = (typeof RESPONSE_TRIAGE_MODES)[number];
@@ -529,11 +531,15 @@ function triageByBlockType(blockType: PrimaryBlockType, ctx: BlockTypeContext): 
     }
 
     case 'oneoff_operation':
+      // 2026-11-11 方案二（R1 缺口类型）：一次性操作/排障（蓝屏、报错、打不开）是**信息缺口**
+      // 不是认知缺口——首轮直答给现成解法 + 尾部转化钩子（answer_then_hook），不排课。
+      // 用户明确要学（「生成排障课/教我这个」）或出现表现要求时，上游把 primary_block_type
+      // 更新为 capability 重新分诊，正常开路。
       return finalize(
         {
-          mode: 'combination',
+          mode: 'answer_then_hook',
           confidence: 'medium',
-          reasons: ['阻塞类型为 oneoff_operation（一次性操作，含少量可学习成分）'],
+          reasons: ['阻塞类型为 oneoff_operation（一次性操作/排障）：先给现成解法，想学可生成 1-2 节小课'],
         },
         urgency,
         constraints
@@ -563,6 +569,7 @@ function applySupportNeed(base: ResponseTriage, supportNeed: SupportNeed): Respo
       : 'support_need=referral（现实条件/资源/流程阻塞）';
   const conflicts =
     base.mode === 'learning_path' ||
+    base.mode === 'answer_then_hook' ||
     (base.mode === 'emotional_support' && supportNeed === 'referral') ||
     (base.mode === 'referral' && supportNeed === 'emotional');
   if (!conflicts) return base;
@@ -582,6 +589,8 @@ const ADVISORY_BY_MODE: Record<Exclude<ResponseTriageMode, 'learning_path'>, str
     '系统判断：你卡住的主因更偏现实条件/资源/流程，学习路径只是其中一部分——建议先解决外部阻塞，再规划学习。',
   answer_only:
     '系统判断：这个问题的答案可以直接讲清楚，不需要排成学习路径——它是理解型的（看懂/搞懂），答案一条回复能讲透，也没有需要反复练习才能稳定达标的表现要求。我直接给你讲透；之后如果想把它练成稳定的表现（快速判读、应试输出），再回来排一条小路径。',
+  answer_then_hook:
+    '系统判断：这是一次性操作/排障诉求——先给现成解法（止痛药），不需要排课。想弄懂背后的排查逻辑、以后自己能独立搞定，回「生成排障课」，我们用 1-2 节小课练透。',
 };
 
 /**

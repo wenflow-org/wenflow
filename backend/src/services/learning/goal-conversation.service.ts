@@ -638,8 +638,11 @@ async continueConversation(
         // 分诊判 answer_only 且用户坚持 <2 次 → 两确认通道都不放行，落普通回合——
         // 提示词层「一句话讲透测试」规则引导模型直接给出完整解答并收口；
         // 坚持 ≥2 次 → 放行照常排路径（用户 agency 兜底，不搞死拦）。
+        // 2026-11-11 方案二：answer_then_hook（一次性操作/排障）同闸——首轮直答给解法，
+        // 用户坚持要课（或说「生成排障课」触发重分诊为 capability）后照常放行。
         const answerOnlyTriage = resolveResponseTriageFromCollectedData(collected);
-        const answerOnlyGate = answerOnlyTriage?.mode === 'answer_only' && proposalConfirmable;
+        const answerOnlyGate = (answerOnlyTriage?.mode === 'answer_only'
+          || answerOnlyTriage?.mode === 'answer_then_hook') && proposalConfirmable;
         const answerOnlyNudges = Number((collected as any)?.answerOnlyNudges || 0);
         const flagConfirmWanted = conversation.stage === 'proposing'
           && options?.confirmProposal === true

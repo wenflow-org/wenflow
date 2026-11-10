@@ -97,8 +97,14 @@ describe('triageGoalResponse 规则表', () => {
     expect(result.mode).toBe('referral');
   });
 
-  it('oneoff_operation → combination', () => {
+  it('oneoff_operation → answer_then_hook（2026-11-11 方案二：一次性排障先直答+钩子，不排课）', () => {
     const result = triageGoalResponse({ primaryBlockType: 'oneoff_operation' });
+    expect(result.mode).toBe('answer_then_hook');
+    expect(result.reasons.join('')).toContain('现成解法');
+  });
+
+  it('oneoff_operation + 情绪支持需求 → combination（钩子让位给组合响应）', () => {
+    const result = triageGoalResponse({ primaryBlockType: 'oneoff_operation', supportNeed: 'emotional' });
     expect(result.mode).toBe('combination');
   });
 
@@ -196,6 +202,12 @@ describe('buildTriageAdvisoryLine 负向出口文案', () => {
     const line = buildTriageAdvisoryLine({ mode: 'combination', confidence: 'low', reasons: [] });
     expect(line).toContain('置信度低');
   });
+
+  it('answer_then_hook 文案给出止痛药口径 + 「生成排障课」钩子（2026-11-11 方案二）', () => {
+    const line = buildTriageAdvisoryLine({ mode: 'answer_then_hook', confidence: 'high', reasons: [] });
+    expect(line).toContain('现成解法');
+    expect(line).toContain('生成排障课');
+  });
 });
 
 describe('collectedData 承载读取与模式归一化', () => {
@@ -272,7 +284,7 @@ describe('问题结构轴：coupling/stakes 静默推断 + 三条件测试', () 
       surface_goal: '今天把两张表头不一样的月度表拼成一张能交差的总表',
       time_dimensions: { objectiveScopeHours: 0.8 },
     });
-    expect(r.mode).toBe('combination');
+    expect(r.mode).toBe('answer_then_hook');
     expect(r.reasons[0]).toContain('一次性微操作');
   });
 
