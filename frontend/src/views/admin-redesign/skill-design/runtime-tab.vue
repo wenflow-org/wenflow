@@ -1,38 +1,26 @@
 <template>
   <!-- 运行时：模型与路由。
        2026-10-21 版式重做（用户「这个的布局不行，看看成熟设计」）：
-       参照主流 LLM 控制台的 Settings + Test 动线——
-       ① 独立配置改成卡头开关（Override），状态与动作同处，不再用复选框占一行；
-       ② 配置按「模型 / 生成参数 / 请求与容错」三段竖排，每段内是两列字段；
-          参数覆盖从三列大格子改成一行一个字段的小表（标签 / 模式 / 值对齐）；
+       配置按「模型 / 生成参数 / 请求与容错」三段竖排，每段内是两列字段；
+       参数覆盖从三列大格子改成一行一个字段的小表（标签 / 模式 / 值对齐）；
        ③（2026-11-04 撤除）模型测试那块已从本页撑出去：它是直发上游的连通性探测，
           平台「模型与接入」页每个模型都有「测试」，在 Skill 页再留一份等于同一件事两处入口；
-       2026-10-24（用户「生效值是什么东西，没意义，拿掉，什么叫独立配置」）：
-       顶部「生效值」只读摘要删掉——导航副文/分节页头/表单本身已有同样的当前值，
-       改为一行「取值顺序」；卡头开关从「独立配置」改称「覆盖平台默认」（说出独立于谁）。 -->
+       2026-11-10 用户「模型与路由也重新设计一下」（承接「不要有平台默认这个东西出现」）：
+       卡头撤掉「覆盖平台默认」开关与那行黄字说明，只留「配置」；卡面 = 模型行（id + 能力/价格）
+       + 事实格（只列有值的项：思考、强度、温度、topP、maxTokens、超时、重试）。
+       改值进弹层，清掉这套配置用弹层里的「恢复默认」。 -->
   <div class="sdp-pane">
     <section class="mk-card">
       <div class="mk-card__head sdp-card__head">
         <h3 class="mk-card__title">模型与路由</h3>
-        <!-- 覆盖开关放卡头（成熟控制台的「Override」动线）：状态与动作同处，
-             下面的字段随开关统一禁用，不再用一枚小复选框占一行表单。
-             2026-11-03：`v-model` 改「翻转即落盘」——这枚开关此前是全页唯一
-             **没有保存入口的表单字段**：翻它只置脏态，而落盘路径只有配置弹层里的「保存」，
-             翻完直接离开页面改动就无声丢了（脏态只喂了导航守卫的离开确认）。 -->
-        <MkSwitch
-          :model-value="rtForm.enabled"
-          label="覆盖平台默认"
-          :state-text="rtForm.enabled ? '已开启' : '用平台默认'"
-          :title="overrideTitle"
-          :busy="rtSaving"
-          class="sdp-head__switch"
-          @update:model-value="onOverrideToggle"
-        />
-        <!-- 「配置」从卡头挪到模型行右侧（2026-11-06 用户「按照系统设置的展开页面进行新的设计」）：
-             系统设置里每个模型行的动作都在行右缘（配置 · 测试 · ⋯），这里只有一行一个模型，
-             动作跟着行走，卡头只留覆盖开关。 -->
+        <!-- 2026-11-10 用户「模型与路由也重新设计一下」+ 上一轮「不要有平台默认这个东西出现，
+             模型配置是什么，就是什么」：撤掉卡头「覆盖平台默认」开关。它把「这套配置启不启用」
+             摆在了「现在跑什么」之前，关掉后卡面还留一行黄字解释机制；而开关本身只是
+             skill_model_configs.enabled 的显隐，用户在卡上要的是当前模型与参数。
+             现在只有一种状态：卡面陈述当前值，改值进弹层；要清掉这套配置用弹层的「恢复默认」。 -->
+        <button type="button" class="mk-link sdp-head__act" :title="`改这个 Skill 的模型、生成参数与请求容错`" @click="openConfig">配置</button>
       </div>
-      <!-- 卡头只保留标题/开关/保存；旧「Prompt 里声明了 model 时，本页模型不参与」已删：
+      <!-- 卡头只保留标题 + 配置入口；旧「Prompt 里声明了 model 时，本页模型不参与」已删：
            与运行时契约相反（route 优先于 prompt.model）。 -->
 
       <div class="sdp-body">
@@ -55,8 +43,8 @@
              此前两版的「基线 / 本 Skill 独立调整」是把机制讲给读者听，读者要的只是
              「这个 Skill 现在用哪个模型、参数是什么」；改值仍走卡头「配置」弹层。 -->
         <div class="sdp-live">
-          <!-- 模型行：与「系统设置 → 模型与接入」的模型行同一套语言——
-               mono id + 能力小胶囊 + 行右缘的文字动作。 -->
+          <!-- 模型行：mono id + 能力小胶囊（与「系统设置 → 模型与接入」同一套语言）；
+               动作已上移卡头，这一行只陈述「哪台模型、什么能力、什么价」。 -->
           <div class="sdp-modelrow">
             <span class="mono sdp-model" :title="`${baseModel}
 
@@ -65,23 +53,17 @@ ${orderTitle}`">{{ baseModel }}</span>
               <span v-for="tag in capTags" :key="tag" class="mk-badge mk-badge--muted sdp-cap">{{ tag }}</span>
               <span v-if="summaryMeta" class="sdp-meta">{{ summaryMeta }}</span>
             </span>
-            <span class="sdp-modelrow__acts">
-              <button
-                type="button"
-                class="mk-link"
-                :disabled="!rtForm.enabled"
-                :title="rtForm.enabled ? '改这个 Skill 的模型、生成参数与请求容错' : '先开启覆盖平台默认'"
-                @click="openConfig"
-              >配置</button>
-            </span>
           </div>
 
-          <!-- 参数行：系统设置里模型行的第二行读数（测试结果）同一位置、同一档灰字 -->
-          <p v-if="rtForm.enabled" class="sdp-params">{{ paramSummary.join(' · ') }}</p>
-          <!-- 覆盖关闭时这套设置不参与：只说清「现在按谁」，不列表单里那份用不上的值 -->
-          <p v-else class="sdp-live__note">
-            覆盖已关闭：模型与超时用平台默认，生成参数仍按 Prompt 文件声明取值。
-          </p>
+          <!-- 参数读数：只列**有值**的项（思考模式、显式设过的强度、四项生成参数中填过的、
+               设过的超时与重试）。没填的项不占位、也不写「平台默认」——那一列要回答
+               「现在是什么」，不是「哪几项没配」。 -->
+          <div v-if="runtimeFacts.length" class="mk-facts sdp-facts">
+            <div v-for="f in runtimeFacts" :key="f.label">
+              <span>{{ f.label }}</span>
+              <strong>{{ f.value }}</strong>
+            </div>
+          </div>
         </div>
 
         <!-- 配置弹层：模型 / 生成参数 / 请求与容错三段，底部一颗保存。 -->
@@ -109,7 +91,6 @@ ${orderTitle}`">{{ baseModel }}</span>
                   aria-label="模型"
                   :model-value="rtForm.model || effectiveModelId"
                   :options="pickerOptions"
-                  :disabled="!rtForm.enabled"
                   @update:model-value="rtForm.model = $event"
                 />
                 <!-- 能力胶囊（2026-11-06 用户「不要这么设计，什么覆盖默认什么的，没意义」）：
@@ -138,7 +119,6 @@ ${orderTitle}`">{{ baseModel }}</span>
                     :options="THINKING_MODE_OPTIONS"
                     aria-label="思考模式"
                     block
-                    :disabled="!rtForm.enabled"
                   />
                 </label>
                 <label class="sdp-field">
@@ -148,13 +128,13 @@ ${orderTitle}`">{{ baseModel }}</span>
                     :options="reasoningEffortOptions"
                     aria-label="推理强度"
                     block
-                    :disabled="!rtForm.enabled || rtForm.thinkingMode === 'disabled'"
+                    :disabled="rtForm.thinkingMode === 'disabled'"
                   />
                 </label>
               </div>
               <!-- 能力冲突提示（2026-10-24）：模型支不支持思考/强度由注册表声明，网关按能力裁剪；
                    裁剪是静默的，所以必须在配置处说明「写了也不会发」。模型不在目录时不猜、不提示。 -->
-              <p v-if="rtForm.enabled && thinkingNotice" class="sdp-cap-note" role="status">{{ thinkingNotice }}</p>
+              <p v-if="thinkingNotice" class="sdp-cap-note" role="status">{{ thinkingNotice }}</p>
 
               <!-- 2026-11-09 设计语言收敛（弹窗表单）：这四个数字原先走 .sdp-param 的
                    「左标签 + 右输入框」横排，而同弹窗上面两项（思考模式 / 强度）和下面
@@ -166,7 +146,7 @@ ${orderTitle}`">{{ baseModel }}</span>
                   <input
                     v-model.number="temperatureInput"
                     type="number" min="0" max="2" step="0.1"
-                    class="mk-input mono" :disabled="!rtForm.enabled"
+                    class="mk-input mono"
                     placeholder="未设置" aria-label="temperature"
                   />
                 </label>
@@ -175,7 +155,7 @@ ${orderTitle}`">{{ baseModel }}</span>
                   <input
                     v-model.number="topPInput"
                     type="number" min="0.01" max="1" step="0.05"
-                    class="mk-input mono" :disabled="!rtForm.enabled"
+                    class="mk-input mono"
                     placeholder="未设置" aria-label="topP"
                   />
                 </label>
@@ -184,7 +164,7 @@ ${orderTitle}`">{{ baseModel }}</span>
                   <input
                     v-model.number="maxTokensInput"
                     type="number" min="256" max="131072" step="1000"
-                    class="mk-input mono" :disabled="!rtForm.enabled"
+                    class="mk-input mono"
                     placeholder="未设置" aria-label="maxTokens"
                   />
                 </label>
@@ -193,7 +173,7 @@ ${orderTitle}`">{{ baseModel }}</span>
                   <input
                     v-model.number="maxAttemptsInput"
                     type="number" min="1" max="5" step="1"
-                    class="mk-input mono" :disabled="!rtForm.enabled"
+                    class="mk-input mono"
                     placeholder="未设置" aria-label="maxAttempts"
                   />
                 </label>
@@ -211,7 +191,7 @@ ${orderTitle}`">{{ baseModel }}</span>
                   <input
                     v-model.number="timeoutInput"
                     type="number" min="10000" max="300000" step="10000"
-                    class="mk-input mono" :disabled="!rtForm.enabled"
+                    class="mk-input mono"
                     placeholder="未设置" aria-label="请求超时毫秒数"
                   />
                 </label>
@@ -220,7 +200,7 @@ ${orderTitle}`">{{ baseModel }}</span>
                   <input
                     v-model.number="retriesInput"
                     type="number" min="0" :max="platformLogicalRetries" step="1"
-                    class="mk-input mono" :disabled="!rtForm.enabled"
+                    class="mk-input mono"
                     :aria-label="`逻辑重试次数，平台默认 ${platformLogicalRetries} 次`"
                   />
                 </label>
@@ -252,8 +232,8 @@ ${orderTitle}`">{{ baseModel }}</span>
 
 <script setup lang="ts">
 /**
- * 运行时 tab：模型与路由（覆盖平台默认开关 / 模型层级 / 思考档 / 超时 / 参数覆盖）
- * + 模型测试（直发上游探测）。重排说明见模板顶部注释：本组件是该页唯一的编辑入口。
+ * 运行时 tab：模型与路由（模型 / 思考 / 超时 / 参数覆盖）。重排说明见模板顶部注释：
+ * 本组件是该页唯一的编辑入口。2026-11-10 起卡面陈述当前配置，不再有「这套配置启不启用」的开关。
  * 2026-11-04 用户「去掉降级这个功能，不要」：备用链（降级顺序）整块撤除。
  */
 import { computed, ref, watch } from 'vue'
@@ -265,7 +245,6 @@ import { errText, thinkingCapabilityNotice, type ThinkingCapability } from './sd
 import { COMMON_REASONING_EFFORTS, effortOptions, normalizeEfforts } from '../reasoningEfforts'
 import { useModelCatalog } from '@/composables/useModelCatalog'
 import MkModelPicker from '@/components/mk/MkModelPicker.vue'
-import MkSwitch from '@/components/mk/MkSwitch.vue'
 import MkSelect from '@/components/mk/MkSelect.vue'
 
 // 模型目录候选（File-as-Truth llm-providers.json）：模型选择器消费；
@@ -303,14 +282,12 @@ interface RuntimeForm {
   thinkingMode: 'default' | 'enabled' | 'disabled'
   reasoningEffort: 'default' | string
   requestTimeoutMs: number | null
-  enabled: boolean
 }
 const rtForm = ref<RuntimeForm>({
   model: '',
   thinkingMode: 'default',
   reasoningEffort: 'default',
-  requestTimeoutMs: null,
-  enabled: false
+  requestTimeoutMs: null
 })
 const rtSaving = ref(false)
 const rtMsg = ref('')
@@ -352,7 +329,7 @@ const promptParamValues = computed<Record<ParamFieldKey, number | null>>(() => (
   temperature: generationParams.value?.temperature ?? null,
   topP: generationParams.value?.topP ?? null,
   maxTokens: generationParams.value?.maxTokens ?? null,
-  // 该字段不随配置接口返回（见 paramValText 的说明），留空由后端按自身默认
+  // maxAttempts 不随配置接口返回生效值（后端只投 temperature/topP/maxTokens），留空由后端按自身默认
   maxAttempts: null
 }))
 function readParamInput(k: ParamFieldKey): number | null {
@@ -405,20 +382,6 @@ const effectiveLogicalRetries = computed(() =>
 const thinkingLabel = computed(() =>
   rtForm.value.thinkingMode === 'enabled' ? '开启' : rtForm.value.thinkingMode === 'disabled' ? '关闭' : '按模型默认'
 )
-/** 继承档的生效取值：只读展示合并链（Prompt 文件声明 → 代码默认 → 平台默认）算出来的数。
- *  2026-11-02 评审：四行都写「按 Prompt 声明」，每行看不到自己到底取了多少。
- *  maxAttempts 不在配置接口的生效值投影里（后端只投 temperature/topP/maxTokens），显 — 不猜。 */
-type EffectiveParamKey = 'temperature' | 'topP' | 'maxTokens' | 'maxAttempts'
-function paramValText(k: EffectiveParamKey): string {
-  if (k === 'maxAttempts') return '—'
-  const v = generationParams.value?.[k]
-  return v == null ? '—' : String(v)
-}
-/** 卡头开关的悬停全文：说清「覆盖什么」与「关掉之后谁生效」——
- *  「独立配置」只说明它独立，说不出独立于谁，运营没法据此判断该不该开。 */
-const overrideTitle =
-  '开启后本 Skill 使用下面这套模型、参数与超时设置，与平台默认冲突时优先。'
-  + '关闭后这些设置不参与，模型与超时按平台默认，生成参数仍按 Prompt 文件声明取值。'
 /** 取值顺序的悬停全文：UI 上一行只放主链，具体分层在这里写全（与后端
  *  resolve-llm-call-params 的字段级合并序一致，2026-10-24 核对） */
 const orderTitle =
@@ -432,14 +395,14 @@ const orderTitle =
  *  2026-11-06 用户「有必要暴露强度在外面吗，配置那边也是」：不再把模型的挡位清单
  *  （low / high / max）当胶囊印出来——挡位在弹层里有专门的「思考强度」下拉，
  *  外面只需要知道这台模型支不支持思考、看不看图。 */
-/** 生效模型 id：本 Skill 没单独指定时就是平台默认那个（选择器的回显值） */
-const effectiveModelId = computed(() =>
-  String((rtForm.value.enabled && rtForm.value.model) || generationParams.value?.model || '')
-)
+/** 本 Skill 自己指定的模型；空 = 没有这套配置，沿用当前模型（generationParams 的合并链） */
+const ownModel = computed(() => String(rtForm.value.model || ''))
+/** 生效模型 id：本 Skill 没指定时就是当前模型（选择器的回显值） */
+const effectiveModelId = computed(() => ownModel.value || String(generationParams.value?.model || ''))
 const capTags = computed(() => {
-  /* 用**生效模型**查目录（继承平台默认时 rtForm.model 是空的，primaryOption 会落空，
-     于是「视觉」这枚标签在继承档整个消失——与系统设置同一台模型的标签对不上）。 */
-  const id = String((rtForm.value.enabled && rtForm.value.model) || generationParams.value?.model || '')
+  /* 用**生效模型**查目录（没单独指定时 rtForm.model 是空的，直接查会落空，
+     于是「视觉」这枚标签整个消失——与系统设置同一台模型的标签对不上）。 */
+  const id = effectiveModelId.value
   const opt = pickerOptions.value.find((o) => o.value === id) ?? null
   const cap = effectiveModelCap.value
   return [
@@ -449,18 +412,16 @@ const capTags = computed(() => {
 })
 const summaryMeta = computed(() => {
   const opt = primaryOption.value
-  // 目录里查不到这个模型（继承平台默认 / 自定义通道）时这里不说话：
-  // 「覆盖开着却用平台默认」的事实由「模型：平台默认」胶囊表达，
-  // 在这行再写一遍会与卡头绿色开关读作自相矛盾（2026-11-02 评审）
+  // 目录里查不到这个模型（自定义通道 / 历史 id）时这里不说话，不猜供应商与价格
   if (!opt) return ''
   const price = opt.priceIn != null || opt.priceOut != null
     ? `入 ${opt.priceIn ?? '—'} / 出 ${opt.priceOut ?? '—'}`
     : ''
   return [opt.providerName, price].filter(Boolean).join(' · ')
 })
-/** 生效模型的能力声明（注册表）：选中模型优先；继承时用侧栏解析出的生效模型查目录 */
+/** 生效模型的能力声明（注册表）：选中模型优先；没指定时用当前模型查目录 */
 const effectiveModelCap = computed<ThinkingCapability | null>(() => {
-  const id = String(rtForm.value.enabled && rtForm.value.model ? rtForm.value.model : generationParams.value?.model || '')
+  const id = effectiveModelId.value
   if (!id) return null
   const opt = pickerOptions.value.find((o) => o.value === id)
   return opt ? { thinking: opt.thinking, efforts: opt.efforts } : null
@@ -472,36 +433,37 @@ const thinkingNotice = computed(() =>
   )
 )
 
-/* ---------- 基线 + 差异（2026-11-04） ----------
-   基线 = 这个 Skill 什么都不改时会拿到的配置。卡面只列改过的项，每项右侧标注基线会取什么。 */
 /** 推理强度在卡面的读数（思考关掉时它不参与，恒为「按模型默认」） */
 const cfgEffortLabel = computed(() =>
   rtForm.value.reasoningEffort === 'default' ? '按模型默认' : rtForm.value.reasoningEffort
 )
-/** 基线模型：本 Skill 没单独指定时就是平台默认（generationParams 的合并链已算出） */
-const baseModel = computed(() => {
-  if (rtForm.value.enabled && rtForm.value.model) return rtForm.value.model
-  return String(generationParams.value?.model || '平台默认模型')
-})
-/** 参数行：这一屏直接给「现在是什么值」，不再与基线逐项对照（2026-11-06 用户
- *  「没有什么基线之类的，只有切换模型，参数等等」）。取的是生效值：
- *  覆盖开启时用本 Skill 的值，未覆盖的字段取 Prompt 文件声明的值；超时与重试取平台默认。 */
-const paramSummary = computed(() => {
-  const out: string[] = [`思考模式 ${thinkingLabel.value}`]
-  // 只在显式设过挡位时才列出：思考模式是「按模型默认」时，强度也跟着默认，再写一行是复读
-  if (rtForm.value.reasoningEffort !== 'default') out.push(`推理强度 ${cfgEffortLabel.value}`)
-  const tp = paramT.value
-  const temp = tp.mode === 'override' && tp.value != null
-    ? String(tp.value)
-    : String(generationParams.value?.temperature ?? paramValText('temperature'))
-  out.push(`温度 ${temp}`)
-  out.push(`超时 ${rtForm.value.requestTimeoutMs ? `${Math.round(rtForm.value.requestTimeoutMs / 1000)}s` : '平台默认'}`)
-  out.push(`重试 ${effectiveLogicalRetries.value} 次`)
+/** 卡面的模型标题：本 Skill 指定过就用它，否则用当前生效模型（没有就如实说未配置） */
+const baseModel = computed(() => ownModel.value || String(generationParams.value?.model || '') || '未配置模型')
+/** 卡面读数（2026-11-10 重设计）：只列**有值**的项——现在是什么，就写什么。
+ *  没填的项不占位，也不出现「平台默认」这类占位词（用户要求：模型配置是什么就是什么）。
+ *  温度 / topP / maxTokens 取生效值（本 Skill 覆盖 → Prompt 声明），超时与重试只在设过时列。 */
+const runtimeFacts = computed<Array<{ label: string; value: string }>>(() => {
+  const out: Array<{ label: string; value: string }> = []
+  out.push({ label: '思考', value: thinkingLabel.value })
+  if (rtForm.value.reasoningEffort !== 'default') out.push({ label: '思考强度', value: cfgEffortLabel.value })
+  const temp = paramT.value.mode === 'override' && paramT.value.value != null
+    ? paramT.value.value
+    : generationParams.value?.temperature
+  if (temp != null) out.push({ label: '温度', value: String(temp) })
+  if (paramTopP.value.mode === 'override' && paramTopP.value.value != null) {
+    out.push({ label: 'topP', value: String(paramTopP.value.value) })
+  }
+  const maxTok = paramMax.value.mode === 'override' && paramMax.value.value != null
+    ? paramMax.value.value
+    : generationParams.value?.maxTokens
+  if (maxTok != null) out.push({ label: 'maxTokens', value: String(maxTok) })
+  if (rtForm.value.requestTimeoutMs) out.push({ label: '超时', value: `${Math.round(rtForm.value.requestTimeoutMs / 1000)}s` })
+  out.push({ label: '重试', value: `${effectiveLogicalRetries.value} 次` })
   return out
 })
 
 /** 主模型在目录里的条目：用于就地核对能力与价格（2026-11-04 起不再收窄备用候选） */
-const primaryOption = computed(() => pickerOptions.value.find((o) => o.value === rtForm.value.model) ?? null)
+const primaryOption = computed(() => pickerOptions.value.find((o) => o.value === effectiveModelId.value) ?? null)
 
 watch(
   () => rtForm.value.thinkingMode,
@@ -516,8 +478,7 @@ function resetRtForm() {
     model: '',
     thinkingMode: 'default',
     reasoningEffort: 'default',
-    requestTimeoutMs: null,
-    enabled: false
+    requestTimeoutMs: null
   }
   logicalRetryMode.value = 'inherit'
   customLogicalRetries.value = 1
@@ -548,7 +509,6 @@ interface ConfigBackup {
 let configBackup: ConfigBackup | null = null
 
 function openConfig() {
-  if (!rtForm.value.enabled) return
   configBackup = {
     form: { ...rtForm.value },
     logicalRetryMode: logicalRetryMode.value,
@@ -603,8 +563,7 @@ async function loadRuntime() {
       model: raw?.model || '',
       thinkingMode: raw?.thinkingMode || 'default',
       reasoningEffort: raw?.reasoningEffort || 'default',
-      requestTimeoutMs: raw?.requestTimeoutMs ?? null,
-      enabled: raw?.enabled === true
+      requestTimeoutMs: raw?.requestTimeoutMs ?? null
     }
     timeoutMode.value = raw?.requestTimeoutMs ? 'custom' : 'inherit'
     logicalRetryMode.value = raw?.maxLogicalRetries == null ? 'inherit' : raw.maxLogicalRetries === 0 ? 'disabled' : 'custom'
@@ -679,9 +638,10 @@ async function saveRuntime(okMsg = '已更新') {
       model: rtForm.value.model || undefined,
       thinkingMode: rtForm.value.thinkingMode,
       reasoningEffort: rtForm.value.thinkingMode === 'disabled' ? 'default' : rtForm.value.reasoningEffort,
-      requestTimeoutMs: rtForm.value.enabled ? normNum(rtForm.value.requestTimeoutMs) : null,
+      requestTimeoutMs: normNum(rtForm.value.requestTimeoutMs),
       maxLogicalRetries: logicalRetryMode.value === 'inherit' ? null : logicalRetryMode.value === 'disabled' ? 0 : normNum(customLogicalRetries.value),
-      enabled: rtForm.value.enabled
+      // 卡面不再有启用开关：能打开弹层并保存，就是要这套配置生效
+      enabled: true
     }
     if (Object.keys(overrides).length > 0) payload.paramOverrides = overrides
     else if (hadParamOverrides.value) payload.paramOverrides = null
@@ -699,24 +659,14 @@ async function saveRuntime(okMsg = '已更新') {
   }
 }
 
-/* 卡头「覆盖平台默认」开关：翻转即落盘（2026-11-03）。
-   这枚开关是全页唯一落在卡面的表单字段，而卡面没有保存钮——此前翻转只置脏态，
-   真正落盘得进配置弹层再点「保存」，用户翻完就离开，改动无声丢失（脏态只喂了
-   导航守卫的离开确认）。现在翻转直接调同一套保存：弹层关着时表单其余字段等于
-   最近一次落盘值（弹层取消会回滚），所以这次保存只会改变 enabled 这一项；
-   失败则把开关退回原状——开关显示的状态与库里存的状态始终一致。 */
-async function onOverrideToggle(next: boolean) {
-  if (rtSaving.value || next === rtForm.value.enabled) return
-  rtForm.value.enabled = next
-  await saveRuntime(next ? '覆盖已开启，已保存' : '覆盖已关闭，已保存')
-  if (rtErr.value) rtForm.value.enabled = !next
-}
+/* 卡头开关已于 2026-11-10 撤除（用户「模型与路由也重新设计一下」）：卡面只陈述当前配置，
+   改值统一走「配置」弹层，不再有「这套配置启不启用」这一维。 */
 
 async function resetRuntime() {
   if (rtSaving.value) return
   const ok = await askConfirm({
     title: '恢复默认配置',
-    message: '确认恢复该 Skill 的默认模型配置？\n本 Skill 的覆盖配置将被删除，改为用平台默认。',
+    message: '确认删除该 Skill 的模型与参数配置？\n删除后这个 Skill 使用当前的默认模型。',
     confirmText: '恢复默认'
   })
   if (!ok) return
@@ -725,7 +675,7 @@ async function resetRuntime() {
   try {
     await adminSkillsApi.deleteSkillModelConfig(props.skillId)
     rtErr.value = false
-    rtMsg.value = '已恢复默认（用平台默认）'
+    rtMsg.value = '已恢复默认'
     await loadRuntime()
     configOpen.value = false
     configBackup = null
@@ -791,19 +741,18 @@ watch(() => props.skillId, () => {
 /* 取值顺序：一行说清「谁压谁」。原来这块是「生效值」只读摘要，把下面各分节的
    当前值又抄一遍（导航副文、分节页头、表单各一份），已删（2026-10-24 用户判定无意义）。 */
 /* 模型行（2026-11-06 用户「按照系统设置的展开页面，进行新的设计」）：
-   与「系统设置 → 模型与接入」的模型行同构——mono id 打头、能力胶囊跟后、行右缘是文字动作，
-   下一行是该行的第二行读数（系统设置那里放测试结果，这里放当前参数值）。 */
-.sdp-live { display: grid; gap: 6px; }
-.sdp-live__note { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-amber); line-height: 1.6; }
+   与「系统设置 → 模型与接入」的模型行同构——mono id 打头、能力胶囊跟后；
+   2026-11-10 用户「模型与路由也重新设计一下」：动作收进卡头，参数改成事实格。 */
+.sdp-live { display: grid; gap: 12px; }
 .sdp-modelrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
 /* 模型 id：卡面第一眼要读到的那个值 */
 .sdp-model { color: var(--mk-ink); font-weight: 700; font-size: var(--mk-fs-emphasis); overflow-wrap: anywhere; }
 .sdp-caps { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; }
 .sdp-cap { font-weight: 600; }
 .sdp-meta { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
-.sdp-modelrow__acts { margin-left: auto; display: flex; align-items: center; gap: 12px; flex: none; }
-/* 参数行：与模型 id 同一左缘、不占动作列（系统设置里测试读数那一行的位置） */
-.sdp-params { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.6; }
+/* 参数读数：共享事实格（.mk-facts）三列；项数不固定（只列有值的项），
+   列宽自适应到内容不挤——六项以上自然换成四列。 */
+.sdp-facts { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px 16px; }
 
 /* 控件同高 32px：这一屏的下拉（.mk-select__trigger）与按钮（.mk-btn）都是 32px，
    只有模型选择器还是 40px 的默认档，实测同一行三个高度（40 / 31 / 32）。
@@ -829,9 +778,9 @@ watch(() => props.skillId, () => {
 }
 .sdp-panel__head h4 { margin: 0; font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
 
-/* 卡头：覆盖开关与配置入口同处右组；标题左，动作右 */
+/* 卡头：标题左，唯一的动作（配置）右 */
 .sdp-card__head { flex-wrap: wrap; }
-.sdp-head__switch { margin-left: auto; }
+.sdp-head__act { margin-left: auto; }
 
 .sdp-form__grid {
   display: grid;

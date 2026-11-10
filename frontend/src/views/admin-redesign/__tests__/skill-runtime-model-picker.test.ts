@@ -178,22 +178,30 @@ describe('Skill 运行时 · 模型选择', () => {
     w.unmount()
   })
 
-  it('卡头「覆盖平台默认」翻转即落盘：调一次保存接口，且不丢当前配置', async () => {
+  /* 2026-11-10 用户「模型与路由也重新设计一下」：卡头「覆盖平台默认」开关撤除。
+     卡面只陈述当前配置（模型 + 有值的事实格），改值统一走「配置」弹层；
+     保存即表示这套配置生效（enabled: true），不再有「启不启用」这一维。 */
+  it('卡面没有覆盖开关与「平台默认」字样；配置弹层保存即生效', async () => {
     const w = await mountTab()
     const api = (await import('@/api/adminApi')).adminSkillsApi as unknown as {
       updateSkillModelConfig: ReturnType<typeof vi.fn>
     }
     api.updateSkillModelConfig.mockClear()
-    const sw = w.find('.sdp-head__switch')
-    expect(sw.exists(), '卡头应有覆盖开关').toBe(true)
-    await sw.trigger('click')
+    expect(w.find('.sdp-head__switch').exists()).toBe(false)
+    expect(w.text()).not.toContain('覆盖平台默认')
+    expect(w.text()).not.toContain('平台默认')
+    // 卡面读数：模型 id + 有值的事实格（思考恒显示；温度等未设就不占位）
+    expect(w.find('.sdp-model').text()).toContain('deepseek-v4.1-flash')
+    expect(w.find('.sdp-facts').text()).toContain('思考')
+
+    await openConfig(w)
+    const save = w.findAll('button').find((b) => b.text() === '保存')
+    expect(save, '弹层应有保存').toBeTruthy()
+    await save!.trigger('click')
     await flushPromises()
-    // 开关本身没有保存钮：翻转必须自己发一次 PUT，否则改动只留在内存里
     expect(api.updateSkillModelConfig).toHaveBeenCalledTimes(1)
     const payload = api.updateSkillModelConfig.mock.calls[0][1] as Record<string, unknown>
-    expect(payload.enabled).toBe(false)
-    // 其余字段照旧（关掉覆盖只改 enabled 这一项）
-    expect(payload.model).toBe('deepseek-v4.1-flash')
+    expect(payload.enabled).toBe(true)
     w.unmount()
   })
 })

@@ -606,8 +606,12 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     // 模型与路由（2026-10-19 重排：宿主与设计区块原本各渲染一份同配置的可编辑副本，
     // 现由 RuntimeTab 单点承载，卡名从「模型配置」改为「模型与路由」）
     expect(w.text()).toContain('模型与路由')
-    // 2026-10-24 用户「什么叫独立配置」：开关改称「覆盖平台默认」，说出独立于谁
-    expect(w.text()).toContain('覆盖平台默认')
+    /* 2026-11-10 用户「模型与路由也重新设计一下」：卡头「覆盖平台默认」开关与
+       那行黄字说明撤除——卡面陈述当前模型与参数，改值走「配置」。
+       「平台默认」这类机制词不再出现在这一屏（承接列表页同一口径）。 */
+    expect(w.text()).not.toContain('覆盖平台默认')
+    expect(w.text()).not.toContain('平台默认')
+    expect(w.find('.sdp-head__act').exists()).toBe(true)
     // 2026-10-28：保存与「恢复默认」都收进配置弹层；卡面只有摘要 + 配置入口
     expect(w.findAll('.sdp-card__save').length).toBe(0)
     expect(w.find('.sdp-live').exists()).toBe(true)

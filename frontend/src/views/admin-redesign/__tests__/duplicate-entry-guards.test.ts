@@ -44,14 +44,14 @@ describe('重复操作入口守卫', () => {
 
   it('运行时配置只有配置弹层里一颗保存钮，卡头不再有分段保存', () => {
     const src = read('skill-design/runtime-tab.vue')
-    // 保存钮只有弹层里一颗（2026-11-03 卡头改「翻转即落盘」后仍只有这一颗按钮；
-    // 覆盖开关走 onOverrideToggle 内部调同一套保存，不是第二颗保存钮）
+    // 保存钮只有弹层里一颗
     expect(src.match(/@click="saveRuntime(\(\))?/g) ?? []).toHaveLength(1)
     expect(src).not.toContain('sdp-card__save')
     expect(src).toContain('@click="openConfig"')
-    // 覆盖开关必须真的落盘：绑 onOverrideToggle，而不是只改本地 v-model
-    expect(src).toContain('@update:model-value="onOverrideToggle"')
-    expect(src).toContain('async function onOverrideToggle')
+    /* 2026-11-10：卡头的「覆盖平台默认」开关撤除——它曾是第二个落盘入口
+       （onOverrideToggle → saveRuntime）。现在卡面只陈述当前配置，改值一律进弹层。 */
+    expect(src).not.toContain('onOverrideToggle')
+    expect(src).not.toContain('MkSwitch')
   })
 
   /* 2026-11-07 用户「提回去」：连接卡回到页顶常驻，但它仍然只有**一颗**保存钮

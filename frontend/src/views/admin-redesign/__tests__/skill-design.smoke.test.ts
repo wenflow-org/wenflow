@@ -465,13 +465,16 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
     expect(row.find('.sdp-model').text()).toContain('gpt-4o-mini');
     // 取值顺序（谁压谁）降成模型 id 的悬停说明，不占一行读数
     expect(row.find('.sdp-model').attributes('title') ?? '').toContain('本 Skill 指定');
-    // 行右缘的文字动作（系统设置里那枚「配置」）
-    expect(row.find('.sdp-modelrow__acts .mk-link').text()).toBe('配置');
-    // 参数行给生效值：mock 里超时由本 Skill 设为 30s，温度取 Prompt 声明值
-    const params = live.find('.sdp-params').text();
-    expect(params).toContain('思考模式');
-    expect(params).toContain('超时 30s');
-    expect(params).toContain('温度 0.4');
+    /* 2026-11-10 用户「模型与路由也重新设计一下」：动作收进卡头（.sdp-head__act），
+       参数行改成事实格——只列有值的项。 */
+    expect(wrapper.find('.sdp-head__act').text()).toBe('配置');
+    // 事实格给生效值：mock 里超时由本 Skill 设为 30s，温度取 Prompt 声明值
+    const facts = live.find('.sdp-facts').text();
+    expect(facts).toContain('思考');
+    expect(facts).toContain('超时');
+    expect(facts).toContain('30s');
+    expect(facts).toContain('温度');
+    expect(facts).toContain('0.4');
     // 不再出现「基线 / 独立调整」那套词
     expect(live.text()).not.toContain('基线');
     expect(live.text()).not.toContain('独立调整');
