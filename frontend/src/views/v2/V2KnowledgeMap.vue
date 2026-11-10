@@ -272,6 +272,11 @@ onMounted(async () => {
     display: flex;
     flex-direction: column;
   }
+  /* 画布定高后侧栏（图谱概览/节点详情）自己滚，别把内容推出卡片 */
+  .km__card :deep(.mk-ge__side) {
+    min-height: 0;
+    overflow-y: auto;
+  }
   .km__card :deep(.mk-graph) {
     flex: 1 1 0%;
     min-height: 0;

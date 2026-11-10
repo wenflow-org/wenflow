@@ -123,6 +123,12 @@ describe('图谱 · 图例与高度', () => {
     }
   })
 
+  it('一屏模式下侧栏自己滚；4K 的 ÷zoom 高度档已删（永不生效）', () => {
+    expect(LD).toContain('.ld.ld--fit :deep(.mk-ge__side) { overflow-y: auto; }')
+    expect(LD, '2800/3600 两档在 ld--fit 下永远走不到').not.toMatch(/calc\(\(100vh - 592px\) \/ 1\.15\)/)
+    expect(LD).not.toMatch(/calc\(\(100vh - 662px\) \/ 1\.3\)/)
+  })
+
   it('矮窗口/窄屏不启用一屏（保留页面滚动，画布不被压没）', () => {
     const fit = LD.slice(LD.indexOf('.ld.ld--fit {'))
     const start = LD.lastIndexOf('@media', LD.indexOf('.ld.ld--fit {'))

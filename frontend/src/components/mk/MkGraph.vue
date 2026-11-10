@@ -240,6 +240,10 @@ let ro: ResizeObserver | null = null
  * 故按宽度自适应（窄栏收紧字号/折行宽度/斥力）。
  */
 const width = ref(0)
+/* 画布高度也要跟：两个宿主现在都把高度交给 flex（视口/卡片高度一变，画布就变高变矮），
+   只盯宽度的话高度变化不会触发 chart.resize，ECharts 会留着旧画布尺寸——
+   画布比盒子高时内容被裁/错位（2026-11-10 走查实测：改样式后 canvas 774 vs 盒子 745）。 */
+const boxHeight = ref(0)
 const isNarrow = computed(() => width.value > 0 && width.value < 420)
 
 /** 可见节点（2026-10-31 二轮评审 P2 修订）：hideIsolated 只裁「未评估的孤立点」——
@@ -1002,12 +1006,17 @@ function bindZrInteractions(instance: echarts.ECharts) {
 
 onMounted(() => {
   width.value = el.value?.clientWidth ?? 0
+  boxHeight.value = el.value?.clientHeight ?? 0
   lastNarrow = isNarrow.value
   render()
   ro = new ResizeObserver(() => {
     const next = el.value?.clientWidth ?? 0
-    if (next === width.value) return
+    const nextH = el.value?.clientHeight ?? 0
+    /* 宽高任一变化都要 resize：宿主把画布高度交给 flex 后，窗口变高/图例换行/卡片留白
+       都会只改高度不改宽度（此前 `next === width.value` 直接 return，画布尺寸留在旧值） */
+    if (next === width.value && nextH === boxHeight.value) return
     width.value = next
+    boxHeight.value = nextH
     chart?.resize()
     // 只有"窄/宽档位"翻转才重建 option（字号/折行宽度/斥力不同）。
     // 单纯变宽变窄**不重建**：setOption(notMerge) 会把力导向布局打回起点，

@@ -3900,12 +3900,10 @@ const snapshotHint = computed(() =>
      缩放钮与图例完整可见，一屏仍然装得下整卡。 */
   --ld-graph-h: calc(100vh - 512px);
 }
-@media (min-width: 2800px) {
-  #ld-panel-graph { --ld-graph-h: calc((100vh - 592px) / 1.15); }
-}
-@media (min-width: 3600px) {
-  #ld-panel-graph { --ld-graph-h: calc((100vh - 662px) / 1.3); }
-}
+/* 2800/3600 两档 ÷zoom 覆写已删（2026-11-10）：一屏改由 flex 接管后，按固定高度走的分支
+   只会落在「<900 宽或 <640 高」的矮窗上，而这两个断点必然同时满足 min-width:900 /
+   min-height:640 —— 那两档永远不会生效，留着只会让人以为 4K 还靠常数。 */
+
 /* ---- 图谱页签「一屏」（2026-11-10 用户走查：这一页也做成一屏） ----
    上面那套 --ld-graph-h 是「视口 − 固定 chrome」的估算，窗口高度或缩放档一变就差几十像素：
    1920×1080 实测卡底离视口底还差 121px（空一截），4K 缩放档则反过来被裁。
@@ -3939,6 +3937,9 @@ const snapshotHint = computed(() =>
   }
   .ld.ld--fit :deep(.mk-graph-wrap) { flex: 1 1 0%; min-height: 0; display: flex; flex-direction: column; }
   .ld.ld--fit :deep(.mk-graph) { flex: 1 1 0%; min-height: 0; }
+  /* 页面整屏不滚之后，侧栏（图谱概览 / 节点详情的关系分组）必须自己滚：
+     否则内容超出画布行高的部分被页面直接裁掉，且没有任何滚动出口。 */
+  .ld.ld--fit :deep(.mk-ge__side) { overflow-y: auto; }
 }
 .ld-ev-main { min-width: 0; display: flex; flex-direction: column; }
 /* 列表容器统一走 .ld-ev-scroll 的 440px 限高内滚（2026-11-09 压缩）；

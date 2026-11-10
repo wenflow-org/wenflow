@@ -162,6 +162,8 @@ describe('知识图谱容器与顶距（2026-11-07 走查/二次/三次）：同
     expect(css, '画布盒不许再写死 height:100%').not.toMatch(/\.km__card :deep\(\.mk-ge__canvas\) \{[^}]*height:\s*100%/);
     expect(css).toMatch(/\.km__card :deep\(\.mk-graph-wrap\) \{[^}]*flex:\s*1 1 0%/);
     expect(css).toMatch(/\.km__card :deep\(\.mk-ge__canvas\) \{[^}]*overflow:\s*hidden/);
+    /* 画布定高后侧栏要有自己的滚动出口，否则概览/详情超出部分被裁掉 */
+    expect(css).toMatch(/\.km__card :deep\(\.mk-ge__side\) \{[^}]*overflow-y:\s*auto/);
     const narrow = strip(km).slice(strip(km).indexOf('@media (max-width: 1100px)'));
     expect(narrow, '移动档不该再改画布高度变量（高度已由 prop 的 clamp 统一）').not.toMatch(/--km-h-floor:/);
   });
