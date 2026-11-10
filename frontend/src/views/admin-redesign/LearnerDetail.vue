@@ -19,7 +19,7 @@
       <MkSkeleton variant="cards" :count="4" :h="140" :cols="2" :radius="12" />
     </div>
   </div>
-  <div v-else-if="d" class="mk-page ld">
+  <div v-else-if="d" class="mk-page ld" :class="{ 'ld--fit': tab === 'graph' }">
 
     <!-- 详情页头（newui/admin hero 形态，MkDetailHero）：返回钮在壳层顶栏，页内不重复 -->
     <MkDetailHero :avatar="d.name.charAt(0)" :title="d.name" :sub="d.email">
@@ -3905,6 +3905,40 @@ const snapshotHint = computed(() =>
 }
 @media (min-width: 3600px) {
   #ld-panel-graph { --ld-graph-h: calc((100vh - 662px) / 1.3); }
+}
+/* ---- 图谱页签「一屏」（2026-11-10 用户走查：这一页也做成一屏） ----
+   上面那套 --ld-graph-h 是「视口 − 固定 chrome」的估算，窗口高度或缩放档一变就差几十像素：
+   1920×1080 实测卡底离视口底还差 121px（空一截），4K 缩放档则反过来被裁。
+   大屏改成纯 flex：页面吃满内容区 → 卡片吃剩余高度 → 画布吃卡片剩余高度，不再有任何常数，
+   4K 的 zoom 也自动跟着走（百分比高度在 zoom 内是逻辑坐标，不需要 ÷zoom 换算）。
+   窄屏/矮窗口不启用，保持原来的自然流 + 页面滚动（见 @media 外的 calc 档）。 */
+@media (min-width: 900px) and (min-height: 640px) {
+  .ld.ld--fit {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    /* 本页整屏不滚（.mshell__content > * 默认 overflow-y:auto，这里收回滚动权） */
+    overflow: hidden;
+    padding-bottom: var(--mk-page-pad-b-fill);
+  }
+  .ld.ld--fit .ld-tabpage { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  .ld.ld--fit #ld-panel-graph > .mk-card { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  .ld.ld--fit #ld-panel-graph .mk-ge { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  /* .mk-ge 是 MkGraphExplorer 的根（带本页 scope 属性）；再往里是组件内部节点，
+     必须走 :deep() 才命得中 */
+  .ld.ld--fit :deep(.mk-ge__card) { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  /* 单行 1fr：画布拿到确定高度，height:100% 才有参照物 */
+  .ld.ld--fit :deep(.mk-ge__body) { flex: 1 1 auto; min-height: 0; grid-template-rows: minmax(0, 1fr); }
+  .ld.ld--fit :deep(.mk-ge__canvas) {
+    flex: 1 1 auto; min-height: 0;
+    display: flex; flex-direction: column;
+    /* 图例必须留在盒子内、画布在上：写死 height:100% 会把图例顶到盒外，
+       放大后节点就压到图例上（用户侧同一处的修法，2026-11-10） */
+    overflow: hidden;
+  }
+  .ld.ld--fit :deep(.mk-graph-wrap) { flex: 1 1 0%; min-height: 0; display: flex; flex-direction: column; }
+  .ld.ld--fit :deep(.mk-graph) { flex: 1 1 0%; min-height: 0; }
 }
 .ld-ev-main { min-width: 0; display: flex; flex-direction: column; }
 /* 列表容器统一走 .ld-ev-scroll 的 440px 限高内滚（2026-11-09 压缩）；

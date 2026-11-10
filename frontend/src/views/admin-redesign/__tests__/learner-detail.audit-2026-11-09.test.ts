@@ -110,6 +110,25 @@ describe('图谱 · 图例与高度', () => {
   it('画布高度留出底部余量，缩放钮与图例不被视口底边裁掉', () => {
     expect(LD).toMatch(/--ld-graph-h: calc\(100vh - 512px\)/)
   })
+
+  /* 2026-11-10 用户走查「这个知识图谱，看看也做一屏」：2920/3840 等缩放档下 512 这类常数
+     估不准（1920 实测卡底离视口底还空 121px，4K 反过来被裁）。大屏改成纯 flex 撑满，
+     常数只留作矮窗口的滚动回退。 */
+  it('图谱页签大屏走 flex 一屏（页面 → 卡片 → 画布，全部吃剩余高度）', () => {
+    expect(LD).toContain(`:class="{ 'ld--fit': tab === 'graph' }"`)
+    expect(LD).toMatch(/\.ld\.ld--fit \{[\s\S]*?height: 100%/)
+    // 组件内部节点必须 :deep()，否则 scoped 选择器命不中
+    for (const sel of ['.mk-ge__card', '.mk-ge__body', '.mk-ge__canvas', '.mk-graph-wrap', '.mk-graph']) {
+      expect(LD, `缺少 :deep(${sel}) 自适应节点`).toContain(`.ld.ld--fit :deep(${sel})`)
+    }
+  })
+
+  it('矮窗口/窄屏不启用一屏（保留页面滚动，画布不被压没）', () => {
+    const fit = LD.slice(LD.indexOf('.ld.ld--fit {'))
+    const start = LD.lastIndexOf('@media', LD.indexOf('.ld.ld--fit {'))
+    expect(LD.slice(start, start + 80)).toMatch(/@media \(min-width: 900px\) and \(min-height: 640px\)/)
+    expect(fit).toContain('overflow: hidden')
+  })
 })
 
 describe('全局 · 筛选器、面包屑与 URL', () => {
