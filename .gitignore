@@ -376,3 +376,6 @@ walkthrough/
 
 # 浏览器自动化认证残留（含本地登录 token，禁止入库）
 gui-test-screenshots/
+
+# 课堂实录评审材料（12MB 截图/PDF，临时材料不入库）
+docs/classroom-transcripts-*/

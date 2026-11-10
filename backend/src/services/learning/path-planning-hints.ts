@@ -258,7 +258,7 @@ const TOPIC_GRANULARITY_TAG_MAP: Record<string, TopicGranularity> = {
 
 export function parseTopicGranularity(value: unknown): TopicGranularity | null {
   if (typeof value !== 'string') return null;
-  const match = /^\s*[【\[]?\s*(单点概念|技能模块|完整学科)\s*[】\]]?/.exec(value.trim());
+  const match = /^\s*[【[]?\s*(单点概念|技能模块|完整学科)\s*[】\]]?/.exec(value.trim());
   if (!match) return null;
   return TOPIC_GRANULARITY_TAG_MAP[match[1]] ?? null;
 }

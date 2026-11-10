@@ -81,6 +81,10 @@ jobs:
         run: npm --prefix backend run prisma:migrate:verify-clean
       - name: Run backend and frontend tests with coverage
         run: npm run check:test
+        # test:coverage = jest --runInBand --coverage：单进程背全量插桩，默认 4GB 堆不够
+        #（2026-11-10 run#488 实证 OOM）。标准 runner 7GB 内存，堆给 6GB。
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
       - name: Upload coverage reports
         if: always()
         uses: actions/upload-artifact@v4
