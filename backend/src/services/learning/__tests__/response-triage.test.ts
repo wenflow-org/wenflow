@@ -62,6 +62,28 @@ describe('triageGoalResponse 规则表', () => {
     expect(result.mode).toBe('combination');
   });
 
+  it('emotion_relationship × cognitive_internalized × judgeable_output → combination（2026-11-11 真机：结构化字段优先于词面）', () => {
+    const result = triageGoalResponse({
+      primary_block_type: 'emotion_relationship',
+      recurrence: 'recurring',
+      skill_nature: 'cognitive_internalized',
+      platform_judgment: 'judgeable_output',
+      block_type_evidence: '一被否定就控制不住情绪，要么顶回去要么整晚睡不着；深呼吸坚持两天就断',
+    });
+    expect(result.mode).toBe('combination');
+    expect(result.reasons.join('')).toContain('cognitive_internalized');
+  });
+
+  it('emotion_relationship × physical_internalized × not_judgeable → 仍 referral（不在情绪分支放宽）', () => {
+    const result = triageGoalResponse({
+      primary_block_type: 'emotion_relationship',
+      skill_nature: 'physical_internalized',
+      platform_judgment: 'not_judgeable',
+      block_type_evidence: '一上台就手抖',
+    });
+    expect(result.mode).toBe('referral');
+  });
+
   it('environment_tooling 无可学习成分 → referral', () => {
     const result = triageGoalResponse({
       primaryBlockType: 'environment_tooling',

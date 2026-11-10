@@ -20,7 +20,7 @@ import { fenceLearnerMessagesForModel } from './input-fence';
 import { memoryTraceService } from '../memory/memory-trace.service';
 import { recordMisconceptions, rerouteMisconceptionConceptKey } from '../learner/misconception-ledger.service';
 import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
-import { checkpointRhythmMinTurns, parseSessionArtifacts, resolveCheckpointConceptAttribution, resolveUnderstandingReading } from './checkpoint-shared';
+import { parseSessionArtifacts, resolveCheckpointConceptAttribution, resolveUnderstandingReading } from './checkpoint-shared';
 import { applyVoidPendingCheckpoint } from './checkpoint-void';
 import { shouldDeferCompletionForClosure } from './teaching-closure';
 import {
@@ -1487,9 +1487,9 @@ export async function processStudentMessage(
       teachingOutput.reply = visibleWithQuestion;
       effectiveTeachingOutput.reply = visibleWithQuestion;
     };
-    // 出题节奏分档（拍板 #10）：与提示词闸共用同一口径（理解度<0.6 → 2 条消息优先探测），
-    // 防两处数值漂移；理解度取上一轮分析（与 shouldEmitCheckpoint 的 gate 同基准），无读数按常规节奏。
-    const previousTurnAnalysis = [...session.messages].reverse().find((message) => message?.analysis)?.analysis;
+    // 出题时机与频次只有一个权威：shouldEmitCheckpoint（单焦点通关守门员，2026-11-11 第二刀）。
+    // 引擎侧不再维护「节奏票」——旧 checkpointRhythmMinTurns 会把理解度 <0.6 加速到 2 条消息，
+    // 与「学生懵时给支架不弹卡」直接冲突。下面只保留与编排层同向的结构兜底。
     const pendingBeforeTurn = previousTeachingState.pendingCheckpoint;
     // 作废通道：语义边界与两条护栏见 ./checkpoint-void.ts；作废不授权本轮出题，出题时机只认 controls.emitCheckpoint。
     const voidedPendingCheckpoint = teachingOutput.control?.voidCheckpoint === true && !submittedCheckpoint && !!pendingBeforeTurn;
@@ -1524,17 +1524,11 @@ export async function processStudentMessage(
       && !endIntent.isEndIntent
       && !!checkpointCandidate
       // 出题时机**只有一个权威**：编排层的 controls.emitCheckpoint（由 shouldEmitCheckpoint 按
-      // pending/阶段/节奏算出，teaching-turn-shared.ts:210 注入本轮模型输入）。此处真正读它：
-      // 为 false 时本轮**任何** checkpoint 都不落库——引擎不再自带一套可越权的旁路，作废回合也不例外
-      // （作废发生在 pending 还在的回合，该死时 shouldEmitCheckpoint 必为 false）。下面两道票是与它
-      // 同向的保守兜底（防两处实现漂移时被放宽），其余回合语义不变：
-      //  ① 待答票：本轮若已有待答检查点（作废被撤销前它就在），不得再落新题；
-      //  ② 节奏票：距上次出题不足 checkpointRhythmMinTurns 时不得落新题。
+      // 单焦点收口条件算出，teaching-turn-shared.ts 注入本轮模型输入）。为 false 时本轮**任何**
+      // checkpoint 都不落库——引擎不再自带节奏旁路，作废回合也不例外。
       && turnInput.controls?.emitCheckpoint === true
-      && !previousTeachingState.pendingCheckpoint
-      && (previousTeachingState.lastCheckpointTurn === undefined
-        || updatedMessages.length - previousTeachingState.lastCheckpointTurn
-          >= checkpointRhythmMinTurns(previousTurnAnalysis?.understanding));
+      // 待答票：本轮若已有待答检查点（作废被撤销前它就在），不得再落新题。
+      && !previousTeachingState.pendingCheckpoint;
     const duplicateCheckpointQuestion = checkpointEmissionEligible
       && isDuplicateCheckpointQuestion(previousTeachingState.checkpointHistory, checkpointCandidate);
     if (duplicateCheckpointQuestion) {
@@ -1561,10 +1555,25 @@ export async function processStudentMessage(
       // 其归属由 anchorConceptKey 承载，且纪律 2 禁止锚题结果改写掌握，不得经本通道进聚合。
       // 兜底（EPOCH2 发现 #2 收尾）：模型漏报 currentPoint 时用看板首个点名近似——
       // 此前直接 null，产生无归属检查点（证据无键、无法参与概念聚合）。
+      // 2026-11-11 第二刀补第三层兜底：本轮 output.knowledge 为空但会话最近一条教学消息带
+      // knowledgePoint/knowledgePoints 时，沿用该点名。课堂实证（合同案例）出现 pending 无归属
+      // → checkpointHistory 无 conceptName → 单焦点守门员匹配不到，同一焦点可反复出题。
+      const latestSessionPointName = (() => {
+        for (let i = updatedMessages.length - 1; i >= 0; i -= 1) {
+          const message = updatedMessages[i] as { knowledgePoint?: unknown; knowledgePoints?: unknown };
+          const direct = typeof message?.knowledgePoint === 'string' ? message.knowledgePoint.trim() : '';
+          if (direct) return direct;
+          const points = Array.isArray(message?.knowledgePoints) ? message.knowledgePoints as Array<{ name?: unknown }> : [];
+          const lastName = points.map((point) => (typeof point?.name === 'string' ? point.name.trim() : '')).filter(Boolean).pop();
+          if (lastName) return lastName;
+        }
+        return '';
+      })();
       const checkpointConcept = anchorTarget
         ? null
         : resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.currentPoint)
-          ?? resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.points[0]?.name);
+          ?? resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.points[0]?.name)
+          ?? resolveCheckpointConceptAttribution(latestSessionPointName);
       teachingState.pendingCheckpoint = normalizeCheckpointWithTelemetry({
         id: `cp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         type: checkpointCandidate.type,
