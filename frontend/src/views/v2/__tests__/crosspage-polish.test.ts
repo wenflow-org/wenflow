@@ -142,11 +142,17 @@ describe('知识图谱容器与顶距（2026-11-07 走查/二次/三次）：同
     expect(has(rule, /padding:\s*24px 28px 48px/)).toBe(true);
   });
 
-  it('画布高 clamp(300px, calc(100dvh - 282px), 900px)：用满页脚上方空间、又不在 2.5K 拉成竖塔', () => {
-    /* 2026-11-10 用户走查：1080 视口下卡片底部还空一条 —— 改为按视口扣掉页头/卡内固定高度，
-       同时保留 820 的上限（2026-11-07 裁决：不能随视口无限撑高，2.5K 会变瘦高竖塔）。 */
-    expect(km).toContain('height="clamp(300px, calc(100dvh - 282px), 900px)"');
-    expect(km, '不许退回无上限的视口撑满').not.toContain('100dvh - var(--km-h-reserve');
+  it('画布高走 flex 自适应（height="100%"），不再按 DPI 推固定像素', () => {
+    /* 2026-11-10 用户裁决「改成自适应」：4K 缩放下 100dvh − 282 这类固定量总会差几像素。
+       现在卡片吃掉剩余高度，链路 .km → .km__main → .km__card → .mk-ge → .mk-ge__card
+       → .mk-ge__body(1fr) → .mk-ge__canvas → .mk-graph(height:100%)，全部 flex。 */
+    expect(km).toContain('height="100%"');
+    expect(km, '不许再按视口减固定像素算画布高').not.toMatch(/height="clamp\(\d+px, calc\(100dvh/);
+    const css = strip(km);
+    for (const sel of ['.km {', '.km__main {', '.km__card {']) {
+      expect(css, `缺少自适应链路节点 ${sel}`).toContain(sel);
+    }
+    expect(css).toMatch(/\.km__card :deep\(\.mk-ge__body\) \{[^}]*grid-template-rows: minmax\(0, 1fr\)/);
     const narrow = strip(km).slice(strip(km).indexOf('@media (max-width: 1100px)'));
     expect(narrow, '移动档不该再改画布高度变量（高度已由 prop 的 clamp 统一）').not.toMatch(/--km-h-floor:/);
   });
