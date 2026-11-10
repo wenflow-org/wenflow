@@ -1,8 +1,8 @@
 # 教学图的理论依据与证据分级
 
-> 📌 类型：参考资料｜文献核验 2026-10-22（联网检索 + 交叉核对）｜索引见 [doc/README.md](./README.md)
+> 📌 类型：参考资料｜文献核验 2026-10-22（联网检索 + 交叉核对）｜最后核验：2026-11-02（§八 实测数据口径）｜索引见 [doc/README.md](./README.md)
 > 用途：教学图（位置线/对照/阶梯/交集/矩阵等）的图型配额、提示词措辞、评审口径的**理论依据引用源**；同时登记"哪些说法只有设计经验、不能当已验证结论"。
-> 关联文档：[EDUCATIONAL_THEORY_MAP.md](./EDUCATIONAL_THEORY_MAP.md)（认知负荷理论 §二⑧）、[LEARNING_SCIENCE_AUDIT.md](./LEARNING_SCIENCE_AUDIT.md)。
+> 关联文档：[EDUCATIONAL_THEORY_MAP.md](./EDUCATIONAL_THEORY_MAP.md)（认知负荷理论 §二⑧）、`LEARNING_SCIENCE_AUDIT.md`（已归档删除，出处留档于 git 历史 3c555923^）。
 >
 > **证据分级**
 > - **A｜强**：多项独立元分析或大样本一致结论，可直接写进产品说明。
@@ -187,7 +187,7 @@
 > 与文献结论分列；这些是测量结果，不是理论证据。
 
 - 图型分布：compare 266、ladder 148、bins 124、venn 70、position-line 53、grid 23、balance 18、bipartite 15、cycle 12、matrix 7、range-bar 7、tree 1（合计 744；12 个 kind 被真实课触发）。
-- 触发源：recap-cadence 292（39.2%）、task-structure 221、structure-content 175、ascii-structure 23、time-order 10、position-description 7。
+- 触发源：recap-cadence 292（39.2%）、task-structure 221、structure-content 175、ascii-structure 23、time-order 10、position-description 7。六类合计 **728 张**，较本节 744 张少 **16 张**——差额为不属这六类编排出图时机的图（`figureSource.reason` 为 null，即模型自行出图或未记录来源；枚举见 `TeachingSessionRepository.ts`）。原始导出未入库留存，无法逐张复原这 16 张的归类，故 728 不作为全量、也不据此重算百分比。
 - kindHint 失配：412 张带建议，80 张改了图型（19.4%）。
 - 链路形态：10 张 compare.chain、47 跳，**0 跳写了 `from:"prev"`**，全部按"从客户端跨边界并联"渲染。
 - 闸门实测：同图型上限触发 102 次；**会话上限 4 触发 0 次**（100+ 会话超限，最多 12 张）；**同骨架去重触发 0 次**（同会话相似度 0.55/0.60 仍渲染）。

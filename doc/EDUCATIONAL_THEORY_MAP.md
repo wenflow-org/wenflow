@@ -1,13 +1,13 @@
 # 教育理论地图（理念宪法）
 
-> 📌 类型：参考资料｜未核验（2026-09-28 普查登记）。索引见 [doc/README.md](./README.md)。
+> 📌 类型：参考资料｜最后核验：2026-11-02（§二/§五 实现状态口径已对齐）。索引见 [doc/README.md](./README.md)。
 
 > 本文档为 Wenflow 教育 Agent 的**理论基座**：所有教学法/心理学/神经科学/LLM 方向的理念、引用文献与落点索引。
 > 用途：prompt 规则编写、学习状态指标设计、learn agent 调度策略设计的**理论依据引用源**。
 > 规范：新增任何教学法条文或指标时，应在此登记理论来源（含 DOI/arXiv ID）与代码落点，防止"理论漂移"。
 > 核实说明：本文档中所有标注 ✅ 的文献均经联网核查（2026-08，Crossref / arXiv / Wikisource / Wikipedia）；标注 ⚠️ 的为存在出入的引用。
 > 复核说明：2026-09-05 对照代码复核落点（引用改按"文件 + 规则/字段名"定位，行号仅作示意并可能漂移）；已被后续实现吸收的状态已更新。
-> 复核基线：**2026-10-19**（对照当时 HEAD 复跑 §二 逐条口径与 §五 缺口表；SRL ⑫ / 睡眠巩固 ⑭ / 元认知训练 ⑬ 三项由「完全缺失」改判「部分实现」，见 §五）。
+> 复核基线：**2026-10-19**（对照当时 HEAD 复跑 §二 逐条口径与 §五 缺口表；SRL ⑫ / 睡眠巩固 ⑭ / 元认知训练 ⑬ 三项由「完全缺失」改判「部分实现」，见 §五）；**2026-11-02** 复核 ③/⑦/⑩/⑮ 的实现状态并统一为 §五 口径。
 
 ---
 
@@ -28,7 +28,7 @@ Goal 层（目标澄清）        Path 层（路径规划）         Teach 层�
 
 ## 二、教学 / 心理 / 神经科学理论清单
 
-> **复核基线：2026-10-19**（本节逐条对照 HEAD 代码复核；落点以「文件 + 字段/函数名」为准，行号仅作示意并可能漂移）。
+> **复核基线：2026-11-02**（③/⑦/⑩/⑮ 的实现状态已与 §五 表口径对齐；其余条目沿用 2026-10-19 复核结论。落点以「文件 + 字段/函数名」为准，行号仅作示意并可能漂移）。
 
 ### ① 自我决定论（Self-Determination Theory, SDT）
 - **文献**：Deci & Ryan (1985) *Intrinsic Motivation and Self-Determination in Human Behavior*；Ryan & Deci (2000) *Self-determination theory and the facilitation of intrinsic motivation*（[DOI 10.1037/0003-066X.55.1.68](https://doi.org/10.1037/0003-066X.55.1.68)）。✅ Crossref 核实
@@ -45,7 +45,7 @@ Goal 层（目标澄清）        Path 层（路径规划）         Teach 层�
 ### ③ 成长型思维（Growth Mindset / Implicit Theories）
 - **文献**：Hong, Chiu & Dweck (1995) *Implicit theories of intelligence*（[DOI 10.1007/978-1-4899-1280-0_10](https://doi.org/10.1007/978-1-4899-1280-0_10)）；Dweck (2006) *Mindset*。✅ Crossref 核实
 - **核心观点**：能力可塑信念（incremental theory）→ 更愿意接受挑战、从失败恢复；过程导向表扬（努力/策略）优于能力导向表扬。
-- **Wenflow 落点**：**缺失**。`teaching-turn.yaml`"情绪急救：一句正常化"是雏形；"自检：表扬/纠错未使用特质语言（聪明/天赋/厉害），失败归因指向策略/方法而非能力"是过程导向的基础，可扩展为"归因于努力与策略"条文。
+- **Wenflow 落点**：**部分（2026-11-02 复核）**——`teaching-turn.yaml`「成长型思维语言规范（表扬与纠错通用，全策略继承）」已落地过程表扬 / 失败归因于策略 / "还没"框架 / 禁特质语言，并进"自检五件事"第 ④ 条；仍缺 wrapup 反馈语言接同一规范。
 - **建议**：Learn 层反馈语言规范（process praise 条文）。
 
 ### ④ 生成效应（Generation Effect）
@@ -69,7 +69,7 @@ Goal 层（目标澄清）        Path 层（路径规划）         Teach 层�
 ### ⑦ Yerkes-Dodson 唤醒度定律（Inverted-U）
 - **文献**：Yerkes & Dodson (1908) *The relation of strength of stimulus to rapidity of habit-formation*（[DOI 10.1002/cne.920180503](https://doi.org/10.1002/cne.920180503)）。✅ 公认文献
 - **核心观点**：表现随唤醒度倒U变化——唤醒不足→动机低；过度唤醒→表现崩溃；中等唤醒最优。
-- **Wenflow 落点**：**部分（无注释）**。LSS/LSB 阈值设计依据来自 2026-05 历史分析（已清理不保留）；现行 `services/learner/LearnerSnapshotService.ts`（`paceMode：lf≥6 或 lsb<0 → recover；趋势向好 → push`）是倒U的量化实现。
+- **Wenflow 落点**：**已实现但未命名（无理论注释，2026-11-02 复核）**。LSS/LSB 阈值设计依据来自 2026-05 历史分析（已清理不保留）；现行 `services/learner/LearnerSnapshotService.ts`（`paceMode：lf≥6 或 lsb<0 → recover；趋势向好 → push`）是倒U的量化实现。
 - **已知缺陷（2026-08-29 修正记录）**：admin 学习者详情"压力曲线"曾错误使用**学习分钟数 EWMA**（运动科学 Banister 隐喻，无学习场景效度）且与指标卡（LSS/LF 0-10 体系）量纲冲突——已改为 `learning_metrics` 真实指标历史（`getStateTrendWindow`，与用户侧 `/state/trends` 同源），见 `LearnerDetail.vue` 压力记录卡片。
 - **建议**：给 `LearnerSnapshotService` 阈值与 LSS/LSB 指标补理论注释；"不愤不启"三路由的唤醒度映射；EWMA 系数（0.95/0.05、0.7/0.15）待真实数据拟合。
 
@@ -90,7 +90,7 @@ Goal 层（目标澄清）        Path 层（路径规划）         Teach 层�
 ### ⑩ 交错学习（Interleaving）
 - **文献**：Rohrer & Taylor (2007) *The shuffling of mathematics problems improves learning*（[DOI 10.1007/s11251-007-9015-8](https://doi.org/10.1007/s11251-007-9015-8)）；Rohrer (2006) 分块 vs 混合。✅ Wikipedia 核实
 - **核心观点**：混合不同类型练习 > 分块练习（学会"何时用哪个方法"）；与间隔效应同为 desirable difficulty 家族。
-- **Wenflow 落点**：**缺失**。跨里程碑 hub 回捞（`path-planning.yaml`"hub concept 必须被非首阶段 milestone 显式复用"）与 consolidate 任务（`stage-designer.yaml`"每阶段至少 1 个 consolidate 类型任务回捞前一阶段概念"）是间隔/检索而非交错；`teaching-turn.yaml`"knowledge.points 最多 5 个单焦点主讲"约束与回合内交错存在张力。
+- **Wenflow 落点**：**部分（2026-11-02 复核）**——`teaching-turn.yaml`「复习题的策略选择框架（交错学习）」已落地"不预告方法 + 对比式回捞"；跨里程碑 hub 回捞（`path-planning.yaml`"hub concept 必须被非首阶段 milestone 显式复用"）与 consolidate 任务（`stage-designer.yaml`"每阶段至少 1 个 consolidate 类型任务回捞前一阶段概念"）仍是间隔/检索而非交错；`teaching-turn.yaml`"knowledge.points 最多 5 个单焦点主讲"约束与回合内交错存在张力。
 - **建议**：交错应在**任务/会话粒度**落地（学习预算台账的轮换编排、复习课混合概念），不破坏回合内单焦点。
 
 ### ⑪ 有效失败（Productive Failure）
@@ -123,8 +123,8 @@ Goal 层（目标澄清）        Path 层（路径规划）         Teach 层�
 ### ⑮ 自我解释效应（Self-Explanation Effect）
 - **文献**：Chi, de Leeuw, Chiu & LaVancher (1994) *Eliciting self-explanations improves understanding*（Cognitive Science 18:439-477）。✅ 公认文献（Crossref 检索有噪声但该文为领域经典）
 - **核心观点**：要求学习者解释"为什么"显著提升理解与迁移。
-- **Wenflow 落点**：**已实现**——README「教育理论基础」已将费曼技巧标注为自我解释；`teaching-turn.yaml`"用自己的话讲给一个不懂的人听"；`peer-reinforcement.yaml`（feynman 策略）。
-- **建议**：无，保持。
+- **Wenflow 落点**：**已实现但未命名（2026-11-02 复核）**——`teaching-turn.yaml`"用自己的话讲给一个不懂的人听"；`peer-reinforcement.yaml`（feynman 策略）。README「把教育学理论落进代码」现只写"费曼技巧 + 检索练习"，未再挂"自我解释"理论名。
+- **建议**：在费曼 reflect 条文旁补"自我解释效应"理论注释，与 §五 未命名表同步。
 
 ### ⑯ 预测校准方法论（可证伪置信度 / Empirical Calibration）
 - **文献**：Popper (1959) *The Logic of Scientific Discovery*（可证伪性方法论）；UKT 不确定性感知 KT（pykt.org/ukt）；CIKT（[arXiv 2505.17705](https://arxiv.org/abs/2505.17705)，预测-反馈迭代）；学习分析荟萃（[DOI 10.1177/21582440251336707](https://doi.org/10.1177/21582440251336707)，干预须闭环才有效）。✅ arXiv/DOI 核实
@@ -174,10 +174,9 @@ Goal 层（目标澄清）        Path 层（路径规划）         Teach 层�
 
 ## 五、理论 → 规则映射缺口清单（现状盘点）
 
-### 已实现且命名（README 7 条 + 近期落地）
-README 7 条（认知负荷 / 自我导向学习 / ZPD+支架 / 形成性评估 / 刻意练习+检索练习 / 费曼（自我解释）/ 安德森分类）**全部有代码落点**；另已在代码中命名、状态与本节一致的近期落地：
+### 已实现且命名（README 理论条目 + 近期落地）
+README「把教育学理论落进代码」现行 5 个条目（认知负荷 / 最近发展区+支架 / 费曼技巧+检索练习 / 有效失败 / 间隔效应与复习闭环）**全部有代码落点**；另已在代码中命名、状态与本节一致的近期落地：
 
-- **生成效应 ④ / 自我解释 ⑮**：费曼 reflect 条文（README「教育理论基础」已标注）
 - **ICAP ⑤**：`stage-designer.yaml`（subtask 类型 ICAP 档位映射 + 阶段内非递减约束 + 首阶段首任务最低 active）
 - **有效失败 ⑪**：`teaching-turn.yaml`「有效失败模式（Productive Failure）」（Phase 1 生成期 / Phase 2 整合期 / 逃生舱）
 - **预测校准 ⑯**：`learning-predictor` + `PredictionCalibrationService`（2026-08-29 落地）
@@ -188,16 +187,16 @@ README 7 条（认知负荷 / 自我导向学习 / ZPD+支架 / 形成性评估 
 |---|---|---|
 | 生成效应 ④ | `teaching-turn.yaml`（"用自己的话讲给一个不懂的人听" / 交付物由学生自产）；`session-wrapup.yaml`（actionPlan 检索式自测） | teaching-turn.yaml 对应规则旁 |
 | Yerkes-Dodson ⑦ | `services/learner/LearnerSnapshotService.ts`（paceMode / conceptLoad 推导）；LSS/LSB 阈值 | 服务头部注释 |
-| 自我解释 ⑮ | 已归费曼名下（README「教育理论基础」） | 无需 |
+| 自我解释 ⑮ | `teaching-turn.yaml`（"用自己的话讲给一个不懂的人听"）；`peer-reinforcement.yaml`（feynman 策略） | teaching-turn.yaml 费曼 reflect 条文旁 |
 
-### 部分实现（机制已有落点，覆盖不全）｜复核基线 2026-10-19
+### 部分实现（机制已有落点，覆盖不全）｜复核基线 2026-11-02（③/⑩ 行复核；其余沿用 2026-10-19）
 
 | 理论 | 已有落点 | 仍缺的部分 |
 |---|---|---|
 | SDT ① | `goal-conversation.yaml:132` 静默累积 `sdt_needs`（autonomy / competence / relatedness） | 画像层未消费三需求；relatedness 无对应教学/同伴机制 |
-| 成长型思维 ③ | `teaching-turn.yaml:121` 成长型思维语言规范（过程表扬 / 归因于策略 / "还没"框架 / 禁特质语言），并进自检五件事第 ④ 条 | wrapup 反馈语言未接同一规范 |
+| 成长型思维 ③ | `teaching-turn.yaml:128` 成长型思维语言规范（过程表扬 / 归因于策略 / "还没"框架 / 禁特质语言），并进自检五件事第 ④ 条 | wrapup 反馈语言未接同一规范 |
 | 心流 ⑥ | `teaching-turn.yaml:97` 认知负荷三路由（0.6–0.8「愤悱带」即挑战-技能平衡带） | 未按心流命名；无挑战-技能平衡的可视化 |
-| 交错学习 ⑩ | `teaching-turn.yaml:104` 复习题策略选择框架（不预告方法 + 对比式回捞） | 任务/会话粒度的轮换编排（预算台账）未做 |
+| 交错学习 ⑩ | `teaching-turn.yaml:111` 复习题策略选择框架（不预告方法 + 对比式回捞） | 任务/会话粒度的轮换编排（预算台账）未做 |
 | SRL ⑫ | `agents/learner-model-agent/types.ts:171` `srlPhase` 字段 + `services/learner/LearnerSnapshotService.ts:44` `deriveSrlPhase`（快照 `:425`/`:549` 写入，投影 `LearnerProjectionService.ts:145` 透传） | 无用户可见三阶段视图；判据只按会话状态粗派生（非自我监控证据）；三阶段未接干预路由 |
 | 睡眠巩固 ⑭ | `services/memory/memory-trace.service.ts:191` `snapToActiveWindow`（23-07 睡眠区让位、首次提取保证跨 1 睡眠周期）+ `services/memory/actr.ts:28` 跨日递增调度 | 与"今日复习"/睡眠建议无联动；无就寝时间感知的提醒；到期日跳过夜间无用户可读解释 |
 | 元认知训练 ⑬ | `services/learner/calibration.service.ts:20` `computeCalibrationBias` → 画像覆盖 `selfAssessmentAccuracy`（`profile-aggregator.ts:178-180`）→ 教学链消费（`teaching-session-lifecycle.ts:1130`）；管理端可见（`LearnerDetail.vue:1827`） | 无面向学习者的"自评→对照→校准"训练环节；`selfAssessmentSignal` 仍是隐藏信号 |

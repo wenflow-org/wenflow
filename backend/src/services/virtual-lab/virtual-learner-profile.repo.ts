@@ -1,5 +1,7 @@
 import prisma from '../../config/database';
 import type { Prisma } from '@prisma/client';
+import { withKeyedLock } from '../../utils/keyed-lock';
+import { INSTANCE_PROFILE_WHERE } from './instance-scope';
 
 /**
  * 虚拟学习者画像/账号仓储（routes/admin/virtual-learners.ts 的取数层）。
@@ -96,11 +98,38 @@ export function findProfileJsonById(profileId: string) {
   return prisma.virtual_learner_profiles.findUnique({ where: { id: profileId }, select: { profile: true } });
 }
 
-/** 故事池整体回写（生成/编辑/删除故事共用） */
-export function updateProfileJsonField(id: string, profileJson: string) {
-  return prisma.virtual_learner_profiles.update({
+/**
+ * 故事池整体回写（生成/编辑/删除故事共用）。
+ *
+ * #170：profile 是整包 JSON，课后记忆回写会在同一行写 knownConcepts / recentCompleted /
+ * selfAssessmentAccuracy。调用方在锁外读到的 `updatedProfile` 是**旧快照**，直接整包写回会
+ * 回滚这段窗口内的记忆写入。这里与记忆写者共用 `vlab-profile:<userId>` 锁，并在锁内**重新读取**
+ * 画像，只把 storyPool 合并进去——其余键取最新值，不丢更新。
+ */
+export async function updateStoryPoolLocked(id: string, storyPool: unknown[]) {
+  const row = await prisma.virtual_learner_profiles.findUnique({
     where: { id },
-    data: { profile: profileJson },
+    select: { userId: true },
+  });
+  if (!row) throw new Error('虚拟用户不存在');
+
+  return withKeyedLock(`vlab-profile:${row.userId}`, async () => {
+    const fresh = await prisma.virtual_learner_profiles.findUnique({
+      where: { id },
+      select: { profile: true },
+    });
+    let profileData: Record<string, unknown> = {};
+    try {
+      profileData = JSON.parse(fresh?.profile || '{}') as Record<string, unknown>;
+    } catch {
+      profileData = {};
+    }
+    const next = { ...profileData, storyPool };
+    const updated = await prisma.virtual_learner_profiles.update({
+      where: { id },
+      data: { profile: JSON.stringify(next), updatedAt: new Date() },
+    });
+    return { ...updated, profileData: next };
   });
 }
 
@@ -125,25 +154,22 @@ export function createVirtualLearnerProfile(args: { data: Prisma.virtual_learner
 }
 
 /**
- * 虚拟学习者列表的取数范围 = **派生实例**（2026-10-25 拍板「不播种、都派生」）。
+ * 虚拟学习者列表的取数范围 = **实例**（2026-10-25 拍板「不播种、都派生」）。
  *
- * 卡库是身份池（导入卡 / 平台生产 / 预置一键加载都只往池里放**模板卡**），虚拟学习者
- * 一律由「选角 → 派生」产生（`card-import.service.cloneCardsToLearners`）。二者同一张表，
- * 唯一年龄可辨的标记是身份克隆时写进 `profile` JSON 的 `derivedFrom`——模板卡从不写这个键
- * （写入侧只有 cloneCardsToLearners，全仓唯一）。卡墙早已按同一字段反向过滤
- * （`getCardWallIndex` 的 `!c.derivedFrom`），此处补齐另一半：列表不再把模板卡当人列。
+ * 卡库是身份池（导入卡 / 平台生产 / 预置一键加载都只往池里放**模板卡**），实例主要来自
+ * 「选角 → 派生」（`card-import.service.cloneCardsToLearners`）；批量实验也直接建实例
+ * （2026-11-09 补标：此前不写标记，建的实例不进列表/统计/清理，成为孤儿数据）。
+ * 二者同一张表，判据是 `profile` JSON 里的来源标记（`derivedFrom` / `origin`，见 instance-scope.ts）——
+ * 模板卡两个键都不写。卡墙按 `derivedFrom` 反向过滤（`getCardWallIndex` 的 `!c.derivedFrom`），
+ * 此处补齐另一半：列表不把模板卡当人列。
  *
- * 该字段在 `profile` JSON 里、没有独立列，故按 JSON 子串判定（不改 schema：本库客户端的
+ * 标记在 `profile` JSON 里、没有独立列，故按 JSON 子串判定（不改 schema：本库客户端的
  * 迁移面受共享生成物约束，见 `prisma/schema.prisma` 的平台数据库说明）。
  */
-const DERIVED_INSTANCE_WHERE = {
-  profile: { contains: '"derivedFrom"' },
-} satisfies Prisma.virtual_learner_profilesWhereInput
-
-/** 列表页：派生实例 + 会话样本（50 条）+ 会话计数（范围见 DERIVED_INSTANCE_WHERE） */
+/** 列表页：实例 + 会话样本（50 条）+ 会话计数（范围见 INSTANCE_PROFILE_WHERE） */
 export function listProfilesWithSessionSamples(skip: number, limit: number) {
   return prisma.virtual_learner_profiles.findMany({
-    where: DERIVED_INSTANCE_WHERE,
+    where: INSTANCE_PROFILE_WHERE,
     skip,
     take: limit,
     orderBy: { createdAt: 'desc' },
@@ -181,10 +207,38 @@ export function listProfilesWithSessionSamples(skip: number, limit: number) {
   });
 }
 
-/** 列表分页总数与「实例数」读数同源：只数派生实例（范围与 DERIVED_INSTANCE_WHERE 一致），
+/** 列表分页总数与「实例数」读数同源：只数实例（范围与 INSTANCE_PROFILE_WHERE 一致），
     否则分页器会把身份池里的模板卡也算进来，与列表行数对不上。 */
 export function countProfiles() {
-  return prisma.virtual_learner_profiles.count({ where: DERIVED_INSTANCE_WHERE });
+  return prisma.virtual_learner_profiles.count({ where: INSTANCE_PROFILE_WHERE });
+}
+
+/**
+ * 「按创建时间清理」的候选（2026-11-09 改服务端取数）。
+ *
+ * 背景：判定原先在清理向导里对**当前载入页**的行做（列表一次最多 1000 行），
+ * 超过一页的实例静默漏删——向导报「将删除 3 人」时库里可能还有几百个同龄实例，
+ * 运营以为清干净了。这里改成服务端按实例全集查询（年龄 + 会话数 + 标签 + 名字），
+ * 运行态由调用方用同一套 `classifySessionRunPhase` 判定（autopilot 状态是唯一真值，
+ * 不能在 SQL 里用 session.status 近似）。
+ */
+export function listCleanupCandidatesBefore(cutoff: Date) {
+  return prisma.virtual_learner_profiles.findMany({
+    where: { ...INSTANCE_PROFILE_WHERE, createdAt: { lt: cutoff } },
+    select: {
+      id: true,
+      createdAt: true,
+      tags: true,
+      users: { select: { name: true } },
+      _count: { select: { sessions: true } },
+    },
+    orderBy: { createdAt: 'asc' },
+  });
+}
+
+/** 清理向导的分母：实例总数（用于「豁免 N 人」的可复算口径） */
+export function countAllInstances() {
+  return countProfiles();
 }
 
 /** 每个画像已生成的路径数（distinct learningPathId）：一个故事可衍生多条路径，

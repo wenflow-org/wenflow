@@ -153,6 +153,40 @@ export function endOfDay(instant: Date, tz: string = appTimeZone): Date {
   return new Date(parseDayKeyStart(nextKey, tz).getTime() - 1);
 }
 
+/**
+ * 日期键区间（'YYYY-MM-DD' 首日、末日）→ 绝对时刻区间，两端都按应用时区本地日解析。
+ *
+ * 2026-10-31 用户走查 P0-3：走查页发 `startDate=2026-11-01`，后端用 `new Date(startDate)`
+ * 解析成 **UTC 零点（本地 08:00）**，而 `endDate` 却用 `setHours(23,59,59,999)`（机器本地时区）
+ * ——起止口径不对称，UTC+8 用户 00:00–08:00 的学习被整体挤出当月（同页「今天 54 分钟」与
+ * 「本月 0 分钟」并存，月历一格不上色）。凡是「前端只给日期键」的范围过滤都必须走这里。
+ *
+ * 非法/缺失的日期键返回 null（不参与过滤），不抛错、也不静默换成别的口径。
+ */
+export function parseDayKeyRange(
+  startDayKey?: unknown,
+  endDayKey?: unknown,
+  tz: string = appTimeZone,
+): { from: Date | null; to: Date | null } {
+  const from = parseStrictDayKey(startDayKey, tz);
+  const toStart = parseStrictDayKey(endDayKey, tz);
+  return {
+    from,
+    to: toStart ? endOfDay(toStart, tz) : null,
+  };
+}
+
+/**
+ * 严格日期键：解析后再回环比对。'2026-13-40' 这类脏键会被 Date.UTC 悄悄滚成
+ * 2027-02-09（同理 11-31 会变成 12-01）——范围过滤宁可不过滤，也不能静默偏移一个月。
+ */
+function parseStrictDayKey(dayKey: unknown, tz: string): Date | null {
+  if (typeof dayKey !== 'string' || !dayKey) return null;
+  const start = parseDayKeyStart(dayKey, tz);
+  if (Number.isNaN(start.getTime())) return null;
+  return dayKeyOf(start, tz) === dayKey.slice(0, 10) ? start : null;
+}
+
 /** 两个绝对时刻之间相隔的**本地日**数（同日为 0；负差钳到 0）。 */
 export function dayDiffInDays(from: Date, to: Date, tz: string = appTimeZone): number {
   const a = startOfDay(from, tz).getTime();

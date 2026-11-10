@@ -23,10 +23,16 @@ const h = vi.hoisted(() => ({
   feedbackList: vi.fn(),
   contentStats: vi.fn(),
   outboxDead: vi.fn(),
+  setOpsPending: vi.fn(),
 }))
 
 vi.mock('@/api/adminApi', () => ({
-  adminFeedbackApi: { list: h.feedbackList },
+  adminFeedbackApi: {
+    list: h.feedbackList,
+    /* 默认页签改成「反馈」后 Feedback 挂载时会拉 30 天趋势；缺它会让 load 抛错落进失败态，
+       把「读数是否如实」这类断言搅浑。 */
+    getTrend: vi.fn(async () => ({ data: { data: [] } })),
+  },
   adminLearningContentApi: { getStats: h.contentStats },
   adminDevtoolsApi: { getOutboxDead: h.outboxDead },
   adminAxios: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
@@ -41,10 +47,18 @@ vi.mock('../live', async () => {
     liveAnnouncements: ref([]),
     liveFailures: ref({}),
     liveRefreshSeq: ref(0),
+    // 侧栏角标回写（2026-11-01：OpsHub 拉完三域后同步给 live 共享读数）
+    setLiveOpsPendingCounts: h.setOpsPending,
     loadLiveData: vi.fn(async () => {}),
     timeAgo: () => 'x',
     errMsg: (e: unknown) => (e instanceof Error ? e.message : String(e)),
     shortId: (s: string) => s,
+    /* 2026-11-09 默认页签改成「反馈」后 Feedback 会随宿主挂载，它要读这两个页缓存接口
+       （此前默认落运营待办、Feedback 不挂载，mock 里没有它们也不会被访问）。 */
+    isPageCacheFresh: () => false,
+    markPageFetched: vi.fn(),
+    /* Feedback 内嵌 Pagination，分页器挂载即读 totalPagesOf。 */
+    totalPagesOf: (total: number, pageSize: number) => Math.max(1, Math.ceil(total / Math.max(1, pageSize))),
   }
 })
 vi.mock('../opsShared', async () => {
@@ -86,17 +100,19 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     // 2026-10-18 用户拍板：四张读数卡升到页签栏之上（页级概览 + 页签内工作台）。
     const naValues = w.findAll('.mk-kpi__num').filter((v) => v.text() === '—')
     expect(naValues).toHaveLength(3)
-    expect(w.findAll('.mk-kpi__hint--bad')).toHaveLength(3)
+    /* 2026-11-01 用户拍板「KPI 面板下方不许有解释说明文字，全站改了」：
+       原先是三张失败卡各挂一句红字脚注（.mk-kpi__hint--bad）。现在卡内不渲染任何说明，
+       失败信号靠数字档位——三张失败卡的数字走 bad 档，文案退到卡根 title（悬停/读屏）。 */
+    expect(w.findAll('.mk-kpi__hint')).toHaveLength(0)
+    expect(w.findAll('.mk-kpi--bad')).toHaveLength(3)
+    expect(w.findAll('.mk-kpi[title*="加载失败"]')).toHaveLength(3)
     const zeroValues = w.findAll('.mk-kpi__num').filter((v) => v.text() === '0')
     expect(zeroValues).toHaveLength(1)
-    // 2026-10-27：页签内是行动队列——失败行保留但不可操作，清零项压成底部署名
-    expect(w.findAll('.oh-task')).toHaveLength(3)
-    expect(w.findAll('.oh-task--failed')).toHaveLength(3)
-    for (const row of w.findAll('.oh-task--failed')) {
-      expect(row.text()).toContain('加载失败')
-      expect(row.find('button').exists()).toBe(false)
-    }
-    expect(w.find('.oh-queue__cleared').text()).toContain('草稿公告')
+    /* 2026-11-09「运营待办」空壳页签下线：页签体内不再有行动队列/失败行，
+       失败信号全部由页级错误条 + 读数卡（「—」/bad 档/title）承载。 */
+    expect(w.findAll('.oh-task')).toHaveLength(0)
+    expect(w.find('.oh-queue').exists()).toBe(false)
+    expect(w.find(`[role="tab"][aria-selected="true"]`).text()).toBe('反馈')
     const failedCards = w.findAll('.mk-kpi').filter((c) => c.find('.mk-kpi__num').text() === '—')
     for (const card of failedCards) {
       expect(card.classes()).not.toContain('mk-kpi--clickable')
@@ -107,7 +123,7 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     w.unmount()
   })
 
-  it('三个待办域成功且全为 0 → 读数带四卡显 0，页签内收成一行「没有待处理项」', async () => {
+  it('三个待办域成功且全为 0 → 读数带四卡显 0，默认落「反馈」页签（空壳待办页签已下线）', async () => {
     // D16：mock 换 live 信封（后端体为 { success, data: [...], pagination: {...} }，pagination 与 data 平级），
     // 旧 mock 的 { data: {}, pagination } 形状与真实不符，会让「解析错位」在任何测试里不可见。
     h.feedbackList.mockResolvedValue({ data: { success: true, data: [], pagination: { total: 0 } } })
@@ -120,44 +136,38 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     // 护栏：页头状态条已退役
     expect(w.find('.mk-status').exists(), '本页状态条已退役').toBe(false)
     expect(w.find('.mk-alert').exists()).toBe(false)
-    // 读数如实显示 0（真实 0 可以显；四卡：待处理反馈/生成失败路径/事件投递失败/草稿公告）
+    // 读数如实显示 0（真实 0 可以显；四卡：未处理反馈/生成失败路径/事件投递失败/草稿公告）
     const values = w.findAll('.mk-kpi__num').map((v) => v.text())
     expect(values).toEqual(['0', '0', '0', '0'])
-    // 2026-10-27：全部清零时不再渲染 4 个空行，改一行空态；清零名单不再需要
-    expect(w.findAll('.mk-card')).toHaveLength(1)
+    /* 2026-11-09：「运营待办」页签删除后，页签体只剩嵌入子页（反馈默认），
+       不再有「没有待处理项」空态卡——清零结论由上方四个 0 直接承担。 */
     expect(w.findAll('.oh-task')).toHaveLength(0)
-    expect(w.find('.oh-queue__empty').exists()).toBe(true)
-    expect(w.find('.oh-queue__empty').text()).toContain('没有待处理项')
-    expect(w.find('.oh-queue__cleared').exists()).toBe(false)
-    /* 2026-10-29 冗余副文审计：全清零时卡头不再复述结论、空态不再点名四类待办——
-       同一事实只由页级四个 0 与「没有待处理项」承担（此前一屏说了四遍）。 */
-    expect(w.find('.mk-card__meta').exists()).toBe(false)
-    expect(w.find('.oh-queue__empty').text()).not.toContain('都已处理完')
+    expect(w.find('.oh-queue').exists()).toBe(false)
+    expect(w.find('.oh-queue__empty').exists()).toBe(false)
+    expect(w.find(`[role="tab"][aria-selected="true"]`).text()).toBe('反馈')
+    const tabLabels = w.findAll('.tabs .tab').map((t) => t.text())
+    expect(tabLabels).toEqual(['反馈', '成就', '公告', '站内通知'])
 
     w.unmount()
   })
 
   /* 2026-10-18 用户拍板「读数卡升到页签栏之上、任何页签都能看见」：
      这一块是跨页签的待办读数（反馈/路径/事件/公告各属别的页签），从此不再只长在「运营待办」页签里。
-     用「数据导出」页签验证最狠：它是纯表单页、本页签零读数，读数带仍要照常在页签栏之上。
+     2026-11-01 四个系统页签迁去「系统设置」后，本页每个页签都属内容运营、读数带与它们全都相关，
+     原先「系统页签隐藏读数带」的判据（SYSTEM_TABS）随之退役——这里反过来锁住「页签换了读数带还在」。
      页签切换走 URL（?tab=），故用带 router 的挂载。 */
-  it('页级读数带在零读数的「数据导出」页签同样可见（跨页签待办不再被某个页签独占）', async () => {
+  it('读数带在运营中心任一页签都在（系统页签判据已退役）', async () => {
     h.feedbackList.mockResolvedValue({ data: { success: true, data: [], pagination: { total: 3 } } })
     h.contentStats.mockResolvedValue({ data: { data: { byStatus: { failed: 2 } } } })
     h.outboxDead.mockResolvedValue({ data: { data: { deadCount: 1 } } })
 
     const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/admin/:page?', component: { template: '<div />' } }] })
-    await router.push('/admin/ops-hub?tab=export')
+    await router.push('/admin/ops-hub?tab=inapp')
     await router.isReady()
     const w = mount(OpsHub, { global: { plugins: [router] } })
     await flushPromises()
 
-    const readings = w.findAll('.oh-metrics .mk-kpi__label').map((x) => x.text().trim())
-    expect(readings).toEqual(['待处理反馈', '生成失败路径', '事件投递失败', '草稿公告'])
-    expect(w.findAll('.oh-metrics .mk-kpi__num').map((x) => x.text())).toEqual(['3', '2', '1', '0'])
-    // 位置：读数带在页签面板之外、页签栏之前（页级，不是某个页签体内的内容）
-    expect(w.find('.oh-metrics').element.closest('[role="tabpanel"]')).toBeNull()
-    expect((w.find('.tabs').element.compareDocumentPosition(w.find('.oh-metrics').element) & Node.DOCUMENT_POSITION_PRECEDING) !== 0).toBe(true)
+    expect(w.find('.oh-metrics').exists()).toBe(true)
     // 口径开关随读数带走（不再留在某个页签的卡头里）；刷新不再在页头另出一颗（走顶栏）
     // 口径开关已退役（2026-10-21）：页头动作区不再有 真实/测试 控件
     expect(w.find('.mk-pagehead__actions').text()).not.toContain('真实')
@@ -165,9 +175,9 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     w.unmount()
   })
 
-  /* D7/D16 护栏：live 信封下待处理反馈计数必须从 pagination.total 解析且读数卡可点下钻。
+  /* D7/D16 护栏：live 信封下未处理反馈计数必须从 pagination.total 解析且读数卡可点下钻。
      旧实现 `data?.data?.pagination` 恒 undefined，把真实 10 条显示成「已清零」且不可下钻。 */
-  it('待处理反馈 live 信封（data 数组 + pagination 平级）→ 计数=10、读数卡可点', async () => {
+  it('未处理反馈 live 信封（data 数组 + pagination 平级）→ 计数=10、读数卡可点', async () => {
     h.feedbackList.mockResolvedValue({ data: { success: true, data: [{ id: 'f1', status: 'new' }], pagination: { total: 10 } } })
     h.contentStats.mockResolvedValue({ data: { data: { byStatus: { failed: 0 } } } })
     h.outboxDead.mockResolvedValue({ data: { data: { deadCount: 0 } } })
@@ -178,12 +188,14 @@ describe('R2：OpsHub 失败不得伪装成「已清零」', () => {
     // 读数如实显示 10（不再解析错位成 0）。
     const values = w.findAll('.mk-kpi__num').map((v) => v.text())
     expect(values).toContain('10')
-    // 值色分档：待处理反馈的严重度是 warn（琥珀），不是 bad（红）——颜色只承载紧急度。
-    const feedbackCard = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '待处理反馈')!
+    // 值色分档：未处理反馈的严重度是 warn（琥珀），不是 bad（红）——颜色只承载紧急度。
+    const feedbackCard = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '未处理反馈')!
     expect(feedbackCard.classes()).toContain('mk-kpi--warn')
     expect(feedbackCard.find('.mk-kpi__num').text()).toBe('10')
     // 2026-10-26：读数卡自身就是入口（页签内的第二份清单已删）
     expect(feedbackCard.classes()).toContain('mk-kpi--clickable')
+    // 2026-11-01：三域读数同步给侧栏角标（角标口径 = 待办件数，不再是已发布公告数）
+    expect(h.setOpsPending).toHaveBeenCalledWith(expect.objectContaining({ feedback: 10 }))
 
     w.unmount()
   })

@@ -226,10 +226,6 @@ fields:
     promptRole: hidden-inference
     valueType: object
     description: KC 前置依赖图 {nodes[{kcId,name,taxonomy}], edges[{from,to,relation=prerequisite}]}（知识依赖非讲授顺序、无环）；代码侧物化为概念图供前置闭包查询
-  - fieldId: gapCoverage
-    promptRole: hidden-inference
-    valueType: object
-    description: 前提缺口覆盖报告 {covered[], uncovered[{concept,reason}]}（仅提供 prerequisiteTree 时输出，否则整个字段省略）
 
 routings:
   # path-agent（确定性定帧）→ path-planning + stage-designer
@@ -576,10 +572,10 @@ routings:
   - agentId: skill:path-reviewer
     fieldId: replanInstructions
     render: hidden
-    handoff: [path-agent, skill:path-planning]
+    handoff: [path-agent]
     internal: true
     accumulate: false
-    notes: 评审未过时的修订指令回传
+    notes: 评审未过时的修订指令回传。path-planning 并不直接收到 replanInstructions 这个键：重规划时它经 replan.reviewerFeedback（已声明 sandbox:path.replan）消费，故不声明为向 skill:path-planning 的直接交接（#199 实参对账）
 
   # === skill:kc-mapper（2026-10-24 契约同步批；代码侧物化为概念图/KC 注册表） ===
   - agentId: skill:kc-mapper
@@ -601,9 +597,3 @@ routings:
     internal: true
     accumulate: false
     notes: 物化概念图（prerequisite 闭包 → 教学侧前置缺口查询）
-  - agentId: skill:kc-mapper
-    fieldId: gapCoverage
-    render: hidden
-    handoff: [path-agent]
-    internal: true
-    accumulate: false

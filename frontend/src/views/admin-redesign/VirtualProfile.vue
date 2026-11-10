@@ -1,7 +1,6 @@
 ﻿<template>
   <div v-if="detailError" class="mk-page vp">
     <MkEmptyState
-      icon="◌"
       title="画像加载失败"
       description="暂时无法获取该虚拟学习者的画像与故事池。"
       action-text="重试"
@@ -32,10 +31,27 @@
              与 LearnerDetail 的「虚拟档案 →」对称——那边也是 MkDetailHero 的 #actions。
              默认档按钮（hero 位不用 sm，判例 2026-10-20）。 -->
         <div class="mk-entity__actions">
-          <!-- 页面级主操作（2026-10-24 层级收口）：此前启动入口只在「故事池」的故事行里，
-               从学习详情反跳进来的人没有下一步。这里复用列表的启动弹窗（选故事 → 建会话并开跑）。 -->
+          <!-- 页面级主操作（2026-10-31 四轮评审 R4）：已有活跃会话时主位是「打开座舱」——
+               管理员此刻的第一诉求是看进度，蓝色「运行」会诱使误触新建一套重复会话
+               （沈舟/韩磊 故事/路径: 2/1 正是重复运行的产物）；新运行降级为次钮「再开一局」。
+               无活跃会话时维持原样（主位「运行」，复用列表的启动弹窗）。 -->
+          <template v-if="isLive && activeSessionId">
+            <button
+              type="button"
+              class="mk-btn mk-btn--primary"
+              title="打开当前活跃会话的座舱：查看对话、推进/暂停/终止等实时控制"
+              @click="goCockpit()"
+            >打开座舱</button>
+            <button
+              v-if="displayStories.length"
+              type="button"
+              class="mk-btn"
+              title="不影响当前会话：另选故事新开一套运行"
+              @click="openLaunch()"
+            >再开一局</button>
+          </template>
           <button
-            v-if="isLive"
+            v-else-if="isLive"
             type="button"
             class="mk-btn mk-btn--primary"
             :disabled="!displayStories.length"
@@ -90,7 +106,6 @@
             aria-label="更多操作"
             aria-haspopup="menu"
             :aria-expanded="openMenu === 'ops'"
-            title="更多操作：座舱 / 生命周期 / 账号自动学习 / 编辑画像"
             @click.stop="toggleMenu('ops')"
           >⋯</button>
           <div v-if="openMenu === 'ops'" class="mk-menu__pop" :style="popStyle" @click.stop>
@@ -170,16 +185,6 @@
           {{ genBusy ? `生成中 ${genProgress.done}/${genProgress.total}…` : '生成故事' }}
         </button>
       </template>
-      <button
-        v-else-if="activeTab === 'memory'"
-        type="button"
-        class="mk-status__action"
-        :disabled="memoryLoading"
-        title="重新读取记忆池数据"
-        @click="loadMemory(true)"
-      >
-        <MkLoading v-if="memoryLoading" inline /><template v-else>刷新</template>
-      </button>
     </div>
 
     <div class="vp-body">
@@ -231,7 +236,7 @@
                 <div v-if="latestRun" class="vp-lastrun">
                   <div class="vp-lastrun__row">
                     <span class="vp-lastrun__story" :title="latestRun.storyTitle || '未关联故事'">{{ latestRun.storyTitle || '未关联故事' }}</span>
-                    <RunStateBadge :status="latestRun.result" :hint="formatRunResult(latestRun.result)" :pulse="false" />
+                    <RunStateBadge :status="runDisplayState(latestRun)" :hint="formatRunResult(runDisplayState(latestRun))" :pulse="false" />
                   </div>
                   <span
                     v-if="runReadings(latestRun)"
@@ -350,7 +355,7 @@
               <span class="mk-field__label">{{ BUDGET_TOTAL_LABEL }}</span>
               <input v-model.number="budgetForm.maxRetriesTotal" type="number" min="1" max="1000" class="mk-field__input" @input="budgetDirty = true" />
               <span v-if="budgetErrors.maxRetriesTotal" class="mk-field__err">{{ budgetErrors.maxRetriesTotal }}</span>
-              <span class="mk-field__hint">单个运行累计 AI 调用（含重试）达到上限即终止，故事可单独覆盖</span>
+              <span class="mk-field__hint">单个运行累计 AI 调用（含重试）达到上限即终止。会话实际生效值以座舱额度条为准（故事自带预算优先于画像设置）</span>
             </label>
             <label class="mk-field" :class="{ 'mk-field--error': budgetErrors.turnCapPerLesson }">
               <span class="mk-field__label">每课回合上限</span>
@@ -371,7 +376,8 @@
           </div>
           <div class="mk-card__foot">
             <span v-if="budgetSavedAt" class="mk-card__meta">已保存 · {{ budgetSavedAt }}</span>
-            <button type="button" class="mk-btn mk-btn--primary" :disabled="budgetSaving" @click="saveBudget">
+            <!-- 未改动置灰（2026-10-31 三轮评审 P3）：与「保存策略」同一脏检规则，pristine 不给可点假象 -->
+            <button type="button" class="mk-btn mk-btn--primary" :disabled="budgetSaving || !budgetDirty" @click="saveBudget">
               {{ budgetSaving ? '保存中…' : '保存预算' }}
             </button>
           </div>
@@ -382,8 +388,9 @@
           <div class="mk-card__head">
             <h3 class="mk-card__title">记忆池 · {{ memoryPoolRows.length }} 个概念<template v-if="memoryCount"> / 共 {{ memoryCount }} 条</template></h3>
             <div class="mk-card__head-right">
-              <span class="mk-card__meta">课后沉淀</span>
-              <!-- 账号级记忆与复习（2026-10-24）：本页只列本档案的记忆痕迹，跨路径明细在账号详情 -->
+              <!-- 账号级记忆与复习（2026-10-24）：本页只列本档案的记忆痕迹，跨路径明细在账号详情。
+                   2026-10-31 四轮评审 R8：刷新挪到行尾——插在中间会把「账号级记忆与复习 →」
+                   这组词组劈成两半 -->
               <button
                 v-if="d.userId"
                 type="button"
@@ -391,8 +398,14 @@
                 title="打开该账号的学习详情 · 记忆与复习：含跨路径概念与到期明细。两处统计方式不同，数字可能不一致"
                 @click="goMemoryReview()"
               >账号级记忆与复习 →</button>
+              <button
+                type="button"
+                class="mk-btn mk-btn--sm"
+                :disabled="memoryLoading"
+                title="重新读取记忆池数据"
+                @click="loadMemory(true)"
+              ><MkLoading v-if="memoryLoading" inline /><template v-else>刷新</template></button>
             </div>
-            <!-- 刷新已上移至统一操作台「主动作」槽 -->
           </div>
 
           <MkLoading v-if="isLive && memoryLoading && !memoryData" text="正在读取记忆…" />
@@ -461,8 +474,9 @@
             <!-- 记忆保持曲线（Q2/Q8）：到期 / 已掌握概念的保留率随天数衰减 -->
             <div v-if="memoryCurveConcepts.length" class="vp-memory__group">
               <div class="vp-memory__group-head">
-                <h4 class="vp-memory__group-title">记忆保持曲线</h4>
-                <span class="mk-card__meta">横轴为距上次复习天数 · 纵轴为预计还记得的比例</span>
+                <!-- 坐标轴含义收进卡题 title（2026-11-02 文案清理）：轴刻度只有「第 N 天 / %」，
+                     横轴单位与纵轴口径别处没有出口，随卡题悬停给；屏上不再单起一行图例 -->
+                <h4 class="vp-memory__group-title" title="横轴为距上次复习天数 · 纵轴为预计还记得的比例">记忆保持曲线</h4>
               </div>
               <div class="vp-memory__curve-legend">
                 <span
@@ -486,7 +500,6 @@
             <div v-if="memoryCompleted.length" class="vp-memory__group">
               <div class="vp-memory__group-head">
                 <h4 class="vp-memory__group-title">最近完成的事</h4>
-                <span class="mk-card__meta">成果物</span>
               </div>
               <div class="vp-memory__completed">
                 <div v-for="(c, ci) in memoryCompleted" :key="c.taskId || `mc-${ci}`" class="vp-memory__completed-item">
@@ -603,7 +616,16 @@
                   </div>
                 </div>
                 <div class="vp-story__ops">
-                  <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="running" :title="'用这个故事启动一次新的实验运行（进入座舱）'" @click="runStory(s, i)">
+                  <!-- 2026-10-31 三轮/四轮评审：运行中或已暂停（未完结）的故事主操作都是
+                       「打开座舱」——▶ 运行会新开一套重复任务；只有终态故事才给 ▶ 运行 -->
+                  <button
+                    v-if="['running', 'paused'].includes(storyRunState(s)) && s.latestRun?.sessionId"
+                    type="button"
+                    class="mk-btn mk-btn--sm"
+                    :title="storyRunState(s) === 'paused' ? '该故事最新运行已暂停：打开座舱查看进度或继续' : '该故事最新运行仍在进行：打开其座舱查看实时进度'"
+                    @click="openSessionCockpit(String(s.latestRun.sessionId))"
+                  >打开座舱</button>
+                  <button v-else type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="running" :title="'用这个故事启动一次新的实验运行（进入座舱）'" @click="runStory(s, i)">
                     {{ running ? '进行中…' : '▶ 运行' }}
                   </button>
                   <!-- 低频操作收进 ⋯ 菜单：卡片只留主操作「运行」 -->
@@ -614,7 +636,6 @@
                       aria-label="更多故事操作"
                       aria-haspopup="menu"
                       :aria-expanded="openMenu === `story-${storyKey(s, i)}`"
-                      title="编辑 / 诊断 / 删除故事"
                       @click.stop="toggleMenu(`story-${storyKey(s, i)}`)"
                     >⋯</button>
                     <div v-if="openMenu === `story-${storyKey(s, i)}`" class="mk-menu__pop" :style="popStyle" @click.stop>
@@ -666,15 +687,24 @@
             <!-- 说明只在有会话时出：没有会话就没有可按天看的读数，此时只留空态给下一步 -->
             <p class="vp-timeline__hint">
               按自然日汇总所选运行的学习负担、学习状态、系统干预与难度调整。
+              推进日期由本卡直接操作（推进并上课会真实消耗 AI 调用）。
             </p>
-            <DayTimeline v-if="timelineSessionId" :session-id="timelineSessionId" :from="0" :to="29" readonly />
+            <!-- 2026-11-09：取消 readonly——这里原来是全站唯一的使用点却传了只读，
+                 使后端已有的推进/推进并上课/自动推进/重置全部没有 UI 入口（跨日链路不可达）。
+                 @changed 用于推进后立刻重载详情，让画像/指标反映新的模拟日。 -->
+            <DayTimeline
+              v-if="timelineSessionId"
+              :session-id="timelineSessionId"
+              :from="0"
+              :to="29"
+              @changed="onTimelineChanged"
+            />
           </template>
         </section>
 
         <section v-if="activeTab === 'runs'" class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">运行记录 · {{ allRuns.length }}</h3>
-            <span class="mk-card__meta">按时间倒序</span>
             <!-- 截断披露（#96）：详情接口最多 200 条，本页只渲染最近 RUNS_TAB_WINDOW 条 -->
             <span
               v-if="runsTruncated"
@@ -699,10 +729,10 @@
                     :title="runReadingsTitle(r)"
                   >{{ runReadings(r) }}</span>
                 </div>
-                <RunStateBadge :status="r.result" :hint="`${formatRunResult(r.result)}${r.pathId ? ' · 关联学习路径' : ''}`" :pulse="false" />
+                <RunStateBadge :status="runDisplayState(r)" :hint="`${formatRunResult(runDisplayState(r))}${r.pathId ? ' · 关联学习路径' : ''}`" :pulse="false" />
                 <RunStageBar
                   :stage="r.stage"
-                  :status="r.result"
+                  :status="runDisplayState(r)"
                   :task-progress="null"
                   :show-task-text="false"
                 />
@@ -811,13 +841,13 @@
               <input v-model="editStoryForm.problemKnowledge.hiddenGaps" class="mk-field__input" />
             </label>
             <label class="mk-field">
-              <span class="mk-field__label">自我评估（自评表述）</span>
+              <span class="mk-field__label">自我评估</span>
               <input v-model="editStoryForm.problemKnowledge.selfAssessment" class="mk-field__input" />
             </label>
           </div>
           <!-- 故事级预算覆盖（可选）：缺省按角色级预算取值 -->
           <div class="vp-pk">
-            <span class="mk-field__label">故事级预算（可选，留空按角色级取值）</span>
+            <span class="mk-field__label">故事级预算</span>
             <label class="mk-field" :class="{ 'mk-field--error': storyBudgetErrors.maxRetriesPerStep }">
               <span class="mk-field__label">单步最大重试</span>
               <input v-model="editStoryForm.budget.maxRetriesPerStep" type="number" min="1" max="20" class="mk-field__input" placeholder="留空按角色级取值（默认 8）" />
@@ -892,7 +922,7 @@
               maxlength="120"
               placeholder="例如：化学实验误差分析、期末前一周的复习取舍"
             />
-            <span class="mk-field__hint">写具体学科、考试节点或情境。留空则由画像与学习记忆自由发挥。{{ genForm.direction.length }}/120</span>
+            <span class="mk-field__hint">留空则由画像与学习记忆自由发挥。{{ genForm.direction.length }}/120</span>
           </label>
 
           <div class="vp-gen__group" role="radiogroup" aria-label="生成数量">
@@ -1053,6 +1083,7 @@ import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { statusText } from './statusText'
 import { subPage, openSubPage, setSubPageLabel, isLive } from './store'
 import { liveGetVirtualDetail, liveVirtuals, timeAgo, errMsg } from './live'
+import { personaDisplayName } from './cardDisplay'
 import { adminVirtualLearnersApi, adminLearnerModelsApi } from '@/api/adminApi'
 import { clearProjectionToken, setProjectionToken } from '@/utils/projection'
 import { LEARNER_METRICS } from '@/utils/learnerMetrics'
@@ -1147,10 +1178,12 @@ interface Detail {
   runsTotal: number
   aiProfile: { label: string; value: string }[]
   /** V3：最近一次黑盒终局评估（裁判 / 保真分）——已随裁判独立面移除（2026-09-27） */
-  /** LLM 重试预算（以虚拟学习者为单位） */
+  /** LLM 重试预算（以虚拟学习者为单位）。costCeiling = 成本护栏真值（派生链路键），
+      null 表示不限；maxRetriesTotal 为本表单历史键，二者语义相同（resolveSessionBudget 兼容） */
   simulationBudget?: {
     maxRetriesPerStep: number
     maxRetriesTotal: number
+    costCeiling?: number | null
     consumedRetries?: number
   }
   /** 运行偏好（画像级持久，新会话创建时作为 simulationConfig 初始值） */
@@ -1389,8 +1422,10 @@ const storyFilter = ref('')
 const storyFilterOptions = computed(() => {
   const base = stories.value
   const count = (pred: (s: StoryItem) => boolean) => base.filter(pred).length
-  const running = count((s) => (s.runningCount || 0) > 0)
-  const paused = count((s) => !!s.latestRun && ['paused'].includes(String(s.latestRun.status || '').toLowerCase()))
+  const running = count((s) => (s.runningCount || 0) > 0 && !(s.latestRun?.sessionId && pausedSessionIds.value.has(s.latestRun.sessionId)))
+  /* 2026-10-31 四轮评审 R1：已暂停计数与徽章同判据（autopilot 停机也算） */
+  const paused = count((s) => (s.latestRun?.sessionId && pausedSessionIds.value.has(s.latestRun.sessionId))
+    || ['paused'].includes(String(s.latestRun?.status || '').toLowerCase()))
   const failed = count((s) => !!s.latestRun && ['failed', 'abandoned', 'timeout'].includes(String(s.latestRun.status || '').toLowerCase()))
   const completed = count((s) => !!s.latestRun && String(s.latestRun.status || '').toLowerCase() === 'completed')
   return [
@@ -1514,9 +1549,14 @@ function fillBudgetForm() {
   if (budgetDirty.value) return
   const b = liveDetail.value?.simulationBudget
   const rp = liveDetail.value?.runtimePrefs
+  /* 成本护栏双键兼容（2026-10-31 三轮评审 P1 根因）：画像/派生链路写 costCeiling，
+     本表单历史键是 maxRetriesTotal——只读后者时，派生画像（costCeiling 1500）会显示
+     兜底 600，与座舱额度条（同一 resolveSessionBudget 单源解析）当屏打架。
+     现优先读 costCeiling；两者皆缺时才是 600 兜底。 */
+  const ceiling = Number(b?.costCeiling ?? b?.maxRetriesTotal ?? 600)
   budgetForm.value = {
     maxRetriesPerStep: b?.maxRetriesPerStep ?? 8,
-    maxRetriesTotal: b?.maxRetriesTotal ?? 600,
+    maxRetriesTotal: Number.isFinite(ceiling) && ceiling > 0 ? ceiling : 600,
     turnCapPerLesson: rp?.turnCapPerLesson ?? 40,
     frictionBudget: rp?.frictionBudget || 'normal'
   }
@@ -1549,7 +1589,9 @@ async function saveBudget() {
   budgetSaving.value = true
   try {
     await adminVirtualLearnersApi.updateVirtualLearner(id, {
-      simulationBudget: { maxRetriesPerStep: perStep, maxRetriesTotal: total },
+      /* 双键同写（2026-10-31 三轮评审 P1）：resolveSessionBudget 优先读 costCeiling
+         （派生画像已带该键），只写 maxRetriesTotal 会被旧 costCeiling 压住、改动静默失效 */
+      simulationBudget: { maxRetriesPerStep: perStep, maxRetriesTotal: total, costCeiling: total },
       runtimePrefs: {
         turnCapPerLesson: turnCap,
         frictionBudget: budgetForm.value.frictionBudget
@@ -1832,6 +1874,14 @@ function retryStories() {
   if (id) void loadDetail(id, true)
 }
 
+/** 日期模拟推进/重置后：静默重载详情。
+ *  必要性（2026-11-09 跨日核查）：管理端详情的画像与指标读链已按实例模拟钟取数，
+ *  推进后必须重拉才能看到新模拟日的四读数/概念状态；不重载会停留在推进前的画面。 */
+function onTimelineChanged() {
+  const id = subPage.value?.id
+  if (id) void loadDetail(id, true)
+}
+
 async function loadDetail(id?: string, quiet = false) {
   if (!id) return
   const seq = ++loadSeq
@@ -1892,12 +1942,14 @@ async function loadDetail(id?: string, quiet = false) {
       selectedStoryId.value = null
     }
 
-    /* 显示名链与「学习者卡库」/ 虚拟学习者列表同源（#66）：personaSeed.nickname →
-       nickname → name → nameHint → userName → id；三处同一字符串，vlAvatar 哈希
-       「同一人恒定同色」才成立。 */
+    /* 显示名链与「虚拟学习者列表」（live.ts 同一处口径）同源（2026-11-08 二次修正）：
+       personaSeed.nickname → nickname → name → nameHint → userName → id，末层再过
+       personaDisplayName——合成卡的 nickname 是诉求句（「想解决…」），要在**两处**都
+       派生成同一个人名，否则从列表点进详情名字就变了。卡库面向卡池、标题读内容句
+       （cardDisplayTitle），是另一批数据行，不在这条链上。 */
     const personaSeed = (p.personaSeed || {}) as Record<string, unknown>
     liveDetail.value = {
-      name: String(personaSeed.nickname || p.nickname || p.name || p.nameHint || raw.userName || id),
+      name: personaDisplayName(String(personaSeed.nickname || p.nickname || p.name || p.nameHint || raw.userName || id)),
       archetype: String(p.occupation || p.archetype || '自定义样本'),
       story: String(p.background || raw.notes || '（未填写故事）'),
       goal: String(raw.learningGoal || ''),
@@ -1931,6 +1983,10 @@ async function loadDetail(id?: string, quiet = false) {
           paused: (() => {
             try {
               const sr = typeof s.stageResults === 'string' ? JSON.parse(s.stageResults || '{}') : (s.stageResults || {})
+              /* 2026-10-31 四轮评审 R1：自动驾驶停机（进度保留）也算已暂停——与列表页
+                 pausedSessionIds 同一判据（live.ts stageResults.autopilot.status==='stopped'），
+                 否则列表灰点「已暂停」、详情满屏绿「进行中」两套状态打架 */
+              if (sr?.autopilot?.status === 'stopped') return true
               return !!(sr?.teaching?.paused)
             } catch { return false }
           })(),
@@ -1943,7 +1999,16 @@ async function loadDetail(id?: string, quiet = false) {
           rounds: Number(s.roundCount ?? 0),
           durationMs: (() => {
             const from = Date.parse(String(s.createdAt || s.startedAt || ''))
-            const to = Date.parse(String(s.updatedAt || ''))
+            /* 2026-10-31 五轮评审 P2：挂机不计时——推进中/停机的会话以自动驾驶最后心跳为
+               活动终点（停机后心跳冻结，暂停 3 小时不再被算进运行时长）；终态会话以最后
+               一次落库写（updatedAt）收口（总结/收尾写入晚于最后一次心跳） */
+            let sr: Record<string, unknown> | null = null
+            try { sr = typeof s.stageResults === 'string' ? JSON.parse(s.stageResults || '{}') : (s.stageResults || null) } catch { sr = null }
+            const ap = (sr?.autopilot || null) as Record<string, unknown> | null
+            const hb = Date.parse(String(ap?.heartbeatAt || ''))
+            const upd = Date.parse(String(s.updatedAt || ''))
+            const terminal = ['completed', 'failed', 'abandoned', 'timeout', 'cancelled', 'incomplete'].includes(String(s.status || '').toLowerCase())
+            const to = terminal ? upd : Number.isFinite(hb) ? hb : upd
             return Number.isFinite(from) && Number.isFinite(to) && to >= from ? to - from : undefined
           })(),
           currentTask: s.currentTaskTitle ? String(s.currentTaskTitle) : null
@@ -1955,10 +2020,14 @@ async function loadDetail(id?: string, quiet = false) {
       ],
       simulationBudget: (() => {
         const b = (p.simulationBudget || {}) as Record<string, unknown>
-        if (!b.maxRetriesPerStep && !b.maxRetriesTotal) return undefined
+        if (!b.maxRetriesPerStep && !b.maxRetriesTotal && b.costCeiling == null) return undefined
+        /* costCeiling 双键透传（2026-10-31 三轮评审 P1 根因）：派生画像的成本护栏真值在
+           costCeiling（如 1500），此前映射层丢弃该键并伪造 maxRetriesTotal 600，
+           表单与座舱额度条（resolveSessionBudget 单源）当屏打架 */
         return {
           maxRetriesPerStep: Number(b.maxRetriesPerStep) || 8,
           maxRetriesTotal: Number(b.maxRetriesTotal) || 600,
+          costCeiling: b.costCeiling == null ? null : Number(b.costCeiling),
           consumedRetries: Number(b.consumedRetries) || 0
         }
       })(),
@@ -2564,9 +2633,10 @@ const tabs = computed(() => {
 })
 /** 操作台是否有内容：主动作（stories 生成故事 / memory 刷新）或视图筛选（stories 状态 / runs 流水）
     存在的 tab 才渲染整行；日程/画像等无操作 tab 不出现空行（账号级 ⋯ 在 tabs 行右端常驻） */
+/* 2026-10-31 三轮评审 P2：memory 不再进工具台——该页签没有筛选器，整行只剩右侧一个
+   刷新，读作「空筛选容器」；刷新移入记忆池卡头（mk-card__head-right）。 */
 const hasToolbar = computed(() =>
   activeTab.value === 'stories'
-  || activeTab.value === 'memory'
   || (activeTab.value === 'runs' && allRuns.value.length > 0)
 )
 const levelLabel = computed(() => ({
@@ -2594,6 +2664,22 @@ const LINE_EMPTY = 'mk-empty--line'
    窗口上限 RUNS_TAB_WINDOW；runsTotal 是详情接口给的原始条数（接口上限 200），
    超出窗口时卡头须披露「已截断」（审核 2026-10-06 低 [96]） */
 const allRuns = computed<RunItem[]>(() => (d.value?.runs || []).slice(0, RUNS_TAB_WINDOW))
+
+/* 2026-10-31 四轮评审 R1：会话未完结但自动驾驶已停机 = 已暂停（展示态折叠）。
+   列表页按 autopilot 停机态画灰点「已暂停」，详情页此前只看 result==='running'
+   就画绿「进行中」——同一人两页两种状态。此 helper 是画像页所有运行徽章的单一出口。 */
+function runDisplayState(r: Pick<RunItem, 'result' | 'paused'>): string {
+  if ((r.result === 'running' || r.result === 'created') && r.paused) return 'paused'
+  return String(r.result || 'created')
+}
+/** 自动驾驶已停机的会话 id 集：故事池徽章（latestRun 无 stageResults）跨引用用 */
+const pausedSessionIds = computed(() => {
+  const ids = new Set<string>()
+  for (const r of allRuns.value) {
+    if (r.paused && r.sessionId) ids.add(r.sessionId)
+  }
+  return ids
+})
 const runsTruncated = computed(() => (d.value?.runsTotal ?? 0) > allRuns.value.length)
 
 /* ===== 概览 pane / 状态条读数（原型 renderVLearnerDetail index.html:2403-2482）=====
@@ -2713,12 +2799,17 @@ const loopStages = computed<LoopStage[]>(() => {
           : stage.includes('memor') || stage.includes('review')
             ? 4
             : -1
+  /* 路径从未生成时不得把「教学回合」高亮为当前环（2026-10-31 五轮评审 P1）：
+     目标确认后状态机可能把 latest.stage 推到 teaching，但 pathTotal=0——钳回「路径规划」 */
+  const currentIdx2 = currentIdx >= 2 && pathTotal === 0 ? 1 : currentIdx
   const toneOf = (i: number): LoopStage['tone'] => {
     if (i === 4 && (due ?? 0) > 0) return 'alert'
     // 零运行：五环都还没走过。此前全部落 done（绿边），读起来像「闭环已完成」——
     // 改为只有入口环 active、其余虚线待办，明确「从这里开始」。
     if (!allRuns.value.length) return i === 0 ? 'active' : 'idle'
-    return i === currentIdx ? 'active' : 'done'
+    /* 指针前 = done、指针 = active、指针后 = idle（2026-10-31 五轮评审 P1：
+       原来指针之后也全落 done 绿边，0 教学会话/0 成果被画成已完成） */
+    return i < currentIdx2 ? 'done' : i === currentIdx2 ? 'active' : 'idle'
   }
   return [
     { name: '目标对话', meta: '澄清真实目标与约束', val: `${goalTotal} 会话`, tone: toneOf(0), title: `来源：故事池目标会话合计 ${goalTotal}` },
@@ -2845,7 +2936,8 @@ const timelineSessionOptions = computed(() =>
     .map((r) => ({
       sessionId: String(r.sessionId),
       // 传原始时间 createdAt（RunItem 内 time 已是 timeAgo 文案，再喂 timeAgo 会二次格式化出 Invalid Date）
-      label: `${formatRunResult(r.result)} · ${r.storyTitle || '未关联故事'} · ${timeAgo(String(r.createdAt || ''))}`,
+      /* 2026-10-31 五轮评审 P3：标签读展示态（已暂停），不再与页头徽章打架 */
+      label: `${formatRunResult(runDisplayState(r))} · ${r.storyTitle || '未关联故事'} · ${timeAgo(String(r.createdAt || ''))}`,
     })),
 )
 /** MkSelect 形态：value = sessionId（v-model 仍是 timelineSessionId） */
@@ -2866,7 +2958,10 @@ watch(
     「已选」只属于卡头勾选计数（selectedStoryKeys）；行选中态由 .is-selected
     的行底 + 单选点表达，避免同屏同名不同义（走查 F4-3）。 */
 /** 故事生命周期 → 中文 + 徽章档位（后端原样回 completed/pending/draft，
-    此前直接透出英文，和「草稿」混在一列）。未知值兜底草稿，不裸透内部枚举。 */
+    此前直接透出英文，和「草稿」混在一列）。未知值兜底草稿，不裸透内部枚举。
+    2026-10-31 四轮评审 R7：本徽章只表达故事**模板**生命周期（预置/草稿/就绪），
+    不用运行态覆盖——运行态属于下方 RunStateBadge（已暂停/已完成…），同卡双徽章
+    各说各轴，不再出现两个近义词蓝标相隔 20px。 */
 function storyStatusMeta(s: StoryItem): { text: string; cls: string } {
   switch (String(s.status || '')) {
     case 'ready': return { text: '就绪', cls: 'mk-badge--ok' }
@@ -2927,9 +3022,13 @@ function formatRunResult(result: string) {
  * 其余按 latestRun.status 原样（含 paused/failed/completed/abandoned）
  */
 function storyRunState(s: StoryItem): string {
-  if ((s.runningCount || 0) > 0 && s.latestRun?.status === 'running') return 'running'
   const st = String(s.latestRun?.status || '').toLowerCase()
-  if (['completed', 'incomplete', 'failed', 'abandoned', 'paused', 'created', 'timeout', 'cancelled'].includes(st)) return st
+  /* 终态优先（2026-10-31 四轮评审：停机后被回收为已放弃的会话不得再标「已暂停」） */
+  if (['completed', 'incomplete', 'failed', 'abandoned', 'paused', 'timeout', 'cancelled'].includes(st)) return st
+  /* 2026-10-31 四轮评审 R1：会话未完结但自动驾驶已停机 = 已暂停——latestRun 自身不带
+     stageResults，跨引用画像会话流水的停机 id 集（与列表页同判据） */
+  if (s.latestRun?.sessionId && pausedSessionIds.value.has(s.latestRun.sessionId)) return 'paused'
+  if ((s.runningCount || 0) > 0 && st === 'running') return 'running'
   if (st === 'running') return 'running'
   return st || 'created'
 }
@@ -2940,24 +3039,32 @@ interface RunDayGroup { key: string; title: string; runs: RunItem[] }
    故事池 = 按故事看（教材库存视角，卡片自带各故事的最近会话）；
    这里   = 按时间看（会话流水视角：全部会话按时间倒序、按日期分组），
    两个 tab 因此不再是同一数据的重复展示。 */
+/* 2026-10-31 五轮评审 P9：筛选维度与隔壁故事池对齐——全部 / 进行中 / 已暂停 / 已完成 / 需关注，
+   原「未完成」把已暂停混进终态桶，与故事池的「已暂停」独立胶囊不一致 */
 const RUN_FILTERS = [
   { key: '', label: '全部' },
   { key: 'active', label: '进行中' },
+  { key: 'paused', label: '已暂停' },
   { key: 'done', label: '已完成' },
-  /* 2026-10-23 走查：原来第四格叫「失败」且只收 tone=bad——「已放弃 / 已暂停 / 超时」
-     这些终态既不在进行中也不在已完成，于是出现「全部 1、其余 0」的读不通。
-     改「未完成」＝除进行中与已完成以外的全部终态；具体状态词看行内徽章。 */
-  { key: 'unfinished', label: '未完成' },
+  { key: 'bad', label: '需关注' },
 ] as const
 const runsFilter = ref('')
 function isRunActive(r: RunItem): boolean {
+  /* 2026-10-31 四轮评审 R1：自动驾驶停机不算「进行中」（落「已暂停」桶，行内徽章同词） */
+  if (r.paused && (r.result === 'running' || r.result === 'created')) return false
   return r.result === 'running' || r.result === 'created'
 }
 function isRunDone(r: RunItem): boolean {
   return r.tone === 'ok' || r.result === 'completed'
 }
-function isRunUnfinished(r: RunItem): boolean {
-  return !isRunActive(r) && !isRunDone(r)
+/** 展示态 = 已暂停（含自动驾驶停机折叠，见 runDisplayState） */
+function isRunPaused(r: RunItem): boolean {
+  return !isRunActive(r) && !isRunDone(r) && runDisplayState(r) === 'paused'
+}
+/** 需关注 = 系统失败 + 人为终止 + 超时等异常终态（与列表「异常」列同一关注面） */
+function isRunBad(r: RunItem): boolean {
+  const st = String(r.result || '').toLowerCase()
+  return r.tone === 'bad' || ['failed', 'abandoned', 'timeout'].includes(st)
 }
 const runFilterOptions = computed(() =>
   RUN_FILTERS.map((f) => ({
@@ -2967,17 +3074,20 @@ const runFilterOptions = computed(() =>
       ? allRuns.value.length
       : f.key === 'active'
         ? allRuns.value.filter(isRunActive).length
-        : f.key === 'done'
-          ? allRuns.value.filter(isRunDone).length
-          : allRuns.value.filter(isRunUnfinished).length,
+        : f.key === 'paused'
+          ? allRuns.value.filter(isRunPaused).length
+          : f.key === 'done'
+            ? allRuns.value.filter(isRunDone).length
+            : allRuns.value.filter(isRunBad).length,
   }))
 )
 /** 时间倒序 + 筛选（与 runFilterOptions 同口径） */
 const runRows = computed<RunItem[]>(() => {
   const rows = allRuns.value.slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
   if (runsFilter.value === 'active') return rows.filter(isRunActive)
+  if (runsFilter.value === 'paused') return rows.filter(isRunPaused)
   if (runsFilter.value === 'done') return rows.filter(isRunDone)
-  if (runsFilter.value === 'unfinished') return rows.filter(isRunUnfinished)
+  if (runsFilter.value === 'bad') return rows.filter(isRunBad)
   return rows
 })
 /** 会话流水行内时刻 HH:mm（完整日期见日期分组头） */
@@ -2996,7 +3106,7 @@ function fmtRunDuration(ms?: number): string {
 function runReadings(r: RunItem): string {
   const parts: string[] = []
   if (r.taskTotal && r.taskTotal > 0) parts.push(`任务 ${r.taskDone ?? 0}/${r.taskTotal}`)
-  if (r.rounds && r.rounds > 0) parts.push(`${r.rounds} 回合`)
+  if (r.rounds && r.rounds > 0) parts.push(`${r.rounds} 次推进`)
   const dur = fmtRunDuration(r.durationMs)
   if (dur) parts.push(dur)
   return parts.join(' · ')
@@ -3007,6 +3117,9 @@ function runReadingsTitle(r: RunItem): string {
   const lines = [runReadings(r)]
   if (r.currentTask) lines.push(`当前任务：${r.currentTask}`)
   lines.push('时长 = 从开始到最后一次活动')
+  /* 2026-10-31 三轮评审 P1：推进 = 自动驾驶步数，与消息条数/发言数不同义——
+     此前「6 回合」撞上座舱「学习者发言 5」，同屏数不同名同 */
+  lines.push('推进 = 自动驾驶推进步数，与消息条数不同义')
   return lines.filter(Boolean).join(String.fromCharCode(10))
 }
 
@@ -3111,7 +3224,7 @@ async function quietReload(id: string) {
   align-items: center;
   gap: 6px;
   padding: 2px 9px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-sm);
   border: 1px solid transparent;
   background: var(--mk-surface-3);
   font-size: var(--mk-fs-micro);
@@ -3133,7 +3246,7 @@ async function quietReload(id: string) {
   color: var(--mk-muted);
   background: var(--mk-surface-2);
   border: 1px solid var(--mk-line);
-  border-radius: 999px;
+  border-radius: var(--mk-radius-sm);
   padding: 2px 10px;
   white-space: nowrap;
   overflow: hidden;
@@ -3244,7 +3357,7 @@ async function quietReload(id: string) {
 /* 特征标签（原型 .chip 词汇：胶囊描边 + surface 底 + muted 字） */
 .vp-trait {
   padding: 4px 11px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-sm);
   border: 1px solid var(--mk-line);
   background: var(--mk-surface);
   color: var(--mk-muted);
@@ -3259,7 +3372,9 @@ async function quietReload(id: string) {
   background: var(--mk-blue-bg);
 }
 .vp-goal span { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 700; }
-.vp-goal strong { color: var(--mk-blue); font-size: var(--mk-fs-body); line-height: 1.45; }
+/* 2026-10-31 三轮评审 P3：蓝底蓝字读作超链接（「二战上岸」被当成可点）——
+   静态陈述回归正文墨色，重点靠加粗与蓝底面板承载，不借链接色 */
+.vp-goal strong { color: var(--mk-ink); font-size: var(--mk-fs-body); line-height: 1.45; }
 
 /* 画像字段键值对（原型 dl.kv 词汇：96px 标签列网格、行间不画线、标签 12px muted、值常规字重；
    __row 以 display:contents 透传，模板不动） */
@@ -3389,7 +3504,7 @@ async function quietReload(id: string) {
   cursor: pointer;
   border-radius: var(--mk-radius-xs);
 }
-.vp-story__title:hover { color: var(--mk-blue); }
+.vp-story__title:hover { color: var(--mk-blue-text); }
 .vp-story__title:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
 .vp-story__budget-badge {
   font-size: var(--mk-fs-micro);
@@ -3398,7 +3513,7 @@ async function quietReload(id: string) {
   background: var(--mk-amber-bg);
   border: 1px solid transparent;
   padding: 1px 8px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-sm);
   flex-shrink: 0;
   white-space: nowrap;
 }

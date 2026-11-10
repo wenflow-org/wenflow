@@ -1,6 +1,6 @@
 # WenFlow 非功能治理与统一计划
 
-> 📌 类型：治理计划（⚠️ 状态基线 2026-07-17，判状态以 §9 为准）｜最后核验：2026-09-28。索引见 [doc/README.md](./README.md)。
+> 📌 类型：治理计划（⚠️ 状态基线 2026-07-17，判状态以 §9 为准）｜最后核验：2026-11-02。索引见 [doc/README.md](./README.md)。
 
 > 审计日期：2026-07-17  
 > 架构基线与对齐计划（ARCHITECTURE_BASELINE_2026-07、ARCHITECTURE_ALIGNMENT_AND_REMEDIATION_PLAN）
@@ -590,15 +590,14 @@ Manifest 已明确五个顶层 Agent，但 Skill 仍注册到 AgentRegistry，Ad
 
 **状态：部分修复**
 
-Outbox 已有 Claim、Retry、Dead 和部分 Inbox 幂等，但内存 EventBus 与 Durable Event 双轨，LearnerCoordinator listener 未接线。
+Outbox 已有 Claim、Retry、Dead 和部分 Inbox 幂等，消费侧由 `DurableEventConsumerRegistry` 统一分发；当前没有内存事件总线，业务事件只有 Durable Outbox 一条主干。
 
 统一方案：
 
 1. 业务状态变化只允许事务内写 Outbox。
-2. 内存总线改名为 `ProcessSignalBus`，明确允许丢失。
-3. 有价值的旧 Listener 迁为 Durable Consumer；无价值的删除。
-4. `LearnerCoordinator.setupEventListeners()` 不直接补接线，先消除与 Durable Consumer 的重复逻辑。
-5. 无 Consumer 的 Durable Event 启动告警或失败。
+2. 当前没有内存事件总线；若后续确需进程内信号，统一命名为 `ProcessSignalBus` 并明确允许丢失。
+3. 消费逻辑统一注册到 `DurableEventConsumerRegistry`，不额外补接进程内 listener。
+4. 无 Consumer 的 Durable Event 启动告警或失败。
 
 ### NF-P1-8 Outbox 长任务续租和 Consumer 幂等
 
@@ -641,13 +640,12 @@ Outbox 锁固定五分钟，消费期间没有 Heartbeat。长消费可能被另
 - HTTP 先停止接收新连接并关闭 idle connection；Deadline 到期后调用 `closeAllConnections()` 强制结束。
 - Teaching idle scan 保存 timer 和 in-flight Promise，停止时不再启动新扫描并等待当前扫描。
 - Agent Collaboration 使用具名监听器，stop 时取消订阅并等待已触发 handler。
-- Outbox、Gateway/EventBus 和双 Prisma 按顺序停止，数据库最后断开；清理错误进入报告并导致非零退出。
+- Outbox、Gateway 和双 Prisma 按顺序停止，数据库最后断开；清理错误进入报告并导致非零退出。
 - 启动失败、监听端口错误、`uncaughtException` 和 `unhandledRejection` 进入同一受控关闭路径。
 - Docker backend `stop_grace_period=35s`，大于应用默认 Deadline。
 
 待完成：
 
-- EventBus 已统一包装、捕获并跟踪异步 handler，Gateway close 会等待级联 handler 稳定归零。
 - 新增全局 Background Task Tracker，使用 lazy factory 在 drain 后拒绝任务真正启动，并等待集合稳定归零。
 - PathCoordinator 异步生成、核心恢复、正常/重试阶段补全、Dashboard refresh、任务完成 learner snapshot、启动回填和恢复轮询已接入 Tracker。
 - PathCoordinator 在 drain 拒绝时调用原业务 `onError` hook，避免占位路径永久停留在 generating。
@@ -705,7 +703,7 @@ Agent / Coordinator Span
 
 **状态：未修复**
 
-现有 Performance Monitor 未接线，也不是跨实例可抓取的指标系统。
+当前没有跨实例可抓取的指标系统（未接入 Prometheus 或 OpenTelemetry）。
 
 接入 Prometheus 或 OpenTelemetry，至少包括：
 
@@ -791,9 +789,9 @@ createApiClient({ authMode: 'user' | 'admin' | 'none' })
 
 ### NF-P2-2 Circuit Breaker 和 Provider 韧性
 
-**状态：部分实现但未接线**
+**状态：Circuit Breaker 未实现（预算制 Retry 已接入）**
 
-代码中存在 Retry/Circuit Breaker 工具，但没有接入主 AI Gateway，且现有 Helper 每次创建新 Breaker，无法跨请求累计状态。
+主 AI Gateway 已接入预算制 Retry（`retry-budget.ts`），但仍无 Circuit Breaker：没有按 Provider/Endpoint 累计状态的长生命周期 Breaker。
 
 统一方案：
 
@@ -854,10 +852,10 @@ createApiClient({ authMode: 'user' | 'admin' | 'none' })
 - `learning.service.ts`
 - `AITeachingCoordinator.ts`
 - Admin Virtual Learner/Platform Routes
-- `GoalConversation.vue`
-- `LearningPathDetail.vue`
-- `LearningPaths.vue`
-- `LearningPage.vue`
+- `frontend/src/views/v2/V2GoalConversation.vue`
+- `frontend/src/views/v2/V2LearningPathDetail.vue`
+- `frontend/src/views/v2/V2LearningPaths.vue`
+- `frontend/src/views/v2/V2LearningPage.vue`
 - `adminApi.ts`
 
 新增文件建议采用 500–800 行软阈值，超出需评审说明。
@@ -1032,7 +1030,7 @@ createApiClient({ authMode: 'user' | 'admin' | 'none' })
 | NF-P1-6 | 未开始 | 待定 | Wave 3 | Manifest/Registry |
 | NF-P1-7 | 未开始 | 待定 | Wave 3 | Event 主干 |
 | NF-P1-8 | 未开始 | 待定 | Wave 3 | Outbox Reliability |
-| NF-P1-9 | 第一阶段完成 | 待定 | Wave 2 | Readiness、Drain、Deadline、EventBus 和关键后台任务跟踪已完成；待低优先级异步工作 |
+| NF-P1-9 | 第一阶段完成 | 待定 | Wave 2 | Readiness、Drain、Deadline 和关键后台任务跟踪已完成；待低优先级异步工作 |
 | NF-P1-10 | 未开始 | 待定 | Wave 3 | Trace/Span |
 | NF-P1-11 | 第一阶段完成 | 待定 | Wave 4 | 已统一脱敏、stdout 和持久化目录；待轮转保留策略 |
 | NF-P1-12 | 未开始 | 待定 | Wave 4 | Metrics/Alert |

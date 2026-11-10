@@ -89,7 +89,10 @@ function buildVisibleContextProjection(
 
 function buildUserPayload(input: EpistemicGroundingInput) {
   // 缓存前缀优化：learner 里逐回合被回写的概念数组（knownConcepts/struggleConcepts，含 profile 内副本）
-  // 移到 payload 尾部，稳定画像（profile/learningGoal/personalityTraits 等）前置——否则首个键即变化，前缀缓存全灭
+  // 从 learner 剥离，稳定画像（profile/learningGoal/personalityTraits 等）前置。
+  // 2026-11-08 全 skill 缓存调查修正：概念数组此前被放在**索引 2/3**（注释却写"移到 payload 尾部"，
+  // 与实现不符），每一个概念数组一变就把其后的 knowledgeSnapshot/previousLearnerState/visibleContext
+  // 的 KV 前缀全部打断。现真正下沉到易变尾部，稳定段由 2 键扩到 3 键（learner→currentTask→knowledgeSnapshot）。
   const learnerSrc = (input.learner && typeof input.learner === 'object' ? input.learner : {}) as Record<string, any>;
   const { knownConcepts, struggleConcepts, ...learnerRest } = learnerSrc;
   const learnerProfileSrc = learnerRest.profile && typeof learnerRest.profile === 'object'
@@ -106,10 +109,11 @@ function buildUserPayload(input: EpistemicGroundingInput) {
   return {
     learner: stableLearner,
     currentTask: input.currentTask || null,
-    knownConcepts: Array.isArray(knownConcepts) ? knownConcepts : [],
-    struggleConcepts: Array.isArray(struggleConcepts) ? struggleConcepts : [],
     knowledgeSnapshot: Array.isArray(input.knowledgeSnapshot) ? input.knowledgeSnapshot.slice(0, 5) : [],
     previousLearnerState: input.previousLearnerState || null,
+    // —— 以下为逐回合回写项，统一后置（概念数组从索引 2/3 下沉至此）——
+    knownConcepts: Array.isArray(knownConcepts) ? knownConcepts : [],
+    struggleConcepts: Array.isArray(struggleConcepts) ? struggleConcepts : [],
     ...(visibleContext ? { visibleContext } : {}),
     ...(input.pendingCheckpoint ? { pendingCheckpoint: input.pendingCheckpoint } : {}),
     // 编排层硬指令放 payload 尾部（与逐轮变化的概念数组同区，保住稳定画像的前缀缓存）

@@ -2,7 +2,7 @@
  * 目标规划会话状态管理：由问流后端 goal-conversation skill 驱动。
  * 只负责交互与展示：会话由后端真实 skill 处理，本地仅做视图恢复（localStorage），不新增任何落库逻辑。
  */
-import { computed, reactive, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import {
   getGoalConversationCid,
   getGoalConversationMsgs,
@@ -19,10 +19,12 @@ import {
   streamReplyGoalConversation,
   streamRegenerateGoalConversation,
   type GoalConversationEnvelope,
+  type GoalProbeAnswer,
   type GoalUnderstanding
 } from '@/api/goalConversation';
 import { useInteractionMeta, type InteractionMeta } from '@/composables/useInteractionMeta';
-import { buildProbeAnswerText } from './probeAnswer';
+// 气泡时间标签单一实现（nowTime / formatMsgTime 同源），见 learningChat.ts 注释
+import { nowTime, formatMsgTime } from './learningChat';
 
 export interface LiveMessage {
   role: 'user' | 'ai';
@@ -83,21 +85,11 @@ function toList(input: unknown): string[] {
   return out;
 }
 
-function nowTime(): string {
-  const d = new Date();
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
+/* 时间标签实现已统一到 learningChat.ts（nowTime / formatMsgTime），此处不再保留副本。 */
 
-function formatMsgTime(raw?: string): string {
-  if (!raw) return nowTime();
-  // 后端可能回 ISO；统一成 HH:mm
-  const d = new Date(raw);
-  if (!Number.isNaN(d.getTime()) && (raw.includes('T') || raw.includes('-'))) {
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  }
-  if (/^\d{1,2}:\d{2}/.test(raw)) return raw.slice(0, 5);
-  return raw;
-}
+/** 硬阻断拒绝文案的稳定识别标记（初判「这类目标当前不会生成学习路径」与重判「这次仍不会
+    生成学习路径」两版都含此句）。#213：完成态无路径只有硬阻断一种正常终局需要展示原因。 */
+const HARD_BLOCK_REFUSAL_MARKER = '不会生成学习路径';
 
 const conversationId = ref('');
 const messages = ref<LiveMessage[]>([]);
@@ -113,6 +105,8 @@ const pushMessage = (m: LiveMessage): LiveMessage => {
 const metaTracker = useInteractionMeta();
 const stage = ref<'understanding' | 'proposing' | 'ready' | 'completed' | ''>('');
 const isCompleted = ref(false);
+/** 分诊硬阻断终局（completed 且不会生成路径）：视图据此展示阻断说明而非「路径已创建」假成功 */
+const hardBlocked = ref(false);
 const understanding = ref<GoalUnderstanding>({});
 const collected = ref<Record<string, unknown>>({});
 const quickReplies = ref<Array<{ text: string; icon?: string }>>([]);
@@ -120,6 +114,9 @@ const confirmedProposal = ref<Record<string, unknown> | null>(null);
 /** 前置探测题作答记录（probeId → 选项 id，防重复作答） */
 const probeAnswers = ref<Record<string, string>>({});
 const learningPath = ref<{ id: string; status?: string } | null>(null);
+/** 已完成但没有生成路径时服务端给出的说明（#213：硬阻断拒绝文案已落库，GET 快照会重建）。
+    普通成功终局的收尾语不落库，仍由 done 面板承载，不进这里。 */
+const completionNote = ref('');
 const sending = ref(false);
 const failed = ref<'start' | 'reply' | 'confirm' | 'supplement' | 'resume' | ''>('');
 const resumeErrorStatus = ref<number | null>(null);
@@ -147,31 +144,9 @@ export function normalizeFieldValue(raw: unknown): string {
   return s.toLowerCase() === 'unknown' ? '' : s;
 }
 
-/** 方案确认短语（normalize 后全等命中才确认；带调整/疑问意图的一律不确认） */
-const PROPOSAL_CONFIRM_HEADS = [
-  '按这个来', '就按这个来', '按这个方案来', '就按这个方案', '按这个走', '就按这个走',
-  '按这版来', '就按这版', '就这版', '这版可以', '就这么定', '这么定', '就这样定',
-  '确认生成', '确认并生成路径', '生成路径', '生成', '可以生成', '生成吧', '确认',
-  '同意', '没问题', '可以了', '就这个', '行就这个', '就按这个',
-];
-const PROPOSAL_CONFIRM_STRIP_HEAD = /^(好的?|行|可以|ok|嗯+|好呀|行呀)[，,。!！\s]+/;
-const PROPOSAL_CONFIRM_STRIP_TAIL = /[吧呢啊了呗哦～~。!！\s]+$/g;
-const PROPOSAL_ADJUST_RE = /但是|不过|想调|调整|改成|换一|换下|先别|不要|再想|补充|还想|另外|或者|不如|如果|是不是|吗|？|\?/;
-
-/**
- * 纯文本是否等价于「确认方案」：方案卡在展示时，用户键入这类短语
- * 应走 confirmProposal 通道（与确认按钮同权），否则模型永远只能复述方案
- * ——goal 阶段绕圈圈的根因。命中口径刻意收窄：归一后全等短语表 +
- * 剥离前后缀应答词，含任何调整/疑问意图直接放行为普通回复。
- */
-export function isProposalConfirmText(raw: string): boolean {
-  const t = String(raw || '').trim().toLowerCase();
-  if (!t || t.length > 16) return false;
-  if (PROPOSAL_ADJUST_RE.test(t)) return false;
-  // 先查原串（"可以了"这类剥后缀会变义），再查剥应答词后的串（"按这个来吧"→"按这个来"）
-  const stripped = t.replace(PROPOSAL_CONFIRM_STRIP_HEAD, '').replace(PROPOSAL_CONFIRM_STRIP_TAIL, '').trim();
-  return PROPOSAL_CONFIRM_HEADS.includes(t) || PROPOSAL_CONFIRM_HEADS.includes(stripped);
-}
+/* 打字确认的前端白名单已退役（2026-11-08 确认动作减重）：键入文本一律走普通 reply，
+   「这句话是不是确认」由后端 goal-confirm-adjudicator 一次语义裁决——命中直接推进
+   （不跑主对话回合），未命中由模型正常接住。前端不再维护第二份确认词表。 */
 
 const fields = computed<LiveField[]>(() =>
   FIELD_DEFS.map((def) => {
@@ -277,6 +252,16 @@ function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string;
     : 'understanding';
   // confidence：信封仍带该字段，但页面从不渲染（2026-09-27 死状态清理），不再维护
   isCompleted.value = core?.isCompleted === true;  learningPath.value = core?.learningPath ?? null;
+  // #213：已完成且没有路径 = 分诊硬阻断终局。拒绝文案不能像普通收尾语那样丢弃，
+  // 否则用户确认后当场看不到、重载后也看不到（服务端现已落库并由 GET 重建）。
+  // 正向识别硬阻断文案（初判/重判两版都含此句），其余 completed 无路径的旧异常态
+  // （如「学习路径已经生成」占位）不误判为拒绝原因——保持既有行为不变。
+  const isHardBlockRefusal = !!env.userVisible && env.userVisible.includes(HARD_BLOCK_REFUSAL_MARKER);
+  completionNote.value = stage.value === 'completed' && !learningPath.value && isHardBlockRefusal ? env.userVisible : '';
+  // 合并取舍：develop 新增的服务端结构化标记（比文案匹配更可靠，2026-11-05 UX 审计 P0）。
+  // 两条并存——模板优先用 hardBlocked，并用 completionNote 兜住「老信封没有该字段、
+  // 但 userVisible 里确实带着拒绝原文」的回落场景，两边行为都不丢。
+  hardBlocked.value = core?.hardBlocked === true;
   // 已完成的会话不再作为「继续上次的规划」入口：路径已生成，恢复终态会话只会造成
   // 「已经产生了新路径，goal 还让继续上次规划」的困惑。清本地缓存（带 :conversationId
   // 的 URL 回看不依赖该缓存，resumeById 按 id 直取）。
@@ -315,10 +300,18 @@ function applyEnvelope(env: GoalConversationEnvelope, opts: { userText?: string;
         pushMessage({ role: 'user', content: opts.userText, time: nowTime() });
       }
     }
-    // 完成信封不再把 userVisible 落进对话：确认后的收尾语（「已收到确认，正在生成…」）
-    // 服务端不落库（updateConversationLifecycle 只追加 user 确认消息），客户端渲染会造成
-    // 「阶段结束后 AI 还发消息」且刷新后凭空消失的双态不一致；该信息由 done 面板承载。
-    if (env.userVisible && stage.value !== 'completed') pushMessage({ role: 'ai', content: env.userVisible, time: nowTime() });
+    // 普通成功终局的收尾语（「已收到确认，正在生成…」）不落库，渲染后刷新即消失，仍由
+    // done 面板承载；但硬阻断终局（completed 且无 learningPath）的拒绝文案已落库，必须上屏。
+    if (env.userVisible && (stage.value !== 'completed' || (!learningPath.value && isHardBlockRefusal))) pushMessage({ role: 'ai', content: env.userVisible, time: nowTime() });
+  }
+  // 硬阻断终局例外（2026-11-05 UX 审计 P0）：阻断说明（不会生成路径 + 补充说明可重判）
+  // 必须在对话流里可见。上面的「completed 不落 userVisible」只针对确认收尾语；对硬阻断
+  // 再套用会把唯一的结果说明整个丢掉（done 弹层此前还把它误读成「路径已创建」）。
+  // 服务端只落 user 消息，resume 时 meta.messages 分支同样拿不到它——两种分支之后统一
+  // 补挂，按内容去重（重进会话不重复叠同一句）。
+  if (env.userVisible && hardBlocked.value
+    && !messages.value.some((m) => m.role === 'ai' && m.content === env.userVisible)) {
+    pushMessage({ role: 'ai', content: env.userVisible, time: nowTime() });
   }
   // P2-14：恢复会话时用最后一条带快捷补充的 AI 消息回填当前轮面板（刷新后不再只剩输入框）
   if (!quickReplies.value.length) {
@@ -346,7 +339,12 @@ const GOAL_SEND_STALL_TIMEOUT_MS = 90_000;
 /** 单次发送总闸：心跳只证明传输活着，总闸保证永挂任务最终有超时出口 */
 const GOAL_SEND_TOTAL_TIMEOUT_MS = 600_000;
 
-async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: string, meta?: InteractionMeta) {
+async function run(
+  action: 'start' | 'reply' | 'confirm' | 'supplement',
+  text: string,
+  meta?: InteractionMeta,
+  turnOptions?: { probeAnswers?: GoalProbeAnswer[] },
+) {
   const gen = generation;
   sending.value = true;
   failed.value = '';
@@ -386,7 +384,7 @@ async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: s
       if (action === 'start') {
         env = await streamStartGoalConversation(text, { meta }, { onDelta, onActivity: armWatchdog, signal: abort.signal });
       } else if (action === 'confirm') {
-        env = await streamReplyGoalConversation(conversationId.value, text, { confirmProposal: true }, { onDelta, onActivity: armWatchdog, signal: abort.signal });
+        env = await streamReplyGoalConversation(conversationId.value, text, { confirmProposal: true, probeAnswers: turnOptions?.probeAnswers }, { onDelta, onActivity: armWatchdog, signal: abort.signal });
       } else if (action === 'supplement') {
         env = await streamRegenerateGoalConversation(conversationId.value, text, { onDelta, onActivity: armWatchdog, signal: abort.signal });
       } else {
@@ -440,7 +438,9 @@ async function run(action: 'start' | 'reply' | 'confirm' | 'supplement', text: s
         if (action === 'start') {
           env = await startGoalConversation(text, { meta });
         } else if (action === 'confirm') {
-          env = await replyGoalConversation(conversationId.value, text, { confirmProposal: true });
+          // 传输层失败回退到非流式：probeAnswers 必须与流式路径（上方）同权携带——
+          // 回退路径丢题会让「确认前自测」作答静默蒸发，后端确定性判分键缺失
+          env = await replyGoalConversation(conversationId.value, text, { confirmProposal: true, probeAnswers: turnOptions?.probeAnswers });
         } else if (action === 'supplement') {
           env = await regenerateGoalConversation(conversationId.value, text);
         } else {
@@ -507,15 +507,9 @@ async function send(text: string, skipUserPush = false) {
   const meta = metaTracker.collect(t);
   if (!conversationId.value) {
     await run('start', t, meta);
-  } else if (
-    (stage.value === 'proposing' || stage.value === 'ready')
-    && proposal.value
-    && isProposalConfirmText(t)
-  ) {
-    // 方案卡在展示时键入确认短语 = 与确认按钮同权的显式确认；
-    // 不路由的话模型只能复述方案（硬规则禁模型自报 ready）→ goal 阶段绕圈圈
-    await run('confirm', t);
   } else {
+    // 打字一律走普通 reply：是否「确认方案」由后端 goal-confirm-adjudicator 裁决
+    // （2026-11-08 减重——前端白名单路由已退役，前端不再猜语义）
     await run('reply', t, meta);
   }
 }
@@ -525,17 +519,72 @@ async function confirm() {
   const label = '确认并生成路径';
   pushMessage({ role: 'user', content: label, time: nowTime() });
   setGoalConversationMsgs(JSON.stringify(messages.value.slice(-60)));
-  await run('confirm', label);
+  await run('confirm', label, undefined, { probeAnswers: pendingProbeAnswers() });
 }
 
-/** 前置探测题作答：把选项以明确格式作为用户消息发送，goal-conversation 回填
-    prerequisiteCheckResults。消息格式与渲染识别共用 ./probeAnswer（先给答案、题目跟后）。 */
-async function answerProbe(probe: { probeId: string; targetConcept: string; question: string; options: Array<{ id: string; text: string }> }, optionId: string, optionText: string) {
+/**
+ * 待提交的前置自测作答（按当前方案的题目顺序，只收已作答的）。
+ * 2026-11-02 口径：自测是「方案确认前的一张表单」——作答不发对话回合，
+ * 随确认请求一次性提交，后端按 confirmedProposal 的 correctOption 确定性判分。
+ */
+function pendingProbeAnswers(): GoalProbeAnswer[] {
+  const p = proposal.value;
+  if (!p) return [];
+  return p.probes
+    .filter((probe) => !!probeAnswers.value[probe.probeId])
+    .map((probe) => ({
+      probeId: probe.probeId,
+      userAnswer: probeAnswers.value[probe.probeId],
+      ...(probe.targetConcept ? { targetConcept: probe.targetConcept } : {}),
+    }));
+}
+
+/** 已作答题数 / 题目总数（面板回执文案用） */
+function probeProgress(): { answered: number; total: number } {
+  const total = proposal.value?.probes.length ?? 0;
+  const answered = pendingProbeAnswers().length;
+  return { answered, total };
+}
+
+/**
+ * 换题保护（2026-11-02 业务口径）：作答按 probeId 记录，方案重渲染若换了题/少一道，
+ * 旧答案会**凭空失效**——回执从 2/2 掉回 1/2，用户以为「我答过的丢了」。
+ * 这里在方案变化时主动清掉已不存在的题号，并把「被清掉几题」暴露给面板，
+ * 让用户看到「题目有更新，请重新确认」，而不是无声蒸发。
+ */
+const droppedProbeAnswers = ref(0);
+watch(proposal, (next) => {
+  const ids = new Set((next?.probes ?? []).map((p) => p.probeId));
+  if (!ids.size) return;
+  const kept: Record<string, string> = {};
+  let dropped = 0;
+  for (const [probeId, optionId] of Object.entries(probeAnswers.value)) {
+    if (ids.has(probeId)) kept[probeId] = optionId;
+    else dropped += 1;
+  }
+  if (dropped > 0) {
+    probeAnswers.value = kept;
+    droppedProbeAnswers.value = dropped;
+  }
+});
+
+/** 重新作答即视为已知悉换题，提示收起 */
+function acknowledgeProbeChange() {
+  droppedProbeAnswers.value = 0;
+}
+
+/**
+ * 前置探测题作答（2026-11-02 口径重做）：**只记本地状态，不发对话回合**。
+ *
+ * 旧实现每答一题就把答案当消息发给模型、走一个完整回合，两题场景实测卡住：
+ * 答第 1 题后面板全部选项禁用、等 30-90s，回来时方案重渲染（题目少一道/换题），
+ * 用户既答不完也看不懂。现在作答是纯本地表单，点「确认，生成我的路径」时随确认
+ * 一次性提交（见 pendingProbeAnswers / confirm），判分由后端确定性完成。
+ * 再点别的选项 = 改答案（本地覆盖），不锁死。
+ */
+function answerProbe(probe: { probeId: string }, optionId: string) {
   if (sending.value) return;
-  if (probeAnswers.value[probe.probeId]) return; // 已作答，防重复
   probeAnswers.value = { ...probeAnswers.value, [probe.probeId]: optionId };
-  const text = buildProbeAnswerText(probe.question, optionId, optionText);
-  await send(text, false);
 }
 
 async function supplement(text: string) {
@@ -612,11 +661,13 @@ function reset(clearStorage = true) {
   messages.value = [];
   stage.value = '';
   isCompleted.value = false;
+  hardBlocked.value = false;
   understanding.value = {};
   collected.value = {};
   quickReplies.value = [];
   confirmedProposal.value = null;
   learningPath.value = null;
+  completionNote.value = '';
   freshKeys.value = [];
   failed.value = '';
   stopped.value = '';
@@ -642,13 +693,19 @@ export function useGoalLive() {
     stage,
     stageIndex,
     isCompleted,
+    hardBlocked,
     fields,
     filledCount,
     totalFields: FIELD_DEFS.length,
     quickReplies,
     proposal,
     probeAnswers,
+    probeProgress,
+    pendingProbeAnswers,
+    droppedProbeAnswers,
+    acknowledgeProbeChange,
     learningPath,
+    completionNote,
     sending,
     streamingText,
     failed,

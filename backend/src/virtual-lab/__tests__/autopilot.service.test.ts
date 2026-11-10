@@ -11,14 +11,25 @@ const mockRestartLearningPhase = jest.fn()
 const mockRunCommand = jest.fn()
 const mockAutoStep = jest.fn()
 
+// #171 实例 2：writeState 改为事务内读改写（与 assisted-shared 同范式）。
+// 这里把 $transaction 直通到同一组 mock，测试仍按「读到的 stageResults → 写回的 stageResults」断言。
+const mockTransaction: any = jest.fn(async (fn: any) => fn(transactionClient))
+const transactionClient: any = {
+  virtual_sessions: {
+    findUnique: (...args: any[]) => mockSessionFindUnique(...args),
+    findMany: (...args: any[]) => mockSessionFindMany(...args),
+    update: (...args: any[]) => mockSessionUpdate(...args)
+  }
+}
 jest.mock('../../config/database', () => ({
   __esModule: true,
   default: {
     virtual_sessions: {
-      findUnique: mockSessionFindUnique,
-      findMany: mockSessionFindMany,
-      update: mockSessionUpdate
-    }
+      findUnique: (...args: any[]) => mockSessionFindUnique(...args),
+      findMany: (...args: any[]) => mockSessionFindMany(...args),
+      update: (...args: any[]) => mockSessionUpdate(...args)
+    },
+    $transaction: (fn: any, opts?: any) => mockTransaction(fn, opts)
   }
 }))
 jest.mock('../../coordinators/simulation.coordinator', () => ({
@@ -115,6 +126,35 @@ describe('AutopilotService 全自动模式', () => {
   it('同一会话已有运行中的全自动时拒绝启动', async () => {
     sessionRecord = buildSession('goal', 'running', { autopilot: { status: 'running' } })
     await expect(service.start('s1')).rejects.toBeInstanceOf(AutopilotConflictError)
+  })
+
+  /**
+   * #171 实例 2 回归：`writeState` 必须走事务，且只替换 `autopilot` 顶层键。
+   *
+   * 病灶：原实现是**租约外**的 findUnique → 改 autopilot → 整列 update。会话租约只互斥
+   * autopilot 循环，不阻挡其它写者（assisted-shared 的合并/删除、教学回合写 teaching 等），
+   * 旧快照整列回写会把这些写入连带回滚。
+   *
+   * 本用例能钉住两层：① 读改写确实经过 `$transaction`（改回非事务形态即红）；
+   * ② 写回只动 `autopilot`，同一次写入携带的其它键（path_review / teaching）原样保留。
+   * 不写「读之后、写之前第三方写入不被丢」的断言——那种时序在读写分离时同样会丢，
+   * 属写序列化范畴，mock 区分不出新旧实现，写了就是虚假断言。
+   */
+  it('#171-2：writeState 走事务且只替换 autopilot，其它键原样保留', async () => {
+    sessionRecord = buildSession('goal', 'running', {
+      autopilot: { status: 'idle' },
+      path_review: { status: 'accepted', reviewedAt: '2026-11-07T00:00:00.000Z' },
+      teaching: { sessionId: 't1' },
+    })
+
+    await (service as any).writeState('s1', { status: 'running' })
+
+    expect(mockTransaction).toHaveBeenCalled()
+    const written = JSON.parse(sessionRecord.stageResults)
+    expect(written.autopilot.status).toBe('running')
+    expect(written.autopilot.heartbeatAt).toBeTruthy()
+    expect(written.path_review.reviewedAt).toBe('2026-11-07T00:00:00.000Z')
+    expect(written.teaching.sessionId).toBe('t1')
   })
 
   it('stop 非运行中返回未接受', async () => {
@@ -313,6 +353,31 @@ describe('AutopilotService 全自动模式', () => {
 
     expect(final.status).toBe('failed')
     expect(mockRestartLearningPhase).toHaveBeenCalledTimes(3)
+    expect(String(final.lastError)).toContain('恢复上限')
+  })
+
+  it('assisted：#154 解绑课堂（LEARN_CLASSROOM_UNBOUND）被识别为可恢复 → restart-learning 续跑，而非首发即失败', async () => {
+    mockExecuteSingleStep.mockImplementation(async () => {
+      sessionRecord.currentStage = 'path'
+      return { success: true, goalReady: true }
+    })
+    mockWaitForPathReady.mockResolvedValue({ ready: true })
+    mockResolvePathReview.mockImplementation(async () => {
+      sessionRecord.currentStage = 'teaching'
+      return { success: true }
+    })
+    // 协调层无绑定课堂时返回该 code（含「没有绑定教学会话」原文）
+    mockExecuteAutoLearning.mockResolvedValue({ success: false, error: 'LEARN_CLASSROOM_UNBOUND: 当前 Learn 没有绑定教学会话' })
+    mockRestartLearningPhase.mockResolvedValue({ success: true })
+
+    await service.start('s1')
+    const final = await waitTerminal()
+
+    // 关键：被当成可恢复 → 走了 restart-learning；若仍不可恢复则一次都不会调用（对照下方 fatal 用例）
+    expect(mockRestartLearningPhase).toHaveBeenCalled()
+    expect(mockRestartLearningPhase.mock.calls.length).toBeGreaterThanOrEqual(1)
+    // 达到恢复上限后按 autopilot 既有策略收口（bounded，非无界重启）
+    expect(final.status).toBe('failed')
     expect(String(final.lastError)).toContain('恢复上限')
   })
 

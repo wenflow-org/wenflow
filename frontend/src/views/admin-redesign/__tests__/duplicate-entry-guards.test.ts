@@ -44,16 +44,26 @@ describe('重复操作入口守卫', () => {
 
   it('运行时配置只有配置弹层里一颗保存钮，卡头不再有分段保存', () => {
     const src = read('skill-design/runtime-tab.vue')
-    expect(src.match(/@click="saveRuntime"/g) ?? []).toHaveLength(1)
+    // 保存钮只有弹层里一颗（2026-11-03 卡头改「翻转即落盘」后仍只有这一颗按钮；
+    // 覆盖开关走 onOverrideToggle 内部调同一套保存，不是第二颗保存钮）
+    expect(src.match(/@click="saveRuntime(\(\))?/g) ?? []).toHaveLength(1)
     expect(src).not.toContain('sdp-card__save')
     expect(src).toContain('@click="openConfig"')
+    // 覆盖开关必须真的落盘：绑 onOverrideToggle，而不是只改本地 v-model
+    expect(src).toContain('@update:model-value="onOverrideToggle"')
+    expect(src).toContain('async function onOverrideToggle')
   })
 
-  it('接入页：连接与策略只在连接设置弹层里有一颗保存钮，不再有整页保存条', () => {
+  /* 2026-11-07 用户「提回去」：连接卡回到页顶常驻，但它仍然只有**一颗**保存钮
+     （拉清单会自动落盘，这颗只服务「只改了重试 / RPM」那一路），页面上依然没有整页保存条。 */
+  it('接入页：连接与策略只有页顶卡里一颗保存钮，不再有整页保存条', () => {
     const src = read('ApiConfig.vue')
     expect(src).not.toContain('class="ac-save"')
     expect(src).not.toContain('showSaveBar')
-    expect(src.match(/@click="saveConnModal"/g) ?? []).toHaveLength(1)
+    expect(src.match(/@click="saveConn"/g) ?? []).toHaveLength(1)
+    /* 三处调用点：连接卡保存（conn + reliability）、「保存清单」只提交 conn。
+       注意 saveModelList 里那次是单域保存，不是第二颗按钮。 */
+    expect(src.match(/saveGroups\(\[/g) ?? []).toHaveLength(3)
   })
 
   it('供应商设置弹窗不再重复行内的启用开关与密钥输入（仅创建时出现）', () => {
@@ -74,7 +84,7 @@ describe('重复操作入口守卫', () => {
     expect(src).not.toContain('按会话归组查看')
   })
 
-  it('审计日志：时间范围与动作都在主栏，卡头不再有「筛选」弹层', () => {
+  it('审计日志：时间范围进页头、动作与状态在卡头主栏，没有「筛选」弹层', () => {
     const src = read('AuditLogs.vue')
     /* 2026-10-27：动作维度从弹层上提到主栏后，这一页没有弹层了——
        同类别的多个筛选不得收进菜单/下拉（Carbon），只装一项的弹层更是纯隐藏。 */
@@ -83,7 +93,10 @@ describe('重复操作入口守卫', () => {
     // 2026-10-24 用户「时间范围和筛选重新设计一下」：胶囊里是真 select，不再是不可点的 <span>
     // 2026-10-26 卡头统一：形态收进共享 MkPillSelect（.mk-pill + 透明 select）
     expect(src).toContain('<MkPillSelect')
-    expect(src).toContain('v-model="timeRange"')
+    // 2026-11-07 用户「执行日志的时间范围在页头，审计日志却掉到表格工具栏」：改到页头 actions
+    expect(src).toContain(':model-value="timeRange"')
+    expect(src).toContain('aria-label="时间范围"')
+    expect(src).toContain('aria-label="按状态筛选"')
     expect(src).toContain('aria-label="按动作筛选"')
     // 页内不再自带 .al-range 私有类（三页逐字重复的同一段 CSS 已删）
     expect(src).not.toMatch(/^\.al-range/m)
@@ -115,14 +128,14 @@ describe('重复操作入口守卫', () => {
     expect(src).toContain("'orchestration-steps',")
   })
 
-  it('目标对话：行点击进座舱，路径页签入口只留在 ⋯ 菜单', () => {
-    // 2026-10-27 用户「这两个按钮也重复吧，本身点这个条目就可以跳进去了」：
-    // 行点击已落默认页签，操作列不再重复「详情」；路径页签入口收进 ⋯ 菜单，
-    // 操作列只留溢出菜单，不再出现整行可见的文本链接。
+  it('目标对话：行点击与一级「详情」同落座舱，路径页签入口只留在 ⋯ 菜单', () => {
+    // 2026-11-09 用户走查「只有孤零零一个 ⋯，最常用的详情被藏进二级菜单」：
+    // 操作列恢复「详情」一级按钮（与学习路径/复习积压同构），⋯ 只留次级动作；
+    // 路径页签入口继续只留在 ⋯ 菜单里，不新增第二个可见路径入口。
     const src = read('GoalConversations.vue')
     expect(src).toContain('@click="openDetail(r)"')
-    expect(src).not.toContain('>详情</button>')
-    expect(src).not.toContain('@click.stop="openDetail(r)"')
+    expect(src).toContain('@click.stop="openDetail(r)"')
+    expect(src).toContain('>详情</button>')
     expect(src).toContain('>查看路径</button>')
     expect(src).toContain('menuOpenPath(r)')
     expect(src).not.toContain('@click.stop="openPathStage(r)"')

@@ -44,6 +44,8 @@ vi.mock('../live', async () => {
     liveAnnouncements: ref([]),
     liveFailures: ref({}),
     liveRefreshSeq: ref(0),
+    // 侧栏角标回写（2026-11-01：OpsHub 拉完三域后同步给 live 共享读数）
+    setLiveOpsPendingCounts: () => {},
     loadLiveData: vi.fn(async () => {}),
     errMsg: (e: unknown) => String(e),
     shortId: (s: string) => s,
@@ -98,15 +100,17 @@ async function mountWithRouter(component: unknown, route = '/admin/ops-hub') {
 describe('运维工具面板（原系统工具 Tab1）', () => {
   beforeEach(() => { vi.clearAllMocks() })
 
-  it('只剩事件投递失败一张卡；批量吞吐已迁走、内容抽检已退役，零死信显示健康态而不给假动作', async () => {
+  it('只剩事件投递一张卡；批量吞吐已迁走、内容抽检已退役，零死信显示健康态而不给假动作', async () => {
     const w = await mountWithRouter(ServerToolsPanel)
     const titles = w.findAll('.mk-card__title').map((t) => t.text())
-    expect(titles).toEqual(['事件投递失败'])
+    // 卡名取中性词，状态交给徽标（2026-11-02 评审：健康时标题仍写「失败」与「全部已送达」矛盾）
+    expect(titles).toEqual(['事件投递'])
     expect(w.text()).not.toContain('时间推进')
     expect(w.text()).not.toContain('批量吞吐')
     expect(w.text()).not.toContain('内容抽检')
-    // 卡片保留一句白话说明（这些记录从哪来、点按钮会发生什么）
-    expect(w.findAll('.stp-intro')).toHaveLength(1)
+    // 卡片仍保留一句白话说明（这些记录从哪来、点按钮会发生什么），但 2026-11-02 起不再常驻
+    // 屏面（「让布局自己说话」），改挂卡题 title；这里断言出口，不再断言那个已删的元素。
+    expect(w.find('.mk-card__title').attributes('title')).toContain('第一次投递失败会记在这里')
     // 2026-10-27 重做：0 死信不再渲染禁用重发钮，改健康态摘要 + 刷新出口
     const requeue = w.findAll('button').find((b) => b.text() === '重新发送全部')
     expect(requeue, '零死信不渲染假动作').toBeFalsy()
@@ -157,15 +161,18 @@ describe('数据导出面板（原系统工具 Tab2）', () => {
     expect(go?.attributes('disabled')).toBeDefined()
     await boxes[0]!.setValue(true)
     await boxes[1]!.setValue(true)
-    expect(w.findAll('.exp-item--on').map((c) => c.find('.exp-item__title').text())).toEqual(['用户', '教学会话'])
+    expect(w.findAll('.exp-item.mk-choice--on').map((c) => c.find('.exp-item__title').text())).toEqual(['用户', '教学会话'])
     expect(w.text()).toContain('已选 2 项')
     const go2 = w.findAll('button').find((b) => b.text() === '开始导出')
     expect(go2?.attributes('disabled')).toBeUndefined()
-    // 行数上限只服务日志组：选业务表时不出现，选日志后出现
-    expect(w.find('.exp-limit').exists()).toBe(false)
+    // 行数上限归日志组：常驻在该组标题行，不再随勾选与否在底部操作条出现/消失
+    const logGroup = w.findAll('.exp-group').find((g) => g.text().includes('日志与审计'))!
+    expect(logGroup.find('.exp-limit').exists()).toBe(true)
+    const otherGroup = w.findAll('.exp-group').find((g) => g.text().includes('账号与学习'))!
+    expect(otherGroup.find('.exp-limit').exists()).toBe(false)
     const logBox = w.findAll('.exp-item input[type="checkbox"]')[4]!
     await logBox.setValue(true)
-    expect(w.find('.exp-limit').exists()).toBe(true)
+    expect(w.find('.exp-foot .exp-limit').exists()).toBe(false)
     w.unmount()
   })
 
@@ -177,50 +184,33 @@ describe('数据导出面板（原系统工具 Tab2）', () => {
   })
 })
 
-describe('运营中心宿主：系统工具三页签在位', () => {
+describe('运营中心宿主：只剩内容运营四页签', () => {
   beforeEach(() => { vi.clearAllMocks() })
 
-  it('页签含 运维工具 / 数据导出 / 会话安全 / 访问与注册；页签不带计数角标（数字归 KPI 卡）', async () => {
+  it('四个系统页签已迁出（2026-11-01 → 系统设置）；空壳「运营待办」也已下线（2026-11-09）', async () => {
     const w = await mountWithRouter(OpsHub)
     const tabs = w.findAll('.tabs .tab').map((t) => t.text())
-    expect(tabs.some((t) => t.includes('运维工具'))).toBe(true)
-    expect(tabs.some((t) => t.includes('数据导出'))).toBe(true)
-    expect(tabs.some((t) => t.includes('访问与注册'))).toBe(true)
-    const sec = tabs.find((t) => t.includes('会话安全'))
-    expect(sec).toBeTruthy()
-    // 2026-10-27 用户「tab 里面的数字不要了」：页签只写标签，不挂角标
+    expect(tabs).toEqual(['反馈', '成就', '公告', '站内通知'])
+    // 页签不挂计数角标（2026-10-27 用户「tab 里面的数字不要了」）
     expect(w.findAll('.tab__count')).toHaveLength(0)
-    expect(sec).not.toContain('未加载')
-    expect(sec).not.toContain('—')
     expect(w.find('.mk-status').exists(), '宿主无状态条（信息各归其位）').toBe(false)
     w.unmount()
   })
 
-  it('访问与注册深链：?tab=access 挂载嵌入式面板（无页头），懒挂载不阻塞其它页签', async () => {
+  it('旧 ?tab=access 不再在本页挂载访问与注册面板（改投在路由层）', async () => {
+    /* OpsHub 自己的 watch 会把不认识的 tab 静默回落到默认页签（feedback）；
+       真正的改投见 router/__tests__/admin-routes.test.ts。这里只锁「本页不再有这些面板」。 */
     const w = await mountWithRouter(OpsHub, '/admin/ops-hub?tab=access')
-    await flushPromises()
-    expect(w.findComponent(AccessControl).exists()).toBe(true)
-    expect(w.findComponent(AccessControl).props('embedded')).toBe(true)
-    expect(w.find('.mk-pagehead__title').text()).toBe('运营中心')
-    expect(w.find('#oh-panel-access').exists()).toBe(true)
+    expect(w.findComponent(AccessControl).exists()).toBe(false)
+    expect(w.find('#oh-panel-access').exists()).toBe(false)
     w.unmount()
-
-    // 首屏不是访问页签时不挂载（v-if 懒挂载），切走后才常驻（v-show 保留未保存编辑）
-    const w2 = await mountWithRouter(OpsHub, '/admin/ops-hub?tab=todo')
-    expect(w2.findComponent(AccessControl).exists()).toBe(false)
-    w2.unmount()
   })
 
-  it('页头不再有独立刷新钮；顶栏广播仍刷新页级读数带（导出页签一并生效）', async () => {
-    // 2026-10-18 用户拍板：四张待办读数卡升到页签栏之上，8 个页签都可见（含 export 表单页）。
-    // 2026-10-23 用户「已经有刷新，为什么还有独立刷新」：这枚页头钮撤除，
-    // 刷新入口收敛到顶栏 —— 广播（liveRefreshSeq）必须同样能重拉读数带，否则等于丢掉重试出口。
-    const w = await mountWithRouter(OpsHub, '/admin/ops-hub?tab=export')
+  it('页级读数带在任一页签都在（系统页签判据退役），顶栏广播仍可刷新', async () => {
+    const w = await mountWithRouter(OpsHub, '/admin/ops-hub?tab=inapp')
+    expect(w.find('.oh-metrics').exists()).toBe(true)
     const headBtns = w.findAll('.mk-pagehead__actions > button')
     expect(headBtns.some((b) => b.text().includes('刷新')), '页头不再有第二颗刷新钮').toBe(false)
-    // 读数带在导出页签也渲染：四张卡，且位于页签栏之前（页级、非页签体内）
-    expect(w.findAll('.oh-metrics .mk-kpi')).toHaveLength(4)
-    expect((w.find('.tabs').element.compareDocumentPosition(w.find('.oh-metrics').element) & Node.DOCUMENT_POSITION_PRECEDING) !== 0).toBe(true)
 
     const before = apiObject.adminLearningContentApi.getStats.mock.calls.length
     liveRefreshSeq.value += 1

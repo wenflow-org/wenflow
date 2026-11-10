@@ -56,6 +56,7 @@ export const RESPONSE_TRIAGE_MODES = [
   'combination',
   'emotional_support',
   'referral',
+  'answer_only',
 ] as const;
 
 export type ResponseTriageMode = (typeof RESPONSE_TRIAGE_MODES)[number];
@@ -76,6 +77,8 @@ export interface ResponseTriage {
   /** 静默推断的问题结构轴（缺证据时不输出，消费者须容忍 undefined） */
   coupling?: ProblemCoupling;
   stakes?: ProblemStakes;
+  /** 三条件测试命中数（0-3）：answer_only 判定的依据之一，随结论落 collectedData 供复核 */
+  problemAxisHits?: number;
 }
 
 /** `goal_conversations.collectedData` 中承载分诊结论的顶层键。 */
@@ -185,6 +188,20 @@ const COUPLING_MEDIUM_PATTERN =
 const STAKES_HIGH_PATTERN =
   /(流失|亏|赔|损失|白费|白搭|报废|砸了|搞砸|耽误|错过|客诉|投诉|退货|退单|事故|罚款|丢(了)?(客户|单|工作|机会)|没等就走了|排错|排班失误|不敢.{0,8}(改|调|动)|风险)/;
 
+/** answer_only 理解型信号（2026-11-10 外评实证：均线判读被排成 1h/4 课——「一句话能讲透」的诉求不该成课）：
+ *  诉求动词落在「看懂/搞懂/读懂」一簇。 */
+const COMPREHENSION_PATTERN =
+  /(看懂|搞懂|弄懂|读懂|看明白|搞明白|理解|是什么意思|什么含义|一知半解|看不懂|看不会)/;
+/** answer_only 表现要求排除词：出现任何一项 = 存在可训练的表现要求，永不判 answer_only。
+ *  匹配前先剥离否定前缀（「不需要考试/不用写出/没验收」的『考试/写出/验收』不是表现要求
+ *  ——均线案真机实证：用户原话「不需要考试或者给谁验收」裸匹配『考试』误拦出口）。 */
+const ANSWER_ONLY_BLOCK_PATTERN =
+  /(考试|应试|刷题|做题|秒[判出内回]|限时|提速|准确率|连对|判对|写出|做出|产出|交付|汇报|答辩|面试|讲给|给业务|通过|过线|考过|条件反射|不犹豫|排[出个].{0,4}计划|竞业|合法|存疑|改写|翻成|说出依据|写出依据)/;
+/** 否定前缀剥离：防「不需要考试」这类否定式把排除词误喂进阻断判定。 */
+function stripNegatedSpans(text: string): string {
+  return text.replace(/(不需要|不需|不用|无需|不必|没有|没让|没要|不是要|不是给)[^，。；！？!?,.]{0,10}/g, '');
+}
+
 /**
  * 静默推断 coupling（从 realProblem/evidence/painPoints 的自由文本，确定性、可解释）。
  * 命中高精度词 → high；仅中置信词 → medium；有文本但都不命中 → low；完全无文本 → null（不输出）。
@@ -233,7 +250,7 @@ function applyProblemStructureAxes(
     confidence = downgrade(confidence);
     reasons.push('三条件测试 0/3（低复现×低耦合×低代价）→ 更像一次性解答场景，学习路径可能过重');
   }
-  return { ...base, ...axes, confidence, reasons };
+  return { ...base, ...axes, problemAxisHits: hits, confidence, reasons };
 }
 
 /** 统一在末尾应用「urgency 极高 + 存在硬约束 → 降一档」。 */
@@ -300,7 +317,16 @@ export function triageGoalResponse(input: ResponseTriageInput | null | undefined
     ...painPoints,
   ].filter(Boolean).join('；');
   const sensoryInternalized = skillNature === 'cognitive_internalized'
-    && /(喝|尝|闻|嗅|口感|风味|气味|味觉|嗅觉|听|音色|手感|笔锋|触感|摸)/.test(sensoryText);
+    // 2026-11-08 收紧：两路命中才算「感官判定对象」——
+    // ① 感官对象名词（口感/风味/音色…，天然 ≥2 字）独立成立；
+    // ② 单字通道词（听/喝/摸/闻/嗅/尝）必须与**辨别类动词**（分辨/听出/尝出…）共现。
+    // 旧口径「听」一个字命中即 referral，把「能听懂英语播客」这类可判定认知技能误终局
+    // （真机实证）；「喝一口咖啡就分辨烘焙」这类真感官判定仍命中（喝×分辨）。
+    && (
+      /(口感|风味|气味|味觉|嗅觉|音色|笔锋|手感|触感)/.test(sensoryText)
+      || (/(喝|尝|闻|嗅|听|摸)/.test(sensoryText)
+        && /(分辨|区分|辨认|听出|尝出|闻出|品出|辨出)/.test(sensoryText))
+    );
   if (platformJudgment === 'not_judgeable'
     && (skillNature === 'physical_internalized' || sensoryInternalized)) {
     return {
@@ -366,12 +392,34 @@ export function triageGoalResponse(input: ResponseTriageInput | null | undefined
   // 问题结构轴（静默推断，禁止向用户追问）：与 recurrence 合成三条件测试，
   // 只调制 learning_path 的置信度与 reasons；轴值随结论落 collectedData 供后续路由消费。
   const axisTexts = [realProblem, evidence, ...painPoints];
-  return applyProblemStructureAxes(
+  const axisResult = applyProblemStructureAxes(
     withSupport,
     recurrence,
     inferCoupling(axisTexts),
     inferStakes(axisTexts)
   );
+  // answer-only 出口（2026-11-10 外评实证：均线判读被排成 1h/4 课——一句话能讲透的诉求不该成课）：
+  // 三条件 0/3（低复现×低耦合×低代价）× 理解型动词（看懂/搞懂簇）× 无表现要求词汇 →
+  // mode=answer_only：不排学习路径，由对话直接给完整解答（用户坚持两次仍可照常排路径）。
+  // 表现要求词汇在场时永不触发——苯乙烯「练到条件反射」、合同「判合法/存疑」都留在 learning_path。
+  if (axisResult.mode === 'learning_path' && axisResult.problemAxisHits === 0) {
+    const answerOnlyText = [surfaceGoal, realProblem, evidence, ...painPoints, ...constraints]
+      .filter((t): t is string => !!t && t.trim().length > 0)
+      .join('；');
+    if (answerOnlyText
+      && COMPREHENSION_PATTERN.test(answerOnlyText)
+      && !ANSWER_ONLY_BLOCK_PATTERN.test(stripNegatedSpans(answerOnlyText))) {
+      return {
+        ...axisResult,
+        mode: 'answer_only',
+        reasons: [
+          ...axisResult.reasons,
+          '理解型诉求（看懂/搞懂簇）× 无表现要求 × 三条件 0/3：答案一条回复可讲透，转对话直答，不排学习路径',
+        ],
+      };
+    }
+  }
+  return axisResult;
 }
 
 interface BlockTypeContext {
@@ -532,6 +580,8 @@ const ADVISORY_BY_MODE: Record<Exclude<ResponseTriageMode, 'learning_path'>, str
     '系统判断：你卡住的主因更偏情绪/信心，学习路径只是其中一部分——建议先处理情绪阻力，再进入系统学习。',
   referral:
     '系统判断：你卡住的主因更偏现实条件/资源/流程，学习路径只是其中一部分——建议先解决外部阻塞，再规划学习。',
+  answer_only:
+    '系统判断：这个问题的答案可以直接讲清楚，不需要排成学习路径——它是理解型的（看懂/搞懂），答案一条回复能讲透，也没有需要反复练习才能稳定达标的表现要求。我直接给你讲透；之后如果想把它练成稳定的表现（快速判读、应试输出），再回来排一条小路径。',
 };
 
 /**

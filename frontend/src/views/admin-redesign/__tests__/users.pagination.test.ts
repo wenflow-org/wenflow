@@ -113,25 +113,30 @@ describe('Users 客户端分页（mk-pagination）', () => {
     expect(w.text()).not.toContain('用户16');
   });
 
-  /** 2026-10-17 用户走查「这个多选，默认不出来吧」：勾选列默认不出。
-   *  2026-10-26：入口不再只藏在「列」菜单里——卡头明面给一枚「批量操作」，点开即显示勾选列。 */
-  it('选择框列默认隐藏：首访无全选、无行内勾选；「批量操作」一键打开，列菜单仍可找回', async () => {
-    localStorage.removeItem('wf_users_hidden_cols_v5');
+  /** 2026-11-08 用户走查：勾选列 ☐ 默认常驻（取代「默认隐藏 + 卡头批量操作按钮」）。
+   *  首访即有全选与行内勾选、无「批量操作」按钮、已选 0 时底栏不挂出。 */
+  it('选择框列默认常驻：首访即有全选与行内勾选，卡头不再有「批量操作」按钮', async () => {
+    localStorage.removeItem('wf_users_hidden_cols_v6');
     const w = await mountUsers();
-    await nextTick();
-    expect(w.find('thead input[type="checkbox"][aria-label="全选当前页"]').exists()).toBe(false);
-    expect(w.findAll('tbody input[type="checkbox"]')).toHaveLength(0);
-
-    const batch = findBtn(w, '批量操作');
-    await batch.trigger('click');
     await nextTick();
     expect(w.find('thead input[type="checkbox"][aria-label="全选当前页"]').exists()).toBe(true);
     expect(w.findAll('tbody input[type="checkbox"]')).toHaveLength(15);
-    // 再点一次收起并清空已选
-    await batch.trigger('click');
-    await nextTick();
-    expect(w.find('thead input[type="checkbox"][aria-label="全选当前页"]').exists()).toBe(false);
+    // 已选 0：底栏不挂出
+    expect(w.find('.mk-batchbar').exists()).toBe(false);
+    // 卡头无「批量操作」模式按钮
+    expect(w.findAll('.mk-card__head-right button').some((b) => b.text() === '批量操作')).toBe(false);
 
+    // 勾选一行 → 底部命令栏挂出；取消选择即收起
+    await w.findAll<HTMLInputElement>('tbody input[type="checkbox"]')[0].setValue(true);
+    await nextTick();
+    expect(w.find('.mk-batchbar').exists()).toBe(true);
+    expect(w.text()).toContain('已选 1 项');
+    const cancel = w.findAll('.mk-batchbar button').find((b) => b.text() === '取消选择')!;
+    await cancel.trigger('click');
+    await nextTick();
+    expect(w.find('.mk-batchbar').exists()).toBe(false);
+
+    // 勾选列仍可在「列」菜单收起
     await w.find('.mk-cols__trigger').trigger('click');
     await nextTick();
     const labels = w.findAll('.mk-cols__item label, .mk-cols__item').map((x) => x.text());

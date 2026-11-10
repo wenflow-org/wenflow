@@ -13,6 +13,7 @@
       'mk-select--open': open,
       'mk-select--sm': size === 'sm',
       'mk-select--block': block,
+      'mk-select--borderless': borderless,
       'mk-select--error': error,
       'mk-select--disabled': disabled
     }"
@@ -106,6 +107,8 @@ const props = withDefaults(defineProps<{
   mono?: boolean
   /** 撑满父容器（表单字段） */
   block?: boolean
+  /** 无边框轻量档（2026-11-05 去肥胖化）：筛选/排序不再套描边盒子，只留文字 + 箭头 */
+  borderless?: boolean
   /** 校验失败态（替代旧 select 上的 is-err / mk-field--error） */
   error?: boolean
 }>(), {
@@ -114,6 +117,7 @@ const props = withDefaults(defineProps<{
   size: 'md',
   mono: false,
   block: false,
+  borderless: false,
   error: false
 })
 const emit = defineEmits<{

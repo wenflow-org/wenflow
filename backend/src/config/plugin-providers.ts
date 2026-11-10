@@ -23,6 +23,13 @@ export interface PluginProviderField {
   placeholder?: string;
   /** true = 走 provider_secrets 密文表 */
   secret?: boolean;
+  /**
+   * 内置值：上游服务地址由代码写死，界面上不呈现、保存也不接受改动（改传即 400）。
+   * 2026-11-04 联网三家曾按此处理（「其实这个是写死的，相当于只需要配 key 就行」）；
+   * 2026-11-07 用户要求换成第三方兼容端点，联网字段已全部放开——
+   * 现在目录里没有字段用它，服务端逻辑保留，供以后确实不该改的字段（如平台固定的网关地址）复用。
+   */
+  builtin?: boolean;
 }
 
 export interface PluginProviderDef {
@@ -37,6 +44,12 @@ export interface PluginChannelDef {
   /** 降级链环境变量名；顺序只读展示，本轮不在界面改 */
   orderEnv: string;
   defaultOrder: readonly string[];
+  /**
+   * 顺序由代码固定：界面上不让用户排「主用 / 备用」，保存过的顺序与环境变量都不参与解析，
+   * 一律用 defaultOrder。2026-11-04 同批曾把联网的搜索/抓取两条链锁成固定顺序，
+   * 2026-11-07 用户要求可排，已全部放开——现在目录里没有通道用它。
+   */
+  orderFixed?: boolean;
 }
 
 export interface PluginConfigDef {

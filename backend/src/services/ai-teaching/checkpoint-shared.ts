@@ -14,14 +14,65 @@ export const CHECKPOINT_TRIGGER_MIN_UNDERSTANDING = 0.6;
 export const CHECKPOINT_LOW_UNDERSTANDING_MIN_TURNS = 2;
 
 /**
+ * 「不可观测」与「低理解度」是两件事（2026-11-01 走查修复）。
+ *
+ * 背景（用户走查原话：「课堂当中，为什么一句话两句话就测试呢」）：模型在**没有可引用证据**时
+ * 被旧规则要求「understanding 取低值」，于是「观测不到」被写成了一个低数字；下游确定性闸门
+ * 只认数字——`checkpointRhythmMinTurns(0.2)` 把出题间隔压到 2 条消息，学生刚说一两句就被测。
+ * **根因是把「没有读数」与「读数是低」混为一谈**。
+ *
+ * 本函数把理解度读数统一解析为 `number | null`：只有一个**真正有限**的数才算读数；
+ * null / undefined / 空串 / 非数值一律解析为 `null`（无读数），由消费方按「不加速、不否决」处理。
+ */
+export function resolveUnderstandingReading(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+/**
  * 按上一轮理解度读数给出出题节奏下限（提示词闸与 engine 事后门共用同一分档，
- * 防两处数值漂移）；无读数按常规节奏 CHECKPOINT_MIN_TURNS。
+ * 防两处数值漂移）。
+ *
+ * - 有读数且 <0.6：缩到 2 条消息优先探测（拍板 #10，见 `CHECKPOINT_LOW_UNDERSTANDING_MIN_TURNS`）；
+ * - 有读数且 ≥0.6：4 条消息常规节奏；
+ * - **无读数（null）：回常规节奏**——「观测不到」不得被当成「理解度低」而加速出题
+ *   （2026-11-01 修复点：旧实现 `Number(null)` 得 0 且有限，一个没读数的回合会把节奏压到 2，
+ *   正是「一两句就测试」的确定性成因之一）。
  */
 export function checkpointRhythmMinTurns(understanding: unknown): number {
-  const value = Number(understanding);
-  return Number.isFinite(value) && value < CHECKPOINT_TRIGGER_MIN_UNDERSTANDING
+  const value = resolveUnderstandingReading(understanding);
+  if (value === null) return CHECKPOINT_MIN_TURNS;
+  return value < CHECKPOINT_TRIGGER_MIN_UNDERSTANDING
     ? CHECKPOINT_LOW_UNDERSTANDING_MIN_TURNS
     : CHECKPOINT_MIN_TURNS;
+}
+
+/**
+ * 「卡点」的硬口径：有原话证据支撑的困惑点数量（2026-11-01 走查修复）。
+ *
+ * 课堂里有两条困惑通道，硬度完全不同：
+ * - `analysis.confusionPoints`：**软通道**——模型可自由给出、无证据要求（实测 51.9% 的回合都有），
+ *   直接当「学生卡住了」用，会把每轮老师都说成在挖卡点，也把阶段机频繁推进到 intervention；
+ * - `analysis.misconceptions`：**硬通道**——`evidence` 必须能在学生本轮原话里逐字定位
+ *   （`skills/teaching-turn` 的 `normalizeMisconceptions` 逐条核对，定位不到整条丢弃，实测 19.6%）。
+ *
+ * 学生可见的「发现卡点」chip 与「干预」阶段判定都改用本口径；软通道仍保留在分析里供遥测/复盘，
+ * 只是不再单独驱动学生可见结论。
+ */
+export function countEvidencedConfusions(analysis: unknown): number {
+  const list = (analysis as { misconceptions?: unknown })?.misconceptions;
+  if (!Array.isArray(list)) return 0;
+  return list.reduce((count, item) => {
+    const evidence = (item as { evidence?: unknown })?.evidence;
+    return typeof evidence === 'string' && evidence.trim() ? count + 1 : count;
+  }, 0);
 }
 /**
  * 同一检查点重答上限（2026-10-03 完结课堂裸审计 P1 实证）：同一道题被逐轮原样重发，最极端

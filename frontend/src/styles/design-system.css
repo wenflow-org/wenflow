@@ -291,7 +291,9 @@
   --text-muted: var(--mk-muted);
   --text-disabled: var(--neutral-500);
   --text-inverse: var(--neutral-950);
-  --text-on-primary: #141415;
+  /* 2026-11-05 用户终裁「主按钮蓝底白字」：暗色档 primary 同步收深（见 tokens.css 品牌交互色注释），
+     白字对 #2f6ae0 达 4.9:1 AA；原 #141415 暗字 pairing 已废 */
+  --text-on-primary: #FFFFFF;
   /* 已删除（死别名清理）：--text-on-success / -warning / -danger 及 *-light / -info-light
      七枚暗色档（随亮色档同删）。 */
 
@@ -371,10 +373,43 @@ body {
 
 /* Firefox / 新版标准属性：两条都是继承属性，放在根上即可覆盖全站；
    局部 `scrollbar-width: none/thin` 的容器仍按自己的声明走。
-   此前只有 WebKit 规则，Firefox 的弹层/表格滚动条完全原生（2026-10-27 走查）。 */
+   此前只有 WebKit 规则，Firefox 的弹层/表格滚动条完全原生（2026-10-27 走查）。
+   2026-11-05 全局瘦身（用户点名「每个页面右侧有很宽的 Windows 原生滚动条」）：
+   thin → none——thin 在 Windows Chromium 上仍会渲染一条带上下箭头的滚动槽（≈15px 横向占位），
+   内容右缘与卡片对不齐；隐去后滚动手势/滚轮/键盘全部不变，仅视觉消除原生槽。
+
+   2026-11-07 全站巡检 准则6 修正：这里**不能**写 scrollbar-color。
+   `scrollbar-color` 是继承属性，一旦某个元素上算出非 initial 值，Chromium 就整体关闭
+   WebKit 滚动条自绘——`::-webkit-scrollbar` 系列规则全部失效。此前 it 让「学员端 4px
+   极细滑块」与「管理台 4px」都落空：实测内部滚动容器仍是原生 16px 宽槽（只是被染色）。
+   页级滚动条由下面的 `html::-webkit-scrollbar{width:0}`（WebKit）+ `scrollbar-width:none`
+   （Firefox）各自负责，不需要 scrollbar-color 参与。 */
 html {
-  scrollbar-width: thin;
-  scrollbar-color: var(--neutral-400) transparent;
+  scrollbar-width: none;
+}
+html::-webkit-scrollbar { width: 0; height: 0; }
+
+/* 管理台内部滚动容器：与学员端同档 4px 极细滑块（2026-11-07 全站巡检 准则6）
+   上面的全站 `::-webkit-scrollbar` 是 8px + 实色轨道；学员端早在 `.v2-page *` 下
+   override 成 4px 半透明滑块，管理台（.mshell 及其页面、表格、侧栏导航）一直没有——
+   执行日志表、Skill 目录列表、侧栏导航实测都是 8px 带轨道的宽槽，两端观感不一致。
+   这里补齐同一档；`.mk-listbox-pop` 等刻意要标准宽度的容器（mk-select.css 自写 auto）
+   不在名单里，仍按自己的声明走。 */
+:is(.mshell, .mshell *)::-webkit-scrollbar { width: 4px; height: 4px; }
+:is(.mshell, .mshell *)::-webkit-scrollbar-track { background: transparent; }
+:is(.mshell, .mshell *)::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--neutral-400) 70%, transparent);
+  border-radius: var(--radius-full);
+}
+:is(.mshell, .mshell *)::-webkit-scrollbar-thumb:hover {
+  background: var(--neutral-500);
+}
+/* Firefox：scrollbar-width 不继承，必须显式声明（学员端同一处理）。 */
+@supports (-moz-appearance: none) {
+  :is(.mshell, .mshell *) {
+    scrollbar-width: thin;
+    scrollbar-color: var(--neutral-400) transparent;
+  }
 }
 
 /* ==========================================

@@ -8,6 +8,9 @@
       title="更多"
       @click="toggle"
     >⋯</button>
+    <!-- 窄屏遮罩（2026-11-06 走查）：菜单浮在聊天气泡上，边缘字贴字读起来很乱。
+         只在 ≤1023 显示；点击即关（本元素在 wrapRef 之外，文档点击处理器也会兜一层）。 -->
+    <div v-if="open && mask" class="imm-menu__mask" aria-hidden="true" @click="open = false"></div>
     <Transition name="imm-pop">
       <!-- 插槽内容是真 button 列表（keyboard 原生可达），容器只做点击委托收起菜单；
            不标 role="menu"——menu 语义要求子项为 menuitem，与真按钮不符 -->
@@ -24,6 +27,9 @@
    （评估页弹层被后续卡片盖住）。开合机制内聚到这里，菜单项由使用方以默认插槽传入
    （插槽内容编译在父作用域，沿用各自的 item 样式）；点击弹层内任意项自动关闭。 */
 import { onBeforeUnmount, onMounted, ref } from 'vue';
+
+/** 窄屏是否给弹层加背景遮罩（课堂页用；评估页不受影响） */
+withDefaults(defineProps<{ mask?: boolean }>(), { mask: false });
 
 const open = ref(false);
 const wrapRef = ref<HTMLElement | null>(null);
@@ -60,6 +66,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .imm-menu { position: relative; display: inline-flex; flex-shrink: 0; }
 .imm-menu__btn {
+  position: relative; z-index: 39; /* 高于窄屏遮罩(38)、低于弹层(40)：触发键不被遮罩压暗 */
   width: 44px; height: 44px;
   display: grid; place-items: center;
   border: 1px solid var(--line);
@@ -73,6 +80,14 @@ onBeforeUnmount(() => {
   font-family: inherit;
 }
 .imm-menu__btn:hover { color: var(--blue-deep); border-color: color-mix(in srgb, var(--blue) 40%, transparent); }
+.imm-menu__mask { display: none; }
+@media (max-width: 1023px) {
+  .imm-menu__mask {
+    display: block;
+    position: fixed; inset: 0; z-index: 38;
+    background: color-mix(in srgb, #000 35%, transparent);
+  }
+}
 .imm-menu__pop {
   position: absolute;
   right: 0;

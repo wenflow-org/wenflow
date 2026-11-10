@@ -135,3 +135,49 @@ describe('执行日志默认排除金丝雀探针（回归）', () => {
     expect(res.body.data.stats.canary).toBe(0)
   })
 })
+
+/**
+ * 2026-11-08 审计：状态档三分的 where 判据。
+ * 平台口径里「失败」= 没成功（含超时），超时是失败的原因分类（失败归因的 provider_timeout 桶），
+ * 所以 status=failed 只加 `success: false`、**不**排除超时——总览「近 7 天失败 N 次」下钻过来
+ * 要拿到同一批行（旧写法发 status=error 排除超时 → 下钻比总数少掉超时那几行）。
+ */
+describe('执行日志状态档 where 判据（failed / error / timeout）', () => {
+  const andOf = () => (findMany.mock.calls[0][0].where.AND || []) as any[]
+  const hasTimeoutExclusion = (and: any[]) =>
+    and.some((c: any) => c?.NOT?.OR?.some((o: any) => String(o.errorCode?.contains || '').includes('TIMEOUT')))
+  const hasTimeoutOnly = (and: any[]) =>
+    and.some((c: any) => c?.OR?.some((o: any) => o.errorCode?.contains === 'TIMEOUT'))
+
+  it('status=failed → 只加 success:false（含超时，一行不漏）', async () => {
+    const res = await run(getRouteHandler(platformRouter, '/agents/logs', 'get'), {
+      query: { timeRange: 'week', status: 'failed' },
+    })
+
+    expect(res.statusCode).toBe(200)
+    const and = andOf()
+    expect(and).toEqual(expect.arrayContaining([{ success: false }]))
+    expect(hasTimeoutExclusion(and)).toBe(false)
+    expect(hasTimeoutOnly(and)).toBe(false)
+  })
+
+  it('status=error → success:false 且排除超时（细分档仍可用）', async () => {
+    await run(getRouteHandler(platformRouter, '/agents/logs', 'get'), {
+      query: { timeRange: 'week', status: 'error' },
+    })
+
+    const and = andOf()
+    expect(and).toEqual(expect.arrayContaining([{ success: false }]))
+    expect(hasTimeoutExclusion(and)).toBe(true)
+  })
+
+  it('status=timeout → success:false 且只要超时（快捷子档）', async () => {
+    await run(getRouteHandler(platformRouter, '/agents/logs', 'get'), {
+      query: { timeRange: 'week', status: 'timeout' },
+    })
+
+    const and = andOf()
+    expect(and).toEqual(expect.arrayContaining([{ success: false }]))
+    expect(hasTimeoutOnly(and)).toBe(true)
+  })
+})

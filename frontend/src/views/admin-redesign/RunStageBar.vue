@@ -102,14 +102,14 @@ const LABEL: Record<RunStageName, string> = { goal: '目标', path: '路径', le
 .rs-bar__dot--todo { background: var(--mk-surface-3); }
 .rs-bar__dot--fail { background: var(--mk-red); box-shadow: 0 0 0 3px var(--mk-red-bg); }
 .rs-bar__dot--skip { background: var(--mk-amber); box-shadow: 0 0 0 3px var(--mk-amber-bg); }
-.rs-bar__node--done .rs-bar__label { color: var(--mk-blue); }
-.rs-bar__node--doing .rs-bar__label { color: var(--mk-blue); }
+.rs-bar__node--done .rs-bar__label { color: var(--mk-blue-text); }
+.rs-bar__node--doing .rs-bar__label { color: var(--mk-blue-text); }
 .rs-bar__node--fail .rs-bar__label { color: var(--mk-red); }
 .rs-bar__node--skip .rs-bar__label { color: var(--mk-amber); }
 
 .rs-bar__connector--done { background: var(--mk-blue); }
 .rs-bar__task { margin-left: 4px; color: var(--mk-muted); font-weight: 600; font-size: var(--mk-fs-micro); }
-.rs-bar__done { margin-left: 4px; color: var(--mk-blue); font-weight: 700; }
+.rs-bar__done { margin-left: 4px; color: var(--mk-blue-text); font-weight: 700; }
 
 /* 进行中脉冲：品牌底环由 3px 扩散回 0（环本身随 .rs-bar__dot--doing 的 box-shadow 给出） */
 @keyframes rsbar-pulse {

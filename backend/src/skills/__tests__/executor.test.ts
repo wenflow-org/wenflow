@@ -32,8 +32,9 @@ jest.mock('../../utils/logger', () => ({
   }
 }))
 
-import { getRequestContext, runWithContext } from '../../gateway/api-gateway/context'
+import { getRequestContext, runInAgentScope, runWithContext } from '../../gateway/api-gateway/context'
 import { consumeUpstreamAttempt } from '../../gateway/api-gateway/retry-budget'
+import { getAgentOfSkill } from '../../services/agent-manifest.service'
 import { executeSkillHandler } from '../executor'
 
 describe('统一 Skill Executor', () => {
@@ -72,6 +73,81 @@ describe('统一 Skill Executor', () => {
     }))
   })
 
+  it('#185：skill span 的 callerAgent 取所属 agent 边界，不继承上层运行来源标记', async () => {
+    const result = await runWithContext({
+      userId: 'user-1',
+      sourceEntry: 'simulation',
+      callerAgent: 'simulation-agent'
+    }, () => executeSkillHandler({ id: 'skill:session-wrapup' }, {}, async () => ({
+      success: true,
+      output: 'ok',
+      duration: 1
+    })))
+
+    expect(result.success).toBe(true)
+    const data = logCreate.mock.calls.at(-1)[0].data
+    expect(data.agentId).toBe('skill:session-wrapup')
+    expect(data.callerAgent).toBe('teaching-agent')
+  })
+
+  it('#185：跨阶段调用的 callerAgent 取真实执行边界，不是 skill 的静态 owner（归属扁平化）', async () => {
+    // 病灶复现：learning-predictor 静态归属 profile-agent，但在教学链（teaching-agent 作用域）
+    // 内被调用。旧实现（继承 simulation-agent 或直接写静态 owner）会写出
+    // simulation-agent / profile-agent -> skill:learning-predictor 的假边。
+    expect(getAgentOfSkill('skill:learning-predictor')?.id).toBe('profile-agent')
+    const result = await runWithContext({
+      userId: 'user-1',
+      sourceEntry: 'simulation',
+      callerAgent: 'simulation-agent' // 自动驾驶的运行来源
+    }, () => runInAgentScope('teaching-agent', () => executeSkillHandler(
+      { id: 'skill:learning-predictor' },
+      {},
+      async () => ({ success: true, output: 'ok', duration: 1 })
+    )))
+
+    expect(result.success).toBe(true)
+    const data = logCreate.mock.calls.at(-1)[0].data
+    expect(data.callerAgent).toBe('teaching-agent')
+    // 运行来源不被丢弃，落到 rootCallerAgent 供追溯
+    expect(JSON.parse(data.metadata).rootCallerAgent).toBe('simulation-agent')
+  })
+
+  it('#185：嵌套 skill 调用沿用所在 agent 边界，不被内层 skill 的静态 owner 改写', async () => {
+    const result = await runWithContext({
+      userId: 'user-1',
+      sourceEntry: 'simulation'
+    }, () => runInAgentScope('teaching-agent', () => executeSkillHandler(
+      { id: 'skill:learning-predictor' },
+      {},
+      async () => {
+        // 真实执行中的下一个调用：边界仍是 teaching-agent
+        expect(getRequestContext().agentScope).toBe('teaching-agent')
+        return { success: true, output: 'ok', duration: 1 }
+      }
+    )))
+
+    expect(result.success).toBe(true)
+  })
+
+  it('#185：无归属的 handler-only skill 不再借用上层 callerAgent（记为调用方未知）', async () => {
+    const result = await runWithContext({
+      userId: 'user-1',
+      sourceEntry: 'simulation',
+      callerAgent: 'simulation-agent'
+    }, () => executeSkillHandler({ id: 'skill:replan-attribution' }, {}, async () => ({
+      success: true,
+      output: 'ok',
+      duration: 1
+    })))
+
+    expect(result.success).toBe(true)
+    // 前提：该 skill 无归属 agent（skills.yaml 无 parentAgent），故没有可用的调用方
+    expect(getAgentOfSkill('skill:replan-attribution')).toBeUndefined()
+    const data = logCreate.mock.calls.at(-1)[0].data
+    expect(data.agentId).toBe('skill:replan-attribution')
+    expect(data.callerAgent).toBeNull()
+  })
+
   it('把 SkillExecutionResult 失败统一转换为异常并记录失败统计', async () => {
     await expect(executeSkillHandler(
       { name: 'text-structure-analyzer' },
@@ -87,6 +163,22 @@ describe('统一 Skill Executor', () => {
       where: { name: 'text-structure-analyzer' },
       data: expect.objectContaining({ callCount: 3, successRate: expect.closeTo(1 / 3) })
     }))
+  })
+
+  it('上游/基础设施失败（provider_http 等）不计入技能成功率（#177 健康度口径）', async () => {
+    await expect(executeSkillHandler(
+      { name: 'concept-consolidator' },
+      {},
+      async () => {
+        throw Object.assign(new Error('Provider request retry budget exhausted'), { category: 'provider_http' })
+      }
+    )).rejects.toMatchObject({ message: 'Provider request retry budget exhausted' })
+
+    // span 照记（观测不丢），但成功率不被上游故障拉低
+    expect(logCreate).toHaveBeenCalled()
+    expect(skillUpdate).not.toHaveBeenCalled()
+    // #177：skill 层 span 也带上真实失败类别（供成功率口径按 category 判，而非猜 errorCode）
+    expect(logCreate.mock.calls.at(-1)[0].data.errorCategory).toBe('provider_http')
   })
 
   it('quality 与 cached 双向桥接：legacy cached 派生 quality', async () => {

@@ -53,10 +53,31 @@ function tailSentences(reply: string, count = 2): string[] {
     .slice(-count);
 }
 
+/**
+ * 「有问题随时问我」这类**条件式客套**：老师在告知「接下来遇到困难可以找我」，
+ * 不是在等学员本轮交付东西。它落在 OPEN_REQUEST_PATTERNS 的「告诉我」上，
+ * 却与「把你改好的句子告诉我」是两回事——前者不构成未闭合请求。
+ *
+ * 判别靠条件前缀（有问题/不懂/不清楚/不明白/遇到问题/卡住），而不是「随时」，
+ * 这样「随时告诉我你的答案」这类真请求不会被误豁免。
+ *
+ * #164：这一条同时是两个门禁的公共判据——回合门禁（shouldDeferCompletionForClosure）
+ * 与收束入口门禁（evaluateSessionClosable）共用 detectOpenRequest，不再各写一套。
+ */
+const COURTESY_OFFER_PATTERN = /(?:有问题|有不懂|有不清楚|有疑问|不明白|遇到问题|遇到卡点|卡住了?)[^。！？!?\n]{0,12}(?:问我|告诉(?:一声)?我|找我|喊我|发给我|来问)/;
+
+/** 该句是否属于「课后建议 / 条件式客套」——不参与未闭合请求判定 */
+function isNonRequestSentence(sentence: string): boolean {
+  return CLOSING_ADVICE_PATTERN.test(sentence) || COURTESY_OFFER_PATTERN.test(sentence);
+}
+
 export function detectOpenRequest(reply: string): boolean {
-  const tail = tailSentences(reply).join('');
-  if (!tail || CLOSING_ADVICE_PATTERN.test(tail)) return false;
-  return OPEN_REQUEST_PATTERNS.some((pattern) => pattern.test(tail));
+  // 逐句判定：一句「课后建议/客套」不能把同段里真正的请求一起豁免
+  //（旧实现把末两句拼起来整体匹配 CLOSING_ADVICE，一句话就吞掉整段）。
+  const tail = tailSentences(reply);
+  if (!tail.length) return false;
+  return tail.some((sentence) => !isNonRequestSentence(sentence)
+    && OPEN_REQUEST_PATTERNS.some((pattern) => pattern.test(sentence)));
 }
 
 function lastOpenRequestSentence(reply: string): string | null {
@@ -67,6 +88,7 @@ function lastOpenRequestSentence(reply: string): string | null {
   for (let i = sentences.length - 1; i >= 0; i -= 1) {
     const sentence = sentences[i];
     if (CLOSING_ADVICE_PATTERN.test(sentence)) return null;
+    if (COURTESY_OFFER_PATTERN.test(sentence)) continue;
     if (OPEN_REQUEST_PATTERNS.some((pattern) => pattern.test(sentence))) return sentence;
   }
   return null;
@@ -95,7 +117,7 @@ export interface ClosureGateDecision {
   /** true = 本回合压住完成信号，延迟一轮 */
   defer: boolean;
   /** 压住原因（日志/观测用），defer=false 时为 null */
-  reason: 'pending-checkpoint-unanswered' | 'checkpoint-emitted-this-turn' | 'trailing-question' | null;
+  reason: 'pending-checkpoint-unanswered' | 'checkpoint-emitted-this-turn' | 'trailing-question' | 'open-request' | null;
   /** 本回合被压住的题面归一化键（用于同一题识别；无题面时为 null） */
   questionKey: string | null;
   /** true = 这是绝对上限后的最后一次宽限延迟（只发生一次） */
@@ -124,13 +146,19 @@ function resolveClosureQuestionKey(reply: string, pendingCheckpoint: unknown, em
 export function shouldDeferCompletionForClosure(input: ClosureGateInput): ClosureGateDecision {
   const priorDeferrals = Number(input.priorDeferrals) || 0;
   const questionKey = resolveClosureQuestionKey(input.reply, input.pendingCheckpoint, input.emittedCheckpointQuestion);
+  // #164：判据与收束入口（evaluateSessionClosable）同源——两处都在问同一个问题
+  // 「老师的末句是否还在等学员交付」。旧实现这里只认问号，收束入口还认「请提交/发给我」类祈使句，
+  // 于是「今天就到这里，有问题随时告诉我」会被引擎判完成、前端展示完成入口，用户点下去却在
+  // complete_task 收 409（FINALIZATION_OPEN_QUESTION）——产品内没有出口。
   const gateReason: ClosureGateDecision['reason'] = input.pendingCheckpoint
     ? 'pending-checkpoint-unanswered'
     : input.checkpointEmittedThisTurn
       ? 'checkpoint-emitted-this-turn'
       : detectTrailingQuestion(input.reply)
         ? 'trailing-question'
-        : null;
+        : detectOpenRequest(input.reply)
+          ? 'open-request'
+          : null;
   // 活力兜底：全会话延迟总上限到顶即放行（旧实现按"全会话累计 2 次"封顶，
   // 前两轮的旧题把预算耗尽后，后面新抛出的、从未作答的末问也会被直接收掉——
   // 实测 22 分钟课在老师刚问完最后一道时结束，学员永远没机会答。外部审计 P0-2。）
@@ -163,6 +191,10 @@ export function shouldDeferCompletionForClosure(input: ClosureGateInput): Closur
  * - 回合内：压住「模型想收」的信号，最多 2 次，避免拖死；
  * - 收束入口：学员/系统主动结束时，若仍有未闭合问答则 409，让前端先作答（或走放弃路径）。
  * 放弃/异常终态一律放行——那不是「没答完」，是「不学了」。
+ *
+ * #164：两个门禁的**末问判据必须同源**（都用 detectTrailingQuestion / detectOpenRequest），
+ * 否则会出现「引擎说已完成、complete_task 却 409」的僵局——前端已展示完成入口，点下去却被拒。
+ * 引擎侧延迟预算耗尽后的放行（见 closureBackstopReleased）在这里同样放行。
  */
 export type SessionClosableCode =
   | 'FINALIZATION_PENDING_CHECKPOINT'
@@ -200,9 +232,25 @@ export function evaluateSessionClosable(input: {
    * 结算（complete_task）不放行——那正是本门禁要守的假完成。
    */
   allowOpenQuestion?: boolean;
+  /**
+   * 学员**明确确认**后放行「末问未答」（2026-11-03 真人走查补的活力兜底）。
+   *
+   * 与 `allowOpenQuestion` 的区别：后者是整条通道豁免（复习课有界收束 / 主动退出），
+   * 三类判据一起放行；本参数**只豁免末问这一条启发式判据**，客观待答（小测未答 /
+   * 末次检查题还有重答机会）仍然硬拦——那些是学员自己就能确定性地解决的状态，
+   * 不会把人卡死在循环里，没有放行的理由。
+   *
+   * 为什么要有它：本模块自己的注释就写了「活力兜底……防止**老师每回合都带问号**把课拖到
+   * 永不收敛」，但那个上限只加在**模型侧**的收束判决上；学员主动点「完成并结算」这条路
+   * 没有任何兜底。真人走查实测：这门课的老师每轮都以提问收尾，学员连答 4 轮才等到一次
+   * 不问的回应，期间点结算一直被拒——即「末问未答」在**这种授课形态下不可被学员的动作满足**。
+   * 所以补的是活力兜底，不是放宽标准：把「我确实要收课」这个决定交回学员，
+   * 而未答的那一问**一定会留痕**（见下方 buildClosureAudit / appendClosureFollowUp：
+   * 审计与门禁同源、故意不看本参数，收口时把「待验证：<末问>」确定性写进总结的 actionPlan）。
+   */
+  waiveOpenQuestion?: boolean;
 }): SessionClosableDecision {
   if (input.endReason && ABNORMAL_END_REASONS.has(input.endReason)) return { closable: true };
-
   const state = input.teachingState || {};
   if (state.pendingCheckpoint && !input.allowOpenQuestion) {
     return {
@@ -213,11 +261,24 @@ export function evaluateSessionClosable(input: {
   }
 
   const messages = Array.isArray(input.messages) ? input.messages : [];
+  /**
+   * #164：引擎侧延迟预算耗尽后的放行必须被收束入口认账。
+   *
+   * `shouldDeferCompletionForClosure` 在 `completionDeferrals >= COMPLETION_DEFERRAL_ABSOLUTE_CAP`
+   * 且宽限已用掉后**一定**放行完成信号（liveness backstop，防「老师每回合都带问号」拖死）。
+   * 如果这里仍按末句文本拦一道 409，引擎放行的那一轮用户点「完成任务」必然被拒，
+   * 而产品内没有第二个出口——同一条判据在两侧给出相反结论。两个门禁同源后，
+   * 引擎已经放行的课，收束入口照此放行；留痕由 buildClosureAudit / appendClosureFollowUp
+   * 负责（它们故意不看放行参数，未答末问照样写进总结的 actionPlan）。
+   */
+  const closureBackstopReleased = Number(state.completionDeferrals) >= COMPLETION_DEFERRAL_ABSOLUTE_CAP
+    && state.completionCapGraceUsed === true;
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i];
     if (message?.role === 'user') break;
     const content = String(message?.content || '');
-    if (message?.role === 'assistant' && !input.allowOpenQuestion
+    if (message?.role === 'assistant' && !input.allowOpenQuestion && !input.waiveOpenQuestion
+      && !closureBackstopReleased
       && (detectTrailingQuestion(content) || detectOpenRequest(content))) {
       return {
         closable: false,

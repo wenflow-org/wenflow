@@ -12,6 +12,7 @@ import { classifyLoad } from '../learning/learning-load-verdict';
 import type { TeachingSessionMessage, TeachingKnowledgePointState } from './TeachingSessionRepository';
 import type { TeachingScenarioContext } from './TeachingContextBuilder';
 import type { TeachingTurnOutput } from '../../skills/teaching-turn';
+import { countEvidencedConfusions, resolveUnderstandingReading } from './checkpoint-shared';
 
 /**
  * 教学阶段。
@@ -193,7 +194,9 @@ export function buildClassroomEvent(
 }
 
 export function detectEndIntent(message: string) {
-  const text = (message || '').trim();
+  // 防御：非字符串入参（如 123 / {} / [] / true）不得让 `.trim` 抛 TypeError 升级成 500；
+  // 统一归一为字符串后再判空。
+  const text = String(message ?? '').trim();
   if (!text) return { isEndIntent: false, reason: '' };
 
   const patterns = [
@@ -228,11 +231,16 @@ export function determineNextStage(params: {
   frustratedStreak?: number;
 }): { stage: LearnStage; reason: string } {
   const { currentStage, teachingOutput, peerTriggered, learnerMessage, taskMode, frustratedStreak } = params;
-  const understanding = Number(teachingOutput.analysis?.understanding ?? 0.5);
+  // 理解度读数可能是 null（本轮不可观测，见 checkpoint-shared）：进入条件上按中性 0.5 处理
+  // （不因「测不出」而升级干预），但**退出干预**这类「好转结论」必须有真实读数支撑。
+  const understandingReading = resolveUnderstandingReading(teachingOutput.analysis?.understanding);
+  const understanding = understandingReading ?? 0.5;
   const emotion = teachingOutput.analysis?.emotionalState;
-  const confusionPoints = Array.isArray(teachingOutput.analysis?.confusionPoints)
-    ? teachingOutput.analysis.confusionPoints
-    : [];
+  // 「卡点」改走硬口径（2026-11-01）：软通道 confusionPoints 无证据要求，实测过半回合都有——
+  // 拿 `>= 2` 驱动阶段机等于让每两轮就进一次 intervention（「每句话都在挖卡点」的机制成因）。
+  // 硬通道（misconceptions 的 evidence 必须逐字定位到学生原话）才配得上「学生出现明显卡点」。
+  // 软通道不再参与阶段判定，仍留在 analysis 里供遥测与复盘。
+  const evidencedConfusions = countEvidencedConfusions(teachingOutput.analysis);
   const completionCandidate = teachingOutput.control?.isCompletionCandidate === true;
   // loadIndex 作为 intervention 的辅助证据（认知过载 >0.85 且理解不足时倾向干预，
   // 而非仅依赖情绪/困惑点显式信号；M1 感知层消费接入）
@@ -256,15 +264,17 @@ export function determineNextStage(params: {
     return { stage: 'ready_to_close', reason: `PF 逃生舱触发：${highLoad ? '认知过载' : `连续 ${frustratedStreak} 轮受挫`}，退出有效失败模式` };
   }
 
-  if (peerTriggered || understanding < 0.35 || emotion === 'frustrated' || confusionPoints.length >= 2 || (highLoad && understanding < 0.6) || (ktStruggle && understanding < 0.6)) {
-    return { stage: 'intervention', reason: highLoad ? '认知负荷过高，进入干预降载' : ktStruggle ? '知识状态低于任务难度（θ−d），进入干预' : '学生出现明显卡点，进入干预阶段' };
+  if (peerTriggered || understanding < 0.35 || emotion === 'frustrated' || evidencedConfusions >= 2 || (highLoad && understanding < 0.6) || (ktStruggle && understanding < 0.6)) {
+    return { stage: 'intervention', reason: highLoad ? '认知负荷过高，进入干预降载' : ktStruggle ? '当前任务略超掌握度，已切入针对性辅导' : '学生出现明显卡点，进入干预阶段' };
   }
 
   if (currentStage === 'opening' && learnerMessage.trim()) {
     return { stage: 'teaching', reason: '已完成开场定位，进入正常推进' };
   }
 
-  if (currentStage === 'intervention' && understanding >= 0.5) {
+  // 退出干预＝「卡点已缓解」的结论：**必须有真实读数**。此前 `Number(null ?? 0.5)` 让一个
+  // 不可观测的回合以 0.5 释放干预，等于凭空宣布「好了」（2026-11-01 修复）。
+  if (currentStage === 'intervention' && understandingReading !== null && understandingReading >= 0.5) {
     return { stage: 'teaching', reason: '卡点已缓解，回到授课推进' };
   }
 
@@ -371,28 +381,14 @@ export function buildTeachingStateWithArtifacts(
   };
 }
 
-export async function withTimeout<T>(promise: Promise<T>, ms: number, errorMessage: string): Promise<T> {
-  let timer: NodeJS.Timeout | null = null;
-  // 超时取消钩子：调用方可传入 controller，超时 reject 的同时 abort 底层 LLM 调用，
-  // 避免"上层已超时、底层流仍在跑"的幽灵 CALLER_ABORTED 日志与 token 浪费。
-  const controller = new AbortController();
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        timer = setTimeout(() => {
-          controller.abort();
-          reject(new Error(errorMessage));
-        }, ms);
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
 /**
- * 同 withTimeout，但把超时取消信号暴露给调用方（传给 gateway.execute 的 abortSignal）。
+ * wall-clock 超时 + **协作式取消**：promise(signal) 拿到的 signal 在 ms 到点时先 abort、随后 reject。
+ *
+ * 为什么参数是一段函数而不是现成的 Promise：只有让调用方在**构造底层调用时**就拿到同一个 signal，
+ * 才能把它透传给 gateway.execute（executeSkill 的 abortSignal），超时才会真正停掉底层模型调用。
+ * 若像旧版 withTimeout 那样自己 new 一个 controller 却没人消费，超时只是「上层不再等」——
+ * 底层还在跑，调用方却已释放操作租约，后续请求会与新回合并发烧同一份预算（175-3）。
+ * 因此调用方必须把 signal 交给底层；本函数自身不做任何「取消」，只负责发出信号。
  */
 export async function withTimeoutSignal<T>(
   promise: (signal: AbortSignal) => Promise<T>,

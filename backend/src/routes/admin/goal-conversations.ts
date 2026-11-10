@@ -9,6 +9,7 @@ import {
   findGoalConversationWithUser,
   countAiGeneratedPathsByUser,
   getGoalConversationStatusCounts,
+  bucketGoalConversationStatusCounts,
   findRecentGoalConversationsForTrend,
   countDistinctGoalConversationUsers,
 } from '../../services/admin/goal-conversation-admin.repo';
@@ -206,12 +207,19 @@ router.post('/:id/regenerate-path', async (req: any, res) => {
     // 调用服务生成新的学习路径
     const pathData = await generateLearningPathFromConversation(id);
 
+    /* 2026-11-01 实测修复：本入口返回的就是 learning_paths 行本身（`fullPath`），
+       不是 `{ learningPath }` 信封——旧写法读 `pathData.learningPath?.id` 恒取到 undefined，
+       于是前端 toast 只能显示「已生成路径「未命名」」，行上的 pathId 也永远回填不上，
+       对话一直停在「未生成路径」。两种形状都认，服务侧换信封也不会再断。 */
+    const generatedPath = (pathData as { learningPath?: { id?: string; name?: string; title?: string; totalWeeks?: number } })?.learningPath
+      ?? (pathData as { id?: string; name?: string; title?: string; totalWeeks?: number } | null);
+
     res.json({
       success: true,
       data: {
-        learningPathId: pathData.learningPath?.id,
-        learningPathName: pathData.learningPath?.name,
-        totalWeeks: pathData.learningPath?.totalWeeks,
+        learningPathId: generatedPath?.id,
+        learningPathName: generatedPath?.name || generatedPath?.title,
+        totalWeeks: generatedPath?.totalWeeks,
         version: existingPathsCount + 1,
         totalVersions: existingPathsCount + 1
       }
@@ -235,10 +243,13 @@ router.get('/stats/overview', async (req: any, res) => {
     // （与 GET / 的分支同一判据，否则分布条/完成率与列表不同源）
     const includeTest = String(req.query.includeTest || '') === 'true';
     const userWhere = includeTest ? {} : await resolveStatsUserWhere();
-    const [[total, active, completed, cancelled], distinctUsers] = await Promise.all([
+    const [statusRows, distinctUsers] = await Promise.all([
       getGoalConversationStatusCounts(userWhere),
       countDistinctGoalConversationUsers(userWhere)
     ]);
+    /* 分桶口径（2026-11-02 P2-2）：与列表的四个状态档一一对应，「已取消」含回收、
+       total 含列表没单列一档的 discarded——四档之和可以不等于 total，属预期。 */
+    const { total, active, completed, cancelled, failed } = bucketGoalConversationStatusCounts(statusRows);
 
     // 获取最近 7 天的对话趋势（含 7 天内完成但更早创建的对话，保证「当日完成」完整）
     const sevenDaysAgo = new Date();
@@ -275,6 +286,7 @@ router.get('/stats/overview', async (req: any, res) => {
         active,
         completed,
         cancelled,
+        failed,
         distinctUsers,
         completionRate: total > 0 ? ((completed / total) * 100).toFixed(2) : '0',
         dailyStats: Object.entries(dailyStats).map(([date, stats]) => ({

@@ -5,6 +5,18 @@
          页头之下补 4 卡 KPI 带（记录总数 / 失败记录 / 失败率 / 失败动作）。 -->
     <MkPageHead title="审计日志">
       <template #actions>
+        <!-- 2026-11-07 用户「时间范围在执行日志里在页头，到审计日志却掉到表格下方工具栏」：
+             它同时管顶部 4 张统计卡与下方表格，位置必须与执行日志一致（页头，导出左侧）。 -->
+        <div class="logs-window">
+          <MkPillSelect
+            :model-value="timeRange"
+            label="时间范围"
+            aria-label="时间范围"
+            :options="timeRangeOptions"
+            :active="timeRange !== 'all'"
+            @update:model-value="applyFilters"
+          />
+        </div>
         <button type="button" class="mk-btn mk-btn--sm" @click="goExport">导出</button>
       </template>
     </MkPageHead>
@@ -14,11 +26,13 @@
          失败下钻收敛为两条入口——「失败记录」卡（一键只看失败）与「失败动作」下拉
          （按动作下钻，选项自带次数）；卡头不再挂一排动作胶囊。
          2026-10-27 用户「kpi 和 tab 位置反了」：KPI 是页面级读数，放在页签之上；
-         页签下才是筛选头与表体。 -->
+         页签下才是筛选头与表体。
+         2026-11-02 评审：三张与失败同源的卡（失败记录 / 失败率 / 失败动作）同一套着色，
+         此前「失败动作」是白字，同排三个读数用两种强调方式。 -->
     <section class="mk-kpi-grid" aria-label="审计日志统计" :aria-busy="statsLoading || undefined">
       <MkKpi
         label="记录总数"
-        :value="statsLoading ? '—' : total"
+        :value="statsLoading || statsError ? '—' : total"
       />
       <MkKpi
         clickable
@@ -38,6 +52,7 @@
         v-if="tab === 'operation'"
         label="失败动作"
         :value="statsLoading || statsError ? '—' : failureByAction.length"
+        :tone="failureByAction.length && !statsError ? 'bad' : ''"
       />
     </section>
 
@@ -70,20 +85,22 @@
       <!-- 筛选卡片头（关键词 / 时间范围 / 列） -->
       <div class="mk-card__head">
         <div class="mk-filter">
-          <!-- 时间范围常驻可操作，默认「全部」：默认「今天」时首屏是空态，会被读成「没有异常」 -->
+          <!-- 2026-11-07 用户「执行日志叫『状态 全部状态』、审计日志叫『失败动作 不过滤』」：
+               这里补一枚真状态筛选，与执行日志同名同项（全部 / 仅成功 / 仅失败）。
+               时间范围已上提到页头（它同时管 KPI 与表格）。 -->
           <MkPillSelect
-            v-model="timeRange"
-            label="时间范围"
-            aria-label="时间范围"
-            :options="timeRangeOptions"
-            :active="timeRange !== 'all'"
-            @update:model-value="applyFilters"
+            :model-value="statusFilter"
+            label="状态"
+            aria-label="按状态筛选"
+            :options="statusFilterOptions"
+            :active="!!statusFilter"
+            @update:model-value="applyStatusFilter"
           />
           <!-- 动作快筛（2026-10-27 从「筛选」弹层提到主栏）：Carbon 的筛选模式禁止把类别
                收进菜单/下拉——这里原本是一个只装单项的弹层，收起后只剩数字角标。选项仍是
                当前页动作聚合（口径如实写在「全部动作」之后），下钻走 keyword 搜索。 -->
           <MkPillSelect
-            v-if="tab === 'operation'"
+            v-if="tab === 'operation' && !failedOnly"
             :model-value="activeActionValue"
             label="动作"
             aria-label="按动作筛选"
@@ -92,18 +109,26 @@
             @update:model-value="applyActionFilter"
           />
           <!-- 失败动作下钻（2026-10-27）：替代原先「失败 N + 每个动作一枚胶囊」的常驻行。
-               计数只随选项出现；空选项在失败域里读作「全部失败」，不在失败域时读作「不过滤」。 -->
+               2026-11-09 审计（图 6）：此前「动作」与「失败动作」并排常驻、默认值同为「全部动作」，
+               读者分不清两者是 AND 还是 OR，而「状态」里已经有「仅失败」。
+               两者过滤的其实是同一字段（都写 keyword 下钻），只是取值域不同——
+               失败动作 = 失败记录里的动作名。故改为条件联动：只有状态 = 仅失败时才出现，
+               且此时只留这一枚（「动作」让位），默认值改读「全部失败动作」。
+               计数只随选项出现；空选项在失败域里读作「全部失败」。 -->
           <MkPillSelect
-            v-if="tab === 'operation' && failureByAction.length"
+            v-if="tab === 'operation' && failedOnly && failureByAction.length"
             :model-value="failedAction"
             label="失败动作"
-            aria-label="按失败动作筛选"
+            aria-label="按失败动作筛选（状态为仅失败时可用）"
             :options="failureSelectOptions"
-            :active="failedOnly && !!failedAction"
+            :active="!!failedAction"
             @update:model-value="applyFailureFilter"
           />
-          <!-- 失败 TOP 常驻主行：先看到「最近什么在失败」，再点 chip 下钻 -->
-          <div v-if="statsError" class="mk-alert mk-alert--row al-stats-error" role="alert">
+          <!-- 失败 TOP 常驻主行：先看到「最近什么在失败」，再点 chip 下钻。
+               2026-11-09 审计（图 5）：列表本身也失败时，下方 MkEmptyState 的「重试」已经同时
+               重取列表与统计（applyFilters），这里再挂一枚红「重试」就是同屏第二个入口。
+               故列表失败时让位，只留下方那一枚；统计单独失败（列表仍在）时才显示本条。 -->
+          <div v-if="statsError && !loadError" class="mk-alert mk-alert--row al-stats-error" role="alert">
             <span class="mk-alert__msg">失败统计不可用</span>
             <button type="button" class="mk-alert__btn" :disabled="statsLoading" @click="fetchStats">{{ statsLoading ? '重试中…' : '重试' }}</button>
           </div>
@@ -169,7 +194,10 @@
                 @click="toggleAlSort('success')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleAlSort('success')">结果<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th v-if="colVisible('ip')" scope="col" class="al-c-ip">IP</th>
-              <th class="mk-th--right al-c-expand" aria-hidden="true"></th>
+              <!-- 2026-11-09 审计（图 6）：此前是 aria-hidden 的空表头 + 一枚缩小深灰 ▸，
+                   看不出这一列是什么、也没有可读名。改为带「详情」表头的操作列，
+                   行内一枚真按钮（aria-expanded 指向本行详情区），行点击仍可展开。 -->
+              <th scope="col" class="mk-th--right mk-c-act al-c-expand">详情</th>
             </tr>
           </thead>
           <tbody>
@@ -210,13 +238,19 @@
                   <template v-if="log.targetType">{{ targetTypeText(log.targetType) }}</template>
                   <span v-else class="mk-na">—</span>
                 </td>
-                <td v-if="colVisible('target')" class="log-target mono" :title="log.targetId || ''">
+                <td v-if="colVisible('target')" class="log-target mono" :title="targetTitle(log)">
+                  <!-- 2026-11-07 用户「目标类型与目标两列都是 —，看不出动了哪个模块」：
+                       只有「登记了目标类型」的 id 才是可读对象（用户/会话/插件…）；
+                       没登记类型的 id（如探活接口把 provider 名写进 targetId）对外行没有意义，
+                       一律回退到请求所属的模块名（由接口路径反推），原始 id 留在悬停里。 -->
                   <button
-                    v-if="log.targetId && targetLinkOf(log)"
+                    v-if="log.targetType && log.targetId && targetLinkOf(log)"
                     type="button"
                     class="al-target-link al-ellipsis"
                     @click.stop="openTarget(log)"
                   >{{ shortId(log.targetId) }}</button>
+                  <span v-else-if="log.targetType && log.targetId" class="al-ellipsis">{{ shortId(log.targetId) }}</span>
+                  <span v-else-if="moduleOf(log)" class="log-target-module al-ellipsis">{{ moduleOf(log) }}</span>
                   <span v-else-if="log.targetId" class="al-ellipsis">{{ shortId(log.targetId) }}</span>
                   <span v-else class="mk-na">—</span>
                 </td>
@@ -226,8 +260,10 @@
                   <div class="log-result-line">
                     <span class="mk-badge" :class="log.success ? 'mk-badge--ok' : 'mk-badge--bad'">{{ log.success ? '成功' : '失败' }}</span>
                     <span v-if="log.statusCode || log.durationMs != null" class="log-result-meta mono" :title="resultMetaTitle(log)">
-                      <span v-if="log.statusCode">{{ log.statusCode }}</span>
-                      <span v-if="log.durationMs != null">{{ fmtMs(log.durationMs) }}</span>
+                      <!-- 2026-11-07 用户「200 240ms 粘在一起像六位数」：状态码深色、耗时浅灰，中间一个圆点 -->
+                      <span v-if="log.statusCode" class="log-result-code">{{ log.statusCode }}</span>
+                      <span v-if="log.statusCode && log.durationMs != null" class="log-result-sep" aria-hidden="true">·</span>
+                      <span v-if="log.durationMs != null" class="log-result-dur">{{ fmtMs(log.durationMs) }}</span>
                     </span>
                   </div>
                 </td>
@@ -235,7 +271,18 @@
                   <span v-if="(log.ip || '').trim()" class="al-ellipsis">{{ ipText(log.ip) }}</span>
                   <span v-else class="mk-na">—</span>
                 </td>
-                <td class="mk-th--right log-arrow" aria-hidden="true"><span class="log-arrow__i">▸</span></td>
+                <td class="mk-th--right al-act">
+                  <div class="mk-actions">
+                    <button
+                      type="button"
+                      class="mk-link"
+                      :aria-expanded="openId === log.id"
+                      :aria-controls="`audit-payload-${log.id}`"
+                      :aria-label="`查看这条审计记录的详情（${fmtTime(log.createdAt)}）`"
+                      @click.stop="openId = openId === log.id ? '' : log.id"
+                    >{{ openId === log.id ? '收起' : '详情' }}</button>
+                  </div>
+                </td>
               </tr>
               <tr v-if="openId === log.id" class="log-payload-row">
                 <td :colspan="visibleAlCols">
@@ -439,6 +486,62 @@ function actionLabelOf(log: AuditLogRow): string {
   return /\/api\//.test(raw) || String(log.action || '').startsWith('/') ? RAW_ACTION_FALLBACK : log.action || log.path || mapped
 }
 
+/**
+ * 请求所属模块（2026-11-07 用户「目标类型 —、目标 —，看不出改了哪个模块」）。
+ * 审计行只记 targetType/targetId；大量自动化接口（探活、拉模型、配置保存）两个字段都为空，
+ * 于是连着两列白卷。这里用接口路径的稳定前缀反推模块名——它不编数据，只把路径说成人话：
+ * 取 `/api/admin/<segment>` 与侧栏同名（`/api/admin/api-config` → 接入配置）。
+ */
+const PATH_MODULE_TEXT: Record<string, string> = {
+  'api-config': '接入配置',
+  'model-providers': '模型供应商',
+  'infra-models': '基础模型',
+  plugins: '插件',
+  'health-center': '健康中心',
+  skills: 'Skill 目录',
+  'skill-model-configs': 'Skill 模型配置',
+  'field-routings': '字段路由',
+  'agent-prompts': 'Prompt 管理',
+  'prompt-ops': 'Prompt 评测',
+  'prompt-lab': 'Prompt 实验台',
+  'runtime-definitions': '运行时定义',
+  users: '用户账号',
+  sessions: '会话',
+  'session-console': '会话座舱',
+  announcements: '公告',
+  notifications: '站内通知',
+  mcp: 'MCP 服务',
+  'virtual-learners': '虚拟学习者',
+  'goal-conversations': '目标对话',
+  'learning-content': '学习内容',
+  'token-cost': '成本分析',
+  'memory-review': '复习积压',
+  'memory-traces': '记忆链路',
+  'content-review': '内容审核',
+  presets: '预置库',
+  'session-audits': '会话审计',
+  'model-registry': '模型目录',
+  achievements: '成就',
+  feedback: '反馈',
+  export: '数据导出',
+  'batch-experiments': '批量实验',
+  glossary: '术语表',
+}
+/** 路径 → 模块名；非 /api/admin/... 的请求返回空串（不猜） */
+function moduleOf(log: AuditLogRow): string {
+  const path = String(log.path || '').split('?')[0]
+  const m = /^\/api\/admin\/([^/]+)/.exec(path)
+  if (!m) return ''
+  return PATH_MODULE_TEXT[m[1]] || ''
+}
+/** 目标列悬停：登记了 targetId 就露全 id；否则说明这行的目标是接口本身 */
+function targetTitle(log: AuditLogRow): string {
+  if (log.targetType && log.targetId) return log.targetId
+  const mod = moduleOf(log)
+  if (mod) return log.targetId ? `${mod} · ${log.targetId}` : `${mod}（该操作没有登记具体对象）`
+  return log.targetId || ''
+}
+
 /* —— 动作快筛（2026-10-05 重设计）：当前页动作聚合 → keyword 下钻 ——
    刷屏根因是自动化调用与人工操作混排（「推进虚拟会话」单动作可占当前页 70%）；
    给动作维度一个免打字的入口。下钻词取 path 稳定尾段（/wrapup /restart 这类）：
@@ -517,8 +620,23 @@ if (route.query.tab === 'login') tab.value = 'login'
 const logs = ref<AuditLogRow[]>([])
 const attempts = ref<LoginAttemptRow[]>([])
 const total = ref(0)
-/** 失败域下钻态：success=false（后端白名单参数）+ 可选动作关键词 */
-const failedOnly = ref(false)
+/** 状态筛选（2026-11-07 与执行日志统一为「全部 / 仅成功 / 仅失败」）。
+    此前只有「失败域」（failedOnly 布尔），没有「仅成功」；现在一个状态值同时表达三档，
+    failedOnly 变成它的派生读法（KPI 卡、失败域提示、stats 都还按失败域语义消费）。 */
+const statusFilter = ref<'' | 'ok' | 'err'>('')
+const failedOnly = computed(() => statusFilter.value === 'err')
+/** 状态下拉选项：与执行日志同名同项（计数只在失败侧有权威读数，成功侧不编数字） */
+const statusFilterOptions = computed(() => [
+  { value: '', label: '全部' },
+  { value: 'ok', label: '仅成功' },
+  { value: 'err', label: failedCount.value > 0 ? `仅失败（${failedCount.value}）` : '仅失败' }
+])
+function applyStatusFilter(v: string) {
+  statusFilter.value = v === 'ok' || v === 'err' ? v : ''
+  if (statusFilter.value !== 'err') failedAction.value = ''
+  keyword.value = ''
+  void applyFilters()
+}
 const failedAction = ref('')
 /** P2-16：失败按动作聚合 TOP（后端 /stats 返回），作为「失败动作」下拉的下钻入口 */
 const failureByAction = ref<Array<{ action: string; count: number }>>([])
@@ -532,9 +650,11 @@ const statsLoading = ref(false)
 const failedRate = computed(() =>
   total.value > 0 ? `${Math.round((failedCount.value / total.value) * 100)}%` : '—'
 )
-/** 失败动作下拉：空值的文案随失败域变化——在失败域里=「全部失败」，否则=「不过滤」 */
+/** 失败动作下拉：空值 = 不按动作下钻。状态档已由「状态」下拉表达，这里只说动作维度。
+    2026-11-09 审计（图 6）：空值文案改「全部失败动作」——它只在状态 = 仅失败时出现，
+    与「动作」下拉的「全部动作」区分开，不再两枚下拉默认值同名。 */
 const failureSelectOptions = computed(() => [
-  { value: '', label: failedOnly.value ? '全部失败' : '不过滤' },
+  { value: '', label: '全部失败动作' },
   ...failureByAction.value.map((f) => ({
     value: f.action,
     label: `${failureLabel(f.action)} ${f.count}`,
@@ -619,8 +739,8 @@ function buildParams(nextPage: number, scopeOverride?: typeof tab.value): AuditL
     timeRange: timeRange.value === 'all' ? undefined : timeRange.value,
     sort: (alSortKey.value || undefined) as AuditLogQuery['sort'],
     order: alSortDir.value,
-    /* 失败域下钻（KPI 卡 / 失败动作下拉）：后端 parseSuccess 白名单 true/false */
-    success: failedOnly.value ? false : undefined,
+    /* 状态筛选（全部 / 仅成功 / 仅失败）：后端 parseSuccess 白名单 true/false */
+    success: statusFilter.value === 'err' ? false : statusFilter.value === 'ok' ? true : undefined,
   }
 }
 
@@ -719,13 +839,12 @@ function failureKeyword(action: string): string {
 /** KPI「失败记录」卡：一键进入/退出失败域。若当前正按某动作下钻，先回到「全部失败」。 */
 function toggleFailureOnly() {
   if (failedOnly.value && !failedAction.value) {
-    failedOnly.value = false
-    keyword.value = ''
+    statusFilter.value = ''
   } else {
-    failedOnly.value = true
+    statusFilter.value = 'err'
     failedAction.value = ''
-    keyword.value = ''
   }
+  keyword.value = ''
   void applyFilters()
 }
 
@@ -734,7 +853,7 @@ function toggleFailureOnly() {
 function applyFailureFilter(action: string) {
   failedAction.value = action
   if (action) {
-    failedOnly.value = true
+    statusFilter.value = 'err'
     keyword.value = failureKeyword(action)
   } else {
     keyword.value = ''
@@ -765,7 +884,8 @@ function syncTabQuery(id: TabId) {
   const next = { ...route.query }
   if (id === 'login') next.tab = 'login'
   else delete next.tab
-  void router.replace({ query: next })
+  /* 显式带 path（2026-11-09）：无 path 的 replace 以「当前 route」解析——场景切换在途时会写回旧路径 */
+  void router.replace({ path: AUDIT_SCENE_PATH, query: next })
 }
 
 function switchTab(id: TabId) {
@@ -814,11 +934,11 @@ watch([alSortKey, alSortDir], () => {
 /* 顶栏刷新：重取当前页（与旧页头钮同一语义，保留页码与列表） */
 watch(liveRefreshSeq, () => { void refreshPage() })
 
-const isFiltered = computed(() => !!keyword.value.trim() || timeRange.value !== 'all' || failedOnly.value)
+const isFiltered = computed(() => !!keyword.value.trim() || timeRange.value !== 'all' || !!statusFilter.value)
 function clearFilters() {
   keyword.value = ''
   timeRange.value = 'all'
-  failedOnly.value = false
+  statusFilter.value = ''
   failedAction.value = ''
   void applyFilters()
 }
@@ -858,13 +978,17 @@ const timeRangeOptions = (['all', 'today', 'yesterday', 'week', 'month'] as cons
    此前只有 ?tab=login 入 URL，关键词/时间/失败下钻/页码切场景或返回即复位；
    与执行日志（全量筛选入 URL）同级不同规则。键：q / range / failed / action / page / size，
    缺省值不写（today / 无关键词 / 第 1 页 / 30 条）。 */
-const AUDIT_FILTER_KEYS = ['q', 'range', 'failed', 'action', 'page', 'size'] as const
+/** 本场景的规范路径（侧栏 id → URL 的唯一映射，见 AdminConsole 的 `scene → /admin/${s}`） */
+const AUDIT_SCENE_PATH = '/admin/audit-logs'
+const AUDIT_FILTER_KEYS = ['q', 'range', 'failed', 'status', 'action', 'page', 'size'] as const
 const AUDIT_SIZES = [15, 30, 50, 100] as const
 function readFiltersFromRoute() {
   keyword.value = typeof route.query.q === 'string' ? route.query.q : ''
   const r = typeof route.query.range === 'string' ? route.query.range : ''
   timeRange.value = (TIME_RANGES as readonly string[]).includes(r) ? (r as typeof timeRange.value) : 'all'
-  failedOnly.value = route.query.failed === '1'
+  const st = typeof route.query.status === 'string' ? route.query.status : ''
+  /* 老的 ?failed=1 仍认（深链/收藏）；新写法 ?status=ok|err */
+  statusFilter.value = st === 'ok' || st === 'err' ? st : route.query.failed === '1' ? 'err' : ''
   failedAction.value = typeof route.query.action === 'string' ? route.query.action : ''
   const p = Number(route.query.page)
   page.value = Number.isInteger(p) && p > 0 ? p : 1
@@ -872,18 +996,25 @@ function readFiltersFromRoute() {
   pageSize.value = (AUDIT_SIZES as readonly number[]).includes(sz) ? sz : 30
 }
 function auditFilterSig(): string {
-  return [keyword.value.trim(), timeRange.value, failedOnly.value ? '1' : '', failedAction.value, page.value, pageSize.value].join('|')
+  return [keyword.value.trim(), timeRange.value, statusFilter.value, failedAction.value, page.value, pageSize.value].join('|')
 }
 function syncFiltersToRoute() {
+  /* 2026-11-09 走查修复（地址栏停在上一页，必现）：场景切换由 AdminConsole 的 scene watch 异步 push，
+     本组件挂在 push 落地之前——此刻 route 仍是上一页，而**不带 path** 的 replace 会以旧 path 解析，
+     把在途的 push 顶掉：点侧栏「审计日志」后页面切了、地址栏却还停在 /admin/overview
+     （刷新/复制链接/后退全落错页，且上一页的 query 被原样带走）。
+     路径还没落到本场景时直接不写回；等用户改筛选时（route 已就位）再写。 */
+  if (route.path !== AUDIT_SCENE_PATH) return
   const q = { ...route.query }
   for (const k of AUDIT_FILTER_KEYS) delete q[k]
   if (keyword.value.trim()) q.q = keyword.value.trim()
   if (timeRange.value !== 'all') q.range = timeRange.value
-  if (failedOnly.value) q.failed = '1'
+  if (statusFilter.value === 'err') q.failed = '1'
+  if (statusFilter.value === 'ok') q.status = 'ok'
   if (failedAction.value) q.action = failedAction.value
   if (page.value > 1) q.page = String(page.value)
   if (pageSize.value !== 30) q.size = String(pageSize.value)
-  void router.replace({ query: q })
+  void router.replace({ path: AUDIT_SCENE_PATH, query: q })
 }
 /* 外部改动（返回/前进/手改地址）才重查：本页写回的同值改动不触发第二笔请求 */
 watch(
@@ -945,14 +1076,14 @@ onMounted(() => {
   void applyFilters()
 })
 
-/** 会话安全深链：?user=用户名 → 只看该用户当前会话（运营中心宿主「会话安全」tab） */
+/** 会话安全深链：?user=用户名 → 只看该用户当前会话（系统设置「会话安全」页签） */
 function goSessions(username: string) {
-  void router.push({ path: '/admin/ops-hub', query: { tab: 'security', user: username } })
+  void router.push({ path: '/admin/system-settings', query: { tab: 'security', user: username } })
 }
 
-/** 导出只有运营中心数据导出页一个入口（CSV、最近 2000 条），本页不再自出 JSON */
+/** 导出只有系统设置「数据导出」页签一个入口（CSV、最近 2000 条），本页不再自出 JSON */
 function goExport() {
-  void router.push({ path: '/admin/ops-hub', query: { tab: 'export' } })
+  void router.push({ path: '/admin/system-settings', query: { tab: 'export' } })
 }
 </script>
 
@@ -969,13 +1100,17 @@ function goExport() {
 /* 结果列从纯徽章升级为「结果 + HTTP 状态 + 耗时」单行，宽度相应让出 */
 .al-c-result { width: 130px; }
 .al-c-ip { width: 134px; }
-.al-c-expand { width: 34px; }
+/* 详情列（2026-11-09 审计，图 6）：原为 34px 的 aria-hidden 空表头 + 缩小深灰 ▸，
+   现在是一枚真按钮（详情 / 收起），宽度按按钮文案给足 */
+.al-c-expand { width: 96px; }
 .al-c-reason { width: 280px; }
 /* 登录审计：操作列在 fixed 布局里被挤到 67px，95px 的「查看会话 →」会顶出表格右缘 23px。
    锁定最小宽后由固定布局从其他列回收空间，1920 下不再横向溢出。 */
 .al-login-table .mk-c-act { width: 116px !important; }
 /* fixed 档列宽即契约：行内 max-width 会顶出单元格，改成随列收缩 + 省略号 */
 .al-table .log-target, .al-table .log-ip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+/* 目标列回退的模块名：中文说明，走正文无衬线（父格是 mono） */
+.log-target-module { font-family: inherit; color: var(--mk-muted); }
 /* td 上的 text-overflow 在表格单元里不生效（2026-10-22 实测仍切字）：内层 span 承担截断 */
 .al-ellipsis { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 目标可点（用户 / 会话）：继承单元格字号，只染字色，不撑行高 */
@@ -984,7 +1119,7 @@ function goExport() {
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
   font: inherit;
   font-size: var(--mk-fs-micro);
   text-align: left;
@@ -1009,7 +1144,6 @@ function goExport() {
 .log-tr { cursor: pointer; }
 .log-tr--err { background: var(--mk-red-bg); }
 .log-tr--open td { background: var(--mk-blue-bg); }
-.log-tr--open .log-arrow__i { transform: rotate(90deg); }
 
 /* 展开的 payload 行：整行铺开，不参与行点击 */
 .log-payload-row { cursor: default; }
@@ -1119,7 +1253,7 @@ function goExport() {
   border-radius: var(--mk-radius-sm);
   padding: 1px 8px;
   background: var(--mk-blue-bg);
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1155,35 +1289,10 @@ function goExport() {
   text-overflow: ellipsis;
   max-width: 320px;
 }
-/* 展开指示：行末箭头，展开时旋转 90°。
-   箭头列显式定宽 + 居中：auto 布局下表头空列宽度随内容抖动（用户反馈展开后箭头与邻列视觉重叠）。
-   2026-10-19 用户走查「旋转后大小不对了」：原先 rotate 直接挂在 <td> 上——格子是 36×41.4 的
-   非正方盒，rotate(90deg) 后外接盒变成 42.1×36（实测），箭头连背景一起横向撑出列 6px、纵向缩
-   5px，字形还因为绕格心而非自身中心旋转右移约 10px。改法：格子里放 1em 正方、字形居中的内层盒，
-   只转内层——正方盒绕自身中心旋转外接盒不变，字形中心也不动。 */
-.mk-table-scroll table th:last-child { width: 36px; }
-.log-arrow {
-  display: block;
-  width: 36px;
-  max-width: 36px;
-  min-width: 36px;
-  margin-left: auto;
-  /* 水平内衬清零：mk-table 的 td 有 16px 左右内衬，36px 定宽格里内容盒只剩 4px，
-     比内容还窄的居中会退化成「贴内容盒左缘」（实测箭头偏列心右 4.25px）。 */
-  padding-left: 0;
-  padding-right: 0;
-  text-align: center;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
-}
-.log-arrow__i {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1em;
-  height: 1em;
-  transition: transform 0.15s ease;
-}
+/* 详情列（2026-11-09 审计，图 6）：原为 36px 的 aria-hidden 空表头 + 一枚缩小深灰 ▸，
+   读者看不出这一列是什么。改为带「详情」表头的操作列，行内主操作按钮与全站列表页
+   （.mk-actions > .mk-link）同形。宽度由 .al-c-expand 给出（见上方列宽组），
+   按钮文案「详情 / 收起」两字宽一致，列宽不随展开态跳动。 */
 
 .log-payload { display: grid; gap: 8px; }
 /* 请求行与客户端一行读；2026-10-19 用户走查「文案位置不对」：原先 space-between 把 UA 甩到
@@ -1247,7 +1356,6 @@ function goExport() {
   .log-label { font-size: var(--mk-fs-micro); }
   .log-payload pre { font-size: var(--mk-fs-micro); }
   .log-payload-row td { padding-left: 84px !important; }
-  .log-arrow { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 2800px) {
   .log-time,
@@ -1265,7 +1373,6 @@ function goExport() {
   .log-ua { font-size: var(--mk-fs-micro); }
   .log-label { font-size: var(--mk-fs-micro); }
   .log-payload pre { font-size: var(--mk-fs-micro); }
-  .log-arrow { font-size: var(--mk-fs-body); }
 }
 @media (min-width: 3600px) {
   .log-time,
@@ -1284,7 +1391,6 @@ function goExport() {
   .log-label { font-size: var(--mk-fs-body); }
   .log-payload pre { font-size: var(--mk-fs-body); }
   .log-payload-row td { padding-left: 100px !important; }
-  .log-arrow { font-size: var(--mk-fs-body); }
 }
 
 /* 本页空态撑满主区剩余高度的覆写（P1-1「空态利用」→ 审核 #156 改为 flex:1 + min-height:0）

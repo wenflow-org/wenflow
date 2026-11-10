@@ -56,6 +56,16 @@
       </div>
       <span class="ovbars__label" :class="{ 'ovbars__label--today': c.today }">{{ labelShown(i) ? c.label : '\u00A0' }}</span>
     </component>
+    <!-- 2026-11-09 走查：单柱图缺参考系——补 3~4 条浅灰水平虚线网格线 + Y 轴刻度感。
+         gridlines>0 时渲染（默认 0 关，其它消费方不变）；覆盖在柱区之上、柱字之下，不挡交互。 -->
+    <div v-if="gridlines > 0" class="ovbars__grid" aria-hidden="true">
+      <span
+        v-for="g in gridlines"
+        :key="g"
+        class="ovbars__gridline"
+        :style="{ bottom: `${(g / (gridlines + 1)) * 100}%` }"
+      ></span>
+    </div>
   </div>
 </template>
 
@@ -92,6 +102,9 @@ const props = withDefaults(defineProps<{
   sparse?: boolean;
   /** 稀疏行末的口径说明（如「近 7 天仅此日有数据」） */
   sparseNote?: string;
+  /** 水平参考网格线数量（默认 0 = 不画）。单柱图缺 Y 轴刻度感时传 3~4，
+      仅覆盖在柱区之上、不挡柱与数值，不改其它消费方行为。 */
+  gridlines?: number;
 }>(), {
   showNums: true,
   labelEvery: 1,
@@ -99,7 +112,8 @@ const props = withDefaults(defineProps<{
   barWidth: 9,
   selectable: false,
   sparse: false,
-  sparseNote: ''
+  sparseNote: '',
+  gridlines: 0
 });
 
 const emit = defineEmits<{ (e: 'select', key: string): void }>();
@@ -132,6 +146,27 @@ const colsSummary = computed(() => {
   align-items: stretch;
   /* 顶部数值带（只有 showNums 时生效）：24 ≥ 数值 18 + 与柱顶 4px 间隙 + 2px 余量 */
   --ovbars-num-band: 24px;
+  /* 参考网格线覆盖层定位上下文（不参 grid，绝对定位于柱区范围） */
+  position: relative;
+}
+/* 水平参考网格线：浅灰虚线、跨整图、压在柱区之上、数值与柱之下；pointer-events 透传点击。
+   y 轴刻度感替代方案（单柱序列无真实 Y 轴）。top 让出数值带（showNums 时），
+   bottom 让出标签行；线条由 gridlines 数量均分。 */
+.ovbars__grid {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--ovbars-num-band);
+  bottom: 22px;
+  pointer-events: none;
+  z-index: 1;
+}
+.ovbars:not(.ovbars--nums) .ovbars__grid { top: 0; }
+.ovbars__gridline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed var(--mk-line);
 }
 .ovbars__col {
   display: flex;
@@ -146,6 +181,9 @@ const colsSummary = computed(() => {
   padding: 0;
   font: inherit;
   color: inherit;
+  /* 柱列在网格线覆盖层（z-index:1）之上渲染，避免虚线压住柱与数值 */
+  position: relative;
+  z-index: 2;
 }
 /* 可点列：只给焦点环与 hover 底色，不改变柱形与基线 */
 .ovbars__col--selectable { cursor: pointer; }
@@ -172,7 +210,7 @@ const colsSummary = computed(() => {
 }
 .ovbars__num--zero { color: var(--mk-faint); font-weight: 600; }
 .ovbars__label { color: var(--mk-faint); }
-.ovbars__label--today { color: var(--mk-blue); font-weight: 800; }
+.ovbars__label--today { color: var(--mk-blue-text); font-weight: 800; }
 .ovbars__bars {
   flex: 1;
   min-height: var(--ovbars-min);

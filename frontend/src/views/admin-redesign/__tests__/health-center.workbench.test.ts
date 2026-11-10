@@ -59,7 +59,7 @@ function makeItem(
   return {
     id, label: `检查项 ${id}`, base: 'bidirectional', semantics: 'consistency',
     severity, status: severity === 'ok' ? 'clean' : severity === 'warn' ? 'drifted' : 'drifted',
-    count, detail, cause: `cause ${id}`, action: 'none', fixHint: '', source: 'test',
+    count, detail, cause: `cause ${id}`, okNote: `ok ${id}`, action: 'none', fixHint: '', source: 'test',
   };
 }
 
@@ -107,6 +107,9 @@ function makeReport(overrides: Partial<HealthCenterSummaryReport> = {}): HealthC
   base.health.items[2].base = 'file:core.yaml';
   base.health.items[2].fixHint = '需开发处理：定位差异后执行契约同步';
   base.health.items[12].base = 'runtime';
+  // 覆盖行的 semantics 与后端一致（buildItem('override-record')）：它是「记录数」不是检查项，
+  // 组头状态计数与行内语义词都按这个字段分流（2026-11-02 评审）
+  base.health.items[11].semantics = 'override-record';
   return { ...base, ...overrides };
 }
 
@@ -131,6 +134,36 @@ describe('健康中心（G1）', () => {
     getReconciliationMock.mockReset();
     getReconciliationMock.mockResolvedValue({ data: { data: makeReconReport() } });
     dataSource.value = 'live';
+  });
+
+  /* 2026-11-08 审计：读不到（status=unavailable）被判成 info 不进异常组，会掉进「正常」分支
+     把 okNote 原样印出来——同一条明细里却写着「读取失败…不能据此判定」，上下自相矛盾。 */
+  it('读取失败的观测项不印正常话术：行内写「未判定」，okNote 一个字都不出现', async () => {
+    const report = makeReport();
+    report.health.items.push({
+      ...makeItem('runtime-degradation', 'info', 0, ['degradation_events 读取失败或表尚未创建；不能据此判定「没有降级」']),
+      status: 'unavailable',
+      okNote: '近 7 天没有降级事件',
+    });
+    getSummaryMock.mockResolvedValue({ data: { success: true, data: report } });
+    const wrapper = await mountWorkbench();
+    const text = wrapper.text();
+    expect(text).toContain('本次读取失败，未判定');
+    expect(text).not.toContain('近 7 天没有降级事件');
+    wrapper.unmount();
+  });
+
+  it('正常项的 okNote 照常渲染（这条新分支不能吃掉正常态说明）', async () => {
+    const report = makeReport();
+    report.health.items.push({
+      ...makeItem('runtime-degradation', 'info', 0, []),
+      status: 'recorded',
+      okNote: '近 7 天没有降级事件',
+    });
+    getSummaryMock.mockResolvedValue({ data: { success: true, data: report } });
+    const wrapper = await mountWorkbench();
+    expect(wrapper.text()).toContain('近 7 天没有降级事件');
+    wrapper.unmount();
   });
 
   it('live + summary mock：概要卡四张 + 计数口径 + 健康检查分组', async () => {
@@ -192,10 +225,12 @@ describe('健康中心（G1）', () => {
     // 异常域默认展开，组头给域内分布
     expect(groups[0].attributes('open')).toBeDefined();
     expect(groups[0].text()).toContain('异常 2');
-    // 全正常域折叠；含 info 观测项时披露观测条数，不冒名「正常」
+    // 全正常域折叠；覆盖行是记录数不是检查项，既不冒名「正常」也不计进「观测」，
+    // 行内自报「无覆盖」（2026-11-02 评审：原先组头「观测 1」+ 行内「0 无异常」两种说法）
     expect(groups[3].attributes('open')).toBeUndefined();
     expect(groups[3].text()).toContain('正常 8');
-    expect(groups[3].text()).toContain('观测 1');
+    expect(groups[3].text()).toContain('无覆盖');
+    expect(groups[3].text()).not.toContain('观测');
 
     // 两域页签（2026-10-14 收敛：原四页签与 KPI 四卡一一对应，实测漂移/完成度两页只有
     // 一卡孤行 + 半屏死区；漂移并入健康检查、完成度并入对账，深链旧键走别名）

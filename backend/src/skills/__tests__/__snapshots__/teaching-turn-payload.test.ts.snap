@@ -22,7 +22,6 @@ exports[`teaching-turn payload snapshot parity payload contains exactly the keys
     "learningControlState": {},
     "stableProfile": {},
   },
-  "promptDirectives": Any<Object>,
   "scenario": {
     "subject": "JavaScript",
     "taskDescription": "解释闭包与变量生命周期",

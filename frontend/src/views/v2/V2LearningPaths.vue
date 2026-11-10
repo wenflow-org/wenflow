@@ -3,27 +3,24 @@
     <V2Nav />
 
     <main class="paths__main">
-      <!-- 从目标页过来：生成提示 -->
-      <transition name="toast">
-        <div v-if="goalBanner && hasGenerating" class="goal-banner">
-          <span class="goal-banner__dot"></span>
-          这版路径正在生成，通常几分钟。页面会自动刷新，也可以先离开。
-          <button type="button" class="goal-banner__close" @click="goalBanner = false">×</button>
-        </div>
-      </transition>
+      <!-- 顶部全宽蓝色横幅已删（2026-11-06 走查）：正下方第一张卡就是这条正在生成的路径，
+           横幅是同一句「生成中」的第四遍；「页面会自动刷新」又和卡里那颗手动「刷新状态」
+           按钮互相打架（一个说自动、一个让手动）。状态只说一次 = 卡片自己说。 -->
 
-      <!-- 页头按原型 wf-paths__head（index.html 1786-1792）：左 16px 标题 + 右 ghost「新目标」，
-           无 hero 大标题与说明文字；失败态仍隐藏（与失败原因同屏会互相矛盾）。
+      <!-- 页头（2026-11-07 恢复）：2026-11-05 曾整块撤除（理由：顶栏已写「学习路径」，
+           页内 h2「我的学习路径」是同一句复读），但空态页因此顶部只剩一块居中图标，
+           与「知识图谱」空态并排看时本页秃一截（用户「我喜欢图谱的空态设计，上面有点文案」）。
+           现按图谱模板恢复，且只留 h1 = 页名 + 一行副标题，不再出现「我的学习路径」
+           这种复读式 h2；「新目标」仍只在下方控制栏，页头不放按钮。
            「新建目标」每屏只保留一个入口（2026-10-09 用户反馈：空态 CTA、列表尾虚线条
            与页头短钮三处并存是重复）——空态显示居中「规划第一个目标」，有路径后本按钮
            是唯一入口（原列表尾 wf-newpath 虚线条已随本次反馈移除）。 -->
-      <div v-if="!loadError" class="paths__head">
-        <h2>我的学习路径</h2>
-        <button v-if="cards.length > 0" type="button" class="paths__new-goal" @click="router.push('/goal-conversation')">
-          <Plus :size="15" :stroke-width="2" aria-hidden="true" />
-          新目标
-        </button>
-      </div>
+      <header class="paths__head">
+        <div>
+          <h1>学习路径</h1>
+          <p>目标拆成的阶段、任务与完成进度</p>
+        </div>
+      </header>
 
       <!-- 加载 -->
       <div v-if="loading" class="paths__loading">
@@ -35,58 +32,65 @@
         v-else-if="loadError"
         tone="error"
         title="路径加载失败"
-        description="网络或服务暂时不可用，你的学习进度不受影响。稍后重试即可继续。"
+        description="网络或服务暂时不可用，你的学习进度不受影响。"
         action-text="重试"
         @action="load"
       />
 
       <template v-else>
-        <!-- 筛选（无任何路径时整行隐藏：空态下五个「0」芯片是噪音，2026-09-24 全新账号走查发现） -->
-        <div v-if="cards.length" class="filters">
-          <button
-            v-for="f in filterList"
-            :key="f.key"
-            type="button"
-            class="filter"
-            :class="{ 'filter--active': filter === f.key }"
-            @click="filter = f.key"
-          >
-            {{ f.label }} <b>{{ f.count }}</b>
-          </button>
+        <!-- 工具栏（2026-11-06 §2 顶栏一行化）：左「状态切换芯片」+ 右「搜索 / 排序 / 新目标」。
+             原先独立的「共 X 条路径」一行已删——左侧「全部 N」芯片写着同一个数字，再报一次是同屏复读。
+             ≥1024 左状态右操作同一条基准线；≤1023 芯片行收进「全部状态 ▾」弹层，
+             搜索 + 新目标一行、排序与筛选落到第二行。
+             无任何路径时整区隐藏：空态下五个「0」芯片是噪音（2026-09-24 全新账号走查发现） -->
+        <div v-if="cards.length" class="paths__toolbar">
+          <div class="filters" role="group" aria-label="按状态筛选">
+            <button
+              v-for="f in filterList"
+              :key="f.key"
+              type="button"
+              class="filter"
+              :class="{ 'filter--active': filter === f.key }"
+              @click="filter = f.key"
+            >
+              {{ f.label }} <b>{{ f.count }}</b>
+            </button>
+          </div>
+
+          <div class="paths__tools">
+            <label class="paths__search">
+              <Search :size="15" :stroke-width="1.75" aria-hidden="true" />
+              <input
+                v-model="search"
+                type="search"
+                placeholder="搜索路径标题或内容"
+                aria-label="搜索学习路径"
+              />
+              <button v-if="search" type="button" class="paths__search-clear" aria-label="清空搜索" @click="search = ''">×</button>
+            </label>
+            <button type="button" class="paths__new-goal" @click="router.push('/goal-conversation')">
+              <Plus :size="15" :stroke-width="2" aria-hidden="true" />
+              新目标
+            </button>
+            <label class="paths__sort">
+              <div class="paths__sort-select">
+                <MkSelect v-model="sort" :options="SORT_OPTIONS" aria-label="排序方式" borderless />
+              </div>
+            </label>
+            <!-- 窄屏筛选入口（批13）：显示当前状态，≤1023 才出现（桌面用左侧芯片行） -->
+            <button
+              type="button"
+              class="paths__filter-btn"
+              :aria-expanded="filterSheetOpen ? 'true' : 'false'"
+              @click="filterSheetOpen = true"
+            >
+              {{ filter === 'all' ? '全部状态' : activeFilterLabel }} ▾
+            </button>
+          </div>
         </div>
 
-        <!-- 搜索 + 排序（批18）：路径多了以后不能只靠分类芯片逐个翻；q 入 URL 与筛选同口径 -->
-        <div v-if="cards.length" class="paths__tools">
-          <label class="paths__search">
-            <Search :size="15" :stroke-width="1.75" aria-hidden="true" />
-            <input
-              v-model="search"
-              type="search"
-              placeholder="搜索路径标题或内容"
-              aria-label="搜索学习路径"
-            />
-            <button v-if="search" type="button" class="paths__search-clear" aria-label="清空搜索" @click="search = ''">×</button>
-          </label>
-          <label class="paths__sort">
-            <span class="paths__sort-label">排序</span>
-            <div class="paths__sort-select">
-              <MkSelect v-model="sort" :options="SORT_OPTIONS" aria-label="排序方式" block />
-            </div>
-          </label>
-        </div>
-
-        <!-- 移动端筛选（批13）：芯片行在 375 折两行占首屏 ~9%，≤1100 收进按钮 + 底部弹层；
-             桌面仍用芯片行。单选即点即生效并收起。 -->
-        <button
-          v-if="cards.length"
-          type="button"
-          class="paths__filter-btn"
-          :aria-expanded="filterSheetOpen ? 'true' : 'false'"
-          @click="filterSheetOpen = true"
-        >
-          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M3 5h18l-7 8v5l-4-2v-3z"/></svg>
-          筛选 · {{ activeFilterLabel }}
-        </button>
+        <!-- 窄屏筛选弹层（批13）：≤1023 芯片行收进「全部状态 ▾」（在工具栏右组里）
+             单选即点即生效并收起。 -->
         <div v-if="filterSheetOpen" class="paths__filter-mask" @click.self="filterSheetOpen = false">
           <div class="paths__filter-sheet" role="dialog" aria-label="筛选路径">
             <div class="paths__filter-head">
@@ -181,15 +185,14 @@
                 <span class="spinner--sm spinner" style="border-color: color-mix(in srgb, var(--cyan) 30%, transparent); border-top-color: var(--cyan);"></span>
                 <span>{{ card.phaseText }}</span>
               </div>
-              <div class="pcard__actions">
-                <button type="button" class="btn-ghost" @click.stop="refreshStatus(card)">刷新状态</button>
-              </div>
             </template>
 
             <!-- failed：待重试 -->
             <template v-else>
               <!-- P2-30（设计评审）：错误行动词与按钮对齐——后端兜底句在渲染层改说「主结构」，见 failReasonText -->
-              <div class="pcard__fail-reason">{{ failReasonText(card) || '生成失败，目标和已确认信息已保留。' }}</div>
+              <!-- 保留语义对齐（paths/xiaomi/1）：后端保留的是已完成任务与进度，标题/描述
+                   会被重新生成，「目标和已确认信息已保留」与重排事实不符，改说学习进度 -->
+              <div class="pcard__fail-reason">{{ failReasonText(card) || '生成失败，已完成的学习进度会保留。' }}</div>
               <div v-if="deleting === card.id" class="pcard__confirm" @click.stop>
                 <span>{{ CONFIRM_DELETE_PATH_MSG }}</span>
                 <button type="button" class="pcard__confirm-yes" @click="doDelete(card)">删除</button>
@@ -205,13 +208,31 @@
           </article>
         </div>
 
-        <!-- 筛选/搜索空态 -->
-        <div v-else class="empty">
-          <div class="empty__illus"><span></span><span></span><span></span></div>
-          <p>{{ emptyText }}</p>
-          <router-link v-if="cards.length === 0" to="/goal-conversation" class="btn-primary">规划第一个目标</router-link>
-          <button v-else type="button" class="btn-ghost" @click="search ? (search = '') : (filter = 'all')">{{ search ? '清除搜索' : '查看全部' }}</button>
-        </div>
+        <!-- 页面级空态（2026-11-06 走查「空态设计不一样」）：与图谱/学习历史同一套
+             V2ResultState——66px 图标盘 + 标题 + 说明 + 主动作。
+             说明句 2026-11-07 改写：原句 23 字在 36ch（≈21 个汉字）的说明列上折成
+             「…学习路 / 径。」，末行只剩一个字（孤字）；新句 31 字折成 20/11 两行，
+             且不再与下方按钮「规划第一个目标」重复同一句开头。 -->
+        <V2ResultState
+          v-else-if="cards.length === 0"
+          tone="empty"
+          title="还没有学习路径"
+          description="问流会把你规划的目标拆成可执行的阶段与任务，再带你逐步学下去。"
+          action-text="规划第一个目标"
+          @action="router.push('/goal-conversation')"
+        />
+
+        <!-- 筛选/搜索空态：同样并入统一结果组件（图标盘 + 标题 + 说明 + 动作）。
+             原先这里自绘三条灰胶囊 + 一行小字，与「知识图谱」的空态不是一套
+             （2026-11-06 0 部署 UI 检查）。 -->
+        <V2ResultState
+          v-else
+          tone="empty"
+          :title="emptyText"
+          :description="emptyHint"
+          :action-text="emptyActionText"
+          @action="onEmptyAction"
+        />
       </template>
     </main>
 
@@ -288,9 +309,6 @@ const sort = ref<PathSortKey>('default');
 const retrying = ref('');
 const menuFor = ref('');
 const deleting = ref('');
-const goalBanner = ref(route.query.from === 'goal');
-/** 存在生成中卡才显示「正在生成」横幅：生成早已完成/列表为空时这条提示是误导 */
-const hasGenerating = computed(() => cards.value.some((c) => c.kind === 'generating'));
 /** 生成状态轮询连续失败计数（超过阈值停止空转） */
 const pollFailCount = ref(0);
 
@@ -300,13 +318,13 @@ const deleteBusy = ref(false);
     2026-10-08 走查 #15：这两处原先各写一份，轮询一跑就把「主结构生成中，一般 1-2 分钟内完成…」
     换成「主结构生成中…」，那句用户最需要的时长承诺整段消失（手机档实测只剩短句，
     且本屏 docH=视口高、没有滚动可达的后半段）。抽成一处后不可能再各自漂移。 */
-const CORE_PHASE_TEXT = '路径生成中，通常几分钟，完成后会出现在这里…';
+const CORE_PHASE_TEXT = '路径生成中，完成后会出现在这里…';
 function phaseTextOf(lc: { phase?: string | null; completedStages?: number | null; totalStages?: number | null }) {
   if (lc.phase === 'core') return CORE_PHASE_TEXT;
   // 阶段数已满但整体未 ready：这是「任务正在写入」而不是 100% 卡死（#112）
   const done = lc.completedStages ?? 0;
   const total = lc.totalStages ?? 0;
-  if (total > 0 && done >= total) return '课时正在写入，马上就好…';
+  if (total > 0 && done >= total) return '课时正在写入…';
   return `课程准备中（${done}/${lc.totalStages ?? '?'}）…`;
 }
 
@@ -325,7 +343,11 @@ function normalize(p: Record<string, any>): PathCard {
   const title = p.title || p.name || '未命名路径';
   // AI 生成的简短摘要优先（path-planning summary），旧数据回退用户目标原文
   const desc = p.summary || p.description || '';
-  const stages: number = lc?.totalStages || p.totalStages || (p.milestones?.length ?? p.weeks?.length ?? 0);
+  // 2026-11-04 走查：阶段数以路径自身为准（阶段列表 / totalStages），不再优先 generationLifecycle.totalStages——
+  // 后者取自生成 run 的 totalItems（渐进式 core run 恒为 1），会把 4 阶段的路径在列表卡显示成「第 1 / 1 阶段」，
+  // 与同 id 详情页 hero 的「1 / 4 当前阶段」自相矛盾（详情页取路径阶段列表长度）。
+  const ownStages: number = p.milestones?.length ?? p.weeks?.length ?? 0;
+  const stages: number = ownStages || p.totalStages || lc?.totalStages || 0;
   const hours = p.estimatedHours;
 
   if (lc && lc.phase !== 'ready') {
@@ -434,25 +456,6 @@ async function pollOnce() {
   schedulePolling();
 }
 
-async function refreshStatus(card: PathCard) {
-  // 手动刷新：重置断路器计数（用户主动重试应重新计数）
-  pollFailCount.value = 0;
-  try {
-    const lc = await learningAPI.getPathGenerationStatus(card.id);
-    if (lc.phase === 'ready') {
-      toast.success(`「${card.title}」${GEN_DONE_TAIL}`);
-      await load();
-    } else if (lc.status === 'failed' || lc.status === 'stale') {
-      toast.error(`「${card.title}」${GEN_FAIL_TAIL}`);
-      await load();
-    } else {
-      toast.info('仍在生成中…');
-    }
-  } catch {
-    toast.error('刷新失败，稍后再试');
-  }
-}
-
 async function doRetry(card: PathCard) {
   if (retrying.value) return;
   // 手动重试：重置断路器计数（用户主动重试应重新计数）
@@ -527,11 +530,31 @@ watch(filterSheetOpen, (open) => {
   }
 });
 
+/** §7 空态微文案：≤20 字、去机制解释；三种空态各一句，不再补第二句因果或说明 */
 const emptyText = computed(() => {
-  if (search.value) return '没有匹配的路径，换个关键词试试';
-  if (cards.value.length === 0) return '还没有学习路径，从规划一个目标开始';
-  return '这个分类下还没有路径';
+  if (search.value) return '没有匹配的路径';
+  if (cards.value.length === 0) return '还没有学习路径';
+  return '该状态下还没有路径';
 });
+
+/** 空态补一句「下一步能做什么」（标题保持 ≤20 字，说明行给动作指向） */
+const emptyHint = computed(() => {
+  if (search.value) return '换个关键词，或清空搜索看全部路径。';
+  if (cards.value.length === 0) return '说出最近想解决的一件事，就能开始规划。';
+  return '换一个状态筛选试试。';
+});
+const emptyActionText = computed(() => {
+  if (cards.value.length === 0) return '规划第一个目标';
+  return search.value ? '清除搜索' : '查看全部';
+});
+function onEmptyAction() {
+  if (cards.value.length === 0) {
+    router.push('/goal-conversation');
+    return;
+  }
+  if (search.value) search.value = '';
+  else filter.value = 'all';
+}
 
 const visibleCards = computed(() => {
   let list = cards.value;
@@ -609,9 +632,6 @@ function onPageScroll() {
 
 onMounted(() => {
   load();
-  if (goalBanner.value) {
-    window.setTimeout(() => (goalBanner.value = false), 9000);
-  }
   window.addEventListener('keydown', onMenuKey);
   window.addEventListener('click', onWindowClick);
   document.addEventListener('scroll', onPageScroll, { passive: true, capture: true });
@@ -632,31 +652,50 @@ onBeforeUnmount(() => {
   padding: 24px 28px 48px;
   display: grid; gap: 18px;
 }
-/* 页头按原型 wf-paths__head（718-719）：左标题、右 ghost 按钮 */
-.paths__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.paths__head h2 { margin: 0; font-size: 16px; font-weight: 800; letter-spacing: -0.01em; }
-/* ghost「新目标」＝原型 wf-btn--ghost（surface 底 + line 描边 + muted 字） */
+/* 页头（2026-11-07 恢复，解剖对齐 V2KnowledgeMap 的 .km__head）：
+   h1 是文档里唯一可见的一级标题，主 Tab 切换时本页顶边与学习状态/知识图谱同一条线。
+   副标题只讲本页独有的东西（阶段/任务/进度），不复述页名。 */
+.paths__head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 2px;
+}
+.paths__head h1 { margin: 0; font-size: 22px; font-weight: 800; color: var(--ink); }
+.paths__head p { margin: 3px 0 0; font-size: 13px; color: var(--muted); }
+/* ghost「新目标」＝原型 wf-btn--ghost（surface 底 + line 描边 + muted 字）
+   高度收敛 36（§1 工具栏控件 34–36 档）：与搜索框 / 排序触发器同一条基准线 */
 .paths__new-goal {
   display: inline-flex; align-items: center; gap: 6px;
-  min-height: 38px; padding: 0 14px;
-  border: 1px solid var(--line); border-radius: var(--mk-radius-xl);
+  min-height: 36px; padding: 0 14px;
+  /* 16 → 8（2026-11-05 去肥胖化）：工具条里与搜索框同档控件圆角 */
+  border: 1px solid var(--line); border-radius: var(--mk-radius-md);
   background: var(--surface); color: var(--muted);
   font-family: inherit; font-size: 13px; font-weight: 700;
   cursor: pointer;
+  /* 防折行/防压缩（2026-11-06 走查 图2）：窄屏 2×2 网格里 auto 轨道可被压到 min-content，
+     中文的 min-content 是 1 个字 →「新目标」被挤成竖排三行、按钮变窄高方块。
+     nowrap 同时把 min-content 抬回整句宽度，轨道再也压不动它。 */
+  white-space: nowrap; flex: 0 0 auto;
   transition: border-color 0.15s ease, color 0.15s ease;
 }
 .paths__new-goal:hover {
   border-color: color-mix(in srgb, var(--blue) 35%, transparent);
   color: var(--blue-deep);
 }
-/* 搜索+排序工具行（批18）：全尺寸常显（移动端芯片行收弹层后，这里是唯一检索入口），
-   视觉压到原型 chip 语言（1px line / surface 底 / muted 字 / 胶囊） */
-.paths__tools { display: flex; align-items: center; gap: 10px; margin: 14px 0 2px; flex-wrap: wrap; }
+/* 工具栏（2026-11-06 §2 一行化）：左「状态切换芯片」、右「搜索 + 排序 + 新目标主按钮」
+   同一条基准线（≥1024 基准成立，≤1023 由文件末尾媒体块改纵向 + 收弹层）。
+   「共 X 条路径」独立占行已删——左芯片「全部 N」写着同一个数字。 */
+.paths__toolbar { display: flex; align-items: center; gap: 16px; min-width: 0; }
+.paths__tools { display: flex; align-items: center; gap: 10px; margin-left: auto; min-width: 0; }
 .paths__search {
   flex: 1 1 220px; max-width: 420px;
   display: flex; align-items: center; gap: 8px;
-  padding: 0 14px; min-height: 36px;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--mk-radius-pill);
+  padding: 0 12px; min-height: 36px;
+  /* 胶囊 → 8px 控件圆角、描边弱化（2026-11-05 去肥胖化）：成熟 UI 的输入框是小圆角矩形，
+     全圆胶囊把搜索框读成"按钮"；描边降为发丝（--line 本色已是低对比，这里不再加粗） */
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--mk-radius-md);
   color: var(--faint);
   transition: border-color var(--mk-dur-fast, 120ms) ease, box-shadow var(--mk-dur-fast, 120ms) ease;
 }
@@ -671,7 +710,7 @@ onBeforeUnmount(() => {
 .paths__search input::placeholder { color: var(--faint); }
 .paths__search-clear { border: 0; background: none; padding: 4px; font-size: 15px; color: var(--faint); cursor: pointer; line-height: 1; }
 .paths__search-clear:hover { color: var(--ink); }
-.paths__sort { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.paths__sort { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
 /* 包裹层只定位，按钮视觉由 MkSelect 承担（2026-10-27 自绘下拉） */
 .paths__sort-select { flex: 0 0 auto; }
 /* wrapper 沉底：AI 提示与页脚一起贴近底部 */
@@ -690,22 +729,10 @@ onBeforeUnmount(() => {
   color: var(--blue-deep);
 }
 
-.btn-primary {
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 11px 22px; border-radius: var(--mk-radius-xl);
-  /* 实色主按钮：蓝渐变 + 30% 蓝色发光投影一并退役 */
-  background: var(--blue);
-  color: var(--text-on-primary); font-size: 14px; font-weight: 700;
-  cursor: pointer; text-decoration: none;
-  transition: transform 0.18s ease, background 0.18s ease;
-}
-.btn-primary:not(:disabled):active { transform: scale(0.98); }
-.btn-ghost {
-  padding: 10px 18px; border-radius: var(--mk-radius-xl);
-  border: 1px solid var(--line); background: var(--surface);
-  font-size: 14px; font-weight: 700; color: var(--muted);
-  cursor: pointer;
-}
+/* 按钮基座单源：v2.css 的 .v2-page .btn-primary / .btn-ghost（32px 高 / 0 14px 内衬 /
+   --mk-radius-md / 13px 字）。本页原有一份 10~11px 竖内衬 + 16px 圆角的旧副本
+   （2026-11-06 UI 排查 §1），与全局同优先级 (0,2,0) 而后加载——实机上一直是这份旧值在赢。
+   删除后由全局统一定档，本页只留自己的变体（如 .proposal__foot 的定宽比例）。 */
 
 /* 状态筛选 chip 行（Vue 侧新增功能）：视觉压到原型 chip 语言——
    1px line 描边 + surface 底 + muted 字；选中态 border 透明 + blue 12% 底 + blue-deep 字 */
@@ -747,7 +774,18 @@ onBeforeUnmount(() => {
 .pcard__head-main { flex: 1; min-width: 0; }
 .pcard__head-right { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
 /* 状态徽章＝原型 wf-badge（216-238 / 301-304）：4×10 内边距、999 圆角、12px/800 */
-.pcard__badge { padding: 4px 10px; border-radius: var(--mk-radius-pill); font-size: 12px; font-weight: 800; flex: 0 0 auto; }
+/* 状态标签（2026-11-05 去肥胖化 / 2026-11-06 §1 两处补齐）：原 4/10 内边距 + 全圆胶囊，
+   视觉面积压过标题。改紧凑小方签、无描边（只留 11–14% 底色），「进行中」不再冒充按钮。
+   数值与学习台「路径状态签」(.badge)、v2.css 全局 .v2-page .badge 取同一组
+   ——22px 高 / 1px 6px / --mk-radius-sm：同一枚「进行中」在两页必须一样大，
+   20px + 4px 圆角是本页自己的旧值（终审 2026-11-06 比对两页时发现）。
+   字号固定 12px，不用 --mk-fs-micro（≥1440 档会是 12.5px，见 v2.css:690 的说明）。 */
+.pcard__badge {
+  display: inline-flex; align-items: center;
+  height: 22px; padding: 1px 6px; border-radius: var(--mk-radius-sm);
+  font-size: 12px; font-weight: 800; line-height: 1; flex: 0 0 auto;
+  border: 0;
+}
 .pcard__badge--green { color: var(--green-ink); background: color-mix(in srgb, var(--green) 12%, transparent); }
 .pcard__badge--blue { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 11%, transparent); }
 /* 走查 2026-10-08 #13：「生成中」徽章原先用通用墨色 --cyan-ink（cyan 75% 混 ink），
@@ -769,7 +807,7 @@ onBeforeUnmount(() => {
   position: relative;
   width: 36px; height: 36px; padding: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  border: 0; border-radius: var(--mk-radius-md, 10px);
+  border: 0; border-radius: var(--mk-radius-md);
   background: none; color: var(--faint); cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
 }
@@ -809,6 +847,15 @@ onBeforeUnmount(() => {
   font-variant-numeric: tabular-nums;
 }
 .pcard__actions { display: flex; justify-content: flex-end; margin-top: auto; }
+/* 卡内嵌按钮（2026-11-06 §1 同心圆角）：外卡 16px 圆角 → 内按钮统一 8px（--mk-radius-md）、
+   高 32、13px 字，替掉原先 11/22 内边距 + 16px 圆角的大按钮（「重新生成路径 / 刷新状态」）。
+   ≤1100 由媒体块抬到 36px 触控下沿（mobile:spec lt36 硬门禁）。 */
+.pcard__actions .btn-primary,
+.pcard__actions .btn-ghost {
+  min-height: 32px; padding: 0 14px;
+  border-radius: var(--mk-radius-md);
+  font-size: 13px;
+}
 
 .pcard__generating {
   display: flex; align-items: center; gap: 9px;
@@ -825,29 +872,14 @@ onBeforeUnmount(() => {
 /* 失败：原因区弹性拉伸，重试按钮压底（与 ready 卡内容高度对齐） */
 .pcard--failed .pcard__fail-reason { flex: 1; display: grid; align-content: center; }
 
-.empty {
-  display: grid; justify-items: center; align-content: center; gap: 12px;
-  /* 空态留白优化：占用剩余视口空间并垂直居中，避免内容缩在顶部、下方大段空白 */
-  min-height: 52vh;
-  padding: 56px 0; color: var(--faint); font-size: 14px;
-}
-.empty__illus { display: flex; gap: 6px; }
-.empty__illus span { width: 26px; height: 8px; border-radius: 999px; background: var(--line); }
-.empty__illus span:nth-child(2) { background: color-mix(in srgb, var(--blue) 30%, transparent); }
 
-/* .toast/.toast__icon 本体是死 CSS 已删：全局 toast 由 utils/toast 独立渲染，不落在本组件；
-   下面的 toast-enter/leave 是上方 goal-banner <transition name="toast"> 的过渡类，保留 */
-.toast-enter-active, .toast-leave-active { transition: .25s ease; }
-.toast-enter-from, .toast-leave-to { opacity: 0; transform: translateY(-8px); }
+/* .toast/.toast__icon 与 toast-enter/leave 过渡类已随顶部横幅一并删除（2026-11-06 走查）：
+   全局 toast 由 utils/toast 独立渲染，本组件不再挂任何 toast 形态的元素 */
 
 @media (max-width: 1100px) {
   .paths__main { padding: 16px 14px 32px; }
-  /* 页头按原型常驻 16px：窄屏给按钮留行，整行可换行不挤压 */
-  .paths__head { flex-wrap: wrap; }
-  /* 触诊下限（mobile:spec lt44 只紧不松）：搜索框/排序在 375 抬到 44px */
-  .paths__search { min-height: 44px; }
-  .paths__search input { min-height: 44px; }
-  .cards { grid-template-columns: 1fr; }
+  /* 触诊/单列规则挪到 ≤1023（移动总档）：≥1024 是桌面档，工具栏控件统一 34–36px、
+     卡片回 auto-fill 多列（v2.css 断点刻度；§2「解决单列硬拉宽」） */
   /* ⋯ 触发器桌面档已是 36×36（见基座规则），窄屏只在 36 的盒上再外扩热区到 50+：
      它贴在卡片右上角、周边没有别的手势目标，扩热区无副作用 */
   .pcard__more::before { content: ''; position: absolute; inset: -8px -7px; }
@@ -895,41 +927,25 @@ onBeforeUnmount(() => {
 /* 防误触重设计（2026-09-27）：原来「删除/取消」是两粒挨着的小字，一记快 tap 就能
    确认销毁。改成实体按钮——「删除」实底红、「取消」描边 ghost，中间留 8px 间隔，
    高度 36 进触控带；文案补一句后果说明（不可自行恢复），给用户一次真正的阅读机会。 */
+/* 卡内确认按钮（2026-11-06 §1）：与上方内嵌按钮同一档——8px 同心圆角、32 高、13 字；
+   原来是 999 胶囊 + 36 高，与卡片 16 圆角不同心。≤1100 由媒体块抬回 40 触控带。 */
 .pcard__confirm-yes {
-  min-height: 36px; padding: 0 14px;
-  border: 0; border-radius: var(--mk-radius-pill);
+  min-height: 32px; padding: 0 14px;
+  border: 0; border-radius: var(--mk-radius-md);
   background: var(--red); color: var(--text-on-primary);
-  font-size: 12.5px; font-weight: 800; cursor: pointer;
+  font-size: 13px; font-weight: 800; cursor: pointer;
   transition: filter 0.15s ease;
 }
 .pcard__confirm-yes:hover { filter: brightness(1.06); }
 .pcard__confirm-no {
-  min-height: 36px; padding: 0 12px;
-  border: 1px solid var(--line); border-radius: var(--mk-radius-pill);
+  min-height: 32px; padding: 0 12px;
+  border: 1px solid var(--line); border-radius: var(--mk-radius-md);
   background: var(--surface); color: var(--muted);
-  font-size: 12.5px; font-weight: 700; cursor: pointer;
+  font-size: 13px; font-weight: 700; cursor: pointer;
   transition: border-color 0.15s ease, color 0.15s ease;
 }
 .pcard__confirm-no:hover { color: var(--ink); border-color: color-mix(in srgb, var(--ink) 30%, transparent); }
 .paths__loading { display: grid; justify-items: center; gap: 12px; padding: 64px 0; color: var(--faint); font-size: 13px; }
-.goal-banner {
-  display: flex; align-items: center; gap: 10px;
-  padding: 11px 15px;
-  border-radius: var(--mk-radius-xl);
-  background: color-mix(in srgb, var(--blue) 7%, transparent);
-  border: 1px solid color-mix(in srgb, var(--blue) 25%, transparent);
-  color: var(--blue-deep);
-  font-size: 13px; font-weight: 600;
-}
-.goal-banner__dot {
-  width: 8px; height: 8px; border-radius: 50%;
-  background: var(--blue);
-  animation: goal-pulse 1.4s ease-in-out infinite;
-  flex: 0 0 auto;
-}
-@keyframes goal-pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
-.goal-banner__close { margin-left: auto; cursor: pointer; color: var(--faint); font-size: 16px; }
-.goal-banner__close:hover { color: var(--ink); }
 .paths__main { width: 100%; }
 </style>
 
@@ -957,19 +973,18 @@ onBeforeUnmount(() => {
   /* 卡标题 15 → 14：用户指着 15.5px 的路径卡标题说「这些就是大了」 */
   .pcard__title { font-size: 14px; }
   .pcard { padding: 14px 16px; gap: 10px; }
-  .empty { min-height: 40vh; padding: 32px 0; }
   .paths__loading { padding: 32px 0; }
 }
 
-/* ---------- 移动端筛选弹层（批13）：≤1100 芯片行收进按钮 + 底部弹层 ----------
-   视觉统一压到原型 chip 语言：1px line 描边 + surface 底 + muted 字 + 胶囊圆角；
+/* ---------- 移动端筛选入口（批13）：≤1023 芯片行收进按钮 + 底部弹层 ----------
+   视觉统一压到原型 chip 语言：surface 底 + muted 字 + 8px 圆角；
    选中态 border 透明 + blue 12% 底 + blue-deep 字（与桌面 .filter--active 同一口径） */
 .paths__filter-btn {
   display: none;
   align-items: center; gap: 6px;
-  min-height: 36px; padding: 7px 14px;
-  align-self: flex-start;
-  border: 1px solid var(--line); border-radius: var(--mk-radius-pill);
+  min-height: 36px; padding: 7px 12px;
+  /* 胶囊 → 8px（2026-11-05 去肥胖化）：筛选与排序同为「轻量文字下拉」，不再套大胶囊 */
+  border: 1px solid var(--line); border-radius: var(--mk-radius-md);
   background: var(--surface); color: var(--muted);
   font-size: 13px; font-weight: 600; font-family: inherit; cursor: pointer;
   transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease;
@@ -980,14 +995,58 @@ onBeforeUnmount(() => {
   color: var(--blue-deep);
 }
 @media (max-width: 1100px) {
-  .filters { display: none; }
-  /* 移动端触诊下限 44（mobile:spec 只紧不松）：外观仍是 chip，只高一档 */
-  .paths__filter-btn { display: inline-flex; min-height: 44px; }
   /* 菜单项进 44 触控带：弹出层是悬浮的，点偏了没有 hover 兜底 */
   .pcard__menu { min-width: 168px; }
   .pcard__menu-item { min-height: 44px; }
+  /* 删除确认按钮的抬高档不在这里：1024–1100 已是桌面档，必须与同卡 32px 的内嵌按钮同档，
+     见下方 ≤1023 移动总档 */
+}
+
+/* ---------- 移动模式（≤1023，v2.css 的移动总档）----------
+   状态芯片行收进「全部状态 ▾」弹层；工具栏改 2×2 网格（不靠 flex 折行猜宽度）：
+   第一行 搜索 + 新目标，第二行 排序 + 筛选入口（右对齐）——桌面 ≥1024 是左芯片 / 右操作的单行。 */
+@media (max-width: 1023px) {
+  .filters { display: none; }
+  .paths__toolbar { display: block; }
+  .paths__tools {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px 8px;
+    margin-left: 0;
+  }
+  /* 第一行：搜索吃满剩余宽（解除基座 420 上限），新目标按内容宽贴右 */
+  .paths__search { grid-area: 1 / 1; max-width: none; min-height: 44px; }
+  /* 窄屏把「新目标」抬到 44：它是本页唯一主操作，mobile:spec 分级口径要求主操作 ≥44
+     （旁边的排序/筛选是无边框文字档，留在 36–40 紧凑带） */
+  .paths__new-goal { grid-area: 1 / 2; min-height: 44px; }
+  /* 第二行：排序与筛选入口都贴右，与第一行的新目标右边缘对齐成一列 */
+  .paths__sort { grid-area: 2 / 1; justify-self: end; }
+  .paths__search input { min-height: 44px; }
+  /* 单列卡片：375 下一列读得完，不硬拉两列窄条 */
+  .cards { grid-template-columns: 1fr; }
+  /* 卡内嵌按钮的 8px 同心圆角保留，高度回到 36 触控下沿（mobile:spec lt36 硬门禁） */
+  .pcard__actions .btn-primary,
+  .pcard__actions .btn-ghost { min-height: 36px; }
+  /* 删除确认按钮同档：36 触控下沿（不回到 40，避免与同卡 32/36 的两套尺寸并存） */
   .pcard__confirm-yes,
-  .pcard__confirm-no { min-height: 40px; }
+  .pcard__confirm-no { min-height: 36px; }
+  /* 触控下沿 36（mobile:spec lt36 硬下沿，与旁边 MkSelect --borderless 同高）：
+     外观降为纯文字 + ▾，与「默认 ▾」并排像同一组轻量下拉，不再一盒一字 */
+  .paths__filter-btn {
+    grid-area: 2 / 2;
+    justify-self: end;
+    display: inline-flex;
+    padding: 0 6px;
+    border-color: transparent; background: transparent;
+    color: var(--mk-muted, var(--muted));
+    font-size: var(--mk-fs-micro, 12px); font-weight: 600;
+    white-space: nowrap; overflow: hidden;
+  }
+  .paths__filter-btn:hover {
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
+    border-color: transparent; color: var(--ink);
+  }
 }
 .paths__filter-mask {
   position: fixed; inset: 0; z-index: 60;
@@ -1033,5 +1092,18 @@ onBeforeUnmount(() => {
 }
 .paths__filter-tick { margin-left: auto; font-style: normal; color: var(--blue); font-weight: 800; }
 .paths__filter-opt.is-active b { margin-left: 0; color: var(--blue-deep); }
+
+/* PC 工具栏一行（2026-11-06 §2）：≥1024（v2.css 桌面档）左状态筛选芯片 +
+   右「搜索 → 排序 → 新目标主按钮」，同一条基准线。工具栏本身就是 flex 行（见基座规则），
+   这里只调右组的顺序与搜索宽度，不再动 .paths__main 的 grid 布局——
+   原先用 grid-column 摆位的写法会把 loading/失败态/生成横幅挤进半幅列（空态与加载态布局破）。 */
+@media (min-width: 1024px) {
+  .paths__search { order: 1; flex: 0 1 300px; max-width: 300px; }
+  .paths__sort { order: 2; }
+  /* 新建＝本页唯一主操作：PC 用蓝底白字主按钮（窄屏保持 ghost——那里它贴在搜索框右手，
+     同一行已有搜索这个强控件，再放一颗实色主按钮会打架） */
+  .paths__new-goal { order: 3; border-color: transparent; background: var(--blue); color: var(--text-on-primary); }
+  .paths__new-goal:hover { border-color: transparent; background: var(--blue-deep); color: var(--text-on-primary); }
+}
 </style>
 

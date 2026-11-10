@@ -1,7 +1,7 @@
 /**
  * 难度调整台账的**回看**（只读）：生产锚点 → 效果度量（relieved / still_triggered）。
  *
- * 背景（doc/LEARNING_SCIENCE_AUDIT.md §7 P0-2）：`recordTaskDifficultyAdjustment` 此前
+ * 背景（LEARNING_SCIENCE_AUDIT.md（已移出仓库，见 git 历史） §7 P0-2）：`recordTaskDifficultyAdjustment` 此前
  * 唯一的调用者是模拟脚本，效果度量在真实课上从未运行。现已接进开课路径
  * （`AITeachingOrchestrator.recordTaskDifficultyAnchor`），本脚本用于回看真实数据。
  *

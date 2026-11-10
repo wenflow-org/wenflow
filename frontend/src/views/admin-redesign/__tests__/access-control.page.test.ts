@@ -142,18 +142,88 @@ describe('访问与注册（拆页后的独立页）', () => {
     expect(saveButton(w).text()).toBe('保存策略');
 
     const titles = w.findAll('.mk-card__title').map((t) => t.text());
-    // 入站来源、出站白名单与注册同属一张设置卡，段间用分隔线区分
-    expect(titles).toEqual(['访问与注册设置']);
+    // 入站来源、出站白名单与注册同属一张设置卡，段间用分隔线区分。
+    // 卡头不再有标题（2026-11-09 设计语言收敛）：页签已经叫「访问与注册」，
+    // 卡头再印一遍「访问与注册设置」是同屏两行字说一件事；三段自己的标题才是内容层级。
+    expect(titles).toEqual([]);
     expect(w.text()).toContain('管理后台访问控制');
     expect(w.text()).toContain('服务端出站访问');
     expect(w.text()).toContain('注册设置');
-    expect(w.findAll('.ac-seg')[0].findAll('.ac-seg__item')).toHaveLength(3);
+    expect(w.findAll('.ac-opts')[0].findAll('.ac-opt')).toHaveLength(3);
+    w.unmount();
+  });
+
+  it('卡头右侧出「当前生效」徽章，改动后补「未保存」（与同页其余页签卡头同形）', async () => {
+    const w = await mountPage();
+    const right = () => w.find('.mk-card__head .mk-card__head-right');
+    /* 2026-11-03：生效档从入站段标题后的灰字尾巴挪到卡头右侧徽章；脏值改挂同款 warn 徽章
+       （与「模型与接入」的未保存徽章同一写法）。挂在卡头上是这类状态的统一出口，
+       别再退回「段标题 + 一句灰字」。 */
+    expect(right().text()).toContain('当前生效：私有网段');
+    expect(right().find('.mk-badge--warn').exists()).toBe(false);
+
+    const anyRadio = w.findAll('.ac-opt').find((r) => r.text().includes('不限制'))!;
+    await anyRadio.trigger('click');
+    await nextTick();
+    expect(right().text()).toContain('未保存');
+    w.unmount();
+  });
+
+  it('选项卡片自带说明与风险：警示落在选中的那张卡里，屏上不再有整条红横幅', async () => {
+    const w = await mountPage();
+    /* 2026-11-03 范式二：三档入站是等宽选项卡片，每张卡自带「这一档意味着什么」 */
+    const opts = w.findAll('.ac-opts')[0].findAll('.ac-opt');
+    expect(opts).toHaveLength(3);
+    expect(opts.map((o) => o.find('.ac-opt__desc').text()))
+      .toEqual(['只有本机能进后台', '本机与局域网、VPN 内可进', '任意来源都能进后台']);
+    /* 默认档（私有网段，低风险）不出现任何整条告警——原先「允许全部内网」那条红横幅是常驻的 */
+    expect(w.findAll('.ac-risk')).toHaveLength(0);
+
+    const anyOpt = () => w.findAll('.ac-opt').find((o) => o.text().includes('不限制'))!;
+    await anyOpt().trigger('click');
+    await nextTick();
+    // 2026-11-09 设计语言收敛：选中态走全站原语 mk-choice--on（蓝描边 + 淡蓝底），
+    // 不再额外叠一个琥珀描边类——选中与警示抢同一个通道时，
+    // 「这张是选中的」和「这张有问题」互相抵消。
+    expect(anyOpt().classes()).toContain('mk-choice--on');
+    expect(anyOpt().classes()).not.toContain('ac-opt--risk');
+    expect(anyOpt().find('.ac-opt__warn').classes()).not.toContain('ac-opt__warn--idle');
+    // 警示仍只在卡内，不是回到「贯穿整屏的红条」
+    expect(w.findAll('.ac-risk')).toHaveLength(0);
+    w.unmount();
+  });
+
+  it('脏值只在卡头徽章说一次：卡尾不再重复一句「改动尚未保存」', async () => {
+    const w = await mountPage();
+    const anyOpt = w.findAll('.ac-opt').find((o) => o.text().includes('不限制'))!;
+    await anyOpt.trigger('click');
+    await nextTick();
+    // 卡头徽章是脏值的唯一出口（与「模型与接入」的未保存徽章同一写法）
+    expect(w.find('.mk-card__head .mk-card__head-right').text()).toContain('未保存');
+    // 卡尾只有主操作，不再同屏说第二遍
+    expect(w.findAll('.ac-foot > *')).toHaveLength(1);
+    expect(w.find('.ac-foot').text()).toBe('保存策略');
+    w.unmount();
+  });
+
+  it('注册两项也是带边框的设置卡（与上方两列卡片同栅格）', async () => {
+    registrationEnabled.value = true;
+    registerIpQuotaEnabled.value = false;
+    const w = await mountPage();
+    const cards = w.findAll('.ac-setcard');
+    expect(cards).toHaveLength(2);
+    expect(cards.map((c) => c.find('b').text())).toEqual(['新用户注册', '单 IP 每日注册配额']);
+    expect(cards.map((c) => c.find('.ac-setcard__desc').text()))
+      .toEqual(['允许访客在登录页自行注册账号。', '防止脚本批量注册账号。']);
+    // 开关贴在卡片右侧（标题即它的标签，故开关不自带可见 label）
+    expect(cards[0].find('.mk-switch').exists()).toBe(true);
+    expect(cards[0].find('.mk-switch__label').exists()).toBe(false);
     w.unmount();
   });
 
   it('访问来源模式是 radio 组：选中项 aria-checked=true 且只有它可 Tab 进入', async () => {
     const w = await mountPage();
-    const radios = w.findAll('.ac-seg')[0].findAll('.ac-seg__item');
+    const radios = w.findAll('.ac-opts')[0].findAll('.ac-opt');
     const checked = radios.filter((r) => r.attributes('aria-checked') === 'true');
     expect(checked).toHaveLength(1);
     expect(checked[0].text()).toContain('私有网段');
@@ -165,7 +235,7 @@ describe('访问与注册（拆页后的独立页）', () => {
     const w = await mountPage();
     expect(saveButton(w).attributes('disabled')).toBeDefined();
 
-    const anyRadio = w.findAll('.ac-seg__item').find((r) => r.text().includes('不限制'))!;
+    const anyRadio = w.findAll('.ac-opt').find((r) => r.text().includes('不限制'))!;
     await anyRadio.trigger('click');
     await nextTick();
     expect(saveButton(w).attributes('disabled')).toBeUndefined();
@@ -183,7 +253,7 @@ describe('访问与注册（拆页后的独立页）', () => {
 
   it('仅白名单 + 名单为空：禁用保存并写明后果', async () => {
     const w = await mountPage();
-    const seg = w.findAll('.ac-seg__item').find((b) => b.text().includes('仅白名单'))!;
+    const seg = w.findAll('.ac-opt').find((b) => b.text().includes('仅白名单'))!;
     await seg.trigger('click');
     await nextTick();
     expect(w.text()).toContain('服务端将无法访问任何内网地址');
@@ -254,7 +324,7 @@ describe('访问与注册（拆页后的独立页）', () => {
 
   it('注册开关与配额在加载完成前不渲染（null = 未加载，不伪装成关）', async () => {
     const w = await mountPage();
-    expect(w.findAll('.mk-card__title').map((t) => t.text())).toEqual(['访问与注册设置']);
+    expect(w.findAll('.mk-card__title').map((t) => t.text())).toEqual([]);
     expect(w.text()).toContain('服务端出站访问');
     w.unmount();
   });
@@ -266,7 +336,9 @@ describe('访问与注册（拆页后的独立页）', () => {
     expect(w.find('.mk-pagehead').exists()).toBe(false);
     expect(w.classes()).toContain('acl-host--embedded');
     const head = w.find('.mk-card__head');
-    expect(head.find('.mk-card__title').text()).toBe('访问与注册设置');
+    // 嵌入态卡头无标题，只承载右侧状态（生效档 / 未保存），与「会话安全」同页签同形
+    expect(head.find('.mk-card__title').exists()).toBe(false);
+    expect(head.find('.mk-badge').text()).toContain('当前生效');
     const foot = w.find('.ac-foot');
     expect(foot.find('button').text()).toBe('保存策略');
     expect(foot.find('button').attributes('disabled')).toBeDefined();

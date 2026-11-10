@@ -16,12 +16,12 @@ describe('编排图连线', () => {
     expect(DataFlowGraphSource).toMatch(/\.dfg-edges\s*\{[^}]*max-width:\s*none/)
   })
 
-  it('终点落在「组」的垂直中点：本组标题出发，汇入下一组内容带中点', () => {
-    // 2026-10-24 用户「向右下角的曲线指向下个组的中间，而不是指向第一列的 agent 名字」
-    expect(OrchestratorSource).toContain('const groupMidY')
-    expect(OrchestratorSource).toContain('foot.offsetTop + foot.offsetHeight')
+  it('两端锚点都落在列头标题框：本列标题出发，汇入下一列标题框（不随内容带拉伸）', () => {
+    // 2026-10-31 外部评审拍板：原「汇入下一组内容带中点」在末列很长时把曲线拽成大斜线；
+    // 起止固定连向每列顶部的标题框后，各列头等高、连线平行（取代 2026-10-24 的组中点方案）
+    expect(OrchestratorSource).not.toContain('const groupMidY')
     expect(OrchestratorSource).toContain('const y1 = headMidY(a)')
-    expect(OrchestratorSource).toContain('const y2 = groupMidY(b)')
+    expect(OrchestratorSource).toContain('const y2 = headMidY(b)')
     // 旧实现（拉伸后的列中点）不得回潮：中点会落在列底空白里
     expect(OrchestratorSource).not.toContain('a.offsetTop + Math.round(a.offsetHeight / 2)')
   })

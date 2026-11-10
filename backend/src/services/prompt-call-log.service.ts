@@ -10,7 +10,6 @@ import prisma from '../config/database';
 export interface PromptCallLogFilter {
   agentId: string | null;
   pathId: string | null;
-  pipelineRunId: string | null;
   traceId: string | null;
   parentExecutionId: string | null;
   /** status=success|error|drift，其余不做 success/drift 过滤 */
@@ -24,7 +23,6 @@ export function listPromptCallLogs(filter: PromptCallLogFilter) {
     where: {
       ...(filter.agentId ? { agentId: filter.agentId } : {}),
       ...(filter.pathId ? { pathId: filter.pathId } : {}),
-      ...(filter.pipelineRunId ? { pipelineRunId: filter.pipelineRunId } : {}),
       ...(filter.traceId ? { traceId: filter.traceId } : {}),
       ...(filter.parentExecutionId ? { parentExecutionId: filter.parentExecutionId } : {}),
       ...(filter.status === 'success' ? { success: true } : {}),

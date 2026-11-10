@@ -14,12 +14,24 @@
       </button>
     </div>
 
-    <!-- 审计日志深链横幅（?user=用户名 → 只看该管理员的会话；含分工说明 + 反向跳转）：
+    <!-- 审计日志深链横幅（?user=用户名 → 只看该管理员的会话；2026-11-02 起屏上只剩
+         横幅标题 + 反向跳转，范围释义（成功登录 / 失败尝试两页不同源）收进卡根 title）：
          走全局 .mk-alert--info（原型 .alert--info 词汇），本地只补行内布局 -->
-    <div v-if="deepLinkUser" class="mk-alert mk-alert--info ss-deeplink">
-      <strong>来自审计日志 · 查看「{{ deepLinkUser }}」的登录会话</strong>
-      <span>仅列登录成功产生的会话（可强制下线），登录事件完整历史（含失败尝试）见</span>
-      <button type="button" class="mk-link" @click="goAuditLogs">{{ AUDIT_LINK_LABEL }}</button>
+    <div
+      v-if="deepLinkUser"
+      class="mk-alert mk-alert--info ss-deeplink"
+      :title="DEEPLINK_SCOPE_HINT"
+    >
+      <div class="ss-deeplink__text">
+        <strong>来自审计日志 · 查看「{{ deepLinkUser }}」的登录会话</strong>
+        <!-- 2026-11-02「让布局自己说话」：屏上那句「仅列登录成功产生的会话，可强制下线。
+             完整登录历史含失败尝试，在〔审计日志〕」整句在自我介绍本页有什么 / 能做什么 /
+             去哪看全量（复述控件 + 按钮分工 + 指路），横幅标题与跳转钮本身已说清，故收掉。
+             句里唯一会改变判断的限定——本页只列成功登录产生的会话、审计日志的登录尝试含失败、
+             两页计数因此不同源——收进横幅卡根 title（DEEPLINK_SCOPE_HINT），不再占一行版面。
+             （更早 2026-11-02 评审曾把跳转动作并进这句、清除筛选单独靠右；本轮在其上再收一层。） -->
+        <span><button type="button" class="mk-link" @click="goAuditLogs">{{ AUDIT_LINK_LABEL }}</button></span>
+      </div>
       <button type="button" class="mk-link ss-deeplink__clear" @click="clearDeepLink">× 清除筛选</button>
     </div>
     <!-- 常驻分工说明已撤（2026-10-27 用户「这文案没用吧」）：登录成功/失败的口径从页面文案
@@ -31,7 +43,6 @@
     <MkEmptyState
       v-if="loadError && !sessions.length"
       min
-      icon="◌"
       tone="error"
       title="会话列表加载失败"
       :description="loadError"
@@ -69,21 +80,34 @@
             :title="`清理${bulkScope.label}已过期 / 已下线的历史会话`"
             @click="cleanupAllHistory"
           >清理历史（{{ bulkCleanupCount }}）</button>
+          <!-- 2026-11-01 外部评审（三轮）：按钮写「下线全部（7）」而表里能看到 8 条活跃，
+               管理员读成「漏了一条」。实际是剔除本机当前会话（不能把自己踢下线）：
+               文案与悬停都把这个差说清楚。 -->
           <button
             v-if="bulkRevokeCount"
             type="button"
             class="mk-btn mk-btn--danger-ghost mk-btn--sm"
-            :title="`下线${bulkScope.label}的全部活跃会话`"
+            :title="`下线${bulkScope.label}除本设备外的全部活跃会话（本机当前会话不会被下线，因此比活跃数少 1）`"
             @click="revokeAllSessions"
-          >下线全部<template v-if="bulkRevokeCount > 1">（{{ bulkRevokeCount }}）</template></button>
+          >下线其他会话（{{ bulkRevokeCount }}）</button>
         </div>
       </div>
+
+    <!-- 2026-11-02 评审指出「前几行亮绿点+琥珀倒计时、后几行灰点+灰白时间，看不出差别」，
+         当时在卡头下加了一行图例解释这两种记号。2026-11-02 二次走查撤掉：图例是在给记号
+         配说明书，正确做法是让记号自己带释义——圆点的含义挂到「最后活跃」单元格的 title
+         （见 lastSeenTitle），琥珀时间本就配着「剩 N 小时」这行文字（F6-5：文字才是信号）。
+         「为什么会有两种显示」这个背景仍留在本注释里，不再占一行版面。 -->
 
     <MockSkeletonTable v-if="loading && !sessions.length" :cols="7" :rows="6" />
 
     <!-- 按管理员分组的标准表格 -->
     <div v-else-if="groups.length" class="ss-body">
-      <div v-for="{ g, active } in visibleGroups" :key="g.adminId" class="mk-card ss-group">
+      <!-- 2026-11-09 设计语言收敛（容器层级）：分组原先是「外层 mk-card--fill 里再套一层
+           mk-card.ss-group」——同页其余四个页签都只有一层卡，只有这里生成卡中卡，
+           内外两层圆角也各转各的。分组不再自带卡壳，复用外层卡的边框与底色；
+           多管理员时用一条分隔线分区，视觉层级仍清楚。 -->
+      <div v-for="{ g, active } in visibleGroups" :key="g.adminId" class="ss-group">
         <!-- 组头（2026-10-27 用户「这个也不要了」）：单管理员是常态，身份/计数与卡头动作重复，
              整行撤除让表格直接起读；多管理员时仍保留一行用于区分是谁的会话。 -->
         <div v-if="groups.length > 1" class="mk-card__head">
@@ -105,18 +129,18 @@
               <col class="ss-col--time">
               <col class="ss-col--time">
               <col class="ss-col--time">
-              <col style="width:var(--mk-col-badge)">
+              <col class="ss-col--status">
               <col style="width:var(--mk-col-actions-wide)">
             </colgroup>
             <thead>
               <tr>
-                <th>设备</th>
-                <th>IP</th>
-                <th>登录时间</th>
-                <th>最后活跃</th>
-                <th>过期时间</th>
-                <th>状态</th>
-                <th class="mk-th--right mk-c-act">操作</th>
+                <th scope="col">设备</th>
+                <th scope="col">IP</th>
+                <th scope="col">登录时间</th>
+                <th scope="col">最后活跃</th>
+                <th scope="col">过期时间</th>
+                <th scope="col">状态</th>
+                <th class="mk-th--right mk-c-act" scope="col">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -136,14 +160,19 @@
                     <strong class="ss-device">
                       <span class="ss-dot" :class="`ss-dot--${deviceOf(s).kind}`" aria-hidden="true"></span>
                       <span class="ss-browser">{{ deviceOf(s).browser }}</span>
+                      <!-- 2026-11-09 设计语言收敛：当前会话标记原先落在最右侧「操作」列，
+                           与「用户账号」把「当前账号」放身份列的做法相反——同一件事两页两个位置。
+                           统一到首列、贴身份后面，并与那边同一枚 mk-badge--self。 -->
+                      <span v-if="s.id === currentId" class="mk-badge mk-badge--sm mk-badge--self" :title="CURRENT_TAB_HINT">当前</span>
                     </strong>
                     <span class="mk-cell-sub">{{ deviceOf(s).os || '未知系统' }}<template v-if="s.remember"> · 记住我</template></span>
                   </div>
                 </td>
                 <td class="ss-ip mono" :title="s.ip || ''">{{ ipText(s.ip) }}</td>
                 <td class="ss-time mono" :title="fmtFull(s.issuedAt)">{{ fmtDateTime(s.issuedAt) }}</td>
-                <td class="ss-time mono" :title="s.lastSeenAt ? fmtFull(s.lastSeenAt) : ''">
-                  <!-- 批C：新鲜度点做活跃度视觉锚；绝对时间保留（安全审计回溯刚需，不藏 title） -->
+                <td class="ss-time mono" :title="lastSeenTitle(s)">
+                  <!-- 批C：新鲜度点做活跃度视觉锚；绝对时间保留（安全审计回溯刚需，不藏 title）。
+                       圆点含义（24 小时内有没有活动）原在卡下一行图例里，2026-11-02 收进本单元格 title。 -->
                   <span class="mk-fresh" :class="lastSeenFreshTone(s)" style="justify-content: flex-end">
                     <template v-if="s.lastSeenAt">{{ fmtDateTime(s.lastSeenAt) }}</template>
                     <template v-else>—</template>
@@ -152,16 +181,16 @@
                 <td class="ss-time mono" :class="{ 'ss-time--soon': expiringSoon(s) }" :title="expiryTitle(s)">
                   <div class="mk-cell-main">
                     <span>{{ fmtDateTime(s.expiresAt) }}</span>
-                    <!-- F6-5：24h 内过期行给出可读剩余时长（颜色只是辅助，文字才是信号） -->
+                    <!-- F6-5：快到期（≤2h）的行给出可读剩余时长（颜色只是辅助，文字才是信号） -->
                     <span v-if="expiringSoon(s)" class="ss-expiry-soon">剩 {{ remainText(s) }}</span>
                   </div>
                 </td>
                 <td><span class="mk-badge" :class="statusClass(s)">{{ statusTextOf(s) }}</span></td>
                 <td class="mk-th--right">
                   <div class="mk-actions">
-                    <span v-if="s.id === currentId" class="ss-current" :title="CURRENT_TAB_HINT">当前</span>
+                    <!-- 当前会话不可下线：标记已上移到首列身份行，这里只留「无可用动作」的占位 -->
                     <button
-                      v-else-if="statusOf(s) === 'active'"
+                      v-if="s.id !== currentId && statusOf(s) === 'active'"
                       type="button"
                       class="mk-btn mk-btn--danger-ghost mk-btn--sm"
                       @click="revoke(s)"
@@ -179,8 +208,15 @@
              括号内外两个 42 同屏重复，读数像出错（2026-10-30 人工复查）。 -->
         <details v-if="g.historical.length" class="ss-hist" :open="statusFilter !== ''">
           <summary class="mk-section__summary ss-hist__summary">
-            <span class="ss-hist__title">已结束会话（{{ g.historical.length }}<template v-if="fullHistorical(g) > g.historical.length"> / 全量 {{ fullHistorical(g) }}</template>）</span>
+            <span class="ss-hist__title">已结束会话（<template v-if="fullHistorical(g) > g.historical.length">显示 {{ g.historical.length }} / 共 {{ fullHistorical(g) }}</template><template v-else>{{ g.historical.length }}</template>）</span>
             <span class="ss-hist__meta">过期 {{ groupCounts(g).expired }} · 已撤销 {{ groupCounts(g).revoked }}</span>
+            <!-- 2026-11-01 外部评审（五轮 P2）：只列最近 92 条、却写着共 183 条，
+                 读者怀疑有 91 条丢了。这里直说取样口径与取全量的出口。 -->
+            <span
+              v-if="fullHistorical(g) > g.historical.length"
+              class="ss-hist__hint"
+              :title="`列表按时间倒序取最近 ${g.historical.length} 条（后端行窗口上限 100）。全部 ${fullHistorical(g)} 条历史会话可经「数据导出」拉全量 CSV。`"
+            >仅显示最近 {{ g.historical.length }} 条，全量走「数据导出」</span>
           </summary>
           <div class="mk-table-scroll">
             <table class="mk-table mk-table--fixed">
@@ -190,27 +226,28 @@
                 <col class="ss-col--time">
                 <col class="ss-col--time">
                 <col class="ss-col--time">
-                <col style="width:var(--mk-col-badge)">
+                <col class="ss-col--status">
                 <col style="width:var(--mk-col-actions-wide)">
               </colgroup>
               <thead>
                 <tr>
-                  <th>设备</th>
-                  <th>IP</th>
-                  <th>登录时间</th>
-                  <th>最后活跃</th>
-                  <th>过期时间</th>
-                  <th>状态</th>
-                  <th class="mk-th--right mk-c-act">操作</th>
+                  <th scope="col">设备</th>
+                  <th scope="col">IP</th>
+                  <th scope="col">登录时间</th>
+                  <th scope="col">最后活跃</th>
+                  <th scope="col">过期时间</th>
+                  <th scope="col">状态</th>
+                  <th class="mk-th--right mk-c-act" scope="col">操作</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="s in g.historical" :key="s.id" class="ss-tr">
+                <tr v-for="s in g.historical.slice(0, histShown)" :key="s.id" class="ss-tr">
                   <td :title="uaFull(s)">
                     <div class="mk-cell-main">
                       <strong class="ss-device">
                         <span class="ss-dot" :class="`ss-dot--${deviceOf(s).kind}`" aria-hidden="true"></span>
                         <span class="ss-browser">{{ deviceOf(s).browser }}</span>
+                        <span v-if="s.id === currentId" class="mk-badge mk-badge--sm mk-badge--self" :title="CURRENT_TAB_HINT">当前</span>
                       </strong>
                       <span class="mk-cell-sub">{{ deviceOf(s).os || '未知系统' }}<template v-if="s.remember"> · 记住我</template></span>
                     </div>
@@ -226,9 +263,8 @@
                   <td><span class="mk-badge" :class="statusClass(s)">{{ statusTextOf(s) }}</span></td>
                   <td class="mk-th--right">
                     <div class="mk-actions">
-                      <span v-if="s.id === currentId" class="ss-current" :title="CURRENT_TAB_HINT">当前</span>
                       <button
-                        v-else-if="statusOf(s) === 'active'"
+                        v-if="s.id !== currentId && statusOf(s) === 'active'"
                         type="button"
                         class="mk-btn mk-btn--danger-ghost mk-btn--sm"
                         @click="revoke(s)"
@@ -239,6 +275,12 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+          <!-- 历史行默认只铺一屏（2026-11-02 评审：94 条一次性展开，整页高 7000+ px，
+               行与行几乎一样，只能一路滚）。逐段放行，滚动区仍带吸顶表头。 -->
+          <div v-if="g.historical.length > histShown" class="ss-hist__more">
+            <span class="ss-hist__morecount">已显示 {{ histShown }} / {{ g.historical.length }} 条</span>
+            <button type="button" class="mk-link" @click="showMoreHistory">再显示 30 条</button>
           </div>
         </details>
       </div>
@@ -260,9 +302,11 @@
 
     <!-- 分页（标准件 · 卡脚）：只分页活跃会话行，跨管理员统一计数（组头/组数随页变）；
          历史折叠组不受分页影响。行窗口被截断时用 note 披露口径——
-         页码器读数是「已加载行数」，卡头「活跃 N」是后端全量，两者不同源须各自标明。 -->
+         页码器读数是「已加载行数」，卡头「活跃 N」是后端全量，两者不同源须各自标明。
+         仅一页时隐藏（2026-10-31 外部评审）：单页页码器只会挂在「已结束会话」折叠组
+         下方，读起来像在给历史列表分页；多页时它仍是活跃表的全站分页，保留。 -->
     <Pagination
-      v-if="groups.length && activeFlat.length"
+      v-if="groups.length && activeFlat.length && ssPages > 1"
       v-model:page="page"
       v-model:pageSize="pageSize"
       :total="activeFlat.length"
@@ -295,6 +339,10 @@ const emit = defineEmits<{ (e: 'count', total: number): void }>()
 
 /* 文案单源（R6 复读单源化）：审计深链横幅与常驻分工说明的同一跳转钮、表格/卡片两种视图的同一「当前」标 */
 const AUDIT_LINK_LABEL = '审计日志 · 登录审计 →'
+/* 深链横幅卡根释义（原为屏上一句「仅列登录成功产生的会话，可强制下线。完整登录历史含失败
+   尝试，在〔审计日志〕」，2026-11-02 收进 title）：本页只列成功登录产生的会话，而审计日志的
+   登录尝试含失败，两页计数因此不同源——读到两处数字不等时先看这条，别当成丢数据。 */
+const DEEPLINK_SCOPE_HINT = '仅列登录成功产生的会话（审计日志的登录尝试含失败，两页计数不同源）'
 const CURRENT_TAB_HINT = '当前登录标签页的会话，不可下线'
 
 /** admin_sessions 行（与后端 Prisma 模型一致 + adminName/adminEmail 联查字段） */
@@ -407,7 +455,8 @@ const statusSelect = computed({
   set: (v: string) => { statusFilter.value = (v as '' | SessionStatus) }
 })
 const statusSelectOptions = computed(() => [
-  { value: '', label: '全部状态' },
+  /* 「全部状态」→「全部」：触发器已带「状态」label，选项不再复述（2026-11-09 走查）。 */
+  { value: '', label: '全部' },
   ...statusPills.map((p) => ({ value: p.id, label: `${p.label}（${countOf(p.id)}）` }))
 ])
 
@@ -548,6 +597,13 @@ const groups = computed<SessionGroup[]>(() => {
 const activeFlat = computed(() => groups.value.flatMap((g) => g.active))
 const page = ref(1)
 const pageSize = ref(15)
+/** 已结束会话一次渲染多少行：逐段放行，避免上百行把页面拉成一条长带 */
+const histShown = ref(15)
+function showMoreHistory(): void {
+  histShown.value += 30
+}
+/** 总页数：单页时分页器整体隐藏（页脚只有一页读数，挂历史组下有歧义） */
+const ssPages = computed(() => Math.max(1, Math.ceil(activeFlat.value.length / pageSize.value)))
 const pagedActive = computed(() =>
   activeFlat.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value)
 )
@@ -598,13 +654,17 @@ function uaFull(s: AdminSessionRow): string {
   return s.userAgent || '未知设备'
 }
 
-/** 24 小时内过期的活跃会话高亮提示 */
+/** 即将过期的活跃会话高亮阈值（2026-11-09 设计语言收敛）。
+    原为 24h：本页绝大多数会话就是 24h 到期，于是几乎每一行都被标成琥珀色，
+    颜色不再是「注意这一行」的信号，而是整列底色。降到 2h —— 只剩真正快到期、
+    需要管理员决定「续不续」的那几行才亮，其余走常规时间色。 */
+const EXPIRING_SOON_MS = 2 * 60 * 60 * 1000
 function expiringSoon(s: AdminSessionRow): boolean {
   if (statusOf(s) !== 'active') return false
-  return new Date(s.expiresAt).getTime() - Date.now() <= 24 * 60 * 60 * 1000
+  return new Date(s.expiresAt).getTime() - Date.now() <= EXPIRING_SOON_MS
 }
 /** 剩余时长（F6-5）：安全运维关心「还有多久过期」，给可读文字而非仅颜色差。
-    24h 内按小时、<1h 按分钟（向上取整，最小 1 分钟），避免出现「剩 0 小时」。 */
+    <1h 按分钟（向上取整，最小 1 分钟，不出现「剩 0 小时」），其余按小时。 */
 function remainText(s: AdminSessionRow): string {
   const ms = new Date(s.expiresAt).getTime() - Date.now()
   if (ms <= 0) return '已到期'
@@ -623,10 +683,21 @@ function lastSeenFreshTone(s: AdminSessionRow): string {
   return Date.now() - new Date(s.lastSeenAt).getTime() < 24 * 60 * 60 * 1000 ? 'mk-fresh--fresh' : ''
 }
 
+/** 「最后活跃」列的悬停释义（原卡下图例的上一半，2026-11-02 收进这里）：
+    圆点=24 小时内有没有活动，绝对时间照旧供安全回溯。 */
+function lastSeenTitle(s: AdminSessionRow): string {
+  if (!s.lastSeenAt) return '该会话没有活跃记录'
+  const fresh = Date.now() - new Date(s.lastSeenAt).getTime() < 24 * 60 * 60 * 1000
+  return `${fmtFull(s.lastSeenAt)}（24 小时内${fresh ? '有过' : '没有'}活动）`
+}
+
 async function revoke(s: AdminSessionRow) {
+  /* 设备读人话（浏览器 · 系统 · 记住我），不再塞整段原始 UA——
+     确认框要的是「下线的是哪台设备」，UA 全文留在表格行悬停（deviceOf().uaFull 兜底） */
+  const d = deviceOf(s)
   const confirmed = await askConfirm({
     title: '强制下线该会话',
-    message: `确定强制下线此会话吗？\n设备：${uaFull(s)}\n登录时间：${fmtDateTime(s.issuedAt)}`,
+    message: `确定强制下线此会话吗？\n设备：${[d.browser, d.os, s.remember ? '记住我' : ''].filter(Boolean).join(' · ')}\nIP：${ipText(s.ip)}\n登录时间：${fmtDateTime(s.issuedAt)}`,
     confirmText: '强制下线',
     busy: true,
   })
@@ -738,23 +809,40 @@ onMounted(async () => {
 /* 深链横幅：底色/字色/圆角由 .mk-alert--info 承担，这里只补行内布局 */
 .ss-deeplink {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
   flex-wrap: wrap;
   border-radius: var(--mk-radius-xl);
   font-size: var(--mk-fs-micro);
 }
+/* 标题一句、说明一句，各自成行（原先四处内容挤在一行里连读） */
+.ss-deeplink__text { display: grid; gap: 4px; min-width: 0; }
 .ss-deeplink strong { font-weight: 700; color: var(--mk-ink); }
 .ss-deeplink__clear { color: var(--mk-muted); }
+/* 历史列表的分段放行：与滚动区同宽，弱化展示进度 */
+.ss-hist__more {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--mk-line);
+  font-size: var(--mk-fs-micro);
+}
+.ss-hist__morecount { color: var(--mk-muted); }
 
 /* 加载失败错误态走 MkEmptyState（模板内），此处不再自建错误卡 */
 
 /* 有旧行时刷新失败的行内 alert（审核 #179）：贴卡头下方，保留表格可读 */
 .ss-stale-alert { margin: 10px 14px 0; }
 
-.ss-body { display: grid; gap: var(--mk-space-4); }
+/* 分组之间不再各套一张卡（2026-11-09 设计语言收敛）：同页其余页签只有一层卡，
+   这里用一条分隔线区隔多管理员的分组，单管理员（常态）时无任何多余分隔。 */
+.ss-body { display: grid; gap: 0; }
+.ss-group + .ss-group { border-top: 1px solid var(--mk-line); }
 
-/* 分组卡在 fill 布局里被拉到可用高度：活跃表在上，历史折叠条作为卡脚贴底。
+/* 分组在 fill 布局里被拉到可用高度：活跃表在上，历史折叠条作为卡脚贴底。
    否则折叠条紧跟活跃行、其下留 300+px 空白，像表格里混进了一条无主行（2026-10-30 人工复查）。 */
 .ss-group { display: flex; flex-direction: column; }
 .ss-group > .mk-table-scroll { flex: none; }
@@ -798,7 +886,16 @@ onMounted(async () => {
 .ss-dot--android { background: var(--mk-purple); }
 .ss-dot--ios { background: var(--mk-muted); }
 .ss-dot--other { background: var(--mk-badge-virtual-line); }
-.ss-ip { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+/* IP 与「（本机）」标记整体换行（2026-11-03 视觉走查）：地址列宽 130px 与
+   「127.0.0.1（本机）」等宽，默认的中日韩逐字断行会把它拆成「127.0.0.1（本」/「机）」，
+   读起来像两个坏值。keep-all 禁止逐字断行，整段跟着换行；overflow-wrap:anywhere 兜底——
+   真遇上放不下的长 IPv6 时按任意位置断，而不是撑出列外。 */
+.ss-ip {
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
 .ss-time {
   color: var(--mk-muted);
   font-variant-numeric: tabular-nums;
@@ -816,27 +913,27 @@ onMounted(async () => {
 /* LY6（2026-10-05 布局方案 §4）：三列时刻在 ≤1599 档收 176→112（MM-DD HH:mm 预算），
    七列合计 968px，在 1280 内容区 992 内不再横向滚动；≥1600 恢复 token 原值。 */
 .ss-col--time { width: var(--mk-col-datetime); }
+/* 2026-11-04：状态列要容得下 3 字徽章。历史行的「已过期 / 已撤销」徽章本身 54px，
+   而 --mk-col-badge 的 64px 只算了徽章、未计单元格左右 16px 内衬（内容盒仅 32px），
+   390 / 1280 档徽章右缘越出 td 6px 压进「操作」列。本页两表同取
+   max(token, 88px = 54 + 32 内衬 + 2px 余量)，2 字（活跃 42px）与 3 字徽章都落在
+   本列内，活跃表与历史表的「状态 / 操作」也保持同宽对齐。 */
+.ss-col--status { width: max(var(--mk-col-badge), 88px); }
 @media (max-width: 1599px) {
   .ss-col--time { width: 112px; }
-}
-.ss-current {
-  display: inline-flex;
-  align-items: center;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  border-radius: 999px;
-  padding: 2px 9px;
-  /* 实底 surface（而非与当前行底同色 16% 蓝）：胶囊形状与行底分层；文字 accent-deep
-     对 surface 复算 ~6.5:1（原同色叠同色在暗色下胶囊消失、文字仅 4.11:1） */
-  background: var(--mk-surface);
-  color: var(--mk-accent-deep, #1f57cc);
-  white-space: nowrap;
+  /* 2026-11-04：≤1599 档列收 112px 后，内容盒只剩 80px（112−左右 16 内衬），
+     而「MM-DD HH:mm」按正文 14px 要 90px，溢出 10px（390×844 走查复现的量化溢出）。
+     本档把时间文本降到 micro 角色（≈12px→77px），与 ≥2800 档 .ss-time 同一字号口径。 */
+  .ss-time { font-size: var(--mk-fs-micro); }
 }
 .ss-na { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
 
 /* 过期/已撤销折叠组（默认收起，summary 行可点击展开）
    折叠头形态走全局 .mk-section__summary（▸ 指示 + open 旋转 + hover），此处只覆配色/内衬 */
 .ss-hist { border-top: 1px solid var(--mk-line); margin-top: auto; }
+/* 历史可能上百条：展开后卡内滚动，不再把整页拉到 4000px（2026-10-30 外部评审）；
+   展开态给滚动容器补下边线——末行被视口拦腰截断时与下方内容仍有分界（2026-10-31 复检） */
+.ss-hist[open] .mk-table-scroll { max-height: 420px; overflow-y: auto; border-bottom: 1px solid var(--mk-line); }
 .ss-hist__summary {
   display: flex;
   align-items: center;
@@ -848,13 +945,14 @@ onMounted(async () => {
 }
 .ss-hist__summary:hover { background: var(--mk-hover-surface); }
 .ss-hist__meta { color: var(--mk-faint); font-weight: 600; font-size: var(--mk-fs-micro); }
+/* 截断说明：贴在折叠头右端，弱化但不藏（读者要知道列表为什么不等于总数） */
+.ss-hist__hint { margin-left: auto; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 
 /* 大屏/4K 适配（全站 mk 体系档位；表格与状态条由 shared.css 档位覆盖）。
    分组名走 --mk-fs-emphasis，随档位自动放大，故不在档位内重复声明。 */
 @media (min-width: 2000px) {
   .ss-group__email { font-size: var(--mk-fs-micro); }
   .ss-group__count { font-size: var(--mk-fs-micro); }
-  .ss-current { font-size: var(--mk-fs-micro); }
   .ss-na { font-size: var(--mk-fs-micro); }
   .ss-time--soon { font-size: var(--mk-fs-micro); }
   .ss-ip { font-size: var(--mk-fs-micro); }
@@ -862,7 +960,6 @@ onMounted(async () => {
 @media (min-width: 2800px) {
   .ss-group__email { font-size: var(--mk-fs-micro); }
   .ss-group__count { font-size: var(--mk-fs-micro); }
-  .ss-current { font-size: var(--mk-fs-micro); }
   .ss-na { font-size: var(--mk-fs-micro); }
   .ss-time,
   .ss-time--soon { font-size: var(--mk-fs-micro); }
@@ -871,7 +968,6 @@ onMounted(async () => {
 @media (min-width: 3600px) {
   .ss-group__email { font-size: var(--mk-fs-micro); }
   .ss-group__count { font-size: var(--mk-fs-body); }
-  .ss-current { font-size: var(--mk-fs-micro); }
   .ss-na { font-size: var(--mk-fs-body); }
   .ss-time--soon { font-size: var(--mk-fs-micro); }
   .ss-ip { font-size: var(--mk-fs-body); }

@@ -136,24 +136,21 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     expect(w.find('.mk-pagination__num--active').text()).toBe('2');
   });
 
-  it('切换每页条数下拉 → 行数与页码器同步', async () => {
+  it('切换每页条数下拉 → 行数与页码器同步；折成单页后页码器整体隐藏', async () => {
     const sessions = Array.from({ length: 30 }, (_, i) => fakeSession(i + 1));
     const w = await mountSS(sessions);
     await chooseMkSelect(w as never, '每页条数', '30');
     await flushPromises();
     expect(w.findAll('.ss-tr').length).toBe(30);
-    expect(pagerText(w)).toContain('第 1 / 1 页');
+    // 2026-10-31 外部评审：仅一页时页码器不再渲染——单页读数挂在「已结束会话」
+    // 折叠组下方会被读成给历史列表分页
+    expect(w.find('.mk-pagination').exists()).toBe(false);
   });
 
-  it('行数不足一页时仍在卡脚显示读数（共 N 条 · 第 1 / 1 页）', async () => {
+  it('行数不足一页时不再渲染分页器（2026-10-31 外部评审：单页读数挂历史组下有歧义）', async () => {
     const w = await mountSS(Array.from({ length: 8 }, (_, i) => fakeSession(i + 1)));
     expect(w.findAll('.ss-tr').length).toBe(8);
-    expect(pagerText(w)).toContain('共 8 条');
-    expect(pagerText(w)).toContain('第 1 / 1 页');
-    // 只有一页：上一页/下一页均禁用
-    for (const b of w.findAll('.mk-pagination__btn')) {
-      expect(b.attributes('disabled')).toBeDefined();
-    }
+    expect(w.find('.mk-pagination').exists()).toBe(false);
   });
 
   it('状态筛选切换 → 回到第 1 页', async () => {
@@ -189,7 +186,7 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     // 批量动作条数读 adminCounts（非窗口行数）：历史 7，活跃 93 - 当前标签页 1 = 92
     const acts = w.find('.ss-head-acts').text();
     expect(acts).toContain('清理历史（7）');
-    expect(acts).toContain('下线全部（92）');
+    expect(acts).toContain('下线其他会话（92）');
     // 页码器分母 = 行窗口（30），note 同时标出全站活跃数与已加载数——两个数不同源，各自标口径
     // （2026-10-26 视觉验收：只说「全部活跃 93」会被读成与「共 30 条」矛盾）
     expect(pagerText(w)).toContain('共 30 条');
@@ -212,7 +209,7 @@ describe('SessionSecurity 分页（标准页码器）', () => {
       window: { limit: 100, returned: 12 }
     });
     // admin-1 即当前管理员：467 活跃 - 1 当前标签页 = 466；33 过期 + 5 已撤销 = 38 条历史
-    const revokeBtn = w.findAll('button').find((b) => b.text().includes('下线全部'));
+    const revokeBtn = w.findAll('button').find((b) => b.text().includes('下线其他会话'));
     expect(revokeBtn?.text()).toContain('466');
     const cleanupBtn = w.findAll('button').find((b) => b.text().includes('清理历史'));
     expect(cleanupBtn?.text()).toContain('38');
@@ -232,13 +229,23 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     expect(h.getSessions).toHaveBeenCalledTimes(2);
   });
 
-  it('24h 内过期的活跃行给出可读剩余时长（F6-5）', async () => {
+  it('2h 内过期的活跃行给出可读剩余时长；20h 这种还早的不再标黄（F6-5 + 2026-11-09 收敛）', async () => {
     const soon = fakeSession(1);
-    soon.expiresAt = new Date(Date.now() + 20 * 3600_000).toISOString();
+    soon.expiresAt = new Date(Date.now() + 50 * 60_000).toISOString();
     const w = await mountSS([soon]);
     const label = w.find('.ss-expiry-soon');
     expect(label.exists()).toBe(true);
-    expect(label.text()).toContain('剩 20 小时');
+    expect(label.text()).toContain('剩 50 分钟');
+    w.unmount();
+
+    // 阈值原为 24h：本页会话基本都是 24h 到期，几乎每行都被标成琥珀色，
+    // 颜色失去「注意这一行」的意义。现在只有 ≤2h 才亮。
+    const later = fakeSession(1);
+    later.expiresAt = new Date(Date.now() + 20 * 3600_000).toISOString();
+    const w2 = await mountSS([later]);
+    expect(w2.find('.ss-expiry-soon').exists()).toBe(false);
+    expect(w2.find('.ss-time--soon').exists()).toBe(false);
+    w2.unmount();
   });
 
   it('过期时间列 title 含剩余时长（非仅颜色差）', async () => {
@@ -249,6 +256,20 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     expect(cell.attributes('title')).toContain('后过期');
   });
 
+  it('「当前」标记在首列身份行（与「用户账号」同位置、同一枚 mk-badge--self），操作列留占位', async () => {
+    const w = await mountSS([fakeSession(1), fakeSession(2)]);
+    const rows = w.findAll('.ss-tr');
+    const currentRow = rows.find((r) => r.text().includes('当前'))!;
+    // 首列（设备）里带标记
+    expect(currentRow.findAll('td')[0].find('.mk-badge--self').exists()).toBe(true);
+    expect(currentRow.findAll('td')[0].text()).toContain('当前');
+    // 操作列不再重复「当前」，也不给下线按钮
+    const actCell = currentRow.findAll('td').at(-1)!;
+    expect(actCell.text()).not.toContain('当前');
+    expect(actCell.find('button').exists()).toBe(false);
+    w.unmount();
+  });
+
   it('过期/已撤销历史收进折叠组，不计入分页总数', async () => {
     const sessions = [
       fakeSession(1, { revoked: true }),
@@ -256,10 +277,10 @@ describe('SessionSecurity 分页（标准页码器）', () => {
       ...Array.from({ length: 11 }, (_, i) => fakeSession(i + 3))
     ];
     const w = await mountSS(sessions);
-    // 13 个会话：2 历史进折叠组，11 活跃；页码器只数活跃行（11，不是 13）
+    // 13 个会话：2 历史进折叠组，11 活跃；活跃行不截断
     expect(w.find('.ss-hist').exists()).toBe(true);
-    expect(pagerText(w)).toContain('共 11 条');
-    // 一页装下 11 活跃 + 2 历史（.ss-tr 同时匹配活跃表行与折叠组内历史表行）
+    // 2026-10-31 外部评审：11 活跃单页装下 → 分页器不渲染（折叠组保持历史唯一入口）
+    expect(w.find('.mk-pagination').exists()).toBe(false);
     expect(w.findAll('.ss-tr').length).toBe(13);
   });
 
@@ -332,7 +353,7 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     expect(pillCount(w, '已撤销')).toBe('1');
     const acts = w.find('.ss-head-acts').text();
     expect(acts).toContain('清理历史（1）');
-    expect(acts).toContain('下线全部（2）');
+    expect(acts).toContain('下线其他会话（2）');
   });
 
   it('顶部说明条与卡头审计跳转均已撤；单管理员不渲染组头，批量动作收在卡头右组', async () => {
@@ -345,7 +366,7 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     const headRight = w.find('.mk-card__head-right');
     // 当前标签页 #1 不计入下线：活跃 3 - 1 = 2；历史 4 + 2 = 6
     expect(headRight.text()).toContain('清理历史（6）');
-    expect(headRight.text()).toContain('下线全部（2）');
+    expect(headRight.text()).toContain('下线其他会话（2）');
     // 单管理员的组头整行已撤（2026-10-27 用户「这个也不要了」）
     expect(w.find('.ss-group .mk-card__head').exists()).toBe(false);
     expect(w.find('.ss-group__acts').exists()).toBe(false);

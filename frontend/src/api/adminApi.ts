@@ -240,9 +240,10 @@ export const adminDashboardApi = {
   },
 
   /**
-   * 完课量按轨道/通道拆分（#105 读侧接入）：数据 = learner_evidence 已投影收束事件，
-   * task:completed 计入完课量；历史无 track 行归 legacy（未标记），不回填。
-   * 返回 { total, byTrack, bySource, pathCompletions }。
+   * 完课量按轨道/通道拆分（#105 读侧接入；2026-11-04 口径对齐 #186）：
+   * 数据 = learner_evidence 已投影收束事件。total/byTrack/bySource 同源同口径（非虚拟），
+   * 三项轨道相加即 total；虚拟学习者单列 virtualCount（不计入）；历史无 track 行归 legacy（未标记）。
+   * 返回 { total, byTrack, bySource, virtualCount, pathCompletions }。
    */
   getClosureSummary: async () => {
     return adminAxios.get('/admin/overview/closure');
@@ -549,7 +550,8 @@ export const adminAgentsApi = {
     agentId?: string;
     traceId?: string;
     sessionId?: string;
-    status?: 'success' | 'error' | 'timeout';
+    /** failed = 未成功（含超时，平台口径的「失败」）；error = 非超时的失败；timeout = 仅超时 */
+    status?: 'success' | 'failed' | 'error' | 'timeout';
     keyword?: string;
     timeRange?: 'today' | 'yesterday' | 'week' | 'month' | 'all';
     sourceEntry?: string;
@@ -583,7 +585,6 @@ export const adminRuntimeDefinitionsApi = {
     limit?: number;
     agentId?: string;
     pathId?: string;
-    pipelineRunId?: string;
     traceId?: string;
     parentExecutionId?: string;
     status?: 'success' | 'error' | 'drift';
@@ -745,7 +746,6 @@ export const adminApiConfigApi = {
     apiKey: string;
     availableModels: string | string[];
     defaultModel: string;
-    defaultReasoningModel: string;
     defaultEvaluationModel: string;
     defaultThinkingMode?: string;
     defaultReasoningEffort?: string;
@@ -786,8 +786,9 @@ export const adminApiConfigApi = {
   },
 
   /**
-   * 模型配置总览（只读）：能力注册表 / 别名映射 / 默认解析 / 降级链 / 部署冷却 / 配置漂移告警。
+   * 模型配置总览（只读）：能力注册表 / 别名映射 / 默认解析 / 配置漂移告警。
    * 模型目录的唯一写源 = File-as-Truth 配置文件 llm-providers.json（doc/MODEL_GATEWAY_DESIGN.md §4.2）。
+   * 2026-11-04 用户「去掉降级这个功能，不要」：降级链 / 部署冷却两项已随降级整条下线。
    */
   getModelRegistry: async () => {
     return adminAxios.get('/admin/model-registry');
@@ -867,7 +868,12 @@ export interface InfraModelEntryView {
   provider: 'bge';
   connectionMode: 'inherit' | 'own';
   endpoint: string;
+  /** 当前启用的模型（运行时只认这一个）；空串 = 尚未选择 */
   model: string;
+  /** 已配置的模型池（含启用项）：一条连接可配多个，⋯ 里切换启用 / 删除 */
+  models: string[];
+  /** 模型显示名称（id → 名称，2026-11-05）：与对话模型的「显示名称」同一件事，没起名就只显示 id */
+  labels: Record<string, string>;
   apiKeyEnv: string;
   timeoutMs: number;
   batchSize: number | null;
@@ -906,7 +912,13 @@ export interface InfraModelsUpdateInput {
 export const adminInfraModelsApi = {
   get: async () => adminAxios.get('/admin/infra-models'),
   update: async (data: InfraModelsUpdateInput) => adminAxios.put('/admin/infra-models', data),
-  test: async (kind: 'embedding' | 'rerank') => adminAxios.post('/admin/infra-models/test', { kind })
+  /** 测试连通性：传 model 就测那一行（模型池里逐行测），不传测当前启用项 */
+  test: async (kind: 'embedding' | 'rerank', model?: string) =>
+    adminAxios.post('/admin/infra-models/test', model ? { kind, model } : { kind }),
+  /** 用这条能力的连接向上游拉模型清单（P1 2026-11-04）：向量 / 重排不必手打模型 ID。
+   *  独立服务可带草稿连接：填地址与密钥后直接拉，不必先保存一次。 */
+  pull: async (data: { kind: 'embedding' | 'rerank'; endpoint?: string; apiKey?: string }) =>
+    adminAxios.post('/admin/infra-models/pull', data)
 };
 
 // ============================================================
@@ -958,6 +970,8 @@ export interface HealthCenterItem {
   count: number;
   detail: string[];
   cause: string;
+  /** 正常态的行内说明（异常态才读 cause）。后端逐项声明，前端不再拿 cause 当常驻副标题。 */
+  okNote: string;
   action: 'fixable' | 'manual' | 'none';
   fixHint: string;
   source: string;
@@ -1287,6 +1301,15 @@ export const adminPluginsApi = {
       providers,
       ...(orders ? { orders } : {})
     });
+  },
+  /**
+   * 单个 provider 的连通性测试（2026-11-07）：只探点名的这一家、不进降级链，
+   * 失败时后端把上游原文放在 error 里（网关 / 额度 / 鉴权各有各的说法，前端不再包装）。
+   */
+  testProvider: async (pluginId: string, providerId: string) => {
+    return adminAxios.post(
+      `/admin/plugins/config/${encodeURIComponent(pluginId)}/providers/${encodeURIComponent(providerId)}/test`
+    );
   }
 };
 
@@ -1331,7 +1354,6 @@ export const adminSkillsApi = {
     thinkingMode?: string;
     reasoningEffort?: string;
     paramOverrides?: Record<string, number> | null;
-    fallbackChain?: string[] | null;
     requestTimeoutMs?: number | null;
     maxLogicalRetries?: number | null;
     enabled?: boolean;
@@ -1344,7 +1366,7 @@ export const adminSkillsApi = {
     return adminAxios.get('/admin/skill-model-configs/coverage');
   },
 
-  /** 批量套用同一份通道/模型/参数/兜底配置到多个 skill */
+  /** 批量套用同一份通道/模型/参数配置到多个 skill（2026-11-04 起不再有备用链字段） */
   bulkApplySkillModelConfig: async (data: {
     skillIds: string[];
     endpoint?: string;
@@ -1352,16 +1374,10 @@ export const adminSkillsApi = {
     model?: string;
     tier?: string;
     paramOverrides?: Record<string, number> | null;
-    fallbackChain?: string[] | null;
     /** 只清空模型覆盖（改为跟随平台默认），其余字段保持不变；与套用字段互斥 */
     clearModel?: boolean;
   }) => {
     return adminAxios.post('/admin/skill-model-configs/bulk-apply', data);
-  },
-
-  /** 通道能力探测：返回该 endpoint+key 下可用的模型列表 */
-  probeSkillChannel: async (skillId: string) => {
-    return adminAxios.post(`/admin/skill-model-configs/${encodeURIComponent(skillId)}/probe`);
   },
 
   deleteSkillModelConfig: async (skillId: string) => {
@@ -1372,17 +1388,15 @@ export const adminSkillsApi = {
     return adminAxios.post(`/admin/skills/${encodeURIComponent(skillId)}/test`, input);
   },
 
-  /** 模型延迟探测：不对 handler 全量试跑，直发上游看指定思考档的真实延迟/JSON/token */
-  modelProbe: async (skillId: string, data: {
-    thinkingMode?: string;
-    reasoningEffort?: string;
-    testInput?: string;
-    timeoutMs?: number;
-  }) => {
-    // 后端探测默认超时 180s（可到数分钟）；不能吃 adminAxios 的 30s 默认值，
-    // 否则前端先报「请求超时」，UI 承诺的「最长 180s」永远等不到
-    return adminAxios.post(`/admin/skills/${encodeURIComponent(skillId)}/model-probe`, data, { timeout: AI_REQUEST_TIMEOUT });
+  /** 试跑页「填入示例输入」：取该 Skill 最近一次成功真实调用的载荷（无则 data=null，前端用契约骨架兜底） */
+  getSampleInput: async (skillId: string) => {
+    return adminAxios.get(`/admin/skills/${encodeURIComponent(skillId)}/sample-input`);
   },
+
+  /* 2026-11-04：`probeSkillChannel` 与 `modelProbe` 一并撤除——前者指向的
+     /skill-model-configs/:id/probe 路由本就不存在（兜底链校验删掉后更无出处），
+     后者是 Skill 运行时页「模型测试」的唯一调用方，而那块已从该页撑出去
+     （连通性测试在平台「模型与接入」页每个模型上都有）。 */
 
   getEffectiveSkillPrompt: async (skillId: string) => {
     return adminAxios.get(`/admin/skills/${encodeURIComponent(skillId)}/effective-prompt`);
@@ -1823,6 +1837,15 @@ export const adminVirtualLearnersApi = {
   /** A3 批量删除虚拟学习者：级联删除 profile + 全部虚拟数据 */
   batchDeleteVirtualLearners: async (profileIds: string[]) => {
     return adminAxios.post('/admin/virtual-learners/batch-delete', { profileIds });
+  },
+
+  /**
+   * 按创建时间清理的候选清单（2026-11-09 改服务端全量）：
+   * 年龄 > keepDays 且当前没有在推进的会话的实例全集；`exempt.running` / `exempt.withinKeepWindow`
+   * 由服务端按实例总数算出（此前前端只算当前载入页，超过一页的实例被静默漏删）。
+   */
+  getVirtualLearnerCleanupCandidates: async (params: { keepDays: number }) => {
+    return adminAxios.get('/admin/virtual-learners/cleanup/candidates', { params });
   },
 
   /** 学习者卡库：校验卡文档（不落库，返回逐卡 errors/warnings） */
@@ -2345,6 +2368,9 @@ export interface LearningPathRow {
   estimatedHours: number | null;
   totalMilestones: number;
   completedMilestones: number;
+  /** 子任务口径进度（2026-10-31 外部评审 P1-2）：与学员概览/座舱 Path 步点同源；旧部署缺省回退里程碑口径 */
+  totalTasks?: number;
+  completedTasks?: number;
   aiGenerated: boolean;
   createdAt: string;
   updatedAt: string;

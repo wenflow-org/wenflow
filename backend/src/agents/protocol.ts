@@ -282,10 +282,29 @@ export interface AgentDefinition {
   // 能力描述
   capabilities: string[];
   
-  // 订阅的事件类型
+  /**
+   * 声明「本 Agent 关心哪些事件」。
+   *
+   * **文档性元数据，不参与运行时分发**：全仓没有任何调度器读取本字段做事件派发，
+   * 它只被序列化进 `agent_registrations` 表（gateway/registries/agent-registry.ts）供人工查阅。
+   * 请勿据此推断真实订阅关系。
+   *
+   * 真实的事件消费接线是显式注册的 durable outbox consumer，见
+   * `backend/src/bootstrap/schedulers.ts`。可分发的事件类型**只有**
+   * `backend/src/events/contracts.ts` 的 `DurableEventType`：
+   * goal:understanding:updated / task:completed / lesson:completed /
+   * path:created / path:generated / path:adjusted / path:completed / review:completed。
+   * 本字段里出现的其它事件名均为描述性说明，不代表运行时会收到该事件。
+   */
   subscribes: string[];
-  
-  // 发布的事件类型
+
+  /**
+   * 声明「本 Agent 会产生哪些事件」。
+   *
+   * **同样是文档性元数据，不参与运行时发布**：全仓没有任何 emit 点读取本字段，
+   * Agent 执行体也不会据此发出事件。真实产生的事件**只有** `DurableEventType`，
+   * 且由具体服务经 outbox 发出，与本字段无关。字段内其它名称仅为描述性说明。
+   */
   publishes: string[];
   
   // 输入 Schema

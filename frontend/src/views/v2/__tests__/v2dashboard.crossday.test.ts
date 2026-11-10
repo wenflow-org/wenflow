@@ -73,12 +73,12 @@ async function openMonth(w: Awaited<ReturnType<typeof mountDash>>) {
   expect(toggle, '没找到「展开整月」开关').toBeTruthy();
   await toggle!.trigger('click');
   await flushPromises();
-  return w.find('.month-summary');
+  return w.find('.cal__sum');
 }
 
 /** 周条 7 格的分钟文本（周一→周日） */
 const weekCells = (w: Awaited<ReturnType<typeof mountDash>>) =>
-  w.findAll('.week__grid .day .day__min').map((e) => e.text());
+  w.findAll('.cal__grid:not(.cal__grid--month) .cal__min').map((e) => e.text());
 
 beforeEach(() => {
   setActivePinia(createPinia());
@@ -100,7 +100,7 @@ describe('跨周边界：本周条只含本周一~周日', () => {
     expect(cells).toHaveLength(7);
     expect(cells[0]).toBe('25分'); // 周一
     expect(cells[6]).toBe('—'); // 上周日不在本行
-    expect(w.find('.month-summary').exists()).toBe(false);
+    expect(w.find('.cal__sum').exists()).toBe(false);
     // 本周合计 = 25（上周日的 40 不算进来）
     expect(w.text()).toContain('本周 25 分钟');
   });
@@ -135,8 +135,8 @@ describe('跨周边界：本周条只含本周一~周日', () => {
     freezeAt(2026, 10, 5, 12); // 周一中午
     const w = await mountDash([session('dawn', at(2026, 10, 5, 0, 30), 20)]);
     expect(weekCells(w)[0]).toBe('20分'); // 周一凌晨 → 周一格
-    expect(w.find('.day--today').exists()).toBe(true);
-    expect(w.find('.day--today').find('.day__min').text()).toBe('20分');
+    expect(w.find('.cal__cell--today').exists()).toBe(true);
+    expect(w.find('.cal__cell--today').find('.cal__min').text()).toBe('20分');
   });
 });
 
@@ -148,7 +148,7 @@ describe('跨月边界：本月摘要只含当前自然月', () => {
       session('nov', at(2026, 11, 1, 10), 25), // 本月今天
     ]);
     const summary = await openMonth(w);
-    expect(summary.text()).toContain('本月节奏：25 分钟');
+    expect(summary.text()).toContain('本月 25 分钟');
     expect(summary.text()).toContain('1 天有学习');
     expect(summary.text()).toContain('1 次');
   });
@@ -161,7 +161,7 @@ describe('跨月边界：本月摘要只含当前自然月', () => {
       session('c', at(2026, 10, 7, 20), 10),
     ]);
     const summary = await openMonth(w);
-    expect(summary.text()).toContain('本月节奏：45 分钟');
+    expect(summary.text()).toContain('本月 45 分钟');
     expect(summary.text()).toContain('1 天有学习');
     expect(summary.text()).toContain('3 次');
   });
@@ -173,7 +173,7 @@ describe('跨月边界：本月摘要只含当前自然月', () => {
       session('d2', at(2026, 11, 1, 10), 30),
     ]);
     const summary = await openMonth(w);
-    expect(summary.text()).toContain('本月节奏：30 分钟');
+    expect(summary.text()).toContain('本月 30 分钟');
     expect(summary.text()).toContain('1 天有学习');
     // 连续天数从今天（11/1）往前数：今天 + 昨天 = 2（连续天数唯一出处：问候栏药丸）
     expect(w.find('.streak').text()).toContain('连续 2 天');
@@ -187,7 +187,7 @@ describe('跨月边界：本月摘要只含当前自然月', () => {
     ]);
     const summary = await openMonth(w);
     // 3 月只有 3/1 这一天
-    expect(summary.text()).toContain('本月节奏：25 分钟');
+    expect(summary.text()).toContain('本月 25 分钟');
     expect(summary.text()).toContain('1 天有学习');
   });
 

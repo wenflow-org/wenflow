@@ -45,6 +45,24 @@ function templateNodesWithClass(root: TplNode, cls: string): TplNode[] {
   return found;
 }
 
+function mediaBlockByMarker(marker: string): string {
+  const start = source.indexOf(marker);
+  expect(start, `文件里没有 ${marker}`).toBeGreaterThan(-1);
+  let depth = 0;
+  for (let i = source.indexOf('{', start); i < source.length; i += 1) {
+    if (source[i] === '{') depth += 1;
+    else if (source[i] === '}') {
+      depth -= 1;
+      if (depth === 0) return source.slice(start, i + 1);
+    }
+  }
+  throw new Error(`${marker} 不闭合`);
+}
+
+function wideBlock(): string {
+  return mediaBlockByMarker('@media (min-width: 1101px) {');
+}
+
 function mobileBlock(): string {
   const marker = '@media (max-width: 1100px) {';
   const start = source.indexOf(marker);
@@ -90,30 +108,20 @@ const px = (v: string | null): number | null => {
   return m ? Number(m[1]) : null;
 };
 
-/** 左右 padding（`a` / `a b` / `a b c` / `a b c d`） */
-function horizontalPadding(rule: string): { l: number; r: number } | null {
-  const v = decl(rule, 'padding');
-  if (!v) return null;
-  const n = v.split(/\s+/).map(px);
-  if (n.some((x) => x === null)) return null;
-  const a = n as number[];
-  if (a.length === 1) return { l: a[0], r: a[0] };
-  if (a.length === 2) return { l: a[1], r: a[1] };
-  if (a.length === 3) return { l: a[1], r: a[1] };
-  return { l: a[3], r: a[1] };
-}
-
 describe('输入区底部提示条：只放元数据，不放动作', () => {
   const { descriptor, errors } = parse(source);
   const root = descriptor.template?.ast as unknown as TplNode | undefined;
 
-  it('两处提示条里都没有按钮或链接（动作不再混进元数据行）', () => {
+  it('提示条里都没有按钮或链接（动作不再混进元数据行）', () => {
     expect(errors).toEqual([]);
     expect(root, '模板 AST 解析失败').toBeTruthy();
+    /* 2026-11-06 走查：会话态元数据并入 .chat__under-hint（输入框正下方），提示条只剩入口态一处 */
     const hints = templateNodesWithClass(root as TplNode, 'composer__hint');
-    expect(hints.length, '模板里 .composer__hint 应有两处（入口态 + 会话态）').toBe(2);
+    expect(hints.length, '模板里 .composer__hint 应只剩入口态一处').toBe(1);
+    const underHints = templateNodesWithClass(root as TplNode, 'chat__under-hint');
+    expect(underHints.length, '会话态元数据行应挂在输入框正下方').toBe(1);
     const interactive: string[] = [];
-    for (const hint of hints) {
+    for (const hint of [...hints, ...underHints]) {
       const walk = (n: TplNode) => {
         if (n.type === 1 && (n.tag === 'button' || n.tag === 'a' || n.tag === 'router-link')) {
           interactive.push(n.tag);
@@ -124,7 +132,7 @@ describe('输入区底部提示条：只放元数据，不放动作', () => {
     }
     expect(
       interactive,
-      `.composer__hint 里出现了 ${interactive.join(', ')}：它是元数据行，动作按钮会被读作被动状态文本`
+      `.提示条里出现了 ${interactive.join(', ')}：它是元数据行，动作按钮会被读作被动状态文本`
     ).toEqual([]);
   });
 
@@ -134,16 +142,11 @@ describe('输入区底部提示条：只放元数据，不放动作', () => {
     expect(source).not.toContain('function onNewGoalEvent');
   });
 
-  it('移动端提示条左右内缩 = .composer 左右内边距（默认 16），否则比输入框多探出去', () => {
+  it('移动端 hint dock 整套退役（2026-11-06）：绝对定位缝不再存在', () => {
     const block = mobileBlock();
-    const hint = ruleOf(block, '.composer__hint');
-    const composer = ruleOf(block, '.chat > .composer');
-    const hintPad = horizontalPadding(hint);
-    const composerPad = horizontalPadding(composer);
-    expect(hintPad, '.composer__hint 没读到 padding').toBeTruthy();
-    expect(composerPad, '.chat > .composer 没读到 padding').toBeTruthy();
-    expect(decl(hint, 'left'), '未显式写 left，绝对定位会落到 composer 的 padding box 边缘（多探出 16px）').toBe(`${composerPad!.l}px`);
-    expect(decl(hint, 'right')).toBe(`${composerPad!.r}px`);
+    expect(block, '移动端媒体块里不该再有 hint 规则（主元数据行已并入 under-hint）').not.toContain('.composer__hint');
+    expect(source).not.toContain('composer__hint-right');
+    expect(source, 'under-hint 基础档应隐藏（移动端位置被底部导航接管），PC 档规则在 ≥1101 块里').toContain('.chat__under-hint { display: none; }');
   });
 
   it('两级 min-width:0 都在（缺一级就压不回列宽）', () => {
@@ -152,26 +155,29 @@ describe('输入区底部提示条：只放元数据，不放动作', () => {
   });
 
   it('提示条文本不低于 12px（mobile:spec 的 fonts 口径）', () => {
-    for (const sel of ['.composer__hint', '.composer__count']) {
-      const size = px(decl(ruleOf(source, sel), 'font-size'));
-      expect(size, `${sel} 没读到 font-size`).not.toBeNull();
-      expect(size!, `${sel} 字号 ${size} < 12，会破 fonts 门禁`).toBeGreaterThanOrEqual(12);
+    const sizes = [
+      decl(ruleOf(source, '.composer__hint'), 'font-size'),
+      decl(ruleOf(source, '.composer__count'), 'font-size'),
+      decl(ruleOf(wideBlock(), '.chat__under-hint'), 'font-size'),
+    ];
+    for (const raw of sizes) {
+      const size = px(raw);
+      expect(size, `提示条没读到 font-size`).not.toBeNull();
+      expect(size!, `提示条字号 ${size} < 12，会破 fonts 门禁`).toBeGreaterThanOrEqual(12);
     }
   });
 
-  it('计数贴输入框左缘、AI 声明贴右缘（各锚住那条列宽的一端）', () => {
-    const block = mobileBlock();
-    const cluster = ruleOf(block, '.composer__hint-right');
-    // 簇必须撑满列宽，否则没有可分配的空隙，两端锚不住
-    expect(decl(cluster, 'width'), '簇没撑满列宽，两端分布无从谈起').toBe('100%');
-    // 计数靠 margin-right:auto 顶到左端，声明留在 flex-end 的右端
-    expect(
-      decl(ruleOf(block, '.composer__count'), 'margin-right'),
-      '计数没顶到左端：会被 226px 的声明推离输入框左缘（390 实测曾落在 x=81）'
-    ).toBe('auto');
-    expect(
-      decl(cluster, 'justify-content'),
-      '簇不能用 space-between：≤360 计数隐藏后只剩声明一项，会被丢到左端'
-    ).toBe('flex-end');
+  it('under-hint：AI 声明与快捷键同行居中，仅 PC 档显示（≥3500 计数同源）', () => {
+    /* 2026-11-06 走查：免责行从对话流顶部挪到输入框正下方，与快捷键合并单行浅灰小字 */
+    const wide = wideBlock();
+    const under = ruleOf(wide, '.chat__under-hint');
+    expect(decl(under, 'justify-content')).toBe('center');
+    expect(px(decl(under, 'font-size'))).toBeGreaterThanOrEqual(12);
+    expect(source).toContain('<AiContentNote />');
+    expect(source).toContain('SEND_SHORTCUT_HINT');
+    expect(source).toContain('input.length >= 3500');
+    /* 对话流顶部的免责行整体退役（2026-11-06 二次走查：移动端黑洞+免责行头顶）——
+       全断面声明唯一出口 = under-hint */
+    expect(source).not.toContain('chat__ai-note');
   });
 });

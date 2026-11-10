@@ -58,10 +58,22 @@ describe('deriveVsLifecycleStateFromRuns（画像级聚合）', () => {
   it('无记录 → idle', () => {
     expect(deriveVsLifecycleStateFromRuns([])).toBe('idle')
   })
-  it('有暂停中的活跃会话 → paused（优先于其它活跃会话）', () => {
+  it('有会话在推进 → running（取最活跃的一条，与列表页同源）', () => {
+    /* 2026-11-08 审计：此前断言 paused 优先于其它活跃会话，与列表页 runPhaseOf（running 优先）、
+       后端 classifySessionRunPhase 的分类、以及本函数注释「多会话取最活跃的一条」三处都反向——
+       同一个学习者「1 条在推进 + 1 条被冻结」在列表读「进行中」、点进详情读「已暂停」。 */
     expect(deriveVsLifecycleStateFromRuns([
       run({ result: 'running', tone: 'warn' }),
       run({ result: 'running', tone: 'warn', paused: true })
+    ])).toBe('running')
+  })
+  it('在跑的会话全被冻结 → paused（单会话语义不变）', () => {
+    expect(deriveVsLifecycleStateFromRuns([
+      run({ result: 'running', tone: 'warn', paused: true })
+    ])).toBe('paused')
+    expect(deriveVsLifecycleStateFromRuns([
+      run({ result: 'running', tone: 'warn', paused: true }),
+      run({ result: 'created', tone: 'warn', paused: true })
     ])).toBe('paused')
   })
   it('活跃会话优先于历史终态（最近在跑就是 running，不看旧失败）', () => {

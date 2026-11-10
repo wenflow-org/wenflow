@@ -1,27 +1,42 @@
 /**
  * Adaptive Guidance Copy Skill
  *
- * 根据学习者状态、路径上下文和课后结果，生成面向 Dashboard / Path 页面
- * 的动态引导文案块。
+ * 根据学习者状态、路径上下文和课后结果，生成 dashboard / learning-state 页面的
+ * 动态引导文案块。每个视图由各自的调用方以真实 view 调用本 skill（dashboard 走事件驱动快照、
+ * learning-state 走页面按需生成），提示词里有各视图专属规则——不存在跨视图借用文案的路径（#187）。
  */
 
 import { SkillDefinition, SkillExecutionResult } from '../protocol';
 import { callPrompt } from '../../composers/prompt-composer';
 import { JSON_OUTPUT_RETRY_STRATEGY } from '../json-output-retry';
 import { loadPromptFile } from '../../composers/prompt-files/loader';
+import type { GuidanceView } from './views';
+import { GUIDANCE_VIEWS, isGuidanceView } from './views';
+
+export { GUIDANCE_VIEWS, isGuidanceView } from './views';
+export type { GuidanceView } from './views';
 
 export const adaptiveGuidanceCopyDefinition: SkillDefinition = {
   name: 'adaptive-guidance-copy',
   displayName: '动态引导文案生成器',
   version: '1.0.0',
   category: 'generation',
-  description: '根据学习者状态与路径上下文生成 Dashboard / Path 页面引导文案',
+  description: '根据学习者状态与路径上下文生成 Dashboard / learning-state 页面引导文案',
   status: 'working',
 
   inputSchema: {
     type: 'object',
     properties: {
-      view: { type: 'string', description: '页面类型：dashboard|path-list|path-detail|learning-state', required: true },
+      // 契约收口（#187）：两个视图由各自的调用方以真实 view 调用同一个 skill——
+      // dashboard（DashboardGuidanceSnapshotService）与 learning-state（LearningStateGuidanceService）
+      // 各按本视图口径生成，不存在「复用另一视图文案」的路径；path-list/path-detail 无调用方、
+      // 也不在任何声明里登记，路由直接 400（view 集合唯一真源见 ./views.ts）
+      view: {
+        type: 'string',
+        description: '页面类型：dashboard|learning-state',
+        enum: [...GUIDANCE_VIEWS],
+        required: true,
+      },
       learnerSnapshot: { type: 'object', description: '学习者快照', required: true },
       learningState: { type: 'object', description: '学习状态', required: true },
       path: { type: 'object', description: '路径上下文' },
@@ -44,7 +59,7 @@ export const adaptiveGuidanceCopyDefinition: SkillDefinition = {
     }
   },
 
-  capabilities: ['adaptive-copy', 'dashboard-copy', 'path-copy', 'learning-guidance'],
+  capabilities: ['adaptive-copy', 'dashboard-copy', 'learning-guidance'],
 
   stats: {
     callCount: 0,
@@ -54,7 +69,8 @@ export const adaptiveGuidanceCopyDefinition: SkillDefinition = {
 };
 
 export interface AdaptiveGuidanceCopyInput {
-  view: 'dashboard' | 'path-list' | 'path-detail' | 'learning-state';
+  /** 展示位置；取值集合唯一真源见 ./views.ts（当前 dashboard / learning-state） */
+  view: GuidanceView;
   learnerSnapshot: any;
   learningState: any;
   path?: any;
@@ -118,50 +134,46 @@ function buildPrompt(input: AdaptiveGuidanceCopyInput): string {
   return JSON.stringify(ordered, null, 2);
 }
 
-// 2026-09-27 导出：learning-state 引导改为复用 dashboard 快照，快照缺失时
-// 直接用本构造器出静态文案兜底（不再为兜底单独跑一次 LLM）
+// 静态兜底构造器：模型链路失败时按**入参 view** 出本视图口径的文案（两个视图各有自己的分支）。
+// #187 之前 learning-state 页的 copy 是 dashboard 快照借来的——本构造器的 learning-state 分支
+// 因此长期只被"快照缺失"这一条极窄路径命中。现在 learning-state 由调用方按本视图生成/兜底。
 export function buildFallback(input: AdaptiveGuidanceCopyInput): AdaptiveGuidanceCopyOutput {
+  // 运行时兜底：view 是调用方直供的字符串，未登记视图按 dashboard 口径出文案（正常路径不会走到，
+  // 路由与调用方都只发 GUIDANCE_VIEWS 里的值）
+  const view: GuidanceView = isGuidanceView(input.view) ? input.view : 'dashboard';
   const name = safeText(input.learnerSnapshot?.profile?.name) || '同学';
   const recentTrend = safeText(input.learnerSnapshot?.dynamicState?.recentTrend) || 'stable';
   const pace = safeText(input.learnerSnapshot?.dynamicState?.recommendedPacing) || 'moderate';
   const pathTitle = safeText(input.path?.title || input.path?.name) || '学习路径';
 
-  const headlineMap: Record<string, string> = {
+  const headlineMap: Record<GuidanceView, string> = {
     dashboard: `欢迎回来，${name}`,
-    'path-list': `先选一条最值得继续的路径`,
-    'path-detail': `继续推进「${pathTitle}」`,
     'learning-state': `先看清当前状态，再决定下一步`,
   };
 
-  const subtitleMap: Record<string, string> = {
+  const subtitleMap: Record<GuidanceView, string> = {
     dashboard: recentTrend === 'declining' ? '先稳住节奏，再继续推进。' : '从上次停下的位置接上学习。',
-    'path-list': '优先完成一个最关键的小任务，不要同时展开太多分支。',
-    'path-detail': '把当前阶段的核心概念做稳，再决定是否扩展更多内容。',
     'learning-state': recentTrend === 'declining'
       ? '最近状态有些下滑，先判断是疲劳、卡点，还是任务粒度偏大。'
       : '结合最近趋势看节奏、负荷和掌握情况，再决定继续推进还是先调整。',
   };
 
-  const todayActions = input.view === 'dashboard'
+  const todayActions = view === 'dashboard'
     ? [
         { title: '继续上次学习', desc: '从当前任务接着推进。', action: '继续学习', to: 'continue-learning' },
         { title: '查看学习状态', desc: '看看当前节奏和负荷。', action: '查看状态', to: 'learning-state' },
       ]
-    : input.view === 'learning-state'
-      ? [
-          { title: '查看当前路径', desc: '回到当前任务，确认状态影响的是哪一步。', action: '查看路径', to: 'path-detail' },
-          { title: '继续学习', desc: '如果状态稳定，就继续完成当前最小任务。', action: '继续学习', to: 'continue-learning' },
-          { title: '回看学习台', desc: '从总览页面看今天建议和节奏提示。', action: '回到学习台', to: 'continue-learning' },
-        ]
     : [
-        { title: '先完成当前阶段', desc: '优先把本阶段最关键的一件事做完。', action: '查看路径', to: 'path-detail' },
+        { title: '查看当前路径', desc: '回到当前任务，确认状态影响的是哪一步。', action: '查看路径', to: 'path-detail' },
+        { title: '继续学习', desc: '如果状态稳定，就继续完成当前最小任务。', action: '继续学习', to: 'continue-learning' },
+        { title: '回看学习台', desc: '从总览页面看今天建议和节奏提示。', action: '回到学习台', to: 'continue-learning' },
       ];
 
   return {
-    headline: headlineMap[input.view],
-    subtitle: subtitleMap[input.view],
+    headline: headlineMap[view],
+    subtitle: subtitleMap[view],
     todayActions,
-    pathHint: input.view === 'learning-state' ? `先结合当前路径「${pathTitle}」判断状态来源。` : `当前围绕「${pathTitle}」推进。`,
+    pathHint: view === 'learning-state' ? `先结合当前路径「${pathTitle}」判断状态来源。` : `当前围绕「${pathTitle}」推进。`,
     nextStep: pace === 'slow' ? '先把内容压小一点，稳定推进。' : '继续沿着当前焦点往前走。',
     paceHint: pace === 'slow' ? '当前建议放慢节奏，优先消化当前内容。' : '当前节奏正常，可以继续推进。',
     emptyStateCopy: '先从一个具体目标开始，系统会帮你生成下一步。',
@@ -175,20 +187,39 @@ function normalizeAdaptiveOutput(parsed: any, input: AdaptiveGuidanceCopyInput):
   return {
     headline: safeText(obj.headline) || fallback.headline,
     subtitle: safeText(obj.subtitle) || fallback.subtitle,
-    todayActions: Array.isArray(obj.todayActions)
-      ? obj.todayActions.slice(0, 3).map((item: any) => ({
-          title: safeText(item?.title) || '继续学习',
-          desc: safeText(item?.desc) || '',
-          action: safeText(item?.action) || '继续',
-          to: safeText(item?.to) || undefined,
-        }))
-      : fallback.todayActions,
+    todayActions: normalizeTodayActions(obj.todayActions, input, fallback.todayActions),
     pathHint: safeText(obj.pathHint) || fallback.pathHint,
     nextStep: safeText(obj.nextStep) || fallback.nextStep,
     paceHint: safeText(obj.paceHint) || fallback.paceHint,
     emptyStateCopy: safeText(obj.emptyStateCopy) || fallback.emptyStateCopy,
     warningCopy: safeText(obj.warningCopy) || fallback.warningCopy,
   };
+}
+
+/**
+ * todayActions 归一化 + 视图契约兜底（#187）。
+ *
+ * learning-state 页上的 `to: 'learning-state'` 是指向**本页自身**的深链（dashboard 口径的
+ * 「查看学习状态」搬到本页就是这个形状）。消费方（V2LearningState.vue）只能把它过滤掉，
+ * 过滤后若列表为空就等于"建议突然消失"。这里在生成侧就裁掉自指动作，剩余为空时回落
+ * 本视图的兜底动作——让"本页不给自己指路"成为可测的输出契约，而不只是提示词里的一句话。
+ */
+function normalizeTodayActions(
+  items: any,
+  input: AdaptiveGuidanceCopyInput,
+  fallbackActions: AdaptiveGuidanceCopyOutput['todayActions']
+): AdaptiveGuidanceCopyOutput['todayActions'] {
+  if (!Array.isArray(items)) return fallbackActions;
+  const mapped = items.slice(0, 3).map((item: any) => ({
+    title: safeText(item?.title) || '继续学习',
+    desc: safeText(item?.desc) || '',
+    action: safeText(item?.action) || '继续',
+    to: safeText(item?.to) || undefined,
+  }));
+  const usable = input.view === 'learning-state'
+    ? mapped.filter((item) => item.to !== 'learning-state')
+    : mapped;
+  return usable.length > 0 ? usable : fallbackActions;
 }
 
 export async function adaptiveGuidanceCopy(

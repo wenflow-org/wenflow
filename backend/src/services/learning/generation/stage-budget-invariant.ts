@@ -96,12 +96,16 @@ export function auditStageBudget(input: StageBudgetInvariantInput): StageBudgetI
   }
 
   if (multiStage && totalStageHours > 0 && upstream !== null && upstream > 0) {
-    // 阶段汇总与路径总量应一致（阶段回写后 pathEstimatedHours 即汇总）；差 >5% 说明有阶段没写回
-    const drift = Math.abs(totalStageHours - upstream) / upstream;
-    if (drift > 0.05) {
+    // 2026-11-02 口径翻转：upstream（objectiveScopeHours / targetTotalHours）是**估算上限**，
+    // 阶段合计**低于**总量不再是缺陷——低于就等于内容确实只有这么多，是诚实而非漏写
+    //（实测同一路径从 13.9h 降到 11.9h，阶段按内容权重 3.2/3.3/3.5/2.0 而非等分）。
+    // 只有**超出**上游才是真不一致（阶段回写给总量注了水）。等分/复制两个退化形态由上面
+    // `all_stages_identical` 与 `stage_equals_upstream` 两条独立判据覆盖。
+    const overrun = (totalStageHours - upstream) / upstream;
+    if (overrun > 0.05) {
       violations.push({
         kind: 'stage_sum_mismatch',
-        detail: `阶段合计 ${totalStageHours}h 与总量 ${upstream}h 差 ${Math.round(drift * 100)}%（>5%）`,
+        detail: `阶段合计 ${totalStageHours}h 超出总量 ${upstream}h ${Math.round(overrun * 100)}%（>5%）`,
       });
     }
   }

@@ -1,14 +1,14 @@
 // 对话式学习目标收集服务 - 问题穿透模式 V2
 // 核心理念：穿透表象，找到真问题，渐进式收集信息
+import { createHash } from 'crypto';
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import { withTransaction } from '../../utils/with-transaction';
 import { executeSkill } from '../../skills';
 import { goalConversationAgentDefinition } from '../../skills/goal-conversation';
-import { collectGoalUploadedMaterialSummaries } from './goal-material-summaries.service';
+import { collectGoalUploadedMaterialSummaries, clearGoalMaterialRankCache } from './goal-material-summaries.service';
 import pathOrchestrator, { GoalPathRequest } from '../../coordinators/path.coordinator';
 import { buildGoalPathVisibleSummary } from './goal-path-visible-summary';
-import { normalizeDeadlineDate } from './deadline-date';
 import { derivePlannedOutline, deriveTriageHint, type LearnerLoadProfile, type TriageHint } from './path-planning-hints';
 import {
   normalizeLearnerLoadProfile,
@@ -16,8 +16,12 @@ import {
   resolvePrerequisiteCheckResultsFromUnderstanding,
 } from './learner-load-profile';
 import { selectGoalHistory, RECENT_CONTEXT_LIMIT } from './goal-conversation.context';
-import { isProposalConfirmationText, isExplicitRefusalText } from './goal-conversation.confirm-text';
+import { adjudicateGoalConfirm } from '../../skills/goal-confirm-adjudicator';
+import { hasConfirmableProposal } from './goal-proposal-guard';
+import { mergeProbeAnswersIntoUnderstanding, normalizeProbeAnswerInput } from './goal-probe-answers';
 import { applyConversationLifecycle, type ConversationLifecycleDb } from './goal-conversation.lifecycle';
+// stage 权威源收口（172-1）：读只认持久化值，降级时三处副本同步（见模块头）
+import { resolveAuthoritativeGoalStage, syncDegradedGoalStage } from './goal-conversation.stage-authority';
 import systemPrisma from '../../config/system-database';
 import {
   DEFAULT_RESPONSE_TRIAGE_ENFORCEMENT,
@@ -33,7 +37,9 @@ import {
   type ResponseTriageEnforcementMode,
 } from './response-triage';
 import { assembleGoalHandoff } from '../../services/field-dispatcher';
-import { buildCompletedConversationResult, buildHardBlockResult } from './goal-conversation.exit';
+import { buildCompletedConversationResult, buildHardBlockMessage, buildHardBlockResult, PATH_COMPLETED_USER_VISIBLE, PATH_GENERATING_USER_VISIBLE, resolveConversationUserVisible, resolvePathCompletionUserVisible } from './goal-conversation.exit';
+import { getPathCompletionProjection } from './goal-conversation.path-projection';
+import { buildGoalConversationExt } from './goal-conversation.ext';
 import learningService from './learning.service';
 import { bindGeneratingPath, kickPathGeneration, rejudgeHardBlockedCompletion, type GoalConversationRejudgeDeps } from './goal-conversation-rejudge';
 import { createDomainEvent } from '../../events/contracts';
@@ -54,70 +60,13 @@ interface GoalConversationOptions {
    * 真实用户不传 ⇒ 不落库、不参与体量推导（行为与今天完全一致）。
    */
   learnerLoadProfile?: LearnerLoadProfile | null;
-}
-
-interface GoalNormalizedStateV1 {
-  version: '1.0';
-  learnerIntent: {
-    surfaceGoal: string | null;
-    realProblem: string | null;
-    motivation: string | null;
-  };
-  baseline: {
-    currentLevel: string | null;
-    priorKnowledgeStructure: string | null;
-  };
-  constraints: {
-    availableTime: string | null;
-    deadlineText: string | null;
-    /** P0.1（TIME-TRUST-SCHEME-20261001）：模型解析的外部截止绝对日期（YYYY-MM-DD），可空 */
-    deadlineDate: string | null;
-  };
-  successCriteria: {
-    observableResult: string | null;
-    acceptanceCheck: string | null;
-  };
-  proposal: {
-    learningDirection: string | null;
-    firstDeliverable: string | null;
-  };
-}
-
-function buildGoalNormalizedState(data: any): GoalNormalizedStateV1 {
-  const understanding = data?.understanding || {};
-  const confirmedProposal = data?.confirmedProposal || {};
-  return {
-    version: '1.0',
-    learnerIntent: {
-      surfaceGoal: typeof understanding?.surface_goal === 'string' ? understanding.surface_goal : null,
-      realProblem: typeof understanding?.real_problem === 'string' ? understanding.real_problem : null,
-      motivation: typeof understanding?.motivation === 'string' ? understanding.motivation : null,
-    },
-    baseline: {
-      currentLevel: typeof understanding?.background?.current_level === 'string' ? understanding.background.current_level : null,
-      priorKnowledgeStructure: typeof understanding?.cognitive_profile?.prior_knowledge_structure === 'string'
-        ? understanding.cognitive_profile.prior_knowledge_structure
-        : null,
-    },
-    constraints: {
-      availableTime: typeof understanding?.background?.available_time === 'string' ? understanding.background.available_time : null,
-      deadlineText: typeof understanding?.deadline_text === 'string' ? understanding.deadline_text : null,
-      deadlineDate: normalizeDeadlineDate(understanding?.deadline_date)
-        ?? normalizeDeadlineDate(understanding?.time_dimensions?.deadlineDate),
-    },
-    successCriteria: {
-      observableResult: typeof understanding?.success_criteria?.observable_result === 'string'
-        ? understanding.success_criteria.observable_result
-        : null,
-      acceptanceCheck: typeof understanding?.success_criteria?.acceptance_check === 'string'
-        ? understanding.success_criteria.acceptance_check
-        : null,
-    },
-    proposal: {
-      learningDirection: typeof confirmedProposal?.learning_direction === 'string' ? confirmedProposal.learning_direction : null,
-      firstDeliverable: typeof confirmedProposal?.first_deliverable === 'string' ? confirmedProposal.first_deliverable : null,
-    },
-  };
+  /**
+   * 前置自测作答（2026-11-02 业务口径梳理）：面板内本地作答、随「确认」一次性提交。
+   * 服务端按 `confirmedProposal.prerequisiteDiagnostics[].correctOption` 确定性判分，
+   * 合并进 `understanding.prerequisiteCheckResults`（不再让模型逐题读对话消息回填）。
+   * 入参是请求原始形态，逐项校验见 goal-probe-answers.normalizeProbeAnswerInput。
+   */
+  probeAnswers?: unknown[];
 }
 
 /**
@@ -212,9 +161,6 @@ class GoalConversationService {
     return /(不过|但是|但我|但还是|我担心|还是担心|还有个问题|还有一个问题|我还想问|我还想补充|能先说一下|能不能先说一下|具体怎么|要是|如果到时候|万一)/.test(text || '');
   }
 
-
-
-
   private static readonly GOAL_STAGES = ['understanding', 'proposing', 'ready', 'completed'] as const;
 
   private getCore(internal: any): { stage: string; confidence: number; isCompleted: boolean; conversationId?: string | null; learningPath?: any } {
@@ -296,7 +242,8 @@ class GoalConversationService {
 
     if (next) {
       return {
-        stage: next.stage || data?.stage || fallbackStage || 'understanding',
+        // 172-1：stage 只认持久化权威源；runtimeNextState.stage 是模型自报值副本，不能反向覆盖降级结果
+        stage: resolveAuthoritativeGoalStage(data, fallbackStage),
         confidence: typeof next.confidence === 'number' ? next.confidence : (typeof data?.confidence === 'number' ? data.confidence : 0),
         understanding: next.understanding || data?.understanding || {},
         collected: next.collected || data?.collected || {},
@@ -351,13 +298,28 @@ class GoalConversationService {
 
   private toServiceResult(aiResponse: any, conversationId: string, overrides?: {
     stage?: string;
+    confidence?: number;
     isCompleted?: boolean;
     learningPath?: any;
     userVisible?: string;
+    /**
+     * 持久化快照回填（#159）：落库侧 updateCollectedData 是「字段缺席保留旧值」，
+     * 但响应侧此前只取本轮模型输出。模型某轮没再复述 confirmedProposal（delta 语义缺席=不变，
+     * 见 skill 层注释）时，响应会是 undefined 而 DB 仍有值 → 前端把 confirmedProposal 清空，
+     * proposing 阶段提案卡/确认入口消失。此处仅在字段真的缺席时用持久化值补齐。
+     */
+    fallbackGoalExt?: { confirmedProposal?: any; structuredData?: any; confidenceScores?: any } | null;
   }) {
     const stage = overrides?.stage || this.resolveStageFromResponse(aiResponse);
-    const confidence = this.resolveConfidenceFromResponse(aiResponse);
+    const confidence = typeof overrides?.confidence === 'number' ? overrides.confidence : this.resolveConfidenceFromResponse(aiResponse);
     const goalExt = this.getGoalExt(aiResponse?.internal);
+    const fallback = overrides?.fallbackGoalExt || null;
+    const resolvedGoalExt = {
+      ...goalExt,
+      confirmedProposal: goalExt.confirmedProposal !== undefined ? goalExt.confirmedProposal : (fallback?.confirmedProposal ?? undefined),
+      structuredData: goalExt.structuredData !== undefined ? goalExt.structuredData : (fallback?.structuredData ?? undefined),
+      confidenceScores: goalExt.confidenceScores !== undefined ? goalExt.confidenceScores : (fallback?.confidenceScores ?? undefined)
+    };
     return {
       userVisible: overrides?.userVisible ?? aiResponse?.userVisible ?? '',
       runtimeEnvelope: aiResponse?.runtimeEnvelope || null,
@@ -371,9 +333,9 @@ class GoalConversationService {
         },
         ext: {
           goalConversation: {
-            ...goalExt,
+            ...resolvedGoalExt,
             // 分诊结论（纯函数）：随结果透出，供虚拟会话遥测统计「分诊命中率」
-            responseTriage: triageGoalResponse(goalExt.understanding)
+            responseTriage: triageGoalResponse(resolvedGoalExt.understanding)
           }
         }
       }
@@ -420,21 +382,35 @@ class GoalConversationService {
       completedAt?: Date | null;
       learningPathId?: string | null;
       learningPath?: { id: string; status?: string } | null;
-      appendMessage?: { role: 'user' | 'ai'; content: string };
+      appendMessage?: { role: 'user' | 'ai'; content: string } | Array<{ role: 'user' | 'ai'; content: string }>;
       mutateCollectedData?: (data: Record<string, any>) => void;
       /** 传值 = revision 条件更新（CAS）；失配返回 false 且不写入（审计 §1.4） */
       expectedRevision?: number;
     } = {}
   ): Promise<boolean> {
-    return applyConversationLifecycle(
+    const result = await applyConversationLifecycle(
       prisma as unknown as ConversationLifecycleDb,
       conversationId,
       {
         ...options,
         stage,
-        sanitizeContent: (text: string) => this.sanitizeVisibleContent(text)
+        sanitizeContent: (text: string) => this.sanitizeVisibleContent(text),
+        // 回合级幂等标记（#160）清理收口：终局路径（proposing 确认 / 硬阻断 / gated）由
+        // appendMessage 落用户消息并直接收尾，不经过 updateCollectedData；标记若不在这些
+        // 路径一并清除，会永留在 collectedData 里，把后续「内容相同」的消息误判为重试而不追加。
+        // 只对「落用户消息的 lifecycle 写入」清（appendMessage.role === 'user' 即回合提交）；
+        // 否决计量 / ready 回落等中途 lifecycle 写入不清，避免打断失败回合的重试去重。
+        mutateCollectedData: (data: Record<string, any>) => {
+          const appended = options.appendMessage
+            ? (Array.isArray(options.appendMessage) ? options.appendMessage : [options.appendMessage])
+            : [];
+          if (appended.some((message) => message.role === 'user')) delete data.pendingUserTurn;
+          options.mutateCollectedData?.(data);
+        }
       }
     );
+    if (result && stage === 'completed') clearGoalMaterialRankCache(conversationId); // #176-4：会话收尾清排序缓存
+    return result;
   }
 
   /**
@@ -464,28 +440,33 @@ class GoalConversationService {
   private buildConfirmedResult(
     conversationId: string,
     data: Record<string, any>,
-    learningPath: { id: string; status?: string } | null
+    learningPath: { id: string; status?: string; lifecycle?: string | null } | null
   ) {
-    const generating = !learningPath || learningPath.status === 'generating';
+    // #228：与 GET 快照 / /reply 早退共用同一个分档函数（原先此处另写一份 status 判定）；
+    // 未绑路径时保持「正在生成」，绝不谎称已生成。
+    const userVisible = learningPath
+      ? resolvePathCompletionUserVisible({
+          lifecycle: learningPath.lifecycle,
+          status: learningPath.status,
+          readyText: PATH_COMPLETED_USER_VISIBLE,
+        })
+      : PATH_GENERATING_USER_VISIBLE;
     return {
-      userVisible: generating
-        ? '已收到确认，学习路径正在生成，通常 10-60 秒内完成，可前往“学习路径”查看进度。'
-        : '学习路径已经生成，可以去查看啦！',
+      userVisible,
       internal: {
         core: {
           conversationId,
           stage: 'completed',
           confidence: data.confidence || 0.9,
           isCompleted: true,
-          learningPath
+          // lifecycle 只是文案的输入，不进响应信封（保持既有 payload 形状）
+          learningPath: learningPath ? { id: learningPath.id, status: learningPath.status } : null
         },
         ext: {
-          goalConversation: {
-            understanding: data.understanding || {},
-            nextQuestions: [],
-            quickReplies: [],
-            collected: data.collected || {}
-          }
+          goalConversation: buildGoalConversationExt({
+            understanding: data.understanding,
+            collected: data.collected,
+          })
         }
       }
     };
@@ -496,12 +477,12 @@ class GoalConversationService {
     const latest = await prisma.goal_conversations.findUnique({ where: { id: conversationId } });
     const latestData = latest?.collectedData ? JSON.parse(latest.collectedData) : fallbackData;
     const winnerPath = latest?.learningPathId
-      ? await prisma.learning_paths.findFirst({ where: { id: latest.learningPathId } })
+      ? await getPathCompletionProjection(latest.learningPathId)
       : null;
     return this.buildConfirmedResult(
       conversationId,
       latestData,
-      winnerPath ? { id: winnerPath.id, status: winnerPath.status } : null
+      winnerPath ? { id: winnerPath.id, status: winnerPath.status, lifecycle: winnerPath.lifecycle } : null
     );
   }
 
@@ -560,13 +541,19 @@ class GoalConversationService {
         });
       }
 
+      // 本轮用户输入（目标）与 continueConversation 同口径（#160）：先落库再调模型。
+      // callAI 抛错时目标仍留在 collectedData.messages（description 列之外多一处痕迹），
+      // 重试时按 pendingUserTurn 幂等去重；callAI 侧剔除末尾同内容用户消息，避免重复喂入。
+      await this.saveMessage(conversation.id, 'user', initialGoal, null, { idempotentUserTurn: true });
+
       // 让AI生成第一个回复
-      const aiResponse = await this.callAI(conversation.id, initialGoal, true, userId, options);
+      const aiResponse = await this.callAI(conversation.id, initialGoal, true, userId, options, {
+        excludeTrailingUserInput: true
+      });
       const responseWithConversationId = this.withConversationId(aiResponse, conversation.id);
 
       if (!this.getStructuredOutputValid(aiResponse)) {
-        // 422 恢复信封前先持久化本轮用户消息，避免刷新恢复后上下文丢失（AI 回复不落库）
-        await this.saveMessage(conversation.id, 'user', initialGoal);
+        // 用户目标已落库（上方），AI 回复不落库 → 422 恢复信封刷新后对话上下文不丢
         logger.warn('开始对话结构化输出失败，状态未更新', {
           conversationId: conversation.id,
           userId,
@@ -575,8 +562,8 @@ class GoalConversationService {
         this.throwStructuredOutputInvalid(responseWithConversationId);
       }
 
-      await this.saveMessage(conversation.id, 'user', initialGoal);
-      await this.saveMessage(conversation.id, 'ai', aiResponse.userVisible, null, { quickReplies: this.getGoalExt(aiResponse.internal).quickReplies });
+      const openingGoalExt = this.getGoalExt(aiResponse.internal);
+      await this.saveMessage(conversation.id, 'ai', aiResponse.userVisible, null, { quickReplies: openingGoalExt.quickReplies });
 
       // 更新收集的数据（stage 优先取 runtimeEnvelope.phase）
       await this.updateCollectedData(conversation.id, responseWithConversationId);
@@ -628,197 +615,105 @@ async continueConversation(
             conversationId,
             collectedData: conversation.collectedData,
             learningPathId: conversation.learningPathId,
-            findPath: (id) => prisma.learning_paths.findFirst({ where: { id } }),
+            // #228：文案的权威信号是 lifecycle（活动 run 推导），不是路径 status——
+            // 这里注入的投影与 GET 快照同源，保证同一状态两接口给同一口径。
+            findPath: (id) => getPathCompletionProjection(id),
           });
         }
 
-        // 确认双通道（2026-09-27 绕圈缺陷修复）：①UI 显式标志（首选，优先级不变）；
-        // ②自然语言确认（快捷选项/打字）——原先只认标志，proposing 阶段 AI 连续 5 轮
-        // 重复"请在下面点一下确认"而用户回「就按这个来，确认」永远推不动（confidence 卡 0.88）。
-        // 文本探测是高精度白名单（只认最后一个语义段的纯确认短语，否决/改需求尾缀一律不认，
-        // 见 goal-conversation.confirm-text.ts 文件头），误确认面收得很窄。
-        // 显式拒绝不得代签（2026-10-08，R6 P1-12 真人面镜像）：标志仍首选，但文本明示
-        // 拒绝/犹豫时（C 轨探针实锤「再想想吧」+ flag=true 当轮生成路径）不再代签，
-        // 按普通回复推进由模型接住犹豫——误确认生成没人要的路径，比不确认伤。
-        let confirmProposal = options?.confirmProposal === true || isProposalConfirmationText(userReply);
-        if (options?.confirmProposal === true && isExplicitRefusalText(userReply)) {
-          confirmProposal = false;
-          logger.info('[goal-conversation] 显式拒绝文本压过 confirmProposal 标志，按普通回复推进', {
-            conversationId,
-            userId,
-            replyPreview: userReply.slice(0, 40),
-          });
-          // 同意计量落库（拍板 #2，2026-10-08）：否决事件可查询、可计数（口径见 lastConfirmation）。
-          // 只 mutate 不 appendMessage——用户消息由下方普通回合链路落库，避免双写。
-          await this.updateConversationLifecycle(conversationId, conversation.stage as 'understanding' | 'proposing' | 'ready', {
-            mutateCollectedData: (currentData) => {
-              this.recordConfirmationMetering(currentData, 'flag-vetoed-by-text', true, userReply);
-            },
-          });
-        }
-
-        if (conversation.stage === 'proposing' && confirmProposal) {
-          if (options?.confirmProposal !== true) {
-            logger.info('[goal-conversation] 自然语言确认命中，按 confirmProposal 推进', {
+        // 确认两通道（2026-11-08 确认动作减重）：
+        // ①UI 按钮 flag——最强信号，直接推进，不再做文本否决（按钮确认发送固定话术，
+        //   旧「拒绝文本压过 flag」只对 API 驱动方/VL legacy 开关有意义，删）；
+        // ②打字——proposing 阶段先过一次裁决 skill（goal-confirm-adjudicator，temperature 0，
+        //   只回答「这句话是否表达就要这个方案、开始排路径」）：confirm=true 直接推进，
+        //   **不跑主对话回合**（比旧 confirmIntent 通道快一个完整回合）；false（调整/拒绝/提问）
+        //   落库走正常回合，由模型自然接住。裁决失败一律 fail-open 按非确认处理——
+        //   行为与旧白名单未命中完全一致，不阻塞对话。
+        // 提案内容门禁（#162，develop 侧修复并入）：没有可用提案时不代签——按钮与裁决都
+        // 不该对着 null/半截提案生成路径，转普通回合由模型先补提案（判据见 goal-proposal-guard）。
+        const collected = JSON.parse(conversation.collectedData || '{}');
+        const proposalConfirmable = conversation.stage === 'proposing'
+          && hasConfirmableProposal(conversation.collectedData, { conversationId, userId, stage: conversation.stage });
+        // answer-only 出口（2026-11-10 外评：一句话能讲透的理解型诉求不排路径）：
+        // 分诊判 answer_only 且用户坚持 <2 次 → 两确认通道都不放行，落普通回合——
+        // 提示词层「一句话讲透测试」规则引导模型直接给出完整解答并收口；
+        // 坚持 ≥2 次 → 放行照常排路径（用户 agency 兜底，不搞死拦）。
+        const answerOnlyTriage = resolveResponseTriageFromCollectedData(collected);
+        const answerOnlyGate = answerOnlyTriage?.mode === 'answer_only' && proposalConfirmable;
+        const answerOnlyNudges = Number((collected as any)?.answerOnlyNudges || 0);
+        const flagConfirmWanted = conversation.stage === 'proposing'
+          && options?.confirmProposal === true
+          && proposalConfirmable;
+        let adjudicatedConfirm = false;
+        if (proposalConfirmable && !flagConfirmWanted && !answerOnlyGate) {
+          // 纵深防御：adjudicateGoalConfirm 自带 fail-open（内部 catch → 非确认），
+          // 但 service 不假设它永不抛——任何意外异常也按非确认走正常回合，不阻塞对话。
+          let verdict = { confirm: false };
+          try {
+            verdict = await adjudicateGoalConfirm({
+              userUtterance: userReply,
+              proposal: {
+                learning_direction: collected.confirmedProposal?.learning_direction,
+                first_deliverable: collected.confirmedProposal?.first_deliverable,
+              },
+              lastAssistantExcerpt: this.lastAssistantExcerpt(collected),
+            });
+          } catch (error) {
+            logger.warn('[goal-conversation] 确认裁决调用异常，按非确认走正常回合', {
               conversationId,
               userId,
-              replyPreview: userReply.slice(0, 40),
+              error: (error as Error).message,
             });
           }
-          const data = JSON.parse(conversation.collectedData || '{}');
-          const understanding = data.understanding || {};
-
-          // 幂等快路径（审计 §1.4）：该对话已确认过（并发重试/双击的第二次请求）→
-          // 直接复用已存在的路径，不再新建占位路径。
-          if (conversation.learningPathId) {
-            const existingPath = await prisma.learning_paths.findFirst({ where: { id: conversation.learningPathId } });
-            if (existingPath) {
-              return this.buildConfirmedResult(conversationId, data, { id: existingPath.id, status: existingPath.status });
-            }
+          adjudicatedConfirm = verdict.confirm;
+        }
+        const confirmIntentArrived = flagConfirmWanted || adjudicatedConfirm;
+        const confirmAllowed = !answerOnlyGate || answerOnlyNudges >= 2;
+        if (confirmIntentArrived && confirmAllowed) {
+          if (answerOnlyGate) {
+            logger.info('[goal-conversation] answer-only：用户坚持 ≥2 次，放行排路径', { conversationId, userId });
           }
-
-          // ── 分诊负向出口（gated 模式）：非学习路径且尚未被显式放行时，不自动推进路径生成，
-          //    把分诊结论作为待确认项写回 collectedData.responseTriagePending，保持可手动推进。
-          //    再次确认（responseTriagePending 已存在）即放行，走下方原路径生成逻辑。
-          //    默认 advisory 下此分支不进入，现有行为零变化。
-          const triageMode = await this.resolveResponseTriageEnforcementMode();
-          const storedTriage = resolveResponseTriageFromCollectedData(data);
-          const triagePending = (data as Record<string, unknown>)[RESPONSE_TRIAGE_PENDING_KEY];
-
-          // ── 硬阻断（2026-10-28 R4 外部评审 P0）：referral / emotional_support /
-          //    not_judgeable×physical_internalized 三类结论，不依赖 advisory/gated、也不允许
-          //    「再次确认」放行。否则 F96/F97 会在分诊判 referral 后仍生成 5.3h/26.4h 路径。
-          const hardBlockTriage = storedTriage ?? triageGoalResponse(understanding);
-          if (isHardBlockResponseTriage(hardBlockTriage, understanding)) {
-            await this.updateConversationLifecycle(conversationId, 'completed', {
-              status: 'completed',
-              appendMessage: { role: 'user', content: userReply },
-              mutateCollectedData: (currentData) => {
-                currentData[RESPONSE_TRIAGE_KEY] = hardBlockTriage;
-                delete currentData[RESPONSE_TRIAGE_PENDING_KEY];
-              },
-            });
-            logger.info('[goal-conversation] 分诊硬阻断：不生成学习路径', {
-              conversationId,
-              mode: hardBlockTriage.mode,
-              confidence: hardBlockTriage.confidence,
-              platformJudgment: (understanding as any)?.platform_judgment ?? (understanding as any)?.platformJudgment ?? null,
-            });
-            return buildHardBlockResult(
-              { conversationId, understanding, confidence: data.confidence || 0, collected: data.collected || {} },
-              hardBlockTriage
-            );
-          }
-
-          if (triageMode === 'gated'
-            && storedTriage
-            && storedTriage.mode !== 'learning_path'
-            && !triagePending) {
-            const pendingTriage: ResponseTriage = {
-              ...storedTriage,
-              reasons: [...storedTriage.reasons, 'gated：分诊结论待用户确认，暂不自动生成路径'],
-            };
-            await this.updateConversationLifecycle(conversationId, 'proposing', {
-              status: 'active',
-              appendMessage: { role: 'user', content: userReply },
-              mutateCollectedData: (currentData) => {
-                currentData[RESPONSE_TRIAGE_KEY] = storedTriage;
-                currentData[RESPONSE_TRIAGE_PENDING_KEY] = pendingTriage;
-              },
-            });
-            logger.info('[goal-conversation] gated 分诊拦截：非学习路径结论待确认，暂不生成路径', {
-              conversationId,
-              mode: storedTriage.mode,
-            });
-            const gatedLine = buildTriageAdvisoryLine(pendingTriage).trim();
-            return {
-              userVisible: `${gatedLine}\n\n若仍希望直接生成学习路径，请再次确认；也可以先补充说明，我们再一起调整方向。`,
-              internal: {
-                core: {
-                  conversationId,
-                  stage: 'proposing',
-                  confidence: data.confidence || 0,
-                  isCompleted: false,
-                },
-                ext: {
-                  goalConversation: {
-                    understanding,
-                    nextQuestions: [],
-                    quickReplies: [],
-                    collected: data.collected || {},
-                    responseTriage: pendingTriage,
-                  },
-                },
-              },
-            };
-          }
-
-          try {
-            const { bound, placeholderPath, runId, seedResult } = await bindGeneratingPath(this.rejudgeDeps(), {
-              conversation,
-              data,
-              appendMessage: { role: 'user', content: userReply },
-              expectedRevision: conversation.revision,
-              // 同意计量落库（拍板 #2，2026-10-08）：flag=按钮通道 / text=自然语言确认；
-              // 计数口径 SELECT json_extract(collectedData,'$.lastConfirmation.channel'), COUNT(*)
-              onBound: (currentData) => {
-                this.recordConfirmationMetering(
-                  currentData,
-                  options?.confirmProposal === true ? 'flag' : 'text',
-                  false,
-                  userReply
-                );
-              }
-            });
-
-            if (!bound) {
-              // 落败方：标记占位路径 failed（不会被生成恢复/自动重试），并复用赢家已绑定的路径
-              await learningService
-                .markActiveGenerationFailed(placeholderPath.id, new Error('并发确认，本条占位路径作废'), runId)
-                .catch(() => undefined);
-              return this.resolveConcurrentConfirmation(conversationId, data);
-            }
-
-            await kickPathGeneration(this.rejudgeDeps(), {
-              conversation,
-              seedResult,
-              pathId: placeholderPath.id,
-              runId,
-              systemPromptOverrides: options?.systemPromptOverrides
-            });
-            return {
-              userVisible: '已收到确认，学习路径正在生成，通常 10-60 秒内完成，可前往“学习路径”查看进度。',
-              internal: {
-                core: {
-                  conversationId,
-                  stage: 'completed',
-                  confidence: 0.95,
-                  isCompleted: true,
-                  learningPath: { id: placeholderPath.id, status: 'generating' }
-                },
-                ext: {
-                  goalConversation: {
-                    understanding,
-                    nextQuestions: [],
-                    quickReplies: [],
-                    collected: data.collected || {}
-                  }
-                }
-              }
-            };
-          } catch (pathError) {
-            logger.error('硬规则触发生成路径失败', pathError);
-            throw pathError;
-          }
+          // 推进收口到 advanceConfirmedProposal；saveUserTurn=true=用户消息尚未落库。
+          return this.advanceConfirmedProposal(conversationId, conversation, userReply, options, collected, true);
+        }
+        if (confirmIntentArrived && answerOnlyGate) {
+          // 计一次坚持并落库；不放行、不跑确认链路——落普通回合由模型直答
+          // （提示词层规则接管：直接给完整解答，不出方案；模型若仍出方案会被 ready 回落守卫拦住）。
+          await this.updateConversationLifecycle(conversationId, 'proposing', {
+            status: 'active',
+            mutateCollectedData: (currentData) => {
+              (currentData as Record<string, unknown>).answerOnlyNudges = answerOnlyNudges + 1;
+              currentData[RESPONSE_TRIAGE_KEY] = answerOnlyTriage;
+            },
+          });
+          logger.info('[goal-conversation] answer-only：确认拦截（第 ' + (answerOnlyNudges + 1) + ' 次），转普通回合直答', {
+            conversationId,
+            userId,
+          });
         }
 
-      // 调用AI生成回复。先不写当前用户消息，避免本轮输入重复进入上下文。
-      const aiResponse = await this.callAI(conversation.id, userReply, false, userId, options);
+      // 本轮用户消息**先落库再调模型**（#160）：落库与调用解耦后，任何失败路径用户输入都不丢。
+      // 旧实现只在 422（结构化失败）与成功两支补写，网关/网络/LLM 抖动让 callAI 抛错时，
+      // 用户这一轮输入在库与模型上下文里都不存在（刷新即消失），与 422「先落库避免丢上下文」自相矛盾。
+      // 代价是本条已在历史里，故 callAI 侧传 excludeTrailingUserInput 把它剔出上下文，避免重复喂入；
+      // 失败重试由 saveMessage 的回合级幂等（pendingUserTurn）护栏挡住重复写入。
+      await this.saveMessage(conversation.id, 'user', userReply, options?.meta, { idempotentUserTurn: true });
+
+      // 被门禁否决的确认（会话内没有可用提案）不再当作确认喂给模型：
+      // 否则模型会按「用户已确认」推进，而本轮实际上只是在补提案（#162，develop 侧语义并入）。
+      const guardVetoedFlag = conversation.stage === 'proposing'
+        && options?.confirmProposal === true
+        && !proposalConfirmable;
+      const aiOptions = guardVetoedFlag
+        ? { ...options, confirmProposal: false }
+        : options;
+      const aiResponse = await this.callAI(conversation.id, userReply, false, userId, aiOptions, {
+        excludeTrailingUserInput: true
+      });
       const responseWithConversationId = this.withConversationId(aiResponse, conversationId);
 
       if (!this.getStructuredOutputValid(aiResponse)) {
-        // 422 恢复信封前先持久化本轮用户消息，避免刷新恢复后对话上下文丢失（AI 回复不落库）
-        await this.saveMessage(conversation.id, 'user', userReply, options?.meta);
+        // 用户消息已落库（上方），AI 回复不落库 → 422 恢复信封刷新后对话上下文不丢
         logger.warn('继续对话结构化输出失败，状态未更新', {
           conversationId,
           userId,
@@ -828,32 +723,48 @@ async continueConversation(
         this.throwStructuredOutputInvalid(responseWithConversationId);
       }
 
-      await this.saveMessage(conversation.id, 'user', userReply, options?.meta);
-      await this.saveMessage(conversation.id, 'ai', aiResponse.userVisible, null, { quickReplies: this.getGoalExt(aiResponse.internal).quickReplies });
+      const replyGoalExt = this.getGoalExt(aiResponse.internal);
+      await this.saveMessage(conversation.id, 'ai', aiResponse.userVisible, null, { quickReplies: replyGoalExt.quickReplies });
 
       // 更新收集的数据（stage 优先取 runtimeEnvelope.phase）
-      await this.updateCollectedData(conversation.id, responseWithConversationId);
+      const persistedData = await this.updateCollectedData(conversation.id, responseWithConversationId);
       const stage = this.resolveStageFromResponse(responseWithConversationId);
       const confidence = this.resolveConfidenceFromResponse(responseWithConversationId);
       const goalExt = this.getGoalExt(responseWithConversationId.internal);
 
+      // 模型本轮未复述的持久化字段回填（#159）：响应与 DB 保持同口径，
+      // 否则 proposing 阶段前端会因 confirmedProposal 为空清掉提案卡与确认入口。
+      const fallbackGoalExt = persistedData ? {
+        confirmedProposal: persistedData.confirmedProposal,
+        structuredData: persistedData.structuredData,
+        confidenceScores: persistedData.confidenceScores
+      } : null;
+
       // 模型自报 ready/completed 不产生学习路径：路径生成只能由用户通过 UI 按钮显式确认触发
       // （见上方 confirmProposal 硬规则路径）。模型自报一律回落 proposing，等待用户确认方案。
       if (stage === 'ready' || stage === 'completed') {
+        // 172-1：降级按 proposing 档（0.75~0.94）重算 confidence，不沿用 ready 档自报值（floor 0.95）
+        const degradedConfidence = Math.min(Math.max(Number.isFinite(confidence) ? confidence : 0.75, 0.75), 0.94);
         await this.updateConversationLifecycle(conversationId, 'proposing', {
           status: 'active',
           completedAt: null,
           mutateCollectedData: (data) => {
-            data.stage = 'proposing';
+            syncDegradedGoalStage(data, 'proposing');
+            for (const target of [data, data.runtimeNextState, data.runtimeEnvelope?.contextUpdate?.nextState]) {
+              if (target && typeof target === 'object') target.confidence = degradedConfidence;
+            }
           }
         });
         logger.warn('模型自报 ready 已被回落为 proposing，等待用户显式确认', {
           conversationId,
-          userId
+          userId,
+          confidence: { reported: confidence, degraded: degradedConfidence }
         });
         return this.toServiceResult(responseWithConversationId, conversationId, {
           stage: 'proposing',
+          confidence: degradedConfidence,
           isCompleted: false,
+          fallbackGoalExt,
         });
       }
 
@@ -861,11 +772,197 @@ async continueConversation(
       return this.toServiceResult(responseWithConversationId, conversationId, {
         stage,
         isCompleted: false,
+        fallbackGoalExt,
       });
 
     } catch (error) {
       logger.error('继续对话失败:', error);
       throw error;
+    }
+  }
+
+  /** 导师上一条回复的尾部摘录（确认裁决输入）：取 collectedData.messages 最后一条 ai 的内容尾段。 */
+  private lastAssistantExcerpt(data: any): string {
+    const messages = Array.isArray(data?.messages) ? data.messages : [];
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const m = messages[i];
+      if (m?.role === 'ai' && typeof m.content === 'string' && m.content.trim()) {
+        return m.content.slice(-300);
+      }
+    }
+    return '';
+  }
+
+  /** 确认推进（UI flag / 打字裁决两通道共用出口）。saveUserTurn 控制用户消息是否由 appendMessage 落库（两通道都是回合前未落 → true）。 */
+  private async advanceConfirmedProposal(
+    conversationId: string,
+    conversation: any,
+    userReply: string,
+    options: GoalConversationOptions | undefined,
+    data: Record<string, any>,
+    saveUserTurn: boolean,
+  ): Promise<any> {
+    /* 前置自测：确认时一次性提交的作答在此确定性合并（2026-11-02）。
+       旧链路是「每答一题发一个对话回合、由模型回填」，两题场景会把面板锁死 30-90s
+       且题目随重渲染漂移；现在作答只随确认到达，判分键取 confirmedProposal。 */
+    const incomingProbeAnswers = normalizeProbeAnswerInput(options?.probeAnswers);
+    if (incomingProbeAnswers.length > 0) {
+      data.understanding = mergeProbeAnswersIntoUnderstanding(data.understanding, data.confirmedProposal, incomingProbeAnswers);
+    }
+    const understanding = data.understanding || {};
+
+    // 幂等快路径（审计 §1.4）：该对话已确认过（并发重试/双击的第二次请求）→
+    // 直接复用已存在的路径，不再新建占位路径。
+    if (conversation.learningPathId) {
+      const existingPath = await getPathCompletionProjection(conversation.learningPathId);
+      if (existingPath) {
+        return this.buildConfirmedResult(conversationId, data, {
+          id: existingPath.id,
+          status: existingPath.status,
+          lifecycle: existingPath.lifecycle,
+        });
+      }
+    }
+
+    // ── 分诊负向出口（gated 模式）：非学习路径且尚未被显式放行时，不自动推进路径生成，
+    //    把分诊结论作为待确认项写回 collectedData.responseTriagePending，保持可手动推进。
+    //    再次确认（responseTriagePending 已存在）即放行，走下方原路径生成逻辑。
+    //    默认 advisory 下此分支不进入，现有行为零变化。
+    const triageMode = await this.resolveResponseTriageEnforcementMode();
+    const storedTriage = resolveResponseTriageFromCollectedData(data);
+    const triagePending = (data as Record<string, unknown>)[RESPONSE_TRIAGE_PENDING_KEY];
+
+    // ── 硬阻断（2026-10-28 R4 外部评审 P0）：referral / emotional_support /
+    //    not_judgeable×physical_internalized 三类结论，不依赖 advisory/gated、也不允许
+    //    「再次确认」放行。否则 F96/F97 会在分诊判 referral 后仍生成 5.3h/26.4h 路径。
+    const hardBlockTriage = storedTriage ?? triageGoalResponse(understanding);
+    if (isHardBlockResponseTriage(hardBlockTriage, understanding)) {
+      // #213：拒绝文案随终局落库（user 回合 + ai 拒绝回合同笔原子写入）。此前文案
+      // 只进返回值，重载后用户只看到自己那句确认，无从知道为什么没生成路径。
+      await this.updateConversationLifecycle(conversationId, 'completed', {
+        status: 'completed',
+            appendMessage: [
+              ...(saveUserTurn ? [{ role: 'user' as const, content: userReply }] : []),
+              { role: 'ai' as const, content: buildHardBlockMessage(hardBlockTriage) },
+            ],
+        mutateCollectedData: (currentData) => {
+          currentData[RESPONSE_TRIAGE_KEY] = hardBlockTriage;
+          delete currentData[RESPONSE_TRIAGE_PENDING_KEY];
+        },
+      });
+      logger.info('[goal-conversation] 分诊硬阻断：不生成学习路径', { conversationId, mode: hardBlockTriage.mode, confidence: hardBlockTriage.confidence, platformJudgment: (understanding as any)?.platform_judgment ?? (understanding as any)?.platformJudgment ?? null });
+      return buildHardBlockResult({ conversationId, understanding, confidence: data.confidence || 0, collected: data.collected || {} }, hardBlockTriage);
+    }
+
+    if (triageMode === 'gated'
+      && storedTriage
+      && storedTriage.mode !== 'learning_path'
+      && !triagePending) {
+      const pendingTriage: ResponseTriage = {
+        ...storedTriage,
+        reasons: [...storedTriage.reasons, 'gated：分诊结论待用户确认，暂不自动生成路径'],
+      };
+      const gatedLine = buildTriageAdvisoryLine(pendingTriage).trim();
+      const gatedVisible = `${gatedLine}\n\n若仍希望直接生成学习路径，请再次确认；也可以先补充说明，我们再一起调整方向。`;
+      await this.updateConversationLifecycle(conversationId, 'proposing', {
+        status: 'active',
+        // #213：gated 提示同样落库（旧模式只落 user 回合，重载后提示消失）。
+        appendMessage: [
+          ...(saveUserTurn ? [{ role: 'user' as const, content: userReply }] : []),
+          { role: 'ai' as const, content: gatedVisible },
+        ],
+        mutateCollectedData: (currentData) => {
+          currentData[RESPONSE_TRIAGE_KEY] = storedTriage;
+          currentData[RESPONSE_TRIAGE_PENDING_KEY] = pendingTriage;
+        },
+      });
+      logger.info('[goal-conversation] gated 分诊拦截：非学习路径结论待确认，暂不生成路径', {
+        conversationId,
+        mode: storedTriage.mode,
+      });
+      return {
+        userVisible: gatedVisible,
+        internal: {
+          core: {
+            conversationId,
+            stage: 'proposing',
+            confidence: data.confidence || 0,
+            isCompleted: false,
+          },
+          ext: {
+            goalConversation: {
+              understanding,
+              nextQuestions: [],
+              quickReplies: [],
+              collected: data.collected || {},
+              responseTriage: pendingTriage,
+            },
+          },
+        },
+      };
+    }
+
+    try {
+      const { bound, placeholderPath, runId, seedResult } = await bindGeneratingPath(this.rejudgeDeps(), {
+        conversation,
+        data,
+        appendMessage: saveUserTurn ? { role: 'user', content: userReply } : undefined,
+        expectedRevision: conversation.revision,
+        // 同意计量落库（拍板 #2，2026-10-08）：flag=按钮通道 / text=自然语言确认（UI 标志 or 模型 confirmIntent）；
+        // 计数口径 SELECT json_extract(collectedData,'$.lastConfirmation.channel'), COUNT(*)
+        onBound: (currentData) => {
+          this.recordConfirmationMetering(
+            currentData,
+            options?.confirmProposal === true ? 'flag' : 'text',
+            false,
+            userReply
+          );
+          // 自测作答一并落库（刷新后回看方案时仍能显示哪些题已答）
+          if (incomingProbeAnswers.length > 0) {
+            currentData.understanding = mergeProbeAnswersIntoUnderstanding(
+              currentData.understanding,
+              currentData.confirmedProposal,
+              incomingProbeAnswers,
+            );
+          }
+        }
+      });
+
+      if (!bound) {
+        // 落败方：bindGeneratingPath 已删除本请求的占位路径（#212），直接复用赢家已绑定的路径
+        return this.resolveConcurrentConfirmation(conversationId, data);
+      }
+
+      await kickPathGeneration(this.rejudgeDeps(), {
+        conversation,
+        seedResult,
+        pathId: placeholderPath.id,
+        runId,
+        systemPromptOverrides: options?.systemPromptOverrides
+      });
+      return {
+        userVisible: PATH_GENERATING_USER_VISIBLE,
+        internal: {
+          core: {
+            conversationId,
+            stage: 'completed',
+            confidence: 0.95,
+            isCompleted: true,
+            learningPath: { id: placeholderPath.id, status: 'generating' }
+          },
+          ext: {
+            goalConversation: {
+              understanding,
+              nextQuestions: [],
+              quickReplies: [],
+              collected: data.collected || {}
+            }
+          }
+        }
+      };
+    } catch (pathError) {
+      logger.error('硬规则触发生成路径失败', pathError);
+      throw pathError;
     }
   }
 
@@ -906,6 +1003,18 @@ async continueConversation(
   }
 
   /**
+   * 剔除历史末尾那条与「本轮即将发送的输入」完全相同的用户消息（#160 落库/调用解耦的配套）。
+   * 只认最后一条、且必须同角色同（清洗后）内容；不匹配时原样返回，不复制数组。
+   */
+  private stripTrailingUserInput(history: any[], userInput: string): any[] {
+    const last = history[history.length - 1];
+    if (last && last.role === 'user' && String(last.content ?? '') === this.sanitizeVisibleContent(userInput)) {
+      return history.slice(0, -1);
+    }
+    return history;
+  }
+
+  /**
    * 调用AI生成回复
    */
   private async callAI(
@@ -913,7 +1022,8 @@ async continueConversation(
     userInput: string,
     isFirst: boolean,
     userId?: string,
-    options?: GoalConversationOptions
+    options?: GoalConversationOptions,
+    callOptions?: { excludeTrailingUserInput?: boolean }
   ) {
     const startTime = Date.now();
 
@@ -924,7 +1034,12 @@ async continueConversation(
       });
 
       const data = JSON.parse(conversation.collectedData);
-      const history = data.messages || [];
+      const rawHistory = data.messages || [];
+      // 落库/调用解耦（#160）：本轮用户消息在 callAI 之前已落库，若原样当历史喂入，
+      // 同一句输入会既走 input 又出现在历史最后一条（重复喂给模型）。调用方声明后剔除。
+      const history = callOptions?.excludeTrailingUserInput
+        ? this.stripTrailingUserInput(rawHistory, userInput)
+        : rawHistory;
       const previousState = this.buildPreviousState(data, conversation.stage);
       const previousUnderstanding = previousState.understanding || data.understanding || {};
 
@@ -974,7 +1089,10 @@ async continueConversation(
         systemPromptOverride: options?.systemPromptOverrides?.goalAgent,
         // 已上传资料清单（元信息 + 理解摘要）：让 goal-agent 知道用户提供了什么、资料讲什么，
         // 避免答出「没有收到文件」这类与事实不符的话；无上传=空数组=payload 无该键
-        uploadedMaterials: await collectGoalUploadedMaterialSummaries(userId, materialSelectionQuery)
+        uploadedMaterials: await collectGoalUploadedMaterialSummaries(userId, materialSelectionQuery, {
+          conversationId,
+          surfaceGoal: (previousUnderstanding as { surface_goal?: string }).surface_goal,
+        })
       }, {
         // 会话标识进 envelope（与教学链 A6 同模式）：此前只有 SSE 流式路由在 ALS 注入
         // conversationId，非流式路径（API 直连/驱动）恒 null → prompt_call_logs 缺值、
@@ -1036,7 +1154,35 @@ async continueConversation(
     return out;
   }
 
-  private async saveMessage(conversationId: string, role: string, content: string, meta?: Record<string, number> | null, extra?: { quickReplies?: unknown }) {
+  /**
+   * 回合级幂等（#160）：判定本次用户消息要不要追加；返回 false 表示本回合的用户消息此前已落库
+   * （前端「重试」重发同一句），不再重复追加。
+   * 判据是「本回合是否已落过库」而非「本条是否为 messages 最后一条」：`pendingUserTurn` 在回合
+   * 开始落用户消息时写入，在回合提交时清除——普通回合在 `updateCollectedData` 清，终局路径
+   * （proposing 确认 / 硬阻断 / gated，见 `updateConversationLifecycle`）在落用户消息的同一笔
+   * lifecycle 写入里一并清。它存在 ⇒ 上一回合未提交（callAI 抛错 / updateCollectedData 三次
+   * revision 冲突后抛出 / 进程中断）。此时库里可能已留下该回合的 AI 回复，一并丢弃——那条回复
+   * 从未交付给用户（提交成功才会返回响应）。提交成功的回合会清掉标记，故用户合法地再次发送同一
+   * 句话不会被误吞。
+   */
+  private resolveUserTurnAppend(data: Record<string, any>, sanitizedContent: string): boolean {
+    const replyHash = this.hashTurnReply(sanitizedContent);
+    const pending = data.pendingUserTurn as { replyHash?: string } | undefined;
+    if (pending && pending.replyHash === replyHash) {
+      const last = data.messages[data.messages.length - 1];
+      if (last && (last.role === 'ai' || last.role === 'assistant')) data.messages.pop();
+      return false;
+    }
+    data.pendingUserTurn = { replyHash };
+    return true;
+  }
+
+  /** 回合幂等标记用：只存哈希，避免把整句用户原文在 collectedData 里再存一份 */
+  private hashTurnReply(content: string): string {
+    return createHash('sha256').update(content).digest('hex').slice(0, 16);
+  }
+
+  private async saveMessage(conversationId: string, role: string, content: string, meta?: Record<string, number> | null, extra?: { quickReplies?: unknown; idempotentUserTurn?: boolean }) {
     // 乐观锁：messages/collectedData 是整包 JSON 读改写，同一会话的并发提交
     // （双击/重试）会互相覆盖丢消息。以 revision 条件更新，冲突时重读重放。
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -1050,15 +1196,26 @@ async continueConversation(
       const data = JSON.parse(conversation.collectedData);
       data.messages = data.messages || [];
       const sanitizedContent = this.sanitizeVisibleContent(content);
-      // P2-14：快捷补充随消息持久化（渲染时随历史消息一起回来，刷新不再只剩输入框）
-      const quickReplies = this.normalizeQuickReplies(extra?.quickReplies);
-      data.messages.push({
-        role,
-        content: sanitizedContent,
-        time: new Date().toISOString(),
-        ...(meta && Object.keys(meta).length > 0 ? { meta } : {}),
-        ...(quickReplies.length ? { quickReplies } : {})
-      });
+      const lengthBeforeIdempotency = data.messages.length;
+      let shouldAppend = true;
+      if (extra?.idempotentUserTurn && role === 'user') {
+        shouldAppend = this.resolveUserTurnAppend(data, sanitizedContent);
+      }
+      if (!shouldAppend) {
+        // 本回合用户消息此前已落库（重试）：无需追加；仅当同时丢弃了上一回合未交付的
+        // AI 回复、确实改动了 messages 时才需要写回。
+        if (data.messages.length === lengthBeforeIdempotency) return;
+      } else {
+        // P2-14：快捷补充随消息持久化（渲染时随历史消息一起回来，刷新不再只剩输入框）
+        const quickReplies = this.normalizeQuickReplies(extra?.quickReplies);
+        data.messages.push({
+          role,
+          content: sanitizedContent,
+          time: new Date().toISOString(),
+          ...(meta && Object.keys(meta).length > 0 ? { meta } : {}),
+          ...(quickReplies.length ? { quickReplies } : {})
+        });
+      }
 
       // S1 数据质量修复：messages 列与 collectedData.messages 双写（追加后整列同步为完整对话数组）。
       // 消费方（admin 详情兜底解析）按 {role, content, time} 数组读取该列，与 collectedData 语义一致。
@@ -1082,7 +1239,7 @@ async continueConversation(
     userVisible: string;
     internal: any;
     runtimeEnvelope?: any;
-  }) {
+  }): Promise<any> {
     // 乐观锁：与 saveMessage 同理，防止并发回合互相覆盖 collectedData
     for (let attempt = 0; attempt < 3; attempt++) {
     const conversation = await prisma.goal_conversations.findUnique({
@@ -1151,11 +1308,13 @@ async continueConversation(
       data.miFrames = goalExt.miFrames;
     }
 
-    data.normalizedGoalState = buildGoalNormalizedState(data);
-
     if (core.learningPath !== undefined) {
       data.learningPath = core.learningPath || null;
     }
+
+    // 回合提交（#160）：清除回合级幂等标记——本回合成功收尾后，同一句话再发按新回合处理。
+    // 提交失败（下方 3 次 revision 冲突后抛出）时标记保留，重试才能被识别为同一回合。
+    delete data.pendingUserTurn;
 
     try {
       await withTransaction(async (tx) => {
@@ -1182,14 +1341,14 @@ async continueConversation(
             stage,
             confidence,
             understanding: data.understanding,
-            normalizedGoalState: data.normalizedGoalState,
             confirmedProposal: data.confirmedProposal || null,
             structuredData: data.structuredData || null,
             responseTriage
           }
         }));
       }, { label: 'goal-conversation.persistUnderstanding' });
-      return;
+      // 返回写入后的持久化快照，供本轮响应回填模型未复述的字段（#159）
+      return data;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!message.includes('GOAL_REVISION_CONFLICT') || attempt === 2) {
@@ -1228,8 +1387,9 @@ async continueConversation(
           .filter((message: { role: string; content: string }) => message.content)
       : [];
 
-    // 配置式值流转（P1 试点）：按 routings 表 goal-agent 交付行 + pathInRawOutput
-    // 从 skill 输出抽取 goal→path 字段，与 visibleSummary 并行产出（golden 验证/后续装配切换）
+    // 配置式值流转（P1 试点）：按 routings 表 goal 阶段（goal-agent 及其下辖 skill）交付行
+    // + pathInRawOutput 从 skill 输出抽取 goal→path 字段，与 visibleSummary 并行产出
+    // （golden 验证/后续装配切换）
     const goalHandoffFields = await assembleGoalHandoff(aiResponse).catch((err) => {
       logger.warn('[goal-conversation] assembleGoalHandoff failed, falling back to visibleSummary', {
         conversationId: conversation.id,
@@ -1451,11 +1611,7 @@ async continueConversation(
             isCompleted: true
           },
           ext: {
-            goalConversation: {
-              understanding,
-              nextQuestions: [],
-              collected
-            }
+            goalConversation: buildGoalConversationExt({ understanding, collected })
           }
         }
       }, systemPromptOverrides);
@@ -1488,11 +1644,7 @@ async continueConversation(
             learningPath
           },
           ext: {
-            goalConversation: {
-              understanding,
-              nextQuestions: [],
-              collected
-            }
+            goalConversation: buildGoalConversationExt({ understanding, collected })
           }
         }
       };
@@ -1519,6 +1671,7 @@ async continueConversation(
       await prisma.goal_conversations.delete({
         where: { id: conversationId }
       });
+      clearGoalMaterialRankCache(conversationId); // #176-4：会话已删除，排序缓存一并清掉
 
       logger.info('对话已删除', { conversationId, userId });
 
@@ -1543,11 +1696,34 @@ async continueConversation(
 
     const data = JSON.parse(conversation.collectedData);
 
+    // 已绑路径的会话不信 collectedData 里冻结的 learningPath（#211）：确认时只写入一次
+    // status:'generating'，异步生成完成回调不回写，冻结值会永久停在「生成中」，与 /reply 及
+    // GET /api/learning/paths/:id 自相矛盾。这里改用权威行鲜查（与 buildCompletedConversationResult
+    // 同源）；#228：status 在 stage design 窗口恒为 active，故连同活动 run 推导的 lifecycle 一起投影。
+    let learningPath = data.learningPath || (conversation.learningPathId ? { id: conversation.learningPathId } : null);
+    let learningPathForVisible: { id: string; name?: string | null; status?: string | null; lifecycle?: string | null } | null = null;
+    if (conversation.learningPathId) {
+      const projection = await getPathCompletionProjection(conversation.learningPathId);
+      learningPath = projection ? { id: projection.id, status: projection.status } : null;
+      // lifecycle 只喂给文案函数，不落进响应的 learningPath（保持既有 payload 形状）
+      learningPathForVisible = projection ? { ...projection } : null;
+    }
+
+    // #213/#221：GET 快照的 userVisible 按状态取值——硬阻断重建拒绝文案，已有路径给
+    // 「学习路径已生成：<名字>」，进行中给最后一条 AI 回复；不再用 HTTP 占位串兜底。
+    const userVisible = resolveConversationUserVisible({
+      conversationId: conversation.id, status: conversation.status,
+      collectedData: conversation.collectedData, learningPathId: conversation.learningPathId,
+      learningPath: learningPathForVisible,
+      messages: data.messages,
+    });
+
     return {
       id: conversation.id,
       description: conversation.description,
       stage: conversation.stage,
       status: conversation.status,
+      userVisible,
       messages: data.messages || [],
       collected: data.collected || {},
       understanding: data.understanding || {},
@@ -1555,7 +1731,21 @@ async continueConversation(
       confirmedProposal: data.confirmedProposal || null,
       structuredData: data.structuredData || null,
       confidenceScores: data.confidenceScores || null,
-      learningPath: data.learningPath || (conversation.learningPathId ? { id: conversation.learningPathId } : null),
+      // #251③：分诊结论（与 hardBlocked 同一判据的数据源）。GET 恢复信封要透出它，
+      // 此前服务层只把 responseTriage 写进 collectedData、返回值里没有该键，
+      // 路由层白名单重建也就无从携带。
+      responseTriage: resolveResponseTriageFromCollectedData(data),
+      // 合并取舍：保留本分支的 learningPath（已被 getPathCompletionProjection 增强过 status，
+      // develop 侧那行是未经投影的原始表达式，取它会丢掉 #228/#221 的状态投影），
+      // 同时接入 develop 新增的硬阻断终局标记。
+      learningPath,
+      // 硬阻断终局标记（2026-11-05 UX 审计 P0）：与 buildCompletedConversationResult 同判据
+      // （completed + 无路径 + 分诊硬阻断）。GET 恢复信封缺此标记时，前端重进已完成会话
+      // 会把「completed 且 learningPath:null」当普通完成，重弹「路径已创建」假成功弹层。
+      hardBlocked:
+        conversation.status === 'completed'
+        && !conversation.learningPathId
+        && isHardBlockResponseTriage(resolveResponseTriageFromCollectedData(data), data.understanding || {}),
       confidence: data.confidence || 0,
       createdAt: conversation.createdAt,
       completedAt: conversation.completedAt
@@ -1674,7 +1864,7 @@ export async function generateLearningPathFromConversation(conversationId: strin
   const surfaceGoal = understanding.surface_goal || collected.surface_goal || '';
 
   // 构造新格式参数
-  return await service['generateLearningPath'](conversation, {
+  const learningPath = await service['generateLearningPath'](conversation, {
     userVisible: '',  // 此场景无对话文本
     internal: {
       core: {
@@ -1695,4 +1885,24 @@ export async function generateLearningPathFromConversation(conversationId: strin
       }
     }
   });
+
+  /* 2026-11-01 实测修复：这里原来只生成、不回写，于是管理端「生成学习路径」之后
+     对话仍停在「未生成路径」，新路径也没有任何对话指向它——学习路径列表点详情只能
+     落在「该路径没有关联的目标对话」空态（孤儿路径）。
+     `regeneratePath` 一直有这段回写，本入口是唯一遗漏的调用点。 */
+  if (learningPath?.id) {
+    await applyConversationLifecycle(
+      prisma as unknown as ConversationLifecycleDb,
+      conversationId,
+      {
+        stage: 'completed',
+        status: 'completed',
+        completedAt: new Date(),
+        learningPathId: learningPath.id,
+        learningPath: { id: learningPath.id, status: learningPath.status },
+      }
+    );
+  }
+
+  return learningPath;
 }

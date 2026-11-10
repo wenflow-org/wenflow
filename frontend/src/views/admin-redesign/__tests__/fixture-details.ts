@@ -2295,14 +2295,6 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "description": "学习者教学投影（toTeachingProjection）",
         "pathInRawOutput": "context.learnerProjection",
         "persistKey": null
-      },
-      {
-        "fieldId": "visibleDialogueContext",
-        "valueType": "array<object>",
-        "promptRole": "soft-info",
-        "description": "最近可见对话（role/content）",
-        "pathInRawOutput": "session.messages",
-        "persistKey": null
       }
     ],
     "agents": [
@@ -3044,20 +3036,6 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
           "level": "fully-editable"
         },
         "notes": null
-      },
-      {
-        "agentId": "teaching-agent",
-        "fieldId": "visibleDialogueContext",
-        "render": "hidden",
-        "handoff": [
-          "skill:teaching-turn"
-        ],
-        "internal": true,
-        "accumulate": false,
-        "locks": {
-          "level": "fully-editable"
-        },
-        "notes": "回合输入通道（AITeachingOrchestrator 组装注入）"
       }
     ]
   }

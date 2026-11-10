@@ -119,7 +119,7 @@ describe('VirtualLearners · 筛选 ↔ URL', () => {
     wrapper.unmount();
   });
 
-  it('异常列「只看有异常」：本地开关，不占用 pill，筛掉没有失败/无响应的行', async () => {
+  it('异常「只看有异常」：卡头胶囊筛选，不占用 pill，筛掉没有失败/无响应的行', async () => {
     // 空列表会走 MkEmptyState（无表格），先铺两行：一行有异常、一行干净
     const row = (id: string, name: string, extra: Record<string, unknown> = {}) => ({
       id, name, goal: 'g', storyCount: 1, pathCount: 0, sessions: 1,
@@ -129,14 +129,14 @@ describe('VirtualLearners · 筛选 ↔ URL', () => {
     });
     (liveVirtuals as { value: unknown[] }).value = [row('a', '有异常', { failedCount: 2 }), row('b', '干净的')];
     const { wrapper, router } = await mountVl('/admin/virtual-learners');
-    const filter = wrapper.find('.vl-th-filter');
-    expect(filter.exists()).toBe(true);
-    expect(filter.attributes('aria-pressed')).toBe('false');
+    /* 2026-11-09 审计 D：列头漏斗（.vl-th-filter）退役，筛选迁回卡头筛选行的「异常」胶囊；
+       列头只留共享排序按钮，caret 回到文字右侧。 */
+    expect(wrapper.find('.vl-th-filter').exists()).toBe(false);
+    expect(filterValue(wrapper as never, '异常')).toBe('all');
     expect(wrapper.findAll('tbody tr')).toHaveLength(2);
-    await filter.trigger('click');
+    await chooseFilter(wrapper as never, '异常', '只看有异常');
     await flushPromises();
-    expect(wrapper.find('.vl-th-filter').classes()).toContain('vl-th-filter--on');
-    expect(wrapper.find('.vl-th-filter').attributes('aria-pressed')).toBe('true');
+    expect(filterValue(wrapper as never, '异常')).toBe('abnormal');
     expect(wrapper.findAll('tbody tr')).toHaveLength(1);
     expect(wrapper.text()).toContain('有异常');
     expect(wrapper.text()).not.toContain('干净的');

@@ -25,6 +25,21 @@ describe('pickCurrentTask（学习台/详情页共用挑选规则）', () => {
     expect(pickCurrentTask([t('a', 'completed'), t('b', 'completed')])).toBeNull();
     expect(pickCurrentTask([])).toBeNull();
   });
+
+  // 2026-11-03 真人走查根因修复：锁着阶段里的 in_progress 曾把「当前任务」劫走，
+  // 页头「继续当前任务」指向它、点进去是「本节暂时开不了课」，而真正能学的待学课没有入口。
+  it('isLocked：锁着阶段的 in_progress 不参与挑选', () => {
+    const locked = new Set(['c']); // c 在锁着的阶段里，但状态是 in_progress
+    const list = [t('a', 'completed'), t('b', 'todo'), t('c', 'in_progress')];
+    expect(pickCurrentTask(list, (task) => locked.has(task.id))?.id).toBe('b');
+    expect(pickCurrentTask(list)?.id).toBe('c'); // 不传判定时保持旧口径
+  });
+
+  it('isLocked：全部锁定退回旧口径，不返回 null（否则页面失去入口）', () => {
+    const list = [t('a', 'todo'), t('b', 'in_progress')];
+    expect(pickCurrentTask(list, () => true)?.id).toBe('b');
+    expect(pickCurrentTask(list, () => true)).not.toBeNull();
+  });
 });
 
 describe('normalizeCurrentTask', () => {

@@ -124,8 +124,6 @@ model prompt_call_logs {
   /// 教学/学习会话归因（真列；此前只能经 conversationId 间接反推）
   sessionId           String?
   conversationId      String?
-  pipelineRunId       String?
-  pipelineStepIndex   Int?
   traceId             String?
   parentExecutionId   String?
   promptAttemptCount  Int      @default(1)
@@ -143,7 +141,6 @@ model prompt_call_logs {
   // Skill 统计覆盖索引（2026-10-04 性能批）：列序 agentId+createdAt 承载窗口范围，
   // success/durationMs 尾列让 AVG/COUNT 索引内完成（避免宽行根页随机读，实测 35s→毫秒）
   @@index([agentId, createdAt, success, durationMs])
-  @@index([pipelineRunId])
   @@index([pathId])
   @@index([userId])
   @@index([sessionId, createdAt])
@@ -793,6 +790,11 @@ model prediction_records {
   suggestedDepth String // shallow | standard | deep
   focusConcepts String // JSON string[]
   rationale     String
+  // P1-13 / #181：预测器自由描述原文（枚举 predictedTone/suggestedDepth 仅作机器判定，
+  // 原文供教学层各回合读语义）。此前只透传到首回合内存、未落库 ⇒ 第 2 回合起/重试/续课
+  // 从本表重建时原文丢失，只剩枚举。
+  toneDetail    String?
+  depthDetail   String?
   // 实证对照（任务完成后回写）
   outcome       String? // not_evaluated | smooth | struggled | failed
   outcomeAt     DateTime?
@@ -1077,7 +1079,14 @@ model virtual_learner_profiles {
   profile               String
   learningGoal          String
   knowledgeLevel        String
+  // 虚拟学习者专用（2026-11-07 契约表态 #151）：真实学习者**没有本表行**（本表随虚拟学习者
+  // 档案创建，受 isVirtualLearner 门约束），故真实侧的 knownConcepts 恒为 N/A，不是「写了但为空」。
+  // 真实侧概念台账的权威来源是 memory_traces / misconception_ledger / learner_evidence 的聚合
+  // （见 LearnerSnapshot.knowledgeMemory 与 lesson-knowledge-enricher 的 conceptLedger）。
+  // 不要为真实用户在本表建行来补写概念：会造成双写双源，并污染卡库导出 / 故事 / 投影。
   knownConcepts         String?
+  // 同 knownConcepts：虚拟学习者专用；真实学习者无本表行、恒为 N/A。真实侧「仍在学 / 易混淆」
+  // 的权威口径见 memory_traces（到期复习点）与 misconception_ledger / learner_evidence 聚合。
   struggleConcepts      String?
   simulationPrompt      String?
   simulationModel       String?

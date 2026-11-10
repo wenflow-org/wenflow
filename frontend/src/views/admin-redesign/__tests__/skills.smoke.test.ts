@@ -176,23 +176,25 @@ describe('Skill 目录 P1 修复批', () => {
     };
     const wrapper = await mountSkills();
     expect(getReconciliationMock).toHaveBeenCalled();
-    // 2026-10-24「完成度有什么实际意义吗」：列已撤；2026-10-28 目录改为列表，不再有表格列
-    expect(wrapper.find('.sk-list .mk-badge--rec-live').exists()).toBe(false);
-    expect(wrapper.find('.sk-table').exists()).toBe(false);
-    expect(wrapper.findAll('th')).toHaveLength(0);
+    // 2026-10-24「完成度有什么实际意义吗」：完成度列已撤。2026-11-09 目录恢复为固定列宽表，
+    // 但列集里没有完成度——它只喂「已上线」KPI
+    expect(wrapper.find('.sk-catalog .mk-badge--rec-live').exists()).toBe(false);
+    expect(wrapper.find('.sk-catalog').exists()).toBe(true);
+    expect(wrapper.findAll('th').map((t) => t.text())).not.toContain('完成度');
     // 数据没白拉：仍按对账 status=live 计「已上线」KPI（3 行档案里 1 行 live）
     const live = wrapper.findAll('.mk-kpi').find((k) => k.text().includes('已上线'))!;
     expect(live.find('.mk-kpi__num').text()).toBe('1');
     wrapper.unmount();
   });
 
-  it('对账面板口径 pill：「已上线 X / 总数」并列标注（户口簿全量口径）', async () => {
+  it('对账面板口径徽章：「已上线 X / 总数」并列标注（户口簿全量口径）', async () => {
     getReconciliationMock.mockResolvedValue({ data: { success: true, data: makeReport() } });
     const wrapper = await mountRecon();
-    // 对账面板（HealthCenter 内嵌的 SkillReconciliation）头部口径 pill
-    const pill = wrapper.find('.sk-rec__pills .mk-pill');
-    expect(pill.text()).toContain('已上线 2 / 4');
-    // 异常计数 pill：未注册 1
+    // 对账面板（HealthCenter 内嵌的 SkillReconciliation）头部口径读数
+    // 2026-11-05 去胶囊化：非交互读数从 .mk-pill（筛选触发器）改回 .mk-badge
+    const badge = wrapper.find('.sk-rec__pills .mk-badge');
+    expect(badge.text()).toContain('已上线 2 / 4');
+    // 异常计数徽章：未注册 1
     expect(wrapper.text()).toContain('未注册 1');
     wrapper.unmount();
   });
@@ -244,10 +246,11 @@ describe('Skill 目录 P1 修复批', () => {
 });
 
 /* 2026-09-29 用户拍板：健康检查/漂移/对账三 tab 退役——三者本是同一份报表的三刀，
-   合一后独立成 /admin/health-center（系统组）。2026-10-04 Prompt 评估由独立场景折入，
-   2026-10-25 用户「拆成单页，把这个 tab 撤掉，放到组里」又拆回独立页 /admin/prompt-eval。
-   2026-10-24「模型路由」页签退役（与 Skill 详情「运行时」重复），改为页头弹窗：
-   Skills 现为单一目录视图，无视图切换。 */
+   合一后独立成 /admin/health-center（系统组）。2026-10-24「模型路由」页签退役
+   （与 Skill 详情「运行时」重复），改为页头弹窗：Skills 现为单一目录视图，无视图切换。
+   Prompt 评估 2026-10-25 拆出、2026-11-01 下线，本页从此与评估无涉——
+   老深链 ?tab=prompt-eval 与 /admin/prompt-eval 都在路由层改投回本页，
+   断言见 router/__tests__/admin-routes.test.ts（那里用的是真路由，含全局改投）。 */
 async function mountHost(path: string) {
   dataSource.value = 'live';
   const router = createRouter({
@@ -255,7 +258,6 @@ async function mountHost(path: string) {
     routes: [
       { path: '/admin/:page?', component: { template: '<div />' } },
       { path: '/admin/health-center', component: { template: '<div />' } },
-      { path: '/admin/prompt-eval', component: { template: '<div />' } },
     ],
   });
   await router.push(path);
@@ -275,13 +277,13 @@ describe('Skills 页 tab 收敛（健康中心独立成页）', () => {
     liveSkillStatsMap.value = null;
   });
 
-  it('单一目录视图：不再有视图切换页签，也不渲染健康中心（Prompt 评估已拆为独立页）', async () => {
+  it('单一目录视图：不再有视图切换页签，也不渲染健康中心', async () => {
     const { wrapper } = await mountHost('/admin/skills');
     expect(wrapper.findAll('.skills-tabs .tab')).toHaveLength(0);
     expect(wrapper.find('.hc-embedded').exists()).toBe(false);
     // 目录在位：KPI 卡带（无档案时 Skill 卡显 0；2026-10-04 状态条已退役）
     expect(wrapper.find('.mk-kpi-grid').exists()).toBe(true);
-    // 页头只剩「批量模型配置」——「批量跑评估」随评估页搬走
+    // 页头只剩「批量模型配置」（「批量跑评估」原属评估页，随该页一并下线）
     const actions = wrapper.findAll('.mk-pagehead__actions button').map((b) => b.text());
     expect(actions).toEqual(['批量模型配置']);
     wrapper.unmount();
@@ -295,15 +297,6 @@ describe('Skills 页 tab 收敛（健康中心独立成页）', () => {
       expect(router.currentRoute.value.query.refresh).toBe('1');
       wrapper.unmount();
     }
-  });
-
-  it('老深链 ?tab=prompt-eval 改投独立页 /admin/prompt-eval（?peTab= 原样带走）', async () => {
-    const { wrapper, router } = await mountHost('/admin/skills?tab=prompt-eval&peTab=runs');
-    expect(router.currentRoute.value.path).toBe('/admin/prompt-eval');
-    expect(router.currentRoute.value.query.peTab).toBe('runs');
-    // 宿主键不跟着搬：新页没有 ?tab= 语义，留着只会和页内键混淆
-    expect(router.currentRoute.value.query.tab).toBeUndefined();
-    wrapper.unmount();
   });
 
   it('页头「批量模型配置」打开覆盖矩阵弹窗（原「模型路由」页签的替代落点）', async () => {

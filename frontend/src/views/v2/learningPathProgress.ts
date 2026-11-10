@@ -6,7 +6,7 @@
  * 读起来像 100% 卡死。另外后端 `generation-status` 一直带着 `currentStageNumber` 与
  * `heartbeatAt`，详情页一个都没用：用户看不到「正在做第几阶段」，也看不出进程是否还活着。
  *
- * 本模块只做纯函数格式化，供详情页渲染与单测；口径与列表页保持同一套判据
+ * 本模块只做纯函数格式化，供详情页/目标页渲染与单测；口径与列表页保持同一套判据
  * （phase=core 给时长承诺；completed >= total 判「写入中」）。
  */
 
@@ -70,9 +70,9 @@ export function buildGenerationProgress(
 
   let primary: string;
   if (lifecycle.phase === 'core') {
-    primary = '正在生成路径（通常几分钟）…';
+    primary = '正在生成路径…';
   } else if (total > 0 && clampedDone >= total) {
-    primary = '课时正在写入，马上就好…';
+    primary = '课时正在写入…';
   } else if (total > 0) {
     const current = isPositiveInt(lifecycle.currentStageNumber)
       ? Math.min(lifecycle.currentStageNumber, total)
@@ -93,4 +93,51 @@ export function buildGenerationProgress(
     : '你也可以先去别的页面看看。';
 
   return { primary, secondary };
+}
+
+/* ---------- 目标页 gen-pill（走查 2026-11-02 P22 三缺陷） ----------
+   确认后约 1.5s 后端就落了路径记录、会话 isCompleted——但阶段/课时生成还在后端跑
+   （实测约 7 分钟）。目标页此前只看会话 phase，pill 提前跳平静终态、刷新即消失、
+   完成弹层永远说「还在生成中」。修法：与列表页同源（generation-status 轮询），
+   状态 → 文案的映射收在本模块纯函数里，供单测锁定。 */
+
+/** 终态判据：与列表页（V2LearningPaths pollOnce）同一套口径，不另造第三种写法 */
+export function isGenerationSettled(lifecycle: GenerationLifecycleLike | null | undefined): boolean {
+  if (!lifecycle) return false;
+  return lifecycle.phase === 'ready' || lifecycle.status === 'failed' || lifecycle.status === 'stale';
+}
+
+/** 生成中 pill 的紧凑阶段短语（口径同 buildGenerationProgress 主行 / 列表页 phaseTextOf） */
+export function genStageLabel(lifecycle: GenerationLifecycleLike): string {
+  const done = isPositiveInt(lifecycle.completedStages) ? lifecycle.completedStages : 0;
+  const total = isPositiveInt(lifecycle.totalStages) ? lifecycle.totalStages : 0;
+  const clampedDone = total > 0 ? Math.min(done, total) : done;
+  if (lifecycle.phase === 'core') return '规划阶段与课时';
+  if (total > 0 && clampedDone >= total) return '课时正在写入';
+  if (total > 0) return `课程准备中（${clampedDone}/${total}）`;
+  return '课程准备中';
+}
+
+export interface GenPillCopy {
+  tone: 'run' | 'done' | 'fail';
+  text: string;
+}
+
+/**
+ * status → pill 文案的唯一映射。
+ * - 生成中 → run「正在生成路径 · {真实阶段}」；
+ * - 完成 → done「路径已创建 · 生成完成」（点击去路径详情）；
+ * - 失败/stale → fail「生成失败」（重试入口在路径列表的失败卡上）；
+ * - 状态接口尚未应答（null/undefined，短暂窗口）→ run 过渡「路径已创建 · 生成中」——
+ *   P22 红线：生成未确认完成前不得给平静终态。
+ */
+export function genPillCopy(lifecycle: GenerationLifecycleLike | null | undefined): GenPillCopy {
+  if (!lifecycle) return { tone: 'run', text: '路径已创建 · 生成中' };
+  if (lifecycle.status === 'failed' || lifecycle.status === 'stale') {
+    return { tone: 'fail', text: '生成失败' };
+  }
+  if (lifecycle.phase === 'ready') {
+    return { tone: 'done', text: '路径已创建 · 生成完成' };
+  }
+  return { tone: 'run', text: `正在生成路径 · ${genStageLabel(lifecycle)}` };
 }

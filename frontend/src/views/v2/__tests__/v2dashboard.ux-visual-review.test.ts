@@ -118,3 +118,54 @@ describe('学习台成就提示口径（走查 2026-10-08 #75）', () => {
     expect(source).not.toContain("replace(/KTL/g");
   });
 });
+
+/**
+ * 学习台新手态（2026-11-07 用户走查 图3/图4）
+ *
+ * 用户原话：「右卡『本周节奏』在 0 记录时，把 7 天日历藏起来换成了虚线空框……哪怕今天还没学，
+ * 今天依然是 11月7日周六！把日历藏起来会让首页像没数据的毛坯房，还导致 PC 端左卡高、右卡矮，
+ * 底边根本不齐」；「左上角 56×56 的灰色大方块独占 64px 高」「3 个示例用了虚线边框，像填空题
+ * 不像按钮」。
+ *
+ * 四条修法逐条锁死：① 7 天打卡条常驻（今日 0 分钟显示「待点亮」）；② 图标盘 40px 与标题同行；
+ * ③ 示例芯片实线细边 + 36px + ↗；④ 空态双栏两卡等高。
+ */
+describe('学习台新手态：日历常驻 / 图标同行 / 芯片实线 / 双栏等高（走查 2026-11-07）', () => {
+  it('① 7 天打卡条常驻（不再被 hasAnyMinutes 换成虚线空框）', () => {
+    expect(html, '.cal 又被 hasAnyMinutes 门槛挡住：0 分钟的新用户看不到日历').not.toMatch(/v-else-if="hasAnyMinutes"\s*\n?\s*class="cal"/);
+    expect(html, '日历条不在模板里').toContain('class="cal"');
+    expect(source, '虚线空态 .week__empty 应整块退役').not.toContain('week__empty');
+    expect(html, '今日 0 分钟应给「待点亮」，否则又是一个没有任何提示的空格').toContain("d.isToday ? '待点亮' : '—'");
+  });
+
+  it('② 空态图标盘 40px，且与标题同行（不再独占一行）', () => {
+    expect(html, '图标盘又独占一整行了').toContain('class="action__head"');
+    const art = ruleAfter('.action__art {');
+    expect(px(decl(art, 'width')), '图标盘没收到 40px').toBe(40);
+    expect(px(decl(art, 'height'))).toBe(40);
+    expect(decl(art, 'flex'), '不给 flex:none，标题长了会把图标压扁').toBe('none');
+    /* 圆角必须落在阶梯内（规则 14 棘轮只认 4/6/8/12/16/999）：用户指令里的 10px 会当场记违规 */
+    expect(decl(art, 'border-radius'), '图标盘圆角跑到阶梯外').not.toContain('10px');
+  });
+
+  it('③ 示例芯片实线细边 + 36px + 行尾 ↗（不再像填空题）', () => {
+    const chip = ruleAfter('.example {');
+    const border = decl(chip, 'border') ?? '';
+    expect(border, '又是 dashed：虚线在 UI 语言里是「拖拽上传占位」不是「可点入口」').not.toContain('dashed');
+    expect(border).toContain('solid');
+    expect(px(decl(chip, 'height')), '芯片高度回到 32：lt36 预算恒为 0，会越阈').toBe(36);
+    expect(decl(chip, 'border-radius')).toBe('var(--mk-radius-md)');
+    expect(html, '芯片行尾没有 ↗').toContain('<ArrowUpRight');
+  });
+
+  it('④ PC 双栏空态两卡等高（仅空态拉伸，有数据时仍按内容定高）', () => {
+    expect(html).toContain("'dash--empty': pageState === 'empty'");
+    expect(css, '空态没把这一行拉齐，左右卡底边还是错开').toContain('.dash--empty { align-items: stretch; }');
+    expect(css, '左卡没填满，栅格里的卡片仍是内容高').toContain('.dash--empty .dash__left { align-items: stretch; }');
+    expect(css, '右卡注释没沉到卡底，两卡底部对不齐').toContain('.dash--empty .week { align-content: space-between; }');
+  });
+
+  it('移动端「待点亮」不被省略号切掉（列间距收到 3px）', () => {
+    expect(css, '窄屏列间距没收，三字的「待点亮」会溢出成「待点…」').toContain('.cal__grid { column-gap: 3px; }');
+  });
+});

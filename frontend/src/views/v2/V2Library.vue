@@ -8,7 +8,9 @@
           <h1>资料库</h1>
           <p v-if="!loading && !loadError" class="library__sub">{{ summaryText }}</p>
         </div>
-        <button type="button" class="library__upload" :disabled="uploading" @click="openPicker">
+        <!-- 「上传资料」每屏只保留一个入口（2026-11-04：空资料库时页头 PRIMARY 与空态居中 CTA
+             同屏重复）——空态显示居中 CTA，有资料后本按钮是唯一入口。同 V2LearningPaths。 -->
+        <button v-if="items.length" type="button" class="library__upload" :disabled="uploading" @click="openPicker">
           <Upload :size="16" :stroke-width="2" aria-hidden="true" />
           {{ uploading ? '上传中…' : '上传资料' }}
         </button>
@@ -136,13 +138,18 @@
         <div class="lib-modal__scroll">
           <div v-if="preview.item?.brief" class="lib-preview__brief">
             <p v-if="preview.item.brief.overview">{{ preview.item.brief.overview }}</p>
-            <p v-if="preview.item.brief.toc?.length" class="lib-preview__toc">
-              目录：{{ preview.item.brief.toc.slice(0, 8).map((entry) => entry.title).join(' · ') }}
+            <!-- 目录去掉英文条目（2026-11-06 走查 图5）：联网资料的第一条目录常是
+                 抓取页的英文标题（Regulations Regarding…），列出来像章节名错位 -->
+            <p v-if="previewTocTitles.length" class="lib-preview__toc">
+              目录：{{ previewTocTitles.join(' · ') }}
             </p>
           </div>
           <p v-if="preview.loading" class="lib-preview__loading">正在读取原文…</p>
           <p v-else-if="preview.error" class="library__error">{{ preview.error }}</p>
-          <pre v-else class="lib-preview__text">{{ preview.markdown }}</pre>
+          <!-- 原文预览改渲染（2026-11-06 走查 图5/6/8）：此前是 <pre> 直出原始 markdown——
+               `## 第一章` 和 `*第一条*` 原样裸露、几千字挤成一坨。现在先清洗爬虫头、
+              再按 markdown 渲染，行高 1.75，条文各自成段。 -->
+          <div v-else class="lib-preview__text" v-html="previewHtml"></div>
           <p v-if="preview.truncated" class="lib-preview__note">仅预览前 60000 字，完整正文用于路径与课堂取回。</p>
         </div>
       </section>
@@ -182,6 +189,8 @@ import {
   type UploadedMaterial,
 } from '@/api/materials';
 import { toast } from '@/utils/toast';
+import { looksLikeEnglishTitle, materialHeadingOf, normalizeMaterialMarkdown } from '@/utils/materialText';
+import { plainMessageHtml } from '@/utils/messageMarkdown';
 
 type FilterKey = 'all' | 'upload' | 'web';
 type SortKey = 'recent' | 'name';
@@ -218,6 +227,20 @@ const search = ref('');
 const filter = ref<FilterKey>('all');
 const sort = ref<SortKey>('recent');
 const usageFilter = ref<UsageFilterKey>('all');
+
+/* 原文预览渲染（2026-11-06 走查 图5/6/8）：清洗爬虫头 + markdown 渲染，
+   不再把原始源码铺在 <pre> 里。（纯展示层兜底；入库清洗归采集链路。） */
+const previewHtml = computed(() => {
+  const normalized = normalizeMaterialMarkdown(preview.markdown);
+  return normalized ? plainMessageHtml(normalized) : '';
+});
+/** 目录只列中文条目：联网资料的英文抓取标题不是章节 */
+const previewTocTitles = computed(() =>
+  (preview.item?.brief?.toc || [])
+    .map((entry) => materialHeadingOf(String(entry?.title || '')))
+    .filter((title) => !!title && !looksLikeEnglishTitle(title))
+    .slice(0, 8)
+);
 
 const preview = reactive<{
   open: boolean;
@@ -314,22 +337,37 @@ function metaOf(item: UploadedMaterial): string {
   const pages = item.structure?.pageCount ?? item.structure?.slideCount ?? item.structure?.sheetCount ?? 0;
   const parts = [formatBytes(item.size), `${item.charCount} 字`];
   if (pages > 0) parts.push(`${pages} 页/节`);
-  if (item.structure?.headingCount > 0) parts.push(`${item.structure.headingCount} 章`);
+  /* 章节数按「清洗后的章节名」算（2026-11-06 走查）：联网资料的 headingCount 把英文 H1
+     也算进去（实测该文档 =2），卡片却只显示中文那一章，读起来自相矛盾 */
+  const headingCount = headingListOf(item).length || item.structure?.headingCount || 0;
+  if (headingCount > 0) parts.push(`${headingCount} 章`);
   if (item.origin === 'web') parts.push('联网采集');
   return parts.join(' · ');
 }
 
-function headingsOf(item: UploadedMaterial): string[] {
+/* 章节名清洗（2026-11-06 走查）：联网资料的锚点有两类脏数据——
+   ① #1 锚点是抓取页自带的英文 H1（Regulations Regarding…）；
+   ② 后续锚点标题是「第一章 总则 + 全部条文」的整行（实测 5752 字），
+      直接铺出来就是卡片上那条两行长文，还带裸露的 `*第一条*`。
+   两步处理后才是可读章节名：materialHeadingOf 切到章节名/首句并截断，
+   再滤掉英文。中文锚点一个都没有时保留原样——宁可显示英文，也不要显示空。 */
+function headingListOf(item: UploadedMaterial): string[] {
   const seen = new Set<string>();
   const headings: string[] = [];
   for (const anchor of item.anchors || []) {
-    const heading = String(anchor?.heading || '').trim();
-    if (!heading || heading === '（无标题）' || seen.has(heading)) continue;
+    const raw = String(anchor?.heading || '').trim();
+    if (!raw || raw === '（无标题）') continue;
+    const heading = materialHeadingOf(raw);
+    if (!heading || seen.has(heading)) continue;
     seen.add(heading);
     headings.push(heading);
-    if (headings.length >= 4) break;
   }
-  return headings;
+  const zh = headings.filter((heading) => !looksLikeEnglishTitle(heading));
+  return zh.length ? zh : headings;
+}
+
+function headingsOf(item: UploadedMaterial): string[] {
+  return headingListOf(item).slice(0, 4);
 }
 
 function usageHint(item: UploadedMaterial): string {
@@ -648,20 +686,30 @@ onMounted(load);
 
 .lib-card__main {
   display: flex;
+  /* flex-start 不能省（2026-11-06 走查）：默认 stretch 会把左边那枚格式签拉成
+     与卡片等高的「长 pill」——一列 200px 高的窄条只顶上写着 MD，读作破版 */
+  align-items: flex-start;
   gap: 12px;
   flex: 1;
   min-width: 0;
 }
 
+/* 格式签：30×30 小方砖（不是拉长的色条），失败/上传/联网同一形态 */
 .lib-card__ext {
   flex: 0 0 auto;
-  padding: 3px 6px;
+  display: inline-grid;
+  place-items: center;
+  /* 方块起步、按内容放宽：DOCX/PPTX 这类 4 字格式在 34px 里会顶到边 */
+  min-width: 34px;
+  height: 34px;
+  padding: 0 7px;
   border-radius: var(--mk-radius-sm);
   background: color-mix(in srgb, var(--blue) 10%, transparent);
   color: var(--blue-deep);
-  font-size: var(--mk-fs-micro);
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.02em;
+  line-height: 1;
 }
 
 .lib-card__body {
@@ -706,12 +754,18 @@ onMounted(load);
   margin-top: 8px;
 }
 
+/* 徽章 = 非点击类状态标签，走 §1 的紧凑小方签（22px / 1px 6px / --mk-radius-sm / 12px），
+   与 v2.css 全局 .v2-page .badge 同一组；原 2px 7px + 999px 药丸已退役。
+   字号固定 12px，不用 --mk-fs-micro（宽屏会涨到 12.5px，顶破 §1 的 11~12px 上限）。 */
 .lib-badge {
-  padding: 2px 7px;
-  border-radius: var(--mk-radius-pill);
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 1px 6px;
+  border-radius: var(--mk-radius-sm);
   background: var(--mk-surface-2);
   color: var(--muted);
-  font-size: var(--mk-fs-micro);
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -911,8 +965,26 @@ onMounted(load);
   font-family: var(--mk-sans);
   font-size: 12.5px;
   line-height: 1.75;
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+/* 渲染后的正文排版（2026-11-06 走查 图5/6/8）：markdown 已经把条文断成段，
+   这里只管段距与标题档。原先的 white-space: pre-wrap 已随 <pre> 一起撤除——
+   保留它会让每个 markdown 段落之间再叠一行空白。 */
+.lib-preview__text :deep(p) { margin: 0 0 10px; }
+.lib-preview__text :deep(h1),
+.lib-preview__text :deep(h2) { margin: 18px 0 9px; font-size: 14px; font-weight: 800; line-height: 1.45; }
+.lib-preview__text :deep(h3),
+.lib-preview__text :deep(h4) { margin: 14px 0 7px; font-size: 13px; font-weight: 800; line-height: 1.45; }
+.lib-preview__text :deep(h1:first-child),
+.lib-preview__text :deep(h2:first-child),
+.lib-preview__text :deep(h3:first-child) { margin-top: 0; }
+.lib-preview__text :deep(strong) { font-weight: 800; }
+.lib-preview__text :deep(ul),
+.lib-preview__text :deep(ol) { margin: 0 0 10px; padding-left: 20px; }
+.lib-preview__text :deep(blockquote) {
+  margin: 0 0 10px; padding: 4px 0 4px 10px;
+  border-left: 2px solid color-mix(in srgb, var(--blue) 45%, transparent);
+  color: var(--muted);
 }
 
 .lib-preview__loading,

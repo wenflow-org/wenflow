@@ -164,6 +164,19 @@ function claim(session: any) {
   return { operationId: 'op-1', session, messagesBaseCount: session.messages.length };
 }
 
+/**
+ * 生产不变式：任一**真实出题**回合之前，课堂上至少已有一条带 analysis 的导师消息——
+ * `shouldEmitCheckpoint` 要求 lastAnalysis 存在，否则编排层不会把 emitCheckpoint 置真
+ * （出题闸以 controls.emitCheckpoint 为权威，见 teaching-turn-engine 的检查点产生分支）。
+ * 旧 fixture 缺这条消息，等于在「编排层没批准」的状态下断言出题，测的是生产上不存在的路径。
+ */
+const MESSAGES_WITH_ANALYSIS = [
+  // 两条教师消息：shouldEmitCheckpoint 的「首个教学回合不出题」结构闸（2026-11-08 p-π外评修复）
+  // 要求除开场外已有教学回复；这些单测考察同题抑制/判分链路，不是首回合节奏。
+  { role: 'assistant', content: '我们开始吧', timestamp: new Date().toISOString(), analysis: { understanding: 0.8, engagement: 0.7 } },
+  { role: 'assistant', content: '先把汇总的动作拆成两步讲清楚。', timestamp: new Date().toISOString(), analysis: { understanding: 0.75, engagement: 0.7 } },
+];
+
 function turnSkillResult(reply = '我们再对照一遍：这道题的关键动作是重填。', control: Record<string, unknown> = {}) {
   return {
     success: true,
@@ -321,6 +334,143 @@ describe('检查点提交链路集成（报告 #15/#16）', () => {
   })
 })
 
+describe('检查点作废通道（2026-11-07 入户实证：正文宣布跳过但旧题卡住新题）', () => {
+  const STUCK_ID = 'cp-1';
+  const NEW_QUESTION = '如果先按日期分组再汇总，哪一步能少返工？';
+
+  /**
+   * 真实链路取件：本文件顶层把 `../../../skills/teaching-turn` mock 成空壳，正常拿不到真 normalizer；
+   * 用 requireActual 取回真实 `normalizeOutput`，让 mock 的 executeSkill 返回**经真实出口白名单**的
+   * artifact（终审复核要求：不要再绕过 normalizer 直接喂手搓 artifact）。
+   */
+  const { normalizeOutput: realNormalizeOutput } = jest.requireActual('../../../skills/teaching-turn') as {
+    normalizeOutput: (parsed: Record<string, any>, input: any) => Record<string, any>;
+  };
+
+  /** 让 mock 的 executeSkill 用真实 normalizeOutput 产出 artifact；input 由真实链路的 buildTeachingTurnInput 提供 */
+  function turnSkillThroughRealNormalizer(parsedControl: Record<string, unknown>, reply = '这道不算，我们接着往下。') {
+    mockTurnSkill.mockImplementation(async (_def: unknown, input: Record<string, any>) => ({
+      success: true,
+      internal: {
+        ext: {
+          teachingTurnOutcome: {
+            artifact: realNormalizeOutput({
+              reply,
+              analysis: { understanding: 0.8, engagement: 0.7, confusionPoints: [] },
+              knowledge: { currentPoint: '汇总动作', points: [] },
+              pedagogy: { strategies: ['feedback'] },
+              control: parsedControl,
+            }, input),
+          },
+        },
+      },
+    }));
+  }
+
+  /** 旧题同时挂在顶层 pendingCheckpoint 与 sessionArtifacts.pendingCheckpoint（双槽清理口径）。
+   *  lastCheckpointTurn 一并给出：真实不变式里只要有 pending 就必定写过 lastCheckpointTurn（出题时写），
+   *  缺了它节奏闸会因 `=== undefined` 直接放行，测不到作废回合的真实出题闸行为。 */
+  function sessionWithStuckPending() {
+    return sessionRecord({
+      teachingState: {
+        pendingCheckpoint: CHECKPOINT,
+        sessionArtifacts: { pendingCheckpoint: CHECKPOINT },
+        checkpointHistory: [],
+        lastCheckpointTurn: 1,
+        classroomContext: { stage: { current: 'teaching' } },
+      },
+    });
+  }
+
+  it('作废回合：编排层 emitCheckpoint=false → 即便模型给了新题也不落库；pending 清掉、留 voided 痕', async () => {
+    const session = sessionWithStuckPending();
+    mockClaimOperation.mockResolvedValue(claim(session));
+    // 模型病态地既作废又同轮塞一道新题（提示词本就不允许，这里验证引擎也不越权）
+    turnSkillThroughRealNormalizer({
+      voidCheckpoint: true,
+      checkpoint: { type: 'short_answer', question: NEW_QUESTION, expectedKeywords: ['先分组'] },
+    });
+
+    // 普通聊天回合（没有 checkpointId）：真实轨迹里教师在这一轮宣布弃题并把话题推进到别的教学点
+    const result = await processStudentMessage('sess-1', '我明白了，换个点讲吧', {
+      operationClaim: claim(session) as never,
+    });
+
+    // 权威一：真实链路的 buildTeachingTurnInput 注入的 emitCheckpoint（待答检查点还在 → false）
+    const skillInput = mockTurnSkill.mock.calls[0][1] as any;
+    expect(skillInput.controls.emitCheckpoint).toBe(false);
+    // 权威二：出题闸没有被作废绕过——本轮没有任何新检查点落库，也没有旧题借尸还魂
+    expect(result.checkpoint).toBeNull();
+    const committed = (mockCommitTurnState.mock.calls[0][2] as any).teachingState;
+    expect(committed.pendingCheckpoint).toBeUndefined();
+    expect(committed.sessionArtifacts?.pendingCheckpoint).toBeUndefined();
+    expect(committed.lastCheckpointTurn).toBe(1); // 节奏时钟如实记录“上一道题”的落点，作废不改写它
+    // 旧题留痕：形状与 skip 记录一致，用 voided:true 标出教师侧作废
+    expect(committed.checkpointHistory).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        checkpointId: STUCK_ID, title: CHECKPOINT.title, type: CHECKPOINT.type,
+        question: CHECKPOINT.question, passed: false, voided: true,
+      }),
+    ]));
+    expect(mockRecordDegradation).not.toHaveBeenCalled();
+  });
+
+  it('护栏（防回归）：真实作答回合答错 → 同题仍保留可重答，作废信号不得打断', async () => {
+    const session = sessionWithStuckPending();
+    mockClaimOperation.mockResolvedValue(claim(session));
+    // 模型即便误报作废，也不能在判分块之前清掉 pending
+    mockTurnSkill.mockResolvedValue(turnSkillResult('这道没答对。', { voidCheckpoint: true }));
+
+    const result = await processStudentMessage('sess-1', '理解检查：…我的答案：我按常规观察记录处理。', {
+      operationClaim: claim(session) as never,
+      checkpointId: STUCK_ID,
+      checkpointJudgement: judgeCheckpointAnswer(CHECKPOINT, { answerText: '我按常规观察记录处理。' }),
+      checkpointSubmission: {},
+    });
+
+    expect(result.checkpointResolution?.passed).toBe(false);
+    // 服务端仍把同一道题（同 cpId）回给前端，学生可再次作答
+    expect(result.checkpoint?.id).toBe(STUCK_ID);
+    const committed = (mockCommitTurnState.mock.calls[0][2] as any).teachingState;
+    expect(committed.pendingCheckpoint?.id).toBe(STUCK_ID);
+    expect(committed.checkpointHistory.some((row: any) => row.voided === true)).toBe(false);
+  });
+
+  it('单一权威（防回归）：编排层 emitCheckpoint=false 且无待答题 → 模型给的 checkpoint 不落库', async () => {
+    // 无 analysis ⇒ shouldEmitCheckpoint=false（编排层未批准出题）。此前引擎会在这条旁路上落库，
+    // 等于在编排层没批准的时刻多探测一次；本用例锁死「为 false 时任何 checkpoint 都不落库」。
+    const session = sessionRecord({
+      teachingState: { checkpointHistory: [], classroomContext: { stage: { current: 'teaching' } }, sessionArtifacts: {} },
+    });
+    mockClaimOperation.mockResolvedValue(claim(session));
+    turnSkillThroughRealNormalizer({ checkpoint: { type: 'short_answer', question: NEW_QUESTION, expectedKeywords: ['先分组'] } });
+
+    const result = await processStudentMessage('sess-1', '我明白了', { operationClaim: claim(session) as never });
+
+    const skillInput = mockTurnSkill.mock.calls[0][1] as any;
+    expect(skillInput.controls.emitCheckpoint).toBe(false);
+    expect(result.checkpoint).toBeNull();
+    const committed = (mockCommitTurnState.mock.calls[0][2] as any).teachingState;
+    expect(committed.pendingCheckpoint).toBeUndefined();
+  });
+
+  it('没有待答检查点时 voidCheckpoint 是空操作：不乱写历史、不误伤正常流程', async () => {
+    const session = sessionRecord({
+      teachingState: {
+        checkpointHistory: [], classroomContext: { stage: { current: 'teaching' } }, sessionArtifacts: {},
+      },
+    });
+    mockClaimOperation.mockResolvedValue(claim(session));
+    mockTurnSkill.mockResolvedValue(turnSkillResult('我们继续。', { voidCheckpoint: true }));
+
+    await processStudentMessage('sess-1', '继续', { operationClaim: claim(session) as never });
+
+    const committed = (mockCommitTurnState.mock.calls[0][2] as any).teachingState;
+    expect(committed.checkpointHistory).toHaveLength(0);
+    expect(committed.pendingCheckpoint).toBeUndefined();
+  });
+});
+
 describe('检查点同题复问抑制（TONIGHT-BROAD-2026-10-07 宽域 C 轨缺陷②）', () => {
   const ANSWER_TEXT = '表复制一份，数字重填一遍，还得再做一次核对。';
   const OTHER_QUESTION = '如果把汇总动作拆成两个步骤，先做哪一步能少返工？';
@@ -349,7 +499,7 @@ describe('检查点同题复问抑制（TONIGHT-BROAD-2026-10-07 宽域 C 轨缺
 
   /** 下一轮：模型又输出一道检查点候选（control.checkpoint），返回落库状态与回合结果 */
   async function emitCandidate(teachingState: Record<string, any>, candidate: Record<string, unknown>) {
-    const session = sessionRecord({ teachingState });
+    const session = sessionRecord({ teachingState, messages: MESSAGES_WITH_ANALYSIS });
     mockClaimOperation.mockResolvedValue(claim(session));
     mockTurnSkill.mockResolvedValue(turnSkillResult('我们再确认一下别的做法。', { checkpoint: candidate }));
     const result = await processStudentMessage('sess-1', '我明白了', {
@@ -421,7 +571,7 @@ describe('检查点同题复问抑制（TONIGHT-BROAD-2026-10-07 宽域 C 轨缺
       type: 'short_answer',
       allowSkip: true,
     }));
-    expect(committed.lastCheckpointTurn).toBe(2);
+    expect(committed.lastCheckpointTurn).toBe(3);
     expect(result.checkpoint?.question).toBe(OTHER_QUESTION);
     expect(mockRecordDegradation).not.toHaveBeenCalled();
   })
@@ -442,6 +592,7 @@ describe('检查点概念归属兜底（EPOCH2 发现 #2 收尾）', () => {
   /** currentPoint 缺失、看板首点有名字 → 用首点兜底归属（此前直接 null=证据无键） */
   async function emitWithKnowledge(knowledge: Record<string, unknown>) {
     const session = sessionRecord({
+      messages: MESSAGES_WITH_ANALYSIS,
       teachingState: { checkpointHistory: [], classroomContext: { stage: { current: 'teaching' } }, sessionArtifacts: {} },
     });
     mockClaimOperation.mockResolvedValue(claim(session));
@@ -634,5 +785,41 @@ describe('反馈硬门接线（拍板 #5 切口1+2）：code 判错回合的回�
 
     expect(result.aiResponse).toContain('答对了');
     expect(mockRecordDegradation).not.toHaveBeenCalled();
+  })
+})
+
+describe('受理入口护栏（issue #210）：纯空白 message 不当真实教学回合', () => {
+  it.each(['', '   ', '\n\n', '\t', ' \n\t '])(
+    '空白 message %p → 抛「缺少消息内容」，不落库、不跑模型',
+    async (blank) => {
+      const session = sessionRecord();
+      await expect(
+        processStudentMessage('sess-1', blank, { operationClaim: claim(session) as never })
+      ).rejects.toThrow('缺少消息内容');
+      expect(mockTurnSkill).not.toHaveBeenCalled();
+      expect(mockCommitTurnState).not.toHaveBeenCalled();
+    }
+  )
+
+  it('非字符串 message → 同样拒绝（不向下游 .trim 抛 TypeError）', async () => {
+    const session = sessionRecord();
+    await expect(
+      processStudentMessage('sess-1', 123 as never, { operationClaim: claim(session) as never })
+    ).rejects.toThrow('缺少消息内容');
+    expect(mockTurnSkill).not.toHaveBeenCalled();
+    expect(mockCommitTurnState).not.toHaveBeenCalled();
+  })
+
+  it('resume-continue 空 message 豁免（断线续讲无学生新输入，保住既有行为）', async () => {
+    const session = sessionRecord();
+    mockClaimOperation.mockResolvedValue(claim(session));
+    const result = await processStudentMessage('sess-1', '', {
+      operationClaim: claim(session) as never,
+      kind: 'resume-continue',
+    });
+    expect(result).toBeDefined();
+    // 续讲不落库伪 user 消息
+    const committed = mockCommitTurnState.mock.calls[0][2] as any;
+    expect(committed.messages.some((m: any) => m.role === 'user' && m.content === '')).toBe(false);
   })
 })

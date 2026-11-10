@@ -1,179 +1,100 @@
 <template>
-  <!-- 试跑：试跑 + ACTIVE 参照 + 最近调用（验证闭环） -->
-  <div class="sdp-workbench">
-    <!-- 左：试跑 -->
-    <section class="sdp-block">
-      <header class="sdp-block__head">
-        <h4>试跑</h4>
-        <span class="sdp-block__meta">
-          <button type="button" class="mk-link" :disabled="!trialInput.trim()" @click="formatTrialJson">格式化</button>
+  <!-- 试跑：输入 + 执行链路 + 输出。
+       2026-11-06 整合：「当前生效 Prompt」搬进协议页签的查看态（那边已有全文与查看弹层），
+       「最近调用」并入运行时页签（同批日志的列表与 KPI 同窗口，不再两处各取一份）——
+       本页只负责「跑一次、看这次的结果」。 -->
+  <div class="sdp-pane">
+    <section class="mk-card">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">试跑</h3>
+        <div class="mk-card__head-right">
+          <!-- 「填入示例输入」（2026-11-08 用户「让管理员手写冷冰冰的 JSON 太难用了」）：
+               骨架值全是类型占位（""/0/false），直接点上跑必然失败。这里按输入契约给一组
+               能跑通的示例值，点一下即填好，随后可直接「开始试跑」。 -->
+          <button type="button" class="mk-link" :disabled="trialRunning" title="按输入契约填入一组可直接试跑的示例值" @click="fillSampleInput">填入示例输入</button>
+          <button type="button" class="mk-link" :disabled="!trialInput.trim() || trialRunning" @click="formatTrialJson">格式化</button>
+          <!-- 按钮文案只由「是否真的在跑」决定（2026-11-08 用户截图里的「运行中…」是旧版把
+               disabled 误当 isRunning 的写法，本处已按 trialRunning 单一判据）。 -->
           <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" :disabled="trialRunning" @click="runTrial">
-            {{ trialRunning ? '运行中…' : '运行预览' }}
+            {{ trialRunning ? '运行中…' : '▶ 开始试跑' }}
           </button>
-        </span>
-      </header>
-      <!-- 试跑输入（JSON 语法高亮覆盖层） -->
-      <div class="sdp-codehl sdp-codehl--json">
-        <pre class="sdp-codehl__pre mono" aria-hidden="true"><code v-html="trialHighlighted"></code></pre>
-        <textarea
-          ref="trialTextareaRef"
-          v-model="trialInput"
-          class="sdp-json mono sdp-codehl__ta"
-          rows="7"
-          wrap="off"
-          spellcheck="false"
-          placeholder='{}'
-          @input="syncTrialHlScroll()"
-          @scroll="syncTrialHlScroll"
-        ></textarea>
-      </div>
-      <div v-if="trialResult" class="sdp-trial__meta">
-        <span class="mk-badge" :class="trialResult.success ? 'mk-badge--ok' : 'mk-badge--bad'">
-          {{ trialResult.success ? '成功' : '失败' }}
-        </span>
-        <span class="sdp-chip">耗时 <b class="mono">{{ trialResult.duration ?? '—' }}ms</b></span>
-        <span class="sdp-chip">{{ trialResult.cached ? '缓存' : '实时' }}</span>
-        <button type="button" class="mk-link" title="保留已填输入，仅清除本次运行结果" @click="clearTrial">清除结果</button>
-      </div>
-      <div v-if="trialError" class="sdp-error">{{ trialError }}</div>
-      <pre v-if="trialOutputText" class="sdp-output mono">{{ trialOutputText }}</pre>
-      <!-- 执行链路（原型 renderSkillDetail 2332-2335：OK/ERR pill + 步骤名 + ms）。
-           真实试跑只回最终输出，无逐步链路 → 跑过显「仅返回最终输出」，未跑显占位 -->
-      <div class="sdp-steps">
-        <header class="sdp-block__head">
-          <h4>执行链路</h4>
-          <span class="sdp-block__meta">{{ trialSteps.length ? `${trialSteps.length} 步` : '—' }}</span>
-        </header>
-        <div v-for="(s, i) in trialSteps" :key="`${s.label}-${i}`" class="sdp-step">
-          <span class="mk-badge" :class="s.ok ? 'mk-badge--ok' : 'mk-badge--bad'">{{ s.ok ? 'OK' : 'ERR' }}</span>
-          <span class="sdp-step__label" :title="s.label">{{ s.label }}</span>
-          <span class="mono sdp-step__ms">{{ s.ms != null ? `${s.ms} ms` : '—' }}</span>
         </div>
-        <p v-if="!trialSteps.length" class="sdp-none" :title="trialResult ? '本次试跑仅返回最终输出' : '尚未试跑'">
-          {{ trialResult ? '本次试跑仅返回最终输出，暂无逐步明细。' : '—' }}
+      </div>
+      <div class="sdp-trial__body">
+        <!-- 试跑输入（JSON 语法高亮覆盖层） -->
+        <div class="sdp-codehl sdp-codehl--json">
+          <pre class="sdp-codehl__pre mono" aria-hidden="true"><code v-html="trialHighlighted"></code></pre>
+          <textarea
+            ref="trialTextareaRef"
+            v-model="trialInput"
+            class="sdp-json mono sdp-codehl__ta"
+            rows="7"
+            wrap="off"
+            spellcheck="false"
+            placeholder='{}'
+            @input="syncTrialHlScroll()"
+            @scroll="syncTrialHlScroll"
+          ></textarea>
+        </div>
+        <!-- 默认载荷是按输入契约生成的骨架（值为类型示例），此前只有空白 JSON，读者不知道该填什么
+             （2026-11-02 评审）。这里把契约里的输入字段列出来，并说明骨架各值的来处。 -->
+        <p v-if="inputDecls.length" class="sdp-trial__decl">
+          输入字段（{{ inputDecls.length }} 项，按输入契约生成骨架，值为类型示例）：
+          <code v-for="d in inputDecls" :key="d.name" class="mono">{{ d.name }}{{ d.type ? `: ${d.type}` : '' }}</code>
         </p>
+        <p v-else class="sdp-trial__decl">该 Skill 的输入契约没有声明必填输入，可直接在编辑器里写任意 JSON。</p>
+        <div v-if="trialResult" class="sdp-trial__meta">
+          <span class="mk-badge" :class="trialResult.success ? 'mk-badge--ok' : 'mk-badge--bad'">
+            {{ trialResult.success ? '成功' : '失败' }}
+          </span>
+          <span class="mk-badge mk-badge--muted">耗时 <b class="mono">{{ trialResult.duration ?? '—' }}ms</b></span>
+          <span class="mk-badge mk-badge--muted">{{ trialResult.cached ? '缓存' : '实时' }}</span>
+          <button type="button" class="mk-link" title="保留已填输入，仅清除本次运行结果" @click="clearTrial">清除结果</button>
+        </div>
+        <div v-if="trialError" class="mk-alert mk-alert--row" role="alert">
+          <span class="mk-alert__msg">{{ trialError }}</span>
+        </div>
+        <pre v-if="trialOutputText" class="sdp-output mono">{{ trialOutputText }}</pre>
+        <!-- 执行链路（原型 renderSkillDetail 2332-2335：OK/ERR pill + 步骤名 + ms）。
+             真实试跑只回最终输出，无逐步链路 → 跑过显「仅返回最终输出」，未跑显占位 -->
+        <div class="sdp-steps">
+          <div class="mk-section__head">
+            <h4>执行链路</h4>
+            <span class="mk-card__meta">{{ trialSteps.length ? `${trialSteps.length} 步` : '—' }}</span>
+          </div>
+          <div v-for="(s, i) in trialSteps" :key="`${s.label}-${i}`" class="sdp-step">
+            <span class="mk-badge" :class="s.ok ? 'mk-badge--ok' : 'mk-badge--bad'">{{ s.ok ? 'OK' : 'ERR' }}</span>
+            <span class="sdp-step__label" :title="s.label">{{ s.label }}</span>
+            <span class="mono sdp-step__ms">{{ s.ms != null ? `${s.ms} ms` : '—' }}</span>
+          </div>
+          <p v-if="!trialSteps.length" class="mk-empty--line" :title="trialResult ? '本次试跑仅返回最终输出' : '尚未试跑'">
+            <!-- 2026-11-04 文案口径修复：原句「点「运行预览」后这里显示每一步的耗时。」是教用法式句式，
+                 按既定口径只报状态（未运行过、无逐步明细），不教操作。 -->
+            {{ trialResult ? '本次试跑仅返回最终输出，暂无逐步明细。' : '尚未运行过，暂无逐步明细。' }}
+          </p>
+        </div>
       </div>
-    </section>
-
-    <!-- 右：ACTIVE Prompt 只读参照 -->
-    <section class="sdp-prompt">
-      <header class="sdp-block__head">
-        <h4>当前生效 Prompt</h4>
-        <button type="button" class="mk-link" @click="copy(effectivePrompt?.prompt?.systemPrompt || '')">
-          复制
-        </button>
-      </header>
-      <div class="sdp-prompt__facts">
-        <span>生效版本 <b class="mono">v{{ effectivePrompt?.prompt?.version ?? '—' }}</b></span>
-      </div>
-      <p v-if="inspectError" class="sdp-none sdp-bad-text">Prompt 检视加载失败。<button type="button" class="mk-link" @click="loadInspect">重试</button></p>
-      <pre class="sdp-prompt__code">{{ effectivePrompt?.prompt?.systemPrompt || (inspectError ? '加载失败，请重试' : '暂无内容') }}</pre>
-      <p class="sdp-prompt__hint">
-        正式内容以源文件为准：修改 <code class="mono">{{ filePath || 'prompts/skill.*.md' }}</code>，经部署同步生效。
-      </p>
     </section>
   </div>
-
-  <!-- 最近调用（全宽） -->
-  <section class="sdp-block">
-    <header class="sdp-block__head">
-      <h4>最近调用</h4>
-    </header>
-    <div v-if="recentLogs.length" class="sdp-logs">
-      <div
-        v-for="log in recentLogs"
-        :key="log.id"
-        class="sdp-log"
-        :class="{ 'is-open': openLogId === log.id }"
-      >
-        <button type="button" class="sdp-log__main" @click="toggleLogDetail(log)">
-          <span class="sdp-log__dot" :class="`is-${log.status}`"></span>
-          <span class="sdp-log__time mono">{{ log.time }}</span>
-          <span class="sdp-log__dur mono">{{ fmtMs(log.durationMs) }}</span>
-          <span class="sdp-log__summary">{{ log.summary }}</span>
-        </button>
-        <button
-          type="button"
-          class="sdp-log__rerun"
-          :disabled="log.loading || trialRunning"
-          @click="rerun(log)"
-        >
-          {{ log.loading ? '…' : '重跑' }}
-        </button>
-        <!-- 看 Trace：跳到执行日志页并预填该条链路（与「重跑」并存——重跑验行为，看 Trace 查现场） -->
-        <button
-          type="button"
-          class="sdp-log__trace"
-          :disabled="!log.traceId"
-          :title="log.traceId ? `在执行日志查看链路 ${log.traceId}` : '该条日志没有 traceId'"
-          @click="goTrace(log.traceId)"
-        >
-          看 Trace
-        </button>
-        <div v-if="openLogId === log.id && log.detail" class="sdp-log__detail">
-          <div v-if="log.detail.input" class="sdp-log__io">
-            <span>输入</span>
-            <pre class="mono">{{ displayCap(log.detail.input) }}</pre>
-          </div>
-          <div v-if="log.detail.output" class="sdp-log__io">
-            <span>输出</span>
-            <pre class="mono">{{ log.detail.output }}</pre>
-          </div>
-          <div v-if="log.detail.error" class="sdp-log__io sdp-log__io--err">
-            <span>错误</span>
-            <pre class="mono">{{ log.detail.error }}</pre>
-          </div>
-        </div>
-      </div>
-    </div>
-    <MkLoading v-if="recentLogsLoading" inline text="日志加载中…" />
-    <p v-else-if="recentLogsError" class="sdp-none sdp-bad-text">近 8 条日志加载失败。<button type="button" class="mk-link" @click="loadRecentLogs">重试</button></p>
-    <p v-else class="sdp-none">近一周内没有调用记录。</p>
-  </section>
 </template>
 
 <script setup lang="ts">
 /**
- * 试跑 tab：试跑输入 + ACTIVE Prompt 参照 + 最近调用（真实输入一键重跑）
+ * 试跑 tab：输入 + 执行链路 + 输出（只负责「跑一次」）。
+ * 生效 Prompt 在协议页签的查看态，调用历史在运行时页签（2026-11-06 整合）。
  */
 import { computed, ref, watch } from 'vue'
 import hljs from 'highlight.js/lib/core'
 import json from 'highlight.js/lib/languages/json'
 import 'highlight.js/styles/github-dark.css'
-import {
-  adminAgentsApi,
-  adminPromptWorkbenchApi,
-  adminSkillsApi
-} from '@/api/adminApi'
+import { adminPromptWorkbenchApi, adminSkillsApi } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
-import { fmtMs, errText, buildTrialInputFromContract, type TrialInputDecl } from './sdp-shared'
-import { humanizeHttpError } from '../terms'
-import { openTrace } from '../store'
-import MkLoading from '@/components/mk/MkLoading.vue'
+import { errText, buildTrialInputFromContract, type TrialInputDecl } from './sdp-shared'
 
 hljs.registerLanguage('json', json)
 
-const props = defineProps<{ skillId: string; filePath?: string; refreshTick: number }>()
-const emit = defineEmits<{ (e: 'failures', n: number): void; (e: 'dirty', p: { dirty: boolean; label: string }): void }>()
-
-/* ---------- Prompt 内容 ---------- */
-/* 二级编译已退役：ACTIVE Prompt 只有源文本一条数据源（effective-prompt），无编译产物视图 */
-interface EffectivePrompt {
-  prompt?: { version?: number | string; systemPrompt?: string }
-}
-const effectivePrompt = ref<EffectivePrompt | null>(null)
-const inspectError = ref(false)
-
-async function loadInspect() {
-  const id = props.skillId
-  inspectError.value = false
-  const ep = await adminSkillsApi
-    .getEffectiveSkillPrompt(id)
-    .catch(() => null)
-  if (id !== props.skillId) return
-  inspectError.value = ep === null
-  effectivePrompt.value = ep?.data?.data ?? null
-}
+const props = defineProps<{ skillId: string; refreshTick: number }>()
+const emit = defineEmits<{ (e: 'dirty', p: { dirty: boolean; label: string }): void }>()
 
 /* ---------- 试跑 ---------- */
 /* 默认载荷由该 Skill 的输入契约（core.yaml inputs）生成，见 loadTrialDefault（#15）：
@@ -201,6 +122,28 @@ function formatTrialJson() {
 function clearTrial() {
   trialResult.value = null
   trialError.value = ''
+}
+
+/** 填入示例输入（2026-11-08）：优先用该 Skill 最近一次成功真实调用的载荷——
+    生产里真吃过的形状，粘进去就能跑；一条都没有时才回落契约骨架（并说明来历）。 */
+async function fillSampleInput() {
+  const id = props.skillId
+  if (!id || trialRunning.value) return
+  try {
+    const res = await adminSkillsApi.getSampleInput(id)
+    if (id !== props.skillId) return
+    const sample = (res.data?.data ?? null) as { json?: string; origin?: string; calledAt?: string } | null
+    if (sample?.json) {
+      adoptTrialInput(sample.json)
+      toast.success('已填入最近一次真实调用用过的输入')
+      return
+    }
+    // 无真实调用：回落契约骨架（loadTrialDefault 同一份）
+    await loadTrialDefault(id)
+    toast.info('该 Skill 暂无成功调用记录，已按输入契约填入骨架，请按其提示补全')
+  } catch (e) {
+    toast.error(`填入示例输入失败：${errText(e)}`)
+  }
 }
 
 /** 执行链路（原型 vrow：OK/ERR pill + 步骤名 + ms）：testSkill 只回最终输出 → 多为空态，
@@ -239,8 +182,7 @@ async function runTrial() {
     if (id !== props.skillId) return
     trialResult.value = res.data?.data ?? res.data ?? null
     // 已运行 → 输入被消费，不算未保存改动（#118）
-    trialBase = trialInput.value
-    emit('dirty', { dirty: false, label: '试跑输入' })
+    adoptTrialInput(trialInput.value)
   } catch (e) {
     if (id !== props.skillId) return
     trialResult.value = null
@@ -270,177 +212,46 @@ const trialHighlighted = computed(() => {
   }
 })
 
-/* ---------- 最近调用（真实输入一键重跑） ---------- */
-interface LogRow {
-  id: string
-  status: 'ok' | 'err' | 'timeout'
-  time: string
-  durationMs: number
-  summary: string
-  /** 链路 id（agent_call_logs.traceId）：空则「看 Trace」不可用 */
-  traceId: string
-  loading: boolean
-  detail: { input?: string; output?: string; error?: string } | null
-}
-const recentLogs = ref<LogRow[]>([])
-const recentLogsError = ref(false)
-const recentLogsLoading = ref(false)
-const openLogId = ref('')
-
-function mapLogStatus(s: unknown): LogRow['status'] {
-  return s === 'error' ? 'err' : s === 'timeout' ? 'timeout' : 'ok'
-}
-
-async function loadRecentLogs() {
-  const id = props.skillId
-  recentLogsError.value = false
-  recentLogsLoading.value = true
-  try {
-    const res = await adminAgentsApi.getLogs({ agentName: `skill:${id}`, limit: 8, timeRange: 'week' }).catch(() => null)
-    if (id !== props.skillId) return
-    if (!res) {
-      recentLogsError.value = true
-      recentLogs.value = []
-      return
-    }
-    const body = res?.data?.data ?? res?.data ?? {}
-    const items: Record<string, unknown>[] = Array.isArray(body) ? body : body.items || body.logs || []
-    recentLogs.value = items.map((l) => {
-      const status = mapLogStatus(l.status)
-      const rawErr = String(l.errorMessage || l.error || '')
-      // 网关黑话人话（terms.ts 单源）：失败摘要与展开详情同步人话化
-      const err = humanizeHttpError(rawErr) || rawErr
-      return {
-        id: String(l.id),
-        status,
-        time: timeAgo(String(l.createdAt || '')),
-        durationMs: Number(l.durationMs || 0),
-        summary: status === 'ok' ? '成功' : err.slice(0, 60) || (status === 'timeout' ? '超时' : '失败'),
-        traceId: String(l.traceId || ''),
-        loading: false,
-        detail: null
-      }
-    })
-  } finally {
-    if (id === props.skillId) recentLogsLoading.value = false
-  }
-}
-
-/** 拉详情（输入/输出），供展开与重跑共用；input 保留完整原文供重跑，展示时再截断 */
-async function ensureLogDetail(log: LogRow): Promise<void> {
-  if (log.detail || log.loading) return
-  log.loading = true
-  try {
-    const res = await adminAgentsApi.getLogDetail(log.id)
-    const body = res.data?.data ?? res.data ?? {}
-    const d = (body.log || body) as Record<string, unknown>
-    const raw = (v: unknown): string | undefined => {
-      if (v == null) return undefined
-      return typeof v === 'string' ? v : JSON.stringify(v, null, 2)
-    }
-    const cap = (v: unknown): string | undefined => {
-      if (v == null) return undefined
-      const s = typeof v === 'string' ? v : JSON.stringify(v, null, 2)
-      return s.length > 3000 ? `${s.slice(0, 3000)}\n…（截断）` : s
-    }
-    log.detail = {
-      input: raw(d.input ?? d.userPayload ?? d.requestPayload),
-      output: cap(d.output ?? d.modelOutput ?? d.responsePayload),
-      error: cap(d.errorMessage ?? d.error)
-    }
-  } catch {
-    log.detail = { error: '详情加载失败' }
-  } finally {
-    log.loading = false
-  }
-}
-
-async function toggleLogDetail(log: LogRow) {
-  if (openLogId.value === log.id) {
-    openLogId.value = ''
-    return
-  }
-  openLogId.value = log.id
-  await ensureLogDetail(log)
-}
-
-/** 一键重跑：真实输入填入试跑并立即运行 */
-async function rerun(log: LogRow) {
-  await ensureLogDetail(log)
-  if (!log.detail?.input) {
-    toast.error('该调用没有可用输入')
-    return
-  }
-  trialInput.value = log.detail.input
-  toast.info('已填入真实输入，正在重跑…')
-  await runTrial()
-}
-
-/** 展开详情展示截断（detail 保留完整原文供重跑） */
-function displayCap(v?: string) {
-  return v && v.length > 3000 ? `${v.slice(0, 3000)}\n…（截断）` : v || ''
-}
-
-function timeAgo(iso?: string | null): string {
-  if (!iso) return '—'
-  const t = new Date(iso).getTime()
-  if (!t || Number.isNaN(t)) return '—'
-  const diff = Date.now() - t
-  if (diff < 0) return '刚刚'
-  const m = Math.floor(diff / 60000)
-  if (m < 1) return '刚刚'
-  if (m < 60) return `${m} 分钟前`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h} 小时前`
-  const d = Math.floor(h / 24)
-  return d < 30 ? `${d} 天前` : new Date(t).toLocaleDateString('zh-CN')
-}
-
-/** 看 Trace：预填该链路并跳到执行日志页的 Trace tab（store.openTrace 跨页动线单源） */
-function goTrace(traceId: string) {
-  if (!traceId) return
-  openTrace(traceId)
-}
-
-async function copy(content: string) {
-  if (!content) return
-  try {
-    await navigator.clipboard.writeText(content)
-    toast.success('已复制')
-  } catch {
-    toast.error('复制失败：剪贴板不可用')
-  }
-}
-
-/* 头部失败计数上报 + 切换 skill / 发布后刷新 */
-watch(
-  recentLogs,
-  (logs) => emit('failures', logs.filter((l) => l.status !== 'ok').length),
-  { immediate: true }
-)
+/* 切换 skill / 发布后复位本次结果 */
 watch(
   [() => props.skillId, () => props.refreshTick],
   () => {
     trialResult.value = null
     trialError.value = ''
-    void Promise.all([loadInspect(), loadRecentLogs()])
   },
   { immediate: true }
 )
+
+/** 该 Skill 输入契约里的必填输入（展示用）：默认载荷就是按它生成的骨架。
+ *  2026-11-02 评审「只给一个每字段都是空对象的 JSON，没有字段说明或示例」——
+ *  把字段名与类型列在编辑器下方，读者才知道该往哪儿填。 */
+const inputDecls = ref<TrialInputDecl[]>([])
+
+/** 程序化填入（「填入示例输入」与契约骨架）统一走这里：都算**新的基线**。
+    2026-11-09 走查：示例是"看一眼就能用"的便利功能，点完就走不该被判成未保存修改
+    （实测点一下示例、再点侧栏任意页 → 弹「离开 Skill 详情 · 有未保存的修改（试跑输入）」）。
+    手工改过的值仍然算脏（见 reportTrialDirty）。 */
+function adoptTrialInput(next: string) {
+  trialInput.value = next
+  trialBase = next
+  emit('dirty', { dirty: false, label: '试跑输入' })
+}
 
 /** 按该 Skill 输入契约生成默认载荷（#15）：契约不可读时回落空对象 `{}`，绝不再塞无关的 input 键 */
 async function loadTrialDefault(id: string) {
   const res = await adminPromptWorkbenchApi.getCore(id).catch(() => null)
   if (id !== props.skillId) return
   const inputs = (res?.data?.core?.inputs ?? []) as TrialInputDecl[]
-  const next = buildTrialInputFromContract(inputs)
-  trialInput.value = next
-  trialBase = next
-  emit('dirty', { dirty: false, label: '试跑输入' })
+  // 骨架里的键就是这些必填输入（buildTrialInputFromContract 只收必填项，可选的不注入）
+  inputDecls.value = inputs.filter((i) => i?.name && !String(i.type || '').trim().endsWith('?'))
+  adoptTrialInput(buildTrialInputFromContract(inputs))
 }
 
 /* #118：试跑输入改动上报宿主脏态（此前切 Skill/离开页面会静默丢弃）。
-   基线 = 该 Skill 的契约默认载荷；切换 skill 时重新生成并复位。 */
+   基线 = 该 Skill 的契约默认载荷；切换 skill 时重新生成并复位。
+   2026-11-09 走查：**程序化填入**（契约骨架 / 最近一次真实调用的示例 / 跑过一次的输入）
+   一律重新取基线（见 adoptTrialInput），只有运营手写的值才算未保存改动——
+   否则「点一下示例、再点侧栏任意页」会被离开守卫拦一次。 */
 let trialBase = EMPTY_TRIAL_INPUT
 function reportTrialDirty() {
   emit('dirty', { dirty: trialInput.value !== trialBase, label: '试跑输入' })
@@ -450,92 +261,24 @@ watch(() => props.skillId, (id) => { void loadTrialDefault(id) }, { immediate: t
 </script>
 
 <style scoped>
-/* ---------- 工作台：左右双栏 ---------- */
-.sdp-workbench {
-  display: grid;
-  grid-template-columns: minmax(0, 6fr) minmax(0, 5fr);
-  gap: 14px;
-  align-items: start;
-}
-@media (max-width: 1020px) {
-  .sdp-workbench { grid-template-columns: 1fr; }
-}
-.sdp-block, .sdp-prompt {
-  border: 1px solid var(--mk-line);
-  border-radius: 12px;
-  background: var(--mk-surface);
-  padding: 12px 14px;
-  display: grid;
-  gap: 10px;
-  align-content: start;
-}
-.sdp-block__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-.sdp-block__head h4 {
-  margin: 0;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--mk-faint);
-}
-.sdp-block__meta { display: inline-flex; align-items: center; gap: 10px; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.sdp-none { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.sdp-bad-text { color: var(--mk-red); font-weight: 700; }
+.sdp-pane { display: grid; gap: 14px; align-content: start; }
+/* 卡身：与协议 / 工程页签同一档内边距 */
+.sdp-trial__body { display: grid; gap: 10px; align-content: start; padding: 12px 16px; }
+/* 输入契约字段清单（编辑器下方）：一行小字 + 等宽字段名，避免再开一块表格占版面 */
+.sdp-trial__decl { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); line-height: 1.9; }
+.sdp-trial__decl code { margin-right: 8px; padding: 1px 6px; border-radius: var(--mk-radius-sm); background: var(--mk-surface-2); color: var(--mk-muted); }
+.sdp-trial__meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.sdp-trial__meta b { color: var(--mk-ink); font-weight: 600; }
 
-/* Prompt 面板（视图切换已收敛为全局 mk-pills） */
-.sdp-prompt__facts {
-  display: flex;
-  gap: 14px;
-  flex-wrap: wrap;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
-}
-.sdp-prompt__facts b { color: var(--mk-ink); }
-.sdp-prompt__facts code { font-size: var(--mk-fs-micro); }
-.sdp-prompt__code {
-  margin: 0;
-  height: min(58vh, 620px);
-  overflow: auto;
-  padding: 12px;
-  border-radius: var(--mk-radius-xl);
-  background: #fbfcfe;
-  border: 1px solid #eef2f8;
-  white-space: pre-wrap;
-  word-break: break-word;
-  /* #127：原 11.5px 是正文三档 token 之外的第 4 档（跨档位 11.5→20px 跳变）→ 归到 micro 档，
-     与 .sdp-json / .sdp-output 同档 */
-  font: var(--mk-fs-micro)/1.65 var(--mk-mono);
-  color: var(--mk-ink);
-}
-.sdp-prompt__hint { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); line-height: 1.6; }
-.sdp-prompt__hint code { font-size: var(--mk-fs-micro); }
-
-/* 试跑 */
-.sdp-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: #eef2fa;
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
-  font-weight: 600;
-}
-.sdp-chip b { color: var(--mk-ink); font-weight: 600; }
 .sdp-json {
   width: 100%;
   padding: 10px 12px;
-  border: 1px solid #dbe3ef;
+  border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-xl);
   font-size: var(--mk-fs-micro);
   line-height: 1.6;
   resize: vertical;
-  background: #fbfcfe;
+  background: var(--mk-surface-2);
 }
 .sdp-json:focus { outline: none; border-color: var(--mk-blue); }
 
@@ -543,7 +286,7 @@ watch(() => props.skillId, (id) => { void loadTrialDefault(id) }, { immediate: t
 .sdp-codehl--json,
 .sdp-codehl--json .sdp-codehl__pre,
 .sdp-codehl--json .sdp-codehl__ta { min-height: 0; }
-.sdp-codehl--json { height: 180px; margin-bottom: 12px; position: relative; display: flex; flex-direction: column; border-radius: var(--mk-radius-xl); overflow: hidden; }
+.sdp-codehl--json { height: 180px; position: relative; display: flex; flex-direction: column; border-radius: var(--mk-radius-xl); overflow: hidden; }
 .sdp-codehl--json .sdp-codehl__pre,
 .sdp-codehl--json .sdp-codehl__ta { height: 100%; padding: 10px 12px; font-size: var(--mk-fs-micro); }
 .sdp-codehl--json .sdp-codehl__pre {
@@ -568,8 +311,7 @@ watch(() => props.skillId, (id) => { void loadTrialDefault(id) }, { immediate: t
   color: transparent;
   caret-color: var(--mk-code-fg);
 }
-.sdp-codehl--json .sdp-codehl__ta::placeholder { color: rgba(201, 212, 227, 0.4); }
-.sdp-trial__meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.sdp-codehl--json .sdp-codehl__ta::placeholder { color: var(--mk-muted); }
 .sdp-output {
   margin: 0;
   padding: 12px;
@@ -584,81 +326,8 @@ watch(() => props.skillId, (id) => { void loadTrialDefault(id) }, { immediate: t
   max-height: 320px;
   overflow: auto;
 }
-.sdp-error {
-  padding: 10px 12px;
-  border-radius: var(--mk-radius-xl);
-  background: var(--mk-red-bg);
-  border: 1px solid rgba(220, 38, 38, 0.3);
-  color: var(--mk-red);
-  font-size: var(--mk-fs-micro);
-}
-
-/* 最近调用 */
-.sdp-logs { display: grid; gap: 4px; }
-.sdp-log {
-  display: grid;
-  /* 3 列：主体（吃掉剩余宽）+ 重跑 + 看 Trace（两个窄动作列）。主体列必须 minmax(0,1fr)——
-     auto 列在窄容器里会把摘要挤没 */
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-xl);
-  background: var(--mk-surface);
-  overflow: hidden;
-}
-.sdp-log.is-open { border-color: rgba(47, 106, 224, 0.35); }
-.sdp-log__main {
-  display: grid;
-  grid-template-columns: 8px 64px 46px 1fr;
-  gap: 8px;
-  align-items: center;
-  padding: 8px 10px;
-  border: 0;
-  background: transparent;
-  font: inherit;
-  font-size: var(--mk-fs-micro);
-  text-align: left;
-  cursor: pointer;
-}
-.sdp-log__main:hover { background: #f8fbff; }
-.sdp-log__dot { width: 7px; height: 7px; border-radius: 50%; }
-.sdp-log__dot.is-ok { background: var(--mk-green); }
-.sdp-log__dot.is-err, .sdp-log__dot.is-timeout { background: var(--mk-red); }
-.sdp-log__time { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
-.sdp-log__dur { color: var(--mk-muted); font-size: var(--mk-fs-micro); text-align: right; font-variant-numeric: tabular-nums; }
-.sdp-log__summary {
-  color: var(--mk-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.sdp-log__rerun {
-  border: 0;
-  border-left: 1px solid #eef2f8;
-  background: transparent;
-  color: var(--mk-blue);
-  font: inherit;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  padding: 0 10px;
-  cursor: pointer;
-}
-.sdp-log__rerun:hover { background: #eff6ff; }
-.sdp-log__rerun:disabled { color: var(--mk-faint); cursor: not-allowed; }
-.sdp-log__trace {
-  border: 0;
-  border-left: 1px solid var(--mk-line);
-  background: transparent;
-  color: var(--mk-blue);
-  font: inherit;
-  font-size: var(--mk-fs-micro);
-  font-weight: 700;
-  padding: 0 10px;
-  cursor: pointer;
-}
-.sdp-log__trace:hover { background: var(--mk-blue-bg); }
-.sdp-log__trace:disabled { color: var(--mk-faint); cursor: not-allowed; }
-/* 执行链路（试跑块内的子区块：分隔线 + 步骤行） */
-.sdp-steps { display: grid; gap: 6px; padding-top: 8px; border-top: 1px solid var(--mk-line); }
+/* 执行链路（试跑卡内的子区块：分隔线 + 步骤行） */
+.sdp-steps { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid var(--mk-line); }
 .sdp-step {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -668,77 +337,14 @@ watch(() => props.skillId, (id) => { void loadTrialDefault(id) }, { immediate: t
 }
 .sdp-step__label { color: var(--mk-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sdp-step__ms { color: var(--mk-faint); text-align: right; }
-.sdp-log__detail {
-  grid-column: 1 / -1;
-  border-top: 1px solid #eef2f8;
-  padding: 8px 10px;
-  display: grid;
-  gap: 8px;
-  background: #fbfcfe;
-}
-.sdp-log__io { display: grid; gap: 3px; }
-.sdp-log__io span { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); letter-spacing: 0.04em; }
-.sdp-log__io pre {
-  margin: 0;
-  padding: 8px 10px;
-  border-radius: var(--mk-radius-sm);
-  background: var(--mk-surface);
-  border: 1px solid #eef2f8;
-  font-size: var(--mk-fs-micro);
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-word;
-  max-height: 180px;
-  overflow-y: auto;
-  color: var(--mk-muted);
-}
-.sdp-log__io--err pre { background: #fef5f5; border-color: rgba(220, 38, 38, 0.25); color: var(--mk-red-strong); }
 
 /* 4K：字号跟随壳层放大 */
-@media (min-width: 2000px) {
-  .sdp-json,
-  .sdp-output,
-  .sdp-prompt__code { font-size: var(--mk-fs-micro); }
-}
-@media (min-width: 2800px) {
-  .sdp-json,
-  .sdp-output,
-  .sdp-prompt__code { font-size: var(--mk-fs-micro); }
-}
 @media (min-width: 3600px) {
-  .sdp-block, .sdp-prompt { padding: 16px 18px; gap: 12px; }
-  .sdp-block__head h4 { font-size: var(--mk-fs-body); }
-  .sdp-block__meta { font-size: var(--mk-fs-body); }
-  .sdp-chip { font-size: var(--mk-fs-body); padding: 4px 12px; }
-  .sdp-prompt__facts { font-size: var(--mk-fs-body); gap: 18px; }
-  .sdp-prompt__facts code { font-size: var(--mk-fs-body); }
-  .sdp-prompt__code { font-size: var(--mk-fs-emphasis); padding: 18px; }
-  .sdp-prompt__hint { font-size: var(--mk-fs-body); }
-  .sdp-prompt__hint code { font-size: var(--mk-fs-body); }
   .sdp-json { font-size: var(--mk-fs-emphasis); padding: 14px 16px; }
   .sdp-codehl--json { height: 240px; }
   .sdp-codehl--json .sdp-codehl__pre,
   .sdp-codehl--json .sdp-codehl__ta { padding: 14px 16px; font-size: var(--mk-fs-emphasis); }
   .sdp-output { font-size: var(--mk-fs-emphasis); padding: 16px; max-height: 420px; }
-  .sdp-error { font-size: var(--mk-fs-body); padding: 14px 16px; }
-  .sdp-log__main { font-size: var(--mk-fs-body); padding: 12px 14px; }
-  .sdp-log__time { font-size: var(--mk-fs-micro); }
-  .sdp-log__dur { font-size: var(--mk-fs-body); }
-  .sdp-log__rerun { font-size: var(--mk-fs-body); padding: 0 14px; }
-  .sdp-log__trace { font-size: var(--mk-fs-body); padding: 0 14px; }
   .sdp-step { font-size: var(--mk-fs-body); }
-  .sdp-log__io span { font-size: var(--mk-fs-micro); }
-  .sdp-log__io pre { font-size: var(--mk-fs-body); padding: 12px 14px; }
 }
-
-/* 暗色模式 */
-[data-theme='dark'] .sdp-block,
-[data-theme='dark'] .sdp-prompt,
-[data-theme='dark'] .sdp-log,
-[data-theme='dark'] .sdp-log__detail,
-[data-theme='dark'] .sdp-log__io pre { background: #1b1c1d; border-color: #313235; color: #e6edf7; }
-[data-theme='dark'] .sdp-prompt__code { background: #19191a; }
-[data-theme='dark'] .sdp-log__main:hover { background: #202122; }
-[data-theme='dark'] .sdp-log__io--err pre { background: rgba(248, 113, 113, 0.1); border-color: rgba(248, 113, 113, 0.3); }
-
 </style>

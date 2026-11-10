@@ -21,6 +21,7 @@ import { executeSkill } from '../../skills';
 import { virtualLearnerScenarioDesignerDefinition } from '../../skills/virtual-learner-scenario-designer';
 import { buildLearnerMemorySnapshot } from '../../virtual-lab/learner-memory';
 import { logger } from '../../utils/logger';
+import { withKeyedLock } from '../../utils/keyed-lock';
 
 /** 故事池上限：防止一夜之间无限生长（每章需一节真课才长出）。 */
 export const STORY_POOL_MAX = 8;
@@ -170,42 +171,70 @@ export async function growStoryChapter(input: {
   }
 
   const prevChapterIndex = Number.isFinite(Number(predecessor.chapterIndex)) ? Number(predecessor.chapterIndex) : 1;
-  const successor: StoryPoolEntry = {
-    ...newStory,
-    id: newStory.id || `story_${randomUUID().slice(0, 8)}`,
-    // 生命周期
-    status: 'pending' as StoryStatus,
-    progressesFrom: input.predecessorStoryId,
-    chapterIndex: prevChapterIndex + 1,
-    generatedAt: new Date().toISOString(),
-    generatedReason: input.reason || 'lesson-completed',
+
+  const insertSuccessor = async (): Promise<StoryChapterResult> => {
+    // #170：LLM 调用期间画像可能被「课后记忆回写」（knownConcepts / recentCompleted /
+    // selfAssessmentAccuracy）更新。旧实现持着 LLM 调用**前**的整包快照写回
+    // `{...profileData, storyPool}`，会把这段窗口内的写入静默回滚。
+    // 现在与 learner-memory 的写者共用同一把 `vlab-profile:<userId>` 锁，并在锁内**重新读取**
+    // 画像，只合并 storyPool —— 记忆字段保持最新，续章也不会被并发的记忆回写覆盖。
+    return withKeyedLock(`vlab-profile:${profile.userId}`, async () => {
+      const fresh = await prisma.virtual_learner_profiles.findUnique({ where: { id: input.profileId } });
+      if (!fresh) return { added: false, reason: 'profile-not-found' };
+      const { profileData: freshProfileData, pool: freshPool } = parseProfilePool(fresh);
+      if (freshPool.length === 0) return { added: false, reason: 'empty-pool' };
+      if (freshPool.length >= STORY_POOL_MAX) return { added: false, reason: 'pool-max' };
+      const freshPredecessor = freshPool.find((s) => (s?.id || s?.storyId) === input.predecessorStoryId);
+      if (!freshPredecessor) return { added: false, reason: 'predecessor-not-in-pool' };
+      // 幂等：同一故事只长一次续章（LLM 期间可能已有并发调用写入）
+      if (freshPool.some((s) => s?.progressesFrom === input.predecessorStoryId)) {
+        return { added: false, reason: 'successor-exists' };
+      }
+
+      const freshPredecessorChapter = Number.isFinite(Number(freshPredecessor.chapterIndex))
+        ? Number(freshPredecessor.chapterIndex)
+        : prevChapterIndex;
+      const successor: StoryPoolEntry = {
+        ...newStory,
+        id: newStory.id || `story_${randomUUID().slice(0, 8)}`,
+        // 生命周期
+        status: 'pending' as StoryStatus,
+        progressesFrom: input.predecessorStoryId,
+        chapterIndex: freshPredecessorChapter + 1,
+        generatedAt: new Date().toISOString(),
+        generatedReason: input.reason || 'lesson-completed',
+      };
+
+      // 前一章标记 completed（其学习需求已被真实学习推进）；旧故事无 status 视为 legacy，此处补写。
+      const nextPool: StoryPoolEntry[] = freshPool.map((s) =>
+        (s?.id || s?.storyId) === input.predecessorStoryId
+          ? { ...s, status: 'completed' as StoryStatus, chapterIndex: Number.isFinite(Number(s.chapterIndex)) ? Number(s.chapterIndex) : 1 }
+          : s
+      );
+      nextPool.push(successor);
+
+      await prisma.virtual_learner_profiles.update({
+        where: { id: input.profileId },
+        data: {
+          // 只覆盖 storyPool：其余键取锁内刚读到的最新画像（并发记忆回写不丢）
+          profile: JSON.stringify({ ...freshProfileData, storyPool: nextPool }),
+          updatedAt: new Date(),
+        },
+      });
+
+      logger.info('[story-chapter] 续章已生长', {
+        profileId: input.profileId,
+        predecessor: input.predecessorStoryId,
+        successorId: successor.id,
+        chapterIndex: successor.chapterIndex,
+        title: String(successor.title).slice(0, 40),
+      });
+
+      return { added: true, storyId: String(successor.id), title: String(successor.title) };
+    });
   };
 
-  // 前一章标记 completed（其学习需求已被真实学习推进）；旧故事无 status 视为 legacy，此处补写。
-  const nextPool: StoryPoolEntry[] = pool.map((s) =>
-    (s?.id || s?.storyId) === input.predecessorStoryId
-      ? { ...s, status: 'completed' as StoryStatus, chapterIndex: Number.isFinite(Number(s.chapterIndex)) ? Number(s.chapterIndex) : 1 }
-      : s
-  );
-  nextPool.push(successor);
-
-  await prisma.virtual_learner_profiles.update({
-    where: { id: input.profileId },
-    data: {
-      profile: JSON.stringify({ ...profileData, storyPool: nextPool }),
-      updatedAt: new Date(),
-    },
-  });
-
-  logger.info('[story-chapter] 续章已生长', {
-    profileId: input.profileId,
-    predecessor: input.predecessorStoryId,
-    successorId: successor.id,
-    chapterIndex: successor.chapterIndex,
-    title: String(successor.title).slice(0, 40),
-  });
-
-  return { added: true, storyId: String(successor.id), title: String(successor.title) };
+  return insertSuccessor();
 }
 
 /**

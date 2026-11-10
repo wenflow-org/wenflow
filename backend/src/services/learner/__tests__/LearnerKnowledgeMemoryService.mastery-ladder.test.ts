@@ -8,8 +8,11 @@
  * （实测 52 条 advisory 里 40 条正文含兜底词）。修复后：
  *   F1 掌握判定只认真实接触证据（会话知识/摘要/痕迹），只有标签信号的概念 = pending；
  *   F2 兜底 displayLabel 与 concept-N 占位键不进概念集合。
- * 断言口径：对外投影只有 globalSignals 三张名单 + globalBackground.conceptLedger（familiarity:
- * mastered→stable / review→understood / learning→practiced / pending→seen）。
+ * 断言口径：对外投影只有 globalSignals 三张名单 + globalBackground.conceptLedger。
+ * familiarity 口径于 2026-11-07（#172-2）改为**只认单一源 stability**：
+ *   stable→stable / developing|fragile→practiced / 其它→seen。
+ * 旧口径 review→understood 会让同一行同时出现 familiarity='understood' 与
+ * misconceptionRisk='high'（issue 实测 136 条投影中 116 条），故 review 不再映射 understood。
  */
 jest.mock('../../../config/database', () => ({
   __esModule: true,
@@ -70,11 +73,14 @@ const lists = (memory: Memory) => {
   const g = memory.globalSignals;
   const ledgerFamiliarity = (label: string) =>
     memory.globalBackground.conceptLedger.find((c) => c.label === label)?.familiarity ?? null;
+  const ledgerRisk = (label: string) =>
+    memory.globalBackground.conceptLedger.find((c) => c.label === label)?.misconceptionRisk ?? null;
   return {
     fragile: g.fragileConcepts,
     struggling: g.strugglingConcepts,
     mastered: g.masteredConcepts,
     ledgerFamiliarity,
+    ledgerRisk,
   };
 };
 
@@ -94,7 +100,7 @@ describe('F1：任务标签不是学习证据（只有标签信号的概念 = pe
     expect(ledgerFamiliarity('评审要素对齐')).toBe('seen');
   });
 
-  it('有真实接触证据（会话知识 review）→ 仍 fragile/understood（标签不再稀释判定）', async () => {
+  it('有真实接触证据（会话知识 review）→ 仍 fragile/practiced（标签不再稀释判定）', async () => {
     const memory = await build(
       [
         { id: 't-done', order: 1, title: '已完成任务', status: 'completed', linkedConceptName: '驱动问题构造', coreConcept: null, displayLabel: null, learningObjectives: null, completedAt: END, updatedAt: END },
@@ -102,9 +108,14 @@ describe('F1：任务标签不是学习证据（只有标签信号的概念 = pe
       ],
       [sessionWith([{ name: '驱动问题构造', status: 'review', progress: 40 }])]
     );
-    const { fragile, ledgerFamiliarity } = lists(memory);
+    const { fragile, ledgerFamiliarity, ledgerRisk } = lists(memory);
     expect(fragile).toContain('驱动问题构造');
-    expect(ledgerFamiliarity('驱动问题构造')).toBe('understood');
+    // #172-2：review 在稳定轴是 fragile → familiarity=practiced（不再写 understood）。
+    // 这正是「同一行 understood + misconceptionRisk=high」自相矛盾的源头，改后两者同源。
+    expect(ledgerFamiliarity('驱动问题构造')).toBe('practiced');
+    expect(ledgerFamiliarity('驱动问题构造')).not.toBe('understood');
+    // 同源保障：familiarity 与 misconceptionRisk 不可能再自相矛盾（issue 实测 116/136 那种形态）。
+    expect(ledgerRisk('驱动问题构造')).toBe('high');
   });
 
   it('会话知识 mastered → 进 masteredConcepts，不被后续任务标签否决', async () => {

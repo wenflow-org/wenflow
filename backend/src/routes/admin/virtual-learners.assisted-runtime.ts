@@ -18,7 +18,9 @@ import simulationCoordinator from '../../coordinators/simulation.coordinator';
 import { logger } from '../../utils/logger';
 import { sendVirtualSessionError } from './virtual-session-http';
 import {
+  getAssistedCommandId,
   parseSimulationLimit,
+  runAssistedIdempotentMutation,
   runAssistedSessionMutationWithSimClock,
 } from './virtual-learners.assisted-shared';
 import { registerAssistedBlackboxRoutes } from './virtual-learners.assisted-blackbox';
@@ -42,18 +44,28 @@ export function registerAssistedRuntimeRoutes(router: Router): void {
 router.post('/sessions/:sessionId/step', async (req: import('express').Request, res) => {
   try {
     const { sessionId } = req.params;
-    const result = await runAssistedSessionMutationWithSimClock(sessionId, session =>
-      simulationCoordinator.executeSingleStep({
+    const idempotencyKey = getAssistedCommandId(req);
+    // #173-3（方案 B）：单步模拟是「手动模式」最贵入口，网关超时重试会真多推一个回合。
+    // 在锁内按 (sessionId, key) 记账，命中回放上次结果。
+    const outcome = await runAssistedSessionMutationWithSimClock(sessionId, session =>
+      runAssistedIdempotentMutation(
         sessionId,
-        userId: session.userId,
-        mode: 'single-step'
-      })
+        idempotencyKey,
+        'step',
+        req.body,
+        () => simulationCoordinator.executeSingleStep({
+          sessionId,
+          userId: session.userId,
+          mode: 'single-step'
+        })
+      )
     );
-
+    const { result, reused } = outcome;
     res.json({
       success: result.success,
       data: result,
-      error: result.error
+      error: result.error,
+      ...(idempotencyKey ? { reused } : {}),
     });
   } catch (error) {
     logger.error('单步模拟失败:', error);

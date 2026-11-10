@@ -19,7 +19,10 @@ import {
   adminPlatformSettingsApi,
   adminAnnouncementsApi,
   adminGoalConversationsApi,
-  adminRuntimeDefinitionsApi
+  adminRuntimeDefinitionsApi,
+  adminFeedbackApi,
+  adminLearningContentApi,
+  adminDevtoolsApi
 } from '@/api/adminApi'
 import {
   dataSource,
@@ -32,6 +35,7 @@ import {
 import { EXTRA_COMPONENT_VISIBLE_SKILLS } from './capabilityCatalog'
 import { TERMS, humanizeHttpError } from './terms'
 import { errorCategoryText } from './statusText'
+import { personaDisplayName } from './cardDisplay'
 
 /** 与生产 Skill 目录同口径：外挂能力 Skill 不在主目录展示（归外挂组件页） */
 const isExtraSkill = (id: string) => EXTRA_COMPONENT_VISIBLE_SKILLS.has(id.replace(/^skill:/, ''))
@@ -56,7 +60,16 @@ export function timeAgo(iso?: string | null): string {
   const t = new Date(iso).getTime()
   if (!t || Number.isNaN(t)) return '从未'
   const diff = Date.now() - t
-  if (diff < 0) return '刚刚'
+  /* 时间在「现在之后」= 虚拟学习者的模拟日（业务时间落在未来）。
+     原先一律返回「刚刚」，把模拟日 3 天后的事件读成刚发生（2026-11-09 跨日核查：
+     推进后的会话/证据/痕迹全被读成「刚刚」）。这里保留小窗口容忍（时钟偏差/写入延迟），
+     超过就如实给出「N 小时后 / N 天后」，不再谎报「刚刚」。 */
+  if (diff < 0) {
+    const ahead = -diff
+    if (ahead < 5 * 60000) return '刚刚'
+    const ah = Math.floor(ahead / 3600000)
+    return ah < 24 ? `${ah} 小时后` : `${Math.floor(ah / 24)} 天后`
+  }
   const m = Math.floor(diff / 60000)
   if (m < 1) return '刚刚'
   if (m < 60) return `${m} 分钟前`
@@ -225,7 +238,10 @@ export function mapLogsToSpans(items: RawLog[], opts: { preserveOrder?: boolean 
       detail: errText,
       payload: errText || undefined,
       execLayer: log.executionLayer,
-      model: log.model,
+      /* 模型与 token 记在网关行（skill 行不落模型名），配对成功时并入——否则概要卡
+         的 Token/模型三格整组误报「无 LLM 调用」（2026-10-31 三轮评审：teaching-turn
+         明明走了 deepseek，span 上却是空）。 */
+      model: log.model || gatewayLog?.model || undefined,
       statusCode: log.statusCode != null ? Number(log.statusCode) : undefined,
       attempts: log.attempts != null ? Number(log.attempts) : undefined,
       maxAttempts: log.maxAttempts != null ? Number(log.maxAttempts) : undefined,
@@ -237,8 +253,8 @@ export function mapLogsToSpans(items: RawLog[], opts: { preserveOrder?: boolean 
       sourceEntry: log.sourceEntry || undefined,
       gatewayDurMs: gatewayLog ? Number(gatewayLog.durationMs || 0) : undefined,
       sessionId: log.sessionId || undefined,
-      promptTokens: log.promptTokens != null ? Number(log.promptTokens) : null,
-      completionTokens: log.completionTokens != null ? Number(log.completionTokens) : null
+      promptTokens: log.promptTokens != null ? Number(log.promptTokens) : (gatewayLog?.promptTokens != null ? Number(gatewayLog.promptTokens) : null),
+      completionTokens: log.completionTokens != null ? Number(log.completionTokens) : (gatewayLog?.completionTokens != null ? Number(gatewayLog.completionTokens) : null)
     }
   }
 
@@ -573,7 +589,8 @@ export interface SpanQuery {
   agentName?: string
   /** 节点过滤走 agentId（服务端做 skill:/agent: 前缀规范化，兼容裸名）；agentName 保留给分组名场景 */
   agentId?: string
-  status?: 'success' | 'error' | 'timeout'
+  /** 状态档：failed = 未成功（含超时，平台口径的「失败」）/ error = 非超时的失败 / timeout = 仅超时 */
+  status?: 'success' | 'failed' | 'error' | 'timeout'
   traceId?: string
   sessionId?: string
   /** 错误类别筛选（失败归因/异常流跳转；后端按列值 + 空类别启发式归并） */
@@ -979,6 +996,8 @@ export function buildOverviewHead(input: {
   const badByRate = todaySuccessRate < 80 && todayFailed >= 3
   // 结论行只写状态词，不带读数（2026-10-22 用户：标题就是「需要关注」，其他内容放明细行）
   const rateAttentionHeadline = '需要关注'
+  /* todayFailed = 未成功（含超时）——超时是失败的原因分类，所以本句已经覆盖了「全是超时」的
+     那一天，不需要再单独列超时读数（单列会与同屏「今日调用 · 超时 N」重复报同一件事）。 */
   const rateAttentionSubline = `今日 ${todayCalls} 次调用 · ${todayFailed} 次失败。`
   if (todayCalls === 0) {
     if (todayOnlySimulated) {
@@ -1036,6 +1055,9 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
   /* 虚拟/测试调用独立口径：后端 overview/stats 已返回（总览不展示，预留供「虚拟学习者」仿真看板使用） */
   // 后端可能返回字符串或非法值（0/0 场景），统一收敛为有限数
   const todaySuccessRate = Number.isFinite(Number(agents.todaySuccessRate ?? 100)) ? Number(agents.todaySuccessRate ?? 100) : 100
+  /* 今日「失败」= 未成功（含超时），由成功率反推——与总览 usage.failed7d / 失败归因同一口径
+     （platform-overview-stats.test.ts 固化了「归因之和 == failed7d，无分叉」这条不变式）。
+     超时是失败的一个原因分类（provider_timeout 桶），不是并列的第三档，所以这里不减 todayTimeouts。 */
   const todayFailed = Math.max(0, Math.round(todayCalls * (1 - todaySuccessRate / 100)))
   const activeUsers = Number(users.activeToday || 0)
 
@@ -1367,6 +1389,11 @@ export interface LiveLearner {
   isTestAccount?: boolean
   pathId?: string
   pathTitle: string | null
+  /** 在学路径总数（后端 activePathCount；列表只展示最近更新的一条） */
+  activePathCount?: number | null
+  /** 无 active 路径时的兜底路径（已下线 / 已完成 / 生成失败等）；active 路径存在时为 null。
+     含历史完成进度（completedTasks / totalTasks），绝不参与快照锚点。 */
+  fallbackPath?: { status: string; completedTasks: number; totalTasks: number } | null
   currentTask: string | null
   currentMilestone: string | null
   trend: 'up' | 'down' | 'flat'
@@ -1413,6 +1440,10 @@ async function fetchLiveLearners(): Promise<void> {
     isTestAccount: !!m.isTestAccount,
     pathId: (m.pathId as string) || undefined,
     pathTitle: (m.pathTitle as string) || null,
+    activePathCount: typeof m.activePathCount === 'number' ? m.activePathCount : null,
+    fallbackPath: m.fallbackPath
+      ? (m.fallbackPath as { status: string; completedTasks: number; totalTasks: number })
+      : null,
     currentTask: (m.currentTask as string) || null,
     currentMilestone: (m.currentMilestone as string) || null,
     trend: mapTrend(m.recentTrend as string),
@@ -1607,6 +1638,8 @@ export interface LiveVirtual {
   abandonedCount: number
   /** 卡死（running 超 reclaim 阈值无写入）会话数 */
   stalledCount: number
+  /** 2026-10-31 五轮评审 P8：活跃会话自动驾驶最后一次错误（不含进程重启中断这类预期态） */
+  activeError?: string | null
   /** 运行中会话 id（会话样本内；用于「运行中」列直达座舱） */
   runningSessionIds: string[]
   /** 已暂停会话 id（autopilot=stopped） */
@@ -1761,6 +1794,9 @@ export async function refreshLiveVirtuals(): Promise<void> {
     // 单域刷新成功同样刷新域时间戳：VirtualLearners 挂载时的「早于最近一次创建」判断
     // 以它为准（virtualsStaleAfterMutation），否则每次进页都会把已新鲜的数据再拉一遍
     liveFetchAt.virtuals = Date.now()
+    /* 统计一并刷新（2026-10-31 三轮评审 P1）：行内运行/暂停/继续、派生后「今日调用」
+       等仿真 KPI 此前只在进页时取一次，自动驾驶在后台跑起来后读数长期停滞 */
+    await fetchLiveVirtualStats()
   } catch {
     /* 单域刷新失败不打断交互：列表下一次全量刷新会补上 */
   }
@@ -1824,18 +1860,23 @@ async function fetchLiveVirtuals(): Promise<void> {
     })
     return {
       id: String(p.id),
-      /* 显示名链必须与「学习者卡库」同源（2026-10-06 审核 §主题 5）：
-         卡库用 card-import.service 的 nickname || personaSeed.nameHint || cleanDisplayName(users.name) || key || email；
-         此处此前只用 profile.name || profile.nameHint || userName || id —— 两链对同一张卡给出不同字符串，
-         vlAvatar 哈希（「同一人恒定同色」）随之分裂：480 张卡实测 235 张两页显示名不同、
-         205 张首字不同、207 张色档不同。优先取 personaSeed.nickname（卡的人设短语），与卡库 nickname 同源。 */
-      name: String(
-        (profile.personaSeed as Record<string, unknown> | undefined)?.nickname
-        || profile.nickname
-        || profile.name
-        || profile.nameHint
-        || p.userName
-        || p.id
+      /* 显示名链与「VirtualProfile 详情」同源（2026-11-08 二次修正）：名字是「想…」诉求句时
+         按诉求句派生人名，详情页（VirtualProfile.vue 同一条链）传同一句才算同一个人——
+         否则从列表点进详情就改名。学习者卡库（VirtualLearnerCards / CardDetailPage）面向卡池、
+         标题读内容句，走 cardDisplayTitle；实测卡库（frontier-*）与实例（vl-*）的 profileId
+         零重叠，是两批数据行，不承诺同名同色（见 cardDisplay.ts syntheticPersonaName 注释）。
+         2026-11-08：合成卡把「学习诉求」写进了 nickname（400 张全是「想解决…/想搞懂…」），
+         整列表读作「想解决2024新《公司法》认缴制」。诉求句不是人名，改按诉求句派生稳定人名；
+         预置卡 / 自建卡的真人名原样保留。 */
+      name: personaDisplayName(
+        String(
+          (profile.personaSeed as Record<string, unknown> | undefined)?.nickname
+          || profile.nickname
+          || profile.name
+          || profile.nameHint
+          || p.userName
+          || p.id
+        )
       ),
       goal: String(p.learningGoal || '未设置目标'),
       level: String(p.knowledgeLevel || ''),
@@ -1850,6 +1891,11 @@ async function fetchLiveVirtuals(): Promise<void> {
       failedCount: Number(p.failedCount ?? 0),
       abandonedCount: Number(p.abandonedCount ?? 0),
       stalledCount: Number(p.stalledCount ?? 0),
+      /* 2026-10-31 五轮评审 P8：活跃会话自动驾驶最后一次错误（如僵尸会话自动回收）
+         透传到列表「异常」列——座舱日志已报错而列表异常列为 — 的断链在此接上 */
+      /* 2026-10-31 五轮评审 P8：直接读后端列表新字段 activeError（会话样本已瘦身、
+         不含 stageResults，前端不能从样本二次解析；进程重启中断在后端已按预期态过滤） */
+      activeError: typeof p.activeError === 'string' ? p.activeError : null,
       runningSessionIds: (Array.isArray(p.runningSessionIds) ? p.runningSessionIds : runningSessions.map((s) => String(s.id)))
         .map(String)
         .filter(Boolean),
@@ -1951,8 +1997,9 @@ export interface LiveApiConfig {
   apiUrl: string
   apiKeyConfigured: boolean
   availableModels: string[]
+  /** 平台默认模型：没单独指定模型的 Skill 都走它（平台只有这一个默认——推理与否由
+      该 Skill 的思考模式 / 推理强度决定，不是换一个模型）。2026-11-04 起不再有「默认推理模型」。 */
   defaultModel: string
-  defaultReasoningModel: string
   defaultEvaluationModel: string
   defaultThinkingMode: 'default' | 'enabled' | 'disabled'
   defaultReasoningEffort: 'default' | 'low' | 'high' | 'max'
@@ -1978,7 +2025,6 @@ async function fetchLiveApiConfig(): Promise<void> {
     apiKeyConfigured: !!d.apiKeyConfigured,
     availableModels: d.availableModels || [],
     defaultModel: d.defaultModel || '',
-    defaultReasoningModel: d.defaultReasoningModel || '',
     defaultEvaluationModel: d.defaultEvaluationModel || '',
     defaultThinkingMode: d.defaultThinkingMode || 'default',
     defaultReasoningEffort: d.defaultReasoningEffort || 'default',
@@ -2006,7 +2052,6 @@ export async function liveSaveApiConfig(data: {
   apiKey: string
   availableModels: string[]
   defaultModel: string
-  defaultReasoningModel: string
   defaultEvaluationModel: string
   defaultThinkingMode?: 'default' | 'enabled' | 'disabled'
   defaultReasoningEffort?: 'default' | 'low' | 'high' | 'max'
@@ -2016,6 +2061,32 @@ export async function liveSaveApiConfig(data: {
   lastCheckedAt?: string
 }): Promise<void> {
   await adminApiConfigApi.updateConfig(data)
+  await fetchLiveApiConfig()
+}
+
+/**
+ * 设置平台默认模型。
+ *
+ * 默认模型是**运行面选择**，落在 DB `platform_api_configs.defaultModel`——与模型清单
+ * （`llm-providers.json`）不同源：清单回答「有哪些模型」，默认回答「没单独指定的 Skill 走哪个」。
+ * 两者都缺时，运行时直接抛 `AI model is not configured`（`router.resolveModel`），
+ * 所以「填地址 → 拉清单 → 挂模型」之后必须补上这一步，否则平台跑不起来。
+ * 平台只有一个默认（2026-11-04 用户「为什么还在区分默认推理和对话，没有这个了」）。
+ */
+export async function liveSetDefaultModel(patch: {
+  /** 省略 = 保持现值（PUT 是字段级合并，不传的字段不会被改写） */
+  defaultModel?: string
+}): Promise<void> {
+  const c = liveApiConfig.value
+  if (!c) throw new Error('接入配置尚未载入')
+  await adminApiConfigApi.updateConfig({
+    apiUrl: c.apiUrl,
+    // 空串 = 地址没变，后端沿用已保存的密钥（不会把密钥清掉）
+    apiKey: '',
+    availableModels: c.availableModels,
+    defaultModel: patch.defaultModel ?? c.defaultModel,
+    defaultEvaluationModel: c.defaultEvaluationModel
+  })
   await fetchLiveApiConfig()
 }
 
@@ -2244,6 +2315,59 @@ export interface LiveAnnouncement {
 
 export const liveAnnouncements = ref<LiveAnnouncement[]>([])
 
+/**
+ * 运营待办三域读数（反馈 / 失败路径 / 死信）：侧栏「运营中心」角标的唯一来源。
+ *
+ * 2026-11-01 外部评审：角标原先是「已发布公告数」——发得越多角标越大，而落地页顶部
+ * 读数带写「待处理反馈 3」，同屏两个数各说各话，且角标语义（数据量）被读成了待办量。
+ * 改为与运营中心页级读数带同口径的三域之和（草稿公告由 liveAnnouncements 补），
+ * 全 0 时角标不挂（「没有要处理的」不需要一个 0 占着导航）。
+ */
+export const liveOpsPending = ref<{ feedback: number; paths: number; dead: number; loaded: boolean }>({
+  feedback: 0,
+  paths: 0,
+  dead: 0,
+  loaded: false
+})
+
+/** 三域计数并行拉取：任一端点失败只让对应域保持原值，三域全失败才向上抛（角标整体不可信） */
+async function fetchLiveOpsPending(): Promise<void> {
+  const [fr, sr, dr] = await Promise.allSettled([
+    adminFeedbackApi.list({ limit: 1, status: 'new' }),
+    adminLearningContentApi.getStats(),
+    adminDevtoolsApi.getOutboxDead()
+  ])
+  const next = { ...liveOpsPending.value }
+  if (fr.status === 'fulfilled') {
+    // 信封 { success, data: [...], pagination: { total } }：total 与 data 平级（同 OpsHub 口径）
+    const body = (fr.value.data ?? {}) as { pagination?: { total?: number } }
+    next.feedback = Number(body.pagination?.total ?? 0)
+  }
+  if (sr.status === 'fulfilled') {
+    const s = (sr.value.data?.data ?? sr.value.data) as { byStatus?: { failed?: number } } | null
+    next.paths = Number(s?.byStatus?.failed ?? 0)
+  }
+  if (dr.status === 'fulfilled') {
+    const d = (dr.value.data?.data ?? dr.value.data) as { deadCount?: number } | null
+    next.dead = Number(d?.deadCount ?? 0)
+  }
+  const anyOk = [fr, sr, dr].some((r) => r.status === 'fulfilled')
+  liveOpsPending.value = { ...next, loaded: anyOk }
+  if (!anyOk && fr.status === 'rejected') throw fr.reason
+}
+
+/**
+ * 运营中心页自己也在拉这三个域（页级读数带要逐域失败态）：拉到后回写共享读数，
+ * 免得侧栏角标要点两次刷新才跟上页内数字。传 null 表示该域本轮失败、保留旧值。
+ */
+export function setLiveOpsPendingCounts(part: Partial<{ feedback: number | null; paths: number | null; dead: number | null }>): void {
+  const next = { ...liveOpsPending.value }
+  if (part.feedback != null) next.feedback = part.feedback
+  if (part.paths != null) next.paths = part.paths
+  if (part.dead != null) next.dead = part.dead
+  liveOpsPending.value = { ...next, loaded: true }
+}
+
 /** 侧栏导航徽章：live 真实计数（无数据时不显示） */
 export const liveNavBadges = computed<Record<string, string>>(() => {
   const out: Record<string, string> = {}
@@ -2251,16 +2375,23 @@ export const liveNavBadges = computed<Record<string, string>>(() => {
   if (virtuals > 0) out['virtual-learners'] = String(virtuals)
   const skills = liveSkillProfiles.value.length
   if (skills > 0) out.skills = String(skills)
-  // 公告已折入运营中心 tab（阶段 1 导航收敛）：徽章挂到 ops-hub（messages 场景下线）
-  const published = liveAnnouncements.value.filter((a) => a.status === 'published').length
-  if (published > 0) out['ops-hub'] = String(published)
+  // 运营中心角标 = 待办件数（反馈 / 失败路径 / 死信 / 草稿公告），与落地页读数带同一口径
+  // （2026-11-01 评审口径取代本地此前的 published 计数；公告已折入运营中心 tab）
+  const drafts = liveAnnouncements.value.filter((a) => a.status === 'draft').length
+  const p = liveOpsPending.value
+  const pending = p.feedback + p.paths + p.dead + drafts
+  if (pending > 0) out['ops-hub'] = String(pending)
   // 事故信号：近 7 天失败数（>0 时侧栏亮红）。2026-10-28 数据审计 P1：用后端全量
   // stats.error（与角标落地页 ?range=week&status=err 的「失败（N）」同源）；旧后端
-  // 无 stats 时回退 200 行采样（Shell 的 title 会如实标注）
-  const bootErrorCount = liveBootLogStats.value?.error
-  const failed = typeof bootErrorCount === 'number' && bootErrorCount > 0
-    ? bootErrorCount
-    : (liveSpans.value || []).filter((s) => s.status === 'err').length
+  // 无 stats 时回退 200 行采样（Shell 的 title 会如实标注）。
+  // 2026-11-08 口径：失败 = 未成功（error + timeout）——落地页的「仅失败」发 status=failed，
+  // 只数 error 会让角标比落地页少一批超时行。（并集：远程分支未见过本地这条修，
+  // 不得随徽标口径一起退回 spans 采样）
+  const bootStats = liveBootLogStats.value
+  const bootFailed = bootStats ? Number(bootStats.error || 0) + Number(bootStats.timeout || 0) : NaN
+  const failed = Number.isFinite(bootFailed) && bootFailed > 0
+    ? bootFailed
+    : (liveSpans.value || []).filter((s) => s.status !== 'ok').length
   if (failed > 0) out['execution-logs'] = String(failed)
   return out
 })
@@ -2390,7 +2521,8 @@ const liveDomainReady: Record<string, () => boolean> = {
   topology: () => liveTopoNodes.value.length > 0,
   catalog: () => liveSkillCatalog.value.length > 0,
   registration: () => registrationEnabled.value !== null,
-  announcements: () => liveAnnouncements.value.length > 0
+  announcements: () => liveAnnouncements.value.length > 0,
+  opsPending: () => liveOpsPending.value.loaded
 }
 
 const liveDomainFresh = (key: string): boolean => {
@@ -2428,7 +2560,8 @@ export async function loadLiveData(force = false) {
     topology: () => fetchLiveTopology(force),
     catalog: fetchLiveSkillCatalog,
     registration: fetchRegistrationSetting,
-    announcements: fetchLiveAnnouncements
+    announcements: fetchLiveAnnouncements,
+    opsPending: fetchLiveOpsPending
   }
 
   // 首屏门闩两笔并行（性能批 2026-09-30）：spans 与 overview 是两个独立 GET，

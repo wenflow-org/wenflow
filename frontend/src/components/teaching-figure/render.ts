@@ -32,12 +32,27 @@ export interface RenderOptions {
    * 刻意只提供浅色材质：深色底（黑板）需要整套反白配色，在会话内联场景里过于抢眼。
    */
   material?: 'none' | 'paper' | 'grid';
+  /**
+   * 宿主卡片给到的可用宽度（px，2026-11-08 外评 #2）。写死 620 的画布塞进 1080px 的
+   * 消息卡时，右侧整块留白、左侧列宽却不够 CJK 一行——「② 消息进队/列」就是这来的。
+   * 渲染器取 max(自然宽, min(target, 自身上限))：宽卡撑满、窄卡不裁剪。缺省 = 不干预
+   * （旧调用方与测试的快照宽度不变）。
+   */
+  targetWidth?: number;
+}
+
+/**
+ * 画布宽度按宿主卡片放宽（2026-11-08 外评 #2）：自然宽为下限，max 为防拉伸上限，
+ * 未传 target 时原样返回自然宽（旧调用方与测试快照零变化）。
+ */
+function hostW(target: number | undefined, natural: number, max: number): number {
+  if (!target || target <= natural) return natural;
+  return Math.round(Math.min(target, max));
 }
 
 /** 粗估文本宽度：CJK 1em，ASCII 0.56em。用于排版避让，不追求像素级。 */
 function est(text: unknown, size: number): number {
-  let w = 0;
-  for (const ch of String(text ?? '')) {
+  let w = 0;  for (const ch of String(text ?? '')) {
     w += /[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/.test(ch) ? size : size * 0.56;
   }
   return w;
@@ -708,8 +723,9 @@ type CompareChainSpec = {
   focus?: string;
 };
 
-function renderCompareChain({ title, left, right, note, leftTone = 'ok', rightTone = 'accent', focus }: CompareChainSpec): RenderedFigure {
-  const panelW = 330;
+function renderCompareChain({ title, left, right, note, leftTone = 'ok', rightTone = 'accent', focus }: CompareChainSpec, targetWidth?: number): RenderedFigure {
+  // 面板宽随宿主卡片放宽（外评 #2）：节点标签「同步调用通知服务」在 330 面板里正好挤成两行
+  const panelW = Math.max(330, Math.min(Math.round(((targetWidth || 0) - 44 - 16) / 2), 520));
   const gap = 16;
   const padX = 14;
   const W = padX * 2 + panelW * 2 + gap;
@@ -891,14 +907,15 @@ type CompareSpec = {
   focus?: string;
 };
 
-function renderCompare({ title, left, right, divider, note, leftTone = 'ok', rightTone = 'accent', focus }: CompareSpec): RenderedFigure {
+function renderCompare({ title, left, right, divider, note, leftTone = 'ok', rightTone = 'accent', focus }: CompareSpec, targetWidth?: number): RenderedFigure {
   // 两侧给了请求链路 → 走拓扑模式：跳数由边界上的序号和箭头本身表达
   if ((Array.isArray(left?.chain) && left.chain.length) || (Array.isArray(right?.chain) && right.chain.length)) {
-    return renderCompareChain({ title, left, right, note, leftTone, rightTone, focus });
+    return renderCompareChain({ title, left, right, note, leftTone, rightTone, focus }, targetWidth);
   }
-  const colW = 268;
   const gap = 156;
   const padX = 16;
+  // 列宽随宿主卡片放宽（外评 #2）：268 是 724 总宽下的存量值，宽卡上仍按它排右侧就空了
+  const colW = Math.max(268, Math.min(Math.round(((targetWidth || 0) - padX * 2 - gap) / 2), 460));
   const w = padX * 2 + colW * 2 + gap;
   // 条目允许三行：两行时 19 字的因果句仍会被截掉最后一个动作（2026-10-22 夜间跑批 #269）
   const itemTextW = colW - 46;
@@ -2514,10 +2531,11 @@ type SplitCompareSpec = {
   placeholder?: string;
 };
 
-function renderSplitCompare({ title, left, right, delta, placeholder }: SplitCompareSpec): RenderedFigure | null {
+function renderSplitCompare({ title, left, right, delta, placeholder }: SplitCompareSpec, targetWidth?: number): RenderedFigure | null {
   // 契约与归一化一致：两栏都必须有至少一行——空栏不是对比
   if (!left || !right || !Array.isArray(left.rows) || !left.rows.length || !Array.isArray(right.rows) || !right.rows.length) return null;
-  const W = 620;
+  // 宽卡撑满（外评 #2）：窄列把栏头/条目挤成单字折行
+  const W = hostW(targetWidth, 620, 1040);
   const padX = 20;
   const titleH = title ? T.fontTitle + 20 : 6;
   const gapMid = 56;
@@ -2637,9 +2655,10 @@ type StripFrame = { label?: unknown; tone: string; items?: unknown[] };
 
 type StateStripSpec = { title?: string; frames?: StripFrame[]; note?: string };
 
-function renderStateStrip({ title, frames = [], note }: StateStripSpec): RenderedFigure | null {
+function renderStateStrip({ title, frames = [], note }: StateStripSpec, targetWidth?: number): RenderedFigure | null {
   if (!Array.isArray(frames) || frames.length < 2) return null;
-  const W = 620;
+  // 宽卡撑满（外评 #2）：620 塞进 1080 卡右侧全空、帧宽却只够单字折行
+  const W = hostW(targetWidth, 620, 1040);
   const padX = 20;
   const titleH = title ? T.fontTitle + 20 : 6;
   const gap = 30;
@@ -2998,7 +3017,7 @@ export function renderSpecFigure(
       case 'matrix':
         return renderMatrix(spec as MatrixSpec);
       case 'compare':
-        return renderCompare(spec as CompareSpec);
+        return renderCompare(spec as CompareSpec, options.targetWidth);
       case 'quadrant':
         return renderQuadrant(spec as QuadrantSpec);
       case 'bipartite':
@@ -3026,9 +3045,9 @@ export function renderSpecFigure(
       case 'concept-map':
         return renderConceptMap(spec as ConceptMapSpec);
       case 'split-compare':
-        return renderSplitCompare(spec as SplitCompareSpec);
+        return renderSplitCompare(spec as SplitCompareSpec, options.targetWidth);
       case 'state-strip':
-        return renderStateStrip(spec as StateStripSpec);
+        return renderStateStrip(spec as StateStripSpec, options.targetWidth);
       default:
         return null;
     }

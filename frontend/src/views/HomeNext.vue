@@ -8,8 +8,9 @@
         <div class="hn-hero__copy">
           <span class="hn-pill">问流 · 从问题到学习路径</span>
           <h1>先说清你想解决的事，<br />再开始学习。</h1>
+          <!-- 2026-11-04 去「帮你」代劳预设，改陈述动作 -->
           <p>
-            不用整理成完美目标。聊几分钟，问流帮你理清方向、生成路径——学习台直接给出今天能动手的一步。
+            不用整理成完美目标。说清你想解决的事，问流理出方向、生成路径——学习台直接给出今天能动手的一步。
           </p>
           <div class="hn-hero__cta">
             <router-link :to="primaryPath" class="hn-btn hn-btn--primary hn-btn--lg">{{ primaryLabel }}</router-link>
@@ -18,7 +19,7 @@
         </div>
 
         <aside class="hn-stage" aria-label="产品示意" ref="stageEl">
-          <div class="hn-stage__chat" :class="{ 'is-fading': phase === 7 }">
+          <div class="hn-stage__chat">
             <div class="hn-stage__bar">
               <span>目标规划</span>
               <span class="hn-chip">澄清问题</span>
@@ -95,7 +96,8 @@
               <span>{{ i + 1 }}</span>
               <strong>{{ s.t }}</strong>
               <p>{{ s.d }}</p>
-              <em>{{ s.where }}</em>
+              <!-- 2026-11-04 相邻步骤属同一产品面时只在首张挂标签，去整列同名冗余 -->
+              <em v-if="i === 0 || s.where !== steps[i - 1].where">{{ s.where }}</em>
             </li>
           </ol>
         </div>
@@ -107,8 +109,9 @@
           <div class="hn-idea__lead" v-reveal>
             <span class="hn-pill">和常见开始方式不同</span>
             <h2>先把问题说小，再开始学。</h2>
+            <!-- 2026-11-04 去「帮你」代劳预设，改陈述动作 -->
             <p>
-              目标太大、资料太多时，问流先帮你收到能落地的范围，再边学边调。
+              目标太大、资料太多时，问流先把范围收到能落地的程度，再边学边调。
             </p>
           </div>
           <div class="hn-idea__list">
@@ -124,7 +127,8 @@
       <section class="hn-desk hn-shell">
         <div class="hn-desk__copy" v-reveal>
           <h2>每天打开学习台，只盯今天这一步。</h2>
-          <p>路径生成后，「今日行动」直接告诉你学什么、学多久。也可以随时规划新目标。</p>
+          <!-- 2026-11-04 删「也可以随时」心理预设，只留状态与动作 -->
+          <p>路径生成后，「今日行动」直接给出今天学什么、学多久。有新目标可另起一条路径。</p>
           <ul>
             <li>今日行动 · 清楚今天学什么</li>
             <li>学习路径 · 阶段与任务可继续</li>
@@ -143,8 +147,9 @@
               <div><span>状态</span><b class="hn-state__form">最优训练区</b></div>
             </div>
             <div class="hn-stage__prog"><i style="--w: 62%" /></div>
+            <!-- 2026-11-04 删「按…即可」教用法尾巴，只留状态陈述 -->
             <div class="hn-state__hint">
-              本周节奏稳定，状态正处最优训练区——按当前节奏推进即可。
+              本周节奏稳定，状态正处最优训练区。
             </div>
           </div>
         </div>
@@ -212,9 +217,15 @@ function syncAuthState() {
   loggedIn.value = hasUserSession()
 }
 
-/* Hero 对话演示：用户提问 → 正在输入 → AI 回复 → 选中标签 → 高亮结果 → 淡出重播。
+/* Hero 对话演示：用户提问 → 正在输入 → AI 回复 → 选中标签 → 高亮结果，然后停在结果上。
    phase 99 = 全部静态可见（reduced-motion 时的兜底，不跑时间轴）。
-   phase 7 为淡出过渡（整卡上浮淡出），随后回到 phase 0 重播。 */
+
+   2026-11-07 用户反馈「首页这个地方循环播放了」：原先播完两轮会整卡淡出（phase 7）
+   再回到 phase 0 重播，淡出那一帧整张卡变成半透明灰（截图里就是这一帧）——落地页
+   反复闪一下再重来，读起来像卡住重启，而不是演示。现在只播一遍并停在完成态：
+   - 去掉 phase 7 淡出与回 0 的循环项（不再有半透明帧）；
+   - 时间轴跑完即停（demoDone），IntersectionObserver 重进视口也不再重播；
+   - 观察视口只为「进视口才开始播」（首屏以下的访客滑动到舞台时才启动），不是循环开关。 */
 const phase = ref(
   typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
     ? 99
@@ -227,16 +238,14 @@ const demoTimeline: Array<[number, number]> = [
   [3, 600],   // AI 回复
   [4, 550],   // 选中标签
   [5, 450],   // 高亮结果
-  [6, 1300],  // 停留
-  [7, 300],   // 整卡淡出
-  [0, 250]    // 回到起点，循环
+  [6, 1300]   // 停留（终态，不再淡出/重播）
 ]
 
 const stageEl = ref<HTMLElement | null>(null)
 let demoTimer: ReturnType<typeof setTimeout> | null = null
 let demoIndex = 0
-let demoLoops = 0
-let demoVisible = true
+let demoDone = false
+let demoVisible = false
 let demoObserver: IntersectionObserver | null = null
 
 function stopDemo() {
@@ -247,16 +256,13 @@ function stopDemo() {
 }
 
 function runDemoStep() {
-  if (!demoVisible || phase.value === 99) return
-  const [nextPhase, delay] = demoTimeline[demoIndex % demoTimeline.length]
-  demoIndex++
-  // 循环上限：播完 2 轮后停在完成态（phase 5 高亮结果），不再重播（4K 高视口下 hero 常驻视口，
-  // 无限循环会造成持续动画干扰）
-  if (nextPhase === 0) demoLoops++
-  if (demoLoops >= 2 && nextPhase > 5) {
-    phase.value = 5
+  if (!demoVisible || demoDone || phase.value === 99) return
+  if (demoIndex >= demoTimeline.length) {
+    demoDone = true
     return
   }
+  const [nextPhase, delay] = demoTimeline[demoIndex]
+  demoIndex++
   demoTimer = setTimeout(() => {
     if (!demoVisible) return
     phase.value = nextPhase
@@ -268,16 +274,15 @@ onMounted(() => {
   syncAuthState()
   window.addEventListener('storage', syncAuthState)
   if (phase.value === 99) return
-  // 舞台离开视口时暂停时间轴，回到视口再继续，避免后台空转
+  /* 只在舞台首次进入视口时启动时间轴；播完即停（不重播，见上方注释）。
+     离屏期间不必暂停——时间轴最多 4 秒就跑完，没有常驻空转。 */
   demoObserver = new IntersectionObserver(
     (entries) => {
-      const visible = entries.some((e) => e.isIntersecting)
-      demoVisible = visible
-      if (visible) {
-        runDemoStep()
-      } else {
-        stopDemo()
-      }
+      if (!entries.some((e) => e.isIntersecting)) return
+      demoVisible = true
+      runDemoStep()
+      // 时间轴只走一遍：进视口一次后就不再需要观察
+      demoObserver?.disconnect()
     },
     { threshold: 0.15 }
   )
@@ -493,12 +498,10 @@ main {
   padding: 18px;
 }
 .hn-stage__chat {
+  /* 静态倾斜即可：卡本身不再变透明度/位移（is-fading 与它的 opacity/transform 过渡
+     一并退役，2026-11-07 用户反馈「循环播放」——截图那张半透明灰卡就是过渡帧）。
+     内部气泡的进出仍由 .hn-bubble 自己的过渡负责。 */
   transform: rotate(-1deg);
-  transition: opacity 0.5s var(--ease), transform 0.5s var(--ease);
-}
-.hn-stage__chat.is-fading {
-  opacity: 0;
-  transform: rotate(-1deg) translateY(-14px);
 }
 .hn-stage__desk {
   transform: rotate(1.2deg) translateX(18px);
@@ -1205,9 +1208,13 @@ main {
    展示型字号（hero h1 / 副文案）不在文本带内，保留各自的字面量。 */
 @media (min-width: 2000px) {
   /* 档位文本尺度：×1.15（与 admin 的 4K 档倍率同口径） */
-  --mk-fs-micro: 13.8px;
-  --mk-fs-body: 16.1px;
-  --mk-fs-emphasis: 17.25px;
+  /* 2026-11-04 修：三条自定义属性原为裸写（无选择器），解析器会把紧随其后的
+     .hn-shell 规则整条丢弃；补挂 .hn 选择器让声明合法，后续 .hn-shell 恢复正常。 */
+  .hn {
+    --mk-fs-micro: 13.8px;
+    --mk-fs-body: 16.1px;
+    --mk-fs-emphasis: 17.25px;
+  }
   .hn-shell {
     width: min(1560px, calc(100% - 64px));
   }

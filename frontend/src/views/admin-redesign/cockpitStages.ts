@@ -34,16 +34,25 @@ export function useCockpitStages(deps: {
   } = deps
 
   /** 进度条索引：优先 currentStage，并用 bindings 兜底（避免 key 不一致时全「未开始」） */
+  /* 路径证据（2026-10-31 五轮评审 P1）：learningPathId / 生成标志 / 里程碑视图任一存在 */
+  const hasPathEvidence = computed(() =>
+    !!(bindings.value.learningPathId || stageStatus.value.path?.generated || pathMilestonesView.value.length)
+  )
   const effectiveStageIndex = computed(() => {
     const raw = currentStage.value
     const idx = stageFlow.indexOf(raw as StageKey)
-    if (idx >= 0) return idx
+    /* 指针不得越过路径档：目标确认后状态机可能把 currentStage 推到 teaching，
+       但路径从未生成——「✓路径已完成 / 学习进行中」与右栏「路径尚未生成」同屏打架。
+       钳制到路径档（当前阶段 = 路径），与右侧/操作栏同一事实。 */
+    if (idx >= 0) return idx >= 2 && !hasPathEvidence.value ? 1 : idx
 
     // 后端偶发非标准 stage 时，用绑定证据推断
-    if (bindings.value.teachingSessionId || bindings.value.currentTaskId) return 2
-    if (bindings.value.learningPathId || stageStatus.value.path?.generated) return 1
-    if (bindings.value.goalConversationId) return 0
-    return 0
+    let cur: number
+    if (bindings.value.teachingSessionId || bindings.value.currentTaskId) cur = 2
+    else if (bindings.value.learningPathId || stageStatus.value.path?.generated) cur = 1
+    else if (bindings.value.goalConversationId) cur = 0
+    else cur = 0
+    return cur >= 2 && !hasPathEvidence.value ? 1 : cur
   })
 
   function stageDone(st: StageKey) {
@@ -52,6 +61,9 @@ export function useCockpitStages(deps: {
 
     // Wrapup 不是会话终态的同义词：只有确实写出总结时才算完成。
     if (st === 'wrapup') return hasWrapup.value
+    /* 路径证据守卫（2026-10-31 五轮评审 P1）：路径从未生成时不得打勾——
+       teachingSessionId 可能已存在（状态机越过路径推进），不能按下游推断路径完成 */
+    if (st === 'path' && !hasPathEvidence.value) return false
     // 中断终态只确认中断点以前的阶段；当前中断阶段不能伪装成完成（#135：timeout/
     // finalization_failed/discarded/superseded 同 failed/abandoned 口径）。
     if ((isFailedTerminal.value || isInterruptedTerminal.value) && idx === cur) return false
@@ -140,6 +152,16 @@ export function useCockpitStages(deps: {
     const list = learnLessons.value
     if (!list.length) return ''
     const started = list.filter((l) => l.teachingSessionId || l.state === 'done').length
+    /* 2026-11-01 外部评审 P1：本格与「学习总结」卡的「0/15 课已完成」同屏时，一个说
+       「已开始 1/15」、一个说「已完成 0/15」，读者会外推成自相矛盾。阶段已到完成态
+       （课堂收尾/出总结）而课一节没学完时，把两条轴各自的事实写进格子：
+       「课堂已收尾」是阶段轴，「已学完 0/N 课」是内容轴，二者不可互推。
+       2026-11-01 第二轮评审 P0：措辞从「课程 0/N 已完成」改为「已学完 0/N 课」——
+       第 4 步「总结」报的是**已出总结的课次**（同一节课收尾后即为 1），这里报的是
+       **已学完的课**（任务达标才算），两处都用「已完成」会被读成「0 节 vs 1 节」打架。 */
+    if (stageDone('learning') && countDoneLessons(list) === 0) {
+      return `课堂已收尾 · 已学完 0/${list.length} 课`
+    }
     return `已开始 ${started}/${list.length} 课`
   })
   /* 总结按课走（2026-10-19 用户走查「总结是按课走的，已生成应该也是按课程走吧」）：
@@ -166,7 +188,10 @@ export function useCockpitStages(deps: {
         return learnStageRollupText.value
       case 'wrapup': {
         const { done, total } = wrapupLessonStat.value
-        if (total && done) return `已生成 ${done}/${total} 课`
+        /* 2026-11-01 外部评审 P0：「已生成 d/t 课」与第 3 步/卡头的「已学完 0/t 课」同屏，
+           被读成「到底 0 节还是 1 节」。本轴数的是**已出总结的课次**（课堂收尾即计入），
+           内容轴的学完与否是另一回事，文案里把轴名写出来。 */
+        if (total && done) return `已出总结 ${done}/${total} 课`
         return hasWrapup.value ? '总结已生成' : ''
       }
       default:
@@ -185,8 +210,9 @@ export function useCockpitStages(deps: {
   /** 阶段迷你状态文本 */
   function stageMiniStatus(st: StageKey) {
     if (st === 'goal') {
-      const n = goalConversationMessages.value.length
-      return n ? `${n} 轮` : (stageDone(st) ? '已完成' : '')
+      /* 2026-10-31 三轮评审 P1：原 `${全量消息数} 轮` 把「5 学习者发言 + 5 平台回复」
+         说成「目标 10 轮」，与步点副标「学习者发言 N」同屏打架。统一读 goalRoundText。 */
+      return goalRoundText.value || (stageDone(st) ? '已完成' : '')
     }
     if (st === 'path') {
       return pathMilestonesView.value.length ? `${pathMilestonesView.value.length} 个里程碑` : ''
@@ -206,6 +232,9 @@ export function useCockpitStages(deps: {
 
   return {
     effectiveStageIndex, stageDone, stageActive, stageCls, stageMark,
-    stageProgress, stageMiniStatus, goalRoundText, pathProgressText, learnProgressText
+    stageProgress, stageMiniStatus, goalRoundText, pathProgressText, learnProgressText,
+    /* 2026-11-01 外部评审 P0：学习总结卡头要与第 4 步同源报「已出总结 d/t 课」，
+       而卡头在 SFC 里、这个计数在 composable 里——导出后两处共用一份判定，不再各算一遍。 */
+    wrapupLessonStat
   }
 }

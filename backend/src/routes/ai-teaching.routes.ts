@@ -20,7 +20,9 @@ import {
 } from '../services/ai-teaching/TeachingSessionRepository';
 import { sessionFinalizationService } from '../services/ai-teaching/SessionFinalizationService';
 import { startWrapupRegeneration } from '../services/ai-teaching/teaching-wrapup-regen';
-import { listSessionEvents, type SessionEventKind } from '../services/ai-teaching/session-events.service';
+import { projectActiveSession } from '../services/ai-teaching/session-activity';
+import { listSessionEvents, recordSessionEvent, type SessionEventKind } from '../services/ai-teaching/session-events.service';
+import { buildTurnAnalysisView } from '../services/ai-teaching/teaching-session-views';
 import { reviewPlanService } from '../services/memory/review-plan.service';
 import { learnerExitService } from '../services/learner/LearnerExitService';
 import { PromptStreamEvent, setRequestContext, getRequestContext } from '../gateway/api-gateway/context';
@@ -32,6 +34,10 @@ import {
   teachingOperationRequestHash,
 } from '../services/ai-teaching/TeachingMessageIdempotencyService';
 import { dashboardGuidanceSnapshotService } from '../services/learner/DashboardGuidanceSnapshotService';
+import {
+  ADVISORY_RESPONSE_ACTIONS,
+  type AdvisoryResponseAction,
+} from '../services/ai-teaching/ReplanAdvisoryService';
 
 const router = Router();
 
@@ -51,6 +57,15 @@ const teachingMessagesUserLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req: any) => req.user?.userId || ipKeyGenerator(req.ip, 56),
 });
+
+/**
+ * 学习者单条消息的应用级上限（#224）。
+ * 口径与前端输入框一致：frontend/src/views/v2/V2LearningPage.vue 的编辑器与编辑态
+ * textarea 均为 maxlength=800、计数显示 "x / 800"。前端拦的是产品层，这里拦 API 层，
+ * 防止绕过前端直接打接口把整段文本送进模型并落库（每条消息会触发 1-2 次 LLM 调用）。
+ * 注意这是业务上限，不是传输层上限（bootstrap/http-app.ts 的 express.json({ limit: '2mb' })）。
+ */
+const TEACHING_MESSAGE_MAX_CHARS = 800;
 
 /**
  * 会话级归因单点：所有带 :sessionId 的路由在进入处理前把会话 id 注入请求上下文，
@@ -365,6 +380,12 @@ const sendTeachingError = (res: any, error: any, fallbackMessage: string) => {
   });
 };
 
+/** 回合失败留痕（174-2）：此前时间线上只有 turn.committed。失败不推进 revision → 记基线 revision；流式/非流式共用。 */
+const recordTurnFailed = (sessionId: string, revision: number, error: any, streamed: boolean) => {
+  const { code, message } = resolveTeachingError(error, '处理消息失败');
+  return recordSessionEvent({ sessionId, kind: 'turn.failed', actor: 'system', status: 'failed', revision, payload: { code, message, streamed } });
+};
+
 const sendUnauthorized = (res: any) =>
   res.status(401).json({ success: false, error: { message: '未登录', code: 'UNAUTHORIZED', status: 401 } });
 
@@ -398,8 +419,8 @@ const startSseHeartbeat = (res: any) => {
  * 是否随消息响应下发 prompt 调试信封（`promptDebug` / `peerDebug`，含完整 systemPrompt）。
  *
  * 默认**关**（18 号报告衍生观察项）：`/messages` 面向学习者，而 `promptDebug` 里是 ~18k 的教学提示词；
- * 前端只有类型声明、没有任何 UI 读取它（admin 视图也不走该端点、`/detail` 不含该字段）
- * → 属"无消费者 + 提示词外泄"。需要调试时置环境变量 `PROMPT_DEBUG_ENVELOPE=1`。
+ * 前端只有类型声明、没有任何 UI 读取它（admin 视图也不走该端点；`/detail` 不含**新**写入的该字段，但存量消息行
+ * 里仍有历史信封，由出口 `projectMessagesForClient` 整份剔除）→ 属"无消费者 + 提示词外泄"；调试时置 PROMPT_DEBUG_ENVELOPE=1。
  */
 const promptDebugEnabled = (): boolean => process.env.PROMPT_DEBUG_ENVELOPE === '1';
 
@@ -432,14 +453,7 @@ const buildMessageResultData = (result: any, synthetic: boolean): Record<string,
   }
   return {
     aiResponse: result.aiResponse,
-    analysis: {
-      cognitiveLevel: analysis.cognitiveLevel ?? null,
-      levelScore: analysis.levelScore ?? null,
-      understanding: analysis.understanding ?? null,
-      confusionPoints: analysis.confusionPoints ?? [],
-      engagement: analysis.engagement ?? null,
-      emotionalState: analysis.emotionalState ?? null,
-    },
+    analysis: buildTurnAnalysisView(analysis),
     state: {
       // 0-10 内部尺度 → 0-100 展示尺度（与 /api/state/current 一致）
       lss: Math.round((result.currentState?.lss ?? 0) * 10),
@@ -525,14 +539,16 @@ const handleStreamingMessage = async (
     writeSseEvent(res, 'final', data);
     writeSseEvent(res, 'done', {});
   } catch (error: any) {
+    const errorCode = typeof error?.code === 'string' ? error.code : 'TEACHING_MESSAGE_FAILED';
     if (idempotencyKey) {
       await settleIdempotentOperation('fail', {
         sessionId,
         idempotencyKey,
-        errorCode: typeof error?.code === 'string' ? error.code : 'TEACHING_MESSAGE_FAILED',
+        errorCode,
       });
     }
     const { status, code, message: errorMessage } = resolveTeachingError(error, '处理消息失败');
+    await recordTurnFailed(sessionId, expectedRevision, error, true);
     writeSseEvent(res, 'error', { status, code, message: errorMessage });
   } finally {
     stopHeartbeat();
@@ -812,7 +828,7 @@ router.post('/sessions/:sessionId/resume', async (req: any, res) => {
 });
 
 /**
- * 调整建议处置埋点（保留 / 稍后再看 / 预览）
+ * 调整建议处置埋点（保留 / 稍后再看 / 预览 / 确认调整…）
  * POST /api/ai-teaching/sessions/:sessionId/advisory-response
  * 轻量记账：只写 advisory.learnerResponse{action,at}，不触发任何调整执行（真动作走 replan 链）。
  */
@@ -825,14 +841,17 @@ router.post('/sessions/:sessionId/advisory-response', async (req: any, res) => {
 
     const { sessionId } = req.params;
     const action = String(req.body?.action || '');
-    if (!['keep', 'later', 'preview', 'adopt'].includes(action)) {
+    // #251：可接受动作由建议服务下发的选项键派生（ADVISORY_RESPONSE_ACTIONS）——
+    // 此前是另一张手写白名单 ['keep','later','preview','adopt']，漏掉 confirm/accelerate/
+    // reinforce/resequence，于是界面自己渲染的按钮点下去恒 400「无效的建议处置动作」。
+    if (!(ADVISORY_RESPONSE_ACTIONS as readonly string[]).includes(action)) {
       return res.status(400).json({
         success: false,
         error: { message: '无效的建议处置动作', code: 'INVALID_ADVISORY_ACTION' },
       });
     }
 
-    const result = await teachingSessionRepository.recordAdvisoryResponse(sessionId, userId, action as 'keep' | 'later' | 'preview' | 'adopt');
+    const result = await teachingSessionRepository.recordAdvisoryResponse(sessionId, userId, action as AdvisoryResponseAction);
     if (result.status === 'not_found') {
       return res.status(404).json({
         success: false,
@@ -901,8 +920,13 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
     const { message } = req.body;
     const interactionMeta = sanitizeInteractionMeta(req.body?.meta);
 
-    if (!message) {
+    if (typeof message !== 'string' || message.trim().length === 0) {
       return sendValidationError(res, '缺少消息内容');
+    }
+
+    // #224：应用级长度上限（传输层 2mb 不是业务上限）。必须在幂等受理/落库/模型调用之前拒绝。
+    if (message.length > TEACHING_MESSAGE_MAX_CHARS) {
+      return sendValidationError(res, `消息内容不能超过 ${TEACHING_MESSAGE_MAX_CHARS} 字符`);
     }
 
     const expectedRevision = requireExpectedRevision(req.body?.revision);
@@ -942,11 +966,14 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
       });
       return res.json({ success: true, data });
     } catch (error: any) {
+      const errorCode = typeof error?.code === 'string' ? error.code : 'TEACHING_MESSAGE_FAILED';
       await settleIdempotentOperation('fail', {
         sessionId,
         idempotencyKey,
-        errorCode: typeof error?.code === 'string' ? error.code : 'TEACHING_MESSAGE_FAILED',
+        errorCode,
       });
+      // 失败留痕：与流式出口同口径——非流式失败的回合也必须在会话时间线上可查（174-2）
+      await recordTurnFailed(sessionId, expectedRevision, error, false);
       throw error;
     }
   } catch (error: any) {
@@ -1285,7 +1312,10 @@ router.post('/sessions/:sessionId/finalize', async (req: any, res) => {
       subjectiveDifficulty,
       endReason: req.body?.reason === 'learner-abandoned'
         ? 'learner-abandoned'
-        : req.body?.reason === 'task-completed' ? 'task-completed' : 'manual-end'
+        : req.body?.reason === 'task-completed' ? 'task-completed' : 'manual-end',
+      // 学员在门禁提示后明确确认「末问没答也结算」（2026-11-03）：只放行末问，未答小测仍拦。
+      // 只在确认时带该字段——常规结算的入参形状保持不变（既有契约与测试不受影响）。
+      ...(req.body?.confirmOpenQuestion === true ? { confirmOpenQuestion: true } : {})
     });
     return res.status(result.status === 'processing' ? 202 : 200).json({ success: true, data: result });
   } catch (error: any) {
@@ -1424,7 +1454,9 @@ router.post('/sessions/:sessionId/peer/messages', async (req: any, res) => {
 
     const { message } = req.body;
 
-    if (!message) {
+    // #210：伴学端点与主消息端点同口径——纯空白不是一次真实回合，
+    // 裸判空会让 '' / '   ' / '\n\t ' 落库空消息并触发一次付费模型调用。
+    if (typeof message !== 'string' || message.trim().length === 0) {
       return sendValidationError(res, '缺少消息内容');
     }
 
@@ -1473,30 +1505,22 @@ router.get('/sessions/active', async (req: any, res) => {
     const { taskId } = req.query;
 
     const sessions = await aiTeachingCoordinator.getSessionHistory(userId);
-    const activeSessions = sessions.filter(s => s.status === 'active');
-    
+    // 2026-11-04：可继续的课堂不止 active——离开课堂即 paused、超时待恢复为 timeout，
+    // 三者都是 startSession 可恢复的状态；只认 active 会让「继续当前任务」进入的课堂在面板两档整体缺席。
+    const activeSessions = sessions.filter(s => ['active', 'paused', 'timeout'].includes(s.status));
+
+    // 活跃度分档（2026-11-03）：lastActiveAt = 每会话最近一条消息时间；activity 与断线恢复窗口同源。
+    // 投影逻辑在 session-activity.ts（本文件受超大文件棘轮约束，只许缩短）。
     if (taskId) {
       const filtered = activeSessions
         .filter(s => s.taskId === taskId)
-        .map(s => ({
-          sessionId: s.id,
-          subject: s.subject,
-          topic: s.topic,
-          startTime: s.startTime,
-          messageCount: s.messageCount,
-        }));
+        .map(s => projectActiveSession(s));
       return res.json({ success: true, data: filtered });
     }
 
     res.json({
       success: true,
-      data: activeSessions.map(s => ({
-        sessionId: s.id,
-        subject: s.subject,
-        topic: s.topic,
-        startTime: s.startTime,
-        messageCount: s.messageCount,
-      })),
+      data: activeSessions.map(s => projectActiveSession(s)),
     });
   } catch (error: any) {
     logger.error('获取活跃会话失败:', error);

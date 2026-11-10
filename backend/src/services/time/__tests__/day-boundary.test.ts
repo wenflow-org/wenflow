@@ -14,6 +14,7 @@ import {
   parseDayKeyStart,
   startOfDay,
   endOfDay,
+  parseDayKeyRange,
   dayDiffInDays,
   formatLocal,
   DAY_BOUNDARY_DAY_MS,
@@ -108,5 +109,40 @@ describe('day-boundary：日界口径', () => {
   it('DAY_BOUNDARY_DAY_MS 与本地日界的配合（endOfDay = start + 24h - 1ms，非 DST 日）', () => {
     const start = startOfDay(new Date('2026-09-16T10:00:00Z'), SH);
     expect(endOfDay(new Date('2026-09-16T10:00:00Z'), SH).getTime()).toBe(start.getTime() + DAY_BOUNDARY_DAY_MS - 1);
+  });
+});
+
+describe('parseDayKeyRange：日期键区间的起止都在应用时区本地日（2026-10-31 走查 P0-3）', () => {
+  it('首日 00:00 → 末日 23:59:59.999，两端同一口径', () => {
+    const range = parseDayKeyRange('2026-11-01', '2026-11-30', SH);
+    expect(range.from?.toISOString()).toBe('2026-10-31T16:00:00.000Z'); // 本地 11-01 00:00
+    expect(range.to?.toISOString()).toBe('2026-11-30T15:59:59.999Z'); // 本地 11-30 23:59:59.999
+  });
+
+  it('回归事故点：本地 11-01 04:23 的学习必须落进「2026-11」这个区间', () => {
+    // 事故原貌：会话 startTime=2026-10-31T20:23:15Z（本地 11-01 04:23），
+    // 旧实现 startDate 走 UTC 零点（= 本地 11-01 08:00），把它整体挤出当月。
+    const session = new Date('2026-10-31T20:23:15.135Z');
+    const range = parseDayKeyRange('2026-11-01', '2026-11-30', SH);
+    expect(range.from!.getTime()).toBeLessThanOrEqual(session.getTime());
+    expect(range.to!.getTime()).toBeGreaterThanOrEqual(session.getTime());
+
+    // 同一时刻按旧口径（UTC 零点）会被排除——留证，防止有人再改回去
+    expect(new Date('2026-11-01').getTime()).toBeGreaterThan(session.getTime());
+  });
+
+  it('单边给值：只给首日 / 只给末日', () => {
+    expect(parseDayKeyRange('2026-11-01', undefined, SH)).toEqual({
+      from: new Date('2026-10-31T16:00:00.000Z'),
+      to: null,
+    });
+    expect(parseDayKeyRange(undefined, '2026-11-30', SH).from).toBeNull();
+    expect(parseDayKeyRange(undefined, '2026-11-30', SH).to?.toISOString()).toBe('2026-11-30T15:59:59.999Z');
+  });
+
+  it('脏输入不造出非法日期（不抛错、不参与过滤）', () => {
+    expect(parseDayKeyRange('not-a-date', '2026-13-40', SH)).toEqual({ from: null, to: null });
+    expect(parseDayKeyRange('', null, SH)).toEqual({ from: null, to: null });
+    expect(parseDayKeyRange(123 as unknown, {} as unknown, SH)).toEqual({ from: null, to: null });
   });
 });

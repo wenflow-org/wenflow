@@ -9,27 +9,19 @@
         <button type="button" class="mk-modal__close" aria-label="关闭" @click="launchTarget = null">✕</button>
       </div>
       <div class="mk-modal__body">
-        <div class="vl-launch-row">
-          <label class="mk-field vl-launch-row__story">
-            <span class="mk-field__label">选择故事 <em class="mk-field__req">必填</em></span>
-            <MkSelect
-              v-model="launchForm.storyId"
-              :options="launchStoryOptions"
-              :placeholder="launchStoryPlaceholder"
-              :disabled="launchStoriesLoading"
-              aria-label="选择故事"
-              block
-            />
-          </label>
-          <button
-            type="button"
-            class="mk-btn mk-btn--primary"
-            :disabled="launchBusy || !launchForm.storyId"
-            @click="startLaunch"
-          >
-            {{ launchBusy ? '启动中…' : '启动' }}
-          </button>
-        </div>
+        <!-- 主操作归页脚（2026-11-02 评审 R1/R3）：按钮留在表单行里既会被下拉挤成
+             竖排两行，也和「取消」拆在弹窗两端。表单行只留字段，两个操作在页脚一处收口。 -->
+        <label class="mk-field vl-launch-story">
+          <span class="mk-field__label">选择故事 <em class="mk-field__req">必填</em></span>
+          <MkSelect
+            v-model="launchForm.storyId"
+            :options="launchStoryOptions"
+            :placeholder="launchStoryPlaceholder"
+            :disabled="launchStoriesLoading"
+            aria-label="选择故事"
+            block
+          />
+        </label>
         <details class="vl-launch-more">
           <summary>更多设置</summary>
           <div class="vl-launch-more__body">
@@ -43,11 +35,11 @@
               />
             </label>
             <label class="mk-field">
-              <span class="mk-field__label">学生对抗度</span>
+              <span class="mk-field__label">学习者对抗度</span>
               <MkSelect
                 v-model="launchForm.friction"
                 :options="FRICTION_OPTIONS"
-                aria-label="学生对抗度"
+                aria-label="学习者对抗度"
                 block
               />
             </label>
@@ -56,6 +48,14 @@
       </div>
       <div class="mk-modal__foot">
         <button type="button" class="mk-btn" @click="launchTarget = null">取消</button>
+        <button
+          type="button"
+          class="mk-btn mk-btn--primary"
+          :disabled="launchBusy || !launchForm.storyId"
+          @click="startLaunch"
+        >
+          {{ launchBusy ? '启动中…' : '启动' }}
+        </button>
       </div>
     </div>
   </div>
@@ -104,11 +104,15 @@ const launchBusy = ref(false)
 const launchStoriesLoading = ref(false)
 const launchStories = ref<LaunchStory[]>([])
 
-/** 故事下拉选项：标签沿用原 option 文案（已生成路径数 / 是否运行过） */
+/** 故事下拉选项：标签沿用原 option 文案（已生成路径数 / 是否运行过）。
+ *  2026-11-02 评审 R2：原来写成「已生成 N 条路径（已运行 M 次）」，在 480px 弹窗里
+ *  必被省略号吃掉后半句；压成短句后整条读全，下拉弹层也不再截断。 */
 const launchStoryOptions = computed(() =>
   launchStories.value.map((st) => ({
     value: st.id,
-    label: `${st.title}${st.runCount ? ` · 已生成 ${st.pathCount} 条路径（已运行 ${st.runCount} 次）` : ' · 尚未运行'}`
+    label: st.runCount
+      ? `${st.title} · ${st.pathCount} 条路径 · 运行 ${st.runCount} 次`
+      : `${st.title} · ${st.pathCount} 条路径 · 未运行`
   }))
 )
 /** 空值占位：加载中 / 待选 / 无故事三种状态（原 disabled option 的文案） */
@@ -209,8 +213,10 @@ defineExpose({ open })
 
 <style scoped>
 /* 必填标记走全局 .mk-field__req（原页内 .vl-req 蓝色是另一套「必填」语言） */
-.vl-launch-row { display: flex; align-items: flex-end; gap: 10px; }
-.vl-launch-row__story { flex: 1 1 auto; min-width: 0; }
+.vl-launch-story { min-width: 0; }
+/* 故事标题是这条下拉的决策依据：弹层里允许折行读全，不做省略号截断 */
+.vl-launch-story :deep(.mk-listbox-opt) { white-space: normal; }
+.vl-launch-story :deep(.mk-listbox-opt__label) { overflow: visible; text-overflow: clip; }
 .vl-launch-more { margin-top: 10px; }
 .vl-launch-more > summary { cursor: pointer; font-size: var(--mk-fs-micro); color: var(--mk-muted); list-style: none; }
 .vl-launch-more > summary::-webkit-details-marker { display: none; }

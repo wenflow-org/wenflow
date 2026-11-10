@@ -1,7 +1,20 @@
 import prisma from '../../config/database';
 import { learnerSnapshotService } from './LearnerSnapshotService';
 import { buildNonVirtualUserWhere, isTestAccountUser } from '../../utils/test-account';
+import { logger } from '../../utils/logger';
 import type { LearnerSnapshot } from '../../agents/learner-model-agent/types';
+
+/**
+ * 内存快照缓存条数上限（#176-2）。
+ *
+ * 此前只有 5 分钟 TTL，**没有容量上限、没有失效入口**：每个 (user, scope, path,
+ * milestone, task) 组合都留下一条，删除只发生在「同 key 过期」和列表分支的顺带清理，
+ * 长跑进程里只增不减。这里按 LRU 封顶。
+ *
+ * TODO(#176-2)：具体条数属容量口径（单条快照 payload 数十 KB），待产品确认；
+ * 当前取 1000，约与列表窗口上限（2000）同量级、避免一次整页预热把自己全淘汰。
+ */
+export const LEARNER_SNAPSHOT_CACHE_MAX_ENTRIES = 1000;
 
 export interface LearnerSnapshotRefreshInput {
   userId: string;
@@ -19,14 +32,150 @@ export class LearnerSnapshotRefreshService {
   /** 列表路径可接受的投影陈旧度：60 分钟（2026-10-04，原 10 分钟在 500 窗口下每页加载都全量重建） */
   private static readonly LIST_PROJECTION_FRESH_MS = 60 * 60 * 1000;
 
+  /** 缓存键前缀（buildKey 的第 0 段），invalidate 按 `前缀 + userId + ':'` 精确匹配用户 */
+  private static readonly CACHE_KEY_PREFIX = 'learner-snapshot-v1';
+
+  /**
+   * 失效水位（#176-2 复核）：`userId → invalidate 时刻`。**早于该时刻落地**的快照一律不许再被读出——
+   * 无论它躺在内存缓存里，还是躺在 `learner_projections` 的持久化窗口里。
+   *
+   * 只删内存键是不够的（复核实测）：`getLatest` 在内存未命中后会回落到持久化投影的 10 分钟窗口，
+   * 把那行**由旧画像算出**的载荷重新读出并写回内存，于是「主动失效」在最要紧的场景里近乎空转——
+   * `learner-model-agent/index.ts:196-197` 的 `updateProfile` 清了画像 + 图快照，**并没有**接着 refresh
+   * 任何键；此后任意读路径（`TeachingContextBuilder.ts:74`、`admin/learner-models.ts:76,141`）拿到的
+   * 仍是旧画像拼出的快照，最长 10 分钟。
+   *
+   * 事件驱动的那几处（`learner-event-consumer.ts:54`、`schedulers.ts:97`、`LessonKnowledgeEnrichmentConsumer.ts:52`）
+   * 是「invalidate + 只 refresh 一个键」，同一用户其它作用域键（path / teaching / global）同样只剩这条水位兜着。
+   *
+   * 仅在进程内维护：与内存缓存同生命周期（重启后两者一起丢，不存在「内存没了但水位还在」的错配）。
+   */
+  private invalidatedAt = new Map<string, number>();
+  /** 水位表的用户数上限：只记住最近失效的用户，避免长跑进程里只增不减（与缓存同口径） */
+  private static readonly INVALIDATION_MAX_USERS = 2000;
+
+  /**
+   * 该时刻落地的快照是否已失效（严格早于水位）。
+   * 用 `<` 而非 `<=`：invalidate 与随后的 refresh 可能落在同一毫秒，那不是「失效前落地的」。
+   */
+  private isInvalidated(userId: string, at: number): boolean {
+    const mark = this.invalidatedAt.get(userId);
+    return mark !== undefined && at < mark;
+  }
+
+  /** LRU 读：命中即移到队尾（Map 保持插入序，淘汰从队首取最久未用） */
+  private cacheGet(key: string): { snapshot: LearnerSnapshot; cachedAt: number } | undefined {
+    const entry = this.cache.get(key);
+    if (!entry) return undefined;
+    this.cache.delete(key);
+    this.cache.set(key, entry);
+    return entry;
+  }
+
+  /** LRU 写：超出条数上限时淘汰队首（最久未用） */
+  private cacheSet(key: string, snapshot: LearnerSnapshot): void {
+    this.cache.delete(key);
+    this.cache.set(key, { snapshot, cachedAt: Date.now() });
+    while (this.cache.size > LEARNER_SNAPSHOT_CACHE_MAX_ENTRIES) {
+      const oldest = this.cache.keys().next().value;
+      if (oldest === undefined) break;
+      this.cache.delete(oldest);
+    }
+  }
+
+  /**
+   * 主动失效（#176-2）：画像/证据变化后清掉该用户的**所有作用域**缓存键，并抬高失效水位，
+   * 让持久化投影里那行旧载荷也读不出来。此前只能等 5 分钟 TTL 或读路径自愈，调用方
+   * （learnerProfileService.clear 的调用点）清了画像缓存却留着由旧画像算出的快照。
+   */
+  invalidate(userId?: string): void {
+    const mark = Date.now();
+    if (!userId) {
+      this.cache.clear();
+      this.invalidatedAt.clear();
+      return;
+    }
+    const prefix = `${LearnerSnapshotRefreshService.CACHE_KEY_PREFIX}:${userId}:`;
+    for (const key of [...this.cache.keys()]) {
+      if (key.startsWith(prefix)) this.cache.delete(key);
+    }
+    this.invalidatedAt.delete(userId);
+    this.invalidatedAt.set(userId, mark);
+    while (this.invalidatedAt.size > LearnerSnapshotRefreshService.INVALIDATION_MAX_USERS) {
+      const oldest = this.invalidatedAt.keys().next().value;
+      if (oldest === undefined) break;
+      this.invalidatedAt.delete(oldest);
+    }
+    this.dropPersistedProjections(userId);
+  }
+
+  /**
+   * 作废该用户落库的投影行（#176-2 复核残留 1）。
+   *
+   * 水位只活在进程里，而 `learner_projections` 的 10 分钟（getLatest）/ 60 分钟（列表）
+   * 窗口不随进程消失：**进程在窗口内重启**（部署、崩溃重启）后水位为空，读路径就会把
+   * **失效前**那行旧画像载荷重新采用。所以失效必须落到持久层。
+   *
+   * **必须按前缀白名单删，不能按 userId 整族删**（第二轮复核实测的口径事故）：
+   * 同表里还有不是缓存、而是**账本/状态**的行——当日复习额度 `reviewDailyQuotaKey`
+   * （读缺失即按空额度重置）、BKT 信念 `learner-concept-beliefs-v1`、洞察校准记录
+   * `learner-insight-records-v1`、归并审计 `consolidationAuditKey`。`invalidate` 由每条学习事件
+   * 触发，整族删除等于每次任务完成就清掉该用户的额度与信念。所以这里只列**派生自画像/证据、
+   * 删掉即可由读路径重建**的族；新增族要显式加进来（并想清楚它是不是缓存）。
+   *
+   * fire-and-forget：`invalidate` 的调用方（`updateProfile`、事件消费者）都在热路径上，
+   * 不为一次缓存清理把链路改成 async；失败只记日志——同进程内还有水位兜着，
+   * 跨进程由「行已被删」保证，二者其一失效不至于把旧画像端上桌。
+   */
+  private static readonly INVALIDATABLE_PROJECTION_PREFIXES = [
+    /** 本服务的快照投影（纯缓存） */
+    'learner-snapshot-v1:',
+    /** 评审投影（LearnerStateReviewService 直读，从不经过本服务；同样派生自画像/证据） */
+    'learner-state-review-v1:',
+  ];
+
+  private dropPersistedProjections(userId: string): void {
+    void prisma.learner_projections
+      .deleteMany({
+        where: {
+          userId,
+          OR: LearnerSnapshotRefreshService.INVALIDATABLE_PROJECTION_PREFIXES.map((prefix) => ({
+            projectionKey: { startsWith: prefix },
+          })),
+        },
+      })
+      .catch((error: unknown) => {
+        logger.warn(
+          `[learner-snapshot] 作废持久化投影失败（userId=${userId}）：`
+          + `${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
+  }
+
+  /**
+   * 本轮读源是否发生在失效之前（#176-2 复核残留 3）：refresh 起跑时读了旧画像，
+   * 期间发生的 invalidate 已经把它作废，此时**不能**再把结果 upsert 回投影，
+   * 否则刚删掉的那行又被写回来，10 分钟窗口继续端旧画像。
+   * 用严格 `>`：同一毫秒起跑不算被作废。
+   */
+  private isWriteBlockedByInvalidation(userId: string, startedAt: number): boolean {
+    const mark = this.invalidatedAt.get(userId);
+    return mark !== undefined && mark > startedAt;
+  }
+
   async refresh(input: LearnerSnapshotRefreshInput): Promise<LearnerSnapshot> {
     const key = this.buildKey(input);
+    /** 本轮读源起跑时刻：用于判断结果是否已被期间发生的 invalidate 作废 */
+    const startedAt = Date.now();
     if (input.lastEventId) {
       const existing = await prisma.learner_projections.findUnique({ where: { projectionKey: key } });
-      if (existing?.lastEventId === input.lastEventId) {
+      // 去重按事件 id 比对，但**画像类变更不产生事件 id**：invalidate 之后同一 lastEventId 的那行
+      // 载荷仍是旧画像算出来的，不能再短路返回（否则 refresh 也读回陈旧值）。
+      const dedupable = existing !== null && !this.isInvalidated(input.userId, existing.generatedAt.getTime());
+      if (dedupable && existing.lastEventId === input.lastEventId) {
         try {
           const snapshot = JSON.parse(existing.payload) as LearnerSnapshot;
-          this.cache.set(key, { snapshot, cachedAt: Date.now() });
+          this.cacheSet(key, snapshot);
           return snapshot;
         } catch {
           // Rebuild malformed projections from source facts.
@@ -41,6 +190,12 @@ export class LearnerSnapshotRefreshService {
       taskId: input.taskId,
       mode: input.scope,
     });
+
+    // 复核残留 3：本轮读源起跑于 invalidate 之前 → 结果是旧画像拼的，既不落库也不入内存缓存
+    // （调用方仍拿到它——那次请求本来就发生在失效之前），下次读由重建补齐。
+    if (this.isWriteBlockedByInvalidation(input.userId, startedAt)) {
+      return snapshot;
+    }
 
     await prisma.learner_projections.upsert({
       where: { projectionKey: key },
@@ -66,22 +221,48 @@ export class LearnerSnapshotRefreshService {
         generatedAt: new Date(snapshot.freshness.generatedAt)
       }
     });
-    this.cache.set(key, { snapshot, cachedAt: Date.now() });
+    this.cacheSet(key, snapshot);
     return snapshot;
   }
 
-  async getLatest(input: LearnerSnapshotRefreshInput): Promise<LearnerSnapshot> {
+  /**
+   * 读最新快照（内存 → 持久化投影 → 重算）。
+   *
+   * `opts.maxAgeMs` 收紧可接受的陈旧度（2026-11-09 画像链路核查）：
+   * 默认行为不变（内存 5 min / 投影 10 min），但**教学开课**这类「一次课只取一次、且要看到
+   * 上节课刚产生的证据」的调用可以传 60s——超过就重算，避免用 10 分钟前的掌握度做开场决策。
+   * 只收不放：传入值不会让缓存比默认更旧。
+   */
+  async getLatest(
+    input: LearnerSnapshotRefreshInput,
+    opts?: { maxAgeMs?: number },
+  ): Promise<LearnerSnapshot> {
     const key = this.buildKey(input);
-    const entry = this.cache.get(key);
-    if (entry && Date.now() - entry.cachedAt < LearnerSnapshotRefreshService.CACHE_TTL_MS) {
+    const cacheLimitMs = opts?.maxAgeMs == null
+      ? LearnerSnapshotRefreshService.CACHE_TTL_MS
+      : Math.min(LearnerSnapshotRefreshService.CACHE_TTL_MS, Math.max(0, opts.maxAgeMs));
+    const persistedLimitMs = opts?.maxAgeMs == null
+      ? 10 * 60 * 1000
+      : Math.min(10 * 60 * 1000, Math.max(0, opts.maxAgeMs));
+    const entry = this.cacheGet(key);
+    // 失效水位：#176-2 复核抓到的空转——只删内存键时，下面那段持久化回落会把旧载荷读回来并重新入缓存。
+    if (
+      entry &&
+      Date.now() - entry.cachedAt < cacheLimitMs &&
+      !this.isInvalidated(input.userId, entry.cachedAt)
+    ) {
       return entry.snapshot;
     }
     this.cache.delete(key);
     const persisted = await prisma.learner_projections.findUnique({ where: { projectionKey: key } });
-    if (persisted && Date.now() - persisted.generatedAt.getTime() < 10 * 60 * 1000) {
+    if (
+      persisted &&
+      Date.now() - persisted.generatedAt.getTime() < persistedLimitMs &&
+      !this.isInvalidated(input.userId, persisted.generatedAt.getTime())
+    ) {
       try {
         const snapshot = JSON.parse(persisted.payload) as LearnerSnapshot;
-        this.cache.set(key, { snapshot, cachedAt: Date.now() });
+        this.cacheSet(key, snapshot);
         return snapshot;
       } catch {
         // Rebuild malformed projections from source facts.
@@ -109,10 +290,13 @@ export class LearnerSnapshotRefreshService {
     // 软删用户不进入管理端快照列表（列表与总数口径一致）。
     // 默认 = 全部非虚拟账号（2026-10-21 拍板：测试账号只是行内备注）；
     // includeTest=true 是按 id 直查虚拟账号（学习者详情），不删数据只改默认视图。
+    // 2026-10-31 外部评审 P2-7：纯管理员账号（isAdmin）不是学习主体，不该出现在
+    // 学习状态列表里、更不该对「未开始」的管理员发学习提醒——默认视图排除；
+    // includeTest 按 id 直查不受影响（学习者详情仍可打开任何账号）。
     const userWhere = {
       ...(params?.includeTest
         ? { deletedAt: null }
-        : await buildNonVirtualUserWhere({ deletedAt: null })),
+        : { ...(await buildNonVirtualUserWhere({ deletedAt: null })), isAdmin: false }),
       ...(params?.userId ? { id: params.userId } : {}),
     };
     const total = await prisma.users.count({ where: userWhere });
@@ -127,11 +311,22 @@ export class LearnerSnapshotRefreshService {
             （琥珀「测试」）是两类人；isTestAccountUser 对 /^virtual_/ 也返回 true，
             只靠它会把虚拟学习者渲染成「测试账号」。 */
         isVirtualLearner: true,
+        /* 列表的「当前进度」列只展示一条路径（take: 1，按 updatedAt 取最近更新的活跃路径）。
+           2026-11-01 外部评审 P1：多路径学员在这里只看到其中一条，而同一屏的「学习路径」列表
+           显示他有 2 条在学——读者会以为丢数据。这里同时取活跃路径**总数**，
+           前端在有第二条时给出「共 N 条路径学习中」的角标，把「这是其中一条」说清楚。 */
+        _count: {
+          select: { learning_paths: { where: { status: 'active' } } },
+        },
         learning_paths: {
+          // 锚点路径：行的快照口径只认 active（非 active 会被伪造成 currentPath，#205）。
+          // 「有路径但无 active」时的路径身份（pathTitle）由下方 fallbackTitleByUser 单独补——
+          // 不靠放宽这里的 where + take N（那会让更新的归档路径把 active 挤出窗口，静默降级为 global）。
           where: params?.pathId ? { id: params.pathId } : { status: 'active' },
           select: {
             id: true,
             title: true,
+            status: true,
             updatedAt: true,
           },
           orderBy: { updatedAt: 'desc' },
@@ -143,17 +338,58 @@ export class LearnerSnapshotRefreshService {
       take: limit,
     });
 
+    // #205：无 active 路径的用户，行内「路径」此前恒空（active-only 过滤）。这里单独取一次「最近的非
+    // abandoned 路径」仅用于展示身份，不参与快照锚定。独立取值（而非放宽上面的嵌套 where）保证不会
+    // 漏掉 active 路径，也把「身份」与「锚点」两件事分开。
+    /* 2026-11-09 用户走查：路径已下线、但学员实际学过 30%~40% 的行，列表「当前进度」主标题仍写
+       「未开始」——与同一行的路径名、教学会话页的已完成课堂互相打脸。这里把兜底路径的**状态与
+       真实完成度**一并带出（只读展示，不写快照锚点，#205 不变），前端据此区分「从未开始」与
+       「学过但路径已下线」。 */
+    const usersWithoutPath = users.filter((user) => user.learning_paths.length === 0).map((user) => user.id);
+    const fallbackTitleByUser = new Map<string, string>();
+    const fallbackPathByUser = new Map<string, {
+      status: string;
+      completedTasks: number;
+      totalTasks: number;
+    }>();
+    if (usersWithoutPath.length > 0) {
+      const fallbackPaths = await prisma.learning_paths.findMany({
+        where: { userId: { in: usersWithoutPath }, status: { not: 'abandoned' } },
+        orderBy: { updatedAt: 'desc' },
+        select: {
+          userId: true,
+          title: true,
+          status: true,
+          milestones: { select: { subtasks: { select: { status: true } } } },
+        },
+      });
+      for (const row of fallbackPaths) {
+        if (row.title && !fallbackTitleByUser.has(row.userId)) fallbackTitleByUser.set(row.userId, row.title);
+        if (fallbackPathByUser.has(row.userId)) continue;
+        const subtasks = (row.milestones ?? []).flatMap((m) => m.subtasks ?? []);
+        fallbackPathByUser.set(row.userId, {
+          status: row.status,
+          completedTasks: subtasks.filter((t) => t.status === 'completed').length,
+          totalTasks: subtasks.length,
+        });
+      }
+    }
+
     // 批量取快照：先命中模块缓存，再按 projectionKey in [...] 批量读 learner_projections，
     // 避免每用户逐个 getLatest 重建（原实现每页 100 用户 ≈1300+ 查询）。
     const entries = Array.from(users, (user) => {
-      const path = user.learning_paths[0];
+      // 快照锚点只认 status='active' 的路径（含调用方显式 pathId——非 active 会被伪造成 currentPath，
+      // #205）；无 active 路径时走 global 口径，路径身份仅由 fallbackTitleByUser 补展示。
+      const path = user.learning_paths[0] || null;
+      const anchored = path?.status === 'active' ? path : null;
       return {
         user,
         path,
+        anchored,
         key: this.buildKey({
           userId: user.id,
-          pathId: path?.id,
-          scope: path?.id ? 'path' : 'global',
+          pathId: anchored?.id,
+          scope: anchored?.id ? 'path' : 'global',
         }),
       };
     });
@@ -162,8 +398,12 @@ export class LearnerSnapshotRefreshService {
     const refreshQueue: typeof entries = [];
 
     for (const entry of entries) {
-      const cached = this.cache.get(entry.key);
-      if (cached && Date.now() - cached.cachedAt < LearnerSnapshotRefreshService.CACHE_TTL_MS) {
+      const cached = this.cacheGet(entry.key);
+      if (
+        cached &&
+        Date.now() - cached.cachedAt < LearnerSnapshotRefreshService.CACHE_TTL_MS &&
+        !this.isInvalidated(entry.user.id, cached.cachedAt)
+      ) {
         snapshotsByUser.set(entry.user.id, cached.snapshot);
       } else {
         if (cached) this.cache.delete(entry.key);
@@ -180,16 +420,19 @@ export class LearnerSnapshotRefreshService {
           projectionKey: { in: refreshQueue.map((entry) => entry.key) },
           generatedAt: { gte: new Date(Date.now() - LearnerSnapshotRefreshService.LIST_PROJECTION_FRESH_MS) },
         },
-        select: { projectionKey: true, payload: true },
+        select: { projectionKey: true, payload: true, generatedAt: true },
       });
       const rowByKey = new Map(persisted.map((row) => [row.projectionKey, row]));
       const stillMissing: typeof entries = [];
       for (const entry of refreshQueue) {
         const row = rowByKey.get(entry.key);
-        if (row) {
+        // 失效水位同样管住列表路径（#176-2 复核）：60 分钟保鲜窗是给「缓变趋势信号」的，
+        // 但画像变更后的那一行是**由旧画像算出来的**，不能借这个窗继续展示。
+        // 命中人数 = 本轮失效过的用户，量级极小，不会把整页重建的扇出拉回来。
+        if (row && !this.isInvalidated(entry.user.id, row.generatedAt.getTime())) {
           try {
             const snapshot = JSON.parse(row.payload) as LearnerSnapshot;
-            this.cache.set(entry.key, { snapshot, cachedAt: Date.now() });
+            this.cacheSet(entry.key, snapshot);
             snapshotsByUser.set(entry.user.id, snapshot);
             continue;
           } catch {
@@ -207,8 +450,8 @@ export class LearnerSnapshotRefreshService {
           await Promise.all(stillMissing.slice(i, i + REBUILD_CHUNK).map(async (entry) => {
             const snapshot = await this.refresh({
               userId: entry.user.id,
-              pathId: entry.path?.id,
-              scope: entry.path?.id ? 'path' : 'global',
+              pathId: entry.anchored?.id,
+              scope: entry.anchored?.id ? 'path' : 'global',
             });
             snapshotsByUser.set(entry.user.id, snapshot);
           }));
@@ -216,7 +459,7 @@ export class LearnerSnapshotRefreshService {
       }
     }
 
-    const snapshots = entries.map(({ user, path }) => {
+    const snapshots = entries.map(({ user, path, anchored }) => {
       const snapshot = snapshotsByUser.get(user.id);
       if (!snapshot) {
         throw new Error(`学习者快照构建失败: ${user.id}`);
@@ -241,8 +484,17 @@ export class LearnerSnapshotRefreshService {
         isVirtualLearner: user.isVirtualLearner,
         /** 测试/虚拟账号标记（excludeTest 未开启时供前端灰标签展示；开启后恒为 false） */
         isTestAccount: isTestAccountUser(user),
-        pathId: path?.id || null,
-        pathTitle: path?.title || null,
+        /** pathId 必须与行的快照口径键一致（前端重算带它，见 LearnerCenter.vue:390/741）：
+            只认 active 锚点；无 active 路径时保持 null，避免重算写 path 键而本行读 global 键。 */
+        pathId: anchored?.id || null,
+        /** 路径身份展示（#205）：无 active 路径时回退到最近的非 abandoned 路径名，
+            不再让「有路径但无 active」的用户显示空白路径。 */
+        pathTitle: path?.title || fallbackTitleByUser.get(user.id) || null,
+        /** 兜底路径（无 active 时）的状态与真实完成度：仅用于列表展示
+            「学过但路径已下线」与「从未开始」的区分，不参与快照锚定（#205）。 */
+        fallbackPath: fallbackPathByUser.get(user.id) || null,
+        /** 在学路径总数（列表列只展示其中最近更新的一条，>1 时前端标「共 N 条」） */
+        activePathCount: user._count?.learning_paths ?? (path ? 1 : 0),
         /** 快照重建时刻（排查用；列表的「数据更新」列读 dataUpdatedAt） */
         generatedAt: snapshot.freshness.generatedAt,
         dataUpdatedAt,
@@ -259,8 +511,16 @@ export class LearnerSnapshotRefreshService {
 
     const filtered = snapshots.filter((item) => {
       if (params?.staleOnly) {
-        const ageMs = Date.now() - new Date(item.generatedAt).getTime();
-        if (ageMs < 10 * 60 * 1000) return false;
+        /* 陈旧判定读 dataUpdatedAt（学习证据最后变化时刻），不再读 generatedAt（#176-2）：
+           列表一次请求会把过期投影整批重建，generatedAt 是**本次重建**时刻，于是
+           「刚被重建过的老用户」看起来最新、被 staleOnly 过滤掉，而真正长期没学习的
+           反而被藏在后面——正是这个筛选器要抓的人。
+           dataUpdatedAt 为 null（无任何学习证据/未开始）视为**最陈旧**，不能被当成最新。 */
+        const updatedAtMs = item.dataUpdatedAt ? new Date(item.dataUpdatedAt).getTime() : null;
+        const isFresh = updatedAtMs !== null
+          && Number.isFinite(updatedAtMs)
+          && Date.now() - updatedAtMs < 10 * 60 * 1000;
+        if (isFresh) return false;
       }
       if (params?.riskOnly) {
         if (item.fatigueRisk === 'low' && item.fragileConcepts.length === 0 && item.strugglingConcepts.length === 0) {
@@ -283,7 +543,7 @@ export class LearnerSnapshotRefreshService {
    * 按 evidenceType 白名单取最近 N 条，occurredAt 倒序。
    */
   async listDomainEvidence(userId: string, evidenceTypes: string[], take: number) {
-    return prisma.learner_evidence.findMany({
+    const rows = await prisma.learner_evidence.findMany({
       where: {
         userId,
         evidenceType: { in: evidenceTypes },
@@ -301,6 +561,19 @@ export class LearnerSnapshotRefreshService {
         payload: true,
       },
     });
+    /* 2026-11-01 外部评审 P1（学习动态读起来像重复事件）：learner_evidence 是幂等投影，
+       但删 learning_paths 时不清它的历史行（只清会话软指针），于是**已删除路径**的事件
+       仍留在时间线上——同一学员重生成过路径时，就会看到两条「路径创建 + 路径生成」，
+       而且都没有可区分的信息。这里在读侧把指向已不存在路径的行滤掉（不删数据，
+       保留排查余地）；没有 pathId 的行（目标域证据）不受影响。 */
+    const pathIds = [...new Set(rows.map((r) => r.pathId).filter((id): id is string => !!id))];
+    if (!pathIds.length) return rows;
+    const alive = await prisma.learning_paths.findMany({
+      where: { id: { in: pathIds } },
+      select: { id: true },
+    });
+    const aliveSet = new Set(alive.map((p) => p.id));
+    return rows.filter((r) => !r.pathId || aliveSet.has(r.pathId));
   }
 
   /** 目标用户是否虚拟学习者（learner-models 默认视图准入判断） */

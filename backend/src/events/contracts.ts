@@ -6,7 +6,13 @@ export type DurableEventType =
   | 'path:generated'
   | 'path:adjusted'
   | 'path:completed'
-  | 'review:completed';
+  | 'review:completed'
+  /**
+   * 课后知识增强（#144/#145/#146）：一次 10–20s 的 LLM 调用，不是快照刷新的依赖。
+   * 由 `lesson:completed` 的消费**登记**（见 events/lesson-enrichment-event.ts），
+   * 在 outbox 的**独立泳道**里消费——既不占住有序事件的关键路径，失败也不阻塞同用户后续事件。
+   */
+  | 'lesson:knowledge-enrichment';
 
 export interface DurableDomainEvent<T = Record<string, any>> {
   id: string;

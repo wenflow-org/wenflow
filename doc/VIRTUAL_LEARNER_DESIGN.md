@@ -1,12 +1,12 @@
 # 虚拟学习者设计文档（Virtual Learner Design）
 
-> 📌 类型：活规范（VL 主文档；裁判已独立 2026-09-27）｜最后核验：2026-09-28。索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范（VL 主文档；裁判已独立 2026-09-27）｜最后核验：2026-11-02。索引见 [doc/README.md](./README.md)。
 
 > **定位**：`doc/VIRTUAL_LEARNER_CHAIN.md` 写的是**链路契约**（故事 → Goal → Path 的传递规则与硬约束）。本文补它没覆盖的部分：**人设与故事规范、扮演机制、记忆、生成流水线、评测跑批入口，以及"作为量具"的已知偏差**。
 >
 > **一句话结论**：虚拟学习者既是**产品功能**（黑盒实验对象），也是我们**唯一的评测语料**。它自带偏置——偏置会被误读成产品特性。本文把已实测的偏置全部量化列出（§11），并给出评测纪律（§12）。
 >
-> 快照时间：2026-09-21 · 数据来自本地 `backend/prisma/dev.db`
+> 快照时间：2026-11-02 · 数据来自本地 `backend/prisma/dev.db`（计数随本地库变动）
 
 ---
 
@@ -33,14 +33,14 @@
 | 层 | 存储 | 说明 |
 |---|---|---|
 | 账号 | `users`（`isVirtualLearner = true`） | 生产统计（overview/stats）据此排除合成数据 |
-| 人设 | `virtual_learner_profiles` + JSON `profile` | 33 字段人设 + `storyPool`；`source` = `builtin`(14) / `custom`(75)；`presetKey`+`presetVersion` 仅内置有 |
+| 人设 | `virtual_learner_profiles` + JSON `profile` | 33 字段人设 + `storyPool`；`source` = `builtin`(9) / `custom`(201)；`presetKey`+`presetVersion` 仅内置有 |
 | 会话 | `virtual_sessions` | `status` / `currentStage`(goal/path/…)、`goalConversationId`、`learningPathId`、`stageResults`(JSON，含故事全文、实验配置、自动驾驶状态)、`logs` |
 | 故事 | `profile.storyPool[]`（JSON，非独立表） | 见 §4；无硬 FK，故事↔Path 是软关联 |
 | 记忆 | `memory_traces`（含 FSRS/ACT-R 状态）+ 画像 `knownConcepts` / `struggleConcepts` / `recentCompleted` | 见 §7 |
 | 批量 | `batch_experiment_*` | **时间推演**（模拟日推进 / 记忆衰减 / 快照），不是 A/B 对照设施 |
 | 快捷（已下线） | `virtual_quick_learn_runs` | 快捷支路运行记录；2026-10-18 移除代码，表保留供存量与清理 |
 
-本地现状：**89 个虚拟学习者**（14 内置 + 75 custom）、**282 个虚拟会话**、102 个 Goal 会话带负荷画像。
+本地现状（2026-11-02 快照）：**210 条人设**（9 内置 + 201 custom 卡）、**42 个虚拟会话**、**36 个 Goal 会话带负荷画像**。
 
 ---
 
@@ -95,7 +95,7 @@
 
 | 路径 | 入口 | 产出 | 备注 |
 |---|---|---|---|
-| A. 内置 preset | 启动时 `builtin-learners/seeder.ts` 读 `virtual-learners/presets.yaml` | 人设 + 手写故事 | 有 `presetVersion` + drift 检测；本地 14 个 |
+| A. 内置 preset | 启动时 `builtin-learners/seeder.ts` 读 `virtual-learners/presets.yaml` | 人设 + 手写故事 | 有 `presetVersion` + drift 检测；本地 9 个 |
 | B. 手动创建 | `POST /api/admin/virtual-learners` | 人设（必填 name） | `learningGoal` 可选 |
 | C. LLM 生成人设 | `POST /generate-persona`、`POST /:id/draft-profile` | personaSeed | skill `virtual-learner-persona-designer`；**代码会为缺失字段填默认值**（保成功率，与 prompt"禁止兜底句"有意的契约差异） |
 | D. LLM 生成故事 | `POST /:id/draft-stories` | 1 个故事（追加进 storyPool） | skill `virtual-learner-scenario-designer`；会注入"最近场景提示 + 该学习者记忆摘要"，`sampleType='student'` 时额外注入学生情境 |
@@ -103,8 +103,9 @@
 
 故事可改：`PUT /:id/stories/:storyIndex`（可不改代码注入自定义故事）；`DELETE /:id/stories/:storyIndex`。
 
-> 批量发起走「虚拟学习者」列表页的「批量新建」
-> （`POST /api/admin/virtual-learners/batch-create`，后台队列生成），资产输入走「学习者卡库」。
+> 建号入口收敛到「学习者卡库」（导入卡 / 平台生产 / 预置一键加载）；「虚拟学习者」页只做
+> 「选角 → 派生」（`POST /api/admin/virtual-learners/cards/clone`）。
+> 原 `POST /api/admin/virtual-learners/batch-create` 服务端队列已于 2026-10-25 退役（端点与组件一并删除）。
 > `POST /api/admin/batch-experiments` 路由与调度器保留（`batch_experiments` 两表建页至今 0 行），
 > 供脚本/后续独立面板按需直连。
 
@@ -167,7 +168,7 @@ learnerMemory: ← 长期记忆注入（见 §7）
 
 | 入口 | 用途 |
 |---|---|
-| `scripts/vl-preset-run.mjs` | **基准语料跑批**（14 内置 preset）。`--only=姓名,presetKey`、`--concurrency`(默认1)、`--retries`(3)、`--backoff`(60s 起翻倍)、`--gap`(5s)、`--dry-run`。**在"学习者粒度"退避重试**，专治网关 429 ⇒ 一次 429 不再变成 `Provider request retry budget exhausted` |
+| `scripts/vl-preset-run.mjs` | **基准语料跑批**（9 内置 preset）。`--only=姓名,presetKey`、`--concurrency`(默认1)、`--retries`(3)、`--backoff`(60s 起翻倍)、`--gap`(5s)、`--dry-run`。**在"学习者粒度"退避重试**，专治网关 429 ⇒ 一次 429 不再变成 `Provider request retry budget exhausted` |
 | `POST /:id/start-session` + `POST /sessions/:id/run-full` | 单例（`maxRounds` / `maxMilestones` / `autoAdvanceToPath`） |
 | 黑盒 | `start-blackbox-session` / `blackbox-step` / `blackbox-observe` / `blackbox-rerun`（评审已独立：`POST /api/admin/session-audits/sessions/:id/evaluations`） |
 | 落盘 | `backend/vlab-runs/preset-run-<ts>.json`（**已 gitignore**）+ DB 表 |
@@ -194,7 +195,7 @@ persona.availableTime / cognitiveLoadTolerance
 
 **一处曾经的误判（2026-09-21 复核纠正）**：`pathAgentInput.metadata.normalizedInput` 里确实存着
 `learnerLoadProfile.availableTime`，但它只是**落库审计副本**。真正进入 LLM 的是
-`buildPromptFriendlyNormalizedInput()` 的**白名单投影**（`backend/src/skills/path-planning/index.ts:83`），
+`buildPromptFriendlyNormalizedInput()` 的**白名单投影**（`backend/src/skills/path-planning/index.ts:302`），
 只含 `version / learnerProfile / problemSpace / resources / successCriteria / confirmedProposal / planningHints`
 ⇒ **负荷画像不会到达模型**。提示词里出现的「可用时间：…」来自 `input.metadata.availableTime`（= Goal 产出的 `timePerDay`），与本字段无关。
 
@@ -208,15 +209,15 @@ persona.availableTime / cognitiveLoadTolerance
 |---|---|---|---|
 | ~~1~~ | ✅ **已修复（2026-09-21）**：负荷收紧把区间塌成单点 | 修复前重放 216 条真实历史输入：**88 条（41%）** 区间塌成 `[2,2]`；275 例重扫实测 **127/275（46%）`gated`，其中 100% 恰好 2 段**（自由那半均值 3.80）。修复：认知负荷**退出里程碑数**（只收紧资源）+ 出口不变量「区间永不为单点」 | 体量曾被代码拍死，被误读为"模型只会给 2 段" |
 | 1b | 阶梯对照（同 4 学习者／同故事／同模型） | 现状 `2,2,2`(对照 3) → 上界压到 3：`3,3,3`(对照 4) → 完全不收：_跑批中_ | 定量出"放开的边际收益" |
-| 2 | **只打虚拟学习者**（量具有偏） | 真实用户带画像 **0/116**；14 内置 preset 里 **7 个 `minimal`**；custom 人设 **46/75（61%）`minimal`**；另有 12 人字段缺失 | 评测语料系统性偏向"时间极少"的学习者 ⇒ 量具自己把体量压小 |
-| 2b | ✅ **部分已修（2026-09-21）**：预设语料负荷轴失衡 | `virtual-learners/presets.yaml` **corpus v2**：林慧敏/陈默/周敏/刘芳 `minimal → moderate`（该 4 条 `presetVersion` 2→3），保留王婷/苏芮/孙浩三条真·时间极少 ⇒ 分布 **3/8/3** | 旧 v1 数据与这 4 条 v2 数据不可直接比；custom（LLM 生成）那 61% 仍待改生成提示词 |
+| 2 | **只打虚拟学习者**（量具有偏） | 真实用户带画像 **0/116**；9 内置 preset 里 **2 个 `minimal`**；custom 人设 **39/201（19%）`minimal`** | 评测语料系统性偏向"时间极少"的学习者 ⇒ 量具自己把体量压小 |
+| 2b | ✅ **部分已修（2026-09-21）**：预设语料负荷轴失衡 | `virtual-learners/presets.yaml` **corpus v2**：林慧敏/陈默/周敏/刘芳 `minimal → moderate`（该 4 条 `presetVersion` 2→3），保留王婷/苏芮/孙浩三条真·时间极少 ⇒ 分布 **3/8/3** | 旧 v1 数据与这 4 条 v2 数据不可直接比；custom（LLM 生成）语料仍待改生成提示词 |
 | 3 | **同一学习者重复跑不独立** | 记忆注入 Goal 模拟器（§7）；最活跃者 19 次会话 | "改动前后"对照有顺序混淆 |
 | 4 | **`cognitiveLoadTolerance` 靠正则猜** | 77 个有值者中 **62 个是散文**；用 LLM 当裁判审 64 条：**漏判 47%**、误判 10% | 该收紧的一半人没收紧（路径偏重） |
 | 5 | **`pace`（上界 3/5/8）由正则拍** | 1162 次取值：枚举命中仅 9 次（0.8%）、正则 59%、默认 40%；裁判审计 991 次：一致 75%、**判错 16%**、**裁判判"无法判断"而代码照拍 34%** | 误判方向**偏松**（急事给上界 5）⇒ 与 1 方向相反，调参不收敛 |
 | 6 | **急事被给松上界**（正则漏词） | `这周就要用`/`明早交`/`今天下班前`/`即时`/`不到二十小时` → 代码全判 `standard`(5)，裁判判 `compact`(3)；累计 ~77 次 | 膨胀 |
 | 7 | **日期被读成月数** | `距离12月15日考试，尚有约7-8周…` → 代码 `extended`（51.6 周）| 上界 5→8 |
 | 8 | **表与正则自相矛盾** | `3-7天` 映射表说 `standard`，正则算出 1 周=`compact` | 同一输入两种结论 |
-| 9 | **动词前缀正则静默删阶段**（历史，已修） | 344 会话 / 11399 阶段：**652 个（6%）** 会被删（含"设计…""验证…""复盘…"） | 体量凭空变小且用户不可见；`6dc7e8bb` 已删函数，配置 `operationalStagePatterns` 仍残留（死配置） |
+| 9 | **动词前缀正则静默删阶段**（历史，已修） | 344 会话 / 11399 阶段：**652 个（6%）** 会被删（含"设计…""验证…""复盘…"） | 体量凭空变小且用户不可见；`6dc7e8bb` 已删函数，其死配置 `operationalStagePatterns` 也已清理（`11cee171`） |
 | ~~10~~ | ~~人设字段漏进 LLM 提示词~~ **已澄清，非缺陷** | 复核：进 LLM 的是 `buildPromptFriendlyNormalizedInput` 白名单（§10），`learnerLoadProfile` 不在其中；`pathAgentInput.metadata` 只是落库审计副本 | 无 |
 
 ### 影响"实现质量"（次要）
@@ -247,19 +248,19 @@ persona.availableTime / cognitiveLoadTolerance
 
 | 优先 | 动作 | 依据 |
 |---|---|---|
-| 1 | ✅ **已实现**（2026-09-21）：负荷收紧不再塌成单点 —— `LOAD_MILESTONE_CAP = 3` + **保底宽度 1**（上界压到 3，但永不低于「下界+1」）；资源类收紧（单任务分钟/周期/任务密度）原样保留 | §11-1/2：46%（275 例实测）单点塌缩，且只影响评测语料 |
-| 1b | ⏳ **下一步**：认知负荷**完全退出里程碑数**（只保留资源类收紧）——阶梯对照 `现状 2 / 压到 3 / 完全不收` 出数后定稿 | 用户判断 + §11-1：**结构归 LLM 与学习证据，强度归认知负荷** |
+| 1 | ✅ **已实现**（2026-09-21，`d216bde0`）：认知负荷**退出里程碑数**（只保留资源类收紧）+ **出口不变量「里程碑区间永不为单点」**兜住任何分支的意外塌缩 | §11-1/2：46%（275 例实测）单点塌缩，且只影响评测语料 |
+| 1b | ✅ **已实现**（2026-09-21，`d216bde0`）：认知负荷**完全退出里程碑数**（只保留资源类收紧）——与行 1 同源；阶梯对照（同 4 学习者／同故事／同模型）用于定量「放开的边际收益」 | 用户判断 + §11-1：**结构归 LLM 与学习证据，强度归认知负荷** |
 | 2 | **`cognitiveLoadTolerance` 枚举化**（`low\|normal\|high`）并与 `overloadReaction` 合并（实测 62 个人设**两个字段都填了**），**删掉那条 47% 漏判的正则** | §11-4 |
 | 3 | **`time_horizon` 规格化**：让 Goal 直接产出周数/档位，正则只兜底；同时补齐截止词表（这周/今天/明早/即时…） | §11-5~8 |
 | 4 | **语料治理**：拉均匀 `availableTime` 分布、补全缺失字段、每人补到 2–3 个故事 | §11-2/11 |
 | 5 | **单点编译提示词后 `prompts:sync`**，并把本次口径写进 `prompts/core/*.yaml` 的契约说明 | 仓库约定 |
-| 6 | 清理残留死配置 `operationalStagePatterns`（`pedagogy.config.ts`） | §11-9 |
+| 6 | ✅ **已清理**：残留死配置 `operationalStagePatterns`（`pedagogy.config.ts`，`11cee171`） | §11-9 |
 
 ### 13.1 拆开看的边界（2026-09-21 定）
 
 | 维度 | 归谁 | 现状 |
 |---|---|---|
-| **分几步 / 走哪条路**（结构） | LLM（问题语义） + **学习证据**（fragile/struggling/前置缺口） | 认知负荷目前**越界**参与了（→ 建议 1b）；调整链本身已经是纯学习证据 ✅ |
+| **分几步 / 走哪条路**（结构） | LLM（问题语义） + **学习证据**（fragile/struggling/前置缺口） | 认知负荷已退出（2026-09-21，`d216bde0`）✅；调整链本身已经是纯学习证据 ✅ |
 | **一次能学多久 / 多密**（强度） | 认知负荷 / 可用时间（代码给上界） | 保留 |
 | **窗口多长**（horizon） | 时间节点（deadline/考试）优先；无节点时兜底 | 现状 `maxWeeks` 硬上限 52 周、**超限无任何反馈** |
 

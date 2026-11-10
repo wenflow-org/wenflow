@@ -111,6 +111,12 @@ export interface MessageResult {
     levelScore: number;
     understanding: string;
     confusionPoints: string[];
+    /**
+     * 困惑点是否有原话证据支撑（2026-11-01）：true 才渲染「发现卡点」chip。
+     * confusionPoints 是软通道（模型可自由给出、无证据要求，实测过半回合都有）；
+     * 学生可见结论只认硬口径（misconceptions 的 evidence 必须逐字定位到学生原话）。
+     */
+    confusionEvidenced?: boolean;
     engagement: string;
     emotionalState: string;
     loadIndex?: number;
@@ -194,6 +200,14 @@ export interface ActiveSessionInfo {
   topic: string;
   startTime: string;
   messageCount: number;
+  /** 最近一条消息时间（无消息回退到 startTime）：2026-11-03 起由服务端给出 */
+  lastActiveAt?: string | null;
+  /**
+   * 活跃度分档，与断线恢复窗口（48h）同源、由服务端判定：
+   * `active` = 还在带的课；`idle` = 最近活跃已超过恢复窗口。
+   * 旧接口/旧数据无此字段时按 active 处理（保持既有行为）。
+   */
+  activity?: 'active' | 'idle';
 }
 
 export interface SessionDetail {
@@ -403,7 +417,8 @@ const wait = (ms: number) => new Promise(resolve => window.setTimeout(resolve, m
  * 「结算现在不可能成功、重试也无意义」的服务端明确拒绝码（finalizeSessionReliably 不做状态补偿）：
  * - 三个收束门禁（teaching-closure.ts #51 P-25）：检查点未答 / 老师末问未回应 / 末次检查未过——
  *   需要用户先回应课内问答，原文有行动指引；
- * - FINALIZATION_SESSION_NOT_CLOSED：自动关课已跑但 wrapup 未落，原文指引「先结束课堂」；
+ * - FINALIZATION_SESSION_NOT_CLOSED：自动关课回来状态机仍未闭合（服务端文案「课堂收束尚未完成，
+ *   请稍后重试」）；不再引导「先结束课堂」——那条路此时必然 409（#239）；
  * - TEACHING_SESSION_STALE：revision 已被在途回合推进，原文指引刷新/重试。
  */
 const FINALIZATION_UNACTIONABLE_ERROR_CODES = new Set([
@@ -891,6 +906,13 @@ export const aiTeachingAPI = {
       onJudgement?: (judgement: { passed: boolean; judgedBy: string; detail: string | null }) => void;
       onDelta?: (text: string) => void;
       onRestart?: () => void;
+      /**
+       * 传输层活动（含 `: hb` 心跳注释行）。2026-10-31 用户走查 P0-2：讲解回合在 final 前
+       * 可以整段无字节，页面 90s 停滞看门狗此前只被 onDelta 喂，于是「答对 → 讲解」正好在
+       * 90s 处被自家 abort 掐断，卡片停在「回答正确，可继续」，讲解要刷新才出现。
+       * 与 streamSendMessage / streamContinue 对齐：心跳也算进展。
+       */
+      onActivity?: () => void;
       signal?: AbortSignal;
       idempotencyKey?: string;
     } = {}
@@ -908,6 +930,8 @@ export const aiTeachingAPI = {
           // 同 streamSendMessage：讲解回合 final 前可整段无字节，60s 默认会误杀慢回合
           headers: { 'Idempotency-Key': handlers.idempotencyKey || createTeachingIdempotencyKey(`cp-${checkpointId}`) },
           idleTimeoutMs: 120_000,
+          // 心跳注释行喂上层停滞看门狗（后端每 15s 一条 `: hb`，见 ai-teaching.routes.ts startSseHeartbeat）
+          onActivity: handlers.onActivity,
           onEvent: (event, data) => {
             if (event === 'judgement') {
               receivedAnything = true;

@@ -10,7 +10,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { logger } from '../utils/logger';
-import { parseAllowedOrigins } from '../config/allowed-origins';
+import { parseAllowedOrigins, isSameOriginRequest } from '../config/allowed-origins';
 import { resolveTrustProxySetting, assessAdminAllowlistRisk } from '../utils/trust-proxy';
 import { adminApiLimiter, globalApiLimiter, writeApiLimiter } from '../middleware/api-rate-limit.middleware';
 import { csrfMiddleware } from '../middleware/csrf.middleware';
@@ -23,6 +23,16 @@ interface RequestError {
   stack?: string;
   status?: number;
   code?: string;
+  /** http-errors 风格错误的机器可读类型（body-parser 超限为 'entity.too.large'） */
+  type?: string;
+}
+
+/**
+ * 请求体超限（body-parser 的 PayloadTooLargeError）识别。
+ * raw-body 抛出时带 status=413 与 type='entity.too.large'，两者任一命中即视为超限。
+ */
+function isPayloadTooLargeError(err: RequestError): boolean {
+  return err.type === 'entity.too.large' || err.status === 413;
 }
 
 export interface HttpAppDeps {
@@ -77,14 +87,26 @@ export function createHttpApp({ lifecycle, readinessService }: HttpAppDeps): exp
     // 属配置漂移信号——显式告警提醒补配，而不是默默用开发值
     logger.warn('[http-app] 生产环境未配置 CORS_ORIGIN，CORS/CSRF 白名单回退到 localhost 开发值，请尽快补配');
   }
-  const corsOptions = {
-    origin: parseAllowedOrigins(process.env.CORS_ORIGIN),
-    credentials: true,
-    optionsSuccessStatus: 200,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Idempotency-Key'],
-  };
-  app.use(cors(corsOptions));
+  app.use(cors((req, callback) => {
+    const origin = req.headers.origin;
+    /* 白名单之外再放行「同源的本机/私网请求」（2026-11-07：局域网换设备访问时
+       Origin 是 http://192.168.x.x:5183，而白名单只枚举了 localhost 的几个端口，
+       预检直接失败）。判定与 CSRF 同一份实现，边界见 config/allowed-origins.ts。
+       用 delegate 形式而不是固定 origin 数组：只有它能同时看到 Origin 与本次请求的
+       Host，才做得出「同源」这个判断。 */
+    const allowed = !origin
+      || parseAllowedOrigins(process.env.CORS_ORIGIN).includes(origin.replace(/\/$/, ''))
+      || isSameOriginRequest(origin, req.headers.host);
+    callback(null, allowed
+      ? {
+          origin,
+          credentials: true,
+          optionsSuccessStatus: 200,
+          methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+          allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Idempotency-Key'],
+        }
+      : { origin: false });
+  }));
 
   // 请求体上限:默认 100kb 会把长文本导入/批量接口/大 prompt 编辑等正常 JSON 拒之门外(413);
   // 与 nginx 层 client_max_body_size 2m 对齐
@@ -179,8 +201,24 @@ export function registerErrorHandlers(app: express.Express): void {
       method: req.method
     });
 
+    // #215：请求体超限是客户端错误，单独映射为 413 / PAYLOAD_TOO_LARGE，
+    // 不落入通用 500 / INTERNAL_ERROR 通道（否则会污染服务端错误率且语义不符）。
+    if (isPayloadTooLargeError(err)) {
+      res.status(413).json({
+        success: false,
+        error: {
+          message: '请求体过大',
+          code: 'PAYLOAD_TOO_LARGE',
+          status: 413
+        }
+      });
+      return;
+    }
+
     const isProduction = process.env.NODE_ENV === 'production';
 
+    // #215：错误响应永不回吐 stack（含服务器绝对路径与依赖版本路径），
+    // 完整堆栈只进上面的服务端日志。
     // 生产环境隐藏敏感信息
     if (isProduction) {
       res.status(err.status || 500).json({
@@ -192,14 +230,13 @@ export function registerErrorHandlers(app: express.Express): void {
         }
       });
     } else {
-      // 开发环境返回详细错误
+      // 开发环境返回详细错误信息（不含堆栈）
       res.status(err.status || 500).json({
         success: false,
         error: {
           message: err.message || 'Internal Server Error',
           code: err.code || 'INTERNAL_ERROR',
-          status: err.status || 500,
-          stack: err.stack
+          status: err.status || 500
         }
       });
     }

@@ -1,5 +1,7 @@
 import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
+import { getAPIGateway } from '../../gateway/api-gateway';
+import type { ChatMessage } from '../../gateway/api-gateway';
 import type { TeachingSessionRecord } from './TeachingSessionRepository';
 import type { TeachingScenarioContext } from './TeachingContextBuilder';
 import type { AnchorProbePlan } from '../learner/anchor-probe';
@@ -22,6 +24,7 @@ import {
   checkpointRhythmMinTurns,
   normalizeForKeywordMatch,
   parseSessionArtifacts,
+  resolveUnderstandingReading,
   type CheckpointConceptAttribution,
 } from './checkpoint-shared';
 
@@ -96,13 +99,23 @@ export function shouldEmitCheckpoint(
   if (getPendingCheckpoint(teachingState)) return false;
   const stage = String(teachingState?.classroomContext?.stage?.current ?? '');
   if (stage === 'wrapup') return false;
+  // 首个教学回合不出题（2026-11-08 p-π案例外评实证：学生选了「先讲要点，再拿例子练」，
+  // 第一条教师回复就被编排层要求出题，学生什么都没学到先挨两道审讯题）。结构事实：
+  // 除开场欢迎语外教师还没有任何一条教学回复时，本节尚无可考的内容——出题节奏顺延，
+  // 从第二个教学回合起按常规 rhythm 走。先猜后揭类开场不受影响（那是 reply 正文提问，
+  // 不依赖 control.checkpoint）。
+  const assistantCount = session.messages.filter((message) => message?.role === 'assistant').length;
+  if (assistantCount <= 1) return false;
   const lastAnalysis = [...session.messages].reverse().find((message) => message?.analysis)?.analysis;
-  const understanding = Number(lastAnalysis?.understanding);
-  // 无理解度读数不出题（没有可依据的观测；沿用旧行为）
-  if (!Number.isFinite(understanding)) return false;
+  // 一条可依据的观测都没有（还没产生过 analysis）→ 不出题（沿用旧行为）。
+  if (!lastAnalysis) return false;
+  // 有 analysis 但理解度读数为空 = 本轮**不可观测**（2026-11-01 修复）：不再等于「理解度低」，
+  // 因此**不加速**出题节奏（checkpointRhythmMinTurns(null) 回常规 4 条），也**不否决**出题——
+  // 「测不出来就不测」与拍板 #10 否掉的 0.6 硬闸是同一类测量盲区。
+  const understanding = resolveUnderstandingReading(lastAnalysis.understanding);
   // 出题时机与自评解耦（拍板 #10，2026-10-08）：理解度只调节奏、不再否决出题——
   // <0.6 缩到 2 条消息优先探测（恰是此前 0.6 硬闸造成 0.71% vs 52.3% 候选率差的盲区），
-  // ≥0.6 维持 4 条消息常规节奏。
+  // ≥0.6 与无读数均维持 4 条消息常规节奏。
   const lastTurn = Number(teachingState?.lastCheckpointTurn);
   if (Number.isFinite(lastTurn)
     && session.messages.length - lastTurn < checkpointRhythmMinTurns(understanding)) return false;
@@ -234,29 +247,46 @@ export function summarizeCheckpointHistory(raw: unknown): {
   passed: number;
   failed: number;
   skipped: number;
+  voided: number;
   recent: Array<{ title: string; passed: boolean; skipped?: boolean; understanding?: number }>;
 } | null {
   const rows = Array.isArray(raw) ? raw : [];
   if (rows.length === 0) return null;
-  const passed = rows.filter((row) => row?.passed === true).length;
-  const skipped = rows.filter((row) => row?.skipped === true).length;
+  // 作废行（control.voidCheckpoint，2026-11-07）：教师侧撤销的题**既非通过也非失败**。
+  // 此前 voided 行无 skipped 标记 → 被算进 failed、并落进 recent 的 passed:false，而本摘要
+  // 是**唯一**会把检查点历史变成模型可见文本的出口（teaching-turn-shared.ts:145 注入
+  // scenario.checkpointHistory），提示词又要求「对 recent 里 passed=false 的点…改用另一种表征
+  // 再确认一次」（teaching-turn.yaml 的 checkpointHistory 条）——于是作废回合的下一轮，模型会把
+  // 刚作废的题换个说法再问一遍，正是作废通道要消除的形态。
+  // 口径：先按 voided 把行分成互斥两组（作废行只计入 voided，不再参与 passed/skipped/failed），
+  // 保证 total = passed + failed + skipped + voided 且 failed 永不为负；作废行也**不进 recent**
+  // （不构成“再确认”候选）。同题复问防护仍由 isDuplicateCheckpointQuestion 直读原始
+  // checkpointHistory 兜底，不依赖本摘要。skip（学生跳过）语义不变，仍留在 recent 里。
+  const voidedRows = rows.filter((row) => row?.voided === true);
+  const activeRows = rows.filter((row) => row?.voided !== true);
+  const passed = activeRows.filter((row) => row?.passed === true).length;
+  const skipped = activeRows.filter((row) => row?.skipped === true).length;
+  const voided = voidedRows.length;
   return {
     total: rows.length,
     passed,
-    failed: rows.length - passed - skipped,
+    failed: activeRows.length - passed - skipped,
     skipped,
-    recent: rows.slice(-5).map((row) => ({
-      title: String(row?.title ?? row?.checkpointId ?? ''),
-      passed: row?.passed === true,
-      ...(row?.skipped === true ? { skipped: true } : {}),
-      ...(typeof row?.understanding === 'number' ? { understanding: row.understanding } : {}),
-    })),
+    voided,
+    recent: activeRows
+      .slice(-5)
+      .map((row) => ({
+        title: String(row?.title ?? row?.checkpointId ?? ''),
+        passed: row?.passed === true,
+        ...(row?.skipped === true ? { skipped: true } : {}),
+        ...(typeof row?.understanding === 'number' ? { understanding: row.understanding } : {}),
+      })),
   };
 }
 
 export interface CheckpointCodeJudgement {
-  /** code = 代码按答案键裁决（独立传感器）；model-reference = 无答案键，退回模型/完成度派生（同步标记，不冒充独立） */
-  judgedBy: 'code' | 'model-reference';
+  /** code = 代码按答案键裁决（独立传感器）；model-rubric = 简答要点词面未全命中时的模型语义复核（2026-11-08 分级判分）；model-reference = 无答案键，退回模型/完成度派生（同步标记，不冒充独立） */
+  judgedBy: 'code' | 'model-rubric' | 'model-reference';
   passed: boolean;
   detail: string;
 }
@@ -280,7 +310,10 @@ export interface CheckpointCodeArbitration {
  * 从检查点历史（+ 本回合裁决）聚合 code 负证据（纯函数，供单测）。
  *
  * 口径：
- * - 只认 `judgedBy==='code'` 的行（独立传感器）；model-reference 派生判定与 skip 不构成负证据；
+ * - 只认 `judgedBy==='code'`（答案键裁决）与 `judgedBy==='model-rubric'`（2026-11-08 起简答
+ *   词面未全命中后的模型语义复核）的行——两者都是独立于教学回合模型自评的裁决；简答升级后
+ *   model-rubric 是该通道的**唯一**裁决来源，排除它会让简答负证据整体失明；
+ *   model-reference 派生判定与 skip 不构成负证据；
  * - 只认带 `conceptName` 归属的行（F1 修复轮 a 起落档；历史无归属行无法定位概念，不误伤）；
  * - **attempts_exhausted 不需单独通道**：它由同一检查点的失败作答行派生，失败行本身即负证据；
  * - 本回合裁决显式并入：merge 在判分落 checkpointHistory 之前执行（teaching-turn-engine 内
@@ -295,7 +328,7 @@ export function buildCheckpointCodeArbitration(
   const judged = new Set<string>();
   const rows = Array.isArray(history) ? history : [];
   for (const row of rows) {
-    if (!row || row.judgedBy !== 'code') continue;
+    if (!row || (row.judgedBy !== 'code' && row.judgedBy !== 'model-rubric')) continue;
     const name = typeof row.conceptName === 'string' ? row.conceptName.trim().toLowerCase() : '';
     if (!name) continue;
     judged.add(name);
@@ -304,7 +337,8 @@ export function buildCheckpointCodeArbitration(
   const currentName = typeof currentCheckpoint?.conceptName === 'string'
     ? currentCheckpoint.conceptName.trim().toLowerCase()
     : '';
-  if (currentVerdict?.judgedBy === 'code' && currentName) {
+  if (currentName && currentVerdict
+    && (currentVerdict.judgedBy === 'code' || currentVerdict.judgedBy === 'model-rubric')) {
     judged.add(currentName);
     if (currentVerdict.passed === false) failed.add(currentName);
   }
@@ -390,6 +424,103 @@ export function judgeCheckpointAnswer(
   };
 }
 
+/* ───────────── 简答分级判分（2026-11-08）───────────── */
+
+const SHORT_ANSWER_RUBRIC_JUDGE_SYSTEM_PROMPT = [
+  '你是检查点简答的语义判分器。给一道简答题、它的要点评分标准（rubric，每条要点可用「|」分隔同义写法）和学生的作答，判断学生作答是否**在语义上覆盖了全部要点**。',
+  '判定口径：',
+  '- 逐条要点判断：学生用自己的话、同义改写表达了该要点的意思即算覆盖，不要求逐字出现 rubric 写法；',
+  '- 全部要点都覆盖 → passed=true；任一要点没覆盖（答错、跑题、空泛套话、只复述题目）→ passed=false；',
+  '- 你只做语义覆盖判定，不评价文笔、不补充知识、不新增要点。',
+  '只输出一个 JSON 对象：{"passed": true或false, "reason": "一句话依据（≤60字，点出哪些要点已覆盖/缺失）"}',
+].join('\n');
+
+function defaultRubricJudgeCall(messages: ChatMessage[]): Promise<string> {
+  // 业务代码直连 APIGateway 的第二个登记点（scripts/check-llm-call-boundary.ts ALLOWED_DIRECT_CALLERS）。
+  // userId/traceId/sessionId 由 APIGateway.execute 从 getRequestContext() 继承，不丢追溯。
+  return getAPIGateway().execute(
+    { messages, temperature: 0, max_tokens: 400 },
+    { skillId: 'teaching-turn', agentId: 'skill:teaching-turn' },
+    { requestPath: 'ai-teaching/checkpoint-answer-judge' },
+  ).then((response) => response?.choices?.[0]?.message?.content || '');
+}
+
+/**
+ * 简答 rubric 语义复核：要点词面未全命中时的一次模型判定（temperature 0，要点键为出题时
+ * 预注册 + filterAnswerLeakingKeywords 过滤后的 rubric——不是判分现场现编，防自判）。
+ * 返回 null = 复核缺席（调用失败/输出非法/无作答），调用方保守保留 code 负裁决（现状行为）。
+ */
+export async function judgeShortAnswerByRubricModel(
+  checkpoint: Pick<TeachingCheckpoint, 'question' | 'expectedKeywords'>,
+  submission: { answerText?: string },
+  codeJudgement: CheckpointCodeJudgement,
+  judgeCall: (messages: ChatMessage[]) => Promise<string> = defaultRubricJudgeCall,
+): Promise<CheckpointCodeJudgement | null> {
+  const answerText = String(submission?.answerText || '').trim();
+  if (!answerText) return null;
+  const keywords = (checkpoint.expectedKeywords || []).map((raw) => String(raw ?? '')).filter(Boolean);
+  if (keywords.length === 0) return null;
+  const messages: ChatMessage[] = [
+    { role: 'system', content: SHORT_ANSWER_RUBRIC_JUDGE_SYSTEM_PROMPT },
+    {
+      role: 'user',
+      content: JSON.stringify({
+        question: String(checkpoint.question ?? ''),
+        rubric: keywords,
+        studentAnswer: answerText,
+        codeKeywordVerdict: { passed: codeJudgement.passed, detail: codeJudgement.detail },
+      }),
+    },
+  ];
+  try {
+    const raw = await judgeCall(messages);
+    const jsonText = String(raw || '').trim()
+      .replace(/^```(?:json)?/i, '')
+      .replace(/```\s*$/, '')
+      .trim();
+    const start = jsonText.indexOf('{');
+    const end = jsonText.lastIndexOf('}');
+    if (start < 0 || end <= start) throw new Error('RUBRIC_JUDGE_OUTPUT_NOT_JSON');
+    const parsed = JSON.parse(jsonText.slice(start, end + 1)) as { passed?: unknown; reason?: unknown };
+    if (typeof parsed.passed !== 'boolean') throw new Error('RUBRIC_JUDGE_OUTPUT_INVALID');
+    const reason = typeof parsed.reason === 'string' ? parsed.reason.slice(0, 120) : '';
+    return {
+      judgedBy: 'model-rubric',
+      passed: parsed.passed,
+      detail: `要点词面未全命中，模型语义复核：${parsed.passed ? '同义改写已覆盖要点' : '要点确有缺失'}${reason ? `（${reason}）` : ''}`,
+    };
+  } catch (error) {
+    recordDegradation({
+      source: 'ai-teaching/checkpoint-answer-judge',
+      faultCategory: /JSON|INVALID|OUTPUT/i.test(degradationCause(error)) ? 'PARSE_FAILED' : 'UNKNOWN',
+      severity: 'P3_NOTICE',
+      impactedDimensions: ['checkpoint-judgement'],
+      mitigationApplied: 'keep-code-keyword-verdict',
+      rootCauseMessage: degradationCause(error),
+    });
+    return null;
+  }
+}
+
+/**
+ * 分级判分入口（2026-11-08）：
+ * - 选择题：correctOption 确定性比对（不变，仍是独立传感器）；
+ * - 简答：要点词面**全命中** = 确定性正证据，直接采纳；**未全命中**不再当场判负
+ *   （同义改写 15/15 判负的根因），升级一次模型 rubric 语义复核；复核失败保守回退 code 负裁决。
+ */
+export async function resolveCheckpointJudgement(
+  checkpoint: Pick<TeachingCheckpoint, 'type' | 'question' | 'options' | 'correctOptionIds' | 'expectedKeywords'>,
+  submission: { selectedOptionIds?: string[]; answerText?: string },
+  base: CheckpointCodeJudgement | null,
+  judgeCall?: (messages: ChatMessage[]) => Promise<string>,
+): Promise<CheckpointCodeJudgement | null> {
+  if (!base || base.judgedBy !== 'code' || base.passed !== false) return base;
+  if (checkpoint.type !== 'short_answer') return base;
+  const modelVerdict = await judgeShortAnswerByRubricModel(checkpoint, submission, base, judgeCall);
+  // 复核缺席（失败/输出非法/无作答）→ 保守保留 code 负裁决（与升级前行为一致），不退回 model-reference
+  return modelVerdict ?? base;
+}
+
 /**
  * 证据 payload 的概念归属字段（F1 修复轮 a）：带归属才展开，无归属缺省（存量形状逐字节不变）。
  * 此前 checkpoint 证据 payload 不带 conceptKey（R1 H2：全库 0/5955）——失败证据无概念可挂，
@@ -405,19 +536,35 @@ function checkpointConceptPayloadFields(checkpoint: TeachingCheckpoint): Record<
 }
 
 /**
+ * `checkpoint:result` 证据的幂等键（确定性派生，不含时间戳）。
+ *
+ * 键空间与同域两条证据互不重叠：`checkpoint:result:<id>`（本键）、
+ * `checkpoint-attempt:<id>`、`anchor:<id>`——三者同属 @@unique([eventId, evidenceKey]) 命名空间，
+ * 必须逐字母不同，否则一次 upsert 会覆盖另一类证据。
+ */
+export function checkpointResultEventId(checkpointId: string): string {
+  return `checkpoint:${checkpointId}`;
+}
+
+/**
  * 检查点结果留痕（`learner_evidence` type=`checkpoint:result`）。
  *
  * 为什么单独留痕：这是**独立于 LLM 自评**的第一手观测（`judgedBy='code'` 时）——
  * 第 3 步的"目标成功率带"（§7 P1-1）与效度检验（§8 E5）都以它为输入。
  * 无答案键时也照记，但标 `judgedBy='model-reference'`，**不得**混进独立信号。
  * 置信度按来源给：code=0.95（可复算）、model-reference=0.6（模型派生，含自证风险）。
+ *
+ * 幂等（#173-1②）：`(eventId, evidenceKey)` 完全由 checkpointId 派生（**不含时间戳**），
+ * 重试/重放走 upsert 只更新同一行。此前 eventId 带 `at.getTime()`：网关超时后同一次提交重试
+ * 会新建一行，同一道题在证据表里叠加多条（成功率分母虚高、重放无法识别）。代价是同题的
+ * 多次作答收敛为「最新一次结果」这一行（历史逐次样本不再各自成行，见 #173-1 口径）。
  */
 export async function recordCheckpointResultEvidence(
   session: TeachingSessionRecord,
   checkpoint: TeachingCheckpoint,
   result: {
     passed: boolean;
-    judgedBy: 'code' | 'model-reference';
+    judgedBy: 'code' | 'model-rubric' | 'model-reference';
     detail: string | null;
     submission: { selectedOptionIds?: string[] };
     /**
@@ -432,42 +579,51 @@ export async function recordCheckpointResultEvidence(
   },
 ): Promise<void> {
   try {
-    const at = new Date();
-    await prisma.learner_evidence.create({
-      data: {
-        id: `lev_cp_${checkpoint.id}_${at.getTime()}`,
-        eventId: `checkpoint:${checkpoint.id}:${at.getTime()}`,
-        evidenceKey: `checkpoint:result:${checkpoint.id}`,
+    // 时间戳只进 `occurredAt`（观测时刻），**不进**幂等键：同 key 的重试必须命中同一行。
+    const at = simulatedNowOr();
+    const eventId = checkpointResultEventId(checkpoint.id);
+    const evidenceKey = `checkpoint:result:${checkpoint.id}`;
+    const payload = JSON.stringify({
+      checkpointId: checkpoint.id,
+      type: checkpoint.type,
+      passed: result.passed,
+      judgedBy: result.judgedBy,
+      detail: result.detail,
+      /** 判定通道置信度：code 可复算 0.95；model-rubric 为独立 rubric 复核 0.85（2026-11-08 分级判分）；model-reference 含自证风险 0.6（与行级 confidence 同源） */
+      judgeConfidence: result.judgedBy === 'code' ? 0.95 : result.judgedBy === 'model-rubric' ? 0.85 : 0.6,
+      // 概念归属（F1 修复轮 a）：失败证据知道自己是哪个概念的
+      ...checkpointConceptPayloadFields(checkpoint),
+      ...(result.submission.selectedOptionIds?.length
+        ? { selectedOptionIds: result.submission.selectedOptionIds }
+        : {}),
+      // #96：判分前的系统预测（用于校准表/阈值拟合）；source='none' 时 predictedMastery 为 null
+      ...(result.prediction
+        ? {
+            predictedMastery: result.prediction.predictedMastery,
+            predictionSource: result.prediction.source,
+            understanding: result.prediction.understanding,
+          }
+        : {}),
+    });
+    const confidence = result.judgedBy === 'code' ? 0.95 : result.judgedBy === 'model-rubric' ? 0.85 : 0.6;
+    await prisma.learner_evidence.upsert({
+      where: { eventId_evidenceKey: { eventId, evidenceKey } },
+      create: {
+        // 行 id 同键派生：重试不再产生第二个 `lev_cp_...` 副本
+        id: `lev_cp_${checkpoint.id}`,
+        eventId,
+        evidenceKey,
         userId: session.userId,
         pathId: session.learningPathId ?? null,
         taskId: session.taskId ?? null,
         sessionId: session.id,
         evidenceType: 'checkpoint:result',
-        payload: JSON.stringify({
-          checkpointId: checkpoint.id,
-          type: checkpoint.type,
-          passed: result.passed,
-          judgedBy: result.judgedBy,
-          detail: result.detail,
-          /** 判定通道置信度：code 可复算 0.95，model-reference 含自证风险 0.6（与行级 confidence 同源） */
-          judgeConfidence: result.judgedBy === 'code' ? 0.95 : 0.6,
-          // 概念归属（F1 修复轮 a）：失败证据知道自己是哪个概念的
-          ...checkpointConceptPayloadFields(checkpoint),
-          ...(result.submission.selectedOptionIds?.length
-            ? { selectedOptionIds: result.submission.selectedOptionIds }
-            : {}),
-          // #96：判分前的系统预测（用于校准表/阈值拟合）；source='none' 时 predictedMastery 为 null
-          ...(result.prediction
-            ? {
-                predictedMastery: result.prediction.predictedMastery,
-                predictionSource: result.prediction.source,
-                understanding: result.prediction.understanding,
-              }
-            : {}),
-        }),
-        confidence: result.judgedBy === 'code' ? 0.95 : 0.6,
+        payload,
+        confidence,
         occurredAt: at,
       },
+      // 答错重答 = 同一道题的下一次观测，按最新一次结果覆盖（唯一行，不叠加）
+      update: { payload, confidence, occurredAt: at },
     });
     logger.info('[AITeaching] 检查点结果留痕', {
       sessionId: session.id,
@@ -492,8 +648,50 @@ export async function recordCheckpointResultEvidence(
  *
  * 纪律：**只留痕、不改写**——不参与掌握/难度/信念判定，也不被现有信号消费（与锚题纪律一致）。
  * 幂等：同一 checkpointId 的终局唯一——(eventId, evidenceKey) 由 checkpointId 派生并命中唯一约束，
- * 收尾重试/重复触发只保留第一行（update 为空，终局不可变）。
+ * 收尾重试/重复触发只保留一行。
+ *
+ * 终局可升级（#173-1③）：此前 `update: {}` 让**第一行**永占——`unresolved`（收尾时仍挂起）
+ * 先落，则之后同一道题真答到顶的 `attempts_exhausted` 永远写不进去，「答不上来」被永久记成
+ * 「没等到作答」（测量口径失真：分母里这题的终局无法更正）。现在按终局强度单调升级：
+ * unresolved（最弱，仅表示没等到作答）< skipped / attempts_exhausted（学员侧终局）。
+ * 同级只保留第一行（不覆盖，重复触发仍幂等）。
  */
+const ATTEMPT_OUTCOME_RANK: Record<'skipped' | 'attempts_exhausted' | 'unresolved', number> = {
+  unresolved: 0,
+  skipped: 1,
+  attempts_exhausted: 1,
+};
+
+/** 读出口径的终局（payload 解析失败/形状异常 → null，按"无既有终局"处理）。 */
+export function parseAttemptOutcome(payload: unknown): 'skipped' | 'attempts_exhausted' | 'unresolved' | null {
+  if (typeof payload !== 'string' || !payload) return null;
+  try {
+    const parsed = JSON.parse(payload) as { outcome?: unknown };
+    const outcome = parsed?.outcome;
+    return outcome === 'skipped' || outcome === 'attempts_exhausted' || outcome === 'unresolved'
+      ? outcome
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 读已有 `checkpoint:attempt` 行的终局（读失败一律视为「无既有终局」）。
+ * best-effort 留痕域：读不到不该阻断写入——upsert 本身对同一 (eventId, evidenceKey) 幂等。
+ */
+async function readPriorAttemptOutcome(eventId: string, evidenceKey: string) {
+  try {
+    const existing = await prisma.learner_evidence.findUnique({
+      where: { eventId_evidenceKey: { eventId, evidenceKey } },
+      select: { payload: true },
+    });
+    return existing ? parseAttemptOutcome(existing.payload) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function recordCheckpointAttemptEvidence(
   session: TeachingSessionRecord,
   checkpoint: TeachingCheckpoint,
@@ -508,6 +706,27 @@ export async function recordCheckpointAttemptEvidence(
     const at = simulatedNowOr();
     const eventId = `checkpoint-attempt:${checkpoint.id}`;
     const evidenceKey = `checkpoint:attempt:${checkpoint.id}`;
+    const payload = JSON.stringify({
+      checkpointId: checkpoint.id,
+      type: checkpoint.type,
+      title: checkpoint.title,
+      outcome: result.outcome,
+      // 概念归属（F1 修复轮 a）：attempts_exhausted/skipped/unresolved 终局同样带归属
+      ...checkpointConceptPayloadFields(checkpoint),
+      ...(typeof result.attempts === 'number' ? { attempts: result.attempts } : {}),
+    });
+    // 终局强度单调：先看已有行的终局，弱于本次才允许升级（#173-1③）。
+    // 同级重复触发直接返回（幂等），更强的一行不被更弱的终局降级。
+    const priorOutcome = await readPriorAttemptOutcome(eventId, evidenceKey);
+    if (priorOutcome && ATTEMPT_OUTCOME_RANK[priorOutcome] >= ATTEMPT_OUTCOME_RANK[result.outcome]) {
+      logger.info('[AITeaching] 检查点尝试留痕已存在且终局不弱于本次，保留原行（幂等）', {
+        sessionId: session.id,
+        checkpointId: checkpoint.id,
+        priorOutcome,
+        outcome: result.outcome,
+      });
+      return;
+    }
     await prisma.learner_evidence.upsert({
       where: { eventId_evidenceKey: { eventId, evidenceKey } },
       create: {
@@ -519,21 +738,21 @@ export async function recordCheckpointAttemptEvidence(
         taskId: session.taskId ?? null,
         sessionId: session.id,
         evidenceType: 'checkpoint:attempt',
-        payload: JSON.stringify({
-          checkpointId: checkpoint.id,
-          type: checkpoint.type,
-          title: checkpoint.title,
-          outcome: result.outcome,
-          // 概念归属（F1 修复轮 a）：attempts_exhausted/skipped/unresolved 终局同样带归属
-          ...checkpointConceptPayloadFields(checkpoint),
-          ...(typeof result.attempts === 'number' ? { attempts: result.attempts } : {}),
-        }),
+        payload,
         confidence: 1,
         occurredAt: at,
       },
-      // 终局不可变：重复触发只保留第一行
-      update: {},
+      // 终局可升级（#173-1③）：unresolved → skipped/attempts_exhausted 就地更正同一行。
+      update: { payload, confidence: 1, occurredAt: at },
     });
+    if (priorOutcome) {
+      logger.info('[AITeaching] 检查点尝试留痕终局升级', {
+        sessionId: session.id,
+        checkpointId: checkpoint.id,
+        from: priorOutcome,
+        to: result.outcome,
+      });
+    }
     logger.info('[AITeaching] 检查点尝试留痕', {
       sessionId: session.id,
       checkpointId: checkpoint.id,
@@ -733,9 +952,68 @@ export async function recordAnchorProbeResult(
 }
 
 /**
- * 剥离检查点答案键（客户端投影前调用）：答案键只用于服务端代码裁决，**绝不下发**。
- * 覆盖两处暴露面：`pendingCheckpoint` 本身，以及原样返回的 `teachingState`（其中也存了一份）。
+ * 检查点答案键的字段名：只用于服务端代码裁决，**任何客户端投影都不得携带**。
+ * 逐键剥离而**不是**按路径白名单下探——`teachingState` 里同一份答案键有多处副本
+ * （顶层 `pendingCheckpoint`、`checkpointHistory`、`sessionArtifacts`、
+ * `lastRuntimeEnvelope.artifact.control.checkpoint`，消息里还有历史 `promptDebug`），
+ * 白名单漏一处就是一次泄漏（240：`/detail` 的 `state.lastRuntimeEnvelope` 漏剥）。
  */
+const CHECKPOINT_ANSWER_KEY_NAMES = ['correctOptionIds', 'expectedKeywords'] as const;
+
+/**
+ * 递归剥离答案键（结构无关）。返回**新对象**，但只在真的删了键的分支上重建节点，
+ * 未命中的子树原样复用——既不修改入参（纯函数），也不为整棵树付出深拷贝代价。
+ */
+function stripAnswerKeysDeep(value: any): any {
+  if (!value || typeof value !== 'object') return value;
+  if (Array.isArray(value)) {
+    let changed = false;
+    const next = value.map((item) => {
+      const stripped = stripAnswerKeysDeep(item);
+      if (stripped !== item) changed = true;
+      return stripped;
+    });
+    return changed ? next : value;
+  }
+  let changed = false;
+  const next: Record<string, any> = {};
+  for (const key of Object.keys(value)) {
+    if ((CHECKPOINT_ANSWER_KEY_NAMES as readonly string[]).includes(key)) {
+      changed = true;
+      continue;
+    }
+    const item = value[key];
+    const stripped = stripAnswerKeysDeep(item);
+    if (stripped !== item) changed = true;
+    next[key] = stripped;
+  }
+  return changed ? next : value;
+}
+
+/**
+ * 消息行 → 客户端投影：剔除已停写的调试信封 + 剥离答案键。
+ *
+ * 为什么必须剔除而不是只剥键（#240）：存量行的 `promptDebug.rawModelOutput` /
+ * `extractedJson` / `attempts[].rawOutput` 是**模型原始输出的字符串**，里面同样嵌着
+ * `control.checkpoint.correctOptionIds`——按键名递归删只能删结构里的键，删不掉字符串里的副本。
+ * 该信封自 2026-10-08 起停写、前端只有类型声明无任何 UI 读取
+ * （见 routes/ai-teaching.routes.ts `promptDebugEnabled` 注释），故学习者侧出口直接不下发。
+ *
+ * 读侧出口不止一个：`/detail`（teaching-session-ops.getSessionDetail）与
+ * `/users/me/sessions`（routes/users.ts）都必须过这里——#240 的教训就是"只补一处"。
+ */
+export function projectMessagesForClient<T extends Record<string, any>>(messages: T[]): T[] {
+  if (!Array.isArray(messages)) return messages;
+  const withoutDebug = messages.map((message) => {
+    if (!message || typeof message !== 'object') return message;
+    const { promptDebug, peerDebug, ...rest } = message as Record<string, any>;
+    void promptDebug;
+    void peerDebug;
+    return rest as T;
+  });
+  return stripCheckpointAnswerKeys({ messages: withoutDebug }).messages;
+}
+
 /**
  * 消息响应里下发的 `checkpoint`：**必须先剥离答案键**。
  *
@@ -767,22 +1045,18 @@ export function inheritTeachingState<T extends Record<string, any>>(
   return { ...(previousTeachingState || {}), ...turnState };
 }
 
+/**
+ * 剥离检查点答案键（客户端投影前调用）：答案键只用于服务端代码裁决，**绝不下发**。
+ *
+ * 覆盖面是**结构无关**的：任意深度的 `correctOptionIds` / `expectedKeywords` 都会被删除——
+ * `pendingCheckpoint`、`checkpointHistory`、`sessionArtifacts`、
+ * `lastRuntimeEnvelope.artifact.control.checkpoint`（写侧保存的模型原始输出）等，白名单漏一处就是泄漏。
+ * 只删**结构里的键**：嵌在字符串（如存量 `promptDebug.rawModelOutput`）里的副本删不掉，
+ * 那种行必须在消息出口整份剔除调试信封（`projectMessagesForClient`）。
+ * 学员自己的作答（`submittedOptionIds` / `selectedOptionIds`）、`passed`、`options` 全部保留
+ * ——评估页回放小测要用这些。
+ */
 export function stripCheckpointAnswerKeys<T extends Record<string, any> | null | undefined>(teachingState: T): T {
   if (!teachingState || typeof teachingState !== 'object') return teachingState;
-  const clone: Record<string, any> = { ...(teachingState as Record<string, any>) };
-  const stripOne = (checkpoint: any) => {
-    if (!checkpoint || typeof checkpoint !== 'object') return checkpoint;
-    const { correctOptionIds, expectedKeywords, ...rest } = checkpoint;
-    void correctOptionIds;
-    void expectedKeywords;
-    return rest;
-  };
-  if (clone.pendingCheckpoint) clone.pendingCheckpoint = stripOne(clone.pendingCheckpoint);
-  if (Array.isArray(clone.checkpointHistory)) {
-    clone.checkpointHistory = clone.checkpointHistory.map(stripOne);
-  }
-  if (clone.sessionArtifacts && typeof clone.sessionArtifacts === 'object' && clone.sessionArtifacts.pendingCheckpoint) {
-    clone.sessionArtifacts = { ...clone.sessionArtifacts, pendingCheckpoint: stripOne(clone.sessionArtifacts.pendingCheckpoint) };
-  }
-  return clone as T;
+  return stripAnswerKeysDeep(teachingState) as T;
 }

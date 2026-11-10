@@ -26,7 +26,6 @@
     <!-- 加载失败（首载无数据时优先于空态展示，含重试） -->
     <MkEmptyState
       v-if="loadFailed && !rows.length"
-      icon="◌"
       title="反馈数据加载失败"
       description="反馈列表加载失败，请重试。"
       action-text="重试"
@@ -124,12 +123,14 @@
                 <span v-if="r.comment" class="fb-comment" :title="r.comment">{{ r.comment }}</span>
                 <span v-else class="mk-na">—</span>
               </td>
+              <!-- 节点是内部 agentId、策略是后端枚举：上屏走中文名，原文进 title（2026-11-02 评审：
+                   此前 snake_case 原样直出，读一屏要在脑子里做一次英中对照） -->
               <td>
-                <span v-if="r.agentId" class="mono fb-agent">{{ r.agentId }}</span>
+                <span v-if="r.agentId" class="fb-agent" :title="r.agentId">{{ agentText(r.agentId) }}</span>
                 <span v-else class="mk-na">—</span>
               </td>
               <td>
-                <span v-if="r.strategy" class="fb-strategy">{{ r.strategy }}</span>
+                <span v-if="r.strategy" class="fb-strategy" :title="r.strategy">{{ strategyText(r.strategy) }}</span>
                 <span v-else class="mk-na">—</span>
               </td>
               <td><span class="mk-badge" :class="statusBadge(r.status)">{{ statusLabel(r.status) }}</span></td>
@@ -147,10 +148,8 @@
         <MockSkeletonTable v-else-if="loading" :cols="8" />
         <MkEmptyState
           v-else
-          icon="◌"
           min
           :title="isFiltered ? '当前筛选无匹配' : '暂无反馈'"
-          :description="isFiltered ? '放宽筛选条件试试。' : ''"
           :action-text="isFiltered ? '清除筛选' : '刷新'"
           @action="isFiltered ? clearFilters() : load(true)"
         />
@@ -175,7 +174,20 @@
           <header class="mk-drawer__head">
             <div class="mk-drawer__heading">
               <h3 class="mk-drawer__title">{{ detail.userName }} 的反馈</h3>
-              <span class="mk-drawer__sub mono">{{ detail.id }}</span>
+              <!-- 反馈 ID 是运营与研发对日志的唯一定位符：给一颗复制钮
+                   （2026-11-01 外部评审：此前只能手动框选 39 个字符的 id） -->
+              <span class="fb-idrow">
+                <span class="mk-drawer__sub mono">{{ detail.id }}</span>
+                <button
+                  type="button"
+                  class="fb-idrow__copy"
+                  :aria-label="`复制反馈 ID ${detail.id}`"
+                  title="复制反馈 ID"
+                  @click="copyDetailId"
+                >
+                  <Copy :size="12" :stroke-width="2" aria-hidden="true" />
+                </button>
+              </span>
             </div>
             <button type="button" class="mk-drawer__close" aria-label="关闭" @click="closeDetail">✕</button>
           </header>
@@ -183,20 +195,49 @@
             <!-- 首段徽章行（原型 .ovl__body 首段 pills）：状态 / 难度适配 / UI 类型 / 轮次（均为行上已有字段） -->
             <div class="fb-pills">
               <span class="mk-badge" :class="statusBadge(detail.status)">{{ statusLabel(detail.status) }}</span>
-              <span v-if="detail.difficultyFit" class="mk-badge mk-badge--muted">难度适配 {{ detail.difficultyFit }}</span>
-              <span v-if="detail.uiType" class="mk-badge mk-badge--muted">{{ detail.uiType }}</span>
+              <span v-if="detail.difficultyFit" class="mk-badge mk-badge--muted" :title="detail.difficultyFit">难度适配 {{ difficultyFitText(detail.difficultyFit) }}</span>
+              <span v-if="detail.uiType" class="mk-badge mk-badge--muted" :title="detail.uiType">{{ uiTypeText(detail.uiType) }}</span>
               <span v-if="detail.roundNumber != null" class="mk-badge mk-badge--muted">轮次 {{ detail.roundNumber }}</span>
             </div>
             <!-- 事实清单（原型 dl.kv → 共享 mk-facts 栅格）：三维评分带点阵；id 类格单行省略、全文在 title -->
             <div class="mk-facts">
               <div><span>评分</span><span class="mk-dots" :class="{ 'mk-dots--warn': detail.rating <= 2 }" role="img" :aria-label="`评分 ${detail.rating}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': d <= detail.rating }"></i></span><strong class="mono">{{ detail.rating }}/5</strong></div>
-              <div><span>有用度</span><span class="mk-dots" role="img" :aria-label="`有用度 ${detail.helpfulness ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.helpfulness != null && d <= detail.helpfulness }"></i></span><strong class="mono">{{ detail.helpfulness ?? '—' }}</strong></div>
-              <div><span>清晰度</span><span class="mk-dots" role="img" :aria-label="`清晰度 ${detail.clarity ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.clarity != null && d <= detail.clarity }"></i></span><strong class="mono">{{ detail.clarity ?? '—' }}</strong></div>
-              <div><span>难度</span><span class="mk-dots" role="img" :aria-label="`难度 ${detail.difficulty ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.difficulty != null && d <= detail.difficulty }"></i></span><strong class="mono">{{ detail.difficulty ?? '—' }}</strong></div>
-              <div><span>节点</span><strong class="mono" :title="detail.agentId || ''">{{ detail.agentId || '—' }}</strong></div>
-              <div><span>策略</span><strong :title="detail.strategy || ''">{{ detail.strategy || '—' }}</strong></div>
-              <div><span>任务</span><strong class="mono" :title="detail.taskId || ''">{{ detail.taskId || '—' }}</strong></div>
-              <div><span>会话</span><strong class="mono" :title="detail.sessionId || ''">{{ detail.sessionId || '—' }}</strong></div>
+              <div><span>有用度</span><span class="mk-dots" role="img" :aria-label="`有用度 ${detail.helpfulness ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.helpfulness != null && d <= detail.helpfulness }"></i></span><strong class="mono">{{ detail.helpfulness != null ? `${detail.helpfulness}/5` : '—' }}</strong></div>
+              <div><span>清晰度</span><span class="mk-dots" role="img" :aria-label="`清晰度 ${detail.clarity ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.clarity != null && d <= detail.clarity }"></i></span><strong class="mono">{{ detail.clarity != null ? `${detail.clarity}/5` : '—' }}</strong></div>
+              <div><span>难度</span><span class="mk-dots" role="img" :aria-label="`难度 ${detail.difficulty ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.difficulty != null && d <= detail.difficulty }"></i></span><strong class="mono">{{ detail.difficulty != null ? `${detail.difficulty}/5` : '—' }}</strong></div>
+              <div><span>节点</span><strong :title="detail.agentId || ''">{{ detail.agentId ? agentText(detail.agentId) : '—' }}</strong></div>
+              <div><span>策略</span><strong :title="detail.strategy || ''">{{ detail.strategy ? strategyText(detail.strategy) : '—' }}</strong></div>
+              <div><span>任务</span>
+                <span class="fb-idrow">
+                  <strong class="mono" :title="detail.taskId || ''">{{ detail.taskId || '—' }}</strong>
+                  <button
+                    v-if="detail.taskId"
+                    type="button"
+                    class="fb-idrow__copy"
+                    :aria-label="`复制任务 ID ${detail.taskId}`"
+                    title="复制任务 ID"
+                    @click="copyField('任务 ID', detail.taskId)"
+                  >
+                    <Copy :size="12" :stroke-width="2" aria-hidden="true" />
+                  </button>
+                </span>
+              </div>
+              <div><span>会话</span>
+                <span class="fb-idrow">
+                  <strong class="mono" :title="detail.sessionId || ''">{{ detail.sessionId || '—' }}</strong>
+                  <!-- 排查 Bad Case 要把会话 ID 贴进日志检索：截断的 id 没法手动选全 -->
+                  <button
+                    v-if="detail.sessionId"
+                    type="button"
+                    class="fb-idrow__copy"
+                    :aria-label="`复制会话 ID ${detail.sessionId}`"
+                    title="复制会话 ID"
+                    @click="copyField('会话 ID', detail.sessionId)"
+                  >
+                    <Copy :size="12" :stroke-width="2" aria-hidden="true" />
+                  </button>
+                </span>
+              </div>
               <!-- 提交时间（审核 #169）：绝对时间入事实格，相对时间留列表列（另三张表同口径） -->
               <div><span>提交时间</span><strong class="mono" :title="detail.createdAtRaw">{{ fmtDateTime(detail.createdAtRaw) }}</strong></div>
             </div>
@@ -216,21 +257,36 @@
             <section v-if="detail.reasonCodes.length" class="fb-section">
               <header class="mk-section__head"><h4>原因标签</h4></header>
               <div class="fb-codes">
-                <span v-for="c in detail.reasonCodes" :key="c" class="mk-badge mk-badge--muted mono">{{ c }}</span>
+                <span v-for="c in detail.reasonCodes" :key="c" class="mk-badge mk-badge--muted" :title="c">{{ reasonText(c) }}</span>
               </div>
             </section>
 
             <section class="fb-section">
               <header class="mk-section__head"><h4>内部备注</h4></header>
-              <textarea v-model="noteDraft" class="fb-note" rows="3" placeholder="处理记录 / 归因 / 跟进结论"></textarea>
+              <!-- 备注随状态一起提交（含四枚按钮各自管什么）：规则收进输入框 title，
+                   屏上不再留说明段——原先是响应 2026-11-02 评审「按钮组与文案随输入内容变来变去」，
+                   把规则写死让主按钮文案稳定；写死的位置从屏上改到 title，规则本身不变。 -->
+              <textarea v-model="noteDraft" class="fb-note" rows="3" placeholder="处理记录 / 归因 / 跟进结论" title="备注会随「标记已解决 / 标记已分流 / 忽略」一起保存，也可以点「仅保存备注」单独留存"></textarea>
             </section>
           </div>
           <!-- 底部动作（原型 .ovl__foot：取消/忽略在左、主钮最右、常驻滚动区外；同 gc-detail__foot 判例） -->
           <footer class="mk-drawer__foot">
-            <button type="button" class="mk-btn mk-btn--ghost" :disabled="saving" @click="save('dismissed')">忽略</button>
-            <button type="button" class="mk-btn mk-btn--ok" :disabled="saving" @click="save('resolved')">标记已解决</button>
-            <button type="button" class="mk-btn mk-btn--primary" :disabled="saving" @click="save('triaged')">
-              {{ saving ? '保存中…' : '标记已分流' }}
+            <!-- 2026-11-01 外部评审（二轮）：主次倒置——「分流入库」被做成了饱和蓝主按钮，
+                 而真正把反馈处理完的「标记已解决」只是绿描边次级。按动作的终局性排：
+                 解决 = 主按钮；分流 / 忽略 = 同款次级（2026-11-02 评审：两枚同级按钮一蓝一灰，
+                 并排读起来像两种权重）。
+                 按钮组固定四枚，不随备注内容增减（2026-11-02 评审）：没有待保存的备注时
+                 「仅保存备注」置灰而不是消失，组内成员与顺序始终一致。 -->
+            <button
+              type="button"
+              class="mk-btn"
+              :disabled="saving || !noteDirty"
+              @click="saveNoteOnly"
+            >仅保存备注</button>
+            <button type="button" class="mk-btn" :disabled="saving" @click="save('dismissed')">忽略</button>
+            <button type="button" class="mk-btn" :disabled="saving" @click="save('triaged')">标记已分流</button>
+            <button type="button" class="mk-btn mk-btn--primary" :disabled="saving" @click="save('resolved')">
+              {{ saving ? '保存中…' : '标记已解决' }}
             </button>
           </footer>
         </aside>
@@ -254,6 +310,8 @@ import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import { useTableSort } from './useTableSort'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
+import { Copy } from 'lucide-vue-next'
+import { copyText } from './clipboard'
 
 /** 嵌入模式：作为运营中心「反馈」tab 渲染（仅去掉外层状态条；宿主承载域计数）。
     count 事件：反馈总数上报（宿主「反馈 N」徽章）。
@@ -319,10 +377,20 @@ watch(scopeProp, () => {
 })
 const detail = ref<Detail | null>(null)
 const noteDraft = ref('')
+/** 备注是否有未保存的改动：只用来决定「仅保存备注」可不可点（按钮常驻，避免组内按钮增减） */
+const noteDirty = computed(() => !!detail.value && noteDraft.value.trim() !== (detail.value.internalNote || ''))
 /** 抽屉统一关闭路径：提交中（saving）禁止 Esc/遮罩/✕ 误关——请求仍在跑却失去上下文。
     ✕/遮罩/Esc 全部指向本函数（与 Confirm.vue busy 拦截同款）。 */
 function closeDetail() {
   if (!saving.value) detail.value = null
+}
+/** 复制反馈 ID：成功/失败都给 toast（失败时把 id 一起打出来，手动可复制） */
+async function copyDetailId() {
+  const id = detail.value?.id
+  if (!id) return
+  const ok = await copyText(id)
+  if (ok) toast.success('已复制反馈 ID')
+  else toast.error(`复制失败，请手动复制：${id}`)
 }
 useEscape(() => !!detail.value, closeDetail)
 const panelRef = ref<HTMLElement | null>(null)
@@ -341,7 +409,9 @@ const statusPills = computed(() => {
 })
 /** 卡头「状态」下拉：计数取当前已载入行 */
 const statusSelectOptions = computed(() => [
-  { value: '', label: '全部状态' },
+  /* 「全部状态」→「全部」（2026-11-09 走查）：MkPillSelect 触发器把 label（状态）与选中项并排渲染，
+     选项再写「全部状态」就是「状态 全部状态」——同一句话说了两遍。 */
+  { value: '', label: '全部' },
   ...statusPills.value.map((p) => ({ value: p.id, label: `${p.label}（${p.count}）` }))
 ])
 
@@ -361,6 +431,74 @@ const statusLabel = (s: string) =>
   ({ new: '待处理', triaged: '已分流', resolved: '已解决', dismissed: '已忽略' })[s] || s || '—'
 const statusBadge = (s: string) =>
   s === 'resolved' ? 'mk-badge--ok' : s === 'new' ? 'mk-badge--warn' : s === 'triaged' ? 'mk-badge--info' : 'mk-badge--muted'
+
+/* ---------- 反馈域枚举 → 中文展示 ----------
+   与 statusText.ts 同策略：未收录的值原样返回（不丢排障信息），原文一律进 title。
+   节点 / 策略 / 难度适配 / UI 类型 / 原因标签此前把这些 snake_case 与内部 id 直接印在
+   中文界面上。表是反馈域私有枚举，先放本页；若其它页面也要读，再并入 statusText.ts。 */
+const NODE_TEXT: Record<string, string> = {
+  // agentId；名字对齐后端 agent-manifest（teaching-agent 的注册名是「教学 Agent」）
+  'teaching-agent': '教学 Agent',
+  'ai-teaching-agent': '教学 Agent',
+  'ai-teaching': '教学 Agent',
+  'goal-conversation': '目标对话',
+  'goal-conversation-agent': '目标对话',
+  'path-planning': '路径规划',
+  'learner-model-agent': '学习记录'
+}
+/* 教学策略枚举单源 = 后端 pedagogy.config / teaching-strategy-selector 的 8 类；
+   末两条是早期与演示数据里的策略名，出现时也要读得懂 */
+const STRATEGY_TEXT: Record<string, string> = {
+  explain: '讲解',
+  demonstrate: '示范',
+  scaffold: '引导',
+  drill: '练习',
+  diagnose: '诊断',
+  feedback: '反馈',
+  motivate: '激励',
+  reflect: '反思',
+  socratic: '启发提问',
+  direct: '直接讲解'
+}
+const DIFFICULTY_FIT_TEXT: Record<string, string> = {
+  too_easy: '偏简单',
+  appropriate: '合适',
+  // 旧数据里写作 fit（与 Learning 侧的 difficulty-change 映射并存），与 appropriate 同义
+  fit: '合适',
+  too_hard: '偏难'
+}
+/* uiType = 采集这条反馈的界面；后端写入值带 v1 版本后缀 */
+const UI_TYPE_TEXT: Record<string, string> = {
+  'session-report-v1': '课后报告',
+  'message-thumbs-v1': '消息点赞',
+  lesson: '课堂',
+  summary: '总结',
+  review: '复习'
+}
+/* 原因标签：单源 = 学习者端 SessionFeedbackPanel 的 reasonOptions（大写枚举）；后端该字段
+   是自由字符串数组，历史与演示数据里另有小写自由值，一并收录 */
+const REASON_TEXT: Record<string, string> = {
+  inaccurate_content: '内容不准确',
+  unclear_explanation: '解释不清',
+  pace_mismatch: '节奏不合适',
+  difficulty_mismatch: '难度不合适',
+  checkpoint_issue: '理解检查有问题',
+  other: '其他',
+  content_unclear: '内容不清',
+  pace_too_fast: '节奏太快',
+  too_fast: '节奏太快',
+  need_examples: '需要示例'
+}
+
+function dictText(dict: Record<string, string>, raw: string | null | undefined): string {
+  const v = String(raw || '')
+  return dict[v.toLowerCase()] || v
+}
+const agentText = (v: string) => dictText(NODE_TEXT, v)
+const strategyText = (v: string) => dictText(STRATEGY_TEXT, v)
+const difficultyFitText = (v: string) => dictText(DIFFICULTY_FIT_TEXT, v)
+const uiTypeText = (v: string) => dictText(UI_TYPE_TEXT, v)
+const reasonText = (v: string) => dictText(REASON_TEXT, v)
 
 /** 绝对时间（反馈列表/抽屉只有相对时间，无法回溯核对；审核 #169）：YYYY-MM-DD HH:mm */
 function fmtDateTime(iso: string): string {
@@ -423,7 +561,7 @@ function clearFilters() {
 /* 状态筛选 ↔ URL（?status=）（F5-3 审核）：URL → 筛选由本组件读取（刷新/后退/复制链接
    复原「待处理」预筛）；筛选 → URL 交由宿主统一写（emit('status')，见 OpsHub.onFeedbackStatus）——
    本组件自写会合并尚未落地的旧 route.query.tab，把宿主在途的 ?tab= replace 覆盖掉（实测竞态：
-   地址栏最终停在 ?tab=todo&status=new，内容与地址脱节）。单测可无 router 挂载，访问保持可选 */
+   地址栏最终停在旧页签值 + status=new，内容与地址脱节）。单测可无 router 挂载，访问保持可选 */
 const route = useRoute()
 const FB_STATUS_VALUES = ['new', 'triaged', 'resolved', 'dismissed'] as const
 watch(
@@ -512,6 +650,28 @@ async function openDetail(r: Row) {
   }
 }
 
+async function copyField(label: string, text: string) {
+  const ok = await copyText(text)
+  if (ok) toast.success(`已复制${label}`)
+  else toast.error(`复制失败，请手动复制：${text}`)
+}
+
+/** 只保存内部备注、不改处理状态（后端同一支 PUT，状态原样回传） */
+async function saveNoteOnly() {
+  const d = detail.value
+  if (!d || saving.value) return
+  saving.value = true
+  try {
+    await adminFeedbackApi.update(d.id, { status: d.status, internalNote: noteDraft.value.trim() || null })
+    d.internalNote = noteDraft.value.trim()
+    toast.success('备注已保存（处理状态未变）')
+  } catch (e) {
+    toast.error(`保存失败：${errMsg(e)}`)
+  } finally {
+    saving.value = false
+  }
+}
+
 async function save(status: Status) {
   const d = detail.value
   if (!d || saving.value) return
@@ -553,7 +713,8 @@ onMounted(() => {
 .fb-c-rating { width: 76px; }
 .fb-c-comment { width: 220px; }
 .fb-c-node { width: 120px; }
-.fb-c-strategy { width: 60px; }
+/* 策略列显示中文（最长「启发提问 / 直接讲解」4 字），60px 只放得下 2 字 + 省略号 */
+.fb-c-strategy { width: 84px; }
 .fb-c-status { width: 84px; }
 .fb-c-time { width: 80px; }
 /* fixed 档列宽即契约：评论格 320px 上限会顶出本列，改成随列收缩 + 省略号 */
@@ -561,6 +722,37 @@ onMounted(() => {
 
 /* 嵌入模式（运营中心宿主 flex 列内）：占满剩余高度，表格区内滚（对齐 oc-embedded 先例） */
 .fb-embedded { flex: 1; min-height: 0; overflow: hidden; }
+/* 抽屉头部的反馈 ID 行：id + 复制钮，id 过长时自身省略，钮不跟着被挤 */
+.fb-idrow { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.fb-idrow .mk-drawer__sub { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 事实格里的 ID 行：值包进 .fb-idrow 后不再是 .mk-facts 的直接子 strong，全局
+   `.mk-facts > div > strong` 的单行省略契约落不到它身上——87 字符的会话 ID 会按连字符/
+   下划线折行，把整格撑高。这里对包裹层内的 strong 补齐同一份契约（字号/字色一并带回来，
+   否则它会按父级字号渲染，和同排事实格不一致）；复制钮 flex: none，不被挤压。 */
+.mk-facts .fb-idrow > strong {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-ink);
+}
+.fb-idrow__copy {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--mk-radius-sm);
+  background: transparent;
+  color: var(--mk-faint);
+  cursor: pointer;
+}
+.fb-idrow__copy:hover { color: var(--mk-ink); border-color: var(--mk-line); background: var(--mk-hover-surface); }
+.fb-idrow__copy:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
 .fb-row { cursor: pointer; }
 .fb-rating { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .fb-rating b { font-size: var(--mk-fs-micro); color: var(--mk-ink); }
@@ -576,16 +768,20 @@ onMounted(() => {
 }
 .fb-agent {
   display: inline-block;
-  max-width: 160px;
+  /* fixed 档列宽即上限：160px 上限会顶出 120px 的节点列，改成随列收缩（同 .fb-comment 判例）；
+     另补 white-space: nowrap——只有 overflow + text-overflow 时省略号不会出现，只是硬裁 */
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
   vertical-align: bottom;
   font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
 }
 .fb-strategy {
   display: inline-block;
-  max-width: 200px;
+  /* 同上：200px 上限会顶出策略列，省略号改为按单元格宽度收 */
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -596,6 +792,18 @@ onMounted(() => {
 
 /* 处理面板：mk-drawer 体系（遮罩/面板/头/体/关闭按钮由全局类提供；
    fb- 仅保留内容区布局与覆盖层内细节样式） */
+/* 抽屉让出顶栏高度（2026-11-02 评审：抽屉从窗口最顶端铺开，把页面搜索、
+   帮助/通知、当前账号整条顶栏盖住）。顶栏是全局常驻控件，浮层不该遮住它：
+   只在反馈抽屉这一处收口，避免改动全站 mk-drawer（其它页另有走查）。 */
+/* 56px = 壳层顶栏 .mshell__top 的高度（Shell.vue，该处亦为字面值）：顶栏高度在本仓库
+   没有 token，两处都按同一字面量写；此处跟随，不另造一个只有本组件用的 token。 */
+/* 比全局 .mk-drawer 的 inset:0 高一档特异性，确保不被后注入的全局样式覆盖 */
+.mk-drawer.mk-drawer { top: 56px; }
+/* 2026-11-04 走查：≤560 时壳层顶栏因面包屑换行改为两行、高 72px（Shell.vue 同判例），
+   此处跟随同一字面量；否则抽屉仍从 56px 起，正好盖住次行的面包屑。 */
+@media (max-width: 560px) {
+  .mk-drawer.mk-drawer { top: 72px; }
+}
 /* 抽屉内容区：mk-drawer__body 提供滚动/内边距，此处补纵向排布（原型 .ovl__body grid gap16） */
 .fb-body { display: grid; gap: 16px; align-content: start; }
 /* 首段徽章行（原型 .ovl__body 首段 pills）：状态 / 难度适配 / UI 类型 / 轮次 */

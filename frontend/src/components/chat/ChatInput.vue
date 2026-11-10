@@ -99,5 +99,90 @@ defineExpose({ focus, textareaRef });
 </template>
 
 <style scoped>
-/* Styles inherit from parent .v2-page scope — uses the same .composer* class names */
+/* 组件自带几何样式：宿主页面的 <style scoped> 只会命中它自己的模板节点，够不到子组件内部
+   （data-v 属性不下传），此前本组件只剩浏览器默认的 textarea + 裸按钮。
+   尺寸口径对齐「目标规划」会话态输入盒（2026-11-06 审计 §1）：
+   外盒 12px 圆角（与上方气泡/方案卡同档）、发送键 36px 高 + 8px 控件圆角（不是全圆胶囊）、
+   底部元信息统一 12px；颜色只用令牌，随明暗主题翻转。 */
+.composer {
+  display: grid;
+  gap: 7px;
+}
+.composer__box {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  min-width: 0;
+  min-height: 54px;
+  padding: 8px;
+  box-sizing: border-box;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--wf-shadow-raised);
+}
+.composer__box:focus-within {
+  border-color: color-mix(in srgb, var(--blue) 55%, transparent);
+  box-shadow: var(--mk-focus-ring);
+}
+.composer__textarea {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  resize: none;
+  padding: 10px 0;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink);
+  background: transparent;
+  max-height: 120px;
+  align-self: center;
+  /* 多行输入自增高超过 120 后的内部滚动：细滑块、无上下箭头（2026-11-06 审计 §6） */
+  scrollbar-width: thin;
+}
+.composer__textarea::-webkit-scrollbar { width: 4px; }
+.composer__textarea::-webkit-scrollbar-thumb {
+  border-radius: var(--mk-radius-xs);
+  background: color-mix(in srgb, var(--ink) 22%, transparent);
+}
+.composer__count {
+  flex: none;
+  align-self: flex-end;
+  padding-bottom: 4px;
+  font-size: 12px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.composer__send {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  /* 8px 控件圆角（审计 §1 同心圆角）；36px 是仓库可点元素的硬下沿 */
+  border-radius: var(--mk-radius-md);
+  background: var(--blue);
+  color: var(--text-on-primary);
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.composer__send:not(:disabled):active { transform: scale(0.98); }
+.composer__send--off {
+  background: color-mix(in srgb, var(--line) 60%, transparent);
+  color: var(--faint);
+  cursor: default;
+}
+.composer__hint {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--faint);
+}
 </style>

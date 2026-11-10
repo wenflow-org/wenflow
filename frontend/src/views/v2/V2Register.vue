@@ -35,14 +35,14 @@
 
       <label class="field" :class="{ 'field--error': errors.name }">
         <span class="field__label">用户名</span>
-        <input v-model.trim="form.name" type="text" class="field__input" placeholder="2 - 20 个字符" autocomplete="username" autofocus @blur="touch('name')" />
+        <input v-model.trim="form.name" type="text" class="field__input" placeholder="2 - 64 个字符" autocomplete="username" autofocus @blur="touch('name')" @input="revalidateWhileTyping('name')" />
         <span v-if="errors.name" class="field__error">{{ errors.name }}</span>
       </label>
 
       <label class="field" :class="{ 'field--error': errors.password }">
         <span class="field__label">密码</span>
         <span class="field__pwd">
-          <input v-model="form.password" :type="showPwd ? 'text' : 'password'" class="field__input" autocomplete="new-password" @blur="touch('password')" />
+          <input v-model="form.password" :type="showPwd ? 'text' : 'password'" class="field__input" autocomplete="new-password" @blur="touch('password')" @input="revalidateWhileTyping('password')" />
           <button type="button" class="field__eye" :aria-label="showPwd ? '隐藏密码' : '显示密码'" @click="showPwd = !showPwd">
             <Eye v-if="showPwd" :size="17" :stroke-width="1.75" />
             <EyeOff v-else :size="17" :stroke-width="1.75" />
@@ -59,7 +59,7 @@
 
       <label class="field" :class="{ 'field--error': errors.confirm }">
         <span class="field__label">确认密码</span>
-        <input v-model="form.confirm" :type="showPwd ? 'text' : 'password'" class="field__input" autocomplete="new-password" @blur="touch('confirm')" />
+        <input v-model="form.confirm" :type="showPwd ? 'text' : 'password'" class="field__input" autocomplete="new-password" @blur="touch('confirm')" @input="revalidateWhileTyping('confirm')" />
         <span v-if="errors.confirm" class="field__error">{{ errors.confirm }}</span>
       </label>
 
@@ -108,7 +108,9 @@ const checks = computed(() => ({
 function touch(key: 'name' | 'password' | 'confirm') {
   if (key === 'name') {
     if (!form.name) errors.name = '请输入用户名';
-    else if (form.name.length < 2 || form.name.length > 20) errors.name = '用户名长度需为 2 到 20 个字符';
+    // 与后端契约一致：auth.ts registerSchema 为 .min(2).max(64)。界面自造的 20 位上限会把
+    // 21–64 位的合法用户名挡在门外（2026-10-31 走查 P1-4）。
+    else if (form.name.length < 2 || form.name.length > 64) errors.name = '用户名长度需为 2 到 64 个字符';
     else if (!/^[\p{L}\p{N}_-]+$/u.test(form.name)) errors.name = '用户名仅支持字母、数字、下划线和连字符';
     else errors.name = '';
   }
@@ -124,6 +126,15 @@ function touch(key: 'name' | 'password' | 'confirm') {
     else if (form.confirm !== form.password) errors.confirm = '两次输入密码不一致';
     else errors.confirm = '';
   }
+}
+
+/**
+ * 输入时只重算「已经有错」的字段：错误文案不该活到下一次失焦。
+ * 2026-10-31 走查 P1-5：确认密码已填满，红字「请再次输入密码」仍挂在下面，用户以为填错了去反复重填
+ * （该字段此前只有 @blur 会重算）。
+ */
+function revalidateWhileTyping(key: 'name' | 'password' | 'confirm') {
+  if (errors[key]) touch(key);
 }
 
 const safeRedirect = computed(() => {
@@ -224,6 +235,9 @@ onMounted(loadStatus);
 }
 .field--error .field__input { border-color: color-mix(in srgb, var(--red) 60%, transparent); }
 .field--error .field__input:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 12%, transparent); }
+/* 错误态只留一圈红色焦点环：v2.css 的 .v2-page :is(...):focus-visible 蓝描边特异性高于组件里的
+   outline:none，会叠成「蓝圈套红框」两层（2026-10-31 走查 P1-5）。这里用同级更高的选择器压掉它。 */
+.v2-page .field__input:focus-visible { outline: none; }
 .field__error { font-size: 12px; color: var(--red-ink); font-weight: 600; }
 
 .hint { margin: 0; font-size: 12px; color: var(--faint); }

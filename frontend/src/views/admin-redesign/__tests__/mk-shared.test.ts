@@ -65,17 +65,20 @@ describe('MkStatStrip', () => {
 })
 
 describe('MkEmptyState', () => {
+  /* 2026-11-06：`icon` 属性（页面传字符 ◌ / ! / ⚠）整体删除——66px 盘里一个字符读成细环，
+     与同页其它空态不是一种图形。图形是空态的固定构件，改由组件内的 lucide 图形提供
+     （错误态换 CloudOff），页面要换图形用 #icon 插槽。断言因此从「文字等于传入的字符」
+     改为「图标盘里有图形」。 */
   it('渲染图标 + 标题 + 解释 + 下一步，点击 emit action', async () => {
     const w = mount(MkEmptyState, {
       props: {
-        icon: '◌',
         title: '暂无反馈数据',
         description: '学习者提交反馈后自动呈现。',
         actionText: '刷新',
         min: true,
       },
     })
-    expect(w.find('.mk-empty__icon').text()).toBe('◌')
+    expect(w.find('.mk-empty__icon svg').exists()).toBe(true)
     expect(w.text()).toContain('暂无反馈数据')
     expect(w.text()).toContain('学习者提交反馈后自动呈现。')
     expect(w.classes()).toContain('mk-empty--min')

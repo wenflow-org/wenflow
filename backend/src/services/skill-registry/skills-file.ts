@@ -88,8 +88,19 @@ export interface SkillEntry {
   handlerRef: string;
   registrationPoint?: RegistrationPoint;
   coreFile?: string;
-  /** handler-only 强制 true；mainline/aux 禁 true（F7） */
+  /**
+   * 「没有提示词文件」。它是**字面语义**，不是 kind 的别名（#235）：
+   * handler-only 的默认值是 true（无提示词），但如果该能力有自己的独立提示词产物
+   * `prompts/skill.<id>.md`，就必须显式声明 `promptArtifact` 并把这里改成 false——
+   * 否则户口簿一边写着「没有提示词」，一边让运行时 loadPromptFile 读那个文件。
+   */
   noPromptFile?: boolean;
+  /**
+   * #235：独立提示词产物的仓库相对路径（形如 `prompts/skill.<id>.md`）。
+   * 用于「有提示词、但没有 core yaml 源」的 handler-only 能力（如 board-designer）。
+   * mainline/aux 的提示词由 coreFile 承载，禁填本字段。
+   */
+  promptArtifact?: string;
   platformGate?: boolean;
   displayName?: string;
   description?: string;
@@ -124,6 +135,7 @@ interface RawSkillEntry {
   registrationPoint?: unknown;
   coreFile?: unknown;
   noPromptFile?: unknown;
+  promptArtifact?: unknown;
   platformGate?: unknown;
   displayName?: unknown;
   description?: unknown;
@@ -249,7 +261,7 @@ function parseSkillsText(rawText: string, sourceLabel: string, topAgentIds: Set<
     const raw = entryRaw as RawSkillEntry;
     assertNoUnknownFields(raw, label, [
       'skillId', 'kind', 'stage', 'parentAgent', 'handlerRef', 'registrationPoint',
-      'coreFile', 'noPromptFile', 'platformGate', 'displayName', 'description', 'aliases',
+      'coreFile', 'noPromptFile', 'promptArtifact', 'platformGate', 'displayName', 'description', 'aliases',
       'dataSource', 'mcpTools', 'coordinator', 'notes',
     ]);
 
@@ -297,17 +309,32 @@ function parseSkillsText(rawText: string, sourceLabel: string, topAgentIds: Set<
     // F1e/F6/F7：coreFile 与 noPromptFile 的 kind 约束
     const coreFile = asOptionalString(raw.coreFile, `${label}.coreFile`);
     if (kind === 'handler-only' && coreFile !== undefined) {
-      throw new Error(`[skills.yaml] ${label}.coreFile 禁填（kind=handler-only 无 prompt 文件，F7）`);
+      throw new Error(`[skills.yaml] ${label}.coreFile 禁填（kind=handler-only 无 core 源，F7）`);
     }
     if (kind !== 'handler-only' && coreFile === undefined) {
       throw new Error(`[skills.yaml] ${label}.coreFile 必填（mainline/aux 必须有 prompts/core/<skillId>.yaml，F6）`);
     }
-    const noPromptFile = asOptionalBoolean(raw.noPromptFile, `${label}.noPromptFile`);
-    if (kind === 'handler-only' && noPromptFile === false) {
-      throw new Error(`[skills.yaml] ${label}.noPromptFile 与 kind=handler-only 冲突（必须为 true，F7）`);
+    // #235：noPromptFile 是「有没有提示词文件」的字面语义，不再等同于 kind=handler-only。
+    // handler-only 可以有独立提示词产物（prompts/skill.<id>.md，无 core 源）——这类条目
+    // 必须声明 promptArtifact 并把 noPromptFile 置 false；没有产物时默认 true。
+    const promptArtifact = asOptionalString(raw.promptArtifact, `${label}.promptArtifact`);
+    if (promptArtifact !== undefined) {
+      if (kind !== 'handler-only') {
+        throw new Error(`[skills.yaml] ${label}.promptArtifact 只用于 kind=handler-only（mainline/aux 的提示词走 coreFile）`);
+      }
+      if (promptArtifact !== `prompts/skill.${skillId}.md`) {
+        throw new Error(`[skills.yaml] ${label}.promptArtifact 必须为 prompts/skill.${skillId}.md（实际 ${promptArtifact}）`);
+      }
     }
+    const noPromptFile = asOptionalBoolean(raw.noPromptFile, `${label}.noPromptFile`);
     if (kind !== 'handler-only' && noPromptFile === true) {
       throw new Error(`[skills.yaml] ${label}.noPromptFile=true 与 kind=${kind} 冲突（mainline/aux 必须有 prompt，F7）`);
+    }
+    if (kind === 'handler-only' && promptArtifact !== undefined && noPromptFile === true) {
+      throw new Error(`[skills.yaml] ${label}.noPromptFile=true 与 promptArtifact 冲突（声明了提示词产物就不是「无提示词」，#235）`);
+    }
+    if (kind === 'handler-only' && promptArtifact === undefined && noPromptFile === false) {
+      throw new Error(`[skills.yaml] ${label}.noPromptFile=false 但未声明 promptArtifact（无法证明提示词文件存在，#235）`);
     }
 
     const platformGate = asOptionalBoolean(raw.platformGate, `${label}.platformGate`);
@@ -370,7 +397,9 @@ function parseSkillsText(rawText: string, sourceLabel: string, topAgentIds: Set<
       handlerRef,
       ...(registrationPoint !== undefined ? { registrationPoint } : {}),
       ...(coreFile !== undefined ? { coreFile } : {}),
-      noPromptFile: kind === 'handler-only' ? true : (noPromptFile ?? false),
+      // #235：handler-only 默认「无提示词」，声明了独立产物才算有
+      noPromptFile: kind === 'handler-only' ? promptArtifact === undefined : (noPromptFile ?? false),
+      ...(promptArtifact !== undefined ? { promptArtifact } : {}),
       ...(platformGate !== undefined ? { platformGate } : {}),
       ...(displayName !== undefined ? { displayName } : {}),
       ...(description !== undefined ? { description } : {}),

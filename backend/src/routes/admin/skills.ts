@@ -12,6 +12,7 @@ import { AgentConfigService } from '../../services/agentConfig.service';
 import { getAgentManifest, getAgentOfSkill, getCanonicalAgentId } from '../../services/agent-manifest.service';
 import {
   getUnifiedSkillStats,
+  getSkillSampleInput,
   resolveEffectiveSkillRuntimeConfig,
   toLegacySkillRuntimeStats,
   type SkillStatsRange,
@@ -359,6 +360,22 @@ router.post('/scaffold', async (req: Request, res: Response) => {
 /**
  * 测试执行 Skill
  */
+/**
+ * GET /:name/sample-input — 试跑页「填入示例输入」的取数（2026-11-08）
+ *
+ * 取该 Skill 最近一次**成功真实调用**吃过的载荷（跳过遥测瘦身的 __slim 摘要），
+ * 让运营不必手写 JSON。找不到时返回 { json: null }，前端用输入契约骨架兜底。
+ */
+router.get('/:name/sample-input', async (req: Request, res: Response) => {
+  try {
+    const sample = await getSkillSampleInput(String(req.params.name || ''));
+    res.json({ success: true, data: sample });
+  } catch {
+    // 便利功能：任何失败都按「无示例」返回，不新增错误面
+    res.json({ success: true, data: null });
+  }
+});
+
 router.post('/:name/test', async (req: Request, res: Response) => {
   try {
     const { name } = req.params;
@@ -995,7 +1012,11 @@ router.get('/:skillId/workbench-meta', async (req: Request, res: Response) => {
         stats: {
           totalCalls: stats?.callCount || 0,
           successCalls: stats?.successCount || 0,
-          successRate: stats?.successRate ?? null,
+          /* 单位写进字段名（2026-11-08 审计）：这里是**百分数**（75.6 = 75.6%），
+             而技能列表 /admin/skills 的 stats.successRate 是**比值**（0..1，空窗 1）——
+             同名两单位曾让「按比值反推失败数」的消费方算出负数。新名 successRatePct
+             与比值断开关联；需要比值时用 successCalls / totalCalls 自己算。 */
+          successRatePct: stats?.successRate ?? null,
           avgDuration: stats?.avgDurationMs || 0,
           lastCalledAt: stats?.lastCalledAt || null,
           source: stats?.source || 'none',
@@ -1061,14 +1082,16 @@ router.get('/reconciliation', async (req: Request, res: Response) => {
       });
       const registered = registeredNames.has(entry.skillId);
       const registrationExempt = exemptRegistrationPoints.has(entry.registrationPoint || 'skillHandlers');
-      const active = entry.noPromptFile === true ? true : activeIds.has(`skill:${entry.skillId}`);
+      // #235：handler-only 不需要 DB ACTIVE prompt 即算「活跃」（逻辑在代码 handler）。
+      // 判据用 kind，不用 noPromptFile——后者现在只指「没有提示词文件」。
+      const active = entry.kind === 'handler-only' ? true : activeIds.has(`skill:${entry.skillId}`);
       if (registered) registeredCount += 1;
       if (active) activeCount += 1;
       byStatus[completion.status] = (byStatus[completion.status] || 0) + 1;
 
       let diff: 'unregistered' | 'active-missing' | null = null;
       if (!registered && !registrationExempt) diff = 'unregistered';
-      else if (!active && entry.noPromptFile !== true) diff = 'active-missing';
+      else if (!active && entry.kind !== 'handler-only') diff = 'active-missing';
 
       items.push({
         skillId: entry.skillId,

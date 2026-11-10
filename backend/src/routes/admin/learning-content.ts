@@ -81,6 +81,10 @@ router.get('/paths', async (req: Request, res: Response) => {
           estimatedHours: p.estimatedHours,
           totalMilestones: p.totalMilestones,
           completedMilestones: p.completedMilestones,
+          // 子任务口径进度（2026-10-31 外部评审 P1-2）：与学员概览/座舱 Path 步点同源，
+          // 避免列表只按已完结里程碑算成 0%
+          totalTasks: p.milestones.reduce((acc, m) => acc + m.subtasks.length, 0),
+          completedTasks: p.milestones.reduce((acc, m) => acc + m.subtasks.filter((t) => t.status === 'completed').length, 0),
           aiGenerated: p.aiGenerated,
           createdAt: p.createdAt,
           updatedAt: p.updatedAt,
@@ -202,10 +206,15 @@ router.post('/paths/:id/retry-generation', async (req: Request, res: Response) =
         return res.json({ success: true, data: { success: true, retryType: 'core', runId: run.runId, mode: run.mode } });
       } catch (fallbackError: any) {
         const conflict = isPathMutationConflictError(fallbackError);
+        // #227：goal 层闸门拒绝（路径自身既无判定产物、也无来源会话凭证）是语义错误，
+        // 与学员端入口一致按 422 透出，别再伪装成服务端 500。
+        const triageRejected = fallbackError?.code === 'GOAL_TRIAGE_REQUIRED'
+          || fallbackError?.code === 'GOAL_NOT_JUDGEABLE';
+        const status = conflict ? 409 : (triageRejected ? 422 : 500);
         logger.warn('[admin-learning-content] 无虚拟会话，回退主结构重建失败', { pathId: path.id, error: fallbackError?.message });
-        return res.status(conflict ? 409 : 500).json({
+        return res.status(status).json({
           success: false,
-          error: { message: fallbackError?.message || '重试路径生成失败', status: conflict ? 409 : 500 }
+          error: { message: fallbackError?.message || '重试路径生成失败', status }
         });
       }
     }

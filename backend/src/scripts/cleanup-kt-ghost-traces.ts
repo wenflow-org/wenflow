@@ -10,6 +10,7 @@
  * 安全边界：默认 dry-run；--apply 前把待删行整行备份到 outputs/kt-ghost-traces-<date>.json。
  * 只删 source='kt-estimate' AND extractionCount=0，不碰有证据的 KT 行。
  */
+import { KT_GHOST_TRACE_WHERE } from '../services/memory/kt-ghost';
 import 'dotenv/config';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -21,7 +22,7 @@ function hasFlag(name: string): boolean {
 
 async function main(): Promise<void> {
   const rows = await prisma.memory_traces.findMany({
-    where: { source: 'kt-estimate', extractionCount: 0 },
+    where: KT_GHOST_TRACE_WHERE,
     select: {
       id: true,
       userId: true,
@@ -53,7 +54,7 @@ async function main(): Promise<void> {
   fs.writeFileSync(backupFile, JSON.stringify(rows, null, 2), 'utf8');
 
   const result = await prisma.memory_traces.deleteMany({
-    where: { source: 'kt-estimate', extractionCount: 0 },
+    where: KT_GHOST_TRACE_WHERE,
   });
   console.log(JSON.stringify({ deleted: result.count, attempted: rows.length, backupFile }, null, 2));
 }

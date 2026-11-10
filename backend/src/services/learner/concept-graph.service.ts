@@ -18,6 +18,8 @@
  * 纪律：物化是 best-effort——失败只 warn，不阻断路径生成；幂等靠复合唯一键。
  */
 import prisma from '../../config/database';
+import { isKtGhostTrace } from '../memory/kt-ghost';
+import { pickLatestMasterySignal, resolveMasteryScore } from './concept-mastery';
 import { conceptRegistryService } from './concept-registry.service';
 import { kcAnchorKey } from './kc-anchor';
 
@@ -110,6 +112,12 @@ export interface ConceptGraphDeps {
    * 可选依赖：缺省不登记（旧测试 fake 零改动）。
    */
   registerKcAnchor?(data: { userId: string; pathId: string; kcId: string; conceptId: string }): Promise<void>;
+  /**
+   * 清掉该路径**此前物化**的边（#173-2）：按 `(userId, pathId)` 删 `scope='path'` 行，返回删除行数。
+   * 不删 `scope='user'`（pathId=null）的行——那是跨路径共享聚合，不归属任何单条路径。
+   * 可选依赖：缺省时不清边（旧测试 fake 零改动）；生产 defaultDeps 已实现。
+   */
+  deletePathEdges?(userId: string, pathId: string): Promise<number>;
 }
 
 const defaultDeps: ConceptGraphDeps = {
@@ -163,6 +171,14 @@ const defaultDeps: ConceptGraphDeps = {
       update: { source: data.source },
     });
   },
+  // #173-2：本路径此前的物化边按 (userId, pathId) 整批清掉，再按当前标注重建。
+  // 只删 scope='path'：user 级行（pathId=null）是跨路径聚合，不归属单条路径。
+  deletePathEdges: async (userId, pathId) => {
+    const deleted = await prisma.concept_edges.deleteMany({
+      where: { userId, pathId, scope: SCOPE_PATH },
+    });
+    return deleted.count;
+  },
   listEdges: async (where) => prisma.concept_edges.findMany({
     where: {
       userId: where.userId,
@@ -184,24 +200,36 @@ const defaultDeps: ConceptGraphDeps = {
   listTraceMastery: async (userId) => {
     const rows = await prisma.memory_traces.findMany({
       where: { userId, conceptId: { not: null } },
-      select: { conceptId: true, masteryScore: true, stability: true, extractionCount: true, lastSeenAt: true },
+      select: { conceptId: true, masteryScore: true, stability: true, extractionCount: true, lastSeenAt: true, source: true },
     });
-    // 同一 canonical 可能有多行（不同自由文本键）→ 取掌握度最高者（与"这个概念我会不会"语义一致）
-    const byConcept = new Map<string, { conceptId: string; masteryScore: number; stability: string; extractionCount: number; lastSeenAt: string | null }>();
+    /* 同一 canonical 可能有多行（不同自由文本键）。2026-11-09 画像链路核查：原先取
+       `masteryScore` 最大值，与画像的「最近一条有业务时间的证据说了算」（#59/#60/#195）语义冲突——
+       一个概念曾经掌握、后来退化成 fragile，取最大值会永远显示高分，于是画像页和图谱页长期对不上。
+       改为共用 services/learner/concept-mastery.ts 的唯一口径：业务时间（lastSeenAt）最新的一条。 */
+    const byConcept = new Map<string, typeof rows>();
     for (const row of rows) {
+      // 2026-11-09 运营字段真值核查：与 LearnerKnowledgeMemoryService（#59/#60）和 review-plan
+      // 同口径排除「KT 幽灵痕」——applyKtEstimate 直写、从未真正提取过的痕迹承载的是**模型自报
+      // 的掌握概率**，不是学习证据。此前只有概念图谱这条读路径漏了这道门，导致节点上的百分比
+      // 可能是模型编的数，而同一概念在画像/复习队列里已被排除。
+      if (isKtGhostTrace(row)) continue;
       const conceptId = row.conceptId!;
-      const current = byConcept.get(conceptId);
-      if (!current || row.masteryScore > current.masteryScore) {
-        byConcept.set(conceptId, {
-          conceptId,
-          masteryScore: row.masteryScore,
-          stability: row.stability,
-          extractionCount: row.extractionCount,
-          lastSeenAt: row.lastSeenAt ? row.lastSeenAt.toISOString() : null,
-        });
-      }
+      const group = byConcept.get(conceptId);
+      if (group) group.push(row);
+      else byConcept.set(conceptId, [row]);
     }
-    return [...byConcept.values()];
+    return [...byConcept.entries()].map(([conceptId, group]) => {
+      const signals = group.map((row) => ({ masteryScore: row.masteryScore, seenAt: row.lastSeenAt }));
+      const chosen = pickLatestMasterySignal(signals) ?? signals[0];
+      const chosenRow = group[signals.indexOf(chosen)] ?? group[0];
+      return {
+        conceptId,
+        masteryScore: resolveMasteryScore(signals),
+        stability: chosenRow.stability,
+        extractionCount: chosenRow.extractionCount,
+        lastSeenAt: chosenRow.lastSeenAt ? chosenRow.lastSeenAt.toISOString() : null,
+      };
+    });
   },
   listPathTitles: async (pathIds) => pathIds.length === 0 ? [] : prisma.learning_paths.findMany({
     where: { id: { in: pathIds } },
@@ -261,6 +289,14 @@ export class ConceptGraphService {
    * - `part_of`：来自 `conceptKcs` 嵌套（父 = coreConcept，子 = 各 KC），代码推导
    * - `prerequisite`（概念级投影）：把上一条的两端各自折叠到所属 coreConcept，跳过自环；
    *   原因见 `SOURCE_PREREQUISITE_PROJECTION` 注释
+   *
+   * **重建语义（#173-2）**：写之前先按 `(userId, pathId)` 清掉本路径此前的 `scope='path'` 边，
+   * 故物化结果恒等于「当前标注的图」，而不是与历次物化**叠加**。此前只 upsert：
+   * replace-path / 重跑 kc-mapper 之后，旧 KC 的边按同一 pathId 残留成幽灵边
+   * （上游闭包 / 邻域 / 图视图读侧会把它们算进来）。范围只到 path 级行——`scope='user'`
+   * （pathId=null）的跨路径聚合边不属于任何单条路径，不清。
+   * 注：`aiPromptTemplate.kcAnnotation` 的落库仍在生成事务之外（stage-enrichment 的 SQLite 写锁取舍），
+   * 本方法只负责表侧的清+建。
    */
   async materializePathGraph(params: {
     userId: string;
@@ -271,6 +307,12 @@ export class ConceptGraphService {
     const { userId, pathId, kcAnnotation, cognitiveCore } = params;
     const result: MaterializeResult = { prerequisite: 0, partOf: 0, prerequisiteConcept: 0, prerequisiteUser: 0, skipped: 0 };
     if (!userId || !pathId || !kcAnnotation) return result;
+
+    // 清旧边（#173-2）：失败按本模块的 best-effort 纪律交给调用方（generation / replan 链均只 warn），
+    // 不在这里吞错——半清半写比整轮失败更难排查。
+    if (this.deps.deletePathEdges) {
+      await this.deps.deletePathEdges(userId, pathId);
+    }
 
     const conceptKcs = Array.isArray(kcAnnotation.conceptKcs) ? kcAnnotation.conceptKcs! : [];
 
@@ -559,7 +601,10 @@ export class ConceptGraphService {
     for (const concept of allConcepts) if (concept.originPathId) pathIds.add(concept.originPathId);
     const pathTitles = await this.deps.listPathTitles([...pathIds]);
     const titleById = new Map(pathTitles.map((item) => [item.id, item.title]));
+    // 2026-11-04：只保留 learning_paths 里仍存在的路径。边/概念可能残留指向已删除路径的 pathId，
+    // 这类路径选进筛选后 concept-graph 会 404「路径不存在」、整块图谱不可用；不给不可用项留入口。
     const paths = [...pathIds]
+      .filter((id) => titleById.has(id))
       .map((id) => ({ id, title: titleById.get(id) ?? null }))
       .sort((a, b) => String(a.title ?? a.id).localeCompare(String(b.title ?? b.id)));
 

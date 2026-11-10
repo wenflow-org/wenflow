@@ -151,9 +151,6 @@ const USER_PAGES = [
   ['user-settings', '/user/settings'],
   ['user-achievements', '/user/achievements'],
   ['user-learning-history', '/user/learning-history'],
-  ['v2-dashboard', '/v2/dashboard'],
-  ['v2-achievements', '/v2/achievements'],
-  ['v2-learning-state', '/v2/learning-state'],
 ];
 
 // ── 参数 ──

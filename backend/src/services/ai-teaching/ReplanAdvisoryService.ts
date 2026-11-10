@@ -76,6 +76,48 @@ interface BuildInput {
     /** 阶段序号（#58：建议落点随建议一起落库，确认时不再靠缺省推断） */
     stageNumber?: number;
   } | null;
+  /**
+   * 本条路径涉及的概念名（2026-11-03 真人走查根因修复）。
+   *
+   * `learnerReplanProjection.mastery.strugglingConcepts` 是**全学习者**的投影，不按路径切；
+   * 账号同时有多条路径时，别的路径上的卡点会被点名到本节课的评估页上。实测原文：
+   * 「系统检测到 区分分数与能力推断、识别字段的变量角色 这些点仍会影响后续推进」——这两个短语
+   * 在本节课任何画面都没出现过，它们属于该账号另一条「用教育测量学核对 AI 测评建议」路径。
+   * 传入本条路径的概念名后，点名只允许落在这些概念上；为空时不做收窄（旧调用方行为不变）。
+   */
+  pathConceptNames?: readonly string[];
+}
+
+/** 概念名比较用归一：去空白与常见标点，避免「区分 A 与 B」和「区分A与B」判成不同。 */
+function normalizeConceptName(name: unknown): string {
+  return String(name ?? '').replace(/[\s，。、；：·\-—_（）()【】[\]「」“”"']/g, '').toLowerCase();
+}
+
+/**
+ * 组装建议点名的概念（两处产出共用一份口径，避免过滤规则两处漂移）。
+ *
+ * 收窄只作用于 `strugglingConcepts`（投影 = 全学习者，必须收窄）；
+ * `movedToReview` 由教学层本节课写进复习队列、天然属于本条路径，不参与收窄——
+ * 否则本节课自己的复习项会被路径概念名不匹配误删，文案退化成通用句。
+ */
+function buildFocusPoints(
+  strugglingConcepts: readonly string[],
+  movedToReview: readonly unknown[],
+  pathConceptNames?: readonly string[],
+): string[] {
+  const allow = (pathConceptNames ?? [])
+    .map((name) => normalizeConceptName(name))
+    .filter((name) => name.length >= 2);
+  const isOnThisPath = (name: unknown): boolean => {
+    if (allow.length === 0) return true;
+    const normalized = normalizeConceptName(name);
+    if (!normalized) return false;
+    return allow.some((allowed) => normalized === allowed || normalized.includes(allowed) || allowed.includes(normalized));
+  };
+  return [
+    ...strugglingConcepts.filter(isOnThisPath).slice(0, 2),
+    ...movedToReview.filter(isRealConceptName).slice(0, 2),
+  ].filter(Boolean);
 }
 
 /** 「无建议」单例：延伸课一期只观测（#124），与其它不满足建议条件的场景共用。 */
@@ -93,6 +135,34 @@ export const NO_ADVISORY: ReplanAdvisory = {
     options: [],
   },
 };
+
+/**
+ * 建议卡下发的选项键（单一事实源，见 build 的三处 ui.options）。
+ *
+ * #251：前端直接渲染 `advisory.ui.options` 并把 `option.key` 原样回传
+ * `POST /advisory-response`。端点若只认一个更窄的子集，就是「自己下发的按钮自己拒收」——
+ * 实测 keep/preview 能用，confirm/accelerate/reinforce/resequence 一律 400。
+ * 因此可接受动作必须由这个常量派生，而不是两处各写一份枚举。
+ */
+export const ADVISORY_UI_OPTION_KEYS = [
+  'keep',
+  'later',
+  'preview',
+  'confirm',
+  'accelerate',
+  'reinforce',
+  'resequence',
+] as const;
+export type AdvisoryUiOptionKey = (typeof ADVISORY_UI_OPTION_KEYS)[number];
+
+/**
+ * `/advisory-response` 可接受的处置动作 = 全部选项键 + `adopt`。
+ *
+ * `adopt` 不由建议卡下发：它只在「真执行了路径重排」之后由前端/虚拟学习者记账
+ * （P1-7 漏斗执行档），所以不属于 ui.options，但仍必须可落库。
+ */
+export const ADVISORY_RESPONSE_ACTIONS = [...ADVISORY_UI_OPTION_KEYS, 'adopt'] as const;
+export type AdvisoryResponseAction = (typeof ADVISORY_RESPONSE_ACTIONS)[number];
 
 /** 补救型建议动作：它们的语义前提是「这节课让人吃力」，故只在有吃力证据时才允许发出。 */
 export const REMEDIAL_ADVISORY_ACTIONS = ['reinforce', 'slow_down'] as const;
@@ -249,11 +319,9 @@ export class ReplanAdvisoryService {
       const recommendation = learnerSignal.recommendation === 'keep' ? 'reinforce' : learnerSignal.recommendation;
       const scope = learnerSignal.scope === 'none' ? 'next_milestone' : learnerSignal.scope;
       const priority = learnerSignal.priority === 'none' ? 'low' : learnerSignal.priority;
-      // 点名只列真卡点与真实复习项：fragile 是饱和通道（会挤掉真名字），movedToReview 过兜底词/占位 id。
-      const focusPoints = [
-        ...strugglingConcepts.slice(0, 2),
-        ...wrapup.progress.movedToReview.filter(isRealConceptName).slice(0, 2),
-      ].filter(Boolean);
+      // 点名只列真卡点与真实复习项：fragile 是饱和通道（会挤掉真名字），movedToReview 过兜底词/占位 id；
+      // 投影来源的卡点再按本条路径收窄（见 BuildInput.pathConceptNames 注释）。
+      const focusPoints = buildFocusPoints(strugglingConcepts, wrapup.progress.movedToReview, input.pathConceptNames);
       // accelerate（压缩）走专用文案：界面语义是「把下一阶段压得更聚焦」，不是通用的「确认调整」。
       const isAccelerate = recommendation === 'accelerate';
       return {
@@ -262,12 +330,15 @@ export class ReplanAdvisoryService {
         recommendation,
         scope,
         targetStageNumber: nextMilestone.stageNumber ?? null,
+        // 安抚句（「该调整只会调整后续阶段…不影响/不会覆盖已完成内容」）不在模板里写：
+        // CompletionCard 会在动作按钮上方统一展示同义提示，这里再写一遍就是用户看到的
+        // 同义重复 + 段落孤行（2026-11-03 真人反馈）。
         rationale: learnerSignal.rationale || '学习者状态中心判断当前路径后续安排需要重新确认。',
         reasonCodes: learnerSignal.reasonCodes || [],
         ui: isAccelerate
           ? {
               title: '可以考虑加速下一阶段',
-              body: `你在当前阶段的掌握比较稳定，而且本节课学习压力与疲劳都不高。建议把下一阶段“${nextMilestone.title}”调整成更聚焦的安排。该调整只会调整后续阶段的课程安排，不影响你已完成的内容。`,
+              body: `你在当前阶段的掌握比较稳定，而且本节课学习压力与疲劳都不高。建议把下一阶段“${nextMilestone.title}”调整成更聚焦的安排。`,
               options: [
                 { key: 'keep', label: '保持原计划', description: '继续按当前路径推进。' },
                 { key: 'accelerate', label: '压缩下一阶段', description: '减少重复内容，更快进入重点。' },
@@ -277,8 +348,8 @@ export class ReplanAdvisoryService {
           : {
               title: priority === 'high' ? '建议先确认路径调整' : '可以考虑调整后续路径',
               body: focusPoints.length > 0
-                ? `系统检测到 ${focusPoints.join('、')} 这些点仍会影响后续推进。建议先确认是否调整“${nextMilestone.title}”及后续阶段安排。该调整只会调整后续阶段的课程安排，不会覆盖你已完成的内容。`
-                : `系统判断当前学习者状态与知识背景提示“${nextMilestone.title}”之后的推进方式需要重新确认。该调整只会调整后续阶段的课程安排，不会覆盖你已完成的内容。`,
+                ? `系统检测到 ${focusPoints.join('、')} 这些点仍会影响后续推进。建议先确认是否调整“${nextMilestone.title}”及后续阶段安排。`
+                : `系统判断当前学习者状态与知识背景提示“${nextMilestone.title}”之后的推进方式需要重新确认。`,
               options: [
                 { key: 'keep', label: '保持原计划', description: '继续按当前路径推进。' },
                 { key: 'preview', label: '查看调整建议', description: '先查看系统建议，再决定是否调整。' },
@@ -321,11 +392,9 @@ export class ReplanAdvisoryService {
       if (wrapup.progress.movedToReview.length > 0) reasonCodes.push('moved_to_review');
       if (repeatedConfusion) reasonCodes.push('repeated_confusion');
 
-      // 与信号分支同口径：点名只列真卡点与真实复习项（fragile 饱和会挤掉真名字）。
-      const focusPoints = [
-        ...strugglingConcepts.slice(0, 2),
-        ...wrapup.progress.movedToReview.filter(isRealConceptName).slice(0, 2),
-      ].filter(Boolean);
+      // 与信号分支同口径：点名只列真卡点与真实复习项（fragile 饱和会挤掉真名字），
+      // 投影来源的卡点同样按本条路径收窄。
+      const focusPoints = buildFocusPoints(strugglingConcepts, wrapup.progress.movedToReview, input.pathConceptNames);
 
       return {
         shouldSuggest: true,
@@ -338,8 +407,8 @@ export class ReplanAdvisoryService {
         ui: {
           title: '建议先调整下一阶段安排',
           body: focusPoints.length > 0
-            ? `你刚完成当前阶段，但 ${focusPoints.join('、')} 这些点还不够稳定。建议在进入“${nextMilestone.title}”前，先补强相关安排。该调整只会调整后续阶段的课程安排，不影响你已完成的内容。`
-            : `你刚完成当前阶段，但当前学习信号显示直接进入“${nextMilestone.title}”的风险偏高。建议先调整下一阶段安排。该调整只会调整后续阶段的课程安排，不影响你已完成的内容。`,
+            ? `你刚完成当前阶段，但 ${focusPoints.join('、')} 这些点还不够稳定。建议在进入“${nextMilestone.title}”前，先补强相关安排。`
+            : `你刚完成当前阶段，但当前学习信号显示直接进入“${nextMilestone.title}”的风险偏高。建议先调整下一阶段安排。`,
           options: [
             { key: 'keep', label: '保持原计划', description: '继续按当前路径进入下一阶段。' },
             { key: 'reinforce', label: '补强后再进', description: '先补一个关键小节，再进入下一阶段。' },

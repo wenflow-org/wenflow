@@ -384,7 +384,7 @@ const config = {
       "value": "prisma-client-js"
     },
     "output": {
-      "value": "D:\\test\\wenflow\\backend\\src\\generated\\system-client",
+      "value": "E:\\UI\\wenflow\\backend\\src\\generated\\system-client",
       "fromEnvVar": null
     },
     "config": {
@@ -398,7 +398,7 @@ const config = {
       }
     ],
     "previewFeatures": [],
-    "sourceFilePath": "D:\\test\\wenflow\\backend\\prisma\\system\\schema.prisma",
+    "sourceFilePath": "E:\\UI\\wenflow\\backend\\prisma\\system\\schema.prisma",
     "isCustomOutput": true
   },
   "relativeEnvPaths": {

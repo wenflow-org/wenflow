@@ -40,7 +40,7 @@
           <!-- 表单 -->
           <div class="faw__grid">
             <label class="mk-field faw__full">
-              <span class="mk-field__label">字段名 <em class="mk-field__req">*</em>（kebab-case 或点分路径，首段为 core 顶层字段）</span>
+              <span class="mk-field__label">字段名 <em class="mk-field__req">*</em>（小写字母开头，可点分嵌套，首段为 core 顶层字段）</span>
               <input v-model="form.name" type="text" class="mk-input mono" placeholder="例如：summary / understanding" spellcheck="false" :disabled="mode === 'edit'" @input="checkName" />
               <span v-if="mode === 'edit'" class="mk-field__hint">编辑模式：字段名即身份标识，不可修改</span>
               <span v-else class="mk-field__hint" :class="nameHintCls">{{ nameHint }}</span>
@@ -110,13 +110,24 @@
           <p v-if="form.internal && handoffList.length" class="faw__warn">内部标记与移交互斥：建议留空移交去向（控制信号除外）</p>
           <p v-if="isNested" class="faw__warn">嵌套字段：core 侧写在顶层 object 的说明子字段里，编排侧用点分字段名，turn 仅顶层可勾选</p>
 
-          <!-- 双文件 YAML 预览（只读） -->
+          <!-- 双文件 YAML 预览（只读）：两个文件各占一列，各带自己的路径标签。
+               2026-11-02 评审：原来两段首尾相接挤在一个代码块里，编排文件的改动落在折叠线下，
+               界面上只看到 core 那三行，与右上角「各追加 1 行」的说明对不上。 -->
           <div class="faw__preview">
             <div class="faw__preview-head">
               <span class="faw__preview-title">双文件{{ mode === 'edit' ? '更新' : '生成' }}预览（只读）</span>
               <span class="faw__preview-meta">{{ previewMeta }}</span>
             </div>
-            <pre class="faw__preview-code mono">{{ previewYaml }}</pre>
+            <div class="faw__preview-cols">
+              <div class="faw__preview-col">
+                <span class="faw__preview-path mono">prompts/core/{{ skillId }}.yaml</span>
+                <pre class="faw__preview-code mono">{{ previewCoreYaml }}</pre>
+              </div>
+              <div class="faw__preview-col">
+                <span class="faw__preview-path mono">prompts/orchestration/{{ stage }}.yaml</span>
+                <pre class="faw__preview-code mono">{{ previewOrchYaml }}</pre>
+              </div>
+            </div>
           </div>
         </template>
 
@@ -360,13 +371,20 @@ const nameDup = computed(() => {
   return ''
 })
 
-const nameHint = ref('每段小写字母开头，仅含字母/数字/下划线，可点分嵌套')
-const nameHintCls = computed(() => ({ 'faw__hint--ok': !nameProblems.value, 'faw__hint--err': Boolean(nameProblems.value) }))
+const nameHint = ref('每段小写字母开头，仅含字母、数字或下划线，可点分嵌套')
+/** 字段名是否被用户动过：没填没动之前提示语保持中性色。
+ *  2026-11-02 评审：必填项还空着时提示语就是红的（nameProblems 空值返回「字段名必填」），
+ *  看上去像校验已经失败——红色只留给「填了但不对」。 */
+const nameTouched = ref(false)
+const nameHintCls = computed(() => ({
+  'faw__hint--ok': nameTouched.value && !nameProblems.value,
+  'faw__hint--err': nameTouched.value && Boolean(nameProblems.value)
+}))
 const nameProblems = computed(() => {
   if (isEdit.value) return ''
   const name = form.value.name.trim()
   if (!name) return '字段名必填'
-  if (!nameSegmentsOk.value) return '命名非法：每段须小写字母开头，仅含字母/数字/下划线，可点分嵌套'
+  if (!nameSegmentsOk.value) return '命名非法：每段须小写字母开头，仅含字母、数字或下划线，可点分嵌套'
   if (nameDup.value === 'full') return '与现有字段重复（核心声明或编排里已登记），如需调整请编辑现有字段'
   if (nameDup.value === 'root' && !isNested.value) return '顶层名与现有核心字段首段重复'
   return ''
@@ -396,12 +414,22 @@ const formProblems = computed(() => {
   return list
 })
 
-const previewYaml = computed(() => {
+/** 双文件预览拆成两列（2026-11-02 评审）：一个 pre 里两段首尾相接时，
+ *  编排文件那几行被折叠在可视区之外，看起来像「只生成了 core」。
+ *  两块各自带路径标签，改动落在哪个文件一眼可辨。 */
+const previewCoreYaml = computed(() => {
   const name = form.value.name.trim() || 'new_field'
   const type = `${form.value.type}${form.value.optional ? '?' : ''}`
-  const vt = valueTypeOf(form.value.type)
   const desc = form.value.desc.trim() || '字段说明'
   const turn = form.value.turn && !isNested.value ? `\n    turn: true` : ''
+  return `  - name: ${name}
+    type: ${type}${turn}
+    desc: ${desc}`
+})
+const previewOrchYaml = computed(() => {
+  const name = form.value.name.trim() || 'new_field'
+  const vt = valueTypeOf(form.value.type)
+  const desc = form.value.desc.trim() || '字段说明'
   const fieldExtra = [
     form.value.persistKey.trim() ? `\n    persistKey: ${form.value.persistKey.trim()}` : '',
     form.value.pathInRawOutput.trim() ? `\n    pathInRawOutput: ${form.value.pathInRawOutput.trim()}` : '',
@@ -410,18 +438,11 @@ const previewYaml = computed(() => {
   ].join('')
   const routingExtra = form.value.visibilityPreset ? `\n    visibilityPreset: ${form.value.visibilityPreset}` : ''
   const handoff = handoffList.value.length ? `[${handoffList.value.join(', ')}]` : '[]'
-  return `# ── prompts/core/${props.skillId}.yaml（fields）──
-  - name: ${name}
-    type: ${type}${turn}
-    desc: ${desc}
-
-# ── prompts/orchestration/${props.stage}.yaml（fields）──
-  - fieldId: ${name}
+  return `  - fieldId: ${name}
     promptRole: ${form.value.role}
     valueType: ${vt ?? 'enum 无编排侧拼写'}${fieldExtra}
     description: ${desc}
 
-# ── prompts/orchestration/${props.stage}.yaml（routings）──
   - agentId: skill:${props.skillId}
     fieldId: ${name}
     render: ${form.value.render}
@@ -438,6 +459,7 @@ watch(
 )
 
 function checkName() {
+  nameTouched.value = true
   nameHint.value = nameProblems.value || '可用（保存时后端还会做最终查重/校验）'
 }
 
@@ -556,6 +578,10 @@ async function submit() {
 .faw__preview-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 12px; background: var(--mk-bg); border-bottom: 1px solid var(--mk-line, #e6ebf4); }
 .faw__preview-title { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-ink, #1a2a44); }
 .faw__preview-meta { font-size: var(--mk-fs-micro); color: var(--mk-faint, var(--mk-faint-soft)); }
+/* 双文件分两列（窄档叠成一列）：每个文件各带路径标签，各自的改动都在首屏可见 */
+.faw__preview-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 10px 12px; }
+.faw__preview-col { display: grid; gap: 6px; min-width: 0; }
+.faw__preview-path { font-size: var(--mk-fs-micro); color: var(--mk-faint, var(--mk-faint-soft)); overflow-wrap: anywhere; }
 /* 代码块走全局 --mk-code-* token（原 #0f172a/#dbeafe 硬编码已归 token，明暗两档自动切换） */
 .faw__preview-code { margin: 0; padding: 12px; background: var(--mk-code-bg); color: var(--mk-code-fg); font-size: var(--mk-fs-micro); line-height: 1.55; overflow: auto; max-height: 240px; }
 .faw__msg { margin: 0; padding: 9px 12px; border: 1px solid color-mix(in srgb, var(--mk-blue) 35%, transparent); border-radius: var(--mk-radius-xl); background: var(--mk-blue-bg); color: var(--mk-blue, #2f6ae0); font-size: var(--mk-fs-micro); font-weight: 600; line-height: 1.5; white-space: pre-wrap; }
@@ -570,6 +596,7 @@ async function submit() {
 
 @media (max-width: 860px) {
   .faw__grid { grid-template-columns: 1fr; }
+  .faw__preview-cols { grid-template-columns: 1fr; }
 }
 
 /* 4K：向导弹窗内容跟随全站节奏（Teleport 覆盖层） */

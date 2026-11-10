@@ -26,6 +26,8 @@ import { buildPromptFriendlyMaterials } from '../../services/materials/material-
 import { assessMaterialRefCoverage } from '../../services/materials/material-ref-coverage.service';
 import { normalizeMaterialRefs } from '../../services/materials/material-refs';
 import type { PromptMaterial } from '../../services/materials/material-prompt-projection';
+import { resolveSubjectScope, formatScopeForPrompt, measureScopeCoverage } from '../../services/learning/subject-scopes';
+import type { SubjectScope } from '../../services/learning/subject-scopes';
 
 const AGENT_ID = 'skill:path-planning';
 const PATH_AGENT_MAX_TOKENS = 64000;
@@ -283,8 +285,18 @@ const PATH_VALIDATION_REPAIR_HINTS: Record<string, string> = {
     `上一次的 milestone.coreConcept 引用了未声明的概念。请严格按这个骨架重出（coreConcept 只能填 coreConcepts 里已声明的 id，如 "concept-1"）：${PATH_OUTPUT_SKELETON}`,
   PATH_PLANNING_MILESTONES_MISSING:
     `上一次没有 milestones 数组。请严格按这个骨架重出：${PATH_OUTPUT_SKELETON}`,
+  PATH_PLANNING_SCOPE_UNBOUND:
+    '上一次的里程碑概念大多落在学习范围之外。请让每个阶段的 coreConcept 取自下面清单（可用清单里的 id），'
+    + '策略、自检、复盘这类方法不要占阶段概念位，写进任务的验收标准。',
+  PATH_PLANNING_META_ONLY_PATH:
+    '上一次的整条路径都是「元认知/策略」本身当核心概念（自检、清单、挂起、复盘、校准这类）。'
+    + '策略目标可以保留，但每个阶段的核心概念必须落在一个**学科实体**上（例如「受力分析中的摩擦力方向判定」「多数派提交与角色变更」），'
+    + '把自检/清单/校准降级为任务的验收标准，而不是阶段概念。请按这个骨架重出：' + PATH_OUTPUT_SKELETON,
   PATH_PLANNING_COGNITIVE_CORE_MISSING:
     `上一次缺少 cognitiveCore。请严格按这个骨架重出：${PATH_OUTPUT_SKELETON}`,
+  PATH_PLANNING_COGNITIVE_CORE_EMPTY:
+    `上一次的 cognitiveCore.coreConcepts 是空的——没有核心概念，整条路径就无法落点（阶段概念会被塌缩成同一个）。`
+    + `请在 coreConcepts 里至少声明 1 个 hub 与若干支撑概念（id 形如 "concept-1"，role 只能是 hub/supporting）：${PATH_OUTPUT_SKELETON}`,
 };
 
 /** 按失败原因（含「fields contract violation: xxx」这类前缀包裹）取修复提示。 */
@@ -296,6 +308,36 @@ export function buildPathValidationRepairNotice(failureReason: string): string {
   const key = Object.keys(PATH_VALIDATION_REPAIR_HINTS).find((candidate) => reason.includes(candidate));
   if (key) return PATH_VALIDATION_REPAIR_HINTS[key];
   return `请只输出一个学习路径 JSON 对象，严格按这个骨架（字段名逐字一致）：${PATH_OUTPUT_SKELETON}`;
+}
+
+/**
+ * 范围绑定校验（2026-10-20 根本性修复）：起了 scope 就必须有一半以上的阶段概念真的落在范围内。
+ * 只校验「概念落在范围内」，不规定怎么排课——排课仍是模型的事。
+ */
+/**
+ * 范围绑定校验（2026-10-20 根本性修复）。
+ *
+ * 判据不是「概念名写得像不像知识点」，而是**每个阶段有没有真的点名一个学科实体**：
+ * 把 title/description/goal 拼起来，至少命中学习范围里的一条术语（全文或前 4 字）。
+ * 为什么这样判：一条「理综做不完」的路径可以写出「标出卡壳时刻」「归类错误类型」这种完全自洽的阶段，
+ * 但它从头到尾没有出现过任何一个物理实体——这种路径不是课，是自我复盘。
+ * 反面样本（分布式课）三个阶段都点名了共识/多数派/任期/日志，判定通过。
+ */
+export function validateScopeBinding(parsed: any, scope: SubjectScope | null) {
+  if (!scope) return { valid: true as const };
+  const milestones = Array.isArray(parsed?.milestones) ? parsed.milestones : [];
+  if (!milestones.length) return { valid: true as const };
+  // 用短词（term）判命中：阶段标题写的是自然语言，不会逐字复述标签全称
+  const terms = scope.entries.map((entry) => entry.term).filter(Boolean);
+  const namesEntity = (milestone: any) => {
+    const text = [String(milestone?.title || ''), String(milestone?.description || ''), String(milestone?.goal || '')].join(' ');
+    return terms.some((term) => text.includes(term));
+  };
+  const named = milestones.filter(namesEntity).length;
+  // 半数以上阶段必须点名实体；一个都没有时一定失败
+  const enough = named * 2 >= milestones.length;
+  if (enough) return { valid: true as const };
+  return { valid: false as const, failureReason: 'PATH_PLANNING_SCOPE_UNBOUND' };
 }
 
 /** 导出以便回归测试（§3.19 P0①：learnerLearningContext 必须真正进入提示词） */
@@ -336,6 +378,16 @@ export function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
           level: normalizePromptString(learnerProfile.currentBaseline?.level),
           evidence: normalizePromptString(learnerProfile.currentBaseline?.evidence),
         },
+        // 技能性质 / 平台可判定性（2026-11-05 #242）：定帧层早已把它们写在 learnerProfile 内
+        // （path.coordinator.ts:403-430 生产、path-planning-hints.ts:1443-1459 透传），但本投影是
+        // 逐字段白名单重建，与 schoolAnchor 同型地被静默裁掉 ⇒ path-planning 载荷里一次都不出现。
+        // 无值时不出键（与定帧层同口径：判不出就按通用口径处理）。
+        ...(normalizePromptString(learnerProfile.skillNature)
+          ? { skillNature: normalizePromptString(learnerProfile.skillNature) }
+          : {}),
+        ...(normalizePromptString(learnerProfile.platformJudgment)
+          ? { platformJudgment: normalizePromptString(learnerProfile.platformJudgment) }
+          : {}),
       },
       problemSpace: {
         realProblem: normalizePromptString(problemSpace.realProblem),
@@ -591,7 +643,13 @@ export function validatePathPlanningOutput(
   const coreConcepts = Array.isArray(parsed.cognitiveCore.coreConcepts)
     ? parsed.cognitiveCore.coreConcepts.filter((c: any) => c && typeof c === 'object')
     : [];
-  if (coreConcepts.length > 0) {
+  // #171-3：coreConcepts 为空时，下面的 hub / 绑定 / 复用校验全部被跳过（模型可以只给一个空壳
+  // cognitiveCore 就过门），落库层随后把每个阶段的 coreConcept 静默回退到 concept-1 ⇒ 全路径概念
+  // 塌缩成一个。这里改硬错误：没有核心概念就没有可绑定的阶段概念。
+  if (coreConcepts.length === 0) {
+    return { valid: false as const, failureReason: 'PATH_PLANNING_COGNITIVE_CORE_EMPTY' };
+  }
+  {
     const hubCount = coreConcepts.filter((c: any) => c.role === 'hub').length;
     if (hubCount === 0) {
       return { valid: false as const, failureReason: 'PATH_PLANNING_HUB_CONCEPT_MISSING' };
@@ -601,12 +659,38 @@ export function validatePathPlanningOutput(
     }
   }
 
+  // 整条路径都是元认知（2026-10-20 实跑：理综「做不完」生成了一条 4 课全在讲「自检/清单/归类」的路径）。
+  // 策略类目标合法，但阶段的核心概念必须落在学科实体上，否则整条路径没有一节课在教东西。
+  const META_CONCEPT_MARKERS = /(元认知|自检|清单|挂起|复盘|策略|校准|漏判|误判|信号化|止损|转场|时间分配|答题节奏|分类判别|决策规则)/;
+  {
+    const concepts = coreConcepts.map((c: any) => String(c?.name || c?.description || '')).join(' ');
+    // #171-3：coreConcept 现在强制绑 id（名字绑定已被拒）。阶段文本里挂的若是 id 而非概念名，
+    // 必须回解成概念名才能判定「整条路径都是元认知」，否则 id 绑定会让这条守卫失效。
+    const conceptNameById = new Map<string, string>();
+    for (const c of coreConcepts) {
+      if (typeof c?.id === 'string' && c.id && typeof c?.name === 'string' && c.name) {
+        conceptNameById.set(c.id, c.name);
+      }
+    }
+    const stages = Array.isArray(parsed.milestones) ? parsed.milestones : [];
+    const metaStages = stages.filter((m: any) => {
+      const boundName = typeof m?.coreConcept === 'string' ? (conceptNameById.get(m.coreConcept) || '') : '';
+      const text = [m?.coreConcept || '', boundName, String(m?.title || ''), String(m?.goal || '')].join(' ');
+      return META_CONCEPT_MARKERS.test(text);
+    }).length;
+    if (stages.length > 0 && metaStages * 2 >= stages.length && META_CONCEPT_MARKERS.test(concepts)) {
+      return { valid: false as const, failureReason: 'PATH_PLANNING_META_ONLY_PATH' };
+    }
+  }
+
   const conceptIds = new Set<string>();
-  const conceptNames = new Set<string>();
+  const conceptNameById = new Map<string, string>();
   let hubConceptId: string | null = null;
   for (const concept of coreConcepts) {
-    if (typeof concept.id === 'string' && concept.id) conceptIds.add(concept.id);
-    if (typeof concept.name === 'string' && concept.name) conceptNames.add(concept.name);
+    if (typeof concept.id === 'string' && concept.id) {
+      conceptIds.add(concept.id);
+      if (typeof concept.name === 'string' && concept.name) conceptNameById.set(concept.id, concept.name);
+    }
     if (concept.role === 'hub') hubConceptId = concept.id;
   }
   let hubReuseCount = 0;
@@ -618,8 +702,11 @@ export function validatePathPlanningOutput(
     if (milestone.subtasks !== undefined || milestone.acceptanceCriteria !== undefined) {
       return { valid: false as const, failureReason: 'PATH_PLANNING_LEGACY_TASK_FIELDS' };
     }
-    if (conceptIds.size > 0 && typeof milestone.coreConcept === 'string' && milestone.coreConcept
-      && !conceptIds.has(milestone.coreConcept) && !conceptNames.has(milestone.coreConcept)) {
+    // #171-3：只认已声明的概念 id。此前 `conceptNames.has(...)` 让 milestone 用概念「名字」写进
+    // coreConcept 即可过校验，随后落库层把未命中 id 的阶段静默回退到 conceptIds[0]（concept-1），
+    // 整条路径的概念塌缩成一个。名字绑定现在一律判未绑定。
+    if (typeof milestone.coreConcept === 'string' && milestone.coreConcept
+      && !conceptIds.has(milestone.coreConcept)) {
       return { valid: false as const, failureReason: 'PATH_PLANNING_MILESTONE_CONCEPT_UNBOUND' };
     }
     // hub 复用统计（rule 66：hub 必须被"非首阶段"milestone 显式复用，不含首阶段）
@@ -713,6 +800,16 @@ export const pathAgentDefinition: AgentDefinition = {
     'time-estimation'
   ],
   
+  // 文档性元数据，不参与运行时分发/发布（语义见 agents/protocol.ts 的 AgentDefinition.subscribes）：
+  // 全仓没有任何调度器读取 subscribes/publishes 做派发，两个字段都只是描述性说明。
+  //
+  // #208：但不要因此把两段写成同一回事——
+  // - `subscribes` 的 5 个 `learning:*` 事件名在全仓**没有**任何 emit 点/消费者（纯描述性，勿据此排障）；
+  // - `publishes` 的 3 个事件是**真实存在**的：本 skill 的生成/重规划/完成链路经 outbox 发出
+  //   path:created（services/learning/generation/path-generation.core.ts）、
+  //   path:adjusted（services/learning/replan/path-replan.service.ts 两处）、
+  //   path:completed（services/learning/tasks/task-completion.service.ts）。
+  //   旧注释笼统写成「全仓无对应 dispatch 调用点」，对 publishes 是假话，会误导排障。
   subscribes: [
     'learning:speed:change',
     'learning:focus:shift',
@@ -1028,6 +1125,17 @@ async function generatePath(
     : null);
   const promptFriendlySceneFraming = buildPromptFriendlyNormalizedInput(framingNormalizedInput);
 
+  // 学习范围：叙事里没有「该学什么」，这里按考试范围/学科文本解析出权威清单。
+  // 命中不了就返回 null，行为与旧版一致（绝不拿错的清单去逼模型）。
+  const learningScope: SubjectScope | null = resolveSubjectScope(
+    (input as any)?.metadata?.normalizedInput?.schoolAnchor?.examScope,
+    analysis.subject,
+    analysis.context,
+    input.goal,
+  );
+  const scopeSection = learningScope ? String.fromCharCode(10, 10) + formatScopeForPrompt(learningScope) + String.fromCharCode(10) : '';
+  logger.info('[path-planning] 学习范围', { scope: learningScope ? learningScope.name : null, scopeChars: scopeSection.length, examScope: (input as any)?.metadata?.normalizedInput?.schoolAnchor?.examScope ?? null, subject: analysis.subject ?? null, goal: String(input.goal || '').slice(0, 40) });
+
   const userPayload = `原始学习目标：${input.goal}
 学习主题：${analysis.subject}
 目标水平：${analysis.level}
@@ -1064,7 +1172,7 @@ ${replan ? renderReplanSection(replan) : ''}
 【强制要求】以下所有生成内容必须紧密围绕"${analysis.context || input.goal}"展开：
 - 路径名称必须包含"${analysis.context || input.goal}"的核心主题关键词（提取 2-6 字即可），不得使用通用模板名称
 - 每个里程碑的标题必须体现"${analysis.context || input.goal}"的具体阶段
-- 禁止使用电商、音乐 App、房价预测、鸢尾花、泰坦尼克号等通用示例，全部替换为"${analysis.context || input.goal}"相关场景
+- 禁止使用电商、音乐 App、房价预测、鸢尾花、泰坦尼克号等通用示例，全部替换为"${analysis.context || input.goal}"相关场景${scopeSection}
 
 重要要求：
 1. 所有里程碑标题、描述、goal 都要具体化到"${analysis.context || input.goal}"场景，不要使用泛泛的通用描述
@@ -1188,7 +1296,13 @@ ${replan ? renderReplanSection(replan) : ''}
       };
     },
     coerceParsedForContract: (parsed: any) => coercePathPlanningParsed(parsed, promptMaterials),
-    validateParsedOutput: (parsed) => validatePathPlanningOutput(parsed, expectedMilestones, expectedMilestoneRange, forcedMilestones),
+    validateParsedOutput: (parsed) => {
+      const base = validatePathPlanningOutput(parsed, expectedMilestones, expectedMilestoneRange, forcedMilestones);
+      if (!base.valid) return base;
+      // 离线评测要单独看 prompt 质量，不能被代码层的范围门挡住（正常运行时不受影响）
+      if (process.env.PATH_EVAL_BYPASS_GATES === '1') return base;
+      return validateScopeBinding(parsed, learningScope);
+    },
     mapEnvelope: (output, _input, runtimeContract) => adaptToRuntimeEnvelope({
       contract: runtimeContract,
       artifact: output,
@@ -1201,6 +1315,7 @@ ${replan ? renderReplanSection(replan) : ''}
     retryStrategy: {
       maxAttempts: 2,
       onValidationFail: ({ failureReason }) => `${buildPathValidationRepairNotice(failureReason)}`
+        + (failureReason.includes('SCOPE_UNBOUND') && learningScope ? String.fromCharCode(10) + formatScopeForPrompt(learningScope) + String.fromCharCode(10) : '')
         + `上次失败原因：${failureReason}`,
     },
   }, input, { userId, ...(systemPromptOverride ? { systemPromptOverride } : {}) });

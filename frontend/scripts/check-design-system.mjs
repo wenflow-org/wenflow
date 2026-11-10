@@ -160,10 +160,10 @@ const isGoverned = (relPath) =>
  *
  * 为什么需要第二个谓词：规则 5 / 6 的整改建议是「改用 <MkLoading> / .mk-skeleton」，
  * 而这些原语定义在 `mk-primitives.css`，该文件只被 AdminConsole.vue 与
- * SkillDesignPage.vue **懒加载**。用户侧路由（`/v2/*` 等）从不加载它，于是
+ * SkillDesignPage.vue **懒加载**。用户侧路由（`/dashboard`、`/learn/:taskId` 等）从不加载它，于是
  * 用户侧页面照着报错改，会得到一段同样没有定义、同样不渲染的类名。
  *
- * 已实证的坏指令：V2LearningPage.vue:123 已经在用 `<MkLoading>`，但在 `/v2/*`
+ * 已实证的坏指令：V2LearningPage.vue:123 已经在用 `<MkLoading>`，但在用户侧路由
  * 下 `.mk-spinner` 与 `.mk-loading` 零命中 —— 转圈根本不显示。这是**既有缺陷**，
  * 不是守卫报出来的假问题；但它说明「用户侧也该用 MkLoading」这个建议当前是错的。
  *
@@ -269,7 +269,15 @@ for (const p of [...walk(SRC, [], '.css'), ...walk(SRC)]) {
  * （若将来新增同类钩子，请在此登记，否则规则 8 会把它当 bug 报出来。）
  * 键统一带 `--`：与 definedTokens / 引用侧同一形式，查表才成立（2026-10-02）。
  */
-const TOKEN_HOOK_WHITELIST = new Set(['--mk-empty-min-h', '--mk-skel-card-min', '--mk-skel-cols'])
+// 2026-11-04：--nc-panel-top 由 V2NotifCenter.vue 运行时经
+//   document.documentElement.style.setProperty 写入（实测吸顶横幅底边 + 顶栏高），
+//   CSS 侧只以 var(--nc-panel-top, 64px) 兜底消费，静态没有 `--nc-panel-top:` 声明，
+//   故规则 8 会误报。它确实是"未定义即设计"的运行时钩子，登记于此。
+const TOKEN_HOOK_WHITELIST = new Set(['--mk-empty-min-h', '--mk-skel-card-min', '--mk-skel-cols', '--nc-panel-top',
+  // 2026-11-05：--gc-overlay-top 由 V2GoalConversation.vue syncOverlayTop 运行时经
+  //   document.documentElement.style.setProperty 写入（吸顶横幅底边 + 顶栏高，同 --nc-panel-top 量法），
+  //   CSS 侧只以 var(--gc-overlay-top, 0) 兜底消费，静态没有 `--gc-overlay-top:` 声明，同款运行时钩子。
+  '--gc-overlay-top'])
 
 /**
  * 【已定位、已排期】的未定义 token —— 报告但不阻断（token → 一句话原因）。
@@ -1363,6 +1371,105 @@ if (hexRegressions.length) {  failed = true
   console.log(`\n✖ 规则 3：硬编码 hex 色值相对基线增加（${hexRegressions.length} 个文件）`)
   console.log('  新增配色请使用 --mk-* token；确需新增请同步下调基线（node scripts/check-design-system.mjs --update）。')
   for (const r of hexRegressions) console.log(`    ${r.file}  ${r.base} → ${r.now}`)
+}
+
+/* ---------- 规则 20–22：表格表头契约（硬失败、无基线） ----------
+   列表页的「表头」不止 <thead>：卡头工具条与列头共同构成同一套阅读语法。工具条的槽位序
+   由 .mk-card__head 的注释钉死（2026-10-15 用户拍板：搜索进右组首位）；这里把列头里
+   能机器判的三条钉住，防止下一次改表又长回各页一套：
+   20) 每个 <th> 必须声明 scope（列表头 scope="col"，行表头 scope="row"）。
+       —— 收口前 349 个列头里有 179 个没有 scope，读屏软件只能靠猜列关系。
+   21) 可排序列必须带 aria-sort（由 useTableSort 驱动箭头），否则键盘/读屏拿不到排序态。
+   22) .mk-table--fixed 必须配 <colgroup>。fixed 下没有 colgroup 就是全列等分，
+       与 ADMIN_COLUMN_WIDTH_SPEC §1「每列都必须给宽度」直接冲突。
+   扫描面 = admin-redesign 页面及其子目录；Mk* 原语层不写 th。 */
+{
+  const thNoScope = []
+  const sortableNoAria = []
+  const fixedNoColgroup = []
+  for (const abs of walk(join(SRC, 'views', 'admin-redesign'))) {
+    const rel = relative(ROOT, abs).split('\\').join('/')
+    const text = readFileSync(abs, 'utf8')
+    /* 引号感知地切出每个 <th …>：属性表达式里可能出现 ">"（如 :title="a > b"），
+       不能用 [^>]* 一刀切。 */
+    let i = 0
+    while (true) {
+      const start = text.indexOf('<th', i)
+      if (start === -1) break
+      const nextChar = text[start + 3]
+      if (!(nextChar === '>' || /\s/.test(nextChar))) { i = start + 3; continue }
+      let j = start + 3
+      let quote = null
+      for (; j < text.length; j++) {
+        const ch = text[j]
+        if (quote) { if (ch === quote) quote = null }
+        else if (ch === '"' || ch === "'") quote = ch
+        else if (ch === '>') break
+      }
+      const tag = text.slice(start, j + 1)
+      const brief = tag.replace(/\s+/g, ' ').slice(0, 72)
+      if (!/scope\s*=/.test(tag)) thNoScope.push({ file: rel, tag: brief })
+      if (/mk-th--sortable/.test(tag) && !/aria-sort/.test(tag)) sortableNoAria.push({ file: rel, tag: brief })
+      i = j + 1
+    }
+    let k = 0
+    while (true) {
+      const open = text.indexOf('<table', k)
+      if (open === -1) break
+      const close = text.indexOf('</table>', open)
+      const openTag = text.slice(open, text.indexOf('>', open) + 1)
+      const body = close === -1 ? '' : text.slice(open, close)
+      if (/mk-table--fixed/.test(openTag) && !/<colgroup/.test(body)) {
+        /* develop 判例（ADMIN_COLUMN_WIDTH_SPEC 48/48 审计口径）：fixed 表列宽由 th 上的
+           页面类 / 原语类承担（.gc-c-* { width }、.mk-c-act { width: 140px } 等），与
+           colgroup 等效。所有 th 都带 class 即视为已声明列宽；裸 <th> 的 fixed 表才是
+           本规则要拦的「全列等分」事故。 */
+        const ths = []
+        let m2 = 0
+        while (true) {
+          const s2 = body.indexOf('<th', m2)
+          if (s2 === -1) break
+          const n2 = body[s2 + 3]
+          if (n2 === '>' || /\s/.test(n2)) {
+            let j2 = s2 + 3
+            let q2 = null
+            for (; j2 < body.length; j2++) {
+              const ch = body[j2]
+              if (q2) { if (ch === q2) q2 = null }
+              else if (ch === '"' || ch === "'") q2 = ch
+              else if (ch === '>') break
+            }
+            ths.push(body.slice(s2, j2 + 1))
+            m2 = j2 + 1
+          } else m2 = s2 + 3
+        }
+        const widthsByClass = ths.length > 0 && ths.every((th) => /\bclass\s*=\s*["']./.test(th))
+        if (!widthsByClass) fixedNoColgroup.push(rel)
+      }
+      k = close === -1 ? open + 6 : close + 8
+    }
+  }
+
+  if (thNoScope.length) {
+    failed = true
+    console.log(`\n✖ 规则 20：<th> 缺少 scope（${thNoScope.length} 处）`)
+    console.log('  列表头一律 scope="col"（行表头 scope="row"）。没有 scope，读屏软件无法把单元格与列关联。')
+    for (const v of thNoScope.slice(0, 12)) console.log(`    ${v.file}  ${v.tag}`)
+    if (thNoScope.length > 12) console.log(`    … 另有 ${thNoScope.length - 12} 处`)
+  }
+  if (sortableNoAria.length) {
+    failed = true
+    console.log(`\n✖ 规则 21：可排序 <th> 缺少 aria-sort（${sortableNoAria.length} 处）`)
+    console.log('  排序态由 useTableSort 的 aria-sort 驱动箭头；缺了它键盘/读屏用户看不到当前排序。')
+    for (const v of sortableNoAria.slice(0, 12)) console.log(`    ${v.file}  ${v.tag}`)
+    if (sortableNoAria.length > 12) console.log(`    … 另有 ${sortableNoAria.length - 12} 处`)
+  }
+  if (fixedNoColgroup.length) {
+    failed = true
+    console.log(`\n✖ 规则 22：.mk-table--fixed 缺少 <colgroup>（${fixedNoColgroup.length} 张表）`)
+    console.log('  fixed 布局下没有 colgroup = 全列等分容器；按 ADMIN_COLUMN_WIDTH_SPEC §1，每列都必须给宽度。')
+    for (const f of fixedNoColgroup) console.log(`    ${f}`)
+  }
 }
 
 if (!failed) {

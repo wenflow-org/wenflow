@@ -29,7 +29,8 @@ function record(name: string, pass: boolean, detail: string): void {
 async function cleanupChurn(userId: string): Promise<void> {
   await prisma.learner_evidence.deleteMany({ where: { userId, evidenceType: 'churn:risk' } });
   await prisma.notifications.deleteMany({
-    where: { userId, kind: 'system', title: { in: ['几天没见，学习进度都帮你留着', '好久不见，路径还在原地等你'] } },
+    // 2026-11-04 同步 churn 通知文案改口径后的标题，保证验收清库仍能命中
+    where: { userId, kind: 'system', title: { in: ['已有几天未开始学习', '已有较长时间未开始学习'] } },
   });
 }
 

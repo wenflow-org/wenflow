@@ -67,9 +67,12 @@ beforeEach(() => {
   closureSummaryMock.mockImplementation(async () => ({
     data: {
       data: {
-        total: 127,
-        byTrack: { human: 0, 'virtual-learner': 20, unknown: 0, legacy: 107 },
-        bySource: { unknown: 107, 'vl-assisted': 20 },
+        // #186 口径对齐后的真实响应形状：主值 total 与 byTrack 同源同口径（非虚拟），
+        // 行内注「真实 + 未标记」之和恒等于 total（90+17=107）；虚拟 20 单列、标注「不计入」。
+        total: 107,
+        byTrack: { human: 90, 'virtual-learner': 0, unknown: 0, legacy: 17 },
+        bySource: { 'human-ui': 90, unknown: 17 },
+        virtualCount: 20,
         pathCompletions: 1
       }
     }
@@ -78,26 +81,33 @@ beforeEach(() => {
 });
 
 describe('总览完课量 KPI（#105）', () => {
-  it('分解挂在数值行内（valueNote）：真实 / 虚拟 / 未标记；不再单开副行抬高整排（2026-10-21）', async () => {
+  it('分解挂在数值行内（valueNote）：真实 / 未标记之和 = 主值；虚拟单列标注「不计入」', async () => {
     const wrapper = await mountOverview();
 
     const card = closureCard(wrapper);
     expect(card).toBeTruthy();
-    expect(card!.text()).toContain('127');
+    expect(card!.text()).toContain('107');
     const note = card!.find('.mk-kpi__num-note');
     expect(note.exists()).toBe(true);
-    expect(note.text()).toContain('真实 0');
+    // 与主值同口径的两项相加 = 107（数值行内自证，不再「主值 107 却标真实 0」）
+    expect(note.text()).toContain('真实 90');
+    expect(note.text()).toContain('未标记 17');
+    // 虚拟单列，且明确标注不计入主值
     expect(note.text()).toContain('虚拟 20');
-    expect(note.text()).toContain('未标记 107');
+    expect(note.text()).toContain('不计入');
     // 五卡里只有这一卡曾带副行，副行撤掉后整排高度一致
     expect(card!.find('.mk-kpi__hint').exists()).toBe(false);
   });
 
-  it('title 只保留与真实口径不同源的限定', async () => {
+  it('title 说明只统计真实账号、虚拟单列不计入', async () => {
     const wrapper = await mountOverview();
 
     const title = closureCard(wrapper)!.attributes('title') || '';
-    expect(title).toContain('与真实用户 KPI 不同源');
+    /* 2026-11-06 文案排查 §7：原句的「非虚拟口径 / 与上方…同源」被改写成直说事实
+       （分号拼接 + 隔空指路「上方」+ 内部词「口径」三条一并消除），断言随之更新。 */
+    expect(title).toContain('只统计真实账号');
+    expect(title).toContain('两项相加即总数');
+    expect(title).toContain('不计入');
     expect(title).not.toContain('不回填');
     expect(title).not.toContain('通道构成');
   });
@@ -108,7 +118,7 @@ describe('总览完课量 KPI（#105）', () => {
     await closureCard(wrapper)!.trigger('click');
     expect(intent.scene).toBe('teaching-sessions');
   });
-  it('读数失败不伪造 0：值给「—」、hint 如实呈报，并在卡内给重试', async () => {
+  it('读数失败不伪造 0：值给「—」、说明如实呈报（走悬停），并在卡内给重试', async () => {
     closureSummaryMock.mockImplementation(async () => {
       throw new Error('boom');
     });
@@ -116,7 +126,9 @@ describe('总览完课量 KPI（#105）', () => {
 
     const card = closureCard(wrapper);
     expect(card!.text()).toContain('—');
-    expect(card!.text()).toContain('读数加载失败');
+    /* 2026-11-01：卡内不再渲染解释文字，失败说明退到卡根 title */
+    expect(card!.find('.mk-kpi__hint').exists()).toBe(false);
+    expect(card!.attributes('title')).toContain('读数加载失败');
     expect(card!.text()).not.toContain('未标记');
     // 2026-10-26：失败态卡不可点（读数不可信），卡内自带重试，不再只能靠整页重试
     expect(card!.classes()).not.toContain('mk-kpi--clickable');

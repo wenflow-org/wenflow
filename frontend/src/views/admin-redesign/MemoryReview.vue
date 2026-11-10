@@ -27,7 +27,7 @@
         <div class="mk-card__head">
           <h3 class="mk-card__title">课内温故计划</h3>
           <!-- 2026-10-23 用户走查「还有后面的这几种文案」：撤掉「本节该接几个 · 按负担预算排队」——
-               下面指标条已逐项给出负担预算/已占用/本节接几个/排队中，卡头再说一遍规则是复述 -->
+               下面指标条已逐项给出负担预算/已占用/本节承接数/排队中，卡头再说一遍规则是复述 -->
         </div>
 
         <!-- 温故计划整块按 detail.reviewPlan 有无渲染：reviewPlan=null 时原来只剩一个裸标题 -->
@@ -39,7 +39,7 @@
           <div v-if="detail.reviewPlan?.items.length" class="mk-table-scroll">
           <table class="mk-table">
             <thead>
-              <tr><th>概念</th><th class="mk-num">记忆强度</th><th>到期原因</th><th class="mk-num">负担</th><th>负担因子</th><th>来源路径</th></tr>
+              <tr><th scope="col">概念</th><th class="mk-num" scope="col">记忆强度</th><th scope="col">到期原因</th><th class="mk-num" scope="col">负担</th><th scope="col">负担因子</th><th scope="col">来源路径</th></tr>
             </thead>
             <tbody>
               <tr v-for="item in detail.reviewPlan.items" :key="item.conceptKey">
@@ -47,9 +47,11 @@
                      相同时不再重复渲染第二行（看着像渲染故障，也把行高撑成两行） -->
                 <td><strong>{{ item.label }}</strong><small v-if="item.conceptKey && item.conceptKey !== item.label" class="mr__sub">{{ item.conceptKey }}</small></td>
                 <td class="mk-num">
-                  <span class="mr-pct" :class="{ 'mr-pct--warn': item.retention < 0.7 }" :title="`记忆强度 ${Math.round(item.retention * 100)}%，低于 70% 优先安排`">
-                    <b>{{ Math.round(item.retention * 100) }}%</b>
-                    <span class="mk-minibar mr__bar mr__bar--sm" aria-hidden="true"><i class="mk-minibar__fill" :data-tone="item.retention < 0.7 ? 'warn' : undefined" :style="{ width: Math.round(item.retention * 100) + '%' }"></i></span>
+                  <!-- 率值格走全站原语 .mk-meter（2026-11-09 收敛）：与「记忆与到期概念总表」的
+                       记忆强度同一渲染——此前这里是「上百分比 + 下短条」右对齐，那边是「左条 + 右百分比」横排 -->
+                  <span class="mk-meter" :title="`记忆强度 ${Math.round(item.retention * 100)}%，低于 70% 优先安排`">
+                    <span class="mk-minibar mk-meter__bar" aria-hidden="true"><i class="mk-minibar__fill" :data-tone="item.retention < 0.7 ? 'warn' : undefined" :style="{ width: Math.round(item.retention * 100) + '%' }"></i></span>
+                    <em class="mk-meter__val" :class="{ 'mk-meter__val--warn': item.retention < 0.7 }">{{ Math.round(item.retention * 100) }}%</em>
                   </span>
                 </td>
                 <td>{{ reasonText(item.reason) }}</td>
@@ -71,7 +73,7 @@
             </tbody>
           </table>
           </div>
-          <p v-else class="mr__sub">当前没有需要在本节接住的记忆点。</p>
+          <p v-else class="mk-empty--line">当前没有需要在本节接住的记忆点。</p>
 
           <div v-if="detail.reviewPlan?.relearnSuggestions.length" class="mr__warn">
             <strong>建议回路径重学：</strong>
@@ -83,8 +85,27 @@
         <p v-else class="mr__sub">暂无温故计划：该用户名下还没有可安排的记忆痕迹。</p>
       </section>
 
+      <!-- 嵌入「记忆与调度」页签（compactAudit）：概念归并审计与同族重复压缩为单行轻量状态条，
+           回滚等破坏性动作展开后可达（避免独立治理卡在本页签再占一屏）。 -->
+      <template v-if="compactAudit && !auditExpand">
+        <section class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">概念归并审计与同族重复</h3>
+            <button
+              type="button"
+              class="mk-btn mk-btn--sm"
+              title="展开归并审计与同族重复，查看并回滚已执行归并"
+              @click="auditExpand = true"
+            >展开</button>
+          </div>
+          <p class="mk-empty--line">
+            概念归并审计：候选 {{ detail?.audit?.stats?.candidates ?? 0 }} · 建议 {{ detail?.audit?.stats?.proposed ?? 0 }} · 同族重复 {{ detail.duplicatedFamilies.length }} 组
+          </p>
+        </section>
+      </template>
+      <template v-else>
       <!-- 2. 概念归并审计：可写动作（勾选执行 / 单条确认 / 驳回 / 回滚），默认观察模式。
-           R7 概念本体治理批：三组建议（归并 / 需人工确认 / 散键清理）全部给出入口——
+           R7 概念本体治理批：三组建议（归并 / 需人工确认 / 未归类记忆清理）全部给出入口——
            此前 dropCandidates 只在类型里声明计数（审计 CC-2）、ambiguous 无操作位； -->
       <section class="mk-card">
         <div class="mk-card__head">
@@ -111,7 +132,7 @@
             @click="historyOpen = !historyOpen"
           >已执行历史（{{ appliedHistoryCount }}）</button>
         </div>
-        <!-- 审计计数（批E）：卡头 6 计数平摊 → 处理队列四格（与概览带同一语言）；R7 补「散键清理」格 -->
+        <!-- 审计计数（批E）：卡头 6 计数平摊 → 处理队列四格（与概览带同一语言）；R7 补「未归类记忆清理」格 -->
         <div v-if="detail.audit" class="mr-audit-queue">
           <div class="mr-audit-queue__item">
             <b>{{ detail.audit.stats.candidates }}</b><span>候选</span>
@@ -126,7 +147,7 @@
             <b>{{ mrAmbiguousCount }}</b><span>需人工确认</span>
           </div>
           <div class="mr-audit-queue__item" :class="{ 'mr-audit-queue__item--hot': mrDropCount > 0 }">
-            <b>{{ mrDropCount }}</b><span>散键清理</span>
+            <b>{{ mrDropCount }}</b><span>未归类记忆清理</span>
           </div>
           <div class="mr-audit-queue__item mr-audit-queue__item--quiet">
             <b>{{ detail.audit.stats.applied }}<i>/{{ detail.audit.stats.deleted }}</i></b><span>已执行 / 删除</span>
@@ -134,7 +155,7 @@
         </div>
 
         <!-- 未观察：卡内一行空态（动作钮「重新观察」在面板栏，那里是唯一入口） -->
-        <p v-if="!detail.audit" class="mr__sub">尚未观察过这个用户的记忆归并。</p>
+        <p v-if="!detail.audit" class="mk-empty--line">尚未观察过这个用户的记忆归并。</p>
 
         <template v-if="detail.audit">
           <!-- 归并处理条（2026-10-19 用户走查「这个重新设计一下」）：原实现是三枚小按钮飘在
@@ -155,7 +176,10 @@
               </template>
               <template v-else>
                 <span class="mr-bulk__count">批量处理</span>
-                <span class="mr-bulk__parts">{{ bulkHintText }}</span>
+                <!-- 0 选中且「有可自动执行项」时不再写一行操作说明（2026-11-03）：
+                     右侧就有「全选可自动执行的建议」按钮，句子只是把按钮念一遍。
+                     只有「本次没有可自动执行的建议」这个状态说不出于版面，才留字。 -->
+                <span v-if="bulkHintText" class="mr-bulk__parts">{{ bulkHintText }}</span>
               </template>
             </div>
             <div class="mr-bulk__actions">
@@ -195,9 +219,9 @@
             </colgroup>
             <thead>
               <tr>
-                <th class="mr__th-check">选择</th>
-                <th>归并目标</th><th>证据（别名 · 理由）</th><th class="mk-num">置信度</th><th class="mk-num">名称相似度</th>
-                <th>可自动执行</th><th class="mk-th--right mk-c-act">操作</th>
+                <th class="mr__th-check" scope="col">选择</th>
+                <th scope="col">归并目标</th><th scope="col">证据（别名 · 理由）</th><th class="mk-num" scope="col">置信度</th><th class="mk-num" scope="col">名称相似度</th>
+                <th scope="col">可自动执行</th><th class="mk-th--right mk-c-act" scope="col">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -217,15 +241,15 @@
                   <div>{{ proposal.rationale || '—' }}</div>
                 </td>
                 <td class="mk-num">
-                  <span class="mr-pct" :title="`置信度 ${Math.round(proposal.confidence * 100)}%`">
-                    <b>{{ Math.round(proposal.confidence * 100) }}%</b>
-                    <span class="mk-minibar mr__bar mr__bar--sm" aria-hidden="true"><i class="mk-minibar__fill" :style="{ width: Math.round(proposal.confidence * 100) + '%' }"></i></span>
+                  <span class="mk-meter" :title="`置信度 ${Math.round(proposal.confidence * 100)}%`">
+                    <span class="mk-minibar mk-meter__bar" aria-hidden="true"><i class="mk-minibar__fill" :style="{ width: Math.round(proposal.confidence * 100) + '%' }"></i></span>
+                    <em class="mk-meter__val">{{ Math.round(proposal.confidence * 100) }}%</em>
                   </span>
                 </td>
                 <td class="mk-num">
-                  <span class="mr-pct" :class="{ 'mr-pct--warn': !proposal.autoApplicable }" :title="`名称相似度 ${Math.round(proposal.lexicalSimilarity * 100)}%${proposal.autoApplicable ? '' : '（相似度不足，需人工确认）'}`">
-                    <b>{{ Math.round(proposal.lexicalSimilarity * 100) }}%</b>
-                    <span class="mk-minibar mr__bar mr__bar--sm" aria-hidden="true"><i class="mk-minibar__fill" :data-tone="proposal.autoApplicable ? undefined : 'warn'" :style="{ width: Math.round(proposal.lexicalSimilarity * 100) + '%' }"></i></span>
+                  <span class="mk-meter" :title="`名称相似度 ${Math.round(proposal.lexicalSimilarity * 100)}%${proposal.autoApplicable ? '' : '（相似度不足，需人工确认）'}`">
+                    <span class="mk-minibar mk-meter__bar" aria-hidden="true"><i class="mk-minibar__fill" :data-tone="proposal.autoApplicable ? undefined : 'warn'" :style="{ width: Math.round(proposal.lexicalSimilarity * 100) + '%' }"></i></span>
+                    <em class="mk-meter__val" :class="{ 'mk-meter__val--warn': !proposal.autoApplicable }">{{ Math.round(proposal.lexicalSimilarity * 100) }}%</em>
                   </span>
                 </td>
                 <td>
@@ -259,9 +283,12 @@
           </div>
           <p v-else class="mr__sub">本次没有达到置信度阈值的归并建议。</p>
 
+          <!-- 2026-11-02「让布局自己说话」：撤掉 h4 里那枚副标「置信度不足，需人工确认」——
+               它与上级标题「需人工确认」逐字重复（同级「归并建议」「未归类记忆清理」两组也都没有
+               这层副标）；判据（相似度阈值）与动作后果已在每行的「名称相似度」列悬停说明与复选框
+               可访问名里各说一次，屏上不再复读。 -->
           <h4 class="mr__h4">
             需人工确认（不会自动执行）
-            <span class="mr__sub-inline">置信度不足，需人工确认</span>
           </h4>
           <div v-if="detail.audit.ambiguous.length" class="mk-table-scroll">
           <table class="mk-table">
@@ -276,7 +303,7 @@
             <!-- 表头补明「候选 A / B 是概念键」（2026-10-06 审核 #62）：原表头只写 A / B
                  两个单字母；A/B 两列是无人类可读 label 的裸 conceptKey，与另三表同降 .mr__sub 档。
                  R7：补 选择/操作 两列——此前这组建议只可看不可动（审计 CC-2） -->
-            <thead><tr><th class="mr__th-check">选择</th><th>归并目标（候选 A）</th><th>并入（候选 B）</th><th>证据（理由）</th><th class="mk-th--right mk-c-act">操作</th></tr></thead>
+            <thead><tr><th class="mr__th-check" scope="col">选择</th><th scope="col">归并目标（候选 A）</th><th scope="col">并入（候选 B）</th><th scope="col">证据（理由）</th><th class="mk-th--right mk-c-act" scope="col">操作</th></tr></thead>
             <tbody>
               <tr v-for="(item, index) in detail.audit.ambiguous" :key="`${item.a}-${item.b}-${index}`">
                 <td>
@@ -318,9 +345,10 @@
           </div>
           <p v-else class="mr__sub">没有待人工确认项。</p>
 
+          <!-- 2026-11-02 冗余副文清理：撤掉副标「误提取的无用概念，确认后清理」——释义与上级
+               标题括号逐字重复；「确认后」由本组表格的操作列（确认 / 驳回）自明 -->
           <h4 class="mr__h4">
-            散键清理（误提取的无用概念）
-            <span class="mr__sub-inline">误提取的无用概念，确认后清理</span>
+            未归类记忆清理（误提取的无用概念）
           </h4>
           <!-- R7 任务书 B：dropCandidates 此前只在类型里声明计数、从不渲染（审计 CC-2）——补第三组建议列表 -->
           <div v-if="mrDropCount" class="mk-table-scroll">
@@ -331,7 +359,7 @@
               <col />
               <col style="width: 132px" />
             </colgroup>
-            <thead><tr><th class="mr__th-check">选择</th><th>散键（概念标识）</th><th>证据（理由）</th><th class="mk-th--right mk-c-act">操作</th></tr></thead>
+            <thead><tr><th class="mr__th-check" scope="col">选择</th><th scope="col">未归类记忆（概念标识）</th><th scope="col">证据（理由）</th><th class="mk-th--right mk-c-act" scope="col">操作</th></tr></thead>
             <tbody>
               <tr v-for="(drop, index) in detail.audit.dropCandidates" :key="`${drop.conceptKey}-${index}`">
                 <td>
@@ -339,7 +367,7 @@
                     type="checkbox"
                     class="mr__check"
                     :checked="selectedDrops[drop.conceptKey] === true"
-                    :aria-label="`勾选清理散键：${drop.conceptKey}`"
+                    :aria-label="`勾选清理未归类记忆：${drop.conceptKey}`"
                     @change="toggleSelectDrop(drop.conceptKey)"
                   />
                 </td>
@@ -354,15 +382,15 @@
                       type="button"
                       class="mk-btn mk-btn--sm"
                       :disabled="busy"
-                      title="确认清理该散键"
-                      @click="applyOne({ drops: [drop.conceptKey] }, `清理散键「${drop.conceptKey}」`)"
+                      title="确认清理该未归类记忆"
+                      @click="applyOne({ drops: [drop.conceptKey] }, `清理未归类记忆「${drop.conceptKey}」`)"
                     >确认</button>
                     <button
                       type="button"
                       class="mk-btn mk-btn--sm"
                       :disabled="busy"
                       :title="REJECT_BTN_HINT"
-                      @click="rejectOne({ drops: [drop.conceptKey] }, `散键清理「${drop.conceptKey}」`)"
+                      @click="rejectOne({ drops: [drop.conceptKey] }, `未归类记忆清理「${drop.conceptKey}」`)"
                     >驳回</button>
                   </div>
                 </td>
@@ -370,7 +398,7 @@
             </tbody>
           </table>
           </div>
-          <p v-else class="mr__sub">没有待清理的散键。</p>
+          <p v-else class="mr__sub">没有待清理的未归类记忆。</p>
 
           <!-- 已执行历史（R7 任务书 B：mode=apply 审计一个入口可见——卡头「已执行历史」开关；
                默认展开保持既有可达性）。含破坏性归并凭据与 alias 式归并凭据两族。
@@ -382,7 +410,7 @@
           <h4 class="mr__h4">已执行归并（可回滚 · 按次留档）</h4>
           <div v-if="rollbackableMerges.length" class="mk-table-scroll">
           <table class="mk-table">
-            <thead><tr><th>规范键</th><th>别名</th><th class="mk-num">删除条数</th><th>执行时间</th><th></th></tr></thead>
+            <thead><tr><th scope="col">规范键</th><th scope="col">别名</th><th class="mk-num" scope="col">删除条数</th><th scope="col">执行时间</th><th scope="col"></th></tr></thead>
             <tbody>
               <tr v-for="merge in rollbackableMerges" :key="merge.mergeId || `${merge.canonical}-${merge.appliedAt}`">
                 <td class="mr__sub">{{ merge.canonical }}</td>
@@ -410,7 +438,7 @@
           <h4 class="mr__h4">别名归并（不删除记录：登记别名并改指向）</h4>
           <div v-if="appliedAliasRollbackable.length" class="mk-table-scroll">
           <table class="mk-table">
-            <thead><tr><th>归并目标</th><th>别名</th><th class="mk-num">改指向记录数</th><th>执行时间</th><th></th></tr></thead>
+            <thead><tr><th scope="col">归并目标</th><th scope="col">别名</th><th class="mk-num" scope="col">改指向记录数</th><th scope="col">执行时间</th><th scope="col"></th></tr></thead>
             <tbody>
               <tr v-for="merge in appliedAliasRollbackable" :key="merge.aliasMergeId || `${merge.canonical}-${merge.appliedAt}`">
                 <td class="mr__sub">{{ merge.canonical }}</td>
@@ -439,8 +467,9 @@
       </section>
 
       <!-- 3. 到期清单预览：到期积压的证据（谁先到期、掌握多少）。排在审计卡之后（2026-10-12
-           外部批评采纳：审计是本页签主动作，证据卡放后面，不再把它挤到首屏之下） -->
-      <section class="mk-card">
+           外部批评采纳：审计是本页签主动作，证据卡放后面，不再把它挤到首屏之下）。
+           嵌入「记忆与调度」页签（omitDuePreview）时省略：FSRS 普查表已覆盖同一概念集，避免重复刷屏。 -->
+      <section v-if="!omitDuePreview" class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">到期清单预览</h3>
           <!-- 2026-10-23 用户走查：排序状态归列头 caret / aria-sort，卡头只说真正影响读数含义的一件事
@@ -450,7 +479,7 @@
         <div v-if="detail.duePreview.length" class="mk-table-scroll">
           <table class="mk-table">
           <thead><tr>
-            <th>概念</th>
+            <th scope="col">概念</th>
             <th
               scope="col"
               class="mk-num mk-th--sortable"
@@ -469,7 +498,7 @@
               title="点列头排序：降序 = 复现最多的在前"
               :aria-sort="dueSortState('extractions')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleDueSort('extractions')">提取次数<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-            <th>来源</th>
+            <th scope="col">来源</th>
             <th
               scope="col"
               class="mk-th--sortable"
@@ -483,15 +512,15 @@
                    label），维持 mr__sub 降档，不冒充正文 -->
               <td><strong>{{ trace.label }}</strong></td>
               <td class="mk-num">
-                <span class="mr-pct" :class="{ 'mr-pct--warn': trace.retention < 0.7 }" :title="strengthTitle(trace)">
-                  <b>{{ Math.round(trace.retention * 100) }}%</b>
-                  <span class="mk-minibar mr__bar mr__bar--sm" aria-hidden="true"><i class="mk-minibar__fill" :data-tone="trace.retention < 0.7 ? 'warn' : undefined" :style="{ width: Math.round(trace.retention * 100) + '%' }"></i></span>
+                <span class="mk-meter" :title="strengthTitle(trace)">
+                  <span class="mk-minibar mk-meter__bar" aria-hidden="true"><i class="mk-minibar__fill" :data-tone="trace.retention < 0.7 ? 'warn' : undefined" :style="{ width: Math.round(trace.retention * 100) + '%' }"></i></span>
+                  <em class="mk-meter__val" :class="{ 'mk-meter__val--warn': trace.retention < 0.7 }">{{ Math.round(trace.retention * 100) }}%</em>
                 </span>
               </td>
               <td class="mk-num">
-                <span class="mr-pct" :title="`掌握 ${Math.round(trace.masteryScore * 100)}%`">
-                  <b>{{ Math.round(trace.masteryScore * 100) }}%</b>
-                  <span class="mk-minibar mr__bar mr__bar--sm" aria-hidden="true"><i class="mk-minibar__fill" :style="{ width: Math.round(trace.masteryScore * 100) + '%' }"></i></span>
+                <span class="mk-meter" :title="`掌握 ${Math.round(trace.masteryScore * 100)}%`">
+                  <span class="mk-minibar mk-meter__bar" aria-hidden="true"><i class="mk-minibar__fill" :style="{ width: Math.round(trace.masteryScore * 100) + '%' }"></i></span>
+                  <em class="mk-meter__val">{{ Math.round(trace.masteryScore * 100) }}%</em>
                 </span>
               </td>
               <td class="mk-num">{{ trace.extractionCount }}</td>
@@ -510,7 +539,11 @@
           </tbody>
         </table>
         </div>
-        <MkEmptyState v-else title="当前没有到期点" description="该用户的记忆痕迹都还没到复习时间；到期后会在这里列出前 20 条。" />
+        <!-- 卡内空态走单行档（2026-11-06 视觉走查）：本页四张并列卡，此前三张是一行 12.5px
+             裸句、这张是 16px 居中块，同一屏读成两种语言。整盘只留给「整页/主内容就是空的」
+             （学员详情·记忆与复习、图谱画布、复习积压页），卡内一律 mk-empty--line：
+             左对齐一行、14.5px、muted，与其它三张同字形同内衬。 -->
+        <p v-else class="mk-empty--line">当前没有到期点，该用户的记忆痕迹都还没到复习时间。</p>
       </section>
 
       <!-- 4. 同族重复：措辞不同、说的是同一件事（归并的输入） -->
@@ -519,10 +552,10 @@
           <h3 class="mk-card__title">同族重复</h3>
           <!-- 2026-10-23：撤掉「措辞不同、含义相同的记录」——卡名已是这件事，下面每一行就是同义成员本身 -->
         </div>
-        <p v-if="!detail.duplicatedFamilies.length" class="mr__sub">没有同族重复。</p>
+        <p v-if="!detail.duplicatedFamilies.length" class="mk-empty--line">没有同族重复。</p>
         <div v-else class="mk-table-scroll">
           <table class="mk-table">
-          <thead><tr><th>重复组</th><th class="mk-num">条数</th><th>成员</th></tr></thead>
+          <thead><tr><th scope="col">重复组</th><th class="mk-num" scope="col">条数</th><th scope="col">成员</th></tr></thead>
           <tbody>
             <tr v-for="family in detail.duplicatedFamilies" :key="family.family">
               <!-- 归一化键没有人类可读 label（后端只回 key）→ 同 负担因子 口径降为 sub，不冒充正文 -->
@@ -538,6 +571,7 @@
         </table>
         </div>
       </section>
+      </template>
       </div>
     </template>
   </div>
@@ -546,7 +580,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { adminMemoryReviewApi } from '@/api/adminApi'
-import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkStatStrip from '@/components/mk/MkStatStrip.vue'
 import MockSkeletonTable from './SkeletonTable.vue'
 import type { MkStatItem } from '@/components/mk/MkStatStrip.vue'
@@ -556,7 +589,10 @@ import { openSubPage, subPage } from './store'
 import { toast } from '@/utils/toast'
 import { errMsg, shortId, timeAgo } from './live'
 
-const props = defineProps<{ userId: string }>()
+const props = defineProps<{ userId: string; /** 嵌入「记忆与调度」页签时省略重复的到期清单预览（FSRS 普查表已覆盖同一概念集） */ omitDuePreview?: boolean; /** 嵌入态：概念归并审计与同族重复压缩为单行轻量状态条，回滚动作展开后可达 */ compactAudit?: boolean }>()
+
+/** 嵌入态（compactAudit）下，审计/同族重复是否展开（展开后回滚等动作可达） */
+const auditExpand = ref(false)
 
 /* 文案单源（R6 复读单源化）：三处「驳回」动作钮的悬停释共用一份 */
 const REJECT_BTN_HINT = '驳回后不再提示，不影响学习记录'
@@ -778,7 +814,7 @@ const planKpiItems = computed<MkStatItem[]>(() => {
   return [
     { key: 'budget', label: '负担预算', value: plan.budget, title: '负担单位，动态校准' },
     { key: 'used', label: '已占用', value: plan.usedLoad },
-    { key: 'items', label: '本节接几个', value: plan.items.length },
+    { key: 'items', label: '本节承接数', value: plan.items.length },
     { key: 'backlog', label: '排队中', value: plan.backlogCount, tone: plan.backlogCount > 15 ? 'warn' : '' },
     {
       key: 'success',
@@ -851,14 +887,13 @@ const selectedPartsText = computed(() => {
   return [
     selectedKeys.value.length ? `归并 ${selectedKeys.value.length}` : '',
     selectedAmbiguousPairs.value.length ? `人工确认对 ${selectedAmbiguousPairs.value.length}` : '',
-    selectedDropKeys.value.length ? `散键 ${selectedDropKeys.value.length}` : ''
+    selectedDropKeys.value.length ? `未归类记忆 ${selectedDropKeys.value.length}` : ''
   ].filter(Boolean).join(' · ')
 })
-/** 0 选中时的引导：无可自动执行项时不摆一枚永远点不动的「全选」按钮 */
+/** 0 选中时只留「说不出于版面」的那半句：有可自动执行项时不写引导（按钮已说明做法），
+    没有时点明「本次没有可自动执行的建议」——这也是「不摆一枚永远点不动的全选按钮」的说明。 */
 const bulkHintText = computed(() =>
-  autoApplicableCount.value
-    ? '勾选条目后批量执行，或全选可自动执行的建议'
-    : '逐条核对后勾选，本次没有可自动执行的建议'
+  autoApplicableCount.value ? '' : '本次没有可自动执行的建议'
 )
 const bulkWarnText = computed(() => {
   const parts = [
@@ -1099,7 +1134,9 @@ async function recompute() {
      服务端 observe 语义（只记录建议），仍写审计投影行，所以不能免确认。 */
   const ok = await askConfirm({
     title: '重新观察',
-    message: `确认对「${detail.value?.user.name || shortId(props.userId)}」重新跑一次记忆复盘？将重新观察其记忆痕迹与归并建议（只记录建议，不改动记忆痕迹），结果实时刷新。`,
+    /* 标题、按钮、列表行都叫「重新观察」，正文原先写「重新跑一次记忆复盘」——
+       同一个动作两个名字，读起来像点下去的是另一件事。 */
+    message: `确认对「${detail.value?.user.name || shortId(props.userId)}」重新观察一次？将重新观察其记忆痕迹与归并建议（只记录建议，不改动记忆痕迹），结果实时刷新。`,
     confirmText: '重新观察',
     danger: false
   })
@@ -1156,9 +1193,6 @@ td.mr__sub { display: table-cell; }
    与逾期时刻同貌，「急不急」要人肉换算 */
 .mr__overdue { color: var(--mk-red-strong); font-weight: 600; }
 
-/* 列内比例条宽度（mk-minibar 管形状，这里只管两档宽度） */
-.mr__bar { width: 64px; }
-.mr__bar--sm { width: 52px; }
 
 .mr__warn { margin: 8px 16px 14px; padding: 8px 10px; border-radius: var(--mk-radius-xl); border: 1px solid color-mix(in srgb, var(--mk-amber) 30%, transparent); background: color-mix(in srgb, var(--mk-amber) 6%, transparent); font-size: var(--mk-fs-micro); }
 .mr__chip { display: inline-block; margin-left: 8px; }
@@ -1169,10 +1203,10 @@ td.mr__sub { display: table-cell; }
    外层不再叠 padding（原 inline 档首格 padding-left:0 的 16px 补偿随之退役） */
 .mr__strip { padding: 0; border-bottom: 1px solid var(--mk-line); }
 /* 明细区百分比列（批E）：数字+色阶条，与概览带/用户表同一语言 */
-.mr-pct { display: inline-grid; justify-items: end; gap: 2px; }
-.mr-pct b { font-variant-numeric: tabular-nums; font-weight: 700; }
-/* 比例条走共享 mk-minibar（默认蓝承接原绿档；warn 琥珀由模板 data-tone 驱动） */
-.mr-pct--warn b { color: var(--mk-amber); }
+/* 率值格（记忆强度 / 置信度 / 相似度 / 掌握度）已收进全站原语 .mk-meter：
+   条子 + 数值同一行、数值固定槽右对齐。此前 .mr-pct 是「上数值 + 下短条」右对齐，
+   与学习者详情页的记忆强度列读法不同（2026-11-09 走查）。 */
+
 /* 审计处理队列（批E）：复用概览带队列格语言 */
 /* auto-fit：窄屏不挤成 5 等份，宽屏不浪费（原固定 repeat(5) 在窄屏下每格 <100px） */
 .mr-audit-queue { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; padding: 10px 16px 4px; }
@@ -1183,7 +1217,7 @@ td.mr__sub { display: table-cell; }
 .mr-audit-queue__item b { font-size: 18px; font-weight: 800; color: var(--mk-ink); font-variant-numeric: tabular-nums; }
 .mr-audit-queue__item b i { font-style: normal; font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-faint); }
 .mr-audit-queue__item span { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.mr__sub-inline { margin-left: 8px; font-weight: 400; color: var(--mk-muted, #5b6577); font-size: var(--mk-fs-micro); }
+/* （.mr__sub-inline 随「需人工确认」组那枚复读副标一并撤除，2026-11-02） */
 /* 归并处理条（2026-10-19 重设计）：卡内工具条，左读数 / 右动作 / 警告独立一行。
    0 选中保持静默表面，选中后点亮描边，避免与下方三张表争视觉。 */
 .mr-bulk {

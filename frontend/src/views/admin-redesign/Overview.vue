@@ -35,12 +35,13 @@
         :label="k.label"
         :value="k.value"
         :value-note="k.valueNote"
-        :hint="k.hint"
+        :hint="kpiHint(k)"
         :title="kpiTitle(k)"
         @click="jumpToKpi(k)"
       />
-      <!-- 完课量（#105 读侧接入，2026-10-19）：收束事件统一观测的按轨拆分，
-           点卡进教学会话页看逐条轨道/通道。与上方四卡不同源（含虚拟/测试）。
+      <!-- 完课量（#105 读侧接入，2026-10-19；2026-11-04 口径对齐 #186）：收束事件统一观测的按轨拆分，
+           点卡进教学会话页看逐条轨道/通道。主值走非虚拟口径（与上方四卡调用统计同源）；
+           行内注「真实 / 未标记」之和即主值，虚拟学习者单列标注「不计入」。
            2026-10-21 用户「五个就一个有，也不要了，直接把这个做到上面」：五卡里只有本卡
            带副行，整排被抬高一档——分解移到数值行内（valueNote），副行只留给取数三态。
            失败态卡不可点（卡内放重试钮），读数失败不能靠点卡跳去别处兜底。 -->
@@ -97,7 +98,7 @@
            2026-10-22 用户：标题只写「需要关注」，今日失败数下移到这里。
            2026-10-26：健康 chip 撤除——同一控件加载中点击会跳走、失败态点击却是就地重试；
            健康只留结论行右端一个出口。 -->
-      <div class="ov-row ov-subs">
+      <div v-if="todayFailed > 0 || simTone === 'bad' || simTone === 'warn'" class="ov-row ov-subs">
         <button
           v-if="todayFailed > 0"
           type="button"
@@ -106,9 +107,10 @@
           @click="investigateTodayFailures"
         >调用 · 今日失败 {{ todayFailed }} 次</button>
         <button
+          v-if="simTone === 'bad' || simTone === 'warn'"
           type="button"
           class="mk-status__meta-link"
-          :class="simTone === 'bad' ? 'mk-status__meta--bad' : simTone === 'warn' ? 'mk-status__meta--warn' : simTone === 'ok' ? 'mk-status__meta--ok' : ''"
+          :class="simTone === 'bad' ? 'mk-status__meta--bad' : 'mk-status__meta--warn'"
           :title="simTitle"
           @click="jump('virtual-learners')"
         >仿真 · {{ simHeadline }}</button>
@@ -117,7 +119,10 @@
 
     <!-- 教学闭环（原型 .loop 招牌块）：五环各一卡，读数全真实。
          口径：对话/路径/评估来自 overview/stats（随 10s 轮询）；
-         教学回合=会话累计、记忆复习=到期待办（进页拉一次）。 -->
+         教学回合=会话累计、记忆复习=到期待办（进页拉一次）。
+         卡内不再画行尾箭头（2026-11-02 评审 R4）：卡间已有指向下一环的连线箭头，
+         同一行同方向再挂一个蓝色「→」等于两套箭头说同一件事。可点线索保留在
+         悬停边框与 cursor 上（同页 KPI 卡的可点语言）。 -->
     <div class="mk-card">
       <div class="mk-card__head">
         <span class="mk-card__title">教学闭环</span>
@@ -158,7 +163,6 @@
                   title="生成失败的路径数"
                   @click.stop="jumpToFailedPaths()"
                 >失败 {{ s.failN }}</button>
-                <span class="loop__go" aria-hidden="true">→</span>
               </span>
             </div>
           </template>
@@ -172,9 +176,14 @@
       <div class="mk-card ov-card--rank">
         <div class="mk-card__head">
           <span class="mk-card__title">Skill 调用量 Top 5</span>
-          <!-- 2026-10-21 用户「除了 kpi 面板，其他地方也有这种文案」：卡头 meta 只留时间窗，
-               账号口径（仅真实账号 / 含管理员发起的仿真任务）进 title -->
-          <span class="mk-card__meta">近 7 天</span>
+          <!-- 卡头 meta = 时间窗 + 账号范围。2026-10-21 曾把账号口径只写进 title
+               （当时嫌可见副文啰嗦），2026-11-02 评审 R2 推翻了这一处理：同一 Skill
+               在详情页读 197 次、这里读 72 次，两边都写「近 7 天」，差别只在这一卡不含
+               虚拟学习者——范围不可见就会被读成数据对不上。meta 只留这一句，完整说明进 title。 -->
+          <span
+            class="mk-card__meta"
+            title="近 7 天 · 只统计真实账号发起的 Skill 执行，不含虚拟学习者"
+          >近 7 天 · 不含虚拟学习者</span>
         </div>
         <div class="ov-card__body">
           <div class="ranklist">
@@ -200,8 +209,11 @@
               <span class="rankrow__idx">{{ i + 1 }}</span>
               <!-- 英文主行（2026-10-25 用户「以英文为主」）：与 Skills 列表 / 详情 hero 同口径，
                    canonical id 在前；中文 displayName 只在它确实是别名时括注（同 id 不重复） -->
+              <!-- 2026-11-01 外部评审（五轮 P2）：1920 下长 id 带中文别名会被截成
+                   「teaching-opening-generator · 课…」，被吃掉的是 id 本身。id 是监控键，
+                   优先保它完整：id 长到 22 字符以上就不再续别名（别名仍在悬停里）。 -->
               <span class="rankrow__grow" :title="skillNameTitle(s.agentId)">
-                {{ skillIdOf(s.agentId) }}<template v-if="skillAliasOf(s.agentId)"> · {{ skillAliasOf(s.agentId) }}</template>
+                {{ skillIdOf(s.agentId) }}<template v-if="skillAliasOf(s.agentId) && skillIdOf(s.agentId).length <= 22"> · {{ skillAliasOf(s.agentId) }}</template>
               </span>
               <!-- 占比条（mk-minibar 共享原语）：名次数字只给序，条给「梯队差距」一眼可读；
                    无金银铜——排序徽章是装饰不编码信息 -->
@@ -328,15 +340,18 @@
               </div>
             </div>
           </div>
+          <!-- 图标走 #icon 插槽（2026-11-02 评审 R7）：原来传字符「◌」，19px 字号在 46px 圆角块里
+               只剩一个几乎看不见的点，读成图标没渲染。线性图标按同页空态惯例给 22px。 -->
           <MkEmptyState
             v-else
             class="ov-card__empty"
-            icon="◌"
             :title="data.feed.length ? '动态均来自测试 / 模拟账号' : '近 24h 暂无动态'"
             :description="data.feed.length
               ? '按真实视角已隐藏这些动态。'
               : '近 24 小时没有执行失败、新用户注册、教学会话或任务完成记录。'"
-          />
+          >
+            <template #icon><Inbox :size="22" :stroke-width="1.7" aria-hidden="true" /></template>
+          </MkEmptyState>
         </div>
       </div>
     </div>
@@ -358,6 +373,7 @@
 
 <script setup lang="ts">
 import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, watch, nextTick } from 'vue';
+import { Inbox } from 'lucide-vue-next';
 import { overviewHealth, investigateAgent, investigateTodayFailures, statusActionOf, mergeStatusHeadline, intent, dataSource, openSubPage } from './store';
 import {
   liveOverviewFull, overviewHideTest, refreshLiveOverview, liveLoading, liveRefreshing,
@@ -413,7 +429,7 @@ type LoopExtraState = 'loading' | 'ready' | 'failed';
 const teachState = ref<LoopExtraState>('loading');
 const memState = ref<LoopExtraState>('loading');
 /** P2 异常→动作闭环：五环各接深链（跳目标页 scene），点击行为与 title 同步披露 */
-interface LoopStage { name: string; val: string; tone: 'active' | 'done' | 'alert'; title?: string; scene: string; sceneQuery?: Record<string, string>; failN?: number; ringFailed?: boolean }
+interface LoopStage { name: string; val: string; tone: 'done' | 'alert'; title?: string; scene: string; sceneQuery?: Record<string, string>; failN?: number; ringFailed?: boolean }
 const loopStages = computed<LoopStage[]>(() => {
   const d = data.value;
   const evalOk = (d?.wrapup.evaluationModel ?? 0) + (d?.wrapup.evaluationAiFallback ?? 0);
@@ -422,8 +438,12 @@ const loopStages = computed<LoopStage[]>(() => {
   return [
     {
       name: '目标对话',
-      val: `${d?.loop.conversationsActive ?? 0} 进行中`, tone: 'active',
-      title: '进行中的目标对话数',
+      /* 2026-11-01 外部评审：本环此前恒蓝框，而同样「N 进行中」的「路径规划」是绿框——
+         蓝被读成「选中/当前」，五环里只有它一个蓝，语义自相矛盾。五环只保留两档：
+         正常（done）/ 有失败（alert），进行中与否由读数本身说明。 */
+      val: `${d?.loop.conversationsActive ?? 0} 进行中`, tone: 'done',
+      /* title 撤（2026-11-02 文案清理）：卡名「目标对话」+ 读数「N 进行中」已把这句话说过一遍，
+         tooltip 只是把同屏文字重新组合，不带任何屏上没有的信息。 */
       scene: 'goal-conversations',
     },
     {
@@ -459,7 +479,8 @@ const loopStages = computed<LoopStage[]>(() => {
       // 视觉修复 2026-10-24：评估失败数 > 0 时阶段卡必须与「路径规划」同档转 alert，
       // 不能继续绿框（同屏「失败 N」+ 绿色阶段卡会被读成互相矛盾）
       tone: evalFailed > 0 ? 'alert' : 'done',
-      title: `最近 ${d?.wrapup.sampleSize ?? 0} 次课后总结中 ${evalOk} 次评估完成 · 失败 ${evalFailed}`,
+      /* title 撤（2026-11-02 文案清理）：分母（最近 N 次总结）/ 完成 / 失败三个数都印在本卡读数行上，
+         tooltip 把同一组数换个说法再讲一遍；口径的可见出口仍是读数行本身。 */
       scene: 'teaching-sessions',
       sceneQuery: evalFailed > 0 ? { wrap: 'eval-failed' } : undefined,
     },
@@ -472,8 +493,10 @@ const loopStages = computed<LoopStage[]>(() => {
           : `${memDue.value ?? 0} 待办`,
       tone: memState.value === 'failed' || (memDue.value ?? 0) > 0 ? 'alert' : 'done',
       ringFailed: memState.value === 'failed',
+      /* 失败态不再附「点「重试」重新获取」（2026-11-02 文案清理）：同一状态下本卡指标行就渲染着
+         「重试」钮（ringFailed），这句是对那个控件的复述；失败事实与到期口径保留。 */
       title: memState.value === 'failed'
-        ? '到期待办数获取失败 · 点「重试」重新获取'
+        ? '到期待办数获取失败'
         : '到期未复习的记忆条数',
       scene: 'memory-review',
     },
@@ -573,16 +596,17 @@ const kpiCards = computed<KpiCard[]>(() =>
   }))
 );
 
-/* ===== 完课量（#105 读侧接入，2026-10-19）=====
-   「管理端同屏不同源」的读侧收口：真实侧与虚拟侧不再各算各的——统一数收束事件
-   （learner_evidence 已投影的 task:completed 行，口径单点 closure-observability.ts）。
-   家法同上方四卡：hint 一行可见口径（真实 / 虚拟 / 未标记分解），长释进 title 悬停。
-   与上方四卡不同源：本卡含虚拟学习者与测试账号（拆分自证），不并入真实口径读数；
+/* ===== 完课量（#105 读侧接入，2026-10-19；2026-11-04 口径对齐 #186）=====
+   数据源：learner_evidence 已投影的 task:completed 行（口径单点 closure-observability.ts）。
+   主值 total 走**非虚拟口径**（与上方四卡调用统计同一套判据），byTrack/bySource 与主值
+   同源同口径——行内注「真实 / 未标记」之和恒等于 total，数值行内自证；虚拟学习者单列
+   virtualCount 并标注「不计入」，既不混进主值也不丢披露。
    历史无 track 行如实显示「未标记」，不回填、不猜；读数以已投影事件为准（消费滞后时偏小）。 */
 type ClosureSummary = {
   total: number
   byTrack: Record<string, number>
   bySource: Record<string, number>
+  virtualCount: number
   pathCompletions: number
 }
 const closureState = ref<'loading' | 'ready' | 'error'>('loading')
@@ -595,6 +619,7 @@ async function loadClosure() {
       total: Number(body.total ?? 0),
       byTrack: (body.byTrack || {}) as Record<string, number>,
       bySource: (body.bySource || {}) as Record<string, number>,
+      virtualCount: Number(body.virtualCount ?? 0),
       pathCompletions: Number(body.pathCompletions ?? 0),
     }
     closureState.value = 'ready'
@@ -617,12 +642,17 @@ const closureKpi = computed(() => {
   }
   const s = closureSummary.value
   const human = s.byTrack.human ?? 0
-  const virtual = s.byTrack['virtual-learner'] ?? 0
   const unmarked = (s.byTrack.legacy ?? 0) + (s.byTrack.unknown ?? 0)
   const unmarkedLabel = closureTrackText('legacy')
-  const hintParts = [`真实 ${human}`, `虚拟 ${virtual}`]
+  const virtual = s.virtualCount ?? 0
+  // 行内注只分解**主值同口径**（非虚拟）：真实 + 未标记 恒等于 total，数值行内自证；
+  // 虚拟学习者单列并标注「不计入」——否则会出现「主值 2 / 注 1+11+1=13」的卡内自相矛盾（#186 复核）。
+  const hintParts = [`真实 ${human}`]
   if (unmarked > 0) hintParts.push(`${unmarkedLabel} ${unmarked}`)
-  const title = `本卡含虚拟学习者与测试账号，与真实用户 KPI 不同源。整条路径完成 ${s.pathCompletions} 次（统计单位不同，未计入任务完课量）。`
+  if (virtual > 0) hintParts.push(`虚拟 ${virtual} 不计入`)
+  /* 长释（2026-11-06 文案排查 §7 修复）：原句有分号拼接、隔空指路「上方」与内部词
+     「口径」，改为一句直说事实——只统计真实账号，行内两项相加即总数，虚拟单列不计入。 */
+  const title = `只统计真实账号的完课记录，「真实」与「未标记」两项相加即总数，虚拟学习者的记录单独列出、不计入总数。整条路径完成 ${s.pathCompletions} 次，按路径计，不计入任务完课量。`
   return {
     label: '完课量',
     value: `${s.total}`,
@@ -644,7 +674,8 @@ const todayKey = computed(() => {
   const p = (x: number) => String(x).padStart(2, '0');
   return `${n.getFullYear()}-${p(n.getMonth() + 1)}-${p(n.getDate())}`;
 });
-const activeMax = computed(() => Math.max(1, ...(data.value?.growth7d.map((g) => g.activeUsers) || [])));
+/* 分母下限 5：全窗口只有 1 人时柱高不超过 1/5，避免「1 人顶天立地」误读成高峰 */
+const activeMax = computed(() => Math.max(5, ...(data.value?.growth7d.map((g) => g.activeUsers) || [])));
 /** 与 TokenCost.trendCols 同规则：零值不画残影柱（0%），微值保底 6% 可见 */
 const barPct = (v: number, max: number) => (v > 0 ? `${Math.max(Math.round((v / max) * 100), 6)}%` : '0%');
 const barchartCols = computed(() => (data.value?.growth7d || []).map((g) => {
@@ -667,7 +698,7 @@ const sparseActiveDay = computed(() => {
   return days.length === 1 ? days[0] : null
 });
 
-/* 系统健康摘要：拉统一健康清单（60s 缓存），只取 warn/error 计数。
+/* 系统健康摘要：拉巡检聚合的健康清单（/health-center/summary，60s 缓存），只取 warn/error 计数。
    P1#3 三态纪律：加载中 / 加载失败 / 空清单 / 有数据是四种不同事实，
    不得全部坍缩成「加载中」，更不能让「拉不到」冒充正常——失败态着弱琥珀并给重试出口。 */
 const healthCheck = ref<{ total: number; warn: number; error: number } | null>(null);
@@ -692,6 +723,9 @@ const todayFailed = computed(() => {
 
 /** 结论行右端动作：按结论自己的口径派生。
     「需要关注」（今日失败 / 今日成功率两类触发）→ 去执行日志按「失败 + 今天」排查；
+    「近 7 天失败 N 次」这一类结论（今日无调用时的待办接管）→ 去同一批失败调用，
+    否则横幅报 24 次、右端只给健康检查清单，这 24 次由哪些调用组成无处可查
+    （2026-11-02 评审 R3）；
     其余（运行平稳 / 空闲 / 统计未就绪）→ 健康中心入口（健康明细已从状态条撤除，这里只剩这一个出口）。 */
 const statusAction = computed(() => {
   if (statusActionOf(health.value?.headline || '') === 'investigate-today') {
@@ -700,12 +734,23 @@ const statusAction = computed(() => {
       run: investigateTodayFailures
     }
   }
+  if (todoTakesOver.value && failed7d.value > 0) {
+    return {
+      label: '查看失败明细',
+      title: '近 7 天失败的调用，落到执行日志的失败筛选',
+      run: () => jumpToFailures('')
+    }
+  }
   return { label: '查看健康中心', title: healthTitle.value, run: () => jump('health-center') }
 })
 async function loadHealth() {
   try {
-    const res = await adminHealthCenterApi.get()
-    const items = res.data?.data?.items ?? []
+    // 2026-11-04 修复同屏数字不一致：总览结论条与健康中心 KPI 是同一条「健康检查」事实，
+    // 必须读同一数据源。此前总览读列表端点 /health-center（14 项，无 runtime-degradation 等
+    // 两项运行时观测）只数到 1 个 warn，点进健康中心却读概要端点 /health-center/summary
+    // （16 项，abnormal=2）——同一事实两页各报一个数。改读概要端点与健康中心逐一对齐。
+    const res = await adminHealthCenterApi.getSummary()
+    const items = res.data?.data?.health?.items ?? []
     if (!items.length) {
       healthState.value = 'empty'
       return
@@ -942,6 +987,16 @@ function jumpToKpi(k: KpiCard) {
    全部下沉到本 tooltip 长释——副行说「这个数怎么算」，tooltip 说「这一窗具体是多少」。
    （2026-10-19 用户走查：「目标对话 ｜ 累计完成 14 个」「用户活跃 ｜ 今日新增 0…」这类
    hint 在报另一个读数，不是口径；目标页由卡片点击直达，见 kpiTargets。） */
+/**
+ * 卡面副行（口径短语）：成功率在「今日没有调用」时值为「—」，副行若继续讲成功率怎么算，
+ * 会被读成「监控坏了」。这种零分母的情况必须在卡面上直说（2026-11-01 外部评审三轮 P0）。
+ */
+function kpiHint(k: KpiCard): string {
+  const rate = k.key === 'todaySuccessRate' || k.label === '今日成功率'
+  if (rate && (k.value === '—' || k.value === '-')) return '今日 00:00 至今还没有调用，成功率没有可算的样本'
+  return k.hint
+}
+
 function kpiTitle(k: KpiCard): string {
   const trend = k.trend ? `较昨日同时刻 ${k.trend.pct}` : ''
   /* foot 里的 baseNote（「较昨日同时刻」/「昨日同时刻无对照」）在有趋势数字时与 trend 重复，
@@ -1085,10 +1140,7 @@ watch(feedRef, (el) => {
 })
 watch(feedRows, () => { void nextTick(measureFeedOverflow) })
 
-/* 待处理事项（原型 Row B 第二卡）：与状态条同源，不另起口径。
-   密度优化（2026-10-03）：text 里末尾括号是口径标注（「近 7 天 · 200 条采样」），
-   与主句挤一行读着冗长 → 拆成主行 + 口径副行（副行弱化为 faint 小字）。
-   只做展示层拆分，文案单一事实源仍在 live.ts。 */
+/* 待处理事项（原型 Row B 第二卡）：与状态条同源，不另起口径。 */
 const topMaxCalls = computed(() => Math.max(1, ...(data.value?.topSkills || []).map((s) => Number(s.calls) || 0)));
 /** Top5 占比条：以榜首调用量为分母，下限 4% 保证末名可见（数字仍为唯一精确口径） */
 const topBarPct = (calls: number) => `${Math.max(Math.round((calls / topMaxCalls.value) * 100), 4)}%`;
@@ -1098,26 +1150,36 @@ const topBarPct = (calls: number) => `${Math.max(Math.round((calls / topMaxCalls
     定义位置见文件上方「Skill 标签三件套」：必须早于 feedRows（TDZ）。 */
 
 interface TodoItem { key: string; text: string; main: string; tone: Tone; actLabel: string; action: () => void; title?: string }
-/** 去掉末尾括号口径（完整句仍进 title）：可见行只留动作本身 */
-function splitTodoMain(text: string): string {
-  const m = text.match(/^(.*?)\s*[（(]([^（）()]+)[）)]\s*$/)
-  return m ? m[1] : text
-}
+/** 全量近 7 天失败数（按 Skill，与 Top 5 卡同一份聚合）。
+    待办清单本身来自 live.ts 的「最近 200 条调用」采样，采样数不能加「近 7 天」的标签：
+    同一 Skill 在同屏 Top 5 里是 7 次、在待办里是 1 次（2026-11-02 评审 R1）。
+    这里只认全量聚合里的读数；不在聚合里（Top 5 按调用量截断）的 Skill 不给数。 */
+const failed7dBySkill = computed(() => {
+  const map = new Map<string, number>();
+  for (const s of data.value?.topSkills || []) map.set(skillIdOf(s.agentId), Number(s.failed) || 0);
+  return map;
+});
 const todoItems = computed<TodoItem[]>(() => {
   const items: TodoItem[] = [];
   // 健康检查异常（#5）：状态条已红/琥珀报「N 项异常」，此处必须有对应条目，
   // 否则同屏红结论配「没有待处理的事项」（healthTone 由 healthCheck error/warn 计数派生）
   const hc = healthCheck.value;
   if (healthState.value === 'ready' && hc && (hc.error > 0 || hc.warn > 0)) {
-    const n = hc.error > 0 ? hc.error : hc.warn;
-    const label = hc.error > 0 ? '异常' : '需关注';
+    /* 2026-11-04：行文案与悬停说明必须给同一组数。原写法行内只报一档（error>0 报 error，
+       否则报 warn），悬停却报 error+warn 合计，两档并存时同一行自相矛盾（行「1 项异常」、
+       悬停「共 3 项」）。改为行内两档分别报数，合计与悬停、健康中心「检查异常」KPI 对齐 */
+    const counted: string[] = []
+    if (hc.error > 0) counted.push(`${hc.error} 项异常`)
+    if (hc.warn > 0) counted.push(`${hc.warn} 项需关注`)
+    const text = `健康检查 ${counted.join('、')}`
     items.push({
       key: 'health',
-      text: `健康检查 ${n} 项${label}`,
-      main: `健康检查 ${n} 项${label}`,
-      /* 2026-10-28 数据审计：本行只数 error 档；健康中心 KPI 的「检查异常 N」另含 warn 档，
-         两页数字不同时给出解释，避免被读成数据不一致 */
-      title: `只计「${label}」档（error）。健康中心的「检查异常」另含「需关注」（warn）档`,
+      text,
+      main: text,
+      /* 2026-11-04：loadHealth 已改读 /health-center/summary，本节数与健康中心 KPI「检查异常」
+         同源同口径；原「本行只数 error 档 / 健康中心另含 warn 档」的说明已不成立（error=0 时
+         会渲染成把「需关注」硬配「（error）」），改为如实说明两档均计入 */
+      title: `含「异常」与「需关注」两档，与健康中心「检查异常」同一统计方式，共 ${hc.error + hc.warn} 项`,
       tone: (hc.error > 0 ? 'bad' : 'warn') as Tone,
       actLabel: '健康中心',
       action: () => jump('health-center'),
@@ -1126,11 +1188,17 @@ const todoItems = computed<TodoItem[]>(() => {
   for (const a of effectiveActions.value) {
     // 事项标题里带内部 Skill id（live.ts 原文 `${agentId} 近 7 天失败…`）：换成「id · 中文别名」
     // （2026-10-25 英文为主；别名缺失时只剩 id，不再替换成纯中文名）
-    const text = a.agentId ? a.text.replace(a.agentId, skillLabelOf(a.agentId)) : a.text
+    const label = a.agentId ? skillLabelOf(a.agentId) : ''
+    const failed = failed7dBySkill.value.get(skillIdOf(a.agentId)) ?? 0
+    const text = label
+      ? failed > 0
+        ? `${label} 近 7 天失败 ${failed} 次`
+        : `${label} 近 7 天有失败调用`
+      : a.text
     items.push({
       key: `a-${a.agentId}-${a.text}`,
       text,
-      main: splitTodoMain(text),
+      main: text,
       tone: a.tone,
       actLabel: '去排查',
       action: () => investigateAgent(a.agentId),
@@ -1138,7 +1206,7 @@ const todoItems = computed<TodoItem[]>(() => {
   }
   const w = wrapupIssue.value;
   if (w) {
-    items.push({ key: 'wrapup', text: w.text, main: splitTodoMain(w.text), tone: w.tone as Tone, actLabel: '教学会话', action: () => openSceneWith('teaching-sessions', { wrap: 'degraded' }) });
+    items.push({ key: 'wrapup', text: w.text, main: w.text, tone: w.tone as Tone, actLabel: '教学会话', action: () => openSceneWith('teaching-sessions', { wrap: 'degraded' }) });
   }
   return items;
 });
@@ -1298,7 +1366,7 @@ onBeforeUnmount(() => { feedRo?.disconnect(); feedRo = null })
 
 /* ---- 胶囊（原型 .pill：卡头 tools 徽标）---- */.pill {
   display: inline-flex; align-items: center; gap: 5px;
-  padding: 2px 9px; border-radius: 999px;
+  padding: 2px 9px; border-radius: var(--mk-radius-sm);
   font-size: var(--mk-fs-micro); font-weight: 600;
   border: 1px solid transparent; white-space: nowrap;
 }
@@ -1330,11 +1398,10 @@ onBeforeUnmount(() => { feedRo?.disconnect(); feedRo = null })
   cursor: pointer;
   transition: border-color 0.12s var(--mk-ease-out), background 0.12s var(--mk-ease-out);
 }
-/* 可点线索：悬停只换边框与底色（全站判例，不做位移），行尾箭头常显 */
+/* 可点线索：悬停只换边框与底色（全站判例，不做位移）。
+   阶段卡不挂行尾箭头：卡间连线已经表达「下一环」，卡内再画一个同向箭头是重复（2026-11-02 评审 R4） */
 .loop__step:hover { border-color: color-mix(in srgb, var(--mk-blue) 50%, transparent); background: var(--mk-btn-hover-bg); }
 .loop__step:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 2px; }
-.loop__step--active { border-color: var(--mk-blue); background: var(--mk-blue-bg); }
-.loop__step--active:hover { background: var(--mk-blue-bg-strong); }
 .loop__step--done { border-color: color-mix(in srgb, var(--mk-green) 34%, var(--mk-line)); }
 .loop__step--alert { border-color: color-mix(in srgb, var(--mk-amber) 42%, var(--mk-line)); background: var(--mk-amber-bg); }
 /* 阶段号是人话标签（「阶段 1」），不与等宽字体混排 */
@@ -1343,8 +1410,6 @@ onBeforeUnmount(() => { feedRo?.disconnect(); feedRo = null })
 .loop__val { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--mk-ink); }
 /* 指标行 = 数值 + 失败徽章（错误内联，2026-10-03）：徽章可点，需手型与文字对齐 */
 .loop__valrow { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
-/* 行尾箭头：role=button 的可点线索，与页内文字链「→」同词汇 */
-.loop__go { margin-left: auto; color: var(--mk-blue); font-weight: 700; }
 .loop__fail { cursor: pointer; font-family: inherit; }
 /* 对比度（#0）：暗色 --mk-red-bg 是 14% 半透明红，红字压在本页 .loop__step--alert 的
    半透明琥珀底上合成 3.49:1（<小字 AA 4.5）。徽章自铺不透明底板：暗色取 --mk-surface-2
@@ -1482,8 +1547,8 @@ html[data-theme='dark'] .loop__fail { background: var(--mk-surface-2); }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .rankrow--link { cursor: pointer; }
-.rankrow--link:hover .rankrow__grow { color: var(--mk-blue); }
-.rankrow__bar { width: 64px; flex: none; }
+.rankrow--link:hover .rankrow__grow { color: var(--mk-blue-text); }
+.rankrow__bar { width: 48px; flex: none; }
 .rankrow__val { flex: none; font-variant-numeric: tabular-nums; font-weight: 600; font-size: var(--mk-fs-micro); color: var(--mk-ink); }
 /* 调用/失败两列（评审 2026-10-10）：右对齐定宽成列；失败非零红字提示，零给「–」保列形。
    宽度按「调用次数 / 失败次数」四字表头定（2026-10-24 用户「调用次数就写调用次数就可以了」）：
@@ -1513,7 +1578,7 @@ html[data-theme='dark'] .loop__fail { background: var(--mk-surface-2); }
   border: 0; background: none; padding: 4px 8px;
   border-radius: var(--mk-radius-sm);
   font: inherit; font-size: var(--mk-fs-micro); font-weight: 700;
-  color: var(--mk-blue); cursor: pointer; white-space: nowrap;
+  color: var(--mk-blue-text); cursor: pointer; white-space: nowrap;
 }
 .todo-act:hover { background: var(--mk-blue-bg); }
 

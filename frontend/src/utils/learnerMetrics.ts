@@ -84,3 +84,58 @@ export function learnerMetric(key: LearnerMetricKey): LearnerMetricDef {
 
 /** 四读数卡头图例（各处同款，避免一处「LSS · KTL · LF · LSB」另一处写成别的顺序/别名） */
 export const LEARNER_METRIC_CODES = METRICS.map((m) => m.code).join(' · ')
+
+/* ---------------------------------------------------------------------------
+ * 刻度换算（2026-11-01 外部评审 P0 修复）
+ *
+ * 同一套 LSS/KTL/LF/LSB 在库里有两个刻度，后端 `learning-state-types.ts` 已把它们分成
+ * `LearnerMetricsInternalTen`（0–10，快照/落库侧）与 `DisplayHundred`（0–100，展示契约），
+ * 并注明「同一个 lss 在落库侧是 0-10、在回调契约里是 0-100，混用就是事故」。
+ *
+ * 管理端学习者详情页恰好两处都画：卡片四读数读快照（0–10），下方「学习压力记录」曲线读
+ * `learning_metrics`（0–100）——同屏两个读数差 10 倍、风险判断相反（实测：卡 1.1 / 曲线 10.8，
+ * LF 卡上判绿、曲线上判红）。该页的图例、警戒线（60）与口径文案都是 0–100，故本页统一到 0–100：
+ * 快照读数经本文件换算后再上屏，阈值同步按 10 倍口径判色。
+ * ------------------------------------------------------------------------- */
+
+/** 内部 0–10 → 展示 0–100（null/undefined/非有限值按缺值透传）。
+ *  负荷类读数（LSS/KTL/LF）非负，下界裁到 0 只是坏数据兜底。 */
+export function toDisplayHundred(v: number | null | undefined): number | null {
+  if (v == null || !Number.isFinite(v)) return null
+  return Math.max(0, Math.min(100, v * 10))
+}
+
+/**
+ * **有符号**读数的内部 0–10 → 展示 0–100，不做下界裁剪（LSB 专用）。
+ *
+ * 2026-11-01 外部评审 P1：LSB = KTL − LF 是差值，负数本身就是结论（该休息了）。
+ * 原先这里复用 `toDisplayHundred` 的 `Math.max(0, …)`，把 −0.72 的 LSB 直接冲成 0.0，
+ * 于是同一张「学习压力记录」卡顶部四个大字写 LSB 0.0、下方曲线写 LSB −7.2，
+ * 被读成「同一卡片两个互相打架的读数」。判色用的 `toneOfHundred` 一直是按有符号值写的
+ * （`v <= -30` 才会判坏），所以只补换算、不动阈值。
+ */
+export function toDisplayHundredSigned(v: number | null | undefined): number | null {
+  if (v == null || !Number.isFinite(v)) return null
+  return Math.max(-100, Math.min(100, v * 10))
+}
+
+/**
+ * 展示刻度（0–100）的负荷类判色：与 0–10 口径同比例（好 ≤40、坏 ≥70；LF 警戒 60）。
+ * 0 视同缺值不判色，与 0–10 版 `loadTone` 一致。
+ */
+export function toneOfHundred(key: LearnerMetricKey, v: number | null | undefined): LearnerMetricTone {
+  if (v == null || v === 0) return ''
+  if (key === 'lsb') return v >= 10 ? 'ok' : v <= -30 ? 'bad' : 'warn'
+  if (key === 'lf') return v >= 60 ? 'bad' : v <= 40 ? 'ok' : 'warn'
+  return v >= 70 ? 'bad' : v <= 40 ? 'ok' : 'warn'
+}
+
+/** 展示刻度（0–100）的参考带文案，供已统一到 0–100 的页面直接用（避免与 0–10 文案同屏打架） */
+export const LEARNER_METRIC_BAND_HUNDRED: Record<LearnerMetricKey, { band: string; bandTitle: string }> = {
+  lss: { band: '0–100 · 参考 40–70', bandTitle: '学习压力 LSS（Learning Stress Score）：0-100，越高说明越累。' },
+  // KTL 的长释不涉刻度（同为「慢速均值」语义）→ 引用基础定义，只覆盖参考带
+  ktl: { band: '慢 EWMA · 参考 ≤ 70', bandTitle: learnerMetric('ktl').bandTitle },
+  lf: { band: '警戒 ≥ 60', bandTitle: '学习疲劳 LF（Learning Fatigue）：0-100，越高说明越疲劳。' },
+  // 0–100 与 0–10 两档的 LSB 文案一致（同为差值语义，不涉刻度）——直接引用基础定义，避免抄两份
+  lsb: { band: learnerMetric('lsb').band, bandTitle: learnerMetric('lsb').bandTitle },
+}

@@ -1,6 +1,6 @@
 # Agent I/O 设计 V3：Agent 中心的字段路由模型
 
-> 📌 类型：设计留痕（⚫ 部分归档 2026-09-28：§1–§4 概念层已由 `SKILL_PROTOCOL_V4 §2.6` 承接；§5–§14 的实现方式已被 v4 编排文件取代，**勿照做**）｜最后核验：2026-10-16。索引见 [doc/README.md](./README.md)。
+> 📌 类型：设计留痕（⚫ 部分归档 2026-09-28：§1–§4 概念层已由 `SKILL_PROTOCOL_V4 §2.6` 承接；§5–§14 的实现方式已被 v4 编排文件取代，**勿照做**）｜最后核验：2026-11-02。索引见 [doc/README.md](./README.md)。
 
 > 起草日期：2026-06-18
 > 适用版本：WenFlow 平台后端 / 前端管理台
@@ -577,7 +577,7 @@ agent_contracts:
 
 ### 7.2 skill:goal-conversation 字段清单
 
-按当前代码 + GOAL_CONVERSATION_FIELDS.md 反向沉淀（**以代码为准**）：
+按起草时代码反向沉淀（**以代码为准**；现行字段契约与路由以 `prompts/orchestration/goal.yaml` 为准）：
 
 | fieldId | valueType | promptRole | 默认 lock | 现状来源 |
 |---|---|---|---|---|
@@ -709,7 +709,7 @@ admin 后台 / 运行节点管理（原 AgentRegistry，逐步改名 NodeRegistr
 │                                                                           │
 │ 字段                          │ 前端 │ 下游      │ 内部 │ 累积 │ Prompt 角色│
 │ ────────────────────────────────────────────────────────────────────────│
-│ 🔴 hard-required (8)                                                      │
+│ 🔴 hard-required (6)                                                      │
 │   🔒 surface_goal             │  ✅  │ path     │  -   │  -   │ 🔴      │
 │   🔒 real_problem             │  ✅  │ path     │  -   │  -   │ 🔴      │
 │   🔒 current_baseline.evidence│  ✅  │ path     │  -   │  -   │ 🔴      │
@@ -744,9 +744,9 @@ admin 后台 / 运行节点管理（原 AgentRegistry，逐步改名 NodeRegistr
 📋 实时输出预览（按 routing 自动生成）：
   ➜ envelope.userVisible: reply (control 中提取的 reply 文本)
   ➜ envelope.internal.ext.goalConversation: { understanding 中 render=visible 字段 }
-  ➜ handoff to path-agent: 21 字段
+  ➜ handoff to path-agent: 18 字段
   ➜ handoff to learner-state-agent: 2 字段
-  ➜ accumulate events: 3 字段
+  ➜ accumulate events: 4 字段
 ```
 
 ### 8.3 锁可视化与权限边界

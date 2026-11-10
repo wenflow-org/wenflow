@@ -105,7 +105,14 @@ export interface LearnerModelProfile {
   lastUpdated: string;
   
   cognitive: CognitiveProfile;
-  behavioral: BehavioralBaseline;
+  /**
+   * 学习行为基线（平均响应/消息长度/互动间隔/投入度/一致性）。
+   * **无观测时为 null**：EMA 基线数据源已于 2026-08 退役，`fetchBaselineData` 恒返回 null。
+   * 2026-11-09 运营字段真值核查：此前回落到 DEFAULT_BEHAVIORAL 常量，导致所有学员显示同一组
+   * 永远不变的数字；改为 null 语义，前端不渲染该子卡、下游不参与判断。
+   * 若将来实现真实采集（从 teaching_session_messages 计算），直接填值即可，结构不变。
+   */
+  behavioral: BehavioralBaseline | null;
   learning: LearningState;
   preferences: LearningPreferences;
   emotional: EmotionalProfile;
@@ -127,12 +134,31 @@ export interface LearnerModelProfile {
     goalTitle: string;
     completedAt: string | null;
   } | null;
+
+  /**
+   * 认知 / 偏好 / 情绪 / 叙述这组「人设字段」的**采集时点**（最近一次目标对话理解证据的时间）。
+   *
+   * 2026-11-09 画像链路核查确认：这组字段只在目标对话阶段写入，此后的教学表现不会回写
+   * （唯一的例外是 `selfAssessmentAccuracy`，它会被 FSRS 校准结果覆盖）。
+   * 暴露时点是为了让界面能标「来自哪天的目标对话」，避免把旧快照读成当前状态。
+   * 没有做「课后自动刷新人设」——那需要新的推断规则，属产品决策，不做编造式回写。
+   */
+  personaCapturedAt?: string | null;
   
   derivedInsights: {
     learningVelocity: number;
     optimalSessionLength: number;
     recommendedDifficulty: 'easy' | 'medium' | 'hard';
     suggestedApproach: string;
+    /**
+     * riskFactors / strengths 由 ProfileAggregator.identifyRiskFactors / identifyStrengths 从画像字段
+     * （cognitive/learning/behavioral/emotional）确定性推导，**不消费** knowledgeMemory.globalBackground
+     * 台账——契约上「不接通」。issue #196 点名的「叙述层增强永不触发」是：原先
+     * reusableFoundations→strengths / blockedFoundations→riskFactors 的增强，其唯一写入口
+     * （applyUpdate 的 'knowledge-background' 合并分支，写入方 learner.coordinator）在 1b3cf644 退役后
+     * 已无调用方。该分支与其增强随该提交一并移除、不再接通：接通需重造写入口或改从 globalBackground
+     * 派生，属产品决策，未做（保住现有行为）。
+     */
     riskFactors: string[];
     strengths: string[];
   };
@@ -243,6 +269,16 @@ export interface LearnerBackgroundConceptLedgerItem {
   sourcePaths: string[];
   sourceTasks: string[];
   evidenceCount: number;
+  /**
+   * 数值掌握度（0–1，2026-11-09 补）。
+   *
+   * 三档 familiarity/transferReadiness 只回答「稳不稳」，看不出「0.9 掉到 0.35」这种退化——
+   * 运营页因此只能看到 practiced→practiced。本字段是**测量值**（确定性通道算出，与画像/图谱
+   * 共用 `resolveMasteryScore` 口径：取业务时间最新的证据信号）。模型蒸馏行不带数值，
+   * 合并规则：组内有确定性数值 → 取业务时间最新那条；纯模型行 → 字段缺省
+   * （不写 0：0 表示「测出来是 0」，缺省表示「没测到」）。
+   */
+  masteryScore?: number;
 }
 
 export interface LearnerRecurringConfusion {
@@ -268,6 +304,11 @@ export interface LearnerGlobalBackgroundKnowledge {
   reusableFoundations: string[];
   blockedFoundations: string[];
   transferSignals: LearnerTransferSignal[];
+  /** 最近一次课后知识状态自然语言摘要（lesson-knowledge-enricher 产出，供预测器/教学决策读取）；
+   *  无 enrichment 证据时不出现（issue #194：此前声明为 profile 产出却从未进快照）。
+   *  issue #198：摘要按**当前路径**取（自由文本可命名概念，跨路径取会经预测器渗入当前教学场景）；
+   *  外层 globalBackground 的其它结构化字段仍是用户级跨路径聚合。 */
+  knowledgeStateSummary?: string;
 }
 
 export interface LearnerPathKnowledgeMemory {
@@ -382,6 +423,8 @@ export interface LearnerSnapshot {
     };
   };
   profile: LearnerModelProfile;
+  /** 逐字段来源（可选：虚拟会话/预览等不跑画像聚合的快照没有） */
+  profileSources?: ProfileFieldSources;
   dynamicState: LearnerDynamicState;
   learningControlState: LearnerLearningControlState;
   replanSignal: LearnerReplanSignal;
@@ -404,7 +447,17 @@ export interface TeachingLearnerProjection {
     lsb: number;
     recentTrend: string;
     recommendedPacing: string;
+    /**
+     * 疲劳风险（low/medium/high）。#183：此前只在 toReplanProjection 里出现，
+     * 课堂投影裁掉它 ⇒「该减速」结论到不了下一课。
+     */
+    fatigueRisk: 'low' | 'medium' | 'high';
   };
+  /**
+   * 重排信号（阈值召回 + 归因）。#183：与 toReplanProjection.signal 同源，
+   * 让「该重排」结论随课堂载荷送达下一课，而不是只进 dashboard 文案与路径重排。
+   */
+  replanSignal: LearnerReplanSignal;
   pathContext: {
     pathTitle: string;
     pathSummary?: string | null;
@@ -424,6 +477,9 @@ export interface TeachingLearnerProjection {
     blockedFoundations: string[];
     recentConceptLedger: LearnerBackgroundConceptLedgerItem[];
     recurringConfusions: LearnerRecurringConfusion[];
+    /** 迁移就绪度信号（lesson-knowledge-enricher 产出、经快照 globalBackground 聚合）。
+     *  供课堂在联系迁移目标时点名可迁移概念（issue #196：此前该字段无任何确定性消费方）。 */
+    transferSignals: LearnerTransferSignal[];
   };
   learningControlState: LearnerLearningControlState;
   /**
@@ -445,6 +501,8 @@ export interface TeachingLearnerProjection {
     recommendedApproach: string;
     emphasize: string[];
     avoid: string[];
+    /** 画像判定的风险因子。#183：教学投影此前只保留前四个键，riskFactors 被裁掉 */
+    riskFactors: string[];
   };
 }
 
@@ -492,38 +550,32 @@ export interface LearnerReplanProjection {
   signal: LearnerReplanSignal;
 }
 
+/**
+ * 个性化配置（**只保留真正被消费的互动参数**）。
+ *
+ * 2026-11-09 画像链路核查：原接口还有 `contentStyle` / `pacing` / `pathAdjustment` 三段，
+ * 全仓没有任何读取方（`generateConfig` 的唯一调用点是 LearnerSnapshotService，它只取
+ * `interaction`），而且其中的绝对阈值（lf>5 / lf>4）与快照的 ACWR 相对判据不同源。
+ * 与其保留「算了没人用、还可能被误读成已生效」的字段，不如从契约里删掉；
+ * 将来若要接入，应以 `dynamicState` 的同一口径为输入，而不是重新造一套阈值。
+ */
 export interface LearnerPersonalizationConfig {
-  contentStyle: {
-    useAnalogies: boolean;
-    detailLevel: 'concise' | 'moderate' | 'detailed';
-    exampleFrequency: 'minimal' | 'moderate' | 'frequent';
-    codeCommentDetail: 'minimal' | 'moderate' | 'extensive';
-  };
-  
-  pacing: {
-    initialDifficulty: 'easy' | 'medium' | 'hard';
-    difficultyProgression: 'slow' | 'moderate' | 'fast';
-    breakFrequency: number;
-    reviewFrequency: 'minimal' | 'moderate' | 'frequent';
-  };
-  
   interaction: {
     hintTiming: 'immediate' | 'delayed' | 'on-request';
     encouragementFrequency: 'low' | 'medium' | 'high';
     challengeFrequency: 'low' | 'medium' | 'high';
-  };
-  
-  pathAdjustment: {
-    compressionThreshold: number;
-    extensionThreshold: number;
-    skipMasteryLevel: number;
   };
 }
 
 export interface ProfileUpdateSource {
   agentId: string;
   timestamp: string;
-  dataType: 'cognitive' | 'behavioral' | 'learning' | 'preferences' | 'emotional' | 'interaction' | 'knowledge-background';
+  // dataType 收窄为 applyUpdate 实际落地的三种（issue #196 复核）：'behavioral' / 'preferences' /
+  // 'interaction' 虽被声明，但 applyUpdate 从无对应分支、只会落到 default 被判失败——声明与行为矛盾，
+  // 故一并移除。未声明的取值不再可能经类型进入；default 仅作运行期防御（agent 侧 metadata.source
+  // 是 as 断言，可能带任意值）。'knowledge-background' 随其合并分支移除：唯一写入方
+  // （learner.coordinator）在 1b3cf644 退役后无人调用。
+  dataType: 'cognitive' | 'learning' | 'emotional';
   data: Partial<
     CognitiveProfile & 
     BehavioralBaseline & 
@@ -531,14 +583,35 @@ export interface ProfileUpdateSource {
     LearningPreferences & 
     EmotionalProfile &
     InteractionHistory
-  > & {
-    learnerBackground?: Partial<LearnerGlobalBackgroundKnowledge>;
-  };
+  >;
   confidence: number;
+}
+
+/**
+ * 画像字段的来源（2026-11-02 P1-8）：每段只列**有数据支撑**的字段名。
+ *
+ * profile-aggregator 在没数据时会填 DEFAULT_*，界面必须能逐格区分「实测」与「初始默认值」。
+ * 只靠「该账号没有任何学习证据」这一个全局条件不够：有目标对话但还没上过课时，
+ * 认知/偏好/情绪来自对话（实测），行为基线/学习状态仍是默认常量，同一张卡里两种来源。
+ */
+export interface ProfileFieldSources {
+  cognitive: string[];
+  behavioral: string[];
+  learning: string[];
+  preferences: string[];
+  emotional: string[];
+  history: string[];
+  /** 课程控制（任务粒度/概念密度/复习频率/推进策略）是按画像规则推出来的，
+   *  只有输入画像有数据时才算「有支撑」，否则同样是默认常量 */
+  curriculumControls: string[];
+  /** 派生建议只有数值/分档三项需要标来源（learningVelocity / optimalSessionLength / recommendedDifficulty）；
+   *  建议文本、优势、风险因素是规则产出，不是「实测 vs 默认」 */
+  derivedInsights: string[];
 }
 
 export interface ProfileAggregationResult {
   profile: LearnerModelProfile;
   changes: string[];
   confidence: number;
+  sources: ProfileFieldSources;
 }

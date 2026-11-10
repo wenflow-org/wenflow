@@ -1,10 +1,11 @@
 /**
  * Skill 运行时页签的模型选择（2026-10-20 走查）。
  *
- * 借鉴成熟平台（OpenRouter / LiteLLM / Dify）后的三条硬约束，钉在这里：
- * - 主模型从目录里选，不再手填 ID；「继承」是一条显式选项，不是空输入框；
- * - 选中目录模型时层级随模型切换（chat 模型配 reasoning 档会路由错档）；
- * - 备用链只列同供应商、同层级（后端 validateFallbackChain 同规则），并排除主模型与已选项。
+ * 借鉴成熟平台（OpenRouter / LiteLLM / Dify）后的硬约束，钉在这里：
+ * - 主模型从目录里选，不再手填 ID；「继承」是一条显式选项，不是空输入框。
+ * 2026-11-04 用户「为什么还在区分默认推理和对话」后，删掉了「选中模型即同步档位」那一条：
+ * 档位随模型本身走、路由侧也不读 skill 的 tier，界面上不再出现档位胶囊。
+ * 2026-11-04 用户「去掉降级这个功能，不要」：备用链选择器与相关用例随降级整条下线。
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -18,7 +19,7 @@ const CATALOG = [
     providerId: 'platform',
     providerName: '平台',
     supportsThinking: true,
-    supportsReasoningEffort: true,
+    reasoningEfforts: ['low', 'high', 'max'],
     pricing: { inputPer1M: 0.3, outputPer1M: 1.2 }
   },
   {
@@ -50,7 +51,6 @@ const getSkillModelConfig = vi.fn(async () => ({
       enabled: true,
       maxLogicalRetries: null,
       paramOverrides: null,
-      fallbackChain: null,
       generationParams: null
     }
   }
@@ -102,24 +102,28 @@ function optionIds(w: Awaited<ReturnType<typeof mountTab>>): string[] {
   return w.findAll('.mk-mp__opt').map((o) => o.find('.mk-mp__id').text())
 }
 
-describe('Skill 运行时 · 模型与备用链选择', () => {
+describe('Skill 运行时 · 模型选择', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it('主模型显示当前目录条目；「用平台默认模型」是显式选项', async () => {
+  it('主模型回显当前模型；选择器只列真实模型，不出「用平台默认模型」', async () => {
     const w = await mountTab()
-    expect(w.find('.sdp-summary').text()).toContain('deepseek-v4.1-flash')
+    // 2026-11-06 两行摘要：卡面第一行（「模型」）就是当前在跑的模型 id
+    expect(w.find('.sdp-model').text()).toContain('deepseek-v4.1-flash')
     await openConfig(w)
     const control = w.find('.sdp-form__grid .mk-mp')
     expect(control.text()).toContain('deepseek-v4.1-flash')
 
+    /* 2026-11-06 用户「什么覆盖默认什么的，没意义」：弹层不再讲「继承平台默认」，
+       选择器只列目录里的真实模型。 */
     await openPicker(w, '.sdp-form__grid .mk-mp .mk-mp__control')
-    expect(optionIds(w)[0]).toBe('用平台默认模型')
+    expect(optionIds(w)[0]).toBe('deepseek-v4.1-flash')
+    expect(optionIds(w)).not.toContain('用平台默认模型')
     w.unmount()
   })
 
-  it('选到 reasoning 模型时层级自动带出（不再单独选模型层级）', async () => {
+  it('选到 reasoning 模型：目录分类不上屏', async () => {
     const w = await mountTab()
     await openConfig(w)
     expect(w.text()).not.toContain('模型层级')
@@ -130,53 +134,67 @@ describe('Skill 运行时 · 模型与备用链选择', () => {
     await acme!.trigger('click')
     await flushPromises()
 
-    expect(w.find('.sdp-model-meta').text()).toContain('reasoning')
-    // 层级随模型切到 reasoning 后，备用链只剩同层级候选（acme 自己是主模型被排除）
-    await openPicker(w, '.sdp-fallback .mk-mp__control')
-    expect(optionIds(w)).toEqual([])
+    // 2026-11-04：摘要只陈述供应商 / 能力 / 价格，不再把目录档位枚举印出来
+    const meta = w.find('.sdp-meta').text()
+    expect(meta).toContain('Acme 网关')
+    expect(meta).not.toContain('reasoning')
+    expect(w.text()).not.toContain('推理档')
     w.unmount()
   })
 
-  it('卡面只留摘要，配置弹层含模型 / 生成参数 / 请求容错三段；模型测试常驻', async () => {
+  it('卡面只留摘要，配置弹层含模型 / 生成参数 / 请求容错三段', async () => {
     const w = await mountTab()
     expect(w.find('.sdp-nav').exists()).toBe(false)
-    expect(w.find('.sdp-summary').exists()).toBe(true)
-    expect(w.find('#sdp-panel-test').exists()).toBe(true)
+    expect(w.find('.sdp-live').exists()).toBe(true)
+    // 2026-11-04：模型测试块已从本页撑出去（连通性测试在「模型与接入」页每个模型上）
+    expect(w.find('#sdp-panel-test').exists()).toBe(false)
     // 未打开弹层时，详细配置不在卡面
     expect(w.find('#sdp-panel-model').exists()).toBe(false)
 
     await openConfig(w)
     const panels = w.findAll('.sdp-sections > .sdp-panel')
     expect(panels.map((p) => p.find('h4').text())).toEqual(['模型', '生成参数', '请求与容错'])
-    expect(w.find('#sdp-panel-params .sdp-panel__state').text()).toContain('T=')
-    expect(w.find('#sdp-panel-request .sdp-panel__state').text()).toContain('重试')
+    // 2026-11-09 设计语言收敛：段头不再悬浮「T=…」读数（temperature 就在下面表单里，
+    // 同一项两个出口）；段头只留段名。
+    expect(w.find('#sdp-panel-params .sdp-panel__state').exists()).toBe(false)
+    /* 2026-11-06 用户「什么覆盖默认什么的，没意义」：四行不再是「来源 + 只读取值」，
+       每行就是一个可填的数字输入框（留空＝取 Prompt 声明 / 平台默认）。 */
+    expect(w.find('#sdp-panel-params input[aria-label="temperature"]').exists()).toBe(true)
+    expect(w.find('#sdp-panel-params input[aria-label="topP"]').exists()).toBe(true)
+    expect(w.find('#sdp-panel-params input[aria-label="maxTokens"]').exists()).toBe(true)
+    expect(w.find('#sdp-panel-params input[aria-label="maxAttempts"]').exists()).toBe(true)
+    expect(w.find('#sdp-panel-request input[aria-label="请求超时毫秒数"]').exists()).toBe(true)
+    expect(w.find('#sdp-panel-request .sdp-panel__state').exists()).toBe(false)
     w.unmount()
   })
 
-  it('备用链只列同供应商、同层级，并排除主模型', async () => {
+  it('备用链选择器与顺序链随降级下线：配置弹层不再有这一块', async () => {
     const w = await mountTab()
     await openConfig(w)
-    await openPicker(w, '.sdp-fallback .mk-mp__control')
-    const ids = optionIds(w)
-    expect(ids).toEqual(['agnes-3.0-flash'])
-    expect(ids).not.toContain('deepseek-v4.1-flash')
-    expect(ids).not.toContain('acme-vision')
+    // 2026-11-04 用户「去掉降级这个功能，不要」：备用模型选择器 / 顺序链整块撤除
+    expect(w.find('.sdp-fallback').exists()).toBe(false)
+    expect(w.find('.sdp-fallback__chain').exists()).toBe(false)
+    expect(w.text()).not.toContain('降级顺序')
     w.unmount()
   })
 
-  it('选中备用后进入有序链；再次打开不再列出已选项', async () => {
+  it('卡头「覆盖平台默认」翻转即落盘：调一次保存接口，且不丢当前配置', async () => {
     const w = await mountTab()
-    await openConfig(w)
-    await openPicker(w, '.sdp-fallback .mk-mp__control')
-    await w.findAll('.mk-mp__opt')[0].trigger('click')
+    const api = (await import('@/api/adminApi')).adminSkillsApi as unknown as {
+      updateSkillModelConfig: ReturnType<typeof vi.fn>
+    }
+    api.updateSkillModelConfig.mockClear()
+    const sw = w.find('.sdp-head__switch')
+    expect(sw.exists(), '卡头应有覆盖开关').toBe(true)
+    await sw.trigger('click')
     await flushPromises()
-
-    expect(w.find('.sdp-fallback__chain').text()).toContain('agnes-3.0-flash')
-    // 链上序号（备用顺序即降级顺序）
-    expect(w.find('.sdp-fallback__chain .sdp-chip b').text()).toBe('1')
-
-    await openPicker(w, '.sdp-fallback .mk-mp__control')
-    expect(optionIds(w)).toEqual([])
+    // 开关本身没有保存钮：翻转必须自己发一次 PUT，否则改动只留在内存里
+    expect(api.updateSkillModelConfig).toHaveBeenCalledTimes(1)
+    const payload = api.updateSkillModelConfig.mock.calls[0][1] as Record<string, unknown>
+    expect(payload.enabled).toBe(false)
+    // 其余字段照旧（关掉覆盖只改 enabled 这一项）
+    expect(payload.model).toBe('deepseek-v4.1-flash')
     w.unmount()
   })
 })
+

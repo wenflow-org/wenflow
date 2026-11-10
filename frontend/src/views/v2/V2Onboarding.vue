@@ -8,7 +8,9 @@
       <section class="ob__card">
         <!-- 步骤进度（4 段）：对读屏可感知——当前步标 aria-current（走查 2026-09-27 P3）。
              第 1 屏是「总览」，正文只列 3 个能力步；这里补 1 / 4 文案，避免「下面 1-2-3 写完了，
-             上面还有 3 格没走」的误读。 -->
+             上面还有 3 格没走」的误读。
+             2026-11-06 走查：页内 kicker pill（「第二步 · 输入」等）退场——顶部「第 N / 4 步」
+             进度已表达页序号，同屏两处步骤计数是重复；各页标题直读。 -->
         <div class="ob__progress">
           <span v-for="i in totalSteps" :key="i" :class="{ 'is-on': i <= step }" :aria-current="i === step ? 'step' : undefined"></span>
           <small class="ob__progress-label">第 {{ step }} / {{ totalSteps }} 步</small>
@@ -57,9 +59,10 @@
 
           <!-- ===== 第 2 步：输入（怎么开始） ===== -->
           <div v-else-if="step === 2" key="s2" class="ob__page">
-            <span class="ob__kicker">第一步 · 输入</span>
             <h1 class="ob__title">说出你想解决的事</h1>
-            <p class="ob__sub">从最近卡住的事开始，一句话也行。问流会追问边界、基础和时间，帮你说清问题，而不是让你先整理出完美目标。</p>
+            <!-- 2026-11-04 走查：去被点名词「卡住」「随时」（含本页 notes 与第 3 步子文）——
+                 只说状态与动作，不替用户预设心理状态 -->
+            <p class="ob__sub">从最近要解决的事开始。问流会追问边界、基础和时间，把问题梳理成目标和阶段安排。</p>
 
             <div class="ob__demo" aria-hidden="true">
               <div class="ob__demo-bar">
@@ -82,7 +85,7 @@
             <div class="ob__notes">
               <span>不用先选一门课</span>
               <span>不用先写完整计划</span>
-              <span>方向随时可以改</span>
+              <span>方向可以改</span>
             </div>
 
             <div class="ob__nav">
@@ -95,9 +98,8 @@
 
           <!-- ===== 第 3 步：生成路径 ===== -->
           <div v-else-if="step === 3" key="s3" class="ob__page">
-            <span class="ob__kicker">第二步 · 生成路径</span>
             <h1 class="ob__title">聊几句，得到能执行的路径</h1>
-            <p class="ob__sub">问流把目标拆成阶段和任务——每一步都知道学什么，今天就能动手。学到一半想改，也可以随时调整。</p>
+            <p class="ob__sub">问流把目标拆成阶段和任务——每一步都知道学什么，今天就能动手。学到一半可调整。</p>
 
             <div class="ob__demo" aria-hidden="true">
               <div class="ob__demo-bar">
@@ -132,7 +134,6 @@
 
           <!-- ===== 第 4 步：学习 ===== -->
           <div v-else key="s4" class="ob__page">
-            <span class="ob__kicker">第三步 · 学习</span>
             <h1 class="ob__title">每天打开学习台，只盯今天这一步</h1>
             <p class="ob__sub">今天该做的一步已经排好。</p>
 
@@ -142,7 +143,8 @@
               <div class="ob__demo-bar">
                 <span>学习台</span>
                 <span class="ob__sample">示例</span>
-                <span class="ob__chip ob__chip--green">今日行动</span>
+                <!-- 2026-11-04 走查：卡头绿 chip 与下方行动行蓝标同写「今日行动」重复，删卡头一枚；
+                     行动行标签保留（与第 3 步同款），故 .ob__chip--green 也一并退役 -->
               </div>
               <div class="ob__demo-action">
                 <span class="ob__demo-action__tag">今日行动</span>
@@ -344,19 +346,6 @@ async function goDashboard() {
 
 .ob__page { display: grid; gap: 0; }
 
-.ob__kicker {
-  display: inline-block;
-  justify-self: center;
-  margin-bottom: 10px;
-  padding: 4px 12px;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  color: var(--blue-deep);
-  background: color-mix(in srgb, var(--blue) 8%, transparent);
-  border-radius: var(--mk-radius-pill);
-}
-
 .ob__title {
   margin: 0 0 8px;
   font-size: 21px;
@@ -443,10 +432,6 @@ async function goDashboard() {
   background: color-mix(in srgb, var(--blue) 10%, transparent);
   padding: 3px 8px;
   border-radius: var(--mk-radius-pill);
-}
-.ob__chip--green {
-  color: var(--green-ink);
-  background: color-mix(in srgb, var(--mk-green) 12%, transparent);
 }
 
 /* 聊天演示（第 2 步） */

@@ -1,4 +1,5 @@
 import { RuntimeDefinitionRecord } from '../../composers/definitions/types';
+import { GUIDANCE_VIEWS } from './views';
 
 /**
  * adaptive-guidance-copy 运行期定义（P1 参数一致性：defaultTemperature/defaultMaxTokens
@@ -7,12 +8,13 @@ import { RuntimeDefinitionRecord } from '../../composers/definitions/types';
 export const adaptiveGuidanceCopyRuntimeDefinition: RuntimeDefinitionRecord = {
   id: 'skill:adaptive-guidance-copy',
   displayName: '自适应引导文案 Skill',
-  description: '根据学习者状态与路径上下文生成 Dashboard / Path 页面引导文案',
+  description: '按传入的 view 生成 dashboard / learning-state 页面各自口径的引导文案',
   category: 'skill',
   inputSchema: {
     type: 'object',
     properties: {
-      view: { type: 'string', description: '页面类型：dashboard|path-list|path-detail|learning-state' },
+      // #187：两个视图各生成各的，view 取值集合与运行时 skill（index.ts）、路由、提示词同源
+      view: { type: 'string', enum: [...GUIDANCE_VIEWS], description: '页面类型：dashboard|learning-state' },
       learnerSnapshot: { type: 'object', description: '学习者快照' },
       learningState: { type: 'object', description: '学习状态' },
       path: { type: 'object', description: '路径上下文' },
@@ -34,7 +36,7 @@ export const adaptiveGuidanceCopyRuntimeDefinition: RuntimeDefinitionRecord = {
       warningCopy: { type: 'string', description: '风险/提醒文案' },
     },
   },
-  capabilities: ['adaptive-copy', 'dashboard-copy', 'path-copy', 'learning-guidance'],
+  capabilities: ['adaptive-copy', 'dashboard-copy', 'learning-guidance'],
   defaultMaxTokens: 64000,
   defaultTemperature: 0.6,
   source: 'code',

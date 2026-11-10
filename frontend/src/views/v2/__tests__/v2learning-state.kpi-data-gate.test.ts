@@ -60,13 +60,13 @@ function trendsWithLsB() {
   return out;
 }
 
-function mockApi(opts: { sessions?: unknown[]; nodes?: unknown[] }) {
+function mockApi(opts: { sessions?: unknown[]; nodes?: unknown[]; warnings?: unknown[] }) {
   getMock.mockImplementation((url: string) => {
     const u = String(url);
     if (u.includes('/users/me/sessions')) return Promise.resolve({ success: true, data: opts.sessions ?? [] });
     if (u.includes('/learning/concept-graph')) return Promise.resolve({ success: true, data: { nodes: opts.nodes ?? [] } });
     if (u.includes('/state/trends')) return Promise.resolve({ success: true, data: { trends: trendsWithLsB(), range: 'recent' } });
-    if (u.includes('/state/warnings')) return Promise.resolve({ success: true, data: { warnings: [] } });
+    if (u.includes('/state/warnings')) return Promise.resolve({ success: true, data: { warnings: opts.warnings ?? [] } });
     if (u.includes('/ai-teaching/review/due')) return Promise.resolve({ success: true, data: { items: [] } });
     if (u.includes('/ai-teaching/review/plan')) return Promise.resolve({ success: true, data: { items: [] } });
     if (u.includes('/adaptive-guidance/copy')) {
@@ -97,18 +97,40 @@ describe('学习状态页数据门（#41）', () => {
     getMock.mockReset();
   });
 
-  it('三 KPI 全 0：不渲染 skill 文案与自动处理块，回落中性空态', async () => {
+  it('三 KPI 全 0（趋势有后向填充值）：不渲染 skill 文案，advisory 落中性空态（#41 原判例）', async () => {
     mockApi({ sessions: [], nodes: [] });
     const w = mount(V2LearningState);
     await flushPromises();
 
-    expect(w.find('.guide__title').exists()).toBe(false);
+    expect(w.find('.guide__diag').exists()).toBe(false);
     expect(w.find('.advisory__sub').exists()).toBe(false);
     const text = w.text();
     expect(text).not.toContain('你已投入时间');
     expect(text).not.toContain('有点疲劳');
     expect(text).not.toContain('近 7 天疲劳度持续高于健康度');
     expect(text).toContain('完成第一次学习后，这里会出现 AI 建议。');
+  });
+
+  it('真·全空态（趋势无数据且 KPI 全 0）：收成一张 state__hero 整卡，碎片空卡不渲染', async () => {
+    mockApi({ sessions: [], nodes: [] });
+    // 覆写 trends 为空数组：stateEmpty = !hasAnyLoad && !hasKpiData
+    getMock.mockImplementation((url: string) => {
+      const u = String(url);
+      if (u.includes('/state/trends')) return Promise.resolve({ success: true, data: { trends: [], range: 'recent' } });
+      return Promise.resolve({ success: true, data: {} });
+    });
+    const w = mount(V2LearningState);
+    await flushPromises();
+
+    const text = w.text();
+    expect(w.find('.state__hero').exists()).toBe(true);
+    expect(text).toContain('学习状态正在积累中');
+    expect(text).toContain('完成第一次学习后，这里会出现训练负荷曲线、AI 建议与掌握分布。');
+    expect(text).toContain('去开始学习');
+    /* 碎片空卡退场：AI 建议卡 / 趋势图空壳 / 三张 0 值 KPI */
+    expect(w.find('.advisory').exists()).toBe(false);
+    expect(w.find('.chart__empty--first').exists()).toBe(false);
+    expect(w.find('.kpis').exists()).toBe(false);
   });
 
   it('本周有真实分钟：正常渲染 skill 文案与自动处理块', async () => {
@@ -119,8 +141,29 @@ describe('学习状态页数据门（#41）', () => {
     const w = mount(V2LearningState);
     await flushPromises();
 
-    expect(w.find('.guide__title').text()).toBe('你已投入时间');
+    // 2026-11-06 审计 §3：学习台首页的破冰引导（headline/warningCopy）整段移出本页卡片，
+    // compact 档只留一行本页自有的结论；自动处理与已执行两节合并为「近期自动调控记录」一条流水
+    expect(w.find('.guide__title').exists()).toBe(false);
+    expect(w.text()).not.toContain('你已投入时间');
+    expect(w.text()).toContain('当前无需调整，有需要时会在这里提醒。');
     expect(w.find('.advisory__sub').exists()).toBe(true);
-    expect(w.text()).toContain('系统已自动处理');
+    expect(w.text()).toContain('近期自动调控记录');
+  });
+
+  it('同时有真预警时：诊断/建议破冰话术退场，预警接管（2026-11-05 PC 自查矛盾修复）', async () => {
+    mockApi({
+      sessions: [{ startTime: new Date().toISOString(), durationMinutes: 30 }],
+      nodes: [],
+      warnings: [
+        { level: 'critical', title: '学习疲劳预警', message: '连续 3 天急性负荷高于适应基座' }
+      ]
+    });
+    const w = mount(V2LearningState);
+    await flushPromises();
+
+    // 破冰话术（"还没到需要提醒疲劳的程度"）不得与真预警同屏
+    expect(w.find('.guide__diag').exists()).toBe(false);
+    expect(w.find('.guide__plan').exists()).toBe(false);
+    expect(w.text()).toContain('学习疲劳预警');
   });
 });

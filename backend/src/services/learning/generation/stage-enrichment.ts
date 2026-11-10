@@ -11,9 +11,11 @@ import prisma from '../../../config/database';
 import { logger } from '../../../utils/logger';
 import { withTransaction } from '../../../utils/with-transaction';
 import { executeSkill } from '../../../skills';
-import { getRequestContext, runWithContext } from '../../../gateway/api-gateway/context';
+import { runWithPathGenerationContext } from './generation-request-context';
+import { auditPathStageAgentsSandboxRefs } from './stage-sandbox-ref-audit';
 import { stageDesignerDefinition } from '../../../skills/stage-designer';
 import {
+  applyGranularityBoundsToHints,
   clampHintsToOneSitting,
   clampStageMinutesToBudget,
   clampStageTasksToHints,
@@ -33,6 +35,7 @@ import { auditGeneratedPath, reorderStageTasks } from './path-structure-integrat
 import { sanitizeUserFacingText } from '../user-facing-text';
 import { detectStageFiller, isStageFiller, detectCrossStageFiller, isCrossStageFiller } from './stage-filler';
 import { buildSupplementRequest, mergeSupplementTasks, needsLessonSupplement } from './stage-task-supplement';
+import { applyCrossStageDedup, buildExistingStageTitles } from './stage-cross-stage-dedup';
 import {
   supplementZeroRefStage,
   createZeroRefSupplementGate,
@@ -40,11 +43,12 @@ import {
 } from './stage-material-supplement';
 import { schoolAnchorCoverage, type PathSchoolAnchor } from './school-anchor';
 import { buildAnchorGoalNote } from './school-anchor-goal';
-import { mapAndPersistKcAnnotation, mergeKcStageAnnotation, type KcAnnotation } from './kc-annotation';
+import { mapAndPersistKcAnnotation, mergeKcStageAnnotation, bindKcLinksToSubtaskIds, type KcAnnotation } from './kc-annotation';
 import { assembleStageDesignerChannels } from '../../field-dispatcher';
 import { extractPromptMaterials, STAGE_MATERIAL_LIMITS, collectMaterialSectionRefs } from '../../materials/material-prompt-projection';
 import { buildSectionSemanticOrder } from '../../materials/material-semantic-order';
-import { summarizeSectionRefPositions, assessMaterialCoverage } from '../../materials/material-refs';
+import { summarizeSectionRefPositions } from '../../materials/material-refs';
+import { auditStageMaterialCoverage } from './stage-material-coverage-audit';
 import type { PreviousStageOutcome } from './progressive-design';
 import {
   assertGenerationRunFence,
@@ -62,6 +66,7 @@ import {
   normalizePathTaskType,
   parsePathCognitiveDesign,
   parsePathPromptTemplate,
+  resolveMilestoneConcept,
   resolvePersistedNormalizedInput,
   resolveTaskConcept,
 } from '../learning.helpers';
@@ -76,6 +81,7 @@ import {
   heartbeatGenerationRun,
   recordPathGenerationStageLog,
   restorePathAfterMutationConflict,
+  restorePathStatusAfterRunSettled,
   startGenerationHeartbeat,
   updatePathGenerationStatus,
   createGenerationId,
@@ -119,6 +125,8 @@ export async function pruneSupersededStageItems(
 import { detectUnjudgeableAcceptance, type UnjudgeableAcceptanceViolation } from './stage-acceptance-guard';
 export { detectUnjudgeableAcceptance, type UnjudgeableAcceptanceViolation } from './stage-acceptance-guard';
 
+import { detectArtifactProductionTasks, looksLikeCraftSubject } from './stage-artifact-guard';
+
 export async function enrichLearningPathWithAnderson(
   pathId: string,
   runId: string,
@@ -132,14 +140,36 @@ export async function enrichLearningPathWithAnderson(
     progressive?: boolean;
     restrictMilestoneIds?: string[];
     previousStageOutcome?: PreviousStageOutcome | null;
+    /** #241：整条重建（rebuild-all）已获准覆盖已完成证据时，阶段设计必须沿用同一放行口径。 */
+    allowCompleted?: boolean;
   } = {}
 ): Promise<void> {
   // 【A/B 归因修复 2026-10-01】后台生成链路原本没有 userId 请求上下文 → callPrompt 的
   // 变体分流键缺失（恒走基线，实测 44% stage-designer 调用如此）且 prompt_call_logs.userId
   // 空缺。此处用路径属主补齐上下文（保留既有字段），stage-designer/kc-mapper/补课全部继承。
-  return runWithContext({ ...getRequestContext(), userId: data.userId }, () =>
-    enrichLearningPathWithAndersonInner(pathId, runId, data, analysis, options)
+  // #248：这里也必须补 pathId（口径见 generation-request-context.runWithPathGenerationContext）。
+  return runWithPathGenerationContext(
+    { userId: data.userId, pathId, sourceConversationId: data.sourceConversationId },
+    () => enrichLearningPathWithAndersonInner(pathId, runId, data, analysis, options)
   );
+}
+
+/**
+ * #241：stageDesign 的路径变更闸门 scope。
+ *
+ * `rebuild-all` 在 core 阶段以 `allowCompleted` 删除并重建全部里程碑；同一事务随后创建的
+ * stageDesign run 若仍按 replace-tasks 的默认口径复核（不允许已完成课堂/证据），就会把刚重建
+ * 空出来的路径取消掉——真实事故：core succeeded 同秒 stageDesign cancelled
+ * `PATH_MUTATION_HAS_COMPLETED_TEACHING_EVIDENCE`，路径留下 active + 0 任务。
+ * append-tasks 自带「目标阶段必须为空」约束，不需要（也不应放宽）allowCompleted。
+ */
+export function buildStageMutationScope(
+  appendOnly: boolean,
+  appendMilestoneIds: string[],
+  allowCompleted?: boolean
+): { milestoneIds: string[] } | { allowCompleted: true } | Record<string, never> {
+  if (appendOnly) return { milestoneIds: appendMilestoneIds };
+  return allowCompleted === true ? { allowCompleted: true } : {};
 }
 
 async function enrichLearningPathWithAndersonInner(
@@ -156,6 +186,8 @@ async function enrichLearningPathWithAndersonInner(
     progressive?: boolean;
     restrictMilestoneIds?: string[];
     previousStageOutcome?: PreviousStageOutcome | null;
+    /** #241：见 enrichLearningPathWithAnderson 同名选项。 */
+    allowCompleted?: boolean;
   } = {}
 ): Promise<void> {
   const startTime = Date.now();
@@ -188,7 +220,7 @@ async function enrichLearningPathWithAndersonInner(
       prisma,
       pathId,
       appendOnly ? 'append-tasks' : 'replace-tasks',
-      appendOnly ? { milestoneIds: appendMilestoneIds } : {}
+      buildStageMutationScope(appendOnly, appendMilestoneIds, options.allowCompleted)
     );
     // 重试不留脏行：replace 语义下本轮 run 取代此前所有 stageDesign 尝试，
     // 但 stage items 的唯一约束是 [runId, stageNumber]，两轮 runId 不同故并存——
@@ -235,6 +267,8 @@ async function enrichLearningPathWithAndersonInner(
     if (!learningPath) {
       throw new Error('PATH_ENRICHMENT_TARGET_NOT_FOUND');
     }
+    // 跨阶段复读闸的存量侧输入（快照口径见 stage-cross-stage-dedup.buildExistingStageTitles）。
+    const existingStageTitles = buildExistingStageTitles(learningPath.milestones);
     if (appendOnly || restrictMilestoneIds) {
       // 追加/渐进 restrict：只处理目标阶段，其余阶段一概不碰（不删除、不覆盖任何既有任务）。
       learningPath.milestones = learningPath.milestones.filter(
@@ -259,6 +293,28 @@ async function enrichLearningPathWithAndersonInner(
     const normalizedInput = getSceneFramingNormalizedInput(sceneFraming)
       || resolvePersistedNormalizedInput(parsedTemplate)
       || null;
+    // 颗粒度硬上界防御性再钳（2026-11-09 装配缝隙修复）：normalizedInput.planningHints 产生于
+    // planning 阶段，旧会话续聊 / 缓存 analysis 的 hints 可能早于 scope_size 前缀链路落地，
+    // 1.2h/6h 帽从未生效过。这里按 confirmedProposal.scopeSizeRaw（落库原文，见
+    // buildFramedNormalizedInput）对既有 hints 再钳一次——只钳上界，与 planning 同一套规则。
+    if (normalizedInput && (normalizedInput as any).planningHints) {
+      const scopeSizeRaw = (normalizedInput as any).confirmedProposal?.scopeSizeRaw
+        ?? (normalizedInput as any).confirmedProposal?.scope_size
+        ?? null;
+      const beforeHints = (normalizedInput as any).planningHints;
+      const afterHints = applyGranularityBoundsToHints(beforeHints, scopeSizeRaw);
+      if (afterHints !== beforeHints) {
+        (normalizedInput as any).planningHints = afterHints;
+        logger.info('[stage-enrichment] 颗粒度硬上界再钳生效', {
+          pathId: learningPath.id,
+          scopeSizeRaw: typeof scopeSizeRaw === 'string' ? scopeSizeRaw.slice(0, 60) : null,
+          targetTotalHours: afterHints.targetTotalHours,
+          milestoneRange: afterHints.milestoneRange,
+          subtasksPerStageRange: afterHints.subtasksPerStageRange,
+          subtaskMinutesRange: afterHints.subtaskMinutesRange,
+        });
+      }
+    }
     // 出口不变量 B 的**下游一半**（2026-09-21）：Path 层已自检为"一次性操作"时，
     // 它产出的路径总量 ≤ 1 小时（见 path-planning 的"一次性操作"规则）。若不在这里
     // 把 hints 一起收紧，stage-designer 会按 standard 档默认 30–90 分钟/任务把学时撑回 7 小时
@@ -356,6 +412,9 @@ async function enrichLearningPathWithAndersonInner(
     // 这个键在代码里根本不存在）——跨阶段衔接与去重规则长期空转。串行下 Stage N 完成后
     // 存摘要，Stage N+1 注入 previousMilestone.tasks。
     const stageTaskSummaries = new Map<number, Array<{ title: string; type: string | null; estimatedMinutes: number | null }>>();
+    // #192：留一份 stage-designer 的真实载荷样本（任一阶段），供本轮沙盘 ref 对账
+    // ——core 声明的 sandbox:path.* 键必须能在池里解析（见 sandbox-resolver.buildPathSandboxPool）。
+    let stageSandboxSample: Record<string, unknown> | null = null;
 
     /**
      * 逐阶段任务锚（2026-09-28 去等分）：按**本阶段实际学时**反推该阶段该出几个任务，
@@ -489,16 +548,20 @@ async function enrichLearningPathWithAndersonInner(
           goal: milestone.goal || null,
           estimatedHours: milestone.estimatedHours || null,
         },
-        ...(designerChannels['previousMilestone'] || previousMilestone ? {
-          previousMilestone: designerChannels['previousMilestone'] || (previousMilestone ? {
-            stageNumber: previousMilestone.stageNumber,
-            title: previousMilestone.title,
-            coreConcept: previousMilestone.coreConceptId || null,
+        ...(previousMilestone ? {
+          previousMilestone: {
+            // #167：配置抽值（stageNumber/title/coreConcept）与手拼回退二选一后，
+            // 再与上一阶段任务摘要合并——原实现以配置抽值优先并直接短路，
+            // 使 tasks 分支永不执行，而提示词把 tasks 声明为跨阶段去重/衔接的唯一事实源。
+            ...(designerChannels['previousMilestone'] || {
+              stageNumber: previousMilestone.stageNumber,
+              title: previousMilestone.title,
+              coreConcept: previousMilestone.coreConceptId || null,
+            }),
             // 幽灵通道修复（2026-10-26）：上一阶段真实任务清单（串行生成后才存在）。
-            // 提示词规则 13 的「previousMilestoneContext」从来不存在，跨阶段衔接/去重
-            // 规则此前只能靠阶段标题猜；现在首操作任务能真正「用上一阶段刚产出的东西」。
+            // 首操作任务借此真正「用上一阶段刚产出的东西」，而非只靠阶段标题猜。
             ...(stageTaskSummaries.get(stageIndex - 1) ? { tasks: stageTaskSummaries.get(stageIndex - 1) } : {}),
-          } : null),
+          },
         } : {}),
         ...stageDesignerBaseInput,
         ...(stageMaterials ? { materials: stageMaterials } : {}),
@@ -546,6 +609,7 @@ async function enrichLearningPathWithAndersonInner(
         repairHints: null,
         ...(pathSchoolAnchor ? { schoolAnchor: pathSchoolAnchor } : {}),
       };
+      if (!stageSandboxSample) stageSandboxSample = stageDesignerInput;
       const stageResult = await executeSkill(stageDesignerDefinition, stageDesignerInput);
 
       const rawStageTasks = Array.isArray(stageResult?.subtasks) ? stageResult.subtasks : [];
@@ -653,6 +717,60 @@ async function enrichLearningPathWithAndersonInner(
                 stageNumber: milestone.stageNumber,
                 before: violations.length,
                 after: remaining.length,
+              });
+            }
+          }
+        }
+      }
+      // 工件生产课拦截（2026-11-09 外评「伪 PBL 造表味」结构手术第 1 刀）：非创作类学科的
+      // 任务被写成「产出XX清单/定稿/回写」时，带修复提示重调一次；仍命中放行留痕
+      // （不阻塞、不改写文本——与验收越界守卫同一形状：误伤代价=一次重调，漏检代价=
+      // 学习者花一节课替系统做表）。创作类学科（代码/文章/攻略等）工件即目标，不拦。
+      const artifactCraftText = [
+        (normalizedInput as any)?.problemSpace?.realProblem,
+        (normalizedInput as any)?.problemSpace?.scenario,
+        (normalizedInput as any)?.confirmedProposal?.learningDirection,
+        (normalizedInput as any)?.confirmedProposal?.firstDeliverable,
+        (normalizedInput as any)?.subject,
+        (normalizedInput as any)?.goal,
+      ].filter((v) => typeof v === 'string' && v.trim()).join(' ');
+      if (!looksLikeCraftSubject(artifactCraftText)) {
+        const artifactViolations = detectArtifactProductionTasks(stageTasks as Array<Record<string, unknown>>);
+        if (artifactViolations.length > 0) {
+          logger.warn('[stage-artifact] 非创作类路径检出文书生产课，带修复提示重调一次', {
+            pathId: learningPath.id,
+            stageNumber: milestone.stageNumber,
+            violations: artifactViolations.map((v) => v.taskTitle),
+          });
+          const artifactRetry = await executeSkill(stageDesignerDefinition, {
+            ...stageDesignerInput,
+            repairHints: {
+              artifactFixes: {
+                reason: '以下任务是「文书生产课」（让学习者产出清单/卡片/流程图/定稿），而清单一类文档是给学生的教具，不是要花一节课生产的功课',
+                rules: '改写成综合实战：把本阶段学的判断与方法在无提示条件下连续应用到带陷阱的新例上并验收做对质量（如「5 个真题分子限时连判并写依据」「综合分录 10 题做对 7 道」）；标题/描述/验收里不得出现「产出/定稿/回写/固化 + 清单/卡/流程图」组合；错题要点由平台课后自动生成，不占课时',
+                tasks: artifactViolations,
+              },
+            },
+          } as any).catch((error: unknown) => {
+            logger.warn('[stage-artifact] 文书课修复重调失败，保留原产出', {
+              pathId: learningPath.id,
+              stageNumber: milestone.stageNumber,
+              error: String(error).slice(0, 200),
+            });
+            return null;
+          });
+          const artifactRetryTasks = Array.isArray((artifactRetry as any)?.subtasks)
+            ? (artifactRetry as any).subtasks as Array<Record<string, unknown>>
+            : [];
+          if (artifactRetryTasks.length > 0) {
+            const artifactRemaining = detectArtifactProductionTasks(artifactRetryTasks);
+            if (artifactRemaining.length < artifactViolations.length) {
+              stageTasks = clampStageTasksToHints(artifactRetryTasks, stageHints || (normalizedInput as any)?.planningHints);
+              logger.warn('[stage-artifact] 文书课修复重调采纳', {
+                pathId: learningPath.id,
+                stageNumber: milestone.stageNumber,
+                before: artifactViolations.length,
+                after: artifactRemaining.length,
               });
             }
           }
@@ -870,41 +988,46 @@ async function enrichLearningPathWithAndersonInner(
       await Promise.all(batchIndexes.map(processStageDesign));
     }
 
-    // 全路径覆盖体检（只告警）：阶段数 ≥3、资料 ≥9 节，但所有引用都停在文档前半，
-    // 或存在零引用阶段 ⇒ 生成当下就能看见缺口（报告里「后半引用 0」的运行期对应物），
-    // 而不是等 A/B 复算才发现。不阻断、不改写模型输出。
-    if (stageMaterialAudit.length >= 3) {
-      const primarySectionTotal = Number(
-        (normalizedInput as any)?.resources?.materials?.[0]?.pack?.sections?.length
-        || (normalizedInput as any)?.materials?.[0]?.pack?.sections?.length
-        || 0,
-      );
-      const coverage = assessMaterialCoverage(stageMaterialAudit, primarySectionTotal);
-      if (coverage.lowCoverage) {
-        logger.warn('[stage-material-window] 全路径引用未覆盖资料后半', {
-          pathId,
-          primarySectionTotal,
-          maxSection: coverage.maxSection,
-          stages: stageMaterialAudit.length,
-        });
-      }
-      if (coverage.zeroRefStages.length > 0) {
-        logger.warn('[stage-material-window] 存在零引用阶段', {
-          pathId,
-          zeroRefStages: coverage.zeroRefStages,
-          stageCount: stageMaterialAudit.length,
-        });
-      }
-    }
+    // 跨阶段复读闸（判据与阈值见 stage-cross-stage-dedup）。
+    applyCrossStageDedup({ pathId, existingStageTitles, stageDesignOutputs });
+
+    // 全路径材料覆盖体检（只告警，判据见 stage-material-coverage-audit）。
+    auditStageMaterialCoverage({ pathId, stageMaterialAudit, normalizedInput });
+
+    // #192：把 stage-designer / kc-mapper 纳入沙盘 ref 运行期对账（载荷与判据见 stage-sandbox-ref-audit）。
+    await auditPathStageAgentsSandboxRefs({
+      pathId, normalizedInput, stageDesignerPayload: stageSandboxSample,
+      kcMapperPayload: {
+        subtasks: stageDesignOutputs.flatMap((stage) => stage.subtasks),
+        milestones: learningPath.milestones.map((m: any) => ({ stageNumber: m.stageNumber, title: m.title, coreConcept: m.coreConceptName || m.coreConceptId })),
+        prerequisiteTree: parsedTemplate?.cognitiveCore?.prerequisiteTree || parsedTemplate?.cognitiveDesign?.prerequisiteTree || null,
+      },
+    });
 
     // KC 映射（kc-mapper）：stage-designer 全部完成后，将概念与子任务分解为知识组件 + 依赖图，
     // 写回 aiPromptTemplate.kcAnnotation，结束"写后无读者"，供 teaching-turn 按 KC 粒度消费。
     // 契约收口在 kc-annotation 模块（executeSkillWithResult；2026-09-22 判空错配事故修复见该文件头注）。
-    // 渐进式（批次 D）：单阶段输出走 **增量合并**（mergeKcStageAnnotation，v2 顶层与 v1 同形、
-    // byStage 存阶段快照）——整包调用会把单阶段输出当全量覆写、抹掉其他阶段的 KC。
-    // persist 注入 no-op：合并结果经本函数返回值交给下方 final 事务统一写 template（避免双写竞争）。
+    // 渐进式（批次 D）与追加补齐（appendOnly，仅对空白阶段生成）都走 **增量合并**
+    // （mergeKcStageAnnotation，v2 顶层与 v1 同形、byStage 存阶段快照）：两者的 kc-mapper
+    // 输入都只含本轮的阶段/任务，整包调用会把这段输出当全量覆写、抹掉**已设计阶段**的
+    // taskKcLinks（issue #169：append 自愈通道只判 progressive，未判 appendOnly）。
+    // 合并结果经本函数返回值交给下方 final 事务统一写 template（避免双写竞争）。
+    //
+    // 任务↔KC 的稳定键（issue #179）：连接键不能用会变形的自然语言标题，也不能靠标题自带的唯一性
+    // （同名任务无解）。这里给本次运行的每个任务分配「阶段序号-阶段内序号」的稳定键，随 kc-mapper
+    // 输入下发并要求逐字回显。
+    // 键**写在任务对象自己的属性上**（而非 WeakMap）：同阶段重排（reorderStageTasks →
+    // remapStageTaskReferences/repairForwardReferences）用浅拷贝 `{ ...task }` 换掉任务对象，
+    // 弱引用表会因对象身份被换而查不到；自身属性则随浅拷贝一起流动，重排只挪位置不改键。
+    // subtaskIdByTaskKey 在下方事务内按属性回填真实 subtasks.id（事务重试时清空重建）。
+    const subtaskIdByTaskKey = new Map<string, string>();
+    for (const stage of stageDesignOutputs) {
+      stage.subtasks.forEach((task: any, index: number) => {
+        if (task && typeof task === 'object') task.taskKey = `task-${stage.stageNumber}-${index}`;
+      });
+    }
     let kcAnnotation: KcAnnotation | null;
-    if (progressive) {
+    if (progressive || appendOnly) {
       const { executeSkillWithResult } = await import('../../../skills');
       const { kcMapperDefinition } = await import('../../../skills/kc-mapper');
       const kcParams = {
@@ -919,6 +1042,7 @@ async function enrichLearningPathWithAndersonInner(
           goal: m.goal,
         })),
         subtasks: stageDesignOutputs.flatMap((s) => s.subtasks.map((t: any) => ({
+          taskKey: t.taskKey,
           title: t.title,
           type: t.type,
           linkedConcept: t.linkedConcept,
@@ -984,6 +1108,7 @@ async function enrichLearningPathWithAndersonInner(
         goal: m.goal,
       })),
       subtasks: stageDesignOutputs.flatMap((s) => s.subtasks.map((t: any) => ({
+        taskKey: t.taskKey,
         title: t.title,
         type: t.type,
         linkedConcept: t.linkedConcept,
@@ -1019,24 +1144,33 @@ async function enrichLearningPathWithAndersonInner(
     //
     // 只收 `conceptSource === 'linked-concept'`：回退文本（'fallback-text'）可能是 path 内局部序号
     // `concept-N`，把它当 canonical 注册会重造"同键不同义"污染（实测别名表出现 aliasRaw="concept-1"）。
-    const subtaskConceptIds = new Map<string, string>();
+    //
+    // 里程碑核心概念（milestones.conceptId 的目标）与子任务共用同一张 `canonicalName → conceptId` 表：
+    // 两侧写的都是「认知设计里的概念名」，故合并成一次 resolveMany（少一次 concepts/aliases 写事务）。
+    const canonicalConceptIdsByName = new Map<string, string>();
     try {
-      const names = stageDesignOutputs
-        .flatMap((s) => s.subtasks)
-        .map((t: any) => {
-          const linked = typeof t?.linkedConcept === 'string' ? t.linkedConcept : null;
-          const resolved = resolveTaskConcept(linked, pathCognitiveDesign, linked, taskConceptMap);
-          return resolved.conceptSource === 'linked-concept' ? resolved.linkedConceptName : null;
-        })
-        .filter((name): name is string => !!name && !!name.trim());
+      const names = [
+        ...stageDesignOutputs
+          .flatMap((s) => s.subtasks)
+          .map((t: any) => {
+            const linked = typeof t?.linkedConcept === 'string' ? t.linkedConcept : null;
+            const resolved = resolveTaskConcept(linked, pathCognitiveDesign, linked, taskConceptMap);
+            return resolved.conceptSource === 'linked-concept' ? resolved.linkedConceptName : null;
+          }),
+        // 里程碑核心概念（与 path-generation.core 落 coreConceptName 同源同函数）
+        ...learningPath.milestones.map((milestone) => {
+          const resolved = resolveMilestoneConcept(milestone.coreConceptId, pathCognitiveDesign, milestone.coreConceptId);
+          return resolved.conceptSource === 'linked-concept' ? resolved.coreConceptName : null;
+        }),
+      ].filter((name): name is string => !!name && !!name.trim());
       if (names.length > 0) {
         const resolved = await conceptRegistryService.resolveMany(data.userId, names, {
           source: 'write_time', level: 'concept', originPathId: pathId,
         });
-        for (const [key, conceptId] of resolved) subtaskConceptIds.set(key, conceptId);
+        for (const [key, conceptId] of resolved) canonicalConceptIdsByName.set(key, conceptId);
       }
     } catch (error) {
-      logger.warn('[stage-enrichment] 子任务概念身份预解析失败（best-effort，conceptId 留空）', {
+      logger.warn('[stage-enrichment] 任务/里程碑概念身份预解析失败（best-effort，conceptId 留空）', {
         pathId,
         error: error instanceof Error ? error.message : String(error),
       });
@@ -1049,6 +1183,7 @@ async function enrichLearningPathWithAndersonInner(
       for (const key of Object.keys(materialRefsByTask)) delete materialRefsByTask[key];
       for (const key of Object.keys(misconceptionHintsByTask)) delete misconceptionHintsByTask[key];
       for (const key of Object.keys(adjustabilityByTask)) delete adjustabilityByTask[key];
+      subtaskIdByTaskKey.clear();
       await assertGenerationRunFence(tx, pathId, runId);
       const lockedPath = await tx.learning_paths.updateMany({
         where: { id: pathId, activeGenerationRunId: runId },
@@ -1059,7 +1194,7 @@ async function enrichLearningPathWithAndersonInner(
         tx,
         pathId,
         appendOnly ? 'append-tasks' : 'replace-tasks',
-        appendOnly ? { milestoneIds: appendMilestoneIds } : {}
+        buildStageMutationScope(appendOnly, appendMilestoneIds, options.allowCompleted)
       );
       for (const milestone of learningPath.milestones) {
         if (!appendOnly) {
@@ -1102,6 +1237,10 @@ async function enrichLearningPathWithAndersonInner(
             || (taskData.knowledgeType && taskData.cognitiveLevel ? `${taskData.knowledgeType} + ${taskData.cognitiveLevel}` : null);
 
           const subtaskId = `st_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${milestone.stageNumber}_${j}`;
+          // 稳定键 → 真实 id 登记（issue #179）：键在 kc-mapper 之前按原顺序分配并写在任务对象上，
+          // 同阶段重排的浅拷贝会带着它流动，这里按属性取回即可（不再依赖对象身份）。
+          const taskKey = (taskData as any)?.taskKey;
+          if (taskKey) subtaskIdByTaskKey.set(taskKey, subtaskId);
           // 任务 → 可调整性（动态规划）：skill 侧已归一为 core|flexible，未给值时按 core 保守处理
           adjustabilityByTask[subtaskId] = (taskData as any).adjustability === 'flexible' ? 'flexible' : 'core';
           // 任务 → 资料条目（skill 侧已逐字核对）：按 subtaskId 落进 aiPromptTemplate.materialRefs.byTask
@@ -1145,7 +1284,7 @@ async function enrichLearningPathWithAndersonInner(
               linkedConceptId: resolvedConcept.linkedConceptId || null,
               linkedConceptName: resolvedConcept.linkedConceptName || null,
               // canonical 身份（事务外预解析；未命中留 null，回填脚本可补）
-              conceptId: subtaskConceptIds.get(normalizeConceptKey(resolvedConcept.linkedConceptName)) ?? null,
+              conceptId: canonicalConceptIdsByName.get(normalizeConceptKey(resolvedConcept.linkedConceptName)) ?? null,
               knowledgeType: taskData.knowledgeType || null,
               cognitiveLevel: taskData.cognitiveLevel || null,
               icapLevel: taskData.icapLevel || null,
@@ -1195,6 +1334,15 @@ async function enrichLearningPathWithAndersonInner(
           title: milestone.title ?? null,
           estimatedHours: stageHours,
         });
+        // 里程碑 canonical 概念身份（issue #166）：`coreConceptId` 是 path 内局部序号（concept-N），
+        // 概念图「去练习」锚点按 canonical `conceptId` 跨表 join；落库侧此前从不写该列，故在此用
+        // 与子任务同一张预解析表回填（同一 `resolveMilestoneConcept` 语义，命中认知设计才取 canonical）。
+        const milestoneConcept = resolveMilestoneConcept(
+          milestone.coreConceptId, pathCognitiveDesign, milestone.coreConceptId,
+        );
+        const milestoneCanonicalId = milestoneConcept.conceptSource === 'linked-concept' && milestoneConcept.coreConceptName
+          ? canonicalConceptIdsByName.get(normalizeConceptKey(milestoneConcept.coreConceptName)) ?? null
+          : null;
         if (stageHours !== null) {
           pathNormalizedHours += stageHours;
           // 阶段级「时间说明」拼接已下线（2026-10-25 方向改造）：实证它把内部预算口径差
@@ -1213,11 +1361,25 @@ async function enrichLearningPathWithAndersonInner(
             where: { id: milestone.id },
             data: {
               estimatedHours: stageHours,
+              ...(milestoneCanonicalId ? { conceptId: milestoneCanonicalId } : {}),
               ...(anchorNote && anchorGoalBase !== null ? { goal: `${anchorGoalBase}${anchorNote}` } : {}),
               updatedAt: new Date(),
             }
           });
+        } else if (milestoneCanonicalId) {
+          // 无任务阶段不会走进上面的学时回写分支，但仍需补 canonical 身份（否则该里程碑锚点恒空）
+          await tx.milestones.update({
+            where: { id: milestone.id },
+            data: { conceptId: milestoneCanonicalId },
+          });
         }
+      }
+      // 任务↔KC 连接键收稳（issue #179）：kc-mapper 只能按标题回写链接，而标题是会被改写的
+      // 自然语言（落库前经 sanitizeUserFacingText），同名任务更无法在标题上区分。落库前按模型
+      // 逐字回显的 taskKey 把链路绑到真实 subtasks.id 上，读侧即可按 id 精确匹配，标题退为兜底键。
+      // 未回显 taskKey 的链接（旧标注 / 模型漏回显）原样保留，由读侧回退标题并集。
+      if (kcAnnotation) {
+        kcAnnotation = bindKcLinksToSubtaskIds(kcAnnotation, subtaskIdByTaskKey);
       }
       // 终局预算夹（Frontier-100 R1 实证 F81：目标 3h，core 骨架 3h，stageDesign 按任务分钟
       // 回写后 4.5h）：core 夹只作用于骨架，逐阶段 1.25× 容差累加仍可把总量放大到目标 1.5×。
@@ -1401,7 +1563,7 @@ async function enrichLearningPathWithAndersonInner(
       // 离线评审才发现 3 条路径 KC/审计双双丢失）。落显式标记：可见、可统计、可告警。
       const auditDisabledReason = kcAnnotation
         ? null
-        : (progressive ? 'kc-mapper-failed' : 'kc-mapper-persist-failed');
+        : ((progressive || appendOnly) ? 'kc-mapper-failed' : 'kc-mapper-persist-failed');
       if (structureAudit && structureAudit.issues.length > 0) {
         logger.warn('[stage-enrichment] 路径结构审计发现问题（只记录，不重排）', {
           pathId: learningPath.id,
@@ -1540,6 +1702,9 @@ async function enrichLearningPathWithAndersonInner(
           errorMessage: null
         }
       });
+      // #238：本 run 可能抢占了仍在 'generating' 的 core run（被抢占者随后必撞 fence），
+      // 成功收尾必须把陈旧的 'generating' 复位，否则路径永久卡在生成中、无法开课。
+      await restorePathStatusAfterRunSettled(tx, pathId, runId, 'active');
       await enqueueDomainEvent(tx, createDomainEvent({
         type: 'path:generated',
         aggregateType: 'path',
@@ -1664,7 +1829,9 @@ async function enrichLearningPathWithAndersonInner(
         runId,
         andersonError,
         andersonError?.message?.includes('EMPTY_TASKS') ? 'PATH_STAGE_DESIGN_ZERO_TASKS' : 'PATH_ENRICHMENT_FAILED',
-        'stageDesign'
+        'stageDesign',
+        // #238：阶段设计失败不销毁骨架路径，只把（可能被本 run 抢占而陈旧的）'generating' 复位为可学。
+        'active'
       );
     } catch (fenceError) {
       if (!(fenceError instanceof Error) || fenceError.message !== 'GENERATION_RUN_FENCED') throw fenceError;

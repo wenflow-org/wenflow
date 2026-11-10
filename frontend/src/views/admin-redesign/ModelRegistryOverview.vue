@@ -14,7 +14,8 @@
 
     <template v-else>
       <!-- 分区卡（批24；2026-10-15 用户重组）：默认路由解析结果改为宿主行内展示（「所配即所得」），
-           部署冷却落进限额表「状态」列、配置提示落进行级徽标 + 表尾注——三个尾巴分区随之退役 -->
+           配置提示落进行级徽标 + 表尾注——两个尾巴分区随之退役。
+           2026-11-04 用户「去掉降级这个功能，不要」：备用模型列与部署冷却（行级状态）随降级下线。 -->
       <section class="mk-card">
 
         <!-- ② 别名映射：一处切换的落点 -->
@@ -25,7 +26,7 @@
           <div class="mk-table-scroll">
             <table class="mk-table mk-table--dense">
               <thead>
-                <tr><th>别名</th><th>候选来源</th><th>候选模型（按序）</th><th>默认选中</th><th>需要思考时</th></tr>
+                <tr><th scope="col">别名</th><th scope="col">候选来源</th><th scope="col">候选模型（按序）</th><th scope="col">默认选中</th><th scope="col">需要思考时</th></tr>
               </thead>
               <tbody>
                 <tr v-for="alias in data.aliases" :key="alias.alias">
@@ -77,15 +78,15 @@
             <table class="mk-table mk-table--dense">
               <thead>
                 <tr>
-                  <th>模型</th><th>状态</th><th>档位</th><th>思考</th><th>推理强度</th>
-                  <th>输出上限</th><th>默认输出</th><th>推理预留</th><th>并发上限</th><th>备用模型</th>
+                  <th scope="col">模型</th><th scope="col">档位</th><th scope="col">思考</th><th scope="col">推理强度</th>
+                  <th scope="col">输出上限</th><th scope="col">默认输出</th><th scope="col">推理预留</th><th scope="col">并发上限</th>
                 </tr>
               </thead>
               <tbody>
                 <template v-for="g in providerGroups" :key="g.id">
                   <!-- 组头：供应商行（原「模型供应商」列表行形态；38px 方块徽标 + 名/用途 + id/承载/端点 + 状态徽标） -->
                   <tr class="ac-mr-pgroup">
-                    <td colspan="10">
+                    <td colspan="8">
                       <div class="ac-mr-mrow ac-mr-mrow--flat">
                         <span class="ac-mr-mrow__badge" aria-hidden="true">{{ g.badge }}</span>
                         <div class="ac-mr-mrow__grow">
@@ -118,12 +119,8 @@
                     <td>
                       <span class="mono">{{ model.id }}</span>
                       <span class="ac-mr-label">{{ model.label }}</span>
-                    </td>
-                    <td>
-                      <span v-if="cooldownOf(model)" class="mk-badge mk-badge--warn" :title="`该部署已触发熔断冷却，降级时会被跳过（剩余 ${Math.ceil(cooldownOf(model)!.remainingMs / 1000)}s）`">
-                        ⏳ 冷却中（剩余 {{ Math.ceil(cooldownOf(model)!.remainingMs / 1000) }}s）
-                      </span>
-                      <span v-else class="mk-badge mk-badge--ok" title="该部署无冷却记录">● 健康</span>
+                      <!-- 行级配置提示（原挂在「状态」列；2026-11-04 用户「去掉降级这个功能，不要」
+                           撤掉冷却/健康整列后迁到模型名后，告警本身与降级无关，保留） -->
                       <span
                         v-if="modelWarnings(model).length"
                         class="mk-badge mk-badge--warn ac-mr-rowwarn"
@@ -140,8 +137,10 @@
                         {{ model.capabilities.supportsThinking ? '支持' : '不支持' }}
                       </span>
                     </td>
-                    <td>
-                      <span v-if="model.capabilities.supportsReasoningEffort">支持</span>
+                    <!-- 强度是逐模型声明的挡位（2026-11-05）：只写「支持」看不出这台模型认哪几档，
+                         而运行时只发出它声明过的那几档。 -->
+                    <td class="mono">
+                      <template v-if="model.capabilities.reasoningEfforts.length">{{ model.capabilities.reasoningEfforts.join(' / ') }}</template>
                       <span v-else class="mk-na">—</span>
                     </td>
                     <td class="mono">
@@ -157,21 +156,10 @@
                       <span v-else class="mk-na">—</span>
                     </td>
                     <td class="mono">{{ model.limits.maxParallelRequests ?? '不限' }}</td>
-                    <td class="mono">
-                      <template v-if="model.fallbacks.length">
-                        {{ effectiveFallbacks(model.fallbacks).join(' → ') }}
-                        <span
-                          v-if="model.fallbacks.length > effectiveFallbacks(model.fallbacks).length"
-                          class="ac-mr-label"
-                          title="运行时最多使用主模型加 1 个备用模型，声明的备用再长也只生效前段"
-                        >(声明 {{ model.fallbacks.length }} 个，实际生效 {{ effectiveFallbacks(model.fallbacks).length }} 个)</span>
-                      </template>
-                      <template v-else>—</template>
-                    </td>
                   </tr>
                   <!-- 该供应商没有参与路由的模型（停用条目 / 未登记）：一行说明，不留空组 -->
                   <tr v-if="!g.models.length" class="ac-mr-pempty">
-                    <td colspan="10">
+                    <td colspan="8">
                       {{ g.enabled ? '该供应商下暂无已登记的模型。' : '该供应商当前停用，其模型不参与路由。' }}
                     </td>
                   </tr>
@@ -252,14 +240,13 @@ interface ModelRegistryOverviewData {
     providerName?: string
     hasOwnEndpoint: boolean
     keyConfigured: boolean | null
-    capabilities: { supportsThinking: boolean; supportsReasoningEffort: boolean }
+    capabilities: { supportsThinking: boolean; reasoningEfforts: string[] }
     limits: {
       maxOutputTokens: number | null
       defaultMaxTokens: number | null
       reasoningReserveTokens: number
       maxParallelRequests: number | null
     }
-    fallbacks: string[]
     pricingConfigured: boolean
     description?: string
   }>
@@ -276,29 +263,17 @@ interface ModelRegistryOverviewData {
     defaultModelConfigured: string | null
     defaultModelResolved: string | null
     defaultModelSource: 'alias' | 'concrete' | 'unset'
-    defaultReasoningModelConfigured: string | null
-    defaultReasoningModelResolved: string | null
-    defaultReasoningModelSource: 'alias' | 'concrete' | 'unset'
     // 后端暂未返回评估档字段，按可选声明；模板据此显示 '—' 占位
     defaultEvaluationModelConfigured?: string | null
     defaultEvaluationModelResolved?: string | null
     defaultEvaluationModelSource?: 'alias' | 'concrete' | 'unset'
   }
-  /** 运行时实际默认（含 env 兜底来源）；defaults 只报平台行上配了什么 */
+  /** 运行时实际默认（含 env 兜底来源）；defaults 只报平台行上配了什么。
+      2026-11-04：平台不再有「默认推理模型」，这一档读数已从后端契约移除。 */
   runtimeDefaults?: {
     model: string | null
     source: 'ui' | 'env' | 'none'
-    reasoningModel: string | null
-    reasoningSource: 'ui' | 'env' | 'none'
   }
-  fallbackChains: Array<{
-    model: string
-    fallbacks: string[]
-    effectiveFallbacks: string[]
-    truncated: boolean
-  }>
-  runtime?: { maxModelCandidates: number; fallbackSwapsModelOnly: boolean }
-  cooldowns: Array<{ key: string; providerId: string; endpoint: string; model: string; remainingMs: number }>
   warnings: string[]
   deprecatedPromptModelCount: number
 }
@@ -319,18 +294,13 @@ const emit = defineEmits<{
   count: [payload: { models: number; warnings: number }]
   aliases: [aliases: string[]]
   /** 路由解析结果回传宿主（2026-10-15「所配即所得」）：宿主在三条角色行下展示
-   *  「实际生效 / 来源 / 降级备用」，原解析结果表退役 */
-  defaults: [payload: { defaults: ModelRegistryOverviewData['defaults']; models: ModelRegistryOverviewData['models']; runtime?: ModelRegistryOverviewData['runtime']; runtimeDefaults?: ModelRegistryOverviewData['runtimeDefaults'] }]
+   *  「实际生效 / 来源」，原解析结果表退役 */
+  defaults: [payload: { defaults: ModelRegistryOverviewData['defaults']; models: ModelRegistryOverviewData['models']; runtimeDefaults?: ModelRegistryOverviewData['runtimeDefaults'] }]
 }>()
 
 const data = ref<ModelRegistryOverviewData | null>(null)
 const failed = ref(false)
 const errorText = ref('')
-
-/** 行级状态（2026-10-15）：该模型所属部署是否在熔断冷却中（providerId + model 双键匹配） */
-function cooldownOf(model: ModelRegistryOverviewData['models'][number]) {
-  return (data.value?.cooldowns ?? []).find((c) => c.model === model.id && c.providerId === model.providerId) ?? null
-}
 
 /** 模型级配置提示（warning 文案里以「模型「id」」包住的，挂到对应行；其余走 globalWarnings） */
 function modelWarnings(model: ModelRegistryOverviewData['models'][number]): string[] {
@@ -342,17 +312,10 @@ const globalWarnings = computed(() => {
 })
 
 const router = useRouter()
-/** 空态出口（R6D）：跳到接入配置所在的「接入与模型」页签，路由与页签参数均为既有契约 */
+/** 空态出口（R6D）：跳到接入配置所在的「系统设置 · 模型与接入」页签
+    （2026-11-01：原 /admin/api-config 已成该系统设置页的第一格视图） */
 function goAccessConfig() {
-  void router.push({ path: '/admin/api-config', query: { tab: 'access' } })
-}
-
-/** 运行时模型候选上限(含主模型);后端 registry runtime 缺失时按现状 2 兜底 */
-function runtimeMaxCandidates(): number {
-  return data.value?.runtime?.maxModelCandidates ?? 2
-}
-function effectiveFallbacks(fallbacks: string[]): string[] {
-  return fallbacks.slice(0, Math.max(0, runtimeMaxCandidates() - 1))
+  void router.push({ path: '/admin/system-settings', query: { tab: 'api' } })
 }
 
 /* sourceLabel/sourceBadge 2026-10-15 随「默认路由（解析结果）」表退役——
@@ -412,7 +375,6 @@ async function refresh(force = false): Promise<void> {
       emit('defaults', {
         defaults: data.value.defaults,
         models: data.value.models,
-        runtime: data.value.runtime,
         runtimeDefaults: data.value.runtimeDefaults
       })
     }

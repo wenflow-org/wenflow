@@ -16,6 +16,8 @@ const usersCount = jest.fn();
 const projectionsFindMany = jest.fn();
 const projectionsFindUnique = jest.fn();
 const projectionsUpsert = jest.fn();
+/** #205：无 active 路径用户的「路径身份」回退查询（展示用，不参与快照锚定） */
+const learningPathsFindMany = jest.fn();
 
 jest.mock('../../../config/database', () => ({
   __esModule: true,
@@ -27,9 +29,20 @@ jest.mock('../../../config/database', () => ({
           : usersFindMany(args),
       count: (...args: any[]) => usersCount(...args),
     },
-    learner_projections: { findMany: projectionsFindMany, findUnique: projectionsFindUnique, upsert: projectionsUpsert },
+    learning_paths: {
+      findMany: (...args: any[]) => learningPathsFindMany(...args),
+    },
+    learner_projections: {
+      findMany: projectionsFindMany,
+      findUnique: projectionsFindUnique,
+      upsert: projectionsUpsert,
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    },
   },
 }));
+
+// clearAllMocks 不清实现：默认「没有回退身份」；用例按需 mockResolvedValueOnce 覆写。
+learningPathsFindMany.mockResolvedValue([]);
 
 jest.mock('../LearnerSnapshotService', () => ({
   learnerSnapshotService: { getSnapshot: jest.fn() },
@@ -116,6 +129,63 @@ describe('listForAdmin 口径（只排除虚拟学习者）', () => {
     const data = await learnerSnapshotRefreshService.listForAdmin({ limit: 50 });
     expect(data.items[0].isTestAccount).toBe(true);
   });
+
+  /* #205：无 active 路径的用户此前行内「路径」列恒空（active-only 过滤）。
+     修法：路径身份回退到最近的非 abandoned 路径用于展示，但快照锚点仍只认 active——
+     pathId 保持 null、快照走 global 口径，避免 currentPath 被锚到 archived（同一 bug 在列表重现），
+     也避免前端重算带 archived pathId 写 path 键而本行读 global 键（LearnerCenter.vue:390/741）。
+     身份回退走独立查询，不靠放宽嵌套 where 的 take（否则更新的归档路径可能把 active 挤出窗口）。 */
+  it('无 active 路径：路径身份回退展示非 abandoned 路径，但不锚定（pathId null / global 口径）', async () => {
+    usersFindMany.mockResolvedValue([baseUser({ id: 'u-arch', learning_paths: [] })]);
+    usersCount.mockResolvedValue(1);
+    projectionsFindMany.mockResolvedValue([]);
+    // 回退查询只取 status + milestones.subtasks.status（#205 只展示身份；2026-11-09 顺带带出真实完成度）
+    learningPathsFindMany.mockResolvedValueOnce([
+      {
+        userId: 'u-arch',
+        title: '归档路径',
+        status: 'archived',
+        milestones: [{ subtasks: [{ status: 'completed' }, { status: 'in_progress' }, { status: 'completed' }] }],
+      },
+    ]);
+    stubFreshProjections();
+
+    const data = await learnerSnapshotRefreshService.listForAdmin({ limit: 50 });
+    expect(data.items[0].pathTitle).toBe('归档路径');
+    expect(data.items[0].pathId).toBeNull();
+    // 学过但已下线的路径：带出真实进度，前端据此区分「从未开始」与「历史进度」
+    expect(data.items[0].fallbackPath).toEqual({
+      status: 'archived',
+      completedTasks: 2,
+      totalTasks: 3,
+    });
+    const { learnerSnapshotService } = jest.requireMock('../LearnerSnapshotService');
+    expect(learnerSnapshotService.getSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'u-arch', learningPathId: undefined, mode: 'global' }),
+    );
+  });
+
+  it('有 active 路径：锚点与身份都取 active 路径（行为不变）', async () => {
+    usersFindMany.mockResolvedValue([
+      baseUser({
+        id: 'u-act',
+        learning_paths: [{ id: 'p-act', title: '进行中路径', status: 'active', updatedAt: new Date() }],
+      }),
+    ]);
+    usersCount.mockResolvedValue(1);
+    projectionsFindMany.mockResolvedValue([]);
+    stubFreshProjections();
+
+    const data = await learnerSnapshotRefreshService.listForAdmin({ limit: 50 });
+    expect(data.items[0].pathId).toBe('p-act');
+    expect(data.items[0].pathTitle).toBe('进行中路径');
+    // 有 active 路径时不查身份回退
+    expect(learningPathsFindMany).not.toHaveBeenCalled();
+    const { learnerSnapshotService } = jest.requireMock('../LearnerSnapshotService');
+    expect(learnerSnapshotService.getSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'u-act', learningPathId: 'p-act', mode: 'path' }),
+    );
+  });
 });
 
 /**
@@ -172,5 +242,90 @@ describe('listForAdmin dataUpdatedAt（学习证据最后变化时刻）', () =>
     });
     const data = await learnerSnapshotRefreshService.listForAdmin({ limit: 50, excludeTest: true });
     expect(data.items[0].dataUpdatedAt).toBeNull();
+  });
+});
+
+/**
+ * #176-2：staleOnly 的陈旧判定改读 dataUpdatedAt（学习证据最后变化时刻）。
+ * 病灶：旧实现按 generatedAt 判——列表一次请求会把过期投影整批重建，
+ * 于是「刚被重建过的老用户」看起来最新被过滤掉，真正长期没学习的反而被隐藏。
+ */
+describe('listForAdmin staleOnly（#176-2：按 dataUpdatedAt 判陈旧）', () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it('重建时刻很新但 dataUpdatedAt 很旧/为空 → 仍是陈旧用户；只有真正有近期证据的才被过滤', async () => {
+    const { learnerSnapshotService } = jest.requireMock('../LearnerSnapshotService');
+    const freshEvidence = new Date(Date.now() - 60 * 1000).toISOString();
+    const staleEvidence = new Date(Date.now() - 40 * 24 * 60 * 60 * 1000).toISOString();
+    const basedOnByUser: Record<string, Record<string, string>> = {
+      'u-stale-evidence': { latestTaskCompletionAt: staleEvidence },
+      'u-stale-null': {},
+      'u-fresh-evidence': { latestTaskCompletionAt: freshEvidence },
+    };
+
+    usersFindMany.mockResolvedValue([
+      baseUser({ id: 'u-stale-evidence' }),
+      baseUser({ id: 'u-stale-null' }),
+      baseUser({ id: 'u-fresh-evidence' }),
+    ]);
+    usersCount.mockResolvedValue(3);
+    projectionsFindMany.mockResolvedValue([]);
+    projectionsFindUnique.mockResolvedValue(null);
+    projectionsUpsert.mockResolvedValue({});
+    // generatedAt 三者相同且都是"刚刚"（模拟列表整批重建）：旧实现会把三人都判成最新。
+    learnerSnapshotService.getSnapshot.mockImplementation(async (input: { userId: string }) => ({
+      ...baseSnapshot,
+      freshness: {
+        ...baseSnapshot.freshness,
+        generatedAt: new Date().toISOString(),
+        basedOn: basedOnByUser[input.userId],
+      },
+    }));
+
+    const data = await learnerSnapshotRefreshService.listForAdmin({
+      limit: 50,
+      includeTest: true,
+      staleOnly: true,
+    });
+
+    const ids = data.items.map((item: { userId: string }) => item.userId);
+    expect(ids).toContain('u-stale-evidence');
+    // dataUpdatedAt 为 null 视为最陈旧，不能被当成最新
+    expect(ids).toContain('u-stale-null');
+    expect(ids).not.toContain('u-fresh-evidence');
+  });
+
+  /**
+   * #176-2 复核：列表路径的 60 分钟保鲜窗是给「缓变趋势信号」的，但它同样能让
+   * **失效前落地**的那行投影继续被展示——画像变更后 invalidate 只清了内存键，
+   * 列表读到旧载荷又把它写回内存，失效等于空转。
+   */
+  it('invalidate 之后，列表不得再返回失效前落地的持久化投影（水位同样管住列表路径）', async () => {
+    usersFindMany.mockResolvedValue([baseUser({ id: 'u-wm-list' })]);
+    usersCount.mockResolvedValue(1);
+    stubFreshProjections();
+    const { learnerSnapshotService } = jest.requireMock('../LearnerSnapshotService');
+
+    // 无 active 路径 → global 口径的投影键（与 buildKey 一致）
+    const key = ['learner-snapshot-v1', 'u-wm-list', 'global', 'global', 'none', 'none'].join(':');
+    projectionsFindMany.mockResolvedValue([
+      { projectionKey: key, payload: JSON.stringify(baseSnapshot), generatedAt: new Date(Date.now() - 30_000) },
+    ]);
+
+    learnerSnapshotRefreshService.invalidate('u-wm-list');
+    await learnerSnapshotRefreshService.listForAdmin({ limit: 50, includeTest: true });
+
+    // 该行被判失效 → 走重建，而不是把它读出来展示
+    expect(learnerSnapshotService.getSnapshot).toHaveBeenCalled();
+
+    // 对照组：没有失效的用户命中同一行，不重建
+    (learnerSnapshotService.getSnapshot as jest.Mock).mockClear();
+    usersFindMany.mockResolvedValue([baseUser({ id: 'u-no-wm-list' })]);
+    const otherKey = ['learner-snapshot-v1', 'u-no-wm-list', 'global', 'global', 'none', 'none'].join(':');
+    projectionsFindMany.mockResolvedValue([
+      { projectionKey: otherKey, payload: JSON.stringify(baseSnapshot), generatedAt: new Date(Date.now() - 30_000) },
+    ]);
+    await learnerSnapshotRefreshService.listForAdmin({ limit: 50, includeTest: true });
+    expect(learnerSnapshotService.getSnapshot).not.toHaveBeenCalled();
   });
 });

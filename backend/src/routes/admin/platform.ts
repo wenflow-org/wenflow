@@ -474,9 +474,10 @@ router.get('/overview/stats', async (req: Request, res: Response) => {
 
 /**
  * GET /api/admin/overview/closure
- * 完课量按轨道/通道拆分（#105 读侧接入）：数据 = learner_evidence 已投影收束事件，
- * task:completed 计入完课量（path:completed 单列披露），历史无 track 行按 legacy 呈现、
- * 不回填不猜测（口径单点在 services/learning/closure-observability.ts）。
+ * 完课量按轨道/通道拆分（#105 读侧接入；2026-11-04 口径对齐 #186）：数据 = learner_evidence
+ * 已投影收束事件。total/byTrack/bySource 同源同口径（非虚拟）、三项轨道相加即 total；
+ * 虚拟学习者单列 virtualCount（不计入）；path:completed 单列披露；历史无 track 行按 legacy
+ * 呈现、不回填不猜测（口径单点在 services/learning/closure-observability.ts）。
  */
 router.get('/overview/closure', async (_req: Request, res: Response) => {
   try {
@@ -741,7 +742,15 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
     }
 
     if (traceId) {
-      where.AND.push({ traceId: { contains: String(traceId) } });
+      const traceNeedle = String(traceId);
+      /* 前端对「没有链路 ID 的记录」显示合成值 `log:<记录 id>`（live.ts mapLogsToSpans 的兜底：
+         网关行有 traceId，skill 行常常没有）。运维从表格里复制到的是这个值，直接按 traceId 列查
+         必然 0 行（实测），所以带 log: 前缀时按主键查。 */
+      where.AND.push(
+        traceNeedle.startsWith('log:')
+          ? { id: { contains: traceNeedle.slice(4) } }
+          : { traceId: { contains: traceNeedle } }
+      );
     }
 
     if (sessionId) {
@@ -760,6 +769,13 @@ router.get('/agents/logs', async (req: Request, res: Response) => {
     if (status) {
       if (status === 'success') {
         where.AND.push({ success: true });
+      } else if (status === 'failed') {
+        /* 未成功（含超时）：平台口径里「失败」= 没成功，超时是它的一个**原因分类**
+           （失败归因的 provider_timeout 桶），不是并列的第三档——总览 usage.failed7d
+           与归因之和恒等这条不变式就建立在此（platform-overview-stats.test.ts）。
+           执行日志的「仅失败」档必须用它：总览「今日/近 7 天失败 N 次」下钻过来时，
+           旧写法（status=error 排除超时）会少掉超时那几行（2026-11-08 审计）。 */
+        where.AND.push({ success: false });
       } else if (status === 'error') {
         where.AND.push({ success: false });
         where.AND.push({ NOT: buildTimeoutCondition() });

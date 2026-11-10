@@ -4,10 +4,10 @@
  * - /admin/:page 主路由与 /admin/skills/:agentId 设计页路由解析
  * - requiresAdminAuth 守卫：无会话 → /admin/login 重定向，有会话 → 放行
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import router from '../index';
-import { ADMIN_SESSION_KEY } from '@/api/adminApi';
+import { ADMIN_SESSION_KEY, adminAuthApi, hasAdminSession } from '@/api/adminApi';
 
 function setAdminSession(on: boolean) {
   if (on) {
@@ -121,11 +121,11 @@ describe('Admin 路由重定向', () => {
       ['/admin/notifications', '/admin/ops-hub', 'inapp'],
       // 2026-10-19：「外挂能力」从「模型与接入」宿主拆回独立页 —— /admin/addons 不再是重定向，
       // 而是真实场景路径（下面单独断言）；旧外部别名 /admin/external-capabilities 改投本页。
-      ['/admin/session-security', '/admin/ops-hub', 'security'],
-      // 2026-10-16：「系统工具」解散并入运营中心，旧深链改指 ops-hub 对应页签
-      ['/admin/ops-center', '/admin/ops-hub', 'tools'],
-      ['/admin/devtools', '/admin/ops-hub', 'tools'],
-      ['/admin/export-data', '/admin/ops-hub', 'export'],
+      // 2026-11-01：运维工具/数据导出/会话安全/访问与注册 从运营中心迁入「系统设置」
+      ['/admin/session-security', '/admin/system-settings', 'security'],
+      ['/admin/ops-center', '/admin/system-settings', 'tools'],
+      ['/admin/devtools', '/admin/system-settings', 'tools'],
+      ['/admin/export-data', '/admin/system-settings', 'export'],
     ];
     for (const [from, toPath, tab] of cases) {
       await router.push(from);
@@ -150,33 +150,81 @@ describe('Admin 路由重定向', () => {
 
   it('退役场景深链保留业务 query（会话安全 ?user= 透传）', async () => {
     await router.push('/admin/session-security?user=admin');
-    expect(router.currentRoute.value.path).toBe('/admin/ops-hub');
+    expect(router.currentRoute.value.path).toBe('/admin/system-settings');
     expect(router.currentRoute.value.query.tab).toBe('security');
     expect(router.currentRoute.value.query.user).toBe('admin');
   });
 
   it('改名/拆页后的旧深链仍在路由层改投：api-config?tab=security / skills?tab=prompt-eval', async () => {
     await router.push('/admin/api-config?tab=security');
-    expect(router.currentRoute.value.path).toBe('/admin/ops-hub');
+    expect(router.currentRoute.value.path).toBe('/admin/system-settings');
     expect(router.currentRoute.value.query.tab).toBe('access');
 
+    /* Prompt 评估 2026-11-01 下线：?tab=prompt-eval 落回 Skill 目录（tab 键与页内键 peTab 都清掉，
+       否则会在已下线的页签上留一个空壳或把无效内层键带给宿主页） */
     await router.push('/admin/skills?tab=prompt-eval&peTab=runs');
-    expect(router.currentRoute.value.path).toBe('/admin/prompt-eval');
+    expect(router.currentRoute.value.path).toBe('/admin/skills');
     expect(router.currentRoute.value.query.tab).toBeUndefined();
-    expect(router.currentRoute.value.query.peTab).toBe('runs');
+    expect(router.currentRoute.value.query.peTab).toBeUndefined();
   });
 
-  it('访问与注册独立页深链改投运营中心 access 页签', async () => {
-    await router.push('/admin/access-control?foo=bar');
+  it('模型与接入并入系统设置（2026-11-01）：/admin/api-config 与 /admin/models 落到首页签', async () => {
+    await router.push('/admin/models');
+    expect(router.currentRoute.value.path).toBe('/admin/system-settings');
+    expect(router.currentRoute.value.query.tab).toBe('api');
+
+    // 旧页签键（model / registry / runtime / access…）都只是「打开这一页」，一律回到首页签
+    for (const legacy of ['model', 'registry', 'connection', 'overview', 'runtime', 'model-routing']) {
+      await router.push(`/admin/api-config?tab=${legacy}`);
+      expect(router.currentRoute.value.path, `tab=${legacy}`).toBe('/admin/system-settings');
+      expect(router.currentRoute.value.query.tab, `tab=${legacy}`).toBe('api');
+    }
+
+    // virtual 是迁出去的页签：直接到虚拟学习者，不在本页停一下
+    await router.push('/admin/api-config?tab=virtual');
+    expect(router.currentRoute.value.path).toBe('/admin/virtual-learners');
+    expect(router.currentRoute.value.query.tab).toBeUndefined();
+
+    // 无 tab 参数同样落首页签
+    await router.push('/admin/api-config');
+    expect(router.currentRoute.value.path).toBe('/admin/system-settings');
+    expect(router.currentRoute.value.query.tab).toBe('api');
+  });
+
+  it('运营中心四个系统页签的老深链改投系统设置（2026-11-01 拆页）', async () => {
+    for (const t of ['tools', 'export', 'security', 'access']) {
+      await router.push(`/admin/ops-hub?tab=${t}`);
+      expect(router.currentRoute.value.path, `tab=${t}`).toBe('/admin/system-settings');
+      expect(router.currentRoute.value.query.tab, `tab=${t}`).toBe(t);
+    }
+    // 内容运营四页签仍留在运营中心（2026-11-09 空壳「运营待办」下线后为四个）
+    for (const t of ['feedback', 'achievements', 'announce', 'inapp']) {
+      await router.push(`/admin/ops-hub?tab=${t}`);
+      expect(router.currentRoute.value.path, `tab=${t}`).toBe('/admin/ops-hub');
+      expect(router.currentRoute.value.query.tab, `tab=${t}`).toBe(t);
+    }
+    // 老深链 ?tab=todo 改投默认「反馈」页签（页签已删，书签不留空壳）
+    await router.push('/admin/ops-hub?tab=todo');
     expect(router.currentRoute.value.path).toBe('/admin/ops-hub');
+    expect(router.currentRoute.value.query.tab).toBe('feedback');
+  });
+
+  it('已下线场景 /admin/prompt-eval 本身也改投 Skill 目录', async () => {
+    await router.push('/admin/prompt-eval');
+    expect(router.currentRoute.value.path).toBe('/admin/skills');
+  });
+
+  it('访问与注册独立页深链改投系统设置 access 页签', async () => {
+    await router.push('/admin/access-control?foo=bar');
+    expect(router.currentRoute.value.path).toBe('/admin/system-settings');
     expect(router.currentRoute.value.query.tab).toBe('access');
     expect(router.currentRoute.value.query.foo).toBe('bar');
   });
 
-  it('/admin/memory-review?userId= → 学习者详情「记忆调度」页签（路由级改投，页面不必先挂载转发）', async () => {
+  it('/admin/memory-review?userId= → 学习者详情「记忆与复习」页签（路由级改投，页面不必先挂载转发）', async () => {
     await router.push('/admin/memory-review?userId=user_abc');
     expect(router.currentRoute.value.path).toBe('/admin/learner-state');
-    expect(router.currentRoute.value.query).toMatchObject({ view: 'learner', id: 'user_abc', tab: 'memory-ops' });
+    expect(router.currentRoute.value.query).toMatchObject({ view: 'learner', id: 'user_abc', tab: 'memory' });
     expect(router.currentRoute.value.query.userId).toBeUndefined();
   });
 
@@ -257,5 +305,57 @@ describe('Admin 鉴权守卫', () => {
   it('有会话访问受保护页 → 放行', async () => {
     await router.push('/admin/overview');
     expect(router.currentRoute.value.path).toBe('/admin/overview');
+  });
+
+  it('有会话标记访问登录页且后端确认会话有效 → 弹回 /admin/overview（原行为保留）', async () => {
+    // 先落一个非登录路由：同路由重复 push 不触发守卫，测试间需真实导航
+    await router.push('/admin/overview');
+    const getMeSpy = vi.spyOn(adminAuthApi, 'getMe').mockResolvedValue({ status: 200 } as never);
+    try {
+      await router.push('/admin/login');
+      expect(router.currentRoute.value.path).toBe('/admin/overview');
+      expect(hasAdminSession()).toBe(true);
+    } finally {
+      getMeSpy.mockRestore();
+    }
+  });
+
+  it('有会话标记访问登录页但后端返回 403（会话已吊销）→ 清标记放行登录页（错误门死锁出口）', async () => {
+    await router.push('/admin/overview');
+    // http.ts 错误归一化形态：{ message, status, response }（无 response.data 依赖）
+    const getMeSpy = vi.spyOn(adminAuthApi, 'getMe').mockRejectedValue({ message: '会话已吊销或过期', status: 403 });
+    try {
+      await router.push('/admin/login');
+      expect(router.currentRoute.value.path).toBe('/admin/login');
+      expect(hasAdminSession()).toBe(false);
+    } finally {
+      getMeSpy.mockRestore();
+      setAdminSession(true);
+    }
+  });
+
+  it('有会话标记访问登录页但后端 401（Token 过期）→ 清标记放行登录页', async () => {
+    await router.push('/admin/overview');
+    const getMeSpy = vi.spyOn(adminAuthApi, 'getMe').mockRejectedValue({ message: 'Token 已过期', status: 401 });
+    try {
+      await router.push('/admin/login');
+      expect(router.currentRoute.value.path).toBe('/admin/login');
+      expect(hasAdminSession()).toBe(false);
+    } finally {
+      getMeSpy.mockRestore();
+      setAdminSession(true);
+    }
+  });
+
+  it('有会话标记访问登录页但网络故障（无 status）→ 维持弹回 overview（不因抖动误送登录页）', async () => {
+    await router.push('/admin/overview');
+    const getMeSpy = vi.spyOn(adminAuthApi, 'getMe').mockRejectedValue({ message: '网络错误，请检查连接' });
+    try {
+      await router.push('/admin/login');
+      expect(router.currentRoute.value.path).toBe('/admin/overview');
+      expect(hasAdminSession()).toBe(true);
+    } finally {
+      getMeSpy.mockRestore();
+    }
   });
 });

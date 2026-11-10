@@ -89,7 +89,7 @@
         action-busy-text="重试中…"
         @action="reload(true)"
       />
-      <div v-else-if="filtered.length" class="mk-table-scroll">
+      <div v-else class="mk-table-scroll">
         <!-- 固定列宽（2026-10-22 与教学会话/目标对话同判例）：自动布局下路径/用户两列按当页
              最长文本分宽，翻页整表跳动；改 fixed + 逐列表头宽度，余量按权重摊开。
              单元格 nowrap 仍走全局 .mk-table--nowrap，长标题/主题由 .mk-cell-main/.mk-cell-text 截断 -->
@@ -117,10 +117,13 @@
                 :aria-sort="ocSortState('difficulty')"
                 @click="toggleOcSort('difficulty')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('difficulty')">难度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <!-- 2026-11-09 用户走查（图 2）：「~21h」原为右对齐、右邻「进度」左对齐，
+                   数字贴左列的右缘、表头却站最左——和复习积压同一处「左空右撞」。
+                   短指标列一律左对齐（判例：教学会话的「12 分钟」）。 -->
               <th
                 v-if="!hiddenCols.has('hours')"
                 scope="col"
-                class="mk-th--sortable mk-th--right oc-c-hours"
+                class="mk-th--sortable oc-c-hours"
                 :aria-sort="ocSortState('hours')"
                 @click="toggleOcSort('hours')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleOcSort('hours')">预计时长<span class="mk-th__caret" aria-hidden="true"></span></button></th>
@@ -148,6 +151,7 @@
               v-for="p in paged"
               :key="p.id"
               tabindex="0"
+              :class="{ 'oc-row--menu': openMenu === p.id }"
               @click="openPath(p)"
               @keydown.enter.self.prevent="openPath(p)"
             >
@@ -178,10 +182,13 @@
                       v-if="p.user?.id"
                       type="button"
                       class="mk-user-link"
+                      :title="p.user?.email ? `${p.user?.name || '—'}
+${p.user?.email}` : (p.user?.name || '—')"
                       @click.stop="openLearnerOf(p)"
                       @keydown.enter.stop.prevent="openLearnerOf(p)"
                     >{{ p.user?.name || '—' }}</button>
-                    <strong v-else>{{ p.user?.name || '—' }}</strong>
+                    <strong v-else :title="p.user?.email ? `${p.user?.name || '—'}
+${p.user?.email}` : (p.user?.name || '—')">{{ p.user?.name || '—' }}</strong>
                     <!-- 备注在副行：姓名行保持全额宽度（2026-10-24 压字回归） -->
                     <!-- 副行去重（2026-10-24）：邮箱 local part 与姓名同值时不再复读 -->
                     <span v-if="emailSubline(p.user?.email, p.user?.name) || p.isTestAccount" class="mk-cell-subline">
@@ -197,7 +204,8 @@
                      一律显示「未知」，原文进 title，不把半句话当难度展示 -->
                 <span class="oc-diff">{{ difficultyText(p.difficulty) }}</span>
               </td>
-              <td v-if="!hiddenCols.has('hours')" class="mk-num">
+              <td v-if="!hiddenCols.has('hours')">
+                <!-- 等宽数字由 .mk-table td 的 tabular-nums 承担，不再需要私有类 -->
                 <span v-if="p.estimatedHours">~{{ p.estimatedHours }}h</span>
                 <span v-else class="mk-na">—</span>
               </td>
@@ -205,7 +213,7 @@
                 <div class="oc-progress">
                   <span class="mk-minibar"><span class="mk-minibar__fill" :data-tone="progressTone(p)" :style="{ width: progressPct(p) + '%' }"></span></span>
                   <span class="oc-progress__num">{{ progressPct(p) }}%</span>
-                  <span class="oc-progress__count mk-cell-sub">{{ p.completedMilestones }}/{{ p.totalMilestones }}</span>
+                  <span class="oc-progress__count mk-cell-sub">{{ progressCount(p) }}</span>
                 </div>
               </td>
               <td v-if="!hiddenCols.has('updated')" :title="fmtDate(activityAt(p))">
@@ -243,16 +251,21 @@
             </tr>
           </tbody>
         </table>
+        <!-- 空态长在表格内部：筛到 0 条时整张表连同表头一起消失，两态之间列宽与列上下文
+             全断（2026-11-02 评审 R12）。compact 而非 min——min 的视口高常量会在
+             滚动容器里撑出一整屏空白。 -->
+        <MkEmptyState
+          v-if="!filtered.length"
+          compact
+          :title="emptyStateTitle"
+          :action-text="isFiltered ? '清除筛选' : '去目标对话'"
+          @action="isFiltered ? clearFilters() : goGoalConversations()"
+        >
+          <!-- 图标用线性图标而不是「◌」字符：字体缺 U+25CC 时只剩两笔几乎看不见的短线，
+               读作"图标没加载出来"（2026-11-02 评审 R11）。 -->
+          <template #icon><Inbox :size="22" :stroke-width="1.7" /></template>
+        </MkEmptyState>
       </div>
-      <MkLoading v-else-if="loading" />
-      <MkEmptyState
-        v-else
-        min
-        icon="◌"
-        :title="isFiltered ? '当前筛选无匹配' : '没有学习路径'"
-        :action-text="isFiltered ? '清除筛选' : '去目标对话'"
-        @action="isFiltered ? clearFilters() : goGoalConversations()"
-      />
 
       <!-- 翻页器常驻（判例 GoalConversations/TeachingSessions）：0 行时也保留页码与条数，
            否则整页像数据没了。Pagination 自带越界收敛 watcher。 -->
@@ -273,6 +286,7 @@
 
 <script setup lang="ts">
 import { computed, getCurrentInstance, onMounted, ref, watch } from 'vue'
+import { Inbox } from 'lucide-vue-next'
 import { timeAgo, errMsg, isPageCacheFresh, liveRefreshSeq, markPageFetched } from './live'
 import { intent, openSubPage } from './store'
 import { adminLearningContentApi, type LearningContentStats, type LearningPathRow } from '@/api/adminApi'
@@ -385,7 +399,8 @@ const ocStatusPills = computed<Array<{ key: string; name: string; n: number | nu
 })
 /** 卡头「状态」下拉：计数与分布带同源（byStatus 全平台）；未就绪时不显计数 */
 const ocStatusOptions = computed(() => [
-  { value: 'all', label: '全部状态' },
+  /* 「全部状态」→「全部」：触发器已带「状态」label，选项不再复述（2026-11-09 走查）。 */
+  { value: 'all', label: '全部' },
   ...ocStatusPills.value
     .filter((p) => p.key !== 'all')
     .map((p) => ({ value: p.key, label: p.n != null ? `${p.name}（${p.n}）` : p.name }))
@@ -438,6 +453,17 @@ const filtered = computed(() => {
   }))
 })
 const isFiltered = computed(() => !!keyword.value.trim() || statusFilter.value !== 'all')
+/* 空态标题（2026-11-01 外部评审 P2）：状态下拉会列出计数为 0 的档（如「生成失败 (0)」），
+   选中后就只剩一句「当前筛选无匹配」——运营分不清是这类路径真的没有、还是和别的条件没交集。
+   单状态筛选且该档为 0 时，把档名写进标题；档名与下拉同源，避免两处用词不一致。 */
+const emptyStateTitle = computed(() => {
+  if (!isFiltered.value) return '没有学习路径'
+  if (statusFilter.value !== 'all') {
+    const name = ocStatusPills.value.find((p) => p.key === statusFilter.value)?.name
+    if (name) return `当前没有「${name}」的学习路径`
+  }
+  return '当前筛选无匹配'
+})
 function clearFilters() {
   keyword.value = ''
   statusFilter.value = 'all'
@@ -470,9 +496,16 @@ const paged = computed(() => {
 })
 
 const progressPct = (p: PathRow) => {
+  /* 2026-10-31 外部评审 P1-2「进度自相矛盾」：只按已完结里程碑算，学到 1/13 课的路径在列表
+     永远 0%（0/4），而学员概览画的是子任务进度 ~10%。优先子任务口径（与概览/座舱 Path 步点
+     同源同数）；旧部署/无任务数据回退里程碑口径。 */
+  if (p.totalTasks) return Math.min(100, Math.round(((p.completedTasks ?? 0) / p.totalTasks) * 100))
   if (!p.totalMilestones) return 0
   return Math.min(100, Math.round((p.completedMilestones / p.totalMilestones) * 100))
 }
+/* 进度分母读数与百分比同口径（P1-2）：有子任务计数显示 子任务完成数，否则退里程碑 */
+const progressCount = (p: PathRow) =>
+  p.totalTasks ? `${p.completedTasks ?? 0}/${p.totalTasks}` : `${p.completedMilestones}/${p.totalMilestones}`
 /* 进度条三态（P2）：100% = 绿（ok）/ 失败 = 红（bad）/ 其余（含进行中）= 默认中性蓝——
    此前进行中一律琥珀（warn），满屏琥珀稀释真异常，也读不出「快好了」。 */
 const progressTone = (p: PathRow) => {
@@ -739,6 +772,8 @@ defineExpose({ reload: () => void reload(true) })
 .oc-stats-error__msg { font-size: var(--mk-fs-micro); color: var(--mk-red); }
 /* 可点 KPI 的选中态（2026-10-26）：蓝只给可交互与选中，与 .lc-kpi--on / .mr-kpi--on 同一判例 */
 .oc-kpi--on { border-color: var(--mk-blue); }
+/* 行菜单打开中的所属行：浮层 fixed 脱离行盒，不加底色时看不出它属于哪条路径 */
+.oc-row--menu { background: var(--mk-graph-flow-bg); }
 /* 分布条已退役（2026-10-17）：原页面级 .oc-distband 与类名一并下线，状态筛选在卡头 pills；
    页面级间距仍由 .mk-page 的 --mk-stack-gap 统一供 */
 /* 加载失败错误态已收敛共享 MkEmptyState tone="error"（role=alert + 失败原因 + 重试/busy），
@@ -755,7 +790,10 @@ defineExpose({ reload: () => void reload(true) })
 /* 2026-10-24 视觉修复：状态/最近活动这类短列此前吃掉 90/104px，路径主列只剩 170px
    被省略号截断；把富余宽度让回路径列，总宽不变（fixed 表不新增横滚）。 */
 /* 2026-10-26：操作列放宽到 140px 以容纳一级「重试生成」，宽度从预计时长（78px，默认收起）让出 */
-.oc-table .oc-c-path { width: 260px; }
+/* 2026-11-09 用户走查（图 2）：1920 下首列占 31%（512px），用户列被推到右侧留白。
+   主标识列改百分比 + 上限封顶（28–32% 且 ≤440px），判例与教学会话 .ts-c-topic、
+   目标对话 .gc-c-summary 一致；其余列保持像素宽度，整表在 1280 仍不横滚。 */
+.oc-table .oc-c-path { width: 30%; min-width: 260px; max-width: 440px; }
 .oc-table .oc-c-user { width: 150px; }
 .oc-table .oc-c-status { width: 72px; }
 .oc-table .oc-c-difficulty { width: 60px; }
@@ -776,8 +814,9 @@ defineExpose({ reload: () => void reload(true) })
 
 /* 难度：三个语义值 + 未知；未知降一档灰，不抢视觉 */
 .oc-diff { font-size: var(--mk-fs-micro); color: var(--mk-muted); white-space: nowrap; }
-/* 时长：右对齐等宽数字（与表头 mk-th--right 对齐） */
-/* 时长格直出 .mk-num（oc-hours 双层叠写退役，2026-10-03）；右对齐由 .mk-num 承担 */
+/* 时长（2026-11-09 用户走查图 2）：改左对齐后不再吃 .mk-num（右对齐）——
+   表头与数据原先各站一边，数字又贴着右邻「进度」。等宽数字由 .mk-table td 的
+   tabular-nums 承担，本格不再需要私有类（oc-hours 属全域退役方言）。 */
 
 /* 结构详情抽屉已退役（2026-10-01 行点击改走 PathDetail 二级页）；本页只保留列表自身样式 */
 

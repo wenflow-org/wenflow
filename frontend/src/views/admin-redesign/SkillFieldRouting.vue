@@ -90,7 +90,7 @@
 
       <!-- 搜索 -->
       <div class="mk-filter sfr__filter">
-        <MkFilterSearch v-model="keyword" type="search" placeholder="搜索字段 / 含义 / 角色 / 移交" />
+        <MkFilterSearch v-model="keyword" type="search" placeholder="搜索字段 / 含义 / 角色" />
         <MkSelect
           v-model="roleFilter"
           :options="roleFilterOptions"
@@ -143,8 +143,17 @@
                   <span class="mk-badge" :class="`mk-badge--render-${row.render}`" :title="renderHintOf(row)">{{ renderText(row.render) }}</span>
                 </td>
                 <td><span class="mono sfr__handoff" :title="handoffTitleOf(row)">{{ formatHandoff(row.handoff) }}</span></td>
-                <td>{{ row.internal ? '是' : '否' }}</td>
-                <td>{{ row.accumulate ? '是' : '否' }}</td>
+                <!-- 内部 / 累积两列（2026-11-02 评审）：同一属性在流向视图里是「有则显色胶囊、
+                     无则 —」，这里却是「是 / 否」文本。改成与流向视图同款呈现——
+                     两列都在图例里登记了胶囊语义，默认态给「—」并在悬停说清含义。 -->
+                <td>
+                  <span v-if="row.internal" class="mk-badge mk-badge--flow-internal" title="仅供平台内部使用，不进业务状态">内部</span>
+                  <span v-else class="mk-na" title="不标记内部：该字段会进入业务状态">—</span>
+                </td>
+                <td>
+                  <span v-if="row.accumulate" class="mk-badge mk-badge--flow-accumulate" title="值会累积进学习者状态，供后续阶段持续使用">累积</span>
+                  <span v-else class="mk-na" title="不累积：只在本回合内使用">—</span>
+                </td>
                 <td>
                   <span class="mono sfr__persist" :class="{ 'sfr__persist--alias': row.persistKey !== row.fieldId }" :title="row.persistKey === row.fieldId ? '存储字段名与字段名一致' : `值实际保存到 ${row.persistKey}`">{{ row.persistKey === row.fieldId ? '同字段名' : '别名' }}</span>
                 </td>
@@ -155,8 +164,10 @@
                   <span v-else class="mk-badge mk-badge--core-declared" :title="row.coreStateTitle">已声明</span>
                 </td>
                 <td class="sfr__ops">
-                  <button type="button" class="mk-btn mk-btn--sm" :disabled="!canEditRow(row)" :title="editTitleOf(row)" @click="openEdit(row)">编辑</button>
-                  <button type="button" class="mk-btn mk-btn--sm mk-btn--danger" :disabled="!canDeleteRow(row)" :title="deleteTitleOf(row)" @click="onDelete(row)">删除</button>
+                  <!-- 2026-11-09 设计语言收敛：同一格里「删除」是文字链接、「编辑」却是描边按钮，
+                       一行两个动作两种皮。表格行内动作统一走 mk-link（危险动作用 --danger）。 -->
+                  <button type="button" class="mk-link" :disabled="!canEditRow(row)" :title="editTitleOf(row)" @click="openEdit(row)">编辑</button>
+                  <button type="button" class="mk-link mk-link--danger" :disabled="!canDeleteRow(row)" :title="deleteTitleOf(row)" @click="onDelete(row)">删除</button>
                 </td>
               </tr>
             </tbody>
@@ -603,6 +614,11 @@ onMounted(() => void load())
 </script>
 
 <style scoped>
+/* 本块是 grid 容器的子项：默认 min-width:auto 会被宽表撑开，内层 .sfr__scroll 的
+   overflow-x 拿不到滚动条，右端「操作」列被外层容器裁掉（2026-11-02 评审：
+   表头「core 状态」之后只露出半个字的按钮，状态条上的「→ 字段流转页」也被切断）。
+   与 SkillDetail `.skd-pane > *` / mk-primitives `.mk-page > *` 同款修法。 */
+.sfr { min-width: 0; }
 .sfr__status-actions { margin-left: auto; display: inline-flex; gap: 8px; }
 /* 原型 .note：说明/告警行（surface-2 底 + muted 小字；--warn 走琥珀底） */
 .note {
@@ -653,13 +669,19 @@ onMounted(() => void load())
 .sfr__scroll { overflow-x: auto; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl); background: var(--mk-surface); }
 /* 窄屏最小宽度挂页面前缀类（页面 scoped 不得定义 mk- 类） */
 @media (max-width: 860px) { .sfr__table { min-width: 1180px; } }
-.sfr__fieldcell { max-width: 300px; display: grid; gap: 2px; min-width: 0; }
+/* 字段列是本表主键：12 列抢宽时 auto 布局把它压到 ~79px，26 行 23 行截成
+   analys…/contro… 完全无区分度（2026-10-31 三轮评审）。给下限保列宽，
+   公共前缀的区分段（analysis./controls. 后半）就能露出来。 */
+.sfr__fieldcell { min-width: 210px; max-width: 320px; display: grid; gap: 2px; }
 .sfr__field { display: block; min-width: 0; color: var(--mk-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sfr__fieldpath { font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 原型 .tbl td.wrap：含义是长文本列 → 换行不截断（完整文案仍在 title） */
 .sfr__table th.sfr__wrap, .sfr__table td.sfr__wrap { white-space: normal; min-width: 220px; }
 .sfr__meaning { min-width: 220px; }
-.sfr__meaning-text { display: block; max-width: 340px; white-space: normal; overflow-wrap: anywhere; color: var(--mk-muted); line-height: 1.5; }
+/* overflow-wrap: anywhere 会把 confused|bored 这类无空格标识在任意字符处掰断，
+   末尾剩单字母（2026-10-31 外部评审复检）；改 break-word：仅在整词放不下时才断，
+   正常句子里标识符保持完整（确实超长的整词才让位换行） */
+.sfr__meaning-text { display: block; max-width: 340px; white-space: normal; overflow-wrap: break-word; word-break: normal; color: var(--mk-muted); line-height: 1.5; }
 .sfr__handoff { max-width: var(--mk-col-id); color: var(--mk-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* 行内操作钮 = mk-btn--sm 文字钮（编辑/删除），不再覆写尺寸 */
 .sfr__ops { display: flex; gap: 6px; white-space: nowrap; }

@@ -19,7 +19,12 @@ const { openSubPageMock, cardsIndexMock, liveCreateVirtualMock, draftStoriesMock
   cardsCloneMock: vi.fn(),
 }));
 
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+// RouterLink 也 mock 掉：创建成功结果条用真路由链接（2026-11-03 起，替代 href="#" + @click.prevent），
+// 不 stub 的话模板解析不到组件、整棵渲染失败（本条 mock 原先只有 useRouter）。
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: vi.fn() }),
+  RouterLink: { props: ['to'], template: '<a><slot /></a>' },
+}));
 vi.mock('../store', async () => {
   const { ref } = await import('vue');
   return {
@@ -124,9 +129,12 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     // 2026-10-26：预置 / 自建合成一张「身份卡」，两个数进 hint；
     // 「已创建实例」只留读数，跳转改卡头链接（可点这件事此前只有悬停才看得出）
     expect(labels).toEqual(['身份卡', '已创建实例']);
-    expect(w.find('.mk-kpi__hint').text()).toContain('预置 1');
-    expect(w.find('.mk-kpi__hint').text()).toContain('自建 1');
-    expect(w.find('.mk-card__meta').text()).toContain('共 2 张');
+    /* 2026-11-01：构成拆分在数值行的 value-note 上，卡内不再有说明行 */
+    expect(w.find('.mk-kpi__hint').exists()).toBe(false);
+    expect(w.find('.mk-kpi__num-note').text()).toContain('预置 1');
+    expect(w.find('.mk-kpi__num-note').text()).toContain('自建 1');
+    /* 2026-11-02 评审 R16：张数只在 KPI 上出现一次，卡墙卡头不再复读同一读数 */
+    expect(w.findAll('.mk-card__meta').some((m) => m.text().includes('共 2 张'))).toBe(false);
     const wall = w.findAll('.vlc-card');
     expect(wall).toHaveLength(2);
     expect(wall[0].text()).toContain('高一学生小陈');
@@ -270,11 +278,14 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     }));
     const w = await mountPage();
     const chips = w.findAll('.vlc-card__tags .mk-badge');
-    // 2026-10-24 用户「preset:… 是无意义信息，要加就换点数据」：枚举转中文，内部标记全部撤掉
-    expect(chips.map((c) => c.text())).toEqual(['学习', '考试备战']);
+    /* 2026-11-07：来源徽标从卡头挪到卡脚这一行（「合成 / 预置」与档位、卡号同一行底栏），
+       所以这里第一枚是来源，后面才是卡标签。 */
+    expect(chips.map((c) => c.text())).toEqual(['预置', '学习', '考试备战']);
     // 2026-10-26：标签不再挂「场景类型 / 目标类型」注释型 title
-    expect(chips[0].attributes('title')).toBeUndefined();
+    // （首枚是来源徽标，它自带来源释义的 title；卡标签在它之后）
+    expect(chips[0].text()).toBe('预置');
     expect(chips[1].attributes('title')).toBeUndefined();
+    expect(chips[2].attributes('title')).toBeUndefined();
     expect(w.find('.vlc-card__tags').text()).not.toContain('preset:');
     expect(w.find('.vlc-card__tags').text()).not.toContain('hash:');
     expect(w.find('.vlc-card__more').exists()).toBe(false);
@@ -294,7 +305,8 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
       },
     }));
     const w = await mountPage();
-    expect(w.findAll('.vlc-card__tags .mk-badge').map((c) => c.text())).toEqual(['数学', '高一']);
+    // 首枚是来源（2026-11-07 移入底栏），其后是卡自带的标签（最多两枚）
+    expect(w.findAll('.vlc-card__tags .mk-badge').map((c) => c.text())).toEqual(['web', '数学', '高一']);
     w.unmount();
   });
 
@@ -367,11 +379,39 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     }));
     const w = await mountPage();
     const tasks = w.findAll('.vlc-card__task');
-    expect(tasks.map((t) => t.text())).toEqual(['任务亏了三万的那只基金', '任务停在三年前的简历']);
+    expect(tasks.map((t) => t.text())).toEqual(['场景亏了三万的那只基金', '场景停在三年前的简历']);
     // 只有多任务的卡标数量
     const foot = w.findAll('.vlc-card__foot');
     expect(foot[0].text()).not.toContain('个任务');
     expect(foot[1].text()).toContain('3 个任务');
+    w.unmount();
+  });
+
+  /* 2026-11-04 评审：卡库实况——learningGoal（=goalSeed.domain）与 story.title 同源同值，
+     name 又常是「想解决 + 目标」，卡面读成「想解决X / X / 场景X」三行同一句话。 */
+  it('三行同义复述去重：目标行与卡名同源、场景行与目标同值时都不上卡面', async () => {
+    cardsIndexMock.mockImplementation(async () => ({
+      data: {
+        data: {
+          cards: [
+            // 首卡即 eval 取证的那张：name=想解决+goal，goal=firstTaskTitle（三行同文）
+            { profileId: 'p1', userId: 'u1', cardKey: 'frontier-F100', name: '想解决纯情绪宣泄/急性心理危机（非学习诉求）', goal: '纯情绪宣泄/急性心理危机（非学习诉求）', opening: '今天上午刚被公司裁员了。', knowledgeLevel: 'beginner', tags: [], preset: false, sourceKind: 'synthetic', email: null, taskCount: 1, firstTaskTitle: '纯情绪宣泄/急性心理危机（非学习诉求）' },
+            // 次卡：目标与场景真不同，两行都要留
+            { profileId: 'p2', userId: 'u2', cardKey: 'k2', name: '郑凯', goal: '回本', opening: null, knowledgeLevel: 'beginner', tags: [], preset: true, sourceKind: null, email: null, taskCount: 1, firstTaskTitle: '亏了三万的那只基金' },
+          ],
+          summary: { total: 2, builtin: 1, custom: 1 },
+        },
+      },
+    }));
+    const w = await mountPage();
+    const cards = w.findAll('.vlc-card');
+    // 首卡三行同义 → 只留卡名，目标行与「场景」行都不印（开场白是独立内容，保留）
+    expect(cards[0].find('.vlc-card__goal').exists()).toBe(false);
+    expect(cards[0].find('.vlc-card__task').exists()).toBe(false);
+    expect(cards[0].find('.vlc-card__opening').exists()).toBe(true);
+    // 次卡两行各有区分度 → 都保留
+    expect(cards[1].find('.vlc-card__goal').text()).toBe('回本');
+    expect(cards[1].find('.vlc-card__task').text()).toBe('场景亏了三万的那只基金');
     w.unmount();
   });
 
@@ -400,7 +440,8 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     const w = await mountPage();
     const btn = w.findAll('button').find((b) => b.text() === '导入卡')!;
     await btn.trigger('click');
-    expect(openSubPageMock).toHaveBeenCalledWith('card-import', 'new');
+    /* 2026-10-31 二轮评审 P2：'new' 是路由占位不是文案，入口用 label 覆盖面包屑显示名 */
+    expect(openSubPageMock).toHaveBeenCalledWith('card-import', 'new', { label: '导入卡' });
     expect(w.find('.mk-drawer').exists()).toBe(false);
   });
 
@@ -460,5 +501,19 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     expect(cardsIndexMock.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(openSubPageMock).not.toHaveBeenCalled();
     w.unmount();
+  });
+});
+
+/**
+ * 2026-11-10 用户走查：「派生那个 pill 在卡片上的高度都不一致」。
+ * 根因是卡头 align-items:center——标题折成两行时，「已派生 N」徽章与勾选框跟着沉到两行中线
+ * （57px 卡头里比单行卡低 ≈12px），同一排卡扫过去徽章高低错落。
+ * 改 flex-start 后两者都钉在标题首行（行高 24.75 vs 徽章 23.34，首行内差 <1px）。
+ */
+describe('卡头徽章对齐（2026-11-10）', () => {
+  it('卡头顶部对齐：标题折行时徽章/勾选框不再往卡头中线沉', () => {
+    const rule = Source.match(/\.vlc-card__head \{[^}]*\}/)?.[0] ?? '';
+    expect(rule).toContain('align-items: flex-start');
+    expect(rule, 'center 会让两行标题的卡把徽章压到中线').not.toContain('align-items: center');
   });
 });

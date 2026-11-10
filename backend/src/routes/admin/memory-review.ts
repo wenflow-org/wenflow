@@ -37,6 +37,7 @@ import { isTestAccountUser } from '../../utils/test-account';
 import { logger } from '../../utils/logger';
 import { normalizeConceptKey } from '../../services/memory/memory-trace.service';
 import { reviewPlanService } from '../../services/memory/review-plan.service';
+import { resolveUserSimulatedNow } from '../../services/virtual-lab/simulation-clock-resolver';
 import {
   conceptConsolidatorService,
   CONSOLIDATION_AUDIT_PROJECTION_SCOPE,
@@ -90,7 +91,7 @@ function retentionOf(trace: {
   masteryScore: number;
   extractionCount: number;
   lastSeenAt: Date | null;
-}): number {
+}, asOf: Date = new Date()): number {
   if (!trace.lastSeenAt) return 1;
   const state: FsrsMemoryState = trace.fsrsStability !== null && trace.fsrsStability !== undefined
     ? {
@@ -101,7 +102,9 @@ function retentionOf(trace: {
         lastReviewAt: trace.lastSeenAt,
       }
     : fsrsStateFromLegacy(trace.masteryScore, trace.extractionCount, trace.lastSeenAt);
-  return Math.round(fsrsRetrievability(state, new Date()) * 100) / 100;
+  /* 基准时刻可传（2026-11-09）：虚拟学习者的记忆池要按**模拟时刻**算可提取率——
+     跨用户总览不传（默认真实 now，那里默认不含虚拟账号），学习者详情传解析出的 now。 */
+  return Math.round(fsrsRetrievability(state, asOf) * 100) / 100;
 }
 
 /* ---------- 跨用户总览：排序键与「薄弱/平均强度/最近复习」聚合 ---------- */
@@ -164,23 +167,27 @@ router.get('/', async (req, res) => {
        做一次痕迹聚合——只在被请求时加载，默认翻页不多查一遍库。 */
     const sortKey: OverviewSortKey = isOverviewSortKey(req.query.sort) ? req.query.sort : 'due';
     const sortOrder: 'asc' | 'desc' = req.query.order === 'asc' ? 'asc' : 'desc';
-    // 模拟钟单点（#68 P-43）：VL 管理视角的到期/积压必须与写入侧同一时间基准
+    /* 跨用户总览按**真实 now** 聚合（2026-11-09 说明）：这一屏是跨账号的积压排行，账号之间有
+       不同的模拟日（甚至有的没有），没有一个「当前模拟时刻」能同时适用于所有行；且默认已把虚拟
+       学习者排除在外。逐账号的到期/额度在 `GET /:userId` 里按该账号的模拟时刻算（见那里的 now）。 */
     const now = simulatedNowOr();
 
     let baseWhere: Record<string, unknown>;
+    // 默认视图排除的虚拟学习者；审计投影与痕迹计数共用同一份排除清单（P1-5：两处口径必须同源）
+    let excludedUserIds: string[] = [];
     if (String(req.query.includeVirtual || '') === 'true') {
       // 按 id 直查虚拟账号（学习者详情的记忆侧逃生口，不删数据只改默认视图）
       baseWhere = {};
     } else {
       /* 默认 = 全部非虚拟账号。测试/审计账号照常计入（2026-10-21 用户拍板「照常计入，只加备注」），
          这里只把虚拟学习者挡在外面——它们的记忆在虚拟学习者详情「记忆池」与学习详情里看。 */
-      const virtualIds = (await listVirtualLearnerIds()).map((row) => row.id);
-      baseWhere = virtualIds.length > 0 ? { userId: { notIn: virtualIds } } : {};
+      excludedUserIds = (await listVirtualLearnerIds()).map((row) => row.id);
+      baseWhere = excludedUserIds.length > 0 ? { userId: { notIn: excludedUserIds } } : {};
     }
     const [traceCounts, dueCounts, audits, mergeRecords, unattachedCounts] = await Promise.all([
       groupTraceCountsByUser(baseWhere),
       groupDueCountsByUser(baseWhere, now),
-      findConsolidationAuditProjections(),
+      findConsolidationAuditProjections(excludedUserIds),
       // 按次留档的归并凭据（权威、长期有效）：概览必须基于它，否则"审计窗口滚出去的旧归并"在界面上消失
       findMergeRecordEvidence(),
       // outlet(D)：未挂靠散键（conceptId 为空）跨用户计数——全量口径，供 totals 聚合
@@ -336,7 +343,10 @@ router.get('/', async (req, res) => {
       users: ranked.length,
       traces: ranked.reduce((sum, row) => sum + row.traces, 0),
       due: ranked.reduce((sum, row) => sum + row.due, 0),
-      usersWithAudit: auditByUser.size,
+      /* 观察过的人数必须与上面三项同源（2026-11-02 P1-5）。投影取数已按默认视图排除虚拟学习者，
+         但「有记忆痕迹的用户」清单仍可能不含个别有投影却无痕迹的账号；
+         这里只以 ranked 里的人为限——users/traces/due 与「需人工确认」的加总都出自这一批。 */
+      usersWithAudit: ranked.filter((row) => auditByUser.has(row.userId)).length,
       proposed: 0,
       autoApplicable: 0,
       ambiguous: 0,
@@ -402,6 +412,11 @@ router.get('/', async (req, res) => {
             /* 薄弱 = 强度<40% 的痕迹数（原型 threshold）；平均强度 0-1，null = 无 FSRS 强度数据 */
             weak: agg?.weak ?? 0,
             avgStrength: agg && agg.seen > 0 ? Math.round((agg.sum / agg.seen) * 100) / 100 : null,
+            /* 2026-11-01 外部评审 P1：`traces` 是全部记忆痕迹（含从未看过、无强度的），
+               而 avgStrength 的分母 `agg.seen` 只数有 lastSeenAt 的那些——列表上「记忆痕迹 4」
+               与「记忆强度 83%（=3 条的平均）」并排，读者会以为 4 条都参与了平均。
+               把有强度的条数一并下发，前端才能在列表上把两个口径分开写。 */
+            tracesWithStrength: agg?.seen ?? 0,
             lastReviewedAt: agg?.last ?? null,
             // outlet(D)：重复 label 比率等按用户粒度（供 adminui 渲染「概念碎片」读数）
             fragmentation: fragByUser.get(row.userId) ?? null,
@@ -451,8 +466,15 @@ router.get('/:userId', async (req, res) => {
       return res.status(404).json({ success: false, error: { message: '用户不存在' } });
     }
 
+    /* 模拟钟单点（2026-11-09）：虚拟学习者的记忆池此前按**真实今天**判到期/可提取率/今日额度，
+       而它自己的模拟日可能在真实今天之后（跨日推进过的实例）——同一页面上「复习到期」与
+       学习进度各说一套。这里解析该用户的模拟时刻（会话钟 > 画像钟 > 无 = 真实墙钟），
+       显式下传给计划与到期清单；非虚拟账号解析为 null，行为与现状完全一致。 */
+    const simulatedAsOf = await resolveUserSimulatedNow(userId).catch(() => null);
+    const now = simulatedAsOf ?? simulatedNowOr();
+
     const [plan, traces, audit] = await Promise.all([
-      reviewPlanService.buildReviewPlan(userId).catch(() => null),
+      reviewPlanService.buildReviewPlan(userId, { now }).catch(() => null),
       listUserMemoryTraces(userId),
       conceptConsolidatorService.getAudit(userId).catch(() => null),
     ]);
@@ -500,14 +522,13 @@ router.get('/:userId', async (req, res) => {
         .map(toAliasView),
     };
 
-    // 模拟钟单点（#68 P-43）：VL 管理视角的到期/积压必须与写入侧同一时间基准
-    const now = simulatedNowOr();
+    // 到期清单与可提取率同基准：`now` 在入口解析（该用户的模拟时刻，非虚拟账号 = 真实墙钟）
     const dueTraces = traces
       .filter((trace) => trace.dueAt && trace.dueAt <= now && trace.extractionCount > 0)
       .map((trace) => ({
         conceptKey: trace.conceptKey,
         label: trace.label || trace.conceptKey,
-        retention: retentionOf(trace),
+        retention: retentionOf(trace, now),
         masteryScore: trace.masteryScore,
         extractionCount: trace.extractionCount,
         dueAt: trace.dueAt,

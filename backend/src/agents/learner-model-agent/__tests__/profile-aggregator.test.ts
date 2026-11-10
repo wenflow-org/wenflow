@@ -14,6 +14,7 @@ import { ProfileAggregator } from '../profile-aggregator';
 const mockEvidenceFindFirst = jest.fn();
 const mockGoalFindFirst = jest.fn();
 const mockSessionsFindMany = jest.fn();
+const mockSessionsCount = jest.fn();
 const mockMessageGroupBy = jest.fn();
 const mockMisconceptionFindMany = jest.fn();
 const mockMemoryFindMany = jest.fn();
@@ -23,7 +24,10 @@ jest.mock('../../../config/database', () => ({
   default: {
     learner_evidence: { findFirst: (...a: unknown[]) => mockEvidenceFindFirst(...a) },
     goal_conversations: { findFirst: (...a: unknown[]) => mockGoalFindFirst(...a) },
-    teaching_sessions: { findMany: (...a: unknown[]) => mockSessionsFindMany(...a) },
+    teaching_sessions: {
+      findMany: (...a: unknown[]) => mockSessionsFindMany(...a),
+      count: (...a: unknown[]) => mockSessionsCount(...a),
+    },
     teaching_session_messages: { groupBy: (...a: unknown[]) => mockMessageGroupBy(...a) },
     misconception_ledger: { findMany: (...a: unknown[]) => mockMisconceptionFindMany(...a) },
     memory_traces: { findMany: (...a: unknown[]) => mockMemoryFindMany(...a) },
@@ -61,6 +65,7 @@ beforeEach(() => {
   mockEvidenceFindFirst.mockResolvedValue(null);
   mockGoalFindFirst.mockResolvedValue(null);
   mockSessionsFindMany.mockResolvedValue([]);
+  mockSessionsCount.mockResolvedValue(0);
   mockMessageGroupBy.mockResolvedValue([]);
   mockMisconceptionFindMany.mockResolvedValue([]);
   mockMemoryFindMany.mockResolvedValue([]);
@@ -82,8 +87,12 @@ describe('画像叙述：单对话观测 + 出处', () => {
     const { profile } = await new ProfileAggregator().aggregateProfile('u1');
 
     expect(profile.narrativeInsights.backgroundContextNote).toContain('幼儿园在职人员');
-    expect(profile.narrativeInsights.backgroundContextNote).toContain('当前自述水平：beginner');
+    // 2026-11-09 走查修：level 枚举不再原样透出，按全站等级词汇出中文
+    expect(profile.narrativeInsights.backgroundContextNote).toContain('当前自述水平：入门');
+    expect(profile.narrativeInsights.backgroundContextNote).not.toContain('beginner');
     expect(profile.narrativeInsights.backgroundContextNote).toContain('时间很紧');
+    // 段间拼接不再出现「。；」这种句读连排（各段自带句末「。」）
+    expect(profile.narrativeInsights.backgroundContextNote).not.toMatch(/[。；]\s*；/);
     expect(profile.narratives?.painPoints).toEqual(['之前完全没接触过这份指南', '时间很紧']);
     // 只查一条（findFirst），不拉全量做并集
     expect(mockGoalFindFirst).toHaveBeenCalledTimes(1);
@@ -120,19 +129,34 @@ describe('画像叙述：单对话观测 + 出处', () => {
     expect(profile.narrativeInsights.goalNarrative).toBe('来自证据的真实问题');
   });
 
-  it('learner_background 的复用基础并入优势', async () => {
-    mockGoalFindFirst.mockResolvedValue(
-      conv({}, { extra: { learner_background: { reusableFoundations: ['会做表格'] } } })
-    );
+  // issue #196：knowledge-background 合并分支随其唯一写入方（learner.coordinator）退役而删除；
+  // dataType 已收窄为 applyUpdate 实际落地的三种（types.ts），本用例以存量非法字面量验证
+  // 运行期防御分支仍显式判失败（不再静默写回）。
+  it('applyUpdate 对未支持的 dataType 返回失败（不再静默写回）', async () => {
+    mockGoalFindFirst.mockResolvedValue(conv({}));
 
-    const { profile } = await new ProfileAggregator().aggregateProfile('u1');
+    const result = await new ProfileAggregator().applyUpdate('u1', {
+      agentId: 'test',
+      timestamp: new Date().toISOString(),
+      dataType: 'behavioral' as any,
+      data: {},
+      confidence: 0.5,
+    });
 
-    expect(profile.derivedInsights.strengths).toContain('可复用基础：会做表格');
+    expect(result).toEqual({ success: false, changes: [] });
   });
 
-  it('无证据也无已完成对话：全默认画像且 narrativeSource 为 null', async () => {
+  it('无证据也无已完成对话：叙述洞察不输出任何无条件断言（2026-11-09 真值核查）', async () => {
+    // 旧行为：这里返回罐头句「背景信息还不充分，后续需要结合学习表现继续补齐。」，
+    // 同时 motivationNarrative / contentReceptionPattern / frictionPatternNote 等会无条件断言
+    // 学习者特质（「当前更多依赖兴趣或外部目标驱动」「当前没有特别突出的认知摩擦模式」），
+    // 并在后台当作洞察展示、经 TeachingContextBuilder 注入教学人设。没有输入就不该有断言。
     const { profile } = await new ProfileAggregator().aggregateProfile('u1');
-    expect(profile.narrativeInsights.backgroundContextNote).toBe('背景信息还不充分，后续需要结合学习表现继续补齐。');
+    expect(profile.narrativeInsights.backgroundContextNote).toBe('');
+    expect(profile.narrativeInsights.goalNarrative).toBe('');
+    expect(profile.narrativeInsights.motivationNarrative).toBe('');
+    expect(profile.narrativeInsights.contentReceptionPattern).toBe('');
+    expect(profile.narrativeInsights.frictionPatternNote).toBe('');
     expect(profile.narrativeSource).toBeNull();
     expect(profile.history.totalSessions).toBe(0);
   });
@@ -151,6 +175,7 @@ describe('互动历史真实计数', () => {
             ]
       )
     );
+    mockSessionsCount.mockResolvedValue(3);
     mockMessageGroupBy.mockResolvedValue([
       { sessionId: 's1', _count: { _all: 5 } },
       { sessionId: 's2', _count: { _all: 3 } },
@@ -192,5 +217,134 @@ describe('P1-2 画像已掌握概念不得吃 KT 幽灵痕', () => {
       masteryScore: { gte: 0.8 },
       extractionCount: { gt: 0 },
     });
+  });
+});
+
+/* 2026-11-02 P1-8：画像页要逐格区分「实测」与「初始默认值」，只靠「证据为空」一个全局条件
+   会把同卡里两种来源一起标错（有目标对话但没上过课时，认知/偏好来自对话、行为基线仍是默认）。 */
+describe('行为基线：无观测时为 null（2026-11-09 真值核查）', () => {
+  it('零证据账号 behavioral 为 null，不再回落默认常量对象', async () => {
+    const { profile } = await new ProfileAggregator().aggregateProfile('u1');
+    // 旧行为：恒回落 {10,50,5,0.5,0.5}，所有学员同一组数字且永远不变
+    expect(profile.behavioral).toBeNull();
+  });
+
+  it('下游规则在 behavioral 为 null 时不崩、不参与判断', async () => {
+    const { profile } = await new ProfileAggregator().aggregateProfile('u1');
+    const { personalizationEngine } = require('../personalization');
+    expect(() => personalizationEngine.generateConfig(profile)).not.toThrow();
+    // 学习速度/推荐难度等派生读数仍应产出（它们不依赖 behavioral）
+    expect(profile.derivedInsights.recommendedDifficulty).toBeTruthy();
+  });
+});
+
+describe('画像字段来源 profileSources', () => {
+  it('无任何数据：各段来源为空（界面逐格标默认值）', async () => {
+    const { sources } = await new ProfileAggregator().aggregateProfile('u1');
+    expect(sources).toEqual({
+      cognitive: [],
+      behavioral: [],
+      learning: [],
+      preferences: [],
+      emotional: [],
+      history: [],
+      curriculumControls: [],
+      derivedInsights: [],
+    });
+  });
+
+  it('有真实聚合指标时：streak / masteryByTopic 不得被标成实测（它们没有数据源）', async () => {
+    // 2026-11-09 运营字段真值核查：fetchMetricsData 曾写死 masteryByTopic:{} / streak:0，
+    // observedFieldKeys 用 `!== ''` 判空 → 0 与 {} 都通过，界面据此把它们当实测而非默认值。
+    // 修法是不再返回这两个字段（由 DEFAULT_LEARNING_STATE 补齐），来源表因此不含它们。
+    const learningState = require('../../../services/learning/learning-state.service').default as {
+      getAggregatedState: jest.Mock;
+      getTrends: jest.Mock;
+    };
+    learningState.getAggregatedState.mockResolvedValueOnce({
+      perPath: [],
+      dayLoad: { ktl: 0, lf: 0, lss: 0 },
+      metrics: { ktl: 3.2, lf: 1.4, lss: 2.1, lsb: 1.8 },
+    });
+    learningState.getTrends.mockResolvedValueOnce([]);
+
+    const { sources, profile } = await new ProfileAggregator().aggregateProfile('u1');
+    expect(sources.learning).toContain('ktl');
+    expect(sources.learning).toContain('lf');
+    expect(sources.learning).not.toContain('streak');
+    expect(sources.learning).not.toContain('masteryByTopic');
+    // 字段本身仍由默认值补齐，类型不变
+    expect(profile.learning.streak).toBe(0);
+    expect(profile.learning.masteryByTopic).toEqual({});
+  });
+
+  it('只有目标对话：认知/偏好/情绪按对话字段记来源；行为基线与其派生读数仍算默认', async () => {
+    mockGoalFindFirst.mockResolvedValue(
+      conv({
+        cognitive_profile: { thinking_style: 'practical', metacognition_level: 'high' },
+        learning_style: { preferred_format: 'practice', theory_vs_practice: 'practice-first' },
+        emotional_profile: { confidence_level: 'anxious' },
+      })
+    );
+
+    const { sources } = await new ProfileAggregator().aggregateProfile('u1');
+
+    expect(sources.cognitive).toContain('thinkingStyle');
+    expect(sources.cognitive).toContain('metacognitionLevel');
+    expect(sources.cognitive).not.toContain('confusionPattern');
+    // 对话里没给时间预算时 sessionLength 是 inferSessionLength 的兜底值，不算实测
+    expect(sources.preferences).toEqual(['preferredStyle', 'theoryVsPractice']);
+    expect(sources.emotional).toEqual(['confidenceLevel']);
+    expect(sources.behavioral).toEqual([]);
+    expect(sources.learning).toEqual([]);
+    expect(sources.history).toEqual([]);
+    expect(sources.derivedInsights).not.toContain('learningVelocity');
+    expect(sources.derivedInsights).not.toContain('optimalSessionLength');
+    expect(sources.derivedInsights).toContain('recommendedDifficulty');
+    /* 2026-11-09 口径修正：suggestedApproach 是规则拼装的文本，不是测量值——
+       按契约不列入 sources（同 strengths / riskFactors），界面用「规则推导」徽标表达。 */
+    expect(sources.derivedInsights).not.toContain('suggestedApproach');
+  });
+});
+
+describe('默认值合并：目标对话缺子字段时不得变成 undefined（2026-11-09 口径修正）', () => {
+  it('learning_style / emotional_profile 整体缺失 → 保留 DEFAULT_*，不是 undefined', async () => {
+    // 只有 real_problem：没有任何偏好/情绪子字段（fetchGoalConversationData 会显式返回 undefined 键）
+    mockEvidenceFindFirst.mockResolvedValue({
+      payload: JSON.stringify({ understanding: { real_problem: '想把课上得更清楚' } }),
+      occurredAt: new Date('2026-11-01T00:00:00.000Z'),
+    });
+
+    const { profile } = await new ProfileAggregator().aggregateProfile('u1');
+
+    // 旧实现用 spread 合并：undefined 会覆盖默认值，类型承诺非空的字段实际变成 undefined
+    expect(profile.preferences.preferredStyle).toBe('mixed');
+    expect(profile.preferences.theoryVsPractice).toBe('balanced');
+    expect(profile.preferences.sessionLength).toBe('medium');
+    expect(profile.emotional.motivationTrigger).toBe('interest');
+    expect(profile.emotional.urgencyLevel).toBe('medium');
+    expect(profile.emotional.confidenceLevel).toBe('moderate');
+    // 未被对话覆盖的默认常量仍在
+    expect(profile.emotional.frustrationTolerance).toBe(0.5);
+    expect(profile.emotional.rewardSensitivity).toBe('medium');
+  });
+
+  it('对话给出部分子字段 → 只覆盖给了值的键，其余保留默认', async () => {
+    mockEvidenceFindFirst.mockResolvedValue({
+      payload: JSON.stringify({
+        understanding: {
+          learning_style: { preferred_format: 'visual' }, // 只给风格，theory_vs_practice 缺失
+          emotional_profile: { confidence_level: 'anxious' }, // 只给自信水平
+        },
+      }),
+      occurredAt: new Date('2026-11-01T00:00:00.000Z'),
+    });
+
+    const { profile } = await new ProfileAggregator().aggregateProfile('u1');
+
+    expect(profile.preferences.preferredStyle).toBe('visual');
+    expect(profile.preferences.theoryVsPractice).toBe('balanced');
+    expect(profile.emotional.confidenceLevel).toBe('anxious');
+    expect(profile.emotional.motivationTrigger).toBe('interest');
   });
 });

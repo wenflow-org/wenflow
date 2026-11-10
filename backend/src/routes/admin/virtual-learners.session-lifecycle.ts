@@ -17,19 +17,21 @@ import { deriveActiveRuns, deriveRecentRuns, deriveRunProgress } from '../../ser
 import { findSessionWithProfileAndUser, findGoalConversationById, getSessionStatusAggregates, getPerProfileStatusAggregates, findStaleSessionsByProfiles, findStaleSessionCandidates, findStaleSessionsForStats, findLiveSessionsByProfiles, findLiveSessionsAll, findTerminalSessions, countTodayVirtualAgentCalls } from '../../services/virtual-lab/virtual-session.repo';
 import { hydrateSessionLogsField as hydrateVirtualSessionLogsField } from '../../services/virtual-lab/virtual-session-log-store';
 import { logger } from '../../utils/logger';
+import { withKeyedLock } from '../../utils/keyed-lock';
 import { teachingSessionRepository } from '../../services/ai-teaching/TeachingSessionRepository';
 import { findTeachingSessionsByPathId } from '../../services/admin/session-console.repo';
 import { teachingSessionHistoryOf } from './session-console';
 import { signProjectionToken } from '../../utils/projection-token';
 import { autopilotService } from '../../virtual-lab/autopilot.service';
 import { parseSessionAutopilotOption, startSessionAutopilot } from '../../virtual-lab/session-autopilot';
-import { classifySessionRunPhase } from '../../services/virtual-lab/session-run-phase';
+import { classifySessionRunPhase, collectAutopilotErrors } from '../../services/virtual-lab/session-run-phase';
 import { virtualSessionReclaimService } from '../../virtual-lab/session-reclaim.service';
 import { simulatedDayService } from '../../services/virtual-lab/simulated-day.service';
 import { resolveSessionBudget } from '../../virtual-lab/session-budget';
 import { getVirtualLabSettings, updateVirtualLabSettings } from '../../services/virtual-lab-settings.service';
 import { applyRpmLimitsFromSettings, getRpmLimitStats } from '../../services/rpm-limit-config.service';
 import { virtualCleanupService } from '../../services/virtual-lab/virtual-cleanup.service';
+import { stopLiveRunsForProfile } from './virtual-learners.assisted-shared';
 import { ensureCardKey } from '../../services/virtual-lab/card-import.service';
 import { safeJsonParse } from '../../utils/safe-json';
 import type { SimulationLogEntry } from '../../coordinators/simulation.types';
@@ -279,6 +281,11 @@ router.get('/', async (req: Request, res) => {
       m.set(key, (m.get(key) ?? 0) + 1);
     };
     const stalledSessionIds = new Set<string>();
+    /* 异常列的最后一次自动驾驶错误：取「非终态会话」全集（含 created 会话），
+       不能只扫样本里 status='running' 的会话——会话在 goal/path 阶段是 created，
+       自动驾驶在那一阶段失败（如渠道 503）时 status 永远不会变成 running，错误就丢了。
+       与 findLiveSessionsByProfiles 同源，与逐画像三档分类口径一致。 */
+    const liveErrorByProfile = collectAutopilotErrors(liveSessions);
     for (const s of liveSessions) {
       const phase = classifySessionRunPhase(s, staleBefore);
       phaseBySessionId.set(s.id, phase);
@@ -330,6 +337,10 @@ router.get('/', async (req: Request, res) => {
       );
       const runningSessions = sessionSample.filter((s) => s.status === 'running' && !autopilotStoppedIds.has(s.id));
       const pausedSessions = sessionSample.filter((s) => s.status === 'running' && autopilotStoppedIds.has(s.id));
+      /* 2026-10-31 五轮评审 P8：活跃会话自动驾驶最后一次错误（如僵尸会话自动回收）透传列表，
+         「异常」列与座舱日志同源；进程重启导致的「自动驾驶已中断」是预期态不算异常。
+         2026-11-09：判据从「样本里的 running 会话」换成「非终态会话全集」——见 liveErrorByProfile。 */
+      const activeError = liveErrorByProfile.get(p.id) ?? null;
       // 阶段进度（轴 B）：没有活跃会话时回落到最近一次会话（历史进度，前端标「最近」）。
       const latestSession = runningSessions[0] || pausedSessions[0] || sessionSample[0];
       const stageProgress = latestSession ? deriveRunProgress(latestSession) : null;
@@ -403,6 +414,7 @@ router.get('/', async (req: Request, res) => {
         // F20：与 failedCount 分列的人为终止数（/stats 的 abandoned 同口径）
         abandonedCount: abandonedByProfile.get(p.id) ?? 0,
         stalledCount: staleByProfile.get(p.id) ?? 0,
+        activeError,
         currentStage: runningSessions[0]?.currentStage || sessionSample[0]?.currentStage || null,
         runningSessionIds: runningSessions.map((s) => s.id),
         pausedSessionIds: pausedSessions.map((s) => s.id),
@@ -639,58 +651,65 @@ router.put('/:id', async (req: Request, res) => {
       });
     }
     
-    const updateData: Record<string, unknown> = {};
+    // #170：画像 profile 是整包 JSON 读改写，且与课后记忆回写共用同一行（后者的临界区是
+    // `vlab-profile:<userId>`）。锁外读旧包再整包写回会静默回滚同期写入的
+    // knownConcepts / recentCompleted / selfAssessmentAccuracy，故把「读→合并→写」整体
+    // 放进同一把锁，并在锁内重新读取画像作为合并 base。
+    const updated = await withKeyedLock(`vlab-profile:${profile.userId}`, async () => {
+      const current = (await findProfileById(id)) || profile;
+      const updateData: Record<string, unknown> = {};
     
-    if (req.body.profile) {
-      const existingProfile = parseJson<Record<string, unknown>>(profile.profile, {});
-      updateData.profile = JSON.stringify({ ...existingProfile, ...req.body.profile });
-    }
-    if (typeof req.body.name === 'string' && req.body.name.trim()) {
-      await updateUserName(profile.userId, req.body.name.trim());
-    }
-    // learningGoal 的产品语义已降为可选长期倾向；请求显式携带空串时也要允许清空。
-    if (typeof req.body.learningGoal === 'string') updateData.learningGoal = req.body.learningGoal.trim();
-    if (req.body.knowledgeLevel) updateData.knowledgeLevel = req.body.knowledgeLevel;
-    if (req.body.knownConcepts) updateData.knownConcepts = JSON.stringify(req.body.knownConcepts);
-    if (req.body.struggleConcepts) updateData.struggleConcepts = JSON.stringify(req.body.struggleConcepts);
-    if (req.body.simulationPrompt) updateData.simulationPrompt = req.body.simulationPrompt;
-    if (req.body.simulationModel) updateData.simulationModel = req.body.simulationModel;
-    if (req.body.simulationTemperature) updateData.simulationTemperature = req.body.simulationTemperature;
-    if (req.body.personalityTraits) updateData.personalityTraits = JSON.stringify(req.body.personalityTraits);
-    if (req.body.tags) updateData.tags = JSON.stringify(req.body.tags);
-    if (req.body.notes) updateData.notes = req.body.notes;
-    // simulationBudget 写入 profile JSON（以虚拟学习者为单位的 LLM 重试预算）
-    // 注意：与 runtimePrefs 共用同一 profile JSON，必须从同一 base 叠加，避免相互覆盖
-    let nextProfileJson = profile.profile;
-    if (req.body.simulationBudget) {
-      const base = parseJson<Record<string, unknown>>(nextProfileJson, {});
-      const existingBudget = (base.simulationBudget || {}) as Record<string, unknown>;
-      const newBudget = { ...existingBudget, ...req.body.simulationBudget };
-      // 钳制数值范围（与前端输入框 min/max 一致），防止手误写入超大值导致近无限重试
-      newBudget.maxRetriesPerStep = clampBudgetValue(newBudget.maxRetriesPerStep, 8, 1, 20);
-      newBudget.maxRetriesTotal = clampBudgetValue(newBudget.maxRetriesTotal, 600, 1, 1000);
-      // 保留已消耗的 consumedRetries（不能被前端覆盖）
-      newBudget.consumedRetries = existingBudget.consumedRetries || 0;
-      nextProfileJson = JSON.stringify({ ...base, simulationBudget: newBudget });
-    }
-    // runtimePrefs 写入 profile JSON（虚拟人运行偏好：每课回合上限 / 默认难度；
-    // 新会话创建时作为 simulationConfig 初始值，三级驾驶舱可临时覆盖）
-    if (req.body.runtimePrefs && typeof req.body.runtimePrefs === 'object') {
-      const base = parseJson<Record<string, unknown>>(nextProfileJson, {});
-      const existingPrefs = (base.runtimePrefs || {}) as Record<string, unknown>;
-      const newPrefs: Record<string, unknown> = { ...existingPrefs, ...req.body.runtimePrefs };
-      if (Number.isFinite(Number(newPrefs.turnCapPerLesson))) {
-        newPrefs.turnCapPerLesson = Math.min(100, Math.max(1, Math.round(Number(newPrefs.turnCapPerLesson))));
+      if (req.body.profile) {
+        const existingProfile = parseJson<Record<string, unknown>>(current.profile, {});
+        updateData.profile = JSON.stringify({ ...existingProfile, ...req.body.profile });
       }
-      if (newPrefs.frictionBudget !== undefined) {
-        const friction = String(newPrefs.frictionBudget);
-        newPrefs.frictionBudget = (SIMULATION_FRICTION_BUDGETS as readonly string[]).includes(friction) ? friction : 'normal';
+      if (typeof req.body.name === 'string' && req.body.name.trim()) {
+        await updateUserName(profile.userId, req.body.name.trim());
       }
-      nextProfileJson = JSON.stringify({ ...base, runtimePrefs: newPrefs });
-    }
-    if (nextProfileJson !== profile.profile) updateData.profile = nextProfileJson;
+      // learningGoal 的产品语义已降为可选长期倾向；请求显式携带空串时也要允许清空。
+      if (typeof req.body.learningGoal === 'string') updateData.learningGoal = req.body.learningGoal.trim();
+      if (req.body.knowledgeLevel) updateData.knowledgeLevel = req.body.knowledgeLevel;
+      if (req.body.knownConcepts) updateData.knownConcepts = JSON.stringify(req.body.knownConcepts);
+      if (req.body.struggleConcepts) updateData.struggleConcepts = JSON.stringify(req.body.struggleConcepts);
+      if (req.body.simulationPrompt) updateData.simulationPrompt = req.body.simulationPrompt;
+      if (req.body.simulationModel) updateData.simulationModel = req.body.simulationModel;
+      if (req.body.simulationTemperature) updateData.simulationTemperature = req.body.simulationTemperature;
+      if (req.body.personalityTraits) updateData.personalityTraits = JSON.stringify(req.body.personalityTraits);
+      if (req.body.tags) updateData.tags = JSON.stringify(req.body.tags);
+      if (req.body.notes) updateData.notes = req.body.notes;
+      // simulationBudget 写入 profile JSON（以虚拟学习者为单位的 LLM 重试预算）
+      // 注意：与 runtimePrefs 共用同一 profile JSON，必须从同一 base 叠加，避免相互覆盖
+      let nextProfileJson = current.profile;
+      if (req.body.simulationBudget) {
+        const base = parseJson<Record<string, unknown>>(nextProfileJson, {});
+        const existingBudget = (base.simulationBudget || {}) as Record<string, unknown>;
+        const newBudget = { ...existingBudget, ...req.body.simulationBudget };
+        // 钳制数值范围（与前端输入框 min/max 一致），防止手误写入超大值导致近无限重试
+        newBudget.maxRetriesPerStep = clampBudgetValue(newBudget.maxRetriesPerStep, 8, 1, 20);
+        newBudget.maxRetriesTotal = clampBudgetValue(newBudget.maxRetriesTotal, 600, 1, 1000);
+        // 保留已消耗的 consumedRetries（不能被前端覆盖）
+        newBudget.consumedRetries = existingBudget.consumedRetries || 0;
+        nextProfileJson = JSON.stringify({ ...base, simulationBudget: newBudget });
+      }
+      // runtimePrefs 写入 profile JSON（虚拟人运行偏好：每课回合上限 / 默认难度；
+      // 新会话创建时作为 simulationConfig 初始值，三级驾驶舱可临时覆盖）
+      if (req.body.runtimePrefs && typeof req.body.runtimePrefs === 'object') {
+        const base = parseJson<Record<string, unknown>>(nextProfileJson, {});
+        const existingPrefs = (base.runtimePrefs || {}) as Record<string, unknown>;
+        const newPrefs: Record<string, unknown> = { ...existingPrefs, ...req.body.runtimePrefs };
+        if (Number.isFinite(Number(newPrefs.turnCapPerLesson))) {
+          newPrefs.turnCapPerLesson = Math.min(100, Math.max(1, Math.round(Number(newPrefs.turnCapPerLesson))));
+        }
+        if (newPrefs.frictionBudget !== undefined) {
+          const friction = String(newPrefs.frictionBudget);
+          newPrefs.frictionBudget = (SIMULATION_FRICTION_BUDGETS as readonly string[]).includes(friction) ? friction : 'normal';
+        }
+        nextProfileJson = JSON.stringify({ ...base, runtimePrefs: newPrefs });
+      }
+      if (nextProfileJson !== current.profile) updateData.profile = nextProfileJson;
     
-    const updated = await updateProfileFields(id, updateData);
+      return updateProfileFields(id, updateData);
+    });
     
     res.json({
       success: true,
@@ -720,6 +739,15 @@ router.put('/:id', async (req: Request, res) => {
 router.delete('/:id', async (req: Request, res) => {
   try {
     const { id } = req.params;
+    /* 删除前先叫停该学习者的活跃运行（撤租约 + 停自动驾驶）——见 stopLiveRunsForProfile：
+       级联删除不给内存里的循环任何通知，删完它还会占并发额度、继续调模型。 */
+    const stoppedRuns = await stopLiveRunsForProfile(id).catch((error) => {
+      logger.warn('[virtual-learners] 删除前叫停活跃运行失败（不阻断删除）', {
+        profileId: id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return 0;
+    });
     const manifest = await virtualCleanupService.cascadeDeleteProfile(id, {
       adminId: req.user?.userId ?? null,
       adminName: req.user?.email ?? null
@@ -730,6 +758,7 @@ router.delete('/:id', async (req: Request, res) => {
       userId: manifest.userId,
       deletedSessions: manifest.virtualSessions.length,
       deletedTeachingSessions: manifest.teachingSessions,
+      stoppedRuns,
       deletedBy: req.user?.userId
     });
 

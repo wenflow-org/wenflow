@@ -140,10 +140,12 @@ describe('V2LearningHistory 样式护栏', () => {
     expect(styleDecl(sub, 'text-overflow')).toBeNull();
   });
 
-  it('动作文字链左右等量外扩热区（「继续」实测宽仅 35px，够高不够宽）', () => {
+  it('动作文字链横向热区只向左外扩（「继续」实测宽仅 35px，够高不够宽）', () => {
     const rule = styleRule('.history__resume');
-    expect(styleDecl(rule, 'padding')).toBe('0 6px');
-    expect(styleDecl(rule, 'margin')).toBe('0 -6px');
+    // 2026-11-04：右向 6px 外扩会越过卡片内容右缘、把 .history__aside 撑出 6px 横向溢出，
+    // 热区改只向左扩（12px 内边距 + -12px 左边距），总宽与文字位置不变。
+    expect(styleDecl(rule, 'padding')).toBe('0 0 0 12px');
+    expect(styleDecl(rule, 'margin')).toBe('0 0 0 -12px');
     expect(styleDecl(rule, 'min-height'), '44px 高度地板不能被这次改动带走').toBe('44px');
   });
 

@@ -1,6 +1,6 @@
 /**
  * 共享原语新增档（2026-10-26 导航与共享原语收口）：
- * - Pagination：total=0 常驻空计数并禁用导航；hideWhenSinglePage 单页自隐
+ * - Pagination：total=0 整条自隐（2026-10-31 三轮评审：空列表不配分页器）；hideWhenSinglePage 单页自隐
  * - SkeletonTable：flat 不渲染卡片外壳；rows 省略按宿主高度算
  * - OvBars：列级 select 事件（键盘可达）与稀疏形态
  */
@@ -12,14 +12,9 @@ import SkeletonTable from '../SkeletonTable.vue'
 import OvBars from '../OvBars.vue'
 
 describe('Pagination · 0 行与单页', () => {
-  const btn = (w: ReturnType<typeof mount>, text: string) => w.findAll('button').find((b) => b.text() === text)!
-
-  it('total=0：仍渲染「共 0 条 · 第 1 / 1 页」，页码与前后翻全部禁用', () => {
+  it('total=0：整条不渲染（2026-10-31 三轮评审：空列表不配分页器）', () => {
     const w = mount(Pagination, { props: { page: 1, total: 0, pageSize: 15 } })
-    expect(w.text()).toContain('共 0 条 · 第 1 / 1 页')
-    expect(btn(w, '上一页').attributes('disabled')).toBeDefined()
-    expect(btn(w, '下一页').attributes('disabled')).toBeDefined()
-    expect(w.find('.mk-pagination__num').attributes('disabled')).toBeDefined()
+    expect(w.find('.mk-pagination').exists()).toBe(false)
     w.unmount()
   })
 
@@ -29,7 +24,7 @@ describe('Pagination · 0 行与单页', () => {
     w.unmount()
   })
 
-  it('hideWhenSinglePage 默认 false：单页仍常驻（0 行页面需要常驻计数）', () => {
+  it('hideWhenSinglePage 默认 false：单页仍常驻（有行数就有计数）', () => {
     const w = mount(Pagination, { props: { page: 1, total: 4, pageSize: 15 } })
     expect(w.find('.mk-pagination').exists()).toBe(true)
     expect(w.text()).toContain('共 4 条')

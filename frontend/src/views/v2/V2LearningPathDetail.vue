@@ -34,7 +34,11 @@
           <template v-if="lifecycleFailed">
             <div class="genbar__text">
               <strong>{{ lifecycle.retryType === 'stage_design' ? '课程准备失败' : '路径生成失败' }}</strong>
-              <p>{{ lifecycle.errorMessage || '目标和已确认信息已保留，重试一般能成功。' }}</p>
+              <!-- 保留语义对齐（paths/xiaomi/1）：后端重排/重试保留的是已完成任务与学习进度
+                   （preserveCompletedTasks/preserveCoreTasks），标题与描述会被重新生成——
+                   旧句「目标和已确认信息已保留」与事实不符（走查实证标题被改写）；
+                   也不承诺「一般能成功」，只说状态与动作（仓库文案口径） -->
+              <p>{{ lifecycle.errorMessage || '已完成的学习进度会保留，可以重试。' }}</p>
             </div>
             <button type="button" class="btn-primary" :class="{ 'btn-primary--off': retrying }" @click="doRetry">
               <span v-if="retrying" class="spinner spinner--sm"></span>
@@ -170,18 +174,9 @@
                   <ul v-if="objectivesOf(stage).length" class="objectives">
                     <li v-for="(o, oi) in objectivesOf(stage)" :key="oi">{{ o }}</li>
                   </ul>
-                  <p v-if="materialRefLabels(stage).length" class="stage__material">
-                    本阶段依据资料：
-                    <button
-                      v-for="(ref, ri) in stage.materialRefs"
-                      :key="ri"
-                      type="button"
-                      class="material-ref"
-                      :disabled="!refClickable(ref)"
-                      :title="refTitle(ref)"
-                      @click="openMaterialRef(ref)"
-                    >{{ refLabel(ref) }}</button>
-                  </p>
+                  <!-- 阶段级「本阶段依据资料：[📄 公文种类]」整行删除（2026-11-06 二次走查）：
+                       它与每个任务自己的引用签是同一批（实测阶段 1 的 2 个任务都挂同一个「公文种类」），
+                       同屏读作上下复读机；引用已经挂在任务行上，阶段头再报一遍没有新增信息。 -->
                   <template v-for="task in stageTasks(stage)" :key="task.id">
                   <div
                     class="task"
@@ -194,26 +189,39 @@
                   </span>
                   <div class="task__body">
                     <strong>{{ task.title || task.displayLabel }}</strong>
-                    <small>{{ taskKindText(task) }} · {{ task.estimatedMinutes ? `约 ${task.estimatedMinutes} 分钟` : '—' }}</small>
-                    <small v-if="materialRefLabels(task).length" class="task__material">
-                      资料：
+                  </div>
+                  <!-- 任务行（2026-11-06 二次走查·三行压两行）：左「类型 · 时长 · 资料签」、
+                       右「操作按钮」同一行两端对齐。
+                       资料签从独占一行的「资料：[📄 公文种类]」并进本行——它的信息维度与
+                       「类型 · 时长」同级（都是这条任务的属性），单占一行纯属浪费高度。
+                       时长 nowrap（bare/15）：「约 18 分钟」不拆成「约 18 分/钟」孤字行。 -->
+                  <div class="task__line">
+                    <span class="task__meta">
+                      {{ taskKindText(task) }} · <span class="task__mins">{{ task.estimatedMinutes ? `约 ${task.estimatedMinutes} 分钟` : '—' }}</span>
+                      <!-- 引用签（v-for 走 materialRefsOf：后端按 sectionId|quote 去重，
+                           同一章节的不同引文会并存 → 不去重就连排三颗同名签） -->
                       <button
-                        v-for="(ref, ri) in task.materialRefs"
+                        v-for="(ref, ri) in materialRefsOf(task)"
                         :key="ri"
                         type="button"
-                        class="material-ref"
+                        class="material-ref material-ref--inline"
                         :disabled="!refClickable(ref)"
                         :title="refTitle(ref)"
                         @click="openMaterialRef(ref)"
-                      >{{ refLabel(ref) }}</button>
-                    </small>
-                  </div>
+                      ><svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true"><path fill="currentColor" d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1.5V8h4.5L14 3.5zM8 12h8v1.5H8V12zm0 4h8v1.5H8V16z"/></svg>{{ refLabel(ref) }}</button>
+                    </span>
+                    <div class="task__ops">
                   <button type="button" v-if="task.id === currentTask?.id && canLearn" class="task__cta" @click="goLearn(task.id)">
                     {{ task.status === 'in_progress' ? '继续学习' : '开始学习' }}
                   </button>
                   <button type="button" v-else-if="task.status === 'completed'" class="task__done-label" @click="viewFeedback(task)">查看反馈</button>
                   <span v-else-if="taskCls(task) === 'locked'" class="task__lock-label">待解锁</span>
-                  <button type="button" v-else-if="task.status === 'in_progress'" class="task__cta" @click="goLearn(task.id)">继续学习</button>
+                  <!-- 未锁且未完成的课次都得有入口（2026-11-03 真人走查根因修复）：
+                       此前只给「当前任务」一颗 CTA，其余未完成课次落到不可点的「待开始」文案上——
+                       一门已解锁、待开始的课在路径页没有任何进入方式。 -->
+                  <button v-else-if="canLearn" type="button" class="task__cta" @click="goLearn(task.id)">
+                    {{ task.status === 'in_progress' ? '继续学习' : '开始学习' }}
+                  </button>
                   <span v-else class="task__todo-label">待开始</span>
                   <button
                     v-if="canEditTask(task)"
@@ -221,30 +229,64 @@
                     class="task__edit"
                     :aria-expanded="editingTaskId === task.id"
                     @click="toggleTaskEditor(task.id)"
-                  >微调</button>
+                  >{{ editingTaskId === task.id ? '收起 ▴' : '微调' }}</button>
                   </div>
-                  <!-- #64 P-39：手动结构编辑（插 / 延 / 缩 / 删）。顺序权威=subtasks.order，保存后静默刷新。 -->
+                  </div>
+                  <!-- #64 P-39：手动结构编辑（时长步进 / 插 / 删）。顺序权威=subtasks.order，保存后静默刷新。
+                       2026-11-06 二次走查：面板从「卡片外的虚线框」收进任务卡内部
+                       （同一张高亮卡、底部一条细分割线），并把三类操作拆成上下两行——
+                       此前 6 个控件挤一排，红色「删除」与「插入」只隔 6px，手一抖就删错任务。 -->
                   <div v-if="editingTaskId === task.id" class="task-edit" role="group" aria-label="任务微调">
-                    <span class="task-edit__minutes">时长 {{ task.estimatedMinutes || 30 }} 分钟</span>
-                    <button type="button" class="task-edit__btn" :disabled="structuralEditBusy" @click="changeTaskMinutes(task, -10)">缩短 10 分钟</button>
-                    <button type="button" class="task-edit__btn" :disabled="structuralEditBusy" @click="changeTaskMinutes(task, 10)">延长 10 分钟</button>
-                    <span class="task-edit__insert">
+                    <!-- 第一行：时长步进器（左） + 删除（独立在右端，远离下面的插入键） -->
+                    <div class="task-edit__row task-edit__row--split">
+                      <span class="task-edit__field">
+                        <span class="task-edit__label">预计时长</span>
+                        <button
+                          type="button"
+                          class="task-edit__step"
+                          :disabled="structuralEditBusy"
+                          aria-label="缩短 10 分钟"
+                          @click="changeTaskMinutes(task, -10)"
+                        >−10 分</button>
+                        <strong class="task-edit__minutes">{{ task.estimatedMinutes || 30 }} 分钟</strong>
+                        <button
+                          type="button"
+                          class="task-edit__step"
+                          :disabled="structuralEditBusy"
+                          aria-label="延长 10 分钟"
+                          @click="changeTaskMinutes(task, 10)"
+                        >+10 分</button>
+                      </span>
+                      <button
+                        v-if="task.status === 'todo'"
+                        type="button"
+                        class="task-edit__danger"
+                        :disabled="structuralEditBusy"
+                        @click="deleteTask(task)"
+                      >
+                        <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M9 3h6l1 2h4v2H4V5h4l1-2zM6 8h12l-1 12a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 8zm3 3v8h2v-8H9zm4 0v8h2v-8h-2z"/></svg>
+                        删除此任务
+                      </button>
+                    </div>
+                    <!-- 第二行：插入新任务（输入框吃满整行，插入键内嵌右端） -->
+                    <div class="task-edit__insert">
+                      <span class="task-edit__plus" aria-hidden="true">+</span>
                       <input
                         v-model="insertTitle"
                         class="task-edit__input"
                         maxlength="120"
-                        placeholder="在这之后插入一个任务"
+                        placeholder="在此之后插入一个新任务…"
+                        aria-label="插入新任务的内容"
                         @keyup.enter="insertTaskAfter(stage, task)"
                       />
-                      <button type="button" class="task-edit__btn" :disabled="structuralEditBusy || !insertTitle.trim()" @click="insertTaskAfter(stage, task)">插入</button>
-                    </span>
-                    <button
-                      v-if="task.status === 'todo'"
-                      type="button"
-                      class="task-edit__btn task-edit__btn--danger"
-                      :disabled="structuralEditBusy"
-                      @click="deleteTask(task)"
-                    >删除</button>
+                      <button
+                        type="button"
+                        class="task-edit__submit"
+                        :disabled="structuralEditBusy || !insertTitle.trim()"
+                        @click="insertTaskAfter(stage, task)"
+                      >插入</button>
+                    </div>
+                  </div>
                   </div>
                   </template>
                 </div>
@@ -258,29 +300,10 @@
                「进行到哪」（当前任务 + 接下来合并）／「学习资料」（资料 + 原文预览合并）／
                「设计意图」（默认折叠，依据型信息）；「路径状态」空态卡删除（hero 指标已覆盖） -->
           <aside class="side">
-            <section v-if="currentTask || nextTasks.length" class="card sidecard" :class="{ 'sidecard--current': currentTask }">
-              <span class="kicker">进行到哪</span>
-              <template v-if="currentTask">
-                <strong>{{ currentTask.title || currentTask.displayLabel }}</strong>
-                <p>完成后还剩 {{ remainingAfterCurrent }} 个任务。</p>
-                <div class="sidecard__meta">
-                  <span class="tag tag--blue">{{ currentTask.estimatedMinutes ? `约 ${currentTask.estimatedMinutes} 分钟` : '—' }}</span>
-                  <span class="tag">{{ taskKindText(currentTask) }}</span>
-                </div>
-                <button type="button" v-if="canLearn" class="btn-ghost btn-primary--block" @click="goLearn(currentTask.id)">
-                  {{ currentTask.status === 'in_progress' ? '继续当前任务' : '开始学习' }}
-                </button>
-              </template>
-              <div v-if="nextTasks.length" class="sidecard__sub">
-                <span class="sidecard__sub-head">接下来</span>
-                <ol class="next-list">
-                  <li v-for="t in nextTasks" :key="t.id">
-                    <strong>{{ t.title || t.displayLabel }}</strong>
-                    <small>{{ t.estimatedMinutes ? `${t.estimatedMinutes} 分钟` : '—' }}</small>
-                  </li>
-                </ol>
-              </div>
-            </section>
+            <!-- 「接下来」卡片整块删除（2026-11-06 走查 图1/2/3）：左栏阶段 1 展开后
+                 已经把同一批任务连标题带时长列了一遍，右栏再抄一次且序号对不上
+                 （复现缺第 1 条、原第 2 条被标成 1.）。分工改为——
+                 左栏只管「阶段与任务」，右栏只管「学习资料」与「设计意图」。 -->
 
             <section v-if="pathMaterials.length" class="card sidecard">
               <span class="kicker">学习资料</span>
@@ -299,19 +322,23 @@
                   >{{ openMaterial === mi ? '收起章节' : '查看章节' }}</button>
                 </li>
               </ul>
-              <!-- 资料原文预览：并入本卡（原独立「资料原文」卡），打开章节引用时在此展开 -->
-              <template v-if="materialPreview.open">
-                <div class="sidecard__sub">
-                  <span class="sidecard__sub-head">原文 · {{ materialPreview.title }}</span>
-                  <p v-if="materialPreview.loading" class="materials-note">正在读取…</p>
-                  <template v-else>
-                    <p v-if="materialPreview.sectionTitle" class="materials-note">对应章节：{{ materialPreview.sectionTitle }}</p>
-                    <p v-if="materialPreview.quote" class="materials-note">引文：{{ materialPreview.quote }}</p>
-                    <pre class="material-text">{{ materialPreview.text }}</pre>
-                  </template>
-                  <button type="button" class="materials-toggle" @click="materialPreview.open = false">收起原文</button>
-                </div>
-              </template>
+              <!-- 当前引用的资料（2026-11-06 走查 图3/4）：只讲一件事——用户点的这一条引用。
+                   原来这里「原文 · 公文种类」＋「对应章节：公文种类」两行复读同一件事，
+                   下面还塞了一个 280px 宽的 <pre> 全文滚动框（从整篇文档第 1 行的英文爬虫头开始
+                   显示 6000 字），窄侧栏里根本读不了。
+                   现在：一条引用行 + 左竖线引用块（引文本身最该被看见）+ 去大弹窗读全文的入口。 -->
+              <div v-if="materialPreview.open" class="sidecard__sub">
+                <p v-if="materialPreview.loading" class="materials-note">正在读取…</p>
+                <template v-else>
+                  <span class="sidecard__sub-head">当前引用：{{ materialPreview.sectionTitle || materialPreview.title }}</span>
+                  <blockquote v-if="materialPreview.quote" class="material-quote">{{ materialPreview.quote }}</blockquote>
+                  <p v-else class="materials-note">这一条没有可摘录的整句，直接看原文。</p>
+                </template>
+                <button type="button" class="materials-open" @click="openMaterialReader">
+                  查看完整章节原文 ↗
+                </button>
+                <button type="button" class="materials-toggle" @click="materialPreview.open = false">收起</button>
+              </div>
             </section>
 
             <section v-if="sceneSummary" class="card sidecard">
@@ -397,7 +424,7 @@
         <div class="adjust-dialog__head">
           <div>
             <h3 id="adjustDialogTitle" class="adjust-dialog__title">调整这条路径</h3>
-            <p class="adjust-dialog__desc">说说你的情况和想法，选一种调整方式。已学完的内容我们会帮你保留衔接。</p>
+            <p class="adjust-dialog__desc">说说你的情况和想法，选一种调整方式。已学完的内容会保留并衔接。</p>
           </div>
           <button type="button" class="adjust-dialog__close" aria-label="关闭" @click="adjustDialogOpen = false">
             <svg viewBox="0 0 24 24" width="14" height="14"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
@@ -442,7 +469,7 @@
               {{ retryingAfterClear ? '正在继续调整…' : `全部结束（${blockingSessions.length}）并继续` }}
             </button>
           </div>
-          <p class="clear-sessions__hint">按「结束」会把未完成的课堂标记为放弃：不计入学习进度，对话内容仍保留在学习历史中。</p>
+          <p class="clear-sessions__hint">按「结束」会把未完成的课堂标记为放弃，不计入学习进度，对话内容仍保留在学习历史中。</p>
         </div>
 
         <!-- 场景选择：按 adjustmentPolicy.allowedModes 门控（禁用 + 原因），推荐场景带引导标记 -->
@@ -622,10 +649,49 @@
               </button>
             </div>
             <p v-if="!adjustText.trim() && !adjusting" class="adjust-form__hint">先写几句想怎么调整，再点{{ adjustConfirmText }}。</p>
-            <p class="adjust-form__hint adjust-form__hint--safety">调整前的安排会自动留存，之后可随时一键回退。</p>
+            <!-- 回退保障句跟随真实能力（paths/iphone/2）：AI 重排会留存快照 → 承诺成立并给
+                 就地入口（此前入口只挂 hero，审计全 UI 搜索不到「回退」）；无快照（如仅做过
+                 手动微调的旧路径）不再凭空承诺 -->
+            <p class="adjust-form__hint adjust-form__hint--safety">
+              <template v-if="rollbackAvailable">调整前的安排已留存，可随时一键回退。</template>
+              <template v-else>调整前的安排会自动留存，调整完成后可一键回退。</template>
+            </p>
+            <p v-if="rollbackAvailable" class="adjust-form__rollback">
+              <button type="button" class="btn-ghost" :disabled="rollingBack" @click="confirmRollback">
+                <span v-if="rollingBack" class="spinner spinner--sm"></span>
+                {{ rollingBack ? '正在回退…' : '回退上次调整' }}
+              </button>
+            </p>
           </template>
         </template>
       </div>
+    </div>
+
+    <!-- 全文阅读弹窗（2026-11-06 走查 图6）：侧栏卡片里那个 280px 宽的 <pre> 滚动框换成
+         这一张正经的阅读面——正文经 markdown 渲染（标题成标题、条文各自成段），
+         打开即滚到用户点的那一章。 -->
+    <div v-if="reader.open" class="reader" @click.self="closeMaterialReader">
+      <section
+        ref="readerCardRef"
+        class="reader__card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="reader-title"
+        tabindex="-1"
+      >
+        <header class="reader__head">
+          <div class="reader__head-main">
+            <h2 id="reader-title" class="reader__title">{{ reader.title || '资料原文' }}</h2>
+            <p v-if="reader.section" class="reader__meta">已定位到：{{ reader.section }}</p>
+          </div>
+          <button type="button" class="reader__close" aria-label="关闭原文" @click="closeMaterialReader">×</button>
+        </header>
+        <div ref="readerBodyRef" class="reader__body">
+          <p v-if="reader.loading" class="reader__note">正在读取原文…</p>
+          <p v-else-if="reader.error" class="reader__note reader__note--error">{{ reader.error }}</p>
+          <div v-else class="reader__text" v-html="reader.html"></div>
+        </div>
+      </section>
     </div>
 
     <!-- AI 生成提示 + 页脚：一起沉底 -->
@@ -644,7 +710,9 @@ import { useRoute, useRouter } from 'vue-router';
 import { learningAPI } from '@/api/learning';
 import { aiTeachingAPI } from '@/api/aiTeaching';
 import { toast } from '@/utils/toast';
-import { readMaterial, readMaterialSection } from '@/api/materials';
+import { readMaterial } from '@/api/materials';
+import { dedupeMaterialRefs, normalizeMaterialMarkdown } from '@/utils/materialText';
+import { plainMessageHtml } from '@/utils/messageMarkdown';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
 import { pickCurrentTask } from '@/composables/useCurrentTask';
 import { buildGenerationProgress } from './learningPathProgress';
@@ -730,53 +798,98 @@ function webRefDomain(url: string): string {
   }
 }
 
-const materialPreview = ref<{ open: boolean; loading: boolean; title: string; sectionTitle: string; quote: string; text: string }>({
-  open: false, loading: false, title: '', sectionTitle: '', quote: '', text: '',
-});
+const materialPreview = ref<{
+  open: boolean; loading: boolean; title: string; sectionTitle: string; quote: string;
+}>({ open: false, loading: false, title: '', sectionTitle: '', quote: '' });
 
 /**
- * 「点开看原文」：优先按章节取回窗口（GET /materials/:id/section，标题优先、引文回退）——点「一、健康」直接看到那一章，而不是全文前 4000 字；
- * 端点失败时回退整篇读取（老行为）。联网资料（materialId=null）改为跳转原文链接。
+ * 同一章节会被后端切成多个文本切片（实测「公文种类」在同一条任务下挂 3 个），
+ * 直接遍历 materialRefs 会连排三颗同名引用。去重规则见 dedupeMaterialRefs
+ * （按章节身份，不按引文）——2026-11-06 走查 图1/2/3 的实测根因。
  */
-const openMaterialRef = async (ref: any) => {
+const materialRefsOf = (node: any): any[] => dedupeMaterialRefs(node?.materialRefs);
+
+/**
+ * 「点开查看引用」：只把用户点的那一条摆出来（章节名 + 精引文），不再在侧栏里
+ * 拉全文——全文由 openMaterialReader 打开阅读弹窗（2026-11-06 走查 图3/4）。
+ * 联网资料（materialId=null）没有可读原文，直接开外链。
+ */
+const openMaterialRef = (ref: any) => {
   if (!ref?.materialId) {
     const url = String(ref?.sourceUrl || '');
     if (url) window.open(url, '_blank', 'noopener');
     return;
   }
+  activeMaterialRef.value = ref;
   materialPreview.value = {
     open: true,
-    loading: true,
+    loading: false,
     title: String(ref.sectionTitle || '资料原文'),
     sectionTitle: String(ref.sectionTitle || ''),
     quote: String(ref.quote || ''),
-    text: '',
   };
-  try {
-    const section = await readMaterialSection(String(ref.materialId), {
-      title: ref.sectionTitle || null,
-      quote: ref.quote || null,
-    });
-    materialPreview.value.text = String(section?.excerpt || '') || '（正文为空）';
-  } catch {
-    try {
-      const material = await readMaterial(String(ref.materialId));
-      materialPreview.value.text = String(material?.markdown || '').slice(0, 4000) || '（正文为空）';
-    } catch (error) {
-      materialPreview.value.text = `读取失败：${String((error as { message?: string })?.message || error)}`;
-    }
-  } finally {
-    materialPreview.value.loading = false;
-  }
 };
 
-const materialRefLabels = (node: any): string[] => {
-  const refs = Array.isArray(node?.materialRefs) ? node.materialRefs : [];
-  return refs
-    .map((ref: any) => String(ref?.sectionTitle || ref?.quote || '').trim())
-    .filter((label: string) => !!label)
-    .map((label: string) => (label.length > 20 ? `${label.slice(0, 20)}…` : label));
-};
+/* ---------- 全文阅读弹窗（2026-11-06 走查 图6） ---------- */
+const activeMaterialRef = ref<any>(null);
+const reader = ref<{ open: boolean; loading: boolean; title: string; section: string; html: string; error: string }>({
+  open: false, loading: false, title: '', section: '', html: '', error: '',
+});
+const readerCardRef = ref<HTMLElement | null>(null);
+const readerBodyRef = ref<HTMLElement | null>(null);
+
+function closeMaterialReader() {
+  reader.value = { open: false, loading: false, title: '', section: '', html: '', error: '' };
+}
+
+/** 打开全文并滚到当前引用那一章：先按章节标题找标题节点，找不到再退回按引文首句定位 */
+async function openMaterialReader() {
+  const ref = activeMaterialRef.value;
+  const materialId = ref?.materialId ? String(ref.materialId) : '';
+  reader.value = {
+    open: true,
+    loading: !!materialId,
+    title: String(ref?.sectionTitle || '资料原文'),
+    section: String(ref?.sectionTitle || ''),
+    html: '',
+    error: materialId ? '' : '这份资料没有可读取的原文，请点引用直接打开来源页。',
+  };
+  await nextTick();
+  readerCardRef.value?.focus();
+  if (!materialId) return;
+  try {
+    const material = await readMaterial(materialId);
+    const normalized = normalizeMaterialMarkdown(material?.markdown || '');
+    reader.value.html = normalized ? plainMessageHtml(normalized) : '';
+    if (!reader.value.html) reader.value.error = '（正文为空）';
+  } catch (error) {
+    reader.value.error = `读取失败：${String((error as { message?: string })?.message || error)}`;
+  } finally {
+    reader.value.loading = false;
+  }
+  await nextTick();
+  scrollReaderToSection();
+}
+
+function scrollReaderToSection() {
+  const body = readerBodyRef.value;
+  if (!body) return;
+  const wanted = String(reader.value.section || '').replace(/\s+/g, '');
+  if (!wanted) return;
+  const nodes = Array.from(body.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,p,li'));
+  const hit = nodes.find((el) => (el.textContent || '').replace(/\s+/g, '').includes(wanted));
+  if (hit) hit.scrollIntoView({ block: 'start', behavior: 'auto' });
+}
+
+function onReaderKey(e: KeyboardEvent) {
+  if (e.key === 'Escape') closeMaterialReader();
+}
+watch(() => reader.value.open, (open) => {
+  if (open) window.addEventListener('keydown', onReaderKey);
+  else window.removeEventListener('keydown', onReaderKey);
+});
+onBeforeUnmount(() => window.removeEventListener('keydown', onReaderKey));
+
 const openMaterial = ref<number | null>(null);
 const heroDescription = computed(() => String(path.value?.summary || path.value?.description || '').trim());
 const descExpanded = ref(false);
@@ -1120,6 +1233,9 @@ function openAdjustDialog() {
   blockingSessions.value = [];
   pendingAdjustRetry.value = null;
   clearedSessionIds.value = [];
+  // 回退可用性打开时刷新（paths/iphone/2）：面板内的「回退上次调整」入口与
+  // 保障句都要跟随最新快照状态，不吃页面加载时的旧值
+  void refreshRollbackAvailability();
   // recommendedMode 默认选中：直接落到推荐场景的填写步（场景选择页仍可「换一种方式」改选）
   const rec = recommendedEntry.value;
   if (rec && adjustEntryAllowed(rec)) adjustMode.value = rec;
@@ -1578,26 +1694,24 @@ onMounted(() => {
 onBeforeUnmount(() => cancelAnimationFrame(percentRaf));
 const allDone = computed(() => totalTasks.value > 0 && doneTasks.value === totalTasks.value);
 
-/* 当前任务 = 全局第一个 in_progress，否则第一个 todo；与学习台「今日行动」共用
-   pickCurrentTask（决策链同源：两页必须指向同一节课，2026-09-25 收口） */
-const currentTask = computed(() => pickCurrentTask(allTasks.value));
+/* 锁定态以**阶段状态**为权威（2026-11-03 真人走查根因修复）。
+   此前锁定由「位置相对当前任务」推断，而当前任务又只按课次状态挑——循环自证：锁着阶段里
+   只要有一条 in_progress，它就成了「当前任务」，页头「继续当前任务」指向它、点进去是
+   「本节暂时开不了课」，而真正能学的待学课在行内反而落到不可点的「待开始」。 */
+function stageLockedOf(task: Record<string, any>) {
+  const stage = stages.value.find((s) => stageTasks(s).some((t) => t.id === task.id));
+  return String(stage?.status || '') === 'locked';
+}
+
+/* 当前任务 = 未锁阶段里第一个 in_progress，否则第一个 todo；与学习台「今日行动」共用
+   pickCurrentTask（决策链同源：两页必须指向同一节课，2026-09-25 收口）。
+   传入阶段锁定判定，锁着阶段的课次不再被选成「当前任务」（2026-11-03 根因修复）。 */
+const currentTask = computed(() => pickCurrentTask(allTasks.value, stageLockedOf));
 
 const currentStageNo = computed(() => {
   if (!currentTask.value) return stages.value.length;
   const idx = stages.value.findIndex((s) => stageTasks(s).some((t) => t.id === currentTask.value?.id));
   return idx >= 0 ? stageNo(stages.value[idx], idx) : 1;
-});
-
-const remainingAfterCurrent = computed(() => {
-  if (!currentTask.value) return 0;
-  const idx = allTasks.value.findIndex((t) => t.id === currentTask.value?.id);
-  return Math.max(0, allTasks.value.length - idx - 1);
-});
-
-const nextTasks = computed(() => {
-  if (!currentTask.value) return [];
-  const idx = allTasks.value.findIndex((t) => t.id === currentTask.value?.id);
-  return allTasks.value.slice(idx + 1, idx + 4);
 });
 
 const sceneSummary = computed(() => {
@@ -1664,16 +1778,41 @@ const badgeCls = computed(() => {
 
 function taskCls(task: Record<string, any>) {
   if (task.status === 'completed') return 'completed';
+  if (!canLearn.value) return 'locked';
+  // 阶段锁是权威（2026-11-03 根因修复）：锁着阶段的课次一律 locked，不看它自己的 status，
+  // 否则残留/异常的 in_progress 会让锁着的行显示成「可继续」。
+  if (stageLockedOf(task)) return 'locked';
   if (task.status === 'in_progress') return 'current';
   if (currentTask.value && task.id === currentTask.value.id) return 'current';
-  if (!canLearn.value) return 'locked';
   const curIdx = allTasks.value.findIndex((t) => t.id === currentTask.value?.id);
   const myIdx = allTasks.value.findIndex((t) => t.id === task.id);
   return curIdx >= 0 && myIdx > curIdx ? 'locked' : 'todo';
 }
 
+/** 任务类型枚举 → 中文标签（2026-11-05 UX 审计 P1）：手动插入的任务不写 displayLabel，
+    旧回退链把英文枚举（如 practice）直接亮在「进行到哪」主界面（截图实证），
+    与相邻课程的中文标签（理解核心原理/动手实践…）割裂。值域对齐后端
+    AITeachingCoordinator normalizeTaskType 的 11 种枚举；displayLabel（LLM 中文标签）
+    优先原样透传，未命中映射的枚举也原样兜底，不造新词。 */
+const TASK_TYPE_LABELS: Record<string, string> = {
+  reading: '阅读材料',
+  practice: '动手练习',
+  project: '项目实践',
+  quiz: '小测验',
+  acquire: '理解核心原理',
+  deconstruct: '拆解示范',
+  model: '模仿练习',
+  execute: '动手实操',
+  diagnose: '诊断纠错',
+  refine: '精进训练',
+  consolidate: '巩固复习',
+};
+
 function taskKindText(task: Record<string, any>) {
-  return task.displayLabel || task.taskType || task.knowledgeType || '任务';
+  const raw = task.displayLabel || task.taskType || task.knowledgeType;
+  if (!raw) return '任务';
+  const text = String(raw).trim();
+  return TASK_TYPE_LABELS[text] || text;
 }
 
 function goLearn(taskId: string) {
@@ -1742,14 +1881,24 @@ onBeforeUnmount(() => {
   box-shadow: var(--shadow-sm);
 }
 .kicker { font-size: 12px; font-weight: 800; letter-spacing: .06em; color: var(--blue-deep); }
-.badge { padding: 4px 10px; border-radius: var(--mk-radius-pill); font-size: 12px; font-weight: 800; }
+/* 状态标签（2026-11-06 §1 标签规范）：非点击类标签禁「全圆胶囊 + 大内边距」，
+   收敛为紧凑小方签——高 22px、内边距 1px 6px、半径 6px（--mk-radius-sm）、
+   12px 常规偏中字重（原 800 过重），柔和半透明底、无描边。 */
+.badge {
+  display: inline-flex; align-items: center;
+  height: 22px; padding: 1px 6px;
+  border-radius: var(--mk-radius-sm);
+  font-size: 12px; font-weight: 600;
+  border: 0;
+}
 .badge--blue { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 10%, transparent); }
 .badge--muted { color: var(--muted); background: color-mix(in srgb, var(--ink) 7%, transparent); }
 
 .hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; padding: 26px 28px; align-items: center; }
 .hero__tags { display: flex; align-items: center; gap: 10px; }
 .hero h1 { margin: 8px 0 6px; font-size: 20px; letter-spacing: -0.01em; }
-.hero p { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.7; max-width: 56ch; }
+/* 描述性正文（2026-11-06 §4）：常规字重 400（未声明即默认）+ 行高 1.5 */
+.hero p { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.5; }
 /* Hero 描述：默认 3 行截断，展开后完整显示（老数据无 summary 时兜底原文，避免整段糊屏） */
 .hero__desc {
   display: -webkit-box;
@@ -1780,23 +1929,11 @@ onBeforeUnmount(() => {
 }
 .metric b { font-size: 13.5px; color: var(--ink); font-variant-numeric: tabular-nums; }
 .hero__actions { display: flex; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
-.btn-primary {
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 11px 22px; border-radius: var(--mk-radius-xl);
-  /* 实色主按钮：蓝渐变 + 30% 蓝色发光投影一并退役 */
-  background: var(--blue);
-  color: var(--text-on-primary); font-size: 14px; font-weight: 700;
-  cursor: pointer; text-decoration: none;
-  transition: transform 0.18s ease, background 0.18s ease;
-}
-.btn-primary:not(:disabled):active { transform: scale(0.98); }
-.btn-primary--block { justify-content: center; width: 100%; }
-.btn-ghost {
-  padding: 10px 18px; border-radius: var(--mk-radius-xl);
-  border: 1px solid var(--line); background: var(--surface);
-  font-size: 14px; font-weight: 700; color: var(--muted);
-  cursor: pointer;
-}
+/* 主/次按钮不再在本页复制一份：本文件曾自带 .btn-primary（11px 22px / 16px 圆角 / 14px 字，
+   实测约 39px 高）与 .btn-ghost 副本，与 .card / .adjust-dialog 的 16px 圆角同档，正是 §1
+   要消除的「内层与外层同圆角 + 肥大」；且页内 scoped 副本晚于入口样式表加载，会把
+   v2.css 已统一的控件档（32px / 0 14px / --mk-radius-md / 13px，移动档 44px）压回去。
+   删除副本后由 v2.css「SPEC §1 控件档」唯一承载，hero、生成失败横幅、调整弹窗页脚同规格。 */
 .hero__ring { position: relative; width: 120px; height: 120px; }
 /* svg 铺满容器而不是写死 120：窄屏容器收到 96 时，写死宽高的 svg 会被裁成 96×120、
    环图与居中文字错位（2026-10-15 移动端重设计实测）。 */
@@ -1873,39 +2010,117 @@ onBeforeUnmount(() => {
 }
 .stage__body--open .stage__body-inner { padding: 8px 12px 12px; opacity: 1; }
 .task {
-  display: grid; grid-template-columns: 24px 1fr auto auto;
-  align-items: center; gap: 11px;
+  /* 两行结构（2026-11-06 定稿）：第一行「图标 + 完整标题」（标题独占整宽，不被按钮挤压）；
+     第二行 .task__line 左放时长属性、右放操作按钮。 */
+  display: grid; grid-template-columns: 24px minmax(0, 1fr);
+  align-items: start; gap: 4px 11px;
   padding: 9px 10px;
   border-radius: 12px; /* 圆角阶梯：面板 */
   border: 1px solid transparent;
 }
-/* #64 P-39：任务微调入口（只在校验通过的任务上出现；第 4 列在无按钮的行自动塌成 0 宽） */
+.task__body { grid-column: 2; min-width: 0; }
+/* 第二行：两端对齐；装不下时按钮整枚换行，靠 margin-left:auto 仍贴右缘 */
+.task__line {
+  grid-column: 2;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; flex-wrap: wrap;
+  margin-top: 2px;
+}
+/* 时长属性（左）：类型标签 + 时长，与右侧操作按钮同基线 */
+/* 属性行（左）：类型 · 时长 · 引用签同一行，窄屏自动折行 */
+.task__meta {
+  min-width: 0; font-size: 12px; color: var(--faint);
+  display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px 6px;
+}
+/* 行内引用签（2026-11-06 二次走查）：贴着属性行，不再独占一行；
+   前置一个「·」把它和「约 45 分钟」隔开，与原型写法一致 */
+.task__meta .material-ref--inline:first-of-type::before {
+  content: '·';
+  margin-right: 6px;
+  color: var(--faint);
+}
+.material-ref--inline { margin: 0; padding: 1px 7px; }
+.task__ops {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  margin-left: auto;
+}
+/* #64 P-39：任务微调入口（只在校验通过的任务上出现）
+   尺寸（2026-11-06 §1 内嵌按钮）：高 32px、圆角 8px（卡面 16px 的同心内档）、12px 字号 */
 .task__edit {
   font: inherit; font-size: 12px; color: var(--muted);
   background: var(--surface); border: 1px solid var(--line);
-  border-radius: 8px; padding: 6px 11px; min-height: 36px;
+  border-radius: 8px; padding: 0 11px; height: 32px;
+  display: inline-flex; align-items: center;
   cursor: pointer;
 }
 .task__edit:hover, .task__edit[aria-expanded="true"] { color: var(--blue); }
+
+/* ---------- 任务微调抽屉（2026-11-06 二次走查重构） ----------
+   原先它是任务卡**外面**的一个虚线框（夹在任务 1 与任务 2 之间），既不归属任何任务、
+   又读作「未完成占位」；内部 6 个控件挤一排，红色「删除」与「插入」只隔 6px。
+   现在：收进任务卡内部（grid-column 1/-1 整宽）、底部一条细分割线表示「正在微调这一条」，
+   并拆成上下两行——第一行时长步进器 + 右端删除，第二行插入（独占整行，远离删除键）。
+   分割线用 color-mix(--ink 8%) 而不是写死的 rgba(255,255,255,.08)：后者在亮色主题下
+   是一条看不见的白线，暗色才对。 */
 .task-edit {
-  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
-  margin: -2px 0 6px 45px; padding: 8px 10px;
-  border: 1px dashed var(--line); border-radius: var(--mk-radius-lg);
+  grid-column: 1 / -1;
+  display: grid; gap: 8px;
+  margin-top: 8px; padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
   font-size: 12px; color: var(--faint);
 }
-.task-edit__minutes { font-weight: 600; color: var(--ink); }
-.task-edit__btn {
-  font: inherit; font-size: 12px; padding: 5px 9px;
+.task-edit__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.task-edit__row--split { justify-content: space-between; }
+.task-edit__field { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.task-edit__label { color: var(--faint); }
+/* 数值居中定宽：加减各按一次时数字不左右横跳 */
+.task-edit__minutes {
+  min-width: 54px; text-align: center;
+  font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums;
+}
+/* 步进键：比「缩短 10 分钟」这种 5 字按钮窄一半，宽度留给真正要读的东西 */
+.task-edit__step {
+  font: inherit; font-size: 12px; height: 32px; padding: 0 8px;
+  display: inline-flex; align-items: center;
   border-radius: var(--mk-radius-md); border: 1px solid var(--line);
   background: var(--surface); color: var(--ink); cursor: pointer;
 }
-.task-edit__btn:disabled { opacity: .55; cursor: not-allowed; }
-.task-edit__btn--danger { color: var(--red); border-color: color-mix(in srgb, var(--red) 30%, var(--line)); }
-.task-edit__insert { display: inline-flex; gap: 6px; align-items: center; }
-.task-edit__input {
-  width: 200px; padding: 5px 8px; border-radius: var(--mk-radius-md);
-  border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-size: 12px;
+.task-edit__step:hover:not(:disabled) { border-color: color-mix(in srgb, var(--blue) 35%, var(--line)); color: var(--blue-deep); }
+.task-edit__step:disabled { opacity: .55; cursor: not-allowed; }
+/* 删除是这条抽屉里唯一的破坏性动作：独立在右端，与下面的「插入」上下错开 */
+.task-edit__danger {
+  font: inherit; font-size: 12px; height: 32px; padding: 0 10px;
+  display: inline-flex; align-items: center; gap: 5px;
+  border-radius: var(--mk-radius-md);
+  border: 1px solid color-mix(in srgb, var(--red) 30%, var(--line));
+  background: transparent; color: var(--red-ink); cursor: pointer;
 }
+.task-edit__danger:hover:not(:disabled) { background: color-mix(in srgb, var(--red) 8%, transparent); }
+.task-edit__danger:disabled { opacity: .55; cursor: not-allowed; }
+/* 插入：组合输入框占满整行，插入键内嵌在右端（不额外吃一行） */
+.task-edit__insert {
+  display: flex; align-items: stretch; min-height: 32px;
+  border: 1px solid var(--line); border-radius: var(--mk-radius-md);
+  background: var(--surface); overflow: hidden;
+}
+.task-edit__insert:focus-within { border-color: var(--blue); box-shadow: var(--mk-focus-ring); }
+.task-edit__plus { display: inline-flex; align-items: center; padding-left: 9px; color: var(--faint); }
+.task-edit__input {
+  flex: 1 1 auto; min-width: 0;
+  padding: 0 8px; border: 0; background: none;
+  font: inherit; font-size: 12px; color: var(--ink);
+}
+.task-edit__input::placeholder { color: var(--faint); }
+.task-edit__input:focus { outline: none; }
+.task-edit__submit {
+  flex: none; padding: 0 14px;
+  border: 0; border-left: 1px solid var(--line);
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
+  font: inherit; font-size: 12px; font-weight: 700; color: var(--blue-deep);
+  cursor: pointer;
+}
+.task-edit__submit:hover:not(:disabled) { background: color-mix(in srgb, var(--blue) 16%, transparent); }
+.task-edit__submit:disabled { color: var(--faint); background: transparent; cursor: not-allowed; }
 .task--current { background: color-mix(in srgb, var(--blue) 6%, transparent); border-color: color-mix(in srgb, var(--blue) 20%, transparent); }
 /* 锁定态（2026-10-08 走查 #65）：原 `.task--locked { opacity: .62 }` 把整行连文字一起压暗，
    --faint 对卡面只剩 2.45:1（亮）/ 2.91:1（暗），任务名与「待解锁」读不清；
@@ -1920,25 +2135,27 @@ onBeforeUnmount(() => {
 .task--locked .task__icon { color: var(--faint); background: var(--canvas); opacity: .62; }
 .task__body strong { display: block; font-size: 13.5px; }
 .task__body small { display: block; margin-top: 2px; font-size: 12px; color: var(--faint); }
+/* 时长标签禁词中折行（bare/15）：「约 18 分钟」不拆成「约 18 分/钟」 */
+.task__mins { white-space: nowrap; }
 .task__cta {
-  min-height: 36px;
-  font-size: 12px; font-weight: 800; color: var(--blue-deep);
+  height: 32px;
+  display: inline-flex; align-items: center;
+  font-size: 12px; font-weight: 600; color: var(--blue-deep);
   /* 主区 hero 已有唯一实心 CTA；任务行这颗降为描边，和相邻「微调」同高同圆角 */
   background: color-mix(in srgb, var(--blue) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--blue) 30%, var(--line));
-  padding: 6px 13px; border-radius: 8px; /* 圆角阶梯：控件 */
+  padding: 0 12px; border-radius: 8px; /* 圆角阶梯：控件 */
   cursor: pointer;
   transition: transform 0.16s ease, background 0.16s ease;
 }
 .task__cta:not(:disabled):active { transform: scale(0.98); }
-.task__done-label { font-size: 12px; font-weight: 600; color: var(--green); cursor: pointer; display: inline-block; padding: 12px 0; min-width: 44px; text-align: center; }
+.task__done-label { font-size: 12px; font-weight: 600; color: var(--green); cursor: pointer; display: inline-flex; align-items: center; height: 32px; padding: 0 8px; min-width: 44px; border-radius: 8px; }
 .task__lock-label, .task__todo-label { font-size: 12px; color: var(--faint); }
 
 .side { display: grid; gap: 12px; position: sticky; top: 16px; }
 .sidecard { padding: 16px 18px; display: grid; gap: 10px; align-content: start; }
 .sidecard strong { font-size: 15px; line-height: 1.5; }
-.sidecard p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.65; }
-.sidecard__meta { display: flex; gap: 8px; flex-wrap: wrap; }
+.sidecard p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
 /* 侧栏折叠头（设计意图，2026-09-25）：与问题背景的 bg-head 同款箭头语言 */
 .sidecard__head {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
@@ -1962,21 +2179,54 @@ onBeforeUnmount(() => {
 .materials-sections li { font-size: 12px; color: var(--muted); }
 .materials-toggle { align-self: flex-start; background: none; border: none; padding: 0; font-size: 12px; color: var(--blue); cursor: pointer; }
 .materials-note { margin: 10px 0 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
-.task__material { display: block; margin-top: 2px; font-size: 12px; color: var(--blue); }
-.stage__material { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
-.material-ref { background: none; border: none; padding: 0 4px 0 0; font-size: 12px; color: var(--blue); cursor: pointer; text-decoration: underline; }
-.material-ref:disabled { color: var(--muted); text-decoration: none; cursor: default; }
-.material-text { margin: 8px 0 0; max-height: 220px; overflow: auto; white-space: pre-wrap; font-size: 12px; line-height: 1.6; color: var(--ink); }
-.sidecard--current { border-color: color-mix(in srgb, var(--blue) 30%, transparent); }
+/* .task__material / .stage__material 随「资料」独占行一并删除（2026-11-06 二次走查）：
+   引用签已并入 .task__meta，阶段头那行「本阶段依据资料」与任务行重复 */
+/* 资料引用＝胶囊微签（2026-11-06 走查 图1/2/3）：原生蓝字下划线像 90 年代网页，
+   而且一行三颗同名链接时下划线把字连成一条。4px 控件圆角 + 蓝 10% 底 + 文档小图标，
+   行内换行时每颗都是独立可点的胶囊。 */
+.material-ref {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin: 2px 6px 2px 0; padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--blue) 22%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
+  font-size: 12px; font-weight: 600; line-height: 1.4;
+  color: var(--blue-deep);
+  cursor: pointer;
+  text-decoration: none;
+}
+.material-ref:hover { background: color-mix(in srgb, var(--blue) 16%, transparent); }
+.material-ref svg { flex: none; opacity: .85; }
+.material-ref:disabled { color: var(--muted); background: var(--line); border-color: transparent; cursor: default; }
+/* 引文块（2026-11-06 走查 图3/4）：左竖线 + 浅底，用户最该看的就是这一句 */
+.material-quote {
+  margin: 0;
+  padding: 6px 0 6px 10px;
+  border-left: 2px solid color-mix(in srgb, var(--blue) 45%, transparent);
+  font-size: 12.5px; line-height: 1.7; color: var(--ink);
+}
+/* 去大弹窗读全文的轻量入口 */
+.materials-open {
+  align-self: flex-start;
+  display: inline-flex; align-items: center;
+  min-height: 30px; padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent);
+  border-radius: var(--mk-radius-sm);
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
+  font-family: inherit; font-size: 12px; font-weight: 700;
+  color: var(--blue-deep);
+  cursor: pointer;
+}
+.materials-open:hover { background: color-mix(in srgb, var(--blue) 16%, transparent); }
+/* 通用小签（§1）：同样收紧为紧凑小方签，不再全圆胶囊 */
 .tag {
-  padding: 4px 10px; border-radius: var(--mk-radius-pill);
-  background: var(--line); border: 1px solid var(--line);
+  display: inline-flex; align-items: center;
+  height: 20px; padding: 1px 6px; border-radius: var(--mk-radius-sm);
+  background: var(--line);
   font-size: 12px; font-weight: 600; color: var(--muted);
 }
-.tag--blue { background: color-mix(in srgb, var(--blue) 9%, transparent); border-color: color-mix(in srgb, var(--blue) 30%, transparent); color: var(--blue-deep); }
-.next-list { margin: 0; padding: 0 0 0 18px; display: grid; gap: 9px; }
-.next-list strong { display: block; font-size: 13px; line-height: 1.45; }
-.next-list small { display: block; margin-top: 2px; font-size: 12px; color: var(--faint); }
+.tag--blue { background: color-mix(in srgb, var(--blue) 9%, transparent); color: var(--blue-deep); }
+/* .next-list 随「接下来」卡片一并删除（2026-11-06 走查 图1/2/3） */
 .sidecard__sum { font-size: 12px; font-weight: 700; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 9px; }
 .sidecard__text { font-size: 13px; }
 .sidecard__intent-title {
@@ -1990,30 +2240,28 @@ onBeforeUnmount(() => {
 .sidecard__intent-title--expanded { display: block; overflow: visible; }
 .sidecard__rows { margin: 0; display: grid; gap: 8px; }
 .sidecard__row { display: grid; gap: 2px; }
-.sidecard__row dt { font-size: 12px; font-weight: 800; color: var(--faint); letter-spacing: 0.03em; }
-.sidecard__row dd { margin: 0; font-size: 12.5px; line-height: 1.65; color: var(--muted); }
+.sidecard__row dt { font-size: 12px; font-weight: 600; color: var(--faint); letter-spacing: 0.03em; }
+.sidecard__row dd { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
 .sidecard__bg { border-top: 1px dashed var(--line); padding-top: 8px; }
 /* 调整历史卡：来源路径链接 + 与快照回退区的互引说明 */
 .lineage-link { font-size: 12px; font-weight: 600; color: var(--blue); text-decoration: underline; }
-.lineage-note { margin: 0; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 12px; line-height: 1.6; color: var(--faint); }
+.lineage-note { margin: 0; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 12px; line-height: 1.5; color: var(--faint); }
 .sidecard__bg-head {
   display: inline-flex; align-items: center; gap: 5px;
-  font-size: 12px; font-weight: 800; letter-spacing: 0.03em; color: var(--faint);
+  font-size: 12px; font-weight: 600; letter-spacing: 0.03em; color: var(--faint);
 }
 .sidecard__bg-head:hover { color: var(--blue-deep); }
 .sidecard__bg-chev { font-size: 12px; transition: transform 0.15s ease; }
 .sidecard__bg-chev--open { transform: rotate(180deg); }
-.sidecard__bg-text { margin: 6px 0 0; font-size: 12px; line-height: 1.65; color: var(--muted); white-space: pre-wrap; }
+.sidecard__bg-text { margin: 6px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted); white-space: pre-wrap; }
 
 @media (max-width: 1100px) {
   .detail__main { padding: 14px 14px 32px; }
   .detail__grid { grid-template-columns: 1fr; }
-  /* 侧栏提前：aside 在 DOM 里位于阶段列表之后，单列下「进行到哪/学习资料」
-     会垫在 2-4 屏外（2026-09-25 移动框架审查）；order:-1 提到阶段列表之前，
-     桌面双列布局不受影响（order 只在单列时改变视觉顺序） */
-  .side { position: static; order: -1; }
-  /* 单列下侧栏提到最前，其「继续当前任务」与主区 hero 重复且会被固定底栏压住；窄屏只保留主区那颗。 */
-  .sidecard--current .btn-primary--block { display: none; }
+  /* 单列顺序改回 DOM 序（2026-11-06 走查 图7）：原先 order:-1 把「学习资料/设计意图」
+     提到阶段列表之前，一旦展开学习资料，阶段 1~4 就被挤到屏外最底下。
+     现在 = 概览卡 → 阶段与任务 → 学习资料 → 设计意图，任务永远排第一优先级。 */
+  .side { position: static; }
 }
 </style>
 
@@ -2030,13 +2278,13 @@ onBeforeUnmount(() => {
 .genbar--muted { border-color: var(--line); }
 .genbar__text { flex: 1; }
 .genbar__text strong { font-size: 14px; }
-.genbar__text p { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); }
+.genbar__text p { margin: 4px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
 .objectives {
   margin: 0 0 8px; padding: 10px 12px 10px 28px;
   background: var(--canvas); border: 1px solid var(--line); border-radius: var(--mk-radius-lg);
   display: grid; gap: 4px;
 }
-.objectives li { font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+.objectives li { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
 .task--current .task__todo-label { color: var(--blue-deep); font-weight: 700; }
 .detail__main { width: 100%; }
 </style>
@@ -2090,7 +2338,7 @@ onBeforeUnmount(() => {
 .adjust-dialog__desc {
   margin: 0 0 14px;
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.5;
   color: var(--muted);
 }
 .adjust-dialog__head {
@@ -2114,7 +2362,8 @@ onBeforeUnmount(() => {
   display: flex; align-items: center; gap: 12px;
   width: 100%;
   padding: 12px 14px;
-  border: 1px solid var(--line); border-radius: var(--mk-radius-xl);
+  /* 同心圆角（2026-11-06 §1）：外层弹窗 16px → 内层选项 12px，不再与弹窗同档 */
+  border: 1px solid var(--line); border-radius: var(--mk-radius-lg);
   background: var(--surface); text-align: left;
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
@@ -2135,32 +2384,38 @@ onBeforeUnmount(() => {
 }
 .adjust-mode__body { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .adjust-mode__body strong { font-size: 13.5px; color: var(--ink); }
-.adjust-mode__body small { font-size: 12px; line-height: 1.55; color: var(--mk-faint); }
+.adjust-mode__body small { font-size: 12px; line-height: 1.5; color: var(--mk-faint); }
 .adjust-mode__arrow { color: var(--faint); font-size: 16px; }
 /* 策略禁用的场景入口：压暗 + 原因副文案（amber 一档，与整建警示同色语言） */
 .adjust-mode:disabled { opacity: 0.55; cursor: not-allowed; }
 .adjust-mode:disabled:hover { border-color: var(--line); background: var(--surface); box-shadow: none; }
 .adjust-mode__blocked { color: var(--amber-ink); }
-/* 策略推荐引导标记：场景卡标题角标 + 填写步提示条内文案 */
+/* 策略推荐引导标记：场景卡标题角标 + 填写步提示条内文案
+   （2026-11-06 §1）：胶囊 → 紧凑小方签，去掉 1px 描边，只留柔和半透明底 */
 .adjust-mode__rec {
   margin-left: 6px;
-  padding: 1px 7px;
-  border-radius: var(--mk-radius-pill);
-  font-size: var(--mk-fs-micro); font-weight: 800;
+  display: inline-flex; align-items: center;
+  height: 20px; padding: 1px 6px;
+  border-radius: var(--mk-radius-sm);
+  font-size: 12px; font-weight: 600;
   color: var(--blue-deep);
   background: color-mix(in srgb, var(--blue) 10%, transparent);
-  border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent);
   vertical-align: 1px;
 }
-.adjust-form__hint-group { display: inline-flex; align-items: center; gap: 10px; }
+.adjust-form__hint-group { display: inline-flex; align-items: center; gap: 10px; margin-left: auto; }
 .adjust-form__rec { font-size: 12px; font-weight: 700; opacity: 0.9; }
-/* 选中场景后的头部提示 */
+/* 选中场景后的头部提示。
+   flex-wrap（bare/20）：窄屏（iPhone 402 实测）长模式说明与右侧「← 换一种方式」
+   挤同一行，按钮压在折行后的标题文字上；wrap 让按钮组在装不下时换行到下一行，
+   与文字分离。
+   圆角（2026-11-06 §1）：整条通栏提示条不用胶囊，收敛为 8px 控件档。 */
 .adjust-form__mode-hint {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  flex-wrap: wrap;
   margin-bottom: 10px;
   padding: 7px 12px;
   font-size: 12.5px; font-weight: 700;
-  border-radius: var(--mk-radius-pill);
+  border-radius: var(--mk-radius-md);
   color: var(--blue-ink); background: color-mix(in srgb, var(--blue) 10%, transparent);
 }
 .adjust-form__mode-hint--rebuild { color: var(--amber-ink); background: color-mix(in srgb, var(--amber) 14%, transparent); }
@@ -2175,7 +2430,7 @@ onBeforeUnmount(() => {
 .adjust-form__warn {
   margin: 0 0 10px;
   padding: 9px 12px;
-  font-size: 12.5px; line-height: 1.6;
+  font-size: 12.5px; line-height: 1.5;
   color: var(--amber-ink);
   background: color-mix(in srgb, var(--amber) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--amber) 35%, transparent);
@@ -2192,6 +2447,12 @@ onBeforeUnmount(() => {
   margin-top: 4px;
   color: var(--faint);
 }
+/* 面板内回退入口（paths/iphone/2）：承诺「可一键回退」就必须可达，不再只挂 hero。
+   尺寸交给 v2.css 的控件档（电脑 32px / 移动 44px），本页不再单独写 min-height 把它压到 36px */
+.adjust-form__rollback {
+  margin: 8px 0 0;
+  display: flex;
+}
 /* 挡路课堂清场视图 */
 .clear-sessions {
   display: grid;
@@ -2203,15 +2464,16 @@ onBeforeUnmount(() => {
 }
 .clear-sessions__tag {
   justify-self: start;
-  font-size: 12px; font-weight: 800;
+  display: inline-flex; align-items: center;
+  height: 20px; padding: 1px 6px;
+  font-size: 12px; font-weight: 600;
   color: var(--amber-ink);
   background: color-mix(in srgb, var(--amber) 14%, transparent);
-  border: 1px solid color-mix(in srgb, var(--amber) 35%, transparent);
-  padding: 2px 8px; border-radius: var(--mk-radius-pill);
+  border-radius: var(--mk-radius-sm);
 }
 .clear-sessions__head p {
   margin: 0;
-  font-size: 12.5px; line-height: 1.6;
+  font-size: 12.5px; line-height: 1.5;
   color: var(--muted);
 }
 .clear-sessions__list {
@@ -2242,16 +2504,32 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.clear-sessions__item-main .uc-badge { justify-self: start; }
+/* 课堂状态标签（2026-11-06 §1）：类名来自全站通用壳（本仓无全局底样式），
+   这里按「状态标签=紧凑小方签」给底色，不再是一行裸文字（进行中/已暂停/收尾中…） */
+.clear-sessions__item-main .uc-badge {
+  justify-self: start;
+  display: inline-flex; align-items: center;
+  height: 20px; padding: 1px 6px;
+  font-size: 12px; font-weight: 600;
+  border-radius: var(--mk-radius-sm);
+  color: var(--muted);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+.clear-sessions__item-main .uc-badge--warn {
+  color: var(--amber-ink);
+  background: color-mix(in srgb, var(--amber) 14%, transparent);
+}
 .clear-sessions__hint {
   margin: 0;
-  font-size: 12px; line-height: 1.6;
+  font-size: 12px; line-height: 1.5;
   color: var(--faint);
 }
+/* 行内主按钮（清场列表）：§1 内嵌按钮档——高 32px、圆角 8px、12px 字号 */
 .btn-primary--sm {
   flex: 0 0 auto;
+  height: 32px;
   font-size: 12px;
-  padding: 7px 12px;
+  padding: 0 12px;
   border-radius: var(--mk-radius-md);
 }
 
@@ -2262,7 +2540,7 @@ onBeforeUnmount(() => {
 .adjust-scope__label {
   margin: 0 0 6px;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
   color: var(--muted);
 }
 .adjust-scope__opts {
@@ -2302,40 +2580,42 @@ onBeforeUnmount(() => {
   max-width: 300px;
   min-width: 0;
 }
-/* AI 诊断建议卡（auto 场景） */
+/* AI 建议卡的嵌套面板（2026-11-06 §1）：与弹窗内层同档 12px，不同档于外层弹窗 */
 .ai-advice {
   display: grid;
   gap: 8px;
   padding: 14px;
   border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
   background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 6%, transparent), color-mix(in srgb, var(--blue) 4%, transparent));
-  border-radius: var(--mk-radius-xl);
+  border-radius: var(--mk-radius-lg);
 }
 .ai-advice__head {
   display: flex;
   align-items: center;
   gap: 8px;
 }
+/* 「AI 诊断」标签 + 诊断依据/卡点小签（2026-11-06 §1）：一律紧凑小方签 */
 .ai-advice__tag {
   flex: 0 0 auto;
-  font-size: 12px; font-weight: 800;
+  display: inline-flex; align-items: center;
+  height: 20px; padding: 1px 6px;
+  font-size: 12px; font-weight: 600;
   color: var(--purple-ink);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-  padding: 2px 8px; border-radius: var(--mk-radius-pill);
+  border-radius: var(--mk-radius-sm);
 }
 .ai-advice__verdict {
-  font-size: 14px; font-weight: 800;
+  font-size: 14px; font-weight: 700;
   color: var(--purple-ink);
 }
 .ai-advice__verdict--ok { color: var(--green-ink); }
 .ai-advice__rationale {
   margin: 0;
-  font-size: 13px; line-height: 1.6;
+  font-size: 13px; line-height: 1.5;
   color: var(--ink);
 }
 .ai-advice__detail {
-  font-size: 12.5px; line-height: 1.6;
+  font-size: 12.5px; line-height: 1.5;
   color: var(--muted);
   background: color-mix(in srgb, var(--surface) 55%, transparent);
   border-radius: var(--mk-radius-md);
@@ -2352,16 +2632,16 @@ onBeforeUnmount(() => {
   color: var(--faint);
 }
 .ai-advice__chip {
+  display: inline-flex; align-items: center;
+  height: 20px; padding: 1px 6px;
   font-size: 12px; font-weight: 600;
   color: var(--blue-ink);
   background: color-mix(in srgb, var(--blue) 10%, transparent);
-  border-radius: var(--mk-radius-pill);
-  padding: 2px 9px;
+  border-radius: var(--mk-radius-sm);
 }
 .ai-advice__chip--warn {
   color: var(--amber-ink);
   background: color-mix(in srgb, var(--amber) 14%, transparent);
-  border: 1px solid color-mix(in srgb, var(--amber) 30%, transparent);
 }
 .ai-advice__meta {
   font-size: 12px;
@@ -2458,6 +2738,16 @@ onBeforeUnmount(() => {
   /* 失败横幅主 CTA「重新准备阶段任务」在窄屏换行成两行、与左侧文案不齐（LY16）：
      窄屏让按钮独占一行、通栏居中，并禁止文字换行 */
   .genbar--failed .btn-primary { width: 100%; justify-content: center; white-space: nowrap; }
+  /* 任务行操作钮：电脑档按 §1 收到 32px（30–34 档），触屏档回到 40px——
+     守住仓库 mobile:spec「可点元素任何一维 ≥36px」（lt36 预算 0）的硬线，
+     375 实测口径下不再新增不足 36 的点击目标；字号维持 12px 不动。 */
+  .task__cta, .task__edit, .task__done-label { height: 40px; padding: 0 14px; }
+  /* 微调抽屉（点开后才出现在 DOM 里）：步进键 / 删除 / 插入组合框同抬到 40px，
+     避免触屏上出现 <36 的目标（lt36 预算 0）；字号维持 12px 不动。 */
+  .task-edit__step,
+  .task-edit__danger,
+  .task-edit__insert { height: 40px; }
+  .task-edit__input { height: 38px; }
   .adjust-dialog-mask { padding: 14px; }
   .adjust-dialog { padding: 16px 18px; }
   /* 26×26 对拇指偏小（弹窗右上角唯一退出路径），抬到 36 */
@@ -2470,5 +2760,86 @@ onBeforeUnmount(() => {
     display: inline-flex;
     align-items: center;
   }
+}
+</style>
+
+<style scoped>
+/* ===== 全文阅读弹窗（2026-11-06 走查 图6）=====
+   侧栏里那个 280px 宽、从整篇文档第一行英文爬虫头开始显示的 <pre> 滚动框，
+   字面意义上「没法读」：换成这张正经阅读面（宽度 760、行高 1.75、条文各自成段）。 */
+.reader {
+  position: fixed; inset: 0; z-index: 60;
+  display: grid; place-items: center;
+  padding: 24px;
+  background: var(--wf-overlay);
+}
+.reader__card {
+  width: min(760px, 100%);
+  max-height: min(86dvh, 900px);
+  display: flex; flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--mk-radius-modal);
+  box-shadow: var(--mk-shadow-modal);
+  overflow: hidden;
+}
+.reader__card:focus { outline: none; }
+.reader__head {
+  flex: none;
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.reader__title { margin: 0; font-size: 15px; font-weight: 800; line-height: 1.4; color: var(--ink); }
+.reader__meta { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.reader__close {
+  flex: none;
+  width: 32px; height: 32px;
+  display: grid; place-items: center;
+  border: 0; border-radius: var(--mk-radius-sm);
+  background: transparent;
+  font-size: 18px; line-height: 1; color: var(--muted);
+  cursor: pointer;
+}
+.reader__close:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.reader__body {
+  flex: 1 1 auto; min-height: 0;
+  overflow-y: auto;
+  padding: 16px 20px 28px;
+}
+.reader__note { margin: 0; font-size: 13px; color: var(--muted); }
+.reader__note--error { color: var(--red-ink); }
+/* 正文排版：1.75 行高 + 段落间距。条文由 normalizeMaterialMarkdown 在句末标点后断段，
+   标题由 markdown 渲染成 h1~h3，所以这里只管字距行距，不再碰内容。 */
+.reader__text { font-size: 13.5px; line-height: 1.75; color: var(--ink); }
+.reader__text :deep(p) { margin: 0 0 10px; }
+.reader__text :deep(h1),
+.reader__text :deep(h2) { margin: 20px 0 10px; font-size: 15px; font-weight: 800; line-height: 1.45; }
+.reader__text :deep(h3),
+.reader__text :deep(h4) { margin: 16px 0 8px; font-size: 14px; font-weight: 800; line-height: 1.45; }
+.reader__text :deep(h1:first-child),
+.reader__text :deep(h2:first-child),
+.reader__text :deep(h3:first-child) { margin-top: 0; }
+.reader__text :deep(strong) { font-weight: 800; }
+.reader__text :deep(ul),
+.reader__text :deep(ol) { margin: 0 0 10px; padding-left: 20px; }
+.reader__text :deep(blockquote) {
+  margin: 0 0 10px; padding: 4px 0 4px 10px;
+  border-left: 2px solid color-mix(in srgb, var(--blue) 45%, transparent);
+  color: var(--muted);
+}
+.reader__text :deep(code) {
+  padding: 1px 5px; border-radius: var(--mk-radius-sm);
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
+  font-size: 12.5px;
+}
+.reader__text :deep(pre) { margin: 0 0 10px; padding: 10px; border-radius: var(--mk-radius-md); background: var(--canvas); overflow-x: auto; }
+.reader__text :deep(a) { color: var(--blue-deep); }
+
+@media (max-width: 1100px) {
+  .reader { padding: 12px; }
+  .reader__card { max-height: 90dvh; }
+  .reader__head { padding: 14px 14px 10px; }
+  .reader__body { padding: 14px 14px 24px; }
 }
 </style>

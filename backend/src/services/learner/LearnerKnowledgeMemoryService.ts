@@ -5,6 +5,8 @@ import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
 import { conceptGraphService } from './concept-graph.service';
 // 注册表口径的归一化（比本文件的本地 normalizeConceptKey 更强：还去引号/冒号从句/尾部标点）。
 // 查别名表必须用它，否则会 miss——本文件那个本地版只做 trim+空白压缩。
+import { isKtGhostTrace } from '../memory/kt-ghost';
+import { resolveMasteryScore } from './concept-mastery';
 import { normalizeConceptKey as normalizeConceptKeyCanonical } from '../memory/concept-key';
 import type {
   LearnerBackgroundConceptLedgerItem,
@@ -71,6 +73,12 @@ const NAMESPACED_KEY_RE = /^[A-Za-z0-9]+(?::[A-Za-z0-9_-]+)+$/;
 
 /** 卡点判定线（2026-10-15 F3/F4 定档）：证据均分低于它算「卡点」。 */
 export const STRUGGLING_MASTERY_THRESHOLD = 0.55;
+/**
+ * 「反复困惑」的最小出现次数（#172-3）：只有 struggle 信号真实出现 >= 2 次才配叫 recurring。
+ * 旧口径 `struggleCountByKey.get(label) || 1` 把只出现过一次（甚至 0 次）的信号兜底成 1，
+ * 由确定性通道凭空造出一条「反复」困惑行；单次信号不是反复，不生成。
+ */
+export const RECURRING_CONFUSION_MIN_COUNT = 2;
 /** 高严重度卡点线：低于它才允许触发「压缩/加速」这类减法动作（struggling 常态档挡不住它们）。 */
 export const SEVERE_STRUGGLING_MASTERY_THRESHOLD = 0.3;
 /**
@@ -273,6 +281,12 @@ function signalFromProgress(progress: number, status: 'pending' | 'learning' | '
   return { score, stability } as const;
 }
 
+/** 知识状态行 → 证据信号：review→struggle、mastered→mastery、其余（含 learning）→incomplete，不再把「仍在学」当掌握。 */
+function signalFromKnowledgeState(items: Array<{ status?: string | null }>): LearnerRecentEvidence['signal'] {
+  if (items.some((item) => item?.status === 'review')) return 'struggle';
+  if (items.some((item) => item?.status === 'mastered')) return 'mastery';
+  return 'incomplete';
+}
 
 /**
  * 会话评估 → 记忆信号（2026-09-22 档位化修正）。
@@ -300,7 +314,7 @@ function resolveEvaluationSignal(evaluation: {
 
 export class LearnerKnowledgeMemoryService {
   async build(input: BuildInput): Promise<LearnerKnowledgeMemory> {
-    const path = input.learningPathId
+    const resolvedPath = input.learningPathId
       ? await prisma.learning_paths.findUnique({
           where: { id: input.learningPathId },
           include: {
@@ -315,7 +329,10 @@ export class LearnerKnowledgeMemoryService {
           },
         })
       : // 无 pathId（如 admin 证据端点场景）时自动定位用户最新 active 路径，
-        // 否则 currentPath 恒空、recentEvidence/conceptLedger 等画像数据前端永远看不到
+        // 否则 currentPath 恒空、recentEvidence/conceptLedger 等画像数据前端永远看不到。
+        // 注意：#205 决定「非 active 路径不得被伪造成 currentPath」（否则学员端会给出
+        // 「继续学习一条已下线路径」）。管理台要展示「他有路径、但已下线 + 真实进度」时，
+        // 走 admin 详情路由的 fallback 字段（learner-models.ts），不放宽这里。
         await prisma.learning_paths.findFirst({
           where: { userId: input.userId, status: 'active' },
           orderBy: { updatedAt: 'desc' },
@@ -331,24 +348,11 @@ export class LearnerKnowledgeMemoryService {
           },
         });
 
-    if (!path || path.userId !== input.userId) {
-      return {
-        currentPath: undefined,
-        globalSignals: {
-          masteredConcepts: [],
-          fragileConcepts: [],
-          strugglingConcepts: [],
-          severeStrugglingConcepts: [],
-        },
-        globalBackground: {
-          conceptLedger: [],
-          recurringConfusions: [],
-          reusableFoundations: [],
-          blockedFoundations: [],
-          transferSignals: [],
-        },
-      };
-    }
+    // #155：无 active 路径（路径已完成/归档）或路径不属于本用户时，不再整体清零。
+    // globalSignals / globalBackground 是**用户级**画像（按 userId 聚合痕迹与各路径证据），
+    // 不依赖具体路径；只有 currentPath 依赖它。此前这里直接 return 空结构，导致路径完成或
+    // 归档后管理端 / learner-center 的已掌握、脆弱名单凭空归零（连用户级 memory_traces 都不读）。
+    const path = resolvedPath && resolvedPath.userId === input.userId ? resolvedPath : null;
 
     // #93：globalSignals / globalBackground 是**用户级**画像，不能只从当前路径取数——
     // 多路径学习者的跨路径概念信号、反复误解、迁移信号此前全部漏掉。
@@ -356,7 +360,13 @@ export class LearnerKnowledgeMemoryService {
     // 当前路径若不在最近 N 条里也会被显式并入（allPaths 首位）。
     const OTHER_PATHS_LIMIT = 8;
     const otherPaths = (await prisma.learning_paths.findMany({
-      where: { userId: input.userId, id: { not: path.id } },
+      where: {
+        userId: input.userId,
+        // #155：状态白名单——被放弃（abandoned）的路径不是用户的学习证据，不参与用户级并集；
+        // active/completed/archived 仍参与（#93「完成/换目标后不失忆」）。
+        status: { not: 'abandoned' },
+        ...(path ? { id: { not: path.id } } : {}),
+      },
       orderBy: { updatedAt: 'desc' },
       take: OTHER_PATHS_LIMIT,
       include: {
@@ -370,10 +380,10 @@ export class LearnerKnowledgeMemoryService {
         },
       },
     })) ?? [];
-    const allPaths = [path, ...otherPaths];
+    const allPaths = path ? [path, ...otherPaths] : otherPaths;
     const pathIds = allPaths.map((item) => item.id);
     const currentPathTaskIds = new Set(
-      path.milestones.flatMap((milestone) => (milestone.subtasks || []).map((task) => task.id))
+      (path?.milestones ?? []).flatMap((milestone) => (milestone.subtasks || []).map((task) => task.id))
     );
 
     const [allSessions, allPersistedEvidence, memoryTraces] = await Promise.all([
@@ -423,6 +433,16 @@ export class LearnerKnowledgeMemoryService {
       })
     ]);
 
+    // issue #156（复核补修）：蒸馏/对话证据的取胜时间必须取所属会话的**业务 endTime**
+    // （与确定性通道 :615-617 同源：模拟/回填链路经 simulatedNowOr 落模拟日），
+    // 而不是 learner_evidence.occurredAt——它由 createDomainEvent 缺省 new Date() 生成
+    // （teaching-session-lifecycle.ts:1064 未传值）＝真墙钟，与本文件 :550-552 / :615-617
+    // 及 anchor-probe 守卫禁止的跨时钟域比较同源违规。
+    const sessionEndTimeById = new Map<string, string>();
+    for (const session of allSessions) {
+      if (session.endTime) sessionEndTimeById.set(session.id, session.endTime.toISOString());
+    }
+
     const conceptSignals = new Map<string, ConceptSignal[]>();
     const recentEvidence: LearnerRecentEvidence[] = [];
     // 用户级证据（跨路径）：只喂 globalBackground 台账聚合；currentPath.recentEvidence 仍按路径取。
@@ -432,22 +452,76 @@ export class LearnerKnowledgeMemoryService {
     const enrichedReusableFoundations: string[] = [];
     const enrichedBlockedFoundations: string[] = [];
     const enrichedTransferSignals: LearnerTransferSignal[] = [];
+    // issue #194：knowledgeStateSummary 曾只写进 learner_evidence、从不进快照。
+    // 证据按 occurredAt desc 取，首个非空摘要即最新一次课后状态摘要。
+    // issue #198：摘要是**自由文本**，可命名其它路径的概念。它随 globalBackground 进入
+    // 教学上下文并作为 learning-predictor 的输入（TeachingContextBuilder:446），而预测器按
+    // pathId/taskId 计算——若取到别的路径的摘要，别的路径的概念会无声渗入当前路径的教学场景
+    // （focusConcepts 回写 prediction_records）。故摘要必须按**当前路径**取；其它路径的摘要
+    // 不参与（跨路径概念仍以 conceptLedger/recurringConfusions 等结构化字段用户级聚合）。
+    let enrichedKnowledgeStateSummary: string | undefined;
+    /* 蒸馏 / 对话提取也是「提到某概念的证据行」，但它们的载荷不进 globalRecentEvidence
+       （那张表还喂反复困惑的 struggle 计数与 currentPath.recentEvidence，塞进去会改变
+       那两个读数与教学上下文载荷）。这里单开一个只服务「台账证据条数」的倒排索引：
+       key → 命中该键的蒸馏/提取行 id 集合（id 形如 d<序号>，与主索引的数字下标不相交）。 */
+    const enrichedEvidenceRowIdsByKey = new Map<string, Set<string>>();
+    let enrichedEvidenceRowSeq = 0;
+    const recordEnrichedEvidenceRow = (items: any[], rowId: string) => {
+      for (const item of items) {
+        for (const key of dedupe([item?.label, item?.conceptKey, item?.name])) {
+          if (!key) continue;
+          let ids = enrichedEvidenceRowIdsByKey.get(key);
+          if (!ids) {
+            ids = new Set<string>();
+            enrichedEvidenceRowIdsByKey.set(key, ids);
+          }
+          ids.add(rowId);
+        }
+      }
+    };
 
     for (const evidence of allPersistedEvidence) {
       const evidencePathId = evidence.pathId ?? undefined;
-      const isCurrentPath = evidencePathId === path.id;
+      const isCurrentPath = evidencePathId === path?.id;
       // payload 只在确认要消费该类型后才解析（旧口径对每行先 parse 再判类型）
       if (evidence.evidenceType === 'session-knowledge-distilled') {
         const payload = parseJsonSafe<any>(evidence.payload, {});
-        if (Array.isArray(payload.conceptLedger)) enrichedLedger.push(...payload.conceptLedger);
+        // issue #156（复核补修）：概念台账「最旧证据覆盖最新证据」。模型行本身不带时间戳
+        // （lesson-knowledge-enricher 输出无 lastSeenAt），需用**同源业务时间**补齐才能按证据
+        // 新旧取胜；此处取所属会话的 endTime（确定性通道用的是同一个 session.endTime），
+        // 不用证据墙钟 occurredAt——否则与确定性通道跨时钟域比较，模拟/回填链路下回退到旧课
+        // 掌握度仍可复现。查不到业务时间（会话未结束/未加载）就**不记**时间，绝不回退墙钟。
+        const businessAtIso = evidence.sessionId ? sessionEndTimeById.get(evidence.sessionId) : undefined;
+        if (Array.isArray(payload.conceptLedger)) {
+          enrichedLedger.push(...payload.conceptLedger.map((item: any) => businessAtIso
+            ? { ...item, firstSeenAt: item?.firstSeenAt ?? businessAtIso, lastSeenAt: businessAtIso }
+            : item));
+          // 台账「证据条数」把这条蒸馏证据也算上（2026-11-09）：此前证据倒排索引只收
+          // task:completed / lesson:completed 两类行 ⇒ 只有蒸馏/提取证据的概念恒显 ev=0，
+          // 运营读成「没证据」。行 id 用 `d<序号>` 与主索引的数字下标天然不相交。
+          recordEnrichedEvidenceRow(payload.conceptLedger, `d${enrichedEvidenceRowSeq++}`);
+        }
         if (Array.isArray(payload.reusableFoundations)) enrichedReusableFoundations.push(...payload.reusableFoundations);
         if (Array.isArray(payload.blockedFoundations)) enrichedBlockedFoundations.push(...payload.blockedFoundations);
         if (Array.isArray(payload.transferSignals)) enrichedTransferSignals.push(...payload.transferSignals);
+        if (!enrichedKnowledgeStateSummary
+          && isCurrentPath
+          && typeof payload.knowledgeStateSummary === 'string'
+          && payload.knowledgeStateSummary.trim()) {
+          enrichedKnowledgeStateSummary = payload.knowledgeStateSummary.trim();
+        }
         continue;
       }
       if (evidence.evidenceType === 'dialogue-concepts-extracted') {
         const payload = parseJsonSafe<any>(evidence.payload, {});
-        if (Array.isArray(payload.recurringConfusions)) enrichedConfusions.push(...payload.recurringConfusions);
+        if (Array.isArray(payload.recurringConfusions)) {
+          // 同上：recurringConfusions 的 lastSeenAt 取所属会话业务 endTime，不用证据墙钟 occurredAt。
+          const businessAtIso = evidence.sessionId ? sessionEndTimeById.get(evidence.sessionId) : undefined;
+          enrichedConfusions.push(...payload.recurringConfusions.map((item: any) => businessAtIso
+            ? { ...item, lastSeenAt: businessAtIso }
+            : item));
+          recordEnrichedEvidenceRow(payload.recurringConfusions, `d${enrichedEvidenceRowSeq++}`);
+        }
         if (Array.isArray(payload.transferSignals)) enrichedTransferSignals.push(...payload.transferSignals);
         continue;
       }
@@ -464,9 +538,7 @@ export class LearnerKnowledgeMemoryService {
         ? 'task-completed'
         : 'teaching-session';
       const signal: LearnerRecentEvidence['signal'] = evidence.evidenceType === 'lesson:completed'
-        ? Array.isArray(payload.knowledgeState) && payload.knowledgeState.some((item: any) => item?.status === 'review')
-          ? 'struggle'
-          : 'mastery'
+        ? signalFromKnowledgeState(Array.isArray(payload.knowledgeState) ? payload.knowledgeState : [])
         : 'mastery';
       const recent = {
         type,
@@ -485,6 +557,17 @@ export class LearnerKnowledgeMemoryService {
     // （旧口径 O(概念数×证据数×includes)。key → 命中该键的证据行下标集合，Set 保证同一条
     // 证据同时含 label 与 conceptKey 时只计一次；struggle 计数按 (证据行, 键) 记账，与旧口径一致。
     const evidenceIndicesByKey = new Map<string, Set<number>>();
+    /* 台账「证据条数」的可复算口径（2026-11-09 修）：主索引（task/lesson 两类证据行）
+       ∪ 蒸馏/提取证据行，两个 id 空间不相交，故可放进同一个 Set 去重。 */
+    const ledgerEvidenceCount = (keys: Iterable<string>): number => {
+      const ids = new Set<string>();
+      for (const key of keys) {
+        if (!key) continue;
+        for (const index of evidenceIndicesByKey.get(key) ?? []) ids.add(`t${index}`);
+        for (const rowId of enrichedEvidenceRowIdsByKey.get(key) ?? []) ids.add(rowId);
+      }
+      return ids.size;
+    };
     const struggleCountByKey = new Map<string, number>();
     for (let i = 0; i < globalRecentEvidence.length; i += 1) {
       const item = globalRecentEvidence[i];
@@ -502,7 +585,7 @@ export class LearnerKnowledgeMemoryService {
       }
     }
 
-    const allTasks = path.milestones.flatMap((milestone) =>
+    const allTasks = (path?.milestones ?? []).flatMap((milestone) =>
       (milestone.subtasks || []).map((task) => ({ milestone, task }))
     );
     // 其它路径的任务只作为用户级概念台账/前置的排期事实（task-label），
@@ -531,7 +614,7 @@ export class LearnerKnowledgeMemoryService {
           sourceType: 'task-label',
           taskId: task.id,
           milestoneId: milestone.id,
-          pathId: path.id,
+          pathId: path?.id,
           // 时钟域：只用业务写入的 completedAt（模拟链路经 simulatedNowOr/asOf 落模拟日）；
           // 绝不回退 Prisma @updatedAt（真墙钟基础设施列）——否则真/模拟时间混入 lastSeenAt，
           // 使延迟锚题跨域比较。无 completedAt = 无"接触"证据，宁可不记时间。
@@ -579,9 +662,41 @@ export class LearnerKnowledgeMemoryService {
       }
     }
 
+    // #195（复核补修）：把「同一课双通道」的去重从**原始名字级**提到**概念身份级**。
+    // 结构看板名与可靠摘要的知识点名先经注册表解析 canonical 身份（只读，createIfMissing:false，
+    // 读侧绝不创建概念），名字不同但归并到同一 conceptId 的同一概念据此在会话内只计一次；
+    // 解析不到身份时退回原有名字键比较（旧行为逐字兼容）。批量解析一次，避免逐条往返。
+    const sessionConceptNames: string[] = [];
+    for (const session of allSessions) {
+      const rawKnowledgeState = parseJsonSafe<Array<{ name?: string }>>(session.knowledgeState, []);
+      for (const point of rawKnowledgeState) if (point?.name) sessionConceptNames.push(point.name);
+      const rawWrapup = parseJsonSafe<any>(session.wrapup, null);
+      // 与下方 `summaryIsReliable` 同口径：降级摘要不进掌握证据，其知识点名也无需解析。
+      if (rawWrapup?.status !== 'summary-only' && rawWrapup?.sources?.summary !== 'fallback') {
+        const items = rawWrapup?.summary?.knowledgeItems;
+        if (Array.isArray(items)) for (const item of items) if (item?.name) sessionConceptNames.push(item.name);
+      }
+    }
+    const sessionIdentityByNorm = new Map<string, string>();
+    if (sessionConceptNames.length > 0) {
+      try {
+        const resolved = await conceptRegistryService.resolveMany(input.userId, sessionConceptNames, { createIfMissing: false });
+        for (const [norm, conceptId] of resolved) sessionIdentityByNorm.set(norm, conceptId);
+      } catch (error) {
+        logger.warn('[learner-knowledge] 会话概念身份解析失败（只读，best-effort）', {
+          userId: input.userId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    const sessionIdentityOf = (name: string | null | undefined): string | undefined => {
+      const key = normalizeConceptKeyCanonical(name);
+      return key ? sessionIdentityByNorm.get(key) : undefined;
+    };
+
     for (const session of allSessions) {
       const sessionPathId = session.learningPathId ?? undefined;
-      const isCurrentPath = sessionPathId === path.id;
+      const isCurrentPath = sessionPathId === path?.id;
       const pushEvidence = (entry: LearnerRecentEvidence) => {
         globalRecentEvidence.push(entry);
         if (isCurrentPath) recentEvidence.push(entry);
@@ -601,9 +716,22 @@ export class LearnerKnowledgeMemoryService {
       // 会话未结束（endTime=null）时不回退 updatedAt（真墙钟）——无结束时间 = 不记 seenAt。
       const sessionSeenAt = session.endTime ? session.endTime.toISOString() : undefined;
 
+      // #195：同一课同一概念的掌握贡献只计一次。session.knowledgeState（结构化看板）是权威源，
+      // wrapup.summary.knowledgeItems（LLM 摘要）按提示词规则 6「优先复用输入 knowledgePoints 的
+      // 名称/状态/progress」——二者同名时本会各推一条信号、等权落进同一个 mastery 均值（一课双计、
+      // 且摘要受 ≤5 项预算截断会让同名概念权重不一致）。这里以结构化信号为准跳过同名项；
+      // 摘要独有的概念在下方的「幽灵概念」判定里另行排除出掌握均值。
+      // #195（复核补修）：去重键除名字外再并一层 canonical 身份（见上 `sessionIdentityOf`），
+      // 覆盖「模型把看板概念改写成别名/不同写法」的名字键失配情形。
+      const structuredConceptKeys = new Set<string>();
+      const structuredConceptIds = new Set<string>();
+
       for (const point of knowledgeState) {
         const conceptKey = normalizeConceptKey(point.name);
         if (!conceptKey) continue;
+        structuredConceptKeys.add(conceptKey);
+        const structuredIdentity = sessionIdentityOf(point.name);
+        if (structuredIdentity) structuredConceptIds.add(structuredIdentity);
         const { score, stability } = signalFromProgress(point.progress, point.status);
         const current = conceptSignals.get(conceptKey) || [];
         current.push({
@@ -626,11 +754,7 @@ export class LearnerKnowledgeMemoryService {
         taskId: session.taskId,
         sessionId: session.id,
         conceptKeys: knowledgeState.map((item) => item.name).filter(Boolean),
-        signal: knowledgeState.some((item) => item.status === 'review')
-          ? 'struggle'
-          : knowledgeState.some((item) => item.status === 'mastered')
-            ? 'mastery'
-            : 'incomplete',
+        signal: signalFromKnowledgeState(knowledgeState),
         score: knowledgeState.reduce((sum, item) => sum + item.progress, 0) / Math.max(1, knowledgeState.length) / 100,
         happenedAt,
       });
@@ -640,6 +764,11 @@ export class LearnerKnowledgeMemoryService {
         for (const item of summaryPayload.knowledgeItems) {
           const conceptKey = normalizeConceptKey(item?.name);
           if (!conceptKey) continue;
+          // #195：本课已在结构化看板里记过的概念不再由摘要重复计一次。
+          if (structuredConceptKeys.has(conceptKey)) continue;
+          // #195（复核补修）：名字不同但 canonical 身份与看板某项相同（别名/改写）仍算同一概念。
+          const itemIdentity = sessionIdentityOf(item?.name);
+          if (itemIdentity && structuredConceptIds.has(itemIdentity)) continue;
           const score = typeof item.progress === 'number' ? clamp(item.progress / 100, 0, 1) : 0.5;
           const status = item.status === 'mastered' || item.status === 'review' || item.status === 'learning'
             ? item.status
@@ -665,7 +794,7 @@ export class LearnerKnowledgeMemoryService {
           taskId: session.taskId,
           sessionId: session.id,
           conceptKeys: summaryPayload.knowledgeItems.map((item: any) => item?.name).filter(Boolean),
-          signal: summaryPayload.knowledgeItems.some((item: any) => item?.status === 'mastered') ? 'mastery' : 'incomplete',
+          signal: signalFromKnowledgeState(summaryPayload.knowledgeItems),
           happenedAt,
         });
       }
@@ -696,10 +825,9 @@ export class LearnerKnowledgeMemoryService {
     for (const trace of memoryTraces) {
       const conceptKey = normalizeConceptKey(trace.conceptKey);
       if (!isRealConceptKey(conceptKey)) continue;
-      // #59/#60 第 1/3 条：KT 幽灵痕（applyKtEstimate 创建、从未真正提取过）没有资格进掌握判定。
+      // #59/#60 第 1/3 条：KT 幽灵痕没有资格进掌握判定（判定口径见 services/memory/kt-ghost.ts）。
       // 它承载的是模型估计而非学习证据；此前以 masteryScore=0.3 冒充「学过一半」，直接制造 fragile。
-      const isKtGhost = trace.source === 'kt-estimate' && (Number(trace.extractionCount) || 0) === 0;
-      if (isKtGhost) continue;
+      if (isKtGhostTrace(trace)) continue;
       const mastery = trace.masteryScore ?? 0.5;
       const extractionCount = Number(trace.extractionCount) || 0;
       const lastSeenMs = trace.lastSeenAt ? new Date(trace.lastSeenAt).getTime() : null;
@@ -748,19 +876,39 @@ export class LearnerKnowledgeMemoryService {
       // 名单里混着纯任务标签与 DISPLAY_LABEL_MAP 兜底词；口径与下方 prerequisiteGaps 回落
       // 过滤的「只认接触过且证据为负」一致）。只有标签信号的概念 = 未评估 → pending。
       const evidence = allSignals.filter((signal) => signal.sourceType !== 'task-label');
-      const masteryScore = evidence.length > 0
-        ? clamp(evidence.reduce((sum, signal) => sum + signal.score, 0) / evidence.length, 0, 1)
-        : 0;
+      // #195：仅由 LLM 摘要（derived）、无任何结构化看板 / 记忆痕迹接触证据的概念 = 幽灵概念。
+      // session-wrapup 的 knowledgeItems 是模型对课堂的判断，可能造出看板里不存在的知识点。
+      // 复核补修：这类概念**不再对外暴露 state**（下方 globalConceptStates / conceptStates 过滤
+      // 掉 isGhost 行），因此既不入掌握均值、也不进 mastered / struggling / fragile 名单，
+      // 更不会被任务级 confidence 计入（taskMastery 从 conceptStates 建倒排）。
+      // 有真实接触证据（session-knowledge / memory-trace）在场时，可靠摘要仍按 #70 P-45
+      // 作为补充证据参与（沿用原口径，不改 task-label/memory-trace 的既有行为）。
+      const isDerivedOnly = evidence.length > 0
+        && evidence.every((signal) => signal.sourceType === 'derived');
+      const masteryEvidence = isDerivedOnly ? [] : evidence;
 
       // #59/#60 第 2 条：消灭 OR 吸收——此前任一条历史 review 会永久压住后来的 mastered。
       // 现改为「最近一条有业务时间的证据说了算」，让后来真的掌握能翻案；
       // 全部无时间戳（旧数据/测试桩）时退回保守 OR 口径（行为不变）。
-      const hasReview = evidence.some((signal) => signal.status === 'review' || signal.stability === 'fragile');
-      const hasMastery = evidence.some((signal) => signal.status === 'mastered' || signal.stability === 'stable');
-      const hasLearning = evidence.some((signal) => signal.status === 'learning' || signal.stability === 'developing');
-      const latestTimed = evidence
+      const hasReview = masteryEvidence.some((signal) => signal.status === 'review' || signal.stability === 'fragile');
+      const hasMastery = masteryEvidence.some((signal) => signal.status === 'mastered' || signal.stability === 'stable');
+      const hasLearning = masteryEvidence.some((signal) => signal.status === 'learning' || signal.stability === 'developing');
+      const latestTimed = masteryEvidence
         .filter((signal) => typeof signal.seenAt === 'string' && signal.seenAt.length > 0)
         .sort((a, b) => String(b.seenAt).localeCompare(String(a.seenAt)))[0];
+
+      // #195（复核补修 · 跨会话去等权）：masteryScore 与 status 同源——都取「最近一条有业务时间的
+      // 证据」（同一个 latestTimed，含同一套排序与并列规则：业务时间 seenAt 字符串降序、稳定排序
+      // 同时间取先入者；绝不用墙钟 occurredAt）。此前 masteryScore 是 masteryEvidence 全量信号的
+      // 等权算术平均，同一概念在会话 1=0.4、会话 2=1.0 会得 0.7——与 status 的「最近一条说了算」
+      // 判据不一致（旧课稀释新课），正是本条要消除的失真。无任何带业务时间的证据时（旧数据/测试桩）
+      // 退回原等权均值，与上方 status 的 OR 回退口径配套，行为不变。
+      // 2026-11-09 口径统一：数值解析与概念图谱共用 services/learner/concept-mastery.ts 的单一实现
+      // （最新业务时间优先，全无时间戳退回等权均值），避免两页各算一套。
+      const masteryScore = resolveMasteryScore(
+        masteryEvidence.map((signal) => ({ masteryScore: signal.score, seenAt: signal.seenAt })),
+      );
+
       const statusFromLatest: 'pending' | 'learning' | 'mastered' | 'review' | null = latestTimed
         ? latestTimed.status === 'review' || latestTimed.stability === 'fragile'
           ? 'review'
@@ -809,15 +957,32 @@ export class LearnerKnowledgeMemoryService {
         relatedMilestoneIds,
         lastSeenAt,
       };
-      return { state, allSignals };
+      return { state, allSignals, isGhost: isDerivedOnly };
     });
 
-    const globalConceptStates: LearnerConceptState[] = conceptStateRows.map((row) => row.state);
+    // #195（复核补修）：幽灵概念（仅由 LLM 摘要支撑、无结构化接触证据）不对外暴露 state——
+    // globalConceptStates / conceptStates 均剔除，故 taskMastery 倒排、globalSignals 名单、
+    // 确定性概念台账都不会再出现它们（task 级 confidence 也因此不再把幽灵计入）。
+    const globalConceptStates: LearnerConceptState[] = conceptStateRows
+      .filter((row) => !row.isGhost)
+      .map((row) => row.state);
     // 当前路径视图：本路径产出的信号 + 用户级痕迹（pathId 缺省）参与过的概念；
     // 只在其它路径出现过的概念不进 currentPath（不影响 taskMastery / 前置缺口）。
     const conceptStates: LearnerConceptState[] = conceptStateRows
-      .filter((row) => row.allSignals.some((signal) => signal.pathId === undefined || signal.pathId === path.id))
+      .filter((row) => !row.isGhost && row.allSignals.some((signal) => signal.pathId === undefined || signal.pathId === path?.id))
       .map((row) => row.state);
+
+    // #195（复核补修）：幽灵名此前会经 currentPath.recentEvidence[].conceptKeys 漏出（摘要证据
+    // 条目原样携带 knowledgeItems 名），等于绕过上面 state 的过滤。按同一幽灵名单剔除：事件条目
+    // 本身保留（它确实发生过），只去掉幽灵概念名。归一化口径与 conceptKey 一致。
+    const ghostConceptKeys = new Set(
+      conceptStateRows.filter((row) => row.isGhost).map((row) => row.state.conceptKey)
+    );
+    const stripGhostConceptKeys = (conceptKeys: string[]): string[] =>
+      conceptKeys.filter((key) => {
+        const normalized = normalizeConceptKey(key);
+        return !normalized || !ghostConceptKeys.has(normalized);
+      });
 
     // 概念身份补齐（只读）：来源不含痕迹的信号（会话知识/摘要/任务标签）没有 conceptId，
     // 用注册表按归一化键解析一次（`createIfMissing:false` —— **读侧绝不创建概念**）。
@@ -907,7 +1072,7 @@ export class LearnerKnowledgeMemoryService {
       };
     });
 
-    const milestoneProgress = path.milestones.map((milestone) => {
+    const milestoneProgress = (path?.milestones ?? []).map((milestone) => {
       const tasks = taskMastery.filter((task) => task.milestoneId === milestone.id);
       const completedTasks = tasks.filter((task) => task.status === 'completed').length;
       const fragileCount = tasks.filter((task) => task.masteryState === 'fragile').length;
@@ -934,10 +1099,12 @@ export class LearnerKnowledgeMemoryService {
       };
     });
 
-    const currentMilestone = path.milestones.find((milestone) => milestone.id === input.milestoneId)
-      || path.milestones.find((milestone) => milestone.subtasks.some((task) => task.id === input.taskId))
-      || path.milestones.find((milestone) => milestone.status === 'active')
-      || path.milestones[0];
+    const currentMilestone = path
+      ? path.milestones.find((milestone) => milestone.id === input.milestoneId)
+        || path.milestones.find((milestone) => milestone.subtasks.some((task) => task.id === input.taskId))
+        || path.milestones.find((milestone) => milestone.status === 'active')
+        || path.milestones[0]
+      : undefined;
 
     const currentTask = currentMilestone?.subtasks.find((task) => task.id === input.taskId);
     const currentTaskOrder = currentTask ? currentMilestone.subtasks.findIndex((task) => task.id === currentTask.id) + 1 : undefined;
@@ -954,11 +1121,31 @@ export class LearnerKnowledgeMemoryService {
       .slice(-5);
 
     // #93：globalSignals 是用户级视角（跨路径并集），不用 currentPath 子集。
+    // #172-2 一致性过滤：mastered 与 fragile / blocked 名单必须互斥。确定性与模型蒸馏是两套
+    // 独立来源，同一概念身份可能被一侧判「已掌握」、另一侧判「高风险/阻塞」。已掌握是更强的正面
+    // 结论，这里在名单组装处统一排除（conceptId 优先、归一化名字兜底），避免下游路径规划同时看到
+    // 「可复用地基」与「阻塞地基」自相矛盾。台账行本身仍按 #156 的「最新证据取胜」口径保留。
     const masteredConcepts = globalConceptStates
       .filter((concept) => concept.stability === 'stable' || concept.status === 'mastered')
       .map((concept) => concept.label);
+    const masteredConceptIds = new Set(
+      globalConceptStates
+        .filter((concept) => concept.stability === 'stable' || concept.status === 'mastered')
+        .map((concept) => concept.conceptId)
+        .filter((id): id is string => !!id),
+    );
+    const masteredRefKeys = new Set<string>(
+      masteredConcepts.map((label) => normalizeConceptKey(label)).filter(Boolean) as string[],
+    );
+    /** 名单项/台账行以名字或概念键引用概念时，判断该身份是否已被判为 mastered。 */
+    const isMasteredRef = (ref: string | null | undefined, conceptId?: string | null): boolean => {
+      if (conceptId && masteredConceptIds.has(conceptId)) return true;
+      const normalized = normalizeConceptKey(ref);
+      return !!normalized && masteredRefKeys.has(normalized);
+    };
     const fragileConcepts = globalConceptStates
       .filter((concept) => concept.stability === 'fragile' || concept.status === 'review')
+      .filter((concept) => !isMasteredRef(concept.label, concept.conceptId))
       .map((concept) => concept.label);
     // 卡点两档（2026-10-15 P0-2 F3/F4）：<0.55 = 卡点（名单/文案用）；<0.3 = 高严重度卡点
     //（加速/压缩这类"减法"动作的判据用——刚学完的概念天然 <0.55，只挡真没学会的）。
@@ -982,12 +1169,14 @@ export class LearnerKnowledgeMemoryService {
     // 旧口径算的是"**当前概念自己**没掌握"，那不是缺口——缺口是"**当前任务依赖的上游前置**没掌握"。
     // 新口径：当前任务的 canonical → 沿 prerequisite 边向上游闭包 → 取其中未掌握者。
     // **图缺失/无上游时回落旧口径**，保证未回填路径行为与改造前逐字一致。
-    const graphGaps = await buildUpstreamPrerequisiteGaps({
-      userId: input.userId,
-      pathId: path.id,
-      currentTask: currentTask ?? null,
-      conceptStates,
-    });
+    const graphGaps = path
+      ? await buildUpstreamPrerequisiteGaps({
+          userId: input.userId,
+          pathId: path.id,
+          currentTask: currentTask ?? null,
+          conceptStates,
+        })
+      : [];
     const prerequisiteGaps = graphGaps.length > 0
       ? graphGaps
       : currentTaskConcepts
@@ -1009,41 +1198,44 @@ export class LearnerKnowledgeMemoryService {
           source: 'fallback' as const,
         }));
 
-    const currentPath: LearnerPathKnowledgeMemory = {
-      learningPathId: path.id,
-      pathTitle: path.title || path.name || '未命名路径',
-      pathSummary: null,
-      // P1.6 落后触发器的时间判据输入：外部截止（L1 硬锚）与路径起点（时间进度分母）。
-      // 无 deadline 的路径 deadline=null，判据整体不启用（行为与原先一致）。
-      deadline: path.deadline ? new Date(path.deadline).toISOString() : null,
-      startedAt: path.createdAt ? new Date(path.createdAt).toISOString() : null,
-      progress: {
-        totalMilestones: path.milestones.length,
-        completedMilestones: milestoneProgress.filter((milestone) => milestone.completedTasks === milestone.totalTasks && milestone.totalTasks > 0).length,
-        totalTasks: taskMastery.length,
-        completedTasks: taskMastery.filter((task) => task.status === 'completed').length,
-      },
-      currentPosition: {
-        milestoneId: currentMilestone?.id || '',
-        stageNumber: currentMilestone?.stageNumber || 1,
-        milestoneTitle: currentMilestone?.title || '当前阶段',
-        milestoneGoal: currentMilestone?.goal,
-        taskId: currentTask?.id,
-        taskTitle: currentTask?.title,
-        taskOrder: currentTaskOrder || 1,
-        totalTasksInMilestone: currentMilestone?.subtasks.length || 0,
-        completedTasksInMilestone: currentMilestone?.subtasks.filter((task) => task.status === 'completed').length || 0,
-      },
-      milestoneProgress,
-      taskMastery,
-      conceptStates,
-      prerequisiteGaps,
-      recentEvidence: Array.from(new Map(
-        recentEvidence
-          .sort((a, b) => new Date(b.happenedAt).getTime() - new Date(a.happenedAt).getTime())
-          .map((item) => [`${item.type}:${item.sessionId || item.taskId || item.happenedAt}`, item])
-      ).values()).slice(0, 20),
-    };
+    const currentPath: LearnerPathKnowledgeMemory | undefined = path
+      ? {
+          learningPathId: path.id,
+          pathTitle: path.title || path.name || '未命名路径',
+          pathSummary: null,
+          // P1.6 落后触发器的时间判据输入：外部截止（L1 硬锚）与路径起点（时间进度分母）。
+          // 无 deadline 的路径 deadline=null，判据整体不启用（行为与原先一致）。
+          deadline: path.deadline ? new Date(path.deadline).toISOString() : null,
+          startedAt: path.createdAt ? new Date(path.createdAt).toISOString() : null,
+          progress: {
+            totalMilestones: path.milestones.length,
+            completedMilestones: milestoneProgress.filter((milestone) => milestone.completedTasks === milestone.totalTasks && milestone.totalTasks > 0).length,
+            totalTasks: taskMastery.length,
+            completedTasks: taskMastery.filter((task) => task.status === 'completed').length,
+          },
+          currentPosition: {
+            milestoneId: currentMilestone?.id || '',
+            stageNumber: currentMilestone?.stageNumber || 1,
+            milestoneTitle: currentMilestone?.title || '当前阶段',
+            milestoneGoal: currentMilestone?.goal,
+            taskId: currentTask?.id,
+            taskTitle: currentTask?.title,
+            taskOrder: currentTaskOrder || 1,
+            totalTasksInMilestone: currentMilestone?.subtasks.length || 0,
+            completedTasksInMilestone: currentMilestone?.subtasks.filter((task) => task.status === 'completed').length || 0,
+          },
+          milestoneProgress,
+          taskMastery,
+          conceptStates,
+          prerequisiteGaps,
+          recentEvidence: Array.from(new Map(
+            recentEvidence
+              .map((item) => ({ ...item, conceptKeys: stripGhostConceptKeys(item.conceptKeys) }))
+              .sort((a, b) => new Date(b.happenedAt).getTime() - new Date(a.happenedAt).getTime())
+              .map((item) => [`${item.type}:${item.sessionId || item.taskId || item.happenedAt}`, item])
+          ).values()).slice(0, 20),
+        }
+      : undefined;
 
     // 概念 → 出现过的路径（globalBackground 是用户级台账，sourcePaths 必须如实跨路径）。
     const pathIdsByConceptKey = new Map<string, string[]>();
@@ -1056,13 +1248,16 @@ export class LearnerKnowledgeMemoryService {
 
     const deterministicConceptLedger: LearnerBackgroundConceptLedgerItem[] = globalConceptStates
       .map((concept) => {
-        const familiarity: LearnerBackgroundConceptLedgerItem['familiarity'] = concept.status === 'mastered'
+        // #172-2：familiarity 与 misconceptionRisk 必须同源（都只认 stability），否则同一行会出现
+        // 「understood + misconceptionRisk=high」（issue 实测 136 条投影中 116 条）。
+        // stable→stable / developing|fragile→practiced / 其它→seen；risk: fragile→high / developing→medium。
+        const familiarity: LearnerBackgroundConceptLedgerItem['familiarity'] = concept.stability === 'stable'
           ? 'stable'
-          : concept.status === 'review'
-            ? 'understood'
-            : concept.status === 'learning'
-              ? 'practiced'
-              : 'seen';
+          : concept.stability === 'developing' || concept.stability === 'fragile'
+            ? 'practiced'
+            : 'seen';
+        // 迁移就绪三档是**工程启发式映射**，不是标准化测量（2026-11-09 核查）：学习科学里没有
+        // 「可迁移/待巩固/不宜迁移」的公认分类，对外应理解为「就绪度粗分」而非效度已验的测量。
         const transferReadiness: LearnerBackgroundConceptLedgerItem['transferReadiness'] = concept.stability === 'stable'
           ? 'high'
           : concept.stability === 'developing'
@@ -1070,40 +1265,77 @@ export class LearnerKnowledgeMemoryService {
             : 'low';
         const misconceptionRisk: LearnerBackgroundConceptLedgerItem['misconceptionRisk'] = concept.stability === 'fragile'
           ? 'high'
-          : concept.status === 'learning'
+          : concept.stability === 'developing'
             ? 'medium'
             : 'low';
         // 证据计数走倒排索引（label 与 conceptKey 命中的下标并集去重，等价于旧的
-        // globalRecentEvidence.filter(item => conceptKeys.includes(label) || includes(key)).length）
-        const evidenceCount = new Set<number>([
-          ...(evidenceIndicesByKey.get(concept.label) ?? []),
-          ...(evidenceIndicesByKey.get(concept.conceptKey) ?? []),
-        ]).size;
+        // globalRecentEvidence.filter(item => conceptKeys.includes(label) || includes(key)).length）；
+        // 2026-11-09 起并入蒸馏/对话提取证据行（只有蒸馏证据的概念不再恒显 ev=0）。
+        const evidenceCount = ledgerEvidenceCount([concept.label, concept.conceptKey]);
         return {
           conceptKey: concept.conceptKey,
           label: concept.label,
           familiarity,
           transferReadiness,
           misconceptionRisk,
+          /* 数值掌握度（2026-11-09 补）：三档 familiarity 看不出「0.9 掉到 0.35」的退化。
+             `concept.masteryScore` 已由 resolveMasteryScore 按业务时间取最新信号算出（见上游
+             #195），此处只是把它带出去，不再另算一份口径。 */
+          masteryScore: clamp(concept.masteryScore, 0, 1),
           firstSeenAt: concept.lastSeenAt,
           lastSeenAt: concept.lastSeenAt,
           sourcePaths: pathIdsByConceptKey.get(concept.conceptKey)?.length
             ? pathIdsByConceptKey.get(concept.conceptKey) as string[]
-            : [path.id],
+            : path ? [path.id] : [],
           sourceTasks: concept.relatedTaskIds,
           evidenceCount,
         };
-      })
-      .slice(0, 40);
+      });
+    // issue #156：此处旧实现 `.slice(0, 40)` 在**合并前**截断确定性台账，模型独有概念只能吃
+    // 60 条里剩余的 20 个额度，且排序是任务插入序而非证据新旧。改为不截断，交给合并后的
+    // 「按 lastSeenAt 排序 + slice(0,60)」（见下方 conceptLedger），口径统一为「越新越优先」。
 
-    const deterministicConfusions: LearnerRecurringConfusion[] = fragileConcepts.slice(0, 12).map((label) => ({
-      conceptKey: label,
-      label,
-      pattern: '近期多次出现 review / fragile 信号，后续新目标与新路径中应视为不稳定前置。',
-      confidence: 0.7,
-      count: struggleCountByKey.get(label) || 1,
-      lastSeenAt: globalConceptStates.find((concept) => concept.label === label)?.lastSeenAt,
-    }));
+    // #172-3：单次困惑不是「反复困惑」。旧口径用 `|| 1` 把 0/1 次兜底成 1，凭空造出「多次」；
+    // 现只保留真实出现 >= RECURRING_CONFUSION_MIN_COUNT 次的概念，count 取真实值。
+    //
+    // 计数源（复核补修）：两条通道有重叠——会话知识看板既进 conceptSignals，也经 pushEvidence
+    // 进 globalRecentEvidence；且同一 canonical 的不同写法（概念丙/概念丁）必须合起来算一次反复。
+    // 故按**概念身份**聚合 conceptSignals 的 fragile/review 条数，与证据侧 struggle 次数取 max
+    // （不是相加，避免同一件事数两遍）。仍是「≥2 次才叫反复、1 次不生成」，只去掉 `|| 1` 兜底。
+    const identityOfRow = (row: { state: { conceptId?: string; conceptKey: string; label: string } }): string =>
+      row.state.conceptId ?? row.state.conceptKey ?? row.state.label;
+    const confusionCountByIdentity = new Map<string, number>();
+    const identityByLabel = new Map<string, string>();
+    for (const row of conceptStateRows) {
+      const identity = identityOfRow(row);
+      identityByLabel.set(row.state.label, identity);
+      identityByLabel.set(row.state.conceptKey, identity);
+      const confusionSignals = row.allSignals.filter(
+        (signal) => signal.stability === 'fragile' || signal.status === 'review'
+      );
+      if (confusionSignals.length === 0) continue;
+      confusionCountByIdentity.set(identity, (confusionCountByIdentity.get(identity) ?? 0) + confusionSignals.length);
+    }
+    const deterministicConfusions: LearnerRecurringConfusion[] = fragileConcepts
+      .map((label) => ({
+        label,
+        // 两通道有重叠（会话看板同进 conceptSignals 与 globalRecentEvidence），故取 max 而非相加或单选：
+        // ① 概念信号侧（痕迹 + 看板）条数，② 证据行 struggle 次数；哪个更能代表「真实发生了几次」取哪个。
+        count: Math.max(
+          confusionCountByIdentity.get(identityByLabel.get(label) ?? label) ?? 0,
+          struggleCountByKey.get(label) ?? 0,
+        ),
+      }))
+      .filter(({ count }) => count >= RECURRING_CONFUSION_MIN_COUNT)
+      .slice(0, 12)
+      .map(({ label, count }) => ({
+        conceptKey: label,
+        label,
+        pattern: '近期多次出现 review / fragile 信号，后续新目标与新路径中应视为不稳定前置。',
+        confidence: 0.7,
+        count,
+        lastSeenAt: globalConceptStates.find((concept) => concept.label === label)?.lastSeenAt,
+      }));
 
     const deterministicTransferSignals: LearnerTransferSignal[] = deterministicConceptLedger
       .filter((concept) => concept.transferReadiness !== 'low')
@@ -1132,44 +1364,129 @@ export class LearnerKnowledgeMemoryService {
       ?? (item?.label ? conceptIdByLedgerKey.get(item.label) : undefined);
 
     // 台账聚合：conceptId 优先归并（同一 canonical 的痕迹键/任务标签键收敛为一行），名字键兜底
+    const seenMs = (value?: string): number | null => {
+      if (!value) return null;
+      const ms = new Date(value).getTime();
+      return Number.isFinite(ms) ? ms : null;
+    };
     const ledgerMap = new Map<string, LearnerBackgroundConceptLedgerItem>();
+    // issue #156（复核补修）：`familiarity/transferReadiness/misconceptionRisk` 必须由**证据时间最新**
+    // 的那一行决定，而不是数组位置。旧合并体把 deterministicConceptLedger 恒排在前、模型行恒在后 →
+    // 模型行无条件覆盖确定性行，于是「更新的 session knowledgeState / memory_trace」反被「更旧的
+    // 模型蒸馏行」改写（新课 mastered→stable 被旧课 seen 覆盖，lastSeenAt 却取新课 → 自相矛盾）。
+    // 组内按 lastSeenAt 选赢家（无任何时间戳时退回数组末位 = 既有「模型行优先」口径），
+    // firstSeenAt 取最早、lastSeenAt 取最晚；比较的 lastSeenAt 全部是**业务时间**（确定性行=
+    // session.endTime/trace.lastSeenAt、模型行=所属会话 endTime），同源可比较，不含墙钟。
+    // label/conceptKey 仍走原有身份归并口径（P1-16 契约：
+    // 合并后保留模型 slug 键），集合字段两侧求并、evidenceCount 取大。
+    const enrichedLedgerAsc = [...enrichedLedger].sort(
+      (a, b) => (seenMs(a.lastSeenAt) ?? Number.NEGATIVE_INFINITY) - (seenMs(b.lastSeenAt) ?? Number.NEGATIVE_INFINITY),
+    );
     for (const [key, group] of groupItemsByConceptIdentity<LearnerBackgroundConceptLedgerItem>(
-      [...deterministicConceptLedger, ...enrichedLedger],
+      [...deterministicConceptLedger, ...enrichedLedgerAsc],
       identityOfLedgerItem,
     )) {
       let merged = group[0];
+      let firstSeenAt = group[0].firstSeenAt;
+      let lastSeenAt = group[0].lastSeenAt;
       for (let i = 1; i < group.length; i += 1) {
         const item = group[i];
-        // P1-16 既有合并体：后者覆盖标量、集合字段求并（聚合语义与改造前逐字一致）
         merged = {
           ...merged,
           ...item,
           sourcePaths: dedupe([...(merged.sourcePaths || []), ...(item.sourcePaths || [])]),
           sourceTasks: dedupe([...(merged.sourceTasks || []), ...(item.sourceTasks || [])]),
-          evidenceCount: Math.max(merged.evidenceCount || 0, item.evidenceCount || 0)
+          // evidenceCount 不在此合并：组内所有行归并完后由下方的可复算计数统一覆盖
+          // （旧口径 Math.max 会让模型自报值抬高读数）。
         };
+        const curFirst = seenMs(firstSeenAt);
+        const itemFirst = seenMs(item.firstSeenAt);
+        if (itemFirst !== null && (curFirst === null || itemFirst < curFirst)) firstSeenAt = item.firstSeenAt;
+        const curLast = seenMs(lastSeenAt);
+        const itemLast = seenMs(item.lastSeenAt);
+        if (itemLast !== null && (curLast === null || itemLast > curLast)) lastSeenAt = item.lastSeenAt;
       }
+      // 赢家：时间戳最大者；并列取数组靠后者（保持「无时间戳时模型行优先」的既有口径）。
+      let winner = group[group.length - 1];
+      for (const item of group) {
+        const winnerLast = seenMs(winner.lastSeenAt);
+        const itemLast = seenMs(item.lastSeenAt);
+        if (itemLast !== null && (winnerLast === null || itemLast >= winnerLast)) winner = item;
+      }
+      // 证据条数**只认可复算值**（2026-11-09 运营字段真值核查）：
+      // 模型自报的 evidenceCount 在提示词里只有一个结构占位（`"evidenceCount": 0`），
+      // 没有任何计数规则；实测同一输入连跑 3 次对同一概念给出 3/2/17，且旧合并口径
+      // `Math.max(确定性, 模型)` 让它只能抬高、不能压低。改为：把组内所有身份键
+      // （slug / 中文 label）在证据倒排索引里的命中行求并集，用**真实证据行数**覆盖。
+      // 模型独有概念（输入里没有对应证据行）因此得 0——没有可核对证据就是 0。
+      const groupKeys = new Set<string>();
+      for (const item of group) {
+        if (item.conceptKey) groupKeys.add(item.conceptKey);
+        if (item.label) groupKeys.add(item.label);
+      }
+      merged = {
+        ...merged,
+        familiarity: winner.familiarity ?? merged.familiarity,
+        transferReadiness: winner.transferReadiness ?? merged.transferReadiness,
+        misconceptionRisk: winner.misconceptionRisk ?? merged.misconceptionRisk,
+        evidenceCount: ledgerEvidenceCount(groupKeys),
+        /* 数值掌握度只认确定性通道的测量值（2026-11-09 补）：组内有数就按业务时间取最新那条，
+           组内一个数都没有（纯模型行）→ 字段缺省而不是 0，避免把「没测到」读成「测出来是 0」。 */
+        masteryScore: (() => {
+          const measured = group.filter((item) => Number.isFinite(Number(item.masteryScore)));
+          if (!measured.length) return undefined;
+          return resolveMasteryScore(measured.map((item) => ({
+            masteryScore: Number(item.masteryScore),
+            seenAt: item.lastSeenAt,
+          })));
+        })(),
+        firstSeenAt,
+        lastSeenAt,
+      };
       ledgerMap.set(key, merged);
     }
-    const conceptLedger = Array.from(ledgerMap.values()).slice(0, 60);
+    // issue #156：确定性台账此前在合并前就 slice(0,40)，模型独有概念只能吃 60 条里剩余的额度，
+    // 且排序是任务插入序而非证据新旧。改为先合并、再按 lastSeenAt（越新越靠前）排序截断到 60
+    // ——注意：无 lastSeenAt 的行排在最末，>60 时可能被挤出（旧实现靠 slice(0,40) 保确定性行）。
+    const conceptLedger = Array.from(ledgerMap.values())
+      .sort((a, b) => (seenMs(b.lastSeenAt) ?? Number.NEGATIVE_INFINITY) - (seenMs(a.lastSeenAt) ?? Number.NEGATIVE_INFINITY))
+      .slice(0, 60);
 
-    // 反复误解聚合：与台账同口径（conceptId 优先归并，名字键兜底）
+    // 反复误解聚合：与台账同口径（conceptId 优先归并，名字键兜底；pattern 同样取最新证据）
     const confusionMap = new Map<string, LearnerRecurringConfusion>();
+    const enrichedConfusionsAsc = [...enrichedConfusions].sort(
+      (a, b) => (seenMs(a.lastSeenAt) ?? Number.NEGATIVE_INFINITY) - (seenMs(b.lastSeenAt) ?? Number.NEGATIVE_INFINITY),
+    );
     for (const [key, group] of groupItemsByConceptIdentity<LearnerRecurringConfusion>(
-      [...deterministicConfusions, ...enrichedConfusions],
+      [...deterministicConfusions, ...enrichedConfusionsAsc],
       identityOfLedgerItem,
     )) {
       let merged = group[0];
+      let lastSeenAt = group[0].lastSeenAt;
       for (let i = 1; i < group.length; i += 1) {
         const item = group[i];
         merged = {
           ...merged,
           ...item,
           confidence: Math.max(merged.confidence || 0, item.confidence || 0),
-          count: Math.max(merged.count || 0, item.count || 0)
+          count: Math.max(merged.count || 0, item.count || 0),
         };
+        const curLast = seenMs(lastSeenAt);
+        const itemLast = seenMs(item.lastSeenAt);
+        if (itemLast !== null && (curLast === null || itemLast > curLast)) lastSeenAt = item.lastSeenAt;
       }
-      confusionMap.set(key, merged);
+      // issue #156：pattern 同样取最新证据、lastSeenAt 取 max，别停在旧课。
+      let winner = group[group.length - 1];
+      for (const item of group) {
+        const winnerLast = seenMs(winner.lastSeenAt);
+        const itemLast = seenMs(item.lastSeenAt);
+        if (itemLast !== null && (winnerLast === null || itemLast >= winnerLast)) winner = item;
+      }
+      confusionMap.set(key, {
+        ...merged,
+        pattern: winner.pattern ?? merged.pattern,
+        lastSeenAt,
+      });
     }
     const recurringConfusions = Array.from(confusionMap.values()).slice(0, 20);
 
@@ -1191,6 +1508,22 @@ export class LearnerKnowledgeMemoryService {
     }
     const transferSignals = Array.from(transferMap.values()).slice(0, 30);
 
+    // #172-2：blockedFoundations 是「已掌握 vs 阻塞」的第二处双源矛盾入口——它把台账里
+    // misconceptionRisk='high' 的行与模型自带 blockedFoundations 自由文本名单并集。台账行可能由
+    // 模型行取胜（familiarity='stable' 却仍带 high risk），模型名单也可能把已掌握概念写回来。
+    // 与上方 fragileConcepts 同口径过滤：先补齐「台账自认已掌握」的键，再按 mastered 身份剔除。
+    for (const row of conceptLedger) {
+      if (row.familiarity !== 'stable') continue;
+      for (const ref of [row.label, row.conceptKey]) {
+        const normalized = normalizeConceptKey(ref);
+        if (normalized) masteredRefKeys.add(normalized);
+      }
+    }
+    const blockedFoundations = dedupe([
+      ...conceptLedger.filter((concept) => concept.misconceptionRisk === 'high').map((concept) => concept.label),
+      ...enrichedBlockedFoundations
+    ]).filter((label) => !isMasteredRef(label, conceptIdByLedgerKey.get(label))).slice(0, 20);
+
     const globalBackground: LearnerGlobalBackgroundKnowledge = {
       conceptLedger,
       recurringConfusions,
@@ -1198,15 +1531,13 @@ export class LearnerKnowledgeMemoryService {
         ...conceptLedger.filter((concept) => concept.transferReadiness === 'high').map((concept) => concept.label),
         ...enrichedReusableFoundations
       ]).slice(0, 20),
-      blockedFoundations: dedupe([
-        ...conceptLedger.filter((concept) => concept.misconceptionRisk === 'high').map((concept) => concept.label),
-        ...enrichedBlockedFoundations
-      ]).slice(0, 20),
+      blockedFoundations,
       transferSignals,
+      ...(enrichedKnowledgeStateSummary ? { knowledgeStateSummary: enrichedKnowledgeStateSummary } : {}),
     };
 
     return {
-      currentPath,
+      ...(currentPath ? { currentPath } : {}),
       globalSignals: {
         masteredConcepts,
         fragileConcepts,

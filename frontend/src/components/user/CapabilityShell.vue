@@ -3,24 +3,32 @@
     <V2Nav />
 
     <main class="uc__main">
-      <!-- 页头=原型 2026-09-30 版整宽三分段器（wf-seg 同构），替代旧 kicker+h1+药丸 tabs -->
-      <nav class="uc__seg" aria-label="个人中心分区">
-        <router-link
-          v-for="t in tabs"
-          :key="t.to"
-          :to="t.to"
-          class="uc__seg__btn"
-          :class="{ 'uc__seg__btn--on': isActive(t) }"
-          :aria-current="ariaCurrent(t)"
-        >
-          {{ t.label }}
-        </router-link>
-      </nav>
+      <!-- 页头分段器（原型 wf-seg 同构）。2026-11-06 走查：整宽四等分把 2 个字的 tab
+           拉成 ~270px 宽的「巨型跑道」，改 fit-content 左对齐（36 高 / 8px 圆角）；
+           右侧插槽放页面级总计量（学习历史页的「累计 N 天 · N 次 · N 分钟」），
+           同行排布不再单独占一行。 -->
+      <div class="uc__segrow">
+        <nav class="uc__seg" aria-label="个人中心分区">
+          <router-link
+            v-for="t in tabs"
+            :key="t.to"
+            :to="t.to"
+            class="uc__seg__btn"
+            :class="{ 'uc__seg__btn--on': isActive(t) }"
+            :aria-current="ariaCurrent(t)"
+          >
+            {{ t.label }}
+          </router-link>
+        </nav>
+        <div v-if="$slots['seg-right']" class="uc__seg-right">
+          <slot name="seg-right" />
+        </div>
+      </div>
 
-      <!-- 分段器只覆盖三个能力页；深页（设置/调用日志）保留可见标题与动作区。
-           走查 2026-10-08 #52：深页不再出现「三段全无选中」——按 owns 归属到父级分区，
-           「账户」段保持选中胶囊（aria-current="true" 表示所属分区，不是当前页本身；
-           真正的当前页是下面这个可见 h1）。 -->
+      <!-- 分段器只覆盖四个能力页；深页（调用日志）保留可见标题与动作区。
+           走查 2026-11-01 P20：深页不再点亮父段——此前的 owns 归属会让
+           /user/agent-logs 高亮错停在「设置」上；激活判定改为与当前路由精确对应，
+           深页的当前页由下面这个可见 h1 承担。 -->
       <div v-if="!onCapabilityTab" class="uc__deeptitle">
         <h1>{{ title }}</h1>
         <p v-if="description">{{ description }}</p>
@@ -52,31 +60,27 @@ const route = useRoute()
 /* 2026-09-27 撤入口留能力：「API 接入」「调用日志」从学习者可见的 tab 栏撤下
    （面向开发者/排查的面板，全量库实测零使用；后端路由/网关分支/数据表全部保留，
    需要时直达 URL 仍可用）。未来做开发者/团队版再放出。 */
-/* owns = 该段归属的深页（自身路径之外）：
-   走查 2026-10-08 #52 —— /user/settings（设置）与 /user/agent-logs（调用日志）
-   都是「账户」分区的下一层，单独列出才能既选中父段、又不让 /user/account 前缀
-   把两者继续漏掉（原来三个 match 只覆盖能力页，深页进页面即三段全无选中）。 */
+/* 激活判定与当前路由精确对应（走查 2026-11-01 P20）：此前是 startsWith 前缀匹配 +
+   owns 归属（2026-10-08 #52 的口径），/user/agent-logs（调用日志）会点亮「设置」段
+   ——高亮错停在上一站。现在每个 tab 只对准自己的路径段，深页（/user/agent-logs）
+   四段全不选中，可见页名由 uc__deeptitle 的 h1 承担。 */
 const tabs = [
-  { to: '/user/account', label: '账户', match: ['/user/account'], owns: [] },
-  { to: '/user/achievements', label: '成就', match: ['/user/achievements'], owns: [] },
-  { to: '/user/learning-history', label: '学习历史', match: ['/user/learning-history'], owns: [] },
-  /* 设置不再「无 tab 可回」：作为一级分段，调用日志归属其下 */
-  { to: '/user/settings', label: '设置', match: ['/user/settings'], owns: ['/user/agent-logs'] }
+  { to: '/user/account', label: '账户' },
+  { to: '/user/achievements', label: '成就' },
+  { to: '/user/learning-history', label: '学习历史' },
+  { to: '/user/settings', label: '设置' }
 ]
 
-function isActive(t: { match: string[]; owns: string[] }) {
-  return [...t.match, ...t.owns].some((m) => route.path.startsWith(m))
+function isActive(t: { to: string }) {
+  return route.path === t.to
 }
 
-/* 当前页正好是该段自身路径 → 'page'；只是归属该分区的深页 → 'true'（所属分区）；
-   都不属于 → 不出 aria-current（与原先 undefined 一致） */
-function ariaCurrent(t: { match: string[]; owns: string[] }): 'page' | 'true' | undefined {
-  if (t.match.some((m) => route.path.startsWith(m))) return 'page'
-  if (t.owns.some((m) => route.path.startsWith(m))) return 'true'
-  return undefined
+/* 当前页正好是该段自身路径 → 'page'；深页不点亮任何段 → 不出 aria-current */
+function ariaCurrent(t: { to: string }): 'page' | undefined {
+  return isActive(t) ? 'page' : undefined
 }
 
-const onCapabilityTab = computed(() => tabs.some((t) => t.match.some((m) => route.path.startsWith(m))))
+const onCapabilityTab = computed(() => tabs.some((t) => route.path === t.to))
 </script>
 
 <style scoped>
@@ -90,7 +94,12 @@ const onCapabilityTab = computed(() => tabs.some((t) => t.match.some((m) => rout
 
 .uc.v2-page > main.uc__main {
   flex: 1;
-  width: min(1080px, calc(100% - 40px));
+  /* 与全站标准看板同一档（2026-11-07 全站巡检 准则1 + DPI 缩放专项）：
+     此前 1080 封顶、1680 才拓 1360，1536×864（1080p 开 125%）下只占 70%，
+     1280 下 84%。改成连续档：笔记本用满 92vw，大屏封顶 --vp-container
+     （1360 基准；≥2000 抬 1520、≥2800 抬 1680。定义在 v2.css，全局加载，
+     本页不重复写数字——上限只改一处）。 */
+  width: min(92vw, var(--vp-container));
   margin: 0 auto;
   padding: 22px 0 40px;
   display: grid;
@@ -98,34 +107,48 @@ const onCapabilityTab = computed(() => tabs.some((t) => t.match.some((m) => rout
   align-content: start;
 }
 
-/* 与 v2 页面一致：≥1680px 加宽 */
-@media (min-width: 1680px) {
-  .uc.v2-page > main.uc__main {
-    width: min(1360px, calc(100% - 40px));
-  }
-}
-
-/* ===== 页头分段器（原型 wf-seg）：整宽三分格 + 白色激活胶囊 ===== */
-.uc__seg {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 4px;
-  padding: 4px;
-  background: color-mix(in srgb, var(--line) 45%, transparent);
-  border-radius: var(--mk-radius-pill);
-}
-
-.uc__seg__btn {
-  min-height: 40px;
+/* ===== 页头分段器：与顶部主导航同一中轴（2026-11-08 走查） =====
+   此前 fit-content 左对齐：tab 栏只有 ~260px 宽、孤零零贴在左边，右边空 1000px；
+   而全站顶部 5 个主导航是水平居中的——上下两条轴明显错开，没页面大标题压阵时
+   头重脚轻。改居中 + 放宽单个 tab 内距，让两者中轴重合、上下呼应。
+   seg-right 插槽存在时仍靠右（学习历史页的总计量），此时整行回到 space-between。 */
+.uc__segrow {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--mk-radius-pill);
-  font-size: 13.5px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.uc__segrow:has(.uc__seg-right) { justify-content: space-between; }
+.uc__seg {
+  display: inline-grid;
+  grid-template-columns: repeat(4, minmax(0, auto));
+  gap: 3px;
+  padding: 3px;
+  background: color-mix(in srgb, var(--line) 45%, transparent);
+  border-radius: 8px;
+}
+
+.uc__seg__btn {
+  min-height: 34px;
+  padding: 6px 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--muted);
   text-decoration: none;
   transition: background 0.15s ease, color 0.15s ease;
+}
+.uc__seg-right {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-left: auto;
+  min-width: 0;
 }
 
 .uc__seg__btn:hover { color: var(--ink); }
@@ -257,16 +280,16 @@ const onCapabilityTab = computed(() => tabs.some((t) => t.match.some((m) => rout
     line-height: 1.55;
   }
 
-  .uc__tab {
-    /* 3 个分段（账户/成就/学习历史）在 390 下自然排成一行（撤掉 API 接入/调用日志后
-       宽度更宽松）；高度补到 36（mobile:spec 的 lt36 门禁）：只加最小高度与居中，
-       横向 padding 不动。 */
-    padding: 7px 10px;
-    min-height: 36px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+  /* 分段器窄屏：fit-content 本身就放得下 4 个 2 字 tab（~270px），内衬收一档即可 */
+  .uc__seg__btn {
+    min-height: 34px;
+    padding: 0 14px;
     font-size: 12.5px;
+  }
+
+  .uc__seg-right {
+    width: 100%;
+    margin-left: 0;
   }
 }
 </style>

@@ -1,7 +1,7 @@
 ﻿import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router';
 import { nextTick } from 'vue';
 import { useUserStore } from '../stores/user';
-import { hasAdminSession } from '../api/adminApi';
+import { adminAuthApi, clearAdminSession, hasAdminSession } from '../api/adminApi';
 import { getProjectionToken } from '../utils/projection';
 import { applyDocumentTheme, readTheme } from '../utils/theme';
 
@@ -168,39 +168,10 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/DeveloperDocs.vue'),
     meta: { title: '开发者文档' }
   },
-  // ===== /v2 已上线：旧地址全部重定向到正式路径 =====
-  {
-    path: '/v2',
-    redirect: '/dashboard'
-  },
-  {
-    path: '/v2/dashboard',
-    redirect: '/dashboard'
-  },
-  {
-    path: '/v2/goal-conversation/:conversationId?',
-    redirect: (to) => ({ path: `/goal-conversation/${to.params.conversationId || ''}`, query: to.query })
-  },
-  {
-    path: '/v2/learning-paths',
-    redirect: (to) => ({ path: '/learning-paths', query: to.query })
-  },
-  {
-    path: '/v2/learning-path/:id',
-    redirect: (to) => ({ path: `/learning-path/${to.params.id}`, query: to.query })
-  },
-  {
-    path: '/v2/learn/:taskId',
-    redirect: (to) => ({ path: `/learn/${to.params.taskId}`, query: to.query })
-  },
-  {
-    path: '/v2/learning-state',
-    redirect: '/learning-state'
-  },
-  {
-    path: '/v2/achievements',
-    redirect: '/user/achievements'
-  },
+  // ===== 旧 /v2/* 预览地址已于 2026-11-01 移除（用户拍板）=====
+  // 新 UI 上线后这些地址只是重定向，长期无人引用；连带清理见：巡检脚本
+  // scripts/v4-ui-audit.mjs 的 v2-* 条目、README 的 /v2 说明。
+  // 另注意：组件名与目录仍沿用 views/v2/ + V2* 前缀（只改了 URL，没改命名）。
   {
     path: '/admin/login',
     name: 'AdminLogin',
@@ -244,6 +215,11 @@ const routes: RouteRecordRaw[] = [
     // 旧路径：/admin/users → /admin/people
     path: '/admin/users',
     redirect: '/admin/people'
+  },
+  {
+    // /admin/prompt-eval → /admin/skills
+    path: '/admin/prompt-eval',
+    redirect: (to) => ({ path: '/admin/skills', query: stripTab(to) })
   },
   {
     path: '/admin/learner-center',
@@ -324,8 +300,27 @@ const routes: RouteRecordRaw[] = [
     redirect: (to) => ({ path: '/admin/virtual-learners', query: to.query })
   },
   {
+    // /admin/models → /admin/system-settings（落到首页签「模型与接入」）
     path: '/admin/models',
-    redirect: '/admin/api-config'
+    redirect: (to) => ({ path: '/admin/system-settings', query: { ...to.query, tab: 'api' } })
+  },
+  {
+    // 旧的模型与接入独立页：2026-11-01 起它是「系统设置」的首屏页签。
+    // 旧键的改投全部收在这一处（原先 ApiConfig.vue 里还有一份，两处各写一遍）：
+    //   addons      → 早已拆成独立页 /admin/addons
+    //   virtual     → 虚拟学习者（旧实现还会经 components 层再兜一次）
+    //   security    → 本页「访问与注册」页签（2026-10-27 的落点，保持不变）
+    //   其余旧键     → 首页签「模型与接入」（model/registry/connection/overview/runtime/routing 等）
+    path: '/admin/api-config',
+    redirect: (to) => {
+      const tab = typeof to.query.tab === 'string' ? to.query.tab : ''
+      const rest = { ...to.query }
+      delete rest.tab
+      if (tab === 'addons') return { path: '/admin/addons', query: rest }
+      if (tab === 'virtual') return { path: '/admin/virtual-learners', query: rest }
+      if (tab === 'security') return { path: '/admin/system-settings', query: { ...rest, tab: 'access' } }
+      return { path: '/admin/system-settings', query: { ...rest, tab: 'api' } }
+    }
   },
   {
     // 外挂能力 2026-10-19 从「模型与接入」宿主拆回独立页（用户拍板：「拆出来，作为单页，
@@ -340,18 +335,17 @@ const routes: RouteRecordRaw[] = [
     redirect: '/admin/orchestrator'
   },
   {
-    // 合并后旧路径兼容：运维工具/数据导出/会话安全 → 运营中心对应 tab
-    // （2026-10-16 用户拍板「系统工具」场景解散并入运营中心；深链带 tab 由 OpsHub 恢复子视图）
+    // 旧「系统工具」三条路径 → 系统设置对应页签（2026-11-01 这四页签从运营中心迁入系统设置）
     path: '/admin/ops-center',
-    redirect: (to) => ({ path: '/admin/ops-hub', query: { ...to.query, tab: (to.query.tab as string) || 'tools' } })
+    redirect: (to) => ({ path: '/admin/system-settings', query: { ...to.query, tab: (to.query.tab as string) || 'tools' } })
   },
   {
     path: '/admin/devtools',
-    redirect: () => ({ path: '/admin/ops-hub', query: { tab: 'tools' } })
+    redirect: () => ({ path: '/admin/system-settings', query: { tab: 'tools' } })
   },
   {
     path: '/admin/export-data',
-    redirect: () => ({ path: '/admin/ops-hub', query: { tab: 'export' } })
+    redirect: () => ({ path: '/admin/system-settings', query: { tab: 'export' } })
   },
   {
     // 旧内容管理 URL → /admin/learning-paths
@@ -390,14 +384,14 @@ const routes: RouteRecordRaw[] = [
     redirect: (to) => ({ path: '/admin/ops-hub', query: { ...to.query, tab: 'achievements' } })
   },
   {
-    // 会话安全并入「运营中心」宿主 tab（保留 ?user= 深链筛选）
+    // 会话安全并入「系统设置」页签（保留 ?user= 深链筛选）
     path: '/admin/session-security',
-    redirect: (to) => ({ path: '/admin/ops-hub', query: { ...to.query, tab: 'security' } })
+    redirect: (to) => ({ path: '/admin/system-settings', query: { ...to.query, tab: 'security' } })
   },
   {
-    // 访问与注册并入「运营中心」宿主 tab（2026-10-27 由独立场景迁入）
+    // 访问与注册并入「系统设置」页签（2026-10-27 曾并入运营中心，2026-11-01 随系统组迁入）
     path: '/admin/access-control',
-    redirect: (to) => ({ path: '/admin/ops-hub', query: { ...to.query, tab: 'access' } })
+    redirect: (to) => ({ path: '/admin/system-settings', query: { ...to.query, tab: 'access' } })
   },
   {
     // 管理控制台：/admin/:page 反映当前页面（深链/前进后退），动态段置于静态路由之后
@@ -511,45 +505,54 @@ router.beforeEach(async (to, _from, next) => {
       next({ path: '/admin/health-center', query });
       return;
     }
-    /* Prompt 评估 2026-10-25 拆为独立页：老深链 ?tab=prompt-eval 路由级改投，
-       ?peTab= 原样带走。模型路由是页内弹窗，仍需 Skills 挂载后打开，不在路由层处理。 */
+    /* Prompt 评估 2026-11-01 下线（用户「先下线吧，不需要了」）：?tab=prompt-eval 与
+       /admin/prompt-eval 一并落回 Skill 目录——它 2026-10-25 就是从这里的页签拆出去的，
+       老书签/外链不留 404，也不留一个已经摘掉的空页签（tab 键删掉，Skills 落默认页签）。 */
     if (tab === 'prompt-eval') {
       const query = { ...to.query };
       delete query.tab;
-      next({ path: '/admin/prompt-eval', query });
+      delete query.peTab;
+      next({ path: '/admin/skills', query });
       return;
     }
   }
-  /* 退役 tab 老深链（?tab=addons）→ 外挂能力独立页（2026-10-19 用户拍板从模型与接入拆出）。
-     与上面健康中心同款：路由级改投，别等宿主挂载后由 query watch 兜（那样用户会先看到
-     目标错误的「接入与模型」页签）。 */
-  if (to.path === '/admin/api-config' && to.query.tab === 'addons') {
-    const query = { ...to.query };
-    delete query.tab;
-    next({ path: '/admin/addons', query });
-    return;
+  /* 运营中心的四个系统页签 2026-11-01 迁入「系统设置」：老深链（含站外书签、健康中心与
+     审计日志里写死的地址）一律路由级改投，别等 OpsHub 挂载后用 watch 兜——那样用户会先
+     看到一个已经不存在这些页签的运营中心。?user= 等定位参数原样带走。
+     注意 /admin/api-config?tab=addons|virtual|security 的改投**不在这里**：
+     它们走别名区的函数式 redirect，进 beforeEach 时 path 早已不是 api-config。 */
+  if (to.path === '/admin/ops-hub' && typeof to.query.tab === 'string') {
+    const moved: Record<string, string> = { tools: 'tools', export: 'export', security: 'security', access: 'access' };
+    const target = moved[to.query.tab];
+    if (target) {
+      const query = { ...to.query, tab: target };
+      next({ path: '/admin/system-settings', query });
+      return;
+    }
+    /* 2026-11-09「运营待办」空壳页签下线（顶部四张读数卡已承载待办数）：
+       老书签/外链 ?tab=todo 路由级改投默认的「反馈」页签，?status= 等定位参数原样带走。 */
+    if (to.query.tab === 'todo') {
+      const query = { ...to.query, tab: 'feedback' };
+      next({ path: '/admin/ops-hub', query, replace: true });
+      return;
+    }
   }
-  /* 安全与访问 2026-10-25 拆为独立页、2026-10-27 再并入运营中心：老深链直接落到
-     access 页签，不再经 /admin/access-control 二次重定向。 */
-  if (to.path === '/admin/api-config' && to.query.tab === 'security') {
-    const query = { ...to.query };
-    delete query.tab;
-    next({ path: '/admin/ops-hub', query: { ...query, tab: 'access' } });
-    return;
-  }
-  /* 复习积压的单用户明细（?userId=）是学习者详情的「记忆调度」页签：
-     路由级改投，页面不必先挂载再转发。 */
+  /* 复习积压的单用户明细（?userId=）落在学习者详情的「记忆与复习」页签：
+     复习积压列表读的是 FSRS 普查（记忆痕迹 / 待复习 / 记忆强度），与同名页签同源；
+     改投「记忆调度」会只给出温故计划与归并审计——对一个刚在列表里点进来的用户
+     全是 0 与 —，被点的那条记忆根本不在屏上（2026-11-02 评审 R58）。 */
   if (to.path === '/admin/memory-review' && typeof to.query.userId === 'string' && to.query.userId) {
     const query = { ...to.query };
     const userId = String(query.userId);
     delete query.userId;
-    next({ path: '/admin/learner-state', query: { ...query, view: 'learner', id: userId, tab: 'memory-ops' } });
+    next({ path: '/admin/learner-state', query: { ...query, view: 'learner', id: userId, tab: 'memory' } });
     return;
   }
   /* 运营中心的 ?status= 只认当前页签的枚举：别的页签留下的值（反馈的 new 落到公告）
      会把列表筛成空表。非法值丢弃，页签与其余参数照旧。 */
   if (to.path === '/admin/ops-hub' && typeof to.query.status === 'string' && to.query.status) {
-    const tab = typeof to.query.tab === 'string' ? to.query.tab : 'todo';
+    /* 默认页签 = feedback（2026-11-09 运营待办下线后）：裸 ?status=new 深链仍合法。 */
+    const tab = typeof to.query.tab === 'string' ? to.query.tab : 'feedback';
     const allowed: Record<string, readonly string[]> = {
       feedback: ['new', 'triaged', 'resolved', 'dismissed'],
       announce: ['published', 'expired', 'draft', 'archived'],
@@ -621,9 +624,24 @@ router.beforeEach(async (to, _from, next) => {
     return;
   }
 
-  // 已登录管理员访问管理登录页
+  // 已登录管理员访问管理登录页：先向后端确认会话真的有效再弹回总览。
+  // 本地标记（localStorage）无从感知服务端吊销——会话被吊销/过期后（403 错误门场景）
+  // 用户主动来登录页时，若照旧直接弹回 overview 就死锁（唯一出口只剩错误门上不显眼的
+  // 「退出登录」）。确认失效（401/403）则清掉标记放行登录页；非认证失败（网络抖动等）
+  // 维持原弹回行为，避免瞬时故障把有效管理员误送到登录页。
   if (to.name === 'AdminLogin' && adminSession) {
-    next('/admin/overview');
+    try {
+      await adminAuthApi.getMe();
+      next('/admin/overview');
+    } catch (error) {
+      const status = (error as { status?: number } | null)?.status;
+      if (status === 401 || status === 403) {
+        clearAdminSession();
+        next();
+      } else {
+        next('/admin/overview');
+      }
+    }
     return;
   }
   

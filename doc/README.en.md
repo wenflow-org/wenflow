@@ -4,7 +4,7 @@
 > Process materials — `archive/`, `history/`, `design/`, survey snapshots and historical change logs — are kept **locally only** and are not tracked by git (since 2026-09-05); they are not linked here. For anything current, rely on the root docs and the code.
 > **Registry gate (since 2026-09-28)**: a new doc must be ① added to the root `.gitignore` allowlist ② registered in the table below ③ carry a status header; whenever an implementation contradicts a doc's "not-doing / TODO" claim, that doc must be updated in the same commit.
 
-## Master Index (39 docs directly under doc/ · full coverage · 2026-10-16)
+## Master Index (39 docs directly under doc/ · full coverage · 2026-11-02)
 
 > Every doc carries a status line (`📌 type | last verified`). Chinese version: [`README.md`](./README.md).
 
@@ -12,37 +12,37 @@
 |---|---|---|
 | SKILL_PROTOCOL_V4.md | Living spec | Skill protocol SSOT (two-level compilation retired) |
 | MODEL_GATEWAY_DESIGN.md | Living spec | Gateway SSOT |
-| PROMPT_CACHE_OPTIMIZATION.md | Living spec | Cache optimization (32k SSOT written back) |
+| PROMPT_CACHE_OPTIMIZATION.md | Living spec | Cache optimization (64k SSOT written back) |
 | PROMPT_ADJUSTMENT_GUIDE.md | Living spec | Prompt adjustment how-to |
 | SKILL_DEVELOPMENT_GUIDE.md | Living spec | New / refactor Skill guide (§2 CLI-first) |
 | AGENT_SKILL_MANUAL.md | Living spec | Agent / Skill the-why overview |
+| PIPELINE_MAP.md | Generated | Scenario → Agent → Prompt pipeline index (`pipeline:map` generated; do not edit) |
+| PIPELINE_PROMPTS.md | Generated | Full prompt corpus by scenario (same generator; do not edit) |
 | KC_CONCEPT_IDENTITY_AND_GRAPH_DESIGN.md | Living spec | KC concept identity + graph (~95%) |
 | KC_MULTIPATH_AND_LEARNER_SIGNAL_SCOPE.md | Living spec | KC multi-path + learner-signal scope (§2 still holds) |
 | LEARNER_CENTER_AND_STATE_FUSION.md | Living spec | Learner center / state fusion (§3.3 wired) |
 | LEARNER_MODEL_ARCHITECTURE.md (.en) | Living spec | Learner model (Phase 5 consumed; §6/§10/§11 pending) |
 | LEARNER_STATE_REVIEW_DESIGN.md | Design record | ⚠️ in-doc table names differ from the current schema; anchored to `learner_projections` |
 | PATH_PRODUCTION_REPLAN_CONTRACT.md (.en) | Living spec | ⚠️ known TODO: 2 issues in the 409 decisions |
-| PATH_ANDERSON_ITERATION_NOTE.md (.en) | Design record (archived) | Sole decision record for cutting the two-stage replan |
 | SESSION_JSON_INCREMENTAL_DESIGN.md | Design record (landed) | Incrementalization of session large-JSON columns + acceptance checklist |
 | VIRTUAL_LEARNER_DESIGN.md | Living spec | VL main doc (referee separated) |
 | VIRTUAL_LEARNER_CHAIN.md | Living spec | VL chain source of truth (16/17) |
-| VIRTUAL_LEARNER_PRESET_DESIGN.md | Design record (archived) | Source moved to `presets.yaml` v4 |
 | VIRTUAL_LEARNER_SIMULATED_DAY_CONTRACT.md | Living spec | Page side landed; system layer ③④ per body |
 | VIRTUAL_LEARNER_SIMULATED_DAY_DESIGN.md | Design record | ⚠️ header outdated; full revision pending |
 | AGENT_IO_DESIGN_V3.md | Design record (partially archived) | §1–§4 superseded by V4 §2.6 |
 | UPGRADE_DIRECTION_20Q.md | Governance ledger | Q12/Q18 misplacement fixed; stale vector/materials claims recycled |
 | NON_FUNCTIONAL_GOVERNANCE_PLAN.md | Governance plan | ⚠️ status baseline 2026-07-17 |
 | EDUCATIONAL_THEORY_MAP.md | Reference | Theory map (literature verified) |
+| DIAGRAM_PEDAGOGY_RESEARCH.md | Reference | Teaching-diagram evidence grading (A–D) and per-diagram-type empirical ratings |
+| LLM_PACK_GUIDE.md | Reference | How to hand teaching-diagram review packs to an LLM (token bloat causes and slimming) |
 | ADMIN_TERMINOLOGY_AUDIT.md | Living spec | Terminology SSOT (must not be archived) |
+| USER-JOURNEY-MAP-2026-11-01.md + ADMIN-JOURNEY-MAP-2026-11-01.md | Living spec (maps) | Learner/admin journey maps: entry points, actions, system behavior (revised by the 2026-11-02 audit; cross-linked) |
 | ADMIN_OPERATIONS_MANUAL.md | Living spec | Admin operations manual (routes → duties, metric definitions, action names, SOP) |
 | ADMIN_VISUAL_LAYER_SPEC.md | Living spec | ⛔ must not be archived (guard hard-references it) · v4 wired to the design system |
 | NEWUI-PROTOTYPES.md | Living spec | newui prototype registry & "protovalue residue" rule |
-| ADMIN_COLUMN_WIDTH_SPEC.md | Living spec | 48/48 passing |
-| ADMIN_PAGE_TEMPLATES.md | Historical snapshot · archived | Archived 2026-10-02: T1–T4 template duties taken over by the newui prototype replica set + spec v4 |
-| ADMIN_TABS_BUSINESS_AUDIT.md | Historical audit | Unverified |
-| ADMIN_MODULE_BENCHMARK.md | Historical snapshot | Unverified |
-| CONTEXT_MECHANISM_AUDIT.md | Historical audit | Cache baseline predates the refactor |
-| LEARNING_SCIENCE_AUDIT.md | Historical audit | Scientific conclusions still valid |
+| ADMIN_COLUMN_WIDTH_SPEC.md | Living spec | Column-width ratio contract, width tokens (three tiers in sync), utility alignment |
+| CLASSROOM_PIPELINE.md | Living spec | Classroom + evaluation pipeline single-file account (files/functions directly comparable) |
+| CLASSROOM_SKILLS.md | Living spec | Full prompt collection used by the classroom (companion to CLASSROOM_PIPELINE.md) |
 | DEV_SCRIPTS.md | Living spec | Single script index (86 paths, none dead) |
 | README.md / README.en.md | Index | This document |
 
@@ -71,9 +71,6 @@
 - [`ADMIN_TERMINOLOGY_AUDIT.md`](./ADMIN_TERMINOLOGY_AUDIT.md)
   - Single source for admin console terminology governance: term families, banned phrases, and guard rules
   - Source for `frontend/src/views/admin-redesign/terms.ts`, `statusText.ts` and the terminology guard tests
-- [`CONTEXT_MECHANISM_AUDIT.md`](./CONTEXT_MECHANISM_AUDIT.md)
-  - Context-mechanism audit across all stage skills: real-call telemetry (input size / prefix-cache hit rate) + optimization directions
-  - Finding: size is not the bottleneck; the real lever is **prefix-cache hit rate** (global 20.9%)
 
 ## Agents & Scenarios
 
@@ -94,8 +91,6 @@
 
 - [`PATH_PRODUCTION_REPLAN_CONTRACT.md`](./PATH_PRODUCTION_REPLAN_CONTRACT.md) ([en](./PATH_PRODUCTION_REPLAN_CONTRACT.en.md))
   - Path production pipeline and replan contract
-- [`PATH_ANDERSON_ITERATION_NOTE.md`](./PATH_ANDERSON_ITERATION_NOTE.md) ([en](./PATH_ANDERSON_ITERATION_NOTE.en.md))
-  - Path enrichment / Anderson annotation iteration notes (archived decision record)
 
 ## Virtual Learners
 
@@ -103,8 +98,6 @@
   - Virtual learner chain source of truth: persona / stories / session simulation / referee
 - [`VIRTUAL_LEARNER_DESIGN.md`](./VIRTUAL_LEARNER_DESIGN.md)
   - VL main document: persona/story specs, role-play mechanics, memory, generation pipeline, batch entry points
-- [`VIRTUAL_LEARNER_PRESET_DESIGN.md`](./VIRTUAL_LEARNER_PRESET_DESIGN.md)
-  - Built-in preset virtual learners, design v0 (archived; source moved to `virtual-learners/presets.yaml` v4 — 19 entries)
 - [`VIRTUAL_LEARNER_SIMULATED_DAY_DESIGN.md`](./VIRTUAL_LEARNER_SIMULATED_DAY_DESIGN.md)
   - Simulated-day / study-load design: multi-day semantics, system-layer contract, page touchpoints, TODO list
 - [`VIRTUAL_LEARNER_SIMULATED_DAY_CONTRACT.md`](./VIRTUAL_LEARNER_SIMULATED_DAY_CONTRACT.md)
@@ -127,17 +120,6 @@
   - newui prototype registry and the "protovalue residue" rule (precedence: tokens.css / spec v4 > prototype > historical docs)
 - [`ADMIN_COLUMN_WIDTH_SPEC.md`](./ADMIN_COLUMN_WIDTH_SPEC.md)
   - `.mk-table--fixed` column-width ratio contract, width tokens (three tiers in sync), utility alignment
-- [`ADMIN_PAGE_TEMPLATES.md`](./ADMIN_PAGE_TEMPLATES.md)
-  - T1–T4 page template skeleton spec v1 (archived 2026-10-02; duties taken over by the newui prototype replica set + spec v4)
-- [`ADMIN_TABS_BUSINESS_AUDIT.md`](./ADMIN_TABS_BUSINESS_AUDIT.md)
-  - Admin tab switcher inventory and per-page business-logic review (historical audit)
-- [`ADMIN_MODULE_BENCHMARK.md`](./ADMIN_MODULE_BENCHMARK.md)
-  - Per-module benchmark against mature products (Langfuse / LangSmith / Dify), gap grading and trade-offs (historical snapshot)
-
-## Ethics, Memory & Science Audits
-
-- [`LEARNING_SCIENCE_AUDIT.md`](./LEARNING_SCIENCE_AUDIT.md)
-  - Scientific audit of the learning loop: what is wired, what are proxies, what is missing (historical audit; scientific conclusions still valid)
 
 ## Developer Tooling
 
@@ -153,3 +135,5 @@ Survey snapshots (`SKILL_RUNTIME_MAP_MAIN/SIM`), design process records (`ORCHES
 Local process materials (design drafts, research surveys, dated snapshots, screenshots, etc.) live under `doc/local/` (gitignored, not tracked); the `doc/` root keeps only current, in-repo documents tracked by git.
 
 **2026-10-16 tidy**: three untracked files were moved from the `doc/` root into `doc/local/` — `ADMIN-OPERATIONS-MANUAL.md` (a parallel draft of the ops manual spelled with hyphens; the canonical copy is `ADMIN_OPERATIONS_MANUAL.md`), `USER_SIDE_QA_REPORT.md` (2026-09-18 user-side walkthrough) and `agent-usage-audit-2026-09-22.md` (Agent usage investigation). In the same batch, 11 tracked-but-unlisted docs were added to the `.gitignore` allowlist and `NEWUI-PROTOTYPES.md` was registered.
+
+**2026-11-02 tidy — reports/audits moved out of the repo**: under the scope rule that `doc/` keeps only design-principle / architecture / theory docs, 21 historical records were removed from `doc/`: the teaching-figure visual/pipeline reports (`VERSION_REPORT_V1–V8.md`, `TEACHING_PIPELINE_REPORT.md`, `TEACHING_PIPELINE_REPORT_2026-10-26.md`, `BOARD_MODE_REPORT.md`) and the audits/snapshots/archived design records (`ADMIN_PAGE_TEMPLATES.md`, `ADMIN_TABS_BUSINESS_AUDIT.md`, `ADMIN_MODULE_BENCHMARK.md`, `CONTEXT_MECHANISM_AUDIT.md`, `LEARNING_SCIENCE_AUDIT.md`, `ADMIN_COPY_SEMANTIC_AUDIT.md`, `FLOW-ARCH-AUDIT-REMEDIATION-2026-10-22.md`, `PATH_ANDERSON_ITERATION_NOTE.md` + `.en`, `VIRTUAL_LEARNER_PRESET_DESIGN.md`). Index count: 54 → 39. In the same-day local cleanup these 21 files were deleted from this machine along with the discarded/CI/old-run/recomputable artefacts under `doc/local/` (316MB → 42MB); they survive only in git history, and the remaining name-only citations (e.g. `ADMIN_PAGE_TEMPLATES.md (moved out of the repo; see git history)`) refer to those historical versions.

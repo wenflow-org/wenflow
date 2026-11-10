@@ -1,6 +1,6 @@
 # 虚拟学习者 · 日期模拟 接口冻结清单（系统层 ↔ 页面层）
 
-> 📌 类型：活规范（页面侧已落地 `e2af8f7`/`ce8c983`/`b57c480`；接口 ①② 已实现，系统层 ③④ 状态以正文为准）｜最后核验：2026-10-16。索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范（页面侧已落地 `e2af8f7`/`ce8c983`/`b57c480`；接口 ①②③ 已实现，系统层 ④ 状态以正文为准）｜最后核验：2026-11-02。索引见 [doc/README.md](./README.md)。
 
 > 目的：把"学习分散在各自然天"的仿真的**分工边界与数据契约**钉死，避免系统层与页面层各写一半。
 > 状态：**待系统层 owner 确认**（本页由页面侧提出）。
@@ -14,7 +14,7 @@
 **不做 mock 时钟**，用**历史日期重放 + `asOf` 读回**：
 
 - 写入：把"第 dayIndex 天"的业务时间戳写成 `timestamp = baseDate + dayIndex`（`updateLearningMetrics({timestamp})`、`subtasks.completedAt`、`teaching_sessions.startTime/endTime`、`learner_evidence.occurredAt`）。
-- 读取：一律按 `asOf = endOfDayUtc(baseDate + dayIndex)` 读回。
+- 读取：一律按 `asOf = endOfDay(baseDate + dayIndex)`（应用时区日末）读回。
 - **模拟日可进入真实未来**（产品拍板 2026-10-07）：`baseDate + dayIndex` 允许超过真实 `now`，用于跨日/长程模拟；原「未来日拒绝」护栏已移除。
 - **真实时间窗统计必须设上界**：任何面向真人运维/学习者的「近 N 天/今日」查询，除下界外还必须带 `lte: now`（或用 `asOf` 读回），不得把未来模拟日的完成记录当成已发生事实。
 - **隔离**：只对 `isVirtualLearner = 1`；`asOf` 上界（`calculatedAt <= asOf`）天然排除真实行。VL 数据进入真实时间窗时以 `now` 为上界。
@@ -35,7 +35,7 @@
 
 ---
 
-## 三、冻结接口（页面已实现 ①②；③④待系统层）
+## 三、冻结接口（页面已实现 ①②；③ 系统层已实现；④待系统层）
 
 ### ① `GET /api/admin/virtual-learners/sessions/:sessionId/simulation-clock` ✅ 已实现
 ```jsonc
@@ -50,16 +50,18 @@
 `signals[]` / `tasks[]` / `difficultyAdjustments[]` / `reviewQuota{limitLoad,usedLoad,remainingLoad}` /
 `memory{traceCount,dueCount,fragileCount,stableCount,avgRetention}`。
 
-### ③ `POST /sessions/:sessionId/advance-day`（**待系统层**）
+### ③ `POST /api/admin/virtual-learners/sessions/:sessionId/advance-day` ✅ 已实现
 ```jsonc
 // body
-{ "days": 1, "runTasks": true, "maxMinutesPerDay": 45, "stopOnIntervention": false }
+{ "days": 1, "runTasks": true }
 // 语义
 // - 校验 isVirtualLearner + dateSimulation.enabled；否则 409
+// - days 限 1..60；runTasks=true 时一次只能推进 1 天（多天请用 runTasks=false 纯记账）
 // - 幂等：同 session 同 dayIndex 重复调用不重复写
 // - 写：simulationClock.dayIndex++ / simulatedNow=endOfDay(baseDate+dayIndex) / history.push({...})
-// - runTasks=true 时：用 baseDate+dayIndex 作为业务时间戳跑当天分配任务（重放）
+// - runTasks=true 时：在模拟时钟上下文内用 baseDate+dayIndex 作为业务时间戳跑当天分配任务（重放）
 ```
+> 实现 `backend/src/routes/admin/virtual-learners.assisted-simulation.ts`（经 `virtual-learners.assisted-runtime.ts` 挂载）；当前只消费 `days`/`runTasks`，不含 `maxMinutesPerDay`/`stopOnIntervention`。
 
 ### ④ `GET /api/admin/batch-experiments/:experimentId/day-timeline?metric=burden|intervention`（待系统层）
 
@@ -83,7 +85,7 @@
 | 8 | `services/ai-teaching/teaching-session-lifecycle.ts loadRetrievabilityHints` | `asOf` | ✓ `simulatedNowOr()`（FSRS 可提取度） |
 
 > 只读侧已就绪（`getCurrentState/getPreviousMetrics({pathId,asOf})`、`getAggregatedState({asOf})`、`buildReviewPlan({now})`）。
-> 仍未做的是系统层的 `advance-day` / batch day-timeline 路由与 §六 待确认 5 项（属接口与产品裁决，不在注入点清单内）。
+> 仍未做的是系统层的 batch day-timeline 路由（§三 ④）与 §六 待确认 5 项（属接口与产品裁决，不在注入点清单内）。
 
 ---
 
@@ -95,15 +97,15 @@
 4. **只对 `isVirtualLearner=1` 生效**；真实用户零变更（依赖 `asOf` 上界）。
 5. **不得重复造负担口径**：`getAggregatedState().dayLoad.fatigueBonus`、`deriveReplanSignal.reasonCodes`、`decideTaskDifficulty.reasons`、`ReviewQuotaService` 为权威。
 6. `epistemic-grounding`（ESS 认知硬判决）**保持无时间**；时间只影响叙事/节奏，不得让它"隔几天突然会了"。
-7. 每日温故额度（`ReviewQuotaService`）与每日时长（`dailyMinutesCap`）**不合并**，各自映射既有公式。
+7. 每日温故额度（`ReviewQuotaService`）与每日时长（学习者可用时间，权威在 `services/learning/capacity-authority.ts`）**不合并**，各自映射既有公式。
 
 ---
 
 ## 六、待确认（请系统层 owner 回复）
 
-> **已定案（系统层 2026-09-16）**：日界统一为 **UTC**（commit `700b718`：自然衰减统一到 UTC 日界，四口径合一）；日期模拟脚手架已复用本侧的 `resolveDayWindow` 作为**规范助手**（commit `fcf651b`）。本页以下为该结论后的剩余项。
+> **已定案（系统层 2026-09-22，收敛此前 2026-09-16 的 UTC 口径）**：日界统一为**应用时区本地日**（单一真理源 `backend/src/services/time/day-boundary.ts`；commit `482012f1` 把应用日界收敛为单一真理源）。日期模拟脚手架已复用本侧的 `resolveDayWindow` 作为**规范助手**（commit `fcf651b`）。本页以下为该结论后的剩余项。
 
-- [x] 日界统一为 **UTC** —— 已实现（`getNaturalDayDiff` 改为 UTC 日界；与 `getAggregatedState.dayLoad` / `ReviewQuotaService` / `resolveDayWindow` 一致）。
+- [x] 日界统一为**应用时区本地日** —— 已实现（`getNaturalDayDiff` 走 `day-boundary` 的 `dayDiffInDays`；与 `getAggregatedState.dayLoad` / `ReviewQuotaService` / `resolveDayWindow` 同口径）。
 - [ ] `baseDate` 归属：系统层按 `now - maxTotalDays` 自动生成，还是由会话 `createdAt`？页面侧建议：**默认为会话创建日，可在画像级/会话级覆盖**（会话级配置已实现）。
 - [ ] `advance-day` 是否复用 `simulate-learner-days.ts` 的重放写法（独立模拟路径 vs 真实会话路径）？
 - [ ] `runTasks` 的日时长上限（`maxMinutesPerDay`）由谁裁决（系统层顺延策略）？
@@ -115,3 +117,4 @@
 ## 七、变更记录
 
 - 2026-09-16 v1：首版（页面侧提出，待系统层确认）。
+- 2026-11-02：按当前代码核验更新——日界改为应用时区本地日（`day-boundary`）、§三 ③ `advance-day` 记为已实现并订正 body、移除不存在符号 `dailyMinutesCap`。

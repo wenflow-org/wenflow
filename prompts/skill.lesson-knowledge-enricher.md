@@ -1,6 +1,6 @@
 ---
 agentId: skill:lesson-knowledge-enricher
-coreHash: 8a5000c8bb750dc3c9f6e6cd1cfd159acfa1e1cb6bbf8d5746f0b90f640fc6e5
+coreHash: b96d7ac5d3cf00c52d74a363d006e5b3ab5846d0a4f6c0929b82a37efaa3cd88
 coreVersion: 1
 temperature: 0.4
 maxTokens: 64000
@@ -29,8 +29,8 @@ transferGoal 相关的概念及其迁移就绪度（readiness）。
 
 1. 只输出 6 个字段：conceptLedger、reusableFoundations、blockedFoundations、transferSignals、recurringConfusions、knowledgeStateSummary
 2. 结论必须稳健，不夸大，不凭空发明输入里没有的知识点或混淆
-3. conceptLedger 的 familiarity 只能是 seen|practiced|understood|stable，transferReadiness 与 misconceptionRisk 只能是 low|medium|high
-4. transferSignals 的 readiness 只能是 low|medium|high，confidence 范围 0-1
+3. conceptLedger 每项只需给出 label（概念白话标签）与 misconceptionRisk（low|medium|high）； 概念身份键、熟悉度、迁移就绪度、证据条数**由系统按知识看板与证据行计算**，不要输出， 也不要为它们做额外推断（输出了也会被系统覆盖）
+4. transferSignals 每项只需给出 label、readiness（low|medium|high）与 confidence（0-1）； readiness 若与看板状态冲突，以看板为准
 5. 如果输入提供了 transferGoal：transferSignals 应优先覆盖与该迁移目标直接相关的概念（迁移意图锚定）， 并如实标注其就绪度；若本课证据不足以支撑该目标的迁移，不要虚报 high，可给 low/medium 或省略
 6. recurringConfusions 只记录对话或事件中反复出现的卡住/混淆模式，confidence 范围 0-1
 7. reusableFoundations 关注"这节课后可复用的稳定基础"
@@ -41,15 +41,20 @@ transferGoal 相关的概念及其迁移就绪度（readiness）。
 ## 输出字段
 
 - conceptLedger · object[] — 概念台账，每项结构：
-{ "conceptKey": 概念唯一键, "label": 概念白话标签, "familiarity": "seen|practiced|understood|stable",
-  "transferReadiness": "low|medium|high", "misconceptionRisk": "low|medium|high",
-  "sourcePaths": ["来源路径 ID"], "sourceTasks": ["来源任务 ID"], "evidenceCount": 0 }
+{ "label": 概念白话标签, "misconceptionRisk": "low|medium|high",
+  "sourcePaths": ["来源路径 ID"], "sourceTasks": ["来源任务 ID"] }
+说明：conceptKey / familiarity / transferReadiness / evidenceCount / masteryScore 不在输出里——
+它们由系统按输入 knowledgeState 的 kcId、status/progress 与证据行确定性计算
+（masteryScore 为 0-1 数值掌握度，与画像/图谱同一口径）。
+只输出能在输入里找到的概念（知识看板概念，或对话/事件中确实出现过的）。
 - reusableFoundations · string[] — 课后可复用的稳定基础
 - blockedFoundations · string[] — 仍不稳定、会阻塞后续学习的前置
 - transferSignals · object[] — 迁移信号列表，每项结构：
-{ "conceptKey": 概念唯一键, "label": 概念白话标签, "readiness": "low|medium|high", "confidence": 0-1 }
+{ "label": 概念白话标签, "readiness": "low|medium|high", "confidence": 0-1 }
+（conceptKey 由系统按 label 归一，不要输出）
 - recurringConfusions · object[] — 反复混淆模式，每项结构：
-{ "conceptKey": 概念唯一键, "label": 概念白话标签, "pattern": "混淆表现描述", "confidence": 0-1, "count": 1 }
+{ "label": 概念白话标签, "pattern": "混淆表现描述", "confidence": 0-1, "count": 1 }
+（conceptKey 由系统按 label 归一，不要输出）
 - knowledgeStateSummary · string — 本节课后学习者的知识状态摘要（2-4 句中文自然语言），供后续教学决策与预测器直接读取。必须涵盖：
 ① 已掌握/半掌握/未掌握的关键概念（引用本节课概念名）
 ② 反复出现的卡点或误解（具体到表现，不要空泛）

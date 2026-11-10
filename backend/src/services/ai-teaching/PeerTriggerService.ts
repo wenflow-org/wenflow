@@ -5,6 +5,7 @@ import {
   hasHelpSignal,
   detectAwaitingLearnerWork,
 } from '../../config/pedagogy.config';
+import { resolveUnderstandingReading } from './checkpoint-shared';
 import { logger } from '../../utils/logger';
 
 export type PeerTriggerReason = 'model-control' | 'help-keyword' | 'low-understanding-window';
@@ -71,9 +72,18 @@ export class PeerTriggerService {
       .map((message) => message.analysis as any);
 
     if (recentAnalyses.length >= windowSize) {
-      const avgUnderstanding = recentAnalyses.reduce((sum, item) => sum + (item.understanding || 0), 0) / recentAnalyses.length;
-      if (avgUnderstanding < peerTriggerConfig.understandingThreshold && teachingOutput.analysis.understanding < peerTriggerConfig.understandingThreshold) {
-        return 'low-understanding-window';
+      // 只统计**有读数**的回合（2026-11-01 修复）：null/缺失是「本轮不可观测」，不是「理解度 0」——
+      // 旧实现 `item.understanding || 0` 把无读数当 0，会把均值拖到阈值以下凭空触发伴学；
+      // 末行 `null < threshold` 同样为真（null 转 0），是同一处语义混淆。
+      const readings = recentAnalyses
+        .map((item) => resolveUnderstandingReading(item.understanding))
+        .filter((value): value is number => value !== null);
+      const current = resolveUnderstandingReading(teachingOutput.analysis.understanding);
+      if (current !== null && readings.length > 0) {
+        const avgUnderstanding = readings.reduce((sum, value) => sum + value, 0) / readings.length;
+        if (avgUnderstanding < peerTriggerConfig.understandingThreshold && current < peerTriggerConfig.understandingThreshold) {
+          return 'low-understanding-window';
+        }
       }
     }
 

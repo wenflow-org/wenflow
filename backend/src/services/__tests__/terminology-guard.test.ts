@@ -79,9 +79,6 @@ describe('前端术语单源守卫（阶段 1D）', () => {
     const mustImport = [
       'FieldRoutingTable.vue',
       'SkillFieldRouting.vue',
-      // SkillDesignPage.vue 已退役（2026-10-15 设计页并入 SkillDetail：只读概览上 + 设计区块下），
-      // 单源消费点随之搬进 SkillDetail.vue
-      'SkillDetail.vue',
       'ExecLogs.vue',
       'TraceWaterfall.vue',
       'HealthCenter.vue',
@@ -94,6 +91,11 @@ describe('前端术语单源守卫（阶段 1D）', () => {
     for (const file of mustImport) {
       expect(read(file)).toContain("from './terms'");
     }
+    // 2026-11-04：SkillDetail 的失败行重构为 failureText（错误类别人话 → 错误码字典 → 执行失败），
+    // 该函数由 sdp-shared 承接、与试跑页共用，SkillDetail.vue 不再直接出现 "from './terms'"。
+    // 单源未断：sdp-shared.ts 仍直接引用 ../terms，这里改为断言这条间接消费链。
+    expect(read('SkillDetail.vue')).toContain("from './skill-design/sdp-shared'");
+    expect(read('skill-design/sdp-shared.ts')).toContain("from '../terms'");
   });
 
   it('禁用叫法/黑话不出现在页面源码（全目录 .vue 扫描）', () => {

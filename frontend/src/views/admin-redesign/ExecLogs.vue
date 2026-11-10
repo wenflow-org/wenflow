@@ -35,6 +35,11 @@
          也不随 logs.length 隐藏：无行时读数是「—」（与目标对话同语义），
          整条消失会让下面的页签与明细卡整体上跳。 -->
     <section class="mk-kpi-grid" aria-label="执行读数">
+      <!-- 2026-11-07 用户「同组三页指标卡数量不齐」：执行日志此前只有 3 张（成功率/P50/P99），
+           漏掉了最基础的总量与失败数；补成 4 张，与审计日志 / 健康中心同构。
+           失败数在卡头「失败（N）」下拉里也有，但那是筛选入口的计数（同屏两处同一读数是
+           用户点名的「不齐」本身导致的重复，取舍：KPI 给当眼前一档的结论，筛选入口给筛选辅助）。 -->
+      <MkKpi class="exec-kpi-total" label="调用总数" :value="callsTotalText" :value-note="callsTotalNote" :title="callsTotalTitle" />
       <MkKpi label="成功率" :value="successRateText" :tone="successKpiTone" />
       <MkKpi label="耗时 P50" :value="latencyP50" :title="latencyTitle" />
       <MkKpi label="耗时 P99" :value="latencyP99" :title="latencyTitle" />
@@ -98,32 +103,43 @@
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位。
                审核 #127：搜索框补 aria-label（MkFilterSearch inheritAttrs:false + v-bind="$attrs"，
                属性直达内层 input），与同工具栏 Trace ID / 会话输入的显式标签口径一致 -->
-          <MkFilterSearch v-model="keyword" placeholder="搜调用内容或错误" aria-label="搜调用内容或错误（回车查询）" @keydown.enter="applyServerQuery()" />
-          <label class="log-auto"><input type="checkbox" v-model="autoRefresh" /> 自动刷新</label>
-          <MkCols :col-defs="colDefs" :storage-key="COLS_KEY" :default-hidden="DEFAULT_HIDDEN" v-model:hidden="hiddenCols" />
-          <div class="mk-adv">
+          <!-- 2026-11-07 用户「工具栏太杂乱」：原先是 搜索 + 自动刷新 + 列 + 按 ID 定位 + 健康中心
+               五件套，最后那个蓝字链接与左侧导航重复。现在搜索框的 placeholder 里点明
+               「也能搜 Trace / 会话 ID」，并在搜索框下方给一个「精确命中」的补充输入口——
+               按 ID 定位不再是独立浮层：
+               搜索框本身已按 keyword 搜 input/output/error；trace/session 是精确匹配参数，
+               二者语义不同，所以保留一个可展开的「精确 ID」入口，但收进搜索框的附属行。 -->
+          <div class="exec-search">
+            <MkFilterSearch
+              v-model="keyword"
+              placeholder="搜索内容、错误、Trace 或会话 ID…"
+              aria-label="搜索内容、错误、Trace 或会话 ID（回车查询）"
+              @keydown.enter="onSearchEnter"
+            />
             <button
               type="button"
-              class="mk-link mk-adv-trigger"
+              class="mk-link exec-search__adv"
               :class="{ 'mk-link--active': advOpen }"
               :aria-expanded="advOpen"
+              aria-label="按 Trace ID 或会话 ID 精确定位"
               @click="advOpen = !advOpen"
             >
-              <Filter :size="14" :stroke-width="1.75" />按 ID 定位<span v-if="advancedFilterCount" class="mk-pill__count">{{ advancedFilterCount }}</span>
+              <Filter :size="13" :stroke-width="1.75" />精确 ID<span v-if="advancedFilterCount" class="mk-pill__count">{{ advancedFilterCount }}</span>
             </button>
             <div v-if="advOpen" class="mk-adv__mask" @click="advOpen = false"></div>
-            <div v-show="advOpen" class="mk-adv__pop" @click.stop>
+            <div v-show="advOpen" class="mk-adv__pop exec-search__pop" @click.stop>
               <label class="mk-adv__field">
                 <span class="mk-cell-sub">{{ TRACE_FIELD_LABEL }}</span>
-                <input v-model="traceId" class="mk-filter__input" :aria-label="TRACE_FIELD_LABEL" @keydown.enter="applyServerQuery()" />
+                <input v-model="traceId" class="mk-filter__input" :aria-label="TRACE_FIELD_LABEL" placeholder="粘贴后回车定位" @keydown.enter="applyServerQuery()" />
               </label>
               <label class="mk-adv__field">
                 <span class="mk-cell-sub">会话 ID</span>
-                <input v-model="sessionId" class="mk-filter__input" aria-label="按会话 ID 筛选" @keydown.enter="applyServerQuery()" />
+                <input v-model="sessionId" class="mk-filter__input" aria-label="按会话 ID 筛选" placeholder="粘贴后回车筛选" @keydown.enter="applyServerQuery()" />
               </label>
             </div>
           </div>
-          <button type="button" class="mk-link" @click="goHealthCenter">健康中心</button>
+          <label class="log-auto"><input type="checkbox" v-model="autoRefresh" /> 自动刷新</label>
+          <MkCols :col-defs="colDefs" :storage-key="COLS_KEY" :default-hidden="DEFAULT_HIDDEN" v-model:hidden="hiddenCols" />
           <span class="mk-card__meta" v-if="errorCategory">类别「{{ errorCategory }}」<button type="button" class="mk-link" @click="errorCategory = ''; applyServerQuery()">×</button></span>
           <span v-if="listRefreshing" class="mk-card__meta exec-updating" role="status" aria-live="polite">更新中…</span>
         </div>
@@ -137,7 +153,6 @@
       <MkEmptyState
         v-else-if="liveLogsError && !logs.length"
         min
-        icon="◌"
         tone="error"
         title="日志加载失败"
         :description="liveLogsError"
@@ -151,9 +166,12 @@
         <table class="mk-table mk-table--click mk-table--fixed mk-table--nowrap exec-table">
           <thead>
             <tr>
-              <!-- 列序 = 原型 renderObserve 日志表：时间 | 级别 | Skill | Trace | 消息 | 耗时
+              <!-- 列序 = 原型 renderObserve 日志表：时间 | 状态 | Skill | Trace | 消息 | 耗时
                    （2026-10-02 用户拍板「表格的列按新UI调整」）；类型/模型/输入输出为
-                   真实数据扩展列，收进列设置 -->
+                   真实数据扩展列，收进列设置。
+                   表头写「状态」不写「级别」（2026-11-02 评审）：格内是成功/超时/失败，
+                   与卡头「状态」筛选、审计页「结果」同一批状态词；「级别」会被读成
+                   日志等级（信息/警告/错误）。内部 key 仍叫 status，不动存储键。 -->
               <th
                 v-if="!hiddenCols.has('time')"
                 scope="col"
@@ -161,8 +179,8 @@
                 :aria-sort="logSortState('calledAt')"
                 @click="toggleLogSort('calledAt')"
               ><button type="button" class="mk-th__btn" @click.stop="toggleLogSort('calledAt')">时间<span class="mk-th__caret" aria-hidden="true"></span></button></th>
-              <th v-if="!hiddenCols.has('status')" scope="col" class="ex-c-level">级别</th>
-              <th v-if="!hiddenCols.has('kind')" scope="col" class="ex-c-kind">类型</th>
+              <th v-if="!hiddenCols.has('status')" scope="col" class="ex-c-level">状态</th>
+              <th v-if="!hiddenCols.has('kind')" scope="col" class="ex-c-kind" :title="KIND_COL_TITLE">类型</th>
               <th v-if="!hiddenCols.has('agent')" scope="col" class="ex-c-agent">Skill</th>
               <th v-if="!hiddenCols.has('trace')" scope="col" class="ex-c-trace">Trace</th>
               <th v-if="!hiddenCols.has('msg')" scope="col" class="ex-c-msg">消息</th>
@@ -174,7 +192,11 @@
                 class="right mk-th--sortable ex-c-dur"
                 :aria-sort="logSortState('durationMs')"
                 @click="toggleLogSort('durationMs')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleLogSort('durationMs')">耗时<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" :title="durTierTitle" @click.stop="toggleLogSort('durationMs')">耗时<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <!-- 2026-11-09 审计（图 4）：本页此前没有任何详情入口——行点击能展开，但没有任何
+                   可见提示（没有箭头、没有操作列）。按控制台列表页判例补最右「操作」列，
+                   主操作「详情」与行点击同一落点（toggleRowOpen），行点击保持不变。 -->
+              <th scope="col" class="mk-th--right mk-c-act">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -207,21 +229,23 @@
                   </span>
                 </td>
                 <td v-if="!hiddenCols.has('msg')">
-                  <div class="exec-cell">
-                    <div class="exec-cell__line">
-                      <!-- 主行：错误行显示错误摘要（红）；成功行显示调用内容预览（prompt 提取），
-                           无内容时弱化「执行完成」——避免与级别列"成功"重复占位（原恒显"执行完成"零信息量）。
-                           链路入口/复制已前移到 Trace 列（原型 renderObserve 的列位），本格只留消息 -->
+                  <div class="exec-cell" :class="{ 'exec-cell--bare': msgBare(log) }">
+                    <!-- 主行：错误行显示错误摘要（红）；成功行显示调用内容预览。
+                         2026-11-07 用户「成功行第一行是个孤零零的 —，把每行撑高一倍」：
+                         成功且无内容摘要时整行不渲染，会话/错误码等副行直接当主行——
+                         单行高度让红色失败行更醒目（原「执行完成」已按同一判据撤除）。 -->
+                    <div v-if="!msgBare(log)" class="exec-cell__line">
                       <strong v-if="log.status === 'err'" class="exec-title exec-title--err" :title="log.title || log.detail">{{ log.title || log.detail }}</strong>
                       <strong v-else-if="contentPreview(log)" class="exec-title exec-title--preview" :title="contentPreview(log)">{{ contentPreview(log) }}</strong>
-                      <strong v-else class="exec-title exec-title--ok" :title="log.title">{{ log.title }}</strong>
+                      <strong v-else class="exec-title exec-title--ok" title="这次调用没有记录内容摘要">—</strong>
                     </div>
                     <div class="exec-cell__line exec-cell__sub">
+                      <span v-if="msgBare(log) && !hasCellSub(log)" class="mk-na">—</span>
                       <span v-if="log.errorCode" class="tline__errcode mono" :title="log.errorCode">{{ errorCodeLabel(log.errorCode) ?? `[${log.errorCategory || 'err'}] ${log.errorCode}` }}</span>
                       <span v-if="log.statusCode && log.statusCode >= 400" class="tline__http mono">HTTP {{ log.statusCode }}</span>
                       <span v-if="log.recoveredByRetry" class="tline__recovered">重试 {{ (log.attempts || 1) - 1 }} 次后成功</span>
                       <span v-if="promptOf(log)?.drift" class="tline__drift">{{ TERMS.driftRuntime }}</span>
-                      <span v-if="log.sessionId" class="tline__session mono" role="button" tabindex="0" :aria-label="`查看会话 ${log.sessionId} 链路`" @click.stop="showTrace(undefined, log.sessionId)" @keydown.enter.stop.prevent="showTrace(undefined, log.sessionId)" @keydown.space.stop.prevent="showTrace(undefined, log.sessionId)">会话 {{ shortTrace(log.sessionId) }}</span>
+                      <span v-if="log.sessionId" class="tline__session mono" :class="{ 'tline__session--lead': msgBare(log) }" role="button" tabindex="0" :aria-label="`查看会话 ${log.sessionId} 链路`" @click.stop="showTrace(undefined, log.sessionId)" @keydown.enter.stop.prevent="showTrace(undefined, log.sessionId)" @keydown.space.stop.prevent="showTrace(undefined, log.sessionId)">会话 {{ shortTrace(log.sessionId) }}</span>
                     </div>
                   </div>
                 </td>
@@ -237,6 +261,19 @@
                   </div>
                 </td>
                 <td v-if="!hiddenCols.has('dur')" class="right"><span class="mk-latency exec-dur" :class="latencyTone(log.durationMs)" :title="`${fmtMs(log.durationMs)}（P90 ${latencyP90} · P99 ${latencyP99}）`">{{ fmtMs(log.durationMs) }}</span></td>
+                <!-- 操作列：主操作「详情」= 行点击同一落点（展开/收起详情行）。
+                     aria-expanded 让读屏知道这枚按钮控制的是哪一行详情；stop 冒泡避免与行点击叠加。 -->
+                <td class="right">
+                  <div class="mk-actions">
+                    <button
+                      type="button"
+                      class="mk-link"
+                      :aria-expanded="openId === log.id"
+                      :aria-label="`查看这条日志的详情（${fmtTime(log.ts)}）`"
+                      @click.stop="toggleRowOpen(log.id)"
+                    >详情</button>
+                  </div>
+                </td>
               </tr>
               <tr v-if="openId === log.id" class="exec-detail">
                 <td :colspan="visibleColCount">
@@ -245,11 +282,13 @@
                       <!-- 展开区同款口径：短 Trace 显示 + title 全值（不裸奔整条 UUID） -->
                       <span class="mono" :title="log.traceId">trace {{ shortTrace(log.traceId) }}</span>
                     </div>
-                    <!-- 摘要行：表格弱化列的完整值（类型/模型/输入输出），展开即看全不丢信息 -->
+                    <!-- 摘要行：表格弱化列的完整值（类型/模型/输入输出），展开即看全不丢信息。
+                         除类型徽章外每格自带名头（2026-11-02 评审）：原先模型名紧跟在「Skill」
+                         徽章后，被读成「Skill 就是 deepseek-v4.1-flash」 -->
                     <div class="exec-detail__meta mono">
                       <span class="mk-badge" :class="`mk-badge--${kindTone(log)}`">{{ kindText(log) }}</span>
                       <span v-if="detailCache[log.id]?.fallbackFrom" class="tline__recovered">已从 {{ detailCache[log.id]?.fallbackFrom }} 降级</span>
-                      <span v-if="log.model" :title="log.model">{{ log.model }}</span>
+                      <span v-if="log.model" :title="log.model">模型 {{ log.model }}</span>
                       <span v-if="log.promptTokens != null || log.completionTokens != null || promptOf(log)?.tokens" :title="tokensTitle(log)">{{ tokensText(log) }}</span>
                       <span v-if="log.errorCode" class="tline__errcode">{{ errorCodeLabel(log.errorCode) ?? log.errorCode }}</span>
                       <span v-if="log.statusCode && log.statusCode >= 400">HTTP {{ log.statusCode }}</span>
@@ -267,15 +306,17 @@
                                 <span v-if="a.willRetry" class="tline-attempt__retry">将在 {{ a.backoffMs ?? '—' }}ms 后自动重试</span>
                                 <span class="tline-attempt__dur mono">{{ fmtMs(a.durationMs) }}</span>
                               </div>
+                              <!-- 逐项自带名头（2026-11-02 评审）：原来首个字段只印供应商、
+                                   第二个只印模型名，一行连读时分不清哪个是哪个 -->
                               <div class="tline-attempt__meta mono">
-                                <span>{{ a.provider || 'provider?' }}</span>
-                                <span>{{ a.model || 'model?' }}</span>
+                                <span :title="a.provider || ''">供应商 {{ a.provider || '未知' }}</span>
+                                <span :title="a.model || ''">模型 {{ a.model || '未知' }}</span>
                                 <span v-if="a.statusCode">HTTP {{ a.statusCode }}</span>
                                 <span v-if="a.promptTokens != null">输入 {{ a.promptTokens }} / 输出 {{ a.completionTokens ?? 0 }}</span>
                                 <span v-if="a.ttftMs != null" :title="'TTFT（首字节）'">TTFT {{ a.ttftMs }}ms</span>
                                 <span v-if="a.promptCacheHitTokens" class="tline-attempt__cache" :title="'DeepSeek 自动前缀缓存命中'">缓存 {{ a.promptCacheHitTokens }} token</span>
                                 <span v-if="a.routeSource" :title="a.routeSource">路由 {{ routeSourceLabel(a.routeSource) ?? a.routeSource }}</span>
-                                <span v-if="a.endpointHost">{{ a.endpointHost }}</span>
+                                <span v-if="a.endpointHost" :title="'请求发往的上游域名'">{{ a.endpointHost }}</span>
                               </div>
                               <p v-if="a.errorMessage" class="tline-attempt__err">{{ a.errorCode ? `${errorCodeLabel(a.errorCode) ?? a.errorCode} · ` : '' }}{{ a.errorMessage }}</p>
                             </div>
@@ -287,16 +328,24 @@
                         </div>
                         <div v-if="log.gatewayDurMs" class="tline__section">
                           <span class="tline__label">网关合并</span>
-                          <p class="tline__none">{{ fmtMs(log.gatewayDurMs) }}</p>
+                          <!-- 这一行是「同链路的网关调用耗时」——skill 行与网关行合并后，网关行的
+                               时长只留在这里。原样只印一个数字，读者看不出它是哪个量。 -->
+                          <p class="tline__none">同链路网关调用耗时 {{ fmtMs(log.gatewayDurMs) }}</p>
                         </div>
                         <div v-if="detailCache[log.id].input" class="tline__section">
-                          <span class="tline__label">输入</span>
+                          <div class="tline__label-row">
+                            <span class="tline__label">输入</span>
+                            <button v-if="payloadToggleNeeded(detailCache[log.id].input)" type="button" class="mk-link tline__payload-toggle" @click="togglePayload(`${log.id}~input`)">{{ payloadExpanded(`${log.id}~input`) ? '收起' : '展开全部' }}</button>
+                          </div>
                           <!-- 负载美化（2026-10-04 外部评审）：紧凑单行 JSON 两格缩进展示，非 JSON 原样 -->
-                          <pre>{{ prettyPayload(detailCache[log.id].input) }}</pre>
+                          <pre class="tline__payload" :class="{ 'tline__payload--expanded': payloadExpanded(`${log.id}~input`) }">{{ payloadText(detailCache[log.id].input) }}</pre>
                         </div>
                         <div v-if="detailCache[log.id].output" class="tline__section">
-                          <span class="tline__label">输出</span>
-                          <pre>{{ prettyPayload(detailCache[log.id].output) }}</pre>
+                          <div class="tline__label-row">
+                            <span class="tline__label">输出</span>
+                            <button v-if="payloadToggleNeeded(detailCache[log.id].output)" type="button" class="mk-link tline__payload-toggle" @click="togglePayload(`${log.id}~output`)">{{ payloadExpanded(`${log.id}~output`) ? '收起' : '展开全部' }}</button>
+                          </div>
+                          <pre class="tline__payload" :class="{ 'tline__payload--expanded': payloadExpanded(`${log.id}~output`) }">{{ payloadText(detailCache[log.id].output) }}</pre>
                         </div>
                         <!-- Prompt 契约维度（prompt_call_logs，同 traceId 关联） -->
                         <div v-if="promptOf(log)" class="tline__section tline__prompt">
@@ -307,10 +356,34 @@
                             <span v-if="promptOf(log)!.tokens">{{ promptOf(log)!.tokens }}</span>
                             <span v-if="promptOf(log)!.errorCode">{{ errorCodeLabel(promptOf(log)!.errorCode) ?? `[${promptOf(log)!.errorCode}]` }} {{ promptOf(log)!.errorMessage }}</span>
                           </div>
-                          <pre v-if="promptOf(log)!.userPayload">{{ prettyPayload(promptOf(log)!.userPayload) }}</pre>
-                          <pre v-if="promptOf(log)!.rawModelOutput">{{ prettyPayload(promptOf(log)!.rawModelOutput) }}</pre>
-                          <pre v-if="promptOf(log)!.extractedJson">{{ prettyPayload(promptOf(log)!.extractedJson) }}</pre>
-                          <pre v-if="promptOf(log)!.normalizedOutput">{{ prettyPayload(promptOf(log)!.normalizedOutput) }}</pre>
+                          <template v-if="promptOf(log)!.userPayload">
+                            <div class="tline__label-row">
+                              <span class="tline__sub-label">请求消息</span>
+                              <button v-if="payloadToggleNeeded(promptOf(log)!.userPayload)" type="button" class="mk-link tline__payload-toggle" @click="togglePayload(`${log.id}~request`)">{{ payloadExpanded(`${log.id}~request`) ? '收起' : '展开全部' }}</button>
+                            </div>
+                            <pre class="tline__payload" :class="{ 'tline__payload--expanded': payloadExpanded(`${log.id}~request`) }">{{ payloadText(promptOf(log)!.userPayload) }}</pre>
+                          </template>
+                          <template v-if="promptOf(log)!.rawModelOutput">
+                            <div class="tline__label-row">
+                              <span class="tline__sub-label">模型原文</span>
+                              <button v-if="payloadToggleNeeded(promptOf(log)!.rawModelOutput)" type="button" class="mk-link tline__payload-toggle" @click="togglePayload(`${log.id}~raw`)">{{ payloadExpanded(`${log.id}~raw`) ? '收起' : '展开全部' }}</button>
+                            </div>
+                            <pre class="tline__payload" :class="{ 'tline__payload--expanded': payloadExpanded(`${log.id}~raw`) }">{{ payloadText(promptOf(log)!.rawModelOutput) }}</pre>
+                          </template>
+                          <template v-if="promptOf(log)!.extractedJson">
+                            <div class="tline__label-row">
+                              <span class="tline__sub-label">抽取 JSON</span>
+                              <button v-if="payloadToggleNeeded(promptOf(log)!.extractedJson)" type="button" class="mk-link tline__payload-toggle" @click="togglePayload(`${log.id}~extracted`)">{{ payloadExpanded(`${log.id}~extracted`) ? '收起' : '展开全部' }}</button>
+                            </div>
+                            <pre class="tline__payload" :class="{ 'tline__payload--expanded': payloadExpanded(`${log.id}~extracted`) }">{{ payloadText(promptOf(log)!.extractedJson) }}</pre>
+                          </template>
+                          <template v-if="promptOf(log)!.normalizedOutput">
+                            <div class="tline__label-row">
+                              <span class="tline__sub-label">归一化结果</span>
+                              <button v-if="payloadToggleNeeded(promptOf(log)!.normalizedOutput)" type="button" class="mk-link tline__payload-toggle" @click="togglePayload(`${log.id}~normalized`)">{{ payloadExpanded(`${log.id}~normalized`) ? '收起' : '展开全部' }}</button>
+                            </div>
+                            <pre class="tline__payload" :class="{ 'tline__payload--expanded': payloadExpanded(`${log.id}~normalized`) }">{{ payloadText(promptOf(log)!.normalizedOutput) }}</pre>
+                          </template>
                         </div>
                         <p v-if="detailFailed[log.id]" class="tline__none tline__none--err">详情拉取失败，请稍后重试</p>
                         <p v-else-if="!detailCache[log.id].attempts.length && !detailCache[log.id].error && !detailCache[log.id].input && !detailCache[log.id].output" class="tline__none">无请求内容记录</p>
@@ -332,7 +405,6 @@
       <MkEmptyState
         v-else
         min
-        icon="◌"
         :title="emptyTitle"
         :description="emptyDesc"
         :action-text="emptyActionText"
@@ -402,12 +474,6 @@ function switchElTab(t: ElTab) {
 /* 页签 ARIA 契约（#75）：roving tabindex + 方向键/Home/End */
 const { setTabRef, onTabKeydown } = useTablistKeyboard(EL_TABS, elTab, switchElTab)
 
-/** 下一步：这批失败是不是系统性问题，答案在健康中心 */
-function goHealthCenter() {
-  void router.push('/admin/health-center')
-}
-
-
 /** 切到 Trace tab 并让瀑布聚焦指定链路/会话（openTrace/openSession 深链接入） */
 function showTrace(traceId?: string, sessionId?: string) {
   elTab.value = 'trace'
@@ -435,7 +501,8 @@ const agentFilter = ref('')
    后两类都不传 timeRange（后端枚举校验会 400），换算成 startTime/endTime（ISO）下发——
    后端精确时间优先且 statsWhere 与行查询同窗口，口径一致。 */
 type ExecTimeRange = 'today' | 'yesterday' | 'week' | 'month' | 'all' | '15m' | '1h' | 'custom'
-const timeRange = ref<ExecTimeRange>('today')
+/* 默认近 7 天：侧栏「执行日志」角标统计的是近 7 天失败数，默认窗口必须同口径 */
+const timeRange = ref<ExecTimeRange>('week')
 const timeRangeOptions: Array<{ value: ExecTimeRange; label: string }> = [
   { value: '15m', label: '近 15 分钟' },
   { value: '1h', label: '近 1 小时' },
@@ -492,7 +559,7 @@ function presetToRange(r: ExecTimeRange): { start: string; end: string } {
   }
 }
 /** 上一次非自定义档（切入自定义时按它回填始末） */
-let lastPresetRange: ExecTimeRange = 'today'
+let lastPresetRange: ExecTimeRange = 'week'
 /** 切档：入自定义先按上一档回填，随后下发；区间矛盾（开始晚于结束）时不下发，行内已报错。
     始末输入就地展开在时间胶囊下方，不再打开「按 ID 定位」弹层。 */
 function onTimeRangeChange(value: string) {
@@ -574,11 +641,16 @@ async function copyTrace(traceId: string) {
 }
 
 /* D3 表格增强：列显隐（localStorage 持久化）。列集/列序 2026-10-02 对齐原型 renderObserve
-   （时间|级别|Skill|Trace|消息|耗时），key 升 v2：旧存储按旧列集持久化，不清会盖掉新默认 */
+   （时间|状态|Skill|Trace|消息|耗时），key 升 v2：旧存储按旧列集持久化，不清会盖掉新默认 */
 const COLS_KEY = 'wf_exec_hidden_cols_v2'
+/* 类型列口径（2026-11-04）：同一调用链的网关记录与 Skill 记录合并为一行，本页可见行数会少于
+   页码器「共 N 条记录」的记录数——这是该列唯一能分辨合并行来源（网关 / Skill）的地方，口径就收在
+   本列 title。此前它挂在 Trace 列，d681ed52 删列 title 时整段丢失，页码器侧的解释又被判定为装配
+   自述撤下，现网一度两头皆无（用户走查 2026-11-04）。此处补回，与 live.ts 的 liveLogsRowsMerged 同源设计。 */
+const KIND_COL_TITLE = '记录来源（网关 / Skill / 调用）。同一调用链的网关记录与 Skill 记录合并为一行，所以本页可见行数会少于「共 N 条记录」的记录数'
 const colDefs = [
   { key: 'time', label: '时间' },
-  { key: 'status', label: '级别' },
+  { key: 'status', label: '状态' },
   { key: 'kind', label: '类型' },
   { key: 'agent', label: 'Skill' },
   { key: 'trace', label: 'Trace' },
@@ -591,7 +663,8 @@ const colDefs = [
    模型 / 输入输出为真实数据扩展列，收进列设置。 */
 const DEFAULT_HIDDEN = ['model', 'tokens']
 const hiddenCols = ref<Set<string>>(new Set())
-const visibleColCount = computed(() => colDefs.length - hiddenCols.value.size)
+/* 可见列数 = 可隐藏列中可见的数量 + 1（恒在的操作列）。详情行 colspan 与骨架列数共用此值 */
+const visibleColCount = computed(() => colDefs.length - hiddenCols.value.size + 1)
 
 /* prompt 契约维度：与执行日志同 traceId 关联（版本/漂移/tokens/JSON） */
 onMounted(() => {
@@ -612,12 +685,51 @@ function promptOf(log: { traceId: string; agent: string }): PromptMetaRow | unde
   return list.find((p) => p.agentId === agentId || p.agentId.replace(/^skill:/, '') === log.agent)
 }
 
+/* ---------- 消息列的单行判据（2026-11-07）---------- */
+type MsgRow = { status: string; traceId: string; agent: string; errorCode?: string | null; statusCode?: number | null; recoveredByRetry?: boolean | null; sessionId?: string | null }
+/**
+ * 「无主行」：成功且没有内容摘要。这类行此前主行印一个 —、副行印会话，把一行撑成两行；
+ * 现在主行整行不渲染，副行（会话 / 重试 / 漂移）直接当主行读，普通成功行回到单行高度。
+ */
+function msgBare(log: MsgRow): boolean {
+  return log.status !== 'err' && !contentPreview(log as never)
+}
+/** 副行是否有内容：bare 行若副行也空，必须给一个 — 兜底，不能留空格子 */
+function hasCellSub(log: MsgRow): boolean {
+  return Boolean(
+    log.errorCode
+    || (log.statusCode && log.statusCode >= 400)
+    || log.recoveredByRetry
+    || promptOf(log)?.drift
+    || log.sessionId
+  )
+}
+/**
+ * 搜索框回车（2026-11-07）：placeholder 写的是「内容、错误、Trace 或会话 ID」，
+ * 那就得真的认 ID——后端 keyword 只搜 input/output/error，搜不到 trace/session。
+ * 形如 ID 的长串（带 tr:/se: 前缀，或 16 位以上的十六进制/短横线）时自动补 trace 检索参数。
+ */
+function onSearchEnter() {
+  const q = keyword.value.trim()
+  /* 前缀白名单与 shortTrace 同源：链路 ID 在库里是 `tr:` / `se:` / `log:` 三种写法 */
+  const looksLikeId = /^(?:tr|se|log):[\w-]{8,}$/.test(q) || /^[\w-]{16,}$/.test(q)
+  if (looksLikeId && !traceId.value.trim() && !sessionId.value.trim()) {
+    /* 只走精确 ID 一路：同时带 q= 会让后端再按 input/output/error 做一次 contains，
+       两边 AND 后必然 0 行（实测：粘 trace ID 回车得到「暂无日志」）。
+       前缀处理与后端同源：库里 traceId 不带 tr:/se: 前缀（剥掉），
+       而没有 traceId 的记录在表格里显示为 `log:<记录 id>`（保留，后端按主键查）。 */
+    traceId.value = q.startsWith('log:') ? q : q.replace(/^(?:tr|se):/, '')
+    keyword.value = ''
+  }
+  applyServerQuery()
+}
+
 /* 成功调用的内容预览（消息列主行）：从契约层提取输出摘要，
    让列表行有信息量而非恒显「执行完成」（与状态列冗余）。
-   优先级：extractedJson 的键列表 > normalizedOutput 摘要 > userPayload 摘要；均无则空（回落弱化「执行完成」）。 */
+   优先级：extractedJson 的键列表 > normalizedOutput 摘要 > userPayload 摘要；均无则空（回落弱化「—」）。 */
 /** 内容预览：返回单行全量文本，由 .exec-title 的 ellipsis 负责视觉截断（title 悬停看全）。
  *  2026-10-24 修复：原在数据层硬切 32 字并补「…」，title 却挂的是「执行完成」——
- *  截掉的部分无处可查；纯 JSON 键名预览（{"a":…}）无信息量，回落「执行完成」。 */
+ *  截掉的部分无处可查；纯 JSON 键名预览（{"a":…}）无信息量，回落空值（消息格显「—」）。 */
 function contentPreview(log: { traceId: string; agent: string }): string {
   const p = promptOf(log)
   if (!p) return ''
@@ -625,6 +737,30 @@ function contentPreview(log: { traceId: string; agent: string }): string {
   if (!out) return ''
   if (/^[{[]/.test(out)) return ''
   return out.replace(/\s+/g, ' ').trim()
+}
+
+/* ── 展开区负载展示（2026-11-02 评审）──
+   ① 落库时超过裁剪深度（≥2 层）的字段被 executor 写成 '[max-depth]' 占位符，原样印出来
+      读者只看到一串内部标记，不知道这次调用传了什么、回了什么 → 展示层换成一句人话；
+   ② 负载盒限高 240px 且只有内部滚动条，长 JSON 看着像「被分页条截断」→ 给一个展开出口。 */
+const payloadExpandedIds = ref<Set<string>>(new Set())
+function payloadExpanded(key: string): boolean { return payloadExpandedIds.value.has(key) }
+function togglePayload(key: string) {
+  const s = new Set(payloadExpandedIds.value)
+  if (s.has(key)) s.delete(key)
+  else s.add(key)
+  payloadExpandedIds.value = s
+}
+/** 负载展示文本：美化后把深度裁剪占位符替换成人话（占位符可能带 JSON 引号，也可能裸露） */
+const DEPTH_CLIPPED_PLACEHOLDER = '「层级过深，未记录」'
+function payloadText(text: unknown): string {
+  return prettyPayload(text).replace(/"?\[max-depth\]"?/g, DEPTH_CLIPPED_PLACEHOLDER)
+}
+/** 是否需要「展开全部」：限高 240px ≈ 12 行；长单行（未格式化的截断串）按字符数兜底 */
+const PAYLOAD_COLLAPSE_LINES = 12
+function payloadToggleNeeded(text: unknown): boolean {
+  const t = payloadText(text)
+  return t.split('\n').length > PAYLOAD_COLLAPSE_LINES || t.length > 900
 }
 
 /* Tokens 列语义（P2）：传输层（agent_call_logs.promptTokens/completionTokens）优先——
@@ -644,7 +780,10 @@ function tokensSum(log: TokenRow): number | null {
 function tokensSplitText(log: TokenRow): string {
   if (log.promptTokens != null || log.completionTokens != null) return `输入 ${log.promptTokens ?? 0} · 输出 ${log.completionTokens ?? 0}`
   const p = promptOf(log)
-  return p?.tokens || '未统计'
+  /* 2026-11-02 文案清理：契约层也没有 token 时回空串，不再回「未统计」——该格的
+     主行（tokensSum 为 null 时）已经写着「未统计」，副行再写一遍＝同一格同一句话
+     说两遍。有契约 token 时仍照旧显示（那时主行是「未统计」而副行是唯一的用量）。 */
+  return p?.tokens || ''
 }
 function tokensTitle(log: TokenRow): string {
   if (log.promptTokens != null || log.completionTokens != null) {
@@ -674,7 +813,10 @@ const {
 })
 
 function currentQuery(): SpanQuery {
-  const status = statusFilter.value === 'err' ? 'error' : statusFilter.value === 'warn' ? 'timeout' : statusFilter.value === 'ok' ? 'success' : undefined
+  /* 'err' → status=failed（未成功，含超时）：与胶囊「仅失败（error+timeout）」逐行相等。
+     渲染层仍按行标签区分 超时 / 失败（后端 statusText），所以「失败」这个词在这里是
+     「没成功」的统称，「超时」是其中一类——与总览 usage.failed7d / 失败归因同口径。 */
+  const status = statusFilter.value === 'err' ? 'failed' : statusFilter.value === 'warn' ? 'timeout' : statusFilter.value === 'ok' ? 'success' : undefined
   const range = timeRange.value
   const base: SpanQuery = {
     keyword: keyword.value.trim() || undefined,
@@ -893,7 +1035,7 @@ watch(
     sessionId.value = session
     timeRange.value = (EL_TIME_RANGES as readonly string[]).includes(range)
       ? (range as typeof timeRange.value)
-      : 'today'
+      : 'week' /* 无 range 参数（直接进页）= 页面默认档近 7 天；today 只由显式深链带入（2026-10-31 外部评审复检：fallback=today 让直接打开又回到今天，与侧栏 14 条口径冲突） */
     /* 自定义档的始末：URL 存本地 datetime-local 串，直接回填输入框（不转 ISO，避免时区往返） */
     customStart.value = range === 'custom' ? from : ''
     customEnd.value = range === 'custom' ? to : ''
@@ -916,7 +1058,7 @@ function filterSnapshot(): Record<string, string> {
   if (agentFilter.value) desired.agent = agentFilter.value
   if (statusFilter.value) desired.status = statusFilter.value
   if (errorCategory.value) desired.cat = errorCategory.value
-  if (timeRange.value !== 'today') desired.range = timeRange.value
+  if (timeRange.value !== 'week') desired.range = timeRange.value /* 默认档近 7 天不写 URL，与时间档默认值同一口径 */
   /* 自定义档：始末各占一键（缺端不写），URL 存本地串以便刷新/分享精确还原 */
   if (timeRange.value === 'custom') {
     if (customStart.value) desired.from = customStart.value
@@ -957,9 +1099,9 @@ const skeletonVisible = computed(() => (liveLoading.value || liveLogsLoading.val
 const listRefreshing = computed(() => (liveLoading.value || liveLogsLoading.value) && logs.value.length > 0)
 /* 筛选弹层生效计数（EG17）：目前面板内仅 Trace ID / 会话 ID 两项；
    面板收起时按钮上仍有徽章，状态不丢。 */
-/** 时间档是否偏离默认（'today'）：自定义档即便两端留空也算非默认（用户显式选过自定义）。
+/** 时间档是否偏离默认（'week'）：自定义档即便两端留空也算非默认（用户显式选过自定义）。
     与 isFiltered、清除筛选同一判据（单源，勿各写一遍）。 */
-const timeRangeActive = computed(() => timeRange.value !== 'today')
+const timeRangeActive = computed(() => timeRange.value !== 'week')
 /** 「按 ID 定位」弹层生效数：Trace ID / 会话 ID 任一激活即计（收起也不丢状态）。
     节点与时间档已提上主行，不再计入。 */
 const advancedFilterCount = computed(
@@ -1012,7 +1154,8 @@ const emptyTitle = computed(() =>
 const emptyDesc = computed(() =>
   traceMiss.value
     ? `完整值为 ${traceMiss.value}`
-    : timeRange.value === 'today' ? '今天没有执行记录' : ''
+    : timeRange.value === 'today' ? '今天没有执行记录'
+      : timeRange.value === 'week' ? '近 7 天没有执行记录' : ''
 )
 const emptyActionText = computed(() =>
   timeRange.value !== 'all' ? '查看全部时间' : isFiltered.value ? '清除筛选' : ''
@@ -1044,6 +1187,35 @@ const successRate = computed(() => {
   const ok = logs.value.filter((l) => l.status === 'ok').length
   return Math.round((ok / logs.value.length) * 100)
 })
+/* 调用总数卡（2026-11-07）：值 = 窗口内总条数，失败数写在同一张卡的读数上——
+   「70 · 失败 4」让「成功率 94%」有分母可对，不必再回头数表格行。
+   stats 未就绪时读「—」（与成功率同纪律：不拿上一窗口或本页样本冒充）。
+   2026-11-08 审计：这里的失败数 = **未成功**（error + timeout），与同屏「仅��败」胶囊、
+   成功率分母、总览「失败 N 次」四处同口径；此前只数 error，与胶囊/下钻三处不同数。
+   2026-11-09 审计（图 4）：失败数从主值里拆出来走 valueNote——主值只放总数，
+   失败数作为行内注记（更小字号）单独染红，主值保持正常墨色。 */
+const callsTotalText = computed(() => {
+  const st = liveStats.value
+  if (st) return `${st.total}`
+  if (statsPending.value) return '—'
+  if (!logs.value.length) return '—'
+  return `${logs.value.length}`
+})
+/** 行内注记：仅在有失败时出现（失败 = 未成功，含超时）；无失败 / 未就绪时留空 */
+const callsTotalNote = computed(() => {
+  const st = liveStats.value
+  if (st) {
+    const failed = st.error + st.timeout
+    return failed > 0 ? `失败 ${failed}` : ''
+  }
+  if (statsPending.value || !logs.value.length) return ''
+  const failed = logs.value.filter((l) => l.status !== 'ok').length
+  return failed > 0 ? `失败 ${failed}` : ''
+})
+const callsTotalTitle = computed(() => (liveStats.value
+  ? '当前时间窗与筛选下的全部调用（失败 = 未成功，含超时）'
+  : '按当前页样本估算，翻页或筛选后随之变化'))
+
 /** KPI 显示值：数字档补 %；未就绪档直接「—」（不出现「—%」这种残缺读数） */
 const successRateText = computed(() => (successRate.value === '—' ? '—' : `${successRate.value}%`))
 
@@ -1115,6 +1287,18 @@ function latencyTone(durationMs: unknown): string {
   if (latencyP90Ms.value != null && d >= latencyP90Ms.value) return 'mk-latency--warn'
   return ''
 }
+/** 耗时列分档说明（2026-11-02 评审）：行耗时按窗口分位着色（≥P90 琥珀 / ≥P99 红），
+    阈值此前只在一个个格子的悬停提示里，列头没有任何说法；这里把分档与当前阈值挂在列头上。
+    阈值取自当前窗口（与行着色同一个 latencyP9*Ms），冷启动未就绪时不编数字。 */
+const durTierTitle = computed(() => {
+  const p90 = latencyP90Ms.value
+  const p99 = latencyP99Ms.value
+  if (p90 == null && p99 == null) return '当前时间窗内的单次调用耗时，慢的调用会着色'
+  const parts = ['当前时间窗内的单次调用耗时']
+  if (p90 != null) parts.push(`≥ P90 ${fmtMs(p90)} 显琥珀色`)
+  if (p99 != null) parts.push(`≥ P99 ${fmtMs(p99)} 显红色`)
+  return parts.join(' · ')
+})
 /* 2026-10-04 状态条退役：原状态条基调 statusTone（muted/bad/ok）随条删除，ok/bad 语义改由
    成功率 KPI 卡着色承载；muted 空态档不再需要（KPI 带 v-if="logs.length"）。
    2026-10-04 外部评审拍板再解耦：成功率是监控指标不是故障告警——「有失败就标红」把 95%
@@ -1146,26 +1330,25 @@ const sourceSelectOptions = computed(() => [
   { value: '', label: '全部来源' },
   { value: 'only', label: testCount.value == null ? '仅测试调用' : `仅测试调用（${testCount.value}）` }
 ])
-/* 状态 pills（失败/超时/成功）：计数来自当前窗口 stats（与表格同源）。B22/F8-1：
-   stats 未就绪（查询在途 / 失败）时不显示 0——0 会被读成「本窗口 0 条失败」的伪读数；
-   置 undefined 使模板不渲染计数角标（与「测试」pill 的常驻入口语义一致）。 */
-const statusPills = computed(() => {
+/** 卡头「状态」下拉：计数取当前窗口 stats；未就绪时不显计数（不把未知读成 0） */
+/* 2026-11-07 用户「执行日志叫『状态 全部状态』、审计日志叫『失败动作 不过滤』，两页各一套」：
+   统一成「状态 · 全部 / 仅成功 / 仅失败 / 仅超时」。
+   2026-11-08 修口径（审计）：口径按平台统一的那一条走——**「失败」= 没成功（含超时）**，
+   超时是失败的原因分类（失败归因里的 provider_timeout 桶），不是并列的第三档；
+   总览「今日/近 7 天失败 N 次」下钻过来必须拿到同一批行，故「仅失败」发 status=failed（未成功）。
+   旧写法发 status=error（后端用 NOT buildTimeoutCondition() 排除超时）→ 胶囊写 7、列表出 4 行，
+   且与总览的数对不上。「仅超时」保留为更窄的快捷档（行内状态列本就区分 超时/失败 两种标签），
+   它让超时既能被单看、也不会因为并进失败而找不到。 */
+const statusSelectOptions = computed(() => {
   const st = liveStats.value
+  const failed = st ? st.error + st.timeout : null
   return [
-    { id: 'err', label: '失败', count: st?.error },
-    { id: 'warn', label: '超时', count: st?.timeout },
-    { id: 'ok', label: '成功', count: st?.success }
+    { value: '', label: '全部' },
+    { value: 'ok', label: st?.success != null ? `仅成功（${st.success}）` : '仅成功' },
+    { value: 'err', label: failed != null ? `仅失败（${failed}）` : '仅失败' },
+    { value: 'warn', label: st?.timeout != null ? `仅超时（${st.timeout}）` : '仅超时' }
   ]
 })
-
-/** 卡头「状态」下拉：计数取当前窗口 stats；未就绪时不显计数（不把未知读成 0） */
-const statusSelectOptions = computed(() => [
-  { value: '', label: '全部状态' },
-  ...statusPills.value.map((p) => ({
-    value: p.id,
-    label: p.count != null ? `${p.label}（${p.count}）` : p.label
-  }))
-])
 
 function clearFilter() {
   testFilter.value = ''
@@ -1175,8 +1358,8 @@ function clearFilter() {
   traceId.value = ''
   sessionId.value = ''
   errorCategory.value = ''
-  timeRange.value = 'today' // 时间范围计入 isFiltered 口径，清除时需一并还原（默认=当天）
-  lastPresetRange = 'today'
+  timeRange.value = 'week' // 时间范围计入 isFiltered 口径，清除时需一并还原（默认=近 7 天）
+  lastPresetRange = 'week'
   customStart.value = ''
   customEnd.value = ''
   clearInvestigation()
@@ -1221,6 +1404,11 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 </script>
 
 <style scoped>
+/* 调用总数卡（2026-11-09 审计，图 4）：失败数走 MkKpi 的 valueNote（行内注记），
+   只有这枚注记染红；主值沿用 .mk-kpi__num 的正常墨色（--mk-ink），不再整串变红。
+   MkKpi 是共享原语（scoped），这里用 :deep 只命中它渲染的注记 span。 */
+.exec-kpi-total :deep(.mk-kpi__num-note) { color: var(--mk-red); font-weight: 600; }
+
 /* 固定列宽（2026-10-22 用户「翻页不同页码时候，列宽怎么还在变呢」）：Skill / Trace / 消息
    三列在 auto 布局下按当页最长内容分宽（消息列 348→437px），翻页跳动；fixed 后按表头定死。
    宽度按 1280 现值校准并留余量：默认 6 列合计 ≤914，全列（列菜单打开类型/模型/输入输出）≤1138。 */
@@ -1229,10 +1417,12 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 .ex-c-kind { width: 70px; }
 .ex-c-agent { width: 160px; }
 .ex-c-trace { width: 120px; }
-.ex-c-msg { width: 240px; }
+.ex-c-msg { width: 200px; }
 .ex-c-model { width: 120px; }
 .ex-c-tokens { width: 100px; }
 .ex-c-dur { width: 68px; }
+/* 操作列（2026-11-09 审计，图 4）：恒在的最右列，宽度走全局 .mk-c-act（列表页统一档），
+   本页不再另写私有列宽。 */
 /* fixed 档里行内 max-width（260/220px）会超出本列把内容顶到邻列：统一改成随单元格收缩，
    由各自已有的省略号 + title 兜底（长 Skill 名 / 长错误码 / 长 Trace）。 */
 .exec-table .exec-stage,
@@ -1287,7 +1477,7 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 .logs-window__field { display: inline-flex; align-items: center; gap: 6px; }
 /* 列表可见加载态（EG7：「更新中」角标 + 表格降透明）——排序/筛选/翻页重查时该查询
    实测可达 30s，无反馈时用户误判「箭头变了、数据没变」。仅在有数据时出现（首载走骨架）。 */
-.exec-updating { color: var(--mk-blue); font-weight: 600; white-space: nowrap; }
+.exec-updating { color: var(--mk-blue-text); font-weight: 600; white-space: nowrap; }
 .exec-table-refreshing { opacity: 0.55; transition: opacity 0.15s ease; }
 
 /* 加载失败横幅：外形走 .mk-alert--row（shared.css），已不再需要本页私有样式 */
@@ -1359,7 +1549,7 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: var(--mk-mu
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* 消息列语义变体：错误摘要(红) / 内容预览(灰蓝) / 成功弱化——告别恒显「执行完成」与状态列重复 */
+/* 消息列语义变体：错误摘要(红) / 内容预览(灰蓝) / 无内容(弱化占位)——告别恒显「执行完成」与状态列重复 */
 .exec-title--err { color: var(--mk-red, #dc2626); font-weight: 650; }
 .exec-title--err:hover { text-decoration: underline; }
 .exec-title--preview { color: var(--mk-muted, #5b6577); font-weight: 550; }
@@ -1383,6 +1573,14 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: var(--mk-mu
 .exec-copy-btn svg { width: 14px; height: 14px; }
 .exec-copy-btn:hover { background: var(--mk-blue-bg, #eff6ff); color: var(--mk-blue, #2f6ae0); }
 .exec-cell__sub { flex-wrap: wrap; gap: 5px; }
+/* 无主行的成功行：副行升为主行——会话 ID 用主行字号与字重，普通行仍是副行小字 */
+.exec-cell--bare { display: flex; align-items: center; }
+.exec-cell--bare .exec-cell__sub { margin-top: 0; }
+.tline__session--lead { font-size: var(--mk-fs-micro); color: var(--mk-blue, #2f6ae0); }
+/* 搜索 + 精确 ID 入口（2026-11-07 工具栏收口）：浮层锚在搜索框这一组里，不再单独占一枚触发钮 */
+.exec-search { position: relative; display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.exec-search__adv { display: inline-flex; align-items: center; gap: 4px; font-size: var(--mk-fs-micro); white-space: nowrap; }
+.exec-search__pop { right: 0; left: auto; }
 /* 节点列：等宽短名，长名 ellipsis（title 全值，点击开 Skill 抽屉）。
    display:inline-block 必须显式声明——span 为 inline 元素时 max-width/overflow/ellipsis 全部失效；
    自动布局下 max-content 决定列宽，需固定截断上限防长节点名撑列。
@@ -1392,7 +1590,7 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: var(--mk-mu
 .exec-stage {
   display: inline-block;
   font-size: var(--mk-fs-micro);
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
@@ -1418,7 +1616,7 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: var(--mk-mu
   justify-content: center;
   font-size: var(--mk-fs-micro);
   font-weight: 700;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-xs);
   padding: 1px 8px;
   white-space: nowrap;
 }
@@ -1570,7 +1768,14 @@ html[data-theme='dark'] .exec-detail__meta .mk-badge { background: #2d2d2f; colo
 .tline__none--err { color: var(--mk-red); font-weight: 600; }
 .tline__section { display: grid; gap: 4px; }
 .tline__label { font-size: var(--mk-fs-micro); font-weight: 700; letter-spacing: 0.06em; color: var(--mk-faint); }
+.tline__sub-label { display: block; margin: 8px 0 4px; font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-muted); }
 .tline__label--err { color: var(--mk-red); }
+/* 负载区标签行（标签 + 展开出口，2026-11-02）：展开钮贴标签右侧，不占负载盒空间 */
+.tline__label-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.tline__label-row .tline__sub-label { margin-bottom: 0; }
+.tline__payload-toggle { font-size: var(--mk-fs-micro); white-space: nowrap; }
+/* 展开态放开限高：限高在 .exec-detail__box pre，这里用更长选择器覆盖（不限高） */
+.exec-detail__box pre.tline__payload--expanded { max-height: none; }
 
 /* 重试时间线 */
 .tline-attempts { display: grid; gap: 6px; }

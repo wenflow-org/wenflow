@@ -80,7 +80,7 @@ describe('successRateOf / successRateText / successRateTone（calls+errors 入�
   })
 })
 
-describe('formatRate（后端直发 passRate 入口，PromptEval 用）', () => {
+describe('formatRate（后端直发 passRate 入口）', () => {
   it('整数不带 .0，小数保留 1 位，缺失 → null', () => {
     expect(formatRate(92)).toBe('92%')
     expect(formatRate(99.9)).toBe('99.9%')

@@ -2,10 +2,11 @@ import express from 'express';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { learnerSnapshotRefreshService } from '../../services/learner/LearnerSnapshotRefreshService';
 import { predictionCalibrationService } from '../../services/learner/PredictionCalibrationService';
-import { findCalibrationEvidence } from '../../services/admin/learner-models.repo';
+import { findCalibrationEvidence, findDisplayPathFallback } from '../../services/admin/learner-models.repo';
 import learningStateService from '../../services/learning/learning-state.service';
 import { dayKeyOf } from '../../services/time/day-boundary';
 import { checkIsAdmin } from '../../services/admin-access.service';
+import { withUserSimulatedClock as withLearnerSimulatedClock } from '../../services/virtual-lab/simulated-clock-scope';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -73,15 +74,32 @@ router.get('/:userId', async (req, res) => {
     }
 
     const pathId = req.query.pathId as string | undefined;
-    const snapshot = await learnerSnapshotRefreshService.getLatest({
-      userId: req.params.userId,
-      pathId,
-      scope: pathId ? 'path' : (req.query.mode as 'global' | 'path' | 'teaching' | undefined) || 'global',
-    });
+    const scope = pathId ? 'path' : (req.query.mode as 'global' | 'path' | 'teaching' | undefined) || 'global';
+    const snapshot = await withLearnerSimulatedClock(req.params.userId, (cached) =>
+      cached
+        ? learnerSnapshotRefreshService.getLatest({ userId: req.params.userId, pathId, scope })
+        : learnerSnapshotRefreshService.refresh({ userId: req.params.userId, pathId, scope }),
+    );
 
     const currentPath = snapshot.knowledgeMemory.currentPath;
     const pathProgress = currentPath?.progress;
     const globalSignals = snapshot.knowledgeMemory.globalSignals;
+
+    /* 「当前进度」的展示兜底（2026-11-08 审计）：快照只锚 active 路径（#205），学习者路径一旦
+       被下线（status=archived），currentPath 恒空 → 管理台「当前进度」显示「尚未开始学习」，
+       而同一页下方照常列着他 5 节已完成的课堂——同一份数据自相矛盾。
+       这里单独查一次「最近一条非 abandoned 路径」的**真实完成度**，只用于管理端展示：
+       不写进快照锚点，学员端仍不会被引导去继续学一条已下线的路径（#205 保持）。 */
+    const fallbackPath = currentPath ? null : await findDisplayPathFallback(req.params.userId);
+    const fallbackProgress = fallbackPath
+      ? (() => {
+          const all = fallbackPath.milestones.flatMap((m) => m.subtasks);
+          const done = all.filter((t) => t.status === 'completed').length;
+          const current = fallbackPath.milestones.find((m) => m.subtasks.some((t) => t.status !== 'completed'))
+            || fallbackPath.milestones[fallbackPath.milestones.length - 1];
+          return { totalTasks: all.length, completedTasks: done, stage: current?.title || '' };
+        })()
+      : null;
 
     return res.json({
       success: true,
@@ -89,13 +107,27 @@ router.get('/:userId', async (req, res) => {
         ...snapshot,
         progress: pathProgress?.totalTasks
           ? Number(((pathProgress.completedTasks / pathProgress.totalTasks) * 100).toFixed(1))
-          : 0,
+          : fallbackProgress?.totalTasks
+            ? Number(((fallbackProgress.completedTasks / fallbackProgress.totalTasks) * 100).toFixed(1))
+            : 0,
         concepts: {
           mastered: globalSignals.masteredConcepts,
           struggling: globalSignals.strugglingConcepts,
           fragile: globalSignals.fragileConcepts,
         },
-        pathTitle: currentPath?.pathTitle || null,
+        pathTitle: currentPath?.pathTitle || fallbackPath?.title || null,
+        /* 管理端展示用的路径身份（含已下线）：前端据此在「当前进度」与「路径范围」下拉里
+           说出「已下线」而不是「暂无路径」。字段独立于快照锚点，不参与任何路由决策。 */
+        displayPath: fallbackPath
+          ? {
+              id: fallbackPath.id,
+              title: fallbackPath.title,
+              status: fallbackPath.status,
+              stage: fallbackProgress?.stage || '',
+              totalTasks: fallbackProgress?.totalTasks || 0,
+              completedTasks: fallbackProgress?.completedTasks || 0,
+            }
+          : null,
       },
     });
   } catch (error: any) {
@@ -111,11 +143,10 @@ router.post('/:userId/recompute', async (req, res) => {
     }
 
     const pathId = (req.body?.pathId as string | undefined) || (req.query.pathId as string | undefined);
-    const snapshot = await learnerSnapshotRefreshService.refresh({
-      userId: req.params.userId,
-      pathId,
-      scope: pathId ? 'path' : req.body?.scope || 'global',
-    });
+    const scope = pathId ? 'path' : req.body?.scope || 'global';
+    const snapshot = await withLearnerSimulatedClock(req.params.userId, () =>
+      learnerSnapshotRefreshService.refresh({ userId: req.params.userId, pathId, scope }),
+    );
 
     return res.json({ success: true, data: snapshot, message: '学习者模型已重算' });
   } catch (error: any) {
@@ -138,11 +169,12 @@ router.get('/:userId/evidence', async (req, res) => {
       });
     }
 
-    const snapshot = await learnerSnapshotRefreshService.getLatest({
-      userId: req.params.userId,
-      pathId: req.query.pathId as string | undefined,
-      scope: 'path',
-    });
+    const evidencePathId = req.query.pathId as string | undefined;
+    const snapshot = await withLearnerSimulatedClock(req.params.userId, (cached) =>
+      cached
+        ? learnerSnapshotRefreshService.getLatest({ userId: req.params.userId, pathId: evidencePathId, scope: 'path' })
+        : learnerSnapshotRefreshService.refresh({ userId: req.params.userId, pathId: evidencePathId, scope: 'path' }),
+    );
 
     // 教学域 4 类证据（快照 recentEvidence：task-completed / teaching-session / summary / evaluation）
     const teachingItems = snapshot.knowledgeMemory.currentPath?.recentEvidence || [];
@@ -168,10 +200,18 @@ router.get('/:userId/evidence', async (req, res) => {
         signal,
         score: e.confidence,
         happenedAt: e.occurredAt.toISOString(),
-        // 附加域信息：payload 里的关键摘要
+        // 附加域信息：payload 里的关键摘要。
+        // 2026-11-01 外部评审 P1：path:generated 的 payload 不带 pathTitle，原来这里退成空串，
+        // 「学习动态」只剩「路径生成」四个字——同一学员两条路径的创建/生成读起来一模一样，
+        // 被当成重复事件。生成事件改为报生成结果（任务/里程碑数），与 session-console 同口径。
         detail: e.evidenceType === 'goal:understanding:updated'
           ? String(payload?.understanding?.surface_goal || payload?.surfaceGoal || '目标澄清对话')
-          : String(payload?.pathTitle || payload?.title || ''),
+          : e.evidenceType === 'path:generated'
+            ? [
+                typeof payload?.taskCount === 'number' ? `${payload.taskCount} 个任务` : '',
+                typeof payload?.milestoneCount === 'number' ? `${payload.milestoneCount} 个里程碑` : '',
+              ].filter(Boolean).join(' / ') || '路径生成完成'
+            : String(payload?.pathTitle || payload?.title || ''),
       };
     });
 

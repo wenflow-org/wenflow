@@ -351,4 +351,19 @@ describe('buildGraphView（图视图 + 路径筛选）', () => {
     // 关键：候选来自**全量**边，筛选后仍能看到另一条路径（否则用户切过去就回不来）
     expect(onlyP1.meta.paths.map((p) => p.id).sort()).toEqual(['p1', 'p2']);
   });
+
+  // 2026-11-04：存量边/概念可能残留指向已删除路径的 pathId，选进筛选后接口 404「路径不存在」、
+  // 整块图谱不可用。候选只列 learning_paths 里仍存在的路径。
+  it('路径候选剔除已删除路径（learning_paths 无此 id）', async () => {
+    const { deps } = makeDeps();
+    // p2 已被删除：listPathTitles 只回 p1（等价 prisma.learning_paths.findMany 的行为）
+    deps.listPathTitles = async (pathIds) =>
+      pathIds.filter((id) => id === 'p1').map((id) => ({ id, title: `路径 ${id}` }));
+    const svc = new ConceptGraphService(deps);
+    await svc.materializePathGraph({ userId: 'u1', pathId: 'p1', kcAnnotation: ann([['a', 'A'], ['b', 'B']], [['a', 'b']]), cognitiveCore: null });
+    await svc.materializePathGraph({ userId: 'u1', pathId: 'p2', kcAnnotation: ann([['c', 'C'], ['d', 'D']], [['c', 'd']]), cognitiveCore: null });
+
+    const all = await svc.buildGraphView('u1', {});
+    expect(all.meta.paths.map((p) => p.id)).toEqual(['p1']);
+  });
 });

@@ -320,6 +320,8 @@ export interface LearnerStateReview {
 export interface AdaptiveGuidancePayload {
   copy: AdaptiveGuidanceCopy;
   summary: LearnerStateSummary;
+  /** 生成这份 copy 的页面视图（#187：两个视图各生成各的，不再跨视图借用文案） */
+  view?: 'dashboard' | 'learning-state';
   review?: LearnerStateReview | null;
   debug?: {
     skillId: string;

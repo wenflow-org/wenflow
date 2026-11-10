@@ -134,6 +134,88 @@ const TRANSIENT_UPSTREAM_CATEGORIES = new Set(['network', 'provider_timeout', 'p
 const TRANSIENT_UPSTREAM_MESSAGE_RE = /retry budget exhausted|upstream_5\d\d|\b50[234]\b|\b529\b|\b429\b|provider_timeout|timed out|timeout|fetch failed|socket hang up|econnreset|rate.?limit|insufficient quota|network error|not supported by any configured account/i;
 
 /**
+ * 「中断窗口」类课堂冲突（`TeachingSessionConflictError` 的子集，由
+ * `TeachingSessionRepository.claimOperation` 抛出）。
+ *
+ * #153：进程重启 / 网关超时会让重入撞上这两码，而它们都只是"这次是从中途重入"，不是"这节课坏了"：
+ *   - `TEACHING_SESSION_STALE`：上一回合其实已经提交、只是「教师回合已提交」与「虚拟侧状态写回」
+ *     之间被中断 → 旧 revision 过期（现读 revision 重试一次即可继续）；
+ *   - `TEACHING_SESSION_BUSY`：崩溃进程遗留的操作租约还没到期（`TEACHING_OPERATION_LEASE_MS`
+ *     = 2 分钟，`virtual-lab/lease-protocol.ts`）→ 等租约自动释放后可续跑。
+ *
+ * 两个码都必须归类为**可续跑**（非终局）：否则一次重启就让整节课 `failed`，只能人工
+ * `restart-learning`（与 `simulation.execution.ts` 的 #46 收束兜底同口径）。
+ * 不包括 `TEACHING_SESSION_STATE_CHANGED` / `FINALIZATION_*` —— 那些是课堂状态本身变了
+ * （已结束等），不属于中断窗口，保持原有语义。
+ */
+const RESUMABLE_TEACHING_SESSION_CONFLICT_CODES = new Set([
+  'TEACHING_SESSION_STALE',
+  'TEACHING_SESSION_BUSY',
+]);
+
+/** 上一回合已提交但虚拟侧状态未写回 → 快照 revision 过期；可用「现读 revision + 重试一次」恢复。 */
+export function isTeachingSessionStaleError(error: unknown): boolean {
+  return (error as { code?: unknown } | null)?.code === 'TEACHING_SESSION_STALE';
+}
+
+/** 中断窗口类课堂冲突（STALE / BUSY）：可续跑，会话不得终局化为 failed。 */
+export function isResumableTeachingSessionConflictError(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === 'string' && RESUMABLE_TEACHING_SESSION_CONFLICT_CODES.has(code);
+}
+
+/**
+ * #206：**终局类**课堂错误——课堂状态本身已经变了（并发收束/已结束 → `TEACHING_SESSION_STATE_CHANGED`），
+ * 或收束操作已被接管/失效（`FINALIZATION_*`）。它们与「中断窗口」相反：重试不会让它们变可续跑，
+ * 必须原样交给上层分类器（该终局化就终局化），不能被重试兜底里的原始 `STALE` 覆盖后静默。
+ */
+export function isTerminalTeachingSessionConflictError(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  if (typeof code !== 'string') return false;
+  return code === 'TEACHING_SESSION_STATE_CHANGED' || code.startsWith('FINALIZATION_');
+}
+
+/**
+ * #206：把一个错误的「重试来源」作为**附加信息**挂到终局错误上（非枚举属性，不改变主错误码/消息）。
+ * 用途：`STALE → 重试 → STATE_CHANGED` 抛出的仍是 `STATE_CHANGED`，但保留「本次是重试后的失败」
+ * 供上层/日志对账；不可写时不阻断（附加信息尽力而为）。
+ */
+export function attachStaleRetryContext(terminalError: unknown, staleError: unknown): void {
+  const target = terminalError as { staleRetry?: unknown } | null;
+  if (!target || typeof target !== 'object') return;
+  if (target.staleRetry !== undefined) return;
+  try {
+    Object.defineProperty(target, 'staleRetry', {
+      value: { code: 'TEACHING_SESSION_STALE', message: asErrorLike(staleError).message || String(staleError) },
+      enumerable: false,
+      configurable: true,
+      writable: true,
+    });
+  } catch {
+    // 附加信息尽力而为：不可写（冻结/宿主对象）时保留终局错误本身即可
+  }
+}
+
+/**
+ * #204：本函数所在收尾流程（`endSession(end_only)`）是否**仍会产出 `lesson:completed`**。
+ *
+ * 教学链路的 `task:completed`（带 `sessionId`）默认把投影键刷新让给同一次收尾的
+ * `lesson:completed`；一旦授课会话已经不处于「可再收束」状态（completed 幂等分支 / superseded /
+ * failed 等状态拒绝），endSession 只会幂等返回或抛 STATE_CHANGED，**不会再产出**
+ * `lesson:completed` —— 此时结算方必须自己补刷，否则该次收尾对投影键 0 次刷新（#204）。
+ *
+ * 判据与 `TeachingSessionRepository.claimFinalization` 的 `allowedStatuses`（end_only）同口径：
+ * active / paused / timeout / finalizing / finalization_failed 才可能真正收束并产出事件。
+ */
+export function willEmitLessonCompletedOnEnd(status: string | null | undefined): boolean {
+  return status === 'active'
+    || status === 'paused'
+    || status === 'timeout'
+    || status === 'finalizing'
+    || status === 'finalization_failed';
+}
+
+/**
  * 「上游突发不可用」类错误（**会话级**判定，2026-09-23 四学段测试 I-1）。
  *
  * 单次调用的重试预算被 5xx/超时/限流耗尽，说明的是"**这次上游没给到**"，而不是"这节课坏了"；
@@ -143,9 +225,13 @@ const TRANSIENT_UPSTREAM_MESSAGE_RE = /retry budget exhausted|upstream_5\d\d|\b5
  *   - 那个决定**单次调用内**要不要重试；预算耗尽是网关的终止信号，当成可重试会让预算形同虚设；
  *   - 这个决定**会话**要不要终态。
  *
- * 判据优先级：网关 category → statusCode → 文案（包装丢字段时仍能识别预算耗尽）。
+ * 判据优先级：中断窗口冲突（#153，非终局可续跑）→ 网关 category → statusCode → 文案
+ * （包装丢字段时仍能识别预算耗尽）。
  */
 export function isTransientUpstreamLearnError(error: unknown): boolean {
+  // #153：课堂冲突带 category='conflict'，若走下面的 category 分支会被直接判成"非上游突发"
+  // 从而终局化——中断窗口内的两码必须先短路为可续跑。
+  if (isResumableTeachingSessionConflictError(error)) return true;
   const record = (error ?? {}) as { category?: unknown; statusCode?: unknown };
   const category = typeof record.category === 'string' ? record.category : '';
   if (category) return TRANSIENT_UPSTREAM_CATEGORIES.has(category);

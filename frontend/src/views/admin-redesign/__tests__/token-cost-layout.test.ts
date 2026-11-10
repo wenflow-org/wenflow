@@ -97,8 +97,9 @@ describe('成本页 · 未定价占位（状态词不进行内）', () => {
     expect(kpi.exists()).toBe(true);
     expect(kpi.find('.mk-kpi__num').text()).toBe('—');
     expect(kpi.classes()).toContain('mk-kpi--muted');
-    // 原因与动作仍在（页顶那一行轻量提示 + 可点直达）
-    expect(kpi.find('.mk-kpi__hint').text()).toContain('待补 2 个模型单价');
+    // 原因与动作仍在（2026-11-01：卡内解释文字撤除，原因退到卡根 title；可点直达保留）
+    expect(kpi.find('.mk-kpi__hint').exists()).toBe(false);
+    expect(kpi.attributes('title')).toContain('待补 2 个模型单价');
     expect(kpi.classes()).toContain('mk-kpi--clickable');
     // 状态词不得回到数值位
     expect(kpi.find('.mk-kpi__num').text()).not.toContain('未配置');
@@ -110,11 +111,11 @@ describe('成本页 · 未定价占位（状态词不进行内）', () => {
     const heads = w.findAll('.tc-skilltable__head > span').map((s) => s.text());
     // 输入/输出（原 Prompt/Completion，2026-10-16 用户：「那就输入输出就行了，不要搞那么多」）
     // 调用 → 调用次数（2026-10-24 用户「调用次数就写调用次数就可以了」：列名用可数的全名）
-    expect(heads).toEqual(['Skill', '调用次数', 'Token 用量', '输入', '输出', '均次 Token', '成本', '占比']);
+    expect(heads).toEqual(['Skill', '调用次数', 'Token 用量', '输入', '输出', '均次 Token', '预估成本 (USD)', '占比']);
     const rows = w.findAll('.tc-skilltable__row');
     expect(rows).toHaveLength(2);
     const priced = rows[0].find('.tc-st__cost');
-    expect(priced.text()).toContain('$1.50');
+    expect(priced.text()).toBe('1.5000');
     expect(priced.classes()).not.toContain('tc-st__cost--none');
     const unpriced = rows[1].find('.tc-st__cost');
     expect(unpriced.text()).toBe('—');
@@ -152,7 +153,7 @@ describe('成本页 · 未定价占位（状态词不进行内）', () => {
     const bodyRows = w.findAll('.tc-table__row');
     expect(bodyRows).toHaveLength(2);
     const priced = bodyRows[0].find('.tc-c--cost');
-    expect(priced.text()).toContain('$2.00');
+    expect(priced.text()).toBe('2.0000');
     expect(priced.classes()).not.toContain('tc-cost--none');
     const unpriced = bodyRows[1].find('.tc-c--cost');
     expect(unpriced.text()).toBe('—');

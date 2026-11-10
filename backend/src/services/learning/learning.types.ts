@@ -325,6 +325,16 @@ export interface CompleteTaskData {
   completionSource?: 'human-ui' | 'teaching-finalize' | 'vl-assisted' | 'vl-blackbox' | 'timebox-skip' | 'learning-api' | 'probe';
   /** 关联的教学会话（有则写入事件与 learner_evidence.sessionId） */
   sessionId?: string | null;
+  /**
+   * #147 缺口（回归 #204）：本次结算前关联会话**已闭合**（`completed` + `wrapup` 已由更早的收尾产出）。
+   *
+   * 此时本次完成不会再产出 `lesson:completed` 事件——而教学快照键（teaching:path:milestone:task）的
+   * 刷新正是交给 `lesson:completed` 消费者的，事件消费者又按 sessionId 跳过 `task:completed`，
+   * 于是投影键 0 次刷新、快照静默陈旧到 `getLatest` 的 10 分钟兜底。置 true 时由 `completeTask`
+   * 自己补做 eager 刷新。缺省 false/undefined：会话由本流程的 endSession 一并关闭（真人 finalize
+   * 的 auto-end、VL 仿真的 completeTask→endSession），仍由 `lesson:completed` 消费者刷新。
+   */
+  sessionClosedBeforeCompletion?: boolean;
   /** 业务时间（日期模拟用）：提供时台账日期按 UTC 日、streak 以该时刻推进；缺省=真墙钟（现网不变） */
   asOf?: Date;
 }

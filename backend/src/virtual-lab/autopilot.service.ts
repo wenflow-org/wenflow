@@ -11,6 +11,7 @@
  */
 import prisma from '../config/database'
 import { logger } from '../utils/logger'
+import { withTransaction } from '../utils/with-transaction'
 import { runWithContext } from '../gateway/api-gateway/context'
 import { asErrorLike } from './vlab-types'
 import simulationCoordinator from '../coordinators/simulation.coordinator'
@@ -202,24 +203,46 @@ export class AutopilotService {
     return { status: 'idle', ...state }
   }
 
+  /**
+   * 写入 `stageResults.autopilot`（#171 实例 2）。
+   *
+   * 此前是**租约外的整列读改写**：`findUnique` 拿整份 stageResults → 只改 autopilot 子键 →
+   * 整列 `update` 写回。会话租约（`runLeasedExclusive`）只保证同一会话的 autopilot 循环互斥，
+   * **不阻挡其它写者**——`assisted-shared` 的 `mergeSessionStageResults` / `clearSessionStageResultsKey`、
+   * `simulation.coordinator` 的事务写、教学回合写 `teaching` 都可以在两步之间落地，
+   * 于是这里用**旧快照**把它们的写入整列回滚掉：可复现的受害者是 `hold` / `path_review` /
+   * `runtimeStats` 等其它子键被抹回旧快照，管理端表现为「刚保存的状态莫名消失」。
+   * （复核注记：教学 revision 存于 `teaching_sessions` 而非 `stageResults`，本函数也不触碰 revision，
+   * 故「revision 回滚触发 STALE 终局」是此前不实的描述，已在此更正。）
+   *
+   * 现改为与同族一致的**事务内读改写**（范式见 `routes/admin/virtual-learners.assisted-shared.ts`
+   * 的 `mergeSessionStageResults`）：读与写在同一事务里，别的写者要么在之前（本次读到新值）、
+   * 要么在之后（覆盖本键之外的内容不受影响）。注意只替换 `autopilot` 这一个顶层键，
+   * 其它键一律沿用事务内读到的最新值。
+   */
   private async writeState(
     sessionId: string,
     patch: Partial<AutopilotState>,
     base?: AutopilotState
   ): Promise<void> {
-    const session = await prisma.virtual_sessions.findUnique({ where: { id: sessionId } })
-    if (!session) return
-    const stageResults = parseStageResults(session.stageResults)
-    stageResults.autopilot = {
-      ...(base || (stageResults.autopilot as AutopilotState | undefined) || {}),
-      ...patch,
-      // 心跳（报告 #58）：每次状态写入都盖一次，跨进程对账据此判定持有循环存活
-      heartbeatAt: new Date().toISOString()
-    }
-    await prisma.virtual_sessions.update({
-      where: { id: sessionId },
-      data: { stageResults: JSON.stringify(stageResults), updatedAt: new Date() }
-    })
+    await withTransaction(async (tx) => {
+      const session = await tx.virtual_sessions.findUnique({
+        where: { id: sessionId },
+        select: { stageResults: true }
+      })
+      if (!session) return
+      const stageResults = parseStageResults(session.stageResults)
+      stageResults.autopilot = {
+        ...(base || (stageResults.autopilot as AutopilotState | undefined) || {}),
+        ...patch,
+        // 心跳（报告 #58）：每次状态写入都盖一次，跨进程对账据此判定持有循环存活
+        heartbeatAt: new Date().toISOString()
+      }
+      await tx.virtual_sessions.update({
+        where: { id: sessionId },
+        data: { stageResults: JSON.stringify(stageResults), updatedAt: new Date() }
+      })
+    }, { label: 'virtual-lab.autopilot.writeState' })
   }
 
   private resolveMode(session: VirtualSessionWithProfile): AutopilotMode {
@@ -800,7 +823,7 @@ export class AutopilotService {
           })
           return
         }
-        const recoverable = /provider|timeout|timed out|fetch failed|network|rate.?limit|503|502|budget|invalid json|does not contain valid json|retry/i.test(errMsg)
+        const recoverable = /provider|timeout|timed out|fetch failed|network|rate.?limit|503|502|budget|invalid json|does not contain valid json|retry|learn_classroom_unbound/i.test(errMsg)
         if (!recoverable) {
           await this.writeState(sessionId, {
             status: 'failed',
@@ -1138,7 +1161,7 @@ export class AutopilotService {
 
       if (!learnResult.success) {
         const errMsg = String(learnResult.error || '').toLowerCase()
-        const recoverable = /provider|timeout|timed out|fetch failed|network|rate.?limit|503|502|budget|invalid json|does not contain valid json|retry/i.test(errMsg)
+        const recoverable = /provider|timeout|timed out|fetch failed|network|rate.?limit|503|502|budget|invalid json|does not contain valid json|retry|learn_classroom_unbound/i.test(errMsg)
         if (!recoverable || lessonRecoveries >= AUTOPILOT_LESSON_RECOVERY_LIMIT) {
           await this.writeState(sessionId, {
             status: 'failed',

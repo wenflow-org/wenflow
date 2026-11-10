@@ -146,6 +146,7 @@ export async function buildHealthCenterSummaryReport(
       ? ['degradation_events 读取失败或表尚未创建；不能据此判定「没有降级」']
       : topDegradation,
     cause: '降级遥测落库（degradation_events，保留 30 天）',
+    okNote: '近 7 天没有降级事件',
     action: 'none',
     fixHint: '按 source/category 用 audit-degradation-rate 或执行日志查根因；本项只读',
     source: 'degradation_events',
@@ -165,6 +166,7 @@ export async function buildHealthCenterSummaryReport(
       ? ['死信读取失败；不能据此判定「没有死信」']
       : deadOutbox.items.slice(0, 5).map((item) => `${item.eventType}｜${item.lastError || '无错误信息'}`),
     cause: 'domain_event_outbox.status=dead（重试耗尽）',
+    okNote: '没有投递失败的事件（死信队列为空）',
     action: 'none',
     fixHint: '到运营中心 → 运维工具查看死信；先修根因再重放（毒丸默认拦截，确认后可 force）',
     source: 'domain_event_outbox',

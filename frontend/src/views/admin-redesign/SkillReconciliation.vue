@@ -11,10 +11,10 @@
       <template v-else-if="recReport">
         <!-- 口径 pill（中性 mk-pill）+ 异常计数（mk-badge 语气，替代自造色块） -->
         <div class="sk-rec__pills">
-          <span class="mk-pill" :title="`已上线数 / 登记册全量（登记册含插件，多于目录）`">已上线 {{ recReport.summary.byStatus.live || 0 }} / {{ recReport.summary.total }}</span>
+          <span class="mk-badge mk-badge--muted" :title="`已上线数 / 登记册全量（登记册含插件，多于目录）`">已上线 {{ recReport.summary.byStatus.live || 0 }} / {{ recReport.summary.total }}</span>
           <span v-if="recReport.summary.unregistered" class="mk-badge mk-badge--bad">未注册 {{ recReport.summary.unregistered }}</span>
           <span v-if="recReport.summary.activeMissing" class="mk-badge mk-badge--warn" :title="ACTIVE_MISSING_HINT">无生效版本 {{ recReport.summary.activeMissing }}</span>
-          <span v-if="recReport.summary.orphanRegistrations" class="mk-badge mk-badge--bad" title="登记册已删除/不存在，但注册记录仍残留（幽灵注册）">失效注册 {{ recReport.summary.orphanRegistrations }}</span>
+          <span v-if="recReport.summary.orphanRegistrations" class="mk-badge mk-badge--bad" title="技能注册表里已没有它，但数据库注册记录仍残留">失效注册 {{ recReport.summary.orphanRegistrations }}</span>
           <span v-else class="mk-pill" :title="recReport.summary.orphanRetiredExempt ? `无失效注册。退役技能另有 ${recReport.summary.orphanRetiredExempt} 项注册行按「不动历史数据」保留、不计异常` : '无失效注册'">
             失效注册 0
           </span>
@@ -69,12 +69,12 @@
           </colgroup>
           <thead>
             <tr>
-              <th>Skill</th>
-              <th title="是否在配置文件中声明">配置声明</th>
-              <th title="是否已在系统运行中注册">运行注册</th>
-              <th title="线上生效 Prompt：是否有生效版本">生效版本</th>
-              <th>完成度</th>
-              <th title="只列未注册 / 无生效版本两类异常，失效注册残留在表末单独列出">差集</th>
+              <th scope="col">Skill</th>
+              <th scope="col" title="是否在配置文件中声明">配置声明</th>
+              <th scope="col" title="是否已在系统运行中注册">运行注册</th>
+              <th scope="col" title="线上生效 Prompt：是否有生效版本">生效版本</th>
+              <th scope="col">完成度</th>
+              <th scope="col" title="只列未注册 / 无生效版本两类异常，失效注册残留在表末单独列出">差集</th>
             </tr>
           </thead>
           <tbody>
@@ -109,15 +109,17 @@
                   </div>
                 </td>
                 <td>
-                  <span :class="['sk-rec-yn', e.row.manifest ? 'sk-rec-yn--ok' : 'sk-rec-yn--no']">{{ e.row.manifest ? '✓' : '✗' }}</span>
+                  <!-- 2026-10-31 外部评审：豁免类缺项不是错误——带豁免徽章的格子画灰色 —，
+                       不再用红 ✗ 报异常（✗ 只留给真异常） -->
+                  <span :class="['sk-rec-yn', e.row.manifest ? 'sk-rec-yn--ok' : e.row.kind === 'aux' ? 'sk-rec-yn--na' : 'sk-rec-yn--no']">{{ e.row.manifest ? '✓' : e.row.kind === 'aux' ? '—' : '✗' }}</span>
                   <span v-if="e.row.kind === 'aux' && !e.row.manifest" class="mk-badge mk-badge--muted sk-rec-tag">免注册</span>
                 </td>
                 <td>
-                  <span :class="['sk-rec-yn', e.row.registered ? 'sk-rec-yn--ok' : 'sk-rec-yn--no']">{{ e.row.registered ? '✓' : '✗' }}</span>
+                  <span :class="['sk-rec-yn', e.row.registered ? 'sk-rec-yn--ok' : e.row.registrationExempt ? 'sk-rec-yn--na' : 'sk-rec-yn--no']">{{ e.row.registered ? '✓' : e.row.registrationExempt ? '—' : '✗' }}</span>
                   <span v-if="e.row.registrationExempt" class="mk-badge mk-badge--muted sk-rec-tag">豁免</span>
                 </td>
                 <td>
-                  <span :class="['sk-rec-yn', e.row.active ? 'sk-rec-yn--ok' : 'sk-rec-yn--no']">{{ e.row.active ? '✓' : '✗' }}</span>
+                  <span :class="['sk-rec-yn', e.row.active ? 'sk-rec-yn--ok' : e.row.noPromptFile ? 'sk-rec-yn--na' : 'sk-rec-yn--no']">{{ e.row.active ? '✓' : e.row.noPromptFile ? '—' : '✗' }}</span>
                   <span v-if="e.row.noPromptFile" class="mk-badge mk-badge--muted sk-rec-tag">纯函数</span>
                 </td>
                 <td>
@@ -373,9 +375,15 @@ function recDotTone(row: RecRow) {
   return "idle";
 }
 /** 行级异常判据（2026-10-14）：三源任一为 ✗ 即整行弱告警底——与三列 ✓/✗ 的取值同源，
-    避免「列上有红 ✗ 但整行看着跟健康行一样」 */
+    避免「列上有红 ✗ 但整行看着跟健康行一样」。
+    2026-10-31 外部评审：豁免类缺项不算异常——aux 无 manifest（免注册）、
+    registrationExempt（豁免）、noPromptFile（纯函数不常驻）不参与标记，
+    整行不再泛红（learner-model 行此前被误报成告警行） */
 function recRowFlagged(row: RecRow): boolean {
-  return !row.manifest || !row.registered || !row.active;
+  if (!row.manifest && row.kind !== 'aux') return true
+  if (!row.registered && !row.registrationExempt) return true
+  if (!row.active && !row.noPromptFile) return true
+  return false
 }
 function recGateDetail(completion: SkillCompletion): string {
   const gates: Array<[string, string]> = [
@@ -408,8 +416,10 @@ defineExpose({ refresh, recReport, recDiff });
 .sk-rec-row--flagged { background: color-mix(in srgb, var(--mk-red) 6%, transparent); }
 
 .sk-rec__pills { display: inline-flex; gap: 6px; margin-left: auto; flex-wrap: wrap; align-items: center; }
-/* 同行里 mk-pill（中性口径）与 mk-badge（异常语气）统一到同一档尺寸，避免高矮不齐 */
-.sk-rec__pills > * { padding: 5px 12px; border-radius: 999px; font-size: var(--mk-fs-micro); font-weight: 600; }
+/* 2026-11-05 去胶囊化：这一行原先把「已上线 X/Y」借 .mk-pill 当形状（那是筛选触发器），
+   再靠下面这条覆盖把胶囊与徽章压成同一档高度——两个不同语义的元素硬对齐。
+   现在整行都是 .mk-badge（中性读数走 --muted、异常走 --bad/--warn），形状由徽章自带，
+   覆盖行整条撤除。 */
 .sk-rec__skeleton { padding: 12px; }
 .sk-rec-table th, .sk-rec-table td { text-align: left; }
 /* 四个布尔列（配置声明/运行注册/生效版本/完成度）与差集列取居中：铺满卡片后每列 128px，
@@ -423,6 +433,8 @@ defineExpose({ refresh, recReport, recDiff });
 .sk-rec-yn { font-weight: 700; font-size: var(--mk-fs-body); }
 .sk-rec-yn--ok { color: var(--mk-green); }
 .sk-rec-yn--no { color: var(--mk-red); }
+/* 豁免类缺项（免注册/豁免/纯函数）：中性灰 —，不参与红绿语义（2026-10-31 外部评审） */
+.sk-rec-yn--na { color: var(--mk-faint); font-weight: 400; }
 /* 免注册 / 豁免 / 纯函数：语气归 mk-badge--muted，本类只留与 ✓/✗ 的间距 */
 .sk-rec-tag { margin-left: 4px; vertical-align: 1px; }
 .sk-rec-orphans { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 14px; border-top: 1px dashed var(--mk-line); font-size: var(--mk-fs-micro); color: var(--mk-muted); }

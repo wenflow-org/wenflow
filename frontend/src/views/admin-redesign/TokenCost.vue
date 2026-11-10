@@ -1,5 +1,5 @@
 <template>
-  <div class="mk-page">
+  <div class="mk-page tc-page">
     <!-- 页头：页名 + 动作区（时间窗 / 读数时刻 / 导出）。读数归下方 KPI 卡，页头不复述 -->
     <MkPageHead title="成本分析">
       <template #actions>
@@ -33,7 +33,6 @@
          并给重试按钮 actionBusy 反馈（与 ExecLogs 失败态对齐） -->
     <MkEmptyState
       v-if="loadFailed && !summary"
-      icon="◌"
       tone="error"
       min
       title="Token 成本数据加载失败"
@@ -68,7 +67,6 @@
       <MkEmptyState
         v-if="summaryEmpty"
         min
-        icon="◌"
         title="这个时间窗没有调用"
         :action-text="days !== 90 ? '看近 90 天' : '去执行日志'"
         @action="days !== 90 ? (days = 90) : goExecLogs()"
@@ -118,7 +116,11 @@
            系列（失败数移入卡尾 note 与柱 title，不再与用量混读）。 -->
       <section class="mk-card">
         <div class="mk-card__head">
-          <!-- 卡头 = 标题 + 单位；右侧只留跨页跳转 -->
+          <!-- 卡头 = 标题 + 单位；右侧只留跨页跳转。
+               零值列的柱顶「·」（OvBars 的零值写法，见该组件的 sparse/num 约定）原先靠卡头一句
+               「柱顶『·』表示当天没有 Token 用量」解码——那是给图例找的补丁（2026-11-02 评审）。
+               2026-11-03 收进柱自己：零值列的 title 直接写「当天没有 Token 用量」，鼠标悬到哪根柱
+               就在哪根上得到答案，卡头不必替图表说话。 -->
           <div class="tc-card-head__main">
             <h3 class="mk-card__title">近 {{ days }} 天用量趋势</h3>
             <span class="mk-card__meta">单位：Token</span>
@@ -141,10 +143,11 @@
           <OvBars
             v-if="trend.length"
             :cols="trendCols"
-            :bar-width="days <= 7 ? 44 : days <= 30 ? 20 : 10"
+            :bar-width="days <= 7 ? 36 : days <= 30 ? 16 : 8"
             :show-nums="days <= 30"
             :label-every="days <= 7 ? 1 : days <= 30 ? 4 : 12"
             :min-bars-height="150"
+            :gridlines="4"
           />
         </div>
         <!-- 趋势卡尾 note（审核 #111）：原由 trend.reduce 求和，与 KPI 的 totals 在非整日窗口
@@ -180,12 +183,12 @@
         <div v-if="skillRows.length" class="tc-skilltable" :class="{ 'tc-skilltable--cost': skillCostTotal > 0 }" role="table" :aria-label="SKILL_COST_TITLE">
           <div class="tc-skilltable__head" role="row">
             <span role="columnheader">Skill</span>
-            <span role="columnheader">调用次数</span>
-            <span role="columnheader">Token 用量</span>
+            <span role="columnheader" class="tc-th--sortable" :aria-sort="skillAria('calls')" @click="toggleSkillSort('calls')">调用次数<i class="tc-th__caret" :class="skillCaret('calls')"></i></span>
+            <span role="columnheader" class="tc-th--sortable" :aria-sort="skillAria('tokens')" @click="toggleSkillSort('tokens')">Token 用量<i class="tc-th__caret" :class="skillCaret('tokens')"></i></span>
             <span role="columnheader">输入</span>
             <span role="columnheader">输出</span>
             <span role="columnheader">均次 Token</span>
-            <span role="columnheader">成本</span>
+            <span role="columnheader" class="tc-th--sortable" :aria-sort="skillAria('usd')" @click="toggleSkillSort('usd')">预估成本 (USD)<i class="tc-th__caret" :class="skillCaret('usd')"></i></span>
             <!-- 文案保持「占比」（表格契约锁定），口径用 title 说清：已定价按成本、未定价按 Token；
                  导出 CSV 已拆成「Token占比% / 成本占比%」两列。 -->
             <!-- 可见文案由 .tc-share-head 的伪元素补成「成本占比 / Token 占比」；
@@ -226,7 +229,7 @@
             <div class="mk-card__head-right">
               <!-- D13：中小用户此前不可见——加按 用户ID/昵称/邮箱 的服务端搜索（不改动 summary/趋势） -->
               <MkFilterSearch v-model="userQuery" placeholder="搜索用户 ID / 昵称 / 邮箱" />
-              <span class="mk-card__meta">{{ userQuery ? `匹配 ${byUser.length}` : `Top ${byUser.length}` }}<template v-if="!userAll && byUser.length > userLimit"> · 显示前 {{ userLimit }}</template></span>
+              <span class="mk-card__meta">{{ userQuery ? `匹配 ${byUser.length}` : `Top ${byUser.length}` }}</span>
               <!-- G8（2026-10-10）：搜索失败静默保留旧列表时的行内 stale 提示——此前失败无任何反馈，
                    meta「匹配 N」仍按输入框实时读数，与表格脱源（N 是旧结果的行数）。对齐 Skills.vue
                    liveSkillsError 行内告警判例：辅助数据失败不弹遮主表的 toast，但必须指认数据来源 -->
@@ -276,6 +279,7 @@ import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import { toast } from '@/utils/toast'
+import { formatUsd } from './costFormat'
 
 /* 文案单源（R6 复读单源化）：卡标题与成本表的 aria-label 共用一份 */
 const SKILL_COST_TITLE = '按 Skill 成本明细'
@@ -424,7 +428,41 @@ const totalTokens = computed(() => summary.value?.totals.tokens || 0)
 /* 空窗口判据：后端 getSummary 恒返回对象（totals 全 0），「!summary」整页空态不可达；
    以 calls === 0 判空，筛选项（时间窗/测试流量）切换后用户仍可换窗自救 */
 const summaryEmpty = computed(() => !!summary.value && summary.value.totals.calls === 0)
-const skillRows = computed(() => bySkill.value.slice(0, skillAll.value ? bySkill.value.length : skillLimit))
+/* 2026-11-09 走查：表名叫「按 Skill 成本明细」，行序却是按调用次数——第 5 行金额高于第 4 行、
+   却排在后面，且表头无任何排序指示。改为默认按成本降序，三个数值列表头可点切换（aria-sort 同步）。 */
+type SkillSortKey = 'calls' | 'tokens' | 'usd'
+const skillSortKey = ref<SkillSortKey>('usd')
+const skillSortDir = ref<'asc' | 'desc'>('desc')
+function toggleSkillSort(k: SkillSortKey) {
+  if (skillSortKey.value === k) {
+    skillSortDir.value = skillSortDir.value === 'desc' ? 'asc' : 'desc'
+  } else {
+    skillSortKey.value = k
+    skillSortDir.value = 'desc'
+  }
+}
+function skillSortVal(r: SkillCostRow, k: SkillSortKey): number {
+  if (k === 'usd') return typeof r.usd === 'number' ? r.usd : Number.NEGATIVE_INFINITY
+  if (k === 'tokens') return r.tokens || 0
+  return r.calls || 0
+}
+function skillAria(k: SkillSortKey): 'ascending' | 'descending' | 'none' {
+  if (skillSortKey.value !== k) return 'none'
+  return skillSortDir.value === 'desc' ? 'descending' : 'ascending'
+}
+function skillCaret(k: SkillSortKey): string {
+  if (skillSortKey.value !== k) return 'tc-th__caret--off'
+  return skillSortDir.value === 'desc' ? 'tc-th__caret--desc' : 'tc-th__caret--asc'
+}
+const skillSorted = computed(() => {
+  const dir = skillSortDir.value === 'desc' ? -1 : 1
+  return [...bySkill.value].sort(
+    (a, b) => (skillSortVal(a, skillSortKey.value) - skillSortVal(b, skillSortKey.value)) * dir
+  )
+})
+const skillRows = computed(() =>
+  skillSorted.value.slice(0, skillAll.value ? skillSorted.value.length : skillLimit)
+)
 const userRows = computed(() => byUser.value.slice(0, userAll.value ? byUser.value.length : userLimit))
 
 
@@ -433,7 +471,7 @@ const skillCostTotal = computed(() =>
   bySkill.value.reduce((acc, r) => acc + (typeof r.usd === 'number' ? r.usd : 0), 0)
 )
 function skillRowCost(r: SkillCostRow): string {
-  return typeof r.usd === 'number' ? `≈ $${fmtCostUsd(r.usd)}` : '—'
+  return typeof r.usd === 'number' ? formatUsd(r.usd) : '—'
 }
 /** 有无已定价金额（决定成本列占位色：无 → 暗灰） */
 function hasCost(r: SkillCostRow): boolean {
@@ -549,9 +587,9 @@ function goFailedLogs() {
 function goOverview() {
   intent.scene = 'overview'
 }
-/** P1#25：单价未配置 → 直达「模型与接入」补单价（决策就近） */
+/** P1#25：单价未配置 → 直达「系统设置」的模型与接入页签补单价（决策就近） */
 function goModelConfig() {
-  intent.scene = 'api-config'
+  intent.scene = 'system-settings'
 }
 
 const costLoading = ref(false)
@@ -575,21 +613,26 @@ const failedPct = computed(() => {
 const failedCallsText = computed(() =>
   failedCalls.value > 0 ? `${failedCalls.value} 次` : '0 次'
 )
-/** 失败卡副行：同一张卡内给分母，失败率不再另开一张卡 */
-const failedHintShort = computed(() => `共 ${totalCalls.value} 次调用 · ${failedPct.value}`)
+/** 失败卡副行：同一张卡内给分母，失败率不再另开一张卡。
+    统计范围单独说明（2026-11-02 评审）：本卡数是窗口内失败调用，下面三张明细表
+    只收产生 Token 用量的网关调用——不加这句，51 次失败在任何明细行上都找不到，
+    会被读成「数字对不上」。
+    2026-11-04 口径对齐：本卡「失败」与 /admin/execution-logs 的「失败」同一判据（不含超时），
+    副行补「不含超时」以免被读成全量失败。 */
+const failedHintShort = computed(
+  () => `共 ${totalCalls.value} 次调用 · ${failedPct.value} · 失败不含超时 · 三张明细排行只统计产生 Token 用量的网关调用，其余失败不在明细行里`
+)
 
-/* P1#25 单价未配置 = 决策态：卡可点直达「模型与接入」补单价 */
+/* P1#25 单价未配置 = 决策态：卡可点直达「系统设置」补单价 */
 const pricingMissing = computed(
   () => !costLoading.value && !costFailed.value && costUsd.value === null && !(costPricedCalls.value === 0 && costMissingCalls.value === 0)
 )
 
 /* P1#25 金额格式：固定 6 位小数改有效数字——固定 6 位对大额是噪音、对微额首屏
-   全是 0.000000 读不出量级。≥1 两位小数 / ≥0.01 四位 / 更小保留 6 位；0 与非法值显「0」 */
+   全是 0.000000 读不出量级。2026-11-09 走查统一：成本页三张表 + 调用成本卡共用 formatUsd
+   （固定 4 位小数、极小额显 <0.0001），单元格不再重复 ≈ $ 前缀，币种归表头。 */
 function fmtCostUsd(v: number): string {
-  if (!Number.isFinite(v) || v <= 0) return '0'
-  if (v >= 1) return v.toFixed(2)
-  if (v >= 0.01) return v.toFixed(4)
-  return v.toFixed(6)
+  return formatUsd(v)
 }
 
 /* 已加载数据对应的窗口键（D4）：缓存命中只在「同一窗口」时短路。
@@ -718,7 +761,10 @@ const trendCols = computed(() => trend.value.map((d) => ({
   label: d.date === todayKey.value ? '今日' : dayLabel(d.date),
   today: d.date === todayKey.value,
   num: fmtTokens(d.tokens),
-  title: `${d.date}：Token ${fmtTokens(d.tokens)} · ${d.calls.toLocaleString()} 次调用 · 失败 ${d.failed.toLocaleString()} 次`,
+  title: d.tokens > 0
+    ? `${d.date}：Token ${fmtTokens(d.tokens)} · ${d.calls.toLocaleString()} 次调用 · 失败 ${d.failed.toLocaleString()} 次`
+    /* 零值柱柱顶渲染「·」：说清它是「没有用量」而不是「有 0 条」（2026-11-03 从卡头图例移入） */
+    : `${d.date}：当天没有 Token 用量 · ${d.calls.toLocaleString()} 次调用 · 失败 ${d.failed.toLocaleString()} 次`,
   bars: [
     { pct: barPct(d.tokens, trendMax.value), tone: 'blue' as const },
   ],
@@ -726,13 +772,17 @@ const trendCols = computed(() => trend.value.map((d) => ({
 </script>
 
 <style scoped>
+/* 2026-11-09 走查：成本页内容较长（KPI + 趋势 + 三张明细/排行），最后一张「用户用量排行」
+   卡片在窄视口下易贴底被裁。.mk-page 全局已留 48px 呼吸位；这里再兜底一层最小底部留白，
+   确保最后一行的 3px 不被视口/外层容器直接截断（不引入二次滚动）。 */
+.tc-page { padding-bottom: calc(var(--mk-page-pad-b) + 16px); }
 /* 窗口 pill 随页头动作区排布（2026-10-16）：与「导出报表/刷新」同一行，窄屏由
    MkPageHead__actions 的 flex-wrap 自动折行；不再有独立的描边筛选条。 */
 /* 读数时刻：后端 5 分钟缓存，金额不是实时值 */
 .tc-stats-at { white-space: nowrap; }
 /* 未配置单价是可点动作（与「调用成本」卡同落点），徽章外观 + 手型 */
 .tc-unpriced { border: 0; font-family: inherit; cursor: pointer; }
-.tc-unpriced:hover { color: var(--mk-blue); }
+.tc-unpriced:hover { color: var(--mk-blue-text); }
 /* KPI 区已改用共享 .mk-kpi-grid（2026-09-29 重设：原私有 .tc-overview
    repeat(4,1fr)/gap14 与全站 KPI 栅格不是同一套；.tc-status--bad 随状态条
    去数字一并退役 → 见下方模板注释 */
@@ -775,7 +825,7 @@ const trendCols = computed(() => trend.value.map((d) => ({
   font: inherit;
   font-size: var(--mk-fs-micro);
   font-weight: 700;
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
   border-radius: 6px;
   cursor: pointer;
   transition: background 0.12s;
@@ -808,10 +858,18 @@ const trendCols = computed(() => trend.value.map((d) => ({
   display: flex;
   flex-direction: column;
   padding: 2px 14px 0;
+  /* 2026-11-04：窄屏八列（最小内容宽实测 709px > 卡内容宽 305px）会溢出卡右缘，
+     此前无滚动容器，最右「成本 / 占比」列被 .mk-card 的 overflow:clip 静默裁掉且不可达。
+     由表格自身接管横滚（同 .mk-table-scroll / SkillDetail .skd-tablewrap 判例），
+     列宽契约不删、数据不删。 */
+  overflow-x: auto;
 }
 .tc-skilltable__head,
 .tc-skilltable__row {
   display: grid;
+  /* 2026-11-04：行不得压到八列最小内容宽以下（否则数字列互相挤字），
+     窄屏溢出交由 .tc-skilltable 的横滚接管；宽屏 min-content 仍低于可用宽，行为不变。 */
+  min-width: min-content;
   /* 列宽收敛（2026-10-14 用户评审）：原五列纯 fr（1.4/.5/.9/.8/1）在宽屏把每个数值摊到
      各自列的最右——996px 卡里 Skill 列拿 282px 只装 85px 文字（Skill↔调用 空 197px），
      1480px 卡里更到 ~340px 空转。现按内容给上下限（Skill 是唯一文本列，其余数字列 ~100px），
@@ -845,6 +903,21 @@ const trendCols = computed(() => trend.value.map((d) => ({
   color: var(--mk-faint);
 }
 .tc-skilltable__head > span:not(:first-child) { text-align: right; }
+/* 2026-11-09 走查：数值列表头可点排序（默认成本降序），caret 紧跟文字右侧。
+   用空 <i> 画三角，不向表头 .text() 注入字符，保证表头文案契约（成本 (USD)）不被破坏。 */
+.tc-th--sortable { cursor: pointer; user-select: none; }
+.tc-th--sortable:hover { color: var(--mk-faint); }
+.tc-th__caret {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  margin-left: 4px;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+}
+.tc-th__caret--off { border-bottom: 5px solid var(--mk-faint); opacity: 0.35; }
+.tc-th__caret--desc { border-bottom: 5px solid var(--mk-blue); }
+.tc-th__caret--asc { border-top: 5px solid var(--mk-blue); }
 /* 占比口径上屏（2026-10-24）：表头 DOM 文案因测试契约保持「占比」，
    用伪元素补出「成本 / Token」，与导出 CSV 的两列同义。 */
 .tc-skilltable__head .tc-share-head::before { content: 'Token '; }

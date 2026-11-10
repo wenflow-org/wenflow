@@ -57,11 +57,10 @@
           <button type="button" class="mk-btn mk-btn--ghost vl-ai" :disabled="personaBusy" @click="generatePersona">
             {{ personaBusy ? '生成身份中…' : 'AI 生成身份' }}
           </button>
-          <span class="vl-ai-hint">{{ sampleType === 'student' ? '学生样本含考试节点与学期节奏' : '' }}</span>
         </div>
         <p v-if="personaSeed" class="mk-alert mk-alert--ok">{{ PERSONA_BACKFILLED_NOTE }}</p>
         <details class="vl-advanced">
-          <summary>{{ ASPIRATION_SUMMARY }}</summary>
+          <summary title="不是某次故事的目标">{{ ASPIRATION_SUMMARY }}</summary>
           <label class="mk-field">
             <span class="mk-field__label">长期倾向</span>
             <input
@@ -95,7 +94,7 @@ import { toast } from '@/utils/toast'
 /* ---------- 文案单源（R6 同文件复读治理）：同一句用户可见文案只在此定义一次，模板就地引用 ---------- */
 const STORY_HINT_LIBRARY = '字 · 建议 ≥ 40 字 · 学习需求由入库后自动生成的故事定义'
 const PERSONA_BACKFILLED_NOTE = '已回填人设，可改称呼/背景后创建'
-const ASPIRATION_SUMMARY = '可选 · 长期学习倾向（不是某次故事的目标）'
+const ASPIRATION_SUMMARY = '长期学习倾向'
 
 /* render=false 时不渲染 Teleport（保持与拆分前一致的 tab 条件渲染语义），弹窗状态仍常驻 */
 withDefaults(defineProps<{ render?: boolean }>(), { render: true })
@@ -199,7 +198,7 @@ async function generatePersona() {
     if (nameFromSeed) form.value.name = nameFromSeed
     const background = String(seed.background || seed.corePersonality || seed.behavioralProfileSummary || '').trim()
     if (background) form.value.story = background
-    toast.success('人设已回填，可改后点「创建虚拟学习者」')
+    toast.success('人设已回填')
   } catch (e) {
     toast.error(`生成失败：${errMsg(e)}`)
   } finally {
@@ -234,12 +233,6 @@ defineExpose({ open })
   flex: 0 0 auto;
 }
 .vl-ai { flex: 0 0 auto; }
-.vl-ai-hint {
-  margin: 0;
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-faint, #8492ab);
-  line-height: 1.45;
-}
 /* 高级折叠区（可选字段）：描边浅底盒，色值走 token（暗色由 token 自适应，不再打补丁） */
 .vl-advanced {
   margin-top: 4px;
@@ -270,7 +263,6 @@ defineExpose({ open })
 }
 @media (min-width: 3600px) {
   .vl-ai-row { gap: 16px; }
-  .vl-ai-hint { font-size: var(--mk-fs-body); }
   .vl-advanced { padding: 14px 20px; }
   .vl-advanced summary { font-size: var(--mk-fs-body); }
   .vl-advanced[open] summary { margin-bottom: 13px; }

@@ -2,7 +2,8 @@
  * 设置页「自定义模型服务」开关的 DOM 回写：
  * 未填端点时点击开关会被 handler 拒绝（模型保持 false），
  * 但 Vue 对 false→false 不重绘 checked，DOM 会停在用户点出来的「开」，
- * 与右侧「关」标签自相矛盾。这里锁定拒绝/回滚后开关必须回到模型值。
+ * 与模型/服务端状态脱节。这里锁定拒绝/回滚后开关必须回到模型值。
+ * （2026-11-04：可见状态改由标题承载，断言随之改看标题。）
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
@@ -16,6 +17,9 @@ const { getUserApiConfigMock, updateUserApiConfigMock, disableUserApiConfigMock,
   toastMock: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }
 }));
 
+/* 功能开关 mock 成翻开：这三套行为回归锁保护的是「开关翻开后的页面」，
+   默认隐藏态的断言在 settings.api-flow.test.ts */
+vi.mock('../settings-features', () => ({ SHOW_CUSTOM_MODEL_API: true, SHOW_MCP_TOOLS: true }));
 vi.mock('@/api/userCustom', () => ({
   getUserApiConfig: getUserApiConfigMock,
   updateUserApiConfig: updateUserApiConfigMock,
@@ -75,7 +79,8 @@ describe('Settings 自定义模型服务开关', () => {
     expect(updateUserApiConfigMock).not.toHaveBeenCalled();
     // 关键：用户点出来的 DOM 选中态必须被显式回写
     expect((switchInput(w).element as HTMLInputElement).checked).toBe(false);
-    expect(w.text()).toContain('自定义模型服务：关');
+    // 可见状态由标题唯一承载（2026-11-04：开关标签不再复述开/关）
+    expect(w.text()).toContain('内置模型服务已启用');
     w.unmount();
   });
 
@@ -93,7 +98,8 @@ describe('Settings 自定义模型服务开关', () => {
     expect(askConfirmMock).toHaveBeenCalled();
     expect(disableUserApiConfigMock).not.toHaveBeenCalled();
     expect((switchInput(w).element as HTMLInputElement).checked).toBe(true);
-    expect(w.text()).toContain('自定义模型服务：开');
+    // 可见状态由标题唯一承载（2026-11-04：开关标签不再复述开/关）
+    expect(w.text()).toContain('自定义模型服务已启用');
     w.unmount();
   });
 });

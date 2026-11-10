@@ -5,41 +5,53 @@
        Path 页签」，就地换开座舱：
          ?view=path&id=lp_x  →  ?view=session-real&id=gc_x&stage=path
        反查走详情接口的 conversationId（goal_conversations.learningPathId 最新一条）。
-       孤儿路径（conversationId=null，M-2，2026-10-29 夜审）不再落死空态：路径自身内容
-       （阶段/任务）照常渲染，页头注明未关联对话的事实；面包屑由 PathJourneyPanel 回写路径名。 -->
+       解析失败（无关联对话/接口失败）给明确空态，不静默、不假开。 -->
   <div class="mk-page pdx">
     <MkEmptyState
       v-if="state === 'resolving'"
-      icon="◌"
       title="正在打开该路径所在的学习会话…"
     />
     <MkEmptyState
       v-else-if="state === 'error'"
-      icon="◌"
       tone="error"
       title="路径打开失败"
       :description="errorMsg"
       action-text="重试"
       @action="resolve"
     />
-    <template v-else>
-      <header class="pdx-head">
-        <div class="pdx-head__main">
-          <div class="pdx-head__row">
-            <h2 class="pdx-head__title" :title="orphanTitle">{{ orphanTitle || '未命名路径' }}</h2>
-            <span v-if="orphanStatus" class="mk-badge" :class="statusBadge(orphanStatus)">{{ statusText(orphanStatus) }}</span>
-          </div>
-          <p class="pdx-head__note">该路径未关联目标对话（可能由快速生成创建）。以下为路径内容：阶段与任务。</p>
-        </div>
-        <!-- 治理动作（下线/恢复、重试生成）由 PathJourneyPanel 传送到这里（与座舱同款落点） -->
-        <span class="pdx-head__acts" data-path-acts></span>
-      </header>
-      <div class="mk-card pdx-card">
-        <div class="pdx-cardbody">
-          <PathJourneyPanel :path-id="pathId" />
-        </div>
+    <!-- 无关联对话的路径（学习端直接生成的那种）：空态照旧，但**不能只剩一个裸 id**——
+         2026-11-01 外部评审 P1：运营进来只看到「学习路径 / lp_1793…」+ 一句空态，
+         无法确认这是谁的哪条路径、是否还在生成。路径基础信息接口已经带回来了，直接摆出来。 -->
+    <section v-else class="mk-card pdx-orphan">
+      <div class="mk-card__head">
+        <h3 class="mk-card__title">{{ pathInfo?.title || '未命名路径' }}</h3>
+        <!-- 2026-11-04 缺陷修复：生成路径常把目标文本同时写进 title 与 subject，卡头右侧 meta
+             再复述一遍标题属冗余。沿用列表页 P2-6 口径（OpsContent.vue：仅 subject≠title 才渲染副行）。 -->
+        <span v-if="pathInfo?.subject && pathInfo.subject !== pathInfo?.title" class="mk-card__meta">{{ pathInfo.subject }}</span>
       </div>
-    </template>
+      <MkRowList>
+        <MkRow title="所属用户" :time="pathInfo?.userLabel || '—'" />
+        <MkRow title="路径状态" :time="pathStatusText" />
+        <MkRow title="里程碑 / 任务" :time="`${pathInfo?.milestones ?? 0} 个 · ${pathInfo?.tasks ?? 0} 条`" />
+        <!-- 2026-11-01 外部评审 P2：原先把 lp_… 裸 ID 平铺在正文行里、且无一键复制。
+             内部分诊不靠读 ID，改成次级信息：短式展示 + 悬停看全 + 复制按钮。 -->
+        <MkRow title="路径 ID">
+          <template #trail>
+            <span class="pdx-id" :title="pathId">{{ shortPathId }}</span>
+            <button type="button" class="mk-link pdx-copy" :aria-label="`复制路径 ID`" @click="copyPathId">复制</button>
+          </template>
+        </MkRow>
+      </MkRowList>
+      <!-- 2026-11-02 文案清理：删第二句「路径内容仍可在学习者详情里查看。」——纯指路（去另一个
+           页面看），本卡下方已有「返回列表」「去目标对话」两个出口；只留状态事实一句。 -->
+      <div class="pdx-orphan__note">
+        该路径没有关联的目标对话，因此没有可跳转的学习会话座舱。
+      </div>
+      <div class="pdx-orphan__acts">
+        <button type="button" class="mk-btn mk-btn--primary" @click="closeSubPage">返回列表</button>
+        <button type="button" class="mk-link pdx-alt" @click="goGoalConversations">去目标对话</button>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -48,20 +60,45 @@
  *  - 「重规划」按钮原型有而管理侧无任何可达能力，按「宁缺勿假」未搬（2026-10-01 核查）；
  *  - 「导出」是原型假按钮，未搬。
  *  内容体（阶段全展开/任务弹层/重试生成/下线恢复）现居 PathJourneyPanel.vue。 */
-import { computed, onMounted, ref } from 'vue'
-import { subPage, openSubPage, setSubPageLabel } from './store'
+import { computed, getCurrentInstance, onMounted, ref } from 'vue'
+import { subPage, openSubPage, closeSubPage, setSubPageLabel } from './store'
 import { errMsg } from './live'
 import { adminLearningContentApi } from '@/api/adminApi'
-import { statusText, statusBadge } from './opsShared'
+import { copyText } from './clipboard'
+import { toast } from '@/utils/toast'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
-import PathJourneyPanel from './PathJourneyPanel.vue'
+import MkRowList from '@/components/mk/MkRowList.vue'
+import MkRow from '@/components/mk/MkRow.vue'
+
+type PathInfo = { title: string; subject: string; userLabel: string; milestones: number; tasks: number; status: string }
 
 const state = ref<'resolving' | 'error' | 'orphan'>('resolving')
 const errorMsg = ref('')
-/** 孤儿路径的页头元信息（resolve 已抓到的详情行；内容体由 PathJourneyPanel 自取） */
-const orphanTitle = ref('')
-const orphanStatus = ref('')
+const pathInfo = ref<PathInfo | null>(null)
 const pathId = computed(() => subPage.value?.id || '')
+/** 路径 ID 的短式展示：保留可辨认的头尾，中间省略（完整值在 title 与「复制」里） */
+const shortPathId = computed(() => {
+  const id = pathId.value
+  return id.length > 18 ? `${id.slice(0, 8)}…${id.slice(-6)}` : id || '—'
+})
+async function copyPathId() {
+  const ok = await copyText(pathId.value)
+  if (ok) toast.success('路径 ID 已复制')
+  else toast.error('复制失败，请手动选中复制')
+}
+const PATH_STATUS_TEXT: Record<string, string> = {
+  active: '学习中', generating: '生成中', failed: '生成失败', archived: '已下线', completed: '已完成',
+}
+const pathStatusText = computed(() => PATH_STATUS_TEXT[pathInfo.value?.status || ''] || pathInfo.value?.status || '—')
+/* 无 Router 上下文（单测直挂）时不注入，避免 useRouter 打警告 */
+const router = getCurrentInstance()?.appContext.config.globalProperties.$router as
+  | { push: (to: string) => Promise<unknown> }
+  | undefined
+
+/** 孤儿路径的第二个出口：回链路起点（目标对话）重新确认这条学习目标 */
+function goGoalConversations() {
+  if (router) void router.push('/admin/goal-conversations')
+}
 
 async function resolve() {
   const pid = subPage.value?.id || ''
@@ -70,14 +107,36 @@ async function resolve() {
   errorMsg.value = ''
   try {
     const res = await adminLearningContentApi.getPathDetail(pid)
-    const body = (res.data?.data ?? res.data ?? null) as { conversationId?: string | null; title?: string | null; status?: string | null } | null
+    const body = (res.data?.data ?? res.data ?? null) as
+      | {
+          conversationId?: string | null
+          title?: string
+          name?: string
+          subject?: string
+          status?: string
+          totalMilestones?: number
+          /* 详情接口不带 totalTasks：任务数分散在各里程碑的 tasks/subtasks 里 */
+          milestones?: Array<{ tasks?: unknown[]; subtasks?: unknown[] }>
+          /* 归属用户走 users 关系字段（详情接口没有 user / userName） */
+          users?: { name?: string | null; email?: string | null } | null
+        }
+      | null
     if (!body) throw new Error('详情数据为空')
+    const title = String(body.title || body.name || '').trim()
+    pathInfo.value = {
+      title,
+      subject: String(body.subject || ''),
+      userLabel: String(body.users?.name || body.users?.email || ''),
+      milestones: Number(body.totalMilestones || body.milestones?.length || 0),
+      tasks: (body.milestones || []).reduce((n, m) => n + ((m.tasks || m.subtasks || []).length), 0),
+      status: String(body.status || ''),
+    }
+    /* 面包屑：深链进来时 label 就是那个裸 id，解析出真名后就地替换（与座舱同一手法） */
+    if (title && subPage.value?.id === pid && (!subPage.value.label || subPage.value.label === pid)) {
+      setSubPageLabel(title)
+    }
     const conversationId = typeof body.conversationId === 'string' ? body.conversationId : ''
     if (!conversationId) {
-      // 孤儿路径：就地渲染路径自身内容（M-2），面包屑先回写真名（面板加载完成前不露裸 id）
-      orphanTitle.value = String(body.title || '')
-      orphanStatus.value = String(body.status || '')
-      if (orphanTitle.value && subPage.value && !subPage.value.label) setSubPageLabel(orphanTitle.value)
       state.value = 'orphan'
       return
     }
@@ -97,26 +156,11 @@ onMounted(() => { void resolve() })
 
 <style scoped>
 .pdx { align-content: start; }
-/* 孤儿路径页头：标题 + 状态徽章 + 一句事实说明，右缘留治理动作传送落点 */
-.pdx-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-.pdx-head__main { min-width: 0; }
-.pdx-head__row { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.pdx-head__title {
-  margin: 0;
-  font-size: var(--mk-fs-emphasis);
-  color: var(--mk-ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
-.pdx-head__note { margin: 4px 0 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.5; }
-.pdx-head__acts { flex: none; }
-/* 内容卡与页头留一档呼吸（座舱里同面板包在 mk-card 的 cp-cardbody 内） */
-.pdx-cardbody { padding: 16px; }
+/* 空态里的第二出口：主按钮已是「返回列表」，这条是并列的文字出口 */
+.pdx-alt { margin-top: 2px; }
+.pdx-orphan__note { padding: 12px 16px 0; color: var(--mk-muted); font-size: 12.5px; }
+.pdx-orphan__acts { display: flex; align-items: center; gap: 12px; padding: 12px 16px 16px; }
+/* 路径 ID 次级信息区（2026-11-01 外部评审 P2）：等宽 + 弱色，避免与业务字段抢视线 */
+.pdx-id { font-family: var(--mk-mono); color: var(--mk-muted); }
+.pdx-copy { margin-left: 8px; }
 </style>

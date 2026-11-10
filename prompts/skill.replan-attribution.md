@@ -1,6 +1,6 @@
 ---
 agentId: skill:replan-attribution
-coreHash: 351483b28231b2728701842ea502f1cd1f325dab76e49f37931cf443eb42728f
+coreHash: 67b2596d8636cc2d196715f61a7c38bab272d70ce9cb7d5785cda3ff5cec9ab4
 coreVersion: 1
 temperature: 0.3
 maxTokens: 64000
@@ -29,17 +29,18 @@ failurePolicy: propagate
 1. primaryReasonCode 必须原样取自输入 recall.reasonCodes；不在其中的原因不许编
 2. recommendation 必须取自输入 allowedRecommendations（这是系统真正能执行的方向）；都不合适时给 keep
 3. 只做归因，不要提出范围外的动作（不要提"改目标""换学科""停课"），也不要承诺具体时长或课程数
-4. reason 一句人话（≤40 字），说清"为什么现在提示重排"，不要复述指标数值、不要暴露字段名
-5. claim + checkOn + expect 构成一条可被后续证据检验的断言；只有在你对主因有把握时才输出，最多 1 条；没把握就省略
-6. claim 必须是关于**学习状态**的可证伪陈述（如"这些点仍会不稳"），不能是主观评价或教学建议
-7. evidenceRefs 必须引用输入 evidence 里出现过的 id；没有可引用证据时省略该字段
-8. 输出严格 JSON 对象，不要 markdown 代码块、解释文字或多余文本
+4. reason 必须点名具体卡点：直接引用 evidence 里出现的概念名/未解决点名（如「识别日志痕迹、还原断点还没稳」），禁止「几个关键点」「部分内容」这类泛指——泛指会与学习总结当面打架（2026-11-08 外评第三项）。evidence 同时给出 wrapup:mastered（本节已学会名单）时，reason 要写清张力：哪些是本课刚学会的、哪些旧点仍挂着。证据里确实没有任何可点名的对象时才允许写系统级原因（如「长期学习疲劳偏高」），并照实说。
+5. reason 一句人话（≤40 字），不要复述指标数值、不要暴露字段名
+6. claim + checkOn + expect 构成一条可被后续证据检验的断言；只有在你对主因有把握时才输出，最多 1 条；没把握就省略
+7. claim 必须是关于**学习状态**的可证伪陈述（如"这些点仍会不稳"），不能是主观评价或教学建议
+8. evidenceRefs 必须引用输入 evidence 里出现过的 id；没有可引用证据时省略该字段
+9. 输出严格 JSON 对象，不要 markdown 代码块、解释文字或多余文本
 
 ## 输出字段
 
 - primaryReasonCode · string — 主因，取自 recall.reasonCodes；无法判断时给 recall.reasonCodes 的第一项
 - recommendation · string — 方向，取自 allowedRecommendations（含 keep）
-- reason · string — 一句人话归因（≤40 字），面向学生，不出现内部字段名与数值
+- reason · string — 一句人话归因（≤40 字），必须点名 evidence 里的具体卡点名；与已学会名单冲突时写清张力；不出现内部字段名与数值
 - claim · string — 可选：一条可证伪断言（≤60 字），只在有把握时输出
 - checkOn · string — 可选：断言检验时机，next_lesson | next_task
 - expect · string — 可选：断言期望（如仍不稳 / 已能独立完成）

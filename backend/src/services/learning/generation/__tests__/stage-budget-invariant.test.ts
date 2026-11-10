@@ -79,16 +79,28 @@ describe('auditStageBudget（阶段预算不变量）', () => {
     expect(report.violations.map((v) => v.kind)).toContain('stage_hours_missing');
   });
 
-  it('阶段合计与总量差 >5% → stage_sum_mismatch', () => {
+  it('阶段合计超出总量 >5% → stage_sum_mismatch', () => {
     const report = auditStageBudget({
-      pathEstimatedHours: 40,
-      upstreamBudgetHours: 40,
+      pathEstimatedHours: 12,
+      upstreamBudgetHours: 10,
       stages: [
         { stageNumber: 1, estimatedHours: 6 },
         { stageNumber: 2, estimatedHours: 6 },
       ],
     });
     expect(report.violations.map((v) => v.kind)).toContain('stage_sum_mismatch');
+  });
+
+  it('阶段合计低于总量（2026-11-02 口径：估算是上限）→ 不算缺陷', () => {
+    const report = auditStageBudget({
+      pathEstimatedHours: 12,
+      upstreamBudgetHours: 40,
+      stages: [
+        { stageNumber: 1, estimatedHours: 6 },
+        { stageNumber: 2, estimatedHours: 6 },
+      ],
+    });
+    expect(report.violations.map((v) => v.kind)).not.toContain('stage_sum_mismatch');
   });
 
   it('单阶段路径：阶段=总量是正确形态，不判退化', () => {

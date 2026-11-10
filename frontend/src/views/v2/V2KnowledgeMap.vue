@@ -3,22 +3,28 @@
     <V2Nav />
 
     <main class="km__main">
-      <div class="km__hero">
+      <!-- 顶部标题行恢复（2026-11-07 二次走查）：此前只有 visually-hidden 的 h1，
+           理由是同页已有顶部导航高亮、再印一行是复读。但实测 5 个主 Tab 来回切时，
+           只有本页顶部没有标题行（学习台/学习路径/学习状态都有 h1 + 副标题），
+           卡片上边缘比其他页高出一行，切换时整屏重心跳动。
+           现在按「学习状态」模板恢复同一结构：左对齐 h1 + 副标题，
+           左右内边距与下方卡片同档，卡边与邻页严格同一条竖线。 -->
+      <header class="km__head">
         <div>
           <h1>知识图谱</h1>
-          <p>把你所有学习路径里的概念汇成一张图，颜色是掌握程度。</p>
-          <!-- 「怎么看这张图」折叠图例已删（2026-09-27）：图谱卡底部的 mk-ge__legend
-               常驻覆盖同一套语义（线型/颜色/形状），顶部那份是重复教学 -->
-          <!-- 「查看学习状态」通栏 ghost 已删（2026-10-09 用户反馈）：PC 顶导航与移动端底部
-               dock 都常驻「学习状态」入口，页尾整宽跳转是第三份重复；省下的纵向空间给图区 -->
+          <p>核心概念、知识组件与前置依赖关系</p>
         </div>
-      </div>
+      </header>
 
-      <p v-if="narrowedNote" class="km__note">{{ narrowedNote }}</p>
+      <!-- 说明框已撤（2026-11-05 屏效比）：蓝边通栏 66px 只讲「共 N 条路径、N 个节点、
+           当前展示哪条」——图卡统计行（mk-ge__stats）与路径轨已各自常驻同一组数字，
+           本行是同屏第三份。当前路径由轨道上高亮芯片 + 图卡标题承担 -->
+      <p v-if="narrowedNote" class="km__note visually-hidden">{{ narrowedNote }}</p>
 
       <!-- 卡壳（border / radius / padding 10px 10px 4px）落在内部 .mk-ge__card 上：
-           原型里 wf-rail 与 .wf-graph 是兄弟，路径 chip 要露在图卡**外面**，
-           所以本节点只当 :deep 锚点，不再自己套一层卡（否则会卡中卡） -->
+           2026-11-06 起路径切换收进图卡内的统计栏（单个下拉，见 MkGraphExplorer），
+           卡外不再有 wf-rail 式的独立控件行；本节点只当 :deep 锚点，不再自己套一层卡
+           （否则会卡中卡） -->
       <section class="km__card">
         <MkGraphExplorer
           :nodes="nodes"
@@ -28,7 +34,7 @@
           :theme="theme"
           :loading="loading"
           :error="error"
-          height="clamp(500px, 57vh, 680px)"
+          height="100%"
           empty-hint="还没有可展示的概念图。学完一节课、或生成一条学习路径后，概念与关系会自动出现在这里。"
           error-action-text="重试"
           empty-action-text="开始学习"
@@ -156,55 +162,140 @@ onMounted(async () => {
   if (pathId.value !== null || paths.value.length < 2 || !first) return
   const connected = connectedCount(nodes.value, edges.value)
   if (connected <= AUTO_NARROW_CONNECTED_NODES) return
-  narrowedNote.value = `共 ${paths.value.length} 条学习路径、${connected} 个概念节点。当前展示「${first.title ?? '最近一条路径'}」。想看全貌可切回「全部路径」。`
+  // 教句「想看全貌可切回全部路径」删去（2026-11-03 真机走查）：全部路径 pill 就在下面一排
+  narrowedNote.value = `共 ${paths.value.length} 条学习路径、${connected} 个概念节点。当前展示「${first.title ?? '最近一条路径'}」。`
   await applyPath(first.id)
 })
 </script>
 
 <style scoped>
+/* 容器与「学习状态」严格同档（2026-11-07 三次走查，用户裁决
+   「以学习状态为全站标准模板」）：上一版试过全幅工作台（width:100% 无帽）被判
+   「满屏太难看」，随即退回「组件内 880 + ≥1680 拓 1360」的老阶梯——那套在
+   1280/1536 下只有 54~89%，与邻页不齐。
+   现在本页不再自钉任何宽度：≥1024 由共享 v2.css 的 min(92vw, 1360px) 统一给出，
+   901~1023 走共享的 720 列，≤900 与其余页面一样满宽。 */
 .km__main {
-  max-width: 1180px;
+  width: 100%;
   margin: 0 auto;
-  padding: var(--mk-space-6) var(--mk-space-5) var(--mk-space-8);
+  padding: 24px 28px 48px;
 }
-.km__hero {
+
+/* 顶部标题行（2026-11-07 走查恢复）：与 .state__head 同一解剖——22px/800 主标题 +
+   13px 副标题，左对齐、贴卡片上沿 2px。
+   h1 必须是文档里**可见**的一级标题（此前为 visually-hidden），否则 5 个主导航 Tab
+   切换时本页顶部比其他页矮一行，重心跳动。 */
+.km__head {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: var(--mk-space-4);
-  margin-bottom: var(--mk-space-5);
+  gap: 12px;
+  padding-bottom: 2px;
 }
-.km__hero h1 {
-  margin: 0 0 var(--mk-space-2);
-  /* 原型 .wf-km__hero h1 = 21px（全站 h1 档随原型走；移动端仍落 18px 全站约定） */
-  font-size: 21px;
-}
-.km__hero p {
-  /* 原型 .wf-km__hero p：12.5px + max-width 32ch（一行不超过 32 字，说明不再铺满 640px） */
-  max-width: 32ch;
-  margin: 0;
-  font-size: var(--mk-fs-12_5);
-  line-height: 1.7;
-  color: var(--mk-muted);
-}
+.km__head h1 { margin: 0; font-size: 22px; font-weight: 800; color: var(--ink); }
+.km__head p { margin: 3px 0 0; font-size: 13px; color: var(--muted); }
+
+/* 说明框视觉已撤（2026-11-05 屏效比）：内容仅留给读屏（visually-hidden 全局类），
+   不再占 66px 视觉高度——同屏第三份数字（图卡统计行 + 路径轨已各有） */
 .km__note {
-  margin: 0 0 var(--mk-space-4);
-  padding: var(--mk-space-3) var(--mk-space-4);
-  border: 1px solid var(--mk-line);
-  border-left: 3px solid var(--mk-blue);
-  border-radius: var(--mk-radius-md);
-  background: var(--mk-surface-2);
-  font-size: var(--mk-fs-12_5);
-  line-height: 1.6;
-  color: var(--mk-muted);
+  margin: 0;
 }
-.km__card {
-  min-width: 0;
+/* 图卡自适应（2026-11-10 用户裁决「改成自适应」）：
+   整页「导航 + 主区」两段式弹性布局，图卡直接吃掉剩余高度，不再按 DPI 推固定像素
+   （100dvh − 282 这类会在 4K 缩放下差几十像素）。
+   链路：.km(flex column, height=视口/zoom) → .km__main(flex:1) → .km__card(flex:1)
+   → .mk-ge(flex:1) → .mk-ge__card(flex:1) → .mk-ge__body(flex:1 + 单行 1fr 网格)
+   → .mk-ge__canvas(网格项拉伸出确定高度) → .mk-graph(height:100%)。
+   ⚠ 只在 ≥721px 生效：≤720px 的画布走组件自带的窄屏档（像素高度），
+   手机上是「图 + 概览上下堆叠」的纵向流，不该被限制成一屏。 */
+@media (min-width: 721px) {
+  /* App.vue 的 #app / #app-main 是 flex 壳，本页默认被当成弹性项、高度由父级分配
+     （height 被忽略、内容再多也不改变分配）。钉成 0 0 auto 才能让下面那条 height 生效。
+     ⚠ 不要动 align-self：父级是纵向 flex，交叉轴是宽度——flex-start 会让整页缩成内容宽、
+     不再居中。只作用于 ≥721：手机保持纵向流（画布固定像素高、页面可滚动）。 */
+  .km {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    /* ⚠ 必须除以 --vp-zoom：v2.css 在 ≥1600 视口给 .v2-page 加 zoom（1.08 / 1.15 / 1.3），
+       zoom 会把 100dvh 一起放大——直接写 100dvh 渲染出来是「1.08 个视口高」，卡片被顶出折线
+       （用户 4K 缩放实测的「还是不行」）。口径与 V2LearningPage 的 .learn 一致。
+       用 height 而非 min-height：只有确定高度，整条 flex 链才会按剩余空间分配。 */
+    height: calc(100dvh / var(--vp-zoom, 1));
+    min-height: 0;
+  }
+  .km__main {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .km__card {
+    min-width: 0;
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    /* 2026-11-10 用户走查「不喜欢完全贴底」：卡片与页脚留白之间再让出一档呼吸空间，
+       由这条 margin 从剩余高度里扣（页面总高仍等于视口，不产生滚动）。 */
+    margin-bottom: 28px;
+  }
+  .km__card :deep(.mk-ge) {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  /* 单行 1fr：行高由 .mk-ge__body 的定高决定，画布的 height:100% 才有参照物，
+     不会退化成「按内容算 → 内容按父高算」的循环 */
+  .km__card :deep(.mk-ge__body) {
+    flex: 1 1 auto;
+    min-height: 0;
+    grid-template-rows: minmax(0, 1fr);
+  }
+  /* 画布盒是「画布 + 图例」的纵向流：写死 height:100% 会把图例挤到盒子外
+     ——图例压到卡片下沿，滚轮放大后的节点直接画到图例底下（2026-11-10 用户截图）。 */
+  .km__card :deep(.mk-ge__canvas) {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    /* 兜底裁剪：画布万一比盒子大（缩放/resize 竞态），多出来的部分被裁掉，
+       而不是画到图例和卡片外面的页面上。 */
+    overflow: hidden;
+  }
+  /* MkGraph 的根是 .mk-graph-wrap（内层才是 .mk-graph）。这一层跟内层都要能缩：
+     用 flex-basis:0 定主尺寸，不再靠 height:100% 硬顶（那样图例与「未画出的概念」
+     注脚会被顶出盒子）。 */
+  .km__card :deep(.mk-graph-wrap) {
+    flex: 1 1 0%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .km__card :deep(.mk-graph) {
+    flex: 1 1 0%;
+    min-height: 0;
+  }
+  .km__card :deep(.mk-ge__card) {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  /* 加载骨架没有真实画布可参照，给个下限，避免 100% 撑成 0 */
+  .km__card :deep(.mk-ge__skel-graph) {
+    min-height: 360px;
+  }
+}
+/* ≤720px：画布回到组件窄屏档该有的像素高度——prop 是 100%，而手机上是纵向流，
+   100% 没有参照物会塌成一条（实测 94px）。 */
+@media (max-width: 720px) {
+  .km__card :deep(.mk-graph) {
+    height: 312px;
+  }
 }
 /* 图卡外壳落在组件的结构层 .mk-ge__card 上（原型 .wf-graph：surface 底 + 1px 线 +
    radius-modal + shadow-sm + padding 10px 10px 4px）。本节点只当 :deep 锚点：
-   路径 chip 轨要露在图卡外面（原型 wf-rail 与 .wf-graph 是兄弟），所以卡壳不能套在最外层。 */
+   路径切换已收进图卡内的统计栏（单个下拉），卡外没有独立控件行，卡壳仍由组件结构层出，
+   页面这边不再重复套一层。 */
 .km__card :deep(.mk-ge__card) {
   padding: 10px 10px 4px;
   border: 1px solid var(--line);
@@ -213,8 +304,9 @@ onMounted(async () => {
   background: var(--surface);
 }
 /* 「查看学习状态」通栏 ghost 已删（2026-10-09）：入口由顶导航/底部 dock 承担。
-   图高随视口走高（clamp 下限 560 保底，上限 720 防超大屏失控），移动端 ≤720px
-   档 MkGraph 会自动减半，不受影响。 */
+   画布高度走 `height="100%"` + 上面那条 flex 链（2026-11-10 用户裁决「改成自适应」）：
+   卡片高度 = 视口 − 导航 − 标题行 − 页脚留白，由浏览器自己算，任何缩放/DPI 都不会差几个像素。
+   移动端 ≤720px 档 MkGraph 仍按 0.6 倍收（媒体查询在组件里，对 100% 同样生效）。 */
 
 /* ===== 移动端密度（2026-09-24 / 2026-09-30 对齐原型后复核）=====
    判据：整页上下留白 ≤40px。本页通篇用 --mk-space-* token，这里继续用 token。
@@ -222,11 +314,7 @@ onMounted(async () => {
    图卡内边距不再按断点改：卡壳已移到 .mk-ge__card，两端统一吃原型固定档 10px 10px 4px。 */
 @media (max-width: 1100px) {
   .km__main {
-    padding: var(--mk-space-4) var(--mk-space-3) var(--mk-space-6);
-  }
-  /* 页面 h1 移动端全站 18px，只有这页漏了（桌面 21px 一直漏到手机上） */
-  .km__hero h1 {
-    font-size: var(--mk-fs-18);
+    padding: var(--mk-space-2) var(--mk-space-3) var(--mk-space-4);
   }
 }
 </style>

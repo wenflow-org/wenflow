@@ -44,7 +44,11 @@ const PASSWORD = process.env.E2E_PASSWORD || `E2eLong!${randomUUID().slice(0, 12
  * 调收束门禁时可反复跑，不必每次重建学习路径。
  */
 const RESUME_PATH = process.env.E2E_PATH_ID || null;
-const GOAL = {
+/**
+ * 目标对话脚本可按环境变量覆盖（2026-11-07）：默认是一条应试型 TypeScript 目标，
+ * 但验收「死板机械」这类缺陷要能换成人设（如纯兴趣型）。`E2E_GOAL_FOLLOWUPS` 用 `|` 分隔。
+ */
+const DEFAULT_GOAL = {
   opening: '我是做前端开发的，想系统补一下 TypeScript 的类型系统。平时只会写 any 和简单的 interface，泛型、条件类型、类型体操完全看不懂。每周能挤出 3 次、每次 40 分钟。希望一个月内能读懂公司代码库里那些复杂的类型声明。',
   followUps: [
     '我平时主要写 Vue 和 React，项目里已经开了 strict。最常卡住的是泛型约束和 infer。',
@@ -52,6 +56,13 @@ const GOAL = {
     '一个月后能读懂泛型工具类型，并且自己能写一个简单的 Pick/Partial 就算达标。',
     '就按这个思路，帮我生成学习路径。',
   ],
+};
+
+const GOAL = {
+  opening: process.env.E2E_GOAL_OPENING || DEFAULT_GOAL.opening,
+  followUps: process.env.E2E_GOAL_FOLLOWUPS
+    ? process.env.E2E_GOAL_FOLLOWUPS.split('|').map((s) => s.trim()).filter(Boolean)
+    : DEFAULT_GOAL.followUps,
 };
 
 const result = {
@@ -277,7 +288,7 @@ async function turn(sessionId, revision, text) {
   };
 }
 
-const TURN_LINES = [
+const DEFAULT_TURN_LINES = [
   '老师好，我准备好了，请从最基础的开始。',
   '我理解了一点，但还想确认：泛型约束里 extends 和普通继承有什么区别？',
   '这个例子清楚了。我能自己写一个简单的 Pick 吗？',
@@ -287,6 +298,15 @@ const TURN_LINES = [
   '再补充一点：条件类型里的 infer 是推断占位符，对吗？',
   '好的，我已经能读懂公司代码里的类型声明了，想结束这一课。',
 ];
+
+/**
+ * 学习者台词同样可覆盖（2026-11-07）：默认这套是**TypeScript 应试**语境写的，
+ * 拿它去配兴趣型（AI 教育）目标，模型收到的是离题的学生回复，课堂指标全是噪音。
+ * `E2E_TURN_LINES` 用 `|` 分隔。
+ */
+const TURN_LINES = process.env.E2E_TURN_LINES
+  ? process.env.E2E_TURN_LINES.split('|').map((s) => s.trim()).filter(Boolean)
+  : DEFAULT_TURN_LINES;
 
 /** 提交课堂理解检查：有选项选第一项，简答给一段占位作答。 */
 async function submitCheckpoint(sessionId, checkpoint, revision) {

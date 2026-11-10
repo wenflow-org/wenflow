@@ -1,4 +1,5 @@
 const mockPromptGroupBy = jest.fn()
+const mockPromptFindMany = jest.fn()
 const mockAgentQueryRaw = jest.fn()
 const mockPromptFindFirst = jest.fn()
 const mockResolveRoute = jest.fn()
@@ -8,7 +9,10 @@ const mockSkillConfigGet = jest.fn()
 jest.mock('../../config/database', () => ({
   __esModule: true,
   default: {
-    prompt_call_logs: { groupBy: (...args: any[]) => mockPromptGroupBy(...args) },
+    prompt_call_logs: {
+      groupBy: (...args: any[]) => mockPromptGroupBy(...args),
+      findMany: (...args: any[]) => mockPromptFindMany(...args),
+    },
     // 2026-09-30 性能批：归属统计改走 $queryRaw（json_extract 单扫），tagged template 直接收 (strings, ...values)
     $queryRaw: (...args: any[]) => mockAgentQueryRaw(...args),
   },
@@ -46,6 +50,7 @@ jest.mock('../agent-manifest.service', () => ({
 
 import {
   getUnifiedSkillStats,
+  getSkillSampleInput,
   resolveEffectiveSkillRuntimeConfig,
   __clearMetadataSkillIdSniffForTests,
 } from '../skill-runtime-contract.service'
@@ -78,7 +83,9 @@ describe('skill-runtime-contract.service', () => {
     })
   })
 
-  it('prefers prompt_call_logs over agent_call_logs for LLM skills', async () => {
+  /* 2026-11-08 语义调整：prompt_call_logs 由「优先」改为「无 skill 执行行时的兜底」。
+     原因见下方新增用例——prompt 表不记录 skill 级失败，单看它必漏算失败。 */
+  it('无 skill 执行行时回落到 prompt_call_logs（LLM 技能无 agent 遥测的兜底）', async () => {
     mockPromptGroupBy
       .mockResolvedValueOnce([
         {
@@ -108,6 +115,47 @@ describe('skill-runtime-contract.service', () => {
         range: 'all',
       })
     )
+  })
+
+  /* 2026-11-08 用户实测 Bug：「运行时」卡片写着「调用 5 · 失败 0 · 成功率 100%」，
+     底下「最近调用」却躺着 4 条 SKILL_EXECUTION_FAILED 红行。
+     根因：skill 只要在 prompt_call_logs 有行，skill 层的 agent_call_logs 就被整段跳过；
+     而结构化输出校验失败（category=internal）只在 agent 表里，prompt 表一条都没有。
+     口径改为「有 skill 执行行就以它为准」→ 卡片与列表一致。
+     本用例锁死：两表都有行时，计数取 skill 执行行（9 = 5 成功 + 4 失败），不取 prompt 的 5。 */
+  it('两表都有行时以 skill 执行行为准（失败不再被 prompt 行吞掉）', async () => {
+    mockPromptGroupBy
+      .mockResolvedValueOnce([
+        {
+          agentId: 'skill:goal-conversation',
+          _count: { _all: 5 },
+          _avg: { durationMs: 12000 },
+          _max: { createdAt: new Date('2026-07-25T00:00:00.000Z') },
+        },
+      ])
+      .mockResolvedValueOnce([
+        { agentId: 'skill:goal-conversation', success: true, _count: { _all: 5 } },
+      ])
+    // skill 执行行：5 成功 + 4 失败（结构化输出缺字段，category=internal，prompt 表无对应行）
+    aggRows = [
+      { agentId: 'skill:goal-conversation', success: 1, n: 5, durSum: 60000, lastAt: '2026-07-25T00:00:00.000Z' },
+      { agentId: 'skill:goal-conversation', success: 0, n: 4, durSum: 8000, lastAt: '2026-07-26T00:00:00.000Z' },
+    ]
+
+    const map = await getUnifiedSkillStats(['goal-conversation'], 'all')
+    const stats = map.get('goal-conversation')
+
+    expect(stats).toEqual(
+      expect.objectContaining({
+        callCount: 9,
+        successCount: 5,
+        failureCount: 4,
+        successRate: 55.6,
+        source: 'agent_call_logs',
+      })
+    )
+    // 卡片失败数与「最近调用」列表（同读 agent 表）严格一致
+    expect(stats!.failureCount).toBe(4)
   })
 
   it('falls back to agent_call_logs when no prompt logs exist（前缀行 SQL 聚合形态）', async () => {
@@ -291,5 +339,96 @@ describe('skill-runtime-contract.service', () => {
     )
     expect(effective.reliability.maxLogicalRetries).toBe(1)
     expect(effective.reliability.logicalRetrySource).toBe('skill-override')
+  })
+
+  /* #177：展示用成功率口径剔除上游/基础设施失败与调用方取消（与 executor 同口径）。 */
+  it('成功率口径带上游失败剔除条件：prompt groupBy where + agent 聚合 SQL', async () => {
+    mockPromptGroupBy.mockResolvedValueOnce([]).mockResolvedValueOnce([])
+    aggRows = []
+
+    await getUnifiedSkillStats(['label-generator'], 'all')
+
+    // prompt_call_logs：where 带 NOT(失败 且 errorCode 属上游码/调用方取消)
+    const promptWhere = JSON.stringify(mockPromptGroupBy.mock.calls[0][0].where)
+    expect(promptWhere).toContain('RETRY_BUDGET_EXHAUSTED')
+    expect(promptWhere).toContain('CALLER_ABORTED')
+
+    // agent_call_logs：前缀聚合 SQL 内联同口径剔除谓词——按 category 判（单一真源），
+    // errorCode 分支仅在 errorCategory 为空（skill 层旧行）时回退，避免把 category='protocol'
+    // 的真实失败静默化（TRUNCATED_EMPTY_OUTPUT 反复重试 → RETRY_BUDGET_EXHAUSTED）。
+    const aggCall = mockAgentQueryRaw.mock.calls.find((c: any) => String(c[0]?.join?.('?')).includes('AS "n"'))
+    const aggSql = JSON.stringify(aggCall?.slice(1))
+    expect(aggSql).toContain('errorCategory')
+    expect(aggSql).toContain('IS NULL')
+    expect(aggSql).toContain('provider_http')
+    expect(aggSql).toContain('RETRY_BUDGET_EXHAUSTED')
+  })
+
+  /* 2026-11-08 试跑页「填入示例输入」：取最近一次成功真实调用的载荷。 */
+  describe('getSkillSampleInput', () => {
+    it('取第一条可解析、未被瘦身的真实载荷', async () => {
+      mockPromptFindMany.mockResolvedValue([
+        { userPayload: '{"__slim":true,"bytes":5984,"sha256":"d2f3a8ed"}', createdAt: new Date('2026-11-01') },
+        { userPayload: '{"milestone":{"title":"并发基础"}}', createdAt: new Date('2026-10-31') },
+      ])
+
+      const sample = await getSkillSampleInput('stage-designer')
+
+      expect(sample?.origin).toBe('real-call')
+      expect(JSON.parse(sample!.json)).toEqual({ milestone: { title: '并发基础' } })
+      // 查询按 skill 前缀 + 裸 id 两种落库形态一起找，只要成功行
+      const where = mockPromptFindMany.mock.calls[0][0].where
+      expect(where.agentId.in).toEqual(['skill:stage-designer', 'stage-designer'])
+      expect(where.success).toBe(true)
+    })
+
+    it('全是瘦身摘要 / 非法 JSON 时返回 null（由前端回落契约骨架）', async () => {
+      mockPromptFindMany.mockResolvedValue([
+        { userPayload: '{"__slim":true,"bytes":1,"sha256":"x"}', createdAt: new Date() },
+        { userPayload: 'not json', createdAt: new Date() },
+        { userPayload: '[1,2,3]', createdAt: new Date() },
+      ])
+
+      expect(await getSkillSampleInput('stage-designer')).toBeNull()
+    })
+
+    it('查询抛错时返回 null，不把便利功能变成新的错误面', async () => {
+      mockPromptFindMany.mockRejectedValue(new Error('db down'))
+      expect(await getSkillSampleInput('stage-designer')).toBeNull()
+    })
+
+    /* 2026-11-09 走查修复：库里存在「演示/探针行」——`seedpcl_*` 把 {"seed":true,"step":N}
+       写在 skill:goal-conversation 名下，而该 Skill 的输入契约是 userInput/state/conversationContext。
+       此前按「最新一条非瘦身成功行」直接返回，于是「填入示例输入」把仿真参数填进编辑器，
+       紧接着点「开始试跑」必然报输入形状错误，真正该用的契约骨架反倒被绕过。 */
+    it('载荷键与该 Skill 输入契约一个都不重合 → 跳过，继续找下一条可用的', async () => {
+      mockPromptFindMany.mockResolvedValue([
+        { userPayload: '{"seed":true,"step":40}', createdAt: new Date('2026-11-08') },
+        { userPayload: '{"userInput":"我不想学数学了","state":{"confidence":0.4}}', createdAt: new Date('2026-11-07') },
+      ])
+
+      const sample = await getSkillSampleInput('goal-conversation')
+
+      expect(sample?.origin).toBe('real-call')
+      expect(JSON.parse(sample!.json)).toEqual({ userInput: '我不想学数学了', state: { confidence: 0.4 } })
+    })
+
+    it('只有形状不符的行时返回 null（由前端回落输入契约骨架）', async () => {
+      mockPromptFindMany.mockResolvedValue([
+        { userPayload: '{"seed":true,"step":87}', createdAt: new Date('2026-11-08') },
+        { userPayload: '{"seed":true,"step":29}', createdAt: new Date('2026-11-07') },
+      ])
+
+      expect(await getSkillSampleInput('goal-conversation')).toBeNull()
+    })
+
+    it('契约读不到（无 core 文件）时不按形状拦：宁可给得不够完美，也不能彻底不给', async () => {
+      mockPromptFindMany.mockResolvedValue([
+        { userPayload: '{"whatever":1}', createdAt: new Date('2026-11-08') },
+      ])
+
+      const sample = await getSkillSampleInput('no-such-skill-xyz')
+      expect(JSON.parse(sample!.json)).toEqual({ whatever: 1 })
+    })
   })
 })

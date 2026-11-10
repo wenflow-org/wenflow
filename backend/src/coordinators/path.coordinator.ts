@@ -20,6 +20,13 @@ import { partitionMaterialNeeds } from '../services/materials/material-need-orig
 import { findWebRecordByTitle, normalizeTitleForMatch } from '../services/materials/material-web-ingest.service';
 import { patchPathsWithAsyncMaterials, type AsyncMaterialPatch } from '../services/materials/material-async-collect.service';
 import { collectBriefsWithDeadline } from '../services/materials/material-brief.service';
+import {
+  assertPathGenerationAllowed,
+  evaluateGoalTriageEvidence,
+  PathGenerationBlockedError,
+  type GoalTriageEvidence,
+} from '../services/learning/path-generation-gate';
+import { resolveGoalTriageEvidenceForPathId } from '../services/learning/goal-triage-evidence';
 import type { ResponseTriage } from '../services/learning/response-triage';
 import {
   getPathAgentInputConfig,
@@ -107,6 +114,13 @@ export interface PathGenerationInput {
   systemPromptOverrides?: {
     pathAgent?: string;
   };
+  /**
+   * goal 层判定凭证（#217）：`generate` 是生成路径的唯一动作入口。新建路径必须带
+   * goal 层产物（分诊结论 / understanding / visibleSummary），否则拒绝生成；
+   * 既有路径（重建/重试）除此之外还认**路径自身携带**的判定产物（#227，见 `generate`）。
+   * `generateFromGoal` → `normalizeGoalRequest` 会自动注入；直生成入口由调用方提供。
+   */
+  goalTriage?: GoalTriageEvidence | null;
 }
 
 /** 前置知识探测结果（goal 层 prerequisiteCheckResults 透传，供 path-planning prerequisiteTree.knownConcepts 校准） */
@@ -244,8 +258,10 @@ export interface GoalPathRequest {
   /** 学习者负荷画像（虚拟学习者链路注入 `availableTime`/`cognitiveLoadTolerance`；真实用户不传 ⇒ 行为不变） */
   learnerLoadProfile?: LearnerLoadProfile | null;
   /**
-   * 响应分诊结论（goal 层透传，advisory 默认）。仅承载/透传，**不参与 path 生成逻辑**；
-   * 缺失（真实用户/旧会话）⇒ undefined，生成行为与今天完全一致。
+   * 响应分诊结论（goal 层透传）。**参与判定**（#217）：`normalizeGoalRequest` 把它连同
+   * `visibleSummary` 一起注入 `PathGenerationInput.goalTriage`，由 `generate` 的闸门执行；
+   * 硬阻断结论不进入生成/落库，普通 referral 照常生成。
+   * 缺失（重建/旧会话）⇒ undefined，由 visibleSummary 兜底；两者都没有则拒绝生成。
    */
   responseTriage?: ResponseTriage | null;
   /**
@@ -1002,9 +1018,12 @@ class PathCoordinator {
         skillLevel,
         currentSkillLevel: skillLevel,
         timePerDay: availableTime,
-        structuredData: input.structuredData || null,
+        // structuredData/confidenceScores 的 routings 声明 handoff:[path]（goal-agent 行），
+        // 配置式交接取用优先、旧直连字段回退——与同函数内 needsMaterial 同款取用顺序。
+        // 此前这两行只读直连字段，声明为交接的 handoff 值无人消费（审计 #178）。
+        structuredData: (goalFinalPayload.goalHandoffFields as any)?.['structuredData'] ?? input.structuredData ?? null,
         confirmedProposal: config.normalizedInput.includeConfirmedProposal ? input.visibleSummary?.confirmedProposal || null : null,
-        confidenceScores: input.confidenceScores ?? null,
+        confidenceScores: (goalFinalPayload.goalHandoffFields as any)?.['confidenceScores'] ?? input.confidenceScores ?? null,
         conversationHistory: config.normalizedInput.includeConversationHistory ? input.conversationHistory || [] : [],
         normalizedInput: framedNormalizedInput,
         goalFinalPayload: {
@@ -1036,10 +1055,46 @@ class PathCoordinator {
     // 路径生成变慢，故默认改 sync：先采后生成，让 pack 真正进入 resources.materials。
     // 需要旧行为时设 MATERIAL_COLLECTION_MODE=async（保留回滚口）。
     const mode: 'sync' | 'async' = process.env.MATERIAL_COLLECTION_MODE === 'async' ? 'async' : 'sync';
-    return this.buildNormalizedGoalInput(input, config, mode);
+    const normalized = await this.buildNormalizedGoalInput(input, config, mode);
+    // goal 层判定凭证随归一化结果一起下传，由 generate 统一守卫（#217）。
+    // responseTriage 优先；缺失时用 visibleSummary 的可判定性投影兜同一套判定。
+    normalized.goalTriage = {
+      responseTriage: input.responseTriage ?? null,
+      visibleSummary: input.visibleSummary ?? null,
+    };
+    return normalized;
   }
 
   async generate(input: PathGenerationInput) {
+    // 生成路径动作的唯一闸门（#217/#222/#227）：没有 goal 层判定凭证就拒绝，命中硬阻断也拒绝。
+    // 放在最前面，保证任何入口都不会先落库/先起后台生成。
+    //
+    // 既有路径（重新生成 / 整条重建 / 失败重试）的豁免前提**不是**「存在 existingPathId」，
+    // 而是「这条路径自身携带服务端产出的 goal 判定」：`POST /paths` 能用任意用户文本建出
+    // status=active、0 里程碑、无任何 goal 产物的空壳路径（#227），它同样是一条已存在的行，
+    // 豁免它等于给「建空壳 → regenerate?mode=rebuild-all」两步开后门。
+    // 因此既有路径只在两种情况放行：
+    //   1. 本次调用已携带判定凭证（goal 链重建自带 visibleSummary）；
+    //   2. 该路径自身能解析出判定产物（模板 visibleSummary / 关联目标会话），
+    //      或本次调用补了与目标绑定的服务端会话凭证（#222 那套）。
+    // 解析不出的旧数据/空壳路径在这里被拦下，不再先落库再失败。
+    if (input.existingPathId) {
+      const decision = evaluateGoalTriageEvidence(input.goalTriage);
+      if (decision.status === 'blocked') {
+        throw new PathGenerationBlockedError(decision.triage);
+      }
+      if (decision.status === 'unverified') {
+        const storedEvidence = await resolveGoalTriageEvidenceForPathId({
+          pathId: input.existingPathId,
+          userId: input.userId,
+          sourceConversationId: input.sourceConversationId,
+        });
+        assertPathGenerationAllowed(storedEvidence);
+      }
+    } else {
+      assertPathGenerationAllowed(input.goalTriage);
+    }
+
     logger.info('[path-coordinator] generate start', {
       agentId: this.id,
       source: input.source || 'api',

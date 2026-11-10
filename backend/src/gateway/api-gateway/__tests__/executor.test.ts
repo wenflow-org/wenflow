@@ -18,7 +18,6 @@ jest.mock('../../../services/agentRequestTimeout.service', () => ({
 jest.mock('../../../config/models.config', () => ({
   supportsThinkingMode: () => false,
   getModelDefinition: jest.fn(() => undefined),
-  getModelFallbacks: jest.fn(() => []),
   getModelMaxParallelRequests: jest.fn(() => null),
   supportsVision: jest.fn(() => false),
   // 默认按标准上游（支持 system）处理；折叠语义另有 system-fold.test.ts 专项
@@ -39,8 +38,7 @@ import type { RetryBudget } from '../retry-budget'
 import { createRetryBudget } from '../retry-budget'
 import { logger } from '../../../utils/logger'
 import { safeHttpRequest, safeHttpStreamRequest } from '../../../utils/safe-http'
-import { getModelDefinition, getModelFallbacks, providerSupportsSystemRole } from '../../../config/models.config'
-import { resetDeploymentHealth } from '../deployment-health'
+import { getModelDefinition, providerSupportsSystemRole } from '../../../config/models.config'
 import { getInFlight, resetModelConcurrency } from '../model-concurrency'
 
 const safeHttpRequestMock = safeHttpRequest as jest.Mock
@@ -679,8 +677,7 @@ describe('APIExecutor streaming (SSE)', () => {
   })
 })
 
-describe('APIExecutor P1：降级链 + 截断空输出', () => {
-  const fallbacksMock = getModelFallbacks as jest.Mock
+describe('APIExecutor P1：重试耗尽与截断空输出', () => {
   const definitionMock = getModelDefinition as jest.Mock
 
   beforeEach(() => {
@@ -689,77 +686,26 @@ describe('APIExecutor P1：降级链 + 截断空输出', () => {
     streamRequestMock.mockReset()
     agentLogCreate.mockReset().mockResolvedValue({})
     attemptCreate.mockReset().mockResolvedValue({})
-    fallbacksMock.mockReturnValue([])
     definitionMock.mockReturnValue(undefined)
-    resetDeploymentHealth()
   })
 
-  it('主候选 429 耗尽后降级到 fallback 模型', async () => {
-    fallbacksMock.mockReturnValue(['fallback-model'])
+  /* 2026-11-04 用户「去掉降级这个功能，不要」：主候选失败不再换模型重试。
+     这一条是那次下线的验收点——同一条 429 上游只被调用一次，错误原样抛出。 */
+  it('主候选 429 耗尽后直接失败，不再换模型重试（降级已下线）', async () => {
     definitionMock.mockImplementation((id: string) => (id === 'fallback-model' ? { id } : undefined))
-    safeHttpRequestMock
-      .mockResolvedValueOnce(jsonResponse(429, { error: 'rate limited' }))
-      .mockResolvedValueOnce(jsonResponse(200, {
-        id: 'completion-fallback',
-        model: 'fallback-model',
-        choices: [{ index: 0, message: { role: 'assistant', content: 'from-fallback' }, finish_reason: 'stop' }]
-      }))
-
-    const response = await new APIExecutor().execute(
-      route,
-      { messages: [{ role: 'user', content: 'hello' }] },
-      { traceId: 'trace-fallback', retryBudget: createRetryBudget({ maxTransportRetries: 0, maxUpstreamAttempts: 2 }) }
-    )
-
-    expect(response.choices[0].message.content).toBe('from-fallback')
-    expect(safeHttpRequestMock).toHaveBeenCalledTimes(2)
-    expect(safeHttpRequestMock.mock.calls[0][1].body.model).toBe('test-model')
-    expect(safeHttpRequestMock.mock.calls[1][1].body.model).toBe('fallback-model')
-    // 降级记账：降级那一行 agent_call_logs 的 metadata 带 fallbackFrom
-    const fallbackMeta = JSON.parse(agentLogCreate.mock.calls.at(-1)![0].data.metadata)
-    expect(fallbackMeta.fallbackFrom).toBe('test-model')
-  })
-
-  it('两跳 fallbackChain：第一跳仍失败时继续第二跳，并记录完整轨迹', async () => {
-    fallbacksMock.mockReturnValue(['fallback-1', 'fallback-2'])
-    definitionMock.mockImplementation((id: string) => (id.startsWith('fallback-') ? { id } : undefined))
-    safeHttpRequestMock
-      .mockResolvedValueOnce(jsonResponse(429, { error: 'primary limited' }))
-      .mockResolvedValueOnce(jsonResponse(429, { error: 'fallback-1 limited' }))
-      .mockResolvedValueOnce(jsonResponse(200, {
-        id: 'completion-fallback-2',
-        model: 'fallback-2',
-        choices: [{ index: 0, message: { role: 'assistant', content: 'from-second-fallback' }, finish_reason: 'stop' }]
-      }))
-
-    const response = await new APIExecutor().execute(
-      route,
-      { messages: [{ role: 'user', content: 'hello' }] },
-      { traceId: 'trace-fallback-2', retryBudget: createRetryBudget({ maxTransportRetries: 0, maxUpstreamAttempts: 4 }) }
-    )
-
-    expect(response.choices[0].message.content).toBe('from-second-fallback')
-    expect(safeHttpRequestMock.mock.calls.map((call) => call[1].body.model))
-      .toEqual(['test-model', 'fallback-1', 'fallback-2'])
-    const fallbackMeta = JSON.parse(agentLogCreate.mock.calls.at(-1)![0].data.metadata)
-    expect(fallbackMeta.fallbackTrail).toEqual(['test-model', 'fallback-1'])
-  })
-
-  it('不可降级的错误类（如 protocol）不会触发 fallback', async () => {
-    fallbacksMock.mockReturnValue(['fallback-model'])
-    definitionMock.mockImplementation((id: string) => (id === 'fallback-model' ? { id } : undefined))
-    safeHttpRequestMock.mockResolvedValueOnce(jsonResponse(200, {
-      id: 'completion-bad',
-      model: 'test-model',
-      choices: [{ index: 0, message: { role: 'assistant', content: '' }, finish_reason: 'stop' }]
-    }))
+    safeHttpRequestMock.mockResolvedValueOnce(jsonResponse(429, { error: 'rate limited' }))
 
     await expect(new APIExecutor().execute(
       route,
       { messages: [{ role: 'user', content: 'hello' }] },
       { traceId: 'trace-no-fallback', retryBudget: createRetryBudget({ maxTransportRetries: 0, maxUpstreamAttempts: 2 }) }
-    )).rejects.toMatchObject({ code: 'INVALID_RESPONSE_SCHEMA' })
+    )).rejects.toMatchObject({ statusCode: 429 })
     expect(safeHttpRequestMock).toHaveBeenCalledTimes(1)
+    expect(safeHttpRequestMock.mock.calls[0][1].body.model).toBe('test-model')
+    // 遥测里也不再写降级记账字段
+    const meta = JSON.parse(agentLogCreate.mock.calls.at(-1)![0].data.metadata)
+    expect(meta).not.toHaveProperty('fallbackFrom')
+    expect(meta).not.toHaveProperty('fallbackTrail')
   })
 
   it('空内容 + finish_reason=length → 关闭思考重试（TRUNCATED_EMPTY_OUTPUT）', async () => {
@@ -896,3 +842,65 @@ describe('APIExecutor onWireRequest（最终请求体测试缝）', () => {
     ])
   })
 })
+
+/**
+ * #缓存口径（2026-11-08）：上游 DeepSeek 新版只回 prompt_tokens_details.cached_tokens，
+ * 不回 uncached_tokens —— 实测 2305/3675 行 promptCacheMissTokens 为 NULL。
+ * 量测脚本用 hit/(hit+miss) 时 NULL 被当 0，命中率虚报成 100%。
+ * 护栏锁：上游缺 miss 时必须由 prompt_tokens - cached 推导，且上游真给了 miss 时不得覆盖。
+ */
+describe('前缀缓存 miss 推导（#缓存口径）', () => {
+  const baseResponse = (usage: Record<string, unknown>) => jsonResponse(200, {
+    id: 'completion-cache',
+    model: 'test-model',
+    choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+    usage: { prompt_tokens: 1000, completion_tokens: 8, total_tokens: 1008, ...usage },
+  })
+
+  beforeEach(() => {
+    jest.restoreAllMocks()
+    safeHttpRequestMock.mockReset()
+    agentLogCreate.mockReset().mockResolvedValue({})
+    attemptCreate.mockReset().mockResolvedValue({})
+  })
+
+  const lastAttemptData = () => attemptCreate.mock.calls.at(-1)?.[0].data as Record<string, unknown>;
+
+  async function run(usage: Record<string, unknown>) {
+    safeHttpRequestMock.mockResolvedValue(baseResponse(usage));
+    await new APIExecutor().execute(
+      route,
+      { messages: [{ role: 'user', content: 'hello' }] },
+      { traceId: 'trace-cache-miss' }
+    );
+    return lastAttemptData();
+  }
+
+  it('上游只回 cached_tokens 时，miss = prompt_tokens - hit（不再留 NULL）', async () => {
+    const data = await run({ prompt_tokens_details: { cached_tokens: 640 } });
+    expect(data.promptCacheHitTokens).toBe(640);
+    expect(data.promptCacheMissTokens).toBe(360);
+  });
+
+  it('上游确实给了 uncached_tokens 时优先用上游值，不重复推导', async () => {
+    const data = await run({ prompt_tokens_details: { cached_tokens: 640, uncached_tokens: 300 } });
+    expect(data.promptCacheMissTokens).toBe(300);
+  });
+
+  it('旧版 prompt_cache_miss_tokens 形态同样优先', async () => {
+    const data = await run({ prompt_cache_hit_tokens: 512, prompt_cache_miss_tokens: 488 });
+    expect(data.promptCacheHitTokens).toBe(512);
+    expect(data.promptCacheMissTokens).toBe(488);
+  });
+
+  it('完全没有缓存字段时不臆造 miss（保持 null）', async () => {
+    const data = await run({});
+    expect(data.promptCacheHitTokens).toBeNull();
+    expect(data.promptCacheMissTokens).toBeNull();
+  });
+
+  it('hit 大于 prompt_tokens 的异常值不产生负数 miss', async () => {
+    const data = await run({ prompt_tokens: 100, prompt_tokens_details: { cached_tokens: 200 } });
+    expect(data.promptCacheMissTokens).toBeNull();
+  });
+});

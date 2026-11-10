@@ -13,9 +13,10 @@ channels: [evidence, task]
 stateAdvance: false
 inputs:
   # 本 skill 的输入由 lesson:completed 领域事件直供（消费者 LessonKnowledgeEnrichmentConsumer），
-  # 不经沙盘通道，故只登记提示词规则真正引用的这一个键；其余事件键（knowledgeState / wrapup /
-  # sessionEvidence / visibleDialogueContext / classroomEventHistory / taskContext / knowledgeDelta）
-  # 由执行信封承载，不在此声明（与本族其它 skill 一致）。
+  # 不经沙盘通道，故只登记提示词规则真正引用的这一个键；其余输入由执行信封承载，不在此声明
+  # （与本族其它 skill 一致）——其中 knowledgeState / wrapup / sessionEvidence / visibleDialogueContext
+  # 是事件原样携带的键，classroomEventHistory / taskContext / knowledgeDelta 则是消费者在投递前
+  # 派生的键（见 LessonKnowledgeEnrichmentConsumer.ts 的 classroomEventHistory/taskContext/knowledgeDelta 组装）。
   - name: transferGoal
     type: string?
     ref: user:lessonCompleted.transferGoal
@@ -23,8 +24,11 @@ inputs:
 rules:
   - 只输出 6 个字段：conceptLedger、reusableFoundations、blockedFoundations、transferSignals、recurringConfusions、knowledgeStateSummary
   - 结论必须稳健，不夸大，不凭空发明输入里没有的知识点或混淆
-  - conceptLedger 的 familiarity 只能是 seen|practiced|understood|stable，transferReadiness 与 misconceptionRisk 只能是 low|medium|high
-  - transferSignals 的 readiness 只能是 low|medium|high，confidence 范围 0-1
+  - conceptLedger 每项只需给出 label（概念白话标签）与 misconceptionRisk（low|medium|high）；
+    概念身份键、熟悉度、迁移就绪度、证据条数**由系统按知识看板与证据行计算**，不要输出，
+    也不要为它们做额外推断（输出了也会被系统覆盖）
+  - transferSignals 每项只需给出 label、readiness（low|medium|high）与 confidence（0-1）；
+    readiness 若与看板状态冲突，以看板为准
   - 如果输入提供了 transferGoal：transferSignals 应优先覆盖与该迁移目标直接相关的概念（迁移意图锚定），
     并如实标注其就绪度；若本课证据不足以支撑该目标的迁移，不要虚报 high，可给 low/medium 或省略
   - recurringConfusions 只记录对话或事件中反复出现的卡住/混淆模式，confidence 范围 0-1
@@ -37,9 +41,12 @@ fields:
     type: "object[]"
     desc: |
       概念台账，每项结构：
-      { "conceptKey": 概念唯一键, "label": 概念白话标签, "familiarity": "seen|practiced|understood|stable",
-        "transferReadiness": "low|medium|high", "misconceptionRisk": "low|medium|high",
-        "sourcePaths": ["来源路径 ID"], "sourceTasks": ["来源任务 ID"], "evidenceCount": 0 }
+      { "label": 概念白话标签, "misconceptionRisk": "low|medium|high",
+        "sourcePaths": ["来源路径 ID"], "sourceTasks": ["来源任务 ID"] }
+      说明：conceptKey / familiarity / transferReadiness / evidenceCount / masteryScore 不在输出里——
+      它们由系统按输入 knowledgeState 的 kcId、status/progress 与证据行确定性计算
+      （masteryScore 为 0-1 数值掌握度，与画像/图谱同一口径）。
+      只输出能在输入里找到的概念（知识看板概念，或对话/事件中确实出现过的）。
   - name: reusableFoundations
     type: "string[]"
     desc: 课后可复用的稳定基础
@@ -50,12 +57,14 @@ fields:
     type: "object[]"
     desc: |
       迁移信号列表，每项结构：
-      { "conceptKey": 概念唯一键, "label": 概念白话标签, "readiness": "low|medium|high", "confidence": 0-1 }
+      { "label": 概念白话标签, "readiness": "low|medium|high", "confidence": 0-1 }
+      （conceptKey 由系统按 label 归一，不要输出）
   - name: recurringConfusions
     type: "object[]"
     desc: |
       反复混淆模式，每项结构：
-      { "conceptKey": 概念唯一键, "label": 概念白话标签, "pattern": "混淆表现描述", "confidence": 0-1, "count": 1 }
+      { "label": 概念白话标签, "pattern": "混淆表现描述", "confidence": 0-1, "count": 1 }
+      （conceptKey 由系统按 label 归一，不要输出）
   - name: knowledgeStateSummary
     type: string
     desc: |

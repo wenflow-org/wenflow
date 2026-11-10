@@ -353,14 +353,26 @@ describe('感官技能分类漂移兜底（R5 F96）', () => {
     expect(t.mode).toBe('referral');
   });
 
-  it('not_judgeable + cognitive_internalized 但文本无感官词 → 仍按原规则', () => {
+  it('not_judgeable + cognitive_internalized 但文本无感官词 → 落基础规则（2026-11-10 起：理解型无表现要求落 answer_only）', () => {
     const t = triageGoalResponse({
       surface_goal: '理解一个抽象数学定理的证明结构',
       primary_block_type: 'capability',
       platform_judgment: 'not_judgeable',
       skill_nature: 'cognitive_internalized',
     });
-    expect(t.mode).toBe('learning_path');
+    // 感官覆盖不触发（无感官词）→ 落基础规则；基础规则 2026-11-10 新增 answer_only 出口
+    //（理解型动词 × 无表现要求 × 三条件 0/3），不再落 learning_path。
+    expect(t.mode).toBe('answer_only');
+  });
+
+  it('单字通道词不再命中：「能听懂英语播客」不触发 referral（2026-11-08 真机误拦实证）', () => {
+    const t = triageGoalResponse({
+      surface_goal: '能听懂英语播客，听懂日常语速的讨论',
+      primary_block_type: 'capability',
+      platform_judgment: 'not_judgeable',
+      skill_nature: 'cognitive_internalized',
+    });
+    expect(t.mode).not.toBe('referral');
   });
 });
 
@@ -372,5 +384,83 @@ describe('情绪场景不被当日一次性操作覆盖（R5 F100）', () => {
       time_dimensions: { objectiveScopeHours: 1 },
     });
     expect(t.mode).toBe('emotional_support');
+  });
+});
+
+describe('answer_only 出口（2026-11-10 外评：一句话能讲透的理解型诉求不排路径）', () => {
+  it('均线判读（看懂簇×无表现要求×三条件 0/3）→ answer_only', () => {
+    const t = triageGoalResponse({
+      surface_goal: '搞懂均线怎么反映趋势，能看懂自己买的基金走势图',
+      real_problem: '行情软件红红绿绿的线完全看不懂，特别是均线',
+      primary_block_type: 'capability',
+      block_type_evidence: '刚开始定投，没有系统学过看图',
+      pain_points: ['打开走势图看不懂均线在说什么'],
+    });
+    expect(t.mode).toBe('answer_only');
+    expect(t.reasons.join('')).toContain('理解型诉求');
+  });
+
+  it('有表现要求词汇（条件反射/秒判）→ 不触发 answer_only，留在 learning_path', () => {
+    const t = triageGoalResponse({
+      surface_goal: '搞懂共轭类型判据，练到条件反射',
+      real_problem: '看到分子不能快速反应出共轭类型',
+      primary_block_type: 'capability',
+      pain_points: ['拿到混合题不能秒判每个位点的共轭类型'],
+    });
+    expect(t.mode).toBe('learning_path');
+  });
+
+  it('recurrence=recurring（三条件命中 ≥1）→ 不触发 answer_only', () => {
+    const t = triageGoalResponse({
+      surface_goal: '搞懂财经新闻背后的经济学逻辑',
+      real_problem: '看财经新闻总被降准降息、通胀这些词绕晕',
+      primary_block_type: 'capability',
+      recurrence: 'recurring',
+    });
+    expect(t.mode).toBe('learning_path');
+  });
+
+  it('非理解型诉求（学做完整工具）→ 不触发 answer_only', () => {
+    const t = triageGoalResponse({
+      surface_goal: '学会独立写出能跑的 Python 小工具',
+      real_problem: '照教程能抄，关掉教程写不出来',
+      primary_block_type: 'capability',
+      block_type_evidence: '试过独立写但写不下去',
+      pain_points: ['面对空文件不知道从哪开头'],
+    });
+    expect(t.mode).toBe('learning_path');
+  });
+
+  it('answer_only 不是硬阻断（buildTriageAdvisoryLine 有文案；isHardBlock=false）', () => {
+    const t = triageGoalResponse({
+      surface_goal: '搞懂均线怎么反映趋势，能看懂走势图',
+      primary_block_type: 'capability',
+      pain_points: ['看不懂均线'],
+    });
+    expect(t.mode).toBe('answer_only');
+    expect(buildTriageAdvisoryLine(t)).toContain('不需要排成学习路径');
+    expect(isHardBlockResponseTriage(t, { surface_goal: '搞懂均线' })).toBe(false);
+  });
+});
+
+describe('answer_only 否定式剥离（均线案真机漏判实证）', () => {
+  it('「不需要考试或者给谁验收」的否定式不触发阻断 → answer_only 照常判出', () => {
+    const t = triageGoalResponse({
+      surface_goal: '搞懂均线怎么反映趋势，能看懂自己买的基金走势图',
+      real_problem: '打开行情软件看不懂均线',
+      primary_block_type: 'capability',
+      constraints_and_boundaries: ['不需要考试或者给谁验收，纯粹自己看着不糊涂'],
+    });
+    expect(t.mode).toBe('answer_only');
+  });
+
+  it('肯定式的真实表现要求仍阻断 → learning_path', () => {
+    const t = triageGoalResponse({
+      surface_goal: '搞懂合同条款，能自己判断条款合法还是存疑',
+      real_problem: '签合同前看不懂试用期违约金竞业限制',
+      primary_block_type: 'capability',
+      constraints_and_boundaries: ['两周内要签合同'],
+    });
+    expect(t.mode).toBe('learning_path');
   });
 });

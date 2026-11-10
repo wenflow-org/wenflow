@@ -8,8 +8,9 @@
       <span class="tc-c tc-c--num" role="columnheader">失败次数</span>
       <span class="tc-c tc-c--tok" role="columnheader">Token 用量</span>
       <!-- 成本列（审核 #112）：接口 RankEntry 已带成本桶，此前 user/model 排行未渲染，与页头
-           「按模型、Skill 与时间维度追踪模型调用成本」承诺不符 -->
-      <span class="tc-c tc-c--cost" role="columnheader">成本</span>
+           「按模型、Skill 与时间维度追踪模型调用成本」承诺不符。2026-11-09 走查：币种与 ≈
+           上提到表头，单元格只放纯数字（formatUsd 固定 4 位小数、tabular-nums 对齐）。 -->
+      <span class="tc-c tc-c--cost" role="columnheader">预估成本 (USD)</span>
       <!-- 排行表占比 = Token 占比（成本另有独立列），与导出 CSV 的 Token占比% 对齐 -->
       <span class="tc-c tc-c--share" role="columnheader">Token 占比</span>
     </div>
@@ -98,6 +99,7 @@ export interface RankRow {
 <script setup lang="ts">
 import { computed } from 'vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
+import { formatUsd } from './costFormat'
 
 const props = withDefaults(
   defineProps<{
@@ -147,16 +149,13 @@ function failRate(r: RankRow): string {
    2026-10-14 用户评审：未定价行原显「单价未配置」五个字（亮白、挤在 140px 列里接着占比条），
    现在是占位符——原因走行 title 与页顶卡 hint（同一状态不在三张表里各念一遍）。 */
 function fmtCostUsd(v: number): string {
-  if (!Number.isFinite(v) || v <= 0) return '0'
-  if (v >= 1) return v.toFixed(2)
-  if (v >= 0.01) return v.toFixed(4)
-  return v.toFixed(6)
+  return formatUsd(v)
 }
 function hasCost(r: RankRow): boolean {
   return typeof r.usd === 'number'
 }
 function costText(r: RankRow): string {
-  return hasCost(r) ? `≈ $${fmtCostUsd(r.usd as number)}` : '—'
+  return hasCost(r) ? formatUsd(r.usd as number) : '—'
 }
 /** 成本口径全称（行 title / 读屏用）：占位符本身不带原因，原因必须另有出口 */
 function costDesc(r: RankRow): string {
@@ -184,12 +183,20 @@ function rowTitle(r: RankRow): string {
   display: flex;
   flex-direction: column;
   padding: 2px 14px 0;
+  /* 2026-11-04：390×844 窄屏七列最小内容宽实测 786px > 卡内容宽 305px，整表溢出卡右缘
+     被 .mk-card 的 overflow:clip 静默裁掉「失败次数 / Token 用量 / 成本 / Token 占比」列，
+     且祖先链无滚动容器、末列不可达（同页 .tc-skilltable 已按同判例接管横滚）。
+     由表格自身接管横滚，列宽契约不删、数据不删。 */
+  overflow-x: auto;
 }
 .tc-table__head,
 .tc-table__row {
   display: grid;
   align-items: center;
   gap: 10px;
+  /* 2026-11-04：行不得压到七列最小内容宽以下（否则数字列互相挤字），
+     窄屏溢出交由 .tc-table 的横滚接管；宽屏 min-content 仍低于可用宽，行为不变。 */
+  min-width: min-content;
 }
 /* user/model 半宽侧表：原「名称 1fr 独吃 + Token 固定 112px」——Token 副行
    （prompt X · completion Y）实测宽 ~227px，溢出列宽会压到「失败」列上（用户实测「挤着」）。
@@ -254,7 +261,7 @@ function rowTitle(r: RankRow): string {
 }
 .tc-c--share {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 40px;
+  grid-template-columns: minmax(0, 1fr) 44px;
   align-items: center;
   gap: 8px;
   /* 与左侧金额列的分隔 = 列间距 10 + 14 = 24px（2026-10-14 用户实测：金额文字右缘

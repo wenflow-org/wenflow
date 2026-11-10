@@ -4,12 +4,14 @@
        窄屏左槽亮品牌 logo 与学习台先例一致 -->
   <header class="v2nav-bar" :data-notitle="titleHidden || undefined">
     <div class="v2nav-bar__left">
-      <router-link to="/dashboard" class="v2nav-bar__brand" aria-label="问流 WenFlow，返回工作台">
-        <img :src="isDark ? '/logo-dark.png' : '/logo.png'" alt="" class="v2nav-bar__logo" />
-      </router-link>
+      <!-- 返回钮放左组首位（bare/25）：原先夹在 logo 与页标题之间，无页标题的页面
+           （如资料库）「‹」孤悬 logo 右侧，读不出返回语义——贴左缘才是标准返回位 -->
       <button v-if="showBack" type="button" class="v2nav-back" aria-label="返回上一页" @click="goBack">
         <ChevronLeft :size="20" :stroke-width="2" aria-hidden="true" />
       </button>
+      <router-link to="/dashboard" class="v2nav-bar__brand" aria-label="问流 WenFlow，返回工作台">
+        <img :src="isDark ? '/logo-dark.png' : '/logo.png'" alt="" class="v2nav-bar__logo" />
+      </router-link>
       <strong v-if="pageTitle" class="v2nav-bar__title">{{ pageTitle }}</strong>
     </div>
 
@@ -64,11 +66,10 @@
               <span>资料库</span>
             </router-link>
             <button type="button" role="menuitem" class="v2nav__menu-theme" @click="toggleTheme">
-              <span class="v2nav__menu-theme-icon" aria-hidden="true">
-                <Sun v-if="isDark" :size="14" :stroke-width="2" />
-                <Moon v-else :size="14" :stroke-width="2" />
-              </span>
-              <span class="v2nav__menu-theme-label">{{ isDark ? '使用亮色模式' : '使用暗色模式' }}</span>
+              <!-- 图标与其余行同一规格（2026-11-06 走查：原 22px 键帽芯片与上下裸图标不一致） -->
+              <Sun v-if="isDark" :size="15" :stroke-width="1.75" aria-hidden="true" />
+              <Moon v-else :size="15" :stroke-width="1.75" aria-hidden="true" />
+              <span>{{ isDark ? '使用亮色模式' : '使用暗色模式' }}</span>
             </button>
             <button type="button" role="menuitem" class="v2nav__menu-danger" @click="handleLogout">
               <LogOut :size="15" :stroke-width="1.75" aria-hidden="true" />
@@ -158,7 +159,9 @@ const showBack = computed(() => !onTabSection.value && !route.path.startsWith('/
  * 正文 H1 保留为唯一页题。
  */
 const titleHidden = computed(
-  () => route.path.startsWith('/dashboard') || route.path.startsWith('/knowledge-map') || route.path.startsWith('/library')
+  // 2026-11-04：学习状态窄屏同屏三处「学习状态」（导航高亮 + 顶栏标题 + 正文 H1，顶栏与 H1 相距 62px），按本集合 P2-23 同口径收进来
+  // 2026-11-05 屏效比：目标规划进集合——底部 dock 已高亮同一 tab，顶栏标题与之同屏复读（页内还有步骤条承载阶段语境），窄屏左槽亮品牌
+  () => route.path.startsWith('/dashboard') || route.path.startsWith('/knowledge-map') || route.path.startsWith('/library') || route.path.startsWith('/learning-state') || route.path.startsWith('/goal-conversation')
 );
 const pageTitle = computed(() => {
   const t = route.meta?.title;
@@ -306,24 +309,32 @@ onUnmounted(() => {
 .v2nav__user { position: relative; }
 /* 头像-only（原型 wf-avatar）：名字移进菜单头，正文区不再重复身份 */
 .v2nav__avatar {
-  display: grid; place-items: center;
-  width: 44px; height: 44px;
+  /* 触控盒 44 不动（mobile:spec 下沿），但**不再自绘外层圆环**（2026-11-06 走查 图3）：
+     44px 钮 + 34px 内圆 + hover 灰底 = 深灰大圆套深蓝小圆的「套娃」，还占掉一圈视觉重量。 */
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; padding: 0;
   font: inherit;
   background: transparent;
   border: 0;
   border-radius: 50%;
   cursor: pointer;
-  transition: background 0.15s ease;
 }
-.v2nav__avatar:hover { background: color-mix(in srgb, var(--surface) 92%, var(--ink)); }
+/* hover 反馈下沉到内圆本身（外层保持透明），不再出现第二层圆 */
 .v2nav__avatar i {
-  width: 34px; height: 34px; border-radius: 50%;
+  width: 32px; height: 32px; border-radius: 50%;
   /* 扁平强调色底 + 同色系首字母（2026-09-24 去炫彩口径），与导航活跃态同一语言 */
   background: color-mix(in srgb, var(--blue) 12%, transparent);
   color: var(--blue-deep);
-  font-style: normal; font-size: 14px; font-weight: 800;
-  display: grid; place-items: center;
+  font-style: normal; font-size: 13px; font-weight: 800;
+  /* 首字母一律大写（图3：小写 c 夹在中文界面里读作排版错误） */
+  text-transform: uppercase;
+  /* 严格居中：inline-flex + line-height:1，grid 的基线对齐在 32px 圆里会偏上偏左 */
+  display: inline-flex; align-items: center; justify-content: center;
+  line-height: 1;
+  transition: background 0.15s ease;
 }
+.v2nav__avatar:hover i,
+.v2nav__avatar:focus-visible i { background: color-mix(in srgb, var(--blue) 22%, transparent); }
 .v2nav__menu {
   position: absolute;
   top: calc(100% + 8px);
@@ -349,12 +360,13 @@ onUnmounted(() => {
   opacity: 0;
   transform: translateY(-6px) scale(0.97);
 }
-/* 菜单头（原型 wf-popover__title）：名字 + 身份，替代旧顶栏常显用户名。
-   左右内边距与下面各菜单项一致（12），名字左缘才能落在图标列那条竖线上
-   （原为 10，比图标列左缘还靠左 2px）。 */
+/* 菜单头（原型 wf-popover__title）：名字 + 身份签，替代旧顶栏常显用户名。
+   左内边距 = 菜单项内边距(12) + 行内图标外边距(3.5) = 15.5 —— 名字左缘与下面
+   每一行的**图标左缘**落在同一条竖线上（2026-11-06 走查 图3：此前写 12，
+   与图标列差 3.5px，读作「名字没对齐」）。 */
 .v2nav__menu-head {
-  padding: 8px 12px 6px;
-  display: flex; align-items: baseline; gap: 6px;
+  padding: 8px 12px 6px 15.5px;
+  display: flex; align-items: center; gap: 6px;
   border-bottom: 1px solid var(--line);
   margin-bottom: 4px;
 }
@@ -363,7 +375,18 @@ onUnmounted(() => {
   color: var(--ink);
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.v2nav__menu-role { font-size: 12px; color: var(--faint); flex: none; }
+/* 角色签（2026-11-06 走查 图3）：原来是与名字同字号的散排文字，左右各飘各的；
+   收成 11px 小方签，紧跟名字右侧，成为身份的「标签」而不是第二行信息 */
+.v2nav__menu-role {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  /* 12px 而不是 11px：仓库字号硬下沿 = 12（design:check 规则 16 / mobile:spec fonts），
+     11px 会直接破门禁；紧凑感由 1px/6px 内衬与 4px 小圆角承担，不靠压字号 */
+  font-size: 12px; font-weight: 700; line-height: 1.4;
+  color: var(--faint);
+}
 .v2nav__menu a,
 .v2nav__menu button {
   display: flex;
@@ -382,11 +405,8 @@ onUnmounted(() => {
   text-decoration: none;
   cursor: pointer;
 }
-/* 行内直接子图标：染色 + 补齐 22px 图标槽。
-   ① 只用 `> svg`：写成 `a svg` 会连主题芯片里那个 14px 图标一起命中，而直接命中的规则
-      比继承更优先，芯片声明的 --blue-deep 会被无声盖成灰色（实测 rgb(175,177,182)）。
-   ② 补 3.5px 对称边距：主题项是 22px 键帽芯片，其余是 15px 线图标；不补的话那四行文字
-      会比「切换到亮色模式」左移 7px（390 实测 235.7 vs 242.7）。15 + 3.5×2 = 22。 */
+/* 行内直接子图标：统一 15px 裸线图标（主题切换与其余行同规格，2026-11-06 走查拆芯片），
+   染 muted + 3.5px 对称边距（图标槽 15 + 3.5×2 = 22，各行文字同一左缘） */
 .v2nav__menu a > svg,
 .v2nav__menu button > svg {
   color: var(--muted);
@@ -400,20 +420,6 @@ onUnmounted(() => {
 .v2nav__menu button:hover {
   background: color-mix(in srgb, var(--blue) 8%, var(--surface));
 }
-.v2nav__menu-theme {
-  display: flex !important;
-  align-items: center;
-  gap: 8px;
-}
-.v2nav__menu-theme-icon {
-  display: grid;
-  place-items: center;
-  width: 22px; height: 22px;
-  border-radius: 6px; /* 圆角阶梯：芯片档 */
-  background: color-mix(in srgb, var(--blue) 10%, transparent);
-  color: var(--blue-deep);
-  flex-shrink: 0;
-}
 .v2nav__menu-danger {
   color: var(--red-ink) !important;
   border-top: 1px solid var(--line) !important;
@@ -425,7 +431,7 @@ onUnmounted(() => {
   .v2nav__right { gap: 4px; }
   .v2nav__right :deep(.nc__bell) { width: 44px; height: 44px; }
   .v2nav__right :deep(.nc__bell svg) { width: 19px; height: 19px; }
-  .v2nav__avatar i { width: 28px; height: 28px; font-size: 12px; }
+  /* 内圆与桌面同一档 32（2026-11-06 走查 图3）：28 只差 4px 却让同一头像在两档两种大小 */
 }
 </style>
 

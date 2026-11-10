@@ -35,7 +35,6 @@ function styleBlock(file: string): string {
 const PAGES = [
   'Announcements.vue',
   'Notifications.vue',
-  'PromptEvalPanel.vue',
   'SkillDetail.vue',
   'Skills.vue',
   'Feedback.vue',
@@ -129,12 +128,13 @@ describe('表格方言回归门禁', () => {
     expect(src).toMatch(/<li[^>]*class="frt__item"/)
   })
 
-  /* Skill 目录同为条目清单（2026-10-28 重新设计）：一行一个 Skill。
-     批量模型配置弹窗里的对照表在子组件 SkillModelCoverage 内，不属本页主列表。 */
-  it('Skill 目录保持列表形态，主区不回退成宽表', () => {
+  /* Skill 目录 2026-11-09 起为固定列宽表（图 3 走查：列表形态下中区留 1000px 空白、
+     右侧两个数字列无表头）。批量模型配置弹窗里的对照表在子组件 SkillModelCoverage 内，
+     不属本页主列表——这里只锁主表仍走全站表格方言（fixed + click + 固定列宽）。 */
+  it('Skill 目录主表走全站表格方言（fixed 列宽 + 可点行），不回退成手写列表', () => {
     const src = stripComments(readFileSync(join(dir, 'Skills.vue'), 'utf8'))
-    expect(src).not.toMatch(/<table[\s>]/)
-    expect(src).toMatch(/<div[^>]*class="sk-list"/)
-    expect(src).toMatch(/<div[^>]*class="sk-item"/)
+    expect(src).toMatch(/<table[^>]*class="mk-table mk-table--click mk-table--fixed sk-catalog"/)
+    expect(src).toMatch(/<colgroup>/)
+    expect(src).not.toMatch(/class="sk-list"/)
   })
 })

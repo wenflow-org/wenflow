@@ -24,7 +24,6 @@ export const kcMapperRuntimeDefinition: RuntimeDefinitionRecord = {
       conceptKcs: { type: 'array', description: '概念级 KC' },
       taskKcLinks: { type: 'array', description: '任务-KC 关联' },
       kcGraph: { type: 'object', description: 'KC 前置依赖图' },
-      gapCoverage: { type: 'object', description: '覆盖缺口分析' },
     },
   },
   capabilities: ['kc-mapping', 'knowledge-graph'],

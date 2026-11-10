@@ -43,24 +43,15 @@
         <div class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
           <MkFilterSearch v-model="keyword" placeholder="搜索昵称 / 邮箱 / ID" />
-          <!-- 勾选列默认隐藏（2026-10-17 用户走查「这个多选，默认不出来吧」）：批量删除/导出属
-               低频动作，常驻一整列勾选框会顶在身份列前面，也容易被读成每行都要勾。
-               入口不再只藏在「列」菜单里：卡头明面给一枚「批量操作」，点开即显示勾选列并进入选择态，
-               再点一次收起（并清空已选）。
-               2026-10-19：注册时间本就存在，只是与勾选列一起被默认隐藏了——现在只默认隐藏勾选列。
-               存储键 v5：v4 存下的隐藏集含 created，不升版新默认对已访问过的浏览器不生效。 -->
-          <button
-            v-if="isLive && !isNarrow"
-            type="button"
-            class="mk-link"
-            :class="{ 'mk-link--active': checkVisible }"
-            :aria-pressed="checkVisible"
-            @click="toggleBatchMode"
-          >批量操作</button>
+          <!-- 2026-11-08 用户走查（图1「已选 0 人 空弹条 / 操作列空白」）：
+               ① 删掉卡头「批量操作 / 退出批量」按钮——勾选列 ☐ 现在常驻，无需切换模式；
+               ② 选中 ≥1 行时底部命令栏才挂出（已选 0 时彻底隐藏），见下方 .mk-batchbar 的 v-if；
+               ③ 右侧「操作」列任何状态下都常驻渲染（不再在批量模式下整列变空白）。 -->
           <MkCols
             :col-defs="ulColDefs"
-            storage-key="wf_users_hidden_cols_v5"
-            :default-hidden="['check']"
+            :fixed-cols="['用户', '操作']"
+            storage-key="wf_users_hidden_cols_v6"
+            :default-hidden="['created']"
             v-model:hidden="hiddenCols"
           />
         </div>
@@ -71,12 +62,11 @@
         v-else-if="loadFailed"
         min
         tone="error"
-        icon="◌"
         title="数据加载失败"
         action-text="重试"
         @action="retryLoad"
       />
-      <div v-else-if="filtered.length" class="mk-table-scroll">
+      <div v-else-if="filtered.length" class="mk-table-scroll ul-tablewrap" :class="{ 'ul-scroll--batch': selected.length > 0 }">
         <!-- 固定列宽（2026-10-22 与教学组三表同判例）：自动布局下用户/邮箱两列按当页最长内容
              分宽，翻页整表跳动；改 fixed + 逐列表头宽度，余量按权重摊开。
              单元格 nowrap 不变，长邮箱/长昵称仍由 max-width 截断兜底 -->
@@ -123,12 +113,31 @@
                行内控件已 stopPropagation，聚焦自身即可回车，不产生双份焦点停靠 -->
           <!-- 口径透传：测试视角下点虚拟/测试账号，详情接口需按全量口径查询，否则 404（与行点击/详情钮同参） -->
           <tr v-for="u in paged" :key="u.id" class="ul-row" :class="{ 'ul-row--deleted': u.deleted }" tabindex="0" @click="openSubPage('user', u.id)" @keydown.enter="($event.target === $event.currentTarget) && openSubPage('user', u.id)">
-            <td v-if="isLive && showCol('check')" @click.stop><input v-model="selected" type="checkbox" :value="u.id" :disabled="u.deleted || isNonRealAccount(u)" :aria-label="`选择 ${userName(u)}`" @click.stop /></td>
+            <td v-if="isLive && showCol('check')" @click.stop><input v-model="selected" type="checkbox" :value="u.id" :disabled="u.deleted || isNonRealAccount(u) || isSelf(u)" :title="isSelf(u) ? '当前账号不能加入批量操作' : undefined" :aria-label="`选择 ${userName(u)}`" @click.stop /></td>
             <td>
               <div class="ul-user">
                 <MkCellAvatar :name="userName(u)" :tone="avaTone(u)" />
                 <div class="mk-cell-main">
-                  <strong :title="userName(u)">{{ userName(u) }}</strong>
+                  <!-- 2026-11-09 审计 A：徽章此前挂在 .ul-tags（margin-left:auto），被
+                       justify-content 推到列右缘，与姓名之间隔着一整段空白，「当前账号」读作
+                       一个孤立的浮标。现改为姓名行内紧跟一枚徽章（名字 → 徽章，6px 间隙），
+                       身份备注与姓名同读一句；副行（等级）结构不变。 -->
+                  <div class="ul-nameline">
+                    <strong :title="userName(u)">{{ userName(u) }}</strong>
+                    <span v-if="u.deleted" class="mk-badge mk-badge--sm mk-badge--deleted" :title="u.deletedAt ? `删除于 ${u.deletedAt}` : undefined">已删除</span>
+                    <!-- 2026-10-21 用户拍板「测试只是备注」：不做视角，也不用筛选，行内一枚备注即可 -->
+                    <span
+                      v-else-if="isNonRealAccount(u) && !isVirtualAccount(u)"
+                      class="mk-badge mk-badge--sm mk-badge--test"
+                    >测试</span>
+                    <!-- 自己那一行（2026-10-19 用户走查「这不就重复了吗」）：原文案「当前管理员」
+                         与身份列的「管理员」徽章读作同一个角色标签，实际标的是「这一行是你正在用的
+                         账号」（该行 ⋯ 菜单刻意不给「删除」） -->
+                    <span
+                      v-else-if="isSelf(u)"
+                      class="mk-badge mk-badge--sm mk-badge--self"
+                    >当前账号</span>
+                  </div>
                   <!-- 原型 celluser meta 模式：等级（XP 细节进悬停）。
                        2026-10-23 走查：路径条数不再在副行复述——同一读数已在「路径 / 课堂」列
                        给全且可排序，副行只说等级。
@@ -137,21 +146,6 @@
                     class="mk-cell-sub"
                     :title="u.xp === 0 ? '尚无经验值' : `${u.xp} XP · 距 L${levelFromXp(u.xp) + 1} 还需 ${xpToNext(u.xp)}`"
                   >{{ levelBadgeZh(u.xp, u.currentLevel) }}</span>
-                </div>
-                <div class="ul-tags">
-                  <span v-if="u.deleted" class="mk-badge mk-badge--sm mk-badge--deleted" :title="u.deletedAt ? `删除于 ${u.deletedAt}` : undefined">已删除</span>
-                  <!-- 2026-10-21 用户拍板「测试只是备注」：不做视角，也不用筛选，行内一枚备注即可 -->
-                  <span
-                    v-else-if="isNonRealAccount(u) && !isVirtualAccount(u)"
-                    class="mk-badge mk-badge--sm mk-badge--test"
-                  >测试</span>
-                  <!-- 自己那一行（2026-10-19 用户走查「这不就重复了吗」）：原文案「当前管理员」
-                       与身份列的「管理员」徽章读作同一个角色标签，实际标的是「这一行是你正在用的
-                       账号」（该行 ⋯ 菜单刻意不给「删除」） -->
-                  <span
-                    v-else-if="isSelf(u)"
-                    class="mk-badge mk-badge--sm mk-badge--self"
-                  >当前账号</span>
                 </div>
               </div>
             </td>
@@ -167,15 +161,27 @@
             <td v-if="showCol('created')"><span :class="u.createdAt === '从未' ? 'mk-na' : ''">{{ u.createdAt }}</span></td>
             <td v-if="showCol('lastlogin')"><span :class="u.lastLogin === '从未' ? 'mk-na' : ''">{{ u.lastLogin }}</span></td>
             <td>
+              <!-- 2026-11-08 用户走查：操作列任何状态下都渲染（不再在批量模式下整列变空白）。
+                   勾选列与编辑/⋯ 并排是管理台表格常态，优先保证列不为空、表头有「操作」二字下方有内容。 -->
               <div class="mk-actions">
                 <!-- 行点击进详情，操作列留给这页唯一的处置动作：编辑（改昵称 / 邮箱 / 角色、重置密码）。
-                     已删除行不给编辑（账号不可登录，先恢复再改）。 -->
+                     已删除行不给编辑（账号不可登录，先恢复再改），恢复直接露出来——
+                     此前只在「⋯」里，已删除视图整列只有一个省略号（2026-11-02 评审）。 -->
                 <button v-if="!u.deleted" type="button" class="mk-link" @click.stop="openEdit(u)">编辑</button>
-                <div v-if="isLive && (u.deleted || !isSelf(u))" class="mk-menu">
+                <button v-else-if="isLive" type="button" class="mk-link" :disabled="u.busy" @click.stop="menuRestore(u)">恢复</button>
+                <!-- 当前账号也保留「⋯」入口（2026-11-02 评审：同一列里只有自己这一行少一个入口，
+                     页面上没有解释）。菜单里删除项置灰并说明原因。 -->
+                <div v-if="isLive && !u.deleted" class="mk-menu">
                   <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === u.id" @click.stop="toggleMenu(u.id)">⋯</button>
                   <div v-if="openMenu === u.id" class="mk-menu__pop" :style="popStyle" @click.stop>
-                    <button v-if="u.deleted" type="button" class="mk-menu__item" :disabled="u.busy" @click="menuRestore(u)">恢复</button>
-                    <button v-else type="button" class="mk-menu__item mk-menu__item--danger" :disabled="u.busy" @click="menuDelete(u)">删除</button>
+                    <button
+                      type="button"
+                      class="mk-menu__item mk-menu__item--danger"
+                      role="menuitem"
+                      :disabled="isSelf(u) || u.busy"
+                      :title="isSelf(u) ? '当前登录的账号不能删除自己' : undefined"
+                      @click="menuDelete(u)"
+                    >删除</button>
                   </div>
                 </div>
               </div>
@@ -189,7 +195,6 @@
       <MkEmptyState
         v-else
         min
-        icon="◌"
         :title="isDeletedView ? '暂无已删除账号' : isFiltered ? '当前筛选无用户' : '暂无账号'"
         :action-text="isDeletedView || isFiltered ? '显示全部用户' : '新建用户'"
         @action="isDeletedView || isFiltered ? clearFilters() : openCreate()"
@@ -206,16 +211,20 @@
       />
     </div>
 
-    <!-- 批量操作条（全局 mk-batchbar） -->
+    <!-- 底部命令栏（全局 mk-batchbar）：仅在「已选 ≥ 1」时挂出（2026-11-08 用户：
+           已选 0 时不得弹出空条）；取消选择即收起。出口统一为「取消选择」，不再有冗余的
+           「退出批量」双入口。 -->
     <div v-if="isLive && selected.length" class="mk-batchbar">
       <!-- 审核 #13（2026-10-06）：手动跨页勾选时批量条如实标注未显示页行数，
            否则「已选 304 人」在只看得见 15 行的屏上会被读成「全在眼前」
            （2026-10-11 起表头全选只管当前页，跨页集合只能来自手动逐个勾） -->
-      <span>已选 {{ selected.length }} 人<template v-if="selectedOffPage">（含未显示页 {{ selectedOffPage }} 行）</template></span>
-      <button type="button" class="mk-link" @click="selected = []">取消选择</button>
-      <button type="button" class="mk-link" :disabled="batchBusy" @click="exportSelected">导出 CSV</button>
-      <button type="button" class="mk-batchbar__danger" :disabled="batchBusy" @click="batchDelete">
-        {{ batchBusy ? '删除中…' : '批量删除' }}
+      <span class="mk-batchbar__count">已选 {{ selected.length }} 项<template v-if="selectedOffPage">（含未显示页 {{ selectedOffPage }} 行）</template></span>
+      <button type="button" class="mk-link mk-batchbar__cancel" @click="selected = []">取消选择</button>
+      <span class="mk-batchbar__sep" aria-hidden="true"></span>
+      <button type="button" class="mk-batchbar__btn" :disabled="batchBusy || !selected.length" @click="exportSelected">导出 CSV</button>
+      <span class="mk-batchbar__sep" aria-hidden="true"></span>
+      <button type="button" class="mk-batchbar__danger" :disabled="batchBusy || !selected.length" @click="batchDelete">
+        {{ batchBusy ? '删除中…' : '删除' }}
       </button>
     </div>
 
@@ -408,9 +417,9 @@ const users = computed<UserRow[]>(() => {
    列表 = 全部非虚拟账号；测试/审计账号照常列出，行内以「测试」备注标识。 */
 
 /* D3 表格增强：列显隐（公共组件 MkCols 接管：菜单 + localStorage 持久化；列可隐藏，用户/操作列固定）。
-   默认列集对齐原型 .tbl（用户/邮箱/角色/路径会话/最后登录/操作）：「选择框」「注册时间」默认隐藏
-   （列菜单可恢复）。首访默认隐藏走 MkCols :default-hidden 单源（与 LearnerCenter/ExecLogs 同判例）；
-   页面不再私设 v-model 初值——否则 localStorage 已存在时会被双源钉死。 */
+   2026-11-08 用户走查：勾选列 ☐ 改为**默认常驻**（不再需要「批量操作」按钮进入选择态），
+   「注册时间」仍默认隐藏（列菜单可恢复）。存储键升 v6：v5 存下的隐藏集含 check，
+   不升版新默认对已访问过的浏览器不生效。页面不私设 v-model 初值——否则 localStorage 已存在时会被双源钉死。 */
 const ulColDefs = [
   { key: 'check', label: '选择框（批量操作）' },
   { key: 'email', label: '邮箱' },
@@ -433,18 +442,8 @@ const showCol = (key: string) =>
   !(isMedium.value && MEDIUM_HIDDEN_COLS.has(key)) &&
   !(isNarrow.value && MOBILE_HIDDEN_COLS.has(key))
 
-/** 卡头「批量操作」：打开勾选列并进入选择态；再点收起并清空已选 */
-const checkVisible = computed(() => isLive.value && showCol('check'))
-function toggleBatchMode() {
-  if (checkVisible.value) {
-    selected.value = []
-    hiddenCols.value = new Set([...hiddenCols.value, 'check'])
-  } else {
-    const next = new Set(hiddenCols.value)
-    next.delete('check')
-    hiddenCols.value = next
-  }
-}
+/** 勾选列 ☐ 常驻（2026-11-08 用户走查）：无需「批量操作」模式切换，选中 ≥1 行即弹出底部命令栏，
+   取消选择即收起。勾选列显隐由「列」菜单控制（不再默认隐藏）。 */
 
 
 /** live 用户域拉取失败（且列表为空）→ 错误态；空态只在真正无数据时展示 */
@@ -541,7 +540,8 @@ const selected = ref<string[]>([])
 const batchBusy = ref(false)
 /* 表头全选 = 当前页全选（2026-10-11 用户拍板：跨页全量勾选对批量删除这类动作太易误伤）。
    再点一次只清当前页；跨页仍可手动逐个勾（selected 保留），批量条据此标注未显示页行数。 */
-const pageSelectable = computed(() => paged.value.filter((u) => !isNonRealAccount(u) && !u.deleted))
+/** 当前账号不参与批量操作（2026-11-02 评审：自己这一行也能勾进批量删除，界面上没有任何置灰提示） */
+const pageSelectable = computed(() => paged.value.filter((u) => !isNonRealAccount(u) && !u.deleted && !isSelf(u)))
 const allChecked = computed(() => pageSelectable.value.length > 0 && pageSelectable.value.every((u) => selected.value.includes(u.id)))
 const headerIndeterminate = computed(() => !allChecked.value && pageSelectable.value.some((u) => selected.value.includes(u.id)))
 /** 审核 #13（2026-10-06）：已选中但不在当前页的条数——手动跨页勾选时，
@@ -570,7 +570,7 @@ async function batchDelete() {
   if (!ids.length || batchBusy.value) return
   const ok = await askConfirm({
     title: '批量删除用户',
-    message: `确认批量删除 ${ids.length} 个用户？删除后用户将无法登录，历史数据保留，可在后台恢复。`,
+    message: `确认批量删除 ${ids.length} 个用户？删除后用户将无法登录，历史数据保留，需要恢复时到「视图 → 已删除」里找回。`,
     confirmText: `删除 ${ids.length} 个用户`,
     busy: true
   })
@@ -629,7 +629,9 @@ function exportSelected() {
 async function removeUser(u: UserRow) {
   const ok = await askConfirm({
     title: '删除用户',
-    message: `确认删除用户「${u.name}」（${u.email}）？\n删除后用户将无法登录，历史数据保留，可在后台恢复。`,
+    /* 邮箱独占一行（2026-11-01 外部评审）：和账号名挤在一句里时，确认框宽度不够，
+       长邮箱会在连字符处被折断成两行，读起来像两个地址。 */
+    message: `确认删除用户「${u.name}」？\n邮箱：${u.email}\n删除后用户将无法登录，历史数据保留，需要恢复时到「视图 → 已删除」里找回。`,
     confirmText: '删除',
     busy: true
   })
@@ -637,7 +639,9 @@ async function removeUser(u: UserRow) {
   u.busy = true
   try {
     await liveDeleteUser(u.id)
-    toast.success(`「${u.name}」已删除`)
+    /* 删除是可逆的软删：toast 顺带给出找回路径——否则「可在后台恢复」只是一句空承诺
+       （2026-11-01 外部评审二轮：删完找不到回收站入口） */
+    toast.success(`「${u.name}」已删除，可在「视图 → 已删除」恢复`)
     doneConfirm()
   } catch (e) {
     toast.error(`删除失败：${errMsg(e)}`)
@@ -651,7 +655,7 @@ async function removeUser(u: UserRow) {
 async function restoreUserRow(u: UserRow) {
   const ok = await askConfirm({
     title: '恢复用户',
-    message: `确认恢复用户「${u.name}」（${u.email}）？\n恢复后该用户可重新登录，历史数据原样保留。`,
+    message: `确认恢复用户「${u.name}」？\n邮箱：${u.email}\n恢复后该用户可重新登录，历史数据原样保留。`,
     confirmText: '恢复',
     danger: false
   })
@@ -777,6 +781,18 @@ function clearFilters() {
 /* 筛选弹层外壳（.mk-adv*）已提升为共享原语：见 styles/mk-primitives.css */
 /* 视图页签随学习状态拆页退役（2026-10-04，单视图不再需要 .tabs） */
 .ul-row { cursor: pointer; }
+/* 表格滚动区底部留白 + 渐隐遮罩（2026-11-09 审计 B，与 LearnerCenter .lc-tablewrap /
+   TeachingSessions .ts-table-scroll 同款）：mk-card--fill 固定卡高，最后一行副行
+   （「L1 · 入门」）此前被表格底边腰斩。留白 16px 大于遮罩渐隐区 12px，
+   渐隐只落在空白区，不裁任何字形；内部滚动保留。遮罩色走 --mk-ink token（无硬编码色）。 */
+.ul-tablewrap {
+  padding-bottom: 16px;
+  -webkit-mask-image: linear-gradient(to bottom, var(--mk-ink) 0, var(--mk-ink) calc(100% - 12px), transparent 100%);
+  mask-image: linear-gradient(to bottom, var(--mk-ink) 0, var(--mk-ink) calc(100% - 12px), transparent 100%);
+}
+/* 批量模式下给表格留出浮条的高度（2026-11-02 评审：吸底浮条压穿最后一行，
+   把「管理员」标签和表格底边一起盖住） */
+.ul-scroll--batch { padding-bottom: 56px; }
 /* 键盘可达（对齐 gc-row/oc-row 判例）：行可聚焦，焦点态描边提示当前位置 */
 .ul-row:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: -2px; }
 /* 已删除行（审核 #8，2026-10-06）：整行 opacity 0.62 会把行内文字压到 AA 之下
@@ -791,8 +807,11 @@ function clearFilters() {
 /* 固定列宽（2026-10-22 用户「翻页不同页码时候，列宽怎么还在变呢」）：用户/邮箱两列在
    auto 布局下按当页最长文本分宽，翻页跳动；fixed 后按表头宽度定死，余量按权重摊开。 */
 .u-c-check { width: 36px; }
-.u-c-user { width: 250px; }
-.u-c-email { width: 190px; }
+.u-c-user { width: 220px; }
+/* 2026-11-01 外部评审（二轮）：邮箱是账号的唯一识别符，却是第一个被截断的列
+   （ui-review-demo-…@example.in 尾巴被吃），而「操作」列只有两颗按钮却吃掉 400px。
+   邮箱加宽 + 给操作列定宽，余量不再全落到最右列。 */
+.u-c-email { width: 280px; }
 .u-c-role { width: 96px; }
 /* 390 档 fixed 表按比例摊薄列宽，「路径 / 课堂」+ 右缘 caret（绝对定位 -12px）会贴到内衬里；
    112 = 文字 75 + 左右内衬 32 + 余量，窄屏保整词与箭头。 */
@@ -801,7 +820,12 @@ function clearFilters() {
 .u-c-lastlogin { width: 100px; }
 .ul-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .ul-user .mk-cell-main { min-width: 0; flex: 1; }
-.ul-tags { display: flex; gap: 5px; margin-left: auto; flex: none; }
+/* 姓名行（2026-11-09 审计 A）：姓名 + 身份徽章同行，徽章紧跟文字右侧 6px。
+   此前徽章在 .ul-tags（margin-left:auto）被推到列右缘，与姓名之间空出整段间隙。
+   strong 的 max-width 截断（.mk-cell-main strong）不变，徽章 flex:none 不被压扁。 */
+.ul-nameline { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.ul-nameline strong { min-width: 0; }
+.ul-nameline .mk-badge { flex: none; }
 
 /* 邮箱列（原型独立邮箱列，sub 字级弱于姓名）。
    原型 .tbl 是自动布局：列宽随内容，超长邮箱用 max-width 截断兜底
@@ -821,10 +845,10 @@ function clearFilters() {
    2026-10-05 CM6：收敛为全局修饰类 .mk-table--nowrap（表元素已挂该 class）。 */
 
 @media (min-width: 2000px) {
-  .ul-tags { gap: 6px; margin-top: 3px; }
+  .ul-nameline { gap: 6px; }
 }
 @media (min-width: 2800px) {
-  .ul-tags { gap: 7px; margin-top: 4px; }
+  .ul-nameline { gap: 7px; }
 }
 
 /* ================= 暗色模式（D1）：用户页局部覆写 ================= */
@@ -857,6 +881,13 @@ html[data-theme='dark'] {
     border: solid var(--mk-on-fill);
     border-width: 0 2px 2px 0;
     transform: rotate(45deg);
+  }
+  /* 上面的 appearance:none 把原生 checkbox 的 :disabled 灰化一起剥掉了，已删除行 /
+     虚拟测试账号的勾选框与可选行长得一模一样（「不能勾」只剩点不动这一条线索）。
+     补回弱化 + 禁止光标。亮色不设这条：亮色没覆写外观，原生 disabled 样式还在。 */
+  .mk-table input[type='checkbox']:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 }
 </style>

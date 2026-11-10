@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import apiConfigService from '../../services/apiConfig.service';
+import { resolvesToRegisteredModel } from '../../config/models.config';
 import { getAPIGateway } from '../../gateway/api-gateway';
 import { resolveChatCompletionsUrl } from '../../gateway/api-gateway/chat-protocol-adapter';
 import { safeHttpRequest } from '../../utils/safe-http';
@@ -29,7 +30,6 @@ router.get('/', async (req, res) => {
         apiKeyConfigured: Boolean(config.apiKey),
         availableModels: config.availableModels,
         defaultModel: config.defaultModel,
-        defaultReasoningModel: config.defaultReasoningModel,
         defaultEvaluationModel: config.defaultEvaluationModel,
         defaultTemperature: config.defaultTemperature ?? 0.7,
         defaultMaxTokens: config.defaultMaxTokens ?? 2048,
@@ -112,7 +112,6 @@ router.put('/', async (req, res) => {
       apiKey, 
       availableModels, 
       defaultModel, 
-      defaultReasoningModel, 
       defaultEvaluationModel,
       defaultTemperature,
       defaultMaxTokens,
@@ -172,6 +171,30 @@ router.put('/', async (req, res) => {
       });
     }
 
+    /* #177 根因门禁：平台三档默认模型写入时必须能解析到 llm-providers.json 注册目录
+       （含别名展开）。目录外的值（如历史遗留的评测专用 id）在运行时无可用渠道、请求直接
+       transport 失败，且未单独配模型的 skill 会静默继承它——这里在写入点拒绝，而不是等
+       下次启动被 normalizePlatformModelDefaults 归一化。只校验本次请求确实提交的字段：
+       partial 保存（如只改连接）不该被库里的历史值卡住。 */
+    const aliasOverrides = {
+      chat: Array.isArray(chatModels) ? chatModels : (currentConfig.chatModels || []),
+      reasoning: Array.isArray(reasoningModels) ? reasoningModels : (currentConfig.reasoningModels || []),
+      light: Array.isArray(lightModels) ? lightModels : (currentConfig.lightModels || []),
+    };
+    const invalidDefaults = ([
+      ['默认模型', defaultModel],
+      ['评估默认模型', defaultEvaluationModel],
+    ] as const)
+      .filter(([, value]) => typeof value === 'string' && value.trim() !== ''
+        && !resolvesToRegisteredModel(value, aliasOverrides))
+      .map(([label, value]) => `${label}「${String(value).trim()}」`);
+    if (invalidDefaults.length) {
+      return res.status(400).json({
+        success: false,
+        error: `${invalidDefaults.join('、')}不在已注册模型目录（llm-providers.json）中：运行时会因无可用渠道 transport 失败，未配置模型的 skill 会继承它。请改到目录内模型或用已注册别名，清空表示不设置。`,
+      });
+    }
+
     const parsedModelsArray = Array.isArray(availableModels)
       ? availableModels
       : typeof availableModels === 'string'
@@ -200,7 +223,6 @@ router.put('/', async (req, res) => {
       apiKey: resolvedApiKey,
       availableModels: modelsArray,
       defaultModel,
-      defaultReasoningModel,
       defaultEvaluationModel,
       defaultTemperature: defaultTemperature ?? currentConfig.defaultTemperature,
       defaultMaxTokens: defaultMaxTokens ?? currentConfig.defaultMaxTokens,
@@ -232,7 +254,6 @@ router.put('/', async (req, res) => {
         apiKeyConfigured: Boolean(updatedConfig.apiKey),
         availableModels: updatedConfig.availableModels,
         defaultModel: updatedConfig.defaultModel,
-        defaultReasoningModel: updatedConfig.defaultReasoningModel,
         defaultEvaluationModel: updatedConfig.defaultEvaluationModel,
         defaultTemperature: updatedConfig.defaultTemperature,
         defaultMaxTokens: updatedConfig.defaultMaxTokens,

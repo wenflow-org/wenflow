@@ -42,11 +42,16 @@ export const PLUGIN_GROUPS: readonly PluginGroup[] = [
     primary: 'web-search',
   },
   {
+    /* 2026-11-07 用户「决策到底是什么，要起个能读懂的名字」：
+       这一组实际做三件事——教学干预裁决（路径/练习的放行与拦截）、作答证据核验（判分证据够不够）、
+       掌握度评估与路由校准（把评估结果写回路由）。原来的「决策」「对资料质量等边界判断做结构化打分」
+       只描述了其中最小的一块，且「决策」二字在后台还指「模型路由决策」，两处混读。
+       后缀 (JEV) 是运行时里这套判定的内部名（jev-* 模型、systemone 端点），运营在日志里会看到它。 */
     id: 'decision',
-    name: '决策',
+    name: '决策与核验 (JEV)',
     glyph: '决',
-    description: '对资料质量等边界判断做结构化打分。',
-    members: [{ id: 'decision-gate', name: '决策判断' }],
+    description: '教学干预裁决 · 作答证据核验 · 掌握度评估与路由校准。',
+    members: [{ id: 'decision-gate', name: '决策与核验' }],
     fallback: '决策不可用时资料质量闸门按放行处理，不阻塞路径生成。',
     primary: 'decision-gate',
   },

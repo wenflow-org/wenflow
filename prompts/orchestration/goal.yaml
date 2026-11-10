@@ -187,21 +187,16 @@ fields:
     valueType: object
     pathInRawOutput: internal.ext.goalConversation.understanding.needsMaterial
     description: 资料需求 {kind,title,why,origin(public|private),queries[]}；origin=private 表示内部/私有资料，下游跳过联网、等待用户上传；无需求留空（下游 material-collector 消费）
-  - fieldId: understanding.prerequisiteDiagnostics
+  - fieldId: confirmedProposal.prerequisiteDiagnostics
     promptRole: soft-info
     valueType: array<object>
-    pathInRawOutput: internal.ext.goalConversation.understanding.prerequisiteDiagnostics
-    description: 前置知识探测题（最多 2 个二元单概念点）[{probeId, targetConcept, question, options[2], correctOption}]；作答结果由平台回传校准 prerequisiteTree.knownConcepts
+    pathInRawOutput: internal.ext.goalConversation.confirmedProposal.prerequisiteDiagnostics
+    description: 前置知识探测题（最多 2 个二元单概念点）[{probeId, targetConcept, question, options[2], correctOption}]；随 confirmedProposal 产出（core 契约），作答结果由平台回传校准 prerequisiteTree.knownConcepts
   - fieldId: understanding.prerequisiteCheckResults
     promptRole: soft-info
     valueType: array<object>
     pathInRawOutput: internal.ext.goalConversation.understanding.prerequisiteCheckResults
     description: 探测题作答结果（用户作答后回填）[{probeId, targetConcept, userAnswer, isCorrect}]
-  - fieldId: proposalQuality
-    promptRole: hidden-inference
-    valueType: object
-    pathInRawOutput: internal.ext.goalConversation.proposalQuality
-    description: 提案 SMART 自评（proposing 阶段随 confirmedProposal 产出）{specific, measurable, achievable, relevant, timeBound 均 0-100, overall 加权总分}；overall<60 时回复给一句质量改善建议但不阻断确认
   # 平台派生/旁路字段
   - fieldId: structuredData
     promptRole: soft-info
@@ -499,7 +494,7 @@ routings:
     accumulate: true
     visibilityPreset: agent-internal
   - agentId: skill:goal-conversation
-    fieldId: understanding.prerequisiteDiagnostics
+    fieldId: confirmedProposal.prerequisiteDiagnostics
     render: hidden
     handoff: [goal-agent]
     internal: false
@@ -512,14 +507,6 @@ routings:
     internal: false
     accumulate: false
     visibilityPreset: agent-internal
-  - agentId: skill:goal-conversation
-    fieldId: proposalQuality
-    render: hidden
-    handoff: [goal-agent]
-    internal: false
-    accumulate: false
-    visibilityPreset: agent-internal
-    notes: SMART 自评（仅 proposing 阶段）
   # 平台派生/旁路字段
   - agentId: skill:goal-conversation
     fieldId: structuredData

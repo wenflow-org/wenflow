@@ -1,20 +1,37 @@
 <template>
   <section class="ac">
     <!-- 启动失败（非 401；401 由路由守卫与拦截器导向登录页） -->
+    <!-- 2026-11-04 用户「这个页面重新设计，诊断信息很奇怪的位置」：
+         原先是一张居中排版的小卡，三个按钮横排，诊断信息作为一枚裸 <details> 挂在按钮下面——
+         收起来只剩一个 ▸ 三角 + 一行灰字，展开后又把整块内容顶歪。现在按「错误页」该有的层级排：
+         图标 + 标题 + 一句人话说明 + 两个动作（重试 / 退出登录），诊断信息收进卡内独立的
+         带分隔线的区块（标题行右侧是复制），长文本限高滚动。 -->
     <div v-if="bootError" class="ac-error">
-      <div class="ac-error__card">
-        <strong>控制台暂时无法打开</strong>
-        <span>数据服务返回异常，所有页面受影响。可直接重试，若仍失败请复制诊断信息发给研发。</span>
-        <div class="ac-error__actions">
-          <button type="button" class="mk-btn mk-btn--primary" @click="boot">重试</button>
-          <button type="button" class="mk-btn" @click="copyDiagnostics">复制诊断信息</button>
-          <!-- 长故障兜底：会话可能已失效（否则重试应能恢复），退出重登不困在错误页 -->
-          <button type="button" class="mk-btn" @click="logoutFromError">退出登录</button>
+      <div class="ac-error__card" role="alert" aria-labelledby="ac-error-title">
+        <div class="ac-error__head">
+          <TriangleAlert class="ac-error__icon" :size="20" :stroke-width="2" aria-hidden="true" />
+          <h1 id="ac-error-title" class="ac-error__title">控制台暂时无法打开</h1>
         </div>
-        <details class="ac-error__diag">
-          <summary>诊断信息</summary>
-          <code>{{ bootError }}</code>
-        </details>
+        <p class="ac-error__lead">
+          {{ bootErrorIsAuth
+            ? '登录状态已经失效，重新登录就能继续。'
+            : '数据服务没有正常响应，所有页面都受影响。可以先重试。仍然打不开就退出重登，或把下面的诊断信息发给研发。' }}
+        </p>
+        <div class="ac-error__actions">
+          <!-- 登录失效时「重试」修不了问题，主按钮让给「重新登录」——别让人对着一个 403 反复点重试 -->
+          <button type="button" class="mk-btn" :class="{ 'mk-btn--primary': !bootErrorIsAuth }" @click="boot">重试</button>
+          <!-- 长故障兜底：会话可能已失效（否则重试应能恢复），退出重登不困在错误页 -->
+          <button type="button" class="mk-btn" :class="{ 'mk-btn--primary': bootErrorIsAuth }" @click="logoutFromError">
+            {{ bootErrorIsAuth ? '重新登录' : '退出登录' }}
+          </button>
+        </div>
+        <div class="ac-error__diag">
+          <div class="ac-error__diag-head">
+            <span>诊断信息</span>
+            <button type="button" class="mk-link" @click="copyDiagnostics">复制</button>
+          </div>
+          <code class="ac-error__diag-code">{{ bootError }}</code>
+        </div>
       </div>
     </div>
 
@@ -99,14 +116,15 @@ const LearningPaths = asyncPage(() => import('./OpsContent.vue'));
 const VirtualLearners = asyncPage(() => import('./VirtualLearners.vue'));
 const VirtualLearnerCards = asyncPage(() => import('./VirtualLearnerCards.vue'));
 const Skills = asyncPage(() => import('./Skills.vue'));
-// Prompt 评估（2026-10-25 用户拍板从 skills 宿主页签拆回独立页，归入侧栏 Skill 组）
-const PromptEval = asyncPage(() => import('./PromptEval.vue'));
 const Orchestrator = asyncPage(() => import('./Orchestrator.vue'));
 const ExecLogs = asyncPage(() => import('./ExecLogs.vue'));
 // 2026-09-29 拆回独立页：成本分析从执行日志宿主释放
 const TokenCost = asyncPage(() => import('./TokenCost.vue'));
 const AuditLogs = asyncPage(() => import('./AuditLogs.vue'));
-const ApiConfig = asyncPage(() => import('./ApiConfig.vue'));
+// 系统设置（2026-11-01）：模型与接入 + 运营中心原系统运维四页签合并（用户「这四个拆出来，
+// 和模型与接入作为一个页面，但是模型与接入要改名字了」）。模型与接入降为该页首屏页签，
+// 不再作为独立场景注册——旧 id api-config 的 URL 在 router 改投过来。
+const SystemSettings = asyncPage(() => import('./SystemSettings.vue'));
 const PromptWorkbench = asyncPage(() => import('./PromptWorkbench.vue'));
 // 运营术语表（2026-10-10 抽屉退役改整页）：壳层帮助按钮跳转的隐藏场景，不进侧栏
 const AdminGlossary = asyncPage(() => import('./AdminGlossary.vue'));
@@ -155,15 +173,13 @@ const components: Record<string, unknown> = {
   'orchestrator': Orchestrator,
   // 外挂能力（2026-10-19 从 api-config 宿主拆回独立场景，侧栏 Skill 组）
   'addons': Addons,
-  // Prompt 评估（2026-10-25 从 skills 宿主页签拆回独立场景，侧栏 Skill 组）：
-  // 面板 PromptEvalPanel 由本页异步加载；旧 /admin/skills?tab=prompt-eval 在 Skills 页改投
-  'prompt-eval': PromptEval,
+  // Prompt 评估 2026-11-01 下线：场景与侧栏项一并摘除，旧 URL 在 router 改投 /admin/skills
   'execution-logs': ExecLogs,
   'token-cost': TokenCost,
   'memory-review': MemoryReview,
   'audit-logs': AuditLogs,
-  'api-config': ApiConfig,
-  // 访问与注册 2026-10-27 并入运营中心宿主 tab（场景下线，URL 重定向兼容）
+  'system-settings': SystemSettings,
+  // 访问与注册 2026-11-01 随系统运维四页签迁入「系统设置」（此前 2026-10-27 曾并入运营中心 tab）
   // 隐藏场景（不在 manifest 侧栏）：PromptWorkbench 是「新建 Skill」骨架生成的唯一入口，
   // 健康中心 hash/yaml 跳转深链至此，勿删注册
   'skill-workbench': PromptWorkbench,
@@ -201,10 +217,12 @@ export const DETAIL_COMPONENTS: Readonly<Record<string, unknown>> = detailCompon
  */
 import { computed, defineAsyncComponent, h, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { TriangleAlert } from 'lucide-vue-next';
 import Shell from './Shell.vue';
 import HealthCenter from './HealthCenter.vue';
 import MockSkeletonTable from './SkeletonTable.vue';
 import { intent, intentQueryParams, subPage, closeSubPage, liveSpans, asSubPageStage, type SubPageView, type SubPageStage } from './store';
+import { MOCK_SCENES } from './manifest';
 import { loadLiveData } from './live';
 import { clearAdminSession } from '@/api/adminApi';
 import { useEscape } from './useEscape';
@@ -218,6 +236,9 @@ useEscape(() => !!subPage.value, closeSubPage);
 const scene = ref('overview');
 const booting = ref(true);
 const bootError = ref('');
+/* 失败原因分两类：会话失效（403 / 「权限已失效」）与数据服务不可用。
+   前者重试没用、退出重登才有用，所以文案与主按钮都要跟着换（2026-11-04 实机踩到）。 */
+const bootErrorIsAuth = computed(() => /权限|登录|401|403|unauthori[sz]ed|forbidden/i.test(bootError.value));
 
 const currentComponent = computed(() => components[scene.value]);
 const detailComponent = computed(() => (subPage.value ? detailComponents[subPage.value.view] : null));
@@ -227,10 +248,10 @@ const pageKey = computed(() => (subPage.value ? `${subPage.value.id}:${subPage.v
    2026-10-24：from 支持 parent 链（二级 → 三级 → 四级），逐层拼出完整路径；
    超过 3 段时保留最近 3 段并用「…」占位，避免顶栏被长链撑爆。 */
 const CRUMB_MAX_DEPTH = 3
+/* 不截断实体名：teaching-turn 这类 13 字符标识按「前 8 + … + 后 4」反而更长，
+   顶栏右侧留白足够，交给 CSS ellipsis 处理（2026-10-30 外部评审）。 */
 function crumbPart(label?: string, id?: string): string {
-  const text = label || id || ''
-  if (text.length <= 12) return text
-  return `${text.slice(0, 8)}…${text.slice(-4)}`
+  return label || id || ''
 }
 /** 从当前 subPage 往上取完整链路（最外层在前） */
 function crumbChain(): string[] {
@@ -241,6 +262,15 @@ function crumbChain(): string[] {
   while (from) {
     chain.unshift(crumbPart(from.label, from.id))
     from = from.parent
+  }
+  /* 2026-11-09 走查（面包屑与左侧菜单对不上）：链根若不是当前栏目，就把当前栏目接到最前。
+     典型是「会话监控」——它是一个下钻页，左侧菜单里根本没有这一栏，于是顶栏副行写着
+     「会话监控」而菜单高亮「目标对话」，读者不知道自己在哪一节。顶栏副行读的就是链首，
+     补上栏目后两处一致；返回目标仍是链尾那条真实来源页（from 没动）。
+     链已经到 CRUMB_MAX_DEPTH 时不补——否则三级链会被挤成「… / x / y」，把有用的层级挤掉。 */
+  const sectionLabel = MOCK_SCENES.find((s) => s.id === scene.value)?.label
+  if (sectionLabel && chain[0] !== sectionLabel && chain.length < CRUMB_MAX_DEPTH) {
+    chain.unshift(sectionLabel)
   }
   return chain
 }
@@ -517,45 +547,63 @@ onMounted(() => {
   z-index: var(--mk-z-critical, 500);
   background: var(--mk-bg, #f7f8fa);
   display: grid;
-  place-content: center;
+  place-items: center;
+  padding: 24px;
 }
+/* 左对齐的单列卡：标题与说明读起来是一段话，而不是三行居中的标签 */
 .ac-error__card {
   display: grid;
-  gap: 10px;
-  justify-items: center;
-  padding: 32px 40px;
+  gap: 12px;
+  width: min(520px, 100%);
+  padding: 24px 26px;
   border: 1px solid var(--mk-line);
-  border-radius: 16px;
+  border-radius: var(--mk-radius-xl);
   background: var(--mk-surface);
   box-shadow: var(--mk-shadow-modal);
 }
-.ac-error__card strong { font-size: var(--mk-fs-emphasis); color: var(--mk-ink); }
-.ac-error__card span { font-size: var(--mk-fs-body); color: var(--mk-muted); }
-.ac-error__actions { display: flex; gap: 10px; margin-top: 6px; }
-.ac-error__diag { max-width: 460px; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.ac-error__diag summary { cursor: pointer; list-style: none; }
-/* 系统三角退役：与全站 details（.mk-section__summary）同用自绘 ▸ */
-.ac-error__diag summary::-webkit-details-marker { display: none; }
-.ac-error__diag summary::before { content: '▸'; display: inline-block; margin-right: 6px; transition: transform 0.12s ease; }
-.ac-error__diag[open] summary::before { transform: rotate(90deg); }
-.ac-error__diag code {
+.ac-error__head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ac-error__icon { flex: none; color: var(--mk-red); }
+.ac-error__title { margin: 0; font-size: var(--mk-fs-emphasis); font-weight: 700; color: var(--mk-ink); }
+.ac-error__lead { margin: 0; font-size: var(--mk-fs-body); line-height: 1.6; color: var(--mk-muted); }
+.ac-error__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+/* 诊断信息：卡内独立区块，与动作之间一条发丝线隔开；标题行右侧才是复制 */
+.ac-error__diag {
+  display: grid;
+  gap: 6px;
+  margin-top: 2px;
+  padding-top: 12px;
+  border-top: 1px solid var(--mk-line);
+}
+.ac-error__diag-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--mk-faint);
+  font-size: var(--mk-fs-micro);
+}
+.ac-error__diag-code {
   display: block;
-  margin-top: 6px;
+  max-height: 96px;
+  overflow: auto;
+  margin: 0;
   padding: 8px 10px;
   border-radius: var(--mk-radius-sm);
   background: var(--mk-surface-3);
   color: var(--mk-muted);
+  font-size: var(--mk-fs-micro);
   word-break: break-all;
+  white-space: pre-wrap;
 }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15） ========== */
 @media (min-width: 2000px) {
-  .ac-error__card { gap: 12px; padding: 38px 48px; }
-  .ac-error__card strong { font-size: 18.5px; }
+  .ac-error__card { gap: 14px; padding: 30px 32px; }
+  .ac-error__title { font-size: 18.5px; }
 }
 @media (min-width: 2800px) {
-  .ac-error__card { gap: 14px; padding: 46px 58px; }
-  .ac-error__card strong { font-size: var(--mk-fs-emphasis); }
+  .ac-error__card { gap: 16px; padding: 36px 38px; }
+  .ac-error__title { font-size: var(--mk-fs-emphasis); }
 }
 
 /* 异步 tab 过渡态：错误卡（加载骨架已统一走 SkeletonTable） */

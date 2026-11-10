@@ -1,4 +1,5 @@
 import type { TaskDifficultyAdjustment } from './TaskDifficultyAdjustmentService';
+import { projectWrapupForPrompt } from './wrapup-prompt-projection';
 import type {
   LearnerPlanningProjection,
   LearnerReplanProjection,
@@ -42,6 +43,12 @@ const GUIDANCE_PATH_FIELDS = [
   'deadlineText', 'replanMode', 'replanReason',
 ] as const;
 
+/**
+ * guidance 文案不用的收束摘要键（2026-11-08 前缀缓存优化）。
+ *
+ * 实测真实载荷 28.3KB 中 wrapup 占 12.8KB，其中 runtimeEnvelope 一个就 5.6KB。
+ * 清单已抽到 `wrapup-prompt-projection.ts`（SSOT），与课后增强器共用，防止两处漂移。
+ */
 export class LearnerProjectionService {
   /**
    * 呈现层投影：只保留生成引导文案所需字段。
@@ -59,13 +66,32 @@ export class LearnerProjectionService {
       masteredConcepts: [], fragileConcepts: [], strugglingConcepts: [],
     };
     const globalBackground = knowledgeMemory?.globalBackground ?? {};
+    const profile = anySnapshot?.profile ?? {};
+    const dynamicState = anySnapshot?.dynamicState ?? {};
 
     const trimmedSnapshot = {
       snapshotVersion: anySnapshot?.snapshotVersion,
       scope: anySnapshot?.scope,
-      freshness: anySnapshot?.freshness,
-      profile: anySnapshot?.profile,
-      dynamicState: anySnapshot?.dynamicState,
+      // 2026-11-08 前缀缓存优化（实测驱动）：只保留提示词规则真正读取的画像字段。
+      // 真实载荷 28.3KB 中 profile 占 5.3KB，其中 narratives(1.5KB)/history(0.65KB)/认知·
+      // 行为·情绪子块等从未被任何规则引用；且 profile 逐次变化会打断整段前缀缓存。
+      // 规则 7 只读 narrativeInsights.practicePreferenceNote。
+      profile: {
+        name: profile?.name,
+        level: profile?.level ?? profile?.learning?.level,
+        narrativeInsights: {
+          practicePreferenceNote: profile?.narrativeInsights?.practicePreferenceNote,
+        },
+      },
+      // 规则 10/11/12 需要「负荷/疲劳/节奏」判定：只保留状态位，丢掉叙述性字段
+      // （recentSessionQuality/recommendedInteraction/lessonMetrics 等）。
+      dynamicState: {
+        metrics: dynamicState?.metrics,
+        recentTrend: dynamicState?.recentTrend,
+        fatigueRisk: dynamicState?.fatigueRisk,
+        recommendedPacing: dynamicState?.recommendedPacing,
+        srlPhase: dynamicState?.srlPhase,
+      },
       learningControlState: anySnapshot?.learningControlState,
       replanSignal: anySnapshot?.replanSignal,
       teachingHints: anySnapshot?.teachingHints,
@@ -97,10 +123,15 @@ export class LearnerProjectionService {
           blockedFoundations: (globalBackground.blockedFoundations ?? []).slice(0, 5),
           conceptLedger: Array.isArray(globalBackground.conceptLedger) ? globalBackground.conceptLedger.slice(0, 5) : [],
           recurringConfusions: Array.isArray(globalBackground.recurringConfusions) ? globalBackground.recurringConfusions.slice(0, 3) : [],
-          transferSignals: [],
+          // 与其余台账项同口径透传（仅 slice 截断）：此前硬置空导致 profile-agent 声明的
+          // 「写入 snapshot 与 projection」（prompts/orchestration/profile.yaml）在投影侧落空。
+          // 2026-11-08 缓存优化时曾试图再砍台账项，被本文件契约测试拦下——该声明受护栏保护，故保留。
+          transferSignals: Array.isArray(globalBackground.transferSignals) ? globalBackground.transferSignals.slice(0, 3) : [],
         },
       },
-    } as LearnerSnapshot;
+      // freshness 含逐次变化的 generatedAt，是前缀缓存杀手，一并剔除；
+      // 调用方读 basedOn 时用的是投影前的原始 snapshot，不受影响。
+    } as unknown as LearnerSnapshot;
 
     const pathProjection = path
       ? {
@@ -117,6 +148,16 @@ export class LearnerProjectionService {
       : null;
 
     return { learnerSnapshot: trimmedSnapshot, path: pathProjection };
+  }
+
+  /**
+   * 收束摘要投影：剔除运行时/审计元数据（见 GUIDANCE_WRAPUP_DROP_KEYS）。
+   * 只用于 adaptive-guidance-copy 的输入载荷；summary/progress/evidence/evaluation
+   * 等语义字段原样保留。
+   */
+  toGuidanceWrapup(wrapup: Record<string, any> | null | undefined): Record<string, any> | null {
+    // 清单与投影实现见 wrapup-prompt-projection.ts（两个消费方共用，防漂移）
+    return projectWrapupForPrompt(wrapup) as Record<string, any> | null;
   }
 
   /**
@@ -197,7 +238,11 @@ export class LearnerProjectionService {
         lsb: snapshot.dynamicState.metrics.lsb,
         recentTrend: snapshot.dynamicState.recentTrend,
         recommendedPacing: snapshot.dynamicState.recommendedPacing,
+        // #183：「该减速」的结论此前被裁掉——课堂看不到疲劳风险，减速规则在真实载荷里不可满足
+        fatigueRisk: snapshot.dynamicState.fatigueRisk,
       },
+      // #183：「该重排」的结论此前完全不在课堂投影里，只进 dashboard 文案与路径重排
+      replanSignal: snapshot.replanSignal,
       pathContext: {
         pathTitle: currentPath?.pathTitle || '当前学习路径',
         pathSummary: currentPath?.pathSummary,
@@ -220,6 +265,8 @@ export class LearnerProjectionService {
         blockedFoundations: snapshot.knowledgeMemory.globalBackground.blockedFoundations,
         recentConceptLedger: snapshot.knowledgeMemory.globalBackground.conceptLedger.slice(0, 12),
         recurringConfusions: snapshot.knowledgeMemory.globalBackground.recurringConfusions.slice(0, 8),
+        // 迁移就绪度信号：此前无人消费（issue #196）；现送达课堂投影，由 teaching-turn 规则显式读取
+        transferSignals: (snapshot.knowledgeMemory.globalBackground.transferSignals ?? []).slice(0, 8),
       },
       learningControlState: snapshot.learningControlState,
       ...(options.taskDifficulty ? { taskDifficulty: options.taskDifficulty } : {}),
@@ -228,6 +275,8 @@ export class LearnerProjectionService {
         recommendedApproach: snapshot.teachingHints.recommendedApproach,
         emphasize: snapshot.teachingHints.emphasize,
         avoid: snapshot.teachingHints.avoid,
+        // #183：画像判定的风险因子同样被裁掉，补回（与 avoid/emphasize 同源、同口径透传）
+        riskFactors: snapshot.teachingHints.riskFactors,
       },
     };
   }

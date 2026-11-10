@@ -116,15 +116,16 @@ describe('VirtualProfile 概览 · 有运行的画像', () => {
     expect(w.find('.vp-lastrun__story').text()).toBe('永远做不完的理综')
     const meta = w.find('.vp-lastrun__meta').text()
     expect(meta).toContain('任务 3/10')
-    expect(meta).toContain('7 回合')
+    expect(meta).toContain('7 次推进')
     expect(meta).toContain('2 小时')
     w.unmount()
   })
 
-  it('有运行：有真实读数，闭环按当前阶段高亮而不是「尚未运行」', async () => {
+  it('有运行：有真实读数，闭环按当前阶段高亮；指针后未走过的环显示 idle（五轮 P1）', async () => {
     const w = await mountOverview()
     expect(w.findAll('.lsm__row')).toHaveLength(4)
-    expect(w.findAll('.loop__step--idle')).toHaveLength(0)
+    // 夹具画像无路径（pathTotal=0）：指针钳制到「路径规划」，其后三环虚线待办
+    expect(w.findAll('.loop__step--idle')).toHaveLength(3)
     expect(w.findAll('.loop__step--active')).toHaveLength(1)
     expect(w.text()).not.toContain('尚未运行')
     w.unmount()

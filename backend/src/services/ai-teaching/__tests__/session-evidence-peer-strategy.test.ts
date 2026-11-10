@@ -62,7 +62,9 @@ describe('wrapup 会话证据：解法尝试台账 rsmAttempts（2026-09-17 起�
 describe('shouldEmitCheckpoint：出题触发由代码给（2026-09-17）', () => {
   const session = (understanding: number | null, messageCount = 10) => ({
     messages: [
-      ...Array.from({ length: Math.max(0, messageCount - 1) }, () => ({ role: 'user' as const })),
+      // 开场欢迎语（assistant）——「首个教学回合不出题」结构闸要求教师至少已有一条教学回复
+      { role: 'assistant' as const },
+      ...Array.from({ length: Math.max(0, messageCount - 2) }, () => ({ role: 'user' as const })),
       { role: 'assistant' as const, ...(understanding === null ? {} : { analysis: { understanding } }) },
     ],
   });

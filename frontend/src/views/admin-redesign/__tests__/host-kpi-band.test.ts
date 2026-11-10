@@ -163,10 +163,12 @@ describe('页级读数形态归属', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('执行日志页头读数是三张 MkKpi（成功率 / P50 / P99），且不随行数隐藏', () => {
+  it('执行日志页头读数是四张 MkKpi（调用总数 / 成功率 / P50 / P99），且不随行数隐藏', () => {
     const src = readFileSync(resolve(DIR, 'ExecLogs.vue'), 'utf8');
     expect(src).toContain('<section class="mk-kpi-grid" aria-label="执行读数">');
-    expect(src.split('<MkKpi ').length - 1).toBe(3);
+    /* 2026-11-07 用户「同组三页指标卡数量不齐」：执行日志此前缺最基础的调用总数与失败数，
+       补成 4 张与审计日志 / 健康中心同构。 */
+    expect(src.split('<MkKpi ').length - 1).toBe(4);
     // 原先的 v-if="logs.length" 包围整条读数带：窗口筛空时页头读数与页签之间会整体上跳
     expect(src).not.toMatch(/<section class="mk-kpi-grid"[^>]*v-if/);
   });

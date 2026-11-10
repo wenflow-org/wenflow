@@ -5,12 +5,12 @@ import { PromptCallSpec, type PromptCallResult } from '../../composers/types';
 import { logger } from '../../utils/logger';
 import type { AgentDefinition, AgentOutput } from '../../agents/protocol';
 import { evaluateByCriteria, evaluateByProfile } from '../../skills/acceptance-evidence-evaluator';
-import { getFallbackStrategies, normalizeStrategy, buildGuidancePrompt } from '../../skills/teaching-strategy-selector';
+import { getFallbackStrategies, normalizeStrategy } from '../../skills/teaching-strategy-selector';
 import type { TeachingLearnerProjection } from '../../agents/learner-model-agent/types';
 import { buildSkillOutcome, type SkillOutcome } from '../outcome';
 import { recordDegradation } from '../degradation-telemetry';
 import { findArithmeticMismatches, type ArithmeticMismatch } from '../../services/ai-teaching/teaching-arithmetic-guard';
-import { normalizeForKeywordMatch } from '../../services/ai-teaching/checkpoint-shared';
+import { normalizeForKeywordMatch, resolveUnderstandingReading } from '../../services/ai-teaching/checkpoint-shared';
 import { applyObservableEvidenceGate, detectObservableEvidence } from './observable-evidence';
 import type { ChatMessageContent } from '../../gateway/api-gateway/types';
 import { buildVisionContent } from '../../utils/vision-content';
@@ -214,12 +214,14 @@ export interface TeachingTurnInput {
      * 只读参考：与课堂实况冲突时以实况为准；不得在 reply 里向学生复述内部诊断。
      */
     learnerInsights?: Array<{ type?: string; claim?: string; action?: string }> | null;
-    /** 本节课理解检查点历史摘要（2026-09-17 起被消费）：未通过/跳过的点用于换表征再确认 */
+    /** 本节课理解检查点历史摘要（2026-09-17 起被消费）：未通过/跳过的点用于换表征再确认；作废点不计入未通过、也不进 recent */
     checkpointHistory?: {
       total: number;
       passed: number;
       failed: number;
       skipped: number;
+      /** 教师侧被 control.voidCheckpoint 撤销的点（2026-11-07）：既非通过也非失败，只作节奏参考 */
+      voided: number;
       recent: Array<{ title: string; passed: boolean; skipped?: boolean; understanding?: number }>;
     } | null;
     /**
@@ -334,10 +336,19 @@ export interface TeachingTurnInput {
     instruction: string;
   } | null;
   /**
-   * 当前白板的文本描述（2026-10-28 接线）：只在白板真实存在时注入。
-   * 模型据此知道「板上写了什么、哪里还空着」；没有 boardContext 时禁止任何看图指代。
+   * 当前白板的文本描述（2026-10-28 接线，2026-11-03 起**每轮都注入**）：
+   * 有板时是「板上写了什么」，没板时是 `describeBoardForTeacher(null)` 那句
+   * 「本任务暂无板书」正向告知（见 board-state.ts）。因此**不能**用它的真假判「有没有板」。
    */
   boardContext?: string | null;
+  /**
+   * 本轮学生屏幕上是否真的有板（#244 结构化信号）：由编排层（teaching-turn-engine →
+   * board-state.boardPromptInputForTeacher）按 board-state.boardReachesStudent 显式注入
+   * （degenerate 首版板永不下发，不算有板）。看板指代守卫以此为准；`boardContext` 是给模型
+   * 看的文本，两种语义混用一个字段正是「守卫永不触发」的根因，故不靠猜字符串。
+   * 缺省（非编排层调用，如单测/其它入口）时回落到「内容等价于无板」的判据。
+   */
+  boardPresent?: boolean;
 }
 
 export interface TeachingTurnOutput {
@@ -345,7 +356,11 @@ export interface TeachingTurnOutput {
   analysis: {
     cognitiveLevel: string;
     levelScore: number;
-    understanding: number;
+    /**
+     * 本轮对学习者理解度的读数（0-1）；**没有可引用证据支撑时为 null**（不可观测）。
+     * null 不是「低」：出题节奏与伴学触发都按「无读数」处理，不按 0 处理（2026-11-01）。
+     */
+    understanding: number | null;
     confusionPoints: string[];
     /** 结构化误解台账（G-R-R Phase 1）：每项含 hypothesis/evidence/confidence */
     misconceptions?: Array<{
@@ -398,6 +413,19 @@ export interface TeachingTurnOutput {
   control: {
     isCompletionCandidate: boolean;
     shouldTriggerPeer: boolean;
+    /**
+     * 检查点**作废**信号（2026-11-07 入户实证）：模型判定刚发出/仍待答的检查点应当撤销时置 true——
+     * 题干或选项有误、学生已明确表示跳过、话题已推进到别的教学点。引擎据此清掉 pendingCheckpoint
+     * （同时清 `sessionArtifacts.pendingCheckpoint`）、往 `checkpointHistory` 追加一条 `voided:true` 留痕。
+     * **作废不授权本轮出题**：出题时机只有一个权威 `controls.emitCheckpoint`，作废回合它通常为 false
+     * （待答检查点还在），因此本轮不得再输出 control.checkpoint，新题在后续回合按正常时机再出。
+     * **只在 reply 正文写「这道跳过」不会真的跳过**。
+     *
+     * 安全性：引擎侧只在**非作答回合**（无 checkpointId）生效——真实提交回合把 checkpointId 与
+     * checkpointJudgement 一起送入，`submittedCheckpoint` 恒为真，作废分支被护栏挡下，
+     * 因此不会打断「答错保留、答对消费」的既有语义。
+     */
+    voidCheckpoint?: boolean;
     completionCandidateEvidence?: {
       hasCriteria: boolean;
       acceptanceCriteria: string | null;
@@ -622,6 +650,8 @@ export const teachingTurnAgentDefinition: AgentDefinition = {
     'knowledge-state-suggestion',
     'teaching-strategy-selection'
   ],
+  // 文档性元数据，不参与运行时分发/发布（语义见 agents/protocol.ts 的 AgentDefinition.subscribes）：
+  // 下列事件名均为描述性说明，全仓无对应 dispatch 调用点，请勿据此排查真实订阅关系。
   subscribes: ['teaching:turn:requested'],
   publishes: ['teaching:turn:generated'],
   inputSchema: {
@@ -669,24 +699,6 @@ function normalizeConceptName(value: string | null | undefined): string {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
 }
 
-function buildStrategyGuidancePrompt(input: TeachingTurnInput): string | null {
-  return buildGuidancePrompt(input.scenario.teachingStrategyGuidance);
-}
-
-function buildTaskExecutionPrompt(input: TeachingTurnInput): string {
-  const taskProfile = input.scenario.taskProfile;
-  const taskContext = input.scenario.currentTaskContext;
-  const lines = [
-    '以下是当前子任务的执行锚点，优先围绕它教学：',
-    `- linkedConcept: ${taskProfile?.linkedConceptName || taskProfile?.coreConcept || 'none'}`,
-    `- taskDescription: ${taskContext?.description || input.scenario.taskDescription || 'none'}`,
-    `- acceptanceCriteria: ${taskContext?.acceptanceCriteria || 'none'}`,
-    `- primaryConcepts: ${(input.scenario.taskKnowledgeScope?.primaryConcepts || []).join(' | ') || 'none'}`,
-    `- supportingConcepts: ${(input.scenario.taskKnowledgeScope?.supportingConcepts || []).join(' | ') || 'none'}`,
-  ];
-  return lines.join('\n');
-}
-
 function normalizeAllowedStrategy(value: string | undefined) {
   return normalizeStrategy(value);
 }
@@ -723,7 +735,8 @@ function resolveKnowledgeBlock(parsed: Record<string, any>): Record<string, any>
   return block;
 }
 
-function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput): TeachingTurnOutput {
+/** 导出以便回归测试（不可观测口径：understanding 的 null 必须原样保留到闸门层） */
+export function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput): TeachingTurnOutput {
   const reply = typeof parsed.reply === 'string' && parsed.reply.trim()
     ? parsed.reply.trim()
     : '我们继续沿着这个主题往下学。';
@@ -836,7 +849,10 @@ function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput):
         ? analysis.cognitiveLevel
         : 'understand',
       levelScore: Number.isFinite(analysis.levelScore) ? Number(analysis.levelScore) : 2,
-      understanding: Number.isFinite(analysis.understanding) ? Number(analysis.understanding) : 0.5,
+      // 无读数保留为 null（2026-11-01）：旧实现把「模型没给出可支撑的读数」一律填成 0.5（中性），
+      // 与「真的读数是 0.5」不可区分；现在 null 一路带到闸门，由消费方按「不可观测」处理
+      // （不加速出题、不触发低理解度伴学），见 services/ai-teaching/checkpoint-shared.ts。
+      understanding: resolveUnderstandingReading(analysis.understanding),
       confusionPoints: resolveConfusionPoints(analysis.confusionPoints, analysis.misconceptions),
       ...(normalizeMisconceptions(
         analysis.misconceptions,
@@ -860,7 +876,7 @@ function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput):
     knowledge: {
       currentPoint: resolvedCurrentPoint,
       points: normalizedKnowledgePoints.slice(0, 5),
-      ...(normalizeConfirmCheck(knowledge.confirmCheck)),
+      ...(normalizeConfirmCheck(knowledge.confirmCheck, resolvedCurrentPoint)),
     },
     pedagogy: {
       strategies: normalizedStrategies.length > 0 ? normalizedStrategies : fallbackStrategies,
@@ -868,6 +884,9 @@ function normalizeOutput(parsed: Record<string, any>, input: TeachingTurnInput):
     control: {
       isCompletionCandidate: resolvedCompletionCandidate,
       shouldTriggerPeer: !!control.shouldTriggerPeer,
+      // 检查点作废通道（2026-11-07）：本出口是 control 的白名单投影，未在此声明的字段会被静默丢弃——
+      // 模型输出的 control.voidCheckpoint 必须显式透传，否则引擎永远收不到作废信号。
+      ...(control.voidCheckpoint === true ? { voidCheckpoint: true } : {}),
       completionCandidateEvidence: acceptanceEvidence.hasCriteria
         ? acceptanceEvidence
         : {
@@ -2716,17 +2735,40 @@ function resolveConfusionPoints(rawConfusionPoints: any, rawMisconceptions: any)
   return Array.from(new Set(derived)).slice(0, 5);
 }
 
+/**
+ * 万能确认词（放到哪节课都成立）：命中且 label 不带当前点名时，改写成带点名的具体动作。
+ * 2026-11-02 用户反馈「快选没什么意义」——"掌握了，继续 / 再讲一遍"每节课一字不差，
+ * 学生看不出点下去会讲哪个点；core 规则已要求带点名，这里是模型不照做时的确定性兜底。
+ */
+const GENERIC_CONFIRM_LABEL_RE =
+  /^(掌握了?[，,]?继续|继续|再讲一遍|再讲一次|再听一遍|懂了|明白了|不太懂|没掌握|不会|再练一个|下一个|好的)$/;
+
+/** 点名截短：保证改写后的 label 不超过 12 字（positive「…」懂了=11 / negative「…」还没懂=12） */
+function clipSignedPoint(point: string): string {
+  const trimmed = point.trim();
+  return trimmed.length > 6 ? `${trimmed.slice(0, 6)}…` : trimmed;
+}
+
 /** 归一化确认动作组（knowledge.confirmCheck）：恰好 2 个动作、字段限长；不合法返回空 */
-function normalizeConfirmCheck(value: any): { confirmCheck?: NonNullable<TeachingTurnOutput['knowledge']['confirmCheck']> } {
+function normalizeConfirmCheck(value: any, currentPoint?: string | null): { confirmCheck?: NonNullable<TeachingTurnOutput['knowledge']['confirmCheck']> } {
   if (!value || typeof value !== 'object') return {};
   const rawActions = Array.isArray(value.actions) ? value.actions : [];
+  const pointLabel = clipSignedPoint(String(currentPoint || ''));
   const actions = rawActions
     .filter((a: any) => a && typeof a?.label === 'string' && a.label.trim() && typeof a?.message === 'string' && a.message.trim())
     .slice(0, 2)
-    .map((a: any) => ({
-      label: String(a.label).trim().slice(0, 12),
-      message: String(a.message).trim().slice(0, 120),
-    }));
+    .map((a: any, index: number) => {
+      const rawLabel = String(a.label).trim();
+      const isGeneric = GENERIC_CONFIRM_LABEL_RE.test(rawLabel.replace(/\s/g, ''));
+      // 顺序语义见 core：actions[0]=正面（认可继续）、actions[1]=反面（还需要帮助）
+      const label = isGeneric && pointLabel
+        ? (index === 0 ? `「${pointLabel}」懂了` : `「${pointLabel}」还没懂`)
+        : rawLabel;
+      return {
+        label: label.slice(0, 12),
+        message: String(a.message).trim().slice(0, 120),
+      };
+    });
   if (actions.length !== 2) return {};
   return {
     confirmCheck: {
@@ -2963,9 +3005,6 @@ export function selectApplicableRules(rules: ConditionalRule[], input: TeachingT
 const CONDITIONAL_RULES = splitConditionalRules(TEACHING_TURN_PROMPT).rules;
 
 function buildPromptInput(input: TeachingTurnInput) {
-  const strategyGuidancePrompt = buildStrategyGuidancePrompt(input);
-  const taskExecutionPrompt = buildTaskExecutionPrompt(input);
-
   // KV 前缀缓存友好化：scenario 内动态子键（contextCompression/interactionProfile）挪到尾部，
   // 稳定主体（任务/路径/策略上下文）保持前置，最大化 user 内前缀命中
   const {
@@ -2988,10 +3027,6 @@ function buildPromptInput(input: TeachingTurnInput) {
   // learner 唯一的动态子键：编排层逐回合改写的难度档位（baseline/adjusted/reasons/evidence）
   const { taskDifficulty, ...stableLearner } = input.learner;
 
-  const promptDirectives = {
-    ...(strategyGuidancePrompt ? { strategyGuidance: strategyGuidancePrompt } : {}),
-    taskExecution: taskExecutionPrompt,
-  };
   const latestLearnerMessage = [...input.messages].reverse().find((message) => message.role === 'user')?.content || '';
 
   // 条件规则按需注入（逐回合变化 → 必须放**载荷尾部**）：输入提供了对应字段才带
@@ -3010,9 +3045,13 @@ function buildPromptInput(input: TeachingTurnInput) {
     : {};
 
   // 试飞改造（默认启用；PAYLOAD_STABLE_PREFIX=0 回退旧序）：
-  // 真实遥测显示 scenario 每回合必变（因子键 interactionProfile/contextCompression 逐回合变化），
-  // 前缀在 promptDirectives 之后的 knowledge 处即断（~7.3k/15.8k）。
-  // 稳定前缀版：scenario(洁) → promptDirectives → learner 前置，其余逐回合变化的键全部后置。
+  // 真实遥测显示 scenario 每回合必变（因子键 interactionProfile/contextCompression 逐回合变化）。
+  // 稳定前缀版：scenario(洁) → learner 前置，其余逐回合变化的键全部后置。
+  // 2026-11-08 载荷审计（全 skill 缓存调查）：删掉零引用键 promptDirectives——它是
+  // scenario.teachingStrategyGuidance 的散文重述 + taskProfile/currentTaskContext 的锚点重述，
+  // 编译产物（md 与 core yaml）里对 promptDirectives 的引用数为 0；被真正消费的是
+  // scenario.teachingStrategyGuidance（规则 40）与 scenario.taskProfile / scenario.currentTaskContext
+  // （规则 19/22/24/27/30/31/32），三者都仍在载荷里。实测每次可省 ~200–280 tok。
   // 对话上下文单键化：原 visibleDialogueContext / recentDialogueContext 同源重复，收敛为 messages
   // （与 core 输入名一致；沙盘 ref sandbox:teaching.session.messages）。
   // 2026-09-25 前缀缓存修正：对话历史**不再放进载荷**，改由 buildMessages 以真 message 发送
@@ -3023,7 +3062,6 @@ function buildPromptInput(input: TeachingTurnInput) {
   if (process.env.PAYLOAD_STABLE_PREFIX !== '0') {
     return {
       scenario: stableScenario,
-      promptDirectives,
       learner: stableLearner,
       // —— 低频变化项（churn<1）：放在每回合必变键**之前**，稳定回合可并入前缀；
       //    变化时也只牺牲其后本来就无法命中的动态键 ——
@@ -3059,7 +3097,6 @@ function buildPromptInput(input: TeachingTurnInput) {
       interactionProfile: scenarioInteractionProfile,
       ...(scenarioMemoryWarmup ? { memoryWarmup: scenarioMemoryWarmup } : {}),
     },
-    promptDirectives,
     knowledge: input.knowledge,
     learner: input.learner,
     controls: input.controls,
@@ -3111,7 +3148,77 @@ function evaluateCompletionByTaskProfile(input: TeachingTurnInput) {
   });
 }
 
-function validateTeachingTurnOutput(parsed: any, input: TeachingTurnInput) {
+/**
+ * 看板指代词（2026-11-04）：「左边那栏 / 右边第 2 条 / 板书 / 看板 / 如上图 / 图里 / 表中」
+ * 这类把学生视线引向一块「板/图/表」的方位指示。内容词不命中——心理学课讲
+ * 「左脑/右脑半球」「图像记忆」「第一原则」是正当课文，不拦。
+ *
+ * #244 收窄（2026-11-05）：旧版把 `上表`/`表里`/`表中` 当裸子串，守卫一旦真正可达就成了
+ * 误伤路径——「这节课上表现得很主动」命中 `上表`、「透视表里」/「报表中」/「表里如一」
+ * 命中 `表里`/`表中`（本地 dev.db 253 条 assistant 消息里 `透视表里` 出现 6 次、`表里` 11 次），
+ * 而这些与板/图毫无指代关系，两轮误判即整轮失败。现只认「带限定语」的表指代：
+ * `如下表/下表中/对照表中/该表里/这表里/上表（后不接「现/演」）`。裸 `表中` 一并去掉
+ * （会命中「报表中」「课表中」）——宁可漏判一次表指代，也不把正常课堂话术判废。
+ */
+const BOARD_DEIXIS_RE = new RegExp([
+  '[左右][边侧]?[那这][一]?[栏块幅张]',
+  '[左右][边侧]?第\\s*[一二三四五六七八九十1-9]+\\s*条',
+  '板书|看板|白板|板上的|黑板上',
+  '如上[图表]|上[图表]中|这张图|图里|图中|示意图',
+  // 表指代：限定语 + 表 + 方位，避免与「课上表现/透视表里/报表中/表里如一」碰撞
+  '如下表|下表中|对照表[中里]|[该这]表[中里]|上表(?!现|演)',
+].join('|'));
+
+/**
+ * 「过早收束」语言判据（#163 收窄）。
+ *
+ * 原判据是裸词 `/已完成/`，任何进度陈述（如「这个练习已完成了一半」）都会整轮判废；
+ * 课中 `input.knowledge.points` 常含冻结的 pending 点，旧的「全 mastered」硬门禁几乎恒 false，
+ * 误伤是常态而非边界（该门禁已从 validateTeachingTurnOutput 移除）。
+ *
+ * 现判据只认「**本次课/本任务整体**已完成」这类收束结论，命中集是旧裸词的真子集：
+ * - 完成语必须带**范围主语**（本节/这节课/本任务/本阶段…）并收在句读或行尾/串尾：
+ *   「第一个小任务已完成。」「这一步已完成。」「这个练习已完成了一半」都不再命中——
+ *   它们是对子步骤的合法进度陈述，而整节课的完成与否由引擎的 completionReady 决定，
+ *   不该由正文里一句「已完成。」推断（旧实现只按裸词判，句末子步陈述照样整轮判废）。
+ * - 「满足要求/标准」保持旧口径（句末结论式），不扩「满足条件」，也不加「已经」前缀。
+ * - 显式推进指令只认收在句读/串尾的**推进结论**——「稍后进入下一环节，我们先做…」不再整轮判废。
+ *
+ * 与 teaching-knowledge-state.hasPrematureNextStepLanguage 的关系：那是同一语言族的
+ * warn-only 观测（判据更宽、不拦回合），不是本判据的同源实现。
+ */
+const PREMATURE_COMPLETION_LANGUAGE: RegExp[] = [
+  // 范围主语 + 完成语 + 句末：只捕获「本次课/本任务整体完成」的收束结论
+  /(?:本节|这节课|这一节|本课|本节课|本次课|本任务|这个任务|该任务|整个任务|本阶段|这一阶段|当前任务|当前阶段)[^。！？!?\n]{0,10}已?完成(?=[。！？!?；;\n]|$)/,
+  /满足[^。！？!?\n]{0,10}(?:要求|标准)(?=[。！？!?；;\n]|$)/,
+  /进入下一环节(?=[。！？!?；;\n]|$)/,
+  /进入下一个任务(?=[。！？!?；;\n]|$)/,
+  /接下来[^。！？!?\n]{0,10}下一环节(?=[。！？!?；;\n]|$)/,
+  /接下来[^。！？!?\n]{0,10}下一个任务(?=[。！？!?；;\n]|$)/,
+];
+
+/**
+ * 「本轮没有可指代的板书」判据（#244）。
+ *
+ * 为什么不能直接 `!input.boardContext`：引擎每轮都注入 `boardContext`（2026-11-03 起），
+ * 无板时它的内容是 board-state.ts 那句「本任务暂无板书」正向告知——**非空字符串**。
+ * 于是「字段在场」与「有板」被混为一谈，旧判据恒为 false，整段守卫生产不可达。
+ *
+ * 判据优先级：
+ * ① `boardPresent`（编排层按「学生屏幕上真有板」显式注入的结构化事实）——不猜字符串；
+ * ② 缺省时按**内容**判（与提示词 rule15 同一口径）：写着「本任务暂无板书」= 无板；
+ * ③ 完全没有 `boardContext` = 无板（单测/其它入口的旧形态，行为不变）。
+ */
+const NO_BOARD_CONTEXT_MARKER = '本任务暂无板书';
+
+function hasRealBoard(input: TeachingTurnInput): boolean {
+  if (typeof input.boardPresent === 'boolean') return input.boardPresent;
+  const context = input.boardContext;
+  if (typeof context !== 'string' || !context.trim()) return false;
+  return !context.includes(NO_BOARD_CONTEXT_MARKER);
+}
+
+export function validateTeachingTurnOutput(parsed: any, input: TeachingTurnInput) {
   if (!parsed || typeof parsed !== 'object') {
     return { valid: false, failureReason: 'TEACHING_TURN_OUTPUT_NOT_OBJECT' };
   }
@@ -3133,33 +3240,36 @@ function validateTeachingTurnOutput(parsed: any, input: TeachingTurnInput) {
   }
 
   const reply = typeof parsed.reply === 'string' ? parsed.reply.trim() : '';
+  // #163（缺口③）：此前这里用「模型自称完成 + input.knowledge.points 全 mastered」派生
+  // `completionLanguageAllowed`。但课中 points 含冻结的 pending 点，该门禁几乎恒 false，
+  // 且这里的 mastered 读数发生在知识合并之前（引擎后续会以「冻结目标集」与 soft 收口重判）——
+  // 于是任何命中收束措辞的合法回合都会被整轮判废（issue 点名的「误伤面是常态而非边界」）。
+  // 改为**信任模型自己的完成信号**（与收束判据完全同源）：`control.isCompletionCandidate=true`
+  // 即放行收束措辞，其正确性由引擎的冻结目标集 / soft 收口门禁兜底（虚假完成仍会被 soft-AND 拦）。
+  // 收窄后的 `PREMATURE_COMPLETION_LANGUAGE` 只捕获会被硬门禁误伤的边界，不会放大检查成本。
   const rawCompletionCandidate = parsed.control?.isCompletionCandidate === true;
-  // 2026-08-30：完成一致性校验不再使用关键词硬匹配（evaluateByCriteria/evaluateByProfile），
-  // 改为 LLM 语义判定 + 知识硬门禁：模型说完成 + 知识点全 mastered 才允许宣布完成。
-  const resolvedKnowledge = resolveKnowledgeBlock(parsed);
-  const rawPoints = Array.isArray(resolvedKnowledge.points) ? resolvedKnowledge.points : [];
-  const inputPointMap = new Map(
-    (Array.isArray(input.knowledge?.points) ? input.knowledge.points : [])
-      .filter((point) => typeof point?.name === 'string' && point.name.trim())
-      .map((point) => [point.name.trim().toLowerCase(), point])
-  );
-
-  rawPoints.forEach((point: any) => {
-    if (typeof point?.name !== 'string' || !point.name.trim()) return;
-    inputPointMap.set(point.name.trim().toLowerCase(), {
-      name: point.name.trim(),
-      status: point.status,
-      progress: point.progress,
-    });
-  });
-
-  const allKnowledgeMastered = Array.from(inputPointMap.values()).length > 0
-    && Array.from(inputPointMap.values()).every((point: any) => point?.status === 'mastered');
-  const hasPrematureCompletionLanguage = /已完成|满足.*要求|满足.*标准|进入下一环节|进入下一个任务|接下来.*下一环节|接下来.*下一个任务/.test(reply);
-  const completionLanguageAllowed = rawCompletionCandidate && allKnowledgeMastered;
+  const hasPrematureCompletionLanguage = PREMATURE_COMPLETION_LANGUAGE.some((pattern) => pattern.test(reply));
+  const completionLanguageAllowed = rawCompletionCandidate;
 
   if (hasPrematureCompletionLanguage && !completionLanguageAllowed) {
     return { valid: false, failureReason: 'TEACHING_TURN_REPLY_COMPLETION_MISMATCH' };
+  }
+
+  // 有板指代漂移守卫（2026-11-04 无板任务实锤：模型讲「左边那栏…右边第 4 条给了个答案」，
+  // 所指的板从未存在，学生全屏找不到。core 契约本就要求无板时 reply 必须脱离图也成立，
+  // flash 档照样漂——确定性兜底：本轮没出 figure/diagram、任务也没有真实板书时，
+  // reply 出现看板指代即判校验失败，走既有 retryStrategy 重写。
+  // 板上真实存在或本轮真出了图时，指代合法不拦。
+  // #244：判据从「boardContext 字段真假」改为 hasRealBoard（结构化 boardPresent 优先，
+  // 回落内容等价于无板）——引擎每轮无条件注入非空 boardContext，旧判据恒 false、守卫不可达。）
+  // #244：本轮模型「自称出了图」不算数——无板回合的 figure/diagram 会在引擎里被删掉
+  // （teaching-turn-engine 的「无 boardContext ⇒ 丢弃模型输出的 figure/diagram」闸），
+  // reply 却已按「有图」写完，学生屏幕上一片空白。所以只在本轮**真有板**时承认自出图。
+  const emittedVisualThisTurn = hasRealBoard(input) && !!(parsed.figure || parsed.diagram
+    || (Array.isArray(parsed.figures) && parsed.figures.length)
+    || (Array.isArray(parsed.diagrams) && parsed.diagrams.length));
+  if (!hasRealBoard(input) && !emittedVisualThisTurn && BOARD_DEIXIS_RE.test(reply)) {
+    return { valid: false, failureReason: 'TEACHING_TURN_BOARD_DEIXIS_WITHOUT_BOARD' };
   }
 
   return { valid: true };
@@ -3216,7 +3326,7 @@ function buildTeachingTurnMessages(args: {
   // （实测 hit 每回合仅 +256 tok，载荷内可命中 71% 也不兑现）。
   // 修法：会话内恒定的稳定块（scenario/learner 主体，审计实测 ~12K 字节 ≈ 5K tok）
   // 挪进 system 尾部——第 2 回合起进入可缓存前缀；user 载荷只留逐回合变化项（~6K 字节）。
-  // system 变更会使当回合缓存归零，因此低频变化块（promptDirectives/conditionalRules/
+  // system 变更会使当回合缓存归零，因此低频变化块（conditionalRules/
   // taskDifficulty 等）一律**不进** system、留在 user 载荷尾部（EV 上更便宜）。
   let systemContent = args.systemPrompt;
   let userContent = `${args.userPayload}${suffix}`;
@@ -3283,7 +3393,7 @@ function buildUserMessageContent(args: {
   return [...withImages, { type: 'text', text: args.suffix }];
 }
 
-const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutput> = {
+export const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutput> = {
   agentId: AGENT_ID,
   defaultSystemPrompt: TEACHING_TURN_PROMPT,
   requireActivePrompt: true,
@@ -3301,7 +3411,26 @@ const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutp
   coerceParsedForContract: (parsed) => (parsed && typeof parsed === 'object' && !Array.isArray(parsed)
     ? { ...parsed, knowledge: resolveKnowledgeBlock(parsed) }
     : parsed),
-  validateParsedOutput: (parsed, input) => validateTeachingTurnOutput(parsed, input),
+  // #252：无板指代（TEACHING_TURN_BOARD_DEIXIS_WITHOUT_BOARD）从硬失败降为**软**失败。
+  // 硬失败时两次改写都救不回来就整轮 throw → 接口 500，而引擎只在成功路径提交回合状态，
+  // 学生这一轮输入随之丢失（实测：三连回合里两个回合 attempt2 改写成功、最后一个回合两次
+  // 都失败 → 500 + 消息不落库）。降为软失败后语义不变——仍是「先带改写指令重试」，
+  // 只是最后一次仍命中时按当前输出继续（prompt-composer 的软校验语义），
+  // 代价是极少数回合正文里残留一处不存在的板书指代，换掉「报错 + 丢输入」。
+  validateParsedOutput: (parsed, input) => {
+    const result = validateTeachingTurnOutput(parsed, input);
+    if (!result.valid && result.failureReason === 'TEACHING_TURN_BOARD_DEIXIS_WITHOUT_BOARD') {
+      return { valid: true as const };
+    }
+    return result;
+  },
+  softValidateParsedOutput: (parsed, input) => {
+    const result = validateTeachingTurnOutput(parsed, input);
+    if (!result.valid && result.failureReason === 'TEACHING_TURN_BOARD_DEIXIS_WITHOUT_BOARD') {
+      return result;
+    }
+    return { valid: true as const };
+  },
   mapEnvelope: (output, _input, runtimeContract) => {
     const isCompletion = !!output.control?.isCompletionCandidate;
     const phase = isCompletion ? 'completion-candidate' : 'turn-generated';
@@ -3331,7 +3460,23 @@ const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutp
       + `knowledge（对象，含 points 数组）、pedagogy（对象，含 strategies）、control（对象）；缺任一块整轮都会失败，不能只给其中一部分；`
       + `1) knowledge.points 要围绕当前任务、验收标准和最近课堂对话动态生成，不要偏题；`
       + `2) pedagogy.strategies 只能使用允许的枚举；`
-      + `3) 保持当前任务的 core concept 与 target relation 不偏移。`,
+      + `3) 保持当前任务的 core concept 与 target relation 不偏移。`
+      // 无板指代（2026-11-04 实锤，见 validateTeachingTurnOutput 守卫注释）：点名改写路径。
+      // #244：本轮**没有**真实板书，模型自出的 figure/diagram 会被引擎丢弃（学生看不到），
+      // 因此这里只能给一条路——写进正文。旧文案的「或真的产出一张图」在无板回合是死路，
+      // 重试也会再次被同一守卫拦下（且图随后被删），两轮用完整轮失败。
+      + (failureReason === 'TEACHING_TURN_BOARD_DEIXIS_WITHOUT_BOARD'
+        ? `\n4) 你的 reply 引用了不存在的板书/图（如「左边那栏」「右边第 N 条」「如图」），但本轮没有任何板书，学生屏幕上找不到所指内容。把想引用的两栏/条目内容**直接写成正文文字**（Markdown 列表），并用文字把方位关系说清楚；本轮不要输出 figure/diagram——它会因为无板书而被丢弃。`
+        : '')
+      // #163：此前该失败原因不在重试文案里，模型无信号可改，两轮同类失败即整轮丢弃
+      // （teaching-turn-engine 直接 throw，本轮消息不落库）。仅在命中该原因时附加，避免每轮灌无关约束。
+      + (failureReason === 'TEACHING_TURN_REPLY_COMPLETION_MISMATCH'
+        ? `\n4) reply 里不得出现**整节课/本任务整体**的收束结论或推进指令：只有当 control.isCompletionCandidate=true 时，`
+          + `才允许写「本节/本任务已完成」「已满足要求」这类整体结论，或「进入下一环节/下一个任务」这类推进语；`
+          + `本轮 control.isCompletionCandidate 为 false，请改写为仍在当前环节推进的说法——`
+          + `子步骤的进度陈述是允许的（例如「这个练习已完成了一半」「第一个小任务已完成」），`
+          + `不要用它们宣告整节课结束。`
+        : ''),
   },
 };
 

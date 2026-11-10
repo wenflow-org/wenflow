@@ -7,6 +7,12 @@
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="close">✕</button>
         </div>
         <div class="mk-modal__body">
+          <!-- 提交失败错误条（P32：POST /api/admin/users 403 时此前只发 4s toast，
+               截图取证时已消失，管理员只看到弹窗原样不动＝静默失败。
+               改为弹窗内常驻错误条直出后端 message，与 ModelEditor/ProviderEditor 弹窗同款。 -->
+          <div v-if="submitError" class="mk-alert mk-alert--row" role="alert">
+            <span class="mk-alert__msg">{{ submitError }}</span>
+          </div>
           <label class="mk-field" :class="{ 'mk-field--error': errors.name }">
             <span class="mk-field__label">昵称 <em class="mk-field__req">*</em></span>
             <input v-model="form.name" class="mk-field__input" placeholder="例如：陈晓" />
@@ -18,8 +24,17 @@
             <span v-if="errors.email" class="mk-field__err">{{ errors.email }}</span>
           </label>
           <label v-if="isLive" class="mk-field" :class="{ 'mk-field--error': errors.password }">
-            <span class="mk-field__label">{{ user ? '重置密码' : '初始密码' }} <em class="mk-field__req">*</em></span>
-            <input v-model="form.password" type="password" class="mk-field__input" :placeholder="user ? '留空表示不修改' : '至少 8 位，含字母和数字'" />
+            <span class="mk-field__label">{{ user ? '重置密码' : '初始密码' }} <em v-if="!user" class="mk-field__req">*</em></span>
+            <input
+              v-model="form.password"
+              type="password"
+              class="mk-field__input"
+              :aria-describedby="user ? 'ufd-password-hint' : undefined"
+              :placeholder="user ? '留空表示不修改' : '至少 8 位，含字母和数字'"
+            />
+            <!-- 编辑态只有一句占位文字，读者不知道点保存会发生什么（2026-11-02 评审 R40）：
+                 规则、留空语义、生效时机写在同一行，不必先踩一次校验错误才知道。 -->
+            <span v-if="user" id="ufd-password-hint" class="mk-field__hint">留空则保持原密码不变。填写则至少 8 位，且同时包含字母和数字，保存后立即生效</span>
             <span v-if="errors.password" class="mk-field__err">{{ errors.password }}</span>
           </label>
           <label v-if="isLive && !user" class="mk-field" :class="{ 'mk-field--error': errors.confirmPassword }">
@@ -35,6 +50,9 @@
               aria-label="角色"
               block
             />
+            <!-- 昵称/邮箱带必填星号而角色没有，读者无从判断它是不是必填（2026-11-02 评审 R40）。
+                 角色恒有初值、不会留空，故不加星号，改用一行说明讲清它决定什么。 -->
+            <span class="mk-field__hint">必选，决定该账号能否进入管理台</span>
           </label>
         </div>
         <div class="mk-modal__foot">
@@ -84,6 +102,8 @@ const ROLE_OPTIONS: Array<{ value: boolean; label: string }> = [
 const saving = ref(false)
 const form = ref({ name: '', email: '', password: '', confirmPassword: '', admin: false })
 const errors = ref<{ name?: string; email?: string; password?: string; confirmPassword?: string }>({})
+/** 提交失败（请求层）错误：区别于 errors（字段校验），直出后端 message，常驻弹窗内（P32） */
+const submitError = ref('')
 
 const panelRef = ref<HTMLElement | null>(null)
 const maskRef = ref<HTMLElement | null>(null)
@@ -102,6 +122,7 @@ function resetForm() {
     ? { name: u.name, email: u.email, password: '', confirmPassword: '', admin: u.admin }
     : { name: '', email: '', password: '', confirmPassword: '', admin: false }
   errors.value = {}
+  submitError.value = ''
 }
 
 watch(() => [props.open, props.user?.id], () => {
@@ -110,6 +131,7 @@ watch(() => [props.open, props.user?.id], () => {
 
 async function save() {
   errors.value = {}
+  submitError.value = ''
   if (!form.value.name.trim()) errors.value.name = '请输入昵称'
   if (!form.value.email.trim()) errors.value.email = '请输入邮箱'
   else if (!/^\S+@\S+\.\S+$/.test(form.value.email.trim())) errors.value.email = '邮箱格式不正确'
@@ -151,7 +173,8 @@ async function save() {
     }
     emit('update:open', false)
   } catch (e) {
-    toast.error(`保存失败：${errMsg(e)}`)
+    // P32：不再只发 4s toast（实测取证时已消失＝静默失败）；错误条常驻弹窗内，弹窗保持打开
+    submitError.value = errMsg(e)
   } finally {
     saving.value = false
   }

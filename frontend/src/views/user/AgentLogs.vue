@@ -59,8 +59,10 @@
     </div>
 
     <div v-if="!loadError" class="stats">
+      <!-- 2026-11-04：pagination.total 是折叠后的记录数（同一次调用的重复行已去重、同会话多轮归成一条），
+           不是原始调用次数，故不写「总调用」；导出与列表同走折叠视图，两处条数一致。 -->
       <div class="stat-card">
-        <span>总调用</span>
+        <span>记录条数（折叠后）</span>
         <strong>{{ pagination.total }}</strong>
       </div>
       <div class="stat-card">
@@ -69,7 +71,7 @@
       </div>
       <div class="stat-card">
         <span>平均耗时（本页）</span>
-        <strong>{{ hasPageSamples ? avgDuration + 'ms' : '—' }}</strong>
+        <strong>{{ hasPageSamples ? formatDuration(avgDuration) : '—' }}</strong>
       </div>
       <div class="stat-card">
         <span>Token（本页）</span>
@@ -90,8 +92,8 @@
       </div>
 
       <div v-else-if="!displayLogs.length" class="uc-empty">
-        <strong>暂无日志</strong>
-        <span>调整筛选条件或稍后再来查看</span>
+        <strong>{{ emptyStateTitle }}</strong>
+        <span>{{ emptyStateHint }}</span>
       </div>
 
       <template v-else>
@@ -122,7 +124,7 @@
               <td><span class="uc-badge" :class="row.success ? 'uc-badge--ok' : 'uc-badge--bad'">
                 {{ row.success ? '成功' : '失败' }}
               </span></td>
-              <td class="uc-table__muted">{{ row.durationMs ?? '-' }}</td>
+              <td class="uc-table__muted">{{ formatDuration(row.durationMs) }}</td>
               <td class="uc-table__muted">{{ row.tokensUsed ?? '-' }}</td>
               <td class="uc-table__muted" :title="`来源：${getModelSourceInfo(row).label}`">{{ getModelSourceInfo(row).display }}</td>
               <td class="uc-table__muted logs-error-cell">{{ row.error || '-' }}</td>
@@ -187,7 +189,7 @@
               <div class="detail-fact"><span>状态</span><span class="uc-badge" :class="currentLog.success ? 'uc-badge--ok' : 'uc-badge--bad'">
                 {{ currentLog.success ? '成功' : '失败' }}
               </span></div>
-              <div class="detail-fact"><span>耗时</span><strong>{{ currentLog.durationMs }}ms</strong></div>
+              <div class="detail-fact"><span>耗时</span><strong>{{ formatDuration(currentLog.durationMs) }}</strong></div>
               <div class="detail-fact"><span>Token</span><strong>{{ currentLog.tokensUsed || '-' }}</strong></div>
               <div class="detail-fact"><span>模型来源</span><strong>{{ getModelSourceInfo(currentLog).label }}</strong></div>
               <div class="detail-fact"><span>Provider</span><strong>{{ getModelSourceInfo(currentLog).providerName }}</strong></div>
@@ -240,6 +242,7 @@ import { ref, reactive, computed, onMounted } from 'vue';
 import { toast } from '../../utils/toast';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
 import { getAgentLogDetail, getAgentLogs, exportAgentLogs } from '@/api/userCustom';
+import { formatWaited } from '../v2/learningPathProgress';
 import { useEscape } from '@/views/admin-redesign/useEscape';
 import { useOverlay } from '@/views/admin-redesign/useOverlay';
 import dayjs from 'dayjs';
@@ -259,6 +262,11 @@ interface AgentLogItem {
   sourceEntry?: string | null;
   callerAgent?: string | null;
   logSource?: string;
+  /** 折叠会话组的代表调用真实 id（组 id 是合成键，详情接口只认真实 id） */
+  repLogId?: string;
+  /** 折叠会话组内的调用次数 / 明细（后端归并附带） */
+  groupCount?: number;
+  groupItems?: Array<{ id: string; agentId: string; calledAt: string; success?: boolean; durationMs?: number; errorCode?: string | null; phase?: string | null }>;
   /** 实际模型名（折叠会话由后端从组内网关 span 提取） */
   model?: string | null;
   input?: unknown;
@@ -314,11 +322,11 @@ const pagination = reactive({
 const AGENT_OPTIONS = [
   { value: '', label: '全部' },
   { value: 'skill:path-planning', label: 'Path Agent' },
-  /* 两个 id 都是授课（新 teaching-agent / 旧 ai-teaching-agent），展示名统一「AI 授课」；
-     旧 id 只服务历史数据，保留独立筛选项 */
-  { value: 'teaching-agent', label: 'AI 授课' },
-  { value: 'ai-teaching-agent', label: 'AI 授课（legacy）' },
-  { value: 'learner-model-agent', label: 'Learner State Hub' }
+  /* #218：下拉曾挂已废弃 id（teaching-agent / ai-teaching-agent / learner-model-agent，
+     线上 0 行），「Agent=AI 授课」恒空。改为 manifest 中的真实 id
+     （skill:teaching-turn 是授课真实执行体）。 */
+  { value: 'skill:teaching-turn', label: 'AI 授课' },
+  { value: 'skill:learner-state-review', label: 'Learner State Hub' }
 ];
 const CAPABILITY_OPTIONS = [
   { value: '', label: '全部' },
@@ -357,6 +365,14 @@ const avgDuration = computed(() => {
   return Math.round(total / displayLogs.value.length);
 });
 
+/** 裸毫秒 → 人读时长（account/iphone/5）：统计卡 90272ms、详情 50622ms 直拼不可读。
+    口径复用 v2/learningPathProgress.formatWaited（「1 分 30 秒 / 42 秒 / 1 小时 2 分」），
+    异常值回退裸数加单位。 */
+function formatDuration(ms?: number | null): string {
+  if (ms == null || !Number.isFinite(ms) || ms < 0) return '-';
+  return formatWaited(ms) ?? `${ms}ms`;
+}
+
 const totalTokens = computed(() => {
   return displayLogs.value.reduce((sum, l) => sum + (l.tokensUsed || 0), 0);
 });
@@ -366,6 +382,23 @@ const displayLogs = computed(() => {
     ? logs.value.filter((log) => getCapabilityType(log.agentId) === filters.capabilityType)
     : logs.value;
 });
+
+/* 平台里结构性没有对应 agent 的能力类：筛选必然为空，不能沿用通用「暂无日志」
+   （会被读成筛选或加载出错）。只有 tutoring 属于这一类——manifest 里没有任何
+   辅导类 Agent/Skill（backend services/users/capability-groups 显式映射为空集）。
+   profile 不在此列：#218 复核确认库里确有该类调用（skill:learning-predictor /
+   skill:learner-state-review 等），后端能力筛选按 Profile 监控组全量成员派生，
+   因此不能再写「平台暂无学习者模型类调用记录」这种与事实相反的文案。 */
+const STRUCTURAL_EMPTY_CAPABILITIES: Record<string, string> = {
+  tutoring: '平台暂无辅导类调用记录'
+};
+const structuralEmptyText = computed(() => STRUCTURAL_EMPTY_CAPABILITIES[filters.capabilityType] || '');
+const emptyStateTitle = computed(() => structuralEmptyText.value || '暂无日志');
+/* 空态副文精简到一句指令（§7.3）：原「可切换到其他活动类型查看」既隔空指路（门禁 R2）
+   又把「怎么操作」写了一遍，改为直接说换个类型试试。 */
+const emptyStateHint = computed(() =>
+  structuralEmptyText.value ? '换个活动类型试试' : '调整筛选条件或稍后再来查看'
+);
 
 // 本页无样本时不能把「无样本」写成 0 分：成功率 / 平均耗时是「0%」「0ms」会被读成
 // 「全部失败 / 零耗时」（走查 2026-10-08 #51，本页空态与「总调用 0」并排）。
@@ -381,6 +414,22 @@ onMounted(() => {
   loadLogs();
 });
 
+/**
+ * 列表 / 详情 / 导出共用的筛选口径。详情也必须带上同一组筛选：
+ * 折叠组的 groupCount/groupItems 由后端用列表 where 复算，不带筛选就会退回默认口径，
+ * 出现「同一条折叠行点进去条数变了」（#225）。
+ */
+const buildFilterParams = (): AgentLogQueryParams => {
+  const params: AgentLogQueryParams = {};
+  if (filters.agentId) params.agentId = filters.agentId;
+  if (filters.capabilityType) params.capabilityType = filters.capabilityType;
+  if (typeof filters.success === 'boolean') params.success = filters.success;
+  params.includeSystem = filters.includeSystem;
+  if (filters.startDate) params.startDate = filters.startDate;
+  if (filters.endDate) params.endDate = filters.endDate;
+  return params;
+};
+
 const loadLogs = async () => {
   // 竞态守卫：seq 代际号 last-wins，快速翻页/连点查询时丢弃过期响应
   const seq = ++loadLogsSeq;
@@ -389,15 +438,9 @@ const loadLogs = async () => {
   try {
     const params: AgentLogQueryParams = {
       page: pagination.page,
-      limit: pagination.limit
+      limit: pagination.limit,
+      ...buildFilterParams()
     };
-    
-    if (filters.agentId) params.agentId = filters.agentId;
-    if (filters.capabilityType) params.capabilityType = filters.capabilityType;
-    if (typeof filters.success === 'boolean') params.success = filters.success;
-    params.includeSystem = filters.includeSystem;
-    if (filters.startDate) params.startDate = filters.startDate;
-    if (filters.endDate) params.endDate = filters.endDate;
 
     const res = await getAgentLogs(params);
     if (seq !== loadLogsSeq) return; // 已有更新的请求：丢弃本次过期响应
@@ -478,7 +521,10 @@ const viewDetail = async (log: AgentLogItem) => {
   detailLoading.value = true;
 
   try {
-    const res = await getAgentLogDetail(log.id);
+    // 2026-11-04：折叠会话行的 id 是合成组键（path:/goal: 前缀），直接拿去查详情必然 404；
+    // 有代表调用真实 id 时按它查，拿到的输入/输出才是这条会话的实际内容
+    // #225：查详情同时带列表的筛选口径（折叠组的 groupCount/groupItems 由后端按同一 where 复算）
+    const res = await getAgentLogDetail(log.repLogId || log.id, buildFilterParams());
     if (seq !== detailSeq) return;
     const detail = res?.data || res;
     if (detail) {
@@ -497,13 +543,7 @@ const exportLogs = async (format: 'json' | 'csv') => {
   if (exporting.value) return;
   exportingFormat.value = format;
   try {
-    const params: AgentLogQueryParams = { format };
-    if (filters.agentId) params.agentId = filters.agentId;
-    if (filters.capabilityType) params.capabilityType = filters.capabilityType;
-    if (typeof filters.success === 'boolean') params.success = filters.success;
-    params.includeSystem = filters.includeSystem;
-    if (filters.startDate) params.startDate = filters.startDate;
-    if (filters.endDate) params.endDate = filters.endDate;
+    const params: AgentLogQueryParams = { format, ...buildFilterParams() };
 
     const data = await exportAgentLogs(params);
     const blob = format === 'csv'
@@ -608,13 +648,38 @@ const formatAgentId = (logOrAgentId: string | AgentLogItem | null | undefined) =
   // 来源说明：本页为用户侧执行日志，无现成 agent 清单 API 可复用；id 含
   // 历史/业务别名（ai-teaching-agent、ai-tutor 等）与 admin 注册表不同构，
   // 保持本地字典，仅作显示层映射（未命中时原样回退 agentId）。
+  // #218：键以 manifest 真实 id 为准（skill:teaching-turn / skill:learner-model 等），
+  // 旧 id 保留只为兼容历史行。
   const agentNames: Record<string, string> = {
-    'skill:path-planning': '学习路径规划',
     'skill:goal-conversation': '目标对话',
-    'ai-teaching-agent': 'AI 授课',
+    'goal-agent': '目标对话',
+    'skill:path-planning': '学习路径规划',
+    // 2026-11-04：路径生成编排器此前未收录，行内直接印内部 id「path-agent」
+    'path-agent': '路径生成',
+    // 2026-11-06 文案排查 §7：原展示名「阶段任务设计」含内部词「阶段任务」（门禁 R4），
+    // 改为「课程阶段设计」——同一能力，用户可读且不再直出内部生成阶段名。
+    'skill:stage-designer': '课程阶段设计',
+    'skill:path-reviewer': '路径评审',
+    'skill:kc-mapper': '知识点映射',
     'teaching-agent': 'AI 授课',
-    'ai-tutor': 'AI 辅导',
+    'skill:teaching-turn': 'AI 授课',
+    'skill:peer-reinforcement': '伴学补强',
+    'skill:session-wrapup': '课后总结',
+    'skill:teaching-opening-generator': '课堂开场',
+    'skill:board-designer': '课堂板书',
+    'ai-teaching-agent': 'AI 授课',
+    'profile-agent': '学习者 Agent',
+    'skill:learner-model': '学习者模型',
+    'skill:lesson-knowledge-enricher': '课后知识增强',
+    'skill:adaptive-guidance-copy': '自适应引导文案',
+    'skill:learner-progress-report': '学习进度报告',
+    'skill:learner-state-review': '学习状态复盘',
+    'skill:concept-consolidator': '概念归并',
+    'skill:concept-load-estimator': '概念负担评估',
+    'skill:replan-attribution': '重排归因',
+    'skill:learning-predictor': '学习表现预测',
     'learner-model-agent': '学习者模型',
+    'ai-tutor': 'AI 辅导',
     'system-call': '平台底层调用'
   };
   
@@ -647,13 +712,39 @@ const getLogSourceLabel = (log: AgentLogItem) => {
 
 const getCapabilityType = (agentId?: string) => {
   // agent → 能力类型映射（显示层字典，与上方 agentNames 同源；无 agent 清单 API，
-  // 保持本地映射，未命中归为 system）
+  // 保持本地映射，未命中归为 system）。
+  // #218：键与后端 capabilityType 派生分组对齐（manifest monitoringGroup），
+  // 否则服务端按该能力筛出的行会在客户端二次过滤（displayLogs）时被丢掉，
+  // 表现为「表里只剩几行、页脚总数却是几十条」。四个能力组须 100% 覆盖 manifest id。
+  // tutoring 无对应 manifest agent，保留键仅为兼容历史行。
   const mapping: Record<string, string> = {
     'skill:goal-conversation': 'goal',
+    'goal-agent': 'goal',
     'skill:path-planning': 'path',
-    'ai-teaching-agent': 'teaching',
+    // 2026-11-04：path-agent 是路径生成编排器，此前未收录被归到 system，
+    // 同一行来源标「业务层」、能力标「平台底层调用」自相矛盾（也与「隐藏底层调用」冲突）
+    'skill:stage-designer': 'path',
+    'skill:path-reviewer': 'path',
+    'skill:kc-mapper': 'path',
+    'path-agent': 'path',
     'teaching-agent': 'teaching',
+    'skill:teaching-turn': 'teaching',
+    'skill:peer-reinforcement': 'teaching',
+    'skill:session-wrapup': 'teaching',
+    'skill:teaching-opening-generator': 'teaching',
+    'skill:board-designer': 'teaching',
+    'ai-teaching-agent': 'teaching',
     'ai-tutor': 'tutoring',
+    'profile-agent': 'profile',
+    'skill:learner-model': 'profile',
+    'skill:lesson-knowledge-enricher': 'profile',
+    'skill:adaptive-guidance-copy': 'profile',
+    'skill:learner-progress-report': 'profile',
+    'skill:learner-state-review': 'profile',
+    'skill:concept-consolidator': 'profile',
+    'skill:concept-load-estimator': 'profile',
+    'skill:replan-attribution': 'profile',
+    'skill:learning-predictor': 'profile',
     'learner-model-agent': 'profile',
     'unknown': 'system',
     'system-call': 'system'
@@ -983,6 +1074,13 @@ html[data-theme='dark'] .filter-dates input[type='date'] {
   overflow: hidden;
 }
 
+/* 2026-11-04 走查：弹窗体是 display:grid，三个折叠节被均分压扁（「输出 (output)」块可见 0px，
+   body 又因内容被裁而无滚动余量）。min-height:min-content 让节拒绝被压到内容以下——
+   总高超出弹窗时由 .uc-dialog__body 的 overflow-y 兜底滚动，输入/输出永远可达。 */
+.detail-collapse {
+  min-height: min-content;
+}
+
 .detail-collapse summary {
   padding: 10px 14px;
   font-size: 13px;
@@ -1069,7 +1167,7 @@ html[data-theme='dark'] .filter-dates input[type='date'] {
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: anywhere;
-  font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+  font-family: var(--mk-mono);
   font-size: 12px;
   color: var(--ink, #172033);
   margin: 12px;

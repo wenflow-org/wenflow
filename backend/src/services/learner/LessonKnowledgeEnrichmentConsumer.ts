@@ -3,11 +3,65 @@ import { withTransaction } from '../../utils/with-transaction';
 import type { DurableDomainEvent } from '../../events/contracts';
 import { executeSkill } from '../../skills';
 import { lessonKnowledgeEnricherDefinition, type LessonKnowledgeEnricherOutput } from '../../skills/lesson-knowledge-enricher';
+import { mapOutboxRecord } from '../../events/outbox.repository';
+import { LESSON_ENRICHMENT_EVENT_TYPE, type LessonEnrichmentEventData } from '../../events/lesson-enrichment-event';
+import { learnerProfileService } from './LearnerProfileService';
+import { learnerSnapshotRefreshService } from './LearnerSnapshotRefreshService';
+import { projectWrapupForPrompt } from './wrapup-prompt-projection';
 import { logger } from '../../utils/logger';
 
 const CONSUMER_ID = 'lesson-knowledge-enrichment-v1';
 
 export class LessonKnowledgeEnrichmentConsumer {
+  /**
+   * 独立增强事件入口（#144）：`lesson:knowledge-enrichment` 只带源事件 id，这里回查源
+   * `lesson:completed` 行（published 后行仍在）再执行增强。
+   *
+   * 为什么回查而不是复制 payload：源 payload（wrapup / 对话上下文）数十 KB，复制一份到增强行
+   * 无意义；且源行不会在本行消费前被清理（虚拟账号清理按 userId 整批删，两行同时消失）。
+   */
+  async handleEnrichmentEvent(event: DurableDomainEvent): Promise<void> {
+    if (event.type !== LESSON_ENRICHMENT_EVENT_TYPE) return;
+    const lessonEventId = (event.data as LessonEnrichmentEventData | undefined)?.lessonEventId;
+    if (!lessonEventId) {
+      logger.warn('[lesson-knowledge-enrichment] 增强事件缺少源事件引用，跳过', { eventId: event.id });
+      return;
+    }
+    const source = await prisma.domain_event_outbox.findUnique({ where: { id: lessonEventId } });
+    if (!source) {
+      // 源事件行已被清理（如虚拟账号清理）：没有可增强的对象，直接终结，不重试。
+      logger.warn('[lesson-knowledge-enrichment] 源 lesson:completed 行不存在，跳过本课增强', {
+        eventId: event.id,
+        lessonEventId,
+      });
+      return;
+    }
+
+    const lessonEvent = mapOutboxRecord(source);
+    await this.handle(lessonEvent);
+
+    // 增强证据刚落库：立刻把增量推进画像。
+    // 快路径（learner-event-consumer）刷新时增强证据还不存在，而它的 `lastEventId` 用的是源事件 id；
+    // 这里用**增强事件自己的 id**（与源 id 不同）作 lastEventId，因此不会被 refresh 的
+    // 「lastEventId 相同直接返回旧投影」短路掉——本课知识增量随增强落地即进入画像，
+    // 不再等下一个学习事件或读路径 TTL（#146 的「画像持续落后一节课」）。
+    const userId = lessonEvent.userId;
+    if (!userId) return;
+    const data = lessonEvent.data || {};
+    learnerProfileService.clear(userId);
+    // #176-2：增强证据刚落库，旧画像算出的快照缓存与画像缓存一起失效，随后立刻重算。
+    learnerSnapshotRefreshService.invalidate(userId);
+    await learnerSnapshotRefreshService.refresh({
+      userId,
+      pathId: data.pathId || undefined,
+      milestoneId: data.milestoneId || undefined,
+      taskId: data.taskId || undefined,
+      scope: data.pathId ? (data.taskId ? 'teaching' : 'path') : 'global',
+      lastEventId: event.id,
+      lastEventAt: event.occurredAt,
+    });
+  }
+
   async handle(event: DurableDomainEvent): Promise<void> {
     if (event.type !== 'lesson:completed' || !event.userId) return;
 
@@ -31,9 +85,15 @@ export class LessonKnowledgeEnrichmentConsumer {
 
     // 呈现层投影（B1）：wrapup 里的**执行信封元数据**（runtimeEnvelope/debug）对知识蒸馏无信息量，
     // 实测每次稳定 ~2.4–2.8KB（占单次 payload 的 10~30%），发前剔除。
+    // 2026-11-08 全 skill 缓存调查：本 skill 的提示词只声明了 1 个契约键（transferGoal），
+    // 载荷是 buildUserPayload=(payload)=>payload 恒等透传 → persistedWrapup 里 shadowDeterministic
+    // （源码自述「不被任何消费方读取」）/closureAudit/extensionObservability/sources 等审计块
+    // 全部原样发给模型。改为走共用投影（与 guidance 侧同一份清单，防漂移）。
     const wrapupSource = data.wrapup && typeof data.wrapup === 'object' ? (data.wrapup as Record<string, unknown>) : null;
-    const { runtimeEnvelope: _wrapupRuntimeEnvelope, debug: _wrapupDebug, ...wrapup } = (wrapupSource || {}) as Record<string, unknown>;
-    const wrapupPayload = wrapupSource && Object.keys(wrapup).length > 0 ? wrapup : null;
+    const { debug: _wrapupDebug, ...wrapupWithoutDebug } = (wrapupSource || {}) as Record<string, unknown>;
+    const projectedWrapup = wrapupSource ? projectWrapupForPrompt(wrapupWithoutDebug) : null;
+    // 全部键都被投影剔除时按「无 wrapup」处理（与改造前的 null 语义一致）
+    const wrapupPayload = projectedWrapup && Object.keys(projectedWrapup).length > 0 ? projectedWrapup : null;
 
     // 单次 LLM 调用完成知识台账蒸馏 + 隐性概念抽取（原两个 skill 合并）
     // 隔离语义：enricher 失败 → 不写证据、不写 receipt → 抛错给 outbox worker

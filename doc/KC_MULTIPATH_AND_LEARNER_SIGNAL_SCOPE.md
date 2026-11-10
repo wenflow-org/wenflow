@@ -1,12 +1,12 @@
 # 单用户多路径 · 概念图有用性 · 学习者信号作用域
 
-> 📌 类型：活规范（实现度 ~90%；§2 C1-C4 结论仍成立）｜最后核验：2026-09-28。索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范（实现度 ~90%；§2 C1/C2/C4 已改为用户级并集与 user 级边，仅 C3 路径兜底仍成立）｜最后核验：2026-11-02。索引见 [doc/README.md](./README.md)。
 
 > 日期：2026-09-23 ｜ 关联：`doc/KC_CONCEPT_IDENTITY_AND_GRAPH_DESIGN.md`（L1/L2/L3 设计）
 > 驱动：`backend/scripts/kc-multipath-run.ts`（单用户 3 路径 × 2 跨日；`--case=` 跑具名单案例）
 > 续跑：`backend/scripts/kc-resume-case.ts`（会话中断后补课，不重算路径与图）
-> 度量：`backend/scripts/kc-multipath-measure.ts`（只读）、`scripts/q-trace-join.ts`（痕迹↔节点）、
-> `scripts/q-case-state.ts`（会话/任务/痕迹状态）、`scripts/q-miscon.ts`（误解归并诊断）
+> 度量：`backend/scripts/kc-multipath-measure.ts`（只读）、`backend/scripts/q-trace-join.ts`（痕迹↔节点）、
+> `backend/scripts/q-case-state.ts`（会话/任务/痕迹状态）、`backend/scripts/q-miscon.ts`（误解归并诊断）
 
 ## 0. 为什么做这件事
 
@@ -23,8 +23,8 @@
 
 学习者 `[kc] 多路径 0923a`（userId=`ae3ccc10-1d03-4c69-8278-a3e585755842`，
 profileId=`dd6845fa-c069-4508-8367-2447642e4f28`，baseDate=2026-09-02，`--keep` 保留）。
-原始数据：`C:/tmp/kc-multipath.json`。复跑：`npx ts-node --transpile-only scripts/kc-multipath-run.ts --name=... --paths=3 --days=2 --keep`；
-度量：`scripts/kc-multipath-measure.ts`、`scripts/kc-multipath-days.cjs`。
+原始数据：`C:/tmp/kc-multipath.json`。复跑：`npx ts-node --transpile-only backend/scripts/kc-multipath-run.ts --name=... --paths=3 --days=2 --keep`；
+度量：`backend/scripts/kc-multipath-measure.ts`、`backend/scripts/kc-multipath-days.cjs`。
 （保留的现场可用 `DELETE /api/admin/virtual-learners/dd6845fa-c069-4508-8367-2447642e4f28` 清理。）
 
 ### 1.1 运行结果
@@ -166,7 +166,7 @@ support = []
 `primary` 恒空的副作用一并消失：`supportingConcepts` 的 `!primaryConcepts.includes(c)` 过滤
 从"永远放行"变成"真的在去重"。
 
-新增测试：`src/services/ai-teaching/__tests__/task-knowledge-seeds.test.ts`（9 条）。
+新增测试：`backend/src/services/ai-teaching/__tests__/task-knowledge-seeds.test.ts`（9 条）。
 
 **注**：`primaryConcepts` 恒空是否曾被**有意**用于 productive-failure（`determineTaskMode` 用
 `persistedLearningObjectives.length === 0` 判"新概念"）——没有。那个判定读的是
@@ -226,27 +226,32 @@ path#2/#3 有 `teaching_session` 但没有 committed learning_state。
 | `replanSignal` | 针对当前路径（`scope: next_milestone / downstream_path`） |
 | 路径级难度基线 | `decideTaskDifficulty(...lessonMetrics...)` |
 
-### C. 错位：名字是 global，实际只算了一条路径（**该跨而未跨**）
+### C. 曾错位：名字是 global，实际只算了一条路径（**已改成用户级**）
 
 1. **`globalBackground.conceptLedger / recurringConfusions / blockedFoundations / transferSignals`**
-   来源 `learner_evidence` 在 `build()` 里按 `pathId: path.id` 过滤（`persistedEvidence`）。
-   证据：`sourcePaths: [path.id]` **字面硬编码单路径**（`LearnerKnowledgeMemoryService.ts:747`），
-   而字段名是复数 `sourcePaths`、`deterministicConfusions.pattern` 文案写着"后续新目标与新路径中应视为不稳定前置"
-   ——**语义明确指向跨路径，数据却只有一条路径**。
-   → 后果：路径 B 里被阻塞的地基概念，不会提醒路径 A。
+   来源 `learner_evidence` 现在按**用户级全部路径**取（`allPersistedEvidence`，`pathId: { in: pathIds }`，
+   `pathIds` = 当前路径 + 最近 8 条其它路径）。
+   证据：`sourcePaths` 由「概念 → 出现过的路径」倒排累积多路径
+   （`LearnerKnowledgeMemoryService.ts:1048-1056` 注释「globalBackground 是用户级台账，sourcePaths 必须如实跨路径」、
+   `:1090-1092`），字段名是复数 `sourcePaths`，语义与数据一致。
+   → 路径 B 里被阻塞的地基概念，会提醒路径 A。
 
 2. **`globalSignals.masteredConcepts / fragileConcepts / strugglingConcepts`**
-   由 `conceptStates` 推导（`:646-654`）；而 `conceptStates` = **当前路径**的任务/会话信号 **+ 用户级痕迹**。
-   → 名"global"实为"当前路径 + 痕迹"，**不是跨路径并集**。路径 B 里通过课堂蒸馏掌握的概念（无痕迹）不会进路径 A 的 globalSignals。
+   由 `globalConceptStates` 推导（`:956-970`，注释「#93：globalSignals 是用户级视角（跨路径并集），不用 currentPath 子集」）；
+   而 `globalConceptStates` = **用户级概念状态**（全部路径 + 用户级痕迹）。
+   → 名"global"即为**跨路径并集**；路径 B 里通过课堂蒸馏掌握的概念（无痕迹）也会进路径 A 的 globalSignals。
+   `currentPath.conceptStates` 才是它的路径子集（`:818-820`）。
 
-3. **`build()` 无 `learningPathId` 时的兜底是"最新一条 active 路径"**
-   （`LearnerKnowledgeMemoryService.ts:199-202`，`findFirst({userId,status:'active'}, orderBy updatedAt desc)`）。
-   生成新路径（path#2）时规划上下文拿到的是 **path#1**，不是并集。
-   → 跨路径迁移是**偶然而非设计**，且最多覆盖一条路径。
+3. **`build()` 无 `learningPathId` 时的兜底仍是"最新一条 active 路径"（本条仍成立）**
+   （`LearnerKnowledgeMemoryService.ts:318-321`，`findFirst({userId,status:'active'}, orderBy updatedAt desc)`）。
+   但它只决定 `currentPath` 取哪条路径；`globalSignals` / `globalBackground` 已按用户级并集取数，
+   不再受兜底路径影响。
 
-4. **概念图 `concept_edges` 全是 `scope='path'`，`scope='user'` 零行**
-   设计的用户级那一半未实现（`concept-graph.service.ts` 无写 user 级边的代码）。
-   → 多路径图不连通：跨路径共享概念之间没有边。
+4. **概念图 `concept_edges` 已有 `scope='user'` 边**
+   物化时同一条 KC 级前置**同时落一条 `pathId=null` 的用户级边**
+   （`concept-graph.service.ts:342-349`，`relation: RELATION_PREREQUISITE, scope: SCOPE_USER, pathId: null`，
+   注释「#92 用户级投影」）——跨路径查询（多路径用户图谱）因此连得起来。
+   → 但跨路径共享概念本身仍为 0（§1.4），用户级图会呈现为若干互不相连的簇：缺的是共享概念身份，不是边。
 
 ### D. 教学现场级（teaching）——短暂，不必跨
 
@@ -265,10 +270,10 @@ path#2/#3 有 `teaching_session` 但没有 committed learning_state。
 ## 3. 结论与建议
 
 1. **A/B 两类已经分对了**——不必大改。
-2. **C 类是真正要修的**：把 `globalBackground` 四件套与 `globalSignals` 的取数从"单路径"改为"用户级并集"，
-   否则"跨路径迁移"这个宣称的能力是空的。最小改法：`build()` 里对 `learner_evidence` 去掉 pathId 过滤（或并集），
-   并让 `sourcePaths` 真的累积多路径。
-3. **C4 是结构性缺口**：`scope='user'` 边未实现 → 多路径图不连通。要么补，要么在 UI/文档里明确"图是路径级的"。
+2. **C1/C2 已按此修复**：`globalBackground` 四件套与 `globalSignals` 的取数已从"单路径"改为"用户级并集"
+   （`learner_evidence` 按 `pathId: { in: pathIds }` 取，`sourcePaths` 真的累积多路径）。
+3. **C4 已补**：`scope='user'` 边在物化时与路径级边同时写入（`pathId=null`），多路径图因此可连通。
+   仍缺的是跨路径共享概念身份（§1.4），不是边。
 4. **E 类需要产品裁决**，不建议擅自定。
 
 ### 实测暴露的问题与处置
@@ -292,7 +297,8 @@ path#2/#3 有 `teaching_session` 但没有 committed learning_state。
 
 8. **跨路径概念共享为 0**（本次 3 条路径两两零交集）。
    这不是 bug，而是"跨 path 迁移"这个能力**缺前提**：先有共享概念身份，才谈得上跨路径复用。
-   `scope='user'` 边未实现（C4）之前，多路径图必然是若干不连通的簇。
+   `scope='user'` 边已补上（C4，物化时同时写 `pathId=null` 的用户级边），但共享概念仍为 0——
+   缺的是共享身份，多路径图仍会呈现为若干不连通的簇。
 
 9. **教学上下文的"本课知识范围"恒空，已修**（§1.2d）。`buildTaskKnowledgeSeeds` 是空桩 +
    `learningObjectives` 全库为空 ⇒ `primaryConcepts` 恒空 ⇒ 按它过滤的 `prerequisiteConcepts`
@@ -318,9 +324,10 @@ path#2/#3 有 `teaching_session` 但没有 committed learning_state。
 | 颜色 | 掌握度/稳定性 | 该学习者自己的记忆痕迹（ACT-R） |
 | 点的大小 | 连接度（枢纽更大） | 图内 degree |
 
-**硬边界**：图**不是跨路径的**——路径级图只含当前路径；多路径之间目前没有跨路径边
-（`scope='user'` 未实现），所以用户级聚合图会呈现为**若干个互不相连的簇**
-（实测：陈嘉两条同为"定积分换元/分部"的路径，概念交集为 **0**，聚合页上就是两团分开的点）。
+**硬边界**：路径级图只含当前路径；跨路径边已实现（物化时每条 KC 级前置同时落一条
+`scope='user'`、`pathId=null` 的用户级边），但用户级聚合图仍会呈现为**若干个互不相连的簇**
+——因为跨路径共享概念为 **0**（实测：陈嘉两条同为"定积分换元/分部"的路径，概念交集为 **0**，
+聚合页上就是两团分开的点）。缺的是共享概念身份，不是跨路径边。
 另外只有生成时带 `kcGraph`/`conceptKcs` 的路径才有边，老路径是空的。
 
 ### 4.2 两个入口
@@ -329,7 +336,7 @@ path#2/#3 有 `teaching_session` 但没有 committed learning_state。
 |---|---|---|---|
 | **用户侧 · 课内** | `/learn/:taskId` →「本节知识点」面板 →「列表 / 图谱」 | `GET /api/learning/concept-graph?pathId=` | **当前路径** |
 | **用户侧 · 聚合页** | 顶部导航「知识图谱」→ `/knowledge-map` | 同上，**不传 pathId** | **全部路径**，可按路径筛选 |
-| **Admin** | `/admin/learner-center?view=learner&id=<userId>&tab=graph` | `GET /api/admin/memory-review/:userId/concept-graph` | **用户级全部路径**，可按路径筛选 |
+| **Admin** | `/admin/learner-state?view=learner&id=<userId>&tab=graph` | `GET /api/admin/memory-review/:userId/concept-graph` | **用户级全部路径**，可按路径筛选 |
 
 用户侧接口是 **self-scoped**（只读 `req.user.userId`，不接 userId 参数，防越权）。
 课内那处另有一个「全部路径 →」桥接到聚合页。
@@ -365,8 +372,8 @@ path#2/#3 有 `teaching_session` 但没有 committed learning_state。
 - 学习者 `[case] 3-6岁儿童行为 0923`（userId=`43c65d04-60a9-4217-bd62-094fc831ecd3`，
   profileId=`79e7ccc7-9776-4283-ae7c-c8def5a180a7`）
 - 路径 `lp_1790149867127_ulb8vl2`「识别社会性行为背后的指南对照关系」，3 里程碑 / 9 子任务
-- 驱动：`scripts/kc-multipath-run.ts --case=children36`（新增具名 case 预设）
-- 续跑：`scripts/kc-resume-case.ts --session=<id> --days=N`（**新增**，见 5.3）
+- 驱动：`backend/scripts/kc-multipath-run.ts --case=children36`（新增具名 case 预设）
+- 续跑：`backend/scripts/kc-resume-case.ts --session=<id> --days=N`（**新增**，见 5.3）
 
 ### 5.1 跑完之后图上有没有东西
 
@@ -379,7 +386,7 @@ path#2/#3 有 `teaching_session` 但没有 committed learning_state。
 | 掌握度分布 | — | 已掌握 5 · 脆弱 4 · 未评估 12 |
 | 已完成子任务 | 0/9 | 1/9（另有 1 在学、7 待做） |
 
-**关键一测：痕迹 → 节点 9/9 命中**（`scripts/q-trace-join.ts --name=...`）。
+**关键一测：痕迹 → 节点 9/9 命中**（`backend/scripts/q-trace-join.ts --name=...`）。
 即"教学产生的记忆痕迹"确实落在图上、并带出掌握度颜色——图不是装饰，
 `已掌握/在学/脆弱/未评估` 四档口径与画布着色同源（`MkGraphExplorer.counts`）。
 
@@ -388,7 +395,7 @@ id 时间戳晚于路径生成），说明物化不是一次性快照。
 
 ### 5.2 L3 消费面（真跑一次，不是单测）
 
-`scripts/kc-multipath-measure.ts`：9 个任务 **9/9 有图邻居**、**5/9 有非空上游闭包**。
+`backend/scripts/kc-multipath-measure.ts`：9 个任务 **9/9 有图邻居**、**5/9 有非空上游闭包**。
 闭包里出现了 2 跳链（`专业判断降维转译` ← `行为表现偏离度识别`@d1 ← `社会性行为映射`@d2），
 即概念级前置投影确实被 `upstreamClosure` 吃到了（对应 1.2b 的修复）。
 身份覆盖：`memory_traces` 9/9、`misconception_ledger` 22/22 带 `conceptId`。
@@ -443,9 +450,11 @@ id 时间戳晚于路径生成），说明物化不是一次性快照。
    按生产预算（`max_tokens=2000`、`thinking.disabled`）复测，`deepseek-v4-flash` 与
    `deepseek-v4-pro` 各 8/8 正常、中位耗时约 3.4s——**所以当前是「间歇性抖动」而不是「持续不可用」**。
 
-网关对空补全的处理有一处会放大故障：`executor.ts:754` 只把 `finish_reason='length'` 判为
-**可重试**，`tool_calls` 走 `INVALID_RESPONSE_SCHEMA` → `retryable:false` → 直接跳到
-fallback（`models.config.ts:134` 声明 `deepseek-v4-flash` 的 fallback 是 `agnes-3.0-flash`），
+网关对空补全的处理有一处会放大故障：空补全判定在 `backend/src/gateway/api-gateway/executor.ts:852-886`
+——只把 `finish_reason='length'` 的空补全（`TRUNCATED_EMPTY_OUTPUT`）判为**可重试**，
+`tool_calls` 之类的空补全走 `INVALID_RESPONSE_SCHEMA` → `retryable:false` → 直接跳到
+fallback（当时 `models.config.ts` 的模型目录里 `deepseek-v4-flash` 的 fallback 是 `agnes-3.0-flash`；
+该模型已于 2026-10-18 下线并被 `RETIRED_MODEL_IDS` 收录，见 `models.config.ts:581`），
 而实测 `agnes-3.0-flash` **连续 5 次全部 45s 无响应**。
 于是"一次空补全"要烧完 fallback 的 300s 超时才算失败——这正是上一轮那条
 `durationMs: 900436` 的 `RETRY_BUDGET_EXHAUSTED` 的来历。
@@ -468,7 +477,7 @@ fallback（`models.config.ts:134` 声明 `deepseek-v4-flash` 的 fallback 是 `a
 
 ### 6.1 先证伪一条错误路线：词面相似度救不了
 
-动手前先量了相似度分布（`scripts/q-miscon-sim.ts`，用仓库既有的 `lexicalSimilarity`）：
+动手前先量了相似度分布（`backend/scripts/q-miscon-sim.ts`，用仓库既有的 `lexicalSimilarity`）：
 
 | 对照 | lexicalSimilarity |
 |---|---|
@@ -493,7 +502,7 @@ fallback（`models.config.ts:134` 声明 `deepseek-v4-flash` 的 fallback 是 `a
    winner = 最早观察到的那行，`occurrenceCount` 求和、`confidence` 取最大、`status` **只升不降**、
    `firstSeenAt` 取最小 / `lastSeenAt` 取最大、证据取最近一次。
    无标签行**只有归一文本完全相同才并**，其余原样保留并计入 `ungroupedRows`（不猜）。
-4. **CLI**：`src/scripts/consolidate-misconceptions.ts`，**默认 dry-run（纯只读）**，`--apply` 才动数据。
+4. **CLI**：`backend/src/scripts/consolidate-misconceptions.ts`，**默认 dry-run（纯只读）**，`--apply` 才动数据。
 
 审计：写进 `learner_projections`。**两种模式用两个键**——
 `misconception-consolidation:<userId>`（apply，含被删行完整快照 = 回滚凭据）与
@@ -511,46 +520,34 @@ fallback（`models.config.ts:134` 声明 `deepseek-v4-flash` 的 fallback 是 `a
 `lbl:` 两行在后续 2 天的 4 节课里 **occurrence 未变**（4 / 11）——课没再报这两个误解，
 所以锚点机制没被反向验证；但新写入的行**确实带上了 `hyp:` 前缀**，证明新代码在线上生效。
 
-### 6.4 残留：标签为 null 的行仍会累积（**根因在 prompt，未改**）
+### 6.4 标签为 null 的行：根因在 prompt（**已修，2026-09-24**）
 
 新行全落在概念「定位行为维度对应的指南领域条目」下、`canonicalLabel` 全为 `null`。
-追到契约层，是两句话互相矛盾：
+追到契约层，是两句话互相矛盾（修复前的文本）：
 
-- `prompts/core/teaching-turn.yaml:107`：「hypothesis 写"学生误以为…"的自由形式假设
+- `prompts/core/teaching-turn.yaml`：「hypothesis 写"学生误以为…"的自由形式假设
   （**不是从标签库选择**、不是症状复述）」
-- `prompts/core/teaching-turn.yaml:135`：`canonicalLabel` 是「**匹配到的规范误解标签**或 null」
+- `prompts/core/teaching-turn.yaml`：`canonicalLabel` 是「**匹配到的规范误解标签**或 null」
 
 字段按"有个标签库可以匹配"设计，规则却明说不要从标签库选，而 payload 里从来没给过标签库
 （`scenario.priorMisconceptions` 只回了历史行的标签，历史行本身也是 null）→ 模型只能编或给 null。
 
-**这一处没改**，因为它不是代码改动：改 `prompts/core/*.yaml` 要走 publish-core 发布流程
+**当时判定「这一处没改」**：`prompts/core/*.yaml` 的改动要走 publish-core 发布流程
 （`loadCoreAgentPromptSeeds` 对漂移的 core 是**跳过**而不是自动采用，见
-`seed-core-agent-prompts.ts:264-277`），属于带 freeze 判官的版本化发布，需要单独决定。
+`seed-core-agent-prompts.ts:264-277`），属于带 freeze 判官的版本化发布，且当时
+`prompts/core/teaching-turn.yaml` 上压着并行会话未提交的结构性改动（新增 `visual` 输入字段），
+故 2026-09-23 本轮未发。
 
-**2026-09-23 19:00 追加：本轮确认「不能由我发」。** 发布入口是
-`POST /api/prompt-lab/publish-core`（`routes/prompt-lab.ts:571`），闸门依次是
-五块结构 → 字段冻结 → `classifyCoreEdit`（增删字段需开发确认）→ 语义冻结判官。
-问题是它用 `loadCoreFile(skillId)` **从磁盘读**，而此刻
-`prompts/core/teaching-turn.yaml` 上正压着**并行会话未提交的结构性改动**——
-新增 `visual` 输入字段（教学配图，对应未提交的 `teaching-visual.service.ts`、
-`aiTeaching.ts` 的 `images`、`V2LearningPage.vue` 的配图渲染）。
-在该文件上做任何编辑或发布，都会连带把别人未完成的功能推上线（或覆盖其工作副本）。
-**故本轮到此为止**：等该文件安静下来（对方提交或撤下），再把下面两处改完发布。
+**2026-09-24 已修**：commit `c8f4506e`「fix(prompts): teaching-turn 的 canonicalLabel 契约自相矛盾」
+把下面两处建议逐字落地，当前文件文本即：
 
-建议改法（两处，各一句）：
-
-1. `prompts/core/teaching-turn.yaml:137` 的字段说明，把
-   `"canonicalLabel": 匹配到的规范误解标签或 null`
-   改为
-   `"canonicalLabel": 规范误解标签——若 scenario.priorMisconceptions 中有语义相同的一条，**原样复用其 canonicalLabel**；确属新误解则给一个 ≤12 字的短标签（不含学生原话、不含"本轮/上次"等时间词）；确实概括不出时才为 null`
-2. `prompts/core/teaching-turn.yaml:109` 规则里的
-   `（不是从标签库选择、不是症状复述）`
-   改为
+1. `prompts/core/teaching-turn.yaml:146` 的字段说明 =
+   `"canonicalLabel": 规范误解标签——若 scenario.priorMisconceptions 中有语义相同的一条，原样复用其 canonicalLabel；确属新误解则给一个 ≤12 字的短标签（不含学生原话、不含"本轮/上次"等时间词）；确实概括不出时才为 null`
+2. `prompts/core/teaching-turn.yaml:116` 规则里的括号 =
    `（自由措辞，但必须同时在 canonicalLabel 给出可复用的短标签；不是症状复述）`
-   ——括号原意是"hypothesis 别写成标签"，但读起来像"别用标签"，与字段说明正好相反。
+   ——括号原意是"hypothesis 别写成标签"，此前读起来像"别用标签"，与字段说明正好相反；现已一致。
 
-发完之后：`npm run prompts:core:check` 必须回到全 in-sync，再跑一个模拟日看
-`canonicalLabel` 是否还出 null（验收口径 = 同一概念的已报误解不再新增 `hyp:` 行）。
+验收口径：`npm run prompts:core:check` 全 in-sync，且同一概念的已报误解不再新增 `hyp:` 行。
 
 配套已做的一处接头（属代码范围）：`TeachingContextBuilder` 取历史误解时**补上了本课 KC 名**
 （台账的 `conceptKey` 往往就是 KC 名）。此前只按三个概念槽位查，KC 粒度的误解一条都拉不到；
@@ -563,7 +560,7 @@ fallback（`models.config.ts:134` 声明 `deepseek-v4-flash` 的 fallback 是 `a
 - `src/services/learner/__tests__` + `ai-teaching/__tests__` + `scripts/__tests__`：**627 passed / 0 failed**
 - `tsc --noEmit` 干净；`eslint` 改动文件 0 problem
   （刻意没往 `.eslintrc.json` 的 `no-explicit-any` 白名单里加新文件——deps 改成按用途命名的强类型接口）
-- 新增脚本：`scripts/q-miscon.ts`、`q-miscon-sim.ts`、`q-miscon-dump.ts`、`q-audit-check.ts`、`q-audit-keys.ts`（均只读诊断）
+- 新增脚本：`backend/scripts/q-miscon.ts`、`q-miscon-sim.ts`、`q-miscon-dump.ts`、`q-audit-check.ts`、`q-audit-keys.ts`（均只读诊断）
 
 
 ---
@@ -579,7 +576,7 @@ commit `a76cbfac` 记录了重跑 kc-mapper 的风险：新旧 KC 名同名交�
 
 ### 7.2 工具（已落地，默认 dry-run）
 
-`src/scripts/kc-identity-migrate.ts`：
+`backend/src/scripts/kc-identity-migrate.ts`：
 
 1. 读旧标注的 KC 名 → `resolveConcept(createIfMissing:false)` 取旧 conceptId 与痕迹分布
 2. 跑一次 kc-mapper（只取输出，不落库）→ 新 KC 名
@@ -604,7 +601,7 @@ commit `a76cbfac` 记录了重跑 kc-mapper 的风险：新旧 KC 名同名交�
 ### 7.3 实测：收益上限只有 12%，所以**没上**
 
 13 条有痕迹路径全量 dry-run：**提出 81 条别名**，但**别名覆盖的痕迹只有个位数**。
-追根因，量了"痕迹名 vs 本路径标注 KC 名"的漂移（`scripts/q-trace-name-drift.ts`）：
+追根因，量了"痕迹名 vs 本路径标注 KC 名"的漂移（`backend/scripts/q-trace-name-drift.ts`）：
 
 | 档 | 含义 | 条数 | 占比 |
 |---|---|---|---|

@@ -20,7 +20,7 @@
 
     <!-- 成就定义（原型 1890-1893 卡片栅格：每卡 名 strong + grow + 状态 badge；
          副行 描述 sub；底行 已解锁 b mono N 人 + grow）。原型底行右侧为「解锁率」，
-         但 /admin/achievements/definitions 只回 unlockCount（全量含虚拟），
+         但 /admin/achievements/definitions 只回 unlockCount（默认口径，已排除虚拟学习者），
          缺「总学习者」分母——按无数据不硬造，右侧改显真实奖励 +XP；「手动发放」能力保留。 -->
     <div v-if="achTab === 'defs'" id="oa-panel-defs" role="tabpanel" aria-labelledby="oa-tab-defs" class="mk-card">
       <MockSkeletonTable v-if="defsLoading && !defs.length" :cols="3" />
@@ -30,9 +30,11 @@
             <strong class="ac-card__name"><AchIcon :type="d.type" /> {{ d.name }}</strong>
             <span class="mk-badge" :class="typeBadge(d.type)">{{ typeText(d.type) }}</span>
           </div>
-          <span class="ac-card__desc">{{ d.description }}</span>
+          <!-- 一张卡只说一件事（2026-11-02 评审）：描述与「条件」原先各占一行、说的是同一句
+               （「完成第一个任务」/「条件：完成 1 个任务」）。条件行给具体阈值，
+               定义里的 description 只在条件无法数值化时（custom 类）顶上来当规则说明。 -->
           <span class="ac-card__cond" :title="reqTitle(d.requirement)">
-            条件：<template v-if="d.requirement.type === 'mastered_concepts'"><RouterLink class="ac-card__term" :to="glossaryTermLink('已掌握知识点')">已掌握知识点</RouterLink> {{ d.requirement.value }} 个</template><template v-else>{{ reqText(d.requirement) }}</template>
+            条件：<template v-if="d.requirement.type === 'mastered_concepts'"><RouterLink class="ac-card__term" :to="glossaryTermLink('已掌握知识点')">已掌握知识点</RouterLink> {{ d.requirement.value }} 个</template><template v-else-if="d.requirement.type === 'custom'">{{ d.description || '由后台规则判定' }}</template><template v-else>{{ reqText(d.requirement) }}</template>
           </span>
           <div class="ac-card__foot">
             <span class="ac-card__unlocked">已解锁 <b class="mono">{{ d.unlockCount }}</b> 人</span>
@@ -43,7 +45,6 @@
       </div>
       <MkEmptyState
         v-else-if="defsFailed"
-        icon="!"
         title="成就定义加载失败"
         description="无法读取成就定义清单，读数可能不完整。"
         action-text="重试"
@@ -52,7 +53,6 @@
       <!-- 原先缺 v-else 兜底：后端返回空数组时卡内什么都不渲染（审计 附 A #10） -->
       <MkEmptyState
         v-else
-        icon="◌"
         title="暂无成就定义"
         description="还没有配置任何成就。定义来自成就目录，配置后学习者达成时自动发放。"
         action-text="刷新"
@@ -129,7 +129,6 @@
       <MkEmptyState
         v-else-if="recordsFailed"
         min
-        icon="!"
         title="解锁记录加载失败"
         description="无法读取解锁记录，读数可能不完整。"
         action-text="重试"
@@ -137,7 +136,6 @@
       />
       <MkEmptyState
         v-else
-        icon="◌"
         :title="isRecordsFiltered ? '没有符合筛选条件的解锁记录' : '还没有解锁记录'"
         :description="isRecordsFiltered
           ? '当前搜索/筛选条件下无匹配记录，可清除筛选查看全部。'
@@ -146,8 +144,10 @@
         :action-text="isRecordsFiltered ? '清除筛选' : ''"
         @action="clearRecordsFilters"
       />
+      <!-- 分页器常驻（2026-11-02 评审）：此前只有超过一页才出现，个位数记录时
+           连「共 N 条」都没有，与反馈 / 公告列表的读数方式不一致 -->
       <Pagination
-        v-if="totalRecords > pageSize"
+        v-if="totalRecords > 0"
         v-model:page="recordPage"
         v-model:pageSize="pageSize"
         :total="totalRecords"
@@ -174,8 +174,13 @@
                   <strong>{{ grantTarget?.name }}</strong>
                   <span class="mk-cell-sub">{{ grantTarget?.description }}</span>
                 </div>
-                <span class="mk-badge mk-badge--ok">+{{ grantTarget?.xpReward }} XP</span>
+                <!-- XP 标签与成就定义卡的 .oa-xp 同款（2026-11-02 评审：同一枚奖励标签
+                     在定义页是蓝、在发放弹窗是绿） -->
+                <span class="oa-xp" :title="`解锁可得 ${grantTarget?.xpReward} XP`">+{{ grantTarget?.xpReward }} XP</span>
               </div>
+              <!-- 发放对象由发起入口决定，不是可切换的选择项：这块带描边的身份卡容易被读成
+                   单选卡，补一句说明（2026-11-02 评审） -->
+              <span class="mk-field__hint">本次发放的成就由发起入口确定，不可在此更换</span>
             </div>
             <label class="mk-field" :class="{ 'mk-field--error': errors.user }">
               <span class="mk-field__label">用户</span>
@@ -202,7 +207,8 @@
             <!-- 统一关闭路径：发放中禁关（与 Esc/遮罩/✕ 同守卫） -->
             <button type="button" class="mk-btn" @click="closeGrant">取消</button>
             <button type="button" class="mk-btn mk-btn--primary" :disabled="!grantUserId || granting" @click="confirmGrant">
-              {{ granting ? '发放中…' : '确认发放（+XP）' }}
+              <!-- 按钮直说这次会发多少经验：原先写死「+XP」，读不出数值（2026-11-02 评审） -->
+              {{ granting ? '发放中…' : `确认发放（+${grantTarget?.xpReward ?? 0} XP）` }}
             </button>
           </div>
         </div>
@@ -296,7 +302,7 @@ const reqText = (r: AchievementDef['requirement']) => {
   if (t === 'streak_days') return `连续学习 ${r.value} 天`
   if (t === 'path_completion') return `完成 ${r.value} 条路径`
   if (t === 'mastered_concepts') return `掌握 ${r.value} 个知识点`
-  return `自定义条件`
+  return `按后台规则判定`
 }
 /** 术语 → 术语表深链：?q= 由 AdminGlossary 读取并预填搜索，让成就卡里的裸缩写可点可查
     （此前术语解释只塞在 title 悬停里，不可发现也不可点，走查 #32） */
@@ -309,7 +315,7 @@ const reqTitle = (r: AchievementDef['requirement']) => {
   if (r.type === 'task_count') return `累计完成 ${r.value} 个学习任务`
   if (r.type === 'streak_days') return `连续学习天数达到 ${r.value} 天`
   if (r.type === 'path_completion') return `完成 ${r.value} 条学习路径`
-  return '由后台自定义条件判定'
+  return '由后台规则判定（未在本页展开具体阈值）'
 }
 
 async function loadDefs() {
@@ -573,7 +579,7 @@ onMounted(() => {
 /* 成就定义卡片栅格（原型 1890-1893：grid minmax(260px,1fr) + card） */
 .ac-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
   gap: 12px;
   padding: 16px;
 }
@@ -596,7 +602,6 @@ onMounted(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ac-card__desc { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.5; }
 .ac-card__cond {
   font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
@@ -605,7 +610,7 @@ onMounted(() => {
   white-space: nowrap;
 }
 /* 条件格内可点术语：链接色 + 虚线下划线，区别于正文灰字（走查 #32） */
-.ac-card__term { color: var(--mk-blue); text-decoration: underline dotted; cursor: pointer; }
+.ac-card__term { color: var(--mk-blue-text); text-decoration: underline dotted; cursor: pointer; }
 .ac-card__term:hover { color: var(--mk-accent-deep); }
 .ac-card__foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ac-card__unlocked { margin-right: auto; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
@@ -616,6 +621,12 @@ onMounted(() => {
   font-variant-numeric: tabular-nums;
 }
 .ac-card__grant { font-size: var(--mk-fs-micro); }
+/* 2026-11-01 外部评审（二轮）：14 张卡片 × 一颗蓝字「手动发放」，首屏是一墙高饱和链接，
+   压过了成就本身（名称/条件/已解锁数）。人工发放是例外动作，不是每张卡的主操作：
+   默认走弱色，悬停/键盘聚焦才提亮——可发现，但不抢视线。 */
+.ac-card__grant { color: var(--mk-faint); }
+.ac-card__grant:hover,
+.ac-card__grant:focus-visible { color: var(--mk-blue-text); }
 
 /* ================= 视图切换（原型 .tabs 下划线页签） =================
    样式 2026-10-05 CM1 收敛到全局 .tabs/.tab（mk-primitives.css），本页不再私持拷贝。

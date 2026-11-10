@@ -17,17 +17,24 @@
       <MkKpi
         label="完结率"
         :value="completionRatePct"
+        :value-note="stats ? `已完结 ${stats.completed}/${stats.total}` : ''"
       />
       <!-- P-49（#74）：停滞会话此前只活在分布带 hint 里；升为卡，0 是健康信号。
            2026-10-26 动线：读数有对应行就得能落到那几行——点卡即筛「停滞」，
-           与学习状态页可点 KPI 同一语法（本页原先只有它是点了没反应的卡）。 -->
+           与学习状态页可点 KPI 同一语法（本页原先只有它是点了没反应的卡）。
+           2026-10-31 外部评审 P2-5：口径上卡（active 且超 7 天未更新）——3 天没动的行
+           不计入是阈值使然不是失效，阈值是否收紧交后续拍板（用户拍板：维持 7 天）。
+           2026-10-31 二轮评审 P1：0 时也要可点——点了筛出空集，展示「当前筛选无匹配」
+           空态，「点击按停滞筛选」的承诺才成立（此前 0 时整卡不可点，承诺落空）。 -->
       <MkKpi
         label="停滞目标对话"
         :value="rows.length ? staleActiveCount : '—'"
+        value-note="当前列表内"
         :tone="staleActiveCount ? 'warn' : ''"
-        :clickable="!!rows.length && staleActiveCount > 0"
+        hint="进行中且超过 7 天未更新的对话"
+        :clickable="!!rows.length"
         :class="{ 'gc-kpi--on': stalledOnly }"
-        :aria-pressed="rows.length && staleActiveCount > 0 ? stalledOnly : undefined"
+        :aria-pressed="rows.length ? stalledOnly : undefined"
         @click="stalledOnly = !stalledOnly"
       />
       <!-- 2026-10-27 用户「去掉这个 pill，综合设计 KPI 面板和筛选」：未生成路径原先只有卡头
@@ -35,7 +42,9 @@
       <MkKpi
         label="未生成路径"
         :value="rows.length ? pathPendingCount : '—'"
+        value-note="当前列表内"
         :tone="pathPendingCount ? 'warn' : ''"
+        hint="还没有生成学习路径的目标对话"
         :clickable="!!rows.length && pathPendingCount > 0"
         :class="{ 'gc-kpi--on': noPathOnly }"
         :aria-pressed="rows.length && pathPendingCount > 0 ? noPathOnly : undefined"
@@ -66,7 +75,7 @@
         <div class="mk-filter">
           <!-- 状态筛选（2026-10-17 恢复为卡头下拉）：取消 / 失败 / 放弃三档分开
                （2026-10-26：此前合一档，筛「已取消」出来的行状态列却写「失败」）。
-               计数取 stats 服务端全量口径，但后端只给合并桶 → 取消与失败两档不显计数。
+               计数取 stats 服务端全量；2026-11-02 P2-2 起后端按全状态 groupBy 下发，四档都有数。
                2026-10-27 用户「去掉这个 pill，综合设计 KPI 面板和筛选」：「未生成路径 / 停滞」
                从常驻 chip 组迁到上方 KPI 卡（读数 + 一键筛选），卡头只在筛选中时出现
                「已应用」胶囊，筛选区最终只留维度下拉。 -->
@@ -95,8 +104,9 @@
           <MkFilterSearch v-model="keyword" placeholder="搜索用户 / 邮箱 / 目标摘要" />
           <MkCols
             :col-defs="gcColDefsFiltered"
-            storage-key="wf_goal_hidden_cols_v2"
+            storage-key="wf_goal_hidden_cols_v3"
             :default-hidden="GC_DEFAULT_HIDDEN"
+            :fixed-cols="['用户', '操作']"
             v-model:hidden="gcHiddenCols"
           />
           <!-- 卡头 meta 只放分页器没有的事实：口径（真实/测试）由页头那个开关自明，
@@ -118,7 +128,7 @@
         action-text="重试"
         @action="load(true)"
       />
-      <div v-else-if="filtered.length" class="mk-table-scroll">
+      <div v-else class="mk-table-scroll">
       <!-- 固定列宽（2026-10-22 与教学会话同判例）：自动布局下摘要/用户两列按当页最长文本分宽，
            翻页整表跳动（摘要 303↔325、用户 241↔219）；改 fixed + 逐列表头宽度，余量按权重摊开。
            长摘要/长邮箱仍由 .mk-cell-text / .mk-cell-main 的截断兜底 -->
@@ -139,10 +149,14 @@
               :aria-sort="gcSortState('status')"
               @click="toggleGcSort('status')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('status')">状态<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            <!-- 学习路径：紧挨状态列（2026-11-09 用户「顶部有未生成路径 2，表格列里看不出来」）。
+                 路径生成状态与状态列是同一件事的两个面（进行中才可能未生成），并排放便于对照；
+                 默认可见（不再是「列」菜单里才有的隐藏列），路径名进副行。 -->
+            <th v-if="showCol('path')" scope="col" class="gc-c-path">学习路径</th>
             <th
               v-if="showCol('turns')"
               scope="col"
-              class="mk-th--sortable mk-th--right gc-c-turns"
+              class="mk-th--sortable gc-c-turns"
               :aria-sort="gcSortState('turns')"
               @click="toggleGcSort('turns')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleGcSort('turns')">澄清轮次<span class="mk-th__caret" aria-hidden="true"></span></button></th>
@@ -165,7 +179,16 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="r in paged" :key="r.id" tabindex="0" @click="openDetail(r)" @keydown.enter.self.prevent="openDetail(r)">
+          <!-- 菜单打开时给所属行加底色：浮层压住了行内两处按钮、又跨在行与行之间，
+                 没有任何视觉线索说明它属于哪一条（2026-11-02 评审 R4） -->
+          <tr
+            v-for="r in paged"
+            :key="r.id"
+            tabindex="0"
+            :class="{ 'gc-row--menu': openMenu === r.id }"
+            @click="openDetail(r)"
+            @keydown.enter.self.prevent="openDetail(r)"
+          >
             <td v-if="showCol('summary')">
               <!-- 原型目标摘要格 = wrap 两行：strong 摘要 + sub mono 会话 ID。
                    2026-10-23 走查：会话 ID 副行撤除——它是内部键，本页搜索也不匹配 ID，
@@ -185,9 +208,14 @@
                        200px（≤1599 收 176px）强制最小宽，长名字/长邮箱被省略号截断后
                        看不到全值——同表其余格均有 title -->
                   <!-- 2026-10-18：姓名即学习者详情入口（行点击仍是进会话，这里 stop 冒泡） -->
+                  <!-- 2026-11-01 外部评审 P2：副行邮箱在「local part 与昵称同值」时按设计不复读
+                       （副行渲染规则），于是同一列有的行有副行、有的没有，被读成排版不一致。
+                       默认规则不动，但邮箱改为姓名格上始终可查——同名用户核对不再依赖副行。 -->
                   <button
                     type="button"
                     class="mk-user-link"
+                    :title="r.userEmail ? `${r.userName}
+${r.userEmail}` : r.userName"
                     @click.stop="openLearner(r.userId)"
                     @keydown.enter.stop.prevent="openLearner(r.userId)"
                   >{{ r.userName }}</button>
@@ -211,8 +239,24 @@
                 :title="statusCellTitle(r)"
               >{{ isOngoingStatus(r.status) ? '进行中' : statusLabel(r.status) }}</span>
             </td>
-            <td v-if="showCol('turns')" class="mk-num">
-              <span v-if="r.turns != null" class="mk-num">{{ r.turns }} 轮</span>
+            <td v-if="showCol('path')">
+              <!-- 路径生成状态（2026-11-09 用户「顶部有未生成路径 2，但表格列里看不出来」）：
+                   只回答「有没有生成」这件事，路径名进 title（长路径名会把整列撑歪，也是
+                   2026-10-27「这个列还是重复了」的根子——重复的是**状态**，不是生成与否）。 -->
+              <span
+                v-if="r.hasPath"
+                class="mk-cell-sub"
+                :title="r.pathCell ? `已生成学习路径：${r.pathCell}` : '已生成学习路径'"
+              >已生成</span>
+              <span
+                v-else-if="isPathPendingRow(r)"
+                class="mk-badge mk-badge--sm mk-badge--warn"
+                title="进行中但还没有生成学习路径"
+              >未生成</span>
+              <span v-else class="mk-na" title="会话已结束，不再生成学习路径">—</span>
+            </td>
+            <td v-if="showCol('turns')">
+              <span v-if="r.turns != null" class="gc-turns">{{ r.turns }} 轮</span>
               <span v-else class="mk-na">—</span>
             </td>
             <td v-if="showCol('constraints')">
@@ -222,20 +266,24 @@
               <span v-else class="mk-na">—</span>
             </td>
             <td v-if="showCol('stageDate')">
-              <span v-if="r.timelineDate" :title="`阶段时间线 ${r.timeline}`">{{ r.timelineDate }}</span>
+              <span v-if="r.timelineDate" :title="`阶段时间线 ${r.timeline}
+最近活动 ${r.timelineDateAbs}`">{{ r.timelineDate }}</span>
               <span v-else class="mk-na">—</span>
             </td>
             <!-- 相对时间是人话（「3 天前」），走正文无衬线；等宽只留给 id/代码类机器串 -->
             <td v-if="showCol('created')"><span class="mk-cell-sub" :title="r.createdAtAbs">{{ r.createdAt }}</span></td>
             <td>
               <div class="mk-actions">
-                <!-- 2026-10-27 用户「这两个按钮也重复吧，本身点这个条目就可以跳进去了」：
-                     行点击已进座舱，不再单列「详情」；路径入口收进 ⋯ 菜单，操作列只留溢出菜单。 -->
+                <!-- 2026-11-09 用户走查「只有孤零零一个 ⋯，最常用的详情被藏进二级菜单」：
+                     操作列统一为「主操作 + 溢出菜单」——详情回到一级（与学习路径/复习积压同构），
+                     菜单只留查看路径 / 执行日志 / 重建 / 删除这些次级动作。
+                     行点击仍是同一入口（整行可点，详情按钮只是把这条能力显式写出来）。 -->
+                <button type="button" class="mk-link" @click.stop="openDetail(r)">详情</button>
                 <div class="mk-menu">
                   <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === r.id" @click.stop="toggleMenu(r.id)">⋯</button>
                   <div v-if="openMenu === r.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="popStyle" @click.stop>
                     <button v-if="r.hasPath" type="button" class="mk-menu__item" role="menuitem" @click="menuOpenPath(r)">查看路径</button>
-                    <button type="button" class="mk-menu__item" role="menuitem" @click="goTrace(r)">链路</button>
+                    <button type="button" class="mk-menu__item" role="menuitem" @click="menuOpenTrace(r)">查看执行日志</button>
                     <button
                       type="button"
                       class="mk-menu__item"
@@ -251,18 +299,19 @@
           </tr>
         </tbody>
       </table>
-      </div>
-      <MkLoading v-else-if="loading" />
-      <!-- 同一骨架覆盖两态（筛选无匹配 / 本来就没数据），只有标题与动作不同；
-           补 min 让空态吃掉卡内剩余高度并居中（2026-10-24「空数据的时候页面很奇怪」）。 -->
+      <!-- 空态长在表格内部：筛到 0 条时整张表连同表头一起消失，读者当场失去列上下文
+           （2026-11-02 评审 R5）。表头常驻，空态紧接在表头下方；compact 而非 min，
+           否则视口高常量会在滚动容器里撑出一整屏空白。 -->
       <MkEmptyState
-        v-else
-        min
-        icon="◌"
-        :title="isFiltered ? '当前筛选无匹配' : '暂无目标对话'"
+        v-if="!filtered.length"
+        compact
+        :title="emptyTitle"
         :action-text="isFiltered ? '清除筛选' : '查看学习者'"
         @action="isFiltered ? clearFilters() : goLearners()"
-      />
+      >
+        <template #icon><Inbox :size="22" :stroke-width="1.7" /></template>
+      </MkEmptyState>
+      </div>
       <!-- 客户端分页常驻（2026-10-26）：0 行时也渲染「共 0 条 · 第 1 / 1 页」，否则整页像数据没了 -->
       <Pagination
         v-model:page="page"
@@ -278,13 +327,13 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { X } from 'lucide-vue-next'
+import { Inbox, X } from 'lucide-vue-next'
 import { useRoute, useRouter } from 'vue-router'
 import { isLive, openSubPage } from './store'
 import { useListQueryState } from './learner-profile'
 import { useSessionDrill } from './useSessionDrill'
 import { errMsg, timeAgo, isPageCacheFresh, liveRefreshSeq, markPageFetched } from './live'
-import { stageProgressIndex, stageTimelineText, stageTimeline, monthDayText, GOAL_STAGE_TOTAL, statusText } from './statusText'
+import { stageProgressIndex, stageTimelineText, GOAL_STAGE_TOTAL, statusText } from './statusText'
 import { useRowMenu } from './useRowMenu'
 import { useIsNarrow } from './useIsNarrow'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
@@ -294,7 +343,6 @@ import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
-import MkLoading from '@/components/mk/MkLoading.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import { useTableSort } from './useTableSort'
 import MkCols from '@/components/mk/MkCols.vue'
@@ -334,6 +382,10 @@ interface Row {
   timeline: string
   /** 时间线末条日期（阶段日期列显示值，阶段词由徽章单源；全串进 title） */
   timelineDate: string
+  /** 「最近活动」的绝对时间（悬停用；格内是 timeAgo 相对读数） */
+  timelineDateAbs: string
+  /** 关联路径名（无路径为空串）；仅「关联路径」列使用（默认隐藏） */
+  pathCell: string
   /** 时间线末站绝对时间（阶段日期列排序用；与 stageTimeline 末条同源） */
   stageDateAbs: string
   regenerating?: boolean
@@ -343,8 +395,8 @@ const loading = ref(false)
 const rows = ref<Row[]>([])
 const loadError = ref('')
 const stats = ref<{
-  total: number; active: number; completed: number; completionRate: string;
-  distinctUsers: number | null; dailyStats: { date: string; total: number }[]
+  total: number; active: number; completed: number; cancelled: number; failed: number;
+  completionRate: string; distinctUsers: number | null; dailyStats: { date: string; total: number }[]
 } | null>(null)
 /* stats 三态（P1#6）：失败置 statsError，桶位显示「统计获取失败 · 重试」而非整组静默消失 */
 const statsError = ref(false)
@@ -371,23 +423,25 @@ function isStalledRow(r: Row): boolean {
 }
 const staleActiveCount = computed(() => rows.value.filter(isStalledRow).length)
 /* ===== 状态快筛 pills（2026-10-17 从退役的分布带迁回；2026-10-26 拆开混合桶）=====
-   「已取消」只含用户取消与自动回收（cancelled / abandoned），「失败」单列 failed——
+   「已取消」只含用户取消与自动回收（cancelled / canceled / abandoned），「失败」单列 failed——
    此前三值合一档，筛出来的行状态列却写着「失败」。
-   计数取 stats 服务端全量，而后端只给合并桶（total − active − completed），
-   故拆分后的两档不显计数（不拿窗口口径冒充全量）。 */
+   计数取 stats 服务端全量（2026-11-02 P2-2 起后端按全状态 groupBy 下发，「已取消」按上面
+   这一档合并数，「失败」单独数；此前只给 total/active/completed/cancelled，两档只能空着不显）。 */
 const gcStatusPills = computed<Array<{ key: string; label: string; n: number | null }>>(() => {
   const s = stats.value
   return [
     { key: 'all', label: '全部', n: null },
     { key: 'active', label: '进行中', n: s ? s.active : null },
     { key: 'completed', label: '已完成', n: s ? s.completed : null },
-    { key: 'cancelled', label: '已取消', n: null },
-    { key: 'failed', label: '失败', n: null }
+    { key: 'cancelled', label: '已取消', n: s ? s.cancelled : null },
+    { key: 'failed', label: '失败', n: s ? s.failed : null }
   ]
 })
-/** 卡头「状态」下拉：后端未拆分的档（取消 / 失败）不显计数 */
+/** 卡头「状态」下拉：每档带服务端全量计数（stats 未取到时不显，不把未知写成 0） */
 const gcStatusOptions = computed(() => [
-  { value: '', label: '全部状态' },
+  /* 「全部状态」→「全部」：MkPillSelect 的触发器把 label（状态）与选中项并排渲染，
+     选项再写「全部状态」就是「状态 全部状态」——同一句话说了两遍（2026-11-09 走查）。 */
+  { value: '', label: '全部' },
   ...gcStatusPills.value
     .filter((p) => p.key !== 'all')
     .map((p) => ({ value: p.key, label: p.n != null ? `${p.label}（${p.n}）` : p.label }))
@@ -430,11 +484,16 @@ const gcAppliedViews = computed(() => {
    · 约束条件：真实数据稀疏（~35% 有值），逐条约束在详情里看。
    2026-10-27 用户「这个列还是重复了」：路径列并入状态（已完成即已生成），路径入口
    收进操作列（有路径时显示「路径」），不再单列重复。
-   两项仍可在「列」菜单打开；存储键升 v2，旧本地配置不覆盖新默认。 */
+   两项仍可在「列」菜单打开；存储键升 v2，旧本地配置不覆盖新默认。
+   2026-11-01 外部评审 P1：「关联路径」列同理由默认隐藏、可在「列」菜单打开。
+   2026-11-09 用户走查（图 1）：KPI 说「未生成路径 2」，列里却指不出是哪 2 条——「学习路径」
+   列改为默认可见，并紧挨状态列（见模板注）。列序同步为「摘要 → 用户 → 状态 → 学习路径 →
+   澄清轮次 → 约束 → 时间 → 操作」。 */
 const GC_DEFAULT_HIDDEN = ['constraints', 'created'] as const
 const gcColDefs = [
   { key: 'summary', label: '目标摘要' },
   { key: 'status', label: '状态' },
+  { key: 'path', label: '学习路径' },
   { key: 'turns', label: '澄清轮次' },
   { key: 'constraints', label: '约束条件' },
   { key: 'stageDate', label: '最近活动' },
@@ -509,6 +568,10 @@ function menuOpenPath(r: Row) {
   closeMenu()
   openPathStage(r)
 }
+function menuOpenTrace(r: Row) {
+  closeMenu()
+  goTrace(r)
+}
 
 /** 「已取消」档 = 用户取消 + 长时间无操作回收；失败（failed）独立成档 */
 const CANCELLED_STATUSES = new Set(['cancelled', 'canceled', 'abandoned'])
@@ -553,10 +616,13 @@ function statusCellTitle(r: Row): string | undefined {
 
 /** 目标摘要：description 优先，其次 collectedData 里的 goal 字段 */
 function summaryOf(c: Record<string, unknown>): string {
-  if (c.description) return String(c.description)
+  // 2026-11-04：个别历史会话 description 入库即为乱码（U+FFFD），别把方块原文上屏
+  const desc = String(c.description || '')
+  if (desc && !desc.includes('\uFFFD')) return desc
   try {
     const cd = JSON.parse(String(c.collectedData || '{}'))
-    return String(cd.goal || cd.learningGoal || cd.objective || cd.target || '—')
+    const goal = String(cd.goal || cd.learningGoal || cd.objective || cd.target || '')
+    return goal && !goal.includes('\uFFFD') ? goal : '—'
   } catch {
     return '—'
   }
@@ -565,13 +631,12 @@ function summaryOf(c: Record<string, unknown>): string {
 function mapRow(c: Record<string, unknown>): Row {
   const u = (c.users as Record<string, unknown>) || {}
   const stage = String(c.stage || '')
-  const stageTl = stageTimeline({
-    stage,
-    status: String(c.status || ''),
-    createdAt: String(c.createdAt || ''),
-    updatedAt: String(c.updatedAt || ''),
-    completedAt: String(c.completedAt || '')
-  })
+  // 2026-10-15 用户拍板：阶段日期拆独立列。末站绝对时间与 stageTimeline 末条同源——
+  // 已完成=completedAt（缺则回落 createdAt），其余=updatedAt || createdAt；仅排序用。
+  // 提到 return 之前，供「最近活动」列同时给出相对读数与绝对悬停。
+  const stageDateAbs = String(
+    (String(c.status || '').toLowerCase() === 'completed' ? (c.completedAt || c.createdAt) : (c.updatedAt || c.createdAt)) || ''
+  )
   return {
     id: String(c.id),
     userId: String(c.userId || ''),
@@ -583,7 +648,11 @@ function mapRow(c: Record<string, unknown>): Row {
     stage,
     // 2026-10-01 列表列裁剪：服务端已按同口径解析 summary（description 优先，
     // 其次 collectedData.goal——该大列不再随列表出库）；summaryOf 仅作旧响应兜底
-    summary: String(c.summary ?? '') || summaryOf(c),
+    // 2026-11-04：服务端若仍下发乱码摘要（历史行），退回 summaryOf 取可读值，避免方块上屏
+    summary: (() => {
+      const s = String(c.summary ?? '')
+      return s && !s.includes('\uFFFD') ? s : summaryOf(c)
+    })(),
     // 澄清轮次/约束条件（2026-10-01 对齐原型两列）：后端库内 JSON 取数带回；旧响应缺省
     turns: typeof c.turns === 'number' ? c.turns : null,
     constraints: Array.isArray(c.constraints) ? (c.constraints as unknown[]).map(String) : [],
@@ -601,13 +670,17 @@ function mapRow(c: Record<string, unknown>): Row {
       updatedAt: String(c.updatedAt || ''),
       completedAt: String(c.completedAt || '')
     }),
-    // 写法用「10月13日」而非裸「10-13」——单看不再是数字区间的形状（2026-10-13 运营走查 F2）
-    timelineDate: monthDayText(stageTl.at(-1)?.date || ''),
-    // 2026-10-15 用户拍板：阶段日期拆独立列。末站绝对时间与 stageTimeline 末条同源——
-    // 已完成=completedAt（缺则回落 createdAt），其余=updatedAt || createdAt；仅排序用
-    stageDateAbs: String(
-      (String(c.status || '').toLowerCase() === 'completed' ? (c.completedAt || c.createdAt) : (c.updatedAt || c.createdAt)) || ''
-    ),
+    stageDateAbs,
+    // 2026-11-01 外部评审 P2：本列原用 monthDayText 出「10月28日」绝对日期，而同页创建时间
+    // 列、同事其它列表页的最近活动列都是 timeAgo 相对时间——同页两种口径，且绝对日期看不出
+    // 到底离「近 7 天」有多远（KPI 卡就写着「近 7 天 +3」）。改相对时间，绝对时间退到悬停。
+    // 无时间戳的老数据保持空串（渲染「—」）：timeAgo('') 会给「从未」，那是给创建时间列的语义
+    timelineDate: stageDateAbs ? timeAgo(stageDateAbs) : '',
+    timelineDateAbs: stageDateAbs,
+    // 2026-11-01 外部评审 P1：KPI 卡说「未生成路径 1」，列表里却没有一列能指出是哪一条
+    // （路径信息此前只并进状态列）。该列默认不进表（用户 2026-10-27 拍板默认口径不改），
+    // 可在「列」菜单打开。只带路径**名**，绝不把 lp_… 内部 id 上屏。
+    pathCell: c.learningPathTitle ? String(c.learningPathTitle) : '',
   }
 }
 
@@ -650,6 +723,17 @@ const filtered = computed(() => {
 })
 
 const isFiltered = computed(() => !!keyword.value.trim() || !!statusFilter.value || noPathOnly.value || stalledOnly.value)
+/** 空态标题带当前档位（2026-11-02 P2-2）：筛「失败」却只写「当前筛选无匹配」，读者分不清
+    是这一档本来就空、还是几项筛选互相打架。有状态档时点名它；同时还有关键词/开关时
+    加限定语，免得把「没有符合关键词的失败对话」说成「没有失败对话」。 */
+const emptyTitle = computed(() => {
+  if (!isFiltered.value) return '暂无目标对话'
+  const key = statusFilter.value
+  const pill = key && key !== 'all' ? gcStatusPills.value.find((p) => p.key === key) : undefined
+  if (!pill) return '当前筛选无匹配'
+  const onlyStatus = !keyword.value.trim() && !noPathOnly.value && !stalledOnly.value
+  return onlyStatus ? `没有「${pill.label}」的目标对话` : `当前筛选里没有「${pill.label}」的目标对话`
+})
 function clearFilters() {
   keyword.value = ''
   statusFilter.value = ''
@@ -759,6 +843,9 @@ async function load(force = false) {
             total: Number(s.total || 0),
             active: Number(s.active || 0),
             completed: Number(s.completed || 0),
+            // 取消档含 cancelled / canceled / abandoned，分桶在服务端做（2026-11-02 P2-2）
+            cancelled: Number(s.cancelled || 0),
+            failed: Number(s.failed || 0),
             completionRate: String(s.completionRate || '0'),
             distinctUsers: s.distinctUsers == null ? null : Number(s.distinctUsers),
             dailyStats: Array.isArray(s.dailyStats) ? s.dailyStats : []
@@ -880,19 +967,28 @@ onMounted(() => {
 /* 可点 KPI 的选中态（停滞卡 → 停滞快筛）：蓝只给可交互与选中，与
    MemoryReview .mr-kpi--on / LearnerCenter .lc-kpi--on 同一判例 */
 .gc-kpi--on { border-color: var(--mk-blue); }
+/* 行菜单打开中的所属行：浮层是 fixed 定位、脱离行盒，不加底色时看不出它属于哪一条 */
+.gc-row--menu { background: var(--mk-graph-flow-bg); }
 /* 行点击/焦点态已升共享契约（table.mk-table--click + tr:focus-visible 原语，2026-10-03） */
 /* 固定列宽（2026-10-22 用户「翻页不同页码时候，列宽怎么还在变呢」）：摘要/用户两列
    在 auto 布局下按当页最长文本分宽，翻页跳动；fixed 后按表头宽度定死，余量按权重摊到各列。
    宽度取 1280 下的现值再留一点余量，保证 1200 档不出横滚。 */
 /* 2026-10-24 视觉修复：状态（100）/创建时间（84）让出的宽度归目标摘要主列，
-   摘要两行档不再在 240px 里只露出语义碎片。 */
-.gc-c-summary { width: 330px; }
-.gc-c-user { width: 160px; }
-.gc-c-status { width: 84px; }
-.gc-c-turns { width: 68px; }
+   摘要两行档不再在 240px 里只露出语义碎片。
+   2026-11-09 用户走查（图 1）「1920 下首列占 38%,用户列被推到右边」：主列改百分比 +
+   上限封顶（28–34% 且 ≤390px，与教学会话 .ts-c-topic 同一判例），余量摊给各指标列；
+   下限 28%（≈240px）仍是两行摘要读得懂语义骨架的宽度。
+   fixed 档下 min-width/max-width 同时生效意味着列宽 = clamp(240, 30%, 390)，
+   表格余量仍按各列 width 权重分摊，不会全堆进首列。 */
+.gc-c-summary { width: 30%; min-width: 240px; max-width: 390px; }
+.gc-c-user { width: 170px; }
+.gc-c-status { width: 96px; }
+/* 学习路径：只放「已生成 / 未生成」一倍徽章，路径名走 title */
+.gc-c-path { width: 96px; }
+.gc-c-turns { width: 84px; }
 .gc-c-constraints { width: 140px; }
-.gc-c-stage-date { width: 78px; }
-.gc-c-created { width: 72px; }
+.gc-c-stage-date { width: 92px; }
+.gc-c-created { width: 84px; }
 /* 操作列宽度由全局 .mk-c-act 统一（2026-10-27） */
 /* fixed 档里列宽即契约：行内 min-width 会把内容顶出单元格，统一归零由截断兜底 */
 .gc-table .gc-user { min-width: 0; }
@@ -901,6 +997,10 @@ onMounted(() => {
    2026-10-22 之前给过 200/176px 兜底，是为自动布局下防被长摘要挤扁；fixed 后
    min-width 只会把内容顶出单元格，已由上方 .gc-table .gc-user 归零 */
 .gc-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
+/* 澄清轮次（2026-11-09 用户走查图 1）：「7 轮」是短读数，右对齐会让表头与数据分站两侧、
+   并与左侧「最近活动」只隔 200px 空白却被读成黏在一起。改跟表头一起左对齐
+   （判例：教学会话的「12 分钟」），等宽数字保住竖向读数对齐。 */
+.gc-turns { font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* 分布条已退役（2026-10-17）：原页面级分布带连同 .gc-distband 类一起下线，
    卡头状态 pills 与「未生成路径」快筛并列；页面级间距仍由 .mk-page 的 --mk-stack-gap 统一供 */
 .gc-user .mk-cell-main { min-width: 0; flex: 1; }

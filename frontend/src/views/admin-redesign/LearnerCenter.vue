@@ -68,6 +68,7 @@
         label="数据覆盖率"
         :value="kpiValue(confCoverageText)"
         :tone="loadFailed || confCoverageText === '—' ? 'muted' : ''"
+        :value-note="loadFailed ? '' : coverageNote"
       />
     </section>
 
@@ -82,8 +83,8 @@
     </div>
 
     <div class="mk-card mk-card--fill">
-      <!-- 失败态整块收起工具栏：pill / 搜索 / 全部重算 / 列 在没有数据时都点不出结果，
-           使用者会先试搜索再回到「重试」（2026-10-26 走查） -->
+      <!-- 失败态整块收起工具栏：pill / 搜索 / 列 在没有数据时都点不出结果，
+           使用者会先试搜索再回到「重试」（2026-10-26 走查；全部重算已收进行内 ⋯） -->
       <div v-if="!loadFailed" class="mk-card__head">
         <div class="mk-filter">
           <!-- 风险筛选归位（2026-10-26 二次走查）：上一轮把入场做成「KPI 卡可点」并撤掉卡头
@@ -107,25 +108,6 @@
             class="mk-btn mk-btn--sm"
             @click="recomputeAbort = true"
           >停止</button>
-          <!-- 批量写操作不占列表主工具位：与「列」并排收进 ⋯ 菜单 -->
-          <div class="mk-menu">
-            <button
-              type="button"
-              class="mk-menu__btn"
-              aria-label="更多操作"
-              aria-haspopup="menu"
-              :aria-expanded="moreMenu === 'more'"
-              @click.stop="toggleMoreMenu('more')"
-            >⋯</button>
-            <div v-if="moreMenu === 'more'" class="mk-menu__pop" :style="morePopStyle" @click.stop>
-              <button
-                type="button"
-                class="mk-menu__item"
-                :disabled="recomputingAll || !filtered.length"
-                @click="closeMoreMenu(); recomputeAll()"
-              >{{ recomputingAll ? `重算中 ${recomputeProgress}/${recomputeTotal}…` : '全部重算' }}</button>
-            </div>
-          </div>
           <MkCols
             :col-defs="lcColDefs"
             storage-key="wf_learner_hidden_cols_v3"
@@ -143,7 +125,6 @@
         <MkEmptyState
           min
           tone="error"
-          icon="◌"
           title="学习者快照加载失败"
           :description="liveFailures.learners"
           action-text="重试"
@@ -199,25 +180,43 @@
             <td v-if="!lcHiddenCols.has('learner')">
               <div class="lc-celluser">
                 <MkCellAvatar :name="r.name" :tone="isVirtualRow(r) ? 'virtual' : r.isTestAccount ? 'test' : 'default'" />
-                <div class="mk-cell-main">
-                  <strong :title="r.name">{{ r.name }}</strong>
-                  <!-- 备注在副行：姓名行保持全额宽度（2026-10-24 压字回归） -->
-                  <!-- 副行去重（2026-10-24）：邮箱 local part 与姓名同值时不复读；无副行内容时整行不占位 -->
-                  <span v-if="emailSubline(r.email, r.name) || r.isTestAccount" class="mk-cell-subline">
-                    <span v-if="emailSubline(r.email, r.name)" class="mk-cell-sub" :title="r.email">{{ r.email }}</span>
-                    <span v-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test">测试</span>
-                  </span>
-                </div>
+              <div class="mk-cell-main">
+                <strong :title="r.email ? `${r.name}
+${r.email}` : r.name">{{ r.name }}</strong>
+                <!-- 副行统一两行结构（2026-11-09 审计 #3）：有邮箱显邮箱、无邮箱退回截断 user id，
+                     与记忆复习同一取法，每行都有副行，杜绝 uxcheck 这类无邮箱账号的纵向错位与重名歧义。
+                     邮箱 local part 与姓名同值时不复读（沿用 emailSubline），去重后仍退回短 id。 -->
+                <span class="mk-cell-subline">
+                  <span v-if="emailSubline(r.email, r.name)" class="mk-cell-sub" :title="r.email">{{ r.email }}</span>
+                  <span v-else class="mk-cell-sub mono" :title="r.id">{{ shortId(r.id) }}</span>
+                  <span v-if="r.isTestAccount" class="mk-badge mk-badge--sm mk-badge--test">测试</span>
+                </span>
+              </div>
               </div>
             </td>
             <td v-if="!lcHiddenCols.has('progress')">
               <!-- 审核 #18（2026-10-06）：任务/路径（与邮箱同理）被 max-width 截断，
                    补 title 全值——被截掉的部分不再无处可查 -->
               <div class="mk-cell-main lc-task">
-                <strong class="progress-title" :title="r.task || '未开始'">{{ r.task || '未开始' }}</strong>
+                <strong class="progress-title" :title="progressMainTitle(r)">{{ progressMainTitle(r) }}</strong>
                 <!-- 副行只放路径真值：任务为空时主行已写「未开始」，副行再补一句「尚未开始学习」
-                     等于同一状态写两遍（2026-10-29 冗余副文审计） -->
-                <span v-if="r.path" class="mk-cell-sub" :title="r.path">{{ r.path }}</span>
+                     等于同一状态写两遍（2026-10-29 冗余副文审计）。
+                     路径与「共 N 条路径」角标同一行（2026-11-02 P1-7）：角标原先独占第三行，
+                     被本列的限高整段裁掉，多路径学员在表里又只剩一条路径。
+                     QW4：已下线路径的历史完成量也放这一行（路径无 active 时不占位）。 -->
+                <span v-if="r.path || extraPathCount(r) > 0 || progressNote(r)" class="mk-cell-subline">
+                  <span v-if="r.path" class="mk-cell-sub" :title="r.path">{{ r.path }}</span>
+                  <span v-if="progressNote(r)" class="mk-cell-sub" :title="progressNote(r)">{{ progressNote(r) }}</span>
+                  <!-- 2026-11-01 外部评审 P1：本列只展示「最近更新的那条在学路径」，
+                       多路径学员看起来像只有一条（同一学员在学习路径列表里明明有 2 条）。
+                       这里把总数标出来，读成「其中一条」而不是「全部」；单路径学员不标，
+                       因为上一行路径名已经就是全部了。 -->
+                  <span
+                    v-if="extraPathCount(r) > 0"
+                    class="mk-badge mk-badge--sm mk-badge--muted"
+                    :title="`该学员共有 ${r.pathCount} 条在学路径，本列展示的是最近更新的那条，另外 ${extraPathCount(r)} 条可在「学习路径」列表查看`"
+                  >共 {{ r.pathCount }} 条路径</span>
+                </span>
               </div>
             </td>
             <td v-if="!lcHiddenCols.has('status')">
@@ -239,7 +238,11 @@
               <span v-if="r.risk" class="risk-text">{{ r.risk }}</span>
               <span v-else class="mk-na">—</span>
             </td>
-            <td v-if="!lcHiddenCols.has('conf')" class="mk-num lc-conf-cell">
+            <!-- 2026-11-09 用户走查：置信度格去掉 mk-num——它本是左对齐格（.lc-conf-cell 早就
+                 text-align:left 覆盖了 mk-num 的右对齐），却因挂着 mk-num 让右侧「数据更新」列
+                 吃到 `.mk-table td.mk-num + td { padding-left: 24px }` 的补偿内衬，
+                 同一张表里各列左内衬忽大忽小。左对齐格不再挂数字列类。 -->
+            <td v-if="!lcHiddenCols.has('conf')" class="lc-conf-cell">
               <span
                 v-if="r.confidence != null && r.task"
                 class="conf"
@@ -260,13 +263,16 @@
                    风险行的琥珀色已撤——风险摘要在左侧列，动作本身与风险无关，颜色只保留一种。
                    「重算」这种低频维护动作收进 ⋯。 -->
               <div class="mk-actions">
+                <!-- 2026-11-01 外部评审 P2：对「未开始」且没有任何在学路径的空白账号，
+                     给的却是蓝色高亮的「发提醒」，而预填正文是「希望保持当前学习节奏」——
+                     对该账号语义不成立，也容易误触骚扰。这类行改为「邀请开启学习」，文案同步。 -->
                 <button
                   v-if="isLive && !r.isTestAccount"
                   type="button"
                   class="mk-link"
-                  title="发送站内提醒（站内信）"
+                  :title="notStarted(r) ? '发送站内邀请（站内信）：该学员还没有开始任何学习' : '发送站内提醒（站内信）'"
                   @click.stop="openIntervene(r)"
-                >发提醒</button>
+                >{{ notStarted(r) ? '邀请开启学习' : '发提醒' }}</button>
                 <div class="mk-menu">
                   <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="rowMenu === r.id" @click.stop="toggleRowMenu(r.id)">⋯</button>
                   <div v-if="rowMenu === r.id" class="mk-menu__pop" role="menu" aria-label="更多操作" :style="rowPopStyle" @click.stop>
@@ -277,6 +283,15 @@
                       :disabled="recomputingAll || isUpdating(r.id)"
                       @click="closeRowMenu(); recompute(r)"
                     >{{ isUpdating(r.id) ? '重算中…' : '重算' }}</button>
+                    <!-- 卡头批量溢出入口（原独立 ⋯）收进同一行 ⋯，全页只留一个溢出入口：
+                         「全部重算」作用于当前筛选命中，低频维护动作不占列表主工具位 -->
+                    <button
+                      type="button"
+                      class="mk-menu__item"
+                      role="menuitem"
+                      :disabled="recomputingAll || !filtered.length"
+                      @click="closeRowMenu(); recomputeAll()"
+                    >{{ recomputingAll ? `重算中 ${recomputeProgress}/${recomputeTotal}…` : '全部重算（当前筛选）' }}</button>
                   </div>
                 </div>
               </div>
@@ -321,8 +336,10 @@
             <div class="lc-iv__actions">
               <button type="button" class="mk-btn mk-btn--ghost" @click="goInterveneSession(intervene)">查看学习详情</button>
             </div>
+            <!-- 2026-10-31 二轮评审 P2：第一格是标题不是动作复述——Label 改「提醒标题 *」；
+                 内容本就选填（COPY 约定 R7：非必填不标注），不再加误导性必填星号 -->
             <label class="mk-field">
-              <span class="mk-field__label">发送站内提醒 <em class="mk-field__req">*</em></span>
+              <span class="mk-field__label">提醒标题 <em class="mk-field__req">*</em></span>
               <input v-model="interveneTitle" class="mk-field__input" placeholder="例如：学习状态提醒" />
             </label>
             <label class="mk-field">
@@ -345,7 +362,7 @@
 <script setup lang="ts">
 import { computed, getCurrentInstance, onBeforeUnmount, ref, watch } from 'vue'
 import { openSubPage, isLive, LEARNER_DETAIL_LANDING } from './store'
-import { liveLearners, liveLearnersTotal, liveRecomputeLearner, refreshLiveLearners, liveLoading, liveFailures, liveFailureRaw, loadLiveData, timeAgo, errMsg } from './live'
+import { liveLearners, liveLearnersTotal, liveRecomputeLearner, refreshLiveLearners, liveLoading, liveFailures, liveFailureRaw, loadLiveData, timeAgo, errMsg, shortId } from './live'
 import { evidenceLowConfidence } from './evidence'
 import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
@@ -363,6 +380,7 @@ import { useEscape } from './useEscape'
 import { useRowMenu } from './useRowMenu'
 import { useTableSort } from './useTableSort'
 import { useListQueryState } from './learner-profile'
+import { statusText as pathStatusText } from './opsShared'
 import { adminNotificationsApi, adminLearnerModelsApi } from '@/api/adminApi'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 
@@ -387,6 +405,10 @@ interface Row {
   ts?: number
   /** 当前活跃路径 ID：重算必须带上，否则后端写 global 口径投影而本页读 path 口径 */
   pathId?: string
+  /** 在学路径总数（后端 activePathCount）：>1 时「当前进度」列标「共 N 条路径」 */
+  pathCount?: number | null
+  /** 无 active 路径时的兜底路径（已下线 / 已完成 / 生成失败等），含历史完成进度；active 路径存在时为 null */
+  fallbackPath?: { status: string; completedTasks: number; totalTasks: number } | null
 }
 
 const keyword = ref('')
@@ -440,15 +462,53 @@ useOverlay(computed(() => !!intervene.value), intervenePanelRef)
 useMaskClose(interveneMaskRef, () => { intervene.value = null })
 useEscape(() => !!intervene.value, () => { intervene.value = null })
 
+/** 「未开始」判定：没有当前任务且没有在学路径（列表里主行写「未开始」的那些空白账号）。
+    它们的指标全是「—」，按快照默认值会落进「疲劳：低」分支，于是提醒正文变成
+    「希望保持当前学习节奏」——对从未开始学习的账号说不通（2026-11-01 外部评审 P2）。 */
+function notStarted(r: Row): boolean {
+  return !r.task && !r.path
+}
+/** 当前进度主标题（2026-11-09 审计 QW4）：有活跃任务显任务名；无活跃任务但有兜底路径（已下线等）
+ *  显「<路径状态>」并区分有无历史完成；其余显未开始。状态词复用 opsShared 的路径域字典
+ *  （archived → 已下线），不在页面内另造词。 */
+function progressMainTitle(r: Row): string {
+  if (r.task) return r.task
+  const fb = r.fallbackPath
+  if (fb) {
+    const status = pathStatusText(fb.status)
+    // 有历史完成：主标题只写状态，具体进度由 progressNote 表达
+    if (fb.completedTasks > 0) return status
+    // 一次都没完成：带上「未开始」，与真正的新账号区分（不写 0%，也不与有进度者混同）
+    return `${status} · 未开始`
+  }
+  return '未开始'
+}
+/** 当前进度副注（QW4）：兜底路径有历史完成时给「历史进度 N%」并附「已完成/总任务」分子分母，
+ *  0 完成不写百分比，与真正的新账号可区分。 */
+function progressNote(r: Row): string {
+  const fb = r.fallbackPath
+  if (!fb || !fb.totalTasks || !fb.completedTasks) return ''
+  const pct = Math.round((fb.completedTasks / fb.totalTasks) * 100)
+  return `历史进度 ${pct}%（${fb.completedTasks}/${fb.totalTasks}）`
+}
 function openIntervene(r: Row) {
   sentTo.value = null
   intervene.value = r
+  if (notStarted(r)) {
+    interveneTitle.value = '开启学习邀请'
+    interveneBody.value = '你还没有开始第一个学习目标。可以从建立一次目标对话开始，我们会据此为你生成学习路径。'
+    return
+  }
   interveneTitle.value = r.fatigue === '高' ? '学习状态提醒：疲劳度偏高' : '学习状态提醒'
   interveneBody.value = r.risk
     ? `检测到学习状态需关注：${r.risk}。建议调整学习节奏或补充练习。`
     : r.fatigue !== '低'
       ? `检测到疲劳度${r.fatigue}，建议适当休息后继续学习。`
       : '希望保持当前学习节奏，如有困难可随时反馈。'
+}
+/** 本列只展示一条在学路径：>1 时给出「共 N 条路径」角标（后端 activePathCount） */
+function extraPathCount(r: Row): number {
+  return Math.max(0, (r.pathCount || 0) - (r.path ? 1 : 0))
 }
 /** 与行内「详情」同一落点：弹窗里的风险摘要就在证据页签 */
 function goInterveneSession(r: Row) {
@@ -486,9 +546,7 @@ async function sendIntervene() {
   }
 }
 
-/** 卡头「⋯」：批量写操作（全部重算）收在这里，不占列表主工具位 */
-const { openMenu: moreMenu, toggleMenu: toggleMoreMenu, closeMenu: closeMoreMenu, popStyle: morePopStyle } = useRowMenu()
-/** 行内 ⋯（重算）：与卡头 ⋯（全部重算）分开，避免同一状态互相串行 */
+/** 行内 ⋯（重算 / 全部重算）：与卡头其余工具并列，单一溢出入口 */
 const { openMenu: rowMenu, toggleMenu: toggleRowMenu, closeMenu: closeRowMenu, popStyle: rowPopStyle } = useRowMenu()
 
 /** P1#16 数据层接线：liveLearnersTotal=后端分页 total；真窗口显「N · 已载 M」，
@@ -538,7 +596,9 @@ const rows = computed<Row[]>(() =>
     confidence: m.confidence,
     ts: dataAt ? new Date(dataAt).getTime() : undefined,
     recomputedAt: m.generatedAt || '',
-    pathId: m.pathId
+    pathId: m.pathId,
+    pathCount: typeof m.activePathCount === 'number' ? m.activePathCount : null,
+    fallbackPath: m.fallbackPath ?? null
     }
   })
 )
@@ -606,6 +666,11 @@ const avgConfText = computed(() => {
    isRisk 与「需关注」判定，只是不再单独占一张读数卡。 */
 const confCoverageText = computed(() =>
   rows.value.length ? `${Math.round((confRows.value.length / rows.value.length) * 100)}%` : '—'
+)
+/** 数据覆盖率卡副注（2026-11-09 审计 #3）：X/Y 位有快照，分母已加载学习者，分子有学习任务且
+ *  测得置信度的快照，与卡面百分比同源，失败态不显注。 */
+const coverageNote = computed(() =>
+  loadFailed.value || !rows.value.length ? '' : `${confRows.value.length}/${rows.value.length} 位有快照`
 )
 /** 平均值必须带基数：n= 之外的行（无任务/无快照）不进均值，读数才知道它代表谁。 */
 const avgConfHint = computed(() =>
@@ -806,6 +871,9 @@ async function recomputeAll() {
     recomputeTotal.value = 0
   }
 }
+
+/* 供单测直接断言「当前进度」主标题与历史进度副注规则（2026-11-09 审计 QW4），无需整页挂载 */
+defineExpose({ progressMainTitle, progressNote })
 </script>
 
 <style scoped>
@@ -823,7 +891,17 @@ async function recomputeAll() {
 /* 失败态外层：只用来挂后端原文的悬停提示（原文不上屏，见 live.ts errMsg 的 RAW_ERROR_RE） */
 .lc-fail { flex: 1; min-height: 0; display: flex; }
 .lc-fail > .mk-empty--min { flex: 1; min-height: 0; }
-.lc-tablewrap { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+/* 2026-11-09 审计 #1：表格滚动区底部加渐隐遮罩与留白，最后一行不被腰斩贴着分页栏。
+   保留内部滚动（mk-card--fill 固定卡高，改页面级滚动会让表格溢出卡体而非整页滚动，反而破坏壳体）。
+   留白 16px 大于遮罩渐隐区 12px，渐隐只落在空白区，不裁任何字形。 */
+.lc-tablewrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 16px;
+  -webkit-mask-image: linear-gradient(to bottom, black 0, black calc(100% - 12px), transparent 100%);
+  mask-image: linear-gradient(to bottom, black 0, black calc(100% - 12px), transparent 100%);
+}
 /* 学习者单元格（原型 celluser：头像 + 主行/副行 + 身份徽章，Users.vue ul-user 同款判例） */
 .lc-celluser { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .lc-celluser .mk-cell-main { min-width: 0; flex: 1; }
@@ -848,12 +926,10 @@ async function recomputeAll() {
 /* 主任务与风险摘要都是「一眼要读完」的句子：两行截断（title 仍有全文），
    不再用单行 nowrap 把语义切成半句（2026-10-24 复核）。
    2026-10-26 有数据走查：主行两行 + 副行一行 = 93px，而同行其他行是 68px，
-   一张表里两种行高看起来像排版坏了。主行保持两行能力，但整格限高，
-   超出部分由 clamp 收敛——行高由列内容的上限决定，不由当页最长那条决定。 */
-.lc-table .lc-task {
-  max-height: 44px;
-  overflow: hidden;
-}
+   一张表里两种行高看起来像排版坏了 → 当时给整格加了 44px 限高。
+   2026-11-02 P1-7：这个限高只够两行主任务，路径副行和「共 N 条路径」角标被整段裁掉
+   （裁剪不报错，所以一直没人发现）。行高的边界交给下面的主行 clamp 就够：最多两行主任务
+   + 一行路径/角标，不会被当页最长的那条任务撑高，也不再裁掉信息。 */
 .lc-table .lc-task .progress-title {
   font-weight: 600;
   display: -webkit-box;
@@ -926,4 +1002,9 @@ async function recomputeAll() {
 .lc-iv__actions { display: flex; gap: 8px; flex-wrap: wrap; }
 /* 可点 KPI 的选中态：蓝只给可交互与选中（2026-10-26：KPI 即筛选入口） */
 .lc-kpi--on { border-color: var(--mk-blue); }
+/* 本页是 6 张卡的 KPI 带，共享原语的 180px 换行基准下，1280 与 1440 两档都只排得下 5 张，
+   第 6 张独占第二行并被 flex-grow 拉成整行（卡面 986px 里只有「数据覆盖率 27%」约 90px 内容，
+   2026-11-03 视觉走查）——正是外部评审在「访问与注册」点出的「左挤右空大白板」同款。
+   收到 150px：1280 内容宽 986 恰好容得下 6×151 + 5×16 间距，六个读数一行读齐。 */
+.lc-kpi > * { flex-basis: 150px; }
 </style>

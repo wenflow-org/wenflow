@@ -307,6 +307,107 @@ export function boardFigureForRender(board: BoardState): { kind: string; spec: R
 }
 
 /**
+ * 历史里最后一条随消息下发的白板版本（2026-10-31 用户走查防复读）：
+ * 共享白板是常驻板书，板没变化就不该随新消息重发——实测同一张板挂在相隔 10 分钟的
+ * 两条导师消息下，滚动区被同图刷屏。扫描历史（不含本轮 assistantMessage），
+ * 返回最后一条带白板图消息的 boardRevision；没有则 null。导出仅为测试。
+ */
+export function getLastSentBoardRevision(
+  messages: ReadonlyArray<{ role?: unknown; figures?: ReadonlyArray<{ board?: boolean; boardRevision?: number }> | undefined }>,
+): number | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i] as { role?: unknown; figures?: ReadonlyArray<{ board?: boolean; boardRevision?: number }> | undefined };
+    if (m.role !== 'assistant') continue;
+    const boardFigure = (m.figures || []).find((f) => f.board === true);
+    if (boardFigure) {
+      return typeof boardFigure.boardRevision === 'number' ? boardFigure.boardRevision : null;
+    }
+  }
+  return null;
+}
+
+/** 随消息下发的白板附件（挂到 assistantMessage 的两个字段） */
+export interface BoardFigureAttachment {
+  figures: Array<{
+    engine: 'svg';
+    kind: string;
+    palette: string;
+    spec: Record<string, unknown>;
+    caption: null;
+    board: true;
+    boardRevision: number;
+  }>;
+  figureSource: {
+    trigger: 'board';
+    reason: null;
+    kindHint: string | null;
+    ruleWhy: string;
+    matched: never[];
+  };
+}
+
+/**
+ * 首版空壳矩阵守卫（2026-11-02 真实课堂实测）。
+ *
+ * 矩阵板的 tone 语义是「学生标到什么程度」：hit=已标出 / miss=漏标 / dup=重叠 / key=关键。
+ * 首版板书时学生一项都还没标，全 hit 等于把「要标的东西」直接说成「已经标完」——实测
+ * 6×3=18 格全 hit，配图例「✓ 已标出」，学生看到一屏勾却读不出任何内容（同一任务的材料
+ * 本身也没写出来，见 subtask-material-completeness）。
+ *
+ * 判据（高精度，只在首版生效，避免误伤「全部识别完」的合法复盘板）：
+ * 首版（revision ≤ 1）+ matrix + 铺满整格 + 全 hit。
+ */
+export function isDegenerateFirstBoard(board: BoardState | null | undefined): boolean {
+  if (!board || board.revision > 1) return false;
+  const figure = board.figure;
+  if (!figure || figure.kind !== 'matrix') return false;
+  const spec = figure.maskedSpec as {
+    rowLabels?: unknown;
+    colLabels?: unknown;
+    cells?: unknown;
+  };
+  const rows = Array.isArray(spec.rowLabels) ? spec.rowLabels.length : 0;
+  const cols = Array.isArray(spec.colLabels) ? spec.colLabels.length : 0;
+  const cells = Array.isArray(spec.cells) ? (spec.cells as Array<{ tone?: unknown }>) : [];
+  if (!rows || !cols || cells.length < rows * cols) return false;
+  return cells.every((cell) => String(cell?.tone ?? '') === 'hit');
+}
+
+/**
+ * 本轮消息应挂的白板附件：板存在、本轮没有其他配图、且板版本与上次下发不同
+ * （板没变化 ⇒ 不重发，老师文本对「板上」的指代仍由紧邻上一条消息承接）。
+ * 首轮开板（历史无白板图）与换板（revision 提升）照常下发。返回 null = 本轮不挂。
+ */
+export function buildBoardFigureAttachment(
+  board: BoardState,
+  previousMessages: ReadonlyArray<{ role?: unknown; figures?: ReadonlyArray<{ board?: boolean; boardRevision?: number }> | undefined }>,
+  palette: string,
+): BoardFigureAttachment | null {
+  if (board.revision === getLastSentBoardRevision(previousMessages)) return null;
+  const rendered = boardFigureForRender(board);
+  if (!rendered) return null;
+  return {
+    figures: [{
+      engine: 'svg',
+      kind: rendered.kind,
+      palette,
+      spec: rendered.spec,
+      caption: null,
+      // 标记为白板：不计入一次性配图的会话配额/同骨架去重
+      board: true,
+      boardRevision: board.revision,
+    }],
+    figureSource: {
+      trigger: 'board',
+      reason: null,
+      kindHint: board.figure?.kind ?? null,
+      ruleWhy: '任务级共享白板（方案 A：首轮板先行，后续老师先说、同轮刷新）',
+      matched: [],
+    },
+  };
+}
+
+/**
  * 老师可见画面的**文本描述**——这是「图教分离」的关键输入。
  *
  * 设计要点：只描述**板上真实可见**的内容（经归一化裁剪、经脱敏挖空之后的），
@@ -319,8 +420,75 @@ function visibleSpec(f: BoardFigureState): Record<string, unknown> {
   return f.maskedSpec;
 }
 
-export function describeBoardForTeacher(board: BoardState): string {
-  const f = board.figure;
+/**
+ * 板书设计请求的基础指令（2026-11-03 从 teaching-turn-engine 搬来，便于该文件缩短：
+ * 超大文件棘轮只许缩短）。首轮不再是「必须出图」：材料本身就是要读/要标的文字对象时，
+ * 绘图员应当声明不画（2026-11-02 实测：一条「6 个句子标时间标志词」的课被硬画成 6 格结论短语）。
+ */
+export const BOARD_DESIGN_BASE_INSTRUCTION =
+  '先判断这块任务要不要板书：图必须承载关系（位置/数值/区间/指向/包含/并排/分帧）；'
+  + '若学习对象只是一组待读、待标注的句子/段落/题目，或画出来只是把句子装进框，'
+  + '直接输出 {"figure":null,"reason":"材料是要读的文字，没有几何"}。'
+  + '确实要画时，画完整形态：骨架、步骤、数值、单位、副标注都写全，一个 ? 都不要留。'
+  + '标题只点题，不写结论。';
+
+/** 本轮该不该把板挂到消息上：判据全在这里，调用方只按 kind 分派日志/赋值。 */
+export type BoardAttachmentDecision =
+  | { kind: 'degenerate' }
+  | { kind: 'unchanged' }
+  | { kind: 'attached'; figures: BoardFigureAttachment['figures']; figureSource?: BoardFigureAttachment['figureSource'] };
+
+/**
+ * 决定本轮的板挂载（2026-11-03 从 teaching-turn-engine 搬来）。
+ *
+ * - `degenerate`：首版空壳矩阵不摆（2026-11-02 实测）——首版矩阵全格 hit = 宣称"全部已标出"，
+ *   学生看到一屏 ✓ 却读不出内容。宁可不摆板，也不摆一张假状态板。
+ * - `unchanged`：板版本与上次下发一致 ⇒ 板没变，不随本轮消息重发（2026-10-31 用户走查）。
+ * - `attached`：正常挂载，附件构造在 buildBoardFigureAttachment。
+ */
+export function decideBoardAttachment(
+  board: BoardState,
+  previousMessages: ReadonlyArray<{ role?: unknown; figures?: ReadonlyArray<{ board?: boolean; boardRevision?: number }> | undefined }>,
+  palette: string,
+): BoardAttachmentDecision {
+  if (isDegenerateFirstBoard(board)) return { kind: 'degenerate' };
+  const attachment = buildBoardFigureAttachment(board, previousMessages, palette);
+  if (!attachment) return { kind: 'unchanged' };
+  return { kind: 'attached', figures: attachment.figures, figureSource: attachment.figureSource };
+}
+
+/**
+ * 学生屏幕上是否真的有一块板（提示词侧与校验器侧**共用**的判据，#244）。
+ *
+ * 为什么不是 `!!board`：首版空壳矩阵（全格 hit、无留白）由 `decideBoardAttachment`
+ * 判为 `degenerate` 而**永不下发**（见 isDegenerateFirstBoard 与 decideBoardAttachment），
+ * 但 `board.figure` 仍非空、`describeBoardForTeacher` 也照常描述它。若把这种板算作「有板」，
+ * 守卫就会放行「左边那栏」——学生屏幕上一片空白，正是 #244 要修的现象。
+ */
+export function boardReachesStudent(board: BoardState | null | undefined): boolean {
+  return !!board?.figure && !isDegenerateFirstBoard(board);
+}
+
+/**
+ * 本轮送给老师的白板输入（#244）：提示词里的 `boardContext` 文案与校验器用的 `boardPresent`
+ * **同源产出**，避免「文案说有板 / 信号说没板」再次对不上。
+ * 返回值直接 Object.assign 进 turnInput（见 teaching-turn-engine 的注入点）。
+ */
+export function boardPromptInputForTeacher(
+  board: BoardState | null | undefined,
+): { boardContext: string; boardPresent: boolean } {
+  const onScreen = boardReachesStudent(board) ? board : null;
+  return { boardContext: describeBoardForTeacher(onScreen), boardPresent: !!onScreen };
+}
+
+/**
+ * 给老师的白板描述。`board` 为 null（本任务从未生成过板书）时返回那句正向的
+ * 「本任务暂无板书」——这句原先就写好了，却因调用点的 `if (board)` 守卫成了不可达分支
+ * （2026-11-03 心理学走查 S3-3：无板回合模型自己假设有一块板并描述它的排布，
+ * 一手「两栏」一手「两个圈」。改口径见 teaching-turn-engine 的注入点注释）。
+ */
+export function describeBoardForTeacher(board: BoardState | null | undefined): string {
+  const f = board?.figure;
   if (!f) return '【白板】本任务暂无板书。请纯用语言推进，不要提及或假设任何图。';
 
   const spec = visibleSpec(f);

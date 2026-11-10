@@ -33,6 +33,8 @@ export type DegradationFaultCategory =
   | 'MODEL_AFFIRMATION_AFTER_FAILED_CHECKPOINT'
   /** 代码裁决判对、老师回复却否定作答（2026-10-28 f3 实拍：答案键 A / 学生选 A / 仍说「这道不对」） */
   | 'MODEL_NEGATION_ON_PASSED_CHECKPOINT'
+  /** 内容去重删课留痕（2026-11-08）：跨阶段近似标题任务被删时不再只进 logger，全量落台账可查询 */
+  | 'CONTENT_DEDUP_DROPPED'
   | 'UNKNOWN';
 
 export type DegradationSeverity = 'P1_CRITICAL' | 'P2_DEGRADED' | 'P3_NOTICE';

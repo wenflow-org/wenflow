@@ -12,6 +12,8 @@ const mockSetAuditAction = jest.fn();
 const mockSafeHttpRequest = jest.fn();
 const mockTestConnection = jest.fn();
 const mockGetConfig = jest.fn();
+/** #177 删除门禁读到的启用 skill 绑定（默认空，按需在用例里覆写）。 */
+const mockSkillBindings: Array<{ skillId: string; model: string | null; endpoint: string | null }> = [];
 
 jest.mock('../../../config/system-database', () => ({
   __esModule: true,
@@ -25,6 +27,10 @@ jest.mock('../../../config/system-database', () => ({
       deleteMany: async ({ where }: { where: { providerId: string } }) => {
         mockSecretRows.delete(where.providerId);
       }
+    },
+    // #177 删除门禁会读启用中的 skill 绑定；默认无绑定，按需在用例里覆写。
+    skill_model_configs: {
+      findMany: async () => mockSkillBindings
     }
   }
 }));
@@ -101,6 +107,7 @@ beforeEach(() => {
   process.env.LLM_PROVIDERS_CONFIG = tempConfig;
   fs.writeFileSync(tempConfig, `${JSON.stringify(FIXTURE, null, 2)}\n`, 'utf-8');
   mockSecretRows.clear();
+  mockSkillBindings.length = 0;
   mockSetAuditAction.mockClear();
   mockSafeHttpRequest.mockReset();
   mockTestConnection.mockReset();
@@ -167,6 +174,96 @@ describe('错误映射', () => {
     const payload = res.json.mock.calls[0][0];
     expect(payload.success).toBe(true);
     expect(payload.warnings.join(' ')).toContain('别名「chat」');
+  });
+
+  /* 2026-11-05 产品决定下线 #177 目录外默认门禁，见 CHANGELOG：
+     DB 平台默认引用不再阻止删除模型（文件 root.defaults 的校验仍在 service 里）。 */
+  it('#177 已下线：删除被平台 DB 默认引用的模型 → 不再拦截', async () => {
+    mockGetConfig.mockResolvedValue({
+      apiUrl: 'https://platform.example.com/v1',
+      apiKey: 'platform-key',
+      defaultModel: 'cm-1',
+      defaultReasoningModel: 'cm-1',
+      defaultEvaluationModel: 'cm-1',
+      chatModels: [],
+      reasoningModels: [],
+      lightModels: []
+    });
+    const res = createRes();
+    await handlerFor('delete', '/:id/models/:modelId')({ params: { id: 'custom', modelId: 'cm-1' }, body: {} }, res);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+    // 模型已从文件里删掉
+    const file = JSON.parse(fs.readFileSync(tempConfig, 'utf-8'));
+    expect(file.providers.custom.models['cm-1']).toBeUndefined();
+  });
+
+  /* 2026-11-05 产品决定下线 #177 运行期引用门禁，见 CHANGELOG：skill 绑定不再阻止删除模型。 */
+  it('#177 已下线：删除被走平台通道的 skill 显式绑定的模型 → 不再拦截', async () => {
+    mockSkillBindings.push({ skillId: 'goal-conversation', model: 'cm-1', endpoint: null });
+    const res = createRes();
+    await handlerFor('delete', '/:id/models/:modelId')({ params: { id: 'custom', modelId: 'cm-1' }, body: {} }, res);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+    const file = JSON.parse(fs.readFileSync(tempConfig, 'utf-8'));
+    expect(file.providers.custom.models['cm-1']).toBeUndefined();
+  });
+
+  it('自带独立 endpoint 的 skill 绑定不阻止删除（模型由其实例通道提供）', async () => {
+    mockSkillBindings.push({ skillId: 'goal-conversation', model: 'cm-1', endpoint: 'http://127.0.0.1:30001/v1' });
+    const res = createRes();
+    await handlerFor('delete', '/:id/models/:modelId')({ params: { id: 'custom', modelId: 'cm-1' }, body: {} }, res);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+  });
+
+  /* 2026-11-05 产品决定下线 #177 供应商级门禁，见 CHANGELOG：
+     删整条通道不再因平台 DB 默认引用而被拦。 */
+  it('#177 已下线：删除被平台默认引用的供应商 → 不再拦截', async () => {
+    mockGetConfig.mockResolvedValue({
+      apiUrl: 'https://platform.example.com/v1',
+      apiKey: 'platform-key',
+      defaultModel: 'cm-1',
+      defaultReasoningModel: 'm-chat',
+      defaultEvaluationModel: 'm-chat',
+      chatModels: [],
+      reasoningModels: [],
+      lightModels: []
+    });
+    const res = createRes();
+    await handlerFor('delete', '/:id')({ params: { id: 'custom' }, body: {} }, res);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+    const file = JSON.parse(fs.readFileSync(tempConfig, 'utf-8'));
+    expect(file.providers.custom).toBeUndefined();
+  });
+
+  /* 2026-11-05 产品决定下线 #177 供应商级门禁，见 CHANGELOG：skill 绑定不再阻止停用通道。 */
+  it('#177 已下线：停用被走平台通道 skill 绑定的供应商 → 不再拦截', async () => {
+    mockSkillBindings.push({ skillId: 'goal-conversation', model: 'cm-1', endpoint: null });
+    const res = createRes();
+    await handlerFor('patch', '/:id')({ params: { id: 'custom' }, body: { enabled: false } }, res);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+    const file = JSON.parse(fs.readFileSync(tempConfig, 'utf-8'));
+    expect(file.providers.custom.enabled).toBe(false);
+  });
+
+  it('未被运行期引用的供应商停用照常放行', async () => {
+    const res = createRes();
+    await handlerFor('patch', '/:id')({ params: { id: 'custom' }, body: { enabled: false } }, res);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
+  });
+
+  it('重命名（不改启用位）不触发供应商级门禁', async () => {
+    mockGetConfig.mockResolvedValue({
+      apiUrl: 'https://platform.example.com/v1',
+      apiKey: 'platform-key',
+      defaultModel: 'cm-1',
+      defaultReasoningModel: 'm-chat',
+      defaultEvaluationModel: 'm-chat',
+      chatModels: [],
+      reasoningModels: [],
+      lightModels: []
+    });
+    const res = createRes();
+    await handlerFor('patch', '/:id')({ params: { id: 'custom' }, body: { name: '自建通道 2' } }, res);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ success: true }));
   });
 });
 

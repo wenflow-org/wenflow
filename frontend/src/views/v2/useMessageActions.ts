@@ -4,6 +4,7 @@
  */
 import { ref, type Ref } from 'vue';
 import { toast } from '@/utils/toast';
+import { copyText } from '@/utils/clipboard';
 import { feedbackApi } from '@/api/feedback';
 import type { ChatMsg } from './learningChat';
 
@@ -21,11 +22,16 @@ export function useMessageActions(deps: {
   function onBubbleEnter(id: string) { hoveredMsgId.value = id; }
   function onBubbleLeave() { hoveredMsgId.value = null; }
 
-  async function copyMessage(text: string) {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast.success('已复制到剪贴板');
-    } catch { toast.error('复制失败'); }
+  /**
+   * 复制消息正文。返回是否成功（MessageActions 据此决定要不要显示对勾——
+   * 失败还画对勾等于骗用户，2026-11-02 走查）。
+   * 局域网 http 下 navigator.clipboard 不存在，回退逻辑在 utils/clipboard。
+   */
+  async function copyMessage(text: string): Promise<boolean> {
+    const ok = await copyText(text);
+    if (ok) toast.success('已复制到剪贴板');
+    else toast.error('复制失败：浏览器未授予剪贴板权限，请手动选中文字复制');
+    return ok;
   }
 
   /** 消息级点赞/点踩上报：内容去重（后端按内容哈希 key），失败静默不打扰 */

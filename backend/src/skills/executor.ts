@@ -15,6 +15,7 @@ import {
   createRuntimeRetryBudget,
   getEffectiveLogicalRetryLimit
 } from '../services/reliability-settings.service';
+import { isUpstreamFailureCategory } from '../gateway/api-gateway/upstream-failure';
 import {
   ToolApprovalRequiredError,
   isToolApprovalRequired,
@@ -41,6 +42,19 @@ function isCallerAbort(error: any): boolean {
   if (String(error.code || '') === 'CALLER_ABORTED') return true;
   if (String(error.name || '') === 'AbortError') return true;
   return /aborted by caller/i.test(String(error.message || ''));
+}
+
+/**
+ * 是否为**上游/基础设施类**失败（限流、上游 HTTP、网络、上游超时）。
+ * 与 {@link isCallerAbort} 同口径：这类错误不代表 Skill 逻辑失败，不应计入技能成功率——
+ * 否则一次上游故障（含 #177 的「目录外模型无可用渠道」）会把整列 skill 打成 0 失败，
+ * 污染健康度面板。类别集合复用网关既有的「上游不稳定」判定（upstream-failure），
+ * 不再维护第二份清单；网关终止错误 `RETRY_BUDGET_EXHAUSTED` 会继承最后一次真实失败的
+ * category，故本判定同样覆盖它。认证/配额/协议/配置类失败仍照常计入。
+ */
+function isUpstreamFailure(error: any): boolean {
+  if (!error || typeof error !== 'object') return false;
+  return isUpstreamFailureCategory(error.category);
 }
 
 function summarizeSkillPayload(value: any, depth = 0): any {
@@ -192,7 +206,19 @@ export async function executeSkillHandler(
     retryBudget.limits.maxLogicalRetries
   );
   const agentId = parentContext.agentId || parentAgent;
-  const callerAgent = parentContext.callerAgent || parentAgent;
+  // #185：交接边的 callerAgent = **当前执行所在的 agent 边界**，不是 skill 的静态归属，
+  // 也不是上层写进来的「运行来源」。
+  //   - 上层已用 runInAgentScope 进入某 agent 边界（教学链、仿真链…）→ 以该 agent 为准：
+  //     教学链调用 profile 阶段的 learning-predictor 记 teaching-agent，而不是它的静态 owner
+  //     profile-agent（归属扁平化会写出 profile-agent -> skill:learning-predictor 这种假边）。
+  //   - 没有边界时 retreat 到该 skill 的归属 agent（顶层直接调用，归属即调用方）。
+  //   - autopilot / blackbox 的 'simulation-agent'、batch-experiment 的任务名、acp-context 的
+  //     X-Caller-Agent 是「本次运行从哪来」，不再冒充调用方（否则 simulation-agent 会盖住整条
+  //     真实教学链，实测写出 simulation-agent -> session-wrapup 幽灵边），改为落到
+  //     rootCallerAgent 保留追溯；无归属的 handler-only/aux skill 则记为「调用方未知」(null)。
+  const callerAgent = parentContext.agentScope || parentAgent;
+  const rootCallerAgent = parentContext.rootCallerAgent || parentContext.callerAgent || callerAgent;
+  const agentScope = parentContext.agentScope || parentAgent;
   const parentExecutionId = parentContext.executionLogId;
   const rootExecutionId = parentContext.rootExecutionId || parentContext.executionLogId || executionLogId;
   const contextEnvelope = buildSkillContextEnvelope({
@@ -212,6 +238,8 @@ export async function executeSkillHandler(
     userId,
     agentId,
     callerAgent,
+    agentScope,
+    rootCallerAgent,
     skillId,
     executionLogId,
     parentExecutionId,
@@ -307,9 +335,10 @@ export async function executeSkillHandler(
       if (error && typeof error === 'object') {
         error.skillDurationMs = durationMs;
       }
-      // 调用方取消不算技能失败：仍记 span 供观测，但不计入 successRate，
-      // 否则客户端超时/切页会把技能成功率拉低（QA skill 调查 P3）。
-      if (!isCallerAbort(error)) {
+      // 调用方取消 / 上游基础设施故障不算技能失败：仍记 span 供观测，但不计入 successRate，
+      // 否则客户端超时/切页、单次上游 5xx（含无可用渠道的目录外模型）会把技能成功率拉低
+      // （QA skill 调查 P3 / #177 健康度面板污染）。
+      if (!isCallerAbort(error) && !isUpstreamFailure(error)) {
         await recordSkillStats(skillId, false, durationMs);
       }
       void recordSkillSpan(
@@ -324,7 +353,8 @@ export async function executeSkillHandler(
         skillId === 'mcp-tool'
           ? error?.code || 'MCP_TOOL_EXECUTION_FAILED'
           : error?.message || String(error),
-        error?.code
+        error?.code,
+        typeof error?.category === 'string' ? error.category : undefined
       );
       logger.error('[skill-executor] 执行失败', {
         skillId,
@@ -406,7 +436,8 @@ async function recordSkillSpan(
   durationMs: number,
   success: boolean,
   errorMessage?: string,
-  errorCode?: string
+  errorCode?: string,
+  errorCategory?: string
 ): Promise<void> {
   try {
     const inputStr = JSON.stringify(summarizeSkillLogPayload(skillId, input, 'input')).slice(0, 1000);
@@ -427,6 +458,9 @@ async function recordSkillSpan(
       durationMs,
       error: success ? null : (errorMessage || 'SKILL_EXECUTION_FAILED'),
       errorCode: success ? null : (errorCode || 'SKILL_EXECUTION_FAILED'),
+      // #177：skill 层行也带上真实失败类别（网关错误对象自带 category）——成功率口径据此判上游失败，
+      // 不再靠 errorCode 猜；旧行无 category 时口径按 code 回退（见 skill-runtime-contract.service）。
+      errorCategory: success ? null : (errorCategory || null),
       executionLayer: 'skill',
       actorType: 'skill',
       actorId: skillId,
@@ -447,6 +481,9 @@ async function recordSkillSpan(
         timeZone: ctx.contextEnvelope?.locale?.timeZone || null,
         experimentId: ctx.experimentId || null,
         runId: ctx.runId || null,
+        // #185：运行来源（autopilot / blackbox / 客户端）不再写进 callerAgent（那是交接边口径），
+        // 保留在 metadata 供追溯，避免「运行来源」信息丢失。
+        rootCallerAgent: ctx.rootCallerAgent || null,
       }),
     });
   } catch {

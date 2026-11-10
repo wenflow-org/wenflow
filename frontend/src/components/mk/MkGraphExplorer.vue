@@ -30,82 +30,44 @@
     </div>
 
     <template v-else>
-      <!-- 路径筛选：原型 wf-rail + wf-chip，独立一行落在图卡上方（与 .wf-graph 兄弟，不在工具条里）。
-           role="radiogroup" + roving tabindex：Tab 只落当前选中项，方向键/Home/End 在轨道内换选。
-           轨道**有界**（见 RAIL_VISIBLE_PATHS）：路径多了收进右侧「更多（N）」浮层，
-           「更多」在轨外不参与横滚，永远停在最右可达。 -->
-      <div v-if="showPathRail && paths.length > 1" class="mk-ge__railrow">
-        <div
-          ref="railEl"
-          class="mk-ge__rail"
-          :class="{ 'mk-ge__rail--fade-l': railFadeLeft, 'mk-ge__rail--fade-r': railFadeRight }"
-          role="radiogroup"
-          aria-label="按学习路径筛选"
-          @scroll.passive="syncRail"
-        >
-          <button
-            v-for="opt in railOptions"
-            :key="opt.value ?? 'all'"
-            type="button"
-            role="radio"
-            class="mk-ge__chip"
-            :class="{ 'mk-ge__chip--on': isActivePath(opt.value) }"
-            :aria-checked="isActivePath(opt.value)"
-            :tabindex="isActivePath(opt.value) ? 0 : -1"
-            @click="selectPath(opt.value)"
-            @keydown="onRailKeydown($event, opt.value)"
-          >{{ opt.label }}</button>
-        </div>
-
-        <!-- 「更多」：轨外的出口，收当前轨上放不下的路径。role=menu + menuitemradio：
-             与轨上 chip 同为单选语义，只是换了个容器。 -->
-        <div v-if="overflowPathOptions.length" ref="moreWrapEl" class="mk-ge__more">
-          <button
-            ref="moreTriggerEl"
-            type="button"
-            class="mk-ge__chip mk-ge__chip--more"
-            :class="{ 'mk-ge__chip--on': moreOpen }"
-            :aria-expanded="moreOpen"
-            aria-haspopup="menu"
-            @click.stop="toggleMore"
-          >
-            更多（{{ overflowPathOptions.length }}）<ChevronDown :size="14" aria-hidden="true" />
-          </button>
-          <div
-            v-if="moreOpen"
-            ref="morePanelEl"
-            class="mk-ge__more-panel"
-            role="menu"
-            aria-label="其余学习路径"
-            @keydown="onMorePanelKeydown"
-          >
-            <button
-              v-for="opt in overflowPathOptions"
-              :key="opt.value"
-              type="button"
-              role="menuitemradio"
-              class="mk-ge__more-item"
-              :class="{ 'mk-ge__more-item--on': isActivePath(opt.value) }"
-              :aria-checked="isActivePath(opt.value)"
-              :tabindex="isActivePath(opt.value) ? 0 : -1"
-              @click="pickOverflow(opt.value)"
-            >{{ opt.label }}</button>
-          </div>
-        </div>
-      </div>
-
       <!-- 图卡：卡壳（border / radius / padding 10px 10px 4px）由宿主出——
            页面走 .km__card :deep(.mk-ge__card)，admin 嵌在 .mk-card 里不再套一层 -->
       <div class="mk-ge__card">
-        <!-- 工具条：左统计、右视图筛选。统计口径与画布着色一致（待学习 / 记忆偏弱 / 进行中 / 已掌握） -->
+        <!-- 工具条：左路径切换、中统计、右视图筛选。统计口径与画布着色一致，四档名见 utils/conceptBands。
+             路径切换（§5 2026-11-06 定稿）：原先图卡上方独立的平铺胶囊轨 + 右侧「更多（N）」浮层
+             （长标题一行只放得下 3 个，浮层还会盖住下方概览面板）整体撤除，收进**一个**路径选择
+             下拉，并与统计筛选栏同栏左端整合——任何视口下都不再溢出、也不再需要第二套单选控件。
+             下拉用 MkSelect（工具栏/表单下拉原语）：键盘 ↑↓ / Home / End / Enter 选中、Esc/点外部
+             关闭、选中后焦点归还触发器，语义为 combobox + listbox（原 radiogroup 的能力不缩水）。 -->
         <div class="mk-ge__bar">
+          <!-- 路径归属恒常驻（2026-11-07 用户走查 图4）：此前只在 `paths.length > 1` 时
+               出下拉，只有 1 条路径的用户左上角什么都没有——看不出当前看的是哪条路径的图。
+               现在：多条 → 下拉（可切「全部路径」）；恰好 1 条 → 静态标签直接写路径名
+               （没有可切项，下拉是假控件）。两者占同一格、同一字号基线，切换路径条数不跳动。 -->
+          <div v-if="showPathRail && paths.length > 1" ref="pathpickEl" class="mk-ge__pathpick">
+            <MkSelect
+              block
+              :model-value="pathId ?? null"
+              :options="pathOptions"
+              placeholder="全部路径"
+              aria-label="按学习路径筛选"
+              @update:model-value="selectPath"
+            />
+          </div>
+          <div v-else-if="showPathRail && paths.length === 1" class="mk-ge__pathonly">
+            <span class="mk-ge__pathonly-label">当前路径</span>
+            <strong :title="paths[0].title || '未命名路径'">{{ paths[0].title || '未命名路径' }}</strong>
+          </div>
           <div class="mk-ge__stats">
-            <span class="mk-ge__stat"><b>{{ levelNodes.length }}</b> 个概念</span>
+            <!-- 2026-10-31 二轮评审 P2：隐藏孤立点时写明「显示 X / Y」，不再让 24 与图例加总对不上 -->
+            <span class="mk-ge__stat" :title="levelNodes.length !== listNodes.length ? `另有 ${levelNodes.length - listNodes.length} 个未评估的孤立概念未画出` : undefined">
+              <b>{{ levelNodes.length !== listNodes.length ? `${listNodes.length} / ${levelNodes.length}` : levelNodes.length }}</b> 个概念
+            </span>
             <span class="mk-ge__stat"><b>{{ levelEdges.length }}</b> 条关系</span>
-            <span class="mk-ge__stat mk-ge__stat--ok"><i />已掌握 <b>{{ counts.stable }}</b></span>
-            <span class="mk-ge__stat mk-ge__stat--mid"><i />进行中 <b>{{ counts.learning }}</b></span>
-            <span class="mk-ge__stat mk-ge__stat--weak"><i />记忆偏弱 <b>{{ counts.fragile }}</b></span>
-            <span class="mk-ge__stat mk-ge__stat--none"><i />待学习 <b>{{ counts.unknown }}</b></span>
+            <span class="mk-ge__stat mk-ge__stat--ok"><i />{{ CONCEPT_BAND_LABEL.stable }} <b>{{ counts.stable }}</b></span>
+            <span class="mk-ge__stat mk-ge__stat--mid"><i />{{ CONCEPT_BAND_LABEL.learning }} <b>{{ counts.learning }}</b></span>
+            <span class="mk-ge__stat mk-ge__stat--weak"><i />{{ CONCEPT_BAND_LABEL.fragile }} <b>{{ counts.fragile }}</b></span>
+            <span class="mk-ge__stat mk-ge__stat--none"><i />{{ CONCEPT_BAND_LABEL.unknown }} <b>{{ counts.unknown }}</b></span>
           </div>
           <div class="mk-ge__controls">
             <div class="mk-ge__seg" role="group" aria-label="概念层级">
@@ -124,24 +86,44 @@
           </div>
         </div>
 
-        <div class="mk-ge__body">
+        <div class="mk-ge__body" :class="{ 'mk-ge__body--full': !sideOpen }">
           <div class="mk-ge__canvas">
             <MkGraph
+              ref="graphComp"
               :nodes="levelNodes"
               :edges="levelEdges"
               :theme="resolvedTheme"
               :height="height"
               :hide-isolated="hideIsolated"
-              @select="selected = $event"
+              @select="onCanvasSelect"
             />
-            <!-- 图例走 DOM：画布内图例在 graph 系列里会误导（categories 是节点分组，不是关系） -->
+            <!-- 收起侧栏后的展开入口（sideOpen=false 时 aside 连同其上的开关一起消失） -->
+            <button
+              v-if="!sideOpen"
+              type="button"
+              class="mk-ge__side-reopen"
+              aria-label="展开侧栏"
+              title="展开侧栏"
+              @click="sideOpen = true"
+            >« 侧栏</button>
+            <!-- 缩放控件（2026-11-06 走查）：滚轮/双指之外给一颗可点的入口——触屏用户
+                 与不知道滚轮缩放的用户此前没有任何缩放手段。⟲ 回到 fitView 初始档。 -->
+            <div class="mk-ge__zoom" role="group" aria-label="图谱缩放">
+              <button type="button" class="mk-ge__zoom-btn" aria-label="放大" title="放大" @click="zoomBy(1.25)">
+                <svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M10 4v12M4 10h12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              </button>
+              <button type="button" class="mk-ge__zoom-btn" aria-label="缩小" title="缩小" @click="zoomBy(0.8)">
+                <svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M4 10h12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              </button>
+              <button type="button" class="mk-ge__zoom-btn" aria-label="适配居中" title="适配居中" @click="resetView">
+                <svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M6.5 3.5h-3v3M13.5 3.5h3v3M6.5 16.5h-3v-3M13.5 16.5h3v-3"/></svg>
+              </button>
+            </div>
+            <!-- 图例走 DOM：画布内图例在 graph 系列里会误导（categories 是节点分组，不是关系）。
+                 2026-11-05 PC 走查：四档状态点从底图例撤除——画布头统计行同屏已有同一套
+                 「已掌握/进行中/记忆偏弱/待学习」计数（同一信息横竖各画一遍是重复），
+                 底图例只留「连线语义 + 形状/操作提示」这两样头行没有的东西 -->
             <div class="mk-ge__legend">
-              <span class="mk-ge__legend-group">
-                <i class="mk-ge__dot mk-ge__dot--ok" />已掌握
-                <i class="mk-ge__dot mk-ge__dot--mid" />进行中
-                <i class="mk-ge__dot mk-ge__dot--weak" />记忆偏弱
-                <i class="mk-ge__dot mk-ge__dot--none" />待学习
-              </span>
               <span class="mk-ge__legend-group">
                 <i
                   class="mk-ge__line"
@@ -153,7 +135,13 @@
                 />属于（知识组件 → 核心概念）
               </span>
               <span class="mk-ge__legend-group mk-ge__legend-hint">
-                圆点=核心概念 · 方块=知识组件 ·
+                <!-- 形状与大小都要有出处（2026-11-09 走查）：图上同时出现圆/圆角方块与大小两档，
+                     而图例此前只在头行解释了颜色，读者只能猜「方块是不是没学会」。
+                     形状 = 粒度（圆点=核心概念 / 方块=知识组件，与 MkGraph 的 symbol 一致）；
+                     大小 = 该节点在图里的关系条数（MkGraph 的 baseSize 由 degree 推）。 -->
+                <i class="mk-ge__shape mk-ge__shape--round" aria-hidden="true" />圆点=核心概念 ·
+                <i class="mk-ge__shape mk-ge__shape--square" aria-hidden="true" />方块=知识组件 ·
+                节点越大=关系越多 ·
                 <span class="mk-ge__legend-desktop">拖动/滚轮可缩放</span>
                 <span class="mk-ge__legend-mobile">双指可缩放</span>
                 <span class="mk-ge__legend-tap"> · 点节点看名称</span>
@@ -163,10 +151,24 @@
 
           <!-- 侧栏详情随画布点选切换，对读屏是「远端变更」→ polite 播报摘要
                （画布的完整 AT 等价清单见下方 sr-only 概念清单——2026-09-27 a11y 走查，P2 收尾落地） -->
-          <aside class="mk-ge__side" aria-live="polite">
+          <aside v-show="sideOpen" class="mk-ge__side" aria-live="polite">
+            <!-- 标题行（2026-11-07 走查）：折叠钮原来 absolute 钉右上，16 字长标题第一行
+                 正好钻到按钮底下被截断。标题与按钮改同一 flex 行：标题弹性占宽可折行，
+                 按钮固定不缩。详情态/概览态共用这一行（按钮在两态都常驻右上）。 -->
+            <div class="mk-ge__side-head">
+              <h4 v-if="selected" class="mk-ge__side-title">{{ selected.label }}</h4>
+              <h4 v-else class="mk-ge__side-title">图谱概览</h4>
+              <button
+                type="button"
+                class="mk-ge__side-toggle"
+                :aria-expanded="sideOpen"
+                :title="sideOpen ? '收起侧栏' : '展开侧栏'"
+                :aria-label="sideOpen ? '收起侧栏' : '展开侧栏'"
+                @click="sideOpen = !sideOpen"
+              >{{ sideOpen ? '»' : '«' }}</button>
+            </div>
             <template v-if="selected">
-              <!-- 标题 + 状态徽章（原型抽屉：h + wf-badge） -->
-              <h4 class="mk-ge__side-title">{{ selected.label }}</h4>
+              <!-- 状态徽章（原型抽屉：h + wf-badge） -->
               <div class="mk-ge__side-meta">
                 <span class="mk-badge" :class="selectedStatus.badge">{{ selectedStatus.label }}</span>
                 <span v-if="selected.taxonomy" class="mk-ge__side-sub">{{ selected.taxonomy }}</span>
@@ -206,7 +208,7 @@
               <!-- 字段分区（2026-09-27）：概览条带 + 关系分区（发丝线分隔）；掌握度/提取次数已由上方 bar 承载 -->
               <dl class="mk-ge__kv">
                 <div class="mk-ge__cell"><dt>层级</dt><dd>{{ selected.level === 'concept' ? '核心概念' : '知识组件' }}</dd></div>
-                <div class="mk-ge__cell"><dt>稳定性</dt><dd>{{ selected.stability || '—' }}</dd></div>
+                <div class="mk-ge__cell"><dt>稳定性</dt><dd>{{ STABILITY_LABEL[String(selected.stability ?? '')] || '—' }}</dd></div>
                 <!-- 概念台账事实（2026-10-20 从概览「概念掌握」卡的逐概念明细搬来）：
                      可迁移 / 误解风险 / 证据条数原本在概览卡里按概念平铺一遍，与这里的
                      记忆强度、提取练习是同一个概念的两种读数；合并到节点详情后
@@ -230,36 +232,26 @@
               </div>
             </template>
             <div v-else class="mk-ge__overview">
-              <h4 class="mk-ge__side-title">图谱概览</h4>
-              <p class="mk-ge__side-hint">点图中节点，查看掌握度与前后关系。</p>
               <!-- 未选中时侧栏不能只剩一句提示、把 800px 高的右栏留空（2026-10-29
-                   像素级走查）：先给分布，再给最多 5 个「最该先看」的概念，点名字等同
-                   点画布节点，侧栏即刻切到详情。 -->
-              <div class="mk-ge__overview-stats">
-                <div class="mk-ge__overview-stat">
-                  <b>{{ counts.unknown }}</b><span>待学习</span>
-                </div>
-                <div class="mk-ge__overview-stat">
-                  <b>{{ counts.fragile }}</b><span>记忆偏弱</span>
-                </div>
-                <div class="mk-ge__overview-stat">
-                  <b>{{ counts.learning }}</b><span>进行中</span>
-                </div>
-                <div class="mk-ge__overview-stat">
-                  <b>{{ counts.stable }}</b><span>已掌握</span>
-                </div>
-              </div>
+                   像素级走查）：给最多 5 个「最该先看」的概念，点名字等同点画布节点，
+                   侧栏即刻切到详情。原来的 2×2 分布数字块删去（2026-11-03 真机走查）：
+                   画布头图例同屏已有同一套「已掌握/进行中/记忆偏弱/待学习」计数，
+                   同一信息两种呈现是重复；「点图中节点…」用法句也删——画布底图例
+                   已有「点节点看名称」，同屏教两遍。 -->
               <template v-if="suggestedNodes.length">
                 <p class="mk-ge__overview-label">建议先看</p>
                 <ul class="mk-ge__overview-list">
                   <li v-for="n in suggestedNodes" :key="n.id">
                     <button type="button" class="mk-ge__overview-item" @click="focusNode(n.id)">
                       <span>{{ n.label }}</span>
-                      <span class="mk-badge" :class="STATUS_BADGE[statusKeyOf(n)]">{{ STATUS_LABEL[statusKeyOf(n)] }}</span>
+                      <!-- 列表本身排除了已掌握；全列「待学习」时徽标列零信息，
+                           只在行有别的状态原因（记忆偏弱/进行中）时才标 -->
+                      <span v-if="statusKeyOf(n) !== 'unknown'" class="mk-badge" :class="STATUS_BADGE[statusKeyOf(n)]">{{ CONCEPT_BAND_LABEL[statusKeyOf(n)] }}</span>
                     </button>
                   </li>
                 </ul>
               </template>
+              <p v-else class="mk-ge__side-hint">这个图谱里的概念都已掌握。</p>
             </div>
           </aside>
         </div>
@@ -297,14 +289,16 @@
  *
  * 2026-09-30 对齐原型（newui/用户侧 知识图谱屏）：
  *  ① 路径筛选从工具条里的原生 <select> 改为图卡上方独立的 chip 轨（wf-rail + wf-chip）；
+ *     2026-11-06 §5 又收回到工具条里的单个下拉（chip 轨 + 「更多」浮层整体撤除，见模板注释）；
  *  ② 空/错/骨架三态改整屏形态（V2ResultState + SkeletonLoader，替换 rail 与图卡）；
  *  ③ 节点详情补原型抽屉的内容结构：状态徽章 / 掌握程度两条 bar / 复习说明 / 主 CTA + ghost。
  */
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ChevronDown } from 'lucide-vue-next'
+import { computed, nextTick, ref, watch } from 'vue'
 import MkGraph, { relationStyleOf } from './MkGraph.vue'
+import MkSelect from './MkSelect.vue'
 import { useIsDark } from '@/composables/useIsDark'
 import type { MkGraphConceptFacts, MkGraphEdge, MkGraphNode } from './MkGraph.vue'
+import { CONCEPT_BAND_LABEL, type ConceptBandKey } from '@/utils/conceptBands'
 import SkeletonLoader from '../ui/SkeletonLoader.vue'
 import V2ResultState from '../ui/V2ResultState.vue'
 
@@ -334,6 +328,11 @@ const props = withDefaults(
     /** 概念台账事实（可迁移 / 误解风险 / 证据数），按概念名索引；不传 = 节点详情不渲染这组行
      *  （用户侧知识图谱没有学习者模型台账，保持原样） */
     conceptFacts?: Record<string, MkGraphConceptFacts>
+    /** 初始是否隐藏「无关系的孤立概念」（默认 true，勾选框仍可切）。
+     *  2026-11-09 学习者详情传 false：它的图是一条路径的完整概念网，未学习节点也要以暗灰
+     *  留在图上——否则只剩几个薄弱孤点、连线全断（实测 8 / 21 个概念 · 0 条关系，
+     *  读者看不出这 8 个薄弱点在整张知识网里的位置）。 */
+    defaultHideIsolated?: boolean
   }>(),
   {
     paths: () => [],
@@ -348,6 +347,7 @@ const props = withDefaults(
     emptyActionText: '',
     practiceActionText: '',
     conceptFacts: () => ({}),
+    defaultHideIsolated: true,
   }
 )
 
@@ -366,323 +366,90 @@ const LEVEL_OPTIONS = [
 ]
 
 const level = ref<'all' | 'concept' | 'kc'>('all')
-const hideIsolated = ref(true)
+const hideIsolated = ref(props.defaultHideIsolated)
 const selected = ref<MkGraphNode | null>(null)
-
-/* ---------- 路径筛选轨（原型 wf-rail + wf-chip） ---------- */
-
-/**
- * 轨上最多并排几条路径 chip（不含「全部路径」与「更多」）。
- *
- * 为什么要有上限（2026-10-05 实测，wfprobe1 账号 10 条路径，1440 视口）：
- * 轨道可视宽 1140px、内容宽 2390px（溢出 2.1 倍），11 枚 chip 里只有 5 枚完整可见，
- * 最后一枚右缘 2538px 而轨道右缘 1290px —— 1248px 的内容在屏幕外。而轨道
- * `scrollbar-width: none` + `::-webkit-scrollbar{display:none}` 把滚动条显式抹掉了，
- * 也没有渐隐/箭头，鼠标用户根本看不出后面还有 5 条路径。路径数只会涨（每生成一条
- * 新目标就多一条），所以轨必须有界，不能靠「反正能横滚」兜着。
- *
- * 为什么是 3（实测布局值，注意 v2 页在 ≥1600 有 zoom 档，量宽要在同一坐标系里比）：
- * 桌面轨布局宽恒为 1024px（`.km__main` 封顶 1180 − 卡内边距 −「更多」108 − 间隙 8），
- * chip 上限 260px、实测「全部路径（10 条）」140px。最坏情况（标题全部顶到上限）
- * 3 枚 = 140 + 3×260 + 3×8 + 4 = 948 ≤ 1024，留 76px 余量；**4 枚最坏 1216 > 1024**，
- * 必然横滚——实测 10 条路径时铺 4 枚正是溢出 33px、第 4 枚被裁一半。
- */
-const RAIL_VISIBLE_PATHS = 3
-/** 溢出到「更多」的路径少于 2 条时不值得开浮层：多铺一枚 chip 比多一次点击便宜 */
-const RAIL_MIN_OVERFLOW = 2
-/** 轨自身两端留白（.mk-ge__rail 的 padding: 4px 2px）—— 与 scroll-margin 保持同一口径 */
-const RAIL_PAD = 2
+/** 侧栏收起态（2026-11-06 走查）：收起后画布吃满卡宽，全屏看图 */
+const sideOpen = ref(true)
+const graphComp = ref<{ zoomBy: (factor: number) => void; resetView: () => void } | null>(null)
+function zoomBy(factor: number) { graphComp.value?.zoomBy(factor) }
+function resetView() { graphComp.value?.resetView() }
 
 /**
- * 窄屏（≤900，与本文件移动端媒体块同档）：轨改**多行平铺、铺开全部路径**，不再横向滚动。
- *
- * 上面的「3 枚 + 更多」是按桌面 1024px 轨宽实测来的；390 手机档轨宽只有 ~358px，同一套
- * 阈值下 3 条路径既够不着「更多」出口（数量不到 RAIL_MIN_OVERFLOW）、又必须横滑——
- * 一屏外还有 2 条，只有一道很淡的右缘渐隐提示，学习者「不好选」（2026-10-15 走查）。
- * 窄屏铺开所有 chip 一眼可见、直接点选；桌面维持有界轨 +「更多」浮层不变。
+ * 画布点选 → 侧栏切换（2026-11-05 UX 审计 P2）：
+ * - 再次点击已选节点 = 反选回「图谱概览」。详情卡此前没有任何关闭/收起控件（2026-10-09
+ *   刻意决定「侧栏非模态、无需显式关闭」），但其前提不成立：概览/详情二选一渲染、
+ *   点空白画布在部分触屏上点不中（审计实测 side-title 不变），概览一旦被详情替换，
+ *   同路径内只能靠切走再切回路径 chip 找回——不可发现。反选不引入新控件，不违原决定。
+ * - 点空白（node 为 null）维持原有回概览行为。
  */
-const NARROW_RAIL_QUERY = '(max-width: 900px)'
-const railNarrow = ref(
-  typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-    ? window.matchMedia(NARROW_RAIL_QUERY).matches
-    : false
-)
-function onRailNarrowChange(event: MediaQueryListEvent) {
-  railNarrow.value = event.matches
+function onCanvasSelect(node: MkGraphNode | null) {
+  if (node && selected.value && node.id === selected.value.id) {
+    selected.value = null
+    return
+  }
+  selected.value = node
 }
 
-type PathOption = { value: string | null; label: string }
-/** 路径条目（value 必为 id）：可见集合与「更多」浮层都只装路径，不含「全部路径」 */
-type PathFilterOption = { value: string; label: string }
+/* ---------- 路径切换（§5 2026-11-06 定稿：单个下拉，与统计栏同栏） ---------- */
 
-/** 轨上恒定的第一枚：全部路径（它是「看全貌」的出口，不参与收纳） */
+type PathOption = { value: string | null; label: string }
+
+/** 下拉恒定的第一项：全部路径（「看全貌」的出口） */
 const allPathOption = computed<PathOption>(() => ({
   value: null,
   label: props.paths.length > 1 ? `全部路径（${props.paths.length} 条）` : '全部路径',
 }))
 
-const pathOnlyOptions = computed<PathFilterOption[]>(() =>
+/** 各条路径（value 必为 id），下拉里跟在「全部路径」之后 */
+const pathOnlyOptions = computed<Array<{ value: string; label: string }>>(() => {
   // 无标题路径回落「未命名路径」而非裸 id（lp_1791… 对学习者无意义）；
   // 与列表页/学习台同款口径（V2LearningPaths / V2Dashboard 都是 `title || name || '未命名路径'`）
-  props.paths.map((p) => ({ value: p.id, label: p.title || '未命名路径' }))
-)
-
-/** 路径多到轨上放不下（且溢出值得开浮层）时收「更多」。
-    窄屏一律不收（改多行平铺，见 railNarrow）：全部路径直接铺在轨上、点选，不走「更多」浮层 */
-const railBounded = computed(
-  () => !railNarrow.value && pathOnlyOptions.value.length - RAIL_VISIBLE_PATHS >= RAIL_MIN_OVERFLOW
-)
-
-/** 当前选中路径在列表里的下标（-1 = 选的是「全部路径」，或选中项不在列表里） */
-const activePathIndex = computed(() =>
-  pathOnlyOptions.value.findIndex((opt) => isActivePath(opt.value))
-)
-
-/**
- * 轨上真正铺开的路径。有界时取前 N 条；**若当前选中项不在这 N 条里，用它顶掉第 N 条**——
- * 否则选中态会掉进「更多」，轨上没有任何 chip 是选中态，用户看不出自己在哪条路径上。
- */
-const visiblePathOptions = computed<PathFilterOption[]>(() => {
-  const all = pathOnlyOptions.value
-  if (!railBounded.value) return all
-  const index = activePathIndex.value
-  if (index < RAIL_VISIBLE_PATHS) return all.slice(0, RAIL_VISIBLE_PATHS)
-  return [...all.slice(0, RAIL_VISIBLE_PATHS - 1), all[index]]
+  const options = props.paths.map((p) => ({ value: p.id, label: p.title || '未命名路径' }))
+  // 2026-11-04：同名项（实证=两条无标题路径同时回落「未命名路径」，lp_…oboui70 / lp_…zu7bhwj）
+  // 在下拉里逐字相同、无法区分。对重名项按出现顺序补「1/2」序号；仅当同名 ≥2 条时补，
+  // 唯一项仍保持原回落文案（单条无标题不能长出无意义的「1」）。
+  const total = new Map<string, number>()
+  for (const opt of options) total.set(opt.label, (total.get(opt.label) ?? 0) + 1)
+  const seen = new Map<string, number>()
+  return options.map((opt) => {
+    if ((total.get(opt.label) ?? 0) < 2) return opt
+    const n = (seen.get(opt.label) ?? 0) + 1
+    seen.set(opt.label, n)
+    return { ...opt, label: `${opt.label} ${n}` }
+  })
 })
 
-/** 收进「更多」浮层的路径（保持原顺序，与轨上可见集合互补） */
-const overflowPathOptions = computed<PathFilterOption[]>(() => {
-  if (!railBounded.value) return []
-  const shown = new Set(visiblePathOptions.value.map((opt) => opt.value))
-  return pathOnlyOptions.value.filter((opt) => !shown.has(opt.value))
-})
-
-/** 轨上渲染的完整选项：全部路径 + 可见路径 */
-const railOptions = computed<PathOption[]>(() => [
+/** 下拉的完整选项：全部路径 + 各条路径。
+ *  路径再多也只是列表长一点（弹层自身可滚），不再有「轨上放不下」这回事，
+ *  也就不需要「更多（N）」这种二级出口——旧轨的 RAIL_VISIBLE_PATHS / 溢出浮层随之删除。 */
+const pathOptions = computed<PathOption[]>(() => [
   allPathOption.value,
-  ...visiblePathOptions.value,
+  ...pathOnlyOptions.value,
 ])
 
 function isActivePath(value: string | null): boolean {
   return (props.pathId ?? null) === value
 }
 
-/** 换路径：清空当前选中节点（旧节点可能不在这张图里），再让父组件重新请求 */
+const pathpickEl = ref<HTMLElement | null>(null)
+/** 换路径会触发宿主重新请求（整屏切成骨架，下拉连同图卡一起卸载重建），
+ *  所以「选中后焦点回到触发器」要等这次加载结束、控件重新挂上 DOM 再落——
+ *  否则焦点掉回 body，键盘/读屏用户不知道自己换到了哪条路径。 */
+const pendingPathFocus = ref(false)
+
+/** 换路径：清空当前选中节点（旧节点可能不在这张图里），再让父组件重新请求。 */
 function selectPath(value: string | null) {
   if (isActivePath(value)) return
   selected.value = null
+  pendingPathFocus.value = true
   emit('update:pathId', value)
 }
 
-/**
- * 换路径 + 把焦点落到新的选中 chip 上。键盘换选（方向键/Home/End）与「更多」浮层选路径
- * 都走这里；鼠标点 chip 不需要（焦点本就在被点的元素上）。
- * 落焦点的时机见 pendingFocusPathId：等父组件把 pathId 同步回来，而不是当场 focus。
- */
-function selectPathKeepingFocus(value: string | null) {
-  if (isActivePath(value)) return
-  selectPath(value)
-  pendingFocusPathId.value = value
-}
-
-const railEl = ref<HTMLElement | null>(null)
-
-/** radiogroup 的 roving tabindex：方向键 / Home / End 在轨道内移动并选中，焦点跟随选中项 */
-function onRailKeydown(event: KeyboardEvent, value: string | null) {
-  const options = railOptions.value
-  const index = options.findIndex((opt) => opt.value === value)
-  if (index < 0) return
-  let next: number
-  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (index + 1) % options.length
-  else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = (index - 1 + options.length) % options.length
-  else if (event.key === 'Home') next = 0
-  else if (event.key === 'End') next = options.length - 1
-  else return
-  event.preventDefault()
-  selectPathKeepingFocus(options[next].value)
-}
-
-/* ---------- 「更多」浮层 ---------- */
-
-const moreOpen = ref(false)
-const moreWrapEl = ref<HTMLElement | null>(null)
-const moreTriggerEl = ref<HTMLButtonElement | null>(null)
-const morePanelEl = ref<HTMLElement | null>(null)
-
-function closeMore(restoreFocus = false) {
-  if (!moreOpen.value) return
-  moreOpen.value = false
-  if (restoreFocus) void nextTick(() => moreTriggerEl.value?.focus())
-}
-
-function toggleMore() {
-  moreOpen.value = !moreOpen.value
-  if (!moreOpen.value) return
-  // 键盘打开时焦点必须进浮层，否则 Tab 会从触发钮直接跳走、浮层成了不可达的死内容
-  void nextTick(() => {
-    const panel = morePanelEl.value
-    ;(panel?.querySelector<HTMLElement>('[aria-checked="true"]')
-      ?? panel?.querySelector<HTMLElement>('[role="menuitemradio"]'))?.focus()
-  })
-}
-
-/**
- * 待落焦点的目标路径值（undefined = 无待办）。
- *
- * 为什么要延迟落焦点：父组件收到 update:pathId 会把整屏切成加载态（三态骨架顶掉轨道），
- * 轨道连同 chip 一起卸载重建——此刻同步 focus 是徒劳的，节点已不在 DOM，焦点掉回 body，
- * 键盘与读屏用户无从知道选中落到了哪条路径（2026-10-05 实测方向键换选后 activeElement
- * 变成 body）。所以记下「请求切到哪条」，等父组件把 pathId 同步回来（= 确认生效）再落焦点。
- *
- * 为什么用值配对而不是布尔标记：布尔标记在「父组件还没来得及更新 props」的那一帧就会
- * 误判为「轨道还在、当场落焦点」，结果把焦点交给**旧**的选中 chip（实测如此）。
- * 值配对只在父组件确实切到这条路径时才落焦点，忽略请求的父组件不会触发任何误跳。
- */
-const pendingFocusPathId = ref<string | null | undefined>(undefined)
-
-/** 从浮层里选路径：选中项会被钉进轨上，焦点随后落在那枚 chip 上 */
-function pickOverflow(value: string | null) {
-  selectPathKeepingFocus(value)
-  closeMore()
-}
-
-/** 浮层内方向键换焦点（与轨上 roving tabindex 同款；Home/End 到两端） */
-function onMorePanelKeydown(event: KeyboardEvent) {
-  const items = Array.from(
-    morePanelEl.value?.querySelectorAll<HTMLElement>('[role="menuitemradio"]') ?? []
-  )
-  if (items.length === 0) return
-  const index = items.indexOf(document.activeElement as HTMLElement)
-  let next: number | null = null
-  if (event.key === 'ArrowDown') next = (index + 1 + items.length) % items.length
-  else if (event.key === 'ArrowUp') next = (index - 1 + items.length) % items.length
-  else if (event.key === 'Home') next = 0
-  else if (event.key === 'End') next = items.length - 1
-  if (next === null) return
-  event.preventDefault()
-  items[next].focus()
-}
-
-/** 点击浮层外 / Esc：关闭（与列表页 pcard 菜单同款 dismiss 口径） */
-function onMoreDocClick(event: MouseEvent) {
-  if (!moreOpen.value) return
-  const target = event.target
-  // target 未必是 Node（事件直接派发到 window 时是 window 本身），先判类型再 contains
-  if (target instanceof Node && moreWrapEl.value?.contains(target)) return
-  closeMore()
-}
-function onMoreDocKey(event: KeyboardEvent) {
-  if (event.key !== 'Escape' || !moreOpen.value) return
-  event.preventDefault()
-  closeMore(true)
-}
-
-/** 轨道是否已挂在 DOM：三态整屏（加载/错误/空态）替换掉 rail 与图卡，此时无 chip 可滚 */
-const railVisible = computed(
-  () => !props.loading && !props.error && props.nodes.length > 0 && props.paths.length > 1
-)
-
-/**
- * 选中 chip 滚进轨道可视区（P2-24 2026-10-04 全站评审 adjusted，2026-10-09 #23 修正）：
- * 轨道 overflow-x:auto 但 scrollbar-width:none，组件此前没有任何滚动定位——
- * 程序化选中末枚 chip 后 scrollLeft 恒 0，「轨上还有 N 条路径」零 affordance。
- * 初始加载（rail 刚挂载，nextTick 等 DOM 就绪）与 pathId 变化（selectPath/键盘换选/
- * 宿主程序化切路径后 props 同步）统一走这里。
- *
- * 为什么不用裸 chip.scrollIntoView()（#23 实测）：它滚动的是**所有可滚祖先**，
- * 页面级祖先也在其中。390×844 实测选中第 2 枚 chip 后
- * 轨被推到 scrollLeft=125，「全部路径（10 条）」落在 x=-111..30（140px 的 chip 有 111px
- * 在视口外），而它是「看全貌」的出口——既不在「更多」浮层里、也不在轨的另一端，推出去
- * 就回不来（探针实测：点它聚焦后连按 6 次 ←，scrollLeft 恒 101 不动，落在轨外的部分根本滚不回来）。
- *
- * 所以这里只滚**轨自身**，且只在目标 chip **完全**不在轨的可视区内时才滚——
- * 只要它还有一部分露在可视区里（构造上选中项不会落在视口左侧），就一像素都不动。
- * 390×844 实测：选中第 2 枚 chip 时它右缘超出轨右缘 97px，仍露着「按字段边界写」这一截
- * 且带选中蓝底，够认出是它；而若为了让它整条可见（哪怕只是靠右对齐）都要把轨推到
- * scrollLeft=101，恒定第一枚「全部路径（10 条）」又只剩 42px 露头——权衡之下宁可让
- * 选中项停在左端、也不能把唯一的出口推出视口。真正需要滚动的是「宿主在轨尾钉进一枚
- * 新 chip」：那时它整枚落在可视区外，才把它的右缘对齐到轨右缘。
- *
- * 向左让位由 CSS 的 scroll-margin-inline-start 负责——只在「切到轨外路径后被钉进来」的
- * 那一帧生效（新 chip 排在最左却因视图停在尾部而落在视口左侧），且它同样把目标左缘
- * 对齐到轨的左缘（scrollLeft 归零），永远不推出任何内容。
- */
-function scrollSelectedChip() {
-  void nextTick(() => {
-    const rail = railEl.value
-    const chip = rail?.querySelector<HTMLElement>('[aria-checked="true"]')
-    const target = chip ?? rail?.querySelector<HTMLElement>('.mk-ge__chip')
-    if (rail && target) {
-      const railBox = rail.getBoundingClientRect()
-      const chipBox = target.getBoundingClientRect()
-      const left = chipBox.left - railBox.left
-      const gapL = RAIL_PAD
-      const gapR = RAIL_PAD
-      const visible = rail.clientWidth - gapL - gapR
-      const boxRight = gapL + visible
-      if (left >= boxRight) {
-        // 整枚落在可视区右侧之外：只做「把它带回来」的最小滚动（右缘对齐轨右缘）
-        const nextLeft = Math.max(
-          0,
-          Math.min(rail.scrollLeft + left + chipBox.width - boxRight, rail.scrollWidth - rail.clientWidth)
-        )
-        rail.scrollTo({ left: Math.round(nextLeft), behavior: 'smooth' })
-      }
-    }
-    // 键盘换选/浮层选路径的落焦点时机到了（父组件已把 pathId 同步过来）
-    if (pendingFocusPathId.value !== undefined && (props.pathId ?? null) === pendingFocusPathId.value) {
-      pendingFocusPathId.value = undefined
-      chip?.focus()
-    }
-    syncRail()
-  })
-}
-
-/* ---------- 轨两端渐隐：溢出侧才亮 ----------
-   轨道滚动条被显式抹掉（scrollbar-width:none），渐隐是唯一「还有内容」的静态提示。
-   不溢出的一侧不亮，否则静止轨道两侧糊一层白，看着像渲染坏了。 */
-
-const railFadeLeft = ref(false)
-const railFadeRight = ref(false)
-
-function syncRail() {
-  const el = railEl.value
-  if (!el) {
-    railFadeLeft.value = false
-    railFadeRight.value = false
-    return
-  }
-  const max = el.scrollWidth - el.clientWidth
-  railFadeLeft.value = el.scrollLeft > 1
-  railFadeRight.value = max > 1 && el.scrollLeft < max - 1
-}
-
-/** 路径集合变化会改变轨宽（如切到「全部路径」后 chip 文案变长）→ 重新判断两端 */
-watch([railOptions, railVisible], () => void nextTick(syncRail))
-/** 视口变化：阈值以内不换集合，但轨宽变了，渐隐要跟着重算 */
-function onRailResize() {
-  syncRail()
-}
-
-watch([railVisible, () => props.pathId], ([ready]) => {
-  if (ready) scrollSelectedChip()
-})
-
-onMounted(() => {
-  window.addEventListener('click', onMoreDocClick)
-  window.addEventListener('keydown', onMoreDocKey)
-  window.addEventListener('resize', onRailResize, { passive: true })
-  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
-    window.matchMedia(NARROW_RAIL_QUERY).addEventListener('change', onRailNarrowChange)
-  }
-})
-onBeforeUnmount(() => {
-  window.removeEventListener('click', onMoreDocClick)
-  window.removeEventListener('keydown', onMoreDocKey)
-  window.removeEventListener('resize', onRailResize)
-  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
-    window.matchMedia(NARROW_RAIL_QUERY).removeEventListener('change', onRailNarrowChange)
-  }
+/** 加载结束（loading 落沿）后把焦点还回路径下拉；宿主不切加载态时不会误落焦点 */
+watch(() => props.loading, (now, prev) => {
+  if (now || !prev || !pendingPathFocus.value) return
+  pendingPathFocus.value = false
+  void nextTick(() => pathpickEl.value?.querySelector<HTMLElement>('[role="combobox"]')?.focus())
 })
 
 /* ---------- 层级筛选（本地）：节点筛掉后，两端不齐的边也一并筛掉 ---------- */
@@ -696,8 +463,9 @@ const levelEdges = computed(() => {
   return props.edges.filter((e) => ids.has(e.fromConceptId) && ids.has(e.toConceptId))
 })
 
-/** 读屏清单与画布同口径：MkGraph 内部会按 hideIsolated 滤掉孤立节点（其 visibleNodes 逻辑）。
- *  清单若不复制这条规则，「图上看不到的概念」会出现在读屏清单里，两套信息互相矛盾 */
+/** 读屏清单与画布同口径：MkGraph 内部只裁「未评估的孤立点」（有掌握度读数的孤立
+ *  概念会画出来，2026-10-31 二轮评审），清单复制同一条规则——「图上看不到的概念」
+ *  不出现在读屏清单里，两套信息不互相矛盾 */
 const listNodes = computed(() => {
   if (!hideIsolated.value) return levelNodes.value
   const connected = new Set<string>()
@@ -705,7 +473,9 @@ const listNodes = computed(() => {
     connected.add(e.fromConceptId)
     connected.add(e.toConceptId)
   }
-  const kept = levelNodes.value.filter((n) => connected.has(n.id))
+  const kept = levelNodes.value.filter(
+    (n) => connected.has(n.id) || (n.masteryScore !== null && n.masteryScore !== undefined)
+  )
   return kept.length > 0 ? kept : levelNodes.value
 })
 
@@ -718,15 +488,10 @@ function masteryText(n: MkGraphNode): string {
 
 /* ---------- 掌握状态四档（统计 / 徽章 / 图例共用一个口径） ---------- */
 
-type StatusKey = 'stable' | 'learning' | 'fragile' | 'unknown'
+/** 四档名走 utils/conceptBands 单源：管理台学习者的「概念信号」行读同一份，
+ *  同一批概念不再一处叫「进行中」一处叫「挣扎」 */
+type StatusKey = ConceptBandKey
 
-/** 文案对齐原型四色口径：已掌握 / 进行中 / 记忆偏弱 / 待学习 */
-const STATUS_LABEL: Record<StatusKey, string> = {
-  stable: '已掌握',
-  learning: '进行中',
-  fragile: '记忆偏弱',
-  unknown: '待学习',
-}
 /** 徽章色跟随画布着色（MkGraph.colorOf 同为绿/琥珀/红/中性灰）：图例教的色必须是图里画的色 */
 const STATUS_BADGE: Record<StatusKey, string> = {
   stable: 'mk-badge--ok',
@@ -735,7 +500,7 @@ const STATUS_BADGE: Record<StatusKey, string> = {
   unknown: 'mk-badge--muted',
 }
 
-/** 与画布着色同一套阈值（未评估 / 脆弱 / 已掌握 / 其余在学），避免"图上红一片、统计说都好" */
+/** 与画布着色同一套阈值（四档名见 utils/conceptBands），避免"图上红一片、统计说都好" */
 function statusKeyOf(node: MkGraphNode | null): StatusKey {
   if (!node || node.masteryScore === null || node.masteryScore === undefined) return 'unknown'
   if (node.stability === 'fragile' || node.masteryScore < 0.45) return 'fragile'
@@ -743,16 +508,29 @@ function statusKeyOf(node: MkGraphNode | null): StatusKey {
   return 'learning'
 }
 
-/** 统计口径与画布着色一致 */
+/** 记忆强度枚举（后端 MemoryStability: unknown|fragile|developing|stable）→ 用户可读。
+    2026-10-31 走查 P1-8：此前把 developing 原样渲染成英文小写，和旁边的中文「知识组件」并排。 */
+const STABILITY_LABEL: Record<string, string> = {
+  stable: '稳固',
+  developing: '形成中',
+  fragile: '较弱',
+  unknown: '尚未形成',
+}
+
+/* 统计口径 = 画布可见节点（2026-10-31 外部评审 P2-4）：此前按全部概念计数，而孤立概念被
+   「显示无关联的概念」默认过滤、画布上看不见——「🟡进行中 1」永远找不到黄点。改与画布
+   同一可见集（listNodes 已实现 hideIsolated 同款规则），图例教的色就是图里画的色；
+   「N 个概念」仍报全量，隐藏的孤立点由画布下方披露行说明。 */
 const counts = computed(() => {
   const out = { stable: 0, learning: 0, fragile: 0, unknown: 0 }
-  for (const n of levelNodes.value) out[statusKeyOf(n)] += 1
+  for (const n of listNodes.value) out[statusKeyOf(n)] += 1
   return out
 })
 
-/** 未选中节点时的侧栏建议：先弱后生，最多 5 个；已掌握的不再占位 */
+/** 未选中节点时的侧栏建议：先弱后生，最多 5 个；已掌握的不再占位。
+ *  同 counts 收窄到画布可见集——推荐一个画布上看不见、点了没反应的节点是死建议。 */
 const suggestedNodes = computed(() =>
-  [...levelNodes.value]
+  [...listNodes.value]
     .filter((n) => statusKeyOf(n) !== 'stable')
     .sort((a, b) => (a.masteryScore ?? 0) - (b.masteryScore ?? 0))
     .slice(0, 5)
@@ -760,7 +538,7 @@ const suggestedNodes = computed(() =>
 
 const selectedStatus = computed(() => {
   const key = statusKeyOf(selected.value)
-  return { key, label: STATUS_LABEL[key], badge: STATUS_BADGE[key] }
+  return { key, label: CONCEPT_BAND_LABEL[key], badge: STATUS_BADGE[key] }
 })
 
 /** 选中节点的概念台账事实：按概念名索引（台账 conceptKey 就是概念名），
@@ -904,141 +682,35 @@ function onPractice() {
   border-radius: var(--mk-radius-modal);
   background: color-mix(in srgb, var(--line) 55%, var(--surface));
 }
-/* 路径筛选行：轨 + 轨外的「更多」出口 */
-.mk-ge__railrow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+/* 路径切换：单个下拉（§5 2026-11-06 定稿），与统计、视图筛选同在 .mk-ge__bar 一栏左端。
+   flex 基准 320px：路径名再长也只在触发器里省略；路径条数再多也只是列表长一点。
+   平铺胶囊轨 / 「更多（N）」浮层 / 两端渐隐 / 横滚定位（scroll-margin）一套随之删除——
+   同一件事（切换路径）在全站只留一个控件。 */
+.mk-ge__pathpick {
+  flex: 0 1 320px;
   min-width: 0;
+  max-width: 100%;
 }
-/* 路径筛选轨（原型 .wf-rail：横滚、无滚动条、与图卡同列）。
-   flex:1 + min-width:0：轨吃满「更多」之外的宽度，且允许收缩到触发横滚 —— 不给
-   min-width:0 时 flex 子项按内容最小宽撑开，整行会被推宽（列表页 .pcard 同款教训） */
-.mk-ge__rail {
-  display: flex;
-  flex: 1 1 auto;
+/* 单路径时的静态归属标签（2026-11-07 走查 图4）：与下拉同一格、同一高度基线，
+   但不是控件——没有可选项（1 条路径），做成下拉会是假控件。
+   标题超长省略，不挤中间统计与右侧筛选。 */
+.mk-ge__pathonly {
+  flex: 0 1 320px;
   min-width: 0;
-  gap: 8px;
-  /* 两端各留 2px：轨是横滚容器，首尾 chip 贴边时描边/焦点环会被裁掉半像素 */
-  padding: 4px 2px;
-  overflow-x: auto;
-  scrollbar-width: none;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.6;
 }
-.mk-ge__rail::-webkit-scrollbar {
-  display: none;
-}
-/* 两端渐隐：滚动条已抹掉，这是「轨上还有内容」的唯一静态提示（有界轨道 + 窄视口下仍需）。
-   遮罩用 black 关键字而非 hex：mask 的色停只吃 alpha（与 Overview 的纵向渐隐同款），
-   写 hex 会被 design:check 记成硬编码配色，读起来也像调色板里的颜色。 */
-.mk-ge__rail--fade-r {
-  mask-image: linear-gradient(to right, black calc(100% - 26px), transparent 100%);
-  -webkit-mask-image: linear-gradient(to right, black calc(100% - 26px), transparent 100%);
-}
-.mk-ge__rail--fade-l {
-  mask-image: linear-gradient(to right, transparent 0, black 26px);
-  -webkit-mask-image: linear-gradient(to right, transparent 0, black 26px);
-}
-.mk-ge__rail--fade-l.mk-ge__rail--fade-r {
-  mask-image: linear-gradient(to right, transparent 0, black 26px, black calc(100% - 26px), transparent 100%);
-  -webkit-mask-image: linear-gradient(to right, transparent 0, black 26px, black calc(100% - 26px), transparent 100%);
-}
-/* 路径 chip（原型 .wf-chip：38px 高胶囊；选中态 = 蓝 14% 底 + 蓝描边）。
-   P2-24（2026-10-04 评审）：路径标题整句直出，390 视口选中 chip（19 字实测
-   scrollWidth=275）溢出 42px 尾部被裁、后续 chip 排到 right=1763 且轨道无滚动定位。
-   chip 收敛为单行省略（完整标题由选中说明与详情承载）；选中 chip 由 script 的
-   scrollSelectedChip 居中，兼作「轨上还有其他路径」的滚动 affordance。 */
-.mk-ge__chip {
-  flex: none;
-  min-height: 38px;
-  max-width: 260px;
-  padding: 8px 14px;
+.mk-ge__pathonly-label { flex: 0 0 auto; color: var(--faint); font-size: 12px; }
+.mk-ge__pathonly strong {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  border: 1px solid var(--line);
-  border-radius: var(--mk-radius-pill);
-  background: var(--surface);
-  color: var(--muted);
-  font: inherit;
-  /* --mk-fs-13 是档外字面量 token（1440 档三档为 12.5/14.5/15.5），
-     用角色 token 取代，避免同屏第 4 个文本档（2026-10-06 审核 §主题 6）。 */
-  font-size: var(--mk-fs-micro);
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
-}
-.mk-ge__chip:hover {
-  background: color-mix(in srgb, var(--blue) 12%, transparent);
-}
-.mk-ge__chip--on,
-.mk-ge__chip--on:hover {
-  background: color-mix(in srgb, var(--blue) 14%, transparent);
-  border-color: var(--blue);
-  color: var(--blue-deep);
-}
-.mk-ge__chip:focus-visible {
-  outline: none;
-  box-shadow: var(--mk-focus-ring);
-}
-/* ---------- 「更多」（轨外的路径出口） ----------
-   有界轨道的逃生口：路径数一涨，轨上只留「全部路径 + 3 条 + 更多（N）」，其余进浮层。
-   放在轨外（.mk-ge__railrow 的 flex:none 子项）而不是轨尾 —— 轨尾的 chip 会随横滚
-   跑出视口，「出口」本身就不该需要滚动才能找到。 */
-.mk-ge__more {
-  position: relative;
-  flex: none;
-}
-.mk-ge__chip--more {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  max-width: none;
-}
-.mk-ge__more-panel {
-  /* 与触发钮隔 6px：指尖停在「更多」上时不在任何菜单项里（列表页 pcard 菜单同款防误触口径） */
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 10;
-  display: grid;
-  gap: 2px;
-  min-width: 236px;
-  max-width: min(360px, calc(100vw - 32px));
-  max-height: min(60vh, 360px);
-  overflow-y: auto;
-  padding: 6px;
-  border: 1px solid var(--line);
-  border-radius: var(--mk-radius-xl);
-  background: var(--surface);
-  box-shadow: var(--shadow-md);
-}
-.mk-ge__more-item {
-  min-height: 40px;
-  padding: 9px 11px;
-  border: 0;
-  border-radius: var(--mk-radius-md);
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  /* 走角色 token（2026-10-06 审核 §主题 6 同批先例：--mk-fs-13 档外字面量已删，
-     同屏不出现第 4 个文本档），与筛选芯片同档。 */
-  font-size: var(--mk-fs-micro);
-  font-weight: 600;
-  text-align: left;
-  cursor: pointer;
-}
-.mk-ge__more-item:hover {
-  background: color-mix(in srgb, var(--surface) 96%, var(--ink));
   color: var(--ink);
-}
-.mk-ge__more-item--on,
-.mk-ge__more-item--on:hover {
-  background: color-mix(in srgb, var(--blue) 12%, transparent);
-  color: var(--blue-deep);
-}
-.mk-ge__more-item:focus-visible {
-  outline: none;
-  box-shadow: var(--mk-focus-ring);
+  font-weight: 700;
 }
 /* 图卡内层：壳（border / radius / 10px 10px 4px padding）由宿主出，这里只排版 */
 .mk-ge__card {
@@ -1053,6 +725,13 @@ function onPractice() {
   align-items: center;
   justify-content: space-between;
   gap: var(--mk-space-3);
+}
+/* 窄屏（≤1100）：下拉整行铺开——390 档统计/视图筛选本来就会换行，
+   下拉自己一行，不再被压成一条缝（旧轨在这里还会占 44px 高 + 横滚） */
+@media (max-width: 1100px) {
+  .mk-ge__pathpick { flex: 1 1 100%; }
+  /* 单路径静态标签同样整行铺开，与下拉同一断点行为 */
+  .mk-ge__pathonly { flex: 1 1 100%; }
 }
 .mk-ge__stats {
   display: flex;
@@ -1092,7 +771,11 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   border-radius: var(--mk-radius-sm);
 }
 .mk-ge__seg-btn {
-  padding: 4px var(--mk-space-3);
+  /* §1（2026-11-06）：卡内控件收敛到 32px 高（30~34 档），不再靠 4px 内衬凑出 27px 的矮条 */
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 var(--mk-space-3);
   border: 0;
   background: transparent;
   color: var(--mk-muted);
@@ -1113,12 +796,20 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   cursor: pointer;
 }
 .mk-ge__body {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 280px;
   gap: var(--mk-space-4);
+  /* 2026-11-05 PC 走查改回 stretch：用户点名概览卡「像块膏药」——短卡浮在画布右上，
+     下面空一截。侧栏作为独立栏与画布等高（stretched），空白由栏内 flex 布局吸收；
+     内容仍然顶对齐，不强行居中。 */
   align-items: stretch;
 }
+/* 收起侧栏（2026-11-06 走查）：单栏后画布吃满卡宽，100% 全屏看图 */
+.mk-ge__body--full { grid-template-columns: minmax(0, 1fr); }
+.mk-ge__body--full .mk-ge__side { display: none; }
 .mk-ge__canvas {
+  position: relative;
   min-width: 0;
 }
 .mk-ge__legend {
@@ -1133,17 +824,13 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   display: inline-flex;
   align-items: center;
   gap: var(--mk-space-1);
+  /* 组内禁折行（2026-11-05 UX 审计）：402px 视口下「属于（知识组件 → 核心概念）」
+     曾被拆成「核心概/念）」断在括号中间、符号悬在行首（截图实证）。外层 .mk-ge__legend
+     已有 flex-wrap，整组放不下时作为整体换行，组内文字不再词中拆断 */
+  white-space: nowrap;
 }
-.mk-ge__dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: var(--mk-radius-pill);
-}
-.mk-ge__dot--ok { background: var(--mk-green); }
-.mk-ge__dot--mid { background: var(--mk-amber); }
-.mk-ge__dot--weak { background: var(--mk-red); }
-.mk-ge__dot--none { background: var(--mk-line); }
+/* .mk-ge__dot* 已删（2026-11-05 PC 走查）：四档状态点从底图例撤除后无引用，
+   状态色点只剩画布头统计行自己的 <i>（.mk-ge__stat 系） */
 .mk-ge__line {
   display: inline-block;
   width: 22px;
@@ -1151,6 +838,18 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   border-top-width: 2px;
 }
 /* 线色不再写死在 CSS：图例与画布同源取 relationStyleOf（见 script legendLines） */
+/* 形状图例（2026-11-09）：与画布上 MkGraph 的 symbol 同形——圆点=核心概念、圆角方块=知识组件。
+   色走当前文字色（图例是说明文字的一部分，不引入第五种语义色）。 */
+.mk-ge__shape {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 3px;
+  background: currentColor;
+  vertical-align: -1px;
+}
+.mk-ge__shape--round { border-radius: 50%; }
+.mk-ge__shape--square { border-radius: 2px; }
 .mk-ge__legend-hint {
   display: block;
   opacity: 0.8;
@@ -1163,18 +862,86 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   .mk-ge__legend-mobile { display: inline; }
   .mk-ge__legend-tap { display: inline; }
 }
+/* 画布角落缩放控件（+ / - / ⟲）：38px 方钮竖排贴右下角图例上方 */
+.mk-ge__zoom {
+  position: absolute;
+  right: 10px;
+  bottom: 40px;
+  z-index: 5;
+  display: grid;
+  gap: 4px;
+}
+.mk-ge__zoom-btn {
+  width: 32px; height: 32px;
+  display: grid; place-items: center;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-sm);
+  background: var(--mk-surface);
+  color: var(--mk-muted);
+  cursor: pointer;
+  box-shadow: var(--mk-shadow-sm);
+}
+.mk-ge__zoom-btn:hover { color: var(--mk-ink); border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line)); }
+/* 收起态：画布右上角的展开钮 */
+.mk-ge__side-reopen {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 5;
+  min-height: 26px;
+  padding: 2px 10px;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-sm);
+  background: var(--mk-surface);
+  color: var(--mk-muted);
+  font: inherit;
+  font-size: var(--mk-fs-micro);
+  cursor: pointer;
+  box-shadow: var(--mk-shadow-sm);
+}
+.mk-ge__side-reopen:hover { color: var(--mk-ink); border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line)); }
+/* 侧栏标题行（2026-11-07 走查）：标题占弹性宽、按钮固定宽——长标题在自己的轨道里
+   折行，不再钻到按钮底下。标题行下距由行容器统一出（原挂在 h4 上）。 */
+.mk-ge__side-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: var(--mk-space-2);
+}
+.mk-ge__side-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--mk-fs-body);
+  line-height: 1.5;
+  word-break: break-word;
+}
+/* 侧栏收起/展开开关：标题行右端，固定尺寸不随标题挤压 */
+.mk-ge__side-toggle {
+  flex: none;
+  width: 26px; height: 26px;
+  display: grid; place-items: center;
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-sm);
+  background: var(--mk-surface);
+  color: var(--mk-muted);
+  cursor: pointer;
+  font-size: 13px; line-height: 1;
+}
+.mk-ge__side-toggle:hover { color: var(--mk-ink); border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line)); }
 .mk-ge__side {
+  position: relative;
   padding: var(--mk-space-3);
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-md);
   background: var(--mk-surface);
-  height: 100%;
+  /* 2026-11-05 PC 走查：随 stretch 拉满画布行高（用户点名「与画布等高」），
+     flex 列让详情态的内容自然从上往下排；概览态内容少时卡内留白交给栏本身，
+     不再像短卡浮在画布旁。此前 height:100% 拔高的顾虑随「概览即首页」设计一并翻案。 */
+  display: flex; flex-direction: column;
+  min-height: 0;
   box-sizing: border-box;
-}
-.mk-ge__side-title {
-  margin: 0 0 var(--mk-space-2);
-  font-size: var(--mk-fs-body);
-  line-height: 1.5;
 }
 /* 标题下的一行：状态徽章（原型 wf-badge）+ 分类副标题（原型 wf-drawer__sub 位） */
 .mk-ge__side-meta {
@@ -1189,39 +956,32 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
 }
+/* 状态小签（§1 2026-11-06）：图谱里出现的状态标签（侧栏「进行中/记忆偏弱/…」、
+   概览建议行的同款）是非点击类标签，不再用 .mk-badge 默认的 999px 大胶囊 + 2px 8px
+   内衬。收敛为 20px 高小方签、1px 6px 内衬、4px 方角、无描边；底色仍走
+   .mk-badge--ok/warn/bad/muted 的柔和半透明档（色语义不动）。
+   注：这是本组件内的局部收敛（原语层 .mk-badge 归全局样式组，已在报告里提为全局项）。 */
+.mk-ge .mk-badge {
+  height: 20px;
+  padding: 1px 6px;
+  border: 0;
+  border-radius: var(--mk-radius-xs);
+  font-weight: 600;
+}
 .mk-ge__side-hint {
   margin: 0;
   font-size: var(--mk-fs-micro);
   line-height: 1.6;
   color: var(--mk-muted);
 }
-/* 未选中态的概览：把原先把 800px 右栏留空的单句提示，换成分布 + 建议入口 */
+/* 未选中态的概览：建议入口清单（分布计数画布头图例已有，不再重复呈现） */
 .mk-ge__overview {
   display: grid;
+  /* minmax(0,1fr)：auto 轨会被 nowrap 概念名的 max-content 撑到卡外（2026-11-03 真机：
+     24 字生成名把 254px 面板撑到 322px，里层的省略号永远轮不到生效），显式收窄轨道 */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--mk-space-3);
   align-content: start;
-}
-.mk-ge__overview-stats {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--mk-space-2);
-}
-.mk-ge__overview-stat {
-  display: grid;
-  gap: 2px;
-  padding: 10px 12px;
-  border: 1px solid var(--mk-line);
-  border-radius: var(--mk-radius-md);
-  background: var(--mk-surface-2);
-}
-.mk-ge__overview-stat b {
-  font-size: 20px;
-  line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-}
-.mk-ge__overview-stat span {
-  font-size: var(--mk-fs-micro);
-  color: var(--mk-muted);
 }
 .mk-ge__overview-label {
   margin: 0;
@@ -1231,10 +991,19 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
 }
 .mk-ge__overview-list {
   display: grid;
+  /* 单列轨道按容器宽收窄：默认 auto 轨道 + li 的 min-width:auto 按 min-content 撑宽，
+     长概念名与右侧 nowrap 徽章一起把整个行盒顶出侧栏，右端徽章正好落在卡片裁切边界上
+     被切掉（2026-11-02 P2-6） */
+  grid-template-columns: minmax(0, 1fr);
   gap: 4px;
   margin: 0;
   padding: 0;
   list-style: none;
+}
+/* li 自己也要 min-width:0：父级轨道收了，但 grid item 的 min-width:auto 仍会按内容
+   把行盒撑回 min-content 宽（只把 min-width:0 加在下面那个标签 span 上约束不住它） */
+.mk-ge__overview-list > li {
+  min-width: 0;
 }
 .mk-ge__overview-item {
   display: flex;
@@ -1258,9 +1027,11 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
 }
 .mk-ge__overview-item > span:first-child {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* 换行代替省略号（2026-11-04 溢出走查）：25 字概念名（「结果义与过去事件义的区分决定
+     完成时与过去时的取舍」）在 232px 窄栏里被 nowrap+ellipsis 截成「结果义与过去事件义
+     的区分决定完成时…」，同一条在详情卡里是全名——列表是导航入口，截断后长名无从区分。
+     min-width:0 保留：否则 flex item 按 min-content 撑宽，外层 minmax(0,1fr) 也压不住。 */
+  overflow-wrap: anywhere;
 }
 /* 状态徽章是固定两字，不能被长概念名挤成「待学 / 习」 */
 .mk-ge__overview-item > .mk-badge {
@@ -1342,12 +1113,15 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 44px;
-  padding: 0 18px;
-  border-radius: var(--mk-radius-xl);
+  /* §1（2026-11-06）卡内嵌按钮：高度收敛到 32px（30~34 档）、同心圆角 8px
+     （旧为 44px 高 + 16px 圆角的大胶囊）、字号走 micro（12~13 档）。触屏档在
+     ≤900 媒体块里单独抬回 36（mobile:spec 的 lt36 硬下沿）。 */
+  min-height: 32px;
+  padding: 0 14px;
+  border-radius: var(--mk-radius-md);
   font: inherit;
-  font-size: var(--mk-fs-body);
-  font-weight: 700;
+  font-size: var(--mk-fs-micro);
+  font-weight: 600;
   cursor: pointer;
   transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease, color 0.16s ease;
 }
@@ -1410,17 +1184,25 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
 .mk-ge__rel-label b {
   margin-left: 5px;
   font-weight: 600;
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
 }
 .mk-ge__rel-list {
   margin: 0;
   padding: 0;
   list-style: none;
+  /* 双列网格（2026-11-05 屏效比）：前置/后继各有 6 条时逐条整行拉成 12 行——
+     概念名多为 6~9 字，两列并排高度直接减半；触控盒不变（item 仍 padding 10/7） */
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 6px;
 }
 .mk-ge__rel-item {
   display: block;
   width: 100%;
-  padding: 3px 7px;
+  /* 热区（2026-11-05 UX 审计 P1）：micro 字号 + 3px 上下距实测整行仅 24px，低于 36px
+     触屏门禁；关联概念行是详情卡内唯一的继续导航（6 行实测），误触即跳错概念。
+     上下 padding 抬到 10px → 命中高 ≈37px 达标，微字号视觉密度不变。 */
+  padding: 10px 7px;
   border: 0;
   border-radius: var(--mk-radius-sm, 8px);
   background: transparent;
@@ -1433,7 +1215,7 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
 }
 .mk-ge__rel-item:hover {
   background: var(--mk-surface-3);
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
 }
 @media (max-width: 900px) {
   .mk-ge__body {
@@ -1442,8 +1224,9 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   /* 图例后多留 32px：首屏底边原先正好切在「图谱概览」标题腰部，只露出半截字。
      把下一张卡整体推到首屏之外，避免假半截卡；滚动后卡片完整出现。 */
   .mk-ge__canvas { padding-bottom: calc(var(--mk-space-2) + 24px); }
-  .mk-ge__side { height: auto; }
-  /* 视图分段控件（全部/核心概念/知识组件）只有 27px 高，触屏上它是最常用的过滤器 */
+  /* 窄屏原本在此把 .mk-ge__side 的 height 覆回 auto（对抗桌面 100%）；桌面 100% 已删
+     （2026-11-04），此覆写失去对象，一并删去。 */
+  /* 视图分段控件（全部/核心概念/知识组件）桌面 32px，触屏抬到 36（mobile:spec lt36） */
   .mk-ge__seg-btn {
     min-height: 36px;
     display: inline-flex;
@@ -1453,28 +1236,7 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   /* 「显示无关系的概念」是一行 label + 原生 18px checkbox：点 label 任意处都能切换，
      所以手势目标是 label 本身——它原来只有 ~19px 高，补齐到 36（mobile:spec 按 label 量） */
   .mk-ge__check { min-height: 36px; }
-  /* 路径 chip 桌面 38px（原型档）；触屏抬到 44 —— 轨道里 chip 数量 = 路径数 +1，
-     每个 <44 都吃 mobile:spec 的 lt44 预算（kmap 页预算 7，旧 select 是 44 不占额度） */
-  .mk-ge__chip { min-height: 44px; }
-  /* 窄屏路径轨改多行平铺：脚本侧 railBounded 在 ≤900 恒 false（不收「更多」），
-     这里让轨换行铺开全部 chip、不再横滚——390 轨宽仅 ~358px，横滚时屏外路径
-     只有一道很淡的右缘渐隐提示，学习者不好选（2026-10-15 走查）。
-     横滚相关的两端渐隐/scroll-margin 在窄屏失去意义，一并关掉。 */
-  .mk-ge__rail {
-    flex-wrap: wrap;
-    overflow-x: visible;
-  }
-  .mk-ge__rail--fade-l,
-  .mk-ge__rail--fade-r,
-  .mk-ge__rail--fade-l.mk-ge__rail--fade-r {
-    mask-image: none;
-    -webkit-mask-image: none;
-  }
-  /* 与 script 的 scrollSelectedChip 配套：chip 被**平台**自动滚进视口时（焦点落在一张卡片上，
-     平台会把它滚到光标处；或宿主在轨尾钉进一枚新 chip），把落点边界设在 chip 的左缘
-     + 轨自身 2px 内边距处——目标整枚带进来、且只露出它左侧的内容，不会把恒定第一枚
-     「全部路径」继续往左推。scroll-margin 只影响自动滚动的对齐，本身不产生位移。
-     注意：这条 ≤900 覆盖必须留在本文件**最后一个** style 块里，写进中间会被后面的桌面规则盖成死代码。 */
-  .mk-ge__chip { scroll-margin-inline: 2px; }
+  /* 节点详情主 CTA 桌面 32px（§1 卡内按钮档），触屏抬回 36（mobile:spec lt36 硬下沿） */
+  .mk-ge__cta { min-height: 36px; }
 }
 </style>

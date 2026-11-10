@@ -91,7 +91,11 @@ export interface TeachingSessionStartInput {
 
 export interface TeachingOpening {
   message: string;
-  /** 可选软引导：与 quickReplies 互斥（2026-10-10 起动作选项在场时不下发，见开场生成器 core 规则） */
+  /**
+   * 可选的一行思考引导（渲染在动作选项上方一行）。不配控件，因此 **不得出现动作指向词**；
+   * quickReplies 恒为非空（2026-11-02 起由 ensureOpeningActionLine 确定性兜底），
+   * 动作出口永远由 quickReplies 承担——两者不是二选一，各自负责"想什么 / 往哪走"。
+   */
   question?: string;
   quickReplies: Array<{ text: string }>;
   mode: 'self-assess' | 'predict' | 'example-first';

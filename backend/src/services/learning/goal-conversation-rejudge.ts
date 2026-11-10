@@ -19,6 +19,8 @@ import {
   triageGoalResponse,
 } from './response-triage';
 import { buildCompletedConversationResult, buildHardBlockMessage } from './goal-conversation.exit';
+import { getPathCompletionProjection } from './goal-conversation.path-projection';
+import { hasConfirmableProposal } from './goal-proposal-guard';
 import learningService from './learning.service';
 
 /** service 侧 GoalConversationOptions 的结构子集（重判链路只读 meta / systemPromptOverrides 并原样透传） */
@@ -73,7 +75,8 @@ export interface GoalConversationRejudgeDeps {
     userInput: string,
     isFirst: boolean,
     userId?: string,
-    options?: RejudgeConversationOptions
+    options?: RejudgeConversationOptions,
+    callOptions?: { excludeTrailingUserInput?: boolean }
   ) => Promise<unknown>;
   withConversationId: (result: unknown, conversationId: string) => unknown;
   getStructuredOutputValid: (aiResponse: unknown) => boolean;
@@ -83,14 +86,14 @@ export interface GoalConversationRejudgeDeps {
     role: string,
     content: string,
     meta?: Record<string, number> | null,
-    extra?: { quickReplies?: unknown }
+    extra?: { quickReplies?: unknown; idempotentUserTurn?: boolean }
   ) => Promise<void>;
   getGoalExt: (internal: unknown) => { quickReplies?: unknown };
   updateCollectedData: (conversationId: string, aiResponse: unknown) => Promise<void>;
   buildConfirmedResult: (
     conversationId: string,
     data: Record<string, unknown>,
-    learningPath: { id: string; status?: string } | null
+    learningPath: { id: string; status?: string; lifecycle?: string | null } | null
   ) => unknown;
 }
 
@@ -98,7 +101,8 @@ export interface GoalConversationRejudgeDeps {
  * 确认链路共用段（2026-10-29 抽取）：建占位路径 → 认领生成 run → 以 revision CAS 把路径
  * 原子绑定到会话。两个调用方：proposing 阶段的 confirmProposal 硬规则、
  * completed 硬阻断会话的补充说明重判通过（rejudgeHardBlockedCompletion）。
- * 返回 bound=false 表示 CAS 失配（并发写赢了自己），占位路径由调用方负责作废。
+ * 返回 bound=false 表示 CAS 失配（并发写赢了自己）：本条占位路径已被本函数删除，不留在用户
+ * 可见列表里（#212），调用方只需按最新状态复用赢家路径。
  */
 export async function bindGeneratingPath(
   deps: GoalConversationRejudgeDeps,
@@ -122,6 +126,14 @@ export async function bindGeneratingPath(
       ext: {
         goalConversation: {
           understanding: input.data.understanding || {},
+          // 交接声明（prompts/orchestration/goal.yaml 的 pathInRawOutput）把以下键当作
+          // skill 原始输出里的物理位置；seed 是确认链路里 skill 输出的替代品。
+          confirmedProposal: input.data.confirmedProposal ?? null,
+          // structuredData/confidenceScores 只在确有值时落键：写成 `?? null` 会把「skill 没产出
+          // 该字段」伪装成「产出为 null」，assembleGoalHandoff 的 skip 诊断（goal-conversation
+          // .service 的 warn）随之静默——缺值就照实报缺，由消费方回退旧的直连字段。
+          ...(input.data.structuredData != null ? { structuredData: input.data.structuredData } : {}),
+          ...(input.data.confidenceScores != null ? { confidenceScores: input.data.confidenceScores } : {}),
           nextQuestions: [],
           collected: input.data.collected || {}
         }
@@ -133,7 +145,7 @@ export async function bindGeneratingPath(
   const runId = await learningService.claimPathCoreGeneration(placeholderPath.id, null);
 
   // 原子确认（审计 §1.4）：以 revision 条件把「确认权 + 占位路径」一次性绑定；
-  // 并发/重试的落败方 CAS 失配：不写库、不推进对话（占位路径由调用方作废并读最新状态兜底）。
+  // 并发/重试的落败方 CAS 失配：不写库、不推进对话。
   const bound = await deps.updateConversationLifecycle(input.conversation.id, 'completed', {
     status: 'completed',
     completedAt: new Date(),
@@ -144,10 +156,50 @@ export async function bindGeneratingPath(
     ...(input.onBound ? { mutateCollectedData: input.onBound } : {}),
   });
 
+  if (!bound) {
+    await discardLosingPlaceholder(placeholderPath.id, runId);
+    return { bound, placeholderPath: null, runId: null, seedResult };
+  }
+
   return { bound, placeholderPath, runId, seedResult };
 }
 
-/** 确认链路共用段：绑定成功后异步跑 Path 生成（失败回调作废占位路径，供 markActiveGenerationFailed 兜底）。 */
+/**
+ * 作废并发确认落败方的占位路径（#212）。
+ *
+ * 落败方的占位路径从未被任何会话/学习会话引用，也没有 kick 过生成，直接删除即可；
+ * `path_generation_runs` / `milestones` 由 learning_paths 的 ON DELETE CASCADE 一并清掉，
+ * 否则它会以 `failed` 占位（标题「个性化学习路径」）出现在用户路径列表里，点重试还会
+ * 在同一目标下再造一条真路径。
+ *
+ * 删除失败时退回旧行为（标 failed）：至少不让带 processing run 的生成中占位被
+ * recoverStaleGeneratingPaths 恢复成一条没人要的真路径。
+ */
+async function discardLosingPlaceholder(pathId: string, runId: string): Promise<void> {
+  try {
+    await prisma.learning_paths.delete({ where: { id: pathId } });
+  } catch (error) {
+    logger.warn('[goal-conversation] 并发确认落败方占位路径删除失败，退回标记失败', {
+      pathId,
+      error: String(error),
+    });
+    await learningService
+      .markActiveGenerationFailed(pathId, new Error('并发确认，本条占位路径作废'), runId)
+      .catch(() => undefined);
+  }
+}
+
+/**
+ * 确认链路共用段：绑定成功后异步跑 Path 生成（失败回调作废占位路径，供 markActiveGenerationFailed 兜底）。
+ *
+ * #175 实例 1：`buildGoalPathRequest` 原先直接写在 `runGoalAsync` 的**实参展开**里，
+ * 因此先于 `runGoalAsync` 求值——它一抛错就逃出本函数：`onError` 只覆盖异步运行失败，
+ * 调用方的 catch 又只 rethrow，于是留下「会话已 completed + 路径停在 generating」，
+ * 用户拿到 500 并要等 5 分钟租约过期才被 `recoverStaleGeneratingPaths` 兜住。
+ * 现把「准备请求」与「投递」一起纳入 try：准备阶段失败就**就地**把该 run 标失败
+ * （`markActiveGenerationFailed` 按 activeRunId 幂等/fenced，可安全重入），
+ * 让路径立刻落到 failed + 可重试文案，而不是靠租约兜底。
+ */
 export async function kickPathGeneration(
   deps: GoalConversationRejudgeDeps,
   input: {
@@ -158,22 +210,41 @@ export async function kickPathGeneration(
     systemPromptOverrides?: RejudgeConversationOptions['systemPromptOverrides'];
   }
 ) {
-  pathOrchestrator.runGoalAsync(
-    {
-      ...await deps.buildGoalPathRequest(input.conversation, input.seedResult, input.pathId, input.systemPromptOverrides),
+  type GoalPathRequest = Awaited<ReturnType<GoalConversationRejudgeDeps['buildGoalPathRequest']>> & {
+    generationRunId: string;
+    createdPlaceholder: boolean;
+  };
+  let request: GoalPathRequest;
+  try {
+    request = {
+      ...(await deps.buildGoalPathRequest(
+        input.conversation,
+        input.seedResult,
+        input.pathId,
+        input.systemPromptOverrides
+      )),
       generationRunId: input.runId,
       createdPlaceholder: true
+    };
+  } catch (prepareError) {
+    logger.error('硬规则触发：路径生成请求准备失败，就地置该 run 为失败', {
+      conversationId: input.conversation.id,
+      pathId: input.pathId,
+      error: String(prepareError)
+    });
+    await learningService.markActiveGenerationFailed(input.pathId, prepareError, input.runId);
+    return;
+  }
+
+  pathOrchestrator.runGoalAsync(request, {
+    onSuccess: () => {
+      logger.info('硬规则触发：异步学习路径生成成功', { conversationId: input.conversation.id, pathId: input.pathId });
     },
-    {
-      onSuccess: () => {
-        logger.info('硬规则触发：异步学习路径生成成功', { conversationId: input.conversation.id, pathId: input.pathId });
-      },
-      onError: async (pathError) => {
-        logger.error('硬规则触发：异步学习路径生成失败', { conversationId: input.conversation.id, pathId: input.pathId, error: String(pathError) });
-        await learningService.markActiveGenerationFailed(input.pathId, pathError, input.runId);
-      }
+    onError: async (pathError) => {
+      logger.error('硬规则触发：异步学习路径生成失败', { conversationId: input.conversation.id, pathId: input.pathId, error: String(pathError) });
+      await learningService.markActiveGenerationFailed(input.pathId, pathError, input.runId);
     }
-  );
+  });
 }
 
 /**
@@ -185,8 +256,10 @@ export async function kickPathGeneration(
  *   1. 新消息照常入对话（用户补充 + 模型回合都落库）；
  *   2. 模型按「原目标 + 补充说明」重新提取 understanding，updateCollectedData 内重算分诊；
  *   3. 仍硬阻断 → 返回更新后的拒绝文案（明说重判仍不通过，建议换知识型框架重开对话）；
- *      硬阻断解除 → 复用确认链路生成路径并回写 learningPathId（同一会话只允许一条活路径，
- *      learningPathId 回写 + CAS 双保险，重复补充说明只会拿到已有路径）。
+ *      硬阻断解除 → **再过后置提案门禁**（#162 的另一条入口，与 service 确认通道同一道
+ *      hasConfirmableProposal），确有可用提案才复用确认链路生成路径并回写 learningPathId
+ *      （同一会话只允许一条活路径，learningPathId 回写 + CAS 双保险，重复补充说明只会拿到
+ *      已有路径）；没有可用提案则回到 proposing，让模型先把提案补出来（用户再确认）。
  *
  * 返回 null = 不适用重判（存档分诊非硬阻断），调用方回落既有 completed 行为（不回归）。
  * 与 proposing 确认分支「不允许再次确认放行」的关系：那条规则拦的是对同一份旧证据的重复
@@ -214,13 +287,18 @@ export async function rejudgeHardBlockedCompletion(
     replyPreview: userReply.slice(0, 40),
   });
 
-  // 调模型把补充说明并进 understanding（先不写当前用户消息，避免本轮输入重复进入上下文）
-  const aiResponse = (await deps.callAI(conversation.id, userReply, false, userId, options)) as AiTurnResponse;
+  // 用户补充说明**先落库再调模型**（#160：落库与调用解耦，callAI 非结构化失败也不丢这一轮输入）。
+  // 本条已在历史里，故 callAI 侧传 excludeTrailingUserInput 把它剔出上下文，避免重复喂入；
+  // 失败重试由 saveMessage 的回合级幂等（pendingUserTurn）护栏挡住重复写入。
+  await deps.saveMessage(conversation.id, 'user', userReply, options?.meta, { idempotentUserTurn: true });
+
+  const aiResponse = (await deps.callAI(conversation.id, userReply, false, userId, options, {
+    excludeTrailingUserInput: true
+  })) as AiTurnResponse;
   const responseWithConversationId = deps.withConversationId(aiResponse, conversation.id);
 
   if (!deps.getStructuredOutputValid(aiResponse)) {
-    // 422 恢复信封前先持久化本轮用户消息，保证补充说明不丢（与普通回合同款兜底）
-    await deps.saveMessage(conversation.id, 'user', userReply, options?.meta);
+    // 用户补充说明已落库（上方），AI 回复不落库 → 422 恢复信封刷新后仍不丢（与普通回合同款兜底）
     logger.warn('[goal-conversation] 硬阻断重判结构化输出失败，状态未更新', {
       conversationId: conversation.id,
       userId,
@@ -229,8 +307,7 @@ export async function rejudgeHardBlockedCompletion(
     deps.throwStructuredOutputInvalid(responseWithConversationId);
   }
 
-  // 追加进对话：用户补充说明 + 模型回合（补充说明从此在库有痕迹，不再被短路丢弃）
-  await deps.saveMessage(conversation.id, 'user', userReply, options?.meta);
+  // 模型回合追加进对话（补充说明已在上方落库，不再重复写）
   await deps.saveMessage(conversation.id, 'ai', aiResponse.userVisible, null, { quickReplies: deps.getGoalExt(aiResponse.internal).quickReplies });
 
   // 持久化更新后的 understanding，并重算落库分诊结论（updateCollectedData 内重算 RESPONSE_TRIAGE_KEY）
@@ -256,22 +333,44 @@ export async function rejudgeHardBlockedCompletion(
   const rejudgedTriage = resolveResponseTriageFromCollectedData(latestData)
     || triageGoalResponse(latestData.understanding || {});
   if (isHardBlockResponseTriage(rejudgedTriage, latestData.understanding)) {
-    // 仍被拦：恢复终态语义（stage 列写回 completed，status 保持 completed），返回更新后的拒绝文案
-    await deps.updateConversationLifecycle(conversation.id, 'completed', { status: 'completed' });
+    const rejudgedMessage = buildHardBlockMessage(rejudgedTriage, { rejudged: true });
+    // 仍被拦：恢复终态语义（stage 列写回 completed，status 保持 completed），返回更新后的拒绝文案。
+    // #213：这段文案必须落库——此前只进返回值，GET 会按初判重建另一段文案，重载后「结论不变」这句
+    // 凭空消失，用户以为补充说明没被读到。历史里紧邻的那条 ai 是模型原始回合（平台并不把原文交给用户），
+    // 用拒绝文案就地取代它，保持「user 补充 → ai 结论」的回合形状。
+    await deps.updateConversationLifecycle(conversation.id, 'completed', {
+      status: 'completed',
+      mutateCollectedData: (data) => {
+        const messages = Array.isArray(data.messages) ? (data.messages as Array<Record<string, unknown>>) : [];
+        for (let i = messages.length - 1; i >= 0; i -= 1) {
+          const role = messages[i]?.role;
+          if (role !== 'ai' && role !== 'assistant') continue;
+          messages[i] = { ...messages[i], content: rejudgedMessage };
+          data.messages = messages;
+          return;
+        }
+        messages.push({ role: 'ai', content: rejudgedMessage, time: new Date().toISOString() });
+        data.messages = messages;
+      },
+    });
     logger.info('[goal-conversation] 硬阻断重判仍不通过', {
       conversationId: conversation.id,
       mode: rejudgedTriage.mode,
       confidence: rejudgedTriage.confidence
     });
     return {
-      userVisible: buildHardBlockMessage(rejudgedTriage, { rejudged: true }),
+      userVisible: rejudgedMessage,
       internal: {
         core: {
           conversationId: conversation.id,
           stage: 'completed' as const,
           confidence: latestData.confidence || 0,
           isCompleted: true,
-          learningPath: null
+          learningPath: null,
+          // 与 buildHardBlockResult 同口径（2026-11-05 UX 审计 P0）：重判仍被拦也是
+          // 「completed 且无路径」终局，缺此标记前端会把它当普通完成弹「路径已创建」
+          // 假成功——这正是阻断卡引导的「回复补充说明重判」退路上，不可漏。
+          hardBlocked: true
         },
         ext: {
           goalConversation: {
@@ -286,7 +385,44 @@ export async function rejudgeHardBlockedCompletion(
     };
   }
 
-  // 重判通过：复用确认链路生成路径（硬阻断是唯一无条件闸门，解除即放行，
+  // 提案门禁（#162 的另一条入口）：硬阻断解除只撤掉「分诊」这一道闸，不等于会话里已经有
+  // 一份可确认的提案。与 service 确认通道（goal-conversation.service.ts 的 proposing 分支）
+  // 复用同一判据 hasConfirmableProposal，避免这里成为「从没被确认过的路径」的旁路：
+  // 没有可用提案（confirmedProposal 为空/半截）时不 bindGeneratingPath，回到 proposing 由
+  // 模型先补提案，模型本轮回复原样交给用户（用户看到的是模型在继续推进，而非凭空成功）。
+  if (!hasConfirmableProposal(latest.collectedData, {
+    conversationId: conversation.id,
+    userId,
+    stage: latest.stage,
+  })) {
+    await deps.updateConversationLifecycle(conversation.id, 'proposing', { status: 'active' });
+    return {
+      userVisible: aiResponse.userVisible,
+      internal: {
+        core: {
+          conversationId: conversation.id,
+          stage: 'proposing' as const,
+          confidence: latestData.confidence || 0,
+          isCompleted: false,
+          learningPath: null,
+          // 与硬阻断终局的 hardBlocked 标记同形状但取反：这是「可继续推进」的普通回合，
+          // 前端据此不弹「路径已创建」假成功、也不显示阻断卡。
+          hardBlocked: false
+        },
+        ext: {
+          goalConversation: {
+            understanding: latestData.understanding || {},
+            nextQuestions: [] as string[],
+            quickReplies: [] as string[],
+            collected: latestData.collected || {},
+            responseTriage: rejudgedTriage
+          }
+        }
+      }
+    };
+  }
+
+  // 重判通过且提案门禁已过：复用确认链路生成路径（硬阻断解除 + 确有可确认提案后即放行，
   // 与 generate 直连入口同口径；confirmProposal 的确认计量不适用本链路，不落 lastConfirmation）
   const { bound, placeholderPath, runId, seedResult } = await bindGeneratingPath(deps, {
     conversation: latest,
@@ -294,25 +430,25 @@ export async function rejudgeHardBlockedCompletion(
     expectedRevision: latest.revision
   });
   if (!bound) {
-    // CAS 失配：并发写赢了自己。作废自己的占位路径后按最新状态返回（赢家可能已绑路径）。
-    await learningService
-      .markActiveGenerationFailed(placeholderPath.id, new Error('并发重判，本条占位路径作废'), runId)
-      .catch(() => undefined);
+    // CAS 失配：并发写赢了自己。本请求的占位路径已由 bindGeneratingPath 删除（#212），
+    // 直接按最新状态返回（赢家可能已绑路径，也可能仍在建行）。
     const refreshed = await prisma.goal_conversations.findUnique({ where: { id: conversation.id } });
     if (refreshed?.learningPathId) {
       const refreshedData = refreshed.collectedData ? JSON.parse(refreshed.collectedData) : latestData;
-      const winnerPath = await prisma.learning_paths.findFirst({ where: { id: refreshed.learningPathId } });
+      // #228：与 service 侧确认复用同一投影（权威行 + 活动 run 推导的 lifecycle），
+      // 避免这条并发落败支路只看 status 而谎称「已生成」。
+      const winnerPath = await getPathCompletionProjection(refreshed.learningPathId);
       return deps.buildConfirmedResult(
         conversation.id,
         refreshedData,
-        winnerPath ? { id: winnerPath.id, status: winnerPath.status } : null
+        winnerPath ? { id: winnerPath.id, status: winnerPath.status, lifecycle: winnerPath.lifecycle } : null
       );
     }
     return buildCompletedConversationResult({
       conversationId: conversation.id,
       collectedData: refreshed?.collectedData ?? null,
       learningPathId: refreshed?.learningPathId ?? null,
-      findPath: (id) => prisma.learning_paths.findFirst({ where: { id } }),
+      findPath: (id) => getPathCompletionProjection(id),
     });
   }
 

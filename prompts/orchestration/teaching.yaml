@@ -117,7 +117,20 @@ fields:
   - fieldId: control.checkpoint
     promptRole: control-signal
     valueType: object
-    description: 检查点（question/type/options/hint），间隔满足时可选输出
+    description: 检查点（question/type/options/hint/correctOptionIds/expectedKeywords），间隔满足时可选输出
+  # #174（实例 1）：检查点的两个**答案键**此前只存在于代码里（teaching-turn/index.ts 的
+  # normalizeCheckpoint 与 teaching-checkpoint.ts 的类型），声明只写了 question/type/options/hint，
+  # 于是「代码裁决不依赖模型自报」的关键字段在契约地图上看不见。答案键由服务端持有、
+  # 读侧剥离后不下发学生（coordinator 侧负责剥离），故只登记 fields 行、不另设 routings 通道行
+  # ——routing 粒度是**整个** `control.checkpoint` 对象（已有整对象通道行），这两个子键不是独立输入通道。
+  - fieldId: control.checkpoint.correctOptionIds
+    promptRole: control-signal
+    valueType: array<string>
+    description: 选择题答案键（服务端私有；只保留真实存在于 options 里的 id 并去重，单选只留一个，读侧剥离，不下发学生）
+  - fieldId: control.checkpoint.expectedKeywords
+    promptRole: control-signal
+    valueType: array<string>
+    description: 简答题答案键（服务端私有；1-4 条、每条 ≤40 字，代码按包含判定，读侧剥离，不下发学生）
   - fieldId: control.completionCandidateEvidence
     promptRole: derived-presentation
     valueType: object
@@ -145,11 +158,28 @@ fields:
     valueType: object
     pathInRawOutput: teachingState.classroomContext
     description: 课堂上下文（上轮持久化）
-  - fieldId: visibleDialogueContext
+  # #185 调用归属：教学链在 teaching-agent 作用域内直调**画像阶段**的 learning-predictor
+  # （TeachingContextBuilder.buildLearnerPrediction，入参 knowledgeStateSummary），
+  # 运行日志因此记为 teaching-agent → skill:learning-predictor；本行声明该调用通道。
+  - fieldId: knowledgeStateSummary
     promptRole: soft-info
-    valueType: array<object>
-    pathInRawOutput: session.messages
-    description: 最近可见对话（role/content）
+    valueType: string
+    description: 最近一次课后知识状态摘要（画像快照 globalBackground；任务前预测输入）
+
+  # #193（实例 1）：scenario 是「编排层整块组装」的输入通道——buildTeachingTurnInput
+  # （services/ai-teaching/teaching-turn-shared.ts）逐回合把 taskKcs/cognitiveFrame/materials/taskProfile/
+  # pathProgress 等组装成**单个顶层对象**注入，没有单点可抽取路径。故在此登记为**字段声明（fields 行）**，
+  # 但**不设 routings 通道行、不填 pathInRawOutput**：field-dispatcher 的通道行不变式要求
+  # 「teaching-agent → skill:teaching-turn 的每一行都可按 pathInRawOutput 装配」
+  # （见 backend/src/services/__tests__/field-dispatcher-teaching-channels.test.ts）——把没有抽取路径的
+  # 复合通道塞进 routings 会造出装配时恒被 skip 的假通道。fields 行则无此约束（pathInRawOutput 可选）。
+  - fieldId: scenario
+    promptRole: soft-info
+    valueType: object
+    description: 任务与路径上下文（编排层整块组装：taskKcs/cognitiveFrame/materials/taskProfile/pathProgress 等；无单点抽取路径，故无 routings 行）
+  # 同类的 classroomEventContext / interactionProfile（同样是编排层组装、无单点抽取路径）亦不作 routings 行；
+  # 三者的沙盘引用声明在 core inputs（prompts/core/teaching-turn.yaml，ref sandbox:teaching.*）与
+  # 沙盘键注册表（services/agent-contract-view.ts 的 SANDBOX_EXTRA_KEYS），门禁 prompts:check-handoff 据此对账。
 
   # === skill:peer-reinforcement 产出 ===
   - fieldId: message
@@ -394,10 +424,10 @@ routings:
   - agentId: skill:teaching-turn
     fieldId: control.shouldTriggerPeer
     render: visible
-    handoff: [skill:peer-reinforcement, teaching-agent]
+    handoff: [teaching-agent]
     internal: false
     accumulate: false
-    notes: 触发 peer 流程的信号
+    notes: 触发 peer 流程的信号。由 teaching-agent 的 PeerTriggerService 读取后决定是否调起伴学；peer-reinforcement 的实参（peerInput）不含 control，故不声明为向 skill:peer-reinforcement 的直接交接（#199 实参对账）
   - agentId: skill:teaching-turn
     fieldId: control.checkpoint
     render: visible
@@ -447,14 +477,20 @@ routings:
     accumulate: false
     visibilityPreset: agent-internal
     notes: 回合输入通道（AITeachingOrchestrator 组装注入）
+
+  # teaching-agent → skill:learning-predictor 输入通道（#185 调用归属）。
+  # 预测器静态归属 profile-agent，但真实调用方是**教学链**（teaching-agent 作用域，
+  # TeachingContextBuilder.buildLearnerPrediction）；此前编排侧没有任何声明，
+  # audit-handoff-edges 把运行日志里的 teaching-agent → skill:learning-predictor 判成「幽灵边」。
+  # 本行即该调用边的声明：知识状态摘要由 teaching-agent 交给预测器做任务前预测。
   - agentId: teaching-agent
-    fieldId: visibleDialogueContext
+    fieldId: knowledgeStateSummary
     render: hidden
-    handoff: [skill:teaching-turn]
+    handoff: [skill:learning-predictor]
     internal: true
     accumulate: false
     visibilityPreset: agent-internal
-    notes: 回合输入通道（AITeachingOrchestrator 组装注入）
+    notes: 任务前学习表现预测输入（TeachingContextBuilder 注入；#185 调用归属）
 
   # peer-reinforcement 输出
   - agentId: skill:peer-reinforcement
@@ -570,74 +606,75 @@ routings:
     accumulate: true
     visibilityPreset: agent-internal
 
-  # teaching-agent → learner（累积画像）
+  # teaching-agent → learner：非 handoff——这些字段随会话落库，并经 lesson 事件投影进画像；
+  # profile 阶段没有交接装配器（#180），原 handoff:[profile] 是永不执行的声明，故置空。
   - agentId: teaching-agent
     fieldId: analysis.understanding
     render: hidden
-    handoff: [profile]
+    handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
   - agentId: teaching-agent
     fieldId: analysis.confusionPoints
     render: hidden
-    handoff: [profile]
+    handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
   - agentId: teaching-agent
     fieldId: knowledge.points
     render: hidden
-    handoff: [profile]
+    handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
   - agentId: teaching-agent
     fieldId: pedagogy.strategies
     render: hidden
-    handoff: [profile]
+    handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
   - agentId: teaching-agent
     fieldId: analysis.misconceptions
     render: hidden
-    handoff: [profile]
+    handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
   - agentId: teaching-agent
     fieldId: analysis.ktEstimate
     render: hidden
-    handoff: [profile]
+    handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
   - agentId: teaching-agent
     fieldId: summary.knowledgeItems
     render: hidden
-    handoff: [profile]
+    handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
   - agentId: teaching-agent
     fieldId: evaluation.sessionLss
     render: hidden
-    handoff: [profile]
+    handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
   - agentId: teaching-agent
     fieldId: evaluation.sessionKtl
     render: hidden
-    handoff: [profile]
+    handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
   - agentId: teaching-agent
     fieldId: evaluation.sessionLf
     render: hidden
-    handoff: [profile]
+    handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal

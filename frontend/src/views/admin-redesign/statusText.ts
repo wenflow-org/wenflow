@@ -130,8 +130,12 @@ export function stageBadgeCls(s: string | null | undefined): string {
 export function sessionStatusBadgeCls(s: string | null | undefined): string {
   const key = String(s || '').toLowerCase()
   if (key === 'completed' || key === 'done' || key === 'succeeded' || key === 'success') return 'mk-badge--ok'
-  if (key === 'failed' || key === 'timeout' || key === 'finalization_failed' || key === 'discarded') return 'mk-badge--bad'
+  if (key === 'failed' || key === 'timeout' || key === 'finalization_failed') return 'mk-badge--bad'
   if (key === 'active' || key === 'initializing' || key === 'finalizing' || key === 'running' || key === 'in_progress' || key === 'started') return 'mk-badge--info'
+  /* 已废弃 = 生命周期归档（同一任务重开后会留下大量这种会话），不是故障：
+     与失败/超时同用红胶囊时，一屏 10 条红色里分不出"真出事了"和"这条被重开顶掉了"。
+     降为中性灰，红色只留给失败族（2026-11-02 评审 R14）。 */
+  if (key === 'discarded') return 'mk-badge--muted'
   if (key === 'superseded' || key === 'paused') return 'mk-badge--warn'
   return 'mk-badge--muted'
 }
@@ -262,15 +266,17 @@ export function sessionProgressPct(p: SessionProgress | null | undefined): numbe
   return Math.max(0, Math.min(100, pct))
 }
 
-/** 教学会话进度文本：进行中「任务 x/y」；中断「中断于 x/y」；完成「结束于 x/y」。
+/** 教学会话进度文本：进行中「任务 x/y」；中断「中断于任务 x/y」；完成「结束于任务 x/y」。
  *  终态不再只说「已完成」——那与状态列同词，且会让人以为任务做到了最后一格；
- *  进度列只回答「结束在哪一格」。无进度数据 → —。 */
+ *  进度列只回答「结束在哪一格」。无进度数据 → —。
+ *  2026-11-02 P2-4：终态原先写「结束于 3/5」，裸 x/y 与同屏「阶段」列的「里程碑 1/3」
+ *  长得一个样，两个分母只能靠悬停分辨——三种状态的可见文本因此都要带上单位「任务」。 */
 export function sessionProgressText(p: SessionProgress | null | undefined, status?: string | null): string {
   if (!p || !Number.isFinite(p.totalTasks) || p.totalTasks <= 0) return '—'
   const pos = `${Math.min(Math.max(p.taskIndex, 0), p.totalTasks)}/${p.totalTasks}`
   const st = String(status || '').toLowerCase()
-  if (st === 'completed' || st === 'succeeded') return `结束于 ${pos}`
-  if (['failed', 'timeout', 'finalization_failed', 'discarded', 'superseded'].includes(st)) return `中断于 ${pos}`
+  if (st === 'completed' || st === 'succeeded') return `结束于任务 ${pos}`
+  if (['failed', 'timeout', 'finalization_failed', 'discarded', 'superseded'].includes(st)) return `中断于任务 ${pos}`
   return `任务 ${pos}`
 }
 
@@ -292,7 +298,7 @@ export function sessionProgressDone(status?: string | null): boolean {
 /** 进度列 hover 的任务位置短语（教学会话列表 / 学习者明细共用一句措辞）。
  *  taskIndex 是 1-based（teaching-session-progress.service），**0 = 会话结束时还没定位到
  *  具体任务**（未开始或数据缺失）；旧实现 clamp 成「第 1 个任务」，与同一行的可见文本
- *  「结束于 0/4」自相矛盾——0 就如实说是没进到任务，不硬凑成第 1 个。 */
+ *  「结束于任务 0/4」自相矛盾——0 就如实说是没进到任务，不硬凑成第 1 个。 */
 export function sessionTaskPositionText(p: SessionProgress | null | undefined): string {
   if (!p || !Number.isFinite(p.totalTasks) || p.totalTasks <= 0) return ''
   const total = p.totalTasks
@@ -603,7 +609,7 @@ export function actionText(s: string | null | undefined): string {
   return ACTION_TEXT[key] || String(s || '')
 }
 
-/** 审计目标类型 → 中文；未知值回退原文 */
+/** 审计目标类型 → 中文；未知值回退原文（回退即漏译，新增 targetType 时应补进来） */
 const TARGET_TEXT: Record<string, string> = {
   user: '用户',
   announcement: '公告',
@@ -613,7 +619,17 @@ const TARGET_TEXT: Record<string, string> = {
   // 2026-10-24：插件启停写审计后，目标类型此前回退成英文 plugin
   plugin: '插件',
   // 2026-10-26：模型供应商的增删改审计此前把 model-provider 原样印在「目标类型」列
-  'model-provider': '模型供应商'
+  'model-provider': '模型供应商',
+  // 2026-11-02 评审：同一列里中英混排。以下取值由后端各路由的 setAuditAction 写入
+  // （api-config / learning-content / prompt-lab / mcp / infra-models / notifications / skill-model-configs），
+  // 漏一条就在「目标类型」列直出英文键名
+  skill: '技能',
+  'skill-model-config': '技能模型配置',
+  'learning-path': '学习路径',
+  'api-config': '接入配置',
+  'infra-models': '基础模型',
+  'mcp-tool': 'MCP 工具',
+  notification: '站内通知'
 }
 
 export function targetTypeText(s: string | null | undefined): string {

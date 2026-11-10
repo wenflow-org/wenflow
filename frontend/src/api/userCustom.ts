@@ -107,8 +107,17 @@ export const getAgentLogs = async (params?: {
   return await api.get(`${USER_ME_BASE}/agent-logs`, { params });
 };
 
-export const getAgentLogDetail = async (logId: string) => {
-  return await api.get(`${USER_ME_BASE}/agent-logs/${logId}`);
+export const getAgentLogDetail = async (logId: string, params?: {
+  agentId?: string;
+  capabilityType?: string;
+  success?: boolean;
+  includeSystem?: boolean;
+  startDate?: string;
+  endDate?: string;
+}) => {
+  // 详情复用列表的筛选口径（#225）：折叠组的条数由后端按同一 where 复算，
+  // 不带筛选会让「同一条折叠行」在详情里回到默认口径、条数与列表不一致。
+  return await api.get(`${USER_ME_BASE}/agent-logs/${logId}`, { params });
 };
 
 export const exportAgentLogs = async (params?: {

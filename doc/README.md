@@ -5,18 +5,20 @@
 > 需要时以 doc/ 根目录现行文档与代码为准。
 > **登记门禁（2026-09-28 起）**：新文档入库三件套 = 白名单 + 本表登记 + 状态头；实现与「不做」声明相悖须同提交改文档。
 
-## 总索引（doc/ 根 54 篇 · 全覆盖 · 2026-10-31）
+## 总索引（doc/ 根 41 篇 · 全覆盖 · 2026-11-06）
 
-> 每篇文档头部有状态行（📌 类型｜最后核验）。**登记约定**：新增 doc/ 文档须同时 ①加入根 .gitignore 白名单 ②登记本表 ③写状态头；凡实现与文档「不做/待办」声明相悖的改动，须同一提交内更新该文档声明。审计详见 doc/local/DOC-TIMELINESS-AUDIT-2026-09-28（本机）。
+> 每篇文档头部有状态行（📌 类型｜最后核验）。**收录范围**：`doc/` 根目录只收「设计原理 / 架构 / 理论基础」类文档；**报告、审计、快照、跑批留痕、已归档的决策留痕一律入 `doc/local/`、不进仓库**。**登记约定**：新增 doc/ 文档须同时 ①加入根 .gitignore 白名单 ②登记本表 ③写状态头；凡实现与文档「不做/待办」声明相悖的改动，须同一提交内更新该文档声明。审计详见 doc/local/DOC-TIMELINESS-AUDIT-2026-09-28（本机）。
 
 | 文档 | 类型 | 备注 |
 |---|---|---|
 | SKILL_PROTOCOL_V4.md | 活规范 | Skill 协议 SSOT（二级编译已退役） |
 | MODEL_GATEWAY_DESIGN.md | 活规范 | 网关 SSOT |
-| PROMPT_CACHE_OPTIMIZATION.md | 活规范 | 缓存优化（32k SSOT 已回写） |
+| PROMPT_CACHE_OPTIMIZATION.md | 活规范 | 缓存优化（64k SSOT 已回写） |
+| MODEL_SETUP_AND_CONFIG_DESIGN.md | 设计方案（待评审） | 从部署到 Skill 细调的模型配置设计；补「怎么把模型配进来」（注：文内「三块模型/插件降级」已随 2026-11-05 降级链下线失效）
 | PROMPT_ADJUSTMENT_GUIDE.md | 活规范 | 提示词调整操作指南 |
 | SKILL_DEVELOPMENT_GUIDE.md | 活规范 | 新建/改造 Skill 指南（§2 CLI 优先） |
 | AGENT_SKILL_MANUAL.md | 活规范 | Agent/Skill 全景 why |
+| USER-JOURNEY-MAP-2026-11-01.md ＋ ADMIN-JOURNEY-MAP-2026-11-01.md | 活规范（地图） | 学习者/管理台两条旅程的入口·动作·系统行为参照（2026-11-02 实测审计修订；两图互链） |
 | PIPELINE_MAP.md | 生成物 | 场景→Agent→Prompt 全管线索引（`pipeline:map` 生成，勿手改） |
 | PIPELINE_PROMPTS.md | 生成物 | 全部提示词原文汇编，按场景归档（同上） |
 | KC_CONCEPT_IDENTITY_AND_GRAPH_DESIGN.md | 活规范 | KC 概念身份+图（95%） |
@@ -25,11 +27,9 @@
 | LEARNER_MODEL_ARCHITECTURE.md（.en） | 活规范 | 学习者模型（Phase 5 已消费；§6/§10/§11 待补） |
 | LEARNER_STATE_REVIEW_DESIGN.md | 设计留痕 | ⚠️ 文内表名与现状不符，已锚定 learner_projections（见文内复核行） |
 | PATH_PRODUCTION_REPLAN_CONTRACT.md（.en） | 活规范 | ⚠️ 已知待办：2 处 409 判定 |
-| PATH_ANDERSON_ITERATION_NOTE.md（.en） | 设计留痕（已归档） | 砍二阶段的唯一决策留痕 |
 | SESSION_JSON_INCREMENTAL_DESIGN.md | 设计留痕（已落地） | 会话大 JSON 列增量化设计与验收清单 |
 | VIRTUAL_LEARNER_DESIGN.md | 活规范 | VL 主文档（裁判已独立） |
 | VIRTUAL_LEARNER_CHAIN.md | 活规范 | VL 链路 SoT（16/17） |
-| VIRTUAL_LEARNER_PRESET_DESIGN.md | 设计留痕（已归档） | 真源已迁 presets.yaml v4 |
 | VIRTUAL_LEARNER_SIMULATED_DAY_CONTRACT.md | 活规范 | 页面侧已落地（e2af8f7/ce8c983/b57c480）；系统层 ③④ 见正文 |
 | VIRTUAL_LEARNER_SIMULATED_DAY_DESIGN.md | 设计留痕 | ⚠️ 抬头已失准，全套修订待做 |
 | AGENT_IO_DESIGN_V3.md | 设计留痕（部分归档） | §1-4 由 V4 §2.6 承接 |
@@ -42,21 +42,11 @@
 | ADMIN_VISUAL_LAYER_SPEC.md | 活规范 | ⛔ 禁归档（守卫硬引用）｜v4 已接设计体系包，令牌层/圆角/阴影/材质收口完毕 |
 | NEWUI-PROTOTYPES.md | 活规范 | newui 原型登记与「原型值残留」规则（基准层级：tokens.css/spec v4 > 原型 > 历史文档） |
 | ADMIN_COLUMN_WIDTH_SPEC.md | 活规范 | 48/48 全中 |
-| ADMIN_PAGE_TEMPLATES.md | 历史快照（已存档） | 2026-10-02 存档；惟 R2 状态语义色 / 危险确认约定仍被活代码引用，2026-10-16 已迁 spec §0.5 |
-| ADMIN_TABS_BUSINESS_AUDIT.md | 历史审计 | 未核验 |
-| ADMIN_MODULE_BENCHMARK.md | 历史快照 | 未核验 |
-| CONTEXT_MECHANISM_AUDIT.md | 历史审计 | 缓存基线为改造前口径 |
-| LEARNING_SCIENCE_AUDIT.md | 历史审计 | 科学性判断仍有效 |
+| ADMIN_TABLE_HEADER_SPEC.md | 活规范 | 表头区（卡头工具条 + 列头）唯一口径；守卫规则 20–22 钉死 |
 | DEV_SCRIPTS.md | 活规范 | 脚本唯一索引（86 条零失效） |
 | CLASSROOM_PIPELINE.md | 活规范 | 课堂管线与评价管线单文件口径（文件/函数可直接对照，基线 feat/teaching-figures @ 62108427） |
 | CLASSROOM_SKILLS.md | 活规范 | 课堂用到的提示词全文合集（配套 CLASSROOM_PIPELINE.md） |
-| BOARD_MODE_REPORT.md | 设计留痕 | 白板模式 MVP 报告（图教分离；含 2026-10-27 §九二次定调） |
-| TEACHING_PIPELINE_REPORT.md | 设计留痕 | 教学课堂管线报告（图分支早期版，被 10-26 版推进） |
-| TEACHING_PIPELINE_REPORT_2026-10-26.md | 设计留痕 | 图分支课堂管线现状（出图决策链 9 道闸 / 13 图型 / 五轮盲评） |
-| VERSION_REPORT_V1.md … VERSION_REPORT_V8.md | 历史快照 | 教学图版本报告 V1–V8（外部视觉盲评迭代留痕，V8 为 2026-10-27） |
 | LLM_PACK_GUIDE.md | 参考资料 | 教学图评审包给 LLM 的几种发法（token 膨胀根因与瘦身） |
-| ADMIN_COPY_SEMANTIC_AUDIT.md | 历史审计 | 管理端文案语义审计 |
-| FLOW-ARCH-AUDIT-REMEDIATION-2026-10-22.md | 历史审计 | 流程架构审计修复与数据处置记录（对应审计在 doc/local/） |
 | README.md / README.en.md | 索引 | 本文档 |
 
 
@@ -92,9 +82,6 @@
 - [`ADMIN_TERMINOLOGY_AUDIT.md`](./ADMIN_TERMINOLOGY_AUDIT.md)
   - Admin 运营台术语治理单源依据：术语族、禁用叫法与守卫规则
   - `frontend/src/views/admin-redesign/terms.ts`、`statusText.ts` 与术语守卫测试均以本文为准
-- [`CONTEXT_MECHANISM_AUDIT.md`](./CONTEXT_MECHANISM_AUDIT.md)
-  - 各阶段 skill 的**上下文机制审计**：真实调用遥测（输入体积 / 前缀缓存命中率）+ 优化方向
-  - 结论：体积不是瓶颈，真正的杠杆是**前缀缓存命中率**（全局 20.9%）
 
 ## Agent 与场景
 
@@ -115,15 +102,11 @@
 
 - [`PATH_PRODUCTION_REPLAN_CONTRACT.md`](./PATH_PRODUCTION_REPLAN_CONTRACT.md)（[en](./PATH_PRODUCTION_REPLAN_CONTRACT.en.md)）
   - 路径生产链路与 replan 契约
-- [`PATH_ANDERSON_ITERATION_NOTE.md`](./PATH_ANDERSON_ITERATION_NOTE.md)（[en](./PATH_ANDERSON_ITERATION_NOTE.en.md)）
-  - 路径 enrichment / Anderson 标注迭代说明
 
 ## 虚拟学习者
 
 - [`VIRTUAL_LEARNER_CHAIN.md`](./VIRTUAL_LEARNER_CHAIN.md)
   - 虚拟学习者链路 Source of Truth：persona / 故事 / 会话模拟 / 裁判
-- [`VIRTUAL_LEARNER_PRESET_DESIGN.md`](./VIRTUAL_LEARNER_PRESET_DESIGN.md)
-  - 预制虚拟学习者设计稿 v0（历史设计；真源已迁 `virtual-learners/presets.yaml` v4——19 条，2026-09-27）
 - [`VIRTUAL_LEARNER_SIMULATED_DAY_DESIGN.md`](./VIRTUAL_LEARNER_SIMULATED_DAY_DESIGN.md)
   - 日期模拟与学习负担评估设计：跨日语义、系统层契约、页面落点、待做清单
 - [`VIRTUAL_LEARNER_SIMULATED_DAY_CONTRACT.md`](./VIRTUAL_LEARNER_SIMULATED_DAY_CONTRACT.md)
@@ -141,6 +124,12 @@
 调查快照（SKILL_RUNTIME_MAP_MAIN/SIM）、设计过程（ORCHESTRATOR_FIELD_FLOW_REDESIGN、QUICK_LEARN 设计稿）、design/ 目录（主计划/诊断/草案）、CHANGES_* 改动记录与 doc/CHANGELOG 等历史过程材料已于 2026-09-05 清理（不纳入仓库）。prompt-lab/archive/ 中的 v2 遗留资产同步清理。
 
 本机过程材料（设计稿、研究综述、日期快照、截图等）统一存放于 `doc/local/`（已被 gitignore，不进仓库）；`doc/` 根目录只保留纳入 git 的现行有效文档。
+
+**2026-11-02 整理 · 教学图视觉/管线报告移出仓库**：11 篇教学图视觉与管线的报告/留痕移出 `doc/`：`VERSION_REPORT_V1–V8.md`（外部视觉盲评迭代留痕）、`TEACHING_PIPELINE_REPORT.md`、`TEACHING_PIPELINE_REPORT_2026-10-26.md`、`BOARD_MODE_REPORT.md`。这 11 篇零代码引用、也不被任何现行文档链接；同主题的两篇**参考资料**（`DIAGRAM_PEDAGOGY_RESEARCH.md`、`LLM_PACK_GUIDE.md`）按性质保留。索引篇数由 54 更正为 49。
+
+**2026-11-02 整理 · 审计/快照/已归档留痕移出仓库**：按「`doc/` 只收设计原理 / 架构 / 理论基础」的收录口径，再移出 10 篇历史记录：`ADMIN_PAGE_TEMPLATES.md`、`ADMIN_TABS_BUSINESS_AUDIT.md`、`ADMIN_MODULE_BENCHMARK.md`、`CONTEXT_MECHANISM_AUDIT.md`、`LEARNING_SCIENCE_AUDIT.md`、`ADMIN_COPY_SEMANTIC_AUDIT.md`、`FLOW-ARCH-AUDIT-REMEDIATION-2026-10-22.md`、`PATH_ANDERSON_ITERATION_NOTE.md`（＋`.en`）、`VIRTUAL_LEARNER_PRESET_DESIGN.md`。索引篇数由 49 更正为 39。
+
+**2026-11-02 二次执行 · 本机副本一并删除**：上述 21 篇未在 `doc/local/` 留存，连同 `doc/local/` 内已作废批次（`runs/voided-*`）、CI/门禁产物（`ci-logs/`、`gate-logs*/` 等）、历史跑批批次（`runs/2026*`）与可复算的大体积产物（embedding 缓存、页面审计/走查截图等）自本机删除，`doc/local/` 由 316MB 降至 42MB。这 21 篇**仅存 git 历史**；源码注释与现行文档中仍出现的这些文件名（形如 `ADMIN_PAGE_TEMPLATES.md（已移出仓库，见 git 历史）`）为历史指代，不再有对应文件。
 
 **2026-10-16 整理**：`doc/` 根目录下三份未入库文件移入 `doc/local/`——`ADMIN-OPERATIONS-MANUAL.md`（连字符拼写的运营手册并行草稿，真源为 `ADMIN_OPERATIONS_MANUAL.md`；其独有章节「其余页面简表」「术语与状态字典」未并入真源，仅存本机副本）、`USER_SIDE_QA_REPORT.md`（2026-09-18 用户侧走查）、`agent-usage-audit-2026-09-22.md`（Agent 使用调查）。同批补入 11 个「已跟踪但漏登记白名单」的文档，并登记 `NEWUI-PROTOTYPES.md`。
 

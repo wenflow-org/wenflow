@@ -1,7 +1,13 @@
 const mockCallPrompt = jest.fn();
+const mockGatewayExecute = jest.fn();
 
 jest.mock('../../../composers/prompt-composer', () => ({
   callPrompt: (...args: unknown[]) => mockCallPrompt(...args),
+}));
+
+// 材料语义判定走 getAPIGateway()；这里 mock 掉，让「模型返回值」成为可控输入。
+jest.mock('../../../gateway/api-gateway', () => ({
+  getAPIGateway: () => ({ execute: mockGatewayExecute }),
 }));
 
 import { stageDesigner } from '../index';
@@ -50,6 +56,10 @@ async function capturedSpec(input: Record<string, unknown>) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // 默认：语义判定模型判通过（不影响本文件既有的资料引用软校验用例）
+  mockGatewayExecute.mockResolvedValue({
+    choices: [{ index: 0, message: { role: 'assistant', content: '{"valid":true,"violations":[]}' }, finish_reason: 'stop' }],
+  });
 });
 
 describe('stage-designer 资料引用软校验', () => {
@@ -119,5 +129,65 @@ describe('stage-designer 资料引用软校验', () => {
     }, {});
 
     expect(validation.valid).toBe(true);
+  });
+});
+
+describe('stage-designer 材料语义判定（生成流程里的模型判定 + 带反馈重试）', () => {
+  function generationResult(subtasks: any[]) {
+    return {
+      success: true,
+      output: { subtasks },
+      runtimeEnvelope: {},
+      debug: { rawModelOutput: '', extractedJson: '', userPayload: '', systemPromptVersion: null, durationMs: 1 },
+    };
+  }
+
+  it('模型判 false → 带修复反馈再生成一次（callPrompt 两次，第二次 repairHints 带 violations）', async () => {
+    mockCallPrompt.mockResolvedValue(generationResult([
+      { title: '拆解争议事件', description: '把三件 AI 教育事件各写一句「它到底在替课堂做哪件事」' },
+    ]));
+    const violations = ['任务 1「拆解争议事件」：承诺了「三件 AI 教育事件」，却没给出这三件事件是什么'];
+    mockGatewayExecute.mockResolvedValueOnce({
+      choices: [{
+        index: 0,
+        message: { role: 'assistant', content: JSON.stringify({ valid: false, violations }) },
+        finish_reason: 'stop',
+      }],
+    });
+
+    const result = await stageDesigner(stageInput({ materials: [] }));
+
+    expect(result.success).toBe(true);
+    expect(mockCallPrompt).toHaveBeenCalledTimes(2);
+    const retryInput = mockCallPrompt.mock.calls[1][1];
+    expect(retryInput.repairHints).toEqual(expect.objectContaining({ materialBodyViolations: violations }));
+    // 首轮输入不带该键（没有被无端污染）
+    expect(mockCallPrompt.mock.calls[0][1]?.repairHints?.materialBodyViolations).toBeUndefined();
+  });
+
+  it('模型判 true → 不重试（callPrompt 只调一次）', async () => {
+    mockCallPrompt.mockResolvedValue(generationResult([
+      { title: '判断行为边界', description: '区分合规与不合规行为，说出判断依据' },
+    ]));
+    mockGatewayExecute.mockResolvedValueOnce({
+      choices: [{ index: 0, message: { role: 'assistant', content: '{"valid":true,"violations":[]}' }, finish_reason: 'stop' }],
+    });
+
+    const result = await stageDesigner(stageInput({ materials: [] }));
+
+    expect(result.success).toBe(true);
+    expect(mockCallPrompt).toHaveBeenCalledTimes(1);
+  });
+
+  it('判定模型报错 → 不阻塞，保留首轮输出（不重试）', async () => {
+    mockCallPrompt.mockResolvedValue(generationResult([
+      { title: '判断行为边界', description: '区分合规与不合规行为，说出判断依据' },
+    ]));
+    mockGatewayExecute.mockRejectedValueOnce(new Error('upstream 500'));
+
+    const result = await stageDesigner(stageInput({ materials: [] }));
+
+    expect(result.success).toBe(true);
+    expect(mockCallPrompt).toHaveBeenCalledTimes(1);
   });
 });

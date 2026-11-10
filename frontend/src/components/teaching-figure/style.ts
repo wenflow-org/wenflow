@@ -70,8 +70,8 @@ const PALETTES: Record<FigurePalette, Omit<FigureTheme, keyof typeof BASE | 'id'
   /* 默认：靛蓝（现有的产品主色，向后兼容） */
   indigo: {
     ink: '#1f2430',
-    muted: '#5b6474',
-    faint: '#8b93a3',
+    muted: '#475569',
+    faint: '#64748b',
     line: '#c3c9d4',
     lineStrong: '#7d8798',
     surface: '#ffffff',
@@ -87,8 +87,8 @@ const PALETTES: Record<FigurePalette, Omit<FigureTheme, keyof typeof BASE | 'id'
   /* 地理 / 人文：土与水的暖棕 + 墨绿，避开「后台仪表盘」的冷灰 */
   earth: {
     ink: '#2b241c',
-    muted: '#6b5f52',
-    faint: '#94897c',
+    muted: '#5b5044',
+    faint: '#7d7266',
     line: '#d8cdbe',
     lineStrong: '#9a8c76',
     surface: '#fffdf9',
@@ -104,8 +104,8 @@ const PALETTES: Record<FigurePalette, Omit<FigureTheme, keyof typeof BASE | 'id'
   /* 计算机 / 系统：石板蓝 + 青，接近终端但可读 */
   tech: {
     ink: '#16202b',
-    muted: '#52616f',
-    faint: '#82919f',
+    muted: '#475569',
+    faint: '#64748b',
     line: '#c8d2dc',
     lineStrong: '#7d8f9f',
     surface: '#ffffff',
@@ -121,8 +121,8 @@ const PALETTES: Record<FigurePalette, Omit<FigureTheme, keyof typeof BASE | 'id'
   /* 棋类 / 语言：纸与朱砂 */
   warm: {
     ink: '#2a2320',
-    muted: '#6d5f58',
-    faint: '#9a8c84',
+    muted: '#5c5049',
+    faint: '#83766c',
     line: '#ddcfc6',
     lineStrong: '#a08a7e',
     surface: '#fffdfa',

@@ -1,6 +1,6 @@
 ---
 agentId: skill:kc-mapper
-coreHash: 53573d965b5fb5d97be75b0e9ecdf99c3c989ee0369321a1d4b50060f2b64c9c
+coreHash: 1113ae5be6aeb9e41c90920f7190ab75982ca019d5762ce05d44d082f4507906
 coreVersion: 3
 temperature: 0.3
 maxTokens: 64000
@@ -28,8 +28,8 @@ failurePolicy: propagate
 输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
 - 「cognitiveCore（object）」`skill:path-planning.cognitiveCore` — 认知核心（coreConcepts + cognitiveDomain）
 - 「milestones（object[]）」`skill:path-planning.milestones` — 里程碑骨架（title/coreConcept/description/goal）
-- 「subtasks（object[]）」`sandbox:path.subtasks`（编排注入） — 阶段子任务列表（title/type/linkedConcept/knowledgeType/cognitiveLevel）
-- 「prerequisiteTree（object?）」`sandbox:path.normalizedInput.prerequisiteTree`（编排注入） — RPKT 前提知识缺口链（可选，用于校验 KC 依赖是否覆盖已知缺口）
+- 「subtasks（object[]）」`sandbox:path.subtasks`（编排注入） — 阶段子任务列表（taskKey/title/type/linkedConcept/knowledgeType/cognitiveLevel）。 taskKey 是该任务的**稳定键**（形如 task-1-0），只用于把 KC 链接对回任务，不参与语义判断。
+- 「prerequisiteTree（object?）」`sandbox:path.prerequisiteTree`（编排注入） — RPKT 前提知识缺口链（可选，用于校验 KC 依赖是否覆盖已知缺口）
 
 ## 执行规则
 
@@ -45,20 +45,20 @@ failurePolicy: propagate
 10. 一个 KC 应当能被多个任务共用；若某个 KC 只可能被一个任务用到，先确认它是不是步骤而非能力
 11. 每个 KC 必须"有来路"：要么被至少一个 subtask 关联（出现在 taskKcLinks 的 linkedKCs 里）， 要么是某个**已被关联** KC 的前置（prerequisite 边的上游）。两样都不占的 KC 是孤岛—— 先自问它是不是某条任务的执行步骤：是则删掉，不是则并入语义最近的 KC； **不要为了让它"挂上"而硬造一条 taskKcLinks**（前置 KC 天然不会被任务直接关联，这是正常的）
 12. 每个 subtask 关联到至少 1 个 KC（通过 linkedKC 字段）
-13. 如果提供 prerequisiteTree，KC 依赖图必须覆盖所有 unknownConcepts（缺口链中的概念必须有对应的 KC 和前置标注）
-14. 不编造不存在于输入中的概念或 KC
+13. taskKcLinks 必须覆盖输入 subtasks 的**每一项**，且每项都要逐字回显该项的 taskKey 作为该条链接的 taskKey（稳定键，禁止改写、省略或自造）；taskTitle 照抄输入的 title 即可，仅供人读对照。 同名任务靠 taskKey 区分，不得因为标题相同就合并成一条。
+14. 如果提供 prerequisiteTree，KC 依赖图必须覆盖所有 unknownConcepts（缺口链中的概念必须有对应的 KC 和前置标注）
+15. 不编造不存在于输入中的概念或 KC
 
 ## 输出字段
 
 - conceptKcs · object[] — 每个 coreConcept 的 KC 分解，每项：
 { "conceptId": "concept-1", "kcs": [{ "kcId": "kc-1a", "name": "识别半联动点", "taxonomy": "procedural", "prerequisiteKCs": ["kc-1a-prereq"] }] }
-- taskKcLinks · object[] — 每个 subtask 关联的 KC，每项（字段名必须逐字为 taskTitle 与 linkedKCs，不得写成 kcIds/kcs 等别名）：
-{ "taskTitle": "识别个人高唤醒触发模式", "linkedKCs": ["kc-1a", "kc-1b"] }
+- taskKcLinks · object[] — 每个 subtask 关联的 KC，每项（taskKey 逐字回显对应 subtask 的 taskKey；字段名必须逐字为
+taskKey/taskTitle/linkedKCs，不得写成 kcIds/kcs 等别名）：
+{ "taskKey": "task-1-0", "taskTitle": "识别个人高唤醒触发模式", "linkedKCs": ["kc-1a", "kc-1b"] }
 - kcGraph · object — KC 依赖图，结构（edges 每项必须含 relation 字段，值为 "prerequisite"）：
 { "nodes": [{ "kcId": "kc-1a", "name": "KC名", "taxonomy": "factual|conceptual|procedural|metacognitive" }],
   "edges": [{ "from": "kc-1a", "to": "kc-1b", "relation": "prerequisite" }] }
-- gapCoverage · object? — 前提缺口覆盖报告（仅在提供 prerequisiteTree 时输出；未提供时整个字段省略，不要输出 null 或空数组）。
-结构：{ "covered": ["已覆盖的缺口概念"], "uncovered": [{ "concept": "未覆盖的缺口概念", "reason": "原因" }] }
 
 ## 边界约束
 

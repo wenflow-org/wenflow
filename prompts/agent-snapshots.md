@@ -50,9 +50,8 @@
 | `understanding.platform_judgment_evidence` | string | path |
 | `understanding.sensor_readouts` | array<string> | path |
 | `understanding.needsMaterial` | object | path |
-| `understanding.prerequisiteDiagnostics` | array<object> | goal-agent |
+| `confirmedProposal.prerequisiteDiagnostics` | array<object> | goal-agent |
 | `understanding.prerequisiteCheckResults` | array<object> | goal-agent |
-| `proposalQuality` | object? | goal-agent |
 | `structuredData` | object? | goal-agent |
 | `confirmedProposal.learning_direction` | string | goal-agent |
 | `confirmedProposal.first_deliverable` | string | goal-agent |
@@ -179,11 +178,10 @@ sandbox:goal-agent.understanding.urgency
 | `dimensions` | object | path-agent |
 | `issues` | object[] | path-agent |
 | `passed` | boolean | path-agent |
-| `replanInstructions` | string? | path-agent, skill:path-planning |
+| `replanInstructions` | string? | path-agent |
 | `conceptKcs` | object[] | path-agent |
 | `taskKcLinks` | object[] | path-agent |
 | `kcGraph` | object | path-agent |
-| `gapCoverage` | object? | path-agent |
 
 ### 合法沙盘键（sandbox: 对账注册表）
 
@@ -207,7 +205,6 @@ sandbox:path-agent.normalizedInput.planningHints.milestoneRange
 sandbox:path-agent.normalizedInput.planningHints.paceSignal
 sandbox:path-agent.normalizedInput.planningHints.subtaskMinutesRange
 sandbox:path-agent.normalizedInput.planningHints.subtasksPerStageRange
-sandbox:path-agent.normalizedInput.prerequisiteTree
 sandbox:path-agent.normalizedInput.problemSpace.currentPainPoint
 sandbox:path-agent.normalizedInput.problemSpace.realProblem
 sandbox:path-agent.normalizedInput.problemSpace.scenario
@@ -219,6 +216,7 @@ sandbox:path-agent.path.name
 sandbox:path-agent.path.summary
 sandbox:path-agent.pathStageMap
 sandbox:path-agent.planningHints
+sandbox:path-agent.prerequisiteTree
 sandbox:path-agent.previousMilestone
 sandbox:path-agent.previousStageOutcome
 sandbox:path-agent.repairHints
@@ -240,7 +238,7 @@ sandbox:path-agent.supplementRequest
 | `sandbox:teaching-agent.knowledge.state` | `knowledge.state` | object | session.knowledgeState |
 | `sandbox:teaching-agent.controls.teachingControlContext` | `controls.teachingControlContext` | object | teachingState.teachingControlContext |
 | `sandbox:teaching-agent.classroomContext` | `classroomContext` | object | teachingState.classroomContext |
-| `sandbox:teaching-agent.visibleDialogueContext` | `visibleDialogueContext` | array<object> | session.messages |
+| `sandbox:teaching-agent.knowledgeStateSummary` | `knowledgeStateSummary` | string | — |
 
 ### 输出/交付字段
 
@@ -269,14 +267,14 @@ sandbox:path-agent.supplementRequest
 | `knowledge.points` | array<object> | teaching-agent |
 | `pedagogy.strategies` | array<string> | teaching-agent |
 | `control.isCompletionCandidate` | boolean | teaching-agent |
-| `control.shouldTriggerPeer` | boolean | skill:peer-reinforcement, teaching-agent |
+| `control.shouldTriggerPeer` | boolean | teaching-agent |
 | `control.checkpoint` | object | teaching-agent |
 | `control.completionCandidateEvidence` | object | teaching-agent |
 | `learner.learnerProjection` | object | skill:teaching-turn |
 | `knowledge.state` | object | skill:teaching-turn |
 | `controls.teachingControlContext` | object | skill:teaching-turn |
 | `classroomContext` | object | skill:teaching-turn |
-| `visibleDialogueContext` | array<object> | skill:teaching-turn |
+| `knowledgeStateSummary` | string | skill:learning-predictor |
 | `message` | string | teaching-agent |
 | `followUpQuestions` | string[]? | teaching-agent |
 | `summary.topicSummary` | string | teaching-agent |
@@ -311,8 +309,10 @@ sandbox:teaching-agent.evaluation.sessionLss
 sandbox:teaching-agent.interactionProfile
 sandbox:teaching-agent.knowledge.points
 sandbox:teaching-agent.knowledge.state
+sandbox:teaching-agent.knowledgeStateSummary
 sandbox:teaching-agent.learner.learnerProjection
 sandbox:teaching-agent.learner.persona
+sandbox:teaching-agent.learnerPrediction
 sandbox:teaching-agent.learningState
 sandbox:teaching-agent.pedagogy.strategies
 sandbox:teaching-agent.scenario
@@ -320,17 +320,19 @@ sandbox:teaching-agent.scenario.interactionProfile
 sandbox:teaching-agent.school.anchor
 sandbox:teaching-agent.session.evidence
 sandbox:teaching-agent.session.info
+sandbox:teaching-agent.session.knowledgeContext
 sandbox:teaching-agent.session.knowledgeState
 sandbox:teaching-agent.session.messages
 sandbox:teaching-agent.session.mode
+sandbox:teaching-agent.session.structure
 sandbox:teaching-agent.session.topic
 sandbox:teaching-agent.session.wrapup
 sandbox:teaching-agent.summary.knowledgeItems
 sandbox:teaching-agent.task.profile
+sandbox:teaching-agent.taskContext
 sandbox:teaching-agent.teachingState.classroomContext
 sandbox:teaching-agent.teachingState.classroomEventHistory
 sandbox:teaching-agent.teachingState.teachingControlContext
-sandbox:teaching-agent.visibleDialogueContext
 ```
 
 ## 学习者 Agent（Profile）（profile-agent）
@@ -339,27 +341,27 @@ sandbox:teaching-agent.visibleDialogueContext
 
 | 字段 | 类型 | handoff |
 |---|---|---|
-| `conceptLedger` | object[] | profile-agent |
-| `reusableFoundations` | string[] | profile-agent |
-| `blockedFoundations` | string[] | profile-agent |
-| `transferSignals` | object[] | profile-agent |
-| `recurringConfusions` | object[] | profile-agent |
-| `knowledgeStateSummary` | string | profile-agent |
-| `snapshot.dynamicState` | object | profile-agent |
-| `snapshot.learningControlState` | object | profile-agent |
-| `snapshot.replanSignal` | object | profile-agent |
-| `snapshot.teachingHints` | object | profile-agent |
-| `snapshot.knowledgeMemory.currentPath` | object | profile-agent |
-| `snapshot.knowledgeMemory.globalSignals` | object | profile-agent |
-| `profile.curriculumControls` | object | profile-agent |
-| `headline` | string | profile-agent |
-| `subtitle` | string | profile-agent |
-| `todayActions` | object[] | profile-agent |
-| `nextStep` | string | profile-agent |
-| `pathHint` | string | profile-agent |
-| `paceHint` | string | profile-agent |
-| `emptyStateCopy` | string | profile-agent |
-| `warningCopy` | string | profile-agent |
+| `conceptLedger` | object[] | — |
+| `reusableFoundations` | string[] | — |
+| `blockedFoundations` | string[] | — |
+| `transferSignals` | object[] | — |
+| `recurringConfusions` | object[] | — |
+| `knowledgeStateSummary` | string | — |
+| `snapshot.dynamicState` | object | — |
+| `snapshot.learningControlState` | object | — |
+| `snapshot.replanSignal` | object | — |
+| `snapshot.teachingHints` | object | — |
+| `snapshot.knowledgeMemory.currentPath` | object | — |
+| `snapshot.knowledgeMemory.globalSignals` | object | — |
+| `profile.curriculumControls` | object | — |
+| `headline` | string | — |
+| `subtitle` | string | — |
+| `todayActions` | object[] | — |
+| `nextStep` | string | — |
+| `pathHint` | string | — |
+| `paceHint` | string | — |
+| `emptyStateCopy` | string | — |
+| `warningCopy` | string | — |
 
 ### 合法沙盘键（sandbox: 对账注册表）
 

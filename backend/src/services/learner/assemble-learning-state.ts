@@ -26,9 +26,17 @@ export interface AssembledLearningState {
   learningState: {
     user: { id: string; name: string | null; xp: number; level: number };
     tasks: {
+      /**
+       * 计数口径（#188）：**主路径**——与页面进度条（路径 percent）和 summary.path.progressPercent
+       * 同源。此前这里数的是该用户**全部路径**的 subtasks，而进度条按主路径算，
+       * 多路径用户在同一载荷里读到两套百分比（进度条 N% / 文案 M%），提示词也被绑到语义不同的源。
+       * 需要跨路径总量时显式另立字段，不要混进 tasks。
+       */
+      scope: 'primary-path';
       total: number;
       completed: number;
       inProgress: number;
+      started: number;
       todo: number;
       completionRate: number;
     };
@@ -41,6 +49,8 @@ export interface AssembledLearningState {
       avgDailyMinutes: number;
       progress: number;
       completionRate: string;
+      /** 时长/天数按**全部路径**的会话累计（与 tasks 的主路径口径不同，标签须区分） */
+      sessionScope: 'all-paths';
     };
     state: any | null;
     suggestion: any | null;
@@ -142,7 +152,32 @@ export async function assembleLearningState(
   const messagesById = await loadTeachingMessagesForIds(timeSessions.map((s) => s.id));
   const timeSessionsHydrated = timeSessions.map((s) => ({ ...s, messages: messagesById.get(s.id) ?? s.messages }));
 
-  const primaryPath = pickPrimaryPath(paths) || paths[0] || null;
+  let primaryPath = pickPrimaryPath(paths) || paths[0] || null;
+  // paths 查询已带 status:'active'，故 primaryPath 非空 ⇔ 存在 active 路径。
+  const hasActivePath = Boolean(primaryPath);
+  if (!primaryPath) {
+    // #155：无 active 路径（路径已完成/归档）时，用户级画像不再整体清零。这里回退到该用户最近的
+    // 非 abandoned 路径，让 dashboard / learning-state-guidance 仍有路径可展示、结构口径自洽
+    // （globalSignals/globalBackground 按 userId 聚合、不依赖具体路径）；但**不**把它当作画像锚点
+    // （见下方 refresh 的 #205 处理）。有 active 路径的用户不走这条回退，paths 口径不变。
+    primaryPath = await prisma.learning_paths.findFirst({
+      where: { userId, status: { not: 'abandoned' } },
+      orderBy: { updatedAt: 'desc' },
+      include: {
+        milestones: {
+          orderBy: { stageNumber: 'asc' },
+          include: {
+            subtasks: {
+              orderBy: { order: 'asc' },
+              select: { id: true, title: true, status: true, estimatedMinutes: true, completedAt: true },
+            },
+          },
+        },
+      },
+    });
+    if (primaryPath) paths.push(primaryPath);
+  }
+
   if (!primaryPath) {
     return {
       user: { id: user.id, name: user.name, xp: user.xp },
@@ -160,10 +195,24 @@ export async function assembleLearningState(
     };
   }
 
+  // #205：快照锚点（currentPath）只对「用户当前的 active 路径」有意义。默认用 active 主路径；
+  // 调用方显式传 pathId 时，仅当该路径确属本用户且 status='active' 才锚定——否则 archived/completed
+  // 路径会被伪造成 currentPath，summary 据此给出指向「已下线不可继续学习」路径的 open-path /
+  // continue-learning（复核第二轮点名：显式 pathId 逃生口仍能重现 #205）。非 active 一律走 global
+  // 口径：globalSignals / globalBackground 仍非空（LearnerKnowledgeMemoryService #155 按 userId 聚合），
+  // currentPath 留空、不伪造。
+  let anchorPathId: string | undefined = hasActivePath ? primaryPath.id : undefined;
+  if (pathId) {
+    const requestedActive = await prisma.learning_paths.findFirst({
+      where: { id: pathId, userId, status: 'active' },
+      select: { id: true },
+    });
+    anchorPathId = requestedActive?.id ?? undefined;
+  }
   const learnerSnapshot = await learnerSnapshotRefreshService.refresh({
     userId,
-    pathId: pathId ?? primaryPath.id,
-    scope: snapshotScope,
+    pathId: anchorPathId,
+    scope: anchorPathId ? snapshotScope : 'global',
   });
 
   // P1.6 落后触发器（TIME-TRUST-SCHEME-20261001）通知侧：快照带 deadline_pace_behind
@@ -184,10 +233,17 @@ export async function assembleLearningState(
   const currentState = await stateTrackingService.getCurrentStateDisplay(userId).catch(() => null);
   const suggestion = currentState ? stateTrackingService.generateDisplaySuggestion(currentState) : null;
 
-  const completedSubtasks = subtasks.filter((task: any) => task.status === 'completed');
-  const inProgressSubtasks = subtasks.filter((task: any) => task.status === 'in_progress');
-  const todoSubtasks = subtasks.filter((task: any) => task.status === 'todo');
-  const totalEstimatedMinutes = subtasks.reduce((sum: number, task: any) => sum + (task.estimatedMinutes || 0), 0);
+  // #188：任务进度统一到**主路径**口径——页面进度条与 summary.path.progressPercent 都是主路径，
+  // 此处不能再数全部路径（否则同一载荷两套百分比）。`subtasks` 全量仍随载荷返回，供跨路径用途。
+  const primarySubtasks: any[] = (primaryPath.milestones || []).flatMap((milestone: any) => milestone?.subtasks || []);
+  const primaryCompleted = primarySubtasks.filter((task: any) => task.status === 'completed');
+  const primaryInProgress = primarySubtasks.filter((task: any) => task.status === 'in_progress');
+  const primaryTodo = primarySubtasks.filter((task: any) => task.status === 'todo');
+  const primaryTotal = primarySubtasks.length;
+  const primaryCompletionRate = primaryTotal > 0
+    ? Number((primaryCompleted.length / primaryTotal * 100).toFixed(1))
+    : 0;
+  const totalEstimatedMinutes = primarySubtasks.reduce((sum: number, task: any) => sum + (task.estimatedMinutes || 0), 0);
   const totalMinutes = timeSessionsHydrated.reduce((sum: number, session: any) => sum + normalizeSessionDurationMinutes(session), 0);
   const activeLearningDays = new Set(timeSessions.map((session: any) => dayKeyOf(session.startTime))).size;
   const avgDailyMinutes = activeLearningDays > 0 ? Number((totalMinutes / activeLearningDays).toFixed(1)) : 0;
@@ -200,14 +256,15 @@ export async function assembleLearningState(
       level: getLevelFromXp(user.xp),
     },
     tasks: {
-      total: subtasks.length,
-      completed: completedSubtasks.length,
-      inProgress: inProgressSubtasks.length,
+      scope: 'primary-path' as const,
+      total: primaryTotal,
+      completed: primaryCompleted.length,
+      inProgress: primaryInProgress.length,
       // 已启动 = 已完成 + 进行中：给文案层一个**可直接引用**的口径，
       // 避免把 completed/total 说成「已启动 X/总」（走查 P10）
-      started: completedSubtasks.length + inProgressSubtasks.length,
-      todo: todoSubtasks.length,
-      completionRate: subtasks.length > 0 ? Number((completedSubtasks.length / subtasks.length * 100).toFixed(1)) : 0,
+      started: primaryCompleted.length + primaryInProgress.length,
+      todo: primaryTodo.length,
+      completionRate: primaryCompletionRate,
     },
     paths: {
       total: paths.length,
@@ -218,8 +275,10 @@ export async function assembleLearningState(
       totalCompleted: totalMinutes,
       activeLearningDays,
       avgDailyMinutes,
-      progress: subtasks.length > 0 ? Number((completedSubtasks.length / subtasks.length * 100).toFixed(1)) : 0,
-      completionRate: subtasks.length > 0 ? (completedSubtasks.length / subtasks.length * 100).toFixed(1) : '0',
+      // 进度与 tasks 同源同口径（#188）：同一载荷里只允许一套完成任务百分比
+      progress: primaryCompletionRate,
+      completionRate: primaryTotal > 0 ? (primaryCompleted.length / primaryTotal * 100).toFixed(1) : '0',
+      sessionScope: 'all-paths' as const,
     },
     state: currentState,
     suggestion,

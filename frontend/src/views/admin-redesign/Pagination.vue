@@ -81,7 +81,7 @@ const props = withDefaults(
     unit?: string
     /** 附加口径说明（如「在当前页内搜索」）：显示在总数右侧，弱化文本；装配自述（谁并入谁）不属于此列 */
     note?: string
-    /** 只有一页时整条自隐（默认 false：total=0 也常驻「共 0 条 · 第 1 / 1 页」） */
+    /** 只有一页时整条自隐（total=0 则无论本开关如何都自隐——空列表不配分页器） */
     hideWhenSinglePage?: boolean
   }>(),
   {
@@ -102,8 +102,9 @@ const emit = defineEmits<{
 
 const totalPages = computed(() => totalPagesOf(props.total, props.pageSize))
 /* 单页自隐：仅当调用方显式要求（hideWhenSinglePage）且 totalPages===1 时整条不渲染。
-   total=0 时 totalPages 仍为 1，但调用方没传 hideWhenSinglePage 就常驻空计数行。 */
-const hidden = computed(() => props.hideWhenSinglePage && totalPages.value === 1)
+   total=0 时全站一律不渲染（2026-10-31 三轮评审）：0 条数据挂「共 0 条 · 第 1 / 1 页」
+   的分页器是纯噪音，空态本身已说明无数据；此前只有会话安全一处隐藏，现收敛进组件。 */
+const hidden = computed(() => props.total === 0 || (props.hideWhenSinglePage && totalPages.value === 1))
 
 /* 翻页后列表回到顶部（2026-10-22 走查）：fill 卡内的 .mk-table-scroll 自带纵向滚动，
    换页后仍停在上一次的 scrollTop（实测 400px 纹丝不动），用户落在新页中段。
@@ -135,8 +136,11 @@ const sizeOptions = computed(() => {
   set.add(props.pageSize)
   return [...set].sort((a, b) => a - b)
 })
+/* 2026-11-04：每页条数档位的单位跟随 unit（与「共 N <unit>」同口径）——此前写死「条/页」，
+   在执行日志这类列表上把「每页记录数」读成了「每页行数」（同一调用的网关行与 Skill 行合并后
+   一页可见行数少于档位值），与总数字段「共 N 条记录」对不上。默认 unit='条' 时文案不变。 */
 const sizeSelectOptions = computed(() =>
-  sizeOptions.value.map((s) => ({ value: s, label: `${s} 条/页` }))
+  sizeOptions.value.map((s) => ({ value: s, label: `${s} ${props.unit}/页` }))
 )
 /** MkSelect 的 v-model：保留 number（原生 select 靠 change 里 Number()，这里不需要） */
 const sizeModel = computed({
@@ -209,11 +213,17 @@ watch(
   align-items: center;
   gap: 8px;
   min-width: 0;
+  /* 2026-11-04：窄屏（≤390）页码多时（如卡库 7 页 = 上一页+7 页码+下一页）整组 386px，
+     父级 .mk-pagination 只到 333px，flex-nowrap 下「下一页」被推出视口不可点。
+     允许右侧组与页码行换行，且可收缩到 min-content，溢出改由折行吸收，不删按钮。 */
+  flex-wrap: wrap;
 }
 .mk-pagination__nav {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 .mk-pagination__btn,
 .mk-pagination__num {
@@ -239,7 +249,7 @@ watch(
   .mk-pagination__btn:hover:not(:disabled),
   .mk-pagination__num:hover:not(:disabled):not(.mk-pagination__num--active) {
     border-color: color-mix(in srgb, var(--mk-blue) 40%, var(--mk-line));
-    color: var(--mk-blue);
+    color: var(--mk-blue-text);
   }
 }
 .mk-pagination__btn:disabled,

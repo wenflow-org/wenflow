@@ -113,7 +113,13 @@
       :running-samples="runningSamples"
     />
 
-    <div class="mk-card mk-card--fill">
+    <!-- 2026-11-09 审计 C：卡片此前恒挂 mk-card--fill，flex:1 把卡片撑到视口底——
+         只有 5 行时下半张卡是一大片空暗区（「黑洞」），分页条也被顶到视口外。
+         现用 vl-cardwrap（flex:1 占满页面剩余高度）+ vl-card（flex:0 1 auto + max-height:100%）：
+         行数少 → 卡片随内容增高、分页条紧贴内容，无黑洞；行数多 → 卡片封顶在可用高度，
+         表格区内滚、分页条恒在卡尾可见。mk-card--fill 保留（它提供 flex 列骨架）。 -->
+    <div class="vl-cardwrap">
+    <div class="mk-card mk-card--fill vl-card">
       <div class="mk-card__head">
         <div class="mk-filter">
           <!-- 生命周期筛选（原页头状态条的 meta-link 迁入，2026-10-04；2026-10-27 统一）：
@@ -126,27 +132,28 @@
             :options="stateSelectOptions"
             :active="stateFilter !== 'all'"
           />
+          <!-- 2026-11-09 审计 D：原「异常」列头漏斗图标（全站唯一、且把排序 caret 挤到左侧）
+               退役，筛选触发器迁回标准筛选行——与「状态」同为胶囊下拉，口径一致。
+               维度是「是否只看有异常」，偏离默认（全部）→ 浅蓝激活态。 -->
+          <MkPillSelect
+            v-model="abnormalSelect"
+            label="异常"
+            aria-label="按异常筛选"
+            :options="abnormalOptions"
+            :active="onlyAbnormal"
+          />
         </div>
         <div class="mk-card__head-right">
           <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位 -->
           <MkFilterSearch v-model="keyword" placeholder="搜索名称 / 倾向" />
           <!-- CP1：筛选命中数单源住在分页器（「共 N 条」），卡头不再渲染「X / N 人」；
                截断警示仍在此（数据完整性事实，与行数同格就近） -->
-          <!-- 批量入口（2026-10-26）：从「列」菜单挪到卡头一枚按钮。列菜单此前是唯一入口，
-               且入口只写一个「列」字，第一次进这页的人读不出这页能批量跑。
-               多选默认仍不出来（2026-10-17 用户拍板），按钮只负责把勾选列打开。 -->
-          <button
-            v-if="isLive && !isNarrow"
-            type="button"
-            class="mk-btn mk-btn--sm vl-batch-toggle"
-            :class="{ 'vl-batch-toggle--on': batchMode }"
-            :aria-pressed="batchMode"
-            @click="toggleBatchMode"
-          >批量</button>
+          <!-- 勾选列 ☐ 默认常驻（2026-11-08 用户走查，取代「卡头批量按钮 + 多选默认隐藏」）：
+               选中 ≥1 行即弹出底部命令栏，取消选择即收起；勾选列显隐交给「列」菜单。 -->
           <MkCols
             :col-defs="vlColDefs"
-            storage-key="wf_vl_hidden_cols_v3"
-            :default-hidden="['check', 'sessions']"
+            storage-key="wf_vl_hidden_cols_v4"
+            :default-hidden="['sessions']"
             v-model:hidden="hiddenCols"
           />
           <span v-if="isLive && liveVirtualsTotal > samples.length" class="mk-card__meta vl-truncated">
@@ -198,7 +205,10 @@
               @click="toggleVlSort('sessions')"
             ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('sessions')">累计运行<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <!-- 失败与无响应合并成一列「异常」（2026-10-21 用户「这都是什么，是运营看的吗」）：
-                 两个都是问题信号、又各自大多为 0，分两列时整片「0 0」最响；合并后只在非零时出声。 -->
+                 两个都是问题信号、又各自大多为 0，分两列时整片「0 0」最响；合并后只在非零时出声。
+                 2026-11-09 审计 D：列头内的漏斗图标已撤——全站只有这一处把筛选触发器塞进
+                 表头，且它把排序 caret 挤到左侧。「只看有异常」改由卡头筛选行的胶囊承载
+                 （与「状态」下拉同组，见上方 mk-filter）。 -->
             <th
               v-if="!isNarrow && !hiddenCols.has('abnormal')"
               scope="col"
@@ -206,14 +216,7 @@
               :title="ABNORMAL_COL_TITLE"
               :aria-sort="vlSortState('abnormal')"
               @click="toggleVlSort('abnormal')"
-            ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('abnormal')">异常<span class="mk-th__caret" aria-hidden="true"></span></button><button
-              type="button"
-              class="vl-th-filter"
-              :class="{ 'vl-th-filter--on': onlyAbnormal }"
-              :aria-pressed="onlyAbnormal"
-              title="只看有失败或无响应运行的学习者"
-              @click.stop="onlyAbnormal = !onlyAbnormal"
-            ><Filter :size="13" :stroke-width="1.75" /></button></th>
+            ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('abnormal')">异常<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th
               v-if="!isNarrow && !isCompact && !hiddenCols.has('created')"
               scope="col"
@@ -225,14 +228,12 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="s in paged" :key="s.id" :class="{ 'vl-row--fresh': freshIds.includes(s.id) }">
+          <tr v-for="s in paged" :key="s.id" :class="{ 'vl-row--fresh': freshIds.includes(s.id), 'vl-row--menu': openMenu === s.id }">
             <td v-if="isLive && !isNarrow && !hiddenCols.has('check')"><input v-model="selected" type="checkbox" :value="s.id" :aria-label="`选择 ${s.name}`" @click.stop /></td>
             <td>
               <div class="vl-cell vl-cell--click" role="button" tabindex="0" :title="s.name" @click="openSubPage('virtual', s.id)" @keydown.enter="openSubPage('virtual', s.id)" @keydown.space.prevent="openSubPage('virtual', s.id)">
-                <!-- 2026-10-15 用户拍板：撤本页私造的「身份哈希八色」头像，改与教学组同款共享原语
-                     MkCellAvatar（虚拟学习者=紫）。头像在 .mk-cell-main 外（同 Skills / 教学组名称格结构）：
-                     mk-cell-main strong 的 display:block 高特异性会压过 strong 上的 flex，头像留格内会跌回块流 -->
-                <MkCellAvatar :name="s.name" tone="virtual" />
+                <!-- 2026-11-08 用户走查（图2）：卡库派生出的虚拟学习者名多以「想解决…」开头，
+                     头像取首字恒为「想」，一排 [想] 方块既无辨识度又显重复，直接去掉，名称格只留文字 -->
                 <div class="mk-cell-main">
                   <strong :title="s.name">{{ s.name }}</strong>
                 </div>
@@ -261,7 +262,8 @@
             </td>
             <td v-if="!isNarrow && !hiddenCols.has('sessions')" class="mk-num">{{ s.sessions }}</td>
             <td v-if="!isNarrow && !hiddenCols.has('abnormal')" class="vl-abnormal">
-              <template v-if="s.failedCount > 0 || s.stalledCount > 0">
+              <!-- 2026-10-31 五轮评审 P8：座舱日志已报错（如僵尸会话自动回收）时异常列不再留空 — -->
+              <template v-if="s.failedCount > 0 || s.stalledCount > 0 || s.activeError">
                 <span
                   v-if="s.failedCount > 0"
                   class="vl-abn vl-abn--fail"
@@ -272,6 +274,11 @@
                   class="vl-abn vl-abn--stall"
                   :title="stalledCellTitle(s)"
                 >无响应 {{ s.stalledCount }}</span>
+                <span
+                  v-if="s.activeError"
+                  class="vl-abn vl-abn--stall"
+                  :title="`自动驾驶最近错误：${s.activeError}`"
+                >自动驾驶错误</span>
               </template>
               <span v-else class="mk-na">—</span>
             </td>
@@ -342,19 +349,23 @@
         v-else
         min
         :title="samples.length ? '当前筛选无虚拟学习者' : '还没有派生过虚拟学习者'"
+        :description="samples.length ? '换一个状态或清空搜索词再看。' : '从学习者卡库派生一个，用来跑仿真教学。'"
         :action-text="isFiltered && samples.length ? '清除筛选' : '从卡库派生'"
         @action="isFiltered && samples.length ? clearFilters() : openDerivePicker()"
       />
       <!-- 客户端分页（统一 mk-pagination 页码器）：筛选后按页切片。
-           单页容得下时不渲染（与卡库页同款守卫）：2 条数据时整行页码器只有禁用钮。 -->
+           2026-11-09 审计 C：只要列表有行就渲染（哪怕只有 1 页）——此前守卫是
+           `filtered.length > pageSize`，5 行数据时整条「共 N 条 · 第 1 / 1 页」不出现，
+           读者看不到总数也无从判断列表是否完整。0 行仍由 Pagination 自身不渲染（空态已说明）。 -->
       <Pagination
-        v-if="filtered.length > pageSize"
+        v-if="filtered.length"
         v-model:page="page"
         v-model:pageSize="pageSize"
         :total="filtered.length"
         :showTotal="true"
         unit="位学习者"
       />
+    </div>
     </div>
 
     <!-- 容量与实验环境已收进页头「维护」菜单 → 右侧抽屉（2026-10-26 用户「这个设计一下，
@@ -373,7 +384,7 @@
          2026-10-25：「新建 / 批量新建」两个弹窗随「不播种、都派生」一起退役——建号只在卡库
          （导入卡 / 平台生产 / 预置一键加载 + 选角派生），本页不再有第二条创建路径。 -->
     <VirtualLearnerReclaim ref="reclaimRef" @done="onReclaimDone" />
-    <VirtualLearnerCleanup ref="cleanupRef" :samples="samples" @done="onReclaimDone" />
+    <VirtualLearnerCleanup ref="cleanupRef" @done="onReclaimDone" />
     <VirtualLearnerLaunch ref="launchRef" />
     <VirtualLearnerPromptTest ref="promptRef" />
     <VirtualLearnerSettingsDrawer
@@ -389,8 +400,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, reactive, watch, onMounted, onUnmounted } from 'vue'
-import { CirclePlay, Filter, Pause, Play } from 'lucide-vue-next'
+import { computed, ref, reactive, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
+import { CirclePlay, Pause, Play } from 'lucide-vue-next'
 import { openSubPage, intent, isLive } from './store'
 import { liveVirtuals, refreshLiveVirtuals, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats, liveAutopilotConcurrency, liveVirtualStatsLoading, liveVirtualStatsError, retryLiveVirtualStats, virtualsStaleAfterMutation } from './live'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
@@ -407,7 +419,6 @@ import MkFilterSearch from '@/components/mk/MkFilterSearch.vue'
 import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import MkCols from '@/components/mk/MkCols.vue'
 import MkKpi from '@/components/mk/MkKpi.vue'
-import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import { useTableSort } from './useTableSort'
 import { statusText } from './statusText'
@@ -428,7 +439,7 @@ const STATS_RETRY_TITLE = '运行统计拉取失败：点击重试'
 const STATS_UNAVAILABLE_HINT = '统计不可用 · 点击重试'
 /* 列头口径（表头 title 与「列」菜单共用同一句，避免同页两处漂移） */
 const SESSIONS_COL_TITLE = '累计运行数（全部运行，含终态）'
-const ABNORMAL_COL_TITLE = '系统失败的运行数 + 当前无响应的运行数。人为终止不计入'
+const ABNORMAL_COL_TITLE = '系统失败的运行数 + 当前无响应的运行数 + 自动驾驶最近故障。人为终止不计入'
 const samples = computed<Sample[]>(() =>
   liveVirtuals.value.map((v) => ({
     id: v.id,
@@ -442,6 +453,7 @@ const samples = computed<Sample[]>(() =>
     failedCount: Number(v.failedCount || 0),
     abandonedCount: Number(v.abandonedCount || 0),
     stalledCount: Number(v.stalledCount || 0),
+    activeError: v.activeError ?? null,
     runningSessionIds: v.runningSessionIds,
     /* G2（2026-10-10）：已暂停会话 id 必须随行带出——否则「正在运行」条的暂停样本拿不到
        可回退的会话 id。列表本行的逐条徽章已改用 activeRuns，但这两列仍供运行条消费。 */
@@ -599,8 +611,21 @@ function failCellTitle(failed: number, abandoned: number): string {
 }
 /** 状态过滤（轴 A 生命周期）：与「运行状态」列同源 */
 const stateFilter = ref('all')
-/** 异常列的「只看有异常」开关（原「曾失败」pill，2026-10-21 迁到列头） */
+/** 异常列的「只看有异常」开关（原「曾失败」pill，2026-10-21 迁到列头；
+ *  2026-11-09 审计 D 从列头漏斗迁回卡头筛选行的胶囊下拉，与状态维度同语言） */
 const onlyAbnormal = ref(false)
+/** 胶囊下拉的字符串代理：'abnormal' = 只看有异常，'all' = 全部 */
+const abnormalSelect = computed<string>({
+  get: () => (onlyAbnormal.value ? 'abnormal' : 'all'),
+  set: (v) => { onlyAbnormal.value = v === 'abnormal' }
+})
+const abnormalOptions = computed(() => {
+  const n = samples.value.filter((s) => s.failedCount > 0 || s.stalledCount > 0).length
+  return [
+    { value: 'all', label: '全部' },
+    { value: 'abnormal', label: `只看有异常（${n}）` }
+  ]
+})
 const stateFilterOptions = computed(() => {
   const failed = statsState.value === 'error'
   const n = (v: number) => (failed ? '—' : v)
@@ -640,8 +665,10 @@ const { toggle: toggleVlSort, sortState: vlSortState, sortRows: sortVlRows } = u
     sessions: (s) => s.sessions,
     /* 「运行状态」列按活跃总数排序（运行 + 暂停），避免暂停多的行被排到已停止区 */
     running: (s) => s.runningCount + (s.pausedCount ?? 0),
-    /* 「异常」= 失败运行数 + 当前无响应运行数：两个字都是问题信号，合计排序让有事的行冒头 */
-    abnormal: (s) => s.failedCount + s.stalledCount,
+    /* 「异常」= 失败运行数 + 当前无响应运行数 + 有自动驾驶故障：都是问题信号，合计排序让有事的行冒头。
+       activeError 必须计入（2026-11-09）：目标/路径阶段的会话失败时不进 failedCount（那是终态计数），
+       只剩这一枚信号——不计入的话「只看有异常」会把唯一能报错的行筛掉。 */
+    abnormal: (s) => s.failedCount + s.stalledCount + (s.activeError ? 1 : 0),
     created: (s) => (s.createdAt ? new Date(s.createdAt).getTime() : null)
   },
   storageKey: 'wf_virtual_learners_sort'
@@ -656,7 +683,9 @@ const filtered = computed(() => {
   if (sf === 'running' || sf === 'paused' || sf === 'stalled' || sf === 'stopped') {
     list = list.filter((s) => runPhaseOf(s) === sf)
   }
-  if (onlyAbnormal.value) list = list.filter((s) => s.failedCount > 0 || s.stalledCount > 0)
+  /* 「有异常」与异常列同源：失败 + 无响应 + 自动驾驶故障（activeError）
+     ——只看前两项会让「只在目标阶段炸过」的行被漏掉（2026-11-09 口径对齐）。 */
+  if (onlyAbnormal.value) list = list.filter((s) => s.failedCount > 0 || s.stalledCount > 0 || !!s.activeError)
   return sortVlRows(list)
 })
 
@@ -698,6 +727,10 @@ watch([keyword, stateFilter], () => {
 })
 
 /* ===== 拆分子组件引用与父侧触发入口（弹窗状态在子组件内，父页面只发指令） ===== */
+/** 深链参数：?open=settings（来自 DayTimeline 空态「去开启日期模拟」）。
+ *  用 useRouter().currentRoute 而不是 useRoute()：本组件此前不依赖路由注入，
+ *  多个单测直接 mount 且只 mock 了 useRouter——一律可空访问，缺路由上下文时静默跳过。 */
+const router = useRouter()
 /** 页头维护菜单展开态；点遮罩关闭 */
 const headMenu = ref<'' | 'maint'>('')
 function toggleHeadMenu(key: 'maint') {
@@ -777,7 +810,7 @@ const isCompact = useIsNarrow(1279)
    原实现跳 /admin/virtual-learner-cards：创建完人停在卡墙，实例不在那面墙上，
    还得自己想到回本页、也认不出刚建的是哪一条。 ===== */
 const deriveRef = ref<InstanceType<typeof CardDeriveDialog> | null>(null)
-const deriveCards = ref<Array<{ profileId: string; name: string; goal?: string }>>([])
+const deriveCards = ref<Array<{ profileId: string; name: string; goal?: string; summary?: string }>>([])
 /** 刚创建的实例 id（短暂高亮） */
 const freshIds = ref<string[]>([])
 
@@ -786,8 +819,10 @@ async function openDerivePicker() {
   try {
     const res = await adminVirtualLearnersApi.cardsIndex()
     const d = (res.data?.data ?? res.data) as { cards?: Array<{ profileId: string; name: string; goal?: string }> }
-    /* goal 随卡带出：弹窗选卡搜索要按目标命中（M-4），与卡库页搜索同一组字段 */
-    deriveCards.value = (d?.cards ?? []).map((c) => ({ profileId: c.profileId, name: c.name, goal: c.goal || '' }))
+    /* goal 随卡带出：弹窗选卡搜索要按目标命中（M-4），与卡库页搜索同一组字段；
+       summary 跟人名一起进选卡列表（2026-10-31 二轮评审 P1）：2 字人名没法区分 9 张卡，
+       卡面目标就是评审建议的「行测做得完、申论敢下笔」那句。同源两字段，一个供搜一个供展示。 */
+    deriveCards.value = (d?.cards ?? []).map((c) => ({ profileId: c.profileId, name: c.name, goal: c.goal || '', summary: c.goal || '' }))
   } catch (e) {
     toast.error(errMsg(e) || '卡库加载失败')
     return
@@ -817,7 +852,19 @@ onUnmounted(() => { if (freshTimer) clearTimeout(freshTimer) })
    单域重拉一次；无创建标记时命中 live 层 TTL 语义不重复请求，也不引入轮询。 */
 onMounted(() => {
   if (virtualsStaleAfterMutation()) void refreshLiveVirtuals()
+  /* 2026-11-09：DayTimeline 空态「去开启日期模拟」带 ?open=settings 跳到本页——
+     直接展开维护抽屉，运营不必自己找右上角「维护」再点「容量与实验环境」。 */
+  if (router?.currentRoute?.value?.query?.open === 'settings') {
+    headMenu.value = ''
+    void nextTick(() => settingsDrawerRef.value?.open())
+  }
 })
+/* 运行中每 30s 轻刷（2026-10-31 三轮评审 P1）：自动驾驶在后台推进，页面停留时
+   「今日调用」/运行状态/正在运行 chips 若只靠进页取一次，读数会长期停滞在启动前 */
+const runPollTimer = setInterval(() => {
+  if (liveVirtualRunStats.value.running > 0) void refreshLiveVirtuals()
+}, 30000)
+onUnmounted(() => clearInterval(runPollTimer))
 
 /* 列显隐（2026-10-05 卡头统一补「列」按钮）：次要列可勾选；名称/运行状态/操作是
    身份与动作列不进 colDefs。窄屏（isNarrow）折叠优先于列勾选——窄屏档勾了也不显
@@ -1030,17 +1077,8 @@ const failureTitle = computed(() => {
 
 /* ===== A1 批量操作：复选框（批量条拆分为 VirtualLearnerBatchBar 子组件） ===== */
 const selected = ref<string[]>([])
-/** 多选态 = 勾选列可见。默认不显示（2026-10-17 用户拍板），卡头「批量」按钮负责打开。 */
-const batchMode = computed(() => !hiddenCols.value.has('check'))
-function toggleBatchMode() {
-  const next = new Set(hiddenCols.value)
-  if (next.has('check')) next.delete('check')
-  else {
-    next.add('check')
-    selected.value = []
-  }
-  hiddenCols.value = next
-}
+/* 勾选列 ☐ 默认常驻（2026-11-08 用户走查，取代 2026-10-17 的「默认不显示 + 卡头批量按钮」）：
+   无需模式切换，选中 ≥1 行即弹出底部命令栏，取消选择即收起；勾选列显隐交给「列」菜单。 */
 
 /* 表头全选 = 当前页全选（2026-10-11 用户拍板，与用户页同规则：跨页全量勾选对批量
    终止/删除太易误伤）。再点一次只清当前页；跨页仍可手动逐个勾（selected 保留）。 */
@@ -1082,6 +1120,17 @@ function onBatchReclaim(ids: string[]) {
 </script>
 
 <style scoped>
+/* 卡片高度（2026-11-09 审计 C）：
+   .vl-cardwrap 占满页面剩余高度（.mk-page--fill 的 flex 列），卡片本身 flex:0 1 auto ——
+   行数少时随内容增高（不撑满、无「黑洞」），行数多时被 max-height:100% 封顶，
+   表格区内滚、分页条恒在卡尾可见。mk-card--fill 的 flex:1 由这里改写成 0 1 auto。 */
+.vl-cardwrap { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.vl-card { flex: 0 1 auto; max-height: 100%; }
+/* 窄屏（≤900）退回整页滚动（与 mk-primitives 的 fill 降级同档）：wrap 不再占剩余高度 */
+@media (max-width: 900px) {
+  .vl-cardwrap { flex: none; height: auto; }
+  .vl-card { max-height: none; }
+}
 /* 固定列宽（2026-10-22 与教学组三表同判例）：虚拟学习者 / 长期倾向 / 进行中三列在
    auto 布局下按当页最长内容分宽，翻页整表跳动；fixed 后按表头定死，余量按权重摊开。
    宽度按 1280 现值校准并留余量，1200 档无横滚。 */
@@ -1136,6 +1185,10 @@ function onBatchReclaim(ids: string[]) {
 /* 刚派生的行：短暂高亮，让「创建完在哪一条」一眼可见（绿=成功，蓝色只留给可交互/选中） */
 .vl-row--fresh { background: var(--mk-green-bg); }
 .vl-row--fresh td:first-child { box-shadow: inset 2px 0 0 var(--mk-green); }
+/* 行尾 ⋯ 菜单开着的那一行（2026-11-02 评审 R6）：菜单浮在下两行之上，
+   不给来源行选中态就读不出「提示词试跑 / 查看来源卡 / 删除」作用在谁身上 */
+.vl-row--menu { background: var(--mk-blue-bg); }
+.vl-row--menu td:first-child { box-shadow: inset 2px 0 0 var(--mk-blue); }
 /* 「故事 / 路径」两数的分隔符：弱化到次级色，数字本身仍是 mk-num 的等宽口径 */
 .vl-story-path__sep { color: var(--mk-faint); padding: 0 1px; }
 /* 异常列：两类问题信号各自带词，零值时整格「—」不出声（用户：分两列时整片 0 0 最响） */
@@ -1144,7 +1197,7 @@ function onBatchReclaim(ids: string[]) {
   display: inline-block;
   margin-left: 6px;
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-xs);
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -1167,29 +1220,12 @@ function onBatchReclaim(ids: string[]) {
 }
 /* 页头两枚下拉（维护 / 新建）：触发钮 + 与工具条同一套弹层。
    遮罩用 fixed 铺满视口接外点，层级压在弹层下一档（--mk-z-menu 是 60） */
-/* 异常列表头的「只看有异常」开关：24px 方形点击区，开着时蓝描边 */
-.vl-th-filter {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  margin-left: 6px;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: var(--mk-radius-xs);
-  background: transparent;
-  color: var(--mk-muted);
-  cursor: pointer;
-  vertical-align: middle;
-}
-.vl-th-filter:hover { background: var(--mk-surface-2); color: var(--mk-ink); }
-.vl-th-filter--on { border-color: var(--mk-blue); background: var(--mk-blue-bg); color: var(--mk-blue); }
+/* 2026-11-09 审计 D：「异常」列头的漏斗开关样式已撤，筛选迁回卡头筛选行。 */
 .vl-headmenu { position: relative; display: inline-flex; }
-.vl-headmenu__mask { position: fixed; inset: 0; z-index: var(--mk-z-menu); }
+.vl-headmenu__mask { position: fixed; inset: 0; z-index: var(--mk-z-menu); background: rgba(0, 0, 0, 0.4); }
+/* 2026-10-31 二轮评审 P2：菜单底边常落在列表卡工具栏（批量/列）上，半截按钮文字
+   读成「穿透破损」。加低度暗化遮罩，页面明确退为背景层，叠压即成正常前景语义。 */
 .vl-headmenu__pop { z-index: calc(var(--mk-z-menu) + 1); top: calc(100% + 6px); }
-/* 批量态：蓝色只给「选中/可交互」——开着的批量按钮与勾选列同一状态 */
-.vl-batch-toggle--on { border-color: var(--mk-blue); background: var(--mk-blue-bg); color: var(--mk-blue); }
 /* 表格已换自动布局（原型 .tbl 词汇），fixed/colgroup 的列宽变量覆写随之删除；
    长内容截断上限收敛到共享原语（.mk-cell-text / .mk-cell-main strong） */
 .vl-truncated { color: var(--mk-amber); font-weight: 700; }
@@ -1198,9 +1234,8 @@ function onBatchReclaim(ids: string[]) {
    实测高 23px 低于 24px 可点下限——本页 :deep 提最小高度补足 1px，padding 不动、视觉不变 */
 .vl-running :deep(.vl-running__chip) { min-height: 24px; }
 
-/* 名称头像（2026-10-15 用户拍板）：撤本页私造的「身份哈希八色」，改与教学组同款共享原语
-   MkCellAvatar（虚拟学习者=紫）。本页私有 .vl-avatar / .vl-avatar--N 退役；
-   mk/vlAvatar.ts 与 --mk-vl-avatar-* 仍由学习者卡库（VirtualLearnerCards）消费，保留 */
+/* 名称列头像已撤（2026-11-08 用户走查：卡库派生的名字多以「想解决…」开头，首字头像恒为「想」，
+   一排重复方块无辨识度）。mk/vlAvatar.ts 与 --mk-vl-avatar-* 仍由学习者卡库消费，保留 */
 /* 名称列可点击进二级（整行不再监听点击，避免多选勾选时误触） */
 .vl-cell--click { cursor: pointer; border-radius: 6px; transition: background 0.12s ease; }
 .vl-cell--click:hover { background: color-mix(in srgb, var(--mk-blue) 6%, transparent); }

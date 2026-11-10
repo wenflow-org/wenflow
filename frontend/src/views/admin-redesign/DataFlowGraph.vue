@@ -19,7 +19,7 @@
       <div class="dfg-toolbar">
         <div class="dfg-toolbar__status">
           <span class="dfg-stage-dot" :style="{ background: toneOf(flow?.stageId || '').hue }"></span>
-          <strong class="dfg-title">{{ flow?.stageName || '' }}<span class="dfg-title__agent mono"> {{ flow?.agentId }}</span></strong>
+          <strong class="dfg-title">{{ flow?.stageName || '' }}&nbsp;<span class="dfg-title__agent mono">{{ flow?.agentId }}</span></strong>
           <span class="dfg-meta">{{ flow ? flow.fieldCount : '—' }} 字段 · {{ flow ? flow.steps.length : '—' }} 步</span>
           <!-- 搜索命中反馈（审核 #114）：无命中此前与空闲态完全一致（画布原样、无提示），
                用户分不清「没这个字段」还是「搜索没生效」；有输入即报命中数，0 命中给醒目提示。
@@ -44,7 +44,7 @@
             <input type="checkbox" v-model="showHidden" />
             <span>隐藏字段</span>
           </label>
-          <label class="dfg-switch" title="显示步间连线（默认淡显，聚焦时点亮）">
+          <label class="dfg-switch" title="显示步间连线">
             <input type="checkbox" v-model="edgeFaded" />
             <span>连线</span>
           </label>
@@ -120,7 +120,9 @@
                 :title="`前往 ${flow.entryFrom?.stageName}（${flow.entryFrom?.stageId}-agent），看这些字段在那边是怎么产出的`"
                 @click="switchStage(flow.entryFrom!.stageId)"
               >入口 · 来自 {{ flow.entryFrom?.stageName }}<span class="dfg-gate__jump">↗</span></button>
-              <span class="dfg-gate__sub" :title="`${entryVisible.length} 个字段经 ${flow.entryFrom?.stageId}-agent 移交进入本阶段`">{{ entryVisible.length }} 个字段经 {{ flow.entryFrom?.stageId }}-agent 移交本阶段</span>
+              <!-- 入口卡与出口卡同构：字段数由右侧「N 字段」徽章给出，对端 agent 由上面卡题
+                   title 给出——此处不再复读一句「N 个字段经 X-agent 移交本阶段」
+                   （2026-11-02 走查：出口卡那句已同批删除） -->
             </div>
             <span class="dfg-gate__count">{{ entryVisible.length }} 字段</span>
             <button type="button" v-for="p in farPorts['__entry__'] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></button>
@@ -159,7 +161,10 @@
           <!-- 桥接闸口（入口整装 / 分发） -->
           <section v-if="step.kind === 'bridge-entry' && step.outputChips.length" :data-card-key="step.agentId" class="dfg-step dfg-step--gate" :class="{ 'is-flash': flashKey === step.agentId }" :style="{ '--hz': toneOf(flow!.stageId).hue }">
             <header class="dfg-step__head">
-              <span class="dfg-step__idx">⇡</span>
+              <!-- 闸口也占一个步号（2026-11-02 评审）：桥接分发在 defSteps 里就是第 1 步，
+                   原先这里画的是 ⇡ 图标，页面上可见编号从 2 起，与页头「N 步」对不上。
+                   闸口的圆形序号框（.dfg-step--gate .dfg-step__idx）已足够区分它与 Skill 步骤卡 -->
+              <span class="dfg-step__idx">{{ step.index }}</span>
               <strong class="dfg-step__name">{{ step.name }}</strong>
               <span class="dfg-step__badge dfg-step__badge--gate">分发上游字段</span>
               <span class="dfg-step__agent mono">{{ step.agentId }}</span>
@@ -216,7 +221,6 @@
               <span class="dfg-step__spacer"></span>
               <span v-if="step.condition" class="dfg-step__cond" :title="step.condition">触发：{{ step.condition }}</span>
               <span v-if="step.loopOver" class="dfg-step__cond">循环：{{ step.loopOver }}</span>
-              <span v-if="step.kind === 'orphan'" class="dfg-step__count" title="该 Skill 没有字段的路由记录，不参与阶段内数据流转">无字段流转</span>
               <button type="button" v-for="p in farPorts[step.agentId] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></button>
             </header>
           </section>
@@ -303,7 +307,15 @@
                           :key="t.target"
                           class="dfg-chip__to mono"
                           :class="{ 'dfg-chip__to--stage': t.kind === 'stage' }"
-                        >{{ t.kind === 'stage' ? `→ ${t.label}` : `→ ${t.label}` }}</span>
+                          :title="t.label"
+                        >→ {{ t.label }}</span>
+                        <!-- 多于两个去向时给余量（2026-11-02 评审后补）：原实现 slice(0,2) 静默丢掉其余去向，
+                             一个字段交给 3 个目标时读者会以为只交了 2 个 -->
+                        <span
+                          v-if="c.toTags.length > 2"
+                          class="dfg-chip__to dfg-chip__to--more mono"
+                          :title="`去向：${c.toTags.map((t) => t.label).join('、')}`"
+                        >+{{ c.toTags.length - 2 }}</span>
                       </template>
                     </button>
                     <button v-if="stepOverflow(step, 'out')" type="button" class="dfg-chip dfg-chip--more" @click="toggleStep(step)">
@@ -329,7 +341,6 @@
                 :title="`前往 ${flow.exitTo?.stageName}（${flow.exitTo?.stageId}-agent），看这些字段在那边是怎么被消费的`"
                 @click="switchStage(flow.exitTo!.stageId)"
               >出口 · 交给 {{ flow.exitTo?.stageName }}<span class="dfg-gate__jump">↗</span></button>
-              <span class="dfg-gate__sub" :title="`${flow.agentId} 汇总 ${flow.exit.length} 个字段，整体移交下一阶段`">{{ flow.agentId }} 汇总 {{ flow.exit.length }} 个字段移交下一阶段</span>
             </div>
             <span class="dfg-gate__count">{{ flow.exit.length }} 字段</span>
             <button type="button" v-for="p in farPorts['__exit__'] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">来自 {{ p.peerLabel }}<b>{{ p.count }}</b></button>
@@ -367,7 +378,6 @@
         <!-- 空态：原型 .empty 词表（图标 + 结论 + 说明 + 行动入口），不再裸一句话 -->
         <MkEmptyState
           v-if="flow && !flow.steps.length && !flow.entry.length && !flow.exit.length"
-          icon="⇅"
           title="该阶段暂无字段路由数据"
           description="编排文件未声明字段路由，可在「字段路由」页编辑编排文件后回来。"
           action-text="刷新"
@@ -414,7 +424,9 @@
             <!-- 首段徽章行（原型 .ovl__body 首段 pills）：角色 / 可见性 / 锁定 / 内部信令 / 累积，均为字段既有属性 -->
             <div class="dfg-drawer__pills">
               <span class="mk-badge" :class="`mk-badge--role-${selected.role}`">{{ roleLabel(selected.role) }}（{{ selected.role }}）</span>
-              <span class="mk-badge" :class="`mk-badge--render-${selected.render}`">{{ selected.render }}</span>
+              <!-- 可见性徽章说中文（2026-11-02 评审）：同一屏下方「可见性」控件写的是「可见 / 隐藏」，
+                   这里却直出 render 枚举（visible / hidden），一个状态两种语言 -->
+              <span class="mk-badge" :class="`mk-badge--render-${selected.render}`">{{ renderLabel(selected.render) }}</span>
               <span class="mk-badge" :class="`mk-badge--lock-${selected.lockLevel}`">{{ lockLabel(selected.lockLevel) }}</span>
               <span v-if="selected.internal" class="mk-badge dfg-badge--internal">内部字段</span>
               <span v-if="selected.accumulate" class="mk-badge dfg-badge--accum">累积进学习者状态</span>
@@ -436,7 +448,10 @@
                 <span>类型</span>
                 <strong class="mono">{{ selected.valueType || '—' }}</strong>
               </div>
-              <div>
+              <!-- 存储字段名整行（2026-11-02 评审）：50 字上下的标识（normalizedInput.confirmedProposal
+                   .firstDeliverable）在 203px 的值列里被硬断成三行、断在词中间，看着像三个名字；
+                   整行后值列约 526px，常见标识一行放得下 -->
+              <div class="dfg-fact--wide">
                 <span>存储字段名</span>
                 <strong class="mono">{{ selected.persistKey || selected.fieldId }}</strong>
               </div>
@@ -686,6 +701,13 @@ function lockLabel(level?: string) {
   if (level === 'system-locked') return '平台锁定'
   if (level === 'structure-locked') return '平台锁定'
   return '可编辑'
+}
+/** render 枚举 → 中文：与抽屉「可见性」控件、字段路由表的同一枚徽章同一个词；
+ *  未知取值原样回显，避免被误标成「可见」 */
+function renderLabel(render: string) {
+  if (render === 'hidden') return '隐藏'
+  if (render === 'visible') return '可见'
+  return render
 }
 function stageNameOf(id: string) {
   return stageNames.value[id] || STAGE_LABELS[id] || id
@@ -1287,7 +1309,11 @@ function journeyOf(part: 'producer' | 'consumers' | 'handoff'): string[] | strin
     return out
   }
   if (c.handoffTargets.length) {
-    return c.handoffTargets.map((t) => `${t}`).join(' / ')
+    /* 阶段去向写中文（2026-11-02 评审）：与「字段路由」的移交行同一套标识——
+       阶段原值 teaching 混在 skill:xxx / agent 之间，读不出这是「交给教学阶段」 */
+    return c.handoffTargets
+      .map((t) => (STAGE_ORDER.includes(t as (typeof STAGE_ORDER)[number]) ? `${stageNameOf(t)}阶段` : t))
+      .join(' / ')
   }
   return c.accumulate ? '学习者状态（累积）' : '对话终点（不转交）'
 }
@@ -1414,6 +1440,9 @@ function stepHue(step: FlowStep): string {
 .dfg-toolbar__status { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
 .dfg-stage-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 0 3px color-mix(in srgb, var(--mk-muted) 12%, transparent); }
 .dfg-title { font-size: var(--mk-fs-body); font-weight: 800; color: var(--mk-ink); }
+/* 阶段名与 agent 名之间用不换行空格（2026-11-02 评审：普通空格会被 Vue 编译器压掉，
+   实测 outerHTML 是「规划<span>path-agent</span>」，页面上读作「规划path-agent」）。
+   &nbsp; 既留在文本里（读屏/复制得到空格），也不会被压缩；顺带避免两段在窄档分行 */
 .dfg-title__agent { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-faint); }
 .dfg-meta { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-faint); font-variant-numeric: tabular-nums; }
 /* 搜索命中反馈（审核 #114）：0 命中用琥珀强调，与「命中 N」的中性读数区分 */
@@ -1526,7 +1555,7 @@ function stepHue(step: FlowStep): string {
 /* 长程端口徽标（跨多卡不画线，点击滚动聚焦） */
 .dfg-step__port {
   flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px;
-  font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-blue);
+  font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-blue-text);
   background: var(--mk-graph-port-bg); border: 1px solid var(--mk-graph-port-line); border-radius: 999px;
   padding: 1px 7px; cursor: pointer; max-width: 160px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -1573,13 +1602,12 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
   font: inherit; font-size: var(--mk-fs-body); font-weight: 800; color: var(--mk-ink);
   background: none; border: 0; padding: 0; cursor: pointer; text-align: left;
 }
-.dfg-gate__src:hover { color: var(--mk-blue); text-decoration: underline; text-underline-offset: 2px; }
+.dfg-gate__src:hover { color: var(--mk-blue-text); text-decoration: underline; text-underline-offset: 2px; }
 .dfg-gate__jump { color: var(--mk-faint); }
-.dfg-gate__src:hover .dfg-gate__jump { color: var(--mk-blue); }
-.dfg-gate__sub { font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dfg-gate__src:hover .dfg-gate__jump { color: var(--mk-blue-text); }
 .dfg-gate__count {
   flex-shrink: 0; font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-muted);
-  background: var(--mk-graph-badge-bg); padding: 2px 9px; border-radius: 999px; font-variant-numeric: tabular-nums;
+  background: var(--mk-graph-badge-bg); padding: 2px 9px; border-radius: var(--mk-radius-xs); font-variant-numeric: tabular-nums;
 }
 .dfg-gate .dfg-chips { margin-top: 9px; }
 
@@ -1624,11 +1652,11 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 /* 卡题可点（进 Skill 详情）：蓝字 = 可交互，其余排版与相邻纯文本卡题一致 */
 .dfg-step__name--link {
   padding: 0; border: 0; background: none; font-family: inherit; line-height: inherit;
-  color: var(--mk-blue); cursor: pointer; text-align: left;
+  color: var(--mk-blue-text); cursor: pointer; text-align: left;
 }
 .dfg-step__name--link:hover { text-decoration: underline; }
 .dfg-step__badge {
-  padding: 1px 7px; border-radius: 999px; background: var(--mk-graph-badge-bg); color: var(--mk-muted);
+  padding: 1px 7px; border-radius: var(--mk-radius-xs); background: var(--mk-graph-badge-bg); color: var(--mk-muted);
   font-size: var(--mk-fs-micro); font-weight: 800;
 }
 .dfg-step__badge--gate { background: color-mix(in srgb, var(--hz) 14%, var(--mk-graph-node-bg)); color: color-mix(in srgb, var(--hz) 75%, var(--mk-ink)); }
@@ -1641,14 +1669,17 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
    只有 id 长过整卡时才落回省略号。spacer 仍把触发/循环条件推到行尾。 */
 .dfg-step__agent { font-size: var(--mk-fs-micro); color: var(--mk-faint); flex: 0 1 auto; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dfg-step__spacer { flex: 1; }
+/* 触发/循环条件不再截断（2026-11-02 评审）：原 max-width:220px + 省略号把「触发：when goal
+   handoff received」（实测 235px）裁成「…rec…」，全文只在 title 里，截图与走查都读不到。
+   改整行折行：卡头本就 flex-wrap，条件独占一行时不会把 Skill id 挤到省略号。 */
 .dfg-step__cond {
   flex-shrink: 0; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-amber);
   background: var(--mk-amber-bg); border-radius: 6px; padding: 1px 7px;
-  max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 100%; overflow-wrap: anywhere;
 }
 .dfg-step__role { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-faint); }
 .dfg-step__stage {
-  flex-shrink: 0; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue);
+  flex-shrink: 0; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue-text);
   cursor: pointer; background: var(--mk-blue-bg); border-radius: 6px; padding: 1px 7px;
   border: 0; margin: 0; font-family: inherit; line-height: inherit; appearance: none;
 }
@@ -1682,7 +1713,7 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 .dfg-chip--in { background: color-mix(in srgb, var(--hz) 5%, var(--mk-graph-inset)); }
 .dfg-chip--more {
   border-style: dashed; border-color: var(--mk-line); border-left-width: 3px;
-  background: var(--mk-graph-node-bg); color: var(--mk-blue); font-weight: 700;
+  background: var(--mk-graph-node-bg); color: var(--mk-blue-text); font-weight: 700;
 }
 .dfg-chip--more:hover { border-color: var(--mk-blue); background: var(--mk-blue-bg); }
 .dfg-chip.is-dimmed { opacity: 0.3; filter: saturate(0.35); }
@@ -1707,11 +1738,16 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 }
 .dfg-chip__flag--accum { color: var(--fam-knowledge); background: var(--mk-amber-bg); }
 .dfg-chip__to {
-  flex-shrink: 0; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue);
+  flex-shrink: 0; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue-text);
   background: var(--mk-blue-bg); border-radius: 6px; padding: 0 6px; line-height: 1.8;
-  max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  /* 上限 160px（2026-11-02 评审）：原 110px 把最常见的目的地都截了
+       （「→ stage-designer」实测 134px →「stage-des…」，chip 上的去向等于没写）。
+       再长的 skill id 仍省略，全文在 title */
+  max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .dfg-chip__to--stage { background: color-mix(in srgb, var(--hz) 12%, var(--mk-graph-node-bg)); color: var(--mk-ink); font-weight: 800; }
+/* 余量计数：陈述而不是另一个去向，弱一档（与「+N 更多」同一语气） */
+.dfg-chip__to--more { background: var(--mk-graph-tag-bg); color: var(--mk-faint); }
 
 /* 图例（数据族） */
 .dfg-legend {
@@ -1724,7 +1760,7 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 .dfg-legend.is-dimmed { opacity: 0.55; }
 .dfg-legend__item {
   display: inline-flex; align-items: center; gap: 5px;
-  padding: 2px 8px; border-radius: 999px;
+  padding: 2px 8px; border-radius: var(--mk-radius-sm);
   border: 1px solid transparent; background: transparent;
   font: inherit; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted);
   cursor: pointer;
@@ -1732,7 +1768,7 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 .dfg-legend__item i { width: 8px; height: 8px; border-radius: 50%; }
 .dfg-legend__item b { font-weight: 800; color: var(--mk-faint); font-variant-numeric: tabular-nums; }
 .dfg-legend__item:hover { background: var(--mk-blue-bg); }
-.dfg-legend__item.is-on { border-color: var(--mk-blue); background: var(--mk-blue-bg); color: var(--mk-blue); }
+.dfg-legend__item.is-on { border-color: var(--mk-blue); background: var(--mk-blue-bg); color: var(--mk-blue-text); }
 
 /* 空态走 MkEmptyState（原型 .empty 词表），此处无本地样式 */
 
@@ -1763,10 +1799,10 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 /* 区块（原型 section = 区块头 + 内容；原 .dfg-flow 虚线自绘框并入此文法） */
 .dfg-section { display: grid; gap: 8px; }
 .dfg-flow__list { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.dfg-flow__chip { padding: 2px 9px; border-radius: 999px; background: var(--mk-blue); color: var(--mk-graph-on-accent); font-size: var(--mk-fs-micro); font-weight: 700; }
+.dfg-flow__chip { padding: 2px 9px; border-radius: var(--mk-radius-sm); background: var(--mk-blue); color: var(--mk-graph-on-accent); font-size: var(--mk-fs-micro); font-weight: 700; }
 .dfg-flow__chip--soft { background: var(--mk-graph-flow-soft-bg); color: var(--mk-accent-deep); }
 .dfg-flow__chip--out { background: var(--mk-graph-flow-out); }
-.dfg-flow__arrow { color: var(--mk-blue); font-weight: 800; }
+.dfg-flow__arrow { color: var(--mk-blue-text); font-weight: 800; }
 .dfg-flow__hint { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.5; }
 
 /* 行级编辑本体（卡体/卡头由共享 mk-card 提供，此处只留排列与 field 行） */
@@ -1779,11 +1815,11 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 .dfg-note { margin: 0; padding: 10px 12px; border-radius: var(--mk-radius-xl); background: var(--mk-surface-3); color: var(--mk-muted); font-size: var(--mk-fs-micro); line-height: 1.6; }
 .dfg-edit__pills { display: inline-flex; gap: 4px; padding: 2px; background: var(--mk-graph-pills-bg); border-radius: var(--mk-radius-sm); width: fit-content; }
 .dfg-pill { padding: 4px 12px; border: 0; border-radius: 6px; background: transparent; font: inherit; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); cursor: pointer; }
-.dfg-pill.is-on { background: var(--mk-graph-pill-on-bg); color: var(--mk-blue); }
+.dfg-pill.is-on { background: var(--mk-graph-pill-on-bg); color: var(--mk-blue-text); }
 .dfg-edit__input { padding: 6px 10px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-sm); font: inherit; font-size: var(--mk-fs-micro); background: var(--mk-graph-field); outline: none; }
 .dfg-edit__input:focus { border-color: var(--mk-blue); }
 .dfg-check { display: inline-flex; align-items: center; gap: 6px; font-size: var(--mk-fs-micro); color: var(--mk-muted); cursor: pointer; }
-.dfg-edit__msg { margin: 0; padding: 8px 10px; border-radius: var(--mk-radius-sm); background: var(--mk-graph-flow-bg); color: var(--mk-blue); font-size: var(--mk-fs-micro); font-weight: 600; }
+.dfg-edit__msg { margin: 0; padding: 8px 10px; border-radius: var(--mk-radius-sm); background: var(--mk-graph-flow-bg); color: var(--mk-blue-text); font-size: var(--mk-fs-micro); font-weight: 600; }
 .dfg-edit__msg.is-error { background: var(--mk-red-bg); color: var(--mk-red); }
 
 /* ================= 暗色模式 ================= */

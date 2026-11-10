@@ -36,7 +36,7 @@ import {
   listUsersBasicInfo,
 } from '../../services/cost/token-cost.service';
 import { logger } from '../../utils/logger';
-import { dayKeyOf, addDaysToDayKey, parseDayKeyStart } from '../../services/time/day-boundary';
+import { dayKeyOf, addDaysToDayKey, parseDayKeyStart, startOfDay } from '../../services/time/day-boundary';
 import { getLlmRegistryStatus } from '../../config/models.config';
 
 const router = express.Router();
@@ -179,19 +179,25 @@ export function warmTokenCostCache(): Promise<TokenDataResult> {
  * JS 侧只做装配（组级合计经 accumulateCost(rowCount) 累加，语义与逐行一致，见该函数注释）。
  */
 async function loadTokenData(days: number, _includeTest: boolean) {
-  const since = new Date(Date.now() - days * 86400000);
+  /* 2026-11-04 窗口边界同源（/admin/token-cost ↔ /admin/execution-logs）：执行日志 timeRange=week/month
+     从本地日 00:00 起算 N×24h（platform.ts startOfDay 基准），本页原用 Date.now() 回溯 days×24h，
+     同「近 N 天」窗口起点相差约半天（数据无失败行时两页同值是巧合）。改为同样以 startOfDay(new Date())
+     为基准回溯，两页窗口对齐；起点落在某个本地日 00:00，故窗口跨 days+1 个本地日（见下方日标签）。 */
+  const since = new Date(startOfDay(new Date()).getTime() - days * 86400000);
   /* 2026-10-21 用户拍板「撤开关，全部混在一起」：仿真跑课花的是真钱，成本页不再按
      账号类型切口径——realUserIds 恒为 null（不过滤），虚拟学习者的消耗也在总额里，
      按用户排行用紫色头像/虚拟徽章标出。参数保留只为旧调用兼容。 */
   const realUserIds: string[] | null = null;
   const sinceMs = since.getTime();
 
-  // 日标签按**应用时区本地日**（day-boundary），与学习侧日界/前端 localDateKey 同口径；
-  // trend 只含最近 days 个整本地日——窗口头部不足一日的行只进总量（与原逐行
-  // dayKeyOf + daily.get 命不中即跳过的行为一致）
+  // 日标签按**应用时区本地日**（day-boundary），与学习侧日界/前端 localDateKey 同口径。
+  /* 2026-11-04 日标签覆盖窗口触及的**每个整本地日**：窗口 = [今日 00:00 − days×24h, now]，
+     起点那天整日都在窗口内——只画 days 个标签会让首日只进 KPI 总量、不进趋势
+     （KPI 总 Token ≠ 各柱之和，同页两个「近 N 天」差一整天）。故从窗口起点那天画到今天，
+     共 days+1 个标签。 */
   const todayKey = dayKeyOf(new Date());
   const dayLabels: string[] = [];
-  for (let i = days - 1; i >= 0; i -= 1) {
+  for (let i = days; i >= 0; i -= 1) {
     dayLabels.push(addDaysToDayKey(todayKey, -i));
   }
 

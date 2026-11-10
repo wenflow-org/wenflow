@@ -44,7 +44,6 @@ vi.mock('@/composables/useInteractionMeta', () => ({
 }));
 
 import { useGoalLive } from '../useGoalLive';
-import { isProbeAnswer, probeAnswerParts } from '../probeAnswer';
 import type { GoalConversationEnvelope } from '@/api/goalConversation';
 
 function makeEnvelope(overrides: Partial<GoalConversationEnvelope> = {}): GoalConversationEnvelope {
@@ -258,20 +257,44 @@ describe('useGoalLive 流式渐进渲染', () => {
   });
 
   /**
-   * 快速自测作答（2026-09-24 反馈）：作答要经对话消息回传（goal-conversation 据此静默
-   * 回填 prerequisiteCheckResults），文案必须"先答案、后原题"，且带前缀供渲染识别成
-   * 紧凑记录卡——此前整道题在句首，用户在对话里看到一条像自己发问的消息。
+   * 快速自测作答（2026-11-02 口径重做）：作答是**面板内的本地表单动作**，不发对话回合。
+   *
+   * 旧实现（2026-09-24）每答一题就把答案当用户消息发出去、走一个完整回合，两题场景实测卡住：
+   * 答第 1 题后面板全部选项禁用、等 30-90s、回来时方案重渲染（题目可能少一道/换题）。
+   * 现在只记本地状态，点「确认」时随确认请求一次性提交（后端按 correctOption 确定性判分）。
    */
-  it('前置自测作答：消息先给答案、题目跟后，并带渲染识别前缀', async () => {
-    driveStream([], makeEnvelope());
-    apiMock.streamReplyGoalConversation.mockResolvedValueOnce(makeEnvelope());
+  it('前置自测作答：只记本地状态、不发对话回合，再点即改答案', async () => {
+    const question = '孩子经常把别人玩具抢过来（3-4岁），按指南最可能涉及哪个领域？';
+    const withProbe = makeEnvelope({
+      internal: {
+        core: { conversationId: 'gc_1', stage: 'proposing', confidence: 0.8, isCompleted: false },
+        ext: {
+          goalConversation: {
+            understanding: {},
+            confirmedProposal: {
+              real_problem: '问题',
+              first_deliverable: '产出',
+              key_stages: ['阶段一'],
+              prerequisiteDiagnostics: [{
+                probeId: 'probe-1',
+                targetConcept: '社会领域',
+                question,
+                options: [{ id: 'A', text: '健康领域' }, { id: 'B', text: '社会领域' }],
+              }],
+            },
+          },
+        },
+      },
+    });
+    driveStream([], withProbe);
     const live = useGoalLive() as ReturnType<typeof useGoalLive> & {
       answerProbe: (
         p: { probeId: string; targetConcept: string; question: string; options: Array<{ id: string; text: string }> },
         optionId: string,
-        optionText: string,
-      ) => Promise<void>;
+      ) => void;
       probeAnswers: Record<string, string>;
+      probeProgress: () => { answered: number; total: number };
+      pendingProbeAnswers: () => Array<{ probeId: string; userAnswer: string; targetConcept?: string }>;
       messages: Array<{ role: string; content: string }>;
       reset: () => void;
       send: (t: string) => Promise<void>;
@@ -279,25 +302,133 @@ describe('useGoalLive 流式渐进渲染', () => {
     live.reset();
     await live.send('开始'); // 建立会话（envelope 带 conversationId）
 
-    const question = '孩子经常把别人玩具抢过来（3-4岁），按指南最可能涉及哪个领域？';
-    await live.answerProbe(
-      { probeId: 'probe-1', targetConcept: '社会领域', question, options: [{ id: 'A', text: '健康领域' }, { id: 'B', text: '社会领域' }] },
-      'B',
-      '社会领域（人际交往与规则意识）',
-    );
+    const callsAfterSend =
+      apiMock.streamStartGoalConversation.mock.calls.length + apiMock.streamReplyGoalConversation.mock.calls.length;
+    const probe = { probeId: 'probe-1', targetConcept: '社会领域', question, options: [{ id: 'A', text: '健康领域' }, { id: 'B', text: '社会领域' }] };
 
-    const last = live.messages.filter((m) => m.role === 'user').at(-1);
-    expect(last?.content).toBe(`【快速自测作答】我选 B（社会领域（人际交往与规则意识））· 原题：${question}`);
-    expect(isProbeAnswer(last?.content ?? '')).toBe(true);
-    expect(probeAnswerParts(last?.content ?? '').question).toBe(question);
-    // 已作答记录（面板据此禁用选项）
+    live.answerProbe(probe, 'B');
+
+    // 作答不再产生用户消息、不再发模型请求
+    expect(live.messages.filter((m) => m.role === 'user').map((m) => m.content)).toEqual(['开始']);
+    expect(
+      apiMock.streamStartGoalConversation.mock.calls.length + apiMock.streamReplyGoalConversation.mock.calls.length,
+    ).toBe(callsAfterSend);
+    // 本地记录（面板据此显示选中态与回执）
     expect(live.probeAnswers['probe-1']).toBe('B');
-    // 已作答后再点同一题不重复发送
-    await live.answerProbe(
-      { probeId: 'probe-1', targetConcept: '社会领域', question, options: [{ id: 'A', text: '健康领域' }, { id: 'B', text: '社会领域' }] },
-      'A',
-      '健康领域（动作发展）',
+    expect(live.probeProgress()).toEqual({ answered: 1, total: 1 });
+    expect(live.pendingProbeAnswers()).toEqual([{ probeId: 'probe-1', userAnswer: 'B', targetConcept: '社会领域' }]);
+
+    // 再点别的选项 = 改答案（不锁死、不重复发送）
+    live.answerProbe(probe, 'A');
+    expect(live.probeAnswers['probe-1']).toBe('A');
+  });
+
+  /**
+   * 换题保护（2026-11-02 业务口径）：方案重渲染换了题/少一道时，按题号取答案会**静默失效**
+   * （回执从 2/2 掉回 1/2，用户以为「我答过的丢了」）。这里钉住：旧题号被清掉时给出可见计数。
+   */
+  it('前置自测换题：旧题作答被清掉并计入 droppedProbeAnswers（不静默蒸发）', async () => {
+    const withProbes = (ids: string[]) =>
+      makeEnvelope({
+        internal: {
+          core: { conversationId: 'gc_1', stage: 'proposing', confidence: 0.8, isCompleted: false },
+          ext: {
+            goalConversation: {
+              understanding: {},
+              confirmedProposal: {
+                real_problem: '问题',
+                first_deliverable: '产出',
+                key_stages: ['阶段一'],
+                prerequisiteDiagnostics: ids.map((id) => ({
+                  probeId: id,
+                  targetConcept: `概念${id}`,
+                  question: `问题${id}？`,
+                  options: [{ id: 'A', text: '甲' }, { id: 'B', text: '乙' }],
+                })),
+              },
+            },
+          },
+        },
+      });
+    driveStream([], withProbes(['probe-1', 'probe-2']));
+    const live = useGoalLive() as ReturnType<typeof useGoalLive> & {
+      answerProbe: (p: { probeId: string }, optionId: string) => void;
+      acknowledgeProbeChange: () => void;
+      probeAnswers: Record<string, string>;
+      droppedProbeAnswers: number;
+      probeProgress: () => { answered: number; total: number };
+      reset: () => void;
+      send: (t: string) => Promise<void>;
+    };
+    live.reset();
+    await live.send('开始');
+    live.answerProbe({ probeId: 'probe-1' }, 'A');
+    live.answerProbe({ probeId: 'probe-2' }, 'B');
+    expect(live.probeProgress()).toEqual({ answered: 2, total: 2 });
+
+    // 第二轮方案换了题：probe-2 消失
+    apiMock.streamReplyGoalConversation.mockResolvedValueOnce(withProbes(['probe-1', 'probe-3']));
+    await live.send('换个方向');
+
+    expect(live.probeAnswers['probe-2']).toBeUndefined();
+    expect(live.probeAnswers['probe-1']).toBe('A');
+    expect(live.droppedProbeAnswers).toBe(1);
+    expect(live.probeProgress()).toEqual({ answered: 1, total: 2 });
+
+    // 重新作答即视为已知悉换题，提示收起
+    live.acknowledgeProbeChange();
+    expect(live.droppedProbeAnswers).toBe(0);
+  });
+});
+
+describe('confirm 的 probeAnswers 携带（2026-11-07：每条确认推进路径都带题）', () => {
+  it('传输层失败回退非流式时，probeAnswers 与流式路径同权携带（不静默丢题）', async () => {
+    const live = useGoalLive();
+    live.reset();
+    apiMock.getGoalConversation.mockResolvedValueOnce(makeEnvelope({
+      internal: {
+        core: { conversationId: 'gc_1', stage: 'proposing', confidence: 0.8, isCompleted: false },
+        ext: {
+          goalConversation: {
+            understanding: {},
+            confirmedProposal: {
+              real_problem: '问题',
+              first_deliverable: '产出',
+              key_stages: ['阶段一'],
+              prerequisiteDiagnostics: [{
+                probeId: 'probe-1',
+                targetConcept: '社会领域',
+                question: '哪个说法更接近大模型的运作方式？',
+                options: [{ id: 'A', text: '概率预测' }, { id: 'B', text: '规则检索' }],
+                correctOption: 'A',
+              }],
+            },
+          },
+        },
+      },
+    }));
+    await live.resumeById('gc_1');
+    const probe = live.proposal?.probes?.[0];
+    expect(probe?.probeId).toBe('probe-1');
+    live.answerProbe(probe!, 'A');
+
+    apiMock.streamReplyGoalConversation.mockRejectedValueOnce({ transport: true });
+    apiMock.replyGoalConversation.mockResolvedValueOnce(makeEnvelope({
+      internal: {
+        core: { conversationId: 'gc_1', stage: 'proposing', confidence: 0.8, isCompleted: false },
+        ext: { goalConversation: { understanding: {}, quickReplies: [] } },
+      },
+    }));
+
+    await live.confirm();
+
+    const expectedProbeAnswers = [{ probeId: 'probe-1', userAnswer: 'A', targetConcept: '社会领域' }];
+    expect(apiMock.streamReplyGoalConversation).toHaveBeenCalledWith(
+      'gc_1', '确认并生成路径', { confirmProposal: true, probeAnswers: expectedProbeAnswers }, expect.anything(),
     );
-    expect(live.messages.filter((m) => m.role === 'user').at(-1)?.content).toBe(last?.content);
+    // 回退路径曾丢题（只带 { confirmProposal: true }）：非流式重发必须同样携带
+    expect(apiMock.replyGoalConversation).toHaveBeenCalledWith(
+      'gc_1', '确认并生成路径', { confirmProposal: true, probeAnswers: expectedProbeAnswers },
+    );
   });
 });

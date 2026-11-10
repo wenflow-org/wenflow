@@ -225,9 +225,19 @@
   /* ==========================================
      六、排版
      ========================================== */
-  --wf-font-sans: 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB',
-    'Inter', 'Helvetica Neue', '微软雅黑', sans-serif;
-  --wf-font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  /* Inter 必须排在 CJK 族之前：PingFang SC / Microsoft YaHei / Hiragino Sans GB 都自带拉丁
+     字形，排在它们后面的西文字体永远轮不到（2026-11-02 字体检查实测：本机整栈解析到
+     Microsoft YaHei，Inter 与 Helvetica Neue 全程未被选中）。挪到最前只影响**装了 Inter**
+     的机器；Windows / macOS 上 Inter 未装，解析结果与调整前逐字相同。
+     Helvetica Neue 留在 CJK 之后作末位回退（前四档都缺时才轮到）。
+     '微软雅黑' 与 'Microsoft YaHei' 是同一款字，保留两个名字是为极少数只登记本地化名的
+     Windows 版本兜底，不去重。 */
+  --wf-font-sans: 'Inter', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB',
+    'Helvetica Neue', '微软雅黑', sans-serif;
+  /* 全仓唯一的等宽型号。此前本项第二档是 Fira Code、main.css 的 --mk-mono 是 Cascadia Code，
+     同一件事两处各写一份；本机两者都没装，于是管理台落到 Cascadia Code、走设计系统基座的
+     落到 Consolas——同一界面两种等宽。2026-11-02 收口为本档，--mk-mono 反向别名到此。 */
+  --wf-font-mono: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
 
   /* 文本角色（同一视口 ≤3 档） */
   --wf-fs-micro: 12px;
@@ -335,7 +345,7 @@
        --mk-blue-bg(-strong) 蓝底用色混而非纯色 → 批次 D
        --mk-shadow-drawer  规范只有三档，抽屉并入 overlay → 批次 C
        --mk-green/amber/red 深色文字基线（白底对比 ≥4.5:1 的取舍）→ 保留，待规范补「语义文字色」档
-       --mk-mono           回退字体为 Cascadia Code 而非 Fira Code → 保留（本机栈实测更优）
+       --mk-mono           2026-11-02 已收口：规范档改用 Cascadia Code，--mk-mono 反向别名到 --wf-font-mono
        --mk-faint(-soft)   弱化文字无规范等价物 → 保留
        --mk-* 业务 tint（badge- / graph- / col- / rec- 前缀族）→ 保留，非设计语言的一部分
      ========================================== */
@@ -352,12 +362,16 @@
 
   --wf-overlay: rgba(3, 7, 14, 0.62);
 
-  /* ---- 品牌 / 交互色（暗色降饱和提亮） ---- */
-  --wf-color-primary: #5b8def;
-  --wf-color-primary-light: #8db3fa;
-  --wf-color-primary-lighter: #a8c5fc;
-  --wf-color-primary-dark: #3f74d6;
-  --wf-color-primary-darker: #2f6ae0;
+  /* ---- 品牌 / 交互色 ----
+     2026-11-05 用户终裁「深色模式主按钮蓝底白字」：暗色档亮蓝 #5b8def 配白字对比仅
+     3.2:1（不达 AA 4.5:1），配暗字 #10131a（5.8:1）读作「蓝底黑字」被用户否掉——
+     主色收敛回品牌唯一交互色 #2f6ae0（白字 4.9:1 达 AA），亮暗两主题同蓝；
+     hover/pressed 链恢复亮色档同款（base 变深后原暗色档 hover 值已不构成层级） */
+  --wf-color-primary: #2f6ae0;
+  --wf-color-primary-light: #5a94f8;
+  --wf-color-primary-lighter: #8db3fa;
+  --wf-color-primary-dark: #1f57cc;
+  --wf-color-primary-darker: #1843a3;
 
   --wf-color-secondary: #6ec5e3;
   --wf-color-secondary-light: #96d5ec;
@@ -399,7 +413,9 @@
   --wf-text-muted: #afb1b6;
   --wf-text-disabled: #7a7e85;
   --wf-text-inverse: #141415;
-  --wf-text-on-primary: #10131a;
+  /* 2026-11-05 用户终裁「主按钮蓝底白字」：随 --wf-color-primary 收深至 #2f6ae0，
+     白字 4.9:1 达 AA（原 #10131a 暗字 pairing 已废，见上方品牌交互色注释） */
+  --wf-text-on-primary: #ffffff;
 
   --wf-border-default: #36373c;
   --wf-border-light: #2a2b2d;
@@ -410,6 +426,8 @@
 
   /* ---- 阴影（暗色：同样只有三档） ---- */
   --wf-shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.5);
-  --wf-shadow-overlay: 0 16px 40px rgba(0, 0, 0, 0.6);
+  /* overlay 双层（2026-10-31 三轮评审 L05）：纯 40px 大阴影在深底稀释到不可见，
+     弹层切过表格行时读不出「浮在上面」；补 4px 近距层让边缘处立刻压暗 */
+  --wf-shadow-overlay: 0 4px 16px rgba(0, 0, 0, 0.55), 0 16px 40px rgba(0, 0, 0, 0.6);
   --wf-shadow-modal: 0 24px 64px rgba(0, 0, 0, 0.7);
 }

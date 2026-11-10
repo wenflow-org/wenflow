@@ -8,10 +8,16 @@
  * 只 mock 外部协作者（DB/logger/邻接域模块），被测的留痕实现走真实代码。
  */
 const mockUpsert = jest.fn(async (..._args: any[]) => undefined)
+const mockFindUnique = jest.fn(async (..._args: any[]) => null)
 
 jest.mock('../../../config/database', () => ({
   __esModule: true,
-  default: { learner_evidence: { upsert: (...args: any[]) => mockUpsert(...(args as [])) } },
+  default: {
+    learner_evidence: {
+      upsert: (...args: any[]) => mockUpsert(...(args as [])),
+      findUnique: (...args: any[]) => mockFindUnique(...(args as [])),
+    },
+  },
 }))
 jest.mock('../../../utils/logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
@@ -74,8 +80,9 @@ describe('checkpoint:attempt 留痕（H1）', () => {
       title: '理解检查',
       outcome: 'skipped',
     }))
-    // 终局不可变：update 为空
-    expect(arg.update).toEqual({})
+    // #173-1③：终局可升级——update 不再为空（同终局重复触发写回同值，幂等）
+    expect(arg.update).toEqual(expect.objectContaining({ confidence: 1 }))
+    expect(JSON.parse(arg.update.payload).outcome).toBe('skipped')
   })
 
   it('attempts_exhausted：payload 带累计作答次数', async () => {

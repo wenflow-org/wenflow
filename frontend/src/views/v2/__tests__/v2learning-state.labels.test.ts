@@ -68,27 +68,33 @@ describe('V2LearningState 中文指标标签（P3-3）', () => {
     getMock.mockReset();
   });
 
-  it('体检卡四项全中文标签：整体状态/学习压力/训练负荷/疲劳程度', async () => {
+  it('状态四项全中文标签：整体状态/学习压力/训练负荷/疲劳程度（2026-11-05 改 2×2 网格）', async () => {
     const w = await mountState();
-    const labels = [
-      w.find('.vitals__main small').text(),
-      ...w.findAll('.vitals__sub small').map((n) => n.text())
-    ];
+    const labels = w.findAll('.vitals__item small').map((n) => n.text());
     expect(labels).toEqual(['整体状态', '学习压力', '训练负荷', '疲劳程度']);
   });
 
-  it('图例中文：训练负荷 / 疲劳度 / 整体状态（训练负荷 − 疲劳）', async () => {
+  it('指标即图例：四项各带圆点，独立图例行不再重复指标名（2026-11-05 屏效比）', async () => {
     const w = await mountState();
+    const items = w.findAll('.vitals__item');
+    expect(items.length).toBe(4);
+    // 每项前置一枚圆点，颜色与折线同源（lss 未画线 → 中性点）
+    const dots = items.map((it) => it.find('.ff-dot').classes().join(' '));
+    expect(dots[0]).toContain('ff-dot--lsb');
+    expect(dots[1]).toContain('ff-dot--plain');
+    expect(dots[2]).toContain('ff-dot--fitness');
+    expect(dots[3]).toContain('ff-dot--fatigue');
+    // 图例只剩它独有的虚线阈值说明；指标名不再出现第二遍
     const legend = w.find('.ff-legend');
-    expect(legend.text()).toContain('训练负荷');
-    expect(legend.text()).toContain('疲劳度');
-    expect(legend.text()).toContain('整体状态');
-    expect(legend.text()).not.toContain('掌握趋势');
+    expect(legend.text()).not.toContain('训练负荷');
+    expect(legend.text()).not.toContain('疲劳度');
   });
 
-  it('有数据时状态图例为「状态」中文（非 form）', async () => {
+  it('虚线阈值保留在右侧图例（有数据时渲染）', async () => {
     const w = await mountState([{ startTime: new Date().toISOString(), durationMinutes: 30 }]);
-    expect(w.find('.ff-legend').text()).toContain('状态');
+    const legend = w.find('.ff-legend');
+    expect(legend.exists()).toBe(true);
+    expect(legend.text()).toContain('虚线阈值');
   });
 
   it('没有可执行建议时不渲染「采用建议 / 保持原计划」按钮', async () => {

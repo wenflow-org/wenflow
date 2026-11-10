@@ -9,6 +9,7 @@ import {
   SKILL_RUNTIME_DEFINITIONS,
   ORCHESTRATOR_RUNTIME_DEFINITIONS,
 } from '../../coordinators/definitions-registry';
+import { logger } from '../../utils/logger';
 
 const router = Router();
 
@@ -102,20 +103,19 @@ router.get('/prompt-call-logs', async (req: Request, res: Response) => {
   const limit = Math.min(Math.max(Number(req.query.limit) || 30, 1), 200);
   const agentId = typeof req.query.agentId === 'string' && req.query.agentId.trim() ? req.query.agentId.trim() : null;
   const pathId = typeof req.query.pathId === 'string' && req.query.pathId.trim() ? req.query.pathId.trim() : null;
-  const pipelineRunId = typeof req.query.pipelineRunId === 'string' && req.query.pipelineRunId.trim() ? req.query.pipelineRunId.trim() : null;
   const traceId = typeof req.query.traceId === 'string' && req.query.traceId.trim() ? req.query.traceId.trim() : null;
   const parentExecutionId = typeof req.query.parentExecutionId === 'string' && req.query.parentExecutionId.trim()
     ? req.query.parentExecutionId.trim()
     : null;
   const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
 
-  const rows = await listPromptCallLogs({
-    agentId,
-    pathId,
-    pipelineRunId,
-    traceId,
-    parentExecutionId,
-    status,
+  try {
+    const rows = await listPromptCallLogs({
+      agentId,
+      pathId,
+      traceId,
+      parentExecutionId,
+      status,
     limit,
   });
 
@@ -146,8 +146,6 @@ router.get('/prompt-call-logs', async (req: Request, res: Response) => {
         pathId: row.pathId,
         userId: row.userId,
         conversationId: row.conversationId,
-        pipelineRunId: row.pipelineRunId,
-        pipelineStepIndex: row.pipelineStepIndex,
         traceId: (row as any).traceId,
         parentExecutionId: (row as any).parentExecutionId,
         promptAttemptCount: row.promptAttemptCount,
@@ -161,6 +159,14 @@ router.get('/prompt-call-logs', async (req: Request, res: Response) => {
       };
     }),
   });
+  } catch (error) {
+    /* 2026-11-09 全站巡检实测踩到：prompt_call_logs 里存在把 'v1' 写进 Int 列的历史脏行，
+       Prisma 读取时抛 P2023；本路由此前是裸 async，Express 4 不接异步拒绝，异常升级成
+       unhandledRejection 直接把整个后端关停（一次只读请求打挂全站）。这里兜住，降级为
+       单接口 500，与 announcements/list 等既有 handler 同一形态。 */
+    logger.error('[admin-runtime] prompt-call-logs 查询失败:', error);
+    res.status(500).json({ success: false, error: '获取 Prompt 调用日志失败' });
+  }
 });
 
 export default router;

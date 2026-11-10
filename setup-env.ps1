@@ -135,7 +135,7 @@ if (-not (Test-AIConfigValue -Value $apiKeyCurrent -InvalidValues @('sk-your-api
 
 $aiModelCurrent = Get-EnvValue -Path $envPath -Key 'AI_MODEL'
 if ([string]::IsNullOrWhiteSpace($aiModelCurrent)) {
-    $aiModelCurrent = 'deepseek-v4-flash'
+    $aiModelCurrent = 'deepseek-v4.1-flash'
 }
 $aiModelInput = Read-Host "AI_MODEL [$aiModelCurrent]"
 if (-not [string]::IsNullOrWhiteSpace($aiModelInput)) {
@@ -143,15 +143,37 @@ if (-not [string]::IsNullOrWhiteSpace($aiModelInput)) {
 }
 Set-EnvValue -Path $envPath -Key 'AI_MODEL' -Value $aiModelCurrent
 
-$aiReasoningModelCurrent = Get-EnvValue -Path $envPath -Key 'AI_MODEL_REASONING'
-if ([string]::IsNullOrWhiteSpace($aiReasoningModelCurrent)) {
-    $aiReasoningModelCurrent = 'deepseek-v4-pro'
+# 平台只有这一个默认模型（2026-11-04 起不再问 AI_MODEL_REASONING：某个 Skill 要不要长思考
+# 由它的思考模式 / 推理强度决定，不是换一个模型）。旧 .env 里残留的该键不再被后端读取。
+
+# 向量 / 重排（基础设施模型）：只作首次部署种子与回落，管理台「模型与接入」优先。
+# 留空即不启用语义层（fail-open 回退关键词/窗口），不影响启动。默认模型名给出可直接用的值。
+$embedUrlCurrent = Get-EnvValue -Path $envPath -Key 'EMBEDDING_API_URL'
+$embedUrlInput = Read-Host "EMBEDDING_API_URL (向量模型地址，留空 = 不启用 [$($embedUrlCurrent)])"
+if (-not [string]::IsNullOrWhiteSpace($embedUrlInput)) {
+    $embedUrlCurrent = $embedUrlInput
 }
-$aiReasoningModelInput = Read-Host "AI_MODEL_REASONING [$aiReasoningModelCurrent]"
-if (-not [string]::IsNullOrWhiteSpace($aiReasoningModelInput)) {
-    $aiReasoningModelCurrent = $aiReasoningModelInput
+if (-not [string]::IsNullOrWhiteSpace($embedUrlCurrent)) {
+    Set-EnvValue -Path $envPath -Key 'EMBEDDING_API_URL' -Value $embedUrlCurrent
 }
-Set-EnvValue -Path $envPath -Key 'AI_MODEL_REASONING' -Value $aiReasoningModelCurrent
+
+$embedKeyCurrent = Get-EnvValue -Path $envPath -Key 'EMBEDDING_API_KEY'
+$embedKeyInput = Read-Host "EMBEDDING_API_KEY (向量模型密钥，回车沿用当前)"
+if (-not [string]::IsNullOrWhiteSpace($embedKeyInput)) {
+    $embedKeyCurrent = $embedKeyInput
+}
+if (-not [string]::IsNullOrWhiteSpace($embedKeyCurrent)) {
+    Set-EnvValue -Path $envPath -Key 'EMBEDDING_API_KEY' -Value $embedKeyCurrent
+}
+
+$rerankUrlCurrent = Get-EnvValue -Path $envPath -Key 'RERANK_API_URL'
+$rerankUrlInput = Read-Host "RERANK_API_URL (重排模型地址，留空 = 不启用 [$($rerankUrlCurrent)])"
+if (-not [string]::IsNullOrWhiteSpace($rerankUrlInput)) {
+    $rerankUrlCurrent = $rerankUrlInput
+}
+if (-not [string]::IsNullOrWhiteSpace($rerankUrlCurrent)) {
+    Set-EnvValue -Path $envPath -Key 'RERANK_API_URL' -Value $rerankUrlCurrent
+}
 
 $adminNameCurrent = Get-EnvValue -Path $envPath -Key 'INIT_ADMIN_NAME'
 if ([string]::IsNullOrWhiteSpace($adminNameCurrent)) {

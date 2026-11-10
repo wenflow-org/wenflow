@@ -9,6 +9,9 @@ import os from 'node:os';
 import path from 'node:path';
 
 const mockSecretRows = new Map<string, { providerId: string; apiKey: string; apiKeyEnv: string | null }>();
+/** #177 运行期引用门禁读到的平台默认与启用 skill 绑定（默认无，按需覆写） */
+const mockGetConfig = jest.fn();
+const mockSkillBindings: Array<{ skillId: string; model: string | null; endpoint: string | null }> = [];
 
 jest.mock('../../../config/system-database', () => ({
   __esModule: true,
@@ -27,8 +30,16 @@ jest.mock('../../../config/system-database', () => ({
       deleteMany: async ({ where }: { where: { providerId: string } }) => {
         mockSecretRows.delete(where.providerId);
       }
-    }
+    },
+    // #177：门禁读平台默认（经 apiConfigService，已 mock）+ 启用 skill 绑定 + 写后归一化读平台行
+    skill_model_configs: { findMany: async () => mockSkillBindings },
+    platform_api_configs: { findUnique: async () => null, update: async () => undefined }
   }
+}));
+
+jest.mock('../../apiConfig.service', () => ({
+  __esModule: true,
+  default: { getConfig: (...args: unknown[]) => mockGetConfig(...args) }
 }));
 
 jest.mock('../../../utils/secret-crypto', () => ({
@@ -130,6 +141,17 @@ beforeAll(() => {
 beforeEach(() => {
   writeFixture();
   mockSecretRows.clear();
+  mockSkillBindings.length = 0;
+  // #177 门禁默认：平台三档默认未配、无 skill 绑定 → 增删改一律放行（与既有用例语义一致）
+  mockGetConfig.mockReset();
+  mockGetConfig.mockResolvedValue({
+    defaultModel: '',
+    defaultReasoningModel: '',
+    defaultEvaluationModel: '',
+    chatModels: [],
+    reasoningModels: [],
+    lightModels: []
+  });
   invalidateProviderSecretCache();
   delete process.env.CUSTOM_KEY;
   // 让模块内的注册表状态对准夹具（每次编辑后都会强制重载，这里只是起点）
@@ -198,15 +220,16 @@ describe('供应商', () => {
     await expectEditError(() => updateProvider('custom', { baseUrl: '' }), 400, '服务地址不能清空');
   });
 
-  it('删除：平台通道被拒；自建供应商连密钥一起清（并告警备用链残留）', async () => {
+  it('删除：平台通道被拒；自建供应商连密钥一起清', async () => {
     await addModel('custom', { id: 'cm-1', tier: 'chat' });
-    await addModel(PLATFORM_PROVIDER_ID, { id: 'm-chat-2', tier: 'chat', fallbacks: ['cm-1'] });
+    await addModel(PLATFORM_PROVIDER_ID, { id: 'm-chat-2', tier: 'chat' });
     mockSecretRows.set('custom', { providerId: 'custom', apiKey: 'wfsec:v1:test:eA==', apiKeyEnv: 'CUSTOM_KEY' });
     await expectEditError(() => deleteProvider(PLATFORM_PROVIDER_ID), 400, '不能删除');
     const result = await deleteProvider('custom');
     expect(providerIds()).toEqual([PLATFORM_PROVIDER_ID]);
     expect(mockSecretRows.has('custom')).toBe(false);
-    expect(result.warnings.join(' ')).toContain('备用链');
+    // 降级下线（2026-11-04）后没有「备用链里还留着已删模型」这条告警了
+    expect(result.warnings.join(' ')).not.toContain('备用链');
   });
 
   it('移除密钥：DB 行删掉，文件里的环境变量名保留', async () => {
@@ -218,42 +241,77 @@ describe('供应商', () => {
 });
 
 describe('模型', () => {
-  it('新增模型：写入规范字段顺序 + 跨供应商备用链告警 + 超出运行时跳数告警', async () => {
-    await addModel('custom', { id: 'cm-1', tier: 'chat' });
+  it('新增模型：写入规范字段顺序（不再有备用链字段）', async () => {
     const result = await addModel(PLATFORM_PROVIDER_ID, {
       id: 'm-new',
       label: 'M New',
       tier: 'reasoning',
       supportsThinking: true,
-      supportsReasoningEffort: true,
+      reasoningEfforts: ['low', 'high', 'max'],
       maxOutputTokens: 131072,
-      fallbacks: ['m-chat', 'custom/cm-1', 'm-reason']
+      // 2026-11-04 用户「去掉降级这个功能，不要」：字段已从入参类型里下线，
+      // 老客户端再传也只当没看见（下面断言它不落盘）
+      ...({ fallbacks: ['m-chat'] } as Record<string, unknown>)
     });
     const entry = readFile().providers.platform.models['m-new'];
     expect(Object.keys(entry)).toEqual([
-      'label', 'tier', 'supportsThinking', 'supportsReasoningEffort', 'maxOutputTokens', 'fallbacks'
+      'label', 'tier', 'supportsThinking', 'reasoningEfforts', 'maxOutputTokens'
     ]);
-    expect(entry.fallbacks).toEqual(['m-chat', 'custom/cm-1', 'm-reason']);
-    expect(result.warnings.join(' ')).toContain('运行时最多用到第 2 条');
-    expect(result.warnings.join(' ')).toContain('属于别的供应商');
+    expect(entry.reasoningEfforts).toEqual(['low', 'high', 'max']);
+    expect(entry).not.toHaveProperty('fallbacks');
+    expect(result.warnings.join(' ')).not.toContain('备用');
   });
 
-  it('新增模型的拒绝面：重复 id / id 非法 / 备用链指向不存在的模型 / 勾强度没勾思考', async () => {
+  it('推理强度挡位：逐模型声明、去重保序、自定义词放行、老布尔键折成三档且不再写回', async () => {
+    await addModel('custom', { id: 'cm-eff', tier: 'chat', supportsThinking: true, reasoningEfforts: ['high', 'low', 'high'] });
+    const entry = readFile().providers.custom.models['cm-eff'];
+    // 去重 + 保上传顺序（上屏顺序就是操作者填的顺序）
+    expect(entry.reasoningEfforts).toEqual(['high', 'low']);
+
+    // 空数组 = 关掉这个能力：键整个删掉，不落一个空壳
+    await updateModel('custom', 'cm-eff', { reasoningEfforts: [] });
+    expect(readFile().providers.custom.models['cm-eff'].reasoningEfforts).toBeUndefined();
+
+    /* 平台词表之外的词**放行**（2026-11-05 用户「写死了五档，但是后面的请求能对上吗，
+       应该放开允许填写挡位」）：数组里的每个词就是请求体里的取值，上游认什么只有运营知道。 */
+    await updateModel('custom', 'cm-eff', { reasoningEfforts: ['xhigh', 'dynamic'] });
+    expect(readFile().providers.custom.models['cm-eff'].reasoningEfforts).toEqual(['xhigh', 'dynamic']);
+
+    // 只拦形态必然发不出去的值：带空格 / 空串（空串按未填处理，跳过）
+    await expectEditError(
+      () => updateModel('custom', 'cm-eff', { reasoningEfforts: ['very high'] }),
+      400,
+      '只能是不带空格的短词'
+    );
+    await updateModel('custom', 'cm-eff', { reasoningEfforts: ['high', ''] });
+    expect(readFile().providers.custom.models['cm-eff'].reasoningEfforts).toEqual(['high']);
+
+    // 老调用方仍传布尔：折算成历史三档；写回只产出数组，布尔键不会被留在文件里
+    await updateModel('custom', 'cm-eff', { supportsReasoningEffort: true });
+    const legacy = readFile().providers.custom.models['cm-eff'];
+    expect(legacy.reasoningEfforts).toEqual(['low', 'high', 'max']);
+    expect(legacy).not.toHaveProperty('supportsReasoningEffort');
+
+    const view = await buildProvidersView();
+    const model = view.providers.find((p) => p.id === 'custom')!.models.find((m) => m.id === 'cm-eff')!;
+    expect(model.reasoningEfforts).toEqual(['low', 'high', 'max']);
+  });
+
+  it('新增模型的拒绝面：重复 id / id 非法 / 勾强度没勾思考', async () => {
     await addModel('custom', { id: 'cm-1', tier: 'chat' });
     await expectEditError(() => addModel('custom', { id: 'cm-1', tier: 'chat' }), 409, '已有模型');
     await expectEditError(() => addModel('custom', { id: 'cm/1', tier: 'chat' }), 400, '只能用字母');
-    await expectEditError(() => addModel('custom', { id: 'cm-2', tier: 'chat', fallbacks: ['ghost'] }), 400, '不在任何供应商目录中');
     await expectEditError(() => addModel('custom', { id: 'cm-3', tier: 'chat', supportsReasoningEffort: true }), 400, '必须同时支持思考模式');
   });
 
   it('批量引入：一次写入多个模型并带上推断出的能力标签', async () => {
     const result = await addModels(PLATFORM_PROVIDER_ID, [
-      { id: 'm-bulk-1', supportsThinking: true, supportsReasoningEffort: true },
+      { id: 'm-bulk-1', supportsThinking: true, reasoningEfforts: ['low', 'medium', 'high'] },
       { id: 'm-bulk-2', vision: true }
     ]);
     expect(result.modelIds).toEqual(['m-bulk-1', 'm-bulk-2']);
     const models = readFile().providers.platform.models;
-    expect(models['m-bulk-1']).toMatchObject({ tier: 'chat', supportsThinking: true, supportsReasoningEffort: true });
+    expect(models['m-bulk-1']).toMatchObject({ tier: 'chat', supportsThinking: true, reasoningEfforts: ['low', 'medium', 'high'] });
     expect(models['m-bulk-2']).toMatchObject({ tier: 'chat', vision: true });
   });
 
@@ -286,12 +344,17 @@ describe('模型', () => {
       id: 'cm-gen',
       label: 'CM Gen',
       tier: 'chat',
+      supportsThinking: true,
+      reasoningEfforts: ['low', 'max'],
       defaultThinkingMode: 'disabled',
       defaultReasoningEffort: 'max',
       defaultResponseFormat: 'json_object'
     });
     const entry = readFile().providers.custom.models['cm-gen'];
-    expect(Object.keys(entry)).toEqual(['label', 'tier', 'defaultThinkingMode', 'defaultReasoningEffort', 'defaultResponseFormat']);
+    expect(Object.keys(entry)).toEqual([
+      'label', 'tier', 'supportsThinking', 'reasoningEfforts',
+      'defaultThinkingMode', 'defaultReasoningEffort', 'defaultResponseFormat'
+    ]);
     expect(entry.defaultThinkingMode).toBe('disabled');
 
     let view = await buildProvidersView();
@@ -358,7 +421,7 @@ describe('写回的文件格式（git diff 卫生 + 换行风格沿袭）', () =
     expect(before).toContain('"aliases"');
 
     await createProvider({ id: 'tmp-gw', name: '临时网关', baseUrl: 'https://tmp.example.com/v1', apiKey: 'sk-tmp-123456' });
-    await addModel('tmp-gw', { id: 'tmp-model', tier: 'chat', fallbacks: ['m-chat'] });
+    await addModel('tmp-gw', { id: 'tmp-model', tier: 'chat' });
     await updateModel('tmp-gw', 'tmp-model', { label: '临时模型' });
     await deleteProvider('tmp-gw');
 
@@ -421,4 +484,61 @@ describe('运行时密钥解析（DB 密文 → 环境变量回落）', () => {
     invalidateProviderSecretCache();
     await expect(resolveProviderApiKey('custom', 'CUSTOM_KEY')).resolves.toBeNull();
   });
+});
+
+/* 2026-11-05 产品决定下线 #177 运行期引用门禁，见 CHANGELOG：
+   平台 DB 默认 / skill 绑定不再阻止删改注册表；文件级 defaults 自检仍然生效。 */
+describe('#177 运行期引用门禁已下线（2026-11-05）', () => {
+  it('#177 已下线：停用供应商不再因平台 DB 默认引用而受阻', async () => {
+    // custom 先补一个模型，再让平台 DB 默认指向它——旧门禁会拦停用，现在应放行。
+    await addModel('custom', { id: 'cm-1', tier: 'chat' })
+    mockGetConfig.mockResolvedValue({
+      defaultModel: 'cm-1',
+      defaultReasoningModel: 'cm-1',
+      defaultEvaluationModel: 'cm-1',
+      chatModels: [],
+      reasoningModels: [],
+      lightModels: []
+    })
+    await expect(updateProvider('custom', { enabled: false })).resolves.toBeTruthy()
+    expect(readFile().providers.custom.enabled).toBe(false)
+  })
+
+  it('#177 已下线：非布尔 enabled 载荷不再被 skill 绑定门禁拦截', async () => {
+    mockSkillBindings.push({ skillId: 'goal-conversation', model: 'm-chat', endpoint: null })
+    for (const payload of [1, 0, null, 'false', '0']) {
+      await expect(updateProvider('custom', { enabled: payload } as never)).resolves.toBeTruthy()
+    }
+    // true 同样不受影响
+    await expect(updateProvider('custom', { enabled: true })).resolves.toBeTruthy()
+  })
+
+  it('#177 已下线：删除被 skill 绑定的供应商不再拦截', async () => {
+    // custom 在共享夹具里没有模型 → 本用例局部写一份带模型的目录，绑定其模型后再删整条通道
+    fs.writeFileSync(tempConfig, JSON.stringify({
+      providers: {
+        platform: { name: '平台', recommended: true, models: { 'm-chat': { tier: 'chat' } } },
+        custom: { name: '自建通道', enabled: true, baseUrl: 'https://api.example.com/v1', apiKeyEnv: 'CUSTOM_KEY', models: { 'cm-1': { tier: 'chat' } } }
+      },
+      aliases: { chat: ['m-chat'] },
+      defaults: { chat: 'm-chat', reasoning: 'm-chat' }
+    }, null, 2), 'utf-8');
+    modelsConfig.reloadLlmProvidersIfChanged(true);
+    mockSkillBindings.push({ skillId: 'goal-conversation', model: 'cm-1', endpoint: null });
+    await expect(deleteProvider('custom')).resolves.toBeTruthy();
+    expect(providerIds()).toEqual(['platform']);
+  })
+
+  it('#177 已下线：删除被平台 DB 默认引用的模型不再拦截（文件 defaults 仍指向别处）', async () => {
+    mockGetConfig.mockResolvedValue({
+      defaultModel: 'm-extra',
+      defaultReasoningModel: '',
+      defaultEvaluationModel: '',
+      chatModels: [],
+      reasoningModels: [],
+      lightModels: []
+    })
+    await expect(deleteModel(PLATFORM_PROVIDER_ID, 'm-extra')).resolves.toBeTruthy()
+    expect(readFile().providers.platform.models['m-extra']).toBeUndefined()
+  })
 });

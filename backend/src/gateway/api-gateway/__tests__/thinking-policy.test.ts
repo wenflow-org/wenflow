@@ -37,6 +37,21 @@ describe('buildThinkingPolicy（能力驱动 + 预算分离）', () => {
     ).toBeUndefined()
   })
 
+  it('逐模型挡位：模型没声明的档位不发（deepseek 只声明 low/high/max）', () => {
+    for (const level of ['low', 'high', 'max'] as const) {
+      expect(
+        buildThinkingPolicy({ modelId: 'deepseek-v4.1-flash', thinkingMode: 'enabled', reasoningEffort: level }).reasoningEffort
+      ).toBe(level)
+    }
+    // medium / minimal 是词表里的合法挡位，但这台模型没声明 → 不发（上游不认的挡位发了也没用）
+    expect(
+      buildThinkingPolicy({ modelId: 'deepseek-v4.1-flash', thinkingMode: 'enabled', reasoningEffort: 'medium' }).reasoningEffort
+    ).toBeUndefined()
+    expect(
+      buildThinkingPolicy({ modelId: 'deepseek-v4.1-flash', thinkingMode: 'enabled', reasoningEffort: 'minimal' }).reasoningEffort
+    ).toBeUndefined()
+  })
+
   it('预算分离：开启思考时 max_tokens = 声明输出 + 推理预留', () => {
     // flash reasoningReserveTokens = 8192
     const policy = buildThinkingPolicy({ modelId: 'deepseek-v4.1-flash', thinkingMode: 'enabled', maxTokens: 8000 })

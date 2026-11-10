@@ -1,5 +1,6 @@
 import prisma from '../../config/database';
 import { Prisma } from '@prisma/client';
+import { timeoutErrorSignals } from '../admin/failure-classification';
 
 /**
  * Admin · Token 成本统计 DB 查询单点。
@@ -24,12 +25,25 @@ function userScopeSql(realUserIds: string[] | null): Prisma.Sql {
   return realUserIds ? Prisma.sql`AND userId IN (${Prisma.join(realUserIds)})` : Prisma.empty;
 }
 
+/* 2026-11-04 口径对齐（/admin/execution-logs「失败」角标/筛选 vs /admin/token-cost「失败」卡）：
+   执行日志的「失败」= success=0 且非超时（status=error 用 buildTimeoutCondition 排除超时行），
+   成本页原按 success=0 全量计（把超时也算进去），同窗口两页出现 155 vs 157。
+   改为沿用同一判据：errorCode 含 TIMEOUT 或 error 文本含任一超时信号即视为超时，不计入 failed。
+   信号表取 failure-classification.timeoutErrorSignals 单一出处；COALESCE 兜住空列（与 Prisma
+   `contains` 对 NULL 不命中的语义一致，否则 SQL 三值逻辑会把空列行漏计）；SQLite LIKE 对 ASCII
+   不分大小写，与 Prisma `contains` 相同。 */
+const NOT_TIMEOUT_SQL = Prisma.sql`NOT (
+  COALESCE(errorCode, '') LIKE '%TIMEOUT%'
+  OR ${Prisma.join(timeoutErrorSignals.map((s) => Prisma.sql`COALESCE(error, '') LIKE ${`%${s}%`}`), ' OR ')}
+)`;
+
 const toNum = (v: number | bigint | null | undefined): number => Number(v ?? 0);
 
 /**
  * 时间窗聚合：[fromMs, toMs) 一次扫出 调用数 / 失败数 / token 数。
  * toMs=null 表示至当前。calledAt 是 epoch 毫秒整数列。
- * 失败口径：success=0 显式失败（success 为 NULL 的行不计失败，与原 JS `=== false` 口径一致）。
+ * 失败口径：success=0 且非超时（与 /agents/logs status=error 同判据，见 NOT_TIMEOUT_SQL；
+ * success 为 NULL 的行不计失败，与原 JS `=== false` 口径一致）。
  */
 export async function aggregateWindow(
   fromMs: number,
@@ -39,7 +53,7 @@ export async function aggregateWindow(
   const upper = toMs == null ? Prisma.empty : Prisma.sql`AND calledAt < ${toMs}`;
   const rows = await prisma.$queryRaw<Array<{ calls: number | bigint; failed: number | bigint | null; tokens: number | bigint | null }>>(Prisma.sql`
     SELECT COUNT(*) AS calls,
-           SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) AS failed,
+           SUM(CASE WHEN success = 0 AND ${NOT_TIMEOUT_SQL} THEN 1 ELSE 0 END) AS failed,
            SUM(CASE WHEN executionLayer = 'api-gateway' AND tokensUsed > 0 THEN tokensUsed ELSE 0 END) AS tokens
     FROM agent_call_logs
     WHERE calledAt >= ${fromMs} ${upper} ${userScopeSql(realUserIds)}
@@ -82,7 +96,7 @@ export async function aggregateTokenGroups(
     SELECT json_extract(metadata, '$.skillId') AS skillId,
            userId, model,
            COUNT(*) AS calls,
-           SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) AS failed,
+           SUM(CASE WHEN success = 0 AND ${NOT_TIMEOUT_SQL} THEN 1 ELSE 0 END) AS failed,
            SUM(tokensUsed) AS tokens,
            SUM(promptTokens) AS promptTokens,
            SUM(completionTokens) AS completionTokens

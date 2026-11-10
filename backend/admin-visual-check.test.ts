@@ -7,16 +7,21 @@ import { test, expect, Page } from '@playwright/test';
 
 // 测试的管理页面列表（页面 id 与 manifest.ts 一致；旧页面名 /admin/dashboard、/admin/agents/editor 等
 // 已随真路由化废弃——会回退 Overview，此前造成假绿灯）
+/* 2026-11-01 校正：本清单此前混着三条**旧别名**（/admin/users、/admin/learner-center、
+ * /admin/topology）——别名会把 URL 改写成新地址，而本文件的断言是「URL 仍含目标 path」，
+ * 于是这三条必然失败（只是没人跑）。现全部换成 manifest.ts 里的真实场景路径。 */
 const ADMIN_PAGES = [
   { name: 'Overview', path: '/admin/overview' },
-  { name: 'Users', path: '/admin/users' },
-  { name: 'LearnerCenter', path: '/admin/learner-center' },
+  { name: 'OpsHub', path: '/admin/ops-hub' },
+  { name: 'People', path: '/admin/people' },
+  { name: 'LearnerCenter', path: '/admin/learner-state' },
   { name: 'Skills', path: '/admin/skills' },
-  { name: 'Topology', path: '/admin/topology' },
   { name: 'Orchestrator', path: '/admin/orchestrator' },
+  { name: 'TeachingSessions', path: '/admin/teaching-sessions' },
   { name: 'ExecutionLogs', path: '/admin/execution-logs' },
   { name: 'VirtualLearners', path: '/admin/virtual-learners' },
   { name: 'ApiConfig', path: '/admin/api-config' },
+  { name: 'HealthCenter', path: '/admin/health-center' },
 ];
 
 // 辅助函数：注入管理员会话标记（真实登录走 HttpOnly Cookie，测试仅需 JS 侧标记让路由放行渲染）

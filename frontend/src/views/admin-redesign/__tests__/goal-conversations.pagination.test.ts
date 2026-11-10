@@ -67,6 +67,7 @@ function makeConv(i: number, overrides: Record<string, unknown> = {}) {
     description: `目标摘要 ${i}`,
     collectedData: '{}',
     learningPathId: i % 2 === 0 ? `path-${i}` : null,
+    learningPathTitle: i % 2 === 0 ? `周报自动化路径 ${i}` : null,
     createdAt: '2026-08-01T10:00:00',
     updatedAt: '2026-08-10T10:00:00',
     completedAt: null,
@@ -194,12 +195,16 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
       }
     });
     statsMock.mockResolvedValue({
-      data: { success: true, data: { total: 5, active: 1, completed: 1, completionRate: '20' } }
+      data: {
+        success: true,
+        // 取消档含 cancelled + abandoned（分桶在服务端做，2026-11-02 P2-2），失败单列
+        data: { total: 5, active: 1, completed: 1, cancelled: 2, failed: 1, completionRate: '20' }
+      }
     });
     const w = await mountGoals();
-    // 后端只给合并桶（total−active−completed=3），拆分后两档不显计数，避免窗口口径冒充全量
-    expect(filterOption(w as never, '状态', '已取消').text()).toBe('已取消');
-    expect(filterOption(w as never, '状态', '失败').text()).toBe('失败');
+    // 两档都带服务端全量计数，且取消档的 2 与下面筛出来的两行对得上
+    expect(filterOption(w as never, '状态', '已取消').text()).toBe('已取消（2）');
+    expect(filterOption(w as never, '状态', '失败').text()).toBe('失败（1）');
     // 选「已取消」→ 只剩 cancelled + abandoned（失败不再混进来）
     await chooseFilter(w as never, '状态', '已取消');
     await nextTick();
@@ -235,6 +240,32 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     const cancelBadge = badges.find((b) => b.text() === '已取消')!;
     expect(failBadge.classes()).toContain('mk-badge--bad');
     expect(cancelBadge.classes()).toContain('mk-badge--muted');
+  });
+
+  /* 2026-11-02 P2-2：空态原先只按「是否在筛选」二分，筛「失败」无命中时只写「当前筛选无匹配」——
+     读者分不清是这一档本来就空、还是几项筛选互相打架。 */
+  it('空态带当前档位：筛「失败」无命中时点名这一档，叠加关键词时加限定语', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: { conversations: [makeConv(1, { status: 'completed' }), makeConv(2, { status: 'active' })] }
+      }
+    });
+    statsMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: { total: 2, active: 1, completed: 1, cancelled: 0, failed: 0, completionRate: '50' }
+      }
+    });
+    const w = await mountGoals();
+    await chooseFilter(w as never, '状态', '失败');
+    await flushPromises();
+    expect(w.find('.mk-empty').text()).toContain('没有「失败」的目标对话');
+
+    await w.find('input[placeholder*="搜索用户"]').setValue('绝不匹配的关键词');
+    await flushPromises();
+    expect(w.find('.mk-empty').text()).toContain('当前筛选里没有「失败」的目标对话');
+    w.unmount();
   });
 
   it('「状态」表头按状态档固定序排（进行中 → 已完成 → 已取消 → 失败 → 已放弃），不按阶段序号', async () => {
@@ -279,7 +310,9 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     });
     const w = await mountGoals();
     const stale = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '停滞目标对话')!;
-    expect(stale.find('.mk-kpi__num').text()).toBe('1');
+    // 数值行带统计范围注记（2026-11-02 评审 R1）：四张卡并排时读者要能看出
+    // 「停滞 / 未生成路径」只数当前列表窗口
+    expect(stale.find('.mk-kpi__num').text()).toBe('1当前列表内');
   });
 
   /* 2026-10-26 动线收口：停滞读数有对应行，就必须能落到那几行。此前它是本页唯一
@@ -328,10 +361,17 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     statsMock.mockResolvedValue({
       data: { success: true, data: { total: 1, active: 1, completed: 0, completionRate: '0' } }
     });
+    /* 2026-10-31 二轮评审 P1 推翻旧拍板「不承诺空动作」：停滞为 0 时 KPI 也必须可点，
+       点卡筛出空集、展示「当前筛选无匹配」——「点击按停滞筛选」的承诺才成立
+       （评审图 L03 抓到 0 时整卡不可点、承诺落空）。 */
     const w = await mountGoals();
     const card = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '停滞目标对话')!;
-    expect(card.classes()).not.toContain('mk-kpi--clickable');
-    expect(w.find('.mk-card__head .gc-view-chip').exists()).toBe(false);
+    expect(card.classes()).toContain('mk-kpi--clickable');
+    await card.trigger('click');
+    await flushPromises();
+    await flushPromises();
+    expect(w.find('.mk-card__head .gc-view-chip').exists()).toBe(true);
+    expect(w.text()).toContain('当前筛选无匹配');
   });
 
   /* 2026-10-27 综合重做：未生成路径从常驻 chip 升为 KPI 卡（读数 + 一键筛选），
@@ -354,7 +394,7 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     });
     const w = await mountGoals();
     const card = () => w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '未生成路径')!;
-    expect(card().find('.mk-kpi__num').text()).toBe('2');
+    expect(card().find('.mk-kpi__num').text()).toBe('2当前列表内');
     await card().trigger('click');
     await nextTick();
     expect(card().classes()).toContain('gc-kpi--on');
@@ -388,7 +428,7 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     await flushPromises();
     await flushPromises();
     expect(w.find('.mk-status--bad').exists()).toBe(false);
-    expect(rateCard().find('.mk-kpi__num').text()).toBe('0%');
+    expect(rateCard().find('.mk-kpi__num').text()).toBe('0%已完结 0/5');
     expect(filterOption(w as never, '状态', '进行中').text()).toBe('进行中（5）');
   });
 
@@ -400,7 +440,7 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
       data: {
         success: true,
         data: {
-          total: 40, active: 40, completed: 0, completionRate: '0',
+          total: 40, active: 40, completed: 0, cancelled: 0, failed: 0, completionRate: '0',
           distinctUsers: 12,
           dailyStats: [
             { date: d(2), total: 3, active: 3, completed: 0, cancelled: 0 },
@@ -414,34 +454,72 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     const tiles = w.findAll('.mk-kpi-grid .mk-kpi');
     expect(tiles.map((t) => t.find('.mk-kpi__label').text().trim())).toEqual(['目标对话数', '完结率', '停滞目标对话', '未生成路径']);
     // 本组 beforeEach 的行窗口 = 5 行；奇数行无 learningPathId → 未生成路径 = 3
-    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual(['40近 7 天 +8', '0%', '5', '3']);
+    // 四张卡的数值行各自带统计范围（2026-11-02 评审 R1）：完结率给分母，
+    // 两张按行派生的读数声明只数当前列表窗口
+    expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual([
+      '40近 7 天 +8', '0%已完结 0/40', '5当前列表内', '3当前列表内'
+    ]);
     // 增长读数（参与用户）不再单开卡
     expect(w.findAll('.mk-kpi__label').map((n) => n.text().trim())).not.toContain('参与用户');
     // 状态数字只活在卡头 pills（2026-10-17 分布带退役后）；「全部」不显数（总数单源=分页器）
     const opt = (label: string) => filterOption(w as never, '状态', label).text();
     expect(opt('进行中')).toBe('进行中（40）');
     expect(opt('已完成')).toBe('已完成（0）');
-    expect(opt('已取消')).toBe('已取消');
-    expect(opt('全部')).toBe('全部状态');
+    expect(opt('已取消')).toBe('已取消（0）');
+    expect(opt('全部')).toBe('全部');
     expect(w.find('.gc-distband').exists()).toBe(false);
   });
 
-  it('行点击进座舱；操作列不再重复「详情」按钮，只保留 ⋯ 溢出菜单', async () => {
+  it('行点击进座舱；操作列露出主操作「详情」，与行点击同一入口', async () => {
     const w = await mountGoals();
     await w.find('tbody tr').trigger('click');
     expect(vi.mocked(openSubPage)).toHaveBeenCalledWith('session-real', 'conv-1');
-    expect(w.findAll('tbody .mk-actions .mk-link')).toHaveLength(0);
+    // 2026-11-09 用户走查：只有孤零零一个 ⋯ 时最常用的详情被藏进二级菜单——
+    // 详情回到一级（与学习路径/复习积压同构），仍与行点击同落一个座舱。
+    // 每行一颗（本组窗口 5 行），不是只给首行
+    const perRow = w.findAll('tbody tr').map((tr) =>
+      tr.findAll('.mk-actions .mk-link').filter((b) => b.text() === '详情')
+    );
+    expect(perRow.every((btns) => btns.length === 1)).toBe(true);
+    vi.mocked(openSubPage).mockClear();
+    await perRow[0][0].trigger('click');
+    expect(vi.mocked(openSubPage)).toHaveBeenCalledWith('session-real', 'conv-1');
     expect(w.findAll('button').some((b) => b.text() === '控制台')).toBe(false);
   });
 
-  /* 2026-10-27 用户「这两个按钮也重复吧，本身点这个条目就可以跳进去了」：
-     行点击即详情；路径页签入口收进 ⋯ 菜单。 */
-  it('不再有独立「路径」列或「路径」按钮：路径入口收进 ⋯ 菜单', async () => {
+  it('⋯ 菜单：次级动作一律动词短语，不再重复「查看详情」，不写裸「链路」', async () => {
     const w = await mountGoals();
-    expect(w.findAll('thead th').map((t) => t.text())).not.toContain('路径');
-    expect(w.text()).not.toContain('已生成');
+    const row = w.findAll('tbody tr')[0];
+    await row.find('.mk-menu__btn').trigger('click');
+    await nextTick();
+    const labels = row.findAll('.mk-menu__item').map((b) => b.text());
+
+    // 详情已是一级按钮，菜单不再留同义项（同一动作只说一次）
+    expect(labels).not.toContain('查看详情');
+    expect(labels).toContain('查看执行日志');
+    expect(labels).not.toContain('链路');
+  });
+
+  /* 2026-10-27 用户「这两个按钮也重复吧，本身点这个条目就可以跳进去了」：
+     行点击即详情；路径页签入口收进 ⋯ 菜单。
+     2026-11-09 走查（图 1）：「未生成路径 2」在列表里指不出是哪 2 条，「学习路径」列回到默认可见
+     （只出「已生成 / 未生成」状态，路径名进 title），⋯ 菜单的「查看路径」仍然保留。 */
+  it('「学习路径」列只出生成状态，路径名不上屏；路径入口仍在 ⋯ 菜单', async () => {
+    const w = await mountGoals();
+    const ths = w.findAll('thead th').map((t) => t.text());
+    expect(ths).toContain('学习路径');
+    // 路径名（learningPathTitle）不进单元格，只在 title
+    expect(w.text()).not.toContain('周报自动化路径');
     const rows = w.findAll('tbody tr');
-    // makeConv：偶数行有 learningPathId → ⋯ 菜单出现「查看路径」；奇数行没有
+    // makeConv：偶数行有 learningPathId → 已生成；奇数行没有 → 进行中且未生成
+    expect(rows[0].findAll('td')[3].text()).toBe('未生成');
+    expect(rows[1].findAll('td')[3].text()).toBe('已生成');
+    // 已生成是弱化文字（不做徽章：满屏徽章会与「未生成」的警示争视线），路径名进 title
+    expect(rows[1].findAll('td')[3].find('.mk-badge').exists()).toBe(false);
+    expect(rows[1].findAll('td')[3].find('.mk-cell-sub').attributes('title')).toContain('周报自动化路径');
+    // 未生成才是琥珀徽章（KPI「未生成路径 N」逐行对上）
+    expect(rows[0].findAll('td')[3].find('.mk-badge').classes()).toContain('mk-badge--warn');
+
     await rows[1].find('.mk-menu__btn').trigger('click');
     await nextTick();
     expect(rows[1].findAll('.mk-menu__item').map((b) => b.text())).toContain('查看路径');
@@ -461,22 +539,25 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
   /** 2026-10-24 用户「空数据的时候，页面很奇怪，没有统一设计」：
    *  本来就没数据时原走页面级一行裸文字（不在卡里、无说明），现与「筛选无匹配」同骨架同位置。
    *  2026-10-26：空态只留一句事实 + 一个出口（不再有教学第二句），分页器常驻。 */
-  it('0 行：仍渲染列表卡（卡头 + 卡内 min 空态 + 常驻分页器），空态给「查看学习者」出口', async () => {
+  it('0 行：仍渲染列表卡（卡头 + 卡内 min 空态），空态给「查看学习者」出口；分页器自隐', async () => {
     listMock.mockResolvedValue({ data: { success: true, data: { conversations: [] } } });
     statsMock.mockResolvedValue({ data: { success: true, data: { total: 0, active: 0, completed: 0, completionRate: '0' } } });
     const w = await mountGoals();
-    // 卡在：卡头筛选带随卡渲染，空态在卡内且带 min（占满卡内剩余高度）
+    // 卡在：卡头筛选带随卡渲染
     expect(w.find('.mk-card--fill').exists()).toBe(true);
     expect(w.find('.mk-card--fill .mk-card__head').exists()).toBe(true);
+    /* 0 条时表头仍要渲染（2026-11-02 评审 R5）：整张表随空态消失 = 读者当场失去列上下文。
+       空态改 compact 挂在表头下方——min 的视口高常量会把它顶出滚动容器。 */
+    expect(w.find('.gc-table thead').exists()).toBe(true);
     const empty = w.find('.mk-empty');
-    expect(empty.classes()).toContain('mk-empty--min');
+    expect(empty.classes()).toContain('mk-empty--compact');
+    expect(w.find('.gc-table tbody tr').exists()).toBe(false);
     expect(empty.text()).toContain('暂无目标对话');
     expect(empty.text()).not.toContain('学习者在学习端提出目标后');
     const action = empty.findAll('button').find((b) => b.text() === '查看学习者');
     expect(action).toBeTruthy();
-    // 分页器常驻：0 行时仍给「共 0 条 · 第 1 / 1 页」，否则整页像数据没了
-    expect(w.find('.mk-pagination').exists()).toBe(true);
-    expect(w.find('.mk-pagination').text()).toContain('共 0 条');
+    // 分页器自隐（2026-10-31 三轮评审）：0 条挂「共 0 条 · 第 1 / 1 页」是纯噪音，空态已说明无数据
+    expect(w.find('.mk-pagination').exists()).toBe(false);
     w.unmount();
   });
 

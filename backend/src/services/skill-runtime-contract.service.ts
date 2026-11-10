@@ -11,9 +11,58 @@ import {
   getPlatformReliabilitySettings,
   type PlatformReliabilitySettings,
 } from './reliability-settings.service';
+import { UPSTREAM_FAILURE_CATEGORIES } from '../gateway/api-gateway/upstream-failure';
 import skillModelConfigService from './skillModelConfig.service';
+import { loadCoreFile } from './prompt-lab/core-file-loader';
 
 export type SkillStatsRange = '24h' | '7d' | '30d' | 'all';
+
+/* ===== #177：skill 成功率口径剔除上游/基础设施类失败 =====
+ * 上游/基础设施类失败（限流、上游 HTTP、网络、上游超时）与调用方取消不代表 skill 逻辑失败，
+ * 与 skills/executor.ts 的 isUpstreamFailure / isCallerAbort 同一口径——类别集合**直接引用**
+ * gateway/api-gateway/upstream-failure.UPSTREAM_FAILURE_CATEGORIES（单一真源，网关加类别此处自动跟随）。
+ * 不计入 skill 成功率，否则一次上游故障（含「目录外模型无可用渠道」）会把整列 skill 打成 0 失败，
+ * 污染健康度面板。行仍照记，只是不参与成功率分子/分母。
+ *
+ * 判据分表不同：
+ * - agent_call_logs 有 errorCategory 列 → **按 category 判**（与 executor 同源）。skill 层行由
+ *   executor.recordSkillSpan 写入，errorCategory 一律为 NULL、只留 errorCode；这部分才回落到
+ *   errorCode 判（RETRY_BUDGET_EXHAUSTED / CALLER_ABORTED）。**仅当 category 为空时**才看 code，
+ *   避免把 category='protocol' 但耗尽预算（TRUNCATED_EMPTY_OUTPUT 反复重试）的真实失败静默化。
+ * - prompt_call_logs 无 errorCategory 列 → 只能按 errorCode 判（transport 阶段 catch 里写的是网关
+ *   终止码，无法再区分底层 category；该类行本身就是 transport 失败）。 */
+const UPSTREAM_FAILURE_CODES = ['RETRY_BUDGET_EXHAUSTED', 'ATTEMPT_TIMEOUT', 'NETWORK_TRANSIENT', 'RATE_LIMITED'] as const;
+const CALLER_ABORT_CODE_FRAGMENT = 'CALLER_ABORTED';
+
+/** prompt_call_logs 的「计入成功率」条件（Prisma where，镜像 agent_call_logs 的 SQL 口径）。
+ *  写成「保留」而非「NOT(排除)」：errorCode 为空的失败无法判定类别，必须保留（SQL 三值逻辑下
+ *  NOT(… AND code IN …) 会把 NULL 行一起踢掉，等于静默少算失败）。 */
+const PROMPT_UPSTREAM_EXCLUSION = {
+  OR: [
+    { success: true },
+    { errorCode: null },
+    {
+      AND: [
+        { success: false },
+        { errorCode: { notIn: [...UPSTREAM_FAILURE_CODES] } },
+        { NOT: { errorCode: { contains: CALLER_ABORT_CODE_FRAGMENT } } },
+      ],
+    },
+  ],
+};
+
+/* agent_call_logs 的剔除条件（SQL 骨架）：失败 且（按 category 命中上游类别/调用方取消
+   ——与 executor 同源；或 category 为空时按 code 回退，仅供 skill 层无 category 的旧行）。
+   类别来源 UPSTREAM_FAILURE_CATEGORIES 单点引用，不抄第二份清单。 */
+const AGENT_UPSTREAM_EXCLUSION_SQL = Prisma.sql`NOT ("success" = 0 AND (
+  COALESCE("errorCategory", '') IN (${Prisma.join([...UPSTREAM_FAILURE_CATEGORIES, 'caller_abort'])}) OR (
+    "errorCategory" IS NULL AND (
+      COALESCE("errorCode", '') IN (${Prisma.join([...UPSTREAM_FAILURE_CODES])})
+      OR COALESCE("errorCode", '') LIKE ${'%' + CALLER_ABORT_CODE_FRAGMENT + '%'}
+    )
+  )
+))`;
+
 
 export interface UnifiedSkillStats {
   skillId: string;
@@ -21,6 +70,9 @@ export interface UnifiedSkillStats {
   callCount: number;
   successCount: number;
   failureCount: number;
+  /** **百分数**（75.6 = 75.6%），空窗 null——与 `toLegacySkillRuntimeStats` 的比值口径（0..1，空窗 1）
+     不是同一个东西（2026-11-08 审计）。两者同名过一次，消费方按比值反推失败数会算出负数
+      （calls=9、rate=55.6 → errors=-491），所以这里把单位写进类型注释，对外另有 `successRatePct`。 */
   successRate: number | null;
   avgDurationMs: number;
   lastCalledAt: Date | null;
@@ -156,7 +208,8 @@ async function resolveMetadataFallbackRows(
     FROM "agent_call_logs"
     WHERE ("executionLayer" IS NULL OR "executionLayer" != 'api-gateway')
       AND "agentId" NOT LIKE 'skill:%'
-      ${since ? Prisma.sql`AND "calledAt" >= ${since}` : Prisma.empty}`;
+      ${since ? Prisma.sql`AND "calledAt" >= ${since}` : Prisma.empty}
+      AND ${AGENT_UPSTREAM_EXCLUSION_SQL}`;
 }
 
 function emptyStats(skillId: string, range: SkillStatsRange): UnifiedSkillStats {
@@ -230,7 +283,7 @@ export async function getUnifiedSkillStats(
 
   const since = rangeToSince(range);
   const promptAgentIds = shortIds.map((id) => `skill:${id}`);
-  const promptWhere: any = { agentId: { in: promptAgentIds } };
+  const promptWhere: any = { agentId: { in: promptAgentIds }, ...PROMPT_UPSTREAM_EXCLUSION };
   if (since) promptWhere.createdAt = { gte: since };
 
   const [promptGroups, promptSuccessGroups, prefixedGroups, metadataFallbackRows] = await Promise.all([
@@ -257,6 +310,7 @@ export async function getUnifiedSkillStats(
       WHERE ("executionLayer" IS NULL OR "executionLayer" != 'api-gateway')
         ${since ? Prisma.sql`AND "calledAt" >= ${since}` : Prisma.empty}
         AND "agentId" IN (${Prisma.join(promptAgentIds)})
+        AND ${AGENT_UPSTREAM_EXCLUSION_SQL}
       GROUP BY "agentId", "success"`,
     /* ② metadata 兜底（非前缀行按 metadata.skillId 归属）：先过嗅探门，未命中形态零成本 */
     resolveMetadataFallbackRows(since),
@@ -269,23 +323,18 @@ export async function getUnifiedSkillStats(
     }
   }
 
-  const promptBacked = new Set<string>();
+  /* prompt 侧的读数先在内存里攒着，最后只作为「没有 skill 执行行」时的兜底
+     （见文件末 finalize：计数优先级 = skill 执行行 > prompt 调用行）。 */
+  const promptGroupsByShort = new Map<string, { total: number; success: number; avg: number; lastAt: Date | null }>();
   for (const group of promptGroups) {
     const short = group.agentId.replace(/^skill:/, '');
     if (!shortIds.includes(short)) continue;
-    promptBacked.add(short);
-    result.set(
-      short,
-      finalizeStats(
-        short,
-        range,
-        group._count._all,
-        promptSuccessMap.get(group.agentId) || 0,
-        group._avg.durationMs || 0,
-        group._max.createdAt || null,
-        'prompt_call_logs'
-      )
-    );
+    promptGroupsByShort.set(short, {
+      total: group._count._all,
+      success: promptSuccessMap.get(group.agentId) || 0,
+      avg: group._avg.durationMs || 0,
+      lastAt: group._max.createdAt || null,
+    });
   }
 
   const agentAgg = new Map<
@@ -307,11 +356,28 @@ export async function getUnifiedSkillStats(
     }
     agentAgg.set(short, current);
   };
-  // ① 前缀聚合行（GROUP BY 后每 skill 至多两行：success/failed）
+  /* ① 前缀聚合行（GROUP BY 后每 skill 至多两行：success/failed）
+   *
+   * 2026-11-08 修复（用户「头顶写着失败 0 · 成功率 100%，底下躺着 4 条红字报错」）：
+   * 此前这里有 `if (promptBacked.has(short)) continue` —— 一个 skill 只要在
+   * prompt_call_logs 里有命中行，skill 层的 agent_call_logs **整段**被跳过。
+   * 而这两张表记的不是同一件事：
+   *   · prompt_call_logs = 单次 LLM 调用（技能内部第 1..N 次模型请求）；
+   *   · agent_call_logs(executionLayer='skill') = 这一个 skill 的执行结果
+   *     （executor 在结构化输出校验失败等**不涉及上游**的失败时也是写在这张表）。
+   * 于是「模型请求都成功、但 skill 整体执行失败」（典型：SKILL_EXECUTION_FAILED /
+   * category=internal —— 结构化输出缺字段）在指标里被完全吞掉：goal-conversation
+   * 实际 5 成功 + 4 失败，卡片却显示「调用 5 · 失败 0 · 成功率 100%」，
+   * 与「最近调用」直接从 agent 日志读出来的 4 条红行当场打架。
+   * 实测（goal-conversation）两张表根本不是同一批执行：
+   *   agent_call_logs = 5 成功 + 4 失败（9 次执行）
+   *   prompt_call_logs = 5 成功（4 次失败**一条都没写进 prompt 表**）
+   * 所以既不能跳过 skill 行，也不能把两表相加（会把 5 次成功算成 10 次）。
+   * 口径定为：**有 skill 执行行就以 skill 执行行为准**（它就是「最近调用」列表现读的那张表，
+   * 卡片与列表因此天然一致）；只有当该 skill 一条 skill 行都没有时，才回落到 prompt 调用行。 */
   for (const group of prefixedGroups) {
     const short = String(group.agentId || '').replace(/^skill:/, '');
     if (!shortIds.includes(short)) continue;
-    if (promptBacked.has(short)) continue;
     const n = Number(group.n) || 0;
     const durSum = Number(group.durSum) || 0;
     const successFlag = group.success === true || group.success === 1;
@@ -336,22 +402,30 @@ export async function getUnifiedSkillStats(
     const raw = typeof log.skillId === 'string' ? log.skillId : '';
     const short = raw.replace(/^skill:/, '');
     if (!shortIds.includes(short)) continue;
-    if (promptBacked.has(short)) continue;
     bumpAgg(short, log.success === true || Number(log.success) === 1, Number(log.durationMs) || 0, coerceCalledAt(log.calledAt));
   }
 
-  for (const [short, stats] of agentAgg.entries()) {
+  /* skill 执行行优先；prompt 调用行只在「该 skill 没有任何 skill 执行行」时兜底。
+     （2026-11-08 见上方 ① 的说明：prompt 表不记录 skill 级失败，单看它必漏算失败。） */
+  for (const [short, agg] of agentAgg.entries()) {
     result.set(
       short,
       finalizeStats(
         short,
         range,
-        stats.total,
-        stats.success,
-        stats.total > 0 ? stats.durationTotal / stats.total : 0,
-        stats.lastCalledAt,
+        agg.total,
+        agg.success,
+        agg.total > 0 ? agg.durationTotal / agg.total : 0,
+        agg.lastCalledAt,
         'agent_call_logs'
       )
+    );
+  }
+  for (const [short, p] of promptGroupsByShort.entries()) {
+    if (agentAgg.has(short)) continue;
+    result.set(
+      short,
+      finalizeStats(short, range, p.total, p.success, p.avg, p.lastAt, 'prompt_call_logs')
     );
   }
 
@@ -365,6 +439,101 @@ export async function getUnifiedSkillStat(
   const short = toShortSkillId(skillId);
   const map = await getUnifiedSkillStats([short], range);
   return map.get(short) || emptyStats(short, range);
+}
+
+/** 试跑页「填入示例输入」的取数结果 */
+export interface SkillSampleInput {
+  /** 可直接粘进试跑编辑器的 JSON 文本 */
+  json: string;
+  /** 这组值的来历（展示给运营，说明不是凭空编的） */
+  origin: 'real-call' | 'contract';
+  /** 真实调用时的发生时间（origin='real-call' 才有） */
+  calledAt: Date | null;
+}
+
+/** userPayload 被遥测层瘦身成摘要时的标志（{__slim:true, bytes, sha256, head}） */
+function isSlimPayload(raw: string): boolean {
+  return /"__slim"\s*:\s*true/.test(raw.slice(0, 120));
+}
+
+/**
+ * 该 Skill 输入契约声明的字段名集合（`name` 别名优先，无别名时取 ref 末段）。
+ *
+ * 用途：校验「最近一次真实调用」的载荷**形状**是否落在本 Skill 的输入面上。
+ * 契约读不到（没有 core 文件 / 未声明 inputs）时返回 null = 无法校验、不拦。
+ */
+function declaredInputNames(skillId: string): Set<string> | null {
+  try {
+    const loaded = loadCoreFile(skillId);
+    const inputs = loaded?.core?.inputs ?? [];
+    if (!inputs.length) return null;
+    const names = new Set<string>();
+    for (const input of inputs) {
+      const name = String(input.name || '').trim();
+      if (name) {
+        names.add(name);
+        continue;
+      }
+      // 无别名：用 ref 末段（goal:collectedData.state → state；latestMessage → latestMessage）
+      const tail = String(input.ref || '').split(/[.:]/).filter(Boolean).pop();
+      if (tail) names.add(tail);
+    }
+    return names.size ? names : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 给「试跑」页取一组能直接跑的示例输入（2026-11-08 用户「让管理员手写冷冰冰的 JSON 太难用了」）。
+ *
+ * 取材优先级：
+ *  1. **真实成功调用**的 userPayload —— 这是该 Skill 在生产里实际吃过的载荷，形状一定对。
+ *     只取未被遥测瘦身（__slim）的那几条；JSON.parse 失败也跳过（旧行可能是文本）。
+ *  2. 一条都没有时回落 null，由前端用输入契约生成的骨架兜底（已有行为）。
+ *
+ * **形状校验（2026-11-09 走查修复）**：库里的 demo/演示行不是"真实调用"——例如
+ * `seedpcl_*` 那批把 `{"seed":true,"step":N}` 写在 `skill:goal-conversation` 名下，
+ * 而该 Skill 的输入契约是 userInput/state/conversationContext。此前不校验形状，
+ * 于是「填入示例输入」把仿真参数当成示例填进编辑器，紧接着点「开始试跑」必然
+ * 报输入形状错误（试跑页真正需要的骨架兜底反倒被绕过了）。现在：载荷键与该 Skill
+ * 声明的输入名**一个都不重合**就跳过，继续往下找；都不合格即回落骨架。
+ * （契约读不到时不校验——宁可能填不完美，也不能因为读不到契约就彻底不给示例。）
+ *
+ * 只读、不改任何数据；失败一律返回 null，不抛——「填示例」是便利功能，不该成为新的错误面。
+ */
+export async function getSkillSampleInput(skillId: string): Promise<SkillSampleInput | null> {
+  const short = toShortSkillId(skillId);
+  if (!short) return null;
+  const agentIds = [`skill:${short}`, short];
+  const declared = declaredInputNames(short);
+  try {
+    const rows = await prisma.prompt_call_logs.findMany({
+      // 只取成功调用；userPayload 在 schema 里是必填 String，不需要（也不能）再写 { not: null } ——
+      // Prisma 对必填字段的 not 过滤会直接抛错，曾被外层 catch 静默吞成「无示例」。
+      where: { agentId: { in: agentIds }, success: true },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      select: { userPayload: true, createdAt: true },
+    });
+    for (const row of rows) {
+      const raw = typeof row.userPayload === 'string' ? row.userPayload.trim() : '';
+      if (!raw || isSlimPayload(raw)) continue;
+      try {
+        const parsed = JSON.parse(raw);
+        // 只接受对象载荷：数组/标量不是可编辑的输入形状
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
+        // 形状对不上（demo 行、串了 agentId 的载荷）→ 继续找下一条
+        if (declared && !Object.keys(parsed).some((k) => declared.has(k))) continue;
+        return { json: JSON.stringify(parsed, null, 2), origin: 'real-call', calledAt: row.createdAt };
+      } catch {
+        continue;
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 /**

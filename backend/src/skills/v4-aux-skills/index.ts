@@ -135,15 +135,21 @@ async function runAux<TOutput>(opts: RunAuxOptions<TOutput>): Promise<SkillExecu
     __prompt: rawPlumbing,
     __fallback: callerFallback,
     __onFailure: onFailureOverride,
+    // 生成参数是**传输层**旋钮，不是业务字段：下面提升为调用点级覆盖后必须从 domain 里剥掉。
+    // 2026-11-08 全 skill 缓存调查：aux skill 多为 `buildUserPayload: (d) => d` 恒等透传，
+    // 若留在 domain，model/temperature/maxTokens 会以业务键身份原样发给模型（零引用废内容）。
+    model: genModel,
+    temperature: genTemperature,
+    maxTokens: genMaxTokens,
     ...domain
   } = opts.input || {};
   const { callerAgentId, callerAction, ...promptContext } = (rawPlumbing || {}) as AuxPlumbing;
   // 调用方显式传入的生成参数（model/temperature/maxTokens）提升为调用点级覆盖，
   // 优先级高于 ACTIVE prompt（core params）与路由配置。
   const generationOverride = {
-    ...(domain.model !== undefined && domain.model !== null ? { model: domain.model } : {}),
-    ...(domain.temperature !== undefined && domain.temperature !== null ? { temperature: domain.temperature } : {}),
-    ...(domain.maxTokens !== undefined && domain.maxTokens !== null ? { maxTokens: domain.maxTokens } : {}),
+    ...(genModel !== undefined && genModel !== null ? { model: genModel } : {}),
+    ...(genTemperature !== undefined && genTemperature !== null ? { temperature: genTemperature } : {}),
+    ...(genMaxTokens !== undefined && genMaxTokens !== null ? { maxTokens: genMaxTokens } : {}),
   };
   const hasCallerFallback = callerFallback !== undefined;
   const resolveFallback = (): TOutput => hasCallerFallback
@@ -259,7 +265,6 @@ async function teachingOpeningGeneratorHandler(input: any) {
           // core rules 引用 priorLearningContext（前序承接）；caller 已传，此前漏在 payload 外
           ...(d.priorLearningContext ? { priorLearningContext: d.priorLearningContext } : {}),
           subject: d.subject,
-          pathSummary: d.pathSummary,
           taskType: d.taskType,
           currentMilestoneTitle: d.currentMilestoneTitle,
           topic: d.topic,
@@ -272,6 +277,9 @@ async function teachingOpeningGeneratorHandler(input: any) {
           ...(d.learnerPersona ? { learnerPersona: d.learnerPersona } : {}),
           ...(d.schoolAnchor?.background || d.schoolAnchor?.baselineEvidence ? { schoolAnchor: d.schoolAnchor } : {}),
           ...(d.taskProfile?.learningObjectives?.length || d.taskProfile?.coreConcept ? { taskProfile: d.taskProfile } : {}),
+          // #181：core rules 已引用 learnerPrediction（开场节奏参考信号）；caller 已传——
+          // 和 priorLearningContext/learnerPersona 同款，漏在 payload 外会被模型无视。
+          ...(d.learnerPrediction ? { learnerPrediction: d.learnerPrediction } : {}),
         }
       : {
           subject: d.subject,
@@ -279,8 +287,9 @@ async function teachingOpeningGeneratorHandler(input: any) {
           taskTitle: d.taskTitle,
           taskDescription: d.taskDescription,
           taskType: d.taskType,
-          pathSummary: d.pathSummary,
           currentMilestoneTitle: d.currentMilestoneTitle,
+          // 2026-11-08 全 skill 缓存调查：删掉零引用键 pathSummary（提示词对 pathSummary /
+          // 「路径概要」/「路径摘要」的引用数均为 0；真正被消费的是 currentMilestoneTitle 与 task* 系列）
           learner: d.learner,
           openingMode: d.openingMode,
           ...(d.priorLearningContext ? { priorLearningContext: d.priorLearningContext } : {}),
@@ -289,14 +298,17 @@ async function teachingOpeningGeneratorHandler(input: any) {
           ...(d.learnerPersona ? { learnerPersona: d.learnerPersona } : {}),
           ...(d.schoolAnchor?.background || d.schoolAnchor?.baselineEvidence ? { schoolAnchor: d.schoolAnchor } : {}),
           ...(d.taskProfile?.learningObjectives?.length || d.taskProfile?.coreConcept ? { taskProfile: d.taskProfile } : {}),
+          ...(d.learnerPrediction ? { learnerPrediction: d.learnerPrediction } : {}),
         }),
     normalize: (parsed, d) => {
       const message = asTrimmedString(parsed?.message);
       const quickReplies = coerceTextOptions(parsed?.quickReplies);
-      // 开场只留一个「下一步」（2026-10-09 用户反馈）：动作选项在场时丢弃引导 question——
-      // message 指令 + question + quickReplies 三者同屏，抢学生仅有的一次回复，决策过载。
-      // core 规则已声明互斥，这里是模型越约时的确定性兜底
-      const question = quickReplies.length > 0 ? '' : asTrimmedString(parsed?.question);
+      /* 2026-11-02 用户反馈（「开场很不舒服」）：question 与 quickReplies 不再互斥。
+         旧口径是动作选项在场就丢掉 question，结果没有动作选项的开场（模型省略 quickReplies）
+         只剩一句 question，学生看到一句"也可以直接往下走"却没有任何可点控件。
+         新口径：动作出口恒由 quickReplies 承担（缺省时由 ensureOpeningActionLine 按本课内容补齐），
+         question 只作它上方的一行思考引导；带动作词/无控件的 question 在那里被确定性丢弃。 */
+      const question = asTrimmedString(parsed?.question);
       return {
         message,
         question,
@@ -367,6 +379,14 @@ async function learnerStateReviewHandler(input: any) {
       learnerDigest: d.learnerDigest,
       knowledgeDigest: d.knowledgeDigest,
       recentEvidence: Array.isArray(d.recentEvidence) ? d.recentEvidence : [],
+      // priorInsights **必须保留**（2026-11-08 复核撤回了一次错误的删除）：
+      //  - 有活写入方：LearnerStateReviewService 每轮 refresh 都调 getActiveInsights 并传入；
+      //  - 有具名契约：doc/LEARNER_STATE_REVIEW_DESIGN.md §4.4 第 5 条明确要求模型
+      //    「输入里的 priorInsights：能延续/推翻就显式说明，不要重复造新条目」；
+      //  - 提示词正文对它的字面引用数为 0，但这属于「文档与 prompt 之间的缺口」，
+      //    不等于「无消费方」——删掉它会让该护栏静默失效，且现有回归测试只断言
+      //    service→skill 的入参、不检查载荷，删后仍全绿，CI 抓不到。
+      // 正确做法：补齐 prompt 正文的这条规则，而不是删载荷。
       priorInsights: Array.isArray(d.priorInsights) ? d.priorInsights : [],
     }),
     normalize: (parsed, d) => {

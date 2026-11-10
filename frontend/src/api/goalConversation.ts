@@ -64,6 +64,8 @@ export interface GoalConversationEnvelope {
         id: string;
         status?: string;
       } | null;
+      /** 分诊硬阻断终局（completed 且无路径，2026-11-05 P0）：前端据此展示阻断说明而非「路径已创建」 */
+      hardBlocked?: boolean;
     };
     ext: {
       goalConversation: {
@@ -102,9 +104,18 @@ interface GoalConversationApiResponse {
 
 export type GoalConversationContextMode = 'recent' | 'full';
 
+/** 前置自测作答（2026-11-02）：面板内本地作答，随「确认」一次性提交给后端确定性判分 */
+export interface GoalProbeAnswer {
+  probeId: string;
+  userAnswer: string;
+  targetConcept?: string;
+}
+
 interface GoalConversationRequestOptions {
   contextMode?: GoalConversationContextMode;
   confirmProposal?: boolean;
+  /** 前置自测作答（仅确认时携带） */
+  probeAnswers?: GoalProbeAnswer[];
   /** 前端交互特征（认知负荷量测 · 可选，缺失走 absent 路径） */
   meta?: InteractionMeta;
 }
@@ -172,7 +183,7 @@ export interface GoalStreamHandlers {
 async function streamGoalRequest(
   action: GoalStreamAction,
   conversationId: string | null,
-  payload: { text?: string; contextMode?: GoalConversationContextMode; confirmProposal?: boolean; adjustments?: string; meta?: InteractionMeta },
+  payload: { text?: string; contextMode?: GoalConversationContextMode; confirmProposal?: boolean; probeAnswers?: GoalProbeAnswer[]; adjustments?: string; meta?: InteractionMeta },
   handlers: GoalStreamHandlers = {}
 ): Promise<GoalConversationEnvelope> {
   const { onDelta, onActivity, signal } = handlers;
@@ -185,6 +196,7 @@ async function streamGoalRequest(
     body.contextMode = payload.contextMode || 'recent';
   }
   if (payload.confirmProposal === true) body.confirmProposal = true;
+  if (payload.probeAnswers?.length) body.probeAnswers = payload.probeAnswers;
   if (payload.adjustments !== undefined) body.adjustments = payload.adjustments;
   if (payload.meta !== undefined) body.meta = payload.meta;
 
@@ -274,6 +286,7 @@ export async function streamReplyGoalConversation(
     text,
     contextMode: options.contextMode,
     confirmProposal: options.confirmProposal,
+    probeAnswers: options.probeAnswers,
     meta: options.meta
   }, handlers);
 }

@@ -258,9 +258,12 @@ describe('SessionCockpit 双模式', () => {
     expect(wrapper.find('.cp-topbar').exists()).toBe(false);
     expect(wrapper.text()).toContain('真实课堂 · 只读监控');
     // 2026-10-19 用户走查「刷新重复了吧」：hero 刷新钮撤，改由顶栏一颗驱动（watch liveRefreshSeq）
+    // 2026-11-09 头部降噪：右上角那颗「← 会话列表」也撤——壳层面包屑左侧的「‹」同目标同语义，
+    // 同一动作不在两处摆。学习者入口同样并入 pills 行的「学习者 X」徽章。
     const heroActions = wrapper.find('.mk-hero__actions');
-    expect(heroActions.text()).toContain('会话列表');
     expect(heroActions.text()).not.toContain('刷新');
+    expect(heroActions.text()).not.toContain('←');
+    expect(heroActions.text()).toContain('执行日志');
 
     // 阶段推进 stepper：4 步 + meta 副标。本夹具 stageResults.path 只给里程碑计数（无任务明细）
     // → 走后端计数兜底「1/2 里程碑」；有任务明细时 Path 步点走子任务动态读数（见 Path 页签用例：
@@ -274,7 +277,9 @@ describe('SessionCockpit 双模式', () => {
     const logText = wrapper.find('.cp-logs').text();
     expect(logText).toContain('学习路径已生成');
     expect(logText).toContain('会话总结已生成');
-    expect(logText).toContain('查看全文');
+    // 2026-11-02 评审 R65：折叠行的入口写明跳去页签看对话全文，
+    // 与同行「原文」JSON 展开区分开（两个词原先都读作"看全文"）
+    expect(logText).toContain('在页签查看对话全文');
     expect(logText).not.toContain('我想学 Python');
 
     // wrapup 字段卡 + 来源徽章（模型生成）
@@ -380,6 +385,91 @@ describe('SessionCockpit 双模式', () => {
     wrapper.unmount();
   });
 
+  /* 2026-11-02 P0-3：路径深链落进目标对话座舱后，H1 与正文已换成路径，状态 pill 却仍取
+     目标对话的 status（completed）→ 同一枚绿「已完成」被读成路径学完了。徽章必须与 H1 同对象。 */
+  it('目标对话控制台：H1 是路径名时状态 pill 报路径状态，不再贴目标对话的「已完成」', async () => {
+    const payload = realTeachingPayload();
+    payload.data.kind = 'goal';
+    // 真实载荷里 stageResults.path 与 path 同构（resolvePathView 带 title/status），fixture 按同构补齐
+    payload.data.stageResults.path = payload.data.path;
+    // 目标对话已澄清结束（真实数据：conversation.status=completed），它生成的路径仍在学
+    payload.data.goal.status = 'completed';
+    payload.data.runtime.status = 'completed';
+    payload.data.path.status = 'active';
+    payload.data.stageResults.path.status = 'active';
+    getRealSessionConsole.mockResolvedValue(payload);
+
+    const wrapper = await mountCockpit('session-real', 'gc_1');
+
+    expect(wrapper.find('.mk-hero__title').text()).toBe('Python 入门学习路径');
+    const pill = wrapper.find('.mk-hero__pills .mk-badge');
+    expect(pill.text()).toBe('学习中');
+    expect(pill.text()).not.toBe('已完成');
+    expect(pill.classes()).toContain('mk-badge--ok');
+    expect(pill.attributes('title')).toBe('路径学习中');
+
+    // 路径状态未知（载荷不带 status）时回落课堂/会话生命周期，不凭空造路径状态
+    const noStatus = realTeachingPayload();
+    noStatus.data.kind = 'goal';
+    noStatus.data.runtime.status = 'completed';
+    getRealSessionConsole.mockResolvedValue(noStatus);
+    const fallback = await mountCockpit('session-real', 'gc_1');
+    expect(fallback.find('.mk-hero__pills .mk-badge').text()).toBe('已完成');
+
+    wrapper.unmount();
+    fallback.unmount();
+  });
+
+  /* 2026-11-02 P1-3：目标对话入口的 runtime.status 是 goal_conversations.status（completed），
+     同一节课在教学会话入口读的是 teaching_sessions.status（timeout）——同一节课两个入口两个答案。
+     课堂终态由 session-console 单独下发在 stageStatus.learning / taskRuntime 上，徽章必须读它。 */
+  it('目标对话控制台：课在超时里结束、目标对话已完成时，pill 报课堂「超时」而不是目标对话的「已完成」', async () => {
+    const payload = realTeachingPayload();
+    payload.data.kind = 'goal';
+    // 这条路径没有可展示的路径名（路径行缺失/无 status），H1 落在课名上，pill 的主语就是课堂
+    payload.data.path = null;
+    payload.data.stageResults.path = null;
+    payload.data.stageResults.learning = { status: 'timeout', manualStop: false };
+    payload.data.teaching.status = 'timeout';
+    payload.data.teaching.wrapup = null;
+    payload.data.runtime.currentStage = 'teaching';
+    payload.data.runtime.status = 'completed';
+    payload.data.runtime.stageStatus.path = { learningPathId: null, generated: false, totalMilestones: null, completedMilestones: null };
+    payload.data.runtime.stageStatus.learning = { teachingSessionId: 'ts_real_1', status: 'timeout', manualStop: false };
+    getRealSessionConsole.mockResolvedValue(payload);
+
+    const wrapper = await mountCockpit('session-real', 'gc_1');
+
+    const pill = wrapper.find('.mk-hero__pills .mk-badge');
+    expect(pill.text()).toBe('超时');
+    expect(pill.text()).not.toBe('已完成');
+    // 教学会话状态单源：timeout 是 bad（旧 switch 会把它落到蓝「info」），悬停与课堂入口同词
+    expect(pill.classes()).toContain('mk-badge--bad');
+    expect(pill.attributes('title')).toBe('课堂中断');
+
+    wrapper.unmount();
+  });
+
+  it('目标对话控制台：H1 是路径名时仍报路径状态（课堂终态不与路径标题抢主语）', async () => {
+    const payload = realTeachingPayload();
+    payload.data.kind = 'goal';
+    payload.data.stageResults.path = payload.data.path;
+    payload.data.path.status = 'active';
+    payload.data.stageResults.path.status = 'active';
+    payload.data.runtime.status = 'completed';
+    payload.data.runtime.stageStatus.learning = { teachingSessionId: 'ts_real_1', status: 'timeout', manualStop: false };
+    getRealSessionConsole.mockResolvedValue(payload);
+
+    const wrapper = await mountCockpit('session-real', 'gc_1');
+
+    expect(wrapper.find('.mk-hero__title').text()).toBe('Python 入门学习路径');
+    const pill = wrapper.find('.mk-hero__pills .mk-badge');
+    expect(pill.text()).toBe('学习中');
+    expect(pill.attributes('title')).toBe('路径学习中');
+
+    wrapper.unmount();
+  });
+
   it('课堂会话控制台：仍跟随 currentStage（课已结束 → 落总结页签）', async () => {
     getRealSessionConsole.mockResolvedValue(realTeachingPayload()); // kind=teaching + currentStage=wrapup
 
@@ -413,24 +503,17 @@ describe('SessionCockpit 双模式', () => {
     empty.unmount();
   });
 
-  it('阶段推进卡：下游直达入口（2026-10-12 收敛——Path 出口撤，stepper 步点即唯一入口；课堂会话不给自指）', async () => {
+  it('阶段条不带动作钮（2026-11-09 头部降噪）：下行入口归 Learn 阶段，头部只做阶段切换', async () => {
     const goalPayload = realTeachingPayload();
     goalPayload.data.kind = 'goal';
     getRealSessionConsole.mockResolvedValue(goalPayload);
     const goalConsole = await mountCockpit('session-real', 'gc_1');
-    // Path 页签自 2026-10-12 起就是路径内容本体：「查看学习路径」按钮与 Path 步点同目标，已撤；
-    // 只保留课堂会话出口（那是另一个对象）
-    expect(goalConsole.findAll('.cp-stepjumps button').map((b) => b.text())).toEqual(['查看课堂会话']);
-    expect(goalConsole.find('.cp-stepjumps button').attributes('title')).toContain('课堂');
-
+    // 原卡头右侧那枚「查看课堂会话」与点「学习」步点高度重叠（一个切阶段、一个开另一个对象），
+    // 读者不知道该点哪个；头部只留 4 枚阶段瓦片，课堂入口回到 Learn 阶段里每节课的「查看课堂对话」。
+    expect(goalConsole.findAll('.cp-stepper button')).toHaveLength(4);
+    expect(goalConsole.find('.cp-stepjumps').exists()).toBe(false);
+    expect(goalConsole.find('.cp-stepcard').exists()).toBe(false);
     goalConsole.unmount();
-
-    // 课堂会话控制台的对象就是那一课：再给「查看课堂会话」是自指 → 一条直达都不给
-    getRealSessionConsole.mockResolvedValue(realTeachingPayload());
-    const teachingConsole = await mountCockpit('session-real', 'ts_real_1');
-    expect(teachingConsole.find('.cp-stepjumps').exists()).toBe(false);
-
-    teachingConsole.unmount();
   });
 
   it('落点页签：subPage.stage 显式提示优先（2026-10-12——从学习路径进来落 Path，深链 ?stage= 同源）', async () => {
@@ -689,19 +772,19 @@ describe('SessionCockpit 双模式', () => {
     getRealSessionConsole.mockResolvedValue(payload);
 
     const wrapper = await mountCockpit('session-real', 'ts_real_1');
-    // 身份信息进身份区（名字常显，邮箱/id 进 title）
+    // 身份信息进身份区（名字常显，邮箱/id 进 title）；2026-11-09 起这一枚徽章本身就是入口
+    // （读数与入口合并，动作区不再出第二枚「查看学习者」）
     const pill = wrapper.find('.cp-hero__learner');
     expect(pill.exists()).toBe(true);
+    expect(pill.element.tagName).toBe('BUTTON');
     expect(pill.text()).toContain('陈晓');
     expect(pill.attributes('title')).toContain('chenxiao@example.com');
+    expect(wrapper.findAll('.mk-hero__actions button').map((b) => b.text())).not.toContain('查看学习者');
 
     // 切到 Path 页签再跳：返回时要回到 Path，而不是会话默认页签
     await wrapper.findAll('.cp-stp')[1].trigger('click');
     await settle();
-    const entry = wrapper.findAll('.mk-hero__actions button').find((b) => b.text() === '查看学习者');
-    expect(entry).toBeTruthy();
-    expect(entry!.attributes('title')).toContain('陈晓');
-    await entry!.trigger('click');
+    await pill.trigger('click');
     await settle();
     expect(subPage.value).toMatchObject({
       view: 'learner',
@@ -805,6 +888,9 @@ describe('SessionCockpit 双模式', () => {
     payload.data.stageResults.path = null;
     payload.data.stageResults.teaching = { teachingSessionId: null, currentTaskId: null, wrapup: null };
     payload.data.conversations.learning.messages = [];
+    // 无映射数据场景 = 教学记录也全空：检查点是结构化教学数据，留着会让「尚未生成课程」
+    // 的空态被一个真实检查点顶掉（2026-10-31 评审 P1-4 后空态门控包含检查点）。
+    payload.data.teaching.checkpoints = [];
     payload.data.timeline = [];
     getRealSessionConsole.mockResolvedValue(payload);
 
@@ -949,16 +1035,17 @@ describe('SessionCockpit 双模式', () => {
     const q = '针对「完成5道错题重做」这条建议，它预设的动机状态是什么？';
     expect(wrapper.findAll('.cp-transcript__message').some((m) => m.text().includes(q))).toBe(false);
     /* 2026-10-19 用户走查「检查点怎么在下方，不符合课堂阅读顺序」期望把检查点按 submittedAt
-       内联进课堂列（.cp-checkpoint--inline）。该断言随 11cfde30 入库，但组件侧的内联实现
-       从未落地（全仓无 .cp-checkpoint--inline 类），故按现状断言末尾汇总块；
-       待内联实现落地后改回：.cp-checkpoints 不存在 + .cp-checkpoint--inline 存在。 */
-    const block = wrapper.find('.cp-checkpoints');
-    expect(block.exists()).toBe(true);
-    expect(block.text()).toContain('检查点');
-    expect(block.text()).toContain(q);
-    expect(block.text()).toContain('未通过');
-    expect(block.text()).toContain('理解度 75%');
-    expect(block.text()).toContain('识别隐含动机假设');
+       内联进课堂列（.cp-checkpoint--inline）。内联实现已落地，这里按终态断言：
+       末尾汇总块不存在，题目/判分/理解度都随发生的那一回合出现在课堂列里。 */
+    expect(wrapper.find('.cp-checkpoints').exists()).toBe(false);
+    const inline = wrapper.findAll('.cp-checkpoint--inline');
+    expect(inline.length).toBeGreaterThan(0);
+    const inlineText = inline.map((el) => el.text()).join('\n');
+    expect(inlineText).toContain('检查点');
+    expect(inlineText).toContain(q);
+    expect(inlineText).toContain('未通过');
+    expect(inlineText).toContain('理解度 75%');
+    expect(inlineText).toContain('识别隐含动机假设');
 
     wrapper.unmount();
   });
@@ -995,11 +1082,14 @@ describe('SessionCockpit 双模式', () => {
     await nextTick();
 
     expect(wrapper.findAll('.cp-checkpoint')).toHaveLength(1);
-    const block = wrapper.find('.cp-checkpoints');
-    expect(block.text()).toContain('1 个 · 2 次作答');
-    expect(block.text()).toContain('尝试 2 次');
+    /* 内联时间轴落位（2026-10-19 走查）：检查点不再整块挂转录末尾（.cp-checkpoints 已退场），
+       随发生的那一回合出现在课堂列里；归并与尝试次数语义不变。 */
+    expect(wrapper.find('.cp-checkpoints').exists()).toBe(false);
+    const inline = wrapper.find('.cp-checkpoint--inline');
+    expect(inline.exists()).toBe(true);
+    expect(inline.text()).toContain('尝试 2 次');
     // 展示最新一次裁决
-    expect(block.text()).toContain('通过');
+    expect(inline.text()).toContain('通过');
 
     wrapper.unmount();
   });
@@ -1040,6 +1130,31 @@ describe('SessionCockpit 双模式', () => {
     const copied = writeText.mock.calls[0][0] as string;
     expect(copied.length).toBeGreaterThan(5000);
     expect(copied).toContain('"kind": "teaching"');
+
+    wrapper.unmount();
+  });
+
+  it('微调（图4 学习阶段）：真实模式课堂对话——学习者卡带 is-real-learner 修饰类、教师卡不带', async () => {
+    const payload = realTeachingPayload();
+    // 课堂转录回退到 conversations.learning.messages：补一条学习者（user）消息，确保出现学习者卡
+    payload.data.conversations.learning.messages = [
+      { role: 'user', content: '我不理解作用域' },
+      { role: 'assistant', content: '作用域是变量可见的范围…' }
+    ];
+    getRealSessionConsole.mockResolvedValue(payload);
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+    const learnTab = wrapper.findAll('.cp-stp').find((el) => el.find('.cp-stp__name').text() === '学习');
+    await learnTab!.trigger('click');
+    await settle();
+
+    const learners = wrapper.findAll('.cp-transcript__message.is-learner');
+    expect(learners.length).toBeGreaterThan(0);
+    // 每条学习者卡都带真实模式修饰类（右缩 + 深蓝底的钩子）
+    expect(learners.every((el) => el.classes().includes('is-real-learner'))).toBe(true);
+    // 教师卡（is-teacher）不得带该修饰类，保持原样
+    const teachers = wrapper.findAll('.cp-transcript__message.is-teacher');
+    expect(teachers.length).toBeGreaterThan(0);
+    expect(teachers.every((el) => !el.classes().includes('is-real-learner'))).toBe(true);
 
     wrapper.unmount();
   });

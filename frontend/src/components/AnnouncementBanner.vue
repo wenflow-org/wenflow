@@ -172,7 +172,10 @@ watch(
   color: inherit;
   font-size: 16px;
   cursor: pointer;
-  padding: 0 4px;
+  /* 触屏热区（P1 审计）：16px 字形 + padding 12px 四周 → ≥36px 命中盒（本仓触屏门禁），
+     负外边距抵消 padding 占位，横幅排版高度与 × 视觉位置均不变 */
+  padding: 12px;
+  margin: -12px;
   /* 对比度修复：opacity 0.7 时 warning 色在浅黄底上约 2.8:1，低于 3:1 控件阈值；提到 0.9 约 4.5:1 */
   opacity: 0.9;
   line-height: 1;

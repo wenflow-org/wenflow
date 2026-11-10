@@ -202,6 +202,185 @@ describe('stripCheckpointAnswerKeys：答案键绝不下发', () => {
   });
 });
 
+/**
+ * #240：`/detail` 的 `state.lastRuntimeEnvelope.artifact.control.checkpoint` 整份未剥。
+ * 写侧把**模型原始输出**存进 `teachingState.lastRuntimeEnvelope`（teaching-turn-engine.ts:1316），
+ * 而答案键白名单只覆盖了 pendingCheckpoint / checkpointHistory / sessionArtifacts 三处。
+ * 下面的 fixture 就是真实行的形状（dev.db 三会话实测：pending 已剥、env 仍为 ["B"]）。
+ */
+describe('stripCheckpointAnswerKeys：结构无关剥离（#240 泄漏回归）', () => {
+  interface OptionShape { id: string; text: string }
+  /** 检查点（含答案键）在状态树里出现处的通用形状。 */
+  type CheckpointShape = Record<string, unknown> & {
+    id?: string;
+    question?: string;
+    options?: OptionShape[];
+    hint?: string;
+    correctOptionIds?: string[];
+    expectedKeywords?: string[];
+  };
+  interface HistoryShape extends CheckpointShape {
+    checkpointId?: string;
+    selectedOptionIds?: string[];
+    submittedOptionIds?: string[];
+    passed?: boolean;
+    skipped?: boolean;
+  }
+  interface EnvelopeShape {
+    businessState: { phase: string; isTerminal: boolean };
+    artifact: { control: { checkpoint: CheckpointShape } & CheckpointShape; reply: string };
+  }
+  interface LeakedStateShape extends Record<string, unknown> {
+    pendingCheckpoint: CheckpointShape;
+    checkpointHistory: HistoryShape[];
+    sessionArtifacts: { pendingCheckpoint: CheckpointShape; other: number };
+    lastRuntimeEnvelope: EnvelopeShape;
+    lastPeerRuntimeEnvelope: { artifact: { control: { checkpoint: CheckpointShape } } };
+    lastBusinessPhase: string;
+  }
+
+  const checkpoint: CheckpointShape = {
+    id: 'cp1',
+    question: '执行 a = 5、b = 2.5、c = "3" 后…',
+    options: [{ id: 'A', text: '选项 A' }, { id: 'B', text: '选项 B' }],
+    correctOptionIds: ['B'],
+    expectedKeywords: ['值本身的写法'],
+    hint: '看值本身的写法…',
+  };
+
+  const runtimeEnvelope: EnvelopeShape = {
+    businessState: { phase: 'in-progress', isTerminal: false },
+    artifact: { control: { checkpoint }, reply: '老师回复' },
+  };
+
+  const leakedState: LeakedStateShape = {
+    pendingCheckpoint: { ...checkpoint },
+    checkpointHistory: [
+      {
+        checkpointId: 'cp0',
+        question: '历史题',
+        options: [{ id: 'A', text: '选项 A' }, { id: 'B', text: '选项 B' }],
+        selectedOptionIds: ['B'],
+        submittedOptionIds: ['B'],
+        correctOptionIds: ['B'],
+        expectedKeywords: ['旧要点'],
+        passed: true,
+        skipped: false,
+      },
+    ],
+    sessionArtifacts: { pendingCheckpoint: { ...checkpoint }, other: 1 },
+    lastRuntimeEnvelope: runtimeEnvelope,
+    lastPeerRuntimeEnvelope: { artifact: { control: { checkpoint: { ...checkpoint } } } },
+    lastBusinessPhase: 'in-progress',
+  };
+
+  /** 穷举式断言：整棵 JSON 里不得残留答案键名（不受路径白名单影响）。 */
+  const countAnswerKeys = (value: unknown): number => {
+    const text = JSON.stringify(value);
+    return (text.match(/correctOptionIds|expectedKeywords/g) || []).length;
+  };
+
+  it('lastRuntimeEnvelope.artifact.control.checkpoint 也剥离（#240 主路径）', () => {
+    const safe = stripCheckpointAnswerKeys(leakedState);
+    const envCheckpoint = safe.lastRuntimeEnvelope.artifact.control.checkpoint;
+    expect(envCheckpoint.question).toBe(checkpoint.question);
+    expect(envCheckpoint.options).toEqual(checkpoint.options);
+    expect(envCheckpoint).not.toHaveProperty('correctOptionIds');
+    expect(envCheckpoint).not.toHaveProperty('expectedKeywords');
+  });
+
+  it('穷举式：剥离后整棵树里 correctOptionIds / expectedKeywords 出现次数为 0', () => {
+    expect(countAnswerKeys(leakedState)).toBeGreaterThan(0);
+    expect(countAnswerKeys(stripCheckpointAnswerKeys(leakedState))).toBe(0);
+  });
+
+  it('json 序列化后全量 grep 也为 0（含嵌套 envelope、历史、消息）', () => {
+    const detailPayload = stripCheckpointAnswerKeys({
+      state: leakedState,
+      messages: [
+        {
+          role: 'assistant',
+          content: '作答吧',
+          // 存量行：promptDebug 停写前的历史调试信封（dev.db 84 条 payload / 10 会话实测）
+          promptDebug: { normalizedOutput: { control: { checkpoint: { ...checkpoint } } } },
+        },
+      ],
+    });
+    const text = JSON.stringify(detailPayload);
+    expect(text).not.toMatch(/correctOptionIds/);
+    expect(text).not.toMatch(/expectedKeywords/);
+  });
+
+  it('只删答案键：学员作答、对错、选项、题面全部保留（评估页回放依赖）', () => {
+    const safe = stripCheckpointAnswerKeys(leakedState);
+    expect(safe.checkpointHistory[0]).toEqual({
+      checkpointId: 'cp0',
+      question: '历史题',
+      options: [{ id: 'A', text: '选项 A' }, { id: 'B', text: '选项 B' }],
+      selectedOptionIds: ['B'],
+      submittedOptionIds: ['B'],
+      passed: true,
+      skipped: false,
+    });
+    expect(safe.pendingCheckpoint).toEqual({
+      id: 'cp1',
+      question: checkpoint.question,
+      options: checkpoint.options,
+      hint: checkpoint.hint,
+    });
+    // envelope 里与答案无关的字段原样保留
+    expect(safe.lastRuntimeEnvelope.businessState).toEqual(runtimeEnvelope.businessState);
+    expect(safe.lastRuntimeEnvelope.artifact.reply).toBe('老师回复');
+  });
+
+  it('纯函数：入参不被修改', () => {
+    stripCheckpointAnswerKeys(leakedState);
+    expect(leakedState.pendingCheckpoint.correctOptionIds).toEqual(['B']);
+    expect(leakedState.lastRuntimeEnvelope.artifact.control.checkpoint.correctOptionIds).toEqual(['B']);
+  });
+
+  /**
+   * 真实库里还有两种形状，递归实现天然覆盖、白名单不覆盖——锁住它们，
+   * 防止将来有人把递归改回路径白名单而这条用例抓不住：
+   *  - `sessionArtifacts.pendingCheckpoint` 独立存在（顶层 pending 已消费，简答题带 expectedKeywords）；
+   *  - 历史行的 `attempts` 里嵌着当时出题用的检查点快照。
+   */
+  it('独立存在的 sessionArtifacts.pendingCheckpoint（顶层已消费）也剥离', () => {
+    const shortAnswer = {
+      id: 'cp-short',
+      type: 'short_answer',
+      question: '说说你判断的依据',
+      expectedKeywords: ['\\d{1,2}', '因为'],
+    };
+    const safe: Record<string, any> = stripCheckpointAnswerKeys({
+      // 顶层 pending 已被消费 → 不存在
+      sessionArtifacts: { pendingCheckpoint: shortAnswer },
+    });
+    expect(safe.sessionArtifacts.pendingCheckpoint).toEqual({
+      id: 'cp-short',
+      type: 'short_answer',
+      question: '说说你判断的依据',
+    });
+  });
+
+  it('历史行 attempts 里嵌的检查点快照也剥离', () => {
+    const safe: Record<string, any> = stripCheckpointAnswerKeys({
+      checkpointHistory: [
+        {
+          checkpointId: 'cp-0',
+          question: '历史题',
+          selectedOptionIds: ['B'],
+          passed: false,
+          attempts: [{ at: '2026-10-01T10:00:00.000Z', checkpoint: { ...checkpoint } }],
+        },
+      ],
+    });
+    expect(safe.checkpointHistory[0].attempts[0].checkpoint).not.toHaveProperty('correctOptionIds');
+    // attempts 本身（作答次数与时间）保留
+    expect(safe.checkpointHistory[0].attempts[0].at).toBe('2026-10-01T10:00:00.000Z');
+  });
+});
+
 describe('checkpointForMessageResult：消息响应出口也剥离答案键（18 号报告 N1）', () => {
   it('顶层 pendingCheckpoint 带答案键时，下发版本不含 correctOptionIds/expectedKeywords', () => {
     const out = checkpointForMessageResult({
@@ -246,5 +425,108 @@ describe('inheritTeachingState：跨回合继承顶层状态（18 号报告 N2�
   it('无上一回合状态时等价于本回合字段', () => {
     expect(inheritTeachingState(null, { a: 1 })).toEqual({ a: 1 });
     expect(inheritTeachingState(undefined, { a: 1 })).toEqual({ a: 1 });
+  });
+});
+/* ───────────── 简答分级判分（2026-11-08）───────────── */
+
+import { resolveCheckpointJudgement, buildCheckpointCodeArbitration } from '../teaching-checkpoint';
+import { recordDegradation } from '../../../skills/degradation-telemetry';
+
+jest.mock('../../../skills/degradation-telemetry', () => ({
+  __esModule: true,
+  recordDegradation: jest.fn(),
+  degradationCause: (e: unknown) => (e instanceof Error ? e.message : String(e)),
+}));
+
+const shortAnswerCheckpoint = {
+  type: 'short_answer' as const,
+  question: '为什么「手动」这个词不适合当判分要点？',
+  expectedKeywords: ['重新|再来一次', '手动|人工'],
+};
+
+describe('resolveCheckpointJudgement：简答分级判分', () => {
+  it('code 词面全命中 → 直接采纳确定性正证据，不调模型', async () => {
+    const judgeCall = jest.fn();
+    const base = {
+      judgedBy: 'code' as const,
+      passed: true,
+      detail: '作答包含全部要点',
+    };
+    const result = await resolveCheckpointJudgement(
+      shortAnswerCheckpoint,
+      { answerText: '我觉得应该重新跑一遍，而且手动核对结果' },
+      base,
+      judgeCall,
+    );
+    expect(result).toBe(base);
+    expect(judgeCall).not.toHaveBeenCalled();
+  });
+
+  it('code 判负 + 模型复核 pass → judgedBy=model-rubric、passed=true（同义改写不再误杀）', async () => {
+    const judgeCall = jest.fn().mockResolvedValue('{"passed": true, "reason": "重跑一遍与再核对都覆盖了"}');
+    const base = { judgedBy: 'code' as const, passed: false, detail: '缺少要点：手动/人工' };
+    const result = await resolveCheckpointJudgement(
+      shortAnswerCheckpoint,
+      { answerText: '答案就是你得自己再复制一份重填一遍，别指望自动同步' },
+      base,
+      judgeCall,
+    );
+    expect(result?.judgedBy).toBe('model-rubric');
+    expect(result?.passed).toBe(true);
+    expect(judgeCall).toHaveBeenCalledTimes(1);
+  });
+
+  it('模型复核也判负 → model-rubric、passed=false', async () => {
+    const judgeCall = jest.fn().mockResolvedValue('{"passed": false, "reason": "没提到任何一个要点"}');
+    const base = { judgedBy: 'code' as const, passed: false, detail: '缺少要点：重新/再来一次' };
+    const result = await resolveCheckpointJudgement(
+      shortAnswerCheckpoint,
+      { answerText: '不知道，可能就是多看看吧' },
+      base,
+      judgeCall,
+    );
+    expect(result?.judgedBy).toBe('model-rubric');
+    expect(result?.passed).toBe(false);
+  });
+
+  it('模型复核失败 → fail-open 保守回退 code 负裁决 + P3 降级留痕', async () => {
+    const judgeCall = jest.fn().mockRejectedValue(new Error('RUBRIC_JUDGE_OUTPUT_NOT_JSON'));
+    const base = { judgedBy: 'code' as const, passed: false, detail: '缺少要点：手动/人工' };
+    const result = await resolveCheckpointJudgement(
+      shortAnswerCheckpoint,
+      { answerText: '随便写两句' },
+      base,
+      judgeCall,
+    );
+    expect(result).toBe(base);
+    expect(recordDegradation).toHaveBeenCalledTimes(1);
+  });
+
+  it('选择题 code 判负 → 不升级（确定性比对保留）', async () => {
+    const judgeCall = jest.fn();
+    const base = { judgedBy: 'code' as const, passed: false, detail: '选项集合不一致' };
+    const result = await resolveCheckpointJudgement(
+      { type: 'single_choice' as const, question: 'q', expectedKeywords: [] },
+      { selectedOptionIds: ['A'] },
+      base,
+      judgeCall,
+    );
+    expect(result).toBe(base);
+    expect(judgeCall).not.toHaveBeenCalled();
+  });
+});
+
+describe('buildCheckpointCodeArbitration：model-rubric 行计入独立裁决证据', () => {
+  it('model-rubric 负证据与 code 同权（简答升级后它是唯一裁决来源）', () => {
+    const arbitration = buildCheckpointCodeArbitration(
+      [
+        { judgedBy: 'model-rubric', passed: false, conceptName: '自动对数' },
+        { judgedBy: 'model-reference', passed: false, conceptName: '不应计入' },
+      ],
+      { judgedBy: 'model-rubric', passed: true },
+      { conceptName: '模板固化' },
+    );
+    expect(arbitration.codeFailedConceptNames).toEqual(['自动对数']);
+    expect(arbitration.codeJudgedConceptNames).toEqual(['自动对数', '模板固化']);
   });
 });

@@ -131,8 +131,9 @@
           <ChevronLeft :size="18" :stroke-width="1.75" aria-hidden="true" />
         </button>
         <div class="mshell__top-crumb">
+          <span v-if="topSub" class="mshell__top-sub">{{ topSub }}</span>
+          <span v-if="topSub" class="mshell__top-sep" aria-hidden="true">/</span>
           <strong class="mshell__top-title">{{ topTitle }}</strong>
-          <span v-if="topSub" class="mshell__top-sub">/ {{ topSub }}</span>
         </div>
         <div class="mshell__top-grow" aria-hidden="true"></div>
         <div class="mshell__search" ref="searchRef">
@@ -162,19 +163,31 @@
           <div v-if="searchOpen && searchQuery.trim()" id="mshell-search-list" class="mshell__search-pop" role="listbox" aria-label="页面搜索结果">
             <button
               v-for="(hit, i) in searchHits"
-              :id="`mshell-search-opt-${hit.id}`"
-              :key="hit.id"
+              :id="`mshell-search-opt-${hit.scene.id}`"
+              :key="hit.scene.id"
               type="button"
               role="option"
               :aria-selected="i === searchActiveIndex"
               class="mshell__search-hit"
               :class="{ 'mshell__search-hit--active': i === searchActiveIndex }"
               @mousemove="searchActiveIndex = i"
-              @click="searchGo(hit)"
+              @click="searchGo(hit.scene)"
             >
-              <component :is="hit.icon" :size="15" :stroke-width="1.75" aria-hidden="true" />
-              <span class="mshell__search-hit-label">{{ hit.label }}</span>
-              <span class="mshell__search-hit-group">{{ hit.group }}</span>
+              <component :is="hit.scene.icon" :size="15" :stroke-width="1.75" aria-hidden="true" />
+              <span class="mshell__search-hit-label">
+                <template v-for="(part, pi) in hitParts(hit.scene.label)" :key="`l${pi}`">
+                  <mark v-if="part.hit" class="mshell__search-hit-mark">{{ part.text }}</mark>
+                  <template v-else>{{ part.text }}</template>
+                </template>
+              </span>
+              <!-- 命中只在关键词上时说清是哪个词（页名/分组命中已在原地高亮，不再解释一遍） -->
+              <span v-if="hit.keyword" class="mshell__search-hit-why">相关词「{{ hit.keyword }}」</span>
+              <span class="mshell__search-hit-group">
+                <template v-for="(part, pi) in hitParts(hit.scene.group)" :key="`g${pi}`">
+                  <mark v-if="part.hit" class="mshell__search-hit-mark">{{ part.text }}</mark>
+                  <template v-else>{{ part.text }}</template>
+                </template>
+              </span>
             </button>
             <div v-if="!searchHits.length" class="mshell__search-empty">
               <p class="mshell__search-empty-title">没有匹配的页面</p>
@@ -243,6 +256,17 @@
             <span class="mshell__user-name">{{ adminName }}</span>
           </button>
           <div v-if="userMenuOpen" class="mshell__user-menu" role="menu">
+            <!-- 身份行（2026-11-02 评审 R5）：此前菜单只有「退出登录」，看不出当前登的是哪个账号。
+                 身份不是动作项，不加 role=menuitem、不进 Tab 序，只做认人用的抬头。 -->
+            <div class="mshell__user-meta">
+              <span class="mshell__user-meta-name">{{ adminName }}</span>
+              <span v-if="adminRoleLabel" class="mshell__user-meta-role">{{ adminRoleLabel }}</span>
+              <span
+                v-if="adminUser.email"
+                class="mshell__user-meta-line"
+                :title="adminUser.email"
+              >{{ adminUser.email }}</span>
+            </div>
             <!-- 账户菜单只剩动作项：退出登录（销毁当前会话）。
                  原型的「登录页预览 / 账户设置」2026-10-05 用户拍板删除——前者是原型残留
                  （已登录守卫会把新标签页弹回总览，永远看不到登录页），后者开到用户侧
@@ -381,16 +405,48 @@ const topSub = computed(() => {
   return group === currentScene.value?.label ? '' : group
 })
 
-const searchHits = computed(() => {
+/** 页面搜索结果：额外带上「为什么命中」（2026-11-02 评审 R6）。
+    此前只回 MOCK_SCENES 条目，搜「健康」时「健康中心」（页面名命中）与「平台总览」
+    （只是 keywords 里登记了「健康」）并排出现，两条都不说命中在哪，读起来像误报。
+    现在页名/分组命中就照亮那一段文字，只在 keywords 命中时把该词亮出来。 */
+interface SearchHit { scene: MockSceneDef; keyword: string }
+const searchHits = computed<SearchHit[]>(() => {
   const q = searchQuery.value.trim().toLowerCase()
   if (!q) return []
-  return MOCK_SCENES.filter((s) => `${s.label} ${s.group} ${(s.keywords || []).join(' ')}`.toLowerCase().includes(q)).slice(0, 8)
+  const hits: SearchHit[] = []
+  for (const s of MOCK_SCENES) {
+    const inLabel = s.label.toLowerCase().includes(q)
+    const inGroup = s.group.toLowerCase().includes(q)
+    const keyword = (s.keywords || []).find((k) => k.toLowerCase().includes(q)) || ''
+    if (!inLabel && !inGroup && !keyword) continue
+    hits.push({ scene: s, keyword: inLabel || inGroup ? '' : keyword })
+    if (hits.length >= 8) break
+  }
+  return hits
 })
+/** 把命中片段切成「高亮/普通」两段文本（大小写不敏感，查询词只取原文一段） */
+function hitParts(text: string): Array<{ text: string; hit: boolean }> {
+  const q = searchQuery.value.trim().toLowerCase()
+  const src = String(text || '')
+  if (!q) return [{ text: src, hit: false }]
+  const lower = src.toLowerCase()
+  const parts: Array<{ text: string; hit: boolean }> = []
+  let from = 0
+  let at = lower.indexOf(q, from)
+  while (at >= 0) {
+    if (at > from) parts.push({ text: src.slice(from, at), hit: false })
+    parts.push({ text: src.slice(at, at + q.length), hit: true })
+    from = at + q.length
+    at = lower.indexOf(q, from)
+  }
+  if (from < src.length) parts.push({ text: src.slice(from), hit: false })
+  return parts
+}
 /* 结果项键盘导航（#192）：activeIndex 是列表内高亮位，-1 = 未选（Enter 回落到第一条）。 */
 const searchActiveIndex = ref(-1)
 const searchActiveId = computed(() => {
   const hit = searchHits.value[searchActiveIndex.value]
-  return hit ? `mshell-search-opt-${hit.id}` : ''
+  return hit ? `mshell-search-opt-${hit.scene.id}` : ''
 })
 function onSearchInput() {
   searchOpen.value = true
@@ -426,7 +482,7 @@ function searchTo(f: { label: string; path: (q: string) => string }) {
 /* Enter：落到当前高亮项；无高亮（未用方向键）时回落到第一条，保持既有手感 */
 function searchGoActive() {
   const hit = searchHits.value[searchActiveIndex.value] ?? searchHits.value[0]
-  if (hit) searchGo(hit)
+  if (hit) searchGo(hit.scene)
 }
 function closeSearch() {
   searchOpen.value = false
@@ -539,12 +595,14 @@ function badgeOf(item: MockSceneDef): string {
 }
 
 /* 角标语义说明：红色=告警（近 7 天执行失败数，点击进入执行日志后自动平息）；
-   其余=数据量计数。角标语义 =「数据量」；页面数只在分组悬浮里以「页」表达，两者不混用 */
+   其余=数据量计数。角标语义 =「数据量」；页面数只在分组悬浮里以「页」表达，两者不混用。
+   2026-11-01 外部评审：「运营中心」角标原写「已发布公告数量」——发布越多角标越大，
+   与落地页顶部「待处理反馈 3」同屏打架；已改为待办件数（见 live.ts liveOpsPending）。 */
 const BADGE_MEANING: Record<string, string> = {
   'virtual-learners': '虚拟学习者数量',
   skills: 'Skill 数量',
-  'ops-hub': '已发布公告数量',
-  'execution-logs': '近 7 天执行失败次数',
+  'ops-hub': '待办件数（待处理反馈 / 生成失败路径 / 事件投递失败 / 草稿公告）',
+  'execution-logs': '近 7 天执行失败次数（采样窗口）',
 }
 function badgeTitle(item: MockSceneDef): string {
   const count = badgeOf(item)
@@ -609,20 +667,28 @@ function goBadge(item: MockSceneDef) {
 
 /* release 模式：管理员信息与退出登录 */
 /** localStorage 非响应式：computed 无响应式依赖会永久缓存，登录写入后本页不刷新名字。
-     改为 setup 时读一次 ref + storage 事件（跨标签页写入也会同步刷新）。 */
+     改为 setup 时读一次 ref + storage 事件（跨标签页写入也会同步刷新）。
+     2026-11-02 评审 R5：菜单里只剩「退出登录」，看不出当前登的是哪个账号——
+     名字/邮箱/角色随登录响应一起落在这个键里（admin-auth 返回 id/email/name/role），
+     一次读出整份身份，头像与菜单共用同一份来源。 */
 const ADMIN_USER_KEY = 'admin_user'
-function readAdminName(): string {
+interface AdminIdentity { name: string; email: string; role: string }
+function readAdminUser(): AdminIdentity {
   try {
     const raw = localStorage.getItem(ADMIN_USER_KEY) || sessionStorage.getItem(ADMIN_USER_KEY)
-    if (!raw) return 'admin'
-    return String(JSON.parse(raw).name || 'admin')
+    if (!raw) return { name: 'admin', email: '', role: '' }
+    const d = JSON.parse(raw)
+    return { name: String(d.name || 'admin'), email: String(d.email || ''), role: String(d.role || '') }
   } catch {
-    return 'admin'
+    return { name: 'admin', email: '', role: '' }
   }
 }
-const adminName = ref(readAdminName())
+const adminUser = ref(readAdminUser())
+const adminName = computed(() => adminUser.value.name)
+/** 角色枚举只有 admin / user 两档（鉴权看 isAdmin）；未知值不硬翻成「管理员」 */
+const adminRoleLabel = computed(() => (adminUser.value.role === 'admin' ? '管理员' : adminUser.value.role === 'user' ? '普通用户' : ''))
 window.addEventListener('storage', (e) => {
-  if (e.key === ADMIN_USER_KEY || e.key === null) adminName.value = readAdminName()
+  if (e.key === ADMIN_USER_KEY || e.key === null) adminUser.value = readAdminUser()
 })
 
 /* 退出登录确认（2026-10-06 审核）：一次点击即销毁管理会话并跳转登录页的不可逆动作，
@@ -697,10 +763,12 @@ watch(
 <style scoped>
 .mshell {
   display: grid;
-  /* 侧栏宽度 244px = newui「UI-分支优化设计」原型 --nav-w。原 208px 是按「子项缩进 24px」
-     那套层级量出来的；原型改成扁平导航（项与分组标签同一起点、图标自带 10px 间隙），
-     244px 才能让标签+计数在同一行不折行。折叠轨仍 64px（--nav-w-min）。 */
-  grid-template-columns: 244px minmax(0, 1fr);
+  /* 底色档 244 → 200（2026-11-07 用户「左侧太宽了的感觉，收一下」）。
+     依据是实测余量：导航最宽标签 73px，行尾却挂着 97px 空白带（trailingGap）——
+     244 是照原型 --nav-w 定死的 px，与实际内容（图标 17 + gap 10 + 标签 73 + 徽标）
+     无关。200 = 图标列 + 标签 + 计数徽标（Skill 目录 29）刚好排下，右侧留 ~30 兜底。
+     标签是 nowrap：再往下收（<190）「学习者卡库」会被裁。 */
+  grid-template-columns: 200px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   height: 100dvh;
   min-height: 0;
@@ -814,7 +882,7 @@ watch(
 .mshell__item:focus-visible { outline: 2px solid var(--mk-blue, #2f6ae0); outline-offset: -2px; }
 .mshell__item--active {
   background: var(--mk-blue-bg);
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
   font-weight: 600;
 }
 /* 图标常显（newui 原型壳：展开态=图标+文字，折叠轨=仅图标）。
@@ -834,7 +902,7 @@ watch(
    规格对齐原型 .nav__badge（中性灰底 / 选中蓝底） */
 .mshell__item-badge {
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-xs);
   background: var(--mk-surface-3);
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
@@ -979,6 +1047,7 @@ watch(
   color: var(--mk-faint);
   white-space: nowrap;
 }
+.mshell__top-sep { color: var(--mk-faint); }
 .mshell__top-grow { flex: 1 1 auto; }
 .mshell__top-btn {
   display: grid;
@@ -1076,6 +1145,16 @@ watch(
 /* 键盘高亮项与 hover 同款（方向键导航时鼠标可能不在项上） */
 .mshell__search-hit--active { background: var(--mk-hover-surface); }
 .mshell__search-hit-group { margin-left: auto; color: var(--mk-faint); font-weight: 500; }
+/* 命中高亮：只提亮字形，不铺底色——弹层本身就是浮层，再叠一层色块会把「这是一项可点的结果」读淡 */
+.mshell__search-hit-mark { background: transparent; color: var(--mk-blue-text); font-weight: 800; }
+.mshell__search-hit-why {
+  padding: 1px 6px;
+  border-radius: var(--mk-radius-pill);
+  background: var(--mk-surface-2);
+  color: var(--mk-muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
 .mshell__search-empty { padding: 10px; font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint); }
 /* 无页面命中时的转搜出口（走查 O1）：三条实体列表页深链，关键词跟着走 */
 .mshell__search-empty-title { margin: 0 0 8px; font-weight: 600; color: var(--mk-ink); }
@@ -1101,7 +1180,7 @@ watch(
   font-weight: 700;
   color: var(--mk-ink);
   padding: 4px 8px 4px 4px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-md);
   cursor: pointer;
   transition: background 0.14s ease;
 }
@@ -1110,7 +1189,7 @@ watch(
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  min-width: 150px;
+  min-width: 210px;
   padding: 6px;
   border: 1px solid var(--mk-line, #e6ebf4);
   border-radius: var(--mk-radius-lg);
@@ -1122,6 +1201,44 @@ watch(
   transform-origin: top right;
   /* 进场动效直接用 animation（Vue Transition 的 name 派生类会被死类门禁误报） */
   animation: mshell-pop-in 0.14s var(--mk-ease-out, ease);
+}
+/* 身份抬头（2026-11-02 评审 R5）：名字 + 角色 + 邮箱。邮箱可能很长，
+   单行省略并把全文留在 title 上，避免把菜单撑成一条宽带 */
+.mshell__user-meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px 8px;
+  padding: 6px 12px 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--mk-line);
+}
+.mshell__user-meta-name {
+  font-size: var(--mk-fs-micro, 12px);
+  font-weight: 700;
+  color: var(--mk-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mshell__user-meta-role {
+  grid-row: 1;
+  grid-column: 2;
+  padding: 1px 6px;
+  border-radius: var(--mk-radius-pill);
+  background: var(--mk-surface-2);
+  color: var(--mk-muted);
+  font-size: var(--mk-fs-micro, 12px);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.mshell__user-meta-line {
+  grid-column: 1 / -1;
+  font-size: var(--mk-fs-micro, 12px);
+  color: var(--mk-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 @keyframes mshell-pop-in {
   from { opacity: 0; transform: translateY(-6px) scale(0.97); }
@@ -1167,10 +1284,14 @@ watch(
   overflow-y: auto;
   overflow-x: hidden;
 }
+/* 大屏内容居中限宽见 admin-theme.css 末尾的「高分屏内容区限宽」块：
+   本文件是 scoped，`:root { --mshell-container }` 会编译成 `:root[data-v-x]`
+   而永不命中 <html>（2026-11-07 实测：写完上限仍读到 none）。 */
 
-/* 1440px 中间档：侧栏适度放大（幅度约为 2000 档一半） */
+/* 1440px 中间档：侧栏适度放大（幅度约为 2000 档一半）。
+   260 → 216（2026-11-07 收窄，实测该档 trailingGap 97px）：收的是纯空白，标签不缩。 */
 @media (min-width: 1440px) {
-  .mshell { grid-template-columns: 260px minmax(0, 1fr); }
+  .mshell { grid-template-columns: 216px minmax(0, 1fr); }
   .mshell__item { font-size: var(--mk-fs-body); padding: 8px 11px; }
   .mshell__caption { font-size: var(--mk-fs-micro); }
   .mshell__item-badge { font-size: var(--mk-fs-micro); }
@@ -1180,7 +1301,8 @@ watch(
 /* 大屏（2000+）：侧栏加宽、字号放大；2800+（4K）再升一档（zoom 之上叠加）。
    宽度只随内容（字号）增长、不随屏宽膨胀——短标签配宽侧栏会在行右拉出大片空洞 */
 @media (min-width: 1920px) {
-  .mshell { grid-template-columns: 276px minmax(0, 1fr); }
+  /* 276 → 232（2026-11-07 收窄，实测该档 trailingGap 110px） */
+  .mshell { grid-template-columns: 232px minmax(0, 1fr); }
   .mshell__item { font-size: var(--mk-fs-body); padding: 8px 12px; }
   .mshell__caption { font-size: var(--mk-fs-micro); }
   .mshell__item-badge { font-size: var(--mk-fs-micro); }
@@ -1188,7 +1310,8 @@ watch(
 }
 @media (min-width: 2000px) {
   .mshell {
-    grid-template-columns: 284px minmax(0, 1fr);
+    /* 284 → 240（2026-11-07 收窄：该档每侧内衬 14×2 = 28，行宽 212 仍容得下标签+徽标） */
+    grid-template-columns: 240px minmax(0, 1fr);
   }
   .mshell__side { padding: 16px 14px 12px; gap: 10px; }
   .mshell__logo-full { height: 40px; }
@@ -1200,7 +1323,8 @@ watch(
 }
 @media (min-width: 2800px) {
   .mshell {
-    grid-template-columns: 324px minmax(0, 1fr);
+    /* 324 → 276（2026-11-07 收窄：zoom 1.15 下渲染 ~317，实测该档 trailingGap 127px） */
+    grid-template-columns: 276px minmax(0, 1fr);
   }
   .mshell__side { padding: 18px 16px 12px; gap: 12px; }
   .mshell__logo-full { height: 44px; }
@@ -1214,7 +1338,8 @@ watch(
 @media (min-width: 3600px) {
   /* 4K（zoom 1.3 档）：侧栏再加宽、字号继续放大 */
   .mshell {
-    grid-template-columns: 372px minmax(0, 1fr);
+    /* 372 → 316（2026-11-07 收窄：zoom 1.3 下渲染 ~411，实测该档 trailingGap 201px） */
+    grid-template-columns: 316px minmax(0, 1fr);
   }
   .mshell__side { padding: 20px 18px 14px; gap: 14px; }
   .mshell__logo-full { height: 52px; }
@@ -1337,6 +1462,19 @@ html[data-theme='dark'] {
     z-index: 200;
     cursor: pointer;
   }
+}
+
+/* 窄屏（≤560）顶栏换行（2026-11-04 走查）：390×844 下单行装不下「分组名 / 页名」+
+   菜单钮 + 4 个工具钮 + 账户，面包屑被压到 28px——分组名溢出盒子压住刷新钮、页名塌成
+   0 宽。工具钮是 flex:none 的固定 34px，压不动，故改为两行：首行菜单钮与工具钮/账户，
+   面包屑以 flex-basis:100% 独占次行；组名/页名各自省略号截断，数据不删。
+   横向间距收到 4px（6 个 34px 方钮 + 菜单钮 + 账户，320 宽也放得进首行），
+   两行内容 34 + 24 + 行距 6 + 上下各 4 = 顶栏高 72px（Feedback.vue 的抽屉让位量按此同步）。 */
+@media (max-width: 560px) {
+  .mshell__top { flex-wrap: wrap; height: auto; min-height: 56px; padding: 4px 20px; gap: 6px 4px; }
+  .mshell__top-crumb { order: 10; flex: 1 1 100%; }
+  /* 组名原本 nowrap 且不可压缩：多级面包屑（「… / A / B」）在次行仍会横向溢出，一并给它截断 */
+  .mshell__top-sub { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 }
 
 /* 短视口（1080P 及以下）收紧导航纵向节奏：20 个场景 + 6 组标签在 953px 可视高里溢出 78px，

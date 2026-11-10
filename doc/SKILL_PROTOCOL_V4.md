@@ -1,6 +1,6 @@
 # 统一 Skill 协议 v4（规则文档）
 
-> 📌 类型：活规范（Skill 协议 SSOT；二级编译已退役 16c3cabd）｜最后核验：2026-09-28。索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范（Skill 协议 SSOT；二级编译已退役 16c3cabd）｜最后核验：2026-11-02。索引见 [doc/README.md](./README.md)。
 
 > 版本：v4.1（现行规范，生效）
 > 变更：在 v4.0 基础上新增数据面配置章节（§2.6 编排文件）
@@ -21,7 +21,7 @@
 
 - 本协议约束 **`prompts/core/` 下的全部 core skill**（清单见附录 A）。**以 `prompts/core/` 实际文件数为准**（2026-10-06 复核：31 个 yaml 文件，triage-judge 退役后；2026-09-28 口径 32、2026-09-14 口径 30 = 20 mainline + 10 aux、更早 26/25/24 等均已过期）。
 - code-only skill（acceptance-evidence-evaluator、goal-understanding-composer、teaching-strategy-selector）豁免，不进入核心文件体系（handler-only 确定性组件，无 LLM prompt）。
-- 无生产调用点的注册 skill（label-generator 等 11 个）维持现状，接入生产时必须先满足本协议。
+- 无生产调用点的注册 skill 维持现状，接入生产时必须先满足本协议（label-generator 已退役并进入 `backend/src/skills/retired-skills.ts` 的 `PURGED_SKILLS`，不属此类，见附录 A 退役注记）。
 
 ## 2. 核心文件（core.yaml）
 
@@ -62,9 +62,9 @@ deltaOutput: boolean         # 可选，默认 false；试验性条款，见 §5
 
 > **`params.maxTokens` 的运行时口径（2026-09-28 更正）**：它是**下限请求**；运行时按模型上限做 clamp（旧「无条件抬顶」描述已废，实现见 services/resolve-llm-call-params.ts）。
 > `services/resolve-llm-call-params.ts` 解析出最终模型后，会把低于该模型输出上限的 `maxTokens`
-> 低于模型上限时抬到上限、超过则压回（clamp）。2026-09-27 起全量 maxTokens 地板统一 32000（core 与编译产物已对齐）。
+> 低于模型上限时抬到上限、超过则压回（clamp）。2026-11-02 复核：31 个 core 文件的 `maxTokens` 全部为 64000；代码侧输出地板为 `MIN_OUTPUT_TOKENS = 256`（`services/resolve-llm-call-params.ts`，低于地板的请求抬到 256），仓库无 32000 地板常量。
 > 唯一例外是"运行时显式覆盖"（`runtime-override`，调试/低耗时才可调小）。
-> 因此 core 文件里的 `maxTokens`（多为 1200–8000）只表达"至少给这么多预算"，**实际有效上限由模型决定**。
+> 因此 core 文件里的 `maxTokens`（现全部为 64000）只表达"至少给这么多预算"，**实际有效上限由模型决定**。
 
 ### 2.3 字段类型受控词表
 
@@ -72,7 +72,7 @@ deltaOutput: boolean         # 可选，默认 false；试验性条款，见 §5
 
 - `enum` 的可选值必须在 `desc` 中列明（如"holistic | detail | balanced"）。
 - 后缀 `?` 表示可缺省（如 `object?`）；未标 `?` 的字段模型必须产出。
-- 扩展新类型属结构变更，按 §7.2 受限级处理。
+- 扩展新类型属结构变更，按 §7.1 受限级处理。
 - YAML flow 写法（`{ ... }` 单行）中含方括号的类型必须加引号：`type: "string[]"`、`type: "object[]"`。
 
 ### 2.4 字段语义规则
@@ -101,7 +101,7 @@ deltaOutput: boolean         # 可选，默认 false；试验性条款，见 §5
 **L2 落地注记（2026-08，配置式值流转）**：运行时装配声明化已开始落地——
 - `field_definitions.pathInRawOutput`：字段值在产出方原始输出的物理抽取路径（goal 阶段 28 字段已登记）。
 - `assembleGoalHandoff`（field-dispatcher）：按 routings 表 goal-agent 交付行 + pathInRawOutput 从 skill 输出抽取 goal→path 字段；`buildNormalizedInputV1`（path.coordinator）已正式切换为"handoff 字段优先 + visibleSummary 回退"（golden 等价验证）。
-- 输入通道：teaching 回合 5 通道（learner.learnerProjection/knowledge.state/controls.teachingControlContext/classroomContext/visibleDialogueContext）已登记（teaching-agent 注入行）；stage-designer 的 milestones/previousMilestone/normalizedInput 通道已有等价验证。
+- 输入通道：teaching 回合 4 条「配置式」通道（learner.learnerProjection/knowledge.state/controls.teachingControlContext/classroomContext）已登记（teaching-agent 注入行，可按 pathInRawOutput 装配）；另有「编排层整块组装」通道 scenario（承载 taskKcs/cognitiveFrame/materials/taskProfile/pathProgress 等）——由 buildTeachingTurnInput 组装成单个顶层对象注入、无单点抽取路径，故不设 routings 行，在编排文件 `prompts/orchestration/teaching.yaml` 以 fields 行声明，并在 core inputs（`sandbox:teaching.scenario`）+ 沙盘键注册表（`SANDBOX_EXTRA_KEYS`）登记；classroomEventContext / interactionProfile 属同类（不设 routings 行）。stage-designer 的 milestones/previousMilestone/normalizedInput 通道已有等价验证。
 - 治理：`prompts:check-handoff --strict`（inputs↔routings 双向对账）、`detectFieldRoutingDrift`（声明 vs DB 漂移启动 warn）、`validateFieldRoutingSeedSemantics`（handoff 白名单/组合语义 fail-fast）。
 
 ### 2.6 数据面配置（编排文件）
@@ -281,7 +281,7 @@ executeSkill(definition, {
 })
 ```
 
-历史三种并存约定（扁平传参、`{input, context}` 包装、goal-conversation 以 `input` 键当用户输入字符串）在链路改造期统一收敛到本信封；skill 全部收敛回 executeSkill 入口，禁止绕过（adaptive-guidance-copy 的直连 handler 调用属违规存量，须整改）。
+历史三种并存约定（扁平传参、`{input, context}` 包装、goal-conversation 以 `input` 键当用户输入字符串）在链路改造期统一收敛到本信封；skill 全部收敛回 executeSkill 入口，禁止绕过（adaptive-guidance-copy 的直连 handler 存量已整改：生产调用点经 `executeSkillWithResult`，仅离线探针脚本 `scripts/probe-guidance-e2e.ts` 仍直调 handler）。
 
 ### 5.3 标准输出包裹（SkillResult）
 
@@ -337,7 +337,7 @@ type SkillResult = {
 
 ### 6.1 版本模型
 
-- 现行 32 个核心文件（含 semantic-freeze-judge；以 `prompts/core/` 实际文件数为准）登记为基准 v1（baseVersion=1）。
+- 现行 31 个核心文件（含 semantic-freeze-judge；以 `prompts/core/` 实际文件数为准）登记为基准 v1（baseVersion=1）。
 - 每次编译发布产生新版本（agent_prompts 同 agentId 多行，version 递增，单 ACTIVE）。
 - 编译产物行必须携带 `coreHash` 与 `coreVersion`（新增列）。
 - **回滚 = 目标历史版本置 ACTIVE、其余置 ARCHIVED**，不需要重新编译。
@@ -380,7 +380,7 @@ coreHash 写入侧 = 编译发布流程（与 sourceHash 同批落库）；判�
 | Delta 写 | 缺席=不变、null=清空、输出=覆盖 的增量输出模式（试验） |
 | 基准 v1 | 现行 prompt 在版本体系中的登记身份 |
 
-## 附录 A. 受约束 skill 清单（30 core；3 个 code-only 组件已退役）
+## 附录 A. 受约束 skill 清单（31 core；3 个 code-only 组件已退役）
 
 > 2026-10-06 复核：以 `prompts/core/` 实际文件数为准（现 31 个 yaml，triage-judge 退役后；2026-09-28 口径 32、2026-09-14 口径 30、更早 26/25/24 均已过期）。
 
@@ -391,12 +391,13 @@ extractor：virtual-learner-actor-auditor、virtual-learner-path-evaluator、vir
 distiller：lesson-knowledge-enricher、session-wrapup
 copywriter：adaptive-guidance-copy、peer-reinforcement
 
-后续新增（core，未列入首批）：path-reviewer、kc-mapper、virtual-learner-epistemic-grounding
+后续新增（core，未列入首批）：path-reviewer、kc-mapper、virtual-learner-epistemic-grounding、material-brief、material-collector
 
 辅助 Skill（8，2026-10-06 复核 = v4-aux-skills 注册面 handler 数（~~9~~ 2026-09-28 口径，triage-judge 退役后）；generic-chat 于 **2026-09-15 正式退役**；course-design / basic-evaluator / goal-alignment-checker 同日退役（四同步，详见附录 A 退役注记）；triage-judge 于 **2026-10-06 退役**（摘注册 + 名单 RESIDUE 位，handler 保留供 eval/replay 脚本直调，详见退役注记）；concept-priority / path-adjustment-generator **已退役，仅 manifest 残留（2026-08）**，无 core.yaml，均不计数）：
 generator：teaching-opening-generator（~~course-design~~ 2026-09-15 退役）
 extractor：skill-compiler、learner-state-review（~~basic-evaluator~~、~~goal-alignment-checker~~ 2026-09-15 退役）
 copywriter：learner-progress-report、skill-author
+distiller：concept-consolidator、concept-load-estimator、replan-attribution
 
 平台守门（1）：semantic-freeze-judge（extractor，thinkingMode=disabled；调用方式见 §5.6 平台层例外）
 
@@ -453,7 +454,7 @@ fields:
   - { name: confirmedProposal, type: object?, desc: 确认后的方向 {learningDirection, firstDeliverable, keyStages[], outOfScope[]}；未确认不出现 }
 constraints:
   - 无证据的字段留空，不编造、不夸大
-params: { temperature: 0.7, maxTokens: 8000, failurePolicy: retry }
+params: { temperature: 0.7, maxTokens: 64000, failurePolicy: retry }
 deltaOutput: true   # 试点
 ```
 

@@ -7,6 +7,9 @@
  * 聚合、配额、记忆保留率、难度调整留痕全部来自已落地读写缝，**不新增实体、不自造口径**。
  *
  * 只读：本模块不写任何业务表；推进（写）属 P2，由系统层负责。
+ *
+ * 边界（#172-5b）：**黑盒轨不参与日期模拟**——`blackbox-runner` 不绑模拟钟、时间戳一律
+ * 取真实墙钟；入口用 `assertDateSimulationAllowedForSession` 拒绝「黑盒会话 + 日期模拟」。
  */
 import prisma from '../../config/database';
 import { safeJsonParse } from '../../utils/safe-json';
@@ -17,8 +20,11 @@ import {
   startOfDay,
   endOfDay,
   addDaysToDayKey,
+  dayDiffInDays,
   normalizeTimeZone,
 } from '../time/day-boundary';
+import { getSimulatedAsOf } from './simulation-clock-context';
+import { getVirtualSessionMode } from '../../virtual-lab/session-mode';
 import learningStateService, { type AggregatedLearningState } from '../learning/learning-state.service';
 import { derivePacing } from '../learner/LearnerSnapshotService';
 import { classifyLoad } from '../learning/learning-load-verdict';
@@ -266,9 +272,52 @@ export interface TemporalContext {
   sinceLastSessionDays?: number | null;
 }
 
-/** 仅为"已开启日期模拟"的会话产出 temporalContext；否则返回 null（输入里省略该键 = 现网不变）。 */
-export function temporalContextFromClock(clock: SimulationClockView | null | undefined): TemporalContext | null {
+export interface TemporalContextOverride {
+  /**
+   * 本次执行所在的模拟时刻（通常是**已推进那一天**的日窗口末端 `dayWindow.asOf`）。
+   * 给出时以它的应用时区日作为「今天」，覆盖库内 clock 的 dayIndex/simulatedNow。
+   */
+  asOf?: Date | string | null;
+}
+
+/** 把外来 asOf 规整成合法 Date（非法/缺省 → null，调用方回落库内 clock）。 */
+function coerceAsOf(value: Date | string | null | undefined): Date | null {
+  if (value === null || value === undefined) return null;
+  const date = value instanceof Date ? value : new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/**
+ * 仅为「已开启日期模拟」的会话产出 temporalContext；否则返回 null（输入里省略该键 = 现网不变）。
+ *
+ * `override.asOf`（#172-5）用于修「模拟日注入旧值」：advance-day 的当天学习在
+ * `runWithSimulatedClock(dayWindow.asOf)` 内执行，但模拟时钟是在运行块**之后**才
+ * mergeSessionStageResults 落库的——只读库内 clock 会把「推进前」的 dayIndex 注入课堂。
+ * 给出 override 时按 asOf 所在日重算 dayIndex/simulatedDay/sinceLastSessionDays。
+ * 只允许**向前**（derived < clock.dayIndex 时保持库内值），不注入比库内进度更早的一天。
+ */
+export function temporalContextFromClock(
+  clock: SimulationClockView | null | undefined,
+  override?: TemporalContextOverride | null,
+): TemporalContext | null {
   if (!clock || !clock.enabled) return null;
+  const asOf = coerceAsOf(override?.asOf);
+  if (asOf) {
+    const baseStart = parseDayKeyStart(clock.baseDate, clock.timezone);
+    const simulatedDay = dayKeyOf(asOf, clock.timezone);
+    const dayIndex = Math.max(0, dayDiffInDays(baseStart, asOf, clock.timezone));
+    if (simulatedDay && dayIndex >= clock.dayIndex) {
+      const sinceLastSessionDays = previousCourseDayGap(clock.baseDate, dayIndex, clock.courseWeekdays, clock.timezone);
+      return {
+        simulatedNow: asOf.toISOString(),
+        simulatedDay,
+        dayIndex,
+        timezone: clock.timezone,
+        // 无"上一次学习"时**省略该键**（而不是给 null）：prompt 规则以"键缺失=不得提及时间跨度"为准
+        ...(sinceLastSessionDays !== null ? { sinceLastSessionDays } : {}),
+      };
+    }
+  }
   const window = resolveDayWindow(clock.baseDate, clock.dayIndex, clock.timezone);
   const sinceLastSessionDays = previousCourseDayGap(clock.baseDate, clock.dayIndex, clock.courseWeekdays, clock.timezone);
   return {
@@ -279,6 +328,46 @@ export function temporalContextFromClock(clock: SimulationClockView | null | und
     // 无"上一次学习"时**省略该键**（而不是给 null）：prompt 规则以"键缺失=不得提及时间跨度"为准
     ...(sinceLastSessionDays !== null ? { sinceLastSessionDays } : {}),
   };
+}
+
+/* ============ 黑盒轨边界（#172-5b：日期模拟与黑盒轨互斥） ============ */
+
+/**
+ * 黑盒轨（`blackbox-api`，见 virtual-lab/blackbox-runner）**从不绑定模拟钟**：
+ * 它的轨迹 / 结算 / 证据时间戳一律取真实墙钟（`new Date()`），也不经
+ * `runWithSimulatedClock` / `simulatedNowOr()`。
+ *
+ * 因此「黑盒会话 + 日期模拟」是**明确禁止**的组合：一旦开启，同一会话会出现两套时间口径
+ * （模拟钟说「第 N 天」、黑盒证据却落在真实当天），既不可复盘也不可比较。
+ * 入口（`PUT /sessions/:id/simulation-config`、`POST /sessions/:id/advance-day`）用
+ * `assertDateSimulationAllowedForSession` 显式拒绝，并给出可读错误。
+ *
+ * 将来若确实要给黑盒轨加日期模拟，必须先在 blackbox-runner 的写入点接入
+ * `simulatedNowOr()` 并由调用方绑钟——只把时钟写进 stageResults 是不够的。
+ */
+export const BLACKBOX_DATE_SIMULATION_MESSAGE =
+  '黑盒轨（blackbox-api）不支持日期模拟：blackbox-runner 的时间戳一律写真实墙钟（new Date()），'
+  + '开启模拟日会让同一会话出现「模拟日 / 真实日」两套口径。请改用 assisted 会话做日期模拟。';
+
+export class DateSimulationTrackError extends Error {
+  readonly code = 'SIM_DATE_BLACKBOX_UNSUPPORTED';
+  readonly statusCode = 409;
+  readonly retryable = false;
+
+  constructor(message: string = BLACKBOX_DATE_SIMULATION_MESSAGE) {
+    super(message);
+    this.name = 'DateSimulationTrackError';
+  }
+}
+
+/** 会话是否属于黑盒实验轨（`stageResults.experiment.mode === 'blackbox-api'`）。 */
+export function isBlackboxExperimentSession(stageResults: unknown): boolean {
+  return getVirtualSessionMode(stageResults) === 'blackbox-api';
+}
+
+/** 日期模拟入口护栏：黑盒会话一律拒绝（抛可读错误，路由层映射为 409）。 */
+export function assertDateSimulationAllowedForSession(stageResults: unknown): void {
+  if (isBlackboxExperimentSession(stageResults)) throw new DateSimulationTrackError();
 }
 
 /** 单日聚合（注入 deps，便于单测）。 */
@@ -594,12 +683,23 @@ class SimulatedDayService {
   /**
    * 从"已加载的会话"派生 temporalContext（免二次查询；供虚拟学习者技能注入"第几天/已过几天"）。
    * 仅当日期模拟开启且被显式启用时返回；否则 null（技能输入里省略该键 = 现网不变）。
+   *
+   * `override.asOf` 显式给出"本次执行所在的模拟时刻"；缺省时取当前模拟钟上下文
+   * （`runWithSimulatedClock` 绑定的 asOf，见 services/virtual-lab/simulation-clock-context）。
+   *
+   * 为什么必须取运行时模拟钟（#172-5）：`advance-day` 的当天学习先跑、模拟时钟后落库，
+   * 只读 `session.stageResults` 会注入**推进前**的 dayIndex（当天课堂被告知"昨天"）。
+   * 绑定 asOf 的调用点（advance-day runTasks / autopilot / assisted 各入口）本就以该时刻
+   * 作为写侧"now"，这里让读侧同钟；未绑定上下文时行为与之前完全一致。
    */
-  async getTemporalContext(session: {
-    stageResults: string | null;
-    createdAt: Date;
-    virtual_learner_profiles?: { profile?: string | null } | null;
-  }): Promise<TemporalContext | null> {
+  async getTemporalContext(
+    session: {
+      stageResults: string | null;
+      createdAt: Date;
+      virtual_learner_profiles?: { profile?: string | null } | null;
+    },
+    override?: TemporalContextOverride | null,
+  ): Promise<TemporalContext | null> {
     const settings = await getVirtualLabSettings().catch(() => ({ ...DEFAULT_VIRTUAL_LAB_SETTINGS }));
     const stageResults = safeJsonParse<Record<string, any>>(session.stageResults, {});
     const profileData = safeJsonParse<Record<string, any>>(session.virtual_learner_profiles?.profile, {});
@@ -609,7 +709,9 @@ class SimulatedDayService {
       settings: settings.dateSimulation,
       sessionCreatedAt: session.createdAt,
     });
-    return temporalContextFromClock(clock);
+    // 显式 override 优先；否则用当前执行块绑定的模拟钟（advance-day runTasks 绑的是"当天"）
+    const asOf = override?.asOf ?? getSimulatedAsOf();
+    return temporalContextFromClock(clock, asOf ? { asOf } : null);
   }
 
   /** 会话按天时间线（只读）。baseDate 缺省取时钟；范围用设置护栏夹紧。 */

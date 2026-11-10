@@ -60,6 +60,24 @@ export function nowTime() {
 }
 
 /**
+ * 气泡时间标签（历史回填必须走这里，而不是 nowTime）。
+ *
+ * 优先用后端给的时间戳，只有拿不到时才退回浏览器当前时刻——课堂回填此前一律写 nowTime()，
+ * 刷新一次所有历史消息都变成刷新那一刻的钟点，消息之间的真实间隔被抹平
+ * （2026-10-31 用户走查 P1-2：7 条消息真实跨 42 分钟，刷新后全显示 05:09）。
+ */
+export function formatMsgTime(raw?: string): string {
+  if (!raw) return nowTime();
+  // 后端可能回 ISO；统一成 HH:mm
+  const d = new Date(raw);
+  if (!Number.isNaN(d.getTime()) && (raw.includes('T') || raw.includes('-'))) {
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  }
+  if (/^\d{1,2}:\d{2}/.test(raw)) return raw.slice(0, 5);
+  return raw;
+}
+
+/**
  * 自动重发判定（#114）：只对「确定没送达」的错误重试。
  * - 传输层（无 status）→ 可重试
  * - 429 / 5xx → 可重试

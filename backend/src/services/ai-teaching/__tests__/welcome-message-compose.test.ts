@@ -26,7 +26,8 @@ describe('composeWelcome（开场正文拼装）', () => {
 
     const text = composeWelcome(opening);
     expect(text).not.toContain('undefined');
-    expect(text).toBe('我们先从 **辨别材料依据与推得结论** 开始这节课。目标是把关键知识点讲清楚，并在过程中检查你的掌握情况。');
+    // 2026-11-08 p-π外评：标题不再嵌在句中——独立成行放目标位，开场话术自然化
+    expect(text).toBe('开始这节课。目标只有一句话：\n**辨别材料依据与推得结论**\n我先讲要点，再拿例子练；卡住随时打断我。');
   });
 
   it('question 为空串/纯空白时同样只保留 message', () => {

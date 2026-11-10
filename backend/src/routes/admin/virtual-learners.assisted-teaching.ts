@@ -9,9 +9,11 @@ import { findSessionById } from '../../services/virtual-lab/virtual-session.repo
 import { sendVirtualSessionError } from './virtual-session-http';
 import {
   clearSessionStageResultsKey,
+  getAssistedCommandId,
   mergeSessionStageResults,
   mergeSessionTeachingFlags,
   parseSimulationLimit,
+  runAssistedIdempotentMutation,
   runAssistedSessionMutationWithSimClock,
 } from './virtual-learners.assisted-shared';
 
@@ -54,14 +56,24 @@ router.post('/sessions/:sessionId/start-learning', async (req: Request, res) => 
 router.post('/sessions/:sessionId/teaching-step', async (req: Request, res) => {
   try {
     const { sessionId } = req.params;
-    const result = await runAssistedSessionMutationWithSimClock(sessionId, () =>
-      simulationCoordinator.executeLearningStep(sessionId)
+    const idempotencyKey = getAssistedCommandId(req);
+    // #173-3（方案 B）：teaching-step 是最贵入口之一——网关超时重试会真多推一个回合。
+    // 在会话租约锁内按 (sessionId, key) 记账，命中回放上次结果（不重跑模型/不重推回合）。
+    const outcome = await runAssistedSessionMutationWithSimClock(sessionId, () =>
+      runAssistedIdempotentMutation(
+        sessionId,
+        idempotencyKey,
+        'teaching-step',
+        req.body,
+        () => simulationCoordinator.executeLearningStep(sessionId),
+      )
     );
-
+    const { result, reused } = outcome;
     res.json({
       success: result.success,
       data: result,
-      error: result.error
+      error: result.error,
+      ...(idempotencyKey ? { reused } : {}),
     });
   } catch (error) {
     logger.error('执行学习步骤失败:', error);
@@ -79,14 +91,25 @@ router.post('/sessions/:sessionId/auto-learning', async (req: Request, res) => {
     const maxMilestones = parseSimulationLimit(req.body?.maxMilestones, 10, 20, 'maxMilestones');
     // 回合上限前端可配（默认 LEARN_AUTO_TURN_CAP=40）：不同课的收束节奏差异很大
     const maxTurns = parseSimulationLimit(req.body?.maxTurns, 40, 100, 'maxTurns');
-    const result = await runAssistedSessionMutationWithSimClock(sessionId, () =>
-      simulationCoordinator.executeAutoLearning(sessionId, { maxMilestones, maxTurns })
+    const idempotencyKey = getAssistedCommandId(req);
+    // #173-3（方案 B）：auto-learning 是长事务、最贵入口——网关超时重试会整段重跑。
+    // 在锁内按 (sessionId, key) 记账并回放；注：auto-learning 内部的多回合循环（跨租约/可续跑）
+    // 本身不在本轮幂等覆盖范围内（注释见虚拟-learners.assisted-shared 的账本说明）。
+    const outcome = await runAssistedSessionMutationWithSimClock(sessionId, () =>
+      runAssistedIdempotentMutation(
+        sessionId,
+        idempotencyKey,
+        'auto-learning',
+        { maxMilestones, maxTurns },
+        () => simulationCoordinator.executeAutoLearning(sessionId, { maxMilestones, maxTurns }),
+      )
     );
-
+    const { result, reused } = outcome;
     res.json({
       success: result.success,
       data: result,
-      error: result.error
+      error: result.error,
+      ...(idempotencyKey ? { reused } : {}),
     });
   } catch (error) {
     logger.error('自动学习失败:', error);
@@ -99,6 +122,9 @@ router.post('/sessions/:sessionId/auto-learning', async (req: Request, res) => {
  * POST /api/admin/virtual-sessions/:sessionId/run-full
  * body: { maxRounds?, maxMilestones?, continueOnTaskComplete?, autoAdvanceToPath?, autoAdvanceToLearning? }
  */
+// 一键全自动（run-full）：本轮**不覆盖**幂等——它是 goal→path→learn 整条长链路，跨多个内部租约/
+// 多阶段，单把 (sessionId, key) 回放无法还原其内部进度（详见虚拟-learners.assisted-shared 账本注释）。
+// #173-3 方案 B 仅覆盖 step / teaching-step / auto-learning 三个最贵入口。
 router.post('/sessions/:sessionId/run-full', async (req: Request, res) => {
   try {
     const { sessionId } = req.params;

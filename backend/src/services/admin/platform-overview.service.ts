@@ -766,40 +766,59 @@ export async function computeOverviewStats(force = false): Promise<unknown> {
  * 数据源：learner_evidence 里已投影的收束事件（task:completed / path:completed，
  * 由 LearnerEvidenceProjector 从 domain_event_outbox 投影；事件统一由
  * learningService.completeTask 发出，payload 带 track / completionSource）。
- * 补的就是「管理端同屏不同源」的读侧：真人侧与 VL 侧不再各算各的完成量。
- * 口径纪律：
- * - 「完课量」只数 task:completed（一次完整课次结算 = 一条；path:completed 是路径里程碑、
- *   单位不同，单独给 pathCompletions 只作披露，不并入 total）；
+ * 口径纪律（2026-11-04 口径对齐，闭合 #186「同屏口径自相矛盾」）：
+ * - 「完课量」主值 total 只数 task:completed（一次完整课次结算 = 一条），且与**同文件
+ *   computeOverviewStats 的调用统计同一套非虚拟口径**（findNonVirtualUserIds：虚拟学习者
+ *   归自己的域，不进主值）——修复前同屏上半屏按非虚拟、下半屏混合 VL，两半口径分叉；
+ * - byTrack / bySource 与 total **同源同口径（非虚拟）**：三项轨道相加恒等于 total，
+ *   卡面「数值 vs 行内分解」自证、不再各算各的；虚拟学习者不混进这三项；
+ * - 虚拟学习者的任务完成数单列 virtualCount（明确不计入 total/byTrack/bySource），
+ *   供前端行内注「虚拟 Y 不计入」披露——既保住 VL 可见，又不让注与主值打架；
+ * - path:completed 是路径里程碑、单位不同，单独给 pathCompletions 只作披露，不并入 total；
  * - 2026-10-18 之前的记录没有 track，closure-observability 统一标 legacy——如实透传，
  *   不用 users.isVirtualLearner 回填、不猜测；
  * - 读数以「已投影」事件为准：outbox 消费滞后时本读数会暂时偏小，不冒充实时。 */
 export interface ClosureCompletionSummary {
-  /** 任务完成事件总数（完课量） */
+  /** 任务完成事件总数（完课量主值）——非虚拟口径：只计真实用户 */
   total: number;
+  /** 与主值同口径的轨道分解（非虚拟）：human + unknown + legacy 恒等于 total */
   byTrack: Record<ClosureTrack, number>;
+  /** 与主值同口径的通道分解（非虚拟） */
   bySource: Record<string, number>;
+  /** 虚拟学习者任务完成数——单列披露，明确不计入 total/byTrack/bySource */
+  virtualCount: number;
   /** 另有路径完成事件数（单位不同，不计入 total，仅披露） */
   pathCompletions: number;
 }
 
 export async function computeClosureCompletionSummary(): Promise<ClosureCompletionSummary> {
+  // 非虚拟口径（与同文件 computeOverviewStats 的调用统计同源单点）：虚拟学习者归自己的域，不进主值。
+  const nonVirtualUserIds = new Set(await findNonVirtualUserIds());
   const rows = await prisma.learner_evidence.findMany({
     where: { evidenceType: { in: ['task:completed', 'path:completed'] } },
-    select: { evidenceType: true, payload: true },
+    select: { evidenceType: true, payload: true, userId: true },
   });
-  const taskObservations: ClosureObservation[] = [];
+  const nonVirtualTasks: ClosureObservation[] = [];
+  let virtualCount = 0;
   let pathCompletions = 0;
   for (const row of rows) {
     const observed = parseClosureObservation(row.evidenceType, row.payload);
     if (!observed) continue;
-    if (observed.eventType === 'task:completed') taskObservations.push(observed);
-    else pathCompletions += 1;
+    if (observed.eventType === 'task:completed') {
+      if (nonVirtualUserIds.has(row.userId)) nonVirtualTasks.push(observed);
+      else virtualCount += 1;
+    } else {
+      pathCompletions += 1;
+    }
   }
-  const summary = summarizeClosureObservations(taskObservations);
+  // total 与 byTrack/bySource 同源同口径（非虚拟）：三项轨道相加恒等于 total，卡面自证；
+  // 虚拟学习者单列 virtualCount，明确不入主值。
+  const summary = summarizeClosureObservations(nonVirtualTasks);
   return {
     total: summary.total,
     byTrack: summary.byTrack,
     bySource: summary.bySource,
+    virtualCount,
     pathCompletions,
   };
 }

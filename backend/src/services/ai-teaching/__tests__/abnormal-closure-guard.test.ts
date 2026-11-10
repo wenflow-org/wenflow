@@ -1,8 +1,9 @@
 /**
  * 幽灵课 / 弃跑状态泄漏拦截 + F2 入队侧收紧（2026-10-06 修复轮）。
  *
- * A. 非正常终态（`endReason==='learner-abandoned'` 等）的会话**仍然收束**（状态机照常闭合、wrapup 照常落库、
- *    调用方轮询/清场逻辑不变），但**不写正式轨**：learner_evidence（lesson:completed 事件不带 userId）、
+ * A. 非正常终态（`endReason==='learner-abandoned'` 等）的会话**仍然收束**（状态机照常闭合到 completed，
+ *    wrapup 按设计留 NULL——调用方只能按 status 判定闭合、不得依赖 wrapup，见 #239），
+ *    但**不写正式轨**：learner_evidence（lesson:completed 事件不带 userId）、
  *    learning_metrics（session-wrapup / session_load）、记忆回写（FSRS trace）、误解台账、休眠信号、
  *    检查点留痕、aux 课后刷新链一律跳过，只落一条审计日志。
  * B. `review:completed` 只在 endSession **真正成功**（completed + wrapup，且非弃跑）后入队；
@@ -425,5 +426,41 @@ describe('弃跑/非正常终态收束：只闭合状态机，不写正式轨', 
       impactedDimensions: ['wrapup.summary', 'wrapup.evaluation'],
       mitigationApplied: 'summary-only-fallback',
     }));
+  });
+});
+/**
+ * #200：`lesson:completed` 事件载荷里的可见对话切片只带 role/content。
+ *
+ * 下游唯一消费者是 lesson-knowledge-enricher，其输入类型
+ * （skills/lesson-knowledge-enricher/index.ts:66）只有 `{ role, content }`；
+ * 曾经额外带 `analysis`（每回合的判读块），抽取后无人读取，只是把重复内容塞进持久化载荷。
+ * 这里直接读领域事件的 data，故能抓住"又有人把 analysis 加回去"。
+ */
+describe('#200 lesson:completed 载荷：可见对话切片只带 role/content', () => {
+  it('消息自带 analysis 判读块时不进入事件载荷', async () => {
+    mockClaimFinalization.mockResolvedValue({
+      status: 'claimed',
+      operationId: 'end-op-1',
+      leaseOwner: 'lease-1',
+      session: session({
+        status: 'finalizing',
+        messages: [
+          { role: 'user', content: '开始吧', analysis: { understanding: '浅层' } },
+          { role: 'assistant', content: '好', analysis: { loadIndex: 3 } },
+        ],
+      }),
+    });
+
+    await endSession('sess-abandon-1', 'manual-end', 7, 'end-op-dialogue');
+
+    // completeWithEvent(sessionId, operationId, leaseOwner, payload, event, metricCommit)
+    const event = mockCompleteWithEvent.mock.calls[0][4];
+    expect(event.type).toBe('lesson:completed');
+    const dialogue = event.data.visibleDialogueContext;
+    expect(dialogue).toHaveLength(2);
+    for (const item of dialogue) {
+      expect(Object.keys(item).sort()).toEqual(['content', 'role']);
+    }
+    expect(dialogue[0]).toEqual({ role: 'user', content: '开始吧' });
   });
 });

@@ -161,7 +161,11 @@ function envelopeGoalConversation(result: any, fallbackConversationId?: string) 
         stage: core.stage || 'understanding',
         confidence: typeof core.confidence === 'number' ? core.confidence : 0,
         isCompleted: !!core.isCompleted,
-        learningPath: core.learningPath || null
+        learningPath: core.learningPath || null,
+        // 硬阻断终局标记透传（2026-11-05 UX 审计 P0）：core 是白名单重建，不透传该字段
+        // 前端永远收不到 true，「路径已创建」假成功弹层照旧。仅 true 时携带（缺席=falsy，
+        // 普通信封的公开 DTO 形状不变，routes.contract 契约测试的 toEqual 不受影响）。
+        ...(core.hardBlocked === true ? { hardBlocked: true as const } : {})
       },
       ext: {
         goalConversation: {
@@ -171,6 +175,10 @@ function envelopeGoalConversation(result: any, fallbackConversationId?: string) 
           structuredData: goalExt.structuredData,
           confirmedProposal: goalExt.confirmedProposal,
           confidenceScores: goalExt.confidenceScores,
+          // #251③：分诊结论（triageGoalResponse 产物，服务层已落 collectedData.responseTriage）
+          // 此前被这条白名单重建丢掉——信封只剩 7 个 ext 字段，前端与分诊命中率遥测拿不到本轮
+          // mode。仅在服务层确实产出时携带（缺席 = 该分支不适用，公开 DTO 形状不变）。
+          ...(goalExt.responseTriage ? { responseTriage: goalExt.responseTriage } : {}),
           collected: goalExt.collected || {}
         }
       }
@@ -220,6 +228,16 @@ function getContextMode(body: any): 'recent' | 'full' {
 
 function getConfirmProposal(body: any): boolean {
   return body?.confirmProposal === true;
+}
+
+/**
+ * 前置自测作答（2026-11-02）：面板内本地作答、随「确认」一次性提交。
+ * 这里只做形态过滤；逐项字段校验与判分合并由
+ * `services/learning/goal-probe-answers.normalizeProbeAnswerInput` 负责。
+ */
+function getProbeAnswers(body: any): unknown[] | undefined {
+  const raw = body?.probeAnswers;
+  return Array.isArray(raw) && raw.length > 0 ? raw : undefined;
 }
 
 router.post('/start', authMiddleware, goalConversationUserLimiter, async (req: Request, res: Response) => {
@@ -297,6 +315,7 @@ router.post('/:conversationId/reply', authMiddleware, goalConversationUserLimite
         () => requirementOrchestrator.step(conversationId, reply, userId, {
           contextMode: getContextMode(req.body),
           confirmProposal: getConfirmProposal(req.body),
+          probeAnswers: getProbeAnswers(req.body),
           meta: sanitizeMeta(req.body?.meta)
         }),
         (result) => goalEnvelopeForRequest(req, result, conversationId)
@@ -306,6 +325,7 @@ router.post('/:conversationId/reply', authMiddleware, goalConversationUserLimite
     const result = await requirementOrchestrator.step(conversationId, reply, userId, {
       contextMode: getContextMode(req.body),
       confirmProposal: getConfirmProposal(req.body),
+      probeAnswers: getProbeAnswers(req.body),
       meta: sanitizeMeta(req.body?.meta)
     });
     return res.json({
@@ -447,7 +467,10 @@ router.get('/:conversationId', authMiddleware, async (req: Request, res: Respons
       return res.json({
         success: true,
         data: {
-          userVisible: '会话详情获取成功',
+          // #213/#221：userVisible 是「用户可见的结果」，由 getConversation 按状态重建
+          // （进行中 = 最后一条 AI 回复；已完成 = 路径文案或硬阻断拒绝文案；无文案为 null）。
+          // 不再用「会话详情获取成功」这类 HTTP 占位串兜底。
+          userVisible: conversation.userVisible,
           control: {
             conversationId,
             stage: conversation.stage,
@@ -465,14 +488,18 @@ router.get('/:conversationId', authMiddleware, async (req: Request, res: Respons
     return res.json({
       success: true,
       data: {
-        userVisible: '会话详情获取成功',
+        // 同上：占位串不再进入 data.userVisible（null = 本次快照没有可展示的终局文案）。
+        userVisible: conversation.userVisible,
         internal: {
           core: {
             conversationId,
             stage: conversation.stage,
             confidence: conversation.confidence,
             isCompleted: conversation.status === 'completed',
-            learningPath: conversation.learningPath || null
+            learningPath: conversation.learningPath || null,
+            // 硬阻断终局标记透传（2026-11-05 UX 审计 P0）：重进已完成会话的恢复信封
+            // 与确认回合的 final 信封同口径，缺省一律 false
+            hardBlocked: conversation.hardBlocked === true
           },
           ext: {
             goalConversation: {
@@ -482,6 +509,9 @@ router.get('/:conversationId', authMiddleware, async (req: Request, res: Respons
               structuredData: conversation.structuredData || null,
               confirmedProposal: conversation.confirmedProposal || null,
               confidenceScores: conversation.confidenceScores || null,
+              // #251③：恢复信封同样透出分诊结论（与 POST /reply 的 final 信封同口径），
+              // 否则用户重进已完成会话时前端拿不到本轮 responseTriage.mode。
+              ...(conversation.responseTriage ? { responseTriage: conversation.responseTriage } : {}),
               collected: conversation.collected || {}
             }
           }

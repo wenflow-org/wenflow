@@ -55,7 +55,6 @@ export async function initializeGateway(): Promise<EduClawGateway> {
       baseUrl: process.env.AI_API_URL || 'http://localhost:3000',
       apiKey: process.env.AI_API_KEY || '',
       defaultModel: process.env.AI_MODEL || '',
-      defaultReasoningModel: process.env.AI_MODEL_REASONING || '',
     }
   });
 

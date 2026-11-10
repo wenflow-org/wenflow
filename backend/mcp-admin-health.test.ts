@@ -30,40 +30,51 @@ async function check(page: Page, name: string, fn: () => Promise<boolean>) {
 }
 
 async function login(page: Page) {
-  await page.goto(`${BASE}/login`, { waitUntil: 'networkidle', timeout: 30000 })
-  await page.waitForTimeout(2000)
-  const loggedIn = await page.$('.user-chip').catch(() => null)
-  if (loggedIn) return true
-  await page.fill('input[placeholder*="请输入用户名"]', 'admin')
-  await page.fill('input[placeholder*="请输入密码"]', 'admin123')
-  await page.click('button:has-text("登录并继续")')
-  await page.waitForTimeout(3000)
-  return (await page.$('.user-chip').catch(() => null)) !== null
+  /* 2026-11-01 校正：原实现走用户登录页 `${BASE}/login` 的「请输入用户名 / 登录并继续」——
+   * 那是**用户侧**表单，且文案早已改动，于是 fill 永远等不到元素、整条巡检卡在登录超时。
+   * 管理台是独立的 /admin/login。凭据只从环境变量取（仓库里不写明文密码）：
+   *   ADMIN_USER / ADMIN_PASSWORD（默认账号 admin，密码必须显式提供）。 */
+  const user = process.env.ADMIN_USER || 'admin'
+  const pass = process.env.ADMIN_PASSWORD
+  if (!pass) {
+    throw new Error('缺少 ADMIN_PASSWORD 环境变量：管理台巡检需要真实管理员凭据（未内置明文密码）')
+  }
+  await page.goto(`${BASE}/admin/login`, { waitUntil: 'networkidle', timeout: 30000 })
+  await page.locator('input[placeholder*="管理员账号"]').fill(user)
+  await page.locator('input[placeholder*="密码"]').fill(pass)
+  await page.locator('button[type="submit"]').first().click()
+  await page.waitForURL((url) => !url.pathname.includes('/admin/login'), { timeout: 20000 })
+  return !page.url().includes('/admin/login')
 }
 
 // 所有实际存在的 Admin 路由
+/* 2026-11-01 校正：原清单 17 条里有 12 条指向**已不存在的页面**
+ * （/admin/dashboard、/admin/learner-models、/admin/platform-capabilities、/admin/agent-registry、
+ * /admin/orchestrator-registry、/admin/orchestrator-definitions、/admin/skill-manager、
+ * /admin/skill-prompt-preview、/admin/prompt-call-logs、/admin/orchestrators、
+ * /admin/manifest-diagnostics、/admin/activity-stream）。
+ * /admin/:page? 会把未知 id 兜住并回退总览，所以这些路径不会 404，而是**安静地渲染总览**——
+ * 巡检照样打勾。现改为以 frontend/src/views/admin-redesign/manifest.ts 为准的真实场景清单。 */
 const adminPages = [
-  // content 组
-  { path: '/admin/dashboard', name: 'Dashboard 数据概览' },
-  { path: '/admin/users', name: '用户管理' },
-  { path: '/admin/learner-models', name: '学习者模型' },
-  { path: '/admin/teaching-sessions', name: '教学会话巡检' },
-  // system 组
-  { path: '/admin/api-config', name: 'API 管理' },
-  { path: '/admin/platform-capabilities', name: '能力地图（Capability Catalog）' },
-  { path: '/admin/agent-registry', name: 'Prompt 运营中心（Agent Registry）' },
-  { path: '/admin/orchestrator-registry', name: '编排配置中心' },
-  { path: '/admin/orchestrator-definitions', name: '编排定义' },
-  { path: '/admin/skill-manager', name: 'Skill 管理中心' },
-  // devDebug / test 组
-  { path: '/admin/skill-prompt-preview', name: 'Skill Prompt 预览' },
-  { path: '/admin/virtual-learners', name: '虚拟用户模拟' },
-  // monitor 组
-  { path: '/admin/execution-logs', name: 'Agent 执行日志' },
-  { path: '/admin/prompt-call-logs', name: 'Prompt 调用日志' },
-  { path: '/admin/orchestrators', name: '编排运行监控' },
-  { path: '/admin/manifest-diagnostics', name: 'Agent 架构诊断' },
-  { path: '/admin/activity-stream', name: '活动流' },
+  { path: '/admin/overview', name: '平台总览' },
+  { path: '/admin/ops-hub', name: '运营中心' },
+  { path: '/admin/people', name: '用户账号' },
+  { path: '/admin/api-config', name: '模型与接入' },
+  { path: '/admin/goal-conversations', name: '目标对话' },
+  { path: '/admin/learning-paths', name: '学习路径' },
+  { path: '/admin/teaching-sessions', name: '教学会话' },
+  { path: '/admin/learner-state', name: '学习状态' },
+  { path: '/admin/memory-review', name: '复习积压' },
+  { path: '/admin/virtual-learners', name: '虚拟学习者' },
+  { path: '/admin/virtual-learner-cards', name: '学习者卡库' },
+  { path: '/admin/orchestrator', name: '字段流转' },
+  { path: '/admin/skills', name: 'Skill 目录' },
+  { path: '/admin/prompt-eval', name: 'Prompt 评估' },
+  { path: '/admin/addons', name: '插件' },
+  { path: '/admin/execution-logs', name: '执行日志' },
+  { path: '/admin/audit-logs', name: '审计日志' },
+  { path: '/admin/token-cost', name: '成本分析' },
+  { path: '/admin/health-center', name: '健康中心' },
 ]
 
 test('Admin 全面功能检查', async ({ page }) => {
@@ -77,7 +88,10 @@ test('Admin 全面功能检查', async ({ page }) => {
 
   if (!checkpoints[0].status.includes('✅')) {
     errors.forEach(e => console.error(e))
-    return
+    /* 2026-11-01 修复「失败即通过」：原实现登录失败时直接 return，而本文件**没有任何断言**，
+     * 于是 Playwright 判 passed——登录挂了也显示绿灯（上面 10.5s 就"通过"、19 个页面一个没走，
+     * 正是这个原因）。巡检类脚本必须让失败真的失败。 */
+    throw new Error(`登录失败，巡检未执行：${checkpoints[0].detail}`)
   }
 
   for (const p of adminPages) {
@@ -91,6 +105,13 @@ test('Admin 全面功能检查', async ({ page }) => {
       if (statusCode >= 400) throw new Error(`HTTP ${statusCode}`)
       if (hasJsError) throw new Error('Vite error overlay detected')
       if (body.length < 50 && body.includes('Login')) throw new Error('Redirected to login page')
+      /* 2026-11-01 补强（假绿灯）：只查 HTTP 200 抓不到「未知 id 被兜底回总览」——
+       * /admin/:page? 会接住任何 id 并静默回退 overview，HTTP 依然是 200。
+       * 改为断言 URL 没有被改写到 /admin/overview（除 overview 自身）。 */
+      const scene = p.path.replace('/admin/', '')
+      const url = page.url()
+      const fellBack = url.includes('/admin/overview') && !p.path.endsWith('/overview')
+      if (fellBack) throw new Error(`被兜底回总览（未知场景 id「${scene}」？）`)
       return true
     })
   }

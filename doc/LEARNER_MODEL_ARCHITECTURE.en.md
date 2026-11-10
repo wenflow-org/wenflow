@@ -1,6 +1,6 @@
 # Learner Model Scenario Design (New Architecture)
 
-> 📌 类型：活规范（英文同步版，与中文 .md 同步更新）｜最后核验：2026-09-28。索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范（英文同步版，与中文 .md 同步更新）｜最后核验：2026-11-02。索引见 [doc/README.md](./README.md)。
 
 ## 1. Objective
 
@@ -35,7 +35,6 @@ This document does not cover:
 Its responsibility is aggregating following data sources into unified snapshot:
 
 - `goal_conversations`
-- `student_baselines`
 - `learning_metrics`
 - `teaching_sessions`
 - `learning_paths / milestones / subtasks`
@@ -48,9 +47,9 @@ Output to:
 
 ## 3. Whether Orchestrator Needed
 
-Current stage no separate orchestrator for learner model scenario.
+A learner mainline orchestrator is now registered at the orchestration layer: `learnerAgentRuntimeDefinition` (id `profile-agent`, `managedByCode: true`), chaining `skill:learner-model` → `skill:lesson-knowledge-enricher` → `LearnerSnapshotRefreshService` (`backend/src/coordinators/learner.definition.ts`; listed in `ORCHESTRATOR_RUNTIME_DEFINITIONS`).
 
-Reasons:
+Reasons the scenario was initially kept orchestrator-free (Phase 1):
 
 1. Learner model scenario is not an independent user flow, but shared upstream state layer across path/teaching/admin.
 2. Current main work is deterministic aggregation, event-triggered refresh, on-demand reading, not multi-Agent multi-stage orchestration.
@@ -58,11 +57,13 @@ Reasons:
 
 ### Current Recommended Form
 
-- External: `learner-model-agent`
+- External: `skill:learner-model`
 - Internal: Several deterministic services
 - Update method: Event-driven refresh + on-demand reading
 
 ### When to Introduce Orchestrator in Future
+
+> The conditions listed in this section have since occurred in the implementation — a learner mainline orchestrator is registered at the orchestration layer (`learnerAgentRuntimeDefinition`, id `profile-agent`, `managedByCode: true`; chain `skill:learner-model` → `skill:lesson-knowledge-enricher` → `LearnerSnapshotRefreshService`). The original criteria are kept below for reference.
 
 Consider adding `learner-refresh-orchestrator` when any condition met:
 
@@ -71,13 +72,12 @@ Consider adding `learner-refresh-orchestrator` when any condition met:
 - High-cost async batch recomputation needs exist
 - Failure retry, stage logs, backend running state management needed
 
-Before that, no new orchestrator.
+Before that, no new orchestrator (that phase has since ended with the registration above).
 
 ## 4. Position in New Architecture
 
 ```text
 goal_conversations
-student_baselines
 learning_metrics
 teaching_sessions
 learning_paths / milestones / subtasks
@@ -97,7 +97,7 @@ teaching-turn-agent / peer-agent / session-wrapup-agent
 
 ### 5.1 Canonical Agent Id
 
-- `learner-model-agent`
+- `skill:learner-model` (alias `learner-model-agent`; unified to the canonical prefix on 2026-08-09)
 
 ### 5.2 Output Namespace
 
@@ -140,19 +140,18 @@ type LearnerSnapshot = {
     }
   }
 
-  profile: StableLearnerProfile
-  dynamicState: DynamicLearnerState
+  profile: LearnerModelProfile
+  dynamicState: LearnerDynamicState
   knowledgeMemory: LearnerKnowledgeMemory
-  teachingHints: TeachingHints
+  teachingHints: LearnerTeachingHints
 }
 ```
 
-### 6.1 StableLearnerProfile
+### 6.1 LearnerModelProfile
 
 Long-term relatively stable, sourced from:
 
 - `goal_conversations`
-- `student_baselines`
 
 Main content:
 
@@ -161,7 +160,7 @@ Main content:
 - emotional
 - behavioral
 
-### 6.2 DynamicLearnerState
+### 6.2 LearnerDynamicState
 
 Recent learning state, sourced from:
 
@@ -279,7 +278,7 @@ type PathKnowledgeMemory = {
 }
 ```
 
-### 6.4 TeachingHints
+### 6.4 LearnerTeachingHints
 
 Guidance information for teaching direct consumption:
 
@@ -400,7 +399,6 @@ Such nodes only update session internal overlay, e.g.:
 2. `teaching_sessions.knowledgeState`
 3. `summary / evaluation`
 4. `goal_conversations`
-5. `student_baselines`
 
 ### 9.3 Concept Key Normalization Priority
 
@@ -531,7 +529,7 @@ query:
 
 ## 12. Service Split Suggestion
 
-Current stage no orchestrator, but suggested introduce following services:
+The orchestrator for the learner model scenario is now registered at the orchestration layer (see §3); in addition, the following services are suggested:
 
 ### 12.1 `LearnerSnapshotService`
 
@@ -656,8 +654,8 @@ Consumed (since 2026-09):
 
 ## 15. Current Decision Summary
 
-1. `learner-model-agent` is canonical id.
+1. `skill:learner-model` is the canonical id.
 2. Output namespace use `internal.ext.learner`.
-3. Current no separate learner orchestrator build.
+3. A learner mainline orchestrator is registered at the orchestration layer (id `profile-agent`, `managedByCode: true`; chain `skill:learner-model` → `skill:lesson-knowledge-enricher` → `LearnerSnapshotRefreshService`).
 4. Learner snapshot use "event refresh + on-demand read" model.
 5. Admin v1 only do "read-only + recompute", no human edit.

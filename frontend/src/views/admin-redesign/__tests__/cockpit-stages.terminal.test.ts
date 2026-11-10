@@ -77,7 +77,10 @@ describe('useCockpitStages 终态语义', () => {
     const s = build({
       currentStage: computed(() => 'learning'),
       isTerminal: computed(() => true),
-      isInterruptedTerminal: computed(() => true)
+      isInterruptedTerminal: computed(() => true),
+      /* 2026-10-31 五轮评审 P1：到 Learn 的前提是路径证据存在，夹具补齐
+         （无证据时指针钳制到路径档，属另一条契约） */
+      bindings: computed(() => ({ learningPathId: 'lp_t' }))
     });
 
     expect(s.stageDone('learning')).toBe(false);
@@ -89,7 +92,8 @@ describe('useCockpitStages 终态语义', () => {
     const s = build({
       currentStage: computed(() => 'learning'),
       isTerminal: computed(() => true),
-      isInterruptedTerminal: computed(() => false)
+      isInterruptedTerminal: computed(() => false),
+      bindings: computed(() => ({ learningPathId: 'lp_t' }))
     });
 
     expect(s.stageDone('learning')).toBe(true);
@@ -167,14 +171,14 @@ describe('useCockpitStages 总结步点按课计数', () => {
     }));
   }
 
-  it('12 课已生成 5 份总结：读数写 5/12，而不是「已生成」', () => {
+  it('12 课已出 5 份总结：读数写 5/12，而不是「已生成」', () => {
     const s = build({
       currentStage: computed(() => 'learning'),
       hasWrapup: computed(() => true),
       learnLessons: computed(() => lessonsWithSummary(12, 5))
     });
 
-    expect(s.stageProgress('wrapup')).toBe('已生成 5/12 课');
+    expect(s.stageProgress('wrapup')).toBe('已出总结 5/12 课');
     expect(s.stageMiniStatus('wrapup')).toBe('5/12');
   });
 
@@ -184,7 +188,7 @@ describe('useCockpitStages 总结步点按课计数', () => {
       learnLessons: computed(() => lessonsWithSummary(12, 12))
     });
 
-    expect(s.stageProgress('wrapup')).toBe('已生成 12/12 课');
+    expect(s.stageProgress('wrapup')).toBe('已出总结 12/12 课');
   });
 
   it('当前课堂的总结已落库但历史条目未带终态：按课堂 id 补记这一节', () => {
@@ -196,7 +200,7 @@ describe('useCockpitStages 总结步点按课计数', () => {
       learnLessons: computed(() => lessons)
     });
 
-    expect(s.stageProgress('wrapup')).toBe('已生成 1/12 课');
+    expect(s.stageProgress('wrapup')).toBe('已出总结 1/12 课');
   });
 
   it('无课程树（单节课堂会话控制台）：保留旧的「总结已生成」兜底', () => {

@@ -65,8 +65,11 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     'normalizedInput.problemSpace.realProblem',
     'normalizedInput.learnerProfile.surfaceGoal',
     'normalizedInput.confirmedProposal',
-    'normalizedInput.prerequisiteTree',
     'normalizedInput.understanding.adjustments',
+    // #192 复核残留：kc-mapper / path-reviewer 的 prerequisiteTree ref 指向**顶层**通道
+    // （载荷是 kcMapperInput.prerequisiteTree / path-generation 评审入参）；normalizedInput
+    // 从不产出该键，此前登记的 `normalizedInput.prerequisiteTree` 是永不存在的路径。
+    'prerequisiteTree',
     // stage-designer 声明 ref: sandbox:path.materials（路径关联资料包，附件在前、联网在后）。
     // 此前未登记 ⇒ prompts:check-handoff:strict 判失败（sandbox-path-unregistered）。
     'materials',
@@ -103,6 +106,11 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     'session.evidence',
     'session.wrapup',
     'learningState',
+    // #193（实例 1）：scenario 是 teaching 回合的「编排层整块组装」输入通道——
+    // buildTeachingTurnInput（ai-teaching/teaching-turn-shared.ts）把 taskKcs/cognitiveFrame/materials/
+    // taskProfile/pathProgress 等组装成单个顶层对象注入，没有单点抽取路径，因此**不作 routings 通道行**
+    // （通道行不变式要求可按 pathInRawOutput 装配）；它在 prompts/orchestration/teaching.yaml 以 fields 行
+    // 声明，并在此沙盘键注册表 + core inputs（sandbox:teaching.scenario）登记。
     'scenario',
     'scenario.interactionProfile',
     'interactionProfile',
@@ -121,6 +129,19 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     'learner.persona',
     'school.anchor',
     'task.profile',
+    // #181：开场生成器新增 learnerPrediction 输入（编排层 TaskContextBuilder 组装、
+    // v4-aux-skills 在调用前注入），同「编排注入」性质，登记后 check-handoff --strict 通过。
+    'learnerPrediction',
+    // #197：session-wrapup 实收 7 键，其中 knowledgeContext / sessionStructure 由编排层
+    // 现场拼装（teaching-session-lifecycle / wrapup-regen），提示词规则依赖但 core inputs 未声明。
+    // 补声明后这两个「编排注入」键需登记，否则 prompts:check-handoff --strict 判 sandbox-path-unregistered。
+    'session.knowledgeContext',
+    'session.structure',
+    // #199：learning-predictor 的输入契约补齐后，其三个「编排注入」键需登记——
+    // knowledgeStateSummary/taskContext 由教学链现场组装（TeachingContextBuilder），
+    // fatigueSignal 由 learningState 分类派生；不登记会让 --strict 判 sandbox-path-unregistered。
+    'knowledgeStateSummary',
+    'taskContext',
   ],
   'profile-agent': [
     'snapshot.dynamicState',

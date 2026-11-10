@@ -13,14 +13,16 @@ export interface APIConfig {
   apiUrl: string;
   apiKey: string;
   availableModels: string[];
+  /** 平台默认模型：没单独指定模型的 Skill 都走它。平台只有这一个默认——
+      2026-11-04 起不再有 defaultReasoningModel，推理与否由该 Skill 的思考模式 / 推理强度决定。 */
   defaultModel: string;
-  defaultReasoningModel: string;
   defaultEvaluationModel: string;
   defaultTemperature?: number;
   defaultMaxTokens?: number;
   /** 平台默认思考模式：default(跟随模型/上游) | enabled | disabled */
   defaultThinkingMode?: string;
-  /** 平台默认思考强度：default | high | max */
+  /** 平台默认思考强度：default | minimal | low | medium | high | max（实际哪几档能发由模型声明的
+   *  reasoningEfforts 决定，见 gateway/api-gateway/thinking-policy.ts） */
   defaultReasoningEffort?: string;
   /** 平台默认结构化输出：none（默认，行为不变）| json_object（json 媒介技能解码层强制 JSON） */
   defaultResponseFormat?: string;
@@ -39,8 +41,9 @@ const defaultConfig: APIConfig = {
   apiKey: process.env.AI_API_KEY || '',
   availableModels: [],
   defaultModel: process.env.AI_MODEL || '',
-  defaultReasoningModel: process.env.AI_MODEL_REASONING || '',
-  defaultEvaluationModel: process.env.AI_MODEL_REASONING || '',
+  // 评估默认的 env 种子：随 AI_MODEL_REASONING 一起退役（2026-11-04），改由平台默认模型兜底。
+  // 仅影响全新安装的初值——已有库里 defaultEvaluationModel 是持久化值，getConfig 优先取它。
+  defaultEvaluationModel: process.env.AI_MODEL || '',
   defaultTemperature: 0.7,
   defaultMaxTokens: 2048,
   defaultThinkingMode: 'default',
@@ -97,7 +100,6 @@ class APIConfigService {
             ? dbConfig.availableModels.split(',').filter(m => m.trim()) 
             : defaultConfig.availableModels,
           defaultModel: dbConfig.defaultModel || defaultConfig.defaultModel,
-          defaultReasoningModel: dbConfig.defaultReasoningModel || defaultConfig.defaultReasoningModel,
           defaultEvaluationModel: dbConfig.defaultEvaluationModel || defaultConfig.defaultEvaluationModel,
           defaultTemperature: dbConfig.defaultTemperature ?? defaultConfig.defaultTemperature,
           defaultMaxTokens: dbConfig.defaultMaxTokens ?? defaultConfig.defaultMaxTokens,
@@ -154,7 +156,6 @@ class APIConfigService {
           apiKey: encryptSecret(mergedConfig.apiKey, 'system.platform_api_configs.apiKey'),
           availableModels: mergedConfig.availableModels.join(',') || null,
           defaultModel: mergedConfig.defaultModel,
-          defaultReasoningModel: mergedConfig.defaultReasoningModel,
           defaultEvaluationModel: mergedConfig.defaultEvaluationModel,
           defaultTemperature: mergedConfig.defaultTemperature,
           defaultMaxTokens: mergedConfig.defaultMaxTokens,
@@ -178,7 +179,6 @@ class APIConfigService {
           apiKey: encryptSecret(mergedConfig.apiKey, 'system.platform_api_configs.apiKey'),
           availableModels: mergedConfig.availableModels.join(',') || null,
           defaultModel: mergedConfig.defaultModel,
-          defaultReasoningModel: mergedConfig.defaultReasoningModel,
           defaultEvaluationModel: mergedConfig.defaultEvaluationModel,
           defaultTemperature: mergedConfig.defaultTemperature,
           defaultMaxTokens: mergedConfig.defaultMaxTokens,
@@ -314,7 +314,6 @@ class APIConfigService {
     endpoint: string;
     apiKeyStatus: string;
     chatModel: string;
-    reasoningModel: string;
     evaluationModel: string;
     availableModels: string[];
     connectionStatus: string;
@@ -329,7 +328,6 @@ class APIConfigService {
       endpoint: config.apiUrl,
       apiKeyStatus: config.apiKey ? '已配置' : '未配置',
       chatModel: config.defaultModel,
-      reasoningModel: config.defaultReasoningModel,
       evaluationModel: config.defaultEvaluationModel,
       availableModels: config.availableModels,
       connectionStatus: dbConfig?.connectionStatus || 'unknown',

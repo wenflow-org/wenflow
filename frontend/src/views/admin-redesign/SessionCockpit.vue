@@ -8,7 +8,10 @@
       <div class="mk-status" :class="`mk-status--${headerHealth}`">
         <span class="mk-status__dot" aria-hidden="true"></span>
         <button type="button" class="mk-back" @click="goBack">← {{ backLabel }}</button>
-        <strong class="mk-status__title">只读监控 <span class="cp-title__id mono">{{ shortId }}</span></strong>
+        <!-- 2026-10-31 四轮评审 R5：本顶栏只渲染虚拟会话（真实会话不进此分支），
+             而下方就是继续/暂停/终止/自动驾驶等全套操控——「只读监控」与实际能力相反，
+             改「仿真操控台」；真实会话的只读声明在 hero chip（真实目标对话 · 只读监控） -->
+        <strong class="mk-status__title">仿真操控台 <span class="cp-title__id mono">{{ shortId }}</span></strong>
         <!-- 自动驾驶进行中的状态指示（停止按钮在控制台） -->
         <span v-if="autopilotRunning" class="mk-status__meta cp-topbar__autopilot">▶ 自动驾驶 · {{ Number(autopilot.steps || 0) }} 步</span>
         <span class="mk-status__sep"></span>
@@ -20,7 +23,7 @@
           class="mk-status__meta cp-simday"
           :title="simClock.enabled
             ? `日期模拟：起点 ${simClock.baseDate}。已推进 ${simClock.dayIndex}/${simClock.maxSimulatedDays} 天。课表 ${simClock.courseWeekdays.join('/')} · 每天 ${simClock.lessonsPerDay} 节${simClock.autoAdvance ? ' · 自动推进已开' : ''}`
-            : '日期模拟未开启（可在「日期模拟」设置开启）'"
+            : '日期模拟未开启'"
         >
           模拟 {{ simClock.enabled ? `第 ${simClock.dayIndex} 天` : '未开启' }}
         </span>
@@ -31,8 +34,8 @@
           class="cp-budget"
           :class="`is-${budgetTone}`"
           :title="budgetUsage.unlimited
-            ? `本会话累计 AI 调用 ${budgetUsage.used}（含重试）。当前未设置成本上限（不限）。可在画像/故事预算中设置上限`
-            : `本会话累计 AI 调用 ${budgetUsage.used}/${budgetUsage.limit}（含重试）。可在画像/故事预算中调整上限`"
+            ? `本会话累计 AI 调用 ${budgetUsage.used}（含重试）。当前未设置成本上限（不限）`
+            : `本会话累计 AI 调用 ${budgetUsage.used}/${budgetUsage.limit}（含重试）`"
         >
           <span class="cp-budget__label">AI 调用</span>
           <!-- 进度量化统一走 .mk-minibar：预算三档（默认 / warn / full）与 ok/warn/bad 语义一一对应 -->
@@ -52,24 +55,41 @@
     <!-- ===== hero（原型 renderSessionDetail）：会话身份 + 状态/阶段 pills + 真实能力动作 =====
          主标题传会话主题（2026-10-04 全站评审 P2-7：截断裸会话 ID 做 24px/700 主标题不可读，
          人类可读主题此前缩在 12.5px 副行）；无主题回退 shortId。会话 ID 降为 pills 行 meta。 -->
-    <MkDetailHero class="cp-hero" avatar="S" :title="heroTitle" :sub="heroSub">
+    <MkDetailHero class="cp-hero" :avatar="heroAvatar" :title="heroTitle" :sub="heroSub">
       <template #pills>
         <!-- 状态 pill：生命周期合成态（与原顶栏徽章同源，原型 statusPill 位） -->
         <span class="mk-badge" :class="`mk-badge--${heroStatusTone}`" :title="statusTitle">{{ heroStatusText }}</span>
-        <!-- 阶段 pill：归一后的当前阶段（原型 pill--info 位） -->
-        <span class="mk-badge mk-badge--info">{{ stageLabel(currentStage) }}</span>
-        <!-- 课堂类型 pill（2026-10-21）：正课/复习课/延伸课；后两者不结算任务 -->
-        <span v-if="classroomMode" class="mk-badge" :class="classroomModeBadge" :title="classroomModeTitle">{{ classroomModeText }}</span>
+        <!-- 路径进度 pill（2026-10-31 外部评审 P1-1）：主标题是路径名后，「已完成」只指本节课堂，
+             首屏须并列路径真实进度（子任务口径，与 Path 阶段步点同源），不再让 1/13 读成学完 -->
+        <span
+          v-if="heroUsesPathTitle && pathProgressText && !pathProgressRepeatedInStepper"
+          class="mk-badge mk-badge--muted"
+          :title="`路径进度按子任务统计（与「阶段推进」步点同源）：${pathProgressText}`"
+        >路径 {{ pathProgressText }}</span>
+        <!-- 阶段 pill：归一后的当前阶段（原型 pill--info 位）。
+             当前阶段是「路径」且上一枚已经在写「路径 任务 x/y」时不再重复一枚只写「路径」的
+             蓝底徽章——同一行两个「路径」，后一个没有值（2026-11-02 评审 R60）。 -->
+        <!-- 阶段 pill 撤（2026-11-09 头部降噪）：当前阶段由下方 stepper 的高亮瓦片承担，
+             同屏再挂一枚只写阶段名的蓝胶囊是复读（原 R60 判例只治了「路径」重复的一种情形）。
+             阶段完成口径仍写在 stepper 那一条的 title 里。 -->
+        <!-- 课堂类型 pill（2026-10-21）：正课/复习课/延伸课。正课是默认档，默认档不挂标签——
+             绝大多数会话都是正课，一枚「正课」徽章不传递信息；只有复习课 / 延伸课要被看见。 -->
+        <span v-if="classroomMode && classroomMode !== 'tutor'" class="mk-badge" :class="classroomModeBadge" :title="classroomModeTitle">{{ classroomModeText }}</span>
         <!-- 只读模式声明（原顶栏 .mk-status__meta 迁入，2026-10-11 走查）：真实会话控制台只读，
              这条提示得随身份区一起在，不能随顶栏撤掉 -->
         <span v-if="isRealMode" class="mk-badge mk-badge--muted" title="真实会话控制台只读：不可推进阶段、不可改会话状态">{{ modeText }}</span>
-        <!-- 回合 pill 撤（2026-10-04 全站评审 P3#13）：回合数单源=「阶段推进」卡 statstrip
-             「已用回合」格，同屏双写收敛 -->
-        <!-- 学习者身份（2026-10-18 用户走查）：页头此前只说「这是哪个会话」，不说是谁的会话；
-             名字常显、邮箱与 id 进 title，入口按钮在动作区（唯一入口，不重复挂第二枚） -->
-        <span v-if="learner" class="mk-badge mk-badge--muted cp-hero__learner" :title="learnerTitle('会话所属学习者')">
+        <!-- 学习者身份（2026-10-18 走查 → 2026-11-09 合并入口）：这一格既是「这是谁的会话」的读数，
+             也是去学习者详情的入口。此前读数在 pills 行、入口在右侧动作区，同一件事两处摆放；
+             现合并成这一枚可点徽章（名字常显、邮箱与 id 进 title），动作区不再出第二枚。 -->
+        <button
+          v-if="learner"
+          type="button"
+          class="mk-badge mk-badge--muted cp-hero__learner cp-hero__learner--link"
+          :title="learnerTitle('查看学习者详情')"
+          @click="openLearnerDetail"
+        >
           学习者 {{ learnerText }}
-        </span>
+        </button>
         <!-- 会话 ID meta：主标题已让位给会话主题；2026-10-23 走查把截断裸 ID 也从 pills 行撤下
              （「…4d2-7ac8d952403d」紧贴学习者徽章，读成身份的一部分）。完整 ID 在 URL、
              会话数据包与复制 JSON 里，排障取用不受影响。 -->
@@ -80,13 +100,13 @@
              ——顶栏刷全站 live 域，本页会话载荷走独立 console 接口不在其中，读者点了以为重复。
              现由本页 watch(liveRefreshSeq) 接住顶栏刷新（同 Orchestrator 判例），hero 不再出刷新钮。 -->
         <template v-if="isRealMode">
-          <!-- 学习者详情入口（2026-10-18）：目标对话 / 学习路径 / 教学会话三处此前都没有
-               去学习者详情的按钮；返回靠 subPage.from 记住本座舱页签 -->
-          <button v-if="learner" type="button" class="mk-btn" :title="learnerTitle('查看学习者详情')" @click="openLearnerDetail">查看学习者</button>
+          <!-- 学习者入口已并入 pills 行的「学习者 X」徽章（2026-11-09 头部降噪：
+               同一件事不再两处摆放）。 -->
           <!-- 异常会话的唯一排查出口（2026-10-26）：列表侧不摆第二颗钮（2026-10-19 决定），
                出口放在座舱里，按 sessionId 落到执行日志的 Trace 归组。 -->
           <button type="button" class="mk-btn" @click="goExecLogs">执行日志</button>
-          <button type="button" class="mk-btn" :title="backTip" @click="goBack">← {{ backLabel }}</button>
+          <!-- 返回钮撤（2026-11-09 头部降噪）：壳层面包屑左侧那颗「‹」与它同目标同语义，
+               右上角再来一枚大按钮是同一动作的第二处摆法；返回目标与 tip 由面包屑承载。 -->
         </template>
         <!-- 动作区只放真实能力（原型「导出日志」假钮不搬）：会话生命周期控制（vlab-controls 统一模型）
              从统一控制台迁入 hero 动作位；危险动作（停止/删除）用 danger 形态（原型「中断会话」位） -->
@@ -105,11 +125,28 @@
 
     <!-- 教学建议条（原教学会话抽屉「建议」页签的文案落点，2026-10-01 随抽屉退役迁入座舱）：
          真实会话控制台接口本就带回 advisory（priority/title/text），数据真实不硬造 -->
-    <div v-if="realAdvisory" class="cp-advisory" :class="`cp-advisory--${realAdvisory.priority}`" role="note">
+    <div
+      v-if="realAdvisory"
+      class="cp-advisory"
+      :class="[`cp-advisory--${realAdvisory.priority}`, { 'cp-advisory--collapsed': advisoryCollapsed }]"
+      role="note"
+    >
       <span class="mk-badge" :class="`mk-badge--${realAdvisory.priority === 'high' ? 'bad' : 'warn'}`">教学建议</span>
-      <span class="cp-advisory__text"><template v-if="realAdvisory.title">{{ realAdvisory.title }}<template v-if="realAdvisory.text"> · </template></template>{{ realAdvisory.text }}</span>
+      <!-- 2026-11-09 头部降噪：这条横跨全屏、常驻占近 50px，切任何阶段都杵在中间——
+             （a）给「收起 / 展开」，收起后只留标题行、正文进 title，视口立刻还给下方内容区；
+             （b）文案默认单行省略，不再把头部顶高。收起态只作用于当前这条建议
+             （advisoryKey 变化即自动展开，换会话/换建议不会被继承的收起态藏住）。 -->
+      <span class="cp-advisory__text" :title="advisoryFullText">
+        <template v-if="realAdvisory.title">{{ realAdvisory.title }}<template v-if="realAdvisory.text"> · </template></template>{{ realAdvisory.text }}
+      </span>
       <!-- 学员处置（2026-10-21）：v0 只留痕，座舱如实展示「保留/稍后再看/预览过」 -->
       <span v-if="learnerAdvisoryResponse" class="mk-badge mk-badge--muted" :title="`学员处置记录时间：${learnerAdvisoryResponse.at || '未记录'}`">学员处置 · {{ learnerAdvisoryResponse.label }}</span>
+      <button
+        type="button"
+        class="mk-link cp-advisory__toggle"
+        :aria-expanded="!advisoryCollapsed"
+        @click="advisoryCollapsed = !advisoryCollapsed"
+      >{{ advisoryCollapsed ? '展开' : '收起' }}</button>
     </div>
 
     <!-- 延伸学进行中（assisted 轨）：回合进度实时可见，结束后由下方「延伸学观测」接棒 -->
@@ -155,11 +192,11 @@
         <!-- ① 执行推进（跨阶段：自动驾驶（全流程后台）/ 停止自动驾驶；黑盒与真实会话不提供） -->
         <template v-if="!isRealMode && !isBlackbox">
           <template v-if="autopilotQueued">
-            <button type="button" class="cp-btn" :disabled="busy" title="自动驾驶运行名额已满，正在排队等待，点击取消排队" @click="act('autopilotStop')">取消排队（第 {{ autopilot.queuePosition || 1 }} 位）</button>
+            <button type="button" class="cp-btn" :disabled="busy" title="自动驾驶运行名额已满，正在排队等待" @click="act('autopilotStop')">取消排队（第 {{ autopilot.queuePosition || 1 }} 位）</button>
           </template>
           <template v-else-if="!autopilotRunning">
             <button v-if="!autopilotStopping" type="button" class="cp-btn cp-btn--primary" :disabled="autopilotStartDisabled" :title="autopilotStartTitle" @click="act('autopilotStart')">自动驾驶</button>
-            <button v-else type="button" class="cp-btn" disabled title="已请求停止自动驾驶：后台已停止推进，可点击「自动驾驶」重新启动" @click="act('autopilotStart')">已请求停止</button>
+            <button v-else type="button" class="cp-btn" disabled title="已请求停止自动驾驶：后台已停止推进" @click="act('autopilotStart')">已请求停止</button>
           </template>
           <button v-else type="button" class="cp-btn" :disabled="busy" title="停止自动驾驶：当前课推进完本轮后停止后台自动运行（学习进度与对话保留，可随时再次启动）" @click="act('autopilotStop')">停止自动驾驶</button>
           <span class="cp-console__sep"></span>
@@ -174,7 +211,11 @@
         </template>
         <template v-if="!isRealMode && !isBlackbox && activeTab === 'path'">
           <button type="button" class="cp-btn" :disabled="advancePathDisabled" :title="advancePathTitle" @click="act('advancePath')">生成路径</button>
-          <button type="button" class="cp-btn cp-btn--primary" :disabled="startLearningDisabled" :title="startLearningTitle" @click="act('startLearning')">启动教学</button>
+          <!-- 教学已启动后本页不再挂「待启动」引导态（2026-10-31 四轮评审 R2）：
+               课堂已在「学习」页签推进（甚至已完成第 1 课），主位让给「进入课堂」；
+               启动教学只在真正未开始时出现 -->
+          <button v-if="hasLearningProgress" type="button" class="cp-btn cp-btn--primary" title="教学已在「学习」页签进行中" @click="selectStageTab('learning')">进入课堂 →</button>
+          <button v-else type="button" class="cp-btn cp-btn--primary" :disabled="startLearningDisabled" :title="startLearningTitle" @click="act('startLearning')">启动教学</button>
           <button type="button" class="cp-btn" :disabled="resetPathDisabled" :title="resetPathTitle" @click="act('resetPath')">重建路径</button>
         </template>
         <template v-if="!isRealMode && !isBlackbox && activeTab === 'learning'">
@@ -210,59 +251,42 @@
       </div>
     </div>
 
-    <!-- ===== 阶段推进（2026-10-12 重设计：卡 = 标题 + 完成计数 + 出口按钮的头部 + 步点阵本体。
-         原下方 MkStatStrip 三读数撤——「当前阶段/下一阶段」步点阵自身已表达、「已用回合」与
-         Goal 步点的「学习者发言 N」近重复且历史上两次被误读（含/不含平台回复）；头部
-         「回合状态机」黑话 meta 同步撤。步点即阶段页签导航。） ===== -->
-    <section class="mk-card cp-stepcard">
-      <div class="mk-card__head">
-        <h3 class="mk-card__title">阶段推进</h3>
-        <span class="cp-stepcard__spacer"></span>
-        <span class="mk-card__meta">已完成 <b class="mono">{{ stageDoneCount }}</b> / {{ stageFlow.length }} 阶段</span>
-        <!-- 下游直达（2026-10-11 走查）：Path / Learn 的数据本卡已摆在页签里，但下钻到它们自己的页面
-             此前要回列表再点一次。两条出口的取数判据与返回记忆见 stageJumpTargets。 -->
-        <span v-if="stageJumpTargets.length" class="cp-stepjumps">
-          <button
-            v-for="j in stageJumpTargets"
-            :key="j.key"
-            type="button"
-            class="mk-btn mk-btn--sm"
-            :title="j.title"
-            @click="j.go()"
-          >{{ j.label }}</button>
-        </span>
-      </div>
-      <div class="cp-cardbody">
-        <!-- 2026-10-15 用户走查重设计：原实现是「1380px 宽卡里四枚 20px 圆点各自居中」，
-             水平空间几乎全空、读数缩在 12.5px 灰字里（用户原话「很不好看，利用率也低」）。
-             改为四枚等宽阶段瓦片：每票一条状态色顶轨 + 状态标记 + 阶段名（正文档）+ 真实读数，
-             既填满卡宽，又把「推进到哪一步、每步什么读数」一屏读完。瓦片间用 chevron 连成流水线。 -->
-        <div class="cp-stepper" role="tablist" aria-label="阶段推进" @keydown="onStepKeydown">
-          <template v-for="(st, i) in stageFlow" :key="st">
-            <span v-if="i" class="cp-stepper__arrow" aria-hidden="true"></span>
-            <button
-              :id="`cp-tab-${st}`"
-              type="button"
-              role="tab"
-              class="cp-stp"
-              :class="`cp-stp--${stepState(st)}`"
-              :aria-selected="activeTab === st"
-              :aria-controls="`cp-tabpanel-${st}`"
-              :tabindex="activeTab === st ? 0 : -1"
-              :title="isBlackbox ? '黑盒模式下阶段不可手动切换' : `打开「${stageLabel(st)}」页签`"
-              :disabled="isBlackbox"
-              @click="selectStageTab(st)"
-            >
-              <span class="cp-stp__dot" aria-hidden="true">{{ stepState(st) === 'done' ? '✓' : i + 1 }}</span>
-              <span class="cp-stp__body">
-                <span class="cp-stp__name">{{ stageLabel(st) }}</span>
-                <span class="cp-stp__meta">{{ stepMeta(st) }}</span>
-              </span>
-            </button>
-          </template>
-        </div>
-      </div>
-    </section>
+    <!-- ===== 阶段推进（2026-11-09 紧凑化重构）：本质是控制下方内容区的四步分段 Tab，
+         此前被画成「大卡片套大卡片」——外层 mk-card 边框 + 卡头（标题 / 「阶段已推进 N/4」/
+         下游直达按钮），里面的四枚瓦片又是双行高卡片，光这一块就吃掉约 140px 高度，
+         把下方的对话与右侧「会话日志」全挤到下半屏。
+         现在：去外层卡与整个卡头，四枚瓦片压成一行分段步骤条（状态点 + 阶段名 + 核心读数同行），
+         高度约 40px。完成态口径（课堂收尾/出总结）从卡头 meta 移到本条 title，语义不丢。
+         下游直达（查看课堂会话）撤——Learn 阶段里每节课本来就有「查看课堂对话」入口，
+         同屏两处做同一件事只会让人犹豫点哪个。 ===== -->
+    <div
+      class="cp-stepper"
+      role="tablist"
+      aria-label="阶段推进"
+      title="阶段完成＝本会话课堂已收尾或已出总结（与「路径任务是否学完」无关）"
+      @keydown="onStepKeydown"
+    >
+      <template v-for="(st, i) in stageFlow" :key="st">
+        <span v-if="i" class="cp-stepper__arrow" aria-hidden="true"></span>
+        <button
+          :id="`cp-tab-${st}`"
+          type="button"
+          role="tab"
+          class="cp-stp"
+          :class="[`cp-stp--${stepState(st)}`, { 'cp-stp--current': activeTab === st }]"
+          :aria-selected="activeTab === st"
+          :aria-controls="`cp-tabpanel-${st}`"
+          :tabindex="activeTab === st ? 0 : -1"
+          :title="isBlackbox ? '黑盒模式下阶段不可手动切换' : undefined"
+          :disabled="isBlackbox"
+          @click="selectStageTab(st)"
+        >
+          <span class="cp-stp__dot" aria-hidden="true">{{ stepState(st) === 'done' ? '✓' : i + 1 }}</span>
+          <span class="cp-stp__name">{{ stageLabel(st) }}</span>
+          <span class="cp-stp__meta">{{ stepMeta(st) }}</span>
+        </button>
+      </template>
+    </div>
 
     <!-- ===== 主体：左侧内容 + 右侧控制台 ===== -->
     <div class="cp-body">
@@ -316,7 +340,11 @@
                整包 JSON 里，运营没有可读落点。字段由后端 goalUnderstandingView 空裁剪，
                这里缺什么不渲染什么，绝不硬造。 -->
           <div v-if="goalUnderstanding" class="cp-cardbody cp-goal-u">
-            <div class="mk-facts">
+            <!-- 2026-11-09 微调（图2 目标阶段）：客观体量 / 单次时长 / 时间预算 / 时间范围 四字段
+                 单行四列并排（cp-goal-u__facts 仅作用于本座舱目标理解栅格，不覆写全局 .mk-facts 原语）。
+                 截止日（绝对截止，可能为空）语义偏日期、非「体量/时长/预算/范围」同轴，移到行末：
+                 无截止日时四字段恰好整行；有截止日时自然落到第二行，不挤断四字段单行。 -->
+            <div class="mk-facts cp-goal-u__facts">
               <div v-if="goalUnderstanding.timeDimensions?.objectiveScopeHours != null">
                 <span title="R8 时间模型：客观内容体量小时（权威预算依据）">客观体量</span>
                 <strong>{{ goalUnderstanding.timeDimensions.objectiveScopeHours }} 小时</strong>
@@ -325,10 +353,6 @@
                 <span title="R8 时间模型：单次学习分钟（原子任务 90 分钟封顶的换算输入）">单次时长</span>
                 <strong>{{ goalUnderstanding.timeDimensions.sessionsLengthMin }} 分钟</strong>
               </div>
-              <div v-if="goalUnderstanding.timeDimensions?.deadlineDate">
-                <span title="R8 时间模型：绝对截止日（无期限为空，不要求总周数）">截止日</span>
-                <strong>{{ goalUnderstanding.timeDimensions.deadlineDate }}</strong>
-              </div>
               <div v-if="goalUnderstanding.availableResources?.timeBudget">
                 <span>时间预算</span>
                 <strong>{{ goalUnderstanding.availableResources.timeBudget }}</strong>
@@ -336,6 +360,10 @@
               <div v-if="goalUnderstanding.availableResources?.timeHorizon">
                 <span>时间范围</span>
                 <strong>{{ goalUnderstanding.availableResources.timeHorizon }}</strong>
+              </div>
+              <div v-if="goalUnderstanding.timeDimensions?.deadlineDate">
+                <span title="R8 时间模型：绝对截止日（无期限为空，不要求总周数）">截止日</span>
+                <strong>{{ goalUnderstanding.timeDimensions.deadlineDate }}</strong>
               </div>
             </div>
             <p v-if="goalUnderstanding.timeDimensions?.scopeAnchor" class="cp-goal-u__line">
@@ -357,11 +385,14 @@
               <span class="cp-goal-u__tag">边界</span>{{ goalUnderstanding.constraints.join('；') }}
             </p>
           </div>
-          <div class="cp-transcripts">
+          <!-- 目标对话自然生长（2026-10-31 四轮评审 R10）：固定高度滚动容器把第 9 条消息
+               削掉大半、12 条只露出 8 条——对话是本卡主体，去掉内部滚动让整卡随页面走，
+               全页走查/截图不再丢消息；课堂转录（cp-transcripts 原用法）保持定高滚动 -->
+          <div class="cp-transcripts cp-transcripts--free">
             <!-- 未加载先骨架，不把「尚未加载」当「确实为空」（2026-10-06 审核 #47） -->
             <MkSkeleton v-if="!session" variant="rows" :count="3" :h="36" :radius="8" />
             <template v-else>
-              <article v-for="(message, index) in goalConversationMessages" :key="`goal-${index}`" class="cp-transcript__message" :class="message.role === 'assistant' ? 'is-teacher' : 'is-learner'">
+              <article v-for="(message, index) in goalConversationMessages" :key="`goal-${index}`" class="cp-transcript__message" :class="message.role === 'assistant' ? 'is-teacher' : (isRealMode ? 'is-learner is-real-learner' : 'is-learner')">
                 <span>{{ message.role === 'assistant' ? '平台目标' : isRealMode ? '学习者' : '虚拟学习者' }}</span>
                 <!-- 模型输出是 markdown（代码围栏/行内代码/粗体）：按产品同一套 markdown-it + DOMPurify 渲染 -->
                 <div class="cp-transcript__content" v-html="renderAiMessageHtml(message.content)"></div>
@@ -369,7 +400,6 @@
               <MkEmptyState
                 v-if="!goalConversationMessages.length"
                 compact
-                icon="◌"
                 title="尚未产生目标对话"
                 description="目标澄清尚未开始。"
               />
@@ -380,31 +410,34 @@
         <!-- 回合记录（仅虚拟会话，Goal 页）：Goal + 课堂按序合并的旅程表。真实会话的阶段面板
              已各自承载转录，同屏再列一张同样的表就是重复（2026-10-11「goal 阶段对话记录会和记录
              会不会重复了」）。2026-10-12 四页拆分：会话级卡片归位到所属阶段页，不再全页签复读。 -->
-        <section v-if="!isRealMode && activeTab === 'goal'" class="mk-card">
+        <section v-if="!isRealMode && activeTab === 'goal' && turnRowsShown.length" class="mk-card">
           <div class="mk-card__head">
-            <h3 class="mk-card__title">回合记录</h3>
-            <!-- 加载中 meta 留空（骨架已在下方承担加载态；不写「暂无对话记录」假空文案） -->
-            <span class="mk-card__meta" :title="turnMetaTitle || undefined">{{ turnMeta }}</span>
+            <h3 class="mk-card__title">课堂回合</h3>
+            <!-- 加载中 meta 留空（骨架已在下方承担加载态；不写「暂无对话记录」假空文案）。
+                 2026-11-03：尾部「目标段由对话卡全文呈现」撤除——它在解释哪张卡承载哪一段，
+                 属布局自述；「目标对话」卡就在本页上方，读者自己看得见。 -->
+            <span class="mk-card__meta">{{ `${turnRowsShown.length} 条课堂对话` }}</span>
           </div>
           <!-- 会话未加载（首载/切换会话）先给骨架：不得把「尚未加载」渲染成「暂无对话记录」（2026-10-06 审核 #47） -->
           <div v-if="!session" class="cp-cardbody"><MkSkeleton variant="rows" :count="4" :h="12" :radius="4" /></div>
-          <!-- 列序对齐原型（# / 类型 / 内容 / …）：Token/耗时/解答分接口没有，不硬造，以真实「时间」列收尾 -->
-          <div v-else-if="turnRows.length" class="mk-table-scroll">
+          <!-- 列序对齐原型（# / 类型 / 内容 / …）：Token/耗时/解答分接口没有；时间列仅在有真实
+               时间时渲染（消息体无时间戳时不摆一列「—」，2026-10-31 三轮评审） -->
+          <div v-else-if="turnRowsShown.length" class="mk-table-scroll">
             <table class="mk-table cp-turns">
               <thead>
                 <tr>
                   <th scope="col" class="cp-turns__num">#</th>
                   <th scope="col">类型</th>
                   <th scope="col" class="cp-turns__wrap">内容</th>
-                  <th scope="col">时间</th>
+                  <th v-if="turnRowsHaveTime" scope="col">时间</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="row in turnRows" :key="row.key">
-                  <td class="mono cp-turns__num">{{ row.index }}</td>
+                <tr v-for="(row, i) in turnRowsShown" :key="row.key">
+                  <td class="mono cp-turns__num">{{ i + 1 }}</td>
                   <td><span class="mk-badge" :class="row.tone">{{ row.type }}</span></td>
                   <td class="cp-turns__wrap">{{ row.content }}</td>
-                  <td class="mono cp-turns__time">{{ row.time }}</td>
+                  <td v-if="turnRowsHaveTime" class="mono cp-turns__time">{{ row.time }}</td>
                 </tr>
               </tbody>
             </table>
@@ -454,8 +487,14 @@
               <template v-if="!learnLessons.length">暂无记录</template>
             </span>
           </div>
-          <!-- 双栏：左侧课程树 + 右侧对话 -->
-          <div class="cp-learn-grid">
+          <!-- 无课程且无课堂数据时整卡收敛为单一空态（2026-10-31 三轮评审 P1：原左右两栏各渲染
+               各的空态文字，左右错位并列读作两句话打架）。真实会话可能只有课堂转录/检查点而没有
+               建课树（里程碑未建课）——此时不能藏掉课堂数据，对话独占整行展示。 -->
+          <div v-if="!lessonTree.length && !learnTimeline.length" class="cp-learn-empty">
+            <p class="cp-none">尚未生成课程，请先生成学习路径并启动教学。</p>
+          </div>
+          <!-- 双栏：左侧课程树 + 右侧对话；无树有数据时对话独占整行 -->
+          <div v-else class="cp-learn-grid" :class="{ 'cp-learn-grid--notree': !lessonTree.length }">
             <!-- 左侧：里程碑 → 课程树 -->
             <nav class="cp-learn-tree" v-if="lessonTree.length">
               <div v-for="group in lessonTree" :key="group.milestone" class="cp-learn-tree__group">
@@ -479,52 +518,60 @@
                 </button>
               </div>
             </nav>
-            <p v-else class="cp-none">尚未生成课程，请先生成路径并启动教学。</p>
             <!-- 右侧：对话区 -->
             <div class="cp-learn-chat">
               <div v-if="viewedLesson" class="cp-lesson-head">
                 <div class="cp-lesson-head__main">
                   <span class="cp-lesson-head__state" :data-state="viewedLesson.state">{{ lessonStateLabel(viewedLesson.state) }}</span>
                   <strong>第 {{ lessonNumber(viewedLesson.taskId) }} 课 · {{ viewedLesson.title }}</strong>
-                  <span class="cp-lesson-head__ms">{{ viewedLesson.milestone }}</span>
                 </div>
+                <!-- 里程碑名独占一行（2026-10-31 外部评审）：原与标题同行 baseline 排列，
+                     长里程碑名被挤成两行短字；作副标题独立成行读感正常 -->
+                <span v-if="viewedLesson.milestone" class="cp-lesson-head__ms">{{ viewedLesson.milestone }}</span>
               </div>
               <!-- 加载态用骨架，禁止纯文字（T2 硬约束；2026-10-06 审核 #47） -->
               <MkSkeleton v-if="teachingDetailLoading" variant="rows" :count="3" :h="12" :radius="4" />
               <!-- 单课总结不在此渲染（2026-10-12 二次拍板「总结就单独总结」）：总结只住总结页签，
                    本列只放课堂对话；要总结去总结页点对应课。 -->
-              <template v-if="learnConversationMessages.length">
-                <article v-for="(message, index) in learnConversationMessages" :key="`learn-${index}`" class="cp-transcript__message" :class="message.role === 'assistant' ? 'is-teacher' : 'is-learner'">
-                  <span>{{ message.role === 'assistant' ? '教师' : isRealMode ? '学习者' : '虚拟学习者' }}</span>
-                  <div class="cp-transcript__content" v-html="renderAiMessageHtml(message.content)"></div>
-                </article>
-              </template>
-              <p v-else-if="teachingDetailFailed && !learnConversationMessages.length" class="cp-degrade">教学记录获取失败 <button type="button" class="mk-link" @click="loadTeachingDetail(selectedTeachingSessionId)">重试</button></p>
-              <p v-else-if="!viewedLesson" class="cp-none">尚未选择课程。</p>
-              <p v-else-if="!learnConversationMessages.length" class="cp-none">{{ learnEmptyHint }}</p>
-              <!-- 检查点：题目/作答/判分（2026-10-13 走查「教学会话看不到检查点题目」）。
-                   2026-10-22 用户「检查点又在下面了」：答错重答会在 history 追加同 checkpointId
-                   的新行（后端用来计重答次数），逐行渲染会让同一道题看起来重复；这里按 id 归并，
-                   保留最新一次裁决并标尝试次数。 -->
-              <div v-if="checkpointGroups.length" class="cp-checkpoints">
-                <div class="cp-checkpoints__head">
-                  <span class="cp-checkpoints__title">检查点</span>
-                  <span
-                    class="cp-checkpoints__meta"
-                  >{{ checkpointGroups.length }} 个 · {{ lessonCheckpoints.length }} 次作答</span>
-                </div>
-                <div v-for="(g, i) in checkpointGroups" :key="`cp-${i}`" class="cp-checkpoint">
-                  <p class="cp-checkpoint__q">{{ g.cp.question || g.cp.title || '（无题干）' }}</p>
-                  <div class="cp-checkpoint__meta">
-                    <span class="mk-badge" :class="g.cp.passed === true ? 'mk-badge--ok' : g.cp.passed === false ? 'mk-badge--warn' : 'mk-badge--muted'">{{ g.cp.passed === true ? '通过' : g.cp.passed === false ? '未通过' : '未判分' }}</span>
-                    <span v-if="g.attempts > 1" class="cp-checkpoint__tag">尝试 {{ g.attempts }} 次</span>
-                    <span class="cp-checkpoint__tag">{{ checkpointTypeLabel(g.cp.type) }}</span>
-                    <span v-if="g.cp.judgedBy" class="cp-checkpoint__tag">判分 {{ g.cp.judgedBy }}</span>
-                    <span v-if="g.cp.understanding != null" class="cp-checkpoint__tag" title="AI 对本次作答的理解度估计">理解度 {{ Math.round(g.cp.understanding * 100) }}%</span>
-                    <span v-if="g.cp.conceptName" class="cp-checkpoint__concept">{{ g.cp.conceptName }}</span>
+              <template v-if="learnTimeline.length">
+                <template v-for="entry in learnTimeline" :key="entry.key">
+                  <article v-if="entry.message" class="cp-transcript__message" :class="entry.message.role === 'assistant' ? 'is-teacher' : (isRealMode ? 'is-learner is-real-learner' : 'is-learner')">
+                    <span>{{ entry.message.role === 'assistant' ? '教师' : isRealMode ? '学习者' : '虚拟学习者' }}</span>
+                    <div v-if="entry.message.content" class="cp-transcript__content" v-html="renderAiMessageHtml(entry.message.content)"></div>
+                    <!-- 课堂视觉产物：与学习者侧同一套确定性渲染（mermaid + 多图型 SVG），
+                         运营在座舱里能直接看到老师当时摆的图，而不是只看到「见图」二字。 -->
+                    <TeachingDiagram
+                      v-for="(diagram, di) in entry.message.diagrams"
+                      :key="`${entry.key}-d${di}`"
+                      :code="String(diagram.code || '')"
+                      :caption="diagram.caption || null"
+                    />
+                    <TeachingFigure
+                      v-for="(figure, fi) in entry.message.figures"
+                      :key="`${entry.key}-f${fi}`"
+                      :figure="figure"
+                    />
+                  </article>
+                  <!-- 检查点：题目/作答/判分。题目走结构化通道、不进聊天逐字稿，所以按时间插回
+                       它发生的那一回合（2026-10-19 用户走查「不符合课堂阅读顺序」）；
+                       2026-10-22 归并保留：同 checkpointId 只渲染最新裁决并标尝试次数。 -->
+                  <div v-else-if="entry.checkpoint" class="cp-checkpoint cp-checkpoint--inline">
+                    <p class="cp-checkpoint__q">{{ entry.checkpoint.question || entry.checkpoint.title || '（无题干）' }}</p>
+                    <div class="cp-checkpoint__meta">
+                      <span class="mk-badge" :class="entry.checkpoint.passed === true ? 'mk-badge--ok' : entry.checkpoint.passed === false ? 'mk-badge--warn' : 'mk-badge--muted'">{{ entry.checkpoint.passed === true ? '通过' : entry.checkpoint.passed === false ? '未通过' : '未判分' }}</span>
+                      <span v-if="entry.checkpoint.attempts != null && entry.checkpoint.attempts > 1" class="cp-checkpoint__tag">尝试 {{ entry.checkpoint.attempts }} 次</span>
+                      <span class="cp-checkpoint__kind">检查点</span>
+                      <span class="cp-checkpoint__tag">{{ checkpointTypeLabel(entry.checkpoint.type) }}</span>
+                      <span v-if="entry.checkpoint.judgedBy" class="cp-checkpoint__tag">判分 {{ entry.checkpoint.judgedBy }}</span>
+                      <span v-if="entry.checkpoint.understanding != null" class="cp-checkpoint__tag" title="AI 对本次作答的理解度估计">理解度 {{ Math.round(entry.checkpoint.understanding * 100) }}%</span>
+                      <span v-if="entry.checkpoint.conceptName" class="cp-checkpoint__concept">{{ entry.checkpoint.conceptName }}</span>
+                    </div>
                   </div>
-                </div>
-              </div>
+                </template>
+              </template>
+              <p v-else-if="teachingDetailFailed && !learnTimeline.length" class="cp-degrade">教学记录获取失败 <button type="button" class="mk-link" @click="loadTeachingDetail(selectedTeachingSessionId)">重试</button></p>
+              <p v-else-if="!viewedLesson" class="cp-none">尚未选择课程。</p>
+              <p v-else-if="!learnTimeline.length" class="cp-none">{{ learnEmptyHint }}</p>
             </div>
           </div>
         </section>
@@ -553,13 +600,16 @@
             <span class="mk-card__meta">{{ wrapupHeadMeta }}</span>
             <!-- 跨页指引（2026-10-12 走查「为啥资料看不到」）：四页拆分后资料归 Goal 页，
                  本页不留正文，给一颗确定性出口——点 stepper 也能到，这里免找 -->
-            <button v-if="realMaterials.length" type="button" class="mk-link" title="学习者资料在目标页" @click="selectStageTab('goal')">学习者资料在目标页 →</button>
+            <button v-if="realMaterials.length" type="button" class="mk-link" @click="selectStageTab('goal')">学习者资料在目标页 →</button>
           </div>
 
           <!-- 终局总结（已生成时；总在前、单课分列在后） -->
           <template v-if="hasWrapup">
             <div class="cp-wrapup-stats" v-if="pathDetailTitle || wrapupSourceBadge || sessionLoadView">
-              <div class="cp-wrapup-stats__goal" v-if="pathDetailTitle">
+              <!-- 2026-11-09 头部降噪（图6）：路径名与页 H1 同文时（目标对话生成的路径，
+                   名字就是那句目标），这里是同一串字的第三次出现（面包屑 / H1 / 本卡）。
+                   与 H1 不同文时才显示——课堂会话页的 H1 是课名，这时的「学习目标」是真信息。 -->
+              <div class="cp-wrapup-stats__goal" v-if="pathDetailTitle && pathDetailTitle !== heroTitle">
                 <span class="cp-wrapup-stats__label">学习目标</span>
                 <strong>{{ pathDetailTitle }}</strong>
               </div>
@@ -744,7 +794,7 @@
         <section v-if="!isRealMode && !isBlackbox && activeTab === 'goal'" class="mk-card">
           <div class="mk-card__head">
             <h4 class="mk-card__title">预生成路径 <span class="cp-aside-dot" :class="hasPath ? 'is-ok' : pathGenerationFailed ? 'is-bad' : goalConverged ? 'is-warn' : 'is-muted'"></span></h4>
-            <span class="mk-card__meta">{{ hasPath ? `已生成 ${pathMilestonesView.length} 个里程碑` : goalConverged ? '目标已确认，待生成' : '未生成（目标未确认）' }}</span>
+            <span class="mk-card__meta">{{ hasPath ? `已生成 ${pathMilestonesView.length} 个里程碑` : goalConverged ? '目标已确认，待生成' : '未生成' }}</span>
           </div>
           <div class="cp-aside-body">
             <template v-if="hasPath">
@@ -776,10 +826,11 @@
         <section v-if="!isRealMode && !isBlackbox && activeTab === 'path'" class="mk-card">
           <div class="mk-card__head">
             <h4 class="mk-card__title">路径评审 <span class="cp-aside-dot" :class="pathReviewStatus ? 'is-ok' : 'is-muted'"></span></h4>
-            <span class="mk-card__meta">{{ pathReviewStatus ? pathReviewDecisionLabel : '未评审' }}</span>
           </div>
           <div class="cp-aside-body">
-            <div class="cp-review-panel__actions">
+            <!-- 已接受后动作行整行撤下（2026-10-31 五轮评审 P6）：此前「评审/接受」按钮与
+                 已接受徽章同屏复读 4 遍；决策未落定时才渲染操作 -->
+            <div v-if="pathReviewDecision !== 'accept'" class="cp-review-panel__actions">
               <button type="button" class="cp-btn cp-btn--sm" :disabled="reviewPathDisabled" :title="reviewPathTitle" @click="act('reviewPath')">评审</button>
               <button v-if="acceptPathVisible" type="button" class="cp-btn cp-btn--primary cp-btn--sm" :disabled="acceptPathDisabled" :title="acceptPathTitle" @click="act('acceptPath')">接受</button>
               <button v-if="replanPathVisible" type="button" class="cp-btn cp-btn--primary cp-btn--sm" :disabled="replanPathDisabled" :title="replanPathTitle" @click="act('replanPath')">按意见重规划</button>
@@ -902,12 +953,20 @@
           </button>
           <div v-if="sidebarOpen.logs" class="cp-sidebar__body">
             <div v-if="session && logPhases.length > 1" class="cp-logs__filter">
+              <!-- 常驻「全部」项：没有它时三个类型 chip 在未筛选态长得一模一样，
+                   读者既看不出当前是「全部」还是「没选中」也找不到清空入口（2026-11-02 评审 R61） -->
+              <button type="button" class="cp-logs__filter-chip" :class="{ 'is-active': !logPhaseFilter }" @click="logPhaseFilter = ''">全部</button>
               <button v-for="p in logPhases" :key="p" type="button" class="cp-logs__filter-chip" :class="{ 'is-active': logPhaseFilter === p }" @click="logPhaseFilter = logPhaseFilter === p ? '' : p">{{ p }}</button>
             </div>
             <!-- 跟随钮移出滚动容器（2026-10-06 审核 #52）：原先 sticky 在其网格行内位移余量为 0、
                  上翻日志暂停跟随后按钮随内容滚出视口，恰在最需要「恢复跟随」时看不见它 -->
             <div class="cp-logs-wrap">
-              <button type="button" class="cp-logs__follow" :class="{ 'is-paused': !logFollowsBottom }" :title="logFollowsBottom ? '自动跟随最新日志' : '已暂停跟随'" :aria-label="logFollowsBottom ? '已跟随最新日志' : '恢复跟随最新日志'" @click="scrollToBottom">{{ logFollowsBottom ? '⏵' : '⏸' }}</button>
+              <!-- 跟随恢复钮改为条件行（2026-10-31 外部评审 P1-3）：原先 absolute 悬浮在日志区
+                   右上角，绿色圆点pill直接压在第一行日志文字上；现仅在「已暂停跟随」时出现于
+                   滚动区上方独立一行（下推内容而非遮盖），恢复跟随后整行消失 -->
+              <div v-if="!logFollowsBottom" class="cp-logs-bar">
+                <button type="button" class="cp-logs__follow" title="恢复跟随最新日志" aria-label="恢复跟随最新日志" @click="scrollToBottom">⏸ 已暂停跟随 · 恢复 ⏵</button>
+              </div>
               <div class="cp-logs" ref="logBox" aria-label="实时日志" @scroll="onLogScroll">
                 <!-- aria-live 已从容器移除：5s 轮询整表重渲染会让读屏反复播报全部日志，视觉跟随已足够 -->
                 <template v-if="!session">
@@ -1029,7 +1088,6 @@
             <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeRaw">✕</button>
           </div>
           <div class="mk-modal__body">
-            <p class="cp-rawview__note">接口返回的完整会话数据</p>
             <pre class="cp-rawview__pre">{{ rawJsonFull }}</pre>
           </div>
           <div class="mk-modal__foot">
@@ -1064,13 +1122,19 @@ import { renderAiMessageHtml } from '@/utils/sanitize'
 import MkDetailHero from '@/components/mk/MkDetailHero.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
-import { runHealthTone, statusText, sessionModeText, sessionModeBadgeCls, sessionModeTitle } from './statusText'
+// 课堂转录里的视觉产物：与学习者侧同一套确定性渲染组件（同一份 spec → 同一张图）
+import TeachingDiagram from '@/components/TeachingDiagram.vue'
+import TeachingFigure from '@/components/TeachingFigure.vue'
+import { runHealthTone, statusText, sessionModeText, sessionModeBadgeCls, sessionModeTitle, sessionStatusBadgeCls } from './statusText'
+// 路径域状态文案/徽章的唯一映射在 opsShared（active 在路径域是「学习中」，与会话域的「进行中」不同）
+import { PATH_STATUS_TEXT, PATH_STATUS_BADGE } from './opsShared'
 import { parseLogEntry, virtualLogPhaseZh } from './sessionLog'
 // 评分助手（evalScore）原供终局评估面板使用；面板已随裁判独立面移除（2026-09-27），本组件不再引用
 import { useSafePolling } from '@/composables/useSafePolling'
 import {
   asRecord, normalized, firstText, boolValue, numberValue,
-  conversationMessages, formatTime, stageLabel, wrapupCardIcon, pathDeadlineView
+  conversationMessages, transcriptMessages, mergeLearnTimeline, formatTime, formatLogTime, stageLabel, wrapupCardIcon, pathDeadlineView,
+  type CheckpointRecord, type LearnTimelineEntry
 } from './cockpitFormat'
 import { useCockpitTraces, timelineKindLabel } from './cockpitTraces'
 import { useCockpitLogs, LOG_WINDOW } from './useCockpitLogs'
@@ -1134,8 +1198,6 @@ const backLabel = computed(() => {
   }
   return '虚拟学习者'
 })
-/** 返回钮 tooltip：backLabel 兜底成「返回」时不能再拼一遍（否则「返回返回」） */
-const backTip = computed(() => (backLabel.value === '返回' ? '返回上一页' : `返回${backLabel.value}`))
 /** 返回：有来源 → 回来源页；否则回该会话所属画像（二级）；都没有 → 回一级 */
 function goBack() {
   const from = subPage.value?.from
@@ -1282,21 +1344,24 @@ const isPaused = computed(() =>
   || stageStatus.value.learning?.paused === true
 )
 
-const statusTitle = computed(() =>
-  !session.value
-    ? '加载中…'
-    : terminalStatus.value === 'created'
-      ? '课堂未开始'
-      : isFailedTerminal.value
-        ? manualStopped.value ? '已手动停止' : teachingTimedOut.value ? '课堂失败 · 授课超时' : '课堂失败'
-        : isInterruptedTerminal.value
-          ? '课堂中断'
-          : isTerminal.value
-            ? '课堂已完成'
-            : isPaused.value
-              ? '已暂停 · 自动推进已冻结（可继续或终止）'
-              : '课堂进行中'
-)
+const statusTitle = computed(() => {
+  if (!session.value) return '加载中…'
+  // pill 改报路径状态时（H1 是路径名），悬停说明也必须说同一个对象，不能仍写「课堂已完成」
+  if (heroUsesPathStatus.value) return `路径${PATH_STATUS_TEXT[pathLifecycleStatus.value] || statusText(pathLifecycleStatus.value)}`
+  // 徽章改报课堂终态时（P1-3），悬停同样按课堂状态说，不能仍拿目标对话的终态冒充
+  const state = heroUsesLessonStatus.value ? lessonLifecycleStatus.value : terminalStatus.value
+  return state === 'created'
+    ? '课堂未开始'
+    : ['failed', 'abandoned'].includes(state)
+      ? manualStopped.value ? '已手动停止' : teachingTimedOut.value ? '课堂失败 · 授课超时' : '课堂失败'
+      : INTERRUPTED_TERMINAL_STATUSES.includes(state)
+        ? '课堂中断'
+        : TERMINAL_STATUSES.includes(state)
+          ? '课堂已完成'
+          : isPaused.value
+            ? '已暂停 · 自动推进已冻结（可继续或终止）'
+            : '课堂进行中'
+})
 
 /* 双轴状态（与一/二级页同源）：生命周期合成态 + 阶段条输入。
    派生本体在 vlab-controls（单一实现，画像页与这里共用同一套优先级）；本计算只把字段喂进去。 */
@@ -1393,6 +1458,19 @@ const realAdvisory = computed(() => {
   if (!priority || priority === 'none') return null
   if (!title && !text) return null
   return { priority, ...(title ? { title } : {}), ...(text ? { text } : {}) }
+})
+/** 教学建议条的收起态（2026-11-09 头部降噪）：按「建议身份」记忆——建议内容换了（换会话、
+    后端给了新建议）自动回到展开态，不会被上一个会话的收起态把新建议藏起来。 */
+const advisoryCollapsed = ref(false)
+const advisoryKey = computed(() => {
+  const a = realAdvisory.value
+  return a ? `${a.priority}|${a.title || ''}|${a.text || ''}` : ''
+})
+watch(advisoryKey, () => { advisoryCollapsed.value = false })
+const advisoryFullText = computed(() => {
+  const a = realAdvisory.value
+  if (!a) return ''
+  return [a.title, a.text].filter(Boolean).join(' · ')
 })
 /** 课堂类型（2026-10-21）：优先当前查看的课时，其次会话当前绑定课时，最后 VL 编排态。
     复习课/延伸课不结算任务，类型与「为什么完成来源为空」必须在座舱首屏说清。 */
@@ -1536,7 +1614,7 @@ const goalUnderstanding = computed<Record<string, any> | null>(() => {
   const u = asRecord(asRecord(session.value?.goal).understanding)
   return Object.keys(u).length ? u : null
 })
-const fallbackLearnConversationMessages = computed(() => conversationMessages(asRecord(conversations.value.learning).messages))
+const fallbackLearnConversationMessages = computed(() => transcriptMessages(asRecord(conversations.value.learning).messages))
 const teachingSessionHistory = computed(() => {
   const history = learningResult.value.teachingSessionHistory
   if (!Array.isArray(history)) return [] as Array<{ id: string; taskId: string; taskTitle: string; status: string }>
@@ -1549,23 +1627,14 @@ const teachingSessionHistory = computed(() => {
     status: normalized(item.status)
   })).filter((item) => item.id && !seen.has(item.id) && !!seen.add(item.id))
 })
-const teachingDetailMessages = computed(() => conversationMessages(teachingDetail.value?.messages))
+const teachingDetailMessages = computed(() => transcriptMessages(teachingDetail.value?.messages))
 const learnConversationMessages = computed(() =>
   teachingDetailMessages.value.length ? teachingDetailMessages.value : fallbackLearnConversationMessages.value
 )
 /** 检查点记录（题目/判分/理解度）。检查点是结构化通道，题目不进聊天逐字稿——
- *  真实模式经 /admin/session-console 的 teaching.checkpoints，虚拟模式在 state.checkpointHistory。 */
-interface CockpitCheckpoint {
-  checkpointId?: string | null
-  title?: string | null
-  type?: string | null
-  question?: string | null
-  passed?: boolean | null
-  judgedBy?: string | null
-  understanding?: number | null
-  conceptName?: string | null
-  submittedAt?: string | null
-}
+ *  真实模式经 /admin/session-console 的 teaching.checkpoints，虚拟模式在 state.checkpointHistory。
+ *  字段定义单源在 cockpitFormat（时间轴合并也要读它）；attempts 由归并层附上。 */
+type CockpitCheckpoint = CheckpointRecord & { attempts?: number }
 const lessonCheckpoints = computed<CockpitCheckpoint[]>(() => {
   // 真实模式：session（/admin/session-console）随首帧加载、始终可用 → 优先；
   // 虚拟模式：teaching-detail 的 state.checkpointHistory 兜底。
@@ -1593,6 +1662,13 @@ const checkpointGroups = computed<Array<{ cp: CockpitCheckpoint; attempts: numbe
   }
   return [...map.values()]
 })
+/** 课堂时间轴：消息与检查点按发生时间交错（2026-10-19 用户走查「这检查点怎么在下方，
+ *  不符合课堂阅读顺序」）。检查点先按 checkpointId 归并（2026-10-22：答错重答同 id 追加
+ *  新行，逐行渲染同题重复；保留最新裁决 + 尝试次数），再按 submittedAt 插回发生的那一回合；
+ *  合并规则与「同回合检查点在前」的判据见 cockpitFormat.ts#mergeLearnTimeline。 */
+const learnTimeline = computed<Array<Omit<LearnTimelineEntry, 'checkpoint'> & { checkpoint?: CockpitCheckpoint }>>(() =>
+  mergeLearnTimeline(learnConversationMessages.value, checkpointGroups.value.map((g) => ({ ...g.cp, attempts: g.attempts })))
+)
 const CHECKPOINT_TYPE_LABEL: Record<string, string> = {
   short_answer: '简答', single_choice: '单选', multiple_choice: '多选', choice: '选择', true_false: '判断'
 }
@@ -1758,13 +1834,27 @@ const pathDeadlineTitle = computed(() => {
   return text ? `截止时间：${dateText}（原文：${text}）` : `截止时间：${dateText}`
 })
 const pathMilestonesView = computed(() => buildPathMilestonesView(pathMilestones.value, firstText(bindings.value.currentTaskId)))
+/* 路径自身生命周期状态（active/completed/…）：真实控制台由 session-console 的 resolvePathView
+   带在 stageResults.path（顶层 path 同源），虚拟控制台走 path-status 接口。
+   H1 换成路径名后 hero 状态 pill 要用它，不能再拿目标对话/课堂会话的 status 顶替
+   （2026-11-02 P0-3：目标对话已完成、它生成的路径仍在学，同一枚绿「已完成」被读成路径学完了）。 */
+const pathLifecycleStatus = computed(() => normalized(firstText(
+  pathStatusPath.value.status,
+  pathStatus.value?.status,
+  asRecord(stageResults.value.path).status,
+  asRecord(session.value?.path).status
+)))
 /* 面包屑名（2026-10-12）：路径统一在座舱打开后，控制台的 subPage 不再有详情页替它回写
    可读名，深链/列表进来面包屑会露裸会话 id。本处只在 pathStatus/stageResults 带真标题时
    回写（『学习路径』是 buildPathDetailTitle 的无数据兜底，泛型名与场景名撞车，不写——
-   真标题由 PathJourneyPanel 的详情接口补写）。只在本座舱仍是当前二级页且尚无名时写。 */
+   真标题由 PathJourneyPanel 的详情接口补写）。「目标对话 / 真实课堂」是 refresh 的
+   旧版泛型兜底，真标题到了要能覆盖它（2026-10-31 外部评审：泛型名抢占后路径详情名
+   永远写不进面包屑）。只在本座舱仍是当前二级页时写。 */
 watch(pathDetailTitle, (title) => {
   const sp = subPage.value
-  if (title && title !== '学习路径' && sp && sp.id === sessionId.value && !sp.label) setSubPageLabel(title)
+  if (!title || title === '学习路径' || !sp || sp.id !== sessionId.value) return
+  if (sp.label && sp.label !== '目标对话' && sp.label !== '真实课堂') return
+  setSubPageLabel(title)
 }, { immediate: true })
 
 /* Path 评审展示：stageResults.path_review */
@@ -1867,11 +1957,17 @@ const timeoutReadout = computed(() => {
    不再让 summary 顶层 completedTasks 与它并排成为第二个口径。
    summary 的 completedTasks 保留在 hasCompletedTask/hasRunnablePathTask 里做存在性判据。 */
 const doneLessonCount = computed(() => countDoneLessons(learnLessons.value))
-/** 学习总结卡头：课数与卡内课时行同源（learnLessons）；课表未加载时不报 N/0 假读 */
+/** 学习总结卡头：两条轴各自报数，且轴名写在读数里
+ *  （2026-11-01 外部评审 P0：原先只报「N/M 课已完成」，与第 4 步「已生成 d/t 课」同屏时
+ *   被读成「0 节 vs 1 节」打架——一个数的是已出总结的课次（课堂收尾即计入），
+ *   一个数的是已学完的课（任务达标才算）。同一节课完全可以「已收尾但未学完」。） */
 const wrapupHeadMeta = computed(() => {
   /* 2026-10-18 用户走查「这类文案」：读数行只报课数进度。「终局总结已生成」是状态位
      不是读数，卡体正文与阶段状态已表达，并列在读数行会把课进度读成半句话。 */
-  return learnLessons.value.length ? `${doneLessonCount.value}/${learnLessons.value.length} 课已完成` : ''
+  const total = learnLessons.value.length
+  if (!total) return ''
+  const summarized = wrapupLessonStat.value.done
+  return `${summarized}/${total} 课已出总结 · ${doneLessonCount.value}/${total} 课已学完`
 })
 const hasRunnablePathTask = computed(() => pathMilestones.value.some((milestone) => {
   const tasks = milestone.subtasks || milestone.tasks
@@ -2065,8 +2161,10 @@ const pathReadinessText = computed(() => {
   if (!hasPath.value) return goalConverged.value ? '目标已确认，等待生成路径。' : '等待目标对话确认后生成路径。'
   if (pathGenerationFailed.value) return learningBlockedReason.value || '路径生成失败，请重新生成。'
   if (pathGenerationInProgress.value) return learningBlockedReason.value || '路径正在生成或补全课程，请稍候。'
+  /* 2026-10-31 四轮评审 R2：教学已启动就不再说「可启动或重启教学」（与主位「进入课堂」一致） */
+  if (hasLearningProgress.value) return '教学已启动，课堂在「学习」页签推进中。'
   if (pathStartable.value) return pathReviewAccepted.value
-    ? '路径已就绪，可启动或重启教学。'
+    ? '路径已就绪，可启动教学。'
     : '路径已就绪，可直接启动教学，无需等待评审。'
   return learningBlockedReason.value || '路径已生成，正在确认教学启动条件。'
 })
@@ -2078,7 +2176,7 @@ const {
 
 const {
   effectiveStageIndex, stageDone, stageActive,
-  stageProgress, stageMiniStatus, learnProgressText
+  stageProgress, stageMiniStatus, learnProgressText, pathProgressText, wrapupLessonStat
 } = useCockpitStages({
   currentStage, bindings, stageStatus, stageResults,
   isTerminal, isFailedTerminal, isInterruptedTerminal, hasWrapup,
@@ -2089,13 +2187,18 @@ const {
    原则是真数据灌块：后端没有的字段（learner 名、Token、耗时、解答分、阶段回合数）宁缺勿造。 */
 
 /* hero 副文（原型「学习者 · skill · 开始于时间」对齐真实字段，缺源的段不渲染）：
-   学习者名 = 虚拟会话 profile.userName；skill = 真实会话 teaching.subject；开始于 = startTime / createdAt */
+   学习者名 = 虚拟会话 profile.userName；skill = 真实会话 teaching.subject；开始于 = startTime / createdAt；
+   主标题被路径名占用后（2026-10-31 外部评审 P1-1），最近一节课的主题下放副文，单课身份不丢。
+   2026-10-31 二轮评审 P2：路径会话里 teaching.subject 就是路径名，与主标题同串——删掉这半句
+   （面包屑 + h1 已写两遍，副文不再重复），保留「当前课：…」与开始时间。 */
 const heroSub = computed(() => {
   const segments: string[] = []
   const learnerName = firstText(String(asRecord(session.value?.profile).userName || ''))
   if (learnerName) segments.push(`学习者 ${learnerName}`)
   const subject = firstText(String(asRecord(session.value?.teaching).subject || ''))
-  if (subject) segments.push(subject)
+  if (subject && !(heroUsesPathTitle.value && subject === pathDetailTitle.value)) segments.push(subject)
+  const topic = firstText(String(asRecord(session.value?.teaching).topic || ''))
+  if (heroUsesPathTitle.value && topic && topic !== pathDetailTitle.value) segments.push(`当前课：${topic}`)
   const startedRaw = firstText(
     String(asRecord(session.value?.teaching).startTime || ''),
     String(session.value?.createdAt || '')
@@ -2105,12 +2208,54 @@ const heroSub = computed(() => {
   return segments.join(' · ')
 })
 
-/* hero 主标题 = 会话主题（2026-10-04 全站评审 P2-7：人类可读主题升 24px/700 主位，
-   截断裸 ID 退位）——真实教学会话取 teaching.topic；无主题（虚拟会话/goal 会话）回退 shortId */
-const heroTitle = computed(() => {
-  const topic = firstText(String(asRecord(session.value?.teaching).topic || ''))
-  return topic || shortId.value
+/* hero 主标题：路径会话 = 学习路径名（2026-10-31 外部评审 P1-1「张冠李戴」：路径详情/目标阶段页
+   的 h1 挂着最近一节单课的课名，真正的路径名缩在 12px 灰色副行——主位还给路径名，单课主题下放副文）；
+   非路径会话仍用会话主题（2026-10-04 全站评审 P2-7：人类可读主题升 24px/700 主位）；都缺回退 shortId */
+/* 2026-11-09 头部降噪：hero 那枚「当前阶段」徽章连同它的两条支撑逻辑一起撤了
+   （displayStage 的归一 + hasPathEvidenceCockpit 的判据）。当前阶段现在只由 stepper 的
+   高亮瓦片表达；「状态机推到 teaching 但路径本体没生成」这种情形由瓦片自己的
+   stepState/stepMeta 呈现（未生成就是「待进入」），不需要第二条口径。 */
+const heroUsesPathTitle = computed(() => {
+  if (!hasPath.value || !pathGeneratedOrReady.value) return false
+  const pathTitle = pathDetailTitle.value
+  return !!pathTitle && pathTitle !== '学习路径'
 })
+const heroTitle = computed(() => {
+  if (heroUsesPathTitle.value) return pathDetailTitle.value
+  const topic = firstText(String(asRecord(session.value?.teaching).topic || ''))
+  if (topic) return topic
+  /* 2026-10-31 三轮评审 P1：路径未生成的目标阶段，原回退 shortId 把截断 UUID
+     （...84e-41ce636c170a）顶成 H1 大标题。回退链改：故事名 → 学习者名，UUID 仅最后兜底 */
+  const storyTitle = firstText(String(asRecord(session.value?.storyContext).title || ''))
+  if (storyTitle) return storyTitle
+  const learnerName = firstText(String(asRecord(session.value?.profile).userName || ''))
+  if (learnerName) return `${learnerName}的目标对话`
+  return shortId.value
+})
+
+/** hero 头像字母（2026-11-01 外部评审 P2）：原先是写死的 `avatar="S"`——换学员、换路径
+ *  都还是 S，被读成 Session/Stage 的硬编码残留。改为取学习者名首字，无名时取真路径名/
+ *  story 名首字；`buildPathDetailTitle` 的泛型兜底「学习路径」不是身份（谁都会变成「学」），
+ *  与 S 是同一类问题，故显式排除。本页是课堂域，都没有才兜底「课」。 */
+const heroAvatar = computed(() => {
+  const learnerName = firstText(String(asRecord(session.value?.profile).userName || ''))
+  if (learnerName) return learnerName.slice(0, 1)
+  const pathTitle = firstText(pathDetailTitle.value || '')
+  if (pathTitle && pathTitle !== '学习路径') return pathTitle.slice(0, 1)
+  const storyTitle = firstText(String(asRecord(session.value?.storyContext).title || ''))
+  if (storyTitle && storyTitle !== '学习路径') return storyTitle.slice(0, 1)
+  return '课'
+})
+
+/* 面包屑同源穿帮（2026-10-31 三轮评审 P1；四轮评审 R3 自愈化）：H1 已回退到故事名，
+   面包屑仍可能挂着 openSubPage 带入的裸会话 id。监听 [heroTitle, subPage] 元组——
+   不管是载荷晚到、还是 stage 深链让宿主重建 subPage（覆盖掉已写的 label），
+   只要当前标签还是裸 id 就用 hero 真名补写；已有可读名（泛型/路径/真名）不抢。 */
+watch([heroTitle, subPage], ([title, sp]) => {
+  if (!title || title === shortId.value || !sp || sp.id !== sessionId.value) return
+  if (sp.label && sp.label !== sp.id) return
+  setSubPageLabel(title)
+}, { immediate: true })
 
 /* 状态 pill：生命周期合成态（与原顶栏徽章同源）→ mk-badge 档位。
    真实会话载荷没有顶层 status（只有 runtime.status），为不再误报「已创建」，先取顶层 status，缺源回退 runtime。
@@ -2121,12 +2266,44 @@ const heroLifecycleState = computed(() => {
   if (isPaused.value) return 'paused'
   return normalized(session.value?.status) || terminalStatus.value || runLifecycleState.value
 })
+/* 状态 pill 的主语必须与 H1 同一个对象（2026-11-02 P0-3）：真实控制台里 H1 已换成路径名
+   （heroUsesPathTitle），徽章却仍报目标对话/课堂会话的 status——目标对话完成后会话 status=completed，
+   而它生成的路径仍在学，同一枚绿「已完成」被读成路径学完了。路径状态未知时回落会话生命周期；
+   虚拟控制台保留运行态徽章（页面的可操作对象是整个虚拟运行，不由本规则改写）。 */
+const heroUsesPathStatus = computed(() =>
+  isRealMode.value && heroUsesPathTitle.value && !!pathLifecycleStatus.value
+)
+/* 课堂真实终态（2026-11-02 P1-3）：目标对话入口的 runtime.status 是 goal_conversations.status，
+   同一节课在教学会话入口读的是 teaching_sessions.status——同一节课两个入口两个答案
+   （教学入口「超时」、目标入口「已完成」）。课堂终态由 session-console 单独下发：
+   runtime.stageStatus.learning.status / stageResults.teaching.taskRuntime.status（真实控制台），
+   stageResults.learning.status（其它生产者）。hero 的「课堂…」徽章改读它，与路径名作 H1 时的
+   路径状态互不抢占：路径优先（P0-3），没有路径状态时才轮到课堂。 */
+const lessonLifecycleStatus = computed(() => normalized(firstText(
+  asRecord(stageResults.value.learning).status,
+  asRecord(stageStatus.value.learning).status,
+  asRecord(learningResult.value.taskRuntime).status,
+  asRecord(session.value?.teaching).status
+)))
+const heroUsesLessonStatus = computed(() =>
+  isRealMode.value && !heroUsesPathStatus.value && !!lessonLifecycleStatus.value
+)
 const heroStatusText = computed(() => {
   if (!session.value) return '加载中'
+  if (heroUsesPathStatus.value) return PATH_STATUS_TEXT[pathLifecycleStatus.value] || statusText(pathLifecycleStatus.value)
+  if (heroUsesLessonStatus.value) return statusText(lessonLifecycleStatus.value) || lessonLifecycleStatus.value
   return statusText(heroLifecycleState.value) || statusText(runLifecycleState.value) || '—'
 })
 const heroStatusTone = computed(() => {
   if (!session.value) return 'muted'
+  // 路径域徽章映射给的是完整类名（mk-badge--ok），本页 pill 只拼后缀 → 去掉前缀
+  if (heroUsesPathStatus.value) {
+    return (PATH_STATUS_BADGE[pathLifecycleStatus.value] || 'mk-badge--muted').replace('mk-badge--', '')
+  }
+  // 课堂档位走教学会话状态单源：timeout / finalization_failed 是 bad（旧 switch 会把它们落到蓝「info」）
+  if (heroUsesLessonStatus.value) {
+    return sessionStatusBadgeCls(lessonLifecycleStatus.value).replace('mk-badge--', '')
+  }
   switch (heroLifecycleState.value) {
     case 'completed': return 'ok'
     case 'failed': return 'bad'
@@ -2138,7 +2315,15 @@ const heroStatusTone = computed(() => {
 })
 
 /* 阶段推进 stepper 三态（done/active/idle 由真实阶段状态机推导）与 meta 文案 */
+/** 当前所处阶段（未终态时一律算「进行中」，即便 stageDone 已成立） */
+function isCurrentStage(st: StageKey): boolean {
+  return !isTerminal.value && stageFlow.indexOf(st) === effectiveStageIndex.value
+}
+/* 「已推进」≠「已学完」：当前阶段原先只要 stageDone 成立就照打对勾，于是一整排四个绿色
+   对勾与同排的「任务 1/13」「已开始 2/13 课」读成同一件事（2026-11-02 评审 R41/R59）。
+   当前阶段永远用序号 + 描边表示，对勾只留给真的走过的阶段。 */
 function stepState(st: StageKey): 'done' | 'active' | 'idle' {
+  if (isCurrentStage(st)) return 'active'
   if (stageDone(st)) return 'done'
   if (stageActive(st)) return 'active'
   return 'idle'
@@ -2150,35 +2335,11 @@ function stepMeta(st: StageKey) {
   if (stageActive(st)) return isTerminal.value ? '中断' : '进行中'
   return '待进入'
 }
-const stageDoneCount = computed(() => stageFlow.reduce((n, st) => n + (stageDone(st as StageKey) ? 1 : 0), 0))
-
-/** 阶段推进卡的下游直达入口（2026-10-11 走查；2026-10-12 收敛）：
- *  Path 出口已撤——Path 页签自本拍板起就是路径内容本体（阶段全展开/任务弹层/治理动作），
- *  stepper 的「Path」步点即唯一入口，再给一枚「查看学习路径」按钮是同目标双入口。
- *  只保留课堂会话出口：只在「真实 + 目标对话」给——这页的对象是 Goal 对话，课堂是另一个
- *  对象；课堂会话控制台上再给这条就是自指，虚拟会话的课堂本来就在本页。
- *  返回记忆：目标页带上本页 from，其返回钮回到这里，不会掉回一级列表。 */
-const stageJumpTargets = computed<Array<{ key: string; label: string; title: string; go: () => void }>>(() => {
-  const here = subPage.value
-  // 目标页的返回钮按 from.label 命名（FROM_BACK_LABEL 只认 virtual/learner/user）——真实控制台不设
-  // subPage.label，不兜底就会退化成「← 返回」
-  const from = here ? { view: here.view, id: here.id, label: here.label || '会话监控' } : undefined
-  const jumps: Array<{ key: string; label: string; title: string; go: () => void }> = []
-  const linkedTeaching = firstText(
-    (stageStatus.value.learning as Record<string, unknown> | undefined)?.teachingSessionId,
-    bindings.value.teachingSessionId
-  )
-  if (isRealMode.value && realKind.value === 'goal' && linkedTeaching) {
-    jumps.push({
-      key: 'learn',
-      label: '查看课堂会话',
-      title: '打开本条路径最近一节课堂的会话监控（只读）',
-      go: () => openSubPage('session-real', linkedTeaching, from ? { from } : undefined)
-    })
-  }
-  return jumps
-})
-
+/* 2026-11-04：页头「路径 任务 x/y」徽章与「阶段推进」Path 瓦片副标同源同串，
+   同屏出现两次（评审「同屏重复」）。Path 瓦片已常驻该串时页头不再复述一遍。 */
+const pathProgressRepeatedInStepper = computed(() =>
+  !!pathProgressText.value && stepMeta('path') === pathProgressText.value
+)
 /* 回合记录行：Goal → 课堂按序合并的真实消息（conversationMessages 只留 role/content，这里连带时间一起取） */
 interface TurnRow { key: string; index: number; type: string; tone: string; content: string; time: string }
 const turnRows = computed<TurnRow[]>(() => {
@@ -2210,19 +2371,14 @@ const turnRows = computed<TurnRow[]>(() => {
   return rows
 })
 
-/** 回合记录卡头：按模式给不同口径（合并规则只在虚拟会话成立，不能当本会话构成的说明）。
-    2026-10-18 用户走查「这类文案」：读数行不再写「目标 + 课堂按序合并」这句装配自述——
-    保留「两段」这个范围事实（N 数的是两段的总和），怎么合并在卡头 title 里说。 */
-const turnMeta = computed(() => {
-  if (!session.value) return ''
-  if (!turnRows.value.length) return '暂无对话记录'
-  if (!isRealMode.value) return `${turnRows.value.length} 条对话 · 目标与课堂两段`
-  return realKind.value === 'goal'
-    ? `${turnRows.value.length} 条对话 · 本目标对话`
-    : `${turnRows.value.length} 条对话 · 本课课堂转录`
-})
-/** 虚拟会话的回合构成（只挂在卡头 title）：本会话一个会话即完整旅程 */
-const turnMetaTitle = computed(() => '')
+/* Goal 页签去重（2026-10-31 三轮评审 P1）：Goal 页签上方「目标对话」气泡卡已全文渲染
+   目标段消息，回合记录表再逐字复读一遍且时间列全是「—」，页面高度膨胀一倍。
+   此页签下本表只补课堂段（没有课堂行就整卡不渲染）；其余页签维持合并旅程表。
+   （原 turnMeta/turnMetaTitle 卡头口径随本轮改版并入下方 meta 行，已删除） */
+const turnRowsShown = computed(() =>
+  activeTab.value === 'goal' ? turnRows.value.filter((r) => r.key.startsWith('learn-')) : turnRows.value
+)
+const turnRowsHaveTime = computed(() => turnRowsShown.value.some((r) => r.time !== '—'))
 
 /* 知识状态更新（真实掌握度）：真实会话 = teaching.knowledgeState（后端 knowledgePointStates）；
    虚拟会话 = 当前课课时总结 knowledgeItems。无数据整卡不渲染，不硬造 ±Δ（后端无增量字段） */
@@ -2459,7 +2615,12 @@ async function refresh() {
       clockTick.value = Date.now()
       const kind = String((session.value as Record<string, unknown>)?.kind || '')
       realKind.value = kind === 'goal' ? 'goal' : 'teaching'
-      /* 面包屑对象名（2026-10-24）：深链进来此前只有裸会话 id，看不出是课堂还是目标对话 */
+      /* 面包屑对象名（2026-10-24）：深链进来此前只有裸会话 id，看不出是课堂还是目标对话。
+         2026-10-31 外部评审复检：这个泛型名抢在 pathDetailTitle / PathJourneyPanel 之前占位后，
+         真标题（路径详情名）被 `!sp.label` 挡住再也写不进来，学习路径页深链座舱的面包屑
+         停留在「学习路径 / 目标对话」。改为：泛型名只在真标题写入后仍缺位时兜底——
+         立即写入会压制后续回写（两个回写点都只认「空名或泛型名」），故真标题写入点
+         （pathDetailTitle watch / writeBreadcrumbLabel）同步放行这两个泛型名。 */
       if (!subPage.value?.label) setSubPageLabel(kind === 'goal' ? '目标对话' : '真实课堂')
       timelineEntries.value = Array.isArray((session.value as Record<string, unknown>)?.timeline)
         ? (session.value as { timeline: Array<{ time: string; kind: string; title: string; detail: string }> }).timeline
@@ -2564,7 +2725,10 @@ async function loadLogs() {
             createdAt: t.time || '',
             timestamp: t.time || '',
             phase: t.kind,
-            message: '查看全文',
+            /* 「查看全文」与同行右侧的「原文」是两件事（跳页签 / 展开 JSON），
+               两个词在紧邻位置各说一半，读起来像同一个入口的两种叫法。
+               跳转项写明跳的是什么全文（2026-11-02 评审 R65）。 */
+            message: '在页签查看对话全文',
             jumpTab: tab
           })
           continue
@@ -2595,10 +2759,12 @@ async function loadLogs() {
       resetLogs()
       appendLogs(items.slice(-LOG_WINDOW).map((l: Record<string, unknown>) => {
         const view = parseLogEntry(l)
+        // 虚拟会话日志字段是 timestamp（非 createdAt）；兼容两者
+        const stamp = String(l.timestamp || l.createdAt || '')
         return {
           id: String(l.id ?? ''),
-          // 虚拟会话日志字段是 timestamp（非 createdAt）；兼容两者
-          time: l.timestamp || l.createdAt ? new Date(String(l.timestamp || l.createdAt)).toLocaleTimeString('zh-CN', { hour12: false }) : '',
+          at: stamp,
+          time: formatLogTime(stamp),
           text: view.text || view.phase,
           // 折叠行没有可排查的载荷：别挂一个只有合成字段的「原文」
           view: { ...view, phase: timelineKindLabel(String(l.phase)), ...(l.jumpTab ? { rawJson: '' } : {}) },
@@ -2622,9 +2788,11 @@ async function loadLogs() {
       /* 阶段徽章中文化（2026-10-18）：虚拟日志 phase 是后端枚举（virtual-reply / goal-response…），
          此前主视觉位直接露英文；筛选项同源取自这里，所以筛选也一并变中文 */
       const phase = virtualLogPhaseZh(view.phase)
+      const stamp = String(l.timestamp || l.createdAt || '')
       return {
         id: String(l.id ?? l.messageId ?? ''),
-        time: l.timestamp || l.createdAt ? new Date(String(l.timestamp || l.createdAt)).toLocaleTimeString('zh-CN', { hour12: false }) : '',
+        at: stamp,
+        time: formatLogTime(stamp),
         text: view.text || phase,
         view: { ...view, phase }
       }
@@ -2874,6 +3042,9 @@ const lifeControlsCockpit = computed(() =>
   vlabControlsFor(lifeStateCockpit.value, {
     stage: typeof session.value?.currentStage === 'string' ? session.value.currentStage : undefined
   }).filter((c) => lifeHandlersCockpit[c.key])
+    /* 2026-10-31 五轮评审 P7：自动驾驶停机（会话未冻结）时，hero「继续」与操作栏主钮
+       「自动驾驶」是同一件事的两个入口——只留操作栏那个；teaching 冻结暂停不受影响 */
+    .filter((c) => !(c.key === 'resume' && (autopilot.value.status || '') === 'stopped' && !isPaused.value))
 )
 /** 统一操作入口：需确认的操作（stop/retry）先过模型文案确认，再执行 */
 function runCockpitAction(c: VsControlDef) {
@@ -3183,7 +3354,7 @@ const rawJsonLength = computed(() => rawJsonFull.value.length)
 const packageFacts = computed(() => {
   const s = session.value as { timeline?: unknown[] } | null
   if (!s) return '加载中…'
-  return Array.isArray(s.timeline) ? `${s.timeline.length} 条时间线` : '完整会话数据'
+  return Array.isArray(s.timeline) ? `${s.timeline.length} 条时间线` : ''
 })
 
 async function copyRawJson() {
@@ -3219,7 +3390,7 @@ async function copyRawJson() {
   font-weight: 700;
   color: var(--mk-amber);
   padding: 2px 9px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-xs);
   background: var(--mk-amber-bg);
   white-space: nowrap;
 }
@@ -3236,7 +3407,7 @@ async function copyRawJson() {
   align-items: center;
   gap: 6px;
   padding: 3px 10px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-xs);
   border: 1px solid var(--mk-line);
   background: var(--mk-card-foot-bg);
   font-size: var(--mk-fs-micro);
@@ -3259,7 +3430,11 @@ async function copyRawJson() {
   background: var(--mk-amber-bg); color: var(--mk-amber);
   font-size: var(--mk-fs-micro); line-height: 1.65;
 }
-.cp-advisory__text { min-width: 0; }
+/* 建议正文：默认单行省略（头部降噪），完整文案始终在 title；收起态只剩标题行 */
+.cp-advisory__text { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-advisory--collapsed { padding: 5px 12px; line-height: 1.3; }
+.cp-advisory--collapsed .cp-advisory__text { display: none; }
+.cp-advisory__toggle { flex: none; margin-left: auto; font-size: var(--mk-fs-micro); color: inherit; text-decoration: underline; }
 /* 课时健康读数条（P1#7）：发丝线分隔、label faint、读数 mono 等宽 */
 .cp-healthstrip { display: flex; align-items: baseline; gap: 10px; padding: 8px 16px; border-bottom: 1px solid var(--mk-line); background: var(--mk-surface); }
 .cp-healthstrip__label { flex: none; color: var(--mk-faint); font-size: var(--mk-fs-micro); }
@@ -3288,6 +3463,10 @@ async function copyRawJson() {
 /* 会话 ID meta（pills 行内 mono 小字，2026-10-04 P2-7）：主标题已让位给会话主题，
    ID 不再以 24px/700 出现；meta 弱化为 muted 微字号，全量 ID 走 title */
 .cp-hero__id { font-size: var(--mk-fs-micro); font-weight: 400; color: var(--mk-muted); }
+/* 学习者徽章兼入口（2026-11-09 合并）：徽章外形不变，可点后补悬停/焦点反馈 */
+.cp-hero__learner--link { border: 1px solid var(--mk-line); cursor: pointer; font: inherit; }
+.cp-hero__learner--link:hover { border-color: var(--mk-blue); color: var(--mk-blue-text); }
+.cp-hero__learner--link:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 2px; }
 /* 卡体（mk-card 头下内容衬距；mk 原语无 .mk-card__body，用本页局部类） */
 .cp-cardbody { padding: 12px 14px 16px; }
 /* 路径卡头右组：meta 与面板治理动作同排；面板 Teleport 进来的 ⋯ 就落在这里 */
@@ -3300,39 +3479,48 @@ async function copyRawJson() {
    「记忆复习」会话里没有对应阶段、恒「未进入」，即整卡不含 stepper 之外的任何会话状态。
    五环闭环该在的地方是有真实读数与下钻的平台总览、以及带每阶段累计会话数的画像详情。 */
 
-/* 阶段推进（2026-10-15 重设计：四枚等宽阶段瓦片，每票一条状态色顶轨 + 标记 + 阶段名 + 真实读数，
-   填满卡宽并把「推进到哪一步/每步读数」一屏读完；瓦片间 chevron 连成流水线。步点即阶段页签。） */
-.cp-stepcard { margin-top: 14px; }
-.cp-stepcard__spacer { flex: 1 1 auto; }
-/* 下游直达入口（阶段推进卡头右侧）：两枚小动作钮，卡头不再只有读数 */
-.cp-stepjumps { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; }
-.cp-stepper { display: flex; align-items: stretch; gap: 8px; }
+/* 阶段推进 · 紧凑分段步骤条（2026-11-09 头部降噪重构）：外层卡与卡头全部撤除，
+   四枚瓦片压成一行（状态点 + 阶段名 + 一个核心读数同行），整条高约 40px——
+   此前「大卡套四张小卡」占 ~140px，把下方对话与右侧会话日志挤到下半屏。
+   步点即阶段页签（role=tablist/tab 不变，键盘导航与 aria 关系原样保留）。 */
+.cp-stepper { display: flex; align-items: stretch; gap: 8px; margin-top: 14px; }
 .cp-stepper__arrow { flex: none; align-self: center; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 5px solid var(--mk-faint); opacity: 0.55; }
 .cp-stp {
   position: relative; flex: 1 1 0; min-width: 0;
-  display: flex; align-items: center; gap: 10px; text-align: left;
-  padding: 12px 14px 12px 12px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-md);
+  display: flex; align-items: center; gap: 8px; text-align: left;
+  min-height: 40px; padding: 7px 12px 7px 10px;
+  border: 1px solid var(--mk-line); border-radius: var(--mk-radius-md);
   background: var(--mk-surface); font: inherit; cursor: pointer; overflow: hidden;
 }
-/* 顶轨：状态色单源（done 绿 / active 蓝 / idle 灰），瓦片顶部一条 3px 实心线 */
-.cp-stp::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--mk-line); }
+/* 顶轨：状态色单源（done 绿 / active 蓝 / idle 灰），瓦片顶部一条 2px 实心线 */
+.cp-stp::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--mk-line); }
 .cp-stp--done::before { background: var(--mk-green); }
 .cp-stp--active::before { background: var(--mk-blue); }
 .cp-stp:disabled { cursor: default; }
 .cp-stp:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 2px; }
 .cp-stp:not(:disabled):hover { border-color: var(--mk-blue); }
 .cp-stp--active { background: var(--mk-blue-bg); border-color: var(--mk-blue); }
+/* 当前查看阶段：即使该阶段已完成（done），也要和其余三个绿勾瓦片区分开 */
+.cp-stp--current { background: var(--mk-blue-bg); border-color: var(--mk-blue); box-shadow: inset 0 0 0 1px var(--mk-blue); }
+.cp-stp--current::before { background: var(--mk-blue); }
+.cp-stp--current .cp-stp__name { color: var(--mk-ink); }
 .cp-stp__dot {
-  flex: none; box-sizing: border-box; width: 22px; height: 22px; border-radius: 50%;
+  flex: none; box-sizing: border-box; width: 18px; height: 18px; border-radius: 50%;
   display: grid; place-items: center; background: var(--mk-surface); border: 2px solid var(--mk-faint);
-  color: var(--mk-faint); font-size: var(--mk-fs-micro); font-weight: 700; font-variant-numeric: tabular-nums;
+  color: var(--mk-faint); font-size: var(--mk-fs-micro); line-height: 1; font-weight: 700; font-variant-numeric: tabular-nums;
 }
 .cp-stp--done .cp-stp__dot { background: var(--mk-green-fill); border-color: var(--mk-green-fill); color: var(--mk-on-fill); }
 .cp-stp--active .cp-stp__dot { background: var(--mk-blue-fill); border-color: var(--mk-blue-fill); color: var(--mk-on-fill); }
-.cp-stp__body { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; }
-.cp-stp__name { font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); overflow-wrap: anywhere; }
+/* 阶段名与读数同一行：名字吃剩余宽度可省略号，读数不换行（读数才是「推进到哪了」的信号） */
+.cp-stp__name {
+  flex: 1 1 auto; min-width: 0; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .cp-stp--idle .cp-stp__name { color: var(--mk-muted); }
-.cp-stp__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); overflow-wrap: anywhere; }
+.cp-stp__meta {
+  flex: none; font-size: var(--mk-fs-micro); color: var(--mk-faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 55%;
+}
 .cp-stp--done .cp-stp__meta { color: var(--mk-green); font-weight: 600; }
 .cp-stp--active .cp-stp__meta { color: var(--mk-accent-deep); font-weight: 700; }
 
@@ -3373,7 +3561,7 @@ async function copyRawJson() {
 .cp-mat__chips { display: flex; flex-wrap: wrap; gap: 4px 6px; }
 .cp-mat__foot { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .cp-mat__fact { overflow-wrap: anywhere; }
-.cp-mat__src { color: var(--mk-blue); text-decoration: none; }
+.cp-mat__src { color: var(--mk-blue-text); text-decoration: none; }
 .cp-mat__src:hover { text-decoration: underline; }
 .cp-mat__time { margin-left: auto; flex: none; }
 
@@ -3429,7 +3617,7 @@ async function copyRawJson() {
 .cp-aside-state--warn strong { color: var(--mk-amber); }
 .cp-aside-state--warn .cp-aside-state__icon { color: var(--mk-amber); }
 .cp-aside-state--empty strong { color: var(--mk-ink); }
-.cp-aside-state--busy strong { color: var(--mk-blue); }
+.cp-aside-state--busy strong { color: var(--mk-blue-text); }
 .cp-aside-state__spin {
   width: 14px;
   height: 14px;
@@ -3487,36 +3675,30 @@ async function copyRawJson() {
 /* 跟随钮的定位容器（滚动容器之外）：按钮 absolute 常驻右上，上翻日志也始终可见（#52） */
 .cp-logs-wrap { position: relative; }
 .cp-logs {
-  max-height: 360px;
-  overflow-y: auto;
-  /* 嵌套滚动隔离（2026-10-06 审核 #72）：同一屏叠了页面/侧栏/日志/课程树多个纵向滚动容器，
-     内层滚到底时不再把滚动链传给外层（否则滚轮滚谁取决于指针落点） */
-  overscroll-behavior: contain;
+  /* 定高滚动窗口的上下边缘永远在硬切文字（2026-10-31 五轮评审 P4：上沿无头残文、
+     下沿半行）——解除定高让日志自然生长（同目标对话 R10 判例）；
+     「最近 60 条」窗口口径与跟随逻辑保持不变（无内滚后恒为跟随态） */
   display: grid;
   gap: 4px;
+  padding: 2px 0 8px;
 }
+.cp-logs-bar { display: flex; justify-content: flex-end; padding-bottom: 4px; }
 .cp-logs__follow {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  z-index: 2;
-  width: fit-content;
   border: none;
   font: inherit;
-  font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-green); cursor: pointer;
-  padding: 2px 9px; border-radius: 999px; background: var(--mk-green-bg);
+  font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-amber); cursor: pointer;
+  padding: 2px 9px; border-radius: var(--mk-radius-xs); background: rgba(217, 119, 6, 0.08);
 }
-.cp-logs__follow:hover { background: rgba(16, 185, 129, 0.15); }
-.cp-logs__follow.is-paused { color: var(--mk-amber); background: rgba(217, 119, 6, 0.08); }
+.cp-logs__follow:hover { background: rgba(217, 119, 6, 0.15); }
 .cp-logs__filter { display: flex; gap: 4px; flex-wrap: wrap; padding-bottom: 6px; border-bottom: 1px solid var(--mk-line); margin-bottom: 4px; }
 .cp-logs__filter-chip {
-  padding: 2px 8px; border-radius: 999px; border: 1px solid var(--mk-line);
+  padding: 2px 8px; border-radius: var(--mk-radius-sm); border: 1px solid var(--mk-line);
   background: var(--mk-surface); font: inherit; font-size: var(--mk-fs-micro); font-weight: 600;
   color: var(--mk-muted); cursor: pointer; transition: all 0.12s ease;
 }
-.cp-logs__filter-chip:hover { border-color: var(--mk-blue); color: var(--mk-blue); }
+.cp-logs__filter-chip:hover { border-color: var(--mk-blue); color: var(--mk-blue-text); }
 /* 选中态（原型 .chip[aria-pressed="true"] 词汇：brand-bg 底 + brand 字，非实心填充） */
-.cp-logs__filter-chip.is-active { background: var(--mk-blue-bg); border-color: var(--mk-blue); color: var(--mk-blue); }
+.cp-logs__filter-chip.is-active { background: var(--mk-blue-bg); border-color: var(--mk-blue); color: var(--mk-blue-text); }
 
 /* ----- Review in sidebar ----- */
 .cp-review-panel__actions { display: flex; flex-wrap: wrap; gap: 5px; }
@@ -3535,8 +3717,11 @@ async function copyRawJson() {
   transition: all 0.12s ease;
 }
 .cp-btn--sm { padding: 5px 10px; font-size: var(--mk-fs-micro); border-radius: 6px; }
-.cp-btn:hover:not(:disabled) { border-color: rgba(47, 106, 224, 0.4); color: var(--mk-blue); }
+.cp-btn:hover:not(:disabled) { border-color: rgba(47, 106, 224, 0.4); color: var(--mk-blue-text); }
 .cp-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+/* 禁用主钮灰化（2026-10-31 四轮评审 R2）：半透明蓝仍读作「可点的主操作」，
+   与 mk-btn 的禁用语义对齐——教学已在进行中时「启动教学」不再像引导态 */
+.cp-btn--primary:disabled { background: var(--mk-surface-3); border-color: var(--mk-line); color: var(--mk-faint); opacity: 1; }
 .cp-btn--primary { background: var(--mk-blue); border-color: var(--mk-blue); color: var(--mk-on-fill); }
 .cp-btn--primary:hover:not(:disabled) { color: var(--mk-on-fill); opacity: 0.9; }
 /* 危险动作按钮改用 mk 原语 .mk-btn--danger（hero 动作区）；原 .cp-danger-btn 已删 */
@@ -3551,6 +3736,9 @@ async function copyRawJson() {
 
 /* Log line */
 .cp-log { display: flex; align-items: baseline; gap: 6px; font-size: var(--mk-fs-micro); flex-wrap: wrap; }
+/* 条目分割（2026-10-31 四轮评审 R6）：自动跟随滚到中部时，上一条的尾巴（39.9s / ▸ 原文）
+   紧贴下一条的头部（18:31:20 学习者回复），人眼会把耗时读成时间戳——给一条分隔线 */
+.cp-log + .cp-log { border-top: 1px solid var(--mk-line); padding-top: 6px; }
 .cp-log--error { padding: 4px 8px; border-radius: 6px; background: var(--mk-red-bg); }
 .cp-log__time { color: var(--mk-faint); font-family: var(--mk-mono); font-size: var(--mk-fs-micro); white-space: nowrap; padding-top: 1px; }
 .cp-log__phase {
@@ -3558,7 +3746,13 @@ async function copyRawJson() {
   background: var(--mk-blue-bg); color: var(--mk-accent-deep); white-space: nowrap;
 }
 .cp-log__phase--error { background: var(--mk-red-fill, var(--mk-red)); color: var(--mk-on-fill); }
-.cp-log__text { color: var(--mk-muted); word-break: break-all; min-width: 0; flex: 1 1 auto; }
+/* 长回复窄栏折叠（2026-10-31 三轮评审 P2）：会话日志栏只有 ~320px，数百字的回复
+   全文平铺会把整屏占满——行内截到 3 行省略，全文走同条目的 ▸ 原文（parseLogEntry
+   恒把整条 entry JSON 挂进 rawJson，展开即可读全文），不新增点击通道 */
+.cp-log__text {
+  color: var(--mk-muted); word-break: break-all; min-width: 0; flex: 1 1 auto;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
+}
 .cp-log--error .cp-log__text { color: var(--mk-red); font-weight: 600; }
 /* 折叠行：同一行文字位置的可点读数（跳左侧页签），与正文同字号，下划线表明可点 */
 .cp-log__jump {
@@ -3566,7 +3760,7 @@ async function copyRawJson() {
   font: inherit; color: var(--mk-accent-deep); text-align: left; cursor: pointer;
   text-decoration: underline; text-underline-offset: 2px;
 }
-.cp-log__jump:hover { color: var(--mk-blue); }
+.cp-log__jump:hover { color: var(--mk-blue-text); }
 .cp-log__jump:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 2px; border-radius: var(--mk-radius-xs); }
 .cp-log__dur { color: var(--mk-faint); font-family: var(--mk-mono); font-size: var(--mk-fs-micro); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .cp-log__raw { font-size: var(--mk-fs-micro); flex-basis: 100%; }
@@ -3595,6 +3789,12 @@ async function copyRawJson() {
   display: grid; gap: 10px; padding: 10px 16px 14px;
   border-bottom: 1px solid var(--mk-line);
 }
+/* 2026-11-09 微调（图2 目标阶段）：客观体量 / 单次时长 / 时间预算 / 时间范围 四字段单行四列并排。
+   作用域锁在本座舱目标理解栅格（.cp-goal-u .cp-goal-u__facts，特异性高于全局 .mk-facts 的 3 列），
+   不覆写全局 .mk-facts 原语，其它调用方（反馈 / 编排图等）不受影响。 */
+/* 列间距 10 → 10/24：值可能很长（时间预算那句自述），省略号截断后右缘距下一列只剩 10px，
+   读起来像连成一串（2026-11-09 走查「时间预算与时间范围撞车」）。 */
+.cp-goal-u .cp-goal-u__facts { grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 24px; }
 .cp-goal-u__line {
   margin: 0; display: flex; gap: 8px; align-items: baseline; min-width: 0;
   font-size: var(--mk-fs-micro); color: var(--mk-muted);
@@ -3617,6 +3817,8 @@ async function copyRawJson() {
   max-height: var(--cp-class-h);
   overscroll-behavior: contain;
 }
+/* 目标对话变体（2026-10-31 四轮评审 R10）：解除定高，对话全文随页面自然生长 */
+.cp-transcripts--free { max-height: none; overflow: visible; }
 .cp-transcript {
   display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl);
 }
@@ -3626,6 +3828,21 @@ async function copyRawJson() {
 }
 .cp-transcript__message.is-teacher { border-left-color: var(--mk-blue); background: var(--mk-blue-bg); }
 .cp-transcript__message.is-learner { border-left-color: var(--mk-teal); background: rgba(45, 212, 191, 0.1); }
+/* 2026-11-09 微调（图4 学习阶段课堂对话流）：真实模式（session-real）学习者消息卡向右缩进
+   12% + 深蓝底，与左侧教师卡拉开区分度。仅给真实模式的「学习者」卡加 is-real-learner 修饰类，
+   虚拟控制台（同用 .cp-transcript__message.is-learner）不受影响；教师卡保持原样。
+   深蓝底走既有令牌 --mk-blue-bg-strong（原语层「深」档胶囊底），无硬编码色值。 */
+.cp-transcript__message.is-learner.is-real-learner {
+  /* 2026-11-09 走查：原为「左缩进 12% + 宽 88%」——既不是右对齐也不是同列左对齐，
+     左边缘凭空空出一条死区，读起来像评论区的二级回复而不是双人对话。
+     改成标准双人对话：学习者一侧靠右、限宽 78%，教师侧左侧满宽；标签与正文一并右对齐。 */
+  margin-left: auto;
+  width: auto;
+  max-width: 78%;
+  background: var(--mk-blue-bg-strong);
+  border-left-color: var(--mk-blue);
+}
+.cp-transcript__message.is-learner.is-real-learner > span:first-child { text-align: right; }
 .cp-transcript__message span { font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-faint); }
 /* 消息正文按 markdown 渲染（2026-10-22 用户「md没渲染」）：产品同一套 markdown-it + DOMPurify，
    这里只补紧凑排版（控制台字号小、气泡内高度有限），不引入产品端的 16px github 版式。 */
@@ -3644,7 +3861,7 @@ async function copyRawJson() {
 }
 .cp-transcript__content :deep(strong) { font-weight: 700; }
 .cp-transcript__content :deep(ul), .cp-transcript__content :deep(ol) { margin: 4px 0; padding-left: 18px; }
-.cp-transcript__content :deep(a) { color: var(--mk-blue); text-decoration: underline; }
+.cp-transcript__content :deep(a) { color: var(--mk-blue-text); text-decoration: underline; }
 
 /* 检查点（题目不走聊天逐字稿，单独渲染；2026-10-13 走查 lesson 13） */
 .cp-checkpoints {
@@ -3660,11 +3877,24 @@ async function copyRawJson() {
 .cp-checkpoint__meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .cp-checkpoint__tag { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .cp-checkpoint__concept { font-size: var(--mk-fs-micro); color: var(--mk-accent-deep); }
+/* 内联变体（2026-10-19 走查「检查点在下方不符合课堂阅读顺序」）：不再整块挂转录末尾，
+   按发生时间插回课堂列——去掉外框，只留左侧紫线与浅底标示「非发言、是作答记录」。 */
+.cp-checkpoint--inline {
+  gap: 6px; padding: 8px 10px;
+  border: none; border-left: 3px solid var(--mk-violet-fill); border-radius: var(--mk-radius-sm);
+  background: var(--mk-surface-2);
+}
+.cp-checkpoint--inline:first-of-type { padding-top: 8px; }
+.cp-checkpoint__kind {
+  padding: 1px 6px; border-radius: var(--mk-radius-pill);
+  background: var(--mk-surface-3);
+  font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-muted);
+}
 
 /* Review */
 .cp-review { display: grid; gap: 8px; padding: 8px 10px; border-radius: var(--mk-radius-sm); background: var(--mk-surface-2); }
 .cp-review__badges { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.cp-review__badge { padding: 2px 9px; border-radius: 999px; font-size: var(--mk-fs-micro); font-weight: 800; background: var(--mk-surface-2); color: var(--mk-muted); }
+.cp-review__badge { padding: 2px 9px; border-radius: var(--mk-radius-xs); font-size: var(--mk-fs-micro); font-weight: 800; background: var(--mk-surface-2); color: var(--mk-muted); }
 .cp-review__badge[data-decision='accept'] { background: var(--mk-green-bg); color: var(--mk-green); }
 .cp-review__badge[data-decision='modify'] { background: var(--mk-amber-bg); color: var(--mk-amber); }
 .cp-review__badge[data-decision='reject'] { background: var(--mk-red-bg); color: var(--mk-red); }
@@ -3672,7 +3902,7 @@ async function copyRawJson() {
 .cp-review__reaction { margin: 0; font-size: var(--mk-fs-micro); line-height: 1.6; white-space: pre-wrap; }
 .cp-review__concern { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-amber-fill); }
 .cp-review__changes { margin: 0; padding-left: 18px; display: grid; gap: 3px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.cp-review__replan { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-blue); }
+.cp-review__replan { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-blue-text); }
 
 /* ===== Learn 双栏：课程树 + 对话 =====
    课堂区高度（2026-10-19 用户「重新设计，课堂区域高度高一些」）：原两根 max-height 都是
@@ -3683,12 +3913,22 @@ async function copyRawJson() {
    max-height calc(100vh - 100px) 是同一把）：下限 560 保证矮屏上仍是一块可用工作区，
    上限 1100 防 4K/超高的屏把整页撑成一张卡。两列同高（只给一处口径，避免再各写一半）——
    口径变量定义在页根 .cp，这里只消费。 */
+/* 无课程时的整卡单一空态：替代原左右两栏各自为政的空态文字（2026-10-31 三轮评审） */
+.cp-learn-empty {
+  display: grid;
+  place-items: center;
+  min-height: 160px;
+  padding: 24px 16px;
+}
+.cp-learn-empty .cp-none { margin: 0; }
 .cp-learn-grid {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
   gap: 0;
   min-height: 300px;
 }
+/* 无建课树但有课堂转录/检查点（真实会话）：左栏空缺，对话独占整行，不挤进 260px 窄列 */
+.cp-learn-grid--notree { grid-template-columns: minmax(0, 1fr); }
 .cp-learn-tree {
   border-right: 1px solid var(--mk-line);
   padding: 6px 0;
@@ -3731,7 +3971,7 @@ async function copyRawJson() {
   font-variant-numeric: tabular-nums;
   background: var(--mk-surface);
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-xs);
 }
 .cp-learn-tree__lesson {
   display: flex;
@@ -3751,14 +3991,14 @@ async function copyRawJson() {
 }
 .cp-learn-tree__lesson:hover:not(:disabled) { background: rgba(0,0,0,0.02); color: var(--mk-ink); }
 .cp-learn-tree__lesson:disabled { opacity: 0.45; cursor: default; }
-.cp-learn-tree__lesson.is-active { background: var(--mk-blue-bg); color: var(--mk-blue); border-left-color: var(--mk-blue); font-weight: 700; }
+.cp-learn-tree__lesson.is-active { background: var(--mk-blue-bg); color: var(--mk-blue-text); border-left-color: var(--mk-blue); font-weight: 700; }
 .cp-learn-tree__lesson.is-done { color: var(--mk-green); }
-.cp-learn-tree__lesson.is-active.is-done { color: var(--mk-blue); }
+.cp-learn-tree__lesson.is-active.is-done { color: var(--mk-blue-text); }
 /* pending（未开始）也可点击：悬停时提示可从此课开始 */
 .cp-learn-tree__lesson.is-pending:hover { background: var(--mk-amber-bg); color: var(--mk-amber); }
 .cp-learn-tree__mark { font-size: var(--mk-fs-micro); width: 14px; text-align: center; flex-shrink: 0; }
 .cp-learn-tree__lesson.is-done .cp-learn-tree__mark { color: var(--mk-green); }
-.cp-learn-tree__lesson.is-active .cp-learn-tree__mark { color: var(--mk-blue); }
+.cp-learn-tree__lesson.is-active .cp-learn-tree__mark { color: var(--mk-blue-text); }
 .cp-learn-tree__num { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 600; flex-shrink: 0; }
 .cp-learn-tree__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cp-learn-chat {
@@ -3788,7 +4028,7 @@ async function copyRawJson() {
 
 /* Lesson head */
 .cp-lesson-head {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  display: grid; gap: 2px;
   padding: 10px 12px; border: 1px solid var(--mk-line); border-radius: var(--mk-radius-xl); background: var(--mk-surface-2);
   margin-bottom: 10px;
 }
@@ -3841,11 +4081,11 @@ async function copyRawJson() {
   color: var(--mk-muted);
   background: var(--mk-surface);
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-xs);
   border: 1px solid var(--mk-line);
 }
 .cp-lesson-wrapup__score--primary {
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
   border-color: rgba(47, 106, 224, 0.3);
   background: var(--mk-blue-bg);
 }
@@ -3900,15 +4140,15 @@ async function copyRawJson() {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   padding: 1px 8px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-xs);
 }
 .cp-lesson-wrapup__kp-status.is-mastered { background: var(--mk-green-bg); color: var(--mk-green); }
-.cp-lesson-wrapup__kp-status.is-learning { background: var(--mk-blue-bg); color: var(--mk-blue); }
+.cp-lesson-wrapup__kp-status.is-learning { background: var(--mk-blue-bg); color: var(--mk-blue-text); }
 .cp-lesson-wrapup__kp-status.is-review { background: var(--mk-amber-bg); color: var(--mk-amber); }
 .cp-lesson-wrapup__kp-unverified {
   font-size: var(--mk-fs-micro);
   padding: 1px 8px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-xs);
   background: var(--mk-surface-2);
   color: var(--mk-faint);
 }
@@ -3928,7 +4168,7 @@ async function copyRawJson() {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   padding: 1px 8px;
-  border-radius: 999px;
+  border-radius: var(--mk-radius-sm);
   text-align: center;
   height: fit-content;
 }
@@ -3971,10 +4211,11 @@ async function copyRawJson() {
 }
 .cp-lesson-head__main { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
 .cp-lesson-head__main strong { font-size: var(--mk-fs-body); }
-.cp-lesson-head__ms { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.cp-lesson-head__state { padding: 2px 9px; border-radius: 999px; font-size: var(--mk-fs-micro); font-weight: 800; background: var(--mk-surface-2); color: var(--mk-muted); }
+/* 里程碑副标题独立一行（2026-10-31 外部评审）：不再与标题抢同一行 */
+.cp-lesson-head__ms { display: block; margin-top: 2px; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.cp-lesson-head__state { padding: 2px 9px; border-radius: var(--mk-radius-xs); font-size: var(--mk-fs-micro); font-weight: 800; background: var(--mk-surface-2); color: var(--mk-muted); }
 .cp-lesson-head__state[data-state='done'] { background: var(--mk-green-bg); color: var(--mk-green); }
-.cp-lesson-head__state[data-state='active'] { background: var(--mk-blue-bg); color: var(--mk-blue); }
+.cp-lesson-head__state[data-state='active'] { background: var(--mk-blue-bg); color: var(--mk-blue-text); }
 .cp-lesson-head__state[data-state='failed'] { background: var(--mk-red-bg); color: var(--mk-red); }
 
 
@@ -4038,7 +4279,7 @@ async function copyRawJson() {
 .cp-wrapup-stats__goal strong { font-size: var(--mk-fs-body); color: var(--mk-ink); line-height: 1.4; }
 .cp-wrapup-stats__badges { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .cp-wrapup-stats__item { display: inline-flex; align-items: baseline; gap: 4px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.cp-wrapup-stats__item em { font-style: normal; font-weight: 800; font-size: var(--mk-fs-emphasis); color: var(--mk-blue); font-variant-numeric: tabular-nums; }
+.cp-wrapup-stats__item em { font-style: normal; font-weight: 800; font-size: var(--mk-fs-emphasis); color: var(--mk-blue-text); font-variant-numeric: tabular-nums; }
 
 .cp-wrapup-cards {
   display: grid;
@@ -4058,7 +4299,7 @@ async function copyRawJson() {
 .cp-wrapup-card__icon {
   /* 图标从 emoji 字（font-size 20px）改为 lucide 线性图标：色块尺寸不变，
      字色改蓝档（--mk-blue 压 --mk-blue-bg 实测 4.4:1，非文本图形需 3:1） */
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
   width: 36px;
   height: 36px;
   display: flex;
@@ -4113,10 +4354,18 @@ async function copyRawJson() {
 .cp-raw__acts { display: flex; align-items: center; gap: 12px; }
 .cp-rawview__head { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
 .cp-rawview__meta { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
-.cp-rawview__note { margin: 0 0 10px; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
 .cp-rawview__pre {
   margin: 0; padding: 12px; border-radius: var(--mk-radius-sm); background: var(--mk-code-bg); color: var(--mk-code-fg);
-  font: 10.5px/1.6 var(--mk-mono); max-height: 56vh; overflow: auto; white-space: pre-wrap; word-break: break-all;
+  /* 不折行（pre）：pre-wrap + break-all 会把超长字符串从第 0 列接着排，JSON 的缩进层级
+     因此整段失真——排查时最需要的正是层级。超长行走横向滚动。
+     上限取行高（10.5×1.6=16.8px）的整数倍，避免最后一行被下缘横向切成半截字；
+     scrollbar-width: auto 让「下面还有」有可见的滚动条，而不是像内容到此为止。 */
+  font: 10.5px/1.6 var(--mk-mono);
+  max-height: calc(16.8px * 33);
+  overflow: auto;
+  white-space: pre;
+  scrollbar-width: auto;
+  overscroll-behavior: contain;
 }
 
 /* 终局评估样式已随裁判独立面移除（2026-09-27） */
@@ -4139,33 +4388,33 @@ async function copyRawJson() {
 .cp-trace-list__seq { font-variant-numeric: tabular-nums; color: var(--mk-faint); font-weight: 700; }
 .cp-trace-list__head time { color: var(--mk-faint); font-variant-numeric: tabular-nums; }
 .cp-trace-list__id { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.cp-trace-list__stage { padding: 1px 6px; border-radius: 999px; font-size: var(--mk-fs-micro); font-weight: 700; background: var(--mk-blue-bg); color: var(--mk-accent-deep); }
+.cp-trace-list__stage { padding: 1px 6px; border-radius: var(--mk-radius-sm); font-size: var(--mk-fs-micro); font-weight: 700; background: var(--mk-blue-bg); color: var(--mk-accent-deep); }
 .cp-trace-list__stage[data-stage='learning'] { background: var(--mk-green-bg); color: #0a8551; }
-.cp-trace-list__emotion, .cp-trace-list__transition { padding: 1px 7px; border-radius: 999px; font-size: var(--mk-fs-micro); background: var(--mk-surface-2); color: var(--mk-muted); }
-.cp-trace-list__degraded { padding: 1px 7px; border-radius: 999px; font-size: var(--mk-fs-micro); background: var(--mk-red-bg); color: var(--mk-red); }
+.cp-trace-list__emotion, .cp-trace-list__transition { padding: 1px 7px; border-radius: var(--mk-radius-sm); font-size: var(--mk-fs-micro); background: var(--mk-surface-2); color: var(--mk-muted); }
+.cp-trace-list__degraded { padding: 1px 7px; border-radius: var(--mk-radius-sm); font-size: var(--mk-fs-micro); background: var(--mk-red-bg); color: var(--mk-red); }
 .cp-trace-list__focus, .cp-trace-list__reason { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .cp-trace-list__signal { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-style: italic; }
 .cp-trace-list__metrics { display: flex; flex-wrap: wrap; gap: 4px; }
-.cp-trace-list__metrics > span { display: inline-flex; align-items: baseline; gap: 3px; padding: 1px 7px; background: var(--mk-surface-2); border-radius: 999px; font-size: var(--mk-fs-micro); }
+.cp-trace-list__metrics > span { display: inline-flex; align-items: baseline; gap: 3px; padding: 1px 7px; background: var(--mk-surface-2); border-radius: var(--mk-radius-sm); font-size: var(--mk-fs-micro); }
 .cp-trace-list__metrics code { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .cp-trace-list__metrics strong { font-variant-numeric: tabular-nums; color: var(--mk-ink); }
 .cp-trace-list__kv { display: flex; flex-wrap: wrap; gap: 4px; }
-.cp-trace-list__kv > span { display: inline-flex; align-items: baseline; gap: 4px; padding: 1px 8px; border-radius: 999px; background: var(--mk-surface-2); font-size: var(--mk-fs-micro); max-width: 100%; }
+.cp-trace-list__kv > span { display: inline-flex; align-items: baseline; gap: 4px; padding: 1px 8px; border-radius: var(--mk-radius-sm); background: var(--mk-surface-2); font-size: var(--mk-fs-micro); max-width: 100%; }
 .cp-trace-list__kv code { flex: 0 0 auto; color: var(--mk-faint); }
 .cp-trace-list__kv strong { color: var(--mk-ink); font-weight: 600; word-break: break-all; }
 .cp-trace-list__raw { font-size: var(--mk-fs-micro); }
 .cp-trace-list__raw summary { cursor: pointer; color: var(--mk-faint); font-weight: 600; user-select: none; }
 .cp-trace-list__raw .cp-trace-list__body { margin-top: 4px; }
 .cp-trace-list__flags { display: flex; flex-wrap: wrap; gap: 4px; }
-.cp-trace-list__flags > span { padding: 1px 7px; border-radius: 999px; font-size: var(--mk-fs-micro); background: var(--mk-surface-2); color: var(--mk-faint); border: 1px solid transparent; }
+.cp-trace-list__flags > span { padding: 1px 7px; border-radius: var(--mk-radius-sm); font-size: var(--mk-fs-micro); background: var(--mk-surface-2); color: var(--mk-faint); border: 1px solid transparent; }
 .cp-trace-list__flags > span.active { background: var(--mk-blue-bg); color: #0958d9; border-color: #91caff; }
 .cp-trace-list__blockers { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.cp-trace-list__blocker { padding: 1px 7px; background: var(--mk-amber-bg); color: var(--mk-amber); border-radius: 999px; }
+.cp-trace-list__blocker { padding: 1px 7px; background: var(--mk-amber-bg); color: var(--mk-amber); border-radius: var(--mk-radius-sm); }
 .cp-trace-list__body { margin: 4px 0 0; padding: 6px 8px; background: var(--mk-surface-2); border-radius: 4px; font-size: var(--mk-fs-micro); line-height: 1.5; color: var(--mk-muted); white-space: pre-wrap; word-break: break-word; max-height: 160px; overflow-y: auto; }
 
 /* Timeline */
 .cp-timeline__kind {
-  padding: 1px 6px; border-radius: 999px; font-size: var(--mk-fs-micro); font-weight: 700; background: var(--mk-surface-2); color: var(--mk-muted); white-space: nowrap;
+  padding: 1px 6px; border-radius: var(--mk-radius-sm); font-size: var(--mk-fs-micro); font-weight: 700; background: var(--mk-surface-2); color: var(--mk-muted); white-space: nowrap;
 }
 .cp-timeline__kind[data-kind='referee'] { background: var(--mk-red-bg); color: var(--mk-red-strong); }
 .cp-timeline__kind[data-kind='private'] { background: #f5f3ff; color: #6d28d9; }
@@ -4174,7 +4423,7 @@ async function copyRawJson() {
 .cp-timeline__kind[data-kind='path'] { background: var(--mk-amber-bg); color: #c2410c; }
 .cp-timeline__kind[data-kind='teaching'] { background: var(--mk-green-bg); color: #0a8551; }
 .cp-timeline__kind[data-kind='evidence'] { background: #ecfeff; color: #0e7490; }
-.cp-timeline__stage { padding: 1px 6px; border-radius: 999px; font-size: var(--mk-fs-micro); font-weight: 700; background: var(--mk-blue-bg); color: var(--mk-accent-deep); white-space: nowrap; }
+.cp-timeline__stage { padding: 1px 6px; border-radius: var(--mk-radius-sm); font-size: var(--mk-fs-micro); font-weight: 700; background: var(--mk-blue-bg); color: var(--mk-accent-deep); white-space: nowrap; }
 .cp-timeline__stage[data-stage='learning'], .cp-timeline__stage[data-stage='teaching'] { background: var(--mk-green-bg); color: #0a8551; }
 .cp-timeline__stage[data-stage='goal'] { background: #faf5ff; color: #7c3aed; }
 .cp-timeline__stage[data-stage='path'] { background: var(--mk-amber-bg); color: #c2410c; }
@@ -4299,6 +4548,8 @@ html[data-theme='dark'] {
   .cp-transcript__message { background: #19191a; border-left-color: #313235; }
   .cp-transcript__message.is-teacher { background: color-mix(in srgb, var(--wf-color-primary) 12%, transparent); border-left-color: var(--mk-blue); }
   .cp-transcript__message.is-learner { background: rgba(45, 212, 191, 0.1); border-left-color: var(--mk-teal); }
+  /* 2026-11-09 微调：暗色下真实模式学习者卡也要盖过上面 .is-learner 的青色，落到深蓝底（令牌 --mk-blue-bg-strong 暗色档） */
+  .cp-transcript__message.is-learner.is-real-learner { background: var(--mk-blue-bg-strong); border-left-color: var(--mk-blue); }
   .cp-review { background: #19191a; }
   .cp-review__badge, .cp-lesson-head__state { background: var(--mk-close-bg); }
   .cp-lesson-head__state[data-state='active'] { background: color-mix(in srgb, var(--wf-color-primary) 18%, transparent); color: var(--mk-accent-deep); }

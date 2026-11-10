@@ -21,7 +21,9 @@ import {
   CheckpointSubmitResult,
   getPendingCheckpoint,
   judgeCheckpointAnswer,
+  resolveCheckpointJudgement,
   normalizeCheckpointShape,
+  projectMessagesForClient,
   recordCheckpointAttemptEvidence,
   stripCheckpointAnswerKeys,
 } from './teaching-checkpoint';
@@ -97,6 +99,8 @@ export async function getSessionHistory(userId: string): Promise<Array<{
   duration: number | null;
   status: string;
   messageCount: number;
+  /** 最近一条消息的时间（无消息回退到 startTime）：通知面板据此区分「进行中 / 空闲中」 */
+  lastActiveAt: Date;
 }>> {
   const sessions = await teachingSessionRepository.listByUser(userId);
   return sessions.map((session) => ({
@@ -109,7 +113,21 @@ export async function getSessionHistory(userId: string): Promise<Array<{
     duration: session.duration,
     status: session.status,
     messageCount: session.messages.length,
+    lastActiveAt: lastMessageAt(session.messages) ?? session.startTime,
   }));
+}
+
+/**
+ * 会话的最近活跃时刻 = 消息里最大的 timestamp；一条消息都没有（刚开课还没说话）时返回 null，
+ * 由调用方回退到 startTime。坏时间戳一律跳过（不让一条脏数据把整条读数拖成 null）。
+ */
+function lastMessageAt(messages: TeachingSessionMessage[]): Date | null {
+  let latestMs = Number.NEGATIVE_INFINITY;
+  for (const m of messages) {
+    const ms = m?.timestamp ? Date.parse(String(m.timestamp)) : NaN;
+    if (Number.isFinite(ms) && ms > latestMs) latestMs = ms;
+  }
+  return Number.isFinite(latestMs) ? new Date(latestMs) : null;
 }
 
 /**
@@ -174,7 +192,8 @@ export async function getSessionDetail(sessionId: string, userId: string): Promi
     endTime: session.endTime,
     duration: session.duration,
     status: session.status,
-    messages: session.messages,
+    // 消息出口：剔除停写的调试信封并剥离答案键（#240，与 /users/me/sessions 共用同一投影）
+    messages: projectMessagesForClient(session.messages),
     state: stripCheckpointAnswerKeys(session.teachingState || {}),
     knowledgePoints: session.knowledgeState,
     wrapup: await withPmcLongTermState(session.wrapup, userId, session.endTime),
@@ -287,7 +306,7 @@ export async function submitCheckpoint(
         operationClaim,
         checkpointId,
         // 代码裁决（答案键存在时）：把"对错"从模型自评里剥离出来（审计 §7 P1-1）
-        checkpointJudgement: judgeCheckpointAnswer(checkpoint, payload),
+        checkpointJudgement: await resolveCheckpointJudgement(checkpoint, payload, judgeCheckpointAnswer(checkpoint, payload)),
         checkpointSubmission: {
           selectedOptionIds: payload.selectedOptionIds,
           // 简答不落原文（可能含学生隐私细节），只留长度特征
@@ -335,6 +354,9 @@ export async function judgeCheckpointSubmission(
   if (!checkpoint || checkpoint.id !== checkpointId) return null;
   const judgement = judgeCheckpointAnswer(checkpoint, payload);
   if (!judgement) return null;
+  // 简答词面未全命中时不提前下结论（2026-11-08 分级判分）：模型 rubric 语义复核在主流程
+  // 做一次即可，这里返回 null ⇒ 客户端照旧等 final，避免同一作答两次裁决调用。
+  if (judgement.passed === false && checkpoint.type === 'short_answer') return null;
   return {
     passed: judgement.passed === true,
     judgedBy: judgement.judgedBy,

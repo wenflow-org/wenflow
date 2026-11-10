@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import yaml from 'js-yaml';
 import { learnerProjectionService } from '../LearnerProjectionService';
 function heavySnapshot() {
   return {
@@ -47,6 +50,94 @@ const heavyPath = {
 };
 
 describe('LearnerProjectionService.toGuidanceProjection', () => {
+  // 2026-11-08 前缀缓存优化：guidance 载荷此前把整个 profile（narratives/history/认知行为情绪）
+  // 与 freshness（逐次变化的 generatedAt）一并发给模型。这两块没有任何提示词规则引用，
+  // 却会因逐次变化把整段前缀缓存打断。以下锁「裁掉什么」与「必须留下什么」。
+  it('裁掉 profile 长叙述与 freshness（前缀缓存杀手），保留规则真正读取的字段', () => {
+    const snapshot = heavySnapshot();
+    snapshot.profile = {
+      userId: 'u1',
+      name: '林同学',
+      learning: { level: 3 },
+      narratives: { long: 'N'.repeat(3000) },
+      history: { events: ['h1', 'h2'] },
+      narrativeInsights: { practicePreferenceNote: '更愿意在真实表格上试', surfaceGoal: '两周内出交叉表' },
+    };
+    snapshot.dynamicState = {
+      metrics: { lss: 4, ktl: 5, lf: 3, lsb: 1 },
+      recentTrend: 'stable',
+      fatigueRisk: 'low',
+      recommendedPacing: 'moderate',
+      srlPhase: 'perform',
+      recentSessionQuality: 'Q'.repeat(500),
+      recommendedInteraction: { style: 'socratic' },
+    };
+
+    const { learnerSnapshot } = learnerProjectionService.toGuidanceProjection(snapshot, null);
+    const s: any = learnerSnapshot;
+
+    expect(s.freshness).toBeUndefined();
+    expect(s.profile.narratives).toBeUndefined();
+    expect(s.profile.history).toBeUndefined();
+    expect(s.dynamicState.recentSessionQuality).toBeUndefined();
+    expect(s.dynamicState.recommendedInteraction).toBeUndefined();
+
+    // 规则 7 读取的偏好字段必须留下
+    expect(s.profile.narrativeInsights.practicePreferenceNote).toBe('更愿意在真实表格上试');
+    // 规则 11/12 判定负荷与节奏所需的状态位
+    expect(s.dynamicState.fatigueRisk).toBe('low');
+    expect(s.dynamicState.recommendedPacing).toBe('moderate');
+    expect(s.dynamicState.metrics).toEqual({ lss: 4, ktl: 5, lf: 3, lsb: 1 });
+    // 规则 10/36 的卡点预警依据、规则 13 的迁移信号
+    expect(s.knowledgeMemory.globalBackground.blockedFoundations).toEqual(['b1']);
+    expect(s.knowledgeMemory.globalBackground.transferSignals).toEqual([{ conceptKey: 't1' }]);
+  });
+
+  it('toGuidanceWrapup 剔除运行时/审计元数据，保留收束语义字段', () => {
+    const wrapup = {
+      status: 'completed',
+      summary: '本节完成了行头识别',
+      progress: { completed: 3 },
+      evidence: ['e1'],
+      runtimeEnvelope: { big: 'R'.repeat(5000) },
+      shadowDeterministic: { big: 'D'.repeat(500) },
+      closureAudit: { checks: ['c1'] },
+      sources: ['model'],
+      summarySource: 'model',
+      evaluationSource: 'model',
+    };
+    const out: any = learnerProjectionService.toGuidanceWrapup(wrapup);
+    for (const dropped of ['runtimeEnvelope', 'shadowDeterministic', 'closureAudit', 'sources', 'summarySource', 'evaluationSource']) {
+      expect(out[dropped]).toBeUndefined();
+    }
+    expect(out.summary).toBe('本节完成了行头识别');
+    expect(out.progress).toEqual({ completed: 3 });
+    expect(out.evidence).toEqual(['e1']);
+    expect(out.status).toBe('completed');
+  });
+
+  it('toGuidanceWrapup 对 null / undefined 输入返回 null（不抛错）', () => {
+    expect(learnerProjectionService.toGuidanceWrapup(null)).toBeNull();
+    expect(learnerProjectionService.toGuidanceWrapup(undefined)).toBeNull();
+  });
+
+  it('toGuidanceWrapup 全键都被剔除时返回 null（不是空对象）', () => {
+    // 若返回 {}，调用方的 `?? undefined` 对空对象不生效（{} 非 nullish），
+    // 会让「本来没有收束摘要」与「有但被投影成空」在载荷里表现不同（{} vs 缺键）。
+    const out = learnerProjectionService.toGuidanceWrapup({
+      runtimeEnvelope: { big: 'R'.repeat(100) },
+      shadowDeterministic: { big: 'D'.repeat(100) },
+      closureAudit: {},
+      sources: ['model'],
+      summarySource: 'model',
+      evaluationSource: 'model',
+      extensionObservability: {},
+    });
+    expect(out).toBeNull();
+    // 由此 `?? undefined` 也确实收敛成 undefined
+    expect(out ?? undefined).toBeUndefined();
+  });
+
   it('裁剪掉 path.aiPromptTemplate（上下文膨胀主因）', () => {
     const { path } = learnerProjectionService.toGuidanceProjection(heavySnapshot(), heavyPath);
     expect(path).not.toHaveProperty('aiPromptTemplate');
@@ -94,6 +185,25 @@ describe('LearnerProjectionService.toGuidanceProjection', () => {
     // 逐任务/逐证据明细不进入诊断投影
     expect(JSON.stringify(review)).not.toContain('taskMastery');
     expect(JSON.stringify(review).length).toBeLessThan(3000);
+  });
+
+  // issue #196：transferSignals 此前被硬置空，成为「产出后无人消费」的字段。
+  it('transferSignals 与其余台账项同口径透传（有界截断，不再硬置空）', () => {
+    const snapshot = heavySnapshot();
+    snapshot.knowledgeMemory.globalBackground.transferSignals = Array.from({ length: 6 }, (_, i) => ({
+      conceptKey: `t${i}`, label: `T${i}`, readiness: 'high', confidence: 0.8,
+    }));
+    const { learnerSnapshot } = learnerProjectionService.toGuidanceProjection(snapshot, null);
+    const signals = (learnerSnapshot as any).knowledgeMemory.globalBackground.transferSignals;
+    expect(signals).toHaveLength(3);
+    expect(signals[0].conceptKey).toBe('t0');
+  });
+
+  it('globalBackground.transferSignals 缺失时投影回落空数组（不抛错）', () => {
+    const snapshot = heavySnapshot() as any;
+    delete snapshot.knowledgeMemory.globalBackground.transferSignals;
+    const { learnerSnapshot } = learnerProjectionService.toGuidanceProjection(snapshot, null);
+    expect((learnerSnapshot as any).knowledgeMemory.globalBackground.transferSignals).toEqual([]);
   });
 });
 
@@ -166,5 +276,117 @@ describe('toTeachingProjection · 概念身份接口（kcid 读取侧契约）',
     const projection = learnerProjectionService.toTeachingProjection(snapshot);
     expect(projection.relevantKnowledge.mastered).toEqual(heavySnapshot().knowledgeMemory.globalSignals.masteredConcepts);
     expect(projection.backgroundKnowledge.recentConceptLedger[0].label).toBe('判断两个元素间的对齐关系');
+  });
+
+  // issue #196：transferSignals 此前不进任何投影响应（无确定性消费方），现送达课堂投影并被 teaching-turn 规则读取。
+  it('backgroundKnowledge 透传 transferSignals（有界截断，供课堂读取）', () => {
+    const withSignals = {
+      ...heavySnapshot(),
+      knowledgeMemory: {
+        ...heavySnapshot().knowledgeMemory,
+        globalBackground: {
+          ...heavySnapshot().knowledgeMemory.globalBackground,
+          transferSignals: Array.from({ length: 12 }, (_, i) => ({
+            conceptKey: `ts${i}`, label: `TS${i}`, readiness: 'high', confidence: 0.8,
+          })),
+        },
+      },
+    } as any;
+    const projection = learnerProjectionService.toTeachingProjection(withSignals);
+    expect(projection.backgroundKnowledge.transferSignals).toHaveLength(8);
+    expect(projection.backgroundKnowledge.transferSignals[0].conceptKey).toBe('ts0');
+  });
+
+  // issue #196 守卫：写入快照台账（globalBackground，来源 learner_evidence 蒸馏）的每一项，
+  // 都必须被至少一个消费侧投影承载——这正是原先 transferSignals 缺失的那一环。
+  it('globalBackground 台账项被消费侧投影逐一承载（防「产出后无人消费」）', () => {
+    const withAll = {
+      ...heavySnapshot(),
+      knowledgeMemory: {
+        ...heavySnapshot().knowledgeMemory,
+        globalBackground: {
+          reusableFoundations: ['R1'],
+          blockedFoundations: ['B1'],
+          conceptLedger: [{ conceptKey: 'c1', label: 'C1' }],
+          recurringConfusions: [{ conceptKey: 'x1', label: 'X1', pattern: 'p', confidence: 0.5, count: 1 }],
+          transferSignals: [{ conceptKey: 't1', label: 'T1', readiness: 'high', confidence: 0.8 }],
+        },
+      },
+    } as any;
+    const bk = learnerProjectionService.toTeachingProjection(withAll).backgroundKnowledge;
+    expect(bk.reusableFoundations.length).toBeGreaterThan(0);
+    expect(bk.blockedFoundations.length).toBeGreaterThan(0);
+    expect(bk.recurringConfusions.length).toBeGreaterThan(0);
+    expect(bk.transferSignals.length).toBeGreaterThan(0);
+    // conceptLedger 在课堂投影里以 recentConceptLedger 承载
+    expect(bk.recentConceptLedger.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * #183：教学投影曾把「该减速 / 该重排 / 疲劳风险」三类跨课结论主动裁掉——
+ * liveState 无 fatigueRisk、teachingHints 只留 4 个键、整份投影没有 replanSignal。
+ * 结果：预测器与编排算出的结论永远到不了下一课（只进 dashboard 文案与路径重排）。
+ */
+describe('toTeachingProjection · 跨课结论送达（#183）', () => {
+  const replanSignal = {
+    shouldSuggest: true,
+    priority: 'high' as const,
+    recommendation: 'slow_down' as const,
+    scope: 'next_milestone' as const,
+    rationale: '连续两课疲劳度高于健康度',
+    reasonCodes: ['fatigue_high', 'lesson_imbalance'],
+  };
+
+  function snapshotWithConsequences() {
+    const snapshot = heavySnapshot();
+    snapshot.dynamicState.fatigueRisk = 'high';
+    snapshot.dynamicState.recommendedPacing = 'slow';
+    snapshot.teachingHints.riskFactors = ['连续高强度', '卡点未解'];
+    snapshot.replanSignal = replanSignal;
+    return snapshot;
+  }
+
+  it('fatigueRisk 随 liveState 送达（减速结论不再被裁）', () => {
+    const projection = learnerProjectionService.toTeachingProjection(snapshotWithConsequences());
+    expect(projection.liveState.fatigueRisk).toBe('high');
+    // 同一份 liveState 的节奏结论保持一致（两者同源，不应一有一无）
+    expect(projection.liveState.recommendedPacing).toBe('slow');
+  });
+
+  it('teachingHints.riskFactors 随投影送达（不再只保留 4 个键）', () => {
+    const projection = learnerProjectionService.toTeachingProjection(snapshotWithConsequences());
+    expect(projection.teachingHints.riskFactors).toEqual(['连续高强度', '卡点未解']);
+    // 原有 4 个键不因补齐而丢失
+    expect(projection.teachingHints).toEqual(expect.objectContaining({
+      promptEnhancement: 'p',
+      recommendedApproach: 'a',
+      emphasize: [],
+      avoid: [],
+    }));
+  });
+
+  it('replanSignal 随投影送达（重排结论不再是 dashboard 专属）', () => {
+    const projection = learnerProjectionService.toTeachingProjection(snapshotWithConsequences());
+    expect(projection.replanSignal).toEqual(replanSignal);
+    // 与重排投影同源同值：两处给下游的必须是同一个信号，不是各算一份
+    expect(learnerProjectionService.toReplanProjection(snapshotWithConsequences())?.signal).toEqual(projection.replanSignal);
+  });
+
+  it('投影键集 ⊇ 课堂提示词实际引用的 learner.<key>（防再次一处声明一处裁掉）', () => {
+    const projection = learnerProjectionService.toTeachingProjection(snapshotWithConsequences()) as unknown as Record<string, unknown>;
+    const promptPath = path.resolve(__dirname, '../../../../../prompts/core/teaching-turn.yaml');
+    const doc = yaml.load(fs.readFileSync(promptPath, 'utf8')) as { rules?: unknown[] };
+    const ruleText = (doc.rules || []).filter((rule): rule is string => typeof rule === 'string').join('\n');
+    const referenced = [...new Set([...ruleText.matchAll(/\blearner\.([A-Za-z_][A-Za-z0-9_]*)/g)].map((match) => match[1]))];
+
+    expect(referenced.length).toBeGreaterThan(0);
+    for (const key of referenced) {
+      expect(Object.keys(projection)).toContain(key);
+    }
+    // 提示词里疲劳/重排相关字段（#183 病灶）必须真的存在于投影里
+    expect(projection).toHaveProperty('liveState.fatigueRisk');
+    expect(projection).toHaveProperty('teachingHints.riskFactors');
+    expect(projection).toHaveProperty('replanSignal.recommendation');
   });
 });

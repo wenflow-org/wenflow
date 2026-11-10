@@ -38,8 +38,11 @@ const DW = 1440, DH = 900;
 const PAGES = [
   /* dashboard lt44 3→10（2026-09-27）：学习节奏改常显后七个星期格进入口径。375 下 7 列每格几何上限 ~44px，
    实测 39px 宽×92px 高（含 3 个 link-muted/path__detail-link 的 36px 紧凑带）。星期格是日历型次级交互，
-   按分级口径登记；格内数字块 28px、点击热区为整格高度。 */
-  { key: 'dashboard', path: '/dashboard', gate: '.dash__main .card', budget: { lt36: 0, lt44: 10, fonts: 0, hOver: 0 } },
+   按分级口径登记；格内数字块 28px、点击热区为整格高度。
+   10→12（2026-11-07）：新手态（0 路径）实测 12 = 品牌链 1 + 3 个示例芯片 36 + 文字链 40 + 7 个星期格 41。
+   两处新增都来自本次改版：① 7 天打卡条改为常驻（原来 0 分钟时藏起来换成虚线空框，见 V2Dashboard 模板注释）；
+   ② 示例芯片 32→36 回到本文件登记的「紧凑芯片 36-40」档。有数据的账号不到 12（无示例芯片）。 */
+  { key: 'dashboard', path: '/dashboard', gate: '.dash__main .card', budget: { lt36: 0, lt44: 12, fonts: 0, hOver: 0 } },
   { key: 'paths', path: '/learning-paths', gate: '.pcard, .empty', budget: { lt36: 0, lt44: 8, fonts: 0, hOver: 0 } },
   { key: 'path-detail', path: '/learning-path/lp_1790165713901_bigjo2r', gate: '.hero', budget: { lt36: 0, lt44: 4, fonts: 1, hOver: 0 } },
   { key: 'state', path: '/learning-state', gate: '.metrics, main .card', budget: { lt36: 0, lt44: 6, fonts: 0, hOver: 0 } },
@@ -57,7 +60,12 @@ const PAGES = [
      learn 用 logocheck2 名下已完结会话走只读续读（驱动配方见 project-mobile-density），
      goal 量的是入口态（无进行中对话的确定性状态）。 */
   { key: 'learn', path: '/learn/teaching_user_c2aad129-66b3-4783-a125-bf7dd7981283_6fb99ca2-1379-4986-a3fa-dfc5278a1048', gate: '.learn, .learn__gate, main', budget: { lt36: 0, lt44: 0, fonts: 0, hOver: 0 } },
-  { key: 'goal', path: '/goal-conversation', gate: '.goal, .entry, main', budget: { lt36: 0, lt44: 2, fonts: 0, hOver: 0 } },
+  /* 2026-11-07 入口态重排（居中标题 → 大输入卡 → 底部轻量胶囊）：示例方向从满宽列表行
+     降为 36px 紧凑胶囊，3 枚胶囊进入 lt44 口径（2→5，实测 offenders 另两枚是既有的
+     textarea 40 与「换一批」36）。36-40 正是本文件自己登记的「紧凑芯片」档
+     （见上文分级口径：主操作须 ≥44，文字链/紧凑芯片 36-40），故按该档登记；
+     胶囊盒子的 36 同时压住 lt36 恒 0 的硬约束（实测 lt36=0、hOver=0、fonts=0）。 */
+  { key: 'goal', path: '/goal-conversation', gate: '.goal, .entry, main', budget: { lt36: 0, lt44: 5, fonts: 0, hOver: 0 } },
 ];
 const EVAL_PATH = process.env.SPEC_EVAL_URL || '';
 
@@ -165,7 +173,10 @@ const DESKTOP = [
   { key: 'settings', path: '/user/settings', gate: '.uc-card, main', budget: { max: 24, steps: 10, small: 1 } },
   { key: 'agent-logs', path: '/user/agent-logs', gate: '.uc-table, .empty, main', budget: { max: 24, steps: 10, small: 24 } },
   { key: 'learn', path: '/learn/teaching_user_c2aad129-66b3-4783-a125-bf7dd7981283_6fb99ca2-1379-4986-a3fa-dfc5278a1048', gate: '.learn, .learn__gate, main', budget: { max: 22, steps: 7, small: 0 } },
-  { key: 'goal', path: '/goal-conversation', gate: '.goal, .entry, main', budget: { max: 20, steps: 8, small: 0 } },
+  /* 2026-11-07 入口态重排：主标题从 20px 抬到 24px（居中 hero）。24 仍是本档的上限口径
+     （「使用者侧不允许出现展示字」，全站 max ≤ 24），登记值随之 20→24；实测 max=24、
+     steps=6、small=0，其余档位不越。 */
+  { key: 'goal', path: '/goal-conversation', gate: '.goal, .entry, main', budget: { max: 24, steps: 8, small: 0 } },
 ];
 
 const dctx = await b.newContext({ viewport: { width: DW, height: DH } });

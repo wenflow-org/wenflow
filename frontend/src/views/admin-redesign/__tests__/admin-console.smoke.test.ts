@@ -3,7 +3,8 @@
  * 真实挂载 AdminConsole（mock 掉 API 层），验证
  * 1. boot 流程完成（loadLiveData 对 mock API 容错 → 不整页报错）
  * 2. manifest 全部菜单项（阶段 1 收敛后 14 项）逐一点击 → 路由跳转 /admin/:id + 对应页面组件真正渲染
- * 3. 深链直达 /admin/:page 渲染对应页面；非法 page 回退 /admin/overview 并修正 URL
+ * 3. 深链直达 /admin/:page 渲染对应页面；未知 page **先提示「未知管理页」再回退 /admin/overview**
+ *    （2026-11-09 走查修正记录：这条曾被误读成「静默落总览」，其实有 toast 与 URL 归一）
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
@@ -68,6 +69,12 @@ vi.mock('@/api/adminApi', () => ({
 vi.mock('@/api/userCustom', () => ({
   getProjectionGrantStatus: vi.fn(async () => ({ data: {} })),
   normalizeProjectionGrant: vi.fn(() => null)
+}));
+
+/* 未知 page 的告知走 toast：mock 掉以便断言「不是静默改写 URL」（2026-11-09 走查修正记录） */
+const { toastWarning } = vi.hoisted(() => ({ toastWarning: vi.fn() }));
+vi.mock('@/utils/toast', () => ({
+  toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: toastWarning }
 }));
 
 async function settle() {
@@ -149,8 +156,13 @@ describe('AdminConsole 导航冒烟', () => {
     expect(wrapper.findComponent(SCENE_COMPONENTS.skills as never)).toBeTruthy();
   });
 
-  it('非法 page 回退 overview 并修正 URL', async () => {
+  /* 2026-11-09 走查修正记录：这一条曾被读成「未知 /admin/* 静默落总览、无提示」而误判为缺陷。
+     实际这里已经有出口——toast 命名了错的那一段，再把 URL 归一成 /admin/overview
+     （见 AdminConsole 的 URL → scene watch）。测试把两件事都锁住，避免再被读成静默回退。 */
+  it('未知 page：提示「未知管理页」并回退 overview（不是静默改写 URL）', async () => {
     const { wrapper, router } = await mountConsole('/admin/not-a-page');
+    await settle();
+    expect(toastWarning).toHaveBeenCalledWith('未知管理页「not-a-page」，已回到总览');
     expect(router.currentRoute.value.path).toBe('/admin/overview');
     expect(wrapper.findComponent(Overview).exists()).toBe(true);
   });
@@ -241,13 +253,17 @@ describe('AdminConsole 导航冒烟', () => {
   });
 
   /* 跨页跳转可带目标页预筛（2026-10-26 导航收口）：侧栏角标把「近 7 天失败」的口径带进
-     执行日志的 URL，落地即筛、可刷新可分享。 */
-  it('侧栏导航携带的落地筛选进 URL（执行日志 ?range=week&status=err）', async () => {
+     执行日志，落地即筛、可刷新可分享。2026-10-31 起页面默认档 = 近 7 天，range=week
+     属默认值不再写 URL（filterSnapshot 只存非默认值）；status=err 非默认仍落 URL。 */
+  it('侧栏导航携带的落地筛选进 URL（执行日志 ?status=err；range=week 为默认档不写）', async () => {
     const { wrapper, router } = await mountConsole('/admin/overview');
+    await settle();
+    await nextTick();
     wrapper.findComponent({ name: 'Shell' }).vm.$emit('navigate', 'execution-logs', { range: 'week', status: 'err' });
     await settle();
     expect(router.currentRoute.value.params.page).toBe('execution-logs');
-    expect(router.currentRoute.value.query).toMatchObject({ range: 'week', status: 'err' });
+    expect(router.currentRoute.value.query).toMatchObject({ status: 'err' });
+    expect(router.currentRoute.value.query.range).toBeUndefined();
   });
 
   /* 2026-09-29 功能走查：健康检查行「查看 →」跳 /admin/skill-workbench?skill=<id>，此前抽屉是

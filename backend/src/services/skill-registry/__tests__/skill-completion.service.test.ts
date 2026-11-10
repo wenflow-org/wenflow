@@ -218,7 +218,7 @@ describe('skill-completion：豁免链（handler-only / aux）', () => {
     expect(report.status).toBe('live');
     expect(report.gates.coreReady.detail).toContain('handler-only 豁免');
     expect(report.gates.fieldsSynced.detail).toContain('豁免');
-    expect(report.gates.live.detail).toContain('豁免：无 prompt 文件');
+    expect(report.gates.live.detail).toContain('豁免：handler-only');
   });
 
   it('aux：fields-synced 豁免但 live 不豁免（runAux requireActivePrompt）', () => {

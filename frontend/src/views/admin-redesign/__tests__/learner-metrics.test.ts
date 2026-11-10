@@ -7,7 +7,7 @@
  * 定义在 @/utils/learnerMetrics（纯定义，学习端组件也能引）；出处文案在 ../opsShared。
  */
 import { describe, expect, it, vi } from 'vitest';
-import { LEARNER_METRICS, LEARNER_METRIC_CODES, learnerMetric } from '@/utils/learnerMetrics';
+import { LEARNER_METRICS, LEARNER_METRIC_CODES, learnerMetric, toDisplayHundred, toneOfHundred } from '@/utils/learnerMetrics';
 import { loadCaliber, panelScopeNote } from '../opsShared';
 
 describe('四读数共享口径', () => {
@@ -118,3 +118,29 @@ describe('面板作用域标注（只出短标，不挂解释句）', () => {
     expect(new Set(labels).size).toBe(labels.length);
   });
 });
+
+/* 2026-11-01 外部评审 P0：同一页两个刻度（快照 0–10 / 曲线 0–100）导致同屏读数差 10 倍。
+   换算与 0–100 判色单点在 utils/learnerMetrics.ts，这里钉住边界与阈值。 */
+describe('刻度换算 toDisplayHundred / toneOfHundred（0–10 → 0–100）', () => {
+  it('×10 并夹在 0–100；缺值与非有限值原样透传为 null', () => {
+    expect(toDisplayHundred(1.1)).toBeCloseTo(11)
+    expect(toDisplayHundred(0)).toBe(0)
+    expect(toDisplayHundred(12.3)).toBe(100)   // 越界夹顶
+    expect(toDisplayHundred(-3)).toBe(0)
+    expect(toDisplayHundred(null)).toBeNull()
+    expect(toDisplayHundred(undefined)).toBeNull()
+    expect(toDisplayHundred(Number.NaN)).toBeNull()
+  })
+
+  it('0–100 判色阈值与 0–10 口径同比例（好 ≤40、坏 ≥70；LF 警戒 60）', () => {
+    expect(toneOfHundred('lss', 0)).toBe('')
+    expect(toneOfHundred('lss', 30)).toBe('ok')
+    expect(toneOfHundred('lss', 50)).toBe('warn')
+    expect(toneOfHundred('lss', 80)).toBe('bad')
+    expect(toneOfHundred('lf', 12.3)).toBe('ok')     // 曲线实测值：远低于警戒线
+    expect(toneOfHundred('lf', 60)).toBe('bad')
+    expect(toneOfHundred('lsb', 15)).toBe('ok')
+    expect(toneOfHundred('lsb', -7)).toBe('warn')
+    expect(toneOfHundred('lsb', -35)).toBe('bad')
+  })
+})

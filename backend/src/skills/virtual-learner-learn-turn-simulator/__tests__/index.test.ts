@@ -219,6 +219,16 @@ describe('virtual-learner-learn-turn-simulator payload 透传（检查点 / 时�
     ])
     expect(await capturedPayload(input)).not.toHaveProperty('memoryRecall')
   })
+
+  it('零引用键 task（只装 requirements）已从载荷删除，稳定段首键改为 personaAnchorHint', async () => {
+    // 2026-11-08 全 skill 缓存调查：task.requirements 的 5 条硬指令在提示词里都有对应规则
+    const payload = await capturedPayload(input)
+    expect(payload).not.toHaveProperty('task')
+    // requirements 也随之不再出现在任何位置上
+    expect(JSON.stringify(payload)).not.toContain('requirements')
+    // 稳定段三键连续前置
+    expect(Object.keys(payload).slice(0, 3)).toEqual(['personaAnchorHint', 'story', 'learner'])
+  })
 })
 
 describe('virtual-learner-learn-turn-simulator · 检查点作答（P1-3）', () => {

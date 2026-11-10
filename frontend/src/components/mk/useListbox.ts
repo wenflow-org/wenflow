@@ -42,26 +42,35 @@ export function useListbox<O>(
     item?.scrollIntoView({ block: 'nearest' })
   }
 
-  /** 估算弹层高度：选项行 ≈29px + 内衬；实际展开后再用 scrollHeight 校正 */
+  /** 估算弹层高度：选项行 ≈32px（实测：内衬 12 + 行高 20）+ 内衬；
+      上限与 `.mk-listbox-pop` 的 max-height 同步，否则「向上弹」的判据会为
+      一个按 CSS 收窄后的真实高度算错方向 */
   function estimateMenuHeight(): number {
-    return Math.min(options().length * 29 + 12, 320)
+    return Math.min(options().length * 32 + 8, 440)
   }
   function placeMenu() {
     const el = triggerEl.value
     if (!el) return
     const rect = el.getBoundingClientRect()
-    const below = window.innerHeight - rect.bottom
-    const measured = menuEl.value?.scrollHeight || estimateMenuHeight()
-    const up = below < measured + 8 && rect.top > below
+    /* 坐标系换算（2026-11-06 走查）：v2 页在 ≥1600 视口给 .v2-page 加 zoom（1.08~1.3，
+       admin 壳的 .ac 在 4K 也有同机制）。getBoundingClientRect 返回的是**缩放后的视觉坐标**，
+       而弹层虽是 fixed，其数值写在缩放子树里——直接用视觉坐标会向右下漂移
+       （视觉 500px 的触发框漂 ~40px，与视觉距离成正比，知识图谱页的路径下拉即此病）。
+       视觉宽 / 布局宽 = 祖先累计缩放系数（zoom 与 transform 都算在内），
+       视觉坐标 ÷ 系数 = 弹层局部坐标系的数值。offsetWidth 取不到 0 时兜底按 1 算。 */
+    const scale = rect.width / (el.offsetWidth || rect.width) || 1
+    const below = window.innerHeight / scale - rect.bottom / scale
+    const measured = (menuEl.value?.scrollHeight || estimateMenuHeight()) / scale
+    const up = below < measured + 8 && rect.top / scale > below
     openUp.value = up
     /* 在弹窗/抽屉里时抬到覆盖层之上（--mk-z-modal + 10）；普通页面用卡片菜单层。
        与 MkModelPicker 同一套 fixed 定位思路：祖先 overflow 不会裁掉浮层。 */
     const inOverlay = !!el.closest('.mk-modal, .mk-drawer')
     popStyle.value = {
-      left: `${Math.round(rect.left)}px`,
-      top: up ? 'auto' : `${Math.round(rect.bottom + 4)}px`,
-      bottom: up ? `${Math.round(window.innerHeight - rect.top + 4)}px` : 'auto',
-      minWidth: `${Math.round(rect.width)}px`,
+      left: `${Math.round(rect.left / scale)}px`,
+      top: up ? 'auto' : `${Math.round(rect.bottom / scale + 4)}px`,
+      bottom: up ? `${Math.round(below + 4)}px` : 'auto',
+      minWidth: `${Math.round(rect.width / scale)}px`,
       zIndex: inOverlay ? 'calc(var(--mk-z-modal) + 10)' : 'var(--mk-z-menu)'
     }
   }

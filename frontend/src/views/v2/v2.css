@@ -69,6 +69,135 @@ html, body {
   color: var(--ink);
 }
 
+/* ================= 全局滚动条（SPEC §6：极简化 / 去箭头） =================
+   design-system.css 的「html 滚动条 none」只作用于文档滚动容器——scrollbar-width
+   不是继承属性，所以聊天流 / 弹窗 / 下拉面板 / 抽屉这些内部滚动容器仍是 Chromium
+   默认的粗灰槽 + Windows 上下三角箭头（用户走查点名的「粗大原生滚动条」）。
+   这里把学员侧所有滚动容器统一成：
+   · WebKit（Chrome / Edge / Safari）：4px 宽、半透明圆角滑块、轨道透明、去箭头；
+   · Firefox（不认 ::-webkit-scrollbar）：标准属性 thin + 同色滑块。
+
+   ⚠ 前置修复（2026-11-06 复核）：scrollbar-color 是**继承属性**，design-system.css
+   在 html 上给了非 auto 的浅灰（`html { scrollbar-color: var(--neutral-400) transparent }`），
+   后代即使自己没写也会继承到这个非 auto 值；Chromium 据此忽略 ::-webkit-scrollbar
+   整族——所以下面每条 WebKit 自绘规则在 Chrome/Edge 里原本都不会生效。必须先把本侧
+   容器的 scrollbar-color 显式重置回 auto，4px 滑块才落得下来。
+
+   覆盖清单：.v2-page 及其后代（聊天流/弹窗/抽屉/页面内下拉）、导航菜单与 dock、
+   通知面板，以及两个 Teleport 到 body 的放大弹层（TeachingFigure / TeachingDiagram
+   的 __canvas，挂在 .v2-page 之外，必须单独点名，否则放大图仍是宽滚动条）。
+   MkSelect 的下拉弹层 .mk-listbox-pop 也单列：它自己写着 scrollbar-width:auto
+   （styles/mk-select.css:28，刻意要标准宽度），不点名就绕过 .v2-page 的覆盖；
+   admin 侧 LearnerDetail 复用同一下拉，一并极简化。 */
+:is(
+  .v2-page,
+  .v2-page *,
+  .v2nav__menu,
+  .v2nav__dock,
+  .nc__panel,
+  .figure-zoom__canvas,
+  .diagram-zoom__canvas,
+  .mk-listbox-pop
+) {
+  /* 重置继承来的非 auto 值，恢复 WebKit 自绘能力；Firefox 分支（文末）会重新给出
+     thin + 同色滑块，同权重后出现，覆盖这条。 */
+  scrollbar-color: auto;
+}
+:is(
+  .v2-page,
+  .v2-page *,
+  .v2nav__menu,
+  .v2nav__dock,
+  .nc__panel,
+  .figure-zoom__canvas,
+  .diagram-zoom__canvas,
+  .mk-listbox-pop
+)::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+:is(
+  .v2-page,
+  .v2-page *,
+  .v2nav__menu,
+  .v2nav__dock,
+  .nc__panel,
+  .figure-zoom__canvas,
+  .diagram-zoom__canvas,
+  .mk-listbox-pop
+)::-webkit-scrollbar-track,
+:is(
+  .v2-page,
+  .v2-page *,
+  .v2nav__menu,
+  .v2nav__dock,
+  .nc__panel,
+  .figure-zoom__canvas,
+  .diagram-zoom__canvas,
+  .mk-listbox-pop
+)::-webkit-scrollbar-corner {
+  background: transparent;
+  border-radius: var(--mk-radius-pill);
+}
+:is(
+  .v2-page,
+  .v2-page *,
+  .v2nav__menu,
+  .v2nav__dock,
+  .nc__panel,
+  .figure-zoom__canvas,
+  .diagram-zoom__canvas,
+  .mk-listbox-pop
+)::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--ink) 22%, transparent);
+  border-radius: var(--mk-radius-pill);
+}
+:is(
+  .v2-page,
+  .v2-page *,
+  .v2nav__menu,
+  .v2nav__dock,
+  .nc__panel,
+  .figure-zoom__canvas,
+  .diagram-zoom__canvas,
+  .mk-listbox-pop
+)::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--ink) 34%, transparent);
+}
+/* Windows 原生滚动槽的上下三角箭头：一旦自绘滑块就必须显式移除 */
+:is(
+  .v2-page,
+  .v2-page *,
+  .v2nav__menu,
+  .v2nav__dock,
+  .nc__panel,
+  .figure-zoom__canvas,
+  .diagram-zoom__canvas,
+  .mk-listbox-pop
+)::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+/* Firefox：@supports not selector(::-webkit-scrollbar) 在部分版本会把 -webkit- 伪元素
+   当合法选择器，判定不可靠；这里用只有 Firefox 认的 -moz-appearance 做特征检测。
+   Firefox 里 scrollbar-width 不继承 → 不写就回落到 auto（粗），故显式 thin。 */
+@supports (-moz-appearance: none) {
+  :is(
+    .v2-page,
+    .v2-page *,
+    .v2nav__menu,
+    .v2nav__dock,
+    .nc__panel,
+    .figure-zoom__canvas,
+    .diagram-zoom__canvas,
+    .mk-listbox-pop
+  ) {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--ink) 22%, transparent) transparent;
+  }
+}
+
 /* ====== .v2-page 布局（不再需要重新定义变量，:root 已提供） ====== */
 .v2-page {
   /* 公告条在 #app 外层占流（App.vue #app 为 flex column），
@@ -218,9 +347,9 @@ html, body {
   opacity: 0.3;
 }
 
-/* 快捷补充面板暗色适配：三条 .replies-panel 规则随 2026-09-30 类名改版
-   （.replies/.reply）作废——暗色已由 --surface/--line token 自动翻转，
-   新类的投影覆写见本文件末尾 html[data-theme='dark'] .replies / .reply:hover。 */
+/* 快捷补充暗色适配：随 2026-11-06 快选改透明折行方签，末尾的暗色投影覆写已随
+   黑带 Bug 一并退役（透明容器上的大投影在暗色卡上读作一条黑色横带）；现在
+   暗色完全由 --blue/--blue-deep token 混色表达 */
 
 /* ================= 暗色模式：V2LearningPage 覆写 ================= */
 [data-theme='dark'] .learn__head {
@@ -308,14 +437,38 @@ html, body {
   cursor: pointer;
 }
 
+/* MkSelect 默认触发器（工具条形态）的 §1 控件档（2026-11-06，页面组请求）：
+   MkSelect 原语自带的 md 档是 32px 高 + 6px 圆角（styles/mk-select.css:76/82），
+   低于 §1 的「34~36px 高、8px 圆角」。该文件不在本组可改范围，故在全局层按同等
+   角色覆写：
+   · --sm 是表格内紧凑档，用 :where() 排除且不抬权重（保持自身 30px）；
+   · .uc-field（42px，表单对齐）与 .filter-select（36px，筛选行）是更专用的档，
+     同权重、写在后面，按层叠顺序继续生效；
+   · 只在 ≥901px 生效：≤900 由 mk-select.css 的移动块统一 36px（mobile:spec
+     的 lt36 硬下沿），不能被这里的 34px 反压。
+   顺带覆盖 --borderless（无底色/描边版）的 6px 圆角 → 8px（悬停浮出底色时才可见）。 */
+@media (min-width: 901px) {
+  .v2-page .mk-select:where(:not(.mk-select--sm)) .mk-select__trigger {
+    height: 34px;
+    border-radius: var(--mk-radius-md);
+  }
+}
+
 /* 表单语境里的自绘下拉（2026-10-28）：MkSelect 默认 32px/6px 是工具条形态，
-   放进 .uc-field 或调用日志的筛选行，会和 44px 的 .uc-field__input 错位。
-   这里统一成用户侧输入框的高度与圆角；工具条（资料库排序等）保持紧凑形态。 */
-.v2-page .uc-field .mk-select__trigger,
-.v2-page .filter-select .mk-select__trigger {
+   放进 .uc-field 会和 ~43px 的 .uc-field__input 错位，所以 .uc-field 里的下拉保持
+   42px/xl——这是**表单字段**语境的对齐钩子，不属 §1 说的「搜索框 / 筛选下拉触发器」。
+   2026-11-06 §1 控件收敛：筛选行（.filter-select，调用日志页）是工具栏触发器，
+   收敛到 36px 高 / 8px 圆角；同排日期输入一起收，筛选行不出现高低不齐。 */
+.v2-page .uc-field .mk-select__trigger {
   height: 42px;
   padding: 0 12px;
   border-radius: var(--mk-radius-xl);
+  font-size: 14px;
+}
+.v2-page .filter-select .mk-select__trigger {
+  height: 36px;
+  padding: 0 12px;
+  border-radius: var(--mk-radius-md);
   font-size: 14px;
 }
 .v2-page .uc-field .mk-mp--compact .mk-mp__control {
@@ -323,6 +476,13 @@ html, body {
   padding: 9px 34px 9px 14px;
   border-radius: var(--mk-radius-xl);
   font-size: 14px;
+}
+/* 配套：筛选行的日期输入与触发器同档（36px / 8px）。AgentLogs.vue 的 scoped
+   `.filter-dates input { height: 42px }` 权重是 (0,2,1)，这条带 .uc-field__input
+   类提到 (0,3,1) 才压得住（与按钮副本同性质的跨页对齐钩子，只影响 .filter-dates）。 */
+.v2-page .filter-dates input.uc-field__input {
+  height: 36px;
+  border-radius: var(--mk-radius-md);
 }
 
 .v2-page > main {
@@ -368,15 +528,20 @@ html, body {
 .v2-page .btn-primary {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 7px;
-  padding: 11px 22px;
+  /* SPEC §1 控件档：默认主按钮 32px 高 / 0 14px 内边距 / 8px 圆角 / 13px 字。
+     --mk-radius-md 就是 token 表里「按钮 / 输入 / 菜单项」的控件圆角档；不再用
+     11px 22px 内边距撑出的「肥大胶囊」（32px 落在 30~34px 档内，13px 落在 12~13px 档内）。 */
+  height: 32px;
+  padding: 0 14px;
   border: 0;
-  border-radius: var(--mk-radius-xl);
+  border-radius: var(--mk-radius-md);
   /* 主按钮纯色 --blue（原 135deg 蓝→深蓝渐变已退役）：
      「友好而平」规定主操作是实色，渐变制造的高光感与暖平基调相冲。 */
   background: var(--blue);
   color: var(--wf-text-on-primary);
-  font-size: 14px;
+  font-size: 13px;
   font-family: inherit;
   font-weight: 700;
   /* 无投影：发光边框式光晕已全量下线（按钮不需要抬升层级，层级由字号/留白表达） */
@@ -384,6 +549,14 @@ html, body {
   text-decoration: none;
   /* 原型 wf-btn 悬停无抬升（仅 :active scale(.98)）——去掉旧的 -2px 悬浮 */
   transition: transform 0.2s ease, background 0.2s ease;
+}
+/* 独立尺寸角色不吃上面的紧凑档，恢复自身高度与卡片同级的 16px 圆角：
+   --block 是表单全宽提交键（认证页 12px 内边距 / 14.5px 字）、--lg 是大幅 CTA（13px 26px /
+   15px 字）。若被 32px 档吃掉，14.5~15px 文字会被压进 32px 高、12~13px 内边距的盒子里。 */
+.v2-page .btn-primary--block,
+.v2-page .btn-primary--lg {
+  height: auto;
+  border-radius: var(--mk-radius-xl);
 }
 .v2-page .btn-primary:not(:disabled):hover {
   background: var(--wf-color-primary-dark);
@@ -399,11 +572,18 @@ html, body {
 }
 
 .v2-page .btn-ghost {
-  padding: 10px 18px;
-  border-radius: var(--mk-radius-xl);
+  /* SPEC §1 控件档：次级按钮与主按钮同档 —— 32px 高 / 0 14px 内边距 / 8px 圆角 / 13px 字。
+     inline-flex + 居中：与主按钮同一基线，图标与文字不再各自漂移。 */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--mk-radius-md);
   border: 1px solid var(--line);
   background: var(--surface);
-  font-size: 14px;
+  font-size: 13px;
   font-family: inherit;
   font-weight: 700;
   color: var(--muted);
@@ -502,11 +682,38 @@ html, body {
   }
 }
 
-/* 徽章/药丸类：禁止换行与压缩（长标题会挤压导致竖排） */
+/* 状态标签 = 紧凑小方签（SPEC §1，2026-11-06 全局去肥胖化）。
+   非点击类状态标签（进行中/积累中/适中/较低/刚收录/待确认/持续关注/课程延续/已调整…）
+   严禁再用 rounded-full(9999px) + 大内边距冒充按钮——统一 22px 高 / 1px 6px 内边距 /
+   12px 字 / 6px 圆角（--mk-radius-sm）/ 无描边，底色与文字色由各语义变体
+   （.badge--blue / .tag--red / .pcard__badge--cyan …）提供。
+   字号固定 12px，**不用 --mk-fs-micro**：该 token 在 ≥1440 档是 12.5px、≥1920 档是 13px
+   （styles/main.css:337-351），宽屏下会顶破 §1 的「11px~12px」上限；标签字号不该随视口
+   半像素跳档，12px 也是 mobile:spec 的 fonts 硬下限（scripts/check-mobile-spec.mjs）。
+   .uc-badge 一并纳入（用户中心徽章此前只有 components/user/uc.css:277-289 的
+   999px 药丸档，且 uc.css 只在部分路由按需 import；这里给出全站统一的紧凑基座，
+   页面 scoped 覆写仍可按各自需要压过它）。
+   长标题不得把标签挤成竖排：nowrap + flex-shrink:0（原规则的职责保留）。 */
 .v2-page .badge,
 .v2-page .pcard__badge,
-.v2-page .streak,
-.v2-page .tag {
+.v2-page .tag,
+.v2-page .uc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 1px 6px;
+  border: 0;
+  border-radius: var(--mk-radius-sm);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* 「连续学习 N 天」是计数条（带描边的实底药丸），不属于状态签，不参与上面的方签收敛，
+   只保 nowrap / 不被压缩 */
+.v2-page .streak {
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -593,6 +800,16 @@ html, body {
   color: var(--faint);
 }
 
+/* ====== 高分屏容器上限（单源变量，2026-11-07 高分屏专项）======
+   全站标准容器的上限只在这一处定义，各页规则一律引用 var(--vp-container)：
+   此前 1360 这个数字在 v2.css（三处）、CapabilityShell、LearningEvaluationPage 各写一遍，
+   调节上限要改多个文件，且几份容易漂移成「有的页 1360、有的页没跟上」。
+   实测六个主 Tab（学习台 / 学习路径 / 知识图谱 / 学习状态 / 学习历史 / 成就）在 2560 下
+   容器本就一致（都是 CSS 1360 / 渲染 1564），真正的问题是屏占比只有 61%——孤岛感来自
+   上限不够高，不是页面之间不齐。故这里按视口档抬高上限；zoom 阶梯（--vp-zoom）保持现状，
+   字号不动（2026-11-07 用户拍板：2560 正文 18.4px、3840 20.8px 已舒适，不放大字号）。 */
+:root { --vp-container: 1360px; }
+
 /* ================= 高分屏 / 超宽屏适配 ================= */
 /* 1680+：加宽容器，减少两侧留白（选择器加权到 3 类，压过组件内 max-width） */
 @media (min-width: 1680px) {
@@ -602,17 +819,50 @@ html, body {
   .v2-page.state .state__main,
   .v2-page.ach .ach__main,
   .v2-page.history .history__main,
+  /* 知识图谱（2026-11-07 二次走查）：当天曾试过「全幅工作台」把它摘出名单，
+     用户判满屏太难看、要与别的页一致——回到与学习状态同档
+     （1920@zoom1.08 渲染 ≈1469px，和状态页齐平） */
+  .v2-page.km .km__main,
   .v2-page.evaluation-page .evaluation-shell {
-    max-width: 1360px;
+    max-width: var(--vp-container);
   }
   /* goal 双栏对话布局不吃 1360：左右两栏各自收窄（2026-09-27 用户反馈），
      组件内 ≥1500 档自管 1180 */
   .v2-page.goal .work { max-width: 1180px; }
   .v2-page.goal .entry { max-width: 1360px; }
+  /* 2026-11-04 初始态内容列跟随容器加宽：.entry 已拓到 1360，但组件内 hero / 卡片 /
+     输入框 / 最近会话仍钉在 640（初始态同列四条），2560 实测内容仅 736px、左右各空
+     约 900px，整块悬在中央。这里把同列四条一起拓到 960（仍窄于 1360 容器、留出边距，
+     行长可控），副标题的 640 上限一并放开以跟随列宽。 */
+  .v2-page.goal main.entry .entry__hero,
+  .v2-page.goal main.entry .entry__cards,
+  .v2-page.goal main.entry .composer--entry,
+  .v2-page.goal main.entry .recent { max-width: 960px; }
+  .v2-page.goal main.entry .entry__hero p { max-width: none; }
+  /* 入口态输入白盒/提示行跟随 960 列：组件内 ≥1101 的 760 阅读宽帽是给会话态消息列的，
+     入口态列 640 时代它不生效；列拓到 960 后帽子露出来——场景卡 960 而白盒 760 居中
+     悬空各 100px，与场景卡不等宽（2026-11-04 用户指认）。会话态（.chat 内）不受影响。 */
+  .v2-page.goal main.entry .composer--entry .composer__box,
+  .v2-page.goal main.entry .composer--entry .composer__hint { max-width: none; }
   /* 课堂阅读列在 ≥1280 档由页面 scoped 规则拓到 1000；这里的外壳必须同步到 1120，
      否则旧 960 的高权重选择器会把 scoped 覆盖掉（2026-10-29 实测 body 仅 960）。 */
   .v2-page.learn .learn__body { max-width: 1120px; }
-  .v2-page .v2footer__inner { max-width: 1360px; }
+  .v2-page .v2footer__inner { max-width: var(--vp-container); }
+}
+
+/* 2000+（2.5K / 4K@150%）：容器上限抬到 1520（× zoom1.15 ≈ 1748 渲染，占屏 68%）。
+   只抬上限、不抬 zoom：字号维持 18.4px 的舒适档（用户 2026-11-07 拍板）。
+   多出的 160px 由内部栅格自行消化（学习台 61/39 双栏、成就 4 列等本就流式）。 */
+@media (min-width: 2000px) {
+  :root { --vp-container: 1520px; }
+}
+
+/* 2800+（4K@100% 及更高）：再抬到 1680（× zoom1.15 ≈ 1932 渲染；
+   3600+ 档 zoom 升到 1.3 → 2184 渲染，占屏 57%）。
+   不取 1720 去凑满 58%：那会让 4K 下的单行正文/表格超过 140 字符，可读性反而下降。
+   注意 2800 档的 zoom 是 1.15、3600 档才是 1.3，故这里只动上限，与 zoom 解耦。 */
+@media (min-width: 2800px) {
+  :root { --vp-container: 1680px; }
 }
 
 /* 1600-1999（1920×1080 主流档在带）：此前 1680 只加宽容器、字号密度无落点，
@@ -730,7 +980,13 @@ html, body {
     padding-bottom: 0;
     /* 视口下沿已无覆盖，焦点/Tab 滚进视野时留一点呼吸位即可 */
     scroll-padding-bottom: 12px;
+    /* 窄屏真正的滚动容器是 .v2-page 本身（不是 html），design-system.css 里
+       「html 滚动条 thin → none」那刀够不到它：实测右缘仍渲染 Windows 原生槽，
+       clientWidth 387 / offsetWidth 402——白吃 15px 宽，卡片右缘与页面右缘差一截。
+       与 html 同一口径隐去；滚轮 / 触控 / 键盘滚动、焦点滚入视野全部不变。 */
+    scrollbar-width: none;
   }
+  html .v2-page:has(> .v2nav__dock)::-webkit-scrollbar { width: 0; height: 0; }
   /* 移动端基准字号 16 → 14。桌面 body 是 16px，任何「没写自己字号」的元素都会继承它，
      在 390 下比周围内容（12.5–13.5px）整整大一档——用户指的筛选条容器实测就是 16px
      （里面的药丸是 12.5px），学习历史的日期行容器同样 16px（内容 14px）。
@@ -788,6 +1044,31 @@ html, body {
 /* ====== 桌面档（≥1024）：无侧栏，页面内容全宽居中（顶栏导航承担位置感） ======
    （2026-09-30 原型二次改版：252px 左侧栏与 .v2-page 左移距一并退役。） */
 
+/* 三级弹性容器 —— 标准看板与列表页（2026-11-07 全站巡检 准则1 + DPI 缩放专项）
+   此前每页各钉死一个上限（学习状态 / 知识图谱 880、学习路径 / 资料库 1080、
+   学习台 1140、反馈报告 1080），而 Windows 笔记本 125%/150% 缩放后的真实 CSS 视口
+   只有 1536×864 / 1280×720：实测 1536 下 880 档只占屏宽 54%（两侧各空 356px），
+   1280 下 1080 档占 80%——1680 才统一拓到 1360，中间这一整段是空档。
+   改为连续档 min(92vw, 1360px)：笔记本上用满 92% 宽度，大屏封顶 1360。
+   goal（main.entry / main.work 双栏对话）与课堂（.learn__body 阅读列）各有自己的
+   列宽口径，不在本档内；反馈报告另有 .evaluation-shell 自管（见其组件）。
+   知识图谱曾试过「全幅工作台」被用户判满屏太难看（2026-11-07 走查），
+   故一并走本档、与学习状态同宽，不单独放宽。
+
+   三个「自管宽度」的壳必须排除（2026-11-07 用户报「登录怎么跑左侧去了」）：
+   本档选择器权重 (0,4,1) 高于组件 scoped 类名，会连它们自己的宽度口径一起顶掉。
+   - .auth__main / .ob__main：满宽盒 + 内部居中（justify-items / align-items: center），
+     盒子本身没有 auto 外边距。宽度被扣到 1360（或 92vw）后盒子贴左边缘，
+     卡片于是在这口窄盒里居中 —— 整页看上去被推到左边（实测 1904 下卡片左 270、
+     应为 542，差的 272 正是 (1360−820)/2；1280 下差 51 = (1178−820)/2）。
+   - .docs-main：自带 max-width: 780px 正文阅读列，被本档顶掉后正文会拉到 1360（一行上百字）。
+   → 这三页维持各自的原有口径，不参与统一加宽。 */
+@media (min-width: 1024px) {
+  .v2-page > main[class]:not(.entry):not(.work):not(.auth__main):not(.ob__main):not(.docs-main) {
+    max-width: min(92vw, var(--vp-container));
+  }
+}
+
 /* ====== 暗色模式：非 .card 抬升面投影 ======
    浅色投影 rgba(23,32,51,·) 在深底上不可见，统一换深色投影。
    用 html[data-theme='dark'] 提升优先级以压过组件 scoped 样式。 */
@@ -807,8 +1088,6 @@ html[data-theme='dark'] .history__stat { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2
 html[data-theme='dark'] .oscene { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 10px 28px rgba(0, 0, 0, 0.22); }
 html[data-theme='dark'] .finish__card { box-shadow: 0 16px 40px rgba(0, 0, 0, 0.42); }
 html[data-theme='dark'] .learn__menu-pop { box-shadow: 0 12px 30px rgba(0, 0, 0, 0.42); }
-html[data-theme='dark'] .replies { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 10px 28px rgba(0, 0, 0, 0.22); }
-html[data-theme='dark'] .reply:hover { box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3); }
 html[data-theme='dark'] .view-toggle__btn--active { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); }
 html[data-theme='dark'] .pcard { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 10px 28px rgba(0, 0, 0, 0.22); }
 html[data-theme='dark'] .pcard:hover { box-shadow: 0 14px 34px rgba(0, 0, 0, 0.4); }

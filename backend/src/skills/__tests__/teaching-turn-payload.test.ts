@@ -83,13 +83,13 @@ describe('teaching-turn payload snapshot parity', () => {
       'knowledge',
       'latestLearnerMessage',
       'learner',
-      'promptDirectives',
       'scenario',
     ])
     expect(payload.interactionProfile).toBeNull()
+    // promptDirectives 已于 2026-11-08 作为零引用键从载荷删除（见载荷审计注释）
+    expect(payload).not.toHaveProperty('promptDirectives')
     expect(payload).toMatchSnapshot({
       latestLearnerMessage: expect.any(String),
-      promptDirectives: expect.any(Object),
     })
   })
 
@@ -130,7 +130,6 @@ describe('teaching-turn payload snapshot parity', () => {
       'controls',
       'interactionProfile',
       'latestLearnerMessage',
-      'promptDirectives',
       'scenario',
     ])
     for (const key of declaredInputs) expect(payload).toHaveProperty(key)
@@ -433,5 +432,202 @@ describe('teaching-turn 完成判定（2026-08-30 起 LLM 语义判定，不再�
     }, input)
 
     expect(validation).toEqual({ valid: false, failureReason: 'TEACHING_TURN_REPLY_COMPLETION_MISMATCH' })
+  })
+
+  it('validateParsedOutput：回复含「已完成一半」的进度陈述但非完成候选时不判废（#163）', async () => {
+    await teachingTurnAgentHandler(EDITING_INPUT as any)
+
+    const [spec, input] = mockCallPrompt.mock.calls[0]
+    const validation = spec.validateParsedOutput({
+      reply: '这个练习已完成了一半，我们把剩下的线索再排一排。',
+      analysis: { cognitiveLevel: 'analyze' },
+      knowledge: {
+        currentPoint: '点单筛选标准',
+        points: [{ name: '点单筛选标准', status: 'learning', progress: 50 }],
+      },
+      pedagogy: { strategies: ['scaffold'] },
+      control: { isCompletionCandidate: false, shouldTriggerPeer: false },
+    }, input)
+
+    expect(validation).toEqual({ valid: true })
+  })
+
+  it('validateParsedOutput：模型自标完成候选、知识点未全 mastered 时收束语不再判废整轮（#163 拆掉 allKnowledgeMastered 硬门禁）', async () => {
+    await teachingTurnAgentHandler(EDITING_INPUT as any)
+
+    const [spec, input] = mockCallPrompt.mock.calls[0]
+    // 复现 issue 点名的「常态误伤」：课中 points 含冻结的 pending/learning 点，旧门禁几乎恒 false，
+    // 于是即便模型正确标记了完成候选，任何收束措辞仍把整轮判废。现由引擎的 completionReady 兜底。
+    const validation = spec.validateParsedOutput({
+      reply: '本节已完成，我们进入下一环节。',
+      analysis: { cognitiveLevel: 'analyze' },
+      knowledge: {
+        currentPoint: '点单筛选标准',
+        points: [{ name: '点单筛选标准', status: 'learning', progress: 50 }],
+      },
+      pedagogy: { strategies: ['reflect'] },
+      control: { isCompletionCandidate: true, shouldTriggerPeer: false },
+    }, input)
+
+    expect(validation).toEqual({ valid: true })
+  })
+
+  it('validateParsedOutput：句中推进语（非句末结论）非完成候选时不判废（#163 推进模式同样收窄）', async () => {
+    await teachingTurnAgentHandler(EDITING_INPUT as any)
+
+    const [spec, input] = mockCallPrompt.mock.calls[0]
+    const validation = spec.validateParsedOutput({
+      reply: '我们先把这三条线索列完，再进入下一环节，好吗？',
+      analysis: { cognitiveLevel: 'analyze' },
+      knowledge: {
+        currentPoint: '点单筛选标准',
+        points: [{ name: '点单筛选标准', status: 'learning', progress: 50 }],
+      },
+      pedagogy: { strategies: ['scaffold'] },
+      control: { isCompletionCandidate: false, shouldTriggerPeer: false },
+    }, input)
+
+    expect(validation).toEqual({ valid: true })
+  })
+
+  it('validateParsedOutput：句末「进入下一环节。」推进结论仍报 MISMATCH', async () => {
+    await teachingTurnAgentHandler(EDITING_INPUT as any)
+
+    const [spec, input] = mockCallPrompt.mock.calls[0]
+    const validation = spec.validateParsedOutput({
+      reply: '这一节就到这里，我们进入下一环节。',
+      analysis: { cognitiveLevel: 'analyze' },
+      knowledge: {
+        currentPoint: '点单筛选标准',
+        points: [{ name: '点单筛选标准', status: 'learning', progress: 50 }],
+      },
+      pedagogy: { strategies: ['reflect'] },
+      control: { isCompletionCandidate: false, shouldTriggerPeer: false },
+    }, input)
+
+    expect(validation).toEqual({ valid: false, failureReason: 'TEACHING_TURN_REPLY_COMPLETION_MISMATCH' })
+  })
+
+  it('validateParsedOutput：句末「已经完成。」非完成候选时不新判废（#163 收窄不得新增命中）', async () => {
+    await teachingTurnAgentHandler(EDITING_INPUT as any)
+
+    const [spec, input] = mockCallPrompt.mock.calls[0]
+    // 旧裸词 `/已完成/` 本就不命中「已经完成。」（已-经-完-成不连续）；收窄时若扩成 `(?:已|已经)`，
+    // 会把「前两步已经完成。」这类合法进度陈述新判废整轮，故此处断言仍有效。
+    const validation = spec.validateParsedOutput({
+      reply: '前两步已经完成。我们把剩下的线索再排一排。',
+      analysis: { cognitiveLevel: 'analyze' },
+      knowledge: {
+        currentPoint: '点单筛选标准',
+        points: [{ name: '点单筛选标准', status: 'learning', progress: 50 }],
+      },
+      pedagogy: { strategies: ['scaffold'] },
+      control: { isCompletionCandidate: false, shouldTriggerPeer: false },
+    }, input)
+
+    expect(validation).toEqual({ valid: true })
+  })
+
+  it('validateParsedOutput：句末「满足要求。」（不含「已」）非完成候选时仍报 MISMATCH（#163 找回护栏覆盖）', async () => {
+    await teachingTurnAgentHandler(EDITING_INPUT as any)
+
+    const [spec, input] = mockCallPrompt.mock.calls[0]
+    const validation = spec.validateParsedOutput({
+      reply: '这份点单记录满足要求。',
+      analysis: { cognitiveLevel: 'analyze' },
+      knowledge: {
+        currentPoint: '点单筛选标准',
+        points: [{ name: '点单筛选标准', status: 'learning', progress: 50 }],
+      },
+      pedagogy: { strategies: ['scaffold'] },
+      control: { isCompletionCandidate: false, shouldTriggerPeer: false },
+    }, input)
+
+    expect(validation).toEqual({ valid: false, failureReason: 'TEACHING_TURN_REPLY_COMPLETION_MISMATCH' })
+  })
+
+  it('validateParsedOutput：句末子步进度陈述（「已完成。」）非完成候选时不判废（#163 收窄到范围主语）', async () => {
+    await teachingTurnAgentHandler(EDITING_INPUT as any)
+
+    const [spec, input] = mockCallPrompt.mock.calls[0]
+    // 复核实测点名的误伤：句末「已完成。」是对**子步骤**最自然的进度陈述，
+    // 旧判据（裸词 + 句末位置）照样整轮判废；现在只有带范围主语的
+    // 「本节/本任务…已完成」才算收束结论。
+    for (const reply of [
+      '第一个小任务已完成。我们继续看下一句。',
+      '这一步已完成。我们来看第二问。',
+      '这一步已完成。',
+    ]) {
+      const validation = spec.validateParsedOutput({
+        reply,
+        analysis: { cognitiveLevel: 'analyze' },
+        knowledge: {
+          currentPoint: '点单筛选标准',
+          points: [{ name: '点单筛选标准', status: 'learning', progress: 50 }],
+        },
+        pedagogy: { strategies: ['scaffold'] },
+        control: { isCompletionCandidate: false, shouldTriggerPeer: false },
+      }, input)
+
+      expect({ reply, validation }).toEqual({ reply, validation: { valid: true } })
+    }
+  })
+
+  it('validateParsedOutput：带范围主语的句末收束结论仍报 MISMATCH（#163 不放过真收束）', async () => {
+    await teachingTurnAgentHandler(EDITING_INPUT as any)
+
+    const [spec, input] = mockCallPrompt.mock.calls[0]
+    for (const reply of ['本节已完成。', '好，这节课就到这儿，本任务已完成。', '本次课的教学目标已完成。']) {
+      const validation = spec.validateParsedOutput({
+        reply,
+        analysis: { cognitiveLevel: 'analyze' },
+        knowledge: {
+          currentPoint: '点单筛选标准',
+          points: [{ name: '点单筛选标准', status: 'learning', progress: 50 }],
+        },
+        pedagogy: { strategies: ['reflect'] },
+        control: { isCompletionCandidate: false, shouldTriggerPeer: false },
+      }, input)
+
+      expect({ reply, validation }).toEqual({
+        reply,
+        validation: { valid: false, failureReason: 'TEACHING_TURN_REPLY_COMPLETION_MISMATCH' },
+      })
+    }
+  })
+
+  it('validateParsedOutput：课中合法进度陈述不因「完成了」措辞判废（#163 范围主语 + 句末双约束）', async () => {
+    await teachingTurnAgentHandler(EDITING_INPUT as any)
+
+    const [spec, input] = mockCallPrompt.mock.calls[0]
+    for (const reply of ['本节课我们完成了三件事：先定标准、再筛线索、最后复盘。', '这一节内容完成度大约一半。']) {
+      const validation = spec.validateParsedOutput({
+        reply,
+        analysis: { cognitiveLevel: 'analyze' },
+        knowledge: {
+          currentPoint: '点单筛选标准',
+          points: [{ name: '点单筛选标准', status: 'learning', progress: 50 }],
+        },
+        pedagogy: { strategies: ['scaffold'] },
+        control: { isCompletionCandidate: false, shouldTriggerPeer: false },
+      }, input)
+
+      expect({ reply, validation }).toEqual({ reply, validation: { valid: true } })
+    }
+  })
+
+  it('retryStrategy.onValidationFail：COMPLETION_MISMATCH 时把该约束显式回灌给重试（#163）', async () => {
+    await teachingTurnAgentHandler(EDITING_INPUT as any)
+
+    const [spec] = mockCallPrompt.mock.calls[0]
+    const notice = spec.retryStrategy.onValidationFail({ failureReason: 'TEACHING_TURN_REPLY_COMPLETION_MISMATCH' })
+    expect(notice).toContain('control.isCompletionCandidate=true')
+    expect(notice).toContain('进入下一环节')
+    // #163：重试文案必须把「子步骤进度陈述是允许的」也写清——否则模型只会把措辞换个说法，
+    // 两轮同类失败后整轮仍被丢弃。
+    expect(notice).toContain('这个练习已完成了一半')
+
+    const otherNotice = spec.retryStrategy.onValidationFail({ failureReason: 'TEACHING_TURN_REPLY_MISSING' })
+    expect(otherNotice).not.toContain('control.isCompletionCandidate=true')
   })
 })

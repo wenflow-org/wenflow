@@ -327,6 +327,8 @@ export const goalConversationAgentDefinition: AgentDefinition = {
   category: 'standard',
   description: '负责学习目标澄清、问题穿透和阶段推进的专用业务 Skill',
   capabilities: ['goal-clarification', 'problem-discovery', 'stage-transition', 'quick-replies'],
+  // 文档性元数据，不参与运行时分发/发布（语义见 agents/protocol.ts 的 AgentDefinition.subscribes）：
+  // 下列 publishes 事件名均为描述性说明，全仓无对应 dispatch 调用点，请勿据此排查真实订阅关系。
   subscribes: [],
   publishes: ['goal-conversation:updated', 'goal-conversation:ready'],
   inputSchema: {
@@ -440,6 +442,53 @@ function enforceSingleQuestionForUnderstanding(text: string, stage: 'understandi
   return normalizedLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
+/**
+ * 快选里的「确认/放行」语义（2026-10-31 用户走查）。
+ *
+ * 为什么在 proposing 阶段剔掉：界面在 proposing 已有一处显式确认入口
+ * （`V2GoalConversation.vue` 的 `.proposal-invite` 条 → 方案卡内确认），那里写明
+ * 「确认动作仍只发生在卡内」。快选再给一条「就按这个方向来」= 同屏两个并列的确认动作，
+ * 用户不知道点哪个（用户原话：「又有快选，又有确认方案，到底让用户干什么」）。
+ *
+ * 而且那条快选点下去**并不会确认**：快选文本照原样发出后只是普通回复（打字确认由
+ * goal-confirm-adjudicator 裁决，模型不猜字面），模型自报 ready 又被强制回落 proposing，
+ * 用户看到的是点了没反应。剔除确认类快选让「确认动作只发生在卡内」，入口与出口一致。
+ *
+ * 判据取实测语料（prompt_call_logs 里 136 个 proposing 回合的快选原文）：
+ * 确认项都以「就按这个…/方向对…/可以，就按…」这类确认意图开头，调整项则不带；
+ * 宁可多剔（少一个可点的调整捷径，用户仍可打字）也不漏剔（漏剔＝原样复现用户报的那个状态）。
+ */
+const PROPOSAL_CONFIRM_CHIP_PATTERN =
+  /(就按|直接按|按)(这个|这版|这样|此方案|这个方案|你的|你说的|你建议的)|^(确认|确定|同意|可以|行|好的?|没问题|就这(么|样)|生成|开始吧)|方向(对|没错|可以)|(^|[，,、\s])确认([，,、\s]|$)/;
+
+/** 该快选是否在表达「确认/放行方案」 */
+export function isProposalConfirmChip(text: string): boolean {
+  return PROPOSAL_CONFIRM_CHIP_PATTERN.test(String(text ?? '').trim());
+}
+
+/**
+ * proposing 阶段的快选归一化：剔除确认语义项，且**不再凭空补齐**。
+ *
+ * 历史行为：模型没给快选时补一对 `[确认，生成学习路径][需要调整]`（旧实现），
+ * 于是实测 136/136 个 proposing 回合都带着快选，与确认条同屏。
+ * 现在 proposing 的快选只承担「调整方向」，确认由界面确认条唯一承担；
+ * 剔空＝整行不渲染，页面只剩一个下一步。
+ *
+ * 只做归一化、不判 invalid：这不是格式错误，不该让整轮重试
+ * （goal 回合重试成本高，且连续失败会以 422 掉到用户脸上）。
+ */
+export function normalizeProposingQuickReplies(quickReplies: QuickReply[], stage: string): QuickReply[] {
+  if (stage !== 'proposing') return quickReplies;
+  const dropped = quickReplies.filter((item) => isProposalConfirmChip(item.text));
+  if (!dropped.length) return quickReplies;
+  logger.warn('[skill:goal-conversation] proposing 剔除确认类快选（确认动作归界面确认条）', {
+    droppedCount: dropped.length,
+    droppedTexts: dropped.map((item) => item.text),
+    keptCount: quickReplies.length - dropped.length,
+  });
+  return quickReplies.filter((item) => !isProposalConfirmChip(item.text));
+}
+
 function inferQuickRepliesFromList(content: string): QuickReply[] {
   const listItems = content.match(/(?:^|\n)\s*(?:\d+[.、]|[•-])\s*(.+?)(?=\n|$)/g);
   if (!listItems || listItems.length < 2 || listItems.length > 5) return [];
@@ -479,23 +528,30 @@ function applyPrerequisiteProbeAnswerKey(understanding: any, confirmedProposal: 
   return changed ? { ...understanding, prerequisiteCheckResults: resolved } : understanding;
 }
 
+/**
+ * 各 stage 的置信度档位上下界（172-1 的单一置信度口径）。
+ *
+ * 降级回合（模型自报 ready/completed → 平台回落 proposing）必须把 confidence 一并重算进
+ * proposing 档，不能沿用模型自报的 ready 档值，否则会出现「stage=proposing 且 confidence≥0.95」
+ * 的自相矛盾组合（stage 的结构性双源已由 goal-conversation.stage-authority 收口，只剩置信度口径）。
+ *
+ * proposing 的上界 0.94 刻意严格低于 ready 的下界 0.95：两档不重叠，
+ * 「proposing + ≥0.95」在结构上不再可能出现（降级重算与常规归一都走这张表）。
+ */
+const STAGE_CONFIDENCE_BANDS = {
+  understanding: { min: 0.15, max: 0.92 },
+  proposing: { min: 0.75, max: 0.94 },
+  ready: { min: 0.95, max: 0.98 }
+} as const;
+
+/** 置信度档位表（只读导出）：服务层降级重算与这里同口径，测试用它做一致性校验。 */
+export const GOAL_STAGE_CONFIDENCE_BANDS = STAGE_CONFIDENCE_BANDS;
+
 function normalizeStageAndConfidence(
   stage: 'understanding' | 'proposing' | 'ready' | 'completed',
   confidence: number,
   options?: StageControlOptions
 ): { stage: 'understanding' | 'proposing' | 'ready' | 'completed'; confidence: number } {
-  const STAGE_CAPS = {
-    understanding: 0.92,
-    proposing: 0.95,
-    ready: 0.98
-  };
-
-  const STAGE_MINIMUMS = {
-    understanding: 0.15,
-    proposing: 0.75,
-    ready: 0.95
-  };
-
   let normalizedStage = stage;
   let normalizedConfidence = Number.isFinite(confidence) ? confidence : 0.2;
 
@@ -505,10 +561,11 @@ function normalizeStageAndConfidence(
     normalizedStage = 'ready';
   }
 
-  const cap = STAGE_CAPS[normalizedStage] || 0.92;
-  const floor = STAGE_MINIMUMS[normalizedStage] || 0.15;
-  normalizedConfidence = Math.min(normalizedConfidence, cap);
-  normalizedConfidence = Math.max(normalizedConfidence, floor);
+  // completed 不在档位表内：沿用历史兜底口径（cap 0.92 / floor 0.15），行为不变。
+  const band = STAGE_CONFIDENCE_BANDS[normalizedStage as keyof typeof STAGE_CONFIDENCE_BANDS]
+    || STAGE_CONFIDENCE_BANDS.understanding;
+  normalizedConfidence = Math.min(normalizedConfidence, band.max);
+  normalizedConfidence = Math.max(normalizedConfidence, band.min);
 
   return {
     stage: normalizedStage,
@@ -516,7 +573,7 @@ function normalizeStageAndConfidence(
   };
 }
 
-function hasThinProposalPayload(payload: {
+export function hasThinProposalPayload(payload: {
   understanding?: any;
   confirmedProposal?: any;
   structuredData?: any;
@@ -525,8 +582,13 @@ function hasThinProposalPayload(payload: {
   const confirmedProposal = payload.confirmedProposal || {};
   const structuredData = payload.structuredData || {};
 
-  // V3 §10 P1.7: 优先从 routing 表（cache）取硬必需字段，回落到硬编码
-  const requiredFields = getCachedHardRequiredFields();
+  // V3 §10 P1.7: 优先从 routing 表（cache）取门禁字段，回落到硬编码。
+  // 门禁 = hard-required（推进的硬条件）+ proposal-output（提案本身的内容），
+  // 后者此前只有渲染用途、无人校验，于是「理解够了、模型没给提案」也进 proposing（#162）。
+  const gateFields = getCachedGateFields();
+  const requiredFields = gateFields
+    ? [...gateFields.hardRequired, ...gateFields.proposalOutput]
+    : null;
 
   // 取嵌套路径值
   const valueAt = (obj: any, path: string): any => {
@@ -537,15 +599,26 @@ function hasThinProposalPayload(payload: {
   const isNonEmptyArray = (v: any): boolean =>
     Array.isArray(v) && v.filter((item) => typeof item === 'string' && item.trim().length > 0).length >= 2;
 
-  // real_problem 必须是具体诊断：过短（<6 字）视为症状级；与 surface_goal 重叠率 ≥0.75
-  // 视为同义改写（未完成诊断），两者都不能满足推进硬条件
+  // real_problem 必须是具体诊断：过短（<6 字）视为症状级；与 surface_goal 的**二字组重叠率**
+  // ≥0.6 视为同义改写（未完成诊断），两者都不能满足推进硬条件。二字组（character bigram）
+  // 比旧的单字包含稳：逐字符 includes 把「的/是/我」这类高频虚词也计入重叠，真诊断容易被
+  // 误判成改写（2026-11-08 thinCheck 判据升级，此前零测试锁定）。
   const isSubstantiveRealProblem = (real: any, surface: any): boolean => {
     if (!isNonEmptyString(real) || !isNonEmptyString(surface)) return isNonEmptyString(real);
     const r = real.trim().replace(/\s+/g, '');
     if (r.length < 6) return false;
     const s = surface.trim().replace(/\s+/g, '');
-    const overlap = [...r].filter((ch) => s.includes(ch)).length;
-    return overlap / r.length < 0.75;
+    const bigrams = (text: string): Set<string> => {
+      const set = new Set<string>();
+      for (let i = 0; i < text.length - 1; i += 1) set.add(text.slice(i, i + 2));
+      return set;
+    };
+    const rg = bigrams(r);
+    const sg = bigrams(s);
+    if (rg.size === 0) return true;
+    let hit = 0;
+    for (const g of rg) if (sg.has(g)) hit += 1;
+    return hit / rg.size < 0.6;
   };
 
   // 时间字段"未明确/不清楚/不知道/无"不满足硬条件
@@ -615,7 +688,9 @@ function hasThinProposalPayload(payload: {
   }
 
   // 兜底：原硬编码逻辑
-  const hasRealProblem = typeof understanding.real_problem === 'string' && understanding.real_problem.trim().length > 0;
+  // real_problem 与路由分支同口径用实质性判据（2026-11-08 一致性修复：症状级/同义改写
+  // 的豁免不能因走哪份字段清单而不同）
+  const hasRealProblem = isSubstantiveRealProblem(understanding.real_problem, understanding.surface_goal);
   const hasTimeBudget = isUsableTime(valueAt(understanding, 'available_resources.time_budget'));
   const hasTimeHorizon = isUsableTime(valueAt(understanding, 'available_resources.time_horizon'));
   const hasSuccessCriteria = typeof understanding.success_criteria?.observable_result === 'string'
@@ -653,9 +728,16 @@ function hasThinProposalPayload(payload: {
   return { thin, missing };
 }
 
-// V3 §10 P1.7: 模块级缓存——hard-required 字段清单
-let _hardRequiredCache: string[] | null = null;
-let _hardRequiredLoadingAt = 0;
+// V3 §10 P1.7: 模块级缓存——门禁字段清单（hard-required + proposal-output）
+interface GoalGateFieldRouting {
+  /** routing 表里 promptRole=hard-required 的 understanding 字段（推进的硬条件） */
+  hardRequired: string[];
+  /** routing 表里 promptRole=proposal-output 的 confirmedProposal 字段（提案本身） */
+  proposalOutput: string[];
+}
+
+let _goalGateFieldsCache: GoalGateFieldRouting | null = null;
+let _goalGateFieldsLoadingAt = 0;
 const HARD_REQUIRED_CACHE_TTL_MS = 30_000;
 
 // jest 下跳过模块级异步预热：fire-and-forget 的 import() 链会在测试环境拆除后执行，
@@ -663,30 +745,45 @@ const HARD_REQUIRED_CACHE_TTL_MS = 30_000;
 // 该缓存为尽力而为（冷缓存回落硬编码校验），跳过不影响任何断言语义。
 const isUnderJest = process.env.JEST_WORKER_ID !== undefined;
 
-function getCachedHardRequiredFields(): string[] | null {
+function getCachedGateFields(): GoalGateFieldRouting | null {
   // 同步访问；过期时间到了启动后台刷新（但不阻塞）
   const now = Date.now();
-  if (_hardRequiredCache && now - _hardRequiredLoadingAt < HARD_REQUIRED_CACHE_TTL_MS) {
-    return _hardRequiredCache;
+  if (_goalGateFieldsCache && now - _goalGateFieldsLoadingAt < HARD_REQUIRED_CACHE_TTL_MS) {
+    return _goalGateFieldsCache;
   }
-  if (!isUnderJest && now - _hardRequiredLoadingAt > HARD_REQUIRED_CACHE_TTL_MS) {
-    _hardRequiredLoadingAt = now;
-    void refreshHardRequiredCache();
+  if (!isUnderJest && now - _goalGateFieldsLoadingAt > HARD_REQUIRED_CACHE_TTL_MS) {
+    _goalGateFieldsLoadingAt = now;
+    void refreshGateFieldsCache();
   }
-  return _hardRequiredCache;
+  return _goalGateFieldsCache;
 }
 
-async function refreshHardRequiredCache(): Promise<void> {
+/**
+ * 由 routing 行装配门禁字段清单；导出供单测注入（生产只由 refreshGateFieldsCache 调用）。
+ *
+ * proposal-output 行（confirmedProposal.learning_direction / first_deliverable /
+ * key_stages / out_of_scope / scope_size）此前**只用于渲染 supplement**——routing 加载后
+ * 门禁只校验 hard-required 的 4 个 understanding 字段，于是「理解够了但模型没给提案」
+ * 照样进入 proposing，确认后生成一条 confirmedProposal=null 的路径（#162）。
+ */
+export function applyGoalGateRoutingRows(
+  rows: Array<{ fieldId: string; promptRole?: string | null }>
+): void {
+  _goalGateFieldsCache = {
+    hardRequired: rows.filter((r) => r.promptRole === 'hard-required').map((r) => r.fieldId),
+    proposalOutput: rows.filter((r) => r.promptRole === 'proposal-output').map((r) => r.fieldId),
+  };
+  _goalGateFieldsLoadingAt = Date.now();
+}
+
+async function refreshGateFieldsCache(): Promise<void> {
   try {
     const { getAgentRoutings } = await import('../../services/field-dispatcher');
     const rows = await getAgentRoutings('goal-conversation');
-    const ids = rows
-      .filter((r) => r.promptRole === 'hard-required')
-      .map((r) => r.fieldId);
     // 允许清空：admin 移除全部 hard-required 后缓存必须同步更新（旧守卫会永久保留旧清单）
-    _hardRequiredCache = ids;
+    applyGoalGateRoutingRows(rows);
   } catch (err) {
-    logger.debug('[skill:goal-conversation] refresh hard-required cache failed', {
+    logger.debug('[skill:goal-conversation] refresh gate field cache failed', {
       error: (err as Error).message,
     });
   }
@@ -694,7 +791,7 @@ async function refreshHardRequiredCache(): Promise<void> {
 
 // 启动时预热一次（不 await）；jest 下跳过（见 isUnderJest 说明）
 if (!isUnderJest) {
-  void refreshHardRequiredCache();
+  void refreshGateFieldsCache();
 }
 
 /**
@@ -837,7 +934,15 @@ export function parseGoalConversationResponse(
   stage = stageControl.stage;
   confidence = stageControl.confidence;
 
-  const thinCheck = hasThinProposalPayload({ understanding, confirmedProposal, structuredData });
+  // 提案的跨轮口径是「缺席=不变」：模型本轮没复述 confirmedProposal（delta 模式常态，
+  // 或只是没再贴一遍）时，门禁要看上一轮落库的那份，否则同一个已有提案的会话会在
+  // 每轮不复述时被误判「提案为空」而压回 understanding（#159 同类跨轮语义）。
+  const previousConfirmedProposal = stageControlOptions?.previousState?.confirmedProposal ?? null;
+  const thinCheck = hasThinProposalPayload({
+    understanding,
+    confirmedProposal: confirmedProposal ?? previousConfirmedProposal,
+    structuredData,
+  });
   if (stage === 'proposing' && thinCheck.thin) {
     stage = 'understanding';
     confidence = Math.min(confidence, 0.78);
@@ -874,12 +979,7 @@ export function parseGoalConversationResponse(
     nextQuestions = nextQuestions.slice(0, 1);
   }
 
-  if (!quickReplies.length && stage === 'proposing') {
-    quickReplies = [
-      { text: '确认，生成学习路径' },
-      { text: '需要调整' }
-    ];
-  }
+  quickReplies = normalizeProposingQuickReplies(quickReplies, stage);
 
   const parsed: GoalConversationAgentResult = {
     userVisible: dialogueText,

@@ -10,27 +10,37 @@
         <div class="evaluation-head__actions">
           <button type="button" class="btn-ghost" :disabled="exportingImage" @click="exportImage">{{ exportingImage ? '导出中…' : '导出图片' }}</button>
           <button type="button" class="btn-ghost" @click="exportPdf">{{ EXPORT_PDF_LABEL }}</button>
-          <button type="button" class="btn-primary" @click="() => goBackToPath()">返回学习路径</button>
+          <!-- 推进动作从卡尾上移到固定操作栏（2026-11-06 走查）：卡尾那组「分割线 + 已计入进度的
+               小字 + 孤零零一颗灰键」是报告最底下的 80px 尾巴，而页面顶部本来就常驻操作栏。
+               主次口径与窄屏吸底条一致：有「完成任务」时它是唯一主按钮，「继续练习」让位；
+               已结算（没有再推进的动作）时「继续练习」顶上主按钮位。 -->
+          <button
+            type="button"
+            class="btn-ghost evaluation-head__continue"
+            :class="{ 'btn-primary': taskCompleted }"
+            :disabled="completeTaskBusy"
+            @click="handleAction('continue-task')"
+          >继续练习</button>
+          <button
+            v-if="!taskCompleted"
+            type="button"
+            class="btn-primary evaluation-head__complete"
+            :disabled="completeTaskBusy"
+            @click="handleAction('complete-task')"
+          >完成任务</button>
+          <button type="button" class="btn-ghost" @click="() => goBackToPath()">返回学习路径</button>
         </div>
         <ImmersiveMenu>
           <button type="button" class="evaluation-head__pop-item" :disabled="exportingImage" @click="pickHeadMenu('image')">{{ exportingImage ? '导出中…' : '导出图片' }}</button>
           <button type="button" class="evaluation-head__pop-item" @click="pickHeadMenu('pdf')">{{ EXPORT_PDF_LABEL }}</button>
+          <button type="button" class="evaluation-head__pop-item" @click="pickHeadMenu('continue')">继续练习</button>
+          <button v-if="!taskCompleted" type="button" class="evaluation-head__pop-item" @click="pickHeadMenu('complete')">完成任务</button>
           <button type="button" class="evaluation-head__pop-item" @click="pickHeadMenu('back')">返回学习路径</button>
         </ImmersiveMenu>
       </header>
 
-      <!-- 页内目录：宽屏独立右栏；只列出当前报告真实存在的章节 -->
-      <nav class="eval-toc" aria-label="报告目录">
-        <button
-          v-for="item in visibleTocItems"
-          :key="item.id"
-          type="button"
-          class="eval-toc__link"
-          :class="{ 'is-active': activeToc === item.id }"
-          @click="scrollToToc(item.id)"
-        >{{ item.label }}</button>
-      </nav>
-
+      <!-- 页内目录条 2026-11-06 撤除：模块合并 + 高度压缩后报告只剩 ~1.5 屏，右侧常驻的
+           9 项锚点条比它索引的内容还长；章节自己就在一屏内，滚动定位的价值不抵它的视觉噪声。 -->
       <section v-if="loading" class="evaluation-loading">
         <div class="evaluation-loading__inner">
           <div class="evaluation-loading__head">
@@ -58,7 +68,17 @@
 
       <section v-else-if="error" class="evaluation-error">
         <p>{{ error }}</p>
-        <div class="evaluation-error__actions">
+        <!-- 终态未完成（failed/discarded/superseded，2026-11-05 UX 审计）：重试只会重拉同一
+             份空态、发不出任何生成类请求（走查 resource 实证）——明说「无产物可重试」并
+             撤下误导性的「重试」按钮，退路给「返回学习路径」。进行中/结算中的错误态保留
+             重试（重拉确实可能在课堂结束后拿到新结果）。 -->
+        <template v-if="terminalIncompleteSession">
+          <p>本次课堂没有正常完成，评估没有可重试的产物。已保存的进度不会丢，可以返回学习路径。</p>
+          <div class="evaluation-error__actions">
+            <button type="button" class="btn-primary" @click="() => goBackToPath()">返回学习路径</button>
+          </div>
+        </template>
+        <div v-else class="evaluation-error__actions">
           <button type="button" class="btn-primary" @click="fetchEvaluation">重试</button>
           <button type="button" class="btn-ghost" @click="() => goBackToPath()">返回学习路径</button>
         </div>
@@ -71,6 +91,10 @@
           <strong v-else-if="wrapupSummaryDegraded">本次课堂总结为简化版本，可重新生成完整版</strong>
           <strong v-else>课堂总结已生成，详细表现分析暂不可用</strong>
           <p>不影响你保存进度、完成任务或查看本次对话。</p>
+          <!-- 课堂未正常完成（未完结、无总结产物）：「重试」只会重拉同一份空态、拉不出
+               新产物（实测仅重发一次 detail 请求）。明说事实并给退路，不再让用户在
+               同一空态里反复点重试（2026-11-05 UX 审计） -->
+          <p v-if="incompleteSession">本次课堂没有正常完成，评估没有可重试的产物。对话记录与已保存的进度都在，可以直接回看，或返回学习路径。</p>
           <!-- 降级 ≠ 终点（2026-10-12）：重试守卫与管理端同源（完结+退化+冷却），后台执行立即返回，
                前端按 regeneratedAt 变化轮询收结果，不挂长请求 -->
           <div v-if="canRetryWrapup" class="evaluation-degraded__actions">
@@ -94,7 +118,7 @@
           :advisory="sessionDetail.advisory || null"
           :busy="completeTaskBusy"
           :blocked="!!settleBlocked"
-          @action="handleAction"
+          :knowledge-points="knowledgePoints"
           @advisory-action="handleAdvisoryAction"
         />
 
@@ -115,9 +139,19 @@
              就无法直接决策（2026-09-25 移动框架：核心 CTA 不能藏在长内容底部）。
              ≤640 与卡内动作行互斥显示，桌面不受影响；写操作与卡内共用 handleAction -->
         <div v-if="!settleBlocked" class="evaluation-ctabar">
-          <button type="button" class="evaluation-ctabar__btn" :disabled="completeTaskBusy" @click="handleAction('continue-task')">继续练习</button>
+          <!-- 已结算（taskCompleted）时条上不再有「完成任务」，此刻「继续练习」就是主操作，
+               补上实心蓝；未结算时它让位给「完成任务」，保持次级外观（一屏只有一个主按钮） -->
+          <button
+            type="button"
+            class="evaluation-ctabar__btn"
+            :class="{ 'evaluation-ctabar__btn--primary': taskCompleted }"
+            :disabled="completeTaskBusy"
+            @click="handleAction('continue-task')"
+          >继续练习</button>
           <button type="button" class="evaluation-ctabar__btn evaluation-ctabar__btn--link" aria-label="返回学习路径" :disabled="completeTaskBusy" @click="handleAction('end')">返回</button>
-          <button type="button" class="evaluation-ctabar__btn evaluation-ctabar__btn--primary" :disabled="completeTaskBusy" @click="handleAction('complete-task')">完成任务</button>
+          <!-- 已结算的任务不再给「完成任务」（2026-11-04 移动吸底条与桌面卡对齐）：桌面卡已在 taskCompleted 时
+               收起该按钮，此处若常驻会与「下面两项不会重复推进」提示矛盾并允许重复提交结算 -->
+          <button v-if="!taskCompleted" type="button" class="evaluation-ctabar__btn evaluation-ctabar__btn--primary" :disabled="completeTaskBusy" @click="handleAction('complete-task')">完成任务</button>
         </div>
 
         <div id="sec-feedback">
@@ -135,15 +169,11 @@
               <p class="evaluation-transcript-card__kicker">本次学习</p>
               <h2>当堂对话</h2>
             </div>
-            <span class="evaluation-transcript-card__meta">{{ mainDialogueMessages.length }} 条消息</span>
-          </div>
-
-          <!-- 卡头的「本次学习 / 当堂对话 / N 条消息」已经说明这是本次课堂的对话回看，
-               不再补一句同义提要（2026-10-29 全站副文审计） -->
-
-          <div v-if="mainDialogueMessages.length" class="evaluation-transcript-list">
+            <!-- 折叠触发器进卡头（2026-11-06 走查）：原来卡头是一颗静态「56 条记录」胶囊，
+                 卡片里又单摆一根 100% 满宽、亮蓝描边的长条按钮——比页面任何按钮都抢戏，
+                 还把「记录数」和「展开入口」拆成两处。现在合成一颗轻量按钮：数量即入口。 -->
             <button
-              v-if="hiddenTranscriptCount > 0"
+              v-if="transcriptEntries.length"
               type="button"
               class="evaluation-transcript-toggle"
               :aria-expanded="transcriptExpanded"
@@ -156,21 +186,76 @@
                 aria-hidden="true"
               ></span>
             </button>
-            <article
-              v-for="(message, index) in visibleTranscriptMessages"
-              :key="`${message.timestamp || 'message'}-${index}`"
-              class="evaluation-transcript-item"
-              :class="`evaluation-transcript-item--${message.role}`"
-              :style="{ animationDelay: Math.min(index * 40, 500) + 'ms' }"
-            >
-              <div class="evaluation-transcript-item__meta">
-                <strong>{{ getMessageRoleLabel(message.role) }}</strong>
-                <span v-if="message.timestamp">{{ formatMessageTime(message.timestamp) }}</span>
-              </div>
-              <div class="evaluation-transcript-item__body">
-                <MarkdownRenderer :content="message.content" />
-              </div>
-            </article>
+          </div>
+
+          <!-- 卡头的「本次学习 / 当堂对话 / N 条消息」已经说明这是本次课堂的对话回看，
+               不再补一句同义提要（2026-10-29 全站副文审计） -->
+
+          <div v-if="transcriptEntries.length" class="evaluation-transcript-list">
+            <template v-for="(entry, index) in visibleTranscriptEntries" :key="entry.key">
+              <article
+                v-if="entry.kind === 'message'"
+                class="evaluation-transcript-item"
+                :class="`evaluation-transcript-item--${entry.message.role}`"
+                :style="{ animationDelay: Math.min(index * 40, 500) + 'ms' }"
+              >
+                <div class="evaluation-transcript-item__meta">
+                  <strong>{{ getMessageRoleLabel(entry.message.role) }}</strong>
+                  <span v-if="entry.message.timestamp">{{ formatMessageTime(entry.message.timestamp) }}</span>
+                </div>
+                <div class="evaluation-transcript-item__body">
+                  <MarkdownRenderer :content="entry.message.content" />
+                  <!-- 2026-11-04 走查：当堂对话此前只回放文字，课堂里老师真出过的结构图
+                       （mermaid）与白板图（figure）全部丢失——回看时讲解引用「图里/左栏」
+                       同样找不到所指。与学习页同款双通道内联渲染。 -->
+                  <TeachingDiagram
+                    v-for="(d, di) in (entry.message.diagrams || [])"
+                    :key="'d' + index + '-' + di"
+                    :code="d.code"
+                    :caption="d.caption"
+                  />
+                  <TeachingFigure
+                    v-for="(f, fi) in (entry.message.figures || [])"
+                    :key="'f' + index + '-' + fi"
+                    :figure="f"
+                  />
+                </div>
+              </article>
+              <!-- 小测回放卡（2026-11-04 走查）：题面/选项/学生选择/对错都在
+                   teachingState.checkpointHistory（服务端已剥答案键），此前评估页完全不回放。
+                   只读展示：高亮学生所选，给通过/未通过判定；正确答案不展示（服务端不下发）。 -->
+              <article
+                v-else
+                class="evaluation-transcript-item evaluation-transcript-item--checkpoint"
+                :style="{ animationDelay: Math.min(index * 40, 500) + 'ms' }"
+              >
+                <div class="evaluation-transcript-item__meta">
+                  <strong>小测</strong>
+                  <span v-if="entry.checkpoint.submittedAt">{{ formatMessageTime(entry.checkpoint.submittedAt) }}</span>
+                </div>
+                <div class="evaluation-transcript-checkpoint">
+                  <p class="evaluation-transcript-checkpoint__q">{{ entry.checkpoint.question || entry.checkpoint.title }}</p>
+                  <ul v-if="entry.checkpoint.options && entry.checkpoint.options.length" class="evaluation-transcript-checkpoint__options">
+                    <li
+                      v-for="opt in entry.checkpoint.options"
+                      :key="opt.id"
+                      class="evaluation-transcript-checkpoint__opt"
+                      :class="{ 'is-picked': (entry.checkpoint.selectedOptionIds || []).includes(opt.id) }"
+                    >
+                      <span class="evaluation-transcript-checkpoint__opt-id">{{ opt.id }}</span>
+                      <span class="evaluation-transcript-checkpoint__opt-text">{{ opt.text }}</span>
+                    </li>
+                  </ul>
+                  <p
+                    v-if="typeof entry.checkpoint.passed === 'boolean'"
+                    class="evaluation-transcript-checkpoint__verdict"
+                    :class="entry.checkpoint.passed ? 'is-pass' : 'is-fail'"
+                  >
+                    {{ entry.checkpoint.passed ? '通过' : '未通过' }}
+                  </p>
+                </div>
+              </article>
+            </template>
           </div>
 
           <div v-else class="evaluation-transcript-empty">
@@ -183,18 +268,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
 // html2canvas 体积大，仅导出图片时动态加载
 import CompletionCard from '@/components/CompletionCard.vue';
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue';
+import TeachingDiagram from '@/components/TeachingDiagram.vue';
+import TeachingFigure from '@/components/TeachingFigure.vue';
 import SessionFeedbackPanel from '@/components/learning/SessionFeedbackPanel.vue';
 import AiContentNote from '@/components/AiContentNote.vue';
 import ImmersiveMenu from '@/components/ImmersiveMenu.vue';
 import { aiTeachingAPI, type SessionDetail, type WrapupArtifact } from '@/api/aiTeaching';
 import { toast } from '@/utils/toast';
 import api from '@/utils/api';
+import { unwrap } from '@/views/v2/unwrap';
 import { isProjectionMode } from '@/utils/projection';
 import { replanModeForRecommendation } from '@/utils/replanSignal';
 
@@ -214,6 +302,9 @@ const learnBasePath = computed(() => '/learn');
 
 const loading = ref(true);
 const error = ref('');
+/** 课次是否已结算（见 probeTaskCompleted）：已结算则不再递「完成任务」入口 */
+const taskCompleted = ref(false);
+let taskProbeDone = false;
 /** 结算失败时继续轮询：后端每 2 分钟自动重结算一次（预算 ≤3），前端不再让用户「重新进入」空等 */
 const finalizationRetrying = ref(false);
 let finalizationRetryPolls = 0;
@@ -297,25 +388,161 @@ const canRetryWrapup = computed(() => {
   if (!detail?.wrapup) return false;
   return detail.status === 'completed' && (wrapupSummaryDegraded.value || evaluationDegraded.value);
 });
+/** 课堂未正常完成（未完结、无总结产物）：无可重试产物，评估页据此明示事实与退路 */
+const incompleteSession = computed(() => {
+  const detail = sessionDetail.value;
+  return !!detail && !detail.wrapup && detail.status !== 'completed';
+});
+/** 终态未完成（failed/discarded/superseded，2026-11-05 UX 审计）：这类错误态走 error
+    分支渲染（shouldContinuePolling 置 error），降级横幅整块被 v-else-if 遮住——「重试」
+    在此只会重拉同一空态（无生成类请求），据此在 error 分支明示并撤下重试按钮 */
+const terminalIncompleteSession = computed(() => {
+  const detail = sessionDetail.value;
+  return !!detail && !detail.wrapup && ['failed', 'discarded', 'superseded'].includes(detail.status);
+});
 const canSubmitSessionFeedback = computed(() => !isProjectionMode());
 const mainDialogueMessages = computed(() => (sessionDetail.value?.messages || []).filter((message) => message.role === 'user' || message.role === 'assistant'));
 
-/* 当堂对话默认只回看最近两条：长会话（5 条消息里两三条是几百字讲解）在手机上能占好几屏，
-   而这一块是"回看"而非必读。导出图片/打印前会临时全展开，避免导出的报告缺内容。 */
-const TRANSCRIPT_PREVIEW_COUNT = 2;
+/* 小测回放条目（2026-11-04 走查）：题面/选项/学生选择/对错在 teachingState.checkpointHistory，
+   服务端 getSessionDetail 已剥答案键（correctOptionIds 绝不下发）。按 submittedAt 编进对话
+   时间线，旧课同样可回放。 */
+interface TranscriptCheckpoint {
+  checkpointId?: string;
+  title?: string;
+  question?: string;
+  type?: string;
+  options?: Array<{ id: string; text: string }>;
+  selectedOptionIds?: string[];
+  passed?: boolean;
+  submittedAt?: string;
+}
+const transcriptCheckpoints = computed<TranscriptCheckpoint[]>(() => {
+  const state = sessionDetail.value?.state as Record<string, unknown> | null | undefined;
+  const history = Array.isArray(state?.checkpointHistory) ? state!.checkpointHistory : [];
+  return (history as TranscriptCheckpoint[]).filter((c) => c && (c.question || c.title));
+});
+
+type TranscriptEntry =
+  | { kind: 'message'; key: string; ts: number; message: (typeof mainDialogueMessages.value)[number] }
+  | { kind: 'checkpoint'; key: string; ts: number; checkpoint: TranscriptCheckpoint };
+
+const toTs = (value: unknown): number => {
+  const t = typeof value === 'string' ? Date.parse(value) : NaN;
+  return Number.isNaN(t) ? 0 : t;
+};
+
+/* 当堂对话默认**整块折叠**（2026-11-06 走查）：用户刚从课堂出来，进报告页是看总结的，
+   不是把聊天记录再读一遍。此前默认铺开最近两条（长讲解一条就几百字），底部这个模块
+   仍然占掉小半屏且没有"可以收起来"的预期。现在只有标题行 + 一颗展开按钮。
+   导出图片/打印前会临时全展开，避免导出的报告缺内容。 */
 const transcriptExpanded = ref(false);
-const hiddenTranscriptCount = computed(() => Math.max(mainDialogueMessages.value.length - TRANSCRIPT_PREVIEW_COUNT, 0));
-const visibleTranscriptMessages = computed(() => (
-  transcriptExpanded.value
-    ? mainDialogueMessages.value
-    : mainDialogueMessages.value.slice(-TRANSCRIPT_PREVIEW_COUNT)
+const transcriptEntries = computed<TranscriptEntry[]>(() => {
+  // 白板快照去重（2026-11-04 用户反馈「看图都是一张图」）：直播时每回合内联当前板快照
+  // 是对的（学生始终看得到板），但回放时同版快照逐条重画——本例 6 条图只有 2 个版本，
+  // 每版重复 3 次。回放语义改为「板变了才画新版」：按 boardRevision（缺省退回 spec 内容）
+  // 与 mermaid code 去重，重复快照不再渲染，正文照常回放。
+  const seenBoardSigs = new Set<string>();
+  const boardSig = (figure: { boardRevision?: number; spec?: unknown }): string => (
+    figure.boardRevision != null ? `r${figure.boardRevision}` : JSON.stringify(figure.spec ?? null)
+  );
+  /* 小测回放锚点（2026-11-08 外评 #1）：checkpointHistory 只带 submittedAt（结算时刻），
+     直接按它全局排序，小测卡会排到学生作答气泡与 AI 点评之后——「先批改完、最后才出题卡」
+     的因果倒置。回放改为按题面文本把小测卡锚回提问的那条 assistant 消息正下方（出题正文 →
+     学生作答 → 判定卡的自然顺序）；题面对不上的旧数据退回 submittedAt 排序。 */
+  const normForAnchor = (text: unknown): string => String(text ?? '').replace(/[\s*#>`「」『』]/g, '');
+  const anchoredByMessage = new Map<number, TranscriptCheckpoint[]>();
+  const unanchoredCheckpoints: TranscriptCheckpoint[] = [];
+  let anchorCursor = 0;
+  for (const checkpoint of transcriptCheckpoints.value) {
+    const q = normForAnchor(checkpoint.question || checkpoint.title);
+    let matchedAt = -1;
+    if (q) {
+      const messages = mainDialogueMessages.value;
+      for (let i = anchorCursor; i < messages.length; i += 1) {
+        const candidate = messages[i];
+        if (candidate.role === 'assistant' && normForAnchor(candidate.content).includes(q)) {
+          matchedAt = i;
+          break;
+        }
+      }
+    }
+    if (matchedAt >= 0) {
+      anchorCursor = matchedAt + 1;
+      const bucket = anchoredByMessage.get(matchedAt) || [];
+      bucket.push(checkpoint);
+      anchoredByMessage.set(matchedAt, bucket);
+    } else {
+      unanchoredCheckpoints.push(checkpoint);
+    }
+  }
+  const entries: TranscriptEntry[] = [];
+  mainDialogueMessages.value.forEach((message, index) => {
+    // 无条件过滤：filter 天然放行首次出现的快照（同时登记签名），其后同版快照被剔
+    const freshFigures = (message.figures || []).filter((f) => {
+      const sig = 'b' + boardSig(f);
+      if (seenBoardSigs.has(sig)) return false;
+      seenBoardSigs.add(sig);
+      return true;
+    });
+    const freshDiagrams = (message.diagrams || []).filter((d) => {
+      const sig = 'm' + d.code;
+      if (seenBoardSigs.has(sig)) return false;
+      seenBoardSigs.add(sig);
+      return true;
+    });
+    const dropped = freshFigures.length !== (message.figures || []).length
+      || freshDiagrams.length !== (message.diagrams || []).length;
+    const view = dropped ? { ...message, figures: freshFigures, diagrams: freshDiagrams } : message;
+    entries.push({
+      kind: 'message' as const,
+      key: `m-${index}-${message.timestamp || ''}`,
+      ts: toTs(message.timestamp),
+      message: view,
+    });
+    for (const checkpoint of anchoredByMessage.get(index) || []) {
+      entries.push({
+        kind: 'checkpoint' as const,
+        key: `cp-${index}-${checkpoint.checkpointId || checkpoint.submittedAt || ''}`,
+        ts: toTs(checkpoint.submittedAt),
+        checkpoint,
+      });
+    }
+  });
+  // 锚不上的旧课数据：按 submittedAt 稳定插回时间线（同刻消息在前，与旧排序口径一致）。
+  // 不能整体重排——锚定卡的真实位置（紧跟题面）优先于它的结算时间戳。
+  const fallbackEntries: TranscriptEntry[] = unanchoredCheckpoints.map((checkpoint, index) => ({
+    kind: 'checkpoint' as const,
+    key: `cp-fb-${index}-${checkpoint.checkpointId || checkpoint.submittedAt || ''}`,
+    ts: toTs(checkpoint.submittedAt),
+    checkpoint,
+  }));
+  fallbackEntries.sort((a, b) => a.ts - b.ts);
+  const merged: TranscriptEntry[] = [];
+  let fallbackCursor = 0;
+  for (const entry of entries) {
+    while (fallbackCursor < fallbackEntries.length && fallbackEntries[fallbackCursor].ts < entry.ts) {
+      merged.push(fallbackEntries[fallbackCursor]);
+      fallbackCursor += 1;
+    }
+    merged.push(entry);
+  }
+  merged.push(...fallbackEntries.slice(fallbackCursor));
+  return merged;
+});
+/* 计数同源（2026-11-06 修 bug）：卡头此前报 mainDialogueMessages.length（只有 user/assistant
+   消息），而展开按钮报 transcriptEntries.length - 2（消息 + 小测回放卡），于是出现过
+   「47 条消息 / 展开更早的 54 条」这种总数小于分项的自相矛盾。现在两边都读 transcriptEntries，
+   卡头也就是这一条时间线的总条数。 */
+const transcriptTotalCount = computed(() => transcriptEntries.value.length);
+const visibleTranscriptEntries = computed(() => (
+  transcriptExpanded.value ? transcriptEntries.value : []
 ));
 const transcriptToggleLabel = computed(() => (
-  transcriptExpanded.value ? '收起对话' : `展开更早的 ${hiddenTranscriptCount.value} 条消息`
+  transcriptExpanded.value ? '收起记录' : `展开 ${transcriptTotalCount.value} 条对话`
 ));
 /** 导出前展开全部对话（返回是否临时展开，便于导出后恢复用户原本的折叠状态） */
 const expandTranscriptForExport = async () => {
-  if (!hiddenTranscriptCount.value || transcriptExpanded.value) return false;
+  if (!transcriptTotalCount.value || transcriptExpanded.value) return false;
   transcriptExpanded.value = true;
   await nextTick();
   return true;
@@ -416,6 +643,7 @@ const pollEvaluation = async () => {
     if (componentUnmounted || !pollingActive) return;
     if (!detail) throw new Error(EVAL_NOT_FOUND_MSG);
     sessionDetail.value = detail;
+    void probeTaskCompleted();
     if (shouldContinuePolling(detail)) {
       schedulePoll(finalizationRetrying.value ? FINALIZATION_RETRY_POLL_MS : POLL_INTERVAL_MS);
     } else {
@@ -559,6 +787,8 @@ const fetchEvaluation = async () => {
     const detail = await aiTeachingAPI.getSessionDetail(sessionId.value);
     if (componentUnmounted) return;
     sessionDetail.value = detail;
+    // 已结束的会话不会再进轮询，首屏这一跳是它唯一的机会（probeTaskCompleted 自带一次守卫）
+    void probeTaskCompleted();
     if (!detail) {
       error.value = EVAL_NOT_FOUND_MSG;
       return;
@@ -597,8 +827,40 @@ const goBackToPath = (forceRefresh?: boolean) => {
   router.push(learningPathsPath.value);
 };
 
+/**
+ * 课次是否已在路径侧计入完成（2026-11-03 走查 S4-5 根因修复）。
+ *
+ * 实测：评估页顶部写「本次学习已结束」，同页底部却又递一颗「完成任务」并注明"会推进路径进度"，
+ * 而路径页早已把这节算进完成（阶段 1 = 1/2）——同一件事像是没做完，还能再做一遍。
+ * 判据不靠页面猜，直接用课次状态（`task.status === 'completed'`），
+ * 与 handleAction('continue-task') 里的 P27 探针同源。只探一次，失败按未结算处理（保持原入口）。
+ */
+async function probeTaskCompleted() {
+  if (taskProbeDone) return;
+  taskProbeDone = true;
+  try {
+    const task = unwrap<{ status?: string } | null>(await api.get(`/learning/tasks/${taskId.value}`));
+    taskCompleted.value = task?.status === 'completed';
+  } catch { /* 探测失败：按未结算处理，不改变既有入口 */ }
+}
+
 const handleAction = async (action: 'end' | 'continue-task' | 'complete-task') => {
   if (action === 'continue-task') {
+    /* P27（2026-11-01 走查实锤）：任务已结算时直进课堂，boot() 会拿到 mode:'completed'
+       并原路 replace 回本页（后端拒绝为已完成任务开新课的守卫），一来一回表现为
+       「点了没反应」。先探任务态：已完成 → 带 ?mode=extension 进延伸课（课堂页既有通道，
+       #124——基于本课加练，不结算任务）；未完成/探测失败 → 维持原语义回课堂继续本任务。 */
+    try {
+      const task = unwrap<{ status?: string } | null>(await api.get(`/learning/tasks/${taskId.value}`));
+      if (task?.status === 'completed') {
+        const pathId = route.query.pathId as string | undefined;
+        router.push({
+          path: `${learnBasePath.value}/${taskId.value}`,
+          query: { mode: 'extension', ...(pathId ? { pathId } : {}) },
+        });
+        return;
+      }
+    } catch { /* 探测失败按未完成处理：常规课堂入口本来就能进 */ }
     router.push(`${learnBasePath.value}/${taskId.value}`);
     return;
   }
@@ -680,7 +942,10 @@ const handleAdvisoryAction = async (action: string) => {
     reportAdvisoryResponse('preview');
     await askConfirm({
       title: advisory.ui.title || '调整建议',
-      message: advisory.ui.body || advisory.rationale,
+      // 2026-11-04 与 CompletionCard 同口径剥离已存库安抚句：模板已不再生成，弹窗不得再复现「不会覆盖/影响已完成内容」
+      message: (advisory.ui.body || '')
+        .replace(/该调整只会调整后续阶段的课程安排，(?:不会覆盖|不影响)你已完成的内容。/g, '')
+        .trim() || advisory.rationale,
       confirmText: '知道了',
       danger: false,
     });
@@ -792,54 +1057,16 @@ const exportPdf = async () => {
 
 /* ── 头部 ⋮ 子菜单（ImmersiveMenu 接管开合/点外关闭/Esc） ── */
 
-/* ── 页内目录（≥1440 固定右栏）：滚动高亮当前章节 ── */
-const tocItems = [
-  { id: 'sec-topic', label: '主题总结' },
-  { id: 'sec-progress', label: '本节进展' },
-  { id: 'sec-perf', label: '本节表现' },
-  { id: 'sec-longterm', label: '长期状态' },
-  { id: 'sec-knowledge', label: '知识点' },
-  { id: 'sec-next', label: '下一步建议' },
-  { id: 'sec-evaluation', label: '学习评价' },
-  { id: 'sec-feedback', label: '你的感受' },
-  { id: 'sec-transcript', label: '当堂对话' },
-];
-/** 只展示当前报告真实渲染的章节：降级总结没有「本节表现 / 长期状态」时不列空锚点 */
-const tocAvailability = ref<Record<string, boolean>>({});
-const visibleTocItems = computed(() => tocItems.filter((item) => tocAvailability.value[item.id]));
-function refreshTocAvailability() {
-  const map: Record<string, boolean> = {};
-  for (const item of tocItems) map[item.id] = !!document.getElementById(item.id);
-  tocAvailability.value = map;
-}
-watch(sessionDetail, () => { void nextTick(refreshTocAvailability); }, { immediate: true });
-const activeToc = ref('');
-function scrollToToc(id: string) {
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-function updateTocActive() {
-  let current = '';
-  for (const item of visibleTocItems.value) {
-    const el = document.getElementById(item.id);
-    if (el && el.getBoundingClientRect().top <= 130) current = item.id;
-  }
-  activeToc.value = current;
-}
-let tocTick = false;
-function onTocScroll() {
-  if (tocTick) return;
-  tocTick = true;
-  requestAnimationFrame(() => { tocTick = false; updateTocActive(); });
-}
-function pickHeadMenu(kind: 'image' | 'pdf' | 'back') {
+function pickHeadMenu(kind: 'image' | 'pdf' | 'back' | 'continue' | 'complete') {
   if (kind === 'image') void exportImage();
   else if (kind === 'pdf') void exportPdf();
+  else if (kind === 'continue') void handleAction('continue-task');
+  else if (kind === 'complete') void handleAction('complete-task');
   else goBackToPath();
 }
 
 onMounted(() => {
   document.addEventListener('visibilitychange', handleVisibilityChange);
-  window.addEventListener('scroll', onTocScroll, { passive: true });
   void fetchEvaluation();
 });
 onUnmounted(() => {
@@ -847,7 +1074,6 @@ onUnmounted(() => {
   stopPolling();
   stopRegenPolling();
   document.removeEventListener('visibilitychange', handleVisibilityChange);
-  window.removeEventListener('scroll', onTocScroll);
 });
 </script>
 
@@ -859,18 +1085,23 @@ onUnmounted(() => {
 }
 
 .evaluation-shell {
-  width: calc(100% - 64px);
-  max-width: 1080px;
+  /* 与全站标准看板同一档（2026-11-07 全站巡检 准则1）：此前 1080 封顶，
+     1280 占 84%、1536 只占 70%；1500+ 才拓到 1240，中间是空档。
+     上限走全局 --vp-container（1360 基准；≥2000 抬 1480、≥2800 抬 1560），
+     不在本组件重复写数字。 */
+  width: min(92vw, var(--vp-container));
   margin: 0 auto;
   display: grid;
+  /* minmax(0,1fr)：与下方 transcript-list 同因——auto 轨道会被宽表格的 max-content
+     撑破（P0 修复的双保险层，根因注释见 .evaluation-transcript-list） */
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
 }
 
-/* 宽屏（≥1500px）：1080 报告在 2K/4K 下两侧大片空白、信息密度骤降
-   （手动流程问题测试 2026-09-26）；只加宽报告，目录在更宽的断点独立定位。 */
+/* 宽屏（≥1500px）：报告已在 1360 封顶，只把块间距松一档
+   （原 1080→1240 的加宽由上面的弹性档接管）。 */
 @media (min-width: 1500px) {
   .evaluation-shell {
-    max-width: 1240px;
     gap: 24px;
   }
 }
@@ -973,6 +1204,8 @@ onUnmounted(() => {
 
 .evaluation-head__actions {
   display: flex;
+  /* 5 颗键（导出图片 / 打印 / 继续练习 / 完成任务 / 返回）在 641–900 会换行，允许折行而不是横向溢出 */
+  flex-wrap: wrap;
   gap: 8px;
   flex-shrink: 0;
 }
@@ -1132,7 +1365,11 @@ onUnmounted(() => {
 }
 
 .evaluation-shell :deep(.completion-summary) {
-  grid-template-columns: repeat(4, 1fr);
+  /* 3 列而不是 4 等分（2026-11-03 排版优化）：报告宽屏下 4 等分格只有 231px，
+     「主题」这种整句标题被压成 3 行，而同排的「31 分钟」只占一行、其余全是空白。
+     「主题」改为独占整行（组件里的 .summary-item--topic），余下三个读数三等分。 */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
   gap: 16px;
   padding: 16px 20px;
   background: color-mix(in srgb, var(--surface) 60%, var(--canvas));
@@ -1228,13 +1465,8 @@ onUnmounted(() => {
   font-size: 26px;
   font-weight: 800;
   color: var(--ink);
-  margin-top: 8px;
-}
-
-.evaluation-shell :deep(.metric-desc) {
-  font-size: 12px;
-  color: var(--muted);
-  line-height: 1.5;
+  /* 标签与读数 6px 紧凑（2026-11-06）：原先 8px 且卡片被全局 text-align:center 拉成「标题居中、
+     读数在左下」的错位；对齐已在 CompletionCard 里显式锁定 text-align: left */
   margin-top: 6px;
 }
 
@@ -1291,6 +1523,8 @@ onUnmounted(() => {
   background: var(--surface);
   box-shadow: var(--wf-shadow-raised);
   display: grid;
+  /* minmax(0,1fr)：宽表格 max-content 撑破链的中间层（P0，根因注释见 .evaluation-transcript-list） */
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
 }
 
@@ -1317,45 +1551,40 @@ onUnmounted(() => {
   color: var(--ink);
 }
 
-.evaluation-transcript-card__meta {
-  display: inline-flex;
-  align-items: center;
-  min-height: 32px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--surface) 60%, var(--canvas));
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
 .evaluation-transcript-list {
   display: grid;
+  /* minmax(0,1fr)（2026-11-05 UX 审计 P0）：缺省 auto 轨道按 max-content 取宽，讲解消息里的
+     markdown 表格（width:max-content）会把整条轨道撑到 534px，连带页头/结算卡一起横向溢出
+     （402 视口实测 scrollWidth=600，正文右切、导出按钮出屏）。0 下限把轨道钳回容器宽，
+     表格自身的 display:block+overflow:auto 随即在容器内横向滚动而不是撑破页面。 */
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
 }
 
-/* 折叠开关：默认只回看最近两条消息（长讲解在手机上占好几屏）。选择器带上卡片类是因为
-   v2 的按钮 reset（.v2-page button:where(...)，权重 0-1-1）比单类选择器更高 */
+/* 折叠开关（2026-11-06 走查）：此前是卡内一根 100% 满宽、亮蓝描边的长条按钮——比页面任何
+   按钮都抢戏，而且和卡头那颗静态「N 条记录」胶囊说的是同一件事。现在合并进卡头右上角，
+   做成一颗轻量小胶囊（数量即入口）。选择器带卡片类是因为 v2 的按钮 reset
+   （.v2-page button:where(...)，权重 0-1-1）比单类选择器更高。 */
 .evaluation-transcript-card .evaluation-transcript-toggle {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   gap: 6px;
-  width: 100%;
-  min-height: 34px;
-  padding: 6px 12px;
-  border: 1px dashed var(--line);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--surface) 60%, var(--canvas));
-  color: var(--blue-deep);
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
   font-size: 12.5px;
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
 }
 
 .evaluation-transcript-card .evaluation-transcript-toggle:not(:disabled):hover {
   border-color: color-mix(in srgb, var(--blue) 35%, transparent);
+  color: var(--blue-deep);
 }
 
 .evaluation-transcript-toggle__caret {
@@ -1377,7 +1606,10 @@ onUnmounted(() => {
 }
 
 .evaluation-transcript-item {
-  max-width: min(100%, 860px);
+  /* 860px 上限撤除（2026-11-06 走查）：报告宽 1080、卡内可用 ~1024，AI 讲解与小测卡被
+     卡在 860 就在右侧空出近 200px（更宽的屏上接近半屏），长文读起来像贴左挤压。
+     现在讲解/小测卡吃满卡宽，只有用户气泡保留收窄（见 --user）。 */
+  max-width: 100%;
   padding: 16px 18px;
   border-radius: 16px;
   border: 1px solid var(--line);
@@ -1392,6 +1624,7 @@ onUnmounted(() => {
 
 .evaluation-transcript-item--user {
   justify-self: end;
+  max-width: min(100%, 620px);
   background: color-mix(in srgb, var(--accent) 8%, var(--surface));
   border-color: color-mix(in srgb, var(--blue) 22%, transparent);
 }
@@ -1401,6 +1634,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0; /* article 单轨 grid：子项 min-width:auto 会让表格 max-content 顶破轨道（走查 2026-11-05） */
 }
 
 .evaluation-transcript-item__meta strong {
@@ -1418,7 +1652,61 @@ onUnmounted(() => {
   font-size: 14px;
   line-height: 1.8;
   color: var(--muted);
+  min-width: 0; /* article 单轨 grid：子项 min-width:auto 会让表格 max-content 顶破轨道（走查 2026-11-05） */
 }
+
+/* 小测回放卡（只读）：高亮学生所选 + 通过/未通过判定；正确答案服务端不下发，不展示 */
+.evaluation-transcript-checkpoint {
+  display: grid;
+  gap: 10px;
+}
+
+.evaluation-transcript-checkpoint__q {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.evaluation-transcript-checkpoint__options {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.evaluation-transcript-checkpoint__opt {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.evaluation-transcript-checkpoint__opt.is-picked {
+  border-color: color-mix(in srgb, var(--blue) 45%, transparent);
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
+  color: var(--ink);
+}
+
+.evaluation-transcript-checkpoint__opt-id {
+  flex: none;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.evaluation-transcript-checkpoint__verdict {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.evaluation-transcript-checkpoint__verdict.is-pass { color: var(--green, #16a34a); }
+.evaluation-transcript-checkpoint__verdict.is-fail { color: var(--red, #dc2626); }
 
 .evaluation-transcript-empty {
   padding: 20px;
@@ -1481,8 +1769,12 @@ onUnmounted(() => {
     grid-template-columns: repeat(2, 1fr);
   }
 
+  .evaluation-shell :deep(.metrics-grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .evaluation-shell :deep(.metrics-grid--three) {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -1495,11 +1787,6 @@ onUnmounted(() => {
   /* 头部动作收进 ⋮ 子菜单：390 下三枚按钮换行堆叠，把头部撑到 154px 且主次不清；
      桌面（>640）仍是并排按钮，行为不变（2026-09-25 用户反馈） */
   .evaluation-head__actions {
-    display: none;
-  }
-
-  /* 卡内动作按钮隐藏（说明文字保留），决策统一走吸底动作条 */
-  .evaluation-shell :deep(.completion-actions__row) {
     display: none;
   }
 
@@ -1657,46 +1944,36 @@ onUnmounted(() => {
     line-height: 1.55;
   }
 
-  /* 指标卡：堆成 1 列后每张 ~150px（标签、值、说明各占一行）。改成"标签+值同行、
-     说明独占一行"的紧凑行（~62px），数值靠右对齐，扫的时候一眼落在数字上 */
-  .evaluation-shell :deep(.metrics-grid),
-  .evaluation-shell :deep(.metrics-grid--three) {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 7px;
-  }
-
-  .evaluation-shell :deep(.metric-card) {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    column-gap: 10px;
-    row-gap: 2px;
-    padding: 8px 12px;
-  }
-
-  .evaluation-shell :deep(.metric-head) {
-    flex: 1 1 auto;
-    min-width: 0;
-    justify-content: flex-start;
+  /* 指标卡（2026-11-06 屏效比）：本节表现 3 项 = 一行 3 列，长期状态 4 项 = 2×2。
+     此前这里把两者都堆成 1 列「标签/值/说明三行」的紧凑行——7 个指标 7 行，实测 ~850px，
+     光看数字就要滑近两个手机屏。说明已收进卡片右上角 ⓘ，框内不再留常驻长句。 */
+  .evaluation-shell :deep(.metrics-grid) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
   }
 
-  .evaluation-shell :deep(.metric-value) {
-    flex: 0 0 auto;
-    margin-top: 0;
-    font-size: 20px;
-    line-height: 1.15;
+  .evaluation-shell :deep(.metrics-grid--three) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
   }
 
-  .evaluation-shell :deep(.metric-desc) {
-    flex: 1 1 100%;
-    margin: 0;
-    font-size: 12px;
-    line-height: 1.45;
+  .evaluation-shell :deep(.metric-card) {
+    padding: 8px 8px 7px;
+  }
+
+  .evaluation-shell :deep(.metric-value) {
+    margin-top: 2px;
+    font-size: 18px;
+    line-height: 1.15;
+    gap: 4px;
+  }
+
+  .evaluation-shell :deep(.metric-label) {
+    padding-right: 14px;
   }
 
   .evaluation-shell :deep(.metric-badge) {
-    padding: 2px 8px;
+    padding: 1px 5px;
   }
 
   .evaluation-shell :deep(.knowledge-list) {
@@ -1757,11 +2034,6 @@ onUnmounted(() => {
 
   .evaluation-transcript-card__head h2 {
     font-size: 18px;
-  }
-
-  .evaluation-transcript-card__meta {
-    min-height: 26px;
-    padding: 0 10px;
   }
 
   .evaluation-transcript-list {
@@ -1843,10 +2115,12 @@ onUnmounted(() => {
     right: 10px;
     bottom: calc(10px + env(safe-area-inset-bottom, 0px));
     z-index: 30;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.15fr);
+    /* 两钮（已结算）或三钮（未结算）都要成立：flex 等分比固定三列稳，
+       未结算时「完成任务」靠 flex-grow 占更宽，已结算时两钮各半。
+       （原 grid 三列在只有两颗键时把第二颗塞进 auto 列、第三列空着，已删） */
+    display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     padding: 8px;
     /* 「友好而平」：吸底浮条原先是 94% 半透明 + backdrop-filter: blur(10px) 的磨砂玻璃。
        玻璃在滚动的长报告上会拖出残影；改为实底 --wf-bg-elevated，
@@ -1858,25 +2132,30 @@ onUnmounted(() => {
   }
 }
 
+/* 按钮档位（2026-11-06 走查）：原来三颗全是 surface 底 + muted 字，一眼看过去像三颗禁用键，
+   手机上尤其分不清该点哪个。现在统一 40 高 / 8px 圆角 / 10px 间距，主操作实心品牌蓝。 */
 .evaluation-ctabar__btn {
-  min-height: 44px;
+  flex: 1 1 0;
+  min-height: 40px;
+  height: 40px;
   padding: 0 10px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--surface);
-  color: var(--muted);
-  font-size: 12.5px;
+  color: var(--ink);
+  font-size: 13px;
   font-weight: 700;
   font-family: inherit;
   white-space: nowrap;
   cursor: pointer;
 }
 .evaluation-ctabar__btn:disabled { opacity: 0.55; cursor: default; }
-.evaluation-ctabar__btn--link { border-color: transparent; background: none; }
+.evaluation-ctabar__btn--link { flex: 0 0 auto; border-color: transparent; background: none; color: var(--muted); }
 .evaluation-ctabar__btn--primary {
+  flex: 1.15 1 0;
   border-color: transparent;
   /* 主按钮实心化：去掉 linear-gradient 与配套的蓝色发光投影，
      层级由浮条自身的 overlay 投影承担，按钮不再自己发光。 */
@@ -1884,39 +2163,4 @@ onUnmounted(() => {
   color: var(--text-on-primary);
 }
 
-/* ---------- 页内目录（≥1680 宽屏固定右缘；窄屏不渲染占位） ---------- */
-.eval-toc { display: none; }
-@media (min-width: 1680px) {
-  .eval-toc {
-    display: grid;
-    gap: 2px;
-    position: fixed;
-    right: 24px;
-    top: 96px;
-    width: 172px;
-    z-index: 10;
-  }
-}
-.eval-toc__link {
-  text-align: left;
-  padding: 7px 10px;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--muted);
-  background: none;
-  border: 0;
-  border-left: 2px solid var(--line);
-  border-radius: 0 var(--mk-radius-sm) var(--mk-radius-sm) 0;
-  cursor: pointer;
-  font-family: inherit;
-}
-.eval-toc__link:hover { color: var(--blue-deep); }
-.eval-toc__link.is-active {
-  color: var(--blue-deep);
-  border-left-color: var(--blue);
-  background: color-mix(in srgb, var(--blue) 7%, transparent);
-}
-/* 锚点落点留出呼吸空间 */
-#sec-topic, #sec-progress, #sec-perf, #sec-longterm, #sec-knowledge,
-#sec-next, #sec-evaluation, #sec-feedback, #sec-transcript { scroll-margin-top: 16px; }
 </style>

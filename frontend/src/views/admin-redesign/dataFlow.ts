@@ -42,7 +42,6 @@ const FAMILY_COLORS: Record<string, string> = {
   evaluation: '#db2777',        // 学习评估 · 粉
   summary: '#c026d3',           // 课后总结 · 紫红
   learner: '#a21caf',
-  visibleDialogueContext: '#6d28d9',
   snapshot: '#1d4ed8',          // 学习者快照 · 靛
   profile: '#4338ca',           // 画像 · 靛蓝
   blockedFoundations: '#b45309',
@@ -167,6 +166,12 @@ export interface DefStepLike {
 
 /* ================= 构建 ================= */
 
+/** 去向标签的展示序（数据流先后：本阶段内部 Skill → 出口闸口 → 其它 agent → 交出阶段）。
+    排序键只此一份，与编排文件里 handoff 的书写顺序无关。 */
+const TAG_KIND_RANK: Record<FlowChip['toTags'][number]['kind'], number> = {
+  skill: 0, bridge: 1, agent: 2, stage: 3,
+}
+
 function toTagsOf(targets: string[], stageId: string): FlowChip['toTags'] {
   const out: FlowChip['toTags'] = []
   for (const t of targets) {
@@ -184,7 +189,10 @@ function toTagsOf(targets: string[], stageId: string): FlowChip['toTags'] {
     }
     out.push({ label: t, target: t, kind: 'agent' })
   }
-  return out
+  /* 2026-11-02 评审：同一节点里相邻两行的去向标签顺序会不一样（先「汇入出口」再 Skill、
+     隔壁行反过来）——因为原序 = 编排文件里 handoff 的原序。按 kind 排一遍后，
+     一列读下来顺序固定；平级再按标签兜平。 */
+  return out.sort((a, b) => (TAG_KIND_RANK[a.kind] - TAG_KIND_RANK[b.kind]) || a.label.localeCompare(b.label))
 }
 
 /** 阶段身份集合：阶段名 / <stage>-agent / 阶段内全部 skill（handoff 目标判定） */

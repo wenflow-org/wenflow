@@ -1,30 +1,40 @@
 export const learnerAgentRuntimeDefinition = {
   id: 'profile-agent',
   displayName: 'Learner State Agent',
-  description: 'Goal/lesson 事件 -> learner profile enrich -> background consolidation -> snapshot refresh 的学习者主链编排（真实执行体：outbox 消费者序列 index.ts:662-677）。',
+  description: 'Goal/lesson 事件 -> 证据投影 -> 清画像缓存（含快照缓存失效） -> 快照重算 ->（仅 lesson:completed）登记课后知识增强事件 的学习者主链编排（真实执行体：outbox 消费者在 bootstrap/schedulers.ts:108 注册，序列见 events/learner-event-consumer.ts:48-82；课后增强不在本链上 await，由独立泳道 bootstrap/schedulers.ts:110-111 消费）。',
   category: 'agent',
   steps: [
     {
       step: 1,
-      agentId: 'skill:learner-model',
-      kind: 'skill',
-      role: 'goal-and-learning-signal-ingestion',
+      agentId: 'LearnerEvidenceProjector',
+      kind: 'service',
+      impl: 'services/learner/LearnerEvidenceProjector.ts handle（事件 → 学习者证据投影；events/learner-event-consumer.ts:49）',
+      role: 'learner-evidence-projection',
       condition: 'when learner profile related events arrive'
     },
     {
       step: 2,
-      agentId: 'skill:lesson-knowledge-enricher',
-      kind: 'skill',
-      role: 'lesson-knowledge-enrichment',
-      condition: 'when lesson ends'
+      agentId: 'LearnerProfileService',
+      kind: 'service',
+      impl: 'services/learner/LearnerProfileService.ts clear + services/learner/LearnerSnapshotRefreshService.ts invalidate（清画像缓存并同源失效快照缓存，读路径超 TTL 自愈重建；events/learner-event-consumer.ts:52-54）',
+      role: 'learner-profile-cache-clear',
+      condition: 'after learner evidence is projected'
     },
     {
       step: 3,
       agentId: 'LearnerSnapshotRefreshService',
       kind: 'service',
-      impl: 'services/learner/LearnerSnapshotRefreshService.ts refresh（outbox 消费者接线 index.ts:662-677）',
+      impl: 'services/learner/LearnerSnapshotRefreshService.ts refresh（events/learner-event-consumer.ts:67-75；教学 task:completed 与 goal:understanding:updated 不刷新）',
       role: 'learner-snapshot-refresh',
-      condition: 'after learner updates are applied'
+      condition: 'after profile cache is invalidated (skipped for teaching task:completed / goal:understanding:updated)'
+    },
+    {
+      step: 4,
+      agentId: 'skill:lesson-knowledge-enricher',
+      kind: 'skill',
+      impl: 'events/lesson-enrichment-event.ts enqueueLessonEnrichmentEvent（events/learner-event-consumer.ts:81；仅 lesson:completed，登记独立事件后由泳道 services/learner/LessonKnowledgeEnrichmentConsumer.ts 消费，快路径不 await LLM）',
+      role: 'lesson-knowledge-enrichment',
+      condition: 'when lesson ends (enqueued asynchronously; the fast path does not await the LLM)'
     },
   ],
   variableGraph: {

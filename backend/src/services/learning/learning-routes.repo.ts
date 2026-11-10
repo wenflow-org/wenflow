@@ -20,6 +20,8 @@ export function findGoalConversationForPathSummary(
       userId: true,
       description: true,
       stage: true,
+      // 重建闸门（#227）只认**已完成**会话的判定结论，故补上 status
+      status: true,
       collectedData: true
     }
   });

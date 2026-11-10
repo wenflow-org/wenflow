@@ -13,6 +13,8 @@ vi.mock('vue-router', () => ({
 
 const getSessionDetailMock = vi.hoisted(() => vi.fn());
 const recordAdvisoryResponseMock = vi.hoisted(() => vi.fn());
+// 2026-11-04：显式声明参数元组，否则 vi.fn 推断为无参，mock.calls[0][0] 触发 TS2493/TS2352
+const askConfirmMock = vi.hoisted(() => vi.fn<(_opts: { message: string }) => Promise<boolean>>(async () => true));
 
 vi.mock('@/api/aiTeaching', () => ({
   aiTeachingAPI: {
@@ -38,7 +40,7 @@ vi.mock('@/utils/projection', () => ({
 }));
 
 vi.mock('@/views/admin-redesign/useConfirm', () => ({
-  askConfirm: vi.fn(async () => true),
+  askConfirm: askConfirmMock,
 }));
 
 vi.mock('@/components/CompletionCard.vue', () => ({
@@ -125,6 +127,24 @@ describe('LearningEvaluationPage 调整卡处置埋点（#35）', () => {
     emitAdvisory(w, 'preview');
     await flushPromises();
     expect(recordAdvisoryResponseMock).toHaveBeenCalledWith('s1', 'preview');
+  });
+
+  // 2026-11-04：旧存库建议正文末尾带「不会覆盖/影响你已完成的内容」安抚句，弹窗须与 CompletionCard 同口径剥离
+  it('预览：弹窗正文剥离已存库安抚句', async () => {
+    getSessionDetailMock.mockResolvedValue({
+      ...detail,
+      advisory: {
+        ...detail.advisory,
+        ui: { ...detail.advisory.ui, body: '系统检测到 定位判别断点 这些点仍会影响后续推进。该调整只会调整后续阶段的课程安排，不会覆盖你已完成的内容。' },
+      },
+    });
+    askConfirmMock.mockClear();
+    const w = await mountReady();
+    emitAdvisory(w, 'preview');
+    await flushPromises();
+    const arg = askConfirmMock.mock.calls[0][0] as { message: string };
+    expect(arg.message).not.toContain('不会覆盖你已完成的内容');
+    expect(arg.message).toContain('这些点仍会影响后续推进');
   });
 
   it('确认调整且 replan 成功后：上报 adopt（P1-7 漏斗执行档）', async () => {

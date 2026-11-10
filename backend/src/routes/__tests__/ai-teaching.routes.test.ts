@@ -3,6 +3,8 @@
   submitCheckpoint: jest.fn(),
   processPeerMessage: jest.fn(),
   startSession: jest.fn(),
+  // GET /sessions/active 的读数来源（2026-11-03 起要带 lastActiveAt / activity 分档）
+  getSessionHistory: jest.fn(),
 };
 
 const mockSessionFinalizationService = {
@@ -62,14 +64,18 @@ jest.mock('../../services/ai-teaching/TeachingMessageIdempotencyService', () => 
   teachingOperationRequestHash: jest.fn(() => 'test-request-hash'),
 }));
 jest.mock('../../config/database', () => ({ __esModule: true, default: {} }));
+const mockRecordSessionEvent = jest.fn();
 jest.mock('../../services/ai-teaching/session-events.service', () => ({
   listSessionEvents: (...args: unknown[]) => mockListSessionEvents(...args),
-  recordSessionEvent: jest.fn(),
+  // 174-2：回合失败留痕断言需要拿到调用记录
+  recordSessionEvent: (...args: unknown[]) => mockRecordSessionEvent(...args),
 }));
 jest.mock('../../utils/logger', () => ({ logger: { error: jest.fn(), warn: jest.fn() } }));
 
 import router from '../ai-teaching.routes';
 import { requestContextStorage, runWithContext } from '../../gateway/api-gateway/context';
+// #251：往返用例直接遍历建议服务下发的选项键（不另抄一份枚举）
+import { ADVISORY_UI_OPTION_KEYS } from '../../services/ai-teaching/ReplanAdvisoryService';
 
 function getRouteHandler(path: string, method: 'get' | 'post' = 'post') {
   const layer = (router as any).stack.find((item: any) => item.route?.path === path && item.route?.methods?.[method]);
@@ -283,6 +289,8 @@ describe('ai-teaching routes', () => {
           levelScore: 4,
           understanding: 0.81,
           confusionPoints: ['条件类型'],
+          // 软通道有困惑点、但台账里没有原话证据 → 学生可见 chip 不显示（2026-11-01 硬口径）
+          confusionEvidenced: false,
           engagement: 0.93,
           emotionalState: 'focused',
         },
@@ -423,6 +431,133 @@ describe('ai-teaching routes', () => {
     expect(mockCoordinator.processStudentMessage).not.toHaveBeenCalled();
   });
 
+  it('#209 真值但非字符串的 message → 400 校验错误（此前穿透成 500）', async () => {
+    const handler = getRouteHandler('/sessions/:sessionId/messages');
+    for (const badMessage of [123, { a: 1 }, ['x'], true]) {
+      const res = createResponse();
+      await handler({
+        user: { userId: 'user-1' },
+        params: { sessionId: 'session-1' },
+        headers: { 'idempotency-key': 'bad-type-key' },
+        body: { message: badMessage, revision: 1 },
+      }, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: expect.objectContaining({ code: 'VALIDATION_ERROR' }),
+      });
+      expect(mockCoordinator.processStudentMessage).not.toHaveBeenCalled();
+    }
+  });
+
+  it('#210 纯空白 message（空格/换行/制表）→ 400 校验错误，不落库不跑模型', async () => {
+    const handler = getRouteHandler('/sessions/:sessionId/messages');
+    for (const blankMessage of ['', '   ', '\n\n', '\t', ' \n\t ']) {
+      const res = createResponse();
+      await handler({
+        user: { userId: 'user-1' },
+        params: { sessionId: 'session-1' },
+        headers: { 'idempotency-key': 'blank-key' },
+        body: { message: blankMessage, revision: 1 },
+      }, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: expect.objectContaining({ code: 'VALIDATION_ERROR', message: '缺少消息内容' }),
+      });
+      // 关键：空白输入必须在受理、落库、付费模型调用之前被拒
+      expect(mockCoordinator.processStudentMessage).not.toHaveBeenCalled();
+    }
+  });
+
+  it('#210 伴学端点同样拒绝纯空白 message（此前裸判空 → 200 + 真实付费调用 + 落库空消息）', async () => {
+    const handler = getRouteHandler('/sessions/:sessionId/peer/messages');
+    for (const blankMessage of ['', '   ', "\n\n", "\t", " \n\t "]) {
+      const res = createResponse();
+      await handler({
+        user: { userId: 'user-1' },
+        params: { sessionId: 'session-1' },
+        body: { message: blankMessage },
+      }, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: expect.objectContaining({ code: 'VALIDATION_ERROR', message: '缺少消息内容' }),
+      });
+      // 空白输入必须在受理、落库、付费模型调用之前被拒
+      expect(mockCoordinator.processPeerMessage).not.toHaveBeenCalled();
+    }
+  });
+  it('#224 恰好 800 字符（与前端 maxlength 同口径）→ 通过校验并受理', async () => {
+    mockCoordinator.processStudentMessage.mockResolvedValue({
+      aiResponse: '收到',
+      analysis: {
+        cognitiveLevel: 'understand',
+        levelScore: 3,
+        understanding: 0.5,
+        confusionPoints: [],
+        engagement: 0.5,
+        emotionalState: 'neutral',
+      },
+      currentState: { lss: 1, ktl: 1, lf: 1, lsb: 1 },
+      strategies: [],
+      knowledgePoint: null,
+      knowledgePoints: [],
+      isCompletion: false,
+      shouldConfirmEnd: false,
+      endReason: null,
+      recovered: false,
+      autoEnded: false,
+      peerTriggered: false,
+      checkpoint: null,
+    });
+    const boundaryMessage = 'A'.repeat(800);
+    const handler = getRouteHandler('/sessions/:sessionId/messages');
+    const res = createResponse();
+
+    await handler({
+      user: { userId: 'user-1' },
+      params: { sessionId: 'session-1' },
+      headers: { 'idempotency-key': 'boundary-key' },
+      body: { message: boundaryMessage, revision: 1 },
+    }, res);
+
+    expect(res.status).not.toHaveBeenCalledWith(400);
+    expect(mockCoordinator.processStudentMessage).toHaveBeenCalledWith(
+      'session-1',
+      boundaryMessage,
+      expect.objectContaining({ expectedRevision: 1 }),
+    );
+  });
+
+  it('#224 超过 800 字符 → 400 校验错误，不落库不跑模型', async () => {
+    const handler = getRouteHandler('/sessions/:sessionId/messages');
+    for (const longMessage of ['A'.repeat(801), 'A'.repeat(1_000_000)]) {
+      const res = createResponse();
+      await handler({
+        user: { userId: 'user-1' },
+        params: { sessionId: 'session-1' },
+        headers: { 'idempotency-key': 'too-long-key' },
+        body: { message: longMessage, revision: 1 },
+      }, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({
+        success: false,
+        error: expect.objectContaining({
+          code: 'VALIDATION_ERROR',
+          message: '消息内容不能超过 800 字符',
+        }),
+      });
+      // 关键：超长输入必须在幂等受理（落库）、付费模型调用之前被拒
+      expect(mockReserveTeachingOperation).not.toHaveBeenCalled();
+      expect(mockCoordinator.processStudentMessage).not.toHaveBeenCalled();
+    }
+  });
+
   it('SSE 流式：Accept text/event-stream 时输出 final/done 事件并关闭连接', async () => {
     mockCoordinator.processStudentMessage.mockResolvedValue({
       aiResponse: '继续',
@@ -514,6 +649,41 @@ describe('ai-teaching routes', () => {
     expect(joined).toContain('event: error\n');
     expect(joined).toContain('TEACHING_SESSION_STATE_CHANGED');
     expect(res.end).toHaveBeenCalled();
+    // 174-2：失败的回合必须落 turn.failed，否则会话时间线上只有 turn.committed、失败不可见
+    expect(mockRecordSessionEvent).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: 'session-1',
+      kind: 'turn.failed',
+      actor: 'system',
+      status: 'failed',
+      revision: 3,
+      payload: expect.objectContaining({ code: 'TEACHING_SESSION_STATE_CHANGED', streamed: true }),
+    }));
+  });
+
+  it('非流式回合失败同样落 turn.failed（带错误码与基线 revision）', async () => {
+    mockCoordinator.processStudentMessage.mockRejectedValue(
+      Object.assign(new Error('模型超时'), { code: 'TEACHING_TURN_TIMEOUT' })
+    );
+
+    const handler = getRouteHandler('/sessions/:sessionId/messages');
+    const res = createResponse();
+
+    await handler({
+      user: { userId: 'user-1' },
+      params: { sessionId: 'session-1' },
+      headers: { 'idempotency-key': 'non-stream-key' },
+      body: { message: '继续', revision: 7 },
+    }, res);
+
+    // 非流式出口仍按原语义回 5xx 错误体，同时时间线留下失败痕迹
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(mockRecordSessionEvent).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: 'session-1',
+      kind: 'turn.failed',
+      status: 'failed',
+      revision: 7,
+      payload: expect.objectContaining({ code: 'TEACHING_TURN_TIMEOUT', streamed: false }),
+    }));
   });
 
   it('SSE 流式：注入业务 sessionId 到请求上下文（执行日志/瀑布归组链路）', async () => {
@@ -643,6 +813,43 @@ describe('ai-teaching routes', () => {
     expect(res.json).toHaveBeenCalledWith({ success: true, data: result });
     expect((res.json as jest.Mock).mock.calls[0][0].data.taskCompletion)
       .toEqual({ status: 'completed', alreadyCompleted: false });
+  });
+
+  /**
+   * 2026-11-03 真人走查：老师每轮都以提问收尾时，学员连答 4 轮才等到一次不问的回应——
+   * 门禁卡给了「仍然完成结算」这颗明确确认 → 路由必须把这个意图透传给服务层（只放行末问）。
+   */
+  it('学员明确确认末问未答 → confirmOpenQuestion 透传给 Finalization 服务', async () => {
+    mockSessionFinalizationService.finalize.mockResolvedValue({ status: 'completed', revision: 9 });
+    const handler = getRouteHandler('/sessions/:sessionId/finalize');
+    const res = createResponse();
+
+    await handler({
+      user: { userId: 'user-1' },
+      params: { sessionId: 'session-1' },
+      headers: { 'idempotency-key': 'finalize-confirm-open-1' },
+      body: { action: 'complete_task', revision: 8, reason: 'manual-end', confirmOpenQuestion: true },
+    }, res);
+
+    expect(mockSessionFinalizationService.finalize).toHaveBeenCalledWith(
+      expect.objectContaining({ confirmOpenQuestion: true, action: 'complete_task' }),
+    );
+  });
+
+  it('未确认时入参形状不变（不带 confirmOpenQuestion 字段）', async () => {
+    mockSessionFinalizationService.finalize.mockResolvedValue({ status: 'completed', revision: 9 });
+    const handler = getRouteHandler('/sessions/:sessionId/finalize');
+    const res = createResponse();
+
+    await handler({
+      user: { userId: 'user-1' },
+      params: { sessionId: 'session-1' },
+      headers: { 'idempotency-key': 'finalize-plain-1' },
+      body: { action: 'complete_task', revision: 8, reason: 'manual-end' },
+    }, res);
+
+    const payload = (mockSessionFinalizationService.finalize as jest.Mock).mock.calls.at(-1)[0];
+    expect('confirmOpenQuestion' in payload).toBe(false);
   });
 
   it('Finalization 拒绝缺少 Idempotency-Key', async () => {
@@ -851,14 +1058,34 @@ describe('ai-teaching routes', () => {
       }));
     });
 
-    it('非法动作（如未经执行链的 confirm）→ 400 且不触达 repository', async () => {
+    it('非法动作 → 400 且不触达 repository', async () => {
       const handler = getRouteHandler('/sessions/:sessionId/advisory-response');
       const res = createResponse();
 
-      await handler({ user: { userId: 'user-1' }, params: { sessionId: 'session-1' }, body: { action: 'confirm' } }, res);
+      await handler({ user: { userId: 'user-1' }, params: { sessionId: 'session-1' }, body: { action: 'bogus-action' } }, res);
 
       expect(mockTeachingSessionRepository.recordAdvisoryResponse).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(400);
+    });
+
+    // #251：端点此前只认 keep/later/preview/adopt 四个手写键，而建议服务自己下发的
+    // ui.options 里还有 confirm/accelerate/reinforce/resequence —— 界面渲染什么按钮，
+    // 那个键就必须能被本端点接受（自己下发的按钮不许自己拒收）。
+    it('#251 建议卡下发的每个选项键都能被端点接受（往返）', async () => {
+      mockTeachingSessionRepository.recordAdvisoryResponse.mockResolvedValue({ status: 'ok', advisory: {} });
+      const handler = getRouteHandler('/sessions/:sessionId/advisory-response');
+
+      for (const action of ADVISORY_UI_OPTION_KEYS) {
+        mockTeachingSessionRepository.recordAdvisoryResponse.mockClear();
+        const res = createResponse();
+
+        await handler({ user: { userId: 'user-1' }, params: { sessionId: 'session-1' }, body: { action } }, res);
+
+        // 未被 400 拦下（status 未调用即 200 分支），且 action 原样落库
+        expect([action, res.status.mock.calls.length]).toEqual([action, 0]);
+        expect(mockTeachingSessionRepository.recordAdvisoryResponse)
+          .toHaveBeenCalledWith('session-1', 'user-1', action);
+      }
     });
 
     it('无待处置建议的会话 → 409 ADVISORY_NOT_FOUND', async () => {
@@ -971,6 +1198,97 @@ describe('ai-teaching routes', () => {
       const res = createResponse();
       await handler({ user: { userId: 'user-1' }, params: { sessionId: 'session-1' }, query: {} }, res);
       expect(res.json.mock.calls[0][0].data.events[0].payload).toBe('not-json{');
+    });
+  });
+
+  /**
+   * 2026-11-03：通知面板把「可继续的课堂」拆成进行中 / 空闲中两档，
+   * 依据是服务端给的 lastActiveAt（每会话最近一条消息时间）与 activity。
+   * 分档阈值与断线恢复窗口同源（RECOVERY_WINDOW_MS = 48h），前端不自己造阈值。
+   */
+  describe('活跃会话读数（GET /sessions/active）', () => {
+    const hoursAgo = (h: number) => new Date(Date.now() - h * 60 * 60 * 1000);
+
+    it('带上 lastActiveAt，并按恢复窗口判出 activity 两档', async () => {
+      mockCoordinator.getSessionHistory.mockResolvedValue([
+        {
+          id: 's_live', subject: '英语', topic: '时态', taskId: 't1', startTime: hoursAgo(1),
+          endTime: null, duration: null, status: 'active', messageCount: 5, lastActiveAt: hoursAgo(0.2),
+        },
+        {
+          id: 's_idle', subject: '心理学', topic: '流派', taskId: 't2', startTime: hoursAgo(200),
+          endTime: null, duration: null, status: 'active', messageCount: 9, lastActiveAt: hoursAgo(199),
+        },
+        {
+          // 2026-11-04：暂停（离开课堂即 paused）与超时待恢复（timeout）同样是可继续的课堂，
+          // 不能被滤掉——通知面板「进行中 / 空闲中」两档靠这个端点出数。
+          id: 's_paused', subject: '化学', topic: '元素周期', taskId: 't4', startTime: hoursAgo(3),
+          endTime: null, duration: null, status: 'paused', messageCount: 6, lastActiveAt: hoursAgo(2.5),
+        },
+        {
+          id: 's_timeout', subject: '物理', topic: '受力分析', taskId: 't5', startTime: hoursAgo(3),
+          // 2026-11-04：超时结束的课带 endTime；lastActiveAt 仍在 48h 窗口内，旧口径会误标「进行中」
+          endTime: hoursAgo(1), duration: null, status: 'timeout', messageCount: 8, lastActiveAt: hoursAgo(2),
+        },
+        {
+          // 已结束的课不出现在这个端点（completed 是终态）
+          id: 's_done', subject: '历史', topic: '旧课', taskId: 't3', startTime: hoursAgo(300),
+          endTime: hoursAgo(299), duration: 60, status: 'completed', messageCount: 4, lastActiveAt: hoursAgo(299),
+        },
+      ]);
+      const handler = getRouteHandler('/sessions/active', 'get');
+      const res = createResponse();
+      await handler({ user: { userId: 'user-1' }, query: {} }, res);
+
+      const data = res.json.mock.calls[0][0].data;
+      expect(data).toHaveLength(4);
+      const live = data.find((s: any) => s.sessionId === 's_live');
+      const idle = data.find((s: any) => s.sessionId === 's_idle');
+      expect(live.activity).toBe('active');
+      expect(idle.activity).toBe('idle');
+      // paused / timeout 不得缺席（缺陷修复回归）
+      expect(data.map((s: any) => s.sessionId)).toEqual(expect.arrayContaining(['s_paused', 's_timeout']));
+      // 2026-11-04：已超时结束（endTime 非空）的课即便在恢复窗口内也归「空闲中」，不冒充进行中
+      expect(data.find((s: any) => s.sessionId === 's_timeout').activity).toBe('idle');
+      expect(data.find((s: any) => s.sessionId === 's_paused').activity).toBe('active');
+      // lastActiveAt 必须原样透出（面板空闲档要显示「最近活跃多久前」）
+      expect(new Date(live.lastActiveAt).getTime()).toBeCloseTo(hoursAgo(0.2).getTime(), -3);
+      expect(new Date(idle.lastActiveAt).getTime()).toBeCloseTo(hoursAgo(199).getTime(), -3);
+    });
+
+    it('缺 lastActiveAt 时按 idle 处理（不让无读数的会话冒充进行中）', async () => {
+      mockCoordinator.getSessionHistory.mockResolvedValue([
+        {
+          id: 's_unknown', subject: '数学', topic: '无读数的课', taskId: 't9', startTime: hoursAgo(2),
+          endTime: null, duration: null, status: 'active', messageCount: 0, lastActiveAt: null,
+        },
+      ]);
+      const handler = getRouteHandler('/sessions/active', 'get');
+      const res = createResponse();
+      await handler({ user: { userId: 'user-1' }, query: {} }, res);
+      expect(res.json.mock.calls[0][0].data[0].activity).toBe('idle');
+    });
+
+    it('按 taskId 过滤时同样带上 lastActiveAt / activity', async () => {
+      mockCoordinator.getSessionHistory.mockResolvedValue([
+        {
+          id: 's_a', subject: '英语', topic: 'A', taskId: 't1', startTime: hoursAgo(1),
+          endTime: null, duration: null, status: 'active', messageCount: 2, lastActiveAt: hoursAgo(0.5),
+        },
+        {
+          id: 's_b', subject: '英语', topic: 'B', taskId: 't2', startTime: hoursAgo(1),
+          endTime: null, duration: null, status: 'active', messageCount: 2, lastActiveAt: hoursAgo(0.5),
+        },
+      ]);
+      const handler = getRouteHandler('/sessions/active', 'get');
+      const res = createResponse();
+      await handler({ user: { userId: 'user-1' }, query: { taskId: 't2' } }, res);
+
+      const data = res.json.mock.calls[0][0].data;
+      expect(data).toHaveLength(1);
+      expect(data[0].sessionId).toBe('s_b');
+      expect(data[0].activity).toBe('active');
+      expect(data[0].lastActiveAt).toBeTruthy();
     });
   });
 });

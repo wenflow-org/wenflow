@@ -417,13 +417,25 @@ export function buildPipelineMap(): PipelineMap {
     .map((f) => ({ skillId: f.replace(/^skill\./, '').replace(/\.md$/, ''), promptFile: `prompts/${f}` }))
     .filter((x) => !skillById.has(x.skillId) && !cores.has(x.skillId) && !manifests.has(x.skillId));
 
+  // #235：归类按**数据**说话，不按 kind 一句话概括。board-designer 是 handler-only，
+  // 但它的提示词以 prompts/skill.board-designer.md 承载（无 core 源）——若一律写成
+  // 「无 LLM 提示词」，那份 130 行的板面 spec 契约就被地图藏起来了。
+  const promptArtifactSkillIds = new Set(
+    fs.readdirSync(PROMPTS_DIR)
+      .filter((f) => /^skill\..+\.md$/.test(f))
+      .map((f) => f.replace(/^skill\./, '').replace(/\.md$/, ''))
+  );
   const skillsWithoutPrompt = skills
     .filter((s) => !cores.has(s.skillId) && !manifests.has(s.skillId))
     .map((s) => ({
       skillId: s.skillId,
       kind: s.kind || 'unknown',
       displayName: s.displayName || s.skillId,
-      reason: s.kind === 'handler-only' ? 'handler-only：无 LLM 提示词，逻辑在代码 handler' : '暂无 core/manifest',
+      reason: s.kind !== 'handler-only'
+        ? '暂无 core/manifest'
+        : promptArtifactSkillIds.has(s.skillId)
+          ? `handler-only：提示词以独立产物 prompts/skill.${s.skillId}.md 承载（无 core 源）`
+          : 'handler-only：无 LLM 提示词，逻辑在代码 handler',
     }));
 
   const byKind: Record<string, number> = {};
@@ -658,7 +670,13 @@ export function renderPromptsMarkdown(map: PipelineMap): string {
   const pushPrompt = (p: PipelinePrompt): void => {
     if (!p.coreFile || emitted.has(p.skillId)) return;
     emitted.add(p.skillId);
-    const raw = fs.readFileSync(path.join(ROOT, p.coreFile), 'utf8').replace(/\s+$/, '');
+    // 生成物按字节比对：core YAML 在 Windows（autocrlf=true）下检出为 CRLF，
+    // 原样内嵌会让任何干净检出上的 pipeline:map:check 恒定报「生成物已过期」，
+    // 而重新生成后 git diff 又是空的（2026-11-05 实测）。故内嵌前归一化为 LF。
+    const raw = fs
+      .readFileSync(path.join(ROOT, p.coreFile), 'utf8')
+      .replace(/\r\n?/g, '\n')
+      .replace(/\s+$/, '');
     const params = p.params
       ? Object.entries(p.params)
           .map(([k, v]) => `${k}=${String(v)}`)

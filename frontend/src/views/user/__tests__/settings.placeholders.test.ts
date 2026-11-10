@@ -6,6 +6,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import Settings from '../Settings.vue';
 
+/* 功能开关 mock 成翻开：这三套行为回归锁保护的是「开关翻开后的页面」，
+   默认隐藏态的断言在 settings.api-flow.test.ts */
+vi.mock('../settings-features', () => ({ SHOW_CUSTOM_MODEL_API: true, SHOW_MCP_TOOLS: true }));
 vi.mock('@/api/userCustom', () => ({
   getUserApiConfig: vi.fn(async () => ({ data: { enabled: false, endpoint: '', chatModel: 'deepseek-v4-flash', reasoningModel: 'deepseek-v4-pro', hasApiKey: false } })),
   updateUserApiConfig: vi.fn(async () => ({ data: {} })),

@@ -4,16 +4,59 @@
  * - 纯函数工具（shortHash/fmtMs/errText 等），供各 tab 子组件复用
  */
 import { reactive } from 'vue'
-import { humanizeHttpError } from '../terms'
+import { humanizeHttpError, errorCodeLabel } from '../terms'
+import { errorCategoryText } from '../statusText'
 
 /** 协议编辑器脏态（仅设计页路由级实例存在，跨组件共享给路由守卫使用） */
 export const coreEditorState = reactive({
   dirty: false
 })
 
-export const shortHash = (v?: string | null) => (v ? v.slice(0, 12) : '—')
-export const coreShortHash = (hash?: string | null) => (hash ? `${hash.slice(0, 10)}…` : '—')
+/**
+ * 短哈希展示：**超过 n 位才截断加省略号**。
+ * 2026-11-02 评审：工程页的文件哈希（base36，可能只有 6 位）与版本页的核心哈希
+ * 一个裸截断、一个带省略号，同一类读数两种写法。六个字符的短哈希贴个省略号，
+ * 又会被读成「后面还有没显示的内容」，所以统一成「够长才截」。
+ */
+export const shortHash = (v?: string | null, n = 12) => (v ? (v.length > n ? `${v.slice(0, n)}…` : v) : '—')
+export const coreShortHash = (hash?: string | null, n = 10) => (hash ? (hash.length > n ? `${hash.slice(0, n)}…` : hash) : '—')
 export const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`)
+
+/**
+ * 失败行的人话标题（判例 SkillDetail.recentRowText）：错误类别人话优先，其次错误码字典，
+ * 最后兜底「执行失败」——原始错误码不直出给运营。
+ *
+ * 2026-11-02 评审：同一条失败调用在试跑页显示原始错误码
+ * （TEACHING_TURN_REPLY_COMPLETION_MISMATCH）、在运行时页显示「执行失败 · 系统内部错误」，
+ * 同一事实两个说法。两页共用这一份。
+ */
+export function failureText(category?: string | null, code?: string | null): string {
+  // 兜底类别 'error' 的字典值是「失败」：与前缀重复，按无类别处理（不渲染「执行失败 · 失败」）
+  const cat = errorCategoryText(category)
+  if (cat && cat !== '失败') return `执行失败 · ${cat}`
+  const label = errorCodeLabel(code || undefined)
+  return label ? `执行失败 · ${label}` : '执行失败'
+}
+
+/**
+ * 调用发生时间：同日只给时:分，跨天带月-日（等宽数字，避免行内抖动）。
+ *
+ * 2026-11-02 评审：同一条记录在试跑页写「1 天前」、在运行时页写「11-01 13:22」——
+ * 一处相对、一处绝对。现在两页共用这一份，完整时刻走 callTimeFull 进悬停。
+ */
+export function callTimeLabel(ts: number): string {
+  if (!ts || Number.isNaN(ts)) return '—'
+  const d = new Date(ts)
+  const p = (n: number) => String(n).padStart(2, '0')
+  const hm = `${p(d.getHours())}:${p(d.getMinutes())}`
+  const now = new Date()
+  const sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
+  return sameDay ? hm : `${p(d.getMonth() + 1)}-${p(d.getDate())} ${hm}`
+}
+export function callTimeFull(ts: number): string {
+  if (!ts || Number.isNaN(ts)) return ''
+  return new Date(ts).toLocaleString('zh-CN', { hour12: false })
+}
 /**
  * 错误提取 + 网关黑话人话化（terms.ts 单源）：
  * - 429 →「请求过于频繁，请稍后重试」
@@ -52,12 +95,17 @@ export const callParamSourceLabel = (raw?: string | null): string =>
 /**
  * 思考配置与模型能力的冲突提示（2026-10-24）。
  *
- * 能力声明是唯一事实源（llm-providers.json 的 supportsThinking / supportsReasoningEffort）：
- * 网关按能力裁剪请求体，不支持思考的模型不会收到 thinking / reasoning_effort 字段。
- * 但裁剪是静默的——页面写「开启」、上游没收到，运营无从判断。这里把冲突说在配置处。
+ * 能力声明是唯一事实源（llm-providers.json 的 supportsThinking / reasoningEfforts）：
+ * 网关按能力裁剪请求体，不支持思考的模型不会收到 thinking / reasoning_effort 字段，
+ * 模型没声明的**那一档**同样会被裁掉。裁剪是静默的——页面写「开启 / max」、上游没收到，
+ * 运营无从判断，所以把冲突说在配置处。
  * cap 为 null = 模型不在目录（自定义通道/历史值），不猜，也不提示。
  */
-export interface ThinkingCapability { thinking: boolean; reasoning: boolean }
+export interface ThinkingCapability {
+  thinking: boolean
+  /** 这台模型声明的挡位（空 = 不支持这个字段）；不再是「支不支持强度」一个布尔 */
+  efforts: readonly string[]
+}
 export function thinkingCapabilityNotice(
   intent: { thinkingMode?: string | null; reasoningEffort?: string | null },
   cap: ThinkingCapability | null | undefined
@@ -68,8 +116,10 @@ export function thinkingCapabilityNotice(
   if (mode === 'enabled' && !cap.thinking) {
     return '当前模型不支持思考，开启后不会发送思考参数'
   }
-  if (mode !== 'disabled' && effort !== 'default' && !cap.reasoning) {
-    return '当前模型不支持推理强度，该档位不会发送'
+  if (mode !== 'disabled' && effort !== 'default' && !cap.efforts.includes(effort)) {
+    return cap.efforts.length
+      ? `当前模型只认 ${cap.efforts.join(' / ')} 这几档，${effort} 不会发送`
+      : '当前模型不支持推理强度，该档位不会发送'
   }
   return ''
 }

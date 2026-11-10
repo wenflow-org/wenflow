@@ -3,17 +3,11 @@
        （2026-10-29 全站副文审计）：它把下方会话卡的表头逐项念了一遍，属自述装配 -->
   <CapabilityShell title="学习历史">
     <!-- 页头由 CapabilityShell 提供（个人中心 kicker + 标题） -->
+    <!-- 全量统计行已删（2026-11-06 二次走查）：seg-right 插槽里的「学习 N 次 · 累计 N 分钟 ·
+         累计 N 天」与日历卡内的「本月 N 分钟 · N 天 · N 次」同屏上下各一遍，数字当前又恰好
+         相同，读成两遍统计。留下卡片内的「本月」口径（它是日历的注脚，位置就在格子上方）；
+         全量口径在 /user/account 的个人概览里已有，本页不再复读。 -->
     <div class="history__body">
-      <!-- 统计行（批19）：三个数字合并为一行内联统计，不再三张等权卡片。
-           接口失败时整行隐藏——显 0 会让学习者误以为「没学过」。
-           P2-33（设计评审）：「N 天有学习」是全量口径，与日历卡的当月口径同词不同值——
-           加「累计」限定，量词口径分家 -->
-      <div v-if="statsOk" class="history__stats">
-        <span class="history__stat">学习 <strong>{{ totalSessions }}</strong> 次</span>
-        <span class="history__stat">累计 <strong>{{ totalMinutes }}</strong> 分钟</span>
-        <span class="history__stat">累计 <strong>{{ activeDays }}</strong> 天有学习</span>
-      </div>
-
       <!-- 整月日历（原型 wf-week/wf-day 382-405 的整月版；月导航/7 列格/图例归本页，
            看板侧只留 month-summary 一行）：点选格子筛当天，再点取消 -->
       <section v-if="!loading && !loadError && sessions.length" class="card history__month" aria-label="整月学习日历">
@@ -106,6 +100,12 @@
           {{ pageError }}
           <button type="button" class="errorbar__retry" @click="loadMore">重试本页</button>
         </div>
+        <!-- 日筛选空态（state/iphone/8）：筛到无记录的日期此前只剩通用尾标「已加载全部记录」，
+             语义误导（月视图有空态而日筛选没有）——明说该日无记录并给退路 -->
+        <div v-if="selectedDate && !visibleGroups.length" class="history__emptyday" role="status">
+          {{ dayDate(selectedDate) }} 没有学习记录。可以换一天，或
+          <button type="button" class="history__emptyday-clear" @click="selectedDate = ''">取消筛选查看全部</button>
+        </div>
         <section v-for="group in visibleGroups" :key="group.date" class="card history__day">
           <div class="history__day-head">
             <!-- 日期为主（原型 wf-hist__day-head 873-875：9月29日 周二），今昨为辅。
@@ -182,10 +182,6 @@
       </div>
     </div>
 
-    <!-- AI 生成提示（页脚由 CapabilityShell 提供） -->
-    <div class="history__ai-note">
-      <AiContentNote />
-    </div>
   </CapabilityShell>
 </template>
 
@@ -194,7 +190,6 @@ import { computed, onMounted, ref } from 'vue';
 import request from '@/utils/api';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
 import V2ResultState from '@/components/ui/V2ResultState.vue';
-import AiContentNote from '@/components/AiContentNote.vue';
 import { localDateKey, localDateKeyFromIso } from '@/utils/date';
 import { unwrap } from './unwrap';
 
@@ -308,29 +303,6 @@ function sessionSummary(s: SessionRecord): string {
     /* 忽略解析失败 */
   }
   return '';
-}
-
-/* ---------- 全量统计（后端权威，分页不影响） ----------
-   totalSessions：/users/me/sessions 返回的 total（含日期过滤的全量会话数）
-   totalMinutes / activeDays：/learning/stats 的 time.totalMinutes / time.activeLearningDays
-   此前统计只算「已加载页」（sessions.length），分页后失真。 */
-const totalSessions = ref(0);
-const totalMinutes = ref(0);
-const activeDays = ref(0);
-/** 统计可用才渲染统计行：失败就隐藏，不用 0 冒充「没学过」 */
-const statsOk = ref(false);
-
-async function loadStats() {
-  try {
-    // totalSessions 不再单独发 limit=1 请求：首屏列表响应顶层就带 total（见 load 里回填）
-    const statsRes = await request.get('/learning/stats');
-    const stats = unwrap<{ time?: { totalMinutes?: number; activeLearningDays?: number } }>(statsRes);
-    if (typeof stats?.time?.totalMinutes === 'number') totalMinutes.value = stats.time.totalMinutes;
-    if (typeof stats?.time?.activeLearningDays === 'number') activeDays.value = stats.time.activeLearningDays;
-    statsOk.value = true;
-  } catch {
-    /* 统计加载失败不阻塞列表：隐藏统计行（模板 v-if="statsOk"），不显 0 */
-  }
 }
 
 interface DayGroup {
@@ -627,8 +599,6 @@ async function load(reset = false) {
     });
     // total 在响应顶层（与 data 平级，unwrap 只取 data）：首屏顺带回填「学习 N 次」统计，
     // 省掉原来单独的 limit=1 请求
-    const body = res as { total?: number };
-    if (typeof body?.total === 'number') totalSessions.value = body.total;
     const data = unwrap<{ sessions?: SessionRecord[] }>(res);
     const items = Array.isArray(data) ? data as unknown as SessionRecord[] : data?.sessions || [];
     hasMore.value = items.length >= PAGE_SIZE;
@@ -674,48 +644,45 @@ onMounted(async () => {
   // P2-33②：先等列表首屏回来，把月游标定位到最近有记录的月份，再拉整月
   await load(true);
   syncMonthCursorToLatestRecord();
-  void loadStats();
   void loadMonth();
 });
 </script>
 
 <style scoped>
-/* AI 提示：页脚由 CapabilityShell 提供，这里只留一行居中说明 */
-.history__ai-note {
-  display: flex; justify-content: center;
-  padding: 4px 0 0;
-}
-.history__ai-note :deep(.ai-note) { font-size: 12px; opacity: 0.75; }
-
 /* 内容容器：宽度/内边距交给 CapabilityShell 的 .uc__main，这里只管卡间距 */
 .history__body {
   display: grid;
   gap: 16px;
   align-content: start;
 }
-
-/* 统计行（批19）：三个数字内联一行，不再三张等权卡 */
-.history__stats {
-  display: flex;
-  align-items: baseline;
-  gap: 22px;
-  flex-wrap: wrap;
-  padding: 2px 2px 0;
-}
-
-.history__stat {
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.history__stat strong {
-  /* 17 → 16：行内次级数字档 */
-  font-size: 16px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-  margin: 0 2px;
+/* PC 双栏（2026-11-06 走查）：单列时日历被拉到 1100px 宽，日期格子成了 140px 宽的
+   超扁长条，而且记录行标题与右端的动作链隔着近 900px。≥1024 改「左月历 38% +
+   右记录列表 62%」：格子收敛成 ~42px 小方格，标题与动作的视线距离回到一屏内。 */
+@media (min-width: 1024px) {
+  .history__body {
+    grid-template-columns: minmax(0, 38fr) minmax(0, 62fr);
+    align-items: start;
+  }
+  .history__month {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: start;
+  }
+  .history__body > .history__list {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  /* 错误横幅 / 加载态 / 全页空态：通栏，不塞半栏 */
+  .history__body > .errorbar,
+  .history__body > .history__loading {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  /* 只剩一个孩子（整页空态/错误）时通栏，不留半栏空洞 */
+  .history__body > :only-child {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
 }
 
 .history__loading {
@@ -834,11 +801,39 @@ onMounted(async () => {
 
 /* 明细展开（同日同任务的每次会话） */
 .history__subs { margin-top: 4px; }
+/* 日筛选空态（state/iphone/8）：状态 + 退路一句话，弱化样式不抢列表 */
+.history__emptyday {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.history__emptyday-clear {
+  border: 0;
+  background: transparent;
+  padding: 4px 2px;
+  min-height: 24px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--blue-deep);
+  cursor: pointer;
+  text-decoration: underline;
+}
 .history__subs > summary {
   cursor: pointer;
   width: fit-content;
   font-size: 12px;
   color: var(--blue-deep);
+  /* 热区（state/iphone/7）：默认 summary 实测仅 87×18，是逐次会话明细的唯一入口、
+     低于 36px 触屏门禁——竖向 padding 扩命中高，负 margin 抵消占位不挤列表行距 */
+  padding: 9px 6px;
+  margin: -9px -6px;
   /* 系统三角退役：与全站 details 同用自绘 ▸（2026-10-27 收口） */
   list-style: none;
 }
@@ -871,12 +866,13 @@ onMounted(async () => {
   overflow: hidden;
 }
 
-/* 右侧列：状态纯文字 + 动作文字链，右对齐同列 */
+/* 右侧列：状态纯文字 + 动作文字链同行右对齐（2026-11-06 走查）：
+   上下两列时「已完成」与「查看反馈 ›」隔着一行，单行并排扫读更快；窄屏原来也是这口径 */
 .history__aside {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
   flex: none;
   margin-left: auto;
 }
@@ -885,15 +881,18 @@ onMounted(async () => {
    13px/700 蓝链。触控高 36→44（P2-35：实测 60.7×36px、桌面档 38.9px 同低于 44 地板；
    基础样式抬齐而非只进移动媒体查询，字号不动、扩的是热区）。
    左右各外扩 6px 内边距（配等量负外边距，视觉与布局都不动）：像「继续」这种两字链接
-   实测只有 35px 宽，只够高不够宽，横竖都得够才好点（2026-10-08 视觉检查）。 */
+   实测只有 35px 宽，只够高不够宽，横竖都得够才好点（2026-10-08 视觉检查）。
+   2026-11-04：横向热区改只往左扩（12px 内边距 + -12px 左边距，右边归零）。原右向 6px 外扩
+   越过卡片内容右缘、把 .history__aside 撑出 6px 横向溢出（scrollWidth 78 / clientWidth 72）；
+   收掉右向即清溢出，文字位置、44px 高度热区与盒子宽度都保持不变。 */
 .history__resume,
 .history__feedback,
 .history__restart {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
-  padding: 0 6px;
-  margin: 0 -6px;
+  padding: 0 0 0 12px;
+  margin: 0 0 0 -12px;
   border: 0;
   background: none;
   font-size: 13px;
@@ -1021,13 +1020,20 @@ onMounted(async () => {
    #5b8def，白字压上去只有 3.2:1（2026-10-09 用户侧走查：暗色下 h3 被中和成中性灰底 + 近白字，
    与同行的灰日期文字撞色，>60 分档读不出；实测探针 .mday--h3 bg=rgb(107,107,107)）。
    --mk-blue-fill 明暗同值，白字 5.75:1，两档都不掉。 */
-.lg--0, .mday--h0 { background: var(--canvas); color: var(--muted); }
+/* h0（当月无学习日）不再带底框（2026-11-06 二次走查）：ink 4% 浅底被读成「突兀的黑块」，
+   而且与未来日（裸数字）两种长相并存像渲染缺了一半。现在当月 0 分钟日与未来日同一份干净底，
+   只高亮有学习时长的日期（h1/h2/h3）；图例色块 .lg--0 保留浅底 + 描边，它是说明图例，需要可见 */
+.lg--0 { background: color-mix(in srgb, var(--ink) 4%, transparent); border: 1px solid var(--line); color: var(--muted); }
+.mday--h0 { background: none; color: var(--muted); }
 .lg--1, .mday--h1 { background: color-mix(in srgb, var(--blue) 14%, transparent); color: var(--blue-deep); }
 .lg--2, .mday--h2 { background: color-mix(in srgb, var(--blue) 32%, transparent); color: var(--blue-deep); }
 .lg--3, .mday--h3 { background: var(--mk-blue-fill); color: var(--mk-on-fill); }
+/* 非当月日期（上月 26~31 / 下月 1~6）：压暗到 0.22（2026-11-06 走查）
+   ——原来只是 --faint 灰、亮度与当月一样，一眼分不出哪天属于 11 月 */
 .mday--outside, .mday--future {
   background: none;
   color: var(--faint);
+  opacity: 0.22;
   font-weight: 500;
   cursor: default;
 }
@@ -1059,9 +1065,6 @@ onMounted(async () => {
      只装「学习次数 / 24 次」两行）。桌面本来就是三列，窄屏竖排是因为 26px 的数值
      在 100px 宽的列里放不下——把数值压到 19px、单位 11px、卡片内边距收到 10px 后
      三列重新放得下（320 下每列内容宽 72px，「271 分钟」实测 57px） */
-  /* 统计已合并为内联一行（批19），窄屏自动换行，无需特殊处理 */
-  .history__stats { gap: 14px; }
-
   /* 加载态桌面 40px 上下留白，移动端收到 28（基线：加载/空态 ≤32） */
   .history__loading {
     padding: 28px 0;
@@ -1103,13 +1106,6 @@ onMounted(async () => {
 
   .history__item-sub {
     font-size: 12px;
-  }
-
-  /* 右侧列在窄屏改成横排：状态文字与动作链一行放得下，列堆叠会把标题挤成两行 */
-  .history__aside {
-    flex-direction: row;
-    align-items: center;
-    gap: 6px;
   }
 
   .history__month {

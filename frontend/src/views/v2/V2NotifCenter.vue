@@ -98,14 +98,35 @@
 
           <!-- ============ AI 任务 Tab ============ -->
           <template v-else>
-            <!-- 进行中任务 -->
-            <div v-if="busyItems.length" class="nc__section">
-              <div class="nc__section-label">
-                <span class="nc__section-label-icon nc__section-label-icon--running" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" width="10" height="10"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
-                </span>
-                运行中
+            <!-- 课堂两档（2026-11-03）：由服务端给的 lastActiveAt/activity 判定，与断线恢复窗口同源。
+                 不叫「进行中/运行中」混排——那会和后台任务的「运行中」读成一回事，故两档都冠以「课堂」。 -->
+            <div v-if="liveSessions.length" class="nc__section">
+              <div class="nc__section-label">课堂进行中</div>
+              <div v-for="s in liveSessions" :key="s.sessionId" class="nc__task">
+                <div class="nc__task-content">
+                  <div class="nc__task-row">
+                    <strong>{{ s.topic || s.subject || '未命名课堂' }}</strong>
+                  </div>
+                  <span class="nc__task-detail">{{ openSessionDetail(s) }}</span>
+                </div>
               </div>
+            </div>
+            <div v-if="idleSessions.length" class="nc__section" :class="{ 'nc__section--border': liveSessions.length }">
+              <div class="nc__section-label">课堂空闲中</div>
+              <div v-for="s in idleSessions" :key="s.sessionId" class="nc__task">
+                <div class="nc__task-content">
+                  <div class="nc__task-row">
+                    <strong>{{ s.topic || s.subject || '未命名课堂' }}</strong>
+                  </div>
+                  <span class="nc__task-detail">{{ idleSessionDetail(s) }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 进行中任务（2026-11-06 走查 图5）：段标题「▶ 运行中」已删——tab 已写
+                 「AI 任务 · N 进行中」，卡片标题再说「正在生成学习路径」就是第三、四遍同一句。
+                 现在一条任务只说两层：标题=正在生成的路径方向名，副文=正在做什么。 -->
+            <div v-if="busyItems.length" class="nc__section" :class="{ 'nc__section--border': liveSessions.length || idleSessions.length }">
               <div v-for="item in busyItems" :key="item.key" class="nc__task nc__task--running">
                 <div class="nc__task-bar"></div>
                 <div class="nc__task-content">
@@ -177,7 +198,7 @@
 
             <!-- 空态给出口（R6D）：照抄上方通知空态的出口结构（.nc__empty-links + 去学习台），
                  原句尾「可以先去学习台或路径页开始一次学习」的指路由按钮承担 -->
-            <div v-if="!busyItems.length && !feed.length" class="nc__empty">
+            <div v-if="!busyItems.length && !openSessions.length && !feed.length" class="nc__empty">
               <span class="nc__empty-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="28" height="28"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M9 7h6M9 12h6M9 17h3"/><rect x="3" y="3" width="18" height="18" rx="4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
               </span>
@@ -205,7 +226,7 @@ import { useRouter } from 'vue-router';
 import api from '@/utils/api';
 import { timeAgo } from '@/views/admin-redesign/live';
 import { learningAPI } from '@/api/learning';
-import { aiTeachingAPI } from '@/api/aiTeaching';
+import { aiTeachingAPI, type ActiveSessionInfo } from '@/api/aiTeaching';
 import { getAgentLogs } from '@/api/userCustom';
 import { agentLabelOf } from './agent-labels';
 import { onTabRowKeydown } from '@/utils/rovingTablist';
@@ -236,6 +257,18 @@ const tab = ref<'notif' | 'tasks'>('notif');
 const rootRef = ref<HTMLElement | null>(null);
 const bellRef = ref<HTMLButtonElement | null>(null);
 const panelRef = ref<HTMLElement | null>(null);
+
+/** 2026-11-04 修复：固定面板的 top 要让开吸顶公告横幅（.anb 实测高度，桌面 41px/移动端 107px 均不固定）。
+ *  有横幅时写「横幅底边 + 顶栏高」；无横幅（或桌面，横幅在流内不与固定面板重叠）则清掉、回落 CSS 里的 64px 顶栏高。 */
+function syncPanelTop() {
+  const banner = document.querySelector('.anb');
+  // 2026-11-04 修复：横幅底边只是顶栏顶边，面板还须再下让一条吸顶顶栏（否则边界对齐顶栏顶边，
+  // 面板把整条顶栏连铃铛一起盖住）；按实测 .v2nav-bar 高补齐，与无横幅回落 64px（顶栏高）同参照。
+  const navH = Math.round(document.querySelector('.v2nav-bar')?.getBoundingClientRect().height ?? 0);
+  const top = banner ? Math.round(banner.getBoundingClientRect().bottom) + (navH || 64) : 0;
+  if (top > 0) document.documentElement.style.setProperty('--nc-panel-top', `${top}px`);
+  else document.documentElement.style.removeProperty('--nc-panel-top');
+}
 
 /* ---------- 通知 ---------- */
 const notifItems = ref<NotifItem[]>([]);
@@ -307,6 +340,8 @@ function onNotifClick(n: NotifItem) {
 
 /* ---------- AI 任务（原 V2TaskCenter 逻辑） ---------- */
 const busyItems = ref<BusyItem[]>([]);
+/** 可继续的课堂（2026-11-03 口径修正）：不是后台任务，不进 busyItems/角标；按服务端 activity 分「进行中 / 空闲中」两档 */
+const openSessions = ref<ActiveSessionInfo[]>([]);
 const feed = ref<FeedEvent[]>([]);
 const refreshing = ref(false);
 const lastSync = ref<number | null>(null);
@@ -371,26 +406,70 @@ async function collectBusy(): Promise<void> {
     );
     if (busyPath) {
       const lc = busyPath.generationLifecycle as Record<string, any>;
+      const stage = lc.phase === 'stage_design' && lc.totalStages
+        ? `正在规划阶段与课时…（${lc.completedStages ?? 0}/${lc.totalStages}）`
+        : '正在规划阶段与课时…';
       busyItems.value.push({
         key: `path-${busyPath.id}`,
-        title: '正在生成学习路径',
-        detail: lc.phase === 'stage_design' && lc.totalStages
-          ? `课程（${lc.completedStages ?? 0}/${lc.totalStages}）`
-          : '路径生成中'
-      });
-    }
-  } catch { /* 忽略 */ }
-  try {
-    const active = await aiTeachingAPI.getActiveSessions();
-    for (const s of active) {
-      busyItems.value.push({
-        key: `session-${s.sessionId}`,
-        title: '课堂进行中',
-        detail: s.topic || s.subject || undefined
+        // 标题写「哪条路径」而不是「正在生成学习路径」：后者在 tab/段标题/进度条上已重复到第四遍
+        title: busyPath.title || '学习路径',
+        detail: stage
       });
     }
   } catch { /* 忽略 */ }
 }
+
+/**
+ * 「可继续的课堂」——原先这些会话被塞进「运行中 / AI 任务进行中」，还挂着进度条动画：
+ * 课堂**不是后台任务**，没有任何东西在跑；而 `sessions/active` 只给 startTime/messageCount、
+ * **不给最近活跃时间**，所以「进行中」是面板验证不了的宣称。真人走查实锤：面板说「课堂进行中」
+ * 而路径列表说「待开始」（那条会话是数据残留 + 2h 空闲回收窗口内的）。
+ *
+ * 现在：服务端补上 `lastActiveAt`（每会话最近一条消息时间）并按断线恢复窗口判出 `activity`，
+ * 面板只做两件事——进行中的课说「始于几点 · 已几轮」，空闲中的课说「最近活跃多久前 · 已几轮」。
+ * 阈值不在前端：档位口径与 RECOVERY_WINDOW_MS 同源（见后端 sessions/active 路由注释）。
+ */
+async function collectOpenSessions(): Promise<void> {
+  try {
+    const active = await aiTeachingAPI.getActiveSessions();
+    openSessions.value = Array.isArray(active) ? active : [];
+  } catch {
+    openSessions.value = [];
+  }
+}
+
+/** 会话条目副文：起始时刻 + 已进行轮次（都来自接口，不猜测状态） */
+function openSessionDetail(s: ActiveSessionInfo): string {
+  const parts: string[] = [];
+  const started = s.startTime ? new Date(s.startTime) : null;
+  if (started && !Number.isNaN(started.getTime())) {
+    const hh = String(started.getHours()).padStart(2, '0');
+    const mm = String(started.getMinutes()).padStart(2, '0');
+    parts.push(`始于 ${hh}:${mm}`);
+  }
+  if (s.messageCount) parts.push(`已 ${s.messageCount} 轮`);
+  return parts.join(' · ') || '尚未开始对话';
+}
+
+/**
+ * 空闲档副文：说清"多久没动了"——这是空闲与进行中的唯一差别所在。
+ * 服务端给的 lastActiveAt 是每会话最近一条消息时间；缺失时退回起始时刻口径。
+ */
+function idleSessionDetail(s: ActiveSessionInfo): string {
+  const parts: string[] = [];
+  if (s.lastActiveAt) {
+    const t = new Date(s.lastActiveAt);
+    if (!Number.isNaN(t.getTime())) parts.push(`最近活跃 ${timeAgo(s.lastActiveAt)}`);
+  }
+  if (!parts.length) parts.push(openSessionDetail(s));
+  else if (s.messageCount) parts.push(`已 ${s.messageCount} 轮`);
+  return parts.join(' · ');
+}
+
+/** 进行中：服务端判定的 activity（缺字段按 active，保持旧接口行为不变） */
+const liveSessions = computed(() => openSessions.value.filter((s) => s.activity !== 'idle'));
+/** 空闲中：最近活跃已超过断线恢复窗口，课还在、可以接着上 */
+const idleSessions = computed(() => openSessions.value.filter((s) => s.activity === 'idle'));
 async function refresh() {
   if (refreshing.value) return;
   refreshing.value = true;
@@ -398,7 +477,9 @@ async function refresh() {
   const prevCount = busyItems.value.length;
   busyItems.value = [];
   // 未读角标刷新挂在同一轮询上：轮询本来就在跑（忙 12s/闲 60s），不另起定时器
-  await Promise.allSettled([collectBusy(), feedRefresh(), refreshUnread()]);
+  await Promise.allSettled([collectBusy(), collectOpenSessions(), feedRefresh(), refreshUnread()]);
+  // busy 只认后台任务（路径生成）：课堂是"有东西可继续"，不是"有东西在跑"，
+  // 更不该按 12s 快轮询去追它（会话状态不会秒级变化）
   busy = busyItems.value.length > 0;
   if (busy !== prevBusy && !busy && prevCount > 0) await feedRefresh();
   lastSync.value = Date.now();
@@ -442,9 +523,10 @@ function closePanel() {
 }
 function toggle() {
   if (open.value) { closePanel(); return; }
+  syncPanelTop();
   open.value = true;
-  // 默认落有内容的一栏；都空则通知
-  tab.value = busyItems.value.length || feed.value.length ? 'tasks' : 'notif';
+  // 默认落有内容的一栏；都空则通知（可继续的课堂也算"有内容"）
+  tab.value = busyItems.value.length || openSessions.value.length || feed.value.length ? 'tasks' : 'notif';
   if (!notifItems.value.length) void notifLoad();
   void nextTick(() => panelRef.value?.focus({ preventScroll: true }));
 }
@@ -459,11 +541,14 @@ onMounted(() => {
   schedulePoll();
   document.addEventListener('click', onDocClick);
   document.addEventListener('keydown', onKey);
+  // 视口宽度变化（桌面↔移动档）会改变横幅换行高度与面板定位基准，重算 top
+  window.addEventListener('resize', syncPanelTop);
 });
 onBeforeUnmount(() => {
   window.clearTimeout(pollTimer);
   document.removeEventListener('click', onDocClick);
   document.removeEventListener('keydown', onKey);
+  window.removeEventListener('resize', syncPanelTop);
 });
 </script>
 
@@ -502,17 +587,27 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 
-/* AI 任务运行中：右下角 8px 蓝点，不再用整圈描边 */
+/* AI 任务运行中：蓝点钉回铃铛右上角（2026-11-06 走查 图3）。
+   2026-11-04 曾把它挪到右下角来避让未读红点——但 44px 圆钮里右下角离铃铛字形太远，
+   截图里读作「掉到按钮外面」的排版错位。改回右上角（贴字形右上角 7px），
+   与未读红点并存时由下面那条规则把红点左移，两点横排不互叠。 */
 .nc__busy-dot {
   position: absolute;
-  top: 7px;
-  right: 7px;
-  width: 8px;
-  height: 8px;
+  top: 6px;
+  right: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--blue);
   box-shadow: 0 0 0 1.5px var(--surface);
   pointer-events: none;
+}
+/* 未读 + AI 任务进行中并存：蓝点占右上角，红点让到它左侧（横排两枚 7px 点） */
+.nc__bell--busy .nc__dot {
+  top: 6px;
+  right: 16px;
+  width: 7px;
+  height: 7px;
 }
 
 /* ================= 面板 ================= */
@@ -567,11 +662,15 @@ onBeforeUnmount(() => {
 @media (max-width: 1100px) {
   .nc__panel {
     position: fixed;
-    top: 64px;
+    /* 2026-11-04 修复：吸顶公告横幅（.anb，z-index:200 > 面板 60）会盖住面板顶部「通知 / AI 任务」
+       两枚页签，分栏切换不了——top 不能写死 64px，改由开面板/改视口时实测横幅底边写入
+       --nc-panel-top（无横幅或桌面回落 64px 顶栏高；桌面横幅在流内不与面板重叠）。 */
+    top: var(--nc-panel-top, 64px);
     left: 12px;
     right: 12px;
     width: auto;
-    max-height: calc((100dvh - 140px) / var(--vp-zoom, 1));
+    /* 上限随 top 一起收缩，保证面板底边不被推到底部 dock 之下 */
+    max-height: calc((100dvh - var(--nc-panel-top, 64px) - 76px) / var(--vp-zoom, 1));
     display: flex;
     flex-direction: column;
   }
@@ -644,7 +743,7 @@ onBeforeUnmount(() => {
   color: var(--faint);
 }
 .nc__section-label-icon { display: grid; place-items: center; }
-.nc__section-label-icon--running { color: var(--blue); }
+/* .nc__section-label-icon--running 已随「运行中」段标题删除（2026-11-06 走查 图5） */
 .nc__section-label-icon--done { color: var(--green-ink); }
 .nc__task {
   display: flex;

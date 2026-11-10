@@ -1,6 +1,6 @@
 import prisma from '../../config/database';
 import type { Prisma } from '@prisma/client';
-import { findRealUserIds } from '../../utils/test-account';
+import { findRealUserIds, isTestAccountUser } from '../../utils/test-account';
 
 /**
  * 用户表仓储（routes/users.ts 自助域 + routes/admin/users.ts 管理域的取数层）。
@@ -82,12 +82,16 @@ export function findSubtasksByIds(taskIds: string[]) {
   });
 }
 
-export function listUserAgentLogs(where: Prisma.agent_call_logsWhereInput, skip: number, take: number) {
+/**
+ * 取该用户符合筛选条件的全量原始行（有上限），供列表路由先折叠成组再对组做分页。
+ * 分页/total 必须与 dedupe→会话折叠后的组同口径（#214）：故在应用层折叠前一次性取数，
+ * 上限防止无界扫描；超出上限时按调用时间倒序截断，与列表最终排序方向一致。
+ */
+export function listUserAgentLogsForGrouping(where: Prisma.agent_call_logsWhereInput) {
   return prisma.agent_call_logs.findMany({
     where,
     orderBy: { calledAt: 'desc' },
-    skip,
-    take,
+    take: 5000,
     select: {
       id: true,
       agentId: true,
@@ -105,10 +109,6 @@ export function listUserAgentLogs(where: Prisma.agent_call_logsWhereInput, skip:
   });
 }
 
-export function countUserAgentLogs(where: Prisma.agent_call_logsWhereInput) {
-  return prisma.agent_call_logs.count({ where });
-}
-
 export function listUserAgentLogsForExport(where: Prisma.agent_call_logsWhereInput) {
   return prisma.agent_call_logs.findMany({
     where,
@@ -117,12 +117,56 @@ export function listUserAgentLogsForExport(where: Prisma.agent_call_logsWhereInp
   });
 }
 
-export function findUserAgentLogById(logId: string, userId: string) {
+/**
+ * 真实主键的详情取数。
+ *
+ * #245：详情必须与列表同一可见口径。此前这里只按 id+userId 取，于是 `?success` 等筛选在详情
+ * 分支被整段忽略（对 success=true 的行发 `?success=false` 仍 200），默认列表不可见的行也能靠
+ * 猜 id 直接取到。scope 由 buildAgentLogWhere 生成（与列表同一个 where），传入即与列表同口径；
+ * 主键的精确匹配仍然优先，不改变「主键详情」的语义。
+ */
+export function findUserAgentLogById(
+  logId: string,
+  userId: string,
+  scope?: Prisma.agent_call_logsWhereInput
+) {
   return prisma.agent_call_logs.findFirst({
+    where: { ...(scope || {}), id: logId, userId }
+  });
+}
+
+/**
+ * #230：模型名只写在 api-gateway 行的 metadata 上（见 gateway/api-gateway/executor），
+ * 而网关行不在默认口径的 userListed 白名单里，默认视图的主取数（listUserAgentLogsForGrouping）
+ * 拿不到它，于是折叠组的 model 恒为 null。这里按**已选中行的 traceId 集合**单独补取网关行，
+ * 不受白名单约束——补的是同一 trace 的展示元数据，不是「要展示的一行」。
+ * 只 select 建模型索引所需字段；traceIds 为空时不发查询。
+ */
+export function listAgentLogModelRowsByTraceIds(userId: string, traceIds: string[]) {
+  if (!traceIds.length) return Promise.resolve([] as Array<{ traceId: string | null; metadata: string | null }>);
+  return prisma.agent_call_logs.findMany({
+    where: { userId, agentId: 'api-gateway', traceId: { in: traceIds } },
+    select: { traceId: true, metadata: true }
+  });
+}
+
+/**
+ * #248：path: 折叠组的代表行是无 traceId 的 path-agent 阶段流水（写侧不写 traceId，
+ * metadata 里也没有 model），模型名只写在同 metadata.pathId 的 api-gateway 行上。
+ * traceId 补数在这批行上结构性取不到，故按**已选中行的 metadata.pathId** 另取一次网关行。
+ * metadata 是字符串列（SQLite），先用 contains 粗筛，调用方建索引时再按 JSON 精确匹配
+ * pathId——粗筛的过匹配不会串到别的路径。只 select 建模型索引所需字段，不改变展示口径。
+ */
+export function listAgentLogModelRowsByPathIds(userId: string, pathIds: string[]) {
+  const ids = [...new Set(pathIds.map((id) => String(id || '').trim()).filter(Boolean))];
+  if (!ids.length) return Promise.resolve([] as Array<{ traceId: string | null; metadata: string | null }>);
+  return prisma.agent_call_logs.findMany({
     where: {
-      id: logId,
-      userId
-    }
+      userId,
+      agentId: 'api-gateway',
+      OR: ids.map((pathId) => ({ metadata: { contains: pathId } }))
+    },
+    select: { traceId: true, metadata: true }
   });
 }
 
@@ -134,6 +178,12 @@ export function markOnboardingCompleted(userId: string) {
 }
 
 // ---------- 管理域（/admin/users） ----------
+
+/** 「课堂（节）」不计的会话状态：discarded 是用户点「重新开始」丢掉的旧会话、timeout 是
+ *  跑飞后被打断的会话，两者都没真正上成一节课——直接取关系计数会把它们算进节数
+ *  （演示数据里该列 19 节有 12 节是这两类，真上成的只有 7 节）。与 learning-state-reads
+ *  里「真实学习时长」排除终态会话同向。 */
+const UNCOUNTED_SESSION_STATUSES = ['discarded', 'timeout'] as const;
 
 export function findUsersForAdminList(where: Prisma.usersWhereInput, skip: number, take: number) {
   return prisma.users.findMany({
@@ -154,7 +204,9 @@ export function findUsersForAdminList(where: Prisma.usersWhereInput, skip: numbe
       _count: {
         select: {
           learning_paths: true,
-          teaching_sessions: true
+          /* 过滤计数而非新增字段：响应里 _count.teaching_sessions 仍是数字，
+             live.ts 与已删视图（同走本函数）的取数都不用跟着改 */
+          teaching_sessions: { where: { status: { notIn: [...UNCOUNTED_SESSION_STATUSES] } } }
         }
       }
     },
@@ -291,4 +343,19 @@ export function findUserIdOnly(userId: string) {
  *  判据单点在 utils/test-account.ts，不用 Prisma startsWith（SQLite LIKE 的 `_` 是通配符）。 */
 export function listRealUserIds() {
   return findRealUserIds().then((ids) => ids.map((id) => ({ id })));
+}
+
+/**
+ * 学员 id 清单（全员通知用）：真实账号里再摘掉管理员。
+ *
+ * 2026-11-01 外部评审（五轮 P2）：站内通知的「全员（真实用户）」会把 admin 也算进去——
+ * 教学向通知（如「学习周报已生成」）发给管理员，受众口径不成立。管理员要收通知就定向发。
+ */
+export function listLearnerIds() {
+  return prisma.users
+    .findMany({
+      where: { isVirtualLearner: false, isAdmin: false, deletedAt: null },
+      select: { id: true, email: true, name: true },
+    })
+    .then((rows) => rows.filter((row) => !isTestAccountUser(row)).map((row) => ({ id: row.id })));
 }

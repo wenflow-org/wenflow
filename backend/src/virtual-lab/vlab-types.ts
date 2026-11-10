@@ -66,6 +66,12 @@ export interface LearnerPrivateStateTraceEntry {
 export interface BlackboxRunState {
   publicTrace?: BlackboxPublicTraceEntry[]
   refereeTrace?: BlackboxRefereeTraceEntry[]
+  /**
+   * publicTrace 的**单调**追加序号（#176-1）。
+   * publicTrace 做首尾保留压缩后长度会封顶，序号不能再用长度推导；
+   * 老会话缺该字段时以当时的 publicTrace.length 作为基线。
+   */
+  publicTraceSequence?: number
   refereeReports?: RefereeReportRecord[]
   actorAuditReports?: ActorAuditReportRecord[]
   latestRefereeReportId?: string | null
@@ -87,7 +93,7 @@ export interface SimulatorRoute {
   model?: string
   privateNetworkPolicy?: 'runtime' | 'public-only'
   thinkingMode?: 'default' | 'enabled' | 'disabled'
-  reasoningEffort?: 'default' | 'low' | 'high' | 'max'
+  reasoningEffort?: string
   timeoutMs?: number | null
   apiKey?: string
   credentialFingerprint?: string

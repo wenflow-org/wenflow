@@ -1,6 +1,6 @@
 # Prompt 缓存优化设计
 
-> 📌 类型：活规范（缓存优化 SSOT；64k SSOT 回写已完成）｜最后核验：2026-10-20。索引见 [doc/README.md](./README.md)。
+> 📌 类型：活规范（缓存优化 SSOT；64k SSOT 回写已完成）｜最后核验：2026-11-02。索引见 [doc/README.md](./README.md)。
 
 - 发布：2026-09-28
 - 范围：平台 LLM 调用链的 prompt 缓存架构、标准通道实测缓存率、运维配置
@@ -52,7 +52,7 @@ executor 支持注入会话亲和头（`backend/.env`：`AI_CACHE_SESSION_HEADER
 
 ```ts
 // backend/src/gateway/api-gateway/executor.ts
-headers[cacheSessionHeader] = context.conversationId || context.agentId || 'wenflow-global';
+headers[cacheSessionHeader] = resolveCacheSessionKey(context);
 ```
 
 会话键取值：
@@ -60,7 +60,8 @@ headers[cacheSessionHeader] = context.conversationId || context.agentId || 'wenf
 | 调用形态 | 会话键 | 效果 |
 |---|---|---|
 | 有会话（goal 对话、课堂） | conversationId | 同会话所有轮次粘到同一上游实例 → 轮间满命中 |
-| 无会话批跑（评测、仿真） | agentId（即 skill 名） | 同 skill 批量调用共享暖前缀 |
+| 仿真（sourceEntry='simulation'） | `vlsess:<sessionId>`（虚拟会话 id，跨任务稳定；无 sessionId 时回落常规链） | 同一虚拟学习者的所有调用共享暖前缀 |
+| 无会话批跑（评测等） | agentId（即 skill 名） | 同 skill 批量调用共享暖前缀 |
 | 兜底 | 'wenflow-global' | 极少数无身份调用 |
 
 注意：亲和头只对支持该机制的通道有意义。**切换渠道供应商时必须按 §3 重新实测**——
@@ -147,7 +148,10 @@ prompt 中 ~44% 是必要新鲜内容（学员最新消息 + 课堂状态变更 
 ### 3.6 输出预算地板（64k）
 
 所有 skill 的 `maxTokens` 统一为 **64000**（`prompts/**/*.yaml` 与 `prompts/skill.*.md` frontmatter，
-2026-10-20 复核：62 处声明全部为 64000，经 prompts:sync 发布）。背景：模型变体输出量可达
+2026-11-02 复核：live 声明 62 处全部为 64000，经 prompts:sync 发布）。**例外**：board-designer
+（2026-10-27 新增）的 prompt 文件不声明 maxTokens，运行时由 `generationOverride` 固定为
+**16000**（`backend/src/services/ai-teaching/board-designer.service.ts`：板图 spec 字数不多，
+但该模型会先花数千 reasoning token，4000 预算会被推理吃满、正文为空）。背景：模型变体输出量可达
 旧预算（4000/8000）的 2-4 倍，低预算导致 finishReason=length 截断（path-reviewer@4000 2/2、
 material-collector@4000 等）。maxTokens 是上限不是目标——抬高不增加成本，只消除截断。判定截断：
 `finishReason='length' 且 completionTokens=maxTokens`。
@@ -180,7 +184,7 @@ material-collector@4000 等）。maxTokens 是上限不是目标——抬高不�
 | 配置 | 位置 | 说明 |
 |---|---|---|
 | `AI_CACHE_SESSION_HEADER` | backend/.env | 设为通道要求的会话头名即启用亲和注入；删除或留空即关闭，无其他行为变化 |
-| skill 级路由（key/endpoint/model/参数/兜底） | admin → Skill 与提示词 → 页头「批量模型配置」（单技能在详情「运行时」） | 21 个链路技能统一（标准 key + deepseek-v4.1-flash）；覆盖率矩阵看「未配置=平台默认」高亮，批量套用带审计 |
+| skill 级路由（key/endpoint/model/参数/兜底） | admin → Skill 目录 → 页头「批量模型配置」（单技能在详情「运行时」） | 21 个链路技能统一（标准 key + deepseek-v4.1-flash）；覆盖率矩阵看「未配置=平台默认」高亮，批量套用带审计 |
 
 skill_model_configs 是运行时绑定层：路由（endpoint/key）、模型（tier/model/thinking/effort）、
 参数覆盖（paramOverrides：temperature/topP/maxTokens，逐字段继承/覆盖）、兜底链（fallbackChain，
@@ -194,7 +198,8 @@ skill_model_configs 是运行时绑定层：路由（endpoint/key）、模型（
    展示名，写入不生效。
 2. skill 级 endpoint 必须带 scheme（`http://…`），executor 自动补 `/v1/chat/completions`；
    无 scheme 时调用报 `NETWORK_POLICY_BLOCKED「URL 格式无效」`。
-3. backend/.env 新增变量需 dev 进程 respawn 一次才生效（ts-node-dev 改任一源码文件触发）。
+3. backend/.env 新增变量需重启 dev 进程才生效——当前入口是 `node restart.mjs`（ts-node
+   `--transpile-only` 一次性启动，无 watcher），改完 env 后重跑 `npm run dev`（或 `node restart.mjs`）。
 
 ### 4.3 遥测护栏（建议告警项）
 
@@ -203,7 +208,7 @@ skill_model_configs 是运行时绑定层：路由（endpoint/key）、模型（
 | 告警 | 条件 | 含义 |
 |---|---|---|
 | 缓存字段塌缩 | `promptCacheMissTokens=0 且 hit>0 且 pt-hit>1000` 行数突增 | 通道停止上报 miss，命中率统计将失真 |
-| 输出截断（变体退化） | `finishReason='length' 且 completionTokens=该 skill maxTokens` | 通道静默更换了输出量异常的模型变体，大 JSON 技能（path-planning@12000、session-wrapup@8000）会组装失败 |
+| 输出截断（变体退化） | `finishReason='length' 且 completionTokens=该 skill maxTokens` | 通道静默更换了输出量异常的模型变体，大 JSON 技能（path-planning、session-wrapup 等，现均 64000）会组装失败 |
 | 命中率跌破基线 | goal-conversation 日聚合 < 60% | 亲和头失效 / 通道切换未复测 / 池冷 |
 
 ## 五、边界与注意

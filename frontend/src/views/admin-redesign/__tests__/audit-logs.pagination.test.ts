@@ -78,7 +78,11 @@ describe('AuditLogs 传统分页（方案 A）', () => {
     h.getLogs.mockReset();
     h.getStats.mockReset();
     h.getLogs.mockImplementation((params: Record<string, unknown>) => Promise.resolve(auditPage(params)));
-    h.getStats.mockResolvedValue({ data: { data: { stats: { total: 378, failed: 7 } } } });
+    /* failureByAction 是「失败动作」下拉的选项源（2026-11-09 起该下拉只在状态 = 仅失败时出现，
+       但选项源仍要随 stats 一起返回，否则切到失败域后下拉无处可取） */
+    h.getStats.mockResolvedValue({
+      data: { data: { stats: { total: 378, failed: 7 }, failureByAction: [{ action: 'user.delete', count: 5 }] } }
+    });
     window.scrollTo = vi.fn();
   });
 
@@ -221,25 +225,34 @@ describe('AuditLogs 传统分页（方案 A）', () => {
     expect(w.findAll('.mk-kpi__hint')).toHaveLength(0);
     // 常驻失败胶囊退役：计数只在 KPI / 下拉选项里
     expect(w.find('.al-fails').exists()).toBe(false);
+    /* 2026-11-09 审计（图 6）：默认态只有「状态 + 动作」两枚筛选，失败动作下拉
+       在状态切到「仅失败」后才出现（条件联动，避免与「动作」默认同值并列）。 */
+    expect(w.findAll('.mk-pillselect__k').map((x) => x.text())).toEqual(['时间范围', '状态', '动作']);
     await card('失败记录').trigger('click');
     await flushPromises();
-    expect(h.getLogs.mock.calls.at(-1)![0]).toMatchObject({ success: false });
+    await nextTick();
+    // 进入失败域后：动作下拉让位给失败动作下拉，默认读「全部失败动作」
+    expect(w.findAll('.mk-pillselect__k').map((x) => x.text())).toEqual(['时间范围', '状态', '失败动作']);
     expect(filterValue(w, '失败动作')).toBe('');
-    expect(filterOptions(w, '失败动作')).toEqual(['全部失败', 'user.delete 5']);
+    expect(filterOptions(w, '失败动作')).toEqual(['全部失败动作', 'user.delete 5']);
   });
 
-  it('失败动作下拉：按动作下钻；清空回「全部失败」而不是退出失败域', async () => {
+  it('失败动作下拉：按动作下钻；清空只退动作维度，仍留在失败域', async () => {
     h.getStats.mockResolvedValue({
       data: { data: { stats: { total: 378, failed: 7 }, failureByAction: [{ action: 'user.delete', count: 5 }] } }
     });
     const w = await mountAudit();
     await flushPromises();
     await nextTick();
-    expect(filterOptions(w, '失败动作')).toEqual(['不过滤', 'user.delete 5']);
+    /* 条件联动（2026-11-09 图 6）：默认态只渲染「状态 + 动作」两枚下拉，
+       失败动作下拉在状态切到「仅失败」后才出现。 */
+    await chooseFilter(w, '状态', '仅失败');
+    await flushPromises();
+    expect(filterOptions(w, '失败动作')).toEqual(['全部失败动作', 'user.delete 5']);
     await chooseFilter(w, '失败动作', 'user.delete');
     await flushPromises();
     expect(h.getLogs.mock.calls.at(-1)![0]).toMatchObject({ success: false, keyword: 'user.delete' });
-    await chooseFilter(w, '失败动作', '全部失败');
+    await chooseFilter(w, '失败动作', '全部失败动作');
     await flushPromises();
     const last = h.getLogs.mock.calls.at(-1)![0] as Record<string, unknown>;
     expect(last).toMatchObject({ success: false });

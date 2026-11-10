@@ -79,6 +79,23 @@ describe('V2Library', () => {
     expect(w.text()).toContain('上传资料');
   });
 
+  // 2026-11-04：空库同屏曾出现两个「上传资料」（页头 PRIMARY + 空态 CTA）。
+  // 上传入口每屏只保留一个：空态走居中 CTA，有资料后走页头按钮（同 V2LearningPaths）。
+  it('上传入口每屏仅一个：空态走居中 CTA，有资料走页头按钮', async () => {
+    mockLibrary.mockResolvedValue(libraryOf([]));
+    const empty = mount(V2Library, { global: mountGlobal });
+    await flushPromises();
+    expect(empty.findAll('button.library__upload').length).toBe(0);
+    expect(empty.findAll('button.v2result__action').length).toBe(1);
+    expect(empty.findAll('button').filter((b) => b.text().includes('上传资料')).length).toBe(1);
+
+    mockLibrary.mockResolvedValue(libraryOf([baseItem()]));
+    const filled = mount(V2Library, { global: mountGlobal });
+    await flushPromises();
+    expect(filled.findAll('button.library__upload').length).toBe(1);
+    expect(filled.findAll('button.v2result__action').length).toBe(0);
+  });
+
   it('渲染资料、统计与来源，并支持搜索过滤', async () => {
     mockLibrary.mockResolvedValue(
       libraryOf([

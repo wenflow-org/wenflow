@@ -3,7 +3,7 @@
    1. 会话验证遮罩（main.ts 动态创建，独立于 mk 体系）；
    2. 4K 超大屏 zoom（壳层全局等比放大）。
    原 EP 覆写块已随 Element Plus 全量移除而删除（QuickLearnPanel 2026-09 重写为 mk-* 原语，
-   全仓现无任何 element-plus import；见 doc/ADMIN_PAGE_TEMPLATES.md §① 的 09-25 批注）。 */
+   全仓现无任何 element-plus import；见 ADMIN_PAGE_TEMPLATES.md（已移出仓库，见 git 历史） §① 的 09-25 批注）。 */
 
 html.admin-session-concealed,
 html.admin-session-concealed body,
@@ -138,13 +138,23 @@ body.admin-session-concealed > #admin-session-validation-shell {
 
 
 /* 4K 超大屏：整体等比放大（与用户侧 v2 页 zoom 机制一致）。
-   zoom 会等比放大 .ac 内所有 100vh/100dvh 尺寸（布局高度 → 渲染高度 ×1.15/×1.3），
+   zoom 会等比放大 .ac 内所有 100vh/100dvh 尺寸（布局高度 → 渲染高度 ×zoom），
    因此 .ac 与 .ac .mshell 的**高度**必须换算回逻辑坐标（÷zoom）。
    注意：不能再只写 min-height——Shell.vue 给了 .mshell 硬 height:100dvh（渲染 ×zoom 后
    4K 变 2808 > 视口 2160），min-height 1662 压不过它，等于 no-op，html 成外层滚动容器、
    顶栏/侧栏随文档滚出视口。必须用更高优先级的 body.admin-route .ac .mshell 覆写 height
    （层级 0,3,0 > scoped .mshell[data-v-x] 的 0,2,0），并把 min-height 归零，
-   否则每页底部会出现 ≈30% 视口高的空滚动区。 */
+   否则每页底部会出现 ≈30% 视口高的空滚动区。
+
+   2026-11-07 补 2000-2799 档：此前 2.5K（2560×1440）**完全没有缩放**——
+   前台在同一视口已经是 zoom 1.15，后台还是 1.0，两边字号与密度对不上，
+   且后台表格在 2560 下挤不出多列。前台 2000-2799 是 1.15、2800+ 是 1.15、
+   3600+ 是 1.3；这里与之逐档对齐，并同样换算 100dvh 高度。 */
+@media (min-width: 2000px) and (max-width: 2799px) {
+  body.admin-route .ac { zoom: 1.15; }
+  body.admin-route .ac,
+  body.admin-route .ac .mshell { height: calc(100dvh / 1.15); min-height: 0; }
+}
 @media (min-width: 2800px) {
   body.admin-route .ac { zoom: 1.15; }
   body.admin-route .ac,
@@ -154,6 +164,23 @@ body.admin-session-concealed > #admin-session-validation-shell {
   body.admin-route .ac { zoom: 1.3; }
   body.admin-route .ac,
   body.admin-route .ac .mshell { height: calc(100dvh / 1.3); min-height: 0; }
+}
+
+/* ================= 高分屏：用 zoom 阶梯，不用限宽（2026-11-07 二次修正） =================
+   ⚠ 当天先试过给 `.mshell__content > *` 加 max-width + margin: 0 auto，4K 实测**不可用**：
+   后台是「固定左导航 + 满宽顶栏」，内容区一旦居中收窄，左边缘就脱离导航与面包屑所在的
+   同一条竖线——内容与侧栏之间裂出 ~200px 灰沟，页面 H1 与顶栏面包屑左右错位。
+   B 端后台的正确做法是**外框永远满幅对齐**（左缘与面包屑同轴、右缘与工具栏对齐），
+   大屏的宽度交给整体 zoom 等比放大 + 内部多列栅格消化，而不是留白。
+   → 限宽块已撤回；zoom 阶梯见上方 2000/2800/3600 三块（与前台同一套口径）。
+
+   但滚上去之后还有一条**同轴线**要求：页面 H1 的左缘必须与顶栏面包屑严格对齐。
+   mk-primitives 的 ≥2800 档把 --mk-page-pad-x 从 20 抬到 32，而顶栏 .mshell__top
+   恒为 20px —— 4K 实测 H1 比面包屑右移 18px（32−20 再 ×zoom 折算）。
+   故这里把高等档的页面左内衬钉回 20px，与顶栏同轴（右缘同理）。
+   限定到 body.admin-route：本文件是全局加载的，裸 :root 会连用户侧一起改。 */
+@media (min-width: 2800px) {
+  body.admin-route { --mk-page-pad-x: 20px; }
 }
 
 

@@ -29,6 +29,7 @@ import {
 } from '../learning/session-evaluation-aggregate';
 import { isCalibratableDirection, replanAttributionService, type ReplanAttributionEvidence } from './ReplanAttributionService';
 import { replanAdvisoryService, shouldBuildReplanAdvisory, toAttributionRecall, NO_ADVISORY, type ReplanAdvisory } from './ReplanAdvisoryService';
+import { loadPathConceptNames } from './path-concept-names';
 import { TeachingOperationLeaseGuard } from './TeachingOperationLeaseGuard';
 import { teachingSessionRepository, TeachingSessionConflictError, type TeachingSessionRecord, type TeachingSessionMessage } from './TeachingSessionRepository';
 import { runWithTeachingSession } from './teaching-session-context';
@@ -166,6 +167,7 @@ export function buildSessionOpeningScene(opts: {
 
 export const RECOVERY_WINDOW_MS = 48 * 60 * 60 * 1000;
 
+
 export function buildSessionId(userId: string) {
   return `teaching_${userId}_${randomUUID()}`;
 }
@@ -178,54 +180,9 @@ export function buildEndSessionRequestIdentity(endReason: string) {
   };
 }
 
-/**
- * 非正常终态收束判定（幽灵课 / 弃跑状态泄漏，2026-10-06 修复）。
- *
- * 语义：这次收束不是「学完了」而是「跑掉了 / 课已经废了」。命中后收束**仍然闭合状态机**
- * （会话照常落到 completed，wrapup 照常落库，调用方的轮询/清场逻辑不变），但**不写正式轨**：
- * learner_evidence（含 lesson:completed 事件与快照刷新）/ learning_metrics（session-wrapup 与
- * session_load）/ 记忆回写（FSRS trace、误解台账、休眠信号）/ 温故回写（review:completed），
- * 只留一条审计日志。
- *
- * 判定口径（宁窄勿宽——正常收束路径必须逐字不变）：
- * - `endReason === 'learner-abandoned'`：调用方显式声明学习者放弃。这是当前唯一可达的异常信号：
- *   产品结束接口（`ai-teaching.routes.ts:906,965`）、清场服务（`open-session-clearance.service.ts:130`）、
- *   虚拟学习者驾驶器弃跑（`platform-user-adapter.ts:398`）都走它。
- * - `status ∈ {discarded, superseded, failed}`：防御性覆盖。正常状态机下这些状态到不了收束入口
- *   （`TeachingSessionRepository.ts:1025-1030` 的 allowedStatuses 已把它们挡在 claim 之外）。
- * - **`timeout` 不在集合内**：超时是可恢复态（`timeoutIfIdle`/`timeoutIfPaused` → 下一轮教学回合
- *   `commitTurnState` 复活为 active），其轻量兜底 wrapup 是既定行为；把它当异常会误伤
- *   「超时后回来继续学、正常收束」的路径。
- */
-export const ABNORMAL_CLOSURE_STATUSES = ['discarded', 'superseded', 'failed'] as const;
-
-/** 幽灵课判据：整节课没有形成一次真实往返，且时长不到一分钟（#69 实测样本 27.3s / 3 条消息）。 */
-export const GHOST_SESSION_MAX_SECONDS = 60;
-export const GHOST_SESSION_MAX_USER_TURNS = 2;
-
-export function isAbnormalSessionClosure(input: {
-  endReason?: string | null;
-  status?: string | null;
-  /**
-   * 真实学生回合数（排除检查点合成消息）。与 durationSeconds 同时提供时才做幽灵课判定；
-   * 不传 = 保持旧口径（只认 endReason/status），避免所有既有调用点被隐式改语义。
-   */
-  userTurnCount?: number | null;
-  /** 会话时长（秒）。幽灵课判定的第二条件，见 GHOST_SESSION_*。 */
-  durationSeconds?: number | null;
-}): boolean {
-  if (input.endReason === 'learner-abandoned') return true;
-  if (!!input.status && (ABNORMAL_CLOSURE_STATUSES as readonly string[]).includes(input.status)) return true;
-  // #69 幽灵课：走的是正常收束理由（manual-end / task-completed），但整节课只有开场 + 至多一句
-  // 学生发言，几十秒就结算。它不是「学完了一节」，只是任务被顺手点完成——不该写证据/负荷/FSRS。
-  // 阈值刻意收得窄（<2 个学生回合且 <60s）：正常短复习课仍有至少两次往返，不会误伤。
-  if (input.userTurnCount != null && input.durationSeconds != null) {
-    if (input.userTurnCount < GHOST_SESSION_MAX_USER_TURNS && input.durationSeconds < GHOST_SESSION_MAX_SECONDS) {
-      return true;
-    }
-  }
-  return false;
-}
+/** 收束口径谓词已独立成模块（2026-11-03 超大文件棘轮：本文件只许缩短）。导出签名不变。 */
+import { ABNORMAL_CLOSURE_STATUSES, GHOST_SESSION_MAX_SECONDS, GHOST_SESSION_MAX_USER_TURNS, isAbnormalSessionClosure } from './session-closure-predicates';
+export { ABNORMAL_CLOSURE_STATUSES, GHOST_SESSION_MAX_SECONDS, GHOST_SESSION_MAX_USER_TURNS, isAbnormalSessionClosure } from './session-closure-predicates';
 
 /**
  * 非正常终态的唯一留痕：一条审计日志（不写 learner_evidence / learning_metrics / 记忆回写 / 温故回写）。
@@ -270,6 +227,13 @@ export function buildReplanAttributionEvidence(input: {
     ? (wrapup as any).progress.stillLearning
     : [];
   push('wrapup:still-learning', 'still_learning', unresolved.slice(0, 4).join('、'));
+  // 本节已学会名单（2026-11-08 外评 #3）：归因只看不稳一路时，会产出与评估数据
+  // 「2/2 已学会」当面打架的文案（「几个关键点还没稳」vs「全部学会」）。把已学会
+  // 一起给到归因器，理由必须写清这种张力（哪几个是本课新学会、哪些旧点仍挂着）。
+  const newlyMastered = Array.isArray((wrapup as any)?.progress?.newlyMastered)
+    ? (wrapup as any).progress.newlyMastered
+    : [];
+  push('wrapup:mastered', 'newly_mastered', newlyMastered.slice(0, 4).join('、'));
   const confusions = Array.isArray((wrapup as any)?.evidence?.topConfusionPoints)
     ? (wrapup as any).evidence.topConfusionPoints
     : [];
@@ -284,7 +248,9 @@ export function buildReplanAttributionEvidence(input: {
     push('signal:metrics', 'session_metrics',
       `sessionKtl=${evaluation.sessionKtl ?? '—'} sessionLss=${evaluation.sessionLss ?? '—'} sessionLf=${evaluation.sessionLf ?? '—'}`);
   }
-  push('signal:trend', 'recent_trend', String(learnerReplanProjection?.dynamicState?.recentTrend || ''));
+  // 2026-11-09 画像链路核查：`LearnerReplanProjection` 没有 dynamicState 段，趋势在 `risk.recentTrend`
+  // （见 LearnerProjectionService.toReplanProjection）。旧路径恒 undefined → 这里永远推入一条空证据。
+  push('signal:trend', 'recent_trend', String(learnerReplanProjection?.risk?.recentTrend || ''));
   push('signal:fragile', 'fragile_concepts',
     (learnerReplanProjection?.mastery?.fragileConcepts ?? []).slice(0, 6).join('、'));
   push('signal:struggling', 'struggling_concepts',
@@ -484,7 +450,11 @@ export async function startSession(input: TeachingSessionStartInput): Promise<{
         messagesBaseCount: claim.messagesBaseCount,
         knowledgeState: resumedKnowledgeState,
         teachingState: resumedTeachingState,
-        allowedStatuses: ['active', 'paused', 'timeout']
+        allowedStatuses: ['active', 'paused', 'timeout'],
+        // #216：复用开课不产生新回合——不推进 revision、事件记 session.resumed。
+        // 否则每次重开课堂都会让 revision 空转 +1（客户端乐观锁持有的 revision 与真实状态脱节），
+        // 事件流还会出现「turn.committed 但 revision=null」的账实不符行。
+        eventKind: 'session.resumed',
       });
       committed = true;
 
@@ -498,7 +468,7 @@ export async function startSession(input: TeachingSessionStartInput): Promise<{
         opening,
         knowledgePoints: normalizeKnowledgePoints(resumedKnowledgeState),
         mode: 'resumed',
-        revision: previousSession.revision + 1,
+        revision: previousSession.revision,
         memoryWarmup: (sessionArtifacts.memoryWarmup as ReviewPlan | undefined) ?? null,
         scene: buildSessionOpeningScene({ mode: 'resumed', context: resumedContext, sameTaskAttempt }),
       };
@@ -517,14 +487,22 @@ export async function startSession(input: TeachingSessionStartInput): Promise<{
   try {
     const opening = await generateOpening(context);
     const welcomeMessage = composeWelcome(opening);
+    /* 开场白落库**只存 message 正文，不再把 question 拼进去**（2026-11-02 走查实锤）：
+       question 是动作选项上方的一行可选引导，直播时由面板单独渲染；拼进 message 后同一句话
+       有了两种存在形态——刷新/重进时它变成气泡里的一句，页面重开时又会和面板那行同时出现，
+       看起来就是「同一节课有两个一样的问题」。question 与 quickReplies 一起存进 analysis，
+       恢复渲染时按同一套规则摆回面板（见前端 boot 的恢复分支）。message 为空时才退回拼装稿，
+       否则那句话会彻底丢失。 */
+    const openingContent = String(opening.message || '').trim() || welcomeMessage;
     const messages: TeachingSessionMessage[] = [
       {
         role: 'assistant',
-        content: welcomeMessage,
+        content: openingContent,
         timestamp: new Date().toISOString(),
         analysis: {
           openingMode: opening.mode,
           quickReplies: opening.quickReplies,
+          ...(opening.question ? { question: opening.question } : {}),
         }
       }
     ];
@@ -979,8 +957,7 @@ export async function endSession(
         })
       : await learnerSnapshotService.getSnapshot(snapshotInput);
     const learnerReplanProjection = learnerProjectionService.toReplanProjection(learnerSnapshot);
-    const currentPath = learnerSnapshot.knowledgeMemory.currentPath;
-    const currentStageNumber = currentPath?.currentPosition.stageNumber || 1;
+    const currentPath = learnerSnapshot.knowledgeMemory.currentPath;    const currentStageNumber = currentPath?.currentPosition.stageNumber || 1;
     const nextMilestone = currentPath?.milestoneProgress.find((item) => item.stageNumber === currentStageNumber + 1) || null;
     // 延伸学一期（#124）：只观测，不产生路径调整建议——延伸课不是任务完成课，
     // 其信号也不该在样本积累前推动重排（2026-10-19 拍板「先不进入，先观测」）。
@@ -990,6 +967,9 @@ export async function endSession(
       : replanAdvisoryService.build({
       wrapup: persistedWrapup,
       learnerReplanProjection,
+      // 点名收窄（2026-11-03 真人走查根因修复）：投影里的卡点来自**全学习者**，不按路径切，
+      // 会把别的路径的概念点名到这节课的评估页上；这里把本条路径的概念名交给建议层收窄。
+      pathConceptNames: await loadPathConceptNames(session.learningPathId),
       nextMilestone: nextMilestone ? {
         milestoneId: nextMilestone.milestoneId,
         title: nextMilestone.title,
@@ -1083,10 +1063,12 @@ export async function endSession(
         transferGoal: context?.cognitiveFrame?.transferGoal || null,
         performance: evaluationResult ? persistedEvaluation : null,
         knowledgeState: session.knowledgeState,
+        // 只带 role/content：下游唯一消费者是 lesson-knowledge-enricher，其输入类型
+        // （skills/lesson-knowledge-enricher/index.ts:66）只有这两键；曾额外带 analysis，
+        // 抽取后无人读取，只是把每回合的判读块重复塞进事件的持久化载荷（#200 清理）。
         visibleDialogueContext: session.messages.slice(-16).map((message) => ({
           role: message.role,
           content: message.content,
-          analysis: message.analysis || null,
         })),
         classroomEventHistory,
         wrapup: finalWrapup,

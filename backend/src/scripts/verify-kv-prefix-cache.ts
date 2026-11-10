@@ -74,10 +74,15 @@ async function main() {
   console.log('run3（间隔 60s，验证前缀缓存 TTL）');
   const run3 = await runOnce('run3');
 
-  const summarize = (r: { hit: number | null; miss: number | null } | null) => {
-    if (!r || r.hit == null || r.miss == null) return 'n/a';
-    const total = r.hit + r.miss;
-    return total > 0 ? `${((r.hit / total) * 100).toFixed(1)}% hit` : '0% hit';
+  const summarize = (r: { hit: number | null; miss: number | null; promptTokens: number | null } | null) => {
+    if (!r || r.hit == null) return 'n/a';
+    // 口径（2026-11-08）：命中率 = hit / promptTokens。
+    // 禁用 hit/(hit+miss)——上游常只回 cached_tokens、不回 miss，NULL 当 0 会把分母压塌、
+    // 命中率虚报成 100%（doc/PROMPT_CACHE_OPTIMIZATION.md 明文禁止该形式）。
+    const prompt = r.promptTokens;
+    if (!prompt || prompt <= 0) return 'n/a';
+    const missPart = r.miss == null ? 'miss 未上报' : `miss=${r.miss}`;
+    return `${((r.hit / prompt) * 100).toFixed(1)}% hit（hit=${r.hit}/${prompt}，${missPart}）`;
   };
 
   console.log('\n=== 汇总 ===');
@@ -86,11 +91,13 @@ async function main() {
   console.log('run3 缓存命中占比:', summarize(run3));
   if (run1 && run2 && run3) {
     const hitGain = (run2.hit ?? 0) > (run1.hit ?? 0);
-    const missDrop = (run2.miss ?? Infinity) < (run1.miss ?? 0);
+    // miss 常为 NULL（新版上游不回 uncached_tokens）——此时不下「未降」的结论，避免假阴性。
+    const missComparable = run1.miss != null && run2.miss != null;
+    const missDrop = missComparable ? (run2.miss as number) < (run1.miss as number) : null;
     const ttftImprove = run2.ttftMs != null && run1.ttftMs != null ? run2.ttftMs < run1.ttftMs : null;
     console.log('\n判定:',
       hitGain ? '✅ 缓存命中提升' : '⚠️ 命中未提升',
-      missDrop ? '| ✅ miss 下降' : '| ⚠️ miss 未降',
+      missDrop === null ? '| miss 未上报，跳过' : (missDrop ? '| ✅ miss 下降' : '| ⚠️ miss 未降'),
       ttftImprove === null ? '' : (ttftImprove ? '| ✅ TTFT 下降' : '| ⚠️ TTFT 未降'));
     if (!hitGain) {
       console.log('提示：若 provider 未返回 prompt_cache_hit_tokens，请确认模型为 DeepSeek 且前缀 ≥ 最小缓存单元。');
