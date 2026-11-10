@@ -86,23 +86,25 @@
             </p>
           </section>
 
-          <!-- 出站：两档并列分段，标签本身就是互斥语义 -->
+          <!-- 出站：三段并列，与入站同构（2026-11-10 用户「不应该也是三段码」：
+               原先只有「允许全部 / 仅白名单」两档，而「禁止内网」在服务端本就存在，
+               只是被当成白名单为空的保存错误挡住；现在显式成第三档） -->
           <section class="ac-section">
             <h4 class="ac-section__title">服务端出站访问</h4>
-            <div class="ac-opts" role="radiogroup" aria-label="服务端出站白名单" @keydown="onOutboundKeydown">
+            <div class="ac-opts" role="radiogroup" aria-label="服务端出站范围" @keydown="onOutboundKeydown">
               <button
                 v-for="(opt, i) in OUTBOUND_OPTIONS"
-                :key="opt.label"
+                :key="opt.id"
                 :ref="(el) => setOutboundRef(el, i)"
                 type="button"
                 role="radio"
-                class="ac-opt mk-choice ac-opt--half"
+                class="ac-opt mk-choice ac-opt--third"
                 :class="{
-                  'mk-choice--on': policy.allowPrivateNetwork === opt.value,
+                  'mk-choice--on': outboundMode === opt.id,
                 }"
-                :tabindex="policy.allowPrivateNetwork === opt.value ? 0 : -1"
-                :aria-checked="policy.allowPrivateNetwork === opt.value"
-                @click="setOutbound(opt.value)"
+                :tabindex="outboundMode === opt.id ? 0 : -1"
+                :aria-checked="outboundMode === opt.id"
+                @click="setOutbound(opt.id)"
               >
                 <span class="ac-opt__head">
                   <component :is="opt.icon" :size="15" :stroke-width="1.8" aria-hidden="true" />
@@ -112,15 +114,15 @@
                 <span class="ac-opt__radio" aria-hidden="true"></span>
                 <span
                   class="ac-opt__warn"
-                  :class="{ 'ac-opt__warn--idle': !(policy.allowPrivateNetwork === opt.value && opt.warn) }"
+                  :class="{ 'ac-opt__warn--idle': !(outboundMode === opt.id && opt.warn) }"
                 >
-                  <template v-if="policy.allowPrivateNetwork === opt.value && opt.warn">
+                  <template v-if="outboundMode === opt.id && opt.warn">
                     <TriangleAlert :size="13" :stroke-width="2" aria-hidden="true" />{{ opt.warn }}
                   </template>
                 </span>
               </button>
             </div>
-            <label v-if="!policy.allowPrivateNetwork" class="mk-field ac-subfield">
+            <label v-if="outboundMode === 'whitelist'" class="mk-field ac-subfield">
               <span class="mk-field__label">允许的 Host / IP</span>
               <textarea
                 class="mk-field__textarea ac-textarea"
@@ -130,10 +132,10 @@
                 placeholder="每行一个 Host 或 CIDR 网段，例如 192.168.1.20"
               ></textarea>
             </label>
-            <!-- 这条会直接挡住保存（saveBlocked），不是「提醒」而是「做不了」，保留整条告警 -->
+            <!-- 选「仅白名单」却把清单清空：多半是想禁内网却没换档，保存前挡住 -->
             <p v-if="outboundEmptyWarn" class="mk-alert ac-risk" role="alert">
               <TriangleAlert :size="15" :stroke-width="2" aria-hidden="true" />
-              白名单为空：保存后服务端将无法访问任何内网地址。
+              白名单为空：要禁止内网出站，请直接选「禁止内网」。
             </p>
           </section>
 
@@ -225,7 +227,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkSwitch from '@/components/mk/MkSwitch.vue'
-import { Globe, Laptop, Network, ShieldCheck, TriangleAlert } from 'lucide-vue-next'
+import { Globe, Laptop, Network, ShieldCheck, ShieldOff, TriangleAlert } from 'lucide-vue-next'
 import { toast } from '@/utils/toast'
 import { authAPI } from '@/api/auth'
 import {
@@ -258,6 +260,13 @@ const policy = reactive({
   privateNetworkHosts: [] as string[],
 })
 const saving = ref(false)
+/** 出站档位（草稿）：由 allowPrivateNetwork + 白名单推导出「禁止内网」这一显式档 */
+const outboundMode = ref<OutboundMode>('all')
+/** 入表策略按档位归一：禁止内网 = 不放行内网且白名单清空（服务端就是这样判的） */
+const effectiveOutbound = computed(() => ({
+  allowPrivateNetwork: outboundMode.value === 'all',
+  privateNetworkHosts: outboundMode.value === 'deny' ? [] : policy.privateNetworkHosts
+}))
 /** 接入域读取失败：空表单不得伪装成「未配置」 */
 const configFailed = computed(() => !!liveFailures.value.apiConfig)
 
@@ -273,9 +282,9 @@ const policyDirty = computed(() => {
   if (!saved) return false
   return (
     policy.adminAccessMode !== saved.adminAccessMode ||
-    policy.allowPrivateNetwork !== saved.allowPrivateNetwork ||
+    effectiveOutbound.value.allowPrivateNetwork !== saved.allowPrivateNetwork ||
     !sameList(policy.adminAllowedIps, saved.adminAllowedIps) ||
-    !sameList(policy.privateNetworkHosts, saved.privateNetworkHosts)
+    !sameList(effectiveOutbound.value.privateNetworkHosts, saved.privateNetworkHosts)
   )
 })
 
@@ -293,6 +302,10 @@ function applyPolicy(): void {
   policy.allowPrivateNetwork = saved.allowPrivateNetwork
   policy.adminAllowedIps = [...saved.adminAllowedIps]
   policy.privateNetworkHosts = [...saved.privateNetworkHosts]
+  /* 已保存态回推档位：放行全部 → all；否则有白名单 → whitelist；空清单 → deny */
+  outboundMode.value = saved.allowPrivateNetwork
+    ? 'all'
+    : (saved.privateNetworkHosts.length ? 'whitelist' : 'deny')
 }
 watch(() => cfg.value, applyPolicy, { immediate: true })
 
@@ -314,9 +327,9 @@ function reload(): void {
 }
 defineExpose({ reload })
 
-/** 仅白名单且名单为空：保存后服务端请求不到任何内网地址（含内网模型上游） */
+/** 选「仅白名单」却又把名单清空：多半是误操作（想禁内网请直接选「禁止内网」），保存前挡住 */
 const outboundEmptyWarn = computed(
-  () => !policy.allowPrivateNetwork && policy.privateNetworkHosts.length === 0,
+  () => outboundMode.value === 'whitelist' && policy.privateNetworkHosts.length === 0,
 )
 const saveBlocked = computed(() => outboundEmptyWarn.value)
 
@@ -354,23 +367,40 @@ const accessOptions = computed(() => [
   },
 ])
 
-/** 出站两档：与入站同构（图标 + 标签 + 一句说明 + 选中时的警示），键序固定供方向键用 */
-const OUTBOUND_OPTIONS = [
+/** 出站三档：与入站同构（图标 + 标签 + 一句说明 + 选中时的警示），键序固定供方向键用。
+ *  2026-11-10 用户「不应该也是三段码」：原先只有两档（允许全部 / 仅白名单），
+ *  而「禁止内网」这一档在服务端本来就存在（allowPrivateNetwork=false + 白名单为空），
+ *  只是被当成「白名单为空」的保存错误挡住。现在把它显式化，三段与入站对齐。 */
+type OutboundMode = 'all' | 'whitelist' | 'deny'
+const OUTBOUND_OPTIONS: ReadonlyArray<{
+  id: OutboundMode
+  label: string
+  icon: typeof Network
+  desc: string
+  warn: string
+}> = [
   {
-    value: true,
+    id: 'all',
     label: '允许全部内网',
     icon: Network,
     desc: '服务端可访问任意内网地址',
     warn: '含云厂商元数据地址，出站目标可信时才保持这一档',
   },
   {
-    value: false,
+    id: 'whitelist',
     label: '仅白名单',
     icon: ShieldCheck,
     desc: '只允许清单里的 Host / IP',
     warn: '',
   },
-] as const
+  {
+    id: 'deny',
+    label: '禁止内网',
+    icon: ShieldOff,
+    desc: '公网照常，内网地址一律不可达',
+    warn: '保存后白名单会清空',
+  },
+]
 function setAccessMode(mode: 'loopback' | 'private' | 'any'): void {
   if (policy.adminAccessMode === mode) return
   if (accessOptions.value.find((o) => o.id === mode)?.disabled) return
@@ -405,10 +435,11 @@ function onAccessKeydown(e: KeyboardEvent): void {
   void nextTick(() => accessEls.value[next]?.focus())
 }
 
-/* 出站两档同样走 radio 语义：roving tabindex + 方向键切换 */
-function setOutbound(allow: boolean): void {
-  if (policy.allowPrivateNetwork === allow) return
-  policy.allowPrivateNetwork = allow
+/* 出站三档同样走 radio 语义：roving tabindex + 方向键切换 */
+function setOutbound(mode: OutboundMode): void {
+  if (outboundMode.value === mode) return
+  outboundMode.value = mode
+  policy.allowPrivateNetwork = mode === 'all'
 }
 const outboundEls = ref<(HTMLElement | null)[]>([])
 function setOutboundRef(el: unknown, i: number): void {
@@ -418,8 +449,15 @@ function onOutboundKeydown(e: KeyboardEvent): void {
   const keys = ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End']
   if (!keys.includes(e.key)) return
   e.preventDefault()
-  const next = e.key === 'ArrowLeft' || e.key === 'ArrowUp' || e.key === 'Home' ? 0 : 1
-  setOutbound(next === 0)
+  const n = OUTBOUND_OPTIONS.length
+  const cur = OUTBOUND_OPTIONS.findIndex((o) => o.id === outboundMode.value)
+  const from = cur >= 0 ? cur : 0
+  const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1
+  let next = from
+  if (e.key === 'Home') next = 0
+  else if (e.key === 'End') next = n - 1
+  else next = (from + step + n) % n
+  setOutbound(OUTBOUND_OPTIONS[next].id)
   void nextTick(() => outboundEls.value[next]?.focus())
 }
 
@@ -458,7 +496,7 @@ async function savePolicy(): Promise<void> {
   }
   saving.value = true
   try {
-    await liveSaveNetworkPolicy({ ...policy })
+    await liveSaveNetworkPolicy({ ...policy, ...effectiveOutbound.value })
     toast.success('访问策略已保存并生效')
   } catch (e) {
     toast.error(`保存失败：${errMsg(e)}`)
