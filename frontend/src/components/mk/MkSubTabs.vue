@@ -102,7 +102,7 @@ function onKeydown(e: KeyboardEvent) {
 }
 .mk-subtab:hover { color: var(--mk-ink); }
 .mk-subtab[aria-selected='true'] {
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
   border-bottom-color: var(--mk-blue);
 }
 .mk-subtab:focus-visible { outline: none; box-shadow: var(--mk-focus-ring); }

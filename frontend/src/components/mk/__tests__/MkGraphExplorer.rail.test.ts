@@ -140,6 +140,22 @@ describe('MkGraphExplorer 路径切换：只有一个下拉（§5）', () => {
     expect(texts.join(' ')).not.toContain('lp_a');
     w.unmount();
   });
+
+  it('defaultHideIsolated=false：默认画出无关系的概念（学习者详情要完整路径图）', () => {
+    const isolated = [
+      { id: 'a', label: '概念甲' },
+      { id: 'b', label: '概念乙' },
+    ];
+    const normal = mount(MkGraphExplorer, { props: { nodes: isolated, edges: [] } });
+    expect(normal.findComponent({ name: 'MkGraph' }).props('hideIsolated'), '默认仍隐藏孤立点').toBe(true);
+    normal.unmount();
+
+    const all = mount(MkGraphExplorer, { props: { nodes: isolated, edges: [], defaultHideIsolated: false } });
+    expect(all.findComponent({ name: 'MkGraph' }).props('hideIsolated')).toBe(false);
+    // 统计与画布同口径：2 个概念都算可见，不再写成「0 / 2」
+    expect(all.find('.mk-ge__stats').text()).toContain('2');
+    all.unmount();
+  });
 });
 
 describe('MkGraphExplorer 路径下拉的键盘与三态', () => {

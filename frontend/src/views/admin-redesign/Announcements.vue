@@ -303,6 +303,18 @@ const hasRouterCtx = !!getCurrentInstance()?.appContext.config.globalProperties.
 const announceRoute = hasRouterCtx ? useRoute() : null
 const initialStatus = typeof announceRoute?.query.status === 'string' ? String(announceRoute.query.status) : ''
 const statusFilter = ref(ANNOUNCE_STATUSES.has(initialStatus) ? initialStatus : '')
+/* URL → 筛选持续同步（2026-11-09）：KPI「草稿公告」是切到本页签的同一次导航里把 ?status=draft
+   写进去的——本组件此刻才挂载，读到的是**旧** route（status 尚未落地），只在 setup 读一次会
+   停在「全部状态」，与地址栏脱节。改成 watch（immediate）后首挂载与后续 in-place 改 query
+   都对齐；非本页枚举（反馈的 new 等）一律清空，不把列表筛成「没有匹配的公告」。 */
+watch(
+  () => announceRoute?.query?.status,
+  (s) => {
+    const v = typeof s === 'string' && ANNOUNCE_STATUSES.has(s) ? s : ''
+    if (v !== statusFilter.value) statusFilter.value = v
+  },
+  { immediate: true }
+)
 
 /* 两维筛选的选项（胶囊内嵌下拉）：空值 = 不筛该维，文案即「全部X」 */
 const severityOptions = [
@@ -312,7 +324,8 @@ const severityOptions = [
   { value: 'critical', label: '紧急' },
 ]
 const statusOptions = [
-  { value: '', label: '全部状态' },
+  /* 「全部状态」→「全部」：触发器已带「状态」label，选项不再复述（2026-11-09 走查）。 */
+  { value: '', label: '全部' },
   { value: 'published', label: '生效中' },
   { value: 'expired', label: '已过期' },
   { value: 'draft', label: '草稿' },
@@ -691,7 +704,7 @@ function expiresLabel(iso: string): string {
   color: var(--mk-muted);
   cursor: pointer;
 }
-.an-sev--on.an-sev--info { border-color: var(--mk-blue); color: var(--mk-blue); background: var(--mk-blue-bg, #eef5ff); }
+.an-sev--on.an-sev--info { border-color: var(--mk-blue); color: var(--mk-blue-text); background: var(--mk-blue-bg, #eef5ff); }
 .an-sev--on.an-sev--warning { border-color: var(--mk-amber); color: var(--mk-amber); background: var(--mk-amber-bg); }
 .an-sev--on.an-sev--critical { border-color: var(--mk-red); color: var(--mk-red); background: var(--mk-red-bg); }
 /* 破坏性动作统一走全局 .mk-link--danger（红字）：2026-11-02 评审指出「下线」

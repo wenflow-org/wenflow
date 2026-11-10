@@ -71,7 +71,7 @@ describe('virtual-learner-epistemic-grounding · payload 注入可见上下文�
     expect(payload.visibleContext.lastTeacherMessage).toBe('先判断直角。')
   })
 
-  it('visibleContext 缺省时不注入该键（现网 payload 不变）', async () => {
+  it('visibleContext 缺省时不注入该键', async () => {
     const payload = await capturedPayload(baseInput)
     expect(payload).not.toHaveProperty('visibleContext')
   })
@@ -84,5 +84,18 @@ describe('virtual-learner-epistemic-grounding · payload 注入可见上下文�
     const keys = Object.keys(payload)
     expect(keys[0]).toBe('learner')
     expect(keys.indexOf('visibleContext')).toBeGreaterThan(keys.indexOf('previousLearnerState'))
+  })
+
+  it('逐回合回写的概念数组下沉到易变尾部，不再打断稳定段（2026-11-08 键序修正）', async () => {
+    const payload = await capturedPayload({
+      ...baseInput,
+      visibleContext: { history: [], lastTeacherMessage: '下一步做什么？' },
+    })
+    const keys = Object.keys(payload)
+    // 稳定段：learner → currentTask → knowledgeSnapshot（三键连续前置）
+    expect(keys.slice(0, 3)).toEqual(['learner', 'currentTask', 'knowledgeSnapshot'])
+    // 概念数组必须排在稳定段之后（此前误置于索引 2/3，注释却声称已在尾部）
+    expect(keys.indexOf('knownConcepts')).toBeGreaterThanOrEqual(3)
+    expect(keys.indexOf('struggleConcepts')).toBeGreaterThanOrEqual(3)
   })
 })

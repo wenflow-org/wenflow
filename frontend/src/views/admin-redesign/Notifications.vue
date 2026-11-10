@@ -626,7 +626,7 @@ void reload()
    行样式不再随已读态变化（批C 注释本就写着「行底色冗余信号降为一枚点」，此处补齐实现）。 */
 .nt-read { display: inline-flex; align-items: center; gap: 6px; font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; }
 .nt-read__dot { width: 6px; height: 6px; border-radius: 50%; background: var(--mk-surface-3); flex: none; }
-.nt-read--no { color: var(--mk-blue); font-weight: 700; }
+.nt-read--no { color: var(--mk-blue-text); font-weight: 700; }
 .nt-read--no .nt-read__dot { background: var(--mk-blue); }
 
 .nt-scope { display: flex; gap: 8px; }

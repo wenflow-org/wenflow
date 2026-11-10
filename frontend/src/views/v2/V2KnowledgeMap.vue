@@ -34,7 +34,7 @@
           :theme="theme"
           :loading="loading"
           :error="error"
-          height="clamp(520px, 62vh, 680px)"
+          height="100%"
           empty-hint="还没有可展示的概念图。学完一节课、或生成一条学习路径后，概念与关系会自动出现在这里。"
           error-action-text="重试"
           empty-action-text="开始学习"
@@ -200,8 +200,97 @@ onMounted(async () => {
 .km__note {
   margin: 0;
 }
-.km__card {
-  min-width: 0;
+/* 图卡自适应（2026-11-10 用户裁决「改成自适应」）：
+   整页「导航 + 主区」两段式弹性布局，图卡直接吃掉剩余高度，不再按 DPI 推固定像素
+   （100dvh − 282 这类会在 4K 缩放下差几十像素）。
+   链路：.km(flex column, height=视口/zoom) → .km__main(flex:1) → .km__card(flex:1)
+   → .mk-ge(flex:1) → .mk-ge__card(flex:1) → .mk-ge__body(flex:1 + 单行 1fr 网格)
+   → .mk-ge__canvas(网格项拉伸出确定高度) → .mk-graph(height:100%)。
+   ⚠ 只在 ≥721px 生效：≤720px 的画布走组件自带的窄屏档（像素高度），
+   手机上是「图 + 概览上下堆叠」的纵向流，不该被限制成一屏。 */
+@media (min-width: 721px) {
+  /* App.vue 的 #app / #app-main 是 flex 壳，本页默认被当成弹性项、高度由父级分配
+     （height 被忽略、内容再多也不改变分配）。钉成 0 0 auto 才能让下面那条 height 生效。
+     ⚠ 不要动 align-self：父级是纵向 flex，交叉轴是宽度——flex-start 会让整页缩成内容宽、
+     不再居中。只作用于 ≥721：手机保持纵向流（画布固定像素高、页面可滚动）。 */
+  .km {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    /* ⚠ 必须除以 --vp-zoom：v2.css 在 ≥1600 视口给 .v2-page 加 zoom（1.08 / 1.15 / 1.3），
+       zoom 会把 100dvh 一起放大——直接写 100dvh 渲染出来是「1.08 个视口高」，卡片被顶出折线
+       （用户 4K 缩放实测的「还是不行」）。口径与 V2LearningPage 的 .learn 一致。
+       用 height 而非 min-height：只有确定高度，整条 flex 链才会按剩余空间分配。 */
+    height: calc(100dvh / var(--vp-zoom, 1));
+    min-height: 0;
+  }
+  .km__main {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .km__card {
+    min-width: 0;
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    /* 2026-11-10 用户走查「不喜欢完全贴底」：卡片与页脚留白之间再让出一档呼吸空间，
+       由这条 margin 从剩余高度里扣（页面总高仍等于视口，不产生滚动）。 */
+    margin-bottom: 28px;
+  }
+  .km__card :deep(.mk-ge) {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  /* 单行 1fr：行高由 .mk-ge__body 的定高决定，画布的 height:100% 才有参照物，
+     不会退化成「按内容算 → 内容按父高算」的循环 */
+  .km__card :deep(.mk-ge__body) {
+    flex: 1 1 auto;
+    min-height: 0;
+    grid-template-rows: minmax(0, 1fr);
+  }
+  /* 画布盒是「画布 + 图例」的纵向流：写死 height:100% 会把图例挤到盒子外
+     ——图例压到卡片下沿，滚轮放大后的节点直接画到图例底下（2026-11-10 用户截图）。 */
+  .km__card :deep(.mk-ge__canvas) {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    /* 兜底裁剪：画布万一比盒子大（缩放/resize 竞态），多出来的部分被裁掉，
+       而不是画到图例和卡片外面的页面上。 */
+    overflow: hidden;
+  }
+  /* MkGraph 的根是 .mk-graph-wrap（内层才是 .mk-graph）。这一层跟内层都要能缩：
+     用 flex-basis:0 定主尺寸，不再靠 height:100% 硬顶（那样图例与「未画出的概念」
+     注脚会被顶出盒子）。 */
+  .km__card :deep(.mk-graph-wrap) {
+    flex: 1 1 0%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .km__card :deep(.mk-graph) {
+    flex: 1 1 0%;
+    min-height: 0;
+  }
+  .km__card :deep(.mk-ge__card) {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  /* 加载骨架没有真实画布可参照，给个下限，避免 100% 撑成 0 */
+  .km__card :deep(.mk-ge__skel-graph) {
+    min-height: 360px;
+  }
+}
+/* ≤720px：画布回到组件窄屏档该有的像素高度——prop 是 100%，而手机上是纵向流，
+   100% 没有参照物会塌成一条（实测 94px）。 */
+@media (max-width: 720px) {
+  .km__card :deep(.mk-graph) {
+    height: 312px;
+  }
 }
 /* 图卡外壳落在组件的结构层 .mk-ge__card 上（原型 .wf-graph：surface 底 + 1px 线 +
    radius-modal + shadow-sm + padding 10px 10px 4px）。本节点只当 :deep 锚点：
@@ -215,9 +304,9 @@ onMounted(async () => {
   background: var(--surface);
 }
 /* 「查看学习状态」通栏 ghost 已删（2026-10-09）：入口由顶导航/底部 dock 承担。
-   画布高度改由组件 prop 上的 clamp(520px, 62vh, 680px) 决定（2026-11-07 用户裁决：
-   原先随视口无限撑高，2.5K（2560×1440）下画布被拉到 ~1200px 的瘦高竖塔，比例失衡）。
-   移动端 ≤720px 档 MkGraph 会自动减半，不受影响。 */
+   画布高度走 `height="100%"` + 上面那条 flex 链（2026-11-10 用户裁决「改成自适应」）：
+   卡片高度 = 视口 − 导航 − 标题行 − 页脚留白，由浏览器自己算，任何缩放/DPI 都不会差几个像素。
+   移动端 ≤720px 档 MkGraph 仍按 0.6 倍收（媒体查询在组件里，对 100% 同样生效）。 */
 
 /* ===== 移动端密度（2026-09-24 / 2026-09-30 对齐原型后复核）=====
    判据：整页上下留白 ≤40px。本页通篇用 --mk-space-* token，这里继续用 token。

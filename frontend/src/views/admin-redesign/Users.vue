@@ -66,7 +66,7 @@
         action-text="重试"
         @action="retryLoad"
       />
-      <div v-else-if="filtered.length" class="mk-table-scroll" :class="{ 'ul-scroll--batch': selected.length > 0 }">
+      <div v-else-if="filtered.length" class="mk-table-scroll ul-tablewrap" :class="{ 'ul-scroll--batch': selected.length > 0 }">
         <!-- 固定列宽（2026-10-22 与教学组三表同判例）：自动布局下用户/邮箱两列按当页最长内容
              分宽，翻页整表跳动；改 fixed + 逐列表头宽度，余量按权重摊开。
              单元格 nowrap 不变，长邮箱/长昵称仍由 max-width 截断兜底 -->
@@ -118,7 +118,26 @@
               <div class="ul-user">
                 <MkCellAvatar :name="userName(u)" :tone="avaTone(u)" />
                 <div class="mk-cell-main">
-                  <strong :title="userName(u)">{{ userName(u) }}</strong>
+                  <!-- 2026-11-09 审计 A：徽章此前挂在 .ul-tags（margin-left:auto），被
+                       justify-content 推到列右缘，与姓名之间隔着一整段空白，「当前账号」读作
+                       一个孤立的浮标。现改为姓名行内紧跟一枚徽章（名字 → 徽章，6px 间隙），
+                       身份备注与姓名同读一句；副行（等级）结构不变。 -->
+                  <div class="ul-nameline">
+                    <strong :title="userName(u)">{{ userName(u) }}</strong>
+                    <span v-if="u.deleted" class="mk-badge mk-badge--sm mk-badge--deleted" :title="u.deletedAt ? `删除于 ${u.deletedAt}` : undefined">已删除</span>
+                    <!-- 2026-10-21 用户拍板「测试只是备注」：不做视角，也不用筛选，行内一枚备注即可 -->
+                    <span
+                      v-else-if="isNonRealAccount(u) && !isVirtualAccount(u)"
+                      class="mk-badge mk-badge--sm mk-badge--test"
+                    >测试</span>
+                    <!-- 自己那一行（2026-10-19 用户走查「这不就重复了吗」）：原文案「当前管理员」
+                         与身份列的「管理员」徽章读作同一个角色标签，实际标的是「这一行是你正在用的
+                         账号」（该行 ⋯ 菜单刻意不给「删除」） -->
+                    <span
+                      v-else-if="isSelf(u)"
+                      class="mk-badge mk-badge--sm mk-badge--self"
+                    >当前账号</span>
+                  </div>
                   <!-- 原型 celluser meta 模式：等级（XP 细节进悬停）。
                        2026-10-23 走查：路径条数不再在副行复述——同一读数已在「路径 / 课堂」列
                        给全且可排序，副行只说等级。
@@ -127,21 +146,6 @@
                     class="mk-cell-sub"
                     :title="u.xp === 0 ? '尚无经验值' : `${u.xp} XP · 距 L${levelFromXp(u.xp) + 1} 还需 ${xpToNext(u.xp)}`"
                   >{{ levelBadgeZh(u.xp, u.currentLevel) }}</span>
-                </div>
-                <div class="ul-tags">
-                  <span v-if="u.deleted" class="mk-badge mk-badge--sm mk-badge--deleted" :title="u.deletedAt ? `删除于 ${u.deletedAt}` : undefined">已删除</span>
-                  <!-- 2026-10-21 用户拍板「测试只是备注」：不做视角，也不用筛选，行内一枚备注即可 -->
-                  <span
-                    v-else-if="isNonRealAccount(u) && !isVirtualAccount(u)"
-                    class="mk-badge mk-badge--sm mk-badge--test"
-                  >测试</span>
-                  <!-- 自己那一行（2026-10-19 用户走查「这不就重复了吗」）：原文案「当前管理员」
-                       与身份列的「管理员」徽章读作同一个角色标签，实际标的是「这一行是你正在用的
-                       账号」（该行 ⋯ 菜单刻意不给「删除」） -->
-                  <span
-                    v-else-if="isSelf(u)"
-                    class="mk-badge mk-badge--sm mk-badge--self"
-                  >当前账号</span>
                 </div>
               </div>
             </td>
@@ -777,6 +781,15 @@ function clearFilters() {
 /* 筛选弹层外壳（.mk-adv*）已提升为共享原语：见 styles/mk-primitives.css */
 /* 视图页签随学习状态拆页退役（2026-10-04，单视图不再需要 .tabs） */
 .ul-row { cursor: pointer; }
+/* 表格滚动区底部留白 + 渐隐遮罩（2026-11-09 审计 B，与 LearnerCenter .lc-tablewrap /
+   TeachingSessions .ts-table-scroll 同款）：mk-card--fill 固定卡高，最后一行副行
+   （「L1 · 入门」）此前被表格底边腰斩。留白 16px 大于遮罩渐隐区 12px，
+   渐隐只落在空白区，不裁任何字形；内部滚动保留。遮罩色走 --mk-ink token（无硬编码色）。 */
+.ul-tablewrap {
+  padding-bottom: 16px;
+  -webkit-mask-image: linear-gradient(to bottom, var(--mk-ink) 0, var(--mk-ink) calc(100% - 12px), transparent 100%);
+  mask-image: linear-gradient(to bottom, var(--mk-ink) 0, var(--mk-ink) calc(100% - 12px), transparent 100%);
+}
 /* 批量模式下给表格留出浮条的高度（2026-11-02 评审：吸底浮条压穿最后一行，
    把「管理员」标签和表格底边一起盖住） */
 .ul-scroll--batch { padding-bottom: 56px; }
@@ -807,7 +820,12 @@ function clearFilters() {
 .u-c-lastlogin { width: 100px; }
 .ul-user { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .ul-user .mk-cell-main { min-width: 0; flex: 1; }
-.ul-tags { display: flex; gap: 5px; margin-left: auto; flex: none; }
+/* 姓名行（2026-11-09 审计 A）：姓名 + 身份徽章同行，徽章紧跟文字右侧 6px。
+   此前徽章在 .ul-tags（margin-left:auto）被推到列右缘，与姓名之间空出整段间隙。
+   strong 的 max-width 截断（.mk-cell-main strong）不变，徽章 flex:none 不被压扁。 */
+.ul-nameline { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.ul-nameline strong { min-width: 0; }
+.ul-nameline .mk-badge { flex: none; }
 
 /* 邮箱列（原型独立邮箱列，sub 字级弱于姓名）。
    原型 .tbl 是自动布局：列宽随内容，超长邮箱用 max-width 截断兜底
@@ -827,10 +845,10 @@ function clearFilters() {
    2026-10-05 CM6：收敛为全局修饰类 .mk-table--nowrap（表元素已挂该 class）。 */
 
 @media (min-width: 2000px) {
-  .ul-tags { gap: 6px; margin-top: 3px; }
+  .ul-nameline { gap: 6px; }
 }
 @media (min-width: 2800px) {
-  .ul-tags { gap: 7px; margin-top: 4px; }
+  .ul-nameline { gap: 7px; }
 }
 
 /* ================= 暗色模式（D1）：用户页局部覆写 ================= */

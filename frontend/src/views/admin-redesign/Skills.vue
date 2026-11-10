@@ -63,6 +63,9 @@
 
     <div class="mk-card mk-card--fill">
       <div class="mk-card__head">
+        <!-- 卡头左组（全站列表页语法：2026-10-15 用户「列表统一设计，搜索放右侧」）：
+             下拉筛选在左、搜索在右。本页左组 = 关注 / 归属 / 窗口 三个维度，
+             与 LearnerCenter / MemoryReview 同一形态（筛选左、搜索右）。 -->
         <div class="mk-filter">
           <MkPillSelect
             v-model="focusSelect"
@@ -71,12 +74,6 @@
             :options="focusOptions"
             :active="onlyAttention"
           />
-        </div>
-        <!-- 卡头右组（全站列表页语法）：搜索 → 归属 → 窗口 → 排序。
-             2026-10-28 用户「重新设计」：本页是 Skill 条目清单，不再用可点表头排序，
-             排序改下拉 + 方向按钮；「列」菜单随宽表一起退役（列表没有可隐藏的列）。 -->
-        <div class="mk-card__head-right">
-          <MkFilterSearch v-model="keyword" placeholder="搜索名称 / ID" />
           <MkPillSelect
             v-model="agentFilter"
             label="归属"
@@ -91,6 +88,13 @@
             :options="statsRangeOptions"
             :active="statsRange !== '7d'"
           />
+        </div>
+        <!-- 卡头右组（全站列表页语法）：搜索 → 排序。排序走下拉 + 方向按钮
+             （2026-10-28 重新设计：本页是 Skill 条目清单，排序不再用可点表头排序，
+             而是下拉 + 方向按钮；列头仍承担「调用次数 / 成功率 / 最近更新 / 归属 / 名称」
+             的可点排序，与下拉共用同一 useTableSort 单点）。 -->
+        <div class="mk-card__head-right">
+          <MkFilterSearch v-model="keyword" placeholder="搜索名称 / ID" />
           <span class="sk-sort-label">排序</span>
           <MkSelect
             v-model="sortSelect"
@@ -114,48 +118,107 @@
         <button type="button" class="mk-alert__btn" @click="retrySkills">重试</button>
       </div>
 
-      <MockSkeletonTable v-if="liveLoading && !cards.length" :cols="3" />
+      <MockSkeletonTable v-if="liveLoading && !cards.length" :cols="7" />
       <template v-else>
-      <!-- 列表视图（2026-10-28 重新设计）：一行一个 Skill，不再用列头宽表。
-           左：健康点；中：canonical id + 中文别名 + 归属/路由；右：调用次数 + 成功率。
-           行点击直达详情（与编排图节点、批量弹窗同名入口同一落点）。
-           容器不挂 role=list：每行本身就是 role=button，混用会得到无 listitem 的伪列表。 -->
-      <div v-if="filtered.length" class="sk-list">
-        <div
-          v-for="s in paged"
-          :key="s.id"
-          class="sk-item"
-          role="button"
-          tabindex="0"
-          :aria-label="`打开 ${s.id} 详情`"
-          @click="openDesign(s.id)"
-          @keydown.enter.self.prevent="openDesign(s.id)"
-          @keydown.space.self.prevent="openDesign(s.id)"
-        >
-          <span class="sk-dot" :class="`sk-dot--${s.health}`" role="img" :aria-label="healthLabel(s.health)" :title="healthLabel(s.health)"></span>
-          <div class="sk-itemmain">
-            <div class="sk-titleline">
-              <!-- 2026-11-08 用户「每一行最醒目的蓝色大字全是长串英文 ID，中文名却缩在后面：
-                   把中文名提拔为主标题，英文 ID 降为浅灰等宽副标题」（主次对调）。
-                   主标题去掉末尾重复的「 Skill」——29 行每行都印一遍同一个词只占宽。
-                   目录没有登记中文名时回落 id 作主标题（不空着）。 -->
-              <button type="button" class="sk-name-main sk-name-link mk-ellipsis" :class="{ 'sk-name-main--id': !skTitleOf(s) }" :title="nameTitleOf(s)" @click.stop="openDesign(s.id)">{{ skTitleOf(s) || s.id }}</button>
-              <span v-if="skTitleOf(s)" class="sk-alias sk-alias--mono" :title="`内部标识：${s.id}`">{{ s.id }}</span>
-              <span v-if="s.agentId" class="sk-agent-tag" :title="s.agentId"><span class="sk-agent-tag__text">{{ s.agentName || s.agentId }}</span></span>
-              <span v-else class="mk-badge mk-badge--sm mk-badge--muted">未归属</span>
-              <span class="sk-model-chip" :title="routingTitleOf(s.id)">{{ routingOf(s.id) }}</span>
-            </div>
-            <div class="sk-meta">
-              <button type="button" class="mono sk-version-link" :title="versionTitleOf(s.id)" @click.stop="openVersions(s.id)">{{ versionOf(s.id) }}</button>
-              <span class="sk-recent" :class="{ 'mk-na': !s.calls }">{{ s.lastAt }}</span>
-              <button v-if="s.errors > 0" type="button" class="mk-link sk-fail-link" :title="failLinkTitle(s)" @click.stop="investigateAgent(s.id)">查看失败记录</button>
-            </div>
-          </div>
-          <div class="sk-stats">
-            <span class="sk-stat" :title="`${rangeLabel}内调用 ${s.calls} 次`"><b>{{ s.calls }}</b> 次</span>
-            <span class="sk-stat sk-rate" :class="rateTone(s)" :title="rowRateTitle(s)">{{ successRateText(s.calls, s.errors) || '—' }}</span>
-          </div>
-        </div>
+      <!-- 目录表（2026-11-09 重新设计）：固定列宽表，中区不再留空。
+           列 = Skill 信息 | 归属 Agent | 路由模型 | 最近更新 | 调用次数 | 成功率 | 操作。
+           调用次数 / 成功率 两列自带右对齐可点表头（与全站表格同形态）；成功率列
+           用「语义色点 + 常态墨色数字」表达档位（见 .sk-rate 注释，D 项规则）。
+           行点击直达详情（与编排图节点、批量弹窗同名入口同一落点）。 -->
+      <div v-if="filtered.length" class="mk-table-scroll">
+        <table class="mk-table mk-table--click mk-table--fixed sk-catalog">
+          <colgroup>
+            <col class="sk-c-info" />
+            <col class="sk-c-agent" />
+            <col class="sk-c-model" />
+            <col class="sk-c-updated" />
+            <col class="sk-c-calls" />
+            <col class="sk-c-rate" />
+            <col class="sk-c-act" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col" class="sk-c-info mk-th--sortable" :aria-sort="sortState('skill')" @click="toggle('skill')">
+                <button type="button" class="mk-th__btn" @click.stop="toggle('skill')">Skill 信息<span class="mk-th__caret" aria-hidden="true"></span></button>
+              </th>
+              <th scope="col" class="sk-c-agent mk-th--sortable" :aria-sort="sortState('agent')" @click="toggle('agent')">
+                <button type="button" class="mk-th__btn" @click.stop="toggle('agent')">归属 Agent<span class="mk-th__caret" aria-hidden="true"></span></button>
+              </th>
+              <th scope="col" class="sk-c-model">路由模型</th>
+              <th scope="col" class="sk-c-updated mk-th--sortable" :aria-sort="sortState('last')" @click="toggle('last')">
+                <button type="button" class="mk-th__btn" @click.stop="toggle('last')">最近更新<span class="mk-th__caret" aria-hidden="true"></span></button>
+              </th>
+              <!-- 调用次数 / 成功率：右对齐 + 可排序（A 项：补齐两列表头，与数字列口径一致） -->
+              <th scope="col" class="sk-c-calls mk-th--right mk-num mk-th--sortable" :aria-sort="sortState('calls')" @click="toggle('calls')">
+                <button type="button" class="mk-th__btn" @click.stop="toggle('calls')">调用次数<span class="mk-th__caret" aria-hidden="true"></span></button>
+              </th>
+              <th scope="col" class="sk-c-rate mk-th--right mk-num mk-th--sortable" :aria-sort="sortState('rate')" @click="toggle('rate')">
+                <button type="button" class="mk-th__btn" @click.stop="toggle('rate')">成功率<span class="mk-th__caret" aria-hidden="true"></span></button>
+              </th>
+              <th scope="col" class="sk-c-act mk-c-act mk-th--right">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="s in paged"
+              :key="s.id"
+              tabindex="0"
+              :aria-label="`打开 ${s.id} 详情`"
+              @click="openDesign(s.id)"
+              @keydown.enter.self.prevent="openDesign(s.id)"
+              @keydown.space.self.prevent="openDesign(s.id)"
+            >
+              <!-- Skill 信息：健康点 + 中文名（主）/ 英文 ID + 版本（副） -->
+              <td class="sk-c-info">
+                <div class="sk-info">
+                  <span class="sk-dot" :class="`sk-dot--${s.health}`" role="img" :aria-label="healthLabel(s.health)" :title="healthLabel(s.health)"></span>
+                  <div class="mk-cell-main">
+                    <!-- 2026-11-08 主次对调：中文名提拔为主标题，英文 ID 降为浅灰等宽副标题。
+                         目录没有登记中文名时回落 id 作主标题。 -->
+                    <button type="button" class="sk-name-main sk-name-link mk-ellipsis" :class="{ 'sk-name-main--id': !skTitleOf(s) }" :title="nameTitleOf(s)" @click.stop="openDesign(s.id)">{{ skTitleOf(s) || s.id }}</button>
+                    <span class="mk-cell-subline">
+                      <span v-if="skTitleOf(s)" class="sk-alias sk-alias--mono" :title="`内部标识：${s.id}`">{{ s.id }}</span>
+                      <button v-if="versionOf(s.id) !== '—'" type="button" class="mono sk-version-link" :title="versionTitleOf(s.id)" @click.stop="openVersions(s.id)">{{ versionOf(s.id) }}</button>
+                      <span v-else class="sk-ver-na mk-na" :title="versionTitleOf(s.id)">—</span>
+                    </span>
+                  </div>
+                </div>
+              </td>
+              <!-- 归属 Agent：有归属显示标签，无归属显示「未归属」徽章（B 项中区成列，不再悬空） -->
+              <td class="sk-c-agent">
+                <span v-if="s.agentId" class="sk-agent-tag" :title="s.agentId"><span class="sk-agent-tag__text">{{ s.agentName || s.agentId }}</span></span>
+                <span v-else class="mk-badge mk-badge--sm mk-badge--muted">未归属</span>
+              </td>
+              <!-- 路由模型：coverage 生效 model（空=平台默认）；未加载 → 「—」 -->
+              <td class="sk-c-model">
+                <span class="sk-model-chip" :title="routingTitleOf(s.id)">{{ routingOf(s.id) }}</span>
+              </td>
+              <!-- 最近更新 -->
+              <td class="sk-c-updated">
+                <span class="sk-recent" :class="{ 'mk-na': !s.calls }">{{ s.lastAt }}</span>
+              </td>
+              <!-- 调用次数 -->
+              <td class="sk-c-calls mk-num">
+                <b :title="`${rangeLabel}内调用 ${s.calls} 次`">{{ s.calls }}</b>
+              </td>
+              <!-- 成功率（D 项：色点承载档位色，数字恒为 --mk-ink，不再对文字着色） -->
+              <td class="sk-c-rate mk-num">
+                <span class="sk-rate">
+                  <span class="sk-dot sk-dot--sm" :class="rateDotClass(s)" aria-hidden="true"></span>
+                  <span :title="rowRateTitle(s)">{{ successRateText(s.calls, s.errors) || '—' }}</span>
+                </span>
+              </td>
+              <!-- 操作（E 项：查看失败记录 提到操作列，无失败显示弱化占位；详情与行点击同源） -->
+              <td class="sk-c-act">
+                <div class="mk-actions">
+                  <button v-if="s.errors > 0" type="button" class="mk-link sk-fail-link" :title="failLinkTitle(s)" @click.stop="investigateAgent(s.id)">查看失败记录</button>
+                  <span v-else class="mk-na sk-act-na" title="该窗口内无失败调用">—</span>
+                  <button type="button" class="mk-link sk-detail-link" :title="`打开 ${s.id} 详情`" @click.stop="openDesign(s.id)">详情</button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <!-- 整页空态（加载失败 / 筛选无匹配）：min 吃掉卡内剩余高度并居中 -->
@@ -414,15 +477,12 @@ function failLinkTitle(s: { id: string; errors: number }): string {
   return `在执行日志里查看 ${s.id} 的 ${s.errors} 条失败调用（${rangeLabel.value}）`
 }
 
-/** tone → 本页 sk-rate 类名（显式映射，rate-utils 只产语义 tone；ok/muted 不着色） */
-const SK_RATE_TONE_CLS: Record<string, string> = {
-  ok: '',
-  muted: '',
-  warn: 'sk-rate--warn',
-  bad: 'sk-rate--bad',
-}
-function rateTone(s: { calls: number; errors: number }): string {
-  return SK_RATE_TONE_CLS[successRateTone(s.calls, s.errors)]
+/** 成功率档位 → 色点类名（D 项统一规则：**色点承载档位色，百分比数字恒为 --mk-ink**）。
+ *  此前三种状态三种写法（绿点白字 / 黄点黄字 / 红点红字），读者无法从「文字有没有变色」
+ *  判断档位；现在文字一律常态墨色，只有点着色——与行首健康点同一套语义色。 */
+function rateDotClass(s: { calls: number; errors: number }): string {
+  const tone = successRateTone(s.calls, s.errors)
+  return tone === 'bad' ? 'sk-dot--error' : tone === 'warn' ? 'sk-dot--warn' : tone === 'ok' ? 'sk-dot--ok' : 'sk-dot--idle'
 }
 // 时间窗口切换 → 按新窗口重新拉取统计；期间状态条展示局部 loading，摘掉旧窗口数字
 const rangeRefreshing = ref(false)
@@ -511,7 +571,7 @@ const coverageReady = ref(false)
 /* 列表排序（2026-10-28 重设计：列表没有表头，排序走工具条下拉 + 方向按钮）。
    默认「需关注优先」= 失败数降序（问题浮顶，保持既有行为）。
    数据为 live 注册表全量（有界）→ 客户端排序是诚实的；截断/服务端分页列表不适用本机制。 */
-const { sortRows, sortKey, sortDir, toggle, toggleDir } = useTableSort<SkillRow>({
+const { sortRows, sortKey, sortDir, toggle, toggleDir, sortState } = useTableSort<SkillRow>({
   accessors: {
     errors: (s) => s.errors,
     /* 主行是 canonical id（2026-10-25 英文为主）：排序也按 id，与可见身份一致 */
@@ -946,27 +1006,31 @@ const primaryCoverageText = computed(() =>
 .skills-bulk .mk-modal__body { min-width: 0; }
 /* 统计刷新失败条：卡内位置 + 不参与 fill 伸缩 */
 .sk-live-err { flex: none; margin: 10px 16px 0; }
-/* ===== 列表（2026-10-28 重新设计） =====
-   一行一个 Skill：左健康点、中身份/路由、右调用与成功率。
-   卡内滚动、分页器吸底，沿用 .mk-card--fill 的列表页约定。 */
-.sk-list {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-}
-.sk-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--mk-line);
-  cursor: pointer;
-}
-.sk-item:last-child { border-bottom: none; }
-.sk-item:hover { background: var(--mk-surface-2); }
-.sk-item:focus-visible { outline: none; box-shadow: var(--mk-focus-ring); }
-.sk-itemmain { display: grid; gap: 3px; min-width: 0; flex: 1; }
-.sk-titleline { display: flex; align-items: center; gap: 8px; min-width: 0; line-height: 1.35; }
+/* ===== 目录表（2026-11-09 重新设计：固定列宽宽表） =====
+   此前一行一个 flex 列表，中区（归属 / 版本 / 最近更新）全挤在左格，
+   1920 下左格到右侧读数之间空出约 1000px 纯空白。改为真列结构：
+   归属 Agent / 路由模型 / 最近更新 各自成列，中区由真实内容填满。
+   列宽：百分比 + px 下限（见下方 .sk-c-*）；100% 之和让 fixed 表在 1920 铺满不留 void，
+   min-width 之和（822px）保证 1280 不横滚。 */
+.sk-catalog { table-layout: fixed; }
+/* 表头即列宽契约：colgroup 与 th 同用这些类（th 上的宽度在 fixed 表里被忽略，
+   但测试与阅读都从 th 读列宽，两处保持同一套类名）。
+   列宽只给「百分比 + px 下限」：fixed 表把 100% 的余量按各列百分比权重摊到所有列，
+   1920 下自然铺满、不留 void（不加 max-width，否则在 1920 处各列触顶后会留出空白）；
+   1280 下 min-width 之和（220+150+120+100+88+96+168 = 822px）远小于容器，不触发横滚。 */
+.sk-c-info { width: 32%; min-width: 220px; }
+.sk-c-agent { width: 14%; min-width: 150px; }
+.sk-c-model { width: 13%; min-width: 120px; }
+.sk-c-updated { width: 10%; min-width: 100px; }
+.sk-c-calls { width: 8%; min-width: 88px; }
+.sk-c-rate { width: 9%; min-width: 96px; }
+.sk-c-act { width: 14%; min-width: 168px; }
+/* 表格单元格不再撑 64px 行高：本表是单行 + 副行，行高由内容决定（与列表页一致） */
+.sk-catalog tbody td { height: auto; }
+/* Skill 信息格：健康点 + 主副行 */
+.sk-info { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.sk-info .mk-cell-main { min-width: 0; }
+.sk-info .sk-dot { margin-top: 6px; }
 .sk-alias {
   min-width: 0;
   font-size: var(--mk-fs-micro);
@@ -978,10 +1042,10 @@ const primaryCoverageText = computed(() =>
 }
 /* 副行的英文 ID（2026-11-08 主次对调）：等宽 + 浅灰，读者一眼知道那是内部标识不是名字 */
 .sk-alias--mono { font-family: var(--mk-mono); }
-/* 路由模型：与归属 Agent 的胶囊同层，长模型名省略、全名走 title */
+/* 路由模型：长模型名省略、全名走 title */
 .sk-model-chip {
-  flex: none;
-  max-width: 180px;
+  display: inline-block;
+  max-width: 100%;
   padding: 1px 7px;
   border-radius: var(--mk-radius-sm);
   background: var(--mk-surface-2);
@@ -990,63 +1054,52 @@ const primaryCoverageText = computed(() =>
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  vertical-align: middle;
 }
-/* 元信息行：版本 / 最近调用 / 查失败，中点分隔 */
-.sk-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 2px 10px; min-width: 0; line-height: 1.5; }
-.sk-meta > * + *::before {
-  content: '·';
-  margin-right: 8px;
-  color: var(--mk-faint);
-}
-/* 右列读数：调用次数 + 成功率；百分比的阈值着色走 .sk-rate--bad/--warn */
-.sk-stats {
-  display: flex;
-  align-items: baseline;
-  gap: 16px;
-  flex: none;
-  align-self: center;
-  padding-left: 4px;
-  font-variant-numeric: tabular-nums;
-}
-.sk-stat { min-width: 56px; text-align: right; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.sk-stat b { font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-ink); }
+/* 最近更新：相对时间，等宽数字 */
+.sk-recent { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* 排序工具条：字段下拉 + 方向按钮 */
 .sk-sort-label { flex: none; font-size: var(--mk-fs-micro); color: var(--mk-faint); white-space: nowrap; }
 /* 可点 KPI 的选中态（需关注 Skill ↔ 仅看需关注）：蓝只给交互与选中，
    与 MemoryReview .mr-kpi--on / LearnerCenter .lc-kpi--on / GoalConversations .gc-kpi--on 同判例 */
 .sk-kpi--on { border-color: var(--mk-blue); }
-/* 主行 canonical id（正文重色 + 等宽）：与详情 hero 同一身份口径 */
+/* 主行中文名（正文重色）：与详情 hero 同一身份口径 */
 .sk-name-main {
-  flex: 0 1 auto;
-  min-width: 0;
+  display: block;
+  max-width: 100%;
   font-weight: 700;
   line-height: 1.35;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* 主行是 canonical id（2026-10-25 英文为主）：机器串走等宽 */
+/* 主行是 canonical id（目录未登记中文名）：机器串走等宽 */
 .sk-name-main--id { font-family: var(--mk-mono); }
-/* 主行 id 是可点的入口（蓝 = 可交互）；按钮复位成文本排版，行高与纯文本行一致 */
+/* 主行是可点的入口（蓝 = 可交互）；按钮复位成文本排版，行高与纯文本行一致 */
 .sk-name-link {
   padding: 0; border: 0; background: none; text-align: left;
-  color: var(--mk-blue); cursor: pointer; font-size: inherit;
+  color: var(--mk-blue-text); cursor: pointer; font-size: inherit;
 }
 .sk-name-link:hover { text-decoration: underline; }
 /* 版本 → 详情「版本」页签（回滚入口与读数同格） */
 .sk-version-link {
   flex: none;
   padding: 0; border: 0; background: none; cursor: pointer;
-  color: var(--mk-blue); font-family: var(--mk-mono);
+  color: var(--mk-blue-text); font-family: var(--mk-mono);
   font-size: var(--mk-fs-micro);
 }
 .sk-version-link:hover { text-decoration: underline; }
-/* 元信息里的最近调用与排障入口 */
-.sk-recent { flex: none; font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; }
-.sk-fail-link { flex: none; padding: 0; font-size: var(--mk-fs-micro); line-height: 1.5; white-space: nowrap; }
-.sk-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; align-self: flex-start; margin-top: 7px; }
+/* 无线上生效 Prompt 时的版本占位（「—」不是可点入口，走 .mk-na 弱化） */
+.sk-ver-na { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); }
+/* 操作列里的失败入口（E 项：从 Skill 信息副行提到操作列，与「详情」同级） */
+.sk-fail-link { padding: 0; font-size: var(--mk-fs-micro); line-height: 1.5; white-space: nowrap; }
+.sk-detail-link { padding: 0; font-size: var(--mk-fs-micro); line-height: 1.5; white-space: nowrap; }
+.sk-act-na { font-size: var(--mk-fs-micro); }
+.sk-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+/* 成功率列的小色点（D 项：色点承载档位色，数字恒为 --mk-ink） */
+.sk-dot--sm { display: inline-block; width: 6px; height: 6px; margin-right: 6px; vertical-align: middle; }
 .sk-dot--ok { background: var(--mk-green); }
-.sk-dot--idle { background: #c3cede; }
+.sk-dot--idle { background: var(--mk-faint); }
 /* P2（2026-10-04 全站评审）：琥珀「有失败」中间档（errors>0 但成功率 ≥90%）；
    红档才闪——闪键帧此前引用 SkillReconciliation scoped 编译名，本页从未生效（死动画），补本地定义 */
 .sk-dot--warn { background: var(--mk-amber); }
@@ -1055,19 +1108,25 @@ const primaryCoverageText = computed(() =>
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
 }
-/* 指标阈值着色（成功率数字；比例条 2026-10-15 已撤） */
-.sk-rate { font-size: var(--mk-fs-body); font-weight: 700; color: var(--mk-muted); }
-.sk-rate--bad { color: var(--mk-red); }
-.sk-rate--warn { color: var(--mk-amber); }
+/* 成功率读数（D 项统一规则）：**色点带档位色，百分比文字恒为常态墨色**——
+   不再按档位给文字着色（此前绿点白字 / 黄点黄字 / 红点红字三种写法并存，
+   读者无法从「文字有没有变色」判断档位）。 */
+.sk-rate {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0;
+  font-size: var(--mk-fs-body);
+  font-weight: 700;
+  color: var(--mk-ink);
+  white-space: nowrap;
+}
 
 /* 归属 Agent 标签 */
 .sk-agent-tag {
   display: inline-flex;
   align-items: center;
-  flex: none;
-  /* 2026-10-31 四轮评审 P2-9：原 128px 会把「虚拟学习者 Agent」截成「虚拟学习者 A…」，
-     而该行右侧到读数区还有 600px+ 富余——无意义的截断。放宽到 240px（长 Agent 名仍省略）。 */
-  max-width: 240px;
+  max-width: 100%;
   padding: 2px 9px;
   border-radius: var(--mk-radius-sm);
   background: var(--mk-line);
@@ -1091,38 +1150,26 @@ const primaryCoverageText = computed(() =>
   flex-shrink: 0;
 }
 
-/* 窄档让位：先收路由模型，再收归属胶囊；身份与读数始终保留 */
+/* 窄档让位：先收路由模型列，再收归属列（身份与读数始终保留） */
 @media (max-width: 1100px) {
-  .sk-model-chip { display: none; }
+  .sk-c-model { display: none; }
 }
 @media (max-width: 900px) {
-  .sk-agent-tag { display: none; }
-  .sk-stats { gap: 10px; }
+  .sk-c-agent { display: none; }
 }
-
-/* 工具条「归属 Agent」label（原型 toolbar 1667）：12px 重字，与下拉同排 */
 
 /* 大屏档位（mk 体系：2000 ≈×1.15，2800 ≈×1.17，3600 ≈×1.3） */
 @media (min-width: 2000px) {
   .sk-dot { width: 10px; height: 10px; }
   .sk-agent-tag { font-size: var(--mk-fs-micro); padding: 3px 11px; }
-
-  .sk-name-main { font-size: var(--mk-fs-micro); }
-  .sk-sub { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
   .sk-dot { width: 12px; height: 12px; }
   .sk-agent-tag { font-size: var(--mk-fs-micro); padding: 4px 13px; }
-
-  .sk-name-main { font-size: var(--mk-fs-micro); }
-  .sk-sub { font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
   .sk-dot { width: 14px; height: 14px; }
   .sk-agent-tag { font-size: var(--mk-fs-body); padding: 5px 15px; }
-
-  .sk-name-main { font-size: var(--mk-fs-emphasis); }
-  .sk-sub { font-size: var(--mk-fs-body); }
 }
 
 /* ================= 暗色模式（D1 补完）：Skill 运行 ================= */

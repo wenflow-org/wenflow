@@ -134,7 +134,7 @@ async function fillSampleInput() {
     if (id !== props.skillId) return
     const sample = (res.data?.data ?? null) as { json?: string; origin?: string; calledAt?: string } | null
     if (sample?.json) {
-      trialInput.value = sample.json
+      adoptTrialInput(sample.json)
       toast.success('已填入最近一次真实调用用过的输入')
       return
     }
@@ -182,8 +182,7 @@ async function runTrial() {
     if (id !== props.skillId) return
     trialResult.value = res.data?.data ?? res.data ?? null
     // 已运行 → 输入被消费，不算未保存改动（#118）
-    trialBase = trialInput.value
-    emit('dirty', { dirty: false, label: '试跑输入' })
+    adoptTrialInput(trialInput.value)
   } catch (e) {
     if (id !== props.skillId) return
     trialResult.value = null
@@ -228,21 +227,31 @@ watch(
  *  把字段名与类型列在编辑器下方，读者才知道该往哪儿填。 */
 const inputDecls = ref<TrialInputDecl[]>([])
 
+/** 程序化填入（「填入示例输入」与契约骨架）统一走这里：都算**新的基线**。
+    2026-11-09 走查：示例是"看一眼就能用"的便利功能，点完就走不该被判成未保存修改
+    （实测点一下示例、再点侧栏任意页 → 弹「离开 Skill 详情 · 有未保存的修改（试跑输入）」）。
+    手工改过的值仍然算脏（见 reportTrialDirty）。 */
+function adoptTrialInput(next: string) {
+  trialInput.value = next
+  trialBase = next
+  emit('dirty', { dirty: false, label: '试跑输入' })
+}
+
 /** 按该 Skill 输入契约生成默认载荷（#15）：契约不可读时回落空对象 `{}`，绝不再塞无关的 input 键 */
 async function loadTrialDefault(id: string) {
   const res = await adminPromptWorkbenchApi.getCore(id).catch(() => null)
   if (id !== props.skillId) return
   const inputs = (res?.data?.core?.inputs ?? []) as TrialInputDecl[]
-  const next = buildTrialInputFromContract(inputs)
-  trialInput.value = next
-  trialBase = next
   // 骨架里的键就是这些必填输入（buildTrialInputFromContract 只收必填项，可选的不注入）
   inputDecls.value = inputs.filter((i) => i?.name && !String(i.type || '').trim().endsWith('?'))
-  emit('dirty', { dirty: false, label: '试跑输入' })
+  adoptTrialInput(buildTrialInputFromContract(inputs))
 }
 
 /* #118：试跑输入改动上报宿主脏态（此前切 Skill/离开页面会静默丢弃）。
-   基线 = 该 Skill 的契约默认载荷；切换 skill 时重新生成并复位。 */
+   基线 = 该 Skill 的契约默认载荷；切换 skill 时重新生成并复位。
+   2026-11-09 走查：**程序化填入**（契约骨架 / 最近一次真实调用的示例 / 跑过一次的输入）
+   一律重新取基线（见 adoptTrialInput），只有运营手写的值才算未保存改动——
+   否则「点一下示例、再点侧栏任意页」会被离开守卫拦一次。 */
 let trialBase = EMPTY_TRIAL_INPUT
 function reportTrialDirty() {
   emit('dirty', { dirty: trialInput.value !== trialBase, label: '试跑输入' })

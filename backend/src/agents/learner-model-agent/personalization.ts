@@ -8,85 +8,16 @@ import {
   LearnerModelProfile,
   LearnerPersonalizationConfig
 } from './types';
+import { classifyLoad } from '../../services/learning/learning-load-verdict';
 
 export class PersonalizationEngine {
   
   generateConfig(profile: LearnerModelProfile): LearnerPersonalizationConfig {
+    /* 2026-11-09 画像链路核查：contentStyle / pacing / pathAdjustment 三段全仓零消费，
+       且阈值与快照的 ACWR 口径冲突，已从契约删除。这里只保留真正被
+       LearnerSnapshotService 搬进 dynamicState.recommendedInteraction 的三项。 */
     return {
-      contentStyle: this.generateContentStyle(profile),
-      pacing: this.generatePacing(profile),
-      interaction: this.generateInteraction(profile),
-      pathAdjustment: this.generatePathAdjustment(profile)
-    };
-  }
-  
-  private generateContentStyle(profile: LearnerModelProfile): LearnerPersonalizationConfig['contentStyle'] {
-    const { cognitive, preferences, narrativeInsights } = profile;
-    
-    const useAnalogies = cognitive.thinkingStyle === 'intuitive' || 
-                         cognitive.thinkingStyle === 'visual' ||
-                         cognitive.priorKnowledgeStructure === 'blank';
-    
-    let detailLevel: 'concise' | 'moderate' | 'detailed' = 'moderate';
-    if (cognitive.metacognitionLevel === 'high' && cognitive.priorKnowledgeStructure === 'systematic') {
-      detailLevel = 'concise';
-    } else if (cognitive.metacognitionLevel === 'low' || cognitive.confusionPattern !== 'none') {
-      detailLevel = 'detailed';
-    }
-    
-    let exampleFrequency: 'minimal' | 'moderate' | 'frequent' = 'moderate';
-    if (cognitive.thinkingStyle === 'practical' || cognitive.confusionPattern === 'application-difficulty') {
-      exampleFrequency = 'frequent';
-    } else if (cognitive.metacognitionLevel === 'high' && cognitive.priorKnowledgeStructure === 'systematic') {
-      exampleFrequency = 'minimal';
-    }
-    if (narrativeInsights.practicePreferenceNote.includes('边学边做') || narrativeInsights.effectiveTeachingPattern.includes('立刻做一个小验证')) {
-      exampleFrequency = 'frequent';
-    }
-    
-    let codeCommentDetail: 'minimal' | 'moderate' | 'extensive' = 'moderate';
-    if (cognitive.metacognitionLevel === 'low' || cognitive.confusionPattern === 'principle-misunderstanding') {
-      codeCommentDetail = 'extensive';
-    }
-    
-    return {
-      useAnalogies,
-      detailLevel,
-      exampleFrequency,
-      codeCommentDetail
-    };
-  }
-  
-  private generatePacing(profile: LearnerModelProfile): LearnerPersonalizationConfig['pacing'] {
-    const { learning, cognitive, derivedInsights, curriculumControls } = profile;
-    
-    const initialDifficulty: 'easy' | 'medium' | 'hard' = derivedInsights.recommendedDifficulty;
-    
-    let difficultyProgression: 'slow' | 'moderate' | 'fast' = 'moderate';
-    if (learning.recentProgress === 'improving' && cognitive.metacognitionLevel === 'high') {
-      difficultyProgression = 'fast';
-    } else if (learning.lf > 5 || cognitive.metacognitionLevel === 'low') {
-      difficultyProgression = 'slow';
-    }
-    
-    const breakFrequency = learning.lf > 5 ? 2 : 
-                           learning.lf > 3 ? 3 : 4;
-    
-    let reviewFrequency: 'minimal' | 'moderate' | 'frequent' = 'moderate';
-    if (cognitive.confusionPattern !== 'none' || cognitive.priorKnowledgeStructure === 'scattered') {
-      reviewFrequency = 'frequent';
-    } else if (cognitive.metacognitionLevel === 'high' && learning.ktl > 5) {
-      reviewFrequency = 'minimal';
-    }
-    if (curriculumControls.reviewFrequencyLevel === 'high') {
-      reviewFrequency = 'frequent';
-    }
-    
-    return {
-      initialDifficulty,
-      difficultyProgression,
-      breakFrequency,
-      reviewFrequency
+      interaction: this.generateInteraction(profile)
     };
   }
   
@@ -110,7 +41,8 @@ export class PersonalizationEngine {
     let challengeFrequency: 'low' | 'medium' | 'high' = 'medium';
     if (learning.recentProgress === 'improving' && cognitive.metacognitionLevel === 'high') {
       challengeFrequency = 'high';
-    } else if (emotional.confidenceLevel === 'anxious' || learning.lf > 5) {
+    // 口径统一（收尾 2026-11-09）：原为绝对阈值 `learning.lf > 5`，与 fatigueRisk 的 ACWR 判据冲突。
+    } else if (emotional.confidenceLevel === 'anxious' || classifyLoad(learning).fatigueRisk !== 'low') {
       challengeFrequency = 'low';
     }
     if (narrativeInsights.supportStyleNote.includes('避免连续追问')) {
@@ -121,39 +53,6 @@ export class PersonalizationEngine {
       hintTiming,
       encouragementFrequency,
       challengeFrequency
-    };
-  }
-  
-  private generatePathAdjustment(profile: LearnerModelProfile): LearnerPersonalizationConfig['pathAdjustment'] {
-    const { learning, behavioral, cognitive, curriculumControls } = profile;
-    
-    let compressionThreshold = 0.7;
-    if (cognitive.metacognitionLevel === 'high' && learning.ktl > 5) {
-      compressionThreshold = 0.6;
-    }
-    
-    let extensionThreshold = 0.4;
-    if (cognitive.metacognitionLevel === 'low' || learning.lf > 4) {
-      extensionThreshold = 0.5;
-    }
-    
-    let skipMasteryLevel = 0.8;
-    if (learning.recentProgress === 'improving') {
-      skipMasteryLevel = 0.75;
-    }
-    
-    if (behavioral.consistencyScore < 0.4) {
-      extensionThreshold = Math.min(0.6, extensionThreshold + 0.1);
-    }
-    if (curriculumControls.taskGranularityLevel === 'small') {
-      extensionThreshold = Math.min(0.65, extensionThreshold + 0.1);
-      compressionThreshold = Math.max(0.65, compressionThreshold);
-    }
-    
-    return {
-      compressionThreshold,
-      extensionThreshold,
-      skipMasteryLevel
     };
   }
   

@@ -179,22 +179,22 @@ async function openPlatformSettings(wrapper: Awaited<ReturnType<typeof mountApiC
 }
 
 /**
- * 展开页顶「服务连接」卡的表单（2026-11-07 用户「提回去」）：
- * 连接不再是「添加模型」弹窗的第一段，而是页面最上方一张常驻卡片。
- * 已配好的通道默认收起成一行摘要，点「修改连接」才展开；没配地址时直接展开。
+ * 打开页顶「服务连接」卡里的配置弹窗（2026-11-09：原先是页面内原地展开的内联表单）：
+ * 连接不再是页面流里的一段，而是卡头「连接配置」打开的独立小号弹窗；
+ * 没收地址时（首次部署）弹窗自动打开，此时不必点。
  */
 async function openConnSettings(wrapper: Awaited<ReturnType<typeof mountApiConfig>>) {
-  if (!wrapper.find('.ac-conn-form').exists()) {
-    await wrapper.findAll('button').find((b) => b.text() === '修改连接')!.trigger('click');
+  if (!wrapper.find('.ac-conn-dlg').exists()) {
+    await wrapper.findAll('button').find((b) => b.text() === '连接配置')!.trigger('click');
     await nextTick();
     await flushPromises();
   }
-  expect(wrapper.find('.ac-conn-form').exists(), '展开后应有连接表单').toBe(true);
+  expect(wrapper.find('.ac-conn-dlg').exists(), '打开后应有连接配置弹窗').toBe(true);
 }
 
-/** 服务连接卡里的保存钮（常驻，无改动时禁用） */
+/** 连接弹窗里的保存钮（常驻，无改动时禁用） */
 function connSaveBtn(wrapper: Awaited<ReturnType<typeof mountApiConfig>>) {
-  return wrapper.findAll('.ac-conn-form .mk-btn').find((b) => b.text().startsWith('保存'))!;
+  return wrapper.findAll('.ac-conn-dlg .mk-btn').find((b) => b.text().startsWith('保存'))!;
 }
 
 describe('ApiConfig P1 修复批', () => {
@@ -317,8 +317,10 @@ describe('ApiConfig P1 修复批', () => {
   });
 
   /* 2026-11-07 用户「提回去」：连接卡回到页面最上方常驻。
-     折叠态 = 一行摘要（地址 · 密钥 · 重试策略），展开态 = 表单 + 常驻保存 + 贴右端的重置。 */
-  it('服务连接卡常驻页顶：默认收起成一行摘要，点「修改连接」才展开；有未保存改动时不许收起', async () => {
+     2026-11-09 用户走查（图 1）：卡面那行长 URL + 重试参数、点开后在页面里原地展开的大表单
+     都把模型清单顶得很重。现在收起态只留一句摘要（默认全局通道 · 主机 · 密钥状态），
+     编辑一律进「配置服务连接」弹窗；有未保存改动时关窗要先确认。 */
+  it('服务连接卡常驻页顶：收起态只留一句摘要（主机 + 密钥），编辑进弹窗；有未保存改动时关窗要确认', async () => {
     liveApiConfig.value = {
       apiUrl: 'https://api.example.com/v1',
       apiKeyConfigured: true,
@@ -339,41 +341,48 @@ describe('ApiConfig P1 修复批', () => {
     const order = wrapper.findAll('#ac-panel-access > *').map((n) => n.classes().join(' '));
     expect(order.findIndex((c) => c.includes('ac-conn'))).toBeLessThan(order.findIndex((c) => c.includes('mpp')));
 
-    // 收起态：一行摘要（地址 + 密钥 + 策略），表单不渲染
+    // 收起态：一行摘要（默认全局通道 · 主机 · 密钥状态），弹窗不渲染
     const summary = wrapper.find('.ac-conn-summary');
-    expect(summary.text()).toContain('https://api.example.com/v1');
+    expect(summary.text()).toContain('默认全局通道');
+    expect(summary.text()).toContain('api.example.com');
     expect(summary.text()).toContain('密钥已配置');
-    expect(summary.text()).toContain('重试');
-    expect(wrapper.find('.ac-conn-form').exists()).toBe(false);
-    // 危险动作（重置此通道）只在展开时出现
+    // 摘要只留主机：完整地址进 title，重试参数不再上屏（它们属于弹窗里的表单）
+    expect(summary.find('.ac-conn-summary__addr').attributes('title')).toBe('https://api.example.com/v1');
+    expect(summary.text()).not.toContain('/v1');
+    expect(summary.text()).not.toContain('重试');
+    expect(wrapper.find('.ac-conn-dlg').exists()).toBe(false);
+    // 危险动作（重置此通道）只在弹窗里出现
     expect(wrapper.findAll('button').some((b) => b.text().includes('重置此通道'))).toBe(false);
 
-    const toggle = () => wrapper.findAll('button').find((b) => b.text() === '修改连接' || b.text() === '收起')!;
-    await toggle().trigger('click');
-    await nextTick();
-    expect(wrapper.find('.ac-conn-form').exists()).toBe(true);
+    await openConnSettings(wrapper);
 
     // 保存按钮常驻（2026-11-07：它此前只在「脏了」之后才出现，用户看不出这段表单能保存）
     expect(connSaveBtn(wrapper).text()).toBe('保存连接配置');
     expect(connSaveBtn(wrapper).attributes('disabled')).toBeDefined();
 
-    // 改了连接：收起被挡下（改动不能藏在一个折起来的段里）
-    await wrapper.find('.ac-conn-form input[placeholder="https://api.example.com/v1"]').setValue('https://new.example.com/v1');
+    // 改了连接后关窗：先问一句「放弃改动」（改动不能藏进一次关闭里）
+    await wrapper.find('.ac-conn-dlg input[placeholder="https://api.example.com/v1"]').setValue('https://new.example.com/v1');
     await nextTick();
-    await toggle().trigger('click');
-    await nextTick();
-    expect(wrapper.find('.ac-conn-form').exists(), '有未保存改动时不许收起').toBe(true);
     expect(connSaveBtn(wrapper).attributes('disabled')).toBeUndefined();
+    await wrapper.find('.ac-conn-dlg .mk-modal__close').trigger('click');
+    await nextTick();
+    expect(confirmState.open).toBe(true);
+    expect(confirmState.title).toContain('放弃');
+    settleConfirm(false);
+    await flushPromises();
+    expect(wrapper.find('.ac-conn-dlg').exists(), '拒绝放弃后弹窗保持打开').toBe(true);
+    expect((wrapper.find('.ac-conn-dlg input[placeholder="https://api.example.com/v1"]').element as HTMLInputElement).value)
+      .toBe('https://new.example.com/v1');
     wrapper.unmount();
   });
 
   it('服务连接卡的保存：连接与调用策略一次落盘', async () => {
     const wrapper = await mountApiConfig();
     await openConnSettings(wrapper);
-    expect(wrapper.find('.ac-conn-form').exists()).toBe(true);
+    expect(wrapper.find('.ac-conn-dlg').exists()).toBe(true);
 
-    await wrapper.find('.ac-conn-form input[placeholder="https://api.example.com/v1"]').setValue('https://new.example.com/v1');
-    await wrapper.find('.ac-conn-form input[type="password"]').setValue('sk-new');
+    await wrapper.find('.ac-conn-dlg input[placeholder="https://api.example.com/v1"]').setValue('https://new.example.com/v1');
+    await wrapper.find('.ac-conn-dlg input[type="password"]').setValue('sk-new');
     const retry = wrapper.find('.ac-conn-policy input[type="number"]');
     await retry.setValue('6');
     await nextTick();
@@ -397,7 +406,7 @@ describe('ApiConfig P1 修复批', () => {
     await flushPromises();
     expect(wrapper.find('.pmd').exists(), '弹窗应已打开').toBe(true);
     expect(wrapper.find('.pmd-conn').exists(), '弹窗里不该再出现连接段').toBe(false);
-    expect(wrapper.findAll('.pmd .ac-conn-form')).toHaveLength(0);
+    expect(wrapper.findAll('.pmd .ac-conn-dlg')).toHaveLength(0);
     wrapper.unmount();
   });
 
@@ -427,13 +436,18 @@ describe('ApiConfig P1 修复批', () => {
     expect(wrapper.findAll('.mk-kpi')).toHaveLength(0);
     // 密钥在合并弹窗的连接段里：已配置时占位写「留空 = 沿用已配置」
     await openConnSettings(wrapper);
-    expect(wrapper.find('.ac-conn-form input[type="password"]').attributes('placeholder')).toBe('留空 = 沿用已配置');
+    expect(wrapper.find('.ac-conn-dlg input[type="password"]').attributes('placeholder')).toBe('留空 = 沿用已配置');
     // 2026-10-16 用户走查重排：原 30+ 枚模型胶囊（.ac-model）退役；2026-10-28 上游读数文案整行撤掉
     expect(wrapper.find('.ac-models-meta').exists()).toBe(false);
-    /* 2026-11-05 用户「已配置这个 pill 不要了」：向量 / 重排卡的卡头不再挂状态徽标，
-       连带的「配置来源：…」悬停说明也一并撤除（配没配好由模型位与测试动作自己表达）。 */
-    expect(wrapper.find('.mpp-eng .mk-card__head .mk-badge').exists()).toBe(false);
+    /* 2026-11-05 用户「已配置这个 pill 不要了」：向量 / 重排卡的卡头不挂**状态**徽标
+       （连带的「配置来源：…」悬停说明一并撤除）。
+       2026-11-09 用户走查：卡头多了一枚**连接归属**标签（独立连接 / 跟随全局）——
+       它讲的是「这条能力接在哪」，不是「配没配好」，两者不冲突。 */
+    expect(wrapper.findAll('.mpp-eng .mk-card__head .mk-badge')).toHaveLength(2);
+    expect(wrapper.findAll('.mpp-eng .mk-card__head .mk-badge').map((b) => b.text()))
+      .toEqual(['独立连接', '跟随全局']);
     expect(wrapper.find('.mpp-eng').text()).not.toContain('配置来源');
+    expect(wrapper.find('.mpp-eng .mk-card__head').text()).not.toContain('已配置');
     wrapper.unmount();
   });
 
@@ -457,8 +471,10 @@ describe('ApiConfig P1 修复批', () => {
     expect(detail.text()).toContain('对话模型');
     expect(detail.find('.mpp-type').text()).toBe('LLM');
     // 2026-11-07 用户「提回去」：连接回到页顶常驻卡，模型卡面上不再重复地址
+    // 2026-11-09：收起态只留主机，完整地址进 title（模型卡面依旧一个字都不印）
     expect(wrapper.find('.ac-conn').exists()).toBe(true);
-    expect(wrapper.find('.ac-conn-summary').text()).toContain('https://api.example.com/v1');
+    expect(wrapper.find('.ac-conn-summary').text()).toContain('api.example.com');
+    expect(wrapper.find('.ac-conn-summary__addr').attributes('title')).toBe('https://api.example.com/v1');
     expect(wrapper.find('.ac-ps').exists()).toBe(false);
     expect(wrapper.find('.ac-conn-open').exists()).toBe(false);
     expect(wrapper.find('.ac-conn-setup').exists()).toBe(false);
@@ -729,14 +745,14 @@ describe('ApiConfig P1 修复批', () => {
     const wrapper = await mountApiConfig();
     await flushPromises();
     await openConnSettings(wrapper);
-    await wrapper.find('.ac-conn-form input[placeholder="https://api.example.com/v1"]').setValue('https://new.example.com/v1');
+    await wrapper.find('.ac-conn-dlg input[placeholder="https://api.example.com/v1"]').setValue('https://new.example.com/v1');
     await nextTick();
     await connSaveBtn(wrapper).trigger('click');
     await flushPromises();
     expect(testConnectionMock).not.toHaveBeenCalled();
     expect(updateConfigMock).not.toHaveBeenCalled();
     // 卡片保持展开，运营可以看到「更换服务地址需重新输入密钥」
-    expect(wrapper.find('.ac-conn-form').exists()).toBe(true);
+    expect(wrapper.find('.ac-conn-dlg').exists()).toBe(true);
     expect(wrapper.find('.ac-keyhint').text()).toContain('重新输入密钥');
     wrapper.unmount();
   });
@@ -779,7 +795,7 @@ describe('ApiConfig P1 修复批', () => {
     expect(wrapper.find('.mpp input[placeholder="https://api.example.com/v1"]').exists()).toBe(false)
 
     await openConnSettings(wrapper)
-    const form = wrapper.find('.ac-conn-form')
+    const form = wrapper.find('.ac-conn-dlg')
     expect(form.findAll('.mk-field__label').map((l) => l.text())).toContain('服务地址')
     expect(form.findAll('.mk-field__label').map((l) => l.text())).toContain('API Key')
     // 未配置时密钥占位说「输入 API Key」，不是「留空 = 沿用已配置」
@@ -869,21 +885,21 @@ describe('ApiConfig P1 修复批', () => {
 
     // 页顶是连接卡；模型卡（.mpp）里没有任何连接控件
     expect(wrapper.find('#ac-panel-access > .ac-conn').exists()).toBe(true);
-    expect(wrapper.find('.mpp .ac-conn-form').exists()).toBe(false);
+    expect(wrapper.find('.mpp .ac-conn-dlg').exists()).toBe(false);
     expect(wrapper.find('.mpp input[placeholder="https://api.example.com/v1"]').exists()).toBe(false);
     expect(wrapper.find('.mpp .ac-conn-summary').exists()).toBe(false);
     expect(wrapper.find('.ac-conn-open').exists()).toBe(false);
     expect(wrapper.find('.mpp .ac-policy--inline').exists()).toBe(false);
 
-    /* 收起态才印摘要：展开后同一组事实就在输入框里，右上再印一遍是同屏复读
-       （2026-11-07 用户「展开态还重复印着一长串」）。 */
+    /* 2026-11-07 曾规定「展开态不再印摘要」（同屏复读）；2026-11-09 表单进弹窗后
+       这条不再适用——弹窗是另一层，卡头摘要被遮罩压在下面，留着它开/关窗不会有布局跳动。 */
     expect(wrapper.find('.ac-conn-summary').text()).toContain('密钥已配置');
     await openConnSettings(wrapper);
-    expect(wrapper.find('.ac-conn-summary__addr').exists(), '展开后摘要文本不再渲染').toBe(false);
+    expect(wrapper.find('.ac-conn-summary__addr').exists()).toBe(true);
     // 地址 / 重试口径都在连接卡里
-    expect((wrapper.find('.ac-conn-form input[placeholder="https://api.example.com/v1"]').element as HTMLInputElement).value)
+    expect((wrapper.find('.ac-conn-dlg input[placeholder="https://api.example.com/v1"]').element as HTMLInputElement).value)
       .toBe('https://api.example.com/v1');
-    expect(wrapper.find('.ac-conn-form').text()).toContain('最大重试');
+    expect(wrapper.find('.ac-conn-dlg').text()).toContain('最大重试');
     const policy = wrapper.findAll('.ac-conn-policy .mk-field');
     expect(policy).toHaveLength(3);
     const labels = policy.map((f) => f.find('.mk-field__label').text());
@@ -1004,7 +1020,7 @@ describe('ApiConfig P1 修复批', () => {
       const wrapper = await mountApiConfig();
       await flushPromises();
       await openConnSettings(wrapper);
-      await wrapper.find('.ac-conn-form .mk-field__input').setValue('https://api.changed.com/v1');
+      await wrapper.find('.ac-conn-dlg .mk-field__input').setValue('https://api.changed.com/v1');
       await nextTick();
       wrapper.findComponent(ModelProvidersPanel).vm.$emit('setDefault', 'model-b');
       await flushPromises();

@@ -258,9 +258,12 @@ describe('SessionCockpit 双模式', () => {
     expect(wrapper.find('.cp-topbar').exists()).toBe(false);
     expect(wrapper.text()).toContain('真实课堂 · 只读监控');
     // 2026-10-19 用户走查「刷新重复了吧」：hero 刷新钮撤，改由顶栏一颗驱动（watch liveRefreshSeq）
+    // 2026-11-09 头部降噪：右上角那颗「← 会话列表」也撤——壳层面包屑左侧的「‹」同目标同语义，
+    // 同一动作不在两处摆。学习者入口同样并入 pills 行的「学习者 X」徽章。
     const heroActions = wrapper.find('.mk-hero__actions');
-    expect(heroActions.text()).toContain('会话列表');
     expect(heroActions.text()).not.toContain('刷新');
+    expect(heroActions.text()).not.toContain('←');
+    expect(heroActions.text()).toContain('执行日志');
 
     // 阶段推进 stepper：4 步 + meta 副标。本夹具 stageResults.path 只给里程碑计数（无任务明细）
     // → 走后端计数兜底「1/2 里程碑」；有任务明细时 Path 步点走子任务动态读数（见 Path 页签用例：
@@ -500,24 +503,17 @@ describe('SessionCockpit 双模式', () => {
     empty.unmount();
   });
 
-  it('阶段推进卡：下游直达入口（2026-10-12 收敛——Path 出口撤，stepper 步点即唯一入口；课堂会话不给自指）', async () => {
+  it('阶段条不带动作钮（2026-11-09 头部降噪）：下行入口归 Learn 阶段，头部只做阶段切换', async () => {
     const goalPayload = realTeachingPayload();
     goalPayload.data.kind = 'goal';
     getRealSessionConsole.mockResolvedValue(goalPayload);
     const goalConsole = await mountCockpit('session-real', 'gc_1');
-    // Path 页签自 2026-10-12 起就是路径内容本体：「查看学习路径」按钮与 Path 步点同目标，已撤；
-    // 只保留课堂会话出口（那是另一个对象）
-    expect(goalConsole.findAll('.cp-stepjumps button').map((b) => b.text())).toEqual(['查看课堂会话']);
-    expect(goalConsole.find('.cp-stepjumps button').attributes('title')).toContain('课堂');
-
+    // 原卡头右侧那枚「查看课堂会话」与点「学习」步点高度重叠（一个切阶段、一个开另一个对象），
+    // 读者不知道该点哪个；头部只留 4 枚阶段瓦片，课堂入口回到 Learn 阶段里每节课的「查看课堂对话」。
+    expect(goalConsole.findAll('.cp-stepper button')).toHaveLength(4);
+    expect(goalConsole.find('.cp-stepjumps').exists()).toBe(false);
+    expect(goalConsole.find('.cp-stepcard').exists()).toBe(false);
     goalConsole.unmount();
-
-    // 课堂会话控制台的对象就是那一课：再给「查看课堂会话」是自指 → 一条直达都不给
-    getRealSessionConsole.mockResolvedValue(realTeachingPayload());
-    const teachingConsole = await mountCockpit('session-real', 'ts_real_1');
-    expect(teachingConsole.find('.cp-stepjumps').exists()).toBe(false);
-
-    teachingConsole.unmount();
   });
 
   it('落点页签：subPage.stage 显式提示优先（2026-10-12——从学习路径进来落 Path，深链 ?stage= 同源）', async () => {
@@ -776,19 +772,19 @@ describe('SessionCockpit 双模式', () => {
     getRealSessionConsole.mockResolvedValue(payload);
 
     const wrapper = await mountCockpit('session-real', 'ts_real_1');
-    // 身份信息进身份区（名字常显，邮箱/id 进 title）
+    // 身份信息进身份区（名字常显，邮箱/id 进 title）；2026-11-09 起这一枚徽章本身就是入口
+    // （读数与入口合并，动作区不再出第二枚「查看学习者」）
     const pill = wrapper.find('.cp-hero__learner');
     expect(pill.exists()).toBe(true);
+    expect(pill.element.tagName).toBe('BUTTON');
     expect(pill.text()).toContain('陈晓');
     expect(pill.attributes('title')).toContain('chenxiao@example.com');
+    expect(wrapper.findAll('.mk-hero__actions button').map((b) => b.text())).not.toContain('查看学习者');
 
     // 切到 Path 页签再跳：返回时要回到 Path，而不是会话默认页签
     await wrapper.findAll('.cp-stp')[1].trigger('click');
     await settle();
-    const entry = wrapper.findAll('.mk-hero__actions button').find((b) => b.text() === '查看学习者');
-    expect(entry).toBeTruthy();
-    expect(entry!.attributes('title')).toContain('陈晓');
-    await entry!.trigger('click');
+    await pill.trigger('click');
     await settle();
     expect(subPage.value).toMatchObject({
       view: 'learner',
@@ -1134,6 +1130,31 @@ describe('SessionCockpit 双模式', () => {
     const copied = writeText.mock.calls[0][0] as string;
     expect(copied.length).toBeGreaterThan(5000);
     expect(copied).toContain('"kind": "teaching"');
+
+    wrapper.unmount();
+  });
+
+  it('微调（图4 学习阶段）：真实模式课堂对话——学习者卡带 is-real-learner 修饰类、教师卡不带', async () => {
+    const payload = realTeachingPayload();
+    // 课堂转录回退到 conversations.learning.messages：补一条学习者（user）消息，确保出现学习者卡
+    payload.data.conversations.learning.messages = [
+      { role: 'user', content: '我不理解作用域' },
+      { role: 'assistant', content: '作用域是变量可见的范围…' }
+    ];
+    getRealSessionConsole.mockResolvedValue(payload);
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+    const learnTab = wrapper.findAll('.cp-stp').find((el) => el.find('.cp-stp__name').text() === '学习');
+    await learnTab!.trigger('click');
+    await settle();
+
+    const learners = wrapper.findAll('.cp-transcript__message.is-learner');
+    expect(learners.length).toBeGreaterThan(0);
+    // 每条学习者卡都带真实模式修饰类（右缩 + 深蓝底的钩子）
+    expect(learners.every((el) => el.classes().includes('is-real-learner'))).toBe(true);
+    // 教师卡（is-teacher）不得带该修饰类，保持原样
+    const teachers = wrapper.findAll('.cp-transcript__message.is-teacher');
+    expect(teachers.length).toBeGreaterThan(0);
+    expect(teachers.every((el) => !el.classes().includes('is-real-learner'))).toBe(true);
 
     wrapper.unmount();
   });

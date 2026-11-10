@@ -9,7 +9,8 @@ import type { LearnerAction } from '../../virtual-lab/contracts';
 import { logger } from '../../utils/logger';
 import { withTransaction } from '../../utils/with-transaction';
 import simulationCoordinator from '../../coordinators/simulation.coordinator';
-import { findSessionById, findSessionStageFields, findSessionStatus, deleteSessionLeases, markSessionAbandoned, createAdminAuditLog } from '../../services/virtual-lab/virtual-session.repo';
+import { findSessionById, findSessionStageFields, findSessionStatus, deleteSessionLeases, markSessionAbandoned, createAdminAuditLog, findLiveSessionsByProfiles } from '../../services/virtual-lab/virtual-session.repo';
+import { autopilotService } from '../../virtual-lab/autopilot.service';
 import { appendSessionLogs as appendVirtualSessionLogs } from '../../services/virtual-lab/virtual-session-log-store';
 import { assertAssistedSessionMode } from '../../virtual-lab/session-mode';
 import { runWithSimulatedClock } from '../../services/virtual-lab/simulation-clock-context';
@@ -308,6 +309,36 @@ export function getExpectedBlackboxTraceCount(req: express.Request) {
   const value = header ?? bodyValue;
   const parsed = typeof value === 'number' ? value : Number(value);
   return parsed;
+}
+
+/**
+ * 删除虚拟学习者前叫停其活跃运行（2026-11-09 运营流程核查）。
+ *
+ * 单行删除（DELETE /:id → cascadeDeleteProfile）原来直接删行：内存里的自动驾驶循环与
+ * 排队项没人通知，删完仍占着并发额度、继续调模型，直到下一次写库才发现会话已不存在；
+ * 持租约的 runner 也可能边删边写。这里按「先撤租约、再停自动驾驶」两步收口：
+ * - 撤租约：持租约者下次续租/写库抛 LeaseLost 中止（与批量终止同一约定）；
+ * - 停自动驾驶：排队中的直接出队，运行中的置 stopRequested，循环下一轮自行收口
+ *   （多进程下由持锁进程消费该标志）。
+ * 返回被叫停的会话数，供路由写审计/日志。
+ */
+export async function stopLiveRunsForProfile(profileId: string): Promise<number> {
+  const live = await findLiveSessionsByProfiles([profileId]);
+  for (const session of live) {
+    await deleteSessionLeases(session.id).catch((error) => {
+      logger.warn('[virtual-learners] 删除前撤租约失败', {
+        sessionId: session.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    });
+    await autopilotService.stop(session.id).catch((error) => {
+      logger.warn('[virtual-learners] 删除前停自动驾驶失败', {
+        sessionId: session.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    });
+  }
+  return live.length;
 }
 
 // ===== 原 virtual-learners.ts L2643–L2694 =====

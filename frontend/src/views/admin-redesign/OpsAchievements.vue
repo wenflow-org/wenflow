@@ -610,7 +610,7 @@ onMounted(() => {
   white-space: nowrap;
 }
 /* 条件格内可点术语：链接色 + 虚线下划线，区别于正文灰字（走查 #32） */
-.ac-card__term { color: var(--mk-blue); text-decoration: underline dotted; cursor: pointer; }
+.ac-card__term { color: var(--mk-blue-text); text-decoration: underline dotted; cursor: pointer; }
 .ac-card__term:hover { color: var(--mk-accent-deep); }
 .ac-card__foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ac-card__unlocked { margin-right: auto; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
@@ -626,7 +626,7 @@ onMounted(() => {
    默认走弱色，悬停/键盘聚焦才提亮——可发现，但不抢视线。 */
 .ac-card__grant { color: var(--mk-faint); }
 .ac-card__grant:hover,
-.ac-card__grant:focus-visible { color: var(--mk-blue); }
+.ac-card__grant:focus-visible { color: var(--mk-blue-text); }
 
 /* ================= 视图切换（原型 .tabs 下划线页签） =================
    样式 2026-10-05 CM1 收敛到全局 .tabs/.tab（mk-primitives.css），本页不再私持拷贝。

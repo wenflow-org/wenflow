@@ -97,6 +97,21 @@ export function levelWordZh(level?: string | null): string {
   return LEVEL_WORDS[String(level).trim().toLowerCase()] || String(level)
 }
 
+/**
+ * 叙述洞察文本展示前的兜底清洗（2026-11-09 走查）：叙述句是**生成时**就落库的字符串，
+ * 生成侧修好只对新快照生效，存量快照仍是脏的，而这一处正是读者直接读到的正文。
+ * 两条清洗都只针对已知的生成瑕疵，不改写语义：
+ *  ① 段间拼接留下的句读连排「。；」→ 「。」（生成侧已改为拼前削句读）；
+ *  ② 裸露的等级英文枚举（beginner / intermediate / advanced）→ 中文等级词汇（levelWordZh 同一词表）。
+ */
+export function tidyNarrativeText(text?: string | null): string {
+  const s = String(text ?? '')
+  if (!s) return ''
+  return s
+    .replace(/[。．.]\s*；/g, '。')
+    .replace(/(?<![A-Za-z])(beginner|intermediate|advanced)(?![A-Za-z])/gi, (m) => levelWordZh(m))
+}
+
 /** XP 等级「L2」与词汇并存的统一格式单点：「L2 · 进阶」；词汇缺失或与 Ln 同名（历史脏值 'L2'）时只出 L2 */
 export function levelBadgeZh(xp: number, level?: string | null): string {
   const l = `L${levelFromXp(xp)}`
@@ -113,6 +128,8 @@ export interface ConceptLedgerItem {
   transferReadiness?: string
   misconceptionRisk?: string
   evidenceCount?: number
+  /** 数值掌握度 0–1（2026-11-09 补）：确定性通道的测量值；纯模型行/旧快照缺省（不按 0 计） */
+  masteryScore?: number
   [k: string]: unknown
 }
 

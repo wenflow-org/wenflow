@@ -39,7 +39,7 @@
            漏掉了最基础的总量与失败数；补成 4 张，与审计日志 / 健康中心同构。
            失败数在卡头「失败（N）」下拉里也有，但那是筛选入口的计数（同屏两处同一读数是
            用户点名的「不齐」本身导致的重复，取舍：KPI 给当眼前一档的结论，筛选入口给筛选辅助）。 -->
-      <MkKpi label="调用总数" :value="callsTotalText" :tone="callsTotalTone" :title="callsTotalTitle" />
+      <MkKpi class="exec-kpi-total" label="调用总数" :value="callsTotalText" :value-note="callsTotalNote" :title="callsTotalTitle" />
       <MkKpi label="成功率" :value="successRateText" :tone="successKpiTone" />
       <MkKpi label="耗时 P50" :value="latencyP50" :title="latencyTitle" />
       <MkKpi label="耗时 P99" :value="latencyP99" :title="latencyTitle" />
@@ -193,6 +193,10 @@
                 :aria-sort="logSortState('durationMs')"
                 @click="toggleLogSort('durationMs')"
               ><button type="button" class="mk-th__btn" :title="durTierTitle" @click.stop="toggleLogSort('durationMs')">耗时<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              <!-- 2026-11-09 审计（图 4）：本页此前没有任何详情入口——行点击能展开，但没有任何
+                   可见提示（没有箭头、没有操作列）。按控制台列表页判例补最右「操作」列，
+                   主操作「详情」与行点击同一落点（toggleRowOpen），行点击保持不变。 -->
+              <th scope="col" class="mk-th--right mk-c-act">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -257,6 +261,19 @@
                   </div>
                 </td>
                 <td v-if="!hiddenCols.has('dur')" class="right"><span class="mk-latency exec-dur" :class="latencyTone(log.durationMs)" :title="`${fmtMs(log.durationMs)}（P90 ${latencyP90} · P99 ${latencyP99}）`">{{ fmtMs(log.durationMs) }}</span></td>
+                <!-- 操作列：主操作「详情」= 行点击同一落点（展开/收起详情行）。
+                     aria-expanded 让读屏知道这枚按钮控制的是哪一行详情；stop 冒泡避免与行点击叠加。 -->
+                <td class="right">
+                  <div class="mk-actions">
+                    <button
+                      type="button"
+                      class="mk-link"
+                      :aria-expanded="openId === log.id"
+                      :aria-label="`查看这条日志的详情（${fmtTime(log.ts)}）`"
+                      @click.stop="toggleRowOpen(log.id)"
+                    >详情</button>
+                  </div>
+                </td>
               </tr>
               <tr v-if="openId === log.id" class="exec-detail">
                 <td :colspan="visibleColCount">
@@ -646,7 +663,8 @@ const colDefs = [
    模型 / 输入输出为真实数据扩展列，收进列设置。 */
 const DEFAULT_HIDDEN = ['model', 'tokens']
 const hiddenCols = ref<Set<string>>(new Set())
-const visibleColCount = computed(() => colDefs.length - hiddenCols.value.size)
+/* 可见列数 = 可隐藏列中可见的数量 + 1（恒在的操作列）。详情行 colspan 与骨架列数共用此值 */
+const visibleColCount = computed(() => colDefs.length - hiddenCols.value.size + 1)
 
 /* prompt 契约维度：与执行日志同 traceId 关联（版本/漂移/tokens/JSON） */
 onMounted(() => {
@@ -1172,24 +1190,27 @@ const successRate = computed(() => {
 /* 调用总数卡（2026-11-07）：值 = 窗口内总条数，失败数写在同一张卡的读数上——
    「70 · 失败 4」让「成功率 94%」有分母可对，不必再回头数表格行。
    stats 未就绪时读「—」（与成功率同纪律：不拿上一窗口或本页样本冒充）。
-   2026-11-08 审计：这里的失败数 = **未成功**（error + timeout），与同屏「仅失败」胶囊、
-   成功率分母、总览「失败 N 次」四处同口径；此前只数 error，与胶囊/下钻三处不同数。 */
+   2026-11-08 审计：这里的失败数 = **未成功**（error + timeout），与同屏「仅��败」胶囊、
+   成功率分母、总览「失败 N 次」四处同口径；此前只数 error，与胶囊/下钻三处不同数。
+   2026-11-09 审计（图 4）：失败数从主值里拆出来走 valueNote——主值只放总数，
+   失败数作为行内注记（更小字号）单独染红，主值保持正常墨色。 */
 const callsTotalText = computed(() => {
+  const st = liveStats.value
+  if (st) return `${st.total}`
+  if (statsPending.value) return '—'
+  if (!logs.value.length) return '—'
+  return `${logs.value.length}`
+})
+/** 行内注记：仅在有失败时出现（失败 = 未成功，含超时）；无失败 / 未就绪时留空 */
+const callsTotalNote = computed(() => {
   const st = liveStats.value
   if (st) {
     const failed = st.error + st.timeout
-    return failed > 0 ? `${st.total}（失败 ${failed}）` : `${st.total}`
+    return failed > 0 ? `失败 ${failed}` : ''
   }
-  if (statsPending.value) return '—'
-  if (!logs.value.length) return '—'
+  if (statsPending.value || !logs.value.length) return ''
   const failed = logs.value.filter((l) => l.status !== 'ok').length
-  return failed > 0 ? `${logs.value.length}（失败 ${failed}）` : `${logs.value.length}`
-})
-const callsTotalTone = computed<'ok' | 'bad' | 'muted'>(() => {
-  const st = liveStats.value
-  if (!st) return 'muted'
-  if (st.error + st.timeout > 0) return 'bad'
-  return 'ok'
+  return failed > 0 ? `失败 ${failed}` : ''
 })
 const callsTotalTitle = computed(() => (liveStats.value
   ? '当前时间窗与筛选下的全部调用（失败 = 未成功，含超时）'
@@ -1383,6 +1404,11 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 </script>
 
 <style scoped>
+/* 调用总数卡（2026-11-09 审计，图 4）：失败数走 MkKpi 的 valueNote（行内注记），
+   只有这枚注记染红；主值沿用 .mk-kpi__num 的正常墨色（--mk-ink），不再整串变红。
+   MkKpi 是共享原语（scoped），这里用 :deep 只命中它渲染的注记 span。 */
+.exec-kpi-total :deep(.mk-kpi__num-note) { color: var(--mk-red); font-weight: 600; }
+
 /* 固定列宽（2026-10-22 用户「翻页不同页码时候，列宽怎么还在变呢」）：Skill / Trace / 消息
    三列在 auto 布局下按当页最长内容分宽（消息列 348→437px），翻页跳动；fixed 后按表头定死。
    宽度按 1280 现值校准并留余量：默认 6 列合计 ≤914，全列（列菜单打开类型/模型/输入输出）≤1138。 */
@@ -1395,6 +1421,8 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 .ex-c-model { width: 120px; }
 .ex-c-tokens { width: 100px; }
 .ex-c-dur { width: 68px; }
+/* 操作列（2026-11-09 审计，图 4）：恒在的最右列，宽度走全局 .mk-c-act（列表页统一档），
+   本页不再另写私有列宽。 */
 /* fixed 档里行内 max-width（260/220px）会超出本列把内容顶到邻列：统一改成随单元格收缩，
    由各自已有的省略号 + title 兜底（长 Skill 名 / 长错误码 / 长 Trace）。 */
 .exec-table .exec-stage,
@@ -1449,7 +1477,7 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 .logs-window__field { display: inline-flex; align-items: center; gap: 6px; }
 /* 列表可见加载态（EG7：「更新中」角标 + 表格降透明）——排序/筛选/翻页重查时该查询
    实测可达 30s，无反馈时用户误判「箭头变了、数据没变」。仅在有数据时出现（首载走骨架）。 */
-.exec-updating { color: var(--mk-blue); font-weight: 600; white-space: nowrap; }
+.exec-updating { color: var(--mk-blue-text); font-weight: 600; white-space: nowrap; }
 .exec-table-refreshing { opacity: 0.55; transition: opacity 0.15s ease; }
 
 /* 加载失败横幅：外形走 .mk-alert--row（shared.css），已不再需要本页私有样式 */
@@ -1562,7 +1590,7 @@ html[data-theme='dark'] .exec-test-tag { background: #313235; color: var(--mk-mu
 .exec-stage {
   display: inline-block;
   font-size: var(--mk-fs-micro);
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;

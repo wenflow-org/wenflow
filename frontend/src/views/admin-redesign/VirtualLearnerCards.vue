@@ -147,8 +147,8 @@
         <article
           v-for="c in pagedCards"
           :key="c.profileId"
-          class="vlc-card"
-          :class="{ 'vlc-card--selected': selected.includes(c.profileId) }"
+          class="vlc-card mk-choice"
+          :class="{ 'mk-choice--on': selected.includes(c.profileId) }"
           role="button"
           tabindex="0"
           :title="cardName(c)"
@@ -726,15 +726,15 @@ watch(liveRefreshSeq, () => {
   padding: 12px;
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-xl);
-  background: var(--mk-surface);
   cursor: pointer;
   transition: border-color 0.12s ease, background 0.12s ease;
   min-width: 0;
 }
-.vlc-card:hover { border-color: color-mix(in srgb, var(--mk-blue) 50%, transparent); }
+/* 默认面 / 选中面走全局 .mk-choice / .mk-choice--on（2026-11-09 收敛）：
+   未选中时本类只落默认底色，避免 scoped 压掉原语的选中底色。 */
+.vlc-card:not(.mk-choice--on) { border-color: var(--mk-line); background: var(--mk-surface); }
+.vlc-card:not(.mk-choice--on):hover { border-color: color-mix(in srgb, var(--mk-blue) 50%, transparent); }
 .vlc-card:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
-/* 选中态：蓝色只给「选中」与可交互——此前勾选后只有 15px 方框变化，卡面上看不出选了哪几张 */
-.vlc-card--selected { border-color: var(--mk-blue); background: var(--mk-blue-bg); }
 /* grid 子项默认 min-width:auto：hash / cardKey / tag 都是长不可断串，会把网格轨道
    撑出卡宽，内容直接画到卡框外、被下一张卡整块盖住（走查：来源/版本角标被邻卡遮没、
    hash 条横跨到下一列）。卡片是固定网格轨，子项必须允许收缩，再由各自省略号收尾。 */
@@ -871,7 +871,7 @@ watch(liveRefreshSeq, () => {
   flex: none;
   border: 1px solid transparent;
   background: var(--mk-blue-bg);
-  color: var(--mk-blue);
+  color: var(--mk-blue-text);
   transition: background 0.12s ease, color 0.12s ease;
 }
 .vlc-card:hover .vlc-card__derive,

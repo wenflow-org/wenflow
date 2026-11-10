@@ -16,9 +16,9 @@
       @action="load"
     />
 
-    <!-- 空态给出口（R6D）：「启用日期模拟」开关唯一落点在压测参数卡的日期模拟页签
-         （模型与接入 → 调用与健康，2026-10-13 迁入）；本组件宿主（画像·日程）以 readonly
-         嵌入，不放写操作，就地给跳转。原文「可在…设置中开启」的指路由按钮承担 -->
+    <!-- 空态给出口（R6D）：「启用日期模拟」开关唯一落点在虚拟学习者的压测参数卡
+         （维护菜单 → 右侧抽屉）。2026-11-09：跳转带 ?open=settings，由列表页直接展开该抽屉，
+         运营不必再自己找菜单（原先是「可在…设置中开启」的死链感） -->
     <MkEmptyState
       v-else-if="!clock"
       compact
@@ -36,7 +36,7 @@
         <span class="dt-status__meta">起点 {{ clock.baseDate }}</span>
         <span class="dt-status__meta">已推进 {{ clock.dayIndex }} / {{ clock.maxSimulatedDays }} 天</span>
         <span class="dt-status__meta">{{ clock.timezone }}</span>
-        <span v-if="!readonly" class="dt-status__act">
+        <span class="dt-status__act">
           <button type="button" class="mk-link mk-link--danger" :disabled="resetting" title="清空推进记录，回到初始日期" @click="resetClock">
             {{ resetting ? '重置中…' : '重置进度' }}
           </button>
@@ -44,13 +44,15 @@
       </div>
 
       <!-- 按钮层级（原型 .btn 191-206）：推进 = 次级，推进并上课 = 主操作。
-           readonly（#67）：嵌入只读视图（画像·日程 tab）时只留课表元信息，不渲染写操作 -->
+           2026-11-09：原以 readonly 嵌在「画像·日程」里，写操作全被 v-if 挡掉——后端
+           advance-day / simulation-config / reset 全都在，前端却没有入口，跨日链路对运营不可达。
+           现在宿主直接可写：推进（不动课程）/ 推进并上课（真实上课，二次确认）/ 自动推进 / 重置。 -->
       <div class="dt-controls">
         <span class="dt-status__meta">课表 {{ weekdaysLabel(clock.courseWeekdays) }} · 每天 {{ clock.lessonsPerDay }} 节</span>
-        <button v-if="!readonly" type="button" class="mk-btn mk-btn--sm" :disabled="advancing || !clock.enabled" title="按课表推进 1 个上课日" @click="advance(1)">推进 1 天</button>
-        <button v-if="!readonly" type="button" class="mk-btn mk-btn--sm" :disabled="advancing || !clock.enabled" title="按课表推进 5 个上课日" @click="advance(5)">推进 5 天</button>
-        <button v-if="!readonly" type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="advancing || !clock.enabled" title="推进 1 天并真实上课" @click="advance(1, true)">推进并上课</button>
-        <label v-if="!readonly" class="dt-auto" title="按课表自动推进日期">
+        <button type="button" class="mk-btn mk-btn--sm" :disabled="advancing || !clock.enabled" title="按课表推进 1 个上课日（不跑课程）" @click="advance(1)">推进 1 天</button>
+        <button type="button" class="mk-btn mk-btn--sm" :disabled="advancing || !clock.enabled" title="按课表推进 5 个上课日（不跑课程）" @click="advance(5)">推进 5 天</button>
+        <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" :disabled="advancing || !clock.enabled" title="推进 1 天并真实上课（消耗 AI 调用）" @click="advance(1, true)">推进并上课</button>
+        <label class="dt-auto" title="按课表自动推进日期">
           <input
             type="checkbox"
             :checked="clock.autoAdvance"
@@ -71,6 +73,15 @@
         <div class="mk-alert__msg">{{ actionError }}</div>
         <div class="mk-alert__act">
           <button type="button" class="mk-btn mk-btn--sm" @click="actionError = ''">知道了</button>
+        </div>
+      </div>
+
+      <!-- 操作成功回执：推进类操作必须给「推到了第几天」的确定反馈——
+           后端在「课程没跑成功」时返回 200 + reverted，若不看响应体就会把没推进当成推进成功 -->
+      <div v-if="actionNotice" class="mk-alert mk-alert--row" role="status">
+        <div class="mk-alert__msg">{{ actionNotice }}</div>
+        <div class="mk-alert__act">
+          <button type="button" class="mk-btn mk-btn--sm" @click="actionNotice = ''">知道了</button>
         </div>
       </div>
 
@@ -209,20 +220,32 @@ const props = withDefaults(defineProps<{
   sessionId: string
   from?: number
   to?: number
-  /** 只读视图（#67）：嵌入声明为「只读」的 tab（画像·日程）时隐藏推进/自动推进/重置等写操作 */
-  readonly?: boolean
 }>(), {
   from: 0,
   to: 29,
-  readonly: false,
 })
+
+const emit = defineEmits<{ (e: 'changed'): void }>()
 
 const router = useRouter()
 /** 空态出口（R6D）：「启用日期模拟」开关在虚拟学习者的压测参数卡上。
  *  2026-10-24 修死链：该卡已从「调用与健康」迁到虚拟学习者页签；
- *  2026-11-01 直接指向目标页——原先经 /admin/api-config?tab=virtual 两跳，中间那跳已裁掉。 */
+ *  2026-11-01 直接指向目标页——原先经 /admin/api-config?tab=virtual 两跳，中间那跳已裁掉。
+ *  2026-11-09：带 ?open=settings，列表页据此直接把「维护」抽屉展开到日期模拟设置，
+ *  不再让运营落在列表页自己找菜单。 */
 function goSimSettings() {
-  void router.push({ path: '/admin/virtual-learners' })
+  void router.push({ path: '/admin/virtual-learners', query: { open: 'settings' } })
+}
+
+/** 推进接口的回执形状（见 routes/admin/virtual-learners.assisted-simulation.ts） */
+interface AdvanceResultDto {
+  advancedDayIndexes?: number[]
+  simulatedDay?: string
+  /** 当天课程的执行结果；error 非空表示这一天的课没跑成功 */
+  learning?: { started?: boolean; chunks?: number; error?: string } | null
+  /** true = 本次没有推进时钟（课程没成功），模拟日未被消耗，可重试 */
+  reverted?: boolean
+  clock?: { dayIndex?: number }
 }
 
 /** 分页窗口：默认窗口只有 30 天，长会话更早的历史按 30 天一档翻页回看；load() 沿用这组 from/to 拉取参数 */
@@ -263,6 +286,8 @@ const loading = ref(false)
 const error = ref('')
 /** 操作类失败（推进/自动推进/重置）的行内提示：不写 error（那是整页错误态，会顶掉整条时间线） */
 const actionError = ref('')
+/** 操作成功回执（推到第几天 / 已上课）：推进是异步且可能被判 reverted，必须有确定反馈 */
+const actionNotice = ref('')
 const clock = ref<SimulationClock | null>(null)
 const days = ref<DayEntry[]>([])
 const resetting = ref(false)
@@ -297,9 +322,25 @@ async function advance(days: number, runTasks = false) {
   }
   advancing.value = true
   actionError.value = ''
+  actionNotice.value = ''
   try {
-    await adminVirtualLearnersApi.advanceVirtualSessionDay(props.sessionId, { days, runTasks })
+    const res = await adminVirtualLearnersApi.advanceVirtualSessionDay(props.sessionId, { days, runTasks })
+    /* 后端契约（routes/admin/virtual-learners.assisted-simulation.ts）：
+       「当天课程没跑成功」时仍返回 200，但带 `reverted:true` + `learning.error`（日期不推进、可重试）。
+       不看响应体就会把「没推进」读成「推进成功」——这是运营最容易误判的一步。 */
+    const payload = (res as { data?: { data?: AdvanceResultDto } } | undefined)?.data?.data
+    const learningError = payload?.learning?.error
+    if (runTasks && (payload?.reverted === true || learningError)) {
+      actionError.value = `本次未推进：${learningError || '当天课程未成功执行，可重试'}`
+    } else {
+      const index = payload?.clock?.dayIndex ?? clock.value?.dayIndex
+      const target = typeof index === 'number' ? `，现在在第 ${index + 1} 天` : ''
+      actionNotice.value = runTasks
+        ? `已推进并运行当天课程${target}`
+        : `已推进 ${days} 个上课日${target}`
+    }
     await load()
+    emit('changed')
   } catch (e) {
     // 操作失败只提示，不顶掉时间线（error ref 会触发 v-else-if 整页错误态）
     actionError.value = pickErr(e, '推进失败')
@@ -312,9 +353,12 @@ async function toggleAuto(next: boolean) {
   if (!props.sessionId) return
   advancing.value = true
   actionError.value = ''
+  actionNotice.value = ''
   try {
     await adminVirtualLearnersApi.updateSessionSimulationConfig(props.sessionId, { simulationClock: { autoAdvance: next } })
+    actionNotice.value = next ? '已开启自动推进（按课表自动往下走）' : '已关闭自动推进'
     await load()
+    emit('changed')
   } catch (e) {
     actionError.value = pickErr(e, '切换自动推进失败')
   } finally {
@@ -333,9 +377,12 @@ async function resetClock() {
   if (!ok) return
   resetting.value = true
   actionError.value = ''
+  actionNotice.value = ''
   try {
     await adminVirtualLearnersApi.resetVirtualSessionClock(props.sessionId)
+    actionNotice.value = '已重置推进进度，回到初始日期（已写的时间戳不回改）'
     await load()
+    emit('changed')
   } catch (e) {
     // 同 advance/toggleAuto：重置是操作不是加载，失败走行内 alert 保留时间线
     actionError.value = errMsg(e)
@@ -486,14 +533,14 @@ watch(
   border: 1px solid currentColor;
   opacity: 0.85;
 }
-.schcell__state--active { color: var(--mk-blue); }
+.schcell__state--active { color: var(--mk-blue-text); }
 .schcell__state--done { color: var(--mk-green); }
 .schcell__state--skip { color: var(--mk-muted); }
 .schcell__day { font-weight: 700; font-size: var(--mk-fs-micro); color: var(--mk-ink); }
 .schcell__slot { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .schcell__scene { display: flex; flex-wrap: wrap; gap: 4px; font-size: var(--mk-fs-micro); }
 .schcell__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.schcell--active .schcell__meta { color: var(--mk-blue); font-weight: 600; }
+.schcell--active .schcell__meta { color: var(--mk-blue-text); font-weight: 600; }
 
 .dt-cell__head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
 .dt-cell__detail { display: grid; gap: 6px; margin-top: 4px; min-width: 0; }
@@ -502,7 +549,7 @@ watch(
 .dt-chip { font-size: var(--mk-fs-micro); padding: 1px 8px; border-radius: var(--mk-radius-sm); background: var(--mk-surface-3); color: var(--mk-muted); }
 .dt-chip--warn { background: var(--mk-amber-bg); color: var(--mk-amber); }
 .dt-chip--pace-slow { background: var(--mk-amber-bg); color: var(--mk-amber-fill); }
-.dt-chip--pace-fast { background: var(--mk-blue-bg); color: var(--mk-blue); }
+.dt-chip--pace-fast { background: var(--mk-blue-bg); color: var(--mk-blue-text); }
 
 /* 读数行：等宽数字（原型 .meterrow / .kpi__value 的 tabular-nums 口径） */
 .dt-metrics { display: flex; flex-wrap: wrap; gap: 12px; font-size: var(--mk-fs-micro); color: var(--mk-faint); font-variant-numeric: tabular-nums; min-width: 0; max-width: 100%; }

@@ -20,6 +20,7 @@ import {
   generateAndApplyStory,
 } from '../../virtual-lab/learner-provisioning';
 import { learnerSnapshotRefreshService } from '../learner/LearnerSnapshotRefreshService';
+import { batchExperimentOrigin } from './instance-scope';
 import { memoryTraceService } from '../memory/memory-trace.service';
 import { runWithContext } from '../../gateway/api-gateway/context';
 
@@ -48,10 +49,14 @@ async function getRun(runId: string) {
 }
 
 /** 创建虚拟学习者（users + profile），返回 profileId */
-async function createLearner(cfg: BatchLearnerConfig): Promise<string> {
+async function createLearner(cfg: BatchLearnerConfig, runId: string): Promise<string> {
   const result = await provisionVirtualProfile({
     name: cfg.name,
     learningGoal: cfg.learningGoal ?? '',
+    /* 实例标记（2026-11-09）：批量实验不经「选角派生」，此前建的账号不写任何来源标记 ⇒
+       不进虚拟学习者列表/统计，也进不了清理向导，成为孤儿数据。写 origin（不是 derivedFrom：
+       它没有来源卡，冒充「从某张卡派生」会让卡详情页的「派生自」链接指向不存在的卡）。 */
+    profile: batchExperimentOrigin(runId),
     tags: ['batch-experiment'],
     notes: '批量实验自动创建',
   });
@@ -133,7 +138,7 @@ async function advanceRunInner(runId: string): Promise<string> {
     if (run.phase === 'setup') {
       if (!run.profileId) {
         const cfg: BatchLearnerConfig = { name: run.learnerName, learningGoal: undefined, frictionBudget: run.frictionBudget };
-        const profileId = await createLearner(cfg);
+        const profileId = await createLearner(cfg, runId);
         await prisma.batch_experiment_runs.update({ where: { id: runId }, data: { profileId } });
         logger.info('[batch-experiment] learner created', { runId, profileId });
         return 'setup';

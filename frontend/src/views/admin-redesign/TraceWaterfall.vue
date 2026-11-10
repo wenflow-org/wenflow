@@ -1189,7 +1189,7 @@ const verdictText = computed(() => {
   font-weight: 700;
   flex-shrink: 0;
 }
-.wf-row__kind--flow { background: var(--mk-blue-bg); color: var(--mk-blue); }
+.wf-row__kind--flow { background: var(--mk-blue-bg); color: var(--mk-blue-text); }
 .wf-row__kind--call { background: var(--mk-graph-tag-bg); color: var(--mk-muted); }
 
 .wf-row__track {

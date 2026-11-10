@@ -132,7 +132,8 @@ class LearningStateGuidanceService {
           learnerSnapshot: guidanceProjection.learnerSnapshot,
           learningState,
           path: guidanceProjection.path ?? undefined,
-          sessionWrapup: sessionWrapup ?? undefined,
+          // 收束摘要走投影：剔除 runtimeEnvelope 等运行时元数据（实测占 wrapup 的 5.6KB/12.8KB）
+          sessionWrapup: learnerProjectionService.toGuidanceWrapup(sessionWrapup) ?? undefined,
           userId,
         });
         copy = result.output as AdaptiveGuidanceCopyOutput;
@@ -154,7 +155,8 @@ class LearningStateGuidanceService {
           learnerSnapshot: guidanceProjection.learnerSnapshot,
           learningState,
           path: guidanceProjection.path ?? undefined,
-          sessionWrapup: sessionWrapup ?? undefined,
+          // 收束摘要走投影：剔除 runtimeEnvelope 等运行时元数据（实测占 wrapup 的 5.6KB/12.8KB）
+          sessionWrapup: learnerProjectionService.toGuidanceWrapup(sessionWrapup) ?? undefined,
         });
         source = 'fallback';
         logger.warn('[learning-state-guidance] skill failed, using static copy', {

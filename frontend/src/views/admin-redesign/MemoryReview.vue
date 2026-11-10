@@ -47,9 +47,11 @@
                      相同时不再重复渲染第二行（看着像渲染故障，也把行高撑成两行） -->
                 <td><strong>{{ item.label }}</strong><small v-if="item.conceptKey && item.conceptKey !== item.label" class="mr__sub">{{ item.conceptKey }}</small></td>
                 <td class="mk-num">
-                  <span class="mr-pct" :class="{ 'mr-pct--warn': item.retention < 0.7 }" :title="`记忆强度 ${Math.round(item.retention * 100)}%，低于 70% 优先安排`">
-                    <b>{{ Math.round(item.retention * 100) }}%</b>
-                    <span class="mk-minibar mr__bar mr__bar--sm" aria-hidden="true"><i class="mk-minibar__fill" :data-tone="item.retention < 0.7 ? 'warn' : undefined" :style="{ width: Math.round(item.retention * 100) + '%' }"></i></span>
+                  <!-- 率值格走全站原语 .mk-meter（2026-11-09 收敛）：与「记忆与到期概念总表」的
+                       记忆强度同一渲染——此前这里是「上百分比 + 下短条」右对齐，那边是「左条 + 右百分比」横排 -->
+                  <span class="mk-meter" :title="`记忆强度 ${Math.round(item.retention * 100)}%，低于 70% 优先安排`">
+                    <span class="mk-minibar mk-meter__bar" aria-hidden="true"><i class="mk-minibar__fill" :data-tone="item.retention < 0.7 ? 'warn' : undefined" :style="{ width: Math.round(item.retention * 100) + '%' }"></i></span>
+                    <em class="mk-meter__val" :class="{ 'mk-meter__val--warn': item.retention < 0.7 }">{{ Math.round(item.retention * 100) }}%</em>
                   </span>
                 </td>
                 <td>{{ reasonText(item.reason) }}</td>
@@ -83,6 +85,25 @@
         <p v-else class="mr__sub">暂无温故计划：该用户名下还没有可安排的记忆痕迹。</p>
       </section>
 
+      <!-- 嵌入「记忆与调度」页签（compactAudit）：概念归并审计与同族重复压缩为单行轻量状态条，
+           回滚等破坏性动作展开后可达（避免独立治理卡在本页签再占一屏）。 -->
+      <template v-if="compactAudit && !auditExpand">
+        <section class="mk-card">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">概念归并审计与同族重复</h3>
+            <button
+              type="button"
+              class="mk-btn mk-btn--sm"
+              title="展开归并审计与同族重复，查看并回滚已执行归并"
+              @click="auditExpand = true"
+            >展开</button>
+          </div>
+          <p class="mk-empty--line">
+            概念归并审计：候选 {{ detail?.audit?.stats?.candidates ?? 0 }} · 建议 {{ detail?.audit?.stats?.proposed ?? 0 }} · 同族重复 {{ detail.duplicatedFamilies.length }} 组
+          </p>
+        </section>
+      </template>
+      <template v-else>
       <!-- 2. 概念归并审计：可写动作（勾选执行 / 单条确认 / 驳回 / 回滚），默认观察模式。
            R7 概念本体治理批：三组建议（归并 / 需人工确认 / 未归类记忆清理）全部给出入口——
            此前 dropCandidates 只在类型里声明计数（审计 CC-2）、ambiguous 无操作位； -->
@@ -220,15 +241,15 @@
                   <div>{{ proposal.rationale || '—' }}</div>
                 </td>
                 <td class="mk-num">
-                  <span class="mr-pct" :title="`置信度 ${Math.round(proposal.confidence * 100)}%`">
-                    <b>{{ Math.round(proposal.confidence * 100) }}%</b>
-                    <span class="mk-minibar mr__bar mr__bar--sm" aria-hidden="true"><i class="mk-minibar__fill" :style="{ width: Math.round(proposal.confidence * 100) + '%' }"></i></span>
+                  <span class="mk-meter" :title="`置信度 ${Math.round(proposal.confidence * 100)}%`">
+                    <span class="mk-minibar mk-meter__bar" aria-hidden="true"><i class="mk-minibar__fill" :style="{ width: Math.round(proposal.confidence * 100) + '%' }"></i></span>
+                    <em class="mk-meter__val">{{ Math.round(proposal.confidence * 100) }}%</em>
                   </span>
                 </td>
                 <td class="mk-num">
-                  <span class="mr-pct" :class="{ 'mr-pct--warn': !proposal.autoApplicable }" :title="`名称相似度 ${Math.round(proposal.lexicalSimilarity * 100)}%${proposal.autoApplicable ? '' : '（相似度不足，需人工确认）'}`">
-                    <b>{{ Math.round(proposal.lexicalSimilarity * 100) }}%</b>
-                    <span class="mk-minibar mr__bar mr__bar--sm" aria-hidden="true"><i class="mk-minibar__fill" :data-tone="proposal.autoApplicable ? undefined : 'warn'" :style="{ width: Math.round(proposal.lexicalSimilarity * 100) + '%' }"></i></span>
+                  <span class="mk-meter" :title="`名称相似度 ${Math.round(proposal.lexicalSimilarity * 100)}%${proposal.autoApplicable ? '' : '（相似度不足，需人工确认）'}`">
+                    <span class="mk-minibar mk-meter__bar" aria-hidden="true"><i class="mk-minibar__fill" :data-tone="proposal.autoApplicable ? undefined : 'warn'" :style="{ width: Math.round(proposal.lexicalSimilarity * 100) + '%' }"></i></span>
+                    <em class="mk-meter__val" :class="{ 'mk-meter__val--warn': !proposal.autoApplicable }">{{ Math.round(proposal.lexicalSimilarity * 100) }}%</em>
                   </span>
                 </td>
                 <td>
@@ -446,8 +467,9 @@
       </section>
 
       <!-- 3. 到期清单预览：到期积压的证据（谁先到期、掌握多少）。排在审计卡之后（2026-10-12
-           外部批评采纳：审计是本页签主动作，证据卡放后面，不再把它挤到首屏之下） -->
-      <section class="mk-card">
+           外部批评采纳：审计是本页签主动作，证据卡放后面，不再把它挤到首屏之下）。
+           嵌入「记忆与调度」页签（omitDuePreview）时省略：FSRS 普查表已覆盖同一概念集，避免重复刷屏。 -->
+      <section v-if="!omitDuePreview" class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">到期清单预览</h3>
           <!-- 2026-10-23 用户走查：排序状态归列头 caret / aria-sort，卡头只说真正影响读数含义的一件事
@@ -490,15 +512,15 @@
                    label），维持 mr__sub 降档，不冒充正文 -->
               <td><strong>{{ trace.label }}</strong></td>
               <td class="mk-num">
-                <span class="mr-pct" :class="{ 'mr-pct--warn': trace.retention < 0.7 }" :title="strengthTitle(trace)">
-                  <b>{{ Math.round(trace.retention * 100) }}%</b>
-                  <span class="mk-minibar mr__bar mr__bar--sm" aria-hidden="true"><i class="mk-minibar__fill" :data-tone="trace.retention < 0.7 ? 'warn' : undefined" :style="{ width: Math.round(trace.retention * 100) + '%' }"></i></span>
+                <span class="mk-meter" :title="strengthTitle(trace)">
+                  <span class="mk-minibar mk-meter__bar" aria-hidden="true"><i class="mk-minibar__fill" :data-tone="trace.retention < 0.7 ? 'warn' : undefined" :style="{ width: Math.round(trace.retention * 100) + '%' }"></i></span>
+                  <em class="mk-meter__val" :class="{ 'mk-meter__val--warn': trace.retention < 0.7 }">{{ Math.round(trace.retention * 100) }}%</em>
                 </span>
               </td>
               <td class="mk-num">
-                <span class="mr-pct" :title="`掌握 ${Math.round(trace.masteryScore * 100)}%`">
-                  <b>{{ Math.round(trace.masteryScore * 100) }}%</b>
-                  <span class="mk-minibar mr__bar mr__bar--sm" aria-hidden="true"><i class="mk-minibar__fill" :style="{ width: Math.round(trace.masteryScore * 100) + '%' }"></i></span>
+                <span class="mk-meter" :title="`掌握 ${Math.round(trace.masteryScore * 100)}%`">
+                  <span class="mk-minibar mk-meter__bar" aria-hidden="true"><i class="mk-minibar__fill" :style="{ width: Math.round(trace.masteryScore * 100) + '%' }"></i></span>
+                  <em class="mk-meter__val">{{ Math.round(trace.masteryScore * 100) }}%</em>
                 </span>
               </td>
               <td class="mk-num">{{ trace.extractionCount }}</td>
@@ -549,6 +571,7 @@
         </table>
         </div>
       </section>
+      </template>
       </div>
     </template>
   </div>
@@ -566,7 +589,10 @@ import { openSubPage, subPage } from './store'
 import { toast } from '@/utils/toast'
 import { errMsg, shortId, timeAgo } from './live'
 
-const props = defineProps<{ userId: string }>()
+const props = defineProps<{ userId: string; /** 嵌入「记忆与调度」页签时省略重复的到期清单预览（FSRS 普查表已覆盖同一概念集） */ omitDuePreview?: boolean; /** 嵌入态：概念归并审计与同族重复压缩为单行轻量状态条，回滚动作展开后可达 */ compactAudit?: boolean }>()
+
+/** 嵌入态（compactAudit）下，审计/同族重复是否展开（展开后回滚等动作可达） */
+const auditExpand = ref(false)
 
 /* 文案单源（R6 复读单源化）：三处「驳回」动作钮的悬停释共用一份 */
 const REJECT_BTN_HINT = '驳回后不再提示，不影响学习记录'
@@ -1167,9 +1193,6 @@ td.mr__sub { display: table-cell; }
    与逾期时刻同貌，「急不急」要人肉换算 */
 .mr__overdue { color: var(--mk-red-strong); font-weight: 600; }
 
-/* 列内比例条宽度（mk-minibar 管形状，这里只管两档宽度） */
-.mr__bar { width: 64px; }
-.mr__bar--sm { width: 52px; }
 
 .mr__warn { margin: 8px 16px 14px; padding: 8px 10px; border-radius: var(--mk-radius-xl); border: 1px solid color-mix(in srgb, var(--mk-amber) 30%, transparent); background: color-mix(in srgb, var(--mk-amber) 6%, transparent); font-size: var(--mk-fs-micro); }
 .mr__chip { display: inline-block; margin-left: 8px; }
@@ -1180,10 +1203,10 @@ td.mr__sub { display: table-cell; }
    外层不再叠 padding（原 inline 档首格 padding-left:0 的 16px 补偿随之退役） */
 .mr__strip { padding: 0; border-bottom: 1px solid var(--mk-line); }
 /* 明细区百分比列（批E）：数字+色阶条，与概览带/用户表同一语言 */
-.mr-pct { display: inline-grid; justify-items: end; gap: 2px; }
-.mr-pct b { font-variant-numeric: tabular-nums; font-weight: 700; }
-/* 比例条走共享 mk-minibar（默认蓝承接原绿档；warn 琥珀由模板 data-tone 驱动） */
-.mr-pct--warn b { color: var(--mk-amber); }
+/* 率值格（记忆强度 / 置信度 / 相似度 / 掌握度）已收进全站原语 .mk-meter：
+   条子 + 数值同一行、数值固定槽右对齐。此前 .mr-pct 是「上数值 + 下短条」右对齐，
+   与学习者详情页的记忆强度列读法不同（2026-11-09 走查）。 */
+
 /* 审计处理队列（批E）：复用概览带队列格语言 */
 /* auto-fit：窄屏不挤成 5 等份，宽屏不浪费（原固定 repeat(5) 在窄屏下每格 <100px） */
 .mr-audit-queue { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; padding: 10px 16px 4px; }

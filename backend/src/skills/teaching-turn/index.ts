@@ -5,7 +5,7 @@ import { PromptCallSpec, type PromptCallResult } from '../../composers/types';
 import { logger } from '../../utils/logger';
 import type { AgentDefinition, AgentOutput } from '../../agents/protocol';
 import { evaluateByCriteria, evaluateByProfile } from '../../skills/acceptance-evidence-evaluator';
-import { getFallbackStrategies, normalizeStrategy, buildGuidancePrompt } from '../../skills/teaching-strategy-selector';
+import { getFallbackStrategies, normalizeStrategy } from '../../skills/teaching-strategy-selector';
 import type { TeachingLearnerProjection } from '../../agents/learner-model-agent/types';
 import { buildSkillOutcome, type SkillOutcome } from '../outcome';
 import { recordDegradation } from '../degradation-telemetry';
@@ -697,24 +697,6 @@ export const teachingTurnAgentDefinition: AgentDefinition = {
 
 function normalizeConceptName(value: string | null | undefined): string {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
-}
-
-function buildStrategyGuidancePrompt(input: TeachingTurnInput): string | null {
-  return buildGuidancePrompt(input.scenario.teachingStrategyGuidance);
-}
-
-function buildTaskExecutionPrompt(input: TeachingTurnInput): string {
-  const taskProfile = input.scenario.taskProfile;
-  const taskContext = input.scenario.currentTaskContext;
-  const lines = [
-    '以下是当前子任务的执行锚点，优先围绕它教学：',
-    `- linkedConcept: ${taskProfile?.linkedConceptName || taskProfile?.coreConcept || 'none'}`,
-    `- taskDescription: ${taskContext?.description || input.scenario.taskDescription || 'none'}`,
-    `- acceptanceCriteria: ${taskContext?.acceptanceCriteria || 'none'}`,
-    `- primaryConcepts: ${(input.scenario.taskKnowledgeScope?.primaryConcepts || []).join(' | ') || 'none'}`,
-    `- supportingConcepts: ${(input.scenario.taskKnowledgeScope?.supportingConcepts || []).join(' | ') || 'none'}`,
-  ];
-  return lines.join('\n');
 }
 
 function normalizeAllowedStrategy(value: string | undefined) {
@@ -3023,9 +3005,6 @@ export function selectApplicableRules(rules: ConditionalRule[], input: TeachingT
 const CONDITIONAL_RULES = splitConditionalRules(TEACHING_TURN_PROMPT).rules;
 
 function buildPromptInput(input: TeachingTurnInput) {
-  const strategyGuidancePrompt = buildStrategyGuidancePrompt(input);
-  const taskExecutionPrompt = buildTaskExecutionPrompt(input);
-
   // KV 前缀缓存友好化：scenario 内动态子键（contextCompression/interactionProfile）挪到尾部，
   // 稳定主体（任务/路径/策略上下文）保持前置，最大化 user 内前缀命中
   const {
@@ -3048,10 +3027,6 @@ function buildPromptInput(input: TeachingTurnInput) {
   // learner 唯一的动态子键：编排层逐回合改写的难度档位（baseline/adjusted/reasons/evidence）
   const { taskDifficulty, ...stableLearner } = input.learner;
 
-  const promptDirectives = {
-    ...(strategyGuidancePrompt ? { strategyGuidance: strategyGuidancePrompt } : {}),
-    taskExecution: taskExecutionPrompt,
-  };
   const latestLearnerMessage = [...input.messages].reverse().find((message) => message.role === 'user')?.content || '';
 
   // 条件规则按需注入（逐回合变化 → 必须放**载荷尾部**）：输入提供了对应字段才带
@@ -3070,9 +3045,13 @@ function buildPromptInput(input: TeachingTurnInput) {
     : {};
 
   // 试飞改造（默认启用；PAYLOAD_STABLE_PREFIX=0 回退旧序）：
-  // 真实遥测显示 scenario 每回合必变（因子键 interactionProfile/contextCompression 逐回合变化），
-  // 前缀在 promptDirectives 之后的 knowledge 处即断（~7.3k/15.8k）。
-  // 稳定前缀版：scenario(洁) → promptDirectives → learner 前置，其余逐回合变化的键全部后置。
+  // 真实遥测显示 scenario 每回合必变（因子键 interactionProfile/contextCompression 逐回合变化）。
+  // 稳定前缀版：scenario(洁) → learner 前置，其余逐回合变化的键全部后置。
+  // 2026-11-08 载荷审计（全 skill 缓存调查）：删掉零引用键 promptDirectives——它是
+  // scenario.teachingStrategyGuidance 的散文重述 + taskProfile/currentTaskContext 的锚点重述，
+  // 编译产物（md 与 core yaml）里对 promptDirectives 的引用数为 0；被真正消费的是
+  // scenario.teachingStrategyGuidance（规则 40）与 scenario.taskProfile / scenario.currentTaskContext
+  // （规则 19/22/24/27/30/31/32），三者都仍在载荷里。实测每次可省 ~200–280 tok。
   // 对话上下文单键化：原 visibleDialogueContext / recentDialogueContext 同源重复，收敛为 messages
   // （与 core 输入名一致；沙盘 ref sandbox:teaching.session.messages）。
   // 2026-09-25 前缀缓存修正：对话历史**不再放进载荷**，改由 buildMessages 以真 message 发送
@@ -3083,7 +3062,6 @@ function buildPromptInput(input: TeachingTurnInput) {
   if (process.env.PAYLOAD_STABLE_PREFIX !== '0') {
     return {
       scenario: stableScenario,
-      promptDirectives,
       learner: stableLearner,
       // —— 低频变化项（churn<1）：放在每回合必变键**之前**，稳定回合可并入前缀；
       //    变化时也只牺牲其后本来就无法命中的动态键 ——
@@ -3119,7 +3097,6 @@ function buildPromptInput(input: TeachingTurnInput) {
       interactionProfile: scenarioInteractionProfile,
       ...(scenarioMemoryWarmup ? { memoryWarmup: scenarioMemoryWarmup } : {}),
     },
-    promptDirectives,
     knowledge: input.knowledge,
     learner: input.learner,
     controls: input.controls,
@@ -3349,7 +3326,7 @@ function buildTeachingTurnMessages(args: {
   // （实测 hit 每回合仅 +256 tok，载荷内可命中 71% 也不兑现）。
   // 修法：会话内恒定的稳定块（scenario/learner 主体，审计实测 ~12K 字节 ≈ 5K tok）
   // 挪进 system 尾部——第 2 回合起进入可缓存前缀；user 载荷只留逐回合变化项（~6K 字节）。
-  // system 变更会使当回合缓存归零，因此低频变化块（promptDirectives/conditionalRules/
+  // system 变更会使当回合缓存归零，因此低频变化块（conditionalRules/
   // taskDifficulty 等）一律**不进** system、留在 user 载荷尾部（EV 上更便宜）。
   let systemContent = args.systemPrompt;
   let userContent = `${args.userPayload}${suffix}`;

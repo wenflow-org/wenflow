@@ -381,7 +381,9 @@
           <div class="proposal-invite__text">
             <strong class="proposal-invite__title">学习方案 · 待确认</strong>
             <span v-if="entryCopy.hint" class="proposal-invite__sub">{{ entryCopy.hint }}</span>
-            <span v-else-if="live.proposal?.stages?.length" class="proposal-invite__sub">共 {{ live.proposal.stages.length }} 个阶段 · {{ live.proposal?.outcome || '方向已成形，打开即可确认' }}</span>
+            <!-- 2026-11-09 文案门禁（R3）：无 outcome 时的回落句原本在正文里讲怎么用
+                 （「点开…」），而右邻就是一枚确认按钮；只报状态即可。 -->
+            <span v-else-if="live.proposal?.stages?.length" class="proposal-invite__sub">共 {{ live.proposal.stages.length }} 个阶段 · {{ live.proposal?.outcome || '方向已成形' }}</span>
           </div>
           <button type="button" class="btn-primary proposal-invite__btn" @click="openProposalReview">{{ entryCopy.button }}</button>
         </div>
@@ -3183,6 +3185,19 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
    底色/描边/阴影已全部令牌化（--surface/--line/--bubble-ai-bg/--mk-shadow-* 与
    color-mix(--ink/--amber/--blue) 派生），随 [data-theme='dark'] 自动翻转——
    原逐条暗色字面量覆写（rgba 纯黑/纯白影、琥珀底、shimmer 白纱）整块退役。 */
+
+/* 初始态内容列的中间档（2026-11-09 全站巡检 准则1 + DPI 缩放专项）
+   问题：.entry__hero / .entry__cards / .entry .composer--entry 三处都钉 640，而 .entry 容器
+   在 1024–1679 是 1080；实测 1280 下容器 1080、内容仅 640（两侧各空 220），1366/1536 同样
+   空 220/360，属「单列拉面条 + 中间空洞」。v2.css 的 960 拓宽只在 ≥1680 生效，中间整段是空档。
+   修法：紧接本块给出连续档 clamp(640px, 62vw, 960px)——1280 → 794、1366 → 847、1536 → 952、
+   1680 起由 v2.css 的 960 接管（上下档衔接，不出现跳变）。对话态 .work 的双栏口径不受影响。 */
+@media (min-width: 1024px) and (max-width: 1679.98px) {
+  .entry__hero,
+  .entry__cards,
+  .entry .composer--entry,
+  .entry__hero p { max-width: clamp(640px, 62vw, 960px); }
+}
 
 /* 桌面阅读宽度：>1100 对话内容限 ~760px 居中（同课堂页批10） */
 @media (min-width: 1101px) {

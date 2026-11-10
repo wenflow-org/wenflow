@@ -34,7 +34,7 @@ promptContract:
     classroomEventContext: { direction: state, visibility: handoff, owner: orchestrator }
     knowledge: { direction: state, visibility: handoff, owner: orchestrator }
     controls: { direction: input, visibility: internal }
-    promptDirectives: { direction: input, visibility: internal }
+    # 2026-11-08 全 skill 载荷审计：promptDirectives 是零引用键（编译产物里 0 次引用），已从载荷删除
     # 载荷缓存重排（2026-09-25）：自 scenario/learner 提取的动态子键，落在载荷尾部顶层
     taskDifficulty: { direction: state, visibility: handoff, owner: orchestrator }
     behavioralProfile: { direction: state, visibility: handoff, owner: orchestrator }

@@ -208,3 +208,48 @@ describe('#176-2 复核：invalidate 必须管住持久化投影（只删内存�
     expect(projectionsDeleteMany).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * 2026-11-09 画像链路核查：教学开课默认 getLatest 允许 10 分钟陈旧。
+ * `maxAgeMs` 用于把「一次课只取一次快照」的场景收紧到分钟级——超过就重算。
+ */
+describe('maxAgeMs：按调用场景收紧可接受的陈旧度', () => {
+  const persistedAt = (ageMs: number) => ({
+    projectionKey: 'unused',
+    payload: JSON.stringify({ ...snapshotFor('u-age'), marker: 'persisted' }),
+    lastEventId: null,
+    generatedAt: new Date(Date.now() - ageMs),
+  });
+
+  it('默认窗口内接受持久化投影；传 60s 时超龄即重算', async () => {
+    projectionsFindUnique.mockResolvedValue(persistedAt(5 * 60 * 1000));
+
+    const got = (await learnerSnapshotRefreshService.getLatest({
+      userId: 'u-age',
+      scope: 'global',
+    })) as any;
+    expect(got.marker).toBe('persisted');
+    expect(snapshotOf).not.toHaveBeenCalled();
+
+    // 只清内存键，不动失效水位：让第二次调用真正走到持久化窗口判定
+    (learnerSnapshotRefreshService as any).cache.clear();
+
+    const fresh = (await learnerSnapshotRefreshService.getLatest(
+      { userId: 'u-age', scope: 'global' },
+      { maxAgeMs: 60_000 },
+    )) as any;
+    expect(fresh.marker).toBeUndefined();
+    expect(snapshotOf).toHaveBeenCalledTimes(1);
+  });
+
+  it('maxAgeMs 只收紧不放松：传超大值也不会超过默认 10 分钟', async () => {
+    projectionsFindUnique.mockResolvedValue(persistedAt(11 * 60 * 1000));
+
+    await learnerSnapshotRefreshService.getLatest(
+      { userId: 'u-age-loose', scope: 'global' },
+      { maxAgeMs: 60 * 60 * 1000 },
+    );
+
+    expect(snapshotOf).toHaveBeenCalledTimes(1);
+  });
+});

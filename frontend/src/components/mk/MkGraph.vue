@@ -70,6 +70,37 @@ export const DENSE_LABEL_NODES_NARROW = 8
 export function isDenseLabelGraph(nodeCount: number, narrow: boolean): boolean {
   return nodeCount > (narrow ? DENSE_LABEL_NODES_NARROW : DENSE_LABEL_NODES)
 }
+
+/** 点本体命中的最小半尺寸：小节点（12~15px）画出来就是一颗豆，容差之外不再给 */
+export const MIN_SYMBOL_HALF = 8
+
+/**
+ * 「这一下点在哪个点的本体上」：半径 = 该点自己的半个符号 + 容差，取半径内最近的一颗。
+ *
+ * 为什么不能拿空白热区（NODE_HIT_RADIUS = 20）来判本体：20px 比小节点的本体大一圈，
+ * 「点在标签上」也会被判成本体，等于把标签的点击抢走——密集图里就变成「点标签却选中旁边那颗点」。
+ * 本体判据必须贴着画出来的点（symbolSize/2）。
+ *
+ * 放在模块作用域（而不是 setup 里）是为了能单测：ECharts 画布在 jsdom 里起不来，
+ * 「点这个点、选这个点」这条判据不能只活在浏览器里。
+ */
+export function nearestSymbolHit(
+  x: number,
+  y: number,
+  symbols: Array<{ id: string; x: number; y: number; half: number }>,
+  tolerance = 2
+): string | null {
+  let bestId: string | null = null
+  let bestDist = Infinity
+  for (const s of symbols) {
+    const r = Math.max(s.half, MIN_SYMBOL_HALF) + tolerance
+    const d = Math.hypot(s.x - x, s.y - y)
+    if (d > r || d >= bestDist) continue
+    bestId = s.id
+    bestDist = d
+  }
+  return bestId
+}
 </script>
 
 <template>
@@ -148,9 +179,9 @@ let chart: echarts.ECharts | null = null
 /** 已点选的节点：右栏/底部详情接管信息，画布 tooltip 不再重复弹出；
  *  2026-11-05 用户定稿：点击选中后画布把无关节点压暗到 0.35（ref 化以便进 buildOption） */
 const selectedIdRef = ref<string | null>(null)
-/** 最近一次 buildOption 烘焙的「值得标注」节点集（批次四：graphRoam 缩放档回填标签用） */
+/** 最近一次 buildOption 烘焙的关键标签集（枢纽 + 薄弱 + 孤立 + 高亮）：只在缩得很小时保留 */
 let lastLabelWorthy = new Set<string>()
-/** 缩放低于该值视为「看不清标签」档：全量收标（hover/emphasis 仍出词），放大恢复 */
+/** 缩放低于该值视为「字已经挤不开」档：退回关键子集（不再整屏收标），放大恢复常显 */
 const ZOOM_LABEL_OFF = 0.85
 let labelsHiddenByZoom = false
 
@@ -162,13 +193,31 @@ let labelsHiddenByZoom = false
  * 24 概念图糊成一团（标签互压）。所以热区在事件层实现：点在空白处时按屏幕像素距离
  * （≤ 20px）取最近的节点，等价于给每颗节点套了一个不可见的 r=20 圆。
  * 文字标签本身挂在节点符号上（zrender 的 __hostTarget 链），点标签即点节点，无需另做。
+ *
+ * ⚠ 与「点本体优先」的分工（2026-11-09 用户走查）：这条 20px 热区**只给空白点击兜底**，
+ * 不能拿去跟标签抢点击——见 symbolAtPixel 与 bindZrInteractions 的注释。
  */
 const NODE_HIT_RADIUS = 20
 
-/** graphRoam 缩放跨档时翻转节点标签：低于阈值全收（密集区字压字不可读），回升恢复 labelWorthy 常显集合 */
+/** 平移容差：按下到松开的位移超过它就当拖动，不当点击（平移画布后不该顺手选中一颗点） */
+const CLICK_SLOP = 5
+
+/** 触摸后的 DOM click 忽略窗口：zrender 已在 touchend 合成过一次点击，浏览器补派的那次不重复处理 */
+const TOUCH_CLICK_GUARD_MS = 700
+
+/** 每个节点符号的半个尺寸（buildOption 烘焙）：命中判据与画出来的点同源，不另估一套 */
+let lastSymbolHalf = new Map<string, number>()
+
+/**
+ * 缩放跨档收/放节点标签：低于阈值时只留「枢纽 + 薄弱 + 孤立」这一关键子集。
+ *
+ * 为什么不能直接全量保留：标签是屏幕像素尺寸（不随 zoom 缩放），画布缩小后点越挤、
+ * 字与字必然叠在一起，而且 roam 期间不会重跑 hideOverlap。所以只在缩得很小时退到关键子集，
+ * 而不是像以前那样**整张图一个字都不剩**（那会让用户以为「必须点一下才有名字」）。
+ */
 function applyZoomLabels() {
   if (!chart) return
-  const opt = chart.getOption() as { series?: Array<{ zoom?: number; data?: Array<{ id?: string; label?: { show?: boolean } }> }> }
+  const opt = (chart as unknown as GraphModel).getOption()
   const zoom = opt.series?.[0]?.zoom
   const hide = typeof zoom === 'number' && zoom < ZOOM_LABEL_OFF
   if (hide === labelsHiddenByZoom) return
@@ -179,7 +228,7 @@ function applyZoomLabels() {
     series: [{
       data: data.map((d) => ({
         ...d,
-        label: { ...d.label, show: !hide && lastLabelWorthy.has(String(d.id ?? '')) }
+        label: { ...d.label, show: hide ? lastLabelWorthy.has(String(d.id ?? '')) : true }
       }))
     }]
   })
@@ -260,7 +309,14 @@ type GraphModel = {
       getGraph: () => { eachNode: (cb: (n: { id: string | number; getLayout: () => unknown }) => void) => void }
     }
   }
-  getOption: () => { series?: Array<{ zoom?: number; center?: [number | string, number | string] }> }
+  getOption: () => {
+    series?: Array<{
+      zoom?: number
+      center?: [number | string, number | string]
+      /** 缩放跨档时按节点回填 label.show 用（applyZoomLabels） */
+      data?: Array<{ id?: string | number; label?: Record<string, unknown>; [key: string]: unknown }>
+    }>
+  }
 }
 
 /**
@@ -303,6 +359,17 @@ function layoutPoint(l: unknown): { x: number; y: number } | null {
  * 全部落在 48 里甚至外面，1024 视口实测最外圈节点连标签一起被画布边缘切掉。
  * 现在把节点视觉尺寸（半径 + 标签两侧/下方占位）先并入包围盒，再按真实画布尺寸取景；
  * 另外 rect 读不到时回落到 chart.getWidth/getHeight()，避免退化成 zoom=1 直接溢出。 */
+/* 节点视觉外扩：半径上限 24（symbolSize ≤ 48 的一半）+ 标签占位
+   （X 向取 6~9 字两行的半宽 ≈ 44；Y 向标签在圆心下方，取 24+两行 ≈ 56）。 */
+const NODE_EXTENT_X = 24 + 44
+const NODE_EXTENT_Y = 24 + 56
+
+/** 画布四边留白：统一一处，力导向的收边范围与标签外扩用同一组数 */
+function graphInsets() {
+  const narrow = isNarrow.value
+  return { top: narrow ? 44 : 40, bottom: narrow ? 46 : 48, left: narrow ? 44 : 48, right: narrow ? 56 : 96 }
+}
+
 function fitGraphView(padding = 48) {
   if (!chart) return
   try {
@@ -331,12 +398,8 @@ function fitGraphView(padding = 48) {
       if (l[1] > maxY) maxY = l[1]
     }
     if (!Number.isFinite(minX) || maxX - minX < 1 || maxY - minY < 1) return
-    /* 节点视觉外扩：半径上限 24（symbolSize ≤ 48 的一半）+ 标签占位
-       （X 向取 6~9 字两行的半宽 ≈ 44；Y 向标签在圆心下方，取 24+两行 ≈ 56）。 */
-    const EXTENT_X = 24 + 44
-    const EXTENT_Y = 24 + 56
-    const boxW = maxX - minX + EXTENT_X * 2
-    const boxH = maxY - minY + EXTENT_Y * 2
+    const boxW = maxX - minX + NODE_EXTENT_X * 2
+    const boxH = maxY - minY + NODE_EXTENT_Y * 2
     const rect = series?.coordinateSystem?.rect
     const chartLike = chart as unknown as { getWidth?: () => number; getHeight?: () => number }
     const viewW = rect?.width || chartLike.getWidth?.() || 0
@@ -370,37 +433,63 @@ function readGraphViewport(): { zoom?: number; center?: [number | string, number
 }
 
 /**
- * click 热区命中（§5：r >= 20px）：给定屏幕像素点，返回半径内最近的节点。
+ * 节点像素坐标（命中判据的唯一来源）。
  *
  * 坐标链：节点布局由布局助手写在 layout（graph 的 view 坐标系，未含 roam 的缩放/平移），
  * `convertToPixel` 按 seriesIndex 取同一坐标系把布局点换算成画布像素（roam 的 zoom/center
- * 已在内），所以拖拽/缩放之后热区仍然贴着节点。探针实测：[389.9, 317.3] → [390.0, 315.6]。
- * 取最近的一颗：热圈重叠时选择「更近」的那个，不会随遍历顺序跳变。
+ * 已在内），所以拖拽/缩放之后命中区仍然贴着节点。探针实测：[389.9, 317.3] → [390.0, 315.6]。
+ * 附带的 half 取 buildOption 烘焙的 symbolSize/2 —— 判据与画出来的点是同一组数，不另估。
  */
-function nodeNearPixel(x: number, y: number, radius: number): MkGraphNode | null {
-  if (!chart) return null
+function symbolPixels(): Array<{ id: string; x: number; y: number; half: number }> {
+  const out: Array<{ id: string; x: number; y: number; half: number }> = []
+  if (!chart) return out
   try {
     const model = chart as unknown as GraphModel
-    const byId = new Map(visibleNodes.value.map((n) => [n.id, n]))
-    let best: MkGraphNode | null = null
-    let bestDist = Infinity
     model.getModel().getSeriesByIndex(0).getGraph().eachNode((n) => {
       const p = layoutPoint(n.getLayout())
       if (!p) return
       const px = chart!.convertToPixel({ seriesIndex: 0 }, [p.x, p.y]) as number[] | null
       if (!Array.isArray(px)) return
-      const dist = Math.hypot(px[0] - x, px[1] - y)
-      if (dist > radius || dist >= bestDist) return
-      const found = byId.get(String(n.id))
-      if (found) {
-        best = found
-        bestDist = dist
-      }
+      const id = String(n.id)
+      out.push({ id, x: px[0], y: px[1], half: lastSymbolHalf.get(id) ?? MIN_SYMBOL_HALF })
     })
-    return best
   } catch {
-    return null
+    /* 实例重建（切主题 dispose）期间取不到模型：当这一下没命中，不抛 */
   }
+  return out
+}
+
+/**
+ * click 热区命中（§5：r >= 20px）：给定屏幕像素点，返回半径内最近的节点。
+ * 取最近的一颗：热圈重叠时选择「更近」的那个，不会随遍历顺序跳变。
+ */
+function nodeNearPixel(x: number, y: number, radius: number): MkGraphNode | null {
+  const byId = new Map(visibleNodes.value.map((n) => [n.id, n]))
+  let best: MkGraphNode | null = null
+  let bestDist = Infinity
+  for (const s of symbolPixels()) {
+    const dist = Math.hypot(s.x - x, s.y - y)
+    if (dist > radius || dist >= bestDist) continue
+    const found = byId.get(s.id)
+    if (found) {
+      best = found
+      bestDist = dist
+    }
+  }
+  return best
+}
+
+/**
+ * 「点本体」命中（2026-11-09 用户走查）：半径 = 该点自己的半个符号 + 2px，只认这一档。
+ *
+ * 为什么不能拿 NODE_HIT_RADIUS(20) 来判「点没点在本体上」：20px 比小节点的本体大一圈，
+ * 会让「点在标签上」也被判成点本体，等于把标签的点击抢走——密集图里就会变成
+ * 「点标签却选中旁边那颗点」。所以本体判据必须贴着画出来的点。
+ */
+function symbolAtPixel(x: number, y: number): MkGraphNode | null {
+  const id = nearestSymbolHit(x, y, symbolPixels())
+  if (!id) return null
+  return visibleNodes.value.find((n) => n.id === id) ?? null
 }
 
 function buildOption(viewState?: { zoom?: number; center?: [number | string, number | string] } | null): EChartsCoreOption {
@@ -409,15 +498,19 @@ function buildOption(viewState?: { zoom?: number; center?: [number | string, num
   const nodeIds = new Set(nodes.map((n) => n.id))
   const edges = props.edges.filter((e) => nodeIds.has(e.fromConceptId) && nodeIds.has(e.toConceptId))
   const degree = new Map<string, number>()
+  /** 本轮的「节点 id → 半个符号尺寸」：data.map 里填，末尾交给 symbolPixels 定命中半径 */
+  const symbolHalves = new Map<string, number>()
   for (const edge of edges) {
     degree.set(edge.fromConceptId, (degree.get(edge.fromConceptId) ?? 0) + 1)
     degree.set(edge.toConceptId, (degree.get(edge.toConceptId) ?? 0) + 1)
   }
   const textColor = dark ? '#c9ccd1' : '#3b3f46'
   const RELATION_LABEL: Record<string, string> = { prerequisite: '前置依赖', part_of: '属于' }
-  // 可读性（视觉验证实测）：节点一多，常显全部标签会让中心区糊成一团；但全都不显示又只剩点。
-  // 故密集图只给"值得标注"的节点显示标签：① 连接度最高的若干（结构枢纽）② 薄弱/脆弱节点。其余靠悬停。
-  // 密集阈值按画布面积给（窄屏更早进密集档），理由与折算见 isDenseLabelGraph 的注释。
+  /* 标签常显策略（2026-11-10 用户走查「一部分点是灰的、没字，得点一下才出名字」）：
+     每个可见概念都常显名字，压字交给 labelLayout.hideOverlap 只收掉真正会重叠的那几个——
+     以前只给「枢纽 6 + 薄弱」标名，其余节点就是一颗没有名字的灰点，必须点一下才知道是什么。
+     labelWorthy 现在的用途只剩**缩得很小的时候**保留哪些（见 applyZoomLabels）：
+     画布越缩点越挤，全量标签必然糊成一片，那时退回「枢纽 + 薄弱 + 孤立」这一关键子集。 */
   const narrow = isNarrow.value
   const denseGraph = isDenseLabelGraph(nodes.length, narrow)
   const highlightSet = new Set(props.highlightIds)
@@ -441,18 +534,16 @@ function buildOption(viewState?: { zoom?: number; center?: [number | string, num
       if (weak) labelWorthy.add(node.id)
     }
   }
-  // 窄屏密集图刻意一个常显标签都不放：320–370px 宽放 20+ 节点时，任何 7–10 个
-  // 标签都会互相压字，最右一列还会被 canvas 裁掉。点按/悬停节点仍有 tooltip 与
-  // 下方详情（MkGraphExplorer 侧栏 / 课堂知识点浮窗的选中行）。
-  // 例外：课堂浮窗传入的本节 1–2 个概念必须常显并高亮，否则迷你图没有教学锚点。
+  // 窄屏密集图：缩小时整屏只剩点，任何常显标签都会互相压字，故关键子集只留空心（见下方注释）
   for (const id of highlightSet) labelWorthy.add(id)
-  // 孤立可见节点一律常显名字（2026-10-31 三轮评审）：它没有任何邻边、悬停兜底也指不出
-  // 「正在学的是什么」，且四周全空不存在压字；不标名就成了一颗无名的点。
+  // 孤立可见节点一律保留名字：它没有任何邻边，悬停兜底也指不出「正在学的是什么」
   for (const node of nodes) {
     if (!degree.get(node.id)) labelWorthy.add(node.id)
   }
   // 供 graphRoam 缩放档回填 label.show 用（buildOption 每次重算，roam 不触发它）
   lastLabelWorthy = labelWorthy
+  // 命中判据与画出来的点同源：data.map 里顺手抄下的 symbolSize/2（见 symbolPixels）
+  lastSymbolHalf = symbolHalves
 
   return {
     backgroundColor: 'transparent',
@@ -478,6 +569,10 @@ function buildOption(viewState?: { zoom?: number; center?: [number | string, num
     series: [
       {
         type: 'graph',
+        /* 力导向自带的近似圆团形状**必须等比**显示：不要换 layout:'none' 追求「铺满画布」——
+           那一档下 ECharts 会把节点包围盒非等比铺满取景盒，2:1 的宽画布上就会被横向拉长
+           （2026-11-09 4K 走查实测：横向被拉 ≈2.4 倍，节点间距失真、连线被扯平）。
+           宽画布两侧留白是等比取景的必然代价，靠 fitGraphView 的留白与节点尺寸控制观感。 */
         layout: 'force',
         roam: true,
         draggable: true,
@@ -492,10 +587,7 @@ function buildOption(viewState?: { zoom?: number; center?: [number | string, num
         // lineHeight 16 的两行标签 ≈37px 高（distance 5 + 32 文字），bottom 36 仍把
         // 「第二个动词的角色判定」第二行拦腰截断；left 28 放不下以节点为中心的
         // 6 字行半宽（36px），首字左半被裁。抬到 top 44 / bottom 46 / left 44。
-        top: narrow ? 44 : 40,
-        bottom: narrow ? 46 : 48,
-        left: narrow ? 44 : 48,
-        right: narrow ? 56 : 96,
+        ...graphInsets(),
         scaleLimit: { min: 0.3, max: 4 },
         label: {
           show: false,
@@ -569,6 +661,8 @@ function buildOption(viewState?: { zoom?: number; center?: [number | string, num
           const dimmedBySelect = !!selectedIdRef.value && node.id !== selectedIdRef.value
           const dimmed = dimmedByHighlight ? 'highlight' : dimmedBySelect ? 'select' : null
           const baseSize = Math.min(narrow ? 34 : 44, (narrow ? 12 : 15) + (degree.get(node.id) ?? 0) * 4)
+          const size = Math.min(narrow ? 38 : 48, baseSize + (highlighted ? 4 : 0))
+          symbolHalves.set(node.id, size / 2)
           // 多个高亮时标签上下交错：第 1 枚在节点下方、第 2 枚起在上方——hideOverlap
           // 常开后（见上方 labelLayout 注释），交错保证两枚高亮标签不因互相重叠被吞
           const highlightIndex = props.highlightIds.indexOf(node.id)
@@ -581,7 +675,7 @@ function buildOption(viewState?: { zoom?: number; center?: [number | string, num
             // 手势光标分离（2026-11-05 用户定稿）：节点/标签才是 pointer，
             // 空白画布由 bindZrInteractions 在 zrender 的 viewport 元素上给 grab/grabbing
             cursor: 'pointer',
-            symbolSize: Math.min(narrow ? 38 : 48, baseSize + (highlighted ? 4 : 0)),
+            symbolSize: size,
             itemStyle: {
               color: colorOf(node, dark),
               /* 选中 = 只描边（2026-11-06 走查）：手机端选中节点曾用大描边+高亮底把名字盖住，
@@ -597,7 +691,8 @@ function buildOption(viewState?: { zoom?: number; center?: [number | string, num
             // 层级：coreConcept 用圆、KC 用圆角方块，一眼区分粒度
             symbol: node.level === 'concept' ? 'circle' : 'roundRect',
             label: {
-              show: labelWorthy.has(node.id) || node.id === selectedIdRef.value,
+              /* 常显：每颗点都带名字，重叠由 labelLayout.hideOverlap 收（见 buildOption 顶部注释） */
+              show: true,
               fontWeight: highlighted ? 'bold' : 'normal',
               color: highlighted ? (dark ? '#ffe08a' : '#8a4b00') : textColor,
               position: highlighted && highlightIndex > 0 ? 'top' : 'bottom'
@@ -646,38 +741,54 @@ function render() {
     // 不注解入参（交给 ECharts 的 ECElementEvent），内部按图节点形状取值——避免 any
     chart.on('click', (params) => {
       if (params?.dataType !== 'node') {
-        selectedIdRef.value = null
-        chart?.dispatchAction({ type: 'hideTip' })
-        emit('select', null)
-        render()
+        selectNode(null)
         return
       }
       const data = params.data as { raw?: MkGraphNode } | undefined
-      selectedIdRef.value = data?.raw?.id ? String(data.raw.id) : null
-      chart?.dispatchAction({ type: 'hideTip' })
-      emit('select', data?.raw ?? null)
-      // 选中/取消都要重建 option 把无关节点压暗；render() 会抄走当前坐标与缩放，
-      // 力导向从原位续跑，不发生"点一下重排一次"
-      render()
+      selectNode(data?.raw ?? null)
     })
     // 批次四 P2：缩放跨档收/放节点标签（setOption(notMerge) 重建会重置缩放档标志）
-    chart.on('graphRoam', () => applyZoomLabels())
+    chart.on('graphRoam', () => {
+      userRoamed = true
+      applyZoomLabels()
+    })
     bindZrInteractions(chart)
   }
   /* 换数据才自适应取景：选中节点/切主题的重建沿用用户当前的视角与缩放
      （props.nodes 引用在父组件重新加载时才会变） */
-  const dataSig = `${props.nodes.length}:${props.edges.length}`
-  const dataChanged = dataSig !== lastGraphSig
-  lastGraphSig = dataSig
+  const sig = graphDataSig()
+  const dataChanged = sig !== lastGraphSig
+  lastGraphSig = sig
   chart.setOption(buildOption(readGraphViewport()), true)
   labelsHiddenByZoom = false
-  if (dataChanged) fitGraphView()
+  if (dataChanged) {
+    userRoamed = false
+    fitGraphView()
+  }
 }
 
-/** 上一次渲染的数据规模签名（见 render 末尾的 fitGraphView 触发条件） */
+/** 上一次渲染的数据指纹（见 graphDataSig）：判断「是否换数据」用 */
 let lastGraphSig = ''
 
+/**
+ * 「这份数据变了没有」的判据：只认**规模**（可见节点数 + 边数）。
+ *
+ * 绝不能拿节点 id / 名字拼指纹：知识图谱这页每次轮询都会用新快照重建节点（id 带时间戳、
+ * 每次都不一样），按 id 判会每次轮询都算「换了数据」→ 触发 fitGraphView 把用户刚滚轮
+ * 缩放/拖动过的视角打回初始档（表现为「滚轮缩放没反应 / 一放大就弹回去」）。
+ * 规模没变就不打扰用户视角——和改造前 `nodes.length:edges.length` 的口径一致。
+ */
+function graphDataSig(): string {
+  return `${visibleNodes.value.length}:${props.edges.length}`
+}
+
 let lastNarrow = false
+
+/**
+ * 用户是否自己动过视角（滚轮缩放 / 拖动画布 / 右侧 [−][+] 按钮）。
+ * resize 后只有「没动过」才重新取景——否则会把用户放大的局部硬拉回全景。
+ */
+let userRoamed = false
 
 /**
  * 画布交互（§5 2026-11-05/11-06 用户定稿）：手势光标 + 点击热区。
@@ -685,6 +796,53 @@ let lastNarrow = false
  * 为什么绑在实例创建处而不是 onMounted：切主题会 dispose 重建实例（见 render 顶部），
  * 新的 zrender 实例不会继承旧监听——放在这里，每次重建后手势与热区都还在。
  */
+/**
+ * 选中一个节点（三条命中路径的唯一出口）：压暗重建 + 通知宿主；null = 取消选中。
+ * 宿主（MkGraphExplorer）自己处理「再点一次同一颗 = 取消」的开关语义。
+ */
+function selectNode(node: MkGraphNode | null): void {
+  selectedIdRef.value = node ? node.id : null
+  chart?.dispatchAction({ type: 'hideTip' })
+  emit('select', node)
+  // 选中/取消都要重建 option 把无关节点压暗；render() 会抄走当前坐标与缩放，
+  // 力导向从原位续跑，不发生「点一下重排一次」
+  render()
+}
+
+/** 需要折回逻辑像素的指针事件：zrender 的 Handler 监听哪些，这里就补偿哪些 */
+const ZR_POINTER_EVENTS = [
+  'mousedown',
+  'mousemove',
+  'mouseup',
+  'click',
+  'dblclick',
+  'contextmenu',
+  'mousewheel',
+  'wheel',
+  'touchstart',
+  'touchmove',
+  'touchend'
+] as const
+
+/**
+ * CSS zoom 补偿（2026-11-09 4K 走查「点击位置是偏的」）。
+ *
+ * `body.admin-route .ac` 在 2000px+ 带 `zoom: 1.15`、3600px+ 带 `zoom: 1.3`。CSS zoom 放大的是
+ * **视觉**尺寸：`getBoundingClientRect()` 与 MouseEvent 的 `offsetX/offsetY` 报的都是放大后的
+ * CSS px，而 ECharts 的 canvas 坐标系是放大前的逻辑 px（`chart.getWidth()`）。两边不换算直接比，
+ * 命中点整体沿画布中心外扩（2560 实测：逻辑 844 的点，zrender 收到 971 = 844 × 1.15），
+ * 表现就是「点在点上却选中旁边那颗」和「点空白没反应、拖动跟手也偏」。
+ *
+ * 系数用 `viewport 实际宽 / 逻辑宽`，不需要读 zoom 配置，任何来源的缩放（含浏览器缩放、
+ * 未来的 transform）都自洽。
+ */
+function zrZoomScale(instance: echarts.ECharts, root: HTMLElement): number {
+  const logicalW = instance.getWidth() || 0
+  if (!logicalW) return 1
+  const scale = root.getBoundingClientRect().width / logicalW
+  return Number.isFinite(scale) && scale > 0 ? scale : 1
+}
+
 function bindZrInteractions(instance: echarts.ECharts) {
   const zrender = instance.getZr()
   // 手势光标分离：空白画布=抓手、按住拖动=紧握、节点/标签=小手。
@@ -725,27 +883,121 @@ function bindZrInteractions(instance: echarts.ECharts) {
   })
 
   // 点击热区（§5：r >= 20px）+ 空白点击回概览。
-  // 节点/文字标签/连线的点击有 target，由 ECharts 自己的 click 处理（标签经 __hostTarget
-  // 归属到节点符号，点文字即点节点）；这里只接「点在空白处」这一档：先按 20px 找最近节点
-  // （热区命中就当选中它），半径内没有节点才取消选中。空白的 chart click 不会触发
-  // （ECharts 对无 target 的点击不派发事件），所以回概览也必须在这里落地。
+  //
+  // 三条命中路径的先后（2026-11-09 用户走查「点这个点却选中旁边那个点」）：
+  //  ① 点本体：捕获阶段先判（见下），命中就自己接管——标签铺着画布色底衬、又画在节点之上，
+  //     排在 zrender 的命中前面。不先判就会出现「点被标签压住的那颗点 → 判成点了标签的宿主」。
+  //  ② 标签 / 连线：有 target，由 ECharts 自己的 click 处理（标签经 __hostTarget 归属到节点符号，
+  //     点文字即点节点）——本处理器不插手。
+  //  ③ 空白：ECharts 对无 target 的点击不派发事件，所以「按 20px 热区选最近的节点、半径内没有
+  //     才取消选中」必须在这里落地。
   zrender.on('click', (e: { target?: unknown; offsetX?: number; offsetY?: number }) => {
+    /* 有 CSS zoom 时用捕获阶段折回逻辑 px 的 zrX/zrY；没有 zoom 时 zrender 自己填的也是它 */
+    const zr = e as { zrX?: number; zrY?: number }
+    const x = Number(zr.zrX ?? e.offsetX)
+    const y = Number(zr.zrY ?? e.offsetY)
+    const usable = Number.isFinite(x) && Number.isFinite(y)
+    /* 本体优先也要在**这一条**里再判一次：触摸端的「点击」是 zrender 在 touchend 里合成的
+       （localDOMHandlers.click 直接调用，不是 DOM click），捕获阶段那条听不到，只能在
+       ECharts 之后纠正——后写的赢，宿主按最后一次 select 落地。 */
+    const body = usable ? symbolAtPixel(x, y) : null
+    if (body) {
+      selectNode(body)
+      return
+    }
     if (e.target) return
-    const x = Number(e.offsetX)
-    const y = Number(e.offsetY)
-    const hot = Number.isFinite(x) && Number.isFinite(y) ? nodeNearPixel(x, y, NODE_HIT_RADIUS) : null
+    const hot = usable ? nodeNearPixel(x, y, NODE_HIT_RADIUS) : null
     if (hot) {
-      selectedIdRef.value = hot.id
-      instance.dispatchAction({ type: 'hideTip' })
-      emit('select', hot)
-      render()
+      selectNode(hot)
       return
     }
     if (!selectedIdRef.value) return
-    selectedIdRef.value = null
-    emit('select', null)
-    render()
+    selectNode(null)
   })
+
+  /* ① 点本体优先（捕获阶段）：与 zrender 的 click 监听挂在同一个 viewport 元素上，
+     捕获先于冒泡；命中就 stopImmediatePropagation，ECharts 不会再按标签报一次
+     （否则同一下点会先报标签的宿主、再报本体，宿主看到两次 select）。
+     按下但拖动了的不算点击（平移画布后不该顺手选中一颗点）。 */
+  const hitRoot = zrender.painter.getViewportRoot() || el.value
+  if (hitRoot) {
+    /* zrender 的事件管线（normalizeEvent → clientToLocal）只认 offsetX，并不知道祖上有 CSS zoom；
+       但它看到 `e.zrX != null` 就直接采用现成坐标。捕获阶段先把 DOM 坐标折回逻辑 px 写进
+       zrX/zrY，命中、hover 光标、平移拖拽、滚轮缩放、tooltip 一次全治，不用逐个 handler 打补丁。
+       （捕获监听挂在同一个 viewport 元素上，先于 zrender 自己注册的冒泡监听执行。） */
+    const stampZrPoint = (ev: Event) => {
+      const scale = zrZoomScale(instance, hitRoot)
+      if (Math.abs(scale - 1) < 1e-3) return
+      type ZrStamped = Event & { zrX?: number; zrY?: number; zrDelta?: number; which?: number; wheelDelta?: number; detail?: number; button?: number }
+      const target = ev as ZrStamped
+      if (target.zrX != null) return
+      const touch = (ev as TouchEvent).changedTouches?.[0] ?? (ev as TouchEvent).touches?.[0]
+      const clientX = touch ? touch.clientX : (ev as MouseEvent).clientX
+      const clientY = touch ? touch.clientY : (ev as MouseEvent).clientY
+      if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return
+      const rect = hitRoot.getBoundingClientRect()
+      target.zrX = (clientX - rect.left) / scale
+      target.zrY = (clientY - rect.top) / scale
+      /* ⚠ 预置 zrX 会让 zrender 的 normalizeEvent 直接早退，跳过它本来要算的两项，
+         必须在这里补齐（2026-11-09 实测：不补 zrDelta → wheelDelta 变 undefined →
+         ECharts 只会取 1/factor，滚轮往哪边滚都变成「缩小」）：
+         ① zrDelta：滚轮方向/幅度（Handler.makeEventPacket 把它映射成 wheelDelta）；
+         ② which：按键号（RoamController 用它区分中键/右键拖拽）。 */
+      if (target.zrDelta == null && (ev.type === 'wheel' || ev.type === 'mousewheel')) {
+        const raw = target.wheelDelta
+        let delta = raw
+        if (!delta) {
+          const dx = (ev as WheelEvent).deltaX
+          const dy = (ev as WheelEvent).deltaY
+          if (dx != null && dy != null) {
+            const magnitude = dy !== 0 ? Math.abs(dy) : Math.abs(dx)
+            const sign = dy > 0 ? -1 : dy < 0 ? 1 : dx > 0 ? -1 : 1
+            delta = 3 * magnitude * sign
+          }
+        }
+        target.zrDelta = delta ? delta / 120 : -(target.detail || 0) / 3
+      }
+      if (
+        target.which == null &&
+        target.button !== undefined &&
+        /^(?:mouse|pointer|contextmenu|drag|drop)|click/.test(ev.type)
+      ) {
+        const button = target.button
+        target.which = button & 1 ? 1 : button & 2 ? 3 : button & 4 ? 2 : 0
+      }
+    }
+    for (const type of ZR_POINTER_EVENTS) hitRoot.addEventListener(type, stampZrPoint, true)
+    let pressX = 0
+    let pressY = 0
+    let pressed = false
+    let lastTouchAt = 0
+    const onPress = (ev: MouseEvent) => {
+      pressed = true
+      pressX = ev.clientX
+      pressY = ev.clientY
+    }
+    const onClick = (ev: MouseEvent) => {
+      const moved = pressed && Math.hypot(ev.clientX - pressX, ev.clientY - pressY) > CLICK_SLOP
+      pressed = false
+      if (ev.button !== 0 || roaming || moved) return
+      /* 触摸端：zrender 已在 touchend 里自己合成过一次 click（走的是上面 zrender 那条分支），
+         浏览器随后还会补派一个 DOM click——同一边点两遍会把「选中」又切回去。 */
+      if (Date.now() - lastTouchAt < TOUCH_CLICK_GUARD_MS) return
+      const rect = hitRoot.getBoundingClientRect()
+      /* 同 zrender 那条：DOM 坐标是放大后的 CSS px，先折回逻辑 px 再比对节点像素坐标 */
+      const scale = zrZoomScale(instance, hitRoot)
+      const node = symbolAtPixel((ev.clientX - rect.left) / scale, (ev.clientY - rect.top) / scale)
+      if (!node) return
+      ev.stopImmediatePropagation()
+      selectNode(node)
+    }
+    const onTouch = () => {
+      lastTouchAt = Date.now()
+    }
+    hitRoot.addEventListener('mousedown', onPress, true)
+    hitRoot.addEventListener('click', onClick, true)
+    hitRoot.addEventListener('touchstart', onTouch, true)
+  }
 }
 
 onMounted(() => {
@@ -763,6 +1015,10 @@ onMounted(() => {
     if (isNarrow.value !== lastNarrow) {
       lastNarrow = isNarrow.value
       render()
+    } else if (!userRoamed) {
+      /* 画布尺寸变了：沿用旧 center/zoom 会让图漂出画布
+         （实测 3840→1920 后节点包围盒变成 [-374,-560,359,342]），重新等比取景 */
+      fitGraphView()
     }
   })
   if (el.value) ro.observe(el.value)
@@ -786,7 +1042,13 @@ function zoomBy(factor: number) {
   applyZoomLabels()
 }
 
-defineExpose({ zoomBy, resetView: () => fitGraphView(48) })
+defineExpose({
+  zoomBy,
+  resetView: () => {
+    userRoamed = false
+    fitGraphView(48)
+  }
+})
 </script>
 
 <style scoped>

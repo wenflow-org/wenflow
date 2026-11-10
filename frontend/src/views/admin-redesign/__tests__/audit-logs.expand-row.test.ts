@@ -4,6 +4,8 @@
  * 1) 「旋转后大小不对了」——展开时 rotate(90deg) 原先挂在 <td class="log-arrow"> 上：格子是
  *    36×41.4 的非正方盒，旋转后外接盒实测变 42.1×36（横向撑出列 6px、纵向缩 5px），字形还因为
  *    绕格心而非自身中心旋转右移约 10px。现改转内层 1em 正方盒（.log-arrow__i）。
+ *    2026-11-09 审计（图 6）：那枚缩小深灰 ▸ 连表头都没有，已整列换成带「详情」表头的
+ *    操作列 + 行内真按钮（aria-expanded），箭头相关的白盒锁随实现一并退役。
  * 2) 「文案位置不对」——展开区口径行原为 justify-content: space-between，把客户端 UA 甩到
  *    块右缘（实测请求行止于 x=1211、UA 起于 x=1748），与它描述的请求行脱开 536px。
  *
@@ -97,26 +99,13 @@ describe('审计日志展开行：箭头旋转与展开区口径行位置', () =
     window.scrollTo = vi.fn();
   });
 
-  it('旋转的是内层 1em 正方盒，不是 36×41 的整格（转整格会改外接盒尺寸）', () => {
-    // 正方盒：1em × 1em + 字形居中，绕自身中心旋转外接盒不变
-    const inner = block(SRC, '.log-arrow__i');
-    expect(inner).toContain('width: 1em');
-    expect(inner).toContain('height: 1em');
-    expect(inner).toContain('justify-content: center');
-    // 旋转挂在内层
-    expect(block(SRC, '.log-tr--open .log-arrow__i')).toContain('rotate(90deg)');
-    // 整格不得再带旋转（回归点：36×41.4 非正方格旋转后外接盒变 42.1×36）
-    expect(block(SRC, '.log-tr--open .log-arrow')).toBe('');
-    expect(block(SRC, '.log-arrow')).not.toContain('transform');
-  });
-
-  it('箭头格水平内衬清零（36px 格里留 16px 内衬 → 内容盒 4px，居中退化成左对齐、箭头偏右）', () => {
-    const cell = block(SRC, '.log-arrow');
-    expect(cell).toContain('padding-left: 0');
-    expect(cell).toContain('padding-right: 0');
-    expect(cell).toContain('text-align: center');
-    // 定宽列不许动（表头空列宽度靠它）
-    expect(cell).toContain('width: 36px');
+  it('箭头列已退役：不再有 .log-arrow / .log-arrow__i 的死样式（2026-11-09 图 6）', () => {
+    // 整列换成带「详情」表头的操作列后，箭头相关的样式必须一并删除（否则是死 CSS）
+    expect(block(SRC, '.log-arrow')).toBe('');
+    expect(block(SRC, '.log-arrow__i')).toBe('');
+    expect(SRC).not.toContain('.log-arrow');
+    // 末列不再用 36px 的 aria-hidden 空表头
+    expect(SRC).not.toContain('th:last-child { width: 36px');
   });
 
   it('展开区口径行左对齐顺排（UA 不再被甩到块右缘）', () => {
@@ -126,18 +115,21 @@ describe('审计日志展开行：箭头旋转与展开区口径行位置', () =
     expect(meta).toContain('flex-wrap: wrap'); // 长请求行 + 长 UA 时 UA 折行，不撑破块
   });
 
-  it('展开后：箭头内层盒在格内、口径行把 UA 紧跟在请求行后（带分隔点）', async () => {
+  it('展开后：操作列有可见「详情」按钮（aria-expanded），口径行把 UA 紧跟在请求行后（带分隔点）', async () => {
     const w = await mountAudit();
     const tr = w.find('tr.log-tr');
     await tr.trigger('click');
     await nextTick();
 
-    // 箭头：外层格仍是 36px 定宽列，旋转目标在内层
-    const cell = w.find('td.log-arrow');
-    expect(cell.exists()).toBe(true);
-    const inner = cell.find('.log-arrow__i');
-    expect(inner.exists()).toBe(true);
-    expect(inner.text()).toBe('▸');
+    // 2026-11-09 审计（图 6）：末列从 aria-hidden 的深灰 ▸ 换成带「详情」表头、行内真按钮。
+    // 表头须是可读的「详情」，按钮 aria-expanded 指向本行详情区。
+    const header = w.findAll('th').find((th) => th.text().trim() === '详情');
+    expect(header?.exists()).toBe(true);
+    const btn = w.find('.al-table .mk-actions button.mk-link');
+    expect(btn.exists()).toBe(true);
+    expect(btn.text()).toBe('收起');
+    expect(btn.attributes('aria-expanded')).toBe('true');
+    expect(btn.attributes('aria-controls')).toBe('audit-payload-a1');
 
     // 口径行：请求行 + 带分隔点的 UA，同序相邻（位置由 flex-start 保证，不再靠 space-between）
     const meta = w.find('.log-payload-meta');

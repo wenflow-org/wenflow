@@ -4,14 +4,18 @@
        撤掉按用途分的页签与「建议归入向量/重排」的判词，清单原样列出——能勾的勾、已添加的置灰。
        2026-11-05 用户「连接设置和添加模型合并到一起吧，只保留添加模型」：
        对话卡的连接（地址 / 密钥 / 重试 / RPM / 重置）搬到本弹窗顶部的 conn 槽里，
-       卡头不再另挂一个「连接设置」入口——一次弹窗既配连接又选模型。 -->
+       卡头不再另挂一个「连接设置」入口——一次弹窗既配连接又选模型。
+       2026-11-09 用户走查（图 2）：满屏绿色「可添加」既没有信息量（整列同值），
+       又和「已添加」的真相打架（已挂上的模型仍显示可添加、还能重复勾）。
+       现在：默认只看「未添加」，中间列改成**预判标签**（标签按名字预判，与本弹窗原有的
+       底部说明同一口径），全选移到表头第一列，底部只留手动录入 + 已选数 + 两个按钮。
+       注：2026-11-04 撤过一版「能力特性」列，那时是拿它当**事实**列在清单里；
+       这次的「预判标签」是同一个推断函数，但列头就写明是预判，只服务「这行是什么模型」。 -->
   <Teleport v-if="open" to="body">
     <div ref="maskRef" class="mk-modal">
       <div ref="panelRef" class="mk-modal__panel pmd" role="dialog" aria-modal="true" :aria-label="title">
         <div class="mk-modal__head">
-          <div class="pmd-head">
-            <h3 class="mk-modal__title">{{ title }}</h3>
-          </div>
+          <h3 class="mk-modal__title">{{ title }}</h3>
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="close">✕</button>
         </div>
 
@@ -20,29 +24,54 @@
             <input
               v-model="query"
               class="mk-field__input pmd-filter"
-              :placeholder="`搜索模型名称或厂商…`"
+              placeholder="搜索模型名称或厂商…"
               aria-label="搜索模型"
               autocomplete="off"
             />
+            <!-- 添加状态（2026-11-09）：默认只看未添加——省掉整列同值的绿标签，
+                 也免得已挂上的模型在「全部」里被再勾一次。计数是清单规模，不随搜索变。
+                 键盘契约同 MkSubTabs：方向键在页签间移动并切换、roving tabindex、Home/End。 -->
+            <div class="mk-seg pmd-view" role="tablist" aria-label="按添加状态筛选" @keydown="onViewKeydown">
+              <button
+                v-for="(v, i) in viewOptions"
+                :key="v.key"
+                :ref="(el) => setViewRef(el, i)"
+                type="button"
+                class="mk-seg__item"
+                role="tab"
+                :aria-selected="view === v.key"
+                :tabindex="view === v.key ? 0 : -1"
+                :class="{ 'mk-seg__item--active': view === v.key }"
+                @click="view = v.key"
+              >{{ v.label }}</button>
+            </div>
             <!-- 清单是「这次拉取」的快照：改了连接就重拉（2026-11-05 合并弹窗后，
                  重拉与改连接同处一屏，不再需要回卡头找入口） -->
             <button
               type="button"
-              class="mk-btn mk-btn--sm"
+              class="mk-btn mk-btn--sm pmd-refetch"
               :disabled="loading"
               @click="emit('refetch')"
             >{{ loading ? '拉取中…' : models.length ? '重新获取' : '获取模型' }}</button>
           </div>
 
-          <!-- 没有「能力特性」列（2026-11-04 用户「能力特性我们也不知道吧，这个列表并不能获取这些」）：
-               `/v1/models` 只回模型 id，按名字猜出来的能力摆在这里等同平台假装知道。
-               引入时按名字预判一版写库（2026-11-07 用户「砍掉」了引入后的逐项确认层），
-               要精修去该行的「配置」——那里才是能力与参数的正经编辑器。 -->
-          <div class="pmd-cols" aria-hidden="true">
-            <span></span>
+          <div class="pmd-cols">
+            <!-- 全选移到表头（2026-11-09 用户「把右下角那句全选移回表头第一列」）：
+                 点表头勾即全选当前列表里**可添加**的行 -->
+            <label class="pmd-cols__pick" :title="allPickTitle">
+              <input
+                type="checkbox"
+                :checked="allVisibleSelected"
+                :indeterminate="someVisibleSelected && !allVisibleSelected"
+                :disabled="!selectableVisibleRows.length"
+                :aria-label="allPickTitle"
+                @change="toggleAll"
+              />
+            </label>
             <span>模型标识</span>
-            <span>状态</span>
-            <span></span>
+            <span>预判标签</span>
+            <span>连通状态</span>
+            <span class="pmd-cols__act">操作</span>
           </div>
           <div class="pmd-list" :class="{ 'pmd-list--stale': stale && !loading }">
             <p v-if="loading" class="pmd-empty">正在向上游拉取模型清单…</p>
@@ -61,36 +90,37 @@
                     type="checkbox"
                     :value="row.id"
                     :disabled="!row.selectable"
+                    :aria-label="`选择 ${row.id}`"
                   />
                   <span class="pmd-row__name">
                     <span class="mono pmd-row__id" :title="row.id">{{ row.id }}</span>
+                    <span v-if="row.display" class="pmd-row__alias" :title="row.display">{{ row.display }}</span>
                   </span>
                 </label>
-                <span class="pmd-row__status">
-                  <span v-if="row.added" class="mk-badge mk-badge--muted">已添加</span>
-                  <span v-else class="mk-badge mk-badge--ok">可添加</span>
+                <span class="pmd-row__tags">
+                  <!-- 已添加只在「已添加 / 全部」两个视图里出现：未添加视图里本行不存在 -->
+                  <span v-if="row.added" class="mk-badge mk-badge--muted mk-badge--sm">已添加</span>
+                  <span v-for="tag in row.tags" :key="tag" class="mk-badge mk-badge--muted mk-badge--sm">{{ tag }}</span>
+                </span>
+                <span class="pmd-row__res" :class="resClass(row.id)" :title="results[row.id]?.text">
+                  <template v-if="results[row.id]">{{ results[row.id].ok ? `已连通 · ${results[row.id].latency}` : '连接失败' }}</template>
+                  <span v-else class="mk-na">—</span>
                 </span>
                 <span v-if="providerId || tester" class="pmd-row__probe">
                   <button
                     type="button"
-                    class="mk-link mk-link--hold pmd-row__test"
+                    class="mk-link pmd-row__test"
                     :disabled="!!testing"
                     @click="runTest(row.id)"
                   >{{ testing === row.id ? '测试中…' : '测试' }}</button>
-                  <span
-                    v-if="results[row.id]"
-                    class="pmd-row__res"
-                    :class="results[row.id].ok ? 'is-ok' : 'is-bad'"
-                    :title="results[row.id].text"
-                  >{{ results[row.id].ok ? `已连通 · ${results[row.id].latency}` : '连接失败' }}</span>
-                  <span v-else class="pmd-row__res" aria-hidden="true"></span>
                 </span>
+                <span v-else class="pmd-row__probe"><span class="mk-na">—</span></span>
               </div>
               <p v-if="!visibleRows.length" class="pmd-empty">{{ emptyMessage }}</p>
             </template>
           </div>
 
-          <div class="pmd-hint">
+          <div v-if="hint || hiddenCount" class="pmd-hint">
             <span class="pmd-hint__left">
               <span v-if="hint">{{ hint }}</span>
               <!-- 宿主按用途筛过清单时（向量 / 重排卡）给一条「看全部」的退路：
@@ -103,16 +133,6 @@
                 @click="emit('showAll')"
               >显示全部模型（{{ models.length + hiddenCount }}）</button>
             </span>
-            <label v-if="selectableVisibleRows.length" class="pmd-all">
-              <input
-                type="checkbox"
-                :checked="allVisibleSelected"
-                :indeterminate="someVisibleSelected && !allVisibleSelected"
-                :disabled="!selectableVisibleRows.length"
-                @change="toggleAll"
-              />
-              <span>全选当前可添加的 {{ selectableVisibleRows.length }} 个模型</span>
-            </label>
           </div>
         </div>
 
@@ -125,7 +145,7 @@
           <button
             type="button"
             class="mk-btn mk-btn--primary"
-            :disabled="!selected.length || loading || (stale && !selected.length)"
+            :disabled="!selected.length || loading"
             @click="confirm"
           >确认引入</button>
         </div>
@@ -142,14 +162,23 @@ import { useMaskClose, useOverlay } from './useOverlay'
 import { errMsg } from './live'
 import {
   hasReadableName,
+  inferModelCapabilities,
+  inferenceLabels,
   readableModelName,
 } from './modelCapabilityInference'
+
+/** 清单视图：默认「未添加」（2026-11-09 用户走查） */
+type PickerView = 'missing' | 'added' | 'all'
+
+const ROLE_LABEL: Record<string, string> = { embedding: '向量', rerank: '重排', image: '图像' }
 
 interface PickerRow {
   id: string
   display: string
   added: boolean
   selectable: boolean
+  /** 预判标签：非对话模型给用途（向量 / 重排 / 图像），对话模型给能力（思考 / 视觉…） */
+  tags: string[]
 }
 
 const props = withDefaults(defineProps<{
@@ -159,7 +188,7 @@ const props = withDefaults(defineProps<{
   models: string[]
   /** 已登记进模型清单的 id：这些行只读标记「已添加」 */
   registered: string[]
-  /** 弹窗标题：对话卡「添加模型」/ 向量卡「添加向量模型」… */
+  /** 弹窗标题：对话卡「添加对话模型」/ 向量卡「添加向量模型」… */
   title?: string
   /** 清单正在重新拉取（宿主在「获取模型」时置位）：列表区给进度，不给一份过期清单 */
   loading?: boolean
@@ -211,6 +240,7 @@ const emit = defineEmits<{
 
 const open = ref(false)
 const query = ref('')
+const view = ref<PickerView>('missing')
 const selected = ref<string[]>([])
 /** 正在测试的模型 id（同一时刻只跑一个：串行避免一把把上游打满） */
 const testing = ref('')
@@ -220,6 +250,16 @@ const maskRef = ref<HTMLElement | null>(null)
 const panelRef = ref<HTMLElement | null>(null)
 
 const registeredSet = computed(() => new Set(props.registered))
+
+/** 预判标签（只服务「这行是什么模型」，不是落库事实）：
+    非对话模型给用途，对话模型给能力；两者都判不出时给「对话」，免得单元格空着像没数据。 */
+function tagsOf(id: string): string[] {
+  const inference = inferModelCapabilities(id)
+  const role = ROLE_LABEL[inference.role]
+  if (role) return [role]
+  const caps = inferenceLabels(inference)
+  return caps.length ? caps : ['对话']
+}
 
 const rows = computed<PickerRow[]>(() => {
   const list = props.models.map((id) => {
@@ -231,26 +271,42 @@ const rows = computed<PickerRow[]>(() => {
       added,
       // 只有「已添加」勾不动；不再按模型角色判断能不能加（2026-11-04）
       selectable: !added,
+      tags: tagsOf(id),
     }
   })
   /* 已添加的行沉到末尾：首屏先给还没挂上的，sort 稳定，同组内保持上游原序。 */
   return list.sort((a, b) => Number(b.selectable) - Number(a.selectable))
 })
 
+/** 三个视图的计数用整份清单（不随搜索变），否则打字时数字乱跳 */
+const viewOptions = computed<Array<{ key: PickerView; label: string }>>(() => {
+  const added = rows.value.filter((r) => r.added).length
+  return [
+    { key: 'missing', label: `未添加 (${rows.value.length - added})` },
+    { key: 'added', label: `已添加 (${added})` },
+    { key: 'all', label: `全部 (${rows.value.length})` },
+  ]
+})
+
 const visibleRows = computed(() => {
+  const inView = rows.value.filter((row) =>
+    view.value === 'all' ? true : view.value === 'added' ? row.added : !row.added
+  )
   const q = query.value.trim().toLowerCase()
-  if (!q) return rows.value
-  return rows.value.filter((row) => row.id.toLowerCase().includes(q) || row.display.toLowerCase().includes(q))
+  if (!q) return inView
+  return inView.filter((row) => row.id.toLowerCase().includes(q) || row.display.toLowerCase().includes(q))
 })
 
 const selectableVisibleRows = computed(() => visibleRows.value.filter((row) => row.selectable))
 
-/** 空列表只有两种缘由：搜索无果，或者上游一个都没返回 / 都已经挂上了。
+/** 空列表的缘由分四种：搜索无果 / 上游没回 / 当前视图下都挂上了 / 宿主自己筛过。
     宿主自己筛过清单时，它给的那句更准（是筛空了还是本来就没有）。 */
 const emptyMessage = computed(() => {
   if (query.value.trim()) return '没有匹配的模型'
   if (!props.models.length) return props.emptyText || '这次没有拉取到模型'
-  return '上游模型都已添加'
+  if (view.value === 'missing') return '上游模型都已添加'
+  if (view.value === 'added') return '还没有已添加的模型'
+  return props.emptyText || '这次没有拉取到模型'
 })
 const allVisibleSelected = computed(() =>
   selectableVisibleRows.value.length > 0
@@ -259,6 +315,39 @@ const allVisibleSelected = computed(() =>
 const someVisibleSelected = computed(() =>
   selectableVisibleRows.value.some((row) => selected.value.includes(row.id))
 )
+const allPickTitle = computed(() =>
+  selectableVisibleRows.value.length
+    ? `全选当前可添加的 ${selectableVisibleRows.value.length} 个模型`
+    : '当前列表没有可添加的模型'
+)
+
+/* 分段控件的键盘落点（与 MkSubTabs 同一套判据）：roving tabindex + 方向键/Home/End。 */
+const viewEls = ref<(HTMLButtonElement | null)[]>([])
+function setViewRef(el: unknown, i: number): void {
+  viewEls.value[i] = (el as HTMLButtonElement) || null
+}
+function activateView(i: number): void {
+  const opt = viewOptions.value[i]
+  if (!opt) return
+  view.value = opt.key
+  // 焦点跟随选中（ARIA tabs 的 manual 激活惯例）
+  requestAnimationFrame(() => viewEls.value[i]?.focus())
+}
+function onViewKeydown(e: KeyboardEvent): void {
+  const keys = ['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp', 'Home', 'End']
+  if (!keys.includes(e.key)) return
+  const n = viewOptions.value.length
+  if (!n) return
+  const cur = viewOptions.value.findIndex((o) => o.key === view.value)
+  const from = cur >= 0 ? cur : 0
+  let next = from
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (from + 1) % n
+  else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (from - 1 + n) % n
+  else if (e.key === 'Home') next = 0
+  else if (e.key === 'End') next = n - 1
+  e.preventDefault()
+  activateView(next)
+}
 
 function toggleAll(): void {
   const ids = selectableVisibleRows.value.map((row) => row.id)
@@ -269,9 +358,17 @@ function toggleAll(): void {
   }
 }
 
+function resClass(id: string): string[] {
+  const r = results.value[id]
+  if (!r) return []
+  return [r.ok ? 'is-ok' : 'is-bad']
+}
+
 function openWith(): void {
   selected.value = []
   query.value = ''
+  // 每次开窗都回「未添加」：默认视图是「这次能挂什么」（2026-11-09）
+  view.value = 'missing'
   results.value = {}
   testing.value = ''
   open.value = true
@@ -327,29 +424,35 @@ defineExpose({ openWith, isOpen: () => open.value })
 </script>
 
 <style scoped>
-.pmd.mk-modal__panel { width: min(980px, 96vw); max-width: none; }
-.pmd-head { display: grid; gap: 2px; min-width: 0; }
+.pmd.mk-modal__panel { width: min(1040px, 96vw); max-width: none; }
 .pmd-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 14px;
+  gap: 12px;
   flex-wrap: wrap;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--mk-line);
 }
-.pmd-filter { width: 320px; }
+.pmd-filter { width: 280px; }
 /* 搜索框：撤掉浏览器原生那圈粗蓝 outline（与外层输入框边框叠成双层框），
    焦点改用本站口径——描边变蓝（2026-11-07 用户「把搜索框那圈粗大的原生蓝色 outline 焦点框去掉」） */
 .pmd-filter:focus-visible { outline: none; border-color: var(--mk-blue); }
+.pmd-view { flex: none; }
+/* 拉取按钮靠右（分段与搜索留在左半：它们是同一次挑选的两步） */
+.pmd-refetch { margin-left: auto; flex: none; }
 .pmd-cols {
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) 132px 92px;
+  grid-template-columns: 26px minmax(0, 1fr) 240px 104px 64px;
   gap: 12px;
+  align-items: center;
   padding: 10px 12px 6px;
   color: var(--mk-faint);
   font-size: var(--mk-fs-micro);
 }
+.pmd-cols__pick { display: inline-flex; align-items: center; cursor: pointer; }
+.pmd-cols__pick input { cursor: pointer; }
+.pmd-cols__pick input:disabled { cursor: default; }
+.pmd-cols__act { text-align: right; }
 .pmd-list {
   max-height: 44vh;
   overflow-y: auto;
@@ -358,7 +461,7 @@ defineExpose({ openWith, isOpen: () => open.value })
 }
 .pmd-row {
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) 132px 92px;
+  grid-template-columns: 26px minmax(0, 1fr) 240px 104px 64px;
   align-items: center;
   gap: 12px;
   min-height: 46px;
@@ -373,7 +476,7 @@ defineExpose({ openWith, isOpen: () => open.value })
 @media (max-width: 900px) {
   .pmd-cols { display: none; }
   .pmd-row { grid-template-columns: 26px minmax(0, 1fr); }
-  .pmd-row__status, .pmd-row__probe { grid-column: 2; }
+  .pmd-row__tags, .pmd-row__res, .pmd-row__probe { grid-column: 2; }
 }
 .pmd-row__pick {
   display: contents;
@@ -381,17 +484,18 @@ defineExpose({ openWith, isOpen: () => open.value })
 }
 .pmd-row--off .pmd-row__pick { cursor: default; }
 .pmd-row__name { display: grid; gap: 1px; min-width: 0; }
-.pmd-row__status { display: flex; }
-.pmd-row__probe { display: inline-flex; align-items: center; gap: 8px; justify-content: flex-end; }
-.pmd-row__test { width: 32px; flex: none; font-size: var(--mk-fs-micro); text-align: left; }
+.pmd-row__alias { color: var(--mk-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 预判标签：可能 2~3 枚（思考 / 视觉 / 代码），允许折行但行高仍受 46px 约束 */
+.pmd-row__tags { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; min-width: 0; }
+.pmd-row__probe { display: inline-flex; align-items: center; justify-content: flex-end; }
+.pmd-row__test { flex: none; font-size: var(--mk-fs-micro); }
 .pmd-row__test:disabled { opacity: 0.55; cursor: default; }
 .pmd-row__res {
-  width: 92px;
-  flex: none;
   font-size: var(--mk-fs-micro);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .pmd-row__res.is-ok { color: var(--mk-green); }
 .pmd-row__res.is-bad { color: var(--mk-red); font-weight: 600; }
@@ -420,16 +524,8 @@ defineExpose({ openWith, isOpen: () => open.value })
   color: var(--mk-muted);
   font-size: var(--mk-fs-micro);
 }
-/* 说明与「显示全部」并排：两者之间要有缝，否则读成一句「…显示全部全选当前可添加的 5 个」 */
+/* 说明与「显示全部」并排：两者之间要有缝，否则读成一句「…显示全部…」 */
 .pmd-hint__left { display: inline-flex; align-items: center; gap: 4px 12px; flex-wrap: wrap; min-width: 0; }
-.pmd-all {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--mk-muted);
-  font-size: var(--mk-fs-micro);
-  cursor: pointer;
-}
 .pmd-foot { align-items: center; gap: 10px; }
 .pmd-manual { margin-right: auto; font-size: var(--mk-fs-micro); }
 .pmd-foot__count { color: var(--mk-muted); font-size: var(--mk-fs-micro); }

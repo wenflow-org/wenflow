@@ -687,8 +687,18 @@
             <!-- 说明只在有会话时出：没有会话就没有可按天看的读数，此时只留空态给下一步 -->
             <p class="vp-timeline__hint">
               按自然日汇总所选运行的学习负担、学习状态、系统干预与难度调整。
+              推进日期由本卡直接操作（推进并上课会真实消耗 AI 调用）。
             </p>
-            <DayTimeline v-if="timelineSessionId" :session-id="timelineSessionId" :from="0" :to="29" readonly />
+            <!-- 2026-11-09：取消 readonly——这里原来是全站唯一的使用点却传了只读，
+                 使后端已有的推进/推进并上课/自动推进/重置全部没有 UI 入口（跨日链路不可达）。
+                 @changed 用于推进后立刻重载详情，让画像/指标反映新的模拟日。 -->
+            <DayTimeline
+              v-if="timelineSessionId"
+              :session-id="timelineSessionId"
+              :from="0"
+              :to="29"
+              @changed="onTimelineChanged"
+            />
           </template>
         </section>
 
@@ -1860,6 +1870,14 @@ let loadSeq = 0
 
 /** 故事池重试：只重跑详情加载（quiet 不清屏），失败态可反复点 */
 function retryStories() {
+  const id = subPage.value?.id
+  if (id) void loadDetail(id, true)
+}
+
+/** 日期模拟推进/重置后：静默重载详情。
+ *  必要性（2026-11-09 跨日核查）：管理端详情的画像与指标读链已按实例模拟钟取数，
+ *  推进后必须重拉才能看到新模拟日的四读数/概念状态；不重载会停留在推进前的画面。 */
+function onTimelineChanged() {
   const id = subPage.value?.id
   if (id) void loadDetail(id, true)
 }
@@ -3486,7 +3504,7 @@ async function quietReload(id: string) {
   cursor: pointer;
   border-radius: var(--mk-radius-xs);
 }
-.vp-story__title:hover { color: var(--mk-blue); }
+.vp-story__title:hover { color: var(--mk-blue-text); }
 .vp-story__title:focus-visible { outline: 2px solid var(--mk-blue); outline-offset: 1px; }
 .vp-story__budget-badge {
   font-size: var(--mk-fs-micro);

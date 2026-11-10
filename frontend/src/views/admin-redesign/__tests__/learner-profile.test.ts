@@ -134,8 +134,9 @@ describe('normalizeLearnerTab（6 tab → 3 tab 深链重定向）', () => {
   });
 });
 
-describe('memoryReviewUrl（跨组件深链契约，2026-10-12 独立页退役后直发学习者详情「记忆调度」页签）', () => {
-  it('落学习者详情记忆调度页签（view=learner + id + tab=memory-ops）', () => {
+describe('memoryReviewUrl（跨组件深链契约，2026-10-12 独立页退役后直发学习者详情「记忆与调度」页签）', () => {
+  // 2026-11-09 页签裁并：?tab=memory-ops 作为旧深链别名保留，normalizeLdTab 回落合并后的 memory 页签。
+  it('落学习者详情记忆与调度页签（view=learner + id + tab=memory-ops，旧深链别名）', () => {
     expect(memoryReviewUrl('u-123')).toBe('/admin/learner-state?view=learner&id=u-123&tab=memory-ops');
   });
 

@@ -54,8 +54,8 @@
   color: var(--mk-ink);
 }
 /* 选中行：主色粗体 + 右侧勾。不靠底色区分——hover 也会给底色，两个通道会打架 */
-.mk-listbox-opt.is-selected { color: var(--mk-blue); font-weight: 700; }
-.mk-listbox-opt.is-selected > svg { flex: none; color: var(--mk-blue); }
+.mk-listbox-opt.is-selected { color: var(--mk-blue-text); font-weight: 700; }
+.mk-listbox-opt.is-selected > svg { flex: none; color: var(--mk-blue-text); }
 .mk-listbox-opt__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 .mk-pillselect__menu { max-width: 320px; }

@@ -67,6 +67,7 @@ function makeConv(i: number, overrides: Record<string, unknown> = {}) {
     description: `目标摘要 ${i}`,
     collectedData: '{}',
     learningPathId: i % 2 === 0 ? `path-${i}` : null,
+    learningPathTitle: i % 2 === 0 ? `周报自动化路径 ${i}` : null,
     createdAt: '2026-08-01T10:00:00',
     updatedAt: '2026-08-10T10:00:00',
     completedAt: null,
@@ -465,44 +466,60 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     expect(opt('进行中')).toBe('进行中（40）');
     expect(opt('已完成')).toBe('已完成（0）');
     expect(opt('已取消')).toBe('已取消（0）');
-    expect(opt('全部')).toBe('全部状态');
+    expect(opt('全部')).toBe('全部');
     expect(w.find('.gc-distband').exists()).toBe(false);
   });
 
-  it('行点击进座舱；操作列不再重复「详情」按钮，只保留 ⋯ 溢出菜单', async () => {
+  it('行点击进座舱；操作列露出主操作「详情」，与行点击同一入口', async () => {
     const w = await mountGoals();
     await w.find('tbody tr').trigger('click');
     expect(vi.mocked(openSubPage)).toHaveBeenCalledWith('session-real', 'conv-1');
-    expect(w.findAll('tbody .mk-actions .mk-link')).toHaveLength(0);
+    // 2026-11-09 用户走查：只有孤零零一个 ⋯ 时最常用的详情被藏进二级菜单——
+    // 详情回到一级（与学习路径/复习积压同构），仍与行点击同落一个座舱。
+    // 每行一颗（本组窗口 5 行），不是只给首行
+    const perRow = w.findAll('tbody tr').map((tr) =>
+      tr.findAll('.mk-actions .mk-link').filter((b) => b.text() === '详情')
+    );
+    expect(perRow.every((btns) => btns.length === 1)).toBe(true);
+    vi.mocked(openSubPage).mockClear();
+    await perRow[0][0].trigger('click');
+    expect(vi.mocked(openSubPage)).toHaveBeenCalledWith('session-real', 'conv-1');
     expect(w.findAll('button').some((b) => b.text() === '控制台')).toBe(false);
   });
 
-  /* 2026-11-02 P2-3：菜单项语法与同菜单的「查看路径 / 删除目标对话」不一致（裸「链路」还省了动词），
-     且行点击吸收「详情」后菜单里没有任何同义可见文字——「这行能点开」在界面上无处可读。 */
-  it('⋯ 菜单：动作一律动词短语，留一条与行点击同义的「查看详情」，不写裸「链路」', async () => {
+  it('⋯ 菜单：次级动作一律动词短语，不再重复「查看详情」，不写裸「链路」', async () => {
     const w = await mountGoals();
     const row = w.findAll('tbody tr')[0];
     await row.find('.mk-menu__btn').trigger('click');
     await nextTick();
     const labels = row.findAll('.mk-menu__item').map((b) => b.text());
 
-    expect(labels).toContain('查看详情');
+    // 详情已是一级按钮，菜单不再留同义项（同一动作只说一次）
+    expect(labels).not.toContain('查看详情');
     expect(labels).toContain('查看执行日志');
     expect(labels).not.toContain('链路');
-    // 与行点击同落一个座舱（同一入口的文字版，不是第二套语义）
-    vi.mocked(openSubPage).mockClear();
-    await row.findAll('.mk-menu__item').find((b) => b.text() === '查看详情')!.trigger('click');
-    expect(vi.mocked(openSubPage)).toHaveBeenCalledWith('session-real', 'conv-1');
   });
 
   /* 2026-10-27 用户「这两个按钮也重复吧，本身点这个条目就可以跳进去了」：
-     行点击即详情；路径页签入口收进 ⋯ 菜单。 */
-  it('不再有独立「路径」列或「路径」按钮：路径入口收进 ⋯ 菜单', async () => {
+     行点击即详情；路径页签入口收进 ⋯ 菜单。
+     2026-11-09 走查（图 1）：「未生成路径 2」在列表里指不出是哪 2 条，「学习路径」列回到默认可见
+     （只出「已生成 / 未生成」状态，路径名进 title），⋯ 菜单的「查看路径」仍然保留。 */
+  it('「学习路径」列只出生成状态，路径名不上屏；路径入口仍在 ⋯ 菜单', async () => {
     const w = await mountGoals();
-    expect(w.findAll('thead th').map((t) => t.text())).not.toContain('路径');
-    expect(w.text()).not.toContain('已生成');
+    const ths = w.findAll('thead th').map((t) => t.text());
+    expect(ths).toContain('学习路径');
+    // 路径名（learningPathTitle）不进单元格，只在 title
+    expect(w.text()).not.toContain('周报自动化路径');
     const rows = w.findAll('tbody tr');
-    // makeConv：偶数行有 learningPathId → ⋯ 菜单出现「查看路径」；奇数行没有
+    // makeConv：偶数行有 learningPathId → 已生成；奇数行没有 → 进行中且未生成
+    expect(rows[0].findAll('td')[3].text()).toBe('未生成');
+    expect(rows[1].findAll('td')[3].text()).toBe('已生成');
+    // 已生成是弱化文字（不做徽章：满屏徽章会与「未生成」的警示争视线），路径名进 title
+    expect(rows[1].findAll('td')[3].find('.mk-badge').exists()).toBe(false);
+    expect(rows[1].findAll('td')[3].find('.mk-cell-sub').attributes('title')).toContain('周报自动化路径');
+    // 未生成才是琥珀徽章（KPI「未生成路径 N」逐行对上）
+    expect(rows[0].findAll('td')[3].find('.mk-badge').classes()).toContain('mk-badge--warn');
+
     await rows[1].find('.mk-menu__btn').trigger('click');
     await nextTick();
     expect(rows[1].findAll('.mk-menu__item').map((b) => b.text())).toContain('查看路径');

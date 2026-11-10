@@ -105,7 +105,14 @@ export interface LearnerModelProfile {
   lastUpdated: string;
   
   cognitive: CognitiveProfile;
-  behavioral: BehavioralBaseline;
+  /**
+   * 学习行为基线（平均响应/消息长度/互动间隔/投入度/一致性）。
+   * **无观测时为 null**：EMA 基线数据源已于 2026-08 退役，`fetchBaselineData` 恒返回 null。
+   * 2026-11-09 运营字段真值核查：此前回落到 DEFAULT_BEHAVIORAL 常量，导致所有学员显示同一组
+   * 永远不变的数字；改为 null 语义，前端不渲染该子卡、下游不参与判断。
+   * 若将来实现真实采集（从 teaching_session_messages 计算），直接填值即可，结构不变。
+   */
+  behavioral: BehavioralBaseline | null;
   learning: LearningState;
   preferences: LearningPreferences;
   emotional: EmotionalProfile;
@@ -127,6 +134,16 @@ export interface LearnerModelProfile {
     goalTitle: string;
     completedAt: string | null;
   } | null;
+
+  /**
+   * 认知 / 偏好 / 情绪 / 叙述这组「人设字段」的**采集时点**（最近一次目标对话理解证据的时间）。
+   *
+   * 2026-11-09 画像链路核查确认：这组字段只在目标对话阶段写入，此后的教学表现不会回写
+   * （唯一的例外是 `selfAssessmentAccuracy`，它会被 FSRS 校准结果覆盖）。
+   * 暴露时点是为了让界面能标「来自哪天的目标对话」，避免把旧快照读成当前状态。
+   * 没有做「课后自动刷新人设」——那需要新的推断规则，属产品决策，不做编造式回写。
+   */
+  personaCapturedAt?: string | null;
   
   derivedInsights: {
     learningVelocity: number;
@@ -252,6 +269,16 @@ export interface LearnerBackgroundConceptLedgerItem {
   sourcePaths: string[];
   sourceTasks: string[];
   evidenceCount: number;
+  /**
+   * 数值掌握度（0–1，2026-11-09 补）。
+   *
+   * 三档 familiarity/transferReadiness 只回答「稳不稳」，看不出「0.9 掉到 0.35」这种退化——
+   * 运营页因此只能看到 practiced→practiced。本字段是**测量值**（确定性通道算出，与画像/图谱
+   * 共用 `resolveMasteryScore` 口径：取业务时间最新的证据信号）。模型蒸馏行不带数值，
+   * 合并规则：组内有确定性数值 → 取业务时间最新那条；纯模型行 → 字段缺省
+   * （不写 0：0 表示「测出来是 0」，缺省表示「没测到」）。
+   */
+  masteryScore?: number;
 }
 
 export interface LearnerRecurringConfusion {
@@ -523,31 +550,20 @@ export interface LearnerReplanProjection {
   signal: LearnerReplanSignal;
 }
 
+/**
+ * 个性化配置（**只保留真正被消费的互动参数**）。
+ *
+ * 2026-11-09 画像链路核查：原接口还有 `contentStyle` / `pacing` / `pathAdjustment` 三段，
+ * 全仓没有任何读取方（`generateConfig` 的唯一调用点是 LearnerSnapshotService，它只取
+ * `interaction`），而且其中的绝对阈值（lf>5 / lf>4）与快照的 ACWR 相对判据不同源。
+ * 与其保留「算了没人用、还可能被误读成已生效」的字段，不如从契约里删掉；
+ * 将来若要接入，应以 `dynamicState` 的同一口径为输入，而不是重新造一套阈值。
+ */
 export interface LearnerPersonalizationConfig {
-  contentStyle: {
-    useAnalogies: boolean;
-    detailLevel: 'concise' | 'moderate' | 'detailed';
-    exampleFrequency: 'minimal' | 'moderate' | 'frequent';
-    codeCommentDetail: 'minimal' | 'moderate' | 'extensive';
-  };
-  
-  pacing: {
-    initialDifficulty: 'easy' | 'medium' | 'hard';
-    difficultyProgression: 'slow' | 'moderate' | 'fast';
-    breakFrequency: number;
-    reviewFrequency: 'minimal' | 'moderate' | 'frequent';
-  };
-  
   interaction: {
     hintTiming: 'immediate' | 'delayed' | 'on-request';
     encouragementFrequency: 'low' | 'medium' | 'high';
     challengeFrequency: 'low' | 'medium' | 'high';
-  };
-  
-  pathAdjustment: {
-    compressionThreshold: number;
-    extensionThreshold: number;
-    skipMasteryLevel: number;
   };
 }
 

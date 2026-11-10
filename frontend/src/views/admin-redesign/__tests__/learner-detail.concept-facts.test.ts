@@ -61,3 +61,34 @@ describe('概念分档名：图谱与学习者详情同源', () => {
     expect(Source).toContain("import { CONCEPT_BAND_LABEL } from '@/utils/conceptBands'")
   })
 })
+
+/* 2026-11-09：概念证据密度列表补数值掌握度。
+   三档「迁移就绪 / 误解风险」只回答稳不稳，读不出「0.9 掉到 0.35」这种退化——
+   台账现在带 masteryScore（确定性测量值），列表把它按百分数显示；缺值不显示、不按 0 计。 */
+describe('概念证据密度：数值掌握度与三档标签同屏', () => {
+  it('列表行显示掌握度百分数，并给出「测量值 vs 三档」的悬停说明', () => {
+    expect(Source).toContain('掌握 {{ c.masteryPct }}%')
+    expect(Source).toContain(':title="MASTERY_TOOLTIP"')
+    expect(Source).toContain('const MASTERY_TOOLTIP =')
+    // 说明里要讲清「三档读不出退化」这个动机，否则后人会再删掉
+    expect(Source).toContain('读不出退化幅度')
+  })
+
+  it('缺 masteryScore 时 masteryPct 为 null（不拿 0 冒充「测出来是 0」）', () => {
+    expect(Source).toContain('masteryPct: masteryPctOf(item)')
+    expect(Source).toContain('function masteryPctOf(item: ConceptLedgerItem): number | null')
+    expect(Source).toContain('if (!Number.isFinite(score) || (evidence <= 0 && score <= 0)) return null')
+    // 模板侧用 v-if 判空，null 不渲染胶囊
+    expect(Source).toContain('v-if="c.masteryPct !== null"')
+  })
+
+  /* 2026-11-09 真数据核对（隔离实例 6 个虚拟人 / 10 条台账）：8 条是「0 证据 + 掌握度 0」，
+     按数值直渲染会给出 8 个「掌握 0%」——把「根本没测」说成「测过了、很低」。
+     撤回口子：SSOT 的 0 是「无有效信号」哨兵，与「测出来是 0」不可区分。 */
+  it('0 证据的行不显示掌握度胶囊（0 是哨兵值，不是测量结果）', () => {
+    expect(Source).toContain('evidence <= 0 && score <= 0')
+    expect(Source).toContain('0 条证据的行同样不显示')
+    // 老快照回退走同一口径：0 也不显示
+    expect(Source).toContain('Number(s.masteryScore || 0) > 0 ? Math.round(Number(s.masteryScore) * 100) : null')
+  })
+})

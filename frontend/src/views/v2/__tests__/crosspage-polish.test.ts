@@ -94,10 +94,11 @@ describe('知识图谱：聚拢、取景与选中态', () => {
 
   it('布局稳定后 fitGraphView 自适应取景（48px 安全边距），只在换数据时触发', () => {
     expect(strip(graph)).toContain('function fitGraphView(');
-    expect(strip(graph)).toMatch(/if \(dataChanged\) fitGraphView\(\)/);
+    /* 2026-11-09：换数据时先复位「用户动过视角」标记再取景；纯 resize 走 RO 那条分支 */
+    expect(strip(graph)).toMatch(/if \(dataChanged\) \{\s*userRoamed = false\s*fitGraphView\(\)/);
     expect(graph).toContain('function fitGraphView(padding = 48)');
     /* 画布角落有可点的缩放控件（+/−/⟲），⟲ 回 fitView 初始档 */
-    expect(graph).toContain('defineExpose({ zoomBy, resetView: () => fitGraphView(48) })');
+    expect(strip(graph)).toMatch(/resetView: \(\) => \{\s*userRoamed = false\s*fitGraphView\(48\)/);
   });
 
   it('选中态：非关联节点 0.42、连线 0.3，选中节点只亮蓝描边', () => {
@@ -141,10 +142,26 @@ describe('知识图谱容器与顶距（2026-11-07 走查/二次/三次）：同
     expect(has(rule, /padding:\s*24px 28px 48px/)).toBe(true);
   });
 
-  it('画布高改黄金比例 clamp(520px, 62vh, 680px)：2.5K 下不再拉成竖塔', () => {
-    /* 原先 height="max(floor, calc(100dvh - reserve))" 在 2560×1440 下把画布拉到 ~1200px */
-    expect(km).toContain('height="clamp(520px, 62vh, 680px)"');
-    expect(km, '不许再用视口高度撑满画布').not.toContain('100dvh - var(--km-h-reserve');
+  it('画布高走 flex 自适应（height="100%"），不再按 DPI 推固定像素', () => {
+    /* 2026-11-10 用户裁决「改成自适应」：4K 缩放下 100dvh − 282 这类固定量总会差几像素。
+       现在卡片吃掉剩余高度，链路 .km → .km__main → .km__card → .mk-ge → .mk-ge__card
+       → .mk-ge__body(1fr) → .mk-ge__canvas → .mk-graph(height:100%)，全部 flex。 */
+    expect(km).toContain('height="100%"');
+    expect(km, '不许再按视口减固定像素算画布高').not.toMatch(/height="clamp\(\d+px, calc\(100dvh/);
+    const css = strip(km);
+    for (const sel of ['.km {', '.km__main {', '.km__card {']) {
+      expect(css, `缺少自适应链路节点 ${sel}`).toContain(sel);
+    }
+    expect(css).toMatch(/\.km__card :deep\(\.mk-ge__body\) \{[^}]*grid-template-rows: minmax\(0, 1fr\)/);
+    /* 2026-11-10 用户补一句「不喜欢完全贴底，还是留一点空间」：卡片底边不吃到页脚，
+       桌面档留一档 margin 从剩余高度里扣（页面总高仍=视口，不产生滚动）。 */
+    expect(css).toMatch(/\.km__card \{[^}]*margin-bottom: 2[0-9]px/);
+    /* 2026-11-10 用户走查「放大后会超出边界」：画布盒写死 height:100% 会把图例顶到盒子外
+       （图例压到卡片下沿），放大后的节点于是画到图例底下。画布盒必须是「画布 + 图例」的
+       纵向流，画布用 flex-basis:0 吃剩余高度，并裁掉溢出。 */
+    expect(css, '画布盒不许再写死 height:100%').not.toMatch(/\.km__card :deep\(\.mk-ge__canvas\) \{[^}]*height:\s*100%/);
+    expect(css).toMatch(/\.km__card :deep\(\.mk-graph-wrap\) \{[^}]*flex:\s*1 1 0%/);
+    expect(css).toMatch(/\.km__card :deep\(\.mk-ge__canvas\) \{[^}]*overflow:\s*hidden/);
     const narrow = strip(km).slice(strip(km).indexOf('@media (max-width: 1100px)'));
     expect(narrow, '移动档不该再改画布高度变量（高度已由 prop 的 clamp 统一）').not.toMatch(/--km-h-floor:/);
   });

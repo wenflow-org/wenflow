@@ -139,12 +139,26 @@ describe('listForAdmin 口径（只排除虚拟学习者）', () => {
     usersFindMany.mockResolvedValue([baseUser({ id: 'u-arch', learning_paths: [] })]);
     usersCount.mockResolvedValue(1);
     projectionsFindMany.mockResolvedValue([]);
-    learningPathsFindMany.mockResolvedValueOnce([{ userId: 'u-arch', title: '归档路径' }]);
+    // 回退查询只取 status + milestones.subtasks.status（#205 只展示身份；2026-11-09 顺带带出真实完成度）
+    learningPathsFindMany.mockResolvedValueOnce([
+      {
+        userId: 'u-arch',
+        title: '归档路径',
+        status: 'archived',
+        milestones: [{ subtasks: [{ status: 'completed' }, { status: 'in_progress' }, { status: 'completed' }] }],
+      },
+    ]);
     stubFreshProjections();
 
     const data = await learnerSnapshotRefreshService.listForAdmin({ limit: 50 });
     expect(data.items[0].pathTitle).toBe('归档路径');
     expect(data.items[0].pathId).toBeNull();
+    // 学过但已下线的路径：带出真实进度，前端据此区分「从未开始」与「历史进度」
+    expect(data.items[0].fallbackPath).toEqual({
+      status: 'archived',
+      completedTasks: 2,
+      totalTasks: 3,
+    });
     const { learnerSnapshotService } = jest.requireMock('../LearnerSnapshotService');
     expect(learnerSnapshotService.getSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({ userId: 'u-arch', learningPathId: undefined, mode: 'global' }),

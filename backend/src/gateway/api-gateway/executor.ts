@@ -50,6 +50,28 @@ export function resolveCacheSessionKey(context: ExecutionContext): string {
   }
   return key || 'wenflow-global';
 }
+
+/**
+ * 推导前缀缓存未命中 token 数（2026-11-08）。
+ *
+ * 上游（DeepSeek 新版）常只回 prompt_tokens_details.cached_tokens，**不回** uncached_tokens，
+ * 也不回 OpenAI 旧版的 prompt_cache_miss_tokens——实测 2305/3675 行 miss 为 NULL。
+ * 若只依赖上游的 miss 值，measure-prompt-cache-rate.ts 用 hit/(hit+miss) 会把 NULL 当 0，
+ * 命中率虚报成 100%。故当上游缺 miss 时，用 promptTokens - cached 推导，保证分母恒成立。
+ */
+function deriveCacheMissTokens(response: unknown): number | null {
+  const usage: any = (response as any)?.usage;
+  if (!usage) return null;
+  const missDirect =
+    usage?.prompt_tokens_details?.uncached_tokens ?? usage?.prompt_cache_miss_tokens;
+  if (missDirect != null) return Number(missDirect);
+  const prompt = usage?.prompt_tokens;
+  const hit = usage?.prompt_tokens_details?.cached_tokens ?? usage?.prompt_cache_hit_tokens;
+  if (typeof prompt === 'number' && typeof hit === 'number' && prompt >= hit) {
+    return prompt - hit;
+  }
+  return null;
+}
 interface RequestResult {
   response: ChatResponse;
   statusCode: number;
@@ -952,9 +974,10 @@ export class APIExecutor {
       promptCacheHitTokens: (response as any)?.usage?.prompt_tokens_details?.cached_tokens
         ?? (response as any)?.usage?.prompt_cache_hit_tokens
         ?? null,
-      promptCacheMissTokens: (response as any)?.usage?.prompt_tokens_details?.uncached_tokens
-        ?? (response as any)?.usage?.prompt_cache_miss_tokens
-        ?? null,
+      // 2026-11-07：provider 普遍只回 cached_tokens、不回 uncached_tokens（实测 2305/3675 行 miss 为 NULL），
+      // 用 hit+miss 当分母的脚本会把 miss 缺失当 0，命中率直接虚报成 100%。
+      // 上游没给 miss 时用 prompt_tokens - cached 推导，让命中率的分母恒成立。
+      promptCacheMissTokens: deriveCacheMissTokens(response),
       expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
       metadata: JSON.stringify({
         temperature: request.temperature ?? null,
@@ -971,9 +994,7 @@ export class APIExecutor {
         promptCacheHitTokens: (response as any)?.usage?.prompt_tokens_details?.cached_tokens
           ?? (response as any)?.usage?.prompt_cache_hit_tokens
           ?? null,
-        promptCacheMissTokens: (response as any)?.usage?.prompt_tokens_details?.uncached_tokens
-          ?? (response as any)?.usage?.prompt_cache_miss_tokens
-          ?? null,
+        promptCacheMissTokens: deriveCacheMissTokens(response),
       })
     });
   }

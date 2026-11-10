@@ -52,6 +52,10 @@
           </label>
         </div>
 
+        <!-- 用例被跳过（引用的人设已被删除 / 模拟输入解析失败）：没有结果 ≠ 未通过，
+             把后端给的 reason 原样摆出来，否则运营会去翻根本不存在的字段明细 -->
+        <p v-if="!testResult && testSkipReason" class="pt-skip">本次未执行：{{ testSkipReason }}</p>
+
         <!-- 结果 -->
         <div v-if="testResult" class="pt-result">
           <div class="pt-verdict">
@@ -169,6 +173,10 @@ interface PromptTestResult {
 const testTarget = ref<PromptTestTarget | null>(null)
 const testRunning = ref(false)
 const testResult = ref<PromptTestResult | null>(null)
+/* 用例被跳过时的原因（2026-11-09 运营流程核查）：后端对「引用的虚拟学习者已删除/输入解析失败」
+   的用例走 skipped 通道、results 里没有它——旧实现把「没有结果」当成「未通过」，
+   运营会去查不存在的字段明细。跳过必须说清原因，而不是判失败。 */
+const testSkipReason = ref<string | null>(null)
 const testForm = ref({
   agentId: 'skill:goal-conversation',
   dialogueRounds: 2,
@@ -218,6 +226,7 @@ useEscape(() => !!testTarget.value, () => { testTarget.value = null })
 function open(s: PromptTestTarget) {
   testTarget.value = s
   testResult.value = null
+  testSkipReason.value = null
   testForm.value = { agentId: 'skill:goal-conversation', dialogueRounds: 2, friction: 'normal' }
   void loadPrompt()
 }
@@ -280,12 +289,14 @@ async function runPromptTest() {
   if (!s || testRunning.value) return
   testRunning.value = true
   testResult.value = null
+  testSkipReason.value = null
   const busy = toast.info(`正在测试「${s.name}」…`, 0)
+  const caseId = `pt-${s.id.slice(0, 8)}`
   try {
     const res = await adminPromptOpsApi.runEval({
       agentId: testForm.value.agentId,
       adhocCases: [{
-        id: `pt-${s.id.slice(0, 8)}`,
+        id: caseId,
         name: s.name,
         messages: [],
         expectations: {
@@ -298,9 +309,15 @@ async function runPromptTest() {
       repeatCount: 1,
     })
     const data = res.data?.data ?? res.data
-    testResult.value = data?.results?.[0] || null
+    const results = Array.isArray(data?.results) ? data.results : []
+    testResult.value = results.find((r: { caseId?: string }) => r?.caseId === caseId) ?? results[0] ?? null
+    const skip = Array.isArray(data?.skipped)
+      ? data.skipped.find((x: { caseId?: string }) => x?.caseId === caseId)
+      : undefined
+    testSkipReason.value = testResult.value ? null : String(skip?.reason || '后端未返回本次用例结果')
     toast.close(busy)
     if (testResult.value?.passed) toast.success(`「${s.name}」测试通过`)
+    else if (!testResult.value) toast.warning(`「${s.name}」未执行：${testSkipReason.value}`)
     else toast.warning(`「${s.name}」测试未通过，看字段检查明细`)
   } catch (e) {
     toast.close(busy)
@@ -325,7 +342,7 @@ defineExpose({ open })
 .pt-prompt__title { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); }
 .pt-prompt__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .pt-prompt__state { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.pt-prompt__box > summary { cursor: pointer; font-size: var(--mk-fs-micro); color: var(--mk-blue); list-style: none; width: fit-content; }
+.pt-prompt__box > summary { cursor: pointer; font-size: var(--mk-fs-micro); color: var(--mk-blue-text); list-style: none; width: fit-content; }
 .pt-prompt__box > summary::-webkit-details-marker { display: none; }
 .pt-prompt__box > summary::before { content: '▸'; margin-right: 6px; }
 .pt-prompt__box[open] > summary::before { content: '▾'; }
@@ -345,6 +362,8 @@ defineExpose({ open })
   word-break: break-word;
 }
 .pt-result { display: grid; gap: 10px; }
+/* 跳过提示：与「未通过」区分——中性告警底色，不出现通过/未通过徽标 */
+.pt-skip { margin: 0; padding: 8px 12px; border-radius: var(--mk-radius-xl); border: 1px solid var(--mk-line, #e1e8f2); background: var(--mk-surface); font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .pt-verdict { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .pt-meta { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 /* 输入/输出区 */
