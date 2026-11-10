@@ -514,6 +514,20 @@ class LearningService {
   }
 
   /**
+   * 渐进式设计：只看**最早一个未完成阶段**。未来阶段为空是正常状态（stage N 完成后才设计
+   * N+1），不得当成绩效/重试目标。返回 null=没有未完成阶段；needsDesign=false=当前阶段已有任务。
+   */
+  private async progressiveDesignTarget(pathId: string): Promise<{ id: string; needsDesign: boolean } | null> {
+    const milestone = await prisma.milestones.findFirst({
+      where: { learningPathId: pathId, status: { not: 'completed' } },
+      orderBy: { stageNumber: 'asc' },
+      select: { id: true, subtasks: { select: { id: true }, take: 1 } }
+    });
+    if (!milestone) return null;
+    return { id: milestone.id, needsDesign: milestone.subtasks.length === 0 };
+  }
+
+  /**
    * 单路径自动重试判定与排队（全量测试报告 #52：逐路径独立执行——单条路径的瞬时 DB 故障
    * 不再拖垮整轮轮询；瞬时故障不消耗重试预算、不推进退避档位）。
    * 返回 true=本轮确实发起了重试。
@@ -532,12 +546,19 @@ class LearningService {
     activeGenerationRunId?: string | null;
     updatedAt: Date;
   }): Promise<boolean> {
+    let progressiveTargetId: string | null = null;
+    if (isProgressiveStageDesignEnabled()) {
+      const target = await this.progressiveDesignTarget(path.id);
+      // 当前阶段已有任务或路径已完成 → 不是阶段设计失败；未来阶段留空是渐进语义
+      if (!target || !target.needsDesign) return false;
+      progressiveTargetId = target.id;
+    }
     const generationStatus = parsePathGenerationStatus(await this.getPathTemplateMemoized(path.id, path.updatedAt));
     const activeRun = await getActiveGenerationRun(path.id, path.activeGenerationRunId);
     const retry = resolveGenerationRetry(path.status, generationStatus, activeRun, path.updatedAt);
     const canReplace = retry.allowed && retry.retryType === 'stageDesign';
     const replaceBudgetLeft = (generationStatus?.stageDesignRetryCount || 0) < ENRICHMENT_AUTO_RETRY_DELAYS_MINUTES.length;
-    const useReplace = canReplace && replaceBudgetLeft;
+    const useReplace = !progressiveTargetId && canReplace && replaceBudgetLeft;
 
     // 追加式自愈（两个入口）：
     //  ① replace 不可用（既非 failed 也非 stale）；或
@@ -546,7 +567,9 @@ class LearningService {
     // 生成在途时一律不追加（resolveAppendMilestoneIds 内已判，避免与在途生成重复）。
     let appendMilestoneIds: string[] = [];
     if (!useReplace) {
-      appendMilestoneIds = await this.resolveAppendMilestoneIds(path.id, generationStatus, activeRun, path.updatedAt);
+      appendMilestoneIds = progressiveTargetId
+        ? [progressiveTargetId]
+        : await this.resolveAppendMilestoneIds(path.id, generationStatus, activeRun, path.updatedAt);
       if (appendMilestoneIds.length === 0) return false;
     }
 
@@ -751,7 +774,17 @@ class LearningService {
       throw new Error('学习路径主结构尚未完成，暂不能继续生成阶段任务');
     }
 
-    if (retry.allowed && retry.retryType === 'stageDesign') {
+    // 渐进式设计：未来阶段为空是正常语义，不得触发 replace 全量设计；只看最早未完成阶段。
+    let progressiveTargetId: string | null = null;
+    if (isProgressiveStageDesignEnabled()) {
+      const target = await this.progressiveDesignTarget(path.id);
+      if (!target || !target.needsDesign) {
+        throw new Error('阶段任务已经准备完成，无需重试');
+      }
+      progressiveTargetId = target.id;
+    }
+
+    if (!progressiveTargetId && retry.allowed && retry.retryType === 'stageDesign') {
       const queued = await this.queuePathEnrichmentRetry(path, generationStatus);
       return {
         accepted: true,
