@@ -91,6 +91,9 @@
                只是被当成白名单为空的保存错误挡住；现在显式成第三档） -->
           <section class="ac-section">
             <h4 class="ac-section__title">服务端出站访问</h4>
+            <!--「服务端」= 本平台自己的后端进程，不是外部网站：这一组管的是它主动发出的
+                HTTP 请求（调模型、抓网页等）能到达哪里。公网始终放行，档位只决定内网放行范围 -->
+            <p class="ac-note">后端自己发请求时能到达哪里（调模型、抓网页都算）。公网始终放行，下面选的是内网范围。</p>
             <div class="ac-opts" role="radiogroup" aria-label="服务端出站范围" @keydown="onOutboundKeydown">
               <button
                 v-for="(opt, i) in OUTBOUND_OPTIONS"
@@ -135,7 +138,7 @@
             <!-- 选「仅白名单」却把清单清空：多半是想禁内网却没换档，保存前挡住 -->
             <p v-if="outboundEmptyWarn" class="mk-alert ac-risk" role="alert">
               <TriangleAlert :size="15" :stroke-width="2" aria-hidden="true" />
-              白名单为空：要禁止内网出站，请直接选「禁止内网」。
+              白名单为空：要禁止内网出站，请直接选「仅公网」。
             </p>
           </section>
 
@@ -381,23 +384,23 @@ const OUTBOUND_OPTIONS: ReadonlyArray<{
 }> = [
   {
     id: 'all',
-    label: '允许全部内网',
+    label: '全部放行',
     icon: Network,
-    desc: '服务端可访问任意内网地址',
+    desc: '公网与内网都可访问',
     warn: '含云厂商元数据地址，出站目标可信时才保持这一档',
   },
   {
     id: 'whitelist',
     label: '仅白名单',
     icon: ShieldCheck,
-    desc: '只允许清单里的 Host / IP',
+    desc: '公网放行，内网只放行清单里的 Host / IP',
     warn: '',
   },
   {
     id: 'deny',
-    label: '禁止内网',
+    label: '仅公网',
     icon: ShieldOff,
-    desc: '公网照常，内网地址一律不可达',
+    desc: '内网地址一律不可达，公网照常',
     warn: '保存后白名单会清空',
   },
 ]

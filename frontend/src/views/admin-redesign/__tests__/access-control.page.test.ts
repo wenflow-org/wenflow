@@ -256,7 +256,7 @@ describe('访问与注册（拆页后的独立页）', () => {
     const seg = w.findAll('.ac-opt').find((b) => b.text().includes('仅白名单'))!;
     await seg.trigger('click');
     await nextTick();
-    expect(w.text()).toContain('要禁止内网出站，请直接选「禁止内网」');
+    expect(w.text()).toContain('要禁止内网出站，请直接选「仅公网」');
     expect(saveButton(w).attributes('disabled')).toBeDefined();
 
     const hosts = w.findAll('.ac-textarea')[1];
@@ -268,9 +268,9 @@ describe('访问与注册（拆页后的独立页）', () => {
 
   /* 2026-11-10 用户「不应该也是三段码」：出站第三档「禁止内网」显式化。
      服务端判据本就是 allowPrivateNetwork=false + 白名单为空，这里不新增字段。 */
-  it('禁止内网：可保存，落库为不放行内网 + 空白名单', async () => {
+  it('仅公网：可保存，落库为不放行内网 + 空白名单', async () => {
     const w = await mountPage();
-    const seg = w.findAll('.ac-opt').find((b) => b.text().includes('禁止内网'))!;
+    const seg = w.findAll('.ac-opt').find((b) => b.text().includes('仅公网'))!;
     await seg.trigger('click');
     await nextTick();
     expect(saveButton(w).attributes('disabled')).toBeUndefined();
