@@ -27,7 +27,7 @@ module.exports = {
     }
   },
   coverageDirectory: 'coverage',
-  coverageReporters: ['text', 'lcov', 'html'],
+  coverageReporters: ['text', 'lcov', 'html', 'json'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1'
   },
