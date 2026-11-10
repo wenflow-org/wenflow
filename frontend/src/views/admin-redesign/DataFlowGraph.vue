@@ -215,7 +215,9 @@
               <span v-if="step.unresolved" class="dfg-step__badge dfg-step__badge--warn" :title="UNRESOLVED_HINT">未解析</span>
               <!-- 阶段名是中文，等宽只留给 agentId 这类机器串 -->
               <button v-if="step.fromStage" type="button" class="dfg-step__stage" @click="switchStage(step.fromStage!)" title="跳到该阶段">→ {{ step.fromStage }}</button>
-              <span v-if="step.role" class="dfg-step__role">{{ step.role }}</span>
+              <!-- 2026-11-10：代码服务卡回答「这个转接节点到底做了什么」，不再直出
+                   input-framing 这类机器角色；没写 summary 的历史/新增服务仍退回角色名。 -->
+              <span v-if="step.role && !step.summary" class="dfg-step__role">{{ step.role }}</span>
               <template v-if="step.kind === 'orphan'">
                 <span class="dfg-step__agent mono">{{ step.agentId }}</span>
               </template>
@@ -224,6 +226,7 @@
               <span v-if="step.loopOver" class="dfg-step__cond">循环：{{ step.loopOver }}</span>
               <button type="button" v-for="p in farPorts[step.agentId] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></button>
             </header>
+            <p v-if="step.summary" class="dfg-step__summary" :title="step.role">{{ step.summary }}</p>
           </section>
 
           <!-- Skill 步骤卡 -->
@@ -1629,6 +1632,15 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
   background: var(--mk-graph-canvas); /* 渐变退役（材质一律平面） */
 }
 .dfg-step--bare { border-style: dashed; background: var(--mk-graph-canvas-2); }
+/* 代码服务说明行：这类步骤没有字段契约，卡头只放得下名称与触发条件，
+   「拿到什么 → 做了什么」另起一行说清（归一化/装配/投影都靠这句看懂）。 */
+.dfg-step__summary {
+  margin: 0;
+  padding: 0 12px 8px;
+  font-size: var(--mk-fs-micro);
+  line-height: 1.55;
+  color: var(--mk-muted);
+}
 .dfg-step--bare.is-unresolved { border-color: color-mix(in srgb, var(--mk-amber) 45%, var(--mk-line)); }
 /* orphan：已注册但无字段契约的 Skill（调用统计是真实健康信号，红色警示） */
 .dfg-step--bare.is-orphan {

@@ -126,6 +126,8 @@ export interface FlowStep {
   role?: string
   loopOver?: string
   condition?: string
+  /** 代码服务的人话说明（后端编排定义里的 summary）；Skill 步骤没有 */
+  summary?: string
   unresolved: boolean
   inputs: FlowChip[]         // 流入本步骤的字段（routing.handoff ∋ agentId）
   outputs: FlowChip[]        // 本步骤产出的字段（routing.agentId = agentId / bridge 归属）
@@ -162,6 +164,7 @@ export interface DefStepLike {
   role?: string
   loopOver?: string
   condition?: string
+  summary?: string
   resolved?: { displayName?: string; kind?: string; unresolved?: boolean }
 }
 
@@ -345,6 +348,7 @@ export function buildStageFlow(
       role: def?.role,
       loopOver: def?.loopOver,
       condition: def?.condition,
+      summary: def?.summary,
       // 代码服务不在 Agent 名册是设计如此（健康中心「步骤解析」检查项同样排除 service 步骤），
       // 不参与「未解析」标注；其余步骤查不到定义 = 运行时不可路由，如实标注。
       unresolved: Boolean(def?.resolved?.unresolved) && kind !== 'service',

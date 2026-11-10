@@ -18,7 +18,7 @@ const flowOf = (s: string) =>
     detailsById as any,
     s === 'path'
       ? [
-          { step: 1, agentId: 'PathCoordinator.buildFramedNormalizedInput', role: 'input-framing', condition: 'when goal handoff received', resolved: { displayName: 'PathCoordinator.buildFramedNormalizedInput', kind: 'service' } },
+          { step: 1, agentId: 'PathCoordinator.buildFramedNormalizedInput', role: 'input-framing', summary: '输入定帧：把 goal 的理解结果整理成 path-planning 的输入，不调模型', condition: 'when goal handoff received', resolved: { displayName: 'PathCoordinator.buildFramedNormalizedInput', kind: 'service' } },
           { step: 2, agentId: 'skill:path-planning', role: 'cognitive-core-and-milestones', resolved: { displayName: '路径规划 Skill', kind: 'skill' } },
           { step: 3, agentId: 'skill:stage-designer', role: 'stage-task-expansion', loopOver: 'milestones', resolved: { displayName: '阶段设计 Skill', kind: 'skill' } },
         ]
@@ -99,6 +99,15 @@ describe('path 阶段（入口 24 字段；闸口分发 normalizedInput；内部
     expect(svc).toBeTruthy()
     expect(svc!.kind).toBe('service')
     expect(svc!.outputs).toHaveLength(0)
+  })
+  /* 2026-11-10 用户「这个筛选转接节点怎么体现归一化」：卡头只放得下 input-framing 这类
+     机器角色，说不清这一步做了什么。后端定义里的 summary 原样透传到步骤，由卡片渲染成人话。 */
+  it('代码服务的 summary 透传到步骤，卡上不再直出机器角色', () => {
+    const svc = f.steps.find((s) => s.agentId === 'PathCoordinator.buildFramedNormalizedInput')!
+    expect(svc.summary).toContain('输入定帧')
+    // 卡片：有 summary 时角色名退到 title，不再占卡头一行
+    expect(DataFlowGraphSource).toContain('v-if="step.summary" class="dfg-step__summary"')
+    expect(DataFlowGraphSource).toContain('v-if="step.role && !step.summary"')
   })
   /* 2026-11-10 用户「未解析是怎么回事」：代码服务（确定性实现、无 LLM 步骤）本就不进
      Agent 名册，后端 resolveStepAgent 会置 unresolved——但那是设计如此，不是故障。
