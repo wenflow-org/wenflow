@@ -99,6 +99,13 @@ describe('shouldEmitCheckpoint：单焦点通关守门员（2026-11-11 第二刀
     })).toBe(false);
   });
 
+  it('历史行无归属但发射层已记住本焦点（lastCheckpointConcept）→ 不出', () => {
+    expect(shouldEmitCheckpoint(session(0.8), {
+      checkpointHistory: [{ passed: true }],
+      lastCheckpointConcept: '判别口径',
+    })).toBe(false);
+  });
+
   it('焦点已 mastered → 不出（答案已判，不补审讯）', () => {
     expect(shouldEmitCheckpoint(session(0.8, 10, { name: '判别口径', status: 'mastered', progress: 100 }), {})).toBe(false);
   });

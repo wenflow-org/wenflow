@@ -1615,6 +1615,9 @@ export async function processStudentMessage(
           : {}),
       }, checkpointCandidate.type);
       teachingState.lastCheckpointTurn = updatedMessages.length;
+      // 单焦点守门员的发射层记忆：历史行可能无归属（旧 pending 或模型漏报 currentPoint），
+      // 记住本次发射的焦点名，下一轮即使 history 匹配不到也能拦住同焦点第二题。
+      if (checkpointConcept?.conceptName) teachingState.lastCheckpointConcept = checkpointConcept.conceptName;
       // 题面可见性（外部审计 P0-4）：检查点题面只存在 pendingCheckpoint，不写进教师回复，
       // 于是学习者历史/课程逐字稿里出现「学生回答了一道从未出现过的题」。这里把题面
       // 补进本轮可见回复（已包含则不重复），保证学员、模拟器、导出逐字稿看到同一道题。
@@ -1642,6 +1645,17 @@ export async function processStudentMessage(
       const checkpointHistory = Array.isArray(teachingState.checkpointHistory)
         ? [...teachingState.checkpointHistory]
         : [];
+      // 提交时归属兜底（2026-11-11）：pending 可能产生于本次修复前（无 conceptName），
+      // 用当前合并看板最后一个点补进 history——否则单焦点守门员永远匹配不到这道题。
+      const submittedConceptFallback = submittedCheckpoint.conceptName
+        ? null
+        : resolveCheckpointConceptAttribution(
+          Array.isArray(mergedKnowledge) && mergedKnowledge.length
+            ? mergedKnowledge[mergedKnowledge.length - 1]?.name
+            : ''
+        );
+      const historyConceptName = submittedCheckpoint.conceptName || submittedConceptFallback?.conceptName;
+      const historyConceptKey = submittedCheckpoint.conceptKey || submittedConceptFallback?.conceptKey;
       // 同一 cpId 的累计作答次数（含本次）：既驱动重答上限，也写进 history 行，
       // 让收束门禁（evaluateSessionClosable）能判断「最后一道题还有没有重答机会」。
       const sameCheckpointAttempts = checkpointHistory.filter(
@@ -1674,8 +1688,8 @@ export async function processStudentMessage(
         understanding,
         // 概念归属（F1 修复轮 a/b）：掌握聚合仲裁按归属概念消费 code 负证据——
         // 无归属的存量检查点（修复前发出的 pending）不带这两字段，聚合侧不误伤
-        ...(submittedCheckpoint.conceptName ? { conceptName: submittedCheckpoint.conceptName } : {}),
-        ...(submittedCheckpoint.conceptKey ? { conceptKey: submittedCheckpoint.conceptKey } : {}),
+        ...(historyConceptName ? { conceptName: historyConceptName } : {}),
+        ...(historyConceptKey ? { conceptKey: historyConceptKey } : {}),
       });
 
       // #96 阈值拟合前置：在判分前解析系统对「该概念已掌握」的预测（ktEstimate 优先，

@@ -131,12 +131,16 @@ export function shouldEmitCheckpoint(
   // ① 已收口（mastered）的焦点不再出题：答案已判，补一张卡只会多一次审讯。
   if (focusStatus === 'mastered') return false;
   // ② 单焦点一次：该焦点在本会话已经出过题（checkpointHistory 按概念归属匹配）→ 不再出。
+  //    teachingState.lastCheckpointConcept 是发射时的归属兜底：历史行可能因旧数据无归属
+  //    （2026-11-11 盘库真机：同一焦点出了 3 道唯一题），只看 history 会漏拦。
   const history = Array.isArray(teachingState?.checkpointHistory) ? teachingState.checkpointHistory : [];
   const focusKey = normalizeForKeywordMatch(focusName);
   if (focusKey && history.some((row: any) => {
     const rowName = String(row?.conceptName ?? row?.conceptKey ?? '');
     return rowName.length > 0 && normalizeForKeywordMatch(rowName) === focusKey;
   })) return false;
+  const lastCheckpointFocus = normalizeForKeywordMatch(teachingState?.lastCheckpointConcept);
+  if (focusKey && lastCheckpointFocus && lastCheckpointFocus === focusKey) return false;
   // ③ 收口信号（以上一轮输出为准）：理解度 ≥ 0.7，或当前焦点 progress ≥ 60。
   //    读数不可观测（null）时不用低值否决也不加速——无信号即不出题。
   const nearClosure = (typeof understanding === 'number' && understanding >= 0.7)
