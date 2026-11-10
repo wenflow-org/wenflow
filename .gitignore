@@ -373,3 +373,6 @@ walkthrough/
 # 小红书单词卡侧项目（2026-10-19 用户：不是平台项目、不上 GitHub；只有 *.png 被上面的通配挡住，
 # py/mjs/json/csv/svg 仍会进 git status，故整目录忽略）
 小红书/
+
+# 浏览器自动化认证残留（含本地登录 token，禁止入库）
+gui-test-screenshots/
