@@ -147,7 +147,7 @@ jobs:
       - name: Merge shards & enforce global thresholds
         # istanbul-lib-coverage 依赖解析在脚本自身目录（backend/node_modules），根目录运行即可；
         # 分片产物落在仓库根 coverage-shards/<artifact 名>/（download-artifact v4 布局）
-        run: node backend/scripts/merge-coverage.mjs backend/coverage-shards/backend-coverage-shard-1/coverage-final.json backend/coverage-shards/backend-coverage-shard-2/coverage-final.json backend/coverage-shards/backend-coverage-shard-3/coverage-final.json
+        run: node backend/scripts/merge-coverage.mjs coverage-shards/backend-coverage-shard-1/coverage-final.json coverage-shards/backend-coverage-shard-2/coverage-final.json coverage-shards/backend-coverage-shard-3/coverage-final.json
       - name: Upload merged backend coverage
         if: always()
         uses: actions/upload-artifact@v4
