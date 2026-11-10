@@ -561,7 +561,7 @@ function healthLabel(health: Health): string {
    ※ 状态声明必须在 useTableSort 之前（版本/路由排序访问器在 setup 期就可能被求值，
      放到下方会撞 TDZ：恢复上次排序为「版本」时页面直接白屏）。 */
 interface SkillMetaEntry { promptVersion: number | null; promptName: string; description: string }
-interface SkillRouteEntry { model: string | null; tier: string }
+interface SkillRouteEntry { model: string | null; effectiveModel: string | null; inherited: boolean; tier: string }
 
 const skillMetaById = ref<Map<string, SkillMetaEntry>>(new Map())
 const coverageById = ref<Map<string, SkillRouteEntry>>(new Map())
@@ -886,12 +886,15 @@ async function refreshSkillMeta(): Promise<void> {
 async function refreshCoverage(): Promise<void> {
   try {
     const res = await adminSkillsApi.getSkillModelCoverage()
-    const data = res.data?.data as { skills?: Array<{ skillId: string; model: string | null; tier?: string }> } | undefined
+    const data = res.data?.data as { skills?: Array<{ skillId: string; model: string | null; effectiveModel?: string | null; inherited?: boolean; tier?: string }> } | undefined
     const m = new Map<string, SkillRouteEntry>()
     for (const r of data?.skills || []) {
       if (!r.skillId) continue
       m.set(r.skillId, {
         model: r.model ?? null,
+        // 旧后端没有 effectiveModel：退回 model（缺省显示「—」，不拿「平台默认」占位）
+        effectiveModel: r.effectiveModel ?? r.model ?? null,
+        inherited: r.inherited ?? !r.model,
         tier: r.tier === 'reasoning' ? 'reasoning' : 'chat'
       })
     }
@@ -945,19 +948,25 @@ function versionTitleOf(skillId: string): string {
     : `线上生效 Prompt v${entry.promptVersion}`
 }
 
-/** 路由模型列：coverage 有行 → 生效 model（空=平台默认）；无行/未加载 → 「—」，不伪装成平台默认 */
+/** 路由模型列：直接显示运行时实际使用的模型（未单独配置时就是平台默认那一个模型）。
+    2026-11-10 用户「不要有平台默认这个东西出现，模型配置是什么，就是什么」——
+    这一列回答「跑的是哪台模型」，不是「有没有单独配」，不再用配置动作占位。
+    覆盖数据未加载 → 「—」，不猜。 */
 function routingOf(skillId: string): string {
   if (!coverageReady.value) return '—'
   const row = coverageById.value.get(skillId)
   if (!row) return '—'
-  return row.model || '平台默认'
+  return row.effectiveModel || '—'
 }
 
 function routingTitleOf(skillId: string): string {
   if (!coverageReady.value) return '模型覆盖数据未加载'
   const row = coverageById.value.get(skillId)
   if (!row) return '该 Skill 没有模型配置记录，显示 —'
-  return row.model ? `生效模型：${row.model}` : '未单独配置模型：走平台默认'
+  if (!row.effectiveModel) return '平台还没有可用模型：先在 API 配置里配置一个'
+  return row.inherited
+    ? `生效模型：${row.effectiveModel}（该 Skill 未单独配置，跟随平台模型）`
+    : `生效模型：${row.effectiveModel}（该 Skill 单独配置）`
 }
 
 /** 归属 Agent 文案（路由表 mono 副行） */
@@ -972,7 +981,9 @@ function agentLabelOf(s: { agentId: string; agentName?: string }): string {
     读作两个数字打架，且 29 行全走同一个模型时算出的「主模型覆盖 100%」与 31 也对不上。
     覆盖表已登记的行本身就是「已路由」（行内 source 三档必居其一），故直接按覆盖表计数。 */
 const routingLabels = computed<string[]>(() =>
-  coverageReady.value ? [...coverageById.value.values()].map((r) => r.model || '平台默认') : []
+  coverageReady.value
+    ? [...coverageById.value.values()].map((r) => r.effectiveModel).filter((m): m is string => Boolean(m))
+    : []
 )
 const routeModelCount = computed<number | string>(() =>
   routingLabels.value.length ? new Set(routingLabels.value).size : '—'
