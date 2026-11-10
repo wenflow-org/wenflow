@@ -75,14 +75,16 @@ describe('shouldEmitCheckpoint：区分「没有 analysis」与「有 analysis �
   });
 
   it('同一条数下「真低读数」会出题，而「无读数」不会——这就是修复的差别', () => {
+    // 首位 assistant 为开场欢迎语：节奏闸要求教师已有教学回复（assistant ≥2）
     const messagesLowReading = [
+      { role: 'assistant' },
       { role: 'assistant' },
       { role: 'user' },
       { role: 'user', analysis: { understanding: 0.2 } },
     ];
     const messagesNoReading = [
       { role: 'assistant' },
-      { role: 'user' },
+      { role: 'assistant' },
       { role: 'user', analysis: { understanding: null } },
     ];
     expect(shouldEmitCheckpoint({ messages: messagesLowReading }, state)).toBe(true);
@@ -91,6 +93,7 @@ describe('shouldEmitCheckpoint：区分「没有 analysis」与「有 analysis �
 
   it('无读数等满常规节奏后仍可出题（不否决，只是不加速）', () => {
     const messages = [
+      { role: 'assistant' },
       { role: 'assistant' },
       { role: 'user' },
       { role: 'user' },

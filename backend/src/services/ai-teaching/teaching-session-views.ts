@@ -264,8 +264,13 @@ export function composeWelcome(opening: TeachingOpening): string {
  * 结构对齐 TeachingOpening 契约（message/question/quickReplies/mode）。
  */
 export function buildDeterministicOpening(context: TeachingScenarioContext): TeachingOpening {
+  // 2026-11-08 p-π案例外评：任务标题（最长 29 字）嵌在句子正中读起来不像人话
+  // （「我们先从 绘出含p-π与π-π判断节点的共轭类型一分钟判别流程图初稿 开始这节课…」）。
+  // 标题独立成行放在目标位，正文用自然的课堂开场话术；节奏承诺（先讲要点再练）与
+  // 快选项动作对齐——学生点「先讲要点」时教师必须兑现（见 teaching-turn 节奏请求规则）。
+  const goalLine = context.topic || context.taskTitle || '把本节的关键点讲清楚';
   return {
-    message: `我们先从 **${context.topic || context.taskTitle}** 开始这节课。目标是把关键知识点讲清楚，并在过程中检查你的掌握情况。`,
+    message: `开始这节课。目标只有一句话：\n**${goalLine}**\n我先讲要点，再拿例子练；卡住随时打断我。`,
     // 动作选项必须带本课内容（2026-11-02 用户反馈「快选没什么意义」）：此前写死的
     // "准备好了，开始 / 先讲讲目标 / 换种方式讲解" 放哪节课都成立，学生看不出点下去会得到什么。
     quickReplies: buildOpeningActionChips(context, 'example-first'),

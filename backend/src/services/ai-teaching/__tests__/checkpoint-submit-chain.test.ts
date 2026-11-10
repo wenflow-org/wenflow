@@ -171,7 +171,10 @@ function claim(session: any) {
  * 旧 fixture 缺这条消息，等于在「编排层没批准」的状态下断言出题，测的是生产上不存在的路径。
  */
 const MESSAGES_WITH_ANALYSIS = [
+  // 两条教师消息：shouldEmitCheckpoint 的「首个教学回合不出题」结构闸（2026-11-08 p-π外评修复）
+  // 要求除开场外已有教学回复；这些单测考察同题抑制/判分链路，不是首回合节奏。
   { role: 'assistant', content: '我们开始吧', timestamp: new Date().toISOString(), analysis: { understanding: 0.8, engagement: 0.7 } },
+  { role: 'assistant', content: '先把汇总的动作拆成两步讲清楚。', timestamp: new Date().toISOString(), analysis: { understanding: 0.75, engagement: 0.7 } },
 ];
 
 function turnSkillResult(reply = '我们再对照一遍：这道题的关键动作是重填。', control: Record<string, unknown> = {}) {
@@ -568,7 +571,7 @@ describe('检查点同题复问抑制（TONIGHT-BROAD-2026-10-07 宽域 C 轨缺
       type: 'short_answer',
       allowSkip: true,
     }));
-    expect(committed.lastCheckpointTurn).toBe(2);
+    expect(committed.lastCheckpointTurn).toBe(3);
     expect(result.checkpoint?.question).toBe(OTHER_QUESTION);
     expect(mockRecordDegradation).not.toHaveBeenCalled();
   })

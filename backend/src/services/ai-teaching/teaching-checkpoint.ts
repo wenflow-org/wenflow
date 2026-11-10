@@ -99,6 +99,13 @@ export function shouldEmitCheckpoint(
   if (getPendingCheckpoint(teachingState)) return false;
   const stage = String(teachingState?.classroomContext?.stage?.current ?? '');
   if (stage === 'wrapup') return false;
+  // 首个教学回合不出题（2026-11-08 p-π案例外评实证：学生选了「先讲要点，再拿例子练」，
+  // 第一条教师回复就被编排层要求出题，学生什么都没学到先挨两道审讯题）。结构事实：
+  // 除开场欢迎语外教师还没有任何一条教学回复时，本节尚无可考的内容——出题节奏顺延，
+  // 从第二个教学回合起按常规 rhythm 走。先猜后揭类开场不受影响（那是 reply 正文提问，
+  // 不依赖 control.checkpoint）。
+  const assistantCount = session.messages.filter((message) => message?.role === 'assistant').length;
+  if (assistantCount <= 1) return false;
   const lastAnalysis = [...session.messages].reverse().find((message) => message?.analysis)?.analysis;
   // 一条可依据的观测都没有（还没产生过 analysis）→ 不出题（沿用旧行为）。
   if (!lastAnalysis) return false;
