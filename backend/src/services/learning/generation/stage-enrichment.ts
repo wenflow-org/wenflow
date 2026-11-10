@@ -15,6 +15,7 @@ import { runWithPathGenerationContext } from './generation-request-context';
 import { auditPathStageAgentsSandboxRefs } from './stage-sandbox-ref-audit';
 import { stageDesignerDefinition } from '../../../skills/stage-designer';
 import {
+  applyGranularityBoundsToHints,
   clampHintsToOneSitting,
   clampStageMinutesToBudget,
   clampStageTasksToHints,
@@ -123,6 +124,8 @@ export async function pruneSupersededStageItems(
 
 import { detectUnjudgeableAcceptance, type UnjudgeableAcceptanceViolation } from './stage-acceptance-guard';
 export { detectUnjudgeableAcceptance, type UnjudgeableAcceptanceViolation } from './stage-acceptance-guard';
+
+import { detectArtifactProductionTasks, looksLikeCraftSubject } from './stage-artifact-guard';
 
 export async function enrichLearningPathWithAnderson(
   pathId: string,
@@ -290,6 +293,28 @@ async function enrichLearningPathWithAndersonInner(
     const normalizedInput = getSceneFramingNormalizedInput(sceneFraming)
       || resolvePersistedNormalizedInput(parsedTemplate)
       || null;
+    // 颗粒度硬上界防御性再钳（2026-11-09 装配缝隙修复）：normalizedInput.planningHints 产生于
+    // planning 阶段，旧会话续聊 / 缓存 analysis 的 hints 可能早于 scope_size 前缀链路落地，
+    // 1.2h/6h 帽从未生效过。这里按 confirmedProposal.scopeSizeRaw（落库原文，见
+    // buildFramedNormalizedInput）对既有 hints 再钳一次——只钳上界，与 planning 同一套规则。
+    if (normalizedInput && (normalizedInput as any).planningHints) {
+      const scopeSizeRaw = (normalizedInput as any).confirmedProposal?.scopeSizeRaw
+        ?? (normalizedInput as any).confirmedProposal?.scope_size
+        ?? null;
+      const beforeHints = (normalizedInput as any).planningHints;
+      const afterHints = applyGranularityBoundsToHints(beforeHints, scopeSizeRaw);
+      if (afterHints !== beforeHints) {
+        (normalizedInput as any).planningHints = afterHints;
+        logger.info('[stage-enrichment] 颗粒度硬上界再钳生效', {
+          pathId: learningPath.id,
+          scopeSizeRaw: typeof scopeSizeRaw === 'string' ? scopeSizeRaw.slice(0, 60) : null,
+          targetTotalHours: afterHints.targetTotalHours,
+          milestoneRange: afterHints.milestoneRange,
+          subtasksPerStageRange: afterHints.subtasksPerStageRange,
+          subtaskMinutesRange: afterHints.subtaskMinutesRange,
+        });
+      }
+    }
     // 出口不变量 B 的**下游一半**（2026-09-21）：Path 层已自检为"一次性操作"时，
     // 它产出的路径总量 ≤ 1 小时（见 path-planning 的"一次性操作"规则）。若不在这里
     // 把 hints 一起收紧，stage-designer 会按 standard 档默认 30–90 分钟/任务把学时撑回 7 小时
@@ -692,6 +717,60 @@ async function enrichLearningPathWithAndersonInner(
                 stageNumber: milestone.stageNumber,
                 before: violations.length,
                 after: remaining.length,
+              });
+            }
+          }
+        }
+      }
+      // 工件生产课拦截（2026-11-09 外评「伪 PBL 造表味」结构手术第 1 刀）：非创作类学科的
+      // 任务被写成「产出XX清单/定稿/回写」时，带修复提示重调一次；仍命中放行留痕
+      // （不阻塞、不改写文本——与验收越界守卫同一形状：误伤代价=一次重调，漏检代价=
+      // 学习者花一节课替系统做表）。创作类学科（代码/文章/攻略等）工件即目标，不拦。
+      const artifactCraftText = [
+        (normalizedInput as any)?.problemSpace?.realProblem,
+        (normalizedInput as any)?.problemSpace?.scenario,
+        (normalizedInput as any)?.confirmedProposal?.learningDirection,
+        (normalizedInput as any)?.confirmedProposal?.firstDeliverable,
+        (normalizedInput as any)?.subject,
+        (normalizedInput as any)?.goal,
+      ].filter((v) => typeof v === 'string' && v.trim()).join(' ');
+      if (!looksLikeCraftSubject(artifactCraftText)) {
+        const artifactViolations = detectArtifactProductionTasks(stageTasks as Array<Record<string, unknown>>);
+        if (artifactViolations.length > 0) {
+          logger.warn('[stage-artifact] 非创作类路径检出文书生产课，带修复提示重调一次', {
+            pathId: learningPath.id,
+            stageNumber: milestone.stageNumber,
+            violations: artifactViolations.map((v) => v.taskTitle),
+          });
+          const artifactRetry = await executeSkill(stageDesignerDefinition, {
+            ...stageDesignerInput,
+            repairHints: {
+              artifactFixes: {
+                reason: '以下任务是「文书生产课」（让学习者产出清单/卡片/流程图/定稿），而清单一类文档是给学生的教具，不是要花一节课生产的功课',
+                rules: '改写成综合实战：把本阶段学的判断与方法在无提示条件下连续应用到带陷阱的新例上并验收做对质量（如「5 个真题分子限时连判并写依据」「综合分录 10 题做对 7 道」）；标题/描述/验收里不得出现「产出/定稿/回写/固化 + 清单/卡/流程图」组合；错题要点由平台课后自动生成，不占课时',
+                tasks: artifactViolations,
+              },
+            },
+          } as any).catch((error: unknown) => {
+            logger.warn('[stage-artifact] 文书课修复重调失败，保留原产出', {
+              pathId: learningPath.id,
+              stageNumber: milestone.stageNumber,
+              error: String(error).slice(0, 200),
+            });
+            return null;
+          });
+          const artifactRetryTasks = Array.isArray((artifactRetry as any)?.subtasks)
+            ? (artifactRetry as any).subtasks as Array<Record<string, unknown>>
+            : [];
+          if (artifactRetryTasks.length > 0) {
+            const artifactRemaining = detectArtifactProductionTasks(artifactRetryTasks);
+            if (artifactRemaining.length < artifactViolations.length) {
+              stageTasks = clampStageTasksToHints(artifactRetryTasks, stageHints || (normalizedInput as any)?.planningHints);
+              logger.warn('[stage-artifact] 文书课修复重调采纳', {
+                pathId: learningPath.id,
+                stageNumber: milestone.stageNumber,
+                before: artifactViolations.length,
+                after: artifactRemaining.length,
               });
             }
           }

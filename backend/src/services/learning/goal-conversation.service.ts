@@ -634,11 +634,18 @@ async continueConversation(
         const collected = JSON.parse(conversation.collectedData || '{}');
         const proposalConfirmable = conversation.stage === 'proposing'
           && hasConfirmableProposal(conversation.collectedData, { conversationId, userId, stage: conversation.stage });
-        if (conversation.stage === 'proposing' && options?.confirmProposal === true && proposalConfirmable) {
-          // 推进收口到 advanceConfirmedProposal；saveUserTurn=true=用户消息尚未落库。
-          return this.advanceConfirmedProposal(conversationId, conversation, userReply, options, collected, true);
-        }
-        if (proposalConfirmable) {
+        // answer-only 出口（2026-11-10 外评：一句话能讲透的理解型诉求不排路径）：
+        // 分诊判 answer_only 且用户坚持 <2 次 → 两确认通道都不放行，落普通回合——
+        // 提示词层「一句话讲透测试」规则引导模型直接给出完整解答并收口；
+        // 坚持 ≥2 次 → 放行照常排路径（用户 agency 兜底，不搞死拦）。
+        const answerOnlyTriage = resolveResponseTriageFromCollectedData(collected);
+        const answerOnlyGate = answerOnlyTriage?.mode === 'answer_only' && proposalConfirmable;
+        const answerOnlyNudges = Number((collected as any)?.answerOnlyNudges || 0);
+        const flagConfirmWanted = conversation.stage === 'proposing'
+          && options?.confirmProposal === true
+          && proposalConfirmable;
+        let adjudicatedConfirm = false;
+        if (proposalConfirmable && !flagConfirmWanted && !answerOnlyGate) {
           // 纵深防御：adjudicateGoalConfirm 自带 fail-open（内部 catch → 非确认），
           // 但 service 不假设它永不抛——任何意外异常也按非确认走正常回合，不阻塞对话。
           let verdict = { confirm: false };
@@ -658,14 +665,31 @@ async continueConversation(
               error: (error as Error).message,
             });
           }
-          if (verdict.confirm) {
-            logger.info('[goal-conversation] 裁决命中确认，直接推进', {
-              conversationId,
-              userId,
-              replyPreview: userReply.slice(0, 40),
-            });
-            return this.advanceConfirmedProposal(conversationId, conversation, userReply, options, collected, true);
+          adjudicatedConfirm = verdict.confirm;
+        }
+        const confirmIntentArrived = flagConfirmWanted || adjudicatedConfirm;
+        const confirmAllowed = !answerOnlyGate || answerOnlyNudges >= 2;
+        if (confirmIntentArrived && confirmAllowed) {
+          if (answerOnlyGate) {
+            logger.info('[goal-conversation] answer-only：用户坚持 ≥2 次，放行排路径', { conversationId, userId });
           }
+          // 推进收口到 advanceConfirmedProposal；saveUserTurn=true=用户消息尚未落库。
+          return this.advanceConfirmedProposal(conversationId, conversation, userReply, options, collected, true);
+        }
+        if (confirmIntentArrived && answerOnlyGate) {
+          // 计一次坚持并落库；不放行、不跑确认链路——落普通回合由模型直答
+          // （提示词层规则接管：直接给完整解答，不出方案；模型若仍出方案会被 ready 回落守卫拦住）。
+          await this.updateConversationLifecycle(conversationId, 'proposing', {
+            status: 'active',
+            mutateCollectedData: (currentData) => {
+              (currentData as Record<string, unknown>).answerOnlyNudges = answerOnlyNudges + 1;
+              currentData[RESPONSE_TRIAGE_KEY] = answerOnlyTriage;
+            },
+          });
+          logger.info('[goal-conversation] answer-only：确认拦截（第 ' + (answerOnlyNudges + 1) + ' 次），转普通回合直答', {
+            conversationId,
+            userId,
+          });
         }
 
       // 本轮用户消息**先落库再调模型**（#160）：落库与调用解耦后，任何失败路径用户输入都不丢。

@@ -242,6 +242,42 @@ function normalizeScopeSize(value: unknown): ScopeSize | null {
   return value === 'micro' || value === 'small' || value === 'medium' || value === 'large' ? value : null;
 }
 
+/**
+ * 课题颗粒度（2026-11-09 外评建议二）：知识点**自身的教材颗粒度**，与用户的备考背景周期正交。
+ * 「考研复习中」是用户背景，「p-π共轭判别」是单点概念——goal 层把背景周期当课题体量报锚
+ * （实证：共轭判别被报成 9.2h/8 课），这里按颗粒度收上界。goal 的 scope_size 以
+ * 「[单点概念]/[技能模块]/[完整学科]」前缀标签开头（prompt 强制），此处确定性解析。
+ */
+export type TopicGranularity = 'single_concept' | 'skill_module' | 'full_subject';
+
+const TOPIC_GRANULARITY_TAG_MAP: Record<string, TopicGranularity> = {
+  '单点概念': 'single_concept',
+  '技能模块': 'skill_module',
+  '完整学科': 'full_subject',
+};
+
+export function parseTopicGranularity(value: unknown): TopicGranularity | null {
+  if (typeof value !== 'string') return null;
+  const match = /^\s*[【\[]?\s*(单点概念|技能模块|完整学科)\s*[】\]]?/.exec(value.trim());
+  if (!match) return null;
+  return TOPIC_GRANULARITY_TAG_MAP[match[1]] ?? null;
+}
+
+/**
+ * 颗粒度硬上界（只钳上界，不抬下限——抬下限会诱发「凑课注水」把 45 分钟的事撑成 1 小时）。
+ * single_concept: 总学时 ≤1.2（外评：45 分钟清爽闯关课的量级；[1.5,4] 依然偏大）；
+ *   阶段 ≤2、每阶段课 ≤2（总课数 ≤4）、单课 ≤25 分钟。
+ * skill_module: 总学时 ≤6；阶段 ≤3、每阶段课 ≤3、单课 ≤35 分钟。
+ * full_subject: 不钳（走既有长线推导）。
+ */
+export const TOPIC_GRANULARITY_BOUNDS: Record<
+  Exclude<TopicGranularity, 'full_subject'>,
+  { totalHoursCap: number; milestoneCap: number; subtasksPerStageCap: number; minutesCap: number }
+> = {
+  single_concept: { totalHoursCap: 1.2, milestoneCap: 2, subtasksPerStageCap: 2, minutesCap: 25 },
+  skill_module: { totalHoursCap: 6, milestoneCap: 3, subtasksPerStageCap: 3, minutesCap: 35 },
+};
+
 export interface PlanningHints {
   paceSignal: PlanningPaceSignal;
   milestoneRange: [number, number];
@@ -549,7 +585,7 @@ export function derivePlanningHints(
     /** R8 形状标记：2=新时间模型 */
     timeModelVersion?: number | null;
   } | null,
-  scopeSize?: ScopeSize | null,
+  scopeSize?: ScopeSize | string | null,
   learnerLoadProfile?: LearnerLoadProfile | null,
   triage?: TriageHint | null,
   /**
@@ -581,6 +617,12 @@ export function derivePlanningHints(
   //   ①节奏（时间→pace）给**上界**（防膨胀）②软下界 2 给**下界**，区间交给 path LLM 自定。
   //   若历史数据仍传来合法枚举值，则沿用乙口径（向后兼容，不因数据形态切换而行为突变）。
   const scope = normalizeScopeSize(scopeSize);
+  // 课题颗粒度（外评建议二）：goal scope_size 带「[单点概念]/[技能模块]/[完整学科]」前缀时
+  // 解析出硬上界来源；无前缀（老数据/未按协议输出）→ null，行为与今天完全一致。
+  const topicGranularity = parseTopicGranularity(typeof scopeSize === 'string' ? scopeSize : null);
+  const granularityBounds = topicGranularity && topicGranularity !== 'full_subject'
+    ? TOPIC_GRANULARITY_BOUNDS[topicGranularity]
+    : null;
   const scopeConfig = scope ? SCOPE_SIZE_RANGES[scope] : null;
 
   let conceptRange: [number, number] = [...paceConfig.conceptRange];
@@ -832,6 +874,27 @@ export function derivePlanningHints(
     if (targetMilestones !== null) targetMilestones = Math.min(targetMilestones, cap.milestoneRange[1]);
   }
 
+  // ---- 课题颗粒度硬上界（2026-11-09 外评建议二，结构手术第 3 刀）----
+  // 「考研复习中」是用户背景周期，不是共轭判别的体量；goal 把背景当体量报锚（9.2h/8 课实证）
+  // 时，这里按知识点自身颗粒度收上界。只钳上界、不抬下限（下限会诱发凑课注水）。
+  // 保持区间非单点（出口不变量 A）：钳后 hi 至少 lo+1。
+  if (granularityBounds) {
+    if (subtaskMinutesRange[1] > granularityBounds.minutesCap) {
+      const upper = granularityBounds.minutesCap;
+      subtaskMinutesRange = [Math.min(subtaskMinutesRange[0], upper), upper];
+    }
+    // 任务区间允许单点（ONE_SITTING 先例，见出口不变量 A 的豁免注）
+    const perStageCap = Math.min(subtasksPerStageRange[1], granularityBounds.subtasksPerStageCap);
+    subtasksPerStageRange = [Math.min(subtasksPerStageRange[0], perStageCap), perStageCap];
+    // 里程碑区间保持非单点且不越帽：lo=max(1, min(lo, cap-1)), hi=cap（cap=2 → [1,2]，cap=3 → [2,3]）
+    const milestoneCapGranular = Math.min(milestoneRange[1], granularityBounds.milestoneCap);
+    milestoneRange = [
+      Math.max(1, Math.min(milestoneRange[0], milestoneCapGranular - 1)),
+      milestoneCapGranular,
+    ];
+    if (targetMilestones !== null) targetMilestones = Math.min(targetMilestones, granularityBounds.milestoneCap);
+  }
+
   // 方案乙：区间即权威（不再塌成点）。确保「建议值」落在区间内，供提示词引用时不自相矛盾。
   // 出口不变量（2026-09-21）：**里程碑区间永不为单点**——两端一旦相等，validator 会退化成
   //   「精确校验」，数量就被代码拍死（这才是体量塌缩的真正机制，而不是"收得小"）。
@@ -997,9 +1060,15 @@ export function derivePlanningHints(
         : estimatedHoursTotalPreScope;
   // 浮点收尾（2026-10-27 R7-5a）：阶段小时累加会产生 5.500000000000001h 这类 IEEE754 尾巴，
   // 落库/展示层统一保留 1 位小数；下界 0.1 防止 round 成 0 后把锚传成 0（L2）。
-  const estimatedHoursTotal = estimatedHoursTotalRawFinal === null
+  // 颗粒度上界在收尾处统一钳（外评建议二）：goal 报 9.2h 的共轭判别锚在此收进 1.2h。
+  const estimatedHoursTotalCapped = estimatedHoursTotalRawFinal === null
     ? null
-    : Math.max(0.1, Math.round(estimatedHoursTotalRawFinal * 10) / 10);
+    : granularityBounds
+      ? Math.min(estimatedHoursTotalRawFinal, granularityBounds.totalHoursCap)
+      : estimatedHoursTotalRawFinal;
+  const estimatedHoursTotal = estimatedHoursTotalCapped === null
+    ? null
+    : Math.max(0.1, Math.round(estimatedHoursTotalCapped * 10) / 10);
   // ---- 大预算扩容（2026-09-27，基线 31 格实测驱动）：锚定总学时超过结构天花板
   // （阶段×任务×单任务分钟上限）时，按需抬升每阶段任务上限与单任务分钟上界——
   // 任务语义升级为「学习单元（可含多次坐学）」。基线收缩比 0.07-0.74（中位 0.13-0.26）
@@ -1233,6 +1302,83 @@ export function derivePlanningHints(
 }
 
 /**
+ * 颗粒度硬上界的防御性再钳（2026-11-09 结构手术第 3 刀的装配缝隙修复）。
+ * 场景：stage-enrichment 读的是 planning 阶段写进 normalizedInput.planningHints 的旧对象——
+ * 会话续聊 / 缓存 analysis 产生的 hints 可能早于 scope_size 前缀链路落地，硬上界从未生效过。
+ * 本函数按 scope_size 原文对既有 hints 再钳一次：区间上界、targetMilestones / targetSubtasksPerStage、
+ * 总学时锚，以及由总学时派生的两根锚（每阶段学时 / 单任务分钟）——派生公式与容量口径
+ * （结构容量 = 课数上界 × 单课分钟上界）与 derivePlanningHints 逐字同源，防止两张皮。
+ * 只钳上界不抬下限；钳后装得下时把过期缺口报告置 null（旧报告基于未钳锚）。
+ */
+export function applyGranularityBoundsToHints(
+  hints: PlanningHints | null,
+  scopeSizeRaw: unknown,
+): PlanningHints | null {
+  if (!hints) return hints;
+  const topicGranularity = parseTopicGranularity(scopeSizeRaw);
+  if (!topicGranularity || topicGranularity === 'full_subject') return hints;
+  const bounds = TOPIC_GRANULARITY_BOUNDS[topicGranularity];
+
+  const next: PlanningHints = { ...hints };
+  if (next.subtaskMinutesRange[1] > bounds.minutesCap) {
+    next.subtaskMinutesRange = [Math.min(next.subtaskMinutesRange[0], bounds.minutesCap), bounds.minutesCap];
+  }
+  const perStageCap = Math.min(next.subtasksPerStageRange[1], bounds.subtasksPerStageCap);
+  next.subtasksPerStageRange = [Math.min(next.subtasksPerStageRange[0], perStageCap), perStageCap];
+  if (next.targetSubtasksPerStage !== null) {
+    next.targetSubtasksPerStage = Math.min(next.targetSubtasksPerStage, bounds.subtasksPerStageCap);
+  }
+  const milestoneCap = Math.min(next.milestoneRange[1], bounds.milestoneCap);
+  next.milestoneRange = [
+    Math.max(1, Math.min(next.milestoneRange[0], milestoneCap - 1)),
+    milestoneCap,
+  ];
+  if (next.targetMilestones !== null) {
+    next.targetMilestones = Math.min(next.targetMilestones, bounds.milestoneCap);
+  }
+  if (next.targetTotalHours !== null) {
+    next.targetTotalHours = Math.max(0.1, Math.round(Math.min(next.targetTotalHours, bounds.totalHoursCap) * 10) / 10);
+  }
+
+  // 派生锚重算（与 derivePlanningHints 同公式；单点目标值在钳后必然落在区间内）
+  if (next.targetMilestones !== null && next.targetTotalHours !== null) {
+    const structureStageCapacityHours = (next.subtasksPerStageRange[1] * next.subtaskMinutesRange[1]) / 60;
+    next.targetHoursPerMilestone = Math.min(
+      structureStageCapacityHours,
+      Math.round((next.targetTotalHours / next.targetMilestones) * 10) / 10,
+    );
+    if (next.targetSubtasksPerStage !== null) {
+      next.targetMinutesPerTask = Math.min(
+        next.subtaskMinutesRange[1],
+        Math.round((next.targetTotalHours * 60) / (next.targetMilestones * next.targetSubtasksPerStage)),
+      );
+    }
+  }
+
+  // 缺口报告以钳后锚重算：装得下 → 作废；仍装不下 → 以新口径重报（limitingFactor 沿用原判）
+  if (next.capacityDeficit && next.targetMilestones !== null && next.targetTotalHours !== null) {
+    const lessonCountCap = next.subtasksPerStageRange[1];
+    const lessonMinutesCap = next.subtaskMinutesRange[1];
+    const capacityHours = (lessonCountCap * lessonMinutesCap * next.targetMilestones) / 60;
+    const deficitRatio = 1 - capacityHours / next.targetTotalHours;
+    next.capacityDeficit = deficitRatio > 0.05
+      ? {
+          ...next.capacityDeficit,
+          requestedHours: Math.round(next.targetTotalHours * 10) / 10,
+          capacityHours: Math.round(capacityHours * 10) / 10,
+          deficitRatio: Math.round(deficitRatio * 1000) / 1000,
+          bounds: {
+            subtasksPerStage: lessonCountCap,
+            subtaskMinutes: lessonMinutesCap,
+            milestones: next.targetMilestones,
+          },
+        }
+      : null;
+  }
+  return next;
+}
+
+/**
  * 预览用：按**路径生成同一口径**归一「用户确认的大纲」。
  *
  * 返回 plannedMilestones（**建议值**，与 path-planning 的 planningHints.targetMilestones 同源）、
@@ -1249,11 +1395,13 @@ export function derivePlannedOutline(confirmedProposal: any): {
   const stages = normalizeStringArray(
     confirmedProposal?.key_stages ?? confirmedProposal?.keyStages
   );
-  const scopeSize = normalizeScopeSize(
-    confirmedProposal?.scope_size ?? confirmedProposal?.scopeSize
-  );
-  // targetMilestones 只由「阶段数 + scope_size」决定，其余入参不影响计数
-  const hints = derivePlanningHints(null, null, null, null, stages, null, scopeSize);
+  const scopeSizeRaw = confirmedProposal?.scope_size ?? confirmedProposal?.scopeSize;
+  const scopeSize = normalizeScopeSize(scopeSizeRaw);
+  // targetMilestones 只由「阶段数 + scope_size」决定，其余入参不影响计数。
+  // 颗粒度前缀（[单点概念] 等，2026-11-09）必须与真实生成同源：这里传**原始串**，
+  // 让 derivePlanningHints 自己解析；先 normalize 成枚举会把自由文本洗成 null，
+  // 预览就吃不到颗粒度钳制（实测：预览 3 段 vs 生成 2 段的失配）。
+  const hints = derivePlanningHints(null, null, null, null, stages, null, typeof scopeSizeRaw === 'string' ? scopeSizeRaw : scopeSize);
   const planned = typeof hints?.targetMilestones === 'number' ? hints.targetMilestones : null;
   const hasSignal = stages.length > 0 || scopeSize !== null;
   const range = hasSignal && Array.isArray(hints?.milestoneRange) && hints.milestoneRange.length === 2
@@ -1310,7 +1458,14 @@ export function buildFramedNormalizedInput(input: any): any {
   // 实测把"设计…固定动作"这类真阶段删掉）。"哪些算认知阶段"是语义判断，交给 LLM：
   // goal 提示词给约束，path-planning 可自行合并/拆分里程碑。
   const keyStages = normalizeStringArray(confirmedProposal?.keyStages);
-  const scopeSize = normalizeScopeSize(confirmedProposal?.scopeSize ?? confirmedProposal?.scope_size);
+  // 颗粒度前缀（[单点概念] 等）必须活着传进 derivePlanningHints：先 normalize 会把自由
+  // 文本洗成 null，落库的 planningHints 就吃不到硬上界（实测 30min/课、2h 总量越过 1.2h 帽）。
+  // 前缀读取顺序（2026-11-09 双定帧缝隙）：上游 coordinator 已定帧过一次，其 framed
+  // confirmedProposal 里 scopeSize 已被 normalizeScopeSize 洗成 null，原文只在 scopeSizeRaw——
+  // 这里必须先读 scopeSizeRaw，否则 path-generation.core 的二次定帧拿 undefined 重算 hints，
+  // 把第一次定帧钳好的上界整段覆盖回去（实测探针：两次 framing，第二次 raw=undefined）。
+  const scopeSizeRaw = confirmedProposal?.scopeSizeRaw ?? confirmedProposal?.scopeSize ?? confirmedProposal?.scope_size;
+  const scopeSize = normalizeScopeSize(scopeSizeRaw);
   const timeBudget = normalizeString(resources.timeBudget) || normalizeString(resources.timePerWeek);
   const timeBudgetCadence = normalizeCadence(resources.timeBudgetCadence);
   const timePerSession = normalizeString(resources.timePerSession);
@@ -1331,7 +1486,7 @@ export function buildFramedNormalizedInput(input: any): any {
   // 「只要/只想/只需/只做/这件事」等宽泛词会把"只要每天半小时"这类真实大预算目标误判为窄目标。
   const narrowScopeSignal = /(只(?:攻|练|学)|单方向|一个方向|这一件事|这件事就够|不展开|专门(?:攻|练|学)|仅(?:攻|练|学))/
     .test([surfaceGoal, explicitProblem, ...keyStages].join(' '));
-  const planningHints = derivePlanningHints(timeHorizon, timePerSession, timeBudget, timeBudgetCadence, keyStages, timeDimensions, scopeSize, learnerLoadProfile, triage, narrowScopeSignal);
+  const planningHints = derivePlanningHints(timeHorizon, timePerSession, timeBudget, timeBudgetCadence, keyStages, timeDimensions, typeof scopeSizeRaw === 'string' ? scopeSizeRaw : scopeSize, learnerLoadProfile, triage, narrowScopeSignal);
   // #242：读**内层 learnerProfile**（producer path.coordinator.ts:398-430 写的这层，顶层为旧快照兜底）；
   // 此前只读顶层 ⇒ 读不到，再由下方 else 整键删除，该字段从未通过定帧层。值无法归一也留痕。
   const rawSkillNature = learnerProfile.skillNature ?? input.skillNature;
@@ -1409,6 +1564,18 @@ export function buildFramedNormalizedInput(input: any): any {
           keyStages,
           outOfScope: normalizeStringArray(confirmedProposal.outOfScope),
           scopeSize: normalizeScopeSize(confirmedProposal.scopeSize ?? confirmedProposal.scope_size),
+          // 颗粒度前缀原文透传（2026-11-09 装配缝隙修复）：normalizeScopeSize 会把
+          // 「[单点概念] …」自由文本洗成 null，下游二次定帧 / enrichment 的防御性再钳
+          // 就没了信号（实测探针：双定帧第二次 raw=undefined，第一次的钳制被整段覆盖）。
+          // 原文只在有前缀语义时带出（parseTopicGranularity 认得出才有意义）。
+          ...(parseTopicGranularity(
+            confirmedProposal.scopeSizeRaw ?? confirmedProposal.scopeSize ?? confirmedProposal.scope_size,
+          )
+            ? {
+                scopeSizeRaw:
+                  confirmedProposal.scopeSizeRaw ?? confirmedProposal.scopeSize ?? confirmedProposal.scope_size,
+              }
+            : {}),
         }
       : null,
     timeDimensions,

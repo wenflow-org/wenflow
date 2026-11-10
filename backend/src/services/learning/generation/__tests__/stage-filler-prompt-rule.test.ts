@@ -46,7 +46,7 @@ describe('R8-1 同题复读禁令：提示词规则已编译进产物', () => {
   it('最新追加的规则在末位（材料承诺自带本体，2026-11-07；空壳准备课在其前），编号连续', () => {
     expect(CORE).toContain('应试形态任务');
     expect(CORE).toContain('示范题/例题/真题引用必须自带题面');
-    expect(CORE).toContain('真实交付锚');
+    expect(CORE).toContain('真实场景锚');
     const nums = [...MD.matchAll(/^(\d+)\.\s/gm)].map((m) => Number(m[1]));
     const last = Math.max(...nums);
     // 追加纪律：最新那条规则必须排在末位。判定取**带编号的规则行**——正文里会引用它（如 repairHints
@@ -122,7 +122,8 @@ describe('R8-1 与 detectStageFiller 的边界一致', () => {
     // 「回补→重推」相似度约 0.63 < 0.7 阈值 → 检测器不报；这正是提示词要管的区间
     const sim = titleSimilarity('回补三角函数的定义与基本性质', '合上书重推三角函数典型例题');
     expect(sim).toBeLessThan(0.7);
-    // 但规则 28/31 已要求收口课必须定义新认知增量或具体产出物
-    expect(CORE).toContain('新认知增量或具体产出物');
+    // 但收口课规则已要求综合实战（无提示条件下连续应用到带陷阱的新例）——2026-11-09 去「产出物」措辞后的新口径
+    expect(CORE).toContain('综合实战');
+    expect(CORE).toContain('无提示条件');
   });
 });
