@@ -1573,6 +1573,13 @@ export async function processStudentMessage(
         ? null
         : resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.currentPoint)
           ?? resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.points[0]?.name)
+          // 2026-11-11 第二刀补第二层：本轮 output.knowledge 为空但合并后的看板有当前焦点时，
+          // 用看板最后一个点（追加顺序=当前焦点）。真机两例（盘库/心理）首题无归属即是此因。
+          ?? resolveCheckpointConceptAttribution(
+            Array.isArray(mergedKnowledge) && mergedKnowledge.length
+              ? mergedKnowledge[mergedKnowledge.length - 1]?.name
+              : ''
+          )
           ?? resolveCheckpointConceptAttribution(latestSessionPointName);
       teachingState.pendingCheckpoint = normalizeCheckpointWithTelemetry({
         id: `cp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
