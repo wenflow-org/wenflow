@@ -131,17 +131,34 @@ goal 会话 understanding 显式抽取 `gapType`（信息缺口/认知缺口/练
 7. **stage-designer.yaml L109 supplementRequest 收紧（后端 stage-enrichment.ts 配合）**：增量补课仅 `intent_type==='exam'` 且存在未覆盖考纲实体时触发，普通认知建构路径关闭课数下限补课。
 8. **goal-conversation.yaml L69 时间采集门按 D-E 松绑 + 物理技能收紧**：时间仅在 deadlineDate 非空时为决定性维度；自由学习未提时间严禁追问，sessionsLengthMin 静默默认 25、objectiveScopeHours 按盲区数自下而上估；物理技能（physical_internalized + not_judgeable）从「排训练计划+事后文字归因」收紧为「仅可文本化底层理论（乐理/透视）或劝退」，落实物理课禁令。
 
-### 第二刀 · checkpoint 降频（teaching-checkpoint.ts，一处小改）
+### 第一刀预检补丁（研究线上机前预检 · 已过码验证）
 
-删「understanding<0.6 → 2 条消息加速出题」（学生懵时需要支架不是考题）；emitCheckpoint 改「单焦点收口触发」：仅当判定学生基本走通、准备推 mastered / isCompletionCandidate 时弹 1 道变式检验卡作通关证明；过程验证全部交给隐性对话互动（co-create 判对即推进看板）。
+- **第 4 项联动**：path-planning 废四段八股必须**同步改 path-reviewer.yaml L31 Integrity 维度**——原文「是否所有 unknownConcepts 都有对应 milestone」+ L55 示例「在 concept-3 之前增加一个简短阶段，建立基础理解」会判 破局即入口 不及格并发 replanInstructions 插回导论段（reviewerFeedback 具最高修改权）。改为「unknownConcepts 是否已融入对应盲区阶段的破局透镜按需供给，禁止要求在阶段 1 前单独插入无挑战的导论/预备段」，L55 示例同步换。
+- **第 6 项联动**：stage-designer 改 L107 充实度时必须**同步改 L64 数量优先级第①项**——原文「必须且只能输出恰好该数量的 subtasks」与「仅作上限容器」同文件撞车。改为「为本阶段课数上限（服务层按学时反推的容器上限），实际课数由本阶段自然包含的独立认知闭环个数决定，≤ 上限即可」。
 
-### 第三刀 · 判官脚本（payload 四块 + 黄金负样本）
+### 第二刀 · checkpoint 降频（teaching-checkpoint.ts，一处小改 + 时序条件）
+
+删「understanding<0.6 → 2 条消息加速出题」（学生懵时需要支架不是考题）；emitCheckpoint 改「单焦点收口触发」。**时序约束（预检 3，已验证 emitCheckpoint 为编排层调用前注入、isCompletionCandidate 为本轮输出——严禁同轮）**，确定性触发条件 4 条同时满足：
+
+1. 当前焦点本课尚未通过任何 checkpoint（单焦点最多 1 道）；
+2. **上一轮** analysis.understanding ≥ 0.7（或当前焦点 progress ≥ 60 / ktEstimate.mastery ≥ 0.7）；
+3. 本课已进行 ≥ 2 个有效教学回合；
+4. 当前无待答 checkpoint，且**上一轮未触发 isCompletionCandidate**（防结课信号与待答卡同轮卡死状态机）。
+
+### 第三刀 · 判官脚本（payload 四块 + 黄金负样本 + 渐进式备课对策）
 
 Payload = ①课堂 visibleDialogueContext + personaSeed（真值）②lesson-knowledge-enricher 产出（blockedFoundations/recurringConfusions/knowledgeStateSummary，被评 A）③previousStageOutcome（strugglingConcepts/recommendation）+ replan-attribution reason（被评 B）④stage-designer 下一阶段 subtasks（被评 C）。判官 prompt 用研究线版本（幻觉/复读审计、负荷升降审计、干预合理性审计三铁律 + JSON verdict + evidenceQuote）；校准 = 7 真实 + 3 黄金负样本（全抄原话/反向乱报/高负荷加难），3 假全判 fail 且 ≤2 分才放行 50 份批跑。
 
-### 方案二修订（架构预警采纳：不建第 5 套枚举）
+**渐进式备课对策（预检 4）**：备课首跑只生成 Stage 1，跑完 1 堂课时被评 C 为空——判官脚本内用已产出的 previousStageOutcome 对 Stage 2 做一次 **stage-designer dry-run 调用**凑齐 payload ④，单样本测试成本省 ~75%（跑 1 堂课而非一整阶段）。
 
-R1 原议 gapType 字段**作废**——understanding 已有 4 套分类字段，蓝屏=primary_block_type(oneoff_operation/environment_tooling)+recurrence(oneoff)、乐器=skill_nature(physical_internalized)+platform_judgment(not_judgeable) 底座已在。改为：primary_block_type 填写时机从「诊断门槛后」提权到第 1 轮，**或**新增轻量 `response_mode_hint: answer_only | answer_then_hook | learning_path | physical_decline`；蓝屏走 answer_then_hook（首轮直答+尾部「生成排障认知课」转化钩子）；物理走 physical_decline（与第一刀第 8 条联动）。
+### 方案二修订 v2（预检 5：零新增字段，连 response_mode_hint 也不需要）
+
+`prompts/orchestration/goal.yaml` 已实证注册四个分类字段的路由（L135 `understanding.primary_block_type`、L144 `recurrence`——描述原文即「triage 分流钥匙」、L160 `skill_nature`，handoff 已打通 goal-agent→path）。因此方案二从「动 Schema 批」**降维为纯规则 + TS 纯函数批**，零字段门禁：
+
+1. goal-conversation.yaml：primary_block_type / recurrence 填写时机从「诊断门槛后」提权到**第 1 轮按首句填写**；首句命中 oneoff_operation / environment_tooling × recurrence=oneoff（如蓝屏）→ 直接触发一句话讲透测试的首轮直答 + 句尾转化钩子（「想系统建立排障思维，回『生成排障课』练 1-2 节」）。
+2. response-triage.ts 纯函数：直接读现成落库的 primary_block_type / recurrence / skill_nature / platform_judgment 四字段做确定性路由（skill_nature=physical_internalized × platform_judgment=not_judgeable → physical_decline，与第一刀第 8 条联动）。
+
+（注：原 v2 的 response_mode_hint 提案随本修订作废——路由态由既有四字段组合表达，不再新造枚举。）
 
 ### 执行顺序（沿用评审结论，校准后不变）
 
