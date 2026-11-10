@@ -102,6 +102,7 @@ const JUDGE_SYSTEM_PROMPT = [
   '1) 幻觉/复读审计：C 的任务是否只是让学习者复述 A/B 已给的原话、定义或课堂结论（换个说法也算复述）？是否编造了 A/B 中不存在的事实、数字、概念或材料？有效任务必须让学习者在新情境里做一次判断或产出，而不是回忆标签。',
   '2) 负荷升降审计：结合 B 的 strugglingConcepts/recommendation 与 A 的课堂表现，C 的难度、新概念数量、任务时长是升还是降？学习者仍在挣扎（recommendation=reinforce 或 struggling 非空）却抬难度/堆新概念 = 违规；已掌握却原地重复 = 空转。',
   '3) 干预合理性审计：每条任务是否对准 A 暴露的真实盲区（B 的 blockedFoundations / recurringConfusions），是否有可验证的 acceptanceHint；与目标无关、无证据支撑、或要求平台无法承接的现实条件，判为不合理。',
+  '   执行面（平台硬约束）：任务的核心动作必须能在对话框里用文字/数字/表格/原文引用完成。把线下体力或现场操作当任务本体（去货架点数、贴便签、拆机、跑腿、当面演示）= 不合理；线下材料只能作为输入素材（学习者把单据/数量/原文贴进来），课堂动作必须发生在对这些文本的分析与判断上。',
   '',
   '判定口径：三律全部通过才 verdict=pass；任一违规 verdict=fail。score 为 0-5 整数：',
   '5=三律全过且任务有迁移价值；4=全过但有可优化点；3=有瑕疵但可修；2=至少一条铁律明确违规；1=多条铁律违规；0=整体不可用。',
@@ -434,17 +435,35 @@ async function dryRunNextStage(pathId: string, previousStageOutcome: JudgePayloa
 
 // ────────────────────────────── case 构建 ──────────────────────────────
 
-async function findTranscriptSessionForPath(createdAt: Date): Promise<string | null> {
-  const rows = await db.virtual_sessions.findMany({
-    where: { createdAt: { gte: new Date(createdAt.getTime() - 36 * 3600 * 1000), lte: new Date(createdAt.getTime() + 36 * 3600 * 1000) } },
+async function findTranscriptSessionForPath(pathRow: { id: string; userId: string; createdAt: Date }): Promise<string | null> {
+  const hasTeachingLogs = async (sessionId: string) => (await db.virtual_session_logs.count({
+    where: { sessionId, phase: { in: ['teaching-reply', 'teaching-response'] } },
+  })) > 0;
+  // ① 精确绑定：virtual_sessions.learningPathId = pathId（批跑/学习启动后回写）
+  const bound = await db.virtual_sessions.findMany({
+    where: { learningPathId: pathRow.id },
+    orderBy: { createdAt: 'desc' },
+  });
+  for (const row of bound) {
+    if (await hasTeachingLogs(row.id)) return row.id;
+  }
+  // ② 同一学习者：path.userId = virtual_sessions.userId（2026-11-11 实证：只按时间窗取
+  //    最近会议话会把考研课堂拼进盘库路径，判官直接判「材料错位」——必须按学习者绑定）
+  const owned = await db.virtual_sessions.findMany({
+    where: { userId: pathRow.userId },
+    orderBy: { createdAt: 'desc' },
+  });
+  for (const row of owned) {
+    if (await hasTeachingLogs(row.id)) return row.id;
+  }
+  // ③ 最后才回退时间窗（路径不是虚拟学习者跑出来的，例如管理端真机测试）
+  const nearby = await db.virtual_sessions.findMany({
+    where: { createdAt: { gte: new Date(pathRow.createdAt.getTime() - 36 * 3600 * 1000), lte: new Date(pathRow.createdAt.getTime() + 36 * 3600 * 1000) } },
     orderBy: { createdAt: 'desc' },
     take: 5,
   });
-  for (const row of rows) {
-    const has = await db.virtual_session_logs.count({
-      where: { sessionId: row.id, phase: { in: ['teaching-reply', 'teaching-response'] } },
-    });
-    if (has > 0) return row.id;
+  for (const row of nearby) {
+    if (await hasTeachingLogs(row.id)) return row.id;
   }
   return null;
 }
@@ -453,7 +472,7 @@ async function buildCaseFromPath(pathId: string, opts: { dryRunStage?: boolean }
   const pathRow = await db.learning_paths.findUnique({ where: { id: pathId } });
   if (!pathRow) throw new Error(`PATH_NOT_FOUND: ${pathId}`);
   const provenance: Record<string, string> = {};
-  const sessionId = await findTranscriptSessionForPath(pathRow.createdAt);
+  const sessionId = await findTranscriptSessionForPath(pathRow);
   let personaSeed: Record<string, unknown> = {
     pathTitle: pathRow.title,
     subject: pathRow.subject,
