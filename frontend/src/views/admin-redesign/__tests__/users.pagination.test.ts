@@ -144,21 +144,21 @@ describe('Users 客户端分页（mk-pagination）', () => {
     w.unmount();
   });
 
-  /** 2026-10-26：这页唯一的处置动作（改昵称 / 邮箱 / 角色、重置密码）从 ⋯ 菜单提到操作列 */
-  it('操作列「编辑」打开表单；⋯ 菜单不再有第二个「编辑」入口', async () => {
+  /** 2026-10-26：这页唯一的处置动作（改昵称 / 邮箱 / 角色、重置密码）从 ⋯ 菜单提到操作列。
+   *  2026-11-10 用户「三个点没必要单独做一个删除」：⋯ 撤除，「删除」与「编辑」并排露在行内。 */
+  it('操作列只有「编辑」+「删除」两颗行内动作，不再有 ⋯ 菜单', async () => {
     localStorage.removeItem('wf_users_hidden_cols_v5');
     const w = await mountUsers();
     await nextTick();
     const firstRow = w.findAll('tbody tr')[0];
     const rowBtns = firstRow.findAll('.mk-actions .mk-link');
-    expect(rowBtns.some((b) => b.text() === '编辑'), '行内应有「编辑」动作').toBe(true);
+    expect(rowBtns.map((b) => b.text())).toEqual(['编辑', '删除']);
+    expect(rowBtns[1].classes(), '删除按破坏性动作着色').toContain('mk-link--danger');
     // 行点击本来就是详情，操作列不再重复一颗「详情」
     expect(rowBtns.some((b) => b.text() === '详情')).toBe(false);
-    // ⋯ 里只剩删除（改角色/改密回到行内）
-    await firstRow.find('.mk-menu__btn').trigger('click');
-    await nextTick();
-    const menuItems = firstRow.findAll('.mk-menu__item').map((b) => b.text());
-    expect(menuItems).toEqual(['删除']);
+    // ⋯ 及其浮层整块退役
+    expect(firstRow.find('.mk-menu__btn').exists()).toBe(false);
+    expect(w.find('.mk-menu__pop').exists()).toBe(false);
     w.unmount();
   });
 

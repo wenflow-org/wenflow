@@ -162,28 +162,24 @@
             <td v-if="showCol('lastlogin')"><span :class="u.lastLogin === '从未' ? 'mk-na' : ''">{{ u.lastLogin }}</span></td>
             <td>
               <!-- 2026-11-08 用户走查：操作列任何状态下都渲染（不再在批量模式下整列变空白）。
-                   勾选列与编辑/⋯ 并排是管理台表格常态，优先保证列不为空、表头有「操作」二字下方有内容。 -->
+                   勾选列与行内动作并排是管理台表格常态，优先保证列不为空、表头有「操作」二字下方有内容。 -->
               <div class="mk-actions">
                 <!-- 行点击进详情，操作列留给这页唯一的处置动作：编辑（改昵称 / 邮箱 / 角色、重置密码）。
                      已删除行不给编辑（账号不可登录，先恢复再改），恢复直接露出来——
                      此前只在「⋯」里，已删除视图整列只有一个省略号（2026-11-02 评审）。 -->
                 <button v-if="!u.deleted" type="button" class="mk-link" @click.stop="openEdit(u)">编辑</button>
                 <button v-else-if="isLive" type="button" class="mk-link" :disabled="u.busy" @click.stop="menuRestore(u)">恢复</button>
-                <!-- 当前账号也保留「⋯」入口（2026-11-02 评审：同一列里只有自己这一行少一个入口，
-                     页面上没有解释）。菜单里删除项置灰并说明原因。 -->
-                <div v-if="isLive && !u.deleted" class="mk-menu">
-                  <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === u.id" @click.stop="toggleMenu(u.id)">⋯</button>
-                  <div v-if="openMenu === u.id" class="mk-menu__pop" :style="popStyle" @click.stop>
-                    <button
-                      type="button"
-                      class="mk-menu__item mk-menu__item--danger"
-                      role="menuitem"
-                      :disabled="isSelf(u) || u.busy"
-                      :title="isSelf(u) ? '当前登录的账号不能删除自己' : undefined"
-                      @click="menuDelete(u)"
-                    >删除</button>
-                  </div>
-                </div>
+                <!-- 删除直接露在行内（2026-11-10 用户「三个点没必要单独做一个删除」）：
+                     ⋯ 里只有这一项，却要多一次点击、且让每行多出一个入口；改成与「编辑」并排的红字链接。
+                     当前账号仍保留这颗按钮（同一列只有自己少一个动作会被读成缺漏），置灰并写明原因。 -->
+                <button
+                  v-if="isLive && !u.deleted"
+                  type="button"
+                  class="mk-link mk-link--danger"
+                  :disabled="isSelf(u) || u.busy"
+                  :title="isSelf(u) ? '当前登录的账号不能删除自己' : undefined"
+                  @click.stop="menuDelete(u)"
+                >删除</button>
               </div>
             </td>
           </tr>
@@ -236,7 +232,6 @@
 import { computed, ref, watch } from 'vue'
 import { openSubPage, intent, isLive } from './store'
 import { liveUsers, liveDeleteUser, liveUsersTotal, refreshLiveUsers, timeAgo, errMsg, registrationEnabled, liveLoading, liveFailures, loadLiveData } from './live'
-import { useRowMenu } from './useRowMenu'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import MockSkeletonTable from './SkeletonTable.vue'
 import Pagination from './Pagination.vue'
@@ -486,15 +481,11 @@ const ulViewOptions = computed(() => [
 const dialogOpen = ref(false)
 const dialogUser = ref<EditableUser | null>(null)
 
-const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
-
-/** 行内 ⋯ 菜单项：先关菜单再执行 */
+/** 行内处置动作（删除 / 恢复）：不再经 ⋯ 菜单，直接执行 */
 function menuDelete(u: UserRow) {
-  closeMenu()
   void removeUser(u)
 }
 function menuRestore(u: UserRow) {
-  closeMenu()
   void restoreUserRow(u)
 }
 
