@@ -275,12 +275,15 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     expect(dialog.exists()).toBe(true);
     expect(dialog.text()).toContain('联网 · 服务配置');
     // 搜索 / 抓取两条链都在界面上，主用可换（不再是一行只读的「尝试顺序」）
-    expect(dialog.findAll('.ac-prio')).toHaveLength(2);
+    expect(dialog.findAll('.ac-row')).toHaveLength(2);
     // 搜索：不做链式降级 → 只有一个选择位（无「主用/备用」）
-    expect(dialog.findAll('.ac-prio')[0].text()).not.toContain('备用');
-    expect(dialog.findAll('.ac-prio')[0].findAll('.ac-prio__item')).toHaveLength(1);
+    expect(dialog.findAll('.ac-row')[0].text()).not.toContain('备用');
+    /* 2026-11-10 重设计：单选通道只留一个选择器——此前左侧还挂一枚同名胶囊，
+       与下拉里的服务名重复。 */
+    expect(dialog.findAll('.ac-row')[0].findAll('.ac-prio__item')).toHaveLength(0);
+    expect(dialog.findAll('.ac-row')[0].findAll('.mk-select')).toHaveLength(1);
     // 抓取：仍是降级链，第一枚是主用
-    expect(dialog.findAll('.ac-prio')[1].text()).toContain('主用');
+    expect(dialog.findAll('.ac-row')[1].text()).toContain('主用');
     expect(dialog.find('.ac-config-order').exists()).toBe(false);
     const cards = dialog.findAll('.ac-config-provider');
     expect(cards.map((c) => c.find('.ac-config-provider__name').text())).toEqual(['TinyFish', 'Tavily', 'Exa']);
@@ -311,8 +314,9 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     await tavily().find('.ac-config-provider__primary').trigger('click');
     await flushPromises();
     // 设为主用 = 把它提到所在链的第一位；搜索已是单档（不参与主用/备用），只有抓取链会变
-    expect(dialog().findAll('.ac-prio')[0].find('.ac-prio__name').text()).toBe('TinyFish');
-    expect(dialog().findAll('.ac-prio')[1].find('.ac-prio__name').text()).toBe('Tavily');
+    // 2026-11-10：搜索行只剩选择器（不再有同名胶囊），断言读选择器当前值
+    expect(dialog().findAll('.ac-row')[0].find('.mk-select__value').text()).toBe('TinyFish');
+    expect(dialog().findAll('.ac-row')[1].find('.ac-prio__name').text()).toBe('Tavily');
     await dialog().findAll('button').find((b) => b.text() === '保存')!.trigger('click');
     await flushPromises();
     expect(pluginSaveMock).toHaveBeenCalledWith(
@@ -542,7 +546,7 @@ describe('Addons MCP 服务（transport 支持）', () => {
     await decisionRow.find('.mk-btn').trigger('click');
     await flushPromises();
     const dialog = () => wrapper.find('[role="dialog"][aria-label="插件服务配置"]');
-    const chain = () => dialog().findAll('.ac-prio')[0];
+    const chain = () => dialog().findAll('.ac-row')[0];
     const names = () => chain().findAll('.ac-prio__name').map((n) => n.text());
     const ops = (label: string) => chain().findAll('.ac-prio__op')
       .filter((b) => b.attributes('aria-label') === label);

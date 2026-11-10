@@ -237,76 +237,93 @@
             <h3 class="mk-modal__title">{{ configTitle }} · 服务配置</h3>
             <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeConfig">✕</button>
           </div>
-          <div class="mk-modal__body">
-            <!-- 通道优先级（2026-10-26 用户两次走查：「这个真的很丑」「本身是三选一，然后用户可以
-                 自己配置优先级」）：每通道一条链，第一位是主用，其余是备用；顺序由用户自己排，
-                 也可以把 provider 加进/移出链。
-                 2026-11-07 用户「联网的地址与顺序也要能改」：上一版把联网整体锁成只读（另一套模板），
-                 现在三个能力共用这一套——联网的搜索/抓取两条链也能排，地址也能覆盖。 -->
-            <div v-for="channel in configTarget?.channels ?? []" :key="channel.id" class="ac-prio">
-              <span class="ac-prio__k">{{ channel.label }}</span>
-              <div class="ac-prio__list">
+          <div class="mk-modal__body ac-config">
+            <!-- 2026-11-10 用户「二级页面重新设计一下」：弹层分两段——
+                 「服务」回答这个能力由哪家提供（搜索单选、抓取可排主备），
+                 「密钥与地址」逐家填凭据与端点。此前两段之间没有段名，通道行里
+                 还重复印了一遍 provider 名（胶囊 + 下拉各一份），读起来像两件事。 -->
+            <section class="ac-sec">
+              <h4 class="mk-section__title">服务</h4>
+              <div v-for="channel in configTarget?.channels ?? []" :key="channel.id" class="ac-row">
+                <span class="ac-row__k">{{ channel.label }}</span>
                 <!-- 不做链式降级的通道（搜索 / 决策）：只有一个「用哪一家」的选择位，
-                     没有备用、没有排序——运行时也只取这一家，失败即报错（2026-11-10 用户裁决） -->
-                <template v-if="channel.single">
+                     没有备用、没有排序——运行时也只取这一家，失败即报错（2026-11-10 用户裁决）。
+                     选择器本身已经写着这家服务名，左侧再挂一枚同名胶囊是复读。 -->
+                <div class="ac-row__ctrl">
+                  <template v-if="channel.single">
+                    <MkSelect
+                      :model-value="orderOf(channel.id)[0] || ''"
+                      :options="channelProviderOptions()"
+                      :aria-label="`选择${channel.label}服务`"
+                      size="sm"
+                      @update:model-value="setSingleProvider(channel.id, $event)"
+                    />
+                  </template>
+                  <template v-else>
+                    <span
+                      v-for="(pid, i) in orderOf(channel.id)"
+                      :key="pid"
+                      class="ac-prio__item"
+                      :title="providerConfiguredOf(pid) ? '已配置' : '缺少密钥'"
+                    >
+                      <span class="ac-prio__rank">{{ i === 0 ? '主用' : `备用 ${i}` }}</span>
+                      <strong class="ac-prio__name">{{ providerLabelOf(pid) }}</strong>
+                      <!-- 排序与移出只在 ≥2 个服务时出现：只剩一个时 ↑↓ 与 ✕ 都无效，
+                           却仍占着胶囊宽度（2026-11-07 用户「生图来源只有一个，这个叉是干嘛的」） -->
+                      <span v-if="orderOf(channel.id).length > 1" class="ac-prio__ops">
+                        <button type="button" class="ac-prio__op" aria-label="上移" :disabled="i === 0"
+                                @click="moveInOrder(channel.id, i, -1)">↑</button>
+                        <button type="button" class="ac-prio__op" aria-label="下移"
+                                :disabled="i === orderOf(channel.id).length - 1"
+                                @click="moveInOrder(channel.id, i, 1)">↓</button>
+                        <button type="button" class="ac-prio__op" aria-label="移出链"
+                                @click="removeFromOrder(channel.id, i)">✕</button>
+                      </span>
+                    </span>
+                    <!-- 2026-10-27 原生 select → MkSelect：触发器常驻「＋ 加入备用」，
+                         选中后由 setOrder 追加并保持 modelValue=''（原生 select 需手动复位已不需要）。
+                         「＋ 加入备用」走 MkSelect 的 placeholder，不再作为列表首项：同名同义的
+                         一项会让人以为它已选中/已添加，而 modelValue 恒为 '' 还会给它挂上蓝勾。 -->
+                    <MkSelect
+                      v-if="availableOf(channel.id).length"
+                      :model-value="''"
+                      :options="addOptionsOf(channel)"
+                      placeholder="＋ 加入备用"
+                      :aria-label="`把 provider 加入${channel.label}备用`"
+                      size="sm"
+                      @change="onAddToOrder(channel.id, $event)"
+                    />
+                  </template>
+                </div>
+                <!-- 状态跟着选择位走：单选通道能一眼看出这家有没有密钥；
+                     链路通道每家状态在各家卡头，不在这里重复 -->
+                <span v-if="channel.single" class="ac-row__state">
                   <span
-                    class="ac-prio__item"
-                    :title="providerConfiguredOf(orderOf(channel.id)[0]) ? '已配置' : '缺少密钥'"
-                  >
-                    <strong class="ac-prio__name">{{ providerLabelOf(orderOf(channel.id)[0]) }}</strong>
-                  </span>
-                  <MkSelect
-                    :model-value="orderOf(channel.id)[0] || ''"
-                    :options="channelProviderOptions()"
-                    aria-label="选择服务"
-                    size="sm"
-                    @update:model-value="setSingleProvider(channel.id, $event)"
-                  />
-                </template>
-                <template v-else>
-                <span
-                  v-for="(pid, i) in orderOf(channel.id)"
-                  :key="pid"
-                  class="ac-prio__item"
-                  :title="providerConfiguredOf(pid) ? '已配置' : '缺少密钥'"
-                >
-                  <span class="ac-prio__rank">{{ i === 0 ? '主用' : `备用 ${i}` }}</span>
-                  <strong class="ac-prio__name">{{ providerLabelOf(pid) }}</strong>
-                  <!-- 排序与移出只在 ≥2 个服务时出现：只剩一个时 ↑↓ 与 ✕ 都无效，
-                       却仍占着胶囊宽度（2026-11-07 用户「生图来源只有一个，这个叉是干嘛的」） -->
-                  <span v-if="orderOf(channel.id).length > 1" class="ac-prio__ops">
-                    <button type="button" class="ac-prio__op" aria-label="上移" :disabled="i === 0"
-                            @click="moveInOrder(channel.id, i, -1)">↑</button>
-                    <button type="button" class="ac-prio__op" aria-label="下移"
-                            :disabled="i === orderOf(channel.id).length - 1"
-                            @click="moveInOrder(channel.id, i, 1)">↓</button>
-                    <button type="button" class="ac-prio__op" aria-label="移出链"
-                            @click="removeFromOrder(channel.id, i)">✕</button>
-                  </span>
+                    class="mk-badge mk-badge--sm"
+                    :class="providerConfiguredOf(orderOf(channel.id)[0]) ? 'mk-badge--ok' : 'mk-badge--warn'"
+                  >{{ providerConfiguredOf(orderOf(channel.id)[0]) ? '已配置' : '缺少密钥' }}</span>
                 </span>
-                <!-- 2026-10-27 原生 select → MkSelect：触发器常驻「＋ 加入备用」，
-                     选中后由 setOrder 追加并保持 modelValue=''（原生 select 需手动复位已不需要）。
-                     「＋ 加入备用」走 MkSelect 的 placeholder，不再作为列表首项：同名同义的
-                     一项会让人以为它已选中/已添加，而 modelValue 恒为 '' 还会给它挂上蓝勾。 -->
-                <MkSelect
-                  v-if="availableOf(channel.id).length"
-                  :model-value="''"
-                  :options="addOptionsOf(channel)"
-                  placeholder="＋ 加入备用"
-                  :aria-label="`把 provider 加入${channel.label}备用`"
-                  size="sm"
-                  @change="onAddToOrder(channel.id, $event)"
-                />
-                </template>
               </div>
-            </div>
+            </section>
+
             <!-- 字段只给链上的 provider（其余不参与调用，也不占版面）。
                  2026-11-07 用户「API key 在左、端点地址在右」：密钥字段排第一列，
                  地址/模型等可选字段排第二列；空地址=用官方默认（placeholder 就是当前生效值）。 -->
-            <section class="ac-config-provider" v-for="provider in chainProviders" :key="provider.id">
-              <header class="ac-config-provider__head">
-                <strong class="ac-config-provider__name">{{ provider.label }}</strong>
-                <span class="ac-config-provider__badges">
+            <section class="ac-sec">
+              <h4 class="mk-section__title">密钥与地址</h4>
+              <div class="ac-config-provider" v-for="provider in chainProviders" :key="provider.id">
+                <header class="ac-config-provider__head">
+                  <strong class="ac-config-provider__name">{{ provider.label }}</strong>
+                  <span class="mk-badge mk-badge--sm" :class="provider.configured ? 'mk-badge--ok' : 'mk-badge--warn'">
+                    {{ provider.configured ? '已配置' : '缺少密钥' }}
+                  </span>
+                  <span class="ac-config-provider__spacer"></span>
+                  <button
+                    v-if="hasChainChannel && !isPrimaryOf(provider.id)"
+                    type="button"
+                    class="mk-link ac-config-provider__primary"
+                    @click="setPrimaryOf(provider.id)"
+                  >设为主用</button>
                   <!-- 测试只探这一家（不进降级链）：改了端点/密钥后要能立刻知道「它通不通」，
                        走主链会拿到「换一家还是成功了」的假信号 -->
                   <button
@@ -315,40 +332,31 @@
                     :disabled="probeBusy === `${configTarget?.id}:${provider.id}`"
                     @click="probeProvider(provider.id)"
                   >{{ probeBusy === `${configTarget?.id}:${provider.id}` ? '测试中…' : '测试' }}</button>
+                </header>
+                <div class="ac-config-fields">
+                  <label class="mk-field" v-for="field in orderedFields(provider)" :key="field.key">
+                    <span class="mk-field__label">{{ field.label }}</span>
+                    <input
+                      v-model="draft[provider.id][field.key]"
+                      class="mk-field__input"
+                      :type="field.type"
+                      :placeholder="fieldPlaceholder(field)"
+                      :autocomplete="field.secret ? 'new-password' : 'off'"
+                    />
+                  </label>
+                </div>
+                <p
+                  v-if="probeResult?.key === `${configTarget?.id}:${provider.id}`"
+                  class="ac-config-provider__probe"
+                  :class="probeResult.ok ? 'is-ok' : 'is-bad'"
+                >{{ probeResult.ok ? `${probeResult.detail} · ${probeResult.latencyMs}ms` : probeResult.detail }}</p>
+                <div v-if="provider.keySource === 'db' || clearKeys[provider.id]" class="ac-config-provider__foot">
                   <button
-                    v-if="!isPrimaryOf(provider.id)"
                     type="button"
-                    class="mk-link ac-config-provider__primary"
-                    @click="setPrimaryOf(provider.id)"
-                  >设为主用</button>
-                  <span class="mk-badge" :class="provider.configured ? 'mk-badge--ok' : 'mk-badge--warn'">
-                    {{ provider.configured ? '已配置' : '缺少密钥' }}
-                  </span>
-                </span>
-              </header>
-              <div class="ac-config-fields">
-                <label class="mk-field" v-for="field in orderedFields(provider)" :key="field.key">
-                  <span class="mk-field__label">{{ field.label }}</span>
-                  <input
-                    v-model="draft[provider.id][field.key]"
-                    class="mk-field__input"
-                    :type="field.type"
-                    :placeholder="fieldPlaceholder(field)"
-                    :autocomplete="field.secret ? 'new-password' : 'off'"
-                  />
-                </label>
-              </div>
-              <p
-                v-if="probeResult?.key === `${configTarget?.id}:${provider.id}`"
-                class="ac-config-provider__probe"
-                :class="probeResult.ok ? 'is-ok' : 'is-bad'"
-              >{{ probeResult.ok ? `${probeResult.detail} · ${probeResult.latencyMs}ms` : probeResult.detail }}</p>
-              <div v-if="provider.keySource === 'db' || clearKeys[provider.id]" class="ac-config-provider__foot">
-                <button
-                  type="button"
-                  class="mk-link"
-                  @click="toggleClearKey(provider.id)"
-                >{{ clearKeys[provider.id] ? '取消清除' : '清除已保存密钥' }}</button>
+                    class="mk-link"
+                    @click="toggleClearKey(provider.id)"
+                  >{{ clearKeys[provider.id] ? '取消清除' : '清除已保存密钥' }}</button>
+                </div>
               </div>
             </section>
           </div>
@@ -817,6 +825,9 @@ function fieldPlaceholder(field: PluginProviderField): string {
 function orderedFields(provider: PluginProvider): PluginProviderField[] {
   return [...provider.fields].sort((a, b) => Number(b.secret) - Number(a.secret))
 }
+/** 该插件是否有降级链通道（联网的「抓取」）：没有链时不存在「主用」概念，
+    不给「设为主用」这枚点了也不生效的按钮（决策 / 生图只有一个单档通道）。 */
+const hasChainChannel = computed(() => (configTarget.value?.channels ?? []).some((ch) => !ch.single))
 /** 该 provider 是否已在它所在的每条链上排第一（是则不再给「设为主用」） */
 function isPrimaryOf(providerId: string): boolean {
   /* 只看降级链通道：单档通道（搜索 / 决策）没有主用概念，不参与这个判断——
@@ -1186,28 +1197,28 @@ function goLogs(skillId: string) {
   .ac-cap-skel--wide { grid-column: 1 / -1; }
 }
 
-/* MCP 服务编辑弹窗：先排通道优先级（主用 + 备用，用户可自己调），再填链上 provider 的密钥/入口。
-   2026-10-25 用户「不要这种解释型文案」：简介、降级注记、provider 说明句、字段提示行全撤。
-   2026-10-26 用户两次走查「这个真的很丑」「本身是三选一，然后用户可以自己配置优先级」：
-   原先是「只读顺序行 + 全部 provider 平铺成灰底卡」，读起来像都在用、每张卡还各带一个
-   「缺少密钥」；现在顺序行变成可编辑的链，字段只给链上的人，卡也不再是灰底盒子。 */
-.ac-prio {
+/* 服务配置弹窗（2026-11-10 重设计）：两段——「服务」选谁提供，「密钥与地址」逐家填。
+   段名用共享 .mk-section__title；通道行 = 固定宽标签 + 控件 + 状态，三列对齐。
+   2026-10-25 用户「不要这种解释型文案」：简介、降级注记、provider 说明句、字段提示行全撤。 */
+.ac-config { display: grid; gap: 18px; }
+.ac-sec { display: grid; gap: 10px; align-content: start; }
+.ac-sec + .ac-sec { padding-top: 16px; border-top: 1px solid var(--mk-line); }
+.ac-row {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--mk-line);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
 }
-.ac-prio:last-of-type { border-bottom: 0; }
-.ac-prio__k {
+.ac-row__k {
   flex: none;
-  width: 32px;
-  padding-top: 6px;
+  width: 36px;
   font-size: var(--mk-fs-micro);
   font-weight: 600;
   color: var(--mk-muted);
 }
-.ac-prio__list { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.ac-row__ctrl { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.ac-row__ctrl :deep(.mk-select) { min-width: 180px; }
+.ac-row__state { margin-left: auto; flex: none; }
 .ac-prio__item {
   display: inline-flex;
   align-items: center;
@@ -1238,18 +1249,19 @@ function goLogs(skillId: string) {
 .ac-prio__op:disabled { opacity: 0.35; cursor: default; }
 /* 「加入备用」下拉的视觉由 MkSelect 承担（2026-10-27 原生 select → MkSelect）：
    原 .ac-prio__add 的虚线胶囊壳不再需要，触发器的描边/圆角/字号统一走共享原语。 */
-/* provider 段：白面 + 发丝线分隔（不再用灰底卡片堆叠），字段两列避免占位符被压断 */
+/* provider 段：白面 + 发丝线分隔（不再用灰底卡片堆叠），字段两列避免占位符被压断。
+   段名已在上面，首家的顶部发丝线由 .ac-sec 的标题承担，不再叠一条。 */
 .ac-config-provider {
   margin-top: 0;
-  padding: 12px 0 0;
+  padding: 0;
   border: 0;
-  border-top: 1px solid var(--mk-line);
   border-radius: 0;
   background: transparent;
 }
-.ac-config-provider__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ac-config-provider + .ac-config-provider { padding-top: 14px; border-top: 1px solid var(--mk-line); }
+.ac-config-provider__head { display: flex; align-items: center; gap: 10px; }
 .ac-config-provider__name { font-size: var(--mk-fs-body); font-weight: 600; color: var(--mk-ink); }
-.ac-config-provider__badges { display: inline-flex; align-items: center; gap: 10px; }
+.ac-config-provider__spacer { flex: 1 1 auto; }
 .ac-config-provider__primary { font-size: var(--mk-fs-micro); }
 .ac-config-provider__test { font-size: var(--mk-fs-micro); }
 /* 探测结果：成功一条绿字、失败一条红字（上游原文，可换行展示不截断） */
