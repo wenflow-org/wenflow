@@ -156,6 +156,12 @@ describe('知识图谱容器与顶距（2026-11-07 走查/二次/三次）：同
     /* 2026-11-10 用户补一句「不喜欢完全贴底，还是留一点空间」：卡片底边不吃到页脚，
        桌面档留一档 margin 从剩余高度里扣（页面总高仍=视口，不产生滚动）。 */
     expect(css).toMatch(/\.km__card \{[^}]*margin-bottom: 2[0-9]px/);
+    /* 2026-11-10 用户走查「放大后会超出边界」：画布盒写死 height:100% 会把图例顶到盒子外
+       （图例压到卡片下沿），放大后的节点于是画到图例底下。画布盒必须是「画布 + 图例」的
+       纵向流，画布用 flex-basis:0 吃剩余高度，并裁掉溢出。 */
+    expect(css, '画布盒不许再写死 height:100%').not.toMatch(/\.km__card :deep\(\.mk-ge__canvas\) \{[^}]*height:\s*100%/);
+    expect(css).toMatch(/\.km__card :deep\(\.mk-graph-wrap\) \{[^}]*flex:\s*1 1 0%/);
+    expect(css).toMatch(/\.km__card :deep\(\.mk-ge__canvas\) \{[^}]*overflow:\s*hidden/);
     const narrow = strip(km).slice(strip(km).indexOf('@media (max-width: 1100px)'));
     expect(narrow, '移动档不该再改画布高度变量（高度已由 prop 的 clamp 统一）').not.toMatch(/--km-h-floor:/);
   });

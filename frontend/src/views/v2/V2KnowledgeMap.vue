@@ -252,17 +252,29 @@ onMounted(async () => {
     min-height: 0;
     grid-template-rows: minmax(0, 1fr);
   }
+  /* 画布盒是「画布 + 图例」的纵向流：写死 height:100% 会把图例挤到盒子外
+     ——图例压到卡片下沿，滚轮放大后的节点直接画到图例底下（2026-11-10 用户截图）。 */
   .km__card :deep(.mk-ge__canvas) {
-    height: 100%;
-    min-height: 0;
-  }
-  /* MkGraph 的根是 .mk-graph-wrap（内层才是 .mk-graph），中间这层不给高度的话
-     画布的 height:100% 会落到 auto 上变成 0 */
-  .km__card :deep(.mk-graph-wrap) {
-    height: 100%;
+    flex: 1 1 auto;
     min-height: 0;
     display: flex;
     flex-direction: column;
+    /* 兜底裁剪：画布万一比盒子大（缩放/resize 竞态），多出来的部分被裁掉，
+       而不是画到图例和卡片外面的页面上。 */
+    overflow: hidden;
+  }
+  /* MkGraph 的根是 .mk-graph-wrap（内层才是 .mk-graph）。这一层跟内层都要能缩：
+     用 flex-basis:0 定主尺寸，不再靠 height:100% 硬顶（那样图例与「未画出的概念」
+     注脚会被顶出盒子）。 */
+  .km__card :deep(.mk-graph-wrap) {
+    flex: 1 1 0%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .km__card :deep(.mk-graph) {
+    flex: 1 1 0%;
+    min-height: 0;
   }
   .km__card :deep(.mk-ge__card) {
     flex: 1 1 auto;
