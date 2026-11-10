@@ -153,6 +153,9 @@ describe('知识图谱容器与顶距（2026-11-07 走查/二次/三次）：同
       expect(css, `缺少自适应链路节点 ${sel}`).toContain(sel);
     }
     expect(css).toMatch(/\.km__card :deep\(\.mk-ge__body\) \{[^}]*grid-template-rows: minmax\(0, 1fr\)/);
+    /* 2026-11-10 用户补一句「不喜欢完全贴底，还是留一点空间」：卡片底边不吃到页脚，
+       桌面档留一档 margin 从剩余高度里扣（页面总高仍=视口，不产生滚动）。 */
+    expect(css).toMatch(/\.km__card \{[^}]*margin-bottom: 2[0-9]px/);
     const narrow = strip(km).slice(strip(km).indexOf('@media (max-width: 1100px)'));
     expect(narrow, '移动档不该再改画布高度变量（高度已由 prop 的 clamp 统一）').not.toMatch(/--km-h-floor:/);
   });

@@ -235,6 +235,9 @@ onMounted(async () => {
     flex: 1 1 auto;
     min-height: 0;
     display: flex;
+    /* 2026-11-10 用户走查「不喜欢完全贴底」：卡片与页脚留白之间再让出一档呼吸空间，
+       由这条 margin 从剩余高度里扣（页面总高仍等于视口，不产生滚动）。 */
+    margin-bottom: 28px;
   }
   .km__card :deep(.mk-ge) {
     flex: 1 1 auto;
