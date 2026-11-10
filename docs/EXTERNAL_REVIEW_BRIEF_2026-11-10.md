@@ -136,6 +136,17 @@ goal 会话 understanding 显式抽取 `gapType`（信息缺口/认知缺口/练
 - **第 4 项联动**：path-planning 废四段八股必须**同步改 path-reviewer.yaml L31 Integrity 维度**——原文「是否所有 unknownConcepts 都有对应 milestone」+ L55 示例「在 concept-3 之前增加一个简短阶段，建立基础理解」会判 破局即入口 不及格并发 replanInstructions 插回导论段（reviewerFeedback 具最高修改权）。改为「unknownConcepts 是否已融入对应盲区阶段的破局透镜按需供给，禁止要求在阶段 1 前单独插入无挑战的导论/预备段」，L55 示例同步换。
 - **第 6 项联动**：stage-designer 改 L107 充实度时必须**同步改 L64 数量优先级第①项**——原文「必须且只能输出恰好该数量的 subtasks」与「仅作上限容器」同文件撞车。改为「为本阶段课数上限（服务层按学时反推的容器上限），实际课数由本阶段自然包含的独立认知闭环个数决定，≤ 上限即可」。
 
+### 第一刀预检补丁三（同文件互搏清扫 · 第三轮预检，已过码验证）
+
+- **补丁 A（=研究线补丁 1，并入前条 L64 项）**：数量优先级第①项改为上限容器时**加 exam 保底 carve-out**——「仅当 intent_type==='exam' 且需覆盖完整考纲清单时，targetSubtasksForStage 才作为保底下限」（与手术 7 的 exam-only 补课同口径）。
+- **补丁 B（里程碑数量死锁，实证 L78+L96 双条）**：path-planning 两处「targetMilestones 存在时必须且只能输出恰好该数量，不得增减」会锁死盲区三律的删并——而 targetMilestones 几乎 100% 存在（来自已确认 keyStages）。两步修：① **源头拦截**——goal-conversation 的 key_stages 字段定义末尾补「每个阶段必须对应一个具体认知盲区（外行按直觉做会翻车的点），严禁把概念导论/发展史/热身准备列为独立阶段」；② **本层换芯**——盲区三律第②条补「若 targetMilestones 已锁定不可减，写不出翻车点的空壳阶段必须原地换芯为头号盲区的边界反例深潜或任务外变式阶段，严禁保留导论式空壳」。
+- **补丁 C（时间硬条件残留，实证 L59）**：推进 proposing 的 4 项硬条件里「available_resources 至少含 time_horizon 或 time_budget」需补第二例外——L59 已有「颗粒度路由例外」先例结构，并列加「无 deadline 的自由学习未提时间时按单次 25 分钟静默满足，不追问」（与手术 8 的 L69 改动同语义闭合）。
+- **补丁 D（物理承接三处对齐，实证 goal L88/L90 + stage-designer L70）**：goal-conversation 能力边界披露的「能做的：给训练计划（练什么、练多久…）」与说法示例、stage-designer not_judgeable 三形态里的「①训练计划」全部改为二选一口径：「要么诚实收窄到纯文本可检验的底层理论（乐理/透视/脚本结构），要么明确劝退；禁止生成线下练琴/绘画打卡式训练计划课」（保留复盘归因/原理讲解两形态）。
+- **补丁 E（破局即入口防跑偏措辞，实证 stage-designer L87 概念门槛 gate）**：盲区三律第③条措辞点明——阶段 1 直击的是【经典公共翻车靶子】，以 acquire/deconstruct 形态带学习者直面「普通人按直觉会怎么错」当场亮真名透镜；用户自带半成品材料仍留该阶段末课收口。防两类误读：首课让零基础者 execute 硬刚（撞 L87 gate）、拿用户半成品开刀（撞阶段内顺序铁律）。
+- **补丁 F（温故微挑战上报时点两档，对齐 teaching-turn L109 既有语义）**：failed（完全卡住/离谱）→ 当轮上报、一句话点破用法、立即进正课不纠缠；with-hint（方向对差半步）→ 本轮**不报**，给 1 句最小线索并顺势搭正课第一步同构小问，学生下一轮接住后补报 with-hint——防 with-hint 分支变死代码或模型虚报。
+
+（第一刀手术清单至此：9 处主手术 + 6 处同文件同步补丁，全部行号锁定。）
+
 ### 第二刀 · checkpoint 降频（teaching-checkpoint.ts，一处小改 + 时序条件）
 
 删「understanding<0.6 → 2 条消息加速出题」（学生懵时需要支架不是考题）；emitCheckpoint 改「单焦点收口触发」。**时序约束（预检 3，已验证 emitCheckpoint 为编排层调用前注入、isCompletionCandidate 为本轮输出——严禁同轮）**，确定性触发条件 4 条同时满足：
