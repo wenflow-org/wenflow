@@ -1117,12 +1117,14 @@ function onBatchReclaim(ids: string[]) {
 </script>
 
 <style scoped>
-/* 卡片高度（2026-11-09 审计 C）：
-   .vl-cardwrap 占满页面剩余高度（.mk-page--fill 的 flex 列），卡片本身 flex:0 1 auto ——
-   行数少时随内容增高（不撑满、无「黑洞」），行数多时被 max-height:100% 封顶，
-   表格区内滚、分页条恒在卡尾可见。mk-card--fill 的 flex:1 由这里改写成 0 1 auto。 */
+/* 卡片高度（2026-11-10 用户裁决，改回「列表到底」）：
+   .vl-cardwrap 占满页面剩余高度（.mk-page--fill 的 flex 列），卡片 flex:1 —— 行少时卡片
+   仍然长到页面底部，表格区吃满剩余高度（短表的空留在卡内、分页贴卡底），与目标对话一致。
+   2026-11-09 审计 C 曾改写成 0 1 auto（「不撑满、无黑洞」），用户看的是全站同类列表的
+   一致性：切换页面时卡片底边不该一页一个位置。行数多时由 max-height:100%
+   封顶，表格区内滚、分页条恒在卡尾可见。 */
 .vl-cardwrap { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
-.vl-card { flex: 0 1 auto; max-height: 100%; }
+.vl-card { flex: 1 1 auto; max-height: 100%; }
 /* 窄屏（≤900）退回整页滚动（与 mk-primitives 的 fill 降级同档）：wrap 不再占剩余高度 */
 @media (max-width: 900px) {
   .vl-cardwrap { flex: none; height: auto; }

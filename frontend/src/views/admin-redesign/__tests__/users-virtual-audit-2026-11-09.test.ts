@@ -244,7 +244,9 @@ describe('C · 虚拟学习者卡片随内容增高 + 分页条恒显', () => {
     w.unmount();
   });
 
-  it('卡片不再被 flex:1 撑满：包在 vl-cardwrap 里，vl-card 为 0 1 auto + max-height 封顶', async () => {
+  /* 2026-11-10 用户：「目标对话他们的列表在数据不够的时候都是列表到底部的」——
+     撤销 2026-11-09 审计 C 的「随内容增高」，卡片改回 flex:1 吃满剩余高度。 */
+  it('卡片吃满剩余高度（与目标对话同款）：vl-card flex:1 + max-height 封顶', async () => {
     liveVirtuals.value = Array.from({ length: 5 }, (_, i) => makeVirtual(i + 1));
     const w = mount(VirtualLearners);
     await flushPromises();
@@ -258,7 +260,7 @@ describe('C · 虚拟学习者卡片随内容增高 + 分页条恒显', () => {
     w.unmount();
 
     const src = readSource('VirtualLearners.vue');
-    expect(ruleBody(src, '.vl-card')).toMatch(/flex:\s*0 1 auto/);
+    expect(ruleBody(src, '.vl-card')).toMatch(/flex:\s*1 1 auto/);
     expect(ruleBody(src, '.vl-card')).toMatch(/max-height:\s*100%/);
     expect(ruleBody(src, '.vl-cardwrap')).toMatch(/flex:\s*1 1 auto/);
   });
