@@ -387,7 +387,9 @@ const OUTBOUND_OPTIONS: ReadonlyArray<{
     label: '全部放行',
     icon: Network,
     desc: '公网与内网都可访问',
-    warn: '含云厂商元数据地址，出站目标可信时才保持这一档',
+    /* 2026-11-10 修正：元数据/Link-local（169.254.x）在 safe-http 里**恒被拦**，
+       不受这个开关影响；这一档实际放开的只是本机（127.0.0.1）与 RFC1918/ULA 内网 */
+    warn: '本机与内网地址都可访问，出站目标可信时才保持这一档',
   },
   {
     id: 'whitelist',
