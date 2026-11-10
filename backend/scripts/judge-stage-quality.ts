@@ -36,6 +36,9 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const OUT_DIR = process.env.STAGE_JUDGE_OUT_DIR
   || path.join(REPO_ROOT, 'qa-reports', 'stage-quality-judge', new Date().toLocaleDateString('sv-SE'));
 const JUDGE_MODEL = process.env.STAGE_JUDGE_MODEL || '';
+// 双判官（2026-11-11 批次实测）：异构小模型（agnes）对备课期材料容易误读，
+// 用它做校准门的「严判官」，再用强模型做第二判官；两份都判 fail 才算 fail（防单模型误杀）。
+const SECONDARY_JUDGE_MODEL = process.env.STAGE_JUDGE_SECONDARY_MODEL || '';
 
 // ────────────────────────────── 类型 ──────────────────────────────
 
@@ -85,6 +88,9 @@ interface JudgeVerdict {
   load?: { pass?: boolean; evidenceQuote?: string; note?: string };
   intervention?: { pass?: boolean; evidenceQuote?: string; note?: string };
   topIssue?: string;
+  /** 双判官时的第二份判定（仅审阅用；最终 verdict 为两份都 fail 才 fail） */
+  secondary?: JudgeVerdict;
+  ensemble?: 'single' | 'both-fail' | 'primary-only-fail' | 'secondary-only-fail';
 }
 
 // ────────────────────────────── 判官提示词（研究线版本） ──────────────────────────────
@@ -99,14 +105,14 @@ const JUDGE_SYSTEM_PROMPT = [
   '④C 下一阶段设计：stage-designer 产出的 subtasks（标题/类型/时长/描述/验收/预期误区）。',
   '',
   '你要执行三条铁律，逐条给结论：',
-  '1) 幻觉/复读审计：C 的任务是否只是让学习者复述 A/B 已给的原话、定义或课堂结论（换个说法也算复述）？是否编造了 A/B 中不存在的事实、数字、概念或材料？有效任务必须让学习者在新情境里做一次判断或产出，而不是回忆标签。',
-  '2) 负荷升降审计：结合 B 的 strugglingConcepts/recommendation 与 A 的课堂表现，C 的难度、新概念数量、任务时长是升还是降？学习者仍在挣扎（recommendation=reinforce 或 struggling 非空）却抬难度/堆新概念 = 违规；已掌握却原地重复 = 空转。',
+  '1) 幻觉/复读审计：C 的任务是否只是让学习者复述 A/B 已给的原话、定义或课堂结论（换个说法也算复述）？是否把编造的内容冒充成 A/B 中已有的学习者事实、真实数据或材料？有效任务必须让学习者在新情境里做一次判断或产出，而不是回忆标签。**为练习而构造的示例句/假设情境/虚构题干不算幻觉**——只要它明显是练习素材（如「原文：In a survey of 200 nurses…」「例如合同写…」），且没有冒充学习者的真实数据或已有材料；只有把编造内容当作「你上次说的」「你合同里写的」这类既成事实时才判幻觉。',
+  '2) 负荷升降审计：结合 B 的 strugglingConcepts/recommendation 与 A 的课堂表现，C 的难度、新概念数量、任务时长是升还是降？学习者仍在挣扎（recommendation=reinforce 或 struggling 非空）却抬难度/堆新概念 = 违规；已掌握却原地重复 = 空转。**previousStageOutcome 为 null（备课期）时负荷审计默认通过**：没有挣扎证据就不能假定违规；只有 C 在单阶段内堆叠 ≥3 个全新概念，或任务总时长超过该阶段 estimatedHours 的 2 倍，才判负荷违规。',
   '3) 干预合理性审计：每条任务是否对准 A 暴露的真实盲区（B 的 blockedFoundations / recurringConfusions），是否有可验证的 acceptanceHint；与目标无关、无证据支撑、或要求平台无法承接的现实条件，判为不合理。',
-  '   执行面（平台硬约束）：任务的核心动作必须能在对话框里用文字/数字/表格/原文引用完成。把线下体力或现场操作当任务本体（去货架点数、贴便签、拆机、跑腿、当面演示）= 不合理；线下材料只能作为输入素材（学习者把单据/数量/原文贴进来），课堂动作必须发生在对这些文本的分析与判断上。',
+  '   执行面（平台硬约束）：任务的核心动作必须能在对话框里用文字/数字/表格/原文引用完成。把线下体力或现场操作当任务本体（去货架点数、贴便签、拆机、跑腿、当面演示）= 不合理；线下材料只能作为输入素材（学习者把单据/数量/原文贴进来），课堂动作必须发生在对这些文本的分析与判断上。任务引用课堂/平台将提供的材料（真题、样例、讲义、评测题）是合理的，不要求任务描述自带全文；只有要求学习者自行寻找平台无法提供的实时/外部数据时才判不合理。',
   '',
   '判定口径：三律全部通过才 verdict=pass；任一违规 verdict=fail。score 为 0-5 整数：',
   '5=三律全过且任务有迁移价值；4=全过但有可优化点；3=有瑕疵但可修；2=至少一条铁律明确违规；1=多条铁律违规；0=整体不可用。',
-  '备课期口径：visibleDialogueContext 为空、previousStageOutcome 为 null、或 B 块 provenance 标注 path-planning-fallback 时，表示该阶段尚无课堂数据——这些「缺失」本身不是缺陷，不要因缺失扣分；只依据已给材料判定。',
+  '备课期口径：visibleDialogueContext 为空、previousStageOutcome 为 null、或 B 块 provenance 标注 path-planning-fallback 时，表示该阶段尚无课堂数据——这些「缺失」本身不是缺陷，不要因缺失扣分；只依据已给材料判定。B 块 provenance=path-planning-fallback 时，lessonKnowledge.recurringConfusions 是路径评审在**设计层**发现的问题，不是学习者的挣扎证据：负荷升降审计不得把它当作「学员仍在挣扎」的依据，只能在干预合理性里作为设计缺口参考；blockedFoundations 也只是前置知识缺口，不等于课堂挣扎。',
   '跨阶段口径：C 任务引用前序阶段学过的方法/链条（如「回顾第一块那条链」）是合理的教学铺垫，不得仅因 A 块没有课堂逐字记录就判为幻觉；只有 C 编造了材料中不存在的具体数字、法条、事实或材料时才算幻觉。',
   '若某条任务因材料缺失无法验证，在该律 note 写「证据不足」，不要直接判违规。',
   '输出纪律：只输出判定结论，不写推理过程、不自我辩论；每条 note 不超过 2 句。',
@@ -456,14 +462,17 @@ async function findTranscriptSessionForPath(pathRow: { id: string; userId: strin
   for (const row of owned) {
     if (await hasTeachingLogs(row.id)) return row.id;
   }
-  // ③ 最后才回退时间窗（路径不是虚拟学习者跑出来的，例如管理端真机测试）
+  // ③ 最后才回退时间窗——仅当该会话的 stageResults.path_review.reviewedPathId 就是本路径
+  //    （人工真机测试可能没回写 learningPathId）。2026-11-11 实证：无条件按时间窗会把无关课堂
+  //    （心理/考研）拼进合同/周报路径，判官整份判「材料错位」——没有绑定就宁可用 path-only 备课期。
   const nearby = await db.virtual_sessions.findMany({
     where: { createdAt: { gte: new Date(pathRow.createdAt.getTime() - 36 * 3600 * 1000), lte: new Date(pathRow.createdAt.getTime() + 36 * 3600 * 1000) } },
     orderBy: { createdAt: 'desc' },
-    take: 5,
+    take: 10,
   });
   for (const row of nearby) {
-    if (await hasTeachingLogs(row.id)) return row.id;
+    const stage = parseJsonLoose(row.stageResults) || {};
+    if (str(stage?.path_review?.reviewedPathId) === pathRow.id && await hasTeachingLogs(row.id)) return row.id;
   }
   return null;
 }
@@ -578,12 +587,12 @@ function buildJudgeUserMessage(payload: JudgePayload): string {
   ].join('\n');
 }
 
-async function judgePayload(payload: JudgePayload): Promise<JudgeVerdict> {
+async function callJudgeModel(payload: JudgePayload, model: string): Promise<JudgeVerdict> {
   const response: any = await getAPIGateway().execute(
     {
-      ...(JUDGE_MODEL ? { model: JUDGE_MODEL } : {}),
+      ...(model ? { model } : {}),
       temperature: 0,
-      max_tokens: 1800,
+      max_tokens: 4000,
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: JUDGE_SYSTEM_PROMPT },
@@ -605,6 +614,27 @@ async function judgePayload(payload: JudgePayload): Promise<JudgeVerdict> {
     load: parsed.load,
     intervention: parsed.intervention,
     topIssue: clip(parsed.topIssue, 400),
+  };
+}
+
+async function judgePayload(payload: JudgePayload): Promise<JudgeVerdict> {
+  const primary = await callJudgeModel(payload, JUDGE_MODEL);
+  if (!SECONDARY_JUDGE_MODEL) return { ...primary, ensemble: 'single' };
+  const secondary = await callJudgeModel(payload, SECONDARY_JUDGE_MODEL);
+  const bothFail = primary.verdict === 'fail' && secondary.verdict === 'fail';
+  const ensemble = bothFail
+    ? 'both-fail'
+    : primary.verdict === 'fail'
+      ? 'primary-only-fail'
+      : secondary.verdict === 'fail'
+        ? 'secondary-only-fail'
+        : 'single';
+  return {
+    ...primary,
+    verdict: bothFail ? 'fail' : 'pass',
+    score: bothFail ? Math.min(primary.score, secondary.score) : Math.max(primary.score, secondary.score),
+    secondary,
+    ensemble,
   };
 }
 
