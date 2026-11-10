@@ -83,9 +83,12 @@ jobs:
         run: npm --prefix backend run prisma:migrate:deploy:all
       - name: Run backend tests with coverage (shard)
         run: npm --prefix backend run test:coverage -- --shard=${{ matrix.shard }}/3
-        # 分片后堆占用 ~1/3；4096 只是防单分片撞到大套件的保险帽
+        # 分片后堆占用 ~1/3；4096 只是防单分片撞到大套件的保险帽。
+        # COVERAGE_THRESHOLDS_OFF：分片覆盖率天然低于全局阈值，jest 末自验关闭，
+        # 阈值由 coverage-merge 合并后统一验收（见 jest.config.js 注释）。
         env:
           NODE_OPTIONS: --max-old-space-size=4096
+          COVERAGE_THRESHOLDS_OFF: '1'
       - name: Upload backend coverage shard
         if: always()
         uses: actions/upload-artifact@v4
