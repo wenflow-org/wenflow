@@ -47,8 +47,8 @@ const { apiObject } = vi.hoisted(() => ({
 
 /* 一行已定价 + 一行未定价：同时覆盖「有金额」与「占位」两档 */
 const skillRows = [
-  { key: 'teaching-turn', display: 'teaching-turn', calls: 100, tokens: 10_000_000, promptTokens: 9_500_000, completionTokens: 500_000, failed: 1, usd: 1.5, pricingKnown: true, pricedCalls: 100, callsMissingPricing: 0 },
-  { key: 'adaptive-guidance-copy', display: 'adaptive-guidance-copy', calls: 40, tokens: 2_000_000, promptTokens: 1_900_000, completionTokens: 100_000, failed: 0, usd: null, pricingKnown: false, pricedCalls: 0, callsMissingPricing: 40 }
+  { key: 'teaching-turn', display: '教学回合 Skill', calls: 100, tokens: 10_000_000, promptTokens: 9_500_000, completionTokens: 500_000, failed: 1, usd: 1.5, pricingKnown: true, pricedCalls: 100, callsMissingPricing: 0 },
+  { key: 'adaptive-guidance-copy', display: '自适应引导文案 Skill', calls: 40, tokens: 2_000_000, promptTokens: 1_900_000, completionTokens: 100_000, failed: 0, usd: null, pricingKnown: false, pricedCalls: 0, callsMissingPricing: 40 }
 ];
 
 vi.mock('@/api/adminApi', () => ({
@@ -124,6 +124,10 @@ describe('成本页 · 未定价占位（状态词不进行内）', () => {
     expect(rows[1].attributes('title')).toBeUndefined();
     // 拆分与派生列真的算出来了（不是空列占位）
     expect(rows[0].findAll('.tc-st__num--dim').map((c) => c.text())).toEqual(['9.5M', '500.0K', '100.0K']);
+    /* 2026-11-10 用户「要用英文的原名称」：这一列是链路的对号入座，
+       显示注册表 id；中文显示名只作 title。 */
+    expect(rows[0].find('.tc-st__name strong').text()).toBe('teaching-turn');
+    expect(rows[0].find('.tc-st__name strong').attributes('title')).toBe('教学回合 Skill');
     w.unmount();
   });
 

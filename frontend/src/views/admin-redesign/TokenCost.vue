@@ -206,7 +206,10 @@
             @keydown.enter.prevent="goSkillLogs(r)"
             @keydown.space.prevent="goSkillLogs(r)"
           >
-            <span class="tc-st__name" role="cell"><strong :title="r.display || r.key">{{ r.display || r.key }}</strong></span>
+            <!-- Skill 列用**英文原名**（注册表 id，2026-11-10 用户要求）：
+                 这列是「哪条链」的对号入座，执行日志、字段路由、Prompt 文件里都是这个 id；
+                 中文显示名退到 title（需要认读时再看）。 -->
+            <span class="tc-st__name" role="cell"><strong :title="r.display || r.key">{{ r.key }}</strong></span>
             <span class="tc-st__num" role="cell">{{ r.calls }}</span>
             <span class="tc-st__num" role="cell">{{ fmtTokens(r.tokens) }}</span>
             <span class="tc-st__num tc-st__num--dim" role="cell">{{ fmtTokens(r.promptTokens ?? 0) }}</span>
@@ -539,7 +542,7 @@ function exportCsv() {
     '[按 Skill 成本明细]',
     'Skill,调用,Token,输入,输出,成本USD,Token占比%,成本占比%',
     ...bySkill.value.map((r) =>
-      [esc(r.display || r.key), r.calls, r.tokens, r.promptTokens ?? '', r.completionTokens ?? '',
+      [esc(r.key), r.calls, r.tokens, r.promptTokens ?? '', r.completionTokens ?? '',
         typeof r.usd === 'number' ? r.usd.toFixed(4) : '单价未配置', sharePct(r.tokens), costSharePct(r.usd)].join(',')),
     '',
     '[用户用量排行]',
