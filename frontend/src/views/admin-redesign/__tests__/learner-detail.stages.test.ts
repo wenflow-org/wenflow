@@ -1221,7 +1221,7 @@ describe('LearnerDetail 画像 KV：分档词表 / 量纲 / 逐格来源（P1-8�
         emotional: ['confidenceLevel'],
         history: [],
         curriculumControls: [],
-        derivedInsights: ['suggestedApproach'],
+        derivedInsights: ['recommendedDifficulty'],
       },
     };
   }
@@ -1239,9 +1239,9 @@ describe('LearnerDetail 画像 KV：分档词表 / 量纲 / 逐格来源（P1-8�
   function kvRow(w: Awaited<ReturnType<typeof mountProfile>>, label: string) {
     return w.findAll('.ld-kv__row').find((r) => r.find('span').text() === label)!;
   }
-  /** 读数文本（默认值不再缀胶囊，值本身就是读数） */
+  /** 读数文本（不含紧随其后的「规则推导」标注） */
   function kvValue(w: Awaited<ReturnType<typeof mountProfile>>, label: string) {
-    return kvRow(w, label).find('strong').text();
+    return kvRow(w, label).find('strong').text().replace('规则推导', '')
   }
 
   it('枚举翻成中文分档，比率标成百分比并带量纲说明', async () => {
@@ -1253,8 +1253,8 @@ describe('LearnerDetail 画像 KV：分档词表 / 量纲 / 逐格来源（P1-8�
       expect(kvValue(w, '困惑模式')).toBe('暂无明显模式');
       expect(kvValue(w, '是否偏好提示')).toBe('需要提示');
       expect(kvValue(w, '自信水平')).toBe('容易紧张');
-      // 0.5 不再裸上屏；量纲写在 title
-      expect(kvValue(w, '投入度')).toBe('50%');
+      // 行为基线数据源已退役：无来源时不再把默认常量渲染成读数（priorAsDash → —）
+      expect(kvValue(w, '投入度')).toBe('—');
       expect(kvRow(w, '投入度').find('strong').attributes('title')).toBe('课堂互动的投入程度，0-100%');
       expect(kvValue(w, '学习速度')).toBe('50%');
       w.unmount();
@@ -1276,11 +1276,13 @@ describe('LearnerDetail 画像 KV：分档词表 / 量纲 / 逐格来源（P1-8�
       for (const label of ['困惑模式', '平均响应（秒）', '平均消息长度（字）', '互动间隔（分钟）', '投入度', '一致性', '学习速度']) {
         expect(kvRow(w, label).find('strong').classes()).toContain('ld-kv__val--prior');
       }
-      // 规则建议（非实测非默认）不上灰
-      expect(kvRow(w, '建议方式').find('.ld-kv__val--prior').exists()).toBe(false);
+      // 规则建议（非实测非默认）不上灰，但仍标「规则推导」
+      expect(kvRow(w, '建议方式').find('.ld-kv__val--prior').exists()).toBe(false)
+      expect(kvRow(w, '建议方式').find('.ld-kv__derived').text()).toBe('规则推导')
       // 图例在卡头说一次，不再逐格复读标签文字
-      expect(w.text()).toContain('灰字 = 初始默认值');
-      expect(w.findAll('.ld-kv__prior')).toHaveLength(0);
+      expect(w.text()).toContain('灰字 = 初始默认值')
+      // 只剩「规则推导」这一类标注；「初始默认值」胶囊已全部撤除
+      expect(w.findAll('.ld-kv__derived')).toHaveLength(1)
       w.unmount();
     } finally {
       if (origDetail) detailMock.mockImplementation(origDetail);

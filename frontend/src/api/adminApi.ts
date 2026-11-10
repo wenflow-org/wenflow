@@ -1839,6 +1839,15 @@ export const adminVirtualLearnersApi = {
     return adminAxios.post('/admin/virtual-learners/batch-delete', { profileIds });
   },
 
+  /**
+   * 按创建时间清理的候选清单（2026-11-09 改服务端全量）：
+   * 年龄 > keepDays 且当前没有在推进的会话的实例全集；`exempt.running` / `exempt.withinKeepWindow`
+   * 由服务端按实例总数算出（此前前端只算当前载入页，超过一页的实例被静默漏删）。
+   */
+  getVirtualLearnerCleanupCandidates: async (params: { keepDays: number }) => {
+    return adminAxios.get('/admin/virtual-learners/cleanup/candidates', { params });
+  },
+
   /** 学习者卡库：校验卡文档（不落库，返回逐卡 errors/warnings） */
   cardsValidate: async (data: { content: string; format?: 'yaml' | 'json' }) => {
     return adminAxios.post('/admin/virtual-learners/cards/validate', data);

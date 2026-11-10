@@ -1,7 +1,8 @@
 <template>
   <!-- 按创建时间清理（2026-10-10）：按创建时间筛选 + 保留名单豁免 → 干跑预览 → 分批（≤100/批）调
-       batch-delete 落地。与 VirtualLearnerReclaim 同族交互（Teleport 模态 / 预览清单 / busy 互斥），
-       但判定在客户端算（创建时间与 tags 都在列表行里），删除走服务端既有批量端点。 -->
+       batch-delete 落地。与 VirtualLearnerReclaim 同族交互（Teleport 模态 / 预览清单 / busy 互斥）。
+       2026-11-09：候选改由服务端按**实例全集**算（GET /cleanup/candidates）——此前判定在客户端对
+       当前载入页的行做，列表一次最多 1000 行，超出的同龄实例被静默漏删（向导报 3 人，库里还有几百）。 -->
   <Teleport v-if="render" to="body">
   <div v-if="state.open" ref="maskRef" class="mk-modal">
     <div ref="panelRef" class="mk-modal__panel" role="dialog" aria-label="按创建时间清理">
@@ -12,7 +13,7 @@
       <div class="mk-modal__body">
         <p class="mk-alert mk-alert--info">
           将删除创建时间早于保留期的虚拟学习者，其会话、教学记录、学习数据一并清除，不可恢复。
-          进行中的账号与保留名单命中的账号自动豁免。
+          进行中的账号与保留名单命中的账号自动豁免。候选按<b>全库实例</b>统计，不只是当前页。
         </p>
         <div class="vl-cleanup-criteria">
           <label class="vl-cleanup-field">
@@ -30,15 +31,19 @@
             <textarea v-model="state.keepTagsText" rows="3" :disabled="state.busy" placeholder="rw-acad5-31&#10;preset:nurse-career-transition"></textarea>
           </label>
         </div>
-        <template v-if="candidates.length">
+        <p v-if="state.loading" class="vl-cleanup-footnote">正在统计候选…</p>
+        <p v-else-if="state.loadError" class="vl-cleanup-footnote vl-cleanup-footnote--error">
+          候选读取失败：{{ state.loadError }}（重开向导重试；不会基于半份数据删除）
+        </p>
+        <template v-else-if="candidates.length">
           <p class="vl-cleanup-summary">
             将删除 <b>{{ candidates.length }}</b> 人（合计会话 {{ totalSessions }}）。
-            豁免 <b>{{ exempted }}</b> 人<template v-if="exemptRunning">（进行中 {{ exemptRunning }}）</template><template v-if="exemptKeepTags">（保留名单 {{ exemptKeepTags }}）</template><template v-if="exemptNoDate">（创建时间缺失 {{ exemptNoDate }}）</template>。
+            豁免 <b>{{ exempted }}</b> 人<template v-if="exemptRunning">（进行中 {{ exemptRunning }}）</template><template v-if="exemptKeepTags">（保留名单 {{ exemptKeepTags }}）</template><template v-if="exemptWithinWindow">（保留期内 {{ exemptWithinWindow }}）</template>。
           </p>
           <div class="vl-cleanup-list">
             <div v-for="s in previewRows" :key="s.id" class="vl-cleanup-item">
               <span class="vl-cleanup-name">{{ s.name }}</span>
-              <span class="mk-badge mk-badge--muted">{{ s.created }}</span>
+              <span class="mk-badge mk-badge--muted" :title="`创建于 ${fmtDateTime(s.createdAt)}`">{{ timeAgo(s.createdAt) }}</span>
               <span class="vl-cleanup-meta">会话 {{ s.sessions }}</span>
             </div>
             <p v-if="candidates.length > previewRows.length" class="vl-cleanup-footnote">
@@ -58,7 +63,7 @@
         <button
           type="button"
           class="mk-btn mk-btn--danger"
-          :disabled="!candidates.length || state.busy"
+          :disabled="!candidates.length || state.busy || state.loading || !!state.loadError"
           @click="confirmCleanup"
         >
           {{ state.busy ? '删除中…' : `删除 ${candidates.length} 人` }}
@@ -70,16 +75,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, toRef } from 'vue'
+import { computed, reactive, ref, toRef, watch } from 'vue'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
-import { loadLiveData, errMsg } from './live'
+import { loadLiveData, errMsg, timeAgo } from './live'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import { useEscape } from './useEscape'
 import { useMaskClose, useOverlay } from './useOverlay'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSelect from '@/components/mk/MkSelect.vue'
-import type { VirtualLearnerRow as Sample } from './virtualLearnersTypes'
 
 /** 保留期档位（天）：建号在此窗口内的账号一律不动 */
 const KEEP_DAY_OPTIONS = [
@@ -90,11 +94,16 @@ const KEEP_DAY_OPTIONS = [
   { value: 30, label: '30 天' }
 ]
 
-const props = withDefaults(defineProps<{
-  /** 全量行数据（liveVirtuals 映射后；判定建号时间与 tags 都在行里） */
-  samples: Sample[]
-  render?: boolean
-}>(), { render: true })
+/** 服务端候选行（GET /cleanup/candidates）：已按年龄与运行态筛过，保留名单仍在前端过滤 */
+interface CleanupCandidate {
+  id: string
+  name: string
+  createdAt: string
+  sessions: number
+  tags: string[]
+}
+
+withDefaults(defineProps<{ render?: boolean }>(), { render: true })
 const emit = defineEmits<{ (e: 'done'): void }>()
 
 const state = reactive({
@@ -105,8 +114,16 @@ const state = reactive({
   /** 保留名单文本：每行一个画像 tag（persona id / cohort key） */
   keepTagsText: '',
   /** 分批删除进度文案（空 = 未在执行） */
-  progress: ''
+  progress: '',
+  /** 候选加载阶段：loading 中或失败时禁止删除（不基于半份数据动手） */
+  loading: false,
+  loadError: ''
 })
+
+/** 服务端返回的候选与豁免口径（分母 = 实例总数，不再是当前载入页行数） */
+const serverCandidates = ref<CleanupCandidate[]>([])
+const serverExempt = ref({ running: 0, withinKeepWindow: 0 })
+const serverTotal = ref(0)
 
 const maskRef = ref<HTMLElement | null>(null)
 const panelRef = ref<HTMLElement | null>(null)
@@ -124,37 +141,63 @@ const keepTagSet = computed(() => new Set(
   state.keepTagsText.split(/[\n,，;；\s]+/).map((s) => s.trim()).filter(Boolean)
 ))
 
-/** 判定在客户端算：建号早于保留期、非进行中、不命中保留名单 → 候选 */
-const candidates = computed(() => {
-  const cutoff = Date.now() - state.keepDays * 86_400_000
-  const tags = keepTagSet.value
-  return props.samples.filter((s) => {
-    if (s.runningCount > 0) return false
-    if ((s.tags || []).some((t) => tags.has(t))) return false
-    const created = Date.parse(s.createdAt || '')
-    if (!Number.isFinite(created)) return false
-    return created < cutoff
-  })
-})
+/** 最终删除名单 = 服务端候选（已排除在跑/在保留期内）− 保留名单命中 */
+const candidates = computed(() => serverCandidates.value.filter(
+  (s) => !(s.tags || []).some((t) => keepTagSet.value.has(t))
+))
 
-/** 豁免分组计数（口径在 hint/摘要里逐项披露，运营知道谁被保住了、为什么） */
-const exemptRunning = computed(() => props.samples.filter((s) => s.runningCount > 0).length)
-const exemptKeepTags = computed(() => props.samples.filter((s) =>
-  s.runningCount === 0 && (s.tags || []).some((t) => keepTagSet.value.has(t))
+/** 豁免分组计数（口径在摘要里逐项披露，运营知道谁被保住了、为什么）：
+    进行中 / 保留期内 来自服务端；保留名单命中数在前端按当前候选集算。 */
+const exemptRunning = computed(() => serverExempt.value.running)
+const exemptWithinWindow = computed(() => serverExempt.value.withinKeepWindow)
+const exemptKeepTags = computed(() => serverCandidates.value.filter(
+  (s) => (s.tags || []).some((t) => keepTagSet.value.has(t))
 ).length)
-const exemptNoDate = computed(() => props.samples.filter((s) => {
-  if (s.runningCount > 0) return false
-  if ((s.tags || []).some((t) => keepTagSet.value.has(t))) return false
-  return !Number.isFinite(Date.parse(s.createdAt || ''))
-}).length)
-const exempted = computed(() => props.samples.length - candidates.value.length)
+const exempted = computed(() => serverTotal.value - candidates.value.length)
 const totalSessions = computed(() => candidates.value.reduce((a, s) => a + Number(s.sessions || 0), 0))
 const previewRows = computed(() => candidates.value.slice(0, 30))
+
+/** 绝对时间（预览行悬停）：相对时间一律配绝对时间 */
+function fmtDateTime(iso: string): string {
+  const d = new Date(iso)
+  if (!iso || Number.isNaN(d.getTime())) return ''
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+/** 拉候选（服务端全量）：打开向导与改保留期时各拉一次；失败即禁删并如实说明 */
+async function loadCandidates(): Promise<void> {
+  state.loading = true
+  state.loadError = ''
+  try {
+    const res = await adminVirtualLearnersApi.getVirtualLearnerCleanupCandidates({ keepDays: state.keepDays })
+    const d = res.data?.data ?? {}
+    serverCandidates.value = Array.isArray(d.candidates) ? (d.candidates as CleanupCandidate[]) : []
+    serverExempt.value = {
+      running: Number(d.exempt?.running || 0),
+      withinKeepWindow: Number(d.exempt?.withinKeepWindow || 0)
+    }
+    serverTotal.value = Number(d.total || 0)
+  } catch (e) {
+    serverCandidates.value = []
+    state.loadError = errMsg(e)
+  } finally {
+    state.loading = false
+  }
+}
+
+watch(() => state.keepDays, () => {
+  if (state.open && !state.busy) void loadCandidates()
+})
 
 function open() {
   state.open = true
   state.busy = false
   state.progress = ''
+  serverCandidates.value = []
+  serverExempt.value = { running: 0, withinKeepWindow: 0 }
+  serverTotal.value = 0
+  void loadCandidates()
 }
 
 /** 确认后分批落地：服务端单批上限 100（batch-delete 校验），循环直至删完；

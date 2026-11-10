@@ -52,4 +52,13 @@ describe('日期模拟 UI 守卫（防退化）', () => {
     const text = read('SessionCockpit.vue');
     expect(text).toMatch(/getVirtualSessionSimulationClock/);
   });
+
+  /* 2026-11-09：跨日推进曾在 UI 上不可达——组件把写操作全挂在 `v-if="!readonly"` 上，
+     而宿主 VirtualProfile 是全站唯一使用点、却传了 readonly。钉住两件事：
+     组件不再有 readonly 门；宿主必须挂 @changed（推进后重载详情，否则停留在推进前的画面）。 */
+  it('跨日推进必须有 UI 入口：组件无 readonly 门、宿主挂 @changed', () => {
+    expect(read('DayTimeline.vue')).not.toMatch(/!readonly/);
+    expect(read('VirtualProfile.vue')).toMatch(/<DayTimeline[^>]*@changed=/);
+    expect(read('VirtualProfile.vue')).not.toMatch(/<DayTimeline[^>]*\breadonly\b/);
+  });
 });

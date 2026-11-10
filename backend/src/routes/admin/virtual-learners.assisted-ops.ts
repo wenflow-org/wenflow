@@ -8,8 +8,10 @@ import { logger } from '../../utils/logger';
 import { withTransaction } from '../../utils/with-transaction';
 import simulationCoordinator from '../../coordinators/simulation.coordinator';
 import { assertPathMutationSafe } from '../../services/learning/path-mutation-safety';
-import { findProfileById } from '../../services/virtual-lab/virtual-learner-profile.repo';
-import { findSessionById, findSessionsByIdPair, overwriteSessionStageResults, createAdminAuditLog } from '../../services/virtual-lab/virtual-session.repo';
+import { findProfileById, countAllInstances, listCleanupCandidatesBefore } from '../../services/virtual-lab/virtual-learner-profile.repo';
+import { findSessionById, findSessionsByIdPair, overwriteSessionStageResults, createAdminAuditLog, findLiveSessionsByProfiles } from '../../services/virtual-lab/virtual-session.repo';
+import { selectCleanupCandidates } from '../../services/virtual-lab/cleanup-candidates';
+import { virtualSessionReclaimService } from '../../virtual-lab/session-reclaim.service';
 import { hydrateSessionLogsField as hydrateVirtualSessionLogsField } from '../../services/virtual-lab/virtual-session-log-store';
 import { virtualCleanupService } from '../../services/virtual-lab/virtual-cleanup.service';
 import { validateCards as validateCardDocument, importCards as importCardDocument, exportCards as exportCardLibrary, getCardWallIndex, getCardDetail, getCardTaskGroups, cloneCardsToLearners, CLONE_MAX_ITEMS } from '../../services/virtual-lab/card-import.service';
@@ -18,7 +20,7 @@ import type { VirtualSessionRow } from '../../virtual-lab/vlab-types';
 import { createSessionForProfile, parseJson } from '../../virtual-lab/session-factory';
 import { regenerateWrapup } from '../../services/ai-teaching/teaching-wrapup-regen';
 import { parseLearningProgress, parseStageResults } from './virtual-learners.projections';
-import { parseSimulationLimit, runAssistedSessionMutation } from './virtual-learners.assisted-shared';
+import { parseSimulationLimit, runAssistedSessionMutation, stopLiveRunsForProfile } from './virtual-learners.assisted-shared';
 
 export function registerAssistedOpsRoutes(router: Router): void {
 /**
@@ -399,6 +401,59 @@ router.post('/sessions/:sessionId/regenerate-wrapup', async (req: Request, res) 
 });
 
 /**
+ * 按创建时间清理的候选清单（2026-11-09 从客户端判定改服务端全量）。
+ *
+ * 背景：清理向导原先拿**当前载入页**的行算候选（列表一次最多 1000 行），超过一页的实例
+ * 静默漏删——向导报「将删除 N 人」时库里可能还有一批同龄实例，运营以为清干净了。
+ * 这里按实例全集算：年龄 > keepDays 且**当前没有在推进的会话**（运行态用与列表同一套
+ * `classifySessionRunPhase` 判，autopilot 状态是唯一真值，不能用 session.status 近似）。
+ *
+ * 保留名单（tags）仍由前端按输入实时过滤——它是运营当场敲的文本，不必回库。
+ *
+ * 路径带 `/cleanup` 前缀是为了避开同域先注册的 `GET /:id`（单段路径会被当成画像 id 吃掉）；
+ * 两段路径不会被 `/:id`、`/:id/memory`、`/:id/stories` 匹配。
+ * GET /api/admin/virtual-learners/cleanup/candidates?keepDays=3
+ */
+router.get('/cleanup/candidates', async (req: Request, res) => {
+  try {
+    const rawDays = Number(req.query.keepDays ?? 3);
+    const keepDays = Number.isFinite(rawDays) ? Math.min(Math.max(Math.round(rawDays), 0), 365) : 3;
+    const cutoff = new Date(Date.now() - keepDays * 86_400_000);
+
+    const [total, aged] = await Promise.all([
+      countAllInstances(),
+      listCleanupCandidatesBefore(cutoff),
+    ]);
+    /* 在推进的实例豁免（口径 = 列表「运行中」：autopilot 在推且心跳新鲜）。
+       只对这批评龄实例取非终态会话——运行态判据是 autopilot 状态（唯一真值），
+       不能在 SQL 里用 session.status 近似（新会话在 goal/path 阶段还是 created）。
+       筛选口径见 services/virtual-lab/cleanup-candidates.ts（纯函数，可单测）。 */
+    const agedIds = aged.map((row) => row.id);
+    const liveSessions = agedIds.length ? await findLiveSessionsByProfiles(agedIds) : [];
+    const staleBefore = new Date(Date.now() - virtualSessionReclaimService.getThresholdMs());
+    const { candidates, runningCount } = selectCleanupCandidates(aged, liveSessions, staleBefore);
+
+    res.json({
+      success: true,
+      data: {
+        keepDays,
+        cutoff: cutoff.toISOString(),
+        /* 分母是实例总数：界面据此报「豁免 N 人」，不再依赖当前载入页的行数 */
+        total,
+        candidates,
+        exempt: {
+          running: runningCount,
+          withinKeepWindow: Math.max(0, total - aged.length),
+        },
+      },
+    });
+  } catch (error) {
+    logger.error('读取清理候选失败:', error);
+    res.status(500).json({ success: false, error: { message: '读取清理候选失败' } });
+  }
+});
+
+/**
  * 批量删除虚拟学习者（A3）：级联删除 profile + user + 全部虚拟数据。
  * 后端已通过 virtualCleanupService.cascadeDeleteProfile 打通 409 死锁。
  * POST /api/admin/virtual-learners/batch-delete  body: { profileIds: string[] }
@@ -422,6 +477,13 @@ router.post('/batch-delete', async (req: Request, res) => {
 
     for (const id of profileIds) {
       try {
+        // 删除前先叫停该学习者的活跃运行（撤租约 + 停自动驾驶），否则删完仍有循环在写
+        await stopLiveRunsForProfile(id).catch((error) => {
+          logger.warn('[virtual-learners] 批量删除前叫停活跃运行失败（不阻断删除）', {
+            profileId: id,
+            error: error instanceof Error ? error.message : String(error)
+          });
+        });
         await virtualCleanupService.cascadeDeleteProfile(id, {
           adminId: req.user?.userId ?? null,
           adminName: req.user?.email ?? null

@@ -60,7 +60,16 @@ export function timeAgo(iso?: string | null): string {
   const t = new Date(iso).getTime()
   if (!t || Number.isNaN(t)) return '从未'
   const diff = Date.now() - t
-  if (diff < 0) return '刚刚'
+  /* 时间在「现在之后」= 虚拟学习者的模拟日（业务时间落在未来）。
+     原先一律返回「刚刚」，把模拟日 3 天后的事件读成刚发生（2026-11-09 跨日核查：
+     推进后的会话/证据/痕迹全被读成「刚刚」）。这里保留小窗口容忍（时钟偏差/写入延迟），
+     超过就如实给出「N 小时后 / N 天后」，不再谎报「刚刚」。 */
+  if (diff < 0) {
+    const ahead = -diff
+    if (ahead < 5 * 60000) return '刚刚'
+    const ah = Math.floor(ahead / 3600000)
+    return ah < 24 ? `${ah} 小时后` : `${Math.floor(ah / 24)} 天后`
+  }
   const m = Math.floor(diff / 60000)
   if (m < 1) return '刚刚'
   if (m < 60) return `${m} 分钟前`

@@ -117,7 +117,7 @@ flowchart LR
 
 | Skill | 类型 | 提示词正文 | 参数 | 输入/输出 | 字段角色 |
 | --- | --- | --- | --- | --- | --- |
-| `teaching-turn` | mainline | `prompts/core/teaching-turn.yaml` | temp=0.7 / retry | 7/8 | 16 |
+| `teaching-turn` | mainline | `prompts/core/teaching-turn.yaml` | temp=0.7 / retry | 7/8 | 15 |
 | `peer-reinforcement` | mainline | `prompts/core/peer-reinforcement.yaml` | temp=0.7 / propagate | 7/2 | 0 |
 | `session-wrapup` | mainline | `prompts/core/session-wrapup.yaml` | temp=0.7 / propagate | 7/2 | 0 |
 | `teaching-opening-generator` | aux | `prompts/core/teaching-opening-generator.yaml` | temp=0.4 / propagate | 7/4 | 0 |
@@ -197,16 +197,16 @@ flowchart LR
 
 ## 3. Prompt 全量清单
 
-共 38 个已登记 Skill（mainline 20 / aux 9 / handler-only 9），其中 31 个有 LLM 提示词正文。
+共 39 个已登记 Skill（mainline 20 / aux 9 / handler-only 10），其中 32 个有 LLM 提示词正文。
 
 | Skill | 所属阶段（含复用） | Agent | 类型 | 规则/约束（条件） | 正文 | Manifest | 身份（首行） |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `goal-conversation` | 澄清阶段、仿真阶段 | `goal-agent` | mainline | 39/3 | `prompts/core/goal-conversation.yaml` | `prompts/manifests/goal-conversation.yaml` | 学习目标澄清与方向收敛助手，通过自然对话澄清学习目标，信息足够时收敛到第一版学习方向。 |
-| `path-planning` | 规划阶段 | `path-agent` | mainline | 53/4 | `prompts/core/path-planning.yaml` | `prompts/manifests/path-planning.yaml` | 一位认知建构师，负责先为用户的真实问题构建隐藏的认知图景，再据此设计一条阶段化的学习骨架。 |
-| `stage-designer` | 规划阶段 | `path-agent` | mainline | 54/1（2） | `prompts/core/stage-designer.yaml` | `prompts/manifests/stage-designer.yaml` | 一位阶段任务设计师。 |
+| `goal-conversation` | 澄清阶段、仿真阶段 | `goal-agent` | mainline | 40/3 | `prompts/core/goal-conversation.yaml` | `prompts/manifests/goal-conversation.yaml` | 学习目标澄清与方向收敛助手，通过自然对话澄清学习目标，信息足够时收敛到第一版学习方向。 |
+| `path-planning` | 规划阶段 | `path-agent` | mainline | 54/4 | `prompts/core/path-planning.yaml` | `prompts/manifests/path-planning.yaml` | 一位认知建构师，负责先为用户的真实问题构建隐藏的认知图景，再据此设计一条阶段化的学习骨架。 |
+| `stage-designer` | 规划阶段 | `path-agent` | mainline | 57/1（2） | `prompts/core/stage-designer.yaml` | `prompts/manifests/stage-designer.yaml` | 一位阶段任务设计师。 |
 | `path-reviewer` | 规划阶段 | `path-agent` | mainline | 12/3 | `prompts/core/path-reviewer.yaml` | `prompts/manifests/path-reviewer.yaml` | 学习路径质量评审器。你评审的是 path-planning 生成的学习路径，不是直接面对用户。 |
 | `kc-mapper` | 规划阶段 | `path-agent` | mainline | 15/11 | `prompts/core/kc-mapper.yaml` | `prompts/manifests/kc-mapper.yaml` | 对给定的认知核心（cognitiveCore）与任务列表（subtasks）做机器可读的结构标注： |
-| `teaching-turn` | 教学阶段 | `teaching-agent` | mainline | 84/15（14） | `prompts/core/teaching-turn.yaml` | `prompts/manifests/teaching-turn.yaml` | 一位结构化教学回合生成器。 |
+| `teaching-turn` | 教学阶段 | `teaching-agent` | mainline | 84/17（14） | `prompts/core/teaching-turn.yaml` | `prompts/manifests/teaching-turn.yaml` | 一位结构化教学回合生成器。 |
 | `peer-reinforcement` | 教学阶段 | `teaching-agent` | mainline | 12/4 | `prompts/core/peer-reinforcement.yaml` | `prompts/manifests/peer-reinforcement.yaml` | 学习伙伴，和学生一起探索问题。 |
 | `session-wrapup` | 教学阶段 | `teaching-agent` | mainline | 22/3（1） | `prompts/core/session-wrapup.yaml` | `prompts/manifests/session-wrapup.yaml` | 一位课后产出助手。请基于本节课的结构化证据生成课后总结与评估。 |
 | `adaptive-guidance-copy` | 画像阶段 | `profile-agent` | mainline | 13/2 | `prompts/core/adaptive-guidance-copy.yaml` | `prompts/manifests/adaptive-guidance-copy.yaml` | 一个学习产品的动态引导文案生成器。 |
@@ -215,7 +215,7 @@ flowchart LR
 | `learning-predictor` | 画像阶段 | `profile-agent` | mainline | 9/5 | `prompts/core/learning-predictor.yaml` | `prompts/manifests/learning-predictor.yaml` | 学习表现预测器。在新任务开始前，基于学习者最近的知识状态摘要、 |
 | `virtual-learner-persona-designer` | 仿真阶段 | `simulation-agent` | mainline | 20/0 | `prompts/core/virtual-learner-persona-designer.yaml` | `prompts/manifests/virtual-learner-persona-designer.yaml` | 一位"虚拟学习者身份设计师"。 |
 | `virtual-learner-scenario-designer` | 仿真阶段 | `simulation-agent` | mainline | 27/0（1） | `prompts/core/virtual-learner-scenario-designer.yaml` | `prompts/manifests/virtual-learner-scenario-designer.yaml` | 一位"虚拟学习者实验样本设计师"。 |
-| `virtual-learner-goal-dialogue-simulator` | 仿真阶段 | `simulation-agent` | mainline | 13/3（1） | `prompts/core/virtual-learner-goal-dialogue-simulator.yaml` | `prompts/manifests/virtual-learner-goal-dialogue-simulator.yaml` | Goal 阶段虚拟学习者对话模拟器。 |
+| `virtual-learner-goal-dialogue-simulator` | 仿真阶段 | `simulation-agent` | mainline | 14/3（1） | `prompts/core/virtual-learner-goal-dialogue-simulator.yaml` | `prompts/manifests/virtual-learner-goal-dialogue-simulator.yaml` | Goal 阶段虚拟学习者对话模拟器。 |
 | `virtual-learner-path-evaluator` | 仿真阶段 | `simulation-agent` | mainline | 9/3 | `prompts/core/virtual-learner-path-evaluator.yaml` | `prompts/manifests/virtual-learner-path-evaluator.yaml` | 虚拟学习者 Path 评估器。 |
 | `virtual-learner-learn-turn-simulator` | 仿真阶段 | `simulation-agent` | mainline | 24/4（3） | `prompts/core/virtual-learner-learn-turn-simulator.yaml` | `prompts/manifests/virtual-learner-learn-turn-simulator.yaml` | Learn 阶段虚拟学习者回合模拟器。 |
 | `virtual-learner-referee` | 仿真阶段 | `simulation-agent` | mainline | 11/6 | `prompts/core/virtual-learner-referee.yaml` | `prompts/manifests/virtual-learner-referee.yaml` | WenFlow Blackbox Virtual Lab 的独立旁路裁判。你不扮演学习者、教师或编排器，只依据可定位证据评估一次实验运行的质量、控制一致性和边界… |
@@ -229,13 +229,14 @@ flowchart LR
 | `material-collector` | — | — | handler-only | 13/6 | `prompts/core/material-collector.yaml` | `prompts/manifests/material-collector.yaml` | 「资料采集抽取器」，是 material-collector 编排链里唯一的 LLM 环节。 |
 | `material-brief` | — | — | handler-only | 9/5 | `prompts/core/material-brief.yaml` | `prompts/manifests/material-brief.yaml` | 「资料理解摘要器」。用户上传了一份学习资料，解析后的正文交给你。 |
 | `text-to-image` | — | — | handler-only | 0/0 | — | — | — |
+| `goal-confirm-adjudicator` | — | — | handler-only | 4/1 | `prompts/core/goal-confirm-adjudicator.yaml` | `prompts/manifests/goal-confirm-adjudicator.yaml` | goal 会话的确认裁决器。你只回答一件事：用户刚说的这段话， |
 | `board-designer` | — | — | handler-only | 0/0 | — | — | — |
-| `teaching-opening-generator` | 教学阶段 | `teaching-agent` | aux | 19/3 | `prompts/core/teaching-opening-generator.yaml` | `prompts/manifests/teaching-opening-generator.yaml` | 课堂开场交互生成器。基于课堂场景、当前阶段与学习者状态，为一个教学 Session 生成短、低门槛、可直接渲染的开场交互块。 |
+| `teaching-opening-generator` | 教学阶段 | `teaching-agent` | aux | 20/3 | `prompts/core/teaching-opening-generator.yaml` | `prompts/manifests/teaching-opening-generator.yaml` | 课堂开场交互生成器。基于课堂场景、当前阶段与学习者状态，为一个教学 Session 生成短、低门槛、可直接渲染的开场交互块。 |
 | `learner-progress-report` | — | — | aux | 3/1 | `prompts/core/learner-progress-report.yaml` | `prompts/manifests/learner-progress-report.yaml` | 学习进展报告生成器。基于任务学习数据、指标与学习信号，生成一段内部用于学习者状态中心的简短分析。 |
 | `learner-state-review` | — | — | aux | 8/2 | `prompts/core/learner-state-review.yaml` | `prompts/manifests/learner-state-review.yaml` | WenFlow 的学习状态评审诊断器。基于给定的学习状态摘要、知识线索与最近证据， |
 | `concept-consolidator` | — | — | aux | 11/6 | `prompts/core/concept-consolidator.yaml` | `prompts/manifests/concept-consolidator.yaml` | 对给定的候选知识点名字做机器可读的**归并判定**：判断哪些其实是同一个概念的不同说法 |
 | `concept-load-estimator` | — | — | aux | 9/2 | `prompts/core/concept-load-estimator.yaml` | `prompts/manifests/concept-load-estimator.yaml` | WenFlow 的概念负担判定器。给定一批知识点名字，逐个判断它在"学生要把它回忆出来"这件事上 |
-| `replan-attribution` | — | — | aux | 8/2 | `prompts/core/replan-attribution.yaml` | `prompts/manifests/replan-attribution.yaml` | WenFlow 的路径重排归因器。系统已用阈值判定"这条路径值得提示重排"，并给出一组可选方向。 |
+| `replan-attribution` | — | — | aux | 9/2 | `prompts/core/replan-attribution.yaml` | `prompts/manifests/replan-attribution.yaml` | WenFlow 的路径重排归因器。系统已用阈值判定"这条路径值得提示重排"，并给出一组可选方向。 |
 | `skill-author` | — | — | aux | 3/1 | `prompts/core/skill-author.yaml` | `prompts/manifests/skill-author.yaml` | Prompt 起草助手。根据 skill 的职责、输入输出约定和必填字段，生成一份可运行 system prompt 草稿。 |
 | `skill-compiler` | — | — | aux | 3/1 | `prompts/core/skill-compiler.yaml` | `prompts/manifests/skill-compiler.yaml` | Skill Prompt 验收器。按输入 system prompt 的要求执行一次单轮生成，并判断输出是否覆盖所有必填字段。 |
 | `semantic-freeze-judge` | — | — | aux | 7/2 | `prompts/core/semantic-freeze-judge.yaml` | `prompts/manifests/semantic-freeze-judge.yaml` | Prompt 语义等价审查员。你的任务是判断一份"核心文件"（业务真相源）与一份"编译产物 Prompt"（候选运行文本）在业务语义上是否等价。 |

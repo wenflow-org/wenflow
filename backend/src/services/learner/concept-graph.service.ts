@@ -18,6 +18,8 @@
  * 纪律：物化是 best-effort——失败只 warn，不阻断路径生成；幂等靠复合唯一键。
  */
 import prisma from '../../config/database';
+import { isKtGhostTrace } from '../memory/kt-ghost';
+import { pickLatestMasterySignal, resolveMasteryScore } from './concept-mastery';
 import { conceptRegistryService } from './concept-registry.service';
 import { kcAnchorKey } from './kc-anchor';
 
@@ -198,24 +200,36 @@ const defaultDeps: ConceptGraphDeps = {
   listTraceMastery: async (userId) => {
     const rows = await prisma.memory_traces.findMany({
       where: { userId, conceptId: { not: null } },
-      select: { conceptId: true, masteryScore: true, stability: true, extractionCount: true, lastSeenAt: true },
+      select: { conceptId: true, masteryScore: true, stability: true, extractionCount: true, lastSeenAt: true, source: true },
     });
-    // 同一 canonical 可能有多行（不同自由文本键）→ 取掌握度最高者（与"这个概念我会不会"语义一致）
-    const byConcept = new Map<string, { conceptId: string; masteryScore: number; stability: string; extractionCount: number; lastSeenAt: string | null }>();
+    /* 同一 canonical 可能有多行（不同自由文本键）。2026-11-09 画像链路核查：原先取
+       `masteryScore` 最大值，与画像的「最近一条有业务时间的证据说了算」（#59/#60/#195）语义冲突——
+       一个概念曾经掌握、后来退化成 fragile，取最大值会永远显示高分，于是画像页和图谱页长期对不上。
+       改为共用 services/learner/concept-mastery.ts 的唯一口径：业务时间（lastSeenAt）最新的一条。 */
+    const byConcept = new Map<string, typeof rows>();
     for (const row of rows) {
+      // 2026-11-09 运营字段真值核查：与 LearnerKnowledgeMemoryService（#59/#60）和 review-plan
+      // 同口径排除「KT 幽灵痕」——applyKtEstimate 直写、从未真正提取过的痕迹承载的是**模型自报
+      // 的掌握概率**，不是学习证据。此前只有概念图谱这条读路径漏了这道门，导致节点上的百分比
+      // 可能是模型编的数，而同一概念在画像/复习队列里已被排除。
+      if (isKtGhostTrace(row)) continue;
       const conceptId = row.conceptId!;
-      const current = byConcept.get(conceptId);
-      if (!current || row.masteryScore > current.masteryScore) {
-        byConcept.set(conceptId, {
-          conceptId,
-          masteryScore: row.masteryScore,
-          stability: row.stability,
-          extractionCount: row.extractionCount,
-          lastSeenAt: row.lastSeenAt ? row.lastSeenAt.toISOString() : null,
-        });
-      }
+      const group = byConcept.get(conceptId);
+      if (group) group.push(row);
+      else byConcept.set(conceptId, [row]);
     }
-    return [...byConcept.values()];
+    return [...byConcept.entries()].map(([conceptId, group]) => {
+      const signals = group.map((row) => ({ masteryScore: row.masteryScore, seenAt: row.lastSeenAt }));
+      const chosen = pickLatestMasterySignal(signals) ?? signals[0];
+      const chosenRow = group[signals.indexOf(chosen)] ?? group[0];
+      return {
+        conceptId,
+        masteryScore: resolveMasteryScore(signals),
+        stability: chosenRow.stability,
+        extractionCount: chosenRow.extractionCount,
+        lastSeenAt: chosenRow.lastSeenAt ? chosenRow.lastSeenAt.toISOString() : null,
+      };
+    });
   },
   listPathTitles: async (pathIds) => pathIds.length === 0 ? [] : prisma.learning_paths.findMany({
     where: { id: { in: pathIds } },

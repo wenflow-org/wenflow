@@ -325,6 +325,8 @@
           <div class="mk-card__head">
             <h3 class="mk-card__title">认知与偏好</h3>
             <span v-if="anyPrior(cognitiveRows, preferenceRows)" class="mk-card__meta" :title="PRIOR_FIELD_TITLE">{{ PRIOR_LEGEND }}</span>
+            <span v-if="personaCapturedLabel" class="mk-card__meta"
+              :title="'这组字段只在目标对话阶段采集，之后的教学表现不会回写；界面据此标出采集时点，避免把旧快照读成当前状态。'">{{ personaCapturedLabel }}</span>
           </div>
           <div class="ld-pf-sub">
             <div>
@@ -335,7 +337,7 @@
                   <!-- 2026-11-09 走查：原来每一格后面缀一枚「初始默认值」胶囊，实测同屏 11 枚，
                      把真正要看的数值淹掉。改为「默认值用灰字」+ 卡头一句说明（见各卡 mk-card__meta），
                      一格一个字都不多写。 -->
-                  <strong :class="{ 'ld-kv__val--prior': kv.prior }" :title="kv.hint || (kv.prior ? PRIOR_FIELD_TITLE : undefined)">{{ kv.value }}</strong>
+                  <strong :class="{ 'ld-kv__val--prior': kv.prior }" :title="kv.hint || (kv.prior ? PRIOR_FIELD_TITLE : undefined)">{{ kv.value }}<em v-if="kv.derived" class="ld-kv__derived" :title="DERIVED_FIELD_TITLE">{{ DERIVED_FIELD_LABEL }}</em></strong>
                 </div>
               </div>
             </div>
@@ -347,7 +349,7 @@
                   <!-- 2026-11-09 走查：原来每一格后面缀一枚「初始默认值」胶囊，实测同屏 11 枚，
                      把真正要看的数值淹掉。改为「默认值用灰字」+ 卡头一句说明（见各卡 mk-card__meta），
                      一格一个字都不多写。 -->
-                  <strong :class="{ 'ld-kv__val--prior': kv.prior }" :title="kv.hint || (kv.prior ? PRIOR_FIELD_TITLE : undefined)">{{ kv.value }}</strong>
+                  <strong :class="{ 'ld-kv__val--prior': kv.prior }" :title="kv.hint || (kv.prior ? PRIOR_FIELD_TITLE : undefined)">{{ kv.value }}<em v-if="kv.derived" class="ld-kv__derived" :title="DERIVED_FIELD_TITLE">{{ DERIVED_FIELD_LABEL }}</em></strong>
                 </div>
               </div>
             </div>
@@ -368,7 +370,7 @@
                   <!-- 2026-11-09 走查：原来每一格后面缀一枚「初始默认值」胶囊，实测同屏 11 枚，
                      把真正要看的数值淹掉。改为「默认值用灰字」+ 卡头一句说明（见各卡 mk-card__meta），
                      一格一个字都不多写。 -->
-                  <strong :class="{ 'ld-kv__val--prior': kv.prior }" :title="kv.hint || (kv.prior ? PRIOR_FIELD_TITLE : undefined)">{{ kv.value }}</strong>
+                  <strong :class="{ 'ld-kv__val--prior': kv.prior }" :title="kv.hint || (kv.prior ? PRIOR_FIELD_TITLE : undefined)">{{ kv.value }}<em v-if="kv.derived" class="ld-kv__derived" :title="DERIVED_FIELD_TITLE">{{ DERIVED_FIELD_LABEL }}</em></strong>
                 </div>
               </div>
             </div>
@@ -380,7 +382,7 @@
                   <!-- 2026-11-09 走查：原来每一格后面缀一枚「初始默认值」胶囊，实测同屏 11 枚，
                      把真正要看的数值淹掉。改为「默认值用灰字」+ 卡头一句说明（见各卡 mk-card__meta），
                      一格一个字都不多写。 -->
-                  <strong :class="{ 'ld-kv__val--prior': kv.prior }" :title="kv.hint || (kv.prior ? PRIOR_FIELD_TITLE : undefined)">{{ kv.value }}</strong>
+                  <strong :class="{ 'ld-kv__val--prior': kv.prior }" :title="kv.hint || (kv.prior ? PRIOR_FIELD_TITLE : undefined)">{{ kv.value }}<em v-if="kv.derived" class="ld-kv__derived" :title="DERIVED_FIELD_TITLE">{{ DERIVED_FIELD_LABEL }}</em></strong>
                 </div>
               </div>
             </div>
@@ -400,7 +402,7 @@
                   <!-- 2026-11-09 走查：原来每一格后面缀一枚「初始默认值」胶囊，实测同屏 11 枚，
                      把真正要看的数值淹掉。改为「默认值用灰字」+ 卡头一句说明（见各卡 mk-card__meta），
                      一格一个字都不多写。 -->
-                  <strong :class="{ 'ld-kv__val--prior': kv.prior }" :title="kv.hint || (kv.prior ? PRIOR_FIELD_TITLE : undefined)">{{ kv.value }}</strong>
+                  <strong :class="{ 'ld-kv__val--prior': kv.prior }" :title="kv.hint || (kv.prior ? PRIOR_FIELD_TITLE : undefined)">{{ kv.value }}<em v-if="kv.derived" class="ld-kv__derived" :title="DERIVED_FIELD_TITLE">{{ DERIVED_FIELD_LABEL }}</em></strong>
                 </div>
               </div>
             </div>
@@ -412,7 +414,7 @@
                   <!-- 2026-11-09 走查：原来每一格后面缀一枚「初始默认值」胶囊，实测同屏 11 枚，
                      把真正要看的数值淹掉。改为「默认值用灰字」+ 卡头一句说明（见各卡 mk-card__meta），
                      一格一个字都不多写。 -->
-                  <strong :class="{ 'ld-kv__val--prior': kv.prior }" :title="kv.hint || (kv.prior ? PRIOR_FIELD_TITLE : undefined)">{{ kv.value }}</strong>
+                  <strong :class="{ 'ld-kv__val--prior': kv.prior }" :title="kv.hint || (kv.prior ? PRIOR_FIELD_TITLE : undefined)">{{ kv.value }}<em v-if="kv.derived" class="ld-kv__derived" :title="DERIVED_FIELD_TITLE">{{ DERIVED_FIELD_LABEL }}</em></strong>
                 </div>
               </div>
             </div>
@@ -705,7 +707,7 @@
             <div class="ld-kv">
               <div v-for="kv in dynamicRows" :key="kv.label" class="ld-kv__row">
                 <span>{{ kv.label }}</span>
-                <strong>{{ kv.value }}</strong>
+                <strong :class="{ 'ld-kv__val--prior': kv.prior }" :title="kv.hint || (kv.prior ? PRIOR_FIELD_TITLE : undefined)">{{ kv.value }}<em v-if="kv.derived" class="ld-kv__derived" :title="DERIVED_FIELD_TITLE">{{ DERIVED_FIELD_LABEL }}</em></strong>
               </div>
             </div>
           </section>
@@ -723,6 +725,11 @@
                 <div class="ld-bar__head">
                   <strong :title="evidenceDensityTooltip(c.label, c.count)">{{ c.label }}</strong>
                   <span class="ld-bar__badges">
+                    <span
+                      v-if="c.masteryPct !== null"
+                      class="ld-bar__mastery"
+                      :title="MASTERY_TOOLTIP"
+                    >掌握 {{ c.masteryPct }}%</span>
                     <span class="mk-minibar ld-bar__track">
                       <i class="mk-minibar__fill" :data-tone="c.tone === 'muted' ? undefined : c.tone" :class="{ 'ld-bar__fill--muted': c.tone === 'muted' }" :style="{ width: c.width + '%' }"></i>
                     </span>
@@ -1113,6 +1120,8 @@ const CONCEPT_NONE_HINT = '重算快照后自动生成。'
 /* 图例文案：默认值不再逐格挂胶囊，改为「灰字 = 初始默认值」一句（2026-11-09 走查） */
 const PRIOR_LEGEND = '灰字 = 初始默认值'
 const PRIOR_FIELD_TITLE = '这一格还没有学习记录支撑，展示的是平台初始默认值，会随学习记录积累更新'
+const DERIVED_FIELD_LABEL = '规则推导'
+const DERIVED_FIELD_TITLE = '这一格由已采集的数据按固定规则推导，不是直接测量值；规则见后端对应字段的注释'
 /** 卡头图例只在卡内确实有默认值格时出现（无默认值的卡不挂一句用不上的说明） */
 function anyPrior(...groups: Array<Array<{ prior?: boolean }>>): boolean {
   return groups.some((rows) => rows.some((r) => r.prior))
@@ -1128,6 +1137,12 @@ const LOAD_NONE_HINT = '学习者完成课堂/任务后，系统会记录每次�
 const SIG_TIER_NOTE = '概念信号按掌握度分档（来自学习证据与课堂表现）。'
   + '\n「记忆与调度」里的记忆强度是按 FSRS 可提取率算的另一条轴：一个概念可以先在掌握度上仍是「进行中」，同时因为刚刚复习过而记忆强度回升。两条轴判据不同，可以同时出现，不是互相矛盾。'
 const CALIB_META_TITLE = '预测与实际情况的吻合率（非学习者自评）'
+/** 概念数值掌握度的悬停说明（2026-11-09 补）：与图谱节点、画像台账同一口径（取业务时间最新的证据信号）。
+    说明它是测量值而非三档标签，运营才能看出「0.9 掉到 0.35」这种退化。 */
+const MASTERY_TOOLTIP = '数值掌握度（0–100%）：按该概念业务时间最新的学习证据算出，与知识图谱节点、画像台账同一口径；'
+  + '\n三档「迁移就绪」只回答稳不稳，读不出退化幅度——同一概念这次 90% 下次 35% 就是退化。'
+  + '\n缺该值表示这批数据没测到（纯模型蒸馏行或旧快照），不按 0 计；0 条证据的行同样不显示——'
+  + '\n上游的 0 是「无有效信号」的哨兵值，直接显示会把「没测」说成「测过了、很低」。'
 const GRAPH_TRUNCATED_NOTE = '仅显示部分概念，共'
 const MEMORY_PANE_TITLE = '记忆与到期概念总表'
 /* 卡头悬停全文单源：空态卡与满数据卡共用同一句（文案守卫 R6 同文件重复） */
@@ -2319,10 +2334,43 @@ function isPriorProfileField(section: ProfileSection, key: string): boolean {
   return !(sources[section] || []).includes(key)
 }
 
-/** 画像 KV 的一行：value 已按画像口径翻译，hint 是量纲说明，prior 表示这格是初始默认值 */
-interface ProfileKvRow { label: string; value: string; hint: string; prior: boolean }
+/** 是否有任何画像输入被观测过：用于「规则推导」类字段的兜底标注
+    （规则文本不在 sources 里，但只要它的输入有观测，就不该标成「初始默认值」）。 */
+const anyProfileSource = computed(() => {
+  const sources = profileSources.value
+  if (!sources) return evidence.value.length > 0
+  return Object.values(sources).some((list) => Array.isArray(list) && list.length > 0)
+})
 
-function kvRows(obj: Record<string, unknown> | null, labels: Record<string, string>, section?: ProfileSection): ProfileKvRow[] {
+/** 学习指标是否真的被观测：dynamicState 整段都由 metrics 派生，没有 metrics 时全是默认值 */
+const metricsObserved = computed(() => {
+  const sources = profileSources.value
+  if (!sources) return evidence.value.length > 0
+  return (sources.learning || []).length > 0
+})
+
+/** 画像 KV 的一行：value 已按画像口径翻译，hint 是量纲说明。
+    prior=这一格是「初始默认值」；derived=这一格由已观测输入按固定规则推导（不是直接测量）。 */
+interface ProfileKvRow { label: string; value: string; hint: string; prior: boolean; derived?: boolean }
+
+function kvRows(
+  obj: Record<string, unknown> | null,
+  labels: Record<string, string>,
+  section?: ProfileSection,
+  opts?: {
+    priorAsDash?: boolean
+    /** 这些键是规则推导产物：输入被观测时标「规则推导」而不是「实测」 */
+    derivedKeys?: string[]
+    /** 该键不在 sources 里、但页面其它输入有观测时，也按「规则推导」展示（如 suggestedApproach） */
+    derivedFallback?: boolean
+    /** 整段统一标注：值由已观测数据推导 */
+    derivedOverride?: boolean
+    /** 整段统一标注：没有可用输入，展示的是默认值 */
+    priorOverride?: boolean
+    /** 指定键的展示文案（覆盖通用词表，避免 mixed 被译成思维风格的「混合型」） */
+    valueText?: Record<string, (v: unknown) => string>
+  }
+): ProfileKvRow[] {
   if (!obj) return []
   /* 后端原始浮点直出（23.06896551724138 / 0.9266399999999999）显示层收敛：
      小数 ≥5 位 → 四舍五入到 2 位（2026-10-11 走查） */
@@ -2332,13 +2380,35 @@ function kvRows(obj: Record<string, unknown> | null, labels: Record<string, stri
   }
   return Object.entries(labels)
     .filter(([key]) => obj[key] != null && obj[key] !== '')
-    .map(([key, label]) => ({
-      label,
-      // 枚举/比率按画像口径翻译（moderate → 一般、0.5 → 50%），其余仍走原兜底
-      value: profileFieldText(key, obj[key], tidy),
-      hint: profileFieldHint(key),
-      prior: section ? isPriorProfileField(section, key) : false
-    }))
+    .map(([key, label]) => {
+      let prior = section ? isPriorProfileField(section, key) : (opts?.priorOverride ?? false)
+      let derived = false
+      if (opts?.derivedOverride) {
+        prior = false
+        derived = true
+      } else if (opts?.derivedKeys?.includes(key)) {
+        if (!prior) {
+          derived = true
+        } else if (opts?.derivedFallback) {
+          prior = false
+          derived = true
+        }
+      }
+      const override = opts?.valueText?.[key]
+      return {
+        label,
+        // 枚举/比率按画像口径翻译（moderate → 一般、0.5 → 50%），其余仍走原兜底；
+        // priorAsDash 段（行为基线）在无观测时不渲染默认常量，避免被读成实测。
+        value: opts?.priorAsDash && prior
+          ? '—'
+          : override
+            ? override(obj[key])
+            : profileFieldText(key, obj[key], tidy),
+        hint: profileFieldHint(key),
+        prior,
+        derived
+      }
+    })
 }
 
 const cognitiveRows = computed(() =>
@@ -2370,13 +2440,17 @@ const preferenceRows = computed(() => [
 
 /** 画像补充展示：学习行为基线（behavioral）——运营价值：判断「节奏是否适合当前干预」 */
 const behaviorRows = computed(() =>
+  // 2026-11-09 运营字段真值核查：这五格的数据源（EMA 行为基线）已退役，
+  // fetchBaselineData 恒返回 null → 永远回落 DEFAULT_BEHAVIORAL 常量，
+  // 所有学习者显示同一组数字（10s / 50字 / 5min / 50% / 50%）。
+  // 仍保留格子与「初始默认值」徽标（结构可扩展），但不再把死常量渲染成读数。
   kvRows((profile.value?.behavioral || null) as Record<string, unknown> | null, {
     avgResponseTime: '平均响应（秒）',
     avgMessageLength: '平均消息长度（字）',
     avgInteractionInterval: '互动间隔（分钟）',
     engagementLevel: '投入度',
     consistencyScore: '一致性'
-  }, 'behavioral')
+  }, 'behavioral', { priorAsDash: true })
 )
 
 /** 画像补充展示：互动历史（history）——运营价值：总盘子与主题分布，判断是否深耕单一主题。
@@ -2386,9 +2460,11 @@ const historyRows = computed(() => {
   const h = (profile.value?.history || null) as Record<string, unknown> | null
   if (!h) return [] as ProfileKvRow[]
   return kvRows(h, {
+    // 2026-11-09 口径修正：totalSessions 现在是真 count；消息数/时长仍按最近 50 节聚合，
+    // 标签必须写清窗口，否则「总消息数」会被读成全量。
     totalSessions: '总课堂数',
-    totalMessages: '总消息数',
-    avgSessionDuration: '平均课堂时长（分钟）'
+    totalMessages: '近 50 节消息数',
+    avgSessionDuration: '近 50 节平均时长（分钟）'
   }, 'history')
 })
 
@@ -2407,14 +2483,17 @@ const historyNarrativeSections = computed<{ label: string; items: string[] }[]>(
   return sections
 })
 
-/** 画像补充展示：课程控制（curriculumControls）——运营价值：平台侧可执行的粒度/密度/复习策略 */
+/** 画像补充展示：课程控制（curriculumControls）——运营价值：平台侧可执行的粒度/密度/复习策略。
+    2026-11-09：四项都是规则推导产物，输入有观测时标「规则推导」而非「实测」。 */
 const curriculumRows = computed(() =>
   kvRows((profile.value?.curriculumControls || null) as Record<string, unknown> | null, {
     taskGranularityLevel: '任务粒度',
     conceptDensityLevel: '概念密度',
     reviewFrequencyLevel: '复习频率',
     progressionStrategyNote: '推进策略'
-  }, 'curriculumControls')
+  }, 'curriculumControls', {
+    derivedKeys: ['taskGranularityLevel', 'conceptDensityLevel', 'reviewFrequencyLevel', 'progressionStrategyNote']
+  })
 )
 
 /** 画像补充展示：派生洞察（derivedInsights）——运营价值：速度/最佳时长/建议方式直接落到干预动作 */
@@ -2426,7 +2505,12 @@ const derivedRows = computed(() => {
     optimalSessionLength: '最佳单次时长（分钟）',
     recommendedDifficulty: '推荐难度',
     suggestedApproach: '建议方式'
-  }, 'derivedInsights')
+  }, 'derivedInsights', {
+    // suggestedApproach 是规则拼装的文本，不在 sources 里；但只要画像输入有观测，
+    // 它就不是「初始默认值」，标「规则推导」才准确（2026-11-09 口径核查）。
+    derivedKeys: ['suggestedApproach'],
+    derivedFallback: anyProfileSource.value
+  })
   const arr = (v: unknown) => (Array.isArray(v) ? v.map(String) : [])
   if (arr(dv.strengths).length) rows.push({ label: '优势', value: arr(dv.strengths).slice(0, 5).join('、'), hint: '', prior: false })
   if (arr(dv.riskFactors).length) rows.push({ label: '风险因素', value: arr(dv.riskFactors).slice(0, 5).join('、'), hint: '', prior: false })
@@ -2486,6 +2570,17 @@ const narrativeSourceTitle = computed(() => {
   return `「${s.goalTitle}」· ${stamp} 完成\n背景与现状等叙述只反映该次目标对话，不是该学习者的全部背景（同一学习者可有多个目标）。`
 })
 
+/** 人设字段（认知/偏好/情绪）的采集时点：只在目标对话阶段写入，教学表现不回写。
+    2026-11-09 画像链路核查：界面必须能看出这是「哪天的快照」，否则会被读成当前状态。 */
+const personaCapturedLabel = computed(() => {
+  const raw = profile.value?.personaCapturedAt as string | null | undefined
+  if (!raw) return ''
+  const at = new Date(raw)
+  if (Number.isNaN(at.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `采集于 ${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())} 的目标对话`
+})
+
 const metricCards = computed(() => {
   const m = (dynamicState.value?.metrics || {}) as Record<string, number>
   const fmt = (v?: number | null) => (v == null ? '—' : v.toFixed(1))
@@ -2500,14 +2595,18 @@ const metricCards = computed(() => {
        原先四读数一律用 toDisplayHundred（`Math.max(0, …)`），把 −0.72 冲成 0.0，
        于是本卡顶部 LSB 写 0.0、同一张卡下方曲线写 −7.2，被读成两个打架的读数。 */
     const hundred = key === 'lsb' ? toDisplayHundredSigned(m[key]) : toDisplayHundred(m[key])
-    const missing = hundred == null || hundred === 0
+    /* 2026-11-09 画像链路核查：原先用 `hundred === 0` 判「暂无数据」，但 0 是合法读数
+       （LSB=0 就是 ktl==lf；新账号四读数全 0 是「没有 metrics 行」）。两种 0 只能靠来源区分：
+       `sources.learning` 为空 → 没观测过 → 显示 —（与同页概览/条形图一致）；
+       有观测 → 0.0 是真实读数，照常显示。 */
+    const missing = !metricsObserved.value || hundred == null
     const bandText = LEARNER_METRIC_BAND_HUNDRED[key]
     return {
       label: def.label,
-      value: fmt(hundred),
+      value: missing ? '—' : fmt(hundred),
       band: bandText.band,
       title: missing ? '暂无数据' : `${bandText.band}\n${bandText.bandTitle}`,
-      tone: toneOfHundred(key, hundred)
+      tone: toneOfHundred(key, missing ? null : hundred)
     }
   }
   return [card('lss'), card('ktl'), card('lf'), card('lsb')]
@@ -2516,15 +2615,18 @@ const metricCards = computed(() => {
 const dynamicRows = computed(() => {
   /* recommendedInteraction 是 {hintTiming, encouragement, challenge} 对象，拆三项展示 */
   const ri = dynamicState.value?.recommendedInteraction
-  const riRows: { label: string; value: string }[] = []
+  const riRows: ProfileKvRow[] = []
   if (ri != null) {
     const o = ri as Record<string, unknown>
+    /* 互动建议由 personalization.generateInteraction 从画像字段规则推导；没有 metrics 时整段是默认值。
+       与其它画像格一致：有观测 → 「规则推导」，无观测 → 「初始默认值」。 */
+    const badge = { derived: metricsObserved.value, prior: !metricsObserved.value }
     if (typeof o === 'string') {
-      riRows.push({ label: '建议互动', value: zh(o) })
+      riRows.push({ label: '建议互动', value: zh(o), hint: '', ...badge })
     } else {
-      if (o.hintTiming != null && o.hintTiming !== '') riRows.push({ label: '提示时机', value: zh(o.hintTiming) })
-      if (o.encouragement != null && o.encouragement !== '') riRows.push({ label: '鼓励方式', value: zh(o.encouragement) })
-      if (o.challenge != null && o.challenge !== '') riRows.push({ label: '挑战设计', value: zh(o.challenge) })
+      if (o.hintTiming != null && o.hintTiming !== '') riRows.push({ label: '提示时机', value: zh(o.hintTiming), hint: '', ...badge })
+      if (o.encouragement != null && o.encouragement !== '') riRows.push({ label: '鼓励方式', value: zh(o.encouragement), hint: '', ...badge })
+      if (o.challenge != null && o.challenge !== '') riRows.push({ label: '挑战设计', value: zh(o.challenge), hint: '', ...badge })
     }
   }
   return [
@@ -2533,9 +2635,17 @@ const dynamicRows = computed(() => {
       fatigueRisk: '疲劳风险',
       confidenceTrend: '置信趋势',
       recentSessionQuality: '近期会话质量'
+    }, undefined, {
+      derivedOverride: metricsObserved.value,
+      priorOverride: !metricsObserved.value,
+      // `mixed` 在通用词表里是「思维风格=混合型」；会话质量语义应为「一般」。
+      valueText: { recentSessionQuality: (v) => ({ strong: '强', mixed: '一般', weak: '弱' } as Record<string, string>)[String(v)] ?? zh(v) }
     }),
     ...kvRows(dynamicState.value, {
       recommendedPacing: '建议节奏'
+    }, undefined, {
+      derivedOverride: metricsObserved.value,
+      priorOverride: !metricsObserved.value
     }),
     ...riRows
   ]
@@ -2699,9 +2809,22 @@ const conceptFacts = computed<Record<string, MkGraphConceptFacts>>(() => {
   return out
 })
 
+/** 台账数值掌握度 → 百分数（无测量依据返回 null，界面不渲染胶囊）。
+ *
+ *  2026-11-09 真数据核对（隔离实例 6 个虚拟人、10 条台账）：其中 8 条是「0 条证据 + 掌握度 0」——
+ *  按数值直渲染会给出 8 个「掌握 0%」，读起来像"测过了、很低"，与事实（这批概念根本没测到）相反。
+ *  上游 SSOT（resolveMasteryScore）的 0 是「无有效信号」的哨兵值，与「测出来确实是 0」不可区分，
+ *  故判据取「有掌握度信号（>0）或有证据行（>0）」；两者皆无 → 不显示。 */
+function masteryPctOf(item: ConceptLedgerItem): number | null {
+  const score = Number(item.masteryScore)
+  const evidence = Number(item.evidenceCount || 0)
+  if (!Number.isFinite(score) || (evidence <= 0 && score <= 0)) return null
+  return Math.round(Math.min(1, Math.max(0, score)) * 100)
+}
+
 /** 证据页「概念证据密度」：优先 ledger（evidenceCount），回退 conceptStates（masteryScore 归一化）。
  *  排序：有证据的概念置顶（按条数降序），无证据的沉底折叠，避免 14 行「0 证据」刷屏 */
-const conceptStats = computed<{ label: string; count: number; tone: ConceptBarTone; width: number }[]>(() => {
+const conceptStats = computed<{ label: string; count: number; tone: ConceptBarTone; width: number; masteryPct: number | null }[]>(() => {
   const km = knowledgeMemory.value as Record<string, unknown> | null
   const ledger = (km?.globalBackground as Record<string, unknown> | undefined)?.conceptLedger
   if (Array.isArray(ledger) && ledger.length) {
@@ -2711,6 +2834,8 @@ const conceptStats = computed<{ label: string; count: number; tone: ConceptBarTo
         label: String(item.label || item.conceptKey || '未命名概念'),
         count: Number(item.evidenceCount || 0),
         tone: conceptBarTone(item),
+        /* 数值掌握度（2026-11-09 补）：三档 familiarity 看不出「0.9 掉到 0.35」的退化。 */
+        masteryPct: masteryPctOf(item),
         /* 0 条就画 0 宽：原先给 8% 的「可见性下限」，于是标着「暂无」的四行各挂一小截
            有色条，读起来像"有证据但很少"（2026-11-02 评审 R23）。 */
         width: Number(item.evidenceCount || 0) > 0
@@ -2728,6 +2853,8 @@ const conceptStats = computed<{ label: string; count: number; tone: ConceptBarTo
         label: String(s.label || '未命名概念'),
         count: Math.round(Number(s.masteryScore || 0) * 100),
         tone: 'muted' as ConceptBarTone,
+        // 老快照回退：0 同样是「无信号」哨兵（与台账口径一致），不显示成「掌握 0%」
+        masteryPct: Number(s.masteryScore || 0) > 0 ? Math.round(Number(s.masteryScore) * 100) : null,
         width: Math.max(8, Math.round((Number(s.masteryScore || 0) * 100 / max) * 100))
       }))
       .slice(0, 16)
@@ -2951,6 +3078,11 @@ function calOutcomeCls(outcome: string | null | undefined): string {
    tone 对齐本页 metricCards 的负荷语义（高=坏）。 */
 const learningStateRows = computed(() => {
   const m = (dynamicState.value?.metrics || {}) as Record<string, number>
+  /* 2026-11-09 口径统一：与同页 metricCards 用同一「缺值」判据（sources.learning）。
+     原先这里按 `hundred === 0` 判缺值，于是同一页两张卡对「真实 0」给出两种结果：
+     卡片显 0.0、条形行显 —。没有观测 → 两处都 —；有观测 → 0.0 是真实读数，照常显示。 */
+  const observed = metricsObserved.value
+  const missingOf = (hundred: number | null) => !observed || hundred == null
   /* 与 metricCards 同一刻度（0–100）：条形宽度按 /100 取百分比，不再按内部 0–10 的 /10
      （旧实现把 1.1 画成 11% 宽，而下方曲线同一天的 10.8 画到 108% 被截顶） */
   const width = (v: number | null | undefined) => (v == null || v === 0 ? 0 : Math.min(100, Math.round(v)))
@@ -2959,12 +3091,13 @@ const learningStateRows = computed(() => {
     /* LSB 走有符号换算（见 metricCards 同款注释）：否则 −7.2 被裁成 0 → 本行渲染成「—」，
        与卡片上的 0.0、曲线上的 −7.2 凑成第三种读数。 */
     const hundred = key === 'lsb' ? toDisplayHundredSigned(m[key]) : toDisplayHundred(m[key])
-    const t = toneOfHundred(key, hundred)
+    const missing = missingOf(hundred)
+    const t = toneOfHundred(key, missing ? null : hundred)
     const bandText = LEARNER_METRIC_BAND_HUNDRED[key]
     return {
       label: def.label,
-      value: hundred == null || hundred === 0 ? '—' : (key === 'lsb' ? `${hundred > 0 ? '+' : ''}${hundred.toFixed(1)}` : hundred.toFixed(1)),
-      width: key === 'lsb' ? (hundred == null || hundred === 0 ? 0 : Math.min(100, Math.round(Math.abs(hundred) * 0.8 + 10))) : width(hundred),
+      value: missing ? '—' : (key === 'lsb' ? `${hundred! > 0 ? '+' : ''}${hundred!.toFixed(1)}` : hundred!.toFixed(1)),
+      width: missing ? 0 : (key === 'lsb' ? Math.min(100, Math.round(Math.abs(hundred!) * 0.8 + 10)) : width(hundred)),
       // 共享口径的 '' = 缺值/中性 → 本页条形用 'muted'（本页只有 ok/bad 上色档）
       tone: (t === '' ? 'muted' : t) as 'ok' | 'warn' | 'bad' | 'muted',
       hint: bandText.band,
@@ -3334,6 +3467,19 @@ const snapshotHint = computed(() =>
   font-variant-numeric: tabular-nums;
 }
 .ld-bar__ev--zero { background: var(--mk-surface-2); color: var(--mk-faint); }
+/* 数值掌握度胶囊（2026-11-09）：与证据计数同排、更弱一档，避免和「N 条」抢读数 */
+.ld-bar__mastery {
+  font-size: var(--mk-fs-micro);
+  font-weight: 700;
+  color: var(--mk-faint);
+  background: transparent;
+  border: 1px solid var(--mk-line, #e1e8f2);
+  border-radius: 6px;
+  padding: 0 6px;
+  cursor: help;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 /* 分布条统一走 .mk-minibar + data-tone（原为 4 套渐变，属 §4 点名的违规）；
    muted 档原语没有，保留本页一个色调类 */
 .ld-bar__fill--muted { background: var(--mk-faint); }
@@ -3411,6 +3557,10 @@ const snapshotHint = computed(() =>
    （同屏 11 枚把读数淹掉），改为这一格的读数用灰字，卡头统一一句「灰字 = 初始默认值」。
    悬停说明仍在读数格上（title），信息不丢、噪声减半。 */
 .ld-kv__val--prior { color: var(--mk-muted); }
+
+/* 「规则推导」标注（2026-11-09 口径）：这一格由已采集数据按固定规则推导，不是直接测量值。
+   与「初始默认值」不是一回事——后者已按 develop 的巡检批次改为灰字，不再逐格挂胶囊。 */
+.ld-kv__derived { margin-left: 4px; font-size: var(--mk-fs-micro); font-style: normal; color: var(--mk-muted); }
 
 /* 记忆强度 / 掌握度的率值格已收进全站原语 .mk-meter（2026-11-09 收敛）：
    同页「课内温故计划」的记忆强度此前是另一种画法，现两表同一渲染，本地不再自造 meter。 */

@@ -103,7 +103,7 @@
           "artifactKind": "conversation",
           "interactionMode": "turn",
           "contractFields": 11,
-          "ruleCount": 39,
+          "ruleCount": 40,
           "constraintCount": 3,
           "conditionalRuleCount": 0,
           "phases": [
@@ -286,7 +286,7 @@
           "artifactKind": "generation",
           "interactionMode": "snapshot",
           "contractFields": 0,
-          "ruleCount": 53,
+          "ruleCount": 54,
           "constraintCount": 4,
           "conditionalRuleCount": 0,
           "phases": [
@@ -325,7 +325,7 @@
           "artifactKind": "generation",
           "interactionMode": "snapshot",
           "contractFields": 0,
-          "ruleCount": 54,
+          "ruleCount": 57,
           "constraintCount": 1,
           "conditionalRuleCount": 2,
           "phases": [
@@ -628,9 +628,9 @@
           "executionMode": "llm",
           "artifactKind": "conversation",
           "interactionMode": "turn",
-          "contractFields": 16,
+          "contractFields": 15,
           "ruleCount": 84,
-          "constraintCount": 15,
+          "constraintCount": 17,
           "conditionalRuleCount": 14,
           "phases": [
             "turn-generated",
@@ -751,7 +751,7 @@
           "artifactKind": "generation",
           "interactionMode": "snapshot",
           "contractFields": 0,
-          "ruleCount": 19,
+          "ruleCount": 20,
           "constraintCount": 3,
           "conditionalRuleCount": 0,
           "phases": [
@@ -1361,7 +1361,7 @@
           "artifactKind": "conversation",
           "interactionMode": "turn",
           "contractFields": 11,
-          "ruleCount": 39,
+          "ruleCount": 40,
           "constraintCount": 3,
           "conditionalRuleCount": 0,
           "phases": [
@@ -1479,7 +1479,7 @@
           "artifactKind": "conversation",
           "interactionMode": "turn",
           "contractFields": 0,
-          "ruleCount": 13,
+          "ruleCount": 14,
           "constraintCount": 3,
           "conditionalRuleCount": 1,
           "phases": [
@@ -1754,7 +1754,7 @@
       "artifactKind": "conversation",
       "interactionMode": "turn",
       "contractFields": 11,
-      "ruleCount": 39,
+      "ruleCount": 40,
       "constraintCount": 3,
       "conditionalRuleCount": 0,
       "phases": [
@@ -1800,7 +1800,7 @@
       "artifactKind": "generation",
       "interactionMode": "snapshot",
       "contractFields": 0,
-      "ruleCount": 53,
+      "ruleCount": 54,
       "constraintCount": 4,
       "conditionalRuleCount": 0,
       "phases": [
@@ -1841,7 +1841,7 @@
       "artifactKind": "generation",
       "interactionMode": "snapshot",
       "contractFields": 0,
-      "ruleCount": 54,
+      "ruleCount": 57,
       "constraintCount": 1,
       "conditionalRuleCount": 2,
       "phases": [
@@ -1962,9 +1962,9 @@
       "executionMode": "llm",
       "artifactKind": "conversation",
       "interactionMode": "turn",
-      "contractFields": 16,
+      "contractFields": 15,
       "ruleCount": 84,
-      "constraintCount": 15,
+      "constraintCount": 17,
       "conditionalRuleCount": 14,
       "phases": [
         "turn-generated",
@@ -2320,7 +2320,7 @@
       "artifactKind": "conversation",
       "interactionMode": "turn",
       "contractFields": 0,
-      "ruleCount": 13,
+      "ruleCount": 14,
       "constraintCount": 3,
       "conditionalRuleCount": 1,
       "phases": [
@@ -2791,6 +2791,42 @@
       "usedInStages": []
     },
     {
+      "skillId": "goal-confirm-adjudicator",
+      "stage": null,
+      "agentId": null,
+      "kind": "handler-only",
+      "displayName": "goal 确认裁决器 Skill",
+      "description": "goal 会话打字确认的唯一语义裁决通道——只回答「用户这句话是否表达就要这个方案、开始排路径」，fail-open 按非确认（2026-11-08 确认动作减重，替代白名单+confirmIntent+拒绝正则三件套）",
+      "coreFile": "prompts/core/goal-confirm-adjudicator.yaml",
+      "manifestFile": "prompts/manifests/goal-confirm-adjudicator.yaml",
+      "hasCore": true,
+      "hasManifest": true,
+      "baseVersion": 1,
+      "channels": [
+        "dialogue"
+      ],
+      "identity": "goal 会话的确认裁决器。你只回答一件事：用户刚说的这段话，",
+      "inputs": 0,
+      "outputs": 1,
+      "params": {
+        "temperature": 0,
+        "maxTokens": 64000,
+        "failurePolicy": "retry"
+      },
+      "executionMode": "llm",
+      "artifactKind": "extraction",
+      "interactionMode": "snapshot",
+      "contractFields": 0,
+      "ruleCount": 4,
+      "constraintCount": 1,
+      "conditionalRuleCount": 0,
+      "phases": [
+        "adjudicated"
+      ],
+      "contextMode": "snapshot-context",
+      "usedInStages": []
+    },
+    {
       "skillId": "board-designer",
       "stage": null,
       "agentId": null,
@@ -2848,7 +2884,7 @@
       "artifactKind": "generation",
       "interactionMode": "snapshot",
       "contractFields": 0,
-      "ruleCount": 19,
+      "ruleCount": 20,
       "constraintCount": 3,
       "conditionalRuleCount": 0,
       "phases": [
@@ -3043,7 +3079,7 @@
       "artifactKind": "distillation",
       "interactionMode": "snapshot",
       "contractFields": 0,
-      "ruleCount": 8,
+      "ruleCount": 9,
       "constraintCount": 2,
       "conditionalRuleCount": 0,
       "phases": [
@@ -3279,15 +3315,15 @@
     }
   ],
   "counts": {
-    "skills": 38,
+    "skills": 39,
     "byKind": {
       "mainline": 20,
-      "handler-only": 9,
+      "handler-only": 10,
       "aux": 9
     },
-    "prompts": 31,
+    "prompts": 32,
     "mainline": 20,
     "aux": 9,
-    "handlerOnly": 9
+    "handlerOnly": 10
   }
 }

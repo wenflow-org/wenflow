@@ -128,6 +128,8 @@ export interface ConceptLedgerItem {
   transferReadiness?: string
   misconceptionRisk?: string
   evidenceCount?: number
+  /** 数值掌握度 0–1（2026-11-09 补）：确定性通道的测量值；纯模型行/旧快照缺省（不按 0 计） */
+  masteryScore?: number
   [k: string]: unknown
 }
 

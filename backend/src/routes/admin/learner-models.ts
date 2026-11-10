@@ -6,6 +6,7 @@ import { findCalibrationEvidence, findDisplayPathFallback } from '../../services
 import learningStateService from '../../services/learning/learning-state.service';
 import { dayKeyOf } from '../../services/time/day-boundary';
 import { checkIsAdmin } from '../../services/admin-access.service';
+import { withUserSimulatedClock as withLearnerSimulatedClock } from '../../services/virtual-lab/simulated-clock-scope';
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -73,11 +74,12 @@ router.get('/:userId', async (req, res) => {
     }
 
     const pathId = req.query.pathId as string | undefined;
-    const snapshot = await learnerSnapshotRefreshService.getLatest({
-      userId: req.params.userId,
-      pathId,
-      scope: pathId ? 'path' : (req.query.mode as 'global' | 'path' | 'teaching' | undefined) || 'global',
-    });
+    const scope = pathId ? 'path' : (req.query.mode as 'global' | 'path' | 'teaching' | undefined) || 'global';
+    const snapshot = await withLearnerSimulatedClock(req.params.userId, (cached) =>
+      cached
+        ? learnerSnapshotRefreshService.getLatest({ userId: req.params.userId, pathId, scope })
+        : learnerSnapshotRefreshService.refresh({ userId: req.params.userId, pathId, scope }),
+    );
 
     const currentPath = snapshot.knowledgeMemory.currentPath;
     const pathProgress = currentPath?.progress;
@@ -141,11 +143,10 @@ router.post('/:userId/recompute', async (req, res) => {
     }
 
     const pathId = (req.body?.pathId as string | undefined) || (req.query.pathId as string | undefined);
-    const snapshot = await learnerSnapshotRefreshService.refresh({
-      userId: req.params.userId,
-      pathId,
-      scope: pathId ? 'path' : req.body?.scope || 'global',
-    });
+    const scope = pathId ? 'path' : req.body?.scope || 'global';
+    const snapshot = await withLearnerSimulatedClock(req.params.userId, () =>
+      learnerSnapshotRefreshService.refresh({ userId: req.params.userId, pathId, scope }),
+    );
 
     return res.json({ success: true, data: snapshot, message: '学习者模型已重算' });
   } catch (error: any) {
@@ -168,11 +169,12 @@ router.get('/:userId/evidence', async (req, res) => {
       });
     }
 
-    const snapshot = await learnerSnapshotRefreshService.getLatest({
-      userId: req.params.userId,
-      pathId: req.query.pathId as string | undefined,
-      scope: 'path',
-    });
+    const evidencePathId = req.query.pathId as string | undefined;
+    const snapshot = await withLearnerSimulatedClock(req.params.userId, (cached) =>
+      cached
+        ? learnerSnapshotRefreshService.getLatest({ userId: req.params.userId, pathId: evidencePathId, scope: 'path' })
+        : learnerSnapshotRefreshService.refresh({ userId: req.params.userId, pathId: evidencePathId, scope: 'path' }),
+    );
 
     // 教学域 4 类证据（快照 recentEvidence：task-completed / teaching-session / summary / evaluation）
     const teachingItems = snapshot.knowledgeMemory.currentPath?.recentEvidence || [];

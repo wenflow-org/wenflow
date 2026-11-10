@@ -12,6 +12,7 @@
 import { logger } from '../utils/logger';
 import prisma from '../config/database';
 import learningService from '../services/learning/learning.service';
+import { parsePathGenerationStatus } from '../services/learning/learning.helpers';
 import pathCoordinator, { type GoalPathRequest } from './path.coordinator';
 import goalConversationService from '../services/learning/goal-conversation.service';
 import { executeSkill, virtualLearnerPathEvaluatorDefinition } from '../skills';
@@ -48,15 +49,57 @@ const MAX_PATH_REPLANS = (() => {
  * 等待学习路径生成就绪：轮询 path 的里程碑落地（最多 timeoutMs）。
  * Goal 收敛后 path 生成是异步任务，实测需要 2-3 分钟；
  * 黑盒/辅助模式均应等待而非让用户反复点击空转。
+ *
+ * 2026-11-09 实测修正（隔离实例 3015）：路径核心结构先落库、**阶段设计（subtasks）随后富化**，
+ * 后者可再花数分钟（本例 18:03 里程碑落库 → 18:14:42 任务写完）。固定 10 分钟硬截止会把
+ * 「还在稳定推进」的生成判死，文案却说「10 分钟无进展」——运营照提示去查路径生成任务，
+ * 那里一切正常，只能反复重试。现在改成：
+ *   ① 进度还在推进（生成状态仍 pending/processing **且** 进度签名有变化）→ 按窗口续期，上限 MAX_PROGRESS_EXTENSIONS；
+ *   ② 生成明确失败（stageDesign=failed）→ 立即失败并把真实原因带出，不再空等；
+ *   ③ 真等不动时，reason 带上最后观察到的生成阶段/进度，运营一眼看出是「慢」还是「坏」。
  */
+const MAX_PROGRESS_EXTENSIONS = 3;
+
 export async function waitForPathReady(ctx: SimulationOrchestrator, 
   sessionId: string,
   learningPathId: string | null,
   timeoutMs = 600_000
 ): Promise<{ ready: boolean; reason?: string }> {
-  const deadline = Date.now() + timeoutMs;
+  const baseWindowMs = timeoutMs;
+  let deadline = Date.now() + timeoutMs;
+  let extensions = 0;
+  /** 上一轮观察到的进度签名 / 本轮窗口内是否观察到「两轮之间有变化」/ 本轮窗口开始时的签名 */
+  let lastPollSignature = '';
+  let sawProgressThisWindow = false;
+  let generation = parsePathGenerationStatus(null);
+  let milestoneCount = 0;
   let pathId = learningPathId;
-  while (Date.now() < deadline) {
+  // 续期会让截止时间往后挪，因此用「无限循环 + 顶部显式判截止」而不是 while (Date.now() < deadline)
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    if (Date.now() >= deadline) {
+      /* 续期条件：本窗口内确实观察到进度变化（两次相邻观察不同）+ 生成仍在进行 + 未超上限。
+         只「第一次看到状态」不算推进——否则坏掉但留有 processing 记录的任务会被反复续期。 */
+      if (sawProgressThisWindow && isGenerationInFlight(generation) && extensions < MAX_PROGRESS_EXTENSIONS) {
+        extensions += 1;
+        sawProgressThisWindow = false;
+        deadline = Date.now() + baseWindowMs;
+        logger.warn('[simulation-coordinator] 路径仍在生成，等待窗口续期', {
+          sessionId,
+          learningPathId: pathId,
+          extension: extensions,
+          maxExtensions: MAX_PROGRESS_EXTENSIONS,
+          progress: describeGenerationProgress(generation, milestoneCount)
+        });
+        continue;
+      }
+      return {
+        ready: false,
+        reason: generation
+          ? `等待路径生成超时（已续期 ${extensions} 次；最后观察：${describeGenerationProgress(generation, milestoneCount)}）`
+          : '等待路径生成超时，请检查路径生成任务'
+      };
+    }
     if (!pathId) {
       const s = await ctx.getVirtualSession(sessionId);
       pathId = s.learningPathId || null;
@@ -65,7 +108,7 @@ export async function waitForPathReady(ctx: SimulationOrchestrator,
         continue;
       }
     }
-    const milestoneCount = await prisma.milestones.count({ where: { learningPathId: pathId } });
+    milestoneCount = await prisma.milestones.count({ where: { learningPathId: pathId } });
     if (milestoneCount > 0) {
       // 关键：里程碑存在 ≠ 可启动。任务（subtasks）可能在里程碑写入后才插入，
       // 过早 ready 会让 startLearningPhase 报「第一个里程碑没有可用任务」。
@@ -82,15 +125,67 @@ export async function waitForPathReady(ctx: SimulationOrchestrator,
 
     const path = await prisma.learning_paths.findUnique({
       where: { id: pathId },
-      select: { status: true }
+      select: { status: true, aiPromptTemplate: true }
     });
     if (path && !['active', 'generating'].includes(path.status)) {
       return { ready: false, reason: `路径生成未产出里程碑（path status=${path.status}）` };
     }
+    /* 生成进度快照（_generation）：只用于「续期判定 + 超时文案」，不改变就绪口径 */
+    generation = parsePathGenerationStatus(path?.aiPromptTemplate ?? null);
+    if (generation) {
+      if (generation.stageDesign === 'failed' || generation.core === 'failed') {
+        return {
+          ready: false,
+          reason: `路径生成失败：${generation.lastError
+            || (generation.stageDesign === 'failed' ? '阶段设计生成失败' : '核心结构生成失败')}`
+        };
+      }
+      const current = generationProgressSignature(generation, milestoneCount);
+      if (lastPollSignature && current !== lastPollSignature) sawProgressThisWindow = true;
+      lastPollSignature = current;
+    }
     await new Promise((resolve) => setTimeout(resolve, 5000));
   }
-  return { ready: false, reason: '等待路径生成超时，请检查路径生成任务' };
 }
+
+/** 进度签名：任一分量变化即视为「还在推进」（核心步 / 阶段设计 / 任务数 / 里程碑数 / 更新时间） */
+function generationProgressSignature(
+  generation: ReturnType<typeof parsePathGenerationStatus>,
+  milestoneCount: number
+): string {
+  if (!generation) return '';
+  return [
+    generation.core || '',
+    generation.coreStep || '',
+    generation.stageDesign || '',
+    Number(generation.scene?.taskCount) || 0,
+    milestoneCount,
+    generation.updatedAt || ''
+  ].join('|');
+}
+
+/** 生成是否仍在进行（pending/processing）：只有这种状态才允许续期，坏掉的任务不会无限等 */
+function isGenerationInFlight(generation: ReturnType<typeof parsePathGenerationStatus>): boolean {
+  if (!generation) return false;
+  const inFlight = (v?: string | null) => v === 'pending' || v === 'processing';
+  return inFlight(generation.core) || inFlight(generation.stageDesign);
+}
+
+function describeGenerationProgress(
+  generation: ReturnType<typeof parsePathGenerationStatus>,
+  milestoneCount: number
+): string {
+  if (!generation) return `里程碑 ${milestoneCount}（无生成状态记录）`;
+  const parts: string[] = [];
+  if (generation.core) parts.push(`核心 ${generation.core}`);
+  if (generation.coreStep) parts.push(`核心步 ${generation.coreStep}`);
+  if (generation.stageDesign) parts.push(`阶段设计 ${generation.stageDesign}`);
+  parts.push(`里程碑 ${milestoneCount}`);
+  if (generation.scene?.taskCount !== undefined) parts.push(`任务 ${generation.scene.taskCount}`);
+  if (generation.updatedAt) parts.push(`更新于 ${generation.updatedAt}`);
+  return parts.join(' · ');
+}
+
 
 
 /**
