@@ -114,4 +114,35 @@ goal 会话 understanding 显式抽取 `gapType`（信息缺口/认知缺口/练
 
 **另附三条设计补充**：① 颗粒度从「坐学时长」松绑为「单盲区闭环判据（Exit Node）」——入口翻车挑战 → 接住真名透镜 → 独立通过任务外变式即收口（触及 path-planning-hints 的时长帽，与坐学判据并存还是替代，落地时定）；② 物理技能（乐器/书法）边界劝退话术入路由；③ 课堂白板仅限纯代码生成轻量 SVG，不引入外部生图模型（锁死 ¥0.21/课成本与延迟）。
 
-**基线快照**：改造前全量技能包已存档 `wenflow-skill-baseline-2026-11-10.tar.gz`（prompts/ 全量 + backend/src/skills/ 全量 + PIPELINE-BASELINE.md 管线底图），供独立研究线对照。
+**基线快照**：改造前全量技能包已存档 `wenflow-skill-baseline-core-2026-11-10.zip`（prompts 真源+编译产物+manifests+orchestration + PIPELINE-BASELINE.md 管线底图），供独立研究线对照。
+
+## 9. 落地计划 v2（研究线读码校准后 · 2026-11-10 深夜）
+
+研究线持基线包读穿 YAML 后的 7 项关键断言已逐一过码验证：**5 确认**（teaching-turn L97 盘问规则架空 L239 开场微讲授协议；path-planning L66/72/89 三问+四段八股；session-wrapup L46 背诵种子；goal-conversation L69 时间决定性维度采集门；teaching-checkpoint.ts L117-121 低 understanding 加速出题至 2 条消息）、**1 部分确认**（stage-designer L107 充实度鞭子存在，但研究线漏看 L107 内 2026-11-09 已加的「≤6h 小体量反注水例外」——v2 把它从例外吸收为通例）、1 未验（referee reachability=external，非阻塞）。方案二架构预警（understanding 已有 4 套分类字段：intent_type / primary_block_type / skill_nature / platform_judgment）属实，采纳。
+
+### 第一刀 · prompt 批（8 处手术，行号已定位，规则文本以研究线版本为底）
+
+1. **teaching-turn.yaml L97 改写 = Meno 闸**：原「状态不明→先给诊断性产出请求，不要直接开讲」是对白纸盘问的根因，架空了 L239 开场微讲授协议。改为「提问前提审计」：积木未给（首轮/刚切焦点/状态不明）→ 禁开放式问题与「用自己的话写出来」，先供积木（场景靶→拆直觉→亮机制）再问框架内二选一/填空；积木已有→按回合意图走；豁免硬锁 `ktEstimate.recommendation==='challenge'` 或 progress≥80 且 loadIndex<0.3/bored。改后与 L239 天然同向。
+2. **teaching-turn.yaml L108 温故 → 间隔迁移微挑战**：禁字面定义复述（「什么是X/X有三个要点」），到期概念包装为异构新情境 1-2 句翻车/决策小现场，不点破该用哪个旧概念；unaided 一句肯定进正课，答偏给最小线索（with-hint）或一句点破用法（failed），不纠缠第 2 轮；原名字上报 + warmupOutcomes 契约不变。
+3. **session-wrapup.yaml L46 同步**：检索种子改迁移种子——「下一课开场先判这个现场：…」（具体小场景），禁「不看笔记说出三个要点」。
+4. **path-planning.yaml L72 废四段八股 → 盲区三律**（逆向剔除）：①盲区唯一性（每阶段=一个独立认知盲区+破局透镜=绑定 coreConcept）②翻车可证伪（写不出具体翻车点的阶段=目录凑数，当场合并/删除，按自然盲区数收敛）③破局即入口（阶段 1 直击头号盲区翻车现场，禁导论/热身段）。L66 三问保留（那是 coreConcepts 提炼，用途不同）；L89 预算不足「四段合并两段」同步改为「按盲区优先级裁剪」。
+5. **真名+SOP 禁令扩充**（path-planning「问题切入理论亮剑」条 + stage-designer 对应条）：非学术实务同权亮真名（ABC 分类/FIFO/5Why/鱼骨图/PDCA 与珀尔因果图同格）；SOP 只作课堂「待诊断靶子」，每步配失效条件与判据，配不出的纯执行步骤不立课。
+6. **stage-designer.yaml L107 充实度 → 单次认知闭环定界（Exit Node）**：subtask 边界由 acceptanceHint 的可验证结束节点决定，不由分钟数决定；闭环成立即收口；targetSubtasksForStage 与 subtaskMinutesRange 仅作上限容器参考，严禁拆闭环凑课数或 15 分钟虚标 45。已有「≤6h 反注水例外」吸收为通例。
+7. **stage-designer.yaml L109 supplementRequest 收紧（后端 stage-enrichment.ts 配合）**：增量补课仅 `intent_type==='exam'` 且存在未覆盖考纲实体时触发，普通认知建构路径关闭课数下限补课。
+8. **goal-conversation.yaml L69 时间采集门按 D-E 松绑 + 物理技能收紧**：时间仅在 deadlineDate 非空时为决定性维度；自由学习未提时间严禁追问，sessionsLengthMin 静默默认 25、objectiveScopeHours 按盲区数自下而上估；物理技能（physical_internalized + not_judgeable）从「排训练计划+事后文字归因」收紧为「仅可文本化底层理论（乐理/透视）或劝退」，落实物理课禁令。
+
+### 第二刀 · checkpoint 降频（teaching-checkpoint.ts，一处小改）
+
+删「understanding<0.6 → 2 条消息加速出题」（学生懵时需要支架不是考题）；emitCheckpoint 改「单焦点收口触发」：仅当判定学生基本走通、准备推 mastered / isCompletionCandidate 时弹 1 道变式检验卡作通关证明；过程验证全部交给隐性对话互动（co-create 判对即推进看板）。
+
+### 第三刀 · 判官脚本（payload 四块 + 黄金负样本）
+
+Payload = ①课堂 visibleDialogueContext + personaSeed（真值）②lesson-knowledge-enricher 产出（blockedFoundations/recurringConfusions/knowledgeStateSummary，被评 A）③previousStageOutcome（strugglingConcepts/recommendation）+ replan-attribution reason（被评 B）④stage-designer 下一阶段 subtasks（被评 C）。判官 prompt 用研究线版本（幻觉/复读审计、负荷升降审计、干预合理性审计三铁律 + JSON verdict + evidenceQuote）；校准 = 7 真实 + 3 黄金负样本（全抄原话/反向乱报/高负荷加难），3 假全判 fail 且 ≤2 分才放行 50 份批跑。
+
+### 方案二修订（架构预警采纳：不建第 5 套枚举）
+
+R1 原议 gapType 字段**作废**——understanding 已有 4 套分类字段，蓝屏=primary_block_type(oneoff_operation/environment_tooling)+recurrence(oneoff)、乐器=skill_nature(physical_internalized)+platform_judgment(not_judgeable) 底座已在。改为：primary_block_type 填写时机从「诊断门槛后」提权到第 1 轮，**或**新增轻量 `response_mode_hint: answer_only | answer_then_hook | learning_path | physical_decline`；蓝屏走 answer_then_hook（首轮直答+尾部「生成排障认知课」转化钩子）；物理走 physical_decline（与第一刀第 8 条联动）。
+
+### 执行顺序（沿用评审结论，校准后不变）
+
+第一刀（prompt 8 处，compile-all + check:all + 3 真机 case：盘库/蓝屏/心理学）→ 第二刀（checkpoint 15 分钟）→ 第三刀（判官挂机批跑）→ 方案二（response_mode_hint，走字段门禁）。

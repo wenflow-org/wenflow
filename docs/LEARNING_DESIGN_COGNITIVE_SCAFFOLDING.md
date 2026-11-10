@@ -52,6 +52,8 @@
 
 ### R1 路由的本质 = 缺口类型判断，不是词面匹配
 
+> 2026-11-10 深夜修订：原议「新增 gapType 字段」作废——understanding 已有 4 套分类字段（intent_type / primary_block_type / skill_nature / platform_judgment），蓝屏与乐器的底座已在其中。落法改为 primary_block_type 提权至第 1 轮判定 + 轻量 `response_mode_hint`（answer_only / answer_then_hook / learning_path / physical_decline），详见评审稿 §9 方案二修订。
+
 用户开口时的目标在三个**根维度**上取值，case 只是它们的投影：
 
 | 根维度 | 取值 | 路由 |
