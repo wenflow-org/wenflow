@@ -230,6 +230,15 @@
             <!-- 四码不在卡头复读（2026-10-19 文案优化）：卡内四行的标签各自带码（LSS 学习压力…），
                  卡头只说到来源与取样时刻 -->
             <span class="mk-card__meta" :title="loadCaliberNote.title">{{ loadCaliberNote.label }}</span>
+            <!-- 取值参考从行内右列收进「?」（2026-11-10 用户「做成一个小问号的样式藏起来」）：
+                 四行参考带同质、看一次就够，常驻一列把柱条挤窄；默认收起，点开才展开。
+                 用 <details> 而不是 title：键盘/读屏能展开，触控也不依赖悬停。 -->
+            <details class="ld-lsm__help">
+              <summary class="ld-lsm__help-btn" aria-label="取值参考" title="取值参考">?</summary>
+              <ul class="ld-lsm__help-pop">
+                <li v-for="r in learningStateRows" :key="r.label"><b>{{ r.label }}</b> · {{ r.hint }}</li>
+              </ul>
+            </details>
           </div>
           <div class="ld-lsm">
             <div v-for="r in learningStateRows" :key="r.label" class="ld-lsm__row">
@@ -243,7 +252,6 @@
                 ></i>
               </span>
               <span class="ld-lsm__val">{{ r.value }}</span>
-              <span class="ld-lsm__hint" :title="r.hintTitle">{{ r.hint }}</span>
             </div>
           </div>
         </section>
@@ -1785,7 +1793,10 @@ async function loadLdGoals(id: string, includeTest: boolean) {
         id: String(c.id),
         summary: goalSummaryOf(c),
         status: String(c.status || ''),
-        subText: c.learningPathId ? '已生成学习路径' : '未生成学习路径',
+        /* 2026-11-10 用户「左侧已经有了已完成，下方就不要再有已生成学习路径了」：
+           状态徽章已经说了结果，副行只在**异常**时补一句——已完成却没挂路径，
+           才是扫描这一列时真正需要看见的那格；两行都在说同一件事的旧写法撤掉。 */
+        subText: c.learningPathId ? '' : '未生成学习路径',
         createdAgo: timeAgo(String(c.createdAt || '')),
         createdTs: new Date(String(c.createdAt || '')).getTime() || 0,
         learningPathId: String(c.learningPathId || '')
@@ -3105,8 +3116,7 @@ const learningStateRows = computed(() => {
       width: missing ? 0 : (key === 'lsb' ? Math.min(100, Math.round(Math.abs(hundred!) * 0.8 + 10)) : width(hundred)),
       // 共享口径的 '' = 缺值/中性 → 本页条形用 'muted'（本页只有 ok/bad 上色档）
       tone: (t === '' ? 'muted' : t) as 'ok' | 'warn' | 'bad' | 'muted',
-      hint: bandText.band,
-      hintTitle: bandText.bandTitle
+      hint: bandText.band
     }
   }
   return [row('lss'), row('ktl'), row('lf'), row('lsb')]
@@ -3575,14 +3585,54 @@ const snapshotHint = computed(() =>
 
 /* 学习状态追踪（lsm，原型 517-522）：label / track / val / hint 四列 */
 .ld-lsm { padding: 14px 16px; display: grid; gap: 12px; }
-/* 参考带列 72 → 128px（2026-10-19 文案优化）：72px 时「0–10 · 参考 4–7」「慢 EWMA · 参考 ≤ 7」
-   全部折成两行，四行读数的高度不齐、参考带被拆开读；128px 下最长的带也单行放得下，
-   柱条仍占满剩余宽度（1600 / 1280 实测均不挤、无横向溢出） */
-.ld-lsm__row { display: grid; grid-template-columns: 92px minmax(0, 1fr) auto 128px; align-items: center; gap: 10px; }
+/* 参考带列已收进卡头「?」（2026-11-10）：原先固定 128px 只为让「0–100 · 参考 40–70」
+   单行放下，四行参考文字常驻在右侧、柱条因此短一截。现在栅格只剩标 / 条 / 值三列。
+   预算过三档断点（1600 / 1280 / 960）都是柱条变长、值贴右缘，不新增折行。 */
+.ld-lsm__row { display: grid; grid-template-columns: 92px minmax(0, 1fr) auto; align-items: center; gap: 10px; }
 .ld-lsm__label { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .ld-lsm__track { min-width: 80px; }
 .ld-lsm__val { font-size: var(--mk-fs-micro); font-weight: 700; font-variant-numeric: tabular-nums; }
-.ld-lsm__hint { font-size: var(--mk-fs-micro); color: var(--mk-faint); text-align: right; }
+/* 卡头小问号：18px 圆圈，默认只是一颗灰点，点开后列出四行参考带。
+   ⚠ 卡是 overflow:clip（粘性表头需要），弹层必须落在卡内：右贴齐、宽 360 时
+   四行各单行、总高低卡高，1280 实测不裁。 */
+.ld-lsm__help { position: relative; display: inline-flex; }
+.ld-lsm__help-btn {
+  cursor: pointer;
+  list-style: none;
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--mk-line);
+  border-radius: 50%;
+  color: var(--mk-faint);
+  font-size: var(--mk-fs-micro);
+  font-weight: 700;
+  line-height: 1;
+}
+.ld-lsm__help-btn::-webkit-details-marker { display: none; }
+.ld-lsm__help-btn:hover { color: var(--mk-blue-text); border-color: var(--mk-blue-text); }
+.ld-lsm__help[open] .ld-lsm__help-btn { color: var(--mk-blue-text); border-color: var(--mk-blue-text); }
+.ld-lsm__help-pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: var(--mk-z-menu);
+  width: min(360px, calc(100vw - 48px));
+  margin: 0;
+  padding: 10px 12px;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  background: var(--mk-surface);
+  border: 1px solid var(--mk-line);
+  border-radius: var(--mk-radius-lg);
+  box-shadow: var(--mk-shadow-pop);
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-muted);
+  line-height: 1.5;
+}
+.ld-lsm__help-pop b { color: var(--mk-ink); font-weight: 700; }
 
 /* 学习路径卡栅格样式已随「学习路径」页签撤销（审核 #22，2026-10-06）：
    里程碑分母 / 路径状态徽章并入概览「当前进度」卡，下钻入口沿用卡头「查看路径结构 →」。 */

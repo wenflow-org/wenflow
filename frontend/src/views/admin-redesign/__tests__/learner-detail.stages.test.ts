@@ -1315,3 +1315,93 @@ describe('LearnerDetail · 页签 URL 同步（2026-11-09 走查）', () => {
     w.unmount();
   });
 });
+
+/**
+ * 2026-11-10 概览两张卡的可读性修复：
+ *  1) 最近目标对话行左侧已有状态徽章（已完成），副行再写「已生成学习路径」是把同一结论说两遍；
+ *     只有「已完成却没挂路径」这种异常才需要补一句。
+ *  2) 学习状态追踪右侧常驻一列「取值参考」（0–100 · 参考 40–70 …），同质、看一次就够，
+ *     收进卡头的小问号，行内只留柱条与读数。
+ */
+describe('LearnerDetail 概览：目标对话副行 + 取值参考小问号', () => {
+  beforeEach(() => {
+    listSessions.mockReset().mockResolvedValue({ data: { data: { items: [] } } });
+    getMemoryTraces.mockReset().mockResolvedValue([]);
+    listPaths.mockReset().mockResolvedValue({ data: { data: { paths: [] } } });
+    routeQuery.tab = 'overview';
+  });
+  afterEach(() => {
+    routeQuery.tab = 'sessions';
+  });
+
+  function goalRowIn(w: Awaited<ReturnType<typeof mountLd>>, text: string) {
+    const row = w.findAll('.mk-row').find((r) => r.text().includes(text));
+    expect(row, `未找到目标行：${text}`).toBeTruthy();
+    return row!;
+  }
+
+  it('已完成且挂上路径：不再复读「已生成学习路径」', async () => {
+    listGoals.mockReset().mockResolvedValue({
+      data: { data: { conversations: [
+        { id: 'g-done', description: '目标已完成', status: 'completed', learningPathId: 'lp1', createdAt: '2026-10-18T10:00:00Z' }
+      ] } }
+    });
+    const w = await mountLd([]);
+    const row = goalRowIn(w, '目标已完成');
+    expect(row.text()).not.toContain('已生成学习路径');
+    // 副行整块不渲染（MkRow 的 v-if="sub"）
+    expect(row.find('.mk-row__sub').exists()).toBe(false);
+    expect(row.text()).toContain('已完成');
+  });
+
+  it('已完成却没有路径：仍补「未生成学习路径」——这才是这一列需要被看见的异常', async () => {
+    /* 作用域收到某条路径时，没挂路径的目标本就被过滤掉（goalInScope），
+       故先切到「全部路径」才看得见这一行。 */
+    listGoals.mockReset().mockResolvedValue({
+      data: { data: { conversations: [
+        { id: 'g-miss', description: '目标没挂路径', status: 'completed', learningPathId: null, createdAt: '2026-10-18T10:00:00Z' }
+      ] } }
+    });
+    const detailMock = vi.mocked(liveGetLearnerDetail as unknown as ReturnType<typeof vi.fn>);
+    const originalDetail = detailMock.getMockImplementation();
+    const originalPath = liveLearners.value[0].pathId;
+    liveLearners.value[0].pathId = '';
+    detailMock.mockResolvedValue({
+      model: { name: '测试学习者', knowledgeMemory: { currentPath: null, globalSignals: {} } }
+    });
+    try {
+      const w = await mountLd([]);
+      expect(goalRowIn(w, '目标没挂路径').text()).toContain('未生成学习路径');
+    } finally {
+      liveLearners.value[0].pathId = originalPath;
+      if (originalDetail) detailMock.mockImplementation(originalDetail);
+    }
+  });
+
+  it('学习状态追踪：四行取值参考收进卡头「?」，行内不再有参考列', async () => {
+    const detailMock = vi.mocked(liveGetLearnerDetail as unknown as ReturnType<typeof vi.fn>);
+    const original = detailMock.getMockImplementation();
+    detailMock.mockResolvedValue({
+      model: { name: '测试学习者', knowledgeMemory: { currentPath: null, globalSignals: {} } },
+      dynamicState: { metrics: { lss: 2.7, ktl: 7.8, lf: 1.9, lsb: 5.9 } },
+      freshness: { generatedAt: new Date().toISOString(), confidence: 0.2 }
+    });
+    try {
+      const w = await mountLd([]);
+      const help = w.find('.ld-lsm__help');
+      expect(help.exists()).toBe(true);
+      expect(help.find('.ld-lsm__help-btn').text()).toBe('?');
+      expect(help.find('.ld-lsm__help-btn').attributes('aria-label')).toBe('取值参考');
+      // 逐行参考带都在弹层里（默认收起 = details 没有 open）
+      const items = help.findAll('.ld-lsm__help-pop li');
+      expect(items.length).toBe(4);
+      expect(items.map((i) => i.text()).join(' | ')).toContain('参考');
+      expect(help.attributes('open')).toBeUndefined();
+      // 行内不再常驻参考文字
+      expect(w.find('.ld-lsm__hint').exists()).toBe(false);
+      expect(w.findAll('.ld-lsm__row').length).toBe(4);
+    } finally {
+      if (original) detailMock.mockImplementation(original);
+    }
+  });
+});
