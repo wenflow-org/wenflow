@@ -275,7 +275,14 @@ class LearningService {
       sourceConversationId: generationStatus?.sourceConversationId || undefined,
       generationRunId: run.id,
       userProfile: {}
-    }, analysis, { appendOnly: true }), { pathId: path.id, runId: run.id, userId: path.userId }, await this.ownerContextOverride(path.userId));
+    }, analysis, {
+      appendOnly: true,
+      // 2026-11-11 三次真机：append 分支此前只传 appendOnly，stage-enrichment 内部又按
+      // listEmptyMilestoneIds 全量枚举 → 渐进模式下 stage 2 仍被一次性补齐。这里把调用方
+      // 已算好的目标阶段传下去，渐进模式再打 progressive（设计输入带学习者信号）。
+      restrictMilestoneIds: milestoneIds,
+      ...(isProgressiveStageDesignEnabled() ? { progressive: true } : {}),
+    }), { pathId: path.id, runId: run.id, userId: path.userId }, await this.ownerContextOverride(path.userId));
 
     return { retryCount: appendCount, runId: run.id };
   }
