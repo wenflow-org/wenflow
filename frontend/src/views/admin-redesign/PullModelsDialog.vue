@@ -7,10 +7,10 @@
        卡头不再另挂一个「连接设置」入口——一次弹窗既配连接又选模型。
        2026-11-09 用户走查（图 2）：满屏绿色「可添加」既没有信息量（整列同值），
        又和「已添加」的真相打架（已挂上的模型仍显示可添加、还能重复勾）。
-       现在：默认只看「未添加」，中间列改成**预判标签**（标签按名字预判，与本弹窗原有的
-       底部说明同一口径），全选移到表头第一列，底部只留手动录入 + 已选数 + 两个按钮。
-       注：2026-11-04 撤过一版「能力特性」列，那时是拿它当**事实**列在清单里；
-       这次的「预判标签」是同一个推断函数，但列头就写明是预判，只服务「这行是什么模型」。 -->
+       现在：默认只看「未添加」，全选移到表头第一列，底部只留手动录入 + 已选数 + 两个按钮。
+       2026-11-10 用户「这里到预判标签，不要了」：撤掉「预判标签」整列与底部那句
+       「能力按模型名预判」——名字推断不落到卡面，能力改由引入后的「配置」里看；
+       「已添加」标记并入名称格，仍能一眼区分已挂上的行。 -->
   <Teleport v-if="open" to="body">
     <div ref="maskRef" class="mk-modal">
       <div ref="panelRef" class="mk-modal__panel pmd" role="dialog" aria-modal="true" :aria-label="title">
@@ -69,7 +69,6 @@
               />
             </label>
             <span>模型标识</span>
-            <span>预判标签</span>
             <span>连通状态</span>
             <span class="pmd-cols__act">操作</span>
           </div>
@@ -95,13 +94,10 @@
                   <span class="pmd-row__name">
                     <span class="mono pmd-row__id" :title="row.id">{{ row.id }}</span>
                     <span v-if="row.display" class="pmd-row__alias" :title="row.display">{{ row.display }}</span>
+                    <!-- 已添加只在「已添加 / 全部」两个视图里出现：未添加视图里本行不存在 -->
+                    <span v-if="row.added" class="mk-badge mk-badge--muted mk-badge--sm">已添加</span>
                   </span>
                 </label>
-                <span class="pmd-row__tags">
-                  <!-- 已添加只在「已添加 / 全部」两个视图里出现：未添加视图里本行不存在 -->
-                  <span v-if="row.added" class="mk-badge mk-badge--muted mk-badge--sm">已添加</span>
-                  <span v-for="tag in row.tags" :key="tag" class="mk-badge mk-badge--muted mk-badge--sm">{{ tag }}</span>
-                </span>
                 <span class="pmd-row__res" :class="resClass(row.id)" :title="results[row.id]?.text">
                   <template v-if="results[row.id]">{{ results[row.id].ok ? `已连通 · ${results[row.id].latency}` : '连接失败' }}</template>
                   <span v-else class="mk-na">—</span>
@@ -160,25 +156,16 @@ import { adminModelProvidersApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
 import { useMaskClose, useOverlay } from './useOverlay'
 import { errMsg } from './live'
-import {
-  hasReadableName,
-  inferModelCapabilities,
-  inferenceLabels,
-  readableModelName,
-} from './modelCapabilityInference'
+import { hasReadableName, readableModelName } from './modelCapabilityInference'
 
 /** 清单视图：默认「未添加」（2026-11-09 用户走查） */
 type PickerView = 'missing' | 'added' | 'all'
-
-const ROLE_LABEL: Record<string, string> = { embedding: '向量', rerank: '重排', image: '图像' }
 
 interface PickerRow {
   id: string
   display: string
   added: boolean
   selectable: boolean
-  /** 预判标签：非对话模型给用途（向量 / 重排 / 图像），对话模型给能力（思考 / 视觉…） */
-  tags: string[]
 }
 
 const props = withDefaults(defineProps<{
@@ -216,7 +203,7 @@ const props = withDefaults(defineProps<{
   error: '',
   stale: false,
   allowManual: true,
-  hint: '能力按模型名预判，引入后可点该行的「配置」调整思考 / 推理强度 / 视觉。',
+  hint: '引入后可点该行的「配置」调整思考 / 推理强度 / 视觉。',
   hiddenCount: 0,
   labels: () => ({}),
   emptyText: '',
@@ -253,14 +240,6 @@ const registeredSet = computed(() => new Set(props.registered))
 
 /** 预判标签（只服务「这行是什么模型」，不是落库事实）：
     非对话模型给用途，对话模型给能力；两者都判不出时给「对话」，免得单元格空着像没数据。 */
-function tagsOf(id: string): string[] {
-  const inference = inferModelCapabilities(id)
-  const role = ROLE_LABEL[inference.role]
-  if (role) return [role]
-  const caps = inferenceLabels(inference)
-  return caps.length ? caps : ['对话']
-}
-
 const rows = computed<PickerRow[]>(() => {
   const list = props.models.map((id) => {
     const added = registeredSet.value.has(id)
@@ -271,7 +250,6 @@ const rows = computed<PickerRow[]>(() => {
       added,
       // 只有「已添加」勾不动；不再按模型角色判断能不能加（2026-11-04）
       selectable: !added,
-      tags: tagsOf(id),
     }
   })
   /* 已添加的行沉到末尾：首屏先给还没挂上的，sort 稳定，同组内保持上游原序。 */
@@ -442,7 +420,7 @@ defineExpose({ openWith, isOpen: () => open.value })
 .pmd-refetch { margin-left: auto; flex: none; }
 .pmd-cols {
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) 240px 104px 64px;
+  grid-template-columns: 26px minmax(0, 1fr) 104px 64px;
   gap: 12px;
   align-items: center;
   padding: 10px 12px 6px;
@@ -461,7 +439,7 @@ defineExpose({ openWith, isOpen: () => open.value })
 }
 .pmd-row {
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) 240px 104px 64px;
+  grid-template-columns: 26px minmax(0, 1fr) 104px 64px;
   align-items: center;
   gap: 12px;
   min-height: 46px;
@@ -476,7 +454,7 @@ defineExpose({ openWith, isOpen: () => open.value })
 @media (max-width: 900px) {
   .pmd-cols { display: none; }
   .pmd-row { grid-template-columns: 26px minmax(0, 1fr); }
-  .pmd-row__tags, .pmd-row__res, .pmd-row__probe { grid-column: 2; }
+  .pmd-row__res, .pmd-row__probe { grid-column: 2; }
 }
 .pmd-row__pick {
   display: contents;
@@ -486,7 +464,6 @@ defineExpose({ openWith, isOpen: () => open.value })
 .pmd-row__name { display: grid; gap: 1px; min-width: 0; }
 .pmd-row__alias { color: var(--mk-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 预判标签：可能 2~3 枚（思考 / 视觉 / 代码），允许折行但行高仍受 46px 约束 */
-.pmd-row__tags { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; min-width: 0; }
 .pmd-row__probe { display: inline-flex; align-items: center; justify-content: flex-end; }
 .pmd-row__test { flex: none; font-size: var(--mk-fs-micro); }
 .pmd-row__test:disabled { opacity: 0.55; cursor: default; }
