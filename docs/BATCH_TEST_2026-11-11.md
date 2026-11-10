@@ -61,7 +61,8 @@
 4. **路径文本对资源的指代**：考研任务写「一篇真题阅读」但未注明「平台提供」；判官会追问资源来源。可在任务 description 加一句「课堂会提供原文/题目」。
 5. **物理拒绝文案的示例不贴场景**：游泳案例的拒绝文案举「风味、手感、笔锋、音色」，与游泳语境不符；属于通用文案，可改为按领域取例。
 6. **oneoff 的 harness 判定**：蓝屏案例 14 步仍在 goal（用户在持续抢修），产品行为正确但 harness 记 `goal-not-converged`；需要「预期不排课」用例类型，避免把正确行为计为失败。
-7. **提示词门禁已全绿**：`prompts:check:all` 退出码 0、payload-prefix 违规 0；此前 `virtual-learner-learn-turn-simulator` 的历史违规已随重编译消失，不再是残留项。
+7. **多次重启造成的 harness 竞态**：盘库 v2 的 3 天续跑在后半段报 `当前课堂状态不允许此操作（teaching-step-stopped）` 并置会话 failed——发生在连续重启后，属于调试期环境竞态，非课堂逻辑回归；设计侧（路径/任务/判官）已在重启前完成验证。
+8. **提示词门禁已全绿**：`prompts:check:all` 退出码 0、payload-prefix 违规 0；此前 `virtual-learner-learn-turn-simulator` 的历史违规已随重编译消失，不再是残留项。
 
 ## 复现命令
 
