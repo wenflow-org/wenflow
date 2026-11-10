@@ -620,7 +620,9 @@ const abnormalSelect = computed<string>({
   set: (v) => { onlyAbnormal.value = v === 'abnormal' }
 })
 const abnormalOptions = computed(() => {
-  const n = samples.value.filter((s) => s.failedCount > 0 || s.stalledCount > 0).length
+  /* 与 filtered 的异常谓词同源：失败 + 卡死 + 自动驾驶故障（activeError），
+     只数前两项会让「只在目标阶段炸过」的行在 N 之外 */
+  const n = samples.value.filter((s) => s.failedCount > 0 || s.stalledCount > 0 || !!s.activeError).length
   return [
     { value: 'all', label: '全部' },
     { value: 'abnormal', label: `只看有异常（${n}）` }
@@ -1088,7 +1090,7 @@ const headerIndeterminate = computed(() => !allChecked.value && pageSelectable.v
 
 /* 选中集合随筛选与数据刷新收敛（审核 #57）：先勾选再筛掉后，批量条不得继续按
    视口外的旧集合执行批量终止/删除/自动驾驶——筛选条件一变即清空选中。 */
-watch([keyword, stateFilter], () => {
+watch([keyword, stateFilter, onlyAbnormal], () => {
   selected.value = []
 })
 /* 数据刷新（行已在别处删除）后按存活 id 收敛，宁可让批量条消失也不误伤已删对象 */

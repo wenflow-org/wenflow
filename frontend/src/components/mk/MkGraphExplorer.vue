@@ -81,7 +81,7 @@
             </div>
             <label class="mk-ge__check">
               <input type="checkbox" :checked="!hideIsolated" @change="onIsolatedChange" />
-              显示无关系的概念
+              显示未评估的孤立概念
             </label>
           </div>
         </div>
@@ -95,6 +95,7 @@
               :theme="resolvedTheme"
               :height="height"
               :hide-isolated="hideIsolated"
+              :selected-id="selected?.id ?? null"
               @select="onCanvasSelect"
             />
             <!-- 收起侧栏后的展开入口（sideOpen=false 时 aside 连同其上的开关一起消失） -->
@@ -251,7 +252,11 @@
                   </li>
                 </ul>
               </template>
-              <p v-else class="mk-ge__side-hint">这个图谱里的概念都已掌握。</p>
+              <p v-else class="mk-ge__side-hint">
+                <template v-if="!listNodes.length">当前筛选下没有概念。</template>
+                <template v-else>画布内可见的概念都已掌握。</template>
+                <template v-if="hiddenIsolatedCount">另有 {{ hiddenIsolatedCount }} 个未评估的孤立概念未显示。</template>
+              </p>
             </div>
           </aside>
         </div>
@@ -299,6 +304,7 @@ import MkSelect from './MkSelect.vue'
 import { useIsDark } from '@/composables/useIsDark'
 import type { MkGraphConceptFacts, MkGraphEdge, MkGraphNode } from './MkGraph.vue'
 import { CONCEPT_BAND_LABEL, type ConceptBandKey } from '@/utils/conceptBands'
+import { hasMasterySignal } from '@/utils/graphSemantics'
 import SkeletonLoader from '../ui/SkeletonLoader.vue'
 import V2ResultState from '../ui/V2ResultState.vue'
 
@@ -473,17 +479,22 @@ const listNodes = computed(() => {
     connected.add(e.fromConceptId)
     connected.add(e.toConceptId)
   }
-  const kept = levelNodes.value.filter(
-    (n) => connected.has(n.id) || (n.masteryScore !== null && n.masteryScore !== undefined)
-  )
+  const kept = levelNodes.value.filter((n) => connected.has(n.id) || hasMasterySignal(n))
   return kept.length > 0 ? kept : levelNodes.value
+})
+/** 被 hideIsolated 裁掉的节点数：侧栏空态用它披露「都已掌握」背后的隐藏量 */
+const hiddenIsolatedCount = computed(() => levelNodes.value.length - listNodes.value.length)
+
+/* 选中的节点被筛掉（切层级 / 换路径 / 收起孤立点）时要一起取消：
+   否则画布按「有选中但可见集里没有它」把全部节点压暗（整张图变灰），侧栏还停在旧节点上。 */
+watch(listNodes, (rows) => {
+  const cur = selected.value
+  if (cur && !rows.some((n) => n.id === cur.id)) selected.value = null
 })
 
 /** 掌握度读屏文案与侧栏同口径（百分比）：raw 0-1 小数直接念出来很难懂 */
 function masteryText(n: MkGraphNode): string {
-  return n.masteryScore === null || n.masteryScore === undefined
-    ? '未知'
-    : `${Math.round(n.masteryScore * 100)}%`
+  return hasMasterySignal(n) ? `${Math.round((n.masteryScore ?? 0) * 100)}%` : '未知'
 }
 
 /* ---------- 掌握状态四档（统计 / 徽章 / 图例共用一个口径） ---------- */
@@ -502,9 +513,11 @@ const STATUS_BADGE: Record<StatusKey, string> = {
 
 /** 与画布着色同一套阈值（四档名见 utils/conceptBands），避免"图上红一片、统计说都好" */
 function statusKeyOf(node: MkGraphNode | null): StatusKey {
-  if (!node || node.masteryScore === null || node.masteryScore === undefined) return 'unknown'
-  if (node.stability === 'fragile' || node.masteryScore < 0.45) return 'fragile'
-  if (node.stability === 'stable' || node.masteryScore >= 0.8) return 'stable'
+  /* 0 分且无提取证据 = 未评估（与画布着色、档案页同一判据，见 utils/graphSemantics） */
+  if (!node || !hasMasterySignal(node)) return 'unknown'
+  const score = node.masteryScore ?? 0
+  if (node.stability === 'fragile' || score < 0.45) return 'fragile'
+  if (node.stability === 'stable' || score >= 0.8) return 'stable'
   return 'learning'
 }
 

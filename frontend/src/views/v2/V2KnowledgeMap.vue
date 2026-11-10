@@ -64,6 +64,7 @@ import MkGraphExplorer from '@/components/mk/MkGraphExplorer.vue'
 import type { MkGraphEdge, MkGraphNode } from '@/components/mk/MkGraph.vue'
 import { learningAPI } from '@/api/learning'
 import { useIsDark } from '@/composables/useIsDark'
+import { hasMasterySignal } from '@/utils/graphSemantics'
 
 const router = useRouter()
 const isDark = useIsDark()
@@ -81,17 +82,18 @@ const error = ref('')
  *
  * 为什么是 40：`MkGraph` 的力导向斥力/边长是按 ~40 节点校准的（该文件注释记录了这次校准），
  * 超过之后云团会撑出画布——实测某学习者 5 条路径并集有 76 个有边节点，802×560 的画布上
- * 只能看见边缘碎片。这里按"有边相连的节点数"判断，与画布实际渲染的规模一致
- * （孤立节点默认不显示）。
+ * 只能看见边缘碎片。判据必须是「画布实际会画出的节点数」——孤立点并不是全都不画：
+ * 有掌握度读数的孤立概念会保留（见 MkGraph.visibleNodes），只数有边的会把它漏在护栏外。
  */
 const AUTO_NARROW_CONNECTED_NODES = 40
 const narrowedNote = ref('')
 
-/** 有边相连的节点数（= 画布实际会渲染的规模） */
+/** 画布实际会渲染的节点数（有边 + 有掌握度读数的孤立点；与 MkGraph.visibleNodes 同判据） */
 function connectedCount(ns: MkGraphNode[], es: MkGraphEdge[]): number {
   const used = new Set<string>()
   for (const e of es) { used.add(e.fromConceptId); used.add(e.toConceptId) }
-  return ns.filter((n) => used.has(n.id)).length
+  const drawn = ns.filter((n) => used.has(n.id) || hasMasterySignal(n))
+  return (drawn.length > 0 ? drawn : ns).length
 }
 
 async function load(nextPathId: string | null = pathId.value) {

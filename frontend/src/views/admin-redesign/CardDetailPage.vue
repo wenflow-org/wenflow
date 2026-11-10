@@ -154,7 +154,8 @@
     <MkEmptyState
       v-else
       tone="error"
-      title="卡不存在或已删除"
+      :title="loadError ? '卡详情加载失败' : '卡不存在或已删除'"
+      :description="loadError || ''"
       action-text="重试"
       :action-busy="loading"
       action-busy-text="重试中…"
@@ -218,6 +219,9 @@ const d = ref<CardDetail | null>(null)
 /** 页头标题：与卡墙同一口径（「想解决并发编程」+「并发编程：…」合成一句） */
 const pageTitle = computed(() => (d.value ? cardDisplayTitle(d.value.name, d.value.goal) : ''))
 const loading = ref(true)
+/** 取数失败原因：网络/500 与「卡不存在」是两件事，此前 catch 只弹 toast，
+    页面仍渲染「卡不存在或已删除」，把「没拉到」说成「没有」。 */
+const loadError = ref('')
 /** 本卡派生出的实例数（列表接口每行的 profile.derivedFrom.profileId 指向来源卡） */
 const derivedCount = ref(0)
 const profileId = computed(() => (subPage.value?.view === 'card' ? subPage.value.id || '' : ''))
@@ -242,6 +246,7 @@ async function load() {
   const pid = profileId.value
   if (!pid) return
   loading.value = true
+  loadError.value = ''
   try {
     const res = await adminVirtualLearnersApi.cardsDetail(pid)
     d.value = (res.data?.data ?? res.data) as CardDetail
@@ -250,15 +255,19 @@ async function load() {
     if (d.value?.name && subPage.value?.id === pid) setSubPageLabel(d.value.name)
     void loadDerivedCount(pid)
   } catch (e) {
-    toast.error(errMsg(e) || '卡详情加载失败')
+    const msg = errMsg(e) || '卡详情加载失败'
+    toast.error(msg)
+    loadError.value = msg
   } finally {
     loading.value = false
   }
 }
 
 /** 回派生来源的身份卡（本卡是实例时才有入口；label 用视图名，避免「同名卡 / 同名卡」） */
-function goTemplate(profileId: string) {
-  openSubPage('card', profileId, { from: { view: 'card', id: profileId, label: '身份卡' } })
+function goTemplate(sourceCardId: string) {
+  /* from 描述「从哪一页点进来的」（store 的叠链规则），必须写**当前页**（这张实例卡），
+     不能写目标卡——此前传的是目标模板 id，面包屑退回来等于原地不动。 */
+  openSubPage('card', sourceCardId, { from: { view: 'card', id: profileId.value, label: '派生实例' } })
 }
 
 /* 人设首段与「背景」字段取的是同一份原文：有背景字段时不再先铺一遍无字段名的长段落，

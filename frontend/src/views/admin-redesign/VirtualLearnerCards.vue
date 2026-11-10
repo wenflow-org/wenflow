@@ -122,8 +122,10 @@
         @action="loadIndex"
       />
       <!-- 池子被派空 ≠ 卡库是空的：卡片还在，只是都变成实例了 -->
+      <!-- 判据用 wallCards（身份卡底册），不是 filtered：档位/关键词筛空是「没有命中的卡」，
+           不是「池子被派空」——此前用它做判据，筛一下档位就变成「池子已派空」且没有复位入口 -->
       <MkEmptyState
-        v-else-if="!filtered.length && !keyword.trim() && summary?.derived"
+        v-else-if="!wallCards.length && summary?.derived"
         title="身份池已派空"
         action-text="去虚拟学习者"
         @action="goInstances"
@@ -131,7 +133,7 @@
       <!-- 2026-11-06 视觉走查：主操作改走 action-text（与全站空态同一条渲染路径），
            并补上「为什么空」的一句——块级空态统一为「标题 + 一句为什么 + 可选动作」。 -->
       <MkEmptyState
-        v-else-if="!cards.length"
+        v-else-if="!wallCards.length"
         title="卡库还是空的"
         description="导入一张身份卡后，就能从它派生虚拟学习者。"
         action-text="导入第一张卡"
@@ -319,6 +321,7 @@ const tierOptions = computed(() => {
 
 /** 卡墙只放身份卡（2026-10-24 层级收口）：实例归「虚拟学习者」。
  *  接口已过滤，这里再挡一次——旧缓存或别处回放的数据里若仍带 derivedFrom，也不进墙。 */
+const wallCards = computed(() => cards.value.filter((c) => !c.derivedFrom))
 const filtered = computed(() => {
   const kw = keyword.value.trim().toLowerCase()
   return cards.value.filter((c) => {
@@ -345,8 +348,23 @@ const pagedCards = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filtered.value.slice(start, start + pageSize.value)
 })
-watch([keyword, tier, cards], () => {
+/* 筛选一变：回第 1 页 + 清空选中（与 VirtualLearners 同一规则——批量条不得继续按
+   视口外/筛掉的旧集合执行派生）；数据刷新：回第 1 页 + 按存活 id 收敛选中，
+   已删的卡不会留在批量集合里让派生对话框显示 0 张。 */
+watch([keyword, tier], () => {
   page.value = 1
+  if (selected.value.length) clearPick()
+})
+watch(cards, () => {
+  page.value = 1
+  if (!selected.value.length) return
+  const alive = new Set(cards.value.map((c) => c.profileId))
+  const next = selected.value.filter((id) => alive.has(id))
+  if (next.length !== selected.value.length) selected.value = next
+}, { deep: true })
+/* 档位下拉随数据变化消失时，把已失效的 tier 复位——否则页面停在「筛空」且没有可复位控件 */
+watch(tierOptions, (opts) => {
+  if (tier.value && !opts.some((o) => o.value === tier.value)) tier.value = ''
 })
 /* 页码收敛：改大 pageSize 或数据缩减后 current page 超界时回落（单页时页码器不渲染，
    不能只依赖 Pagination 自带的越界收敛——它被 v-if 卸载后收不到变化） */
@@ -594,10 +612,21 @@ const showLevel = computed(() => {
 /** 待创建的身份卡 id（卡墙勾选框 v-model） */
 const selected = ref<string[]>([])
 
+/* 一次派生上限 = 后端 cloneCardsToLearners 的 CLONE_MAX_ITEMS（20）。
+   超出时后端直接 400「一次最多派生 20 张卡」，前端必须在勾选阶段就挡住，
+   而不是让对话框显示「创建 30 个」再失败。 */
+const DERIVE_MAX = 20
+/** 超限提示只写一处：勾选与全选共用同一句（同一事实不在同屏说两套） */
+const DERIVE_MAX_NOTE = `一次最多派生 ${DERIVE_MAX} 张身份卡`
+
 function togglePick(profileId: string) {
   const i = selected.value.indexOf(profileId)
-  if (i >= 0) selected.value.splice(i, 1)
-  else selected.value.push(profileId)
+  if (i >= 0) { selected.value.splice(i, 1); return }
+  if (selected.value.length >= DERIVE_MAX) {
+    toast.info(DERIVE_MAX_NOTE)
+    return
+  }
+  selected.value.push(profileId)
 }
 function clearPick() {
   selected.value = []
@@ -617,7 +646,14 @@ function togglePickAll() {
     selected.value = selected.value.filter((id) => !drop.has(id))
     return
   }
-  selected.value = [...new Set([...selected.value, ...ids])]
+  const room = DERIVE_MAX - selected.value.length
+  if (room <= 0) {
+    toast.info(DERIVE_MAX_NOTE)
+    return
+  }
+  const merged = [...new Set([...selected.value, ...ids])]
+  if (merged.length > DERIVE_MAX) toast.info(DERIVE_MAX_NOTE)
+  selected.value = merged.slice(0, DERIVE_MAX)
 }
 
 const deriveRef = ref<InstanceType<typeof CardDeriveDialog> | null>(null)

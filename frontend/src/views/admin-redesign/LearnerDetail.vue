@@ -1308,10 +1308,14 @@ const scopeSelectOptions = computed(() =>
     label: `${p.title}（${pathStatusText(p.status)}）${p.id === learnerCurrentPathId.value ? ' · 当前' : ''}`
   }))
 )
-/** 作用域读数：'' = 未定（后端按「当前 active 路径」回落，不是跨路径聚合）→ 也标「当前路径」 */
+/** 作用域读数：'' = 请求发 `pathId: null`，概念图返回的是**跨全部路径并集**
+ *  （concept-graph.service 的 SCOPE_USER 投影；本文件 loadConceptGraph 注释也这么写）。
+ *  此前这里把 '' 标成「当前路径」，与实际取数口径相反——没有「当前路径」的账号
+ *  （虚拟学习者等）卡头写着当前路径、图里却是全部路径的并。 */
 const scopeNote = computed(() => {
   const title = pathOptions.value.find((p) => p.id === scopePathId.value)?.title || ''
-  return !scopePathId.value || scopePathId.value === learnerCurrentPathId.value
+  if (!scopePathId.value) return panelScopeNote('all-paths')
+  return scopePathId.value === learnerCurrentPathId.value
     ? panelScopeNote('current-path', { pathTitle: title || pathInfo.value?.title || '' })
     : panelScopeNote('path', { pathTitle: title })
 })
