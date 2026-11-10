@@ -348,10 +348,7 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
     expect(OrchestratorSource).toContain(':title="skillNodeTitle(sk, s)"')
     expect(OrchestratorSource).toContain('Skill: ${sk.id}')
     expect(OrchestratorSource).toContain('产出字段: ${sk.produces.length} 个')
-    // 入/出统计自带解释（promptRole 人话仍取后端单源，不写第二份；「口径」改「统计含」）
-    expect(OrchestratorSource).toContain('function contractTitle(kind: \'in\' | \'out\', n: number): string')
-    expect(OrchestratorSource).toContain("roleMetaById.value['hard-required']")
-    expect(OrchestratorSource).toContain('统计含：${roles}')
+    // 2026-11-10 用户「入出、必填产出 都去掉」：总览不再挂字段读数
   })
 })
 

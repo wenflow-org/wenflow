@@ -44,14 +44,18 @@ describe('编排图连线', () => {
     expect(OrchestratorSource).not.toMatch(/\.orch-odg-body\s*\{[^}]*flex:\s*1 1 auto/)
   })
 
-  /* 2026-11-10 用户「教学画像入为什么是 0」：旧口径把 promptRole=hard-required 记作「入」，
-     而那是模型必须产出的字段；教学/画像/仿真没有它，于是恒显示「入 0」，像链路断了。
-     现在 chip 是字段交接（handoff）数，契约口径（必填/产出）单独一行。 */
-  it('列脚 chip 统计字段交接，而不是 hard-required 条数', () => {
-    expect(OrchestratorSource).toContain('computeStageFlow')
-    expect(OrchestratorSource).toContain('function flowChipTitle')
-    expect(OrchestratorSource).not.toContain('入 0（无必填）')
-    expect(OrchestratorSource).toContain('必填 ${c.ins.length} · 产出 ${c.outs.length}')
+  /* 2026-11-10 用户「那就去掉吧，入出，必填产出」：列脚两行数字全部撤除。
+     总览只回答「有哪些阶段、每阶段有哪些 Skill」，字段数量交给「字段路由」页签逐条看。
+     连带撤掉：每阶段 5 个 /stages/:id 契约请求、交接统计、卡头重试按钮。 */
+  it('总览列不再挂字段读数（入/出、必填/产出都撤）', () => {
+    expect(OrchestratorSource).not.toContain('orch-odg-chip')
+    expect(OrchestratorSource).not.toContain('orch-odg-foot')
+    expect(OrchestratorSource).not.toContain('stageFieldContract')
+    expect(OrchestratorSource).not.toContain('computeStageFlow')
+    expect(OrchestratorSource).not.toContain('字段契约重试')
+    // 画布仍是五阶段全貌：阶段头 + Skill 节点保留
+    expect(OrchestratorSource).toContain('orch-odg-colname')
+    expect(OrchestratorSource).toContain('orch-odg-node')
   })
 
   it('阶段内三枚页签并列：字段旅程不再靠「再点一次阶段页签」回程（2026-10-26 评审）', () => {
@@ -60,17 +64,5 @@ describe('编排图连线', () => {
     expect(OrchestratorSource).not.toContain("pane.value !== 'overview' && active.value === id")
     // SkillFieldRouting 的「→ 编排图页」用 ?tab=routing，与白名单同词
     expect(OrchestratorSource).toContain("qTab === 'field-routings'")
-  })
-
-  it('字段契约失败可分辨、可重试：列脚显红字「未加载」，卡头给重试（2026-10-26 评审）', () => {
-    // 失败与「加载中 …」必须两态可分辨；重试入口接回同一加载器
-    expect(OrchestratorSource).toContain('orch-odg-chip--failed')
-    expect(OrchestratorSource).toContain('function flowChipText')
-    expect(OrchestratorSource).toContain("if (c.failed) return '未加载'")
-    expect(OrchestratorSource).toContain('async function retryStageContracts')
-    expect(OrchestratorSource).toContain('@click="retryStageContracts"')
-    // 卡头两枚图例 chip（阶段入参 / 阶段产出）与列脚同形，已撤
-    expect(OrchestratorSource).not.toContain('>阶段入参</span>')
-    expect(OrchestratorSource).not.toContain('>阶段产出</span>')
   })
 })
