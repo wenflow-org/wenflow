@@ -74,7 +74,7 @@ interface JudgePayload {
     } | null;
   };
   C: {
-    nextStage: { stageNumber: number; title: string; goal?: string; coreConcept?: string } | null;
+    nextStage: { stageNumber: number; title: string; goal?: string; coreConcept?: string; estimatedHours?: number; pathTotalHours?: number } | null;
     subtasks: Array<Record<string, unknown>>;
     generatedBy?: 'db' | 'dry-run' | 'missing';
   };
@@ -344,10 +344,28 @@ function compactSubtask(task: any) {
   };
 }
 
-async function buildNextStage(pathId: string): Promise<JudgePayload['C'] & { provenance?: string }> {
+async function buildNextStage(pathId: string, stageNumber?: number): Promise<JudgePayload['C'] & { provenance?: string }> {
   const pathRow = await db.learning_paths.findUnique({ where: { id: pathId } });
   if (!pathRow) return { nextStage: null, subtasks: [], generatedBy: 'missing' };
   const milestones = await db.milestones.findMany({ where: { learningPathId: pathId }, orderBy: { stageNumber: 'asc' } });
+  // --stage N：显式评审某个已存在阶段（含已完成阶段，用最终 B 块材料复核设计质量）
+  if (Number.isFinite(stageNumber)) {
+    const milestone = milestones.find((m) => Number(m.stageNumber) === Number(stageNumber));
+    if (!milestone) return { nextStage: null, subtasks: [], generatedBy: 'missing' };
+    const rows = await db.subtasks.findMany({ where: { milestoneId: milestone.id }, orderBy: { order: 'asc' } });
+    return {
+      nextStage: {
+        stageNumber: Number(milestone.stageNumber),
+        title: milestone.title,
+        goal: clip(milestone.goal, 500),
+        coreConcept: clip(milestone.coreConceptName, 300),
+        estimatedHours: milestone.estimatedHours ?? undefined,
+        pathTotalHours: pathRow.estimatedHours ?? undefined,
+      },
+      subtasks: rows.map(compactSubtask),
+      generatedBy: 'db',
+    };
+  }
   // 「下一阶段」= 第一个 locked 阶段（stage-designer 尚待/刚生成）；没有 locked 时取第一个未完成阶段。
   // 不把当前 active 阶段当被评对象：它已被课堂消费，评它等于评旧设计（2026-11-11 校准首跑实证）。
   let target: any = null;
@@ -477,7 +495,7 @@ async function findTranscriptSessionForPath(pathRow: { id: string; userId: strin
   return null;
 }
 
-async function buildCaseFromPath(pathId: string, opts: { dryRunStage?: boolean }): Promise<JudgePayload> {
+async function buildCaseFromPath(pathId: string, opts: { dryRunStage?: boolean; stageNumber?: number }): Promise<JudgePayload> {
   const pathRow = await db.learning_paths.findUnique({ where: { id: pathId } });
   if (!pathRow) throw new Error(`PATH_NOT_FOUND: ${pathId}`);
   const provenance: Record<string, string> = {};
@@ -507,7 +525,7 @@ async function buildCaseFromPath(pathId: string, opts: { dryRunStage?: boolean }
   const replan = await buildPreviousStageOutcome({ pathId, since: pathRow.createdAt });
   provenance.B_outcome = replan.provenance;
 
-  let C = await buildNextStage(pathId);
+  let C = await buildNextStage(pathId, opts.stageNumber);
   let provenanceC: string = C.generatedBy || 'missing';
   if ((!C.subtasks || C.subtasks.length === 0) && opts.dryRunStage && C.nextStage) {
     try {
@@ -793,7 +811,10 @@ async function main() {
   if (typeof args['payload'] === 'string') {
     basePayload = JSON.parse(fs.readFileSync(args['payload'] as string, 'utf8')) as JudgePayload;
   } else if (typeof args['path'] === 'string') {
-    basePayload = await buildCaseFromPath(args['path'] as string, { dryRunStage: Boolean(args['dry-run-stage']) });
+    basePayload = await buildCaseFromPath(args['path'] as string, {
+      dryRunStage: Boolean(args['dry-run-stage']),
+      stageNumber: Number.isFinite(Number(args['stage'])) ? Number(args['stage']) : undefined,
+    });
   } else if (typeof args['session'] === 'string') {
     basePayload = await buildCaseFromSession(args['session'] as string);
   } else if (args['calibrate'] || args['batch']) {
