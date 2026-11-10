@@ -117,6 +117,15 @@ describe('path 阶段（入口 24 字段；闸口分发 normalizedInput；内部
     expect(DataFlowGraphSource).toContain('edgeFaded.value ? 0.55 : 0')
     expect(DataFlowGraphSource).toContain("e.highlight ? 2.4 : 1.6")
   })
+  /* 2026-11-10 用户「4k显示器缩放，这根线的位置就不对」：
+     ① 量测原点改为连线层自身矩形（内边距/缩放/设备像素比下内容层边框盒不再等同绘制面）；
+     ② 内容层也进 ResizeObserver（卡片增高、字体晚加载都会移动字段，只盯视口会停在旧位置）；
+     ③ 纵向跨度大的跨列边走正交折线，不再用近乎竖直的贝塞尔从卡片上下方斜插回来。 */
+  it('连线坐标以绘制面为原点、跟随内容层变化；长跨列边走折线', () => {
+    expect(DataFlowGraphSource).toContain("root.querySelector<SVGSVGElement>('.dfg-edges')")
+    expect(DataFlowGraphSource).toContain('if (pipeRef.value) resizeObserver.observe(pipeRef.value)')
+    expect(DataFlowGraphSource).toContain('spanY > 260')
+  })
   /* 2026-11-10 用户「未解析是怎么回事」：代码服务（确定性实现、无 LLM 步骤）本就不进
      Agent 名册，后端 resolveStepAgent 会置 unresolved——但那是设计如此，不是故障。
      健康中心「步骤解析」检查项也排除 service；旅程卡上挂「未解析」会被读成服务坏了。 */
@@ -216,8 +225,11 @@ describe('字段旅程画布缩放接线（2026-10-13 用户：这里也要支�
     expect(DataFlowGraphSource).toContain('@pointerdown="onDfgPointerDown"')
     expect(DataFlowGraphSource).toContain('@click.capture="onDfgClickCapture"')
     expect(DataFlowGraphSource).toContain('DFG_ZOOM_WHEEL_K')
-    // 层自有坐标：rect 差值 ÷zoom（层随滚动移动，差值已含滚动量，再加一次就是双计）
-    expect(DataFlowGraphSource).toContain('pipeW.value = rr.width / z')
+    /* 层自有坐标：尺寸与 rect 差值都 ÷zoom（层随滚动移动，差值已含滚动量，再加一次就是双计）。
+       2026-11-10：起见原点就是**连线层自身**的矩形（viewBox + 100% 铺满内边距盒），
+       内容层边框盒在缩放 / 内边距 / 设备像素比下不等于绘制面（4K + Windows 缩放会整体错位）。 */
+    expect(DataFlowGraphSource).toContain('pipeW.value = sr.width / z')
+    expect(DataFlowGraphSource).toContain('(r.left - sr.left) / z')
     expect(DataFlowGraphSource).not.toContain('view.scrollLeft / z')
     // 布局未落地前量到的是中间态：等到层自有宽 === 基准宽再画
     expect(DataFlowGraphSource).toContain('Math.abs(rr.width / z - dfgBaseW.value) > 1')

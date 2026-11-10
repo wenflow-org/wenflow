@@ -83,8 +83,16 @@
         :class="{ 'is-dimmed': !!focusKey }"
         :style="dfgZoomStyle"
       >
-        <!-- 连线层（Bus 总线：卡右缘 → 右侧走廊 → 目标卡右缘，不穿卡片内容） -->
-        <svg class="dfg-edges" :width="pipeW" :height="pipeH" aria-hidden="true">
+        <!-- 连线层（Bus 总线：卡右缘 → 右侧走廊 → 目标卡右缘，不穿卡片内容）。
+             尺寸走 viewBox + 100% 而不是 width/height 属性：属性值在 CSS zoom + 分数设备像素比
+             （Windows 4K 缩放）下与实际生效盒宽可能对不上，连线整层会横向错位；
+             viewBox 把「用户单位」明确钉在内容层 CSS px 上，多余的差异只会体现在容器尺寸里。 -->
+        <svg
+          class="dfg-edges"
+          :viewBox="`0 0 ${Math.max(1, pipeW)} ${Math.max(1, pipeH)}`"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
           <g v-for="(e, i) in edgeGeoms" :key="i">
             <template v-if="e.d">
               <path
@@ -1019,13 +1027,18 @@ function measure(attempt = 0) {
      ② 卡片/芯片 rect 相对**内容层** rect 的差值本身就含滚动量（层随滚动一起移动），
         所以**不再加回 scrollLeft/Top**——原实现参照物是滚动容器自身（容器边界不随自身滚动
         移动），才需要加回滚动量。这里再加一次就是双计（实测 135% 时坐标整体偏大 1.107 倍）。 */
-  pipeW.value = rr.width / z
-  pipeH.value = rr.height / z
+  /* 量测原点就是**连线层自己**：SVG 用 viewBox + 100% 铺满内容层内边距盒，
+     用户单位 = 内容层 CSS px；坐标从绘制面量起，缩放 / 内边距 / 设备像素比怎么变都对得上
+     （4K + Windows 缩放下曾整体偏出卡片）。 */
+  const svgEl = root.querySelector<SVGSVGElement>('.dfg-edges')
+  const sr = svgEl ? svgEl.getBoundingClientRect() : rr
+  pipeW.value = sr.width / z
+  pipeH.value = sr.height / z
   const map = new Map<string, DOMRect>()
   const slotMap = new Map<string, string>()
   const cardMap = new Map<string, DOMRect>()
   const rect = (r: DOMRect) =>
-    new DOMRect((r.left - rr.left) / z, (r.top - rr.top) / z, r.width / z, r.height / z)
+    new DOMRect((r.left - sr.left) / z, (r.top - sr.top) / z, r.width / z, r.height / z)
   for (const el of root.querySelectorAll<HTMLElement>('[data-card-key]')) {
     const key = el.getAttribute('data-card-key') || ''
     cardMap.set(key, rect(el.getBoundingClientRect()))
@@ -1157,11 +1170,30 @@ function renderEdges() {
     }
     let d: string
     if (!sameCol) {
-      // 跨列：水平贝塞尔（控制点落在两端中点 → 曲线整体只在中点带内起伏，不会插回卡片内容）
-      const dx = Math.max(24, Math.round(Math.abs(x2 - x1) / 2))
-      d = dstAnchorLeft
-        ? `M ${x1} ${y1} C ${x1 + dx} ${y1} ${x2 - dx} ${y2} ${x2} ${y2}`
-        : `M ${x1} ${y1} C ${x1 - dx} ${y1} ${x2 + dx} ${y2} ${x2} ${y2}`
+      if (spanY > 260) {
+        /* 纵向跨度大的跨列边改走正交折线：贝塞尔在 dy 远大于 dx 时几乎是一根竖线，
+           会从卡片上下方斜切回来，看着像连错了行（2026-11-10 用户「这根线的位置就不对」）。
+           折线统一在列间走廊竖走、再水平接到目标芯片，起止行一眼可对；
+           走廊按 lane 分散，几十条边不会叠成一根。 */
+        const laneX = (x1 + x2) / 2 + (laneOf(lane++) - 1.5) * 7
+        const sx = dstAnchorLeft ? 1 : -1
+        const r = Math.min(8, Math.abs(x2 - x1) / 2, spanY / 2)
+        const dir = y2 > y1 ? 1 : -1
+        d = [
+          `M ${x1} ${y1}`,
+          `L ${laneX - sx * r} ${y1}`,
+          `Q ${laneX} ${y1} ${laneX} ${y1 + dir * r}`,
+          `L ${laneX} ${y2 - dir * r}`,
+          `Q ${laneX} ${y2} ${laneX + sx * r} ${y2}`,
+          `L ${x2} ${y2}`,
+        ].join(' ')
+      } else {
+        // 跨列短程：水平贝塞尔（控制点落在两端中点 → 曲线整体只在中点带内起伏，不插回卡片）
+        const dx = Math.max(24, Math.round(Math.abs(x2 - x1) / 2))
+        d = dstAnchorLeft
+          ? `M ${x1} ${y1} C ${x1 + dx} ${y1} ${x2 - dx} ${y2} ${x2} ${y2}`
+          : `M ${x1} ${y1} C ${x1 - dx} ${y1} ${x2 + dx} ${y2} ${x2} ${y2}`
+      }
     } else {
       // Bus 正交折线：卡右缘 → 走廊竖走 → 目标卡右缘，Q 圆角
       const busX = x1 + 40 - laneOf(lane++) * 9
@@ -1249,8 +1281,10 @@ onMounted(() => {
     sampleDfgBaseW()
     scheduleMeasure()
   })
-  // 观察**视口**：内容层宽度由 zoom × 基准宽算出来，视口尺寸才是布局变化的来源
+  // 观察**视口**（缩放/宽度来源）与**内容层**（卡片增高/展开/折行后连线基准也得跟着变；
+  // 只盯视口时，字体晚加载、设备像素比不同带来的布局位移不会触发重测，连线就停在旧位置）
   if (viewRef.value) resizeObserver.observe(viewRef.value)
+  if (pipeRef.value) resizeObserver.observe(pipeRef.value)
   window.addEventListener('resize', scheduleMeasure)
 })
 onBeforeUnmount(() => {
@@ -1578,7 +1612,8 @@ function stepHue(step: FlowStep): string {
 /* 缩放读数（工具栏右端）：定宽 + 等宽数字，比例变化时按钮与左邻元素不跳 */
 .dfg-zoom__val { min-width: 56px; font-variant-numeric: tabular-nums; }
 .dfg-edges {
-  position: absolute; left: 0; top: 0; pointer-events: none; z-index: 3;
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 3;
   /* 同 .orch-odg-svg：别让 main.css 的全局 max-width:100% 把连线层按容器宽度等比缩放 */
   max-width: none;
 }
