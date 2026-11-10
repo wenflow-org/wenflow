@@ -142,10 +142,11 @@ describe('知识图谱容器与顶距（2026-11-07 走查/二次/三次）：同
     expect(has(rule, /padding:\s*24px 28px 48px/)).toBe(true);
   });
 
-  it('画布高改黄金比例 clamp(520px, 62vh, 680px)：2.5K 下不再拉成竖塔', () => {
-    /* 原先 height="max(floor, calc(100dvh - reserve))" 在 2560×1440 下把画布拉到 ~1200px */
-    expect(km).toContain('height="clamp(520px, 62vh, 680px)"');
-    expect(km, '不许再用视口高度撑满画布').not.toContain('100dvh - var(--km-h-reserve');
+  it('画布高 clamp(520px, calc(100dvh - 282px), 900px)：用满页脚上方空间、又不在 2.5K 拉成竖塔', () => {
+    /* 2026-11-10 用户走查：1080 视口下卡片底部还空一条 —— 改为按视口扣掉页头/卡内固定高度，
+       同时保留 820 的上限（2026-11-07 裁决：不能随视口无限撑高，2.5K 会变瘦高竖塔）。 */
+    expect(km).toContain('height="clamp(520px, calc(100dvh - 282px), 900px)"');
+    expect(km, '不许退回无上限的视口撑满').not.toContain('100dvh - var(--km-h-reserve');
     const narrow = strip(km).slice(strip(km).indexOf('@media (max-width: 1100px)'));
     expect(narrow, '移动档不该再改画布高度变量（高度已由 prop 的 clamp 统一）').not.toMatch(/--km-h-floor:/);
   });
