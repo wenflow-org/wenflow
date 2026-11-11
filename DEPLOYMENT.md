@@ -359,7 +359,7 @@ INIT_ADMIN_PASSWORD=CHANGE_ME_before_deploy
 - 首次启动会校验密码强度：少于 12 位、缺少大小写字母或数字、或使用文档示例口令都会导致启动失败
 - 建议首次登录后立即修改密码
 
-详见 [`admin-guide.md`](admin-guide.md)。
+详见 [`doc/ADMIN_OPERATIONS_MANUAL.md`](doc/ADMIN_OPERATIONS_MANUAL.md)。
 
 ---
 
@@ -469,7 +469,7 @@ wenflow/
 ## 相关文档
 
 - `README.md`
-- `admin-guide.md`（管理员账户与登录安全）
+- `doc/ADMIN_OPERATIONS_MANUAL.md`（管理员账户、登录安全与运营手册）
 
 ---
 

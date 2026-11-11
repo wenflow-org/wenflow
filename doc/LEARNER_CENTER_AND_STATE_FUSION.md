@@ -8,7 +8,7 @@
 > - **Q7**：知识或状态的**聚合、拆分、融合、评估**，**具体是怎么做到的**？
 >
 > **本文是什么（定位）**
-> - 是**开发者文档**：解释"为什么这样拆、代码在哪、哪些没做"，服务于改造/排障，不承诺产品能力。对外能力以 `README.md` / `admin-guide.md` 为准。
+> - 是**开发者文档**：解释"为什么这样拆、代码在哪、哪些没做"，服务于改造/排障，不承诺产品能力。对外能力以 `README.md` / `ADMIN_OPERATIONS_MANUAL.md` 为准。
 > - 与 [`LEARNER_MODEL_ARCHITECTURE.md`](./LEARNER_MODEL_ARCHITECTURE.md) 的分工：那篇讲 `LearnerSnapshot` 的**契约与场景设计**（what）；本文只补 Q6/Q7 特有的**维度判别**与**机制级解释**（why + how），**不重复**其快照字段表。
 > - 相邻：[`LEARNER_STATE_REVIEW_DESIGN.md`](./LEARNER_STATE_REVIEW_DESIGN.md)（诊断层 + BKT + 校准闭环）、`LEARNING_SCIENCE_AUDIT.md`（自认边界与溯源）、[`EDUCATIONAL_THEORY_MAP.md`](./EDUCATIONAL_THEORY_MAP.md)（理论落点）。
 >

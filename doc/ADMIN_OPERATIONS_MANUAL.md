@@ -797,4 +797,62 @@ pages:
 
 ---
 
+## 6. 初始管理员与登录安全
+
+### 6.1 初始管理员
+
+后端启动时按 `backend/.env` 自动创建初始管理员；数据库已有管理员时跳过。
+
+- `INIT_ADMIN_NAME` 未配置时用 `admin`。
+- 开发环境未配置 `INIT_ADMIN_PASSWORD` 时使用内置默认 `ChangeMe_2026_Admin`；生产环境（`NODE_ENV=production`）拒绝默认口令，必须显式配置，否则跳过创建并告警。
+- 密码至少 12 位，包含大小写字母和数字。已有管理员不会因修改 `INIT_ADMIN_PASSWORD` 而更新密码。
+- 弱口令、初始用户名/邮箱被普通用户占用、数据库写入失败时，后端拒绝启动。
+
+```env
+INIT_ADMIN_NAME=admin
+INIT_ADMIN_EMAIL=admin@wenflow.local
+INIT_ADMIN_PASSWORD=<set-a-unique-strong-password>
+```
+
+### 6.2 访问策略
+
+管理员来源策略通过管理端「模型与接入 → 连接与安全」持久化到 System DB，并支持热生效；环境变量只作为数据库未配置时的默认值：
+
+```env
+# loopback: 仅服务器本机（localhost / 127.0.0.1 / ::1）
+# private: 本机和 RFC1918 局域网，默认推荐
+# any: 不限制来源，不建议直接用于公网
+ADMIN_ACCESS_MODE=private
+ADMIN_ALLOWED_IPS=
+```
+
+生产公网管理建议使用 VPN 或受控反向代理，并保持精确 IP Allowlist；不要通过关闭认证或共享弱密码解决远程访问问题。反向代理场景需同时核对 `CORS_ORIGIN`（不要带尾部 `/`）与 `TRUST_PROXY`（填直连后端的代理 IP/CIDR，禁止 `true`），且后端端口不得绕过代理公开。
+
+### 6.3 忘记密码
+
+不要删除数据库。安全恢复流程：
+
+1. 备份主库和数据库加密 Keyring。
+2. 使用受控维护脚本或数据库管理流程为指定管理员写入新的 bcrypt 哈希。
+3. 撤销现有会话或 Token。
+4. 审计恢复操作与登录记录。
+
+尚未创建任何管理员时，可设置新的 `INIT_ADMIN_PASSWORD` 后重启，或运行 `node create-admin.js`。
+
+### 6.4 启动与登录排查
+
+- 启动后没有管理员：检查 `INIT_ADMIN_NAME` / `INIT_ADMIN_PASSWORD`、数据库中是否已有管理员、后端日志是否有数据库或 Prisma 报错。
+- 反向代理后登录异常：核对 `CORS_ORIGIN`、`TRUST_PROXY` 与后端端口暴露情况。
+- 首次登录后立即修改管理员密码；不要把 `backend/.env` 提交到仓库。
+- 凭据、数据库备份与泄露响应要求见 [`SECURITY.md`](../SECURITY.md)。
+
+### 6.5 发布前检查
+
+```powershell
+npm run security:scan
+npm run check
+```
+
+---
+
 *本手册为运营口径单源；页面改版后请按「三件套」门禁同步更新本文件与 `doc/README.md` 登记。*

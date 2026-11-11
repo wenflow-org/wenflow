@@ -428,7 +428,7 @@ Two SQLite databases; relative URLs resolve against their own schema directory:
 
 The initial admin is created from `backend/.env` on first start (`INIT_ADMIN_NAME` / `INIT_ADMIN_PASSWORD`; skipped if an admin already exists). Change the password right after the first login.
 
-Admin login defaults to `ADMIN_ACCESS_MODE=private` (local machine and LAN only); it can be set to `loopback` or `any`, with `ADMIN_ALLOWED_IPS` for exact allowances. The policy can be changed live from the admin “Models and Access” page. For remote administration over the public internet, pair it with a VPN or an exact IP allowlist. See [`admin-guide.md`](admin-guide.md).
+Admin login defaults to `ADMIN_ACCESS_MODE=private` (local machine and LAN only); it can be set to `loopback` or `any`, with `ADMIN_ALLOWED_IPS` for exact allowances. The policy can be changed live from the admin “Models and Access” page. For remote administration over the public internet, pair it with a VPN or an exact IP allowlist. See [`doc/ADMIN_OPERATIONS_MANUAL.md`](doc/ADMIN_OPERATIONS_MANUAL.md).
 
 Reverse proxy notes:
 
@@ -467,7 +467,7 @@ The documentation index is [`doc/README.md`](doc/README.md), organised as “liv
 - **Agent / Skill**: [`doc/AGENT_SKILL_MANUAL.md`](doc/AGENT_SKILL_MANUAL.md) (why), [`doc/SKILL_PROTOCOL_V4.md`](doc/SKILL_PROTOCOL_V4.md) (protocol), [`doc/SKILL_DEVELOPMENT_GUIDE.md`](doc/SKILL_DEVELOPMENT_GUIDE.md) (building or changing a skill)
 - **Architecture and models**: [`doc/MODEL_GATEWAY_DESIGN.md`](doc/MODEL_GATEWAY_DESIGN.md), [`doc/LEARNER_MODEL_ARCHITECTURE.md`](doc/LEARNER_MODEL_ARCHITECTURE.md)
 - **Development scripts**: [`doc/DEV_SCRIPTS.md`](doc/DEV_SCRIPTS.md)
-- **Deployment / security / admin**: [`DEPLOYMENT.md`](DEPLOYMENT.md), [`SECURITY.md`](SECURITY.md), [`admin-guide.md`](admin-guide.md)
+- **Deployment / security / admin**: [`DEPLOYMENT.md`](DEPLOYMENT.md), [`SECURITY.md`](SECURITY.md), [`doc/ADMIN_OPERATIONS_MANUAL.md`](doc/ADMIN_OPERATIONS_MANUAL.md)
 - **Contributing**: [`CONTRIBUTING.md`](CONTRIBUTING.md) (branch model `develop` → `main`, gates, documentation governance and shared-worktree discipline)
 - **Changelog**: [`CHANGELOG.md`](CHANGELOG.md)
 

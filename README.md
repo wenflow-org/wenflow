@@ -430,7 +430,7 @@ npm run prompts:lint && npm run prompts:core:check
 
 首次启动时按 `backend/.env` 自动创建初始管理员（`INIT_ADMIN_NAME` / `INIT_ADMIN_PASSWORD`，已有管理员则跳过）。首次登录后请立即修改密码。
 
-管理员登录默认 `ADMIN_ACCESS_MODE=private`（仅本机与局域网），可设 `loopback`（仅本机）或 `any`，并用 `ADMIN_ALLOWED_IPS` 精确放行；该策略可在管理端「模型与接入」页热生效。确有公网远程管理需求时，请配合 VPN 或精确 IP 白名单。详见 [`admin-guide.md`](admin-guide.md)。
+管理员登录默认 `ADMIN_ACCESS_MODE=private`（仅本机与局域网），可设 `loopback`（仅本机）或 `any`，并用 `ADMIN_ALLOWED_IPS` 精确放行；该策略可在管理端「模型与接入」页热生效。确有公网远程管理需求时，请配合 VPN 或精确 IP 白名单。详见 [`doc/ADMIN_OPERATIONS_MANUAL.md`](doc/ADMIN_OPERATIONS_MANUAL.md)。
 
 反向代理注意：
 
@@ -469,7 +469,7 @@ npm run prompts:lint && npm run prompts:core:check
 - **Agent / Skill**：[`doc/AGENT_SKILL_MANUAL.md`](doc/AGENT_SKILL_MANUAL.md)（why）、[`doc/SKILL_PROTOCOL_V4.md`](doc/SKILL_PROTOCOL_V4.md)（协议）、[`doc/SKILL_DEVELOPMENT_GUIDE.md`](doc/SKILL_DEVELOPMENT_GUIDE.md)（新建 / 改造 Skill）
 - **架构与模型**：[`doc/MODEL_GATEWAY_DESIGN.md`](doc/MODEL_GATEWAY_DESIGN.md)、[`doc/LEARNER_MODEL_ARCHITECTURE.md`](doc/LEARNER_MODEL_ARCHITECTURE.md)
 - **开发脚本**：[`doc/DEV_SCRIPTS.md`](doc/DEV_SCRIPTS.md)
-- **部署 / 安全 / 管理**：[`DEPLOYMENT.md`](DEPLOYMENT.md)、[`SECURITY.md`](SECURITY.md)、[`admin-guide.md`](admin-guide.md)
+- **部署 / 安全 / 管理**：[`DEPLOYMENT.md`](DEPLOYMENT.md)、[`SECURITY.md`](SECURITY.md)、[`doc/ADMIN_OPERATIONS_MANUAL.md`](doc/ADMIN_OPERATIONS_MANUAL.md)
 - **参与开发**：[`CONTRIBUTING.md`](CONTRIBUTING.md)（分支模型 `develop` → `main`、门禁、文档治理与共享工作树纪律）
 - **更新日志**：[`CHANGELOG.md`](CHANGELOG.md)
 
