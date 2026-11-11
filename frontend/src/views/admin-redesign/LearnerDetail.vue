@@ -209,7 +209,7 @@
             <h3 class="mk-card__title">最近课堂</h3>
             <span class="mk-card__meta">
               <MkLoading v-if="ldSessLoading" inline min text="加载中…" />
-              <template v-else-if="ldSessError">加载失败</template>
+              <template v-else-if="ldSessError">加载失败 <button type="button" class="mk-link" @click="retryLdSessions">重试</button></template>
               <!-- 「最近」语义恒在：左栏只取有效会话窗口前 5 条，裸「N 条」会被读成总量 -->
               <template v-else>{{ sessionPreviewMeta }}</template>
             </span>
@@ -217,7 +217,7 @@
           <!-- 审核 #23（2026-10-06）：原卡头 MkLoading + MkRowList :loading 同时出两个转圈——
                卡头文案保留为全卡唯一加载信号，列表 loading 撤；同时把空态挂起条件补上
                ldSessLoading，避免加载中先闪「暂无教学会话」 -->
-          <MkRowList :empty="!recentSessionRows.length && !ldSessLoading" :empty-text="discardedHiddenCount ? '暂无有效课堂' : '暂无课堂'" empty-hint="该学习者上课后，这里会出现课堂记录。">
+          <MkRowList :empty="!recentSessionRows.length && !ldSessLoading && !ldSessError" :empty-text="discardedHiddenCount ? '暂无有效课堂' : '暂无课堂'" empty-hint="该学习者上课后，这里会出现课堂记录。">
             <MkRow
               v-for="s in recentSessionRows"
               :key="s.id"
@@ -245,12 +245,12 @@
             <h3 class="mk-card__title">最近目标对话</h3>
             <span class="mk-card__meta">
               <MkLoading v-if="ldGoalLoading" inline min text="加载中…" />
-              <template v-else-if="ldGoalError">加载失败</template>
+              <template v-else-if="ldGoalError">加载失败 <button type="button" class="mk-link" @click="retryLdGoals">重试</button></template>
               <template v-else>{{ goalPreviewMeta }}</template>
             </span>
           </div>
           <MkRowList
-            :empty="!recentGoalRows.length && !ldGoalLoading"
+            :empty="!recentGoalRows.length && !ldGoalLoading && !ldGoalError"
             :empty-text="scopePathId ? '该路径下暂无目标对话' : '暂无目标对话'"
             empty-hint="学习者发起目标对话后，这里会出现记录。"
           >
@@ -1854,6 +1854,16 @@ function ldProgTitle(r: LdSessionRow): string {
 }
 const ldSessLoading = ref(false)
 const ldSessError = ref(false)
+/** 最近课堂/目标对话的重试参数：失败后卡头「重试」复用同一次 id + 口径 */
+const ldRecentArgs = ref<{ id: string; includeTest: boolean } | null>(null)
+function retryLdSessions() {
+  const a = ldRecentArgs.value
+  if (a) void loadLdSessions(a.id, a.includeTest)
+}
+function retryLdGoals() {
+  const a = ldRecentArgs.value
+  if (a) void loadLdGoals(a.id, a.includeTest)
+}
 /** 状态徽章降噪（有意域差异，收尾批 C10 登记）：仅异常态上色、正常态全灰——列表降噪视图；全彩版见 statusText.sessionStatusBadgeCls 单源 */
 const sessBadgeCls = (s: string) =>
   s === 'failed' || s === 'timeout' || s === 'discarded' || s === 'finalization_failed'
@@ -2122,6 +2132,7 @@ async function loadDetail(id: string | undefined, opts: { soft?: boolean } = {})
   } catch { /* 用户记录失败按入口旗标走（原行为），详情照常 */ }
   // 从用户详情显式进入学习者画像时携带 includeTest（虚拟/测试账号可查，默认视图仍排除）
   const includeTest = subPage.value?.includeTest || accountIsTest
+  ldRecentArgs.value = { id, includeTest }
   try {
     // 详情与证据并行（此前串行 await：两个独立接口白等一趟 RTT）
     const [raw, evidenceRes] = await Promise.all([

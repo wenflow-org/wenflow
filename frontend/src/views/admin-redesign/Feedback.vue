@@ -630,7 +630,6 @@ async function load(force?: boolean) {
     recent30.value = Array.isArray(trend) ? trend.reduce((s: number, d: Record<string, unknown>) => s + Number(d.count || d.total || 0), 0) : null
   } catch (e) {
     loadFailed.value = true
-    toast.error(`加载失败：${errMsg(e)}`)
   } finally {
     loading.value = false
     markPageFetched('feedback')
@@ -691,7 +690,6 @@ async function saveNoteOnly() {
     toast.success('备注已保存（处理状态未变）')
   } catch (e) {
     saveError.value = `备注保存失败：${errMsg(e)}。可重试，或先复制备注内容再关闭。`
-    toast.error(`保存失败：${errMsg(e)}`)
   } finally {
     saving.value = false
   }
@@ -713,7 +711,6 @@ async function save(status: Status) {
     toast.success(`已标记为${statusLabel(status)}`)
   } catch (e) {
     saveError.value = `处理失败：${errMsg(e)}。状态未改变，可重试。`
-    toast.error(`保存失败：${errMsg(e)}`)
   } finally {
     saving.value = false
   }

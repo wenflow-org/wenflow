@@ -170,7 +170,6 @@ async function loadDead() {
     deadLoaded.value = true
   } catch (e) {
     deadFailed.value = true
-    toast.error(`事件清单加载失败：${errMsg(e)}`)
   } finally {
     deadLoading.value = false
   }

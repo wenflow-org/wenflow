@@ -845,7 +845,6 @@ async function load(force = false) {
     listTotal.value = 0
     stats.value = null
     loadError.value = `加载失败：${errMsg(e)}`
-    toast.error(loadError.value)
   } finally {
     loading.value = false
     markPageFetched('goal-conversations')

@@ -2829,9 +2829,9 @@ async function refresh() {
     ])
   } catch (e) {
     if (sessionId.value !== id) return
-    // 只有「从未加载成功」才算首载失败（session 已有旧数据时失败仅 toast，避免误盖错误条）
+    // 首载失败由主区整块错误态接管；已有旧数据时只 toast，避免同一次失败两套呈现
     if (!session.value) sessionLoadFailed.value = true
-    toast.error(`加载失败：${errMsg(e)}`)
+    else toast.error(`加载失败：${errMsg(e)}`)
   }
 }
 

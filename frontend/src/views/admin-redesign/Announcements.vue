@@ -48,6 +48,18 @@
       </div>
 
       <MockSkeletonTable v-if="liveLoading && !rows.length" :cols="7" />
+      <!-- 失败优先于旧数据：刷新失败时不能继续把上一页的行当成本次结果 -->
+      <MkEmptyState
+        v-else-if="liveFailed"
+        min
+        tone="error"
+        title="公告加载失败"
+        description="公告列表加载失败，请重试。"
+        action-text="重试"
+        action-busy-text="重试中…"
+        :action-busy="liveRetrying"
+        @action="retryLive"
+      />
       <div v-else-if="filtered.length" class="mk-table-scroll an-list">
       <!-- 列表区由 .mk-card--fill > .mk-table-scroll 接管纵向滚动（an-list 仅留列/单元格口径） -->
       <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），列按内容自然分宽；
@@ -124,18 +136,6 @@
         </tbody>
       </table>
       </div>
-
-      <MkEmptyState
-        v-else-if="liveFailed"
-        min
-        tone="error"
-        title="公告加载失败"
-        description="公告列表加载失败，请重试。"
-        action-text="重试"
-        action-busy-text="重试中…"
-        :action-busy="liveRetrying"
-        @action="retryLive"
-      />
 
       <!-- 空态补 icon（审核 #170）：同单元反馈/通知/成就三处均为「◌」。
            2026-11-02 评审：字符图标在缺字字体下渲染成豆腐方块，改走 #icon 插槽的线性图标。
@@ -425,7 +425,6 @@ async function retryLive() {
     toast.success('公告列表已刷新')
   } catch (e) {
     liveFailed.value = true
-    toast.error(`加载失败：${errMsg(e)}`)
   } finally {
     liveRetrying.value = false
   }

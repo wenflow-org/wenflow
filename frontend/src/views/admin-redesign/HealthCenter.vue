@@ -452,13 +452,18 @@ const reconciliation = computed<HealthReconciliationSummary>(
       missingActive: 0, zombieActive: 0, zombieSkillActive: 0, unwired: 0,
     },
 )
-const healthAbnormal = computed(() => displayReport.value?.health.abnormal ?? 0)
+const healthAbnormal = computed(() => {
+  const items = displayReport.value?.health.items || []
+  /* 读不到也是需要处理的异常：unavailable 的 severity 是 info（不进后端 abnormal），
+     但页首「检查异常」不能因此报 0，否则与行内「未判定」互相矛盾。 */
+  return (displayReport.value?.health.abnormal ?? 0) + items.filter((i) => i.status === 'unavailable').length
+})
 /** 异常档位与 KPI / 卡头徽标共用：error→bad 红，warn→warn 琥珀，全正常→ok。
     2026-10-24 修复：KPI 此前固定 warn、卡头固定 bad，同一读数两套颜色。 */
 const healthAbnormalTone = computed<'ok' | 'warn' | 'bad'>(() => {
   const items = displayReport.value?.health.items || []
   if (items.some((i) => i.severity === 'error')) return 'bad'
-  if (items.some((i) => i.severity === 'warn')) return 'warn'
+  if (items.some((i) => i.severity === 'warn' || i.status === 'unavailable')) return 'warn'
   return 'ok'
 })
 /** 检查异常卡悬停：口径 + 本次总数（2026-10-19 用户走查「KPI hint 在报读数」——总数从副行
@@ -713,6 +718,8 @@ function semanticsLabel(semantics: HealthCenterItem['semantics']) {
     覆盖行是「管理员手工覆盖的行数」这个记录数，不是检查项，按有无覆盖如实说——
     给它下「无异常」结论时读者分不出 0 是好是坏（0 只表示没有覆盖）。 */
 function semanticsText(item: HealthCenterItem): string {
+  /* 读不到 ≠ 正常：unavailable 的 severity 是 info、count 是 0，旧分支会落「正常」 */
+  if (item.status === 'unavailable') return '未判定'
   if (item.semantics === 'override-record') return item.count > 0 ? `${item.count} 条覆盖` : '无覆盖'
   if (item.severity === 'ok' || !item.count) return '正常'
   return semanticsLabel(item.semantics)

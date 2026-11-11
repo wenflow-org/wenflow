@@ -308,7 +308,7 @@ describe('排行表 · 失败次数列（2026-11-10 用户「失败次数的字�
 })
 
 describe('成本页 · 失败三态（#72 P-47）', () => {
-  it('刷新失败保留旧数时：显式提示「以下为上次结果」，失败数与总 Token 不落成 0', async () => {
+  it('刷新失败不保留半旧半新的读数：整页错误态接管，KPI/表格不再画旧数', async () => {
     const { adminTokenCostApi } = await import('@/api/adminApi');
     const w = await mountTokenCost();
     expect(w.find('.tc-error').exists()).toBe(false);
@@ -319,13 +319,10 @@ describe('成本页 · 失败三态（#72 P-47）', () => {
     await flushPromises();
     await nextTick();
 
-    expect(w.find('.tc-error').exists()).toBe(true);
-    expect(w.find('.tc-error').text()).toContain('上次加载结果');
-    const failed = w.findAll('.mk-kpi').find((k) => k.find('.mk-kpi__label').text() === '失败')!;
-    const tokens = w.findAll('.mk-kpi').find((k) => k.find('.mk-kpi__label').text() === '总 Token')!;
-    // 旧 summary 里 failed=0，刷新失败后必须显示「—」而不是沿用 0 冒充健康
-    expect(failed.find('.mk-kpi__num').text()).toBe('—');
-    expect(tokens.find('.mk-kpi__num').text()).toBe('—');
+    // 失败后只有一处结论：整页错误态；不得同时保留旧 KPI / 旧表格再配一条「上次结果」横幅
+    expect(w.find('.tc-error').exists()).toBe(false);
+    expect(w.text()).toContain('Token 成本数据加载失败');
+    expect(w.findAll('.mk-kpi').length).toBe(0);
     w.unmount();
   });
 });

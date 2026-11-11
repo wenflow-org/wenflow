@@ -214,7 +214,7 @@
               <button type="button" class="todo-act" @click="t.action()">{{ t.actLabel }} →</button>
             </div>
           </div>
-          <MkEmptyState v-if="!todoItems.length" class="ov-card__empty" title="没有待处理的事项" description="健康检查、失败调用与课后总结都没有异常。" />
+          <MkEmptyState v-if="!todoItems.length" class="ov-card__empty" title="没有待处理的事项" description="当前没有需要处理的事项。" />
         </div>
       </div>
 
@@ -1086,6 +1086,17 @@ const todoItems = computed<TodoItem[]>(() => {
   const items: TodoItem[] = [];
   // 健康检查异常（#5）：状态条已红/琥珀报「N 项异常」，此处必须有对应条目，
   // 否则同屏红结论配「没有待处理的事项」（healthTone 由 healthCheck error/warn 计数派生）
+  if (healthState.value === 'error') {
+    items.push({
+      key: 'health-error',
+      text: '健康检查读数不可用',
+      main: '健康检查读数不可用',
+      title: '健康检查摘要请求失败，当前无法判断是否存在异常',
+      tone: 'warn',
+      actLabel: '重试',
+      action: () => { void loadHealth() },
+    });
+  }
   const hc = healthCheck.value;
   if (healthState.value === 'ready' && hc && (hc.error > 0 || hc.warn > 0)) {
     /* 2026-11-04：行文案与悬停说明必须给同一组数。原写法行内只报一档（error>0 报 error，

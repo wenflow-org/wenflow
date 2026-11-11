@@ -575,7 +575,6 @@ const loadLogs = async () => {
     logs.value = [];
     pagination.total = 0;
     loadError.value = error?.response?.data?.error?.message || '无法读取调用日志，请稍后重试。';
-    toast.error('日志加载失败');
     console.error('加载日志失败:', error);
   } finally {
     if (seq === loadLogsSeq) loading.value = false;

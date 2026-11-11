@@ -10,13 +10,14 @@
          · 累计里程碑 / 累计子任务 —— stats 里已有的内容体量，不另发请求。
          计数一律取 stats（全平台 byStatus），与胶囊徽章同源；stats 未落定显「—」而不是 0。 -->
     <section v-if="!embedded" class="mk-kpi-grid" aria-label="路径读数">
-      <template v-if="statsFailed">
+      <!-- 列表整体失败时，本轮错误由下方列表错误态统一承担；KPI 带不再出第二块红条 -->
+      <template v-if="statsFailed && !failed">
         <div class="oc-stats-error" role="alert">
           <span class="oc-stats-error__msg">统计加载失败</span>
           <button type="button" class="mk-btn mk-btn--sm" @click="loadStats()">重试</button>
         </div>
       </template>
-      <template v-else>
+      <template v-else-if="!statsFailed">
         <!-- 口径标注（2026-10-28 数据审计）：本页含测试账号（列表能看到 e2e 行），
              平台总览的路径读数是仅真实用户口径——两页数字差 1 时给出解释，不让人猜 -->
         <MkKpi label="路径总数" :value="stats?.total ?? '—'" title="全部状态的学习路径（含已下线），与列表同源。总览「路径规划 N 进行中」= 有未完成子任务的路径且不过滤路径状态（已下线也算），所以可能更多" />
@@ -271,6 +272,7 @@ ${p.user?.email}` : (p.user?.name || '—')">{{ p.user?.name || '—' }}</strong
       <!-- 翻页器常驻（判例 GoalConversations/TeachingSessions）：0 行时也保留页码与条数，
            否则整页像数据没了。Pagination 自带越界收敛 watcher。 -->
       <Pagination
+        v-if="!failed"
         v-model:page="page"
         v-model:pageSize="pageSize"
         :total="filtered.length"
@@ -595,7 +597,6 @@ async function reload(force = false) {
     if (seq !== listReqSeq) return
     failed.value = true
     loadError.value = `加载失败：${errMsg(e)}`
-    toast.error(loadError.value)
   } finally {
     // 只由最新一笔复位：过期响应收尾时不得把在途新请求的 loading 关掉
     if (seq === listReqSeq) loading.value = false

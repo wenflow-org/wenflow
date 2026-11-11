@@ -11,6 +11,10 @@
         </div>
 
         <div class="mk-modal__body">
+          <div v-if="settingsUnknown" class="mk-alert mk-alert--row" role="alert">
+            <span class="mk-alert__msg">注册设置读取失败，开关状态未知</span>
+            <button type="button" class="mk-alert__btn" @click="retrySettings">重试</button>
+          </div>
           <div class="rs-row">
             <div class="rs-row__text">
               <b>新用户注册</b>
@@ -19,8 +23,9 @@
             <MkSwitch
               :model-value="registrationEnabled === true"
               :busy="registrationBusy"
+              :disabled="settingsUnknown"
               aria-label="新用户注册"
-              :state-text="registrationStateText"
+              :state-text="settingsUnknown ? '读取失败' : registrationStateText"
               @update:model-value="setRegistration"
             />
           </div>
@@ -43,7 +48,7 @@
                   />
                   <em>个 / IP</em>
                 </template>
-                <span v-else class="rs-quota__off">当前不限制</span>
+                <span v-else class="rs-quota__off">{{ settingsUnknown ? '读取失败' : '当前不限制' }}</span>
               </label>
               <button
                 v-if="registerIpQuotaEnabled && quotaDirty"
@@ -56,6 +61,7 @@
             <MkSwitch
               :model-value="registerIpQuotaEnabled === true"
               :busy="quotaBusy"
+              :disabled="settingsUnknown"
               :aria-label="IP_QUOTA_TITLE"
               @update:model-value="setQuotaEnabled"
             />
@@ -75,7 +81,7 @@ import { computed, ref, watch } from 'vue'
 import MkSwitch from '@/components/mk/MkSwitch.vue'
 import { authAPI } from '@/api/auth'
 import { toast } from '@/utils/toast'
-import { errMsg, registrationEnabled, registerIpQuotaEnabled, registerIpDailyQuota, updateRegistrationSetting, updateRegisterIpQuotaSetting } from './live'
+import { errMsg, loadLiveData, registrationEnabled, registerIpQuotaEnabled, registerIpDailyQuota, updateRegistrationSetting, updateRegisterIpQuotaSetting } from './live'
 import { askConfirm } from './useConfirm'
 import { useEscape } from './useEscape'
 import { useMaskClose, useOverlay } from './useOverlay'
@@ -84,6 +90,12 @@ const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ (e: 'update:open', value: boolean): void }>()
 
 const IP_QUOTA_TITLE = '单 IP 每日注册配额'
+
+/** 未加载/读取失败时两个开关的值都是 null：不能按 false 渲染成「关闭 / 不限制」 */
+const settingsUnknown = computed(() => registrationEnabled.value === null || registerIpQuotaEnabled.value === null)
+function retrySettings(): void {
+  void loadLiveData()
+}
 
 const maskRef = ref<HTMLElement | null>(null)
 const panelRef = ref<HTMLElement | null>(null)

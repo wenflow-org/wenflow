@@ -73,6 +73,16 @@
         </div>
       </div>
       <MockSkeletonTable v-if="recordsLoading && !records.length" :cols="6" />
+      <!-- 失败优先于旧数据：刷新失败时不能继续把上一页的行当成本次结果 -->
+      <MkEmptyState
+        v-else-if="recordsFailed"
+        min
+        tone="error"
+        title="解锁记录加载失败"
+        description="无法读取解锁记录，读数可能不完整。"
+        action-text="重试"
+        @action="reloadRecords"
+      />
       <div v-else-if="records.length" class="mk-table-scroll ac-list">
         <!-- 固定列宽（2026-10-22 与教学组三表同判例）：成就/用户两列在 auto 布局下按当页最长
              名称分宽，翻页整表跳动；fixed 后按表头定死，余量按权重摊开。双行单元格由
@@ -128,14 +138,6 @@
           </tbody>
         </table>
       </div>
-      <MkEmptyState
-        v-else-if="recordsFailed"
-        min
-        title="解锁记录加载失败"
-        description="无法读取解锁记录，读数可能不完整。"
-        action-text="重试"
-        @action="reloadRecords"
-      />
       <MkEmptyState
         v-else
         :title="isRecordsFiltered ? '没有符合筛选条件的解锁记录' : '还没有解锁记录'"
@@ -328,7 +330,6 @@ async function loadDefs() {
     defs.value = (res.data?.data ?? res.data) || []
   } catch (e) {
     defsFailed.value = true
-    toast.error(`加载失败：${errMsg(e)}`)
   } finally {
     defsLoading.value = false
   }
@@ -408,7 +409,6 @@ async function reloadRecords() {
     totalRecords.value = body.pagination?.total ?? records.value.length
   } catch (e) {
     recordsFailed.value = true
-    toast.error(`加载失败：${errMsg(e)}`)
   } finally {
     recordsLoading.value = false
   }

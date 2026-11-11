@@ -6,11 +6,11 @@
        行内动作与对话卡同序同形（配置 · 测试 · ⋯），⋯ 里是「设为启用 / 删除」。 -->
   <div id="mpp-platform-panel-infra" class="mpp-infra">
     <p v-if="loading && !view" class="mpp-infra__state">模型配置读取中…</p>
-    <p v-else-if="failed" class="mpp-infra__state">
+    <p v-else-if="failed && !suppressError" class="mpp-infra__state">
       {{ failed }}
       <button type="button" class="mk-link" @click="load">重试</button>
     </p>
-    <template v-else-if="view">
+    <template v-else-if="!failed && view">
       <section v-for="g in groups" :key="g.kind" class="mk-card mpp-eng">
         <div class="mk-card__head">
           <div class="mpp-eng__id">
@@ -280,7 +280,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import PullModelsDialog from './PullModelsDialog.vue'
 import {
   adminInfraModelsApi,
@@ -302,8 +302,19 @@ const NO_MODEL_HINT = '这条能力还没有模型，先在卡头「＋ 添加�
 type InfraKind = 'embedding' | 'rerank'
 type ConnectionMode = 'inherit' | 'own'
 
+withDefaults(defineProps<{
+  /** 宿主已经用页面级错误态接管本次失败：子面板不再重复渲染自己的错误行 */
+  suppressError?: boolean
+}>(), { suppressError: false })
+
+const emit = defineEmits<{
+  /** 读取失败状态变化：宿主据此决定是否用页面级错误态接管 */
+  'error-change': [failed: boolean]
+}>()
+
 const loading = ref(false)
 const failed = ref('')
+watch(failed, (v) => emit('error-change', !!v), { immediate: true })
 const view = ref<InfraModelsView | null>(null)
 const saving = ref(false)
 
@@ -657,7 +668,7 @@ async function pullUpstream(background = false): Promise<void> {
     addAll.value = []
     addTypes.value = {}
     addFetchedSig.value = ''
-    if (!background) toast.error(`拉取失败：${errMsg(e)}`)
+    // 弹窗内已有 addError 行内错误，不再叠同次失败的 toast
   } finally {
     addLoading.value = false
   }
@@ -861,6 +872,7 @@ async function save() {
 }
 
 onMounted(load)
+defineExpose({ load })
 </script>
 
 <style scoped>

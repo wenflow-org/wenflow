@@ -10,11 +10,11 @@
       </div>
 
       <!-- 带 token 但校验不过（伪造/截断链接）：此前静默降级为找回表单，用户不知道手里的链接已废（走查 2026-09-27 P2） -->
-      <div v-if="tokenRejected" class="errorbar" role="alert">
-        链接无效或已过期，请重新找回。
-      </div>
-      <div v-else-if="formError" class="errorbar" role="alert">
+      <div v-if="formError" class="errorbar" role="alert">
         {{ formError }}
+      </div>
+      <div v-else-if="tokenRejected && !notice" class="errorbar" role="alert">
+        链接无效或已过期，请重新找回。
       </div>
 
       <!-- 找回结果回执：不是错误，不复用红色 errorbar（走查 2026-09-27 P1） -->
@@ -180,16 +180,10 @@ async function submit() {
       ? String(error.message)
       : '操作失败，请稍后重试';
     formError.value = message;
-    // 行内 errorbar 为主，toast 只留给网络类错误（走查 2026-09-27 P3 三页统一）
-    if (isNetworkError(error)) toast.error(message);
+    // 网络与业务错误都只走可停留的 errorbar，不再叠同文案 toast
   } finally {
     submitting.value = false;
   }
-}
-
-/* http 层约定：断网/超时的 reject 不带 status 字段，业务错误一定带 */
-function isNetworkError(error: unknown): boolean {
-  return !(error && typeof error === 'object' && 'status' in error);
 }
 
 function goLogin() {

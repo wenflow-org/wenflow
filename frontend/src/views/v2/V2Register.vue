@@ -186,17 +186,11 @@ async function handleRegister() {
     const message = error && typeof error === 'object' && 'message' in error
       ? String(error.message)
       : '注册失败，请稍后重试';
-    // 行内 errorbar 为主，toast 只留给网络类错误（走查 2026-09-27 P3 三页统一）
+    // 网络与业务错误都只走可停留的 errorbar，不再叠同文案 toast
     formError.value = message;
-    if (isNetworkError(error)) toast.error(message);
   } finally {
     loading.value = false;
   }
-}
-
-/* http 层约定：断网/超时的 reject 不带 status 字段，业务错误一定带 */
-function isNetworkError(error: unknown): boolean {
-  return !(error && typeof error === 'object' && 'status' in error);
 }
 
 function goLogin() {

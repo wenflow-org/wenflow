@@ -209,7 +209,7 @@ ${orderTitle}`">{{ baseModel }}</span>
                 </div>
               </div>
               <div class="mk-modal__foot sdp-config-modal__foot">
-                <button type="button" class="mk-btn mk-btn--sm mk-btn--danger-ghost" :disabled="rtSaving" @click="resetRuntime">恢复默认</button>
+                <button type="button" class="mk-btn mk-btn--danger-ghost" :disabled="rtSaving" @click="resetRuntime">恢复默认</button>
                 <span class="sdp-config-modal__spacer"></span>
                 <button type="button" class="mk-btn" @click="closeConfig">取消</button>
                 <button type="button" class="mk-btn mk-btn--primary" :disabled="rtSaving" @click="saveRuntime()">

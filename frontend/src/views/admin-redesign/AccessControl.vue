@@ -33,9 +33,9 @@
                 type="button"
                 role="radio"
                 class="ac-opt mk-choice"
-                :class="{ 'mk-choice--on': outboundMode === opt.id }"
-                :tabindex="outboundMode === opt.id ? 0 : -1"
-                :aria-checked="outboundMode === opt.id"
+                :class="{ 'mk-choice--on': !configUnknown && outboundMode === opt.id }"
+                :tabindex="!configUnknown && outboundMode === opt.id ? 0 : -1"
+                :aria-checked="!configUnknown && outboundMode === opt.id"
                 @click="setOutbound(opt.id)"
               >
                 <span class="ac-opt__head">
@@ -48,7 +48,7 @@
                 <!-- 警示行常驻占位（只有选中这一档时才亮起）：切档时卡片行高不变，页面不抽 -->
                 <span
                   class="ac-opt__warn"
-                  :class="{ 'ac-opt__warn--idle': !(outboundMode === opt.id && opt.warn) }"
+                  :class="{ 'ac-opt__warn--idle': configUnknown || !(outboundMode === opt.id && opt.warn) }"
                 >
                   <template v-if="outboundMode === opt.id && opt.warn">
                     <TriangleAlert :size="13" :stroke-width="2" aria-hidden="true" />{{ opt.warn }}
@@ -114,6 +114,8 @@ const effectiveOutbound = computed(() => ({
 }))
 /** 接入域读取失败：空表单不得伪装成「未配置」 */
 const configFailed = computed(() => !!liveFailures.value.apiConfig)
+/** 从未读到 networkPolicy 且当前失败：选项区不能渲染默认档冒充当前生效值 */
+const configUnknown = computed(() => configFailed.value && !cfg.value?.networkPolicy)
 
 /** 列表字段按元素比：改回原值（含只增删空行）不算改动 */
 function sameList(a: readonly string[], b: readonly string[]): boolean {
@@ -132,7 +134,7 @@ const policyDirty = computed(() => {
 /** 已保存的出站档：页面只展示它，编辑中的草稿另存在 policy 里 */
 const savedOutboundText = computed(() => {
   const saved = cfg.value?.networkPolicy
-  if (!saved) return '读取中'
+  if (!saved) return configFailed.value ? '读取失败' : '读取中'
   if (saved.allowPrivateNetwork) return '允许内网与本地服务'
   return saved.privateNetworkHosts.length ? '仅白名单' : '仅限公共互联网'
 })
@@ -205,6 +207,7 @@ const OUTBOUND_OPTIONS: ReadonlyArray<{
   },
 ]
 function setOutbound(mode: OutboundMode): void {
+  if (configUnknown.value) return
   if (outboundMode.value === mode) return
   outboundMode.value = mode
   policy.allowPrivateNetwork = mode === 'all'

@@ -90,23 +90,23 @@
         />
         <MkKpi
           label="已定价调用"
-          :value="loadFailed ? '—' : summary ? `${costPricedCalls.toLocaleString()} 次` : '—'"
-          :tone="loadFailed ? 'muted' : ''"
+          :value="loadFailed && !summary ? '—' : summary ? `${costPricedCalls.toLocaleString()} 次` : '—'"
+          :tone="loadFailed && !summary ? 'muted' : ''"
           :title="pricedCallsHint"
         />
         <MkKpi
           label="总 Token"
-          :value="loadFailed ? '—' : summary ? fmtTokens(summary.totals.tokens) : '—'"
-          :tone="loadFailed ? 'muted' : ''"
-          :hint="loadFailed ? '数据加载失败，Token 用量暂不可用' : ''"
+          :value="loadFailed && !summary ? '—' : summary ? fmtTokens(summary.totals.tokens) : '—'"
+          :tone="loadFailed && !summary ? 'muted' : ''"
+          :hint="loadFailed && !summary ? '数据加载失败，Token 用量暂不可用' : ''"
           :title="summary ? `输入 ${fmtTokens(summary.totals.promptTokens)} · 输出 ${fmtTokens(summary.totals.completionTokens)}（只读读数）` : undefined"
         />
         <MkKpi
           label="失败"
-          :value="loadFailed ? '—' : failedCallsText"
-          :tone="loadFailed ? 'muted' : failedCalls > 0 ? 'bad' : ''"
-          :hint="loadFailed ? '数据加载失败，失败数未知' : failedHintShort"
-          :clickable="!loadFailed && failedCalls > 0"
+          :value="loadFailed && !summary ? '—' : failedCallsText"
+          :tone="loadFailed && !summary ? 'muted' : failedCalls > 0 ? 'bad' : ''"
+          :hint="loadFailed && !summary ? '数据加载失败，失败数未知' : failedHintShort"
+          :clickable="!(loadFailed && !summary) && failedCalls > 0"
           @click="failedCalls > 0 && goFailedLogs()"
         />
       </section>
@@ -277,7 +277,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { intent, tokenCostCacheKey, tokenCostFilters } from './store'
-import { errMsg, isPageCacheFresh, markPageFetched, liveRefreshSeq } from './live'
+import { isPageCacheFresh, markPageFetched, liveRefreshSeq } from './live'
 import { adminTokenCostApi } from '@/api/adminApi'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import OvBars from './OvBars.vue'
@@ -734,14 +734,18 @@ async function load(force = false) {
     loadedKey.value = key
     statsAt.value = new Date().toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' })
     markPageFetched(key)
-  } catch (e) {
+  } catch {
     if (seq !== loadSeq) return
     loadFailed.value = true
-    /* 金额条为辅助信息：失败显式报错并可重试，绝不静默降级成「无调用」 */
+    /* 失败时整页同口径：清掉上一轮快照，由整页错误态接管；不再出现「横幅说旧结果、
+       KPI 说加载失败、表格继续画旧数」三种结论。错误态本身带重试，不再叠 toast。 */
     costFailed.value = true
     costUsd.value = null
     costPricingKnown.value = false
-    toast.error(`加载失败：${errMsg(e)}`)
+    summary.value = null
+    bySkill.value = []
+    byModel.value = []
+    byUser.value = []
   } finally {
     if (seq === loadSeq) { loading.value = false; costLoading.value = false; clearSlowTimer() }
   }

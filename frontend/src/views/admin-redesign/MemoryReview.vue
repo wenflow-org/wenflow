@@ -14,9 +14,9 @@
       </div>
     </template>
 
-    <p v-else-if="!detail" class="mr__sub mr-panels__empty">该学习者暂无可复盘的记忆数据。</p>
+    <p v-else-if="!error && !detail" class="mr__sub mr-panels__empty">该学习者暂无可复盘的记忆数据。</p>
 
-    <template v-else>
+    <template v-else-if="detail">
 
       <!-- 2026-10-23 用户「有什么意义吗下面表格都有了」：原面板栏「记忆调度与治理 + 痕迹/到期/
            同族重复/从未提取/有强度数据」整条撤除——五个数全由下面各卡的表格/空态表达，栏名又与
@@ -1126,7 +1126,7 @@ async function load(opts: { quietSort?: boolean } = {}) {
   } catch (e) {
     if (seq !== detailSeq) return
     error.value = errMsg(e)
-    detail.value = null
+    /* 刷新失败保留上一份明细；首次失败由上方 !error 闸门挡住空态，不再把「读不到」说成「没有」 */
   } finally {
     if (seq === detailSeq) {
       busy.value = false

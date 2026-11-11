@@ -753,7 +753,8 @@ async function recompute(userId: string, name?: string | null) {
     await loadOverview()
     toast.success('已完成一次记忆复盘')
   } catch (e) {
-    error.value = errMsg(e)
+    /* 行级动作失败只提示本行，不把整页共用 error 置上——否则顶部失败条、KPI 的
+       「取数失败」与仍完整的列表会同时出现，把一次观察失败渲染成整页故障。 */
     toast.error(`重新观察失败：${errMsg(e)}`)
   } finally {
     busy.value = false

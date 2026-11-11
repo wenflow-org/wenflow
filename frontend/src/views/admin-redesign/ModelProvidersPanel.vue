@@ -58,7 +58,7 @@
 
     <MkLoading v-if="loading && !view" inline text="读取接入通道…" />
     <MkEmptyState
-      v-else-if="failed"
+      v-else-if="failed && !suppressError"
       tone="error"
       title="接入通道读取失败"
       :description="errorText"
@@ -66,7 +66,7 @@
       @action="refresh(true)"
     />
 
-    <div v-else class="mpp-body">
+    <div v-else-if="!failed" class="mpp-body">
       <!-- 2026-11-11 用户「这页已经概念打架」：撤掉供应商条与「供应商设置」。
            本页只有一条通道（页顶「服务连接」），对话模型平铺，向量 / 重排各自独立连接，
            不再出现「地址与密钥沿用服务连接」这类补丁式说明。多供应商能力仍留在注册表文件里，
@@ -214,7 +214,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { adminApiConfigApi, adminModelProvidersApi } from '@/api/adminApi'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
@@ -268,6 +268,8 @@ const props = withDefaults(defineProps<{
   pullError?: string
   /** 连接在清单之后被改过：清单过期，先重拉再选 */
   pullStale?: boolean
+  /** 宿主已经用页面级错误态接管本次失败：子面板不再重复渲染自己的错误块 */
+  suppressError?: boolean
 }>(), {
   upstream: () => [],
   upstreamTypes: () => ({}),
@@ -295,6 +297,8 @@ const emit = defineEmits<{
   /** 模型被删除后通知宿主：若删的正是平台默认，宿主负责改指到下一个可用模型，
       否则默认会指向一个已不存在的 id（运行时同样报错）。 */
   removeModel: [modelId: string]
+  /** 本面板读取失败状态变化：宿主据此决定是否用页面级错误态接管，避免同屏两套错误 */
+  'error-change': [failed: boolean]
 }>()
 
 const view = ref<ProvidersView | null>(null)
@@ -302,6 +306,7 @@ const health = ref<RegistryHealth | null>(null)
 const loading = ref(false)
 const failed = ref(false)
 const errorText = ref('')
+watch(failed, (v) => emit('error-change', v), { immediate: true })
 const busy = ref(false)
 const actionError = ref('')
 const writeWarnings = ref<string[]>([])

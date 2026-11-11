@@ -57,6 +57,16 @@
       </div>
 
       <MockSkeletonTable v-if="loading && !items.length" :cols="5" />
+      <!-- 失败优先于旧数据：刷新失败时不能继续把上一页的行当成本次结果 -->
+      <MkEmptyState
+        v-else-if="failed"
+        min
+        title="通知加载失败"
+        tone="error"
+        description="无法加载通知列表，请稍后重试。"
+        action-text="重试"
+        @action="reload"
+      />
       <div v-else-if="visibleItems.length" class="mk-table-scroll nt-list">
         <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），单元格 nowrap，
              列按内容自然分宽；通知/用户双行单元格由 mk-cell-main 全局 max-width 截断兜底 -->
@@ -151,15 +161,6 @@
           </tbody>
         </table>
       </div>
-      <MkEmptyState
-        v-else-if="failed"
-        min
-        title="通知加载失败"
-        tone="error"
-        description="无法加载通知列表，请稍后重试。"
-        action-text="重试"
-        @action="reload"
-      />
       <MkEmptyState
         v-else-if="isFiltered"
         min
@@ -462,7 +463,6 @@ async function reload() {
     emit('count', unreadTotal.value)
   } catch (e) {
     failed.value = true
-    toast.error(`加载失败：${errMsg(e)}`)
   } finally {
     loading.value = false
   }
