@@ -184,23 +184,42 @@ function wrapupView(raw: string | null | undefined) {
 
 /** teachingState.checkpointHistory → 控制台视图。检查点是结构化通道（pendingCheckpoint →
  *  checkpointAnswer），题目**不进聊天逐字稿**——不单独带出来，运营就只能看到老师喊「接下来出检查题」
- *  却永远看不到那道题（2026-10-13 走查 lesson 13）。同一题多次作答各留一条，按提交时间序。 */
+ *  却永远看不到那道题（2026-10-13 走查 lesson 13）。同一题多次作答各留一条，按提交时间序。
+ *  2026-11-11：题干之外补 options 与学员选择——复核时只看到「我的答案：A」却看不到 A/B/C/D
+ *  分别写什么，判分是否合理无从对照。答案键（correctOptionIds / expectedKeywords）仍不下发：
+ *  这里只透出选项文本与学员所选，与 stripCheckpointAnswerKeys 的既有口径一致。 */
 function checkpointHistoryView(raw: string | null | undefined) {
   const state = parseJsonSafe<any>(raw, null);
   const hist = state && Array.isArray(state.checkpointHistory) ? state.checkpointHistory : [];
   return hist
     .filter((cp: any) => cp && typeof cp === 'object')
-    .map((cp: any) => ({
-      checkpointId: cp.checkpointId ?? null,
-      title: cp.title ?? null,
-      type: cp.type ?? null,
-      question: cp.question ?? null,
-      passed: typeof cp.passed === 'boolean' ? cp.passed : null,
-      judgedBy: cp.judgedBy ?? null,
-      understanding: typeof cp.understanding === 'number' ? cp.understanding : null,
-      conceptName: cp.conceptName ?? null,
-      submittedAt: cp.submittedAt ?? null,
-    }));
+    .map((cp: any) => {
+      const options = (Array.isArray(cp.options) ? cp.options : [])
+        .filter((option: any) => option && typeof option === 'object')
+        .map((option: any) => ({
+          id: option.id != null ? String(option.id) : null,
+          text: option.text != null ? String(option.text) : null,
+        }));
+      // 新行写 selectedOptionIds；存量行可能只有 submittedOptionIds
+      const selectedRaw = Array.isArray(cp.selectedOptionIds)
+        ? cp.selectedOptionIds
+        : (Array.isArray(cp.submittedOptionIds) ? cp.submittedOptionIds : []);
+      const selectedOptionIds = selectedRaw.map(String);
+      return {
+        checkpointId: cp.checkpointId ?? null,
+        title: cp.title ?? null,
+        type: cp.type ?? null,
+        question: cp.question ?? null,
+        // 选项与学员选择：给运营复核用；没有选项的简答题不带空数组
+        ...(options.length ? { options } : {}),
+        ...(selectedOptionIds.length ? { selectedOptionIds } : {}),
+        passed: typeof cp.passed === 'boolean' ? cp.passed : null,
+        judgedBy: cp.judgedBy ?? null,
+        understanding: typeof cp.understanding === 'number' ? cp.understanding : null,
+        conceptName: cp.conceptName ?? null,
+        submittedAt: cp.submittedAt ?? null,
+      };
+    });
 }
 
 /** teachingState.extensionRuntime → 控制台视图（只在编排态 active 时给值）。

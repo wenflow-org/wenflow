@@ -524,6 +524,31 @@ describe('InfraModelsPanel', () => {
     wrapper.unmount();
   });
 
+  it('分类以后端 modelOptions 为准：名字里没有 embedding 字样的向量模型也能进筛后清单', async () => {
+    pullMock.mockResolvedValue({
+      data: {
+        data: {
+          models: ['mystery-vector', 'deepseek-v4.1-flash'],
+          modelOptions: [
+            { id: 'mystery-vector', inferredType: 'embedding' },
+            { id: 'deepseek-v4.1-flash', inferredType: 'llm' },
+          ],
+        },
+      },
+    });
+    const wrapper = mountPanel();
+    await flushPromises();
+    await addBtn(wrapper, 0).trigger('click');
+    await flushPromises();
+
+    // 前端名字推断认不出 mystery-vector（role=chat），但后端分类说它是向量 → 仍在清单里
+    expect(wrapper.findAll('.pmd-row .pmd-row__id').map((r) => r.text())).toEqual(['mystery-vector']);
+    expect(wrapper.find('.pmd').text()).not.toContain('deepseek-v4.1-flash');
+    // 向量卡的弹窗不再出现「推荐对话 / 全部模型」这条对话专用切换
+    expect(wrapper.find('.pmd-kind').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
   it('弹窗里的行内测试走这条能力的连接（不是供应商端点）', async () => {
     pullMock.mockResolvedValue({ data: { data: { models: ['BAAI/bge-large-zh-v1.5'] } } });
     testMock.mockResolvedValue({ data: { data: { ok: true, latencyMs: 95, dimensions: 1024 } } });

@@ -34,7 +34,7 @@
           />
           <div v-if="state.reclaimable.length" class="vl-reclaim-list">
             <div v-for="r in state.reclaimable" :key="r.id" class="vl-reclaim-item">
-              <code class="vl-reclaim-id">{{ r.id.slice(0, 14) }}…</code>
+              <code class="vl-reclaim-id" :title="r.id">{{ r.id.slice(0, 14) }}…</code>
               <span class="mk-badge mk-badge--muted">{{ r.currentStage }}</span>
               <span class="vl-reclaim-stale">{{ fmtStale(r.staleMs) }}</span>
             </div>
@@ -49,7 +49,7 @@
             <p class="vl-reclaim-skipped-title">以下候选本轮不会回收（豁免保护）：</p>
             <div class="vl-reclaim-list">
               <div v-for="r in protectedSkipped" :key="r.id" class="vl-reclaim-item vl-reclaim-item--skipped">
-                <code class="vl-reclaim-id">{{ r.id.slice(0, 14) }}…</code>
+                <code class="vl-reclaim-id" :title="r.id">{{ r.id.slice(0, 14) }}…</code>
                 <span class="mk-badge mk-badge--muted">{{ r.currentStage }}</span>
                 <span class="mk-badge">{{ skipReasonLabel(r.skipReason) }}</span>
                 <span class="vl-reclaim-stale vl-reclaim-stale--skipped">{{ fmtStale(r.staleMs) }}</span>

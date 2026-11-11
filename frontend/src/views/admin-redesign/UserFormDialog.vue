@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <div v-if="open" ref="maskRef" class="mk-modal">
-      <div ref="panelRef" class="mk-modal__panel" role="dialog" :aria-label="user ? '编辑用户' : '新建用户'">
+      <div ref="panelRef" class="mk-modal__panel" role="dialog" :aria-label="user ? '编辑用户' : '新建用户'" @keydown.enter="onEnterSubmit">
         <div class="mk-modal__head">
           <h3 class="mk-modal__title">{{ user ? `编辑用户 · ${user.name}` : '新建用户' }}</h3>
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="close">✕</button>
@@ -67,12 +67,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { isLive } from './store'
 import { liveCreateUser, errMsg } from './live'
 import { adminUsersApi } from '@/api/adminApi'
 import { useOverlay, useMaskClose } from './useOverlay'
 import { useEscape } from './useEscape'
+import { askConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
 import MkSelect from '@/components/mk/MkSelect.vue'
 
@@ -101,6 +102,10 @@ const ROLE_OPTIONS: Array<{ value: boolean; label: string }> = [
 
 const saving = ref(false)
 const form = ref({ name: '', email: '', password: '', confirmPassword: '', admin: false })
+/** 打开时的表单快照：关闭前据此判断有没有未保存改动（2026-11-11 可用性） */
+const initialForm = ref({ ...form.value })
+/** 有未保存改动（密码只在填写后才算改动：编辑态空密码 = 不修改） */
+const formDirty = computed(() => JSON.stringify(form.value) !== JSON.stringify(initialForm.value))
 const errors = ref<{ name?: string; email?: string; password?: string; confirmPassword?: string }>({})
 /** 提交失败（请求层）错误：区别于 errors（字段校验），直出后端 message，常驻弹窗内（P32） */
 const submitError = ref('')
@@ -113,7 +118,33 @@ useEscape(() => props.open, close)
 
 function close() {
   if (saving.value) return
-  emit('update:open', false)
+  if (!formDirty.value) {
+    emit('update:open', false)
+    return
+  }
+  /* 有未保存改动：Esc / 遮罩 / 取消 / ✕ 走同一条确认（与公告、通知表单同判例）。
+     保存成功后由 save() 直接关窗，不经过这里，所以不会在成功时反问。 */
+  void (async () => {
+    const ok = await askConfirm({
+      title: '放弃未保存的用户修改',
+      message: props.user
+        ? `用户「${props.user.name}」的昵称 / 邮箱 / 角色 / 密码改动尚未保存。`
+        : '新建用户的昵称 / 邮箱 / 密码尚未保存。',
+      confirmText: '放弃修改',
+      danger: true
+    })
+    if (ok) emit('update:open', false)
+  })()
+}
+
+/** Enter 提交：输入框里回车即可保存；按钮 / 下拉 / 文本域保持原生行为 */
+function onEnterSubmit(e: KeyboardEvent) {
+  if (e.isComposing) return
+  const el = e.target as HTMLElement | null
+  if (!el || el.closest('button, textarea, select, [role="combobox"], [role="listbox"], .mk-select')) return
+  if (saving.value) return
+  e.preventDefault()
+  void save()
 }
 
 function resetForm() {
@@ -121,6 +152,7 @@ function resetForm() {
   form.value = u
     ? { name: u.name, email: u.email, password: '', confirmPassword: '', admin: u.admin }
     : { name: '', email: '', password: '', confirmPassword: '', admin: false }
+  initialForm.value = { ...form.value }
   errors.value = {}
   submitError.value = ''
 }
@@ -130,6 +162,7 @@ watch(() => [props.open, props.user?.id], () => {
 }, { immediate: true })
 
 async function save() {
+  if (saving.value) return
   errors.value = {}
   submitError.value = ''
   if (!form.value.name.trim()) errors.value.name = '请输入昵称'
@@ -142,7 +175,17 @@ async function save() {
   if (isLive.value && !target && form.value.confirmPassword !== form.value.password) {
     errors.value.confirmPassword = '两次输入的密码不一致'
   }
-  if (Object.keys(errors.value).length) return
+  if (Object.keys(errors.value).length) {
+    // 错误定位（2026-11-11 表单审计）：校验失败不只标红字段，把焦点送到第一个错误处，
+    // 长弹窗里不用自己找哪一项没填。
+    void nextTick(() => {
+      const el = panelRef.value?.querySelector<HTMLElement>('.mk-field--error input, .mk-field--error textarea')
+      if (!el) return
+      el.focus()
+      try { el.scrollIntoView({ block: 'center' }) } catch { /* jsdom / 无滚动容器时忽略 */ }
+    })
+    return
+  }
 
   saving.value = true
   try {

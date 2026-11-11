@@ -100,6 +100,9 @@ async function mountUsers() {
 describe('Users 客户端分页（mk-pagination）', () => {
   beforeEach(() => {
     liveUsers.value = Array.from({ length: 37 }, (_, i) => makeUser(i + 1));
+    // 每页条数记忆是跨列表的全局偏好（Pagination 读 wf_page_size）：用例之间还原默认，
+    // 否则上一用例选过的 50 会被下一用例的「默认 15」断言读到
+    localStorage.removeItem('wf_page_size');
   });
 
   it('37 行 → 总数展示「共 37 个账号」+ 第 1 / 3 页 + 首屏 15 行', async () => {
@@ -356,6 +359,7 @@ describe('Users 已删除视图：后端分页', () => {
 
   beforeEach(() => {
     liveUsers.value = [makeUser(1)];
+    localStorage.removeItem('wf_page_size');
     (getDeletedUsers as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
       data: { data: { users: Array.from({ length: 15 }, (_, i) => deleted(i + 1)), pagination: { total: 120, page: 1, limit: 15 } } }
     });

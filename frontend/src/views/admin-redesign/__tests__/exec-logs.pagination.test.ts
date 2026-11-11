@@ -731,3 +731,37 @@ describe('批次 1：EG7 / EG17 / D19', () => {
     expect((items.find((i) => i.text() === '模型')!.find('input').element as HTMLInputElement).checked).toBe(false);
   });
 });
+
+describe('筛选总出口与 KPI 可点口径（2026-11-11 二轮走查）', () => {
+  beforeEach(() => {
+    h.reload.mockClear();
+    liveLogsPage.value = 1;
+    liveLogsPageSize.value = 30;
+    liveLogsTotal.value = 10;
+    liveLogsFiltered.value = [fakeSpan(1)];
+    liveLogStats.value = { total: 10, success: 8, timeout: 1, error: 1, canary: 0 };
+    liveLogsLoading.value = false;
+  });
+
+  it('有筛选时调用总数卡可点清空；成功率卡明确只读', async () => {
+    const w = await mountExec();
+    await nextTick();
+    await chooseFilter(w as never, '状态', '仅失败');
+    await flushPromises();
+    expect(filterValue(w as never, '状态')).toBe('err');
+    expect(w.findAll('button').some((b) => b.text() === '清空筛选')).toBe(true);
+
+    let kpis = w.findAll('.mk-kpi');
+    expect(kpis[0].classes()).toContain('mk-kpi--clickable');
+    expect(kpis[1].classes()).not.toContain('mk-kpi--clickable');
+    expect(kpis[1].attributes('title')).toContain('只读读数');
+
+    await kpis[0].trigger('click');
+    await flushPromises();
+    expect(filterValue(w as never, '状态')).toBe('');
+    expect(w.findAll('button').some((b) => b.text() === '清空筛选')).toBe(false);
+    kpis = w.findAll('.mk-kpi');
+    expect(kpis[0].classes()).not.toContain('mk-kpi--clickable');
+    w.unmount();
+  });
+});

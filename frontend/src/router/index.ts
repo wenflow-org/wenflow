@@ -335,13 +335,23 @@ const routes: RouteRecordRaw[] = [
     redirect: '/admin/orchestrator'
   },
   {
-    // 旧「系统工具」三条路径 → 系统设置对应页签（2026-11-01 这四页签从运营中心迁入系统设置）
+    /* 旧「系统工具」路径（2026-11-01 四页签迁入系统设置）。
+       2026-11-11：运维工具页签下线、事件投递并回健康中心——不带 tab 或 tab=tools 的旧链接
+       改投健康中心；其余三个仍落系统设置对应页签。?user= 等定位参数原样带走。 */
     path: '/admin/ops-center',
-    redirect: (to) => ({ path: '/admin/system-settings', query: { ...to.query, tab: (to.query.tab as string) || 'tools' } })
+    redirect: (to) => {
+      const tab = typeof to.query.tab === 'string' ? to.query.tab : ''
+      const rest = { ...to.query }
+      delete rest.tab
+      if (tab === 'export' || tab === 'security' || tab === 'access') {
+        return { path: '/admin/system-settings', query: { ...rest, tab } }
+      }
+      return { path: '/admin/health-center', query: rest }
+    }
   },
   {
     path: '/admin/devtools',
-    redirect: () => ({ path: '/admin/system-settings', query: { tab: 'tools' } })
+    redirect: (to) => ({ path: '/admin/health-center', query: to.query })
   },
   {
     path: '/admin/export-data',
@@ -516,13 +526,20 @@ router.beforeEach(async (to, _from, next) => {
       return;
     }
   }
-  /* 运营中心的四个系统页签 2026-11-01 迁入「系统设置」：老深链（含站外书签、健康中心与
+  /* 运营中心的系统页签 2026-11-01 迁入「系统设置」：老深链（含站外书签、健康中心与
      审计日志里写死的地址）一律路由级改投，别等 OpsHub 挂载后用 watch 兜——那样用户会先
      看到一个已经不存在这些页签的运营中心。?user= 等定位参数原样带走。
+     2026-11-11：运维工具页签下线，?tab=tools 与 /admin/system-settings?tab=tools 改投健康中心。
      注意 /admin/api-config?tab=addons|virtual|security 的改投**不在这里**：
      它们走别名区的函数式 redirect，进 beforeEach 时 path 早已不是 api-config。 */
   if (to.path === '/admin/ops-hub' && typeof to.query.tab === 'string') {
-    const moved: Record<string, string> = { tools: 'tools', export: 'export', security: 'security', access: 'access' };
+    if (to.query.tab === 'tools') {
+      const query = { ...to.query };
+      delete query.tab;
+      next({ path: '/admin/health-center', query, replace: true });
+      return;
+    }
+    const moved: Record<string, string> = { export: 'export', security: 'security', access: 'access' };
     const target = moved[to.query.tab];
     if (target) {
       const query = { ...to.query, tab: target };
@@ -536,6 +553,13 @@ router.beforeEach(async (to, _from, next) => {
       next({ path: '/admin/ops-hub', query, replace: true });
       return;
     }
+  }
+  /* 旧书签直接指向已下线的运维工具页签：改投健康中心（事件投递卡在那里） */
+  if (to.path === '/admin/system-settings' && to.query.tab === 'tools') {
+    const query = { ...to.query };
+    delete query.tab;
+    next({ path: '/admin/health-center', query, replace: true });
+    return;
   }
   /* 复习积压的单用户明细（?userId=）落在学习者详情的「记忆与复习」页签：
      复习积压列表读的是 FSRS 普查（记忆痕迹 / 待复习 / 记忆强度），与同名页签同源；

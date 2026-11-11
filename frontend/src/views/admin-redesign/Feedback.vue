@@ -107,8 +107,8 @@
             <tr v-for="r in paged" :key="r.id" class="fb-row" tabindex="0" @click="openDetail(r)" @keydown.enter="($event.target === $event.currentTarget) && openDetail(r)">
               <td>
                 <div class="mk-cell-main">
-                  <strong>{{ r.userName }}</strong>
-                  <span class="mk-cell-sub">{{ r.userEmail }}</span>
+                  <strong :title="r.userName">{{ r.userName }}</strong>
+                  <span class="mk-cell-sub" :title="r.userEmail">{{ r.userEmail }}</span>
                 </div>
               </td>
               <td class="mk-num">
@@ -150,6 +150,9 @@
           v-else
           min
           :title="isFiltered ? '当前筛选无匹配' : '暂无反馈'"
+          :description="isFiltered
+            ? '当前状态 / 评分 / 关键词条件下没有反馈，可清除筛选查看全部。'
+            : '还没有学员提交反馈。课后报告或消息点赞产生的反馈会出现在这里。'"
           :action-text="isFiltered ? '清除筛选' : '刷新'"
           @action="isFiltered ? clearFilters() : load(true)"
         />
@@ -201,10 +204,10 @@
             </div>
             <!-- 事实清单（原型 dl.kv → 共享 mk-facts 栅格）：三维评分带点阵；id 类格单行省略、全文在 title -->
             <div class="mk-facts">
-              <div><span>评分</span><span class="mk-dots" :class="{ 'mk-dots--warn': detail.rating <= 2 }" role="img" :aria-label="`评分 ${detail.rating}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': d <= detail.rating }"></i></span><strong class="mono">{{ detail.rating }}/5</strong></div>
-              <div><span>有用度</span><span class="mk-dots" role="img" :aria-label="`有用度 ${detail.helpfulness ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.helpfulness != null && d <= detail.helpfulness }"></i></span><strong class="mono">{{ detail.helpfulness != null ? `${detail.helpfulness}/5` : '—' }}</strong></div>
-              <div><span>清晰度</span><span class="mk-dots" role="img" :aria-label="`清晰度 ${detail.clarity ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.clarity != null && d <= detail.clarity }"></i></span><strong class="mono">{{ detail.clarity != null ? `${detail.clarity}/5` : '—' }}</strong></div>
-              <div><span>难度</span><span class="mk-dots" role="img" :aria-label="`难度 ${detail.difficulty ?? '—'}/5`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.difficulty != null && d <= detail.difficulty }"></i></span><strong class="mono">{{ detail.difficulty != null ? `${detail.difficulty}/5` : '—' }}</strong></div>
+              <div><span>评分</span><span class="mk-dots" :class="{ 'mk-dots--warn': detail.rating <= 2 }" role="img" :title="`评分 1-5，5 = 最好（≤2 标琥珀）`" :aria-label="`评分 ${detail.rating}/5（1-5，5 最好）`"><i v-for="d in 5" :key="d" :class="{ 'is-on': d <= detail.rating }"></i></span><strong class="mono">{{ detail.rating }}/5</strong></div>
+              <div><span>有用度</span><span class="mk-dots" role="img" :title="`有用度 1-5，5 = 最好`" :aria-label="`有用度 ${detail.helpfulness ?? '—'}/5（1-5，5 最好）`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.helpfulness != null && d <= detail.helpfulness }"></i></span><strong class="mono">{{ detail.helpfulness != null ? `${detail.helpfulness}/5` : '—' }}</strong></div>
+              <div><span>清晰度</span><span class="mk-dots" role="img" :title="`清晰度 1-5，5 = 最好`" :aria-label="`清晰度 ${detail.clarity ?? '—'}/5（1-5，5 最好）`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.clarity != null && d <= detail.clarity }"></i></span><strong class="mono">{{ detail.clarity != null ? `${detail.clarity}/5` : '—' }}</strong></div>
+              <div><span>难度</span><span class="mk-dots" role="img" :title="`难度 1-5，5 = 最难（数值高不代表好评）`" :aria-label="`难度 ${detail.difficulty ?? '—'}/5（1-5，5 最难）`"><i v-for="d in 5" :key="d" :class="{ 'is-on': detail.difficulty != null && d <= detail.difficulty }"></i></span><strong class="mono">{{ detail.difficulty != null ? `${detail.difficulty}/5` : '—' }}</strong></div>
               <div><span>节点</span><strong :title="detail.agentId || ''">{{ detail.agentId ? agentText(detail.agentId) : '—' }}</strong></div>
               <div><span>策略</span><strong :title="detail.strategy || ''">{{ detail.strategy ? strategyText(detail.strategy) : '—' }}</strong></div>
               <div><span>任务</span>
@@ -236,6 +239,14 @@
                   >
                     <Copy :size="12" :stroke-width="2" aria-hidden="true" />
                   </button>
+                  <!-- 2026-11-11（困惑测试 #7）：处理反馈的下一步是看现场，会话 ID 原先只能复制。
+                       复用只读会话座舱深链（与教学会话列表同一落点）。 -->
+                  <button
+                    v-if="detail.sessionId"
+                    type="button"
+                    class="mk-link"
+                    @click="openSubPage('session-real', detail.sessionId)"
+                  >查看会话</button>
                 </span>
               </div>
               <!-- 提交时间（审核 #169）：绝对时间入事实格，相对时间留列表列（另三张表同口径） -->
@@ -268,6 +279,15 @@
                    把规则写死让主按钮文案稳定；写死的位置从屏上改到 title，规则本身不变。 -->
               <textarea v-model="noteDraft" class="fb-note" rows="3" placeholder="处理记录 / 归因 / 跟进结论" title="备注会随「标记已解决 / 标记已分流 / 忽略」一起保存，也可以点「仅保存备注」单独留存"></textarea>
             </section>
+            <!-- 2026-11-11（困惑测试 #6）：三个终态的差别与后果原先全靠猜。 -->
+            <p class="fb-statusnote">
+              已分流 = 已确认待跟进（不转派给具体人，离开待处理数）。已解决 = 已按反馈处理完。已忽略 = 判定无需处理。三者只改运营侧状态，不影响评分与统计（统计不按状态过滤），学员侧暂不可见。
+            </p>
+            <!-- 处理失败的原因留在抽屉里（2026-11-11 表单审计）：此前只有 4s toast，
+                 消失后用户只看到按钮恢复、状态未变，不知道该改什么。 -->
+            <div v-if="saveError" class="mk-alert" role="alert">
+              <span class="mk-alert__msg">{{ saveError }}</span>
+            </div>
           </div>
           <!-- 底部动作（原型 .ovl__foot：取消/忽略在左、主钮最右、常驻滚动区外；同 gc-detail__foot 判例） -->
           <footer class="mk-drawer__foot">
@@ -298,7 +318,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { isLive, intent } from './store'
+import { isLive, intent, openSubPage } from './store'
 import { errMsg, timeAgo, isPageCacheFresh, markPageFetched } from './live'
 import { adminFeedbackApi } from '@/api/adminApi'
 import { useEscape } from './useEscape'
@@ -355,6 +375,8 @@ const loading = ref(false)
 /** live 拉取失败 → 行内错误态（区别于真正无数据的空态） */
 const loadFailed = ref(false)
 const saving = ref(false)
+/** 处理动作的失败原因：常驻抽屉（不只 toast），让用户知道下一步该做什么 */
+const saveError = ref('')
 const rows = ref<Row[]>([])
 const total = ref(0)
 const pendingCount = ref(0)
@@ -629,6 +651,7 @@ async function openDetail(r: Row) {
     internalNote: ''
   }
   noteDraft.value = ''
+  saveError.value = ''
   try {
     const res = await adminFeedbackApi.getDetail(r.id)
     const f = (res.data?.data ?? res.data ?? {}) as Record<string, unknown>
@@ -661,11 +684,13 @@ async function saveNoteOnly() {
   const d = detail.value
   if (!d || saving.value) return
   saving.value = true
+  saveError.value = ''
   try {
     await adminFeedbackApi.update(d.id, { status: d.status, internalNote: noteDraft.value.trim() || null })
     d.internalNote = noteDraft.value.trim()
     toast.success('备注已保存（处理状态未变）')
   } catch (e) {
+    saveError.value = `备注保存失败：${errMsg(e)}。可重试，或先复制备注内容再关闭。`
     toast.error(`保存失败：${errMsg(e)}`)
   } finally {
     saving.value = false
@@ -676,6 +701,7 @@ async function save(status: Status) {
   const d = detail.value
   if (!d || saving.value) return
   saving.value = true
+  saveError.value = ''
   try {
     await adminFeedbackApi.update(d.id, { status, internalNote: noteDraft.value.trim() || null })
     d.status = status
@@ -686,6 +712,7 @@ async function save(status: Status) {
     pendingCount.value = rows.value.filter((x) => x.status === 'new').length
     toast.success(`已标记为${statusLabel(status)}`)
   } catch (e) {
+    saveError.value = `处理失败：${errMsg(e)}。状态未改变，可重试。`
     toast.error(`保存失败：${errMsg(e)}`)
   } finally {
     saving.value = false
@@ -806,6 +833,8 @@ onMounted(() => {
 }
 /* 抽屉内容区：mk-drawer__body 提供滚动/内边距，此处补纵向排布（原型 .ovl__body grid gap16） */
 .fb-body { display: grid; gap: 16px; align-content: start; }
+/* 三个终态语义（2026-11-11 困惑测试 #6）：与备注框同档的低调说明，不抢按钮主次 */
+.fb-statusnote { margin: 0; font-size: var(--mk-fs-micro); line-height: 1.65; color: var(--mk-muted); }
 /* 首段徽章行（原型 .ovl__body 首段 pills）：状态 / 难度适配 / UI 类型 / 轮次 */
 .fb-pills { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 

@@ -544,6 +544,11 @@ describe('VirtualLearners 批量管理与生命周期视图', () => {
     settleConfirm(true);
     await flushPromises();
     expect(terminateMock).toHaveBeenCalledWith({ profileIds: ['vl-1', 'vl-2'], dryRun: false });
+    // 命令栏执行完会收起、toast 几秒后消失：人级结果必须留在卡头下方可回看
+    const summary = w.find('.vl-batch-summary');
+    expect(summary.exists()).toBe(true);
+    expect(summary.text()).toContain('涉及 2 人');
+    expect(summary.text()).toContain('终止 2 个会话');
   });
 
   it('批量终止（busy 端到端）：真点弹窗确认 → 进入「处理中…」防重复提交 → 业务结束后弹窗自动关闭', async () => {

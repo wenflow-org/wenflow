@@ -331,9 +331,11 @@ export function buildStageFlow(
       : allRoutings.filter((c) => c.agentId !== a && c.handoffTargets.includes(a))
     const resolvedName = def?.resolved?.displayName || ''
     const owner = isSkill || isBridge ? undefined : ownerStageOf(a)
-    // orphan：已注册 agent（agents 清单），但无字段契约（0 routing 行）且不在 defSteps
-    // 如实呈现为「无契约 Skill」：标注 no-contract 而非误导性「0 产出」
-    const isOrphan = isSkill && !outputs.length && !inputs.length && !def
+    // orphan：已注册 agent（agents 清单），但无字段契约（0 routing 行）
+    // 如实呈现为「无契约 Skill」：标注 no-contract 而非误导性「0 产出」。
+    // 2026-11-11（困惑测试 #58）：原守卫多写了 `&& !def`，把「在 defSteps 但 0 进 0 出」的
+    // Skill（如 teaching-opening-generator，产出直接进会话消息）漏回通用卡，打出字面「0 产出」。
+    const isOrphan = isSkill && !outputs.length && !inputs.length
     const kind = isBridge ? 'bridge-entry' as const
       : isOrphan ? 'orphan' as const
         : isSkill ? 'skill' as const
@@ -408,4 +410,36 @@ export function buildStageFlow(
     edges,
     families: [...familiesMap.entries()].sort((a, b) => b[1].count - a[1].count).map(([name, v]) => ({ name, hue: v.hue, count: v.count })),
   }
+}
+
+/* ===== 编排定义里的英文条件 → 运营可读（2026-11-11 困惑测试 #58） =====
+   条件串是后端定义（coordinators/*.definition.ts）的原文，字段旅程此前原样直出；
+   「legacy assisted mode only」这类行话在页内无处可查。这里做展示层翻译（不改编排文件），
+   未收录的原文照常显示，悬停仍给「定义原文」。 */
+const CONDITION_TEXT: Record<string, string> = {
+  'on session start': '会话开始时',
+  'when session ends': '会话结束时',
+  'until goal confirmed': '直到目标确认',
+  'when goal stage converges': '目标阶段完成时',
+  'when goal handoff received': '收到 goal 阶段移交时',
+  'when teaching phase starts': '教学阶段开始时',
+  'when lesson ends (enqueued asynchronously; the fast path does not await the LLM)': '课程结束时（异步入队，快路径不等待模型）',
+  'after wrapup and learner projection refresh': '收尾总结与学习者投影刷新后',
+  'after learner evidence is projected': '学习者证据投影后',
+  'after profile cache is invalidated (skipped for teaching task:completed / goal:understanding:updated)': '画像缓存失效后（教学任务完成 / 目标理解更新时跳过）',
+  'after a lesson/task completes in any chain': '任一链路中课程 / 任务完成后',
+  'when learner profile related events arrive': '学习者画像相关事件到达时',
+  'when a pending checkpoint is returned': '返回待处理检查点时',
+  'when control.shouldTriggerPeer = true': '控制信号要求同伴强化时',
+  'legacy assisted mode only': '仅旧版 assisted 座舱手动「路径评审」触发（黑盒主链不调用，自动入口已关闭）',
+  'external: /api/admin/session-audits（裁判独立面，blackbox-api sessions only）': '外部触发：调用 /api/admin/session-audits（仅黑盒 API 会话）',
+}
+export function conditionText(raw: string | null | undefined): string {
+  const key = String(raw || '')
+  return CONDITION_TEXT[key] || key
+}
+const LOOP_TEXT: Record<string, string> = { 'teaching-turns': '按教学回合' }
+export function loopText(raw: string | null | undefined): string {
+  const key = String(raw || '')
+  return LOOP_TEXT[key] || key
 }

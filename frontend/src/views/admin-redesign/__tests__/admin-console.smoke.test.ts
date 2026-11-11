@@ -11,7 +11,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import { nextTick } from 'vue';
 import AdminConsole from '../AdminConsole.vue';
-import { SCENE_COMPONENTS } from '../AdminConsole.vue';
+import { SCENE_COMPONENTS, LIST_SCROLL_MEMORY, listScrollKeyOf } from '../AdminConsole.vue';
 import { MOCK_SCENES } from '../manifest';
 import Overview from '../Overview.vue';
 import { intent, subPage, openSubPage, closeSubPage } from '../store';
@@ -111,7 +111,7 @@ afterEach(() => {
 });
 
 describe('AdminConsole 导航冒烟', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     // store 为模块级单例：清掉上一用例残留的跨页动线，避免污染本次挂载
     intent.scene = 'overview';
     intent.agentFilter = '';
@@ -120,6 +120,9 @@ describe('AdminConsole 导航冒烟', () => {
     intent.sessionId = '';
     intent.quickAction = '';
     subPage.value = null;
+    LIST_SCROLL_MEMORY.clear();
+    // 冲掉上一用例卸载后仍排队的 subPage watcher（否则它会把旧实体的来源写进下一用例）
+    await nextTick();
   });
 
   it('boot 完成并默认渲染 Overview（无整页错误）', async () => {
@@ -200,10 +203,103 @@ describe('AdminConsole 导航冒烟', () => {
     expect(wrapper.find('nav[aria-label="管理导航"]').exists()).toBe(true);
   });
 
+  /* 详情页不是模态：Esc 的第一下应该只把焦点从输入框里退出来。
+     否则在详情页的自筛框里按 Esc 会直接退回列表，看起来像「搜索把内容弄丢了」。 */
+  it('详情页内焦点在输入框时 Esc 只退出输入，第二次才退出详情', async () => {
+    const { wrapper } = await mountConsole('/admin/people?view=user&id=user_abc');
+    await settle();
+    await vi.waitFor(() => expect(wrapper.find('.mk-page.ld').exists()).toBe(true), { timeout: 15000 });
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    input.focus();
+    expect(document.activeElement).toBe(input);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await settle();
+    expect(subPage.value, '焦点在输入框时 Esc 不得退出详情').not.toBeNull();
+    // 输入框已失焦：第二下 Esc 才走「返回上级」
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await settle();
+    expect(subPage.value).toBeNull();
+    input.remove();
+  });
+
+  /* 2026-11-11 二轮可用性：列表滚到第 30 行 → 进详情 → 返回，列表应回到原位置。
+     jsdom 没有布局，「可滚动」用自有 scrollTop 属性模拟；回填由 nextTick + rAF 重试完成。 */
+  it('列表滚动位置在详情往返后恢复（同 scene、同 query）', async () => {
+    const { wrapper } = await mountConsole('/admin/people');
+    await settle();
+    await vi.waitFor(
+      () => expect(wrapper.find('.mshell__content > .mk-page').exists()).toBe(true),
+      { timeout: 10000 }
+    );
+    const listPage = wrapper.find('.mshell__content > .mk-page').element as HTMLElement;
+    Object.defineProperty(listPage, 'scrollTop', { configurable: true, writable: true, value: 420 });
+
+    openSubPage('user', 'user_abc');
+    await settle();
+    expect(subPage.value).toMatchObject({ view: 'user', id: 'user_abc' });
+    expect([...LIST_SCROLL_MEMORY.values()], '打开详情时应记下列表位置').toContainEqual({ page: 420, table: 0 });
+
+    closeSubPage();
+    await settle();
+    await vi.waitFor(() => {
+      const back = wrapper.find('.mshell__content > .mk-page').element as HTMLElement | undefined;
+      expect(back, '返回后列表页应重新挂载').toBeTruthy();
+      if (back && !Object.prototype.hasOwnProperty.call(back, 'scrollTop')) {
+        Object.defineProperty(back, 'scrollTop', { configurable: true, writable: true, value: 0 });
+      }
+      expect(back!.scrollTop).toBe(420);
+    }, { timeout: 4000 });
+  });
+
+  it('详情打开期间列表 query 变了 → 返回不回填旧滚动位置', async () => {
+    const { wrapper, router } = await mountConsole('/admin/people');
+    await settle();
+    await vi.waitFor(
+      () => expect(wrapper.find('.mshell__content > .mk-page').exists()).toBe(true),
+      { timeout: 10000 }
+    );
+    const listPage = wrapper.find('.mshell__content > .mk-page').element as HTMLElement;
+    Object.defineProperty(listPage, 'scrollTop', { configurable: true, writable: true, value: 420 });
+
+    openSubPage('user', 'user_abc');
+    await settle();
+    // 同一 scene 下筛选项变了：返回的是另一份列表，不该回到旧位置
+    await router.push({ path: '/admin/people', query: { view: 'user', id: 'user_abc', q: 'abc' } });
+    await settle();
+
+    const scrollSetter = vi.spyOn(Element.prototype, 'scrollTop', 'set');
+    closeSubPage();
+    await settle();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(
+      scrollSetter.mock.calls.some(([v]) => v === 420),
+      'query 变化后不得把旧位置写回新列表'
+    ).toBe(false);
+    scrollSetter.mockRestore();
+  });
+
+  it('记忆 key：只剔除二级页参数，列表自己的筛选/页签保留', () => {
+    // 打开时记的是列表 URL；关闭后等路由收干净再比对同一个 key（详情落点页签随关闭被 URL 同步收走）
+    expect(listScrollKeyOf('people', { view: 'learner', id: 'u1', tab: 'evidence', q: 'a' })).toBe(
+      listScrollKeyOf('people', { q: 'a', tab: 'evidence' })
+    );
+    expect(listScrollKeyOf('people', { fromView: 'skill', fromId: 's', q: 'a' })).toBe(
+      listScrollKeyOf('people', { q: 'a' })
+    );
+    // 列表自己的页签属于筛选状态：换 tab 不能复用滚动位置
+    expect(listScrollKeyOf('ops-hub', { tab: 'feedback' })).not.toBe(
+      listScrollKeyOf('ops-hub', { tab: 'achievements' })
+    );
+    // 筛选参数参与 key（顺序无关）
+    expect(listScrollKeyOf('people', { q: 'a', pill: 'online' })).toBe(
+      listScrollKeyOf('people', { pill: 'online', q: 'a' })
+    );
+  });
+
   /* 2026-10-18 用户走查：列表条目一律落「概览」不匹配列表主题 → 二级页带落点页签。
      落点必须与 view/id 同一次 push 并进 URL（刷新/深链保持），关闭二级页时随详情一起收，
-     否则列表 URL 上留一个无主的 ?tab=。 */
-  it('二级页落点页签：openSubPage 带 tab 并进 URL，closeSubPage 时随 view/id 一起收（learner 专有）', async () => {
+     否则列表 URL 上留一个无主的 ?tab=。 */  it('二级页落点页签：openSubPage 带 tab 并进 URL，closeSubPage 时随 view/id 一起收（learner 专有）', async () => {
     const { router } = await mountConsole('/admin/learner-state');
     await settle();
     openSubPage('learner', 'user_abc', { tab: 'evidence' });
@@ -216,6 +312,42 @@ describe('AdminConsole 导航冒烟', () => {
     expect(router.currentRoute.value.query.tab).toBeUndefined();
     expect(router.currentRoute.value.query.view).toBeUndefined();
     expect(router.currentRoute.value.query.id).toBeUndefined();
+  });
+
+  /* 2026-11-11：课堂刷新后 from 丢失 → 面包屑只剩「用户账号 / 路径名」，返回落用户列表。
+     来源页持久化进 URL（fromView/fromId/fromLabel），刷新/深链/前进后退都能恢复；
+     关闭二级页时随 view/id 一起收，不留在列表 URL 上。 */
+  it('openSubPage 带 from：来源写进 URL，关闭后随详情一起收（不污染列表 URL）', async () => {
+    const { router } = await mountConsole('/admin/people?view=user&id=user_abc');
+    await settle();
+    openSubPage('session-real', 'ts_1', { from: { view: 'user', id: 'user_abc', label: 'cs' } });
+    await settle();
+    expect(router.currentRoute.value.query).toMatchObject({
+      view: 'session-real', id: 'ts_1',
+      fromView: 'user', fromId: 'user_abc', fromLabel: 'cs'
+    });
+    closeSubPage();
+    await settle();
+    expect(subPage.value).toMatchObject({ view: 'user', id: 'user_abc', label: 'cs' });
+    expect(router.currentRoute.value.query).toMatchObject({ view: 'user', id: 'user_abc' });
+    expect(router.currentRoute.value.query.fromView).toBeUndefined();
+    expect(router.currentRoute.value.query.fromId).toBeUndefined();
+    expect(router.currentRoute.value.query.fromLabel).toBeUndefined();
+  });
+
+  it('刷新/深链带 from*：subPage.from 恢复，返回回到学习者详情而不是用户列表', async () => {
+    const { router } = await mountConsole(
+      '/admin/people?view=session-real&id=ts_1&fromView=user&fromId=user_abc&fromLabel=cs'
+    );
+    await settle();
+    expect(subPage.value).toMatchObject({
+      view: 'session-real', id: 'ts_1',
+      from: { view: 'user', id: 'user_abc', label: 'cs' }
+    });
+    closeSubPage();
+    await settle();
+    expect(subPage.value).toMatchObject({ view: 'user', id: 'user_abc', label: 'cs' });
+    expect(router.currentRoute.value.query).toMatchObject({ view: 'user', id: 'user_abc' });
   });
 
   it('跨场景深链 push（overview → people?view=user&id=）同样存活', async () => {

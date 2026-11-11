@@ -28,11 +28,13 @@
         label="用户账号"
         :value="kpiValue(learnerTotalText)"
         :hint="learnerKpiHint"
+        :title="learnerCountTitle"
         :tone="loadFailed ? 'muted' : ''"
       />
       <MkKpi
         label="需关注"
         :value="kpiValue(riskCount)"
+        :title="riskTitle"
         :tone="loadFailed ? 'muted' : riskCount ? 'warn' : ''"
         clickable
         :class="{ 'lc-kpi--on': pill === 'risk' }"
@@ -43,6 +45,7 @@
       <MkKpi
         label="观察"
         :value="kpiValue(watchCount)"
+        :title="watchTitle"
         :tone="loadFailed ? 'muted' : ''"
         clickable
         :class="{ 'lc-kpi--on': pill === 'watch' }"
@@ -52,6 +55,7 @@
       <MkKpi
         label="低置信用户"
         :value="kpiValue(lowConfCount)"
+        :title="lowConfTitle"
         :tone="loadFailed ? 'muted' : lowConfCount ? 'warn' : ''"
         clickable
         :class="{ 'lc-kpi--on': pill === 'stale' }"
@@ -67,6 +71,7 @@
       <MkKpi
         label="数据覆盖率"
         :value="kpiValue(confCoverageText)"
+        :title="coverageTitle"
         :tone="loadFailed || confCoverageText === '—' ? 'muted' : ''"
         :value-note="loadFailed ? '' : coverageNote"
       />
@@ -161,7 +166,7 @@
               class="mk-th--sortable lc-c-conf"
               :aria-sort="lcSortState('conf')"
               @click="toggleLcSort('conf')"
-            ><button type="button" class="mk-th__btn" @click.stop="toggleLcSort('conf')">置信度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            ><button type="button" class="mk-th__btn" :title="CONFIDENCE_TITLE" @click.stop="toggleLcSort('conf')">置信度<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th
               v-if="!lcHiddenCols.has('updated')"
               scope="col"
@@ -198,7 +203,7 @@ ${r.email}` : r.name">{{ r.name }}</strong>
               <!-- 审核 #18（2026-10-06）：任务/路径（与邮箱同理）被 max-width 截断，
                    补 title 全值——被截掉的部分不再无处可查 -->
               <div class="mk-cell-main lc-task">
-                <strong class="progress-title" :title="progressMainTitle(r)">{{ progressMainTitle(r) }}</strong>
+                <strong class="progress-title" :title="progressCellTitle(r)">{{ progressMainTitle(r) }}</strong>
                 <!-- 副行只放路径真值：任务为空时主行已写「未开始」，副行再补一句「尚未开始学习」
                      等于同一状态写两遍（2026-10-29 冗余副文审计）。
                      路径与「共 N 条路径」角标同一行（2026-11-02 P1-7）：角标原先独占第三行，
@@ -247,6 +252,7 @@ ${r.email}` : r.name">{{ r.name }}</strong>
                 v-if="r.confidence != null && r.task"
                 class="conf"
                 :class="{ 'conf--low': evidenceLowConfidence(r.confidence) }"
+                :title="CONFIDENCE_TITLE"
               >
                 <span class="mono">{{ Math.round(r.confidence * 100) }}%</span><em v-if="evidenceLowConfidence(r.confidence)" class="conf__lack">证据不足</em>
               </span>
@@ -270,7 +276,7 @@ ${r.email}` : r.name">{{ r.name }}</strong>
                   v-if="isLive && !r.isTestAccount"
                   type="button"
                   class="mk-link"
-                  :title="notStarted(r) ? '发送站内邀请（站内信）：该学员还没有开始任何学习' : '发送站内提醒（站内信）'"
+                  :title="notStarted(r) ? '发送站内邀请（站内信）：该学员还没有开始任何学习' : '点击填写提醒内容，发送前可修改或取消。发出后可在「站内通知」删除'"
                   @click.stop="openIntervene(r)"
                 >{{ notStarted(r) ? '邀请开启学习' : '发提醒' }}</button>
                 <div class="mk-menu">
@@ -305,8 +311,9 @@ ${r.email}` : r.name">{{ r.name }}</strong>
           v-else
           min
           :title="isFiltered ? '没有匹配的用户' : '暂无用户快照'"
-          :action-text="isFiltered ? '清除筛选' : ''"
-          @action="clearFilters"
+          :description="isFiltered ? '当前风险档或搜索条件下没有匹配用户，可清除筛选查看全部。' : '学习者快照来自学习活动；账号已建立但还没产生学习证据时这里为空。'"
+          :action-text="isFiltered ? '清除筛选' : '查看用户账号'"
+          @action="isFiltered ? clearFilters() : goPeople()"
         />
       </div>
       <!-- 客户端分页（统一 mk-pagination 页码器）：筛选后按页切片；lc-body 外 = 卡尾吸底恒可见 -->
@@ -384,6 +391,25 @@ import { statusText as pathStatusText } from './opsShared'
 import { adminNotificationsApi, adminLearnerModelsApi } from '@/api/adminApi'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 
+/** 绝对时间悬停口径（全站统一 YYYY-MM-DD HH:mm）：toLocaleString 会渲染成 2026/11/11，禁止 */
+function absDateTime(value?: string | number | null): string {
+  if (value == null || value === '') return ''
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return String(value)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+/** 计数统一千分位；null / 非法值不伪装成 0 */
+function fmtCount(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(Number(n))) return '—'
+  return Number(n).toLocaleString('zh-CN')
+}
+/** 相对时间；timeAgo 超过 30 天会回落成 2026/11/11（违反全站绝对时间口径），此时改绝对时间 */
+function relTime(value?: string | null): string {
+  const rel = timeAgo(value)
+  return /^\d{4}[-/]/.test(rel) ? absDateTime(value) : rel
+}
+
 interface Row {
   id: string
   name: string
@@ -438,8 +464,8 @@ function freshTone(ts?: number): string {
     两者此前混成一个读数，批重建把全表刷成同一分钟（2026-10-23） */
 function updatedCellTitle(r: Row): string | undefined {
   const parts: string[] = []
-  if (r.ts) parts.push(`数据截至 ${new Date(r.ts).toLocaleString()}`)
-  if (r.recomputedAt) parts.push(`档案重算 ${new Date(r.recomputedAt).toLocaleString()}`)
+  if (r.ts) parts.push(`数据截至 ${absDateTime(r.ts)}`)
+  if (r.recomputedAt) parts.push(`档案重算 ${absDateTime(r.recomputedAt)}`)
   return parts.length ? parts.join('；') : undefined
 }
 function openDetail(r: Row) {
@@ -483,6 +509,14 @@ function progressMainTitle(r: Row): string {
   }
   return '未开始'
 }
+/** 当前进度格悬停（2026-11-11 困惑测试 #35）：兜底路径的「已下线」是**学习路径状态**，
+   不是账号状态——原 title 只复读同一句，读者容易把离线账号状态与路径下架混在一起。 */
+function progressCellTitle(r: Row): string {
+  if (r.task) return r.task
+  const fb = r.fallbackPath
+  if (fb) return `${pathStatusText(fb.status)}：指学习路径状态（不是账号状态），这一格是该路径自己的历史完成进度`
+  return '还没有开始学习'
+}
 /** 当前进度副注（QW4）：兜底路径有历史完成时给「历史进度 N%」并附「已完成/总任务」分子分母，
  *  0 完成不写百分比，与真正的新账号可区分。 */
 function progressNote(r: Row): string {
@@ -522,6 +556,10 @@ const appRouter = getCurrentInstance()?.appContext.config.globalProperties.$rout
 function goNotifications(userId: string) {
   void appRouter?.push({ path: '/admin/ops-hub', query: { tab: 'inapp', userId } })
 }
+/** 空态出口：没有快照时回到账号列表确认账号是否已建立 / 是否还没开始学习 */
+function goPeople() {
+  void appRouter?.push({ path: '/admin/people', query: {} })
+}
 async function sendIntervene() {
   const r = intervene.value
   if (!r || !interveneTitle.value.trim()) return
@@ -554,8 +592,8 @@ const { openMenu: rowMenu, toggleMenu: toggleRowMenu, closeMenu: closeRowMenu, p
 const learnerTotal = computed(() => liveLearnersTotal.value)
 const learnerTotalText = computed(() => {
   const t = learnerTotal.value
-  if (t != null) return t === rows.value.length ? String(t) : `${t} · 已加载 ${rows.value.length}`
-  return rows.value.length ? `已加载 ${rows.value.length}` : '0'
+  if (t != null) return t === rows.value.length ? fmtCount(t) : `${fmtCount(t)} · 已加载 ${fmtCount(rows.value.length)}`
+  return rows.value.length ? `已加载 ${fmtCount(rows.value.length)}` : '0'
 })
 /** 「用户账号」KPI 口径 hint（2026-10-15 KPI 审计）：随页头「真实/测试」互斥视角变化——
     真实视角绝不提虚拟/测试账号（否则读者以为数里混了假账号）；两视角都含未开始学习的账号。 */
@@ -592,7 +630,7 @@ const rows = computed<Row[]>(() =>
         : m.fragile.length
           ? `「${m.fragile[0]}」等 ${m.fragile.length} 个概念待巩固`
           : '',
-    updated: dataAt ? timeAgo(dataAt) : '',
+    updated: dataAt ? relTime(dataAt) : '',
     confidence: m.confidence,
     ts: dataAt ? new Date(dataAt).getTime() : undefined,
     recomputedAt: m.generatedAt || '',
@@ -634,6 +672,10 @@ const watchCount = computed(() => rows.value.filter(isWatch).length)
    口径 = rows 全集（随「含测试账号」范围联动），不随 pill / 搜索筛选变化；
    有学习任务（r.task）才有有效置信度，与表格置信列的「—」口径一致 */
 const confRows = computed(() => rows.value.filter((r) => r.task && r.confidence != null))
+/* 置信度口径（2026-11-11 困惑测试 #31）：这一列是**评估结果的可信度**，不是掌握程度。
+   此前列头/单元格/均值卡三处 title 全空，100% 置信 + 「2 个概念掌握薄弱」同行被读成
+   自相矛盾（实际是「系统很有把握：他这两块确实薄弱」）。 */
+const CONFIDENCE_TITLE = '置信度＝系统对该学习者评估结果的可信度（按证据量与覆盖度评估），不是掌握程度。100% 表示很有把握评估准确，薄弱概念照样成立。低于 50% 标「证据不足」，结论仅供参考。'
 /** 低置信 KPI 与均值同一口径（有任务的快照）：无任务行在表里置信列本显「—」，
     计入会与均值对不上。 */
 const lowConfCount = computed(() => confRows.value.filter((r) => evidenceLowConfidence(r.confidence ?? 1)).length)
@@ -668,13 +710,37 @@ const confCoverageText = computed(() =>
   rows.value.length ? `${Math.round((confRows.value.length / rows.value.length) * 100)}%` : '—'
 )
 /** 数据覆盖率卡副注（2026-11-09 审计 #3）：X/Y 位有快照，分母已加载学习者，分子有学习任务且
- *  测得置信度的快照，与卡面百分比同源，失败态不显注。 */
+ *  测得置信度的快照，与卡面百分比同源，失败态不显注。
+ *  2026-11-11 全站打磨：1280 宽六卡一排时完整句会被卡右侧裁掉——副注只留 X/Y，全句在 title。 */
 const coverageNote = computed(() =>
-  loadFailed.value || !rows.value.length ? '' : `${confRows.value.length}/${rows.value.length} 位有快照`
+  loadFailed.value || !rows.value.length
+    ? ''
+    : `${confRows.value.length}/${rows.value.length} 位`
 )
-/** 平均值必须带基数：n= 之外的行（无任务/无快照）不进均值，读数才知道它代表谁。 */
-const avgConfHint = computed(() =>
-  confRows.value.length ? '' : '暂无有学习任务的学习者'
+/** 覆盖率卡口径（2026-11-11 困惑测试 #32）：分子是「有学习任务且测得置信度」，不是「有快照」
+    （已加载学习者人人有快照）；未开始学习的用户计入分母。 */
+const coverageTitle = computed(
+  () => `有学习任务且测得置信度的用户 ${confRows.value.length} / 已加载 ${rows.value.length} 位。未开始学习的用户计入分母`
+)
+/** 平均值必须带基数：n= 之外的行（无任务/无快照）不进均值，读数才知道它代表谁。
+    2026-11-11（困惑测试 #31/#32）：有数据时也要给口径——此前有样本即返回空串，
+    均值卡悬停为空，且「30%」与「用户账号 36」并排会被读成 36 人平均。 */
+const avgConfHint = computed(() => {
+  if (!confRows.value.length) return '暂无有学习任务的学习者'
+  return `有学习任务的 ${confRows.value.length} 位用户置信度均值（无任务用户不计入）。${CONFIDENCE_TITLE}`
+})
+/** 概览六卡口径（2026-11-11 困惑测试 #32）：分母/阈值必须可查，与教学会话页同律。 */
+const learnerCountTitle = computed(
+  () => `当前加载的学习者账号数，含未开始学习的账号（虚拟 / 测试账号的范围由右上角开关控制）`
+)
+const riskTitle = computed(
+  () => `趋势下降、疲劳高、或有风险摘要（薄弱 / 待巩固概念）三条命中任一条即计入，共 ${riskCount.value} 人`
+)
+const watchTitle = computed(
+  () => `不属需关注、且疲劳=中的学习者（常态观察档），共 ${watchCount.value} 人`
+)
+const lowConfTitle = computed(
+  () => `有学习任务且置信度低于 50%（证据不足）的用户，共 ${lowConfCount.value} 人。低置信是「评估证据不够」，不代表学得差`
 )
 /** 直方图五档已随分布带退役（2026-10-17）：口径阈值仍锚定 50% 低置信线，
     由「低置信」KPI 与 chip 承载（<50%），分档细节交给可排序的「置信」列。 */
@@ -690,7 +756,11 @@ const {
   sortRows: sortLcRows,
 } = useTableSort<Row>({
   accessors: {
-    conf: (r) => r.confidence ?? null,
+    /* 2026-11-11（困惑测试 #34）：排序口径必须等于显示口径——已下线学员后端快照残留
+       confidence，但 currentTask 为空，格子显「—」；原 accessor 仍按数值排，
+       降序时「—」行插在 100% 与 20% 之间。与表格显示条件（r.task && confidence!=null）对齐后，
+       无任务行恒按空值排末尾。 */
+    conf: (r) => (r.task && r.confidence != null ? r.confidence : null),
     updated: (r) => r.ts ?? null
   },
   storageKey: 'wf_learner_sort'
@@ -732,9 +802,10 @@ function clearFilters() {
 const loadFailed = computed(
   () => isLive.value && !liveLoading.value && !!liveFailures.value.learners && !liveLearners.value.length
 )
-/** 取数失败时读数转「—」：0 是「没人」，— 是「没读到」，两者不能同版面 */
+/** 取数失败时读数转「—」：0 是「没人」，— 是「没读到」，两者不能同版面；
+ *  首载尚未返回时同样显「—」，不把「还没读到」渲染成 0。 */
 function kpiValue<T extends string | number>(v: T): T | '—' {
-  return loadFailed.value ? '—' : v
+  return loadFailed.value || (liveLoading.value && !rows.value.length) ? '—' : v
 }
 /** 审核 #17（2026-10-06）：已有旧行时刷新失败——loadFailed 不覆盖（它要求列表为空），
     单独给「旧结果 + 行内告警 + 重试」通路，避免失败被静默当成当前值 */

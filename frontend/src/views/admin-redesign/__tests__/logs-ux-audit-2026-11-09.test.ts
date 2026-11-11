@@ -218,7 +218,7 @@ describe('A. ExecLogs 调用总数卡：主值不染红，失败数走 valueNote
     const num = total.find('.mk-kpi__num');
     const noteEl = num.find('.mk-kpi__num-note');
     expect(noteEl.exists()).toBe(true);
-    expect(num.element.textContent!.replace(noteEl.element.textContent!, '')).toBe('2225');
+    expect(num.element.textContent!.replace(noteEl.element.textContent!, '')).toBe('2,225');
     // 失败数：行内注记（更小字号），且不含括号——层级由字号/颜色表达，不用括号
     const note = total.find('.mk-kpi__num-note');
     expect(note.exists()).toBe(true);

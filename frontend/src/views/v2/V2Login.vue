@@ -13,25 +13,33 @@
       <label class="field" :class="{ 'field--error': errors.name }">
         <span class="field__label">用户名</span>
         <input
+          id="login-name"
+          ref="nameEl"
           v-model.trim="form.name"
           type="text"
           class="field__input"
           autocomplete="username"
           autofocus
+          :aria-invalid="errors.name ? 'true' : undefined"
+          :aria-describedby="errors.name ? 'login-name-error' : undefined"
           @blur="touch('name')"
           @input="formError = ''"
         />
-        <span v-if="errors.name" class="field__error">{{ errors.name }}</span>
+        <span v-if="errors.name" id="login-name-error" class="field__error">{{ errors.name }}</span>
       </label>
 
       <label class="field" :class="{ 'field--error': errors.password }">
         <span class="field__label">密码</span>
         <span class="field__pwd">
           <input
+            id="login-password"
+            ref="passwordEl"
             v-model="form.password"
             :type="showPwd ? 'text' : 'password'"
             class="field__input"
             autocomplete="current-password"
+            :aria-invalid="errors.password ? 'true' : undefined"
+            :aria-describedby="errors.password ? 'login-password-error' : undefined"
             @blur="touch('password')"
             @input="formError = ''"
           />
@@ -40,7 +48,7 @@
             <EyeOff v-else :size="17" :stroke-width="1.75" />
           </button>
         </span>
-        <span v-if="errors.password" class="field__error">{{ errors.password }}</span>
+        <span v-if="errors.password" id="login-password-error" class="field__error">{{ errors.password }}</span>
       </label>
 
       <label class="remember-row">
@@ -94,6 +102,10 @@ const errors = reactive({ name: '', password: '' });
 const showPwd = ref(false);
 const remember = ref(false);
 const formError = ref('');
+/* 错误定位：提交时把焦点送到第一个出错的输入框（原则 9/11）。视觉红框之外，
+   aria-invalid / aria-describedby 让读屏也能把字段与错误文案关联起来。 */
+const nameEl = ref<HTMLInputElement | null>(null);
+const passwordEl = ref<HTMLInputElement | null>(null);
 
 function touch(key: 'name' | 'password') {
   if (key === 'name') errors.name = form.name ? '' : '请输入用户名';
@@ -138,7 +150,11 @@ const redirectNotice = computed(() =>
 async function handleLogin() {
   touch('name');
   touch('password');
-  if (errors.name || errors.password || loading.value) return;
+  if (errors.name || errors.password || loading.value) {
+    if (errors.name) nameEl.value?.focus();
+    else if (errors.password) passwordEl.value?.focus();
+    return;
+  }
 
   loading.value = true;
   try {

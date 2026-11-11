@@ -43,10 +43,12 @@ export function filterValue<T extends ComponentPublicInstance>(w: VueWrapper<T>,
   return filterTrigger(w, dimLabel).attributes('data-value') ?? '';
 }
 
-/** 全部选项文案（v-show 只改 display，选项始终在 DOM 里，无需先展开） */
+/** 全部选项文案（v-show 只改 display，选项始终在 DOM 里，无需先展开）。
+ *  只读主标签——2026-11-11 起选项可带一行释义（hint），它渲染在同项的第二个 span 里，
+ *  按整项 textContent 取会把释义拼进选项名。 */
 export function filterOptions<T extends ComponentPublicInstance>(w: VueWrapper<T>, dimLabel: string): string[] {
   return Array.from(filterMenu(w, dimLabel).querySelectorAll('.mk-listbox-opt')).map(
-    (o) => o.textContent?.trim() ?? ''
+    (o) => (o.querySelector('.mk-listbox-opt__label')?.textContent ?? o.textContent ?? '').trim()
   );
 }
 
@@ -55,17 +57,17 @@ export interface FilterOptionHandle {
   element: HTMLElement;
 }
 
-/** 取某维某档的 option（文案含计数，按前缀匹配）。 */
+/** 取某维某档的 option（文案含计数，按前缀匹配）。text() 只取主标签，不含释义 */
 export function filterOption<T extends ComponentPublicInstance>(
   w: VueWrapper<T>,
   dimLabel: string,
   optionLabelPrefix: string
 ): FilterOptionHandle {
   const el = Array.from(filterMenu(w, dimLabel).querySelectorAll<HTMLElement>('.mk-listbox-opt')).find(
-    (o) => (o.textContent?.trim() ?? '').startsWith(optionLabelPrefix)
+    (o) => (o.querySelector('.mk-listbox-opt__label')?.textContent?.trim() ?? o.textContent?.trim() ?? '').startsWith(optionLabelPrefix)
   );
   if (!el) throw new Error(`option not found: ${dimLabel} / ${optionLabelPrefix}`);
-  return { text: () => el.textContent?.trim() ?? '', element: el };
+  return { text: () => (el.querySelector('.mk-listbox-opt__label')?.textContent ?? el.textContent ?? '').trim(), element: el };
 }
 
 /** 展开下拉并点选某档 —— 等价于真实用户的开弹层 + 点选项。 */

@@ -20,8 +20,8 @@
       <!-- 区头只留区名（2026-11-05 用户「这种说明文案不要」）：右端那行
            「4 项能力 · 6 个 Skill」是把下方四张卡再数一遍，读者扫一眼卡片就有答案。
            保留的只有「启停状态未读取」——那是读失败，不读这一行看不出来。 -->
-      <div class="ac-section__head">
-        <h2 class="ac-section__title">可选能力</h2>
+      <div class="mk-section__head">
+        <h2 class="mk-section__title">可选能力</h2>
         <span v-if="pluginStateFailed" class="mk-badge mk-badge--warn">启停状态未读取</span>
       </div>
       <div v-if="configsFailed" class="mk-alert mk-alert--row ac-error" role="alert">
@@ -48,7 +48,15 @@
                 <component :is="p.icon" :size="15" :stroke-width="1.8" />
               </span>
               <h3 class="mk-card__title">{{ p.name }}</h3>
-              <button v-if="p.errorCount > 0" type="button" class="mk-link ac-cap__fail" @click="goLogs(p.primary)">查失败</button>
+              <!-- 2026-11-11（困惑测试 #91）：开关只回答「开没开」，不回答「跑不跑得起来」。
+                   决策卡曾经显示「启用」而主用 provider 缺密钥，要自己点进配置弹层才发现
+                   调用必失败。主用服务未配置时卡面直接挂同款警示徽标。 -->
+              <span
+                v-if="capHealth(p).bad"
+                class="mk-badge mk-badge--sm mk-badge--warn"
+                :title="capHealth(p).title"
+              >缺少密钥</span>
+              <button v-if="p.errorCount > 0" type="button" class="mk-link ac-cap__fail" :title="failedTitle(p)" @click="goLogs(failedTarget(p))">查失败</button>
             </div>
             <MkSwitch
               :model-value="pluginEnabled(p.id)"
@@ -145,7 +153,17 @@
           </div>
 
           <div class="ac-cap__foot">
-            <span class="ac-cap__calls">累计 {{ p.calls }} 次调用<i v-if="p.last !== '从未'"> · 最近 {{ p.last }}</i></span>
+            <!-- 2026-11-11（困惑测试 #94）：原「累计 N 次调用」的 N 其实是统计窗口内的数
+                 （与 Skills 页共用一个窗口选择器，默认近 7 天），「累计」是错的量词；
+                 同时把读数做成入口——此前卡上唯一的下钻是失败才出现的「查失败」。 -->
+            <span class="ac-cap__calls">
+              <button
+                type="button"
+                class="mk-link ac-cap__calls-btn"
+                :title="`查看 ${busiestMember(p).name} 的调用明细（同插件其他成员的调用需在执行日志里切换筛选）`"
+                @click="goLogs(busiestMember(p).id)"
+              >{{ statsRangeText }} {{ p.calls }} 次调用</button><i v-if="p.last !== '从未'"> · 最近 {{ p.last }}</i>
+            </span>
             <!-- 入口降级为次要描边按钮（2026-11-07 用户「绿开关紧挨深蓝按钮撞色」）：
                  本页没有「唯一主操作」，实心主色留给真正的主按钮（保存 / 新建）。 -->
             <button v-if="p.id === 'mcp'" type="button" class="mk-btn mk-btn--sm" @click="openToolCreate">新建服务</button>
@@ -196,7 +214,16 @@
             <div class="ac-form">
               <label class="mk-field">
                 <span class="mk-field__label">连接方式</span>
-                <MkSelect v-model="toolForm.transport" :options="TRANSPORT_OPTIONS" aria-label="连接方式" block />
+                <!-- 2026-11-11（困惑测试 #92）：种子里的本机进程工具（endpoint='local'）此前在
+                     弹层被显示成「HTTP 接口 + 地址 local」——三个概念互斥且保存必 400。
+                     第三档「本机进程」把内部约定值显式暴露出来。 -->
+                <MkSelect
+                  :model-value="toolForm.transport"
+                  :options="TRANSPORT_OPTIONS"
+                  aria-label="连接方式"
+                  block
+                  @update:model-value="onTransportChange"
+                />
               </label>
               <label class="mk-field">
                 <span class="mk-field__label">类型</span>
@@ -208,7 +235,7 @@
                   block
                 />
               </label>
-              <label class="mk-field mk-field--full" :class="{ 'mk-field--error': toolErrors.endpoint }">
+              <label v-if="toolForm.transport !== 'local'" class="mk-field mk-field--full" :class="{ 'mk-field--error': toolErrors.endpoint }">
                 <span class="mk-field__label">服务地址 <em class="mk-field__req">*</em></span>
                 <input
                   v-model="toolForm.endpoint"
@@ -217,6 +244,11 @@
                 />
                 <span v-if="toolErrors.endpoint" class="mk-field__err">{{ toolErrors.endpoint }}</span>
               </label>
+              <div v-else class="mk-field mk-field--full">
+                <span class="mk-field__label">服务地址</span>
+                <input class="mk-field__input" value="平台后端进程内执行，无需地址" disabled />
+                <span class="mk-field__opt">本机进程 = 在平台后端服务器上执行（不是管理员本机）。文件类工具只能读取服务端白名单目录（由后端配置限定）</span>
+              </div>
             </div>
           </section>
 
@@ -388,7 +420,7 @@
 import { computed, ref, watch, type Component } from 'vue'
 import { Globe, Image as ImageIcon, Scale, Wrench } from 'lucide-vue-next'
 import { dataSource, investigateAgent, liveSkillStatsMap } from './store'
-import { errMsg, liveRefreshSeq } from './live'
+import { errMsg, liveRefreshSeq, liveSkillStatsRange } from './live'
 import { adminMcpApi, adminPluginsApi } from '@/api/adminApi'
 import { PLUGIN_GROUPS, type PluginGroup, type PluginId } from './capabilityCatalog'
 import { useEscape } from './useEscape'
@@ -411,6 +443,9 @@ async function refreshAll() {
 interface PluginMemberRow {
   id: string
   name: string
+  /** 窗口内该成员的调用 / 失败数（「查失败」按真实失败成员跳转、「N 次调用」取最多的成员） */
+  calls: number
+  errors: number
 }
 
 interface PluginRow {
@@ -445,9 +480,16 @@ function endpointLabel(endpoint: string): string {
   return endpoint || '—'
 }
 function endpointTitle(endpoint: string): string {
-  return ENV_PLACEHOLDER.test(endpoint)
-    ? `环境变量 ${endpoint} 未替换（未在服务端配置），该工具当前不可用`
-    : endpoint
+  if (ENV_PLACEHOLDER.test(endpoint)) {
+    return `环境变量 ${endpoint} 未替换（未在服务端配置），该工具当前不可用`
+  }
+  /* 2026-11-11（困惑测试 #95）：「本机进程」对管理台读者零信息——跑在哪台机器、
+     能读哪些路径都无从判断。这里把运行时事实写进悬停（McpGateway executeLocalTool
+     在后端进程内执行；文件类工具限定 config.allowedPaths 白名单）。 */
+  if (endpoint === 'local') {
+    return '本机进程：在平台后端的服务器进程内执行，不是管理员本机。文件类工具只能读取服务端白名单目录内的文件（白名单由后端配置限定）'
+  }
+  return endpoint
 }
 /**
  * 卡面配置摘要（2026-11-07 用户「四张卡只有名字，得点进『配置』才知道在用谁」）：
@@ -512,6 +554,46 @@ function membersText(p: PluginRow): string {
   const parts: string[] = [...names]
   if (p.availability) parts.push(p.availability.text)
   return parts.join(' · ')
+}
+
+/** 卡面可用性（2026-11-11 困惑测试 #91）：开关只回答「开没开」，卡面还要回答「跑不跑得起来」。
+    只判各通道链首（主用）provider 的 configured——备选缺密钥不影响当前调用，不算「跑不起来」。 */
+function capHealth(p: PluginRow): { bad: boolean; title: string } {
+  const cfg = providerConfigs.value[p.id]
+  if (!cfg) return { bad: false, title: '' }
+  const primaryIds = cfg.channels.map((c) => c.order[0]).filter((id): id is string => !!id)
+  const missing = primaryIds
+    .map((pid) => cfg.providers.find((x) => x.id === pid))
+    .filter((x): x is PluginProvider => !!x && !x.configured)
+  if (!missing.length) return { bad: false, title: '' }
+  return {
+    bad: true,
+    title: `${missing.map((m) => m.label).join(' / ')} 未配置密钥：该能力当前无法调用，「启用」只表示没有停用`,
+  }
+}
+
+/** 统计窗口文案（2026-11-11 困惑测试 #94）：卡脚读数来自 liveSkillStatsMap，窗口由 Skills 页
+    的「统计窗口」选择器决定（同一份 ref），写「累计」会把窗口内读数读成全量。 */
+const STATS_RANGE_TEXT: Record<string, string> = { '7d': '近 7 天', '24h': '近 24 小时', '30d': '近 30 天', all: '全部时间' }
+const statsRangeText = computed(() => STATS_RANGE_TEXT[liveSkillStatsRange.value] || '近 7 天')
+
+/** 失败最多的成员（2026-11-11 困惑测试 #93）：「查失败」原先固定跳 primary，而 errorCount 是
+    成员合计——失败发生在 web-fetch / material-collector 时，跳到 web-search 的日志必为空。 */
+function failedTarget(p: PluginRow): string {
+  const sorted = [...p.members].sort((a, b) => b.errors - a.errors)
+  return sorted[0]?.errors > 0 ? sorted[0].id : p.primary
+}
+function failedTitle(p: PluginRow): string {
+  const failed = p.members.filter((m) => m.errors > 0).sort((a, b) => b.errors - a.errors)
+  if (!failed.length) return ''
+  const head = failed[0]
+  return failed.length === 1
+    ? `失败 ${head.errors} 次，来自 ${head.name}`
+    : `共 ${p.errorCount} 次失败：${failed.map((m) => `${m.name} ${m.errors} 次`).join('、')}；先看失败最多的 ${head.name}`
+}
+/** 调用最多的成员（卡脚「N 次调用」的下钻落点；执行日志一次只能按一个成员筛） */
+function busiestMember(p: PluginRow): PluginMemberRow {
+  return [...p.members].sort((a, b) => b.calls - a.calls)[0] ?? { id: p.primary, name: p.name, calls: 0, errors: 0 }
 }
 /** MCP 工具类型枚举 → 中文（下拉与表格同一套，避免同屏中英两套）。
     http 档叫「HTTP 工具」而非「HTTP 接口」：连接方式下拉的 http 档已叫后者，
@@ -594,6 +676,8 @@ function buildPluginRows(
     const members: PluginMemberRow[] = group.members.map((member) => ({
       id: member.id,
       name: member.name,
+      calls: Number(liveSkillStatsMap.value?.[member.id]?.calls ?? 0),
+      errors: Number(liveSkillStatsMap.value?.[member.id]?.errors ?? 0),
     }))
     const last = members
       .map((member) => liveSkillStatsMap.value?.[member.id]?.lastAt)
@@ -605,8 +689,8 @@ function buildPluginRows(
       icon: PLUGIN_ICONS[group.id],
       primary: group.primary,
       members,
-      calls: members.reduce((n, member) => n + (liveSkillStatsMap.value?.[member.id]?.calls ?? 0), 0),
-      errorCount: members.reduce((n, member) => n + (liveSkillStatsMap.value?.[member.id]?.errors ?? 0), 0),
+      calls: members.reduce((n, member) => n + member.calls, 0),
+      errorCount: members.reduce((n, member) => n + member.errors, 0),
       availability: group.id === 'mcp' ? mcpAvailability : null,
       last,
     }
@@ -700,9 +784,24 @@ const toolErrors = ref<{ id?: string; name?: string; endpoint?: string }>({})
    类型选项从 MCP_TYPE_TEXT 派生，避免下拉与行内展示两套中文名。 */
 const TRANSPORT_OPTIONS = [
   { value: 'http', label: 'HTTP 接口' },
-  { value: 'mcp', label: 'MCP 服务' }
+  { value: 'mcp', label: 'MCP 服务' },
+  /* 第三档不是新的 transport 取值：它是 endpoint='local' 的约定（平台进程内执行），
+     行上叫「本机进程」。保存时仍按 transport='http' + endpoint='local' 落盘。 */
+  { value: 'local', label: '本机进程' }
 ]
 const TOOL_TYPE_OPTIONS = Object.entries(MCP_TYPE_TEXT).map(([value, label]) => ({ value, label }))
+/** 连接方式切换（2026-11-11 困惑测试 #92）：选「本机进程」即把 endpoint 固定成 local 约定值，
+ *  并把类型默认到「文件系统」（其余类型目前没有进程内执行语义）。 */
+function onTransportChange(value: string) {
+  toolForm.value.transport = value
+  if (value === 'local') {
+    toolForm.value.endpoint = 'local'
+    if (toolForm.value.type === 'http') toolForm.value.type = 'filesystem'
+    if (toolErrors.value.endpoint) delete toolErrors.value.endpoint
+  } else if (toolForm.value.endpoint === 'local') {
+    toolForm.value.endpoint = ''
+  }
+}
 useEscape(() => toolOpen.value, () => { toolOpen.value = false })
 const panelRef = ref<HTMLElement | null>(null)
 const maskRef = ref<HTMLElement | null>(null)
@@ -987,7 +1086,9 @@ function openToolEdit(t: McpTool) {
   toolForm.value = {
     id: t.id,
     name: t.name,
-    transport: t.transport || 'http',
+    /* endpoint='local' 的工具在库里 transport 是 'http'，弹层必须认成「本机进程」，
+       否则显示成 HTTP 接口 + 地址 local（困惑测试 #92 的原现象）。 */
+    transport: t.endpoint === 'local' ? 'local' : t.transport || 'http',
     type: t.type,
     endpoint: t.endpoint,
     description: t.description,
@@ -999,9 +1100,10 @@ function openToolEdit(t: McpTool) {
 
 async function saveTool() {
   toolErrors.value = {}
+  const isLocal = toolForm.value.transport === 'local'
   if (!toolForm.value.id.trim()) toolErrors.value.id = '请输入工具 ID'
   if (!toolForm.value.name.trim()) toolErrors.value.name = '请输入名称'
-  if (!toolForm.value.endpoint.trim()) toolErrors.value.endpoint = '请输入 Endpoint 地址'
+  if (!isLocal && !toolForm.value.endpoint.trim()) toolErrors.value.endpoint = '请输入 Endpoint 地址'
   if (Object.keys(toolErrors.value).length) {
     // 兜底：任何字段的校验失败都必须有可见反馈，不能静默 return（此前 endpoint 的错误
     // 没有渲染位，点保存既不提交也无提示，用户读作按钮坏了）
@@ -1010,10 +1112,17 @@ async function saveTool() {
   }
   toolSaving.value = true
   try {
+    /* 「本机进程」落盘为 transport='http' + endpoint='local'（运行时按 endpoint 走
+       executeLocalTool），与种子 config/mcp.json 的 file-reader 同形。 */
+    const payload = {
+      ...toolForm.value,
+      transport: isLocal ? 'http' : toolForm.value.transport,
+      endpoint: isLocal ? 'local' : toolForm.value.endpoint,
+    }
     if (toolEditingId.value) {
-      await adminMcpApi.updateTool(toolEditingId.value, { ...toolForm.value })
+      await adminMcpApi.updateTool(toolEditingId.value, payload)
     } else {
-      await adminMcpApi.createTool({ ...toolForm.value })
+      await adminMcpApi.createTool(payload)
     }
     await loadMcpTools()
     toolOpen.value = false
@@ -1122,9 +1231,10 @@ function goLogs(skillId: string) {
    2026-11-05 曾按用户「先保持一致」做成四张同宽单列——一致性有了，但 1360px 宽里
    每张卡只有一行标题 + 一行成员，纵向白占了 3 屏。列数只在内置能力之间统一，
    MCP 的宽度由它的内容（服务表）决定，不再假装自己是第四张同形卡。 */
+/* 区头走共享 .mk-section__head / .mk-section__title（2026-11-11）：原私有 .ac-section__head /
+   .ac-section__title 把「可选能力」排成 15px/650 的正文重标题，与全站段头（12px 弱化小标签）
+   不是同一套字阶；私有类删除后与「运行指标 / 执行链路 / 建对照臂」等段头一致。 */
 .ac-section { display: grid; gap: 12px; }
-.ac-section__head { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.ac-section__title { margin: 0; font-size: var(--mk-fs-emphasis); font-weight: 650; color: var(--mk-ink); }
 .ac-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 @media (min-width: 1024px) {
   .ac-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -1188,6 +1298,9 @@ function goLogs(skillId: string) {
   text-overflow: ellipsis;
 }
 .ac-cap__calls i { font-style: normal; color: var(--mk-faint); }
+/* 读数即入口（2026-11-11 困惑测试 #94）：默认保持脚注的灰字观感，悬停才露出可点语言 */
+.ac-cap__calls-btn { padding: 0; color: inherit; font-size: inherit; font-weight: 400; }
+.ac-cap__calls-btn:hover { color: var(--mk-blue); text-decoration: underline; }
 .ac-cap__fail { font-size: var(--mk-fs-micro); }
 /* 停用只压信息层，开关与按钮保持清晰可点 */
 .ac-cap.is-off .ac-cap__id,

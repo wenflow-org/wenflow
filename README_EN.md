@@ -145,27 +145,71 @@ Beyond the learner app there is a full operations and observability console (`/a
 
 ## Quick Start in 3 Minutes
 
-Requirements: **Node.js >= 22.23.4**; Windows (PowerShell 5.1+), Linux, or macOS; on Linux/macOS you can also run `./docker-start.sh` to use Docker.
+Requirements: **Node.js >= 22.23.4** (`node -v`); Windows (PowerShell 5.1+), Linux, or macOS; on Linux/macOS you can also run `./docker-start.sh` to use Docker.
 
 ```bash
 # 1) Clone
 git clone https://github.com/wenflow-org/wenflow.git
 cd wenflow
 
-# 2) Initialise config (set the AI API key and the admin password)
-npm run env:setup
+# 2) Install dependencies (fresh machines: use the lockfile, so the start script does not fall back to npm install)
+npm ci
+npm --prefix backend ci
+npm --prefix frontend ci
 
-# 3) One-command start (installs dependencies, initialises both databases, syncs built-in prompts, then starts both ends)
+# 3) Initialise backend/.env
+#    Windows: interactive wizard; generates JWT_SECRET / SECRET_ENCRYPTION_KEYS for you
+npm run env:setup
+#    Linux / macOS: the wizard is PowerShell-only; configure manually:
+#    cp backend/.env.example backend/.env
+#    Fill in at least:
+#      JWT_SECRET=<random string, 32+ chars>
+#      SECRET_ENCRYPTION_CURRENT_KEY_ID=v1
+#      SECRET_ENCRYPTION_KEYS=v1:<32-byte Base64>
+#      AI_API_KEY=<real key>
+#      INIT_ADMIN_PASSWORD=<12+ chars, upper/lower case and digits>
+#    Generate random values:
+#      node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
+#      node -e "console.log('v1:'+require('crypto').randomBytes(32).toString('base64'))"
+
+# 4) One-command start (migrates both databases, syncs built-in prompts, then starts both ends)
 npm run dev
 ```
 
 Then open:
 
 - Learner app: http://localhost:5173
-- Admin console: http://localhost:5173/admin (log in with the admin account you just set)
+- Admin console: http://localhost:5173/admin (log in with the admin account you set in step 3)
 - Backend API: http://localhost:3001
 
 > If it will not start or behaves oddly, run `npm run doctor` first: read-only, takes seconds, and checks Node / dependencies / `.env` / both databases / CORS / ports with fix suggestions.
+
+<details>
+<summary><b>Fresh-machine checklist (tested 2026-11-11: empty AI key + no plugin keys)</b></summary>
+
+| Item | Required? | Test result |
+|---|---|---|
+| Node.js >= 22.23.4 + npm | Yes | Older versions fail at the Prisma / Vite stage |
+| `backend/.env` | Yes | Missing file stops the start script; Linux/macOS must create it manually in step 3 |
+| `JWT_SECRET` (32+ chars) | Yes | Missing or weak value fails fast |
+| `SECRET_ENCRYPTION_CURRENT_KEY_ID` + `SECRET_ENCRYPTION_KEYS` | Yes | Validated by `runtime:validate` inside `prisma:prepare`; missing keys exit |
+| `DATABASE_URL` / `SYSTEM_DATABASE_URL` | Yes | Defaults `file:./dev.db` / `file:../system.db`; SQLite needs no external database |
+| `AI_API_URL` / `AI_API_KEY` / `AI_MODEL` | Yes for the one-command start; no for the backend process | With an empty key the backend still reports `/readyz` = `ready`, but `aiConfiguration` = `warning` and goal/path/teaching calls are unavailable. Windows `npm run dev` blocks an empty key; Linux `start-dev.sh` does not |
+| Embedding / Rerank | No | Boots normally when empty; semantic retrieval and rerank fail open to keyword/window paths |
+| Web / decision / image / MCP plugins | No | A fresh DB enables all four bundles; without keys the page shows "missing key". Disabling all four and restarting still reaches `ready`. MCP ships a local `file-reader` tool that can be disabled or deleted |
+| `INIT_ADMIN_PASSWORD` | No in development / yes in production | Development falls back to a built-in default; production skips admin creation when empty |
+
+**UI/admin-only boot without an AI key**: Windows `npm run dev` blocks an empty `AI_API_KEY`; bypass the one-command script with:
+
+```bash
+npm --prefix backend run prisma:prepare
+npm --prefix backend run dev:server   # 3001
+npm --prefix frontend run dev         # 5173
+```
+
+The backend still lets you log in, open plugin configuration and every read-only page; `/readyz` keeps `aiConfiguration=warning` and all AI calls are unavailable.
+
+</details>
 
 <details>
 <summary><b>First run and common pitfalls (click to expand)</b></summary>
@@ -173,7 +217,10 @@ Then open:
 - **Always use `npm ci`, never `npm install`.** The lockfile contains mirror-sourced optional / peer entries (e.g. `@parcel/watcher`, `@bufbuild/protobuf`); `npm install` rewrites the lockfile from the current resolution and drops those entries in bulk (hundreds of deleted lines that are not real code changes). To install manually: `npm ci && npm --prefix backend ci && npm --prefix frontend ci`.
 - `npm run dev` already runs `prisma:prepare` (generate both Prisma clients + deploy migrations for both databases). Only if you start things step by step, or explicitly skip it (PowerShell `./start-dev.ps1 -SkipPrisma`, bash `./start-dev.sh --skip-prisma`), do you need to run `npm --prefix backend run prisma:prepare` yourself.
 - The skip option also skips the pre-start core-prompt sync and is only meant for environments where the databases and prompts are already prepared.
-- If `backend/.env` is missing or `JWT_SECRET` is invalid, the start script launches the setup flow automatically.
+- On Windows, a missing `backend/.env` or an invalid `JWT_SECRET` makes `start-dev.ps1` launch the setup wizard; Linux/macOS `start-dev.sh` does not generate secrets, so fill them in manually as in step 3.
+- **Empty AI key boundary**: the backend process starts, but `npm run dev` (Windows) blocks it before launch. Use the step-by-step commands above for UI/admin-only acceptance. Do not use a placeholder key to pretend it is configured — `sk-your-api-key` is treated as missing.
+- **Ports**: the default ports are 3001 (backend) and 5173 (frontend). If either is occupied, the one-command start exits; stop the old process first.
+- If npm 11.16+ prints `allow-scripts ... not yet covered`, install scripts for packages such as Prisma / esbuild were skipped. Follow the prompt (`npm approve-scripts --allow-scripts-pending`) and re-run `npm ci`. On this machine Prisma generation, Vite dev and the frontend build still worked with those scripts skipped, but approving them is the safer troubleshooting path.
 - Health probes: `/health` and `/livez` only mean the process is alive; `/readyz` means both databases and core runtime state can serve traffic. To restart the backend use the single entry point `node backend/restart.mjs --port=<port>` (`--status` to inspect, `--stop` to stop); do not kill ports by hand or start with a bare `ts-node`.
 
 </details>

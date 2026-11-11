@@ -39,8 +39,10 @@
         <div class="mk-card__head ac-conn__head">
           <div class="ac-conn__id">
             <h3 class="mk-card__title">服务连接</h3>
-            <span v-if="keySet" class="mk-badge mk-badge--ok">已就绪</span>
-            <span v-else class="mk-badge mk-badge--warn">待配置</span>
+            <!-- 就绪 = 地址 + 密钥都齐（2026-11-11）：原判据只看 keySet，地址清空后
+                 卡头仍报「已就绪」，与下方向导弹窗的「待配置」互相矛盾。 -->
+            <span v-if="connReady" class="mk-badge mk-badge--ok" title="地址与密钥齐全，可以测试连接">已就绪</span>
+            <span v-else class="mk-badge mk-badge--warn" :title="connMissingText">待配置</span>
           </div>
           <div class="mk-card__head-right ac-conn-summary">
             <span class="ac-conn-summary__chan">默认全局通道</span>
@@ -151,12 +153,13 @@
       <ModelProvidersPanel
         ref="providersRef"
         :upstream="models"
+        :upstream-types="fetchedModelTypes"
         :default-model="defaultModel"
         :pull-loading="fetching"
         :pull-error="fetchError"
         :pull-stale="pullStale"
         @registered="onProvidersRegistered"
-        @platform-models="onPlatformModels"
+        @default-candidates="onDefaultCandidates"
         @fetch-upstream="onFetchClick"
         @set-default="onSetDefault"
         @remove-model="onModelRemoved"
@@ -246,6 +249,7 @@ const mountedModelIds = ref<string[]>([])
  * 首个挂载模型自动成为平台默认（只在默认为空时兜底一次）。
  * 已有默认绝不改写——默认是「没单独配的 Skill 走哪个」的落点，静默换掉它等于换掉一批技能的行为。
  * 失败不抛给用户：这是兜底便利，不是用户动作；他仍可在模型行的 ⋯ 里手动设。
+ * 2026-11-11 路径 A：本页只有平台通道，候选就是它挂载的对话模型。
  */
 const defaultSeeded = ref(false)
 async function seedDefaultModel(): Promise<void> {
@@ -253,7 +257,6 @@ async function seedDefaultModel(): Promise<void> {
   // 连接设置还有未保存改动时先不种：写默认会重拉配置回显，把未保存的连接改动冲掉
   if (dirty.value.has('conn')) return
   if (!cfg.value || defaultModel.value || !mountedModelIds.value.length) return
-  if (!cfg.value.apiUrl) return
   defaultSeeded.value = true
   try {
     const first = mountedModelIds.value[0]
@@ -298,8 +301,8 @@ function onProvidersRegistered(): void {
      保留处理器只为槽位契约不变（面板变更时仍会回传）。 */
 }
 
-/** 平台通道挂载的模型变更（增删后都会回传）：默认候选跟着它走，空默认时顺手种一个 */
-function onPlatformModels(ids: string[]): void {
+/** 默认候选（平台通道挂载的对话模型）：空默认时顺手种一个 */
+function onDefaultCandidates(ids: string[]): void {
   mountedModelIds.value = ids
   void seedDefaultModel()
 }
@@ -392,6 +395,8 @@ const form = reactive({
   apiKey: '',
 })
 const fetchedModels = ref<string[]>([])
+/** 上游模型软分类（id → llm/embedding/reranker/unknown）：与清单同一次拉取返回 */
+const fetchedModelTypes = ref<Record<string, string>>({})
 const keySet = ref(false)
 const keyVisible = ref(false)
 const connectionStatus = ref('unknown')
@@ -584,6 +589,15 @@ const testing = ref(false)
 
 /** 首次配置：还没填地址、或密钥还没配 → 主动作是「保存并获取模型」而不是「保存连接配置」 */
 const needsSetup = computed(() => !form.apiUrl.trim() || !keySet.value)
+/** 服务连接是否就绪：地址与密钥缺一不可（卡头徽标与页顶摘要共用同一判据） */
+const connReady = computed(() => !!form.apiUrl.trim() && keySet.value)
+/** 「待配置」的具体缺口：徽标悬停要能回答还差什么，而不是只给一个状态词 */
+const connMissingText = computed(() => {
+  const missing: string[] = []
+  if (!form.apiUrl.trim()) missing.push('服务地址')
+  if (!keySet.value) missing.push('API Key')
+  return missing.length ? `还缺：${missing.join('、')}` : '服务地址与 API Key 均已配置'
+})
 /** 连接配置弹窗开合（2026-11-09：原先是页面内展开的内联表单；没配地址时自动打开，
     首次部署就是要填它） */
 const connOpen = ref(false)
@@ -646,7 +660,7 @@ async function testConn(): Promise<void> {
   }
   testing.value = true
   try {
-    const list = await liveFetchModels(form.apiUrl, form.apiKey)
+    const { models: list } = await liveFetchModels(form.apiUrl, form.apiKey)
     toast.success(list.length ? `连接成功，上游返回 ${list.length} 个模型` : '连接成功，上游未返回模型列表')
   } catch (e) {
     toast.error(`连接失败：${errMsg(e)}`)
@@ -679,8 +693,9 @@ async function fetchModels(source: 'open' | 'refetch' = 'refetch'): Promise<void
   }
   fetching.value = true
   try {
-    const list = await liveFetchModels(form.apiUrl, form.apiKey)
+    const { models: list, types } = await liveFetchModels(form.apiUrl, form.apiKey)
     fetchedModels.value = list
+    fetchedModelTypes.value = types
     fetchedModelsEndpoint.value = form.apiUrl.trim()
     modelsFetchedOnce.value = true
     connectionStatus.value = 'connected'
@@ -907,7 +922,7 @@ async function resetConfig() {
 .ac-key-toggle {
   flex-shrink: 0;
   border: 1px solid var(--mk-line);
-  background: #fafbfc;
+  background: var(--mk-surface-2);
   border-radius: var(--mk-radius-sm);
   width: 32px;
   height: 32px;
@@ -960,6 +975,6 @@ async function resetConfig() {
 html[data-theme='dark'] {
   .ac-key-toggle:hover { background: color-mix(in srgb, var(--wf-color-primary) 14%, transparent); }
   /* 补漏：密钥切换钮浅底（模型胶囊随清单胶囊退役，2026-10-16） */
-  .ac-key-toggle { background: #232325; color: var(--mk-muted); }
+  .ac-key-toggle { background: var(--mk-surface-2); color: var(--mk-muted); }
 }
 </style>

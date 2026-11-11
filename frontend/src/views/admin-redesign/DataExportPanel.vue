@@ -16,6 +16,14 @@
                现统一收到这一句，卡片内不再复读「最近 20000 条 / 最近 1000 行」。 -->
           <span class="mk-card__meta">所选数据将分别导出为独立的 CSV 文件（业务数据单表上限 20,000 条）</span>
         </div>
+        <!-- 六张表逐张勾太慢（2026-11-11）：一枚「全选 / 清空」并到卡头，与主按钮分开——它批量选，
+             不执行。导出中禁用，避免导出集的快照与屏上勾选打架。 -->
+        <button
+          type="button"
+          class="mk-link exp-all"
+          :disabled="exportRunning"
+          @click="toggleAll"
+        >{{ allSelected ? '清空' : '全选' }}</button>
       </div>
 
       <div class="exp-groups">
@@ -31,7 +39,7 @@
                 :options="LOG_LIMIT_OPTIONS"
                 size="sm"
                 aria-label="日志条数上限"
-                :disabled="exporting !== ''"
+                :disabled="exportRunning"
               />
             </label>
           </div>
@@ -40,13 +48,13 @@
               v-for="item in g.items"
               :key="item.key"
               class="exp-item mk-choice"
-              :class="{ 'mk-choice--on': exportSel.includes(item.key), 'exp-item--busy': exporting !== '' }"
+              :class="{ 'mk-choice--on': exportSel.includes(item.key), 'exp-item--busy': exportRunning }"
             >
               <input
                 type="checkbox"
                 class="exp-item__box"
                 :checked="exportSel.includes(item.key)"
-                :disabled="exporting !== ''"
+                :disabled="exportRunning"
                 @change="toggleExport(item.key)"
               />
               <span class="exp-item__body">
@@ -59,7 +67,12 @@
       </div>
 
       <div class="exp-foot">
-        <span class="exp-hint">已选 {{ exportSel.length }} 项</span>
+        <!-- 多表导出是一段等待（每张表后端两次快照），进度必须说清「第几张、导的是哪张」，
+             否则按钮上的「导出中…」在 6 张表时看上去像卡住。 -->
+        <span v-if="exportRunning" class="exp-hint exp-hint--busy">
+          正在导出：{{ currentLabel }}（{{ exportStep }} / {{ exportTotal }}）
+        </span>
+        <span v-else class="exp-hint">已选 {{ exportSel.length }} 张表</span>
         <!-- 2026-11-06 复核：任务单 §7.2 原拟改写为「已自动脱敏」，但导出链路并没有脱敏——
              用户 CSV 直出 email（backend/src/services/admin/export.repo.ts:15），审计 CSV 直出
              ip（同文件 :69），csvCell 只做转义与公式中和（backend/src/routes/admin/export.ts:26-42）。
@@ -74,17 +87,17 @@
         <button
           type="button"
           class="mk-btn mk-btn--primary exp-go"
-          :disabled="!exportSel.length || exporting !== ''"
+          :disabled="!exportSel.length || exportRunning"
           :title="!exportSel.length ? '先勾选要导出的表' : undefined"
           @click="runExport"
-        >{{ exporting !== '' ? '导出中…' : '开始导出' }}</button>
+        >{{ exportRunning ? `导出中 ${exportStep}/${exportTotal}…` : '开始导出' }}</button>
       </div>
     </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { errMsg } from './live'
 import { adminAxios } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
@@ -149,11 +162,25 @@ function toggleExport(key: string) {
     ? exportSel.value.filter((k) => k !== key)
     : [...exportSel.value, key]
 }
+const allSelected = computed(() => exportSel.value.length === exportDefs.length)
+/** 全选 / 清空：六张表逐张勾太慢；也是「只差两张没勾」时最快看全清单的方式 */
+function toggleAll() {
+  exportSel.value = allSelected.value ? [] : exportDefs.map((d) => d.key)
+}
 
+/** 当前正在写的表（导出期间）；批量进度只服务多表场景，单表时也显示 1/1 */
 const exporting = ref('')
+const exportRunning = ref(false)
+const exportStep = ref(0)
+const exportTotal = ref(0)
+const currentLabel = computed(
+  () => exportDefs.find((d) => d.key === exporting.value)?.label || '',
+)
 
-async function doExport(key: string) {
+/** 单表导出：成功返回 true，失败只报这一张的表名（批量时不能只说「导出失败」） */
+async function doExport(key: string): Promise<boolean> {
   exporting.value = key
+  const label = exportDefs.find((d) => d.key === key)?.label || key
   try {
     const params = LOG_EXPORT_KEYS.has(key) ? `?limit=${logLimit.value}` : ''
     const response = await adminAxios.get(`/admin/export/${key}${params}`, { responseType: 'blob' })
@@ -168,20 +195,19 @@ async function doExport(key: string) {
     a.click()
     a.remove()
     URL.revokeObjectURL(url)
-    toast.success('导出成功，已开始下载')
+    return true
   } catch (e) {
-    toast.error(`导出失败：${errMsg(e)}`)
-  } finally {
-    exporting.value = ''
+    toast.error(`「${label}」导出失败：${errMsg(e)}`)
+    return false
   }
 }
 
-/** 顺序导出所选项（共用 exporting 守卫，按钮同时禁用防并发）。
+/** 顺序导出所选项（exportRunning 守卫，按钮与勾选同时禁用防并发）。
     审核 #177：先快照数组再遍历——此前 for…of 直接迭代 ref，导出中途改选会改到本次导出集，
-    与实时变的「已选 N 项」提示不一致（chips 现已随 exporting 禁用，快照是第二道保险）。 */
+    与实时变的「已选 N 张表」提示不一致（chips 现已随导出禁用，快照是第二道保险）。 */
 async function runExport() {
   const keys = [...exportSel.value]
-  if (!keys.length) return
+  if (!keys.length || exportRunning.value) return
   /* 导出范围写进确认框：勾选多表时用户未必记得「日志随条数上限、业务表固定 2 万条」的差异，
      且导出文件含邮箱/IP 等个人数据，落盘前明确范围与用途。单位与卡片文案统一为「条」。 */
   const labels = keys.map((k) => exportDefs.find((d) => d.key === k)?.label || k)
@@ -191,17 +217,43 @@ async function runExport() {
   if (keys.length > logKeys.length) ranges.push('业务表最近 20,000 条')
   // 按勾选顺序列出本次会落盘的个人数据（Set 去重：两张日志表说明不同，但未来加表可能撞词）
   const contents = [...new Set(keys.map((k) => EXPORT_DATA_NOTES[k] || k))]
+  // 三行而不是一段长句：表、范围、含哪些个人数据各自成行，落盘前一眼能核对（confirm 支持换行）
+  const message = [
+    `将导出 ${keys.length} 张表：${labels.join('、')}。`,
+    `范围：${ranges.join('，')}。`,
+    `文件包含${contents.join('、')}，请按数据安全规范保存。`,
+  ].join('\n')
   const ok = await askConfirm({
     title: '导出数据',
-    message: `将导出 ${labels.join('、')}（共 ${keys.length} 项，${ranges.join('，')}）。文件包含${contents.join('、')}，请按数据安全规范保存。`,
+    message,
     confirmText: '开始导出',
     // 导出是只读取数、不改动任何数据，不该沿用破坏性操作的红色警示按钮
     danger: false,
   })
   if (!ok) return
-  for (const key of keys) {
-    if (exporting.value !== '') return
-    await doExport(key)
+
+  exportRunning.value = true
+  exportStep.value = 0
+  exportTotal.value = keys.length
+  let okCount = 0
+  try {
+    for (const key of keys) {
+      exportStep.value += 1
+      if (await doExport(key)) okCount += 1
+    }
+  } finally {
+    // 成功合并成一条：逐表各弹一次「导出成功」在 6 张表时会刷满 toast 池，读者反而看不到失败项
+    if (okCount) {
+      toast.success(
+        okCount === 1
+          ? '导出成功，已开始下载'
+          : `已导出 ${okCount} 个 CSV 文件，已开始下载`,
+      )
+    }
+    exporting.value = ''
+    exportRunning.value = false
+    exportStep.value = 0
+    exportTotal.value = 0
   }
 }
 </script>
@@ -252,6 +304,10 @@ async function runExport() {
   display: flex;
   align-items: flex-start;
   gap: 10px;
+  /* 两行描述与一行描述同高：三列并排时，组内第二张卡不会被左列的换行顶下去，
+     两行卡片在各组之间保持同一基线（2026-11-11 视觉复核）。 */
+  min-height: 86px;
+  box-sizing: border-box;
   padding: 12px 14px;
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-lg);
@@ -286,6 +342,10 @@ async function runExport() {
 }
 .exp-go { margin-left: auto; }
 .exp-hint { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-ink); }
+/* 批量导出进行中：数字用等宽数字，2/6 → 3/6 切换时按钮不左右抖 */
+.exp-hint--busy { font-variant-numeric: tabular-nums; }
+.exp-all { padding-inline: 4px; }
+.exp-all:disabled { opacity: 0.45; cursor: default; }
 .exp-note { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .exp-note::before { content: '·'; margin-right: 6px; color: var(--mk-faint); }
 </style>

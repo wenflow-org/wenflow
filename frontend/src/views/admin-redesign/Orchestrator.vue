@@ -4,7 +4,10 @@
          「字段流转」——看的是字段在 Skill 间怎么流，不是一张拓扑图；页头却还叫「编排图」）。
          2026-10-04 状态条退役，读数迁页首 KPI 带；2026-10-12 按用户走查再收一层：
          三张纯读数卡撤（阶段/Skill 进总览卡头 meta），无警时页头直接接页签（详见下方告警条注释） -->
-    <MkPageHead title="字段流转" />
+    <!-- 2026-11-11（困惑测试 #51）：页名「字段流转」但总览只答「有哪些阶段 / 每阶段哪些 Skill」，
+         落地 20 秒说不清这页给谁用、字段在哪。补一行自述（总览与字段视图的分工），
+         不改总览本身（撤列脚字段读数是 2026-11-10 裁决，见下方注释）。 -->
+    <MkPageHead title="字段流转" sub="总览看五阶段管线与编排 Skill 的分工。字段从哪来到哪去，点阶段页签看「字段旅程」。逐条契约在「字段路由」" />
     <!-- 页头刷新已撤（2026-10-16 用户走查「这个刷新是不是重了，有一个固定的刷新了」）：
          本页原先另有一颗页头「刷新」，实测与顶栏固定刷新各打一半数据——页头打运行时定义/
          阶段清单/对账，顶栏打拓扑/目录/其余全域，用户按任一颗都会以为整页刷了。
@@ -43,7 +46,7 @@
         :tabindex="pane !== 'overview' && active === s.id ? 0 : -1"
         :title="stageTabTitle(s)"
         @click="selectStageTab(s.id)"
-      >{{ stageTabLabel(s) }}<span class="tab__count">{{ s.skills.length }}</span></button>
+      >{{ stageTabLabel(s) }}<span class="tab__count" :title="`本阶段挂载 ${s.skills.length} 个编排 Skill（名册数，与字段旅程的步数不同源）`">{{ s.skills.length }} 个</span></button>
     </div>
 
     <!-- ===== 总览：全旅程 odg 画布（newui/admin odg-canvas 形态）=====
@@ -71,8 +74,15 @@
                （触控板双指捏合走同一条，浏览器把它合成 ctrlKey 的 wheel）；指针处为锚点。
                放大后按钮文案带出「适应宽度」动作（2026-11-02 评审）：原先只有一枚百分比读数，
                被裁掉的两侧没有可见的收束入口 -->
-          <button type="button" class="mk-btn mk-btn--sm orch-odg-zoom__val" @click="odgZoom = 1">
-            {{ odgZoom === 1 ? '100%' : `适应宽度 · ${Math.round(odgZoom * 100)}%` }}
+          <!-- 2026-11-11（困惑测试 #52）：默认档原先只有裸「100%」，紧挨读数 meta 被读成覆盖率/健康度。
+               带出「缩放」二字并补 title；放大态文案（点击复位）沿用 2026-11-02 评审。 -->
+          <button
+            type="button"
+            class="mk-btn mk-btn--sm orch-odg-zoom__val"
+            :title="odgZoom === 1 ? '当前缩放比例 100%，点击复位' : '点击复位到 100%'"
+            @click="odgZoom = 1"
+          >
+            {{ odgZoom === 1 ? '缩放 100%' : `适应宽度 · ${Math.round(odgZoom * 100)}%` }}
           </button>
         </div>
       </div>
@@ -814,10 +824,15 @@ function skillNodeTitle(sk: Stage['skills'][number], s: Stage): string {
   return lines.join('\n')
 }
 
-/** 治理卡头读数：运行时定义条数 + 一致性核查已上线数 */
-const govMetaTitle = computed(() =>
-  recReport.value ? `一致性核查：已上线 ${recLiveCount.value} / 登记 ${recTotalCount.value}` : '一致性核查报告不可用'
-)
+/** 治理卡头读数：运行时定义条数 + 一致性核查已上线数。
+ *  2026-11-11（困惑测试 #53/#64）：光标下是「编排定义 5 · Skill 定义 36」，title 却只解释
+ *  一致性核查——三个 Skill 计数（总览挂载 21 / 运行时定义 36 / 目录档案 30）无处对照。 */
+const govMetaTitle = computed(() => {
+  const scope = `三种 Skill 计数统计不同：本页总览「编排 Skill」= 各阶段挂载节点（${totalSkills.value} 个）· 这里「Skill 定义」= 运行时注册定义条数 · 「Skill 目录」页签 = 目录档案数。`
+  return recReport.value
+    ? `${scope}一致性核查：已上线 ${recLiveCount.value} / 登记 ${recTotalCount.value}`
+    : `${scope}一致性核查报告不可用`
+})
 </script><style scoped>
 /* 一级页签（原型 .tabs 下划线页签）：样式 2026-10-05 CM1 收敛到全局
    .tabs/.tab（mk-primitives.css），本页只留容器间距修饰。 */
@@ -911,8 +926,10 @@ html[data-theme='dark'] {
      端点落在卡片之间的空白里。画布本来就靠滚动区承接溢出，SVG 不该被容器夹窄。 */
   max-width: none;
 }
-.orch-odg-edge { fill: none; stroke: var(--mk-blue, #2f6ae0); stroke-width: 1.6; opacity: 0.85; }
-.orch-odg-svg marker path { fill: var(--mk-blue, #2f6ae0); }
+/* 连线走图专用前景蓝（--mk-graph-blue-ink）：浅色档与 --mk-blue 同值 #2f6ae0，
+   深色档提亮成 #9db8f5——1.6px 细线压在深卡面上仍可辨（2026-11-11 深色对比度）。 */
+.orch-odg-edge { fill: none; stroke: var(--mk-graph-blue-ink, #2f6ae0); stroke-width: 1.6; opacity: 0.85; }
+.orch-odg-svg marker path { fill: var(--mk-graph-blue-ink, #2f6ae0); }
 /* 列宽地板必须显式：flex 项默认 min-width:auto 的内容地板会被列内长串顶开——2026-10-04
    的注入实验里（当时列脚挂着 outs 字段名）五列被顶到 411–1066px、画布总宽 4457px，
    1920 档只见 2/5 列。现在列内是 Skill 中文名 + 长 id，同样会撑内容地板。
@@ -950,7 +967,12 @@ html[data-theme='dark'] {
 }
 .orch-odg-node:hover { border-color: var(--mk-blue, #2f6ae0); box-shadow: var(--mk-shadow-sm, 0 1px 3px rgba(15, 23, 42, 0.1)); }
 .orch-odg-idx { font-family: var(--mk-mono); font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint); }
-.orch-odg-nodename { font-size: var(--mk-fs-micro, 12px); font-weight: 600; color: var(--mk-ink); }
+/* 节点名允许折行（中文长名如「虚拟学习者教学回合模拟」会占两行）：列宽 196px 下不硬切，
+   也不撑破列地板；完整名称另有 skillNodeTitle 悬停。 */
+.orch-odg-nodename { font-size: var(--mk-fs-micro, 12px); font-weight: 600; color: var(--mk-blue-text, #1f57cc); overflow-wrap: anywhere; }
+/* 2026-11-11（困惑测试 #54）：节点可点，但静止态与纯展示卡同外观，靠误触才发现入口。
+   沿用字段旅程卡题的可点击语言（蓝字 = 可交互），悬停再给下划线。 */
+.orch-odg-node:hover .orch-odg-nodename { text-decoration: underline; }
 /* Skill id（英文名）：与中文显示名分行。允许折行而不是省略号——运营要照着这枚 id
    去对 Skill 目录 / 执行日志，截断了反而对不上（长 id 如 virtual-learner-* 会占两行）。 */
 .orch-odg-slug {

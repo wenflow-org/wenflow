@@ -7,26 +7,43 @@
       <template #actions>
         <!-- 口径开关已退役（2026-10-21 用户拍板「没有测试，测试只是备注」）：
              列表 = 全部非虚拟账号，测试/审计账号行内备注；虚拟学习者归自己的域 -->
+        <!-- 注册设置迁到用户页（2026-11-11）：它决定「能不能自助建号」，与「新建用户」是同一个
+             账号入口的两条来路，放在同一处才讲得通（原在系统设置 → 访问与注册） -->
+        <button type="button" class="mk-btn mk-btn--sm" @click="registrationOpen = true">注册设置</button>
         <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="usersRef?.openCreate?.()">新建用户</button>
       </template>
     </MkPageHead>
 
     <Users ref="usersRef" embedded />
+    <RegistrationSettingsDialog v-model:open="registrationOpen" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import Users from './Users.vue'
+import RegistrationSettingsDialog from './RegistrationSettingsDialog.vue'
 
-const usersRef = ref<{ refresh?: () => void; openCreate?: () => void } | null>(null)
+const usersRef = ref<{ refresh?: () => void; openCreate?: () => void; setPill?: (p: string) => void } | null>(null)
+/** 注册设置（2026-11-11 从系统设置迁入）：自助注册开关与单 IP 配额 */
+const registrationOpen = ref(false)
 
 const route = useRoute()
 const router = useRouter()
 /* 旧深链兼容：/admin/people?tab=state → 学习状态独立页（拆页 2026-10-04）；
    其余 query（tab=account 等）就地归零，不再有第二视图 */
+/* 平台总览「用户活跃」卡带 ?pill=online 深链：此前 query 被静默丢弃，点了两数无法对照。
+   2026-11-11（困惑测试 #12）：把档位交给内嵌列表。 */
+watch(
+  () => route.query.pill,
+  (p) => {
+    if (typeof p === 'string' && p) void nextTick(() => usersRef.value?.setPill?.(p))
+  },
+  { immediate: true }
+)
+
 watch(
   () => route.query.tab,
   (t) => {

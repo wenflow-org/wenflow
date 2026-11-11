@@ -185,8 +185,10 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     expect(wrapper.find('.ac-cap .ac-mcp__row').exists()).toBe(true);
     /* 2026-11-05 用户「这种说明文案不要」：区头那行「4 项能力 · 6 个 Skill」是把下方
        四张卡再数一遍，撤除；区头只剩区名（读失败的徽标才保留）。 */
-    const sectionHead = wrapper.find('.ac-section__head');
+    // 2026-11-11：区头收敛到共享 .mk-section__head / .mk-section__title（原私有 .ac-section__* 已删）
+    const sectionHead = wrapper.find('.mk-section__head');
     expect(sectionHead.text()).toBe('可选能力');
+    expect(sectionHead.find('.mk-section__title').exists()).toBe(true);
     expect(sectionHead.find('.mk-badge').exists()).toBe(false);
     expect(wrapper.find('.ac-section__meta').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('项能力 ·');
@@ -221,7 +223,10 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     expect(webFacts).toContain('Tavily → Exa');
     // 没有配置数据的卡（决策 / 生图 fixture 里为空）不渲染空摘要
     expect(rows[1].find('.ac-cap__facts').exists()).toBe(false);
-    expect(rows[0].find('.ac-cap__calls').text()).toContain('累计 0 次调用');
+    /* 2026-11-11 困惑测试 #94：读数带统计窗口（与 Skills 页共用窗口选择器，默认近 7 天），
+       且做成可点下钻——原「累计 N 次调用」既错量词又无入口。 */
+    expect(rows[0].find('.ac-cap__calls').text()).toContain('近 7 天 0 次调用');
+    expect(rows[0].find('.ac-cap__calls button').exists()).toBe(true);
     // 列表仍不回答 Skill 的 LLM 路由问题
     expect(text).not.toContain('deepseek-v4-flash');
     expect(text).not.toContain('跟随平台默认');
@@ -231,7 +236,7 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     expect(switches[0].attributes('title')).toBeUndefined();
     /* 入口从卡头（与绿开关并排）下移到卡脚，并降为次要描边按钮——
        本页没有唯一主操作，实心主色不在这里和开关抢视觉。 */
-    const entries = wrapper.findAll('.ac-cap__foot button');
+    const entries = wrapper.findAll('.ac-cap__foot .mk-btn');
     expect(entries.map((b) => b.text())).toEqual(['配置', '配置', '配置', '新建服务']);
     expect(entries.every((b) => b.classes().includes('mk-btn'))).toBe(true);
     expect(entries.some((b) => b.classes().includes('mk-btn--primary'))).toBe(false);

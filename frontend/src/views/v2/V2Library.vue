@@ -2,7 +2,14 @@
   <div class="library v2-page">
     <V2Nav />
 
-    <main class="library__main">
+    <main
+      class="library__main"
+      :class="{ 'library__main--drop': dragActive }"
+      @dragenter.prevent="onDragEnter"
+      @dragover.prevent
+      @dragleave="onDragLeave"
+      @drop.prevent="onDrop"
+    >
       <header class="library__head">
         <div class="library__head-main">
           <h1>资料库</h1>
@@ -16,9 +23,13 @@
         </button>
       </header>
 
+      <p v-if="dragActive" class="library__drop-hint" role="status">松开即可上传</p>
+
       <input ref="fileInput" type="file" class="library__input" multiple :accept="ACCEPT" @change="onPick" />
 
-      <p v-if="error" class="library__error">{{ error }}</p>
+      <div v-if="uploadErrors.length" class="library__error" role="alert">
+        <p v-for="(message, index) in uploadErrors" :key="index">{{ message }}</p>
+      </div>
 
       <div v-if="items.length" class="library__tools">
         <div class="library__tabs" role="tablist" aria-label="资料筛选" @keydown="onFilterKeydown">
@@ -67,14 +78,17 @@
         @action="load"
       />
 
-      <V2ResultState
-        v-else-if="!items.length"
-        tone="empty"
-        title="资料库还是空的"
-        description="上传 PDF / Word / PPT / Excel / TXT / Markdown；生成路径时会按目标相关性选用。"
-        action-text="上传资料"
-        @action="openPicker"
-      />
+      <template v-else-if="!items.length">
+        <V2ResultState
+          tone="empty"
+          title="资料库还是空的"
+          description="上传 PDF / Word / PPT / Excel / TXT / Markdown / CSV；生成路径时会按目标相关性选用。"
+          action-text="上传资料"
+          :busy="uploading"
+          @action="openPicker"
+        />
+        <p class="library__drop-note">也可以把文件直接拖到这里上传。</p>
+      </template>
 
       <p v-else-if="!visible.length" class="library__no-match">
         没有匹配的资料。
@@ -86,7 +100,7 @@
           <div class="lib-card__main">
             <span class="lib-card__ext" aria-hidden="true">{{ extOf(item) }}</span>
             <div class="lib-card__body">
-              <h2 class="lib-card__title">{{ item.name }}</h2>
+              <h2 class="lib-card__title" :title="item.name">{{ item.name }}</h2>
               <p class="lib-card__meta">{{ metaOf(item) }}</p>
               <p v-if="item.brief?.overview" class="lib-card__brief">{{ item.brief.overview }}</p>
               <p v-else-if="headingsOf(item).length" class="lib-card__brief lib-card__brief--muted">
@@ -208,6 +222,8 @@ const USAGE_OPTIONS: ReadonlyArray<{ value: UsageFilterKey; label: string }> = [
 ];
 
 const ACCEPT = '.pdf,.docx,.pptx,.xlsx,.txt,.md,.markdown,.csv';
+const SUPPORTED_EXTS = ['pdf', 'docx', 'pptx', 'xlsx', 'txt', 'md', 'markdown', 'csv'];
+const UPLOAD_FORMAT_HINT = 'PDF / Word / PPT / Excel / TXT / Markdown / CSV';
 const PREVIEW_LIMIT = 60_000;
 
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -221,8 +237,10 @@ const stats = ref<MaterialLibraryStats>({
 });
 const loading = ref(true);
 const loadError = ref(false);
-const error = ref('');
+/** 上传失败/被客户端拒收的逐条原因：一条错误盖掉另一条会让人只看到最后一个文件的问题 */
+const uploadErrors = ref<string[]>([]);
 const uploading = ref(false);
+const dragActive = ref(false);
 const search = ref('');
 const filter = ref<FilterKey>('all');
 const sort = ref<SortKey>('recent');
@@ -321,10 +339,32 @@ const deleteUsageWarn = computed<string>(() => {
 
 function formatBytes(bytes: number): string {
   const value = Number(bytes) || 0;
+  // 单位与数值之间统一留一个空格（此前只有 0 B 有空格，页头读成「0 B / 200MB」）
   if (value <= 0) return '0 B';
-  if (value >= 1024 * 1024) return `${Math.round((value / 1024 / 1024) * 10) / 10}MB`;
-  if (value >= 1024) return `${Math.round(value / 1024)}KB`;
-  return `${value}B`;
+  if (value >= 1024 * 1024) return `${Math.round((value / 1024 / 1024) * 10) / 10} MB`;
+  if (value >= 1024) return `${Math.round(value / 1024)} KB`;
+  return `${value} B`;
+}
+
+function extOfName(name: string): string {
+  return (/\.([a-z0-9]+)$/i.exec(name || '')?.[1] || '').toLowerCase();
+}
+
+/** 上传前先拦格式/空文件/超配额：拖拽不受 input accept 约束，后端的 400 也只会给一句概述 */
+function uploadProblem(file: File, usedBytes: number, quotaBytes: number): string | null {
+  if (!SUPPORTED_EXTS.includes(extOfName(file.name))) {
+    return `「${file.name}」格式不支持，可上传 ${UPLOAD_FORMAT_HINT} 文件`;
+  }
+  if (file.size <= 0) {
+    return `「${file.name}」是空文件，换一份试试`;
+  }
+  if (quotaBytes > 0) {
+    const remaining = quotaBytes - usedBytes;
+    if (file.size > remaining) {
+      return `「${file.name}」超出剩余容量（剩余 ${formatBytes(Math.max(0, remaining))}）`;
+    }
+  }
+  return null;
 }
 
 function extOf(item: UploadedMaterial): string {
@@ -405,7 +445,7 @@ async function load() {
 }
 
 function openPicker() {
-  error.value = '';
+  uploadErrors.value = [];
   fileInput.value?.click();
 }
 
@@ -416,21 +456,53 @@ async function onPick(event: Event) {
   await uploadFiles(files);
 }
 
+function onDragEnter(event: DragEvent) {
+  if (uploading.value) return;
+  if (!event.dataTransfer?.types.includes('Files')) return;
+  dragActive.value = true;
+}
+
+function onDragLeave(event: DragEvent) {
+  // 指针从 main 移到内部子元素时也会冒泡 dragleave：落在本元素内就不算离开，
+  // 否则高亮会一闪一闪
+  const next = event.relatedTarget as Node | null;
+  if (next && (event.currentTarget as HTMLElement).contains(next)) return;
+  dragActive.value = false;
+}
+
+function onDrop(event: DragEvent) {
+  dragActive.value = false;
+  if (uploading.value) return;
+  const files = Array.from(event.dataTransfer?.files || []);
+  if (files.length) void uploadFiles(files);
+}
+
 async function uploadFiles(files: File[]) {
-  if (!files.length) return;
+  if (!files.length || uploading.value) return;
   uploading.value = true;
-  error.value = '';
+  uploadErrors.value = [];
+  const failed: string[] = [];
+  let usedBytes = stats.value.totalBytes;
+  let uploadedAny = false;
   for (const file of files) {
+    const problem = uploadProblem(file, usedBytes, stats.value.quotaBytes);
+    if (problem) {
+      failed.push(problem);
+      continue;
+    }
     try {
       const record = await uploadMaterial(file);
       items.value = [record, ...items.value.filter((item) => item.id !== record.id)];
+      usedBytes += Number(file.size) || 0;
+      uploadedAny = true;
       toast.success(`已上传 ${file.name}`);
     } catch (err) {
-      error.value = `${file.name}：${errMsg(err)}`;
+      failed.push(`${file.name}：${errMsg(err)}`);
     }
   }
+  uploadErrors.value = failed;
   uploading.value = false;
-  await load();
+  if (uploadedAny) await load();
 }
 
 async function openPreview(item: UploadedMaterial) {
@@ -668,9 +740,42 @@ onMounted(load);
 
 .library__error {
   margin: 0;
+  display: grid;
+  gap: 4px;
   color: var(--red);
   font-size: 12.5px;
   line-height: 1.5;
+}
+
+.library__error p {
+  margin: 0;
+}
+
+/* 拖拽进入时整页给一层浅蓝底 + 顶部提示条：可放置区域是整块内容区，
+   不额外画一个只在拖拽时才出现的虚线大框 */
+.library__main--drop {
+  background: color-mix(in srgb, var(--blue) 4%, transparent);
+  border-radius: var(--mk-radius-xl);
+  outline: 2px dashed color-mix(in srgb, var(--blue) 45%, transparent);
+  outline-offset: -4px;
+}
+
+.library__drop-hint {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--mk-radius-sm);
+  background: color-mix(in srgb, var(--blue) 10%, var(--surface));
+  color: var(--blue-deep);
+  font-size: 12.5px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.library__drop-note {
+  margin: -8px 0 0;
+  color: var(--faint);
+  font-size: 12.5px;
+  text-align: center;
 }
 
 .lib-card {
@@ -723,6 +828,12 @@ onMounted(load);
   font-weight: 800;
   line-height: 1.45;
   overflow-wrap: anywhere;
+  /* 长文件名（带日期/版本号的导出名常见 60+ 字）最多两行，超出省略；
+     完整名字留在 title 与预览弹层里，列表不被一份资料撑成三行高 */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .lib-card__meta {

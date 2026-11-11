@@ -341,7 +341,7 @@ type KpiReading = {
 const kpiReadings = computed<KpiReading[]>(() => [
   { key: 'feedback', label: '未处理反馈', title: '反馈列表', count: wbPendingFeedback.value, severity: 'warn' as const, failed: !!wbErrors.value.feedback, tab: 'feedback' },
   { key: 'paths', label: '生成失败路径', title: '生成失败的学习路径', count: wbFailedPaths.value, severity: 'bad' as const, failed: !!wbErrors.value.paths, tab: null },
-  { key: 'dead', label: '事件投递失败', title: '运维工具 · 事件投递失败清单', count: wbDeadLetters.value, severity: 'warn' as const, failed: !!wbErrors.value.dead, tab: null },
+  { key: 'dead', label: '事件投递失败', title: '健康中心 · 事件投递失败清单', count: wbDeadLetters.value, severity: 'warn' as const, failed: !!wbErrors.value.dead, tab: null },
   { key: 'draft', label: '草稿公告', title: '公告列表', count: ann.value.draft, severity: 'muted' as const, failed: annFailed.value, tab: 'announce' },
 ])
 
@@ -393,10 +393,10 @@ function goFailedPaths() {
   intent.statusFilter = 'failed'
   intent.scene = 'learning-paths'
 }
-/** outbox 死信 → 「系统设置」的运维工具页签（2026-11-01：该面板已从本页拆走，
-    这里恢复成跨页跳转；死信清单由面板挂载时自拉） */
+/** outbox 死信 → 健康中心「事件投递」卡片（2026-11-11：原运维工具页签下线，
+    处置表并回健康中心；focus=outbox 让对面滚到那张卡） */
 function goDeadLetters() {
-  void router.push({ path: '/admin/system-settings', query: { tab: 'tools' } })
+  void router.push({ path: '/admin/health-center', query: { focus: 'outbox' } })
 }
 /** 草稿公告 → 本页「公告」页签并预筛草稿（2026-10-24）：预筛进 URL，刷新/复制链接可复原。
     单写者纪律（F5-3）：只由 openTabWith 一次写定 tab + status，不再同时设 intent.tab

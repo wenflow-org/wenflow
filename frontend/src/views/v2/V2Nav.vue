@@ -38,13 +38,16 @@
           class="v2nav__avatar"
           :aria-expanded="menuOpen ? 'true' : 'false'"
           aria-haspopup="menu"
+          aria-controls="v2nav-user-menu"
           :aria-label="`账户菜单：${userName}`"
-          @click="menuOpen = !menuOpen"
+          @click="toggleMenu"
+          @keydown.down.prevent="openMenuAt(0)"
+          @keydown.up.prevent="openMenuAt(-1)"
         >
           <i>{{ avatarLetter }}</i>
         </button>
         <Transition name="v2menu">
-          <div v-if="menuOpen" class="v2nav__menu" role="menu">
+          <div v-if="menuOpen" id="v2nav-user-menu" ref="menuRef" class="v2nav__menu" role="menu" @keydown="onMenuKeydown">
             <div class="v2nav__menu-head">
               <span class="v2nav__name">{{ userName }}</span>
               <span class="v2nav__menu-role">学习者</span>
@@ -100,7 +103,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, type Component } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, type Component } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Activity, ChevronLeft, History, House, Layers2, Library, LogOut, MessageCircle, Moon, Sun, Trophy, UserRound, Waypoints } from 'lucide-vue-next';
 import { useUserStore } from '@/stores/user';
@@ -115,6 +118,67 @@ const userStore = useUserStore();
 
 const menuOpen = ref(false);
 const userMenuRef = ref<HTMLElement | null>(null);
+const menuRef = ref<HTMLElement | null>(null);
+
+/* 账户菜单的键盘可达性（原则 3/11）：菜单是 role=menu，但此前只有鼠标点击与
+   document 级 Esc——Esc 关掉后焦点随 DOM 一起消失（落到 body），方向键也不生效。
+   现在：打开即把焦点放到第一项；↑/↓/Home/End 在项间移动；Esc 关闭并把焦点还给头像；
+   Tab 关闭菜单后继续按文档顺序离开（不让焦点困在被卸载的节点上）。 */
+function menuItems(): HTMLElement[] {
+  return menuRef.value
+    ? Array.from(menuRef.value.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+    : [];
+}
+
+function focusMenuItem(index: number) {
+  const items = menuItems();
+  if (!items.length) return;
+  const target = index < 0 ? items[items.length - 1] : items[Math.min(index, items.length - 1)];
+  target?.focus({ preventScroll: true });
+}
+
+function openMenuAt(index = 0) {
+  menuOpen.value = true;
+  void nextTick(() => focusMenuItem(index));
+}
+
+function toggleMenu() {
+  if (menuOpen.value) closeMenu();
+  else openMenuAt(0);
+}
+
+function closeMenu(returnFocus = false) {
+  if (!menuOpen.value) return;
+  menuOpen.value = false;
+  if (returnFocus) {
+    void nextTick(() => {
+      userMenuRef.value?.querySelector<HTMLElement>('.v2nav__avatar')?.focus({ preventScroll: true });
+    });
+  }
+}
+
+function onMenuKeydown(e: KeyboardEvent) {
+  const items = menuItems();
+  if (!items.length) return;
+  const current = items.indexOf(document.activeElement as HTMLElement);
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    focusMenuItem(current < 0 ? 0 : (current + 1) % items.length);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    focusMenuItem(current < 0 ? -1 : (current - 1 + items.length) % items.length);
+  } else if (e.key === 'Home') {
+    e.preventDefault();
+    focusMenuItem(0);
+  } else if (e.key === 'End') {
+    e.preventDefault();
+    focusMenuItem(-1);
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    e.stopPropagation();
+    closeMenu(true);
+  }
+}
 
 /* #20 / 跟踪单 #45：窄屏底栏避让不能写死 66px——字号缩放或 iOS 安全区（env(safe-area-inset-bottom)）
    都会改变实际高度。这里实测 dock 盒高（含内边距与安全区）写入根上的 --v2-dock-h，
@@ -198,11 +262,12 @@ async function handleLogout() {
 
 function onDocClick(e: MouseEvent) {
   if (!menuOpen.value || !userMenuRef.value) return;
-  if (!userMenuRef.value.contains(e.target as Node)) menuOpen.value = false;
+  if (!userMenuRef.value.contains(e.target as Node)) closeMenu();
 }
 
 function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape') menuOpen.value = false;
+  // 焦点在菜单内时由 onMenuKeydown 处理（并 stopPropagation）；这里兜住焦点已移出菜单的情况
+  if (e.key === 'Escape' && menuOpen.value) closeMenu(true);
 }
 
 onMounted(() => {
@@ -419,6 +484,12 @@ onUnmounted(() => {
 .v2nav__menu a:hover,
 .v2nav__menu button:hover {
   background: color-mix(in srgb, var(--blue) 8%, var(--surface));
+}
+/* 键盘焦点与顶栏导航同口径（2px 实线 + 2px 外距）；菜单项贴边，焦点环内收 1px 免被弹层裁切 */
+.v2nav__menu a:focus-visible,
+.v2nav__menu button:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -1px;
 }
 .v2nav__menu-danger {
   color: var(--red-ink) !important;

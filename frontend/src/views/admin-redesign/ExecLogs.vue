@@ -39,8 +39,18 @@
            漏掉了最基础的总量与失败数；补成 4 张，与审计日志 / 健康中心同构。
            失败数在卡头「失败（N）」下拉里也有，但那是筛选入口的计数（同屏两处同一读数是
            用户点名的「不齐」本身导致的重复，取舍：KPI 给当眼前一档的结论，筛选入口给筛选辅助）。 -->
-      <MkKpi class="exec-kpi-total" label="调用总数" :value="callsTotalText" :value-note="callsTotalNote" :title="callsTotalTitle" />
-      <MkKpi label="成功率" :value="successRateText" :tone="successKpiTone" />
+      <!-- 可点口径（2026-11-11 二轮走查）：调用总数 = 「全部调用」的总出口，有筛选时可点清空；
+           成功率 / P50 / P99 是只读读数（没有对应筛选），title 明说只读。 -->
+      <MkKpi
+        class="exec-kpi-total"
+        label="调用总数"
+        :value="callsTotalText"
+        :value-note="callsTotalNote"
+        :title="callsTotalTitle"
+        :clickable="isFiltered"
+        @click="clearFilter"
+      />
+      <MkKpi label="成功率" :value="successRateText" :tone="successKpiTone" :title="successRateTitle" />
       <MkKpi label="耗时 P50" :value="latencyP50" :title="latencyTitle" />
       <MkKpi label="耗时 P99" :value="latencyP99" :title="latencyTitle" />
     </section>
@@ -96,6 +106,9 @@
             :options="sourceSelectOptions"
             :active="!!testFilter"
           />
+          <!-- 筛选总出口（2026-11-11 二轮走查）：时间范围 + 状态 + 节点 + 来源 + 关键词
+               组合后，任何一项非默认即出现；清空后同步 URL（filterSnapshot 写回）。 -->
+          <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilter">清空筛选</button>
         </div>
         <!-- 右侧：自动刷新 / 列 / 筛选（筛选=节点 / Trace ID / 会话 ID 三个精确定位项；
              触发钮与「列」同为文字动作，激活时带生效数角标） -->
@@ -281,6 +294,12 @@
                     <div class="tline__payload-meta">
                       <!-- 展开区同款口径：短 Trace 显示 + title 全值（不裸奔整条 UUID） -->
                       <span class="mono" :title="log.traceId">trace {{ shortTrace(log.traceId) }}</span>
+                      <!-- 复制放在展开区（2026-11-11 二轮走查）：Trace 列被列设置隐藏时，
+                           行内复制图标随之消失；展开区保留完整 ID 的复制出口。会话 ID 同理。 -->
+                      <span class="tline__copygroup">
+                        <button v-if="log.traceId" type="button" class="mk-link" @click.stop="copyText(log.traceId, 'Trace ID')">复制链路 ID</button>
+                        <button v-if="log.sessionId" type="button" class="mk-link" @click.stop="copyText(log.sessionId, '会话 ID')">复制会话 ID</button>
+                      </span>
                     </div>
                     <!-- 摘要行：表格弱化列的完整值（类型/模型/输入输出），展开即看全不丢信息。
                          除类型徽章外每格自带名头（2026-11-02 评审）：原先模型名紧跟在「Skill」
@@ -621,23 +640,27 @@ function legacyCopy(text: string): boolean {
     return false
   }
 }
-async function copyTrace(traceId: string) {
-  if (!traceId) {
-    toast.error('该行没有 Trace ID')
+async function copyText(text: string | null | undefined, label: string) {
+  const value = String(text ?? '').trim()
+  if (!value) {
+    toast.error(`该行没有 ${label}`)
     return
   }
   let ok = false
   try {
     if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(traceId)
+      await navigator.clipboard.writeText(value)
       ok = true
     }
   } catch {
     ok = false
   }
-  if (!ok) ok = legacyCopy(traceId)
-  if (ok) toast.success(`已复制 trace ${traceId}`)
-  else toast.error(`复制失败，请手动复制：${traceId}`)
+  if (!ok) ok = legacyCopy(value)
+  if (ok) toast.success(`已复制 ${label}`)
+  else toast.error(`复制失败，请手动复制：${value}`)
+}
+function copyTrace(traceId: string) {
+  return copyText(traceId, 'Trace ID')
 }
 
 /* D3 表格增强：列显隐（localStorage 持久化）。列集/列序 2026-10-02 对齐原型 renderObserve
@@ -1151,12 +1174,30 @@ const emptyTitle = computed(() =>
     ? `未找到「${shortTrace(traceMiss.value)}」的日志`
     : isFiltered.value ? '当前筛选无日志' : '暂无日志'
 )
-const emptyDesc = computed(() =>
-  traceMiss.value
-    ? `完整值为 ${traceMiss.value}`
-    : timeRange.value === 'today' ? '今天没有执行记录'
-      : timeRange.value === 'week' ? '近 7 天没有执行记录' : ''
-)
+/** 空态说明（2026-11-11）：筛选组合为空时不能拿「近 7 天没有执行记录」冒充全局结论——
+    必须说清是哪些条件把结果筛空了，并给出下一步（放宽时间 / 清筛选）。 */
+const emptyDesc = computed(() => {
+  if (traceMiss.value) return `完整值为 ${traceMiss.value}`
+  if (isFiltered.value) {
+    const bits: string[] = []
+    if (agentFilter.value) bits.push(`节点「${agentFilter.value}」`)
+    if (statusFilter.value) {
+      const st = ({ ok: '仅成功', err: '仅失败', warn: '仅超时' } as Record<string, string>)[statusFilter.value]
+      if (st) bits.push(`状态「${st}」`)
+    }
+    if (testFilter.value === 'only') bits.push('来源「仅测试调用」')
+    if (keyword.value.trim()) bits.push(`关键词「${keyword.value.trim()}」`)
+    if (errorCategory.value) bits.push(`类别「${errorCategory.value}」`)
+    if (timeRangeActive.value) bits.push(`时间范围「${timeRangeOptions.find((o) => o.value === timeRange.value)?.label || timeRange.value}」`)
+    return bits.length
+      ? `当前筛选（${bits.join(' · ')}）没有匹配的执行记录。可先放宽时间范围。仍为空时清除筛选。`
+      : '当前筛选条件下没有匹配的执行记录。可放宽时间范围，或清除筛选。'
+  }
+  if (timeRange.value === 'today') return '今天没有执行记录。有调用发生后刷新即可看到。'
+  if (timeRange.value === 'week') return '近 7 天没有执行记录。更早的调用可在「全部」时间范围查看。'
+  if (timeRange.value === 'all') return '当前时间范围内没有执行记录。确认应用已接入网关后，调用会实时出现在这里。'
+  return `当前时间范围（${timeRangeOptions.find((o) => o.value === timeRange.value)?.label || timeRange.value}）内没有执行记录。可放宽时间范围。`
+})
 const emptyActionText = computed(() =>
   timeRange.value !== 'all' ? '查看全部时间' : isFiltered.value ? '清除筛选' : ''
 )
@@ -1181,11 +1222,11 @@ const statsPending = computed(() => liveLogsLoading.value && liveStats.value ===
    其余（响应缺 stats 的兜底）→ 本页样本估算并在 hint 披露。 */
 const successRate = computed(() => {
   const st = liveStats.value
-  if (st) return st.total ? Math.round((st.success / st.total) * 100) : '—'
+  if (st) return st.total ? Math.round((st.success / st.total) * 1000) / 10 : '—'
   if (statsPending.value) return '—'
   if (!logs.value.length) return '—'
   const ok = logs.value.filter((l) => l.status === 'ok').length
-  return Math.round((ok / logs.value.length) * 100)
+  return Math.round((ok / logs.value.length) * 1000) / 10
 })
 /* 调用总数卡（2026-11-07）：值 = 窗口内总条数，失败数写在同一张卡的读数上——
    「70 · 失败 4」让「成功率 94%」有分母可对，不必再回头数表格行。
@@ -1196,25 +1237,41 @@ const successRate = computed(() => {
    失败数作为行内注记（更小字号）单独染红，主值保持正常墨色。 */
 const callsTotalText = computed(() => {
   const st = liveStats.value
-  if (st) return `${st.total}`
+  if (st) return st.total.toLocaleString()
   if (statsPending.value) return '—'
   if (!logs.value.length) return '—'
-  return `${logs.value.length}`
+  return logs.value.length.toLocaleString()
 })
 /** 行内注记：仅在有失败时出现（失败 = 未成功，含超时）；无失败 / 未就绪时留空 */
 const callsTotalNote = computed(() => {
   const st = liveStats.value
   if (st) {
     const failed = st.error + st.timeout
-    return failed > 0 ? `失败 ${failed}` : ''
+    return failed > 0 ? `失败 ${failed.toLocaleString()}` : ''
   }
   if (statsPending.value || !logs.value.length) return ''
   const failed = logs.value.filter((l) => l.status !== 'ok').length
-  return failed > 0 ? `失败 ${failed}` : ''
+  return failed > 0 ? `失败 ${failed.toLocaleString()}` : ''
 })
-const callsTotalTitle = computed(() => (liveStats.value
-  ? '当前时间窗与筛选下的全部调用（失败 = 未成功，含超时）'
-  : '按当前页样本估算，翻页或筛选后随之变化'))
+const callsTotalTitle = computed(() => {
+  const base = liveStats.value
+    ? '当前时间窗与筛选下的全部调用（失败 = 未成功，含超时）'
+    : '按当前页样本估算，翻页或筛选后随之变化'
+  const failCount = liveStats.value
+    ? liveStats.value.error + liveStats.value.timeout
+    : (statsPending.value || !logs.value.length ? 0 : logs.value.filter((l) => l.status !== 'ok').length)
+  const fail = failCount > 0
+    ? `失败 ${failCount.toLocaleString()} 次可在卡头「状态 → 仅失败」查看`
+    : ''
+  const action = isFiltered.value
+    ? '清空筛选后查看默认时间窗全部调用'
+    : '只读读数，当前无筛选'
+  return [base, fail, action].filter(Boolean).join(' · ')
+})
+/** 成功率没有对应筛选：明确只读，避免用户点空卡 */
+const successRateTitle = computed(
+  () => '只读读数：按当前时间窗与筛选计算成功调用占比。筛选请用卡头「状态」下拉'
+)
 
 /** KPI 显示值：数字档补 %；未就绪档直接「—」（不出现「—%」这种残缺读数） */
 const successRateText = computed(() => (successRate.value === '—' ? '—' : `${successRate.value}%`))
@@ -1233,8 +1290,8 @@ const latencyEstimated = computed(() =>
   && logs.value.some((l) => l.status === 'ok')
 )
 const latencyTitle = computed(() => (latencyEstimated.value
-  ? '按当前页样本估算，翻页或筛选后随之变化'
-  : '按当前筛选的整窗成功调用统计，与成功率同一窗口'))
+  ? '按当前页样本估算，翻页或筛选后随之变化。只读读数'
+  : '按当前筛选的整窗成功调用统计，与成功率同一窗口。只读读数'))
 const latencyP50 = computed(() => {
   const v = backendP50.value
   if (v != null) return fmtMs(v)
@@ -1328,7 +1385,7 @@ const sourceSelect = computed<string>({
 })
 const sourceSelectOptions = computed(() => [
   { value: '', label: '全部来源' },
-  { value: 'only', label: testCount.value == null ? '仅测试调用' : `仅测试调用（${testCount.value}）` }
+  { value: 'only', label: testCount.value == null ? '仅测试调用' : `仅测试调用（${testCount.value.toLocaleString()}）` }
 ])
 /** 卡头「状态」下拉：计数取当前窗口 stats；未就绪时不显计数（不把未知读成 0） */
 /* 2026-11-07 用户「执行日志叫『状态 全部状态』、审计日志叫『失败动作 不过滤』，两页各一套」：
@@ -1344,9 +1401,9 @@ const statusSelectOptions = computed(() => {
   const failed = st ? st.error + st.timeout : null
   return [
     { value: '', label: '全部' },
-    { value: 'ok', label: st?.success != null ? `仅成功（${st.success}）` : '仅成功' },
-    { value: 'err', label: failed != null ? `仅失败（${failed}）` : '仅失败' },
-    { value: 'warn', label: st?.timeout != null ? `仅超时（${st.timeout}）` : '仅超时' }
+    { value: 'ok', label: st?.success != null ? `仅成功（${st.success.toLocaleString()}）` : '仅成功' },
+    { value: 'err', label: failed != null ? `仅失败（${failed.toLocaleString()}）` : '仅失败' },
+    { value: 'warn', label: st?.timeout != null ? `仅超时（${st.timeout.toLocaleString()}）` : '仅超时' }
   ]
 })
 
@@ -1369,13 +1426,13 @@ function clearFilter() {
 }
 
 const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`)
-/* 绝对时间：统一 MM-DD HH:MM:SS（日志可能跨天，全部带日期避免同一列表两种格式；
-   年/完整时区由 tooltip fmtFull 提供） */
+/* 绝对时间：全站统一 YYYY-MM-DD HH:mm:ss（日志排查需要秒；不再用 MM-DD 的紧凑写法，
+   同一页不再出现两套日期口径） */
 function fmtTime(ts?: number): string {
   if (!ts) return '—'
   const d = new Date(ts)
   const pad = (n: number) => String(n).padStart(2, '0')
-  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 /* 短标识：单源自 ./terms 的 shortTrace（2026-10-06 审核 #121），本页不再私持实现。
    旧实现 `/^(\w{2}):?([\w-]+)$/` 会给无冒号的纯 ID 造出「17:」「14:」这种假前缀，已废弃。 */
@@ -1412,7 +1469,8 @@ const statusText = { ok: '成功', warn: '超时', err: '失败' } as const
 /* 固定列宽（2026-10-22 用户「翻页不同页码时候，列宽怎么还在变呢」）：Skill / Trace / 消息
    三列在 auto 布局下按当页最长内容分宽（消息列 348→437px），翻页跳动；fixed 后按表头定死。
    宽度按 1280 现值校准并留余量：默认 6 列合计 ≤914，全列（列菜单打开类型/模型/输入输出）≤1138。 */
-.ex-c-time { width: 115px; }
+/* 时间列宽按 YYYY-MM-DD HH:mm:ss（19 字符等宽）校准，避免新口径折行 */
+.ex-c-time { width: 150px; }
 .ex-c-level { width: 68px; }
 .ex-c-kind { width: 70px; }
 .ex-c-agent { width: 160px; }
@@ -1758,12 +1816,15 @@ html[data-theme='dark'] .exec-detail__meta .mk-badge { background: #2d2d2f; colo
 }
 .tline__payload-meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: 6px 12px;
   font-size: var(--mk-fs-micro);
   color: var(--mk-faint);
   font-family: var(--mk-mono);
 }
+.tline__copygroup { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px; font-family: inherit; }
 .tline__none { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .tline__none--err { color: var(--mk-red); font-weight: 600; }
 .tline__section { display: grid; gap: 4px; }

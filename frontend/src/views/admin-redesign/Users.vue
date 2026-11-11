@@ -11,7 +11,7 @@
       <span class="mk-status__meta" :title="isLive ? (liveUsersTotal > users.length ? '共 ' + liveUsersTotal + ' 人，当前显示前 ' + users.length + ' 人' : '共 ' + liveUsersTotal + ' 人') : undefined">
         共 {{ isLive && liveUsersTotal > users.length ? liveUsersTotal + ' 人 · 当前显示 ' + users.length : users.length }} 人
       </span>
-      <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" :title="`管理员 ${adminCount} · 近 7 天活跃 ${activeToday}${registrationEnabled !== null ? ' · 注册' + (registrationEnabled ? '开放' : '关闭') : ''}`">
+      <span v-if="isLive && pill !== 'deleted'" class="mk-status__meta" :title="`管理员 ${adminCount} · 近 7 天活跃 ${activeToday}${registrationEnabled !== null ? ' · 注册' + (registrationEnabled ? '开放' : '关闭') : ''}。活跃按最后登录时间计，近 7 天登录过即计入（含管理员 / 测试账号）。平台总览的「近 7 天活跃学习者」按当日发起教学会话去重，两数统计方式不同`">
         近 7 天活跃 {{ activeToday }}
       </span>
       <span class="mk-status__actions">
@@ -112,7 +112,7 @@
                行内控件已 stopPropagation，聚焦自身即可回车，不产生双份焦点停靠 -->
           <!-- 口径透传：测试视角下点虚拟/测试账号，详情接口需按全量口径查询，否则 404（与行点击/详情钮同参） -->
           <tr v-for="u in paged" :key="u.id" class="ul-row" :class="{ 'ul-row--deleted': u.deleted }" tabindex="0" @click="openSubPage('user', u.id)" @keydown.enter="($event.target === $event.currentTarget) && openSubPage('user', u.id)">
-            <td v-if="isLive && showCol('check')" @click.stop><input v-model="selected" type="checkbox" :value="u.id" :disabled="u.deleted || isNonRealAccount(u) || isSelf(u)" :title="isSelf(u) ? '当前账号不能加入批量操作' : undefined" :aria-label="`选择 ${userName(u)}`" @click.stop /></td>
+            <td v-if="isLive && showCol('check')" @click.stop><input v-model="selected" type="checkbox" :value="u.id" :disabled="u.deleted || isNonRealAccount(u) || isSelf(u)" :title="checkTitle(u)" :aria-label="`选择 ${userName(u)}`" @click.stop /></td>
             <td>
               <div class="ul-user">
                 <MkCellAvatar :name="userName(u)" :tone="avaTone(u)" />
@@ -122,7 +122,14 @@
                        一个孤立的浮标。现改为姓名行内紧跟一枚徽章（名字 → 徽章，6px 间隙），
                        身份备注与姓名同读一句；副行（等级）结构不变。 -->
                   <div class="ul-nameline">
-                    <strong :title="userName(u)">{{ userName(u) }}</strong>
+                    <!-- 2026-11-11（困惑测试 #13）：姓名是详情入口却零反馈；复用全站 mk-user-link
+                         原语（常态正文加粗、hover 变蓝），不整列染蓝。 -->
+                    <button
+                      type="button"
+                      class="mk-user-link ul-nameline__link"
+                      :title="`${userName(u)}（打开用户详情）`"
+                      @click.stop="openSubPage('user', u.id)"
+                    >{{ userName(u) }}</button>
                     <span v-if="u.deleted" class="mk-badge mk-badge--sm mk-badge--deleted" :title="u.deletedAt ? `删除于 ${u.deletedAt}` : undefined">已删除</span>
                     <!-- 2026-10-21 用户拍板「测试只是备注」：不做视角，也不用筛选，行内一枚备注即可 -->
                     <span
@@ -155,10 +162,11 @@
             <td v-if="showCol('paths')" class="mk-num">
               <!-- 原型列语言：数字列就是 mono 文本，不加自造可视化（双段条退役）。
                    P2：0 值统一 mk-na 弱化（此前只有会话 0 弱化，路径 0 却实心黑，双标） -->
-              <span class="ul-ps"><b :class="{ 'mk-na': !u.paths }">{{ u.paths }}</b><i>/</i><b :class="{ 'mk-na': !u.sessions }">{{ u.sessions }}</b></span>
+              <!-- 2026-11-11（困惑测试 #14）：裸「1/6」要回读表头才知道是路径/课堂，量词随读数走。 -->
+              <span class="ul-ps" :title="`路径 ${u.paths} 条 · 课堂 ${u.sessions} 节`"><b :class="{ 'mk-na': !u.paths }">{{ u.paths }}</b><i class="ul-ps__unit">条</i><i>/</i><b :class="{ 'mk-na': !u.sessions }">{{ u.sessions }}</b><i class="ul-ps__unit">节</i></span>
             </td>
-            <td v-if="showCol('created')"><span :class="u.createdAt === '从未' ? 'mk-na' : ''">{{ u.createdAt }}</span></td>
-            <td v-if="showCol('lastlogin')"><span :class="u.lastLogin === '从未' ? 'mk-na' : ''">{{ u.lastLogin }}</span></td>
+            <td v-if="showCol('created')"><span :class="u.createdAt === '从未' ? 'mk-na' : ''" :title="fmtAbsolute(u.createdAtRaw)">{{ u.createdAt }}</span></td>
+            <td v-if="showCol('lastlogin')"><span :class="u.lastLogin === '从未' ? 'mk-na' : ''" :title="fmtAbsolute(u.lastLoginRaw)">{{ u.lastLogin }}</span></td>
             <td>
               <!-- 2026-11-08 用户走查：操作列任何状态下都渲染（不再在批量模式下整列变空白）。
                    勾选列与行内动作并排是管理台表格常态，优先保证列不为空、表头有「操作」二字下方有内容。 -->
@@ -191,6 +199,11 @@
         v-else
         min
         :title="isDeletedView ? '暂无已删除账号' : isFiltered ? '当前筛选无用户' : '暂无账号'"
+        :description="isDeletedView
+          ? '回收站里没有账号。删除的用户会留在这里，可随时恢复。'
+          : isFiltered
+            ? '当前视图或搜索条件下没有账号，可切换视图或清空搜索。'
+            : '还没有账号。可新建用户，或在页头「注册设置」里开放自助注册。'"
         :action-text="isDeletedView || isFiltered ? '显示全部用户' : '新建用户'"
         @action="isDeletedView || isFiltered ? clearFilters() : openCreate()"
       />
@@ -289,6 +302,22 @@ const currentAdmin = computed(() => {
   }
 })
 const isSelf = (u: UserRow) => !!currentAdmin.value.id && u.id === currentAdmin.value.id
+/** 勾选框禁用原因（2026-11-11）：禁用态此前只有「点不动」，没有一句为什么。
+    已删 / 虚拟 / 测试 / 当前账号四类原因分开写，行内悬停即可自证。 */
+function checkTitle(u: UserRow): string {
+  if (u.deleted) return '已删除账号不参与批量操作；恢复后可勾选'
+  if (isSelf(u)) return '当前登录的账号不能加入批量操作'
+  if (isNonRealAccount(u)) return isVirtualAccount(u) ? '虚拟学习者不参与批量操作' : '测试账号不参与批量操作'
+  return `选择 ${userName(u)}`
+}
+/** 相对时间列（注册 / 最后登录）的 title：绝对时间按全站 YYYY-MM-DD HH:mm */
+function fmtAbsolute(iso?: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
 /** 虚拟学习者 / 测试账号判定与真实域口径全部走 learner-profile.ts 单点：
     此前这里直接用命名约定正则，漏掉卡库/预置库造出的虚拟学习者（vl-*@cards.local、
     builtin_*@preset.local —— payload 标了 isVirtualLearner=true）——含测试档下这类行既进
@@ -418,7 +447,7 @@ const ulColDefs = [
   { key: 'check', label: '选择框（批量操作）' },
   { key: 'email', label: '邮箱' },
   { key: 'role', label: '角色' },
-  { key: 'paths', label: '路径 / 课堂' },
+  { key: 'paths', label: '路径（条）/ 课堂（节）' },
   { key: 'created', label: '注册时间' },
   { key: 'lastlogin', label: '最后登录' },
 ] as const
@@ -448,7 +477,12 @@ function retryLoad() {
   void loadLiveData()
 }
 /* 宿主刷新联动（用户账号宿主「刷新」按钮 → 重拉 live 用户域） */
-defineExpose({ refresh: () => { void loadLiveData() }, openCreate })
+/** 外部深链落视图（平台总览「用户活跃」卡 → ?pill=online）：只接受既有档位，未知值忽略 */
+function setPill(next: string) {
+  const allowed = new Set(['all', 'admin', 'user', 'online', 'new7d', 'never', 'deleted'])
+  if (allowed.has(next)) pill.value = next
+}
+defineExpose({ refresh: () => { void loadLiveData() }, openCreate, setPill })
 /* 筛选 pill（角色 / 活跃 / 新增 / 从未登录 / 生命周期；已去掉原「全部角色」下拉，避免与「管理员」pill 语义冲突）。
    计数取自全量 liveUsers（统一判例：除「全部」外一律显命中数）；
    「已删除」为独立数据源（后端分页），切过去才拉取，计数取后端真总数。 */
@@ -471,7 +505,12 @@ const ulViewOptions = computed(() => [
   { value: 'all', label: '全部用户' },
   ...pills.value
     .filter((p) => p.id !== 'all')
-    .map((p) => ({ value: p.id, label: p.count != null ? `${p.label}（${p.count}）` : p.label }))
+    .map((p) => ({
+      value: p.id,
+      label: p.count != null ? `${p.label}（${p.count}）` : p.label,
+      /* 2026-11-11（困惑测试 #12）：与总览图表同名不同量法，选项上给口径。 */
+      hint: p.id === 'online' ? '按最后登录时间，近 7 天登录过即计入（含管理员 / 测试账号）' : undefined
+    }))
 ])
 
 /* Phase 2：「已删除」是后端分页的独立数据源，取数时机见文件末的 watch（需排在「筛选回第 1 页」之后）。 */
@@ -593,14 +632,14 @@ function exportSelected() {
     if (/^[=+\-@]/.test(s)) s = `'${s}`
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
   }
-  const header = ['姓名', '邮箱', '角色', '等级/XP', '路径/课堂', '注册时间', '最后登录', '类型']
+  const header = ['姓名', '邮箱', '角色', '等级/XP', '路径（条）/课堂（节）', '注册时间', '最后登录', '类型']
   const lines = rows.map((u) =>
     [
       esc(u.name),
       esc(u.email),
       u.admin ? '管理员' : '用户',
       `${levelBadgeZh(u.xp, u.currentLevel)} / ${u.xp}`,
-      `${u.paths} / ${u.sessions}`,
+      `${u.paths} 条 / ${u.sessions} 节`,
       esc(u.createdAt || ''),
       esc(u.lastLogin || ''),
       u.deleted ? '已删除' : isVirtualAccount(u) ? '虚拟学习者' : isNonRealAccount(u) ? '测试' : '普通',
@@ -768,6 +807,8 @@ function clearFilters() {
 .ul-ps { font-variant-numeric: tabular-nums; }
 .ul-ps b { font-weight: 600; }
 .ul-ps i { font-style: normal; color: var(--mk-faint); margin: 0 2px; }
+/* 量词（2026-11-11 困惑测试 #14）：比数字小一档，跟在读数后就地可读 */
+.ul-ps .ul-ps__unit { font-size: var(--mk-fs-micro); margin: 0 1px; }
 /* 筛选弹层外壳（.mk-adv*）已提升为共享原语：见 styles/mk-primitives.css */
 /* 视图页签随学习状态拆页退役（2026-10-04，单视图不再需要 .tabs） */
 .ul-row { cursor: pointer; }
@@ -815,6 +856,9 @@ function clearFilters() {
    strong 的 max-width 截断（.mk-cell-main strong）不变，徽章 flex:none 不被压扁。 */
 .ul-nameline { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .ul-nameline strong { min-width: 0; }
+/* 姓名入口（2026-11-11 困惑测试 #13）：常态正文加粗，悬停才上蓝——不整列染蓝 */
+.ul-nameline__link { padding: 0; border: 0; background: none; font: inherit; font-weight: 700; color: inherit; cursor: pointer; text-align: left; min-width: 0; }
+.ul-nameline__link:hover { color: var(--mk-blue-text); text-decoration: underline; }
 .ul-nameline .mk-badge { flex: none; }
 
 /* 邮箱列（原型独立邮箱列，sub 字级弱于姓名）。
@@ -849,7 +893,7 @@ html[data-theme='dark'] {
     appearance: none;
     width: 14px;
     height: 14px;
-    border: 1.5px solid #4d4e51;
+    border: 1.5px solid var(--mk-card-line);
     border-radius: 4px;
     background: transparent;
     cursor: pointer;

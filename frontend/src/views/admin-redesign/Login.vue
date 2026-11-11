@@ -55,6 +55,7 @@
                 <button
                   type="button"
                   class="field__eye"
+                  :title="showPwd ? '隐藏密码' : '显示密码'"
                   :aria-label="showPwd ? '隐藏密码' : '显示密码'"
                   @click="showPwd = !showPwd"
                 >
@@ -235,9 +236,15 @@ const handleLogin = async () => {
     }
   } catch (error: any) {
     const status = error?.response?.status
-    const msg = status === 429 ? '登录尝试过于频繁，请稍后再试'
-      : !status || status >= 500 ? '服务暂时不可用，请稍后重试'
-      : error.response?.data?.error?.message || LOGIN_FAILED_MSG
+    /* 后端对登录失败有账号/IP 双维度锁定，429 会带「登录失败次数过多，请 N 秒后重试」与
+       remainingTime（默认锁 15 分钟）——直接用它，别在前端猜一个时长。
+       其余失败也优先用服务端 message；都没有时给「是什么故障 + 下一步」，不用泛泛的兜底话术。 */
+    const rawMessage = error?.response?.data?.error?.message
+    const serverMsg = typeof rawMessage === 'string' ? rawMessage.trim() : ''
+    const msg = status === 429
+      ? serverMsg || '登录失败次数过多，请等待一段时间后再登录'
+      : !status || status >= 500 ? '登录服务暂时不可用，稍后可重新提交'
+      : serverMsg || LOGIN_FAILED_MSG
     loginError.value = msg
   } finally {
     loading.value = false

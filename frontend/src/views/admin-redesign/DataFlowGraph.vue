@@ -21,7 +21,10 @@
           <span class="dfg-stage-dot" :style="{ background: toneOf(flow?.stageId || '').hue }"></span>
           <!-- 阶段名走 id（2026-11-10 与总览列头同语言），中文全名留在下方入口/出口的悬停句里 -->
           <strong class="dfg-title">{{ flow?.stageId || '' }}&nbsp;<span class="dfg-title__agent mono">{{ flow?.agentId }}</span></strong>
-          <span class="dfg-meta">{{ flow ? flow.fieldCount : '—' }} 字段 · {{ flow ? flow.steps.length : '—' }} 步</span>
+          <span
+            class="dfg-meta"
+            :title="`步 = 入口闸口（有分发时）+ 编排链节点：Skill / 代码服务 / 跨阶段引用。与页签上的「N 个」名册 Skill 数不同源，不能直接比较`"
+          >{{ flow ? flow.fieldCount : '—' }} 字段 · {{ flow ? flow.steps.length : '—' }} 步</span>
           <!-- 搜索命中反馈（审核 #114）：无命中此前与空闲态完全一致（画布原样、无提示），
                用户分不清「没这个字段」还是「搜索没生效」；有输入即报命中数，0 命中给醒目提示。
                清除入口复用搜索框右侧 ✕（v-if="query"） -->
@@ -41,9 +44,12 @@
             />
             <button v-if="query" type="button" class="dfg-search__clear" title="清除" @click="clearQuery">✕</button>
           </div>
-          <label class="dfg-switch">
+          <!-- 2026-11-11（困惑测试 #56）：原标签「隐藏字段」与行为相反——未勾选时仍保留
+               带移交/累积的隐藏字段，勾选只会「增加」芯片，四个阶段画布逐像素一样。改为
+               「显示内部字段」并让未勾选时严格按 render=hidden 收窄（勾选才显示）。 -->
+          <label class="dfg-switch" title="显示渲染层隐藏的内部字段（带移交/累积的字段仍会出现在产出卡里）">
             <input type="checkbox" v-model="showHidden" />
-            <span>隐藏字段</span>
+            <span>显示内部字段</span>
           </label>
           <label class="dfg-switch" title="显示步间连线">
             <input type="checkbox" v-model="edgeFaded" />
@@ -95,17 +101,18 @@
         >
           <g v-for="(e, i) in edgeGeoms" :key="i">
             <template v-if="e.d">
+              <!-- 颜色走 style（不是 presentation attribute）：阶段色是 CSS 变量，
+                   attribute 里的 var() 不生效，style 里才继承得到深色档。 -->
               <path
                 :d="e.d"
                 fill="none"
-                :stroke="e.hue"
+                :style="{ stroke: e.hue, opacity: e.op }"
                 :stroke-width="e.highlight ? 2.4 : 1.6"
-                :opacity="e.op"
                 :class="{ 'is-hot': e.highlight }"
                 stroke-linecap="round"
               />
-              <circle :cx="e.x1" :cy="e.y1" r="3" :fill="e.hue" :opacity="e.dotOp" />
-              <path :d="e.arrow" :fill="e.hue" :opacity="e.dotOp" />
+              <circle :cx="e.x1" :cy="e.y1" r="3" :style="{ fill: e.hue, opacity: e.dotOp }" />
+              <path :d="e.arrow" :style="{ fill: e.hue, opacity: e.dotOp }" />
             </template>
           </g>
         </svg>
@@ -219,7 +226,7 @@
                 class="dfg-step__badge"
                 :class="step.kind === 'service' ? 'dfg-step__badge--svc' : 'dfg-step__badge--cross'"
               >{{ step.kind === 'service' ? '代码服务' : '跨阶段引用' }}</span>
-              <span v-else class="dfg-step__badge dfg-step__badge--warn" title="该 Skill 已注册，但没有声明任何字段的产出与输入，未接入数据流转">无字段路由</span>
+              <span v-else class="dfg-step__badge dfg-step__badge--warn" title="该 Skill 已注册，但没有声明任何字段的产出与输入（产出直接进会话消息，不走字段路由）">无字段路由</span>
               <span v-if="step.unresolved" class="dfg-step__badge dfg-step__badge--warn" :title="UNRESOLVED_HINT">未解析</span>
               <!-- 阶段名是中文，等宽只留给 agentId 这类机器串 -->
               <button v-if="step.fromStage" type="button" class="dfg-step__stage" @click="switchStage(step.fromStage!)" title="跳到该阶段">→ {{ step.fromStage }}</button>
@@ -230,8 +237,8 @@
                 <span class="dfg-step__agent mono">{{ step.agentId }}</span>
               </template>
               <span class="dfg-step__spacer"></span>
-              <span v-if="step.condition" class="dfg-step__cond" :title="step.condition">触发：{{ step.condition }}</span>
-              <span v-if="step.loopOver" class="dfg-step__cond">循环：{{ step.loopOver }}</span>
+              <span v-if="step.condition" class="dfg-step__cond" :title="`定义原文：${step.condition}`">触发：{{ conditionText(step.condition) }}</span>
+              <span v-if="step.loopOver" class="dfg-step__cond">循环：{{ loopText(step.loopOver) }}</span>
               <button type="button" v-for="p in farPorts[step.agentId] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></button>
             </header>
             <p v-if="step.summary" class="dfg-step__summary" :title="step.role">{{ step.summary }}</p>
@@ -319,7 +326,7 @@
                           :key="t.target"
                           class="dfg-chip__to mono"
                           :class="{ 'dfg-chip__to--stage': t.kind === 'stage' }"
-                          :title="t.label"
+                          :title="t.kind === 'stage' ? `移交到下一阶段：${t.label}` : `汇入本阶段出口（${t.label}），随跨阶段移交进入下游`"
                         >→ {{ t.label }}</span>
                         <!-- 多于两个去向时给余量（2026-11-02 评审后补）：原实现 slice(0,2) 静默丢掉其余去向，
                              一个字段交给 3 个目标时读者会以为只交了 2 个 -->
@@ -415,6 +422,11 @@
         <i :style="{ background: f.hue }"></i>{{ f.name }}<b>{{ f.count }}</b>
       </button>
     </div>
+    <!-- 2026-11-11（困惑测试 #57）：芯片右端「→ X」有无的区别原先无图例——无去向标记的字段
+         不是被丢弃，而是只在本阶段可见（公开回复直接给学习者）。 -->
+    <p v-if="flow" class="dfg-legend__note">
+      芯片右端「→ 目标」= 移交去向（阶段 / Skill）。没有去向标记的字段不流向下一阶段——公开回复类直接给学习者，内部字段留在本阶段。
+    </p>
 
     <!-- 字段详情抽屉（含行级编辑，同步回写编排文件） -->
     <Teleport to="body">
@@ -497,7 +509,10 @@
             <section v-if="!selected.locked" class="mk-card">
               <div class="mk-card__head">
                 <h4 class="mk-card__title">行级编辑</h4>
-                <span class="mk-card__meta">会同步回写编排文件</span>
+                <span
+                  class="mk-card__meta"
+                  :title="`保存后立即写回编排文件「${stageOfChip(selected.agentId) || '本阶段'}」并同步 DB，没有审核流。变更记录见「治理」页签的最近变更`"
+                >保存即生效 · 回写 {{ stageOfChip(selected.agentId) || '本阶段' }}.yaml</span>
               </div>
               <div class="dfg-edit">
                 <div class="dfg-field">
@@ -536,7 +551,8 @@
           <footer class="mk-drawer__foot">
             <button type="button" class="mk-btn" @click="selected = null">关闭</button>
             <template v-if="!selected.locked">
-              <button type="button" class="mk-btn" :disabled="saving" @click="resetDraft">还原</button>
+              <!-- 2026-11-11（困惑测试 #59）：「还原」只是丢弃未保存草稿，不是回滚历史版本 -->
+              <button type="button" class="mk-btn" :disabled="saving" title="放弃未保存的修改，恢复到当前已保存值（不是回滚历史版本）" @click="resetDraft">放弃修改</button>
               <button type="button" class="mk-btn mk-btn--primary" :disabled="saving || !dirty" @click="saveEdit">
                 {{ saving ? '保存中…' : '保存修改' }}
               </button>
@@ -557,7 +573,7 @@ import { toast } from '@/utils/toast'
 import { ensureLiveTopologyRaw } from './live'
 import {
   buildStageFlow, familyHue, type FlowChip, type FlowStep, type StageFlow, type DefStepLike,
-  STAGE_ORDER, STAGE_LABELS,
+  STAGE_ORDER, STAGE_LABELS, conditionText, loopText,
 } from './dataFlow'
 import type { StageDetailLike } from './fieldFlowLayout'
 import MkLoading from '@/components/mk/MkLoading.vue'
@@ -728,8 +744,21 @@ function renderLabel(render: string) {
 function stageNameOf(id: string) {
   return stageNames.value[id] || STAGE_LABELS[id] || id
 }
+/* 阶段身份色走 CSS 变量（2026-11-11 深色对比度）：原实现直接取 store.AGENT_TONES 的十六进制，
+   深色档下 #4f46e5 / #0d9488 压在 #1c1e23 卡面上只有 ~2.4:1，连线与阶段点发灰。
+   五个阶段各映射到一个已定义的 --mk-* token（见样式表 .dfg 块），深色档由 token 自身提亮；
+   `--hz` 供 color-mix 混色消费，SVG 连线改用 style 绑定（presentation attribute 不认 var()）。 */
+const STAGE_HUE_VAR: Record<string, string> = {
+  goal: 'var(--dfg-hue-goal)',
+  path: 'var(--dfg-hue-path)',
+  teaching: 'var(--dfg-hue-teaching)',
+  profile: 'var(--dfg-hue-profile)',
+  simulation: 'var(--dfg-hue-simulation)',
+}
 function toneOf(id: string) {
-  return AGENT_TONES[`${id}-agent`] || { hue: '#64748b', soft: 'rgba(100,116,139,0.08)' }
+  const v = STAGE_HUE_VAR[id]
+  if (v) return { hue: v }
+  return AGENT_TONES[`${id}-agent`] || { hue: 'var(--mk-muted)' }
 }
 
 /** 数据族语义色注入：值取自 dataFlow.ts 的 familyHue（唯一源 = FAMILY_COLORS），
@@ -750,7 +779,10 @@ type WalkStep = FlowStep & {
   chips: FlowChip[]
 }
 function visibleChips(chips: FlowChip[]) {
-  return showHidden.value ? chips : chips.filter((c) => c.render === 'visible' || c.handoffTargets.length > 0 || c.accumulate)
+  /* 2026-11-11（困惑测试 #56）：原实现保留「有移交或累积」的隐藏字段，勾选框只会增加芯片，
+     对现网数据近乎零差异。现按 render 严格收窄：未勾选 = 不显示隐藏字段，勾选 = 全显示。
+     字段旅程的完整性由产出卡上的芯片与「+M 更多」表达，不靠把内部字段强行铺满。 */
+  return showHidden.value ? chips : chips.filter((c) => c.render !== 'hidden')
 }
 const ENTRY_LIMIT = 8
 const OUTPUT_LIMIT = 8
@@ -1454,7 +1486,7 @@ async function saveEdit() {
       return
     }
     await adminFieldRoutingsApi.patchRouting(c.agentId, c.fieldId, patch)
-    editMsg.value = '已保存：编排文件与 DB 已同步'
+    editMsg.value = '已保存并生效：编排文件与 DB 已同步；变更记录见「治理 → 最近变更」'
     toast.success('字段路由已更新')
     onRoutingChanged()
   } catch (e: any) {
@@ -1480,6 +1512,14 @@ function stepHue(step: FlowStep): string {
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
+  /* 阶段身份色（2026-11-11）：改走已定义的 --mk-* token，深色档由 token 自己提亮
+     （--mk-purple / --mk-teal / --mk-amber 与 --mk-graph-*-ink 在暗色块都有覆写），
+     不再在组件里写死十六进制。toneOf() 返回这些变量名，连线 / 阶段点 / 闸口边框与底色统一从这里取。 */
+  --dfg-hue-goal: var(--mk-purple);
+  --dfg-hue-path: var(--mk-teal);
+  --dfg-hue-teaching: var(--mk-graph-blue-ink);
+  --dfg-hue-profile: var(--mk-amber);
+  --dfg-hue-simulation: var(--mk-graph-accent-purple-ink);
 }
 .dfg-frame {
   border: 1px solid var(--mk-line);
@@ -1835,6 +1875,13 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
   background: var(--mk-surface);
   margin-top: 10px;
 }
+/* 去向标记说明（2026-11-11 困惑测试 #57）：芯片右端有无「→ 目标」此前无图例 */
+.dfg-legend__note {
+  margin: 6px 2px 0;
+  font-size: var(--mk-fs-micro);
+  line-height: 1.55;
+  color: var(--mk-muted);
+}
 .dfg-legend.is-dimmed { opacity: 0.55; }
 .dfg-legend__item {
   display: inline-flex; align-items: center; gap: 5px;
@@ -1902,6 +1949,12 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 
 /* ================= 暗色模式 ================= */
 html[data-theme='dark'] {
+  /* 数据族色来自 dataFlow.ts 的 FAMILY_COLORS（十六进制，逐族无法映射到 token）；
+     深色档统一提亮，避免细线与芯片点在深底上失去对比。
+     阶段色已在 .dfg 上走 --mk-* token，深色档由 token 自身覆写，这里不再重复。 */
+  .dfg-edges { filter: brightness(1.35) saturate(1.05); }
+  .dfg-chip__dot,
+  .dfg-legend__item i { filter: brightness(1.3); }
   .dfg-frame { background: var(--mk-graph-canvas); border-color: var(--mk-graph-line); }
   .dfg-toolbar { background: var(--mk-graph-toolbar-b); border-bottom-color: var(--mk-graph-line); }
   .dfg-search__input { background: var(--mk-graph-field); border-color: var(--mk-line); color: var(--mk-ink); }

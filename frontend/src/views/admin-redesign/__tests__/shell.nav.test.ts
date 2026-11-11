@@ -117,4 +117,81 @@ describe('Shell 导航', () => {
     // L1 页顶栏常显（页面名/分组），但不出现「返回上一级」钮
     expect(without.find('.mshell__top-back').exists()).toBe(false);
   });
+
+  it('三段面包屑保留中间层：用户账号 / cs / 课堂主题（不再只显示首尾两段）', () => {
+    const wrapper = mountShell({
+      current: 'people',
+      crumb: '用户账号 / cs / 把米勒与皮亚杰并排，写出认知革命替行为主义补上的那句「中间发生了什么」'
+    });
+    expect(wrapper.find('.mshell__top-sub').text()).toBe('用户账号 / cs');
+    expect(wrapper.find('.mshell__top-title').text()).toBe(
+      '把米勒与皮亚杰并排，写出认知革命替行为主义补上的那句「中间发生了什么」'
+    );
+  });
+
+  /* 顶栏可见文本会被 CSS 省略号截断（长实体名 / 深链），完整链必须留在 title 上——
+     否则悬停也读不到被截掉的那一段。 */
+  it('面包屑把完整链路放进 title（父级传入的 crumbTitle 比可见文本更长时优先用它）', () => {
+    const wrapper = mount(Shell, {
+      props: {
+        current: 'people',
+        crumb: '用户账号 / cs',
+        crumbTitle: '用户账号 / cs / 课堂 · 2026-11-11'
+      }
+    });
+    expect(wrapper.find('.mshell__top-crumb').attributes('title')).toBe('用户账号 / cs / 课堂 · 2026-11-11');
+    // 一级页没有更长的链：title 与屏幕上的「分组 / 页名」一致
+    const l1 = mountShell({ current: 'overview' });
+    expect(l1.find('.mshell__top-crumb').attributes('title')).toBe('总览 / 平台总览');
+  });
+
+  it('焦点离开搜索框后按 Esc 仍能收起结果弹层（输入框自己的 Esc 监听收不到）', async () => {
+    const wrapper = mountShell();
+    await wrapper.find('.mshell__search-input').setValue('成本');
+    expect(wrapper.find('.mshell__search-pop').exists()).toBe(true);
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('.mshell__search-pop').exists()).toBe(false);
+    expect((wrapper.find('.mshell__search-input').element as HTMLInputElement).value).toBe('');
+  });
+});
+
+/* 2026-11-11 二轮：≤768 顶栏搜索按原型整块 display:none，`/` 快捷键不应再把焦点丢进隐藏控件。
+   jsdom 对 display:none 元素仍允许 focus，所以这里用 matchMedia 断点模拟窄屏（与 CSS 同断点）。 */
+describe('窄屏 / 搜索快捷键', () => {
+  function stubMatchMedia(maxWidth768: boolean): () => void {
+    const saved = window.matchMedia
+    window.matchMedia = ((query: string) => ({
+      matches: maxWidth768 && query.includes('max-width: 768px'),
+      media: query,
+      onchange: null,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      dispatchEvent: () => false
+    })) as unknown as typeof window.matchMedia
+    return () => { window.matchMedia = saved }
+  }
+
+  it('桌面：按 / 聚焦页面搜索框', async () => {
+    const wrapper = mount(Shell, { props: { current: 'overview' }, attachTo: document.body })
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: '/', bubbles: true }))
+    await wrapper.vm.$nextTick()
+    expect(document.activeElement).toBe(wrapper.find('.mshell__search-input').element)
+    wrapper.unmount()
+  })
+
+  it('≤768（搜索框 display:none）：按 / 不再聚焦隐藏输入', async () => {
+    const restore = stubMatchMedia(true)
+    const wrapper = mount(Shell, { props: { current: 'overview' }, attachTo: document.body })
+    try {
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: '/', bubbles: true }))
+      await wrapper.vm.$nextTick()
+      expect(document.activeElement).not.toBe(wrapper.find('.mshell__search-input').element)
+    } finally {
+      wrapper.unmount()
+      restore()
+    }
+  })
 });

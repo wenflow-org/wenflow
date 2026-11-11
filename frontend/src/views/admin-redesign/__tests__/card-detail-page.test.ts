@@ -67,6 +67,7 @@ vi.mock('../live', async () => {
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 import CardDetailPage from '../CardDetailPage.vue';
+import CardDeriveDialog from '../CardDeriveDialog.vue';
 
 describe('CardDetailPage（卡详情二级页）', () => {
   it('全字段可视：概览事实/人设/故事池（开场白+追问+预算）/资料/标签备注', async () => {
@@ -181,8 +182,39 @@ describe('CardDetailPage（卡详情二级页）', () => {
     expect(w.text().split('县城重点高中在读，函数基础薄弱')).toHaveLength(2);
   });
 
-  it('R17：占位卡号 builtin 不进概览卡头', async () => {
+  /* 2026-11-11 困惑测试 #46/#48/#50：档位码要有中文释义；来源标识是批次标签时不做死链接；
+     人设背景里的作者/评测元数据不上屏（卡文档暂不重导，展示层整句剔除）。 */
+  it('来源标签不绑死链接；档位与等级各有释义；背景里的作者元数据不上屏', async () => {
     const { adminVirtualLearnersApi } = await import('@/api/adminApi');
+    vi.mocked(adminVirtualLearnersApi.cardsDetail).mockResolvedValueOnce({
+      data: {
+        data: {
+          profileId: 'p1', userId: 'u1', cardKey: 'frontier-F100', name: '想解决裁员后的情绪沟通', goal: '裁员后的情绪与家庭沟通',
+          knowledgeLevel: 'beginner', tags: ['F5B'], preset: false, sourceKind: 'synthetic',
+          sourceRef: 'Frontier-100 F100', email: null, notes: null, createdAt: '2026-10-05T00:00:00Z',
+          personaFacts: [{ label: '背景', value: '今天上午刚被裁，坐在车里不敢上楼跟老婆说。预期：primary_block_type = emotion_relationship + support_need = emotional' }],
+          nickname: null, nameHint: null, background: null, stories: [], materials: [],
+        },
+      },
+    } as never);
+    const w = mount(CardDetailPage);
+    await flushPromises();
+    // #48：批次标签不是 URI，不能产生 href 为字面量的死链接；说明它是什么
+    expect(w.find('a[href="Frontier-100 F100"]').exists()).toBe(false);
+    expect(w.find('a[href^="http"]').exists()).toBe(false);
+    expect(w.text()).toContain('Frontier-100 F100');
+    // #46：档位码带中文释义；「入门」标明是知识水平而非档位
+    const pills = w.find('.mk-hero__pills');
+    expect(pills.text()).toContain('F5B · 分诊负样本');
+    const level = pills.findAll('.mk-badge').find((b) => b.text() === '入门')!;
+    expect(level.attributes('title')).toContain('知识水平');
+    // #50：程序字段整句剔除，人物描述保留
+    expect(w.text()).not.toContain('primary_block_type');
+    expect(w.text()).toContain('今天上午刚被裁');
+    w.unmount();
+  });
+
+  it('R17：占位卡号 builtin 不进概览卡头', async () => {    const { adminVirtualLearnersApi } = await import('@/api/adminApi');
     vi.mocked(adminVirtualLearnersApi.cardsDetail).mockResolvedValueOnce({
       data: {
         data: {
@@ -197,5 +229,27 @@ describe('CardDetailPage（卡详情二级页）', () => {
     await flushPromises();
     const overview = w.findAll('.mk-card').find((c) => c.text().includes('概览'))!;
     expect(overview.text()).not.toContain('builtin');
+  });
+
+  it('派生成功后卡详情直接给新实例入口（不必回列表找人），返回落回本卡', async () => {
+    const w = mount(CardDetailPage);
+    await flushPromises();
+
+    const dialog = w.findComponent(CardDeriveDialog);
+    dialog.vm.$emit('created', [
+      { profileId: 'new-1', userId: 'u9', name: '吴倩', cardKey: 'w6-math-01', taskCount: 1 }
+    ]);
+    await flushPromises();
+
+    const bar = w.find('.cd-derived');
+    expect(bar.exists()).toBe(true);
+    expect(bar.text()).toContain('已创建 1 个虚拟学习者');
+    expect(bar.text()).toContain('打开「吴倩」画像');
+
+    await bar.find('button').trigger('click');
+    expect(openSubPageMock).toHaveBeenCalledWith('virtual', 'new-1', {
+      from: { view: 'card', id: 'p1', label: expect.any(String) }
+    });
+    w.unmount();
   });
 });

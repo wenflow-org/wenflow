@@ -129,3 +129,15 @@ describe('二次确认弹窗：文案契约', () => {
     expect(bad.map((s) => `${s.file}:${s.line}  ${s.confirmText}`)).toEqual([])
   })
 })
+
+describe('二次确认弹窗：层级', () => {
+  it('确认框压过普通弹层（常从弹层内部发起），仍低于 toast / critical', () => {
+    const confirm = readFileSync(join(SRC, 'views/admin-redesign/Confirm.vue'), 'utf8')
+    const mainCss = readFileSync(join(SRC, 'styles/main.css'), 'utf8')
+    // 双类选择器稳压 .mk-modal（同层时会按样式注入顺序被弹层盖住，2026-11-11 真浏览器发现）
+    expect(confirm).toContain('mk-modal mk-modal--confirm')
+    expect(confirm).toContain('var(--mk-z-confirm')
+    expect(mainCss).toMatch(/--mk-z-confirm:\s*340/)
+    expect(mainCss).toMatch(/--mk-z-toast:\s*450/)
+  })
+})

@@ -1,7 +1,7 @@
 /**
  * 传统分页器组件（方案 A）测试：页码文本 / 边界禁用 / 翻页事件 / 每页条数变更 / 越界自动收敛
  */
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import Pagination from '../Pagination.vue';
@@ -85,6 +85,20 @@ describe('Pagination（mk-pagination 传统分页器）', () => {
     expect(w.text()).toContain('共 378 条');
   });
 
+  it('总数用千分位（全站计数口径）：2053 → 共 2,053 条', () => {
+    const w = mountPagination({ total: 2053 });
+    expect(w.text()).toContain('共 2,053 条');
+    expect(w.text()).not.toContain('共 2053 条');
+  });
+
+  it('页码组是可命名的导航地标，总数变化会被读屏播报', () => {
+    const w = mountPagination();
+    const nav = w.find('[role="navigation"]');
+    expect(nav.exists()).toBe(true);
+    expect(nav.attributes('aria-label')).toBe('分页');
+    expect(w.find('.mk-pagination__total').attributes('aria-live')).toBe('polite');
+  });
+
   it('unit 可换：列表数的是「人」时直接写「位学习者」，不再另起一句解释', () => {
     const w = mountPagination({ showTotal: true, unit: '位学习者' });
     expect(w.text()).toContain('共 378 位学习者');
@@ -128,5 +142,54 @@ describe('Pagination（mk-pagination 传统分页器）', () => {
     expect(scroller.scrollTop).toBe(0);
     w.unmount();
     host.remove();
+  });
+});
+
+describe('Pagination 每页条数记忆（wf_page_size）', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('无存储：沿用宿主默认 15，不额外 emit', () => {
+    const w = mountPagination({ pageSize: 15 });
+    expect(w.emitted('update:pageSize')).toBeUndefined();
+  });
+
+  it('存储 50：以 50 作为初值 emit（宿主 v-model 更新后按 50 重查）', () => {
+    localStorage.setItem('wf_page_size', '50');
+    const w = mountPagination({ pageSize: 15 });
+    expect(w.emitted('update:pageSize')?.[0]).toEqual([50]);
+  });
+
+  it('非法存储回落 15：abc / 0 / 负数 / 小数 都不回填', () => {
+    for (const bad of ['abc', '0', '-5', '50.5', '']) {
+      localStorage.setItem('wf_page_size', bad);
+      const w = mountPagination({ pageSize: 15 });
+      expect(w.emitted('update:pageSize'), `${bad} 不该回填`).toBeUndefined();
+      w.unmount();
+    }
+  });
+
+  it('宿主自带非默认档（公告 20 / 审计日志 30）不被记忆覆盖', () => {
+    localStorage.setItem('wf_page_size', '50');
+    expect(mountPagination({ pageSize: 20 }).emitted('update:pageSize')).toBeUndefined();
+    expect(mountPagination({ pageSize: 30 }).emitted('update:pageSize')).toBeUndefined();
+  });
+
+  it('hideSize 固定行数页不读记忆', () => {
+    localStorage.setItem('wf_page_size', '50');
+    const w = mountPagination({ pageSize: 15, hideSize: true });
+    expect(w.emitted('update:pageSize')).toBeUndefined();
+  });
+
+  it('用户选 50 → 写入 wf_page_size，下一个列表可继承', async () => {
+    const w = mountPagination({ pageSize: 15 });
+    await chooseMkSelect(w as never, '每页条数', '50');
+    expect(w.emitted('update:pageSize')?.at(-1)).toEqual([50]);
+    expect(localStorage.getItem('wf_page_size')).toBe('50');
+
+    // 换一个默认 15 的列表：读到记忆值并回填
+    const next = mountPagination({ pageSize: 15 });
+    expect(next.emitted('update:pageSize')?.[0]).toEqual([50]);
   });
 });

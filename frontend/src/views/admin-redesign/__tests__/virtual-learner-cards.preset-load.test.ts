@@ -101,7 +101,7 @@ describe('卡库预置「一键加载」（#91 / P-67）', () => {
     (toast.warning as unknown as ReturnType<typeof vi.fn>).mockClear();
   });
 
-  it('「身份卡」KPI：两个构成数进同行 value-note（预置 / 自建），定义回退走琥珀档', async () => {
+  it('「身份卡」KPI：两个构成数进同行 value-note（预置 / 非预置），定义回退走琥珀档', async () => {
     const w = mount(VirtualLearnerCards);
     await flushPromises();
 
@@ -113,7 +113,7 @@ describe('卡库预置「一键加载」（#91 / P-67）', () => {
     expect(kpi.find('.mk-kpi__hint').exists()).toBe(false);
     const note = kpi.find('.mk-kpi__num-note');
     expect(note.text()).toContain('预置 1');
-    expect(note.text()).toContain('自建 0');
+    expect(note.text()).toContain('非预置 0');
     w.unmount();
   });
 

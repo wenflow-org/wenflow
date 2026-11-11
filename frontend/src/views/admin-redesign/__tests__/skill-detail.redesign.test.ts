@@ -25,7 +25,8 @@ import OrchestratorSource from '../Orchestrator.vue?raw'
 import { DETAIL_COMPONENTS } from '../AdminConsole.vue'
 import SkillDetail from '../SkillDetail.vue'
 import Skills from '../Skills.vue'
-import { subPage, closeSubPage, dataSource, liveSkillStatsMap } from '../store'
+import { subPage, closeSubPage, dataSource, liveSkillStatsMap, intent } from '../store'
+import { confirmState, settleConfirm } from '../useConfirm'
 import { liveSkillProfiles } from '../live'
 
 const { apiObject, metaMock, promptMock, cfgMock, routingsMock, versionsMock, overviewMock, coreMock, testSkillMock, probeMock } =
@@ -238,6 +239,36 @@ describe('技能详情接线（原型 open-skill 跳页，不是抽屉）', () =
     await row.trigger('click')
     await settle()
     expect(subPage.value).toMatchObject({ view: 'skill', id: 'skill-a' })
+    closeSubPage()
+    w.unmount()
+  })
+
+  /* 2026-11-11 第二轮（键盘动线）：目录行本身可 Tab（tabindex=0）+ Enter/Space 打开详情；
+     行内「详情」按钮是同一落点的第二入口，@click.stop 保证只跳一次（不叠加行点击）。 */
+  it('目录行键盘动线：Enter / Space 打开详情；行内「详情」按钮单跳', async () => {
+    closeSubPage()
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/admin/:page?', component: { template: '<div />' } }]
+    })
+    await router.push('/admin/skills')
+    await router.isReady()
+    const w = mount(Skills, { global: { plugins: [router] } })
+    await settle()
+
+    const row = w.find('.sk-catalog tbody tr')
+    expect(row.attributes('tabindex')).toBe('0')
+    await row.trigger('keydown', { key: 'Enter' })
+    await settle()
+    expect(subPage.value).toMatchObject({ view: 'skill', id: 'skill-a' })
+
+    closeSubPage()
+    const detail = row.findAll('button').find((b) => b.text() === '详情')
+    expect(detail, '行内应有「详情」按钮').toBeTruthy()
+    await detail!.trigger('click')
+    await settle()
+    expect(subPage.value).toMatchObject({ view: 'skill', id: 'skill-a' })
+
     closeSubPage()
     w.unmount()
   })
@@ -474,6 +505,29 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     w.unmount()
   })
 
+  /* P0（2026-11-11）：生效 Prompt 拉取失败此前只剩一句「暂无生效 Prompt。」——
+     把「请求失败」读成「确实没有生效版本」。失败必须给原因 + 重试。 */
+  it('生效 Prompt 拉取失败：显示可读原因 + 重试，不落成「暂无生效 Prompt」空态', async () => {
+    promptMock.mockRejectedValueOnce(new Error('upstream 502'))
+    const w = mountDetail()
+    await settle()
+    await w.findAll('.mk-subtab')[1].trigger('click')
+    await nextTick()
+
+    const alert = w.findAll('.mk-alert').find((a) => a.text().includes('生效 Prompt 加载失败'))
+    expect(alert, '应有生效 Prompt 错误条').toBeTruthy()
+    expect(alert!.text()).toContain('upstream 502')
+    expect(w.find('.sdp-pw__pre').exists()).toBe(false)
+
+    promptMock.mockResolvedValueOnce({
+      data: { data: { prompt: { id: 'p-9', version: 9, name: 'v9', systemPrompt: 'RETRY OK' } } }
+    })
+    await alert!.find('button').trigger('click')
+    await settle()
+    expect(w.find('.sdp-pw__pre').text()).toContain('RETRY OK')
+    w.unmount()
+  })
+
   it('Prompt 编辑弹层（原型 openPromptModal：modal--wide）：预填生效内容，关闭/Esc 可收', async () => {
     const w = mountDetail()
     await settle()
@@ -694,6 +748,177 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     expect(w.find('.sdp-routing').exists()).toBe(true)
 
     w.unmount()
+  })
+
+  /* 2026-11-11 走查（lesson-knowledge-enricher）：6 个产出字段的「流向」全是 —、
+     「渲染」全是隐藏、「内部/累积」全空——三列逐行复读同一个空值，说明列被挤窄。
+     与「脱敏列无数据就不出列」同一判例：整列没有信息量就省略。 */
+  it('字段流向表：全表同值时省略空列（流向 / 渲染 / 属性），渲染全隐藏只在卡头说一次', async () => {
+    routingsMock.mockResolvedValueOnce({
+      data: {
+        data: {
+          skillId: 'skill-a',
+          stage: 'teaching',
+          agentId: 'teaching-agent',
+          routings: [
+            { agentId: 'teaching-agent', fieldId: 'conceptLedger', render: 'hidden', handoff: [], internal: false, accumulate: false, notes: '概念账本' },
+            { agentId: 'teaching-agent', fieldId: 'knowledgeStateSummary', render: 'hidden', handoff: [], internal: false, accumulate: false, notes: '知识状态摘要' }
+          ],
+          fields: [
+            { fieldId: 'conceptLedger', promptRole: 'proposal-output', valueType: 'object', description: '概念账本' },
+            { fieldId: 'knowledgeStateSummary', promptRole: 'proposal-output', valueType: 'string', description: '知识状态摘要' }
+          ],
+          promptRoleMeta: [{ id: 'proposal-output', label: '派生展示' }],
+          core: { exists: true, fields: [], sync: null }
+        }
+      }
+    })
+    const w = mountDetail()
+    await settle()
+    await w.findAll('.mk-subtab')[1].trigger('click')
+    await nextTick()
+
+    const table = w.find('.mk-table')
+    const heads = table.findAll('thead th').map((t) => t.text())
+    expect(heads).toEqual(['字段', '角色', '说明'])
+    // 卡头一句替代 2 行「隐藏」徽章；文案明确「列已省略」，避免读者以为列丢了
+    expect(w.text()).toContain('渲染全部隐藏（列已省略）')
+    const hiddenHint = w.findAll('.mk-card__meta').find((m) => m.text().includes('渲染全部隐藏'))
+    expect(hiddenHint!.attributes('title')).toContain('省略「渲染」列')
+    expect(table.text()).not.toContain('隐藏')
+    w.unmount()
+  })
+
+  it('字段流向表：有真实流向 / 属性时列仍在（不误伤有信息的表）', async () => {
+    const w = mountDetail()
+    await settle()
+    await w.findAll('.mk-subtab')[1].trigger('click')
+    await nextTick()
+
+    const heads = w.find('.mk-table').findAll('thead th').map((t) => t.text())
+    expect(heads).toContain('流向')
+    expect(heads).toContain('渲染')
+    expect(heads).toContain('内部 / 累积')
+    w.unmount()
+  })
+
+  it('试跑失败：错误原因可读 + 重试入口；重试按同一载荷再跑一次', async () => {
+    testSkillMock.mockRejectedValueOnce(new Error('upstream boom'))
+    testSkillMock.mockResolvedValueOnce({
+      data: { data: { success: true, duration: 12, cached: false, output: { ok: true } } }
+    })
+    const w = mountDetail()
+    await settle()
+    await w.findAll('.mk-subtab')[2].trigger('click')
+    await nextTick()
+
+    const runBtn = w.findAll('button').find((b) => b.text().includes('开始试跑'))!
+    await runBtn.trigger('click')
+    await settle()
+    const alert = w.find('.mk-alert')
+    expect(alert.exists()).toBe(true)
+    expect(alert.text()).toContain('试跑失败')
+    const retry = alert.findAll('button').find((b) => b.text() === '重试')
+    expect(retry, '失败态应有重试入口').toBeTruthy()
+
+    await retry!.trigger('click')
+    await settle()
+    expect(testSkillMock).toHaveBeenCalledTimes(2)
+    expect(w.find('.sdp-output').text()).toContain('ok')
+    w.unmount()
+  })
+
+  /* 2026-11-11 第二轮（可用性）：排查「这个 Skill 最近为什么失败」最常用的一跳。
+     最近调用列表只到单条 Trace，卡头补「查执行日志」→ 按该 Skill 过滤的全部调用；
+     复用 ExecLogs 的 URL 契约（?agent=，AdminConsole 由 intent 落 URL），不改后端。 */
+  it('最近调用卡头 → 执行日志：带该 Skill 的 agent 过滤（全部状态，近 7 天）', async () => {
+    intent.scene = ''
+    intent.agentFilter = ''
+    intent.statusFilter = ''
+    const w = mountDetail()
+    await settle()
+
+    const btn = w.findAll('button').find((b) => b.text() === '查执行日志')
+    expect(btn, '运行时页签应有「查执行日志」入口').toBeTruthy()
+    await btn!.trigger('click')
+
+    expect(intent.scene).toBe('execution-logs')
+    expect(intent.agentFilter).toBe('skill-a')
+    // 这个入口看全部调用；失败筛选入口仍是 hero 健康徽标（investigateAgent 默认 status=err）
+    expect(intent.statusFilter).toBe('')
+    expect(intent.timeRange).toBe('week')
+    w.unmount()
+    intent.scene = ''
+    intent.agentFilter = ''
+  })
+
+  it('hero 失败徽标 → 执行日志失败筛选：任何页签都一跳（不再先切运行概览）', async () => {
+    liveSkillStatsMap.value = { 'skill-a': { calls: 100, errors: 5, avgMs: 2200, lastAt: '刚刚' } }
+    intent.scene = ''
+    intent.agentFilter = ''
+    intent.statusFilter = ''
+    const w = mountDetail()
+    await settle()
+    // 切到非运行页签，确认徽标仍直接进日志
+    await w.findAll('.mk-subtab')[1].trigger('click')
+    await nextTick()
+
+    const badge = w.find('.skd-badge-btn')
+    expect(badge.exists(), '有失败时健康徽标应可点').toBe(true)
+    await badge.trigger('click')
+    expect(intent.scene).toBe('execution-logs')
+    expect(intent.agentFilter).toBe('skill-a')
+    expect(intent.statusFilter).toBe('err')
+    w.unmount()
+    intent.scene = ''
+    intent.agentFilter = ''
+    intent.statusFilter = ''
+  })
+
+  /* 2026-11-11 第二轮：Prompt 弹层的正文改动此前不在 anyDirty 里——
+     编辑后点面包屑返回 / 关浏览器不会拦（弹层「已关闭」时草稿会落 sessionStorage，
+     但「没关就离开」这条路是静默丢弃）。现在纳入离开守卫，且关闭弹层后不再重复拦。 */
+  it('Prompt 弹层有未保存改动：离开被确认框拦下；关闭弹层落草稿后不再拦', async () => {
+    confirmState.open = false
+    confirmState.busy = false
+    confirmState.busyMode = false
+    confirmState.resolve = null
+    const w = mountDetail()
+    await settle()
+    await w.findAll('.mk-subtab')[1].trigger('click')
+    await nextTick()
+    await w.findAll('.mk-card__head .mk-btn--sm')[0].trigger('click')
+    await nextTick()
+
+    const ta = document.querySelector('.mk-modal textarea') as HTMLTextAreaElement
+    expect(ta).toBeTruthy()
+    ta.value = 'CHANGED PROMPT BODY'
+    ta.dispatchEvent(new Event('input'))
+    await nextTick()
+
+    // 关浏览器同样要拦（beforeunload 与 anyDirty 同源）
+    const unload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(unload)
+    expect(unload.defaultPrevented).toBe(true)
+
+    closeSubPage()
+    await settle()
+    expect(confirmState.open, '未保存的 Prompt 应触发离开确认').toBe(true)
+    settleConfirm(false)
+    await settle()
+    expect(subPage.value?.view).toBe('skill')
+
+    // 显式关闭弹层 → 草稿落 sessionStorage，dirty 清零；再离开不再拦
+    ;(document.querySelector('.mk-modal__close') as HTMLButtonElement).click()
+    await nextTick()
+    confirmState.open = false
+    closeSubPage()
+    await settle()
+    expect(confirmState.open).toBe(false)
+    w.unmount()
+    sessionStorage.removeItem('skd-prompt-draft:skill-a')
+    intent.scene = ''
+    intent.agentFilter = ''
   })
 
   it('Esc 关详情页（弹层未开时）：subPage 清空回列表', async () => {

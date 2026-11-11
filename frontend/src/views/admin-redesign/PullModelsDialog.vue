@@ -13,7 +13,7 @@
        「已添加」标记并入名称格，仍能一眼区分已挂上的行。 -->
   <Teleport v-if="open" to="body">
     <div ref="maskRef" class="mk-modal">
-      <div ref="panelRef" class="mk-modal__panel pmd" role="dialog" aria-modal="true" :aria-label="title">
+      <div ref="panelRef" class="mk-modal__panel pmd" role="dialog" aria-modal="true" :aria-label="title" @keydown.enter="onEnterSubmit">
         <div class="mk-modal__head">
           <h3 class="mk-modal__title">{{ title }}</h3>
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="close">✕</button>
@@ -28,6 +28,20 @@
               aria-label="搜索模型"
               autocomplete="off"
             />
+            <!-- 类型视图（2026-11-11 用户评审）：上游清单是混合的，对话弹窗默认只推荐对话模型；
+                 向量 / 重排 / 其它不隐藏，切「全部模型」就能选，误判时也有出口。
+                 规则在后端（inferModelType），前端不维护模型名单。 -->
+            <div v-if="showKinds" class="mk-seg pmd-kind" role="group" aria-label="按模型类型筛选">
+              <button
+                v-for="k in kindOptions"
+                :key="k.key"
+                type="button"
+                class="mk-seg__item"
+                :class="{ 'mk-seg__item--active': kindView === k.key }"
+                :aria-pressed="kindView === k.key"
+                @click="kindView = k.key"
+              >{{ k.label }}</button>
+            </div>
             <!-- 添加状态（2026-11-09）：默认只看未添加——省掉整列同值的绿标签，
                  也免得已挂上的模型在「全部」里被再勾一次。计数是清单规模，不随搜索变。
                  键盘契约同 MkSubTabs：方向键在页签间移动并切换、roving tabindex、Home/End。 -->
@@ -96,10 +110,12 @@
                     <span v-if="row.display" class="pmd-row__alias" :title="row.display">{{ row.display }}</span>
                     <!-- 已添加只在「已添加 / 全部」两个视图里出现：未添加视图里本行不存在 -->
                     <span v-if="row.added" class="mk-badge mk-badge--muted mk-badge--sm">已添加</span>
+                    <!-- 「全部模型」里给非对话行一枚类型标，避免再次混选；推荐视图不印 -->
+                    <span v-if="kindView === 'all' && typeLabel(row.id)" class="mk-badge mk-badge--muted mk-badge--sm">{{ typeLabel(row.id) }}</span>
                   </span>
                 </label>
                 <span class="pmd-row__res" :class="resClass(row.id)" :title="results[row.id]?.text">
-                  <template v-if="results[row.id]">{{ results[row.id].ok ? `已连通 · ${results[row.id].latency}` : '连接失败' }}</template>
+                  <template v-if="results[row.id]">{{ resText(row.id) }}</template>
                   <span v-else class="mk-na">—</span>
                 </span>
                 <span v-if="providerId || tester" class="pmd-row__probe">
@@ -157,6 +173,7 @@ import { useEscape } from './useEscape'
 import { useMaskClose, useOverlay } from './useOverlay'
 import { errMsg } from './live'
 import { hasReadableName, readableModelName } from './modelCapabilityInference'
+import { testFailureReason } from './modelTestHints'
 
 /** 清单视图：默认「未添加」（2026-11-09 用户走查） */
 type PickerView = 'missing' | 'added' | 'all'
@@ -173,6 +190,10 @@ const props = withDefaults(defineProps<{
   providerId?: string
   /** 本次拉取到的全部模型 id */
   models: string[]
+  /** 上游模型的软分类（id → llm/embedding/reranker/unknown）：后端推断，前端不自建字典 */
+  types?: Record<string, string>
+  /** 「推荐对话 / 全部模型」切换条：只有对话卡需要；向量 / 重排卡自己按用途筛过了 */
+  showKinds?: boolean
   /** 已登记进模型清单的 id：这些行只读标记「已添加」 */
   registered: string[]
   /** 弹窗标题：对话卡「添加对话模型」/ 向量卡「添加向量模型」… */
@@ -206,6 +227,8 @@ const props = withDefaults(defineProps<{
   hint: '引入后可点该行的「配置」调整思考 / 推理强度 / 视觉。',
   hiddenCount: 0,
   labels: () => ({}),
+  types: () => ({}),
+  showKinds: true,
   emptyText: '',
   tester: undefined,
 })
@@ -228,11 +251,13 @@ const emit = defineEmits<{
 const open = ref(false)
 const query = ref('')
 const view = ref<PickerView>('missing')
+/** 类型视图：默认推荐对话；向量 / 重排在「全部模型」里仍可选（不隐藏，只排后） */
+const kindView = ref<'recommended' | 'all'>('recommended')
 const selected = ref<string[]>([])
 /** 正在测试的模型 id（同一时刻只跑一个：串行避免一把把上游打满） */
 const testing = ref('')
-/** 行内测试结果：ok 显耗时，失败显「连接失败」（原因进 title） */
-const results = ref<Record<string, { ok: boolean; latency: string; text: string }>>({})
+/** 行内测试结果：ok 显耗时，失败显短判词（401 / 超时 / 连不上），完整报文进 title */
+const results = ref<Record<string, { ok: boolean; latency: string; text: string; reason?: string }>>({})
 const maskRef = ref<HTMLElement | null>(null)
 const panelRef = ref<HTMLElement | null>(null)
 
@@ -258,16 +283,37 @@ const rows = computed<PickerRow[]>(() => {
 
 /** 三个视图的计数用整份清单（不随搜索变），否则打字时数字乱跳 */
 const viewOptions = computed<Array<{ key: PickerView; label: string }>>(() => {
-  const added = rows.value.filter((r) => r.added).length
+  const scope = kindFilteredRows.value
+  const added = scope.filter((r) => r.added).length
   return [
-    { key: 'missing', label: `未添加 (${rows.value.length - added})` },
+    { key: 'missing', label: `未添加 (${scope.length - added})` },
     { key: 'added', label: `已添加 (${added})` },
-    { key: 'all', label: `全部 (${rows.value.length})` },
+    { key: 'all', label: `全部 (${scope.length})` },
   ]
 })
 
+/** 类型标签：只在「全部模型」视图里印，提醒这一行不是对话模型 */
+const TYPE_LABEL: Record<string, string> = { embedding: '向量', reranker: '重排', unknown: '其它' }
+function typeLabel(id: string): string {
+  return TYPE_LABEL[props.types[id] || ''] || ''
+}
+/** 没有分类（旧后端 / 已保存清单）按对话处理：推荐视图不能因为缺字段就筛空 */
+function isRecommendedType(id: string): boolean {
+  const t = props.types[id]
+  return !t || t === 'llm'
+}
+const kindOptions = computed(() => [
+  { key: 'recommended' as const, label: `推荐对话 (${rows.value.filter((r) => isRecommendedType(r.id)).length})` },
+  { key: 'all' as const, label: `全部模型 (${rows.value.length})` },
+])
+const kindFilteredRows = computed(() => {
+  // 没有类型切换条（向量 / 重排卡）时，宿主已经把清单筛成该用途，这里不再二次过滤
+  if (!props.showKinds || kindView.value === 'all') return rows.value
+  return rows.value.filter((r) => isRecommendedType(r.id))
+})
+
 const visibleRows = computed(() => {
-  const inView = rows.value.filter((row) =>
+  const inView = kindFilteredRows.value.filter((row) =>
     view.value === 'all' ? true : view.value === 'added' ? row.added : !row.added
   )
   const q = query.value.trim().toLowerCase()
@@ -282,6 +328,9 @@ const selectableVisibleRows = computed(() => visibleRows.value.filter((row) => r
 const emptyMessage = computed(() => {
   if (query.value.trim()) return '没有匹配的模型'
   if (!props.models.length) return props.emptyText || '这次没有拉取到模型'
+  if (kindView.value === 'recommended' && kindFilteredRows.value.length < rows.value.length) {
+    return '推荐视图里没有可添加的对话模型，「全部模型」里仍可选'
+  }
   if (view.value === 'missing') return '上游模型都已添加'
   if (view.value === 'added') return '还没有已添加的模型'
   return props.emptyText || '这次没有拉取到模型'
@@ -347,6 +396,8 @@ function openWith(): void {
   query.value = ''
   // 每次开窗都回「未添加」：默认视图是「这次能挂什么」（2026-11-09）
   view.value = 'missing'
+  // 类型视图也回默认：上次切到「全部」不该让下一个用户再看见混合清单（2026-11-11）
+  kindView.value = 'recommended'
   results.value = {}
   testing.value = ''
   open.value = true
@@ -371,10 +422,19 @@ async function runTest(modelId: string): Promise<void> {
       [modelId]: { ok: true, latency: `${data.durationMs ?? 0}ms`, text: data.content || '连通正常' },
     }
   } catch (e) {
-    results.value = { ...results.value, [modelId]: { ok: false, latency: '', text: errMsg(e) } }
+    const text = errMsg(e)
+    results.value = { ...results.value, [modelId]: { ok: false, latency: '', text, reason: testFailureReason(text) } }
   } finally {
     testing.value = ''
   }
+}
+
+/** 行内测试结果文案：成功给耗时，失败给短判词（列宽 104px，「失败 · 401」放得下） */
+function resText(id: string): string {
+  const r = results.value[id]
+  if (!r) return ''
+  if (r.ok) return `已连通 · ${r.latency}`
+  return r.reason ? `失败 · ${r.reason}` : '连接失败'
 }
 
 function close(): void {
@@ -387,6 +447,17 @@ function confirm(): void {
   if (!selected.value.length) return
   emit('confirm', [...selected.value])
   close()
+}
+
+/** Enter 提交（2026-11-11 可用性）：勾选后回车即确认引入。
+    搜索框里回车也走这里（有勾选时）；未勾选 / 拉取中不做任何事，避免误提交。 */
+function onEnterSubmit(e: KeyboardEvent): void {
+  if (e.isComposing) return
+  const el = e.target as HTMLElement | null
+  if (!el || el.closest('button, textarea, select, [role="tab"]')) return
+  if (props.loading || !selected.value.length) return
+  e.preventDefault()
+  confirm()
 }
 
 function manual(): void {
@@ -416,6 +487,7 @@ defineExpose({ openWith, isOpen: () => open.value })
    焦点改用本站口径——描边变蓝（2026-11-07 用户「把搜索框那圈粗大的原生蓝色 outline 焦点框去掉」） */
 .pmd-filter:focus-visible { outline: none; border-color: var(--mk-blue); }
 .pmd-view { flex: none; }
+.pmd-kind { flex: none; }
 /* 拉取按钮靠右（分段与搜索留在左半：它们是同一次挑选的两步） */
 .pmd-refetch { margin-left: auto; flex: none; }
 .pmd-cols {

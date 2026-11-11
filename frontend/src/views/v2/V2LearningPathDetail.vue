@@ -118,7 +118,13 @@
                 <span v-if="rollingBack" class="spinner spinner--sm"></span>
                 {{ rollingBack ? '正在回退…' : '回退上次调整' }}
               </button>
-              <span v-else-if="allDone" class="btn-ghost">全部任务已完成</span>
+              <!-- 2026-11-11 走查：原「全部任务已完成」是 .btn-ghost 的禁用态 span——
+                   状态被画成控件（原则 5）。改成状态说明 + 一个有去处的文字链；
+                   「调整路径」仍是次按钮（已完成路径上它用于续写/重排，不是主行动）。 -->
+              <span v-if="allDone" class="hero__done">
+                <span class="hero__done-state">全部 {{ totalTasks }} 个任务已完成</span>
+                <router-link to="/user/learning-history" class="hero__done-link">查看学习记录 ›</router-link>
+              </span>
             </div>
           </div>
           <div class="hero__ring">
@@ -351,6 +357,9 @@
                 <span class="kicker">设计意图</span>
                 <span class="sidecard__chev" :class="{ 'sidecard__chev--open': intentOpen }">▾</span>
               </button>
+              <!-- 收起态不是空卡（2026-11-11 走查 图5）：给一行实际内容摘要（设计依据字段名 /
+                   目标标题），展开后不重复；长文本单行省略，完整值在 title。 -->
+              <p v-if="!intentOpen && intentPreview" class="sidecard__preview" :title="intentPreview">{{ intentPreview }}</p>
               <div v-show="intentOpen" class="sidecard__body">
                 <strong
                   v-if="sceneSummaryTitle"
@@ -1762,6 +1771,14 @@ const sceneProblemBackground = computed(() => {
 
 watch(sceneProblemBackground, () => { bgExpanded.value = false; });
 
+/* 收起态摘要（2026-11-11 走查）：只复述已有内容，不写「点击展开」这类操作说明。
+   有结构化字段时报字段名；只有标题/背景时退回标题本身。 */
+const intentPreview = computed(() => {
+  const labels = sceneRows.value.map((row) => row.label);
+  if (labels.length) return `设计依据：${labels.join('、')}`;
+  return sceneSummaryTitle.value || '';
+});
+
 /* ---------- 展示辅助 ---------- */
 const badgeText = computed(() => {
   if (pathOffline.value) return '已下线';
@@ -1928,7 +1945,13 @@ onBeforeUnmount(() => {
   font-size: 12.5px; color: var(--faint);
 }
 .metric b { font-size: 13.5px; color: var(--ink); font-variant-numeric: tabular-nums; }
-.hero__actions { display: flex; gap: 12px; margin-top: 18px; flex-wrap: wrap; }
+.hero__actions { display: flex; gap: 12px; margin-top: 18px; flex-wrap: wrap; align-items: center; }
+/* 已完成说明（2026-11-11 走查）：状态不再是按钮；说明与「查看学习记录」文字链同排，
+   窄屏整体换行，不挤压「调整路径」。 */
+.hero__done { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; }
+.hero__done-state { color: var(--muted); }
+.hero__done-link { color: var(--blue-deep); font-weight: 700; text-decoration: none; }
+.hero__done-link:hover { text-decoration: underline; }
 /* 主/次按钮不再在本页复制一份：本文件曾自带 .btn-primary（11px 22px / 16px 圆角 / 14px 字，
    实测约 39px 高）与 .btn-ghost 副本，与 .card / .adjust-dialog 的 16px 圆角同档，正是 §1
    要消除的「内层与外层同圆角 + 肥大」；且页内 scoped 副本晚于入口样式表加载，会把
@@ -2168,6 +2191,17 @@ onBeforeUnmount(() => {
    原 rotate(90deg) 把「▾」转成朝左，看不出是展开态（2026-10-08 走查 #77）。 */
 .sidecard__chev--open { transform: rotate(180deg); }
 .sidecard__body { display: grid; gap: 10px; align-content: start; }
+/* 折叠态摘要：一行真实内容，避免收起后只剩「设计意图 + 箭头」像空卡 */
+.sidecard .sidecard__preview {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--faint);
+  overflow-wrap: anywhere;
+}
 /* 卡内子分区（接下来 / 原文预览）：与主 kicker 同语言、低一档 */
 .sidecard__sub { display: grid; gap: 6px; align-content: start; border-top: 1px solid var(--line); padding-top: 10px; margin-top: 2px; }
 .sidecard__sub-head { font-size: 12px; font-weight: 700; color: var(--muted); }

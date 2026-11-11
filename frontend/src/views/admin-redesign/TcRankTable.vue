@@ -31,12 +31,13 @@
       <div class="tc-c tc-c--name" role="cell">
         <template v-if="variant === 'user'">
           <!-- 审核 #135：显式给 tone（原不传 → MkCellAvatar 渲染幽灵类 mk-ava--undefined）。
-               测试/虚拟账号的差异化着色需后端 by-user enrich 返回 isTest（当前无此标记，见报告「暂缓」） -->
-          <MkCellAvatar :name="r.name || r.key" tone="default" />
+               2026-11-11 困惑测试 #98：后端 by-user 已补 isVirtualLearner，虚拟账号头像转紫、
+               副行标出「虚拟学习者」——本页不按账号类型过滤，行内必须能认出仿真消耗。 -->
+          <MkCellAvatar :name="r.name || r.key" :tone="r.isVirtualLearner ? 'virtual' : 'default'" />
           <span class="tc-c__main">
             <strong :title="r.name || r.key">{{ r.name || shortId(r.key) }}</strong>
             <em class="tc-c__sub" :title="r.email || r.key">
-              {{ r.email || (r.name ? shortId(r.key) : '') }}
+              {{ r.email || (r.name ? shortId(r.key) : '') }}<template v-if="r.isVirtualLearner"> · 虚拟学习者</template>
             </em>
           </span>
         </template>
@@ -48,14 +49,14 @@
         </template>
       </div>
 
-      <span class="tc-c tc-c--num tc-num" role="cell">{{ r.calls }}</span>
+      <span class="tc-c tc-c--num tc-num" role="cell">{{ r.calls.toLocaleString() }}</span>
 
       <!-- 失败：次数为值，失败率作副行（与 Token 用量同一套「值 + 副读数」结构）。
            2026-11-10 用户「失败次数的字体大小不对」：此前次数与失败率挤在同一行，
            次数按 4K 档放大、失败率仍是 micro，两个字号并排读成「210%」——
            现在失败率独占副行，字号关系与 Token 列一致。 -->
       <div class="tc-c tc-c--num tc-fail" :class="r.failed > 0 ? 'tc-fail--bad' : 'tc-fail--ok'" role="cell">
-        <strong class="tc-num tc-fail__count">{{ r.failed }}</strong>
+        <strong class="tc-num tc-fail__count">{{ r.failed.toLocaleString() }}</strong>
         <em v-if="r.failed > 0" class="tc-c__sub">失败率 {{ failRate(r) }}</em>
       </div>
 
@@ -91,6 +92,8 @@ export interface RankRow {
   failed: number
   name?: string | null
   email?: string | null
+  /** 虚拟学习者账号（2026-11-11：by-user 补全，行内标出仿真消耗） */
+  isVirtualLearner?: boolean
   /* 成本桶（审核 #112）：后端 RankEntry extends CostBucket，原样回传 usd/pricingKnown/
      pricedCalls/callsMissingPricing；此前未声明也未渲染，user/model 排行缺成本列 */
   usd?: number | null
@@ -103,7 +106,7 @@ export interface RankRow {
 <script setup lang="ts">
 import { computed } from 'vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
-import { formatUsd } from './costFormat'
+import { formatUsd, formatPct, formatTokens as fmtTokens } from './costFormat'
 
 const props = withDefaults(
   defineProps<{
@@ -118,14 +121,6 @@ const props = withDefaults(
 
 const nameLabel = computed(() => (props.variant === 'user' ? '用户' : '模型'))
 
-function fmtTokens(n: number | undefined): string {
-  if (!Number.isFinite(n as number) || !n || n <= 0) return '0'
-  if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`
-  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`
-  if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`
-  return String(Math.round(n))
-}
-
 function shortId(id: string): string {
   if (!id) return '—'
   return id.length > 18 ? `${id.slice(0, 12)}…${id.slice(-4)}` : id
@@ -136,8 +131,7 @@ function shareW(tokens: number): string {
   return `${Math.max(p > 0 ? 3 : 0, p)}%`
 }
 function sharePct(tokens: number): string {
-  const p = sharePctNum(tokens)
-  return p > 0 && p < 1 ? '<1%' : `${Math.round(p)}%`
+  return formatPct(sharePctNum(tokens))
 }
 function sharePctNum(tokens: number): number {
   if (!props.totalTokens || tokens <= 0) return 0
@@ -146,9 +140,8 @@ function sharePctNum(tokens: number): number {
 
 function failRate(r: RankRow): string {
   if (!r.calls || r.failed <= 0) return ''
-  const pct = (r.failed / r.calls) * 100
   // 有失败但占比不足 1%：写 0% 会和旁边那枚红字次数读作矛盾（1 次失败 · 失败率 0%）
-  return pct < 1 ? '<1%' : `${Math.round(pct)}%`
+  return formatPct((r.failed / r.calls) * 100)
 }
 
 /* 成本取值口径（审核 #112）：只有已定价金额才显金额，其余暗灰 — 占位。
@@ -179,7 +172,7 @@ function rowTitle(r: RankRow): string {
   const label = props.variant === 'user' ? (r.name || r.key) : (r.display || r.key)
   /* 2026-10-18 用户走查「这类文案」：行 title 只留调用/失败/成本三项，
      输入/输出两列就在同一行里，悬停复读一遍只会让长串里更难找关心的那一项 */
-  return [label, `${r.calls} 次调用`, `失败 ${r.failed}`, `成本 ${costDesc(r)}`].join(' · ')
+  return [label, `${r.calls.toLocaleString()} 次调用`, `失败 ${r.failed.toLocaleString()}`, `成本 ${costDesc(r)}`].join(' · ')
 }
 </script>
 

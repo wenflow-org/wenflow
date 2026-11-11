@@ -231,8 +231,8 @@ export function analyzeW2(book: SkillsBook, registrations: Array<{ name: string 
     .filter((entry) => {
       const rp = registrationPointOf(entry);
       // agents（learner-model 落 agentHandlers）/ platform-direct（semantic-freeze-judge 守门直调）
-      // 不落 skill_registrations 是预期行为，豁免方向 A
-      if (rp === 'agents' || rp === 'platform-direct') return false;
+      // / none（board-designer 等不进派发表、无注册语义）不落 skill_registrations 是预期行为，豁免方向 A
+      if (rp === 'agents' || rp === 'platform-direct' || rp === 'none') return false;
       return !registeredNames.has(entry.skillId);
     })
     .map((entry) => entry.skillId)

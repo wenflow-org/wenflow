@@ -12,7 +12,7 @@
     <MkDetailHero :title="pageTitle">
       <template #pills>
         <span class="mk-badge" :class="sourceBadge(d)" :title="sourceTitle(d)">{{ sourceText(d) }}</span>
-        <span class="mk-badge mk-badge--muted">{{ levelText(d.knowledgeLevel) }}</span>
+        <span class="mk-badge mk-badge--muted" :title="levelTitle(d.knowledgeLevel)">{{ levelText(d.knowledgeLevel) }}</span>
         <!-- 徽标行只放运营读得懂的标签：preset: / hash: / vN 这类内部标记改到「概览 · 标识」
              一行里带全值展示（2026-11-02 评审 R18，卡墙 2026-10-24 已同规则） -->
         <span v-for="t in visibleTags.slice(0, 4)" :key="t" class="mk-badge mk-badge--muted" :title="t">{{ t }}</span>
@@ -26,6 +26,23 @@
         >创建虚拟学习者</button>
       </template>
     </MkDetailHero>
+
+    <!-- 派生结果常驻条（2026-11-11 第二轮走查）：创建成功后弹层关闭，本页原先只回刷「已创建 N」，
+         没有去新实例的入口，运营得回虚拟学习者列表再找人。这里直接给画像入口。 -->
+    <div v-if="derivedCreated.length" class="cd-derived mk-alert mk-alert--ok" role="status">
+      <span>已创建 {{ derivedCreated.length }} 个虚拟学习者</span>
+      <span class="cd-derived__acts">
+        <button
+          v-for="c in derivedCreated.slice(0, 3)"
+          :key="c.profileId"
+          type="button"
+          class="mk-link"
+          :title="`打开「${c.name}」的虚拟画像`"
+          @click="openCreated(c)"
+        >打开「{{ c.name }}」画像 →</button>
+        <span v-if="derivedCreated.length > 3" class="cd-derived__more">其余 {{ derivedCreated.length - 3 }} 个可在虚拟学习者列表查看</span>
+      </span>
+    </div>
 
     <!-- 来源（2026-10-16 卡=身份模板）：本页是从另一张身份卡派生出来的实例。
          给回模板的入口——运营常要从同一张身份卡再派生一个实例。
@@ -72,14 +89,19 @@
           <div><span>账号</span><strong class="mono">{{ d.email || '—（纯档案卡，无账号）' }}</strong></div>
           <div><span>创建时间</span><strong>{{ fmtDate(d.createdAt) }}</strong></div>
           <div><span>来源</span><strong>
-            <template v-if="d.sourceRef"><a :href="d.sourceRef" target="_blank" rel="noopener" class="mk-link">{{ d.sourceRef }}</a></template>
+            <template v-if="d.sourceRef">
+              <!-- 2026-11-11 困惑测试 #48：sourceRef 是卡文档里的批次标签（Frontier-100 F100），
+                   不是网址；绑成 href 会得到 href 为字面量的死链接。只有真是 URL 才做链接。 -->
+              <a v-if="isHttpUrl(d.sourceRef)" :href="d.sourceRef" target="_blank" rel="noopener" class="mk-link">{{ d.sourceRef }}</a>
+              <span v-else :title="SOURCE_REF_TITLE">{{ d.sourceRef }}</span>
+            </template>
             <template v-else>{{ sourceText(d) }}</template>
           </strong></div>
           <!-- 内部标识留在这里给核对（2026-11-02 评审 R18）：徽标行不摊给所有人看，
                但版本与内容指纹要能读全值，不能被省略号截断 -->
           <div v-if="internalTags.length">
             <span>标识</span>
-            <strong><span class="cd-ident">{{ internalTags.join(' · ') }}</span></strong>
+            <strong><span class="cd-ident" :title="internalTags.join(' · ')">{{ internalTags.join(' · ') }}</span></strong>
           </div>
         </div>
       </div>
@@ -111,9 +133,9 @@
       <div class="cd-pad cd-sec">
         <article v-for="(s, i) in d.stories" :key="i" class="cd-story">
           <div class="cd-story__title">{{ s.title || `故事 ${i + 1}` }}</div>
-          <p v-if="s.opening" class="cd-story__opening">「{{ s.opening }}」</p>
+          <p v-if="s.opening" class="cd-story__opening">「{{ cleanAuthoringText(s.opening) }}」</p>
           <ul v-if="s.followUps.length" class="cd-story__hooks">
-            <li v-for="(h, hi) in s.followUps" :key="hi">{{ h }}</li>
+            <li v-for="(h, hi) in s.followUps" :key="hi">{{ cleanAuthoringText(h) }}</li>
           </ul>
           <!-- 标签行（2026-11-07 用户「故事池底部标签与正文重复」）：
                领域与故事标题同值是卡库常态，不再把标题原样再印一枚胶囊；
@@ -176,9 +198,10 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import { subPage, closeSubPage, openSubPage, setSubPageLabel } from './store'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { errMsg, liveRefreshSeq } from './live'
+import { formatTime } from './cockpitFormat'
 import { toast } from '@/utils/toast'
 import { isInternalTag, isPlaceholderCardKey } from './cardTags'
-import { cardDisplayTitle, isWallHiddenTag } from './cardDisplay'
+import { cardDisplayTitle, isWallHiddenTag, tierLabel, TIER_RE } from './cardDisplay'
 
 /* 文案单源（R6 复读单源化）：hero 副文与来源徽章悬停释共用一份 */
 const PRESET_SYNC_NOTE = '平台预置角色（卡库内「一键加载」同步）'
@@ -280,7 +303,7 @@ function goTemplate(sourceCardId: string) {
 const backgroundLead = computed(() => {
   const bg = (d.value?.background || '').trim()
   if (!bg) return ''
-  return (d.value?.personaFacts || []).some((f) => f.label === '背景') ? '' : bg
+  return (d.value?.personaFacts || []).some((f) => f.label === '背景') ? '' : cleanAuthoringText(bg)
 })
 /**
  * 徽标行只放运营标签：内部标记（preset: / hash: / vN）改到概览「标识」一行全值展示；
@@ -292,7 +315,8 @@ const visibleTags = computed(() => {
   const out: string[] = []
   for (const t of d.value?.tags || []) {
     if (isInternalTag(t) || isWallHiddenTag(t)) continue
-    const text = TAG_ZH[t] || t
+    // 档位码单独一档：A–E / F1–F5B 印成「F5B · 分诊负样本」（与卡墙、筛选下拉同口径）
+    const text = TIER_RE.test(String(t).trim()) ? tierLabel(String(t)) : (TAG_ZH[t] || t)
     if (!out.includes(text)) out.push(text)
   }
   return out
@@ -331,6 +355,18 @@ function levelText(level: string): string {
   const map: Record<string, string> = { beginner: '入门', intermediate: '进阶', advanced: '高阶' }
   return map[level] || level || '—'
 }
+/** 等级徽章的悬停释（2026-11-11 困惑测试 #46）：它与档位徽章（A–E / F1–F5B）是两个维度，
+ *  第一次看卡的人会把「入门」当成档位名。 */
+function levelTitle(level: string): string {
+  const map: Record<string, string> = { beginner: '入门', intermediate: '进阶', advanced: '高阶' }
+  const name = map[level]
+  return `知识水平：${name || level || '未标注'}（beginner / intermediate / advanced，与卡库档位 A–E / F1–F5B 是两个维度）`
+}
+/** 来源标识的悬停释（2026-11-11 困惑测试 #48）：读到「Frontier-100 F100」的人不知道它是什么。 */
+const SOURCE_REF_TITLE = '来源标识：卡文档导入时写入的批次标签，不是可跳转网址。例如 Frontier-100 = 前沿 100 张评测基线、Golden-100 = 基准 100 张'
+function isHttpUrl(v: string): boolean {
+  return /^https?:\/\//i.test(String(v || '').trim())
+}
 /** 人设字段的枚举值 → 运营词（后端原样下发 reading / necessity / minimal / high；
     2026-10-23 走查「卡片详情人设表在写英文码」，同页等级/预算都已中文化，这里补齐） */
 const PERSONA_ENUM_ZH: Record<string, Record<string, string>> = {
@@ -343,7 +379,21 @@ const PERSONA_ENUM_ZH: Record<string, Record<string, string>> = {
   认知风格: { intuitive: '直觉型', logical: '逻辑型', visual: '视觉型', practical: '实践型', mixed: '混合型' }
 }
 function personaValue(label: string, value: string): string {
-  return PERSONA_ENUM_ZH[label]?.[value] || value
+  return cleanAuthoringText(PERSONA_ENUM_ZH[label]?.[value] || value)
+}
+
+/* 作者/评测元数据漏进人设（2026-11-11 困惑测试 #50）：8/200 张卡的 background / followUps
+   带「预期：primary_block_type = emotion_relationship + support_need = emotional」这类程序字段。
+   卡文档暂不重导（改数据要跑 fix-cards.mjs + 覆盖导入），先在展示层整句剔除：
+   标记子句只去标注，同一句里的人物描述照留；全被剔空时回退原文，避免出现空背景。
+   标记清单与 virtual-learners/cards/fix-cards.mjs 的 MARK 同源（只取元数据类，不含行为指令）。 */
+const AUTHORING_MARK_RE = /预期：|primary_block_type|support_need|emotion_relationship|not_judgeable|physical_internalized|oneoff_operation|environment_tooling|permission_process|platform_judgment/
+function cleanAuthoringText(text: string): string {
+  const s = String(text || '')
+  if (!AUTHORING_MARK_RE.test(s)) return s
+  const kept = s.split(/(?<=[。！？；\n])/).filter((sent) => !AUTHORING_MARK_RE.test(sent))
+  const out = kept.join('').trim()
+  return out || s
 }
 /** 预算键 → 中文 + 单位（2026-11-07：此前直接拼英文键，出现「horizon 无期限」这种中英混杂） */
 const BUDGET_LABEL: Record<string, { label: string; unit: string }> = {
@@ -390,19 +440,36 @@ function materialIcon(kind: string): string {
 }
 function fmtDate(iso: string): string {
   if (!iso) return '—'
-  const t = new Date(iso)
-  return Number.isNaN(t.getTime()) ? '—' : t.toLocaleString()
+  // 全站口径 `YYYY-MM-DD HH:mm`（原 toLocaleString 出 2026/11/6 21:59:59）
+  return Number.isNaN(new Date(iso).getTime()) ? '—' : formatTime(iso)
 }
 
 /* ===== 派生（从这张卡创建虚拟学习者）=====
    成功后回刷本卡：派生不消耗身份卡，运营常会连着造几个实例。 */
+/** 派生出的虚拟学习者（成功创建的实例）：本页直接给画像入口，不必回列表找。 */
+interface DerivedInstance { profileId: string; name: string; taskCount?: number }
+const derivedCreated = ref<DerivedInstance[]>([])
+/* 同一组件实例从卡 A 详情切到卡 B 时，A 的派生结果条不能跟过来 */
+watch(profileId, (pid, old) => {
+  if (pid !== old) derivedCreated.value = []
+})
+
 const deriveRef = ref<InstanceType<typeof CardDeriveDialog> | null>(null)
 function openDerive() {
   const pid = d.value?.profileId
   if (!pid) return
   deriveRef.value?.openWith([pid])
 }
-function onDerived() {
+/** 从卡详情直接进新实例的画像页；返回落回本卡（from 链），不会丢当前卡。 */
+function openCreated(c: DerivedInstance) {
+  const cardId = d.value?.profileId
+  if (!cardId || !c.profileId) return
+  openSubPage('virtual', c.profileId, {
+    from: { view: 'card', id: cardId, label: pageTitle.value }
+  })
+}
+function onDerived(created: DerivedInstance[]) {
+  derivedCreated.value = Array.isArray(created) ? created : []
   void load()
 }
 
@@ -413,6 +480,13 @@ watch(liveRefreshSeq, () => { void load() })
 
 <style scoped>
 .cd-pad { padding: 16px; }
+/* 派生结果条：标题与画像入口同排，窄屏换行；颜色走 mk-alert--ok 的 token */
+.cd-derived {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px;
+  margin: 12px 0 0; font-size: var(--mk-fs-micro);
+}
+.cd-derived__acts { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; min-width: 0; }
+.cd-derived__more { color: var(--mk-muted); }
 /* 双栏（2026-11-07 用户「四张满宽卡片太松散」）：宽屏左 38% 放概览 + 人设，
    右 62% 放故事池；窄屏回单列，顺序不变。 */
 .cd-grid { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
@@ -434,7 +508,8 @@ watch(liveRefreshSeq, () => { void load() })
 .cd-story__meta { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
 .cd-story__meta :deep(.mk-badge) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cd-mats { display: flex; flex-wrap: wrap; gap: 4px; }
-/* 标识行：hash 是 64 位十六进制长串，必须在行内折行，不能被右侧裁掉 */
-.cd-ident { font-family: var(--mk-mono); word-break: break-all; }
+/* 标识行：hash 是 64 位十六进制长串。单行 + 横向滚动，保持「一个标识一行」可核对；
+   完整值同时在 title 里，悬停即可读全，不再折成两三行把卡撑高。 */
+.cd-ident { display: block; max-width: 100%; font-family: var(--mk-mono); white-space: nowrap; overflow-x: auto; }
 .mono { font-family: var(--mk-mono); }
 </style>

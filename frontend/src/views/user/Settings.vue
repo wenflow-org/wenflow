@@ -177,6 +177,7 @@
            原型账户段（index.html 2038-2069）只有 资料卡 + 3 KPI + 快捷入口，
            「修改密码 / 注销账号」两张双栏卡属设置页职责，迁到这里与 API 接入、MCP 并列成区。
            双栏沿用 .settings-cols 的栅格与断点，仅覆写 align-items 让两卡等高（改密按钮贴底）。 -->
+      <h2 class="settings-sec__title">账号安全</h2>
       <div class="settings-cols settings-cols--security">
         <article class="uc-card uc-card--pwd">
           <div class="uc-card__head">
@@ -188,35 +189,117 @@
           <div class="pwd-grid">
             <label class="uc-field pwd-field pwd-field--wide">
               <span class="uc-field__label">当前密码</span>
-              <input v-model="pwdForm.oldPassword" type="password" class="uc-field__input" />
+              <div class="uc-field__pwd">
+                <input
+                  ref="pwdOldEl"
+                  v-model="pwdForm.oldPassword"
+                  :type="showPwd.old ? 'text' : 'password'"
+                  class="uc-field__input"
+                  autocomplete="current-password"
+                  :aria-invalid="!!pwdErrors.old"
+                  :aria-describedby="pwdErrors.old ? 'pwd-old-error' : undefined"
+                  @input="clearPwdError('old')"
+                  @keyup.enter="handleChangePassword"
+                />
+                <button
+                  type="button"
+                  class="uc-field__eye"
+                  :aria-label="showPwd.old ? '隐藏当前密码' : '显示当前密码'"
+                  @click="showPwd.old = !showPwd.old"
+                >{{ showPwd.old ? '隐藏' : '显示' }}</button>
+              </div>
+              <span v-if="pwdErrors.old" id="pwd-old-error" class="uc-field__error" role="alert">{{ pwdErrors.old }}</span>
             </label>
             <label class="uc-field pwd-field">
               <span class="uc-field__label">新密码</span>
-              <input v-model="pwdForm.newPassword" type="password" class="uc-field__input" placeholder="至少 8 位，含字母和数字" />
+              <div class="uc-field__pwd">
+                <input
+                  ref="pwdNewEl"
+                  v-model="pwdForm.newPassword"
+                  :type="showPwd.new ? 'text' : 'password'"
+                  class="uc-field__input"
+                  autocomplete="new-password"
+                  placeholder="至少 8 位，含字母和数字"
+                  :aria-invalid="!!pwdErrors.new"
+                  :aria-describedby="pwdErrors.new ? 'pwd-new-error' : 'pwd-rule'"
+                  @input="onPwdInput('new')"
+                  @keyup.enter="handleChangePassword"
+                />
+                <button
+                  type="button"
+                  class="uc-field__eye"
+                  :aria-label="showPwd.new ? '隐藏新密码' : '显示新密码'"
+                  @click="showPwd.new = !showPwd.new"
+                >{{ showPwd.new ? '隐藏' : '显示' }}</button>
+              </div>
+              <span v-if="pwdErrors.new" id="pwd-new-error" class="uc-field__error" role="alert">{{ pwdErrors.new }}</span>
             </label>
             <label class="uc-field pwd-field">
               <span class="uc-field__label">确认新密码</span>
-              <input v-model="pwdForm.confirmPassword" type="password" class="uc-field__input" placeholder="再输入一次" />
+              <div class="uc-field__pwd">
+                <input
+                  ref="pwdConfirmEl"
+                  v-model="pwdForm.confirmPassword"
+                  :type="showPwd.confirm ? 'text' : 'password'"
+                  class="uc-field__input"
+                  autocomplete="new-password"
+                  placeholder="再输入一次"
+                  :aria-invalid="!!pwdErrors.confirm"
+                  :aria-describedby="pwdErrors.confirm ? 'pwd-confirm-error' : undefined"
+                  @input="onPwdInput('confirm')"
+                  @keyup.enter="handleChangePassword"
+                />
+                <button
+                  type="button"
+                  class="uc-field__eye"
+                  :aria-label="showPwd.confirm ? '隐藏确认密码' : '显示确认密码'"
+                  @click="showPwd.confirm = !showPwd.confirm"
+                >{{ showPwd.confirm ? '隐藏' : '显示' }}</button>
+              </div>
+              <span v-if="pwdErrors.confirm" id="pwd-confirm-error" class="uc-field__error" role="alert">{{ pwdErrors.confirm }}</span>
             </label>
           </div>
+          <p id="pwd-rule" class="pwd-rule">新密码至少 8 位，并同时包含字母和数字。</p>
+          <p v-if="pwdErrors.general" class="uc-field__error" role="alert">{{ pwdErrors.general }}</p>
           <div class="uc-card__foot">
-            <button type="button" class="uc-btn uc-btn--primary" :disabled="!pwdCanSubmit || pwdSubmitting" @click="handleChangePassword">
+            <button
+              type="button"
+              class="uc-btn uc-btn--primary"
+              :disabled="!pwdCanSubmit || pwdSubmitting"
+              :title="pwdCanSubmit ? '保存新密码' : '请填写当前密码，并设置至少 8 位的新密码'"
+              @click="handleChangePassword"
+            >
               {{ pwdSubmitting ? '更新中…' : '更新密码' }}
             </button>
           </div>
         </article>
 
         <!-- 危险操作：注销 -->
-        <article class="uc-card uc-card--danger">
+        <article class="uc-card uc-card--danger" aria-labelledby="danger-title" aria-describedby="danger-desc">
           <div class="uc-card__head">
             <div>
-              <h3>注销账号</h3>
-              <p>注销后账号将不可用，学习数据无法再访问。此操作不可自行撤销（可联系管理员恢复）。</p>
+              <h3 id="danger-title">注销账号 <span class="danger-tag">不可撤销</span></h3>
+              <p id="danger-desc">注销后账号将不可用，学习数据无法再访问。此操作不可自行撤销（可联系管理员恢复）。</p>
             </div>
           </div>
           <div class="danger-form">
-            <input v-model="deactivatePassword" type="password" class="uc-field__input" placeholder="输入当前密码确认注销" aria-label="当前密码（确认注销）" @keyup.enter="handleDeactivate" />
-            <button type="button" class="uc-btn uc-btn--danger" :disabled="deactivating" @click="handleDeactivate">
+            <input
+              v-model="deactivatePassword"
+              type="password"
+              class="uc-field__input"
+              placeholder="输入当前密码确认注销"
+              aria-label="当前密码（确认注销）"
+              :disabled="deactivating"
+              autocomplete="current-password"
+              @keyup.enter="handleDeactivate"
+            />
+            <button
+              type="button"
+              class="uc-btn uc-btn--danger"
+              :disabled="!deactivatePassword || deactivating"
+              :title="deactivatePassword ? '永久注销此账号' : '输入当前密码后可注销'"
+              @click="handleDeactivate"
+            >
               {{ deactivating ? '注销中…' : '注销账号' }}
             </button>
           </div>
@@ -339,7 +422,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
 import MkModelPicker from '@/components/mk/MkModelPicker.vue';
@@ -405,6 +488,10 @@ onMounted(async () => {
   if (SHOW_CUSTOM_MODEL_API) jobs.push(loadApiConfig());
   if (SHOW_MCP_TOOLS) jobs.push(loadMcpConfig());
   await Promise.all(jobs);
+  /* 本页当前只剩「修改密码 + 注销」，进入即把焦点放到第一个密码框：
+     键盘用户不用先 Tab 穿过顶部导航；preventScroll 避免整页被拽动。 */
+  await nextTick();
+  pwdOldEl.value?.focus({ preventScroll: true });
 });
 
 const loadApiConfig = async () => {
@@ -800,20 +887,60 @@ const secErrorText = (e: any, fallback: string) =>
 
 const pwdForm = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' });
 const pwdSubmitting = ref(false);
+const pwdOldEl = ref<HTMLInputElement | null>(null);
+const pwdNewEl = ref<HTMLInputElement | null>(null);
+const pwdConfirmEl = ref<HTMLInputElement | null>(null);
+const showPwd = reactive({ old: false, new: false, confirm: false });
+/* 校验错误贴在对应字段下（toast 会把「第几个框错了」这件事说丢，错误一多也留不住）。
+   general 只接服务端/网络失败——它无法归因到某个输入框。 */
+const pwdErrors = reactive({ old: '', new: '', confirm: '', general: '' });
 const pwdCanSubmit = computed(
   () => pwdForm.oldPassword.length > 0 && pwdForm.newPassword.length >= 8 && pwdForm.confirmPassword.length > 0
 );
 
+function clearPwdError(field: 'old' | 'new' | 'confirm') {
+  pwdErrors[field] = '';
+  pwdErrors.general = '';
+  if (field === 'new') pwdErrors.confirm = '';
+}
+
+function onPwdInput(field: 'new' | 'confirm') {
+  clearPwdError(field);
+}
+
 const handleChangePassword = async () => {
   if (pwdSubmitting.value) return;
-  if (pwdForm.newPassword !== pwdForm.confirmPassword) {
-    toast.error('两次输入的新密码不一致');
+  pwdErrors.old = '';
+  pwdErrors.new = '';
+  pwdErrors.confirm = '';
+  pwdErrors.general = '';
+
+  if (!pwdForm.oldPassword) {
+    pwdErrors.old = '请输入当前密码';
+    pwdOldEl.value?.focus({ preventScroll: true });
+    return;
+  }
+  if (pwdForm.newPassword.length < 8) {
+    pwdErrors.new = '新密码至少 8 位';
+    pwdNewEl.value?.focus({ preventScroll: true });
     return;
   }
   if (!/[a-zA-Z]/.test(pwdForm.newPassword) || !/[0-9]/.test(pwdForm.newPassword)) {
-    toast.error('新密码需同时包含字母和数字');
+    pwdErrors.new = '新密码需同时包含字母和数字';
+    pwdNewEl.value?.focus({ preventScroll: true });
     return;
   }
+  if (!pwdForm.confirmPassword) {
+    pwdErrors.confirm = '请再次输入新密码';
+    pwdConfirmEl.value?.focus({ preventScroll: true });
+    return;
+  }
+  if (pwdForm.newPassword !== pwdForm.confirmPassword) {
+    pwdErrors.confirm = '两次输入的新密码不一致';
+    pwdConfirmEl.value?.focus({ preventScroll: true });
+    return;
+  }
+
   pwdSubmitting.value = true;
   try {
     await request.post('/auth/change-password', {
@@ -824,8 +951,10 @@ const handleChangePassword = async () => {
     pwdForm.oldPassword = '';
     pwdForm.newPassword = '';
     pwdForm.confirmPassword = '';
+    showPwd.old = showPwd.new = showPwd.confirm = false;
   } catch (error: any) {
-    toast.error(secErrorText(error, '修改失败，请稍后再试'));
+    // 服务端原因（当前密码错误 / 网络）无法定位到具体字符，但保留在卡内可见，并给读屏播报
+    pwdErrors.general = secErrorText(error, '修改失败，请稍后再试');
   } finally {
     pwdSubmitting.value = false;
   }
@@ -957,7 +1086,15 @@ const handleDeactivate = async () => {
 }
 
 /* ===== 账号安全（自 Profile.vue 账户段迁入的两张双栏卡） ===== */
-/* 两卡不再强制等高：注销卡内容短，拉齐会留下约 130px 空洞，按内容自然收口 */
+/* 隐藏了模型接入后本页只剩这一区：给一个分区标题，别让两张卡直接漂在页头下面；
+   两卡不再强制等高：注销卡内容短，拉齐会留下约 130px 空洞，按内容自然收口 */
+.settings-sec__title {
+  margin: 4px 0 -4px;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--ink, #172033);
+}
+
 .settings-cols--security {
   align-items: start;
 }
@@ -1002,7 +1139,42 @@ const handleDeactivate = async () => {
 }
 
 .uc-card--danger {
-  border-color: color-mix(in srgb, var(--red) 35%, transparent);
+  /* 危险区不只靠一枚红边按钮：整卡加一层极浅红底 + 更实的红边，与左侧安全表单分开；
+     墨色仍走 --red-ink（暗色自动提亮），不新增硬编码色值。 */
+  border-color: color-mix(in srgb, var(--red) 42%, var(--line));
+  background: color-mix(in srgb, var(--red) 4%, var(--surface));
+}
+
+.uc-card--danger .uc-card__head h3 {
+  color: var(--red-ink);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.danger-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--mk-radius-sm);
+  background: color-mix(in srgb, var(--red) 12%, transparent);
+  color: var(--red-ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.pwd-rule {
+  margin: 10px 0 0;
+  color: var(--faint, #67758f);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* 服务端错误是独立一行（不属于某个 label），与密码网格留一点气口 */
+.uc-card--pwd > .uc-field__error {
+  margin: 8px 0 0;
 }
 
 .danger-form {

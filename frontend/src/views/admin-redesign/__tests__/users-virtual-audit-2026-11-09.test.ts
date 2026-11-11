@@ -169,7 +169,7 @@ beforeEach(() => {
 
 /* ============================================================ A */
 describe('A · 用户账号「当前账号」徽章紧跟姓名', () => {
-  it('徽章在姓名行内、紧跟 <strong> 之后（DOM 顺序），不在独立的 .ul-tags 里', async () => {
+  it('徽章在姓名行内、紧跟姓名入口之后（DOM 顺序），不在独立的 .ul-tags 里', async () => {
     // 当前登录管理员 = u1（isSelf 按 admin_user.id 匹配）
     localStorage.setItem('admin_user', JSON.stringify({ id: 'u1' }));
     liveUsers.value = [makeUser(1), makeUser(2)];
@@ -180,14 +180,14 @@ describe('A · 用户账号「当前账号」徽章紧跟姓名', () => {
     const selfRow = w.findAll('tbody tr')[0];
     const nameline = selfRow.find('.ul-nameline');
     expect(nameline.exists()).toBe(true);
-    // 姓名行内：strong 之后就是「当前账号」徽章
-    const strong = nameline.find('strong');
-    expect(strong.text()).toBe('用户1');
+    // 姓名行内：姓名入口（2026-11-11 改为 mk-user-link 按钮）之后就是「当前账号」徽章
+    const name = nameline.find('.ul-nameline__link');
+    expect(name.text()).toBe('用户1');
     const badge = nameline.find('.mk-badge--self');
     expect(badge.exists()).toBe(true);
     expect(badge.text()).toBe('当前账号');
-    // DOM 顺序：strong 的下一个兄弟就是徽章
-    expect(strong.element.nextElementSibling).toBe(badge.element);
+    // DOM 顺序：姓名入口的下一个兄弟就是徽章
+    expect(name.element.nextElementSibling).toBe(badge.element);
     // 旧的右侧悬浮容器已退役
     expect(selfRow.find('.ul-tags').exists()).toBe(false);
 

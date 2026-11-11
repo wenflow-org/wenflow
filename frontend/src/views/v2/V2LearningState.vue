@@ -111,7 +111,7 @@
                 <SkeletonLoader variant="lines" :count="1" />
               </div>
               <template v-else>
-                <span v-for="m in metricCards" :key="m.key" class="vitals__item">
+                <span v-for="m in metricCards" :key="m.key" class="vitals__item" :title="m.tip">
                   <span class="vitals__head">
                     <i class="ff-dot" :class="dotClsOf(m.key)" aria-hidden="true"></i>
                     <small>{{ m.label }}</small>
@@ -124,17 +124,33 @@
               </template>
             </div>
 
+            <!-- 一句话结论（2026-11-11 语义走查）：四项指标只报分档，读者还要自己翻译成
+                 「今天该学还是该休息」。结论行按疲劳优先给行动建议，紧贴指标下方，
+                 不与下方 AI 建议抢位置（AI 建议是依据与调整入口，这里只回答当下安排）。 -->
+            <p
+              v-if="hasAnyLoad && statusVerdict"
+              class="vitals__verdict"
+              :class="`vitals__verdict--${statusVerdict.tone}`"
+              role="status"
+            >
+              <b>今天怎么安排：</b>{{ statusVerdict.text }}
+            </p>
+
             <!-- 虚线阈值说明（批19 术语自然化；2026-09-27 删状态 chip，2026-11-05 删重复的三条
                  指标名——那三条已随圆点上移到 vitals；图内文字早于 2026-10-08 移出以免压曲线） -->
             <div v-if="hasAnyLoad && zoneLines.length" class="ff-legend">
+              <!-- 2026-11-11：原「40 精力充沛 · 20 最优训练区」把两根虚线读成两个独立档位，
+                   而 20/40 是同一条「最优训练区」的上下边界。改为三档区间口径，
+                   每档都写清边界与动作。 -->
               <span class="ff-legend__zone">
                 <i class="ff-dash"></i>虚线阈值&nbsp;
-                <!-- 分隔符写成真实文本而不是 ::before（2026-10-08）：CSS 生成内容不进 DOM，
-                     读屏只念得到「40 精力充沛20 最优训练区」两声连读。 -->
-                <template v-for="(z, i) in zoneLines" :key="z.v">
-                  <span v-if="i" class="ff-legend__sep">·</span><b>{{ z.v }} {{ z.label }}</b>
-                </template>
+                <b>≥40 精力充沛</b><span class="ff-legend__sep">·</span>
+                <b>20–39 最优训练区</b><span class="ff-legend__sep">·</span>
+                <b>&lt;20 需要休息</b>
               </span>
+              <!-- 图例补单位/读法（2026-11-11）：图里既有 0–100 的指标分，又有当日分钟柱，
+                   此前只靠悬停才知道柱是什么。 -->
+              <span class="ff-legend__unit">纵轴为指标分值 · 柱为当日学习时长（分钟）</span>
             </div>
 
             <div v-if="trendLoading" class="chart__loading"><SkeletonLoader variant="lines" :count="3" /></div>
@@ -569,7 +585,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import request from '@/utils/api';
 import { toast } from '@/utils/toast';
 import { metricsAPI } from '@/api/metrics';
@@ -598,8 +614,17 @@ const trendError = ref(false);
 /* 趋势窗口（2026-11-05 用户定稿）：近 7 天 / 近 30 天 / 近 90 天三档。
    默认档跟着数据历史走——历史 ≤21 天给 7（用户点名：数据挤在右下角 15% 是因为
    默认窗口远大于数据），否则 30。rangeChoice=null 表示「跟随默认」，
-   用户点过切换器后就固定住不再自动跳。 */
-const rangeChoice = ref<7 | 30 | 90 | null>(null);
+   用户点过切换器后就固定住不再自动跳。
+   2026-11-11：窗口写进 ?days=，刷新/收藏/分享后仍是用户选的那一档；
+   rangeChoice 的初始值因此优先读 URL，读不到才走「跟随历史」的默认。 */
+const VALID_RANGES = [7, 30, 90] as const;
+type RangeDays = typeof VALID_RANGES[number];
+function parseRangeQuery(raw: unknown): RangeDays | null {
+  const v = Number(Array.isArray(raw) ? raw[0] : raw);
+  return (VALID_RANGES as readonly number[]).includes(v) ? (v as RangeDays) : null;
+}
+const route = useRoute();
+const rangeChoice = ref<RangeDays | null>(parseRangeQuery(route?.query?.days));
 
 /* ---------- 卡片常显（2026-09-27）：本页所有 band 全部默认展开，折叠按钮退役——
    藏内容的成本（一次点击 + 预期管理）高于滚动成本（与学习台同口径）。仅
@@ -618,7 +643,10 @@ function toneOf(key: MetricKey, v: number, mature?: boolean): { tone: string; co
   if (key === 'lsb') {
     // 后端 mature=false：PMC 冷启动爬升期（KTL 基座未成熟）form<0 属正常，
     // 不能按「严重疲劳」展示——与 /state/warnings、建议引擎同判据。
-    if (mature === false) return { tone: 'blue', color: 'var(--blue-deep)', note: '积累中' };
+    // 2026-11-11：标签从「积累中」改为「暂不定档」——数值 -100 与「积累中」同屏时，
+    // 读者会读成「还在积累，所以是 -100 分」，把参考值当成真实状态分。标签只陈述
+    // 「现在不按分数定档」这一事实，具体该学该休息由下方结论行回答。
+    if (mature === false) return { tone: 'blue', color: 'var(--blue-deep)', note: '暂不定档' };
     // LSB = KTL - LF（-100 ~ +100），分档对齐后端相对量判据与状态分档文案。
     // 标签文案压到 4 字（原「严重疲劳，优先休息」9 字）：窄屏 2 列时标签折成两行会
     // 破 20px 方签并顶乱数值基线（2026-11-06 复核）；「休息」这一动作由图例
@@ -651,17 +679,53 @@ function toneOf(key: MetricKey, v: number, mature?: boolean): { tone: string; co
   return { tone: 'red', color: 'var(--red-ink)', note: '过高' };
 }
 
+const METRIC_TIPS: Record<MetricKey, string> = {
+  lsb: '整体状态＝训练负荷 − 疲劳，40 分及以上精力充沛，20–39 分最优训练区，低于 20 分需要休息',
+  lss: '近期学习安排带来的压力，50 分及以下适中，75 分以上过高',
+  ktl: '长期学习压力的累积，越高说明负荷越重，变化平缓',
+  lf: '近期学习累积的疲劳，60 分及以下较低，85 分以上过高'
+};
+
 const metricCards = computed(() =>
   metricOptions.map((m) => {
     // P1 修复：加载失败显示「读取失败」而非伪装「暂无数据」
     if (currentLoadFailed.value) {
-      return { ...m, value: '—', unit: m.key === 'lsb' ? '' : '分', tone: 'red', color: 'var(--red-ink)', note: '读取失败' };
+      return { ...m, value: '—', unit: '分', tone: 'red', color: 'var(--red-ink)', note: '读取失败', tip: METRIC_TIPS[m.key] };
     }
     const v = current.value?.[m.key];
     const t = toneOf(m.key, v, current.value?.mature);
-    return { ...m, value: v ?? '—', unit: m.key === 'lsb' ? '' : '分', ...t };
+    // 单位统一为「分」：此前整体状态不写单位、其余三项写「分」，同一行四个分数两套口径
+    return { ...m, value: v ?? '—', unit: '分', ...t, tip: METRIC_TIPS[m.key] };
   })
 );
+/* 一句话结论（2026-11-11 语义走查）：四项指标各自报分档后，读者仍要自己把
+   「整体状态 -100／疲劳 100 过高」翻译成行动。这里按「疲劳优先」给一句今天怎么安排：
+   疲劳已过高时，即使整体状态因数据积累期显示参考值，也明确建议休息/轻量；
+   其余情况再按整体状态分档。只做状态归纳，不新增后端数据，也不复述下方 AI 建议。 */
+const statusVerdict = computed<{ tone: string; text: string } | null>(() => {
+  if (currentLoadFailed.value) return { tone: 'red', text: '状态读取失败，稍后重试或刷新页面。' };
+  const c = current.value;
+  if (!c) return null;
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  const lf = num(c.lf);
+  const lsb = num(c.lsb);
+  if (lf !== null && lf > 85) {
+    return { tone: 'red', text: '疲劳已到「过高」档：今天优先休息，或只做轻量复习，等疲劳降下来再加量。' };
+  }
+  if (lf !== null && lf > 60) {
+    return { tone: 'amber', text: '疲劳开始累积：今天可以按计划学习，但建议减少新内容、多做巩固。' };
+  }
+  if (c.mature === false) {
+    return { tone: 'blue', text: '训练负荷还在积累，整体状态暂不评定分数。疲劳不高时按既定节奏学习即可。' };
+  }
+  if (lsb !== null) {
+    if (lsb >= 40) return { tone: 'green', text: '整体状态充沛，适合按计划推进新内容。' };
+    if (lsb >= 20) return { tone: 'blue', text: '整体状态在最优训练区，适合常规学习。' };
+    if (lsb >= 0) return { tone: 'amber', text: '整体状态偏低，今天以复习或轻量任务为主。' };
+    return { tone: 'red', text: '整体状态低于 0，建议先休息，恢复后再学习。' };
+  }
+  return null;
+});
 
 /* 体检卡（批19）：2026-11-05 由「主指标 + 行内条」改 2×2 网格，四项同权（图例圆点内联） */
 const vitalsLoading = computed(() => current.value === null && !currentLoadFailed.value);
@@ -1236,8 +1300,23 @@ async function loadTrends() {
 
 function setRange(r: 7 | 30 | 90) {
   rangeChoice.value = r;
+  // 窗口是用户的阅读选择：写进 URL（replace，不新增历史条目），刷新/收藏后仍在同一档
+  if (router) {
+    const query = { ...(route?.query || {}), days: String(r) };
+    void router.replace({ query });
+  }
   void loadTrends();
 }
+/* 浏览器前进/后退或用户手改 ?days= 时同步曲线，避免 URL 与图上的窗口各说一套 */
+watch(
+  () => route?.query?.days,
+  (raw) => {
+    const r = parseRangeQuery(raw);
+    if (!r || r === rangeChoice.value) return;
+    rangeChoice.value = r;
+    void loadTrends();
+  }
+);
 
 /* ---------- skill 引导（adaptive-guidance-copy, view=learning-state） ---------- */
 const guidance = ref<Record<string, any> | null>(null);
@@ -1818,6 +1897,23 @@ function loadGuidance() {
 .metric__note--amber { color: var(--amber-ink); background: color-mix(in srgb, var(--amber-ink) 14%, var(--surface)); }
 .metric__note--red { color: var(--red-ink); background: color-mix(in srgb, var(--red-ink) 13%, var(--surface)); }
 
+/* 指标结论行（2026-11-11）：四格分档之后的「所以今天怎么办」，一条底色轻、字重中等的行。
+   不用大卡：它与下方 AI 建议是承接关系，不是第二个主行动。 */
+.vitals__verdict {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px;
+  margin: -2px 0 12px;
+  padding: 8px 12px;
+  border-radius: var(--mk-radius-lg);
+  font-size: 12.5px; line-height: 1.6;
+  background: color-mix(in srgb, var(--muted) 8%, var(--surface));
+  color: var(--muted);
+}
+.vitals__verdict b { flex: 0 0 auto; font-weight: 800; color: var(--ink); }
+.vitals__verdict--green { background: color-mix(in srgb, var(--green-ink) 9%, var(--surface)); color: var(--green-ink); }
+.vitals__verdict--blue { background: color-mix(in srgb, var(--blue-deep) 9%, var(--surface)); color: var(--blue-deep); }
+.vitals__verdict--amber { background: color-mix(in srgb, var(--amber-ink) 11%, var(--surface)); color: var(--amber-ink); }
+.vitals__verdict--red { background: color-mix(in srgb, var(--red-ink) 10%, var(--surface)); color: var(--red-ink); }
+
 /* ---------- 单列流（原型 924 + wf-screen）：主列 880px 居中，原 1fr + 300px 侧栏栅格撤掉 ---------- */
 .state__grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
 /* #118：隐式 auto 轨按 min-content 解算（390 宽实测 387.9px，容器仅 354px），
@@ -2286,9 +2382,11 @@ function loadGuidance() {
    （像素实测两线在 y≈544/563、刻度中心 y≈572），孤立看刻度栏容易把「12」当成阈值标注。
    修法落在下面 .ff-zone / .ff-grid line：阈值线加粗提实、网格线压淡，拉开两者层级；
    不改刻度取值（取整避开 20/40 会破坏 5 条等分网格线与曲线纵坐标的对应）。 */
-.ff-legend__zone { display: inline-flex; align-items: center; color: var(--muted); }
+.ff-legend__zone { display: inline-flex; align-items: center; flex-wrap: wrap; color: var(--muted); }
 .ff-legend__zone b { font-weight: 700; color: var(--green-ink); }
 .ff-legend__zone .ff-legend__sep { margin: 0 5px; color: var(--faint); font-weight: 400; }
+/* 图例补单位与读法（2026-11-11）：分值刻度与分钟柱同图，必须说明各自口径 */
+.ff-legend__unit { font-size: 12px; color: var(--faint); }
 .ff-dash {
   width: 12px; height: 0; display: inline-block; margin-right: 5px;
   border-top: 1px dashed color-mix(in srgb, var(--green) 70%, transparent);

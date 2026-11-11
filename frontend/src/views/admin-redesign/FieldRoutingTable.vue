@@ -13,14 +13,35 @@
         :options="SORT_OPTIONS"
         aria-label="组内排序字段"
       />
-      <button
-        type="button"
-        class="mk-btn mk-btn--sm"
-        :disabled="!sortKey"
-        title="切换排序方向"
-        @click="toggleDir"
-      >{{ sortDir === 'asc' ? '升序' : '降序' }}</button>
+      <!-- 2026-11-11（困惑测试 #61）：默认顺序下方向无意义（useTableSort 无 key 不翻转），
+           但按钮仍显示「升序」且 disabled 吞掉 title——读作坏按钮。未选字段时标签写「默认顺序」，
+           并在包裹层给可感知的禁用原因（disabled 按钮本身不弹 tooltip）。 -->
+      <span
+        class="frt__dirwrap"
+        :title="sortKey ? '切换排序方向（升序 / 降序）' : '默认顺序按编排文件列出行。先在排序下拉选一个字段，才能切升 / 降序'"
+      >
+        <button
+          type="button"
+          class="mk-btn mk-btn--sm"
+          :disabled="!sortKey"
+          @click="toggleDir"
+        >{{ sortKey ? (sortDir === 'asc' ? '升序' : '降序') : '默认顺序' }}</button>
+      </span>
       <span v-if="filterActive" class="frt__filter-count">命中 {{ filteredTotal }} / {{ routings.length }} 行</span>
+    </div>
+
+    <!-- 2026-11-11（困惑测试 #60）：同一字段会在两张卡出现（产出 Skill → 桥接 agent → 下一阶段），
+         页面此前没有任何视角说明，读起来像重复表。 -->
+    <p class="frt__scope">
+      卡片按 agent / Skill 分组：行 = 该名下这个字段的移交声明。同一字段会先后出现在产出 Skill 卡（→ 桥接 agent）
+      与桥接 agent 卡（→ 下一阶段），这是同一段旅程的两条腿，不是重复记录。
+    </p>
+    <!-- 角色图例（2026-11-11 困惑测试 #63）：中文徽章与英文口径原先只能在筛选下拉里对上 -->
+    <div v-if="roleMeta.length" class="frt__legend" aria-label="字段角色图例">
+      <span v-for="m in roleMeta" :key="m.id" class="frt__legend-item" :title="m.hint">
+        <span class="mk-badge" :class="`mk-badge--role-${m.id}`">{{ m.label }}</span>
+        <span class="mono frt__legend-id">{{ m.id }}</span>
+      </span>
     </div>
 
     <MkLoading v-if="loading" />
@@ -63,7 +84,7 @@
                     v-if="roleMetaOf(row.fieldId)"
                     class="mk-badge"
                     :class="`mk-badge--role-${roleMetaOf(row.fieldId)!.id}`"
-                    :title="roleMetaOf(row.fieldId)!.hint"
+                    :title="`${roleMetaOf(row.fieldId)!.label}（${roleMetaOf(row.fieldId)!.id}） · ${roleMetaOf(row.fieldId)!.hint}`"
                   >{{ roleMetaOf(row.fieldId)!.label }}</span>
                   <span v-else class="mk-na">—</span>
                 </span>
@@ -82,7 +103,7 @@
                     <span v-if="row.internal" class="mk-badge frt__flag frt__flag--internal" title="内部字段：仅供平台内部使用，不对外交付">内部</span>
                     <span v-if="row.accumulate" class="mk-badge frt__flag frt__flag--accum" title="累积进学习者状态">累积</span>
                   </div>
-                  <p class="frt__meaning" :title="meaningTitle(row)">{{ descOf(row.fieldId) || '—' }}</p>
+                  <p class="frt__meaning" :title="meaningTitle(row)">{{ displayDesc(row.fieldId) || '—' }}</p>
                   <div class="frt__metaline">
                     <span class="mono frt__type">{{ typeOf(row.fieldId) }}</span>
                     <span
@@ -149,6 +170,7 @@
             <span class="frt__orch-quick-item"><b>流转去向</b>阶段名（goal/path/teaching/profile/simulation）或 agent / skill:</span>
             <span class="frt__orch-quick-item"><b>存储字段名</b>仅存储字段名与字段名不一致时标注</span>
           </div>
+          <p class="frt__orch-label">文件内容（可编辑）</p>
           <textarea
             ref="orchTextareaRef"
             v-model="orchContent"
@@ -169,7 +191,7 @@
               :aria-expanded="orchMoreOpen"
               :disabled="orchSaving || orchSyncing || orchPruning"
               @click="orchMoreOpen = !orchMoreOpen"
-            >更多</button>
+            >维护操作…</button>
             <div v-if="orchMoreOpen" class="mk-menu__pop" @click.stop>
               <button type="button" class="mk-menu__item" @click="menuSync">{{ TERMS.syncToDb }}</button>
               <button type="button" class="mk-menu__item mk-menu__item--danger" @click="menuPrune">
@@ -311,6 +333,9 @@ const fieldMap = computed(() => new Map(fields.value.map((f) => [f.fieldId, f]))
 
 function typeOf(fieldId: string) { return fieldMap.value.get(fieldId)?.valueType || '—'; }
 function descOf(fieldId: string) { return fieldMap.value.get(fieldId)?.description || ''; }
+/** 含义列展示层归一（2026-11-11 困惑测试 #62）：声明层 description 里带 markdown 强调
+ *  （`**不选档位**`）与开发备注，原样直出像源码。这里只去标记，原文仍在 meaningTitle 悬停里。 */
+function displayDesc(fieldId: string) { return descOf(fieldId).replace(/\*\*|__|`/g, '').trim(); }
 function roleOf(fieldId: string) { return fieldMap.value.get(fieldId)?.promptRole || ''; }
 function roleMetaOf(fieldId: string) {
   const role = roleOf(fieldId);
@@ -688,6 +713,15 @@ html[data-theme='dark'] .note--info { color: var(--mk-badge-info-fg); }
 /* ========== 搜索 / 过滤 ========== */
 .frt__filter { margin-bottom: 12px; }
 .frt__filter-count { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 600; font-variant-numeric: tabular-nums; }
+/* 禁用方向按钮的包裹层只负责挂 title（disabled 按钮不弹 tooltip） */
+.frt__dirwrap { display: inline-flex; }
+/* 两张卡视角说明（2026-11-11 困惑测试 #60） */
+.frt__scope { margin: 0 2px 10px; font-size: var(--mk-fs-micro); line-height: 1.6; color: var(--mk-muted); }
+/* 角色图例（2026-11-11 困惑测试 #63）：中文徽章 + 英文口径一行对照 */
+.frt__legend { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 2px 12px; }
+.frt__legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.frt__legend-id { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.frt__orch-label { margin: 10px 2px 4px; font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-muted); }
 /* 弹窗底部的整文件级动作收在「更多」里：菜单在底栏内向上展开（弹窗 overflow:hidden，
    向下展开会被裁掉） */
 .frt__orch-more { position: relative; }

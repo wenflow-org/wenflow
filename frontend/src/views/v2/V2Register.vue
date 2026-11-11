@@ -35,14 +35,14 @@
 
       <label class="field" :class="{ 'field--error': errors.name }">
         <span class="field__label">用户名</span>
-        <input v-model.trim="form.name" type="text" class="field__input" placeholder="2 - 64 个字符" autocomplete="username" autofocus @blur="touch('name')" @input="revalidateWhileTyping('name')" />
-        <span v-if="errors.name" class="field__error">{{ errors.name }}</span>
+        <input id="register-name" ref="nameEl" v-model.trim="form.name" type="text" class="field__input" placeholder="2 - 64 个字符" autocomplete="username" autofocus :aria-invalid="errors.name ? 'true' : undefined" :aria-describedby="errors.name ? 'register-name-error' : undefined" @blur="touch('name')" @input="revalidateWhileTyping('name')" />
+        <span v-if="errors.name" id="register-name-error" class="field__error">{{ errors.name }}</span>
       </label>
 
       <label class="field" :class="{ 'field--error': errors.password }">
         <span class="field__label">密码</span>
         <span class="field__pwd">
-          <input v-model="form.password" :type="showPwd ? 'text' : 'password'" class="field__input" autocomplete="new-password" @blur="touch('password')" @input="revalidateWhileTyping('password')" />
+          <input id="register-password" ref="passwordEl" v-model="form.password" :type="showPwd ? 'text' : 'password'" class="field__input" autocomplete="new-password" :aria-invalid="errors.password ? 'true' : undefined" :aria-describedby="errors.password ? 'register-password-error' : undefined" @blur="touch('password')" @input="revalidateWhileTyping('password')" />
           <button type="button" class="field__eye" :aria-label="showPwd ? '隐藏密码' : '显示密码'" @click="showPwd = !showPwd">
             <Eye v-if="showPwd" :size="17" :stroke-width="1.75" />
             <EyeOff v-else :size="17" :stroke-width="1.75" />
@@ -54,13 +54,13 @@
           <li :class="{ 'is-ok': checks.digit }"><i>{{ checks.digit ? '✓' : '○' }}</i>包含数字</li>
         </ul>
         <p v-else class="hint">密码至少 8 位，且需同时包含字母和数字。</p>
-        <span v-if="errors.password" class="field__error">{{ errors.password }}</span>
+        <span v-if="errors.password" id="register-password-error" class="field__error">{{ errors.password }}</span>
       </label>
 
       <label class="field" :class="{ 'field--error': errors.confirm }">
         <span class="field__label">确认密码</span>
-        <input v-model="form.confirm" :type="showPwd ? 'text' : 'password'" class="field__input" autocomplete="new-password" @blur="touch('confirm')" @input="revalidateWhileTyping('confirm')" />
-        <span v-if="errors.confirm" class="field__error">{{ errors.confirm }}</span>
+        <input id="register-confirm" ref="confirmEl" v-model="form.confirm" :type="showPwd ? 'text' : 'password'" class="field__input" autocomplete="new-password" :aria-invalid="errors.confirm ? 'true' : undefined" :aria-describedby="errors.confirm ? 'register-confirm-error' : undefined" @blur="touch('confirm')" @input="revalidateWhileTyping('confirm')" />
+        <span v-if="errors.confirm" id="register-confirm-error" class="field__error">{{ errors.confirm }}</span>
       </label>
 
       <button type="submit" class="btn-primary btn-primary--block" :disabled="loading">
@@ -98,6 +98,10 @@ const form = reactive({ name: '', password: '', confirm: '' });
 const errors = reactive({ name: '', password: '', confirm: '' });
 const showPwd = ref(false);
 const formError = ref('');
+/* 错误定位：提交时把焦点送到第一个出错的输入框；aria-invalid/describedby 把字段与错误文案关联 */
+const nameEl = ref<HTMLInputElement | null>(null);
+const passwordEl = ref<HTMLInputElement | null>(null);
+const confirmEl = ref<HTMLInputElement | null>(null);
 
 const checks = computed(() => ({
   length: form.password.length >= 8,
@@ -165,7 +169,12 @@ async function handleRegister() {
   touch('name');
   touch('password');
   touch('confirm');
-  if (errors.name || errors.password || errors.confirm || loading.value) return;
+  if (errors.name || errors.password || errors.confirm || loading.value) {
+    if (errors.name) nameEl.value?.focus();
+    else if (errors.password) passwordEl.value?.focus();
+    else if (errors.confirm) confirmEl.value?.focus();
+    return;
+  }
 
   loading.value = true;
   try {

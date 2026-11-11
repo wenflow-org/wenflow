@@ -8,7 +8,7 @@
  * 只锁「已确认删除的入口」，不断言实现细节；每条都写明保留的是哪个入口。
  */
 import { describe, expect, it } from 'vitest'
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const read = (file: string) => readFileSync(resolve(__dirname, '..', file), 'utf8')
@@ -66,10 +66,16 @@ describe('重复操作入口守卫', () => {
     expect(src.match(/saveGroups\(\[/g) ?? []).toHaveLength(3)
   })
 
-  it('供应商设置弹窗不再重复行内的启用开关与密钥输入（仅创建时出现）', () => {
-    const src = read('ProviderEditorDialog.vue')
-    expect(src).toContain('<label v-if="isCreate" class="mk-field">')
-    expect(src).toContain('<label v-if="isCreate" class="mk-field mk-field--switch">')
+  /* 2026-11-11 用户「这页已经概念打架」：路径 A = 对话卡不再有供应商层。
+     连接只有页顶「服务连接」一处，卡面不重复地址 / 密钥 / 启用开关。 */
+  it('对话模型卡不再有供应商条与供应商设置（连接只由页顶服务连接承担）', () => {
+    const panel = read('ModelProvidersPanel.vue')
+    expect(panel).not.toContain('mpp-prov')
+    expect(panel).not.toContain('aria-label="供应商"')
+    expect(panel).not.toContain('type="checkbox"')
+    expect(panel).not.toContain('type="password"')
+    // 供应商设置弹层随概念一并下线，文件不再存在
+    expect(existsSync(resolve(__dirname, '..', 'ProviderEditorDialog.vue'))).toBe(false)
   })
 
   it('插件行不再给与成员按钮同落点的「详情 / 配置」', () => {

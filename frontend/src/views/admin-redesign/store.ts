@@ -234,6 +234,13 @@ export function intentQueryParams(scene: string): Record<string, string> {
   if (intent.statusFilter) q.status = intent.statusFilter
   if (intent.errorCategory) q.cat = intent.errorCategory
   if (intent.timeRange) q.range = intent.timeRange
+  /* 2026-11-11（困惑测试 #78）：从「最近调用」点进执行日志时只带内存里的 traceId，
+     URL 是裸的 /admin/execution-logs——刷新或分享就丢定位。ExecLogs 已支持
+     ?trace=&session=&tab=trace 双向还原（FILTER_QUERY_KEYS / TraceWaterfall），
+     这里补上快照键；缺 tab=trace 会落回日志页签，故一并写。 */
+  if (intent.traceId) q.trace = intent.traceId
+  if (intent.sessionId) q.session = intent.sessionId
+  if (intent.traceFocus || intent.traceId) q.tab = 'trace'
   return q
 }
 
@@ -314,6 +321,33 @@ export function openSubPage(view: SubPageView, id: string, opts?: { includeTest?
 /** 二级页加载出名称后回写（面包屑显示中文名/短标识；未设置时回退 ID 截断） */
 export function setSubPageLabel(label: string) {
   if (subPage.value && label) subPage.value = { ...subPage.value, label }
+}
+
+/** 深链/刷新后由详情载荷反查来源（2026-11-11：真实课堂载荷的 learner 块）→ 补回 from。
+ *  没有来源时补整条；已有同来源时只补缺的可读名/落点（旧分享链接只有 fromId、没有
+ *  fromLabel 时，面包屑不该露出裸 id）。显式来源的 view/id 与 parent 链永远优先。 */
+export function setSubPageFrom(from: SubPageFrom | null) {
+  const sp = subPage.value
+  if (!sp) return
+  if (!from) {
+    if (!sp.from) return
+    const { from: _drop, ...rest } = sp
+    subPage.value = rest
+    return
+  }
+  if (!sp.from) {
+    subPage.value = { ...sp, from }
+    return
+  }
+  if (sp.from.view !== from.view || sp.from.id !== from.id) return
+  const merged: SubPageFrom = {
+    ...sp.from,
+    ...(sp.from.label ? {} : from.label ? { label: from.label } : {}),
+    ...(sp.from.stage ? {} : from.stage ? { stage: from.stage } : {}),
+    ...(sp.from.tab ? {} : from.tab ? { tab: from.tab } : {})
+  }
+  if (JSON.stringify(merged) === JSON.stringify(sp.from)) return
+  subPage.value = { ...sp, from: merged }
 }
 
 export function closeSubPage() {

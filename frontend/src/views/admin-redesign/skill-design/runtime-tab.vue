@@ -51,7 +51,7 @@
 ${orderTitle}`">{{ baseModel }}</span>
             <span class="sdp-caps">
               <span v-for="tag in capTags" :key="tag" class="mk-badge mk-badge--muted sdp-cap">{{ tag }}</span>
-              <span v-if="summaryMeta" class="sdp-meta">{{ summaryMeta }}</span>
+              <span v-if="summaryMeta" class="sdp-meta" title="单价单位：USD / 1M tokens（在「系统设置 → 模型与接入」编辑）">· {{ summaryMeta }}</span>
             </span>
           </div>
 
@@ -406,7 +406,9 @@ const capTags = computed(() => {
   const opt = pickerOptions.value.find((o) => o.value === id) ?? null
   const cap = effectiveModelCap.value
   return [
-    cap?.thinking ? '思考' : '',
+    /* 2026-11-11（困惑测试 #69）：模型能力标签「思考」与下方事实格的「思考模式」同词不同义，
+       能力侧写成「支持思考」，配置侧写成「思考模式」。 */
+    cap?.thinking ? '支持思考' : '',
     opt?.vision ? '视觉' : ''
   ].filter(Boolean)
 })
@@ -415,7 +417,7 @@ const summaryMeta = computed(() => {
   // 目录里查不到这个模型（自定义通道 / 历史 id）时这里不说话，不猜供应商与价格
   if (!opt) return ''
   const price = opt.priceIn != null || opt.priceOut != null
-    ? `入 ${opt.priceIn ?? '—'} / 出 ${opt.priceOut ?? '—'}`
+    ? `价 入 ${opt.priceIn ?? '—'} / 出 ${opt.priceOut ?? '—'}`
     : ''
   return [opt.providerName, price].filter(Boolean).join(' · ')
 })
@@ -444,7 +446,8 @@ const baseModel = computed(() => ownModel.value || String(generationParams.value
  *  温度 / topP / maxTokens 取生效值（本 Skill 覆盖 → Prompt 声明），超时与重试只在设过时列。 */
 const runtimeFacts = computed<Array<{ label: string; value: string }>>(() => {
   const out: Array<{ label: string; value: string }> = []
-  out.push({ label: '思考', value: thinkingLabel.value })
+  // 「思考模式」是配置状态（开启/关闭/按模型默认），与能力胶囊「支持思考」区分
+  out.push({ label: '思考模式', value: thinkingLabel.value })
   if (rtForm.value.reasoningEffort !== 'default') out.push({ label: '思考强度', value: cfgEffortLabel.value })
   const temp = paramT.value.mode === 'override' && paramT.value.value != null
     ? paramT.value.value

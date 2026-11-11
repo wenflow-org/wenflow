@@ -155,7 +155,7 @@
       <div class="wf-ruler">
         <span class="wf-ruler__label">{{ viewMode === 'session' ? '会话内 span' : '分组 / Skill' }}</span>
         <div class="wf-ruler__track" :style="rulerTrackW ? { width: rulerTrackW } : undefined">
-          <span v-for="tick in ticks" :key="tick" class="wf-ruler__tick" :class="{ 'wf-ruler__tick--edge': tickEdge(tick) }" :style="{ left: tickLeft(tick) }">
+          <span v-for="tick in ticks" :key="tick" class="wf-ruler__tick" :class="{ 'wf-ruler__tick--edge': tickEdge(tick) }" :style="tickEdge(tick) ? undefined : { left: tickLeft(tick) }">
             {{ fmtTick(tick) }}
           </span>
         </div>
@@ -331,6 +331,7 @@ import { monitoringGroupText, statusText } from './statusText'
    上方 immediate watch 引用它不再有 TDZ 顾虑 */
 import { TERMS, errorCodeLabel, shortTrace } from './terms'
 import { prettyPayload } from './payload-format'
+import { formatTokens as fmtTokens, formatUsd } from './costFormat'
 import { estimateTraceCostUsd, loadModelPrices, type PriceMap } from './traceCost'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
@@ -741,10 +742,9 @@ const traceSummary = computed(() => {
   const completionTokens = s.reduce((a, x) => a + (x.completionTokens ?? 0), 0)
   const totalTokens = promptTokens + completionTokens
   const cost = estimateTraceCostUsd(s, modelPrices.value)
-  /* 位数与成本分析页 fmtCostUsd 同档（≥1 两位 / ≥0.01 四位 / 其余六位）：
-     同一屏的金额换个页面就少两位，读起来会以为是两个不同的量 */
-  const fmtCost = (v: number) => (v >= 1 ? v.toFixed(2) : v >= 0.01 ? v.toFixed(4) : v.toFixed(6))
-  const estCost = cost.usd !== null ? fmtCost(cost.usd) : null
+  /* 金额精度与成本分析页同一口径（formatUsd：固定 4 位小数、极小值 <0.0001）：
+     同一站点的 USD 金额不再出现 2/4/6 位三套精度 */
+  const estCost = cost.usd !== null ? formatUsd(cost.usd) : null
   /* 是否有 LLM 读数（token 或模型名任一存在）：false ⇒ 概要卡省略 Token / 成本 / 模型三格 */
   const hasLlm = totalTokens > 0 || models.length > 0
   return {
@@ -849,7 +849,6 @@ watch(activeSpans, async () => {
 })
 
 const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`)
-const fmtTokens = (n: number) => (n >= 1000000 ? `${(n / 1000000).toFixed(1)}M` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n || 0))
 const badgeOf = (s: string) => (s === 'err' ? 'mk-badge--bad' : s === 'warn' ? 'mk-badge--warn' : 'mk-badge--ok')
 
 /* 长 trace ID 在下拉与标题中截断显示（shortTrace 单源自 ./terms，审核 #121） */
@@ -883,7 +882,7 @@ const wfEmpty = computed(() => {
   if (failuresOnly.value && !raw.some((s) => s.status === 'err')) {
     return {
       title: '当前视图没有失败 span',
-      description: '',
+      description: `当前视图共 ${raw.length} 个 span，全部成功。「仅失败」是筛选条件，不是数据缺失。关闭后可看到全部调用。`,
       actionText: '关闭仅失败',
       action: () => { failuresOnly.value = false }
     }
@@ -892,7 +891,7 @@ const wfEmpty = computed(() => {
   if (q && !traceIds.value.length) {
     return {
       title: '没有匹配的链路',
-      description: '',
+      description: `当前加载样本里没有 ID 包含「${q}」的链路。可清除筛选，或到执行日志用「精确 ID」按完整链路 ID 查询。`,
       actionText: '清除链路筛选',
       action: () => { traceKeyword.value = '' }
     }
@@ -900,14 +899,14 @@ const wfEmpty = computed(() => {
   if (viewMode.value === 'session' && !sessionIds.value.length) {
     return {
       title: '暂无会话数据',
-      description: '',
+      description: '当前样本里没有带会话 ID 的链路。业务会话产生调用后，会自动按会话归组到这里。',
       actionText: '',
       action: () => {}
     }
   }
   return {
     title: '暂无链路数据',
-    description: '',
+    description: '当前时间范围与筛选下没有可展示的链路。有调用发生后，这里会按 trace 归组展示。',
     actionText: '',
     action: () => {}
   }
@@ -957,11 +956,13 @@ const verdictText = computed(() => {
 .wf-embedded > .mk-empty { margin: 0 16px 12px; }
 .wf-embedded > .wf-tracepick:first-child { margin-top: 12px; }
 
-/* 卡片形态：1px 发丝线 + 平底 + 12px 圆角（原型 .card 208） */
+/* 卡片形态：1px 发丝线 + 平底 + 12px 圆角（原型 .card 208）。
+   横向由卡片自身接管：行尾事实（错误码 / 漂移 / 网关 / 耗时）在窄屏不得被卡缘硬切。 */
 .wf {
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-xl);
   background: var(--mk-surface);
+  overflow-x: auto;
 }
 
 /* 链路选择器：替代 pills，避免长 trace ID 挤爆状态条 */
@@ -1118,7 +1119,7 @@ const verdictText = computed(() => {
 /* 末刻度右对齐：只给「本来就在量程末端」的刻度（居中定位会让标签跨出右缘一半）；
    中间刻度即使排在最后也按真实位置居中。判定见 tickEdge() */
 .wf-ruler__tick--edge {
-  left: auto !important;
+  /* 边缘刻度不再由内联 left 定位（模板对它不写 left），因此无需 !important 覆盖内联样式 */
   right: 0;
   transform: none;
 }
@@ -1141,10 +1142,12 @@ const verdictText = computed(() => {
 .wf-row--err.wf-row--open { background: color-mix(in srgb, var(--mk-red) 8%, transparent); }
 .wf-row__main {
   display: grid;
-  grid-template-columns: 280px 1fr auto;
+  /* 尾列 minmax(0,auto)：行尾事实过多时可收缩换行，而不是把卡片撑出横滚 */
+  grid-template-columns: 280px minmax(0, 1fr) minmax(0, auto);
   gap: 12px;
   align-items: center;
   width: 100%;
+  min-width: 0;
   padding: 10px 16px;
   border: 0;
   background: transparent;
@@ -1177,7 +1180,8 @@ const verdictText = computed(() => {
 }
 .wf-row__stage-id {
   font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
+  /* 次要但仍是「哪一次调用」的识别键：暗色下 faint 在行底上偏低，升一档到 muted */
+  color: var(--mk-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1224,14 +1228,14 @@ const verdictText = computed(() => {
 .wf-row--open .wf-row__arrow { transform: rotate(90deg); }
 .wf-row__gw {
   font-size: var(--mk-fs-micro);
-  color: var(--mk-faint);
+  color: var(--mk-muted);
   background: var(--mk-graph-fact-bg);
   border-radius: var(--mk-radius-xs);
   padding: 1px 6px;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-.wf-row__tail { display: flex; align-items: center; gap: 8px; justify-content: flex-end; min-width: 0; }
+.wf-row__tail { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; justify-content: flex-end; min-width: 0; }
 .wf-row__errcode {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
@@ -1287,7 +1291,7 @@ const verdictText = computed(() => {
 .wf-attempt__no { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-muted); }
 .wf-attempt__retry { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-amber); }
 .wf-attempt__meta { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
-.wf-attempt__dur { margin-left: auto; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.wf-attempt__dur { margin-left: auto; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 
 .wf-row__detail { padding: 4px 16px 12px 16px; display: grid; gap: 10px; }
 .wf-row__detail-grid {

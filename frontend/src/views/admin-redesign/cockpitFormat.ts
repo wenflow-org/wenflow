@@ -33,10 +33,14 @@ export function numberValue(value: unknown): number | null {
 }
 
 export function conversationMessages(value: unknown) {
-  if (!Array.isArray(value)) return [] as Array<{ role: string; content: string }>
+  if (!Array.isArray(value)) return [] as Array<{ role: string; content: string; at: string }>
   return value.map(asRecord).map((message) => ({
     role: normalized(message.role) === 'assistant' || normalized(message.role) === 'teacher' ? 'assistant' : 'user',
-    content: firstText(message.content, message.text, message.message)
+    content: firstText(message.content, message.text, message.message),
+    /* 每条消息的原始时间戳（2026-11-11 用户「对话里看不到时间，只有内容」）：
+       目标对话与课堂转录都要在气泡头显示发生时刻。`time` 是真实教学消息的实际字段
+       （session-console 的 teaching.messages 只有 role/content/time），其余形态兜底。 */
+    at: firstText(message.time, message.timestamp, message.createdAt)
   })).filter((message) => message.content)
 }
 
@@ -99,6 +103,10 @@ export interface CheckpointRecord {
   title?: string | null
   type?: string | null
   question?: string | null
+  /** 选项文本（答案键不下发）：复核时对照 A/B/C/D 与学员所选 */
+  options?: Array<{ id?: string | null; text?: string | null }> | null
+  /** 学员选了哪些选项（新行 selectedOptionIds，存量行可能是 submittedOptionIds） */
+  selectedOptionIds?: string[] | null
   passed?: boolean | null
   judgedBy?: string | null
   understanding?: number | null
@@ -112,8 +120,12 @@ export interface CheckpointRecord {
  * 为什么需要合并（2026-10-19 用户走查「这检查点怎么在下方，不符合课堂阅读顺序」）：
  * 检查点走结构化通道，题目**不进**聊天逐字稿（只在 `checkpointHistory`），早期实现把它们
  * 整块挂在转录末尾 —— 读者读到「再走一条」时，题面却在整节课之后，得来回翻。
- * 实测 `submittedAt` 恰好等于**该回合老师讲评那条消息**的时间戳（同回合落库），
- * 因此同一时刻让检查点排在消息之前：学生答完 → 看到题与判分 → 再看老师怎么讲。
+ *
+ * 排序规则（2026-11-11 用户「顺序对吗」修正）：检查点按**作答的那条学员消息**落位，
+ * 而不是按 `submittedAt` 硬排。实测落库时间是该回合处理完才写（真实样本：学员 03:42:08
+ * 作答、老师 03:42:28 讲评、检查点 03:42:34 才落库），硬按时间排会把「题目/判分」
+ * 排到老师讲评之后，读起来像答完又被补了一道题。现在把它插回学员发言之后、讲评之前：
+ * 学员答完 → 看到题与判分 → 再看老师怎么讲。没有前置学员发言时仍按自身时间排。
  */
 export function mergeLearnTimeline(
   messages: TranscriptMessage[],
@@ -123,30 +135,56 @@ export function mergeLearnTimeline(
   messages.forEach((message, index) => {
     entries.push({ kind: 'message', key: `m-${index}`, at: timeValue(message.at), seq: entries.length, message })
   })
+  /** 学员发言（有时间的）：检查点归属到 submittedAt 之前最后一条 */
+  const learnerTurns = entries.filter(
+    (entry): entry is LearnTimelineEntry & { at: number } =>
+      entry.kind === 'message' && entry.message?.role === 'user' && entry.at !== null
+  )
   checkpoints.forEach((checkpoint, index) => {
+    const submittedAt = timeValue(checkpoint.submittedAt)
+    let at = submittedAt
+    if (submittedAt !== null) {
+      let anchor: LearnTimelineEntry & { at: number } | null = null
+      for (const turn of learnerTurns) {
+        if (turn.at <= submittedAt && (!anchor || turn.at >= anchor.at)) anchor = turn
+      }
+      if (anchor) at = anchor.at
+    }
     entries.push({
       kind: 'checkpoint',
       key: `c-${index}-${firstText(checkpoint.checkpointId)}`,
-      at: timeValue(checkpoint.submittedAt),
+      at,
       seq: entries.length,
       checkpoint
     })
   })
+  const rank = (entry: LearnTimelineEntry) =>
+    entry.kind === 'checkpoint' ? 1 : entry.message?.role === 'user' ? 0 : 2
   return entries.sort((a, b) => {
     if (a.at === null && b.at === null) return a.seq - b.seq
     if (a.at === null) return 1
     if (b.at === null) return -1
     if (a.at !== b.at) return a.at - b.at
-    // 同一回合：检查点作答在前，老师讲评在后
-    if (a.kind !== b.kind) return a.kind === 'checkpoint' ? -1 : 1
+    // 同一时刻：学员发言 → 检查点（作答与判分）→ 老师讲评
+    if (rank(a) !== rank(b)) return rank(a) - rank(b)
     return a.seq - b.seq
   })
 }
 
+/**
+ * 全站时间口径：`YYYY-MM-DD HH:mm`（本地时区，24 小时制）。
+ *
+ * 为什么不用 `toLocaleString('zh-CN')`（2026-11-11 全站审计）：它输出
+ * `2026/11/11 18:32:59`，与列表页 / 教学会话页的 `YYYY-MM-DD HH:mm` 同页并存时
+ * 一屏两套日期格式；秒对运营读「几点开始」也不是必要信息（日志另有完整时间）。
+ * 需要秒的场景在调用方自行补，不在共享格式化里分叉。
+ */
 export function formatTime(value?: string | null) {
   if (!value) return ''
   const d = new Date(value)
-  return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleString('zh-CN', { hour12: false })
+  if (Number.isNaN(d.getTime())) return String(value)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 /**
@@ -172,20 +210,16 @@ export function pathDeadlineView(rawDeadline: unknown, deadlineText: unknown): {
 }
 
 /**
- * 会话日志行的时间戳（2026-11-01 外部评审 P2）：
- * 原先固定 `toLocaleTimeString`，只出 HH:MM:SS——跨天的日志从上往下读会出现
- * 「23:13:27 之后变成 14:06:19」的时间倒流错觉（同页其它时间线用 formatTime 带日期，
- * 审计页也用 MM-DD HH:MM:SS，只有这里少了日期）。今天只到时分秒，非今天补 MM-DD。
+ * 会话日志行的时间戳：与同页其它绝对时间同一口径 `YYYY-MM-DD HH:mm`。
+ *
+ * 历史（2026-11-01 外部评审 P2）：原先固定 `toLocaleTimeString` 只出 HH:MM:SS，
+ * 跨天日志从上往下读会出现「23:13:27 之后变成 14:06:19」的时间倒流错觉；随后补成
+ * 「今天只时分秒 / 非今天 MM-DD HH:MM:SS」，又与页头 `2026/11/11 18:32:59` 形成
+ * 同页两套格式（2026-11-11 用户复核）。现在统一成全日期，今天与非今天不再分叉；
+ * 秒不参与主口径，日志的排序仍由完整 ISO 承载（entry.at）。
  */
 export function formatLogTime(value?: string | null) {
-  if (!value) return ''
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return String(value)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  const clock = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-  const now = new Date()
-  const sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
-  return sameDay ? clock : `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${clock}`
+  return formatTime(value)
 }
 
 export function stageLabel(st: string) {

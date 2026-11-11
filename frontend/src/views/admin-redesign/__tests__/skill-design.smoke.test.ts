@@ -640,6 +640,9 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
     expect(texts).toContain('sandbox:teaching.extra');
     // user: 前缀不是依赖（平台注入）→ 不收
     expect(texts.length).toBe(3);
+    /* 2026-11-11 时间口径：发布时间统一 YYYY-MM-DD HH:mm，不再出现 zh-CN 的 2026/08/01 08:00:00 */
+    expect(wrapper.text()).toContain('发布时间');
+    expect(wrapper.text()).not.toMatch(/\d{4}\/\d{1,2}\/\d{1,2}/);
     wrapper.unmount();
   });
 });

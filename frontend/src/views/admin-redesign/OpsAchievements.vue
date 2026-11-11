@@ -66,7 +66,9 @@
         <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位；
              「查询」钮随搜索框一起移（它是搜索的提交动作，贴着输入框才读得出从属） -->
         <div class="mk-card__head-right">
-          <MkFilterSearch v-model="recordSearch" placeholder="搜索姓名 / 邮箱" @keydown.enter="reloadRecordsFromFirstPage" />
+          <!-- 2026-11-11（困惑测试 #9）：解锁记录的搜索是服务端查询，需回车/点「查询」才生效；
+               与同页反馈页签的即输即滤不是一套交互，占位符写明提交方式（对齐 ExecLogs 判例）。 -->
+          <MkFilterSearch v-model="recordSearch" placeholder="搜索姓名 / 邮箱（回车查询）" aria-label="搜索姓名 / 邮箱（回车查询）" @keydown.enter="reloadRecordsFromFirstPage" />
           <button type="button" class="mk-btn mk-btn--sm" @click="reloadRecordsFromFirstPage">查询</button>
         </div>
       </div>
@@ -139,7 +141,7 @@
         :title="isRecordsFiltered ? '没有符合筛选条件的解锁记录' : '还没有解锁记录'"
         :description="isRecordsFiltered
           ? '当前搜索/筛选条件下无匹配记录，可清除筛选查看全部。'
-          : ''"
+          : '还没有学员解锁成就。达成条件后系统会自动发放，也可以在「成就定义」里手动发放。'"
         min
         :action-text="isRecordsFiltered ? '清除筛选' : ''"
         @action="clearRecordsFilters"
@@ -526,6 +528,7 @@ function searchGrantUser() {
 }
 
 async function confirmGrant() {
+  if (granting.value) return
   if (!grantUserId.value || !grantTarget.value) { errors.value.user = '请选择用户'; return }
   granting.value = true
   grantError.value = ''

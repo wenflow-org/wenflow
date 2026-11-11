@@ -19,12 +19,12 @@
       <template v-else>
         <!-- 口径标注（2026-10-28 数据审计）：本页含测试账号（列表能看到 e2e 行），
              平台总览的路径读数是仅真实用户口径——两页数字差 1 时给出解释，不让人猜 -->
-        <MkKpi label="路径总数" :value="stats?.total ?? '—'" title="含测试账号，与列表同源。平台总览的路径读数仅算真实用户，两处数字不同源" />
+        <MkKpi label="路径总数" :value="stats?.total ?? '—'" title="全部状态的学习路径（含已下线），与列表同源。总览「路径规划 N 进行中」= 有未完成子任务的路径且不过滤路径状态（已下线也算），所以可能更多" />
         <MkKpi
           label="学习中"
           :value="stats ? byStatus('active') : '—'"
           clickable
-          title="status=active，含测试账号。总览「路径规划 N 进行中」按「有未完成任务且仅真实用户」统计，两处数字不同源"
+          title="status=active 的路径数（不含已下线）。总览「进行中」按「有未完成子任务」统计、含已下线，两处主体不同，不是同一套统计"
           :class="{ 'oc-kpi--on': statusFilter === 'active' }"
           :aria-pressed="statusFilter === 'active'"
           @click="selectStatus('active')"
@@ -258,6 +258,7 @@ ${p.user?.email}` : (p.user?.name || '—')">{{ p.user?.name || '—' }}</strong
           v-if="!filtered.length"
           compact
           :title="emptyStateTitle"
+          :description="emptyStateDescription"
           :action-text="isFiltered ? '清除筛选' : '去目标对话'"
           @action="isFiltered ? clearFilters() : goGoalConversations()"
         >
@@ -403,7 +404,13 @@ const ocStatusOptions = computed(() => [
   { value: 'all', label: '全部' },
   ...ocStatusPills.value
     .filter((p) => p.key !== 'all')
-    .map((p) => ({ value: p.key, label: p.n != null ? `${p.name}（${p.n}）` : p.name }))
+    .map((p) => ({
+      value: p.key,
+      label: p.n != null ? `${p.name}（${p.n}）` : p.name,
+      /* 2026-11-11（困惑测试 #21）：路径域「已完成」= 全部任务学完；目标对话页的
+         「已完成」= 澄清对话谈成，两页撞词不同主体。 */
+      hint: p.key === 'completed' ? '已完成 = 学完整条路径的全部任务；目标对话页的「已完成」= 目标对话谈成，两处主体不同' : undefined
+    }))
 ])
 /** KPI 卡 / 旧 pill 入口 = 单状态筛选；再点已选中的取消回「全部」 */
 function selectStatus(key: string) {
@@ -464,6 +471,12 @@ const emptyStateTitle = computed(() => {
   }
   return '当前筛选无匹配'
 })
+/** 空态第二行（2026-11-11 P0）：标题只说「没有」，这里补为什么空 + 下一步去哪。 */
+const emptyStateDescription = computed(() =>
+  isFiltered.value
+    ? '当前状态或搜索条件下没有路径，可清除筛选查看全部。'
+    : '还没有从目标对话生成的学习路径。先去目标对话发起一次，路径规划会自动生成。'
+)
 function clearFilters() {
   keyword.value = ''
   statusFilter.value = 'all'

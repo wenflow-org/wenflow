@@ -111,9 +111,9 @@ describe('TeachingSessions 手动结束标注（2026-10-18：endReason 落库后
     const title = (i: number) => rows[i].find('.ts-status').attributes('title') || '';
     expect(rows[0].find('.ts-status').text()).toBe('已完成');
     expect(title(0)).toContain('手动结束');
-    expect(title(0)).toContain('第 1 个任务（共 4 个）');
+    expect(title(0)).toContain('第 1 个任务（本阶段共 4 个）');
     expect(title(1)).not.toContain('手动结束');
-    expect(title(1)).toContain('第 4 个任务（共 4 个）');
+    expect(title(1)).toContain('第 4 个任务（本阶段共 4 个）');
     expect(title(2)).not.toContain('手动结束');
     wrapper.unmount();
   });
@@ -133,7 +133,8 @@ describe('TeachingSessions 手动结束标注（2026-10-18：endReason 落库后
     // 2026-10-27 用户「还是太多数据了」：格内只留状态徽章，副行文本下线
     expect(wrapper.findAll('.ts-status .mk-badge')).toHaveLength(1);
     const title = wrapper.find('.ts-status').attributes('title') || '';
-    expect(title).toContain('手动结束 · 低参与');
+    expect(title).toContain('手动结束：非任务完成结算');
+    expect(title).toContain('低参与');
     wrapper.unmount();
   });
 });
@@ -171,7 +172,7 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
     const cell = row.find('.ts-status');
     // 2026-10-27 用户「还是太多数据了」：进度不再上屏，只进 title
     expect(cell.text()).toBe('已完成');
-    expect(cell.attributes('title')).toBe('阶段 2/4 · 第 2 个任务（共 5 个）');
+    expect(cell.attributes('title')).toBe('阶段 2/4 · 第 2 个任务（本阶段共 5 个）');
     expect(row.find('.mk-minibar').exists()).toBe(false);
     expect(row.text()).not.toContain('2/5');
     wrapper.unmount();
@@ -198,9 +199,9 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
     const wrapper = await mountLive();
     const rows = wrapper.findAll('tbody tr');
     expect(rows[0].text()).toContain('失败');
-    expect(rows[0].find('.ts-status').attributes('title')).toContain('第 3 个任务（共 4 个）');
+    expect(rows[0].find('.ts-status').attributes('title')).toContain('第 3 个任务（本阶段共 4 个）');
     expect(rows[1].text()).toContain('超时');
-    expect(rows[1].find('.ts-status').attributes('title')).toContain('第 1 个任务（共 2 个）');
+    expect(rows[1].find('.ts-status').attributes('title')).toContain('第 1 个任务（本阶段共 2 个）');
     // 合并后不再有进度条：结果着色只由状态徽章承担
     expect(rows[0].find('.mk-minibar').exists()).toBe(false);
     wrapper.unmount();
@@ -223,7 +224,7 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
     const wrapper = await mountLive();
     const row = wrapper.find('tbody tr');
     expect(row.text()).toContain('已被替代');
-    expect(row.find('.ts-status').attributes('title')).toContain('第 2 个任务（共 4 个）');
+    expect(row.find('.ts-status').attributes('title')).toContain('第 2 个任务（本阶段共 4 个）');
     expect(row.find('.ts-status__main').classes()).toContain('mk-badge--warn');
     wrapper.unmount();
   });
@@ -269,7 +270,7 @@ describe('TeachingSessions 进度列（遗留项：后端补 progress 字段）'
     });
     const wrapper = await mountLive();
     const title = wrapper.find('tbody tr .ts-status').attributes('title') || '';
-    expect(title).toContain('未进入具体任务（共 4 个）');
+    expect(title).toContain('未进入具体任务（本阶段共 4 个）');
     expect(title).not.toContain('第 1 个任务');
     wrapper.unmount();
   });
@@ -610,7 +611,7 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     // 总结三档筛选（总览「评估失败 / 降级总结」的落地入口）也在主栏
     // 2026-11-09 走查：四个维度的空值项统一写「全部」（此前是「全部总结 / 全部课型 / 全部时间」，
     // 触发器已带维度前缀，读出来是「总结 全部总结」结巴）
-    expect(filterOptions(wrapper as never, '总结')).toEqual(['全部', '降级总结', '评估失败', '缺总结']);
+    expect(filterOptions(wrapper as never, '总结')).toEqual(['全部', '有总结', '降级总结', '评估失败', '缺总结']);
     /* 2026-10-27：课型 / 开始时间从「筛选」弹层提到主栏——Carbon 的筛选模式明确
        「多个类别不得收进菜单/下拉」；卡头不再有弹层触发器，维度一维一枚胶囊下拉。 */
     expect(wrapper.find('.mk-adv').exists()).toBe(false);
@@ -623,13 +624,13 @@ describe('TeachingSessions 页层次（newui renderSessions / openTurnDetail 对
     const rows = wrapper.findAll('tbody tr');
     expect(rows).toHaveLength(1);
     expect(rows[0].text()).toContain('用户a');
-    /* 2026-10-27 用户「清除筛选也不想要」：工具条不再挂文字链，每个维度自己复位
-       （下拉选回「全部…」），不再有第三个重复入口 */
-    expect(wrapper.findAll('.mk-filter .mk-link').some((b) => b.text() === '清除筛选')).toBe(false);
+    /* 2026-10-27 用户「清除筛选我也不太想要」：卡头不挂总出口；每个控件自己复位。
+       2026-11-11 复核仍维持该结论——筛选区只保留维度下拉与已应用视图胶囊。 */
     await chooseFilter(wrapper as never, '开始时间', '近 7 天');
     expect(filterValue(wrapper as never, '开始时间')).toBe('7d');
     await chooseFilter(wrapper as never, '状态', '全部');
     await chooseFilter(wrapper as never, '开始时间', '全部');
+    await flushPromises();
     expect(filterValue(wrapper as never, '状态')).toBe('');
     expect(filterValue(wrapper as never, '开始时间')).toBe('');
     expect(wrapper.findAll('tbody tr')).toHaveLength(2);

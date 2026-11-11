@@ -312,7 +312,7 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     const stale = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '停滞目标对话')!;
     // 数值行带统计范围注记（2026-11-02 评审 R1）：四张卡并排时读者要能看出
     // 「停滞 / 未生成路径」只数当前列表窗口
-    expect(stale.find('.mk-kpi__num').text()).toBe('1当前列表内');
+    expect(stale.find('.mk-kpi__num').text()).toBe('1最近 1000 条窗口内');
   });
 
   /* 2026-10-26 动线收口：停滞读数有对应行，就必须能落到那几行。此前它是本页唯一
@@ -376,8 +376,7 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
 
   /* 2026-10-27 综合重做：未生成路径从常驻 chip 升为 KPI 卡（读数 + 一键筛选），
      KPI 是唯一读数出处，卡头只在筛选生效时给可移除胶囊。 */
-  it('未生成路径 KPI 可点即筛：点卡只剩未生成行，胶囊就地清除', async () => {
-    listMock.mockResolvedValue({
+  it('未生成路径 KPI 可点即筛：点卡只剩未生成行，胶囊就地清除', async () => {    listMock.mockResolvedValue({
       data: {
         success: true,
         data: {
@@ -394,7 +393,7 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     });
     const w = await mountGoals();
     const card = () => w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '未生成路径')!;
-    expect(card().find('.mk-kpi__num').text()).toBe('2当前列表内');
+    expect(card().find('.mk-kpi__num').text()).toBe('2统计范围：最近 1000 条');
     await card().trigger('click');
     await nextTick();
     expect(card().classes()).toContain('gc-kpi--on');
@@ -405,6 +404,34 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     await nextTick();
     expect(w.findAll('tbody tr')).toHaveLength(3);
     expect(w.find('.mk-card__head .gc-view-chip').exists()).toBe(false);
+  });
+
+  /* 2026-11-11 二轮可用性：与「停滞」卡同一语法——窗口内有行就可点。
+     0 时点卡筛出空集，空态给「当前筛选无匹配 + 清除筛选」，不是一张点了没反应的卡。 */
+  it('未生成路径为 0 时 KPI 仍可点：筛出空集并给清除筛选出口', async () => {
+    listMock.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          conversations: [
+            makeConv(1, { status: 'active', learningPathId: 'path-1' }),
+            makeConv(2, { status: 'active', learningPathId: 'path-2' })
+          ]
+        }
+      }
+    });
+    statsMock.mockResolvedValue({
+      data: { success: true, data: { total: 2, active: 2, completed: 0, completionRate: '0' } }
+    });
+    const w = await mountGoals();
+    const card = w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === '未生成路径')!;
+    expect(card.find('.mk-kpi__num').text()).toBe('0统计范围：最近 1000 条');
+    expect(card.classes()).toContain('mk-kpi--clickable');
+    await card.trigger('click');
+    await nextTick();
+    expect(card.classes()).toContain('gc-kpi--on');
+    expect(w.text()).toContain('当前筛选无匹配');
+    expect(w.findAll('.mk-empty button').some((b) => b.text() === '清除筛选')).toBe(true);
   });
 
   it('P1#6 stats 拉取失败 → 错误条「统计暂不可用 · 重试」，完结率 KPI 不拿 0 冒充读数', async () => {
@@ -457,7 +484,7 @@ describe('GoalConversations 状态桶口径 / 停滞信号 / 行点击语义（P
     // 四张卡的数值行各自带统计范围（2026-11-02 评审 R1）：完结率给分母，
     // 两张按行派生的读数声明只数当前列表窗口
     expect(tiles.map((t) => t.find('.mk-kpi__num').text())).toEqual([
-      '40近 7 天 +8', '0%已完结 0/40', '5当前列表内', '3当前列表内'
+      '40近 7 天 +8', '0%已完结 0/40', '5最近 1000 条窗口内', '3统计范围：最近 1000 条'
     ]);
     // 增长读数（参与用户）不再单开卡
     expect(w.findAll('.mk-kpi__label').map((n) => n.text().trim())).not.toContain('参与用户');

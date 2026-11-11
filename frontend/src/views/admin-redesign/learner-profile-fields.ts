@@ -82,10 +82,10 @@ export function profileFieldText(key: string, raw: unknown, fallback: (value: un
     2026-11-09 画像链路核查：把「窗口口径」和「建议 vs 实际」写进 tooltip，避免被读成全量/已生效。 */
 const FIELD_HINT: Record<string, string> = {
   totalSessions: '全部课堂记录数（真实计数，不受最近 50 节窗口限制）',
-  totalMessages: '最近 50 节课的消息总数（逐会话聚合的窗口口径）',
-  avgSessionDuration: '最近 50 节课的平均时长（逐会话聚合的窗口口径）',
-  reviewFrequencyLevel: '画像给出的复习节奏建议；实际复习调度由 FSRS 到期队列决定，不由该字段控制',
-  optimalSessionLength: '按目标对话里的可用时间推断的建议时长；平台没有真实交互间隔采集，不是测量值'
+  totalMessages: '最近 50 节课的消息总数（逐会话聚合的窗口统计）',
+  avgSessionDuration: '最近 50 节课的平均时长（逐会话聚合的窗口统计）',
+  reviewFrequencyLevel: '画像给出的复习节奏建议。实际复习调度由 FSRS 到期队列决定，不由该字段控制',
+  optimalSessionLength: '按目标对话里的可用时间推断的建议时长。平台没有真实交互间隔采集，不是测量值'
 }
 
 /** 字段值的量纲说明（没写就是空串，模板按空 title 处理） */

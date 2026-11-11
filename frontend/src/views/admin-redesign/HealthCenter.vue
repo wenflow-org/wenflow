@@ -3,7 +3,7 @@
     <!-- 页头只留页名 + 报告新鲜度（轮询页不放刷新钮，强制复检走失败态重试与修复后 refresh(true)） -->
     <MkPageHead title="健康中心">
       <template #actions>
-        <span v-if="refreshNote" class="hc-refresh-note" role="status">{{ refreshNote }}</span>
+        <span v-if="refreshNote" class="hc-refresh-note" role="status" :title="refreshNoteTitle">{{ refreshNote }}</span>
       </template>
     </MkPageHead>
 
@@ -187,6 +187,7 @@
                       v-for="(d, i) in visibleDetail(item)"
                       :key="i"
                       :class="{ 'hc-check__code': isTechnicalDetail(d) }"
+                      :title="isTechnicalDetail(d) ? d : undefined"
                     >{{ d }}</p>
                     <p v-if="detailTruncated(item)" class="hc-check__detail-more">{{ detailMoreText(item) }}</p>
                   </div>
@@ -195,6 +196,12 @@
             </details>
           </div>
       </section>
+
+      <!-- 事件投递失败处置（2026-11-11 从「系统设置 → 运维工具」并回健康中心）：
+           这页只剩一张死信表，却独占一个设置页签，健康时永远是绿卡；它本质是运行时故障的
+           处置入口，与上面的检查项同域。运营中心待办与检查行的入口都落到这里。
+           健康态只占一行摘要；有积压才展开清单与重发动作。 -->
+      <ServerToolsPanel id="hc-outbox" />
       </div>
 
       <!-- 技能核查 + 完成度：完成度即对账 completion 列的汇总，与对账表同页 -->
@@ -233,6 +240,7 @@ import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import SkillReconciliation from './SkillReconciliation.vue'
+import ServerToolsPanel from './ServerToolsPanel.vue'
 
 /* 对账报告只由 SkillReconciliation 自取：AdminConsole 的 <component :is> 不传 props，
    页面声明 prop 分支只会得到一份永远为空的报告。 */
@@ -289,11 +297,15 @@ const reconCardTitle = computed(() => {
   const scope = extraCapabilityCount > 0 ? `（登记总数含 ${extraCapabilityCount} 个插件，Skill 运行页不含）` : ''
   return parts.join(' · ') + exclNote + note + scope
 })
-/** 页头注记只报报告新鲜度 */
+/** 页头注记只报报告新鲜度；相对时间为主口径，绝对时间放 title（全站时间口径） */
 const refreshNote = computed(() => {
   if (loading.value) return '检测中…'
   const iso = displayReport.value?.generatedAt
   return iso ? `更新于 ${timeAgo(iso)}` : ''
+})
+const refreshNoteTitle = computed(() => {
+  const iso = displayReport.value?.generatedAt
+  return iso ? `报告生成于 ${fmtAbsolute(iso)}` : ''
 })
 
 /** 概要卡落点：检查异常 / 契约与哈希不一致定位到具体检查行，两张核查卡落到对应筛选 */
@@ -330,6 +342,13 @@ function focusCheck(id: HealthCenterItemId | null) {
     return
   }
   void router.replace({ query: { ...omitQuery(['diff', 'recon']), tab: 'health', check: id } })
+}
+/** 事件投递卡片就在本页：入口只把视线送过去，不再跨页去系统设置 */
+function focusOutbox() {
+  hcTab.value = 'health'
+  void nextTick(() => {
+    document.getElementById('hc-outbox')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+  })
 }
 
 const router = useRouter()
@@ -509,7 +528,7 @@ const healthGroups = computed(() => {
     })
     .sort((a, b) => (GROUP_TONE_ORDER[a.tone] ?? 9) - (GROUP_TONE_ORDER[b.tone] ?? 9))
 })
-/** 检查行的跨页入口：漂移项去对应面板，运行时告警项去执行日志 / 运维工具 */
+/** 检查行的跨页入口：漂移项去对应面板，运行时告警项去执行日志 / 本页事件投递卡 */
 interface RowJump { label: string; go: () => void }
 function rowJump(item: HealthCenterItem): RowJump | null {
   if (item.id === 'w4-corehash' && drift.value.hash > 0) return { label: '去发布 →', go: () => goDrift('hash') }
@@ -518,7 +537,7 @@ function rowJump(item: HealthCenterItem): RowJump | null {
     return { label: '执行日志 →', go: () => void router.push('/admin/execution-logs') }
   }
   if (item.id === 'runtime-outbox-dead' && item.count > 0) {
-    return { label: '运维工具 →', go: () => void router.push('/admin/system-settings?tab=tools') }
+    return { label: '事件投递 →', go: focusOutbox }
   }
   return null
 }
@@ -529,13 +548,17 @@ function runRowJump(item: HealthCenterItem) {
   rowJump(item)?.go()
 }
 
-/** 时刻 HH:mm（修复记录用时；后端检查项无逐项时间，事件流撤除后本函数只服务修复日志） */
-function hhmm(iso: string | undefined): string {
+/** 绝对时间统一 YYYY-MM-DD HH:mm（全站口径；秒不参与运营读数） */
+function fmtAbsolute(iso?: string | null): string {
   const ts = iso ? new Date(iso).getTime() : NaN
-  if (!Number.isFinite(ts)) return '--:--'
+  if (!Number.isFinite(ts)) return '—'
   const d = new Date(ts)
   const p = (n: number) => String(n).padStart(2, '0')
-  return `${p(d.getHours())}:${p(d.getMinutes())}`
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+/** 修复记录时间：绝对时间（此前只给 HH:mm，跨天看不出是哪天） */
+function hhmm(iso: string | undefined): string {
+  return fmtAbsolute(iso)
 }
 
 /** 行内明细展开状态（默认：异常/关注项展开，正常项收起） */
@@ -630,9 +653,7 @@ function runtimePromptLines(item: HealthCenterItem): string[] {
 }
 function formatLocalTime(ts: number): string {
   if (!Number.isFinite(ts) || ts <= 0) return '—'
-  const d = new Date(ts)
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getMonth() + 1}月${d.getDate()}日 ${p(d.getHours())}:${p(d.getMinutes())}`
+  return fmtAbsolute(new Date(ts).toISOString())
 }
 function detailTruncated(item: HealthCenterItem): boolean { return item.detail.length > DETAIL_LIMIT }
 /** 截断提示单源（R6 复读单源化）：异常区与折叠区两处明细尾注共用一份 */
@@ -672,7 +693,9 @@ const COUNT_UNITS: Record<string, string> = {
 }
 function countTitle(item: HealthCenterItem): string {
   const unit = COUNT_UNITS[item.semantics] || '项'
-  const detail = item.detail.length ? `（明细 ${item.detail.length} 条）` : ''
+  // #109：count=0 时后端仍塞一行解释性 detail，「（明细 1 条）」会读成 0≠1；
+  // 只有真有条目时才报明细数。
+  const detail = item.count > 0 && item.detail.length ? `（明细 ${item.detail.length} 条）` : ''
   return `${item.count} ${unit}${detail}`
 }
 function semHint(semantics: HealthCenterItem['semantics']): string {
@@ -821,7 +844,7 @@ async function fix(id: HealthCenterItemId) {
     title: '一键修复',
     message: `将执行「${item?.label || id}」的自动修复。\n修复前自动备份，结果写入审计日志。\n产物若是代码库跟踪文件：修复即刻在线上生效，未提交前下次部署可能回退。`,
     confirmText: '执行修复',
-    danger: false,
+    danger: true,
   })
   if (!ok) return
   fixingId.value = id
@@ -871,6 +894,12 @@ onMounted(() => {
 })
 // 顶栏刷新：本页报告与对账都随 liveRefreshSeq 重拉（轮询页自身没有刷新钮）
 watch(liveRefreshSeq, () => { if (isLive.value) void refresh(true) })
+/* ?focus=outbox：从运营中心待办跳来时，等报告把卡片渲染出来再滚到它 */
+watch(
+  () => [route.query.focus, displayReport.value] as const,
+  ([focus, report]) => { if (focus === 'outbox' && report) focusOutbox() },
+  { immediate: true }
+)
 onUnmounted(() => {
   stopPolling()
 })
@@ -939,7 +968,16 @@ defineExpose({ refresh })
 .hc-group > .hc-checks > .hc-check { padding-left: 48px; }
 .hc-check:last-child { border-bottom: none; }
 .hc-check__row { display: flex; align-items: center; gap: 10px; padding: 10px 0; min-width: 0; background: none; border: 0; font: inherit; text-align: left; cursor: pointer; }
-.hc-check__metrics { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
+/* 计数 + 语义两格定宽：语义词长短不一（正常 / 基准不一致 / 运行时观测），
+   用 flex 右对齐会让数字随语义词宽度左右漂移；改成「34px 数字槽 + 剩余语义槽」，
+   13 行检查的数字落在同一条竖线上（三态对齐）。 */
+.hc-check__metrics {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
 .hc-check__dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .hc-check__dot--ok { background: var(--mk-green); }
 .hc-check__dot--warn { background: var(--mk-amber); }
@@ -951,8 +989,8 @@ defineExpose({ refresh })
 .hc-check__main span { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 /* 展开箭头贴标题尾（2026-10-31 外部评审）：不跨到行右缘 */
 .hc-check__titleline { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
-.hc-check__num { font-size: var(--mk-fs-body); font-weight: 800; color: var(--mk-ink); min-width: 30px; text-align: right; font-variant-numeric: tabular-nums; }
-.hc-check__sem { font-size: var(--mk-fs-micro); color: var(--mk-muted); background: var(--mk-line); padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+.hc-check__num { font-size: var(--mk-fs-body); font-weight: 800; color: var(--mk-ink); min-width: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.hc-check__sem { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; font-size: var(--mk-fs-micro); color: var(--mk-muted); background: var(--mk-line); padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
 /* 正常 / 零计数用中性底，不继承异常语义的着色 */
 .hc-check__sem--neutral { background: var(--mk-surface-3); color: var(--mk-faint); }
 .hc-check__caret { color: var(--mk-faint); font-size: var(--mk-fs-micro); flex: none; }
@@ -977,17 +1015,21 @@ defineExpose({ refresh })
 .hc-check__detail { grid-column: 1 / -1; padding: 0 0 10px 18px; display: grid; gap: 4px; }
 /* 检查明细是中文说明 + 数值混排，走正文无衬线（等宽只给 id/代码类机器串） */
 .hc-check__detail p { margin: 0; font-size: var(--mk-fs-micro); line-height: 1.5; color: var(--mk-muted); overflow-wrap: anywhere; }
-.hc-check__detail-more { color: var(--mk-amber) !important; }
-/* 技术差异行：等宽 + 浅底 + 可横向滚动，与中文说明分色分体 */
-.hc-check__code {
-  padding: 3px 8px !important;
+.hc-check__detail p.hc-check__detail-more { color: var(--mk-amber); }
+/* 技术差异行：等宽 + 浅底，与中文说明分色分体。
+   2026-11-11：字段声明单行可达数百字符，原先 white-space: pre + 不可见的横滚
+   在 1280 下表现为「右侧被硬切且无从发现」；改为 pre-wrap + anywhere——
+   保留缩进与换行，同时让超长单行折行，全文可读（完整值另挂 title 可复制）。
+   选择器用 .hc-check__detail p.hc-check__code 提高特异性，撤掉原先 3 处 !important。 */
+.hc-check__detail p.hc-check__code {
+  padding: 3px 8px;
   border-radius: var(--mk-radius-sm);
   background: var(--mk-surface-2);
-  font-family: var(--mk-mono) !important;
+  font-family: var(--mk-mono);
   font-size: var(--mk-fs-micro);
-  color: var(--mk-ink) !important;
-  overflow-x: auto;
-  white-space: pre;
+  color: var(--mk-ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 /* 窄屏：动作区（跳转/修复钮）改到行下方，否则固定列把标题挤成一字一行 */

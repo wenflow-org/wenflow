@@ -325,6 +325,16 @@ describe('真实调用端点', () => {
     const res = createRes();
     await handlerFor('post', '/:id/models/pull')({ params: { id: 'custom' }, body: {} }, res);
     expect(mockTestConnection).toHaveBeenCalledWith('https://api.example.com/v1', 'sk-gateway-key');
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { models: ['cm-1', 'cm-2'], registered: ['cm-1'] } }));
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        models: ['cm-1', 'cm-2'],
+        registered: ['cm-1'],
+        // 2026-11-11：清单随附软分类，前端「推荐对话」视图不再自建模型字典
+        modelOptions: [
+          { id: 'cm-1', inferredType: 'llm' },
+          { id: 'cm-2', inferredType: 'llm' },
+        ],
+      }),
+    }));
   });
 });

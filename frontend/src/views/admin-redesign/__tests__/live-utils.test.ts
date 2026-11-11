@@ -38,8 +38,9 @@ describe('live.timeAgo', () => {
     expect(timeAgo('2026-08-08T12:00:00')).toBe('5 天前');
   });
 
-  it('超过 30 天 → 本地化日期', () => {
-    expect(timeAgo('2026-07-01T12:00:00')).toMatch(/\//);
+  it('超过 30 天 → 绝对日期 YYYY-MM-DD（不再出斜杠日期）', () => {
+    expect(timeAgo('2026-07-01T12:00:00')).toBe('2026-07-01');
+    expect(timeAgo('2026-07-01T12:00:00')).not.toMatch(/\//);
   });
 });
 

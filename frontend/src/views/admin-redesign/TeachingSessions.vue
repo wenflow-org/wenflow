@@ -57,7 +57,7 @@
         label="完结率"
         :value="completionRate"
         :value-note="completedSessionNote"
-        :title="`已结束（完成 / 失败 / 超时 / 已废弃 / 收尾失败）会话里已完成 ${completedSessionCount} 节，占已加载 ${rows.length} 节`"
+        :title="`状态=已完成的会话 ${completedSessionCount} 节，占当前已加载全部 ${rows.length} 节（含进行中 / 已暂停等所有状态。分母是列表加载窗口，不是后端全量）`"
       />
     </section>
 
@@ -136,16 +136,16 @@
             :unavailable="tsUnavailableCols"
             v-model:hidden="tsHiddenCols"
           />
-          <span v-if="truncated" class="mk-card__meta">共 {{ listTotal }} 条 · 当前显示最近 {{ LIST_LIMIT }} 条</span>
+          <span v-if="truncated" class="mk-card__meta">共 {{ fmtCount(listTotal) }} 节 · 当前显示最近 {{ fmtCount(LIST_LIMIT) }} 节</span>
         </div>
       </div>
 
       <div v-if="loadFailed" class="mk-alert mk-alert--row ts-error" role="alert">
-        <span class="mk-alert__msg">教学会话加载失败</span>
+        <span class="mk-alert__msg">{{ rows.length ? '教学会话刷新失败' : '教学会话加载失败' }}{{ loadError ? `：${loadError}` : '' }}{{ rows.length ? '（以下为上次结果）' : '' }}</span>
         <button type="button" class="mk-alert__btn" :disabled="refreshing" @click="refreshNow">{{ refreshing ? '重试中…' : '重试' }}</button>
       </div>
 
-      <MockSkeletonTable v-if="refreshing && !rows.length" :cols="tsVisibleColCount" />
+      <MockSkeletonTable v-if="refreshing && !rows.length && !loadFailed" :cols="tsVisibleColCount" />
       <!-- 0 行不渲染滚动容器（2026-10-24 全站空态收齐）：它带 flex:1 会吃满卡高，把空态顶到卡底
            （实测文案上方 603px 空白）；空态改挂卡级 + min，吃掉卡内剩余高度并居中 -->
       <div v-else-if="filtered.length" class="mk-table-scroll ts-table-scroll">
@@ -275,7 +275,7 @@
                 </div>
               </td>
               <td v-if="!tsHiddenCols.has('messages')">
-                <div class="ts-ia ts-ia--msg" :title="interactTitle(r)">{{ r.messageCount }} 条</div>
+                <div class="ts-ia ts-ia--msg" :title="interactTitle(r)">{{ fmtCount(r.messageCount) }} 条</div>
               </td>
               <td v-if="!tsHiddenCols.has('knowledge')">
                 <div class="ts-ia ts-ia--kp" :title="interactTitle(r)">
@@ -370,8 +370,9 @@
         v-else-if="!loadFailed"
         min
         :title="isFiltered ? '当前筛选无课堂' : '暂无教学会话'"
-        :action-text="isFiltered ? '清除筛选' : ''"
-        @action="clearFilters"
+        :description="isFiltered ? '当前筛选条件下没有课堂，可清除筛选查看全部。' : '教学会话由学习者在端内发起；可从目标对话或学习者查看学习进程。'"
+        :action-text="isFiltered ? '清除筛选' : '查看学习者'"
+        @action="isFiltered ? clearFilters() : goLearners()"
       />
       <!-- 客户端分页（统一 mk-pagination 页码器）：筛选后按页切片 -->
       <Pagination
@@ -380,7 +381,7 @@
         v-model:pageSize="pageSize"
         :total="filtered.length"
         :showTotal="true"
-        :note="truncated ? `已载入 ${rows.length} 条内统计` : ''"
+        :note="truncated ? `已载入 ${fmtCount(rows.length)} 节内统计` : ''"
       />
     </div>
   </div>
@@ -395,7 +396,7 @@ import { useSessionDrill } from './useSessionDrill'
 import { useRowMenu } from './useRowMenu'
 import { useIsNarrow } from './useIsNarrow'
 import { useListQueryState } from './learner-profile'
-import { timeAgo, isPageCacheFresh, liveRefreshSeq, markPageFetched, shortId } from './live'
+import { timeAgo, isPageCacheFresh, liveRefreshSeq, markPageFetched, shortId, errMsg } from './live'
 import { statusText, sessionProgressTitle, taskTypeText, taskTypeTitle, sessionStatusBadgeCls as statusBadge, closureSourceText, sessionModeText, advisoryOpsTitle, advisoryOpsBadgeCls } from './statusText'
 import type { SessionProgress, OpsAdvisoryLike } from './statusText'
 import { adminTeachingSessionsApi } from '@/api/adminApi'
@@ -466,6 +467,27 @@ interface Row {
 const rows = ref<Row[]>([])
 const refreshing = ref(false)
 const loadFailed = ref(false)
+/** 失败原因（P0：错误态要给可读原因，不能只吞成一句「加载失败」） */
+const loadError = ref('')
+
+/** 绝对时间悬停口径（全站统一 YYYY-MM-DD HH:mm）：toLocaleString 会渲染成 2026/11/11，禁止 */
+function absDateTime(value?: string | null): string {
+  if (!value) return ''
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return String(value)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+/** 计数统一千分位；null / 非法值不伪装成 0 */
+function fmtCount(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(Number(n))) return '—'
+  return Number(n).toLocaleString('zh-CN')
+}
+/** 相对时间；timeAgo 超过 30 天会回落成 2026/11/11（违反全站绝对时间口径），此时改绝对时间 */
+function relTime(value?: string | null): string {
+  const rel = timeAgo(value)
+  return /^\d{4}[-/]/.test(rel) ? absDateTime(value) : rel
+}
 
 /* 列表拉取上限：文案与实现共用同一常量，避免再次漂移
    （此前文案写「最近 100 条」而实现是 limit: 1000 —— 审计 附 A #9） */
@@ -513,10 +535,14 @@ async function fetchRows(force = false): Promise<boolean> {
     totalFromBackend.value = Number.isFinite(total) && total > 0
     listTotal.value = totalFromBackend.value ? total : rows.value.length
     loadFailed.value = false
+    loadError.value = ''
     markPageFetched('teaching-sessions')
     return true
-  } catch {
-    if (seq === fetchSeq) loadFailed.value = true
+  } catch (e) {
+    if (seq === fetchSeq) {
+      loadFailed.value = true
+      loadError.value = errMsg(e)
+    }
     return false
   }
 }
@@ -590,6 +616,10 @@ function openLearner(userId: string) {
   const id = String(userId || '')
   if (id) openSubPage('learner', id)
 }
+/** 空态出口：教学会话由学习者在端内发起，平台侧只能去看学习者 */
+function goLearners() {
+  if (router) void router.push('/admin/people')
+}
 /** 头像 tone（同 GoalConversations 判例；与全站身份色一致：虚拟=紫 / 测试=琥珀 / 真实=默认蓝） */
 function avatarTone(r: Pick<Row, 'isVirtualLearner' | 'isTestAccount'>): 'virtual' | 'test' | 'default' {
   return r.isVirtualLearner ? 'virtual' : r.isTestAccount ? 'test' : 'default'
@@ -662,7 +692,7 @@ function mapRow(s: Record<string, unknown>): Row {
     wrapupStatus,
     hasAdvisory: advisoryRelevant,
     attention,
-    startAt: timeAgo(String(s.startTime || '')),
+    startAt: relTime(String(s.startTime || '')),
     startTime: s.startTime ? String(s.startTime) : undefined,
     wrapup: summary,
     wrapupDegraded,
@@ -766,7 +796,7 @@ const statusOptionCounts = computed<Record<string, number>>(() => {
   return out
 })
 const statusSelectOptions = computed(() => {
-  const withCount = (label: string, count: number) => (rows.value.length ? `${label}（${count}）` : label)
+  const withCount = (label: string, count: number) => (rows.value.length ? `${label}（${fmtCount(count)}）` : label)
   return [
     { value: '', label: '全部' },
     { value: 'abnormal', label: withCount('异常（失败 · 超时）', abnormalSessionCount.value) },
@@ -776,11 +806,14 @@ const statusSelectOptions = computed(() => {
 /* 空值项一律写「全部」（2026-11-09 走查）：此前是「全部总结 / 全部课型 / 全部时间」，
    而触发器本身已经带维度前缀（「总结 全部总结」），读出来是结巴；三个下拉的「不筛选」
    语义也本该同名——同一枚控件（MkPillSelect）里只有「状态」写的是「全部」。 */
+/* 总结筛选（2026-11-11 困惑测试 #27）：原先只有三档异常，想筛「有总结的正常课」无路可走；
+   页内分类本来就是两档结论「有总结 / 缺总结」，下拉补上正向档。两档异常术语给行内释义。 */
 const wrapSelectOptions = [
   { value: '', label: '全部' },
-  { value: 'degraded', label: '降级总结' },
-  { value: 'eval-failed', label: '评估失败' },
-  { value: 'missing', label: '缺总结' },
+  { value: 'complete', label: '有总结', hint: '会话结束后成功生成了总结' },
+  { value: 'degraded', label: '降级总结', hint: '生成走了兜底来源，内容不完整' },
+  { value: 'eval-failed', label: '评估失败', hint: '总结有产出，但评估模型调用失败或回退' },
+  { value: 'missing', label: '缺总结', hint: '已结束的会话没有生成总结' },
 ]
 const modeSelectOptions = [
   { value: '', label: '全部' },
@@ -813,7 +846,7 @@ const completionRate = computed(() => {
 /* 完结率副注（2026-11-09 推广图 5 指标卡副文案）：已完结 / 已加载总数，与 KPI 数字同源同批 rows。
    分母取已加载窗口（与 completionRate 同一口径），后端未回 total 时也无可用全量，故不臆造。 */
 const completedSessionCount = computed(() => rows.value.filter((r) => r.status === 'completed').length)
-const completedSessionNote = computed(() => (rows.value.length ? `已完成 ${completedSessionCount.value}/${rows.value.length}` : ''))
+const completedSessionNote = computed(() => (rows.value.length ? `已完成 ${fmtCount(completedSessionCount.value)}/${fmtCount(rows.value.length)}` : ''))
 
 /* 客户端排序：数据全量在客户端（全量拉取）→ 排序诚实；默认保持服务端顺序。 */
 const {
@@ -864,8 +897,9 @@ function toggleStatusFilter(value: string) {
   statusFilter.value = statusFilter.value === value ? '' : value
 }
 
-/** 总结筛选三档：降级总结（兜底来源）/ 评估失败（evaluation 非 model）/ 缺总结（终态无产物） */
+/** 总结筛选四档：有总结（正向）/ 降级总结（兜底来源）/ 评估失败（evaluation 非 model）/ 缺总结（终态无产物） */
 function matchesWrapFilter(r: Row, key: string): boolean {
+  if (key === 'complete') return r.wrapupStatus === 'complete'
   if (key === 'degraded') return r.wrapupDegraded
   if (key === 'eval-failed') return r.wrapupEvalFallback
   if (key === 'missing') return isMissingWrapup(r)
@@ -923,7 +957,7 @@ useListQueryState(
       { key: 'abn', get: () => '', set: (v) => { if (v === '1') statusFilter.value = 'abnormal' }, allowed: ['1'] },
       { key: 'mode', get: () => modeFilter.value, set: (v) => (modeFilter.value = v), allowed: ['tutor', 'review', 'extension'] },
       { key: 'date', get: () => dateFilter.value, set: (v) => (dateFilter.value = v) },
-      { key: 'wrap', get: () => wrapFilter.value, set: (v) => (wrapFilter.value = v), allowed: ['degraded', 'eval-failed', 'missing'] },
+      { key: 'wrap', get: () => wrapFilter.value, set: (v) => (wrapFilter.value = v), allowed: ['complete', 'degraded', 'eval-failed', 'missing'] },
       { key: 'advisory', get: () => (onlyAdvisory.value ? '1' : ''), set: (v) => (onlyAdvisory.value = v === '1'), allowed: ['1'] }
     ]
   }
@@ -965,7 +999,12 @@ const isMissingWrapup = (r: Row) => wrapupTier(r) === 'missing'
 const statusNote = (r: Row): string => {
   if (r.status !== 'completed') return ''
   const notes: string[] = []
-  if (r.endReason === 'manual-end') notes.push('手动结束')
+  /* 2026-11-11（困惑测试 #30）：裸词「手动结束」没有主语与含义——ops 脚本收束悬挂会话
+     也记这个原因，不必是人点的。把完整子句还给 title（该解释句在 2026-10-27 搬进 title
+     的提交里丢了，属回归）。 */
+  if (r.endReason === 'manual-end') {
+    notes.push('手动结束：非任务完成结算——学习者点「结束学习」或系统主动结束悬挂课都会记这个原因，任务未必做完')
+  }
   if ((r.messageCount ?? 0) < 2) notes.push('低参与')
   return notes.join(' · ')
 }
@@ -1000,9 +1039,11 @@ const tsSubNote = (r: Row): { text: string; title?: string } | null => {
   return null
 }
 
-/** 会话列副行文案（#39 行高并档）：学科 · 任务类型 [+ 异常态替代] */
+/** 会话列副行文案（#39 行高并档）：学科 · 任务类型 [+ 异常态替代]。
+ *  2026-11-11（困惑测试 #30）：后缀「获取/拆解/…」与筛选条「课型（正课/复习课）」是两套分类，
+ *  同屏撞名。副行前缀「任务」把它标成另一维度。 */
 function sessionSubText(r: Row): string {
-  const base = `${r.subject} · ${taskTypeText(r.taskType)}`
+  const base = `${r.subject} · 任务 ${taskTypeText(r.taskType)}`
   const note = tsSubNote(r)
   return note ? `${base} · ${note.text}` : base
 }
@@ -1106,17 +1147,16 @@ const fmtDuration = (minutes: number) => {
   const m = minutes % 60
   return m ? `${h} 小时 ${m} 分` : `${h} 小时`
 }
-/** 时间列悬停：本地化绝对时刻（后端原始 ISO 为 UTC 带 Z，直出跨时区读不出真实时刻——审核 #38） */
+/** 时间列悬停：本地化绝对时刻 YYYY-MM-DD HH:mm（后端原始 ISO 为 UTC 带 Z，直出跨时区读不出真实时刻——审核 #38） */
 function startAbsTitle(r: Row): string | undefined {
   if (!r.startTime) return r.startAt || undefined
-  const t = new Date(r.startTime).getTime()
-  return Number.isFinite(t) ? new Date(t).toLocaleString('zh-CN', { hour12: false }) : r.startAt || undefined
+  return absDateTime(r.startTime) || r.startAt || undefined
 }
 /** 时长 / 消息 / 知识点共用的悬停读数：拆列后知识点在窄档不占列宽，读数仍可查 */
 function interactTitle(r: Row): string | undefined {
   if (!r.duration) return undefined
-  const parts = [`时长 ${fmtDuration(r.duration)}`, `${r.messageCount} 条消息`]
-  if (r.knowledgePointCount) parts.push(`${r.knowledgePointCount} 个知识点`)
+  const parts = [`时长 ${fmtDuration(r.duration)}`, `${fmtCount(r.messageCount)} 条消息`]
+  if (r.knowledgePointCount) parts.push(`${fmtCount(r.knowledgePointCount)} 个知识点`)
   return parts.join(' · ')
 }
 /** 进度工具提示（人话）：阶段 n/m · 第 x 个任务（共 y 个）。

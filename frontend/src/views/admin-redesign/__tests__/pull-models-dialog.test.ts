@@ -28,9 +28,9 @@ const MODELS = [
   'step-fun/step-1v',
 ]
 
-function mountDialog(registered: string[] = ['deepseek-v4.1-flash'], providerId = '', models = MODELS) {
+function mountDialog(registered: string[] = ['deepseek-v4.1-flash'], providerId = '', models = MODELS, types: Record<string, string> = {}) {
   return mount(PullModelsDialog, {
-    props: { providerId, models, registered },
+    props: { providerId, models, registered, types },
     global: { stubs: { teleport: true } },
   })
 }
@@ -51,6 +51,13 @@ const rowIds = (wrapper: ReturnType<typeof mountDialog>) =>
 /** 切视图（未添加 / 已添加 / 全部）：按分段控件的可见文案点 */
 async function switchView(wrapper: ReturnType<typeof mountDialog>, prefix: string) {
   const item = wrapper.findAll('.pmd-view .mk-seg__item').find((b) => b.text().startsWith(prefix))!
+  await item.trigger('click')
+  await nextTick()
+}
+
+/** 切类型视图（推荐对话 / 全部模型） */
+async function switchKind(wrapper: ReturnType<typeof mountDialog>, prefix: string) {
+  const item = wrapper.findAll('.pmd-kind .mk-seg__item').find((b) => b.text().startsWith(prefix))!
   await item.trigger('click')
   await nextTick()
 }
@@ -123,7 +130,31 @@ describe('PullModelsDialog', () => {
     expect(w.emitted('confirm')?.[0]).toEqual([['agnes-3.0-flash', 'mimo-v2.5-flash']])
   })
 
-  it('没有分类页签，也没有「建议归入哪张卡」的判词', async () => {
+  /* 2026-11-11 用户评审：上游清单是混合的，对话弹窗默认只推荐对话模型；
+     不硬藏——切「全部模型」仍可选，非对话行带类型标。规则由后端推断传入 types。 */
+  it('类型视图：默认推荐对话，向量 / 重排收进「全部模型」并带类型标', async () => {
+    const types = {
+      'BAAI/bge-m3': 'embedding',
+      'BAAI/bge-reranker-v2-m3': 'reranker',
+    }
+    const w = mountDialog(['deepseek-v4.1-flash'], '', MODELS, types)
+    await open(w)
+    expect(rowIds(w)).not.toContain('BAAI/bge-m3')
+    expect(rowIds(w)).not.toContain('BAAI/bge-reranker-v2-m3')
+    expect(w.find('.pmd-kind').text()).toContain('推荐对话 (6)')
+    expect(w.find('.pmd-kind').text()).toContain('全部模型 (8)')
+
+    await switchKind(w, '全部模型')
+    expect(rowIds(w)).toContain('BAAI/bge-m3')
+    expect(rowOf(w, 'BAAI/bge-m3').text()).toContain('向量')
+    expect(rowOf(w, 'BAAI/bge-reranker-v2-m3').text()).toContain('重排')
+
+    // 重开弹窗回默认推荐视图（上次切到全部不该成为下一次的默认）
+    await open(w)
+    expect(rowIds(w)).not.toContain('BAAI/bge-m3')
+  })
+
+  it('没有分类页签，也没有「建议归入哪张卡」的判词（推荐/全部是筛选，不是分类页签）', async () => {
     const w = mountDialog([], '', MODELS)
     await open(w)
     expect(w.find('.pmd-tab').exists()).toBe(false)
@@ -301,7 +332,8 @@ describe('PullModelsDialog', () => {
     await rowOf(w, 'agnes-3.0-flash').find('.pmd-row__test').trigger('click')
     await flushPromises()
     const bad = rowOf(w, 'agnes-3.0-flash').find('.pmd-row__res')
-    expect(bad.text()).toBe('连接失败')
+    // 2026-11-11 用户评审：失败要带可行动的短判词（401 / 超时 / 连不上），不只「连接失败」
+    expect(bad.text()).toBe('失败 · 401')
     expect(bad.classes()).toContain('is-bad')
     expect(bad.attributes('title')).toContain('401')
   })

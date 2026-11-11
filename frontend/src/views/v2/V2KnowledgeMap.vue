@@ -12,14 +12,19 @@
       <header class="km__head">
         <div>
           <h1>知识图谱</h1>
-          <p>核心概念、知识组件与前置依赖关系</p>
+          <!-- 颜色编码补一句（2026-11-11 走查）：底图例只解释了连线与形状/大小，
+               画布上按掌握度着的绿/琥珀/红/灰没有一处文字说明；四个档位名在统计行里，
+               这里只把「颜色 = 掌握度」这条对应关系说破，不再重复四个档位。 -->
+          <p>核心概念、知识组件与前置依赖关系 · 颜色=掌握度</p>
         </div>
+        <!-- 自动聚焦说明（2026-11-11 走查）：此前整段是 visually-hidden——用户看到的是
+             「全部路径」却只加载了一条，属于静默改范围。现在放进标题行右侧（不额外占高度），
+             并给「查看全部路径」退回。 -->
+        <span v-if="narrowedNote" class="km__note" role="status">
+          <span>{{ narrowedNote }}</span>
+          <button type="button" class="km__note-action" @click="showAllPaths">查看全部路径</button>
+        </span>
       </header>
-
-      <!-- 说明框已撤（2026-11-05 屏效比）：蓝边通栏 66px 只讲「共 N 条路径、N 个节点、
-           当前展示哪条」——图卡统计行（mk-ge__stats）与路径轨已各自常驻同一组数字，
-           本行是同屏第三份。当前路径由轨道上高亮芯片 + 图卡标题承担 -->
-      <p v-if="narrowedNote" class="km__note visually-hidden">{{ narrowedNote }}</p>
 
       <!-- 卡壳（border / radius / padding 10px 10px 4px）落在内部 .mk-ge__card 上：
            2026-11-06 起路径切换收进图卡内的统计栏（单个下拉，见 MkGraphExplorer），
@@ -80,12 +85,15 @@ const error = ref('')
 /**
  * 「全部路径」的图超过这个规模就自动收窄到单条路径。
  *
- * 为什么是 40：`MkGraph` 的力导向斥力/边长是按 ~40 节点校准的（该文件注释记录了这次校准），
- * 超过之后云团会撑出画布——实测某学习者 5 条路径并集有 76 个有边节点，802×560 的画布上
- * 只能看见边缘碎片。判据必须是「画布实际会画出的节点数」——孤立点并不是全都不画：
- * 有掌握度读数的孤立概念会保留（见 MkGraph.visibleNodes），只数有边的会把它漏在护栏外。
+ * 为什么是 24（2026-11-11 走查从 40 下调）：MkGraph 的力导向按节点数撑开、再由
+ * fitGraphView 等比缩进画布；1280×720 的画布只有 ~335px 高，40 节点会被缩到 ~0.4 倍，
+ * 而标签是屏幕像素尺寸（不随缩放变小），中心簇的概念名于是互相压住、整片不可读。
+ * 24 以内单条路径的概念网在同等画布上的缩放倍率明显更高，标签碰撞随之减少；
+ * 用户要看聚合图可从下拉切回「全部路径」（本页会给可见说明，不再静默改范围）。
+ * 判据必须是「画布实际会画出的节点数」——孤立点并不是全都不画：有掌握度读数的孤立概念
+ * 会保留（见 MkGraph.visibleNodes），只数有边的会把它漏在护栏外。
  */
-const AUTO_NARROW_CONNECTED_NODES = 40
+const AUTO_NARROW_CONNECTED_NODES = 24
 const narrowedNote = ref('')
 
 /** 画布实际会渲染的节点数（有边 + 有掌握度读数的孤立点；与 MkGraph.visibleNodes 同判据） */
@@ -132,6 +140,11 @@ function onPathChange(value: string | null) {
   void applyPath(value)
 }
 
+/** 说明行里的「查看全部路径」：清掉说明并重拉聚合图（不刷新页面） */
+function showAllPaths() {
+  onPathChange(null)
+}
+
 /* ---------- 三态主动作（原型 data-retry / data-new-goal） ----------
    错误与空态现在由 MkGraphExplorer 整屏渲染（见其 V2ResultState 用法），
    动作文案从这里传入、事件在这里落地，组件保持「宿主未接线就不渲染按钮」的只读能力。 */
@@ -165,7 +178,7 @@ onMounted(async () => {
   const connected = connectedCount(nodes.value, edges.value)
   if (connected <= AUTO_NARROW_CONNECTED_NODES) return
   // 教句「想看全貌可切回全部路径」删去（2026-11-03 真机走查）：全部路径 pill 就在下面一排
-  narrowedNote.value = `共 ${paths.value.length} 条学习路径、${connected} 个概念节点。当前展示「${first.title ?? '最近一条路径'}」。`
+  narrowedNote.value = `共 ${paths.value.length} 条路径、${connected} 个概念，已聚焦到「${first.title ?? '最近一条路径'}」以保证标签可读。`
   await applyPath(first.id)
 })
 </script>
@@ -191,17 +204,40 @@ onMounted(async () => {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 6px 12px;
   padding-bottom: 2px;
 }
 .km__head h1 { margin: 0; font-size: 22px; font-weight: 800; color: var(--ink); }
 .km__head p { margin: 3px 0 0; font-size: 13px; color: var(--muted); }
 
-/* 说明框视觉已撤（2026-11-05 屏效比）：内容仅留给读屏（visually-hidden 全局类），
-   不再占 66px 视觉高度——同屏第三份数字（图卡统计行 + 路径轨已各有） */
+/* 自动聚焦说明（2026-11-11）：标题行右侧的一行，不再占卡片上方的独立高度。
+   与标题块分开对齐（底对齐），窄屏时整行折到标题下方。 */
 .km__note {
-  margin: 0;
+  margin: 0 0 1px;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  max-width: 62%;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  text-align: right;
 }
+.km__note-action {
+  min-height: 32px;
+  padding: 0 6px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--blue-deep);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.km__note-action:hover { text-decoration: underline; }
 /* 图卡自适应（2026-11-10 用户裁决「改成自适应」）：
    整页「导航 + 主区」两段式弹性布局，图卡直接吃掉剩余高度，不再按 DPI 推固定像素
    （100dvh − 282 这类会在 4K 缩放下差几十像素）。
@@ -314,6 +350,35 @@ onMounted(async () => {
    画布高度走 `height="100%"` + 上面那条 flex 链（2026-11-10 用户裁决「改成自适应」）：
    卡片高度 = 视口 − 导航 − 标题行 − 页脚留白，由浏览器自己算，任何缩放/DPI 都不会差几个像素。
    移动端 ≤720px 档 MkGraph 仍按 0.6 倍收（媒体查询在组件里，对 100% 同样生效）。 */
+
+/* ===== 画布控件热区（2026-11-11 走查 P2）=====
+   缩放三颗是 32×32、侧栏开关 26×26，桌面档低于 36、移动档低于 44。
+   只放大按钮盒（图标尺寸不变），让「+ / − / ⟲ / »」在小屏上也点得中。
+   这些规则只在本页生效，不改变 MkGraphExplorer 在课堂浮窗/学习者详情里的用法。 */
+.km__card :deep(.mk-ge__zoom-btn) {
+  width: 40px;
+  height: 40px;
+}
+.km__card :deep(.mk-ge__side-toggle) {
+  width: 34px;
+  height: 34px;
+}
+@media (max-width: 1100px) {
+  .km__card :deep(.mk-ge__zoom-btn) {
+    width: 44px;
+    height: 44px;
+  }
+  .km__card :deep(.mk-ge__side-toggle) {
+    width: 44px;
+    height: 44px;
+  }
+  .km__note {
+    max-width: none;
+    width: 100%;
+    text-align: left;
+  }
+  .km__note-action { min-height: 44px; }
+}
 
 /* ===== 移动端密度（2026-09-24 / 2026-09-30 对齐原型后复核）=====
    判据：整页上下留白 ≤40px。本页通篇用 --mk-space-* token，这里继续用 token。

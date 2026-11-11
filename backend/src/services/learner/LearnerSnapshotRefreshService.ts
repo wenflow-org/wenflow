@@ -542,11 +542,14 @@ export class LearnerSnapshotRefreshService {
    * 目标/路径域证据时间线（learner-models 详情/证据端点）：
    * 按 evidenceType 白名单取最近 N 条，occurredAt 倒序。
    */
-  async listDomainEvidence(userId: string, evidenceTypes: string[], take: number) {
+  async listDomainEvidence(userId: string, evidenceTypes: string[], take: number, pathId?: string) {
     const rows = await prisma.learner_evidence.findMany({
       where: {
         userId,
         evidenceType: { in: evidenceTypes },
+        // 管理端证据页按页级路径范围收窄（2026-11-11）：目标/路径域事件也带 pathId，
+        // 不传时保持原有「最近 N 条跨路径」口径（学习动态等全局消费者）。
+        ...(pathId ? { pathId } : {}),
       },
       orderBy: { occurredAt: 'desc' },
       take,

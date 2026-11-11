@@ -54,8 +54,11 @@ describe('证据页 · 时间线不再憋在小盒子里', () => {
     expect(LD).toMatch(/\.ld-ev-scroll \{[^}]*max-height: min\(80vh, 900px\)/)
   })
 
-  it('双栏顶部对齐，左栏不被右栏拉高', () => {
-    expect(LD).toMatch(/\.ld-ev-grid \{[\s\S]{0,400}?align-items: start/)
+  it('上方全宽仪表区 + 下方等高两栏，左栏不再被右栏拉出半屏空卡框', () => {
+    // 2026-11-11 P2 重排：仪表区（压力曲线 + 预测校准/趋势）通栏，下方时间线与密度两栏等高内滚。
+    expect(LD).toMatch(/\.ld-ev-top \{[\s\S]{0,400}?grid-template-columns: minmax\(0, 1\.6fr\) minmax\(0, 1fr\)/)
+    expect(LD).toMatch(/\.ld-ev-grid \{[\s\S]{0,400}?align-items: stretch/)
+    expect(LD).toMatch(/\.ld-ev-main,\s*\n\s*\.ld-ev-density \{ height: clamp\(420px, 54vh, 640px\)/)
   })
 
   it('三列诊断的滚动条就地声明成 4px 主题滑块（不回落 Windows 原生亮槽）', () => {
@@ -97,6 +100,13 @@ describe('画像 · 去噪与文案清洗', () => {
       .toBe(`当前自述水平为 ${levelWordZh('beginner')}，需要继续观察`)
     // 正常文本不动
     expect(tidyNarrativeText('先建立概念，再配合例子验证。')).toBe('先建立概念，再配合例子验证。')
+  })
+
+  it('tidyNarrativeText：中英文/数字之间补空格，紧跟汉字的半角标点转全角（2026-11-11）', () => {
+    expect(tidyNarrativeText('第3阶段用FSRS评分,再回到第2节.'))
+      .toBe('第 3 阶段用 FSRS 评分，再回到第 2 节。')
+    // 幂等：已经排版好的文本不会再被插入第二个空格
+    expect(tidyNarrativeText('第 3 阶段用 FSRS 评分。')).toBe('第 3 阶段用 FSRS 评分。')
   })
 })
 

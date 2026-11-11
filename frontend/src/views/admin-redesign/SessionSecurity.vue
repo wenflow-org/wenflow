@@ -322,7 +322,6 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { adminAuthApi, adminSessionsApi } from '@/api/adminApi'
 import { errMsg } from './live'
-import { useIsNarrow } from './useIsNarrow'
 import { ipText } from './statusText'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
@@ -767,14 +766,13 @@ async function cleanupAllHistory() {
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
-/* LY6（2026-10-05 布局方案 §4）：≤1599 档三列 datetime 收 176→112，可见时刻改紧凑口径
-   MM-DD HH:mm（省年，会话有效期以天计）；完整时间仍在 title（fmtFull）与下线确认弹窗。 */
-const isMid = useIsNarrow(1600)
+/* LY6（2026-10-05 布局方案 §4）曾在 ≤1599 档把可见时刻收成 `MM-DD HH:mm`。
+   2026-11-11 时间口径审计撤除该降级：`11-09 23:53` 正是 BRIEF 明令禁止的格式，
+   且同页出现两套写法。日期再挤也不省年份——列宽由 CSS 承担。 */
 function fmtDateTime(iso?: string | null): string {
   if (!iso) return '—'
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return '—'
-  if (isMid.value) return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 function fmtFull(iso?: string | null): string {

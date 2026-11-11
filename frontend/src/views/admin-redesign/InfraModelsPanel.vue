@@ -54,7 +54,7 @@
                 <span
                   v-if="m === g.entry.model"
                   class="mk-badge mk-badge--default mpp-eng__on"
-                  title="这条能力当前调用的模型"
+                  :title="`${g.label}当前调用的模型，池内其余模型仅备用`"
                 >默认</span>
               </div>
               <span
@@ -82,7 +82,7 @@
                 type="button"
                 class="mk-link"
                 :disabled="saving"
-                title="这条能力运行时改用这个模型，其余模型留在池子里备用"
+                :title="`${g.label}运行时改用这个模型，其余模型留在池子里备用`"
                 @click="activate(g.kind, m)"
               >设为默认</button>
               <button type="button" class="mk-link" @click="openEdit(g.entry, m)">配置</button>
@@ -160,7 +160,7 @@
                 </p>
                 <label v-if="addEntry?.keySource === 'db' && !addConn.apiKey.trim()" class="infra-clearkey">
                   <input v-model="addConn.clearKey" type="checkbox" />
-                  <span>清除已保存的密钥（之后改用环境变量中的密钥）</span>
+                  <span>清除已保存的密钥</span>
                 </label>
               </template>
             </div>
@@ -260,6 +260,7 @@
       :title="addTitle"
       :models="addModels"
       :registered="addRegistered"
+      :show-kinds="false"
       :labels="addEntry?.labels ?? {}"
       :allow-manual="false"
       :loading="addLoading"
@@ -347,6 +348,8 @@ async function load() {
 }
 
 async function test(kind: InfraKind, model: string) {
+  /* 同一时刻只跑一个测试：按钮已按 testing 禁用，这里挡住双击/回车造成的重复请求 */
+  if (testing.value) return
   const key = rowKey(kind, model)
   testing.value = key
   /* 清掉这一行上一次的结果（重新测就重新给读数，不拿旧结果显示成「还在通过」） */
@@ -441,6 +444,8 @@ const addKind = ref<InfraKind | null>(null)
 const addEntry = ref<InfraModelEntryView | null>(null)
 /** 上游这次拉到的**全量**清单：卡面按用途筛一份，其余留在「显示全部」后面 */
 const addAll = ref<string[]>([])
+/** 后端给的软分类（id → 类型）：筛清单只认它，前端不再自己维护「名字里带 embedding」的词表 */
+const addTypes = ref<Record<string, string>>({})
 /** 显示全部（含没被识别出用途的模型）：筛选猜错名字时还有一条退路 */
 const addShowAll = ref(false)
 const addLoading = ref(false)
@@ -480,11 +485,28 @@ function resolveEndpoint(kind: InfraKind, root: string): string {
 }
 const addResolvedEndpoint = computed(() => (addKind.value ? resolveEndpoint(addKind.value, addConn.value.endpoint) : ''))
 
-/** 按用途筛一份（名字里带 embedding / rerank 这类标记的）；「显示全部」时原样列 */
+/** 后端的模型类型 → 这张卡认的用途；'' = 这次响应没带分类（旧后端） */
+function backendRole(id: string): InfraKind | 'other' | '' {
+  const t = addTypes.value[id]
+  if (t === 'embedding') return 'embedding'
+  if (t === 'reranker') return 'rerank'
+  if (t === 'llm' || t === 'unknown') return 'other'
+  return ''
+}
+
+/**
+ * 按用途筛一份：优先用后端软分类（`inferModelType`，与对话卡同一套规则）；
+ * 旧后端（返回里没有 modelOptions）才退回名字推断，保证升级期间不清空清单。
+ * 「显示全部」时原样列。
+ */
 const addModels = computed(() => {
   if (!addKind.value || addShowAll.value) return addAll.value
   const kind = addKind.value
-  return addAll.value.filter((id) => inferModelCapabilities(id).role === kind)
+  return addAll.value.filter((id) => {
+    const typed = backendRole(id)
+    if (typed) return typed === kind
+    return inferModelCapabilities(id).role === kind
+  })
 })
 /** 被筛掉的条数：给弹窗底部的「显示全部」用 */
 const addHiddenCount = computed(() => (addShowAll.value ? 0 : addAll.value.length - addModels.value.length))
@@ -508,8 +530,10 @@ const addConnDirty = computed(() => {
 
 const addKeyPlaceholder = computed(() => {
   const entry = addEntry.value
-  if (entry?.keySource === 'db') return `留空 = 沿用已配置${entry.keyHint ? `（${entry.keyHint}）` : ''}`
-  if (entry?.keySource === 'env') return '留空 = 沿用环境变量'
+  /* 统一口径（2026-11-11 用户评审）：密钥存在哪是后端的事，用户只需要知道「留空不会清掉它」。
+     db / env 两种来源都叫「已配置」，掩码跟在同一句里。 */
+  const hint = entry?.keyHint ? `（${entry.keyHint}）` : ''
+  if (entry?.keySource === 'db' || entry?.keySource === 'env') return `留空 = 沿用已配置${hint}`
   return '粘贴 API Key'
 })
 
@@ -618,13 +642,20 @@ async function pullUpstream(background = false): Promise<void> {
       : {}
     const res = await adminInfraModelsApi.pull({ kind, ...draft })
     const all = ((res.data?.data?.models ?? []) as unknown[]).map((m) => String(m))
+    const options = (res.data?.data?.modelOptions ?? []) as Array<{ id: string; inferredType: string }>
+    const types: Record<string, string> = {}
+    for (const o of options) {
+      if (o?.id && o.inferredType) types[o.id] = o.inferredType
+    }
     addAll.value = all
+    addTypes.value = types
     addShowAll.value = false
     addFetchedSig.value = addConnSig.value
     if (!background) toast.success(all.length ? `获取到 ${all.length} 个模型` : '服务未返回模型列表')
   } catch (e) {
     addError.value = errMsg(e)
     addAll.value = []
+    addTypes.value = {}
     addFetchedSig.value = ''
     if (!background) toast.error(`拉取失败：${errMsg(e)}`)
   } finally {
@@ -643,6 +674,7 @@ function addConnPatch(): Record<string, unknown> {
 
 /** 「保存连接」：只提交连接（弹窗里也能只改地址不挑模型） */
 async function saveAddConn(): Promise<void> {
+  if (saving.value) return
   const kind = addKind.value
   if (!kind) return
   if (addConn.value.mode === 'own' && !addConn.value.endpoint.trim()) {
@@ -657,6 +689,7 @@ async function saveAddConn(): Promise<void> {
   addConn.value.clearKey = false
   // 连接换了，手里这份清单就是旧连接拉的：清掉，等用户点「获取模型」
   addAll.value = []
+  addTypes.value = {}
   addFetchedSig.value = addConnSig.value
   addEmpty.value = '连接已保存，点「获取模型」拉一份新清单。'
   toast.success(`${kindLabel(kind)}的连接已保存`)
@@ -664,6 +697,7 @@ async function saveAddConn(): Promise<void> {
 
 function onAddClosed(): void {
   addAll.value = []
+  addTypes.value = {}
   addShowAll.value = false
   addError.value = ''
   addEmpty.value = ''
@@ -685,6 +719,7 @@ async function openAdd(entry: InfraModelEntryView) {
   addKind.value = entry.kind
   addEntry.value = entry
   addAll.value = []
+  addTypes.value = {}
   addShowAll.value = false
   addError.value = ''
   addEmpty.value = ''
@@ -781,6 +816,7 @@ function closeEdit() {
 }
 
 async function save() {
+  if (saving.value) return
   const kind = editKind.value
   const entry = editEntry.value
   if (!kind || !entry) return

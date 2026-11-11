@@ -56,7 +56,12 @@
 /* 选中行：主色粗体 + 右侧勾。不靠底色区分——hover 也会给底色，两个通道会打架 */
 .mk-listbox-opt.is-selected { color: var(--mk-blue-text); font-weight: 700; }
 .mk-listbox-opt.is-selected > svg { flex: none; color: var(--mk-blue-text); }
+.mk-listbox-opt__text { display: grid; gap: 1px; min-width: 0; }
 .mk-listbox-opt__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* 选项释义（2026-11-11 困惑测试 #27）：只在调用方显式给 hint 时出现，随行灰色小字；
+   选项行因此从 nowrap 单行变为可两行——行高按内容自然增长，列表仍逐行对齐。 */
+.mk-listbox-opt__hint { font-size: var(--mk-fs-micro); font-weight: 400; color: var(--mk-faint); overflow: hidden; text-overflow: ellipsis; }
+.mk-listbox-opt:has(.mk-listbox-opt__hint) { white-space: normal; align-items: start; }
 
 .mk-pillselect__menu { max-width: 320px; }
 /* 紧凑密度档：与 .mk-pill 同档收窄（内衬与字号一起收，不单独缩值） */

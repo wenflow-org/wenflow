@@ -51,6 +51,10 @@ export function useOverlay(open: Ref<boolean>, panel: Ref<HTMLElement | null>, l
   let prevFocus: HTMLElement | null = null
   let modalBefore: string | null = null
   let keydownHandler: ((e: KeyboardEvent) => void) | null = null
+  /* 是否由本 hook 真正锁住了 body 滚动。只在「打开过且尚未恢复」时解锁：
+     否则一个「挂载着但从未打开」的浮层卸载时会把 body.style.overflow 清空，
+     把另一层仍然开着的抽屉/弹窗的背景滚动一起放开（Confirm 这类常驻挂载的浮层最易踩到）。 */
+  let scrollLocked = false
 
   watch(open, async (isOpen) => {
     if (isOpen) {
@@ -58,6 +62,7 @@ export function useOverlay(open: Ref<boolean>, panel: Ref<HTMLElement | null>, l
       if (lockScroll) {
         prevOverflow = document.body.style.overflow
         document.body.style.overflow = 'hidden'
+        scrollLocked = true
       }
       await nextTick()
       const el = panel.value
@@ -85,7 +90,10 @@ export function useOverlay(open: Ref<boolean>, panel: Ref<HTMLElement | null>, l
         }
       }
       modalBefore = null
-      if (lockScroll) document.body.style.overflow = prevOverflow
+      if (lockScroll && scrollLocked) {
+        document.body.style.overflow = prevOverflow
+        scrollLocked = false
+      }
       if (prevFocus && document.contains(prevFocus)) prevFocus.focus()
       prevFocus = null
     }
@@ -94,7 +102,11 @@ export function useOverlay(open: Ref<boolean>, panel: Ref<HTMLElement | null>, l
   onBeforeUnmount(() => {
     const el = panel.value
     if (el && keydownHandler) el.removeEventListener('keydown', keydownHandler)
-    document.body.style.overflow = prevOverflow
+    // 只归还本 hook 拿走的锁：从未打开过的浮层卸载时不得清掉别人的 hidden
+    if (scrollLocked) {
+      document.body.style.overflow = prevOverflow
+      scrollLocked = false
+    }
   })
 }
 

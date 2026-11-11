@@ -292,7 +292,8 @@ describe('排行表 · 失败次数列（2026-11-10 用户「失败次数的字�
     const bad = w.findAll('.tc-fail')[0]
     // 次数 = 值；失败率 = 副行（与 Token 用量同一套「值 + 副读数」结构）
     expect(bad.find('.tc-fail__count').text()).toBe('2')
-    expect(bad.find('.tc-c__sub').text()).toBe('失败率 10%')
+    // 2/21 = 9.5%（2026-11-11 全站百分比口径：1 位小数，不再四舍五入成整数 10%）
+    expect(bad.find('.tc-c__sub').text()).toBe('失败率 9.5%')
     expect(bad.text().replace(/\s+/g, '')).not.toContain('210')
     // 0 失败只留一个 0，不占副行
     expect(w.findAll('.tc-fail')[1].find('.tc-c__sub').exists()).toBe(false)
@@ -326,5 +327,23 @@ describe('成本页 · 失败三态（#72 P-47）', () => {
     expect(failed.find('.mk-kpi__num').text()).toBe('—');
     expect(tokens.find('.mk-kpi__num').text()).toBe('—');
     w.unmount();
+  });
+});
+
+describe('costFormat · 全站数值口径（2026-11-11）', () => {
+  it('百分比 1 位小数、整数不带 .0、非零不足 1% 写 <1%', async () => {
+    const { formatPct } = await import('../costFormat');
+    expect(formatPct(89.14)).toBe('89.1%');
+    expect(formatPct(95)).toBe('95%');
+    expect(formatPct(0.4)).toBe('<1%');
+    expect(formatPct(0)).toBe('0%');
+  });
+
+  it('Token 计数 B/M/K 同精度、K 大写（不再出现 1.5k）', async () => {
+    const { formatTokens } = await import('../costFormat');
+    expect(formatTokens(23_500_000)).toBe('23.5M');
+    expect(formatTokens(552_400)).toBe('552.4K');
+    expect(formatTokens(1_500)).toBe('1.5K');
+    expect(formatTokens(0)).toBe('0');
   });
 });

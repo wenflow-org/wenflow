@@ -194,6 +194,25 @@ describe('知识图谱容器与顶距（2026-11-07 走查/二次/三次）：同
     expect(tpl.indexOf('mk-ge__side-title')).toBeGreaterThan(tpl.indexOf('mk-ge__side-head'));
     expect(tpl.indexOf('mk-ge__side-toggle')).toBeGreaterThan(tpl.indexOf('mk-ge__side-title'));
   });
+
+  /* 2026-11-11 走查 P1：40 节点在 1280×720 的画布上被 fitGraphView 缩到 ~0.4 倍，
+     标签（屏幕像素，不随缩放变小）在中心簇互相压住。页面侧先把「过密聚合图」的默认
+     范围收窄到最近一条路径（用户仍可切回全部），并且这次必须把理由显示出来——
+     原说明是 visually-hidden，等于静默换范围。 */
+  it('过密聚合图默认聚焦单条路径：阈值收紧、说明可见、有「查看全部路径」退回', () => {
+    expect(km, '阈值没有收紧，1280 下仍是 40 节点挤一屏').toMatch(/AUTO_NARROW_CONNECTED_NODES = 24/);
+    expect(km, '说明又变成只给读屏的隐藏文本').not.toMatch(/km__note[^>]*visually-hidden/);
+    expect(km).toContain('查看全部路径');
+    expect(km).toContain('function showAllPaths');
+    /* 颜色编码有文字出处（底图例只讲了连线与形状） */
+    expect(km).toContain('颜色=掌握度');
+  });
+
+  it('画布缩放/侧栏开关在桌面与移动档都放大热区', () => {
+    const css = strip(km);
+    expect(css).toMatch(/\.km__card :deep\(\.mk-ge__zoom-btn\) \{[^}]*width: 40px/);
+    expect(css).toMatch(/@media \(max-width: 1100px\)[\s\S]*?\.mk-ge__zoom-btn\) \{[^}]*width: 44px/);
+  });
 });
 
 describe('学习状态：单日折线图与卡头紧凑化', () => {

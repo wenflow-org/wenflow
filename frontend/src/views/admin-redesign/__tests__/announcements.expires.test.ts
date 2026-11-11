@@ -130,4 +130,18 @@ describe('Announcements 过期语义（expiresAt）', () => {
     // 状态筛选下拉含「已过期」选项（2026-09-27 新增），断言收窄到列表行：该公告徽章不是已过期
     expect(w.find('tbody').text()).not.toContain('已过期');
   });
+
+  it('发布 / 过期列主口径为绝对时间 YYYY-MM-DD HH:mm，倒计时与相对时间退到 title', async () => {
+    const future = new Date(Date.now() + 5 * 86400000).toISOString();
+    liveAnnouncements.value = [makeAnnouncement('a1', { expiresAt: future })];
+    const w = await mountAnnouncements();
+    await nextTick();
+    const tds = w.findAll('tbody tr td');
+    const abs = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/;
+    // 列序：公告 / 级别 / 状态 / 发布 / 过期 / 创建人 / 操作
+    expect(tds[3].text()).toMatch(abs);
+    expect(tds[4].text()).toMatch(abs);
+    // 过期列 title 补倒计时（主口径仍是绝对时刻）
+    expect(tds[4].attributes('title')).toContain('剩');
+  });
 });

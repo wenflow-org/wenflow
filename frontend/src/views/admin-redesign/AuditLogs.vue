@@ -32,12 +32,12 @@
     <section class="mk-kpi-grid" aria-label="审计日志统计" :aria-busy="statsLoading || undefined">
       <MkKpi
         label="记录总数"
-        :value="statsLoading || statsError ? '—' : total"
+        :value="statsLoading || statsError ? '—' : total.toLocaleString()"
       />
       <MkKpi
         clickable
         label="失败记录"
-        :value="statsLoading || statsError ? '—' : failedCount"
+        :value="statsLoading || statsError ? '—' : failedCount.toLocaleString()"
         :tone="failedCount && !statsError ? 'bad' : ''"
         :class="{ 'al-kpi--on': failedOnly }"
         :aria-pressed="failedOnly"
@@ -124,6 +124,9 @@
             :active="!!failedAction"
             @update:model-value="applyFailureFilter"
           />
+          <!-- 筛选总出口（2026-11-11 二轮走查）：时间范围 + 状态 + 动作/失败动作 + 关键词
+               任一非默认即出现；清空后由 applyFilters → syncFiltersToRoute 同步 URL。 -->
+          <button v-if="isFiltered" type="button" class="mk-link" @click="clearFilters">清空筛选</button>
           <!-- 失败 TOP 常驻主行：先看到「最近什么在失败」，再点 chip 下钻。
                2026-11-09 审计（图 5）：列表本身也失败时，下方 MkEmptyState 的「重试」已经同时
                重取列表与统计（applyFilters），这里再挂一枚红「重试」就是同屏第二个入口。
@@ -290,18 +293,29 @@
                     <div class="log-payload-meta">
                       <span>{{ log.method }} {{ log.path }} · HTTP {{ log.statusCode }}<template v-if="log.durationMs != null"> · {{ fmtMs(log.durationMs) }}</template></span>
                       <span v-if="log.userAgent" class="log-ua" :title="log.userAgent"><span class="log-meta-sep" aria-hidden="true">·</span>{{ log.userAgent }}</span>
+                      <!-- 目标 ID 复制（2026-11-11 二轮走查）：行内只显截断 id，完整值在展开区一键复制 -->
+                      <button v-if="log.targetId" type="button" class="mk-link" @click.stop="copyText(String(log.targetId), '目标 ID')">复制目标 ID</button>
                     </div>
                     <div v-if="log.requestJson" class="log-section">
-                      <span class="log-label">请求</span>
+                      <div class="log-label-row">
+                        <span class="log-label">请求</span>
+                        <button type="button" class="mk-link" @click.stop="copyText(prettyPayload(log.requestJson), '请求内容')">复制</button>
+                      </div>
                       <!-- 负载美化（2026-10-05 与执行日志同批）：紧凑单行 JSON 两格缩进，非 JSON 原样 -->
                       <pre>{{ prettyPayload(log.requestJson) }}</pre>
                     </div>
                     <div v-if="log.beforeJson" class="log-section">
-                      <span class="log-label">变更前</span>
+                      <div class="log-label-row">
+                        <span class="log-label">变更前</span>
+                        <button type="button" class="mk-link" @click.stop="copyText(prettyPayload(log.beforeJson), '变更前内容')">复制</button>
+                      </div>
                       <pre>{{ prettyPayload(log.beforeJson) }}</pre>
                     </div>
                     <div v-if="log.afterJson" class="log-section">
-                      <span class="log-label">变更后</span>
+                      <div class="log-label-row">
+                        <span class="log-label">变更后</span>
+                        <button type="button" class="mk-link" @click.stop="copyText(prettyPayload(log.afterJson), '变更后内容')">复制</button>
+                      </div>
                       <pre>{{ prettyPayload(log.afterJson) }}</pre>
                     </div>
                     <p v-if="!log.requestJson && !log.beforeJson && !log.afterJson" class="log-none">无请求内容记录</p>
@@ -430,6 +444,8 @@ import MockSkeletonTable from './SkeletonTable.vue'
 import { useIsNarrow } from './useIsNarrow'
 import MkCols from '@/components/mk/MkCols.vue'
 import { actionText, targetTypeText, ipText, pathActionText } from './statusText'
+import { formatPct } from './costFormat'
+import { toast } from '@/utils/toast'
 import { useTableSort } from './useTableSort'
 
 /** admin_audit_logs 行（与后端 Prisma 模型一致） */
@@ -648,7 +664,7 @@ const statsError = ref('')
 const statsLoading = ref(false)
 /** KPI：失败率与失败动作读数（统计失败时模板显示 —，不把 0 冒充结论） */
 const failedRate = computed(() =>
-  total.value > 0 ? `${Math.round((failedCount.value / total.value) * 100)}%` : '—'
+  total.value > 0 ? formatPct((failedCount.value / total.value) * 100) : '—'
 )
 /** 失败动作下拉：空值 = 不按动作下钻。状态档已由「状态」下拉表达，这里只说动作维度。
     2026-11-09 审计（图 6）：空值文案改「全部失败动作」——它只在状态 = 仅失败时出现，
@@ -1029,10 +1045,24 @@ watch(
   }
 )
 
-/** 空态：只留一句事实 */
-const emptyDescription = computed(() =>
-  timeRange.value === 'today' ? '今天没有记录' : ''
-)
+/** 空态说明（2026-11-11）：筛选无结果与「真的没有记录」必须说清区别，
+    并给下一步；原先只有「今天」一档有说明，其余时间范围空着。 */
+const emptyDescription = computed(() => {
+  if (isFiltered.value) {
+    const bits: string[] = []
+    if (keyword.value.trim()) bits.push(`关键词「${keyword.value.trim()}」`)
+    if (statusFilter.value === 'err') bits.push('状态「仅失败」')
+    else if (statusFilter.value === 'ok') bits.push('状态「仅成功」')
+    if (failedAction.value) bits.push(`失败动作「${failedAction.value}」`)
+    if (timeRange.value !== 'all') bits.push(`时间范围「${timeRangeLabels[timeRange.value]}」`)
+    return bits.length
+      ? `当前筛选（${bits.join(' · ')}）没有匹配的${tab.value === 'login' ? '登录' : '审计'}记录。可放宽时间范围，或清除筛选。`
+      : `当前筛选条件下没有匹配的${tab.value === 'login' ? '登录' : '审计'}记录。可清除筛选后重试。`
+  }
+  if (timeRange.value === 'today') return '今天没有记录。更早的审计可在「全部」时间范围查看。'
+  if (timeRange.value === 'all') return '当前时间范围内没有记录。管理员操作与登录尝试发生后会自动记录在这里。'
+  return `当前时间范围（${timeRangeLabels[timeRange.value]}）内没有记录。可放宽时间范围。`
+})
 
 const REASON_TEXT: Record<string, string> = {
   account_locked: '账户已锁定',
@@ -1048,6 +1078,45 @@ function reasonText(reason: string | null | undefined): string {
 function fmtMs(ms: number) {
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`
 }
+
+/* 复制（2026-11-11 二轮走查）：目标 ID 与展开区 payload 一键复制。
+   与执行日志同款兜底：Clipboard API 失败回退 execCommand，两者都失败必须 toast 明示。 */
+function legacyCopy(text: string): boolean {
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.setAttribute('readonly', '')
+    ta.style.position = 'fixed'
+    ta.style.top = '0'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(ta)
+    return ok
+  } catch {
+    return false
+  }
+}
+async function copyText(text: string | null | undefined, label: string) {
+  const value = String(text ?? '').trim()
+  if (!value) {
+    toast.error(`没有可复制的${label}`)
+    return
+  }
+  let ok = false
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value)
+      ok = true
+    }
+  } catch {
+    ok = false
+  }
+  if (!ok) ok = legacyCopy(value)
+  if (ok) toast.success(`已复制 ${label}`)
+  else toast.error(`复制失败，请手动复制：${value}`)
+}
 /** 结果列的紧凑读数在格内只写「200 18ms」；HTTP 口径与完整耗时放 title */
 function resultMetaTitle(log: AuditLogRow): string {
   const parts: string[] = []
@@ -1056,12 +1125,12 @@ function resultMetaTitle(log: AuditLogRow): string {
   return parts.join(' · ')
 }
 const pad = (n: number) => String(n).padStart(2, '0')
-/* 绝对时间：与执行日志统一 MM-DD HH:MM:SS（完整时间见 tooltip fmtFull） */
+/* 绝对时间：全站统一 YYYY-MM-DD HH:mm:ss（审计排查需要秒；不再用 MM-DD 紧凑写法） */
 function fmtTime(iso?: string | null): string {
   if (!iso) return '—'
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return '—'
-  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 function fmtFull(iso?: string | null): string {
   if (!iso) return ''
@@ -1091,7 +1160,8 @@ function goExport() {
 /* 固定列宽（2026-10-22 用户「翻页不同页码时候，列宽怎么还在变呢」）：动作/目标两列在
    auto 布局下按当页最长内容分宽，翻页跳动；fixed 后按表头定死，余量按权重摊开。
    宽度按 1280 现值校准并留余量，1200 档无横滚。 */
-.al-c-time { width: 105px; }
+/* 时间列宽按 YYYY-MM-DD HH:mm:ss 校准（原 MM-DD 口径的 105px 会折行） */
+.al-c-time { width: 150px; }
 .al-c-admin { width: 170px; }
 /* 动作列按「动作名 + 方法徽章」单行校准；HTTP 状态/耗时移到结果列，动作格不再叠第二行 */
 .al-c-action { width: 205px; }
@@ -1105,8 +1175,9 @@ function goExport() {
 .al-c-expand { width: 96px; }
 .al-c-reason { width: 280px; }
 /* 登录审计：操作列在 fixed 布局里被挤到 67px，95px 的「查看会话 →」会顶出表格右缘 23px。
-   锁定最小宽后由固定布局从其他列回收空间，1920 下不再横向溢出。 */
-.al-login-table .mk-c-act { width: 116px !important; }
+   锁定最小宽后由固定布局从其他列回收空间，1920 下不再横向溢出。
+   选择器已比全局 .mk-c-act 高一档特异性，无需 !important。 */
+.al-login-table .mk-c-act { width: 116px; }
 /* fixed 档列宽即契约：行内 max-width 会顶出单元格，改成随列收缩 + 省略号 */
 .al-table .log-target, .al-table .log-ip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 /* 目标列回退的模块名：中文说明，走正文无衬线（父格是 mono） */
@@ -1147,8 +1218,8 @@ function goExport() {
 
 /* 展开的 payload 行：整行铺开，不参与行点击 */
 .log-payload-row { cursor: default; }
-.log-payload-row td {
-  padding: 4px 14px 14px 62px !important;
+.mk-table .log-payload-row td {
+  padding: 4px 14px 14px 62px;
   /* 变量化后暗色自动适配，无需再写 dark 覆盖 */
   background: var(--mk-surface-2);
   border-bottom: 1px solid var(--mk-line);
@@ -1252,8 +1323,10 @@ function goExport() {
   font-weight: 700;
   border-radius: var(--mk-radius-sm);
   padding: 1px 8px;
-  background: var(--mk-blue-bg);
-  color: var(--mk-blue-text);
+  /* 动作列 = 「操作类型」，中性色与 HTTP 方法徽章同一族；
+     语义色只留给结果列（红/绿），避免同一列里一半蓝 chip、一半裸文本。 */
+  background: var(--mk-surface-3);
+  color: var(--mk-ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1284,9 +1357,9 @@ function goExport() {
 .log-reason {
   font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* 登录失败原因可能是上游返回的整句英文：允许换行，不再一行硬切（完整值仍在 title） */
+  white-space: normal;
+  overflow-wrap: anywhere;
   max-width: 320px;
 }
 /* 详情列（2026-11-09 审计，图 6）：原为 36px 的 aria-hidden 空表头 + 一枚缩小深灰 ▸，
@@ -1336,6 +1409,7 @@ function goExport() {
 }
 .log-none { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .log-section { display: grid; gap: 4px; }
+.log-label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .log-label { font-size: var(--mk-fs-micro); font-weight: 700; letter-spacing: 0.06em; color: var(--mk-faint); }
 
 /* 大屏/4K 适配（全站 mk 体系档位；表格由 shared.css 档位覆盖） */
@@ -1355,7 +1429,7 @@ function goExport() {
   .log-ua { font-size: var(--mk-fs-micro); }
   .log-label { font-size: var(--mk-fs-micro); }
   .log-payload pre { font-size: var(--mk-fs-micro); }
-  .log-payload-row td { padding-left: 84px !important; }
+  .mk-table .log-payload-row td { padding-left: 84px; }
 }
 @media (min-width: 2800px) {
   .log-time,
@@ -1390,7 +1464,7 @@ function goExport() {
   .log-ua { font-size: var(--mk-fs-body); }
   .log-label { font-size: var(--mk-fs-body); }
   .log-payload pre { font-size: var(--mk-fs-body); }
-  .log-payload-row td { padding-left: 100px !important; }
+  .mk-table .log-payload-row td { padding-left: 100px; }
 }
 
 /* 本页空态撑满主区剩余高度的覆写（P1-1「空态利用」→ 审核 #156 改为 flex:1 + min-height:0）

@@ -2,7 +2,8 @@ import express from 'express';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { learnerSnapshotRefreshService } from '../../services/learner/LearnerSnapshotRefreshService';
 import { predictionCalibrationService } from '../../services/learner/PredictionCalibrationService';
-import { findCalibrationEvidence, findDisplayPathFallback } from '../../services/admin/learner-models.repo';
+import { findCalibrationEvidence, findDisplayPathFallback, findPathHistory } from '../../services/admin/learner-models.repo';
+import { profileAggregator } from '../../agents/learner-model-agent/profile-aggregator';
 import learningStateService from '../../services/learning/learning-state.service';
 import { dayKeyOf } from '../../services/time/day-boundary';
 import { checkIsAdmin } from '../../services/admin-access.service';
@@ -101,10 +102,33 @@ router.get('/:userId', async (req, res) => {
         })()
       : null;
 
+    /* 路径作用域的画像补充（2026-11-11 多路径串台走查）：
+       - narrative：该路径自己的最近一次已完成目标对话产出的叙述（不是全局最近一次）；
+       - history：该路径的课堂主题/误解（不是最近 50 节跨路径的并集）。
+       两段都按当前快照锚定的路径取；取不到就留 null，前端据此显示「该路径暂无叙述」，
+       不再回落到另一条路径的全局数据。 */
+    const pathContextId = currentPath?.learningPathId || fallbackPath?.id || null;
+    const pathContext = pathContextId
+      ? await (async () => {
+          const [narrative, history] = await Promise.all([
+            profileAggregator.buildPathNarrative(req.params.userId, pathContextId, {
+              cognitive: snapshot.profile.cognitive,
+              preferences: snapshot.profile.preferences,
+              emotional: snapshot.profile.emotional,
+              learning: snapshot.profile.learning,
+              history: snapshot.profile.history,
+            }).catch(() => null),
+            findPathHistory(req.params.userId, pathContextId).catch(() => null),
+          ]);
+          return { pathId: pathContextId, narrative, history };
+        })()
+      : null;
+
     return res.json({
       success: true,
       data: {
         ...snapshot,
+        pathContext,
         progress: pathProgress?.totalTasks
           ? Number(((pathProgress.completedTasks / pathProgress.totalTasks) * 100).toFixed(1))
           : fallbackProgress?.totalTasks
@@ -185,6 +209,7 @@ router.get('/:userId/evidence', async (req, res) => {
       req.params.userId,
       ['goal:understanding:updated', 'path:created', 'path:generated', 'path:adjusted', 'path:completed'],
       30,
+      evidencePathId,
     );
 
     const domainEvidence = domainItems.map((e) => {
@@ -243,7 +268,7 @@ router.get('/:userId/evidence', async (req, res) => {
       happenedAt: string;
     }> = [];
     try {
-      const rows = await findCalibrationEvidence(req.params.userId);
+      const rows = await findCalibrationEvidence(req.params.userId, evidencePathId);
       calibrationDetails = rows.map((row) => {
         const payload = safeJsonParse<Record<string, any>>(row.payload) || {};
         let detail = '';

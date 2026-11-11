@@ -69,7 +69,7 @@
             </span>
           </div>
           <p v-if="data.registry?.source === 'embedded-fallback'" class="ac-mr-note">
-            未读到配置文件，当前为内置默认目录：{{ data.registry?.path }}
+            未读到模型注册表文件，当前为内置默认目录：{{ data.registry?.path }}
           </p>
           <p v-else-if="data.registry?.lastError" class="ac-mr-note" :title="data.registry?.lastError">
             最近一次更新失败，仍在使用上一次可用的模型目录。
@@ -78,8 +78,12 @@
             <table class="mk-table mk-table--dense">
               <thead>
                 <tr>
+                  <!-- 2026-11-11 困惑测试 #103：四个限额列只有裸数字，补单位与语义的悬停说明 -->
                   <th scope="col">模型</th><th scope="col">档位</th><th scope="col">思考</th><th scope="col">推理强度</th>
-                  <th scope="col">输出上限</th><th scope="col">默认输出</th><th scope="col">推理预留</th><th scope="col">并发上限</th>
+                  <th scope="col" title="tokens：单次请求允许的最大输出">输出上限</th>
+                  <th scope="col" title="tokens：未显式指定时的默认输出额度">默认输出</th>
+                  <th scope="col" title="tokens：开思考时在输出预算外追加的额度（仍受输出上限约束）">推理预留</th>
+                  <th scope="col" title="该模型同时进行的上游请求数">并发上限</th>
                 </tr>
               </thead>
               <tbody>

@@ -10,7 +10,9 @@
     <div ref="maskRef" class="mk-modal">
       <div ref="panelRef" class="mk-modal__panel mk-modal__panel--wide" role="dialog" aria-label="创建虚拟学习者">
         <div class="mk-modal__head">
-          <h3 class="mk-modal__title">创建虚拟学习者</h3>
+          <!-- 2026-11-11（困惑测试 #43）：入口叫「从卡库派生」，弹层原名「创建虚拟学习者」；
+               加上派生路径，三处入口仍共用同一弹层。 -->
+          <h3 class="mk-modal__title">{{ pickerCards.length ? '从卡库派生 · 创建虚拟学习者' : '创建虚拟学习者' }}</h3>
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="close">✕</button>
         </div>
 
@@ -37,7 +39,13 @@
                     :checked="pickerPicked.includes(c.profileId)"
                     @change="togglePickCard(c.profileId)"
                   />
-                  <span class="cdd-task__title" :title="c.goal || c.summary || c.name">{{ c.name }}<span v-if="c.summary" class="cdd-card__summary">{{ c.summary }}</span></span>
+                  <!-- 2026-11-11（困惑测试 #43）：合成卡 name 恒为「想解决 + goal」，原样并排印两遍
+                       读作渲染错误；改走全站 cardDisplayTitle 去重，并把搜索承诺的卡号显示出来。 -->
+                  <span class="cdd-task__title" :title="pickerTitle(c)">
+                    {{ pickerTitle(c) }}
+                    <span v-if="pickerSummary(c)" class="cdd-card__summary">{{ pickerSummary(c) }}</span>
+                    <span v-if="c.cardKey" class="cdd-card__key mono">{{ shortCardKey(c.cardKey) }}</span>
+                  </span>
                 </label>
               </li>
             </ul>
@@ -134,6 +142,7 @@ import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { errMsg, markVirtualsMutated } from './live'
 import { useEscape } from './useEscape'
 import { useMaskClose, useOverlay } from './useOverlay'
+import { cardDisplayTitle, shortCardKey } from './cardDisplay'
 import { toast } from '@/utils/toast'
 
 interface Task { id: string; title: string; opening: string | null }
@@ -154,7 +163,7 @@ const note = ref('')
 /** profileId → 勾中的任务 id（默认全选：一张卡的任务通常都要跑，取消个别才是少数派操作） */
 const picked = ref<Record<string, string[]>>({})
 /** 选卡步（openPicker 才有）：候选卡 + 已勾的卡 id（goal 供搜索命中，2026-10-29 M-4；summary = 卡面目标，跟人名一起展示——2026-10-31 三轮评审，与上游字段兼容并存） */
-const pickerCards = ref<Array<{ profileId: string; name: string; goal?: string; summary?: string }>>([])
+const pickerCards = ref<Array<{ profileId: string; name: string; goal?: string; summary?: string; cardKey?: string }>>([])
 const pickerPicked = ref<string[]>([])
 /** 选卡搜索：卡多时（实测 286+ 张）平铺长列表找不到特定卡，按名称 / 卡 id / 目标过滤 */
 const pickerKeyword = ref('')
@@ -162,11 +171,21 @@ const filteredPickerCards = computed(() => {
   const kw = pickerKeyword.value.trim().toLowerCase()
   if (!kw) return pickerCards.value
   return pickerCards.value.filter((c) =>
-    [c.name, c.profileId, c.goal, c.summary]
+    [c.name, c.profileId, c.goal, c.summary, c.cardKey]
       .filter(Boolean)
       .some((v) => String(v).toLowerCase().includes(kw))
   )
 })
+/** 选卡行标题：把「想解决 X」与 X 合并成一句（全站 cardDisplayTitle 口径） */
+function pickerTitle(c: { name: string; goal?: string; summary?: string }) {
+  return cardDisplayTitle(c.name, c.goal || c.summary || '')
+}
+/** 灰字副行只在它与标题不是同一句时出现（否则就是同一句话印两遍） */
+function pickerSummary(c: { name: string; goal?: string; summary?: string }) {
+  const title = pickerTitle(c)
+  const s = String(c.summary || c.goal || '').trim()
+  return s && s !== title ? s : ''
+}
 
 /** 至少留了 1 个任务的卡才会被创建（0 任务的卡后端也会拒，挡在前面省一轮往返） */
 const derivable = computed(() => groups.value.filter((g) => pickedCount(g.profileId) > 0))
@@ -322,4 +341,6 @@ defineExpose({ openWith, openPicker })
 .cdd-card__pick { align-items: flex-start; }
 .cdd-card__pick input[type='checkbox'] { accent-color: var(--mk-blue, #2f6ae0); cursor: pointer; margin-top: 2px; flex: none; }
 .cdd-card__summary { margin-left: 8px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+/* 卡号（2026-11-11 困惑测试 #43）：搜索承诺可按卡号命中，列表里必须看得到 */
+.cdd-card__key { margin-left: 8px; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 </style>

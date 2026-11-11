@@ -120,6 +120,29 @@ export function shortCardKey(key: string): string {
 /** 档位标签：A–E（难度档）与 F1–F5A/B（frontier 批次档）。卡库按它筛。 */
 export const TIER_RE = /^(?:[A-E]|F\d[A-Z]?)$/
 
+/** 档位码 → 人可读名（口径见 virtual-learners/cards/README.md「文件」与「构成」两节）：
+ *  A–E 是 golden 基准批的五组，F1–F5B 是 frontier 前沿批的六组。 */
+export const TIER_LABELS: Record<string, string> = {
+  A: '学科体系',
+  B: '工程实操',
+  C: '应试',
+  D: '业务诊断',
+  E: '边界负样本',
+  F1: '新规时效',
+  F2: '技术版本',
+  F3: '私有材料',
+  F4: '专业深水区',
+  F5A: '诊断纠偏',
+  F5B: '分诊负样本',
+}
+
+/** 档位的一行说明：`F5B · 分诊负样本`；未知码原样返回（不编造语义） */
+export function tierLabel(tier: string): string {
+  const t = String(tier || '').trim()
+  const name = TIER_LABELS[t]
+  return name ? `${t} · ${name}` : t
+}
+
 /** 卡上的档位（没有就空串）：取第一个命中 TIER_RE 的标签 */
 export function cardTier(tags: string[]): string {
   return (tags || []).find((t) => TIER_RE.test(String(t).trim())) || ''

@@ -16,6 +16,9 @@ const getMock = vi.hoisted(() => vi.fn());
 vi.mock('@/utils/api', () => ({ default: { get: getMock } }));
 // 页面已收进个人中心壳：壳负责导航/页头/页脚，测试只关心页面内容，用透传 slot 的桩替掉
 vi.mock('@/components/user/CapabilityShell.vue', () => ({ default: { template: '<div><slot /></div>' } }));
+// 空态主行动走 useRouter().push('/dashboard')（2026-11-11）：裸驱动需给 router 桩，
+// 否则每次 mount 都会打印 injection "Symbol(router)" not found
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 import V2LearningHistory from '../V2LearningHistory.vue';
 
@@ -125,6 +128,15 @@ describe('V2LearningHistory', () => {
     const labels = w.findAll('.history__day-head strong').map((n) => n.text());
     expect(labels).toEqual(['今天']);
   });
+
+  /* 2026-11-11 走查 P1：空态此前只有一句「完成第一次学习后…」，没有按钮，
+     是全站唯一走不出去的空态。现在主行动 = 去学习台，次级出口 = 去规划目标。 */
+  it('空态给出两条出口：去学习台（主按钮）与去规划目标', async () => {
+    const w = await mountHistory([]);
+    expect(w.find('.v2result__action').text()).toBe('去学习台');
+    expect(w.text()).toContain('去规划一个目标');
+    expect(w.find('.history__empty-goal').exists()).toBe(true);
+  });
 });
 
 /**
@@ -160,5 +172,19 @@ describe('V2LearningHistory 样式护栏', () => {
     expect(styleDecl(rule, 'background')).toBe('var(--mk-blue-fill)');
     expect(styleDecl(rule, 'color')).toBe('var(--mk-on-fill)');
     expect(rule, '--blue 暗色档是亮蓝，配白字对比不足且被透明混合中和成灰').not.toContain('var(--blue)');
+  });
+
+  /* 2026-11-11 走查 P1：图例四枚 12px 色块在明暗两档都读成空白，色阶分不出。
+     修法是把图例做成带描边胶囊、色块 14px，并单独加深 .lg 档（不动 .mday 日期格）。 */
+  it('图例色块可见：14px + 独立加深的四档，不与日期格共用浅透明档', () => {
+    const lg = styleRule('.lg');
+    expect(styleDecl(lg, 'width')).toBe('14px');
+    expect(styleDecl(lg, 'height')).toBe('14px');
+    expect(styleDecl(lg, 'border'), '浅档需要描边才能在明暗两档都有边界').not.toBeNull();
+    const l1 = styleRule('.lg.lg--1');
+    expect(styleDecl(l1, 'background'), '第一档仍是 14% 透明蓝，14px 方块里读成空白').toContain('color-mix(');
+    expect(styleDecl(l1, 'background')).toContain('var(--surface)');
+    const legend = styleRule('.month__legend');
+    expect(styleDecl(legend, 'border'), '图例整组需要可见边界').not.toBeNull();
   });
 });

@@ -126,7 +126,7 @@
     <!-- 教学建议条（原教学会话抽屉「建议」页签的文案落点，2026-10-01 随抽屉退役迁入座舱）：
          真实会话控制台接口本就带回 advisory（priority/title/text），数据真实不硬造 -->
     <div
-      v-if="realAdvisory"
+      v-if="realAdvisory && pathLifecycleStatus !== 'archived'"
       class="cp-advisory"
       :class="[`cp-advisory--${realAdvisory.priority}`, { 'cp-advisory--collapsed': advisoryCollapsed }]"
       role="note"
@@ -277,7 +277,7 @@
           :aria-selected="activeTab === st"
           :aria-controls="`cp-tabpanel-${st}`"
           :tabindex="activeTab === st ? 0 : -1"
-          :title="isBlackbox ? '黑盒模式下阶段不可手动切换' : undefined"
+          :title="stepTileTitle(st)"
           :disabled="isBlackbox"
           @click="selectStageTab(st)"
         >
@@ -318,7 +318,7 @@
           <div class="cp-cardbody">
             <MkSkeleton v-if="!session" variant="rows" :count="2" :h="40" :radius="8" />
             <template v-else>
-              <PathJourneyPanel v-if="hasPath && pathId" :path-id="pathId" @changed="loadPathStatus" />
+              <PathJourneyPanel v-if="hasPath && pathId" :path-id="pathId" :readonly="isRealMode" @changed="loadPathStatus" />
               <p v-if="!hasPath && pathStatusFailed" class="cp-degrade">路径状态获取失败 <button type="button" class="mk-link" @click="loadPathStatus">重试</button></p>
               <p v-else-if="!hasPath && pathGenerationInProgress" class="cp-none">路径课程仍在生成，稍后自动刷新。</p>
               <p v-else-if="!hasPath" class="cp-none">{{ pathEmptyHint }}</p>
@@ -346,23 +346,23 @@
                  无截止日时四字段恰好整行；有截止日时自然落到第二行，不挤断四字段单行。 -->
             <div class="mk-facts cp-goal-u__facts">
               <div v-if="goalUnderstanding.timeDimensions?.objectiveScopeHours != null">
-                <span title="R8 时间模型：客观内容体量小时（权威预算依据）">客观体量</span>
+                <span title="按目标对话估算的客观内容体量（小时），是时间预算的权威依据">客观体量</span>
                 <strong>{{ goalUnderstanding.timeDimensions.objectiveScopeHours }} 小时</strong>
               </div>
               <div v-if="goalUnderstanding.timeDimensions?.sessionsLengthMin != null">
-                <span title="R8 时间模型：单次学习分钟（原子任务 90 分钟封顶的换算输入）">单次时长</span>
+                <span title="单次学习时长（分钟），用于把总内容体量换算成课次，单个任务 90 分钟封顶">单次时长</span>
                 <strong>{{ goalUnderstanding.timeDimensions.sessionsLengthMin }} 分钟</strong>
               </div>
               <div v-if="goalUnderstanding.availableResources?.timeBudget">
                 <span>时间预算</span>
-                <strong>{{ goalUnderstanding.availableResources.timeBudget }}</strong>
+                <strong :title="goalUnderstanding.availableResources.timeBudget">{{ goalUnderstanding.availableResources.timeBudget }}</strong>
               </div>
               <div v-if="goalUnderstanding.availableResources?.timeHorizon">
                 <span>时间范围</span>
-                <strong>{{ goalUnderstanding.availableResources.timeHorizon }}</strong>
+                <strong :title="goalUnderstanding.availableResources.timeHorizon">{{ goalUnderstanding.availableResources.timeHorizon }}</strong>
               </div>
               <div v-if="goalUnderstanding.timeDimensions?.deadlineDate">
-                <span title="R8 时间模型：绝对截止日（无期限为空，不要求总周数）">截止日</span>
+                <span title="目标对话里的绝对截止日期（没有期限时为空）">截止日</span>
                 <strong>{{ goalUnderstanding.timeDimensions.deadlineDate }}</strong>
               </div>
             </div>
@@ -393,7 +393,15 @@
             <MkSkeleton v-if="!session" variant="rows" :count="3" :h="36" :radius="8" />
             <template v-else>
               <article v-for="(message, index) in goalConversationMessages" :key="`goal-${index}`" class="cp-transcript__message" :class="message.role === 'assistant' ? 'is-teacher' : (isRealMode ? 'is-learner is-real-learner' : 'is-learner')">
-                <span>{{ message.role === 'assistant' ? '平台目标' : isRealMode ? '学习者' : '虚拟学习者' }}</span>
+                <header class="cp-msg__head">
+                  <span>{{ message.role === 'assistant' ? '平台目标' : isRealMode ? '学习者' : '虚拟学习者' }}</span>
+                  <time
+                    v-if="message.at"
+                    class="cp-msg__time"
+                    :datetime="message.at"
+                    :title="msgStamp(message.at)"
+                  >{{ msgClock(message.at) }}</time>
+                </header>
                 <!-- 模型输出是 markdown（代码围栏/行内代码/粗体）：按产品同一套 markdown-it + DOMPurify 渲染 -->
                 <div class="cp-transcript__content" v-html="renderAiMessageHtml(message.content)"></div>
               </article>
@@ -536,7 +544,15 @@
               <template v-if="learnTimeline.length">
                 <template v-for="entry in learnTimeline" :key="entry.key">
                   <article v-if="entry.message" class="cp-transcript__message" :class="entry.message.role === 'assistant' ? 'is-teacher' : (isRealMode ? 'is-learner is-real-learner' : 'is-learner')">
-                    <span>{{ entry.message.role === 'assistant' ? '教师' : isRealMode ? '学习者' : '虚拟学习者' }}</span>
+                    <header class="cp-msg__head">
+                      <span>{{ entry.message.role === 'assistant' ? '教师' : isRealMode ? '学习者' : '虚拟学习者' }}</span>
+                      <time
+                        v-if="entry.at"
+                        class="cp-msg__time"
+                        :datetime="new Date(entry.at).toISOString()"
+                        :title="msgStamp(entry.at)"
+                      >{{ msgClock(entry.at) }}</time>
+                    </header>
                     <div v-if="entry.message.content" class="cp-transcript__content" v-html="renderAiMessageHtml(entry.message.content)"></div>
                     <!-- 课堂视觉产物：与学习者侧同一套确定性渲染（mermaid + 多图型 SVG），
                          运营在座舱里能直接看到老师当时摆的图，而不是只看到「见图」二字。 -->
@@ -556,7 +572,8 @@
                        它发生的那一回合（2026-10-19 用户走查「不符合课堂阅读顺序」）；
                        2026-10-22 归并保留：同 checkpointId 只渲染最新裁决并标尝试次数。 -->
                   <div v-else-if="entry.checkpoint" class="cp-checkpoint cp-checkpoint--inline">
-                    <p class="cp-checkpoint__q">{{ entry.checkpoint.question || entry.checkpoint.title || '（无题干）' }}</p>
+                    <!-- 2026-11-11 用户「题目呢」：先出题头（检查点/题型/判分），再出题干与选项。
+                         此前只看得到题干与「我的答案：A」，A/B/C/D 各写了什么无处可查。 -->
                     <div class="cp-checkpoint__meta">
                       <span class="mk-badge" :class="entry.checkpoint.passed === true ? 'mk-badge--ok' : entry.checkpoint.passed === false ? 'mk-badge--warn' : 'mk-badge--muted'">{{ entry.checkpoint.passed === true ? '通过' : entry.checkpoint.passed === false ? '未通过' : '未判分' }}</span>
                       <span v-if="entry.checkpoint.attempts != null && entry.checkpoint.attempts > 1" class="cp-checkpoint__tag">尝试 {{ entry.checkpoint.attempts }} 次</span>
@@ -565,7 +582,30 @@
                       <span v-if="entry.checkpoint.judgedBy" class="cp-checkpoint__tag">判分 {{ entry.checkpoint.judgedBy }}</span>
                       <span v-if="entry.checkpoint.understanding != null" class="cp-checkpoint__tag" title="AI 对本次作答的理解度估计">理解度 {{ Math.round(entry.checkpoint.understanding * 100) }}%</span>
                       <span v-if="entry.checkpoint.conceptName" class="cp-checkpoint__concept">{{ entry.checkpoint.conceptName }}</span>
+                      <time
+                        v-if="entry.checkpoint.submittedAt"
+                        class="cp-checkpoint__time"
+                        :datetime="String(entry.checkpoint.submittedAt)"
+                        :title="msgStamp(entry.checkpoint.submittedAt)"
+                      >{{ msgClock(entry.checkpoint.submittedAt) }}</time>
+                      <span
+                        v-if="!entry.checkpoint.options?.length && entry.checkpoint.selectedOptionIds?.length"
+                        class="cp-checkpoint__tag"
+                      >学员选择 {{ entry.checkpoint.selectedOptionIds.join('、') }}</span>
                     </div>
+                    <p class="cp-checkpoint__q">{{ entry.checkpoint.question || entry.checkpoint.title || '（无题干）' }}</p>
+                    <ul v-if="entry.checkpoint.options?.length" class="cp-checkpoint__opts" aria-label="选项">
+                      <li
+                        v-for="(opt, oi) in entry.checkpoint.options"
+                        :key="opt.id || oi"
+                        class="cp-checkpoint__opt"
+                        :class="{ 'cp-checkpoint__opt--picked': isPickedOption(entry.checkpoint, opt.id) }"
+                      >
+                        <span class="cp-checkpoint__opt-id">{{ opt.id || String.fromCharCode(65 + oi) }}.</span>
+                        <span class="cp-checkpoint__opt-text">{{ opt.text || '（选项文本缺失）' }}</span>
+                        <span v-if="isPickedOption(entry.checkpoint, opt.id)" class="cp-checkpoint__opt-mark">学员选择</span>
+                      </li>
+                    </ul>
                   </div>
                 </template>
               </template>
@@ -974,8 +1014,8 @@
                 </template>
                 <template v-else>
                   <div v-for="(l, i) in filteredLogs" :key="i" class="cp-log" :class="{ 'cp-log--error': l.view.isError }">
-                    <span class="cp-log__time">{{ l.time }}</span>
-                    <span v-if="l.view.phase" class="cp-log__phase" :class="{ 'cp-log__phase--error': l.view.isError }">{{ l.view.phase }}</span>
+                    <time class="cp-log__time" :datetime="l.at || undefined">{{ l.time }}</time>
+                    <span v-if="l.view.phase" class="cp-log__phase" :class="{ 'cp-log__phase--error': l.view.isError }" :data-phase="l.view.phase">{{ l.view.phase }}</span>
                     <!-- 折叠行（2026-10-22）：对话全文在左侧页签，这里只报条数并直接跳过去 -->
                     <button
                       v-if="l.jumpTab"
@@ -984,7 +1024,7 @@
                       :title="`打开「${l.jumpTab === 'goal' ? '目标对话' : '课堂'}」页签查看全文`"
                       @click="selectStageTab(l.jumpTab)"
                     >{{ l.view.text }}</button>
-                    <span v-else class="cp-log__text">{{ l.view.text }}</span>
+                    <span v-else class="cp-log__text" :title="l.view.text">{{ l.view.text }}</span>
                     <span v-if="l.view.durationText" class="cp-log__dur">{{ l.view.durationText }}</span>
                     <details v-if="l.view.rawJson" class="cp-log__raw"><summary>原文</summary><pre>{{ l.view.rawJson }}</pre></details>
                   </div>
@@ -1102,8 +1142,8 @@
 
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
-import { subPage, closeSubPage, openSession, openSubPage, setSubPageLabel, asSubPageStage } from './store'
+import { useRoute, useRouter } from 'vue-router'
+import { subPage, closeSubPage, openSession, openSubPage, setSubPageLabel, setSubPageFrom, asSubPageStage, intent } from './store'
 import { errMsg, liveApiConfig, liveRefreshSeq } from './live'
 import { askConfirm } from './useConfirm'
 import { useMaskClose, useOverlay } from './useOverlay'
@@ -1188,6 +1228,7 @@ const SCENE_BACK_LABEL: Record<string, string> = {
   'teaching-sessions': '教学会话列表'
 }
 const route = useRoute()
+const router = useRouter()
 const backLabel = computed(() => {
   const from = subPage.value?.from
   if (from) return FROM_BACK_LABEL[from.view] || from.label || '返回'
@@ -1435,9 +1476,37 @@ function openLearnerDetail() {
   })
 }
 
+/* 刷新/深链兜底（2026-11-11）：URL 没带 from（或旧的分享链接根本没有 from）时，
+   用真实课堂载荷里的 learner 块反查来源，补回「用户账号 / cs」这一层。
+   只补真实课堂（kind=teaching）：虚拟会话沿用 profile/画像返回链，目标对话的返回
+   目标是列表，都不在这里改；载荷没有 learner（如全局教学会话列表里没有归属用户的
+   旧数据）就保持无来源，返回键回退「教学会话」列表，绝不硬编人名。
+   这里直接在 refresh 成功后补，不用 watch：避免组件卸载后残留 watcher 把旧实体写进下一实例。 */
+function reconstructFromLearner(kind: string, sessionId: string) {
+  if (kind !== 'teaching') return
+  const sp = subPage.value
+  if (!sp || sp.id !== sessionId) return
+  const l = (session.value as { learner?: { id?: unknown; name?: unknown } } | null)?.learner
+  const id = String(l?.id || '')
+  if (!id) return
+  /* 已有不同来源（如从画像/学习状态进来）不动；同来源只补缺字段。 */
+  if (sp.from && (sp.from.view !== 'user' || sp.from.id !== id)) return
+  setSubPageFrom({
+    view: 'user',
+    id,
+    label: String(l?.name || '') || `…${id.slice(-8)}`,
+    /* 返回落回「教学会话」页签（学习者详情里点进来的原上下文） */
+    tab: 'sessions'
+  })
+}
+
 /** 执行日志（按 sessionId 归组）：真实会话在列表里只有只读座舱，异常排查面放在座舱里 */
 function goExecLogs() {
-  if (sessionId.value) openSession(sessionId.value)
+  if (!sessionId.value) return
+  /* 清掉上一次排查遗留的时间范围：session 过滤若叠上旧的 range=today/近 7 天，
+     会得到「按会话查但一页空」，看起来像这个会话没有执行记录。 */
+  intent.timeRange = ''
+  openSession(sessionId.value)
 }
 
 /** 真实会话的教学建议（advisory）：接口字段为松类型，仅取有效档位渲染。
@@ -1547,10 +1616,42 @@ const stuckAttribution = computed(() => {
   }
 })
 const sidebarOpen = reactive({ run: true, logs: true, review: false, trace: false })
+
+/** 阶段落点写进 URL（?stage=goal|path|learning|wrapup）。
+ *  为什么不在 selectStageTab 里只改 activeTab：AdminConsole 只在 view/id/from 变化时 push，
+ *  单改 stage 不会触发 URL 同步；刷新/分享「直接看总结」就会丢落点。这里直接 replace 当前历史项，
+ *  与学习者详情的页签路由化（?tab=）同一口径；浏览器后退仍回上一页，前进/刷新保留当前阶段。 */
+function syncStageQuery(st: StageKey) {
+  const cur = typeof route?.query?.stage === 'string' ? route.query.stage : ''
+  if (cur === st) return
+  if (router?.replace) {
+    void router.replace({ query: { ...(route?.query || {}), stage: st } })
+  }
+}
 function selectStageTab(st: StageKey) {
   if (isBlackbox.value) return
   activeTab.value = st
+  /* 同步内存落点：从座舱进学习者详情再返回时（subPage.from.stage）仍落同一阶段 */
+  if (subPage.value && subPage.value.stage !== st) {
+    subPage.value = { ...subPage.value, stage: st }
+  }
+  syncStageQuery(st)
 }
+
+/* URL 阶段 ↔ 页签（刷新/深链/前进后退）：stage 合法就落该阶段；显式传了非法值（?stage=xxx）
+   回落到目标阶段，不让一个拼错的分享链接停在任意页。阶段缺席时保留初始化/自动跟随结果。 */
+watch(
+  () => (typeof route?.query?.stage === 'string' ? route.query.stage : undefined),
+  (raw) => {
+    if (isBlackbox.value) return
+    const st = asSubPageStage(raw)
+    if (st) {
+      if (activeTab.value !== st) activeTab.value = st
+      return
+    }
+    if (raw) activeTab.value = 'goal'
+  }
+)
 
 /** stepper 键盘契约（2026-10-06 审核 #74）：role=tablist/tab 需 ←/→（+Home/End）切换
     与 roving tabindex（未选中项 tabindex=-1 已由模板承担），键盘用户不必 Tab 走过四页签。
@@ -1674,6 +1775,11 @@ const CHECKPOINT_TYPE_LABEL: Record<string, string> = {
 }
 function checkpointTypeLabel(t: string | null | undefined) {
   return (t && CHECKPOINT_TYPE_LABEL[t]) || t || '检查点'
+}
+/** 学员选中的选项（多选也可能是多个）：选项行据此高亮，复核时不必再回读「我的答案」 */
+function isPickedOption(cp: CockpitCheckpoint, optionId: string | null | undefined): boolean {
+  if (!optionId || !Array.isArray(cp.selectedOptionIds)) return false
+  return cp.selectedOptionIds.map(String).includes(String(optionId))
 }
 const displayedTeachingSessionId = computed(() => firstText(
   teachingDetail.value?.id,
@@ -1825,7 +1931,9 @@ const pathDeadline = computed(() => pathDeadlineView(asRecord(session.value?.pat
 const pathHeadMeta = computed(() => {
   const base = pathDetailMeta.value || '等待路径生成'
   if (pathDeadline.value.dateText) return `${base} · 截止 ${pathDeadline.value.dateText}`
-  return pathDeadline.value.text ? `${base} · 截止 ${pathDeadline.value.text}` : base
+  /* 2026-11-11（困惑测试 #24）：模糊原文（如「两个多月」）直接跟在「截止」后，读不出是到期日
+     还是剩余时长。原文没有硬日期（后端禁止把模糊表述推算成 deadline），这里标明出处。 */
+  return pathDeadline.value.text ? `${base} · 截止 目标对话原文「${pathDeadline.value.text}」（无精确日期）` : base
 })
 /** 截止日 title：结构化日期为主读数，原文留档；无结构化时不出 title（正文已是原文） */
 const pathDeadlineTitle = computed(() => {
@@ -1872,6 +1980,20 @@ const pathReviewTime = computed(() => {
   const raw = firstText(pathReview.value.reviewedAt)
   return raw ? formatTime(raw) : ''
 })
+/* 对话气泡头的时间（2026-11-11 用户「对话里看不到时间，只有内容」）：
+   - `msgStamp`：完整 `YYYY-MM-DD HH:mm`，挂 title / datetime，供排障对日志；
+   - `msgClock`：气泡上只显示 `MM-DD HH:mm`，跨天课堂也不会读成「11:33 之后又 10:02」
+     （截掉年份而不是只留时分；同一天的课堂紧凑，跨天的课堂仍可辨）。
+   入参兼容字符串（goal/learning 消息的原始时间）与毫秒数（mergeLearnTimeline 的 entry.at）。 */
+function msgStamp(at?: string | number | null): string {
+  if (at == null || at === '') return ''
+  const iso = typeof at === 'number' ? new Date(at).toISOString() : String(at)
+  return formatTime(iso)
+}
+function msgClock(at?: string | number | null): string {
+  const full = msgStamp(at)
+  return full ? full.slice(5) : ''
+}
 const pathReviewReplan = computed(() => {
   const replan = asRecord(pathReview.value.replan)
   if (!Object.keys(replan).length) return ''
@@ -1967,7 +2089,9 @@ const wrapupHeadMeta = computed(() => {
   const total = learnLessons.value.length
   if (!total) return ''
   const summarized = wrapupLessonStat.value.done
-  return `${summarized}/${total} 课已出总结 · ${doneLessonCount.value}/${total} 课已学完`
+  /* 2026-11-11（困惑测试 #28）：这里的总数是整条路径的课数；与列表「本阶段共 N 个」同屏时
+     必须自标口径，否则 4 与 21 被读成互相矛盾。 */
+  return `${summarized}/${total} 课已出总结 · ${doneLessonCount.value}/${total} 课已学完（全路径）`
 })
 const hasRunnablePathTask = computed(() => pathMilestones.value.some((milestone) => {
   const tasks = milestone.subtasks || milestone.tasks
@@ -2193,7 +2317,10 @@ const {
    （面包屑 + h1 已写两遍，副文不再重复），保留「当前课：…」与开始时间。 */
 const heroSub = computed(() => {
   const segments: string[] = []
-  const learnerName = firstText(String(asRecord(session.value?.profile).userName || ''))
+  const learnerName = firstText(
+    String(asRecord(session.value?.profile).userName || ''),
+    learner.value?.name || ''
+  )
   if (learnerName) segments.push(`学习者 ${learnerName}`)
   const subject = firstText(String(asRecord(session.value?.teaching).subject || ''))
   if (subject && !(heroUsesPathTitle.value && subject === pathDetailTitle.value)) segments.push(subject)
@@ -2228,7 +2355,13 @@ const heroTitle = computed(() => {
      （...84e-41ce636c170a）顶成 H1 大标题。回退链改：故事名 → 学习者名，UUID 仅最后兜底 */
   const storyTitle = firstText(String(asRecord(session.value?.storyContext).title || ''))
   if (storyTitle) return storyTitle
-  const learnerName = firstText(String(asRecord(session.value?.profile).userName || ''))
+  /* 2026-11-11 走查：真实目标对话载荷把学习者放在 `learner.name`（后端从 users 关系投影），
+     不读 profile.userName，导致有学习者名仍回退成 `…42461936_1jslt7n`。两处都认，
+     H1 永远是「谁的目标对话」，不再把截断 ID 当标题。 */
+  const learnerName = firstText(
+    String(asRecord(session.value?.profile).userName || ''),
+    learner.value?.name || ''
+  )
   if (learnerName) return `${learnerName}的目标对话`
   return shortId.value
 })
@@ -2238,7 +2371,10 @@ const heroTitle = computed(() => {
  *  story 名首字；`buildPathDetailTitle` 的泛型兜底「学习路径」不是身份（谁都会变成「学」），
  *  与 S 是同一类问题，故显式排除。本页是课堂域，都没有才兜底「课」。 */
 const heroAvatar = computed(() => {
-  const learnerName = firstText(String(asRecord(session.value?.profile).userName || ''))
+  const learnerName = firstText(
+    String(asRecord(session.value?.profile).userName || ''),
+    learner.value?.name || ''
+  )
   if (learnerName) return learnerName.slice(0, 1)
   const pathTitle = firstText(pathDetailTitle.value || '')
   if (pathTitle && pathTitle !== '学习路径') return pathTitle.slice(0, 1)
@@ -2254,6 +2390,26 @@ const heroAvatar = computed(() => {
 watch([heroTitle, subPage], ([title, sp]) => {
   if (!title || title === shortId.value || !sp || sp.id !== sessionId.value) return
   if (sp.label && sp.label !== sp.id) return
+  setSubPageLabel(title)
+}, { immediate: true })
+
+/* 课堂面包屑（2026-11-11）：从学习者详情进入的课堂，第三段用课堂主题（teaching.topic），
+   不再回写路径名——原行为让顶栏读成「用户账号 / 路径名」，看不出是哪节课。
+   只在有学习者来源（subPage.from）的真实课堂里生效；路径列表 / 目标对话等入口
+   保持原有的路径名回写（那些入口的上级不是学习者，路径名才是正确对象）。
+   可覆盖的既有标签：空 / 裸 id / 泛型兜底 / 路径名（路径回写可能早于或晚于载荷）。 */
+const classroomCrumbTitle = computed(() => {
+  if (!isRealMode.value || realKind.value !== 'teaching') return ''
+  if (!subPage.value?.from) return ''
+  return firstText(String(asRecord(session.value?.teaching).topic || ''))
+})
+watch([classroomCrumbTitle, subPage], ([title, sp]) => {
+  if (!title || !sp || sp.id !== sessionId.value || sp.label === title) return
+  const pathTitle = firstText(pathDetailTitle.value || '')
+  const overwritable = !sp.label || sp.label === sp.id
+    || sp.label === '目标对话' || sp.label === '真实课堂' || sp.label === '学习路径'
+    || (!!pathTitle && sp.label === pathTitle)
+  if (!overwritable) return
   setSubPageLabel(title)
 }, { immediate: true })
 
@@ -2334,6 +2490,14 @@ function stepMeta(st: StageKey) {
   // 已放弃/失败的会话停在 Path 时读起来像还在跑；勾与色不变，只改副标。
   if (stageActive(st)) return isTerminal.value ? '中断' : '进行中'
   return '待进入'
+}
+/** 阶段瓦片的悬停说明（2026-11-11）：1280 宽下阶段名/读数可能被省略号截断，
+ *  瓦片本身必须能悬停读全；黑盒下同时说明为何不可切换。 */
+function stepTileTitle(st: StageKey) {
+  const body = `${stageLabel(st)} · ${stepMeta(st)}`
+  return isBlackbox.value
+    ? `黑盒模式下阶段不可手动切换（${body}）`
+    : `查看「${stageLabel(st)}」阶段 · ${stepMeta(st)}。阶段完成＝本会话课堂已收尾或已出总结`
 }
 /* 2026-11-04：页头「路径 任务 x/y」徽章与「阶段推进」Path 瓦片副标同源同串，
    同屏出现两次（评审「同屏重复」）。Path 瓦片已常驻该串时页头不再复述一遍。 */
@@ -2615,6 +2779,8 @@ async function refresh() {
       clockTick.value = Date.now()
       const kind = String((session.value as Record<string, unknown>)?.kind || '')
       realKind.value = kind === 'goal' ? 'goal' : 'teaching'
+      /* 刷新/深链：用载荷 learner 反查来源（有显式 from 时不动） */
+      reconstructFromLearner(kind, id)
       /* 面包屑对象名（2026-10-24）：深链进来此前只有裸会话 id，看不出是课堂还是目标对话。
          2026-10-31 外部评审复检：这个泛型名抢在 pathDetailTitle / PathJourneyPanel 之前占位后，
          真标题（路径详情名）被 `!sp.label` 挡住再也写不进来，学习路径页深链座舱的面包屑
@@ -3222,10 +3388,10 @@ async function act(kind: string) {
       }
       const target = tabAfterAction[kind]
       if (target) {
-        activeTab.value = target
+        selectStageTab(target)
       } else if (['step', 'auto'].includes(kind)) {
         const next = currentStage.value
-        if ((stageFlow as readonly string[]).includes(next)) activeTab.value = next as StageKey
+        if ((stageFlow as readonly string[]).includes(next)) selectStageTab(next as StageKey)
       }
     }
   } catch (e) {
@@ -3323,10 +3489,11 @@ watch(
     //   深链 ?stage=path 同样生效）；② 目标对话控制台落 goal——本页对象是那条 Goal 对话（2026-10-11
     //   走查）；③ 其余跟随 currentStage。后端 currentStage 报的是**学习路径流水线**位置（session-console.ts
     //   buildGoalConsole），课堂会话页面对象就是那一课，课结束落总结合理。
-    const hint = subPage.value?.stage
-    const stage = hint && (stageFlow as readonly string[]).includes(hint)
-      ? hint
-      : isRealMode.value && realKind.value === 'goal' ? 'goal' : currentStage.value
+    //   显式传了非法 stage（?stage=xxx）时回落 goal，而不是悄悄改用 currentStage。
+    const rawHint = typeof route?.query?.stage === 'string' ? route.query.stage : subPage.value?.stage
+    const hint = asSubPageStage(rawHint)
+    const fallback = isRealMode.value && realKind.value === 'goal' ? 'goal' : currentStage.value
+    const stage = hint || (rawHint ? 'goal' : fallback)
     activeTab.value = (stageFlow as readonly string[]).includes(stage) ? stage as StageKey : 'goal'
     startPolling()
   },
@@ -3740,11 +3907,16 @@ async function copyRawJson() {
    紧贴下一条的头部（18:31:20 学习者回复），人眼会把耗时读成时间戳——给一条分隔线 */
 .cp-log + .cp-log { border-top: 1px solid var(--mk-line); padding-top: 6px; }
 .cp-log--error { padding: 4px 8px; border-radius: 6px; background: var(--mk-red-bg); }
-.cp-log__time { color: var(--mk-faint); font-family: var(--mk-mono); font-size: var(--mk-fs-micro); white-space: nowrap; padding-top: 1px; }
+.cp-log__time { color: var(--mk-faint); font-family: var(--mk-mono); font-size: var(--mk-fs-micro); white-space: nowrap; padding-top: 1px; font-variant-numeric: tabular-nums; }
 .cp-log__phase {
   padding: 0 5px; border-radius: var(--mk-radius-pill); font-size: var(--mk-fs-micro); font-weight: 700;
   background: var(--mk-blue-bg); color: var(--mk-accent-deep); white-space: nowrap;
 }
+/* 阶段标签色语义（2026-11-11）：目标对话=信息蓝，路径=推进绿，课堂=中性墨（正在上课不报警），
+   证据=审计琥珀。此前四类全是同一种蓝底，扫一眼无法按类型过滤视线；错误仍由行级红底单源承担。 */
+.cp-log__phase[data-phase^='路径'] { background: var(--mk-green-bg); color: var(--mk-green); }
+.cp-log__phase[data-phase^='课堂'] { background: var(--mk-surface-2); color: var(--mk-ink); }
+.cp-log__phase[data-phase='证据'] { background: var(--mk-amber-bg); color: var(--mk-amber); }
 .cp-log__phase--error { background: var(--mk-red-fill, var(--mk-red)); color: var(--mk-on-fill); }
 /* 长回复窄栏折叠（2026-10-31 三轮评审 P2）：会话日志栏只有 ~320px，数百字的回复
    全文平铺会把整屏占满——行内截到 3 行省略，全文走同条目的 ▸ 原文（parseLogEntry
@@ -3842,7 +4014,23 @@ async function copyRawJson() {
   background: var(--mk-blue-bg-strong);
   border-left-color: var(--mk-blue);
 }
-.cp-transcript__message.is-learner.is-real-learner > span:first-child { text-align: right; }
+/* 气泡头：角色 + 发生时刻各占一端。学习者卡片反过来（角色靠右、时刻靠左），
+   与正文右对齐的说话人方向一致。 */
+.cp-msg__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.cp-transcript__message.is-learner.is-real-learner .cp-msg__head { flex-direction: row-reverse; }
+.cp-msg__time,
+.cp-checkpoint__time {
+  font-size: var(--mk-fs-micro);
+  font-weight: 400;
+  color: var(--mk-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .cp-transcript__message span { font-size: var(--mk-fs-micro); font-weight: 800; color: var(--mk-faint); }
 /* 消息正文按 markdown 渲染（2026-10-22 用户「md没渲染」）：产品同一套 markdown-it + DOMPurify，
    这里只补紧凑排版（控制台字号小、气泡内高度有限），不引入产品端的 16px github 版式。 */
@@ -3877,6 +4065,19 @@ async function copyRawJson() {
 .cp-checkpoint__meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .cp-checkpoint__tag { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
 .cp-checkpoint__concept { font-size: var(--mk-fs-micro); color: var(--mk-accent-deep); }
+/* 检查点选项（2026-11-11）：只读回放，不参与作答；学员选中的一项淡蓝底 + 行尾「学员选择」 */
+.cp-checkpoint__opts { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.cp-checkpoint__opt {
+  display: flex; align-items: baseline; gap: 6px;
+  padding: 4px 8px; border-radius: var(--mk-radius-xs);
+  background: var(--mk-surface);
+  font-size: var(--mk-fs-micro); line-height: 1.55; color: var(--mk-muted);
+}
+.cp-checkpoint__opt--picked { background: var(--mk-blue-bg); color: var(--mk-ink); }
+.cp-checkpoint__opt-id { flex: none; font-weight: 800; color: var(--mk-muted); }
+.cp-checkpoint__opt--picked .cp-checkpoint__opt-id { color: var(--mk-blue-text); }
+.cp-checkpoint__opt-text { min-width: 0; word-break: break-word; }
+.cp-checkpoint__opt-mark { flex: none; margin-left: auto; font-weight: 700; color: var(--mk-blue-text); }
 /* 内联变体（2026-10-19 走查「检查点在下方不符合课堂阅读顺序」）：不再整块挂转录末尾，
    按发生时间插回课堂列——去掉外框，只留左侧紫线与浅底标示「非发言、是作答记录」。 */
 .cp-checkpoint--inline {

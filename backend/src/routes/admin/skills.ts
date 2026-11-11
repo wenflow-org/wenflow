@@ -1055,9 +1055,12 @@ router.get('/reconciliation', async (req: Request, res: Response) => {
     const activeIds = new Set(activeRows.map((row) => row.agentId));
     const registeredNames = new Set(registrations.map((row) => row.name));
 
-    // 注册豁免点（agents/platform-direct 不落 skill_registrations 是预期，W2 语义）
+    // 注册豁免点（agents/platform-direct/none 不落 skill_registrations 是预期，W2 语义）
+    // 2026-11-11 困惑测试 #108：none（board-designer 这类不进派发表、平台守门直调）此前漏在集合外，
+    // 造成同一行「完成度=已上线」与「运行注册 ✗ 未注册」自相矛盾；与 skill-completion.service
+    // (:286) 及 check-skills-file.ts 的「无注册语义=豁免」口径对齐。
     const w2 = analyzeW2(book, registrations);
-    const exemptRegistrationPoints = new Set(['agents', 'platform-direct']);
+    const exemptRegistrationPoints = new Set(['agents', 'platform-direct', 'none']);
     const unregisteredSet = new Set(w2.missingRegistration);
     // 退役名单内的注册行按「不动历史数据」保留：与健康中心 zombieRegistration（readiness 侧
     // retiredExempt 拆分）同一口径，单列审计、不计异常——两数同屏曾互相矛盾（2026-10-09 F2）
@@ -1105,6 +1108,8 @@ router.get('/reconciliation', async (req: Request, res: Response) => {
         active,
         noPromptFile: entry.noPromptFile === true,
         registrationExempt,
+        // 2026-11-11 #108：面页的「豁免」徽章要说清是哪个注册点（agents / platform-direct / none）
+        registrationPoint: entry.registrationPoint || null,
         diff,
         completion,
       });

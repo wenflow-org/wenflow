@@ -13,16 +13,24 @@
     >
       <template #actions>
         <!-- 预置「一键加载」：只在真有缺卡 / 待升级 / 定义回退时出现——9 张预置卡都在墙上时
-             它是个没有结果的动作。 -->
+             它是个没有结果的动作。悬停说明在 2026-10-26 从 KPI 卡搬进页头时丢过一次（#47），补回。 -->
         <button
           v-if="presetActionable"
           type="button"
           class="mk-btn mk-btn--sm"
+          title="把平台预置身份卡写进卡库：只补缺失 / 待升级的卡，不随平台启动自动同步"
           :disabled="presetLoading"
           @click="doLoadPresets"
         >{{ presetLoading ? '同步中…' : '一键加载' }}</button>
         <!-- 后端只导出「自建卡」：自建卡为 0 时导出的是一个空文件 -->
-        <button v-if="(summary?.custom ?? 0) > 0" type="button" class="mk-btn mk-btn--sm" :disabled="exporting" @click="doExport">
+        <button
+          v-if="(summary?.custom ?? 0) > 0"
+          type="button"
+          class="mk-btn mk-btn--sm"
+          title="把自建卡（非预置）导出为 YAML 文件。预置卡不在导出范围内"
+          :disabled="exporting"
+          @click="doExport"
+        >
           {{ exporting ? '导出中…' : '导出卡库' }}
         </button>
         <!-- 加图标 + 悬停说明（2026-11-02 评审 R15）：一排文字按钮里，「平台生产」四个字
@@ -33,7 +41,7 @@
           title="用平台生成一张新的身份卡（人设 + 第一个故事）"
           @click="openProduce"
         ><Plus :size="14" :stroke-width="1.75" />平台生产</button>
-        <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="openImport">导入卡</button>
+        <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" title="导入 YAML / JSON 卡文档（{cards:[…]}）。同 cardKey 默认跳过，可勾选覆盖" @click="openImport">导入卡</button>
       </template>
     </MkPageHead>
 
@@ -199,7 +207,7 @@
           <footer class="vlc-card__foot">
             <div class="vlc-card__tags">
               <span class="mk-badge" :class="sourceBadge(c)" :title="sourceTitle(c)">{{ sourceText(c) }}</span>
-              <span v-for="t in wallTags(c)" :key="t.text" class="mk-badge mk-badge--muted">{{ t.text }}</span>
+              <span v-for="t in wallTags(c)" :key="t.text" class="mk-badge mk-badge--muted" :title="t.title">{{ t.text }}</span>
               <span v-if="showCardKey(c)" class="vlc-card__key" :title="c.cardKey || ''">{{ shortCardKey(c.cardKey || '') }}</span>
               <!-- 任务数是「创建学习者」时要做的选择（勾几节课），比难度更有决策价值：
                    整面墙难度相同时只留任务数；混级时两者并列 -->
@@ -232,8 +240,8 @@
     <!-- 选角批量栏（页面级兄弟节点，选中后底部浮现；与虚拟学习者页同款全局 mk-batchbar 形态）：
          卡库的主操作是「选身份 → 创建虚拟学习者」，批量是常态（一次挑几张身份各创建一个实例）。 -->
     <div v-if="selected.length" class="mk-batchbar">
-      <span>已选 {{ selected.length }} 张身份卡</span>
-      <button type="button" class="mk-link" @click="clearPick">取消选择</button>
+      <span class="mk-batchbar__count">已选 {{ selected.length }} 张身份卡</span>
+      <button type="button" class="mk-link mk-batchbar__cancel" @click="clearPick">取消选择</button>
       <button
         type="button"
         class="mk-btn mk-btn--primary"
@@ -261,7 +269,7 @@ import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import Pagination from './Pagination.vue'
 import VirtualLearnerCreate from './VirtualLearnerCreate.vue'
 import CardDeriveDialog from './CardDeriveDialog.vue'
-import { cardDisplayTitle, shortCardKey, cardTier, compareTier, isWallHiddenTag } from './cardDisplay'
+import { cardDisplayTitle, shortCardKey, cardTier, compareTier, isWallHiddenTag, tierLabel, TIER_RE } from './cardDisplay'
 import { isInternalTag, isPlaceholderCardKey } from './cardTags'
 import { openSubPage } from './store'
 import { errMsg, liveRefreshSeq } from './live'
@@ -318,7 +326,7 @@ const keyword = ref('')
 const tier = ref('')
 const tierOptions = computed(() => {
   const tiers = [...new Set(cards.value.map((c) => cardTier(c.tags || [])).filter(Boolean))].sort(compareTier)
-  return [{ value: '', label: '全部档位' }, ...tiers.map((t) => ({ value: t, label: t }))]
+  return [{ value: '', label: '全部档位' }, ...tiers.map((t) => ({ value: t, label: tierLabel(t) }))]
 })
 
 /** 卡墙只放身份卡（2026-10-24 层级收口）：实例归「虚拟学习者」。
@@ -434,11 +442,13 @@ const presetActionable = computed(() => {
   if (!s) return true
   return s.missing > 0 || s.upgradable > 0 || s.rolledBack > 0
 })
-/** 身份卡构成：两个数并排；定义回退是人工要看的异常档，用琥珀脚注 */
+/** 身份卡构成：两个数并排；定义回退是人工要看的异常档，用琥珀脚注
+ *  2026-11-11 困惑测试 #49：后端 `custom` 的口径是「一切非预置卡」（含合成的导入评测语料），
+ *  而卡面来源徽章另有「合成 / web / 自建」之分——读数写「自建」会与徽章互相打架。改为「非预置」。 */
 const compositionHint = computed(() => {
   const s = summary.value
   if (!s) return ''
-  const parts = [`预置 ${s.builtin}`, `自建 ${s.custom}`]
+  const parts = [`预置 ${s.builtin}`, `非预置 ${s.custom}`]
   const rolledBack = presetSummary.value?.rolledBack ?? 0
   if (rolledBack) parts.push(`定义回退 ${rolledBack}`)
   return parts.join(' · ')
@@ -551,14 +561,18 @@ const GOAL_TAG_LABELS: Record<string, string> = {
 }
 interface WallTag {
   text: string
+  title?: string
 }
 function wallTags(c: CardWallEntry): WallTag[] {
   const out: WallTag[] = []
   for (const tag of c.tags) {
     if (isInternalTag(tag)) continue
     if (isWallHiddenTag(tag)) continue
-    const text = SOURCE_TAG_LABELS[tag] || GOAL_TAG_LABELS[tag] || tag
-    if (!out.some((x) => x.text === text)) out.push({ text })
+    // 档位码（A–E / F1–F5B）单独一档：码本身没有语义，印成「F5B · 分诊负样本」
+    const tier = String(tag).trim()
+    const isTier = TIER_RE.test(tier)
+    const text = isTier ? tierLabel(tier) : (SOURCE_TAG_LABELS[tag] || GOAL_TAG_LABELS[tag] || tag)
+    if (!out.some((x) => x.text === text)) out.push({ text, title: isTier ? `卡库档位：${tierLabel(tier)}` : undefined })
     if (out.length === 2) break
   }
   return out

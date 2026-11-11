@@ -348,6 +348,19 @@
             >{{ q.text }}</button>
           </div>
         </div>
+        <!-- 回到底部（2026-11-11 长对话走查）：上翻阅读历史后，新消息在下方到达时没有明确出口——
+             一直滑回底部既费力也容易错过。仅当用户离开底部时浮出，点击恢复贴底跟随。 -->
+        <button
+          v-if="!atBottom"
+          type="button"
+          class="chat__jump"
+          aria-label="回到底部"
+          title="回到底部"
+          @click="jumpToLatest"
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M6 13l6 6 6-6"/></svg>
+          回到底部
+        </button>
         <!-- 贴底坞（2026-11-06 走查·严格 flex 三段）：pill / 待确认条 / 输入区 / 元数据行
              全部收进同一个 flex 子项，滚动区在坞上方自然结束。此前三者是 .chat 的并列
              flex 子项，且靠 ::before 渐变「假装」分隔——渐变在暗色下读成一条黑带、
@@ -1427,6 +1440,8 @@ function stageCls(i: number) {
 async function scrollToBottom() {
   await nextTick();
   if (scrollEl.value) scrollEl.value.scrollTop = scrollEl.value.scrollHeight;
+  pinToBottom = true;
+  atBottom.value = true;
 }
 
 watch(() => live.messages.length, scrollToBottom);
@@ -1434,10 +1449,18 @@ watch(() => live.sending, scrollToBottom);
 // 是否跟随贴底：由滚动位置持续记账。手机键盘弹起时视口瞬间收缩，收缩后再量「离底多远」
 // 永远为真（键盘高度本身就超过阈值），所以必须用收缩前的状态判断，否则上翻阅读会被强行拽到底。
 let pinToBottom = true;
+/** 是否停在底部（驱动「回到底部」浮标）：与 pinToBottom 同源，但需要响应式才能在模板里显隐 */
+const atBottom = ref(true);
 function onScrollPin() {
   const el = scrollEl.value;
   if (!el) return;
   pinToBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+  atBottom.value = pinToBottom;
+}
+/** 长对话里上翻阅读后，给一颗明确的回到底部入口（与学习页同口径） */
+function jumpToLatest() {
+  pinToBottom = true;
+  void scrollToBottom();
 }
 /** 视口尺寸变化（键盘弹起/收起、横竖屏切换）后重新贴底，避免最新消息被挤到可视区外 */
 function onViewportResize() {
@@ -2238,6 +2261,26 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
   scrollbar-width: none;
 }
 .chat__scroll::-webkit-scrollbar { display: none; }
+/* 回到底部浮标（2026-11-11）：钉在输入坞上方居中，不参与 flex 高度分配，不遮最新气泡。
+   深浅色都走 surface + line 描边；触控高度 36/44 两档。 */
+.chat__jump {
+  position: absolute;
+  left: 50%;
+  bottom: 118px;
+  z-index: 6;
+  transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 5px;
+  min-height: 36px; padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  color: var(--muted);
+  font: inherit; font-size: 12px; font-weight: 700;
+  cursor: pointer;
+  transition: color .15s ease, border-color .15s ease, background .15s ease;
+}
+.chat__jump:hover { color: var(--blue-deep); border-color: color-mix(in srgb, var(--blue) 40%, transparent); }
 /* AI 生成声明（2026-11-05 屏效比改造自输入区元数据条迁来）：对话流顶部居中一行，
    随内容滚动；消息少时由移动端「贴底」规则带着一起贴在最新消息上方 */
 /* 消息从上方开始、向下生长：桌面**刻意不做贴底**。
@@ -3041,6 +3084,8 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
      （本页 height:100dvh 不随文档滚动，iOS 上链式滚动会把底部导航一起拽动）。
      padding 16/20→10/16、消息间距 18→16（2026-11-05 屏效比）：对话区首屏多装半轮问答 */
   .chat__scroll { min-height: 0; overscroll-behavior: contain; padding: 16px 16px 16px; gap: 16px; }
+  /* 移动档输入坞更矮（under-hint 隐藏、控件 36），浮标随之上移；触控抬到 44 */
+  .chat__jump { bottom: 84px; min-height: 44px; }
   /* AI 头像左列撤除（2026-11-05 屏效比）：30px 圆 + 10px gap 把整段回复推开 40px 宽，
      同样字数多折 2~3 行；品牌已由顶栏承载，气泡不再需要逐条自报家门 */
   .msg--ai { max-width: 100%; }

@@ -49,7 +49,12 @@
         @mouseenter="activeIndex = i"
         @click="choose(o)"
       >
-        <span class="mk-listbox-opt__label" :title="o.label">{{ o.label }}</span>
+        <span class="mk-listbox-opt__text">
+          <span class="mk-listbox-opt__label" :title="o.hint || o.label">{{ o.label }}</span>
+          <!-- 2026-11-11(困惑测试 #27)：选项可以带一句释义（如「降级总结」「评估失败」），
+               只挂 title 的话要逐项悬停才看得到，展开时直接读得懂。 -->
+          <span v-if="o.hint" class="mk-listbox-opt__hint">{{ o.hint }}</span>
+        </span>
         <Check v-if="o.value === modelValue" :size="13" :stroke-width="2.2" aria-hidden="true" />
       </li>
     </ul>
@@ -78,7 +83,7 @@ import { useListbox } from './useListbox'
 const props = withDefaults(defineProps<{
   modelValue: string
   label: string
-  options: ReadonlyArray<{ value: string; label: string }>
+  options: ReadonlyArray<{ value: string; label: string; hint?: string }>
   /** 该维是否偏离默认值（→ 浅蓝激活态） */
   active?: boolean
   /** 可访问名；缺省回落 label */

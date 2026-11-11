@@ -19,11 +19,18 @@
                骨架值全是类型占位（""/0/false），直接点上跑必然失败。这里按输入契约给一组
                能跑通的示例值，点一下即填好，随后可直接「开始试跑」。 -->
           <template v-if="trialMode === 'manual'">
-            <button type="button" class="mk-link" :disabled="trialRunning" title="按输入契约填入一组可直接试跑的示例值" @click="fillSampleInput">填入示例输入</button>
+            <button type="button" class="mk-link" :disabled="trialRunning" title="优先填入最近一次真实调用用过的输入。没有记录时重置为输入契约的必填骨架" @click="fillSampleInput">填入示例输入</button>
             <button type="button" class="mk-link" :disabled="!trialInput.trim() || trialRunning" @click="formatTrialJson">格式化</button>
             <!-- 按钮文案只由「是否真的在跑」决定（2026-11-08 用户截图里的「运行中…」是旧版把
                  disabled 误当 isRunning 的写法，本处已按 trialRunning 单一判据）。 -->
-            <button type="button" class="mk-btn mk-btn--primary mk-btn--sm" :disabled="trialRunning" @click="runTrial">
+            <!-- 2026-11-11（困惑测试 #83）：主按钮无任何副作用说明，第一次不敢点。 -->
+            <button
+              type="button"
+              class="mk-btn mk-btn--primary mk-btn--sm"
+              :disabled="trialRunning"
+              title="真实调用一次该 Skill 的当前生效模型配置（按模型单价计费）：结果会计入执行日志、调用统计与成功率。不改任何线上配置，也不计入虚拟学习者统计"
+              @click="runTrial"
+            >
               {{ trialRunning ? '运行中…' : '▶ 开始试跑' }}
             </button>
           </template>
@@ -48,7 +55,7 @@
         <!-- 默认载荷是按输入契约生成的骨架（值为类型示例），此前只有空白 JSON，读者不知道该填什么
              （2026-11-02 评审）。这里把契约里的输入字段列出来，并说明骨架各值的来处。 -->
         <p v-if="inputDecls.length" class="sdp-trial__decl">
-          输入字段（{{ inputDecls.length }} 项，按输入契约生成骨架，值为类型示例）：
+          输入字段（仅含必填 {{ inputDecls.length }} 项，骨架只注入必填字段<template v-if="optionalInputCount > 0">。其余 {{ optionalInputCount }} 个可选字段见「输入契约」页签，可按契约自行添加</template>。值为类型示例）：
           <code v-for="d in inputDecls" :key="d.name" class="mono">{{ d.name }}{{ d.type ? `: ${d.type}` : '' }}</code>
         </p>
         <p v-else class="sdp-trial__decl">该 Skill 的输入契约没有声明必填输入，可直接在编辑器里写任意 JSON。</p>
@@ -62,6 +69,8 @@
         </div>
         <div v-if="trialError" class="mk-alert mk-alert--row" role="alert">
           <span class="mk-alert__msg">{{ trialError }}</span>
+          <!-- P0 错误态：可读原因 + 重试入口（输入仍保留，重试即按同一载荷再跑一次） -->
+          <button type="button" class="mk-alert__btn" :disabled="trialRunning" @click="runTrial">重试</button>
         </div>
         <pre v-if="trialOutputText" class="sdp-output mono">{{ trialOutputText }}</pre>
         <!-- 执行链路（原型 renderSkillDetail 2332-2335：OK/ERR pill + 步骤名 + ms）。
@@ -154,8 +163,15 @@ async function fillSampleInput() {
       toast.success('已填入最近一次真实调用用过的输入')
       return
     }
-    // 无真实调用：回落契约骨架（loadTrialDefault 同一份）
+    /* 无真实调用：回落契约骨架（与 loadTrialDefault 同一份）。
+       2026-11-11（困惑测试 #84）：输入本来就已经是骨架时，重填同样的 44 字符让按钮读作坏了——
+       不重写、只提示。 */
+    const before = trialInput.value
     await loadTrialDefault(id)
+    if (trialInput.value === before) {
+      toast.info('当前输入已经是输入契约骨架（暂无真实调用示例），请按字段提示补全后再试跑')
+      return
+    }
     toast.info('该 Skill 暂无成功调用记录，已按输入契约填入骨架，请按其提示补全')
   } catch (e) {
     toast.error(`填入示例输入失败：${errText(e)}`)
@@ -242,6 +258,9 @@ watch(
  *  2026-11-02 评审「只给一个每字段都是空对象的 JSON，没有字段说明或示例」——
  *  把字段名与类型列在编辑器下方，读者才知道该往哪儿填。 */
 const inputDecls = ref<TrialInputDecl[]>([])
+/** 契约声明的输入总数（含可选）：试跑骨架只注入必填项，两处数字差要在标签里说清 */
+const inputTotal = ref(0)
+const optionalInputCount = computed(() => Math.max(0, inputTotal.value - inputDecls.value.length))
 
 /** 程序化填入（「填入示例输入」与契约骨架）统一走这里：都算**新的基线**。
     2026-11-09 走查：示例是"看一眼就能用"的便利功能，点完就走不该被判成未保存修改
@@ -260,6 +279,7 @@ async function loadTrialDefault(id: string) {
   const inputs = (res?.data?.core?.inputs ?? []) as TrialInputDecl[]
   // 骨架里的键就是这些必填输入（buildTrialInputFromContract 只收必填项，可选的不注入）
   inputDecls.value = inputs.filter((i) => i?.name && !String(i.type || '').trim().endsWith('?'))
+  inputTotal.value = inputs.filter((i) => !!i?.name).length
   adoptTrialInput(buildTrialInputFromContract(inputs))
 }
 
@@ -337,8 +357,11 @@ watch(() => props.skillId, (id) => { void loadTrialDefault(id) }, { immediate: t
   color: var(--mk-code-fg, #9db8dc);
   font-size: var(--mk-fs-micro);
   line-height: 1.65;
-  white-space: pre-wrap;
-  word-break: break-word;
+  /* 输出是代码/JSON：保留原始换行与缩进，长行走横向滚动而不是折行
+     （折行会把一行 JSON 折成多段，缩进层级读不出来；与输入编辑器 wrap=off 同一口径）。 */
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
   max-height: 320px;
   overflow: auto;
 }

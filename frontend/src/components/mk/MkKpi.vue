@@ -6,7 +6,7 @@
     :is="clickable ? 'button' : 'div'"
     :type="clickable ? 'button' : undefined"
     class="mk-kpi"
-    :class="[tone ? `mk-kpi--${tone}` : '', { 'mk-kpi--clickable': clickable, 'mk-kpi--compact': compact }]"
+    :class="[tone ? `mk-kpi--${tone}` : '', { 'mk-kpi--clickable': clickable, 'mk-kpi--compact': compact, 'mk-kpi--note-wrap': noteWrap }]"
     :title="cardTitle"
   >
     <span class="mk-kpi__label">{{ label }} </span>
@@ -44,8 +44,13 @@ const props = withDefaults(
     clickable?: boolean
     /** 紧凑模式（列表页顶部 KPI）：减内边距/字号、隐藏 hint，压缩垂直空间 */
     compact?: boolean
+    /** 数值分解注记折行（2026-11-11）：分解较长（如「真实 23 · 虚拟 11 · 虚拟账号 16（不计入）」）
+        时，行内 nowrap 会把卡片右缘顶出视口；开启后注记落到数值下一行并按卡宽折行，
+        五卡等高仍由外层 grid/flex 拉伸保证。短注记保持默认行内形态。
+        不用 :deep 在各页各写一遍——同一病根只留一处修法。 */
+    noteWrap?: boolean
   }>(),
-  { hint: '', valueNote: '', tone: '', hintTone: '', title: '', clickable: false, compact: false }
+  { hint: '', valueNote: '', tone: '', hintTone: '', title: '', clickable: false, compact: false, noteWrap: false }
 )
 
 /**
@@ -104,6 +109,17 @@ const cardTitle = computed(() => {
   font-variant-numeric: tabular-nums;
   color: var(--mk-muted);
   white-space: nowrap;
+}
+/* 分解注记折行档（2026-11-11 总览完课量）：注记落到数值下一行，按卡宽折行。
+   value 与 note 同处一个 <strong>，块级化后数值基线不变，卡高由外层拉伸统一。 */
+.mk-kpi--note-wrap .mk-kpi__num { min-width: 0; }
+.mk-kpi--note-wrap .mk-kpi__num-note {
+  display: block;
+  margin-left: 0;
+  margin-top: 2px;
+  line-height: 1.45;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .mk-kpi--bad .mk-kpi__num { color: var(--mk-red); }
 .mk-kpi--warn .mk-kpi__num { color: var(--mk-amber); }

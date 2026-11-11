@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { embedTexts, rerankDocuments, EmbeddingError } from '../../services/embedding';
 import { resolveInfraModelsBaseUrl } from '../../services/embedding/infra-config';
+import { inferModelType } from '../../config/model-type';
 import apiConfigService from '../../services/apiConfig.service';
 import {
   InfraConfigError,
@@ -105,6 +106,9 @@ router.post('/pull', async (req, res) => {
         kind,
         endpoint: base,
         models: result.models ?? [],
+        /* 与对话侧同一套软分类（`inferModelType`）：向量 / 重排弹窗按它筛清单，
+           前端不再自己维护一份「名字里带 embedding / rerank」的词表。 */
+        modelOptions: (result.models ?? []).map((id) => ({ id, inferredType: inferModelType(id) })),
       },
     });
   } catch (error) {

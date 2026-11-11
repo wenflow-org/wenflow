@@ -125,8 +125,8 @@ describe('Trace 链路概要卡（读数带）', () => {
     expect(text).toContain('估算成本');
     expect(text).toContain('模型');
     expect(text).toContain('deepseek-v4.1-flash');
-    // 1200 输入 × $0.3/M + 300 输出 × $1.2/M = $0.00072 → 千分位以下给 6 位
-    expect(text).toContain('≈ $0.000720');
+    // 1200 输入 × $0.3/M + 300 输出 × $1.2/M = $0.00072 → formatUsd 固定 4 位小数（与成本分析页同口径）
+    expect(text).toContain('≈ $0.0007');
     w.unmount();
   });
 

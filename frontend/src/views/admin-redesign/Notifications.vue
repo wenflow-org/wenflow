@@ -91,7 +91,7 @@
               </td>
               <td>
                 <div class="mk-cell-main">
-                  <strong v-if="n.user?.name">{{ n.user.name }}</strong>
+                  <strong v-if="n.user?.name" :title="n.user.name">{{ n.user.name }}</strong>
                   <span v-else class="mk-na">—</span>
                   <span class="mk-cell-sub" :title="n.user?.email || n.userId">{{ n.user?.email || n.userId }}</span>
                 </div>
@@ -126,6 +126,16 @@
                       :style="popStyle"
                       @click.stop
                     >
+                      <!-- 2026-11-11（困惑测试 #10）：未读通知原先行菜单只有「删除」一项，
+                           管理员没有任何置已读的操作杆（repo 能力早就存在，只是没接线）。 -->
+                      <button
+                        v-if="!n.isRead"
+                        type="button"
+                        class="mk-menu__item"
+                        role="menuitem"
+                        :disabled="n.busy"
+                        @click="menuMarkRead(n)"
+                      >标记已读</button>
                       <button
                         type="button"
                         class="mk-menu__item mk-menu__item--danger"
@@ -154,6 +164,7 @@
         v-else-if="isFiltered"
         min
         title="当前筛选无匹配"
+        description="当前类型 / 仅未读 / 关键词条件下没有通知，可清除筛选查看全部。"
         action-text="清除筛选"
         @action="clearFilter"
       />
@@ -161,6 +172,7 @@
         v-else
         min
         title="还没有通知"
+        description="还没有发送过站内通知。通知会进入学员的消息中心；可用右上角「发送通知」发给全体或指定用户。"
         :action-text="embedded ? '' : '发送第一条通知'"
         @action="openSend"
       />
@@ -266,7 +278,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, getCurrentInstance, ref, watch } from 'vue'
+import { computed, getCurrentInstance, nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTableSort } from './useTableSort'
 import { timeAgo, errMsg } from './live'
@@ -466,6 +478,29 @@ watch([ntSortKey, ntSortDir], () => {
 
 const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
 
+/** ⋯ 菜单里的「标记已读」：非破坏动作，不走确认，直接提交并本地落状态 */
+function menuMarkRead(n: NotifRow) {
+  closeMenu()
+  void markRead(n)
+}
+
+async function markRead(n: NotifRow) {
+  if (n.busy) return
+  n.busy = true
+  try {
+    await adminNotificationsApi.markRead(n.id)
+    n.isRead = true
+    unreadTotal.value = Math.max(0, unreadTotal.value - 1)
+    toast.success('已标记为已读')
+    // 写后重取：徽标计数由 reload() 内的 emit('count') 上报
+    void reload()
+  } catch (e) {
+    toast.error(`标记已读失败：${errMsg(e)}`)
+  } finally {
+    n.busy = false
+  }
+}
+
 /** ⋯ 菜单里的删除：先收菜单再走确认（菜单盖在确认弹窗上会读成「点了个寂寞」） */
 function menuRemove(n: NotifRow) {
   closeMenu()
@@ -502,9 +537,20 @@ async function remove(n: NotifRow) {
 
 /* 发送 */
 const sendOpen = ref(false)
-/** 弹窗统一关闭路径：发送中（sending）禁止 Esc/遮罩/✕/取消 误关——请求仍在跑却失去上下文 */
+/** 弹窗统一关闭路径：发送中禁止 Esc/遮罩/✕/取消 误关；有未保存内容先确认。
+    发送成功后由 confirmSend() 直接关窗，不经过这里，因此成功时不会反问。 */
 function closeSend() {
-  if (!sending.value) sendOpen.value = false
+  if (sending.value) return
+  if (!sendDirty.value) { sendOpen.value = false; return }
+  void (async () => {
+    const ok = await askConfirm({
+      title: '放弃未发送的通知',
+      message: '标题 / 正文 / 类型 / 发送范围的改动尚未发送。',
+      confirmText: '放弃内容',
+      danger: true,
+    })
+    if (ok) sendOpen.value = false
+  })()
 }
 useEscape(() => sendOpen.value, closeSend)
 const panelRef = ref<HTMLElement | null>(null)
@@ -516,6 +562,8 @@ useMaskClose(maskRef, closeSend)
 const TITLE_MAX = 50
 const BODY_MAX = 500
 const form = ref({ title: '', body: '', kind: 'system', scope: 'all' as 'all' | 'user' })
+/** 打开时的表单快照（含定向用户）：关闭前据此判断有没有未发送内容 */
+const initialSend = ref({ ...form.value, targetId: '' })
 /** 发送弹窗的类型下拉（文案与旧原生 select 逐字一致） */
 const NOTIFICATION_KIND_OPTIONS = [
   { value: 'system', label: '系统通知' },
@@ -529,6 +577,9 @@ const targetSearch = ref('')
 const targetResults = ref<Array<{ id: string; name: string; email: string }>>([])
 const targetSearched = ref(false)
 const targetId = ref('')
+const sendDirty = computed(() =>
+  JSON.stringify({ ...form.value, targetId: targetId.value }) !== JSON.stringify(initialSend.value)
+)
 
 /** 前置未满足即置灰（与成就发放弹窗同判例）：标题为空、或定向发送还没选用户时，
     按钮就该是禁用的，不必等点下去才回一句「请输入标题」。提交时的校验保留作兜底。 */
@@ -542,6 +593,7 @@ function openSend() {
   targetResults.value = []
   targetSearched.value = false
   targetId.value = ''
+  initialSend.value = { ...form.value, targetId: '' }
   sendOpen.value = true
 }
 
@@ -573,9 +625,14 @@ function searchTarget() {
 }
 
 async function confirmSend() {
+  if (sending.value) return
   errors.value = {}
   sendError.value = ''
-  if (!form.value.title.trim()) { errors.value.title = '请输入标题'; return }
+  if (!form.value.title.trim()) {
+    errors.value.title = '请输入标题'
+    void nextTick(() => panelRef.value?.querySelector<HTMLElement>('.mk-field--error input')?.focus())
+    return
+  }
   if (form.value.scope === 'user' && !targetId.value) { sendError.value = '定向发送请选择用户'; return }
   sending.value = true
   try {

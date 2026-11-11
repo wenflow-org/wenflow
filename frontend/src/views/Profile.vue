@@ -36,11 +36,17 @@
                 </template>
                 <template v-else>
                   <h2>{{ user.name || '未命名用户' }}</h2>
-                  <button type="button" class="uc-btn uc-btn--link" @click="startEditName">编辑</button>
+                  <button
+                    type="button"
+                    class="uc-btn uc-btn--link"
+                    aria-label="编辑用户名"
+                    title="修改显示名称"
+                    @click="startEditName"
+                  >编辑</button>
                 </template>
               </div>
               <span class="profile-identity__role">学习者 · Lv.{{ user.level || 1 }} · {{ user.xp || 0 }} XP</span>
-              <p class="profile-meta">{{ user.email || '未绑定邮箱' }} · 注册于 <span class="profile-meta__date">{{ formatDateShort(user.createdAt) }}</span> · 最近登录 <span class="profile-meta__date">{{ formatDateShort(user.lastLoginAt) }}</span></p>
+              <p class="profile-meta">{{ user.email || '未绑定邮箱' }} · 注册于 <span class="profile-meta__date">{{ formatDateShort(user.createdAt) }}</span> · 最近登录 <span class="profile-meta__date">{{ formatLastLogin(user.lastLoginAt) }}</span></p>
             </div>
           </div>
         </article>
@@ -193,10 +199,16 @@ onMounted(async () => {
 })
 
 function formatDateShort(value?: string | null) {
-  if (!value) return '—'
+  if (!value) return '-'
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '—'
+  if (Number.isNaN(date.getTime())) return '-'
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+/** 最近登录的空值不是「0」也不是「未知」：没有记录时直接说明，别把 — 留在句尾当标点 */
+function formatLastLogin(value?: string | null) {
+  const formatted = formatDateShort(value)
+  return formatted === '-' ? '暂无记录' : formatted
 }
 
 function getErrorMessage(error: any, fallback: string) {
@@ -416,11 +428,12 @@ async function handleSaveName() {
   min-height: 52px;
   padding: 4px 2px;
   border-top: 1px solid var(--line);
+  border-radius: 10px;
   font-size: 14px;
   font-weight: 600;
   color: var(--ink);
   text-decoration: none;
-  transition: color 0.14s ease;
+  transition: color 0.14s ease, background-color 0.14s ease;
 }
 
 .profile-menu li:first-child .profile-menu__item {
@@ -434,12 +447,23 @@ async function handleSaveName() {
 
 .profile-menu__item:hover {
   color: var(--blue-deep);
+  background: color-mix(in srgb, var(--blue) 6%, transparent);
+}
+
+.profile-menu__item:hover svg,
+.profile-menu__item:hover .profile-menu__chev {
+  color: var(--blue-deep);
+}
+
+.profile-menu__item:hover .profile-menu__chev {
+  transform: translateX(2px);
 }
 
 .profile-menu__chev {
   margin-left: auto;
   font-size: 18px;
   color: var(--faint);
+  transition: color 0.14s ease, transform 0.14s ease;
 }
 
 @media (max-width: 1100px) {

@@ -298,7 +298,9 @@ router.post('/test', async (req, res) => {
         data: {
           connected: true,
           modelsCount: result.modelsCount || 0,
-          models: result.models || []
+          models: result.models || [],
+          /* 软分类随清单一起下发：前端默认「推荐对话」，模型被误判时可切「全部」 */
+          modelOptions: result.modelOptions || []
         }
       });
     } else {

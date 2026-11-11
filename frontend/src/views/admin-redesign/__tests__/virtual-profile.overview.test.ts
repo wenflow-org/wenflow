@@ -121,6 +121,17 @@ describe('VirtualProfile 概览 · 有运行的画像', () => {
     w.unmount()
   })
 
+  it('有运行：概览「最近运行」直接给座舱入口（#45：已完成画像没有活跃会话，也不该没入口）', async () => {
+    const w = await mountOverview()
+    const btn = w.find('.vp-lastrun__cockpit')
+    expect(btn.exists()).toBe(true)
+    await btn.trigger('click')
+    await nextTick()
+    expect(subPage.value?.view).toBe('session')
+    expect(subPage.value?.id).toBe('s1')
+    w.unmount()
+  })
+
   it('有运行：有真实读数，闭环按当前阶段高亮；指针后未走过的环显示 idle（五轮 P1）', async () => {
     const w = await mountOverview()
     expect(w.findAll('.lsm__row')).toHaveLength(4)

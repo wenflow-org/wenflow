@@ -530,6 +530,48 @@ describe('GET /api/admin/session-console/:sessionId', () => {
     expect(res.status).not.toHaveBeenCalled();
     expect(res.json.mock.calls[0][0].data.materials).toEqual([]);
   });
+
+  it('检查点带选项与学员选择（复核能看到 A/B/C/D），答案键不下发', async () => {
+    const session = teachingSessionRow({
+      teachingState: JSON.stringify({
+        checkpointHistory: [
+          {
+            checkpointId: 'cp_choice_1',
+            title: '左边那一派判断「心理问题从哪来」时依赖的共同前提',
+            type: 'single_choice',
+            question: '左边那一派（说法①②）判断「心理问题从哪来」时，依赖的共同前提是哪一个？',
+            options: [
+              { id: 'A', text: '原因在身体上，要能查得到、看得见才算数' },
+              { id: 'B', text: '原因在意识之外，只能从症状和梦反推' },
+            ],
+            correctOptionIds: ['A'],
+            expectedKeywords: ['查得到'],
+            selectedOptionIds: ['A'],
+            passed: true,
+            judgedBy: 'code',
+            understanding: 0.6,
+          },
+        ],
+      }),
+    });
+    mockPrisma.teaching_sessions.findUnique.mockResolvedValue(session);
+
+    const handler = getRouteHandler('/:sessionId', 'get');
+    const res = createResponse();
+    await handler({ params: { sessionId: 'ts_real_1' } }, res);
+
+    expect(res.status).not.toHaveBeenCalled();
+    const checkpoint = res.json.mock.calls[0][0].data.teaching.checkpoints[0];
+    expect(checkpoint.options).toEqual([
+      { id: 'A', text: '原因在身体上，要能查得到、看得见才算数' },
+      { id: 'B', text: '原因在意识之外，只能从症状和梦反推' },
+    ]);
+    expect(checkpoint.selectedOptionIds).toEqual(['A']);
+    // 答案键仍属服务端数据：整个载荷不得出现
+    const raw = JSON.stringify(res.json.mock.calls[0][0]);
+    expect(raw).not.toContain('correctOptionIds');
+    expect(raw).not.toContain('expectedKeywords');
+  });
 });
 
 describe('GET /api/admin/session-console/material/:sessionId/:materialId（资料全文，点开才取）', () => {

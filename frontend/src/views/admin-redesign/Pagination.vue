@@ -8,8 +8,9 @@
          P3-28（设计评审）：撤「每页 S 条」段——与右侧「S条/页」下拉同屏复读同事实，
          条数口径单源留在下拉（aria-label 已有「每页条数」）。 -->
     <span class="pagination-left">
-      <span class="mk-pagination__total">
-        共 {{ total }} {{ unit }} · 第 {{ page }} / {{ totalPages }} 页
+      <!-- aria-live：翻页/筛选后总数与页序变了，焦点停在按钮上读不出「现在是第几/共几页」 -->
+      <span class="mk-pagination__total" aria-live="polite">
+        共 {{ formattedTotal }} {{ unit }} · 第 {{ page }} / {{ totalPages }} 页
       </span>
       <!-- 口径说明（可选，如「在当前页内搜索」「全部活跃 93 条」）：与 total 同组，弱化补充，不占按钮区。
            2026-10-18 用户走查「这类文案」：只放「这个数是什么范围」，不放系统怎么把数据拼起来的自述 -->
@@ -25,7 +26,7 @@
         :disabled="loading"
         :options="sizeSelectOptions"
       />
-      <div class="mk-pagination__nav">
+      <div class="mk-pagination__nav" role="navigation" aria-label="分页">
         <button
           type="button"
           class="mk-pagination__btn"
@@ -101,10 +102,39 @@ const emit = defineEmits<{
 }>()
 
 const totalPages = computed(() => totalPagesOf(props.total, props.pageSize))
+/* 计数千分位（全站数字口径：2,053 而不是 2053）。分页器是所有列表共用的总数出口，
+   放在这里一处生效；unit 文案不变，378 这类三位数渲染结果与旧版完全一致。 */
+const formattedTotal = computed(() => Number(props.total || 0).toLocaleString('en-US'))
 /* 单页自隐：仅当调用方显式要求（hideWhenSinglePage）且 totalPages===1 时整条不渲染。
    total=0 时全站一律不渲染（2026-10-31 三轮评审）：0 条数据挂「共 0 条 · 第 1 / 1 页」
    的分页器是纯噪音，空态本身已说明无数据；此前只有会话安全一处隐藏，现收敛进组件。 */
 const hidden = computed(() => props.total === 0 || (props.hideWhenSinglePage && totalPages.value === 1))
+
+/* —— 每页条数全局记忆（2026-11-11 二轮可用性）——
+   各列表把 pageSize 当本地 ref（多数默认 15），用户改成 50 后换页/换列表又回 15。
+   只在「用户主动选择」时写 localStorage；只在宿主沿用共享默认值 15 时作为初值回填，
+   宿主持有自己默认档（如公告 20 / 审计日志 30）时不动，避免破坏各页既有默认。
+   hideSize（固定行数页）既没有选择器，也不接受记忆值。 */
+const PAGE_SIZE_KEY = 'wf_page_size'
+const SHARED_DEFAULT_PAGE_SIZE = 15
+
+function readRememberedPageSize(): number | null {
+  try {
+    const raw = localStorage.getItem(PAGE_SIZE_KEY)
+    if (raw == null) return null
+    const n = Number(raw)
+    return Number.isInteger(n) && n > 0 ? n : null
+  } catch {
+    return null
+  }
+}
+function rememberPageSize(size: number) {
+  try {
+    localStorage.setItem(PAGE_SIZE_KEY, String(size))
+  } catch {
+    /* 隐私模式 / 配额满：记不住顶多回到默认值，不影响分页 */
+  }
+}
 
 /* 翻页后列表回到顶部（2026-10-22 走查）：fill 卡内的 .mk-table-scroll 自带纵向滚动，
    换页后仍停在上一次的 scrollTop（实测 400px 纹丝不动），用户落在新页中段。
@@ -142,11 +172,35 @@ const sizeOptions = computed(() => {
 const sizeSelectOptions = computed(() =>
   sizeOptions.value.map((s) => ({ value: s, label: `${s} ${props.unit}/页` }))
 )
-/** MkSelect 的 v-model：保留 number（原生 select 靠 change 里 Number()，这里不需要） */
+/** MkSelect 的 v-model：保留 number（原生 select 靠 change 里 Number()，这里不需要）。
+    用户显式选档时记进全局偏好；初始化回填见下方 watch（不写回，避免宿主默认值污染记忆）。 */
 const sizeModel = computed({
   get: () => props.pageSize,
-  set: (v) => emit('update:pageSize', Number(v))
+  set: (v) => {
+    const n = Number(v)
+    emit('update:pageSize', n)
+    if (Number.isInteger(n) && n > 0) rememberPageSize(n)
+  }
 })
+
+/* 初值回填只做一次：宿主可能随后按 URL / 自己的逻辑再改 pageSize，不重复覆盖。
+   props 契约：pageSize 必填，宿主自己持有 ref；这里只在「宿主用的就是共享默认 15」时
+   把记忆值 emit 回去（父级 v-model 更新后重查），宿主的 20/30 默认一律尊重。 */
+let pageSizeRestoreTried = false
+watch(
+  () => props.pageSize,
+  () => {
+    if (pageSizeRestoreTried) return
+    pageSizeRestoreTried = true
+    if (props.hideSize) return
+    if (props.pageSize !== SHARED_DEFAULT_PAGE_SIZE) return
+    const remembered = readRememberedPageSize()
+    if (remembered == null || remembered === props.pageSize) return
+    if (!props.sizes.includes(remembered)) return
+    emit('update:pageSize', remembered)
+  },
+  { immediate: true }
+)
 
 /* 页码按钮序列（AntD 风格折叠）：≤7 页全显；>7 页显示 1 … p-1 p p+1 … N */
 const pageItems = computed<(number | '…')[]>(() => {

@@ -128,23 +128,24 @@ describe('状态条结论取最差子项（今日 0 调用不得输出「系统�
     };
   }
 
-  it('今日无调用但有待办 → 结论写待办条数与真实学习者近 7 天失败数，tone 转 bad', async () => {
+  it('今日无调用但有待办 → 顶部状态条退役，近 7 天失败数与待办条目都进「待处理事项」卡', async () => {
     const w = await mountOverview();
     seedTodayIdleWithTodos();
     await nextTick();
 
-    const title = w.find('.mk-status__title').text();
-    expect(title).not.toContain('系统空闲');
-    expect(title).toContain('1 项待处理');
-    expect(title).toContain('真实学习者近 7 天失败 8 次');
-    expect(w.find('.mk-status').classes()).toContain('mk-status--bad');
+    // 2026-11-11 用户「功能重叠了，上方的就不要了，放到下面的待处理卡片里面吧」
+    expect(w.find('.mk-status').exists()).toBe(false);
+    const todo = w.find('.ov-card--todo');
+    expect(todo.text()).toContain('真实学习者近 7 天失败 8 次');
+    expect(todo.text()).toContain('查看失败明细');
+    expect(todo.text()).toContain('goal-conversation');
   });
 
-  it('今日无调用且无待办 → 保留原结论（不把空闲伪造成告警）', async () => {
+  it('今日无调用且无待办 → 不伪造任何告警面（状态条与待办行都不出现）', async () => {
     const w = await mountOverview();
     await nextTick();
-    expect(w.find('.mk-status__title').text()).toBe('系统空闲');
-    expect(w.find('.mk-status').classes()).toContain('mk-status--muted');
+    expect(w.find('.mk-status').exists()).toBe(false);
+    expect(w.find('.ov-card--todo').text()).toContain('没有待处理的事项');
   });
 });
 

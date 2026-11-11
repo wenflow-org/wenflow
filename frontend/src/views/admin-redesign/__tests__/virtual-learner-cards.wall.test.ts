@@ -132,7 +132,7 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     /* 2026-11-01：构成拆分在数值行的 value-note 上，卡内不再有说明行 */
     expect(w.find('.mk-kpi__hint').exists()).toBe(false);
     expect(w.find('.mk-kpi__num-note').text()).toContain('预置 1');
-    expect(w.find('.mk-kpi__num-note').text()).toContain('自建 1');
+    expect(w.find('.mk-kpi__num-note').text()).toContain('非预置 1');
     /* 2026-11-02 评审 R16：张数只在 KPI 上出现一次，卡墙卡头不再复读同一读数 */
     expect(w.findAll('.mk-card__meta').some((m) => m.text().includes('共 2 张'))).toBe(false);
     const wall = w.findAll('.vlc-card');

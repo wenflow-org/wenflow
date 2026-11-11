@@ -33,8 +33,11 @@ function Get-DefaultEnvEntries {
         JWT_EXPIRES_IN = '7d'
         AI_API_URL = 'https://api.deepseek.com'
         AI_API_KEY = ''
-        AI_MODEL = 'deepseek-v4-flash'
-        AI_MODEL_REASONING = 'deepseek-v4-pro'
+        # 与 backend/config/llm-providers.json 的平台通道、DEPLOYMENT.md 的示例保持一致。
+        # 旧值 deepseek-v4-flash / deepseek-v4-pro 已于 2026-10-18 下线：新部署照抄会在运行时
+        # 解析不到注册模型，上游直接 404。AI_MODEL_REASONING 已不再被后端读取，仅保留兼容键。
+        AI_MODEL = 'deepseek-v4.1-flash'
+        AI_MODEL_REASONING = 'deepseek-v4.1-flash'
         FRONTEND_URL = 'http://localhost:5173'
         INIT_ADMIN_NAME = 'admin'
         INIT_ADMIN_EMAIL = 'admin@wenflow.local'
