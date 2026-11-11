@@ -5,7 +5,7 @@
 > 状态：P0~P3 已落地；2026-09-24 完成一次全面对账修订（见文末「修订记录」）。
 > §2「现状」为写作时点（2026-09-03 前后）快照，已解决项已就地标注——单读 §2 会低估现状。
 > 适用范围：`backend/src/gateway/**`、`backend/src/config/models.config.ts`、`backend/src/services/resolve-llm-call-params.ts`、平台/技能/Agent 三层模型配置
-> 关联文档：`doc/SKILL_PROTOCOL_V4.md`（skill 运行时契约）、`doc/NON_FUNCTIONAL_GOVERNANCE_PLAN.md`（非功能治理）、`prompts/manifests/README.md`（Prompt 元数据真相源）
+> 关联文档：`doc/SKILL_PROTOCOL_V4.md`（skill 运行时契约）、`prompts/manifests/README.md`（Prompt 元数据真相源）
 
 ---
 
@@ -16,7 +16,7 @@
 3. 三个真正的缺口：
    - **能力元数据没有闭环**：`models.config.ts` 有能力雏形，但只用来判 `supportsThinking`；思考/输出预算混在一个 `max_tokens` 里。
    - **`maxTokens` 语义错误**（P0 已修）：全局 floor 把每-skill 声明的输出预算**无条件抬到模型硬上限**（deepseek 131072），使 `prompts/core/*.yaml` 的 `params.maxTokens` 全部失效。
-   - **没有降级/冷却**：429 进来耗尽重试预算即终局失败；无 fallback、无 circuit breaker（见 `doc/NON_FUNCTIONAL_GOVERNANCE_PLAN.md:760-771`）。**2026-11-04 起这句话重新成立**：P1 曾补上的降级与冷却已按下线清单撤除（见 §4.5）。
+   - **没有降级/冷却**：429 进来耗尽重试预算即终局失败；无 fallback、无 circuit breaker。
 4. 目标形态＝**模型能力注册表 + 别名/部署 + 能力驱动参数构造 + 错误分类可靠性链路**。
 
 > **2026-09-24 对账**：上述三个缺口已全部闭环（能力注册表 + 预算分离 = P0；maxTokens 语义 = P0；降级/冷却 = P1）。本节保留为写作时的动机记录；其中降级/冷却已于 2026-11-04 主动下线。

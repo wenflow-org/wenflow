@@ -231,8 +231,6 @@ doc/*
 !doc/PIPELINE_PROMPTS.md
 !doc/pipeline-map.json
 !doc/README.md
-!doc/README.en.md
-!doc/NON_FUNCTIONAL_GOVERNANCE_PLAN.md
 !doc/EDUCATIONAL_THEORY_MAP.md
 !doc/PATH_PRODUCTION_REPLAN_CONTRACT.md
 !doc/PATH_PRODUCTION_REPLAN_CONTRACT.en.md
@@ -264,22 +262,12 @@ doc/*
 # 例外：虚拟学习者日期模拟（接口契约 + 设计）
 !doc/VIRTUAL_LEARNER_SIMULATED_DAY_CONTRACT.md
 !doc/VIRTUAL_LEARNER_SIMULATED_DAY_DESIGN.md
-# 例外：课堂管线与提示词全文合集 / 教学图评审包 / 会话大 JSON 增量化设计
-!doc/CLASSROOM_PIPELINE.md
-!doc/CLASSROOM_SKILLS.md
-!doc/LLM_PACK_GUIDE.md
+# 例外：会话大 JSON 增量化设计
 !doc/SESSION_JSON_INCREMENTAL_DESIGN.md
-# 例外：开发脚本手册 与 newui 原型登记规则
+# 例外：开发脚本手册
 !doc/DEV_SCRIPTS.md
-!doc/NEWUI-PROTOTYPES.md
 # 例外：平台测量质量常设化（#85：冻结考卷语料 + 双臂协议 + 质量报告；runner/CI 包装测试按路径校验该语料 sha256）
 !doc/measurement/
-# 例外：两侧旅程地图（用户侧 / 管理台）——产品、运营与外部评审的共同参照，需随代码可查
-!doc/USER-JOURNEY-MAP-2026-11-01.md
-!doc/ADMIN-JOURNEY-MAP-2026-11-01.md
-# 例外：学习设计北极星与外部评审稿（原 docs/ 目录，2026-11-11 并入 doc/）
-!doc/LEARNING_DESIGN_COGNITIVE_SCAFFOLDING.md
-!doc/EXTERNAL_REVIEW_BRIEF_2026-11-10.md
 doc/local/
 
 # Playwright MCP 会话临时文件
