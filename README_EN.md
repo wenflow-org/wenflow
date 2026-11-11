@@ -468,8 +468,7 @@ The documentation index is [`doc/README.md`](doc/README.md), organised as “liv
 - **Architecture and models**: [`doc/MODEL_GATEWAY_DESIGN.md`](doc/MODEL_GATEWAY_DESIGN.md), [`doc/LEARNER_MODEL_ARCHITECTURE.md`](doc/LEARNER_MODEL_ARCHITECTURE.md)
 - **Development scripts**: [`doc/DEV_SCRIPTS.md`](doc/DEV_SCRIPTS.md)
 - **Deployment / security / admin**: [`DEPLOYMENT.md`](DEPLOYMENT.md), [`SECURITY.md`](SECURITY.md), [`admin-guide.md`](admin-guide.md)
-- **Contributing**: [`CONTRIBUTING.md`](CONTRIBUTING.md) (branch model `develop` → `main`, gates and collaboration)
-- **For AI coding sessions**: [`CLAUDE.md`](CLAUDE.md) (documentation governance, shared-worktree discipline)
+- **Contributing**: [`CONTRIBUTING.md`](CONTRIBUTING.md) (branch model `develop` → `main`, gates, documentation governance and shared-worktree discipline)
 - **Changelog**: [`CHANGELOG.md`](CHANGELOG.md)
 
 ---

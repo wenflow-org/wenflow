@@ -277,6 +277,9 @@ doc/*
 # 例外：两侧旅程地图（用户侧 / 管理台）——产品、运营与外部评审的共同参照，需随代码可查
 !doc/USER-JOURNEY-MAP-2026-11-01.md
 !doc/ADMIN-JOURNEY-MAP-2026-11-01.md
+# 例外：学习设计北极星与外部评审稿（原 docs/ 目录，2026-11-11 并入 doc/）
+!doc/LEARNING_DESIGN_COGNITIVE_SCAFFOLDING.md
+!doc/EXTERNAL_REVIEW_BRIEF_2026-11-10.md
 doc/local/
 
 # Playwright MCP 会话临时文件

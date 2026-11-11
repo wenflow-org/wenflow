@@ -470,8 +470,7 @@ npm run prompts:lint && npm run prompts:core:check
 - **架构与模型**：[`doc/MODEL_GATEWAY_DESIGN.md`](doc/MODEL_GATEWAY_DESIGN.md)、[`doc/LEARNER_MODEL_ARCHITECTURE.md`](doc/LEARNER_MODEL_ARCHITECTURE.md)
 - **开发脚本**：[`doc/DEV_SCRIPTS.md`](doc/DEV_SCRIPTS.md)
 - **部署 / 安全 / 管理**：[`DEPLOYMENT.md`](DEPLOYMENT.md)、[`SECURITY.md`](SECURITY.md)、[`admin-guide.md`](admin-guide.md)
-- **参与开发**：[`CONTRIBUTING.md`](CONTRIBUTING.md)（分支模型 `develop` → `main`、门禁与协作）
-- **面向 AI 编码会话**：[`CLAUDE.md`](CLAUDE.md)（文档治理、共享工作树纪律等仓库约定）
+- **参与开发**：[`CONTRIBUTING.md`](CONTRIBUTING.md)（分支模型 `develop` → `main`、门禁、文档治理与共享工作树纪律）
 - **更新日志**：[`CHANGELOG.md`](CHANGELOG.md)
 
 ---
