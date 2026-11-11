@@ -1736,7 +1736,9 @@ async function revealLastTeachingBlock() {
   await nextTick();
   pin();
   // Mermaid 可能在 320ms 后才把 SVG 高度撑开；高度变化会把刚算好的目标顶偏，再量一次。
-  await new Promise<void>((resolve) => window.setTimeout(resolve, 900));
+  // globalThis 而非 window：900ms 定时器可能在 node 环境的挂载测试收尾后才 resolve，
+  // window 直用会以游离 unhandled rejection 打红整轮 vitest（#495 实证）。
+  await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 900));
   pin();
 }
 

@@ -11,14 +11,14 @@
 import { triageGoalResponse, type ResponseTriage } from './response-triage';
 
 export interface GoalConversationExtInput {
-  understanding?: Record<string, any> | null;
+  understanding?: Record<string, unknown> | null;
   nextQuestions?: string[];
   quickReplies?: string[];
-  collected?: Record<string, any> | null;
+  collected?: Record<string, unknown> | null;
   /** 显式分诊结论（如落库值 / 待确认提议）；缺省按 understanding 纯函数推导 */
   responseTriage?: ResponseTriage | null;
   /** 分支特有字段（confirmedProposal / structuredData 等） */
-  extra?: Record<string, any>;
+  extra?: Record<string, unknown>;
 }
 
 export function buildGoalConversationExt(input: GoalConversationExtInput = {}) {

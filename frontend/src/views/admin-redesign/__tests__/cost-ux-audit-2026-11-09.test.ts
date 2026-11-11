@@ -118,9 +118,8 @@ describe('成本页 · 金额精度统一（图 7）', () => {
 });
 
 describe('成本页 · 按 Skill 成本明细默认成本降序 + 表头可点（图 7）', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  function costHeader(w: any) {
-    return w.findAll('.tc-skilltable__head .tc-th--sortable').find((h: any) => h.text().includes('成本'))!;
+  function costHeader(w: Awaited<ReturnType<typeof mountTokenCost>>) {
+    return w.findAll('.tc-skilltable__head .tc-th--sortable').find((h) => h.text().includes('成本'))!;
   }
   it('默认按成本降序：预估金额行排在未定价行之前，成本表头 aria-sort=descending', async () => {
     const w = await mountTokenCost();

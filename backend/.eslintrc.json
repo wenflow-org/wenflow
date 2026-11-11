@@ -46,6 +46,16 @@
     },
     {
       "files": [
+        "src/**/__tests__/**/*.ts",
+        "src/**/*.test.ts",
+        "src/**/*.spec.ts"
+      ],
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "warn"
+      }
+    },
+    {
+      "files": [
         "src/agents/index.ts",
         "src/agents/learner-model-agent/index.ts",
         "src/agents/learner-model-agent/profile-aggregator.ts",

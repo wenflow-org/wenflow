@@ -68,11 +68,13 @@ describe('stage-designer 默认值与交付物口径', () => {
     expect(joined).not.toContain('按 `tool_operation` 的通用口径');
   });
 
-  it('交付物与业务判断统一为一个锚，不再要求每阶段额外生产成品', () => {
-    const rule = rules.find((r) => r.includes('真实交付与判断锚'));
-    expect(rule).toBeTruthy();
-    expect(rule).toContain('业务判断/决策');
-    expect(rule).toContain('不要求每个阶段都额外生产一份新成品');
+  it('交付物与业务判断统一为一个锚，不再要求每阶段额外生产成品（2026-11-09 外评批次改写后口径）', () => {
+    // 旧规则「真实交付与判断锚」已并入 firstDeliverable/successCriteria 内联规则：
+    // 衔接方式 = 对上一阶段产物做业务判断或推进它一步，判断就是推进，不为打卡而生产。
+    const joined = rules.join('\n');
+    expect(joined).toContain('对上一阶段产物做业务判断或推进它一步');
+    expect(joined).toContain('不要求每个阶段都塞一个交付物生产任务');
+    expect(joined).toContain('判断就是推进，不要为打卡而生产');
   });
 });
 

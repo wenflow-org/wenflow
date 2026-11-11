@@ -19,25 +19,48 @@ import { executeSkillWithResult } from '../../../skills';
 import { kcMapperDefinition } from '../../../skills/kc-mapper';
 import { resolveTaskConcept } from '../learning.helpers';
 import { conceptRegistryService } from '../../learner/concept-registry.service';
-import { conceptGraphService } from '../../learner/concept-graph.service';
+import { conceptGraphService, type CognitiveCoreLike } from '../../learner/concept-graph.service';
 import { auditPathStageAgentsSandboxRefs } from '../generation/stage-sandbox-ref-audit';
 import { normalizeConceptKey } from '../../memory/concept-key';
+import type { PathCognitiveDesign } from '../learning.types';
 import {
   bindKcLinksToSubtaskIds,
   mergeKcStageAnnotation,
   type KcAnnotation,
 } from '../generation/kc-annotation';
 
+/**
+ * 重排新任务的运行时输入：service 侧 ReplanTaskDraft 的读取超集——
+ * stage-designer 输出还会附带 materialRefs / anticipatedMisconceptions 两个 sidecar 字段
+ * （service 的 ReplanTaskDraft 类型未声明，运行时存在）。
+ */
+export interface ReplanNewTaskInput {
+  title?: unknown;
+  type?: unknown;
+  linkedConcept?: unknown;
+  knowledgeType?: unknown;
+  cognitiveLevel?: unknown;
+  materialRefs?: unknown[];
+  anticipatedMisconceptions?: unknown[];
+}
+
+/** 事务内 aiPromptTemplate 当前解析值中本函数读写的键（其余键由调用方自行保留）。 */
+interface ReplanTemplateSnapshot {
+  materialRefs?: Record<string, unknown> | null;
+  misconceptionHints?: Record<string, unknown> | null;
+  kcAnnotation?: KcAnnotation | null;
+}
+
 /** 一次重排阶段的 KC 同步上下文（事务可能重试，收集器在事务内 reset 后重建）。 */
 export interface ReplanKcSync {
   resolvedConcepts: ReturnType<typeof resolveTaskConcept>[];
   canonicalConceptIdsByName: Map<string, string>;
   stageKcAnnotation: KcAnnotation | null;
-  cognitiveCore: any;
+  cognitiveCore: CognitiveCoreLike | null;
   taskKeyOf: (index: number) => string;
   subtaskIdByTaskKey: Map<string, string>;
-  materialRefsByTask: Record<string, any[]>;
-  misconceptionHintsByTask: Record<string, any[]>;
+  materialRefsByTask: Record<string, unknown[]>;
+  misconceptionHintsByTask: Record<string, unknown[]>;
   /** 仅在本次真的合并了新 KC 输出时非空，供事务提交后重物化概念图 */
   kcAnnotationForGraph: KcAnnotation | null;
 }
@@ -50,15 +73,23 @@ export async function prepareReplanKcSync(input: {
   userId: string;
   pathId: string;
   stageNumber: number;
-  newTasks: any[];
-  pathCognitiveDesign: any;
-  parsedTemplate: any;
-  sortedMilestones: any[];
-  normalizedInput: any;
-  stageDesignerInput: any;
+  newTasks: ReplanNewTaskInput[];
+  pathCognitiveDesign: PathCognitiveDesign | null;
+  /** aiPromptTemplate 解析值（只读 cognitiveCore/cognitiveDesign 两个键） */
+  parsedTemplate: { cognitiveCore?: CognitiveCoreLike | null; cognitiveDesign?: CognitiveCoreLike | null } | null;
+  sortedMilestones: Array<{
+    stageNumber?: unknown;
+    title?: unknown;
+    coreConceptName?: unknown;
+    coreConceptId?: unknown;
+    description?: unknown;
+    goal?: unknown;
+  }>;
+  normalizedInput: unknown;
+  stageDesignerInput: Record<string, unknown> | null;
   skipSandboxAudit: boolean;
 }): Promise<ReplanKcSync> {
-  const resolvedConcepts = input.newTasks.map((taskData: any) =>
+  const resolvedConcepts = input.newTasks.map((taskData) =>
     resolveTaskConcept(
       typeof taskData.linkedConcept === 'string' ? taskData.linkedConcept : null,
       input.pathCognitiveDesign,
@@ -96,14 +127,14 @@ export async function prepareReplanKcSync(input: {
   let stageKcAnnotation: KcAnnotation | null = null;
   const kcMapperInput = {
     cognitiveCore: replanCognitiveCore,
-    milestones: input.sortedMilestones.map((m: any) => ({
+    milestones: input.sortedMilestones.map((m) => ({
       stageNumber: m.stageNumber,
       title: m.title,
       coreConcept: m.coreConceptName || m.coreConceptId,
       description: m.description,
       goal: m.goal,
     })),
-    subtasks: input.newTasks.map((taskData: any, index: number) => ({
+    subtasks: input.newTasks.map((taskData, index) => ({
       taskKey: taskKeyOf(index),
       title: taskData.title,
       type: taskData.type,
@@ -111,7 +142,7 @@ export async function prepareReplanKcSync(input: {
       knowledgeType: taskData.knowledgeType,
       cognitiveLevel: taskData.cognitiveLevel,
     })),
-    prerequisiteTree: (replanCognitiveCore as any)?.prerequisiteTree || null,
+    prerequisiteTree: replanCognitiveCore?.prerequisiteTree || null,
   };
   try {
     const kcResult = await executeSkillWithResult(kcMapperDefinition, kcMapperInput);
@@ -136,8 +167,8 @@ export async function prepareReplanKcSync(input: {
     await auditPathStageAgentsSandboxRefs({
       pathId: input.pathId,
       normalizedInput: input.normalizedInput,
-      stageDesignerPayload: (input.stageDesignerInput as any) || {},
-      kcMapperPayload: kcMapperInput as any,
+      stageDesignerPayload: input.stageDesignerInput || {},
+      kcMapperPayload: kcMapperInput,
       warnContext: { boundary: 'replan', stageNumber: input.stageNumber },
     });
   }
@@ -169,7 +200,7 @@ export function recordReplanTaskSidecars(
   sync: ReplanKcSync,
   index: number,
   subtaskId: string,
-  taskData: any,
+  taskData: ReplanNewTaskInput,
 ): void {
   sync.subtaskIdByTaskKey.set(sync.taskKeyOf(index), subtaskId);
   // 任务 → 资料条目：按 subtaskId 落进 aiPromptTemplate.materialRefs.byTask（生成链同款）
@@ -179,12 +210,15 @@ export function recordReplanTaskSidecars(
   // 任务 → 迷思预判：规范化后按 subtaskId 落进 aiPromptTemplate.misconceptionHints.byTask
   if (Array.isArray(taskData.anticipatedMisconceptions) && taskData.anticipatedMisconceptions.length) {
     sync.misconceptionHintsByTask[subtaskId] = taskData.anticipatedMisconceptions
-      .map((hint: any) => ({
-        conceptKey: typeof hint?.conceptKey === 'string' ? hint.conceptKey.trim() : '',
-        label: typeof hint?.label === 'string' ? hint.label.trim() : '',
-        why: typeof hint?.why === 'string' ? hint.why.trim() : '',
-      }))
-      .filter((hint: { conceptKey: string; label: string }) => hint.conceptKey && hint.label)
+      .map((hint) => {
+        const record = (hint ?? {}) as Record<string, unknown>;
+        return {
+          conceptKey: typeof record.conceptKey === 'string' ? record.conceptKey.trim() : '',
+          label: typeof record.label === 'string' ? record.label.trim() : '',
+          why: typeof record.why === 'string' ? record.why.trim() : '',
+        };
+      })
+      .filter((hint) => hint.conceptKey && hint.label)
       .slice(0, 2);
   }
 }
@@ -202,24 +236,20 @@ export function resolveReplanCanonicalConceptId(
  * 返回的补丁由 service 展开进 aiPromptTemplate（只含本阶段涉及的三个键）。
  */
 export function buildReplanKcAnnotationPatch(
-  txParsed: any,
+  txParsed: ReplanTemplateSnapshot,
   sync: ReplanKcSync,
   staleTaskIds: string[],
   stageNumber: number,
-): Record<string, any> {
+): Record<string, unknown> {
   // 资料引用 / 迷思预判 sidecar 合并（#168）：保留其他阶段的键，清掉被删任务的旧键，
   // 写入本阶段新任务的键——此前重排只清 taskAdjustability，这两份 sidecar 会一直挂着已删
   // subtaskId 的孤儿条目，而新任务零引用（教学侧读不到资料与迷思预判）。
-  const mergedMaterialRefsByTask: Record<string, any[]> = {
-    ...((txParsed?.materialRefs?.byTask && typeof txParsed.materialRefs.byTask === 'object')
-      ? txParsed.materialRefs.byTask
-      : {}),
+  const mergedMaterialRefsByTask: Record<string, unknown[]> = {
+    ...existingByTaskMap(txParsed?.materialRefs),
     ...sync.materialRefsByTask,
   };
-  const mergedMisconceptionHintsByTask: Record<string, any[]> = {
-    ...((txParsed?.misconceptionHints?.byTask && typeof txParsed.misconceptionHints.byTask === 'object')
-      ? txParsed.misconceptionHints.byTask
-      : {}),
+  const mergedMisconceptionHintsByTask: Record<string, unknown[]> = {
+    ...existingByTaskMap(txParsed?.misconceptionHints),
     ...sync.misconceptionHintsByTask,
   };
   for (const staleId of staleTaskIds) {
@@ -237,7 +267,7 @@ export function buildReplanKcAnnotationPatch(
       stageNumber,
       sync.stageKcAnnotation,
     );
-    mergedKcAnnotation = bindKcLinksToSubtaskIds(merged, sync.subtaskIdByTaskKey) as KcAnnotation | null;
+    mergedKcAnnotation = bindKcLinksToSubtaskIds(merged, sync.subtaskIdByTaskKey) ?? null;
   }
   // 无论 kc-mapper 是否成功，被删任务的死链都要清掉（否则模板里持续堆积无主 taskKcLinks，
   // 读侧按 id/title 都不命中）。其他阶段的链接与无 taskId 的旧标注保持原样。
@@ -245,7 +275,7 @@ export function buildReplanKcAnnotationPatch(
     const staleIdSet = new Set(staleTaskIds);
     mergedKcAnnotation = {
       ...mergedKcAnnotation,
-      taskKcLinks: mergedKcAnnotation.taskKcLinks.filter((link: any) => {
+      taskKcLinks: mergedKcAnnotation.taskKcLinks.filter((link) => {
         const taskId = typeof link?.taskId === 'string' ? link.taskId : null;
         return !taskId || !staleIdSet.has(taskId);
       }),
@@ -259,9 +289,7 @@ export function buildReplanKcAnnotationPatch(
     ...(Object.keys(mergedMaterialRefsByTask).length
       ? {
           materialRefs: {
-            ...((txParsed?.materialRefs && typeof txParsed.materialRefs === 'object')
-              ? txParsed.materialRefs
-              : {}),
+            ...(isRecord(txParsed?.materialRefs) ? txParsed.materialRefs : {}),
             byTask: mergedMaterialRefsByTask,
           },
         }
@@ -269,9 +297,7 @@ export function buildReplanKcAnnotationPatch(
     ...(Object.keys(mergedMisconceptionHintsByTask).length
       ? {
           misconceptionHints: {
-            ...((txParsed?.misconceptionHints && typeof txParsed.misconceptionHints === 'object')
-              ? txParsed.misconceptionHints
-              : {}),
+            ...(isRecord(txParsed?.misconceptionHints) ? txParsed.misconceptionHints : {}),
             byTask: mergedMisconceptionHintsByTask,
           },
         }
@@ -279,6 +305,17 @@ export function buildReplanKcAnnotationPatch(
     // #168：KC 标注（taskKcLinks 已绑新 subtasks.id；conceptKcs / kcGraph 同包）
     ...(mergedKcAnnotation ? { kcAnnotation: mergedKcAnnotation } : {}),
   };
+}
+
+/** 模板里既有的 byTask 映射：缺失或非对象回退空表（调用方拿结果展开合并）。 */
+function existingByTaskMap(container: Record<string, unknown> | null | undefined): Record<string, unknown[]> {
+  const byTask = container?.byTask;
+  if (!byTask || typeof byTask !== 'object') return {};
+  return byTask as Record<string, unknown[]>;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
 /**
