@@ -27,9 +27,9 @@
 
 | 原则 | 系统落点 | 验证 |
 | --- | --- | --- |
-| 问题切入，理论亮剑，沙盘练手，自身收口（黄金准则） | [prompts/core/goal-conversation.yaml](../../prompts/core/goal-conversation.yaml)、[prompts/core/stage-designer.yaml](../../prompts/core/stage-designer.yaml)、[prompts/core/path-planning.yaml](../../prompts/core/path-planning.yaml) | 外评 #6 后真机重跑 5 域 case |
-| 一句话讲透测试：三条件 0/3 × 理解动词簇 × 无表现要求 → 直答不排课 | [backend/src/services/learning/response-triage.ts](../../backend/src/services/learning/response-triage.ts)（answer_only mode）+ goal-conversation.yaml 同步判据 | 均线真机 + jest 套件 |
-| 颗粒度硬上界（坐学次数判据，双定帧存活） | [backend/src/services/learning/path-planning-hints.ts](../../backend/src/services/learning/path-planning-hints.ts) | AB3 2.1h→0.9h |
+| 问题切入，理论亮剑，沙盘练手，自身收口（黄金准则） | [prompts/core/goal-conversation.yaml](../prompts/core/goal-conversation.yaml)、[prompts/core/stage-designer.yaml](../prompts/core/stage-designer.yaml)、[prompts/core/path-planning.yaml](../prompts/core/path-planning.yaml) | 外评 #6 后真机重跑 5 域 case |
+| 一句话讲透测试：三条件 0/3 × 理解动词簇 × 无表现要求 → 直答不排课 | [backend/src/services/learning/response-triage.ts](../backend/src/services/learning/response-triage.ts)（answer_only mode）+ goal-conversation.yaml 同步判据 | 均线真机 + jest 套件 |
+| 颗粒度硬上界（坐学次数判据，双定帧存活） | [backend/src/services/learning/path-planning-hints.ts](../backend/src/services/learning/path-planning-hints.ts) | AB3 2.1h→0.9h |
 | 教案步骤不是课程目录（教师走堂测试） | stage-designer.yaml | 外评 #7 |
 | 全拼图反缩圈（预计产出覆盖全部点名拼图） | goal-conversation.yaml | 财经 3 模块真机 |
 | 交付物=真实场景表现（考场自查判据，禁文书交付物） | goal-conversation.yaml first_deliverable 条款 | — |
