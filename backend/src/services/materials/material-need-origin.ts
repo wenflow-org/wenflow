@@ -58,10 +58,10 @@ const DOC_DEPENDENCY_RE = /(官方文档|API\s*文档|开发文档|技术规范|
  * 即使 goal 没承诺「真实材料」，这类路径也应默认带锚点资料。计分 ≥2（有关键阶段时 ≥1）
  * 即派生锚点 need（从 key stages 取主题）。口语/习惯/体能这类纯训练目标不命中信号，零误伤。
  */
-const RESEARCH_WORTHINESS_RE = /(机制|原理|框架|工具|平台|模型|算法|法规|法律|标准|规范|政策|经济|金融|心理|医学|历史|行业|数据|统计|案例|事件|版本|API|SDK|技术|科学|市场|财报|报表|会计|审计|年报|现金流|资产负债|利润表|造假|估值|投资|证券|合同|条款|司法|判例|税|保险)/g;
+const RESEARCH_WORTHINESS_RE = /(机制|原理|框架|工具|平台|模型|算法|法规|法律|标准|规范|政策|经济|金融|心理|医学|历史|行业|数据|统计|案例|事件|版本|API|SDK|技术|科学|市场|财报|报表|会计|审计|年报|现金流|资产负债|利润表|造假|估值|投资|证券|合同|条款|司法|判例|税|保险|论文|文献|学术|英文)/g;
 
 /** 强领域词：单独命中即可触发锚点采集（即使没有 keyStages 透传） */
-const STRONG_RESEARCH_RE = /(法规|法律|合同|条款|司法|判例|财报|报表|会计|审计|年报|现金流|统计|数据|行业|研究|机制|原理|标准|规范|政策|经济|金融|心理|医学)/;
+const STRONG_RESEARCH_RE = /(法规|法律|合同|条款|司法|判例|财报|报表|会计|审计|年报|现金流|统计|数据|行业|研究|机制|原理|标准|规范|政策|经济|金融|心理|医学|论文|文献|学术)/;
 
 export interface GoalTextSource {
   surfaceGoal?: string | null;
@@ -249,7 +249,13 @@ export function mergeDeclaredAndDerivedNeeds(
   cap = 3,
 ): unknown {
   const declaredNeeds = (Array.isArray(declared) ? declared : declared ? [declared] : [])
-    .filter((need): need is MaterialNeed => !!need && typeof need === 'object');
+    .filter((need): need is MaterialNeed => {
+      if (!need || typeof need !== 'object') return false;
+      // 空对象/只有壳没有 title-kind-why 的声明视为「未声明」：goal 偶尔输出 needsMaterial:{}，
+      // 旧逻辑会把它当 public 声明，直接压掉 path 派生（2026-11-13 u07 实证：论文资料零采集）。
+      return [need.title, need.kind, need.why]
+        .some((value) => typeof value === 'string' && value.trim().length > 0);
+    });
   const hasPublicDeclared = declaredNeeds.some((need) => inferMaterialOrigin(need) === 'public');
   // 未声明时保持旧链路形状：直接把派生列表交给 resolveMaterialPacks（数组）；
   // 没有派生就保持 null（不能返回空数组，否则会把「未声明」变成「已声明空清单」）

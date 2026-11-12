@@ -188,4 +188,23 @@ describe('deriveMaterialNeedsFromGoalText · 研究价值闸（Layer 3：联网�
     expect(needs.length).toBeGreaterThan(0);
     expect(needs.every((need) => need.origin === 'public')).toBe(true);
   });
+
+  it('英文论文/文献类目标命中研究价值闸（u07 实证）', () => {
+    const needs = deriveMaterialNeedsFromGoalText({
+      surfaceGoal: '跨专业研一，导师让每周读三篇英文论文；单词都认识，但一段摘要读下来不知道它在说什么',
+    });
+    expect(needs.length).toBeGreaterThan(0);
+    expect(needs.every((need) => need.origin === 'public')).toBe(true);
+  });
+
+  it('空对象 needsMaterial 不阻断派生（u07 实证）', () => {
+    const derived = deriveMaterialNeedsFromGoalText({
+      surfaceGoal: '跨专业研一，导师让每周读三篇英文论文；摘要读不懂',
+    });
+    expect(derived.length).toBeGreaterThan(0);
+    const merged = mergeDeclaredAndDerivedNeeds({}, derived, 3);
+    const list = (Array.isArray(merged) ? merged : [merged]) as MaterialNeed[];
+    expect(list.some((need) => String(need?.title || '').trim().length > 0)).toBe(true);
+    expect(list.some((need) => inferMaterialOrigin(need) === 'public')).toBe(true);
+  });
 });

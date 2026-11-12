@@ -135,9 +135,9 @@ for (const file of resultFiles.sort()) {
       }))
       const lessons = stages.flatMap((s) => s.lessons)
       const totalMinutes = lessons.reduce((sum, l) => sum + (l.minutes || 0), 0)
-      // 只抓「把结论写进标题」的强信号；带「为什么/如何/怎么」的标题多是任务提问，
-      // 不是剧透（首版把「一次汇报里挨三种打断——为什么不是A」误判成剧透）。
-      const spoilerHits = lessons.filter((l) => /(答案是|真相是|原来是|竟然是|其实是|结论是|原理是|一招|秒懂)/.test(l.title)).map((l) => l.title)
+      // 只抓「把结论写进标题」的强信号；带「为什么/如何/怎么/结论是什么」的标题多是任务提问，
+      // 不是剧透（u07「……结论是什么」被首版误判）。
+      const spoilerHits = lessons.filter((l) => /(答案是|真相是|原来是|竟然是|其实是|原理是|一招|秒懂)/.test(l.title)).map((l) => l.title)
       const collapseHits = stages.filter((s) => s.lessons.length <= 1).map((s) => s.title)
       row.path = {
         id: path.id,
