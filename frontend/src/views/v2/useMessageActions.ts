@@ -13,9 +13,15 @@ export function useMessageActions(deps: {
   typing: Ref<boolean>;
   completed: Ref<boolean>;
   session: Ref<{ sessionId: string; revision: number } | null>;
-  doSend: (text: string, allowStaleRetry?: boolean, skipUserPush?: boolean) => Promise<void>;
+  /** images：随文图片（视觉通道）——编辑/重生成沿用原消息的图，重发不丢图 */
+  doSend: (text: string, allowStaleRetry?: boolean, skipUserPush?: boolean, retryKey?: string, images?: Array<{ url: string; caption?: string }>) => Promise<void>;
 }) {
   const { msgs, typing, completed, session, doSend } = deps;
+
+  /** 取消息随文图片的请求体形状（气泡侧 ChatImage → 请求侧 {url, caption?}） */
+  function msgImages(m: ChatMsg): Array<{ url: string; caption?: string }> {
+    return (m.images || []).map((img) => ({ url: img.url, ...(img.caption ? { caption: img.caption } : {}) }));
+  }
 
   const hoveredMsgId = ref<string | null>(null);
 
@@ -78,12 +84,12 @@ export function useMessageActions(deps: {
     if (t === m.text) { cancelEdit(); return; }
     const idx = msgs.value.indexOf(m);
     if (idx < 0) { cancelEdit(); return; }
-    // 替换本条 + 裁掉其后（含 AI 回复）
+    // 替换本条 + 裁掉其后（含 AI 回复）；随文图片保留在气泡里，重发时一并带上
     msgs.value.splice(idx, msgs.value.length - idx, { ...m, text: t });
     editingMsgId.value = null;
     editingText.value = '';
     // 重新发送（不重复 push 用户消息，消息已替换）
-    await doSend(t, true, true);
+    await doSend(t, true, true, undefined, msgImages(m));
   }
 
   async function regenerateMessage(m: ChatMsg) {
@@ -94,14 +100,15 @@ export function useMessageActions(deps: {
     const lastAiIdx = msgs.value.map((x) => x.role).lastIndexOf('ai');
     if (idx < 0 || idx !== lastAiIdx) { toast.info('只能重新生成最新的回复'); return; }
     // Find the user message preceding this AI message
-    let lastUser = '';
+    let lastUser: ChatMsg | null = null;
     for (let i = idx - 1; i >= 0; i--) {
-      if (msgs.value[i].role === 'user') { lastUser = msgs.value[i].text; break; }
+      if (msgs.value[i].role === 'user') { lastUser = msgs.value[i]; break; }
     }
-    if (!lastUser) { toast.info('找不到对应的问题'); return; }
+    // 只发图不打字的回合也放行重生成（text 为空但图片可作为上下文）
+    if (!lastUser || (!lastUser.text && !lastUser.images?.length)) { toast.info('找不到对应的问题'); return; }
     // Remove the current AI message and re-send（不重复 push 用户消息）
     msgs.value.splice(idx, 1);
-    await doSend(lastUser, true, true);
+    await doSend(lastUser.text, true, true, undefined, msgImages(lastUser));
   }
 
   return {

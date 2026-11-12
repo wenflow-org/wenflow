@@ -954,6 +954,10 @@ export async function endSession(
           ...snapshotInput,
           metrics: finalState,
           generatedAt: finalState.timestamp,
+          // D2：advisory 在 completeWithEvent 写 endTime 之前生成，这里把本次收束时刻
+          // 作为当前会话的业务结束时间，避免本课 85/90 的看板信号因无 seenAt 被旧 0.35 痕迹压掉。
+          currentSessionId: session.id,
+          sessionEndTimeOverride: closureEndedAt,
         })
       : await learnerSnapshotService.getSnapshot(snapshotInput);
     const learnerReplanProjection = learnerProjectionService.toReplanProjection(learnerSnapshot);

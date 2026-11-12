@@ -13,7 +13,7 @@ import { executeSkill, executeSkillWithResult, auxSkillDefinitionMap, peerAgentD
 import { teachingTurnAgentDefinition } from '../../skills/teaching-turn';
 import type { SessionWrapupArtifact } from '../../skills/session-wrapup';
 import { TeachingOperationLeaseGuard } from './TeachingOperationLeaseGuard';
-import { teachingSessionRepository, type TeachingSessionRecord, type TeachingImage, type TeachingDiagram } from './TeachingSessionRepository';import { knowledgeStateService, COMPLETION_TARGET_PROGRESS_FLOOR } from './KnowledgeStateService';
+import { teachingSessionRepository, type TeachingSessionRecord, type TeachingImage, type TeachingDiagram, type TeachingFigure } from './TeachingSessionRepository';import { knowledgeStateService, COMPLETION_TARGET_PROGRESS_FLOOR } from './KnowledgeStateService';
 import { peerTriggerService } from './PeerTriggerService';
 import { buildTeachingScenarioContext, type TeachingScenarioContext } from './TeachingContextBuilder';
 import { fenceLearnerMessagesForModel } from './input-fence';
@@ -73,7 +73,7 @@ import {
   normalizeKnowledgePoints,
   reconcileTeachingKnowledgeState,
 } from './teaching-knowledge-state';
-import { buildDeterministicOpening, ensureOpeningActionLine, pickPeerStrategy, collectPeerHistory, OPENING_GENERATION_TIMEOUT_MS, COMPLETION_TURNS_BACKSTOP } from './teaching-session-views';
+import { buildDeterministicOpening, ensureOpeningActionLine, ensureOpeningMaterialGrounding, pickPeerStrategy, collectPeerHistory, OPENING_GENERATION_TIMEOUT_MS, COMPLETION_TURNS_BACKSTOP } from './teaching-session-views';
 import { generateTeachingVisual, buildVisualOpportunity, detectExerciseLeakInReply, hasDanglingFigureReference, stripDanglingFigureReferences, paletteOfSubject, shouldEmitFigureAmong, figureKindCap, figureRestatesReply, stripInLessonAnnotations, maskFigureForQuestion, resolveFigureMaxPerSession, collectFigureNumbers, collectReplyNumbers, figureNumbersFightReply } from './teaching-visual.service';
 import type { TeachingOpening, ProcessStudentMessageOptions } from './AITeachingCoordinator';
 import { normalizeTaskTypeForMetrics } from './AITeachingCoordinator';
@@ -256,14 +256,18 @@ export async function generateOpening(context: TeachingScenarioContext): Promise
       taskId: context.taskId,
       topic: context.topic,
     });
-    return buildDeterministicOpening(context);
+    return ensureOpeningMaterialGrounding(buildDeterministicOpening(context), context);
   }
 
   if (parsed) {
     // 「一条行动线」契约的确定性兜底（2026-11-02 用户反馈「开场很不舒服」）：
     // 模型可省略 quickReplies，实测 39.5% 的开场落库为空数组 → 第一屏没有任何可点的东西；
     // question 里还会写"也可以直接往下走"这种没有控件的动作承诺。这里统一收口。
-    return ensureOpeningActionLine(parsed as Partial<TeachingOpening>, context);
+    // 材料落地护栏（2026-11-12）：模型说「这段对话」却不摆本体时整块补挂（见 ensureOpeningMaterialGrounding）。
+    return ensureOpeningMaterialGrounding(
+      ensureOpeningActionLine(parsed as Partial<TeachingOpening>, context),
+      context,
+    );
   }
 
   logger.warn('[AITeaching] 开场交互块缺少有效结构，降级为确定性开场', {
@@ -271,7 +275,7 @@ export async function generateOpening(context: TeachingScenarioContext): Promise
     taskId: context.taskId,
     topic: context.topic,
   });
-  return buildDeterministicOpening(context);
+  return ensureOpeningMaterialGrounding(buildDeterministicOpening(context), context);
 }
 
 /**
@@ -302,6 +306,8 @@ export async function processStudentMessage(
   images?: TeachingImage[];
   /** 课堂结构图（2026-09-27 双通道重构）——mermaid 源码，前端确定性渲染，内联在回复里 */
   diagrams?: TeachingDiagram[];
+  /** 位置线/白板等确定性 SVG 图——2026-11-11：模拟链路需要把它交给虚拟学习者，否则学员"看不见图" */
+  figures?: TeachingFigure[];
   strategies: string[];
   knowledgePoint: string | null;
   knowledgePoints: KnowledgePointStatus[];
@@ -335,7 +341,10 @@ export async function processStudentMessage(
   // 避免检查点 / 虚拟学习者 / 脚本等直连调用点绕过路由校验。
   // 例外：resume-continue 是「断线后纯续讲、本轮无学生新输入」的合法模式（message 恒为 ''），
   // 豁免以保住既有续讲行为（见下方 isResumeContinue 分支）。
-  if (options.kind !== 'resume-continue' && (typeof message !== 'string' || message.trim().length === 0)) {
+  // 2026-11-12 视觉输入：只发图不打字也是真实输入（随消息带 ≥1 张合法图片时放行空文案）。
+  const hasLearnerImages = Array.isArray(options.images) && options.images.length > 0;
+  if (options.kind !== 'resume-continue' && !hasLearnerImages
+    && (typeof message !== 'string' || message.trim().length === 0)) {
     throw new Error('缺少消息内容');
   }
 
@@ -391,6 +400,9 @@ export async function processStudentMessage(
           // B2/Q14 的输入围栏只作用于"喂给模型的那一份"（见下方 buildTeachingTurnInput 前的映射）。
           content: message,
           timestamp: new Date().toISOString(),
+          // 学生随消息发来的图片（2026-11-12 视觉输入）：随消息落库（payload 是 JSON 列，无 schema 迁移），
+          // teaching-turn 的 messages 契约本就带 images 字段，会作为「学生本轮发来的图」进视觉上下文
+          ...(hasLearnerImages ? { images: options.images } : {}),
           // 检查点合成消息打标记：进入教学上下文供模型分析答案，但不参与学生行为证据统计
           ...(options.checkpointId ? { checkpoint: true } : {}),
           // 前端交互特征（认知负荷量测 · 前端情报层）：随消息落库，供后续轮次对比

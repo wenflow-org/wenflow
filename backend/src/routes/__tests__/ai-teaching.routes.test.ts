@@ -278,7 +278,7 @@ describe('ai-teaching routes', () => {
     expect(mockCoordinator.processStudentMessage).toHaveBeenCalledWith(
       'session-1',
       '我明白了条件类型',
-      { expectedRevision: 7, interactionMeta: undefined, idempotencyKey: 'test-idem-key' },
+      { expectedRevision: 7, interactionMeta: undefined, idempotencyKey: 'test-idem-key', images: [] },
     );
     expect(res.json).toHaveBeenCalledWith({
       success: true,
@@ -610,7 +610,7 @@ describe('ai-teaching routes', () => {
     expect(mockCoordinator.processStudentMessage).toHaveBeenCalledWith(
       'session-1',
       '我完成了',
-      { expectedRevision: 3, interactionMeta: undefined, idempotencyKey: 'test-idem-key' },
+      { expectedRevision: 3, interactionMeta: undefined, idempotencyKey: 'test-idem-key', images: [] },
     );
     const joined = writes.join('');
     expect(joined).toContain('event: final\ndata: {"aiResponse":"继续",');

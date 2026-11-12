@@ -850,7 +850,7 @@ describe('split-compare：正误并排对比（2026-10-26 动作诊所）', () =
 });
 
 describe('state-strip：不回头的进程分帧（2026-10-26）', () => {
-  it('2~5 帧保留；items 截到 3 条、去重；单帧拒绝', async () => {
+  it('2~8 帧保留（2026-11-12 上限 5→8）；items 截到 3 条、去重；单帧拒绝', async () => {
     const ok = await runWithFigure({
       kind: 'state-strip',
       spec: {
@@ -870,6 +870,30 @@ describe('state-strip：不回头的进程分帧（2026-10-26）', () => {
 
     const one = await runWithFigure({ kind: 'state-strip', spec: { frames: [{ label: '只有一步', items: ['x'] }] } });
     expect(one.figure).toBeUndefined();
+  });
+
+  it('上限 5→8（2026-11-12）：8 轮对话的板书不再被截成 5 帧', async () => {
+    const labels = ['轮1', '轮2', '轮3', '轮4', '轮5', '轮6', '轮7', '轮8'];
+    const ok = await runWithFigure({
+      kind: 'state-strip',
+      spec: {
+        title: '八轮对话逐帧摆开',
+        frames: labels.map((label) => ({ label, items: [`${label} 的状态快照`] })),
+      },
+    });
+    expect(ok.figure.spec.frames).toHaveLength(8);
+    expect(ok.figure.spec.truncatedFrames).toBeUndefined();
+  });
+
+  it('超过 8 帧仍截断，但 spec 记 truncatedFrames（boardContext 据此向模型声明系统截断）', async () => {
+    const labels = ['一', '二', '三', '四', '五', '六', '七', '八', '九'];
+    const over = await runWithFigure({
+      kind: 'state-strip',
+      spec: { title: '九帧', frames: labels.map((label) => ({ label, items: [`${label}态`] })) },
+    });
+    expect(over.figure.spec.frames).toHaveLength(8);
+    expect(over.figure.spec.frames[7].label).toBe('八');
+    expect(over.figure.spec.truncatedFrames).toBe(1);
   });
 });
 

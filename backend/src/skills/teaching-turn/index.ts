@@ -12,8 +12,8 @@ import { recordDegradation } from '../degradation-telemetry';
 import { findArithmeticMismatches, type ArithmeticMismatch } from '../../services/ai-teaching/teaching-arithmetic-guard';
 import { normalizeForKeywordMatch, resolveUnderstandingReading } from '../../services/ai-teaching/checkpoint-shared';
 import { applyObservableEvidenceGate, detectObservableEvidence } from './observable-evidence';
-import type { ChatMessageContent } from '../../gateway/api-gateway/types';
-import { buildVisionContent } from '../../utils/vision-content';
+import type { ChatContentPart, ChatMessageContent } from '../../gateway/api-gateway/types';
+import { normalizeVisionImages, MAX_VISION_IMAGES_PER_MESSAGE } from '../../utils/vision-content';
 
 const AGENT_ID = 'skill:teaching-turn';
 
@@ -842,6 +842,9 @@ export function normalizeOutput(parsed: Record<string, any>, input: TeachingTurn
     });
   }
 
+  // 最近一条用户消息：误解台账的逐字核对窗（confusionPoints 现在与之同源，见 resolveConfusionPoints）
+  const lastLearnerMessage = [...(input.messages || [])].reverse().find((message) => message?.role === 'user')?.content || '';
+
   return {
     reply,
     analysis: {
@@ -853,11 +856,8 @@ export function normalizeOutput(parsed: Record<string, any>, input: TeachingTurn
       // 与「真的读数是 0.5」不可区分；现在 null 一路带到闸门，由消费方按「不可观测」处理
       // （不加速出题、不触发低理解度伴学），见 services/ai-teaching/checkpoint-shared.ts。
       understanding: resolveUnderstandingReading(analysis.understanding),
-      confusionPoints: resolveConfusionPoints(analysis.confusionPoints, analysis.misconceptions),
-      ...(normalizeMisconceptions(
-        analysis.misconceptions,
-        [...(input.messages || [])].reverse().find((message) => message?.role === 'user')?.content || '',
-      )),
+      confusionPoints: resolveConfusionPoints(analysis.misconceptions, lastLearnerMessage),
+      ...(normalizeMisconceptions(analysis.misconceptions, lastLearnerMessage)),
       ...(normalizeKtEstimate(analysis.ktEstimate)),
       ...(normalizeRsmAttempts(analysis.rsmAttempts)),
       ...(normalizeSelfAssessmentSignal(analysis.selfAssessmentSignal)),
@@ -1552,13 +1552,25 @@ function normalizeSplitCompareSpec(raw: Record<string, unknown>): Record<string,
  * 本体是「状态随阶段推进」，cycle 画成环会误导（它不回原点），cartesian 又没有
  * 离散阶段轴。条带帧间箭头就是「下一步」，帧内要点是该时刻的状态快照。
  *
- * 约束：frames 2~5（label ≤18 字），每帧 items 0~3 条（≤18 字）；同一条目跨帧
+ * 约束：frames 2~8（label ≤18 字），每帧 items 0~3 条（≤18 字）；同一条目跨帧
  * 复用由模型自己重写（渲染不做状态对齐）；note ≤160 字；tone 只认四种。
+ *
+ * 上限 5→8（2026-11-12 实测修复）：8 轮对话的板书在归一化时被截成 5 帧，标题仍写
+ * 「八轮对话」——学生看到的图与任务/老师嘴里的帧数对不上，模型还把系统自己的截断
+ * 归因成「学生误以为板书只有五轮」并写进卡点。超过 8 帧仍会丢，丢帧时在 spec 上记
+ * `truncatedFrames`，boardContext（describeBoardForTeacher）显式声明是系统截断，
+ * 防止模型再把残缺板书归因给学习者。
  */
+const STATE_STRIP_MAX_FRAMES = 8;
 function normalizeStateStripSpec(raw: Record<string, unknown>): Record<string, unknown> | null {
   const frames: Array<Record<string, unknown>> = [];
+  let droppedFrames = 0;
   for (const item of Array.isArray(raw.frames) ? raw.frames : []) {
-    if (!item || typeof item !== 'object' || frames.length >= 5) continue;
+    if (!item || typeof item !== 'object') continue;
+    if (frames.length >= STATE_STRIP_MAX_FRAMES) {
+      droppedFrames += 1;
+      continue;
+    }
     const frame = item as Record<string, unknown>;
     const label = toFigureLabel(frame.label, SPEC.labelMax);
     if (!label) continue;
@@ -1577,8 +1589,15 @@ function normalizeStateStripSpec(raw: Record<string, unknown>): Record<string, u
   if (frames.length < 2) return null;
   const title = toFigureText(raw.title, SPEC.titleMax);
   const note = toFigureText(raw.note, SPEC.noteMax);
+  if (droppedFrames > 0) {
+    logger.warn('[TeachingTurnAgent] state-strip 帧数超上限已截断（boardContext 会向模型声明系统截断）', {
+      kept: frames.length,
+      dropped: droppedFrames,
+    });
+  }
   return {
     frames,
+    ...(droppedFrames > 0 ? { truncatedFrames: droppedFrames } : {}),
     ...(title ? { title } : {}),
     ...(note ? { note } : {}),
   };
@@ -2721,16 +2740,21 @@ function normalizeMisconceptions(value: any, learnerMessage = ''): { misconcepti
   return items.length > 0 ? { misconceptions: items } : {};
 }
 
-/** confusionPoints 归一化：LLM 直接输出时优先采用（向后兼容）；未输出时由 normalize 后的 misconceptions 派生（消除双写） */
-function resolveConfusionPoints(rawConfusionPoints: any, rawMisconceptions: any): string[] {
-  const direct = Array.isArray(rawConfusionPoints)
-    ? rawConfusionPoints.map((item: any) => String(item).trim()).filter(Boolean).slice(0, 5)
-    : [];
-  if (direct.length > 0) return direct;
-  const normalized = normalizeMisconceptions(rawMisconceptions);
+/**
+ * confusionPoints 归一化（2026-11-12 收口：卡点 chip 只认**有证据的误解**）。
+ *
+ * 此前 LLM 直接输出的 confusionPoints 原样采纳、零核对——上屏闸门（confusionEvidenced，
+ * 来自逐字核对通过的 misconceptions）与 chip 内容（软通道）不同源：一条有证据的误解
+ * 打开门，编造的卡点文案照样填进去。实测（2026-11-12 跑步咨询会话）：模型把系统板书
+ * 截断脑补成「误以为板书只有五轮、不清楚任务要观察什么」并上屏成卡点，而学生看到的
+ * 确实只有 5 帧——归因与事实相反。现在统一从**逐字核对通过**的 misconceptions 派生
+ * （canonicalLabel 优先，其次 hypothesis），模型不再有免检通道；没有有证据的误解就不上屏。
+ */
+function resolveConfusionPoints(rawMisconceptions: any, learnerMessage: string): string[] {
+  const normalized = normalizeMisconceptions(rawMisconceptions, learnerMessage);
   if (!normalized.misconceptions?.length) return [];
   const derived = normalized.misconceptions
-    .map((m) => m.canonicalLabel || m.conceptKey)
+    .map((m) => m.canonicalLabel || m.hypothesis)
     .filter(Boolean) as string[];
   return Array.from(new Set(derived)).slice(0, 5);
 }
@@ -2888,6 +2912,50 @@ export function collectHistoryImages(messages: TeachingTurnInput['messages']): T
     budget -= kept.length;
   }
   return collected;
+}
+
+/**
+ * 图片按「谁发的、什么时候发的」分桶（2026-11-12 学生发图）。
+ *
+ * #123 只有一种图——老师画的板书图，归属标签可以一句话定死。学生也能发图之后，
+ * 同一份历史里最多有三种来源，归属标签必须分角色，否则模型会把学生的作业照片
+ * 读成「老师的板书」（或反过来「我没画过这张图」）：
+ * - learnerCurrent：最后一条 user 消息的图 = 学生本轮发来的输入（回复必须直接回应）；
+ * - teacherHistory / learnerHistory：更早的图，共享 MAX_HISTORY_IMAGES_PER_REQUEST 预算
+ *   （越近越相关，从最新往回数），进请求时各自带归属标签。
+ */
+interface PartitionedTurnImages {
+  learnerCurrent: TeachingTurnMessageImage[];
+  teacherHistory: TeachingTurnMessageImage[];
+  learnerHistory: TeachingTurnMessageImage[];
+}
+
+export function partitionTurnImages(messages: TeachingTurnInput['messages']): PartitionedTurnImages {
+  const source = Array.isArray(messages) ? messages : [];
+  let lastUserIndex = -1;
+  for (let i = source.length - 1; i >= 0; i -= 1) {
+    if (source[i]?.role === 'user') {
+      lastUserIndex = i;
+      break;
+    }
+  }
+  const out: PartitionedTurnImages = { learnerCurrent: [], teacherHistory: [], learnerHistory: [] };
+  let budget = MAX_HISTORY_IMAGES_PER_REQUEST;
+  for (let index = source.length - 1; index >= 0; index -= 1) {
+    const images = Array.isArray(source[index]?.images) ? source[index].images!.filter((image) => image?.url) : [];
+    if (images.length === 0) continue;
+    if (index === lastUserIndex) {
+      out.learnerCurrent = images.slice(-MAX_VISION_IMAGES_PER_MESSAGE);
+      continue;
+    }
+    const kept = images.slice(-budget);
+    if (kept.length === 0) continue;
+    if (source[index].role === 'assistant') out.teacherHistory.unshift(...kept);
+    else out.learnerHistory.unshift(...kept);
+    budget -= kept.length;
+    if (budget <= 0) break;
+  }
+  return out;
 }
 
 /**
@@ -3312,9 +3380,10 @@ function buildTeachingTurnMessages(args: {
     role: (message.role === 'assistant' ? 'assistant' : 'user') as 'user' | 'assistant',
     content: message.content,
   }));
-  // 历史配图（#123）：统一附加到**本轮 user 消息**尾部（上游拒收 assistant 消息里的 image_url 块，
-  // 见 collectHistoryImages 注释）；无图时 userContent 与改动前逐字节一致。
-  const historyImages = collectHistoryImages(args.input.messages);
+  // 图片（#123 老师板书 + 2026-11-12 学生发图）：统一附加到**本轮 user 消息**尾部
+  // （上游拒收 assistant 消息里的 image_url 块，见 partitionTurnImages 注释）；
+  // 无图时 userContent 与改动前逐字节一致。历史保持纯文本形态（缓存前缀不动）。
+  const turnImages = partitionTurnImages(args.input.messages);
   const suffix = args.retryMessage
     ? `\n\n${args.retryMessage}`
     : OUTPUT_CONTRACT_TAIL;
@@ -3348,13 +3417,26 @@ function buildTeachingTurnMessages(args: {
     }
   }
 
-  // 历史配图归属声明（#123）：图只能挂在 user 消息上（上游拒收 assistant 里的 image_url），
-  // 但实测（带图/不带图双组对照）模型会把 user 回合里的图读成"学生本轮发来的内容"，
-  // 进而以"我没画过这张图"拒绝引用。归属由指令层定死，不靠模型自推。
-  if (historyImages.length > 0) {
-    systemContent = `${systemContent}\n\n【课堂配图说明】本轮用户消息里附有你（老师）此前发给学生的板书图`
-      + '（属于课堂状态数据，不是学生本轮发来的内容）。你可以且应当直接引用图里的信息（布局、行列、颜色、宽窄等）；'
-      + '不要说"我看不到图/没有图/我没画过图"。';
+  // 配图归属声明（#123 + 2026-11-12 学生发图）：图只能挂在 user 消息上（上游拒收 assistant 里的
+  // image_url），但实测（带图/不带图双组对照）模型会把 user 回合里的图读错角色（板书被当成学生
+  // 发来的内容 →「我没画过这张图」）。归属由指令层按桶定死，不靠模型自推。
+  const imageHints: string[] = [];
+  if (turnImages.learnerCurrent.length > 0) {
+    imageHints.push(
+      `【学生本轮发来的图】是学生**此刻**的输入（可能拍照上传作业/题目/自己的解答）——回复必须直接看图、回应图里的内容，不要当它是你画的板书`,
+    );
+  }
+  if (turnImages.teacherHistory.length > 0) {
+    imageHints.push(
+      '【课堂配图】是你（老师）此前发给学生的板书图，属于课堂状态数据——你可以且应当直接引用图里的信息（布局、行列、颜色、宽窄等）',
+    );
+  }
+  if (turnImages.learnerHistory.length > 0) {
+    imageHints.push('【学生此前发来的图】是学生早前发来的历史输入');
+  }
+  if (imageHints.length > 0) {
+    systemContent = `${systemContent}\n\n【课堂配图说明】本轮用户消息里附有：${imageHints.join('；')}。`
+      + '不要说"我看不到图/没有图"。';
   }
 
   return [
@@ -3362,35 +3444,45 @@ function buildTeachingTurnMessages(args: {
     ...history,
     {
       role: 'user',
-      content: buildUserMessageContent({ userContent, historyImages, suffix }),
+      content: buildUserMessageContent({ userContent, turnImages, suffix }),
     },
   ];
 }
 
 /**
- * 本轮 user 消息内容（#123）：
- * - 无历史配图 → 纯文本（`userContent` 与改动前逐字节一致，请求形态与缓存前缀都不动）；
- * - 有历史配图 → 内容块数组，**顺序为 [载荷文本, 配图标签, 图片块…, 输出契约尾]**：
- *   图片紧贴载荷（属于「课堂状态数据」的一部分）而不是落在输出契约之后——契约尾必须保持
- *   离输出最近（模型把它当"这是结构化任务"的最后一道信号；实测图放尾部会让模型把图误当成
- *   学生本轮发来的东西，出现「我没画过这张图」的错角色归因）。
+ * 本轮 user 消息内容（#123 + 2026-11-12 学生发图）：
+ * - 无图 → 纯文本（`userContent` 与改动前逐字节一致，请求形态与缓存前缀都不动）；
+ * - 有图 → 内容块数组，**顺序为 [载荷文本, 学生本轮的图, 老师板书图, 学生历史图, 输出契约尾]**：
+ *   学生本轮的图紧跟载荷（它就是学生这句话的一部分）；历史配图随后（属于「课堂状态数据」）；
+ *   契约尾必须保持离输出最近（模型把它当"这是结构化任务"的最后一道信号）。每张图前插一行
+ *   **分角色归属标签**（partitionTurnImages 分桶），模型不需要自己猜图是谁发的。
  */
 function buildUserMessageContent(args: {
   userContent: string;
-  historyImages: TeachingTurnMessageImage[];
+  turnImages: PartitionedTurnImages;
   suffix: string;
 }): ChatMessageContent {
-  if (args.historyImages.length === 0) return args.userContent;
+  const { learnerCurrent, teacherHistory, learnerHistory } = args.turnImages;
+  if (learnerCurrent.length === 0 && teacherHistory.length === 0 && learnerHistory.length === 0) {
+    return args.userContent;
+  }
   // userContent 此时可能已含 suffix（旧形状兜底路径）——先剥离，重新按 [载荷][图][契约尾] 组装
   const payloadText = args.suffix && args.userContent.endsWith(args.suffix)
     ? args.userContent.slice(0, -args.suffix.length)
     : args.userContent;
-  const withImages = buildVisionContent(payloadText, args.historyImages, {
-    label: '课堂配图：你（老师）上一轮发给学生的板书图',
-    context: 'teaching-turn/history',
-  });
-  if (!Array.isArray(withImages)) return withImages;
-  return [...withImages, { type: 'text', text: args.suffix }];
+  const parts: ChatContentPart[] = [{ type: 'text', text: payloadText }];
+  const appendGroup = (images: TeachingTurnMessageImage[], label: string) => {
+    for (const image of normalizeVisionImages(images, { context: 'teaching-turn/turn' })) {
+      const caption = typeof image.caption === 'string' ? image.caption.trim() : '';
+      parts.push({ type: 'text', text: caption ? `【${label}】${caption}` : `【${label}】` });
+      parts.push({ type: 'image_url', image_url: { url: image.url.trim() } });
+    }
+  };
+  appendGroup(learnerCurrent, '学生本轮发来的图');
+  appendGroup(teacherHistory, '课堂配图');
+  appendGroup(learnerHistory, '学生此前发来的图');
+  parts.push({ type: 'text', text: args.suffix });
+  return parts;
 }
 
 export const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingTurnOutput> = {

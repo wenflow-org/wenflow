@@ -170,6 +170,18 @@ export async function fetchPriorLearningRecap(params: {  userId: string;
     const sameTaskUnresolved = sameTaskFields?.unresolvedPoints ?? [];
     const sameTaskActionPlan = sameTaskFields ? sameTaskFields.actionPlan.slice(0, 3) : [];
 
+    // 同任务重学计数（2026-11-12 口径修正）：此前只数 completed+wrapup，paused/timeout 的
+    // 上一次学习完全不可见——实测重学课（上次 paused）开场拿不到 same-task 上下文，
+    // UI 横幅说「第 2 次学、补上次没掌握的」，老师却当第一次讲。计数口径改为全部
+    // 非活跃会话，与前端「第 N 次学」横幅一致。
+    const sameTaskAttempts = await prisma.teaching_sessions.findMany({
+      where: { userId, taskId: currentTaskId, status: { in: ['completed', 'paused', 'timeout'] } },
+      orderBy: { createdAt: 'desc' },
+      select: { status: true, endTime: true, createdAt: true },
+    });
+    const attemptCount = sameTaskAttempts.length;
+    const lastAttempt = sameTaskAttempts[0] || null;
+
     // 从教学会话里提取 recap 数据
     const toRecap = (session: any, relation: TeachingScenarioContext['lastLessonRecap']['relation']) => {
       const wrapup = session.wrapup ? parseJsonSafe(session.wrapup) : null;
@@ -183,7 +195,7 @@ export async function fetchPriorLearningRecap(params: {  userId: string;
         relation,
         sameTaskHistory: relation === 'same-task'
           ? {
-              attemptCount: sameTaskSessions.length,
+              attemptCount,
               lastStatus: sameTaskLatest?.status || '',
               lastEndTime: sameTaskLatest?.endTime?.toISOString?.() || null,
               lastSummary: topicSummary,
@@ -219,7 +231,7 @@ export async function fetchPriorLearningRecap(params: {  userId: string;
             sourceMilestoneTitle: milestoneTitle,
             sourceTaskTitle: prevTaskInMilestone?.title || null,
           },
-          sameTaskSessions: sameTaskSessions.length,
+          sameTaskSessions: attemptCount,
           lastSourceEndTime: prevTaskSessions.endTime ?? null,
         };
       }
@@ -254,7 +266,7 @@ export async function fetchPriorLearningRecap(params: {  userId: string;
               sourceMilestoneTitle: prevMilestone.title,
               sourceTaskTitle: null,
             },
-            sameTaskSessions: sameTaskSessions.length,
+            sameTaskSessions: attemptCount,
             lastSourceEndTime: prevMsSessions.endTime ?? null,
           };
         }
@@ -272,10 +284,37 @@ export async function fetchPriorLearningRecap(params: {  userId: string;
             sourceMilestoneTitle: milestoneTitle,
             sourceTaskTitle: null,
           },
-          sameTaskSessions: sameTaskSessions.length,
+          sameTaskSessions: attemptCount,
           lastSourceEndTime: sameTaskLatest?.endTime ?? null,
         };
       }
+    }
+    // 上次没走完（paused/timeout，无 wrapup）也必须承认这次是重学（2026-11-12）：
+    // 摘要不可得就给**最小 same-task 上下文**——开场提示词本就允许 unresolved 为空时
+    // 中性带过（「承认之前学过」），但绝不能因为缺 wrapup 就当第一次讲。
+    if (attemptCount > 0) {
+      return {
+        recap: {
+          sourceTopic: null,
+          topicSummary: null,
+          retrievalCue: null,
+          unresolvedPoints: [],
+          relation: 'same-task',
+          sourceStageNumber: currentStageNumber,
+          sourceMilestoneTitle: milestoneTitle,
+          sourceTaskTitle: null,
+          sameTaskHistory: {
+            attemptCount,
+            lastStatus: lastAttempt?.status || '',
+            lastEndTime: lastAttempt?.endTime?.toISOString?.() || lastAttempt?.createdAt?.toISOString?.() || null,
+            lastSummary: null,
+            lastUnresolvedPoints: [],
+            lastActionPlan: [],
+          },
+        },
+        sameTaskSessions: attemptCount,
+        lastSourceEndTime: lastAttempt?.endTime ?? null,
+      };
     }
 
     // 回退：同路径最近完成课（排除当前任务，原行为）
@@ -293,10 +332,10 @@ export async function fetchPriorLearningRecap(params: {  userId: string;
     if (lastEnded) {
       const recap = toRecap(lastEnded, 'last-any');
       if (recap) {
-        return { recap, sameTaskSessions: sameTaskSessions.length, lastSourceEndTime: lastEnded.endTime ?? null };
+        return { recap, sameTaskSessions: attemptCount, lastSourceEndTime: lastEnded.endTime ?? null };
       }
     }
-    return { recap: null, sameTaskSessions: sameTaskSessions.length, lastSourceEndTime: null };
+    return { recap: null, sameTaskSessions: attemptCount, lastSourceEndTime: null };
   } catch (error) {
     logger.warn('[TeachingContext] 拉取前序课程摘要失败（静默降级）', {
       error: error instanceof Error ? error.message : String(error),
