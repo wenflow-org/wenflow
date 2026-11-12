@@ -35,6 +35,10 @@ function isPlaceholder(secret) {
   // 1. 含 '--' 是 BEM 修饰符命名（如 CSS 类名 sk-rec-badge--core-ready），API 密钥不含连续连字符
   // 2. 纯小写字母+连字符（无数字/大写/下划线）是 kebab-case 标识符特征，真实密钥必有更高熵
   if (secret.includes('--') || /^sk-[a-z]+(?:-[a-z]+)*$/.test(normalized)) return true
+  // 3. BEM 元素命名（2026-11-12 CI 实证：sk-health-legend__label 误中）：
+  //    小写段-连字符主干 + __ 修饰符是 CSS 类名签名，真实密钥不含 __ 结构
+  //    （大小写混杂的随机串即使带 __ 也不会命中本条，仍会被标记）
+  if (/^sk-[a-z0-9]+(?:-[a-z0-9]+)*(__[a-z0-9][a-z0-9-]*)+$/.test(normalized)) return true
   return /(?:your|example|replace|redacted|placeholder|dummy|sample|fake|test|ci-only)/.test(normalized)
     || /^sk-\d+$/.test(normalized)
 }
