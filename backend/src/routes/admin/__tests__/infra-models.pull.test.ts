@@ -42,7 +42,12 @@ const testConnectionMock = apiConfigService.testConnection as jest.Mock;
 
 interface PullBody {
   success?: boolean;
-  data?: { kind?: string; endpoint?: string; models?: string[] };
+  data?: {
+    kind?: string;
+    endpoint?: string;
+    models?: string[];
+    modelOptions?: Array<{ id: string; inferredType: string }>;
+  };
   error?: string;
 }
 
@@ -98,6 +103,11 @@ describe('POST /admin/infra-models/pull', () => {
     expect(testConnectionMock).toHaveBeenCalledWith('https://gw.example/v1', 'saved-key');
     expect(body.data).toMatchObject({ kind: 'embedding', endpoint: 'https://gw.example/v1' });
     expect(body.data?.models).toEqual(['BAAI/bge-m3', 'BAAI/bge-reranker-v2-m3']);
+    // 与对话侧同一套软分类：前端按用途筛清单不再自己维护词表
+    expect(body.data?.modelOptions).toEqual([
+      { id: 'BAAI/bge-m3', inferredType: 'embedding' },
+      { id: 'BAAI/bge-reranker-v2-m3', inferredType: 'reranker' },
+    ]);
   });
 
   it('独立服务可用草稿连接去拉（还没保存也能拉）', async () => {

@@ -243,6 +243,49 @@ function sanitizeInteractionMeta(raw: unknown): InteractionMetaRecord | undefine
   return valid ? meta : undefined;
 }
 
+/**
+ * 清洗学生消息携带的图片（2026-11-12 视觉输入）。
+ * 只收 data:image（非 svg）与 http(s) URL；最多 4 张、单张 data URL ≤1.5M 字符、总量 ≤5M 字符
+ * （payload 会整体 JSON 落库两处，超限图不收）。非法项丢弃并留痕，不让一张坏图卡死整条消息。
+ */
+const LEARNER_IMAGE_MAX_COUNT = 4;
+const LEARNER_IMAGE_MAX_URL_CHARS = 1_500_000;
+const LEARNER_IMAGE_MAX_TOTAL_CHARS = 5_000_000;
+const LEARNER_IMAGE_URL_RE = /^(data:image\/(?!svg)[a-z0-9.+-]+;base64,|https?:\/\/)/i;
+
+export interface LearnerTurnImage {
+  url: string;
+  caption?: string;
+}
+
+function sanitizeLearnerImages(raw: unknown): LearnerTurnImage[] {
+  if (!Array.isArray(raw)) return [];
+  const out: LearnerTurnImage[] = [];
+  let totalChars = 0;
+  for (const item of raw.slice(0, LEARNER_IMAGE_MAX_COUNT)) {
+    if (!item || typeof item !== 'object') continue;
+    const url = typeof (item as Record<string, unknown>).url === 'string'
+      ? ((item as Record<string, unknown>).url as string).trim()
+      : '';
+    if (!url || url.length > LEARNER_IMAGE_MAX_URL_CHARS || !LEARNER_IMAGE_URL_RE.test(url)) {
+      logger.warn('[ai-teaching] 学生消息图片被丢弃（非法 URL 或超限）', {
+        reason: !url ? 'missing' : url.length > LEARNER_IMAGE_MAX_URL_CHARS ? 'too_large' : 'invalid_scheme',
+        sample: url.slice(0, 32),
+      });
+      continue;
+    }
+    if (totalChars + url.length > LEARNER_IMAGE_MAX_TOTAL_CHARS) {
+      logger.warn('[ai-teaching] 学生消息图片总量超限，停止接收', { kept: out.length });
+      break;
+    }
+    totalChars += url.length;
+    const captionRaw = (item as Record<string, unknown>).caption;
+    const caption = typeof captionRaw === 'string' ? captionRaw.trim().slice(0, 200) : '';
+    out.push(caption ? { url, caption } : { url });
+  }
+  return out;
+}
+
 const requireIdempotencyKey = (value: unknown): string => {
   const key = typeof value === 'string' ? value.trim() : '';
   if (!key || key.length > 128 || !/^[A-Za-z0-9._:-]+$/.test(key)) {
@@ -498,7 +541,8 @@ const handleStreamingMessage = async (
   message: string,
   expectedRevision: number,
   interactionMeta?: InteractionMetaRecord,
-  idempotencyKey?: string
+  idempotencyKey?: string,
+  images: LearnerTurnImage[] = []
 ) => {
   res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
@@ -524,7 +568,7 @@ const handleStreamingMessage = async (
   const stopHeartbeat = startSseHeartbeat(res);
 
   try {
-    const result = await aiTeachingCoordinator.processStudentMessage(sessionId, message, { expectedRevision, interactionMeta, idempotencyKey });
+    const result = await aiTeachingCoordinator.processStudentMessage(sessionId, message, { expectedRevision, interactionMeta, idempotencyKey, images });
     const synthetic = req.user?.projection?.grantSource === 'synthetic';
     const data = buildMessageResultData(result, synthetic);
     // 先落幂等账本再推 final：客户端断开后重发同 key 应拿到同一结果，而不是再跑一轮。
@@ -919,8 +963,10 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
 
     const { message } = req.body;
     const interactionMeta = sanitizeInteractionMeta(req.body?.meta);
+    const images = sanitizeLearnerImages(req.body?.images);
 
-    if (typeof message !== 'string' || message.trim().length === 0) {
+    // 2026-11-12 视觉输入：允许「只发图不打字」——message 与 images 至少一项非空
+    if ((typeof message !== 'string' || message.trim().length === 0) && images.length === 0) {
       return sendValidationError(res, '缺少消息内容');
     }
 
@@ -941,20 +987,21 @@ router.post('/sessions/:sessionId/messages', async (req: any, res) => {
         message,
         revision: expectedRevision,
         meta: interactionMeta ?? null,
+        images,
       }),
     });
     const synthetic = req.user?.projection?.grantSource === 'synthetic';
     if (resolveIdempotentReservation(res, reservation, wantsStream, (r) => buildMessageResultData(r, synthetic))) return;
 
     if (wantsStream) {
-      return handleStreamingMessage(req, res, sessionId, message, expectedRevision, interactionMeta, idempotencyKey);
+      return handleStreamingMessage(req, res, sessionId, message, expectedRevision, interactionMeta, idempotencyKey, images);
     }
 
     try {
       const result = await aiTeachingCoordinator.processStudentMessage(
         sessionId,
         message,
-        { expectedRevision, interactionMeta, idempotencyKey }
+        { expectedRevision, interactionMeta, idempotencyKey, images }
       );
 
       const data = buildMessageResultData(result, synthetic);

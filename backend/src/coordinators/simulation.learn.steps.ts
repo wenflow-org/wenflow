@@ -598,6 +598,67 @@ export function demoteProfileKnownConcepts(
   return { ...source, knownConcepts, struggleConcepts };
 }
 
+/**
+ * 把教师本轮的课堂白板/结构图压成一段「学习者可见」的文本，附在教师消息末尾。
+ *
+ * 背景（2026-11-11 外部评审隐患 3）：teaching-turn 的「图文互锁」要求正文不罗列图上的
+ * 分支/数值，只说「直接看图」。真实学生看得见前端渲染的 SVG/Mermaid，但虚拟学习者的
+ * visibleContext 只有 reply 文本 —— 不把图面内容带进去，学员就会回「图在哪/没看到数字」。
+ * 这里只做确定性序列化，不改教师原文，不影响前端渲染。
+ */
+export function buildTeacherWhiteboardText(
+  source: { diagrams?: unknown[]; figures?: unknown[] } | null | undefined
+): string {
+  const figures = Array.isArray(source?.figures) ? source!.figures : [];
+  const diagrams = Array.isArray(source?.diagrams) ? source!.diagrams : [];
+  if (!figures.length && !diagrams.length) return '';
+
+  const clip = (value: string, max: number): string =>
+    value.length > max ? `${value.slice(0, max)}…` : value;
+  const lines: string[] = [
+    '【课堂白板】老师本轮展示了图，以下是你屏幕上能直接看到的图面内容（据此理解，不要问「图在哪」）：',
+  ];
+  let count = 0;
+  for (const raw of figures) {
+    const figure = raw as Record<string, unknown> | null;
+    if (!figure || typeof figure !== 'object') continue;
+    const kind = typeof figure.kind === 'string' && figure.kind.trim() ? figure.kind.trim() : '示意图';
+    const caption = typeof figure.caption === 'string' && figure.caption.trim()
+      ? `（${figure.caption.trim()}）`
+      : '';
+    const spec = figure.spec && typeof figure.spec === 'object'
+      ? figure.spec
+      : {
+          ...(figure.axis ? { axis: figure.axis } : {}),
+          ...(figure.marks ? { marks: figure.marks } : {}),
+          ...(figure.spans ? { spans: figure.spans } : {}),
+          ...(figure.guides ? { guides: figure.guides } : {}),
+        };
+    lines.push(`- ${kind}${caption}：${clip(JSON.stringify(spec), 1200)}`);
+    count += 1;
+    if (count >= 4) break;
+  }
+  for (const raw of diagrams) {
+    const diagram = raw as Record<string, unknown> | null;
+    if (!diagram || typeof diagram.code !== 'string' || !diagram.code.trim()) continue;
+    const caption = typeof diagram.caption === 'string' && diagram.caption.trim()
+      ? `（${diagram.caption.trim()}）`
+      : '';
+    lines.push(`- 结构图${caption}（Mermaid，前端会渲染成图形）：\n${clip(diagram.code.trim(), 1200)}`);
+    count += 1;
+    if (count >= 4) break;
+  }
+  return lines.length > 1 ? `\n\n${lines.join('\n')}` : '';
+}
+
+/** 教师消息 + 白板文本（写入模拟会话的 conversationHistory 时使用）。 */
+export function buildTeacherVisibleContent(
+  aiResponse: string,
+  source: { diagrams?: unknown[]; figures?: unknown[] } | null | undefined
+): string {
+  return `${aiResponse || ''}${buildTeacherWhiteboardText(source)}`;
+}
+
 /** 组装本回合结束后的 teaching 状态（进度快照 + 学习者状态 + taskRuntime + 对话历史）。 */
 export function buildNextLearningState(params: {
   learningState: TeachingState;
@@ -624,6 +685,8 @@ export function buildNextLearningState(params: {
   aiResponse: string;
   /** 本轮教师配图（#123）：随教师消息一起进学习者可见上下文 */
   teacherImages?: ConversationHistoryItem['images'];
+  /** 本轮课堂白板/结构图的文本化内容（见 buildTeacherWhiteboardText）：让模拟学习者"看得见图" */
+  teacherWhiteboard?: string;
   /** 延伸学（#124）：本轮结束后的延伸运行时（回合计数/收尾），缺省沿用 learningState */
   extensionRuntime?: TeachingState['extensionRuntime'];
   /** 本轮写入可见历史的用户消息（检查点提交时与 payload 对齐）；缺省用虚拟学习者原话 */
@@ -649,6 +712,7 @@ export function buildNextLearningState(params: {
     teachingSessionId,
     aiResponse,
     teacherImages,
+    teacherWhiteboard,
     extensionRuntime,
     learnerVisibleMessage,
     lessonKnowledgePoints,
@@ -709,7 +773,7 @@ export function buildNextLearningState(params: {
       // 教师配图随教师消息回流（#123）：下一轮模拟学习者请求组装时转 image_url 内容块
       {
         role: 'assistant',
-        content: aiResponse,
+        content: `${aiResponse || ''}${teacherWhiteboard || ''}`,
         ...(Array.isArray(teacherImages) && teacherImages.length > 0 ? { images: teacherImages } : {})
       }
     ]

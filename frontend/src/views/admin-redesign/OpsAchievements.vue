@@ -66,11 +66,23 @@
         <!-- 搜索槽位统一（2026-10-15 用户拍板全站列表页）：搜索移到右组首位；
              「查询」钮随搜索框一起移（它是搜索的提交动作，贴着输入框才读得出从属） -->
         <div class="mk-card__head-right">
-          <MkFilterSearch v-model="recordSearch" placeholder="搜索姓名 / 邮箱" @keydown.enter="reloadRecordsFromFirstPage" />
+          <!-- 2026-11-11（困惑测试 #9）：解锁记录的搜索是服务端查询，需回车/点「查询」才生效；
+               与同页反馈页签的即输即滤不是一套交互，占位符写明提交方式（对齐 ExecLogs 判例）。 -->
+          <MkFilterSearch v-model="recordSearch" placeholder="搜索姓名 / 邮箱（回车查询）" aria-label="搜索姓名 / 邮箱（回车查询）" @keydown.enter="reloadRecordsFromFirstPage" />
           <button type="button" class="mk-btn mk-btn--sm" @click="reloadRecordsFromFirstPage">查询</button>
         </div>
       </div>
       <MockSkeletonTable v-if="recordsLoading && !records.length" :cols="6" />
+      <!-- 失败优先于旧数据：刷新失败时不能继续把上一页的行当成本次结果 -->
+      <MkEmptyState
+        v-else-if="recordsFailed"
+        min
+        tone="error"
+        title="解锁记录加载失败"
+        description="无法读取解锁记录，读数可能不完整。"
+        action-text="重试"
+        @action="reloadRecords"
+      />
       <div v-else-if="records.length" class="mk-table-scroll ac-list">
         <!-- 固定列宽（2026-10-22 与教学组三表同判例）：成就/用户两列在 auto 布局下按当页最长
              名称分宽，翻页整表跳动；fixed 后按表头定死，余量按权重摊开。双行单元格由
@@ -127,19 +139,11 @@
         </table>
       </div>
       <MkEmptyState
-        v-else-if="recordsFailed"
-        min
-        title="解锁记录加载失败"
-        description="无法读取解锁记录，读数可能不完整。"
-        action-text="重试"
-        @action="reloadRecords"
-      />
-      <MkEmptyState
         v-else
         :title="isRecordsFiltered ? '没有符合筛选条件的解锁记录' : '还没有解锁记录'"
         :description="isRecordsFiltered
           ? '当前搜索/筛选条件下无匹配记录，可清除筛选查看全部。'
-          : ''"
+          : '还没有学员解锁成就。达成条件后系统会自动发放，也可以在「成就定义」里手动发放。'"
         min
         :action-text="isRecordsFiltered ? '清除筛选' : ''"
         @action="clearRecordsFilters"
@@ -326,7 +330,6 @@ async function loadDefs() {
     defs.value = (res.data?.data ?? res.data) || []
   } catch (e) {
     defsFailed.value = true
-    toast.error(`加载失败：${errMsg(e)}`)
   } finally {
     defsLoading.value = false
   }
@@ -406,7 +409,6 @@ async function reloadRecords() {
     totalRecords.value = body.pagination?.total ?? records.value.length
   } catch (e) {
     recordsFailed.value = true
-    toast.error(`加载失败：${errMsg(e)}`)
   } finally {
     recordsLoading.value = false
   }
@@ -526,6 +528,7 @@ function searchGrantUser() {
 }
 
 async function confirmGrant() {
+  if (granting.value) return
   if (!grantUserId.value || !grantTarget.value) { errors.value.user = '请选择用户'; return }
   granting.value = true
   grantError.value = ''

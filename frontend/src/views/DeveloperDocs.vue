@@ -8,12 +8,12 @@
           <span class="docs-brand__name">问流</span>
           <span class="docs-brand__tag">开发者</span>
         </router-link>
-        <nav class="docs-nav__links">
-          <a href="#quickstart">快速开始</a>
-          <a href="#architecture">架构</a>
-          <a href="#skill-dev">Skill 开发</a>
-          <a href="#console">控制台</a>
-          <a href="#api">API</a>
+        <nav class="docs-nav__links" aria-label="文档章节">
+          <a href="#quickstart" :class="{ on: active === 'quickstart' }" :aria-current="active === 'quickstart' ? 'location' : undefined">快速开始</a>
+          <a href="#architecture" :class="{ on: active === 'architecture' }" :aria-current="active === 'architecture' ? 'location' : undefined">架构</a>
+          <a href="#skill-dev" :class="{ on: active === 'skill-dev' }" :aria-current="active === 'skill-dev' ? 'location' : undefined">Skill 开发</a>
+          <a href="#console" :class="{ on: active === 'console' }" :aria-current="active === 'console' ? 'location' : undefined">控制台</a>
+          <a href="#api" :class="{ on: active === 'api' }" :aria-current="active === 'api' ? 'location' : undefined">API</a>
         </nav>
         <router-link to="/" class="docs-nav__back">返回首页</router-link>
       </div>
@@ -35,21 +35,21 @@
       <aside class="docs-side">
         <div class="docs-side__group">
           <span class="docs-side__title">入门</span>
-          <a href="#quickstart" :class="{ on: active === 'quickstart' }">快速开始</a>
-          <a href="#architecture" :class="{ on: active === 'architecture' }">架构总览</a>
-          <a href="#env" :class="{ on: active === 'env' }">环境变量</a>
+          <a href="#quickstart" :class="{ on: active === 'quickstart' }" :aria-current="active === 'quickstart' ? 'location' : undefined">快速开始</a>
+          <a href="#architecture" :class="{ on: active === 'architecture' }" :aria-current="active === 'architecture' ? 'location' : undefined">架构总览</a>
+          <a href="#env" :class="{ on: active === 'env' }" :aria-current="active === 'env' ? 'location' : undefined">环境变量</a>
         </div>
         <div class="docs-side__group">
           <span class="docs-side__title">核心</span>
-          <a href="#skills" :class="{ on: active === 'skills' }">Skill 体系</a>
-          <a href="#prompts" :class="{ on: active === 'prompts' }">Prompt 工程</a>
-          <a href="#skill-dev" :class="{ on: active === 'skill-dev' }">开发一个 Skill</a>
+          <a href="#skills" :class="{ on: active === 'skills' }" :aria-current="active === 'skills' ? 'location' : undefined">Skill 体系</a>
+          <a href="#prompts" :class="{ on: active === 'prompts' }" :aria-current="active === 'prompts' ? 'location' : undefined">Prompt 工程</a>
+          <a href="#skill-dev" :class="{ on: active === 'skill-dev' }" :aria-current="active === 'skill-dev' ? 'location' : undefined">开发一个 Skill</a>
         </div>
         <div class="docs-side__group">
           <span class="docs-side__title">工具</span>
-          <a href="#console" :class="{ on: active === 'console' }">控制台</a>
-          <a href="#api" :class="{ on: active === 'api' }">API 参考</a>
-          <a href="#testing" :class="{ on: active === 'testing' }">测试与质量</a>
+          <a href="#console" :class="{ on: active === 'console' }" :aria-current="active === 'console' ? 'location' : undefined">控制台</a>
+          <a href="#api" :class="{ on: active === 'api' }" :aria-current="active === 'api' ? 'location' : undefined">API 参考</a>
+          <a href="#testing" :class="{ on: active === 'testing' }" :aria-current="active === 'testing' ? 'location' : undefined">测试与质量</a>
         </div>
       </aside>
 
@@ -363,7 +363,10 @@ import { useIsDark } from '@/composables/useIsDark';
 const isDark = useIsDark();
 import { toast } from '../utils/toast'
 
-const active = ref('quickstart')
+/* 深链 #api 直达时，目录当前项应与地址一致（此前固定落在「快速开始」，
+   滚动事件在首屏不一定触发） */
+const initialHash = typeof window !== 'undefined' ? window.location.hash.slice(1) : ''
+const active = ref(initialHash || 'quickstart')
 
 async function copy(e: MouseEvent) {
   const block = (e.currentTarget as HTMLElement).closest('.code')
@@ -390,7 +393,10 @@ function onScroll() {
   active.value = current
 }
 
-onMounted(() => window.addEventListener('scroll', onScroll, { passive: true }))
+onMounted(() => {
+  window.addEventListener('scroll', onScroll, { passive: true })
+  onScroll()
+})
 onUnmounted(() => window.removeEventListener('scroll', onScroll))
 </script>
 
@@ -435,11 +441,20 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
   text-decoration: none;
   font-size: 13px;
   font-weight: 600;
-  padding: 5px 6px;
+  /* 触控地板 36：与页脚/导航链接同一硬线；桌面只多 4px 高，不改变视觉节奏 */
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 6px;
+  border-radius: 6px;
 }
-.docs-nav__links a:hover { color: var(--blue); }
+.docs-nav__links a:hover { color: var(--blue); background: var(--mk-surface-2); }
+.docs-nav__links a.on { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 8%, var(--surface)); }
 .docs-nav__back {
-  padding: 7px 14px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 14px;
   border: 1px solid var(--line);
   border-radius: 8px; /* 圆角阶梯：控件 */
   color: var(--muted);
@@ -448,8 +463,28 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
   text-decoration: none;
 }
 .docs-nav__back:hover { color: var(--blue); border-color: color-mix(in srgb, var(--blue) 40%, transparent); }
+/* ≤860：章节导航不再整排隐藏（手机上原先没有任何目录入口），改为顶栏第二行横向滚动；
+   侧栏仍收起，避免长目录吃掉正文高度。 */
 @media (max-width: 860px) {
-  .docs-nav__links { display: none; }
+  .docs-nav__inner {
+    height: auto;
+    min-height: 58px;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    padding: 6px 16px;
+  }
+  .docs-nav__back { margin-left: auto; }
+  .docs-nav__links {
+    order: 10;
+    flex: 1 0 100%;
+    gap: 4px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
+  }
+  .docs-nav__links::-webkit-scrollbar { display: none; }
+  .docs-nav__links a { flex: none; padding: 0 10px; }
 }
 
 /* ---------- 标题区 ---------- */
@@ -499,6 +534,8 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
 }
 @media (max-width: 860px) {
   .docs-side { display: none; }
+  /* 顶栏在窄屏变两行（品牌/返回 + 章节条），锚点落位要避开整条吸顶栏 */
+  .docs-sec { scroll-margin-top: 112px; }
 }
 .docs-side__group { display: grid; gap: 2px; }
 .docs-side__title {
@@ -643,8 +680,12 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
   border: 1px solid #2a3c58;
   background: transparent;
   color: #9db8dc;
-  padding: 4px 10px;
-  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* 24 → 36：仓库可点元素硬线；原 24px 在触屏上几乎点不中 */
+  min-height: 36px;
+  padding: 0 12px;
   border-radius: 6px;
   font-size: 12px;
   cursor: pointer;

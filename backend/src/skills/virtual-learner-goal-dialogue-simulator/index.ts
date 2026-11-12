@@ -58,6 +58,13 @@ export interface GoalLearnerSimulationInput {
 export interface GoalLearnerSimulationOutput {
   reply: string;
   emotion: 'neutral' | 'slightly_frustrated' | 'happy' | 'confident' | 'confused' | string;
+  /**
+   * 本轮之后真人是否暂时不再发消息（去忙/离线/已得到答案/明确拒绝）。
+   * 协调器据此提前收尾 Goal 回合，避免"告别死循环"（2026-11-11 真机 8 轮复读）。
+   */
+  shouldEnd?: boolean;
+  /** shouldEnd=true 的一句话原因：leaving|satisfied|declining|no_more_questions */
+  endReason?: string;
   /** 当 LLM 失败/校验失败时返回兜底数据, 评估时应排除这些 turn */
   degraded?: boolean;
   learnerState: {
@@ -108,6 +115,9 @@ export const virtualLearnerGoalDialogueSimulatorDefinition: SkillDefinition = {
     properties: {
       reply: { type: 'string', description: '学习者自然回复' },
       emotion: { type: 'string', description: '当前情绪' },
+      // 离场语义（2026-11-11）：协调器直接消费，不进字段路由；admin 契约视图需与 core fields 对齐
+      shouldEnd: { type: 'boolean', description: '本轮之后真人是否暂时不再发消息（去忙/离线/得到答案/拒绝）' },
+      endReason: { type: 'string', description: 'shouldEnd=true 的原因：leaving|satisfied|declining|no_more_questions' },
       learnerState: { type: 'object', description: 'Goal 阶段学习者主观状态' },
       debug: { type: 'object', description: '调试信息' },
     },
@@ -171,6 +181,8 @@ function buildFallback(input: GoalLearnerSimulationInput): GoalLearnerSimulation
   return {
     reply,
     emotion: 'neutral',
+    shouldEnd: false,
+    endReason: '',
     learnerState: {
       phaseFocus,
       feltUnderstood: clamp01(previous.feltUnderstood, phaseFocus === 'opening' ? 0.25 : 0.58),
@@ -216,6 +228,9 @@ function normalizeOutput(parsed: any, input: GoalLearnerSimulationInput): GoalLe
   return {
     reply: sanitizeVisibleContent(parsed?.reply) || fallback.reply,
     emotion: safeText(parsed?.emotion) || fallback.emotion,
+    // 只有显式 true 才收尾；字段缺失/非法一律按继续对话处理（旧模型输出零变化）。
+    shouldEnd: parsed?.shouldEnd === true,
+    endReason: parsed?.shouldEnd === true ? safeText(parsed?.endReason).slice(0, 40) : '',
     learnerState: {
       phaseFocus,
       feltUnderstood: clamp01(rawState.feltUnderstood, fallback.learnerState.feltUnderstood),
@@ -291,7 +306,8 @@ function buildUserPayload(input: GoalLearnerSimulationInput) {
         'reply only as the learner',
         'in proposal_evaluation, evaluate proposal fit and task relevance instead of goal confidence',
         'apply friction.guidance to decide whether this turn shows adversarial/failure/emotional patterns',
-        'let personaAnchorHint fields implicitly steer reply style, do not name them'
+        'let personaAnchorHint fields implicitly steer reply style, do not name them',
+        'set shouldEnd=true only when a real person would stop replying now (leaving, satisfied, declining, no more questions); never on a normal answer or a pending proposal evaluation'
       ],
       ...(input.task || {})
     }

@@ -43,7 +43,7 @@ rules:
   - 只总结本节课内发生的进展、困难与下一步建议，不要把历史已掌握内容误写为本节新增成果
   - knowledgeItems 优先复用输入 knowledgePoints 的名称、状态、progress
   - practiceAdvice 必须贴合 taskType：reading 偏阅读复盘，practice 偏练习巩固，project 偏产出推进，quiz 偏错题回顾
-  - actionPlan 中至少 1 条必须是检索式自测（如"不看笔记，能说出 X 的三个要点吗"）；若本节课存在复习点（status=review）或已掌握但易遗忘的概念，必须额外给出 1 条"下一课开场检索题"原文（供 teaching-turn 开场承接，如"下一节开场先问：…"）
+  - actionPlan 中至少 1 条必须是**间隔迁移微挑战**（2026-11-10 改造：禁止「不看笔记，能说出 X 的三个要点吗」这类背诵题；改为「遇到[具体新情境/反例]时，不看笔记用今天学的框架判断该怎么处理」——新课的迁移种子，不是旧知的复述清单）；若本节课存在复习点（status=review）或已掌握但易遗忘的概念，必须额外给出 1 条"下一课开场迁移题"原文（供 teaching-turn 开场承接，如"下一节开场先判这个现场：…"——**给一个具体小场景而非问定义**，与 teaching-turn 的「课内温故 · 间隔迁移协议」同口径）
   - 记忆保持率引用（knowledgeContext.reviewHints）：仅当输入提供了非空的【记忆保持率提示】分区（FSRS 公式算出的记忆保持率，每项含 concept 与 retrievability 0-1 数值）时，才可在 summary.knowledgeSummary 或 actionPlan 中引用其中 1-2 条即将遗忘的概念；数值必须逐字取自输入给出的百分比，禁止编造、修改或"估计"数值。输入未提供、或该分区为 null/[] 时，summary 与 metricInterpretation 中一律不得出现"保持率""记忆保持""记得几成""记得百分之几"等任何形式的记忆保持量化表述，也不得用 learningState 的内部字段（如 lsb/ktl）冒充保持率
   - summary 是给学生看的，禁止直接复述内部字段名或状态码，如 mastered、newlyMastered、avgUnderstanding、sessionKtl
   - 如果输入提供了阶段轨迹、课堂事件或结束原因，必须优先用它们解释本节课是如何推进、卡住、检核和结束的

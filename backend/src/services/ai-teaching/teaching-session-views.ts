@@ -247,6 +247,71 @@ export function ensureOpeningActionLine(
 }
 
 /**
+ * 开场材料落地护栏（2026-11-12 实测「开场问题非常严重」）：提示词已明文
+ * 「给定清单必须露出来——屏幕上没有的东西不许假装学生已经看到」，模型仍会把
+ * taskDescription 里的对话/清单说成「这段/上面给的」而不摆本体——学生第一屏
+ * 看不到任何材料，课从第一句就悬空（跑步咨询重学课：开场说「这段对话里…」，
+ * 对话本体不在屏幕上）。确定性兜底：description 命中材料线索词且含 ≥2 条
+ * 编号材料行（「轮N…」「1. …」）而开场 message 未含大半时，整块补挂到 message。
+ */
+const OPENING_MATERIAL_CUE_RE = /(下面这段|下面这\s*\d|给出以下|给出的?\s*\d+\s*(条|个|句|段|组)|完整给出|逐轮对照)/;
+const OPENING_MATERIAL_LINE_RE = /^(轮\s*\d+|\d{1,2}\s*[.、）)])/;
+
+export function extractOpeningMaterialLines(description: string): string[] {
+  return String(description || '')
+    .split(/(?<=[。；;？！!?])/)
+    .map((line) => line.trim())
+    .filter((line) => OPENING_MATERIAL_LINE_RE.test(line) && line.length >= 6);
+}
+
+export function ensureOpeningMaterialGrounding(
+  opening: TeachingOpening,
+  context: TeachingScenarioContext,
+): TeachingOpening {
+  const description = context.taskDescription || '';
+  if (!OPENING_MATERIAL_CUE_RE.test(description)) return opening;
+  const lines = extractOpeningMaterialLines(description);
+  if (lines.length < 2) return opening;
+  const message = String(opening.message || '');
+  const anchorOf = (line: string) => line.slice(0, Math.min(12, line.length));
+  const present = lines.filter((line) => message.includes(anchorOf(line))).length;
+  if (present >= Math.ceil(lines.length * 0.6)) return opening;
+  return {
+    ...opening,
+    message: `${message}\n\n本课材料先摆出来（后面都围绕它）：\n${lines.join('')}`,
+  };
+}
+
+/**
+ * 开场示例口径护栏（2026-11-12 实证 st_1794451502004：任务描述明确写「豆包收到…后的一段
+ * **示例**回复」，开场却改写成「这段豆包回复**你大概见过**」——把合成示例升格成学习者
+ * 见过的真实经历。来源诚实的开场层漏洞：材料落地了，但定性被改了）。
+ * 确定性兜底：description 带「示例/仿真/示意/仿写」标记时，开场里「你大概见过/你肯定
+ * 遇到过」类假定共享经验的**陈述**（疑问句「你见过…吗」不算）改写为「（示例）」。
+ */
+const OPENING_SAMPLE_MARK_RE = /(示例|仿真|示意|仿写|虚构)/;
+const OPENING_SHARED_EXP_RE = /你(大概|也许|多半|可能|肯定|八成)(曾经)?(见过|遇到过|碰到过)/g;
+
+export function ensureOpeningSampleHonesty(
+  opening: TeachingOpening,
+  context: TeachingScenarioContext,
+): TeachingOpening {
+  const description = context.taskDescription || '';
+  if (!OPENING_SAMPLE_MARK_RE.test(description)) return opening;
+  const message = String(opening.message || '');
+  if (!OPENING_SHARED_EXP_RE.test(message)) return opening;
+  OPENING_SHARED_EXP_RE.lastIndex = 0;
+  const rewritten = message.replace(OPENING_SHARED_EXP_RE, (claim, _adv, _ever, _verb, offset: number) => {
+    // 疑问形态（「你见过…吗？」「你遇到过…没？」）是向学习者提问，不是经验断言——不动
+    const window = message.slice(offset + claim.length, offset + claim.length + 12);
+    if (/[吗呢没？?]/.test(window)) return claim;
+    return '（示例）';
+  });
+  if (rewritten === message) return opening;
+  return { ...opening, message: rewritten };
+}
+
+/**
  * 开场正文拼装：`question` 是可选字段（与 quickReplies 互斥，见 TeachingOpening 契约；
  * 确定性兜底 `buildDeterministicOpening` 就只给 quickReplies），裸 `${message}\n\n${question}`
  * 会把字面量 "undefined" 写进落库消息 —— 那是学习者直接看到的第一句话

@@ -114,7 +114,8 @@
         <button
           type="button"
           class="mshell__menu-btn mshell__square-btn"
-          aria-label="打开导航"
+          :title="mobileNavOpen ? '关闭导航' : '打开导航'"
+          :aria-label="mobileNavOpen ? '关闭导航' : '打开导航'"
           :aria-expanded="mobileNavOpen ? 'true' : 'false'"
           @click="mobileNavOpen = !mobileNavOpen"
         >
@@ -130,7 +131,7 @@
         >
           <ChevronLeft :size="18" :stroke-width="1.75" aria-hidden="true" />
         </button>
-        <div class="mshell__top-crumb">
+        <div class="mshell__top-crumb" :title="crumbTitleText">
           <span v-if="topSub" class="mshell__top-sub">{{ topSub }}</span>
           <span v-if="topSub" class="mshell__top-sep" aria-hidden="true">/</span>
           <strong class="mshell__top-title">{{ topTitle }}</strong>
@@ -146,9 +147,10 @@
             class="mshell__search-input"
             type="text"
             role="combobox"
-            :aria-expanded="searchOpen && !!searchHits.length"
-            aria-controls="mshell-search-list"
+            :aria-expanded="searchPopoverOpen ? 'true' : 'false'"
+            :aria-controls="searchPopoverOpen ? 'mshell-search-list' : undefined"
             aria-autocomplete="list"
+            aria-keyshortcuts="/"
             :aria-activedescendant="searchActiveId || undefined"
             placeholder="搜索页面"
             aria-label="搜索页面，按 / 聚焦"
@@ -159,8 +161,8 @@
             @keydown.up.prevent="searchMove(-1)"
             @keydown.escape.prevent="closeSearch"
           />
-          <kbd class="mshell__search-kbd" aria-hidden="true">/</kbd>
-          <div v-if="searchOpen && searchQuery.trim()" id="mshell-search-list" class="mshell__search-pop" role="listbox" aria-label="页面搜索结果">
+          <kbd class="mshell__search-kbd" aria-hidden="true" title="按 / 快速聚焦搜索">/</kbd>
+          <div v-if="searchPopoverOpen" id="mshell-search-list" class="mshell__search-pop" role="listbox" aria-label="页面搜索结果">
             <button
               v-for="(hit, i) in searchHits"
               :id="`mshell-search-opt-${hit.scene.id}`"
@@ -213,20 +215,23 @@
         >
           <RotateCw :size="16" :stroke-width="1.75" :class="{ 'mshell__spin': liveLoading }" aria-hidden="true" />
         </button>
+        <!-- 2026-11-11 困惑测试 #109：纯图标按钮在页面上没有任何可见文字，
+             读健康检查的人找不到术语解释的入口；改带可见「术语表」文字。 -->
         <button
           type="button"
-          class="mshell__top-btn"
+          class="mshell__top-btn mshell__top-btn--text"
           :title="GLOSSARY_BTN_LABEL"
           :aria-label="GLOSSARY_BTN_LABEL"
           @click="$emit('glossary')"
         >
           <CircleHelp :size="16" :stroke-width="1.75" aria-hidden="true" />
+          <span>术语表</span>
         </button>
         <button
           v-if="release"
           type="button"
           class="mshell__top-btn"
-          :title="density === 'compact' ? '当前紧凑密度' : '当前标准密度'"
+          :title="density === 'compact' ? '切换至标准密度' : '切换至紧凑密度'"
           :aria-label="density === 'compact' ? '切换至标准密度' : '切换至紧凑密度'"
           @click="toggleDensity"
         >
@@ -248,6 +253,7 @@
           <button
             type="button"
             class="mshell__userchip"
+            :title="adminName"
             :aria-expanded="userMenuOpen ? 'true' : 'false'"
             aria-haspopup="menu"
             @click="userMenuOpen = !userMenuOpen"
@@ -344,7 +350,25 @@ function onScroll() {
   backtopVisible.value = !!host && host.scrollTop > 200
 }
 function backToTop() {
-  scrollHost()?.scrollTo({ top: 0, behavior: 'smooth' })
+  const host = scrollHost()
+  if (!host) return
+  /* 2026-11-11（困惑测试 #5）：平滑滚动是 rAF 驱动的动画，在无帧输出的浏览上下文
+     （窗口失焦 / 被遮挡 / 自动化环境）里永不推进，按钮点了「零反应」。改为「能动画就动画，
+     否则必达」：先按 prefers-reduced-motion 决定是否 smooth，再用 250ms 看门狗兜底——
+     还没动就瞬时回顶。功能按钮不允许有「点了没反应」的分支。 */
+  const reduced = typeof window !== 'undefined' && window.matchMedia
+    ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    : false
+  const before = host.scrollTop
+  try {
+    host.scrollTo({ top: 0, behavior: reduced ? 'auto' : 'smooth' })
+  } catch {
+    host.scrollTop = 0
+  }
+  window.setTimeout(() => {
+    // 平滑动画在 250ms 内至少应前进一段；原地不动（含 0 帧环境）就直接落到顶部
+    if (host.scrollTop >= before - 1) host.scrollTop = 0
+  }, 250)
 }
 onMounted(() => {
   // 滚动事件不冒泡，但捕获阶段可命中后代滚动容器（.mk-page）
@@ -352,6 +376,7 @@ onMounted(() => {
   onScroll()
   document.addEventListener('click', onDocDown)
   document.addEventListener('keydown', onGlobalKey)
+  window.addEventListener('storage', onStorage)
   collapseMq = window.matchMedia('(max-width: 1024px)')
   syncForcedCollapse()
   collapseMq.addEventListener('change', syncForcedCollapse)
@@ -363,6 +388,7 @@ onBeforeUnmount(() => {
   contentEl.value?.removeEventListener('scroll', onScroll, true)
   document.removeEventListener('click', onDocDown)
   document.removeEventListener('keydown', onGlobalKey)
+  window.removeEventListener('storage', onStorage)
   collapseMq?.removeEventListener('change', syncForcedCollapse)
   mobileMq?.removeEventListener('change', syncMobileNavViewport)
 })
@@ -373,6 +399,9 @@ const userMenuRef = ref<HTMLElement | null>(null)
 const searchRef = ref<HTMLElement | null>(null)
 const searchQuery = ref('')
 const searchOpen = ref(false)
+/* 结果弹层真实可见的条件：聚焦/打开 + 有关键词。aria-expanded / aria-controls 跟它走——
+   此前 aria-expanded 还要求「有命中」，无命中时空态弹层明明显示着，读屏却报「已折叠」。 */
+const searchPopoverOpen = computed(() => searchOpen.value && !!searchQuery.value.trim())
 /* 转搜出口要 push 深链；无 Router 上下文（单测直接 mount 本组件）时整体降级为不发导航，
    不调 useRouter()（那会往控制台打注入告警）。 */
 const router = getCurrentInstance()?.appContext.config.globalProperties.$router as Router | undefined
@@ -393,8 +422,10 @@ const topTitle = computed(() => {
 const topSub = computed(() => {
   if (props.crumb) {
     const parts = props.crumb.split(' / ')
-    // 深层链会以「…」占位（AdminConsole CRUMB_MAX_DEPTH）：副行取第一个真实段
-    if (parts.length > 1) return parts.find((p) => p && p !== '…') || ''
+    /* 多层链（最多 3 段）副行保留「除当前实体外的整条上级链」。
+       原实现只取第一个真实段，把中间的学习者层吃掉了：用户账号 / cs / 课堂
+       在顶栏只剩「用户账号 / 课堂」（2026-11-11 课堂面包屑走查）。 */
+    if (parts.length > 1) return parts.slice(0, -1).join(' / ')
     const parentPage = currentScene.value?.label ?? ''
     if (parentPage && parentPage !== topTitle.value) return parentPage
     return currentScene.value?.group ?? ''
@@ -403,6 +434,14 @@ const topSub = computed(() => {
      「虚拟学习者 / 虚拟学习者」的头——同详情页「沈奕航 / 沈奕航」同一条判例） */
   const group = currentScene.value?.group ?? ''
   return group === currentScene.value?.label ? '' : group
+})
+/* 顶栏可见面包屑可能被 CSS 省略号截断（长实体名 / 深链），把完整链路放进 title。
+   优先用父级传来的完整链（超过 3 段时 AdminConsole 的可见文本会被折成「… / a / b / c」），
+   否则用当前渲染的两段——title 至少与屏幕上的文字一致。 */
+const crumbTitleText = computed(() => {
+  const visible = [topSub.value, topTitle.value].filter(Boolean).join(' / ')
+  const full = props.crumbTitle || ''
+  return full.length > visible.length ? full : visible
 })
 
 /** 页面搜索结果：额外带上「为什么命中」（2026-11-02 评审 R6）。
@@ -498,11 +537,17 @@ function onGlobalKey(e: KeyboardEvent) {
     if (hasActiveEscapeLayer()) return
     userMenuOpen.value = false
     mobileNavOpen.value = false
+    // 焦点已离开搜索框时（Tab 到结果/别处），输入框自己的 Esc 收不到，弹层会一直浮着
+    if (searchPopoverOpen.value) closeSearch()
     return
   }
   if (e.key !== '/') return
   const t = e.target as HTMLElement | null
   if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+  /* ≤768 顶栏搜索框按原型判例整块 display:none：此时不要再抢焦点。
+     浏览器对 display:none 元素 focus 通常无操作，但这依赖 UA 实现且焦点会莫名丢失；
+     与 CSS 断点共用同一个 MediaQueryList，窄屏下 `/` 明确不处理。 */
+  if (mobileMq?.matches) return
   e.preventDefault()
   searchRef.value?.querySelector<HTMLInputElement>('input')?.focus()
 }
@@ -687,20 +732,23 @@ const adminUser = ref(readAdminUser())
 const adminName = computed(() => adminUser.value.name)
 /** 角色枚举只有 admin / user 两档（鉴权看 isAdmin）；未知值不硬翻成「管理员」 */
 const adminRoleLabel = computed(() => (adminUser.value.role === 'admin' ? '管理员' : adminUser.value.role === 'user' ? '普通用户' : ''))
-window.addEventListener('storage', (e) => {
+/** 跨标签页登录/登出同步。放在 onMounted/onBeforeUnmount 里成对注册：
+    在 setup 顶层直接 addEventListener 会让监听随每次挂载累积，且持有已卸载组件的 ref。 */
+function onStorage(e: StorageEvent) {
   if (e.key === ADMIN_USER_KEY || e.key === null) adminUser.value = readAdminUser()
-})
+}
 
-/* 退出登录确认（2026-10-06 审核）：一次点击即销毁管理会话并跳转登录页的不可逆动作，
-   菜单里唯一一项就是它，此前无二次确认。走全站统一确认层（Confirm.vue + useConfirm），
-   与「删除/终止」同档 danger。 */
+/* 退出登录确认（2026-10-06 审核）：一次点击即销毁管理会话并跳转登录页，菜单里唯一一项就是它，
+   此前无二次确认。走全站统一确认层（Confirm.vue + useConfirm）。
+   危险档口径（useConfirm 文案契约 4）：danger 只给数据不可恢复的删除/终止；退出登录可重新登录
+   回到控制台，故 danger:false——红按钮会把「可以回来」误读成「会丢东西」。 */
 async function confirmLogout() {
   userMenuOpen.value = false
   const ok = await askConfirm({
     title: '退出登录',
-    message: '当前管理会话将被销毁，需要重新登录才能回到控制台。',
+    message: '当前管理会话将结束，需要重新登录才能回到控制台。',
     confirmText: '退出登录',
-    danger: true
+    danger: false
   })
   if (!ok) return
   await logout()
@@ -816,7 +864,18 @@ watch(
 
 /* 组间距 8px：组标题自带 padding-top，原 14px gap 叠加后组间隔 ≈28px 过散（用户反馈 2026-09-29）；
    对齐原型后组间隔由 .mshell__group 的 margin-top 统一表达，容器 gap 收到 4px */
-.mshell__nav { flex: 1; overflow-y: auto; display: grid; gap: 4px; align-content: start; padding-bottom: 8px; }
+.mshell__nav {
+  flex: 1;
+  overflow-y: auto;
+  display: grid;
+  gap: 4px;
+  align-content: start;
+  padding-bottom: 8px;
+  /* 徽章计数晚到会让导航从「不溢出」变「溢出」，滚动条出现时整列文字横向跳 10px。
+     预留稳定槽位（并把槽位改细）后，加载前后导航项左缘不动、也不压住标签与徽章。 */
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
 /* 置顶独立入口区（D5）：驾驶舱入口，与分组间用分隔线区分 */
 .mshell__pinned {
   display: grid;
@@ -972,6 +1031,8 @@ watch(
 .mshell__user-name {
   flex: 1;
   min-width: 0;
+  /* 管理员名可能是真实姓名/邮箱前缀：不限宽会把长名字撑成一条宽带，把顶栏其余钮挤出视口 */
+  max-width: 160px;
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   color: var(--mk-ink);
@@ -1032,7 +1093,7 @@ watch(
   transition: border-color 0.14s ease, color 0.14s ease;
 }
 .mshell__square-btn:hover { border-color: color-mix(in srgb, var(--mk-blue, #2f6ae0) 40%, transparent); color: var(--mk-blue, #2f6ae0); }
-.mshell__top-crumb { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.mshell__top-crumb { display: flex; align-items: baseline; gap: 8px; min-width: 0; overflow: hidden; }
 .mshell__top-title {
   font-size: var(--mk-fs-emphasis, 15px);
   font-weight: 800;
@@ -1046,6 +1107,11 @@ watch(
   font-size: var(--mk-fs-micro, 12px);
   color: var(--mk-faint);
   white-space: nowrap;
+  /* 父链（用户账号 / 学习者名）也是 flex 项：不显式给 0 最小宽会拒绝收缩，
+     把标题顶出顶栏或被搜索框压住。截断后完整链路在 .mshell__top-crumb 的 title 上。 */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .mshell__top-sep { color: var(--mk-faint); }
 .mshell__top-grow { flex: 1 1 auto; }
@@ -1067,6 +1133,16 @@ watch(
    看起来仍可点（与 .mk-btn:disabled{opacity:.65} 同口径）。 */
 .mshell__top-btn:disabled { opacity: 0.5; cursor: default; }
 .mshell__top-btn:disabled:hover { background: transparent; color: var(--mk-muted); }
+/* 带文字的顶栏按钮（术语表）：同一套观感，宽度交给内容（#109） */
+.mshell__top-btn--text {
+  display: inline-flex;
+  gap: 6px;
+  width: auto;
+  padding: 0 10px;
+  font-size: var(--mk-fs-micro);
+  font-weight: 600;
+  white-space: nowrap;
+}
 
 /* 页面搜索：场景跳转（label/组名过滤，Enter 去第一个命中） */
 .mshell__search { position: relative; flex: 0 1 280px; min-width: 200px; }
@@ -1473,8 +1549,6 @@ html[data-theme='dark'] {
 @media (max-width: 560px) {
   .mshell__top { flex-wrap: wrap; height: auto; min-height: 56px; padding: 4px 20px; gap: 6px 4px; }
   .mshell__top-crumb { order: 10; flex: 1 1 100%; }
-  /* 组名原本 nowrap 且不可压缩：多级面包屑（「… / A / B」）在次行仍会横向溢出，一并给它截断 */
-  .mshell__top-sub { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 }
 
 /* 短视口（1080P 及以下）收紧导航纵向节奏：20 个场景 + 6 组标签在 953px 可视高里溢出 78px，

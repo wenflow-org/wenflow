@@ -286,6 +286,16 @@ describe('parseHarnessArgs', () => {
     expect(() => parseHarnessArgs(['--advisory-response=confirm'], {})).toThrow(/advisory-response/);
   });
 
+  it('--expect 区分预期排课/不排课；--realistic-persona 开关生效', () => {
+    expect(parseHarnessArgs([], {}).expectNoPath).toBe(false);
+    expect(parseHarnessArgs(['--expect=no-path'], {}).expectNoPath).toBe(true);
+    expect(parseHarnessArgs(['--expect=path'], {}).expectNoPath).toBe(false);
+    expect(() => parseHarnessArgs(['--expect=maybe'], {})).toThrow(/expect/);
+
+    expect(parseHarnessArgs([], {}).realisticPersona).toBe(false);
+    expect(parseHarnessArgs(['--realistic-persona'], {}).realisticPersona).toBe(true);
+  });
+
   it('凭据兜底：E2E_* 优先，其次 .env 的 INIT_ADMIN_*', () => {
     const initWith = parseHarnessArgs([], { INIT_ADMIN_NAME: 'root2', INIT_ADMIN_PASSWORD: 'p2' });
     expect(initWith.adminName).toBe('root2');

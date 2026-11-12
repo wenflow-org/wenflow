@@ -35,7 +35,7 @@ import type { DurableDomainEvent } from '../../events/contracts';
 import { logger } from '../../utils/logger';
 import { clamp01 } from '../memory/actr';
 import { fsrsSchedule, fsrsStateFromLegacy, FSRS_MIN_STABILITY, type FsrsGradeCode, type FsrsMemoryState } from '../memory/fsrs';
-import { resolveConceptIdSafe } from '../memory/memory-trace.service';
+import { resolveConceptIdSafe, mapKnowledgeStatusToMastery } from '../memory/memory-trace.service';
 import { isPlaceholderConceptKey, normalizeConceptKey } from '../memory/concept-key';
 import { getActiveForConcepts } from './misconception-ledger.service';
 import { recordDegradation, degradationCause } from '../../skills/degradation-telemetry';
@@ -99,13 +99,23 @@ export function mapReviewStatusToRating(
   status: string,
   progress: number,
 ): { rating: ReviewRating; masteryScore: number } {
+  // 复习链路与课堂结算必须共用同一份 mastery 映射（2026-11-11 P0）：
+  // 此前 learning 在课堂写 0.35、在复习链路写 0.5，同一状态两套分数且不单调。
+  const mappedStatus = status === 'mastered'
+    ? 'mastered'
+    : status === 'learning'
+      ? 'learning'
+      : status === 'pending'
+        ? 'pending'
+        : 'review';
+  const { masteryScore } = mapKnowledgeStatusToMastery(mappedStatus, progress);
   switch (status) {
     case 'mastered':
-      return { rating: Number(progress) >= 100 ? 'easy' : 'good', masteryScore: Number(progress) >= 100 ? 0.9 : 0.85 };
+      return { rating: Number(progress) >= 100 ? 'easy' : 'good', masteryScore };
     case 'learning':
-      return { rating: 'hard', masteryScore: 0.5 };
+      return { rating: 'hard', masteryScore };
     default:
-      return { rating: 'again', masteryScore: 0.5 };
+      return { rating: 'again', masteryScore };
   }
 }
 

@@ -19,10 +19,9 @@
             class="mk-card__title"
             title="后台任务（更新学习画像、发放成就等）第一次投递失败会记在这里，确认根因修复后可重发。"
           >事件投递</h4>
-          <!-- 死信告警（原状态条语义迁入卡头）：失败显式降 bad，积压 >0 显式 warn，
-               零值只有成功加载后才显示「全部已送达」——加载中不得伪装成确认无死信 -->
-          <span v-if="deadFailed" class="mk-badge mk-badge--bad">加载失败</span>
-          <span v-else-if="!deadLoading && deadCount > 0" class="mk-badge mk-badge--warn">{{ deadCount }} 条待重发</span>
+          <!-- 死信告警（原状态条语义迁入卡头）：积压 >0 显式 warn，
+               零值只有成功加载后才显示「全部已送达」——读取失败由卡体错误态承担，卡头不再复读 -->
+          <span v-if="!deadLoading && deadCount > 0" class="mk-badge mk-badge--warn">{{ deadCount }} 条待重发</span>
           <span v-else-if="deadLoaded" class="mk-badge mk-badge--ok">全部已送达</span>
         </div>
         <div class="mk-card__head-right">
@@ -170,7 +169,6 @@ async function loadDead() {
     deadLoaded.value = true
   } catch (e) {
     deadFailed.value = true
-    toast.error(`事件清单加载失败：${errMsg(e)}`)
   } finally {
     deadLoading.value = false
   }
@@ -180,7 +178,7 @@ async function requeueAll() {
   // 重发会重新投递事件、产生真实副作用：执行前确认（与 HealthCenter 修复/会话下线同策略）
   const ok = await askConfirm({
     title: '重新发送全部失败事件',
-    message: `将把全部 ${deadCount.value} 条投递失败的事件再发送一次，可能产生重复的业务副作用。确定继续？`,
+    message: `将把全部 ${deadCount.value} 条投递失败的事件再发送一次，可能产生重复的业务副作用。`,
     confirmText: '全部重发',
     danger: true,
   })
@@ -196,7 +194,7 @@ async function requeueAll() {
     if (code === 'OUTBOX_DEAD_LETTER_ROOT_CAUSE') {
       const force = await askConfirm({
         title: '存在已知根因的失败事件',
-        message: '这些事件带有已知根因（如非法 FSRS 状态），直接重发会再次失败。确认根因已修复后，仍要强制重发吗？',
+        message: '这些事件带有已知根因（如非法 FSRS 状态），直接重发会再次失败，请先确认根因已修复。',
         confirmText: '强制重发',
         danger: true,
       })
@@ -224,7 +222,7 @@ async function requeueOne(eventType: string) {
   const count = deadItems.value.filter((i) => i.eventType === eventType).length
   const ok = await askConfirm({
     title: '重新发送这类事件',
-    message: `将把「${eventType}」类全部投递失败的事件再发送一次（当前清单内 ${count} 条），可能产生重复的业务副作用。确定继续？`,
+    message: `将把「${eventType}」类全部投递失败的事件再发送一次（当前清单内 ${count} 条），可能产生重复的业务副作用。`,
     confirmText: '重发这类',
     danger: true,
   })

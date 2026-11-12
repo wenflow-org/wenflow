@@ -62,6 +62,8 @@ import {
   appendClosureTrace,
   evaluateStuckClosure,
   buildNextLearningState,
+  buildTeacherWhiteboardText,
+  buildTeacherVisibleContent,
   auditGroundingCompliance,
   clampLearnerStateToJudgment,
   reconcileKnowledgeBoardWithJudgment,
@@ -1109,6 +1111,8 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
         : [];
     // 本轮教师配图（#123）：教学回合产出后随教师消息进学习者可见上下文（模拟学习者"看得见图"）
     let teacherImages: ConversationHistoryItem['images'] | undefined;
+    // 本轮课堂白板/结构图的文本化（2026-11-11 外部评审隐患 3）：与配图同口径，让学习者"看得见图"
+    let teacherWhiteboard: string | undefined;
     const nextTaskIdx = currentTaskIdx;
     const nextMilestoneIdx = currentMilestoneIdx;
     let learningStepError: string | null = null;
@@ -1149,6 +1153,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
         teacherImages = Array.isArray(aiResult.images) && aiResult.images.length > 0
           ? aiResult.images.map((image) => ({ url: image.url, caption: image.caption ?? null }))
           : undefined;
+        teacherWhiteboard = buildTeacherWhiteboardText(aiResult) || undefined;
         
         // P1-6：看板 × 判决对账——判错轮里被 blockedConcept 命中的教师侧看板项若仍标 mastered，
         // 落库前降级为 learning（progress ≤40），避免教师看板与判决器自相矛盾（audit n=12 中 6 条）。
@@ -1361,7 +1366,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
               { role: 'user', content: learnerVisibleMessage || virtualReplyResult.userVisible },
               {
                 role: 'assistant',
-                content: aiResponse,
+                content: buildTeacherVisibleContent(aiResponse, aiResult),
                 ...(Array.isArray(teacherImages) && teacherImages.length > 0 ? { images: teacherImages } : {})
               }
             ],
@@ -1451,7 +1456,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
               { role: 'user', content: learnerVisibleMessage || virtualReplyResult.userVisible },
               {
                 role: 'assistant',
-                content: aiResponse,
+                content: buildTeacherVisibleContent(aiResponse, aiResult),
                 ...(Array.isArray(teacherImages) && teacherImages.length > 0 ? { images: teacherImages } : {})
               }
             ];
@@ -1651,7 +1656,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
                   { role: 'user', content: learnerVisibleMessage || virtualReplyResult.userVisible },
                   {
                     role: 'assistant',
-                    content: aiResponse,
+                    content: buildTeacherVisibleContent(aiResponse, aiResult),
                     ...(Array.isArray(teacherImages) && teacherImages.length > 0 ? { images: teacherImages } : {})
                   }
                 ],
@@ -2003,6 +2008,7 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
       teachingSessionId,
       aiResponse,
       teacherImages,
+      teacherWhiteboard,
       learnerVisibleMessage,
       lessonKnowledgePoints,
       lessonDowngradedConcepts,

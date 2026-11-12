@@ -16,7 +16,7 @@ import {
 import { readMaterial, type MaterialRecord } from '../services/materials/material-store';
 import { materialRecordHasPhraseHit, selectMaterialsRanked } from '../services/materials/material-selection.service';
 import { applyMaterialRerankGate } from '../services/materials/material-rerank.service';
-import { partitionMaterialNeeds } from '../services/materials/material-need-origin';
+import { partitionMaterialNeeds, deriveMaterialNeedsFromGoalText } from '../services/materials/material-need-origin';
 import { findWebRecordByTitle, normalizeTitleForMatch } from '../services/materials/material-web-ingest.service';
 import { patchPathsWithAsyncMaterials, type AsyncMaterialPatch } from '../services/materials/material-async-collect.service';
 import { collectBriefsWithDeadline } from '../services/materials/material-brief.service';
@@ -200,6 +200,8 @@ interface NormalizedPathInputV1 {
     estimatedHours?: number | null;
     sessionsPerWeek?: number | null;
     sessionsLengthMin?: number | null;
+    /** 单次时长来源：explicit=用户硬约束；default=平台静默默认；estimated=模糊区间取中值 */
+    sessionsLengthSource?: 'explicit' | 'estimated' | 'default' | null;
     /** R8：兼容单数拼写 */
     sessionLengthMin?: number | null;
     totalSessions?: number | null;
@@ -344,11 +346,14 @@ class PathCoordinator {
     }
     const num = (v: any): number | null =>
       Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : null;
+    const sessionSource = (v: any): 'explicit' | 'estimated' | 'default' | null =>
+      v === 'explicit' || v === 'estimated' || v === 'default' ? v : null;
     const td = {
       totalWeeks: num(raw.totalWeeks),
       estimatedHours: num(raw.estimatedHours),
       sessionsPerWeek: num(raw.sessionsPerWeek),
       sessionsLengthMin: num(raw.sessionsLengthMin) ?? num(raw.sessionLengthMin),
+      sessionsLengthSource: sessionSource(raw.sessionsLengthSource ?? raw.sessionLengthSource),
       totalSessions: num(raw.totalSessions),
       calendarCapacityHours: num(raw.calendarCapacityHours),
       scopeAnchorHours: num(raw.scopeAnchorHours),
@@ -815,10 +820,37 @@ class PathCoordinator {
 
     // goal→path 资料采集：goal 声明了 needsMaterial 才触发（缺省零调用）；采集失败 fail-open。
     // 来源优先配置式 handoff（若后续登记路由），否则 visibleSummary 白名单透传（understanding.needsMaterial）。
-    const needsMaterial = (goalFinalPayload.goalHandoffFields as any)?.['understanding.needsMaterial']
+    let needsMaterial = (goalFinalPayload.goalHandoffFields as any)?.['understanding.needsMaterial']
       ?? (goalFinalPayload.goalHandoffFields as any)?.needsMaterial
       ?? (visibleSummary as any)?.needsMaterial
       ?? null;
+    // path 阶段「思考触发」兜底（2026-11-12 实证：goal 承诺「都是公开日志能查到的」却没登记
+    // needsMaterial → 采集整链未触发 → 路径按"真实"措辞生成而材料为空）。path 拿着全量 goal
+    // 文本，声明缺失但出现真实材料承诺/文档依赖信号时，自动派生采集需求走同一条链——
+    // 两道闸：goal 声明是主通道（有对话上下文、queries 更准、async 下与规划并行），
+    // 这里是承受交货压力的 path 自己的第二道判断。
+    if (!needsMaterial) {
+      const finalVisible = (goalFinalPayload as any)?.finalUserVisible;
+      const keyStagesArray = (Array.isArray(finalVisible?.key_stages) && finalVisible.key_stages)
+        || (Array.isArray((visibleSummary as any)?.keyStages) && (visibleSummary as any).keyStages)
+        || null;
+      const derivedNeeds = deriveMaterialNeedsFromGoalText({
+        surfaceGoal: (goalFinalPayload as any)?.understanding?.surface_goal
+          ?? (visibleSummary as any)?.surfaceGoal,
+        realProblem: (goalFinalPayload as any)?.understanding?.real_problem,
+        learningDirection: (typeof finalVisible?.learning_direction === 'string' ? finalVisible.learning_direction : null)
+          ?? (visibleSummary as any)?.learningDirection,
+        keyStages: Array.isArray(keyStagesArray) ? (keyStagesArray as string[]).join(' ') : null,
+        stages: Array.isArray(keyStagesArray) ? (keyStagesArray as string[]) : null,
+      });
+      if (derivedNeeds.length > 0) {
+        logger.info('[path-coordinator] needsMaterial 未登记但 goal 文本命中材料依赖信号，已自动派生采集需求（思考触发兜底）', {
+          userId: typeof input.userId === 'string' ? input.userId : null,
+          derived: derivedNeeds.map((need) => need.title),
+        });
+        needsMaterial = derivedNeeds;
+      }
+    }
     // 附件理解摘要（material-brief）惰性就绪：path 是长流程，值得等 brief（有预算上限）——
     // path-planning 拿到 brief 的 naturalDivisions/目录后才知道「这一堆怎么切分学习」。
     // fail-open：生成失败/超时的附件照常以 pack 进路径（brief=null），下次生成再补。

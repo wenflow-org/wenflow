@@ -6,10 +6,12 @@
          与己无关的动作。顶栏的全局刷新广播仍会刷当前面板（见 refreshActive）。 -->
     <MkPageHead title="系统设置" />
 
-    <!-- 五个页签由两类东西合并而来（2026-11-01 用户「这四个拆出来，和模型与接入作为一个页面」）：
-         模型与接入原为独立场景，运维工具 / 数据导出 / 会话安全 / 访问与注册原为运营中心的
+    <!-- 四个页签由两类东西合并而来（2026-11-01 用户「这四个拆出来，和模型与接入作为一个页面」）：
+         模型与接入原为独立场景，数据导出 / 会话安全 / 访问与注册原为运营中心的
          第二组页签。合并的由头是那个宿主把两类后果完全不同的动作放在一起——
-         改文案 vs 重放事件/导全库/踢会话，且旧页名「模型与接入」装不下后四项。 -->
+         改文案 vs 导全库/踢会话，且旧页名「模型与接入」装不下后三项。
+         2026-11-11 用户「运维工具，这一个孤零零的是干什么的」：事件投递失败处置已并回健康中心，
+         本页不再留一个只装死信表的设置页签。 -->
     <div class="tabs" role="tablist" aria-label="系统设置视图切换" @keydown="onTabKeydown">
       <button
         v-for="(t, i) in SS_TABS"
@@ -37,29 +39,23 @@
       role="tabpanel"
       aria-labelledby="ss-tab-api"
       ref="apiRef"
+      :active="tab === 'api'"
       embedded
     />
 
-    <!-- 其余四个无编辑态，切走即销毁。
+    <!-- 其余三个无编辑态，切走即销毁。
          **必须是独立的 v-if，不能接在上一段的 v-else-if 链上**（2026-11-02 修）：上一段是
          `v-if="apiMounted" v-show="tab === 'api'"`，而 apiMounted 一旦为真就再不变假，
-         v-else-if 只在链头为假时才求值——于是这四页签在「先看过模型与接入」之后全部空白，
-         且不报任何错（2026-11-02 用户「这怎么没内容啊」）。四个条件由同一个 tab 值互斥，
+         v-else-if 只在链头为假时才求值——于是这些页签在「先看过模型与接入」之后全部空白，
+         且不报任何错（2026-11-02 用户「这怎么没内容啊」）。条件由同一个 tab 值互斥，
          拆成独立 v-if 与原来的语义等价。 -->
-    <ServerToolsPanel
-      v-if="tab === 'tools'"
-      id="ss-panel-tools"
-      role="tabpanel"
-      aria-labelledby="ss-tab-tools"
-      ref="toolsRef"
-    />
     <DataExportPanel
       v-if="tab === 'export'"
       id="ss-panel-export"
       role="tabpanel"
       aria-labelledby="ss-tab-export"
     />
-    <!-- 五个页签一律单列通栏（2026-11-07 用户撤回左右分栏：「会话安全 访问与注册的双栏
+    <!-- 三个页签一律单列通栏（2026-11-07 用户撤回左右分栏：「会话安全 访问与注册的双栏
          不要了，换成之前的」）。此前的「左说明 + 右表单」只给会话安全/访问与注册做过，
          实测左侧说明列把可用宽度压掉 30%，卡片反而更窄，不如通栏。 -->
     <SessionSecurity
@@ -82,9 +78,11 @@
 </template>
 
 <script setup lang="ts">
-/* 系统设置（2026-11-01）：模型与接入 + 运营中心原「系统运维」四页签合并成一个宿主。
-   页签键沿用旧页签名（tools / export / security / access），老深链的含义原样保留；
+/* 系统设置（2026-11-01）：模型与接入 + 运营中心原「系统运维」三页签合并成一个宿主。
+   页签键沿用旧页签名（export / security / access），老深链的含义原样保留；
    首页签用 api 而不是 api-config，因为它只是本页的一格视图，不再是独立场景。
+   2026-11-11：运维工具页签下线，事件投递处置并入健康中心；旧的 ?tab=tools 与
+   /admin/devtools 在路由层改投 /admin/health-center。
    旧键（/admin/api-config?tab=addons|virtual|security 等）的改投**全部收在路由层**，
    本页只做成员校验——见下方说明。 */
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
@@ -92,7 +90,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { useTablistKeyboard } from '@/composables/useTablistKeyboard'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
 import ApiConfig from './ApiConfig.vue'
-import ServerToolsPanel from './ServerToolsPanel.vue'
 import DataExportPanel from './DataExportPanel.vue'
 import SessionSecurity from './SessionSecurity.vue'
 import AccessControl from './AccessControl.vue'
@@ -101,10 +98,11 @@ import { liveRefreshSeq } from './live'
 /** 页签顺序即渲染顺序：接入配置在前（本页最常来的目的），运维三件在后 */
 const SS_TABS = [
   { key: 'api', label: '模型与接入' },
-  { key: 'tools', label: '运维工具' },
   { key: 'export', label: '数据导出' },
   { key: 'security', label: '会话安全' },
-  { key: 'access', label: '访问与注册' }
+  // 2026-11-11：入站访问控制与注册设置迁出，这一页只剩出站网络策略 → 改名「网络与安全」。
+  // 页签键保留 access，老深链 / 书签不受影响。
+  { key: 'access', label: '网络与安全' }
 ] as const
 
 type SsTab = (typeof SS_TABS)[number]['key']
@@ -116,7 +114,6 @@ const router = useRouter()
 const tab = ref<SsTab>(DEFAULT_TAB)
 
 const apiRef = ref<{ refresh?: () => void } | null>(null)
-const toolsRef = ref<{ refresh?: () => void } | null>(null)
 const securityRef = ref<{ refresh?: () => void } | null>(null)
 const accessRef = ref<{ reload?: () => void } | null>(null)
 /* 模型与接入懒挂载：首次进入才挂载，之后常驻（v-show）以保留未保存的接入配置编辑 */
@@ -154,7 +151,6 @@ async function refreshActive() {
   refreshing.value = true
   try {
     if (tab.value === 'api') apiRef.value?.refresh?.()
-    else if (tab.value === 'tools') toolsRef.value?.refresh?.()
     else if (tab.value === 'security') securityRef.value?.refresh?.()
     else if (tab.value === 'access') accessRef.value?.reload?.()
   } finally {
@@ -196,11 +192,10 @@ defineExpose({ pageLabel })
 /* ================= 宿主布局 =================
    三种根节点都要在宿主 flex 列里吃掉剩余高度，各自方式不同：
    ① 带 .mk-page--fill 的（会话安全 / 访问与注册嵌入态）——由它自己的 flex 撑开；
-   ② 普通 div 根的（运维工具 .stp-body / 数据导出 .exp-body）——宿主给高度并让它自管内滚；
+   ② 普通 div 根的（数据导出 .exp-body）——宿主给高度并让它自管内滚；
    ③ 模型与接入（.ac-host 嵌入态）——由它自己的 .ac-tab-body 内滚，宿主只给高度。
    少任何一条，对应面板在高屏下都会退化成整页滚动或直接被裁。 */
 .ss-host > .mk-page--fill { flex: 1 1 auto; min-height: 0; }
-.ss-host > .stp-body,
 .ss-host > .exp-body {
   flex: 1 1 auto;
   min-height: 0;
@@ -210,7 +205,6 @@ defineExpose({ pageLabel })
 /* 窄屏：面板内部滚动会缩成一条缝，退回内容高度交给页面滚 */
 @media (max-width: 900px) {
   .ss-host > .mk-page--fill,
-  .ss-host > .stp-body,
   .ss-host > .exp-body,
   .ss-host > .acl-host--embedded { flex: none; min-height: 0; overflow: visible; }
 }

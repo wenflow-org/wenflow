@@ -1,6 +1,6 @@
 <template>
   <header class="mk-hero">
-    <span v-if="avatar" class="mk-hero__avatar" aria-hidden="true">{{ avatar }}</span>
+    <span v-if="avatar" class="mk-hero__avatar" :class="{ 'mk-hero__avatar--learner': tone === 'learner' }" aria-hidden="true">{{ avatar }}</span>
     <div class="mk-hero__meta">
       <h1 class="mk-hero__title">{{ title }}</h1>
       <p v-if="sub" class="mk-hero__sub">{{ sub }}</p>
@@ -26,8 +26,11 @@
  *
  * sub 与 desc 的分工（2026-10-25）：sub 是身份标签（「中文别名 · 归属 · 类别」，一行读完），
  * desc 是功能简介（这个实体做什么，可换行）。列表页只放身份，简介收进详情。
+ *
+ * tone（2026-11-12）：头像底色随实体语义。默认蓝（账号/技能等）；learner = 紫，
+ * 与列表 MkCellAvatar tone=virtual、mk-entity__avatar--learner 同一套语义色。
  */
-defineProps<{ avatar?: string; title: string; sub?: string; desc?: string }>();
+defineProps<{ avatar?: string; title: string; sub?: string; desc?: string; tone?: 'default' | 'learner' }>();
 </script>
 
 <style scoped>
@@ -51,6 +54,8 @@ defineProps<{ avatar?: string; title: string; sub?: string; desc?: string }>();
   background: var(--mk-blue);
   flex: none;
 }
+/* 虚拟学习者的语义色：与列表 MkCellAvatar tone=virtual 一致（2026-11-12） */
+.mk-hero__avatar--learner { background: var(--mk-violet-fill); }
 .mk-hero__meta {
   display: grid;
   gap: 4px;

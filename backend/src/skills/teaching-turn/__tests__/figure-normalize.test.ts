@@ -850,7 +850,7 @@ describe('split-compare：正误并排对比（2026-10-26 动作诊所）', () =
 });
 
 describe('state-strip：不回头的进程分帧（2026-10-26）', () => {
-  it('2~5 帧保留；items 截到 3 条、去重；单帧拒绝', async () => {
+  it('2~8 帧保留（2026-11-12 上限 5→8）；items 截到 3 条、去重；单帧拒绝', async () => {
     const ok = await runWithFigure({
       kind: 'state-strip',
       spec: {
@@ -870,6 +870,30 @@ describe('state-strip：不回头的进程分帧（2026-10-26）', () => {
 
     const one = await runWithFigure({ kind: 'state-strip', spec: { frames: [{ label: '只有一步', items: ['x'] }] } });
     expect(one.figure).toBeUndefined();
+  });
+
+  it('上限 5→8（2026-11-12）：8 轮对话的板书不再被截成 5 帧', async () => {
+    const labels = ['轮1', '轮2', '轮3', '轮4', '轮5', '轮6', '轮7', '轮8'];
+    const ok = await runWithFigure({
+      kind: 'state-strip',
+      spec: {
+        title: '八轮对话逐帧摆开',
+        frames: labels.map((label) => ({ label, items: [`${label} 的状态快照`] })),
+      },
+    });
+    expect(ok.figure.spec.frames).toHaveLength(8);
+    expect(ok.figure.spec.truncatedFrames).toBeUndefined();
+  });
+
+  it('超过 8 帧仍截断，但 spec 记 truncatedFrames（boardContext 据此向模型声明系统截断）', async () => {
+    const labels = ['一', '二', '三', '四', '五', '六', '七', '八', '九'];
+    const over = await runWithFigure({
+      kind: 'state-strip',
+      spec: { title: '九帧', frames: labels.map((label) => ({ label, items: [`${label}态`] })) },
+    });
+    expect(over.figure.spec.frames).toHaveLength(8);
+    expect(over.figure.spec.frames[7].label).toBe('八');
+    expect(over.figure.spec.truncatedFrames).toBe(1);
   });
 });
 
@@ -925,5 +949,42 @@ describe('V8 内容核验：图内算式复算 / 概念图并列边合并 / 对�
       },
     });
     expect(tolerable.figure).toBeDefined();
+  });
+});
+
+describe('split-compare 逐句对账表拒绝（2026-11-12 st_1794451502004 实证）', () => {
+  it('右栏头「有没有依据」+ 判定行 → 整图拒绝（答案不能印在题干下再提问）', async () => {
+    const over = await runWithFigure({
+      kind: 'split-compare',
+      spec: {
+        title: '豆包订票回复：每一句接的是上文哪一段',
+        left: { head: '回复里的话', rows: [
+          { label: '好的，我来帮你安排。', sub: '接用户请求' },
+          { label: '请问你从哪个城市出发？', sub: '接「订票」缺出发地' },
+          { label: '以北京为例，明天有两趟……', sub: '上文没给出发地' },
+          { label: 'G1 次 08:00 出发，11:28 到', sub: '接「以北京为例」' },
+        ] },
+        right: { head: '上文里有没有这一句的依据', rows: [
+          { label: '有：用户说「帮我订票」', sub: '上文原话' },
+          { label: '有：上文没给出发城市', sub: '缺项，故发问' },
+          { label: '没有：上文未出现北京', sub: '自己接出来的' },
+          { label: '有：接上一句的举例', sub: '承上' },
+        ] },
+      },
+    });
+    expect(over.figure).toBeUndefined();
+  });
+
+  it('正误交锋（同一动作两种走法）不受影响', async () => {
+    const ok = await runWithFigure({
+      kind: 'split-compare',
+      spec: {
+        title: '单位换算',
+        left: { head: '常见错法', rows: [{ label: '60 ÷ 400', sub: '把秒当分钟除' }, { label: '= 0.15 米/秒' }] },
+        right: { head: '正确做法', rows: [{ label: '60 × 400 ÷ 1000', sub: '先把米换算成千米' }, { label: '= 24 米/秒' }] },
+        delta: { label: '分叉在第一步', at: 1 },
+      },
+    });
+    expect(ok.figure.kind).toBe('split-compare');
   });
 });

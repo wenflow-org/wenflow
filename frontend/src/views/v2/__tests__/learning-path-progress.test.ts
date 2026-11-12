@@ -12,6 +12,11 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { buildGenerationProgress, formatWaited, HEARTBEAT_NOTICE_MS } from '../learningPathProgress';
+import {
+  buildPathActivityAnchor,
+  formatLocalDateTime,
+  formatRelativeTime,
+} from '../learningPathProgress';
 
 const detailSource = readFileSync(resolve(__dirname, '../V2LearningPathDetail.vue'), 'utf8');
 
@@ -112,5 +117,62 @@ describe('详情页接线（防回退）', () => {
   it('轮询推进时钟（副行的「最近一次进展 X 前」才会走）', () => {
     const poll = detailSource.slice(detailSource.indexOf('async function pollOnce'), detailSource.indexOf('async function doRetry'));
     expect(poll).toContain('genNowTick.value = Date.now()');
+  });
+});
+
+/* 2026-11-11 走查：路径列表四张卡都只写「已完成 / 100%」，分不出新旧。
+   时间锚点抽成纯函数，列表页与学习台共用；这里锁相对时间分档与「最近学习 > 更新 > 创建」优先级。 */
+describe('路径时间锚点（2026-11-11 用户侧走查 #4）', () => {
+  const NOW = Date.parse('2026-11-11T12:00:00.000Z');
+  const ago = (ms: number) => new Date(NOW - ms).toISOString();
+  const DAY = 24 * 60 * 60 * 1000;
+
+  it('相对时间分档：刚刚 / 分钟 / 小时 / 昨天 / 天前 / 超 30 天回落日期', () => {
+    expect(formatRelativeTime(ago(30_000), NOW)).toBe('刚刚');
+    expect(formatRelativeTime(ago(5 * 60_000), NOW)).toBe('5 分钟前');
+    expect(formatRelativeTime(ago(3 * 3_600_000), NOW)).toBe('3 小时前');
+    expect(formatRelativeTime(ago(26 * 3_600_000), NOW)).toBe('昨天');
+    expect(formatRelativeTime(ago(4 * DAY), NOW)).toBe('4 天前');
+    expect(formatRelativeTime(ago(45 * DAY), NOW)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('坏时间戳不产 NaN；未来时间按「刚刚」处理', () => {
+    expect(formatRelativeTime('not-a-date', NOW)).toBe('');
+    expect(formatRelativeTime(null, NOW)).toBe('');
+    expect(formatRelativeTime(ago(-60_000), NOW)).toBe('刚刚');
+    expect(formatLocalDateTime('not-a-date')).toBe('');
+  });
+
+  it('优先任务完成时间（真实学习），并给绝对时间 title', () => {
+    const anchor = buildPathActivityAnchor(
+      {
+        createdAt: ago(10 * DAY),
+        updatedAt: ago(9 * DAY),
+        tasks: [{ completedAt: ago(2 * 3_600_000) }, { completedAt: ago(5 * DAY) }],
+      },
+      NOW
+    );
+    expect(anchor?.text).toBe('最近学习 2 小时前');
+    expect(anchor?.title).toContain('最近学习');
+    expect(anchor?.title).toContain('创建于');
+  });
+
+  it('没有完成记录时：创建后没变过 → 创建于；改过 → 更新于', () => {
+    const createdOnly = buildPathActivityAnchor(
+      { createdAt: ago(3 * DAY), updatedAt: ago(3 * DAY), tasks: [] },
+      NOW
+    );
+    expect(createdOnly?.text).toBe('创建于 3 天前');
+
+    const updated = buildPathActivityAnchor(
+      { createdAt: ago(10 * DAY), updatedAt: ago(2 * 3_600_000), tasks: [] },
+      NOW
+    );
+    expect(updated?.text).toBe('更新于 2 小时前');
+  });
+
+  it('全部字段缺失返回 null：不编造「刚刚」', () => {
+    expect(buildPathActivityAnchor({}, NOW)).toBeNull();
+    expect(buildPathActivityAnchor({ createdAt: null, updatedAt: null, tasks: [{ completedAt: null }] }, NOW)).toBeNull();
   });
 });

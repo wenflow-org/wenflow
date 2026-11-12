@@ -151,8 +151,9 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
  */
 describe('页级读数形态归属', () => {
   const DIR = resolve(__dirname, '..');
-  /* 允许的宿主：VirtualProfile = 虚拟学习者详情 hero 下；Overview / MemoryReview = 卡内读数槽 */
-  const STATSTRIP_HOSTS = new Set(['VirtualProfile.vue', 'Overview.vue', 'MemoryReview.vue']);
+  /* 允许的宿主：Overview / MemoryReview = 卡内读数槽。
+     VirtualProfile 2026-11-12 已撤页级读数条（对齐 LearnerDetail），不再在名单里。 */
+  const STATSTRIP_HOSTS = new Set(['Overview.vue', 'MemoryReview.vue']);
   const files = readdirSync(DIR).filter((f) => f.endsWith('.vue'));
 
   it('MkStatStrip 只住详情页 hero 与卡内读数槽，列表页页级 KPI 一律 MkKpi 卡带', () => {
@@ -167,8 +168,10 @@ describe('页级读数形态归属', () => {
     const src = readFileSync(resolve(DIR, 'ExecLogs.vue'), 'utf8');
     expect(src).toContain('<section class="mk-kpi-grid" aria-label="执行读数">');
     /* 2026-11-07 用户「同组三页指标卡数量不齐」：执行日志此前缺最基础的调用总数与失败数，
-       补成 4 张与审计日志 / 健康中心同构。 */
-    expect(src.split('<MkKpi ').length - 1).toBe(4);
+       补成 4 张与审计日志 / 健康中心同构。
+       2026-11-11：首卡改为多行写法（class/value-note/title 分行），按 `<MkKpi ` 字面量切
+       会把首卡漏掉（3 而非 4）；按标签边界计数，与排版无关。 */
+    expect(src.match(/<MkKpi\b/g)?.length ?? 0).toBe(4);
     // 原先的 v-if="logs.length" 包围整条读数带：窗口筛空时页头读数与页签之间会整体上跳
     expect(src).not.toMatch(/<section class="mk-kpi-grid"[^>]*v-if/);
   });

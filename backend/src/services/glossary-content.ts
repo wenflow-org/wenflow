@@ -97,6 +97,9 @@ export const GLOSSARY_TERMS: GlossaryTerm[] = [
   { term: '覆盖行', category: 'concept', def: 'admin 在管理后台手工改过的配置行，覆盖权高于文件声明，对账时跳过' },
   { term: 'KTL', category: 'concept', def: 'Knowledge Training Load 知识训练负荷——LSS 的慢 EWMA（λ=0.95、半衰期≈13.5 天），高=负荷重。注意与会话级 sessionKtl（本节知识获得质量，高=好）同名不同义；成就体系自 2026-10-23 起改用「已掌握知识点数」，不再读 KTL', where: '学习状态→学习指标；完课卡→长期指标与会话级 sessionKtl' },
   { term: '已掌握知识点', category: 'concept', def: '记忆痕迹（memory_traces）中 masteryScore ≥ 0.8 且 extractionCount > 0 的概念数，即真正提取过、掌握度达阈值的学习证据；成就「知识小成/大成/宗师」分别要求 3/5/10 个', where: '成就管理→成就定义' },
+  { term: '记忆痕迹', category: 'concept', def: '一条「概念 × 学习者」的记忆记录（含掌握度、稳定性、复习计划），是间隔复习的最小单位；不是会话数、也不是知识点总数', where: '复习积压 → 记忆痕迹列' },
+  { term: '措辞重复率', category: 'concept', def: '含义相同、措辞重复的记忆记录占比（重复族痕迹 ÷ 总痕迹）；达到 20% 标需关注，说明概念归并没有跟上', where: '复习积压 → 措辞重复率卡' },
+  { term: '任务类型', category: 'concept', def: '认知弧里的任务形态（获取 / 拆解 / 建模 / 执行 / 诊断 / 打磨 / 巩固 / 反思 / 评估），与会话的「课型」（正课 / 复习课 / 延伸课）是两个维度', where: '教学会话 → 会话列副行「任务 X」' },
 
   // ---- 角色与流转（flow） ----
   { term: 'promptRole（字段角色）', category: 'flow', def: '字段的用途分类：必填/可选补充/隐式推断/公开回复/方案产出/派生展示/控制信号，见字段路由图例' },
@@ -131,6 +134,7 @@ export const GLOSSARY_TERMS: GlossaryTerm[] = [
   // ---- 健康中心（health） ----
   { term: '健康中心', category: 'health', def: '14 项系统健康检查的聚合清单（侧栏「健康中心」）；每项带严重度与修复动作', where: '侧栏 → 健康中心' },
   { term: '健康分', category: 'health', def: '总览页的"今日调用成功率"评分（0-100），与健康中心（14 项系统检查）是两套不同口径；页面已改名为「今日成功率」' },
+  { term: '系统失败率', category: 'health', def: '虚拟学习者 / 仿真运行的系统级失败占比：系统失败会话数 ÷ 全部仿真会话数；人为终止不计入分子，时间窗是全部会话而不是近 7 天。总览状态条第二行与虚拟学习者页的「系统失败率」卡同源', where: '平台总览 → 状态条「仿真 · 需要关注」；虚拟学习者 → 系统失败率卡' },
   { term: '检查项', category: 'health', def: '健康中心里的每一项系统检查（共 14 项），每项带严重度、状态与修复动作' },
   { term: 'W1 注册对账', category: 'health', def: '户口簿活跃技能 ↔ ACTIVE prompt 的双向核对：谁缺 ACTIVE、谁是多出来的残留' },
   { term: 'W2 注册表对账', category: 'health', def: '户口簿 ↔ 系统注册表（skill_registrations）的双向核对：谁没注册、谁是多出来的幽灵' },

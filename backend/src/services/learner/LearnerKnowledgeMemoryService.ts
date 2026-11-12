@@ -25,6 +25,13 @@ type BuildInput = {
   learningPathId?: string;
   milestoneId?: string;
   taskId?: string;
+  /** 正在收束的会话 id：仅用于把本次收束时刻作为该会话的业务 endTime（2026-11-11 D2）。 */
+  currentSessionId?: string;
+  /**
+   * 本次收束的业务结束时刻。advisory 在 completeWithEvent 落 endTime 之前生成，
+   * 不传时当前会话的看板信号会因 endTime=null 丢失 seenAt，被旧 0.35 痕迹压成假卡点。
+   */
+  sessionEndTimeOverride?: Date | null;
 };
 
 type ConceptSignal = {
@@ -452,6 +459,12 @@ export class LearnerKnowledgeMemoryService {
     const enrichedReusableFoundations: string[] = [];
     const enrichedBlockedFoundations: string[] = [];
     const enrichedTransferSignals: LearnerTransferSignal[] = [];
+    /* 2026-11-11 多路径串台修复：这三类是自由文本（不是台账标签），无法按 sourcePaths 收窄；
+       单独收一份**当前路径证据行产出的**名单，挂到 currentPath.scopedBackground。
+       证据行带 pathId，这在现有 schema 下是可靠归属。 */
+    const pathReusableFoundations: string[] = [];
+    const pathBlockedFoundations: string[] = [];
+    const pathConfusions: LearnerRecurringConfusion[] = [];
     // issue #194：knowledgeStateSummary 曾只写进 learner_evidence、从不进快照。
     // 证据按 occurredAt desc 取，首个非空摘要即最新一次课后状态摘要。
     // issue #198：摘要是**自由文本**，可命名其它路径的概念。它随 globalBackground 进入
@@ -501,8 +514,14 @@ export class LearnerKnowledgeMemoryService {
           // 运营读成「没证据」。行 id 用 `d<序号>` 与主索引的数字下标天然不相交。
           recordEnrichedEvidenceRow(payload.conceptLedger, `d${enrichedEvidenceRowSeq++}`);
         }
-        if (Array.isArray(payload.reusableFoundations)) enrichedReusableFoundations.push(...payload.reusableFoundations);
-        if (Array.isArray(payload.blockedFoundations)) enrichedBlockedFoundations.push(...payload.blockedFoundations);
+        if (Array.isArray(payload.reusableFoundations)) {
+          enrichedReusableFoundations.push(...payload.reusableFoundations);
+          if (isCurrentPath) pathReusableFoundations.push(...payload.reusableFoundations);
+        }
+        if (Array.isArray(payload.blockedFoundations)) {
+          enrichedBlockedFoundations.push(...payload.blockedFoundations);
+          if (isCurrentPath) pathBlockedFoundations.push(...payload.blockedFoundations);
+        }
         if (Array.isArray(payload.transferSignals)) enrichedTransferSignals.push(...payload.transferSignals);
         if (!enrichedKnowledgeStateSummary
           && isCurrentPath
@@ -517,9 +536,11 @@ export class LearnerKnowledgeMemoryService {
         if (Array.isArray(payload.recurringConfusions)) {
           // 同上：recurringConfusions 的 lastSeenAt 取所属会话业务 endTime，不用证据墙钟 occurredAt。
           const businessAtIso = evidence.sessionId ? sessionEndTimeById.get(evidence.sessionId) : undefined;
-          enrichedConfusions.push(...payload.recurringConfusions.map((item: any) => businessAtIso
+          const confusions = payload.recurringConfusions.map((item: any) => businessAtIso
             ? { ...item, lastSeenAt: businessAtIso }
-            : item));
+            : item);
+          enrichedConfusions.push(...confusions);
+          if (isCurrentPath) pathConfusions.push(...confusions);
           recordEnrichedEvidenceRow(payload.recurringConfusions, `d${enrichedEvidenceRowSeq++}`);
         }
         if (Array.isArray(payload.transferSignals)) enrichedTransferSignals.push(...payload.transferSignals);
@@ -711,10 +732,14 @@ export class LearnerKnowledgeMemoryService {
       // 降级总结不得进掌握证据（#70 P-45）：summary-only / summarySource=fallback 是模板兜底产物，
       // 它的 knowledgeItems 不是模型对学习结果的判断。知识状态行（session.knowledgeState）仍保留。
       const summaryIsReliable = wrapup?.status !== 'summary-only' && wrapup?.sources?.summary !== 'fallback';
-      const happenedAt = (session.endTime || session.updatedAt).toISOString();
+      const effectiveEndTime = session.id === input.currentSessionId && input.sessionEndTimeOverride
+        ? input.sessionEndTimeOverride
+        : session.endTime;
+      const happenedAt = (effectiveEndTime || session.updatedAt).toISOString();
       // 时钟域：概念"最近可见"只用会话业务结束时间 endTime（模拟链路经 simulatedNowOr 落模拟日）。
-      // 会话未结束（endTime=null）时不回退 updatedAt（真墙钟）——无结束时间 = 不记 seenAt。
-      const sessionSeenAt = session.endTime ? session.endTime.toISOString() : undefined;
+      // 会话未结束（endTime=null）时不回退 updatedAt（真墙钟）——无结束时间 = 不记 seenAt；
+      // 本轮收束的会话由调用方传入 sessionEndTimeOverride，避免 advisory 窗口内丢戳。
+      const sessionSeenAt = effectiveEndTime ? effectiveEndTime.toISOString() : undefined;
 
       // #195：同一课同一概念的掌握贡献只计一次。session.knowledgeState（结构化看板）是权威源，
       // wrapup.summary.knowledgeItems（LLM 摘要）按提示词规则 6「优先复用输入 knowledgePoints 的
@@ -1536,8 +1561,21 @@ export class LearnerKnowledgeMemoryService {
       ...(enrichedKnowledgeStateSummary ? { knowledgeStateSummary: enrichedKnowledgeStateSummary } : {}),
     };
 
+    const currentPathScoped = currentPath
+      ? {
+          ...currentPath,
+          scopedBackground: {
+            reusableFoundations: dedupe(pathReusableFoundations).slice(0, 20),
+            blockedFoundations: dedupe(pathBlockedFoundations).slice(0, 20),
+            recurringConfusions: Array.from(
+              new Map(pathConfusions.map((item) => [String(item.label || item.conceptKey || ''), item])).values(),
+            ).slice(0, 20),
+          },
+        }
+      : undefined;
+
     return {
-      ...(currentPath ? { currentPath } : {}),
+      ...(currentPathScoped ? { currentPath: currentPathScoped } : {}),
       globalSignals: {
         masteredConcepts,
         fragileConcepts,

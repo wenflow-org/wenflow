@@ -53,6 +53,24 @@
             "inputPer1M": 0.03,
             "outputPer1M": 0.15
           }
+        },
+        "agnes-2.5-pro-beta": {
+          "supportsThinking": false,
+          "vision": false,
+          "label": "agnes-2.5-pro-beta",
+          "tier": "chat"
+        },
+        "agnes-image-2.0-flash": {
+          "supportsThinking": false,
+          "vision": false,
+          "label": "agnes-image-2.0-flash",
+          "tier": "chat"
+        },
+        "agnes-image-2.1-flash": {
+          "supportsThinking": false,
+          "vision": false,
+          "label": "agnes-image-2.1-flash",
+          "tier": "chat"
         }
       },
       "enabled": true

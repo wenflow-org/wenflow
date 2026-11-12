@@ -33,6 +33,14 @@ jest.mock('../../../utils/secret-redaction', () => ({
   toSecretSafeResponse: (value: any) => value,
 }))
 
+/* 覆盖矩阵要报「运行时真正用的模型」：未配模型的 Skill 取平台默认模型（与 api-gateway 同一解析链） */
+jest.mock('../../../services/apiConfig.service', () => ({
+  __esModule: true,
+  default: {
+    getPlatformDefault: jest.fn(async () => ({ chatModel: 'platform-default-model' })),
+  },
+}))
+
 import router from '../skill-model-configs'
 
 function getHandler(method: 'get' | 'put' | 'post', path: string) {
@@ -319,6 +327,12 @@ describe('coverage 覆盖矩阵（拍板 #9：平台默认白名单）', () => {
     const byId = new Map<string, any>(payload.data.skills.map((s: any) => [s.skillId, s]))
     expect(byId.get('skill-author').source).toBe('platform-default')
     expect(byId.get('goal-conversation').source).toBe('skill-channel')
+    /* 2026-11-10 用户「模型配置是什么，就是什么」：未配模型的 Skill 也报出实际生效的模型，
+       不再让前端显示「平台默认」占位。inherited 只用于说明「未单独配置」。 */
+    expect(byId.get('skill-author').effectiveModel).toBe('platform-default-model')
+    expect(byId.get('skill-author').inherited).toBe(true)
+    expect(byId.get('goal-conversation').effectiveModel).toBe('deepseek-v4.1-flash')
+    expect(byId.get('goal-conversation').inherited).toBe(false)
   })
 
   it('白名单技能一旦补了配置行即移出 allowlisted（名单只登记「确实走平台默认」的成员）', async () => {

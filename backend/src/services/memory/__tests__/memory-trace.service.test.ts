@@ -8,10 +8,10 @@ describe('mapKnowledgeStatusToMastery（确定性内化强度映射）', () => {
     expect(mapKnowledgeStatusToMastery('mastered', 60)).toEqual({ masteryScore: 0.85, stability: 'stable' })
   })
   it('review → 0.5 fragile', () => {
-    expect(mapKnowledgeStatusToMastery('review', 50)).toEqual({ masteryScore: 0.5, stability: 'fragile' })
+    expect(mapKnowledgeStatusToMastery('review', 50)).toEqual({ masteryScore: 0.525, stability: 'fragile' })
   })
   it('learning → 0.35 developing', () => {
-    expect(mapKnowledgeStatusToMastery('learning', 40)).toEqual({ masteryScore: 0.35, stability: 'developing' })
+    expect(mapKnowledgeStatusToMastery('learning', 40)).toEqual({ masteryScore: 0.52, stability: 'developing' })
   })
   it('pending → 0.2 unknown', () => {
     expect(mapKnowledgeStatusToMastery('pending', 0)).toEqual({ masteryScore: 0.2, stability: 'unknown' })

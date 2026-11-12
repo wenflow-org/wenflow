@@ -27,8 +27,15 @@
         <div class="greet__main">
           <!-- P3-39（设计评审）：视觉主标题原是无语义 strong，h1 挂在今日行动卡 14px 任务标题上
                （大纲与视觉权重倒挂）——greet 升 h1（读屏大纲恢复页面结构，样式不变）、
-               今日行动卡 action__title 降 h2 -->
-          <h1 class="greet__headline">{{ greetHeadline }}</h1>
+               今日行动卡 action__title 降 h2。
+               2026-11-11 走查：服务端 headline 可能把「问候+路径说明」拼成一句 28 字长句
+               （「欢迎回来，奶茶店店长用客流排下周班这条路径正等着你开头」）。这里按已知的
+               姓名边界拆成主/副两层：主行保留问候与姓名，后段说明降为 14px 副行；
+               拆不开时只交给 CSS 换行，不改后端文案、不猜路径名。 -->
+          <h1 class="greet__headline">
+            <span class="greet__headline-lead">{{ greetHeadlineLead }}</span>
+            <span v-if="greetHeadlineTail" class="greet__headline-tail">{{ greetHeadlineTail }}</span>
+          </h1>
         </div>
       </div>
 
@@ -76,9 +83,9 @@
               <div class="action__eyebrow">
                 <span>今日行动</span>
                 <span class="action__from">来自路径「{{ primaryPath?.title }}」</span>
-                <span class="action__tag">阶段 {{ stageInfo }} · {{ todayTask?.kind || '任务' }}</span>
+                <span class="action__tag">{{ actionTag }}</span>
               </div>
-              <h2 class="action__title">{{ todayTask?.title || '今天没有待办任务' }}</h2>
+              <h2 class="action__title">{{ actionTitle }}</h2>
               <p v-if="actionDesc" class="action__desc action__desc--task">{{ actionDesc }}</p>
               <p v-if="actionReason" class="action__reason">
                 <Sparkles :size="13" :stroke-width="1.75" />
@@ -86,11 +93,14 @@
               </p>
               <!-- 分钟数只在底部进度条行出现一次（2026-09-25 去掉 meta 的「约 N 分钟」；
                    P1-6 2026-10-04 再撤句尾「还剩约 N 分钟」——0/30 已隐含余量，镜像复读且
-                   nowrap 下把它推出 390 视口，「去处理」随之不可点） -->
+                   nowrap 下把它推出 390 视口，「去处理」随之不可点）
+                   2026-11-11 走查：超过目标时原样写「64 / 25 分钟」等于 256%，却没有任何
+                   超出说明。现在超目标时改成自然语言并让进度条独占一行，375 档不会被省略号
+                   吃掉「已超出 N 分钟」。 -->
               <div class="action__foot">
-                <div class="action__today">
+                <div class="action__today" :class="{ 'action__today--over': todayOverTarget }">
                   <div class="action__today-bar"><i :style="{ width: todayBarPct + '%' }"></i></div>
-                  <span>今日已学 {{ todayMinutes }} / {{ todayTask?.minutes || 25 }} 分钟</span>
+                  <span :title="todayProgressTitle">{{ todayProgressText }}</span>
                 </div>
                 <!-- 调控提醒位（2026-09-27）：有待确认的调整建议时在行动卡就地露头，
                      不用进学习状态页才能发现；点击进入该页调控区处理 -->
@@ -113,7 +123,7 @@
                       <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
                       开始学习
                     </button>
-                    <router-link v-else to="/learning-paths" class="btn-primary">查看全部路径</router-link>
+                    <router-link v-else :to="allPathDone ? '/user/learning-history' : '/learning-paths'" class="btn-primary">{{ allPathDone ? '查看学习记录' : '查看全部路径' }}</router-link>
                   </template>
                   <!-- P2-22（2026-10-04 全站评审 confirmed）：「今天休息」触控 36px 低于 44px 地板，
                        与同排 44px 主按钮并排不齐——独立 .action__rest 类补齐（不污染通用 .link-muted，
@@ -365,6 +375,21 @@
               </p>
             </div>
           </section>
+
+          <!-- 最近学习（2026-11-11 走查 图1）：两张主卡结束后到页脚约有 250px 空白。
+               只在确有学习记录、且这条记录不是当前待办任务（避免与「继续」复述同一节课）时渲染；
+               无数据不造假区块。时间锚点与路径列表同口径：可见相对时间 + title 绝对时间。 -->
+          <section v-if="recentSession" class="card recent">
+            <div class="card-head">
+              <strong>最近学习</strong>
+              <span class="recent__when" :title="recentSession.title">{{ recentSession.relative }}</span>
+            </div>
+            <div class="recent__body">
+              <strong class="recent__task">{{ recentSession.taskTitle }}</strong>
+              <span v-if="recentSession.minutes" class="recent__meta">{{ recentSession.minutes }} 分钟</span>
+              <router-link to="/user/learning-history" class="link-muted recent__link">学习记录 ›</router-link>
+            </div>
+          </section>
       </template>
     </main>
 
@@ -468,6 +493,7 @@ import V2ResultState from '@/components/ui/V2ResultState.vue';
 import { localDateKey, localDateKeyFromIso } from '@/utils/date';
 import { describeRequestError } from '@/utils/httpError';
 import { computeStreakDays } from './streak';
+import { formatLocalDateTime, formatRelativeTime } from './learningPathProgress';
 import { useCurrentTask } from '@/composables/useCurrentTask';
 import { useSafePolling } from '@/composables/useSafePolling';
 import { unwrapArray } from './unwrap';
@@ -504,7 +530,11 @@ const guidance = ref<Record<string, any> | null>(null);
 const sessions = ref<Array<Record<string, any>>>([]);
 const achievements = ref<Array<Record<string, any>>>([]);
 
-const userName = computed(() => userStore.user?.name || stats.value?.user?.name || '学习者');
+const userName = computed(() => {
+  /* 名字可能来自 store 或 stats；空串/纯空白/非字符串一律回退，避免出现「欢迎回来，」后没名字 */
+  const raw = userStore.user?.name ?? stats.value?.user?.name;
+  return typeof raw === 'string' && raw.trim() ? raw.trim() : '学习者';
+});
 const greeting = computed(() => {
   const h = new Date().getHours();
   if (h < 6) return '夜深了';
@@ -687,7 +717,7 @@ async function fetchSessions(startDate: string, endDate: string) {
 }
 
 /* ================= 页面状态推导 ================= */
-interface StageView { title: string; status: 'done' | 'current' | 'todo' | 'blocked'; note: string }
+interface StageView { title: string; status: 'done' | 'current' | 'todo' | 'blocked'; note: string; taskCount: number }
 interface PathView {
   id: string; title: string; sub: string; percent: number; hours?: number;
   stages: StageView[]; failed: boolean; generating: boolean; retryType: string | null; errorText: string;
@@ -715,7 +745,7 @@ function toPathView(p: Record<string, any>): PathView {
       title: w.title || `阶段 ${i + 1}`,
       status: tasks.length && doneCount === tasks.length ? 'done' : 'todo',
       note: tasks.length ? `${doneCount}/${tasks.length} 任务` : (w.goal || ''),
-      tasks
+      taskCount: tasks.length
     };
   });
   const firstOpen = stages.findIndex((s) => s.status !== 'done');
@@ -793,6 +823,34 @@ const stageInfo = computed(() => {
   return `${(idx >= 0 ? idx : 0) + 1} / ${primaryPath.value.stages.length || '?'}`;
 });
 
+/* 卡片头阶段标签（2026-11-11 走查）：原文「阶段 1 / 2 · 任务」——kind 缺省时只剩一个「任务」，
+   读作半句。现在改报本阶段真实任务数；整条路径已学完时直接报「已完成 · 共 N 个任务」，
+   与列表徽章 / 详情页状态同一口径。 */
+const totalTaskCount = computed(() =>
+  (primaryPath.value?.stages ?? []).reduce((sum, stage) => sum + stage.taskCount, 0)
+);
+const allPathDone = computed(() => totalTaskCount.value > 0 && (primaryPath.value?.percent ?? 0) >= 100);
+const currentStageTaskCount = computed(() => {
+  const stages = primaryPath.value?.stages ?? [];
+  const current = stages.find((s) => s.status === 'current' || s.status === 'blocked') ?? stages[stages.length - 1];
+  return current?.taskCount ?? 0;
+});
+const actionTag = computed(() => {
+  const stages = primaryPath.value?.stages ?? [];
+  if (pageState.value !== 'active' || !stages.length) return '';
+  if (allPathDone.value) return `已完成 · 共 ${totalTaskCount.value} 个任务`;
+  return currentStageTaskCount.value
+    ? `阶段 ${stageInfo.value} · 本阶段 ${currentStageTaskCount.value} 个任务`
+    : `阶段 ${stageInfo.value}`;
+});
+/* 标题只在「没有待办」时才需要换一种说法：整条路径已完成时说清是「学完了」，
+   不再用「今天没有待办任务」这种像死胡同的状态句。 */
+const actionTitle = computed(() => {
+  if (todayTask.value?.title) return todayTask.value.title;
+  if (allPathDone.value) return `这条路径的 ${totalTaskCount.value} 个任务都已完成`;
+  return '今天没有待办任务';
+});
+
 /* 引导空态兜底（任务单 §7③）：15~20 字内、只给一句可做的事，
    不再解释「问流会梳理成目标和阶段安排」的机制；skill 给了 emptyStateCopy 时以它为准 */
 const guidanceEmptyText = computed(() => guidanceCopy.value?.emptyStateCopy || '说说最近想解决的事，帮你理成一条路径。');
@@ -829,11 +887,23 @@ const skillActions = computed<SkillAction[]>(() => {
         return '/learning-paths';
     }
   };
-  return list.slice(0, 1).map((item: Record<string, any>) => ({
-    label: item.action || item.title || ACTION_LABEL_BY_TO[item.to] || '去学习',
-    to: resolve(item.to),
-    primary: true
-  }));
+  return list.slice(0, 1).map((item: Record<string, any>) => {
+    /* 2026-11-11 走查：没有待办任务时，skill 仍可能给「继续」——按钮却只能落到
+       路径详情 / 列表，读作「有事可继续」但实际无事可做。此时把动作与去向一起改说：
+       整条路径学完 → 查看学习记录；否则 → 查看路径详情。 */
+    if (!todayTask.value && item.to === 'continue-learning') {
+      return {
+        label: allPathDone.value ? '查看学习记录' : (primaryPath.value ? '查看路径详情' : '查看全部路径'),
+        to: allPathDone.value ? '/user/learning-history' : resolve('path-detail'),
+        primary: true
+      };
+    }
+    return {
+      label: item.action || item.title || ACTION_LABEL_BY_TO[item.to] || '去学习',
+      to: resolve(item.to),
+      primary: true
+    };
+  });
 });
 
 /* 路径条卡（2026-09-27 信噪比重设计）：阶段全量标题归路径详情页，
@@ -850,10 +920,20 @@ const currentStageNote = computed(() => {
   return note ? `本阶段 ${note}` : '';
 });
 
+const todayTarget = computed(() => todayTask.value?.minutes || 25);
+const todayOverTarget = computed(() => todayMinutes.value > todayTarget.value);
 const todayBarPct = computed(() => {
-  const target = todayTask.value?.minutes || 25;
-  return Math.min(100, Math.round((todayMinutes.value / target) * 100));
+  return Math.min(100, Math.round((todayMinutes.value / todayTarget.value) * 100));
 });
+/* 进度文案（2026-11-11 走查）：「64 / 25 分钟」在 1280 截图上就是 256%，却读不出「超额」。
+   超目标时改成自然语言，并把目标与超出量都写出来；未超时保留原来的 x / y 简洁口径。 */
+const todayProgressText = computed(() => {
+  const done = todayMinutes.value;
+  const target = todayTarget.value;
+  if (done > target) return `今日已学 ${done} 分钟 · 今日目标 ${target} 分钟，已超出 ${done - target} 分钟`;
+  return `今日已学 ${done} / ${target} 分钟`;
+});
+const todayProgressTitle = computed(() => `今日已学 ${todayMinutes.value} 分钟，今日目标 ${todayTarget.value} 分钟`);
 
 /* 今日行动描述：标题已说清任务，desc 只保留「怎么做」的首句 / 首个分句，
    其余进课堂页看完整说明（2026-09-27 信噪比重设计：原 98 字含后段心理按摩）。
@@ -902,7 +982,34 @@ const actionReason = computed(() => {
   return '';
 });
 
-const greetHeadline = computed(() => guidanceCopy.value?.headline || `${greeting.value}，${userName.value}`);
+/* 问候标题分层（2026-11-11 实机走查）：服务端 headline 会把「欢迎回来，X」和一段路径说明
+   直接拼成一整句（实测 28 字，无引号/标点）。前端只按已知的姓名边界拆：问候+姓名留作 h1
+   主行，后段说明降为副行；姓名对不上时整句交给 CSS 换行（overflow-wrap:anywhere），
+   不改后端文案、不猜路径名。 */
+const GREETING_PREFIX_RE = /^(欢迎回来|早上好|下午好|晚上好|夜深了)[，,]\s*/;
+/* 只有后段以「叙事开头」或标点起句时才拆：避免姓名恰好是更长名字的前缀时
+   （如姓名「奶茶」、后段「店店长…」）把名字切成两半。拆不了就交给 CSS 换行。 */
+const HEADLINE_TAIL_CUE_RE = /^(?:用|把|这|那|今天|今早|今晚|接下来|下一步|可以|建议|从|在|让|为|继续|已|还|又|就|将|不妨|记得|需要|正|来)/;
+const greetHeadlineParts = computed<{ lead: string; tail: string }>(() => {
+  const fallback = `${greeting.value}，${userName.value}`;
+  const raw = String(guidanceCopy.value?.headline || '').trim();
+  if (!raw) return { lead: fallback, tail: '' };
+  const match = raw.match(GREETING_PREFIX_RE);
+  if (!match) return { lead: raw, tail: '' };
+  const rest = raw.slice(match[0].length).trim();
+  // 只有问候语、没有名字/后句：用本地拼接兜底，不渲染「欢迎回来，」
+  if (!rest) return { lead: fallback, tail: '' };
+  const name = userName.value;
+  if (rest.startsWith(name) && rest.length > name.length) {
+    const separator = rest.slice(name.length);
+    const tail = separator.replace(/^[，,。；;：:\s]+/, '').trim();
+    const cueStart = HEADLINE_TAIL_CUE_RE.test(tail) || /^[，,。；;：:]/.test(separator);
+    if (tail && cueStart) return { lead: `${match[1]}，${name}`, tail };
+  }
+  return { lead: raw, tail: '' };
+});
+const greetHeadlineLead = computed(() => greetHeadlineParts.value.lead);
+const greetHeadlineTail = computed(() => greetHeadlineParts.value.tail);
 const greetSub = computed(() => guidanceCopy.value?.subtitle || '');
 
 const tipTone = computed(() => {
@@ -1035,6 +1142,33 @@ const minutesByDate = computed(() => {
 });
 
 const todayMinutes = computed(() => minutesByDate.value.get(todayStr) ?? 0);
+
+/* 最近学习（2026-11-11 走查 图1：两卡结束后约 250px 空白）：只在确有近期记录、
+   且不是当前待办任务时渲染——同一节课已经在「今日行动」里说过，不再复述。
+   时间口径与路径列表一致：可见相对时间，title 用本地绝对时间。 */
+const recentSession = computed(() => {
+  let latest: Record<string, any> | null = null;
+  let latestAt = 0;
+  for (const s of sessions.value) {
+    const at = Date.parse(String(s.startTime || ''));
+    if (!Number.isFinite(at)) continue;
+    if (!latest || at > latestAt) {
+      latest = s;
+      latestAt = at;
+    }
+  }
+  if (!latest) return null;
+  const taskTitle = String(latest.taskTitle || '').trim() || '一次学习';
+  if (todayTask.value?.title && taskTitle === todayTask.value.title) return null;
+  const relative = formatRelativeTime(latestAt);
+  if (!relative) return null;
+  return {
+    taskTitle,
+    minutes: Number(latest.durationMinutes) || 0,
+    relative,
+    title: `最近学习 ${formatLocalDateTime(latestAt)}`
+  };
+});
 
 /* P1-1（2026-10-04 全站评审）：「连续 N 天」全站统一为客户端推算（views/v2/streak.ts），
    不再优先读 users.streakDays 库字段快照——该字段无实时刷新机制，与学习状态页的
@@ -1362,6 +1496,16 @@ onMounted(loadAll);
 .greet__main .greet__headline {
   margin: 0; font-size: 21px; font-weight: 800; letter-spacing: -0.01em; color: var(--ink);
   text-wrap: balance;
+  /* 长 headline 必须能断行：服务端可能拼出不带标点的 28 字长句，1280/375 都不许裁 */
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+/* 主/副两层：问候+姓名是主行；后段路径说明降为副行（14px / 600），两句不再挤成一句 */
+.greet__headline-lead { display: block; }
+.greet__headline-tail {
+  display: block; margin-top: 3px;
+  font-size: 14px; font-weight: 600; line-height: 1.5; letter-spacing: 0; color: var(--muted);
+  text-wrap: pretty;
 }
 .greet__date {
   font-size: 12.5px; color: var(--faint);
@@ -1438,6 +1582,14 @@ onMounted(loadAll);
   box-shadow: var(--shadow-sm);
 }
 .card-head { display: flex; align-items: center; justify-content: space-between; font-size: 14px; }
+/* 最近学习（2026-11-11 走查）：紧凑一条横卡，补上两卡结束后的空白；
+   任务名可折行，右侧时长与入口不换行，窄屏整体换行而不是横向溢出。 */
+.recent { padding: 14px 18px; display: grid; gap: 8px; }
+.recent__when { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.recent__body { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-width: 0; }
+.recent__task { font-size: 14px; font-weight: 700; color: var(--ink); overflow-wrap: anywhere; }
+.recent__meta { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.recent__link { margin-left: auto; flex: none; }
 /* .link-muted 全页唯一基础定义：多个 router-link 渲染成 <a>，须自带去下划线。
    走查 2026-10-08 #54：基础样式此前只有 padding 5px 0（内容高约 29.5px），桌面档
    可点热区不足 36px；手机档靠 ≤1100 的 min-height:40 兜底，两档标准不一（桌面更差）。
@@ -1635,6 +1787,11 @@ onMounted(loadAll);
 /* P1-6（2026-10-04）：span 须可收缩（flex-shrink+min-width:0+ellipsis），否则 nowrap 文案
    在 390 视口把整行撑出屏（实测溢出 107px、「去处理」按钮落在屏外不可点） */
 .action__today span { font-size: 12px; color: var(--faint); white-space: nowrap; font-variant-numeric: tabular-nums; flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* 超过今日目标（2026-11-11 走查）：文案变长，进度条独占一行、文字允许折行，
+   不让「已超出 N 分钟」在 375 档被省略号吃掉；轨道仍按 100% 封顶（满格=达标） */
+.action__today--over { flex-wrap: wrap; row-gap: 4px; }
+.action__today--over .action__today-bar { flex: 1 1 100%; }
+.action__today--over span { white-space: normal; overflow: visible; text-overflow: clip; }
 /* 调控提醒位（2026-09-27）：有要拍板的调整时在行动卡就地露头，蓝色弱底不抢主 CTA */
 .action__control {
   display: flex; align-items: center; gap: 7px;
@@ -1729,6 +1886,9 @@ onMounted(loadAll);
   .tip { grid-row: 2; }
   .dash__left { grid-column: 1; grid-row: 3; }
   .week { grid-column: 2; grid-row: 3; }
+  /* 最近学习独占第 4 行：不写显式行号时 auto-placement 会把它塞进提示条缺席时
+     空出来的第 2 行，跑到今日行动上方 */
+  .recent { grid-column: 1 / -1; grid-row: 4; }
   /* 新手态两卡等高（2026-11-07 用户走查 图4）：左卡（行动引导）与右卡（本周节奏）
      同处第 3 行，默认 align-items:start 各按内容定高——左卡 3 条示例 + 页脚，右卡只有
      日历 + 两行注，底边差出一截。这里只在空态把这一行拉齐：两卡都填满行高，左卡靠

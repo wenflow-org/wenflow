@@ -81,4 +81,32 @@ describe('术语表数据态', () => {
     expect(names.filter((t) => t.includes('override-record')).length).toBe(1)
     w.unmount()
   })
+
+  it('段标题用 h2（h1 之下不跳级），目录不列 0 条分组', async () => {
+    // docs 置空：目录里若仍出现「文档链接」，点进去会落在不渲染的 section 上（点了没反应）
+    getMock.mockResolvedValueOnce({ data: { data: { ...payload, docs: [] } } })
+    const w = await mountGlossary()
+    const titles = w.findAll('.mg__section-title')
+    expect(titles.length).toBeGreaterThan(0)
+    for (const t of titles) expect(t.element.tagName).toBe('H2')
+    const toc = w.findAll('.mg__toc-item').map((a) => a.text())
+    expect(toc.length).toBeGreaterThan(0)
+    expect(toc.some((t) => t.includes('文档链接'))).toBe(false)
+    w.unmount()
+  })
+
+  it('搜索无命中走共享空态（MkEmptyState），清空搜索后词条回来', async () => {
+    getMock.mockResolvedValueOnce({ data: { data: payload } })
+    const w = await mountGlossary()
+    await w.find('input[type="search"]').setValue('不存在的术语')
+    await flushPromises()
+    expect(w.find('.mk-empty').exists()).toBe(true)
+    expect(w.text()).toContain('没有匹配「不存在的术语」的词条')
+    await w.find('.mk-empty button').trigger('click')
+    await flushPromises()
+    expect((w.find('input[type="search"]').element as HTMLInputElement).value).toBe('')
+    expect(w.find('.mk-empty').exists()).toBe(false)
+    expect(w.findAll('.mg__term').length).toBeGreaterThan(0)
+    w.unmount()
+  })
 })

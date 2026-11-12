@@ -20,6 +20,7 @@ import { CallerInfo } from '../../gateway/api-gateway';
 import { callPrompt } from '../../composers/prompt-composer';
 import { loadPromptFile } from '../../composers/prompt-files/loader';
 import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
+import { assessPlanningSourceHonesty } from '../../services/learning/generation/stage-subtask-quality';
 
 import { logger } from '../../utils/logger';
 import { buildPromptFriendlyMaterials } from '../../services/materials/material-prompt-projection';
@@ -238,7 +239,7 @@ export function enforceBudgetConservation(
   });
   const totalAfter = round1(after.reduce((a: number, b: number) => a + b, 0));
   const gapNote = capacitySum < floor
-    ? `容量说明：按你的周期与每日投入，学习预算约 ${Math.round(target)} 小时；当前阶段结构最多承载约 ${Math.round(capacitySum)} 小时。建议增加阶段数或提高单次学习时长；本路径优先覆盖主干，其余主题需另行安排。`
+    ? `容量说明：按你的周期与每日投入，学习预算约 ${Math.round(target)} 小时；当前阶段结构最多承载约 ${Math.round(capacitySum)} 小时。建议增加坐学次数或阶段数；本路径优先覆盖主干，其余主题需另行安排。`
     : null;
   return {
     totalAfter,
@@ -1303,6 +1304,18 @@ ${replan ? renderReplanSection(replan) : ''}
       if (process.env.PATH_EVAL_BYPASS_GATES === '1') return base;
       return validateScopeBinding(parsed, learningScope);
     },
+    // 来源诚实软校验（2026-11-12）：无材料时 summary/milestone 不得宣称「真实/公开记录」——
+    // goal 层的口头承诺（「都是公开日志能查到的」）不得被抄进路径合同当事实。带反馈重试一次。
+    softValidateParsedOutput: (parsed: any) => {
+      const plan = parsed?.path || parsed || {};
+      return assessPlanningSourceHonesty(
+        {
+          summary: typeof plan.summary === 'string' ? plan.summary : undefined,
+          milestones: Array.isArray(plan.milestones) ? plan.milestones : [],
+        },
+        { hasMaterials: (promptMaterials?.length ?? 0) > 0 },
+      );
+    },
     mapEnvelope: (output, _input, runtimeContract) => adaptToRuntimeEnvelope({
       contract: runtimeContract,
       artifact: output,
@@ -1316,6 +1329,10 @@ ${replan ? renderReplanSection(replan) : ''}
       maxAttempts: 2,
       onValidationFail: ({ failureReason }) => `${buildPathValidationRepairNotice(failureReason)}`
         + (failureReason.includes('SCOPE_UNBOUND') && learningScope ? String.fromCharCode(10) + formatScopeForPrompt(learningScope) + String.fromCharCode(10) : '')
+        + (failureReason.includes('PLANNING_SOURCE_HONESTY')
+          ? String.fromCharCode(10) + '本路径没有联网采集结果或用户上传资料，summary 与各阶段的 title/description/goal 里不得出现「真实对话/真实记录/真实案例/公开复盘」等措辞——'
+            + '把这类承诺改写为「示意记录/示例样本（形态参照公开事故类型）」，或删掉来源断言。' + String.fromCharCode(10)
+          : '')
         + `上次失败原因：${failureReason}`,
     },
   }, input, { userId, ...(systemPromptOverride ? { systemPromptOverride } : {}) });

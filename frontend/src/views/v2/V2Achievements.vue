@@ -62,6 +62,14 @@
               @click="typeFilter = typeFilter === t.key ? '' : t.key"
             >{{ t.label }}</button>
           </div>
+          <!-- 清除筛选（2026-11-11 走查 P2）：两组筛选叠加生效后，回到「全部」需要逐个
+               点掉两组（状态还要点「全部」）——给一条显式退路，不放进 role=group 里。 -->
+          <button
+            v-if="hasActiveFilter"
+            type="button"
+            class="filters__clear"
+            @click="clearFilters"
+          >清除筛选</button>
         </div>
 
         <!-- 成就网格（原型 wf-ach 2085-2129）：icon → 标题 → 描述 → 一行状态，四行无分隔线 -->
@@ -81,21 +89,28 @@
               aria-label="分享成就"
               @click.stop="shareAchievement(a)"
             >
-              <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 10.6l6.8-4M8.6 13.4l6.8 4"/></svg>
             </button>
 
             <!-- 水平紧凑布局（2026-11-06 走查）：原「图标/标题/描述/状态」四行竖排，
                  每张卡右半边 70% 全空、14 个成就滚一屏。现在左 40px 图标 + 右标题/描述并排，
                  未解锁卡底部一条细进度条（1/3 这类读数已在状态行里，条只补视觉比例） -->
             <div class="ach-card__main">
-              <span class="ach-card__icon" :class="iconCls(a)" aria-hidden="true"><component :is="achIconOf(a)" /></span>
+              <span class="ach-card__icon" :class="iconCls(a)" aria-hidden="true">
+                <component :is="achIconOf(a)" />
+                <!-- 未解锁角标（2026-11-11 走查 P2）：此前锁定态只靠 0.78 透明度和状态行灰字，
+                     截图里与已解锁卡几乎同貌。色块右下角加一把小锁，形状本身说明状态。 -->
+                <span v-if="!a.unlocked" class="ach-card__lock">
+                  <svg viewBox="0 0 24 24" width="9" height="9" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>
+                </span>
+              </span>
               <div class="ach-card__text">
-                <strong class="ach-card__name">{{ a.name }}</strong>
-                <p class="ach-card__desc">{{ a.description }}</p>
+                <strong class="ach-card__name" :title="a.name">{{ a.name }}</strong>
+                <p class="ach-card__desc" :title="a.description">{{ a.description }}</p>
               </div>
             </div>
             <span class="ach-card__state" :class="{ 'ach-card__state--on': a.unlocked }">
-              {{ stateText(a) }}<span v-if="a.unlocked && formatDate(a.earnedAt)" class="ach-card__date"> · {{ formatDate(a.earnedAt) }}</span>
+              {{ stateText(a) }}<span v-if="a.unlocked && formatDate(a.earnedAt)" class="ach-card__date" :title="formatDateTime(a.earnedAt)"> · {{ formatDate(a.earnedAt) }}</span>
             </span>
             <div v-if="!a.unlocked" class="ach-card__progress" role="img" :aria-label="`解锁进度 ${progressPct(a)}%`">
               <i :style="{ width: progressPct(a) + '%' }"></i>
@@ -181,6 +196,13 @@ const statusFilter = ref<'all' | 'unlocked' | 'locked'>('all');
 const typeFilter = ref('');
 const toastMsg = ref('');
 
+/** 是否有关闭不掉的筛选（决定「清除筛选」是否出现） */
+const hasActiveFilter = computed(() => statusFilter.value !== 'all' || typeFilter.value !== '');
+function clearFilters() {
+  statusFilter.value = 'all';
+  typeFilter.value = '';
+}
+
 const statusFilters = [
   { key: 'all' as const, label: '全部' },
   { key: 'unlocked' as const, label: '已解锁' },
@@ -255,6 +277,19 @@ function formatDate(d?: string | Date) {
   const date = new Date(d);
   if (Number.isNaN(date.getTime())) return '';
   return `${date.getMonth() + 1}月${date.getDate()}日`;
+}
+
+/** 日期的机器口径（title）：YYYY-MM-DD HH:mm。
+    页面可见日期统一 M月D日（日历/列表口径），跨年歧义由悬停的绝对时间消除。 */
+function formatDateTime(d?: string | Date) {
+  if (!d) return '';
+  const date = new Date(d);
+  if (Number.isNaN(date.getTime())) return '';
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mi = String(date.getMinutes()).padStart(2, '0');
+  return `${date.getFullYear()}-${mm}-${dd} ${hh}:${mi}`;
 }
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
@@ -350,6 +385,21 @@ onMounted(() => {
   transition: color 0.14s ease, background 0.14s ease, border-color 0.14s ease;
 }
 .filter--active { border-color: transparent; background: color-mix(in srgb, var(--blue) 12%, transparent); color: var(--blue-deep); }
+/* 清除筛选：文字按钮，不参与两枚 role=group（它是两组共用的退路，不属于任一维度） */
+.filters__clear {
+  min-height: 44px;
+  padding: 0 6px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--blue-deep);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.filters__clear:hover { color: var(--blue); }
 
 /* 网格（原型 wf-ach__grid 847 / 931）：2 列，≥1024 放 3 列。
    撤掉本页自造的 auto-fill minmax(230px,1fr)——1080 宽下会铺成 4 列。 */
@@ -377,6 +427,8 @@ onMounted(() => {
   display: grid;
   gap: 2px;
 }
+/* 只有已解锁卡有卡角分享钮，文本才需要让位（锁定卡别白丢 22px 标题宽度） */
+.ach-card--unlocked .ach-card__text { padding-right: 22px; }
 /* 未解锁卡底部极细进度条：1/3 的比例感由条补，数字仍在状态行 */
 .ach-card__progress {
   height: 3px;
@@ -394,6 +446,7 @@ onMounted(() => {
 /* ── 42×42 类型色块（原型 wf-ach__icon 853-862）──
     P3-48：字标升双字（19px 单字 → 14px 双字），42px 块内两字 + 字距放得下 */
 .ach-card__icon {
+  position: relative;
   width: 40px; height: 40px;
   flex: none;
   border-radius: var(--mk-radius-lg);
@@ -416,8 +469,30 @@ onMounted(() => {
    --green-ink 3.49，均达不到 4.5:1；墨色标签则与卡内标题同级（约 6.4:1 浅 / 7.6:1 深）。
    「类型」由色块底色区分，「可读性」由墨色文字承担（2026-10-08 用户侧走查）。 */
 .ach-card__icon--locked { color: var(--ink); }
+/* 未解锁角标：色块右下角的小锁（形状是状态的第二编码，不只靠绿/灰文字）。
+   白底圆圈在明暗两档都把锁从类型色块上分出来；卡片整体 0.78 透明度仍生效。 */
+.ach-card__lock {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  display: grid; place-items: center;
+}
 
-.ach-card__name { font-size: 14px; font-weight: 700; color: var(--ink); }
+.ach-card__name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  /* 长成就名一行封顶（2026-11-11 走查）：原无截断，超长名会把描述挤到卡外 */
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .ach-card__desc {
   margin: 0;
   font-size: 12px;
@@ -432,8 +507,17 @@ onMounted(() => {
 .ach-card__state { margin-top: 4px; font-size: 12px; font-weight: 700; color: var(--faint); }
 .ach-card__state--on { color: var(--green-ink); }
 .ach-card__date { font-weight: 500; color: var(--faint); }
-/* 锁定卡：只降透明度（原型 867 opacity .78）；撤掉原 grayscale(0.3) + hover 复原 */
-.ach-card--locked { opacity: 0.78; }
+/* 锁定卡（2026-11-11 走查 P2）：原只降透明度，截图里与已解锁卡几乎同貌。
+   现在三重编码——虚线边框（未完成/占位）+ 略暗卡底 + 图标角小锁；
+   已解锁卡用绿色描边强调完成。颜色仍走 token，不新增硬编码色值。 */
+.ach-card--locked {
+  opacity: 0.78;
+  border-style: dashed;
+  background: color-mix(in srgb, var(--ink) 2%, var(--surface));
+}
+.ach-card--unlocked {
+  border-color: color-mix(in srgb, var(--green) 32%, var(--line));
+}
 
 /* ── Unlock stagger animation ── */
 .ach-card--unlocked {
@@ -456,7 +540,7 @@ onMounted(() => {
 /* ── Share button（原型无此入口，保留为卡角常显轻量图标钮） ── */
 .ach-share {
   position: absolute; top: 8px; right: 8px;
-  width: 28px; height: 28px;
+  width: 32px; height: 32px;
   border-radius: var(--mk-radius-md); border: 0;
   /* 底色用 ink 派生：写死的 rgba(0,0,0,…) 在暗色下看不见 */
   background: color-mix(in srgb, var(--ink) 5%, transparent);
@@ -472,8 +556,9 @@ onMounted(() => {
      390 下 2 列统计卡的 KPI 数字原为 28px（卡宽仅 ~165px）、成就卡内边距 16px、卡片高 176px——
      一张"我是谁"式的概览要吃掉整屏。按学习侧 KPI 刻度压到 21px/12px 边距。 */
   .grid { grid-template-columns: 1fr 1fr; }
-  /* 28×28 → 34×34 → 36×36（mobile:spec 的 lt36 门禁）：分享是卡角唯一的手势目标 */
-  .ach-share { width: 36px; height: 36px; top: 4px; right: 4px; }
+  /* 32×32 → 44×44（2026-11-11 走查 P2：分享是卡角唯一手势目标，须过移动档 44px 地板） */
+  .ach-share { width: 44px; height: 44px; top: 2px; right: 2px; }
+  .ach-card--unlocked .ach-card__text { padding-right: 30px; }
   /* 总览条原来横向 18px，和下面一整列 .ach-card 的 14px 差 4px——
      同宽卡堆在一列里，内容左缘落在 33/29 两条线上（2026-09-26 对齐走查）。 */
   .ov-line { padding-left: 14px; padding-right: 14px; }

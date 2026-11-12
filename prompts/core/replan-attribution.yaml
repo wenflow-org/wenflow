@@ -10,18 +10,26 @@ identity: |
 channels: [learner, path, evidence, state]
 stateAdvance: false
 inputs:
-  - name: replanSignal
+  # 声明名必须与**模型实收载荷键**一致（2026-11-11 字段审计）：调用方
+  # ReplanAttributionService 实际下发 { recall, allowedRecommendations, evidence, pathContext }；
+  # 此前声明 replanSignal/sessionWrapup/pathSummary，规则里却引用 recall/allowedRecommendations/evidence，
+  # 模型在 payload 里找不到声明名。ref 只标注数据来源，不是键名来源。
+  - name: recall
     type: object
     ref: sandbox:profile.snapshot.replanSignal
-    desc: 阈值召回（reasonCodes/priority/recommendation/scope/rationale）——归因必须在它允许的方向内选
-  - name: sessionWrapup
-    type: object
+    desc: 阈值召回 { reasonCodes, recommendation, priority, rationale }——归因必须在它允许的方向内选
+  - name: allowedRecommendations
+    type: string[]
+    ref: sandbox:path.planningHints
+    desc: 系统真正能执行的方向集合（含 keep）；recommendation 必须取自其中
+  - name: evidence
+    type: object[]
     ref: sandbox:teaching.session.wrapup
-    desc: 课后收束（含未解决点与困惑），即归因证据（evidence）的来源
-  - name: pathSummary
-    type: string
+    desc: 归因证据条目 [{ id, 概念名/未解决点名/掌握状态 }]；evidenceRefs 只能引用其中出现过的 id
+  - name: pathContext
+    type: object?
     ref: sandbox:path.path.summary
-    desc: 路径概要——路径位置上下文（pathContext）
+    desc: 路径位置上下文 { milestoneTitle, stageNumber }（可选）
 rules:
   - primaryReasonCode 必须原样取自输入 recall.reasonCodes；不在其中的原因不许编
   - recommendation 必须取自输入 allowedRecommendations（这是系统真正能执行的方向）；都不合适时给 keep

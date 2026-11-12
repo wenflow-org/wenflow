@@ -20,9 +20,11 @@
         @action="loadDrift"
       />
       <!-- 一致（正向后空态）：原型 .empty 词表，图标 + 结论 -->
+      <!-- 2026-11-11（困惑测试 #65）：「文件 / 线上」这对词此前零解释，出现不一致时去哪改也没说。 -->
       <MkEmptyState
         v-else-if="drift.items.length === 0"
         title="无不一致"
+        description="文件 = 编排 YAML 的声明，线上 = 数据库里的生效值，逐项比对一致。出现不一致时每条会带「打开编排文件」入口：到字段路由页改 YAML 后点「同步到 DB」。"
         compact
       />
       <template v-else>
@@ -46,7 +48,8 @@
         <span class="mk-card__title">最近变更</span>
         <span v-if="changes.length" class="mk-card__meta">{{ changes.length }} 条</span>
       </summary>
-      <ul v-if="changes.length" class="fdp__changes-list">
+      <MkLoading v-if="changesLoading && !changes.length" inline text="读取变更记录…" />
+      <ul v-else-if="changes.length" class="fdp__changes-list">
         <li v-for="(c, i) in changes" :key="i" class="fdp__change">
           <span class="mk-badge mk-badge--muted fdp__change-kind">{{ changeTypeText(c.changeType) }}</span>
           <span class="fdp__change-target">{{ targetTableText(c.targetTable) }}</span>
@@ -60,19 +63,20 @@
         tone="error"
         title="变更记录加载失败"
         description="无法连接审计服务，请稍后重试。"
-        action-text="重试"
         compact
-        @action="loadChanges"
       />
       <!-- 空态不再挂「刷新」动作（2026-11-02 评审）：空列表里那颗主按钮是整页唯一的强调色块，
            而「刷新」是列表动作、不是空态结论。动作移到下面的列表脚，与「在审计日志看全部」并列。 -->
+      <!-- 2026-11-11（困惑测试 #66）：空态原只写「暂无变更记录」，不说是当前阶段、最近 10 条，
+           分不清「确实没变更」还是「没接上数据」；来源入口也只在有数据时出现。 -->
       <MkEmptyState
         v-else
-        title="暂无变更记录"
+        :title="`${stage} 阶段暂无编排 / 路由变更`"
+        :description="`显示最近 ${CHANGE_LIMIT} 条；变更来自编排文件保存、字段路由修改、孤儿行清理等治理动作。`"
         compact
       />
       <div class="fdp__changes-foot">
-        <RouterLink v-if="changes.length" class="mk-link" :to="{ path: '/admin/audit-logs' }">在审计日志看全部</RouterLink>
+        <RouterLink class="mk-link" :to="{ path: '/admin/audit-logs' }">在审计日志看全部</RouterLink>
         <button type="button" class="mk-btn mk-btn--sm" @click="loadChanges">刷新</button>
       </div>
     </details>
@@ -94,7 +98,10 @@ const drift = ref<{ items: Array<Record<string, unknown>>; totalDriftCount: numb
 const driftLoading = ref(false);
 const driftFailed = ref(false);
 const changes = ref<Array<Record<string, unknown>>>([]);
+const changesLoading = ref(false);
 const changesFailed = ref(false);
+/** 变更记录窗口：请求参数与空态说明共用（2026-11-11 困惑测试 #66） */
+const CHANGE_LIMIT = 10;
 
 /** 不一致报告卡头读数：说清这次查出来的结果（术语仍取 terms.ts 单源）。
     三态与卡体的加载/失败/空态一一对应，不再恒显「文件与线上不一致」。 */
@@ -136,21 +143,22 @@ const TARGET_TABLE_LABELS: Record<string, string> = {
 };
 const targetTableText = (v: unknown) => TARGET_TABLE_LABELS[String(v || '')] || String(v || '');
 
-/* 审计行时间/操作人（审核 #81）：接口逐行带 createdAt/actorId/actorRole/reason，
-   此前未渲染导致「最近变更」看不出新旧与是谁改的。时间行内取「今天 HH:mm / M/D HH:mm」，
-   完整时间戳与原因挂 title；操作人缺省时退回角色或「—」 */
+/* 审计行时间/操作人（审核 #81）：接口逐行带 createdAt/actorId/actorRole/reason。
+   时间统一 YYYY-MM-DD HH:mm（全站绝对时间口径；不再用「今天 / M/D」两套写法），
+   秒级完整值与原因挂 title；操作人缺省时退回角色或「—」 */
 function changeTime(iso: unknown): string {
   const ts = typeof iso === 'string' ? new Date(iso).getTime() : NaN;
   if (!Number.isFinite(ts)) return '—';
   const d = new Date(ts);
-  const now = new Date();
-  const sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
   const p = (n: number) => String(n).padStart(2, '0');
-  return sameDay ? `今天 ${p(d.getHours())}:${p(d.getMinutes())}` : `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 function changeTimeFull(iso: unknown): string {
   const ts = typeof iso === 'string' ? new Date(iso).getTime() : NaN;
-  return Number.isFinite(ts) ? new Date(ts).toLocaleString() : '时间未知';
+  if (!Number.isFinite(ts)) return '时间未知';
+  const d = new Date(ts);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 function actorText(c: Record<string, unknown>): string {
   const id = c.actorId != null && String(c.actorId).trim() ? String(c.actorId) : '';
@@ -180,13 +188,16 @@ async function loadDrift() {
 }
 
 async function loadChanges() {
+  changesLoading.value = true;
   changesFailed.value = false;
   try {
-    const c = await adminFieldRoutingsApi.getChanges({ stage: props.stage, limit: 10 });
+    const c = await adminFieldRoutingsApi.getChanges({ stage: props.stage, limit: CHANGE_LIMIT });
     changes.value = Array.isArray(c.data?.data) ? c.data.data : (c.data?.data?.changes || []);
   } catch {
     changesFailed.value = true;
     changes.value = [];
+  } finally {
+    changesLoading.value = false;
   }
 }
 
@@ -208,7 +219,7 @@ watch(() => props.stage, () => {
 /* 卡皮走全局 .mk-card（原型 .card 201-215）；此处只留本页间距。
    卡头 .mk-card__head 自带 border-bottom，折叠时 summary 即卡底 —— 复位避免双线。 */
 .fdp__box { margin-bottom: 12px; }
-.fdp__box[open] > .mk-section__summary { border-bottom: 1px solid var(--mk-line, #e6ebf4); }
+.fdp__box[open] > .mk-section__summary { border-bottom: 1px solid var(--mk-line); }
 .fdp__box:not([open]) > .mk-card__head { border-bottom: 0; }
 .fdp__loading { display: flex; justify-content: center; padding: 20px 0; }
 .fdp__drift-list { margin: 0; padding: 6px 14px 12px; list-style: none; }
@@ -221,17 +232,17 @@ watch(() => props.stage, () => {
   margin-top: 6px;
   border: 0;
   border-radius: var(--mk-radius-md);
-  background: var(--mk-amber-bg, #fffbeb);
+  background: var(--mk-amber-bg);
   font-size: var(--mk-fs-micro);
   flex-wrap: wrap;
 }
 /* 类别徽章走全局 .mk-badge 胶囊（自搓 pill 已删）；本类只保留行内布局位 */
 .fdp__drift-kind { flex-shrink: 0; }
-.fdp__drift-key { font-weight: 700; color: var(--mk-ink, #1a2a44); }
-.fdp__drift-field { color: var(--mk-faint, var(--mk-faint-soft)); }
-.fdp__drift-val { font-size: var(--mk-fs-micro); }
-.fdp__drift-val--seed { color: var(--mk-muted, #5b6577); }
-.fdp__drift-val--db { color: var(--mk-blue, #2f6ae0); font-weight: 600; }
+.fdp__drift-key { font-weight: 700; color: var(--mk-ink); }
+.fdp__drift-field { color: var(--mk-faint); }
+.fdp__drift-val { font-size: var(--mk-fs-micro); min-width: 0; overflow-wrap: anywhere; }
+.fdp__drift-val--seed { color: var(--mk-muted); }
+.fdp__drift-val--db { color: var(--mk-blue); font-weight: 600; }
 .fdp__drift-act { margin-left: auto; font-size: var(--mk-fs-micro); }
 .fdp__changes-list { margin: 0; padding: 2px 14px 8px; list-style: none; }
 /* 审计行：原型 .rankrow/.vrow 分隔线列表（行间 1px 底线、末行不画，不再逐条描边盒）297-302 */
@@ -240,16 +251,16 @@ watch(() => props.stage, () => {
   align-items: baseline;
   gap: 8px;
   padding: 9px 0;
-  border-bottom: 1px solid var(--mk-line, #e6ebf4);
+  border-bottom: 1px solid var(--mk-line);
   font-size: var(--mk-fs-micro);
   flex-wrap: wrap;
 }
 .fdp__change:last-child { border-bottom: 0; }
 .fdp__change-kind { flex-shrink: 0; }
-.fdp__change-target { color: var(--mk-muted, #5b6577); }
+.fdp__change-target { color: var(--mk-muted); }
 /* 时间列等宽数字防跳动；操作人弱化，完整原因/角色在 title（审核 #81） */
-.fdp__change-time { color: var(--mk-faint, var(--mk-muted)); font-variant-numeric: tabular-nums; }
-.fdp__change-actor { color: var(--mk-muted, #5b6577); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.fdp__change-time { color: var(--mk-faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fdp__change-actor { color: var(--mk-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
 .fdp__changes-foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 4px 14px 12px; }
 /* 分区空态收口（2026-11-02 评审）：合计 48px 上下留白 + 46px 图标块让一行结论占掉约 300px，
    在折叠区展开后就是一大片空白。分区内空态只留「一句结论」，留白收到列表行级别。 */

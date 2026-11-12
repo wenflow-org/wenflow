@@ -433,7 +433,13 @@ export interface CardWallEntry {
   sourceKind: string | null;
   email: string | null;
   /** 派生来源模板名（2026-10-16 卡=身份模板）：非空即「已派生实例」，空为身份池里的模板卡 */
-  derivedFrom: string | null;
+  derivedFrom: string | null
+  /**
+   * 是否实例（2026-11-10 口径统一）：`derivedFrom` 或 `origin` 任一存在。
+   * 此前卡墙只认 `derivedFrom`，批量实验建的实例（只写 origin）被当成身份卡上墙，
+   * 与虚拟学习者列表的实例判据（instance-scope.INSTANCE_MARKER_KEYS）相反。
+   */
+  isInstance: boolean;
   /** 故事池任务数（2026-10-27 卡面密度）：创建实例时要勾任务，卡面先给出「这张卡能开几节课」 */
   taskCount: number;
   /** 首个任务标题（2026-10-27）：卡面上真正会被开的那节课叫什么，比抽象的学习目标更能判断要不要用 */
@@ -466,6 +472,7 @@ export function buildCardWallEntries(
     let opening: string | null = null;
     let sourceKind: string | null = null;
     let derivedFrom: string | null = null;
+    let isInstance = false;
     let taskCount = 0;
     let firstTaskTitle: string | null = null;
     try {
@@ -479,6 +486,9 @@ export function buildCardWallEntries(
       opening = (sc.opening as string) || null;
       sourceKind = (sc.sourceKind as string) || null;
       derivedFrom = ((p.derivedFrom as Record<string, unknown> | undefined)?.name as string) || null;
+      /* 与 instance-scope.INSTANCE_MARKER_KEYS 同判据：身份克隆写 derivedFrom，
+         批量实验写 origin——任一存在就是实例，不是身份卡 */
+      isInstance = !!(p.derivedFrom || p.origin);
       const pool = Array.isArray(p.storyPool) ? (p.storyPool as Array<Record<string, unknown>>) : [];
       taskCount = pool.length;
       const first = pool[0];
@@ -502,6 +512,7 @@ export function buildCardWallEntries(
       sourceKind,
       email,
       derivedFrom,
+      isInstance,
       taskCount,
       firstTaskTitle,
     };
@@ -531,7 +542,7 @@ export async function getCardWallIndex() {
     derivedCountBySource.set(srcId, (derivedCountBySource.get(srcId) || 0) + 1);
   }
   const cards = all
-    .filter((c) => !c.derivedFrom)
+    .filter((c) => !c.isInstance)
     .map((c) => ({ ...c, derivedCount: derivedCountBySource.get(c.profileId) || 0 }));
   return {
     cards,
@@ -539,7 +550,9 @@ export async function getCardWallIndex() {
       total: cards.length,
       builtin: cards.filter((c) => c.preset).length,
       custom: cards.filter((c) => !c.preset).length,
-      derived: all.length - cards.length, // 已派生实例数：不在这面墙上，点 KPI 去虚拟学习者列表看
+      /* 已创建实例：all − 身份卡 = derivedFrom ∪ origin 两类实例（与列表侧 INSTANCE_PROFILE_WHERE 同判据）。
+         此前只按 derivedFrom 排除，批量实验实例既上墙又不在 KPI 里，两个数永远差一截。 */
+      derived: all.length - cards.length,
     },
   };
 }
@@ -762,6 +775,8 @@ export interface CardDetail {
   email: string | null;
   notes: string | null;
   createdAt: Date;
+  /** 本卡已派生实例数（与卡墙「已派生 N」同一聚合：扫全表 derivedFrom.profileId） */
+  derivedCount: number;
   /** 人设键值面（profile 根字段优先、personaSeed 兜底；去 scenarioCard/nickname/元数据键） */
   personaFacts: Array<{ label: string; value: string }>;
   nickname: string | null;
@@ -883,6 +898,16 @@ export async function getCardDetail(profileId: string): Promise<CardDetail | nul
   const background =
     (typeof root.background === 'string' && root.background.trim() ? root.background.trim() : null)
     || (typeof seed.background === 'string' && seed.background.trim() ? seed.background.trim() : null);
+  /* 与卡墙同源：同一批 rows 里按 derivedFrom.profileId 聚合，不再让详情页另拉 1000 条自己数 */
+  const derivedCount = rows.reduce((n, r) => {
+    try {
+      const p = JSON.parse(r.profile || '{}') as Record<string, unknown>;
+      const df = p.derivedFrom as Record<string, unknown> | undefined;
+      return n + (df?.profileId === profileId ? 1 : 0);
+    } catch {
+      return n;
+    }
+  }, 0);
   const materials = ((sc.materials as Array<{ kind?: string; title?: string }> | undefined) || [])
     .map((m) => ({ kind: String(m.kind || 'note'), title: String(m.title || '') }))
     .filter((m) => m.title);
@@ -900,6 +925,7 @@ export async function getCardDetail(profileId: string): Promise<CardDetail | nul
     email: entry.email,
     notes: row.notes ?? null,
     createdAt: row.createdAt,
+    derivedCount,
     personaFacts,
     nickname: (seed.nickname as string) || null,
     nameHint: (seed.nameHint as string) || null,
@@ -1056,6 +1082,9 @@ export async function exportCards(): Promise<{ format: 'yaml'; content: string; 
   for (const r of rows) {
     let p: Record<string, unknown> = {};
     try { p = JSON.parse(r.profile || '{}'); } catch { continue; }
+    /* 实例（derivedFrom / origin）不是卡库资产：导出只出身份卡，否则「导出卡库」的张数
+       与 KPI/卡墙对不上，还会把实例回灌成新卡 */
+    if (p.derivedFrom || p.origin) continue;
     const tags = parseTags(r.tags);
     const cardKey = resolveCardKey(p, tags);
     if (!cardKey) continue;

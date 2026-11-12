@@ -75,13 +75,13 @@ describe('normalizeStory 的 goalSeed 问题类型标注', () => {
     const story = normalizeStory({
       goalSeed: {
         primaryBlockType: 'permission_process',
-        recurrence: 'once',
+        recurrence: 'oneoff',
         blockTypeEvidence: '账号被管理员锁了，他不知道该找谁开',
       },
     })
 
     expect(story.goalSeed.primaryBlockType).toBe('permission_process')
-    expect(story.goalSeed.recurrence).toBe('once')
+    expect(story.goalSeed.recurrence).toBe('oneoff')
     expect(story.goalSeed.blockTypeEvidence).toBe('账号被管理员锁了，他不知道该找谁开')
   })
 
@@ -91,8 +91,10 @@ describe('normalizeStory 的 goalSeed 问题类型标注', () => {
     expect(story.goalSeed.primaryBlockType).toBeNull()
   })
 
-  it('recurrence 只接受 once|recurring，非法值置 null', () => {
+  it('recurrence 接受 oneoff|recurring，once 作历史别名归一为 oneoff，非法值置 null', () => {
     expect(normalizeStory({ goalSeed: { recurrence: 'sometimes' } }).goalSeed.recurrence).toBeNull()
+    expect(normalizeStory({ goalSeed: { recurrence: 'oneoff' } }).goalSeed.recurrence).toBe('oneoff')
+    expect(normalizeStory({ goalSeed: { recurrence: 'once' } }).goalSeed.recurrence).toBe('oneoff')
     expect(normalizeStory({ goalSeed: { recurrence: 'recurring' } }).goalSeed.recurrence).toBe('recurring')
   })
 
@@ -112,7 +114,7 @@ describe('normalizeStory 的 goalSeed 问题类型标注', () => {
       'permission_process',
       'emotion_relationship',
     ])
-    expect([...RECURRENCE_TYPES]).toEqual(['once', 'recurring'])
+    expect([...RECURRENCE_TYPES]).toEqual(['oneoff', 'recurring'])
   })
 })
 

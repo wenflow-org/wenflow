@@ -127,6 +127,22 @@ describe('LearnerKnowledgeMemoryService · 概念账本时钟域（B）', () => 
     expect(ledger.find((c) => c.conceptKey === '已提取点')?.lastSeenAt).toBe(SIM_DAY.toISOString());
   });
 
+  it('当前收束会话未写 endTime 时，用 sessionEndTimeOverride 补业务时间（D2）', async () => {
+    prisma.memory_traces.findMany.mockResolvedValue([]);
+    const override = new Date('2026-09-05T15:59:59.999Z');
+
+    const memory = await learnerKnowledgeMemoryService.build({
+      userId: 'u1',
+      learningPathId: 'p1',
+      currentSessionId: 's2',
+      sessionEndTimeOverride: override,
+    });
+    const ledger = memory.globalBackground.conceptLedger;
+    expect(ledger.find((c) => c.conceptKey === '进行中概念')?.lastSeenAt).toBe(override.toISOString());
+    // 其它未结束会话不受影响，仍不回退真墙钟
+    expect(ledger.find((c) => c.conceptKey === '会话概念')?.lastSeenAt).toBe(SIM_DAY.toISOString());
+  });
+
   it('任务完成时间取 completedAt（模拟日），未结束会话不回退 updatedAt（真墙钟）', async () => {
     prisma.memory_traces.findMany.mockResolvedValue([]);
 

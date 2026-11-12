@@ -129,6 +129,9 @@
                 </h3>
                 <!-- 副行按原型 wf-pathitem__sub（12px faint）：课时 · 时长；后端没有目标日期字段，不编造 -->
                 <p v-if="card.sub" class="pcard__sub">{{ card.sub }}</p>
+                <!-- 时间锚点（2026-11-11 走查）：四张卡都写「已完成 / 100%」时分不出新旧。
+                     可见文案用相对时间，title 给绝对时间与创建时间，需要精确核对时可直接看。 -->
+                <p v-if="card.anchorText" class="pcard__anchor" :title="card.anchorTitle">{{ card.anchorText }}</p>
               </div>
               <div class="pcard__head-right">
                 <!-- 状态徽章常驻（原型每张卡都有，1797/1808/1817）：进行中/已完成同样渲染 -->
@@ -259,6 +262,7 @@ import V2Footer from './V2Footer.vue';
 import SkeletonLoader from '@/components/ui/SkeletonLoader.vue';
 import V2ResultState from '@/components/ui/V2ResultState.vue';
 import MkSelect from '@/components/mk/MkSelect.vue';
+import { buildPathActivityAnchor } from './learningPathProgress';
 
 type CardKind = 'ready' | 'generating' | 'failed' | 'completed';
 
@@ -284,6 +288,9 @@ interface PathCard {
   phaseText: string;
   errorText: string;
   status?: string;
+  /** 时间锚点（最近学习 / 更新于 / 创建于）：可见相对时间 + 绝对时间 title */
+  anchorText?: string;
+  anchorTitle?: string;
 }
 
 const route = useRoute();
@@ -384,9 +391,16 @@ function normalize(p: Record<string, any>): PathCard {
   const percent = totalTasks ? Math.round((doneTasks / totalTasks) * 100) : 0;
   const kind: CardKind = p.status === 'completed' || percent >= 100 ? 'completed' : 'ready';
   const totalStages = stages || weeks.length;
+  /* 时间锚点：完成时间 > 路径更新时间 > 创建时间（口径见 learningPathProgress） */
+  const anchor = buildPathActivityAnchor({
+    createdAt: p.createdAt,
+    updatedAt: p.updatedAt,
+    tasks: weeks.flatMap((w: Record<string, any>) => w.subtasks || w.tasks || [])
+  });
   return {
     id: p.id, title, desc, sub: buildSub(totalStages, totalTasks, hours), kind, stages: totalStages, stageDone,
-    percent, hours, lessons: totalTasks, retryType: null, retryLabel: '', phaseText: '', errorText: '', status: p.status
+    percent, hours, lessons: totalTasks, retryType: null, retryLabel: '', phaseText: '', errorText: '', status: p.status,
+    anchorText: anchor?.text, anchorTitle: anchor?.title
   };
 }
 
@@ -829,6 +843,12 @@ onBeforeUnmount(() => {
 .pcard__sub {
   margin: 3px 0 0; font-size: 12px; line-height: 1.5; color: var(--faint);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* 时间锚点：与副行同档 12px，单独一行，窄卡单行省略；精确时间在 title 里 */
+.pcard__anchor {
+  margin: 2px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
 }
 
 /* foot＝原型 wf-pathcard__foot（359-360）：分隔线 + 7px 间隔 + 进度条 + 两端数字；

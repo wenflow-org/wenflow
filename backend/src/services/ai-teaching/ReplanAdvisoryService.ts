@@ -217,13 +217,13 @@ export function applyAttribution(
   attribution: ReplanAttribution | null | undefined,
 ): ReplanAdvisory {
   if (!advisory.shouldSuggest || !attribution?.reason) return advisory;
-  const optionKeys = new Set(advisory.ui.options.map((option) => option.key));
-  const recommendation = optionKeys.has(attribution.recommendation)
-    ? (attribution.recommendation as ReplanAdvisory['recommendation'])
-    : advisory.recommendation;
+  // 2026-11-11 P0：归因只能补“为什么”，不能改阈值方向。
+  // 此前 accelerate 建议可被归因改成 keep，ui.title 仍写“可以考虑加速下一阶段”，
+  // 确认后 path-replan 的 keep 系数=1，等于“标题承诺压缩、执行等量重排”。
+  // 方向不一致时保留阈值版（不挂归因），避免标题/正文/执行三处互相打架。
+  if (attribution.recommendation !== advisory.recommendation) return advisory;
   return {
     ...advisory,
-    recommendation,
     attribution: {
       primaryReasonCode: attribution.primaryReasonCode,
       reason: attribution.reason,
@@ -315,7 +315,8 @@ export class ReplanAdvisoryService {
       recommendation: learnerSignal?.recommendation,
     });
 
-    if (learnerSignal?.shouldSuggest && !suppressSignalAdvisory) {
+    if (learnerSignal?.shouldSuggest && !suppressSignalAdvisory
+      && (currentMilestoneComplete || highRisk)) {
       const recommendation = learnerSignal.recommendation === 'keep' ? 'reinforce' : learnerSignal.recommendation;
       const scope = learnerSignal.scope === 'none' ? 'next_milestone' : learnerSignal.scope;
       const priority = learnerSignal.priority === 'none' ? 'low' : learnerSignal.priority;
@@ -367,12 +368,15 @@ export class ReplanAdvisoryService {
         : NO_ADVISORY;
     }
 
+    // 2026-11-11 频次收紧：阶段收尾几乎总有 1 个「还在学 / 移入复习」的点，把它们当触发条件
+    // 会让建议卡变成每阶段必发的噪音（用户实测「每节课结束都像要重排」）。现在只有硬信号才发：
+    //   · 卡点 ≥2（单处卡点留给课堂内补强，不值得动后续路径）
+    //   · 重复困惑 ≥2 个困惑点
+    // stillLearning / movedToReview 只用于文案点名，不再单独触发建议。
+    const HARD_STRUGGLING_THRESHOLD = 2;
     const needsReinforcement = (
-      wrapup.progress.stillLearning.length > 0 ||
-      strugglingConcepts.length > 0 ||
-      repeatedConfusion ||
-      // movedToReview 降档后归入补强语义：阶段收尾时还有点在复习队列 → 建议补强（而非风险）
-      wrapup.progress.movedToReview.length > 0
+      strugglingConcepts.length >= HARD_STRUGGLING_THRESHOLD ||
+      repeatedConfusion
     );
     // 压缩（accelerate）不再在这里二次判定（F4，2026-10-15）：此处的 canAccelerate 是
     // LearnerSnapshotService.accelerateReady 的更严孪生（fragile=0 && struggling=0 && movedToReview=0

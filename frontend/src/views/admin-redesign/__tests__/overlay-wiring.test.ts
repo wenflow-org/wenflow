@@ -10,6 +10,9 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { mount } from '@vue/test-utils'
+import { defineComponent, h, nextTick, ref, type Ref } from 'vue'
+import { useOverlay } from '../useOverlay'
 
 const srcRoot = resolve(__dirname, '../../../..')
 
@@ -58,5 +61,38 @@ describe('页签行键盘契约', () => {
       }
     }
     expect(offenders).toEqual([])
+  })
+})
+
+describe('useOverlay 背景滚动锁', () => {
+  function makeOverlay(open: Ref<boolean>) {
+    return defineComponent({
+      setup() {
+        const panel = ref<HTMLElement | null>(null)
+        useOverlay(open, panel)
+        return () => h('div', { ref: panel })
+      }
+    })
+  }
+
+  it('从未打开过的浮层卸载时，不归还别人持有的 body 滚动锁', async () => {
+    document.body.style.overflow = ''
+    const openA = ref(false)
+    const openB = ref(false)
+    const a = mount(makeOverlay(openA), { attachTo: document.body })
+    openA.value = true
+    await nextTick()
+    await nextTick()
+    expect(document.body.style.overflow, '打开态应锁住背景滚动').toBe('hidden')
+
+    // B 常驻挂载但从未打开：它的 cleanup 不该把 A 的锁清掉
+    const b = mount(makeOverlay(openB), { attachTo: document.body })
+    b.unmount()
+    expect(document.body.style.overflow).toBe('hidden')
+
+    openA.value = false
+    await nextTick()
+    expect(document.body.style.overflow).toBe('')
+    a.unmount()
   })
 })

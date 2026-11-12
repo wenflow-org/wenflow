@@ -119,7 +119,7 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     expect(labels).not.toContain('详情');
     expect(labels).not.toContain('干预');
     expect(labels).toContain('发提醒');
-    expect(row.find('.mk-link').attributes('title')).toBe('发送站内提醒（站内信）');
+    expect(row.find('.mk-link').attributes('title')).toContain('填写提醒内容')
     w.unmount();
   });
 
@@ -259,10 +259,10 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
     await settle();
     const dingRow = w.findAll('tbody tr').find((r) => r.text().includes('丁'));
     expect(dingRow!.text()).toContain('「X」等 2 个概念掌握薄弱');
-    /* 2026-10-26：KPI 卡的 title 口径自述整批撤除，卡面只留 label + 读数 */
+    /* 2026-11-01：KPI 卡内不放说明文字，口径改挂卡根 title（悬停可见、读屏可读） */
     const avg = w.findAll('.mk-kpi').find((c) => c.text().includes('平均置信度'));
     expect(avg!.find('.mk-kpi__hint').exists()).toBe(false);
-    expect(avg!.attributes('title')).toBeUndefined();
+    expect(avg!.attributes('title')).toContain('置信度')
     w.unmount();
     localStorage.removeItem('wf_learner_hidden_cols_v3');
     liveLearners.value = [];
@@ -302,9 +302,9 @@ describe('LearnerCenter 告警拆档与口径（P1#16/17 + P2）', () => {
       return card!;
     };
     expect(kpiCard('低置信用户').find('.mk-kpi__num').text()).toBe('2'); // 丙/丁；无任务的戊不计（旧口径=3）
-    // 2026-10-26：KPI 卡面只留 label + 读数，口径自述不再挂 title
+    // 2026-11-01：口径改挂卡根 title（悬停可见），卡内仍不放说明行
     expect(kpiCard('低置信用户').find('.mk-kpi__hint').exists()).toBe(false);
-    expect(kpiCard('低置信用户').attributes('title')).toBeUndefined();
+    expect(kpiCard('低置信用户').attributes('title')).toContain('证据不足')
 
     // 分布带已退役：无任务行不计的口径由「低置信用户」卡与列表过滤共同承载
     expect(w.find('.mk-distband').exists()).toBe(false);

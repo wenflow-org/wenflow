@@ -30,17 +30,18 @@
         label="已上线"
         :value="recLoading ? '…' : recError ? '?' : liveCount"
         :tone="!recLoading && !recError && liveCount === 0 ? 'bad' : ''"
-        :title="recLoading ? '上线状态加载中' : recError ? `上线状态加载失败：${recError}` : '目录不含外挂能力 Skill（在插件页）与仅注册 handler 的技能。健康中心的完成度统计按含这些的全量计算，两处数字不同源'"
+        :title="recLoading ? '上线状态加载中' : recError ? `上线状态加载失败：${recError}` : '只数主目录技能。健康中心按登记册全量（含插件与 handler-only）统计，多于本页，两数不同源'"
       />
       <MkKpi
         label="成功率"
         :value="rangeRefreshing ? '…' : (overallRateText ?? '—')"
         :tone="overallRateTone"
-        :title="`统计窗口：${rangeLabel}${RATE_THRESHOLD_NOTE ? `。${RATE_THRESHOLD_NOTE}` : ''}`"
+        :title="`统计窗口：${rangeLabel} · 含虚拟学习者。${RATE_THRESHOLD_NOTE || ''}（总览页 Top 5 只统计真实账号发起的调用，故同一 Skill 两页次数不同）`"
       />
       <MkKpi
         label="平均耗时"
         :value="rangeRefreshing ? '…' : avgLatencyText"
+        :title="`统计窗口：${rangeLabel}。按调用次数加权的平均耗时，含失败调用与虚拟学习者。只统计窗口内有调用的目录 Skill`"
       />
       <!-- P-49（#74）：异常 Skill 此前只活在筛选 pill 上；0 时不渲染，避免占位。
            2026-10-26 评审：这枚读数即「仅看需关注」筛选，点击直接收敛列表，不再让读者往下找 pill。
@@ -52,6 +53,7 @@
         :value="errorCount"
         tone="bad"
         clickable
+        :title="`统计窗口：${rangeLabel}。成功率低于 90%（红档）的 Skill 数。90–97% 的「有失败」不计入。点击仅看这些`"
         :class="{ 'sk-kpi--on': onlyAttention }"
         :aria-pressed="onlyAttention"
         @click="onlyAttention = !onlyAttention"
@@ -118,6 +120,25 @@
         <button type="button" class="mk-alert__btn" @click="retrySkills">重试</button>
       </div>
 
+      <!-- 健康点图例（2026-11-11 困惑测试 #73；2026-11-12 收口）：屏上只留四个短档位，
+           阈值与「需关注」的映射收进各自 tooltip；不再在行尾复述一遍筛选规则。 -->
+      <p class="sk-health-legend" aria-label="状态点说明">
+        <span class="sk-health-legend__label">状态点</span>
+        <span class="sk-health-legend__item" title="成功率 ≥ 97%：窗口内调用基本都成功" aria-label="健康：成功率 ≥ 97%">
+          <i class="sk-dot sk-dot--ok" aria-hidden="true"></i>健康
+        </span>
+        <span class="sk-health-legend__item" title="成功率 90%–97%：有失败，但未到异常档" aria-label="有失败：成功率 90%–97%">
+          <i class="sk-dot sk-dot--warn" aria-hidden="true"></i>有失败
+        </span>
+        <span class="sk-health-legend__item" title="成功率 < 90%：异常档，「需关注」筛选只收这一档" aria-label="异常：成功率低于 90%，「需关注」筛选只收这一档">
+          <i class="sk-dot sk-dot--error" aria-hidden="true"></i>异常
+        </span>
+        <span class="sk-health-legend__item" title="窗口内没有调用记录" aria-label="未调用：窗口内没有调用记录">
+          <i class="sk-dot sk-dot--idle" aria-hidden="true"></i>未调用
+        </span>
+        <span class="sk-health-legend__note">「需关注」= 异常档</span>
+      </p>
+
       <MockSkeletonTable v-if="liveLoading && !cards.length" :cols="7" />
       <template v-else>
       <!-- 目录表（2026-11-09 重新设计）：固定列宽表，中区不再留空。
@@ -150,10 +171,10 @@
               </th>
               <!-- 调用次数 / 成功率：右对齐 + 可排序（A 项：补齐两列表头，与数字列口径一致） -->
               <th scope="col" class="sk-c-calls mk-th--right mk-num mk-th--sortable" :aria-sort="sortState('calls')" @click="toggle('calls')">
-                <button type="button" class="mk-th__btn" @click.stop="toggle('calls')">调用次数<span class="mk-th__caret" aria-hidden="true"></span></button>
+                <button type="button" class="mk-th__btn" :title="`统计窗口：${rangeLabel} · 含虚拟学习者（与总览 Top 5 的真实账号统计不同）`" @click.stop="toggle('calls')">调用次数<span class="mk-th__caret" aria-hidden="true"></span></button>
               </th>
               <th scope="col" class="sk-c-rate mk-th--right mk-num mk-th--sortable" :aria-sort="sortState('rate')" @click="toggle('rate')">
-                <button type="button" class="mk-th__btn" @click.stop="toggle('rate')">成功率<span class="mk-th__caret" aria-hidden="true"></span></button>
+                <button type="button" class="mk-th__btn" :title="`统计窗口：${rangeLabel} · 含虚拟学习者。${RATE_THRESHOLD_NOTE || ''}`" @click.stop="toggle('rate')">成功率<span class="mk-th__caret" aria-hidden="true"></span></button>
               </th>
               <th scope="col" class="sk-c-act mk-c-act mk-th--right">操作</th>
             </tr>
@@ -195,7 +216,9 @@
               </td>
               <!-- 最近更新 -->
               <td class="sk-c-updated">
-                <span class="sk-recent" :class="{ 'mk-na': !s.calls }">{{ s.lastAt }}</span>
+                <!-- 相对时间（2 小时前）为主口径，绝对时刻（YYYY-MM-DD HH:mm）进 title：
+                     全站口径统一，且相对时间跨会话不会变成「昨天」却无法还原到具体时刻。 -->
+                <span class="sk-recent" :class="{ 'mk-na': !s.calls }" :title="recentTitleOf(s)">{{ s.lastAt }}</span>
               </td>
               <!-- 调用次数 -->
               <td class="sk-c-calls mk-num">
@@ -275,7 +298,11 @@
                    两个裸数并排读作口径打架。2026-11-02 起本卡与覆盖表同源计数（分母就是覆盖表），
                    两个数字天然一致，悬停只留一句「这一行数的是什么」。 -->
               <MkKpi label="已路由 Skill" :value="routedSkillCount" :hint="coverageReady ? '覆盖表已登记的路由行数（含未入目录的平台内部 / 工具 Skill）' : ''" />
-              <MkKpi label="主模型覆盖" :value="primaryCoverageText" />
+              <MkKpi
+                label="主模型覆盖"
+                :value="primaryCoverageText"
+                :hint="coverageReady ? '使用最多的模型占已路由 Skill 的比例。未单独配置的按解析后的平台默认模型计入。目录页「Skill」只数入目录档案，本表多出平台内部 / 工具 Skill' : ''"
+              />
             </section>
             <SkillModelCoverage
               embedded
@@ -303,6 +330,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { skillStatOf, isLive, intent, investigateAgent, openSubPage } from './store'
 import { liveSkillProfiles, liveExtraProfiles, liveSkillStatsRange, refreshLiveSkills, liveFailures, liveLoading, errMsg, liveRefreshSeq } from './live'
 import { completionMetaOf } from './glossaryMeta'
+import { formatTime } from './cockpitFormat'
 import { RATE_THRESHOLD_NOTE, successRateOf, successRateText, successRateTone, rateToneOf } from './rate-utils'
 import MockSkeletonTable from './SkeletonTable.vue'
 import MkPageHead from '@/components/mk/MkPageHead.vue'
@@ -471,6 +499,16 @@ function rowRateTitle(s: { calls: number; errors: number }): string {
   return `成功率 ${s.calls - s.errors}/${s.calls}。${RATE_THRESHOLD_NOTE}`
 }
 
+/** 最近更新的悬停：绝对时刻统一 YYYY-MM-DD HH:mm（全站口径）。
+ *  可见列仍是相对时间（2 小时前），绝对时刻只在 title，避免同列两套主口径。
+ *  无原始时间戳时（历史数据）退回可见文案，不硬造日期。 */
+function recentTitleOf(s: { calls: number; lastAt: string; lastCalledAt?: string }): string {
+  if (!s.calls) return '该窗口内暂无调用'
+  if (!s.lastCalledAt) return `最近调用：${s.lastAt}`
+  const abs = formatTime(s.lastCalledAt)
+  return abs ? `最近调用：${abs}` : `最近调用：${s.lastAt}`
+}
+
 /** 失败入口的悬停说明：这是一个动作（跳执行日志看失败），不是状态标记。
  *  2026-11-02 评审：三个字的「查失败」看不出是标记还是可点操作，标签本身也说不出跳去哪。 */
 function failLinkTitle(s: { id: string; errors: number }): string {
@@ -561,7 +599,7 @@ function healthLabel(health: Health): string {
    ※ 状态声明必须在 useTableSort 之前（版本/路由排序访问器在 setup 期就可能被求值，
      放到下方会撞 TDZ：恢复上次排序为「版本」时页面直接白屏）。 */
 interface SkillMetaEntry { promptVersion: number | null; promptName: string; description: string }
-interface SkillRouteEntry { model: string | null; tier: string }
+interface SkillRouteEntry { model: string | null; effectiveModel: string | null; inherited: boolean; tier: string }
 
 const skillMetaById = ref<Map<string, SkillMetaEntry>>(new Map())
 const coverageById = ref<Map<string, SkillRouteEntry>>(new Map())
@@ -593,7 +631,7 @@ const { sortRows, sortKey, sortDir, toggle, toggleDir, sortState } = useTableSor
    2026-10-28 实际走查：此前直接改 sortKey/sortDir，绕过 persist——选完字段切页再回来
    会恢复成上一次持久化的方向；改走 toggle 后下拉与方向按钮共用同一持久化单点。 */
 const SORT_OPTIONS = [
-  { value: 'errors', label: '需关注优先' },
+  { value: 'errors', label: '失败数优先' },
   { value: 'calls', label: '调用次数' },
   { value: 'rate', label: '成功率' },
   { value: 'last', label: '最近调用' },
@@ -886,12 +924,15 @@ async function refreshSkillMeta(): Promise<void> {
 async function refreshCoverage(): Promise<void> {
   try {
     const res = await adminSkillsApi.getSkillModelCoverage()
-    const data = res.data?.data as { skills?: Array<{ skillId: string; model: string | null; tier?: string }> } | undefined
+    const data = res.data?.data as { skills?: Array<{ skillId: string; model: string | null; effectiveModel?: string | null; inherited?: boolean; tier?: string }> } | undefined
     const m = new Map<string, SkillRouteEntry>()
     for (const r of data?.skills || []) {
       if (!r.skillId) continue
       m.set(r.skillId, {
         model: r.model ?? null,
+        // 旧后端没有 effectiveModel：退回 model（缺省显示「—」，不拿「平台默认」占位）
+        effectiveModel: r.effectiveModel ?? r.model ?? null,
+        inherited: r.inherited ?? !r.model,
         tier: r.tier === 'reasoning' ? 'reasoning' : 'chat'
       })
     }
@@ -945,19 +986,25 @@ function versionTitleOf(skillId: string): string {
     : `线上生效 Prompt v${entry.promptVersion}`
 }
 
-/** 路由模型列：coverage 有行 → 生效 model（空=平台默认）；无行/未加载 → 「—」，不伪装成平台默认 */
+/** 路由模型列：直接显示运行时实际使用的模型（未单独配置时就是平台默认那一个模型）。
+    2026-11-10 用户「不要有平台默认这个东西出现，模型配置是什么，就是什么」——
+    这一列回答「跑的是哪台模型」，不是「有没有单独配」，不再用配置动作占位。
+    覆盖数据未加载 → 「—」，不猜。 */
 function routingOf(skillId: string): string {
   if (!coverageReady.value) return '—'
   const row = coverageById.value.get(skillId)
   if (!row) return '—'
-  return row.model || '平台默认'
+  return row.effectiveModel || '—'
 }
 
 function routingTitleOf(skillId: string): string {
   if (!coverageReady.value) return '模型覆盖数据未加载'
   const row = coverageById.value.get(skillId)
   if (!row) return '该 Skill 没有模型配置记录，显示 —'
-  return row.model ? `生效模型：${row.model}` : '未单独配置模型：走平台默认'
+  if (!row.effectiveModel) return '平台还没有可用模型：先在 API 配置里配置一个'
+  return row.inherited
+    ? `生效模型：${row.effectiveModel}（该 Skill 未单独配置，跟随平台模型）`
+    : `生效模型：${row.effectiveModel}（该 Skill 单独配置）`
 }
 
 /** 归属 Agent 文案（路由表 mono 副行） */
@@ -972,7 +1019,9 @@ function agentLabelOf(s: { agentId: string; agentName?: string }): string {
     读作两个数字打架，且 29 行全走同一个模型时算出的「主模型覆盖 100%」与 31 也对不上。
     覆盖表已登记的行本身就是「已路由」（行内 source 三档必居其一），故直接按覆盖表计数。 */
 const routingLabels = computed<string[]>(() =>
-  coverageReady.value ? [...coverageById.value.values()].map((r) => r.model || '平台默认') : []
+  coverageReady.value
+    ? [...coverageById.value.values()].map((r) => r.effectiveModel).filter((m): m is string => Boolean(m))
+    : []
 )
 const routeModelCount = computed<number | string>(() =>
   routingLabels.value.length ? new Set(routingLabels.value).size : '—'
@@ -1018,10 +1067,15 @@ const primaryCoverageText = computed(() =>
    列宽只给「百分比 + px 下限」：fixed 表把 100% 的余量按各列百分比权重摊到所有列，
    1920 下自然铺满、不留 void（不加 max-width，否则在 1920 处各列触顶后会留出空白）；
    1280 下 min-width 之和（220+150+120+100+88+96+168 = 822px）远小于容器，不触发横滚。 */
-.sk-c-info { width: 32%; min-width: 220px; }
-.sk-c-agent { width: 14%; min-width: 150px; }
-.sk-c-model { width: 13%; min-width: 120px; }
-.sk-c-updated { width: 10%; min-width: 100px; }
+/* 2026-11-11（1280 复核）：归属 / 路由模型两列原 14% / 13%，1280 下扣掉单元格内衬只剩
+   ~106px——「虚拟学习者 Agent」「deepseek-v4.1-flash」每行都被省略，读者要靠悬停才能分辨
+   模型。把 Skill 信息列让出 5 个点补到这两列（27 / 16 / 17，路由模型列最紧，
+   18 字符的 deepseek-v4.1-flash 需要 ~149px 内容宽），身份与读数仍然完整；
+   百分比合计仍 100%，min-width 之和不变（822px），1280 不触发横滚。 */
+.sk-c-info { width: 27%; min-width: 220px; }
+.sk-c-agent { width: 16%; min-width: 150px; }
+.sk-c-model { width: 17%; min-width: 120px; }
+.sk-c-updated { width: 9%; min-width: 100px; }
 .sk-c-calls { width: 8%; min-width: 88px; }
 .sk-c-rate { width: 9%; min-width: 96px; }
 .sk-c-act { width: 14%; min-width: 168px; }
@@ -1096,6 +1150,13 @@ const primaryCoverageText = computed(() =>
 .sk-detail-link { padding: 0; font-size: var(--mk-fs-micro); line-height: 1.5; white-space: nowrap; }
 .sk-act-na { font-size: var(--mk-fs-micro); }
 .sk-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+/* 健康点图例（2026-11-11 困惑测试 #73） */
+.sk-health-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px; margin: 0 14px 8px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.sk-health-legend__label { color: var(--mk-faint); font-weight: 600; }
+.sk-health-legend__item { display: inline-flex; align-items: center; gap: 6px; cursor: help; }
+/* 图例是静态说明：红点不闪（闪动只用于表格行，提醒当下有异常） */
+.sk-health-legend .sk-dot--error { animation: none; }
+.sk-health-legend__note { margin-left: auto; color: var(--mk-faint); }
 /* 成功率列的小色点（D 项：色点承载档位色，数字恒为 --mk-ink） */
 .sk-dot--sm { display: inline-block; width: 6px; height: 6px; margin-right: 6px; vertical-align: middle; }
 .sk-dot--ok { background: var(--mk-green); }

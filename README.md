@@ -145,28 +145,72 @@ WenFlow 的教学行为不是提示词拍脑袋，每条设计都有对应的理
 
 ## 3 分钟快速开始
 
-前置条件：**Node.js >= 22.23.4**；Windows（PowerShell 5.1+）、Linux、macOS 均可；Linux/macOS 也可直接 `./docker-start.sh` 走 Docker。
+前置条件：**Node.js >= 22.23.4**（`node -v` 确认）；Windows（PowerShell 5.1+）、Linux、macOS 均可；Linux/macOS 也可直接 `./docker-start.sh` 走 Docker。
 
 ```bash
 # 1) 克隆
 git clone https://github.com/wenflow-org/wenflow.git
 cd wenflow
 
-# 2) 初始化配置（按提示填 AI 接口 Key 与管理员密码）
-npm run env:setup
+# 2) 安装依赖（新机先按 lockfile 装好，避免启动脚本回退到 npm install 改写 lockfile）
+npm ci
+npm --prefix backend ci
+npm --prefix frontend ci
 
-# 3) 一键启动（自动安装依赖、初始化双库、同步内置 Prompt，再拉起前后端）
+# 3) 初始化 backend/.env
+#    Windows：交互式向导，自动生成 JWT_SECRET / SECRET_ENCRYPTION_KEYS
+npm run env:setup
+#    Linux / macOS：该向导是 PowerShell 脚本，改用手工配置：
+#    cp backend/.env.example backend/.env
+#    至少填写：
+#      JWT_SECRET=<至少 32 位随机串>
+#      SECRET_ENCRYPTION_CURRENT_KEY_ID=v1
+#      SECRET_ENCRYPTION_KEYS=v1:<32 字节 Base64>
+#      AI_API_KEY=<真实 key>
+#      INIT_ADMIN_PASSWORD=<至少 12 位，含大小写和数字>
+#    生成随机值：
+#      node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
+#      node -e "console.log('v1:'+require('crypto').randomBytes(32).toString('base64'))"
+
+# 4) 一键启动（双库迁移、同步内置 Prompt，再拉起前后端）
 npm run dev
 ```
 
 启动后：
 
 - 学习端：http://localhost:5173
-- 管理后台：http://localhost:5173/admin（用第 2 步设置的管理员账号登录）
+- 管理后台：http://localhost:5173/admin（用第 3 步设置的管理员账号登录）
 - 后端接口：http://localhost:3001
 
 > 起不来或行为异常时，先跑 `npm run doctor`：只读、秒级，逐项体检 Node / 依赖 / `.env` / 双库 / CORS / 端口并给出修复建议。
 > 从 0 部署到可用需要配哪些（必需 / 按需增强 / 访问拓扑三档），见 [`DEPLOYMENT.md`](DEPLOYMENT.md) 的「从 0 到可用：必需与可选配置」。
+
+<details>
+<summary><b>新机启动清单（2026-11-11 实测：空 AI Key + 无插件密钥）</b></summary>
+
+| 项 | 是否必需 | 实测说明 |
+|---|---|---|
+| Node.js >= 22.23.4 + npm | 必需 | 版本不足会在 Prisma / Vite 阶段失败 |
+| `backend/.env` | 必需 | 缺失时启动脚本退出；Linux/macOS 需按上面第 3 步手工创建 |
+| `JWT_SECRET`（≥32 位） | 必需 | 缺失或弱值 fail-fast |
+| `SECRET_ENCRYPTION_CURRENT_KEY_ID` + `SECRET_ENCRYPTION_KEYS` | 必需 | `prisma:prepare` 的 `runtime:validate` 会校验；缺了直接退出 |
+| `DATABASE_URL` / `SYSTEM_DATABASE_URL` | 必需 | 默认 `file:./dev.db` / `file:../system.db`，SQLite 零外部依赖 |
+| `AI_API_URL` / `AI_API_KEY` / `AI_MODEL` | 一键启动必需；后端进程非必需 | 空 key 时后端仍能 `/readyz` = `ready`，但 `aiConfiguration` = `warning`，目标对话 / 路径 / 课堂不可用。Windows `npm run dev` 会在启动前拦截空 key；Linux `start-dev.sh` 不拦截 |
+| Embedding / Rerank | 可选 | 空值启动正常；语义检索与重排 fail-open 回退关键词/窗口 |
+| 联网 / 决策 / 生图 / MCP 插件 | 可选 | 新库默认 4 个插件 bundle 启用；无密钥时页面显示「缺少密钥」。全部停用后重启仍 `ready`。MCP 自带一个 `file-reader` 本机工具，可在插件页停用或删除 |
+| `INIT_ADMIN_PASSWORD` | 开发可选 / 生产必需 | 开发不填用内置默认密码；生产留空则跳过创建 |
+
+**只想先看界面、暂时没有 AI Key**：Windows 的 `npm run dev` 会拦截空 `AI_API_KEY`，可绕过一键脚本分步启动：
+
+```bash
+npm --prefix backend run prisma:prepare
+npm --prefix backend run dev:server   # 3001
+npm --prefix frontend run dev         # 5173
+```
+
+此时后端仍可登录后台、打开插件配置页与各项只读页面；`/readyz` 保留 `aiConfiguration=warning`，所有 AI 调用不可用。
+
+</details>
 
 <details>
 <summary><b>首次使用与常见坑（点开）</b></summary>
@@ -174,7 +218,10 @@ npm run dev
 - **依赖一律用 `npm ci`，不要用 `npm install`。** 本项目 lockfile 里带镜像来源的 optional / peer 条目（如 `@parcel/watcher`、`@bufbuild/protobuf`），`npm install` 会按当前解析结果重写 lockfile 并整批删掉这些行，实测一次就是数百行纯删除，不是代码改动。需要手动装依赖时：`npm ci && npm --prefix backend ci && npm --prefix frontend ci`。
 - `npm run dev` 已内置 `prisma:prepare`（生成双 Prisma Client + 双库迁移部署）。只有在手动分步、或显式跳过（PowerShell `./start-dev.ps1 -SkipPrisma`，bash `./start-dev.sh --skip-prisma`）时，才需要自己先跑 `npm --prefix backend run prisma:prepare`。
 - 跳过 Prisma 的选项同时会跳过启动前的 core prompts 同步，仅适用于数据库与 prompts 都已就绪的环境。
-- `backend/.env` 缺失或 `JWT_SECRET` 不合格时，启动脚本会自动拉起初始化流程。
+- Windows 下 `backend/.env` 缺失或 `JWT_SECRET` 不合格时，`start-dev.ps1` 会自动拉起初始化向导；Linux/macOS 的 `start-dev.sh` 不会生成密钥，需按第 3 步手工填写。
+- **空 AI Key 的边界**：后端进程能启动，但 `npm run dev`（Windows）会在启动前拦下；纯 UI/后台验收按上面的分步命令启动。不要用占位 key 冒充已配置——`sk-your-api-key` 会被当作未配置。
+- **端口**：默认占用 3001（后端）与 5173（前端）；被占用时一键启动会退出，先停掉旧进程。
+- npm 11.16+ 若在安装时提示 `allow-scripts ... not yet covered`，说明 Prisma / esbuild 等包的安装脚本未执行；按提示运行 `npm approve-scripts --allow-scripts-pending` 后重跑 `npm ci`。本机实测即使跳过这些脚本，Prisma 生成、Vite 开发与前端构建仍可用，但排障时先按提示批准更稳。
 - 运行状态探针：`/health`、`/livez` 只表示进程活着，`/readyz` 才代表双库与核心运行态可接收流量。重启后端用统一入口 `node backend/restart.mjs --port=<端口>`（`--status` 查状态、`--stop` 停服务），不要手工杀端口或用裸 `ts-node` 启动。
 
 </details>
@@ -383,7 +430,7 @@ npm run prompts:lint && npm run prompts:core:check
 
 首次启动时按 `backend/.env` 自动创建初始管理员（`INIT_ADMIN_NAME` / `INIT_ADMIN_PASSWORD`，已有管理员则跳过）。首次登录后请立即修改密码。
 
-管理员登录默认 `ADMIN_ACCESS_MODE=private`（仅本机与局域网），可设 `loopback`（仅本机）或 `any`，并用 `ADMIN_ALLOWED_IPS` 精确放行；该策略可在管理端「模型与接入」页热生效。确有公网远程管理需求时，请配合 VPN 或精确 IP 白名单。详见 [`admin-guide.md`](admin-guide.md)。
+管理员登录默认 `ADMIN_ACCESS_MODE=private`（仅本机与局域网），可设 `loopback`（仅本机）或 `any`，并用 `ADMIN_ALLOWED_IPS` 精确放行；该策略可在管理端「模型与接入」页热生效。确有公网远程管理需求时，请配合 VPN 或精确 IP 白名单。详见 [`doc/ADMIN_OPERATIONS_MANUAL.md`](doc/ADMIN_OPERATIONS_MANUAL.md)。
 
 反向代理注意：
 
@@ -422,9 +469,8 @@ npm run prompts:lint && npm run prompts:core:check
 - **Agent / Skill**：[`doc/AGENT_SKILL_MANUAL.md`](doc/AGENT_SKILL_MANUAL.md)（why）、[`doc/SKILL_PROTOCOL_V4.md`](doc/SKILL_PROTOCOL_V4.md)（协议）、[`doc/SKILL_DEVELOPMENT_GUIDE.md`](doc/SKILL_DEVELOPMENT_GUIDE.md)（新建 / 改造 Skill）
 - **架构与模型**：[`doc/MODEL_GATEWAY_DESIGN.md`](doc/MODEL_GATEWAY_DESIGN.md)、[`doc/LEARNER_MODEL_ARCHITECTURE.md`](doc/LEARNER_MODEL_ARCHITECTURE.md)
 - **开发脚本**：[`doc/DEV_SCRIPTS.md`](doc/DEV_SCRIPTS.md)
-- **部署 / 安全 / 管理**：[`DEPLOYMENT.md`](DEPLOYMENT.md)、[`SECURITY.md`](SECURITY.md)、[`admin-guide.md`](admin-guide.md)
-- **参与开发**：[`CONTRIBUTING.md`](CONTRIBUTING.md)（分支模型 `develop` → `main`、门禁与协作）
-- **面向 AI 编码会话**：[`CLAUDE.md`](CLAUDE.md)（文档治理、共享工作树纪律等仓库约定）
+- **部署 / 安全 / 管理**：[`DEPLOYMENT.md`](DEPLOYMENT.md)、[`SECURITY.md`](SECURITY.md)、[`doc/ADMIN_OPERATIONS_MANUAL.md`](doc/ADMIN_OPERATIONS_MANUAL.md)
+- **参与开发**：[`CONTRIBUTING.md`](CONTRIBUTING.md)（分支模型 `develop` → `main`、门禁、文档治理与共享工作树纪律）
 - **更新日志**：[`CHANGELOG.md`](CHANGELOG.md)
 
 ---

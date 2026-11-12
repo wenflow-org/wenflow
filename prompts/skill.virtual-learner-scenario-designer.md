@@ -1,6 +1,6 @@
 ---
 agentId: skill:virtual-learner-scenario-designer
-coreHash: 1ba8a4ec7ccb2801b8d5aec8e21618fcb3aa1b7cb092b8afd9ef4ee6bc4040eb
+coreHash: 36b6427ef085b55bf3b98c062dab20db8f89b61814f273f7612c7a778004fe79
 coreVersion: 1
 temperature: 0.9
 maxTokens: 64000
@@ -28,6 +28,8 @@ failurePolicy: retry
 - 「candidateDomains（string[]）」`sandbox:simulation.candidateDomains`（编排注入） — 候选领域池
 - 「candidatePersonas（string[]）」`sandbox:simulation.candidatePersonas`（编排注入） — 候选画像池（与 personaSeed 配对）
 - 「recentScenarioHints（string[]）」`sandbox:simulation.recentScenarioHints`（编排注入） — 最近一次样本提示（连续性参考）
+- 「existingPersonaSeed（object?）」`sandbox:simulation.existingPersonaSeed`（编排注入） — 已在用的人设种子（可选）：补故事时必须沿用同一人物底色，只能补空缺，不得换人
+- 「existingStoryPool（object[]?）」`sandbox:simulation.existingStoryPool`（编排注入） — 已有故事池（可选）：新故事必须避开同类 triggerEvent / visibleOpening / pressurePoints / behaviorHooks
 
 ## 执行规则
 
@@ -94,7 +96,7 @@ failurePolicy: retry
 · goalSeed（object）{ "domain", "goalType", "surfaceGoal", "realProblem", "primaryBlockType", "recurrence", "blockTypeEvidence", "motivation", "urgencyHint", "constraints": [], "expectedOutcome" }
 · realProblem（string）真正卡住他的是什么，必须包含"具体场景 + 具体障碍"，例如"账号被管理员锁了，他不知道该找谁开"。禁止用"缺乏…能力/认知"这类笼统句式收尾；只有确实缺少可迁移的底层理解/框架、且能说清缺的是什么时，才允许写成能力缺口。若真正卡住他的是操作不熟 / 系统坏了 / 权限被卡 / 情绪过不去，就照实写，不要翻译成"缺乏系统操作能力"。正例："想用公司新版报销系统，但没人告诉他入口在哪，他反复问同事还是走错流程"；反例："缺乏系统操作能力，需要学习相关认知"。
 · primaryBlockType（enum，必填）capability | oneoff_operation | environment_tooling | permission_process | emotion_relationship。含义：capability＝存在可迁移的概念/技能缺口，必须"建立认知结构 + 多步练习"；oneoff_operation＝一次性具体操作/工具用法，学会点哪里即可，十几分钟能解决；environment_tooling＝设备/软件/网络/配置/环境阻塞，修好系统即可；permission_process＝账号/权限/审批/流程/交接/他人配合阻塞；emotion_relationship＝情绪调节/恐惧/面子/焦虑/人际冲突是主要阻塞。判定口径（写死）："哪个阻塞不解决，其它做什么都白搭"就是 primaryBlockType。判定依据必须是故事事实（storyOutline / triggerEvent / hiddenDetails / problemKnowledge / misdiagnosis）；必须先定 primaryBlockType，再写 realProblem，两者必须一致。
-· recurrence（enum）once | recurring：这件事是一次性还是会反复发生——只有反复发生才可能是能力缺口。
+· recurrence（enum）oneoff | recurring：这件事是一次性还是会反复发生——只有反复发生才可能是能力缺口。**必须写 oneoff，不要写 once**（与 goal-conversation 的 understanding.recurrence 同词表；平台会把历史 once 归一成 oneoff）。
 · blockTypeEvidence（string，≤60字）：引用故事里的一句话作为判定依据。
 · disclosurePlan（object）{ "opening": 首轮最可能的开场表达 1-2 句, "revelationTriggers": [], "resistancePoints": [], "idealProbe": "" }
 - consistencyNotes · string[] — 2-4 条故事与 persona 的一致性校验点（pressurePoints/behaviorHooks/visibleOpening 与 persona 对应字段如何对齐）

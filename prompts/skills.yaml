@@ -299,7 +299,8 @@ skills:
       agentId: profile-agent
       steps: []
     dataSource:
-      sandbox: []
+      # core inputs 引用 sandbox:teaching.*（knowledgeStateSummary/taskContext 由教学链组装）
+      sandbox: [teaching]
     notes: service 侧调用（ai-teaching/TeachingContextBuilder 任务前预测，非 profile.coordinator 编排），不在 profile.definition.ts steps 内
 
   # ============ simulation-agent 下辖（mainline，黑盒实验链） ============
@@ -659,7 +660,9 @@ skills:
     description: 基于状态摘要与最近证据给出可证伪的学习状态诊断（为什么卡、下一步怎么调）
     dataSource:
       db: []
-      sandbox: []
+      # 2026-11-11 字段审计：core inputs 明确引用 profile.snapshot.* / teaching.session.*，
+      # 空声明会被 W5-sandbox 判「实际引用但未声明」。
+      sandbox: [profile, teaching]
     notes: 诊断层 skill（设计 doc/LEARNER_STATE_REVIEW_DESIGN.md §4）；输入 = LearnerStateReviewService 的投影（toReviewProjection）+ 最近证据；输出结构化 insights/conceptAssessments/falsifiableClaims；经 runAux 调用，无 DB 直读
 
   - skillId: concept-consolidator

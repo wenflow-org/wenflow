@@ -21,7 +21,8 @@
  *     evidence / real_problem / pain_points 命中**高精度**「可学习成分」词（方法/思路/框架/模板/…）→ combination。
  *     注意：这里**不用**宽模式，因为 `技能|流程|配置|使用|操作|工具` 既是这两类阻塞自身的定义词，
  *     又常出现在命名实体里（如"职业技能鉴定"），会把权限类案例误抬成 combination（宁可漏判不误报）。
- *  5. oneoff_operation → combination（一次性操作含少量可学习成分）。
+ *  5. oneoff_operation → answer_then_hook（一次性操作/排障：先给现成解法 + 尾部转化钩子，不排课；
+ *     2026-11-11 方案二起，用户明确要学则由上游改判 capability 重新分诊）。
  *  6. urgency 极高且 constraints_and_boundaries 非空 → confidence 降一档，并写入 reasons。
  *  7. 第二轴 support_need（none | emotional | referral，"除学习外是否还需要别的支持"）叠加：
  *     非 none 时把 learning_path 抬升为 combination；emotional_support × referral / referral × emotional
@@ -57,6 +58,7 @@ export const RESPONSE_TRIAGE_MODES = [
   'emotional_support',
   'referral',
   'answer_only',
+  'answer_then_hook',
 ] as const;
 
 export type ResponseTriageMode = (typeof RESPONSE_TRIAGE_MODES)[number];
@@ -99,6 +101,10 @@ export interface ResponseTriageInput {
   blockTypeEvidence?: unknown;
   /** 第二轴：none | emotional | referral（缺失/非法视为 none，零变化） */
   supportNeed?: unknown;
+  /** 技能性质（四字段路由之一）：cognitive_internalized / physical_internalized / tool_operation … */
+  skillNature?: unknown;
+  /** 平台可判定性（四字段路由之一）：judgeable_output / not_judgeable */
+  platformJudgment?: unknown;
   motivation?: unknown;
   urgency?: unknown;
   constraintsAndBoundaries?: unknown;
@@ -384,6 +390,8 @@ export function triageGoalResponse(input: ResponseTriageInput | null | undefined
     painPoints,
     urgency,
     constraints,
+    skillNature,
+    platformJudgment,
   });
   const withSupport = applySupportNeed(base, supportNeed);
   if (immediateOneoff) {
@@ -429,6 +437,10 @@ interface BlockTypeContext {
   painPoints: string[];
   urgency: string | null;
   constraints: string[];
+  /** skill_nature（四字段路由）：判断情绪阻塞背后是否仍有可学的认知技能 */
+  skillNature?: string | null;
+  /** platform_judgment：judgeable_output 才允许把认知技能排成路径 */
+  platformJudgment?: string | null;
 }
 
 /**
@@ -474,15 +486,25 @@ function triageByBlockType(blockType: PrimaryBlockType, ctx: BlockTypeContext): 
     }
 
     case 'emotion_relationship': {
-      // 仅按任务口径：blockTypeEvidence 非空且提到具体技能才算组合响应。
-      const hasSkillGap = hasSpecificSkillSignal(evidence);
+      // 主阻塞是情绪/关系，但**结构化字段**表明存在可学、可判的认知技能
+      // （skill_nature=cognitive_internalized × platform_judgment=judgeable_output）→ 组合响应：
+      // 情绪支持照给，同时允许把可练的那一步排成小路径。这比只看 blockTypeEvidence 词面稳：
+      // 2026-11-11 真机（一被否定就炸）里证据原话不含「练习/方法」词，但模型已判
+      // cognitive_internalized + judgeable_output——纯词面会把它硬阻断成 emotional_support，
+      // 与课堂里已经讲出来的可操作动作自相矛盾（模型先提了方案、出口又说不能排课）。
+      // 注意：physical_internalized / not_judgeable 仍走 referral，不在本分支放宽。
+      const hasStructuredSkillGap = ctx.skillNature === 'cognitive_internalized'
+        && ctx.platformJudgment === 'judgeable_output';
+      const hasSkillGap = hasSpecificSkillSignal(evidence) || hasStructuredSkillGap;
       if (hasSkillGap) {
         return finalize(
           {
             mode: 'combination',
             confidence: 'medium',
             reasons: [
-              '主阻塞为情绪/关系，但 blockTypeEvidence 出现具体技能缺口 → 学习 + 情绪支持组合',
+              hasStructuredSkillGap
+                ? '主阻塞为情绪/关系，但 skill_nature=cognitive_internalized × platform_judgment=judgeable_output（存在可学的认知技能）→ 学习 + 情绪支持组合'
+                : '主阻塞为情绪/关系，但 blockTypeEvidence 出现具体技能缺口 → 学习 + 情绪支持组合',
             ],
           },
           urgency,
@@ -529,11 +551,15 @@ function triageByBlockType(blockType: PrimaryBlockType, ctx: BlockTypeContext): 
     }
 
     case 'oneoff_operation':
+      // 2026-11-11 方案二（R1 缺口类型）：一次性操作/排障（蓝屏、报错、打不开）是**信息缺口**
+      // 不是认知缺口——首轮直答给现成解法 + 尾部转化钩子（answer_then_hook），不排课。
+      // 用户明确要学（「生成排障课/教我这个」）或出现表现要求时，上游把 primary_block_type
+      // 更新为 capability 重新分诊，正常开路。
       return finalize(
         {
-          mode: 'combination',
+          mode: 'answer_then_hook',
           confidence: 'medium',
-          reasons: ['阻塞类型为 oneoff_operation（一次性操作，含少量可学习成分）'],
+          reasons: ['阻塞类型为 oneoff_operation（一次性操作/排障）：先给现成解法，想学可生成 1-2 节小课'],
         },
         urgency,
         constraints
@@ -563,6 +589,7 @@ function applySupportNeed(base: ResponseTriage, supportNeed: SupportNeed): Respo
       : 'support_need=referral（现实条件/资源/流程阻塞）';
   const conflicts =
     base.mode === 'learning_path' ||
+    base.mode === 'answer_then_hook' ||
     (base.mode === 'emotional_support' && supportNeed === 'referral') ||
     (base.mode === 'referral' && supportNeed === 'emotional');
   if (!conflicts) return base;
@@ -582,6 +609,8 @@ const ADVISORY_BY_MODE: Record<Exclude<ResponseTriageMode, 'learning_path'>, str
     '系统判断：你卡住的主因更偏现实条件/资源/流程，学习路径只是其中一部分——建议先解决外部阻塞，再规划学习。',
   answer_only:
     '系统判断：这个问题的答案可以直接讲清楚，不需要排成学习路径——它是理解型的（看懂/搞懂），答案一条回复能讲透，也没有需要反复练习才能稳定达标的表现要求。我直接给你讲透；之后如果想把它练成稳定的表现（快速判读、应试输出），再回来排一条小路径。',
+  answer_then_hook:
+    '系统判断：这是一次性操作/排障诉求——先给现成解法（止痛药），不需要排课。想弄懂背后的排查逻辑、以后自己能独立搞定，回「生成排障课」，我们用 1-2 节小课练透。',
 };
 
 /**

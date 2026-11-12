@@ -285,3 +285,37 @@ describe('课后总结列的信号徽章（对齐顶部 KPI）', () => {
     wrapper.unmount();
   });
 });
+
+describe('加载 / 空态 / 时间口径（2026-11-11 全站打磨）', () => {
+  it('加载失败 → 错误条带可读原因 + 重试，不伪装成空态', async () => {
+    listMock.mockRejectedValue(new Error('网络不可达'));
+    dataSource.value = 'live';
+    const wrapper = mount(TeachingSessions, { global: { plugins: [mockRouter()] } });
+    await flushPromises();
+    await nextTick();
+    await flushPromises();
+    const alert = wrapper.find('.mk-alert--row');
+    expect(alert.text()).toContain('教学会话加载失败：网络不可达');
+    expect(alert.find('.mk-alert__btn').text()).toBe('重试');
+    expect(wrapper.find('.mk-empty').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('0 条且未筛选 → 空态说明来源并给「查看学习者」出口', async () => {
+    const wrapper = await mountLive([]);
+    const empty = wrapper.find('.mk-empty');
+    expect(empty.text()).toContain('暂无教学会话');
+    expect(empty.text()).toContain('教学会话由学习者在端内发起');
+    expect(empty.findAll('button').some((b) => b.text() === '查看学习者')).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('开始时间悬停用 YYYY-MM-DD HH:mm，不再输出 2026/11/11 口径', async () => {
+    const wrapper = await mountLive([makeItem('a', { startTime: '2026-08-12T02:00:00.000Z' })]);
+    const startCell = wrapper.findAll('tbody tr')[0].findAll('td')[5];
+    const title = startCell.find('.mk-cell-sub').attributes('title') || '';
+    expect(title).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+    expect(title).not.toContain('/');
+    wrapper.unmount();
+  });
+});

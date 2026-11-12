@@ -16,10 +16,10 @@ function timelineBlock(): string {
   return Source.slice(start, Source.indexOf('</section>', start))
 }
 
-describe('VirtualProfile · 学习日程卡文案', () => {
-  it('卡名是「学习日程」，不再把「日期模拟」写进标题', () => {
+describe('VirtualProfile · 模拟日程卡文案', () => {
+  it('卡名是「模拟日程」，与页签同名，不再把「日期模拟」写进标题', () => {
     const block = timelineBlock()
-    expect(block).toContain('学习日程')
+    expect(block).toContain('模拟日程')
     expect(block).not.toContain('日程 · 日期模拟')
   })
 

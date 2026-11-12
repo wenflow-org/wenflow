@@ -61,7 +61,8 @@ function webConfig() {
     id: 'web',
     label: '联网',
     channels: [
-      { id: 'search', label: '搜索', order },
+      // 搜索不做链式降级（与后端 single 对齐），抓取仍是降级链
+      { id: 'search', label: '搜索', order: [order[0]], single: true },
       { id: 'fetch', label: '抓取', order }
     ],
     providers: [
@@ -184,8 +185,10 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     expect(wrapper.find('.ac-cap .ac-mcp__row').exists()).toBe(true);
     /* 2026-11-05 用户「这种说明文案不要」：区头那行「4 项能力 · 6 个 Skill」是把下方
        四张卡再数一遍，撤除；区头只剩区名（读失败的徽标才保留）。 */
-    const sectionHead = wrapper.find('.ac-section__head');
+    // 2026-11-11：区头收敛到共享 .mk-section__head / .mk-section__title（原私有 .ac-section__* 已删）
+    const sectionHead = wrapper.find('.mk-section__head');
     expect(sectionHead.text()).toBe('可选能力');
+    expect(sectionHead.find('.mk-section__title').exists()).toBe(true);
     expect(sectionHead.find('.mk-badge').exists()).toBe(false);
     expect(wrapper.find('.ac-section__meta').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('项能力 ·');
@@ -213,11 +216,17 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     const webFacts = rows[0].find('.ac-cap__facts').text();
     expect(webFacts).toContain('主用');
     expect(webFacts).toContain('TinyFish');
-    expect(webFacts).toContain('备选');
-    expect(webFacts).toContain('Tavily · Exa');
+    // 搜索已改单档（无备选），抓取仍是降级链：摘要里用「→」列出备选顺序
+    expect(webFacts).toContain('抓取');
+    expect(webFacts).toContain('→');
+    // 抓取链的备选按降级顺序列出（TinyFish → Tavily → Exa）
+    expect(webFacts).toContain('Tavily → Exa');
     // 没有配置数据的卡（决策 / 生图 fixture 里为空）不渲染空摘要
     expect(rows[1].find('.ac-cap__facts').exists()).toBe(false);
-    expect(rows[0].find('.ac-cap__calls').text()).toContain('累计 0 次调用');
+    /* 2026-11-11 困惑测试 #94：读数带统计窗口（与 Skills 页共用窗口选择器，默认近 7 天），
+       且做成可点下钻——原「累计 N 次调用」既错量词又无入口。 */
+    expect(rows[0].find('.ac-cap__calls').text()).toContain('近 7 天 0 次调用');
+    expect(rows[0].find('.ac-cap__calls button').exists()).toBe(true);
     // 列表仍不回答 Skill 的 LLM 路由问题
     expect(text).not.toContain('deepseek-v4-flash');
     expect(text).not.toContain('跟随平台默认');
@@ -227,7 +236,7 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     expect(switches[0].attributes('title')).toBeUndefined();
     /* 入口从卡头（与绿开关并排）下移到卡脚，并降为次要描边按钮——
        本页没有唯一主操作，实心主色不在这里和开关抢视觉。 */
-    const entries = wrapper.findAll('.ac-cap__foot button');
+    const entries = wrapper.findAll('.ac-cap__foot .mk-btn');
     expect(entries.map((b) => b.text())).toEqual(['配置', '配置', '配置', '新建服务']);
     expect(entries.every((b) => b.classes().includes('mk-btn'))).toBe(true);
     expect(entries.some((b) => b.classes().includes('mk-btn--primary'))).toBe(false);
@@ -271,8 +280,15 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     expect(dialog.exists()).toBe(true);
     expect(dialog.text()).toContain('联网 · 服务配置');
     // 搜索 / 抓取两条链都在界面上，主用可换（不再是一行只读的「尝试顺序」）
-    expect(dialog.findAll('.ac-prio')).toHaveLength(2);
-    expect(dialog.findAll('.ac-prio')[0].text()).toContain('主用');
+    expect(dialog.findAll('.ac-row')).toHaveLength(2);
+    // 搜索：不做链式降级 → 只有一个选择位（无「主用/备用」）
+    expect(dialog.findAll('.ac-row')[0].text()).not.toContain('备用');
+    /* 2026-11-10 重设计：单选通道只留一个选择器——此前左侧还挂一枚同名胶囊，
+       与下拉里的服务名重复。 */
+    expect(dialog.findAll('.ac-row')[0].findAll('.ac-prio__item')).toHaveLength(0);
+    expect(dialog.findAll('.ac-row')[0].findAll('.mk-select')).toHaveLength(1);
+    // 抓取：仍是降级链，第一枚是主用
+    expect(dialog.findAll('.ac-row')[1].text()).toContain('主用');
     expect(dialog.find('.ac-config-order').exists()).toBe(false);
     const cards = dialog.findAll('.ac-config-provider');
     expect(cards.map((c) => c.find('.ac-config-provider__name').text())).toEqual(['TinyFish', 'Tavily', 'Exa']);
@@ -302,15 +318,17 @@ describe('Addons 插件页（2026-10-20 定名：原「外挂能力」）', () =
     await tavily().findAll('input')[1].setValue('https://proxy.example/search');
     await tavily().find('.ac-config-provider__primary').trigger('click');
     await flushPromises();
-    // 设为主用 = 把它提到所在链的第一位（联网两条链一起提）
-    expect(dialog().findAll('.ac-prio')[0].find('.ac-prio__name').text()).toBe('Tavily');
-    expect(dialog().findAll('.ac-prio')[1].find('.ac-prio__name').text()).toBe('Tavily');
+    // 设为主用 = 把它提到所在链的第一位；搜索已是单档（不参与主用/备用），只有抓取链会变
+    // 2026-11-10：搜索行只剩选择器（不再有同名胶囊），断言读选择器当前值
+    expect(dialog().findAll('.ac-row')[0].find('.mk-select__value').text()).toBe('TinyFish');
+    expect(dialog().findAll('.ac-row')[1].find('.ac-prio__name').text()).toBe('Tavily');
     await dialog().findAll('button').find((b) => b.text() === '保存')!.trigger('click');
     await flushPromises();
     expect(pluginSaveMock).toHaveBeenCalledWith(
       'web',
       { tavily: { searchEndpoint: 'https://proxy.example/search' } },
-      { search: ['tavily', 'tinyfish', 'exa'], fetch: ['tavily', 'tinyfish', 'exa'] }
+      // 搜索单档只提交选中的那一家；抓取按「设为主用」提到 Tavily
+      { search: ['tinyfish'], fetch: ['tavily', 'tinyfish', 'exa'] }
     );
     wrapper.unmount();
   });
@@ -533,7 +551,7 @@ describe('Addons MCP 服务（transport 支持）', () => {
     await decisionRow.find('.mk-btn').trigger('click');
     await flushPromises();
     const dialog = () => wrapper.find('[role="dialog"][aria-label="插件服务配置"]');
-    const chain = () => dialog().findAll('.ac-prio')[0];
+    const chain = () => dialog().findAll('.ac-row')[0];
     const names = () => chain().findAll('.ac-prio__name').map((n) => n.text());
     const ops = (label: string) => chain().findAll('.ac-prio__op')
       .filter((b) => b.attributes('aria-label') === label);

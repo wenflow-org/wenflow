@@ -87,9 +87,10 @@ describe('VirtualProfile 概览 · 零运行画像', () => {
     w.unmount()
   })
 
-  it('画像设定不再复读运行次数（次数在状态条，「最近运行」卡回答上次跑到哪）', async () => {
+  it('概览只回答下一步，不再复读画像字段（画像页签有完整字段）', async () => {
     const w = await mountOverview()
-    expect(w.find('.vp-kv').text()).not.toContain('运行信息')
+    expect(w.find('.vp-next').exists()).toBe(true)
+    expect(w.find('.vp-kv').exists()).toBe(false)
     expect(w.find('.vp-lastrun').exists()).toBe(false)
     w.unmount()
   })
@@ -118,6 +119,17 @@ describe('VirtualProfile 概览 · 有运行的画像', () => {
     expect(meta).toContain('任务 3/10')
     expect(meta).toContain('7 次推进')
     expect(meta).toContain('2 小时')
+    w.unmount()
+  })
+
+  it('有运行：概览「最近运行」直接给座舱入口（#45：已完成画像没有活跃会话，也不该没入口）', async () => {
+    const w = await mountOverview()
+    const btn = w.find('.vp-lastrun__cockpit')
+    expect(btn.exists()).toBe(true)
+    await btn.trigger('click')
+    await nextTick()
+    expect(subPage.value?.view).toBe('session')
+    expect(subPage.value?.id).toBe('s1')
     w.unmount()
   })
 

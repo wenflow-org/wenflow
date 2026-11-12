@@ -1052,7 +1052,40 @@ function buildStructuredOutputErrorMessage(attemptCount: number): string {
  * 让模型知道哪里错了，下次怎么调整。原版只是原样重发同一份 messages，
  * 模型反复用同一错误形状回写。注入点：user content 尾部追加 retry notice。
  */
+/**
+ * 讲课漂移检测（2026-11-12 实证 gc_1794449336845）：goal 对话的身份是「收敛学习方案」，
+ * 不是教学回合。用户说「你给我讲」时，导师切讲课模式成段授课（**小标题**+多段机制讲解），
+ * 阶段停在 understanding、确认面板永不出現——用户被漂移进了一场没有出口的即时答疑。
+ *
+ * 判据（高精度，宁漏勿杀）：reply 带多段粗体小标题（≥2 个 6 字以上的 **…** 段）且总长 ≥400，
+ * 或总长 ≥800。proposing 阶段的方案轮廓叙述（无小标题、≤3 段）不命中。
+ */
+export function assessGoalTeachingDrift(reply: string, previousStage: string): { valid: boolean; failureReason?: string; violations?: string[] } {
+  const text = String(reply || '');
+  if (!text) return { valid: true };
+  const boldHeadings = text.match(/\*\*[^*\n]{6,}\*\*/g) || [];
+  const lectureLike = (boldHeadings.length >= 2 && text.length >= 400) || text.length >= 800;
+  if (!lectureLike) return { valid: true };
+  return {
+    valid: false,
+    failureReason: 'GOAL_TEACHING_DRIFT',
+    violations: [
+      `reply 呈讲课形态（${boldHeadings.length} 个粗体小标题、${text.length} 字）——goal 对话不是教学回合`,
+    ],
+  };
+}
+
 function buildRetryNotice(prevFailureType: string, prevViolations: string[]): string {
+  if (prevFailureType === 'GOAL_TEACHING_DRIFT') {
+    return [
+      '[上一轮 reply 越界成讲课 — 请修正后重新输出]',
+      '你的身份是收敛学习方案的导师，不是教学回合。用户要「直接讲给我/现在就解释」时：',
+      '① 只给最简定位（≤3 句，给概念锚点，不展开机制讲解，如「Agent＝大模型＋循环＋工具＋记事板，展开讲正是这条路径的主线」）；',
+      '② 立刻把信号转回方案（「从头讲透这件事就是这条路径第一段的核心——方案定下来，第一课就从最底下那块讲起」）；',
+      '③ reply 里禁止小标题式成段授课与课程内容预演——那是方案确认后 teaching-turn 的职责，越界会让用户失去确认面板与路径出口。',
+      `违规格条目: ${(prevViolations || []).join('；')}`,
+    ].join('\n');
+  }
   const lines: string[] = [];
   lines.push('[上一轮结构化输出校验失败 — 请修正后重新输出]');
   lines.push(`失败类型: ${prevFailureType}`);
@@ -1067,8 +1100,8 @@ function buildRetryNotice(prevFailureType: string, prevViolations: string[]): st
   lines.push('- 若把 understanding 嵌进 state.understanding，请改为放到顶层（与 state 同级）');
   lines.push('- 若把 nextQuestions 嵌进 state.nextQuestions，请改为放到顶层');
   lines.push('- 不要使用 goalConversation 包装层；quickReplies / understanding / nextQuestions 等字段直接放在顶层');
-  lines.push('- state 必须包含 stage / confidence / done 三个字段，不要把 understanding 塞进 state');
-  lines.push('- time_dimensions 只填 sessionsLengthMin/sessionLengthMin、objectiveScopeHours、deadlineDate；数值字段必须是 number，deadlineDate 用 YYYY-MM-DD 或 null');
+  lines.push('- state 必须包含 stage / confidence 两个字段（stage 即阶段权威，不要再填 done），不要把 understanding 塞进 state');
+  lines.push('- time_dimensions 只填 sessionsLengthMin/sessionLengthMin、sessionsLengthSource、objectiveScopeHours、deadlineDate；数值字段必须是 number，sessionsLengthSource 用 explicit/estimated/default，deadlineDate 用 YYYY-MM-DD 或 null');
   lines.push('- 起草时严格按 system prompt 的输出规格，参考但不要照搬输入 payload 的嵌套形态');
   return lines.join('\n');
 }
@@ -1113,6 +1146,13 @@ function buildGoalPromptSpec(
       };
     },
     validateParsedOutput: () => ({ valid: true }),
+    // 讲课漂移软校验（2026-11-12 实证 gc_1794449336845：用户说「你给我讲」，导师直接切讲课
+    // 模式成段授课（**小标题**+多段机制讲解），阶段停在 understanding，确认面板永不出現——
+    // goal 对话漂移成教学回合。带反馈重试一次，仍漂移按原输出走（不硬拦）。
+    softValidateParsedOutput: (parsed: any, input: any) => assessGoalTeachingDrift(
+      typeof parsed?.reply === 'string' ? parsed.reply : '',
+      String(input?.previousStage ?? ''),
+    ),
     normalizeOutput: (_parsed, payload) => parseGoalConversationResponse(
       // parseGoalConversationResponse 需要原始 content 以保留 dialogue 抽取路径；
       // callPrompt 成功时 parsed 已校验，这里用 JSON 回放等价 raw。

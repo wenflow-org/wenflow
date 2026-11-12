@@ -41,7 +41,8 @@ function ruleAfter(cssRaw: string, selector: string): string {
 
 describe('登录页：被登录拦下时说清来源与落点', () => {
   it('带 redirect 时渲染来源提示条', () => {
-    expect(sfc).toMatch(/v-if="redirectNotice"[^>]*class="notice"/);
+    // 2026-11-12：会话失效 flash 优先渲染，redirectNotice 退为 v-else-if（同一次 401 只解释一遍）
+    expect(sfc).toMatch(/v-else-if="redirectNotice"[^>]*class="notice"/);
     expect(sfc).toContain('你刚才要去的页面需要登录后才能访问。');
   });
 

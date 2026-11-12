@@ -115,3 +115,18 @@ describe('页脚 AI 说明不再叠透明度（走查 2026-10-08 #14，同屏 12
     expect(px(decl(aiNote(), 'font-size'))).toBeGreaterThanOrEqual(12);
   });
 });
+
+describe('路径卡时间锚点（走查 2026-11-11 #4：四张卡分不出新旧）', () => {
+  it('卡片渲染相对时间，并用 title 给出绝对时间', () => {
+    expect(source).toContain('class="pcard__anchor"');
+    expect(source).toContain(':title="card.anchorTitle"');
+    expect(source, '时间锚点没接纯函数，列表页各写一份口径会漂').toContain('buildPathActivityAnchor(');
+  });
+
+  it('锚点行与副行同档 12px，单行省略', () => {
+    const rule = ruleAfter(css, '.pcard__anchor {');
+    expect(px(decl(rule, 'font-size'))).toBe(12);
+    expect(decl(rule, 'white-space')).toBe('nowrap');
+    expect(decl(rule, 'text-overflow')).toBe('ellipsis');
+  });
+});

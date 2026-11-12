@@ -463,9 +463,10 @@ describe('ApiConfig P1 修复批', () => {
     expect(panel.exists()).toBe(true);
     // 2026-10-28 三卡重构：本卡标题是能力角色，不再是通道名
     expect(panel.find('.mk-card__head .mk-card__title').text()).toBe('对话模型');
-    // 2026-10-27 用户「这个区域不要了」：左栏通道清单整块撤掉，页面直接是平台通道详情
+    // 2026-11-11 路径 A：供应商条整段撤掉，这页只有平台通道；自建通道仍可由注册表文件配置
     expect(wrapper.find('.mpp-list').exists()).toBe(false);
     expect(wrapper.findAll('.mpp-item')).toHaveLength(0);
+    expect(panel.findAll('.mpp-prov')).toHaveLength(0);
     expect(panel.text()).not.toContain('Acme 网关');
     const detail = wrapper.find('.mpp .mk-card__head');
     expect(detail.text()).toContain('对话模型');

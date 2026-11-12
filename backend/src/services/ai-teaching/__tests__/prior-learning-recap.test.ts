@@ -146,6 +146,29 @@ describe('fetchPriorLearningRecap（按路径位置接续前序）', () => {
     expect(recap?.sameTaskHistory?.lastUnresolvedPoints).toEqual(['难点Z']);
   });
 
+  it('上次没走完（paused，无 wrapup）也产出最小 same-task 上下文（2026-11-12 口径修正）', async () => {
+    mockMilestones();
+    mockTasksInMilestone([{ id: 'task-b', title: '任务B' }]);
+    // 第一次 findMany（completed+wrapup）：0；第二次（attempts 计数）：1 条 paused
+    prisma.teaching_sessions.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([
+        { status: 'paused', endTime: null, createdAt: new Date('2026-11-11T15:48:28Z') },
+      ]);
+    prisma.subtasks.findMany.mockResolvedValue([{ id: 'task-b', title: '任务B' }]);
+    prisma.teaching_sessions.findFirst.mockResolvedValue(null);
+
+    const { recap, sameTaskSessions } = await fetchPriorLearningRecap(base);
+    expect(sameTaskSessions).toBe(1);
+    expect(recap?.relation).toBe('same-task');
+    expect(recap?.sameTaskHistory?.attemptCount).toBe(1);
+    expect(recap?.sameTaskHistory?.lastStatus).toBe('paused');
+    expect(recap?.sameTaskHistory?.lastUnresolvedPoints).toEqual([]);
+    expect(recap?.topicSummary).toBeNull();
+    // 开场模型据此能承认「第 2 次学」，而不是当第一次讲
+    expect(recap?.sameTaskHistory?.lastSummary).toBeNull();
+  });
+
   it('无任何前序时回退最近任意完成课（last-any）', async () => {
     mockMilestones();
     mockTasksInMilestone([{ id: 'task-b', title: '任务B' }]);

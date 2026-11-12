@@ -1,28 +1,21 @@
 /**
- * 访问与注册独立页（2026-10-25 用户「这个组整个页面我觉得做的不好…可以功能打散」）。
+ * 网络与安全页（2026-11-11 从「访问与注册」收敛）。
  *
- * 从「模型与接入 · 安全与访问」页签拆出：它管后台谁能进来、谁能注册，
- * 与「模型接哪个上游」没有共享对象或动线。本测试钉住：
- *  ① 单卡三段在位（管理后台访问控制【含出站白名单】/ 注册设置）
- *  ② 「保存策略」常驻页头，无改动时禁用，保存只提交策略域
- *  ③ 读取失败不伪装成「未配置」
- *  ④ 注册开关是 MkSwitch（布尔配置不用并排双按钮）
- *  ⑤ 配额数字改动走一次显式提交：状态词在写盘成功前不报新值
+ * 原页把三套维度塞进一张卡：入站防火墙（管理后台访问控制）、出站 SSRF 策略、
+ * 业务层注册开关。现在：
+ *  ① 入站访问控制从界面撤除（仍由部署层 ADMIN_ACCESS_MODE / 反向代理生效，避免 Web 自锁）；
+ *  ② 注册设置迁到「用户账号」（见 registration-settings-dialog.test.ts）；
+ *  ③ 本页只剩出站网络策略，文案改成「能不能连局域网 Ollama / 本地知识库」的场景说法。
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import AccessControl from '../AccessControl.vue';
-import { liveApiConfig, liveFailures, registrationEnabled, registerIpQuotaEnabled, registerIpDailyQuota } from '../live';
+import { liveApiConfig, liveFailures } from '../live';
 import { dataSource } from '../store';
-import { confirmState, settleConfirm } from '../useConfirm';
 
-const { updateNetworkPolicyMock, updateRegistrationMock, getRegistrationMock, updateQuotaMock, getRegistrationStatusMock } = vi.hoisted(() => ({
+const { updateNetworkPolicyMock } = vi.hoisted(() => ({
   updateNetworkPolicyMock: vi.fn(),
-  updateRegistrationMock: vi.fn(),
-  getRegistrationMock: vi.fn(),
-  updateQuotaMock: vi.fn(),
-  getRegistrationStatusMock: vi.fn(),
 }));
 
 function apiObject(custom?: Record<string, unknown>): Record<string, unknown> {
@@ -35,16 +28,9 @@ function apiObject(custom?: Record<string, unknown>): Record<string, unknown> {
   });
 }
 
-vi.mock('@/api/auth', () => ({
-  authAPI: { getRegistrationStatus: getRegistrationStatusMock },
-}));
-
 vi.mock('@/api/adminApi', () => ({
   adminApiConfigApi: apiObject({ updateNetworkPolicy: updateNetworkPolicyMock }),
-  adminPlatformSettingsApi: apiObject({
-    updateRegistrationSetting: updateRegistrationMock,
-    getRegistrationSetting: getRegistrationMock,
-  }),
+  adminPlatformSettingsApi: apiObject(),
   adminAuthApi: apiObject(),
   adminSkillsApi: apiObject(),
   adminMcpApi: apiObject(),
@@ -95,7 +81,7 @@ function seedConfig(overrides: Record<string, unknown> = {}) {
     lastCheckedAt: '2026-08-13T09:00:00.000Z',
     networkPolicy: {
       adminAccessMode: 'private',
-      adminAllowedIps: [],
+      adminAllowedIps: ['203.0.113.10'],
       allowPrivateNetwork: true,
       privateNetworkHosts: [],
     },
@@ -116,153 +102,127 @@ function saveButton(w: Awaited<ReturnType<typeof mountPage>>) {
   return w.find('.ac-foot button');
 }
 
-describe('访问与注册（拆页后的独立页）', () => {
+describe('网络与安全（出站策略）', () => {
   beforeEach(() => {
     updateNetworkPolicyMock.mockReset();
-    updateRegistrationMock.mockReset();
-    updateQuotaMock.mockReset();
     updateNetworkPolicyMock.mockResolvedValue({ data: { data: {} } });
-    updateRegistrationMock.mockResolvedValue({ data: { data: {} } });
-    updateQuotaMock.mockResolvedValue({ data: { data: { registerIpQuotaEnabled: true, registerIpDailyQuota: 20 } } });
-    getRegistrationStatusMock.mockReset();
-    getRegistrationStatusMock.mockResolvedValue({ registrationEnabled: true, temporaryUnavailable: false });
     liveFailures.value = {};
-    registrationEnabled.value = null;
-    registerIpQuotaEnabled.value = null;
-    registerIpDailyQuota.value = null;
     seedConfig();
   });
 
-  it('页头只有页名 + 常驻「保存策略」；访问与注册同卡三段', async () => {
-    registrationEnabled.value = true;
-    registerIpQuotaEnabled.value = false;
+  it('页头只有页名 + 常驻「保存策略」；只剩出站一段，入站与注册不再出现', async () => {
     const w = await mountPage();
-    expect(w.find('.mk-pagehead__title').text()).toBe('访问与注册');
+    expect(w.find('.mk-pagehead__title').text()).toBe('网络与安全');
     expect(w.find('.mk-pagehead__sub').exists()).toBe(false);
     expect(saveButton(w).text()).toBe('保存策略');
 
-    const titles = w.findAll('.mk-card__title').map((t) => t.text());
-    // 入站来源、出站白名单与注册同属一张设置卡，段间用分隔线区分。
-    // 卡头不再有标题（2026-11-09 设计语言收敛）：页签已经叫「访问与注册」，
-    // 卡头再印一遍「访问与注册设置」是同屏两行字说一件事；三段自己的标题才是内容层级。
-    expect(titles).toEqual([]);
-    expect(w.text()).toContain('管理后台访问控制');
-    expect(w.text()).toContain('服务端出站访问');
-    expect(w.text()).toContain('注册设置');
+    // 卡头无标题（页签已经在说这一页是什么），只有右侧生效档
+    expect(w.findAll('.mk-card__title')).toHaveLength(0);
+    expect(w.text()).toContain('本地与内网资源访问');
+    expect(w.text()).toContain('Ollama');
+    expect(w.text()).not.toContain('管理后台访问控制');
+    expect(w.text()).not.toContain('仅本机');
+    expect(w.text()).not.toContain('注册设置');
+    expect(w.findAll('.ac-opts')).toHaveLength(1);
     expect(w.findAll('.ac-opts')[0].findAll('.ac-opt')).toHaveLength(3);
     w.unmount();
   });
 
-  it('卡头右侧出「当前生效」徽章，改动后补「未保存」（与同页其余页签卡头同形）', async () => {
+  it('卡头右侧出「当前生效」徽章，改动后补「未保存」', async () => {
     const w = await mountPage();
     const right = () => w.find('.mk-card__head .mk-card__head-right');
-    /* 2026-11-03：生效档从入站段标题后的灰字尾巴挪到卡头右侧徽章；脏值改挂同款 warn 徽章
-       （与「模型与接入」的未保存徽章同一写法）。挂在卡头上是这类状态的统一出口，
-       别再退回「段标题 + 一句灰字」。 */
-    expect(right().text()).toContain('当前生效：私有网段');
+    expect(right().text()).toContain('当前生效：允许内网与本地服务');
     expect(right().find('.mk-badge--warn').exists()).toBe(false);
 
-    const anyRadio = w.findAll('.ac-opt').find((r) => r.text().includes('不限制'))!;
-    await anyRadio.trigger('click');
+    const deny = w.findAll('.ac-opt').find((r) => r.text().includes('仅限公共互联网'))!;
+    await deny.trigger('click');
     await nextTick();
     expect(right().text()).toContain('未保存');
     w.unmount();
   });
 
-  it('选项卡片自带说明与风险：警示落在选中的那张卡里，屏上不再有整条红横幅', async () => {
+  it('三档用场景说法：每张卡自带「这一档意味着什么」，默认档带推荐标记', async () => {
     const w = await mountPage();
-    /* 2026-11-03 范式二：三档入站是等宽选项卡片，每张卡自带「这一档意味着什么」 */
     const opts = w.findAll('.ac-opts')[0].findAll('.ac-opt');
-    expect(opts).toHaveLength(3);
-    expect(opts.map((o) => o.find('.ac-opt__desc').text()))
-      .toEqual(['只有本机能进后台', '本机与局域网、VPN 内可进', '任意来源都能进后台']);
-    /* 默认档（私有网段，低风险）不出现任何整条告警——原先「允许全部内网」那条红横幅是常驻的 */
-    expect(w.findAll('.ac-risk')).toHaveLength(0);
-
-    const anyOpt = () => w.findAll('.ac-opt').find((o) => o.text().includes('不限制'))!;
-    await anyOpt().trigger('click');
-    await nextTick();
-    // 2026-11-09 设计语言收敛：选中态走全站原语 mk-choice--on（蓝描边 + 淡蓝底），
-    // 不再额外叠一个琥珀描边类——选中与警示抢同一个通道时，
-    // 「这张是选中的」和「这张有问题」互相抵消。
-    expect(anyOpt().classes()).toContain('mk-choice--on');
-    expect(anyOpt().classes()).not.toContain('ac-opt--risk');
-    expect(anyOpt().find('.ac-opt__warn').classes()).not.toContain('ac-opt__warn--idle');
-    // 警示仍只在卡内，不是回到「贯穿整屏的红条」
+    expect(opts.map((o) => o.find('.ac-opt__head b').text())).toEqual([
+      '允许内网与本地服务', '仅白名单', '仅限公共互联网',
+    ]);
+    expect(opts.map((o) => o.find('.ac-opt__desc').text())).toEqual([
+      '可连接局域网 / 本机的模型与知识库',
+      '公网照常，内网只放行清单里的 Host / IP',
+      '禁止向内网 / 本机发请求，公网照常',
+    ]);
+    expect(opts[0].find('.ac-opt__tag').text()).toBe('推荐');
+    // 风险提示只落在选中的那张卡内，屏上没有整条红横幅
     expect(w.findAll('.ac-risk')).toHaveLength(0);
     w.unmount();
   });
 
-  it('脏值只在卡头徽章说一次：卡尾不再重复一句「改动尚未保存」', async () => {
+  it('脏值只在卡头徽章说一次：卡尾只有主操作', async () => {
     const w = await mountPage();
-    const anyOpt = w.findAll('.ac-opt').find((o) => o.text().includes('不限制'))!;
-    await anyOpt.trigger('click');
+    await w.findAll('.ac-opt').find((o) => o.text().includes('仅限公共互联网'))!.trigger('click');
     await nextTick();
-    // 卡头徽章是脏值的唯一出口（与「模型与接入」的未保存徽章同一写法）
     expect(w.find('.mk-card__head .mk-card__head-right').text()).toContain('未保存');
-    // 卡尾只有主操作，不再同屏说第二遍
     expect(w.findAll('.ac-foot > *')).toHaveLength(1);
     expect(w.find('.ac-foot').text()).toBe('保存策略');
     w.unmount();
   });
 
-  it('注册两项也是带边框的设置卡（与上方两列卡片同栅格）', async () => {
-    registrationEnabled.value = true;
-    registerIpQuotaEnabled.value = false;
-    const w = await mountPage();
-    const cards = w.findAll('.ac-setcard');
-    expect(cards).toHaveLength(2);
-    expect(cards.map((c) => c.find('b').text())).toEqual(['新用户注册', '单 IP 每日注册配额']);
-    expect(cards.map((c) => c.find('.ac-setcard__desc').text()))
-      .toEqual(['允许访客在登录页自行注册账号。', '防止脚本批量注册账号。']);
-    // 开关贴在卡片右侧（标题即它的标签，故开关不自带可见 label）
-    expect(cards[0].find('.mk-switch').exists()).toBe(true);
-    expect(cards[0].find('.mk-switch__label').exists()).toBe(false);
-    w.unmount();
-  });
-
-  it('访问来源模式是 radio 组：选中项 aria-checked=true 且只有它可 Tab 进入', async () => {
+  it('radio 契约：选中项 aria-checked=true，只有它可 Tab 进入', async () => {
     const w = await mountPage();
     const radios = w.findAll('.ac-opts')[0].findAll('.ac-opt');
     const checked = radios.filter((r) => r.attributes('aria-checked') === 'true');
     expect(checked).toHaveLength(1);
-    expect(checked[0].text()).toContain('私有网段');
-    expect(radios.map((r) => r.attributes('tabindex'))).toEqual(['-1', '0', '-1']);
+    expect(checked[0].text()).toContain('允许内网与本地服务');
+    expect(radios.map((r) => r.attributes('tabindex'))).toEqual(['0', '-1', '-1']);
     w.unmount();
   });
 
-  it('无改动时「保存策略」禁用；改访问来源后启用，确认后只提交策略域', async () => {
+  it('仅限公共互联网：可直接保存；整域提交时回传入站现值，不悄悄改部署层限制', async () => {
     const w = await mountPage();
     expect(saveButton(w).attributes('disabled')).toBeDefined();
 
-    const anyRadio = w.findAll('.ac-opt').find((r) => r.text().includes('不限制'))!;
-    await anyRadio.trigger('click');
+    await w.findAll('.ac-opt').find((o) => o.text().includes('仅限公共互联网'))!.trigger('click');
     await nextTick();
     expect(saveButton(w).attributes('disabled')).toBeUndefined();
-
     await saveButton(w).trigger('click');
-    await nextTick();
-    expect(confirmState.open).toBe(true);
-    settleConfirm(true);
     await flushPromises();
-    expect(updateNetworkPolicyMock).toHaveBeenCalledTimes(1);
-    expect(updateNetworkPolicyMock.mock.calls[0][0]).toMatchObject({ adminAccessMode: 'any' });
-    expect(saveButton(w).attributes('disabled')).toBeDefined();
+
+    expect(updateNetworkPolicyMock).toHaveBeenCalledWith(expect.objectContaining({
+      allowPrivateNetwork: false,
+      privateNetworkHosts: [],
+      // 入站字段不在本页编辑，但协议是整域提交：必须原样回传服务端现值
+      adminAccessMode: 'private',
+      adminAllowedIps: ['203.0.113.10'],
+    }));
     w.unmount();
   });
 
-  it('仅白名单 + 名单为空：禁用保存并写明后果', async () => {
+  it('仅白名单 + 名单为空：禁用保存，并指路「仅限公共互联网」', async () => {
     const w = await mountPage();
-    const seg = w.findAll('.ac-opt').find((b) => b.text().includes('仅白名单'))!;
-    await seg.trigger('click');
+    await w.findAll('.ac-opt').find((b) => b.text().includes('仅白名单'))!.trigger('click');
     await nextTick();
-    expect(w.text()).toContain('服务端将无法访问任何内网地址');
+    expect(w.text()).toContain('要禁止内网访问，请直接选「仅限公共互联网」');
     expect(saveButton(w).attributes('disabled')).toBeDefined();
 
-    const hosts = w.findAll('.ac-textarea')[1];
-    await hosts.setValue('192.168.1.20');
+    await w.find('.ac-textarea').setValue('192.168.1.20');
     await nextTick();
     expect(saveButton(w).attributes('disabled')).toBeUndefined();
+    w.unmount();
+  });
+
+  it('仅白名单 + 填了清单：保存为不放行全部 + 白名单', async () => {
+    const w = await mountPage();
+    await w.findAll('.ac-opt').find((b) => b.text().includes('仅白名单'))!.trigger('click');
+    await nextTick();
+    await w.find('.ac-textarea').setValue('192.168.1.20');
+    await nextTick();
+    await saveButton(w).trigger('click');
+    await flushPromises();
+    expect(updateNetworkPolicyMock).toHaveBeenCalledWith(expect.objectContaining({
+      allowPrivateNetwork: false,
+      privateNetworkHosts: ['192.168.1.20'],
+    }));
     w.unmount();
   });
 
@@ -270,78 +230,22 @@ describe('访问与注册（拆页后的独立页）', () => {
     liveApiConfig.value = null;
     liveFailures.value = { apiConfig: 'boom' };
     const w = await mountPage();
-    expect(w.text()).toContain('访问策略读取失败');
+    expect(w.text()).toContain('网络策略读取失败');
     expect(w.text()).toContain('重试');
     w.unmount();
   });
 
-  it('注册开关是 MkSwitch：一枚 role=switch + 状态词，不再并排双按钮', async () => {
-    registrationEnabled.value = false;
-    registerIpQuotaEnabled.value = false;
-    const w = await mountPage();
-    const sw = w.find('[role="switch"][aria-label="新用户注册"]');
-    expect(sw.exists()).toBe(true);
-    expect(sw.attributes('aria-checked')).toBe('false');
-    expect(sw.find('.mk-switch__state').exists()).toBe(false);
-    expect(w.text()).not.toContain('开放注册');
-    // 关闭注册时给出「新建用户」出口
-    expect(w.findAll('button').some((b) => b.text().includes('新建用户'))).toBe(true);
-    expect(w.find('[role="switch"][aria-label="单 IP 每日注册配额"]').exists()).toBe(true);
-    w.unmount();
-  });
-
-  it('注册状态词用生效值：配置开但核心服务阻断时显示暂不可用', async () => {
-    registrationEnabled.value = true;
-    registerIpQuotaEnabled.value = false;
-    getRegistrationStatusMock.mockResolvedValue({ registrationEnabled: false, temporaryUnavailable: true });
-    const w = await mountPage();
-    await flushPromises();
-    expect(w.text()).toContain('暂不可用');
-    w.unmount();
-  });
-
-  it('配额数字改动后出现「保存上限」，提交新值', async () => {
-    registrationEnabled.value = true;
-    registerIpQuotaEnabled.value = true;
-    registerIpDailyQuota.value = 5;
-    updateRegistrationMock.mockResolvedValue({
-      data: { data: { registerIpQuotaEnabled: true, registerIpDailyQuota: 20 } },
-    });
-    const w = await mountPage();
-
-    const input = w.find('.ac-quota-field input');
-    (input.element as HTMLInputElement).value = '20';
-    await input.trigger('change');
-    await nextTick();
-    const save = w.findAll('button').find((b) => b.text() === '保存上限');
-    expect(save, '改上限后应出现保存钮').toBeTruthy();
-
-    await save!.trigger('click');
-    await flushPromises();
-    expect(updateRegistrationMock).toHaveBeenCalledWith({ registerIpQuotaEnabled: true, registerIpDailyQuota: 20 });
-    w.unmount();
-  });
-
-  it('注册开关与配额在加载完成前不渲染（null = 未加载，不伪装成关）', async () => {
-    const w = await mountPage();
-    expect(w.findAll('.mk-card__title').map((t) => t.text())).toEqual([]);
-    expect(w.text()).toContain('服务端出站访问');
-    w.unmount();
-  });
-
-  it('嵌入运营中心：不出页头，保存钮跟到策略卡头，根节点接管页签面板滚动', async () => {
+  it('嵌入系统设置：不出页头，卡头只承载状态，根节点接管页签面板滚动', async () => {
     const w = mount(AccessControl, { props: { embedded: true } });
     await flushPromises();
     await nextTick();
     expect(w.find('.mk-pagehead').exists()).toBe(false);
     expect(w.classes()).toContain('acl-host--embedded');
     const head = w.find('.mk-card__head');
-    // 嵌入态卡头无标题，只承载右侧状态（生效档 / 未保存），与「会话安全」同页签同形
     expect(head.find('.mk-card__title').exists()).toBe(false);
     expect(head.find('.mk-badge').text()).toContain('当前生效');
-    const foot = w.find('.ac-foot');
-    expect(foot.find('button').text()).toBe('保存策略');
-    expect(foot.find('button').attributes('disabled')).toBeDefined();
+    expect(w.find('.ac-foot button').text()).toBe('保存策略');
+    expect(w.find('.ac-foot button').attributes('disabled')).toBeDefined();
     w.unmount();
   });
 });

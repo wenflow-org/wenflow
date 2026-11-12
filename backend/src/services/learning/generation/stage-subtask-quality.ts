@@ -154,3 +154,115 @@ export function assessStageMetaLessons(subtasks: SubtaskQualityInput[]): StageMe
     violations: hits,
   };
 }
+
+/** 题面/答案/来源/定位模板的确定性拦截（2026-11-12，AI Agent 真机实证）。 */
+export interface StageNarrationInput {
+  title?: string;
+  description?: string;
+  acceptanceHint?: string;
+  materialRefs?: unknown[];
+}
+
+export interface StageNarrationResult {
+  valid: boolean;
+  failureReason?: string;
+  violations?: string[];
+}
+
+const ANSWER_HINT_RE = /(注意[^。；\n]{0,60}(轮|第)[^。；\n]{0,60}(却|但|而是|不是)|(来自|出自)\s*轮\s*\d|而不是\s*轮\s*\d)/;
+const UNSOURCED_REAL_RE = /(真实对话|真实记录|真实形态|公开复盘|真实案例|真实问答)/;
+const LOCATOR_INSTRUCTION_RE = /(先?找出[^。；\n]{0,40}(第几轮|哪一轮|哪一步)|最早[^。；\n]{0,20}(出现|消失)[^。；\n]{0,20}(第几轮|哪一轮)|埋在哪一轮)/;
+/** 标题谜底（2026-11-12 外评）：标题写成本课结论的陈述句，学习者扫目录即看破机制——
+ * 高精度结论词形，宁漏勿杀（标题规则的其余部分靠提示词）。 */
+const TITLE_SPOILER_RE = /(只会|其实就?是|说白了|动手的是|靠的是|，[^：？?]{0,10}(才|就)看得到|不靠记忆|全靠.{2,8}喂)/;
+/** 同例复读（2026-11-12 外评）：后面的课指名复用前面任务的主教材（「回到任务 1 那段记录」）——
+ * stage-designer 规则明文「同一个例子只允许作为主教材出现一课，后续以新例子迁移」。 */
+const SAME_CASE_REUSE_RE = /(回到任务\s*\d|回到第\s*\d+\s*课|上一?个?任务的那段|前一?课的那段|上一课那段)/;
+
+/**
+ * 只查“把答案写在题面里 / 把合成样本叫真实 / 同一阶段反复让学习者找轮次”三类，
+ * 不评价内容质量本身（那归语义评审）。命中即带反馈重试一次，避免生成链把坏题落库。
+ */
+export function assessStageNarration(
+  subtasks: StageNarrationInput[],
+  options: { hasMaterials?: boolean } = {},
+): StageNarrationResult {
+  const list = Array.isArray(subtasks) ? subtasks : [];
+  const violations: string[] = [];
+  let locatorCount = 0;
+
+  for (let i = 0; i < list.length; i += 1) {
+    const task = list[i] || {};
+    const title = String(task.title || '').trim();
+    const description = String(task.description || '').trim();
+    const acceptance = String(task.acceptanceHint || '').trim();
+    const body = `${title} ${description}`;
+    const label = `任务 ${i + 1}「${title || '无标题'}」`;
+
+    if (ANSWER_HINT_RE.test(description) || ANSWER_HINT_RE.test(acceptance)) {
+      violations.push(`${label} 把答案写进了题面/验收（提前揭示关键轮次或归属）`);
+    }
+    if (TITLE_SPOILER_RE.test(title)) {
+      violations.push(`${label} 标题写成了结论陈述句（剧透谜底）——标题改为「动作+靶子/悬念」，结论留给课里得出`);
+    }
+    if (SAME_CASE_REUSE_RE.test(`${title} ${description}`)) {
+      violations.push(`${label} 指名复用前面任务的主教材（同例复读）——同一个例子只允许当一课的主教材，后续课换新例子迁移`);
+    }
+    if (UNSOURCED_REAL_RE.test(body)
+      && !options.hasMaterials
+      && !(Array.isArray(task.materialRefs) && task.materialRefs.length > 0)) {
+      violations.push(`${label} 没有资料引用却把样本称作“真实/公开复盘”，应改为示例/仿真记录`);
+    }
+    if (LOCATOR_INSTRUCTION_RE.test(`${title} ${description}`)) {
+      locatorCount += 1;
+    }
+  }
+
+  if (locatorCount >= 2) {
+    violations.push(`本阶段有 ${locatorCount} 个“在记录里找第几轮”的定位任务；同一路径这类动作最多 1 次`);
+  }
+
+  if (violations.length === 0) return { valid: true };
+  return {
+    valid: false,
+    failureReason: 'TASK_NARRATION_GUARD: 题面泄露答案/标题剧透/同例复读/无来源称真实/定位题重复',
+    violations,
+  };
+}
+
+/**
+ * 规划层来源诚实（2026-11-12 实证：「不写代码看懂 AI Agent」路径）：goal 对话承诺
+ * 「都是公开日志能查到的、不拿编的」但 needsMaterial 未登记 → 联网采集整链未触发 →
+ * 规划器把口头承诺抄进 path summary 与 milestone goal 当既成事实，15 节课全靠即兴
+ * 合成还标"真实"。无材料（未采集/未上传）时，summary 与阶段的 title/description/goal
+ * 一律不得出现「真实记录/公开复盘/真实案例」类措辞——没有采集结果的承诺只能写成
+ * 「示意记录/示例样本（形态参照公开事故类型）」。
+ */
+export interface PlanningSourceHonestyInput {
+  summary?: string;
+  milestones?: Array<{ title?: string; description?: string; goal?: string }>;
+}
+
+export function assessPlanningSourceHonesty(
+  plan: PlanningSourceHonestyInput,
+  options: { hasMaterials?: boolean } = {},
+): StageNarrationResult {
+  if (options.hasMaterials) return { valid: true };
+  const violations: string[] = [];
+  const summary = String(plan.summary || '').trim();
+  if (UNSOURCED_REAL_RE.test(summary)) {
+    violations.push('路径 summary 宣称「真实/公开记录」但本路径没有联网采集结果或上传资料——改为「示意记录/示例样本（形态参照公开事故类型）」');
+  }
+  (Array.isArray(plan.milestones) ? plan.milestones : []).forEach((milestone, index) => {
+    const text = `${milestone?.title || ''} ${milestone?.description || ''} ${milestone?.goal || ''}`;
+    if (UNSOURCED_REAL_RE.test(text)) {
+      violations.push(`阶段 ${index + 1}「${String(milestone?.title || '').slice(0, 20)}」宣称「真实/公开记录」但无资料支撑——同样改为示例措辞`);
+    }
+  });
+  if (violations.length === 0) return { valid: true };
+  return {
+    valid: false,
+    failureReason: 'PLANNING_SOURCE_HONESTY: 无资料支撑却在 summary/阶段目标里承诺真实或公开记录',
+    violations,
+  };
+}

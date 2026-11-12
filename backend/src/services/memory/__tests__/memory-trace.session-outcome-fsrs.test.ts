@@ -214,7 +214,7 @@ describe('recordSessionOutcome：无 grade 路径逐字不变（preserveDueAt，
     const args = mockUpsert.mock.calls[0][0]
     expect(args.update).not.toHaveProperty('dueAt')
     expect(args.update).not.toHaveProperty('fsrsStability')
-    expect(args.update.masteryScore).toBe(0.5)
+    expect(args.update.masteryScore).toBe(0.525)
     expect(args.update.lastSeenAt).toBeInstanceOf(Date)
   })
 })

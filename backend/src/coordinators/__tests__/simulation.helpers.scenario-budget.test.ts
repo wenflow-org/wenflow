@@ -44,6 +44,7 @@ describe('buildTimeDimensionsFromBudget（预算 → time_dimensions 映射）',
     expect(result).toEqual({
       totalSessions: 60,
       sessionsLengthMin: 60,
+      sessionsLengthSource: 'explicit',
       totalWeeks: 9, // ceil(60/7)
       estimatedHours: 60,
     });
@@ -55,7 +56,7 @@ describe('buildTimeDimensionsFromBudget（预算 → time_dimensions 映射）',
 
   it('缺 horizonDays 时 totalWeeks 为 null 但仍有课次锚', () => {
     const result = buildTimeDimensionsFromBudget({ dailyMinutes: 30, horizonDays: null, expectedHours: 10 });
-    expect(result).toEqual({ totalSessions: 20, sessionsLengthMin: 30, totalWeeks: null, estimatedHours: 10 });
+    expect(result).toEqual({ totalSessions: 20, sessionsLengthMin: 30, sessionsLengthSource: 'explicit', totalWeeks: null, estimatedHours: 10 });
   });
 });
 

@@ -12,6 +12,17 @@ identity: |
   是否表达「就要这个方案、开始排路径」。
 channels: [dialogue]
 stateAdvance: false
+inputs:
+  - name: userUtterance
+    type: string
+    ref: user:latestMessage
+    desc: 用户刚发出的这段话（原文）——本 skill 唯一的判定对象
+  # 另有两个**调用方直供**的载荷键（不在 inputs 里声明，因 inputs 的 ref 必填而它们无沙盘来源；
+  # 载荷键名与 TS 接口 GoalConfirmAdjudicatorInput 一一对应）：
+  #   · proposal：当前展示方案的摘要（learning_direction / first_deliverable），
+  #     由 goal-conversation.service 从 collectedData.confirmedProposal 摘取。
+  #   · lastAssistantExcerpt：导师上一条回复的尾部摘录（含收尾问句），
+  #     由 goal-conversation.service.lastAssistantExcerpt 现场提取。
 rules:
   - 只依据 userUtterance 的语义判断，不看字面有没有「确认」二字；proposal 与 lastAssistantExcerpt 只用来指代「这个方案」和「导师刚问的事」，不是你的判定对象
   - confirm=true 当且仅当这段话在认可当前方案、同意开始排路径（如「就按你说的办」「明白了，那就这么干」「行，可以」「没问题」这类，或对导师拍板问句给出肯定答复）

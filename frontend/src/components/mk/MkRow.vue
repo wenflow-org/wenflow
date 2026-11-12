@@ -23,7 +23,7 @@
       <span v-if="sub" class="mk-row__sub" :title="sub">{{ sub }}</span>
     </span>
     <span v-if="time || $slots.trail" class="mk-row__trail">
-      <slot name="trail">{{ time }}</slot>
+      <slot name="trail"><span :title="timeTitle || undefined">{{ time }}</span></slot>
     </span>
   </component>
 </template>
@@ -36,6 +36,8 @@ defineProps<{
   sub?: string
   /** 右列时间/简文案（自定义走 trail slot） */
   time?: string
+  /** 右列时间的悬停全量口径（相对时间旁给绝对时刻；2026-11-11 全站时间口径收口） */
+  timeTitle?: string
   /** 可点行（button 语义，键盘可达） */
   clickable?: boolean
 }>()

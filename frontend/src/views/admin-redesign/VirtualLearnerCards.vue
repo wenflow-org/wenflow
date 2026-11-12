@@ -13,16 +13,24 @@
     >
       <template #actions>
         <!-- 预置「一键加载」：只在真有缺卡 / 待升级 / 定义回退时出现——9 张预置卡都在墙上时
-             它是个没有结果的动作。 -->
+             它是个没有结果的动作。悬停说明在 2026-10-26 从 KPI 卡搬进页头时丢过一次（#47），补回。 -->
         <button
           v-if="presetActionable"
           type="button"
           class="mk-btn mk-btn--sm"
+          title="把平台预置身份卡写进卡库：只补缺失 / 待升级的卡，不随平台启动自动同步"
           :disabled="presetLoading"
           @click="doLoadPresets"
         >{{ presetLoading ? '同步中…' : '一键加载' }}</button>
         <!-- 后端只导出「自建卡」：自建卡为 0 时导出的是一个空文件 -->
-        <button v-if="(summary?.custom ?? 0) > 0" type="button" class="mk-btn mk-btn--sm" :disabled="exporting" @click="doExport">
+        <button
+          v-if="(summary?.custom ?? 0) > 0"
+          type="button"
+          class="mk-btn mk-btn--sm"
+          title="把自建卡（非预置）导出为 YAML 文件。预置卡不在导出范围内"
+          :disabled="exporting"
+          @click="doExport"
+        >
           {{ exporting ? '导出中…' : '导出卡库' }}
         </button>
         <!-- 加图标 + 悬停说明（2026-11-02 评审 R15）：一排文字按钮里，「平台生产」四个字
@@ -33,7 +41,7 @@
           title="用平台生成一张新的身份卡（人设 + 第一个故事）"
           @click="openProduce"
         ><Plus :size="14" :stroke-width="1.75" />平台生产</button>
-        <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" @click="openImport">导入卡</button>
+        <button type="button" class="mk-btn mk-btn--sm mk-btn--primary" title="导入 YAML / JSON 卡文档（{cards:[…]}）。同 cardKey 默认跳过，可勾选覆盖" @click="openImport">导入卡</button>
       </template>
     </MkPageHead>
 
@@ -122,8 +130,10 @@
         @action="loadIndex"
       />
       <!-- 池子被派空 ≠ 卡库是空的：卡片还在，只是都变成实例了 -->
+      <!-- 判据用 wallCards（身份卡底册），不是 filtered：档位/关键词筛空是「没有命中的卡」，
+           不是「池子被派空」——此前用它做判据，筛一下档位就变成「池子已派空」且没有复位入口 -->
       <MkEmptyState
-        v-else-if="!filtered.length && !keyword.trim() && summary?.derived"
+        v-else-if="!wallCards.length && summary?.derived"
         title="身份池已派空"
         action-text="去虚拟学习者"
         @action="goInstances"
@@ -131,7 +141,7 @@
       <!-- 2026-11-06 视觉走查：主操作改走 action-text（与全站空态同一条渲染路径），
            并补上「为什么空」的一句——块级空态统一为「标题 + 一句为什么 + 可选动作」。 -->
       <MkEmptyState
-        v-else-if="!cards.length"
+        v-else-if="!wallCards.length"
         title="卡库还是空的"
         description="导入一张身份卡后，就能从它派生虚拟学习者。"
         action-text="导入第一张卡"
@@ -197,7 +207,7 @@
           <footer class="vlc-card__foot">
             <div class="vlc-card__tags">
               <span class="mk-badge" :class="sourceBadge(c)" :title="sourceTitle(c)">{{ sourceText(c) }}</span>
-              <span v-for="t in wallTags(c)" :key="t.text" class="mk-badge mk-badge--muted">{{ t.text }}</span>
+              <span v-for="t in wallTags(c)" :key="t.text" class="mk-badge mk-badge--muted" :title="t.title">{{ t.text }}</span>
               <span v-if="showCardKey(c)" class="vlc-card__key" :title="c.cardKey || ''">{{ shortCardKey(c.cardKey || '') }}</span>
               <!-- 任务数是「创建学习者」时要做的选择（勾几节课），比难度更有决策价值：
                    整面墙难度相同时只留任务数；混级时两者并列 -->
@@ -230,8 +240,8 @@
     <!-- 选角批量栏（页面级兄弟节点，选中后底部浮现；与虚拟学习者页同款全局 mk-batchbar 形态）：
          卡库的主操作是「选身份 → 创建虚拟学习者」，批量是常态（一次挑几张身份各创建一个实例）。 -->
     <div v-if="selected.length" class="mk-batchbar">
-      <span>已选 {{ selected.length }} 张身份卡</span>
-      <button type="button" class="mk-link" @click="clearPick">取消选择</button>
+      <span class="mk-batchbar__count">已选 {{ selected.length }} 张身份卡</span>
+      <button type="button" class="mk-link mk-batchbar__cancel" @click="clearPick">取消选择</button>
       <button
         type="button"
         class="mk-btn mk-btn--primary"
@@ -259,7 +269,7 @@ import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import Pagination from './Pagination.vue'
 import VirtualLearnerCreate from './VirtualLearnerCreate.vue'
 import CardDeriveDialog from './CardDeriveDialog.vue'
-import { cardDisplayTitle, shortCardKey, cardTier, compareTier, isWallHiddenTag } from './cardDisplay'
+import { cardDisplayTitle, shortCardKey, cardTier, compareTier, isWallHiddenTag, tierLabel, TIER_RE } from './cardDisplay'
 import { isInternalTag, isPlaceholderCardKey } from './cardTags'
 import { openSubPage } from './store'
 import { errMsg, liveRefreshSeq } from './live'
@@ -295,6 +305,8 @@ interface CardWallEntry {
   email: string | null
   /** 来源身份卡名（2026-10-16 卡=身份模板）：非空即本卡是从另一张卡创建的实例 */
   derivedFrom: string | null
+  /** 实例标记（后端 instance-scope 同判据）：derivedFrom 或 origin——旧服务端无此字段 */
+  isInstance?: boolean
   /** 故事池任务数（2026-10-27）：创建实例时按任务勾选，卡面先答「这张卡能开几节课」 */
   taskCount?: number
   /** 首个任务标题（2026-10-27）：卡面上真正会被开的那节课叫什么 */
@@ -314,15 +326,20 @@ const keyword = ref('')
 const tier = ref('')
 const tierOptions = computed(() => {
   const tiers = [...new Set(cards.value.map((c) => cardTier(c.tags || [])).filter(Boolean))].sort(compareTier)
-  return [{ value: '', label: '全部档位' }, ...tiers.map((t) => ({ value: t, label: t }))]
+  return [{ value: '', label: '全部档位' }, ...tiers.map((t) => ({ value: t, label: tierLabel(t) }))]
 })
 
 /** 卡墙只放身份卡（2026-10-24 层级收口）：实例归「虚拟学习者」。
  *  接口已过滤，这里再挡一次——旧缓存或别处回放的数据里若仍带 derivedFrom，也不进墙。 */
+/* 实例判据与后端 instance-scope.INSTANCE_MARKER_KEYS 对齐：
+   derivedFrom（身份克隆）或 origin（批量实验建号）任一存在即实例，不进身份池。
+   旧服务端没有 isInstance 字段时才退回只看 derivedFrom。 */
+const isInstanceCard = (c: CardWallEntry) => c.isInstance ?? !!c.derivedFrom
+const wallCards = computed(() => cards.value.filter((c) => !isInstanceCard(c)))
 const filtered = computed(() => {
   const kw = keyword.value.trim().toLowerCase()
   return cards.value.filter((c) => {
-    if (c.derivedFrom) return false
+    if (isInstanceCard(c)) return false
     if (tier.value && cardTier(c.tags || []) !== tier.value) return false
     if (!kw) return true
     // 搜索只认卡面能看见的标签（场景 / 目标的中文名 + 自定义卡的原样标签）；
@@ -345,8 +362,23 @@ const pagedCards = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filtered.value.slice(start, start + pageSize.value)
 })
-watch([keyword, tier, cards], () => {
+/* 筛选一变：回第 1 页 + 清空选中（与 VirtualLearners 同一规则——批量条不得继续按
+   视口外/筛掉的旧集合执行派生）；数据刷新：回第 1 页 + 按存活 id 收敛选中，
+   已删的卡不会留在批量集合里让派生对话框显示 0 张。 */
+watch([keyword, tier], () => {
   page.value = 1
+  if (selected.value.length) clearPick()
+})
+watch(cards, () => {
+  page.value = 1
+  if (!selected.value.length) return
+  const alive = new Set(cards.value.map((c) => c.profileId))
+  const next = selected.value.filter((id) => alive.has(id))
+  if (next.length !== selected.value.length) selected.value = next
+}, { deep: true })
+/* 档位下拉随数据变化消失时，把已失效的 tier 复位——否则页面停在「筛空」且没有可复位控件 */
+watch(tierOptions, (opts) => {
+  if (tier.value && !opts.some((o) => o.value === tier.value)) tier.value = ''
 })
 /* 页码收敛：改大 pageSize 或数据缩减后 current page 超界时回落（单页时页码器不渲染，
    不能只依赖 Pagination 自带的越界收敛——它被 v-if 卸载后收不到变化） */
@@ -410,11 +442,13 @@ const presetActionable = computed(() => {
   if (!s) return true
   return s.missing > 0 || s.upgradable > 0 || s.rolledBack > 0
 })
-/** 身份卡构成：两个数并排；定义回退是人工要看的异常档，用琥珀脚注 */
+/** 身份卡构成：两个数并排；定义回退是人工要看的异常档，用琥珀脚注
+ *  2026-11-11 困惑测试 #49：后端 `custom` 的口径是「一切非预置卡」（含合成的导入评测语料），
+ *  而卡面来源徽章另有「合成 / web / 自建」之分——读数写「自建」会与徽章互相打架。改为「非预置」。 */
 const compositionHint = computed(() => {
   const s = summary.value
   if (!s) return ''
-  const parts = [`预置 ${s.builtin}`, `自建 ${s.custom}`]
+  const parts = [`预置 ${s.builtin}`, `非预置 ${s.custom}`]
   const rolledBack = presetSummary.value?.rolledBack ?? 0
   if (rolledBack) parts.push(`定义回退 ${rolledBack}`)
   return parts.join(' · ')
@@ -527,14 +561,18 @@ const GOAL_TAG_LABELS: Record<string, string> = {
 }
 interface WallTag {
   text: string
+  title?: string
 }
 function wallTags(c: CardWallEntry): WallTag[] {
   const out: WallTag[] = []
   for (const tag of c.tags) {
     if (isInternalTag(tag)) continue
     if (isWallHiddenTag(tag)) continue
-    const text = SOURCE_TAG_LABELS[tag] || GOAL_TAG_LABELS[tag] || tag
-    if (!out.some((x) => x.text === text)) out.push({ text })
+    // 档位码（A–E / F1–F5B）单独一档：码本身没有语义，印成「F5B · 分诊负样本」
+    const tier = String(tag).trim()
+    const isTier = TIER_RE.test(tier)
+    const text = isTier ? tierLabel(tier) : (SOURCE_TAG_LABELS[tag] || GOAL_TAG_LABELS[tag] || tag)
+    if (!out.some((x) => x.text === text)) out.push({ text, title: isTier ? `卡库档位：${tierLabel(tier)}` : undefined })
     if (out.length === 2) break
   }
   return out
@@ -594,10 +632,21 @@ const showLevel = computed(() => {
 /** 待创建的身份卡 id（卡墙勾选框 v-model） */
 const selected = ref<string[]>([])
 
+/* 一次派生上限 = 后端 cloneCardsToLearners 的 CLONE_MAX_ITEMS（20）。
+   超出时后端直接 400「一次最多派生 20 张卡」，前端必须在勾选阶段就挡住，
+   而不是让对话框显示「创建 30 个」再失败。 */
+const DERIVE_MAX = 20
+/** 超限提示只写一处：勾选与全选共用同一句（同一事实不在同屏说两套） */
+const DERIVE_MAX_NOTE = `一次最多派生 ${DERIVE_MAX} 张身份卡`
+
 function togglePick(profileId: string) {
   const i = selected.value.indexOf(profileId)
-  if (i >= 0) selected.value.splice(i, 1)
-  else selected.value.push(profileId)
+  if (i >= 0) { selected.value.splice(i, 1); return }
+  if (selected.value.length >= DERIVE_MAX) {
+    toast.info(DERIVE_MAX_NOTE)
+    return
+  }
+  selected.value.push(profileId)
 }
 function clearPick() {
   selected.value = []
@@ -617,7 +666,14 @@ function togglePickAll() {
     selected.value = selected.value.filter((id) => !drop.has(id))
     return
   }
-  selected.value = [...new Set([...selected.value, ...ids])]
+  const room = DERIVE_MAX - selected.value.length
+  if (room <= 0) {
+    toast.info(DERIVE_MAX_NOTE)
+    return
+  }
+  const merged = [...new Set([...selected.value, ...ids])]
+  if (merged.length > DERIVE_MAX) toast.info(DERIVE_MAX_NOTE)
+  selected.value = merged.slice(0, DERIVE_MAX)
 }
 
 const deriveRef = ref<InstanceType<typeof CardDeriveDialog> | null>(null)

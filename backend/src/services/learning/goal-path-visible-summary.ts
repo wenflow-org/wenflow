@@ -77,6 +77,8 @@ export interface GoalPathVisibleSummary {
     estimatedHours?: number | null;
     sessionsPerWeek?: number | null;
     sessionsLengthMin?: number | null;
+    /** 单次时长来源：explicit=用户硬约束；default=平台静默默认；estimated=模糊区间取中值 */
+    sessionsLengthSource?: 'explicit' | 'estimated' | 'default' | null;
     /** R8：兼容单数拼写（prompt 若写 sessionLengthMin）；归一化时复数键优先 */
     sessionLengthMin?: number | null;
     /** 课次锚（legacy，体量 = totalSessions × sessionsLengthMin） */
@@ -342,12 +344,15 @@ function buildTimeDimensions(
   const r = raw as Record<string, unknown>;
   const num = (v: unknown): number | null =>
     Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : null;
+  const sessionSource = (v: unknown): 'explicit' | 'estimated' | 'default' | null =>
+    v === 'explicit' || v === 'estimated' || v === 'default' ? v : null;
   const result = {
     totalWeeks: num(r.totalWeeks),
     estimatedHours: num(r.estimatedHours),
     sessionsPerWeek: num(r.sessionsPerWeek),
     // R8：兼容单数别名；复数旧键优先
     sessionsLengthMin: num(r.sessionsLengthMin) ?? num(r.sessionLengthMin),
+    sessionsLengthSource: sessionSource(r.sessionsLengthSource ?? r.sessionLengthSource),
     // 课次锚（2026-09-21）：体量 = totalSessions × sessionsLengthMin。
     // 让 LLM 估"总学时"产出率只有 10%，估"几节课"才估得动。
     totalSessions: num(r.totalSessions),

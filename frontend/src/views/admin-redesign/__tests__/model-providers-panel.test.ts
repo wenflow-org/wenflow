@@ -135,14 +135,19 @@ describe('ModelProvidersPanel', () => {
     seedView()
   })
 
-  it('单通道详情：左栏通道清单已撤，页面直接呈现平台通道', async () => {
+  it('单通道详情（2026-11-11 路径 A）：没有供应商条，直接呈现平台通道', async () => {
     const w = await mountPanel()
-    // 2026-10-27 用户「这个区域不要了」：不再有左栏清单，也没有通道切换/停用入口
+    // 2026-10-27 撤掉的是「平台提供 / 自行接入」分组左栏；2026-11-11 连供应商切换条一起撤掉
     expect(w.find('.mpp-list').exists()).toBe(false)
     expect(w.find('.mpp-item').exists()).toBe(false)
+    expect(w.find('.mpp-prov').exists()).toBe(false)
+    expect(w.text()).not.toContain('添加供应商')
+    expect(w.text()).not.toContain('供应商设置')
     // 自建通道仍在注册表里，但这一页不再提供它的入口
     expect(w.text()).not.toContain('Acme 网关')
-    expect(w.text()).not.toContain('显示已停用')
+    // 也不再有一行「地址与密钥沿用…」的补丁式说明（连接只在页顶服务连接卡）
+    expect(w.find('.mpp-provmeta').exists()).toBe(false)
+    expect(w.text()).not.toContain('沿用「服务连接」')
     // 卡头是能力卡身份：对话模型 + LLM，连接状态由宿主注入
     expect(w.find('.mk-card__head').text()).toContain('对话模型')
     expect(w.find('.mk-card__head').find('.mpp-type').text()).toBe('LLM')
@@ -189,13 +194,13 @@ describe('ModelProvidersPanel', () => {
     const setup = w.find('.mpp-setup')
     expect(setup.exists()).toBe(true)
     expect(setup.text()).toContain('还没有挂载模型')
-    expect(setup.text()).toContain('填服务地址与密钥')
+    expect(setup.text()).toContain('向上游拉取清单')
     // 2026-10-28 对话模型为空时不铺空列表；向量 / 重排已拆成宿主的独立能力卡
     expect(w.find('.mpp-models__list').exists()).toBe(false)
     expect(w.findAll('.mpp-model-row')).toHaveLength(0)
     await btn(w, '添加模型')!.trigger('click')
     await nextTick()
-    // 连接与清单都在这一张弹窗里，不必先去别处配连接
+    // 平台通道的连接在页顶那张服务连接卡里，这里只负责拉清单勾模型
     expect(w.find('.pmd').exists()).toBe(true)
     expect(w.emitted('fetchUpstream')).toHaveLength(1)
   })
@@ -237,7 +242,9 @@ describe('ModelProvidersPanel', () => {
     expect(caps(0)).toEqual([])
     expect(caps(1)).toEqual(['视觉'])
     // 强度标签带档位读数（2026-11-05）：只写「推理强度」看不出这台模型认哪几档
-    expect(caps(2)).toEqual(['思考', '推理强度 low / high'])
+    // 2026-11-11 #102：与「配置」弹层统一叫「支持的推理挡位」，并带悬停说明
+    expect(caps(2)).toEqual(['思考', '支持的推理挡位 low / high'])
+    expect(rows[2].findAll('.mpp-fn__chip')[1].attributes('title')).toContain('声明支持')
     // 能力标签有可读文本，不只靠颜色
     expect(rows[1].findAll('.mpp-fn__chip').map((c) => c.text())).toEqual(['视觉'])
   })
@@ -268,8 +275,9 @@ describe('ModelProvidersPanel', () => {
     const w = await mountPanel()
     // 2026-11-06 文案排查 §7.2：只读说明不再讲「注册表文件所在目录」这类机制，改为直说只读与找谁开放
     expect(w.text()).toContain('当前为只读状态')
-    // 2026-10-28 新人视角：不再从清单里「新建供应商」，只编辑平台通道
+    // 2026-11-11 路径 A：这页没有新建供应商入口，只读时也没有需要禁用的供应商动作
     expect(w.text()).not.toContain('添加供应商')
+    expect(w.find('.mpp-prov--add').exists()).toBe(false)
     /* 模型行的写入口（设为默认 / 配置 / 删除）一并禁用；「测试」是只读动作，仍可用。
        2026-11-07 用户「设为默认从 ⋯ 里提出来，平铺成 设为默认 / 配置 / 测试 / 删除」：
        四枚都是行内链接，不再有 ⋯ 二级菜单。 */
@@ -464,9 +472,18 @@ describe('ModelProvidersPanel', () => {
       expect(updateModelMock).not.toHaveBeenCalled()
     })
 
-    it('平台通道模型 id 单独回传宿主（默认候选不含自建 / 停用供应商）', async () => {
+    it('默认候选 = 本页可见的平台模型（自建通道不在这页出现，也不进候选）', async () => {
+      seedView({
+        providers: [
+          providerView({ id: 'platform', name: '平台', models: [{ id: 'deepseek-v4-flash' }] }),
+          providerView({
+            id: 'acme-gateway', name: 'Acme 网关', baseUrl: 'https://gw.acme.com/v1',
+            apiKeyEnv: 'PROVIDER_ACME_GATEWAY_API_KEY', keyHint: '····9xQv', models: [{ id: 'acme-chat' }]
+          })
+        ]
+      })
       const w = await mountPanel()
-      expect(w.emitted('platformModels')?.at(-1)).toEqual([['deepseek-v4-flash', 'agnes-3.0-flash']])
+      expect(w.emitted('defaultCandidates')?.at(-1)).toEqual([['deepseek-v4-flash']])
     })
   })
 })

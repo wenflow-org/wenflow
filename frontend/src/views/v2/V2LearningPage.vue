@@ -9,7 +9,10 @@
       </button>
       <div class="learn__title">
         <strong>{{ taskTitle || '课堂' }}</strong>
-        <small>{{ pathName }}</small>
+        <small>
+          {{ pathName }}
+          <template v-if="stageProgress"> · 第 {{ stageProgress.index }} / {{ stageProgress.total }} 节</template>
+        </small>
       </div>
       <div class="learn__head-right">
         <!-- 结课入口：2026-11-06 走查后成为**唯一**入口（⋯ 菜单里那条同名双行项已撤，
@@ -238,7 +241,25 @@
             >重新开始</button>
         </div>
 
-        <div ref="scrollEl" class="tutor__scroll" @scroll="updateNearBottom">
+        <div ref="scrollEl" class="tutor__scroll" :class="{ 'tutor__scroll--intro': introLayout }" @scroll="updateNearBottom">
+          <!-- 本节要掌握（2026-11-11 首屏空洞修复）：只在「刚开课、只有开场白」时出现，
+               内容全部来自已有的知识点数据；学员一开口即退场，不长期占位。 -->
+          <section v-if="introLayout && introPoints.length" class="tutor__intro" aria-label="本节要掌握的知识点">
+            <span class="tutor__intro-kicker">本节要掌握</span>
+            <div class="tutor__intro-row">
+              <span
+                v-for="(kp, i) in introPoints"
+                :key="kp.id || i"
+                class="tutor__intro-chip"
+                :class="{ 'tutor__intro-chip--done': isMastered(kp) }"
+              >
+                <i aria-hidden="true">{{ isMastered(kp) ? '✓' : '○' }}</i>{{ kp.name || kp.title }}
+              </span>
+              <span v-if="knowledgePoints.length > introPoints.length" class="tutor__intro-more">
+                等 {{ knowledgePoints.length }} 个
+              </span>
+            </div>
+          </section>
           <!-- 消息空态（批20）：开场卡收起或会话被清空时不再是纯白滚动区 -->
           <div v-if="!msgs.length" class="tutor__empty">
             <strong>准备开始</strong>
@@ -262,7 +283,24 @@
                 </div>
               </div>
               <template v-else>
-                <div class="msg__bubble">{{ m.text }}</div>
+                <!-- 用户随消息发的图片（视觉通道）：缩略图行贴右（与气泡同侧），点击放大
+                     （复用教学配图的 visualmodal 放大层）；加载失败显示占位，不静默烂掉 -->
+                <div v-if="m.images && m.images.length" class="msg__visuals msg__visuals--user">
+                  <template v-for="(img, ii) in m.images" :key="ii">
+                    <button
+                      v-if="!isImgBroken(m.id, ii)"
+                      type="button"
+                      class="msg__pic"
+                      :aria-label="`放大查看图片${ii + 1}`"
+                      @click="openVisualZoom(img)"
+                    >
+                      <img :src="img.url" alt="我发送的图片" loading="lazy" referrerpolicy="no-referrer" @error="markImgBroken(m.id, ii)" />
+                    </button>
+                    <span v-else class="msg__pic-broken" role="img" aria-label="图片加载失败">图片加载失败</span>
+                  </template>
+                </div>
+                <!-- 只发图不打字：text 允许为空，此时不再渲染空蓝泡 -->
+                <div v-if="m.text" class="msg__bubble">{{ m.text }}</div>
               </template>
               <!-- 单条时间戳撤除（2026-11-06 走查），meta 行只在有编辑入口时存在 -->
               <div v-if="canEditMessage(m)" class="msg__meta">
@@ -385,9 +423,10 @@
               :key="q"
               type="button"
               class="reply"
+              :title="q"
               @click="sendDirect(q)"
             >
-              <span class="reply__text">{{ q }}</span>
+              <span class="reply__text">{{ replyLabel(q) }}</span>
             </button>
           </div>
         </div>
@@ -584,10 +623,43 @@
 
         <!-- 输入区 -->
         <div class="composer">
+          <!-- 待发图片预览（发送前 chips）：小图 + 删除按钮；send() 即把图片移交 doSend 并清空，
+               气泡侧用同一份数据乐观渲染。上限 4 张（视觉通道契约）。 -->
+          <div v-if="pendingImages.length" class="composer__pending" role="list" aria-label="待发送图片">
+            <span v-for="p in pendingImages" :key="p.id" class="composer__pending-item" role="listitem">
+              <img :src="p.url" alt="待发送图片" />
+              <button
+                type="button"
+                class="composer__pending-del"
+                title="移除这张图片"
+                aria-label="移除这张图片"
+                @click="removePendingImage(p.id)"
+              >✕</button>
+            </span>
+            <span class="composer__pending-note">{{ pendingImages.length }} / 4</span>
+          </div>
           <!-- #224：本页编辑器与编辑态 textarea 共用 800 上限，后端在
                backend/src/routes/ai-teaching.routes.ts 以 TEACHING_MESSAGE_MAX_CHARS=800
                同口径强制（超限 400）；改一处必须同步改另一处。 -->
           <div class="composer__box">
+            <!-- 图片入口（用户发图给 AI 导师，模型支持视觉）：点击选文件，Ctrl+V 粘贴走 onComposerPaste -->
+            <button
+              type="button"
+              class="composer__img-btn"
+              title="添加图片（最多 4 张，也可直接 Ctrl+V 粘贴）"
+              aria-label="添加图片"
+              :disabled="completed"
+              @click="pickImages"
+            ><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/></svg></button>
+            <!-- 隐藏文件入口：选完清 value，同一张图可再次选择 -->
+            <input
+              ref="imageInputEl"
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              multiple
+              hidden
+              @change="onPickImageFiles"
+            />
             <textarea
               ref="composerEl"
               v-model="input"
@@ -598,6 +670,7 @@
               :placeholder="checkpoint && !completed ? '答完小测后也可以提问…' : '随时提问，或说说你的理解…'"
               @input="interactionMeta.onInput(input.length)"
               @keydown.enter.exact.prevent="send"
+              @paste="onComposerPaste"
             ></textarea>
             <!-- 字数只在接近上限时出现（2026-11-06 走查）：没打字时右侧常年顶着「0 / 800」
                  是纯噪音；600 字起渐进显示，够用户在撞 800 之前看到余量 -->
@@ -606,7 +679,7 @@
             <span
               v-if="!typing"
               class="composer__send"
-              :class="{ 'composer__send--off': !input.trim() || checkpointPending || completed }"
+              :class="{ 'composer__send--off': (!input.trim() && !pendingImages.length) || checkpointPending || completed }"
               role="button"
               tabindex="0"
               aria-label="发送"
@@ -835,8 +908,9 @@ const END_WITHOUT_FINISH_LABEL = '结束学习（不计入完成）';
 
 import { useRoute, useRouter } from 'vue-router';
 import request, { API_BASE_URL } from '@/utils/api';
-import { aiTeachingAPI, createTeachingIdempotencyKey } from '@/api/aiTeaching';
+import { aiTeachingAPI, createTeachingIdempotencyKey, type TeachingMessageImage } from '@/api/aiTeaching';
 import { readMaterialSection } from '@/api/materials';
+import { CHAT_IMAGE_RULES, compressChatImage } from '@/utils/imageCompress';
 import AiContentNote from '@/components/AiContentNote.vue';
 import ImmersiveMenu from '@/components/ImmersiveMenu.vue';
 import { onTabRowKeydown } from '@/utils/rovingTablist';
@@ -992,6 +1066,21 @@ function onPageKeydown(e: KeyboardEvent) {
 /* ---------- 基础 ---------- */
 const taskTitle = ref('');
 const pathName = ref('');
+/** 本节在当前阶段的序号（「第 N / M 节」）。数据来自任务详情自带的 milestones.subtasks，
+    不新增请求；拿不到（旧数据/直进课堂）就不渲染，不猜。 */
+const stageProgress = ref<{ index: number; total: number } | null>(null);
+function updateStageProgress(task: Record<string, any> | null) {
+  const list = task?.milestones?.subtasks
+    || task?.milestone?.subtasks
+    || task?.week?.subtasks;
+  if (!Array.isArray(list) || list.length < 2) {
+    stageProgress.value = null;
+    return;
+  }
+  const tid = String(route.params.taskId || '');
+  const idx = list.findIndex((s: Record<string, any>) => String(s?.id || '') === tid);
+  stageProgress.value = idx >= 0 ? { index: idx + 1, total: list.length } : null;
+}
 const pathId = ref('');
 const session = ref<{ sessionId: string; revision: number } | null>(null);
 const initing = ref(true);
@@ -1279,6 +1368,21 @@ const confusionDeltas = computed<string[][]>(() => {
   });
 });
 const quickReplies = ref<string[]>([]);
+/**
+ * 快捷回复的显示文案（2026-11-11 实机走查）：服务端会把长标签截成
+ * 「先讲「同一星期几同…」」「拿「同一星期几同…」试一小步」——两条动作只剩同一个前缀，
+ * 视觉上无法区分「讲解」与「练习」。这里只压缩“引号里的题目”，保留动作差异；
+ * 发送仍用原文，title 里保留原文以便悬停确认。
+ */
+function replyLabel(text: string): string {
+  const t = String(text || '').trim();
+  // 只处理“引号里被省略号截断”的标签：完整标签（如「先讲「时间标志词」怎么找」）
+  // 本身有区分度，原样保留。
+  const truncated = /…|\.\.\./.test(t);
+  if (truncated && /^先讲[「“]/.test(t)) return '先讲这一条';
+  if (truncated && /^拿[「“]/.test(t) && /试一小步/.test(t)) return '拿它练一小步';
+  return t;
+}
 /** 开场摸底引导（opening.question 收敛进行动台面板的一行小字，不再单独成待答气泡）；仅在有动作选项时收进面板 */
 const openingQuestion = ref('');
 /** 开场景卡片（后端 session.scene）：resumed/new 的恢复·接续·重学·复习信息，取代模板双气泡 */
@@ -1364,6 +1468,17 @@ watch(checkpoint, (now) => {
      知识点全掌握时叠加完课提示。 */
   postQuizReplies.value = buildPostQuizReplies()
 })
+
+/* 首屏空洞修复（2026-11-11 实机走查 1280 浅色）：新开课堂只有一条导师开场白，
+   消息区顶部一条气泡、底部快捷回复与输入框，中间约 450px 全空，第一眼像没加载完。
+   两条措施都不造假数据：
+   ① 消息很少时把「本节要掌握」用真实知识点补在开场白上方；
+   ② 这组内容在滚动区里垂直居中，空白变成构图而不是漏渲染。
+   学员一开口（msgs > 1）即恢复顶部起排。 */
+const introLayout = computed(
+  () => msgs.value.length <= 1 && !openingScene.value && !checkpoint.value && !typing.value && !completed.value
+);
+const introPoints = computed(() => knowledgePoints.value.slice(0, 4));
 
 /**
  * 小测收起后的续接快选（2026-11-02 用户反馈「快选没什么意义」）：
@@ -1593,6 +1708,63 @@ const input = ref('');
 const scrollEl = ref<HTMLElement | null>(null);
 /** 结算门禁提示的去向锚点：输入区 / 检查点卡片 */
 const composerEl = ref<HTMLTextAreaElement | null>(null);
+
+/* ---------- composer 图片附件（用户发图给 AI 导师 · 视觉通道） ----------
+   入口两个：按钮选文件 + textarea Ctrl+V 粘贴，统一走 addPendingImages
+   （上限 4 张、canvas 压缩成 data URL，规则见 utils/imageCompress）。 */
+/** 待发送图片（压缩后的 data URL）：send() 移交 doSend 后即清空，气泡侧用同一份数据乐观渲染 */
+const pendingImages = ref<Array<{ id: string; url: string }>>([]);
+const imageInputEl = ref<HTMLInputElement | null>(null);
+let pendingImageSeq = 0;
+/** 加载失败的气泡图片（key = 消息id#序号）：渲染占位，不静默烂掉 */
+const brokenImages = ref<Record<string, boolean>>({});
+const imgBrokenKey = (mid: string | undefined, ii: number) => `${mid || 'm'}#${ii}`;
+function isImgBroken(mid: string | undefined, ii: number) {
+  return !!brokenImages.value[imgBrokenKey(mid, ii)];
+}
+function markImgBroken(mid: string | undefined, ii: number) {
+  brokenImages.value[imgBrokenKey(mid, ii)] = true;
+}
+/** 追加待发图片：超出 4 张提示并保留余量；单张压缩失败 toast 后继续，不影响其余 */
+async function addPendingImages(files: ArrayLike<File> | null) {
+  const list = Array.from(files || []);
+  if (!list.length) return;
+  const room = CHAT_IMAGE_RULES.maxCount - pendingImages.value.length;
+  if (room <= 0) {
+    toast.error(`一次最多发 ${CHAT_IMAGE_RULES.maxCount} 张图片`);
+    return;
+  }
+  if (list.length > room) toast.error(`一次最多发 ${CHAT_IMAGE_RULES.maxCount} 张图片，已保留前 ${room} 张`);
+  for (const file of list.slice(0, room)) {
+    try {
+      const url = await compressChatImage(file);
+      pendingImages.value.push({ id: `pi_${Date.now().toString(36)}_${++pendingImageSeq}`, url });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : '这张图片处理失败，换一张试试');
+    }
+  }
+}
+function removePendingImage(id: string) {
+  pendingImages.value = pendingImages.value.filter((p) => p.id !== id);
+}
+/** 打开文件选择器（隐藏 input） */
+function pickImages() {
+  imageInputEl.value?.click();
+}
+/** 文件选择回调：选完清 value，同一张图之后还能再次选择 */
+function onPickImageFiles(e: Event) {
+  const el = e.target as HTMLInputElement;
+  void addPendingImages(el.files);
+  el.value = '';
+}
+/** Ctrl+V 直接粘贴图片：剪贴板里有图片时接管这次粘贴，不往文本框插内容 */
+function onComposerPaste(e: ClipboardEvent) {
+  const files = Array.from(e.clipboardData?.files || []).filter((f) => f.type.startsWith('image/'));
+  if (!files.length) return;
+  e.preventDefault();
+  void addPendingImages(files);
+}
+
 const checkpointEl = ref<HTMLElement | null>(null);
 const checkpointAttention = ref(false);
 let checkpointAttentionTimer = 0;
@@ -1800,6 +1972,9 @@ async function boot() {
   msgs.value = [];
   quickReplies.value = [];
   postQuizReplies.value = [];
+  // 图片附件状态一并重置（同页重开课时，旧会话的待发图/坏图占位不该带进来）
+  pendingImages.value = [];
+  brokenImages.value = {};
   checkpoint.value = null;
   checkpointFeedback.value = '';
   checkpointPending.value = false;
@@ -1824,6 +1999,7 @@ async function boot() {
       if (!initing.value || !task) return;
       taskTitle.value = task?.title || task?.displayLabel || '';
       pathName.value = task?.pathTitle || task?.learningPathTitle || task?.learningPath?.title || '';
+      updateStageProgress(task);
     });
 
     const s = (await startSessionByMode()) as unknown as Record<string, any>;
@@ -1832,6 +2008,7 @@ async function boot() {
     if (task) {
       taskTitle.value = task?.title || task?.displayLabel || '';
       pathName.value = task?.pathTitle || task?.learningPathTitle || task?.learningPath?.title || '';
+      updateStageProgress(task);
     }
     /* pathId 取任务负载，query 兜底：任务负载偶发不带 learningPathId（旧路径/直进场），
        此时入口若带 ?pathId= （学习台 CTA）就靠它把「评估页 → 返回学习路径」接回详情页 */
@@ -2005,6 +2182,8 @@ async function boot() {
 
 /* ---------- 对话 ---------- */
 let lastUserText = '';
+/** 上一次逻辑发送随文的图片（视觉通道）：手动「重试」时沿用，失败重发不丢图 */
+let lastUserImages: TeachingMessageImage[] = [];
 /** 上一次逻辑发送的幂等键：手动「重试」同一文本时复用它（同 key = 服务端重放）。 */
 let lastSendKey: string | null = null;
 let lastSendKeyText = '';
@@ -2077,16 +2256,20 @@ async function send(e?: unknown) {
   if (ke && (ke.isComposing || ke.keyCode === 229)) return;
   postQuizReplies.value = []; // 用户主动输入即接管续接
   const t = input.value.trim();
+  // 图片随文字一起走（视觉通道）：只发图不打字也放行（message 传空字符串，契约允许）
+  const imgs: TeachingMessageImage[] = pendingImages.value.map((p) => ({ url: p.url }));
   // 完课后输入即锁：完成候选轮教师常带一个收尾追问，若放行发送，回答会打给已终态化的会话
   // （服务端拒绝、消息不入库、误报失败，且陈旧重试会重复推送同一条用户消息）。
   // 结算中（finalizing）同样锁：finalize 含自动关课+wrapup，期间放行会打出面板后的幽灵教师回合。
-  if (!t || typing.value || checkpointPending.value || !session.value || completed.value || finalizing.value) return;
+  if ((!t && !imgs.length) || typing.value || checkpointPending.value || !session.value || completed.value || finalizing.value) return;
   if (checkpoint.value && !checkpointPassed.value) checkpointWalkedPast.value = true;
   input.value = '';
+  // 待发 chips 即刻清空：图片已移交 doSend（气泡侧乐观渲染），失败由「重试」沿用同一份图
+  pendingImages.value = [];
   assessTarget.value = null; // 用户已表态/新回合开始，快选确认清除
   confirmCheck.value = null;
   collapseOpeningScene();
-  await doSend(t);
+  await doSend(t, true, false, undefined, imgs);
 }
 
 async function sendDirect(text: string) {
@@ -2107,7 +2290,8 @@ async function sendTurnOnce(
   text: string,
   meta: ReturnType<typeof interactionMeta.collect>,
   onActivity: () => void,
-  idempotencyKey: string
+  idempotencyKey: string,
+  images: TeachingMessageImage[] = []
 ): Promise<Record<string, any>> {
   if (!session.value) throw Object.assign(new Error('会话不存在'), { cancelled: true });
   try {
@@ -2116,6 +2300,8 @@ async function sendTurnOnce(
     return await aiTeachingAPI.streamSendMessage(session.value.sessionId, text, session.value.revision, {
       signal: streamCtrl.signal,
       idempotencyKey,
+      // 视觉通道：随消息发给老师的图片（压缩后的 data URL）；为空不携带，body 与旧契约一致
+      ...(images.length ? { images } : {}),
       // 服务端心跳注释行也喂看门狗：JSON 输出的健康慢回合（无 delta 但连接活着）不再被误杀
       onActivity: () => onActivity(),
       onDelta: (delta) => {
@@ -2158,13 +2344,14 @@ async function sendTurnOnce(
       timeout: SEND_FALLBACK_TIMEOUT_MS,
       signal: fallbackCtrl.signal,
       idempotencyKey,
+      ...(images.length ? { images } : {}),
     }) as unknown as Record<string, any>;
   } finally {
     streamAbort = null;
   }
 }
 
-async function doSend(text: string, allowStaleRetry = true, skipUserPush = false, retryKey?: string) {
+async function doSend(text: string, allowStaleRetry = true, skipUserPush = false, retryKey?: string, images: TeachingMessageImage[] = []) {
   if (!session.value) return;
   /* 学员真的推进了一轮 → 恢复横幅的使命结束（2026-11-03 心理课走查实锤）：
      横幅此前只在「输入框有字」（watch(input)）和「勾选小测选项」时收起，而真人常用
@@ -2172,12 +2359,14 @@ async function doSend(text: string, allowStaleRetry = true, skipUserPush = false
      与正在推进的内容长期并列。这里是所有发送路径的唯一漏斗，挂在这里一处即全覆盖。 */
   resumedNotice.value = false;
   lastUserText = text;
+  // 随文图片（视觉通道）：手动「重试」同一文本时沿用，保证失败重发不丢图
+  lastUserImages = images;
   // 同一逻辑发送的所有重试共用一个幂等键（自动退避 / 流式→非流式回退 / 刷新后手动重试）。
   // 丢失响应后的重发因此只会重放服务端已提交的结果，不会重复追加用户消息。
   const sendKey = retryKey || createTeachingIdempotencyKey('msg');
   lastSendKey = sendKey;
   lastSendKeyText = text;
-  if (!skipUserPush) pushMsg({ role: 'user', text, time: nowTime() });
+  if (!skipUserPush) pushMsg({ role: 'user', text, time: nowTime(), ...(images.length ? { images } : {}) });
   // 发送即留痕（未确认送达）：中途刷新时据此恢复气泡/给重发入口（见 markInflight 注释）
   markInflight(session.value.sessionId, text, session.value.revision, sendKey);
   quickReplies.value = [];
@@ -2218,7 +2407,7 @@ async function doSend(text: string, allowStaleRetry = true, skipUserPush = false
         streamAbort = null;
       }, SEND_TOTAL_TIMEOUT_MS);
       try {
-        r = await sendTurnOnce(text, meta, armWatchdog, sendKey);
+        r = await sendTurnOnce(text, meta, armWatchdog, sendKey, images);
       } catch (err) {
         if (turnTimedOut) throw Object.assign(new Error('回复超时'), { turnTimedOut: true });
         if (stopRequested || (err as { cancelled?: boolean })?.cancelled) throw err;
@@ -2265,12 +2454,16 @@ async function doSend(text: string, allowStaleRetry = true, skipUserPush = false
         if (typeof fresh?.revision === 'number') session.value.revision = fresh.revision;
       } catch { /* 同步失败则直接展示失败气泡 */ }
       // 重发不再重复推送用户气泡：首轮已经乐观渲染过，再推一次就是两条同样的「你」
-      await doSend(text, false, true);
+      await doSend(text, false, true, undefined, images);
       return;
     }
+    // 服务端明确拒绝（4xx，如图片超限/格式不符 400）：带上原文，用户知道该删图还是改字
+    const serverMsg = String(raw?.response?.data?.error?.message || '').trim();
     pushMsg({
       role: 'ai',
-      text: autoRetries > 0 ? `这次回复失败了（已自动重试 ${autoRetries} 次）。` : '这次回复失败了。',
+      text: serverMsg
+        ? `这条消息没有发出去：${serverMsg}`
+        : autoRetries > 0 ? `这次回复失败了（已自动重试 ${autoRetries} 次）。` : '这次回复失败了。',
       time: nowTime(),
       failed: true,
     });
@@ -2378,11 +2571,12 @@ async function retryLast() {
   // 结算中/已完课不放行重试：会话已（或将）终态化，重试只会打出幽灵回合
   if (finalizing.value || completed.value) return;
   msgs.value = msgs.value.filter((m) => !m.failed);
-  if (!lastUserText) return;
+  // 只发图不打字的失败回合也要能重试（text 为空但图片仍在）
+  if (!lastUserText && !lastUserImages.length) return;
   // 失败回合的用户气泡还留在列表里（过滤只清失败气泡）：重试复用它，不再追加第二条同样的「你」
   const last = msgs.value[msgs.value.length - 1];
   const reuseUserBubble = last?.role === 'user' && last.text === lastUserText;
-  await doSend(lastUserText, true, reuseUserBubble, lastSendKeyText === lastUserText ? lastSendKey || undefined : undefined);
+  await doSend(lastUserText, true, reuseUserBubble, lastSendKeyText === lastUserText ? lastSendKey || undefined : undefined, lastUserImages);
 }
 
 /* ---------- 结束 ---------- */
@@ -2862,7 +3056,7 @@ onBeforeUnmount(() => {
 .learn__back:hover { color: var(--blue-deep); border-color: color-mix(in srgb, var(--blue) 35%, var(--line)); }
 .learn__title { display: grid; gap: 3px; min-width: 0; border-left: 1px solid var(--line); padding-left: 16px; }
 .learn__title strong { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.learn__title small { font-size: 12px; color: var(--faint); }
+.learn__title small { font-size: 12px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .learn__head-right { display: flex; align-items: center; gap: 10px; position: relative; }
 .learn__state-link {
   font-size: 12px; font-weight: 700;
@@ -3060,6 +3254,36 @@ onBeforeUnmount(() => {
 }
 .tutor__empty strong { font-size: 15px; color: var(--muted); }
 .tutor__empty p { margin: 0; font-size: 13px; }
+
+/* 首屏短会话构图（2026-11-11 实机走查）：只有开场白时，把「本节要掌握 + 开场白」
+   作为一组在消息区垂直居中，空白变成上下留白而不是中段断层。
+   学员开始互动后 introLayout 关闭，恢复从顶部起排。 */
+.tutor__scroll--intro { justify-content: center; }
+.tutor__intro {
+  display: grid; gap: 8px;
+  max-width: 760px; width: 100%;
+  margin: 0 auto;
+  padding: 12px 14px;
+  border: 1px dashed var(--line);
+  border-radius: var(--mk-radius-lg);
+  background: var(--canvas);
+}
+.tutor__intro-kicker { font-size: 12px; font-weight: 800; color: var(--faint); letter-spacing: .04em; }
+.tutor__intro-row { display: flex; flex-wrap: wrap; gap: 6px 8px; }
+.tutor__intro-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  max-width: 100%;
+  padding: 3px 9px;
+  border-radius: var(--mk-radius-pill);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 12px; font-weight: 600; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tutor__intro-chip i { font-style: normal; color: var(--faint); }
+.tutor__intro-chip--done { color: var(--green-ink); border-color: color-mix(in srgb, var(--green) 30%, var(--line)); }
+.tutor__intro-chip--done i { color: var(--green-ink); }
+.tutor__intro-more { align-self: center; font-size: 12px; color: var(--faint); }
 
 /* 恢复进度横幅：续上历史时的可见确认（替代一次性 toast） */
 .tutor__resume {
@@ -3315,6 +3539,26 @@ onBeforeUnmount(() => {
   background: var(--surface);
 }
 .msg__visual figcaption { font-size: 12px; color: var(--faint); line-height: 1.5; }
+/* 用户随消息发的图片（视觉通道 2026-11-12）：缩略图行贴右（与气泡同侧），点击复用
+   教学配图的放大层（visualmodal）；图是压缩后的 data URL（≤1280px），缩略图不再放大 */
+.msg__visuals--user { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.msg__pic {
+  display: block; padding: 0; border: 0; background: none;
+  cursor: zoom-in; border-radius: var(--mk-radius-md);
+}
+.msg__pic:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.msg__pic img {
+  display: block; width: auto; height: auto; max-width: min(180px, 60vw); max-height: 180px;
+  border: 1px solid var(--mk-line); border-radius: var(--mk-radius-md);
+  background: var(--surface);
+}
+/* 图片加载失败占位（历史图失效等）：不静默烂掉 */
+.msg__pic-broken {
+  display: inline-flex; align-items: center; padding: 10px 12px;
+  font-size: 12px; color: var(--muted);
+  border: 1px dashed var(--line); border-radius: var(--mk-radius-md);
+  background: var(--mk-surface-2);
+}
 /* 配图放大层：与结构图/位置线图的放大口径一致，窄屏可看原图 */
 .visualmodal {
   position: fixed; inset: 0; z-index: 96; display: flex; flex-direction: column;
@@ -3915,6 +4159,40 @@ onBeforeUnmount(() => {
   .composer__hint > .composer__hint-note { display: none; }
 }
 
+/* ---------- composer 图片附件（用户发图给 AI 导师 · 视觉通道 2026-11-12） ---------- */
+/* 图片入口：与发送键同档 32px 正圆，灰阶幽灵态（次级操作，不与发送抢视觉） */
+.composer__img-btn {
+  width: 32px; height: 32px; flex: 0 0 auto;
+  display: grid; place-items: center; padding: 0;
+  border: 0; border-radius: 50%;
+  background: none; color: var(--muted); cursor: pointer;
+  transition: color 0.15s ease;
+}
+.composer__img-btn:hover { color: var(--blue); }
+.composer__img-btn:disabled { color: var(--faint); cursor: default; }
+.composer__img-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+/* 待发图片 chips（发送前预览）：与输入盒同宽、贴左排布；小图 + 悬浮删除角标 */
+.composer__pending {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  width: min(100%, 760px);
+}
+.composer__pending-item { position: relative; display: block; }
+.composer__pending-item img {
+  display: block; width: 64px; height: 64px; object-fit: cover;
+  border: 1px solid var(--line); border-radius: var(--mk-radius-sm);
+  background: var(--mk-surface-2);
+}
+.composer__pending-del {
+  position: absolute; top: -6px; right: -6px;
+  width: 20px; height: 20px; display: grid; place-items: center;
+  padding: 0; border: 1px solid var(--line); border-radius: 50%;
+  background: var(--surface); color: var(--muted);
+  font-size: var(--mk-fs-micro); line-height: 1; cursor: pointer;
+}
+.composer__pending-del:hover { color: var(--wf-color-danger-dark); border-color: var(--wf-color-danger-dark); }
+.composer__pending-del:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.composer__pending-note { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
+
 /* 按钮基座单源：v2.css 的 .v2-page .btn-primary / .btn-ghost（32px 高 / 0 14px 内衬 /
    --mk-radius-md / 13px 字）。本页原有一份 10~11px 竖内衬 + 16px 圆角的旧副本
    （2026-11-06 UI 排查 §1），与全局同优先级 (0,2,0) 而后加载——实机上一直是这份旧值在赢。
@@ -4101,6 +4379,7 @@ onBeforeUnmount(() => {
   .composer__textarea::placeholder { font-size: 15px; }
   .composer__attach { margin-top: 4px; }
   .composer__send { width: 40px; height: 40px; } /* 触屏 hit area 40（桌面 32 圆形） */
+  .composer__img-btn { width: 40px; height: 40px; } /* 同上：图片入口触屏 hit area 40 */
   /* 触屏没有键盘快捷键提示：这行是「Enter 发送 · Shift+Enter 换行」+ AI 声明，不隐藏的话两者
      在 340px 里折成两行（hint 行 17→33px）。隐藏后只剩声明，居中与入口页 .goal__ai-note 一致。 */
   .composer__hint > .composer__hint-note { display: none; }
@@ -4143,6 +4422,8 @@ onBeforeUnmount(() => {
   /* 消息区贴底（窄屏专属）：首个子项吃满剩余空间，短会话下最新一条与下方快捷块/检查点
      紧贴输入框——手机上的视线与拇指都不用上下跑。桌面不适用：对话要从上往下长。 */
   .tutor__scroll > :first-child { margin-top: auto; }
+  /* intro 构图走居中而非贴底：auto 上边距会让「本节要掌握」单独沉到底部 */
+  .tutor__scroll--intro > :first-child { margin-top: 0; }
   /* 快捷块瘦身见文件末尾的媒体块：.replies/.reply 的基础规则在本文件靠后的 style 块里，
      同权重下写在这里会被覆盖 */
   /* 弹窗锚定在 ⋯ 按钮正下方、右对齐按钮 */

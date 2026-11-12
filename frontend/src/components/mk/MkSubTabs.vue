@@ -11,6 +11,7 @@
       :aria-selected="t.key === modelValue"
       :aria-controls="idBase ? `${idBase}-panel-${t.key}` : undefined"
       :tabindex="t.key === modelValue ? 0 : -1"
+      :title="t.title"
       @click="$emit('update:modelValue', t.key)"
     >
       {{ t.label }}<span v-if="t.count !== undefined" class="mk-subtab__count">{{ t.count }}</span>
@@ -39,7 +40,7 @@
 import { ref } from 'vue'
 
 const props = defineProps<{
-  tabs: Array<{ key: string; label: string; count?: number | string }>
+  tabs: Array<{ key: string; label: string; count?: number | string; title?: string }>
   modelValue: string
   /** 关联前缀：给了才输出 id/aria-controls（宿主据此写 tabpanel） */
   idBase?: string
@@ -106,6 +107,24 @@ function onKeydown(e: KeyboardEvent) {
   border-bottom-color: var(--mk-blue);
 }
 .mk-subtab:focus-visible { outline: none; box-shadow: var(--mk-focus-ring); }
-.mk-subtab__count { margin-left: 5px; color: var(--mk-faint); font-weight: 600; }
-.mk-subtab[aria-selected='true'] .mk-subtab__count { color: inherit; opacity: 0.72; }
+.mk-subtab__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--mk-surface-3);
+  color: var(--mk-faint);
+  font-size: var(--mk-fs-micro);
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+.mk-subtab[aria-selected='true'] .mk-subtab__count {
+  background: var(--mk-blue-bg);
+  color: var(--mk-blue-text);
+}
 </style>

@@ -18,7 +18,7 @@ const flowOf = (s: string) =>
     detailsById as any,
     s === 'path'
       ? [
-          { step: 1, agentId: 'PathCoordinator.buildFramedNormalizedInput', role: 'input-framing', condition: 'when goal handoff received', resolved: { displayName: 'PathCoordinator.buildFramedNormalizedInput', kind: 'service' } },
+          { step: 1, agentId: 'PathCoordinator.buildFramedNormalizedInput', role: 'input-framing', summary: '输入定帧：把 goal 的理解结果整理成 path-planning 的输入，不调模型', condition: 'when goal handoff received', resolved: { displayName: 'PathCoordinator.buildFramedNormalizedInput', kind: 'service' } },
           { step: 2, agentId: 'skill:path-planning', role: 'cognitive-core-and-milestones', resolved: { displayName: '路径规划 Skill', kind: 'skill' } },
           { step: 3, agentId: 'skill:stage-designer', role: 'stage-task-expansion', loopOver: 'milestones', resolved: { displayName: '阶段设计 Skill', kind: 'skill' } },
         ]
@@ -99,6 +99,49 @@ describe('path 阶段（入口 24 字段；闸口分发 normalizedInput；内部
     expect(svc).toBeTruthy()
     expect(svc!.kind).toBe('service')
     expect(svc!.outputs).toHaveLength(0)
+  })
+  /* 2026-11-10 用户「这个筛选转接节点怎么体现归一化」：卡头只放得下 input-framing 这类
+     机器角色，说不清这一步做了什么。后端定义里的 summary 原样透传到步骤，由卡片渲染成人话。 */
+  it('代码服务的 summary 透传到步骤，卡上不再直出机器角色', () => {
+    const svc = f.steps.find((s) => s.agentId === 'PathCoordinator.buildFramedNormalizedInput')!
+    expect(svc.summary).toContain('输入定帧')
+    // 卡片：有 summary 时角色名退到 title，不再占卡头一行
+    expect(DataFlowGraphSource).toContain('v-if="step.summary" class="dfg-step__summary"')
+    expect(DataFlowGraphSource).toContain('v-if="step.role && !step.summary"')
+  })
+  /* 2026-11-10 用户「箭头几乎不可见，而且位置对不上」：
+     静态连线原为 0.22 透明度 / 1.2px，浅色底上几乎断成虚影；跨列箭头锚在卡片左边界，
+     离字段还有 20–30px 内边距，看着像没连上。两处都钉住，别再退回去。 */
+  it('跨列箭头落在目标字段左缘；静态连线足够可见', () => {
+    expect(DataFlowGraphSource).toContain('const x2 = dstAnchorLeft ? dstChip.left - 3 : dstCard.right')
+    expect(DataFlowGraphSource).toContain('edgeFaded.value ? 0.55 : 0')
+    expect(DataFlowGraphSource).toContain("e.highlight ? 2.4 : 1.6")
+  })
+  /* 2026-11-10 用户「4k显示器缩放，这根线的位置就不对」：
+     ① 量测原点改为连线层自身矩形（内边距/缩放/设备像素比下内容层边框盒不再等同绘制面）；
+     ② 内容层也进 ResizeObserver（卡片增高、字体晚加载都会移动字段，只盯视口会停在旧位置）；
+     ③ 纵向跨度大的跨列边走正交折线，不再用近乎竖直的贝塞尔从卡片上下方斜插回来。 */
+  it('连线坐标以绘制面为原点、跟随内容层变化；长跨列边走折线', () => {
+    expect(DataFlowGraphSource).toContain("root.querySelector<SVGSVGElement>('.dfg-edges')")
+    expect(DataFlowGraphSource).toContain('if (pipeRef.value) resizeObserver.observe(pipeRef.value)')
+    expect(DataFlowGraphSource).toContain('spanY > 260')
+  })
+  /* 2026-11-10 用户「未解析是怎么回事」：代码服务（确定性实现、无 LLM 步骤）本就不进
+     Agent 名册，后端 resolveStepAgent 会置 unresolved——但那是设计如此，不是故障。
+     健康中心「步骤解析」检查项也排除 service；旅程卡上挂「未解析」会被读成服务坏了。 */
+  it('代码服务步骤不挂「未解析」；真查不到的 Agent 才标注', () => {
+    const withFlags = buildStageFlow(
+      'path',
+      (detailsById as any).path,
+      detailsById as any,
+      [
+        { step: 1, agentId: 'PathCoordinator.buildFramedNormalizedInput', resolved: { displayName: 'input-framing', kind: 'service', unresolved: true } },
+        { step: 2, agentId: 'skill:path-planning', resolved: { displayName: '路径规划', kind: 'skill', unresolved: true } },
+      ],
+      stageNames,
+    )
+    expect(withFlags.steps.find((x) => x.kind === 'service')!.unresolved).toBe(false)
+    expect(withFlags.steps.find((x) => x.agentId === 'skill:path-planning')!.unresolved).toBe(true)
   })
   it('orphan 步骤：已注册 agent 但无字段契约（0 routing 行 + 不在 defSteps）→ kind=orphan', () => {
     if (f.steps.some((s) => s.agentId === 'skill:kc-mapper')) {
@@ -182,8 +225,11 @@ describe('字段旅程画布缩放接线（2026-10-13 用户：这里也要支�
     expect(DataFlowGraphSource).toContain('@pointerdown="onDfgPointerDown"')
     expect(DataFlowGraphSource).toContain('@click.capture="onDfgClickCapture"')
     expect(DataFlowGraphSource).toContain('DFG_ZOOM_WHEEL_K')
-    // 层自有坐标：rect 差值 ÷zoom（层随滚动移动，差值已含滚动量，再加一次就是双计）
-    expect(DataFlowGraphSource).toContain('pipeW.value = rr.width / z')
+    /* 层自有坐标：尺寸与 rect 差值都 ÷zoom（层随滚动移动，差值已含滚动量，再加一次就是双计）。
+       2026-11-10：起见原点就是**连线层自身**的矩形（viewBox + 100% 铺满内边距盒），
+       内容层边框盒在缩放 / 内边距 / 设备像素比下不等于绘制面（4K + Windows 缩放会整体错位）。 */
+    expect(DataFlowGraphSource).toContain('pipeW.value = sr.width / z')
+    expect(DataFlowGraphSource).toContain('(r.left - sr.left) / z')
     expect(DataFlowGraphSource).not.toContain('view.scrollLeft / z')
     // 布局未落地前量到的是中间态：等到层自有宽 === 基准宽再画
     expect(DataFlowGraphSource).toContain('Math.abs(rr.width / z - dfgBaseW.value) > 1')

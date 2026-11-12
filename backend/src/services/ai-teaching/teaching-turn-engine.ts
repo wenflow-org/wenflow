@@ -13,14 +13,14 @@ import { executeSkill, executeSkillWithResult, auxSkillDefinitionMap, peerAgentD
 import { teachingTurnAgentDefinition } from '../../skills/teaching-turn';
 import type { SessionWrapupArtifact } from '../../skills/session-wrapup';
 import { TeachingOperationLeaseGuard } from './TeachingOperationLeaseGuard';
-import { teachingSessionRepository, type TeachingSessionRecord, type TeachingImage, type TeachingDiagram } from './TeachingSessionRepository';import { knowledgeStateService, COMPLETION_TARGET_PROGRESS_FLOOR } from './KnowledgeStateService';
+import { teachingSessionRepository, type TeachingSessionRecord, type TeachingImage, type TeachingDiagram, type TeachingFigure } from './TeachingSessionRepository';import { knowledgeStateService, COMPLETION_TARGET_PROGRESS_FLOOR } from './KnowledgeStateService';
 import { peerTriggerService } from './PeerTriggerService';
 import { buildTeachingScenarioContext, type TeachingScenarioContext } from './TeachingContextBuilder';
 import { fenceLearnerMessagesForModel } from './input-fence';
 import { memoryTraceService } from '../memory/memory-trace.service';
 import { recordMisconceptions, rerouteMisconceptionConceptKey } from '../learner/misconception-ledger.service';
 import { simulatedNowOr } from '../virtual-lab/simulation-clock-context';
-import { checkpointRhythmMinTurns, parseSessionArtifacts, resolveCheckpointConceptAttribution, resolveUnderstandingReading } from './checkpoint-shared';
+import { parseSessionArtifacts, resolveCheckpointConceptAttribution, resolveUnderstandingReading } from './checkpoint-shared';
 import { applyVoidPendingCheckpoint } from './checkpoint-void';
 import { shouldDeferCompletionForClosure } from './teaching-closure';
 import {
@@ -73,7 +73,7 @@ import {
   normalizeKnowledgePoints,
   reconcileTeachingKnowledgeState,
 } from './teaching-knowledge-state';
-import { buildDeterministicOpening, ensureOpeningActionLine, pickPeerStrategy, collectPeerHistory, OPENING_GENERATION_TIMEOUT_MS, COMPLETION_TURNS_BACKSTOP } from './teaching-session-views';
+import { buildDeterministicOpening, ensureOpeningActionLine, ensureOpeningMaterialGrounding, ensureOpeningSampleHonesty, pickPeerStrategy, collectPeerHistory, OPENING_GENERATION_TIMEOUT_MS, COMPLETION_TURNS_BACKSTOP } from './teaching-session-views';
 import { generateTeachingVisual, buildVisualOpportunity, detectExerciseLeakInReply, hasDanglingFigureReference, stripDanglingFigureReferences, paletteOfSubject, shouldEmitFigureAmong, figureKindCap, figureRestatesReply, stripInLessonAnnotations, maskFigureForQuestion, resolveFigureMaxPerSession, collectFigureNumbers, collectReplyNumbers, figureNumbersFightReply } from './teaching-visual.service';
 import type { TeachingOpening, ProcessStudentMessageOptions } from './AITeachingCoordinator';
 import { normalizeTaskTypeForMetrics } from './AITeachingCoordinator';
@@ -256,14 +256,22 @@ export async function generateOpening(context: TeachingScenarioContext): Promise
       taskId: context.taskId,
       topic: context.topic,
     });
-    return buildDeterministicOpening(context);
+    return ensureOpeningSampleHonesty(ensureOpeningMaterialGrounding(buildDeterministicOpening(context), context), context);
   }
 
   if (parsed) {
     // 「一条行动线」契约的确定性兜底（2026-11-02 用户反馈「开场很不舒服」）：
     // 模型可省略 quickReplies，实测 39.5% 的开场落库为空数组 → 第一屏没有任何可点的东西；
     // question 里还会写"也可以直接往下走"这种没有控件的动作承诺。这里统一收口。
-    return ensureOpeningActionLine(parsed as Partial<TeachingOpening>, context);
+    // 材料落地护栏（2026-11-12）：模型说「这段对话」却不摆本体时整块补挂（见 ensureOpeningMaterialGrounding）。
+    // 示例口径护栏（2026-11-12）：描述标「示例」而开场说成「你大概见过」时改回示例口径。
+    return ensureOpeningSampleHonesty(
+      ensureOpeningMaterialGrounding(
+        ensureOpeningActionLine(parsed as Partial<TeachingOpening>, context),
+        context,
+      ),
+      context,
+    );
   }
 
   logger.warn('[AITeaching] 开场交互块缺少有效结构，降级为确定性开场', {
@@ -271,7 +279,7 @@ export async function generateOpening(context: TeachingScenarioContext): Promise
     taskId: context.taskId,
     topic: context.topic,
   });
-  return buildDeterministicOpening(context);
+  return ensureOpeningSampleHonesty(ensureOpeningMaterialGrounding(buildDeterministicOpening(context), context), context);
 }
 
 /**
@@ -302,6 +310,8 @@ export async function processStudentMessage(
   images?: TeachingImage[];
   /** 课堂结构图（2026-09-27 双通道重构）——mermaid 源码，前端确定性渲染，内联在回复里 */
   diagrams?: TeachingDiagram[];
+  /** 位置线/白板等确定性 SVG 图——2026-11-11：模拟链路需要把它交给虚拟学习者，否则学员"看不见图" */
+  figures?: TeachingFigure[];
   strategies: string[];
   knowledgePoint: string | null;
   knowledgePoints: KnowledgePointStatus[];
@@ -335,7 +345,10 @@ export async function processStudentMessage(
   // 避免检查点 / 虚拟学习者 / 脚本等直连调用点绕过路由校验。
   // 例外：resume-continue 是「断线后纯续讲、本轮无学生新输入」的合法模式（message 恒为 ''），
   // 豁免以保住既有续讲行为（见下方 isResumeContinue 分支）。
-  if (options.kind !== 'resume-continue' && (typeof message !== 'string' || message.trim().length === 0)) {
+  // 2026-11-12 视觉输入：只发图不打字也是真实输入（随消息带 ≥1 张合法图片时放行空文案）。
+  const hasLearnerImages = Array.isArray(options.images) && options.images.length > 0;
+  if (options.kind !== 'resume-continue' && !hasLearnerImages
+    && (typeof message !== 'string' || message.trim().length === 0)) {
     throw new Error('缺少消息内容');
   }
 
@@ -391,6 +404,9 @@ export async function processStudentMessage(
           // B2/Q14 的输入围栏只作用于"喂给模型的那一份"（见下方 buildTeachingTurnInput 前的映射）。
           content: message,
           timestamp: new Date().toISOString(),
+          // 学生随消息发来的图片（2026-11-12 视觉输入）：随消息落库（payload 是 JSON 列，无 schema 迁移），
+          // teaching-turn 的 messages 契约本就带 images 字段，会作为「学生本轮发来的图」进视觉上下文
+          ...(hasLearnerImages ? { images: options.images } : {}),
           // 检查点合成消息打标记：进入教学上下文供模型分析答案，但不参与学生行为证据统计
           ...(options.checkpointId ? { checkpoint: true } : {}),
           // 前端交互特征（认知负荷量测 · 前端情报层）：随消息落库，供后续轮次对比
@@ -1487,9 +1503,9 @@ export async function processStudentMessage(
       teachingOutput.reply = visibleWithQuestion;
       effectiveTeachingOutput.reply = visibleWithQuestion;
     };
-    // 出题节奏分档（拍板 #10）：与提示词闸共用同一口径（理解度<0.6 → 2 条消息优先探测），
-    // 防两处数值漂移；理解度取上一轮分析（与 shouldEmitCheckpoint 的 gate 同基准），无读数按常规节奏。
-    const previousTurnAnalysis = [...session.messages].reverse().find((message) => message?.analysis)?.analysis;
+    // 出题时机与频次只有一个权威：shouldEmitCheckpoint（单焦点通关守门员，2026-11-11 第二刀）。
+    // 引擎侧不再维护「节奏票」——旧 checkpointRhythmMinTurns 会把理解度 <0.6 加速到 2 条消息，
+    // 与「学生懵时给支架不弹卡」直接冲突。下面只保留与编排层同向的结构兜底。
     const pendingBeforeTurn = previousTeachingState.pendingCheckpoint;
     // 作废通道：语义边界与两条护栏见 ./checkpoint-void.ts；作废不授权本轮出题，出题时机只认 controls.emitCheckpoint。
     const voidedPendingCheckpoint = teachingOutput.control?.voidCheckpoint === true && !submittedCheckpoint && !!pendingBeforeTurn;
@@ -1524,17 +1540,11 @@ export async function processStudentMessage(
       && !endIntent.isEndIntent
       && !!checkpointCandidate
       // 出题时机**只有一个权威**：编排层的 controls.emitCheckpoint（由 shouldEmitCheckpoint 按
-      // pending/阶段/节奏算出，teaching-turn-shared.ts:210 注入本轮模型输入）。此处真正读它：
-      // 为 false 时本轮**任何** checkpoint 都不落库——引擎不再自带一套可越权的旁路，作废回合也不例外
-      // （作废发生在 pending 还在的回合，该死时 shouldEmitCheckpoint 必为 false）。下面两道票是与它
-      // 同向的保守兜底（防两处实现漂移时被放宽），其余回合语义不变：
-      //  ① 待答票：本轮若已有待答检查点（作废被撤销前它就在），不得再落新题；
-      //  ② 节奏票：距上次出题不足 checkpointRhythmMinTurns 时不得落新题。
+      // 单焦点收口条件算出，teaching-turn-shared.ts 注入本轮模型输入）。为 false 时本轮**任何**
+      // checkpoint 都不落库——引擎不再自带节奏旁路，作废回合也不例外。
       && turnInput.controls?.emitCheckpoint === true
-      && !previousTeachingState.pendingCheckpoint
-      && (previousTeachingState.lastCheckpointTurn === undefined
-        || updatedMessages.length - previousTeachingState.lastCheckpointTurn
-          >= checkpointRhythmMinTurns(previousTurnAnalysis?.understanding));
+      // 待答票：本轮若已有待答检查点（作废被撤销前它就在），不得再落新题。
+      && !previousTeachingState.pendingCheckpoint;
     const duplicateCheckpointQuestion = checkpointEmissionEligible
       && isDuplicateCheckpointQuestion(previousTeachingState.checkpointHistory, checkpointCandidate);
     if (duplicateCheckpointQuestion) {
@@ -1561,10 +1571,32 @@ export async function processStudentMessage(
       // 其归属由 anchorConceptKey 承载，且纪律 2 禁止锚题结果改写掌握，不得经本通道进聚合。
       // 兜底（EPOCH2 发现 #2 收尾）：模型漏报 currentPoint 时用看板首个点名近似——
       // 此前直接 null，产生无归属检查点（证据无键、无法参与概念聚合）。
+      // 2026-11-11 第二刀补第三层兜底：本轮 output.knowledge 为空但会话最近一条教学消息带
+      // knowledgePoint/knowledgePoints 时，沿用该点名。课堂实证（合同案例）出现 pending 无归属
+      // → checkpointHistory 无 conceptName → 单焦点守门员匹配不到，同一焦点可反复出题。
+      const latestSessionPointName = (() => {
+        for (let i = updatedMessages.length - 1; i >= 0; i -= 1) {
+          const message = updatedMessages[i] as { knowledgePoint?: unknown; knowledgePoints?: unknown };
+          const direct = typeof message?.knowledgePoint === 'string' ? message.knowledgePoint.trim() : '';
+          if (direct) return direct;
+          const points = Array.isArray(message?.knowledgePoints) ? message.knowledgePoints as Array<{ name?: unknown }> : [];
+          const lastName = points.map((point) => (typeof point?.name === 'string' ? point.name.trim() : '')).filter(Boolean).pop();
+          if (lastName) return lastName;
+        }
+        return '';
+      })();
       const checkpointConcept = anchorTarget
         ? null
         : resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.currentPoint)
-          ?? resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.points[0]?.name);
+          ?? resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.points[0]?.name)
+          // 2026-11-11 第二刀补第二层：本轮 output.knowledge 为空但合并后的看板有当前焦点时，
+          // 用看板最后一个点（追加顺序=当前焦点）。真机两例（盘库/心理）首题无归属即是此因。
+          ?? resolveCheckpointConceptAttribution(
+            Array.isArray(mergedKnowledge) && mergedKnowledge.length
+              ? mergedKnowledge[mergedKnowledge.length - 1]?.name
+              : ''
+          )
+          ?? resolveCheckpointConceptAttribution(latestSessionPointName);
       teachingState.pendingCheckpoint = normalizeCheckpointWithTelemetry({
         id: `cp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         type: checkpointCandidate.type,
@@ -1599,6 +1631,9 @@ export async function processStudentMessage(
           : {}),
       }, checkpointCandidate.type);
       teachingState.lastCheckpointTurn = updatedMessages.length;
+      // 单焦点守门员的发射层记忆：历史行可能无归属（旧 pending 或模型漏报 currentPoint），
+      // 记住本次发射的焦点名，下一轮即使 history 匹配不到也能拦住同焦点第二题。
+      if (checkpointConcept?.conceptName) teachingState.lastCheckpointConcept = checkpointConcept.conceptName;
       // 题面可见性（外部审计 P0-4）：检查点题面只存在 pendingCheckpoint，不写进教师回复，
       // 于是学习者历史/课程逐字稿里出现「学生回答了一道从未出现过的题」。这里把题面
       // 补进本轮可见回复（已包含则不重复），保证学员、模拟器、导出逐字稿看到同一道题。
@@ -1626,6 +1661,17 @@ export async function processStudentMessage(
       const checkpointHistory = Array.isArray(teachingState.checkpointHistory)
         ? [...teachingState.checkpointHistory]
         : [];
+      // 提交时归属兜底（2026-11-11）：pending 可能产生于本次修复前（无 conceptName），
+      // 用当前合并看板最后一个点补进 history——否则单焦点守门员永远匹配不到这道题。
+      const submittedConceptFallback = submittedCheckpoint.conceptName
+        ? null
+        : resolveCheckpointConceptAttribution(
+          Array.isArray(mergedKnowledge) && mergedKnowledge.length
+            ? mergedKnowledge[mergedKnowledge.length - 1]?.name
+            : ''
+        );
+      const historyConceptName = submittedCheckpoint.conceptName || submittedConceptFallback?.conceptName;
+      const historyConceptKey = submittedCheckpoint.conceptKey || submittedConceptFallback?.conceptKey;
       // 同一 cpId 的累计作答次数（含本次）：既驱动重答上限，也写进 history 行，
       // 让收束门禁（evaluateSessionClosable）能判断「最后一道题还有没有重答机会」。
       const sameCheckpointAttempts = checkpointHistory.filter(
@@ -1658,8 +1704,8 @@ export async function processStudentMessage(
         understanding,
         // 概念归属（F1 修复轮 a/b）：掌握聚合仲裁按归属概念消费 code 负证据——
         // 无归属的存量检查点（修复前发出的 pending）不带这两字段，聚合侧不误伤
-        ...(submittedCheckpoint.conceptName ? { conceptName: submittedCheckpoint.conceptName } : {}),
-        ...(submittedCheckpoint.conceptKey ? { conceptKey: submittedCheckpoint.conceptKey } : {}),
+        ...(historyConceptName ? { conceptName: historyConceptName } : {}),
+        ...(historyConceptKey ? { conceptKey: historyConceptKey } : {}),
       });
 
       // #96 阈值拟合前置：在判分前解析系统对「该概念已掌握」的预测（ktEstimate 优先，

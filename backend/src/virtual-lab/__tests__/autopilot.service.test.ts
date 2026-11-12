@@ -334,6 +334,36 @@ describe('AutopilotService 全自动模式', () => {
     expect(String(final.lastError)).toContain('未收敛')
   })
 
+  it('assisted：学习者在 Goal 离场 → 自动驾驶立即停止，不再重跑告别回合', async () => {
+    mockExecuteSingleStep.mockResolvedValue({
+      success: true,
+      goalReady: false,
+      learnerEnded: true,
+      learnerEndReason: 'leaving',
+    })
+
+    await service.start('s1')
+    const final = await waitTerminal()
+
+    expect(final.status).toBe('stopped')
+    expect(mockExecuteSingleStep).toHaveBeenCalledTimes(1)
+    expect(String(final.lastError)).toContain('离场')
+  })
+
+  it('assisted：Goal 正常终局且不排课（answer-only/referral）→ 自动驾驶 completed', async () => {
+    mockExecuteSingleStep.mockResolvedValue({
+      success: true,
+      goalReady: false,
+      noPath: true,
+    })
+
+    await service.start('s1')
+    const final = await waitTerminal()
+
+    expect(final.status).toBe('completed')
+    expect(mockExecuteSingleStep).toHaveBeenCalledTimes(1)
+  })
+
   it('assisted：单课可恢复失败自动 restart-learning 续跑，恢复上限后失败', async () => {
     mockExecuteSingleStep.mockImplementation(async () => {
       sessionRecord.currentStage = 'path'

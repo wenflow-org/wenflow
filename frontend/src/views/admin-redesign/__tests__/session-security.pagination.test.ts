@@ -110,6 +110,9 @@ describe('SessionSecurity 分页（标准页码器）', () => {
     h.cleanup.mockReset();
     h.cleanup.mockResolvedValue({ data: { data: { count: 38 } } });
     h.getMe.mockResolvedValue({ data: { data: { id: 'admin-1' } } });
+    // 每页条数记忆是跨列表的全局偏好（Pagination 读 wf_page_size）：用例之间还原默认 15，
+    // 否则「切换每页条数」用例写下的 30 会被后续用例当成初值
+    localStorage.removeItem('wf_page_size');
   });
 
   it('首屏只渲染每页 15 行，页码器读数与总行数一致', async () => {

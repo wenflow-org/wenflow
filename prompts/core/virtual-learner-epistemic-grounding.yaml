@@ -41,6 +41,7 @@ inputs:
       学习者可见的对话上下文（编排注入，判决"这一步"指什么的唯一依据）：
       · history（object[]）近期可见对话切片，role=teacher|learner
       · lastTeacherMessage（string）教师最新一条消息——"当前这一步"以它为准
+      · 若消息末尾带【课堂白板】块，那是学习者屏幕上能直接看到的图面内容（SVG/Mermaid 的文本化）：判决教师是否给了可视图/数值时据此判断，不得因为 reply 正文没写数字就当作教师没给图
   - name: pendingCheckpoint
     type: object
     ref: sandbox:simulation.pendingCheckpoint
@@ -57,10 +58,14 @@ rules:
   - 输入含 forcedCorrectness（编排层采样指令）时必须无条件服从：sampledCorrectness 判 false，blockedConcept 用 forcedCorrectness.targetConcept（无则从当前任务概念定位），errorPattern 与该卡点一致——受控错误机制把画像概率放在编排层采样，你的画像推断让位于它
   - 判决对象"当前这一步"以 visibleContext.lastTeacherMessage（教师最新消息）与 history 为准：教师本轮要求学习者做什么，就判那一步；不得对教师尚未布置/尚未讲到的内容下判决；visibleContext 缺失时退化为按 currentTask 粒度判决。**教师收口时布置的是课后作业/下一节预告（例如"今晚默写、明早翻第三节"）时，不得把它当成待判步骤判 false**——应判本轮最后一个课内交互；若课内已无待判步骤，则 sampledCorrectness=true、blockedConcept=null、errorPattern=null
   - 输入含 pendingCheckpoint 时，判决对象是**学习者即将对这道检查点做出的作答**（此刻他还没有作答，你在做前瞻判决）：先读题干与 options，按 knownConcepts/struggleConcepts 与本轮教师已讲内容预测学习者会怎么选/怎么答，再判断这个预测作答是否命中正确项（你看不到答案键，只能按学科事实判断）；简答题按题干要求判断他能否答到核心。不得因为教师 reply 没有打印选项就盲判，也不得把题干/选项当成新的教学步骤
-  - sampledCorrectness 基于 knownConcepts/struggleConcepts 画像先验与本轮这一步的认知负荷做离散判决，不是自由发挥——struggleConcepts 命中这一步涉及的概念（或该概念不在 knownConcepts）时大概率判 false；knownConcepts 已包含且这一步不超出已讲授范围时大概率判 true。**画像是先验，本轮课内证据可以覆盖先验**：本轮这一步已在课内做对时不得仅因人设固定 struggle 列表判 false
+  - sampledCorrectness 必须同时看两个轴：**画像先验**（knownConcepts/struggleConcepts）与**教师当轮支架充分度**（visibleContext.lastTeacherMessage 本轮实际怎么教），不是只看人设：
+    · 【无支架冷测必挂】该概念命中 struggleConcepts（或不在 knownConcepts），且教师本轮没有给具象场景、没有点破易错直觉、没有亮出判断口径，就直接抛开放式问题/要求独立推导 → 必须判 sampledCorrectness=false；errorPattern 记为"教师未给前置积木，凭直觉盲猜翻车"。
+    · 【有支架微步可过】教师本轮已给出具体场景、点破易错直觉并亮出判断规则，只要求学习者在刚给的框架内做二选一/最小填空，且不超过该人设的 cognitiveLoadTolerance → 即使概念在 struggleConcepts 中，也应允许判 sampledCorrectness=true（代表接住了脚手架），但 masteryProb 控制在中低位 0.40-0.55（有支架答对≠独立掌握），后续无提示变式轮再检验。
+    · 【课内证据覆盖先验】本轮这一步已在课内做对过且教师本轮未加难 → 不得仅因人设固定 struggle 列表判 false。
+    · 支架只算「具象场景 + 判断口径 + 低门槛作答」三件套；教师直接给答案让学生抄、或只让学生复述结论，不算支架，仍按无支架处理。
   - blockedConcept 从本轮这一步实际涉及的概念里定位（做错时输出，做对时为 null）——应是教师已讲到、学习者却卡住的概念，不是尚未讲授的未来步骤
   - errorPattern 是与该 persona 一致的错误模式（做错时输出，如"把 X 误当成 Y"；做对时为 null）
-  - masteryProb 是画像的掌握概率估计（0-1）：以本轮课内证据为主、画像长期掌握度为先验；本轮做对时不得继续照抄人设的固定低掌握度，本轮做错时也不得高于本轮证据支持的上界
+  - masteryProb 是画像的掌握概率估计（0-1）：以本轮课内证据为主、画像长期掌握度为先验；本轮独立做对时可高于先验，**有支架答对时保持中低位 0.40-0.55**（接住脚手架不等于独立掌握），本轮做错时不得高于本轮证据支持的上界
 fields:
   - name: epistemicGrounding
     type: object

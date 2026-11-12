@@ -2649,7 +2649,8 @@ function renderSplitCompare({ title, left, right, delta, placeholder }: SplitCom
 
 /**
  * state-strip（2026-10-26）：状态条带——不回头的进程分帧速写。
- * 布局：2~5 帧横排，帧间箭头「下一步」；每帧头部条 + 状态要点若干行（折行）。
+ * 布局：2~8 帧横排（上限与后端 normalizeStateStripSpec 对齐，2026-11-12 从 5 放宽，
+ * 修复「八轮对话只显示五帧」的板书-任务不一致），帧间箭头「下一步」；每帧头部条 + 状态要点若干行（折行）。
  */
 type StripFrame = { label?: unknown; tone: string; items?: unknown[] };
 
@@ -2661,8 +2662,9 @@ function renderStateStrip({ title, frames = [], note }: StateStripSpec, targetWi
   const W = hostW(targetWidth, 620, 1040);
   const padX = 20;
   const titleH = title ? T.fontTitle + 20 : 6;
-  const gap = 30;
   const n = frames.length;
+  // 帧多时间距收窄（>6 帧）：8 帧等分时 30px 间隙要吃掉 210px 宽度，帧宽只剩 ~98px，文字折行过碎
+  const gap = n > 6 ? 16 : 30;
   const fw = Math.round((W - padX * 2 - (n - 1) * gap) / n);
   // 帧名可能比帧宽长（4 帧 × 年号/长地名时必超）：按帧宽折行，帧头高度随行数长高。
   // 不折行时标签会横穿相邻帧，并在右边缘被裁掉（2026-10-27 盲评实拍）。

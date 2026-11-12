@@ -175,6 +175,15 @@ export interface PeerMessageResult {
   peerFollowUpQuestions?: string[];
 }
 
+/**
+ * 用户随消息发给老师的图片（视觉通道，2026-11-12）：url 为前端压缩后的 data URL，
+ * 后端 `/messages`（流式与非流式同参）按「最多 4 张、data URL」校验，超限 400。
+ */
+export interface TeachingMessageImage {
+  url: string;
+  caption?: string;
+}
+
 export interface LearningState {
   lss: number;
   ktl: number;
@@ -463,17 +472,18 @@ export const aiTeachingAPI = {
   /**
    * 非流式发送（也是流式失败后的回退通道）。
    * options.signal 必须支持：回退请求最长可跑几十秒，用户点「停止」时要能真正中止它（#111）。
+   * options.images：随消息发给老师的图片（视觉通道，压缩后的 data URL，最多 4 张）。
    */
   async sendMessage(
     sessionId: string,
     message: string,
     revision: number,
     meta?: InteractionMeta,
-    options?: { timeout?: number; signal?: AbortSignal; idempotencyKey?: string }
+    options?: { timeout?: number; signal?: AbortSignal; idempotencyKey?: string; images?: TeachingMessageImage[] }
   ): Promise<MessageResult> {
     const result = await api.post(
       `/ai-teaching/sessions/${sessionId}/messages`,
-      { message, revision, ...(meta ? { meta } : {}) },
+      { message, revision, ...(meta ? { meta } : {}), ...(options?.images?.length ? { images: options.images } : {}) },
       {
         timeout: options?.timeout ?? AI_REQUEST_TIMEOUT,
         ...(options?.signal ? { signal: options.signal } : {}),
@@ -494,7 +504,7 @@ export const aiTeachingAPI = {
     sessionId: string,
     message: string,
     revision: number,
-    handlers: { onDelta: (text: string) => void; onRestart?: () => void; onActivity?: () => void; signal?: AbortSignal; idempotencyKey?: string },
+    handlers: { onDelta: (text: string) => void; onRestart?: () => void; onActivity?: () => void; signal?: AbortSignal; idempotencyKey?: string; images?: TeachingMessageImage[] },
     meta?: InteractionMeta
   ): Promise<MessageResult> {
     return new Promise<MessageResult>((resolve, reject) => {
@@ -507,7 +517,7 @@ export const aiTeachingAPI = {
         settled = true;
         reject(error);
       };
-      streamSsePost(`/ai-teaching/sessions/${sessionId}/messages`, { message, revision, ...(meta ? { meta } : {}) }, {
+      streamSsePost(`/ai-teaching/sessions/${sessionId}/messages`, { message, revision, ...(meta ? { meta } : {}), ...(handlers.images?.length ? { images: handlers.images } : {}) }, {
         signal: handlers.signal,
         onActivity: handlers.onActivity,
         // 教学回合为 JSON 输出、final 前可以整段无字节（实测 2~3 分钟），60s 空闲默认会把

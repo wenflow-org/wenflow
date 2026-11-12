@@ -618,6 +618,24 @@ export class AutopilotService {
       await this.countStep(sessionId)
       if (step.goalReady) return { converged: true, stopped: false }
       if (!step.success) return { converged: false, stopped: false, lastError: step.error }
+      // 2026-11-11：学习者在 Goal 阶段离场（去忙/已得到答案）或平台按分诊不排课。
+      // 两种都是**正常收尾**，不能再让自动驾驶把同一个告别回合重跑几十轮。
+      if (step.noPath) {
+        await this.writeState(sessionId, {
+          status: 'completed',
+          completedAt: new Date().toISOString(),
+          lastError: null
+        })
+        logger.info('[autopilot] Goal 正常终局且不排课，自动驾驶收尾', { sessionId })
+        return { converged: false, stopped: true }
+      }
+      if (step.learnerEnded) {
+        await this.markStopped(
+          sessionId,
+          `学习者在 Goal 阶段离场（${step.learnerEndReason || 'learner-ended'}），自动驾驶停止追问`
+        )
+        return { converged: false, stopped: true }
+      }
       await this.pause()
     }
     return { converged: false, stopped: false }

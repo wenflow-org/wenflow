@@ -109,6 +109,8 @@ describe('画像叙述：单对话观测 + 出处', () => {
       conversationId: 'gc_1',
       goalTitle: '我想学3-6岁儿童发展指南，最近要考试了',
       completedAt: '2026-10-14T02:14:32.000Z',
+      // 2026-11-11：出处补上所属路径（存量对话没有绑定路径时为 null）
+      learningPathId: null,
     });
   });
 
@@ -116,6 +118,30 @@ describe('画像叙述：单对话观测 + 出处', () => {
     mockGoalFindFirst.mockResolvedValue(conv({}, { description: '   ' }));
     const { profile } = await new ProfileAggregator().aggregateProfile('u1');
     expect(profile.narrativeSource?.goalTitle).toBe('（该次目标对话未填写描述）');
+  });
+
+  it('buildPathNarrative：按路径取目标对话，来源带上 learningPathId（多路径不串台）', async () => {
+    mockGoalFindFirst.mockResolvedValue({
+      ...conv(
+        { real_problem: '心理学目标：看懂主要流派' },
+        { description: '想系统了解心理学流派' },
+      ),
+      learningPathId: 'lp_psych',
+    });
+    const out = await new ProfileAggregator().buildPathNarrative('u1', 'lp_psych', {
+      cognitive: {}, preferences: {}, emotional: {}, learning: {}, history: {},
+    } as any);
+
+    expect(mockGoalFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ userId: 'u1', status: 'completed', learningPathId: 'lp_psych' }),
+      }),
+    );
+    expect(out?.narrativeInsights.goalNarrative).toBe('心理学目标：看懂主要流派');
+    expect(out?.narrativeSource).toEqual(expect.objectContaining({
+      goalTitle: '想系统了解心理学流派',
+      learningPathId: 'lp_psych',
+    }));
   });
 
   it('目标理解证据优先于 collectedData（保持既有语义）', async () => {

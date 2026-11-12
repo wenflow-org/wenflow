@@ -15,10 +15,14 @@ jest.mock('../../../config/database', () => ({
   },
 }))
 
-jest.mock('../../memory/memory-trace.service', () => ({
-  __esModule: true,
-  resolveConceptIdSafe: (...args: unknown[]) => mockResolveConceptIdSafe(...args),
-}))
+jest.mock('../../memory/memory-trace.service', () => {
+  const actual = jest.requireActual('../../memory/memory-trace.service')
+  return {
+    __esModule: true,
+    resolveConceptIdSafe: (...args: unknown[]) => mockResolveConceptIdSafe(...args),
+    mapKnowledgeStatusToMastery: actual.mapKnowledgeStatusToMastery,
+  }
+})
 
 // 默认「未解析出身份」（= 未挂靠）：既有用例行为与引入前逐字一致；clearAllMocks 不清实现，故在模块级设默认
 mockResolveConceptIdSafe.mockResolvedValue(null)
@@ -54,13 +58,13 @@ describe('mapReviewStatusToRating（复习结果 → FSRS 语义评分映射）'
     expect(mapReviewStatusToRating('mastered', 60)).toEqual({ rating: 'good', masteryScore: 0.85 })
   })
 
-  it('learning（推进但未掌握）→ hard + 0.5', () => {
-    expect(mapReviewStatusToRating('learning', 40)).toEqual({ rating: 'hard', masteryScore: 0.5 })
+  it('learning（推进但未掌握）→ hard + 按 progress 插值', () => {
+    expect(mapReviewStatusToRating('learning', 40)).toEqual({ rating: 'hard', masteryScore: 0.52 })
   })
 
-  it('其他状态（未推进，如 review/pending）→ again + 0.5', () => {
-    expect(mapReviewStatusToRating('review', 50)).toEqual({ rating: 'again', masteryScore: 0.5 })
-    expect(mapReviewStatusToRating('pending', 0)).toEqual({ rating: 'again', masteryScore: 0.5 })
+  it('其他状态（未推进，如 review/pending）→ again + 低分', () => {
+    expect(mapReviewStatusToRating('review', 50)).toEqual({ rating: 'again', masteryScore: 0.525 })
+    expect(mapReviewStatusToRating('pending', 0)).toEqual({ rating: 'again', masteryScore: 0.2 })
   })
 })
 

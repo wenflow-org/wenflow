@@ -89,7 +89,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { liveFailures, errMsg, liveRefreshSeq, setLiveOpsPendingCounts } from './live'
+import { loadLiveData, liveFailures, errMsg, liveRefreshSeq, setLiveOpsPendingCounts } from './live'
 import { intent } from './store'
 import { adminFeedbackApi, adminLearningContentApi, adminDevtoolsApi, type LearningContentStats } from '@/api/adminApi'
 import { announcementCounts } from './opsShared'
@@ -135,6 +135,8 @@ async function refreshActive() {
   if (refreshing.value) return
   refreshing.value = true
   try {
+    /* 告警条的重试要清掉它展示的失败域：只刷当前页签会让公告等域的 liveFailures 常驻 */
+    if (wbHasError.value || annFailed.value) void loadLiveData()
     if (tab.value === 'feedback') feedbackRef.value?.refresh?.()
     else if (tab.value === 'achievements') achievementsRef.value?.refresh?.()
     else if (tab.value === 'announce') announceRef.value?.refresh?.()
@@ -308,12 +310,18 @@ async function loadWorkbench() {
 }
 
 /** 任一待办域加载失败 → 页面基调降为 bad（禁止静默归零后仍显示「一切正常」） */
-const wbHasError = computed(() => Object.keys(wbErrors.value).length > 0 || annFailed.value)
+/** 当前页签体已经用整块错误态承接的域，不再由页级 alert 复读 */
+const hostWbErrors = computed(() => {
+  const next: Record<string, string> = { ...wbErrors.value }
+  if (tab.value === 'feedback') delete next.feedback
+  return next
+})
+const wbHasError = computed(() => Object.keys(hostWbErrors.value).length > 0 || annFailed.value)
 /** 公告域失败标志来自 live 层（只读既有导出 liveFailures，不改 live.ts）：
     公告由 live 层加载而非本页 loadWorkbench，失败时草稿公告计数同样不可信 */
 const annFailed = computed(() => !!liveFailures.value.announcements)
 const wbErrorText = computed(() =>
-  [...Object.values(wbErrors.value).filter(Boolean), ...(annFailed.value ? ['公告列表加载失败'] : [])].join('；')
+  [...Object.values(hostWbErrors.value).filter(Boolean), ...(annFailed.value ? ['公告列表加载失败'] : [])].join('；')
 )
 /* 2026-10-04 状态条退役：页头基调 statusTone（ok/warn/bad）与宿主分 tab 基调 hostTone
    随状态条整块删除——失败信号由页签体内 mk-alert + 指标卡「加载失败」foot 承载，
@@ -341,7 +349,7 @@ type KpiReading = {
 const kpiReadings = computed<KpiReading[]>(() => [
   { key: 'feedback', label: '未处理反馈', title: '反馈列表', count: wbPendingFeedback.value, severity: 'warn' as const, failed: !!wbErrors.value.feedback, tab: 'feedback' },
   { key: 'paths', label: '生成失败路径', title: '生成失败的学习路径', count: wbFailedPaths.value, severity: 'bad' as const, failed: !!wbErrors.value.paths, tab: null },
-  { key: 'dead', label: '事件投递失败', title: '运维工具 · 事件投递失败清单', count: wbDeadLetters.value, severity: 'warn' as const, failed: !!wbErrors.value.dead, tab: null },
+  { key: 'dead', label: '事件投递失败', title: '健康中心 · 事件投递失败清单', count: wbDeadLetters.value, severity: 'warn' as const, failed: !!wbErrors.value.dead, tab: null },
   { key: 'draft', label: '草稿公告', title: '公告列表', count: ann.value.draft, severity: 'muted' as const, failed: annFailed.value, tab: 'announce' },
 ])
 
@@ -393,10 +401,10 @@ function goFailedPaths() {
   intent.statusFilter = 'failed'
   intent.scene = 'learning-paths'
 }
-/** outbox 死信 → 「系统设置」的运维工具页签（2026-11-01：该面板已从本页拆走，
-    这里恢复成跨页跳转；死信清单由面板挂载时自拉） */
+/** outbox 死信 → 健康中心「事件投递」卡片（2026-11-11：原运维工具页签下线，
+    处置表并回健康中心；focus=outbox 让对面滚到那张卡） */
 function goDeadLetters() {
-  void router.push({ path: '/admin/system-settings', query: { tab: 'tools' } })
+  void router.push({ path: '/admin/health-center', query: { focus: 'outbox' } })
 }
 /** 草稿公告 → 本页「公告」页签并预筛草稿（2026-10-24）：预筛进 URL，刷新/复制链接可复原。
     单写者纪律（F5-3）：只由 openTabWith 一次写定 tab + status，不再同时设 intent.tab

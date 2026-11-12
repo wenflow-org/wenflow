@@ -92,11 +92,41 @@ describe('总览完课量 KPI（#105）', () => {
     // 与主值同口径的两项相加 = 107（数值行内自证，不再「主值 107 却标真实 0」）
     expect(note.text()).toContain('真实 90');
     expect(note.text()).toContain('未标记 17');
-    // 虚拟单列，且明确标注不计入主值
-    expect(note.text()).toContain('虚拟 20');
+    // 虚拟账号的记录单列，且明确标注不计入主值（2026-11-11 困惑测试 #3：文案写明「账号」，
+    // 与「虚拟轨」残桶区分开）
+    expect(note.text()).toContain('虚拟账号 20');
     expect(note.text()).toContain('不计入');
     // 五卡里只有这一卡曾带副行，副行撤掉后整排高度一致
     expect(card!.find('.mk-kpi__hint').exists()).toBe(false);
+  });
+
+  it('轨道残桶不静默丢弃：账号转真实后 track=virtual-learner 的记录如实列出，各桶相加 = total', async () => {
+    /* 2026-11-11 困惑测试 #3 的真实数据形态：13 条完课里 2 条 human、11 条是账号当时为虚拟
+       学习者时写入的 virtual-learner 轨道（账号事后转真实），virtualCount=0。原实现只显示
+       「真实 2」，13 与 2 的差额在卡上无影无踪。 */
+    closureSummaryMock.mockImplementation(async () => ({
+      data: {
+        data: {
+          total: 13,
+          byTrack: { human: 2, 'virtual-learner': 11, unknown: 0, legacy: 0 },
+          bySource: { 'vl-assisted': 11, 'human-ui': 2 },
+          virtualCount: 0,
+          pathCompletions: 0
+        }
+      }
+    }));
+    const wrapper = await mountOverview();
+
+    const card = closureCard(wrapper);
+    expect(card!.text()).toContain('13');
+    const note = card!.find('.mk-kpi__num-note').text();
+    expect(note).toContain('真实 2');
+    // 用户裁决（2026-11-11）：「没有虚拟轨，虚拟就虚拟」——残桶直接叫「虚拟」
+    expect(note).toContain('虚拟 11');
+    // 行内不再出现「虚拟 0 不计入」这种零值噪音
+    expect(note).not.toContain('不计入');
+    const title = card!.attributes('title') || '';
+    expect(title).toContain('账号当时为虚拟学习者');
   });
 
   it('title 说明只统计真实账号、虚拟单列不计入', async () => {
@@ -104,9 +134,10 @@ describe('总览完课量 KPI（#105）', () => {
 
     const title = closureCard(wrapper)!.attributes('title') || '';
     /* 2026-11-06 文案排查 §7：原句的「非虚拟口径 / 与上方…同源」被改写成直说事实
-       （分号拼接 + 隔空指路「上方」+ 内部词「口径」三条一并消除），断言随之更新。 */
-    expect(title).toContain('只统计真实账号');
-    expect(title).toContain('两项相加即总数');
+       （分号拼接 + 隔空指路「上方」+ 内部词「口径」三条一并消除），断言随之更新。
+       2026-11-11 困惑测试 #3：分解从「两项」扩为「各轨道桶（含虚拟轨残桶）」。 */
+    expect(title).toContain('只统计当前真实账号');
+    expect(title).toContain('各桶相加即总数');
     expect(title).toContain('不计入');
     expect(title).not.toContain('不回填');
     expect(title).not.toContain('通道构成');

@@ -116,6 +116,15 @@ export function evidenceTooltip(signal: unknown, score: number): string {
   return parts.join(' · ')
 }
 
+/** 证据时间统一按全站口径展示：YYYY-MM-DD HH:mm（后端可能给 ISO / epoch，统一收敛） */
+function absTimeText(value?: string): string {
+  if (!value) return ''
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return String(value)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
 /** 完整证据 tooltip（含来源类型/会话/任务/时间）：时间线行与概念密度条共用 */
 export function evidenceFullTooltip(
   type: unknown,
@@ -136,7 +145,7 @@ export function evidenceFullTooltip(
   // domain（goal/path）证据的置信度 = 过程完成度，低值不提示「证据不足」
   const t = String(type || '').toLowerCase()
   if (!DOMAIN_SIGNAL_ZH[t] && evidenceLowConfidence(score)) parts.push('证据不足')
-  if (opts?.happenedAt) parts.push(opts.happenedAt)
+  if (opts?.happenedAt) parts.push(absTimeText(opts.happenedAt))
   return parts.join(' · ')
 }
 

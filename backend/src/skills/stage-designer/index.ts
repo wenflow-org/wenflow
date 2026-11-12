@@ -10,7 +10,7 @@ import {
   assessStageMaterialCompleteness,
   assessStageMaterialCompletenessByModel,
 } from '../../services/materials/subtask-material-completeness';
-import { assessStageMetaLessons } from '../../services/learning/generation/stage-subtask-quality';
+import { assessStageMetaLessons, assessStageNarration } from '../../services/learning/generation/stage-subtask-quality';
 import { assessMaterialRefCoverage } from '../../services/materials/material-ref-coverage.service';
 import type { PromptMaterial } from '../../services/materials/material-prompt-projection';
 import { logger } from '../../utils/logger';
@@ -310,6 +310,12 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
         if (!metaLessons.valid) {
           problems.push({ failureReason: metaLessons.failureReason as string, violations: metaLessons.violations });
         }
+        // 题面叙事护栏（2026-11-12 实测「这种问出现了非常多次」）：题面泄露答案 / 无来源称真实 /
+        // 定位题超频——「先找出这些信息最早出现在哪一轮」一类问法多批次复现，软校验不过 → 带反馈重试。
+        const narration = assessStageNarration(subtasks, { hasMaterials: stageMaterials.length > 0 });
+        if (!narration.valid) {
+          problems.push({ failureReason: narration.failureReason as string, violations: narration.violations });
+        }
         const coverage = assessMaterialRefCoverage({
           materials: stageMaterials,
           nodes: coverageNodes(subtasks),
@@ -359,6 +365,14 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
           }
           if (failureReason.includes('MATERIAL_REFS_MISSING_')) {
             blocks.push('本阶段资料与目标相关时，每个 subtask 至少给 1 条 materialRefs：sectionId 取自资料 sections[].id，quote 逐字复制该章节标题或 keyPoints[].cite；不得改写、不得编造。与目标明显无关的资料可以整体不引用。');
+          }
+          if (failureReason.includes('TASK_NARRATION_GUARD')) {
+            blocks.push([
+              '上一个版本里有任务的**题面泄了答案或违反叙事纪律**：',
+              '① description/acceptanceHint 直接给出结论或对比提示（如「注意第 X 轮说的不是 Y 而是 Z」）——题面只描述学生要做的动作与观察对象，结论一个字都不能出现；acceptanceHint 写可观察的验收动作，不得硬编码答案；',
+              '② 「先找出/最早出现在第几轮/哪一轮」这类定位问句整条路径最多 1 个——多余的改成让学生复述、应用、对比、解释因果的问法；',
+              '③ 没有材料本体时不得宣称「真实对话/真实记录/真实案例」——要么引用 materials 里真实存在的小节，要么写明「示例对话」。',
+            ].join('\n'));
           }
           if (Array.isArray(violations) && violations.length) {
             blocks.push(`具体问题：${violations.join('；')}`);

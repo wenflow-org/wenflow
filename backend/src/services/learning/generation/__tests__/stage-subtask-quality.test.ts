@@ -1,5 +1,7 @@
 import {
+  assessPlanningSourceHonesty,
   assessStageMetaLessons,
+  assessStageNarration,
   dropCrossStageDuplicates,
   isMetaOnlySubtask,
 } from '../stage-subtask-quality';
@@ -169,5 +171,122 @@ describe('isMetaOnlySubtask 泛「卡」制品（2026-11-02 回归：旧词表�
   it('把卡当工具但题干含练习对象 → 不命中', () => {
     expect(isMetaOnlySubtask({ title: '用两步卡做 10 道时态选择题并写出排除理由' })).toBe(false);
     expect(isMetaOnlySubtask({ title: '用两步卡限时做完一套模考并逐题归因' })).toBe(false);
+  });
+});
+
+describe('assessStageNarration（2026-11-12 题面叙事护栏）', () => {
+  it('题面泄露答案（「注意…不是…而是…」）→ 命中', () => {
+    const result = assessStageNarration([
+      {
+        title: '定位关键转折',
+        description: '对照板书逐帧读一遍。注意：关键信息在第 2 轮，而不是轮 7。',
+        acceptanceHint: '能说出结论出自哪一轮',
+      },
+    ]);
+    expect(result.valid).toBe(false);
+    expect(result.failureReason).toContain('TASK_NARRATION_GUARD');
+    expect(result.violations?.[0]).toContain('把答案写进了题面');
+  });
+
+  it('2026-11-12 实测原句（跑步咨询「不是轮 X 而是轮 Y」）→ 命中', () => {
+    const result = assessStageNarration([
+      {
+        title: '找信息最早的帧',
+        description: '看「今天跑多远」这句，光凭这一句推不出 30 公里。板上扫一眼，30 这个数最早落在哪一帧？注意信息不在轮7，而是来自轮2。',
+      },
+    ]);
+    expect(result.valid).toBe(false);
+  });
+
+  it('定位题同一阶段出现 ≥2 个 → 命中（这类问法整条路径最多 1 次）', () => {
+    const result = assessStageNarration([
+      { title: '定位一', description: '先找出客户顾虑最早出现在第几轮。' },
+      { title: '定位二', description: '找出承诺变化最早出现在哪一轮。' },
+    ]);
+    expect(result.valid).toBe(false);
+    expect(result.violations?.join('')).toContain('定位任务');
+  });
+
+  it('无材料却宣称「真实对话/真实记录」→ 命中', () => {
+    const result = assessStageNarration([
+      { title: '读真实对话', description: '下面是一段真实对话记录，逐轮标注信息归属。' },
+    ]);
+    expect(result.valid).toBe(false);
+    expect(result.violations?.join('')).toContain('真实');
+  });
+
+  it('有材料引用或明确称「示例」→ 不命中', () => {
+    const clean = assessStageNarration(
+      [
+        {
+          title: '逐轮标注信息归属',
+          description: '读示例对话的 8 轮记录，每轮标注它贡献了哪条信息。',
+          materialRefs: [{ sectionId: 's1', quote: '对话记录' }],
+        },
+      ],
+      { hasMaterials: true },
+    );
+    expect(clean.valid).toBe(true);
+  });
+
+  it('单个定位题 + 正常描述 → 不命中（定位题允许 1 个）', () => {
+    const ok = assessStageNarration([
+      { title: '定位首次出现', description: '找出「备赛周期」最早出现在第几轮，并说明它后来被如何引用。' },
+    ]);
+    expect(ok.valid).toBe(true);
+  });
+});
+
+describe('assessStageNarration 增补（2026-11-12 外评：标题剧透/同例复读）', () => {
+  it('标题写成结论陈述句（「只会…动手的是…」）→ 命中谜底', () => {
+    const result = assessStageNarration([
+      { title: '模型只会说出「调用哪把工具」那句话，动手的是外面那层程序', description: '对照一段调用记录拆开看。' },
+    ]);
+    expect(result.valid).toBe(false);
+    expect(result.violations?.join('')).toContain('剧透谜底');
+  });
+
+  it('标题写「动作+悬念」→ 不命中', () => {
+    const ok = assessStageNarration([
+      { title: '拆开一次查天气的后台记录，看清模型与外部程序怎么接力', description: '逐行读这段记录，标出每一步是谁在动。' },
+    ]);
+    expect(ok.valid).toBe(true);
+  });
+
+  it('description 指名复用前面任务的主教材（「回到任务 1 那段」）→ 命中同例复读', () => {
+    const result = assessStageNarration([
+      { title: '换个问法再判一次', description: '回到任务 1 那段天气调用记录，再对着两条新样例比一比。' },
+    ]);
+    expect(result.valid).toBe(false);
+    expect(result.violations?.join('')).toContain('同例复读');
+  });
+});
+
+describe('assessPlanningSourceHonesty（规划层来源诚实）', () => {
+  it('无材料时 summary/goal 宣称「真实记录」→ 命中并要求示例措辞', () => {
+    const result = assessPlanningSourceHonesty({
+      summary: '拿 AutoGPT 的公开跑偏记录、插件与工具调用的真实记录当样本',
+      milestones: [
+        { title: '看清文本', description: '机制讲解', goal: '对照一次真实问答，能指出模型读到了什么' },
+      ],
+    });
+    expect(result.valid).toBe(false);
+    expect(result.failureReason).toContain('PLANNING_SOURCE_HONESTY');
+    expect(result.violations?.length).toBe(2);
+  });
+
+  it('示例措辞 + 有材料 → 通过', () => {
+    expect(assessPlanningSourceHonesty({
+      summary: '拿按公开跑偏记录形态还原的示意样本当材料',
+      milestones: [{ title: '看清文本', description: '', goal: '对照一段示例问答' }],
+    }).valid).toBe(true);
+    expect(assessPlanningSourceHonesty(
+      { summary: '拿真实记录当样本', milestones: [] },
+      { hasMaterials: true },
+    ).valid).toBe(true);
+  });
+
+  it('干净文本 → 通过', () => {
+    expect(assessPlanningSourceHonesty({ summary: '四块机制逐步拆解', milestones: [{ title: 'A', description: 'B', goal: 'C' }] }).valid).toBe(true);
   });
 });

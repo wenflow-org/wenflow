@@ -18,10 +18,11 @@ const getLearnerEvidence = vi.hoisted(() => vi.fn().mockResolvedValue({ items: [
 
 const routeQuery = vi.hoisted(() => ({ tab: 'sessions' } as Record<string, string>));
 const routerReplace = vi.hoisted(() => vi.fn());
+const routerPush = vi.hoisted(() => vi.fn());
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({ query: routeQuery }),
-  useRouter: () => ({ push: vi.fn(), replace: routerReplace }),
+  useRouter: () => ({ push: routerPush, replace: routerReplace }),
 }));
 vi.mock('../store', async () => {
   const { ref } = await import('vue');
@@ -76,6 +77,8 @@ vi.mock('../learner-profile', () => ({
   memoryReviewUrl: (id: string) => `/admin/memory-review?userId=${id}`,
   transferReadinessZh: () => '—',
   misconceptionRiskZh: () => '—',
+  // 叙述洞察渲染前会过一遍句读清洗；mock 里保持恒等，避免 undefined 把 computed 炸掉
+  tidyNarrativeText: (s: string) => s,
   normalizeLearnerTab: (t: string) => t,
   levelFromXp: () => 1,
   // 等级词汇单点（LearnerDetail EN_ZH/画像卡引用，2026-10-02 起）
@@ -98,6 +101,18 @@ vi.mock('@/api/adminApi', () => ({
   getUserIncludingDeleted: vi.fn().mockResolvedValue({ data: { data: {} } }),
   // 证据页新增的建议归因命中率读侧（2026-10-21）：同样必须有函数，否则同步 TypeError 落进详情 catch
   adminOpsApi: { insightReliability: vi.fn().mockResolvedValue({ data: { data: null } }) },
+  // 课堂只读预览抽屉（2026-11-11）：打开行时才请求 session-console
+  adminVirtualLearnersApi: {
+    getRealSessionConsole: vi.fn().mockResolvedValue({
+      data: {
+        data: {
+          kind: 'teaching',
+          sessionId: 's1',
+          teaching: { topic: '会话 s1', status: 'completed', messages: [], wrapup: null },
+        },
+      },
+    }),
+  },
 }));
 vi.mock('../statusText', async () => {
   // 建议徽章读运营口径（2026-10-22）：用真实实现，别在 mock 里另写一份文案
@@ -118,9 +133,11 @@ vi.mock('../statusText', async () => {
 });
 vi.mock('../useConfirm', () => ({ askConfirm: vi.fn() }));
 vi.mock('@/utils/toast', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }) }));
+const copyText = vi.hoisted(() => vi.fn().mockResolvedValue(true));
+vi.mock('@/utils/clipboard', () => ({ copyText }));
 
 import LearnerDetail from '../LearnerDetail.vue';
-import { liveVirtuals, liveGetLearnerDetail, liveLearners, type LiveVirtual } from '../live';
+import { liveUsers, liveVirtuals, liveGetLearnerDetail, liveLearners, type LiveVirtual } from '../live';
 import { openSubPage, subPage } from '../store';
 
 function sessionRow(id: string, milestoneIndex: number | null, status = 'completed') {
@@ -296,6 +313,15 @@ describe('LearnerDetail 教学会话 pane：视角 + 阶段筛选', () => {
     expect(rows[0].text()).not.toContain('建议重排');
     expect(rows[1].text()).toContain('降级总结');
   });
+
+  it('课堂 ID 列：长 ID 收成前 8 / 后 6，完整 ID 进 title，列禁止折行', async () => {
+    const longId = 'teaching_user_9c353e6e-0c8e-46e5-b764-a4d4bc50dbcb';
+    const w = await mountLd([sessionRow(longId, 1)]);
+    const cell = w.find('#ld-panel-sessions tbody .ld-col-id');
+    expect(cell.text()).toBe('teaching…50dbcb');
+    expect(cell.attributes('title')).toBe(longId);
+    expect(cell.classes()).toContain('ld-col-id');
+  });
 });
 
 describe('LearnerDetail 记忆与复习 pane（2026-10-11 深设计）', () => {
@@ -322,9 +348,9 @@ describe('LearnerDetail 记忆与复习 pane（2026-10-11 深设计）', () => {
 
   it('记忆与调度页签：FSRS 普查表列方言含掌握度；调度面板随页签合并挂载（2026-11-09 页签裁并）', async () => {
     const w = await mountMemory([trace({})]);
-    // 合并后单一页签：普查表列 = 知识点 / 掌握度 / 记忆强度 / 复习到期 / 提取史 / 状态
+    // 合并后单一页签：普查表列 = 知识点 / 掌握度 / 记忆强度 / 复习到期 / 回忆记录 / 状态
     expect(w.findAll('#ld-panel-memory thead th').map((t) => t.text())).toEqual([
-      '知识点', '掌握度', '记忆强度', '复习到期', '提取史', '状态',
+      '知识点', '掌握度', '记忆强度', '复习到期', '回忆记录', '状态',
     ]);
     // 操作列已撤（无单点复习接口）；调度面板（温故计划/归并审计/回滚）随 MemoryReview 一并进入本页签
     expect(w.findAll('#ld-panel-memory tbody button').length).toBe(0);
@@ -353,7 +379,7 @@ describe('LearnerDetail 记忆与复习 pane（2026-10-11 深设计）', () => {
     expect(labels).toEqual(['逾期七点', '逾期两点', '稳固点', '未初始化点']);
   });
 
-  it('列头排序（2026-10-18）：记忆强度首击升序（弱在前）、提取史首击降序（多在前）', async () => {
+  it('列头排序（2026-10-18）：记忆强度首击升序（弱在前）、回忆记录首击降序（多在前）', async () => {
     const rows = [
       trace({ conceptKey: 'k-a', label: '甲', retrievability: 0.9, dueAt: new Date(Date.now() + day).toISOString(), extractionCount: 2 }),
       trace({ conceptKey: 'k-b', label: '乙', retrievability: 0.3, dueAt: new Date(Date.now() + day).toISOString(), extractionCount: 9 }),
@@ -374,8 +400,8 @@ describe('LearnerDetail 记忆与复习 pane（2026-10-11 深设计）', () => {
     await nextTick();
     expect(labelsOf()).toEqual(['甲', '丙', '乙']);
 
-    // 提取史：首击降序（9 次 → 5 次 → 2 次）
-    const extractTh = w.findAll('#ld-panel-memory thead th').find((t) => t.text() === '提取史')!;
+    // 回忆记录：首击降序（9 次 → 5 次 → 2 次）
+    const extractTh = w.findAll('#ld-panel-memory thead th').find((t) => t.text() === '回忆记录')!;
     await extractTh.find('.mk-th__btn').trigger('click');
     await nextTick();
     expect(labelsOf()).toEqual(['乙', '丙', '甲']);
@@ -392,7 +418,20 @@ describe('LearnerDetail 记忆与复习 pane（2026-10-11 深设计）', () => {
     expect(rows[1].classes()).toContain('ld-memrow--uninit');
   });
 
-  it('卡头读数给出状态分档；提取史输出「N 次 · 最近 时间」', async () => {
+  it('状态徽章带判据 title；「未初始化」用中性灰而不是 info 蓝（2026-11-11）', async () => {
+    const w = await mountMemory([
+      trace({ conceptKey: 'k-uninit', label: '未初始化点', retrievability: null, dueAt: null, extractionCount: 0, lastSeenAt: null }),
+      trace({ conceptKey: 'k-ok', label: '稳固点', retrievability: 0.95, dueAt: new Date(Date.now() + day).toISOString() }),
+    ]);
+    const badges = w.findAll('#ld-panel-memory tbody .mk-badge');
+    const uninit = badges.find((b) => b.text() === '未初始化')!;
+    expect(uninit.classes()).toContain('mk-badge--muted');
+    expect(uninit.attributes('title')).toContain('尚无记忆记录');
+    const ok = badges.find((b) => b.text() === '稳固')!;
+    expect(ok.attributes('title')).toContain('可提取率 ≥ 80%');
+  });
+
+  it('卡头读数给出状态分档；回忆记录输出「N 次 · 最近 时间」', async () => {
     const w = await mountMemory([
       trace({ conceptKey: 'k-a', label: '甲', retrievability: 0.3, dueAt: new Date(Date.now() - day).toISOString(), extractionCount: 15 }),
       trace({ conceptKey: 'k-b', label: '乙', retrievability: 1, dueAt: new Date(Date.now() + day).toISOString(), extractionCount: 4 }),
@@ -487,6 +526,34 @@ describe('LearnerDetail 证据时间线分段切换（2026-11-09 纵向压缩）
 
     // 列表容器限高内滚（源码级已锁 440px，这里锁容器存在）
     expect(w.find('#ld-panel-evidence .ld-ev-scroll').exists()).toBe(true);
+  });
+
+  it('带 sessionId 的证据行给出可见「查看课堂」入口，点击即开只读预览（2026-11-11 第二轮）', async () => {
+    getLearnerEvidence.mockResolvedValue({
+      items: [
+        {
+          type: 'task-completed',
+          detail: '完成练习',
+          signal: 'mastery',
+          score: 0.8,
+          happenedAt: '2026-10-01T08:00:00Z',
+          sessionId: 'teaching_user_x',
+          taskId: 'st_1',
+        },
+      ],
+      domain: [],
+      loadCurve: [],
+      calibrationDetails: [],
+    });
+    const w = await mountLd([]);
+    const row = w.find('#ld-panel-evidence .ld-ev--link');
+    expect(row.exists(), '带 sessionId 的行应渲染为可点行').toBe(true);
+    expect(row.find('.ld-ev__go').text()).toBe('查看课堂 →');
+
+    await row.trigger('click');
+    await flushPromises();
+    expect(w.find('.ld-sess-drawer').exists(), '点击后应打开课堂只读预览抽屉').toBe(true);
+    w.unmount();
   });
 });
 
@@ -1051,7 +1118,7 @@ describe('LearnerDetail 已下线兜底路径（user_sim19 回归）', () => {
   });
 });
 
-/* 2026-11-02 P1-2：概览「概念掌握」与证据「全局信号与背景」原先在「当前路径」标签下摆的
+/* 2026-11-02 P1-2：概览「概念掌握」与证据「概念信号与背景」原先在「当前路径」标签下摆的
    是学习者级概念清单（同页图谱才是路径级），掌握分档还各叫一套名字。这里锁住：
    （a）两张卡片把真实作用域写进可见卡头，（b）四档名与图谱同源（utils/conceptBands）。 */
 describe('LearnerDetail 概念卡作用域与分档名（P1-2）', () => {
@@ -1105,7 +1172,7 @@ describe('LearnerDetail 概念卡作用域与分档名（P1-2）', () => {
     }
   });
 
-  it('证据「全局信号与背景」卡头同样报用户级作用域，四档名与图谱一致', async () => {
+  it('证据「概念信号与背景」卡头同样报用户级作用域，四档名与图谱一致', async () => {
     const detailMock = vi.mocked(liveGetLearnerDetail);
     const origDetail = detailMock.getMockImplementation();
     setActivePinia(createPinia());
@@ -1115,8 +1182,8 @@ describe('LearnerDetail 概念卡作用域与分档名（P1-2）', () => {
     detailMock.mockResolvedValue(ledgerDetail() as never);
     try {
       const w = await mountLd([]);
-      const card = w.findAll('.mk-card').find((c) => c.find('.mk-card__title').text() === '全局信号与背景');
-      expect(card, '全局信号与背景卡应存在').toBeTruthy();
+      const card = w.findAll('.mk-card').find((c) => c.find('.mk-card__title').text() === '概念信号与背景');
+      expect(card, '概念信号与背景卡应存在').toBeTruthy();
       const meta = card!.find('.mk-card__meta').text();
       expect(meta).toContain('跨全部路径');
       expect(meta).toContain('按学员统计');
@@ -1127,6 +1194,10 @@ describe('LearnerDetail 概念卡作用域与分档名（P1-2）', () => {
         '待学习 1',
         '不在概念清单 0',
       ]);
+      // 2026-11-11 P1：进行中独占一行；0 状态收成紧凑读数，不再占整列空位。
+      expect(card!.findAll('.ld-sig-tier--wide').map((t) => t.find('strong').text())).toEqual(['进行中 1']);
+      expect(card!.findAll('.ld-sig-tier--zero').map((t) => t.text())).toEqual(['不在概念清单 0']);
+      expect(card!.find('.ld-sig-tier__none').exists()).toBe(false);
       w.unmount();
     } finally {
       if (origDetail) detailMock.mockImplementation(origDetail);
@@ -1148,7 +1219,7 @@ describe('LearnerDetail 概念卡作用域与分档名（P1-2）', () => {
       const clean = ledgerDetail();
       detailMock.mockResolvedValue(clean as never);
       const noOutside = await mountLd([]);
-      const cleanCard = noOutside.findAll('.mk-card').find((c) => c.find('.mk-card__title').text() === '全局信号与背景');
+      const cleanCard = noOutside.findAll('.mk-card').find((c) => c.find('.mk-card__title').text() === '概念信号与背景');
       expect(cleanCard!.find('.ld-sig-sec__foot').exists()).toBe(false);
       expect(cleanCard!.text()).not.toContain('对得上');
       noOutside.unmount();
@@ -1158,7 +1229,7 @@ describe('LearnerDetail 概念卡作用域与分档名（P1-2）', () => {
       withOutside.knowledgeMemory.globalSignals.masteredConcepts = ['变量', '读取Excel表对象'];
       detailMock.mockResolvedValue(withOutside as never);
       const w = await mountLd([]);
-      const card = w.findAll('.mk-card').find((c) => c.find('.mk-card__title').text() === '全局信号与背景');
+      const card = w.findAll('.mk-card').find((c) => c.find('.mk-card__title').text() === '概念信号与背景');
       const foot = card!.find('.ld-sig-sec__foot');
       expect(foot.exists()).toBe(true);
       expect(foot.text()).toBe('另有 1 个标签不在当前概念清单里、未计入：读取Excel表对象');
@@ -1292,9 +1363,12 @@ describe('LearnerDetail 画像 KV：分档词表 / 量纲 / 逐格来源（P1-8�
 });
 
 describe('LearnerDetail · 页签 URL 同步（2026-11-09 走查）', () => {
+  // 本组会把 routeQuery.tab 留在最后点过的页签，复位到文件默认值，避免污染后续 describe
+  afterEach(() => { routeQuery.tab = 'sessions' })
+
   it('从 ?tab=evidence 进来后点「概览」：URL 里的 tab 参数被删掉，不再「界面在概览、URL 在证据」', async () => {
     routeQuery.tab = 'evidence';
-    routerReplace.mockClear();
+    routerPush.mockClear();
     const w = await mountLd([]);
     await flushPromises();
     expect(w.find('#ld-panel-evidence').exists()).toBe(true);
@@ -1303,15 +1377,598 @@ describe('LearnerDetail · 页签 URL 同步（2026-11-09 走查）', () => {
     await flushPromises();
     expect(w.find('#ld-panel-overview').exists()).toBe(true);
     // 回默认页签 = 从 query 里删掉 tab（早前用展开空对象的方式删，旧值原地留着）
-    const lastCall = routerReplace.mock.calls.at(-1)!;
+    const lastCall = routerPush.mock.calls.at(-1)!;
     expect(lastCall[0]).toEqual({ query: {} });
 
     // 非默认页签仍写着 tab=…
     routeQuery.tab = 'overview';
-    routerReplace.mockClear();
+    routerPush.mockClear();
     await w.find('#ld-tab-graph').trigger('click');
     await flushPromises();
-    expect(routerReplace.mock.calls.at(-1)![0]).toEqual({ query: { tab: 'graph' } });
+    expect(routerPush.mock.calls.at(-1)![0]).toEqual({ query: { tab: 'graph' } });
     w.unmount();
+  });
+
+  it('点五个页签都走 push（后退可回上一个页签），URL 与面板同步', async () => {
+    routeQuery.tab = 'overview';
+    routerPush.mockClear();
+    const w = await mountLd([]);
+    await flushPromises();
+
+    const cases: Array<[string, string, string | undefined]> = [
+      ['ld-tab-profile', 'ld-panel-profile', 'profile'],
+      ['ld-tab-evidence', 'ld-panel-evidence', 'evidence'],
+      ['ld-tab-graph', 'ld-panel-graph', 'graph'],
+      ['ld-tab-sessions', 'ld-panel-sessions', 'sessions'],
+      ['ld-tab-memory', 'ld-panel-memory', 'memory'],
+    ];
+    for (const [tabId, panelId, queryTab] of cases) {
+      routerPush.mockClear();
+      await w.find(`#${tabId}`).trigger('click');
+      await flushPromises();
+      expect(w.find(`#${panelId}`).exists(), `${queryTab} 面板应显示`).toBe(true);
+      expect(routerPush.mock.calls.at(-1)?.[0]).toEqual({ query: { tab: queryTab } });
+      // 模拟 router 已落位到新 URL：下一次点击的 cur 才是上一个页签
+      routeQuery.tab = queryTab as string;
+    }
+    w.unmount();
+  });
+
+  it('带 ?tab=memory 刷新：直接落在记忆页签（URL 是唯一真相）', async () => {
+    routeQuery.tab = 'memory';
+    const w = await mountLd([]);
+    await flushPromises();
+    expect(w.find('#ld-panel-memory').exists()).toBe(true);
+    w.unmount();
+  });
+});
+
+describe('LearnerDetail · 身份信息复制（2026-11-11 第二轮）', () => {
+  it('邮箱与用户 ID 各一枚复制按钮：复制全文，并给「已复制」反馈', async () => {
+    liveUsers.value = [{
+      id: 'u1',
+      name: '测试学习者',
+      email: 'student@example.com',
+      isAdmin: false,
+      isVirtualLearner: false,
+      isTestAccount: false,
+      xp: 0,
+      currentLevel: 'L1',
+      lastLoginAt: '2026-11-10T09:30:00Z',
+      createdAt: '2026-11-01T08:00:00Z',
+      paths: 1,
+      sessions: 2,
+    }];
+    routeQuery.tab = 'overview';
+    copyText.mockClear();
+    const w = await mountLd([]);
+    await flushPromises();
+    const card = w.findAll('.mk-card').find((c) => c.find('.mk-card__title').text() === '账号信息');
+    expect(card, '账号信息卡应存在').toBeTruthy();
+    const buttons = card!.findAll('.ld-copy');
+    expect(buttons.length, '只给邮箱与用户 ID 两枚，不逐行铺').toBe(2);
+    expect(buttons.map((b) => b.text())).toEqual(['复制', '复制']);
+
+    await buttons[0].trigger('click');
+    await flushPromises();
+    expect(copyText).toHaveBeenLastCalledWith('student@example.com');
+    expect(buttons[0].text()).toBe('已复制');
+
+    await buttons[1].trigger('click');
+    await flushPromises();
+    expect(copyText).toHaveBeenLastCalledWith('u1');
+    w.unmount();
+    liveUsers.value = [];
+    routeQuery.tab = 'sessions';
+  });
+});
+
+/**
+ * 2026-11-10 概览两张卡的可读性修复：
+ *  1) 最近目标对话行左侧已有状态徽章（已完成），副行再写「已生成学习路径」是把同一结论说两遍；
+ *     只有「已完成却没挂路径」这种异常才需要补一句。
+ *  2) 学习状态追踪右侧常驻一列「取值参考」（0–100 · 参考 40–70 …），同质、看一次就够，
+ *     收进卡头的小问号，行内只留柱条与读数。
+ */
+describe('LearnerDetail 概览：目标对话副行 + 取值参考小问号', () => {
+  beforeEach(() => {
+    listSessions.mockReset().mockResolvedValue({ data: { data: { items: [] } } });
+    getMemoryTraces.mockReset().mockResolvedValue([]);
+    listPaths.mockReset().mockResolvedValue({ data: { data: { paths: [] } } });
+    routeQuery.tab = 'overview';
+  });
+  afterEach(() => {
+    routeQuery.tab = 'sessions';
+  });
+
+  function goalRowIn(w: Awaited<ReturnType<typeof mountLd>>, text: string) {
+    const row = w.findAll('.mk-row').find((r) => r.text().includes(text));
+    expect(row, `未找到目标行：${text}`).toBeTruthy();
+    return row!;
+  }
+
+  it('已完成且挂上路径：不再复读「已生成学习路径」', async () => {
+    listGoals.mockReset().mockResolvedValue({
+      data: { data: { conversations: [
+        { id: 'g-done', description: '目标已完成', status: 'completed', learningPathId: 'lp1', createdAt: '2026-10-18T10:00:00Z' }
+      ] } }
+    });
+    const w = await mountLd([]);
+    const row = goalRowIn(w, '目标已完成');
+    expect(row.text()).not.toContain('已生成学习路径');
+    // 副行整块不渲染（MkRow 的 v-if="sub"）
+    expect(row.find('.mk-row__sub').exists()).toBe(false);
+    expect(row.text()).toContain('已完成');
+  });
+
+  it('已完成却没有路径：仍补「未生成学习路径」——这才是这一列需要被看见的异常', async () => {
+    /* 作用域收到某条路径时，没挂路径的目标本就被过滤掉（goalInScope），
+       故先切到「全部路径」才看得见这一行。 */
+    listGoals.mockReset().mockResolvedValue({
+      data: { data: { conversations: [
+        { id: 'g-miss', description: '目标没挂路径', status: 'completed', learningPathId: null, createdAt: '2026-10-18T10:00:00Z' }
+      ] } }
+    });
+    const detailMock = vi.mocked(liveGetLearnerDetail as unknown as ReturnType<typeof vi.fn>);
+    const originalDetail = detailMock.getMockImplementation();
+    const originalPath = liveLearners.value[0].pathId;
+    liveLearners.value[0].pathId = '';
+    detailMock.mockResolvedValue({
+      model: { name: '测试学习者', knowledgeMemory: { currentPath: null, globalSignals: {} } }
+    });
+    try {
+      const w = await mountLd([]);
+      expect(goalRowIn(w, '目标没挂路径').text()).toContain('未生成学习路径');
+    } finally {
+      liveLearners.value[0].pathId = originalPath;
+      if (originalDetail) detailMock.mockImplementation(originalDetail);
+    }
+  });
+
+  it('学习状态追踪：四行取值参考收进卡头「?」，行内不再有参考列', async () => {
+    const detailMock = vi.mocked(liveGetLearnerDetail as unknown as ReturnType<typeof vi.fn>);
+    const original = detailMock.getMockImplementation();
+    detailMock.mockResolvedValue({
+      model: { name: '测试学习者', knowledgeMemory: { currentPath: null, globalSignals: {} } },
+      dynamicState: { metrics: { lss: 2.7, ktl: 7.8, lf: 1.9, lsb: 5.9 } },
+      freshness: { generatedAt: new Date().toISOString(), confidence: 0.2 }
+    });
+    try {
+      const w = await mountLd([]);
+      const help = w.find('.ld-lsm__help');
+      expect(help.exists()).toBe(true);
+      expect(help.find('.ld-lsm__help-btn').text()).toBe('?');
+      expect(help.find('.ld-lsm__help-btn').attributes('aria-label')).toBe('取值参考');
+      // 逐行参考带都在弹层里（默认收起 = details 没有 open）
+      const items = help.findAll('.ld-lsm__help-pop li');
+      expect(items.length).toBe(4);
+      expect(items.map((i) => i.text()).join(' | ')).toContain('参考');
+      expect(help.attributes('open')).toBeUndefined();
+      // 行内不再常驻参考文字
+      expect(w.find('.ld-lsm__hint').exists()).toBe(false);
+      expect(w.findAll('.ld-lsm__row').length).toBe(4);
+    } finally {
+      if (original) detailMock.mockImplementation(original);
+    }
+  });
+});
+
+/* 2026-11-11 多路径串台修复（用户评审 P0）：
+   （a）证据页概念信号/密度按台账 sourcePaths 收窄到当前路径；
+   （b）画像叙述只取当前路径自己的目标对话，不再拿全局最近一次（可能是另一条路径）顶替；
+   （c）探索主题/挣扎概念取该路径的课堂历史，不与另一条路径混排。 */
+describe('LearnerDetail 多路径作用域：概念与叙述按路径收窄', () => {
+  function scopedDetail(overrides: Record<string, unknown> = {}) {
+    const knowledgeMemory = {
+      currentPath: {
+        learningPathId: 'lp1',
+        pathTitle: '心理学路径',
+        progress: { totalTasks: 20, completedTasks: 10, totalMilestones: 5, completedMilestones: 2 },
+        conceptStates: [],
+      },
+      globalSignals: {
+        masteredConcepts: ['变量'],
+        strugglingConcepts: ['递归', '闭包'],
+        fragileConcepts: [],
+      },
+      globalBackground: {
+        conceptLedger: [
+          { label: '变量', sourcePaths: ['lp1'] },
+          { label: '递归', sourcePaths: ['lp1', 'lp2'] },
+          { label: '闭包', sourcePaths: ['lp2'] },
+        ],
+      },
+    };
+    return {
+      userName: '测试学习者',
+      knowledgeMemory,
+      model: { name: '测试学习者', knowledgeMemory },
+      ...overrides,
+    };
+  }
+
+  it('概念信号/密度按 sourcePaths 收窄：另一条路径的概念不出现', async () => {
+    const detailMock = vi.mocked(liveGetLearnerDetail);
+    const origDetail = detailMock.getMockImplementation();
+    setActivePinia(createPinia());
+    routeQuery.tab = 'evidence';
+    listSessions.mockReset().mockResolvedValue({ data: { data: { items: [] } } });
+    listPaths.mockReset().mockResolvedValue({
+      data: { data: { paths: [{ id: 'lp1', title: '心理学路径', status: 'active', updatedAt: new Date().toISOString() }] } },
+    });
+    detailMock.mockResolvedValue(scopedDetail() as never);
+    try {
+      const w = await mountLd([]);
+      const card = w.findAll('.mk-card').find((c) => c.find('.mk-card__title').text() === '概念信号与背景');
+      expect(card, '概念信号与背景卡应存在').toBeTruthy();
+      const text = card!.text();
+      expect(text).toContain('2 个概念');
+      expect(text).toContain('仅统计该路径概念');
+      expect(text).not.toContain('闭包');
+      // 四档：变量→已掌握、递归→进行中、另一条路径的闭包被排除
+      expect(card!.findAll('.ld-sig-tier strong').map((s) => s.text())).toEqual([
+        '已掌握 1', '进行中 1', '记忆偏弱 0', '待学习 0', '不在概念清单 0',
+      ]);
+      // 概念密度表同样只剩 2 行
+      expect(w.findAll('#ld-panel-evidence .ld-bar:not(.ld-bar--head)').length).toBe(2);
+      w.unmount();
+    } finally {
+      if (origDetail) detailMock.mockImplementation(origDetail);
+      routeQuery.tab = 'sessions';
+    }
+  });
+
+  it('画像叙述只认当前路径：全局叙述是另一条路径时不得顶上', async () => {
+    const detailMock = vi.mocked(liveGetLearnerDetail);
+    const origDetail = detailMock.getMockImplementation();
+    setActivePinia(createPinia());
+    routeQuery.tab = 'profile';
+    listSessions.mockReset().mockResolvedValue({ data: { data: { items: [] } } });
+    listPaths.mockReset().mockResolvedValue({
+      data: { data: { paths: [{ id: 'lp1', title: '心理学路径', status: 'active', updatedAt: new Date().toISOString() }] } },
+    });
+    detailMock.mockResolvedValue(scopedDetail({
+      profile: {
+        narrativeInsights: { goalNarrative: '奶茶店目标：学会排班', motivationNarrative: '奶茶店经营需要' },
+        history: { topicsExplored: ['奶茶店分时客流'], conceptsStruggled: ['时间戳归集'] },
+        narrativeSource: { goalTitle: '奶茶店排班目标', completedAt: '2026-11-11T10:00:00.000Z', learningPathId: 'lp2' },
+      },
+      pathContext: {
+        pathId: 'lp1',
+        narrative: {
+          narrativeInsights: { goalNarrative: '心理学目标：看懂主要流派', motivationNarrative: '一直有兴趣' },
+          narrativeSource: { goalTitle: '系统了解心理学流派', completedAt: '2026-11-09T15:00:00.000Z', learningPathId: 'lp1' },
+          personaCapturedAt: '2026-11-09T15:00:00.000Z',
+        },
+        history: {
+          totalSessions: 18,
+          totalMessages: 232,
+          avgSessionDuration: 3,
+          topicsExplored: ['米勒的数字广度实验'],
+          conceptsStruggled: ['混淆流派前提'],
+        },
+      },
+    }) as never);
+    try {
+      const w = await mountLd([]);
+      const card = w.find('.ld-pf-narr');
+      expect(card.exists()).toBe(true);
+      const text = card.text();
+      expect(text).toContain('心理学目标：看懂主要流派');
+      expect(text).toContain('米勒的数字广度实验');
+      expect(text).toContain('系统了解心理学流派');
+      expect(text).not.toContain('奶茶店目标');
+      expect(text).not.toContain('奶茶店分时客流');
+      w.unmount();
+    } finally {
+      if (origDetail) detailMock.mockImplementation(origDetail);
+      routeQuery.tab = 'sessions';
+    }
+  });
+
+  it('当前路径没有目标对话叙述：显示说明，不回落另一条路径', async () => {
+    const detailMock = vi.mocked(liveGetLearnerDetail);
+    const origDetail = detailMock.getMockImplementation();
+    setActivePinia(createPinia());
+    routeQuery.tab = 'profile';
+    listSessions.mockReset().mockResolvedValue({ data: { data: { items: [] } } });
+    listPaths.mockReset().mockResolvedValue({
+      data: { data: { paths: [{ id: 'lp1', title: '心理学路径', status: 'active', updatedAt: new Date().toISOString() }] } },
+    });
+    detailMock.mockResolvedValue(scopedDetail({
+      profile: {
+        narrativeInsights: { goalNarrative: '奶茶店目标：学会排班' },
+        history: { topicsExplored: ['奶茶店分时客流'] },
+        narrativeSource: { goalTitle: '奶茶店排班目标', completedAt: '2026-11-11T10:00:00.000Z' },
+      },
+      pathContext: { pathId: 'lp1', narrative: null, history: { topicsExplored: [], conceptsStruggled: [] } },
+    }) as never);
+    try {
+      const w = await mountLd([]);
+      const card = w.find('.ld-pf-narr');
+      expect(card.exists()).toBe(true);
+      expect(card.text()).toContain('当前路径暂无目标对话叙述');
+      expect(card.text()).not.toContain('奶茶店目标');
+      w.unmount();
+    } finally {
+      if (origDetail) detailMock.mockImplementation(origDetail);
+      routeQuery.tab = 'sessions';
+    }
+  });
+});
+
+describe('LearnerDetail 多路径作用域：记忆表按路径概念收窄', () => {
+  const trace = (label: string) => ({
+    conceptKey: `kc-${label}`,
+    label,
+    masteryScore: 0.5,
+    stability: 'developing',
+    extractionCount: 2,
+    lastSeenAt: new Date().toISOString(),
+    fsrsStability: 1,
+    fsrsDifficulty: 5,
+    ktMasteryEma: null,
+    dueAt: new Date(Date.now() + 86400000).toISOString(),
+    retrievability: 0.9,
+    updatedAt: new Date().toISOString(),
+  });
+
+  it('当前路径只保留台账里属于该路径的概念；另一条路径的痕迹不显示', async () => {
+    const detailMock = vi.mocked(liveGetLearnerDetail);
+    const origDetail = detailMock.getMockImplementation();
+    setActivePinia(createPinia());
+    routeQuery.tab = 'memory';
+    listSessions.mockReset().mockResolvedValue({ data: { data: { items: [] } } });
+    listPaths.mockReset().mockResolvedValue({
+      data: { data: { paths: [{ id: 'lp1', title: '心理学路径', status: 'active', updatedAt: new Date().toISOString() }] } },
+    });
+    getMemoryTraces.mockReset().mockResolvedValue([trace('变量'), trace('递归'), trace('闭包')]);
+    const knowledgeMemory = {
+      currentPath: {
+        learningPathId: 'lp1',
+        pathTitle: '心理学路径',
+        progress: { totalTasks: 20, completedTasks: 10, totalMilestones: 5, completedMilestones: 2 },
+        conceptStates: [],
+      },
+      globalBackground: {
+        conceptLedger: [
+          { label: '变量', sourcePaths: ['lp1'] },
+          { label: '递归', sourcePaths: ['lp1', 'lp2'] },
+          { label: '闭包', sourcePaths: ['lp2'] },
+        ],
+      },
+    };
+    detailMock.mockResolvedValue({
+      userName: '测试学习者',
+      knowledgeMemory,
+      model: { name: '测试学习者', knowledgeMemory },
+    } as never);
+    try {
+      const w = await mountLd([]);
+      await flushPromises();
+      const rows = w.findAll('#ld-panel-memory tbody tr');
+      expect(rows.length).toBe(2);
+      expect(rows.map((r) => r.text()).join(' ')).not.toContain('闭包');
+      expect(w.find('#ld-panel-memory .mk-card__meta').text()).toContain('仅统计该路径记忆');
+      w.unmount();
+    } finally {
+      if (origDetail) detailMock.mockImplementation(origDetail);
+      routeQuery.tab = 'sessions';
+    }
+  });
+});
+
+/* 2026-11-11 学习者详情评审剩余三项：
+   1) 教学会话行点击改为只读预览抽屉，头部「展开全屏监控」才进原课堂页；
+   2) 概览「当前进度」增加学习路径卡片组，点卡即切页级路径范围；
+   3) 证据页概念信号由文字墙改 pill，点档位/概念筛选概念证据密度。 */
+describe('LearnerDetail 教学会话：只读预览抽屉', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    routeQuery.tab = 'sessions';
+    listSessions.mockReset().mockResolvedValue({ data: { data: { items: [sessionRow('s1', 1)] } } });
+    getMemoryTraces.mockReset().mockResolvedValue([]);
+    listPaths.mockReset().mockResolvedValue({ data: { data: { paths: [] } } });
+    vi.mocked(openSubPage).mockClear();
+  });
+
+  it('行点击打开抽屉而不整页跳转；「展开全屏监控」才调用 openSessionCockpit', async () => {
+    const w = await mountLd([sessionRow('s1', 1)]);
+    const row = w.find('tbody .ld-pane-row');
+    expect(row.exists()).toBe(true);
+    await row.trigger('click');
+    await flushPromises();
+    // 抽屉已开，但尚未发生整页跳转
+    expect(w.find('.ld-sess-drawer').exists()).toBe(true);
+    expect(openSubPage).not.toHaveBeenCalled();
+
+    const expand = w.findAll('.ld-sess-drawer__actions button').find((b) => b.text() === '展开全屏监控');
+    expect(expand, '抽屉头部应有「展开全屏监控」').toBeTruthy();
+    await expand!.trigger('click');
+    expect(openSubPage).toHaveBeenCalledWith(
+      'session-real',
+      's1',
+      expect.objectContaining({ from: expect.objectContaining({ id: 'u1' }) })
+    );
+    // 展开后抽屉关闭，回到页内
+    expect(w.find('.ld-sess-drawer').exists()).toBe(false);
+    w.unmount();
+  });
+
+  it('主题按钮同样打开抽屉（行内入口与整行一致）', async () => {
+    const w = await mountLd([sessionRow('s1', 1)]);
+    await w.find('.ld-topic-btn').trigger('click');
+    await flushPromises();
+    expect(w.find('.ld-sess-drawer').exists()).toBe(true);
+    expect(openSubPage).not.toHaveBeenCalled();
+    w.unmount();
+  });
+});
+
+describe('LearnerDetail 概览：学习路径卡片组', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    routeQuery.tab = 'overview';
+    listSessions.mockReset().mockResolvedValue({ data: { data: { items: [] } } });
+    getMemoryTraces.mockReset().mockResolvedValue([]);
+    listPaths.mockReset().mockResolvedValue({
+      data: {
+        data: {
+          paths: [
+            {
+              id: 'lp1', title: '测试路径', status: 'active', updatedAt: '2026-10-14T00:00:00Z',
+              totalMilestones: 3, completedMilestones: 1, totalTasks: 10, completedTasks: 4,
+              lastActivityAt: '2026-10-14T00:00:00Z',
+            },
+            {
+              id: 'lp2', title: '另一条路径', status: 'archived', updatedAt: '2026-10-01T00:00:00Z',
+              totalMilestones: 5, completedMilestones: 5, totalTasks: 20, completedTasks: 20,
+              lastActivityAt: '2026-10-01T00:00:00Z',
+            },
+          ],
+        },
+      },
+    });
+  });
+  afterEach(() => {
+    routeQuery.tab = 'sessions';
+  });
+
+  it('列出名下每条路径的里程碑/任务/百分比，当前路径带「当前」标识', async () => {
+    const w = await mountLd([]);
+    const cards = w.findAll('.ld-pathcard');
+    expect(cards.length).toBe(2);
+    const first = cards[0].text();
+    expect(first).toContain('测试路径');
+    expect(first).toContain('里程碑 1/3');
+    expect(first).toContain('任务 4/10');
+    expect(first).toContain('完成 40%');
+    expect(first).toContain('学习中');
+    expect(first).toContain('当前');
+    const second = cards[1].text();
+    expect(second).toContain('另一条路径');
+    expect(second).toContain('里程碑 5/5');
+    expect(second).toContain('任务 20/20');
+    expect(second).toContain('完成 100%');
+    expect(second).toContain('已下线');
+    expect(second).not.toContain('当前');
+    w.unmount();
+  });
+
+  it('点任意卡片即切页级路径范围（走既有 watch 重读，不另造数据流）', async () => {
+    const w = await mountLd([]);
+    await w.findAll('.ld-pathcard')[1].trigger('click');
+    await flushPromises();
+    expect(listSessions).toHaveBeenLastCalledWith(expect.objectContaining({ pathId: 'lp2' }));
+    w.unmount();
+  });
+});
+
+describe('LearnerDetail 证据页：概念信号 pill 筛选概念证据密度', () => {
+  function scopedDetail() {
+    const knowledgeMemory = {
+      currentPath: {
+        learningPathId: 'lp1',
+        pathTitle: '心理学路径',
+        progress: { totalTasks: 20, completedTasks: 10, totalMilestones: 5, completedMilestones: 2 },
+        conceptStates: [],
+      },
+      globalSignals: { masteredConcepts: ['变量'], strugglingConcepts: ['递归'], fragileConcepts: [] },
+      globalBackground: {
+        conceptLedger: [
+          { label: '变量', sourcePaths: ['lp1'], evidenceCount: 3 },
+          { label: '递归', sourcePaths: ['lp1'], evidenceCount: 1 },
+          { label: '闭包', sourcePaths: ['lp2'], evidenceCount: 2 },
+        ],
+      },
+    };
+    return { userName: '测试学习者', knowledgeMemory, model: { name: '测试学习者', knowledgeMemory } };
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    routeQuery.tab = 'evidence';
+    listSessions.mockReset().mockResolvedValue({ data: { data: { items: [] } } });
+    getMemoryTraces.mockReset().mockResolvedValue([]);
+    listPaths.mockReset().mockResolvedValue({
+      data: { data: { paths: [{ id: 'lp1', title: '心理学路径', status: 'active', updatedAt: new Date().toISOString() }] } },
+    });
+  });
+  afterEach(() => {
+    routeQuery.tab = 'sessions';
+  });
+
+  it('概念名渲染为 pill，点单个概念只筛该行，清除后恢复全表', async () => {
+    const detailMock = vi.mocked(liveGetLearnerDetail);
+    const origDetail = detailMock.getMockImplementation();
+    detailMock.mockResolvedValue(scopedDetail() as never);
+    try {
+      const w = await mountLd([]);
+      const chips = w.findAll('.ld-sig-chip');
+      expect(chips.length).toBe(2);
+      const variable = chips.find((c) => c.text() === '变量');
+      expect(variable, '变量 pill 应存在').toBeTruthy();
+      await variable!.trigger('click');
+      await flushPromises();
+      expect(w.findAll('#ld-panel-evidence .ld-bar:not(.ld-bar--head)').length).toBe(1);
+      expect(w.find('.ld-density__filter').text()).toContain('筛选：变量');
+
+      await w.find('.ld-density__filter button').trigger('click');
+      await flushPromises();
+      expect(w.findAll('#ld-panel-evidence .ld-bar:not(.ld-bar--head)').length).toBe(2);
+      expect(w.find('.ld-density__filter').exists()).toBe(false);
+      w.unmount();
+    } finally {
+      if (origDetail) detailMock.mockImplementation(origDetail);
+    }
+  });
+
+  it('点档位筛选整档概念，档位计数本身不变', async () => {
+    const detailMock = vi.mocked(liveGetLearnerDetail);
+    const origDetail = detailMock.getMockImplementation();
+    detailMock.mockResolvedValue(scopedDetail() as never);
+    try {
+      const w = await mountLd([]);
+      const head = w.findAll('.ld-sig-tier__head').find((b) => b.text().includes('已掌握'));
+      expect(head, '已掌握档位应存在').toBeTruthy();
+      await head!.trigger('click');
+      await flushPromises();
+      expect(w.findAll('#ld-panel-evidence .ld-bar:not(.ld-bar--head)').length).toBe(1);
+      // 档位计数仍保留（不因筛选而变）
+      expect(head!.text()).toContain('已掌握 1');
+      w.unmount();
+    } finally {
+      if (origDetail) detailMock.mockImplementation(origDetail);
+    }
+  });
+
+  it('按概念名过滤（2026-11-11 第二轮）：客户端筛行、空态可一键清除', async () => {
+    const detailMock = vi.mocked(liveGetLearnerDetail);
+    const origDetail = detailMock.getMockImplementation();
+    detailMock.mockResolvedValue(scopedDetail() as never);
+    try {
+      const w = await mountLd([]);
+      const rows = () => w.findAll('#ld-panel-evidence .ld-bar:not(.ld-bar--head)');
+      expect(rows().length).toBe(2);
+
+      const input = w.find('.ld-density__search');
+      expect(input.exists(), '按概念名过滤输入框应存在').toBe(true);
+      await input.setValue('递');
+      await nextTick();
+      expect(rows().length).toBe(1);
+      expect(rows()[0].text()).toContain('递归');
+
+      await input.setValue('不存在的概念');
+      await nextTick();
+      expect(rows().length).toBe(0);
+      expect(w.find('.ld-density__empty').text()).toContain('没有名称包含「不存在的概念」的概念');
+      await w.find('.ld-density__empty button').trigger('click');
+      await nextTick();
+      expect((w.find('.ld-density__search').element as HTMLInputElement).value).toBe('');
+      expect(rows().length).toBe(2);
+      w.unmount();
+    } finally {
+      if (origDetail) detailMock.mockImplementation(origDetail);
+    }
   });
 });

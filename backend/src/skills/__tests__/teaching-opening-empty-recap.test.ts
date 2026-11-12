@@ -7,6 +7,9 @@
  *
  * 2026-10-14 开场形态自由化（用户纠偏「不要课课同构」）后规则措辞重写：原「必须先承接」
  * 改为「不要求放开头、也不要求每课都承接」。本测试断言随之对齐新措辞，守的仍是同一件事。
+ *
+ * 2026-11-11 间隔迁移打通：retrievalCue 是可判定具体情境时改为「迁移开场优先」，只有明显
+ * 与本课无关才允许跳过；空数据出路仍保留（无数据 → 中性带过，禁止断言完成/掌握）。
  */
 const fs = require('node:fs')
 const path = require('node:path')
@@ -21,16 +24,17 @@ describe('teaching-opening-generator 空数据承接出路（P1-9）', () => {
   const mdText = fs.readFileSync(MD_PATH, 'utf8')
   const doc = yaml.load(yamlText) as { rules: string[] }
 
-  it('yaml 规则给出空数据出路：素材平淡不必硬承接 + 禁止断言完成/掌握', () => {
+  it('yaml 规则：迁移开场优先 + 无关才可跳过 + 禁止断言完成/掌握', () => {
     const rules = doc.rules.join('\n')
-    expect(rules).toContain('不必硬承接')
+    expect(rules).toContain('迁移开场优先')
+    expect(rules).toContain('明显与本课无关')
     expect(rules).toContain('不得断言上次已完成')
     expect(rules).toContain('不得从任务标题外推出成就')
     expect(rules).toContain('中性带过')
   })
 
-  it('编译 md 同样带上空数据出路（重编译已落地）', () => {
-    expect(mdText).toContain('不必硬承接')
+  it('编译 md 同样带上迁移与空数据出路（重编译已落地）', () => {
+    expect(mdText).toContain('迁移开场优先')
     expect(mdText).toContain('不得断言上次已完成')
     expect(mdText).toContain('不得从任务标题外推出成就')
   })

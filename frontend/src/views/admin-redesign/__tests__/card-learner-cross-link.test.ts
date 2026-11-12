@@ -51,7 +51,18 @@ import { subPage } from '../store';
 import { liveGetVirtualDetail } from '../live';
 
 async function mountProfile() {
-  const w = shallowMount(VirtualProfile);
+  /* 页头是共享 MkDetailHero：浅挂会把它整体桩掉，title 不落 DOM。
+     这里只摊开 title，用来确认详情已加载（断言依赖画像名出现在页面上）。 */
+  const w = shallowMount(VirtualProfile, {
+    global: {
+      stubs: {
+        MkDetailHero: {
+          props: { title: { type: String, default: '' }, sub: { type: String, default: '' }, avatar: { type: String, default: '' }, tone: { type: String, default: '' } },
+          template: '<header><h1>{{ title }}</h1><slot name="pills" /><slot name="actions" /></header>'
+        }
+      }
+    }
+  });
   await flushPromises();
   await nextTick();
   await flushPromises();

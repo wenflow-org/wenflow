@@ -220,11 +220,15 @@ export function mapKnowledgeStatusToMastery(
       stability = 'stable';
       break;
     case 'review':
-      score = 0.5;
+      // 复习点也带 progress：只给 0.5 会让“复习到 80%”和“刚打开题”同分。
+      score = Math.min(0.7, 0.35 + 0.35 * (p / 100));
       stability = 'fragile';
       break;
     case 'learning':
-      score = 0.35;
+      // 2026-11-11 P0：learning 不再固定 0.35。课堂 progress 85/90 的概念被写成
+      // 0.35 后会被卡点判据（<0.55）全部算成 struggling，进而触发假“建议重排”。
+      // 按 progress 单调插值，封顶 0.85；overconfident 再降 0.1 仍能让高进度跨过 0.65。
+      score = Math.min(0.85, 0.3 + 0.55 * (p / 100));
       stability = 'developing';
       break;
     case 'pending':
@@ -239,6 +243,8 @@ export function mapKnowledgeStatusToMastery(
   // 元认知校准闭环：overconfident → 降权（自报掌握度不可信），underconfident → 微升
   if (calibrationBias === 'overconfident') score = Math.max(0.1, score - 0.1);
   else if (calibrationBias === 'underconfident') score = Math.min(0.95, score + 0.05);
+  // 浮点收尾：0.35 + 0.35×0.5 会出 0.5249999999999999，落库/断言都按 3 位小数收。
+  score = Math.round(score * 1000) / 1000;
   return { masteryScore: score, stability };
 }
 

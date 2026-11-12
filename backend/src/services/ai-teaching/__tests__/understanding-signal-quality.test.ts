@@ -62,20 +62,20 @@ describe('shouldEmitCheckpoint：区分「没有 analysis」与「有 analysis �
     expect(shouldEmitCheckpoint(session, state)).toBe(false);
   });
 
-  it('有 analysis 但 understanding 为 null：不是「低理解度」→ 第 2 条消息不加速出题', () => {
+  it('有 analysis 但 understanding 为 null：不可观测 → 不出题（无收口信号不弹卡）', () => {
     const session = {
       messages: [
         { role: 'assistant' },
         { role: 'user', analysis: { understanding: null } },
       ],
     };
-    // 距上次出题 1 条 < 常规 4 条 → 不出题（旧口径下 null→0→2 条，则 1<2 同样不出；
-    // 关键区别在下一例：同一条数在低读数下会出题，在无读数下不出）
     expect(shouldEmitCheckpoint(session, state)).toBe(false);
   });
 
-  it('同一条数下「真低读数」会出题，而「无读数」不会——这就是修复的差别', () => {
-    // 首位 assistant 为开场欢迎语：节奏闸要求教师已有教学回复（assistant ≥2）
+  it('「真低读数」与「无读数」在新口径下都不出题——低读数需要支架，不是考题', () => {
+    // 2026-11-11 第二刀：旧的「<0.6 加速到 2 条消息」已删除；显性小测只在收口信号
+    // （上一轮 understanding ≥ 0.7 或焦点 progress ≥ 60）时作为通关证明出现。
+    // 首位 assistant 为开场欢迎语：教师已有教学回复（assistant ≥2）的结构闸保持不变。
     const messagesLowReading = [
       { role: 'assistant' },
       { role: 'assistant' },
@@ -87,11 +87,11 @@ describe('shouldEmitCheckpoint：区分「没有 analysis」与「有 analysis �
       { role: 'assistant' },
       { role: 'user', analysis: { understanding: null } },
     ];
-    expect(shouldEmitCheckpoint({ messages: messagesLowReading }, state)).toBe(true);
+    expect(shouldEmitCheckpoint({ messages: messagesLowReading }, state)).toBe(false);
     expect(shouldEmitCheckpoint({ messages: messagesNoReading }, state)).toBe(false);
   });
 
-  it('无读数等满常规节奏后仍可出题（不否决，只是不加速）', () => {
+  it('无读数即使节奏早已超过常规条数也不出题（无收口信号即不出）', () => {
     const messages = [
       { role: 'assistant' },
       { role: 'assistant' },
@@ -101,7 +101,7 @@ describe('shouldEmitCheckpoint：区分「没有 analysis」与「有 analysis �
       { role: 'user', analysis: { understanding: null } },
     ];
     expect(messages.length - 0).toBeGreaterThanOrEqual(CHECKPOINT_MIN_TURNS);
-    expect(shouldEmitCheckpoint({ messages }, state)).toBe(true);
+    expect(shouldEmitCheckpoint({ messages }, state)).toBe(false);
   });
 });
 

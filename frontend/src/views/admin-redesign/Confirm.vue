@@ -1,12 +1,13 @@
 <template>
   <Teleport to="body">
-    <div v-if="confirmState.open" ref="maskRef" class="mk-modal">
+    <div v-if="confirmState.open" ref="maskRef" class="mk-modal mk-modal--confirm">
       <div
         ref="panelRef"
         class="mk-confirm"
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="mk-confirm-title"
+        aria-describedby="mk-confirm-msg"
       >
         <!-- 结构 = 原型 openConfirm（newui .modal）：ovl__head（shield 图标 + 标题）/
              ovl__body 正文 / ovl__foot（取消左、危险确认右，均右对齐）三段贴边排布 -->
@@ -33,7 +34,7 @@
           <h2 id="mk-confirm-title" class="mk-confirm__title">{{ confirmState.title }}</h2>
         </div>
         <div class="mk-confirm__body">
-          <p class="mk-confirm__msg">{{ confirmState.message }}</p>
+          <p id="mk-confirm-msg" class="mk-confirm__msg">{{ confirmState.message }}</p>
           <label v-if="confirmState.input" class="mk-confirm__input">
             <span>{{ confirmState.input.label }}</span>
             <input
@@ -137,6 +138,8 @@ function confirm() {
   line-height: 1.7;
   color: var(--mk-muted);
   white-space: pre-wrap;
+  /* 正文常点名对象（20 位 ID / 邮箱 / URL）：不可断开的长串会把 480px 卡片顶出横向溢出 */
+  overflow-wrap: anywhere;
 }
 .mk-confirm__input { display: grid; gap: 6px; }
 .mk-confirm__input span { font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-muted); }
@@ -193,6 +196,9 @@ function confirm() {
   place-items: center;
   padding: 20px;
 }
+/* 二次确认比普通弹层高一档：它常从弹层内部发起（如「注册设置」关注册 / 开配额），
+   同层时会按注入顺序被那个弹层盖住。双类选择器稳压 .mk-modal 的 0,1,0。 */
+.mk-modal.mk-modal--confirm { z-index: var(--mk-z-confirm, 340); }
 .mk-btn {
   padding: 5px 14px;
   border-radius: var(--mk-radius-md);

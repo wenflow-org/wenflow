@@ -1,21 +1,14 @@
 <template>
-  <!-- 模型供应商与模型（BYOK 重做，2026-10-18；2026-10-19 去分区；2026-10-28 新人视角收敛）。
-       左=供应商列表（当前通道 + 其余启用中的上游；停用条目默认收起），右=选中供应商的详情
-       （服务地址、密钥三件套、模型清单可增删改、上游未登记折叠；当前通道的服务地址与密钥、
-        连通性验证由宿主经 #platform-detail 注入）。
-       2026-10-19 用户「就不分区，不要做什么平台提供，对于运营来说就是平台本身，自行接入又是什么
-       意义呢」：原先按 id==='platform' 硬切「平台提供 / 自行接入」两组，详情头还挂「平台提供」
-       徽标——那是「这条通道是谁给的」的来历视角，运营不需要，两栏看着还像两种东西。现在平铺成
-       一份供应商清单（当前通道排最前），来历词全部撤掉。
-       2026-10-28 用户「不应该出现新建供应商，走两家供应商的事情」：撤掉「添加供应商」入口，
-       新人只需要把当前通道配好；停用的示例条目不占第一屏。价格不再占模型表一列，收进模型编辑的
-       高级设置（单价只服务成本分析，不是接入路径）。
-       编辑是**即时保存**：点保存就落盘并热生效，不并入页脚保存条——只有当前通道的服务地址与
-       密钥仍是连接设置的脏位保存（那段表单由宿主经 #platform-detail 插槽注入）。
+  <!-- 对话模型卡（BYOK，2026-10-18 起；2026-11-11 路径 A 收敛为单通道）。
+       一条通道 = 页顶「服务连接」（地址 + Key），本卡只管这条通道下挂了哪些对话模型：
+       模型清单可增删改、「设为默认」、行内测试与上游清单勾选。
+       2026-11-11 用户「这页已经概念打架」：供应商 Tab / 供应商设置 / 「地址与密钥沿用服务连接」
+       全撤——没有独立 Key 的「供应商」只是个文件夹，不值得占一层导航。多供应商仍可在
+       backend/config/llm-providers.json 里配置并由运行时解析，只是不在这页做切换入口。
+       编辑是**即时保存**：点保存就落盘并热生效，不并入页脚保存条；连接的保存与重试策略
+       留在页顶那张「服务连接」卡里。
        运行面读数（配置漂移告警）另取 GET /admin/model-registry：编辑面只有配置值，
-       把「这个模型现在能不能用」也算在这里会让两个接口互相复述。
-       2026-11-04 用户「去掉降级这个功能，不要」：备用链与部署冷却随降级整条下线，
-       运行面只保留告警徽标。 -->
+       把「这个模型现在能不能用」也算在这里会让两个接口互相复述。 -->
   <section class="mk-card mpp">
     <!-- 2026-10-27 用户「这个重新设计，可以先放到第三个」：卡头承接通道身份与状态——
          平台通道 + 平台内置 + 连接状态，右侧是写盘状态与本页动作；详情里不再单起一行标题。
@@ -65,7 +58,7 @@
 
     <MkLoading v-if="loading && !view" inline text="读取接入通道…" />
     <MkEmptyState
-      v-else-if="failed"
+      v-else-if="failed && !suppressError"
       tone="error"
       title="接入通道读取失败"
       :description="errorText"
@@ -73,12 +66,11 @@
       @action="refresh(true)"
     />
 
-    <div v-else class="mpp-body">
-      <!-- 单列（2026-11-04 用户「还是不要左右结构了，把链接做到这个卡片右上角吧」）：
-           连接搬进卡头右组之后，正文只剩一块——模型清单，独占整卡宽度。
-           此前是两栏（左连接 / 右列表），连接被拎成 300px 的独立左栏、模型表被挤到 995px 里；
-           用户不需要这条通道接在哪与挂了哪些模型分成两竖列并排看，连接已上移到卡片右上，
-           正文这一段回到「一张清单」的本来形态。 -->
+    <div v-else-if="!failed" class="mpp-body">
+      <!-- 2026-11-11 用户「这页已经概念打架」：撤掉供应商条与「供应商设置」。
+           本页只有一条通道（页顶「服务连接」），对话模型平铺，向量 / 重排各自独立连接，
+           不再出现「地址与密钥沿用服务连接」这类补丁式说明。多供应商能力仍留在注册表文件里，
+           运行时照常解析，只是不在这页做切换入口。 -->
       <template v-if="selected">
         <section id="mpp-platform-panel-models" class="mpp-models">
           <!-- 上游异常（获取失败 / 有未保存清单）与卡头徽标同源，跟着列表一起看 -->
@@ -87,10 +79,10 @@
           <!-- 空模型时的下一步（2026-10-28 新人视角）：不丢一张空表，直接说清先做什么。
                2026-11-05 合并弹窗后，连接与模型清单在同一处，「去配置连接」不再指向卡头，
                而是直接把那张弹窗打开。 -->
-          <div v-if="selected.enabled && !selected.models.length" class="mpp-setup">
+          <div v-if="selected.enabled && !selected.models.length && !pullError" class="mpp-setup">
             <div class="mpp-setup__text">
               <strong>还没有挂载模型</strong>
-              <span>点「＋ 添加模型」填服务地址与密钥、拉到上游清单，再勾要挂的模型。手动录入在弹窗底部。</span>
+              <span>点「＋ 添加模型」向上游拉取清单，勾选要挂的模型。手动录入在弹窗底部。</span>
             </div>
             <button
               type="button"
@@ -105,6 +97,14 @@
                2026-11-03：每行补一行参数摘要——行里必须看得见配了什么，
                否则「配置」仍是一枚通向未知的按钮。 -->
           <div v-if="selected.models.length" class="mpp-models__list">
+            <!-- 列语义（2026-11-11）：此前没有表头，行里的「默认 / 思考 / 视觉」徽章与右侧
+                 四枚动作靠猜。列表不是表格（没有排序/列宽契约），用一行轻量列头说明
+                 三段的含义即可；状态列只在有告警时才有内容，列头仍常驻以固定动作列位置。 -->
+            <div class="mpp-models__head">
+              <span>模型 · 默认与能力</span>
+              <span>状态</span>
+              <span class="mpp-models__head-act">操作</span>
+            </div>
             <div v-for="m in selected.models" :key="m.id" class="mpp-model-row">
               <div class="mpp-model-row__main">
                 <div class="mpp-model-row__idline">
@@ -118,7 +118,7 @@
                     class="mk-badge mk-badge--default"
                     title="平台当前默认，未单独配模型的 Skill 都继承它"
                   >默认</span>
-                  <span v-for="tag in functionTags(m)" :key="tag" class="mk-badge mk-badge--muted mpp-fn__chip">{{ tag }}</span>
+                  <span v-for="tag in functionTags(m)" :key="tag" class="mk-badge mk-badge--muted mpp-fn__chip" :title="functionTagTitle(tag)">{{ tag }}</span>
                 </div>
                 <!-- 测试结果是这一行的第二行读数，与 id 行同一左缘、不占动作列
                      （2026-11-05 用户「调用通过确实还是换行好看一些」）：
@@ -129,9 +129,12 @@
                   :class="{ 'mk-rowres--bad': !testResults[m.id].ok }"
                   :title="testResults[m.id].text"
                 ><span class="mk-rowres__verdict">{{ testResults[m.id].ok ? '调用通过' : '调用失败' }}</span><span
-                  v-if="testResults[m.id].latency"
+                  v-if="testResults[m.id].ok && testResults[m.id].latency"
                   class="mk-rowres__meta"
-                >· {{ testResults[m.id].latency }}</span></span>
+                >· {{ testResults[m.id].latency }}</span><span
+                  v-else-if="!testResults[m.id].ok && testResults[m.id].reason"
+                  class="mk-rowres__meta"
+                >· {{ testResults[m.id].reason }}</span></span>
                 <!-- 2026-11-04 用户「不要这种文案，上『Avoid unnecessary secondary labels and
                      descriptions. Let the layout do the explaining.』」：每行原有的参数摘要
                      （默认输出 / 输出上限 / 并发 / 已配单价）整行撤除——它在 配置 弹层里，
@@ -148,8 +151,10 @@
                 <!-- 2026-11-07 用户「设置为默认从 ⋯ 里提出来」：行内四枚平铺，
                      不用先点 ⋯ 再猜里面有什么。已是默认的那一行不渲染「设为默认」——
                      它此刻无动作可做，禁用一枚不能点的链接只会制造噪音。 -->
+                <!-- 设为默认（2026-11-07 从 ⋯ 里提出来）：已停用的供应商不渲染——
+                     默认候选只取启用通道，指过去运行时没有可用 transport。 -->
                 <button
-                  v-if="!isDefaultModel(m)"
+                  v-if="selected.enabled && !isDefaultModel(m)"
                   type="button"
                   class="mk-link"
                   :disabled="busy || registry?.readOnly"
@@ -189,7 +194,8 @@
     <PullModelsDialog
       ref="pullDialog"
       :provider-id="selected?.id ?? ''"
-      :models="fetchableModels"
+      :models="upstream"
+      :types="upstreamTypes"
       :registered="[...registeredIds]"
       title="添加对话模型（LLM）"
       :loading="pullLoading"
@@ -208,13 +214,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { adminApiConfigApi, adminModelProvidersApi } from '@/api/adminApi'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
 import ModelEditorDialog, { type ModelLike } from './ModelEditorDialog.vue'
 import PullModelsDialog from './PullModelsDialog.vue'
 import { inferModelCapabilities } from './modelCapabilityInference'
+import { testFailureReason } from './modelTestHints'
 import { normalizeEfforts } from './reasoningEfforts'
 import { askConfirm } from './useConfirm'
 import { errMsg } from './live'
@@ -250,6 +257,8 @@ interface RegistryHealth {
 const props = withDefaults(defineProps<{
   /** 上游模型清单（宿主连接设置里拉到的，平台通道用） */
   upstream?: string[]
+  /** 上游模型软分类（id → 类型）：弹窗的「推荐对话 / 全部」视图用 */
+  upstreamTypes?: Record<string, string>
   /** 平台默认模型：没单独指定模型的 Skill 都走它。空 = 未设置，运行时不可用。
       平台只有这一个默认（2026-11-04 用户「为什么还在区分默认推理和对话，没有这个了」）。 */
   defaultModel?: string
@@ -259,8 +268,11 @@ const props = withDefaults(defineProps<{
   pullError?: string
   /** 连接在清单之后被改过：清单过期，先重拉再选 */
   pullStale?: boolean
+  /** 宿主已经用页面级错误态接管本次失败：子面板不再重复渲染自己的错误块 */
+  suppressError?: boolean
 }>(), {
   upstream: () => [],
+  upstreamTypes: () => ({}),
   defaultModel: '',
   pullLoading: false,
   pullError: '',
@@ -272,8 +284,8 @@ const emit = defineEmits<{
   changed: []
   /** 已登记的模型 id（宿主用它算「上游还有几个没登记」的关系句，避免两处各算一遍） */
   registered: [ids: string[]]
-  /** 平台通道已挂载的模型 id（只这一条通道，不含停用示例供应商）：宿主据此种/校正平台默认 */
-  platformModels: [ids: string[]]
+  /** 平台默认的候选（本页可见的对话模型）：宿主据此种/校正默认 */
+  defaultCandidates: [ids: string[]]
   /** ③ 点「添加模型」时清单还没拉过：请宿主先做 ②（拉取 + 落盘连接，成功后宿主会开勾选浮窗）。
       这条把原先「静默转手动录入」的死路补成一步可预期的动作。 */
   /** open = 打开弹窗时顺带拉的一次（只读）；refetch = 用户点「获取模型 / 重新获取」 */
@@ -285,6 +297,8 @@ const emit = defineEmits<{
   /** 模型被删除后通知宿主：若删的正是平台默认，宿主负责改指到下一个可用模型，
       否则默认会指向一个已不存在的 id（运行时同样报错）。 */
   removeModel: [modelId: string]
+  /** 本面板读取失败状态变化：宿主据此决定是否用页面级错误态接管，避免同屏两套错误 */
+  'error-change': [failed: boolean]
 }>()
 
 const view = ref<ProvidersView | null>(null)
@@ -292,12 +306,14 @@ const health = ref<RegistryHealth | null>(null)
 const loading = ref(false)
 const failed = ref(false)
 const errorText = ref('')
+watch(failed, (v) => emit('error-change', v), { immediate: true })
 const busy = ref(false)
 const actionError = ref('')
 const writeWarnings = ref<string[]>([])
 const testingId = ref('')
-/** 单模型测试结果（按模型 id 落在行内，不再用卡上方一条全局结果条） */
-const testResults = ref<Record<string, { ok: boolean; latency: string; text: string }>>({})
+/** 单模型测试结果（按模型 id 落在行内，不再用卡上方一条全局结果条）
+    reason：失败时的短判词（401 / 超时 / 连不上）——行内先给结论，完整报文进 title */
+const testResults = ref<Record<string, { ok: boolean; latency: string; text: string; reason?: string }>>({})
 /** 行内 ⋯ 菜单（低频/危险操作）：与公告、账号、虚拟学习者同一套实现 */
 
 const modelEditor = ref<InstanceType<typeof ModelEditorDialog> | null>(null)
@@ -306,30 +322,24 @@ const pullDialog = ref<InstanceType<typeof PullModelsDialog> | null>(null)
 const providers = computed(() => view.value?.providers ?? [])
 /** 目录文件状态（路径/可写/最近一次热重载错误）：模板里多处按它决定是否禁用编辑 */
 const registry = computed(() => view.value?.registry ?? null)
-/** 这一页只呈现平台通道（2026-10-27 用户「这个区域不要了」）：自建通道不再在页面里切换 */
+/** 本页只呈现平台通道（2026-11-11 路径 A：供应商概念不上屏）：自建通道仍可由注册表文件配置 */
 const selected = computed(() => providers.value.find((p) => p.id === 'platform') ?? null)
 
-/* 2026-10-21 用户「不要了」：卡头不再挂数据来源 / 生效方式；路径与最近错误进 LLM 徽标 title */
+/* 2026-10-21 用户「不要了」：卡头不再挂数据来源 / 生效方式；路径与最近错误进 LLM 徽标 title
+   2026-11-11 困惑测试 #101：全页统一叫「模型注册表文件」（后端报错同词），并说明本页保存即写文件 */
 const registryPathTitle = computed(() => {
   const r = view.value?.registry
   if (!r) return ''
-  const parts = [`配置文件：${r.path}`]
+  const parts = [`模型注册表文件：${r.path}`, '本页的添加 / 配置 / 保存会直接写入这个文件并热生效，无需登录服务器改文件']
   if (r.lastError) parts.push(`最近更新失败：${r.lastError}`)
   return parts.join('\n')
 })
 
 const registeredIds = computed(() => new Set(selected.value?.models.map((m) => m.id) ?? []))
-/** 上游模型清单：平台通道的清单来自连接设置（宿主注入）。只喂「添加模型」的勾选浮窗——
-    页面上不再单独出「已获取 N 个」的读数（2026-11-04 用户「上游清单这个我不太想要了」）。 */
-const fetchableModels = computed(() => props.upstream)
 /** 添加入口的悬停全文：它自带「先拉清单」这一步（这条暗规则写在按钮上，不藏） */
-const pullAddTitle = '按当前服务地址与密钥向上游拉取模型清单，拉到后勾选要挂载的模型'
+const pullAddTitle = '按页顶连接的服务地址与密钥向上游拉取模型清单，拉到后勾选要挂载的模型'
 
 /* ---------- 平台默认模型（P0 2026-11-04） ---------- */
-/** 行内「默认」徽章的判据：平台默认就是这个模型（只认运行时那个源 = DB） */
-function isDefaultModel(m: ModelLike): boolean {
-  return !!props.defaultModel && m.id === props.defaultModel
-}
 /**
  * 删除守卫的「这个模型被哪一处默认引用」（空串 = 可以删）。判据必须与后端 deleteModel 一致。
  *
@@ -344,8 +354,17 @@ function isDefaultModel(m: ModelLike): boolean {
  */
 function defaultRefOf(m: ModelLike): string {
   const fd = health.value?.registry?.fileDefaults
-  if (fd && (m.id === fd.chat || m.id === fd.reasoning)) return '注册表文件里的默认模型'
+  if (fd && (m.id === fd.chat || m.id === fd.reasoning)) return '模型注册表文件里的默认模型'
   return ''
+}
+/**
+ * 行内「默认」徽章的判据：默认存 DB，可能是裸 id，也可能是 `providerId/modelId` 限定式。
+ * 本页只展示平台通道，所以只认平台这一行。
+ */
+function isDefaultModel(m: ModelLike): boolean {
+  const d = props.defaultModel
+  if (!d) return false
+  return d === m.id || d === `${selected.value?.id}/${m.id}`
 }
 /** 「设为默认」只发意图：默认模型存 DB，由持有 live 配置的宿主落盘 */
 function requestDefault(m: ModelLike): void {
@@ -355,13 +374,11 @@ function requestDefault(m: ModelLike): void {
 /** 已登记模型 id 回传宿主（上游清单的关系句由宿主渲染，数据同源一次算） */
 function emitRegistered(): void {
   emit('registered', providers.value.flatMap((p) => p.models.map((m) => m.id)))
-  /* 平台默认只能选平台通道上的模型：`registered` 是全部供应商的并集（含停用的示例条目），
-     拿它当默认候选会把默认指到别的通道去，所以单独回传这一条通道的清单。 */
-  emit('platformModels', selected.value?.models.map((m) => m.id) ?? [])
+  // 默认候选 = 本页可见的对话模型（平台通道）；停用通道不参与
+  emit('defaultCandidates', selected.value?.enabled ? selected.value.models.map((m) => m.id) : [])
 }
 
-/** 详情头徽标：只出「能不能用」。「用连接设置」这一档返回 null——那句话由下面「连接」段
-    的连接徽标回答（同屏一处事实一个控件）。 */
+/** 详情头徽标：只出「能不能用」。「用连接设置」这一档返回 null——那句话由页顶服务连接卡回答 */
 function statusBadge(p: ProviderView): { cls: string; label: string } | null {
   if (p.status === 'inherit') return null
   if (p.status === 'disabled') return { cls: 'mk-badge--muted', label: '已停用' }
@@ -385,13 +402,21 @@ function warningLabel(m: ModelLike): string {
 /** 未配单价 = 成本分析页这个模型的金额会显示「—」，是可在模型编辑高级设置里补的配置缺口 */
 /** 模型能力标签：能力列只列「有没有」，类型不在这张表里猜。
  *  推理强度带档位读数（2026-11-05）：一台模型认哪几档是它自己的事，
- *  只写「推理强度」看不出这台模型到底能发 low 还是 max。 */
+ *  只写「推理强度」看不出这台模型到底能发 low 还是 max。
+ *  2026-11-11 困惑测试 #102：列表页与「配置」弹层统一叫「支持的推理挡位」，
+ *  并补悬停说明它声明的是可发档位、不是当前生效挡位（默认挡在弹层里另选）。 */
 function functionTags(m: ModelLike): string[] {
   const tags: string[] = []
   if (m.supportsThinking) tags.push('思考')
-  if (m.reasoningEfforts.length) tags.push(`推理强度 ${m.reasoningEfforts.join(' / ')}`)
+  if (m.reasoningEfforts.length) tags.push(`支持的推理挡位 ${m.reasoningEfforts.join(' / ')}`)
   if (m.vision) tags.push('视觉')
   return tags
+}
+function functionTagTitle(tag: string): string {
+  if (tag.startsWith('支持的推理挡位')) return '这台模型声明支持哪些推理挡位（请求里原样发出这些词，可在「配置」弹层增删）。当前默认挡位在「配置 → 默认推理挡位」里选'
+  if (tag === '思考') return '这台模型支持开思考（reasoning）'
+  if (tag === '视觉') return '这台模型支持图片输入'
+  return tag
 }
 async function refresh(force = false): Promise<void> {
   if (view.value && !force) return
@@ -447,7 +472,8 @@ async function removeModel(m: ModelLike): Promise<void> {
   busy.value = true
   actionError.value = ''
   try {
-    const res = await adminModelProvidersApi.removeModel(selected.value!.id, m.id)
+    const provider = selected.value!
+    const res = await adminModelProvidersApi.removeModel(provider.id, m.id)
     adopt(res?.data, res?.data?.warnings ?? [])
     // 通知宿主：删的若正是平台默认，宿主改指下一个可用模型（默认不能指向已删的 id）
     emit('removeModel', m.id)
@@ -473,6 +499,9 @@ async function reloadAfterDialog(warnings: string[]): Promise<void> {
 }
 
 async function testModel(p: ProviderView, modelId: string): Promise<void> {
+  /* 测试进行中不再接受第二次点（按钮已按 testingId 禁用，这里再挡一次
+     同一 tick 内的双击/回车重复触发）。 */
+  if (testingId.value) return
   testingId.value = modelId
   actionError.value = ''
   try {
@@ -482,7 +511,8 @@ async function testModel(p: ProviderView, modelId: string): Promise<void> {
       [modelId]: { ok: true, latency: `${res?.data?.data?.durationMs ?? 0}ms`, text: res?.data?.data?.content ?? '' }
     }
   } catch (e) {
-    testResults.value = { ...testResults.value, [modelId]: { ok: false, latency: '', text: errMsg(e) } }
+    const text = errMsg(e)
+    testResults.value = { ...testResults.value, [modelId]: { ok: false, latency: '', text, reason: testFailureReason(text) } }
   } finally {
     testingId.value = ''
   }
@@ -635,8 +665,23 @@ defineExpose({ refresh, openPull, openHostPull, openAdd: onPullAdd })
 /* 对话模型列表：与向量 / 重排配置区同一套「身份 + 状态 + 行内动作」语言，不用列头表格 */
 /* 行悬停通栏到卡片内缘、行内文字回到槽内：列表 −16px + 行 16px（2026-11-04 回到单列后又适用两侧）。 */
 .mpp-models__list { display: grid; margin: 0 -16px; }
+/* 轻量列头（2026-11-11）：与行共用三列栅格，标签只做语义提示，不参与交互。
+   动作列右对齐，与行内四枚链接的右缘对齐。 */
+.mpp-models__head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px auto;
+  gap: 14px;
+  align-items: center;
+  padding: 0 16px 6px;
+  border-bottom: 1px solid var(--mk-line);
+  color: var(--mk-faint);
+  font-size: var(--mk-fs-micro);
+  font-weight: 600;
+}
+.mpp-models__head-act { text-align: right; }
 .mpp-model-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px auto;
   align-items: center;
   gap: 14px;
   min-height: 52px;
@@ -655,7 +700,7 @@ defineExpose({ refresh, openPull, openHostPull, openAdd: onPullAdd })
 /* 名称列定宽：能力胶囊因此各行同一起点，不再随模型名长短而参差（2026-11-03 评审）。
    更长的 id 走省略号 + title，不再把后面的胶囊推着走。 */
 .mpp-model-row__id { width: 240px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mpp-model-row__status { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.mpp-model-row__status { grid-column: 2; display: inline-flex; align-items: center; gap: 6px; flex: none; }
 /* 空模型时的下一步：一句话 + 一个动作，不丢一张只有表头的空表 */
 .mpp-setup {
   display: flex;
@@ -680,7 +725,7 @@ defineExpose({ refresh, openPull, openHostPull, openAdd: onPullAdd })
 /* 默认徽章：实心主色 + 白字，全行唯一高亮。
    不用 --mk-blue 当底：它在暗色档被有意提亮成 #5b8def，白字只有 3.23:1
    （与 .mk-btn--primary 同款坑，见 mk-primitives.css:1631）。 */
-.mpp-rowacts { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.mpp-rowacts { grid-column: 3; display: flex; align-items: center; gap: 8px; white-space: nowrap; justify-self: end; }
 /* 删除与上面三枚之间多留一段空白：不可撤销动作不贴着高频正向动作放（准则 2 防误触） */
 .mpp-rowacts__danger { margin-left: 12px; }
 .mpp-empty { color: var(--mk-muted); font-size: var(--mk-fs-micro); }

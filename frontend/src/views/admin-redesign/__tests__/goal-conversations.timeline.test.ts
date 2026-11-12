@@ -16,7 +16,6 @@ import GoalConversations from '../GoalConversations.vue';
 
 const mockRouter = () => createRouter({ history: createMemoryHistory(), routes: [{ path: '/', component: { template: '<div />' } }] });
 import { dataSource } from '../store';
-import { timeAgo } from '../live';
 
 const { listMock, statsMock } = vi.hoisted(() => ({
   listMock: vi.fn(),
@@ -97,9 +96,12 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
     const dateEl = stageDateEl(wrapper);
     /* 2026-11-01 外部评审 P2：本列由绝对日期（8月13日）改为相对时间，与同页创建时间列
        及同事其它列表页统一；绝对时间退到悬停（不断言具体相对词，避免测试随当前日期漂移）。 */
-    expect(dateEl.text()).toBe(timeAgo('2026-08-13T04:00:00.000Z'));
+    expect(dateEl.text()).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
     expect(dateEl.attributes('title')).toContain('2026-08-13');
     expect(dateEl.attributes('title')).toContain('创建 08-12 → 澄清中 08-13');
+    // 2026-11-11 全站打磨：悬停的绝对时间统一 YYYY-MM-DD HH:mm，不再直出 UTC ISO
+    expect(dateEl.attributes('title')).toMatch(/最近活动 \d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
+    expect(dateEl.attributes('title')).not.toContain('T04:00:00.000Z');
     /* 教学组列序统一（2026-10-16）：身份 → 用户 → 状态 → 过程 → 时间 → 操作。
        原先把「最近活动」紧跟状态列（当状态伴侣），与同组其它页「时间列在过程之后」不一致；
        现移到澄清轮次之后、创建时间之前，两列时间收在表尾。约束条件默认隐藏（MkCols），不进可见表头。
@@ -142,7 +144,7 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
     const cell = wrapper.findAll('tbody tr')[0].findAll('td')[2];
     expect(cell.text()).toBe('已完成');
     const dateEl = stageDateEl(wrapper);
-    expect(dateEl.text()).toBe(timeAgo('2026-08-14T06:00:00.000Z'));
+    expect(dateEl.text()).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
     expect(dateEl.attributes('title')).toContain('2026-08-14');
     expect(dateEl.attributes('title')).toContain('创建 08-12 → 已完成 08-14');
     expect(wrapper.find('.gc-stage-cell__dot').exists()).toBe(false);
@@ -170,7 +172,7 @@ describe('GoalConversations 阶段时间线（遗留项：目标对话阶段进�
     const row = wrapper.find('tbody tr');
     expect(row.find('td .mk-badge').text()).toBe('已取消');
     const dateEl = stageDateEl(wrapper);
-    expect(dateEl.text()).toBe(timeAgo('2026-08-13T04:00:00.000Z'));
+    expect(dateEl.text()).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
     expect(dateEl.attributes('title')).toContain('2026-08-13');
     expect(dateEl.attributes('title')).toContain('创建 08-12 → 已取消 08-13');
     wrapper.unmount();

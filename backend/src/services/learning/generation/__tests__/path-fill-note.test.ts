@@ -8,6 +8,7 @@
 import { readFileSync } from 'fs';
 import {
   appendDescriptionNote,
+  buildCapacityDeficitNote,
   buildPathFillNote,
   PATH_FILL_DECLARE_RATIO,
   PATH_FILL_NOTE_MARKER,
@@ -180,5 +181,27 @@ describe('#55 写入链接线（源码守卫）', () => {
     // 存量行的 stage 档由 delivery-ratio 审计侧识别，生成链路不再产出。
     expect(source).toContain("declaration: pathFillNote ? 'path' : 'none'");
     expect(source).toContain('budgetConservation: reconciledConservation');
+  });
+});
+
+describe('buildCapacityDeficitNote', () => {
+  it('显式 20 分钟、10h 目标 / 6.7h 容量 → 说明缺口并给出需增加的坐学次数', () => {
+    const note = buildCapacityDeficitNote({
+      deficitRatio: 0.33,
+      requestedHours: 10,
+      capacityHours: 6.7,
+      sessionMinutes: 20,
+    }) as string;
+    expect(note).toContain('【课时容量提示】');
+    expect(note).toContain('6.7 小时');
+    expect(note).toContain('10 小时');
+    expect(note).toContain('10 次坐学'); // ceil(3.3h*60/20)=10
+    expect(note).toContain('当前路径先覆盖主干');
+  });
+
+  it('缺口 <10% / 装得下 / 无数据 → 不打扰用户', () => {
+    expect(buildCapacityDeficitNote({ deficitRatio: 0.05, requestedHours: 10, capacityHours: 9.6, sessionMinutes: 20 })).toBeNull();
+    expect(buildCapacityDeficitNote({ deficitRatio: 0.3, requestedHours: 6, capacityHours: 7, sessionMinutes: 20 })).toBeNull();
+    expect(buildCapacityDeficitNote({})).toBeNull();
   });
 });

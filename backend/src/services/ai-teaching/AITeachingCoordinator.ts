@@ -142,6 +142,11 @@ export interface ProcessStudentMessageOptions {
   /** 前端交互特征（认知负荷量测 · 前端情报层）：随学生消息落库并注入教学上下文 */
   interactionMeta?: InteractionMetaRecord | null;
   /**
+   * 学生随消息发来的图片（2026-11-12 视觉输入）：路由层已清洗（≤4 张、data:image/http URL、
+   * 尺寸封顶）。随 user 消息落库，并作为「学生本轮发来的图」进教学回合的视觉上下文。
+   */
+  images?: Array<{ url: string; caption?: string }>;
+  /**
    * 回合类型：默认 message（学生真实输入）；'resume-continue' = 断线恢复后的纯续讲回合——
    * 无学生新输入，不落库伪 user 消息，teaching-turn 仅凭历史 + session-resumed 事件自然接续。
    */

@@ -11,13 +11,13 @@
     <section class="mk-kpi-grid" aria-label="目标对话总量">
       <MkKpi
         label="目标对话数"
-        :value="stats?.total ?? '—'"
-        :value-note="recentCreated7d != null ? `近 7 天 +${recentCreated7d}` : ''"
+        :value="stats ? fmtCount(stats.total) : '—'"
+        :value-note="recentCreated7d != null ? `近 7 天 +${fmtCount(recentCreated7d)}` : ''"
       />
       <MkKpi
         label="完结率"
         :value="completionRatePct"
-        :value-note="stats ? `已完结 ${stats.completed}/${stats.total}` : ''"
+        :value-note="stats ? `已完结 ${fmtCount(stats.completed)}/${fmtCount(stats.total)}` : ''"
       />
       <!-- P-49（#74）：停滞会话此前只活在分布带 hint 里；升为卡，0 是健康信号。
            2026-10-26 动线：读数有对应行就得能落到那几行——点卡即筛「停滞」，
@@ -29,7 +29,7 @@
       <MkKpi
         label="停滞目标对话"
         :value="rows.length ? staleActiveCount : '—'"
-        value-note="当前列表内"
+        value-note="最近 1000 条窗口内"
         :tone="staleActiveCount ? 'warn' : ''"
         hint="进行中且超过 7 天未更新的对话"
         :clickable="!!rows.length"
@@ -38,16 +38,18 @@
         @click="stalledOnly = !stalledOnly"
       />
       <!-- 2026-10-27 用户「去掉这个 pill，综合设计 KPI 面板和筛选」：未生成路径原先只有卡头
-           chip、没有读数；升为 KPI 卡后，读数与入口都在这张卡上，chip 组整体退役。 -->
+           chip、没有读数；升为 KPI 卡后，读数与入口都在这张卡上，chip 组整体退役。
+           2026-11-11 二轮可用性：可点条件与「停滞」卡统一为「窗口内有行」——0 时点下去
+           筛出空集并显示「当前筛选无匹配 + 清除筛选」，不再是一张点了没反应的卡。 -->
       <MkKpi
         label="未生成路径"
         :value="rows.length ? pathPendingCount : '—'"
-        value-note="当前列表内"
+        value-note="统计范围：最近 1000 条"
         :tone="pathPendingCount ? 'warn' : ''"
         hint="还没有生成学习路径的目标对话"
-        :clickable="!!rows.length && pathPendingCount > 0"
+        :clickable="!!rows.length"
         :class="{ 'gc-kpi--on': noPathOnly }"
-        :aria-pressed="rows.length && pathPendingCount > 0 ? noPathOnly : undefined"
+        :aria-pressed="rows.length ? noPathOnly : undefined"
         @click="noPathOnly = !noPathOnly"
       />
     </section>
@@ -106,12 +108,11 @@
             :col-defs="gcColDefsFiltered"
             storage-key="wf_goal_hidden_cols_v3"
             :default-hidden="GC_DEFAULT_HIDDEN"
-            :fixed-cols="['用户', '操作']"
             v-model:hidden="gcHiddenCols"
           />
           <!-- 卡头 meta 只放分页器没有的事实：口径（真实/测试）由页头那个开关自明，
                这里再写一遍「（真实）」是同一状态复读（2026-10-19 用户走查「这个小文案不要」） -->
-          <span v-if="truncated" class="mk-card__meta">共 {{ listTotal }} 条 · 当前显示最近 {{ rows.length }} 条</span>
+          <span v-if="truncated" class="mk-card__meta">共 {{ fmtCount(listTotal) }} 条 · 当前显示最近 {{ fmtCount(rows.length) }} 条</span>
         </div>
       </div>
 
@@ -267,11 +268,11 @@ ${r.userEmail}` : r.userName"
             </td>
             <td v-if="showCol('stageDate')">
               <span v-if="r.timelineDate" :title="`阶段时间线 ${r.timeline}
-最近活动 ${r.timelineDateAbs}`">{{ r.timelineDate }}</span>
+最近活动 ${absDateTime(r.timelineDateAbs)}`">{{ r.timelineDate }}</span>
               <span v-else class="mk-na">—</span>
             </td>
             <!-- 相对时间是人话（「3 天前」），走正文无衬线；等宽只留给 id/代码类机器串 -->
-            <td v-if="showCol('created')"><span class="mk-cell-sub" :title="r.createdAtAbs">{{ r.createdAt }}</span></td>
+            <td v-if="showCol('created')"><span class="mk-cell-sub" :title="absDateTime(r.createdAtAbs)">{{ r.createdAt }}</span></td>
             <td>
               <div class="mk-actions">
                 <!-- 2026-11-09 用户走查「只有孤零零一个 ⋯，最常用的详情被藏进二级菜单」：
@@ -289,6 +290,7 @@ ${r.userEmail}` : r.userName"
                       class="mk-menu__item"
                       role="menuitem"
                       :disabled="r.regenerating || !canRegenerate(r)"
+                      :title="r.regenerating ? '正在生成路径' : !canRegenerate(r) ? '目标对话完成后才能生成路径' : (r.hasPath ? '按当前目标对话重建学习路径' : '按当前目标对话生成学习路径')"
                       @click="regenerate(r)"
                     >{{ r.regenerating ? '生成中…' : (r.hasPath ? '重建路径' : '生成路径') }}</button>
                     <button type="button" class="mk-menu__item mk-menu__item--danger" role="menuitem" @click="menuRemove(r)">删除目标对话</button>
@@ -350,6 +352,25 @@ import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
 import { emailSubline } from '@/components/mk/avatarName'
 import { adminGoalConversationsApi } from '@/api/adminApi'
 import { toast } from '@/utils/toast'
+
+/** 绝对时间悬停口径（全站统一 YYYY-MM-DD HH:mm）：toLocaleString 会渲染成 2026/11/11，禁止 */
+function absDateTime(value?: string | null): string {
+  if (!value) return ''
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return String(value)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+/** 计数统一千分位；null / 非法值不伪装成 0 */
+function fmtCount(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(Number(n))) return '—'
+  return Number(n).toLocaleString('zh-CN')
+}
+/** 相对时间；timeAgo 超过 30 天会回落成 2026/11/11（违反全站绝对时间口径），此时改绝对时间 */
+function relTime(value?: string | null): string {
+  const rel = timeAgo(value)
+  return /^\d{4}[-/]/.test(rel) ? absDateTime(value) : rel
+}
 
 interface Row {
   id: string
@@ -444,7 +465,7 @@ const gcStatusOptions = computed(() => [
   { value: '', label: '全部' },
   ...gcStatusPills.value
     .filter((p) => p.key !== 'all')
-    .map((p) => ({ value: p.key, label: p.n != null ? `${p.label}（${p.n}）` : p.label }))
+    .map((p) => ({ value: p.key, label: p.n != null ? `${p.label}（${fmtCount(p.n)}）` : p.label }))
 ])
 /** 默认 '' 与显式「全部」（'all'）是同一档：高亮与筛选都按这个归一键判断 */
 const gcStatusKey = computed(() => (statusFilter.value === 'all' ? 'all' : statusFilter.value || 'all'))
@@ -607,8 +628,11 @@ const ONGOING_STAGE_HINT: Record<string, string> = {
   ready: '方案已确认，等待生成路径'
 }
 
-/** 状态格悬停：进行中给阶段动作 + 第几步（终态只出状态词，不再解释） */
+/** 状态格悬停：进行中给阶段动作 + 第几步；2026-11-11（困惑测试 #17）终态补主语——
+ *  列表绿「已完成」只指目标澄清对话结束，读者在详情页会看到路径仍是「学习中 0/21」。
+ *  徽章词不动（2026-10-22 拍板「状态列只回答完成没有」），只把主语放进悬停。 */
 function statusCellTitle(r: Row): string | undefined {
+  if (r.status === 'completed') return '目标澄清对话已结束（主语＝目标对话，不代表学习路径学完。路径进度见详情）'
   if (!isOngoingStatus(r.status)) return undefined
   const hint = ONGOING_STAGE_HINT[String(r.stage || '').toLowerCase()] || '进行中'
   return `${hint} · 第 ${r.stageIndex + 1}/${GOAL_STAGE_TOTAL} 步`
@@ -659,7 +683,7 @@ function mapRow(c: Record<string, unknown>): Row {
     hasPath: !!c.learningPathId,
     pathId: c.learningPathId ? String(c.learningPathId) : null,
     // 格内相对时间 + createdAtAbs 绝对时间（title 悬停用；2026-10-03 修复 title=相对串自身的契约违约）
-    createdAt: timeAgo(String(c.createdAt || '')),
+    createdAt: relTime(String(c.createdAt || '')),
     createdAtAbs: String(c.createdAt || ''),
     updatedAt: String(c.updatedAt || ''),
     stageIndex: stageProgressIndex(stage),
@@ -675,7 +699,7 @@ function mapRow(c: Record<string, unknown>): Row {
     // 列、同事其它列表页的最近活动列都是 timeAgo 相对时间——同页两种口径，且绝对日期看不出
     // 到底离「近 7 天」有多远（KPI 卡就写着「近 7 天 +3」）。改相对时间，绝对时间退到悬停。
     // 无时间戳的老数据保持空串（渲染「—」）：timeAgo('') 会给「从未」，那是给创建时间列的语义
-    timelineDate: stageDateAbs ? timeAgo(stageDateAbs) : '',
+    timelineDate: stageDateAbs ? relTime(stageDateAbs) : '',
     timelineDateAbs: stageDateAbs,
     // 2026-11-01 外部评审 P1：KPI 卡说「未生成路径 1」，列表里却没有一列能指出是哪一条
     // （路径信息此前只并进状态列）。该列默认不进表（用户 2026-10-27 拍板默认口径不改），
@@ -821,7 +845,6 @@ async function load(force = false) {
     listTotal.value = 0
     stats.value = null
     loadError.value = `加载失败：${errMsg(e)}`
-    toast.error(loadError.value)
   } finally {
     loading.value = false
     markPageFetched('goal-conversations')

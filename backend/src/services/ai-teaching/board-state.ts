@@ -566,6 +566,15 @@ function describeByKind(kind: string, spec: Record<string, unknown>): string[] {
     frames.forEach((f, i) => {
       out.push(`- 第 ${i + 1} 帧「${String(f.label ?? '')}」：${joinItems(f.items) || '（空）'}`);
     });
+    // 丢帧可见性（2026-11-12）：归一化超上限截断时在 spec 上记 truncatedFrames。
+    // 必须向模型显式声明「这是系统截断」——实测模型会把自己的截断脑补成
+    // 「学生误以为板书只有几轮」并写进卡点（归因与事实相反）。
+    const truncatedFrames = Number(spec.truncatedFrames);
+    if (Number.isFinite(truncatedFrames) && truncatedFrames > 0) {
+      out.push(
+        `- 注意：板书因版面只显示了上面这 ${frames.length} 帧，另有 ${truncatedFrames} 帧被系统截掉，学生同样看不到被截掉的帧——这是系统行为，不是学生的误解，不要据此推断「学生以为板书只有几帧」。`,
+      );
+    }
     return out;
   }
 

@@ -7,7 +7,7 @@
        只有注册表里本就写着 reasoning 的条目不会被改成 chat。 -->
   <Teleport v-if="open" to="body">
     <div ref="maskRef" class="mk-modal">
-      <div ref="panelRef" class="mk-modal__panel mk-modal__panel--wide med-modal" role="dialog" aria-label="模型设置">
+      <div ref="panelRef" class="mk-modal__panel mk-modal__panel--wide med-modal" role="dialog" aria-label="模型设置" @keydown.enter="onEnterSubmit">
         <div class="mk-modal__head">
           <h3 class="mk-modal__title">{{ title }}</h3>
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="close">✕</button>
@@ -115,20 +115,22 @@
           </section>
 
           <section class="med-sec">
+            <!-- 2026-11-11 用户「这种文案不要有」：撤掉整行参数释义；
+                 单位并回字段名（三个 tokens 字段），并发留空即不限由占位符表达。 -->
             <div class="med-subrow">
               <h5 class="med-sub">调用限制</h5>
             </div>
             <div class="med-two">
               <label class="mk-field">
-                <span class="mk-field__label">输出上限</span>
+                <span class="mk-field__label">输出上限（tokens）</span>
                 <input v-model.number="form.maxOutputTokens" class="mk-field__input mono" type="number" min="1" placeholder="默认" />
               </label>
               <label class="mk-field">
-                <span class="mk-field__label">默认输出</span>
+                <span class="mk-field__label">默认输出（tokens）</span>
                 <input v-model.number="form.defaultMaxTokens" class="mk-field__input mono" type="number" min="1" placeholder="默认" />
               </label>
               <label class="mk-field">
-                <span class="mk-field__label">推理预留</span>
+                <span class="mk-field__label">推理预留（tokens）</span>
                 <input v-model.number="form.reasoningReserveTokens" class="mk-field__input mono" type="number" min="1" placeholder="默认" />
               </label>
               <label class="mk-field">
@@ -175,7 +177,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { adminModelProvidersApi } from '@/api/adminApi'
 import { errMsg } from './live'
 import MkSelect from '@/components/mk/MkSelect.vue'
@@ -350,6 +352,21 @@ function openWith(target: { providerId: string; model: ModelLike | null; presetI
   form.outputPer1M = m?.pricing?.outputPer1M ?? null
   labelTouched.value = false
   open.value = true
+  focusFirstEditable()
+}
+
+/** 自动聚焦第一个可编辑字段（2026-11-11 可用性）：
+    useOverlay 会聚焦面板内第一个 input，但编辑态的「模型 ID」是 disabled——focus 无效。
+    这里跳过禁用控件，落到「显示名称」等真正可编辑项。 */
+function focusFirstEditable(): void {
+  void nextTick(() => {
+    const el = panelRef.value
+    if (!el) return
+    const first = el.querySelector<HTMLElement>(
+      'input:not([disabled]), textarea:not([disabled]), select:not([disabled])'
+    )
+    first?.focus()
+  })
 }
 
 function close(): void {
@@ -367,7 +384,22 @@ function numOrNull(value: number | null): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
+/** Enter 提交（2026-11-11 可用性）：输入框回车即保存；按钮 / 下拉保持原生行为。
+    模型设置里没有 textarea，但保留排除以防后续加说明字段。 */
+function onEnterSubmit(e: KeyboardEvent): void {
+  if (e.isComposing) return
+  /* 字段自己的 Enter 处理器（如「添加挡位」的 @keydown.enter.prevent）已消费这次回车：
+     不再冒泡成整表单提交，否则会清掉它刚给出的校验错误。 */
+  if (e.defaultPrevented) return
+  const el = e.target as HTMLElement | null
+  if (!el || el.closest('button, textarea, select, [role="combobox"], [role="listbox"], .mk-select')) return
+  if (busy.value || !canSubmit.value) return
+  e.preventDefault()
+  void submit()
+}
+
 async function submit(): Promise<void> {
+  if (busy.value) return
   busy.value = true
   error.value = ''
   try {

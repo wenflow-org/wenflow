@@ -26,6 +26,7 @@ import {
 } from '../path-planning-hints';
 import {
   appendDescriptionNote,
+  buildCapacityDeficitNote,
   buildPathFillNote,
   reconcileDeliveryConservation,
 } from './path-fill-note';
@@ -302,7 +303,11 @@ async function enrichLearningPathWithAndersonInner(
         ?? (normalizedInput as any).confirmedProposal?.scope_size
         ?? null;
       const beforeHints = (normalizedInput as any).planningHints;
-      const afterHints = applyGranularityBoundsToHints(beforeHints, scopeSizeRaw);
+      const afterHints = applyGranularityBoundsToHints(
+        beforeHints,
+        scopeSizeRaw,
+        learningPath.milestones.length,
+      );
       if (afterHints !== beforeHints) {
         (normalizedInput as any).planningHints = afterHints;
         logger.info('[stage-enrichment] 颗粒度硬上界再钳生效', {
@@ -1344,7 +1349,8 @@ async function enrichLearningPathWithAndersonInner(
           ? canonicalConceptIdsByName.get(normalizeConceptKey(milestoneConcept.coreConceptName)) ?? null
           : null;
         if (stageHours !== null) {
-          pathNormalizedHours += stageHours;
+          // 路径总学时不再累加「逐阶段四舍五入后的小时」——那会把 375min 算成 6.4h。
+          // 末尾统一由 pathTotalMinutes/60 一次换算（与任务明细可逐条核对）。
           // 阶段级「时间说明」拼接已下线（2026-10-25 方向改造）：实证它把内部预算口径差
           // （锚 13h vs 任务 6h）裸露给学习者；预算链「承诺为顶」重锚后锚≈任务，触发源
           // 消失。真欠交付由路径级 buildPathFillNote 声明 + delivery 审计对账（delivery-ratio
@@ -1381,6 +1387,11 @@ async function enrichLearningPathWithAndersonInner(
       if (kcAnnotation) {
         kcAnnotation = bindKcLinksToSubtaskIds(kcAnnotation, subtaskIdByTaskKey);
       }
+      // 路径总学时 = 全部任务分钟一次换算（2026-11-11 R9）：逐阶段 round 再相加会把
+      // 375min 算成 6.4h（1.7+1.7+1.3+1.7），与任务明细对不上。
+      pathNormalizedHours = pathTotalMinutes > 0
+        ? Math.max(0.1, Math.round((pathTotalMinutes / 60) * 10) / 10)
+        : 0;
       // 终局预算夹（Frontier-100 R1 实证 F81：目标 3h，core 骨架 3h，stageDesign 按任务分钟
       // 回写后 4.5h）：core 夹只作用于骨架，逐阶段 1.25× 容差累加仍可把总量放大到目标 1.5×。
       // 全路径生成收尾时按目标等比缩放任务分钟与阶段学时，避免「夹在 core、涨在 stage」。
@@ -1464,6 +1475,18 @@ async function enrichLearningPathWithAndersonInner(
       const overloadDeclaration = capacityOverload
         ? `【时间预算提示】按你当前的学习节奏，这份路径全部学完约需 ${Math.round(pathTotalMinutes / 60)} 小时，超出你可用时间的约 ${Math.round((capacityOverload.ratio - 1) * 100)}%。目标本身不受影响，但按原节奏会超出期限：可以先专注前几个阶段，学完再续后面的，或适当增加每周学习时间。`
         : null;
+      // 结构容量缺口披露（2026-11-11）：用户明确“每次只能 20 分钟”时，单课硬上限会决定
+      // 结构最多装多少；装不下不是靠拉长单课或塞同质任务解决，而是如实告诉用户要加坐学/拆阶段。
+      // 只在全路径生成时写，避免追加/渐进模式把片段缺口误报成整条路径。
+      const planningCapacityDeficit = (normalizedInput as any)?.planningHints?.capacityDeficit;
+      const capacityDeficitNote = isFullPathRun && planningCapacityDeficit
+        ? buildCapacityDeficitNote({
+            deficitRatio: Number(planningCapacityDeficit.deficitRatio),
+            requestedHours: Number(planningCapacityDeficit.requestedHours),
+            capacityHours: Number(planningCapacityDeficit.capacityHours),
+            sessionMinutes: Number((normalizedInput as any)?.timeDimensions?.sessionsLengthMin) || null,
+          })
+        : null;
       const existingDescription = String(learningPath.description || '');
       // #55 路径级欠交付声明：计划→实际这一跳此前完全静默（阶段级只覆盖低于自身锚 70% 的阶段，
       // 路径级只有「超容量」一个方向）。计划优先取守恒层 after（容量夹取后的真实计划），无则退骨架锚。
@@ -1494,6 +1517,9 @@ async function enrichLearningPathWithAndersonInner(
       const descriptionNotes: string[] = [];
       if (overloadDeclaration && !existingDescription.includes('【时间预算提示】')) {
         descriptionNotes.push(overloadDeclaration);
+      }
+      if (capacityDeficitNote && !existingDescription.includes('【课时容量提示】') && !existingDescription.includes('容量说明')) {
+        descriptionNotes.push(capacityDeficitNote);
       }
       if (pathFillNote) descriptionNotes.push(pathFillNote);
       const descriptionWithNotes = descriptionNotes.reduce<string | null>(

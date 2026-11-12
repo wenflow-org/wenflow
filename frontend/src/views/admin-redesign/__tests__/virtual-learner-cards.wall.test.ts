@@ -132,7 +132,7 @@ describe('学习者卡库卡墙（2026-10-05 卡库改版 / 2026-10-06 二级页
     /* 2026-11-01：构成拆分在数值行的 value-note 上，卡内不再有说明行 */
     expect(w.find('.mk-kpi__hint').exists()).toBe(false);
     expect(w.find('.mk-kpi__num-note').text()).toContain('预置 1');
-    expect(w.find('.mk-kpi__num-note').text()).toContain('自建 1');
+    expect(w.find('.mk-kpi__num-note').text()).toContain('非预置 1');
     /* 2026-11-02 评审 R16：张数只在 KPI 上出现一次，卡墙卡头不再复读同一读数 */
     expect(w.findAll('.mk-card__meta').some((m) => m.text().includes('共 2 张'))).toBe(false);
     const wall = w.findAll('.vlc-card');
@@ -517,3 +517,30 @@ describe('卡头徽章对齐（2026-11-10）', () => {
     expect(rule, 'center 会让两行标题的卡把徽章压到中线').not.toContain('align-items: center');
   });
 });
+
+/**
+ * 2026-11-10 逻辑矛盾检索：批量派生上限与筛选/刷新后的选中清理。
+ * 后端 cloneCardsToLearners 的 CLONE_MAX_ITEMS = 20，卡库「全选本页」一页 30 张——
+ * 前端不挡就会出现「对话框说创建 30 个、后端 400 一次最多 20 张」。
+ */
+describe('批量派生上限与选中清理（2026-11-10）', () => {
+  it('勾选上限 20 张，提示只有一处文案', () => {
+    expect(Source).toMatch(/const DERIVE_MAX = 20/)
+    expect(Source).toContain('const DERIVE_MAX_NOTE')
+    expect(Source).toMatch(/if \(selected\.value\.length >= DERIVE_MAX\)/)
+    expect(Source).toContain('merged.slice(0, DERIVE_MAX)')
+  })
+
+  it('筛选变化清空选中；数据刷新按存活 id 收敛', () => {
+    expect(Source).toMatch(/watch\(\[keyword, tier\], \(\) => \{[\s\S]*?clearPick\(\)/)
+    expect(Source).toMatch(/watch\(cards, \(\) => \{[\s\S]*?const alive = new Set/)
+  })
+
+  it('「身份池已派空」用身份卡底册判断，不吃档位/关键词筛选', () => {
+    expect(Source).toContain('const wallCards = computed(() => cards.value.filter((c) => !isInstanceCard(c)))')
+    // 实例判据与后端 instance-scope 对齐：derivedFrom ∪ origin（旧服务端无 isInstance 才退回 derivedFrom）
+    expect(Source).toContain('c.isInstance ?? !!c.derivedFrom')
+    expect(Source).toContain('v-else-if="!wallCards.length && summary?.derived"')
+    expect(Source).not.toContain('v-else-if="!filtered.length && !keyword.trim() && summary?.derived"')
+  })
+})

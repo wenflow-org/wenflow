@@ -49,6 +49,7 @@ import {
   parseGoalConversationHistory,
   resolveGoalTurnState,
   buildGoalStepResult,
+  isRepetitiveLearnerReply,
 } from './simulation.goal.steps';
 import { persistAssistedLearnerMemory } from './simulation.memory';
 import aiTeachingOrchestrator from '../services/ai-teaching/AITeachingCoordinator';
@@ -551,19 +552,96 @@ export async function executeSingleStep(ctx: SimulationOrchestrator, input: Simu
         await ctx.addSessionLog(input.sessionId, log);
       }
 
+      const openingStage = String(goalResult.internal.core.stage || 'understanding');
+      const openingReady = isGoalConverged(openingStage);
+      const openingConversation = openingReady
+        ? await ctx.getGoalConversation(goalResult.internal.core.conversationId, input.userId)
+        : null;
+      const openingPathId = openingConversation?.learningPathId ?? null;
+
+      // answer-only / oneoff / referral 可能在开场一轮就完成且不生成路径：
+      // 这是合法终局，不能把会话推进到 path 阶段空等（2026-11-11 游泳案例实证）。
+      if (openingReady && !openingPathId) {
+        await ctx.updateSessionStatus(input.sessionId, 'completed', 'goal', goalResult.internal.core.conversationId);
+        await ctx.updateStageResults(input.sessionId, 'goal', {
+          ...((initialStageResults.goal as Record<string, unknown> | undefined) || {}),
+          learnerState: openingLearnerState,
+          opening: true,
+          conversationId: goalResult.internal.core.conversationId,
+          finalStage: openingStage,
+          noPath: true,
+          responseTriage: goalResult.internal.ext?.goalConversation?.responseTriage ?? null,
+        });
+        logs.push({
+          timestamp: new Date().toISOString(),
+          phase: 'stage-transition',
+          details: {
+            output: {
+              from: 'goal',
+              to: 'goal',
+              terminal: 'no-path',
+              stage: openingStage,
+              responseTriageMode: goalResult.internal.ext?.goalConversation?.responseTriage?.mode ?? null,
+            }
+          }
+        });
+        await ctx.addSessionLogs(input.sessionId, logs);
+        return {
+          success: true,
+          virtualUserReply: openingReply,
+          goalConversationResponse: {
+            userVisible: goalResult.userVisible,
+            stage: openingStage,
+            confidence: goalResult.internal.core.confidence,
+            quickReplies: goalResult.internal.ext?.goalConversation?.quickReplies?.map(q =>
+              typeof q === 'string' ? q : q.text
+            )
+          },
+          currentStage: 'goal',
+          goalReady: false,
+          noPath: true,
+          logs
+        };
+      }
+
+      if (openingReady && openingPathId) {
+        await ctx.updateSessionStatus(
+          input.sessionId,
+          'running',
+          'path',
+          goalResult.internal.core.conversationId,
+          openingPathId
+        );
+        return {
+          success: true,
+          virtualUserReply: openingReply,
+          goalConversationResponse: {
+            userVisible: goalResult.userVisible,
+            stage: openingStage,
+            confidence: goalResult.internal.core.confidence,
+            quickReplies: goalResult.internal.ext?.goalConversation?.quickReplies?.map(q =>
+              typeof q === 'string' ? q : q.text
+            )
+          },
+          currentStage: 'path',
+          goalReady: true,
+          logs
+        };
+      }
+
       return {
         success: true,
         virtualUserReply: openingReply,
         goalConversationResponse: {
           userVisible: goalResult.userVisible,
-          stage: goalResult.internal.core.stage,
+          stage: openingStage,
           confidence: goalResult.internal.core.confidence,
           quickReplies: goalResult.internal.ext?.goalConversation?.quickReplies?.map(q => 
             typeof q === 'string' ? q : q.text
           )
         },
         currentStage: 'goal',
-        goalReady: isGoalConverged(goalResult.internal.core.stage),
+        goalReady: false,
         logs
       };
     }
@@ -619,21 +697,77 @@ export async function executeSingleStep(ctx: SimulationOrchestrator, input: Simu
       // 避免历史落库字段遮蔽实时进度（issue #4 健壮性观察）
       goalState?.stage || (existingGoalState.finalStage as string | undefined) || (existingGoalState.stage as string | undefined)
     );
-    
+
+    const learnerReply = virtualReplyResult.output.reply;
+    // 真人会离场：模型自报 shouldEnd 是主信号；连续两条高度相似的告别/承诺是确定性兜底。
+    // 两者任一命中都不再跑下一轮 Goal 对话，避免「AI 收口 → 学习者再答应 → AI 再收口」死循环。
+    const learnedEndedByModel = virtualReplyResult.output.shouldEnd === true;
+    const repeatedFarewell = !learnedEndedByModel
+      && isRepetitiveLearnerReply(conversationHistory, learnerReply);
+
     logs.push({
       timestamp: new Date().toISOString(),
       phase: 'virtual-reply',
-      durationMs: Date.now() - virtualReplyStart,
+      durationMs: virtualReplyStart,
       details: {
         output: {
-            reply: virtualReplyResult.output?.reply,
+            reply: learnerReply,
           thoughtProcess: virtualReplyResult.output?.debug?.stateChangeReason,
           learnerState: currentGoalLearnerState,
           emotion: virtualReplyResult.output?.emotion,
+          shouldEnd: learnedEndedByModel,
+          endReason: virtualReplyResult.output?.endReason || null,
+          repeatedFarewell,
           runtimeEnvelope: virtualReplyResult.runtimeEnvelope || virtualReplyResult.output?.runtimeEnvelope || null,
         }
       }
     });
+
+    if (learnedEndedByModel || repeatedFarewell) {
+      const endReason = learnedEndedByModel
+        ? (virtualReplyResult.output.endReason || 'learner-ended')
+        : 'repetition-loop';
+      logs.push({
+        timestamp: new Date().toISOString(),
+        phase: 'virtual-leave',
+        details: {
+          output: {
+            reply: learnerReply,
+            reason: endReason,
+            source: learnedEndedByModel ? 'model' : 'repetition-guard',
+          }
+        }
+      });
+      await ctx.updateStageResults(input.sessionId, 'goal', {
+        ...existingGoalState,
+        concernPool,
+        disclosedConcerns,
+        learnerState: currentGoalLearnerState,
+        learnerEnded: true,
+        learnerEndReason: endReason,
+        learnerEndedAt: new Date().toISOString(),
+        lastReply: learnerReply,
+      });
+      await ctx.addSessionLogs(input.sessionId, logs);
+      logger.info('[simulation-coordinator] 虚拟学习者离场，Goal 回合提前收尾', {
+        sessionId: input.sessionId,
+        reason: endReason,
+        source: learnedEndedByModel ? 'model' : 'repetition-guard',
+      });
+      return buildGoalStepResult({
+        virtualUserReply: learnerReply,
+        goalResponse: {
+          userVisible: '',
+          stage: goalState?.stage || 'understanding',
+          confidence: 0,
+          quickReplies: [],
+        },
+        goalReady: false,
+        learnerEnded: true,
+        learnerEndReason: endReason,
+        logs,
+      });
+    }
 
     const nextDisclosedConcerns = inferDisclosedGoalConcerns(
       virtualReplyResult.output.reply,
@@ -661,9 +795,9 @@ export async function executeSingleStep(ctx: SimulationOrchestrator, input: Simu
           // 平台硬规则：proposing 阶段只有显式确认动作才会收束并触发 Path 生成。
           // 确认信号归学习者自己（2026-11-07 用户裁定）：模拟器在判断方案可行时用自己的
           // 口吻把确认说出来（提示词真源 virtual-learner-goal-dialogue-simulator.yaml），
-          // 后端按确认文本判定——白名单快路径 / confirmIntent 模型判意图（goal-conversation
-          // 侧已上线并经真机验证）。协调器不再按 readyToAdvance 代发：双方互为黑盒，
-          // agent 只认学习者实际说出的话。
+          // 后端按确认文本判定——按钮 flag 直通 / 打字走 goal-confirm-adjudicator 裁决
+          //（goal-conversation 侧已上线并经真机验证）。协调器不再按 readyToAdvance 代发：
+          // 双方互为黑盒，agent 只认学习者实际说出的话。
           // 旧跑数工具（batch-experiment / autopilot）若依赖代发确认，设
           // VIRTUAL_LEARNER_PROXY_CONFIRM=1 恢复旧行为——此时仍按诚实状态代发：
           // readyToAdvance===true 且 readyToProceed!==false 且 wantsClarification!==true
@@ -708,18 +842,76 @@ export async function executeSingleStep(ctx: SimulationOrchestrator, input: Simu
       goalResult.internal.core.stage
     );
 
-    if (goalReady) {
-      // 同步 learningPathId 到 virtual_session（goalConversationService 已自动触发 path 生成）
-      const updatedConversation = await prisma.goal_conversations.findUnique({
-        where: { id: session.goalConversationId }
+    const updatedConversation = goalReady
+      ? await prisma.goal_conversations.findUnique({ where: { id: session.goalConversationId } })
+      : null;
+    const goalPathId = updatedConversation?.learningPathId ?? null;
+    const goalCompletedWithoutPath = goalReady && !goalPathId
+      && (goalResult.internal.core.stage === 'completed' || goalResult.internal.core.stage === 'ready');
+
+    if (goalCompletedWithoutPath) {
+      // 合法的不排课终局：answer-only / oneoff 直答 / referral 硬阻断。
+      // 会话到此完成，不再空转到 path 阶段（2026-11-11 游泳/心理案例实证）。
+      await ctx.updateSessionStatus(
+        input.sessionId,
+        'completed',
+        'goal',
+        session.goalConversationId
+      );
+      await ctx.updateStageResults(input.sessionId, 'goal', {
+        ...existingGoalState,
+        success: true,
+        durationMs: Date.now() - startTime,
+        conversationId: session.goalConversationId,
+        finalStage: goalResult.internal.core.stage,
+        noPath: true,
+        learnerState: finalGoalLearnerState,
+        concernPool,
+        disclosedConcerns: nextDisclosedConcerns,
+        responseTriage: goalResponseTriage,
       });
-      
+      logs.push({
+        timestamp: new Date().toISOString(),
+        phase: 'stage-transition',
+        details: {
+          output: {
+            from: 'goal',
+            to: 'goal',
+            terminal: 'no-path',
+            stage: goalResult.internal.core.stage,
+            responseTriageMode: goalResponseTriage?.mode ?? null,
+          }
+        }
+      });
+      await ctx.addSessionLogs(input.sessionId, logs);
+      logger.info('[simulation-coordinator] Goal 对话终局且不生成路径', {
+        sessionId: input.sessionId,
+        stage: goalResult.internal.core.stage,
+        responseTriageMode: goalResponseTriage?.mode ?? null,
+      });
+      return buildGoalStepResult({
+        virtualUserReply: virtualReplyResult.output.reply,
+        goalResponse: {
+          userVisible: goalResult.userVisible,
+          stage: goalResult.internal.core.stage,
+          confidence: goalResult.internal.core.confidence,
+          quickReplies: goalResult.internal.ext?.goalConversation?.quickReplies?.map(q =>
+            typeof q === 'string' ? q : q.text
+          ),
+        },
+        goalReady: false,
+        noPath: true,
+        logs,
+      });
+    }
+
+    if (goalReady) {
       await ctx.updateSessionStatus(
         input.sessionId,
         'running',
         'path',
         undefined,
-        updatedConversation?.learningPathId
+        goalPathId ?? undefined
       );
       
       await ctx.updateStageResults(input.sessionId, 'goal', {
@@ -728,7 +920,7 @@ export async function executeSingleStep(ctx: SimulationOrchestrator, input: Simu
         durationMs: Date.now() - startTime,
         conversationId: session.goalConversationId,
         finalStage: goalResult.internal.core.stage,
-        learningPathId: updatedConversation?.learningPathId,
+        learningPathId: goalPathId,
         learnerState: finalGoalLearnerState,
         concernPool,
         disclosedConcerns: nextDisclosedConcerns,
@@ -743,7 +935,7 @@ export async function executeSingleStep(ctx: SimulationOrchestrator, input: Simu
           output: {
             from: 'goal',
             to: 'path',
-            learningPathId: updatedConversation?.learningPathId,
+            learningPathId: goalPathId,
             message: '路径已自动开始生成'
           }
         }

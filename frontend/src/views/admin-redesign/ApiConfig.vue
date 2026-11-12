@@ -21,10 +21,12 @@
          与模型表是同一个对象，此前单独一张卡叫「平台默认生成参数」，读起来像另一套设置。
          旧键 ?tab=routing / runtime / model-routing 仍归一到这里（TAB_ALIAS），书签不失效。 -->
     <div class="ac-tab-body ac-conn-body" id="ac-panel-access">
-      <!-- 接入域（live 层）读取失败：表单全空不得伪装成「未配置」，显式失败 + 重试 -->
-      <div v-if="apiConfigFailed" class="mk-alert mk-alert--row" role="alert">
-        <span class="mk-alert__msg">配置读取失败：为空不代表未配置</span>
-        <button type="button" class="mk-alert__btn" @click="retryApiConfigLoad">重试</button>
+      <!-- 模型与接入是一个数据域：live 配置、对话模型、向量 / 重排任一失败都只出一处页面级
+           错误态。子面板通过 error-change 上报，宿主统一接管重试；否则同一次后端失败会同时
+           出现「接入通道读取失败」「模型配置读取失败」与「配置读取失败」三套文案。 -->
+      <div v-if="panelFailure" class="mk-alert mk-alert--row" role="alert">
+        <span class="mk-alert__msg">{{ panelFailureText }}：列表为空不代表未配置</span>
+        <button type="button" class="mk-alert__btn" @click="retryAll">重试</button>
       </div>
 
       <!-- 服务连接（2026-11-07 用户「提回去」）：连接参数回到页面最上方常驻。
@@ -39,19 +41,21 @@
         <div class="mk-card__head ac-conn__head">
           <div class="ac-conn__id">
             <h3 class="mk-card__title">服务连接</h3>
-            <span v-if="keySet" class="mk-badge mk-badge--ok">已就绪</span>
-            <span v-else class="mk-badge mk-badge--warn">待配置</span>
+            <!-- 就绪 = 地址 + 密钥都齐（2026-11-11）：原判据只看 keySet，地址清空后
+                 卡头仍报「已就绪」，与下方向导弹窗的「待配置」互相矛盾。 -->
+            <span v-if="configUnknown" class="mk-badge mk-badge--warn" title="配置读取失败，当前不是确定态">读取失败</span>
+            <span v-else-if="connReady" class="mk-badge mk-badge--ok" title="地址与密钥齐全，可以测试连接">已就绪</span>
+            <span v-else class="mk-badge mk-badge--warn" :title="connMissingText">待配置</span>
           </div>
           <div class="mk-card__head-right ac-conn-summary">
             <span class="ac-conn-summary__chan">默认全局通道</span>
             <span class="ac-conn-summary__dot" aria-hidden="true">·</span>
             <!-- 只给主机：完整地址（含路径 / 查询）进 title 与弹窗，收起态不再拖一条长 URL
                  （2026-11-09 用户「隐藏具体 URL 和参数细节」） -->
-            <span class="mono ac-conn-summary__addr" :title="form.apiUrl || '未配置服务地址'">{{ summaryHost }}</span>
+            <span class="mono ac-conn-summary__addr" :title="configUnknown ? '配置读取失败，地址未知' : (form.apiUrl || '未配置服务地址')">{{ configUnknown ? '配置读取失败' : summaryHost }}</span>
             <span class="ac-conn-summary__dot" aria-hidden="true">·</span>
-            <span class="ac-conn-summary__key">{{ keySet ? '密钥已配置' : '未配置密钥' }}</span>
-            <span v-if="connFetchFailed" class="mk-badge mk-badge--bad">上次获取模型：失败</span>
-            <button type="button" class="mk-btn mk-btn--sm" :disabled="testing || !form.apiUrl.trim()" @click="testConn">{{ testing ? '测试中…' : '测试连接' }}</button>
+            <span class="ac-conn-summary__key">{{ configUnknown ? '密钥状态未知' : (keySet ? '密钥已配置' : '未配置密钥') }}</span>
+            <button type="button" class="mk-btn mk-btn--sm" :disabled="testing || configUnknown || !form.apiUrl.trim()" @click="testConn">{{ testing ? '测试中…' : '测试连接' }}</button>
             <!-- 2026-11-09 设计语言收敛：打开配置弹窗这类「开关」一律 mk-link
                  （会改服务状态的命令才走 mk-btn--sm：测试连接 / 保存），
                  与向量 / 重排卡头里的「连接配置」同一形态。 -->
@@ -130,7 +134,7 @@
             <div class="mk-modal__foot ac-conn__foot">
               <button
                 type="button"
-                class="mk-btn mk-btn--sm mk-btn--danger-ghost ac-conn__danger"
+                class="mk-btn mk-btn--danger-ghost ac-conn__danger"
                 :disabled="resetting"
                 title="只清本条通道的地址、密钥与模型清单"
                 @click="resetConfig"
@@ -151,12 +155,15 @@
       <ModelProvidersPanel
         ref="providersRef"
         :upstream="models"
+        :upstream-types="fetchedModelTypes"
         :default-model="defaultModel"
         :pull-loading="fetching"
         :pull-error="fetchError"
         :pull-stale="pullStale"
+        :suppress-error="panelFailure"
+        @error-change="providersFailed = $event"
         @registered="onProvidersRegistered"
-        @platform-models="onPlatformModels"
+        @default-candidates="onDefaultCandidates"
         @fetch-upstream="onFetchClick"
         @set-default="onSetDefault"
         @remove-model="onModelRemoved"
@@ -182,7 +189,11 @@
 
       <!-- 2026-10-28 用户「按能力角色拆成三个独立卡片」：向量 / 重排不再嵌在对话卡里，
            各自一张卡、各自一套连接（默认复用主通道，也可独立端点）。 -->
-      <InfraModelsPanel />
+      <InfraModelsPanel
+        ref="infraRef"
+        :suppress-error="panelFailure"
+        @error-change="infraFailed = $event"
+      />
 
     </div>
   </div>
@@ -227,11 +238,13 @@ import { toast } from '@/utils/toast'
 defineOptions({ name: 'ApiConfigPage' })
 
 /* 嵌入「系统设置」时不渲染自己的页头（页头与「刷新注册表」归宿主） */
-const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+const props = withDefaults(defineProps<{ embedded?: boolean; active?: boolean }>(), { embedded: false, active: true })
 void props
 
 /** 供应商面板（BYOK）：页头「刷新注册表」与写后重取都走它的 refresh */
 const providersRef = ref<{ refresh?: (force?: boolean) => void; openHostPull?: () => void } | null>(null)
+/** 向量 / 重排面板：页面级重试时一并重拉 */
+const infraRef = ref<{ load?: () => void } | null>(null)
 
 /* ---------- 平台默认模型（P0 2026-11-04） ----------
    为什么这里要有：默认模型只认 DB `platform_api_configs.defaultModel`，文件里的 `defaults`
@@ -246,6 +259,7 @@ const mountedModelIds = ref<string[]>([])
  * 首个挂载模型自动成为平台默认（只在默认为空时兜底一次）。
  * 已有默认绝不改写——默认是「没单独配的 Skill 走哪个」的落点，静默换掉它等于换掉一批技能的行为。
  * 失败不抛给用户：这是兜底便利，不是用户动作；他仍可在模型行的 ⋯ 里手动设。
+ * 2026-11-11 路径 A：本页只有平台通道，候选就是它挂载的对话模型。
  */
 const defaultSeeded = ref(false)
 async function seedDefaultModel(): Promise<void> {
@@ -253,7 +267,6 @@ async function seedDefaultModel(): Promise<void> {
   // 连接设置还有未保存改动时先不种：写默认会重拉配置回显，把未保存的连接改动冲掉
   if (dirty.value.has('conn')) return
   if (!cfg.value || defaultModel.value || !mountedModelIds.value.length) return
-  if (!cfg.value.apiUrl) return
   defaultSeeded.value = true
   try {
     const first = mountedModelIds.value[0]
@@ -298,8 +311,8 @@ function onProvidersRegistered(): void {
      保留处理器只为槽位契约不变（面板变更时仍会回传）。 */
 }
 
-/** 平台通道挂载的模型变更（增删后都会回传）：默认候选跟着它走，空默认时顺手种一个 */
-function onPlatformModels(ids: string[]): void {
+/** 默认候选（平台通道挂载的对话模型）：空默认时顺手种一个 */
+function onDefaultCandidates(ids: string[]): void {
   mountedModelIds.value = ids
   void seedDefaultModel()
 }
@@ -339,7 +352,7 @@ async function saveConn(): Promise<void> {
        拉失败时把弹窗还给用户，好让他就地改地址 / 重填密钥。 */
     connOpen.value = false
     await fetchModels('refetch')
-    if (connectionStatus.value === 'failed') connOpen.value = true
+    if (props.active && connectionStatus.value === 'failed') connOpen.value = true
     return
   }
   const ok = await saveGroups(['conn', 'reliability'])
@@ -365,7 +378,7 @@ const pullStale = computed(
 )
 
 /** 宿主（系统设置）的页头「刷新注册表」经此转发，不必去摸供应商面板的子 ref */
-defineExpose({ refresh: () => providersRef.value?.refresh?.(true) })
+defineExpose({ refresh: () => retryAll() })
 
 /** 注册表读数（只读总览回传）：上游清单与「已添加」的对照只用 models 这一段。
     与生成参数页签的别名映射是同一份接口，不重复请求。
@@ -380,9 +393,23 @@ defineExpose({ refresh: () => providersRef.value?.refresh?.(true) })
  * 读取成功后自动清除，无需本地维护）。
  */
 const apiConfigFailed = computed(() => !!liveFailures.value.apiConfig)
-/** 重试：重新走中央加载器拉取 apiConfig 域（liveFetchAt 未落 → 不会被 TTL 缓存跳过） */
-function retryApiConfigLoad() {
+/** 子面板读取失败：由各自 error-change 上报，宿主统一出一处页面级错误态 */
+const providersFailed = ref(false)
+const infraFailed = ref(false)
+const panelFailure = computed(() => apiConfigFailed.value || providersFailed.value || infraFailed.value)
+/** 横幅按失败源分主语：只坏向量 / 重排时不能再说「列表为空」或泛指整页 */
+const panelFailureText = computed(() => {
+  const parts: string[] = []
+  if (apiConfigFailed.value) parts.push('连接配置')
+  if (providersFailed.value) parts.push('对话模型')
+  if (infraFailed.value) parts.push('向量 / 重排')
+  return parts.length ? `${parts.join('、')}读取失败` : '模型与接入读取失败'
+})
+/** 页面级重试：三条同域请求一起重拉，避免只恢复其中一块、错误态互相打架 */
+function retryAll() {
   void loadLiveData()
+  providersRef.value?.refresh?.(true)
+  infraRef.value?.load?.()
 }
 /* 2026-10-28 用户「这一块彻底不要了」：平台默认与别名（思考模式 / 思考强度 / 输出格式 /
    别名映射）整块撤出。模型级生成参数仍在模型编辑里，平台不再提供一份兜底默认。 */
@@ -392,7 +419,11 @@ const form = reactive({
   apiKey: '',
 })
 const fetchedModels = ref<string[]>([])
+/** 上游模型软分类（id → llm/embedding/reranker/unknown）：与清单同一次拉取返回 */
+const fetchedModelTypes = ref<Record<string, string>>({})
 const keySet = ref(false)
+/** 配置是否成功读到过：失败时 keySet/form 都是空初始值，不能当作「未配置」 */
+const configLoaded = ref(false)
 const keyVisible = ref(false)
 const connectionStatus = ref('unknown')
 /** 本次会话内「获取模型」成功的时刻（connBadge「N 前」的时间源优先级高于 DB 落库值） */
@@ -479,6 +510,7 @@ function retryConfigLoad() {
 
 function applyLiveConfig() {
   if (!cfg.value) return
+  configLoaded.value = true
   form.apiUrl = cfg.value.apiUrl
   form.apiKey = ''
   fetchedModels.value = [...cfg.value.availableModels]
@@ -491,7 +523,7 @@ function applyLiveConfig() {
   /* 首次部署（启动脚本没给 AI_API_URL、库里也没有）：直接展开连接表单。
      这条判断必须放在这里而不是 setup 里——配置是异步拉回来的，初始那一拍 form.apiUrl
      恒为空，放在 setup 会让「已配好的通道」也一进来就展开。 */
-  if (!cfg.value.apiUrl.trim()) connOpen.value = true
+  if (props.active && !cfg.value.apiUrl.trim()) connOpen.value = true
 }
 
 watch(
@@ -503,7 +535,7 @@ watch(
     const pendingGroups = [...dirty.value].filter((g) => !savingGroups.value.has(g))
     if (pendingGroups.length > 0) {
       const ok = await askConfirm({
-        title: '丢弃未保存的配置修改?',
+        title: '丢弃未保存的配置修改',
         message: `配置数据已刷新,继续将覆盖以下未保存的修改:${pendingGroups.map((g) => DIRTY_GROUP_LABELS[g] || g).join(' / ')}。`,
         confirmText: '覆盖'
       })
@@ -521,7 +553,7 @@ onBeforeRouteLeave(async () => {
   if (dirty.value.size === 0) return true
   const ok = await askConfirm({
     title: '有未保存的配置修改',
-    message: `尚未保存的配置组:${dirtyGroups.value.join(' / ')}。离开将丢弃这些修改,确认离开?`,
+    message: `尚未保存的配置组:${dirtyGroups.value.join(' / ')}。离开将丢弃这些修改。`,
     confirmText: '丢弃并离开'
   })
   return ok === true
@@ -564,7 +596,6 @@ const hasUnsavedModels = computed(() => {
    但它的位置是弹窗标题下——连接回页顶、弹窗只挑模型之后，这枚徽标没有落点了。
    成功是一次动作的正常结果（点「重新获取」当场有 toast），不值得常驻；
    失败必须留下来：它是「拉不到清单」的唯一线索。 */
-const connFetchFailed = computed(() => connectionStatus.value === 'failed')
 
 /** 已配置密钥但改了服务地址且 Key 留空：密钥不会随地址迁移，需提示重新输入 */
 const keyHintNeeded = computed(
@@ -584,6 +615,17 @@ const testing = ref(false)
 
 /** 首次配置：还没填地址、或密钥还没配 → 主动作是「保存并获取模型」而不是「保存连接配置」 */
 const needsSetup = computed(() => !form.apiUrl.trim() || !keySet.value)
+/** 配置读取失败且从未成功读到过：卡头/摘要不能把空初始值说成「待配置 / 未配置」 */
+const configUnknown = computed(() => apiConfigFailed.value && !configLoaded.value)
+/** 服务连接是否就绪：地址与密钥缺一不可（卡头徽标与页顶摘要共用同一判据） */
+const connReady = computed(() => !configUnknown.value && !!form.apiUrl.trim() && keySet.value)
+/** 「待配置」的具体缺口：徽标悬停要能回答还差什么，而不是只给一个状态词 */
+const connMissingText = computed(() => {
+  const missing: string[] = []
+  if (!form.apiUrl.trim()) missing.push('服务地址')
+  if (!keySet.value) missing.push('API Key')
+  return missing.length ? `还缺：${missing.join('、')}` : '服务地址与 API Key 均已配置'
+})
 /** 连接配置弹窗开合（2026-11-09：原先是页面内展开的内联表单；没配地址时自动打开，
     首次部署就是要填它） */
 const connOpen = ref(false)
@@ -621,8 +663,8 @@ function closeConnDialog(): void {
   }
   void (async () => {
     const ok = await askConfirm({
-      title: '关闭并放弃连接改动?',
-      message: '关闭后未保存的服务地址 / 密钥 / 重试策略改动会丢弃，确定关闭?',
+      title: '关闭并放弃连接改动',
+      message: '关闭后未保存的服务地址 / 密钥 / 重试策略改动会丢弃。',
       confirmText: '放弃改动'
     })
     if (!ok) return
@@ -646,7 +688,7 @@ async function testConn(): Promise<void> {
   }
   testing.value = true
   try {
-    const list = await liveFetchModels(form.apiUrl, form.apiKey)
+    const { models: list } = await liveFetchModels(form.apiUrl, form.apiKey)
     toast.success(list.length ? `连接成功，上游返回 ${list.length} 个模型` : '连接成功，上游未返回模型列表')
   } catch (e) {
     toast.error(`连接失败：${errMsg(e)}`)
@@ -679,8 +721,9 @@ async function fetchModels(source: 'open' | 'refetch' = 'refetch'): Promise<void
   }
   fetching.value = true
   try {
-    const list = await liveFetchModels(form.apiUrl, form.apiKey)
+    const { models: list, types } = await liveFetchModels(form.apiUrl, form.apiKey)
     fetchedModels.value = list
+    fetchedModelTypes.value = types
     fetchedModelsEndpoint.value = form.apiUrl.trim()
     modelsFetchedOnce.value = true
     connectionStatus.value = 'connected'
@@ -702,8 +745,7 @@ async function fetchModels(source: 'open' | 'refetch' = 'refetch'): Promise<void
     connectionStatus.value = 'failed'
     connCheckedAt.value = new Date().toISOString()
     fetchError.value = errMsg(e)
-    // 打开弹窗时的那次失败不弹提示：弹窗里本来就有一行「连接失败：…」，再弹一遍是同一个事实说两次
-    if (!background) toast.error(`连接失败：${errMsg(e)}`)
+    // 弹窗与模型卡已有行内错误，不再叠同次失败的 toast
   } finally {
     fetching.value = false
   }
@@ -790,7 +832,7 @@ async function resetConfig() {
   const ok = await askConfirm({
     title: '重置平台通道的接入配置',
     message: '将删除平台通道已保存的服务地址、API Key、模型清单与平台默认生成参数。此操作不可撤销。',
-    confirmText: '确认重置'
+    confirmText: '重置'
   })
   if (!ok) return
   resetting.value = true
@@ -907,7 +949,7 @@ async function resetConfig() {
 .ac-key-toggle {
   flex-shrink: 0;
   border: 1px solid var(--mk-line);
-  background: #fafbfc;
+  background: var(--mk-surface-2);
   border-radius: var(--mk-radius-sm);
   width: 32px;
   height: 32px;
@@ -960,6 +1002,6 @@ async function resetConfig() {
 html[data-theme='dark'] {
   .ac-key-toggle:hover { background: color-mix(in srgb, var(--wf-color-primary) 14%, transparent); }
   /* 补漏：密钥切换钮浅底（模型胶囊随清单胶囊退役，2026-10-16） */
-  .ac-key-toggle { background: #232325; color: var(--mk-muted); }
+  .ac-key-toggle { background: var(--mk-surface-2); color: var(--mk-muted); }
 }
 </style>

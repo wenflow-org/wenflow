@@ -62,6 +62,28 @@ describe('triageGoalResponse 规则表', () => {
     expect(result.mode).toBe('combination');
   });
 
+  it('emotion_relationship × cognitive_internalized × judgeable_output → combination（2026-11-11 真机：结构化字段优先于词面）', () => {
+    const result = triageGoalResponse({
+      primary_block_type: 'emotion_relationship',
+      recurrence: 'recurring',
+      skill_nature: 'cognitive_internalized',
+      platform_judgment: 'judgeable_output',
+      block_type_evidence: '一被否定就控制不住情绪，要么顶回去要么整晚睡不着；深呼吸坚持两天就断',
+    });
+    expect(result.mode).toBe('combination');
+    expect(result.reasons.join('')).toContain('cognitive_internalized');
+  });
+
+  it('emotion_relationship × physical_internalized × not_judgeable → 仍 referral（不在情绪分支放宽）', () => {
+    const result = triageGoalResponse({
+      primary_block_type: 'emotion_relationship',
+      skill_nature: 'physical_internalized',
+      platform_judgment: 'not_judgeable',
+      block_type_evidence: '一上台就手抖',
+    });
+    expect(result.mode).toBe('referral');
+  });
+
   it('environment_tooling 无可学习成分 → referral', () => {
     const result = triageGoalResponse({
       primaryBlockType: 'environment_tooling',
@@ -97,8 +119,14 @@ describe('triageGoalResponse 规则表', () => {
     expect(result.mode).toBe('referral');
   });
 
-  it('oneoff_operation → combination', () => {
+  it('oneoff_operation → answer_then_hook（2026-11-11 方案二：一次性排障先直答+钩子，不排课）', () => {
     const result = triageGoalResponse({ primaryBlockType: 'oneoff_operation' });
+    expect(result.mode).toBe('answer_then_hook');
+    expect(result.reasons.join('')).toContain('现成解法');
+  });
+
+  it('oneoff_operation + 情绪支持需求 → combination（钩子让位给组合响应）', () => {
+    const result = triageGoalResponse({ primaryBlockType: 'oneoff_operation', supportNeed: 'emotional' });
     expect(result.mode).toBe('combination');
   });
 
@@ -196,6 +224,12 @@ describe('buildTriageAdvisoryLine 负向出口文案', () => {
     const line = buildTriageAdvisoryLine({ mode: 'combination', confidence: 'low', reasons: [] });
     expect(line).toContain('置信度低');
   });
+
+  it('answer_then_hook 文案给出止痛药口径 + 「生成排障课」钩子（2026-11-11 方案二）', () => {
+    const line = buildTriageAdvisoryLine({ mode: 'answer_then_hook', confidence: 'high', reasons: [] });
+    expect(line).toContain('现成解法');
+    expect(line).toContain('生成排障课');
+  });
 });
 
 describe('collectedData 承载读取与模式归一化', () => {
@@ -272,7 +306,7 @@ describe('问题结构轴：coupling/stakes 静默推断 + 三条件测试', () 
       surface_goal: '今天把两张表头不一样的月度表拼成一张能交差的总表',
       time_dimensions: { objectiveScopeHours: 0.8 },
     });
-    expect(r.mode).toBe('combination');
+    expect(r.mode).toBe('answer_then_hook');
     expect(r.reasons[0]).toContain('一次性微操作');
   });
 

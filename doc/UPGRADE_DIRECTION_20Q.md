@@ -329,7 +329,7 @@ OLM 自述、MRT、分层路由、成本护栏）基本正确；**错位的是�
 
 | 层 | 已被谁覆盖 | 本定位处置 |
 |---|---|---|
-| 基础设施安全 | `NON_FUNCTIONAL_GOVERNANCE_PLAN.md`（41 条 NF）+ `SECURITY.md` | 维持；不涉及 |
+| 基础设施安全 | `SECURITY.md` | 维持；不涉及 |
 | 教育科学性 | `LEARNING_SCIENCE_AUDIT.md` / `EDUCATIONAL_THEORY_MAP.md` | Q13/Q8 与其衔接（已自认阻尼陷阱/观察非因果） |
 | Prompt 工程 | `SKILL_PROTOCOL_V4.md` / `AGENT_IO_DESIGN_V3.md` | 轻量保留（Q11 第二档、Q14 防套取） |
 | 数据治理 | NF-P2-1（需决策，未做） | **不做**（见下） |
@@ -479,7 +479,7 @@ OLM 自述、MRT、分层路由、成本护栏）基本正确；**错位的是�
 - 难度/公平：`backend/src/services/learner/{TaskDifficultyAdjustmentService,independent-success-band.service,anchor-probe,LearnerSnapshotService}.ts`、`backend/src/services/ai-teaching/AITeachingCoordinator.ts`
 - 降级/质量：`backend/src/skills/{outcome.ts,degradation-telemetry.ts}`、`backend/src/scripts/audit-degradation-rate.ts`、`backend/src/services/yaml-vocabulary.ts`
 - 安全/内容：`backend/src/services/ai-teaching/input-fence.ts`、`prompts/core/{teaching-turn,session-wrapup}.yaml`
-- 隐私/删除：`backend/src/agents/learner-model-agent/types.ts`、`backend/src/services/virtual-lab/virtual-cleanup.service.ts`、`backend/src/routes/users.ts`、`backend/src/scripts/purge-soft-deleted-users.ts`、`doc/NON_FUNCTIONAL_GOVERNANCE_PLAN.md:735`
+- 隐私/删除：`backend/src/agents/learner-model-agent/types.ts`、`backend/src/services/virtual-lab/virtual-cleanup.service.ts`、`backend/src/routes/users.ts`、`backend/src/scripts/purge-soft-deleted-users.ts`
 - 生命周期/成本：`backend/src/services/learner/{churn-signals,truth-discovery}.ts`、`backend/src/scripts/audit-churn-signals.ts`、`backend/src/services/cost/model-cost.ts`、`backend/src/config/models.config.ts`
 - 人在环：`backend/src/services/learner/LearnerSnapshotService.ts:454`、`backend/src/services/learning/replan/path-replan.service.ts:781`、`backend/src/routes/admin/virtual-learners.assisted-path.ts`
 - DSL：`backend/src/services/yaml-vocabulary.ts`、`backend/src/services/prompt-lab/{core-compiler,core-file-loader}.ts`、`backend/src/services/skill-output-validator.ts`、`backend/src/gateway/api-gateway/{executor,router}.ts`

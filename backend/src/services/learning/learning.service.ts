@@ -66,6 +66,7 @@ import {
   markActiveGenerationFailed,
 } from './generation/path-generation.core';
 import { enrichLearningPathWithAnderson } from './generation/stage-enrichment';
+import { isProgressiveStageDesignEnabled } from './generation/progressive-design';
 import { ownerContextOverride } from './generation/owner-context';
 import { MANUAL_PATH_PROMPT_TEMPLATE } from './path-generation-gate';
 import {
@@ -128,7 +129,23 @@ class LearningService {
     pathUpdatedAt: Date
   ): Promise<string[]> {
     if (isAppendBlockedByInFlightGeneration(generationStatus, activeRun, pathUpdatedAt)) return [];
-    return this.listEmptyMilestoneIds(pathId);
+    return this.limitEmptyMilestonesForProgressive(await this.listEmptyMilestoneIds(pathId));
+  }
+
+  /**
+   * 渐进式设计下，冷启动/追加自愈只能补**最早一个**空阶段（stage N 完成后才设计 N+1）。
+   * 2026-11-11 真机实证：PROGRESSIVE_STAGE_DESIGN=1 时 stage 2 本应留空，但首课启动窗口
+   * 里 `retryPathEnrichment` 把所有空阶段一次性补齐，stage 2 在 stage 1 未完成时就被设计，
+   * previousStageOutcome 无从注入，等于退回 eager 全量设计。
+   */
+  private async limitEmptyMilestonesForProgressive(emptyIds: string[]): Promise<string[]> {
+    if (!isProgressiveStageDesignEnabled() || emptyIds.length <= 1) return emptyIds;
+    const first = await prisma.milestones.findFirst({
+      where: { id: { in: emptyIds } },
+      orderBy: { stageNumber: 'asc' },
+      select: { id: true }
+    });
+    return first ? [first.id] : [];
   }
   /**
    * 路径归属者是虚拟学习者 → 后台任务显式打 simulation 标。
@@ -258,7 +275,14 @@ class LearningService {
       sourceConversationId: generationStatus?.sourceConversationId || undefined,
       generationRunId: run.id,
       userProfile: {}
-    }, analysis, { appendOnly: true }), { pathId: path.id, runId: run.id, userId: path.userId }, await this.ownerContextOverride(path.userId));
+    }, analysis, {
+      appendOnly: true,
+      // 2026-11-11 三次真机：append 分支此前只传 appendOnly，stage-enrichment 内部又按
+      // listEmptyMilestoneIds 全量枚举 → 渐进模式下 stage 2 仍被一次性补齐。这里把调用方
+      // 已算好的目标阶段传下去，渐进模式再打 progressive（设计输入带学习者信号）。
+      restrictMilestoneIds: milestoneIds,
+      ...(isProgressiveStageDesignEnabled() ? { progressive: true } : {}),
+    }), { pathId: path.id, runId: run.id, userId: path.userId }, await this.ownerContextOverride(path.userId));
 
     return { retryCount: appendCount, runId: run.id };
   }
@@ -497,6 +521,20 @@ class LearningService {
   }
 
   /**
+   * 渐进式设计：只看**最早一个未完成阶段**。未来阶段为空是正常状态（stage N 完成后才设计
+   * N+1），不得当成绩效/重试目标。返回 null=没有未完成阶段；needsDesign=false=当前阶段已有任务。
+   */
+  private async progressiveDesignTarget(pathId: string): Promise<{ id: string; needsDesign: boolean } | null> {
+    const milestone = await prisma.milestones.findFirst({
+      where: { learningPathId: pathId, status: { not: 'completed' } },
+      orderBy: { stageNumber: 'asc' },
+      select: { id: true, subtasks: { select: { id: true }, take: 1 } }
+    });
+    if (!milestone) return null;
+    return { id: milestone.id, needsDesign: milestone.subtasks.length === 0 };
+  }
+
+  /**
    * 单路径自动重试判定与排队（全量测试报告 #52：逐路径独立执行——单条路径的瞬时 DB 故障
    * 不再拖垮整轮轮询；瞬时故障不消耗重试预算、不推进退避档位）。
    * 返回 true=本轮确实发起了重试。
@@ -515,12 +553,19 @@ class LearningService {
     activeGenerationRunId?: string | null;
     updatedAt: Date;
   }): Promise<boolean> {
+    let progressiveTargetId: string | null = null;
+    if (isProgressiveStageDesignEnabled()) {
+      const target = await this.progressiveDesignTarget(path.id);
+      // 当前阶段已有任务或路径已完成 → 不是阶段设计失败；未来阶段留空是渐进语义
+      if (!target || !target.needsDesign) return false;
+      progressiveTargetId = target.id;
+    }
     const generationStatus = parsePathGenerationStatus(await this.getPathTemplateMemoized(path.id, path.updatedAt));
     const activeRun = await getActiveGenerationRun(path.id, path.activeGenerationRunId);
     const retry = resolveGenerationRetry(path.status, generationStatus, activeRun, path.updatedAt);
     const canReplace = retry.allowed && retry.retryType === 'stageDesign';
     const replaceBudgetLeft = (generationStatus?.stageDesignRetryCount || 0) < ENRICHMENT_AUTO_RETRY_DELAYS_MINUTES.length;
-    const useReplace = canReplace && replaceBudgetLeft;
+    const useReplace = !progressiveTargetId && canReplace && replaceBudgetLeft;
 
     // 追加式自愈（两个入口）：
     //  ① replace 不可用（既非 failed 也非 stale）；或
@@ -529,7 +574,9 @@ class LearningService {
     // 生成在途时一律不追加（resolveAppendMilestoneIds 内已判，避免与在途生成重复）。
     let appendMilestoneIds: string[] = [];
     if (!useReplace) {
-      appendMilestoneIds = await this.resolveAppendMilestoneIds(path.id, generationStatus, activeRun, path.updatedAt);
+      appendMilestoneIds = progressiveTargetId
+        ? [progressiveTargetId]
+        : await this.resolveAppendMilestoneIds(path.id, generationStatus, activeRun, path.updatedAt);
       if (appendMilestoneIds.length === 0) return false;
     }
 
@@ -734,7 +781,17 @@ class LearningService {
       throw new Error('学习路径主结构尚未完成，暂不能继续生成阶段任务');
     }
 
-    if (retry.allowed && retry.retryType === 'stageDesign') {
+    // 渐进式设计：未来阶段为空是正常语义，不得触发 replace 全量设计；只看最早未完成阶段。
+    let progressiveTargetId: string | null = null;
+    if (isProgressiveStageDesignEnabled()) {
+      const target = await this.progressiveDesignTarget(path.id);
+      if (!target || !target.needsDesign) {
+        throw new Error('阶段任务已经准备完成，无需重试');
+      }
+      progressiveTargetId = target.id;
+    }
+
+    if (!progressiveTargetId && retry.allowed && retry.retryType === 'stageDesign') {
       const queued = await this.queuePathEnrichmentRetry(path, generationStatus);
       return {
         accepted: true,
@@ -754,7 +811,9 @@ class LearningService {
       || (generationStatus?.stageDesign === 'processing'
         && !isStageDesignStale(generationStatus, path.updatedAt));
     if (!generationInFlight) {
-      const emptyMilestoneIds = await this.listEmptyMilestoneIds(path.id);
+      const emptyMilestoneIds = await this.limitEmptyMilestonesForProgressive(
+        await this.listEmptyMilestoneIds(path.id)
+      );
       if (emptyMilestoneIds.length > 0) {
         const queued = await this.queuePathEnrichmentAppend(path, generationStatus, emptyMilestoneIds);
         return {

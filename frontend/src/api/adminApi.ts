@@ -1477,6 +1477,8 @@ export interface SkillReconciliationRow {
   active: boolean;
   noPromptFile: boolean;
   registrationExempt: boolean;
+  /** 注册点（豁免徽章的悬停说明用）：agents / platform-direct / none / skillHandlers… */
+  registrationPoint?: string | null;
   diff: 'unregistered' | 'active-missing' | null;
   completion: SkillCompletion;
 }
@@ -2489,6 +2491,10 @@ export const adminNotificationsApi = {
   },
   remove: async (id: string) => {
     return adminAxios.delete(`/admin/notifications/${encodeURIComponent(id)}`);
+  },
+  /** 管理员把一条通知标记为已读（2026-11-11 管理台困惑测试 #10） */
+  markRead: async (id: string) => {
+    return adminAxios.patch(`/admin/notifications/${encodeURIComponent(id)}/read`);
   },
 };
 

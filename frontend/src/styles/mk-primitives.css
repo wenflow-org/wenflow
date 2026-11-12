@@ -713,6 +713,9 @@ html[data-density='compact'] .mk-card__meta { font-size: 12px; }
   white-space: nowrap;
 }
 .mk-menu__item:hover { background: var(--mk-menu-item-hover-bg); color: var(--mk-ink); }
+/* 禁用项（2026-11-11 管理台困惑测试 #42）：此前没有 disabled 样式，禁用项与可点项同色同指针。 */
+.mk-menu__item:disabled { color: var(--mk-faint); cursor: not-allowed; }
+.mk-menu__item:disabled:hover { background: transparent; color: var(--mk-faint); }
 /* 暗色下弹层与页面底色只差一档，菜单像「页面被切掉一块」（2026-11-02 评审：
    行尾菜单只靠一圈细边勾边界）。弹层取次级表面，比卡面再亮一档。 */
 html[data-theme='dark'] .mk-menu__pop { background: var(--mk-surface-2); }

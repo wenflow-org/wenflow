@@ -3,6 +3,7 @@
        卡片外壳与「保存」由宿主承担——三项是同一份设置接口，分开保存会让「改了两项只按一个」
        的另一项悄悄没生效，脏态也只跟着改过的那一项走。 -->
   <div class="vl-settings">
+    <p class="vl-settings__intro">只约束虚拟学习者跑批：出站速率、自动驾驶并发与模拟日历。保存后对下一次运行生效，不影响真实学员。</p>
     <div class="vl-settings__limits">
     <div class="vl-settings__block">
       <div class="vl-settings__label">最高 RPM</div>
@@ -40,19 +41,30 @@
         <span class="vl-rpm__unit">个会话 · 1–200</span>
         <span class="vl-settings__read">{{ concurrencyReadout }}</span>
       </div>
+      <span class="vl-settings__blockhint">自动驾驶同时推进的会话数，超出的运行会排队。</span>
     </div>
     </div>
     <!-- 2026-10-28 用户「rpm 全站共享，虚拟学习者单独设置最高 rpm 就行了」：
          这里只是虚拟学习者自己的上限，不是全站额度——两者同时生效，说清免得被读成二选一。 -->
-    <p class="vl-settings__hint">虚拟学习者的独立上限。实际调用仍占用「模型与接入」里的全站 RPM 共享额度。</p>
+    <p class="vl-settings__hint">
+      虚拟学习者的独立上限。实际调用仍占用「模型与接入」里的全站 RPM 共享额度。
+      <a class="mk-link" href="/admin/system-settings?tab=api">查看全站额度 →</a>
+    </p>
 
     <!-- 日期模拟默认收起：它是一整套模拟日历（每天几节、每周几天、上课星期…），
          展开后比整张卡其余内容加起来还高。 -->
     <details class="vl-settings__block vl-settings__date">
       <summary class="vl-settings__summary">
         <span class="vl-settings__label">日期模拟</span>
+        <span class="vl-settings__summary-meta">{{ dayEnabled ? '已开启 · 跑批按模拟日历推进' : '已关闭 · 跑批按真实时间' }}</span>
       </summary>
-      <SimulatedDaySettings ref="dayRef" managed @dirty="dayDirty = $event" @failed="dayLoadFailed = $event" />
+      <SimulatedDaySettings
+        ref="dayRef"
+        managed
+        @enabled="dayEnabled = $event"
+        @dirty="dayDirty = $event"
+        @failed="dayLoadFailed = $event"
+      />
     </details>
 
     <p v-if="failed" class="vl-rpm__failed" role="alert">设置未加载，保存已禁用（请刷新重试）</p>
@@ -99,6 +111,7 @@ const loadFailed = ref(false)
 const saving = ref(false)
 
 const dayRef = ref<InstanceType<typeof SimulatedDaySettings> | null>(null)
+const dayEnabled = ref(false)
 const dayDirty = ref(false)
 const dayLoadFailed = ref(false)
 
@@ -226,5 +239,23 @@ onMounted(() => {
   font-size: var(--mk-fs-micro);
   font-weight: 700;
   color: var(--mk-red);
+}
+/* 抽屉不是表单墙：先一句说明这张卡管什么，再把每个上限的影响写在字段下面 */
+.vl-settings__intro {
+  margin: 0;
+  font-size: var(--mk-fs-micro);
+  line-height: 1.6;
+  color: var(--mk-muted);
+}
+.vl-settings__blockhint {
+  font-size: var(--mk-fs-micro);
+  line-height: 1.45;
+  color: var(--mk-faint);
+}
+.vl-settings__summary-meta {
+  margin-left: auto;
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-muted);
+  white-space: nowrap;
 }
 </style>

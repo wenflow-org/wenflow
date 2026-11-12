@@ -1,6 +1,6 @@
 ---
 agentId: skill:goal-confirm-adjudicator
-coreHash: 1d6f68425dad27312f5cff11256f8190b98aaee65aed61ce993569c49b3d3ef3
+coreHash: 72b4d56ebb825e9fba88eed1e424bbb9e6bb8cdd11801b4abb06f260a67a6ad6
 coreVersion: 1
 temperature: 0
 maxTokens: 64000
@@ -15,6 +15,9 @@ failurePolicy: retry
 ## 使用通道
 
 - dialogue：当前输入与近期对话切片（用于语境理解，不充当状态载体）
+
+输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
+- 「userUtterance（string）」`user:latestMessage`（用户/平台） — 用户刚发出的这段话（原文）——本 skill 唯一的判定对象
 
 ## 执行规则
 

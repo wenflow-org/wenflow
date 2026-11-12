@@ -38,9 +38,9 @@
       <label class="filter-item">
         <span class="filter-label">时间范围</span>
         <div class="filter-dates">
-          <input v-model="startDateInput" type="date" class="uc-field__input" @change="onStartDateChange" />
+          <input v-model="startDateInput" type="date" class="uc-field__input" aria-label="开始日期" @change="onStartDateChange" />
           <span class="filter-dates__sep">至</span>
-          <input v-model="endDateInput" type="date" class="uc-field__input" @change="onEndDateChange" />
+          <input v-model="endDateInput" type="date" class="uc-field__input" aria-label="结束日期" @change="onEndDateChange" />
         </div>
       </label>
       <label class="filter-item filter-item--switch">
@@ -63,7 +63,7 @@
            不是原始调用次数，故不写「总调用」；导出与列表同走折叠视图，两处条数一致。 -->
       <div class="stat-card">
         <span>记录条数（折叠后）</span>
-        <strong>{{ pagination.total }}</strong>
+        <strong>{{ loading ? '—' : pagination.total }}</strong>
       </div>
       <div class="stat-card">
         <span>成功率（本页）</span>
@@ -75,7 +75,7 @@
       </div>
       <div class="stat-card">
         <span>Token（本页）</span>
-        <strong>{{ totalTokens }}</strong>
+        <strong>{{ hasTokenSamples ? `${formatTokenCount(totalTokens)} tokens` : '—' }}</strong>
       </div>
     </div>
 
@@ -94,6 +94,9 @@
       <div v-else-if="!displayLogs.length" class="uc-empty">
         <strong>{{ emptyStateTitle }}</strong>
         <span>{{ emptyStateHint }}</span>
+        <button v-if="hasActiveFilters" type="button" class="uc-btn uc-btn--sm uc-empty__action" @click="resetFilters">
+          清除筛选
+        </button>
       </div>
 
       <template v-else>
@@ -101,7 +104,7 @@
            此前无任何横拖提示；补一行常显提示 + 常显横滚条（桌面档不显示不占位，走查 #43） -->
       <p class="scroll-hint" aria-hidden="true">← 左右滑动查看全部列 →</p>
       <div class="uc-table-wrap logs-scroll">
-        <table class="uc-table logs-table">
+        <table class="uc-table logs-table" aria-label="调用日志列表">
           <thead>
             <tr>
               <th>Agent</th>
@@ -118,20 +121,20 @@
           </thead>
           <tbody>
             <tr v-for="row in displayLogs" :key="row.id">
-              <td>{{ formatAgentId(row.agentId) }}</td>
+              <td>{{ formatAgentId(row) }}</td>
               <td><span class="uc-badge" :class="sourceBadgeClass(row)">{{ getLogSourceLabel(row) }}</span></td>
               <td class="uc-table__muted">{{ getCapabilityTypeLabel(row.agentId) }}</td>
               <td><span class="uc-badge" :class="row.success ? 'uc-badge--ok' : 'uc-badge--bad'">
                 {{ row.success ? '成功' : '失败' }}
               </span></td>
               <td class="uc-table__muted">{{ formatDuration(row.durationMs) }}</td>
-              <td class="uc-table__muted">{{ row.tokensUsed ?? '-' }}</td>
+              <td class="uc-table__muted">{{ formatTokenCount(row.tokensUsed) }}</td>
               <td class="uc-table__muted" :title="`来源：${getModelSourceInfo(row).label}`">{{ getModelSourceInfo(row).display }}</td>
               <td class="uc-table__muted logs-error-cell">{{ row.error || '-' }}</td>
               <td class="uc-table__muted">{{ formatDate(row.calledAt) }}</td>
               <td class="uc-table__right">
-                <button type="button" class="uc-btn uc-btn--link" @click="viewDetail(row)">详情</button>
-                <button type="button" class="uc-btn uc-btn--link" @click="copyLogFeedback(row)">复制</button>
+                <button type="button" class="uc-btn uc-btn--link" :aria-label="`查看「${formatAgentId(row)}」的日志详情`" @click="viewDetail(row)">详情</button>
+                <button type="button" class="uc-btn uc-btn--link" :aria-label="`复制「${formatAgentId(row)}」的排查信息`" @click="copyLogFeedback(row)">复制</button>
               </td>
             </tr>
           </tbody>
@@ -190,7 +193,7 @@
                 {{ currentLog.success ? '成功' : '失败' }}
               </span></div>
               <div class="detail-fact"><span>耗时</span><strong>{{ formatDuration(currentLog.durationMs) }}</strong></div>
-              <div class="detail-fact"><span>Token</span><strong>{{ currentLog.tokensUsed || '-' }}</strong></div>
+              <div class="detail-fact"><span>Token</span><strong>{{ formatTokenCount(currentLog.tokensUsed) }}</strong></div>
               <div class="detail-fact"><span>模型来源</span><strong>{{ getModelSourceInfo(currentLog).label }}</strong></div>
               <div class="detail-fact"><span>Provider</span><strong>{{ getModelSourceInfo(currentLog).providerName }}</strong></div>
               <div class="detail-fact detail-fact--wide"><span>Provider 地址</span><strong>{{ getModelSourceInfo(currentLog).providerBaseUrl }}</strong></div>
@@ -238,7 +241,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { toast } from '../../utils/toast';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
 import { getAgentLogDetail, getAgentLogs, exportAgentLogs } from '@/api/userCustom';
@@ -298,7 +302,22 @@ const loadError = ref('');
 const exportingFormat = ref<'' | 'json' | 'csv'>('');
 const exporting = computed(() => exportingFormat.value !== '');
 
+const route = useRoute();
+const router = useRouter();
+
 const filters = reactive({
+  agentId: '',
+  capabilityType: '',
+  success: undefined as boolean | undefined,
+  includeSystem: false,
+  startDate: '',
+  endDate: ''
+});
+
+/* 已提交给服务端的筛选快照。表单（filters）只在下拉/输入时改动，点「查询」才生效；
+   表格、统计、导出、详情都读这份快照，避免「改了能力下拉、还没点查询，本页表格就先变了」
+   这种一半生效的中间态。 */
+const applied = reactive({
   agentId: '',
   capabilityType: '',
   success: undefined as boolean | undefined,
@@ -351,6 +370,70 @@ const LIMIT_OPTIONS = [
   { value: 100, label: '100 条/页' }
 ];
 
+/* ---------- 筛选态 ↔ URL ----------
+   查询过的筛选、页码、每页条数写进 query：刷新、浏览器返回、把链接发给别人都不丢。
+   默认值不写键，URL 保持干净；replace 不影响历史项，也不清掉同页其它 query
+   （与学习路径列表的 filter/q 同口径）。 */
+const QUERY_KEYS = ['agent', 'capability', 'success', 'system', 'from', 'to', 'page', 'limit'] as const;
+
+function queryString(key: string): string {
+  const value = route.query[key];
+  return typeof value === 'string' ? value : '';
+}
+
+function readQueryState() {
+  const agentId = AGENT_OPTIONS.some((o) => o.value === queryString('agent')) ? queryString('agent') : '';
+  const capabilityType = CAPABILITY_OPTIONS.some((o) => o.value === queryString('capability'))
+    ? queryString('capability')
+    : '';
+  const successRaw = queryString('success');
+  const success = successRaw === 'true' ? true : successRaw === 'false' ? false : undefined;
+  const dateOf = (key: string) => (/^\d{4}-\d{2}-\d{2}$/.test(queryString(key)) ? queryString(key) : '');
+  const page = Number.parseInt(queryString('page'), 10);
+  const limit = Number.parseInt(queryString('limit'), 10);
+  return {
+    filters: {
+      agentId,
+      capabilityType,
+      success,
+      includeSystem: queryString('system') === '1',
+      startDate: dateOf('from'),
+      endDate: dateOf('to')
+    },
+    page: Number.isFinite(page) && page > 0 ? page : 1,
+    limit: LIMIT_OPTIONS.some((o) => o.value === limit) ? limit : 20
+  };
+}
+
+function applyQueryState() {
+  const state = readQueryState();
+  Object.assign(filters, state.filters);
+  Object.assign(applied, state.filters);
+  startDateInput.value = state.filters.startDate;
+  endDateInput.value = state.filters.endDate;
+  pagination.page = state.page;
+  pagination.limit = state.limit;
+}
+
+function syncQueryToUrl() {
+  const next: Record<string, string> = { ...(route.query as Record<string, string>) };
+  for (const key of QUERY_KEYS) delete next[key];
+  if (applied.agentId) next.agent = applied.agentId;
+  if (applied.capabilityType) next.capability = applied.capabilityType;
+  if (typeof applied.success === 'boolean') next.success = applied.success ? 'true' : 'false';
+  if (applied.includeSystem) next.system = '1';
+  if (applied.startDate) next.from = applied.startDate;
+  if (applied.endDate) next.to = applied.endDate;
+  if (pagination.page > 1) next.page = String(pagination.page);
+  if (pagination.limit !== 20) next.limit = String(pagination.limit);
+  void router.replace({ query: next }).catch(() => {});
+}
+
+const hasActiveFilters = computed(() => {
+  const f = applied;
+  return !!(f.agentId || f.capabilityType || typeof f.success === 'boolean' || f.includeSystem || f.startDate || f.endDate);
+});
+
 // 统计口径与表格一致：基于 displayLogs（客户端能力过滤后的当前页）。
 // 此前用未过滤的 logs，筛选「学习者模型」时成功率/耗时仍是全页的，数字对不上表。
 const successRate = computed(() => {
@@ -373,13 +456,25 @@ function formatDuration(ms?: number | null): string {
   return formatWaited(ms) ?? `${ms}ms`;
 }
 
+/** Token 计数：空值统一 '-'（与时长/错误列同符号）；有值加千分位，0 是真实值不吞掉 */
+function formatTokenCount(value?: number | null): string {
+  if (value == null || !Number.isFinite(value) || value < 0) return '-';
+  return value.toLocaleString('en-US');
+}
+
 const totalTokens = computed(() => {
   return displayLogs.value.reduce((sum, l) => sum + (l.tokensUsed || 0), 0);
 });
 
+/** 本页是否有任何一条带 Token 读数：全空时统计卡显示「—」而不是「0 tokens」
+    （0 会被读成「确实消耗了 0」，与本页日志未上报 Token 是两回事）。 */
+const hasTokenSamples = computed(() =>
+  displayLogs.value.some((l) => typeof l.tokensUsed === 'number' && Number.isFinite(l.tokensUsed))
+);
+
 const displayLogs = computed(() => {
-  return filters.capabilityType
-    ? logs.value.filter((log) => getCapabilityType(log.agentId) === filters.capabilityType)
+  return applied.capabilityType
+    ? logs.value.filter((log) => getCapabilityType(log.agentId) === applied.capabilityType)
     : logs.value;
 });
 
@@ -392,7 +487,7 @@ const displayLogs = computed(() => {
 const STRUCTURAL_EMPTY_CAPABILITIES: Record<string, string> = {
   tutoring: '平台暂无辅导类调用记录'
 };
-const structuralEmptyText = computed(() => STRUCTURAL_EMPTY_CAPABILITIES[filters.capabilityType] || '');
+const structuralEmptyText = computed(() => STRUCTURAL_EMPTY_CAPABILITIES[applied.capabilityType] || '');
 const emptyStateTitle = computed(() => structuralEmptyText.value || '暂无日志');
 /* 空态副文精简到一句指令（§7.3）：原「可切换到其他活动类型查看」既隔空指路（门禁 R2）
    又把「怎么操作」写了一遍，改为直接说换个类型试试。 */
@@ -411,6 +506,8 @@ let loadLogsSeq = 0;
 let detailSeq = 0;
 
 onMounted(() => {
+  // 刷新/返回时从 URL 恢复查询过的筛选与页码，再按该口径拉数据
+  applyQueryState();
   loadLogs();
 });
 
@@ -421,14 +518,41 @@ onMounted(() => {
  */
 const buildFilterParams = (): AgentLogQueryParams => {
   const params: AgentLogQueryParams = {};
-  if (filters.agentId) params.agentId = filters.agentId;
-  if (filters.capabilityType) params.capabilityType = filters.capabilityType;
-  if (typeof filters.success === 'boolean') params.success = filters.success;
-  params.includeSystem = filters.includeSystem;
-  if (filters.startDate) params.startDate = filters.startDate;
-  if (filters.endDate) params.endDate = filters.endDate;
+  if (applied.agentId) params.agentId = applied.agentId;
+  if (applied.capabilityType) params.capabilityType = applied.capabilityType;
+  if (typeof applied.success === 'boolean') params.success = applied.success;
+  params.includeSystem = applied.includeSystem;
+  if (applied.startDate) params.startDate = applied.startDate;
+  if (applied.endDate) params.endDate = applied.endDate;
   return params;
 };
+
+/* 浏览器返回/前进：URL 变了（不是本页 replace 触发的那次）就重新按新口径取数。
+   与当前已应用状态一致时直接跳过，避免自己写 URL 又触发一次请求。 */
+watch(
+  () => route.query,
+  () => {
+    const state = readQueryState();
+    const same =
+      state.filters.agentId === applied.agentId &&
+      state.filters.capabilityType === applied.capabilityType &&
+      state.filters.success === applied.success &&
+      state.filters.includeSystem === applied.includeSystem &&
+      state.filters.startDate === applied.startDate &&
+      state.filters.endDate === applied.endDate &&
+      state.page === pagination.page &&
+      state.limit === pagination.limit;
+    if (same) return;
+    Object.assign(filters, state.filters);
+    Object.assign(applied, state.filters);
+    startDateInput.value = state.filters.startDate;
+    endDateInput.value = state.filters.endDate;
+    pagination.page = state.page;
+    pagination.limit = state.limit;
+    loadLogs();
+  },
+  { deep: true }
+);
 
 const loadLogs = async () => {
   // 竞态守卫：seq 代际号 last-wins，快速翻页/连点查询时丢弃过期响应
@@ -451,7 +575,6 @@ const loadLogs = async () => {
     logs.value = [];
     pagination.total = 0;
     loadError.value = error?.response?.data?.error?.message || '无法读取调用日志，请稍后重试。';
-    toast.error('日志加载失败');
     console.error('加载日志失败:', error);
   } finally {
     if (seq === loadLogsSeq) loading.value = false;
@@ -459,7 +582,10 @@ const loadLogs = async () => {
 };
 
 const queryLogs = () => {
+  // 表单快照 → 已应用筛选；只有这一步之后表格/统计才跟着变
+  Object.assign(applied, filters);
   pagination.page = 1;
+  syncQueryToUrl();
   loadLogs();
 };
 
@@ -468,11 +594,13 @@ const totalPages = computed(() => Math.max(1, Math.ceil(pagination.total / pagin
 const goPage = (page: number) => {
   if (page < 1 || page > totalPages.value || page === pagination.page) return;
   pagination.page = page;
+  syncQueryToUrl();
   loadLogs();
 };
 
 const onLimitChange = () => {
   pagination.page = 1;
+  syncQueryToUrl();
   loadLogs();
 };
 
@@ -506,9 +634,11 @@ const resetFilters = () => {
   filters.includeSystem = false;
   filters.startDate = '';
   filters.endDate = '';
+  Object.assign(applied, filters);
   startDateInput.value = '';
   endDateInput.value = '';
   pagination.page = 1;
+  syncQueryToUrl();
   loadLogs();
 };
 
@@ -563,11 +693,11 @@ const copyDiagnosticsSummary = async () => {
   const payload = {
     exportedAt: new Date().toISOString(),
     filters: {
-      agentId: filters.agentId || null,
-      capabilityType: filters.capabilityType || null,
-      success: filters.success,
-      startDate: filters.startDate || null,
-      endDate: filters.endDate || null
+      agentId: applied.agentId || null,
+      capabilityType: applied.capabilityType || null,
+      success: applied.success,
+      startDate: applied.startDate || null,
+      endDate: applied.endDate || null
     },
     summary: {
       total: pagination.total,
@@ -628,7 +758,7 @@ const buildFeedbackPayload = (log: AgentLogItem) => {
 
 const formatDate = (date?: string) => {
   // 空值守卫：dayjs(undefined) 会返回当前时间，缺失时间戳应显示占位而非误导性的「现在」
-  if (!date) return '—';
+  if (!date) return '-';
   return dayjs(date).format('YYYY-MM-DD HH:mm:ss');
 };
 
@@ -1011,6 +1141,19 @@ html[data-theme='dark'] .filter-dates input[type='date'] {
   min-width: 1080px;
 }
 
+/* 表头与筛选器、正文同一套中英文混排：共享 .uc-table th 的 uppercase 会把 Agent/Token
+   拉成全大写，与同表中文列（来源/能力/状态…）排在一起像两种语言两种字号体系。
+   取消转换后复用 12px/700 的窄体表头，只留一点字距。 */
+.logs-table th {
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+/* 0 条且确有筛选时给出口：只写「调整筛选条件」会让用户自己回去猜是哪一项 */
+.uc-empty__action {
+  margin-top: 4px;
+}
+
 /* 横拖提示：桌面档不渲染（表能完整放下），仅窄屏档显示 */
 .scroll-hint {
   display: none;
@@ -1221,6 +1364,13 @@ html[data-theme='dark'] .filter-dates input[type='date'] {
   .stat-card { padding: 10px 12px; }
   .stat-card strong { font-size: 16px; }
   .logs-table td, .logs-table th { padding: 7px 8px; }
+
+  /* 行内两个文字动作按触控契约抬到 44×44（共享 .uc-btn--link 的 36px 是桌面档，
+     本页表格在窄屏要横拖，手指更容易点偏） */
+  .logs-table .uc-btn--link {
+    min-height: 44px;
+    padding: 10px 10px;
+  }
 
   .actions {
     width: 100%;

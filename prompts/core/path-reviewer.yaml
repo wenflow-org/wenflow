@@ -18,7 +18,7 @@ inputs:
     type: object
     ref: sandbox:path.normalizedInput
     desc: 目标上下文（surfaceGoal/confirmedProposal/successCriteria/learnerProfile）
-  - name: prerreqTree
+  - name: prerequisiteTree
     type: object?
     # #192：与 kc-mapper 同一数据键——运行时以顶层 prerequisiteTree 注入
     # （path-generation.core 评审调用），不在 normalizedInput 之下。
@@ -28,7 +28,7 @@ rules:
   - 只评审路径质量，不重写路径内容
   - 五维度评分（Clarity/Integrity/Depth/Practicality/Pertinence），每个维度 0-1 分
   - Clarity（清晰度）：每个 milestone 的 goal 是否可被独立理解？coreConcept 名称是否表达关系而非事物？milestone title 是否表达"认知动作 + 关系对象"？
-  - Integrity（完整性）：是否所有 unknownConcepts（来自 prerequisiteTree）都有对应 milestone？hub concept 是否被非首阶段 milestone 显式复用？milestone 数量是否在 planningHints 范围内？
+  - Integrity（完整性）：是否所有 unknownConcepts（来自 prerequisiteTree）都已**融入对应盲区阶段的破局透镜按需供给**（前置概念作为攻克盲区挑战的透镜材料出现即可——**禁止**要求在阶段 1 之前单独插入无挑战的「基础导论/预备知识阶段」，那是目录式空壳）？hub concept 是否被非首阶段 milestone 显式复用？milestone 数量是否在 planningHints 范围内（数量锁定只约束个数、不豁免盲区三律：空壳阶段应判 integrity 缺陷并要求原地换芯，不得要求插回导论段）？
   - Depth（深度）：cognitiveDomain 是否表达了可迁移的一体化能力，而非任务清单？coreConcepts 是否通过了三检验（可迁移/非任务/可指导）？
   - Practicality（实用性）：milestones 是否围绕 firstDeliverable 和 observableResult 组织？首阶段 milestone 是否直接服务于 firstDeliverable？**estimatedHours 是否与内容体量匹配**：存在客观内容体量锚（`goalContext.timeDimensions.objectiveScopeHours`；老数据回退 `scopeAnchorHours`）或窄目标（"只攻某一方向/一个知识点"）时，以内容体量为准，**不得**要求把课时填满用户的日历 timeBudget（日历只回答"能学多久"，不回答"内容有多少"；把窄目标撑到日历容量会直接违反 v61 窄目标语义）；无锚时才按 timeBudget 判断是否严重偏离。
   - Pertinence（适配性）：难度和节奏是否匹配 learnerProfile 中的水平标签和 backgroundExperience？若 learnerProfile 为 beginner/零基础，路径名称是否使用了"入门""基础"等词？
@@ -51,8 +51,8 @@ fields:
     desc: |
       具体缺陷列表，每项：
       { "dimension": "integrity", "severity": "medium",
-        "description": "concept-3 引入链式法则前未建立偏导数基础",
-        "suggestion": "在 concept-3 之前增加一个简短阶段，建立偏导数的基础理解" }
+        "description": "concept-3 链式法则的破局挑战未把偏导数作为透镜材料供上，学习者会在梯度推导处翻车",
+        "suggestion": "在 concept-3 的破局透镜中按需补上偏导数的判别口径（作为挑战材料，不单独增阶段）" }
   - name: passed
     type: boolean
     desc: overall ≥ 0.75 时为 true；false 时编排层触发路径重规划

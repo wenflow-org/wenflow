@@ -90,7 +90,7 @@ describe('记忆与调度：合并为单一页签', () => {
     expect(template).toMatch(/<MemoryReview[^>]*:compact-audit="true"/)
   })
 
-  it('合并后的记忆表含掌握度列（与记忆强度/复习到期/提取史/状态同表）', () => {
+  it('合并后的记忆表含掌握度列（与记忆强度/复习到期/回忆记录/状态同表）', () => {
     expect(Source).toContain("toggleMemSort('mastery')")
     expect(Source).toContain('>掌握度<')
     expect(Source).toContain('mastery: (r) => r.mastery')
@@ -131,20 +131,33 @@ describe('证据页纵向压缩', () => {
     expect(template).toContain('class="ld-ev-scroll"')
   })
 
-  it('证据双栏顶部对齐，左栏不被右栏拉高（消除半屏空卡框）', () => {
-    expect(Source).toMatch(/\.ld-ev-grid \{[^}]*align-items: start/)
+  it('证据页改为上方全宽仪表区 + 下方等高两栏（时间线与密度各自内滚）', () => {
+    // 2026-11-11 P2：旧版 1.6fr / 1fr + align-items:start 让左时间线（~712px）在右栏
+    // 四张卡（~1867px）旁留下大半屏空白。现为「仪表区通栏 + 下方两栏等高」。
+    expect(Source).toMatch(/\.ld-ev-top \{[^}]*grid-template-columns: minmax\(0, 1\.6fr\) minmax\(0, 1fr\)/)
+    expect(Source).toMatch(/\.ld-ev-grid \{[^}]*align-items: stretch/)
+    expect(Source).toMatch(/\.ld-ev-main,\s*\n\s*\.ld-ev-density \{ height: clamp\(420px, 54vh, 640px\)/)
+    expect(template).toContain('class="ld-ev-top"')
+    expect(template).toContain('class="mk-card ld-ev-density"')
+    expect(template).toContain('class="ld-density__scroll"')
   })
 
-  it('概念证据密度为单行紧凑结构（固定行高 28px，左名右条数）', () => {
+  it('概念证据密度为单行固定列结构（28px 行高，概念 / 掌握 / 证据三列同一基线）', () => {
     expect(Source).toMatch(/\.ld-bar \{[^}]*display: flex;[^}]*height: 28px/)
-    expect(Source).toMatch(/\.ld-bar__head strong \{[^}]*flex: 0 1 60%/)
-    expect(Source).toMatch(/\.ld-bar__badges \{[^}]*flex: 0 1 40%/)
-    // 条与计数同处 .ld-bar__badges（右侧）
+    // 三列定宽：掌握列无值也占位，否则条形起点会随胶囊有无左右跳（2026-11-11 用户截图）
+    expect(Source).toMatch(/\.ld-bar__head \{[^}]*grid-template-columns: minmax\(0, 1fr\) 60px 132px/)
     const anchor = template.indexOf('<h3 class="mk-card__title">概念证据密度</h3>')
     const density = template.slice(anchor, template.indexOf('</section>', anchor))
+    // 表头三列：概念 / 掌握 / 证据（条）
+    expect(density).toContain('>概念<')
+    expect(density).toContain('>掌握<')
+    expect(density).toContain('>证据（条）<')
     expect(density).toContain('ld-bar__track')
     expect(density).toContain('ld-bar__ev')
-    expect(density).toContain('ld-bar__badges')
+    expect(density).toContain('ld-bar__evidence')
+    expect(density).not.toContain('ld-bar__badges')
+    // 0 条不再写「暂无」：表头已给单位，行内只留数字，避免与掌握度并排读成矛盾
+    expect(density).not.toContain("'暂无'")
   })
 })
 

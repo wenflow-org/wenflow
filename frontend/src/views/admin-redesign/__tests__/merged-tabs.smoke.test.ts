@@ -115,6 +115,9 @@ describe('合并宿主页（导航收敛 2026-09-04）', () => {
     expect(w.findComponent(Users).exists()).toBe(true);
     expect(w.findComponent(LearnerCenter).exists()).toBe(false);
     expect(w.findAll('.tab').length).toBe(0);
+    // 注册设置挂在宿主页头（Users 在 People 里恒为 embedded，自带的页头状态条不渲染）
+    const actions = w.findAll('.mk-pagehead__actions button').map((b) => b.text());
+    expect(actions).toEqual(['注册设置', '新建用户']);
     w.unmount();
   });
 

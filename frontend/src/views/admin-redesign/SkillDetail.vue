@@ -10,9 +10,11 @@
          中文名降为副行别名，只出现一次。 -->
     <MkDetailHero avatar="S" :title="view.id" :sub="heroSub" :desc="heroDesc">
       <template #pills>
-        <!-- 健康徽标：带窗口词（「N 次失败」不带窗口会被读成全量，评审「窗口冒充全量」）且可点
-             → 运行时页签（健康+证据先于配置，评审「结论埋深」） -->
-        <button type="button" class="mk-badge skd-badge-btn" :class="healthBadge.cls" :title="healthBadge.title" @click="goRuntimeTab">{{ healthBadge.text }}</button>
+        <!-- 健康徽标：带窗口词（「N 次失败」不带窗口会被读成全量，评审「窗口冒充全量」）。
+             2026-11-11（困惑测试 #76）：只在真有失败时可点（落到执行日志的失败筛选）；
+             健康/空闲降级为静态徽章——原先恒为 button，点后零反馈。 -->
+        <button v-if="stat.errors > 0" type="button" class="mk-badge skd-badge-btn" :class="healthBadge.cls" :title="`${healthBadge.title}。点击按失败筛选打开执行日志`" @click="openFailureLogs">{{ healthBadge.text }}</button>
+        <span v-else class="mk-badge" :class="healthBadge.cls" :title="healthBadge.title">{{ healthBadge.text }}</span>
         <!-- 类别人话（Skills.vue:194 同字段判例）：裸枚举 teaching → 「教学」，title 保留原值备查 -->
         <span class="mk-badge mk-badge--muted" :title="`类别：${view.category}（来源：${view.categorySource}）`">{{ categoryText(view.category) }}</span>
         <!-- 2026-10-24 用户「还是重复部分」：生效模型只在运行时「生效值」里出现一次（带来源），
@@ -39,8 +41,10 @@
             :reload-tick="coreReloadTick"
             :system-prompt="systemPromptText"
             :prompt-state="promptStateText"
+            :prompt-error="promptError"
             :runtime-contract="overviewItem?.runtimeContract ?? null"
             @published="onPublished"
+            @reload="load(true)"
             @open-prompt="openPromptModal"
           />
         </div>
@@ -107,9 +111,20 @@
           <section class="mk-card">
             <div class="mk-card__head">
               <h3 class="mk-card__title">最近调用</h3>
-              <!-- #150：有数据时也带窗口口径——列表是日志采样窗口内的最近 5 条（store.recentSpansOf
-                   默认 limit=5），裸「N 条」会被读成全量（同屏指标卡可能显示 27852 次调用） -->
-              <span class="mk-card__meta">{{ recent.length ? `最近 ${recent.length} 条（近 7 天）` : '近 7 天记录' }}</span>
+              <div class="mk-card__head-right">
+                <!-- #150：有数据时也带窗口口径——列表是日志采样窗口内的最近 5 条（store.recentSpansOf
+                     默认 limit=5），裸「N 条」会被读成全量（同屏指标卡可能显示 27852 次调用） -->
+                <span class="mk-card__meta">{{ recent.length ? `最近 ${recent.length} 条（近 7 天）` : '近 7 天记录' }}</span>
+                <!-- 排查最常用的一跳（2026-11-11 第二轮）：列表只到单条 Trace，看「全部调用 / 为什么失败」
+                     需要按该 Skill 过滤的执行日志。复用 ExecLogs 的 URL 契约（?agent=&range=，AdminConsole
+                     由 intent 落 URL），不改后端；单条「看 Trace」仍保留在行上。 -->
+                <button
+                  type="button"
+                  class="mk-link skd-loglink"
+                  :title="`在执行日志里查看 ${skillId} 近 7 天的全部调用（失败行可再点进 Trace）`"
+                  @click="openSkillLogs"
+                >查执行日志</button>
+              </div>
             </div>
             <div class="skd-pad skd-rows">
               <button v-for="s in recent" :key="s.id" type="button" class="skd-call" :title="recentRowTitle(s)" @click="goTrace(s.traceId)">
@@ -117,7 +132,7 @@
                 <span class="skd-call__title">{{ recentRowText(s) }}</span>
                 <!-- 发生时间（2026-10-24 用户「最近调用可以加上调用时间」）：同日只给时:分，
                      跨天带月-日；完整时刻在 title -->
-                <span v-if="s.ts" class="mono skd-call__time" :title="callTimeFull(s.ts)">{{ callTimeLabel(s.ts) }}</span>
+                <span v-if="s.ts" class="mono skd-call__time" :title="absDateTime(s.ts)">{{ callTimeLabel(s.ts) }}</span>
                 <span class="mono skd-call__ms">{{ fmtMs(s.durationMs) }}</span>
               </button>
               <MkLoading v-if="!recent.length && recentServer === null" inline text="最近调用加载中…" />
@@ -133,6 +148,12 @@
           <!-- 2026-11-06 整合：这里原本还有一张「工程信息」kv 卡，与 EngineeringTab 的「基础信息」
                是同一批事实的第二套呈现（且一套是 .mk-facts、一套是手搓表）。合成一套，只留页签内那份。 -->
           <EngineeringTab v-if="overviewItem" :skill-id="skillId" :overview="overviewItem" />
+          <!-- P0（2026-11-11）：overview 拉取失败 / 该 Skill 不在 agent-overview 里时，
+               此前这一整块静默消失（读者以为页面就长这样）。给一句可读的缺失说明；
+               版本表与 Prompt 段仍可用，不受影响。 -->
+          <div v-else-if="!loading" class="skd-pad">
+            <p class="mk-empty--line">未取到该 Skill 的登记元数据（文件路径 / 哈希 / 运行时契约）。版本与 Prompt 操作不受影响。</p>
+          </div>
         </div>
 
         <!-- ========== 字段路由（原独立页签，2026-11-08 并入「指令与字段」）
@@ -142,51 +163,74 @@
           <!-- 2026-10-31 外部评审拍板：本页签原有两套 26 行大表同屏堆叠（只读流向表 +
                设计区块契约表）。两者语义不同不合并，改为页签内视图切换：默认流向视图（只读），
                「契约编辑」进设计区块（字段血缘 + 加字段向导）。 -->
-          <!-- 2026-11-06：分段控件改用共享 .mk-seg（原 .skd-rswitch 是本页第三套分段方言） -->
-          <div class="mk-seg sdp-seg" role="group" aria-label="字段路由视图切换">
-            <button
-              type="button"
-              class="mk-seg__item"
-              :class="{ 'mk-seg__item--active': routingView === 'flow' }"
-              @click="routingView = 'flow'"
-            >流向视图</button>
-            <button
-              type="button"
-              class="mk-seg__item"
-              :class="{ 'mk-seg__item--active': routingView === 'contract' }"
-              @click="routingView = 'contract'"
-            >契约编辑</button>
+          <!-- 2026-11-06：分段控件改用共享 .mk-seg（原 .skd-rswitch 是本页第三套分段方言）。
+               2026-11-11（困惑测试 #79）：同页签三组同款分段，控制对象原先只在 aria-label 里——
+               对象名提为可见标签。 -->
+          <div class="skd-segrow">
+            <span class="skd-seglabel">字段路由</span>
+            <div class="mk-seg sdp-seg" role="group" aria-label="字段路由流向 / 契约编辑切换">
+              <button
+                type="button"
+                class="mk-seg__item"
+                :class="{ 'mk-seg__item--active': routingView === 'flow' }"
+                @click="routingView = 'flow'"
+              >流向视图</button>
+              <button
+                type="button"
+                class="mk-seg__item"
+                :class="{ 'mk-seg__item--active': routingView === 'contract' }"
+                @click="routingView = 'contract'"
+              >契约编辑</button>
+            </div>
           </div>
           <section v-if="routingView === 'flow'" class="mk-card">
             <div class="mk-card__head">
               <h3 class="mk-card__title">字段流向</h3>
               <div class="mk-card__head-right">
+                <!-- 全表同一取值收成一句，替代逐行「隐藏」徽章（2026-11-11 去噪） -->
+                <span
+                  v-if="renderAllHidden && routingRowsFiltered.length"
+                  class="mk-card__meta"
+                  title="本表所有字段的渲染位都是隐藏，故省略「渲染」列（不是列丢了）：仅内部流转，不对外展示"
+                >渲染全部隐藏（列已省略）</span>
                 <span class="mk-card__meta">{{ routingRowsStateText }}</span>
               </div>
             </div>
             <!-- 角色筛选（2026-11-08 用户「把 [全部 48][必填 4][方案产出 5]… 做成表格顶部的点击筛选」）：
-                 48 行一次平铺读不完，先按产出角色收窄。 -->
-            <div v-if="routingRows.length" class="mk-seg sdp-seg skd-rolefilter" role="group" aria-label="按字段角色筛选">
-              <button
-                type="button"
-                class="mk-seg__item"
-                :class="{ 'mk-seg__item--active': routingRoleFilter === '' }"
-                @click="routingRoleFilter = ''"
-              >全部 {{ routingRows.length }}</button>
-              <button
-                v-for="c in routingRoleChips"
-                :key="c.id"
-                type="button"
-                class="mk-seg__item"
-                :class="{ 'mk-seg__item--active': routingRoleFilter === c.id }"
-                @click="routingRoleFilter = c.id"
-              >{{ c.label }} {{ c.count }}</button>
+                 48 行一次平铺读不完，先按产出角色收窄。
+                 2026-11-12：改用全站筛选语汇 .mk-pill / .mk-pill__count——这是「筛选」不是
+                 视图切换（mk-seg 的语义），原先一条深色分段条压在表头上方，权重比表还重。 -->
+            <div v-if="routingRows.length" class="skd-segrow">
+              <span class="skd-seglabel">字段角色</span>
+              <div class="mk-pills skd-rolefilter" role="group" aria-label="按字段角色筛选">
+                <button
+                  type="button"
+                  class="mk-pill"
+                  :class="{ 'mk-pill--active': routingRoleFilter === '' }"
+                  :aria-pressed="routingRoleFilter === ''"
+                  @click="routingRoleFilter = ''"
+                >全部<span class="mk-pill__count">{{ routingRows.length }}</span></button>
+                <button
+                  v-for="c in routingRoleChips"
+                  :key="c.id"
+                  type="button"
+                  class="mk-pill"
+                  :class="{ 'mk-pill--active': routingRoleFilter === c.id }"
+                  :aria-pressed="routingRoleFilter === c.id"
+                  @click="routingRoleFilter = c.id"
+                >{{ c.label }}<span class="mk-pill__count">{{ c.count }}</span></button>
+              </div>
             </div>
             <div class="skd-tablewrap">
               <table v-if="routingRowsFiltered.length" class="mk-table mk-table--nowrap">
                 <thead>
                   <tr>
-                    <th scope="col">字段</th><th scope="col">角色</th><th class="skd-th-wrap" scope="col">说明</th><th scope="col">流向</th><th scope="col">渲染</th><th title="字段的两种属性：内部（不进用户可见回复）/ 累积（进学习者状态）" scope="col">内部 / 累积</th>
+                    <th scope="col">字段</th><th scope="col">角色</th><th class="skd-th-wrap" scope="col">说明</th>
+                    <!-- 2026-11-11（去噪）：全表同一取值时不再逐行复读——流向全空（—）则整列省略；
+                         渲染全为「隐藏」时列省略、由卡头一行「渲染全部隐藏」说一次；内部/累积全空同理。 -->
+                    <th v-if="hasHandoffCol" scope="col">流向</th>
+                    <th v-if="!renderAllHidden" scope="col">渲染</th>
+                    <th v-if="hasAttrCol" title="字段的两种属性：内部（不进用户可见回复）/ 累积（进学习者状态）" scope="col">内部 / 累积</th>
                     <th v-if="hasMaskedCol" scope="col">脱敏</th>
                   </tr>
                 </thead>
@@ -198,9 +242,9 @@
                       <template v-if="r.desc">{{ r.desc }}</template>
                       <span v-else class="mk-na">—</span>
                     </td>
-                    <td class="mono">{{ r.handoffText }}</td>
-                    <td><span class="mk-badge" :class="r.render === 'visible' ? 'mk-badge--render-visible' : 'mk-badge--render-hidden'">{{ r.render === 'visible' ? '可见' : '隐藏' }}</span></td>
-                    <td>
+                    <td v-if="hasHandoffCol" class="mono">{{ r.handoffText }}</td>
+                    <td v-if="!renderAllHidden"><span class="mk-badge" :class="r.render === 'visible' ? 'mk-badge--render-visible' : 'mk-badge--render-hidden'">{{ r.render === 'visible' ? '可见' : '隐藏' }}</span></td>
+                    <td v-if="hasAttrCol">
                       <span v-if="r.internal" class="mk-badge mk-badge--flow-internal">内部</span>
                       <!-- 2026-11-02 评审：同一个属性在契约编辑页写「累积」、这里写「累计」，
                            一个词两种写法。统一成「累积」（字段路由图例 / 编排图 / 加字段向导同词） -->
@@ -316,12 +360,13 @@
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
-import { subPage, closeSubPage, setSubPageLabel, skillStatOf, recentSpansOf, openTrace, type TraceSpan } from './store'
-import { liveSkillProfiles, liveExtraProfiles, liveSkillStatsRange, liveRefreshSeq, mapLogsToSpans, type RawLog } from './live'
+import { subPage, closeSubPage, setSubPageLabel, skillStatOf, recentSpansOf, openTrace, investigateAgent, intent, type TraceSpan } from './store'
+import { liveSkillProfiles, liveExtraProfiles, liveSkillStatsRange, liveRefreshSeq, mapLogsToSpans, errMsg, type RawLog } from './live'
 /* P2-15（设计评审）：版本状态走共享字典（与设计页 versions-tab 同域同词：ARCHIVED→已归档），
    删本页本地 versionStatusText（只映射 ACTIVE/DRAFT，ARCHIVED 直出英文） */
 import { categoryText } from './statusText'
-import { successRateText, successRateTone } from './rate-utils'
+import { formatTime } from './cockpitFormat'
+import { successRateText, successRateTone, RATE_THRESHOLD_NOTE } from './rate-utils'
 import {
   adminSkillsApi,
   adminSkillWorkbenchApi,
@@ -344,7 +389,7 @@ import { toast } from '@/utils/toast'
 /* 设计页能力平铺（2026-10-15 用户拍板：独立设计页退役，内容就地铺进本页）——
    6 个 tab 正文是自包含子组件（各自 scoped 样式），直接挂到本页各页签只读区块下方。
    各子组件的脏态经 @dirty 上报，离开守卫见文件尾（原 SkillDesignPage 的守卫整套迁入）。 */
-import { coreEditorState, callTimeFull, callTimeLabel, failureText } from './skill-design/sdp-shared'
+import { coreEditorState, callTimeLabel, failureText } from './skill-design/sdp-shared'
 import ProtocolTab from './skill-design/protocol-tab.vue'
 import TrialTab from './skill-design/trial-tab.vue'
 import VersionsTab from './skill-design/versions-tab.vue'
@@ -444,9 +489,14 @@ watch(tab, (t) => {
   }
 })
 
-/** hero 健康徽标点击：跳运行时页签（健康+证据先于配置） */
-function goRuntimeTab() {
-  tab.value = 'runtime'
+/** hero 失败徽标（异常 / 有失败）→ 执行日志的该 Skill 失败筛选。
+ *  2026-11-11（困惑测试 #76）：详情默认落点就是运行时页签，原先点击零反馈；
+ *  2026-11-11 第二轮：从其它页签点它曾先切到运行概览、要再点一次才进日志（两跳），
+ *  与「这是排查入口」的语义不符。现任何页签都直接落执行日志（?agent= + status=err），
+ *  与总览事故卡同一判例；运行概览仍由页签直接进入。 */
+function openFailureLogs() {
+  if (!skillId.value) return
+  investigateAgent(skillId.value)
 }
 
 /* ===== 设计页能力平铺：每个页签下半部挂设计页子组件 =====
@@ -525,7 +575,7 @@ const SKILL_SCENE_PATH = '/admin/skills'
 function askDirtyLeave(target: unknown) {
   return askConfirm({
     title: target ? '切换 Skill' : '离开 Skill 详情',
-    message: `当前 Skill 有未保存的修改（${dirtySummary()}），离开后将丢失，确定离开？`,
+    message: `当前 Skill 有未保存的修改（${dirtySummary()}），离开后将丢失。`,
     confirmText: '离开并放弃修改',
     danger: false
   })
@@ -666,17 +716,20 @@ const stat = computed(() =>
 /** 统计窗口词（liveSkillStatsRange 与 Skill 列表「统计窗口」同源）：「N 次失败」不带窗口会被读成全量 */
 const STAT_RANGE_LABELS: Record<string, string> = { '7d': '近 7 天', '24h': '近 24 小时', '30d': '近 30 天', all: '全部时间' }
 const statsRangeLabel = computed(() => STAT_RANGE_LABELS[liveSkillStatsRange.value] || '近 7 天')
-/** 头部健康徽章三分态（与 Skills.vue 同口径）：异常 / 空闲（0 调用）/ 健康；
-    2026-10-24 用户「还是重复部分」：运行时 KPI 已给失败数与窗口，hero 只报状态词，
-    次数与窗口放 title（既不复读，也不让「N 次失败」失去窗口口径）；徽标可点 → 运行时页签 */
+/** 头部健康徽章三分态（2026-11-11 困惑测试 #68）：改用 rate-utils 共享阈值
+ *  （<90% 异常 / <97% 有失败 / 其余健康），与 Skills 列表、运行时成功率 KPI 同一判据。
+ *  此前 `errors>0` 即红，出现「成功率 96.1% 却挂红色异常」的同屏矛盾
+ *  （2026-10-16 用户已拍板「不要非零就红」）。次数与窗口放 title；徽标可点 → 运行时页签。 */
 const healthBadge = computed<{ cls: string; text: string; title: string }>(() => {
-  if (stat.value.errors > 0) {
-    return { cls: 'mk-badge--bad', text: '异常', title: `${statsRangeLabel.value}窗口内 ${stat.value.errors} 次失败（数字见运行时指标）` }
-  }
   if (stat.value.calls === 0) {
     return { cls: 'mk-badge--muted', text: '空闲', title: `${statsRangeLabel.value}窗口内无调用（从未调用不等于健康）` }
   }
-  return { cls: 'mk-badge--ok', text: '健康', title: `${statsRangeLabel.value}窗口内调用全部成功` }
+  const rate = successRateText(stat.value.calls, stat.value.errors) ?? '—'
+  const tone = successRateTone(stat.value.calls, stat.value.errors)
+  const detail = `${statsRangeLabel.value}窗口 ${stat.value.calls} 次调用 · ${stat.value.errors} 次失败 · 成功率 ${rate}。${RATE_THRESHOLD_NOTE}`
+  if (tone === 'bad') return { cls: 'mk-badge--bad', text: '异常', title: detail }
+  if (tone === 'warn') return { cls: 'mk-badge--warn', text: '有失败', title: detail }
+  return { cls: 'mk-badge--ok', text: '健康', title: detail }
 })
 
 /* ===== 生效 Prompt（协议页签 System Prompt 卡 + hero 版本 pill + 弹层预填） ===== */
@@ -687,6 +740,8 @@ interface EffectivePrompt {
 }
 const prompt = ref<EffectivePrompt | null>(null)
 const promptFailed = ref(false)
+/** 生效 Prompt 失败原因（P0 错误态：失败不能落成「暂无生效 Prompt」的空态） */
+const promptError = ref('')
 /** 请求是否已返回（区分「加载中」与「成功但无生效版本」——此前空数据永久停留「加载中…」） */
 const promptLoaded = ref(false)
 /**
@@ -807,6 +862,17 @@ const routingRowsFiltered = computed(() =>
 /** 原型字段路由 5 列（字段/来源/目标/转换规则/脱敏）vs 本表 6 列（来源+目标并在「流向」、脱敏变属性 badges）：
    仅当后端真的下发了 masked 布尔才补出「脱敏」列，否则保持现状并省略（无数据不硬造）。 */
 const hasMaskedCol = computed(() => routingRows.value.some((r) => typeof r.masked === 'boolean'))
+/* 2026-11-11（去噪，2026-11-11 走查 lesson-knowledge-enricher 实测）：
+   该 Skill 的 6 个产出字段「流向」全是 —、「渲染」全是隐藏、「内部/累积」全空——
+   三列各重复 6 遍同一个空值/同一个状态，读者要在噪声里找「说明」。
+   与 hasMaskedCol 同一判例：整列没有信息量就省略，而不是逐行画徽章。
+   - 流向：只要有一行真的写了去向才出列；
+   - 渲染：全为 hidden 时不出列，卡头用一句「渲染全部隐藏」说一次；
+   - 内部/累积：没有一行带属性时不出列。 */
+/* 列结构按整表判定（不随角色筛选变化），避免切换筛选时列忽隐忽现、表头跳动。 */
+const hasHandoffCol = computed(() => routingRows.value.some((r) => r.handoffText && r.handoffText !== '—'))
+const renderAllHidden = computed(() => routingRows.value.length > 0 && routingRows.value.every((r) => r.render === 'hidden'))
+const hasAttrCol = computed(() => routingRows.value.some((r) => r.internal || r.accumulate))
 /** 422 + 「无编排阶段归属（kind=aux）」= 辅助类技能不适用字段路由，而非加载失败（EG15） */
 function isRoutingsNotApplicable(e: unknown): boolean {
   const err = e as { response?: { status?: number; data?: { error?: { message?: string } | string } } } | undefined
@@ -867,14 +933,20 @@ async function load(force = false) {
     // 生效 Prompt（协议页签 + hero 版本 pill）
     (async () => {
       promptFailed.value = false
+      promptError.value = ''
       promptLoaded.value = false
       try {
         const res = await adminSkillsApi.getEffectiveSkillPrompt(id)
         if (!guard(true)) return
         prompt.value = (res.data?.data ?? res.data ?? null) as EffectivePrompt | null
         promptLoaded.value = true
-      } catch {
-        if (guard(true)) { prompt.value = null; promptFailed.value = true; promptLoaded.value = true }
+      } catch (e) {
+        if (guard(true)) {
+          prompt.value = null
+          promptFailed.value = true
+          promptError.value = errMsg(e)
+          promptLoaded.value = true
+        }
       }
     })(),
     // 字段路由（协议契约 + 字段路由页签）
@@ -972,6 +1044,15 @@ function goTrace(traceId: string) {
   closeSubPage()
   openTrace(traceId)
 }
+/** 最近调用卡头 → 执行日志（按该 Skill 过滤的全部调用）。
+ *  复用 investigateAgent 的 intent 落位（AdminConsole 转成 /admin/execution-logs?agent=&range=week），
+ *  只清掉它默认带的 status=err——这个入口看「全部调用」；失败筛选入口仍是 hero 健康徽标。
+ *  注：ExecLogs 的筛选键是 ?agent=，不是 ?skill=（后者已被 AdminConsole 占用为 Skill 详情深链）。 */
+function openSkillLogs() {
+  if (!skillId.value) return
+  investigateAgent(skillId.value)
+  intent.statusFilter = ''
+}
 
 /* ===== 最近调用（运行时页签；SkillDrawer 概览迁入） ===== */
 /* 服务端自拉（2026-10-31 三轮评审 O04）：recentSpansOf 只读全局采样（执行日志页拉过的
@@ -1026,8 +1107,25 @@ function recentRowTitle(s: TraceSpan): string {
   }
   return parts.join('\n')
 }
-/** 最近调用的发生时间：与试跑页同源（sdp-shared 的 callTimeLabel），
-    同一记录在详情与试跑页不再一处相对、一处绝对；完整时刻在 title（callTimeFull） */
+/** 最近调用的发生时间：可见文案沿用 callTimeLabel（同日 HH:mm / 跨日 MM-DD HH:mm），
+    完整时刻在 title——统一 YYYY-MM-DD HH:mm（全站口径）。
+    sdp-shared 的 callTimeFull 走 toLocaleString('zh-CN')，会渲染成 2026/11/11 18:32:59，
+    与本轮统一口径不符；本页用自己的绝对时间格式化，不引那条共享实现。 */
+function absDateTime(ts: number): string {
+  if (!ts || Number.isNaN(ts)) return ''
+  // 时间格式化单源 = cockpitFormat.formatTime（YYYY-MM-DD HH:mm，本地时区）
+  return formatTime(new Date(ts).toISOString())
+}
+/** Prompt 草稿的保存时刻：新草稿存 epoch，旧草稿（sessionStorage 里已有）是 zh-CN 串，
+ *  能解析就归一成 YYYY-MM-DD HH:mm，解析不了原样回显（不丢信息）。 */
+function draftAtText(at: unknown): string {
+  if (typeof at === 'number') return absDateTime(at)
+  if (typeof at === 'string' && at) {
+    const t = Date.parse(at)
+    return Number.isNaN(t) ? at : absDateTime(t)
+  }
+  return ''
+}
 
 /* 模型配置 / 模型测试的状态与动作 2026-10-19 迁出本页：
    宿主原本自己维护一份 rtForm/probeForm 并渲染同名的两张卡，与设计区块 RuntimeTab 构成
@@ -1071,6 +1169,11 @@ const pmText = ref('')
 const pmNote = ref('')
 const pmDraftRestored = ref(false)
 const pmDraftSavedAt = ref('')
+/** Prompt 弹层的未保存基线（打开时的正文 + 变更说明）：
+ *  2026-11-11 第二轮：此前 pmText/pmNote 不在 anyDirty 里——编辑后点面包屑返回 / 关浏览器
+ *  不会拦（虽然关闭弹层本身会落 sessionStorage 草稿，但「未关闭就离开」那条路是静默丢弃）。
+ *  现在纳入 tabDirty，走既有 useConfirm 守卫；不自动保存。 */
+const pmBaseline = ref({ text: '', note: '' })
 const pmMaskRef = ref<HTMLElement | null>(null)
 const pmPanelRef = ref<HTMLElement | null>(null)
 const pmTextRef = ref<HTMLTextAreaElement | null>(null)
@@ -1080,20 +1183,22 @@ const pmDraftKey = () => `skd-prompt-draft:${skillId.value}`
 async function openPromptModal() {
   pmDraftRestored.value = false
   pmDraftSavedAt.value = ''
-  let draft: { text?: string; note?: string; at?: string } | null = null
+  let draft: { text?: string; note?: string; at?: string | number } | null = null
   try {
     const raw = sessionStorage.getItem(pmDraftKey())
-    if (raw) draft = JSON.parse(raw) as { text?: string; note?: string; at?: string }
+    if (raw) draft = JSON.parse(raw) as { text?: string; note?: string; at?: string | number }
   } catch { /* 隐私模式忽略 */ }
   if (draft && typeof draft.text === 'string' && draft.text !== systemPromptText.value) {
     pmText.value = draft.text
     pmNote.value = draft.note || ''
     pmDraftRestored.value = true
-    pmDraftSavedAt.value = draft.at || ''
+    pmDraftSavedAt.value = draftAtText(draft.at)
   } else {
     pmText.value = systemPromptText.value
     pmNote.value = ''
   }
+  pmBaseline.value = { text: pmText.value, note: pmNote.value }
+  onTabDirty('prompt', { dirty: false, label: 'Prompt 草稿' })
   pmOpen.value = true
   /* 2026-11-02 评审：文本框打开时停在正文中段（写入长文本后浏览器把插入点留在了末尾，
      顺带把滚动位带到后半截），读者看不到提示词开头。挂载后把插入点与滚动位复位到首行。 */
@@ -1108,11 +1213,15 @@ async function openPromptModal() {
 function persistPromptDraft() {
   try {
     if (pmText.value && pmText.value !== systemPromptText.value || pmNote.value.trim()) {
-      sessionStorage.setItem(pmDraftKey(), JSON.stringify({ text: pmText.value, note: pmNote.value, at: new Date().toLocaleString('zh-CN', { hour12: false }) }))
+      // 存 epoch 毫秒（展示时统一 YYYY-MM-DD HH:mm），不再存 zh-CN 的 2026/11/11 18:32:59
+      sessionStorage.setItem(pmDraftKey(), JSON.stringify({ text: pmText.value, note: pmNote.value, at: Date.now() }))
     } else {
       sessionStorage.removeItem(pmDraftKey())
     }
   } catch { /* 隐私模式忽略 */ }
+  /* 草稿已落到本机浏览器（或确认无内容）→ 不再算「未保存」：显式关闭/保存/跳转后
+     不应再拦一次离开确认。 */
+  onTabDirty('prompt', { dirty: false, label: 'Prompt 草稿' })
 }
 function closePromptModal() {
   persistPromptDraft()
@@ -1142,6 +1251,13 @@ async function copyPromptDraft() {
 useOverlay(computed(() => pmOpen.value), pmPanelRef)
 useMaskClose(pmMaskRef, closePromptModal)
 useEscape(() => pmOpen.value, closePromptModal)
+/* 弹层正文 / 变更说明的未保存态 → 宿主 anyDirty（离开守卫与关浏览器 beforeunload 共用）。
+   只在弹层打开时计脏；显式关闭 / 保存草稿会经 persistPromptDraft 清零。 */
+watch([pmText, pmNote], () => {
+  if (!pmOpen.value) return
+  const dirty = pmText.value !== pmBaseline.value.text || pmNote.value !== pmBaseline.value.note
+  onTabDirty('prompt', { dirty, label: 'Prompt 草稿' })
+})
 /* 页面级 Esc：弹层未开时 Esc 关详情页（关闭 = 清 ?view=&id= 回列表，判例二级页范式）。
    #136：焦点在输入框/文本域/下拉等编辑态时不关页——此前在试跑输入里按 Esc 会直接关掉整个详情页、
    未保存输入静默丢失（表单未保存改动的同类风险同源：模型配置表单/试跑输入均无离开守卫）。 */
@@ -1192,8 +1308,12 @@ useEscape(
 /* 字段路由页签内视图切换（2026-10-31 外部评审）：与协议页 sdp-pw__viewswitch 同语汇 */
 /* 字段路由页签内的分段：位置归位（与协议 / 版本 / 试跑同一套 .mk-seg） */
 .sdp-seg { width: fit-content; }
-/* 角色筛选条（2026-11-08）：贴在字段流向表上方，窄屏可换行不挤成一团 */
-.skd-rolefilter { width: auto; max-width: 100%; flex-wrap: wrap; margin: 0 16px 12px; }
+/* 角色筛选条（2026-11-08；2026-11-12 改全站筛选胶囊）：贴在字段流向表上方，窄屏可换行 */
+.skd-rolefilter { max-width: 100%; margin: 0 16px 12px; }
+/* 分段控件的可见对象名（2026-11-11 困惑测试 #79） */
+.skd-segrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.skd-seglabel { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-muted); white-space: nowrap; }
+.skd-segrow .skd-rolefilter { margin: 0; }
 
 /* ===== 运行时：指标卡（原型 metricCard 四张独立卡）走共享 MkKpi + .mk-kpi-grid（审核 #146），
    本文件的 .skd-metric* 私有实现已删（含值档与 4K 档覆写，原语自带全档位） ===== */

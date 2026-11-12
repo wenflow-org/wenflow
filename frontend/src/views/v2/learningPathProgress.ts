@@ -141,3 +141,115 @@ export function genPillCopy(lifecycle: GenerationLifecycleLike | null | undefine
   }
   return { tone: 'run', text: `正在生成路径 · ${genStageLabel(lifecycle)}` };
 }
+
+/* ---------- 用户侧时间锚点（2026-11-11 走查：列表四张卡只有「已完成 / 100%」，分不出新旧） ----------
+   统一口径：
+   - 可见文案用相对时间（刚刚 / N 分钟前 / N 小时前 / 昨天 / N 天前），超过 30 天回落 YYYY-MM-DD，
+     避免「48 天前」这类越读越难换算的数字；
+   - title 给绝对时间（本地时区 YYYY-MM-DD HH:mm），需要精确核对时可直接看；
+   - 只格式化，不猜业务：调用方决定锚点是「最近学习 / 更新于 / 创建于」。
+   全部按本地时区，不用 toISOString().slice（UTC 切日会差一天）。 */
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function toTimestamp(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const time = typeof value === 'number' ? value : Date.parse(value);
+  return Number.isFinite(time) ? time : null;
+}
+
+/** 本地绝对时间：2026-11-11 10:32；无效值返回 '' */
+export function formatLocalDateTime(value: string | number | null | undefined): string {
+  const time = toTimestamp(value);
+  if (time === null) return '';
+  const d = new Date(time);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+/** 本地日期：2026-11-11；无效值返回 '' */
+export function formatLocalDate(value: string | number | null | undefined): string {
+  const time = toTimestamp(value);
+  if (time === null) return '';
+  const d = new Date(time);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+/** 相对时间（面向人读）；未来/坏时间按「刚刚」处理，不产负数与 NaN */
+export function formatRelativeTime(value: string | number | null | undefined, now: number = Date.now()): string {
+  const time = toTimestamp(value);
+  if (time === null) return '';
+  const diff = Math.max(now - time, 0);
+  const minutes = Math.floor(diff / 60_000);
+  if (minutes < 1) return '刚刚';
+  if (minutes < 60) return `${minutes} 分钟前`;
+  const hours = Math.floor(diff / 3_600_000);
+  if (hours < 24) return `${hours} 小时前`;
+  const date = new Date(time);
+  const today = new Date(now);
+  const dayDiff = Math.floor(
+    (new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
+      - new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()) / DAY_MS
+  );
+  if (dayDiff === 1) return '昨天';
+  if (dayDiff < 30) return `${dayDiff} 天前`;
+  return formatLocalDate(time);
+}
+
+export interface PathActivityAnchor {
+  /** 可见文案：「最近学习 2 小时前」 */
+  text: string;
+  /** 绝对时间（含创建时间），给 title 用 */
+  title: string;
+}
+
+export interface PathActivityAnchorInput {
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  tasks?: Array<{ completedAt?: string | null }> | null;
+}
+
+/**
+ * 路径卡的「时间锚点」：优先用任务完成时间（真实学习），
+ * 其次路径更新时间（任务状态/结构变化），最后创建时间。
+ * createdAt 与 updatedAt 相差不足 1 分钟视为「创建后没再变过」，写「创建于」而不是「更新于」。
+ */
+export function buildPathActivityAnchor(
+  input: PathActivityAnchorInput,
+  now: number = Date.now()
+): PathActivityAnchor | null {
+  const created = toTimestamp(input.createdAt);
+  const updated = toTimestamp(input.updatedAt);
+  let completed: number | null = null;
+  for (const task of input.tasks ?? []) {
+    const at = toTimestamp(task?.completedAt);
+    if (at !== null && (completed === null || at > completed)) completed = at;
+  }
+
+  let at: number | null = null;
+  let prefix = '';
+  if (completed !== null) {
+    at = completed;
+    prefix = '最近学习';
+  } else if (created !== null && updated !== null && Math.abs(updated - created) < 60_000) {
+    at = created;
+    prefix = '创建于';
+  } else if (updated !== null) {
+    at = updated;
+    prefix = '更新于';
+  } else if (created !== null) {
+    at = created;
+    prefix = '创建于';
+  }
+  if (at === null) return null;
+
+  const relative = formatRelativeTime(at, now);
+  const absolute = formatLocalDateTime(at);
+  if (!relative || !absolute) return null;
+  const titleParts = [`${prefix} ${absolute}`];
+  if (prefix !== '创建于' && created !== null) {
+    const createdText = formatLocalDateTime(created);
+    if (createdText) titleParts.push(`创建于 ${createdText}`);
+  }
+  return { text: `${prefix} ${relative}`, title: titleParts.join(' · ') };
+}

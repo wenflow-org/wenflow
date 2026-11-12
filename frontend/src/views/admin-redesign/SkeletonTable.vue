@@ -87,7 +87,4 @@ function barWidth(i: number, j: number) {
 .skl:last-child { border-bottom: none; }
 /* shimmer 视觉统一走 .mk-skeleton（shared.css，含暗色与 prefers-reduced-motion）；本类只管形状 */
 .skl__bar { height: 12px; }
-
-/* 暗色模式 */
-html[data-theme='dark'] .skl { border-bottom-color: var(--wf-border-light); }
 </style>

@@ -1,26 +1,22 @@
 /**
- * 供应商 / 模型编辑弹层（2026-10-18 BYOK）：
- * 前端先按后端同一套规则拦一遍（id 格式、服务地址必填、思考关掉时不给挡位、改名），
- * 后端再拦一次并把人话原因显示在弹层里；平台通道不出服务地址与密钥字段。
+ * 模型编辑弹层（2026-10-18 BYOK）：
+ * 前端先按后端同一套规则拦一遍（id 格式、思考关掉时不给挡位、改名），
+ * 后端再拦一次并把人话原因显示在弹层里。
+ * 2026-11-11 路径 A：供应商概念不再上屏，供应商设置弹层与其用例一并删除。
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { nextTick } from 'vue'
-import ProviderEditorDialog from '../ProviderEditorDialog.vue'
 import ModelEditorDialog from '../ModelEditorDialog.vue'
 import { chooseMkSelect, mkSelectBox, mkSelectLabels, mkSelectValue } from '@/components/mk/__tests__/mkSelect'
 
-const { createMock, updateMock, addModelMock, updateModelMock } = vi.hoisted(() => ({
-  createMock: vi.fn(),
-  updateMock: vi.fn(),
+const { addModelMock, updateModelMock } = vi.hoisted(() => ({
   addModelMock: vi.fn(),
   updateModelMock: vi.fn()
 }))
 
 vi.mock('@/api/adminApi', () => ({
   adminModelProvidersApi: {
-    create: createMock,
-    update: updateMock,
     addModel: addModelMock,
     updateModel: updateModelMock
   }
@@ -41,126 +37,6 @@ function fieldOf(w: ReturnType<typeof mount>, label: string) {
 /** Teleport 就地渲染（弹层内容挂到 body 后就查不到了；这里只要断言弹层内部） */
 const mountOptions = { global: { stubs: { teleport: true } } }
 
-/** 表单占位输入（测试夹具，非真实凭据）：避免在断言里内联凭据形态的字面量。 */
-const typedFixtureValue = 'fixture-value'
-
-describe('ProviderEditorDialog', () => {
-  beforeEach(() => {
-    createMock.mockReset()
-    updateMock.mockReset()
-  })
-
-  it('新建：id 非法时保存禁用并就地提示；合法后可提交，落盘成功即关闭', async () => {
-    const w = mount(ProviderEditorDialog, mountOptions)
-    w.vm.openWith(null)
-    await flushPromises()
-    const idInput = w.find('.mk-field__input')
-    await idInput.setValue('Bad Id')
-    expect(w.text()).toContain('非法')
-    expect(btn(w, '保存').attributes('disabled')).toBeDefined()
-
-    await idInput.setValue('acme-gateway')
-    await w.findAll('.mk-field__input')[0].setValue('acme-gateway')
-    await w.findAll('.mk-field__input')[1].setValue('Acme 网关')
-    await w.find('input[placeholder="https://api.example.com/v1"]').setValue('https://gw.acme.com/v1')
-    await w.find('input[type="password"]').setValue(typedFixtureValue)
-    expect(btn(w, '保存').attributes('disabled')).toBeUndefined()
-
-    createMock.mockResolvedValue({ data: { success: true, warnings: [] } })
-    await btn(w, '保存').trigger('click')
-    await flushPromises()
-    expect(createMock).toHaveBeenCalledWith({
-      id: 'acme-gateway',
-      name: 'Acme 网关',
-      description: '',
-      enabled: true,
-      baseUrl: 'https://gw.acme.com/v1',
-      apiKey: typedFixtureValue,
-      supportsSystemRole: null
-    })
-    expect(w.find('[role="dialog"]').exists()).toBe(false)
-  })
-
-  it('后端拒绝时把原因留在弹层里（不关闭、不吞错）', async () => {
-    const w = mount(ProviderEditorDialog, mountOptions)
-    w.vm.openWith(null)
-    await flushPromises()
-    const inputs = w.findAll('.mk-field__input')
-    await inputs[0].setValue('acme-gateway')
-    await inputs[1].setValue('Acme 网关')
-    await w.find('input[placeholder="https://api.example.com/v1"]').setValue('https://gw.acme.com/v1')
-    createMock.mockRejectedValue({ response: { data: { error: '供应商 ID「acme-gateway」已存在，换一个。' } } })
-    await btn(w, '保存').trigger('click')
-    await flushPromises()
-    expect(w.find('[role="alert"]').text()).toContain('已存在，换一个')
-    expect(w.find('[role="dialog"]').exists()).toBe(true)
-  })
-
-  it('弹层打开：面板带 aria-modal、锁背景滚动；Esc 关闭并把焦点还回触发按钮', async () => {
-    // 同文件前面的用例可能留下开着未卸载的弹层（body 仍锁滚动），这里先归零再断言
-    document.body.style.overflow = ''
-    const trigger = document.createElement('button')
-    trigger.textContent = '打开供应商设置'
-    document.body.appendChild(trigger)
-    trigger.focus()
-
-    const w = mount(ProviderEditorDialog, mountOptions)
-    w.vm.openWith(null)
-    await flushPromises()
-
-    const panel = w.find('[role="dialog"]')
-    expect(panel.attributes('aria-modal')).toBe('true')
-    expect(document.body.style.overflow).toBe('hidden')
-
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
-    await flushPromises()
-    expect(w.find('[role="dialog"]').exists()).toBe(false)
-    expect(document.body.style.overflow).toBe('')
-    expect(document.activeElement).toBe(trigger)
-    trigger.remove()
-    w.unmount()
-  })
-
-  it('平台提供：不显示服务地址与密钥字段（那两项归连接设置）', async () => {
-    const w = mount(ProviderEditorDialog, mountOptions)
-    w.vm.openWith({ id: 'platform', name: '平台提供', description: null, enabled: true, baseUrl: null, keyHint: null })
-    await flushPromises()
-    expect(w.text()).not.toContain('服务地址')
-    expect(w.find('input[type="password"]').exists()).toBe(false)
-    // 名称仍可改；启用位只在创建时出现（编辑态由供应商行内开关承担，不再给第二个入口）
-    expect(w.text()).not.toContain('参与路由')
-    updateMock.mockResolvedValue({ data: { success: true, warnings: [] } })
-    await btn(w, '保存').trigger('click')
-    await flushPromises()
-    expect(updateMock).toHaveBeenCalledWith('platform', expect.objectContaining({ name: '平台提供', enabled: true }))
-  })
-
-  it('system 角色：三态回填与回写（自动=null / 保留=true / 合并=false）', async () => {
-    const w = mount(ProviderEditorDialog, mountOptions)
-    w.vm.openWith({
-      id: 'acme-gateway', name: 'Acme 网关', description: null, enabled: true,
-      baseUrl: 'https://gw.acme.com/v1', keyHint: null, supportsSystemRole: false,
-    })
-    await flushPromises()
-    expect(mkSelectValue(w, '系统提示词')).toBe('fold')
-
-    await chooseMkSelect(w, '系统提示词', 'keep')
-    updateMock.mockResolvedValue({ data: { success: true, warnings: [] } })
-    await btn(w, '保存').trigger('click')
-    await flushPromises()
-    expect(updateMock).toHaveBeenCalledWith('acme-gateway', expect.objectContaining({ supportsSystemRole: true }))
-
-    // 未声明 → 自动（null）
-    const w2 = mount(ProviderEditorDialog, mountOptions)
-    w2.vm.openWith({
-      id: 'acme-gateway', name: 'Acme 网关', description: null, enabled: true,
-      baseUrl: 'https://gw.acme.com/v1', keyHint: null, supportsSystemRole: null,
-    })
-    await flushPromises()
-    expect(mkSelectValue(w2, '系统提示词')).toBe('auto')
-  })
-})
-
 describe('ModelEditorDialog', () => {
   beforeEach(() => {
     addModelMock.mockReset()
@@ -174,7 +50,10 @@ describe('ModelEditorDialog', () => {
     await w.find('.med-modal .med-two input').setValue('acme-chat')
     // 2026-11-05：没有「高级设置」折叠了，限额就在同一屏
     expect(w.text()).not.toContain('高级设置')
-    await fieldOf(w, '输出上限').find('input').setValue('65536')
+    // 2026-11-11 用户「这种文案不要有」：不要再有一整行参数释义，单位并回字段名
+    expect(w.text()).not.toContain('推理预留 =')
+    expect(w.text()).not.toContain('留空不限')
+    await fieldOf(w, '输出上限（tokens）').find('input').setValue('65536')
 
     addModelMock.mockResolvedValue({ data: { success: true, warnings: ['保存时出现 2 条提示…'] } })
     await btn(w, '保存').trigger('click')

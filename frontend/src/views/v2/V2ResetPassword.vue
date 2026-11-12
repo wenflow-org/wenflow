@@ -10,11 +10,11 @@
       </div>
 
       <!-- 带 token 但校验不过（伪造/截断链接）：此前静默降级为找回表单，用户不知道手里的链接已废（走查 2026-09-27 P2） -->
-      <div v-if="tokenRejected" class="errorbar" role="alert">
-        链接无效或已过期，请重新找回。
-      </div>
-      <div v-else-if="formError" class="errorbar" role="alert">
+      <div v-if="formError" class="errorbar" role="alert">
         {{ formError }}
+      </div>
+      <div v-else-if="tokenRejected && !notice" class="errorbar" role="alert">
+        链接无效或已过期，请重新找回。
       </div>
 
       <!-- 找回结果回执：不是错误，不复用红色 errorbar（走查 2026-09-27 P1） -->
@@ -27,29 +27,40 @@
           <span class="field__label">新密码</span>
           <span class="field__pwd">
             <input
+              id="reset-new-password"
+              ref="newPasswordEl"
               v-model="form.newPassword"
-              type="password"
+              :type="showPwd ? 'text' : 'password'"
               class="field__input"
               placeholder="至少 8 位，且需同时包含字母和数字"
+              autocomplete="new-password"
+              autofocus
               :disabled="submitting"
+              :aria-invalid="errors.newPassword ? 'true' : undefined"
+              :aria-describedby="errors.newPassword ? 'reset-new-password-error' : undefined"
             />
             <button type="button" class="field__eye" @click="showPwd = !showPwd" :aria-label="showPwd ? '隐藏密码' : '显示密码'">
-              <Eye v-if="!showPwd" :size="17" :stroke-width="1.75" />
+              <Eye v-if="showPwd" :size="17" :stroke-width="1.75" />
               <EyeOff v-else :size="17" :stroke-width="1.75" />
             </button>
           </span>
-          <span v-if="errors.newPassword" class="field__error">{{ errors.newPassword }}</span>
+          <span v-if="errors.newPassword" id="reset-new-password-error" class="field__error">{{ errors.newPassword }}</span>
         </label>
 
         <label class="field">
           <span class="field__label">确认新密码</span>
           <input
+            id="reset-confirm-password"
+            ref="confirmPasswordEl"
             v-model="form.confirmPassword"
-            type="password"
+            :type="showPwd ? 'text' : 'password'"
             class="field__input"
+            autocomplete="new-password"
             :disabled="submitting"
+            :aria-invalid="errors.confirmPassword ? 'true' : undefined"
+            :aria-describedby="errors.confirmPassword ? 'reset-confirm-password-error' : undefined"
           />
-          <span v-if="errors.confirmPassword" class="field__error">{{ errors.confirmPassword }}</span>
+          <span v-if="errors.confirmPassword" id="reset-confirm-password-error" class="field__error">{{ errors.confirmPassword }}</span>
         </label>
       </template>
 
@@ -57,12 +68,18 @@
         <label class="field">
           <span class="field__label">用户名</span>
           <input
+            id="reset-username"
+            ref="nameEl"
             v-model="form.name"
             type="text"
             class="field__input"
+            autocomplete="username"
+            autofocus
             :disabled="submitting"
+            :aria-invalid="errors.name ? 'true' : undefined"
+            :aria-describedby="errors.name ? 'reset-username-error' : undefined"
           />
-          <span v-if="errors.name" class="field__error">{{ errors.name }}</span>
+          <span v-if="errors.name" id="reset-username-error" class="field__error">{{ errors.name }}</span>
         </label>
         <!-- 注册时自动生成 @wenflow.local 本地邮箱且当前只有 console 邮件通道；先说清楚，避免用户白等邮件 -->
         <p class="reset__hint">
@@ -114,6 +131,10 @@ const form = reactive({
   confirmPassword: ''
 });
 const errors = reactive({ name: '', newPassword: '', confirmPassword: '' });
+/* 错误定位：提交时焦点落到第一个出错的字段（与登录/注册同口径） */
+const nameEl = ref<HTMLInputElement | null>(null);
+const newPasswordEl = ref<HTMLInputElement | null>(null);
+const confirmPasswordEl = ref<HTMLInputElement | null>(null);
 
 async function submit() {
   formError.value = '';
@@ -128,10 +149,15 @@ async function submit() {
       errors.newPassword = '密码至少 8 位，且需同时包含字母和数字';
     }
     if (form.confirmPassword !== form.newPassword) errors.confirmPassword = '两次输入的密码不一致';
-    if (errors.newPassword || errors.confirmPassword) return;
+    if (errors.newPassword || errors.confirmPassword) {
+      if (errors.newPassword) newPasswordEl.value?.focus();
+      else confirmPasswordEl.value?.focus();
+      return;
+    }
   } else {
     if (!form.name.trim()) {
       errors.name = '请输入用户名';
+      nameEl.value?.focus();
       return;
     }
   }
@@ -154,16 +180,10 @@ async function submit() {
       ? String(error.message)
       : '操作失败，请稍后重试';
     formError.value = message;
-    // 行内 errorbar 为主，toast 只留给网络类错误（走查 2026-09-27 P3 三页统一）
-    if (isNetworkError(error)) toast.error(message);
+    // 网络与业务错误都只走可停留的 errorbar，不再叠同文案 toast
   } finally {
     submitting.value = false;
   }
-}
-
-/* http 层约定：断网/超时的 reject 不带 status 字段，业务错误一定带 */
-function isNetworkError(error: unknown): boolean {
-  return !(error && typeof error === 'object' && 'status' in error);
 }
 
 function goLogin() {
@@ -252,12 +272,13 @@ function goLogin() {
 
 .field__pwd { position: relative; display: block; }
 .field__pwd .field__input { padding-right: 42px; }
-/* 34×34 与登录/注册页同规格（走查 2026-09-27：原 padding:4px 的 ≈25×25 低于触控门禁） */
+/* 36×36 与登录/注册页同规格（走查 2026-09-27：原 padding:4px 的 ≈25×25 低于触控门禁；
+   2026-11-11 复核发现本页仍是 34，与登录/注册的 36 不一致，一并收回 36） */
 .field__eye {
   position: absolute;
-  right: 5px; top: 50%;
+  right: 4px; top: 50%;
   transform: translateY(-50%);
-  width: 34px; height: 34px;
+  width: 36px; height: 36px;
   border: 0; border-radius: var(--mk-radius-md);
   background: transparent;
   color: var(--faint);
