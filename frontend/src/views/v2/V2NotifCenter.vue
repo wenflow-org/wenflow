@@ -23,7 +23,7 @@
 
     <!-- 合并下拉面板 -->
     <Transition name="nc-pop">
-      <div v-if="open" ref="panelRef" class="nc__panel" role="dialog" aria-modal="true" aria-label="通知与 AI 任务" tabindex="-1">
+      <div v-if="open" ref="panelRef" class="nc__panel" role="dialog" aria-label="通知与 AI 任务" tabindex="-1">
         <!-- Tab 切换 -->
         <div class="nc__tabs" role="tablist" aria-label="通知与任务" @keydown="onTabKeydown">
           <button
@@ -34,7 +34,7 @@
             :aria-selected="tab === 'notif'"
             :tabindex="tab === 'notif' ? 0 : -1"
             @click="tab = 'notif'"
-          >通知<template v-if="unread"> · {{ unread }}</template></button>
+          >通知<template v-if="unread"> · {{ unread }} 未读</template></button>
           <button
             type="button"
             role="tab"
@@ -55,21 +55,24 @@
                 v-for="n in notifItems"
                 :key="n.id"
                 class="nc__item"
-                :class="{ 'nc__item--unread': !n.isRead }"
+                :class="{ 'nc__item--unread': !n.isRead, 'nc__item--link': !!n.link }"
                 :title="n.body || ''"
-                role="button"
-                tabindex="0"
-                :aria-label="n.title"
+                :role="n.link ? 'button' : undefined"
+                :tabindex="n.link ? 0 : undefined"
+                :aria-label="n.link ? n.title : undefined"
                 @click="onNotifClick(n)"
-                @keydown.enter.prevent="onNotifClick(n)"
+                @keydown.enter.prevent="n.link && onNotifClick(n)"
               >
                 <!-- 未读点在左（原型 wf-notif__dot 同位） -->
                 <span class="nc__item-dot" :class="{ 'nc__item-dot--off': n.isRead }" aria-hidden="true"></span>
                 <div class="nc__item-main">
                   <strong>{{ n.title }}</strong>
                   <span v-if="n.body" class="nc__item-body">{{ n.body }}</span>
-                  <span class="nc__item-time">{{ timeAgo(n.createdAt) }}</span>
+                  <span class="nc__item-time" :title="absoluteTime(n.createdAt)">{{ timeAgo(n.createdAt) }}</span>
                 </div>
+                <!-- 可跳转的行给一枚箭头（2026-11-11 走查）：没有它，整行可点只是隐藏行为。
+                     无目标链接的通知不再渲染成按钮语义（避免键盘焦点落进死行）。 -->
+                <span v-if="n.link" class="nc__item-go" aria-hidden="true">›</span>
               </div>
               <div class="nc__foot">
                 <button v-if="notifTotal > notifItems.length" type="button" class="nc__more" @click="notifLoadMore">加载更多</button>
@@ -98,6 +101,23 @@
 
           <!-- ============ AI 任务 Tab ============ -->
           <template v-else>
+            <!-- 首屏/轮询为空时先给加载态，避免「正在取数」被读成「暂无任务」（原则 1） -->
+            <div v-if="refreshing && !busyItems.length && !openSessions.length && !feed.length" class="nc__empty">
+              <span class="mk-spinner"></span> 加载中…
+            </div>
+            <!-- 取数失败不能读成「暂无任务」（原则 1）：与空态分开，并给就地重试 -->
+            <div
+              v-if="!refreshing && feedError && !busyItems.length && !openSessions.length && !feed.length"
+              class="nc__empty nc__empty--error"
+            >
+              <span>AI 任务记录加载失败</span>
+              <button type="button" class="nc__retry" @click="refresh">重试</button>
+            </div>
+            <!-- 有其他内容时错误只占一行，不抢整块；但仍要说出来（不静默） -->
+            <div v-if="!refreshing && feedError && (busyItems.length || openSessions.length)" class="nc__inline-error">
+              <span>已完成记录加载失败</span>
+              <button type="button" class="nc__retry" @click="refresh">重试</button>
+            </div>
             <!-- 课堂两档（2026-11-03）：由服务端给的 lastActiveAt/activity 判定，与断线恢复窗口同源。
                  不叫「进行中/运行中」混排——那会和后台任务的「运行中」读成一回事，故两档都冠以「课堂」。 -->
             <div v-if="liveSessions.length" class="nc__section">
@@ -155,12 +175,19 @@
                   :class="`nc__task--${ev.tone}`"
                 >
                   <div class="nc__task-bar nc__task-bar--done" :class="`nc__task-bar--${ev.tone}`"></div>
-                  <div class="nc__task-content">
+                  <component
+                    :is="ev.link ? 'a' : 'div'"
+                    :href="ev.link || undefined"
+                    class="nc__task-content"
+                    :class="{ 'nc__task-content--link': ev.link }"
+                    @click="ev.link && openFeedLink(ev.link, $event)"
+                  >
                     <div class="nc__task-row">
                       <span class="nc__task-label">{{ ev.label }}</span>
                       <span v-if="ev.groupCount" class="nc__task-times" title="同一会话内的多次 AI 处理已合并">共 {{ ev.groupCount }} 次</span>
                       <span v-if="ev.subject" class="nc__task-subject">{{ ev.subject }}</span>
-                      <span class="nc__task-time">{{ ev.time }}</span>
+                      <span class="nc__task-time" :title="absoluteTime(ev.rawTime)">{{ ev.time }}</span>
+                      <span v-if="ev.link" class="nc__task-go" aria-hidden="true">›</span>
                     </div>
                     <!-- 折叠组可展开：查看组内每次 AI 调用明细 -->
                     <div v-if="ev.groupItems && expanded.has(ev.key)" class="nc__task-detail">
@@ -171,7 +198,7 @@
                         <span class="nc__task-detail-state">{{ it.success ? '成功' : '失败' }}</span>
                       </div>
                     </div>
-                  </div>
+                  </component>
                   <button
                     v-if="ev.groupItems && ev.groupItems.length"
                     type="button"
@@ -193,12 +220,17 @@
                   </button>
                 </li>
               </ul>
-              <button v-if="feedTruncated" type="button" class="nc__more" @click="feedLoadMore">查看更早 ›</button>
+              <!-- 已完成行没有可跳转的业务对象（只是调用日志），不整行做成可点样式；
+                   在段末给一个明确出口，告诉用户这些记录还能去哪看 -->
+              <div class="nc__feed-foot">
+                <button v-if="feedTruncated" type="button" class="nc__more" @click="feedLoadMore">查看更早 ›</button>
+                <router-link to="/user/agent-logs" class="nc__all-logs">查看全部调用日志 ›</router-link>
+              </div>
             </div>
 
             <!-- 空态给出口（R6D）：照抄上方通知空态的出口结构（.nc__empty-links + 去学习台），
                  原句尾「可以先去学习台或路径页开始一次学习」的指路由按钮承担 -->
-            <div v-if="!busyItems.length && !openSessions.length && !feed.length" class="nc__empty">
+            <div v-if="!refreshing && !feedError && !busyItems.length && !openSessions.length && !feed.length" class="nc__empty">
               <span class="nc__empty-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="28" height="28"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M9 7h6M9 12h6M9 17h3"/><rect x="3" y="3" width="18" height="18" rx="4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
               </span>
@@ -241,6 +273,8 @@ interface BusyItem { key: string; title: string; detail?: string }
 interface FeedEvent {
   key: string; label: string; subject?: string; text: string;
   time: string; tone: 'ok' | 'err' | 'muted'; rawTime: number;
+  /** 有明确业务对象时给站内深链（路径/任务）；没有就保持纯信息行，不做假可点 */
+  link?: string;
   groupCount?: number;
   groupItems?: Array<{ id: string; agentId: string; calledAt: string; success: boolean; durationMs?: number; errorCode?: string | null; phase?: string | null }>;
   phase?: string | null;
@@ -338,11 +372,32 @@ function onNotifClick(n: NotifItem) {
   }
 }
 
+/** 已完成任务行的目标对象跳转（metadata 给了 pathId/taskId 才有链接）：
+    用原生 <a> + router.push，保留中键/新窗口语义的同时留在 SPA 内。 */
+function openFeedLink(link: string, e: MouseEvent) {
+  e.preventDefault();
+  open.value = false;
+  void router.push(link);
+}
+
+/** 相对时间的绝对口径（title）：YYYY-MM-DD HH:mm；接受 ISO 字符串或毫秒数 */
+function absoluteTime(t?: string | number | null): string {
+  if (t === null || t === undefined || t === '' || t === 0) return '';
+  const d = new Date(t);
+  if (Number.isNaN(d.getTime())) return '';
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd} ${hh}:${mi}`;
+}
+
 /* ---------- AI 任务（原 V2TaskCenter 逻辑） ---------- */
 const busyItems = ref<BusyItem[]>([]);
 /** 可继续的课堂（2026-11-03 口径修正）：不是后台任务，不进 busyItems/角标；按服务端 activity 分「进行中 / 空闲中」两档 */
 const openSessions = ref<ActiveSessionInfo[]>([]);
 const feed = ref<FeedEvent[]>([]);
+const feedError = ref(false);
 const refreshing = ref(false);
 const lastSync = ref<number | null>(null);
 let busy = false;
@@ -383,6 +438,13 @@ function toFeed(logs: AgentLog[]): FeedEvent[] {
       const subject = (meta.subject || meta.taskTitle || meta.title) as string | undefined;
       const groupCount = (log as unknown as { groupCount?: number }).groupCount;
       const groupItems = (log as unknown as { groupItems?: FeedEvent['groupItems'] }).groupItems;
+      /* 目标对象只从元数据里取（pathId 由 path-agent 行写入、taskId 由课堂/任务行写入）；
+         取不到就不造链接——整行只当记录看，段末有「全部调用日志」出口。 */
+      const pathId = String(meta.pathId || '').trim();
+      const taskId = String(meta.taskId || '').trim();
+      const link = pathId
+        ? `/learning-path/${encodeURIComponent(pathId)}`
+        : taskId ? `/learn/${encodeURIComponent(taskId)}` : '';
       return {
         key: log.id || `${log.calledAt}-${log.agentId}`,
         label, subject,
@@ -391,6 +453,7 @@ function toFeed(logs: AgentLog[]): FeedEvent[] {
         time: timeAgo(log.calledAt),
         tone: log.success ? 'ok' : 'err',
         rawTime: new Date(log.calledAt).getTime() || 0,
+        ...(link ? { link } : {}),
         ...(groupCount && groupCount > 1 ? { groupCount } : {}),
         ...(Array.isArray(groupItems) && groupItems.length ? { groupItems } : {})
       };
@@ -490,7 +553,11 @@ async function feedRefresh() {
     const res = await getAgentLogs({ limit: 30, includeSystem: false });
     feedAll = toFeed(unwrapLogs(res));
     feedApplyWindow();
-  } catch { /* 静默 */ }
+    feedError.value = false;
+  } catch {
+    /* 失败要保持成失败：空列表会被读成「暂无任务」，所以单开一档错误态 */
+    feedError.value = true;
+  }
 }
 function feedApplyWindow() { feed.value = feedAll.slice(0, PAGE_SIZE); }
 function feedLoadMore() {
@@ -525,8 +592,10 @@ function toggle() {
   if (open.value) { closePanel(); return; }
   syncPanelTop();
   open.value = true;
-  // 默认落有内容的一栏；都空则通知（可继续的课堂也算"有内容"）
-  tab.value = busyItems.value.length || openSessions.value.length || feed.value.length ? 'tasks' : 'notif';
+  /* 默认落哪一栏（2026-11-11 走查）：铃铛首先是通知入口。有未读通知就先看通知；
+     没有未读时才让有内容的 AI 任务优先；两者都空则停在通知空态（给出学习入口）。 */
+  const tasksHaveContent = busyItems.value.length > 0 || openSessions.value.length > 0 || feed.value.length > 0;
+  tab.value = unread.value > 0 ? 'notif' : (tasksHaveContent ? 'tasks' : 'notif');
   if (!notifItems.value.length) void notifLoad();
   void nextTick(() => panelRef.value?.focus({ preventScroll: true }));
 }
@@ -616,6 +685,11 @@ onBeforeUnmount(() => {
   top: calc(100% + 10px);
   right: 0;
   width: min(360px, calc(100vw - 32px));
+  /* 面板高度上限（2026-11-11 走查）：1280×720 / 短视口下不让面板探出屏幕底缘；
+     tabs 固定、正文内滚、底栏 sticky（见 .nc__foot），最后一条与出口始终可达。 */
+  max-height: calc(100dvh - var(--nc-panel-top, 64px) - 20px);
+  display: flex;
+  flex-direction: column;
   border-radius: 16px; /* 圆角阶梯：弹层 */
   background: var(--surface);
   border: 1px solid var(--line);
@@ -656,7 +730,7 @@ onBeforeUnmount(() => {
   background: var(--blue);
 }
 
-.nc__body { max-height: min(420px, 60vh); overflow-y: auto; }
+.nc__body { flex: 1 1 auto; min-height: 0; max-height: min(420px, 60vh); overflow-y: auto; }
 
 /* 移动端：面板改为全宽 fixed（铃铛不在屏幕右缘，absolute 右对齐铃铛会向左溢出屏幕） */
 @media (max-width: 1100px) {
@@ -683,12 +757,16 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   gap: 10px;
   padding: 11px 14px;
-  cursor: pointer;
+  /* 无目标链接的通知是纯信息行：不给手型、不进 tab 序列（2026-11-11 走查） */
+  cursor: default;
   border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
   transition: background 0.13s ease;
 }
+.nc__item--link { cursor: pointer; }
 .nc__item:hover { background: color-mix(in srgb, var(--blue) 5%, transparent); }
 .nc__item--unread { background: color-mix(in srgb, var(--blue) 4%, transparent); }
+/* 可跳转箭头：与标题同一行右端，说明「这一行有去处」 */
+.nc__item-go { flex: none; margin-top: 1px; font-size: 15px; line-height: 1.2; color: var(--faint); }
 .nc__item-main { display: grid; gap: 2px; min-width: 0; flex: 1; }
 .nc__item-main strong { font-size: 13.5px; font-weight: 700; color: var(--ink); }
 .nc__item-body {
@@ -709,12 +787,16 @@ onBeforeUnmount(() => {
 }
 .nc__item-dot--off { background: color-mix(in srgb, var(--line) 70%, transparent); }
 
-/* 面板底部操作行 */
+/* 面板底部操作行：贴在滚动区底部，滚到最后一条时两个出口仍然可见 */
 .nc__foot {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 8px 14px;
+  position: sticky;
+  bottom: 0;
+  background: var(--surface);
+  border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
 }
 .nc__more, .nc__readall {
   border: 0;
@@ -725,6 +807,7 @@ onBeforeUnmount(() => {
   font-weight: 700;
   cursor: pointer;
   padding: 4px 6px;
+  min-height: 36px;
   border-radius: var(--mk-radius-sm);
 }
 .nc__more:hover, .nc__readall:hover { background: color-mix(in srgb, var(--blue) 8%, transparent); }
@@ -755,12 +838,18 @@ onBeforeUnmount(() => {
 .nc__task--running { background: color-mix(in srgb, var(--blue) 5%, transparent); }
 .nc__task--done { background: transparent; }
 .nc__task:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+/* 已完成的调用记录没有整行目标：取消 hover 底（那是在暗示可点），
+   行内唯一的交互是右侧「展开 / 移除」两枚按钮。 */
+.nc__task--done:hover { background: transparent; }
+.nc__task-content { position: relative; flex: 1; min-width: 0; display: grid; gap: 2px; }
+.nc__task-content--link { color: inherit; text-decoration: none; cursor: pointer; border-radius: var(--mk-radius-sm); }
+.nc__task-content--link:hover .nc__task-label { color: var(--blue-deep); text-decoration: underline; }
+.nc__task-go { flex: none; font-size: 14px; line-height: 1.2; color: var(--faint); }
 .nc__task-bar { width: 3px; align-self: stretch; border-radius: 4px; background: var(--blue); }
 .nc__task-bar--done { background: color-mix(in srgb, var(--ink) 22%, transparent); }
 .nc__task-bar--ok { background: var(--green); }
 .nc__task-bar--err { background: var(--red); }
 .nc__task-bar--muted { background: color-mix(in srgb, var(--ink) 22%, transparent); }
-.nc__task-content { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .nc__task-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .nc__task-row strong { font-size: 13px; font-weight: 700; color: var(--ink); }
 .nc__task-label { font-size: 13px; font-weight: 600; color: var(--ink); }
@@ -787,7 +876,9 @@ onBeforeUnmount(() => {
   background: transparent;
   color: var(--faint);
   cursor: pointer;
-  padding: 4px;
+  padding: 0;
+  width: 32px;
+  height: 32px;
   border-radius: var(--mk-radius-sm);
   display: grid;
   place-items: center;
@@ -844,12 +935,39 @@ onBeforeUnmount(() => {
   background: transparent;
   color: var(--faint);
   cursor: pointer;
-  padding: 4px;
+  /* 2026-11-11 走查 P1：原 11px 图标 + 4px padding ≈ 19px 热区，手指点不中。
+     视觉图标不放大，按钮盒撑到 32（移动档 44，见文末媒体查询）。 */
+  width: 32px;
+  height: 32px;
+  padding: 0;
   border-radius: var(--mk-radius-sm);
+  display: grid;
+  place-items: center;
   flex-shrink: 0;
 }
 .nc__task-dismiss:hover { background: color-mix(in srgb, var(--red) 10%, transparent); color: var(--red-ink); }
 .nc__feed { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
+
+/* 已完成段末出口：查看更早（截断时）+ 全部调用日志（始终） */
+.nc__feed-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px 0;
+}
+.nc__all-logs {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--blue-deep);
+  text-decoration: none;
+}
+.nc__all-logs:hover { text-decoration: underline; }
 
 /* 空态 / 错误 */
 .nc__empty {
@@ -876,6 +994,15 @@ onBeforeUnmount(() => {
   .nc__empty-links a { min-height: 40px; }
 }
 .nc__empty--error { color: var(--muted); }
+.nc__inline-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
 .nc__retry {
   font: inherit; font-size: 12px; font-weight: 700;
   color: var(--blue-deep);
@@ -908,5 +1035,10 @@ onBeforeUnmount(() => {
 @media (max-width: 1100px) {
   .nc__empty { padding: 24px 14px; }
   .nc__empty-icon { font-size: 18px; }
+  /* 触控地板（2026-11-11）：× 与展开按钮在移动档撑到 44×44，行高随之上来 */
+  .nc__task-dismiss,
+  .nc__task-expand { width: 44px; height: 44px; }
+  .nc__all-logs { min-height: 44px; }
+  .nc__more, .nc__readall { min-height: 44px; }
 }
 </style>

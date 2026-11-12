@@ -283,7 +283,7 @@ describe('Skills 页首统计（2026-10-04 状态条退役换 KPI 卡带）', ()
     const sort = w.find('.mk-card__head .mk-select')
     expect(sort.exists()).toBe(true)
     const optionTexts = sort.findAll('.mk-listbox-opt').map((o) => o.text())
-    expect(optionTexts).toEqual(expect.arrayContaining(['需关注优先', '调用次数', '成功率', '最近调用', 'Skill 名称', '归属 Agent']))
+    expect(optionTexts).toEqual(expect.arrayContaining(['失败数优先', '调用次数', '成功率', '最近调用', 'Skill 名称', '归属 Agent']))
 
     await sort.find('button.mk-select__trigger').trigger('click')
     const rateOpt = sort.findAll('.mk-listbox-opt').find((o) => o.text() === '成功率')!

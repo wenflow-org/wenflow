@@ -4,7 +4,7 @@
  * 「带 from 就记来源」的通用行为，避免又退化成按 view 白名单。
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { openSubPage, closeSubPage, subPage, setSubPageLabel } from '../store';
+import { openSubPage, closeSubPage, subPage, setSubPageLabel, setSubPageFrom } from '../store';
 
 describe('openSubPage 来源记忆', () => {
   beforeEach(() => {
@@ -70,5 +70,14 @@ describe('openSubPage 来源记忆', () => {
     });
     expect(subPage.value?.from).toMatchObject({ view: 'learner', id: 'u1' });
     expect(subPage.value?.from?.parent).toBeUndefined();
+  });
+
+  it('载荷反查来源只补缺字段：旧深链只有 fromId 时补可读名/落点，不同来源不覆盖', () => {
+    subPage.value = { view: 'session-real', id: 'ts1', from: { view: 'user', id: 'u1' } };
+    setSubPageFrom({ view: 'user', id: 'u1', label: 'cs', tab: 'sessions' });
+    expect(subPage.value?.from).toMatchObject({ view: 'user', id: 'u1', label: 'cs', tab: 'sessions' });
+    // 载荷晚到但指向另一个人：显式/已有来源优先，不硬编错误人名
+    setSubPageFrom({ view: 'user', id: 'u2', label: '别人' });
+    expect(subPage.value?.from).toMatchObject({ view: 'user', id: 'u1', label: 'cs' });
   });
 });

@@ -9,7 +9,8 @@ export const AITeachingCoordinatorRuntimeDefinition = {
       agentId: 'TeachingContextBuilder',
       kind: 'service',
       impl: 'services/ai-teaching/TeachingContextBuilder.ts buildTeachingScenarioContext',
-      role: 'teaching-context-build'
+      role: 'teaching-context-build',
+      summary: '装配教学上下文：学习者快照、当前任务、画像信号与控制项'
     },
     {
       step: 2,
@@ -38,6 +39,7 @@ export const AITeachingCoordinatorRuntimeDefinition = {
       kind: 'service',
       impl: 'services/ai-teaching/AITeachingCoordinator.ts submitCheckpoint（teaching-turn 可选输出 control.checkpoint 产生 pendingCheckpoint）',
       role: 'checkpoint-decision',
+      summary: '提交并裁决检查点作答，推进教学会话状态机',
       condition: 'when a pending checkpoint is returned'
     },
     {
@@ -53,6 +55,7 @@ export const AITeachingCoordinatorRuntimeDefinition = {
       kind: 'service',
       impl: 'services/ai-teaching/ReplanAdvisoryService.ts build（endSession 流内调用）',
       role: 'replan-advisory',
+      summary: '课后生成重规划建议（保持、补强、放慢、重排、加速），只记录不执行',
       condition: 'after wrapup and learner projection refresh'
     },
   ],

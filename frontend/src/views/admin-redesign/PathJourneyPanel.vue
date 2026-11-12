@@ -20,6 +20,10 @@
       <MkSkeleton variant="cards" :count="4" :h="64" :cols="1" :radius="12" />
     </div>
     <template v-else>
+      <div v-if="loadError" class="mk-alert mk-alert--row" role="alert">
+        <span class="mk-alert__msg">{{ loadError }}</span>
+        <button type="button" class="mk-alert__btn" @click="load(true)">重试</button>
+      </div>
       <!-- 治理动作（2026-10-22 用户「下线路径属于比较危险操作？这个位置也不合适」）：
            下线/恢复、重试生成都是低频且带后果的动作，收进 ⋯ 菜单；刷新钮撤销——顶栏刷新
            已覆盖本面板（watch liveRefreshSeq），同屏不再出第二颗。
@@ -27,7 +31,10 @@
       <Teleport to="[data-path-acts]">
         <div class="pjp-acts">
         <span v-if="d.status !== 'active'" class="mk-badge" :class="statusBadge(d.status)">{{ statusText(d.status) }}</span>
-        <div class="mk-menu">
+        <!-- 2026-11-11（困惑测试 #20）：真实会话座舱声明只读（不可推进阶段 / 不可改会话状态），
+             却在本面板挂「下线路径」红色动作且真实生效。只读模式下整个治理菜单不渲染，
+             路径治理留在学习路径列表页（能力不丢）。 -->
+        <div v-if="!readonly" class="mk-menu">
           <button
             type="button"
             class="mk-menu__btn"
@@ -82,7 +89,7 @@
             <span class="pd-stage__n" aria-hidden="true">{{ m.stageNumber || i + 1 }}</span>
             <strong class="pd-stage__title" :title="m.title">{{ m.title }}</strong>
             <span class="pd-stage__meta">{{ doneTasks(m) }} / {{ m.subtasks.length }} 任务</span>
-            <span class="mk-badge" :class="milestoneBadge(m.status)">{{ milestoneText(m.status) }}</span>
+            <span class="mk-badge" :class="stageStatusBadge(m.status)">{{ stageStatusText(m.status) }}</span>
           </div>
           <div class="pd-stage__body">
             <!-- 阶段内容层（2026-10-06 审核 #54）：描述/目标/核心概念/预计学时，无值不渲染、不硬造。
@@ -115,7 +122,7 @@
             >
               <span v-if="m.status !== 'locked'" class="pd-task__box" aria-hidden="true">✓</span>
               <span class="pd-task__main">
-                <strong class="pd-task__title">{{ t.title }}</strong>
+                <strong class="pd-task__title" :title="t.title">{{ t.title }}</strong>
                 <span class="pd-task__sub" :title="taskSubTitle(t)">{{ taskSub(t) }}</span>
               </span>
               <span v-if="m.status !== 'locked'" class="mk-badge" :class="taskBadge(t.status)">{{ taskText(t.status) }}</span>
@@ -152,7 +159,11 @@ import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { useEscape } from './useEscape'
 import { toast } from '@/utils/toast'
 
-const props = defineProps<{ pathId: string }>()
+const props = defineProps<{
+  pathId: string
+  /** 只读座舱（真实会话）：治理动作（下线/恢复、重试生成）不渲染 */
+  readonly?: boolean
+}>()
 const emit = defineEmits<{ (e: 'changed'): void }>()
 
 /* 契约与 PathDetail 时代一致（详情接口返回 prisma 原行） */
@@ -230,9 +241,10 @@ async function load(force = false) {
     if (body.title) writeBreadcrumbLabel(String(body.title))
   } catch (e) {
     if (seq !== loadSeq || props.pathId !== pid) return
-    /* 刷新失败保留旧数据（面板不白屏），首载失败走错误态 */
-    if (!d.value) loadError.value = `暂时无法获取该路径的完整信息：${errMsg(e)}`
-    else toast.error(`刷新失败：${errMsg(e)}`)
+    /* 刷新失败保留旧数据（面板不白屏）并常驻标旧；首载失败走整块错误态 */
+    loadError.value = d.value
+      ? `刷新失败，以下为上次结果：${errMsg(e)}`
+      : `暂时无法获取该路径的完整信息：${errMsg(e)}`
   } finally {
     if (seq === loadSeq) loading.value = false
   }
@@ -269,13 +281,27 @@ const doneTasks = (m: PathMilestone) => m.subtasks.filter((t) => t.status === 'c
    （statusText 字典明令禁止的漏译），且 .pd-stage--idle 的「非当前且未完成」判定对 active
    也为真 → 当前阶段与未解锁阶段视觉全同、.pd-stage__n 的蓝底高亮永不出现（31/117 条里程碑，
    2026-10-14 浏览器实测）。「进行中」与同列表的任务徽章同词，阶段与任务读到同一个状态词。 */
-const milestoneText = (s: string) => ({ completed: '已完成', active: '进行中', locked: '未解锁' }[s] || s)
+const milestoneText = (s: string) => ({ completed: '已完成', active: '进行中', locked: '未解锁' }[s] || '—')
 const milestoneBadge = (s: string) =>
   s === 'completed' ? 'mk-badge--ok' : s === 'active' ? 'mk-badge--info' : 'mk-badge--muted'
-const taskText = (s: string) => ({ completed: '已完成', in_progress: '进行中', todo: '未开始' }[s] || s)
+/** 路径已下线时，里程碑行冻结在 active/locked（数据有意保留，恢复路径要用）——
+ *  2026-11-11（困惑测试 #23）：展示层不能继续用「进行中 / 未解锁」这类活状态词，
+ *  否则与同一页的「已下线」徽章互相矛盾。d.status==='archived' 时非完成行标「下线时快照」。 */
+const pathArchived = computed(() => d.value?.status === 'archived')
+const stageStatusText = (s: string) =>
+  pathArchived.value && s !== 'completed' ? '下线时快照' : milestoneText(s)
+const stageStatusBadge = (s: string) =>
+  pathArchived.value && s !== 'completed' ? 'mk-badge--muted' : milestoneBadge(s)
+const taskText = (s: string) => ({ completed: '已完成', in_progress: '进行中', todo: '未开始' }[s] || '—')
 const taskBadge = (s: string) =>
   s === 'completed' ? 'mk-badge--ok' : s === 'in_progress' ? 'mk-badge--info' : 'mk-badge--muted'
-const taskSub = (t: PathSubtask) => `${taskTypeText(t.taskType)} · ${t.estimatedMinutes} 分钟`
+/** 任务副行：类型 + 预计时长；任一缺失只留另一半，两者都缺给「—」（不写「— · —」或「0 分钟」） */
+const taskSub = (t: PathSubtask) => {
+  const type = taskTypeText(t.taskType)
+  const minutes = Number(t.estimatedMinutes)
+  const dur = Number.isFinite(minutes) && minutes > 0 ? `${minutes} 分钟` : '—'
+  return [type !== '—' ? type : '', dur !== '—' ? dur : ''].filter(Boolean).join(' · ') || '—'
+}
 const taskSubTitle = (t: PathSubtask) => taskTypeTitle(t.taskType)
 
 /* ===== 治理动作（真实能力：下线 / 恢复 / 重试生成；成功后通知宿主刷新路径状态） ===== */

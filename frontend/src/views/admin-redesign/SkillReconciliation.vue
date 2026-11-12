@@ -9,12 +9,32 @@
       </div>
       <MkLoading v-if="recLoading" inline />
       <template v-else-if="recReport">
-        <!-- 口径 pill（中性 mk-pill）+ 异常计数（mk-badge 语气，替代自造色块） -->
+        <!-- 口径 pill（中性 mk-pill）+ 异常计数（mk-badge 语气，替代自造色块）
+             2026-11-11 困惑测试 #106：异常徽章接上差集定位（点击只看该异常行并滚到表格），
+             否则「未注册 1」与首屏 15 行对不上，异常行要翻页才看得到。 -->
         <div class="sk-rec__pills">
           <span class="mk-badge mk-badge--muted" :title="`已上线数 / 登记册全量（登记册含插件，多于目录）`">已上线 {{ recReport.summary.byStatus.live || 0 }} / {{ recReport.summary.total }}</span>
-          <span v-if="recReport.summary.unregistered" class="mk-badge mk-badge--bad">未注册 {{ recReport.summary.unregistered }}</span>
-          <span v-if="recReport.summary.activeMissing" class="mk-badge mk-badge--warn" :title="ACTIVE_MISSING_HINT">无生效版本 {{ recReport.summary.activeMissing }}</span>
-          <span v-if="recReport.summary.orphanRegistrations" class="mk-badge mk-badge--bad" title="技能注册表里已没有它，但数据库注册记录仍残留">失效注册 {{ recReport.summary.orphanRegistrations }}</span>
+          <button
+            v-if="recReport.summary.unregistered"
+            type="button"
+            class="mk-badge mk-badge--bad sk-rec__pillbtn"
+            title="登记册里有、运行时注册表里没有。点击只看这些行"
+            @click="focusRecDiff('unregistered')"
+          >未注册 {{ recReport.summary.unregistered }}</button>
+          <button
+            v-if="recReport.summary.activeMissing"
+            type="button"
+            class="mk-badge mk-badge--warn sk-rec__pillbtn"
+            :title="`${ACTIVE_MISSING_HINT}。点击只看这些行`"
+            @click="focusRecDiff('active-missing')"
+          >无生效版本 {{ recReport.summary.activeMissing }}</button>
+          <button
+            v-if="recReport.summary.orphanRegistrations"
+            type="button"
+            class="mk-badge mk-badge--bad sk-rec__pillbtn"
+            title="技能注册表里已没有它，但数据库注册记录仍残留。点击跳到表末残留清单"
+            @click="scrollToOrphans"
+          >失效注册 {{ recReport.summary.orphanRegistrations }}</button>
           <span v-else class="mk-pill" :title="recReport.summary.orphanRetiredExempt ? `无失效注册。退役技能另有 ${recReport.summary.orphanRetiredExempt} 项注册行按「不动历史数据」保留、不计异常` : '无失效注册'">
             失效注册 0
           </span>
@@ -104,7 +124,7 @@
                     <span class="sk-dot" :class="`sk-dot--${recDotTone(e.row)}`"></span>
                     <div class="mk-cell-main">
                       <strong class="sk-id-main" :title="e.row.skillId">{{ e.row.skillId }}</strong>
-                      <span class="sk-name-desc">{{ e.row.displayName || recKindText(e.row.kind) }}<template v-if="e.row.stage"> · {{ e.row.stage }}</template></span>
+                      <span class="sk-name-desc" :title="e.row.displayName || recKindText(e.row.kind)">{{ e.row.displayName || recKindText(e.row.kind) }}<template v-if="e.row.stage"> · {{ e.row.stage }}</template></span>
                     </div>
                   </div>
                 </td>
@@ -112,15 +132,19 @@
                   <!-- 2026-10-31 外部评审：豁免类缺项不是错误——带豁免徽章的格子画灰色 —，
                        不再用红 ✗ 报异常（✗ 只留给真异常） -->
                   <span :class="['sk-rec-yn', e.row.manifest ? 'sk-rec-yn--ok' : e.row.kind === 'aux' ? 'sk-rec-yn--na' : 'sk-rec-yn--no']">{{ e.row.manifest ? '✓' : e.row.kind === 'aux' ? '—' : '✗' }}</span>
-                  <span v-if="e.row.kind === 'aux' && !e.row.manifest" class="mk-badge mk-badge--muted sk-rec-tag">免注册</span>
+                  <span v-if="e.row.kind === 'aux' && !e.row.manifest" class="mk-badge mk-badge--muted sk-rec-tag" title="辅助技能（aux）不要求配置声明，缺声明不算异常">免注册</span>
                 </td>
                 <td>
                   <span :class="['sk-rec-yn', e.row.registered ? 'sk-rec-yn--ok' : e.row.registrationExempt ? 'sk-rec-yn--na' : 'sk-rec-yn--no']">{{ e.row.registered ? '✓' : e.row.registrationExempt ? '—' : '✗' }}</span>
-                  <span v-if="e.row.registrationExempt" class="mk-badge mk-badge--muted sk-rec-tag">豁免</span>
+                  <span
+                    v-if="e.row.registrationExempt"
+                    class="mk-badge mk-badge--muted sk-rec-tag"
+                    :title="`注册点为「${e.row.registrationPoint || '—'}」：该注册点本就不写入技能注册表，属预期豁免而不是漏注册`"
+                  >豁免</span>
                 </td>
                 <td>
                   <span :class="['sk-rec-yn', e.row.active ? 'sk-rec-yn--ok' : e.row.noPromptFile ? 'sk-rec-yn--na' : 'sk-rec-yn--no']">{{ e.row.active ? '✓' : e.row.noPromptFile ? '—' : '✗' }}</span>
-                  <span v-if="e.row.noPromptFile" class="mk-badge mk-badge--muted sk-rec-tag">纯函数</span>
+                  <span v-if="e.row.noPromptFile" class="mk-badge mk-badge--muted sk-rec-tag" title="没有提示词文件：逻辑在代码 handler 里，不常驻 Prompt 版本">纯函数</span>
                 </td>
                 <td>
                   <span class="mk-badge" :class="`mk-badge--rec-${e.row.completion.status}`" :title="recGateDetail(e.row.completion)">{{ recStatusText(e.row.completion.status) }}</span>
@@ -148,6 +172,7 @@
         v-model:page="recPage"
         v-model:pageSize="recPageSize"
         :total="recRowEntries.length"
+        note="共 N 条 = 登记册全量，分组表头不计入条数、跨页不重复计"
       />
       <div v-if="recReport.orphanRegistrations.length" class="sk-rec-orphans">
         <strong title="登记册已删除/不存在，但注册记录仍残留">失效注册残留</strong>
@@ -157,7 +182,7 @@
         <span v-for="s in recStatusOrder" :key="s" class="sk-rec-legend__item">
           <i class="mk-badge" :class="`mk-badge--rec-${s}`"></i>{{ recStatusText(s) }}
         </span>
-        <span class="mk-card__meta">技能登记册共 {{ recReport.summary.total }} 条 · {{ recReport.generatedAt ? '核查于 ' + new Date(recReport.generatedAt).toLocaleString() : '' }}</span>
+        <span class="mk-card__meta">技能登记册共 {{ recReport.summary.total }} 条 · {{ recReport.generatedAt ? '核查于 ' + fmtMinute(recReport.generatedAt) : '' }}</span>
       </div>
     </template>
     <MkEmptyState
@@ -242,6 +267,21 @@ function applyRecQuery() {
   recDiff.value = diff === "unregistered" || diff === "active-missing" || diff === "live" ? diff : "";
 }
 function clearRecDiff() { recDiff.value = ""; }
+/** 卡头异常徽章 → 表内定位（#106）：与 ?diff= 深链同一套机制（「仅看异常」+ 差集高亮），
+    点完滚到表格，免得用户以为总数与首屏行数对不上。 */
+function focusRecDiff(diff: "unregistered" | "active-missing") {
+  recFilter.value = "abnormal";
+  recDiff.value = diff;
+  recPage.value = 1;
+  void nextTick(() => {
+    recPanelRef.value?.querySelector(".mk-table-scroll")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  });
+}
+function scrollToOrphans() {
+  void nextTick(() => {
+    recPanelRef.value?.querySelector(".sk-rec-orphans")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  });
+}
 
 watch(recReport, async (report) => {
   if (!report || !recDeepLinked) return;
@@ -277,6 +317,14 @@ onMounted(() => { applyRecQuery(); refresh(); });
 
 const recStatusOrder = ["draft", "handler-ready", "core-ready", "fields-synced", "live"] as const;
 const recStatusText = (status: string) => completionMetaOf(status)?.label || status;
+/** 绝对时间统一 YYYY-MM-DD HH:mm（全站口径；toLocaleString 会随系统区域变化） */
+function fmtMinute(iso?: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
 
 const REC_AGENT_ORDER = ["goal-agent", "path-agent", "teaching-agent", "profile-agent", "simulation-agent"];
 type RecRow = SkillReconciliationReport["items"][number];
@@ -387,14 +435,22 @@ function recRowFlagged(row: RecRow): boolean {
 }
 function recGateDetail(completion: SkillCompletion): string {
   const gates: Array<[string, string]> = [
-    ["draft", "技能登记册"], ["handlerReady", "handler 注册"], ["coreReady", "core 文件"],
+    // #108：这一门只查 handler 文件是否存在（注册另有「运行注册」列），叫「handler 注册」会与邻列打架
+    ["draft", "技能登记册"], ["handlerReady", "handler 文件"], ["coreReady", "core 文件"],
     ["fieldsSynced", "字段路由"], ["live", "ACTIVE prompt"],
   ];
   for (const [key, label] of gates) {
     const gate = completion.gates[key as keyof typeof completion.gates];
     if (!gate?.ok) return `${label}：${gate?.detail || "未通过"}`;
   }
-  return "全部门槛通过";
+  // 全过时把后端逐门槛 detail 透出来：豁免档（handler-only / 无 Prompt 文件）的信息只在 detail 里
+  const notes = gates
+    .map(([key, label]) => {
+      const detail = completion.gates[key as keyof typeof completion.gates]?.detail
+      return detail ? `${label}：${detail}` : ""
+    })
+    .filter(Boolean)
+  return notes.length ? `全部门槛通过（${notes.join("；")}）` : "全部门槛通过"
 }
 
 // 2026-10-05：整卡折叠退役后 openPanel/recOpen 不再有意义（唯一挂载点=健康中心「对账」页签，
@@ -416,6 +472,9 @@ defineExpose({ refresh, recReport, recDiff });
 .sk-rec-row--flagged { background: color-mix(in srgb, var(--mk-red) 6%, transparent); }
 
 .sk-rec__pills { display: inline-flex; gap: 6px; margin-left: auto; flex-wrap: wrap; align-items: center; }
+/* #106：异常徽章改成按钮后要保住徽章的观感（去 UA 按钮底色/字体差），只加可点的手感 */
+.sk-rec__pillbtn { cursor: pointer; }
+.sk-rec__pillbtn:hover { text-decoration: underline; }
 /* 2026-11-05 去胶囊化：这一行原先把「已上线 X/Y」借 .mk-pill 当形状（那是筛选触发器），
    再靠下面这条覆盖把胶囊与徽章压成同一档高度——两个不同语义的元素硬对齐。
    现在整行都是 .mk-badge（中性读数走 --muted、异常走 --bad/--warn），形状由徽章自带，

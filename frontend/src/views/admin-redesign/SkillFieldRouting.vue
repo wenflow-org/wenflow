@@ -10,7 +10,7 @@
         <strong>契约 · 阶段 {{ data.stage }}</strong>
         <span class="mk-badge mk-badge--muted">产出行 {{ data.routings.length }} 行</span>
         <template v-if="syncReport">
-          <span v-if="syncReport.state === 'ok'" class="mk-badge mk-badge--ok">{{ TERMS.fieldsSynced }}</span>
+          <span v-if="syncReport.state === 'ok'" class="mk-badge mk-badge--ok" :title="`${TERMS.fieldsSynced}：核心文件里的字段声明与编排产出路由行首段一致性核查通过`">{{ TERMS.fieldsSynced }}</span>
           <span v-else-if="syncReport.state === 'no-core'" class="mk-badge mk-badge--bad">core 缺失</span>
           <span v-else-if="syncReport.state === 'no-routings'" class="mk-badge mk-badge--muted">无产出行</span>
           <template v-else>
@@ -46,7 +46,8 @@
       </div>
 
       <!-- 图例：角色 / render / 流转 / 落库键 / 锁定（与编排图页同源人话表） -->
-      <details class="sfr__legend" @toggle="legendOpen = ($event.target as HTMLDetailsElement).open">
+      <!-- 2026-11-11（困惑测试 #81）：图例默认折叠，测试员要的三句人话（必填/锁定/已声明）都在里面却看不到。 -->
+      <details class="sfr__legend" open @toggle="legendOpen = ($event.target as HTMLDetailsElement).open">
         <!-- 折叠头走 .mk-section__summary（shared.css，与 FieldRoutingTable / DriftAuditPanel 同款） -->
         <summary class="mk-section__summary mk-section__summary--muted">图例：字段角色 / 可见性 / 锁定 / 流转</summary>
         <div class="sfr__legend-body">
@@ -103,7 +104,7 @@
       <div class="mk-card">
         <div class="mk-card__head">
           <h3 class="mk-card__title">产出字段</h3>
-          <span class="mk-card__meta">{{ data.routings.length }} 条字段流转</span>
+          <span class="mk-card__meta">{{ data.routings.length }} 条产出路由</span>
         </div>
         <!-- 原型 .tbl：自动布局（去 mk-table--fixed 与 <colgroup>），
              单元格 nowrap；长文本列（含义）走 wrap 列，长标识列 max-width+ellipsis 截断 -->
@@ -582,9 +583,9 @@ function deleteErrText(e: unknown): string {
 async function onDelete(row: Record<string, any>) {
   if (deleting.value) return
   const ok = await askConfirm({
-    title: `删除字段 ${row.fieldId}？`,
-    message: `将同时删除该字段的核心声明、编排字段/路由与数据库记录（原文件会自动备份，可恢复）。\n\n删除前请确认没有下游引用：若其他 Agent 路由或 Skill 仍引用它，后端会拒绝删除并列出引用方。`,
-    confirmText: '确认删除（不可恢复）'
+    title: '删除字段',
+    message: `将删除字段 ${row.fieldId} 的核心声明、编排字段/路由与数据库记录（原文件会自动备份，可恢复）。\n\n删除前请确认没有下游引用：若其他 Agent 路由或 Skill 仍引用它，后端会拒绝删除并列出引用方。`,
+    confirmText: '删除'
   })
   if (!ok) return
   deleting.value = true

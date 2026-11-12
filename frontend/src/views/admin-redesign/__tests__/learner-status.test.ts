@@ -176,8 +176,7 @@ describe('默认每页 15 行（审计 #6）', () => {
   });
 });
 
-describe('数据覆盖率 KPI 副注（审计 #3）', () => {
-  it('卡面带 X/Y 位有快照 副注', async () => {
+describe('数据覆盖率 KPI 副注（审计 #3）', () => {  it('卡面带 X/Y 位有快照 副注', async () => {
     liveLearners.value = [
       lr({ userId: 'a', name: '甲', currentTask: '任务A', pathTitle: '路径A', confidence: 0.7 }),
       lr({ userId: 'b', name: '乙', currentTask: '任务B', pathTitle: '路径B', confidence: 0.3 }),
@@ -188,8 +187,12 @@ describe('数据覆盖率 KPI 副注（审计 #3）', () => {
     const cov = w.findAll('.lc-kpi .mk-kpi').find((c) => c.find('.mk-kpi__label').text().trim() === '数据覆盖率')!;
     const note = cov.find('.mk-kpi__num-note');
     expect(note.exists(), '数据覆盖率应有副注').toBe(true);
-    expect(note.text()).toContain('位有快照');
-    expect(note.text()).toBe('2/3 位有快照');
+    // 2026-11-11 困惑测试 #32：分子是「有学习任务且测得置信度」，不是「有快照」——
+    // 已加载学习者人人有快照，原措辞会让读者问「未开始用户算不算分母」。
+    // 2026-11-11 全站打磨：1280 宽六卡一排时完整句会被卡右侧裁掉，副注只留 X/Y 位；
+    // 完整口径仍在卡根 title（悬停 / 读屏可达）。
+    expect(note.text()).toBe('2/3 位');
+    expect(cov.attributes('title')).toContain('有学习任务且测得置信度的用户 2 / 已加载 3 位');
     w.unmount();
   });
 });

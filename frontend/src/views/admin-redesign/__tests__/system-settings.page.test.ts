@@ -2,9 +2,10 @@
  * 系统设置页（2026-11-01 用户「这四个拆出来，和模型与接入作为一个页面，
  * 但是模型与接入要改名字了」）。
  *
- * 合并后的形状：一个宿主 + 五个并列页签（模型与接入 / 运维工具 / 数据导出 / 会话安全 / 访问与注册）。
+ * 合并后的形状：一个宿主 + 四个并列页签（模型与接入 / 数据导出 / 会话安全 / 网络与安全）。
+ * 2026-11-11：运维工具页签下线，事件投递处置并入健康中心（?tab=tools 由路由改投 /admin/health-center）。
  * 本文件守住四件容易在后续改动中走形的事：
- *  1) 五个页签都在位，且默认落在「模型与接入」；
+ *  1) 四个页签都在位，且默认落在「模型与接入」；
  *  2) ?tab= 是宿主自己的键：只做成员校验、不认识的回落首页签且不改写地址栏；
  *  3) 「模型与接入」面板懒挂载 + v-show 常驻——它在切页签时**不能**被销毁，
  *     否则未保存的接入配置会静默丢掉（它的 onBeforeRouteLeave 拦不住同 route 的 ?tab= 变化）；
@@ -53,7 +54,7 @@ vi.mock('../live', async () => {
     liveLoading: ref(false),
     liveFetchModels: vi.fn(async () => []),
     liveSaveApiConfig: vi.fn(async () => {}),
-    // 访问与注册面板（嵌入态）读的这些
+    // 网络与安全面板（嵌入态）读的这些
     registrationEnabled: ref(null),
     registerIpQuotaEnabled: ref(null),
     registerIpDailyQuota: ref(null),
@@ -71,7 +72,6 @@ vi.mock('@/utils/toast', () => ({ toast: { error: vi.fn(), success: vi.fn() } })
 
 import SystemSettings from '../SystemSettings.vue'
 import ApiConfig from '../ApiConfig.vue'
-import ServerToolsPanel from '../ServerToolsPanel.vue'
 import DataExportPanel from '../DataExportPanel.vue'
 import SessionSecurity from '../SessionSecurity.vue'
 import AccessControl from '../AccessControl.vue'
@@ -90,13 +90,13 @@ async function mountHost(route = '/admin/system-settings') {
   return { wrapper, router }
 }
 
-describe('系统设置宿主：五个页签', () => {
+describe('系统设置宿主：四个页签', () => {
   beforeEach(() => { vi.clearAllMocks() })
 
-  it('页签依次是 模型与接入 / 运维工具 / 数据导出 / 会话安全 / 访问与注册，且不挂计数角标', async () => {
+  it('页签依次是 模型与接入 / 数据导出 / 会话安全 / 网络与安全，且不挂计数角标', async () => {
     const { wrapper } = await mountHost()
     const tabs = wrapper.findAll('.tabs .tab').map((t) => t.text())
-    expect(tabs).toEqual(['模型与接入', '运维工具', '数据导出', '会话安全', '访问与注册'])
+    expect(tabs).toEqual(['模型与接入', '数据导出', '会话安全', '网络与安全'])
     expect(wrapper.findAll('.tab__count')).toHaveLength(0)
     wrapper.unmount()
   })
@@ -110,7 +110,6 @@ describe('系统设置宿主：五个页签', () => {
   })
 
   it.each([
-    ['tools', ServerToolsPanel, '#ss-panel-tools'],
     ['export', DataExportPanel, '#ss-panel-export'],
     ['security', SessionSecurity, '#ss-panel-security'],
     ['access', AccessControl, '#ss-panel-access'],
@@ -139,7 +138,7 @@ describe('系统设置宿主：五个页签', () => {
       wrapper.unmount()
       return has
     }
-    for (const t of ['api', 'tools', 'export', 'security', 'access']) {
+    for (const t of ['api', 'export', 'security', 'access']) {
       expect(await at(t), `tab=${t} 不该出现页面级刷新注册表`).toBe(false)
     }
   })
@@ -154,7 +153,7 @@ describe('系统设置宿主：五个页签', () => {
 describe('切页签不得丢掉未保存的接入配置', () => {
   beforeEach(() => { vi.clearAllMocks() })
 
-  it('从模型与接入切到运维工具再切回来，面板没有被销毁（v-show 常驻）', async () => {
+  it('从模型与接入切到数据导出再切回来，面板没有被销毁（v-show 常驻）', async () => {
     /* 模型与接入有未保存改动的 onBeforeRouteLeave，但它只在离开该 route record 时触发；
        切页签只改 ?tab=，同一条 route，守卫根本不跑。所以靠「不销毁」保编辑态。
        若哪天有人把它改成 v-else-if，这条会红。 */
@@ -162,7 +161,7 @@ describe('切页签不得丢掉未保存的接入配置', () => {
     const apiBefore = wrapper.findComponent(ApiConfig)
     expect(apiBefore.exists()).toBe(true)
     // 首屏就该挂载（懒挂载只在首屏不是 api 时才推迟）
-    await router.push('/admin/system-settings?tab=tools')
+    await router.push('/admin/system-settings?tab=export')
     await flushPromises()
     // 仍是同一个组件实例：v-show 只是 display:none，DOM 节点还在
     expect(wrapper.findComponent(ApiConfig).exists()).toBe(true)
@@ -179,16 +178,15 @@ describe('切页签不得丢掉未保存的接入配置', () => {
     wrapper.unmount()
   })
 
-  it('进过「模型与接入」之后，其余四个页签照常渲染（2026-11-02 空白页回归）', async () => {
-    /* 回归：其余四页签一度写成 `v-if="apiMounted" v-show=…` 那条链上的 v-else-if。
+  it('进过「模型与接入」之后，其余三个页签照常渲染（2026-11-02 空白页回归）', async () => {
+    /* 回归：其余页签一度写成 `v-if="apiMounted" v-show=…` 那条链上的 v-else-if。
        apiMounted 一旦为真就再不变假，v-else-if 只在链头为假时求值——于是「先看过模型与接入」
        之后再点任何页签都是空白，且不报错。下面的 it.each 用「每个页签各挂一次新宿主」跑，
        apiMounted 每次都是 false，正好绕开这条路径，所以必须在这里串起来测。 */
     const { wrapper, router } = await mountHost('/admin/system-settings?tab=api')
     expect(wrapper.findComponent(ApiConfig).exists()).toBe(true)
     const cases = [
-      ['tools', ServerToolsPanel, '#ss-panel-tools'],
-      ['export', DataExportPanel, '#ss-panel-export'],
+        ['export', DataExportPanel, '#ss-panel-export'],
       ['security', SessionSecurity, '#ss-panel-security'],
       ['access', AccessControl, '#ss-panel-access'],
     ] as const

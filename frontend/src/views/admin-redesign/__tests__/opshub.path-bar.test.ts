@@ -150,11 +150,11 @@ describe('运营中心：四张读数卡是快捷切换入口', () => {
     expect(router.currentRoute.value.path).toBe('/admin/learning-paths')
     expect(router.currentRoute.value.query.status).toBe('failed')
 
-    // 事件投递失败 → 系统设置 · 运维工具页签
+    // 事件投递失败 → 健康中心「事件投递」卡（2026-11-11 运维工具页签下线）
     await w.findAll('.oh-metrics .mk-kpi')[2].trigger('click')
     await flushPromises()
-    expect(router.currentRoute.value.path).toBe('/admin/system-settings')
-    expect(router.currentRoute.value.query.tab).toBe('tools')
+    expect(router.currentRoute.value.path).toBe('/admin/health-center')
+    expect(router.currentRoute.value.query.focus).toBe('outbox')
 
     w.unmount()
   })

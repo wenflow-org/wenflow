@@ -170,7 +170,7 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     const w2 = await mountWithRows(ROWS, { due: 2 });
     const dueCard2 = w2.findAll('.mk-kpi')[2];
     expect(dueCard2.classes()).toContain('mk-kpi--warn');
-    expect(dueCard2.attributes('title')).toContain('占全部记录 29%');
+    expect(dueCard2.attributes('title')).toContain('占全部记忆痕迹 29%');
     expect(dueCard2.attributes('title')).not.toContain('标为需关注');
   });
 
@@ -198,8 +198,9 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
       w.findAll('.mk-kpi').find((c) => c.find('.mk-kpi__label').text() === label);
     const card = byLabel('需人工确认')!;
     expect(card.find('.mk-kpi__num').text()).toBe('5');
-    // 2026-10-26：卡面与 title 都只留读数（机制说明整条撤除）
-    expect(card.attributes('title')).toBeUndefined();
+    /* 2026-11-11 困惑测试 #37：卡值（全库条数）与「需关注」筛选（当前页人数）口径不同，
+       title 补上两者关系（原为 undefined）。 */
+    expect(card.attributes('title')).toContain('全库待人审条数');
     expect(byLabel('待审队列')).toBeUndefined();
   });
 
@@ -218,7 +219,8 @@ describe('MemoryReviewOverview：跨用户总览（2026-10-12 恢复，2026-10-1
     expect(card.find('.mk-kpi__hint').exists()).toBe(false);
     expect(card.text()).not.toContain('尚未观察');
     expect(card.text()).not.toContain('已观察');
-    expect(card.attributes('title')).toBeUndefined();
+    // 2026-11-11 困惑测试 #37：口径说明进悬停（不再是 undefined）
+    expect(card.attributes('title')).toContain('全库待人审条数');
     // 没观察过 → 没有可筛的对象，卡不可点
     expect(card.classes()).not.toContain('mk-kpi--clickable');
   });

@@ -20,8 +20,8 @@
       <!-- 区头只留区名（2026-11-05 用户「这种说明文案不要」）：右端那行
            「4 项能力 · 6 个 Skill」是把下方四张卡再数一遍，读者扫一眼卡片就有答案。
            保留的只有「启停状态未读取」——那是读失败，不读这一行看不出来。 -->
-      <div class="ac-section__head">
-        <h2 class="ac-section__title">可选能力</h2>
+      <div class="mk-section__head">
+        <h2 class="mk-section__title">可选能力</h2>
         <span v-if="pluginStateFailed" class="mk-badge mk-badge--warn">启停状态未读取</span>
       </div>
       <div v-if="configsFailed" class="mk-alert mk-alert--row ac-error" role="alert">
@@ -48,7 +48,15 @@
                 <component :is="p.icon" :size="15" :stroke-width="1.8" />
               </span>
               <h3 class="mk-card__title">{{ p.name }}</h3>
-              <button v-if="p.errorCount > 0" type="button" class="mk-link ac-cap__fail" @click="goLogs(p.primary)">查失败</button>
+              <!-- 2026-11-11（困惑测试 #91）：开关只回答「开没开」，不回答「跑不跑得起来」。
+                   决策卡曾经显示「启用」而主用 provider 缺密钥，要自己点进配置弹层才发现
+                   调用必失败。主用服务未配置时卡面直接挂同款警示徽标。 -->
+              <span
+                v-if="capHealth(p).bad"
+                class="mk-badge mk-badge--sm mk-badge--warn"
+                :title="capHealth(p).title"
+              >缺少密钥</span>
+              <button v-if="p.errorCount > 0" type="button" class="mk-link ac-cap__fail" :title="failedTitle(p)" @click="goLogs(failedTarget(p))">查失败</button>
             </div>
             <MkSwitch
               :model-value="pluginEnabled(p.id)"
@@ -120,14 +128,11 @@
                       {{ testResult.ok ? `通过 · ${testResult.latencyMs}ms` : `失败 · ${testResult.error || ''}` }}
                     </span>
                     <!-- 配置从 ⋯ 菜单提到行内（2026-11-07 用户「启用 | 测试 | 配置」）：
-                         编辑是最常用的动作，藏进菜单等于每次多点一次 -->
+                         编辑是最常用的动作，藏进菜单等于每次多点一次。
+                         2026-11-10 用户「统一一下」：删除同样提到行内（与用户账号页同一裁决），
+                         行尾不再留一只只装一项的 ⋯ 菜单。 -->
                     <button type="button" class="mk-link" @click="openToolEdit(t)">配置</button>
-                    <div class="mk-menu">
-                      <button type="button" class="mk-menu__btn" aria-label="更多操作" aria-haspopup="menu" :aria-expanded="openMenu === t.id" @click.stop="toggleMenu(t.id)">⋯</button>
-                      <div v-if="openMenu === t.id" class="mk-menu__pop" :style="popStyle" @click.stop>
-                        <button type="button" class="mk-menu__item mk-menu__item--danger" @click="menuRemove(t)">删除</button>
-                      </div>
-                    </div>
+                    <button type="button" class="mk-link mk-link--danger" @click="removeTool(t)">删除</button>
                   </div>
                 </div>
               </div>
@@ -148,7 +153,17 @@
           </div>
 
           <div class="ac-cap__foot">
-            <span class="ac-cap__calls">累计 {{ p.calls }} 次调用<i v-if="p.last !== '从未'"> · 最近 {{ p.last }}</i></span>
+            <!-- 2026-11-11（困惑测试 #94）：原「累计 N 次调用」的 N 其实是统计窗口内的数
+                 （与 Skills 页共用一个窗口选择器，默认近 7 天），「累计」是错的量词；
+                 同时把读数做成入口——此前卡上唯一的下钻是失败才出现的「查失败」。 -->
+            <span class="ac-cap__calls">
+              <button
+                type="button"
+                class="mk-link ac-cap__calls-btn"
+                :title="`查看 ${busiestMember(p).name} 的调用明细（同插件其他成员的调用需在执行日志里切换筛选）`"
+                @click="goLogs(busiestMember(p).id)"
+              >{{ statsRangeText }} {{ p.calls }} 次调用</button><i v-if="p.last !== '从未'"> · 最近 {{ p.last }}</i>
+            </span>
             <!-- 入口降级为次要描边按钮（2026-11-07 用户「绿开关紧挨深蓝按钮撞色」）：
                  本页没有「唯一主操作」，实心主色留给真正的主按钮（保存 / 新建）。 -->
             <button v-if="p.id === 'mcp'" type="button" class="mk-btn mk-btn--sm" @click="openToolCreate">新建服务</button>
@@ -162,60 +177,89 @@
     <!-- MCP 服务编辑弹窗 -->
     <Teleport to="body">
     <div v-if="toolOpen" ref="maskRef" class="mk-modal">
-      <div ref="panelRef" class="mk-modal__panel" role="dialog" aria-label="MCP 服务">
+      <div ref="panelRef" class="mk-modal__panel mk-modal__panel--wide" role="dialog" aria-label="MCP 服务">
         <div class="mk-modal__head">
           <h3 class="mk-modal__title">{{ toolEditingId ? '编辑 MCP 服务' : '新建 MCP 服务' }}</h3>
           <button type="button" class="mk-modal__close" aria-label="关闭" @click="toolOpen = false">✕</button>
         </div>
-        <div class="mk-modal__body">
-          <label class="mk-field" :class="{ 'mk-field--error': toolErrors.id }">
-            <!-- 编辑态：ID 是主键不可改（输入框禁用），红星撤下、改挂锁定说明——
-                 否则禁用框带必填星号会被读成「该填但填不了」（2026-10-31 四轮评审 P0-3） -->
-            <span class="mk-field__label">
-              工具 ID
-              <em v-if="!toolEditingId" class="mk-field__req">*</em>
-              <!-- 加全角括号并复用字段次级提示档：不写括号时它和「工具 ID」同字号同色位，
-                   整行会被读成一个连写的长标签，看不出后半句是对字段的说明 -->
-              <span v-else class="mk-field__opt">（创建后不可修改）</span>
-            </span>
-            <input v-model="toolForm.id" class="mk-field__input" placeholder="例如：web-search / text-to-image" :disabled="!!toolEditingId" />
-            <span v-if="toolErrors.id" class="mk-field__err">{{ toolErrors.id }}</span>
-          </label>
-          <label class="mk-field" :class="{ 'mk-field--error': toolErrors.name }">
-            <span class="mk-field__label">名称 <em class="mk-field__req">*</em></span>
-            <input v-model="toolForm.name" class="mk-field__input" placeholder="例如：网页搜索" />
-            <span v-if="toolErrors.name" class="mk-field__err">{{ toolErrors.name }}</span>
-          </label>
-          <div class="ac-mcp__formrow">
-            <label class="mk-field">
-              <span class="mk-field__label">连接方式</span>
-              <MkSelect v-model="toolForm.transport" :options="TRANSPORT_OPTIONS" aria-label="连接方式" block />
-            </label>
-            <label class="mk-field">
-              <span class="mk-field__label">类型</span>
-              <MkSelect
-                v-model="toolForm.type"
-                :options="TOOL_TYPE_OPTIONS"
-                aria-label="类型"
-                :disabled="toolForm.transport === 'mcp'"
-                block
-              />
-            </label>
-          </div>
-          <label class="mk-field" :class="{ 'mk-field--error': toolErrors.endpoint }">
-            <span class="mk-field__label">服务地址 <em class="mk-field__req">*</em></span>
-            <input
-              v-model="toolForm.endpoint"
-              class="mk-field__input"
-              :placeholder="toolForm.transport === 'mcp' ? 'https://…/mcp' : 'https://…'"
-            />
-            <span v-if="toolErrors.endpoint" class="mk-field__err">{{ toolErrors.endpoint }}</span>
-          </label>
-          <label class="mk-field">
+        <!-- 2026-11-10 用户「统一」：与插件服务配置弹层同一套骨架——宽版 + 段名 +
+             两列字段网格。此前是窄弹层、五个字段一路竖排，与隔壁那张弹层像两个产品。 -->
+        <div class="mk-modal__body ac-config">
+          <section class="ac-sec">
+            <h4 class="mk-section__title">基本信息</h4>
+            <div class="ac-form">
+              <label class="mk-field" :class="{ 'mk-field--error': toolErrors.id }">
+                <!-- 编辑态：ID 是主键不可改（输入框禁用），红星撤下、改挂锁定说明——
+                     否则禁用框带必填星号会被读成「该填但填不了」（2026-10-31 四轮评审 P0-3） -->
+                <span class="mk-field__label">
+                  工具 ID
+                  <em v-if="!toolEditingId" class="mk-field__req">*</em>
+                  <!-- 加全角括号并复用字段次级提示档：不写括号时它和「工具 ID」同字号同色位，
+                       整行会被读成一个连写的长标签，看不出后半句是对字段的说明 -->
+                  <span v-else class="mk-field__opt">（创建后不可修改）</span>
+                </span>
+                <input v-model="toolForm.id" class="mk-field__input" placeholder="例如：web-search / text-to-image" :disabled="!!toolEditingId" />
+                <span v-if="toolErrors.id" class="mk-field__err">{{ toolErrors.id }}</span>
+              </label>
+              <label class="mk-field" :class="{ 'mk-field--error': toolErrors.name }">
+                <span class="mk-field__label">名称 <em class="mk-field__req">*</em></span>
+                <input v-model="toolForm.name" class="mk-field__input" placeholder="例如：网页搜索" />
+                <span v-if="toolErrors.name" class="mk-field__err">{{ toolErrors.name }}</span>
+              </label>
+            </div>
+          </section>
+
+          <section class="ac-sec">
+            <h4 class="mk-section__title">连接</h4>
+            <div class="ac-form">
+              <label class="mk-field">
+                <span class="mk-field__label">连接方式</span>
+                <!-- 2026-11-11（困惑测试 #92）：种子里的本机进程工具（endpoint='local'）此前在
+                     弹层被显示成「HTTP 接口 + 地址 local」——三个概念互斥且保存必 400。
+                     第三档「本机进程」把内部约定值显式暴露出来。 -->
+                <MkSelect
+                  :model-value="toolForm.transport"
+                  :options="TRANSPORT_OPTIONS"
+                  aria-label="连接方式"
+                  block
+                  @update:model-value="onTransportChange"
+                />
+              </label>
+              <label class="mk-field">
+                <span class="mk-field__label">类型</span>
+                <MkSelect
+                  v-model="toolForm.type"
+                  :options="TOOL_TYPE_OPTIONS"
+                  aria-label="类型"
+                  :disabled="toolForm.transport === 'mcp'"
+                  block
+                />
+              </label>
+              <label v-if="toolForm.transport !== 'local'" class="mk-field mk-field--full" :class="{ 'mk-field--error': toolErrors.endpoint }">
+                <span class="mk-field__label">服务地址 <em class="mk-field__req">*</em></span>
+                <input
+                  v-model="toolForm.endpoint"
+                  class="mk-field__input"
+                  :placeholder="toolForm.transport === 'mcp' ? 'https://…/mcp' : 'https://…'"
+                />
+                <span v-if="toolErrors.endpoint" class="mk-field__err">{{ toolErrors.endpoint }}</span>
+              </label>
+              <div v-else class="mk-field mk-field--full">
+                <span class="mk-field__label">服务地址</span>
+                <input class="mk-field__input" value="平台后端进程内执行，无需地址" disabled />
+                <span class="mk-field__opt">本机进程 = 在平台后端服务器上执行（不是管理员本机）。文件类工具只能读取服务端白名单目录（由后端配置限定）</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="ac-sec">
+            <h4 class="mk-section__title">说明</h4>
             <!-- 必填项已带 *，非必填不再追加「（可选）」 -->
-            <span class="mk-field__label">描述</span>
-            <textarea v-model="toolForm.description" class="mk-field__textarea" rows="2"></textarea>
-          </label>
+            <label class="mk-field">
+              <span class="mk-field__label">描述</span>
+              <textarea v-model="toolForm.description" class="mk-field__textarea" rows="2"></textarea>
+            </label>
+          </section>
         </div>
         <div class="mk-modal__foot">
           <button type="button" class="mk-btn" @click="toolOpen = false">取消</button>
@@ -237,57 +281,93 @@
             <h3 class="mk-modal__title">{{ configTitle }} · 服务配置</h3>
             <button type="button" class="mk-modal__close" aria-label="关闭" @click="closeConfig">✕</button>
           </div>
-          <div class="mk-modal__body">
-            <!-- 通道优先级（2026-10-26 用户两次走查：「这个真的很丑」「本身是三选一，然后用户可以
-                 自己配置优先级」）：每通道一条链，第一位是主用，其余是备用；顺序由用户自己排，
-                 也可以把 provider 加进/移出链。
-                 2026-11-07 用户「联网的地址与顺序也要能改」：上一版把联网整体锁成只读（另一套模板），
-                 现在三个能力共用这一套——联网的搜索/抓取两条链也能排，地址也能覆盖。 -->
-            <div v-for="channel in configTarget?.channels ?? []" :key="channel.id" class="ac-prio">
-              <span class="ac-prio__k">{{ channel.label }}</span>
-              <div class="ac-prio__list">
-                <span
-                  v-for="(pid, i) in orderOf(channel.id)"
-                  :key="pid"
-                  class="ac-prio__item"
-                  :title="providerConfiguredOf(pid) ? '已配置' : '缺少密钥'"
-                >
-                  <span class="ac-prio__rank">{{ i === 0 ? '主用' : `备用 ${i}` }}</span>
-                  <strong class="ac-prio__name">{{ providerLabelOf(pid) }}</strong>
-                  <!-- 排序与移出只在 ≥2 个服务时出现：只剩一个时 ↑↓ 与 ✕ 都无效，
-                       却仍占着胶囊宽度（2026-11-07 用户「生图来源只有一个，这个叉是干嘛的」） -->
-                  <span v-if="orderOf(channel.id).length > 1" class="ac-prio__ops">
-                    <button type="button" class="ac-prio__op" aria-label="上移" :disabled="i === 0"
-                            @click="moveInOrder(channel.id, i, -1)">↑</button>
-                    <button type="button" class="ac-prio__op" aria-label="下移"
-                            :disabled="i === orderOf(channel.id).length - 1"
-                            @click="moveInOrder(channel.id, i, 1)">↓</button>
-                    <button type="button" class="ac-prio__op" aria-label="移出链"
-                            @click="removeFromOrder(channel.id, i)">✕</button>
-                  </span>
+          <div class="mk-modal__body ac-config">
+            <!-- 2026-11-10 用户「二级页面重新设计一下」：弹层分两段——
+                 「服务」回答这个能力由哪家提供（搜索单选、抓取可排主备），
+                 「密钥与地址」逐家填凭据与端点。此前两段之间没有段名，通道行里
+                 还重复印了一遍 provider 名（胶囊 + 下拉各一份），读起来像两件事。 -->
+            <section class="ac-sec">
+              <h4 class="mk-section__title">服务</h4>
+              <div v-for="channel in configTarget?.channels ?? []" :key="channel.id" class="ac-row">
+                <span class="ac-row__k">{{ channel.label }}</span>
+                <!-- 不做链式降级的通道（搜索 / 决策）：只有一个「用哪一家」的选择位，
+                     没有备用、没有排序——运行时也只取这一家，失败即报错（2026-11-10 用户裁决）。
+                     选择器本身已经写着这家服务名，左侧再挂一枚同名胶囊是复读。 -->
+                <div class="ac-row__ctrl">
+                  <template v-if="channel.single">
+                    <MkSelect
+                      :model-value="orderOf(channel.id)[0] || ''"
+                      :options="channelProviderOptions()"
+                      :aria-label="`选择${channel.label}服务`"
+                      size="sm"
+                      @update:model-value="setSingleProvider(channel.id, $event)"
+                    />
+                  </template>
+                  <template v-else>
+                    <span
+                      v-for="(pid, i) in orderOf(channel.id)"
+                      :key="pid"
+                      class="ac-prio__item"
+                      :title="providerConfiguredOf(pid) ? '已配置' : '缺少密钥'"
+                    >
+                      <span class="ac-prio__rank">{{ i === 0 ? '主用' : `备用 ${i}` }}</span>
+                      <strong class="ac-prio__name">{{ providerLabelOf(pid) }}</strong>
+                      <!-- 排序与移出只在 ≥2 个服务时出现：只剩一个时 ↑↓ 与 ✕ 都无效，
+                           却仍占着胶囊宽度（2026-11-07 用户「生图来源只有一个，这个叉是干嘛的」） -->
+                      <span v-if="orderOf(channel.id).length > 1" class="ac-prio__ops">
+                        <button type="button" class="ac-prio__op" aria-label="上移" :disabled="i === 0"
+                                @click="moveInOrder(channel.id, i, -1)">↑</button>
+                        <button type="button" class="ac-prio__op" aria-label="下移"
+                                :disabled="i === orderOf(channel.id).length - 1"
+                                @click="moveInOrder(channel.id, i, 1)">↓</button>
+                        <button type="button" class="ac-prio__op" aria-label="移出链"
+                                @click="removeFromOrder(channel.id, i)">✕</button>
+                      </span>
+                    </span>
+                    <!-- 2026-10-27 原生 select → MkSelect：触发器常驻「＋ 加入备用」，
+                         选中后由 setOrder 追加并保持 modelValue=''（原生 select 需手动复位已不需要）。
+                         「＋ 加入备用」走 MkSelect 的 placeholder，不再作为列表首项：同名同义的
+                         一项会让人以为它已选中/已添加，而 modelValue 恒为 '' 还会给它挂上蓝勾。 -->
+                    <MkSelect
+                      v-if="availableOf(channel.id).length"
+                      :model-value="''"
+                      :options="addOptionsOf(channel)"
+                      placeholder="＋ 加入备用"
+                      :aria-label="`把 provider 加入${channel.label}备用`"
+                      size="sm"
+                      @change="onAddToOrder(channel.id, $event)"
+                    />
+                  </template>
+                </div>
+                <!-- 状态跟着选择位走：单选通道能一眼看出这家有没有密钥；
+                     链路通道每家状态在各家卡头，不在这里重复 -->
+                <span v-if="channel.single" class="ac-row__state">
+                  <span
+                    class="mk-badge mk-badge--sm"
+                    :class="providerConfiguredOf(orderOf(channel.id)[0]) ? 'mk-badge--ok' : 'mk-badge--warn'"
+                  >{{ providerConfiguredOf(orderOf(channel.id)[0]) ? '已配置' : '缺少密钥' }}</span>
                 </span>
-                <!-- 2026-10-27 原生 select → MkSelect：触发器常驻「＋ 加入备用」，
-                     选中后由 setOrder 追加并保持 modelValue=''（原生 select 需手动复位已不需要）。
-                     「＋ 加入备用」走 MkSelect 的 placeholder，不再作为列表首项：同名同义的
-                     一项会让人以为它已选中/已添加，而 modelValue 恒为 '' 还会给它挂上蓝勾。 -->
-                <MkSelect
-                  v-if="availableOf(channel.id).length"
-                  :model-value="''"
-                  :options="addOptionsOf(channel)"
-                  placeholder="＋ 加入备用"
-                  :aria-label="`把 provider 加入${channel.label}备用`"
-                  size="sm"
-                  @change="onAddToOrder(channel.id, $event)"
-                />
               </div>
-            </div>
+            </section>
+
             <!-- 字段只给链上的 provider（其余不参与调用，也不占版面）。
                  2026-11-07 用户「API key 在左、端点地址在右」：密钥字段排第一列，
                  地址/模型等可选字段排第二列；空地址=用官方默认（placeholder 就是当前生效值）。 -->
-            <section class="ac-config-provider" v-for="provider in chainProviders" :key="provider.id">
-              <header class="ac-config-provider__head">
-                <strong class="ac-config-provider__name">{{ provider.label }}</strong>
-                <span class="ac-config-provider__badges">
+            <section class="ac-sec">
+              <h4 class="mk-section__title">密钥与地址</h4>
+              <div class="ac-config-provider" v-for="provider in chainProviders" :key="provider.id">
+                <header class="ac-config-provider__head">
+                  <strong class="ac-config-provider__name">{{ provider.label }}</strong>
+                  <span class="mk-badge mk-badge--sm" :class="provider.configured ? 'mk-badge--ok' : 'mk-badge--warn'">
+                    {{ provider.configured ? '已配置' : '缺少密钥' }}
+                  </span>
+                  <span class="ac-config-provider__spacer"></span>
+                  <button
+                    v-if="hasChainChannel && !isPrimaryOf(provider.id)"
+                    type="button"
+                    class="mk-link ac-config-provider__primary"
+                    @click="setPrimaryOf(provider.id)"
+                  >设为主用</button>
                   <!-- 测试只探这一家（不进降级链）：改了端点/密钥后要能立刻知道「它通不通」，
                        走主链会拿到「换一家还是成功了」的假信号 -->
                   <button
@@ -296,40 +376,31 @@
                     :disabled="probeBusy === `${configTarget?.id}:${provider.id}`"
                     @click="probeProvider(provider.id)"
                   >{{ probeBusy === `${configTarget?.id}:${provider.id}` ? '测试中…' : '测试' }}</button>
+                </header>
+                <div class="ac-config-fields">
+                  <label class="mk-field" v-for="field in orderedFields(provider)" :key="field.key">
+                    <span class="mk-field__label">{{ field.label }}</span>
+                    <input
+                      v-model="draft[provider.id][field.key]"
+                      class="mk-field__input"
+                      :type="field.type"
+                      :placeholder="fieldPlaceholder(field)"
+                      :autocomplete="field.secret ? 'new-password' : 'off'"
+                    />
+                  </label>
+                </div>
+                <p
+                  v-if="probeResult?.key === `${configTarget?.id}:${provider.id}`"
+                  class="ac-config-provider__probe"
+                  :class="probeResult.ok ? 'is-ok' : 'is-bad'"
+                >{{ probeResult.ok ? `${probeResult.detail} · ${probeResult.latencyMs}ms` : probeResult.detail }}</p>
+                <div v-if="provider.keySource === 'db' || clearKeys[provider.id]" class="ac-config-provider__foot">
                   <button
-                    v-if="!isPrimaryOf(provider.id)"
                     type="button"
-                    class="mk-link ac-config-provider__primary"
-                    @click="setPrimaryOf(provider.id)"
-                  >设为主用</button>
-                  <span class="mk-badge" :class="provider.configured ? 'mk-badge--ok' : 'mk-badge--warn'">
-                    {{ provider.configured ? '已配置' : '缺少密钥' }}
-                  </span>
-                </span>
-              </header>
-              <div class="ac-config-fields">
-                <label class="mk-field" v-for="field in orderedFields(provider)" :key="field.key">
-                  <span class="mk-field__label">{{ field.label }}</span>
-                  <input
-                    v-model="draft[provider.id][field.key]"
-                    class="mk-field__input"
-                    :type="field.type"
-                    :placeholder="fieldPlaceholder(field)"
-                    :autocomplete="field.secret ? 'new-password' : 'off'"
-                  />
-                </label>
-              </div>
-              <p
-                v-if="probeResult?.key === `${configTarget?.id}:${provider.id}`"
-                class="ac-config-provider__probe"
-                :class="probeResult.ok ? 'is-ok' : 'is-bad'"
-              >{{ probeResult.ok ? `${probeResult.detail} · ${probeResult.latencyMs}ms` : probeResult.detail }}</p>
-              <div v-if="provider.keySource === 'db' || clearKeys[provider.id]" class="ac-config-provider__foot">
-                <button
-                  type="button"
-                  class="mk-link"
-                  @click="toggleClearKey(provider.id)"
-                >{{ clearKeys[provider.id] ? '取消清除' : '清除已保存密钥' }}</button>
+                    class="mk-link"
+                    @click="toggleClearKey(provider.id)"
+                  >{{ clearKeys[provider.id] ? '取消清除' : '清除已保存密钥' }}</button>
+                </div>
               </div>
             </section>
           </div>
@@ -349,12 +420,11 @@
 import { computed, ref, watch, type Component } from 'vue'
 import { Globe, Image as ImageIcon, Scale, Wrench } from 'lucide-vue-next'
 import { dataSource, investigateAgent, liveSkillStatsMap } from './store'
-import { errMsg, liveRefreshSeq } from './live'
+import { errMsg, liveRefreshSeq, liveSkillStatsRange } from './live'
 import { adminMcpApi, adminPluginsApi } from '@/api/adminApi'
 import { PLUGIN_GROUPS, type PluginGroup, type PluginId } from './capabilityCatalog'
 import { useEscape } from './useEscape'
 import { useOverlay, useMaskClose } from './useOverlay'
-import { useRowMenu } from './useRowMenu'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
@@ -373,6 +443,9 @@ async function refreshAll() {
 interface PluginMemberRow {
   id: string
   name: string
+  /** 窗口内该成员的调用 / 失败数（「查失败」按真实失败成员跳转、「N 次调用」取最多的成员） */
+  calls: number
+  errors: number
 }
 
 interface PluginRow {
@@ -407,9 +480,16 @@ function endpointLabel(endpoint: string): string {
   return endpoint || '—'
 }
 function endpointTitle(endpoint: string): string {
-  return ENV_PLACEHOLDER.test(endpoint)
-    ? `环境变量 ${endpoint} 未替换（未在服务端配置），该工具当前不可用`
-    : endpoint
+  if (ENV_PLACEHOLDER.test(endpoint)) {
+    return `环境变量 ${endpoint} 未替换（未在服务端配置），该工具当前不可用`
+  }
+  /* 2026-11-11（困惑测试 #95）：「本机进程」对管理台读者零信息——跑在哪台机器、
+     能读哪些路径都无从判断。这里把运行时事实写进悬停（McpGateway executeLocalTool
+     在后端进程内执行；文件类工具限定 config.allowedPaths 白名单）。 */
+  if (endpoint === 'local') {
+    return '本机进程：在平台后端的服务器进程内执行，不是管理员本机。文件类工具只能读取服务端白名单目录内的文件（白名单由后端配置限定）'
+  }
+  return endpoint
 }
 /**
  * 卡面配置摘要（2026-11-07 用户「四张卡只有名字，得点进『配置』才知道在用谁」）：
@@ -475,6 +555,46 @@ function membersText(p: PluginRow): string {
   if (p.availability) parts.push(p.availability.text)
   return parts.join(' · ')
 }
+
+/** 卡面可用性（2026-11-11 困惑测试 #91）：开关只回答「开没开」，卡面还要回答「跑不跑得起来」。
+    只判各通道链首（主用）provider 的 configured——备选缺密钥不影响当前调用，不算「跑不起来」。 */
+function capHealth(p: PluginRow): { bad: boolean; title: string } {
+  const cfg = providerConfigs.value[p.id]
+  if (!cfg) return { bad: false, title: '' }
+  const primaryIds = cfg.channels.map((c) => c.order[0]).filter((id): id is string => !!id)
+  const missing = primaryIds
+    .map((pid) => cfg.providers.find((x) => x.id === pid))
+    .filter((x): x is PluginProvider => !!x && !x.configured)
+  if (!missing.length) return { bad: false, title: '' }
+  return {
+    bad: true,
+    title: `${missing.map((m) => m.label).join(' / ')} 未配置密钥：该能力当前无法调用，「启用」只表示没有停用`,
+  }
+}
+
+/** 统计窗口文案（2026-11-11 困惑测试 #94）：卡脚读数来自 liveSkillStatsMap，窗口由 Skills 页
+    的「统计窗口」选择器决定（同一份 ref），写「累计」会把窗口内读数读成全量。 */
+const STATS_RANGE_TEXT: Record<string, string> = { '7d': '近 7 天', '24h': '近 24 小时', '30d': '近 30 天', all: '全部时间' }
+const statsRangeText = computed(() => STATS_RANGE_TEXT[liveSkillStatsRange.value] || '近 7 天')
+
+/** 失败最多的成员（2026-11-11 困惑测试 #93）：「查失败」原先固定跳 primary，而 errorCount 是
+    成员合计——失败发生在 web-fetch / material-collector 时，跳到 web-search 的日志必为空。 */
+function failedTarget(p: PluginRow): string {
+  const sorted = [...p.members].sort((a, b) => b.errors - a.errors)
+  return sorted[0]?.errors > 0 ? sorted[0].id : p.primary
+}
+function failedTitle(p: PluginRow): string {
+  const failed = p.members.filter((m) => m.errors > 0).sort((a, b) => b.errors - a.errors)
+  if (!failed.length) return ''
+  const head = failed[0]
+  return failed.length === 1
+    ? `失败 ${head.errors} 次，来自 ${head.name}`
+    : `共 ${p.errorCount} 次失败：${failed.map((m) => `${m.name} ${m.errors} 次`).join('、')}；先看失败最多的 ${head.name}`
+}
+/** 调用最多的成员（卡脚「N 次调用」的下钻落点；执行日志一次只能按一个成员筛） */
+function busiestMember(p: PluginRow): PluginMemberRow {
+  return [...p.members].sort((a, b) => b.calls - a.calls)[0] ?? { id: p.primary, name: p.name, calls: 0, errors: 0 }
+}
 /** MCP 工具类型枚举 → 中文（下拉与表格同一套，避免同屏中英两套）。
     http 档叫「HTTP 工具」而非「HTTP 接口」：连接方式下拉的 http 档已叫后者，
     并排两框曾显示一模一样的「HTTP 接口」，读作绑定写重（2026-10-31 三轮评审）。 */
@@ -503,8 +623,9 @@ interface PluginProvider {
 interface PluginConfig {
   id: string
   label: string
-  /** orderFixed = 顺序由代码固定（联网），界面不给排 */
-  channels: Array<{ id: string; label: string; order: string[]; orderFixed?: boolean }>
+  /** orderFixed = 顺序由代码固定（联网），界面不给排；
+      single = 不做链式降级（搜索 / 决策），界面只给「用哪一家」 */
+  channels: Array<{ id: string; label: string; order: string[]; orderFixed?: boolean; single?: boolean }>
   providers: PluginProvider[]
 }
 
@@ -555,6 +676,8 @@ function buildPluginRows(
     const members: PluginMemberRow[] = group.members.map((member) => ({
       id: member.id,
       name: member.name,
+      calls: Number(liveSkillStatsMap.value?.[member.id]?.calls ?? 0),
+      errors: Number(liveSkillStatsMap.value?.[member.id]?.errors ?? 0),
     }))
     const last = members
       .map((member) => liveSkillStatsMap.value?.[member.id]?.lastAt)
@@ -566,8 +689,8 @@ function buildPluginRows(
       icon: PLUGIN_ICONS[group.id],
       primary: group.primary,
       members,
-      calls: members.reduce((n, member) => n + (liveSkillStatsMap.value?.[member.id]?.calls ?? 0), 0),
-      errorCount: members.reduce((n, member) => n + (liveSkillStatsMap.value?.[member.id]?.errors ?? 0), 0),
+      calls: members.reduce((n, member) => n + member.calls, 0),
+      errorCount: members.reduce((n, member) => n + member.errors, 0),
       availability: group.id === 'mcp' ? mcpAvailability : null,
       last,
     }
@@ -661,9 +784,24 @@ const toolErrors = ref<{ id?: string; name?: string; endpoint?: string }>({})
    类型选项从 MCP_TYPE_TEXT 派生，避免下拉与行内展示两套中文名。 */
 const TRANSPORT_OPTIONS = [
   { value: 'http', label: 'HTTP 接口' },
-  { value: 'mcp', label: 'MCP 服务' }
+  { value: 'mcp', label: 'MCP 服务' },
+  /* 第三档不是新的 transport 取值：它是 endpoint='local' 的约定（平台进程内执行），
+     行上叫「本机进程」。保存时仍按 transport='http' + endpoint='local' 落盘。 */
+  { value: 'local', label: '本机进程' }
 ]
 const TOOL_TYPE_OPTIONS = Object.entries(MCP_TYPE_TEXT).map(([value, label]) => ({ value, label }))
+/** 连接方式切换（2026-11-11 困惑测试 #92）：选「本机进程」即把 endpoint 固定成 local 约定值，
+ *  并把类型默认到「文件系统」（其余类型目前没有进程内执行语义）。 */
+function onTransportChange(value: string) {
+  toolForm.value.transport = value
+  if (value === 'local') {
+    toolForm.value.endpoint = 'local'
+    if (toolForm.value.type === 'http') toolForm.value.type = 'filesystem'
+    if (toolErrors.value.endpoint) delete toolErrors.value.endpoint
+  } else if (toolForm.value.endpoint === 'local') {
+    toolForm.value.endpoint = ''
+  }
+}
 useEscape(() => toolOpen.value, () => { toolOpen.value = false })
 const panelRef = ref<HTMLElement | null>(null)
 const maskRef = ref<HTMLElement | null>(null)
@@ -797,9 +935,15 @@ function fieldPlaceholder(field: PluginProviderField): string {
 function orderedFields(provider: PluginProvider): PluginProviderField[] {
   return [...provider.fields].sort((a, b) => Number(b.secret) - Number(a.secret))
 }
+/** 该插件是否有降级链通道（联网的「抓取」）：没有链时不存在「主用」概念，
+    不给「设为主用」这枚点了也不生效的按钮（决策 / 生图只有一个单档通道）。 */
+const hasChainChannel = computed(() => (configTarget.value?.channels ?? []).some((ch) => !ch.single))
 /** 该 provider 是否已在它所在的每条链上排第一（是则不再给「设为主用」） */
 function isPrimaryOf(providerId: string): boolean {
-  const channels = (configTarget.value?.channels ?? []).filter((ch) => orderOf(ch.id).includes(providerId))
+  /* 只看降级链通道：单档通道（搜索 / 决策）没有主用概念，不参与这个判断——
+     否则搜索选中 Tavily 时，TinyFish 卡头会挂一个「设为主用」按钮，点下去什么也不会发生 */
+  const channels = (configTarget.value?.channels ?? [])
+    .filter((ch) => !ch.single && orderOf(ch.id).includes(providerId))
   return channels.length > 0 && channels.every((ch) => orderOf(ch.id)[0] === providerId)
 }
 /** 设为主用：把该 provider 提到它所在链的第一位（联网有搜索/抓取两条链，两条一起提）。
@@ -807,6 +951,8 @@ function isPrimaryOf(providerId: string): boolean {
 function setPrimaryOf(providerId: string) {
   const next: Record<string, string[]> = { ...orderDraft.value }
   for (const channel of configTarget.value?.channels ?? []) {
+    /* 单档通道没有主用/备用之分：换家走「选择服务」下拉，这里不动它 */
+    if (channel.single) continue
     const list = orderOf(channel.id)
     if (!list.includes(providerId)) continue
     next[channel.id] = [providerId, ...list.filter((id) => id !== providerId)]
@@ -818,6 +964,16 @@ function providerConfiguredOf(providerId: string): boolean {
 }
 function setOrder(channelId: string, next: string[]) {
   orderDraft.value = { ...orderDraft.value, [channelId]: next }
+}
+/* 不做链式降级的通道（搜索 / 决策，2026-11-10 用户「都不做链式降级了」）：
+   界面上只有一个选择位，换一家直接替换整个顺序，不存在备用。 */
+function setSingleProvider(channelId: string, id: string) {
+  if (!id) return
+  setOrder(channelId, [id])
+}
+/** 单档通道的候选 = 该插件的全部 provider（换回原来那家也要能选到） */
+function channelProviderOptions() {
+  return (configTarget.value?.providers ?? []).map((p) => ({ value: p.id, label: p.label }))
 }
 function moveInOrder(channelId: string, index: number, delta: number) {
   const list = [...orderOf(channelId)]
@@ -894,8 +1050,9 @@ async function saveConfig() {
     if (clearKeys.value[provider.id]) patch.clearKey = true
     if (Object.keys(patch).length) providers[provider.id] = patch
   }
+  /* 单档通道只提交选中的那一家：界面上没有备用位，多提交也没有执行语义 */
   const orders = ordersDirty.value
-    ? Object.fromEntries(cfg.channels.map((ch) => [ch.id, orderOf(ch.id)]))
+    ? Object.fromEntries(cfg.channels.map((ch) => [ch.id, ch.single ? orderOf(ch.id).slice(0, 1) : orderOf(ch.id)]))
     : undefined
   if (!Object.keys(providers).length && !orders) {
     closeConfig()
@@ -929,7 +1086,9 @@ function openToolEdit(t: McpTool) {
   toolForm.value = {
     id: t.id,
     name: t.name,
-    transport: t.transport || 'http',
+    /* endpoint='local' 的工具在库里 transport 是 'http'，弹层必须认成「本机进程」，
+       否则显示成 HTTP 接口 + 地址 local（困惑测试 #92 的原现象）。 */
+    transport: t.endpoint === 'local' ? 'local' : t.transport || 'http',
     type: t.type,
     endpoint: t.endpoint,
     description: t.description,
@@ -941,9 +1100,10 @@ function openToolEdit(t: McpTool) {
 
 async function saveTool() {
   toolErrors.value = {}
+  const isLocal = toolForm.value.transport === 'local'
   if (!toolForm.value.id.trim()) toolErrors.value.id = '请输入工具 ID'
   if (!toolForm.value.name.trim()) toolErrors.value.name = '请输入名称'
-  if (!toolForm.value.endpoint.trim()) toolErrors.value.endpoint = '请输入 Endpoint 地址'
+  if (!isLocal && !toolForm.value.endpoint.trim()) toolErrors.value.endpoint = '请输入 Endpoint 地址'
   if (Object.keys(toolErrors.value).length) {
     // 兜底：任何字段的校验失败都必须有可见反馈，不能静默 return（此前 endpoint 的错误
     // 没有渲染位，点保存既不提交也无提示，用户读作按钮坏了）
@@ -952,10 +1112,17 @@ async function saveTool() {
   }
   toolSaving.value = true
   try {
+    /* 「本机进程」落盘为 transport='http' + endpoint='local'（运行时按 endpoint 走
+       executeLocalTool），与种子 config/mcp.json 的 file-reader 同形。 */
+    const payload = {
+      ...toolForm.value,
+      transport: isLocal ? 'http' : toolForm.value.transport,
+      endpoint: isLocal ? 'local' : toolForm.value.endpoint,
+    }
     if (toolEditingId.value) {
-      await adminMcpApi.updateTool(toolEditingId.value, { ...toolForm.value })
+      await adminMcpApi.updateTool(toolEditingId.value, payload)
     } else {
-      await adminMcpApi.createTool({ ...toolForm.value })
+      await adminMcpApi.createTool(payload)
     }
     await loadMcpTools()
     toolOpen.value = false
@@ -985,6 +1152,7 @@ async function toggleToolEnabled(t: McpTool, enabled: boolean) {
   }
 }
 
+/** 删除是行内动作（2026-11-10）：不再经过 ⋯ 菜单 */
 async function removeTool(t: McpTool) {
   const ok = await askConfirm({
     title: '删除 MCP 服务',
@@ -1007,15 +1175,6 @@ async function removeTool(t: McpTool) {
 /* ---------- 连通性测试 ---------- */
 const testingId = ref('')
 const testResult = ref<{ id: string; ok: boolean; latencyMs?: number; error?: string } | null>(null)
-
-/* 行内 ⋯ 菜单（2026-11-07）：配置提到行内后菜单只剩删除——破坏性动作仍在菜单里，
-   与「测试 / 配置」这类常用动作分开。 */
-const { openMenu, toggleMenu, closeMenu, popStyle } = useRowMenu()
-
-function menuRemove(t: McpTool) {
-  closeMenu()
-  void removeTool(t)
-}
 
 async function testTool(t: McpTool) {
   if (testingId.value) return
@@ -1072,9 +1231,10 @@ function goLogs(skillId: string) {
    2026-11-05 曾按用户「先保持一致」做成四张同宽单列——一致性有了，但 1360px 宽里
    每张卡只有一行标题 + 一行成员，纵向白占了 3 屏。列数只在内置能力之间统一，
    MCP 的宽度由它的内容（服务表）决定，不再假装自己是第四张同形卡。 */
+/* 区头走共享 .mk-section__head / .mk-section__title（2026-11-11）：原私有 .ac-section__head /
+   .ac-section__title 把「可选能力」排成 15px/650 的正文重标题，与全站段头（12px 弱化小标签）
+   不是同一套字阶；私有类删除后与「运行指标 / 执行链路 / 建对照臂」等段头一致。 */
 .ac-section { display: grid; gap: 12px; }
-.ac-section__head { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.ac-section__title { margin: 0; font-size: var(--mk-fs-emphasis); font-weight: 650; color: var(--mk-ink); }
 .ac-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 @media (min-width: 1024px) {
   .ac-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -1138,6 +1298,9 @@ function goLogs(skillId: string) {
   text-overflow: ellipsis;
 }
 .ac-cap__calls i { font-style: normal; color: var(--mk-faint); }
+/* 读数即入口（2026-11-11 困惑测试 #94）：默认保持脚注的灰字观感，悬停才露出可点语言 */
+.ac-cap__calls-btn { padding: 0; color: inherit; font-size: inherit; font-weight: 400; }
+.ac-cap__calls-btn:hover { color: var(--mk-blue); text-decoration: underline; }
 .ac-cap__fail { font-size: var(--mk-fs-micro); }
 /* 停用只压信息层，开关与按钮保持清晰可点 */
 .ac-cap.is-off .ac-cap__id,
@@ -1150,28 +1313,28 @@ function goLogs(skillId: string) {
   .ac-cap-skel--wide { grid-column: 1 / -1; }
 }
 
-/* MCP 服务编辑弹窗：先排通道优先级（主用 + 备用，用户可自己调），再填链上 provider 的密钥/入口。
-   2026-10-25 用户「不要这种解释型文案」：简介、降级注记、provider 说明句、字段提示行全撤。
-   2026-10-26 用户两次走查「这个真的很丑」「本身是三选一，然后用户可以自己配置优先级」：
-   原先是「只读顺序行 + 全部 provider 平铺成灰底卡」，读起来像都在用、每张卡还各带一个
-   「缺少密钥」；现在顺序行变成可编辑的链，字段只给链上的人，卡也不再是灰底盒子。 */
-.ac-prio {
+/* 服务配置弹窗（2026-11-10 重设计）：两段——「服务」选谁提供，「密钥与地址」逐家填。
+   段名用共享 .mk-section__title；通道行 = 固定宽标签 + 控件 + 状态，三列对齐。
+   2026-10-25 用户「不要这种解释型文案」：简介、降级注记、provider 说明句、字段提示行全撤。 */
+.ac-config { display: grid; gap: 18px; }
+.ac-sec { display: grid; gap: 10px; align-content: start; }
+.ac-sec + .ac-sec { padding-top: 16px; border-top: 1px solid var(--mk-line); }
+.ac-row {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--mk-line);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
 }
-.ac-prio:last-of-type { border-bottom: 0; }
-.ac-prio__k {
+.ac-row__k {
   flex: none;
-  width: 32px;
-  padding-top: 6px;
+  width: 36px;
   font-size: var(--mk-fs-micro);
   font-weight: 600;
   color: var(--mk-muted);
 }
-.ac-prio__list { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.ac-row__ctrl { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.ac-row__ctrl :deep(.mk-select) { min-width: 180px; }
+.ac-row__state { margin-left: auto; flex: none; }
 .ac-prio__item {
   display: inline-flex;
   align-items: center;
@@ -1202,18 +1365,19 @@ function goLogs(skillId: string) {
 .ac-prio__op:disabled { opacity: 0.35; cursor: default; }
 /* 「加入备用」下拉的视觉由 MkSelect 承担（2026-10-27 原生 select → MkSelect）：
    原 .ac-prio__add 的虚线胶囊壳不再需要，触发器的描边/圆角/字号统一走共享原语。 */
-/* provider 段：白面 + 发丝线分隔（不再用灰底卡片堆叠），字段两列避免占位符被压断 */
+/* provider 段：白面 + 发丝线分隔（不再用灰底卡片堆叠），字段两列避免占位符被压断。
+   段名已在上面，首家的顶部发丝线由 .ac-sec 的标题承担，不再叠一条。 */
 .ac-config-provider {
   margin-top: 0;
-  padding: 12px 0 0;
+  padding: 0;
   border: 0;
-  border-top: 1px solid var(--mk-line);
   border-radius: 0;
   background: transparent;
 }
-.ac-config-provider__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ac-config-provider + .ac-config-provider { padding-top: 14px; border-top: 1px solid var(--mk-line); }
+.ac-config-provider__head { display: flex; align-items: center; gap: 10px; }
 .ac-config-provider__name { font-size: var(--mk-fs-body); font-weight: 600; color: var(--mk-ink); }
-.ac-config-provider__badges { display: inline-flex; align-items: center; gap: 10px; }
+.ac-config-provider__spacer { flex: 1 1 auto; }
 .ac-config-provider__primary { font-size: var(--mk-fs-micro); }
 .ac-config-provider__test { font-size: var(--mk-fs-micro); }
 /* 探测结果：成功一条绿字、失败一条红字（上游原文，可换行展示不截断） */
@@ -1312,7 +1476,12 @@ function goLogs(skillId: string) {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.ac-mcp__formrow { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+/* 弹层字段网格（2026-11-10 统一）：服务配置与 MCP 编辑共用——两列，整行字段挂 --full */
+.ac-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+.ac-form > .mk-field--full { grid-column: 1 / -1; }
+@media (max-width: 720px) {
+  .ac-form { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* MCP 子列表作为容器：行按「子列表自身宽度」重排，而非视口宽度
    （窄屏缩进后子列表可用宽度更小，视口断点不触发） */
@@ -1330,9 +1499,6 @@ function goLogs(skillId: string) {
   .ac-mcp__dot { grid-area: dot; }
   .ac-mcp__main { grid-area: main; }
   .ac-mcp__row .ac-ctl { grid-area: ctl; justify-self: end; }
-}
-@media (max-width: 800px) {
-  .ac-mcp__formrow { grid-template-columns: 1fr; }
 }
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */

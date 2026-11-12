@@ -31,12 +31,13 @@
       <div class="tc-c tc-c--name" role="cell">
         <template v-if="variant === 'user'">
           <!-- 审核 #135：显式给 tone（原不传 → MkCellAvatar 渲染幽灵类 mk-ava--undefined）。
-               测试/虚拟账号的差异化着色需后端 by-user enrich 返回 isTest（当前无此标记，见报告「暂缓」） -->
-          <MkCellAvatar :name="r.name || r.key" tone="default" />
+               2026-11-11 困惑测试 #98：后端 by-user 已补 isVirtualLearner，虚拟账号头像转紫、
+               副行标出「虚拟学习者」——本页不按账号类型过滤，行内必须能认出仿真消耗。 -->
+          <MkCellAvatar :name="r.name || r.key" :tone="r.isVirtualLearner ? 'virtual' : 'default'" />
           <span class="tc-c__main">
             <strong :title="r.name || r.key">{{ r.name || shortId(r.key) }}</strong>
             <em class="tc-c__sub" :title="r.email || r.key">
-              {{ r.email || (r.name ? shortId(r.key) : '') }}
+              {{ r.email || (r.name ? shortId(r.key) : '') }}<template v-if="r.isVirtualLearner"> · 虚拟学习者</template>
             </em>
           </span>
         </template>
@@ -48,12 +49,16 @@
         </template>
       </div>
 
-      <span class="tc-c tc-c--num tc-num" role="cell">{{ r.calls }}</span>
+      <span class="tc-c tc-c--num tc-num" role="cell">{{ r.calls.toLocaleString() }}</span>
 
-      <!-- 失败：红字 + 失败率小注；0 弱化 -->
-      <span class="tc-c tc-c--num" :class="r.failed > 0 ? 'tc-fail--bad' : 'tc-fail--ok'" role="cell">
-        {{ r.failed > 0 ? r.failed : '0' }}<em v-if="r.failed > 0" class="tc-c__sub">{{ failRate(r) }}</em>
-      </span>
+      <!-- 失败：次数为值，失败率作副行（与 Token 用量同一套「值 + 副读数」结构）。
+           2026-11-10 用户「失败次数的字体大小不对」：此前次数与失败率挤在同一行，
+           次数按 4K 档放大、失败率仍是 micro，两个字号并排读成「210%」——
+           现在失败率独占副行，字号关系与 Token 列一致。 -->
+      <div class="tc-c tc-c--num tc-fail" :class="r.failed > 0 ? 'tc-fail--bad' : 'tc-fail--ok'" role="cell">
+        <strong class="tc-num tc-fail__count">{{ r.failed.toLocaleString() }}</strong>
+        <em v-if="r.failed > 0" class="tc-c__sub">失败率 {{ failRate(r) }}</em>
+      </div>
 
       <!-- Token 用量：主值 + 输入·输出拆分 -->
       <div class="tc-c tc-c--tok" role="cell">
@@ -87,6 +92,8 @@ export interface RankRow {
   failed: number
   name?: string | null
   email?: string | null
+  /** 虚拟学习者账号（2026-11-11：by-user 补全，行内标出仿真消耗） */
+  isVirtualLearner?: boolean
   /* 成本桶（审核 #112）：后端 RankEntry extends CostBucket，原样回传 usd/pricingKnown/
      pricedCalls/callsMissingPricing；此前未声明也未渲染，user/model 排行缺成本列 */
   usd?: number | null
@@ -99,7 +106,7 @@ export interface RankRow {
 <script setup lang="ts">
 import { computed } from 'vue'
 import MkCellAvatar from '@/components/mk/MkCellAvatar.vue'
-import { formatUsd } from './costFormat'
+import { formatUsd, formatPct, formatTokens as fmtTokens } from './costFormat'
 
 const props = withDefaults(
   defineProps<{
@@ -114,14 +121,6 @@ const props = withDefaults(
 
 const nameLabel = computed(() => (props.variant === 'user' ? '用户' : '模型'))
 
-function fmtTokens(n: number | undefined): string {
-  if (!Number.isFinite(n as number) || !n || n <= 0) return '0'
-  if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`
-  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`
-  if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`
-  return String(Math.round(n))
-}
-
 function shortId(id: string): string {
   if (!id) return '—'
   return id.length > 18 ? `${id.slice(0, 12)}…${id.slice(-4)}` : id
@@ -132,8 +131,7 @@ function shareW(tokens: number): string {
   return `${Math.max(p > 0 ? 3 : 0, p)}%`
 }
 function sharePct(tokens: number): string {
-  const p = sharePctNum(tokens)
-  return p > 0 && p < 1 ? '<1%' : `${Math.round(p)}%`
+  return formatPct(sharePctNum(tokens))
 }
 function sharePctNum(tokens: number): number {
   if (!props.totalTokens || tokens <= 0) return 0
@@ -142,7 +140,8 @@ function sharePctNum(tokens: number): number {
 
 function failRate(r: RankRow): string {
   if (!r.calls || r.failed <= 0) return ''
-  return `${Math.round((r.failed / r.calls) * 100)}%`
+  // 有失败但占比不足 1%：写 0% 会和旁边那枚红字次数读作矛盾（1 次失败 · 失败率 0%）
+  return formatPct((r.failed / r.calls) * 100)
 }
 
 /* 成本取值口径（审核 #112）：只有已定价金额才显金额，其余暗灰 — 占位。
@@ -173,7 +172,7 @@ function rowTitle(r: RankRow): string {
   const label = props.variant === 'user' ? (r.name || r.key) : (r.display || r.key)
   /* 2026-10-18 用户走查「这类文案」：行 title 只留调用/失败/成本三项，
      输入/输出两列就在同一行里，悬停复读一遍只会让长串里更难找关心的那一项 */
-  return [label, `${r.calls} 次调用`, `失败 ${r.failed}`, `成本 ${costDesc(r)}`].join(' · ')
+  return [label, `${r.calls.toLocaleString()} 次调用`, `失败 ${r.failed.toLocaleString()}`, `成本 ${costDesc(r)}`].join(' · ')
 }
 </script>
 
@@ -206,19 +205,20 @@ function rowTitle(r: RankRow): string {
 .tc-table--user .tc-table__row,
 .tc-table--model .tc-table__head,
 .tc-table--model .tc-table__row {
-  grid-template-columns: 26px minmax(140px, 1fr) 74px 68px minmax(180px, 1fr) minmax(96px, 0.7fr) 100px;
+  grid-template-columns: 26px minmax(140px, 1fr) 62px 80px minmax(180px, 1fr) minmax(96px, 0.7fr) 100px;
 }
 /* 审核 #129：≤1599 时 TokenCost 的 .tc-ranks 回落单列全宽（卡内 ~1110px），而上面的双 fr 模板
    把 836px 余量平摊给名称/Token 两列（各 ~418px），数据列仅 52/46px——文本列大片空转。
    单列档改用带上限的列模板（合计 ~1100px 贴合卡宽），两文本列不再无限膨胀。
-   2026-10-24「调用次数 / 失败次数」四字表头把两数字列加宽 30px，从 Token 列上限扣回，
-   合计仍 ~1100px：26+300+76+68+330+140+100 + 6×10 = 1100 */
+   2026-10-24「调用次数 / 失败次数」四字表头把两数字列加宽 30px，从 Token 列上限扣回；
+   2026-11-10 失败率副行「失败率 <1%」在 68px 里被省略号截断，从调用次数借 16px
+   （64+80 不变），合计仍 ~1100px：26+300+64+80+330+140+100 + 6×10 = 1100 */
 @media (max-width: 1599px) {
   .tc-table--user .tc-table__head,
   .tc-table--user .tc-table__row,
   .tc-table--model .tc-table__head,
   .tc-table--model .tc-table__row {
-    grid-template-columns: 26px minmax(160px, 300px) 76px 68px minmax(200px, 330px) minmax(96px, 140px) 100px;
+    grid-template-columns: 26px minmax(160px, 300px) 64px 80px minmax(200px, 330px) minmax(96px, 140px) 100px;
   }
 }
 
@@ -336,10 +336,12 @@ function rowTitle(r: RankRow): string {
 }
 .tc-cost--none { color: var(--mk-faint); }
 
-/* 失败列 */
-.tc-fail--bad { color: var(--mk-red); font-weight: 800; font-size: var(--mk-fs-micro); }
+/* 失败列：次数为值、失败率为副行；两行都右对齐（与调用次数同一右缘） */
+.tc-fail { display: grid; justify-items: end; gap: 1px; }
+.tc-fail__count { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tc-fail--bad .tc-fail__count { color: var(--mk-red); font-weight: 800; }
+.tc-fail--ok .tc-fail__count { color: var(--mk-faint); font-weight: 600; }
 .tc-fail--bad .tc-c__sub { color: var(--mk-red); opacity: 0.75; }
-.tc-fail--ok { color: var(--mk-faint); font-weight: 600; }
 
 /* 占比条：走 mk-minibar 原语（轨道底/品牌蓝填充/暗色档由原语 token 接管），
    原页内渐变条（.tc-share__track/__bar 自搓 + 双暗色补丁）已删 */
@@ -355,7 +357,7 @@ function rowTitle(r: RankRow): string {
 /* 4K 档：跟随全站节奏 */
 @media (min-width: 2000px) {
   .tc-table { padding: 2px 16px 0; }
-  .tc-c__main strong, .tc-num, .tc-fail--bad { font-size: var(--mk-fs-body); }
+  .tc-c__main strong, .tc-num { font-size: var(--mk-fs-body); }
   .tc-c__sub { font-size: var(--mk-fs-micro); }
   .tc-rank__no { width: 22px; height: 22px; font-size: var(--mk-fs-micro); }
   .tc-share__bar { height: 7px; }
@@ -364,7 +366,7 @@ function rowTitle(r: RankRow): string {
   .mk-ava { width: 22px; height: 22px; font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 2800px) {
-  .tc-c__main strong, .tc-num, .tc-fail--bad { font-size: var(--mk-fs-micro); }
+  .tc-c__main strong, .tc-num { font-size: var(--mk-fs-micro); }
   .tc-c__sub { font-size: var(--mk-fs-micro); }
   .tc-rank__no { width: 26px; height: 26px; font-size: var(--mk-fs-micro); border-radius: var(--mk-radius-sm); }
   .tc-share__bar { height: 8px; }
@@ -372,7 +374,7 @@ function rowTitle(r: RankRow): string {
   .mk-ava { width: 28px; height: 28px; font-size: var(--mk-fs-micro); }
 }
 @media (min-width: 3600px) {
-  .tc-c__main strong, .tc-num, .tc-fail--bad { font-size: var(--mk-fs-emphasis); }
+  .tc-c__main strong, .tc-num { font-size: var(--mk-fs-emphasis); }
   .tc-c__sub { font-size: var(--mk-fs-body); }
   .tc-rank__no { width: 30px; height: 30px; font-size: var(--mk-fs-micro); }
   .tc-share__bar { height: 10px; }

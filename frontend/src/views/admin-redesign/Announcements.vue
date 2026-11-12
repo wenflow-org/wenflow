@@ -48,6 +48,18 @@
       </div>
 
       <MockSkeletonTable v-if="liveLoading && !rows.length" :cols="7" />
+      <!-- 失败优先于旧数据：刷新失败时不能继续把上一页的行当成本次结果 -->
+      <MkEmptyState
+        v-else-if="liveFailed"
+        min
+        tone="error"
+        title="公告加载失败"
+        description="公告列表加载失败，请重试。"
+        action-text="重试"
+        action-busy-text="重试中…"
+        :action-busy="liveRetrying"
+        @action="retryLive"
+      />
       <div v-else-if="filtered.length" class="mk-table-scroll an-list">
       <!-- 列表区由 .mk-card--fill > .mk-table-scroll 接管纵向滚动（an-list 仅留列/单元格口径） -->
       <!-- 原型 .tbl：width:100% 自动布局（无 colgroup/无 fixed），列按内容自然分宽；
@@ -99,8 +111,8 @@
             <td>
               <span class="mk-badge" :class="statusBadge(r)">{{ statusText(r) }}</span>
             </td>
-            <td :class="{ 'mk-na': !r.publishedAt }" :title="r.publishedAt ? fmtDate(r.publishedAt) : ''">{{ r.publishedAt ? timeAgo(r.publishedAt) : '—' }}</td>
-            <td :class="[r.expiresAt ? expiresTone(r.expiresAt) : 'mk-na']" :title="r.expiresAt ? fmtDate(r.expiresAt) : ''">{{ r.expiresAt ? expiresLabel(r.expiresAt) : '不过期' }}</td>
+            <td :class="{ 'mk-na': !r.publishedAt }" :title="r.publishedAt ? timeAgo(r.publishedAt) : ''">{{ r.publishedAt ? fmtDate(r.publishedAt) : '—' }}</td>
+            <td :class="[r.expiresAt ? expiresTone(r.expiresAt) : 'mk-na']" :title="r.expiresAt ? expiresTitle(r.expiresAt) : ''">{{ r.expiresAt ? fmtDate(r.expiresAt) : '不过期' }}</td>
             <td>
               <span v-if="r.createdBy" class="mono an-author" :title="r.createdBy">{{ r.createdBy }}</span>
               <span v-else class="mk-na">—</span>
@@ -125,18 +137,6 @@
       </table>
       </div>
 
-      <MkEmptyState
-        v-else-if="liveFailed"
-        min
-        tone="error"
-        title="公告加载失败"
-        description="公告列表加载失败，请重试。"
-        action-text="重试"
-        action-busy-text="重试中…"
-        :action-busy="liveRetrying"
-        @action="retryLive"
-      />
-
       <!-- 空态补 icon（审核 #170）：同单元反馈/通知/成就三处均为「◌」。
            2026-11-02 评审：字符图标在缺字字体下渲染成豆腐方块，改走 #icon 插槽的线性图标。
            2026-11-03：描述句「放宽筛选条件试试。」撤除——它教人操作，而「清除筛选」就在同一行；
@@ -144,6 +144,9 @@
       <MkEmptyState
         v-else
         :title="isFiltered ? '没有匹配的公告' : '还没有公告'"
+        :description="isFiltered
+          ? '当前级别 / 状态 / 关键词条件下没有公告，可清除筛选查看全部。'
+          : '还没有发布过公告。点右上角「新建公告」创建第一条，发布后用户端可见。'"
         :action-text="isFiltered ? '清除筛选' : embedded ? '' : '新建公告'"
         min
         @action="isFiltered ? clearFilters() : openCreate()"
@@ -204,6 +207,8 @@
             <!-- 2026-11-01 外部评审：原生 datetime-local 在中文环境把空态渲染成「年 /月/日 --:--」
                  （字间空格不均、深色下与系统配色冲突），交给 MkDateTime 统一回显 + 快捷档 -->
             <MkDateTime v-model="form.expiresAt" label="过期时间" placeholder="留空表示不过期" />
+            <!-- 留空语义上屏（2026-11-11 可用性）：此前只在日期控件 placeholder 里，提交前看不到。 -->
+            <span class="mk-field__hint">留空 = 永不过期。到期后用户端自动不再展示。</span>
             <div class="an-exp-quick">
               <button type="button" class="mk-link" @click="setExpiresInDays(7)">7 天后</button>
               <button type="button" class="mk-link" @click="setExpiresInDays(30)">30 天后</button>
@@ -213,6 +218,10 @@
           <!-- 2026-11-01 外部评审（三轮）：勾选框「创建后立即发布」与主按钮「创建并发布」是同一件事，
                按钮文案还跟着勾选变，「取消勾选后按钮会变成什么」全靠猜。改成两个具名出口：
                存为草稿 / 创建并发布——勾选框撤除。 -->
+          <!-- 提交前可见的发布语义（2026-11-11）：两个出口各自的后果不再只靠按钮文案猜。 -->
+          <p class="an-submit-hint">
+            {{ editingId ? '保存修改不会改变当前发布状态。' : '「存为草稿」不发布。「创建并发布」立即发布，用户端可见。' }}
+          </p>
         </div>
         <div class="mk-modal__foot">
           <!-- 统一关闭路径：提交中禁关（此前绕过 closeCreate，与 Esc/遮罩/✕ 的守卫不一致） -->
@@ -238,7 +247,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, getCurrentInstance, ref, watch } from 'vue'
+import { computed, getCurrentInstance, nextTick, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { intent } from './store'
 import {
@@ -416,7 +425,6 @@ async function retryLive() {
     toast.success('公告列表已刷新')
   } catch (e) {
     liveFailed.value = true
-    toast.error(`加载失败：${errMsg(e)}`)
   } finally {
     liveRetrying.value = false
   }
@@ -511,9 +519,20 @@ async function remove(r: Row) {
 /* 新建 */
 const createOpen = ref(false)
 const creating = ref(false)
-/** 弹窗统一关闭路径：提交中（保存中…）禁止 Esc/遮罩/✕ 误关（请求继续但用户失去上下文） */
+/** 弹窗统一关闭路径：提交中禁止 Esc/遮罩/✕ 误关；有未保存改动先确认（与用户/通知表单同判例）。
+    保存成功后由 create()/saveEdit() 直接关窗，不经过这里，因此成功时不会反问。 */
 function closeCreate() {
-  if (!creating.value) createOpen.value = false
+  if (creating.value) return
+  if (!formDirty.value) { createOpen.value = false; return }
+  void (async () => {
+    const ok = await askConfirm({
+      title: '放弃未保存的公告改动',
+      message: '标题 / 正文 / 级别 / 过期时间的改动尚未保存。',
+      confirmText: '放弃修改',
+      danger: true
+    })
+    if (ok) createOpen.value = false
+  })()
 }
 useEscape(() => createOpen.value, closeCreate)
 const panelRef = ref<HTMLElement | null>(null)
@@ -535,6 +554,9 @@ watch(
 )
 const editingId = ref('')
 const form = ref({ title: '', body: '', severity: 'info' as 'info' | 'warning' | 'critical', expiresAt: '', publishNow: true })
+/** 打开时的表单快照：关闭前据此判断有没有未保存改动（2026-11-11 可用性） */
+const initialForm = ref({ ...form.value })
+const formDirty = computed(() => JSON.stringify(form.value) !== JSON.stringify(initialForm.value))
 const errors = ref<{ title?: string; body?: string }>({})
 /** 两个必填项都填了才允许提交（2026-11-02 评审）：标题/正文为空时主按钮原本仍是实心可点，
    与发送通知弹窗「标题为空即置灰」的处理相反；提交时的校验保留作兜底。 */
@@ -549,6 +571,7 @@ const severities = [
 function openCreate() {
   editingId.value = ''
   form.value = { title: '', body: '', severity: 'info', expiresAt: '', publishNow: true }
+  initialForm.value = { ...form.value }
   errors.value = {}
   createOpen.value = true
 }
@@ -566,6 +589,7 @@ function openEdit(r: Row) {
     expiresAt: r.expiresAt ? toLocalInput(r.expiresAt) : '',
     publishNow: false
   }
+  initialForm.value = { ...form.value }
   errors.value = {}
   createOpen.value = true
 }
@@ -593,10 +617,16 @@ function setExpiresInDays(days: number): void {
 }
 
 async function saveEdit() {
+  if (creating.value) return
   errors.value = {}
   if (!form.value.title.trim()) errors.value.title = '请输入标题'
   if (!form.value.body.trim()) errors.value.body = '请输入正文'
-  if (Object.keys(errors.value).length) return
+  if (Object.keys(errors.value).length) {
+    void nextTick(() => {
+      panelRef.value?.querySelector<HTMLElement>('.mk-field--error input, .mk-field--error textarea')?.focus()
+    })
+    return
+  }
   creating.value = true
   try {
     await liveUpdateAnnouncement(editingId.value, {
@@ -615,10 +645,16 @@ async function saveEdit() {
 }
 
 async function create(publishNow: boolean) {
+  if (creating.value) return
   errors.value = {}
   if (!form.value.title.trim()) errors.value.title = '请输入标题'
   if (!form.value.body.trim()) errors.value.body = '请输入正文'
-  if (Object.keys(errors.value).length) return
+  if (Object.keys(errors.value).length) {
+    void nextTick(() => {
+      panelRef.value?.querySelector<HTMLElement>('.mk-field--error input, .mk-field--error textarea')?.focus()
+    })
+    return
+  }
   creating.value = true
   try {
     await liveCreateAnnouncement({
@@ -656,6 +692,14 @@ function expiresTone(iso: string): string {
   const diff = t - Date.now()
   if (diff <= 0) return 'an-exp--stale'
   return diff < 24 * 3600000 ? 'an-exp--soon' : ''
+}
+/** 过期列主口径 = 绝对时间（YYYY-MM-DD HH:mm，与全站时间口径一致）；倒计时退到 title。
+ *  同一页的发布列也改绝对时间：管理公告要能精确核对生效 / 失效时刻，
+ *  相对时间（刚刚 / 2 天前）不再做列的主口径（2026-11-11 时间格式审计）。 */
+function expiresTitle(iso: string): string {
+  const t = new Date(iso).getTime()
+  if (!t || Number.isNaN(t)) return ''
+  return `${fmtDate(iso)} · ${expiresLabel(iso)}`
 }
 function expiresLabel(iso: string): string {
   const t = new Date(iso).getTime()
@@ -713,6 +757,13 @@ function expiresLabel(iso: string): string {
 .an-exp-quick { display: flex; gap: 14px; margin-top: 2px; }
 .an-exp-quick .mk-link { font-size: var(--mk-fs-micro); }
 
+/* 提交前可见的发布语义：低调说明，不抢两个出口按钮 */
+.an-submit-hint {
+  margin: 2px 0 0;
+  font-size: var(--mk-fs-micro);
+  line-height: 1.6;
+  color: var(--mk-muted);
+}
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15、≥3600px→1.3） ========== */
 @media (min-width: 2000px) {
   .an-body { max-width: 480px; }

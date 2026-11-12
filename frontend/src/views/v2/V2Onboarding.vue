@@ -24,7 +24,11 @@
             <p class="ob__sub">问流把你的真实问题，变成一条能执行的学习路径。</p>
 
             <!-- 三步流程是信息性内容（全页唯一讲清产品用法的文案），不对读屏隐藏；
-                 仅纯装饰的箭头图标标记 aria-hidden -->
+                 仅纯装饰的箭头图标标记 aria-hidden。
+                 2026-11-11 复核：顶部「第 1 / 4 步」是引导自身进度，本卡片 1-2-3 是产品用法，
+                 两组数字同屏且都带序号，仍会被读成「4 步里只走了 3 步」。加一行小标题把两组
+                 计数分开说明，编号保留（顺序本身是信息）。 -->
+            <p class="ob__flow-label">问流怎么用 · 3 步</p>
             <div class="ob__flow">
               <span class="ob__flow-item">
                 <i>1</i>
@@ -362,6 +366,13 @@ async function goDashboard() {
 }
 
 /* ===== 第 1 步：三步流程条 ===== */
+.ob__flow-label {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--faint);
+}
 .ob__flow {
   display: flex;
   align-items: center;

@@ -5,42 +5,65 @@
          原先是一张居中排版的小卡，三个按钮横排，诊断信息作为一枚裸 <details> 挂在按钮下面——
          收起来只剩一个 ▸ 三角 + 一行灰字，展开后又把整块内容顶歪。现在按「错误页」该有的层级排：
          图标 + 标题 + 一句人话说明 + 两个动作（重试 / 退出登录），诊断信息收进卡内独立的
-         带分隔线的区块（标题行右侧是复制），长文本限高滚动。 -->
+         带分隔线的区块（标题行右侧是复制），长文本限高滚动。
+         2026-11-11 用户「优化错误面板 UI」：整页盖住控制台时先给品牌锚点；图标装进 tint 方块、
+         标题与说明并排成一块；诊断信息默认折叠成一行「诊断信息」，不再让开发信息占据首屏。 -->
     <div v-if="bootError" class="ac-error">
       <div class="ac-error__card" role="alert" aria-labelledby="ac-error-title">
-        <div class="ac-error__head">
-          <TriangleAlert class="ac-error__icon" :size="20" :stroke-width="2" aria-hidden="true" />
-          <h1 id="ac-error-title" class="ac-error__title">控制台暂时无法打开</h1>
+        <div class="ac-error__brand">
+          <img :src="isDark ? '/logo-dark.png' : '/logo.png'" alt="问流 WenFlow" />
+          <span>管理控制台</span>
         </div>
-        <p class="ac-error__lead">
-          {{ bootErrorIsAuth
-            ? '登录状态已经失效，重新登录就能继续。'
-            : '数据服务没有正常响应，所有页面都受影响。可以先重试。仍然打不开就退出重登，或把下面的诊断信息发给研发。' }}
-        </p>
+        <div class="ac-error__head">
+          <span class="ac-error__iconwrap" :class="{ 'ac-error__iconwrap--auth': bootErrorIsAuth }" aria-hidden="true">
+            <TriangleAlert :size="22" :stroke-width="1.9" />
+          </span>
+          <div class="ac-error__headtext">
+            <h1 id="ac-error-title" class="ac-error__title">{{ bootErrorIsAuth ? '登录状态已失效' : '控制台暂时无法打开' }}</h1>
+            <p class="ac-error__lead">
+              {{ bootErrorIsAuth
+                ? '当前登录会话已吊销或过期（常见于长时间未操作，或在别处退出了登录）。重新登录后就能继续。'
+                : '数据服务没有正常响应，所有页面都受影响。可以先重试。仍然打不开就退出重登，或把下面的诊断信息发给研发。' }}
+            </p>
+          </div>
+        </div>
         <div class="ac-error__actions">
-          <!-- 登录失效时「重试」修不了问题，主按钮让给「重新登录」——别让人对着一个 403 反复点重试 -->
-          <button type="button" class="mk-btn" :class="{ 'mk-btn--primary': !bootErrorIsAuth }" @click="boot">重试</button>
-          <!-- 长故障兜底：会话可能已失效（否则重试应能恢复），退出重登不困在错误页 -->
+          <!-- 登录态问题重试修不了（会话已吊销不会自愈），只留「重新登录」一条出口；
+               服务故障才给重试 + 退出登录两条路 -->
+          <button v-if="!bootErrorIsAuth" type="button" class="mk-btn mk-btn--primary" @click="boot">重试</button>
           <button type="button" class="mk-btn" :class="{ 'mk-btn--primary': bootErrorIsAuth }" @click="logoutFromError">
             {{ bootErrorIsAuth ? '重新登录' : '退出登录' }}
           </button>
         </div>
         <div class="ac-error__diag">
-          <div class="ac-error__diag-head">
-            <span>诊断信息</span>
-            <button type="button" class="mk-link" @click="copyDiagnostics">复制</button>
+          <div class="ac-error__diagrow">
+            <button
+              type="button"
+              class="ac-error__diagtoggle"
+              :aria-expanded="showDiagnostics"
+              aria-controls="ac-error-diag"
+              @click="showDiagnostics = !showDiagnostics"
+            >
+              <ChevronDown class="ac-error__chev" :class="{ 'ac-error__chev--open': showDiagnostics }" :size="14" :stroke-width="2" aria-hidden="true" />
+              诊断信息
+            </button>
+            <button v-if="showDiagnostics" type="button" class="mk-link" @click="copyDiagnostics">复制</button>
           </div>
-          <code class="ac-error__diag-code">{{ bootError }}</code>
+          <code v-if="showDiagnostics" id="ac-error-diag" class="ac-error__diag-code" tabindex="0">{{ bootError }}</code>
         </div>
       </div>
     </div>
 
       <!-- 面包屑回总览/上级由 crumb-click 承担；帮助按钮跳运营术语表整页（2026-10-10 抽屉退役） -->
+      <!-- 启动失败时错误卡整页盖住控制台：inert 让底下的壳层与页面退出 Tab 序与读屏树，
+           否则键盘用户会从错误卡的动作继续 Tab 进看不见的侧栏。 -->
       <Shell
+        ref="shellRef"
         :current="scene"
         :crumb="crumbLabel"
         :crumb-title="crumbTitle"
         :crumb-clickable="!!subPage"
+        :inert="bootError ? '' : undefined"
         release
         @navigate="navigate"
         @glossary="navigate('glossary')"
@@ -207,6 +230,29 @@ const detailComponents: Record<string, unknown> = {
 
 export const SCENE_COMPONENTS: Readonly<Record<string, unknown>> = components;
 export const DETAIL_COMPONENTS: Readonly<Record<string, unknown>> = detailComponents;
+
+/* —— 列表滚动位置记忆（2026-11-11 二轮可用性）——
+   列表 → 详情 → 返回时把列表滚回原来的位置。key = scene + 列表 query（剔除二级页参数）：
+   只有「同一 scene、同一 query」返回才恢复；切页面/改筛选不恢复（此时用户预期是新列表顶部）。
+   记录对象是列表页根的 .mk-page；fill 列表（用户账号 / 教学会话等）实际滚动在卡内
+   .mk-table-scroll，两条都记，否则「滚到第 30 行」在这类页面上仍然回顶部。 */
+const SUBPAGE_QUERY_KEYS = ['view', 'id', 'includeTest', 'stage', 'fromView', 'fromId', 'fromLabel', 'fromStage', 'fromTab']
+export interface ListScrollMemory { page: number; table: number }
+export const LIST_SCROLL_MEMORY = new Map<string, ListScrollMemory>()
+export function listScrollKeyOf(scene: string, query: Record<string, unknown>): string {
+  const params = new URLSearchParams()
+  for (const key of Object.keys(query).sort()) {
+    if (SUBPAGE_QUERY_KEYS.includes(key)) continue
+    const value = query[key]
+    if (Array.isArray(value)) {
+      for (const v of value) if (v != null) params.append(key, String(v))
+    } else if (value != null) {
+      params.append(key, String(value))
+    }
+  }
+  const qs = params.toString()
+  return qs ? `${scene}?${qs}` : scene
+}
 </script>
 
 <script setup lang="ts">
@@ -215,30 +261,47 @@ export const DETAIL_COMPONENTS: Readonly<Record<string, unknown>> = detailCompon
  * 原实验稿 /admin-redesign-lab 已废除，本组件为唯一管理后台入口。
  * 特点：
  */
-import { computed, defineAsyncComponent, h, onMounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, h, nextTick, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { TriangleAlert } from 'lucide-vue-next';
+import { TriangleAlert, ChevronDown } from 'lucide-vue-next';
 import Shell from './Shell.vue';
 import HealthCenter from './HealthCenter.vue';
 import MockSkeletonTable from './SkeletonTable.vue';
-import { intent, intentQueryParams, subPage, closeSubPage, liveSpans, asSubPageStage, type SubPageView, type SubPageStage } from './store';
+import { intent, intentQueryParams, subPage, closeSubPage, liveSpans, asSubPageStage, type SubPageView, type SubPageStage, type SubPageFrom } from './store';
 import { MOCK_SCENES } from './manifest';
 import { loadLiveData } from './live';
 import { clearAdminSession } from '@/api/adminApi';
 import { useEscape } from './useEscape';
+import { isAdminAuthError } from './adminSessionError';
+import { useIsDark } from '@/composables/useIsDark';
 import { toast } from '@/utils/toast';
 import '@/styles/mk-primitives.css';
 
 /* 整页二级详情（?view=&id=）也走全站统一的 Esc 关浮层通道：LIFO 栈保证盖在详情上的
-   抽屉/弹层先关，再按一次 Esc 才退出详情（与面包屑返回/浏览器后退同一出口语义） */
-useEscape(() => !!subPage.value, closeSubPage);
+   抽屉/弹层先关，再按一次 Esc 才退出详情（与面包屑返回/浏览器后退同一出口语义）。
+   详情页不是模态：焦点在输入框/下拉里时，Esc 只退出该控件（blur），不能连带退掉整页——
+   否则在详情页的搜索框里按 Esc 会直接回到列表，用户以为筛掉了内容。 */
+useEscape(() => !!subPage.value, () => {
+  const active = document.activeElement as HTMLElement | null
+  const tag = active?.tagName
+  if (active && (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || active.isContentEditable)) {
+    active.blur()
+    return
+  }
+  closeSubPage()
+});
 
 const scene = ref('overview');
 const booting = ref(true);
 const bootError = ref('');
-/* 失败原因分两类：会话失效（403 / 「权限已失效」）与数据服务不可用。
-   前者重试没用、退出重登才有用，所以文案与主按钮都要跟着换（2026-11-04 实机踩到）。 */
-const bootErrorIsAuth = computed(() => /权限|登录|401|403|unauthori[sz]ed|forbidden/i.test(bootError.value));
+/** 诊断信息默认折叠：首屏只留「出了什么事 + 怎么办」，开发信息要展开才出现 */
+const showDiagnostics = ref(false);
+const isDark = useIsDark();
+/* 失败原因分两类：会话失效（401/403、会话吊销或过期）与数据服务不可用。
+   前者重试没用、重新登录才有用，所以标题、文案与按钮都要跟着换（2026-11-04 实机踩到；
+   2026-11-11 用户截图：诊断写「会话已吊销或过期」，正文却报成服务故障——判定收到
+   adminSessionError 单源，文案按类分写）。 */
+const bootErrorIsAuth = computed(() => isAdminAuthError(bootError.value))
 
 const currentComponent = computed(() => components[scene.value]);
 const detailComponent = computed(() => (subPage.value ? detailComponents[subPage.value.view] : null));
@@ -310,10 +373,30 @@ const SUBPAGE_VIEWS = ['learner', 'virtual', 'user', 'session', 'session-real', 
    才进得去（应用内入口 VirtualLearnerCards 正是 openSubPage('card-import','new')）。
    给它一个默认 id，让「手敲深链」与「应用内入口」两种写法等价。 */
 const IDLESS_SUBPAGE_VIEWS = ['card-import']
+/* 来源链持久化（2026-11-11）：?fromView=&fromId=&fromLabel=(&fromStage=&fromTab=)。
+   刷新/深链/前进后退后 subPage.from 不再丢失：面包屑保留「用户账号 / cs / 课堂」，
+   返回键回到学习者详情而不是一级列表。只在 from 存在时写这几个键，不污染无关页面。 */
+function fromQueryOf(): SubPageFrom | undefined {
+  const view = typeof route.query.fromView === 'string' ? route.query.fromView : ''
+  const id = typeof route.query.fromId === 'string' ? route.query.fromId : ''
+  if (!view || !id || !SUBPAGE_VIEWS.includes(view)) return undefined
+  const from: SubPageFrom = { view: view as SubPageView, id }
+  const label = typeof route.query.fromLabel === 'string' ? route.query.fromLabel : ''
+  if (label) from.label = label
+  const stage = asSubPageStage(route.query.fromStage)
+  if (stage) from.stage = stage
+  const tab = typeof route.query.fromTab === 'string' ? route.query.fromTab : ''
+  if (tab) from.tab = tab
+  return from
+}
 // URL → subPage（深链/刷新/前进后退）；includeTest 透传（虚拟学习者/测试账号深链可查）
 // stage 透传（2026-10-12）：座舱落点页签（?view=session-real&id=..&stage=path），刷新/深链保持落点
+// from* 透传（2026-11-11）：刷新后保留来源页（学习者详情），面包屑与返回键同源
 watch(
-  () => [route.query.view, route.query.id, route.query.includeTest, route.query.stage] as [unknown, unknown, unknown, unknown],
+  () => [
+    route.query.view, route.query.id, route.query.includeTest, route.query.stage,
+    route.query.fromView, route.query.fromId, route.query.fromLabel, route.query.fromStage, route.query.fromTab
+  ] as [unknown, unknown, unknown, unknown, unknown, unknown, unknown, unknown, unknown],
   ([v, id, includeTest, stage]) => {
     const view = typeof v === 'string' ? v : ''
     const sid = typeof id === 'string' ? id : ''
@@ -321,11 +404,22 @@ watch(
     const st = asSubPageStage(stage)
     if ((sid || IDLESS_SUBPAGE_VIEWS.includes(view)) && SUBPAGE_VIEWS.includes(view)) {
       const nextId = sid || 'new'
-      const next: { view: SubPageView; id: string; includeTest?: boolean; stage?: SubPageStage } =
+      const next: { view: SubPageView; id: string; includeTest?: boolean; stage?: SubPageStage; from?: SubPageFrom } =
         it ? { view: view as SubPageView, id: nextId, includeTest: true } : { view: view as SubPageView, id: nextId }
       if (st) next.stage = st
       const cur = subPage.value
-      if (!cur || cur.view !== next.view || cur.id !== next.id || !!cur.includeTest !== it || cur.stage !== next.stage) {
+      const from = fromQueryOf()
+      if (from) next.from = from
+      /* URL 只持久化一层来源；内存里同源的 parent 链要补回去，避免任何 query 变化
+         把「列表 → 学习者 → 课堂」的完整链路冲成一层。URL 没带 from 且 view/id 没变时
+         也保留内存来源（载荷反查出来的 from 先于 URL 同步存在）。 */
+      if (from && cur?.from && cur.from.view === from.view && cur.from.id === from.id && cur.from.parent) {
+        next.from = { ...from, parent: cur.from.parent }
+      } else if (!from && cur?.from && cur.view === next.view && cur.id === next.id) {
+        next.from = cur.from
+      }
+      const fromChanged = JSON.stringify(cur?.from ?? null) !== JSON.stringify(next.from ?? null)
+      if (!cur || cur.view !== next.view || cur.id !== next.id || !!cur.includeTest !== it || cur.stage !== next.stage || fromChanged) {
         subPage.value = next
       }
     } else if (!sid) {
@@ -340,6 +434,72 @@ watch(
   },
   { immediate: true }
 )
+/* —— 列表滚动位置：打开二级页时记下当前列表位置；关闭后等异步页面挂载再回填 ——
+   监听 subPage 用 pre flush：打开的那一帧 DOM 还是列表页，能读到离开前的 scrollTop；
+   回填推迟到 nextTick，此时详情已卸载、列表（或它的骨架）已挂载。 */
+const shellRef = ref<{ $el?: Element } | null>(null)
+function currentListPage(): HTMLElement | null {
+  const root = shellRef.value?.$el
+  if (!(root instanceof HTMLElement)) return null
+  return root.querySelector<HTMLElement>('.mshell__content > .mk-page')
+}
+function restoreListScroll(key: string) {
+  const saved = LIST_SCROLL_MEMORY.get(key)
+  if (!saved) return
+  LIST_SCROLL_MEMORY.delete(key)
+  if (saved.page <= 0 && saved.table <= 0) return
+  /* 返回的列表是异步 chunk：骨架没有内容高度时写 scrollTop 会被钳回 0。
+     逐帧重试到写入生效（1.5s 上限，同 router 的 applyDockScrollTop）。 */
+  const deadline = Date.now() + 1500
+  const attempt = () => {
+    const page = currentListPage()
+    if (!page || !page.isConnected || Date.now() > deadline) return
+    if (saved.page > 0) page.scrollTop = saved.page
+    const table = page.querySelector<HTMLElement>('.mk-table-scroll')
+    if (table && saved.table > 0) table.scrollTop = saved.table
+    const pageSettled = saved.page <= 0 || page.scrollTop > 0
+    const tableSettled = saved.table <= 0 || (!!table && table.scrollTop > 0)
+    if (!pageSettled || !tableSettled) requestAnimationFrame(attempt)
+  }
+  void nextTick(() => requestAnimationFrame(attempt))
+}
+
+/* 列表 key 只在「URL 已退回列表形」时才算数：关闭二级页的那一刻 URL 还带着 view/id
+   （以及详情自己的落点页签），拿它拼 key 会把列表自己的 ?tab= 一起误伤。
+   所以关闭时先记下打开时那份列表 key，等路由收干净再比对——相等才恢复。 */
+let activeListKey: string | null = null
+let pendingListRestoreKey: string | null = null
+function maybeRestoreListScroll() {
+  const key = pendingListRestoreKey
+  if (!key || subPage.value) return
+  if (typeof route.query.view === 'string' || typeof route.query.id === 'string') return
+  pendingListRestoreKey = null
+  if (key !== listScrollKeyOf(scene.value, route.query as Record<string, unknown>)) return
+  restoreListScroll(key)
+}
+watch(
+  subPage,
+  (next, prev) => {
+    // 详情 ↔ 详情（parent 链）不涉及列表，不做记忆
+    if (!!next === !!prev) return
+    if (next) {
+      const page = currentListPage()
+      const pageTop = page?.scrollTop ?? 0
+      const tableTop = page?.querySelector<HTMLElement>('.mk-table-scroll')?.scrollTop ?? 0
+      activeListKey = (pageTop > 0 || tableTop > 0)
+        ? listScrollKeyOf(scene.value, route.query as Record<string, unknown>)
+        : null
+      if (activeListKey) LIST_SCROLL_MEMORY.set(activeListKey, { page: pageTop, table: tableTop })
+      return
+    }
+    pendingListRestoreKey = activeListKey
+    activeListKey = null
+    maybeRestoreListScroll()
+  },
+  { flush: 'pre' }
+)
+/* 关闭后 URL 由 subPage → URL watch 用 replace 收掉 view/id；等它落地再恢复 */
+watch(() => route.fullPath, () => maybeRestoreListScroll())
 // subPage → URL（打开用 push：浏览器后退可回到列表；关闭用 replace：不污染历史栈；同页互斥无回环）
 watch(
   subPage,
@@ -352,6 +512,24 @@ watch(
       else delete q.includeTest
       if (sp.stage) q.stage = sp.stage
       else delete q.stage
+      /* 来源页并进 URL（2026-11-11）：刷新/深链/前进后退后 from 不丢。只持久化一跳；
+         parent 链仍在内存里，URL 回填时由上方 URL→subPage 补回。 */
+      if (sp.from) {
+        q.fromView = sp.from.view
+        q.fromId = sp.from.id
+        if (sp.from.label) q.fromLabel = sp.from.label
+        else delete q.fromLabel
+        if (sp.from.stage) q.fromStage = sp.from.stage
+        else delete q.fromStage
+        if (sp.from.tab) q.fromTab = sp.from.tab
+        else delete q.fromTab
+      } else {
+        delete q.fromView
+        delete q.fromId
+        delete q.fromLabel
+        delete q.fromStage
+        delete q.fromTab
+      }
       /* 详情内部页签落点（learner）：并进同一次 push，详情挂载即从 ?tab= 取到落点。
          不让详情挂载后再补一笔 replace——两笔导航互相竞态时，补参数那笔会把 view/id 冲掉，
          二级页被自己的 URL 同步当场关掉。离开 learner 详情时顺手清掉它，避免列表 URL 上
@@ -365,8 +543,30 @@ watch(
         if (curView === 'learner') delete q.tab
         if (sp.view === 'skill') delete q.skdTab
       }
+      const urlFrom = sp.from
+        ? {
+            view: sp.from.view,
+            id: sp.from.id,
+            label: sp.from.label || '',
+            stage: sp.from.stage || '',
+            tab: sp.from.tab || ''
+          }
+        : { view: '', id: '', label: '', stage: '', tab: '' }
+      const curFrom = {
+        view: typeof route.query.fromView === 'string' ? route.query.fromView : '',
+        id: typeof route.query.fromId === 'string' ? route.query.fromId : '',
+        label: typeof route.query.fromLabel === 'string' ? route.query.fromLabel : '',
+        stage: typeof route.query.fromStage === 'string' ? route.query.fromStage : '',
+        tab: typeof route.query.fromTab === 'string' ? route.query.fromTab : ''
+      }
+      const fromChanged = urlFrom.view !== curFrom.view || urlFrom.id !== curFrom.id
+        || urlFrom.label !== curFrom.label || urlFrom.stage !== curFrom.stage || urlFrom.tab !== curFrom.tab
       if (curView !== sp.view || curId !== sp.id || (sp.includeTest ? route.query.includeTest !== 'true' : route.query.includeTest != null)) {
         void router.push({ query: q })
+      } else if (fromChanged) {
+        /* 只是补/更新来源参数（载荷反查）→ replace：不为同一实体多造一条历史记录，
+           否则返回键会先退到「无 from 的同一课堂」。 */
+        void router.replace({ query: q })
       }
     } else if (curView || curId) {
       // 场景切换中（scene watch 已 push 新路径、route 尚未落地）时跳过：
@@ -378,6 +578,11 @@ watch(
         delete q.id
         delete q.includeTest
         delete q.stage
+        delete q.fromView
+        delete q.fromId
+        delete q.fromLabel
+        delete q.fromStage
+        delete q.fromTab
         // 落点页签是详情自己的参数，随详情一起收（learner 用 ?tab=，skill 用 ?skdTab=）
         if (curView === 'learner') delete q.tab
         if (curView === 'skill') delete q.skdTab
@@ -484,6 +689,7 @@ try {
 async function boot() {
   booting.value = true;
   bootError.value = '';
+  showDiagnostics.value = false;
   await loadLiveData();
   booting.value = false;
   // loadLiveData 内部已做局部容错；仅核心域（日志）失败才提示整页错误。
@@ -545,7 +751,8 @@ onMounted(() => {
   inset: 0;
   /* 全屏兜底层：用 critical 档（500），此前 400 字面量与 toast 同档会互相抢占（2026-09-26 对齐） */
   z-index: var(--mk-z-critical, 500);
-  background: var(--mk-bg, #f7f8fa);
+  /* 顶部轻微提亮：卡片浮在页面上，而不是贴在一块纯灰底上 */
+  background: radial-gradient(120% 90% at 50% 0%, var(--mk-surface-3), var(--mk-bg, #f7f8fa) 62%);
   display: grid;
   place-items: center;
   padding: 24px;
@@ -553,35 +760,94 @@ onMounted(() => {
 /* 左对齐的单列卡：标题与说明读起来是一段话，而不是三行居中的标签 */
 .ac-error__card {
   display: grid;
-  gap: 12px;
-  width: min(520px, 100%);
-  padding: 24px 26px;
+  gap: 18px;
+  width: min(560px, 100%);
+  padding: 26px 30px 22px;
   border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-xl);
   background: var(--mk-surface);
   box-shadow: var(--mk-shadow-modal);
+  /* 错误页出现时不弹跳，只做一次轻微的落位 */
+  animation: ac-error-in 0.22s ease-out;
 }
-.ac-error__head { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.ac-error__icon { flex: none; color: var(--mk-red); }
-.ac-error__title { margin: 0; font-size: var(--mk-fs-emphasis); font-weight: 700; color: var(--mk-ink); }
-.ac-error__lead { margin: 0; font-size: var(--mk-fs-body); line-height: 1.6; color: var(--mk-muted); }
-.ac-error__actions { display: flex; gap: 8px; flex-wrap: wrap; }
-/* 诊断信息：卡内独立区块，与动作之间一条发丝线隔开；标题行右侧才是复制 */
+@keyframes ac-error-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ac-error__card { animation: none; }
+}
+/* 品牌锚点：这一页盖住整个控制台，先说明「这是哪」，再谈出了什么事 */
+.ac-error__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--mk-line);
+}
+.ac-error__brand img { display: block; height: 22px; width: auto; }
+.ac-error__brand span {
+  font-size: var(--mk-fs-micro);
+  color: var(--mk-faint);
+  letter-spacing: 0.08em;
+}
+.ac-error__head { display: flex; align-items: flex-start; gap: 14px; min-width: 0; }
+.ac-error__iconwrap {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--mk-radius-md);
+  background: var(--mk-red-bg);
+  color: var(--mk-red);
+}
+/* 会话过期不是系统故障：降成琥珀，避免把「重新登录即可」读成事故 */
+.ac-error__iconwrap--auth { background: var(--mk-amber-bg); color: var(--mk-amber); }
+.ac-error__headtext { display: grid; gap: 6px; min-width: 0; }
+.ac-error__title {
+  margin: 0;
+  font-size: var(--mk-fs-20);
+  line-height: 1.35;
+  font-weight: 700;
+  color: var(--mk-ink);
+}
+.ac-error__lead {
+  margin: 0;
+  max-width: 46em;
+  font-size: var(--mk-fs-body);
+  line-height: 1.65;
+  color: var(--mk-muted);
+}
+.ac-error__actions { display: flex; gap: 10px; flex-wrap: wrap; }
+/* 诊断信息：卡内独立区块，与动作之间一条发丝线隔开；默认折叠成一行，点开才占高 */
 .ac-error__diag {
   display: grid;
-  gap: 6px;
+  gap: 10px;
   margin-top: 2px;
-  padding-top: 12px;
+  padding-top: 14px;
   border-top: 1px solid var(--mk-line);
 }
-.ac-error__diag-head {
+.ac-error__diagrow {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+.ac-error__diagtoggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
   color: var(--mk-faint);
   font-size: var(--mk-fs-micro);
+  cursor: pointer;
 }
+.ac-error__diagtoggle:hover { color: var(--mk-ink); }
+.ac-error__chev { transition: transform 0.16s ease; }
+.ac-error__chev--open { transform: rotate(180deg); }
 .ac-error__diag-code {
   display: block;
   max-height: 96px;
@@ -595,15 +861,20 @@ onMounted(() => {
   word-break: break-all;
   white-space: pre-wrap;
 }
+@media (max-width: 640px) {
+  .ac-error { padding: 16px; }
+  .ac-error__card { gap: 14px; padding: 20px 18px 16px; }
+  .ac-error__iconwrap { width: 36px; height: 36px; }
+}
 
 /* ========== 大屏/4K 适配（全站 mk 体系档位：≥2000px 字号放大；zoom 档 ≥2800px→1.15） ========== */
 @media (min-width: 2000px) {
-  .ac-error__card { gap: 14px; padding: 30px 32px; }
-  .ac-error__title { font-size: 18.5px; }
+  .ac-error__card { gap: 20px; padding: 32px 36px 26px; }
+  .ac-error__title { font-size: var(--mk-fs-20); }
 }
 @media (min-width: 2800px) {
-  .ac-error__card { gap: 16px; padding: 36px 38px; }
-  .ac-error__title { font-size: var(--mk-fs-emphasis); }
+  .ac-error__card { gap: 22px; padding: 38px 42px 30px; }
+  .ac-error__title { font-size: var(--mk-fs-20); }
 }
 
 /* 异步 tab 过渡态：错误卡（加载骨架已统一走 SkeletonTable） */

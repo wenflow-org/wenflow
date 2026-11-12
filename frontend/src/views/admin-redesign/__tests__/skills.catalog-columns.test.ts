@@ -80,7 +80,7 @@ function prime() {
     { id: 'skill:idle', name: '空闲技能', agentId: '', agentName: '', category: 'tool' },
   ] as never;
   liveSkillStatsMap.value = {
-    'skill:healthy': { calls: 40, errors: 0, avgMs: 100, lastAt: '刚刚' },
+    'skill:healthy': { calls: 40, errors: 0, avgMs: 100, lastAt: '刚刚', lastCalledAt: '2026-11-11T10:30:00Z' },
     'skill:warn': { calls: 40, errors: 2, avgMs: 100, lastAt: '2 小时前' },
     'skill:bad': { calls: 40, errors: 8, avgMs: 100, lastAt: '1 天前' },
     'skill:idle': { calls: 0, errors: 0, avgMs: 0, lastAt: '从未' },
@@ -175,6 +175,18 @@ describe('Skill 目录 · 列结构（图 3 走查 A/B）', () => {
     expect(tds[2].find('.sk-model-chip').exists()).toBe(true);
     expect(tds[3].classes()).toContain('sk-c-updated');
     expect(tds[3].find('.sk-recent').exists()).toBe(true);
+    w.unmount();
+  });
+
+  /* 2026-11-11：最近更新仍是相对时间（2 小时前）为主口径，但 title 必须是
+     YYYY-MM-DD HH:mm 绝对时刻；无调用的行给「该窗口内暂无调用」，不硬造日期。 */
+  it('B：最近更新的悬停是绝对时刻（YYYY-MM-DD HH:mm），无调用行给明确空态', async () => {
+    const w = await mountSkills();
+    const rows = w.findAll('.sk-catalog tbody tr');
+    const recentOf = (id: string) =>
+      rows.find((r) => r.attributes('aria-label')?.includes(id))!.find('.sk-recent');
+    expect(recentOf('skill:healthy').attributes('title')).toMatch(/^最近调用：\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+    expect(recentOf('skill:idle').attributes('title')).toBe('该窗口内暂无调用');
     w.unmount();
   });
 

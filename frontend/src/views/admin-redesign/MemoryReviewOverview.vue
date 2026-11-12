@@ -82,7 +82,8 @@
         v-if="error && !rows.length"
         min
         tone="error"
-        :title="error"
+        title="复习积压加载失败"
+        :description="error"
         action-text="重试"
         :action-busy="loading"
         action-busy-text="重试中…"
@@ -128,7 +129,7 @@
               <th scope="col" class="mk-th--sortable mr-c-weak" :aria-sort="userSortState('weak')"
                 v-if="!mrHiddenCols.has('weak')"
                 @click="toggleUserSort('weak')"
-              ><button type="button" class="mk-th__btn" @click.stop="toggleUserSort('weak')">需关注<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+              ><button type="button" class="mk-th__btn" title="需关注：薄弱概念数量大于 0，或存在待人工确认的归并项（与「需关注」筛选同判据，按当前页计算）" @click.stop="toggleUserSort('weak')">需关注<span class="mk-th__caret" aria-hidden="true"></span></button></th>
               <th scope="col" class="mk-th--sortable mr-c-traces" :aria-sort="userSortState('traces')"
                 v-if="!mrHiddenCols.has('traces')"
                 @click="toggleUserSort('traces')"
@@ -192,12 +193,12 @@ ${row.email}` : (row.name || '未命名')">{{ row.name || '未命名' }}</strong
                    又与相邻左对齐列挤在一起（「9」紧贴「待确认 4」、「66%」紧贴「9 天前」）。 -->
               <td v-if="!mrHiddenCols.has('due')">
                 <!-- 只留数字：比例条移到「记忆强度」列，避免与相邻列的另一条并排读成一条 -->
-                <b class="mr__due-num" :class="`mr__due-num--${dueTone(row)}`">{{ row.due }}</b>
+                <b class="mr__due-num" :class="`mr__due-num--${dueTone(row)}`">{{ fmtCount(row.due) }}</b>
               </td>
               <!-- 2026-11-09 走查 P2：需关注 状态列（含「无」单字），去掉 mk-num 左对齐 -->
               <td v-if="!mrHiddenCols.has('weak')">
                 <div v-if="row.weak > 0 || row.audit?.ambiguous" class="mr__focus">
-                  <span v-if="row.weak > 0" class="mk-badge mk-badge--sm mk-badge--warn">薄弱 {{ row.weak }}</span>
+                  <span v-if="row.weak > 0" class="mk-badge mk-badge--sm mk-badge--warn">薄弱 {{ fmtCount(row.weak) }}</span>
                   <!-- 待人工确认的同义归并：确认 / 驳回在「记忆调度」页签，点数字直达。
                        2026-11-02 走查：title 原为「…记忆条目：点击到「记忆调度」确认或驳回」，
                        后半句是操作说明 + 隔空指路（去哪一页改），撤除；只留对读数的定义——
@@ -210,17 +211,17 @@ ${row.email}` : (row.name || '未命名')">{{ row.name || '未命名' }}</strong
                     class="mk-badge mk-badge--sm mk-badge--warn mr__act-badge"
                     title="模型判定为同义、等待人工确认合并的记忆条目"
                     @click.stop="openOps(row.userId)"
-                  >待确认 {{ row.audit.ambiguous }}</button>
+                  >待确认 {{ fmtCount(row.audit.ambiguous) }}</button>
                 </div>
                 <span v-else class="mr__none">无</span>
               </td>
               <td v-if="!mrHiddenCols.has('traces')">
-                <b>{{ row.traces }}</b>
+                <b>{{ fmtCount(row.traces) }}</b>
                 <span
                   v-if="uninitializedTraces(row) > 0"
                   class="mk-cell-sub mr__traces-sub"
-                  :title="`${row.traces} 条记忆痕迹里，有 ${uninitializedTraces(row)} 条还没有记忆强度（未初始化），不计入「记忆强度」的平均值`"
-                >未初始化 {{ uninitializedTraces(row) }}</span>
+                  :title="`${fmtCount(row.traces)} 条记忆痕迹里，有 ${fmtCount(uninitializedTraces(row))} 条还没有记忆强度（未初始化），不计入「记忆强度」的平均值`"
+                >未初始化 {{ fmtCount(uninitializedTraces(row)) }}</span>
               </td>
               <td v-if="!mrHiddenCols.has('strength')">
                 <!-- 2026-11-09 用户走查（图 5）+ 设计语言收敛：本页与「记忆调度」页
@@ -240,13 +241,17 @@ ${row.email}` : (row.name || '未命名')">{{ row.name || '未命名' }}</strong
               <!-- 2026-11-09 走查 P2：待合并同义词 含「未观察」文字态，去掉 mk-num 左对齐 -->
               <td v-if="!mrHiddenCols.has('prop')">
                 <!-- 0 与「没观察」必须分开：审计投影是按用户跑观察才有的 -->
-                <span v-if="row.audit === null" class="mr__none">未观察</span>
+                <span
+                  v-if="row.audit === null"
+                  class="mr__none"
+                  title="还没有对该用户跑过归并观察——此列数字要先观察才有依据，与「观察过、结果为 0」不是一回事"
+                >未观察</span>
                 <button
                   v-else-if="row.proposed"
                   type="button"
                   class="mk-link mr__act"
                   @click.stop="openOps(row.userId)"
-                >{{ row.proposed }}</button>
+                >{{ fmtCount(row.proposed) }}</button>
                 <span v-else class="mr__none">0</span>
               </td>
               <td v-if="!mrHiddenCols.has('scatter')">
@@ -255,11 +260,11 @@ ${row.email}` : (row.name || '未命名')">{{ row.name || '未命名' }}</strong
                   type="button"
                   class="mk-link mr__act"
                   @click.stop="openOps(row.userId)"
-                >{{ row.scatter }}</button>
+                >{{ fmtCount(row.scatter) }}</button>
                 <span v-else class="mr__none">0</span>
               </td>
               <td :title="row.lastReviewedAt ? fullTime(row.lastReviewedAt) : undefined" v-if="!mrHiddenCols.has('last')">
-                <span v-if="row.lastReviewedAt" class="mk-cell-sub">{{ timeAgo(row.lastReviewedAt) }}</span>
+                <span v-if="row.lastReviewedAt" class="mk-cell-sub">{{ relTime(row.lastReviewedAt) }}</span>
                 <span v-else class="mr__none">未复习</span>
               </td>
               <td>
@@ -272,7 +277,7 @@ ${row.email}` : (row.name || '未命名')">{{ row.name || '未命名' }}</strong
                     class="mk-link"
                     @click.stop="openLearner(row.userId)"
                   >详情</button>
-                  <button type="button" class="mk-link" :disabled="recomputingId === row.userId" @click.stop="recompute(row.userId, row.name)">{{ recomputingId === row.userId ? '观察中…' : '重新观察' }}</button>
+                  <button type="button" class="mk-link" title="重新跑一次该用户的记忆复盘（归并观察），结果实时刷新。只记录建议，不改动记忆痕迹" :disabled="recomputingId === row.userId" @click.stop="recompute(row.userId, row.name)">{{ recomputingId === row.userId ? '观察中…' : '重新观察' }}</button>
                 </div>
               </td>
             </tr>
@@ -285,7 +290,7 @@ ${row.email}` : (row.name || '未命名')">{{ row.name || '未命名' }}</strong
         min
         title="没有符合条件的用户"
         action-text="显示全部"
-        @action="mrPill = 'all'; keyword = ''"
+        @action="clearFilters"
       />
       <!-- 服务端分页（审核 #41）：total=后端全量有痕迹用户数（totals.users）；v-model:pageSize 接住条数变更。
            0 行不渲染（2026-10-24 用户「空数据的时候页面很奇怪」）：此前空数据页挂着
@@ -325,6 +330,25 @@ import { openSubPage, LEARNER_DETAIL_LANDING } from './store'
 import { useListQueryState } from './learner-profile'
 import { toast } from '@/utils/toast'
 import { errMsg, shortId, timeAgo, liveRefreshSeq } from './live'
+
+/** 绝对时间悬停口径（全站统一 YYYY-MM-DD HH:mm）：toLocaleString 会渲染成 2026/11/11，禁止 */
+function absDateTime(value?: string | null): string {
+  if (!value) return ''
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return String(value)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+/** 计数统一千分位；null / 非法值不伪装成 0 */
+function fmtCount(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(Number(n))) return '—'
+  return Number(n).toLocaleString('zh-CN')
+}
+/** 相对时间；timeAgo 超过 30 天会回落成 2026/11/11（违反全站绝对时间口径），此时改绝对时间 */
+function relTime(value?: string | null): string {
+  const rel = timeAgo(value)
+  return /^\d{4}[-/]/.test(rel) ? absDateTime(value) : rel
+}
 
 interface AuditUserSummary {
   mode: string
@@ -440,6 +464,11 @@ useListQueryState(
 watch([mrPill, keyword], () => {
   if (userPage.value !== 1) userPage.value = 1
 })
+/** 清除筛选：回「全部」并清空搜索；URL 由 useListQueryState 同步删除 */
+function clearFilters() {
+  mrPill.value = 'all'
+  keyword.value = ''
+}
 const mrPills = computed<Array<{ key: MrPill; label: string; n: number | null }>>(() => {
   const due = rows.value.filter((r) => r.due > 0).length
   const unreviewed = rows.value.filter((r) => !r.lastReviewedAt).length
@@ -460,7 +489,19 @@ const mrPillOptions = computed(() => [
   { value: 'all', label: '全部' },
   ...mrPills.value
     .filter((p) => p.key !== 'all')
-    .map((p) => ({ value: p.key, label: p.n != null ? `${p.label}（${p.n}）` : p.label }))
+    .map((p) => ({
+      value: p.key,
+      label: p.n != null ? `${p.label}（${p.n}）` : p.label,
+      /* 2026-11-11（困惑测试 #37）：同一件事在卡上叫「需人工确认 4」（全库条数）、
+         筛选里叫「需关注（1）」（当前页人数）——括号里的数必须说明是人数还是条数。 */
+      hint: p.key === 'attention'
+        ? '当前页命中的人数（不是全库待人工确认条数）'
+        : p.key === 'due'
+          ? '当前页有到期未复习痕迹的用户数'
+          : p.key === 'unreviewed'
+            ? '当前页还没有复习记录的用户数'
+            : undefined
+    }))
 ])
 
 const visibleRows = computed(() => {
@@ -493,7 +534,7 @@ const filteredRows = computed(() => {
 const scopeNote = computed(() => {
   const narrowed = mrPill.value !== 'all' || !!keyword.value.trim()
   if (!narrowed) return ''
-  return `筛选只作用本页 · 本页命中 ${filteredRows.value.length} 位`
+  return `筛选只作用本页 · 本页命中 ${fmtCount(filteredRows.value.length)} 位`
 })
 
 /* 列显隐（P1-3 公共组件 MkCols）：除固定「操作」列外均可收起，键 localStorage 持久化。
@@ -540,7 +581,7 @@ const dueWarn = computed(() => {
 })
 const dueCardTitle = computed(() => {
   const t = totals.value
-  return `到该复习而未复习 ${t.due} 条，占全部记录 ${duePct.value}%`
+  return `到该复习而未复习 ${fmtCount(t.due)} 条，占全部记忆痕迹 ${duePct.value}%`
 })
 
 /* 到期时间轴窗口与下钻计算已随分布带退役（2026-10-17）：页面不再额外拉最近 200 条痕迹，
@@ -561,12 +602,14 @@ interface OverviewCard {
 /** 页级绝对值单一来源；失败/未落定一律 '—'（R2 + B5-F3-2），不静默归零 */
 const overviewCards = computed<OverviewCard[]>(() => {
   const t = totals.value;
-  const failed = !!error.value
+  /* 刷新失败但有旧行：KPI 与列表同口径保留旧值，标注「上次结果」；只有首载失败才置 — */
+  const failed = !!error.value && !rows.value.length
+  const stale = !!error.value && !!rows.value.length
   const pending = kpiPending.value
   const na = failed || pending
-  const val = (v: number) => (na ? '—' : v)
-  const numTone = (tone: OverviewCard['tone']): OverviewCard['tone'] => (failed ? 'bad' : pending ? 'muted' : tone)
-  const numHint = (text: string) => (failed ? '取数失败' : pending ? '取数中…' : text)
+  const val = (v: number) => (na ? '—' : fmtCount(v))
+  const numTone = (tone: OverviewCard['tone']): OverviewCard['tone'] => (failed ? 'bad' : pending || stale ? 'muted' : tone)
+  const numHint = (text: string) => (failed ? '取数失败' : pending ? '取数中…' : stale ? '上次结果' : text)
   /* 待审队列已并入此卡（2026-10-22 用户「合并了」）：需人工确认的不是只有 ambiguous，
      同义概念待确认 + 模糊候选 + 未归类记忆清理建议才是完整的「人审待办」。口径取
      fragmentation.pendingReview；后端旧版没这个字段时退回 ambiguous，不静默归零。 */
@@ -579,15 +622,15 @@ const overviewCards = computed<OverviewCard[]>(() => {
      后端 totals 已改成只在当前视图内计数）。 */
   const noAudit = (t.usersWithAudit ?? 0) === 0
   return [
-    { label: '有记忆痕迹的用户', value: val(t.users), hint: numHint(''), tone: numTone('') },
-    { label: '记忆痕迹', value: val(t.traces), tone: numTone('') },
+    { label: '有记忆痕迹的用户', value: val(t.users), hint: '当前视图内有至少一条记忆痕迹的用户数（虚拟学习者按页面开关排除）', tone: numTone('') },
+    { label: '记忆痕迹', value: val(t.traces), hint: '一条「概念—学习者」记忆记录（含掌握度与复习计划），不是会话数', tone: numTone('') },
     { label: '当前到期', value: val(t.due), hint: numHint(''), tone: numTone(dueWarn.value ? 'warn' : ''), title: dueCardTitle.value },
     {
       label: '需人工确认',
       /* 还没跑过观察时不用「—」：同排其它四张都是数字，一道横杠读作"取数失败/漏了"。
          直接写「未观察」——与列表里同一状态列的措辞一致，说的是这个数还没有依据。 */
       value: na ? '—' : noAudit ? '未观察' : (reviewQueue ?? t.ambiguous),
-      hint: numHint(''),
+      hint: '全库待人审条数 = 人审档建议 + 需人工确认对 + 散键清理建议。点卡落到「需关注」筛选，那个数按当前页人数算（判据：薄弱概念或待确认归并项），两者不同源',
       tone: numTone(!noAudit && (reviewQueue ?? t.ambiguous) > 0 ? 'warn' : ''),
       /* 确认 / 驳回 / 回滚在「记忆调度」页签：卡可点，落到需关注快筛（同一批人） */
       clickable: !noAudit
@@ -603,19 +646,20 @@ const overviewCards = computed<OverviewCard[]>(() => {
    2026-10-22 起只留两卡：「待审队列」并入「需人工确认」，不再同维度说两遍。 */
 const fragmentationCards = computed<OverviewCard[]>(() => {
   const frag = totals.value.fragmentation
-  const failed = !!error.value
+  const failed = !!error.value && !rows.value.length
+  const stale = !!error.value && !!rows.value.length
   const pending = kpiPending.value
   const na = failed || pending
-  const numTone = (tone: OverviewCard['tone']): OverviewCard['tone'] => (failed ? 'bad' : pending ? 'muted' : tone)
+  const numTone = (tone: OverviewCard['tone']): OverviewCard['tone'] => (failed ? 'bad' : pending || stale ? 'muted' : tone)
   /* 副行只留取数状态（2026-10-21）：口径与包含关系全部进 title */
   const stateHint = (missing: boolean) =>
-    failed ? '取数失败' : pending ? '取数中…' : missing ? '指标未取到' : ''
+    failed ? '取数失败' : pending ? '取数中…' : stale ? '上次结果' : missing ? '指标未取到' : ''
   const ratio = frag?.duplicateLabelRatio
   return [
     {
       label: '措辞重复率',
       value: na || ratio == null ? '—' : `${Math.round(ratio * 100)}%`,
-      hint: stateHint(!frag || ratio == null),
+      hint: [stateHint(!frag || ratio == null), '含义相同、措辞重复的记忆记录占比。达到 20% 标需关注'].filter(Boolean).join(' · '),
       tone: numTone(!na && ratio != null && ratio >= 0.2 ? 'warn' : '')
     },
   ];
@@ -642,7 +686,7 @@ function uninitializedTraces(row: OverviewRow): number {
   return Math.max(0, row.traces - withStrength)
 }
 function fullTime(iso: string): string {
-  return new Date(iso).toLocaleString('zh-CN', { hour12: false });
+  return absDateTime(iso);
 }
 
 /* last-wins 代际号（P2）：切口径/翻页时旧响应不得覆盖新状态 */
@@ -712,7 +756,8 @@ async function recompute(userId: string, name?: string | null) {
     await loadOverview()
     toast.success('已完成一次记忆复盘')
   } catch (e) {
-    error.value = errMsg(e)
+    /* 行级动作失败只提示本行，不把整页共用 error 置上——否则顶部失败条、KPI 的
+       「取数失败」与仍完整的列表会同时出现，把一次观察失败渲染成整页故障。 */
     toast.error(`重新观察失败：${errMsg(e)}`)
   } finally {
     busy.value = false

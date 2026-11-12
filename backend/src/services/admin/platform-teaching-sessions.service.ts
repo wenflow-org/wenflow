@@ -117,12 +117,25 @@ export async function listTeachingSessionsDebug(params: {
   includeTest: boolean;
 }): Promise<unknown> {
   const { page, limit, userId, pathId, status, mode, onlyWithAdvisory, onlyMissingWrapup, includeTest } = params;
+  /* 「有建议」同谓词（2026-11-10 口径统一）：页面 KPI / 行徽章用的是
+     `shouldSuggest!==false && priority∉{'', 'none'}`，而这里此前只判 `advisory IS NOT NULL`，
+     点 KPI 后列表条数会多于 KPI。写入侧只在 shouldSuggest 为真时落库（见
+     TeachingSessionRepository 的 end_only 分支），故只需再排除 priority='none'。
+     advisory 是 JSON 文本列（String?），只能按子串排除——写入统一走 JSON.stringify（紧凑格式）。 */
+  const advisoryWhere = onlyWithAdvisory
+    ? {
+        AND: [
+          { advisory: { not: null } },
+          { NOT: { advisory: { contains: '"priority":"none"' } } },
+        ],
+      }
+    : {};
   const where: any = {
     ...(userId ? { userId } : {}),
     ...(pathId ? { learningPathId: pathId } : {}),
     ...(status ? { status } : {}),
     ...(mode ? { mode } : {}),
-    ...(onlyWithAdvisory ? { advisory: { not: null } } : {}),
+    ...advisoryWhere,
     // wrapup 为 JSON 文本列：缺失 = 无记录或内容中不含 topicSummary
     ...(onlyMissingWrapup
       ? { OR: [{ wrapup: null }, { NOT: { wrapup: { contains: 'topicSummary' } } }] }

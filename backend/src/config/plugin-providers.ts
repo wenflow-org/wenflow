@@ -49,7 +49,13 @@ export interface PluginChannelDef {
    * 一律用 defaultOrder。2026-11-04 同批曾把联网的搜索/抓取两条链锁成固定顺序，
    * 2026-11-07 用户要求可排，已全部放开——现在目录里没有通道用它。
    */
-  orderFixed?: boolean;
+  orderFixed?: boolean
+  /**
+   * 不做链式降级（2026-11-10 用户「搜索，决策，都不做链式降级了」）：
+   * 运行时只取顺序里的第一个 provider，失败就报错，不再换下一家；
+   * 界面上也不再给「备用 / 排序」，只留一个「用哪家」的选择。
+   */
+  single?: boolean;
 }
 
 export interface PluginConfigDef {
@@ -77,6 +83,7 @@ export const PLUGIN_CONFIGS: readonly PluginConfigDef[] = [
         label: '搜索',
         orderEnv: 'SEARCH_PROVIDER',
         defaultOrder: ['tinyfish', 'tavily', 'exa'],
+        single: true,
       },
       {
         id: 'fetch',
@@ -124,6 +131,7 @@ export const PLUGIN_CONFIGS: readonly PluginConfigDef[] = [
         label: '判定',
         orderEnv: 'DECISION_PROVIDER',
         defaultOrder: ['alibaba'],
+        single: true,
       },
     ],
     providers: [

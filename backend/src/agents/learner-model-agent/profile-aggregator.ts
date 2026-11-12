@@ -294,8 +294,43 @@ export class ProfileAggregator {
 
     return { profile, changes, confidence, sources };
   }
+
+  /**
+   * 按路径生成「叙述洞察」（管理端多路径画像，2026-11-11）。
+   *
+   * 全局 profile 只取最近一次已完成目标对话，多路径账号会把奶茶店的目标背景摆进心理学
+   * 路径的画像页。这里用同一套 buildNarrativeInsights，只把**目标对话输入**换成该路径
+   * 自己的最近一次已完成目标；认知/偏好/情绪/学习沿用全局合并值（这些是学习者级特质，
+   * 不随路径变化），observed 也按该路径目标对话的字段重新判定——该路径没填的字段就不
+   * 输出对应断言。历史列表由调用方另行按路径取，不在这里混入全局 history。
+   */
+  async buildPathNarrative(
+    userId: string,
+    learningPathId: string,
+    base: Pick<LearnerModelProfile, 'cognitive' | 'preferences' | 'emotional' | 'learning' | 'history'>,
+  ): Promise<{
+    narrativeInsights: LearnerNarrativeInsights;
+    narrativeSource: LearnerModelProfile['narrativeSource'];
+    personaCapturedAt: string | null;
+  } | null> {
+    const goalConversation = await this.fetchGoalConversationData(userId, learningPathId);
+    if (!goalConversation) return null;
+    const observed = {
+      cognitive: observedFieldKeys(goalConversation.cognitive),
+      preferences: observedFieldKeys(goalConversation.preferences)
+        .filter((key) => key !== 'sessionLength' || !!goalConversation.background?.availableTime),
+      emotional: observedFieldKeys(goalConversation.emotional),
+      // 学习负荷是学习者级实时指标，不属于某次目标对话；本路径叙述不据此断言疲劳。
+      learning: [] as string[],
+    };
+    return {
+      narrativeInsights: this.buildNarrativeInsights({ goalConversation, ...base, observed }),
+      narrativeSource: goalConversation.source ?? null,
+      personaCapturedAt: goalConversation.capturedAt ?? null,
+    };
+  }
   
-  private async fetchGoalConversationData(userId: string): Promise<{
+  private async fetchGoalConversationData(userId: string, learningPathId?: string): Promise<{
     cognitive?: Partial<CognitiveProfile>;
     preferences?: Partial<LearningPreferences>;
     emotional?: Partial<EmotionalProfile>;
@@ -311,11 +346,19 @@ export class ProfileAggregator {
     try {
       const [goalEvidence, conversation] = await Promise.all([
         prisma.learner_evidence.findFirst({
-          where: { userId, evidenceType: 'goal:understanding:updated' },
+          where: {
+            userId,
+            evidenceType: 'goal:understanding:updated',
+            ...(learningPathId ? { pathId: learningPathId } : {}),
+          },
           orderBy: { occurredAt: 'desc' }
         }),
         prisma.goal_conversations.findFirst({
-          where: { userId, status: 'completed' },
+          where: {
+            userId,
+            status: 'completed',
+            ...(learningPathId ? { learningPathId } : {}),
+          },
           orderBy: { createdAt: 'desc' }
         })
       ]);
@@ -333,7 +376,8 @@ export class ProfileAggregator {
         ? {
             conversationId: conversation.id,
             goalTitle: String(conversation.description || '').trim() || '（该次目标对话未填写描述）',
-            completedAt: conversation.completedAt ? new Date(conversation.completedAt).toISOString() : null
+            completedAt: conversation.completedAt ? new Date(conversation.completedAt).toISOString() : null,
+            learningPathId: conversation.learningPathId || null,
           }
         : null;
       

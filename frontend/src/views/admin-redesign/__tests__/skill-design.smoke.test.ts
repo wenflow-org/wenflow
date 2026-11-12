@@ -465,13 +465,16 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
     expect(row.find('.sdp-model').text()).toContain('gpt-4o-mini');
     // 取值顺序（谁压谁）降成模型 id 的悬停说明，不占一行读数
     expect(row.find('.sdp-model').attributes('title') ?? '').toContain('本 Skill 指定');
-    // 行右缘的文字动作（系统设置里那枚「配置」）
-    expect(row.find('.sdp-modelrow__acts .mk-link').text()).toBe('配置');
-    // 参数行给生效值：mock 里超时由本 Skill 设为 30s，温度取 Prompt 声明值
-    const params = live.find('.sdp-params').text();
-    expect(params).toContain('思考模式');
-    expect(params).toContain('超时 30s');
-    expect(params).toContain('温度 0.4');
+    /* 2026-11-10 用户「模型与路由也重新设计一下」：动作收进卡头（.sdp-head__act），
+       参数行改成事实格——只列有值的项。 */
+    expect(wrapper.find('.sdp-head__act').text()).toBe('配置');
+    // 事实格给生效值：mock 里超时由本 Skill 设为 30s，温度取 Prompt 声明值
+    const facts = live.find('.sdp-facts').text();
+    expect(facts).toContain('思考');
+    expect(facts).toContain('超时');
+    expect(facts).toContain('30s');
+    expect(facts).toContain('温度');
+    expect(facts).toContain('0.4');
     // 不再出现「基线 / 独立调整」那套词
     expect(live.text()).not.toContain('基线');
     expect(live.text()).not.toContain('独立调整');
@@ -532,6 +535,24 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
     expect(rows[0].text()).toContain('解析输入');
     expect(rows[0].text()).toContain('12 ms');
     expect(rows[1].text()).toContain('ERR');
+    wrapper.unmount();
+  });
+
+  /* 2026-11-10 用户「提示词试跑挂在虚拟学习者列表肯定不合适」：入口迁到提示词自己的页面。
+     「用人设模拟」只对评测适配器认识的 Skill 开放（后端 runSkillEvalCase 只实现了
+     goal-conversation / path-planning），其余 Skill 塞人设也跑不通，不出这一档。 */
+  it('试跑 tab：评测适配器认识的 Skill 有「手动输入 / 用人设模拟」两档', async () => {
+    const { wrapper } = await mountPage('goal-conversation');
+    await gotoTab(wrapper, '在线试跑');
+    const modes = wrapper.find('.sdp-pane').findAll('.mk-seg__item').map((b) => b.text());
+    expect(modes).toEqual(['手动输入', '用人设模拟']);
+    wrapper.unmount();
+  });
+
+  it('试跑 tab：其余 Skill 只有手动输入（不出现跑不通的人设档）', async () => {
+    const { wrapper } = await mountPage();
+    await gotoTab(wrapper, '在线试跑');
+    expect(wrapper.find('.sdp-pane').findAll('.mk-seg__item').map((b) => b.text())).not.toContain('用人设模拟');
     wrapper.unmount();
   });
 
@@ -619,6 +640,9 @@ describe('SkillDetail 设计能力平铺：只读区块就地渲染', () => {
     expect(texts).toContain('sandbox:teaching.extra');
     // user: 前缀不是依赖（平台注入）→ 不收
     expect(texts.length).toBe(3);
+    /* 2026-11-11 时间口径：发布时间统一 YYYY-MM-DD HH:mm，不再出现 zh-CN 的 2026/08/01 08:00:00 */
+    expect(wrapper.text()).toContain('发布时间');
+    expect(wrapper.text()).not.toMatch(/\d{4}\/\d{1,2}\/\d{1,2}/);
     wrapper.unmount();
   });
 });

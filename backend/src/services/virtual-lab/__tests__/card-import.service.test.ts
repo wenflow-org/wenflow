@@ -262,6 +262,25 @@ describe('card-import：卡墙索引映射（buildCardWallEntries，2026-10-05 �
     expect(bad.firstTaskTitle).toBeNull();
   });
 
+  /* 2026-11-10 口径统一：实例判据 = derivedFrom ∪ origin（instance-scope.INSTANCE_MARKER_KEYS）。
+     此前卡墙只认 derivedFrom，批量实验建的实例（只写 origin）被当身份卡上墙。 */
+  it('isInstance：derivedFrom 与 origin 任一存在即实例，模板卡两者都没有', () => {
+    const template = buildCardWallEntries([row()])[0];
+    expect(template.isInstance).toBe(false);
+    expect(template.derivedFrom).toBeNull();
+    const cloned = buildCardWallEntries([row({
+      profile: JSON.stringify({ derivedFrom: { profileId: 'src-1', name: '源卡' } }),
+    })])[0];
+    expect(cloned.isInstance).toBe(true);
+    expect(cloned.derivedFrom).toBe('源卡');
+    const batch = buildCardWallEntries([row({
+      profile: JSON.stringify({ origin: { kind: 'batch-experiment', runId: 'run-1' } }),
+    })])[0];
+    expect(batch.isInstance).toBe(true);
+    // 批量实例没有来源卡名
+    expect(batch.derivedFrom).toBeNull();
+  });
+
   it('name 回退链：nameHint → displayName → cardKey → email；坏 JSON 降级占位不抛', () => {
     const noHint = buildCardWallEntries([row({ profile: JSON.stringify({ personaSeed: { scenarioCard: { cardKey: 'k-1' } } }) })])[0];
     expect(noHint.name).toBe('小陈');

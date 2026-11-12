@@ -103,6 +103,10 @@ export function levelWordZh(level?: string | null): string {
  * 两条清洗都只针对已知的生成瑕疵，不改写语义：
  *  ① 段间拼接留下的句读连排「。；」→ 「。」（生成侧已改为拼前削句读）；
  *  ② 裸露的等级英文枚举（beginner / intermediate / advanced）→ 中文等级词汇（levelWordZh 同一词表）。
+ *
+ * 2026-11-11 排版补丁（中文正文可读性）：生成文本里「第3阶段」「FSRS评分」这类中英文/数字
+ * 直接相贴，读起来挤；统一在汉字与半角字母数字之间补一个空格，并把紧跟汉字的半角 ,;.
+ * 换成全角。只做**插入空格/替换标点**，不删字、不改词；已是全角标点或已带空格的文本幂等。
  */
 export function tidyNarrativeText(text?: string | null): string {
   const s = String(text ?? '')
@@ -110,6 +114,11 @@ export function tidyNarrativeText(text?: string | null): string {
   return s
     .replace(/[。．.]\s*；/g, '。')
     .replace(/(?<![A-Za-z])(beginner|intermediate|advanced)(?![A-Za-z])/gi, (m) => levelWordZh(m))
+    .replace(/([\u4e00-\u9fff])([A-Za-z0-9])/g, '$1 $2')
+    .replace(/([A-Za-z0-9%])([\u4e00-\u9fff])/g, '$1 $2')
+    .replace(/([\u4e00-\u9fff]),/g, '$1，')
+    .replace(/([\u4e00-\u9fff]);/g, '$1；')
+    .replace(/([\u4e00-\u9fff])\.(?=\s|$)/g, '$1。')
 }
 
 /** XP 等级「L2」与词汇并存的统一格式单点：「L2 · 进阶」；词汇缺失或与 Ln 同名（历史脏值 'L2'）时只出 L2 */

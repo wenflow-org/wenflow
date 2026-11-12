@@ -133,6 +133,10 @@ export interface LearnerModelProfile {
     conversationId: string;
     goalTitle: string;
     completedAt: string | null;
+    /** 该目标对话所属路径（可为空：存量会话/目标对话未绑定路径时）。
+     *  管理端据此把叙述绑定到当前路径，避免奶茶店的目标背景摆进心理学路径的画像页
+     *  （2026-11-11 多路径串台走查）。 */
+    learningPathId?: string | null;
   } | null;
 
   /**
@@ -341,6 +345,16 @@ export interface LearnerPathKnowledgeMemory {
   conceptStates: LearnerConceptState[];
   prerequisiteGaps: LearnerPrerequisiteGap[];
   recentEvidence: LearnerRecentEvidence[];
+  /** 该路径自己的教学基础 / 反复困惑（2026-11-11 多路径串台修复）。
+   *  globalBackground 是用户级聚合，其中 reusableFoundations / blockedFoundations /
+   *  recurringConfusions 是自由文本，无法用概念 sourcePaths 收窄；这里按**证据行 pathId**
+   *  只收当前路径的条目，避免心理学页面出现奶茶店的「被阻塞基础」。
+   *  旧快照没有该字段时，前端回落到 globalBackground 全量名单（保持旧行为）。 */
+  scopedBackground?: {
+    reusableFoundations: string[];
+    blockedFoundations: string[];
+    recurringConfusions: LearnerRecurringConfusion[];
+  };
 }
 
 export interface LearnerKnowledgeMemory {

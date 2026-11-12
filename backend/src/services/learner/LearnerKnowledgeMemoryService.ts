@@ -459,6 +459,12 @@ export class LearnerKnowledgeMemoryService {
     const enrichedReusableFoundations: string[] = [];
     const enrichedBlockedFoundations: string[] = [];
     const enrichedTransferSignals: LearnerTransferSignal[] = [];
+    /* 2026-11-11 多路径串台修复：这三类是自由文本（不是台账标签），无法按 sourcePaths 收窄；
+       单独收一份**当前路径证据行产出的**名单，挂到 currentPath.scopedBackground。
+       证据行带 pathId，这在现有 schema 下是可靠归属。 */
+    const pathReusableFoundations: string[] = [];
+    const pathBlockedFoundations: string[] = [];
+    const pathConfusions: LearnerRecurringConfusion[] = [];
     // issue #194：knowledgeStateSummary 曾只写进 learner_evidence、从不进快照。
     // 证据按 occurredAt desc 取，首个非空摘要即最新一次课后状态摘要。
     // issue #198：摘要是**自由文本**，可命名其它路径的概念。它随 globalBackground 进入
@@ -508,8 +514,14 @@ export class LearnerKnowledgeMemoryService {
           // 运营读成「没证据」。行 id 用 `d<序号>` 与主索引的数字下标天然不相交。
           recordEnrichedEvidenceRow(payload.conceptLedger, `d${enrichedEvidenceRowSeq++}`);
         }
-        if (Array.isArray(payload.reusableFoundations)) enrichedReusableFoundations.push(...payload.reusableFoundations);
-        if (Array.isArray(payload.blockedFoundations)) enrichedBlockedFoundations.push(...payload.blockedFoundations);
+        if (Array.isArray(payload.reusableFoundations)) {
+          enrichedReusableFoundations.push(...payload.reusableFoundations);
+          if (isCurrentPath) pathReusableFoundations.push(...payload.reusableFoundations);
+        }
+        if (Array.isArray(payload.blockedFoundations)) {
+          enrichedBlockedFoundations.push(...payload.blockedFoundations);
+          if (isCurrentPath) pathBlockedFoundations.push(...payload.blockedFoundations);
+        }
         if (Array.isArray(payload.transferSignals)) enrichedTransferSignals.push(...payload.transferSignals);
         if (!enrichedKnowledgeStateSummary
           && isCurrentPath
@@ -524,9 +536,11 @@ export class LearnerKnowledgeMemoryService {
         if (Array.isArray(payload.recurringConfusions)) {
           // 同上：recurringConfusions 的 lastSeenAt 取所属会话业务 endTime，不用证据墙钟 occurredAt。
           const businessAtIso = evidence.sessionId ? sessionEndTimeById.get(evidence.sessionId) : undefined;
-          enrichedConfusions.push(...payload.recurringConfusions.map((item: any) => businessAtIso
+          const confusions = payload.recurringConfusions.map((item: any) => businessAtIso
             ? { ...item, lastSeenAt: businessAtIso }
-            : item));
+            : item);
+          enrichedConfusions.push(...confusions);
+          if (isCurrentPath) pathConfusions.push(...confusions);
           recordEnrichedEvidenceRow(payload.recurringConfusions, `d${enrichedEvidenceRowSeq++}`);
         }
         if (Array.isArray(payload.transferSignals)) enrichedTransferSignals.push(...payload.transferSignals);
@@ -1547,8 +1561,21 @@ export class LearnerKnowledgeMemoryService {
       ...(enrichedKnowledgeStateSummary ? { knowledgeStateSummary: enrichedKnowledgeStateSummary } : {}),
     };
 
+    const currentPathScoped = currentPath
+      ? {
+          ...currentPath,
+          scopedBackground: {
+            reusableFoundations: dedupe(pathReusableFoundations).slice(0, 20),
+            blockedFoundations: dedupe(pathBlockedFoundations).slice(0, 20),
+            recurringConfusions: Array.from(
+              new Map(pathConfusions.map((item) => [String(item.label || item.conceptKey || ''), item])).values(),
+            ).slice(0, 20),
+          },
+        }
+      : undefined;
+
     return {
-      ...(currentPath ? { currentPath } : {}),
+      ...(currentPathScoped ? { currentPath: currentPathScoped } : {}),
       globalSignals: {
         masteredConcepts,
         fragileConcepts,

@@ -94,6 +94,12 @@ describe('布局方式：力导向等比取景，不许铺满（铺满会横向�
     expect(fit).toContain('Math.min((viewW - padding * 2) / boxW, (viewH - padding * 2) / boxH)');
   });
 
+  it('宽高任一变化都要 resize（宿主把高度交给 flex，只盯宽度会留旧画布）', () => {
+    expect(source).toContain('const boxHeight = ref(0)')
+    expect(source).toContain('nextH === boxHeight.value')
+    expect(source).toContain('boxHeight.value = nextH')
+  })
+
   it('画布尺寸变化且用户没动过视角 → 重新等比取景', () => {
     expect(source).toContain('userRoamed');
     expect(source).toMatch(/else if \(!userRoamed\) \{[\s\S]*?fitGraphView\(\)/);

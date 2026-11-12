@@ -14,9 +14,9 @@
       </div>
     </template>
 
-    <p v-else-if="!detail" class="mr__sub mr-panels__empty">该学习者暂无可复盘的记忆数据。</p>
+    <p v-else-if="!error && !detail" class="mr__sub mr-panels__empty">该学习者暂无可复盘的记忆数据。</p>
 
-    <template v-else>
+    <template v-else-if="detail">
 
       <!-- 2026-10-23 用户「有什么意义吗下面表格都有了」：原面板栏「记忆调度与治理 + 痕迹/到期/
            同族重复/从未提取/有强度数据」整条撤除——五个数全由下面各卡的表格/空态表达，栏名又与
@@ -98,8 +98,16 @@
               @click="auditExpand = true"
             >展开</button>
           </div>
+          <!-- 2026-11-11（困惑测试 #36）：压缩条漏了「需人工确认」——概览页「待确认 4」点进来后，
+               默认折叠态里根本搜不到「待确认」字样，处理链路断掉。这里补读数 + 直达动作。 -->
           <p class="mk-empty--line">
-            概念归并审计：候选 {{ detail?.audit?.stats?.candidates ?? 0 }} · 建议 {{ detail?.audit?.stats?.proposed ?? 0 }} · 同族重复 {{ detail.duplicatedFamilies.length }} 组
+            概念归并审计：候选 {{ detail?.audit?.stats?.candidates ?? 0 }} · 建议 {{ detail?.audit?.stats?.proposed ?? 0 }} · 需人工确认 {{ mrAmbiguousCount }} · 同族重复 {{ detail.duplicatedFamilies.length }} 组
+            <button
+              v-if="mrAmbiguousCount"
+              type="button"
+              class="mk-link mr__compact-act"
+              @click="auditExpand = true"
+            >处理待确认</button>
           </p>
         </section>
       </template>
@@ -799,38 +807,46 @@ const LOAD_FACTOR_ZH: Record<string, string> = {
 const loadFactorText = (factors: string[] | undefined) =>
   (factors || []).map((f) => LOAD_FACTOR_ZH[f] || f).join('、') || '—'
 
-/** 日期时间格式化（#66）：与最近复习列同参（zh-CN 24 小时制带分组），
- *  避免同屏两处时间格式不同（执行时间列原用无参 toLocaleString，随浏览器 locale 变） */
+/** 日期时间格式化（#66）：与全站时间戳同形 `YYYY-MM-DD HH:mm`（24 小时制）。
+ *  2026-11-11 全站口径：toLocaleString('zh-CN') 会出 `2026/11/11 18:32:59`，
+ *  与其它页的连字符格式不同形，这里显式拼装，避免随浏览器 locale 漂移。 */
 function fmtDateTime(iso?: string | null): string {
   if (!iso) return '—'
-  const t = new Date(iso).getTime()
-  return Number.isFinite(t) ? new Date(t).toLocaleString('zh-CN', { hour12: false }) : '—'
+  const d = new Date(iso)
+  const t = d.getTime()
+  if (!Number.isFinite(t)) return '—'
+  const p2 = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`
 }
 
-/** 明细 · 课内温故计划 KPI 条（MkStatStrip，与虚拟学习者页头同一组件；hint 收进 title） */
+/** 明细 · 课内温故计划 KPI 条（MkStatStrip，与虚拟学习者页头同一组件；hint 收进 title）。
+ *  2026-11-11（困惑测试 #39）：这排数字原先只有「负担单位，动态校准」这类黑话，
+ *  读数之间的关系要猜；现在每个数的单位、换算与超限去向都写在悬停里。 */
 const planKpiItems = computed<MkStatItem[]>(() => {
   const plan = detail.value?.reviewPlan
   if (!plan) return []
   return [
-    { key: 'budget', label: '负担预算', value: plan.budget, title: '负担单位，动态校准' },
-    { key: 'used', label: '已占用', value: plan.usedLoad },
-    { key: 'items', label: '本节承接数', value: plan.items.length },
-    { key: 'backlog', label: '排队中', value: plan.backlogCount, tone: plan.backlogCount > 15 ? 'warn' : '' },
+    { key: 'budget', label: '负担预算', value: plan.budget, title: '本节可用的负担上限（负担单位）：原子任务记 1.0、复合任务记 1.5，按当前检索成功率动态校准' },
+    { key: 'used', label: '已占用', value: plan.usedLoad, title: '本节已安排内容占用的负担。超出预算的部分进「排队中」' },
+    { key: 'items', label: '本节承接数', value: plan.items.length, title: '本节实际安排的知识点数（占用的负担不超过预算）' },
+    { key: 'backlog', label: '排队中', value: plan.backlogCount, tone: plan.backlogCount > 15 ? 'warn' : '', title: '超出本节负担、顺延到后续课的待复习条数' },
     {
       key: 'success',
       label: '检索成功率',
       value: plan.successRate === null ? '—' : `${Math.round(plan.successRate * 100)}%`,
-      title: '低于 70% 时收缩安排，高于 90% 时扩大安排'
+      title: plan.successRate === null
+        ? '暂无样本：还没有复习记录，暂不校准负担预算'
+        : '最近复习中「想得起来」的比例。低于 70% 收缩安排，高于 90% 扩大安排'
     },
-    { key: 'relearn', label: '需回路径重学', value: plan.relearnSuggestions.length, tone: plan.relearnSuggestions.length > 0 ? 'warn' : '', title: '连续没接上，已退出队列' },
+    { key: 'relearn', label: '需回路径重学', value: plan.relearnSuggestions.length, tone: plan.relearnSuggestions.length > 0 ? 'warn' : '', title: '连续多次没接上，已退出本节队列，需要回学习路径重学' },
     {
       key: 'daily',
       label: '今日额度',
       value: `${plan.daily?.usedLoad ?? 0}/${plan.daily?.limitLoad ?? '—'}`,
       tone: (plan.daily?.remainingLoad ?? 1) <= 0 ? 'warn' : '',
-      title: '跨会话共享，用完顺延到明天'
+      title: '当日跨课共享的负担上限（默认 6 = 3 节 × 基准 2.0，防止积压一次倒出）。用完顺延到明天'
     },
-    { key: 'tomorrow', label: '明日预计', value: plan.tomorrowCount ?? 0, title: '首页明日预告' }
+    { key: 'tomorrow', label: '明日预计', value: plan.tomorrowCount ?? 0, title: '按当前复习计划推算的明日到期条数' }
   ]
 })
 
@@ -989,8 +1005,7 @@ async function applySelected() {
     toast.success(`已执行 ${body.applied ?? 0} 条归并${body.skipped?.length ? `，跳过 ${body.skipped.length} 条` : ''}`)
     await load()
   } catch (e) {
-    error.value = errMsg(e)
-    // 明细态失败必须有感知（P1#12）：error 渲染点可能在滚动视野外，toast 兜底
+    /* 写动作失败只保留带动作名的 toast；页面顶部 error 条留给取数失败，避免同一失败两套文案 */
     toast.error(`执行归并失败：${errMsg(e)}`)
   } finally {
     busy.value = false
@@ -1022,7 +1037,6 @@ async function applyOne(
     toast.success(`已执行 ${body.applied ?? 0} 条归并${body.skipped?.length ? `，跳过 ${body.skipped.length} 条` : ''}`)
     await load()
   } catch (e) {
-    error.value = errMsg(e)
     toast.error(`执行归并失败：${errMsg(e)}`)
   } finally {
     busy.value = false
@@ -1049,7 +1063,6 @@ async function rejectOne(
     toast.success('已驳回，这条建议之后不再重复给出')
     await load()
   } catch (e) {
-    error.value = errMsg(e)
     toast.error(`驳回失败：${errMsg(e)}`)
   } finally {
     busy.value = false
@@ -1110,7 +1123,7 @@ async function load(opts: { quietSort?: boolean } = {}) {
   } catch (e) {
     if (seq !== detailSeq) return
     error.value = errMsg(e)
-    detail.value = null
+    /* 刷新失败保留上一份明细；首次失败由上方 !error 闸门挡住空态，不再把「读不到」说成「没有」 */
   } finally {
     if (seq === detailSeq) {
       busy.value = false
@@ -1149,7 +1162,6 @@ async function recompute() {
     await load()
     toast.success('已完成一次记忆复盘')
   } catch (e) {
-    error.value = errMsg(e)
     toast.error(`重新观察失败：${errMsg(e)}`)
   } finally {
     busy.value = false
@@ -1177,6 +1189,8 @@ async function recompute() {
 /* 归并建议勾选框配色（2026-10-06 审核 #63）：accent-color 从浏览器默认蓝收回品牌蓝 */
 .mr__check { accent-color: var(--mk-blue); }
 .mr__sub { display: block; color: var(--mk-muted); font-size: var(--mk-fs-micro); }
+/* 折叠条里的「处理待确认」：与读数同一行，字号跟脚注、颜色走链接 */
+.mr__compact-act { margin-left: 8px; font-size: inherit; }
 /* 但写在 <td> 上的降档文本必须是 table-cell：display:block 会把 td 移出表格布局，
    浏览器把连续的非单元格子元素包进同一个匿名单元格，整行自「别名」列起左移一列
    （实测：95% 落在「别名」表头下、理由长文落在「可自动执行」列，最右「理由」恒空）。

@@ -71,6 +71,7 @@ import DataExportPanel from '../DataExportPanel.vue'
 import OpsHub from '../OpsHub.vue'
 import AccessControl from '../AccessControl.vue'
 import { liveRefreshSeq } from '../live'
+import { toast } from '@/utils/toast'
 
 async function mountWithRouter(component: unknown, route = '/admin/ops-hub') {
   const router = createRouter({
@@ -162,7 +163,7 @@ describe('数据导出面板（原系统工具 Tab2）', () => {
     await boxes[0]!.setValue(true)
     await boxes[1]!.setValue(true)
     expect(w.findAll('.exp-item.mk-choice--on').map((c) => c.find('.exp-item__title').text())).toEqual(['用户', '教学会话'])
-    expect(w.text()).toContain('已选 2 项')
+    expect(w.text()).toContain('已选 2 张表')
     const go2 = w.findAll('button').find((b) => b.text() === '开始导出')
     expect(go2?.attributes('disabled')).toBeUndefined()
     // 行数上限归日志组：常驻在该组标题行，不再随勾选与否在底部操作条出现/消失
@@ -180,6 +181,57 @@ describe('数据导出面板（原系统工具 Tab2）', () => {
     const w = await mountWithRouter(DataExportPanel)
     expect(w.text()).not.toContain('JSONL')
     expect(w.findAll('input[type="datetime-local"], input[placeholder*="时间"]').length).toBe(0)
+    w.unmount()
+  })
+
+  it('卡头「全选 / 清空」批量选择六张表，导出中禁用', async () => {
+    const w = await mountWithRouter(DataExportPanel)
+    const all = () => w.find('.exp-all')
+    expect(all().text()).toBe('全选')
+
+    await all().trigger('click')
+    expect(w.findAll('.exp-item.mk-choice--on')).toHaveLength(6)
+    expect(w.text()).toContain('已选 6 张表')
+    expect(all().text()).toBe('清空')
+
+    await all().trigger('click')
+    expect(w.findAll('.exp-item.mk-choice--on')).toHaveLength(0)
+    expect(all().text()).toBe('全选')
+    w.unmount()
+  })
+
+  it('多表导出：按钮与操作条显示第几张 / 共几张，成功只汇总一条 toast', async () => {
+    // jsdom 没有对象 URL 与真实下载
+    ;(URL as unknown as { createObjectURL: unknown }).createObjectURL = vi.fn(() => 'blob:x')
+    ;(URL as unknown as { revokeObjectURL: unknown }).revokeObjectURL = vi.fn()
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    let releaseFirst!: (v: { headers: Record<string, string>; data: Blob }) => void
+    apiObject.adminAxios.get.mockImplementationOnce(
+      () => new Promise<{ headers: Record<string, string>; data: Blob }>((resolve) => { releaseFirst = resolve }),
+    )
+
+    const w = await mountWithRouter(DataExportPanel)
+    await w.find('.exp-all').trigger('click')
+    await w.findAll('button').find((b) => b.text() === '开始导出')!.trigger('click')
+    await flushPromises()
+
+    // 第一张（用户）在途：按钮与操作条同时报进度，勾选被锁
+    expect(w.find('.exp-go').text()).toBe('导出中 1/6…')
+    expect(w.find('.exp-hint').text()).toBe('正在导出：用户（1 / 6）')
+    expect(w.find('.exp-all').attributes('disabled')).toBeDefined()
+    expect(w.findAll('.exp-item input[type="checkbox"]')[0]!.attributes('disabled')).toBeDefined()
+
+    releaseFirst({ headers: {}, data: new Blob(['x']) })
+    await flushPromises()
+
+    expect(apiObject.adminAxios.get).toHaveBeenCalledTimes(6)
+    // 六次逐表成功合并成一条汇总，不再刷屏
+    expect(vi.mocked(toast.success)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(toast.success)).toHaveBeenCalledWith('已导出 6 个 CSV 文件，已开始下载')
+    expect(w.find('.exp-go').text()).toBe('开始导出')
+    expect(w.find('.exp-hint').text()).toBe('已选 6 张表')
+    anchorClick.mockRestore()
     w.unmount()
   })
 })

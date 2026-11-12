@@ -5,11 +5,15 @@
          System Prompt），与下面这个编辑器渲染的是同一份数据的两层。现在合成一张卡两态：
          查看 = 只读呈现，编辑 = 核心文件表单 / 源码 / 预览。 -->
     <div class="sdp-pw__bar">
-      <div class="mk-seg" role="group" aria-label="协议视图">
+      <!-- 2026-11-11（困惑测试 #79）：三组同款分段（本处 / 核心文件 / 字段路由）原来只有选项值、
+           控制对象只在 aria-label 里。对象名提升为可见标签。 -->
+      <span class="sdp-pw__seglabel">核心文件</span>
+      <div class="mk-seg" role="group" aria-label="核心文件查看 / 编辑切换">
         <button type="button" class="mk-seg__item" :class="{ 'mk-seg__item--active': viewMode === 'read' }" @click="viewMode = 'read'">查看</button>
         <button type="button" class="mk-seg__item" :class="{ 'mk-seg__item--active': viewMode === 'edit' }" @click="viewMode = 'edit'">编辑</button>
       </div>
-      <span class="sdp-pw__file mono">prompts/core/{{ skillId }}.yaml</span>
+      <!-- 查看态在这里给文件路径；编辑态的卡片标题已带同一路径，不再重复印第二遍。 -->
+      <span v-if="viewMode === 'read'" class="sdp-pw__file mono">prompts/core/{{ skillId }}.yaml</span>
     </div>
 
     <!-- ===== 查看态：契约 / 流程 / 生效 Prompt ===== -->
@@ -23,6 +27,10 @@
           <div class="sdp-pw__body">
             <MkLoading v-if="!coreLoaded && !coreMissing" inline text="输入声明加载中…" />
             <template v-else>
+              <!-- 2026-11-11（困惑测试 #82）：ref 前缀释义原先只在编辑态说明段里；只读视图补一行图例 -->
+              <p class="sdp-pw__legend">
+                来源前缀：skill: 上游 Skill · sandbox: 编排注入 · user: 用户 / 平台。字段说明为 core YAML 原文，面向生成引擎。
+              </p>
               <div v-for="(f, i) in readInputs" :key="`${f.ref}-${i}`" class="sdp-crow">
                 <span class="mono sdp-crow__name" :title="f.name || f.ref">{{ f.name || '—' }}</span>
                 <span class="mk-badge mk-badge--muted" :title="`来源声明：${f.ref || '—'}`">{{ refSourceLabel(f.ref) }}</span>
@@ -85,9 +93,15 @@
           </div>
         </div>
         <div class="sdp-pw__body">
+          <!-- P0 错误态（2026-11-11）：拉取失败时此前只剩一句「暂无生效 Prompt。」——
+               把「请求失败」读成「确实没有生效版本」。失败给可读原因 + 重试，空态只在成功但无版本时出现。 -->
+          <div v-if="promptError" class="mk-alert mk-alert--row" role="alert">
+            <span class="mk-alert__msg">生效 Prompt 加载失败：{{ promptError }}</span>
+            <button type="button" class="mk-alert__btn" @click="emit('reload')">重试</button>
+          </div>
           <!-- 2026-11-08 用户「图 5 印了一半被截断的 System Prompt（截断在「11. 连 半个字上」）」：
                改为容器内滚动展示全文（max-height + overflow-y），不再在 1200 字处硬切半句话。 -->
-          <pre class="sdp-pw__pre sdp-pw__pre--scroll">{{ systemPrompt || '暂无生效 Prompt。' }}</pre>
+          <pre v-else class="sdp-pw__pre sdp-pw__pre--scroll">{{ systemPrompt || '暂无生效 Prompt。' }}</pre>
         </div>
       </section>
     </template>
@@ -106,8 +120,14 @@
           </button>
         </div>
       </div>
+      <!-- 2026-11-11（困惑测试 #80）：这是线上生效的生产源文件，进入编辑没有任何警示；
+           两个动作的差别（写盘 vs 立即生效）也只在点击后的弹窗里。 -->
+      <p class="sdp-pw__prodnote">
+        这是线上生效的生产源文件：保存并编译 = 写盘 + 编译（暂不生效）。发布 = 运行时立即生效（可在「版本」页签回滚）。
+      </p>
       <div class="sdp-pw__views">
-        <div class="mk-seg" role="group" aria-label="核心文件视图">
+        <span class="sdp-pw__seglabel">核心文件</span>
+        <div class="mk-seg" role="group" aria-label="核心文件表单 / 源码 / 预览切换">
           <button type="button" class="mk-seg__item" :class="{ 'mk-seg__item--active': coreViewMode === 'form' }" @click="switchCoreView('form')">表单</button>
           <button type="button" class="mk-seg__item" :class="{ 'mk-seg__item--active': coreViewMode === 'raw' }" @click="switchCoreView('raw')">源码</button>
           <button type="button" class="mk-seg__item" :class="{ 'mk-seg__item--active': coreViewMode === 'preview' }" @click="switchCoreView('preview')">预览</button>
@@ -433,12 +453,14 @@ const props = defineProps<{
   /** 生效 Prompt 全文（截断与来源文案在查看态里处理） */
   systemPrompt: string
   promptState: string
+  /** 生效 Prompt 拉取失败的可读原因；非空时查看态给错误态 + 重试，而不是「暂无生效 Prompt」 */
+  promptError?: string
   /** 运行时契约（Prompt 清单）：查看态的「流程」卡读它的阶段集合与终止阶段 */
   runtimeContract: {
     businessState?: { phases?: string[]; defaultPhase?: string; terminalPhases?: string[] }
   } | null
 }>()
-const emit = defineEmits<{ (e: 'published'): void; (e: 'open-prompt'): void }>()
+const emit = defineEmits<{ (e: 'published'): void; (e: 'open-prompt'): void; (e: 'reload'): void }>()
 
 /** 查看 / 编辑：同一个页签的两态（2026-11-06 整合，原宿主只读块与本编辑器是两层） */
 const viewMode = ref<'read' | 'edit'>('read')
@@ -856,7 +878,9 @@ async function requestPublish() {
     const ok = await askConfirm({
       title: '发布到运行时',
       message: `确认发布 ${props.skillId} 的核心文件？\n发布后确定性编译为五块 Prompt（skill.${props.skillId}.md + 数据库线上生效版本），运行时立即生效。如需回退，可在「版本」页签回滚到历史版本。`,
-      confirmText: '发布'
+      confirmText: '发布',
+      /* 与公告页「发布公告」同判据：发布是正向动作（版本页签可回滚），不吃默认红底 */
+      danger: false
     })
     if (!ok) return
   }
@@ -968,15 +992,28 @@ watch(
   gap: 14px;
   align-items: start;
 }
-/* 查看 / 编辑 两态的工具条：左分段控件，右核心文件名 */
+/* 查看 / 编辑 两态的工具条：左对象名 + 分段控件，右核心文件名 */
 .sdp-pw__bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: flex-start;
+  gap: 10px;
   flex-wrap: wrap;
 }
-.sdp-pw__file { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+.sdp-pw__seglabel { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-muted); white-space: nowrap; }
+.sdp-pw__file { font-size: var(--mk-fs-micro); color: var(--mk-faint); margin-left: auto; }
+/* 生产源文件警示（2026-11-11 困惑测试 #80） */
+.sdp-pw__prodnote {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  border-radius: var(--mk-radius-lg);
+  background: color-mix(in srgb, var(--mk-amber) 10%, transparent);
+  color: var(--mk-ink);
+  font-size: var(--mk-fs-micro);
+  line-height: 1.6;
+}
+/* 只读输入契约的来源前缀图例（2026-11-11 困惑测试 #82） */
+.sdp-pw__legend { margin: 0 0 8px; font-size: var(--mk-fs-micro); line-height: 1.55; color: var(--mk-muted); }
 /* 查看态：输入 / 输出契约并排（宽屏两列，窄屏一列） */
 .sdp-pw__grid {
   display: grid;
@@ -1016,10 +1053,12 @@ watch(
 .sdp-pw__views {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: flex-start;
+  gap: 10px;
   padding: 12px 18px 6px;
 }
+/* 展开/收起按钮贴右缘（对象标签与分段在左） */
+.sdp-pw__views > .mk-link { margin-left: auto; }
 .sdp-none { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .sdp-bad-text { color: var(--mk-red); font-weight: 700; }
 

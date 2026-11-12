@@ -47,8 +47,8 @@ const { apiObject } = vi.hoisted(() => ({
 
 /* 一行已定价 + 一行未定价：同时覆盖「有金额」与「占位」两档 */
 const skillRows = [
-  { key: 'teaching-turn', display: 'teaching-turn', calls: 100, tokens: 10_000_000, promptTokens: 9_500_000, completionTokens: 500_000, failed: 1, usd: 1.5, pricingKnown: true, pricedCalls: 100, callsMissingPricing: 0 },
-  { key: 'adaptive-guidance-copy', display: 'adaptive-guidance-copy', calls: 40, tokens: 2_000_000, promptTokens: 1_900_000, completionTokens: 100_000, failed: 0, usd: null, pricingKnown: false, pricedCalls: 0, callsMissingPricing: 40 }
+  { key: 'teaching-turn', display: '教学回合 Skill', calls: 100, tokens: 10_000_000, promptTokens: 9_500_000, completionTokens: 500_000, failed: 1, usd: 1.5, pricingKnown: true, pricedCalls: 100, callsMissingPricing: 0 },
+  { key: 'adaptive-guidance-copy', display: '自适应引导文案 Skill', calls: 40, tokens: 2_000_000, promptTokens: 1_900_000, completionTokens: 100_000, failed: 0, usd: null, pricingKnown: false, pricedCalls: 0, callsMissingPricing: 40 }
 ];
 
 vi.mock('@/api/adminApi', () => ({
@@ -124,6 +124,10 @@ describe('成本页 · 未定价占位（状态词不进行内）', () => {
     expect(rows[1].attributes('title')).toBeUndefined();
     // 拆分与派生列真的算出来了（不是空列占位）
     expect(rows[0].findAll('.tc-st__num--dim').map((c) => c.text())).toEqual(['9.5M', '500.0K', '100.0K']);
+    /* 2026-11-10 用户「要用英文的原名称」：这一列是链路的对号入座，
+       显示注册表 id；中文显示名只作 title。 */
+    expect(rows[0].find('.tc-st__name strong').text()).toBe('teaching-turn');
+    expect(rows[0].find('.tc-st__name strong').attributes('title')).toBe('教学回合 Skill');
     w.unmount();
   });
 
@@ -275,8 +279,36 @@ describe('成本页 · 下钻口径（2026-10-26 评审）', () => {
   });
 });
 
+describe('排行表 · 失败次数列（2026-11-10 用户「失败次数的字体大小不对」）', () => {
+  const rows = [
+    { key: 'u1', display: 'u1', name: '甲', tokens: 60, calls: 21, failed: 2, usd: 2, pricedCalls: 21, callsMissingPricing: 0 },
+    { key: 'u2', display: 'u2', name: '乙', tokens: 30, calls: 3, failed: 0, usd: 1, pricedCalls: 3, callsMissingPricing: 0 },
+    { key: 'u3', display: 'u3', name: '丙', tokens: 10, calls: 400, failed: 1, usd: 1, pricedCalls: 400, callsMissingPricing: 0 }
+  ]
+  const mountTable = () => mount(TcRankTable, { props: { variant: 'user', totalTokens: 100, items: rows } })
+
+  it('次数走数值档、失败率走副行：不再把两个字号拼成「210%」', () => {
+    const w = mountTable()
+    const bad = w.findAll('.tc-fail')[0]
+    // 次数 = 值；失败率 = 副行（与 Token 用量同一套「值 + 副读数」结构）
+    expect(bad.find('.tc-fail__count').text()).toBe('2')
+    // 2/21 = 9.5%（2026-11-11 全站百分比口径：1 位小数，不再四舍五入成整数 10%）
+    expect(bad.find('.tc-c__sub').text()).toBe('失败率 9.5%')
+    expect(bad.text().replace(/\s+/g, '')).not.toContain('210')
+    // 0 失败只留一个 0，不占副行
+    expect(w.findAll('.tc-fail')[1].find('.tc-c__sub').exists()).toBe(false)
+    w.unmount()
+  })
+
+  it('有失败但不足 1%：写 <1%，不写 0%（红字次数旁边挂 0% 自相矛盾）', () => {
+    const w = mountTable()
+    expect(w.findAll('.tc-fail')[2].find('.tc-c__sub').text()).toBe('失败率 <1%')
+    w.unmount()
+  })
+})
+
 describe('成本页 · 失败三态（#72 P-47）', () => {
-  it('刷新失败保留旧数时：显式提示「以下为上次结果」，失败数与总 Token 不落成 0', async () => {
+  it('刷新失败不保留半旧半新的读数：整页错误态接管，KPI/表格不再画旧数', async () => {
     const { adminTokenCostApi } = await import('@/api/adminApi');
     const w = await mountTokenCost();
     expect(w.find('.tc-error').exists()).toBe(false);
@@ -287,13 +319,28 @@ describe('成本页 · 失败三态（#72 P-47）', () => {
     await flushPromises();
     await nextTick();
 
-    expect(w.find('.tc-error').exists()).toBe(true);
-    expect(w.find('.tc-error').text()).toContain('上次加载结果');
-    const failed = w.findAll('.mk-kpi').find((k) => k.find('.mk-kpi__label').text() === '失败')!;
-    const tokens = w.findAll('.mk-kpi').find((k) => k.find('.mk-kpi__label').text() === '总 Token')!;
-    // 旧 summary 里 failed=0，刷新失败后必须显示「—」而不是沿用 0 冒充健康
-    expect(failed.find('.mk-kpi__num').text()).toBe('—');
-    expect(tokens.find('.mk-kpi__num').text()).toBe('—');
+    // 失败后只有一处结论：整页错误态；不得同时保留旧 KPI / 旧表格再配一条「上次结果」横幅
+    expect(w.find('.tc-error').exists()).toBe(false);
+    expect(w.text()).toContain('Token 成本数据加载失败');
+    expect(w.findAll('.mk-kpi').length).toBe(0);
     w.unmount();
+  });
+});
+
+describe('costFormat · 全站数值口径（2026-11-11）', () => {
+  it('百分比 1 位小数、整数不带 .0、非零不足 1% 写 <1%', async () => {
+    const { formatPct } = await import('../costFormat');
+    expect(formatPct(89.14)).toBe('89.1%');
+    expect(formatPct(95)).toBe('95%');
+    expect(formatPct(0.4)).toBe('<1%');
+    expect(formatPct(0)).toBe('0%');
+  });
+
+  it('Token 计数 B/M/K 同精度、K 大写（不再出现 1.5k）', async () => {
+    const { formatTokens } = await import('../costFormat');
+    expect(formatTokens(23_500_000)).toBe('23.5M');
+    expect(formatTokens(552_400)).toBe('552.4K');
+    expect(formatTokens(1_500)).toBe('1.5K');
+    expect(formatTokens(0)).toBe('0');
   });
 });

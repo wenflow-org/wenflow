@@ -134,6 +134,7 @@ export function nearestSymbolHit(
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useIsDark } from '@/composables/useIsDark'
+import { conceptBandOf, hasMasterySignal } from '@/utils/graphSemantics'
 import { wrapGraphLabel } from '@/utils/graphLabel'
 import * as echarts from 'echarts/core'
 import { GraphChart } from 'echarts/charts'
@@ -156,8 +157,11 @@ const props = withDefaults(
     hideIsolated?: boolean
     /** 需要常显标签并描边高亮的节点 id（课堂知识点浮窗：本节正在学的 1–2 个概念） */
     highlightIds?: string[]
+    /** 受控选中（宿主侧栏/建议列表选人时点亮画布）：与画布点击双向同步，
+        宿主清空（反选、筛选把节点筛掉）时画布也取消压暗 */
+    selectedId?: string | null
   }>(),
-  { height: '520px', theme: undefined, hideIsolated: true, highlightIds: () => [] }
+  { height: '520px', theme: undefined, hideIsolated: true, highlightIds: () => [], selectedId: null }
 )
 
 /* 主题跟随（2026-10-06 审核）：默认原为写死 'light'，不跟随 <html data-theme>——
@@ -179,6 +183,18 @@ let chart: echarts.ECharts | null = null
 /** 已点选的节点：右栏/底部详情接管信息，画布 tooltip 不再重复弹出；
  *  2026-11-05 用户定稿：点击选中后画布把无关节点压暗到 0.35（ref 化以便进 buildOption） */
 const selectedIdRef = ref<string | null>(null)
+/* 受控选中：宿主的 selected 变化（反选、侧栏点人、筛选把节点剔除）要反映到画布。
+   画布自己点击时先写 ref 再 emit，宿主回传同一个 id → 这里早退，不会死循环；
+   这里只重画、不再 emit（避免把「同步」误当成一次新点选）。 */
+watch(
+  () => props.selectedId ?? null,
+  (next) => {
+    if (next === selectedIdRef.value) return
+    selectedIdRef.value = next
+    chart?.dispatchAction({ type: 'hideTip' })
+    render()
+  }
+)
 /** 最近一次 buildOption 烘焙的关键标签集（枢纽 + 薄弱 + 孤立 + 高亮）：只在缩得很小时保留 */
 let lastLabelWorthy = new Set<string>()
 /** 缩放低于该值视为「字已经挤不开」档：退回关键子集（不再整屏收标），放大恢复常显 */
@@ -240,6 +256,10 @@ let ro: ResizeObserver | null = null
  * 故按宽度自适应（窄栏收紧字号/折行宽度/斥力）。
  */
 const width = ref(0)
+/* 画布高度也要跟：两个宿主现在都把高度交给 flex（视口/卡片高度一变，画布就变高变矮），
+   只盯宽度的话高度变化不会触发 chart.resize，ECharts 会留着旧画布尺寸——
+   画布比盒子高时内容被裁/错位（2026-11-10 走查实测：改样式后 canvas 774 vs 盒子 745）。 */
+const boxHeight = ref(0)
 const isNarrow = computed(() => width.value > 0 && width.value < 420)
 
 /** 可见节点（2026-10-31 二轮评审 P2 修订）：hideIsolated 只裁「未评估的孤立点」——
@@ -252,9 +272,7 @@ const visibleNodes = computed<MkGraphNode[]>(() => {
     connected.add(e.fromConceptId)
     connected.add(e.toConceptId)
   }
-  const kept = props.nodes.filter(
-    (n) => connected.has(n.id) || (n.masteryScore !== null && n.masteryScore !== undefined)
-  )
+  const kept = props.nodes.filter((n) => connected.has(n.id) || hasMasterySignal(n))
   return kept.length > 0 ? kept : props.nodes
 })
 const isolatedCount = computed(() => props.nodes.length - visibleNodes.value.length)
@@ -264,10 +282,13 @@ const isolatedCount = computed(() => props.nodes.length - visibleNodes.value.len
  *  读成灰/待学习，图例却承诺黄色（🟡进行中 1 画布上永远找不到黄点）。补琥珀档，
  *  色值与图例 --mk-amber 同族（亮 #b45309 系 / 暗 #fbbf24 系，做柔化与红/绿拉开）。 */
 function colorOf(node: MkGraphNode, dark: boolean): string {
-  if (node.masteryScore === null || node.masteryScore === undefined) return dark ? '#5b5f66' : '#a8adb7'
-  if (node.stability === 'fragile' || node.masteryScore < 0.45) return dark ? '#c2726a' : '#b4544a'
-  if (node.stability === 'stable' || node.masteryScore >= 0.8) return dark ? '#6f8f86' : '#4f7d70'
-  return dark ? '#d09a3e' : '#b08020'
+  /* 分档走 conceptBandOf（单一判据）；这里只负责「档 → 色」 */
+  switch (conceptBandOf(node)) {
+    case 'unknown': return dark ? '#5b5f66' : '#a8adb7'
+    case 'fragile': return dark ? '#c2726a' : '#b4544a'
+    case 'stable': return dark ? '#6f8f86' : '#4f7d70'
+    default: return dark ? '#d09a3e' : '#b08020'
+  }
 }
 
 /**
@@ -1002,12 +1023,17 @@ function bindZrInteractions(instance: echarts.ECharts) {
 
 onMounted(() => {
   width.value = el.value?.clientWidth ?? 0
+  boxHeight.value = el.value?.clientHeight ?? 0
   lastNarrow = isNarrow.value
   render()
   ro = new ResizeObserver(() => {
     const next = el.value?.clientWidth ?? 0
-    if (next === width.value) return
+    const nextH = el.value?.clientHeight ?? 0
+    /* 宽高任一变化都要 resize：宿主把画布高度交给 flex 后，窗口变高/图例换行/卡片留白
+       都会只改高度不改宽度（此前 `next === width.value` 直接 return，画布尺寸留在旧值） */
+    if (next === width.value && nextH === boxHeight.value) return
     width.value = next
+    boxHeight.value = nextH
     chart?.resize()
     // 只有"窄/宽档位"翻转才重建 option（字号/折行宽度/斥力不同）。
     // 单纯变宽变窄**不重建**：setOption(notMerge) 会把力导向布局打回起点，

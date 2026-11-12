@@ -50,10 +50,12 @@ describe('账户页两处日期不可在连字符处断行（#50）', () => {
   });
 
   it('最近登录日期片段被 nowrap 的 span 包住', () => {
+    /* 2026-11-11：空值不再输出「—」留在句尾（读成标点），改走 formatLastLogin →
+       「暂无记录」，但日期片段仍必须由 .profile-meta__date 包住（#50 的断行修复不变）。 */
     expect(
       source,
       '最近登录日期没有包进 .profile-meta__date，窄屏仍会在「2026-10-」处断开',
-    ).toMatch(/最近登录\s*<span class="profile-meta__date">\{\{ formatDateShort\(user\.lastLoginAt\) \}\}<\/span>/);
+    ).toMatch(/最近登录\s*<span class="profile-meta__date">\{\{ formatLastLogin\(user\.lastLoginAt\) \}\}<\/span>/);
   });
 
   it('.profile-meta__date 声明 white-space: nowrap', () => {

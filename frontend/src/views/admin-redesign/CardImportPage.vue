@@ -101,7 +101,7 @@
           </thead>
           <tbody>
             <tr v-for="(r, i) in report.reports" :key="(r.cardKey || 'row') + i">
-              <td><span class="ci-key">{{ r.cardKey || '（无卡号）' }}</span></td>
+              <td><span class="ci-key" :title="r.cardKey || '（无卡号）'">{{ r.cardKey || '（无卡号）' }}</span></td>
               <td><span class="mk-badge" :class="statusBadge(r.status)">{{ statusText(r.status) }}</span></td>
               <td>
                 <div class="ci-issues">
@@ -134,7 +134,7 @@
           </thead>
           <tbody>
             <tr v-for="(r, i) in importResult.results" :key="(r.cardKey || 'row') + i">
-              <td><span class="ci-key">{{ r.cardKey || '（无卡号）' }}</span></td>
+              <td><span class="ci-key" :title="r.cardKey || '（无卡号）'">{{ r.cardKey || '（无卡号）' }}</span></td>
               <td><span class="mk-badge" :class="actionBadge(r.action)">{{ actionText(r.action) }}</span></td>
               <td>
                 <span v-if="r.reason" class="ci-reason" :title="r.reason">{{ r.reason }}</span>
@@ -374,7 +374,8 @@ async function doImport() {
   color: var(--mk-blue-text);
 }
 .ci-back { margin-left: auto; font-size: var(--mk-fs-micro); }
-.ci-key { font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-ink); }
+/* 卡号可能是长 slug：单行省略 + title 给全值，不把 20+ 位标识折成两行撑高表格 */
+.ci-key { display: block; max-width: 240px; font-family: var(--mk-mono); font-size: var(--mk-fs-micro); color: var(--mk-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ci-issues { display: flex; flex-direction: column; gap: 2px; white-space: normal; }
 .ci-issue { font-size: var(--mk-fs-micro); line-height: 1.45; }
 .ci-issue--err { color: var(--mk-red); }

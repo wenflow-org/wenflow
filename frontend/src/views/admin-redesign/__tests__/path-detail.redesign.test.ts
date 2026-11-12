@@ -12,6 +12,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import PathDetail from '../PathDetail.vue'
+import PathJourneyPanel from '../PathJourneyPanel.vue'
 import { subPage, closeSubPage } from '../store'
 
 const detailMock = vi.hoisted(() => vi.fn())
@@ -154,6 +155,42 @@ describe('PathDetail 路径深链适配层', () => {
     await retry!.trigger('click')
     await settle()
     expect(subPage.value).toMatchObject({ view: 'session-real', id: 'gc_9', stage: 'path' })
+    w.unmount()
+  })
+})
+
+describe('PathJourneyPanel 任务行（2026-11-11 全站打磨）', () => {
+  it('任务名有 title 可查全值；缺预计时长时只留类型，不写「0 分钟」', async () => {
+    detailMock.mockResolvedValue({
+      data: {
+        data: {
+          title: '毛笔小楷入门',
+          status: 'active',
+          milestones: [{
+            id: 'ms_1',
+            stageNumber: 1,
+            title: '执笔与运笔',
+            status: 'active',
+            subtasks: [
+              { id: 't_1', title: '中锋线条练习', status: 'in_progress', taskType: 'practice', estimatedMinutes: 20 },
+              { id: 't_2', title: '没有时长的任务', status: 'todo', taskType: 'reading', estimatedMinutes: 0 }
+            ]
+          }]
+        }
+      }
+    })
+    const w = mount(PathJourneyPanel, {
+      props: { pathId: 'lp_1' },
+      global: { stubs: { teleport: true } }
+    })
+    await settle()
+    const titles = w.findAll('.pd-task__title')
+    expect(titles[0].attributes('title')).toBe('中锋线条练习')
+    expect(titles[1].attributes('title')).toBe('没有时长的任务')
+    const subs = w.findAll('.pd-task__sub').map((s) => s.text())
+    expect(subs[0]).toBe('练习 · 20 分钟')
+    expect(subs[1]).toBe('阅读')
+    expect(subs[1]).not.toContain('0 分钟')
     w.unmount()
   })
 })

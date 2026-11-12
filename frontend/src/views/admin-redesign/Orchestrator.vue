@@ -4,7 +4,10 @@
          「字段流转」——看的是字段在 Skill 间怎么流，不是一张拓扑图；页头却还叫「编排图」）。
          2026-10-04 状态条退役，读数迁页首 KPI 带；2026-10-12 按用户走查再收一层：
          三张纯读数卡撤（阶段/Skill 进总览卡头 meta），无警时页头直接接页签（详见下方告警条注释） -->
-    <MkPageHead title="字段流转" />
+    <!-- 2026-11-11（困惑测试 #51）：页名「字段流转」但总览只答「有哪些阶段 / 每阶段哪些 Skill」，
+         落地 20 秒说不清这页给谁用、字段在哪。补一行自述（总览与字段视图的分工），
+         不改总览本身（撤列脚字段读数是 2026-11-10 裁决，见下方注释）。 -->
+    <MkPageHead title="字段流转" sub="总览看五阶段管线与编排 Skill 的分工。字段从哪来到哪去，点阶段页签看「字段旅程」。逐条契约在「字段路由」" />
     <!-- 页头刷新已撤（2026-10-16 用户走查「这个刷新是不是重了，有一个固定的刷新了」）：
          本页原先另有一颗页头「刷新」，实测与顶栏固定刷新各打一半数据——页头打运行时定义/
          阶段清单/对账，顶栏打拓扑/目录/其余全域，用户按任一颗都会以为整页刷了。
@@ -43,7 +46,7 @@
         :tabindex="pane !== 'overview' && active === s.id ? 0 : -1"
         :title="stageTabTitle(s)"
         @click="selectStageTab(s.id)"
-      >{{ stageTabLabel(s) }}<span class="tab__count">{{ s.skills.length }}</span></button>
+      >{{ stageTabLabel(s) }}<span class="tab__count" :title="`本阶段挂载 ${s.skills.length} 个编排 Skill（名册数，与字段旅程的步数不同源）`">{{ s.skills.length }} 个</span></button>
     </div>
 
     <!-- ===== 总览：全旅程 odg 画布（newui/admin odg-canvas 形态）=====
@@ -63,12 +66,6 @@
              画布横向滚动时兜底）；Skill 总数是本页唯一非显然读数，title 保留 F8-4 三源口径 -->
         <div class="mk-card__head-right">
           <span v-if="stages.length" class="mk-card__meta" :title="skillKpiTitle">{{ stages.length }} 阶段 · {{ totalSkills }} 个编排 Skill</span>
-          <button
-            v-if="contractFailed"
-            type="button"
-            class="mk-btn mk-btn--sm"
-            @click="retryStageContracts"
-          >字段契约重试</button>
           <!-- 溢出提示（2026-11-02 评审：139% 下五列被两侧裁掉却「无处可看」）：一度写成卡头
                一行「画布比可视区宽，可拖动画布平移」。2026-11-02 二次走查撤掉——它是在教
                读者怎么操作画布，而拖动手势本身就是布局的可供性。同一句改挂到画布容器的
@@ -77,8 +74,15 @@
                （触控板双指捏合走同一条，浏览器把它合成 ctrlKey 的 wheel）；指针处为锚点。
                放大后按钮文案带出「适应宽度」动作（2026-11-02 评审）：原先只有一枚百分比读数，
                被裁掉的两侧没有可见的收束入口 -->
-          <button type="button" class="mk-btn mk-btn--sm orch-odg-zoom__val" @click="odgZoom = 1">
-            {{ odgZoom === 1 ? '100%' : `适应宽度 · ${Math.round(odgZoom * 100)}%` }}
+          <!-- 2026-11-11（困惑测试 #52）：默认档原先只有裸「100%」，紧挨读数 meta 被读成覆盖率/健康度。
+               带出「缩放」二字并补 title；放大态文案（点击复位）沿用 2026-11-02 评审。 -->
+          <button
+            type="button"
+            class="mk-btn mk-btn--sm orch-odg-zoom__val"
+            :title="odgZoom === 1 ? '当前缩放比例 100%，点击复位' : '点击复位到 100%'"
+            @click="odgZoom = 1"
+          >
+            {{ odgZoom === 1 ? '缩放 100%' : `适应宽度 · ${Math.round(odgZoom * 100)}%` }}
           </button>
         </div>
       </div>
@@ -99,7 +103,9 @@
           <div v-for="(s, i) in stages" :key="s.id" class="orch-odg-col">
             <header class="orch-odg-colhead">
               <span class="orch-odg-no">{{ i + 1 }}</span>
-              <span class="orch-odg-colname" :title="s.name">{{ s.name }}</span>
+              <!-- 2026-11-10 用户「阶段换成英文名，和 agent 一样」：列头用阶段 id（goal/path/…），
+                   中文全名退到悬停 title；与右侧 goal-agent 同一语言，读起来是一对。 -->
+              <span class="orch-odg-colname" :title="s.name">{{ s.id }}</span>
               <span class="orch-odg-agent mono" :title="s.agentId">{{ s.agentId }}</span>
             </header>
             <div class="orch-odg-body">
@@ -118,31 +124,6 @@
                 <span class="orch-odg-slug mono">{{ sk.id }}</span>
               </button>
             </div>
-            <footer class="orch-odg-foot">
-              <!-- 字段契约三态：未加载显「…」（不按 0 渲染——加载完成前「入 0」与「真无必填」不可分辨；
-                   部分阶段确无必填入参，加载后「入 0」属实）。
-                   2026-10-24：计数单独一行，字段名另占一行并允许两行——不再用 nowrap+ellipsis
-                   把唯一字段信息裁成一条。 -->
-              <div class="orch-odg-counts">
-                <span
-                  v-for="kind in (['in', 'out'] as const)"
-                  :key="kind"
-                  class="orch-odg-chip"
-                  :class="contractOf(s.id).failed ? 'orch-odg-chip--failed' : `orch-odg-chip--${kind}`"
-                  :title="contractChipTitle(s.id, kind)"
-                >{{ contractChipText(s.id, kind) }}</span>
-              </div>
-              <!-- 2026-11-08 用户「每列底下挂了一大串像乱码一样的英文路径（normalizedInput.confirmed
-                   Proposal.fir… / control.completionCandidateEvidence）」：管线总览默认**不再**把产出
-                   字段名平铺出来——那一层的读者要的是「这一列有哪些子模块、进多少出多少」。
-                   字段明细改由悬停列脚展开（用中文描述，见 stageFieldNamesOf），
-                   真要看逐字段中英对照去「字段路由」页签。 -->
-              <div
-                v-if="contractOf(s.id).loaded && !contractOf(s.id).failed"
-                class="orch-odg-fields orch-odg-fields--summary"
-                :title="stageFieldNamesOf(s.id)"
-              >{{ stageFieldSummaryOf(s.id) }}</div>
-            </footer>
           </div>
         </div>
       </div>
@@ -196,16 +177,6 @@
     <section v-if="current && visitedPanes.has('routing')" v-show="pane === 'routing'" id="orch-pane-routing" role="tabpanel" aria-labelledby="orch-tab-routing" class="mk-card mk-card--fill orch-pane orch-routing">
       <div class="mk-card__head">
         <h3 class="mk-card__title">字段路由</h3>
-        <!-- meta 换同源口径（2026-10-05 页签重设计）：原「输入 0/0 · 输出 0/0」来自
-             liveSkillCatalog 的阶段级变量流——catalog 对多数阶段为空，出假零，与表内
-             25 行字段同页打架。改用字段契约 stageFieldContract（与画布 chips
-             同源同数）：必填入参 = hard-required，产出 = 三产出角色；未加载显「…」 -->
-        <span class="mk-card__meta">
-          <!-- 未加载显「…」（与画布 chips 同一三态约定；规则 5 禁内联「加载中」文案） -->
-          <template v-if="contractOf(active).failed">字段契约未加载</template>
-          <template v-else-if="!contractOf(active).loaded">…</template>
-          <template v-else>必填入参 {{ contractOf(active).ins.length }} · 产出 {{ contractOf(active).outs.length }}</template>
-        </span>
       </div>
       <FieldRoutingTable ref="routingRef" :stage="active" @changed="onRoutingChanged" />
     </section>
@@ -258,7 +229,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { dataSource, openSubPage } from './store'
-import { liveTopoNodes, liveSkillCatalog, liveSkillProfiles, liveLoading, liveFailures, reloadLiveTopology, liveRefreshSeq, errMsg } from './live'
+import { liveTopoNodes, liveSkillCatalog, liveSkillProfiles, liveLoading, liveFailures, reloadLiveTopology, liveRefreshSeq } from './live'
 import { TERMS } from './terms'
 import { adminRuntimeDefinitionsApi, adminFieldRoutingsApi, adminSkillsApi, type SkillReconciliationReport } from '@/api/adminApi'
 import FieldRoutingTable from './FieldRoutingTable.vue'
@@ -541,138 +512,6 @@ const stages = computed<Stage[]>(() => {
 /* ===== 总览 odg 画布（newui/admin odg-canvas）：列间贝塞尔连线 + 下一阶段入参标签 ===== */
 const odgCanvasEl = ref<HTMLElement | null>(null)
 const odgSvgEl = ref<SVGSVGElement | null>(null)
-
-/* 入/出口径来自字段路由注册表（真数据源，后端词表）：
-   入 = hard-required（必填，缺了本阶段无法推进；部分阶段确无必填 → 入 0 属实）；
-   出 = proposal-output + public-reply + derived-presentation（方案产出/公开回复/派生展示，
-   对外可见或可供下游消费的产出，展示在列脚 outs 行）。 */
-/** 产出字段：label = 中文描述（字段注册表 description，运营读得懂），slug = 英文标识（对代码/日志） */
-interface OutField { label: string; slug: string }
-interface StageFieldContract {
-  ins: string[]
-  outs: OutField[]
-  /** 字段契约是否已加载（此前加载完成前按 0 渲染：「入 0」与「真无必填」不可分辨，评审「状态三态缺失」） */
-  loaded?: boolean
-  /** 该阶段契约拉取失败的原因（失败与「加载中」必须可分辨） */
-  failed?: string
-}
-const OUT_ROLES = ['proposal-output', 'public-reply', 'derived-presentation']
-const stageFieldContract = ref<Record<string, StageFieldContract>>({})
-/** 字段契约整体失败（任一阶段失败即给卡头「字段契约重试」） */
-const contractFailed = computed(() => Object.values(stageFieldContract.value).some((c) => c.failed))
-/** promptRole 人话（后端 yaml-vocabulary 单源下发；前端不写第二份）——悬停时把「入/出」的
-    口径连同「缺了会怎样 / 由谁派生」一起摆出来，让数字自带解释（2026-10-14 用户：悬停信息兼顾业务与技术查验） */
-const roleMetaById = ref<Record<string, { label: string; hint: string }>>({})
-/** hard-required 的判定口径 = 阶段自身字段定义里 promptRole 为 hard-required 的条数；
-    教学/画像/仿真三阶段入参被归为隐式推断，故「入 0」属实而非未加载（详见卡头注释） */
-function contractTitle(kind: 'in' | 'out', n: number): string {
-  if (kind === 'in') {
-    const m = roleMetaById.value['hard-required']
-    return `必填入参 ${n} 个${m ? ` · ${m.label}：${m.hint}` : ''}`
-  }
-  const roles = OUT_ROLES.map((r) => roleMetaById.value[r]?.label || r).join(' / ')
-  return `产出字段 ${n} 个 · 统计含：${roles}`
-}
-/** 在途去重（按键签名）：顶栏刷新同时改动 topology（boot 域）与 stageList（本页域），
-    两次都会让 `stages` 重算、各触发一次本函数——同一批 id 的重复拉取并成一笔；
-    签名不同（真的换了阶段集）时照常再拉 */
-let stageContractInflight: { key: string; p: Promise<void> } | null = null
-async function loadStageFieldContracts(ids: string[]) {
-  const key = ids.join('|')
-  if (stageContractInflight) {
-    if (stageContractInflight.key === key) { await stageContractInflight.p; return }
-    await stageContractInflight.p
-  }
-  const p = (async () => {
-    const results = await Promise.allSettled(
-      ids.map((id) => adminFieldRoutingsApi.getStageDetail(id)),
-    )
-    const map: Record<string, StageFieldContract> = {}
-    let meta: Array<{ id: string; label: string; hint: string }> = []
-    results.forEach((r, i) => {
-      if (r.status !== 'fulfilled') {
-        map[ids[i]] = { ins: [], outs: [], loaded: false, failed: errMsg(r.reason) }
-        return
-      }
-      const data = r.value.data?.data
-      const fields = (data?.fields ?? []) as Array<{ promptRole?: string; camelName?: string | null; fieldId: string; description?: string | null }>
-      if (!meta.length && Array.isArray(data?.promptRoleMeta) && data.promptRoleMeta.length) {
-        meta = data.promptRoleMeta
-      }
-      map[ids[i]] = {
-        ins: fields.filter((f) => f.promptRole === 'hard-required').map((f) => f.camelName || f.fieldId),
-        outs: fields
-          .filter((f) => OUT_ROLES.includes(f.promptRole || ''))
-          .map((f) => ({
-            // 中文优先：字段注册表的 description（人写的业务名）；无描述时才回落英文标识
-            label: String(f.description || '').trim() || f.camelName || f.fieldId,
-            slug: f.camelName || f.fieldId,
-          })),
-        loaded: true,
-      }
-    })
-    // 已加载的阶段覆盖旧值，失败阶段保留失败态；成功阶段不因同批其他失败而回退成「加载中」
-    stageFieldContract.value = { ...stageFieldContract.value, ...map }
-    if (meta.length) {
-      roleMetaById.value = Object.fromEntries(meta.map((m) => [m.id, { label: m.label, hint: m.hint }]))
-    }
-  })().finally(() => { if (stageContractInflight?.p === p) stageContractInflight = null })
-  stageContractInflight = { key, p }
-  await p
-}
-watch(
-  stages,
-  (s) => {
-    if (s.length) void loadStageFieldContracts(s.map((x) => x.id))
-  },
-  { immediate: true },
-)
-/** 契约失败重试：清掉在途签名后按当前阶段集重拉（此前失败永远停在「入 …」且无重试） */
-async function retryStageContracts() {
-  stageContractInflight = null
-  await loadStageFieldContracts(stages.value.map((s) => s.id))
-}
-function contractOf(id: string): StageFieldContract {
-  return stageFieldContract.value[id] ?? { ins: [], outs: [], loaded: false }
-}
-/** 列脚读数三态：失败 → 「未加载」；未完成 → 「…」；就绪 → 数字 */
-function contractCountText(id: string, kind: 'in' | 'out'): string {
-  const c = contractOf(id)
-  if (c.failed) return '未加载'
-  if (!c.loaded) return '…'
-  return String(kind === 'in' ? c.ins.length : c.outs.length)
-}
-/** 列脚 chip 全文（2026-10-31 四轮评审）：阶段 3/4/5 的「入 0」被读成「不接收任何上游输入」——
- *  就绪且为 0 时补一句「无必填」，点明口径是「没有 hard-required 必填项」而非「无输入」。
- *  该口径本身属实：教学/画像/仿真阶段的入参在编排里被归为隐式推断（见 contractTitle 注释）。 */
-function contractChipText(id: string, kind: 'in' | 'out'): string {
-  const text = contractCountText(id, kind)
-  if (kind === 'in' && text === '0') return '入 0（无必填）'
-  return `${kind === 'in' ? '入' : '出'} ${text}`
-}
-function contractChipTitle(id: string, kind: 'in' | 'out'): string {
-  const c = contractOf(id)
-  if (c.failed) return `字段契约未加载：${c.failed}`
-  if (!c.loaded) return '字段契约加载中'
-  return contractTitle(kind, kind === 'in' ? c.ins.length : c.outs.length)
-}
-
-/** 列脚一行读数（2026-11-08）：只报「进/出各多少项」，不再平铺英文变量名 */
-function stageFieldSummaryOf(id: string): string {
-  const c = contractOf(id)
-  const ins = c.ins.length
-  const outs = c.outs.length
-  return `入 ${ins} 项 · 出 ${outs} 项`
-}
-/** 列脚悬停：把产出字段的**中文名**排出来（英文标识也带上，便于对代码/日志）；
-    无产出字段时给出人话说明，不留空 title。 */
-function stageFieldNamesOf(id: string): string {
-  const c = contractOf(id)
-  if (c.failed) return `字段契约未加载：${c.failed}`
-  if (!c.loaded) return '字段契约加载中…'
-  if (!c.outs.length) return '本阶段暂无对外产出字段'
-  return `产出字段（${c.outs.length}）：\n` + c.outs.map((o) => `· ${o.label}（${o.slug}）`).join('\n')
-}
 
 /** 画布重算：列位置量出后画三次贝塞尔连线（仅箭头；字段明细不在边上渲染，
      见总览卡头注释——边标签曾压住相邻列节点文字，2026-10-04 撤） */
@@ -970,7 +809,9 @@ async function retryStages() {
  *  2026-11-02 评审：页签此前另挂一份手写译名（目标 / 路径 / 学习者），与列头和旅程页头
  *  （澄清 / 规划 / 画像，均取后端显示名）对不上——同一阶段在一屏里有两个叫法。
  *  名以列头那份为准（后端显示名去「阶段」），拿不到显示名才回退 dataFlow 的阶段译名。 */
-const stageTabLabel = (s: Stage) => (s.name || '').replace(/阶段$/, '') || STAGE_LABELS[s.id] || s.id
+/** 页签同样用阶段 id（2026-11-10 用户「阶段换成英文名，和 agent 一样」）；
+    中文全名仍在 title（stageTabTitle）里，悬停可读。 */
+const stageTabLabel = (s: Stage) => s.id || STAGE_LABELS[s.id] || ''
 
 function stageTabTitle(s: Stage): string {
   return [s.name, `Agent: ${s.agentId}`, `Skill: ${s.skills.length} 个`].join('\n')
@@ -983,10 +824,15 @@ function skillNodeTitle(sk: Stage['skills'][number], s: Stage): string {
   return lines.join('\n')
 }
 
-/** 治理卡头读数：运行时定义条数 + 一致性核查已上线数 */
-const govMetaTitle = computed(() =>
-  recReport.value ? `一致性核查：已上线 ${recLiveCount.value} / 登记 ${recTotalCount.value}` : '一致性核查报告不可用'
-)
+/** 治理卡头读数：运行时定义条数 + 一致性核查已上线数。
+ *  2026-11-11（困惑测试 #53/#64）：光标下是「编排定义 5 · Skill 定义 36」，title 却只解释
+ *  一致性核查——三个 Skill 计数（总览挂载 21 / 运行时定义 36 / 目录档案 30）无处对照。 */
+const govMetaTitle = computed(() => {
+  const scope = `三种 Skill 计数统计不同：本页总览「编排 Skill」= 各阶段挂载节点（${totalSkills.value} 个）· 这里「Skill 定义」= 运行时注册定义条数 · 「Skill 目录」页签 = 目录档案数。`
+  return recReport.value
+    ? `${scope}一致性核查：已上线 ${recLiveCount.value} / 登记 ${recTotalCount.value}`
+    : `${scope}一致性核查报告不可用`
+})
 </script><style scoped>
 /* 一级页签（原型 .tabs 下划线页签）：样式 2026-10-05 CM1 收敛到全局
    .tabs/.tab（mk-primitives.css），本页只留容器间距修饰。 */
@@ -1050,7 +896,8 @@ html[data-theme='dark'] {
   display: flex; align-items: flex-start;
 }
 /* 2026-10-24：画布纵向拉伸到滚动区高度，五列等高（原先各列按 Skill 条数自然高）。
-   列脚不再随之压到底（见 .orch-odg-foot）：等高只用于列头/列宽的稳定，不改变内容流向。 */
+   等高只用于列头/列宽的稳定，不改变内容流向（2026-11-10 列脚读数撤除后，列内只剩
+   阶段头 + Skill 节点）。 */
 .orch-odg-scroll { align-items: stretch; }
 .orch-odg-scroll.is-panning,
 .orch-odg-scroll.is-panning .orch-odg-node { cursor: grabbing; }
@@ -1079,12 +926,15 @@ html[data-theme='dark'] {
      端点落在卡片之间的空白里。画布本来就靠滚动区承接溢出，SVG 不该被容器夹窄。 */
   max-width: none;
 }
-.orch-odg-edge { fill: none; stroke: var(--mk-blue, #2f6ae0); stroke-width: 1.6; opacity: 0.85; }
-.orch-odg-svg marker path { fill: var(--mk-blue, #2f6ae0); }
-/* 列宽地板必须显式：flex 项默认 min-width:auto 的内容地板会被列脚 nowrap 的 outs 长串
-   （.orch-odg-fields）顶开——实测五列被顶到 411–1066px、画布总宽 4457px，1920 档只见 2/5 列
-   （2026-10-04 注入实验）。固定地板 232px 后 flex-grow 才敢分富余宽度；不设 max-width——
-   flex 只摊「可用」宽度，天然不会超出容器（设上限反而在 4K 顶出横滚）。 */
+/* 连线走图专用前景蓝（--mk-graph-blue-ink）：浅色档与 --mk-blue 同值 #2f6ae0，
+   深色档提亮成 #9db8f5——1.6px 细线压在深卡面上仍可辨（2026-11-11 深色对比度）。 */
+.orch-odg-edge { fill: none; stroke: var(--mk-graph-blue-ink, #2f6ae0); stroke-width: 1.6; opacity: 0.85; }
+.orch-odg-svg marker path { fill: var(--mk-graph-blue-ink, #2f6ae0); }
+/* 列宽地板必须显式：flex 项默认 min-width:auto 的内容地板会被列内长串顶开——2026-10-04
+   的注入实验里（当时列脚挂着 outs 字段名）五列被顶到 411–1066px、画布总宽 4457px，
+   1920 档只见 2/5 列。现在列内是 Skill 中文名 + 长 id，同样会撑内容地板。
+   固定地板 232px 后 flex-grow 才敢分富余宽度；不设 max-width——flex 只摊「可用」宽度，
+   天然不会超出容器（设上限反而在 4K 顶出横滚）。 */
 .orch-odg-col { flex: 1 1 232px; min-width: 232px; display: flex; flex-direction: column; gap: 8px; }
 .orch-odg-colhead {
   display: flex; align-items: center; gap: 8px; padding: 8px 10px;
@@ -1117,7 +967,12 @@ html[data-theme='dark'] {
 }
 .orch-odg-node:hover { border-color: var(--mk-blue, #2f6ae0); box-shadow: var(--mk-shadow-sm, 0 1px 3px rgba(15, 23, 42, 0.1)); }
 .orch-odg-idx { font-family: var(--mk-mono); font-size: var(--mk-fs-micro, 12px); color: var(--mk-faint); }
-.orch-odg-nodename { font-size: var(--mk-fs-micro, 12px); font-weight: 600; color: var(--mk-ink); }
+/* 节点名允许折行（中文长名如「虚拟学习者教学回合模拟」会占两行）：列宽 196px 下不硬切，
+   也不撑破列地板；完整名称另有 skillNodeTitle 悬停。 */
+.orch-odg-nodename { font-size: var(--mk-fs-micro, 12px); font-weight: 600; color: var(--mk-blue-text, #1f57cc); overflow-wrap: anywhere; }
+/* 2026-11-11（困惑测试 #54）：节点可点，但静止态与纯展示卡同外观，靠误触才发现入口。
+   沿用字段旅程卡题的可点击语言（蓝字 = 可交互），悬停再给下划线。 */
+.orch-odg-node:hover .orch-odg-nodename { text-decoration: underline; }
 /* Skill id（英文名）：与中文显示名分行。允许折行而不是省略号——运营要照着这枚 id
    去对 Skill 目录 / 执行日志，截断了反而对不上（长 id 如 virtual-learner-* 会占两行）。 */
 .orch-odg-slug {
@@ -1126,38 +981,6 @@ html[data-theme='dark'] {
   overflow-wrap: anywhere;
 }
 /* 审核 #117：.orch-odg-nodemeta 规则随节点内重复 agentId 一起删（列头已承接，类无消费者） */
-/* 列脚紧跟本阶段的最后一个 Skill（2026-10-24 用户「怎么固定底部了，应该跟着组走」）：
-   撤掉 margin-top:auto 与 .orch-odg-body 的 flex-grow——等高列由画布 stretch 给出，
-   富余高度留在列底；否则列脚会被推到整屏最下方，和它所属的分组脱开（放大后更明显）。 */
-.orch-odg-foot {
-  display: flex; flex-direction: column; align-items: stretch; gap: 4px;
-  padding-top: 2px;
-}
-.orch-odg-counts { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.orch-odg-chip {
-  font-size: var(--mk-fs-micro, 12px); padding: 1px 6px;
-  border-radius: var(--mk-radius-sm, 6px);
-  background: var(--mk-surface-2, #eef2fa); color: var(--mk-muted); white-space: nowrap;
-}
-.orch-odg-chip--in { background: color-mix(in srgb, var(--mk-blue, #2f6ae0) 10%, transparent); color: var(--mk-accent-deep, #1f57cc); }
-/* 审核 #119：--out 原继承 --mk-accent-deep 蓝字，与 --in 字色相同——绿底蓝字把「产出」读成可交互蓝。
-   绿系 chip 字色改绿深档，让「蓝=入参/交互、绿=产出」在字色层也成立 */
-.orch-odg-chip--out { background: color-mix(in srgb, var(--mk-green, #15803d) 12%, transparent); color: var(--mk-green, #15803d); }
-/* 契约拉取失败：红字显式说出「未加载」，与「加载中 …」和「真 0 个」在视觉上可分辨 */
-.orch-odg-chip--failed { background: color-mix(in srgb, var(--mk-red, #dc2626) 10%, transparent); color: var(--mk-red, #dc2626); }
-/* 列脚读数（2026-11-08 用户「每列底下挂了一大串像乱码一样的英文路径」）：
-   默认只留一行「入 N 项 · 出 N 项」——总览层读者要的是「这一列进多少出多少」，
-   逐字段的中英对照在「字段路由」页签。字段名改由悬停整行展开（stageFieldNamesOf），
-   所以这里不再有逐字段 chip。 */
-.orch-odg-fields--summary {
-  min-width: 0;
-  font-size: var(--mk-fs-micro, 12px);
-  color: var(--mk-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  cursor: default;
-}
 /* 审核 #110：1440 档卡内可用宽约 1136px，而 5×232 + 4×100 = 1560 必横滚约 448px 才见第 4-5 列，
    卡题「管线总览 · 五阶段字段血缘」的全貌在标准视野内不成立。1599 档收窄列宽与列间距
    （5×196 + 4×48 + 24 ≈ 1196，接近卡宽；仍略超则保留少量内横滚）。1920 起沿用原全展开档。

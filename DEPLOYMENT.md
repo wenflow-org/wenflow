@@ -117,9 +117,9 @@ cd backend
 
 | 配置 | 怎么配 | 不配的后果 |
 |------|--------|-----------|
-| `backend/.env` | `npm run env:setup` 向导生成（或复制 `.env.example`） | 启动脚本直接退出 |
+| `backend/.env` | Windows 用 `npm run env:setup` 向导生成；Linux/macOS 复制 `.env.example` 后手工生成 JWT/密钥环（见 README 快速开始第 3 步） | 启动脚本直接退出 |
 | `JWT_SECRET` | 向导可自动生成（≥32 位随机串） | 启动校验失败 |
-| `AI_API_URL` / `AI_API_KEY` / `AI_MODEL` / `AI_MODEL_REASONING` | 向导第 2-4 问；密钥换成所选 provider 的真实值 | 仍是占位值 `sk-your-api-key` 时启动被拦；启动后 `/readyz` 的 `aiConfiguration` 报 warning，**所有 AI 调用不可用**——目标对话、路径生成、课堂全部无响应 |
+| `AI_API_URL` / `AI_API_KEY` / `AI_MODEL` / `AI_MODEL_REASONING` | 向导第 2-4 问；密钥换成所选 provider 的真实值 | Windows `npm run dev` 在空 key/占位值时启动前拦截；后端进程本身可空 key 启动，但 `/readyz` 的 `aiConfiguration` 报 warning，**所有 AI 调用不可用**——目标对话、路径生成、课堂全部无响应 |
 | 初始管理员 | 开发环境不配 `INIT_ADMIN_PASSWORD` 时用内置默认 `ChangeMe_2026_Admin`；生产必须显式设置（≥12 位含大小写与数字） | 生产留空则跳过创建，无管理员可登录 |
 | 数据库 | 默认 `DATABASE_URL=file:./dev.db` + `SYSTEM_DATABASE_URL=file:../system.db`，SQLite 零外部依赖；`npm run dev` 内置迁移部署 | — |
 
@@ -150,6 +150,8 @@ cd backend
 # 项目根目录执行
 npm run env:setup
 ```
+
+> 该向导依赖 Windows PowerShell；Linux/macOS 请按 README「快速开始」第 3 步复制 `backend/.env.example` 并生成 `JWT_SECRET` / `SECRET_ENCRYPTION_KEYS`。
 
 常用关键项：
 
@@ -357,7 +359,7 @@ INIT_ADMIN_PASSWORD=CHANGE_ME_before_deploy
 - 首次启动会校验密码强度：少于 12 位、缺少大小写字母或数字、或使用文档示例口令都会导致启动失败
 - 建议首次登录后立即修改密码
 
-详见 [`admin-guide.md`](admin-guide.md)。
+详见 [`doc/ADMIN_OPERATIONS_MANUAL.md`](doc/ADMIN_OPERATIONS_MANUAL.md)。
 
 ---
 
@@ -467,7 +469,7 @@ wenflow/
 ## 相关文档
 
 - `README.md`
-- `admin-guide.md`（管理员账户与登录安全）
+- `doc/ADMIN_OPERATIONS_MANUAL.md`（管理员账户、登录安全与运营手册）
 
 ---
 

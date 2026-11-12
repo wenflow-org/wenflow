@@ -230,7 +230,11 @@
             <section class="mk-card">
               <div class="mk-card__head">
                 <h3 class="mk-card__title">最近运行</h3>
-                <span v-if="latestRun" class="mk-card__meta">{{ latestRun.time }}</span>
+                <span
+                  v-if="latestRun"
+                  class="mk-card__meta"
+                  :title="latestRun.createdAt ? `最近一次运行创建于 ${formatTime(latestRun.createdAt)}` : undefined"
+                >{{ latestRun.time }}</span>
               </div>
               <div class="vp-cardbody">
                 <div v-if="latestRun" class="vp-lastrun">
@@ -244,6 +248,14 @@
                     :title="runReadingsTitle(latestRun)"
                   >{{ runReadings(latestRun) }}</span>
                   <span v-if="latestRun.currentTask" class="vp-lastrun__task" :title="latestRun.currentTask">{{ latestRun.currentTask }}</span>
+                  <!-- #45：徽章/菜单承诺「可进入座舱查看」后，概览层也要有真实入口 -->
+                  <button
+                    v-if="latestRun.sessionId"
+                    type="button"
+                    class="mk-link vp-lastrun__cockpit"
+                    title="进入这次运行的座舱：查看对话、推进/自动/暂停/终止等细粒度控制"
+                    @click="openSessionCockpit(String(latestRun.sessionId))"
+                  >打开座舱</button>
                 </div>
                 <MkEmptyState
                   v-else
@@ -604,7 +616,7 @@
                     <span v-if="stageCountsText(s)" class="vp-story__stats-item" title="运行进度：目标对话 / 路径规划 / 教学回合 的累计运行数（0 段省略）">{{ stageCountsText(s) }}</span>
                     <!-- 双轴状态：生命周期徽章（轴 A）+ 阶段条（轴 B）；与一级页同源组件 -->
                     <template v-if="s.latestRun?.sessionId">
-                      <RunStateBadge :status="storyRunState(s)" :hint="`${formatRunResult(s.latestRun?.status || '')} · ${timeAgo(String(s.latestRun?.updatedAt || s.latestRun?.createdAt || ''))}`" :pulse="false" />
+                      <RunStateBadge :status="storyRunState(s)" :hint="`${formatRunResult(s.latestRun?.status || '')} · ${runTimeTitle(s.latestRun)}`" :pulse="false" />
                       <RunStageBar
                         :stage="s.latestRun?.currentStage || null"
                         :status="storyRunState(s)"
@@ -648,7 +660,7 @@
                       <button v-if="s.projection?.formal?.goal" type="button" class="mk-menu__item" title="打开该故事最新运行绑定的真实目标对话（以该虚拟学习者身份浏览）" @click="openProjection(s.projection?.formal?.goal)">看真实目标对话</button>
                       <button v-if="s.projection?.formal?.path" type="button" class="mk-menu__item" title="打开该故事最新运行绑定的真实学习路径" @click="openProjection(s.projection?.formal?.path)">看学习路径</button>
                       <button v-if="s.projection?.formal?.learning" type="button" class="mk-menu__item" title="打开该故事最新运行绑定的真实学习任务" @click="openProjection(s.projection?.formal?.learning)">看学习任务</button>
-                      <button type="button" class="mk-menu__item mk-menu__item--danger" :disabled="storyBusy" title="删除该故事（不可恢复）" @click="removeStory(poolIndex(s, i)); closeMenu()">删除</button>
+                      <button type="button" class="mk-menu__item mk-menu__item--danger" :disabled="storyBusy" title="删除该故事（不可恢复）" @click="removeStory(poolIndex(s, i), s.title); closeMenu()">删除</button>
                     </div>
                   </div>
                 </div>
@@ -718,9 +730,9 @@
           </MkEmptyState>
           <div v-else class="vp-run-flow">
             <div v-for="g in runDayGroups" :key="g.key" class="vp-run-day">
-              <div class="vp-run-day__label">{{ g.title }}</div>
+              <div class="vp-run-day__label" :title="g.tip">{{ g.title }}</div>
               <div v-for="(r, i) in g.runs" :key="r.sessionId || `${r.stage}-${r.time}-${i}`" class="vp-run-row">
-                <span class="vp-run-row__time mono">{{ runHm(r.createdAt) }}</span>
+                <span class="vp-run-row__time mono" :title="r.createdAt ? formatTime(r.createdAt) : undefined">{{ runHm(r.createdAt) }}</span>
                 <div class="vp-run-row__main">
                   <span class="vp-run-row__story" :title="r.storyTitle || '未关联故事'">{{ r.storyTitle || '未关联故事' }}</span>
                   <span
@@ -1083,6 +1095,7 @@ import { computed, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { statusText } from './statusText'
 import { subPage, openSubPage, setSubPageLabel, isLive } from './store'
 import { liveGetVirtualDetail, liveVirtuals, timeAgo, errMsg } from './live'
+import { formatTime } from './cockpitFormat'
 import { personaDisplayName } from './cardDisplay'
 import { adminVirtualLearnersApi, adminLearnerModelsApi } from '@/api/adminApi'
 import { clearProjectionToken, setProjectionToken } from '@/utils/projection'
@@ -1290,7 +1303,7 @@ async function batchRunStories() {
   // 属于高成本、难回滚的操作，先让用户确认数量与预算消耗，避免误点批量勾选
   const ok = await askConfirm({
     title: '批量运行故事',
-    message: `将为勾选的 ${targets.length} 个故事各创建一个真实 LLM 运行并自动运行，将消耗 AI 调用预算。确定继续？`,
+    message: `将为勾选的 ${targets.length} 个故事各创建一个真实 LLM 运行并自动运行，将消耗 AI 调用预算。`,
     confirmText: '批量运行',
     danger: false
   })
@@ -1377,7 +1390,7 @@ async function batchRemoveStories() {
   if (!id || storyBusy.value) return
   const ok = await askConfirm({
     title: '批量删除故事',
-    message: `确认删除勾选的 ${targets.length} 个故事？\n仅删除故事本身；仍被运行记录引用的会被拒绝（需先删除对应运行）。该操作不可撤销。`,
+    message: `确认删除勾选的 ${targets.length} 个故事${batchStoryNames(targets.map((t) => t.s.title))}？\n仅删除故事本身；仍被运行记录引用的会被拒绝（需先删除对应运行）。该操作不可撤销。`,
     confirmText: '批量删除',
     busy: true
   })
@@ -1971,7 +1984,7 @@ async function loadDetail(id?: string, quiet = false) {
         const sessionBindings = (s.bindings || {}) as Record<string, unknown>
         const pathId = sessionBindings.learningPathId ? String(sessionBindings.learningPathId) : s.learningPathId ? String(s.learningPathId) : null
         return {
-          time: timeAgo(String(s.createdAt || s.startedAt || '')),
+          time: runTimeText(String(s.createdAt || s.startedAt || '')),
           createdAt: String(s.createdAt || s.startedAt || ''),
           stage: String(s.currentStage || s.stage || s.phase || 'goal'),
           result: String(s.status || s.result || 'created'),
@@ -2205,11 +2218,8 @@ async function loadMemory(force = false) {
 
 function formatMemoryTime(value: string): string {
   if (!value) return ''
-  try {
-    return new Date(value).toLocaleDateString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' })
-  } catch {
-    return value
-  }
+  // 2026-11-11 全站口径：`YYYY-MM-DD HH:mm`（原 toLocaleDateString 出「2026年11月11日」）
+  return formatTime(value)
 }
 
 /* 编辑画像 */
@@ -2348,12 +2358,20 @@ function hasDiagRaw(s: StoryItem): boolean {
   return !!(s.goalSeed && Object.keys(s.goalSeed).length || s.disclosurePlan && Object.keys(s.disclosurePlan).length)
 }
 
-async function removeStory(index: number) {
+/** 批量危险动作的确认文案：点名前 3 个对象，其余以「等 N 个」收口（BRIEF：危险操作要有对象名） */
+function batchStoryNames(titles: string[]): string {
+  const names = titles.filter(Boolean)
+  if (!names.length) return '（未命名故事）'
+  const head = names.slice(0, 3).map((t) => `「${t}」`).join('')
+  return names.length > 3 ? `${head}等 ${names.length} 个` : head
+}
+
+async function removeStory(index: number, title = '') {
   const id = subPage.value?.id
   if (!id || storyBusy.value) return
   const ok = await askConfirm({
     title: '删除故事',
-    message: `确认删除第 ${index + 1} 个故事？\n仅删除故事本身；仍被运行记录引用的会被拒绝（需先删除对应运行）。该操作不可撤销。`,
+    message: `确认删除故事${title ? `「${title}」` : `（第 ${index + 1} 个）`}？\n仅删除故事本身；仍被运行记录引用的会被拒绝（需先删除对应运行）。该操作不可撤销。`,
     confirmText: '删除',
     busy: true
   })
@@ -2514,8 +2532,12 @@ async function retrySession() {
   } catch (e) { toast.error(`重启失败：${errMsg(e)}`) }
   finally { sessionBusy.value = false }
 }
+/** 座舱入口（2026-11-11 困惑测试 #45）：已完成画像没有 running/failed 会话，activeSessionId
+ *  为 null 时曾静默空操作。回退到最近一条带 sessionId 的运行；连一条运行都没有才给提示。 */
 function goCockpit() {
-  if (activeSessionId.value) openSessionCockpit(activeSessionId.value)
+  const id = activeSessionId.value || allRuns.value.find((r) => !!r.sessionId)?.sessionId || null
+  if (id) openSessionCockpit(id)
+  else toast.info('该画像还没有可打开的运行会话')
 }
 
 /* ===== 跨页入口（#73/#74）===== */
@@ -2736,6 +2758,22 @@ const latestRun = computed<RunItem | null>(() => {
   if (!runs.length) return null
   return runs.slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))[0] || null
 })
+/** 近 30 天用相对时间，更早直接 `YYYY-MM-DD HH:mm`：live.ts 的 timeAgo 超过 30 天后
+ *  回退 `toLocaleDateString('zh-CN')`（会出 2026/10/01），共享文件不在本域内，这里先兜住。 */
+function runTimeText(iso?: string | null): string {
+  if (!iso) return '从未'
+  const t = new Date(iso).getTime()
+  if (Number.isNaN(t)) return '从未'
+  return Date.now() - t > 30 * 86400000 ? formatTime(iso) : timeAgo(iso)
+}
+
+/** 相对时间的主口径保留，但悬停必须能读到绝对时间（BRIEF 全站相对时间规则）。 */
+function runTimeTitle(run?: { updatedAt?: string; createdAt?: string; time?: string }): string {
+  const stamp = String(run?.updatedAt || run?.createdAt || '')
+  const rel = run?.time || runTimeText(stamp)
+  const abs = formatTime(stamp)
+  return abs && abs !== rel ? `${rel}（${abs}）` : rel
+}
 
 /** 当前状态徽章语气：VS_STATE_META.tone（muted/warn/ok/bad）→ mk-badge 修饰类（均已全局定义） */
 
@@ -2760,8 +2798,11 @@ const statItems = computed(() => {
     },
     {
       label: '覆盖场景',
-      value: sceneStats.value.length || '—',
-      title: '运行记录里出现过的不同场景（故事）数'
+      // 有运行记录时 0 是事实（这些运行都没关联故事场景），不能落成「—」冒充未加载
+      value: allRuns.value.length ? String(sceneStats.value.length) : '—',
+      title: allRuns.value.length
+        ? (sceneStats.value.length ? '运行记录里出现过的不同场景（故事）数' : '运行记录尚未关联故事场景，覆盖数为 0')
+        : '暂无运行记录，无法统计覆盖场景'
     },
     {
       label: '记忆点',
@@ -2937,7 +2978,7 @@ const timelineSessionOptions = computed(() =>
       sessionId: String(r.sessionId),
       // 传原始时间 createdAt（RunItem 内 time 已是 timeAgo 文案，再喂 timeAgo 会二次格式化出 Invalid Date）
       /* 2026-10-31 五轮评审 P3：标签读展示态（已暂停），不再与页头徽章打架 */
-      label: `${formatRunResult(runDisplayState(r))} · ${r.storyTitle || '未关联故事'} · ${timeAgo(String(r.createdAt || ''))}`,
+      label: `${formatRunResult(runDisplayState(r))} · ${r.storyTitle || '未关联故事'} · ${runTimeText(String(r.createdAt || ''))}`,
     })),
 )
 /** MkSelect 形态：value = sessionId（v-model 仍是 timelineSessionId） */
@@ -3034,7 +3075,7 @@ function storyRunState(s: StoryItem): string {
 }
 
 /** 会话流水的日期分组（组内保持时间倒序） */
-interface RunDayGroup { key: string; title: string; runs: RunItem[] }
+interface RunDayGroup { key: string; title: string; tip: string; runs: RunItem[] }
 /* —— 会话流水（运行 tab）：与故事池互补的两个轴
    故事池 = 按故事看（教材库存视角，卡片自带各故事的最近会话）；
    这里   = 按时间看（会话流水视角：全部会话按时间倒序、按日期分组），
@@ -3125,31 +3166,32 @@ function runReadingsTitle(r: RunItem): string {
 
 function runHm(iso?: string): string {
   const d = iso ? new Date(iso) : null
-  if (!d || Number.isNaN(d.getTime())) return '--:--'
+  if (!d || Number.isNaN(d.getTime())) return '—'
   const p = (n: number) => String(n).padStart(2, '0')
   return `${p(d.getHours())}:${p(d.getMinutes())}`
 }
-function dayLabelOf(iso?: string): { key: string; label: string } {
+/** 分组头：今天/昨天用相对词（悬停给绝对日期），更早的日期直接 `YYYY-MM-DD`，
+ *  不再出 `11-10` 这类缺年份的写法（2026-11-11 全站时间口径）。 */
+function dayLabelOf(iso?: string): { key: string; label: string; tip: string } {
   const d = iso ? new Date(iso) : null
-  if (!d || Number.isNaN(d.getTime())) return { key: 'unknown', label: '时间未知' }
+  if (!d || Number.isNaN(d.getTime())) return { key: 'unknown', label: '时间未知', tip: '' }
   const p = (n: number) => String(n).padStart(2, '0')
-  const md = `${p(d.getMonth() + 1)}-${p(d.getDate())}`
+  const full = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
   const now = new Date()
-  const today = `${p(now.getMonth() + 1)}-${p(now.getDate())}`
-  if (md === today) return { key: md, label: '今天' }
+  if (full === `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`) return { key: full, label: '今天', tip: full }
   const yest = new Date(now)
   yest.setDate(now.getDate() - 1)
-  if (md === `${p(yest.getMonth() + 1)}-${p(yest.getDate())}`) return { key: md, label: '昨天' }
-  return { key: md, label: `${d.getFullYear() === now.getFullYear() ? '' : `${d.getFullYear()}-`}${md}` }
+  if (full === `${yest.getFullYear()}-${p(yest.getMonth() + 1)}-${p(yest.getDate())}`) return { key: full, label: '昨天', tip: full }
+  return { key: full, label: full, tip: full }
 }
 /** 按日期分组（今天/昨天/日期；组内保持时间倒序） */
 const runDayGroups = computed<RunDayGroup[]>(() => {
   const groups: RunDayGroup[] = []
   for (const r of runRows.value) {
-    const { key, label } = dayLabelOf(r.createdAt)
+    const { key, label, tip } = dayLabelOf(r.createdAt)
     const last = groups[groups.length - 1]
     if (last && last.key === key) last.runs.push(r)
-    else groups.push({ key, title: label, runs: [r] })
+    else groups.push({ key, title: label, tip, runs: [r] })
   }
   return groups
 })
@@ -3318,6 +3360,8 @@ async function quietReload(id: string) {
 }
 .vp-lastrun__meta { color: var(--mk-muted); }
 .vp-lastrun__task { color: var(--mk-faint); }
+/* #45：座舱入口用 mk-link 的观感，但左对齐成第三行（不跟随右浮动） */
+.vp-lastrun__cockpit { justify-self: start; font-size: var(--mk-fs-micro); }
 
 /* 学习状态读数 lsm（原型 learningState index.html:1723-1737）：label / 轨 / 值+参考 三列 */
 .lsm { display: grid; gap: 12px; }

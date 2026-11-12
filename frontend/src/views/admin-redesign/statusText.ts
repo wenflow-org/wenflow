@@ -302,8 +302,11 @@ export function sessionProgressDone(status?: string | null): boolean {
 export function sessionTaskPositionText(p: SessionProgress | null | undefined): string {
   if (!p || !Number.isFinite(p.totalTasks) || p.totalTasks <= 0) return ''
   const total = p.totalTasks
-  if (!Number.isFinite(p.taskIndex) || p.taskIndex <= 0) return `未进入具体任务（共 ${total} 个）`
-  return `第 ${Math.min(p.taskIndex, total)} 个任务（共 ${total} 个）`
+  /* 2026-11-11（困惑测试 #28）：分母是**当前阶段（里程碑）内**的任务数，而详情页座舱的
+     「任务 0/21」是整条路径。两个数都正确、都没有口径词，同屏出现时读成互相矛盾。
+     这里把「本阶段」写进文案；座舱侧对称标「全路径」。 */
+  if (!Number.isFinite(p.taskIndex) || p.taskIndex <= 0) return `未进入具体任务（本阶段共 ${total} 个）`
+  return `第 ${Math.min(p.taskIndex, total)} 个任务（本阶段共 ${total} 个）`
 }
 
 /** 进度列 hover 全文：任务位置（+ 可选里程碑定位）。
@@ -417,10 +420,13 @@ export function taskTypeText(t: string | null | undefined): string {
   return TASK_TYPE_TEXT[key] || '—'
 }
 
-/** 任务类型 title 披露：仅未知枚举时给出原文（命中字典不重复标注） */
+/** 任务类型 title 披露：命中字典给「任务类型「X」」框架（与筛选条「课型」区分），
+ *  未知枚举给原文（不裸直出英文枚举，也不猜词）。 */
 export function taskTypeTitle(t: string | null | undefined): string | undefined {
   const key = String(t || '')
-  return key && !TASK_TYPE_TEXT[key] ? `任务类型原文：${key}` : undefined
+  if (!key) return undefined
+  const label = TASK_TYPE_TEXT[key]
+  return label ? `任务类型「${label}」` : `任务类型原文：${key}`
 }
 
 /**

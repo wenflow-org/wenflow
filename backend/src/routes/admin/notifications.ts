@@ -10,6 +10,7 @@ import {
   findNotificationById,
   deleteNotification,
   createNotifications,
+  markNotificationRead,
 } from '../../services/notifications/notification.repo';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
@@ -140,6 +141,30 @@ router.post('/', async (req: Request, res: Response) => {
   } catch (error: any) {
     logger.error('[admin-notifications] 发送通知失败', { error });
     res.status(500).json({ success: false, error: { message: error.message || '发送通知失败', status: 500 } });
+  }
+});
+
+/**
+ * 把一条通知标记为已读（2026-11-11 管理台困惑测试 #10）。
+ * repo 里 markNotificationRead 早已存在，但此前只接在用户本人路由上——管理端翻遍页面
+ * 也没有任何「已读」操作杆，未读行唯一可做的是删除。
+ */
+router.patch('/:id/read', async (req: Request, res: Response) => {
+  try {
+    const allowed = await ensureAdmin(req.user?.userId);
+    if (!allowed) return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
+    const item = await findNotificationById(req.params.id);
+    if (!item) return res.status(404).json({ success: false, error: { message: '通知不存在' } });
+    if (item.isRead) return res.json({ success: true, data: { id: item.id, isRead: true } });
+
+    setAuditAction(res, 'notification.mark-read', { targetType: 'notification', targetId: item.id });
+    setAuditBefore(res, { title: item.title, userId: item.userId, isRead: false });
+    await markNotificationRead(item.id);
+    setAuditAfter(res, { isRead: true });
+    res.json({ success: true, data: { id: item.id, isRead: true } });
+  } catch (error: any) {
+    logger.error('[admin-notifications] 标记已读失败', { error });
+    res.status(500).json({ success: false, error: { message: error.message || '标记已读失败', status: 500 } });
   }
 });
 

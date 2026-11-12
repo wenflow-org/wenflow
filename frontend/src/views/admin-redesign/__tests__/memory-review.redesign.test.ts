@@ -183,7 +183,7 @@ describe('MemoryReview 面板（学习者详情页签内）', () => {
   });
 
   /** P1#12：明细态 apply / rollback / recompute 失败不再静默——toast + 明细区 error 双出口 */
-  it('明细态动作失败：apply / rollback / recompute 失败弹 toast 且 error 渲染到明细区', async () => {
+  it('明细态动作失败：只弹带动作名的 toast，不把写动作失败写进取数错误条', async () => {
     const w = await mountPanels(makeDetail());
     expect(w.find('.mr__detail').exists()).toBe(true);
 
@@ -192,9 +192,8 @@ describe('MemoryReview 面板（学习者详情页签内）', () => {
     await w.findAll('button').find((b) => b.text().startsWith('执行选中'))!.trigger('click');
     await flushPromises();
     expect(toast.error).toHaveBeenCalledWith('执行归并失败：归并冲突');
-    // 2026-10-06 审核 #40：明细态错误条形态收敛共享 .mk-alert（页私有 .mr__error 已撤）
-    expect(w.find('.mr__detail-error').exists()).toBe(true);
-    expect(w.find('.mr__detail-error').text()).toContain('归并冲突');
+    // 写动作失败不再复用取数 error 条：否则同一失败会同时出现顶部条与 toast
+    expect(w.find('.mr__detail-error').exists()).toBe(false);
 
     // rollback 失败
     rollback.mockRejectedValueOnce(new Error('快照缺失'));

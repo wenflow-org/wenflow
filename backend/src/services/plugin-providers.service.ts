@@ -79,6 +79,11 @@ export interface PluginChannelView {
   order: string[];
   /** true = 顺序由代码固定，界面上不给排（见 PluginChannelDef.orderFixed） */
   orderFixed: boolean;
+  /**
+   * true = 不做链式降级（搜索 / 决策，2026-11-10）：运行时只取 order[0]，
+   * 界面只留「用哪一家」。保存时也只落第一个。
+   */
+  single: boolean;
 }
 
 export interface PluginConfigView {
@@ -300,15 +305,18 @@ function resolveOrder(
   // 固定顺序的通道（联网搜索 / 抓取）不受平台存档与环境变量影响：顺序就是代码里那一行。
   if (channel.orderFixed) return [...channel.defaultOrder];
   const stored = runtimeOrders[plugin.id]?.[channel.id];
-  if (stored?.length) return [...stored];
   const known = new Set(plugin.providers.map((p) => p.id));
   const raw = String(process.env[channel.orderEnv] || '').trim();
-  if (!raw) return [...channel.defaultOrder];
-  const order = raw
-    .split(',')
-    .map((id) => id.trim().toLowerCase())
-    .filter((id) => known.has(id));
-  return order.length ? order : [...channel.defaultOrder];
+  const envOrder = raw
+    ? raw
+        .split(',')
+        .map((id) => id.trim().toLowerCase())
+        .filter((id) => known.has(id))
+    : [];
+  const resolved = (stored?.length ? [...stored] : (envOrder.length ? envOrder : [...channel.defaultOrder]));
+  /* 不做链式降级的通道（搜索 / 决策，2026-11-10）：只留第一个。
+     这样调用侧拿到的顺序长度恒为 1，失败即报错，不会再自动换下一家。 */
+  return channel.single ? resolved.slice(0, 1) : resolved;
 }
 
 /**
@@ -332,6 +340,8 @@ async function viewOf(plugin: PluginConfigDef): Promise<PluginConfigView> {
       label: channel.label,
       order: resolveOrder(plugin, channel),
       orderFixed: Boolean(channel.orderFixed),
+      // true = 不做链式降级：界面只给「用哪一家」，不给备用/排序
+      single: Boolean(channel.single),
     })),
     providers: plugin.providers.map((provider) => {
       const cached = runtime?.[plugin.id]?.[provider.id];
@@ -455,7 +465,9 @@ export async function savePluginProviderConfig(
       }
     }
     const order = normalizeOrder(plugin, raw);
-    if (order.length) pluginOrders[channelId] = order;
+    /* 不做链式降级的通道只落第一个：界面上没有备用位，多传的值也没有执行语义 */
+    const effective = channel.single ? order.slice(0, 1) : order;
+    if (effective.length) pluginOrders[channelId] = effective;
     else delete pluginOrders[channelId];
   }
   if (Object.keys(pluginOrders).length) storedOrders[pluginId] = pluginOrders;

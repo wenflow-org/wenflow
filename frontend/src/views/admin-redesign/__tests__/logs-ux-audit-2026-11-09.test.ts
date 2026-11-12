@@ -218,7 +218,7 @@ describe('A. ExecLogs 调用总数卡：主值不染红，失败数走 valueNote
     const num = total.find('.mk-kpi__num');
     const noteEl = num.find('.mk-kpi__num-note');
     expect(noteEl.exists()).toBe(true);
-    expect(num.element.textContent!.replace(noteEl.element.textContent!, '')).toBe('2225');
+    expect(num.element.textContent!.replace(noteEl.element.textContent!, '')).toBe('2,225');
     // 失败数：行内注记（更小字号），且不含括号——层级由字号/颜色表达，不用括号
     const note = total.find('.mk-kpi__num-note');
     expect(note.exists()).toBe(true);
@@ -391,7 +391,8 @@ describe('C. AuditLogs 筛选栏：动作 / 失败动作 条件联动', () => {
     expect(AUDIT_SRC).toContain('aria-label="按动作筛选"');
     expect(AUDIT_SRC).toContain('aria-label="按失败动作筛选（状态为仅失败时可用）"');
     // 条件联动挂在状态值上（failedOnly），不是只看 failureByAction 有没有数据
-    expect(AUDIT_SRC).toMatch(/v-if="tab === 'operation' && failedOnly && failureByAction\.length"/);
+    // 统计失败时下拉退化为不可用，不展示旧计数
+    expect(AUDIT_SRC).toMatch(/v-if="tab === 'operation' && failedOnly && !statsError && failureByAction\.length"/);
     expect(AUDIT_SRC).toMatch(/v-if="tab === 'operation' && !failedOnly"/);
   });
 });

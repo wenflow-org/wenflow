@@ -31,15 +31,17 @@
             >容量与实验环境</button>
             <button
               type="button"
-              class="mk-menu__item"
+              class="mk-menu__item mk-menu__item--danger"
               role="menuitem"
               :disabled="partition.stale === 0"
+              :title="partition.stale === 0 ? '当前没有超过阈值的无响应运行' : '把这些无响应运行标记为回收（先预览清单，只改状态、不删除数据）'"
               @click="openReclaimFromMenu"
             >回收无响应（{{ partition.stale }}）</button>
             <button
               type="button"
-              class="mk-menu__item"
+              class="mk-menu__item mk-menu__item--danger"
               role="menuitem"
+              title="按创建时间批量清理历史运行（先 dry-run 预览，确认后不可撤销）"
               @click="openCleanupFromMenu"
             >按创建时间清理</button>
           </div>
@@ -84,7 +86,7 @@
         />
         <MkKpi
           label="今日调用"
-          :value="statsKpiValue(String(runStats.todayCalls ?? 0))"
+          :value="statsKpiValue(Number(runStats.todayCalls ?? 0).toLocaleString('zh-CN'))"
           :hint="statsState === 'error' ? STATS_UNAVAILABLE_HINT : ''"
           :clickable="statsState === 'error'"
           @click="onStatsRetry"
@@ -99,6 +101,7 @@
           :value="statsState === 'error' ? '—' : liveVirtualStaleCount"
           :tone="statsState !== 'error' && liveVirtualStaleCount ? 'warn' : ''"
           :hint="statsState === 'error' ? STATS_UNAVAILABLE_HINT : ''"
+          :title="statsState === 'error' ? STATS_RETRY_TITLE : (liveVirtualStaleCount > 0 ? '超过回收阈值的无响应运行（管理员暂停不计入）· 点击打开「回收无响应」预览' : '超过回收阈值的无响应运行（管理员暂停不计入）。当前没有可回收会话')"
           :clickable="statsState === 'error' || liveVirtualStaleCount > 0"
           @click="onStaleKpiClick"
         />
@@ -162,6 +165,16 @@
         </div>
       </div>
 
+      <p
+        v-if="batchSummary"
+        class="vl-batch-summary"
+        :class="`vl-batch-summary--${batchSummary.tone}`"
+        role="status"
+      >
+        <span>{{ batchSummary.text }}</span>
+        <button type="button" class="mk-link" @click="batchSummary = null">关闭</button>
+      </p>
+
       <MockSkeletonTable v-if="liveLoading && !samples.length" :cols="6" />
       <div v-else-if="filtered.length" class="mk-table-scroll vl-table-scroll">
       <!-- 原型 .tbl 词汇：自动布局（无 colgroup），td 靠 nowrap 撑列、长内容列给 px 截断上限；
@@ -172,7 +185,7 @@
         <thead>
           <tr>
             <th v-if="isLive && !isNarrow && !hiddenCols.has('check')" scope="col" class="vl-c-check">
-              <input type="checkbox" aria-label="全选当前页" :indeterminate="headerIndeterminate" :checked="allChecked" @change="toggleAll" />
+              <input type="checkbox" aria-label="全选当前页" title="全选当前页（只勾本页可见行，已勾选的其他页会保留）" :indeterminate="headerIndeterminate" :checked="allChecked" @change="toggleAll" />
             </th>
             <th
               scope="col"
@@ -187,7 +200,7 @@
               class="mk-th--right mk-th--sortable vl-c-story"
               :aria-sort="vlSortState('story')"
               @click="toggleVlSort('story')"
-            ><button type="button" class="mk-th__btn" @click.stop="toggleVlSort('story')">故事 / 路径<span class="mk-th__caret" aria-hidden="true"></span></button></th>
+            ><button type="button" class="mk-th__btn" title="故事池条数 / 已生成路径条数（同一学习者名下的任务与学习路径）" @click.stop="toggleVlSort('story')">故事 / 路径<span class="mk-th__caret" aria-hidden="true"></span></button></th>
             <th
               scope="col"
               class="mk-th--sortable vl-c-running"
@@ -229,20 +242,23 @@
         </thead>
         <tbody>
           <tr v-for="s in paged" :key="s.id" :class="{ 'vl-row--fresh': freshIds.includes(s.id), 'vl-row--menu': openMenu === s.id }">
-            <td v-if="isLive && !isNarrow && !hiddenCols.has('check')"><input v-model="selected" type="checkbox" :value="s.id" :aria-label="`选择 ${s.name}`" @click.stop /></td>
+            <td v-if="isLive && !isNarrow && !hiddenCols.has('check')"><input v-model="selected" type="checkbox" :value="s.id" :aria-label="duplicateNameIds.has(s.id) ? `选择 ${s.name}（#${shortRowId(s.id)}）` : `选择 ${s.name}`" @click.stop /></td>
             <td>
               <div class="vl-cell vl-cell--click" role="button" tabindex="0" :title="s.name" @click="openSubPage('virtual', s.id)" @keydown.enter="openSubPage('virtual', s.id)" @keydown.space.prevent="openSubPage('virtual', s.id)">
                 <!-- 2026-11-08 用户走查（图2）：卡库派生出的虚拟学习者名多以「想解决…」开头，
                      头像取首字恒为「想」，一排 [想] 方块既无辨识度又显重复，直接去掉，名称格只留文字 -->
                 <div class="mk-cell-main">
                   <strong :title="s.name">{{ s.name }}</strong>
+                  <!-- 2026-11-11（困惑测试 #44）：合成卡按诉求句派生人名会撞名，列表里有两位「苏青」时
+                       没有可区分标识。重名行补短尾编号（不是裸内部 id，只在上屏范围出现重名时显示）。 -->
+                  <span v-if="duplicateNameIds.has(s.id)" class="mk-cell-sub mono" :title="`重名区分：#${shortRowId(s.id)}`">#{{ shortRowId(s.id) }}</span>
                 </div>
               </div>
             </td>
             <td v-if="!isNarrow && !isCompact && !hiddenCols.has('tendency')">
               <span class="mk-cell-text--wrap" :class="{ 'mk-na': !s.goal || s.goal === '—' }" :title="s.goal || undefined">{{ s.goal || '未设置' }}</span>
             </td>
-            <td v-if="!isNarrow && !hiddenCols.has('story')" class="mk-num" :title="storyPathTitle(s)">
+            <td v-if="!isNarrow && !hiddenCols.has('story')" class="mk-num" :title="storyPathTitle(s)" :aria-label="storyPathTitle(s)">
               <template v-if="s.storyCount > 0">
                 <span>{{ s.storyCount }}</span><span class="vl-story-path__sep" aria-hidden="true"> / </span><span :class="{ 'mk-na': s.pathCount === 0 }">{{ s.pathCount }}</span>
               </template>
@@ -260,7 +276,7 @@
                 ><i class="vl-runstate__dot" aria-hidden="true"></i>{{ runPhaseLabel(s) }}</span>
               </div>
             </td>
-            <td v-if="!isNarrow && !hiddenCols.has('sessions')" class="mk-num">{{ s.sessions }}</td>
+            <td v-if="!isNarrow && !hiddenCols.has('sessions')" class="mk-num">{{ Number(s.sessions || 0).toLocaleString('zh-CN') }}</td>
             <td v-if="!isNarrow && !hiddenCols.has('abnormal')" class="vl-abnormal">
               <!-- 2026-10-31 五轮评审 P8：座舱日志已报错（如僵尸会话自动回收）时异常列不再留空 — -->
               <template v-if="s.failedCount > 0 || s.stalledCount > 0 || s.activeError">
@@ -268,16 +284,19 @@
                   v-if="s.failedCount > 0"
                   class="vl-abn vl-abn--fail"
                   :title="failCellTitle(s.failedCount, s.abandonedCount ?? 0)"
+                  :aria-label="`系统失败 ${s.failedCount} 次`"
                 >失败 {{ s.failedCount }}</span>
                 <span
                   v-if="s.stalledCount > 0"
                   class="vl-abn vl-abn--stall"
                   :title="stalledCellTitle(s)"
+                  :aria-label="`无响应 ${s.stalledCount} 个运行`"
                 >无响应 {{ s.stalledCount }}</span>
                 <span
                   v-if="s.activeError"
                   class="vl-abn vl-abn--stall"
                   :title="`自动驾驶最近错误：${s.activeError}`"
+                  :aria-label="`自动驾驶错误：${s.activeError}`"
                 >自动驾驶错误</span>
               </template>
               <span v-else class="mk-na">—</span>
@@ -314,8 +333,9 @@
                       role="menuitem"
                       @click="openLaunch(s)"
                     >再跑一次</button>
-                    <button type="button" class="mk-menu__item" role="menuitem" @click="openPromptTest(s)">提示词试跑</button>
-                    <div class="mk-menu__sep" aria-hidden="true"></div>
+                    <!-- 分隔线跟随上一组：提示词试跑已迁到 Skill 详情 → 试跑（2026-11-10），
+                         「再跑一次」不渲染时这里若还留着会变成菜单顶部的一条悬空分隔线 -->
+                    <div v-if="rowActionOf(s).key !== 'launch' && s.storyCount > 0" class="mk-menu__sep" aria-hidden="true"></div>
                     <button type="button" class="mk-menu__item" role="menuitem" @click="menuOpenSourceCard(s)">查看来源卡</button>
                     <div class="mk-menu__sep" aria-hidden="true"></div>
                     <button
@@ -364,6 +384,7 @@
         :total="filtered.length"
         :showTotal="true"
         unit="位学习者"
+        :note="liveVirtualsTotal > samples.length ? `已载入 ${samples.length} 位内统计` : ''"
       />
     </div>
     </div>
@@ -378,6 +399,7 @@
       v-model:selected="selected"
       :samples="samples"
       @reclaim="onBatchReclaim"
+      @summary="onBatchSummary"
     />
 
     <!-- 一键回收 / 按创建时间清理 / 启动 / 单步测试 / 从卡库派生：拆分为独立子组件（各自 Teleport 到 body）。
@@ -386,7 +408,6 @@
     <VirtualLearnerReclaim ref="reclaimRef" @done="onReclaimDone" />
     <VirtualLearnerCleanup ref="cleanupRef" @done="onReclaimDone" />
     <VirtualLearnerLaunch ref="launchRef" />
-    <VirtualLearnerPromptTest ref="promptRef" />
     <VirtualLearnerSettingsDrawer
       ref="settingsDrawerRef"
       :concurrency="concurrency"
@@ -405,8 +426,10 @@ import { useRouter } from 'vue-router'
 import { CirclePlay, Pause, Play } from 'lucide-vue-next'
 import { openSubPage, intent, isLive } from './store'
 import { liveVirtuals, refreshLiveVirtuals, liveDeleteVirtual, liveLoading, liveFailures, loadLiveData, timeAgo, errMsg, liveVirtualsTotal, liveVirtualSessionStats, liveVirtualStaleCount, liveVirtualRunStats, liveAutopilotConcurrency, liveVirtualStatsLoading, liveVirtualStatsError, retryLiveVirtualStats, virtualsStaleAfterMutation } from './live'
+import { formatTime } from './cockpitFormat'
 import { adminVirtualLearnersApi } from '@/api/adminApi'
 import { useRowMenu } from './useRowMenu'
+import { useEscape } from './useEscape'
 import { pauseAutopilotOf, resumeAutopilotOf, terminateRunsOf } from './virtualRunControl'
 import { useIsNarrow } from './useIsNarrow'
 import { useSafePolling } from '@/composables/useSafePolling'
@@ -429,7 +452,6 @@ import VirtualLearnerReclaim from './VirtualLearnerReclaim.vue'
 import VirtualLearnerCleanup from './VirtualLearnerCleanup.vue'
 import VirtualLearnerLaunch from './VirtualLearnerLaunch.vue'
 import VirtualLearnerBatchBar from './VirtualLearnerBatchBar.vue'
-import VirtualLearnerPromptTest from './VirtualLearnerPromptTest.vue'
 import VirtualLearnerSettingsDrawer from './VirtualLearnerSettingsDrawer.vue'
 import CardDeriveDialog from './CardDeriveDialog.vue'
 import type { VirtualLearnerRow as Sample } from './virtualLearnersTypes'
@@ -440,6 +462,16 @@ const STATS_UNAVAILABLE_HINT = '统计不可用 · 点击重试'
 /* 列头口径（表头 title 与「列」菜单共用同一句，避免同页两处漂移） */
 const SESSIONS_COL_TITLE = '累计运行数（全部运行，含终态）'
 const ABNORMAL_COL_TITLE = '系统失败的运行数 + 当前无响应的运行数 + 自动驾驶最近故障。人为终止不计入'
+/** 创建列文案：近 30 天用相对时间（悬停给绝对时间），更早直接给 `YYYY-MM-DD HH:mm`。
+ *  live.ts 的 timeAgo 对 >30 天回退 `toLocaleDateString('zh-CN')`，会出「2026/10/01」——
+ *  共享文件不在本域内，调用侧先按全站口径兜住（该回退问题已报给主代理）。 */
+function createdText(iso: string): string {
+  if (!iso) return '从未'
+  const t = new Date(iso).getTime()
+  if (Number.isNaN(t)) return '从未'
+  return Date.now() - t > 30 * 86400000 ? formatTime(iso) : timeAgo(iso)
+}
+
 const samples = computed<Sample[]>(() =>
   liveVirtuals.value.map((v) => ({
     id: v.id,
@@ -468,7 +500,7 @@ const samples = computed<Sample[]>(() =>
     recentRuns: Array.isArray(v.recentRuns) ? v.recentRuns : [],
     recentRunTotal: Number(v.recentRunTotal ?? 0),
     createdAt: String(v.createdAt || ''),
-    created: timeAgo(v.createdAt),
+    created: createdText(String(v.createdAt || '')),
     tags: Array.isArray(v.tags) ? v.tags : []
   }))
 )
@@ -529,7 +561,7 @@ async function terminateSample(s: Sample) {
   const ok = await askConfirm({
     title: '终止会话',
     message: `「${s.name}」还有 ${n} 条未结束的会话。
-终止后标记为「已放弃」，数据保留，不可撤销。确认终止？`,
+终止后标记为「已放弃」，数据保留，不可撤销。`,
     confirmText: '终止',
     danger: true
   })
@@ -620,7 +652,9 @@ const abnormalSelect = computed<string>({
   set: (v) => { onlyAbnormal.value = v === 'abnormal' }
 })
 const abnormalOptions = computed(() => {
-  const n = samples.value.filter((s) => s.failedCount > 0 || s.stalledCount > 0).length
+  /* 与 filtered 的异常谓词同源：失败 + 卡死 + 自动驾驶故障（activeError），
+     只数前两项会让「只在目标阶段炸过」的行在 N 之外 */
+  const n = samples.value.filter((s) => s.failedCount > 0 || s.stalledCount > 0 || !!s.activeError).length
   return [
     { value: 'all', label: '全部' },
     { value: 'abnormal', label: `只看有异常（${n}）` }
@@ -718,6 +752,16 @@ useListQueryState({
   allowedPills: ['all', 'running', 'paused', 'stalled', 'stopped']
 })
 
+/** 当前筛选范围内重名的学习者 id（重名行补短尾编号） */
+const duplicateNameIds = computed(() => {
+  const count = new Map<string, number>()
+  for (const s of filtered.value) count.set(s.name, (count.get(s.name) || 0) + 1)
+  return new Set(filtered.value.filter((s) => (count.get(s.name) || 0) > 1).map((s) => s.id))
+})
+function shortRowId(id: string) {
+  return String(id || '').slice(-6)
+}
+
 const paged = computed(() => {
   const start = (page.value - 1) * pageSize.value
   return filtered.value.slice(start, start + pageSize.value)
@@ -736,6 +780,8 @@ const headMenu = ref<'' | 'maint'>('')
 function toggleHeadMenu(key: 'maint') {
   headMenu.value = headMenu.value === key ? '' : key
 }
+/* 2026-11-11（困惑测试 #42）：页头维护菜单原先只能点遮罩关闭，同页行菜单与全站其他菜单都支持 Esc。 */
+useEscape(() => !!headMenu.value, () => { headMenu.value = '' })
 function openCleanupFromMenu() {
   headMenu.value = ''
   cleanupRef.value?.open()
@@ -748,15 +794,10 @@ function openReclaimFromMenu() {
 const launchRef = ref<InstanceType<typeof VirtualLearnerLaunch> | null>(null)
 const reclaimRef = ref<InstanceType<typeof VirtualLearnerReclaim> | null>(null)
 const cleanupRef = ref<InstanceType<typeof VirtualLearnerCleanup> | null>(null)
-const promptRef = ref<InstanceType<typeof VirtualLearnerPromptTest> | null>(null)
 
 function openReclaimModal() { void reclaimRef.value?.open() }
 function onReclaimDone() { selected.value = [] }
 function openLaunch(s: Sample) { void launchRef.value?.open(s) }
-function openPromptTest(s: Sample) {
-  closeMenu()
-  promptRef.value?.open(s)
-}
 
 async function removeSample(s: Sample) {
   const ok = await askConfirm({
@@ -810,7 +851,7 @@ const isCompact = useIsNarrow(1279)
    原实现跳 /admin/virtual-learner-cards：创建完人停在卡墙，实例不在那面墙上，
    还得自己想到回本页、也认不出刚建的是哪一条。 ===== */
 const deriveRef = ref<InstanceType<typeof CardDeriveDialog> | null>(null)
-const deriveCards = ref<Array<{ profileId: string; name: string; goal?: string; summary?: string }>>([])
+const deriveCards = ref<Array<{ profileId: string; name: string; goal?: string; summary?: string; cardKey?: string }>>([])
 /** 刚创建的实例 id（短暂高亮） */
 const freshIds = ref<string[]>([])
 
@@ -818,11 +859,12 @@ async function openDerivePicker() {
   headMenu.value = ''
   try {
     const res = await adminVirtualLearnersApi.cardsIndex()
-    const d = (res.data?.data ?? res.data) as { cards?: Array<{ profileId: string; name: string; goal?: string }> }
+    const d = (res.data?.data ?? res.data) as { cards?: Array<{ profileId: string; name: string; goal?: string; cardKey?: string }> }
     /* goal 随卡带出：弹窗选卡搜索要按目标命中（M-4），与卡库页搜索同一组字段；
        summary 跟人名一起进选卡列表（2026-10-31 二轮评审 P1）：2 字人名没法区分 9 张卡，
        卡面目标就是评审建议的「行测做得完、申论敢下笔」那句。同源两字段，一个供搜一个供展示。 */
-    deriveCards.value = (d?.cards ?? []).map((c) => ({ profileId: c.profileId, name: c.name, goal: c.goal || '', summary: c.goal || '' }))
+    /* 2026-11-11（困惑测试 #43）：卡号是选卡的关键识别符（搜索承诺「卡号」），后端返回了却在这里丢掉。 */
+    deriveCards.value = (d?.cards ?? []).map((c) => ({ profileId: c.profileId, name: c.name, goal: c.goal || '', summary: c.goal || '', cardKey: c.cardKey || '' }))
   } catch (e) {
     toast.error(errMsg(e) || '卡库加载失败')
     return
@@ -1077,6 +1119,11 @@ const failureTitle = computed(() => {
 
 /* ===== A1 批量操作：复选框（批量条拆分为 VirtualLearnerBatchBar 子组件） ===== */
 const selected = ref<string[]>([])
+/** 批量动作的常驻结果摘要（toast 一闪而过；命令栏执行完会收起，读数留在卡头下方） */
+const batchSummary = ref<{ tone: 'ok' | 'warn' | 'bad'; text: string } | null>(null)
+function onBatchSummary(value: { tone: 'ok' | 'warn' | 'bad'; text: string }) {
+  batchSummary.value = value
+}
 /* 勾选列 ☐ 默认常驻（2026-11-08 用户走查，取代 2026-10-17 的「默认不显示 + 卡头批量按钮」）：
    无需模式切换，选中 ≥1 行即弹出底部命令栏，取消选择即收起；勾选列显隐交给「列」菜单。 */
 
@@ -1088,7 +1135,7 @@ const headerIndeterminate = computed(() => !allChecked.value && pageSelectable.v
 
 /* 选中集合随筛选与数据刷新收敛（审核 #57）：先勾选再筛掉后，批量条不得继续按
    视口外的旧集合执行批量终止/删除/自动驾驶——筛选条件一变即清空选中。 */
-watch([keyword, stateFilter], () => {
+watch([keyword, stateFilter, onlyAbnormal], () => {
   selected.value = []
 })
 /* 数据刷新（行已在别处删除）后按存活 id 收敛，宁可让批量条消失也不误伤已删对象 */
@@ -1120,12 +1167,14 @@ function onBatchReclaim(ids: string[]) {
 </script>
 
 <style scoped>
-/* 卡片高度（2026-11-09 审计 C）：
-   .vl-cardwrap 占满页面剩余高度（.mk-page--fill 的 flex 列），卡片本身 flex:0 1 auto ——
-   行数少时随内容增高（不撑满、无「黑洞」），行数多时被 max-height:100% 封顶，
-   表格区内滚、分页条恒在卡尾可见。mk-card--fill 的 flex:1 由这里改写成 0 1 auto。 */
+/* 卡片高度（2026-11-10 用户裁决，改回「列表到底」）：
+   .vl-cardwrap 占满页面剩余高度（.mk-page--fill 的 flex 列），卡片 flex:1 —— 行少时卡片
+   仍然长到页面底部，表格区吃满剩余高度（短表的空留在卡内、分页贴卡底），与目标对话一致。
+   2026-11-09 审计 C 曾改写成 0 1 auto（「不撑满、无黑洞」），用户看的是全站同类列表的
+   一致性：切换页面时卡片底边不该一页一个位置。行数多时由 max-height:100%
+   封顶，表格区内滚、分页条恒在卡尾可见。 */
 .vl-cardwrap { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
-.vl-card { flex: 0 1 auto; max-height: 100%; }
+.vl-card { flex: 1 1 auto; max-height: 100%; }
 /* 窄屏（≤900）退回整页滚动（与 mk-primitives 的 fill 降级同档）：wrap 不再占剩余高度 */
 @media (max-width: 900px) {
   .vl-cardwrap { flex: none; height: auto; }
@@ -1229,6 +1278,20 @@ function onBatchReclaim(ids: string[]) {
 /* 表格已换自动布局（原型 .tbl 词汇），fixed/colgroup 的列宽变量覆写随之删除；
    长内容截断上限收敛到共享原语（.mk-cell-text / .mk-cell-main strong） */
 .vl-truncated { color: var(--mk-amber); font-weight: 700; }
+
+/* 批量结果常驻摘要（命令栏执行完即收起，toast 也消失；这里留下人级读数） */
+.vl-batch-summary {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin: 0; padding: 8px 16px;
+  border-bottom: 1px solid var(--mk-line);
+  border-left: 3px solid var(--mk-blue);
+  background: var(--mk-surface-2); color: var(--mk-ink);
+  font-size: var(--mk-fs-micro); line-height: 1.5;
+}
+.vl-batch-summary--ok { border-left-color: var(--mk-green); }
+.vl-batch-summary--warn { border-left-color: var(--mk-amber); }
+.vl-batch-summary--bad { border-left-color: var(--mk-red); }
+.vl-batch-summary button { flex: none; }
 
 /* 走查 2026-09-27：「正在运行」条胶囊按钮由子组件 VirtualLearnerRunningBar 渲染，
    实测高 23px 低于 24px 可点下限——本页 :deep 提最小高度补足 1px，padding 不动、视觉不变 */

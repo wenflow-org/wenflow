@@ -5,6 +5,7 @@ import { normalizeEndpointIdentity } from '../../utils/endpoint-identity';
 import { getPlatformReliabilitySettings } from '../../services/reliability-settings.service';
 import { buildVisionBindingWarning } from '../../config/vision-capability';
 import { scanPromptFiles } from '../../composers/prompt-files/loader';
+import apiConfigService from '../../services/apiConfig.service';
 import { setAuditAction, setAuditBefore, setAuditAfter } from '../../middleware/audit-context';
 
 const router = Router();
@@ -130,15 +131,24 @@ router.get('/coverage', async (req, res) => {
       .sort();
     const rows = await skillModelConfigService.getAll();
     const byId = new Map(rows.map(r => [r.skillId, r]));
+    /* 未单独配模型的 Skill 实际跑的是平台默认那一个模型（api-gateway 的解析链：
+       config.model 为空 → 沿用基础路由 = 平台默认模型）。列表要能直接读出「这台模型」，
+       不再显示「平台默认」这种指向配置动作的占位词（2026-11-10 用户要求）。 */
+    const platformModel = (await apiConfigService.getPlatformDefault()).chatModel || null;
     const skills = skillIds.map(id => {
       const row = byId.get(id);
       const endpoint = row?.endpoint || null;
       const source = endpoint ? 'skill-channel'
         : (row?.model ? 'skill-model-only' : 'platform-default');
+      const model = row?.model ?? null;
       return {
         skillId: id,
         endpoint,
-        model: row?.model ?? null,
+        model,
+        /** 运行时实际使用的模型：有覆盖用覆盖，没有就是平台默认模型 */
+        effectiveModel: model || platformModel,
+        /** 该值是否来自平台默认（未单独配置）；前端只说「未单独配置」，不出现「平台默认」字样 */
+        inherited: !model,
         tier: row?.tier ?? 'chat',
         source,
         paramOverrides: row?.paramOverrides ? JSON.parse(row.paramOverrides) : null,

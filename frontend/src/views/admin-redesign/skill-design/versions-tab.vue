@@ -23,9 +23,11 @@
                   <th scope="col">变体</th>
                   <th scope="col">版本</th>
                   <th scope="col" title="占在线流量百分比，基线=各对照臂之外的剩余流量">权重</th>
-                  <th scope="col" class="mk-num" title="近 7 天按版本归因">近7天调用</th>
-                  <th scope="col" class="mk-num">成功率</th>
-                  <th scope="col" class="mk-num">均耗时</th>
+                  <!-- 2026-11-11（困惑测试 #86）：指标口径原先只在「近7天调用」一列表头里有半句，
+                       基线行「0」与运行概览「80」同屏被读成矛盾——0 只是「没有按版本归因的调用」。 -->
+                  <th scope="col" class="mk-num" :title="VARIANT_METRIC_TITLE">近7天调用</th>
+                  <th scope="col" class="mk-num" :title="VARIANT_METRIC_TITLE">成功率</th>
+                  <th scope="col" class="mk-num" title="按版本归因的调用平均耗时">均耗时</th>
                   <th scope="col" class="mk-th--right mk-col--actions-wide">操作</th>
                 </tr>
               </thead>
@@ -37,9 +39,9 @@
                        2026-11-02 评审：这一格只写「剩余 100%」，与新建臂表单里默认的 10% 并排
                        读作「110%」。补悬停说清基线的权重不是自己设的，下面表单再给出建臂后的剩余值。 -->
                   <td class="mk-na" title="基线不单独设权重，取各对照臂之外的剩余流量">剩余 {{ baselineRemainder }}%</td>
-                  <td class="mk-num">{{ variantBaseline.metrics.calls }}</td>
-                  <td class="mk-num">{{ fmtRate(variantBaseline.metrics.successRate) }}</td>
-                  <td class="mk-num">{{ fmtDur(variantBaseline.metrics.avgDurationMs) }}</td>
+                  <td class="mk-num" :title="VARIANT_METRIC_TITLE">{{ variantCallsText(variantBaseline.metrics.calls) }}</td>
+                  <td class="mk-num" :title="VARIANT_METRIC_TITLE">{{ variantCallsText(variantBaseline.metrics.calls, fmtRate(variantBaseline.metrics.successRate)) }}</td>
+                  <td class="mk-num" :title="VARIANT_METRIC_TITLE">{{ variantCallsText(variantBaseline.metrics.calls, fmtDur(variantBaseline.metrics.avgDurationMs)) }}</td>
                   <!-- 操作列留空（2026-10-31 外部评审）：「当前生效」是状态不是操作，
                        基线徽章已表达，不再在操作列复读 -->
                   <td><span class="mk-na">—</span></td>
@@ -67,9 +69,9 @@
                       @click="saveVariantWeight(v)"
                     >保存</button>
                   </td>
-                  <td class="mk-num">{{ v.metrics.calls }}</td>
-                  <td class="mk-num">{{ fmtRate(v.metrics.successRate) }}</td>
-                  <td class="mk-num">{{ fmtDur(v.metrics.avgDurationMs) }}</td>
+                  <td class="mk-num" :title="VARIANT_METRIC_TITLE">{{ variantCallsText(v.metrics.calls) }}</td>
+                  <td class="mk-num" :title="VARIANT_METRIC_TITLE">{{ variantCallsText(v.metrics.calls, fmtRate(v.metrics.successRate)) }}</td>
+                  <td class="mk-num" :title="VARIANT_METRIC_TITLE">{{ variantCallsText(v.metrics.calls, fmtDur(v.metrics.avgDurationMs)) }}</td>
                   <td>
                     <div class="mk-actions">
                       <button type="button" class="mk-link" :disabled="variantBusy === v.id" @click="promoteVariant(v)">晋级为基线</button>
@@ -94,6 +96,10 @@
             <div class="mk-section__head">
               <h4>建对照臂</h4>
             </div>
+            <!-- 2026-11-11（困惑测试 #88）：区块没有一句流量语义，读者不知道权重是否作用于线上 -->
+            <p class="sdp-var__intro">
+              对照臂承接线上真实流量：新臂按权重 % 对在线请求按用户分桶，基线吃各对照臂之外的剩余流量。评测时也可以指定虚拟学习者按某个变体试跑。
+            </p>
             <div class="sdp-var__create-grid">
               <label class="sdp-var__field">
                 <span>变体键</span>
@@ -113,14 +119,20 @@
                 />
               </label>
               <div class="sdp-var__create-actions">
-                <button type="button" class="mk-btn mk-btn--sm" :disabled="variantCreating" @click="createVariant">
+                <button
+                  type="button"
+                  class="mk-btn mk-btn--sm"
+                  :disabled="variantCreating"
+                  title="把所选源版本克隆为一个实验臂（不产生新内容），按权重参与线上分流"
+                  @click="createVariant"
+                >
                   {{ variantCreating ? '创建中…' : '创建变体' }}
                 </button>
                 <button
                   type="button"
                   class="mk-btn mk-btn--sm"
                   :disabled="variantCorePublishing || !variantNewKey"
-                  title="需先在协议页签保存核心文件"
+                  :title="!variantNewKey ? '先填变体键。再把协议页签未发布的核心文件改动编译发布为新版本并挂为实验臂（走发布守门，基线不变）' : '把协议页签未发布的核心文件改动编译发布为新版本并挂为实验臂（走发布守门，基线不变）'"
                   @click="publishCoreAsVariant"
                 >
                   {{ variantCorePublishing ? '发布中…' : '把当前核心文件改动发布为变体' }}
@@ -138,7 +150,7 @@
                  操作列空表头，行高 34px 低于 40px 下限）——同页三张表统一语汇 -->
             <table class="mk-table">
               <thead>
-                <tr><th scope="col">版本</th><th scope="col" title="核心文件哈希值">核心哈希</th><th scope="col" title="核心文件版本号">核心版本</th><th scope="col">状态</th><th scope="col">发布者</th><th scope="col" class="mk-th--right mk-col--actions-wide">操作</th></tr>
+                <tr><th scope="col">版本</th><th scope="col" title="核心文件哈希值">核心哈希</th><th scope="col" title="该版本编译自核心文件的第几个已发布内容。克隆 / 同源版本会同号">核心版本</th><th scope="col">状态</th><th scope="col">发布者</th><th scope="col" class="mk-th--right mk-col--actions-wide">操作</th></tr>
               </thead>
               <tbody>
                 <tr v-for="v in coreVersions" :key="v.version" :class="{ 'sdp-pw__table-active': v.status === 'ACTIVE' }">
@@ -335,6 +347,14 @@ function fmtRate(rate: number | null) {
 function fmtDur(ms: number | null) {
   if (ms == null) return '—'
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`
+}
+/** 变体指标口径（2026-11-11 困惑测试 #86）：本表按 prompt_call_logs.systemPromptVersion 归因，
+ *  与运行概览的调用数（agent_call_logs 执行行）不同源；未归因 / composer 覆盖路径的调用
+ *  不属于任何一行。0 调用显示「—」（不是实测的 0 次），避免与「没有归因数据」混读。 */
+const VARIANT_METRIC_TITLE =
+  '仅统计按版本归因的调用。未归因、composer 覆盖路径与演示种子行不归入任何变体，所以与运行概览的调用数不同源。0 表示窗口内没有按本版本归因的调用，不是「没跑过」'
+function variantCallsText(calls: number, value: unknown = calls) {
+  return calls === 0 ? '—' : String(value)
 }
 
 async function loadVariants() {
@@ -722,8 +742,8 @@ watch(() => props.skillId, () => {
   align-items: center;
   gap: 10px;
   padding: 8px 12px;
-  background: #f8fafd;
-  border-bottom: 1px solid #eef2f8;
+  background: var(--mk-surface-2);
+  border-bottom: 1px solid var(--mk-line);
   font-size: var(--mk-fs-micro);
   color: var(--mk-muted);
 }
@@ -751,7 +771,7 @@ watch(() => props.skillId, () => {
 .sdp-diff__line.is-removed .sdp-diff__no::after { content: '−'; color: var(--mk-red-strong); margin-left: 3px; }
 .sdp-diff__no { color: var(--mk-faint); text-align: right; user-select: none; }
 .sdp-diff__text { white-space: pre-wrap; word-break: break-word; color: var(--mk-muted); }
-.sdp-diff__gap { padding: 2px 12px; color: #c3cede; user-select: none; }
+.sdp-diff__gap { padding: 2px 12px; color: var(--mk-faint); user-select: none; }
 .sdp-diff__same { margin: 8px 12px; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 /* Prompt 版本「加载更多」（#122） */
 .sdp-versions-more { display: flex; justify-content: center; padding-top: 4px; }
@@ -769,8 +789,20 @@ watch(() => props.skillId, () => {
    字段名对不齐，说明也混在按钮之间） */
 .sdp-var__create { display: grid; gap: 10px; padding: 10px 12px; border: 1px dashed var(--mk-line); border-radius: 12px; background: var(--mk-surface-2); }
 .sdp-var__create-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 14px; align-items: start; }
-.sdp-var__create-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; align-self: end; }
+/* 动作独占一行、右对齐（2026-11-11）：原先动作与三个字段同处 auto-fit 栅格，
+   「把当前核心文件改动发布为变体」这颗长按钮把最后一列撑到 ~260px，1280 下字段被挤窄、
+   两个按钮还上下堆成两行。现在字段一行、动作一行，按钮单行排开不挤。 */
+.sdp-var__create-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  align-items: center;
+}
 .sdp-var__create-note { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
+/* 对照臂流量语义（2026-11-11 困惑测试 #88） */
+.sdp-var__intro { margin: 0; font-size: var(--mk-fs-micro); line-height: 1.6; color: var(--mk-muted); }
 /* 字段：标签在上、控件在下（原为同行，标签与输入框对不齐） */
 .sdp-var__field { display: grid; gap: 5px; font-size: var(--mk-fs-micro); color: var(--mk-muted); font-weight: 600; }
 .sdp-var__field-hint { font-style: normal; font-weight: 400; color: var(--mk-faint); }
@@ -787,6 +819,5 @@ watch(() => props.skillId, () => {
 /* 暗色模式 */
 [data-theme='dark'] .sdp-table-wrap { background: var(--wf-bg-subtle); }
 [data-theme='dark'] .sdp-diff { background: var(--wf-bg-subtle); }
-[data-theme='dark'] .sdp-diff__head { background: #202122; }
 
 </style>

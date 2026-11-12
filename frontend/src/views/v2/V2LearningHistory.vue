@@ -15,7 +15,7 @@
           <strong class="month__title">整月节奏</strong>
           <div class="month__nav">
             <button type="button" class="month__arrow" aria-label="上一月" @click="shiftMonth(-1)">‹</button>
-            <span class="month__label">{{ monthLabel }}</span>
+            <span class="month__label" :title="monthLabelIso">{{ monthLabel }}</span>
             <button
               type="button"
               class="month__arrow"
@@ -38,11 +38,13 @@
           <span>本月 <b>{{ monthTotals.minutes }}</b> 分钟</span>
           <span>本月 <b>{{ monthTotals.days }}</b> 天有学习</span>
           <span>本月 <b>{{ monthTotals.sessions }}</b> 次</span>
-          <span class="month__legend">
-            <i class="lg lg--0"></i>无
-            <i class="lg lg--1"></i>&lt;30分
-            <i class="lg lg--2"></i>30–60分
-            <i class="lg lg--3"></i>&gt;60分
+          <span class="month__legend" role="group" aria-label="每日学习时长色阶">
+            <span class="month__legend-title">每日时长</span>
+            <span class="month__lg-item"><i class="lg lg--0" aria-hidden="true"></i>无</span>
+            <span class="month__lg-item"><i class="lg lg--1" aria-hidden="true"></i>&lt;30</span>
+            <span class="month__lg-item"><i class="lg lg--2" aria-hidden="true"></i>30–60</span>
+            <span class="month__lg-item"><i class="lg lg--3" aria-hidden="true"></i>&gt;60</span>
+            <span class="month__legend-unit">分钟</span>
           </span>
         </div>
 
@@ -64,7 +66,7 @@
               !c.outside && !c.future ? `mday--h${c.level}` : ''
             ]"
             :disabled="c.outside || c.future"
-            :title="c.outside || c.future ? undefined : `${c.dayNum}日${c.minutes ? ` · ${c.minutes} 分钟` : ' · 无学习记录'}`"
+            :title="c.outside || c.future ? undefined : `${c.date} · ${c.minutes ? `${c.minutes} 分钟` : '无学习记录'}`"
             @click="toggleDay(c)"
           >{{ c.dayNum }}</button>
         </div>
@@ -83,13 +85,21 @@
         加载学习记录…
       </div>
 
-      <!-- 空态（整页终态：统一结果组件） -->
-      <V2ResultState
-        v-else-if="!sessions.length"
-        tone="empty"
-        title="还没有学习记录"
-        description="完成第一次学习后，这里会按时间记录你的每次会话。"
-      />
+      <!-- 空态（整页终态：统一结果组件）。2026-11-11 走查：此前只有一句
+           「完成第一次学习后…」没有按钮，是全站唯一没有出口的空态——
+           主行动去学习台，次级出口去规划目标，与路径页/知识图谱空态同构 -->
+      <div v-else-if="!sessions.length" class="history__empty-wrap">
+        <V2ResultState
+          tone="empty"
+          title="还没有学习记录"
+          description="完成第一次学习后，这里会按时间记录你的每次会话。"
+          action-text="去学习台"
+          @action="goLearn"
+        />
+        <p class="history__empty-alt">
+          还没有目标？<router-link to="/goal-conversation" class="history__empty-goal">去规划一个目标 ›</router-link>
+        </p>
+      </div>
 
       <!-- 按日期分组的会话列表（2026-09-27 重排：按「日期 → 任务」聚合，
            同一天同一个任务的多条会话合并成一条，明细用「查看每次会话」展开） -->
@@ -110,7 +120,7 @@
           <div class="history__day-head">
             <!-- 日期为主（原型 wf-hist__day-head 873-875：9月29日 周二），今昨为辅。
                  测试锁 `.history__day-head strong === ['今天']`，故日期走 <b>、今昨走 <strong> -->
-            <b class="history__day-date">{{ dayDate(group.date) }}</b>
+            <b class="history__day-date" :title="group.date">{{ dayDate(group.date) }}</b>
             <strong v-if="dayRel(group.date)" class="history__day-rel">{{ dayRel(group.date) }}</strong>
             <span class="muted">
               {{ group.tasks.length }} 项<template v-if="group.minutes"> · {{ group.minutes }} 分钟</template>
@@ -134,7 +144,7 @@
                   <summary>查看每次会话</summary>
                   <ul class="history__sublist">
                     <li v-for="s in t.sessions" :key="s.id">
-                      <span class="history__sub-time">{{ sessionClock(s) }}</span>
+                      <span class="history__sub-time" :title="sessionClockTitle(s)">{{ sessionClock(s) }}</span>
                       <span class="uc-badge" :class="stateBadgeCls(s)">{{ stateLabel(s) }}</span>
                       <span class="history__sub-min">{{ s.durationMinutes ? `${s.durationMinutes} 分钟` : '—' }}</span>
                       <router-link
@@ -187,6 +197,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import request from '@/utils/api';
 import CapabilityShell from '@/components/user/CapabilityShell.vue';
 import V2ResultState from '@/components/ui/V2ResultState.vue';
@@ -209,6 +220,12 @@ interface SessionRecord {
 }
 
 const PAGE_SIZE = 30;
+const router = useRouter();
+
+/** 空态主行动：去学习台（/dashboard 的「继续/今日行动」是学习入口） */
+function goLearn() {
+  void router.push('/dashboard');
+}
 
 const sessions = ref<SessionRecord[]>([]);
 const loading = ref(true);
@@ -387,6 +404,15 @@ function sessionClock(s: SessionRecord): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
+/** 明细时刻的绝对口径（title）：YYYY-MM-DD HH:mm，与页面可见的 M月D日 / HH:mm 互补 */
+function sessionClockTitle(s: SessionRecord): string {
+  const d = new Date(String(s.startTime || s.endTime || ''));
+  if (Number.isNaN(d.getTime())) return '';
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd} ${sessionClock(s)}`;
+}
+
 /** 聚合行的副行文案：聚合行带「N 次会话 · 共 X 分钟」，单会话行直接给时长（原型副行） */
 function metaLine(t: TaskGroup): string {
   const mins = t.minutes ? `共 ${t.minutes} 分钟` : '';
@@ -448,6 +474,10 @@ const todayStr = localDateKey(new Date());
 const monthFailed = ref(false);
 
 const monthLabel = computed(() => `${monthCursor.value.year}年${monthCursor.value.month + 1}月`);
+/** 月标题的机器口径（title 悬停）：YYYY-MM，与列表 M月D日的展示规则互补 */
+const monthLabelIso = computed(
+  () => `${monthCursor.value.year}-${String(monthCursor.value.month + 1).padStart(2, '0')}`
+);
 const isCurrentMonth = computed(() => {
   const now = new Date();
   return monthCursor.value.year === now.getFullYear() && monthCursor.value.month === now.getMonth();
@@ -699,6 +729,26 @@ onMounted(async () => {
   display: grid;
   gap: 14px;
 }
+
+/* 整页空态 + 次级出口（2026-11-11）：主行动由 V2ResultState 给，规划目标作为第二路径。
+   空态容器在双栏下按 :only-child 通栏（见顶部媒体查询）。 */
+.history__empty-wrap { display: grid; justify-items: center; }
+.history__empty-alt {
+  margin: -10px 0 0;
+  font-size: 13px;
+  color: var(--faint);
+}
+.history__empty-goal {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--blue-deep);
+  text-decoration: none;
+}
+.history__empty-goal:hover { text-decoration: underline; }
 
 .history__day {
   padding: 16px 18px;
@@ -985,18 +1035,31 @@ onMounted(async () => {
   font-size: 12px;
   color: var(--faint);
 }
+/* 图例（2026-11-11 走查 P1）：原四枚 12px 淡块在明暗两档都接近空白，色阶读不出。
+   现在整组做成带描边的胶囊：14px 色块 + 每档自己的文字 + 末尾「分钟」单位；
+   四档的色块各自加深（不与日期格共用同一档透明度——格子面积大，图例只有 14px）。 */
 .month__legend {
   margin-left: auto;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  color: var(--faint);
+  gap: 9px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--mk-radius-pill);
+  background: var(--surface);
+  color: var(--muted);
+  font-weight: 600;
 }
+.month__legend-title { color: var(--faint); }
+.month__lg-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.month__legend-unit { color: var(--faint); }
 .lg {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   border-radius: var(--mk-radius-xs);
   display: inline-block;
+  /* 所有档统一描边：浅档（无 / <30）在深色与浅色底上都能看出边界 */
+  border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
 }
 /* 热力四档（2026-10-09 修复顺序）：.mday 的 background:none 与 .mday--h* 特异性相同（scoped 后各带一个
    [data-v-*]），后写者胜。这些档位原先排在下面 .mday 之前，底色被整体清零——日历四档全无底色，
@@ -1028,6 +1091,12 @@ onMounted(async () => {
 .lg--1, .mday--h1 { background: color-mix(in srgb, var(--blue) 14%, transparent); color: var(--blue-deep); }
 .lg--2, .mday--h2 { background: color-mix(in srgb, var(--blue) 32%, transparent); color: var(--blue-deep); }
 .lg--3, .mday--h3 { background: var(--mk-blue-fill); color: var(--mk-on-fill); }
+/* 图例色块单独加深（只作用于 14px 的 .lg，不改 .mday 日期格）：
+   14px 的小色块用 14% 透明蓝在两种主题下都读成空白（2026-11-11 走查 P1）。
+   与 --surface 实色混合而非 transparent，色块本体不透明、边界由统一描边给出。 */
+.lg.lg--1 { background: color-mix(in srgb, var(--blue) 30%, var(--surface)); border-color: color-mix(in srgb, var(--blue) 55%, var(--line)); }
+.lg.lg--2 { background: color-mix(in srgb, var(--blue) 58%, var(--surface)); border-color: color-mix(in srgb, var(--blue) 70%, var(--line)); }
+.lg.lg--3 { border-color: color-mix(in srgb, var(--blue) 70%, var(--line)); }
 /* 非当月日期（上月 26~31 / 下月 1~6）：压暗到 0.22（2026-11-06 走查）
    ——原来只是 --faint 灰、亮度与当月一样，一眼分不出哪天属于 11 月 */
 .mday--outside, .mday--future {
@@ -1119,6 +1188,8 @@ onMounted(async () => {
   .month__legend {
     margin-left: 0;
     width: 100%;
+    flex-wrap: wrap;
+    row-gap: 6px;
   }
 
   .mday {

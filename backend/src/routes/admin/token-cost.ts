@@ -336,7 +336,13 @@ router.get('/by-user', async (req: Request, res: Response) => {
     const userMap = new Map(users.map((u) => [u.id, u]));
     const enriched = pool.map((r) => {
       const u = userMap.get(r.key);
-      return { ...r, name: u?.name || null, email: u?.email || null };
+      return {
+        ...r,
+        name: u?.name || null,
+        email: u?.email || null,
+        // 2026-11-11：本页不按账号类型过滤，行内需标出虚拟学习者（紫色头像 + 副行文字）
+        isVirtualLearner: !!u?.isVirtualLearner,
+      };
     });
     const matched = q
       ? enriched.filter((r) =>

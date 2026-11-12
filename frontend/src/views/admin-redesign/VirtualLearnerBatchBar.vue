@@ -60,6 +60,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:selected', value: string[]): void
   (e: 'reclaim', profileIds: string[]): void
+  /** 常驻结果摘要（toast 一闪而过，批量动作影响了几个人/失败几人需要可回看） */
+  (e: 'summary', value: { tone: 'ok' | 'warn' | 'bad'; text: string }): void
 }>()
 
 /* 批量操作互斥标志：删除/清理/自动驾驶等共用 */
@@ -69,6 +71,16 @@ const batchProgress = ref('')
 
 /** 批量域「故事列表拉取失败」日志前缀（R6 单源：批量启动/自动驾驶/停止三处同用一句） */
 const storyListFailLog = (name: string) => `获取「${name}」故事列表失败:`
+
+/** 人级结果读数：批量命令栏消失后，父页仍要能读出「影响了几个人、失败几人」。 */
+function peopleText(total: number, okPeople: Set<string>, failPeople: Set<string>): string {
+  const ok = okPeople.size
+  const bad = failPeople.size
+  return `涉及 ${total} 人（成功 ${ok} 人${bad ? `、失败 ${bad} 人` : ''}）`
+}
+function reportSummary(tone: 'ok' | 'warn' | 'bad', text: string) {
+  emit('summary', { tone, text })
+}
 
 /** 选中行里含「无响应」卡死会话的人数——只有这时才给「清理无响应」入口（避免对静止行点了没反应的按钮） */
 const stalledSelectedCount = computed(() =>
@@ -92,7 +104,7 @@ async function batchLaunchAllStories() {
   }
   const ok = await askConfirm({
     title: '启动全部故事（含自动驾驶）',
-    message: `将为选中的 ${ids.length} 个虚拟学习者启动其全部故事的实验会话，共约 ${totalStories} 个会话，并自动开启自动驾驶（直达路径全部完成）。\n注意：并发多个自动驾驶对 LLM 压力较大，建议分批（每批 1-2 人）。确认启动？`,
+    message: `将为选中的 ${ids.length} 个虚拟学习者启动其全部故事的实验会话，共约 ${totalStories} 个会话，并自动开启自动驾驶（直达路径全部完成）。\n注意：并发多个自动驾驶对 LLM 压力较大，建议分批（每批 1-2 人）。`,
     confirmText: `启动 ${totalStories} 个会话`,
     danger: false
   })
@@ -101,6 +113,8 @@ async function batchLaunchAllStories() {
   let launched = 0
   let autopiloted = 0
   let failed = 0
+  const okPeople = new Set<string>()
+  const failPeople = new Set<string>()
   for (const [i, id] of ids.entries()) {
     batchProgress.value = `(${i + 1}/${ids.length})`
     const s = props.samples.find((x) => x.id === id)
@@ -119,32 +133,40 @@ async function batchLaunchAllStories() {
           const sid = String(session.id || session.sessionId || '')
           if (sid) {
             launched++
+            okPeople.add(id)
             // 创建后自动开启自动驾驶（target=final：直达 Path 全部完成）
             try {
               await adminVirtualLearnersApi.autopilotStart(sid, { target: 'final' })
               autopiloted++
             } catch (e) {
               failed++
+              failPeople.add(id)
               console.error(`「${s.name}」故事 ${storyId} 自动驾驶启动失败:`, e)
             }
           }
         } catch (e) {
           failed++
+          failPeople.add(id)
           console.error(`启动「${s.name}」故事会话失败:`, e)
         }
       }
     } catch (e) {
       failed++
+      failPeople.add(id)
       console.error(storyListFailLog(s.name), e)
     }
   }
   batchActionBusy.value = false
   batchProgress.value = ''
+  const people = peopleText(ids.length, okPeople, failPeople)
   if (launched > 0) {
+    const text = `上次批量启动故事：${people} · 启动 ${launched} 个会话，自动驾驶 ${autopiloted} 个${failed ? `，会话级失败 ${failed} 次` : ''}`
+    reportSummary(failed ? 'warn' : 'ok', text)
     toast.success(`已启动 ${launched} 个会话并开启自动驾驶 ${autopiloted} 个（失败 ${failed}）`)
     emit('update:selected', [])
     void loadLiveData()
   } else {
+    reportSummary('bad', `上次批量启动故事：${people} · 未启动任何会话（失败 ${failed} 次）`)
     toast.error(`启动失败：${failed} 个（请检查故事是否生成）`)
   }
 }
@@ -173,7 +195,7 @@ async function batchAutopilotStart() {
   }
   const ok = await askConfirm({
     title: '批量启动自动驾驶',
-    message: `将为选中的 ${ids.length} 个虚拟学习者、约 ${candidates} 个最新会话开启自动驾驶（直达路径全部完成）。\n已在运行自动驾驶的会话会自动跳过，不会重复启动。确认启动？`,
+    message: `将为选中的 ${ids.length} 个虚拟学习者、约 ${candidates} 个最新会话开启自动驾驶（直达路径全部完成）。\n已在运行自动驾驶的会话会自动跳过，不会重复启动。`,
     confirmText: `启动 ${candidates} 个会话的自动驾驶`,
     danger: false
   })
@@ -182,6 +204,8 @@ async function batchAutopilotStart() {
   let started = 0
   let skipped = 0
   let failed = 0
+  const okPeople = new Set<string>()
+  const failPeople = new Set<string>()
   for (const [i, id] of ids.entries()) {
     batchProgress.value = `(${i + 1}/${ids.length})`
     const s = props.samples.find((x) => x.id === id)
@@ -197,24 +221,31 @@ async function batchAutopilotStart() {
         try {
           await adminVirtualLearnersApi.autopilotStart(sid, { target: 'final' })
           started++
+          okPeople.add(id)
         } catch (e) {
           if (String(errMsg(e)).includes('已有全自动运行')) { skipped++; continue }
           failed++
+          failPeople.add(id)
           console.error(`「${s?.name || id}」会话 ${sid.slice(0, 8)} 自动驾驶启动失败:`, e)
         }
       }
     } catch (e) {
       failed++
+      failPeople.add(id)
       console.error(storyListFailLog(s?.name || id), e)
     }
   }
   batchActionBusy.value = false
   batchProgress.value = ''
+  const people = peopleText(ids.length, okPeople, failPeople)
   if (started > 0 || skipped > 0) {
+    const text = `上次批量启动自动驾驶：${people} · 启动 ${started} 个${skipped ? `，跳过 ${skipped} 个` : ''}${failed ? `，会话级失败 ${failed} 次` : ''}`
+    reportSummary(failed ? 'warn' : 'ok', text)
     toast.success(`已启动自动驾驶 ${started} 个${skipped ? `（跳过 ${skipped}）` : ''}${failed ? `，失败 ${failed}` : ''}`)
     emit('update:selected', [])
     void loadLiveData()
   } else {
+    reportSummary('bad', `上次批量启动自动驾驶：${people} · 没有启动任何会话（失败 ${failed} 次）`)
     toast.error(`启动失败：${failed} 个（请检查故事会话状态）`)
   }
 }
@@ -225,7 +256,7 @@ async function batchAutopilotStop() {
   if (!ids.length || batchActionBusy.value) return
   const ok = await askConfirm({
     title: '批量停止自动驾驶',
-    message: `将停止选中的 ${ids.length} 个虚拟学习者全部故事最新会话的自动驾驶。\n学习进度与对话保留，可随时再次启动。确认停止？`,
+    message: `将停止选中的 ${ids.length} 个虚拟学习者全部故事最新会话的自动驾驶。\n学习进度与对话保留，可随时再次启动。`,
     confirmText: `停止 ${ids.length} 人`,
     danger: false
   })
@@ -234,6 +265,8 @@ async function batchAutopilotStop() {
   let stopped = 0
   let skipped = 0
   let failed = 0
+  const okPeople = new Set<string>()
+  const failPeople = new Set<string>()
   for (const [i, id] of ids.entries()) {
     batchProgress.value = `(${i + 1}/${ids.length})`
     const s = props.samples.find((x) => x.id === id)
@@ -249,23 +282,30 @@ async function batchAutopilotStop() {
         try {
           await adminVirtualLearnersApi.autopilotStop(sid)
           stopped++
+          okPeople.add(id)
         } catch (e) {
           failed++
+          failPeople.add(id)
           console.error(`「${s?.name || id}」会话 ${sid.slice(0, 8)} 停止失败:`, e)
         }
       }
     } catch (e) {
       failed++
+      failPeople.add(id)
       console.error(storyListFailLog(s?.name || id), e)
     }
   }
   batchActionBusy.value = false
   batchProgress.value = ''
+  const people = peopleText(ids.length, okPeople, failPeople)
   if (stopped > 0 || skipped > 0) {
+    const text = `上次批量停止自动驾驶：${people} · 停止 ${stopped} 个${skipped ? `，跳过 ${skipped} 个` : ''}${failed ? `，会话级失败 ${failed} 次` : ''}`
+    reportSummary(failed ? 'warn' : 'ok', text)
     toast.success(`已停止自动驾驶 ${stopped} 个${skipped ? `（跳过 ${skipped}）` : ''}${failed ? `，失败 ${failed}` : ''}`)
     emit('update:selected', [])
     void loadLiveData()
   } else {
+    reportSummary('bad', `上次批量停止自动驾驶：${people} · 没有停止任何会话（失败 ${failed} 次）`)
     toast.error(`停止失败：${failed} 个（请检查故事会话状态）`)
   }
 }
@@ -291,6 +331,10 @@ async function batchTerminate() {
     const d = res.data?.data ?? {}
     const terminated = Number(d.terminated ?? 0)
     const skipped = Number(d.skippedTerminal ?? 0)
+    reportSummary(
+      terminated > 0 ? 'ok' : 'warn',
+      `上次批量终止：涉及 ${ids.length} 人 · 终止 ${terminated} 个会话${skipped ? `，跳过已结束 ${skipped} 个` : ''}`
+    )
     toast.success(terminated > 0 ? `已终止 ${terminated} 个会话（跳过已结束的 ${skipped} 个）` : '没有需要终止的未结束会话')
     emit('update:selected', [])
     void loadLiveData()
@@ -328,6 +372,10 @@ async function batchDelete() {
     const deleted = (d.deleted || []).length
     const skipped = (d.skipped || []).length
     const errors = (d.errors || []).length
+    reportSummary(
+      errors > 0 ? 'warn' : 'ok',
+      `上次批量删除：涉及 ${ids.length} 人 · 删除 ${deleted} 人${skipped ? `，跳过 ${skipped} 人` : ''}${errors ? `，失败 ${errors} 人` : ''}`
+    )
     if (errors > 0) {
       toast.error(`删除 ${deleted} 人，${skipped} 人跳过，${errors} 人失败`)
     } else {

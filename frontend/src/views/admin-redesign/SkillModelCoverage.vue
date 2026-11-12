@@ -181,6 +181,7 @@
       <MkEmptyState
         v-else-if="!loading"
         title="暂无技能覆盖数据"
+        description="覆盖表里还没有 Skill 记录。先到 Skill 目录确认技能已登记，或点「刷新」重试。"
         action-text="刷新"
         @action="load"
       />
@@ -427,9 +428,11 @@ async function applyBulk() {  if (bulkSaving.value || !selected.value.length) re
   }
   const ok = await askConfirm({
     title: '批量套用通道配置',
-    message: `将把 endpoint 与 apiKey 覆盖到选中的 ${selected.value.length} 个技能（model 留空则不覆盖）。\n这会替换这些技能已有的独立通道与密钥，且不可撤销。确定继续？`,
+    message: `将把 endpoint 与 apiKey 覆盖到选中的 ${selected.value.length} 个技能（model 留空则不覆盖）。\n这会替换这些技能已有的独立通道与密钥，且不可撤销。`,
     confirmText: '覆盖套用',
     busy: true,
+    /* 不可撤销地替换已配通道与密钥：按危险操作处理（红底确认钮） */
+    danger: true,
   })
   if (!ok) return
   bulkSaving.value = true

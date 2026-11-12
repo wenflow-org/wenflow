@@ -4,6 +4,7 @@ import { safeHttpRequest } from '../../utils/safe-http';
 import { resolveChatCompletionsUrl } from '../../gateway/api-gateway/chat-protocol-adapter';
 import { getProviderCatalog } from '../../config/models.config';
 import { resolveProviderApiKey } from '../../services/provider-secrets.service';
+import { inferModelType } from '../../config/model-type';
 import {
   PLATFORM_PROVIDER_ID,
   RegistryEditError,
@@ -185,6 +186,8 @@ router.post('/:id/models/pull', async (req, res) => {
       success: true,
       data: {
         models: result.models ?? [],
+        /* 与平台连接测试同源的软分类（BYOK「推荐对话」视图用） */
+        modelOptions: (result.models ?? []).map((id) => ({ id, inferredType: inferModelType(id) })),
         registered: provider.models.map((m) => m.id)
       }
     });

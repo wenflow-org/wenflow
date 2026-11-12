@@ -19,8 +19,12 @@
       <div class="dfg-toolbar">
         <div class="dfg-toolbar__status">
           <span class="dfg-stage-dot" :style="{ background: toneOf(flow?.stageId || '').hue }"></span>
-          <strong class="dfg-title">{{ flow?.stageName || '' }}&nbsp;<span class="dfg-title__agent mono">{{ flow?.agentId }}</span></strong>
-          <span class="dfg-meta">{{ flow ? flow.fieldCount : '—' }} 字段 · {{ flow ? flow.steps.length : '—' }} 步</span>
+          <!-- 阶段名走 id（2026-11-10 与总览列头同语言），中文全名留在下方入口/出口的悬停句里 -->
+          <strong class="dfg-title">{{ flow?.stageId || '' }}&nbsp;<span class="dfg-title__agent mono">{{ flow?.agentId }}</span></strong>
+          <span
+            class="dfg-meta"
+            :title="`步 = 入口闸口（有分发时）+ 编排链节点：Skill / 代码服务 / 跨阶段引用。与页签上的「N 个」名册 Skill 数不同源，不能直接比较`"
+          >{{ flow ? flow.fieldCount : '—' }} 字段 · {{ flow ? flow.steps.length : '—' }} 步</span>
           <!-- 搜索命中反馈（审核 #114）：无命中此前与空闲态完全一致（画布原样、无提示），
                用户分不清「没这个字段」还是「搜索没生效」；有输入即报命中数，0 命中给醒目提示。
                清除入口复用搜索框右侧 ✕（v-if="query"） -->
@@ -40,9 +44,12 @@
             />
             <button v-if="query" type="button" class="dfg-search__clear" title="清除" @click="clearQuery">✕</button>
           </div>
-          <label class="dfg-switch">
+          <!-- 2026-11-11（困惑测试 #56）：原标签「隐藏字段」与行为相反——未勾选时仍保留
+               带移交/累积的隐藏字段，勾选只会「增加」芯片，四个阶段画布逐像素一样。改为
+               「显示内部字段」并让未勾选时严格按 render=hidden 收窄（勾选才显示）。 -->
+          <label class="dfg-switch" title="显示渲染层隐藏的内部字段（带移交/累积的字段仍会出现在产出卡里）">
             <input type="checkbox" v-model="showHidden" />
-            <span>隐藏字段</span>
+            <span>显示内部字段</span>
           </label>
           <label class="dfg-switch" title="显示步间连线">
             <input type="checkbox" v-model="edgeFaded" />
@@ -82,21 +89,30 @@
         :class="{ 'is-dimmed': !!focusKey }"
         :style="dfgZoomStyle"
       >
-        <!-- 连线层（Bus 总线：卡右缘 → 右侧走廊 → 目标卡右缘，不穿卡片内容） -->
-        <svg class="dfg-edges" :width="pipeW" :height="pipeH" aria-hidden="true">
+        <!-- 连线层（Bus 总线：卡右缘 → 右侧走廊 → 目标卡右缘，不穿卡片内容）。
+             尺寸走 viewBox + 100% 而不是 width/height 属性：属性值在 CSS zoom + 分数设备像素比
+             （Windows 4K 缩放）下与实际生效盒宽可能对不上，连线整层会横向错位；
+             viewBox 把「用户单位」明确钉在内容层 CSS px 上，多余的差异只会体现在容器尺寸里。 -->
+        <svg
+          class="dfg-edges"
+          :viewBox="`0 0 ${Math.max(1, pipeW)} ${Math.max(1, pipeH)}`"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
           <g v-for="(e, i) in edgeGeoms" :key="i">
             <template v-if="e.d">
+              <!-- 颜色走 style（不是 presentation attribute）：阶段色是 CSS 变量，
+                   attribute 里的 var() 不生效，style 里才继承得到深色档。 -->
               <path
                 :d="e.d"
                 fill="none"
-                :stroke="e.hue"
-                :stroke-width="e.highlight ? 2.2 : 1.2"
-                :opacity="e.op"
+                :style="{ stroke: e.hue, opacity: e.op }"
+                :stroke-width="e.highlight ? 2.4 : 1.6"
                 :class="{ 'is-hot': e.highlight }"
                 stroke-linecap="round"
               />
-              <circle :cx="e.x1" :cy="e.y1" r="3" :fill="e.hue" :opacity="e.dotOp" />
-              <path :d="e.arrow" :fill="e.hue" :opacity="e.dotOp" />
+              <circle :cx="e.x1" :cy="e.y1" r="3" :style="{ fill: e.hue, opacity: e.dotOp }" />
+              <path :d="e.arrow" :style="{ fill: e.hue, opacity: e.dotOp }" />
             </template>
           </g>
         </svg>
@@ -119,7 +135,7 @@
                 class="dfg-gate__src"
                 :title="`前往 ${flow.entryFrom?.stageName}（${flow.entryFrom?.stageId}-agent），看这些字段在那边是怎么产出的`"
                 @click="switchStage(flow.entryFrom!.stageId)"
-              >入口 · 来自 {{ flow.entryFrom?.stageName }}<span class="dfg-gate__jump">↗</span></button>
+              >入口 · 来自 {{ flow.entryFrom?.stageId }}<span class="dfg-gate__jump">↗</span></button>
               <!-- 入口卡与出口卡同构：字段数由右侧「N 字段」徽章给出，对端 agent 由上面卡题
                    title 给出——此处不再复读一句「N 个字段经 X-agent 移交本阶段」
                    （2026-11-02 走查：出口卡那句已同批删除） -->
@@ -210,19 +226,22 @@
                 class="dfg-step__badge"
                 :class="step.kind === 'service' ? 'dfg-step__badge--svc' : 'dfg-step__badge--cross'"
               >{{ step.kind === 'service' ? '代码服务' : '跨阶段引用' }}</span>
-              <span v-else class="dfg-step__badge dfg-step__badge--warn" title="该 Skill 已注册，但没有声明任何字段的产出与输入，未接入数据流转">无字段路由</span>
+              <span v-else class="dfg-step__badge dfg-step__badge--warn" title="该 Skill 已注册，但没有声明任何字段的产出与输入（产出直接进会话消息，不走字段路由）">无字段路由</span>
               <span v-if="step.unresolved" class="dfg-step__badge dfg-step__badge--warn" :title="UNRESOLVED_HINT">未解析</span>
               <!-- 阶段名是中文，等宽只留给 agentId 这类机器串 -->
-              <button v-if="step.fromStage" type="button" class="dfg-step__stage" @click="switchStage(step.fromStage!)" title="跳到该阶段">→ {{ stageNameOf(step.fromStage) }}</button>
-              <span v-if="step.role" class="dfg-step__role">{{ step.role }}</span>
+              <button v-if="step.fromStage" type="button" class="dfg-step__stage" @click="switchStage(step.fromStage!)" title="跳到该阶段">→ {{ step.fromStage }}</button>
+              <!-- 2026-11-10：代码服务卡回答「这个转接节点到底做了什么」，不再直出
+                   input-framing 这类机器角色；没写 summary 的历史/新增服务仍退回角色名。 -->
+              <span v-if="step.role && !step.summary" class="dfg-step__role">{{ step.role }}</span>
               <template v-if="step.kind === 'orphan'">
                 <span class="dfg-step__agent mono">{{ step.agentId }}</span>
               </template>
               <span class="dfg-step__spacer"></span>
-              <span v-if="step.condition" class="dfg-step__cond" :title="step.condition">触发：{{ step.condition }}</span>
-              <span v-if="step.loopOver" class="dfg-step__cond">循环：{{ step.loopOver }}</span>
+              <span v-if="step.condition" class="dfg-step__cond" :title="`定义原文：${step.condition}`">触发：{{ conditionText(step.condition) }}</span>
+              <span v-if="step.loopOver" class="dfg-step__cond">循环：{{ loopText(step.loopOver) }}</span>
               <button type="button" v-for="p in farPorts[step.agentId] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">{{ p.dir === 'out' ? '↳' : '来自' }} {{ p.peerLabel }}<b>{{ p.count }}</b></button>
             </header>
+            <p v-if="step.summary" class="dfg-step__summary" :title="step.role">{{ step.summary }}</p>
           </section>
 
           <!-- Skill 步骤卡 -->
@@ -307,7 +326,7 @@
                           :key="t.target"
                           class="dfg-chip__to mono"
                           :class="{ 'dfg-chip__to--stage': t.kind === 'stage' }"
-                          :title="t.label"
+                          :title="t.kind === 'stage' ? `移交到下一阶段：${t.label}` : `汇入本阶段出口（${t.label}），随跨阶段移交进入下游`"
                         >→ {{ t.label }}</span>
                         <!-- 多于两个去向时给余量（2026-11-02 评审后补）：原实现 slice(0,2) 静默丢掉其余去向，
                              一个字段交给 3 个目标时读者会以为只交了 2 个 -->
@@ -340,7 +359,7 @@
                 class="dfg-gate__src"
                 :title="`前往 ${flow.exitTo?.stageName}（${flow.exitTo?.stageId}-agent），看这些字段在那边是怎么被消费的`"
                 @click="switchStage(flow.exitTo!.stageId)"
-              >出口 · 交给 {{ flow.exitTo?.stageName }}<span class="dfg-gate__jump">↗</span></button>
+              >出口 · 交给 {{ flow.exitTo?.stageId }}<span class="dfg-gate__jump">↗</span></button>
             </div>
             <span class="dfg-gate__count">{{ flow.exit.length }} 字段</span>
             <button type="button" v-for="p in farPorts['__exit__'] || []" :key="p.dir + p.peer" class="dfg-step__port" @click="focusCard(p.peer)">来自 {{ p.peerLabel }}<b>{{ p.count }}</b></button>
@@ -403,6 +422,11 @@
         <i :style="{ background: f.hue }"></i>{{ f.name }}<b>{{ f.count }}</b>
       </button>
     </div>
+    <!-- 2026-11-11（困惑测试 #57）：芯片右端「→ X」有无的区别原先无图例——无去向标记的字段
+         不是被丢弃，而是只在本阶段可见（公开回复直接给学习者）。 -->
+    <p v-if="flow" class="dfg-legend__note">
+      芯片右端「→ 目标」= 移交去向（阶段 / Skill）。没有去向标记的字段不流向下一阶段——公开回复类直接给学习者，内部字段留在本阶段。
+    </p>
 
     <!-- 字段详情抽屉（含行级编辑，同步回写编排文件） -->
     <Teleport to="body">
@@ -485,7 +509,10 @@
             <section v-if="!selected.locked" class="mk-card">
               <div class="mk-card__head">
                 <h4 class="mk-card__title">行级编辑</h4>
-                <span class="mk-card__meta">会同步回写编排文件</span>
+                <span
+                  class="mk-card__meta"
+                  :title="`保存后立即写回编排文件「${stageOfChip(selected.agentId) || '本阶段'}」并同步 DB，没有审核流。变更记录见「治理」页签的最近变更`"
+                >保存即生效 · 回写 {{ stageOfChip(selected.agentId) || '本阶段' }}.yaml</span>
               </div>
               <div class="dfg-edit">
                 <div class="dfg-field">
@@ -524,7 +551,8 @@
           <footer class="mk-drawer__foot">
             <button type="button" class="mk-btn" @click="selected = null">关闭</button>
             <template v-if="!selected.locked">
-              <button type="button" class="mk-btn" :disabled="saving" @click="resetDraft">还原</button>
+              <!-- 2026-11-11（困惑测试 #59）：「还原」只是丢弃未保存草稿，不是回滚历史版本 -->
+              <button type="button" class="mk-btn" :disabled="saving" title="放弃未保存的修改，恢复到当前已保存值（不是回滚历史版本）" @click="resetDraft">放弃修改</button>
               <button type="button" class="mk-btn mk-btn--primary" :disabled="saving || !dirty" @click="saveEdit">
                 {{ saving ? '保存中…' : '保存修改' }}
               </button>
@@ -545,7 +573,7 @@ import { toast } from '@/utils/toast'
 import { ensureLiveTopologyRaw } from './live'
 import {
   buildStageFlow, familyHue, type FlowChip, type FlowStep, type StageFlow, type DefStepLike,
-  STAGE_ORDER, STAGE_LABELS,
+  STAGE_ORDER, STAGE_LABELS, conditionText, loopText,
 } from './dataFlow'
 import type { StageDetailLike } from './fieldFlowLayout'
 import MkLoading from '@/components/mk/MkLoading.vue'
@@ -557,7 +585,11 @@ const props = defineProps<{ stage: string }>()
 const emit = defineEmits<{ changed: []; stage: [string] }>()
 
 /* 文案单源（R6 复读单源化）：工具步骤卡与 Skill 步骤卡的「未解析」悬停释共用一份 */
-const UNRESOLVED_HINT = '编排文件里没有解析到这一步的定义'
+/* 未解析 = 这一步的 agentId 在 Agent 名册里查不到 → 运行时无法路由。
+   代码服务（kind=service）本来就不进名册（确定性实现，无 LLM 步骤），不算缺陷，
+   故数据层对 service 步骤不置 unresolved（2026-11-10：否则「代码服务」卡上还挂
+   「未解析」，读成服务坏了）。 */
+const UNRESOLVED_HINT = '这一步引用的 Agent 不在 Agent 名册里，运行时无法路由（多半是改名或删除后编排没同步）'
 
 /* ================= 状态 ================= */
 const loading = ref(false)
@@ -712,8 +744,21 @@ function renderLabel(render: string) {
 function stageNameOf(id: string) {
   return stageNames.value[id] || STAGE_LABELS[id] || id
 }
+/* 阶段身份色走 CSS 变量（2026-11-11 深色对比度）：原实现直接取 store.AGENT_TONES 的十六进制，
+   深色档下 #4f46e5 / #0d9488 压在 #1c1e23 卡面上只有 ~2.4:1，连线与阶段点发灰。
+   五个阶段各映射到一个已定义的 --mk-* token（见样式表 .dfg 块），深色档由 token 自身提亮；
+   `--hz` 供 color-mix 混色消费，SVG 连线改用 style 绑定（presentation attribute 不认 var()）。 */
+const STAGE_HUE_VAR: Record<string, string> = {
+  goal: 'var(--dfg-hue-goal)',
+  path: 'var(--dfg-hue-path)',
+  teaching: 'var(--dfg-hue-teaching)',
+  profile: 'var(--dfg-hue-profile)',
+  simulation: 'var(--dfg-hue-simulation)',
+}
 function toneOf(id: string) {
-  return AGENT_TONES[`${id}-agent`] || { hue: '#64748b', soft: 'rgba(100,116,139,0.08)' }
+  const v = STAGE_HUE_VAR[id]
+  if (v) return { hue: v }
+  return AGENT_TONES[`${id}-agent`] || { hue: 'var(--mk-muted)' }
 }
 
 /** 数据族语义色注入：值取自 dataFlow.ts 的 familyHue（唯一源 = FAMILY_COLORS），
@@ -734,7 +779,10 @@ type WalkStep = FlowStep & {
   chips: FlowChip[]
 }
 function visibleChips(chips: FlowChip[]) {
-  return showHidden.value ? chips : chips.filter((c) => c.render === 'visible' || c.handoffTargets.length > 0 || c.accumulate)
+  /* 2026-11-11（困惑测试 #56）：原实现保留「有移交或累积」的隐藏字段，勾选框只会增加芯片，
+     对现网数据近乎零差异。现按 render 严格收窄：未勾选 = 不显示隐藏字段，勾选 = 全显示。
+     字段旅程的完整性由产出卡上的芯片与「+M 更多」表达，不靠把内部字段强行铺满。 */
+  return showHidden.value ? chips : chips.filter((c) => c.render !== 'hidden')
 }
 const ENTRY_LIMIT = 8
 const OUTPUT_LIMIT = 8
@@ -1011,13 +1059,18 @@ function measure(attempt = 0) {
      ② 卡片/芯片 rect 相对**内容层** rect 的差值本身就含滚动量（层随滚动一起移动），
         所以**不再加回 scrollLeft/Top**——原实现参照物是滚动容器自身（容器边界不随自身滚动
         移动），才需要加回滚动量。这里再加一次就是双计（实测 135% 时坐标整体偏大 1.107 倍）。 */
-  pipeW.value = rr.width / z
-  pipeH.value = rr.height / z
+  /* 量测原点就是**连线层自己**：SVG 用 viewBox + 100% 铺满内容层内边距盒，
+     用户单位 = 内容层 CSS px；坐标从绘制面量起，缩放 / 内边距 / 设备像素比怎么变都对得上
+     （4K + Windows 缩放下曾整体偏出卡片）。 */
+  const svgEl = root.querySelector<SVGSVGElement>('.dfg-edges')
+  const sr = svgEl ? svgEl.getBoundingClientRect() : rr
+  pipeW.value = sr.width / z
+  pipeH.value = sr.height / z
   const map = new Map<string, DOMRect>()
   const slotMap = new Map<string, string>()
   const cardMap = new Map<string, DOMRect>()
   const rect = (r: DOMRect) =>
-    new DOMRect((r.left - rr.left) / z, (r.top - rr.top) / z, r.width / z, r.height / z)
+    new DOMRect((r.left - sr.left) / z, (r.top - sr.top) / z, r.width / z, r.height / z)
   for (const el of root.querySelectorAll<HTMLElement>('[data-card-key]')) {
     const key = el.getAttribute('data-card-key') || ''
     cardMap.set(key, rect(el.getBoundingClientRect()))
@@ -1074,6 +1127,21 @@ function renderEdges() {
   // 走廊：所有卡同宽同右缘，busX 在卡片右缘与管道右缘之间（lane 分散防叠）
   const outs: EdgeGeom[] = []
   const farAgg = new Map<string, Map<string, 'out' | 'in'>>()
+  /* 卡片 → 每行最右芯片的右缘（行 = 芯片纵向中心，±4px 容差）。
+     宽卡里同一行并排两三枚芯片，源锚点取行内最右那枚才能贴着字段又不横穿邻居。 */
+  const rowsByCard = new Map<string, Array<{ cy: number; right: number }>>()
+  for (const [key, r] of nodeRects.value) {
+    const card = slotCard.get(key)
+    if (!card) continue
+    const row = rowsByCard.get(card) || []
+    row.push({ cy: r.top + r.height / 2, right: r.right })
+    rowsByCard.set(card, row)
+  }
+  const rowRightOf = (card: string, cy: number) => {
+    let best = 0
+    for (const r of rowsByCard.get(card) || []) if (Math.abs(r.cy - cy) <= 4 && r.right > best) best = r.right
+    return best || null
+  }
   let lane = 0
   for (const e of edgeSet.value) {
     const fromSlot = e.kind === 'entry' ? `${e.from}|entry` : `${e.from}|out`
@@ -1097,9 +1165,18 @@ function renderEdges() {
     const sameCol = Math.abs(srcCard.left - dstCard.left) < 2
     const dstIsRight = dstCard.left > srcCard.left + 2
     const dstAnchorLeft = !sameCol && dstIsRight
-    const x1 = srcCard.right
     const y1 = clamp(srcChip.top + srcChip.height / 2, srcCard.top + 4, srcCard.bottom - 4)
-    const x2 = dstAnchorLeft ? dstCard.left : dstCard.right
+    /* 源的锚点也贴回字段：同一行里排在最右的那枚芯片的右缘 +3。
+       整卡取卡片右缘时，宽卡（同一行并排两三枚芯片）的点会落在离字段很远的空白里，
+       同样读成「没连上」。只取行内最右芯片，横线才不会从同排其它芯片身上穿过去；
+       同列仍走右侧走廊，锚点保持卡片右缘（busX 依赖它，挪进来会插进卡内）。 */
+    const rowRight = sameCol ? null : rowRightOf(srcCardKey!, srcChip.top + srcChip.height / 2)
+    const x1 = rowRight ? Math.min(srcCard.right, rowRight + 3) : srcCard.right
+    /* 跨列箭头落在目标芯片的左缘，而不是卡片边界：卡片内边距 20–30px，锚在边界上箭头
+       就悬在留白里，看着像没连到字段（2026-11-10 用户「位置对不上」）。
+       同列走右侧走廊，本来就贴着卡片右缘进出，仍以卡片右缘为锚——改到芯片会在卡内横穿
+       同排的其它芯片（窄档折回单列时整卡都是芯片）。 */
+    const x2 = dstAnchorLeft ? dstChip.left - 3 : dstCard.right
     const y2 = clamp(dstChip.top + dstChip.height / 2, dstCard.top + 4, dstCard.bottom - 4)
     const linked = relatedIds.value.has(e.from) && relatedIds.value.has(e.to)
     const highlight = linked
@@ -1110,9 +1187,11 @@ function renderEdges() {
     /* far 只对同列成立：跨列边线是横向贝塞尔（永远贴着走廊横向走，不沿卡片栈竖排），
        不该被「纵向跨度大」降级成端口徽标——那是把「交给下游」这条主线藏起来。 */
     const mode: EdgeMode = sameCol && spanY > FAR_SPAN ? 'far' : 'near'
-    const baseOp = edgeFaded.value ? 0.22 : 0
-    const op = highlight ? 0.95 : dimmed ? 0.05 : baseOp
-    const dotOp = highlight ? 0.95 : dimmed ? 0.08 : edgeFaded.value ? 0.4 : 0.15
+    /* 静态连线是这个页面的主体（字段从哪来到哪去），不能淡到看不见：
+       原 0.22 / 1.2px 在浅色底上几乎断成虚影（2026-11-10 用户「箭头几乎不可见」）。 */
+    const baseOp = edgeFaded.value ? 0.55 : 0
+    const op = highlight ? 0.95 : dimmed ? 0.12 : baseOp
+    const dotOp = highlight ? 0.95 : dimmed ? 0.15 : edgeFaded.value ? 0.75 : 0.35
     if (mode === 'far') {
       // 不画线：登记端口徽标（双向：源卡「下游」，目标卡「上游」）
       if (!farAgg.has(srcCardKey!)) farAgg.set(srcCardKey!, new Map())
@@ -1123,11 +1202,30 @@ function renderEdges() {
     }
     let d: string
     if (!sameCol) {
-      // 跨列：水平贝塞尔（控制点落在两端中点 → 曲线整体只在中点带内起伏，不会插回卡片内容）
-      const dx = Math.max(24, Math.round(Math.abs(x2 - x1) / 2))
-      d = dstAnchorLeft
-        ? `M ${x1} ${y1} C ${x1 + dx} ${y1} ${x2 - dx} ${y2} ${x2} ${y2}`
-        : `M ${x1} ${y1} C ${x1 - dx} ${y1} ${x2 + dx} ${y2} ${x2} ${y2}`
+      if (spanY > 260) {
+        /* 纵向跨度大的跨列边改走正交折线：贝塞尔在 dy 远大于 dx 时几乎是一根竖线，
+           会从卡片上下方斜切回来，看着像连错了行（2026-11-10 用户「这根线的位置就不对」）。
+           折线统一在列间走廊竖走、再水平接到目标芯片，起止行一眼可对；
+           走廊按 lane 分散，几十条边不会叠成一根。 */
+        const laneX = (x1 + x2) / 2 + (laneOf(lane++) - 1.5) * 7
+        const sx = dstAnchorLeft ? 1 : -1
+        const r = Math.min(8, Math.abs(x2 - x1) / 2, spanY / 2)
+        const dir = y2 > y1 ? 1 : -1
+        d = [
+          `M ${x1} ${y1}`,
+          `L ${laneX - sx * r} ${y1}`,
+          `Q ${laneX} ${y1} ${laneX} ${y1 + dir * r}`,
+          `L ${laneX} ${y2 - dir * r}`,
+          `Q ${laneX} ${y2} ${laneX + sx * r} ${y2}`,
+          `L ${x2} ${y2}`,
+        ].join(' ')
+      } else {
+        // 跨列短程：水平贝塞尔（控制点落在两端中点 → 曲线整体只在中点带内起伏，不插回卡片）
+        const dx = Math.max(24, Math.round(Math.abs(x2 - x1) / 2))
+        d = dstAnchorLeft
+          ? `M ${x1} ${y1} C ${x1 + dx} ${y1} ${x2 - dx} ${y2} ${x2} ${y2}`
+          : `M ${x1} ${y1} C ${x1 - dx} ${y1} ${x2 + dx} ${y2} ${x2} ${y2}`
+      }
     } else {
       // Bus 正交折线：卡右缘 → 走廊竖走 → 目标卡右缘，Q 圆角
       const busX = x1 + 40 - laneOf(lane++) * 9
@@ -1215,8 +1313,10 @@ onMounted(() => {
     sampleDfgBaseW()
     scheduleMeasure()
   })
-  // 观察**视口**：内容层宽度由 zoom × 基准宽算出来，视口尺寸才是布局变化的来源
+  // 观察**视口**（缩放/宽度来源）与**内容层**（卡片增高/展开/折行后连线基准也得跟着变；
+  // 只盯视口时，字体晚加载、设备像素比不同带来的布局位移不会触发重测，连线就停在旧位置）
   if (viewRef.value) resizeObserver.observe(viewRef.value)
+  if (pipeRef.value) resizeObserver.observe(pipeRef.value)
   window.addEventListener('resize', scheduleMeasure)
 })
 onBeforeUnmount(() => {
@@ -1386,7 +1486,7 @@ async function saveEdit() {
       return
     }
     await adminFieldRoutingsApi.patchRouting(c.agentId, c.fieldId, patch)
-    editMsg.value = '已保存：编排文件与 DB 已同步'
+    editMsg.value = '已保存并生效：编排文件与 DB 已同步；变更记录见「治理 → 最近变更」'
     toast.success('字段路由已更新')
     onRoutingChanged()
   } catch (e: any) {
@@ -1412,6 +1512,14 @@ function stepHue(step: FlowStep): string {
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
+  /* 阶段身份色（2026-11-11）：改走已定义的 --mk-* token，深色档由 token 自己提亮
+     （--mk-purple / --mk-teal / --mk-amber 与 --mk-graph-*-ink 在暗色块都有覆写），
+     不再在组件里写死十六进制。toneOf() 返回这些变量名，连线 / 阶段点 / 闸口边框与底色统一从这里取。 */
+  --dfg-hue-goal: var(--mk-purple);
+  --dfg-hue-path: var(--mk-teal);
+  --dfg-hue-teaching: var(--mk-graph-blue-ink);
+  --dfg-hue-profile: var(--mk-amber);
+  --dfg-hue-simulation: var(--mk-graph-accent-purple-ink);
 }
 .dfg-frame {
   border: 1px solid var(--mk-line);
@@ -1544,7 +1652,8 @@ function stepHue(step: FlowStep): string {
 /* 缩放读数（工具栏右端）：定宽 + 等宽数字，比例变化时按钮与左邻元素不跳 */
 .dfg-zoom__val { min-width: 56px; font-variant-numeric: tabular-nums; }
 .dfg-edges {
-  position: absolute; left: 0; top: 0; pointer-events: none; z-index: 3;
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 3;
   /* 同 .orch-odg-svg：别让 main.css 的全局 max-width:100% 把连线层按容器宽度等比缩放 */
   max-width: none;
 }
@@ -1624,6 +1733,15 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
   background: var(--mk-graph-canvas); /* 渐变退役（材质一律平面） */
 }
 .dfg-step--bare { border-style: dashed; background: var(--mk-graph-canvas-2); }
+/* 代码服务说明行：这类步骤没有字段契约，卡头只放得下名称与触发条件，
+   「拿到什么 → 做了什么」另起一行说清（归一化/装配/投影都靠这句看懂）。 */
+.dfg-step__summary {
+  margin: 0;
+  padding: 0 12px 8px;
+  font-size: var(--mk-fs-micro);
+  line-height: 1.55;
+  color: var(--mk-muted);
+}
 .dfg-step--bare.is-unresolved { border-color: color-mix(in srgb, var(--mk-amber) 45%, var(--mk-line)); }
 /* orphan：已注册但无字段契约的 Skill（调用统计是真实健康信号，红色警示） */
 .dfg-step--bare.is-orphan {
@@ -1757,6 +1875,13 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
   background: var(--mk-surface);
   margin-top: 10px;
 }
+/* 去向标记说明（2026-11-11 困惑测试 #57）：芯片右端有无「→ 目标」此前无图例 */
+.dfg-legend__note {
+  margin: 6px 2px 0;
+  font-size: var(--mk-fs-micro);
+  line-height: 1.55;
+  color: var(--mk-muted);
+}
 .dfg-legend.is-dimmed { opacity: 0.55; }
 .dfg-legend__item {
   display: inline-flex; align-items: center; gap: 5px;
@@ -1824,6 +1949,12 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
 
 /* ================= 暗色模式 ================= */
 html[data-theme='dark'] {
+  /* 数据族色来自 dataFlow.ts 的 FAMILY_COLORS（十六进制，逐族无法映射到 token）；
+     深色档统一提亮，避免细线与芯片点在深底上失去对比。
+     阶段色已在 .dfg 上走 --mk-* token，深色档由 token 自身覆写，这里不再重复。 */
+  .dfg-edges { filter: brightness(1.35) saturate(1.05); }
+  .dfg-chip__dot,
+  .dfg-legend__item i { filter: brightness(1.3); }
   .dfg-frame { background: var(--mk-graph-canvas); border-color: var(--mk-graph-line); }
   .dfg-toolbar { background: var(--mk-graph-toolbar-b); border-bottom-color: var(--mk-graph-line); }
   .dfg-search__input { background: var(--mk-graph-field); border-color: var(--mk-line); color: var(--mk-ink); }

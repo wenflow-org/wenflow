@@ -7,9 +7,10 @@
        反查走详情接口的 conversationId（goal_conversations.learningPathId 最新一条）。
        解析失败（无关联对话/接口失败）给明确空态，不静默、不假开。 -->
   <div class="mk-page pdx">
-    <MkEmptyState
+    <MkLoading
       v-if="state === 'resolving'"
-      title="正在打开该路径所在的学习会话…"
+      min
+      text="正在打开该路径所在的学习会话…"
     />
     <MkEmptyState
       v-else-if="state === 'error'"
@@ -67,6 +68,7 @@ import { adminLearningContentApi } from '@/api/adminApi'
 import { copyText } from './clipboard'
 import { toast } from '@/utils/toast'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
+import MkLoading from '@/components/mk/MkLoading.vue'
 import MkRowList from '@/components/mk/MkRowList.vue'
 import MkRow from '@/components/mk/MkRow.vue'
 

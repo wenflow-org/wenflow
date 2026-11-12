@@ -236,3 +236,37 @@ describe('教学会话列表：行级收束观测（#105 轨道/通道）', () =
     expect(result.items[0].closure).toBeNull();
   });
 });
+
+/**
+ * 2026-11-10 口径统一：「有建议」筛选与页面 KPI/行徽章同谓词。
+ * KPI 用 shouldSuggest!==false && priority∉{'','none'}，此前筛选只判 advisory IS NOT NULL，
+ * 点 KPI 后列表条数多于 KPI。写入侧已经只在 shouldSuggest 为真时落库，故这里补齐 priority 一项。
+ */
+describe('onlyWithAdvisory 与 KPI 同谓词', () => {
+  it('筛选条件排除 priority="none" 的附注（KPI 不算它们）', async () => {
+    await listTeachingSessionsDebug({
+      page: 1,
+      limit: 20,
+      onlyWithAdvisory: true,
+      onlyMissingWrapup: false,
+      includeTest: true,
+    });
+    const where = mockPrisma.teaching_sessions.findMany.mock.calls[0][0].where;
+    expect(where.AND).toEqual([
+      { advisory: { not: null } },
+      { NOT: { advisory: { contains: '"priority":"none"' } } },
+    ]);
+  });
+
+  it('不勾选时不加任何 advisory 条件', async () => {
+    await listTeachingSessionsDebug({
+      page: 1,
+      limit: 20,
+      onlyWithAdvisory: false,
+      onlyMissingWrapup: false,
+      includeTest: true,
+    });
+    const where = mockPrisma.teaching_sessions.findMany.mock.calls[0][0].where;
+    expect(where.AND).toBeUndefined();
+  });
+});

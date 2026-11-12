@@ -371,7 +371,7 @@ async function resetClock() {
   /* 全站统一确认框（原原生 window.confirm 是最后一处离类：无 busy/焦点管理、样式断裂） */
   const ok = await askConfirm({
     title: '重置日期模拟进度',
-    message: '确定重置该会话的日期模拟推进进度？回到初始日期，不回改已写的时间戳。',
+    message: '确认重置该会话的日期模拟推进进度？\n回到初始日期，不回改已写的时间戳。',
     confirmText: '重置',
   })
   if (!ok) return

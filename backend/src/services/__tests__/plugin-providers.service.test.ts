@@ -96,7 +96,12 @@ describe('plugin-providers（插件外部服务配置）', () => {
        2026-11-04 写死的顺序恢复可排，优先级回到「平台保存 → 通道环境变量 → 目录默认」。
        本用例设了 SEARCH_PROVIDER=tinyfish,tavily，所以 exa 不在链上。 */
     expect(view.channels.every((c) => c.orderFixed)).toBe(false);
-    expect(view.channels[0].order).toEqual(['tinyfish', 'tavily']);
+    /* 2026-11-10 用户「搜索，决策，都不做链式降级了」：搜索通道 single，
+       环境变量给了两家人也只取第一家；抓取仍是降级链，两家都在。 */
+    expect(view.channels[0].single).toBe(true);
+    expect(view.channels[0].order).toEqual(['tinyfish']);
+    expect(view.channels[1].single).toBe(false);
+    expect(view.channels[1].order).toEqual(['tinyfish', 'tavily']);
     const tinyfish = view.providers.find((p) => p.id === 'tinyfish');
     expect(tinyfish?.configured).toBe(true);
     expect(tinyfish?.keySource).toBe('env');
@@ -135,8 +140,8 @@ describe('plugin-providers（插件外部服务配置）', () => {
     expect(readPluginProviderField('web', 'tinyfish', 'searchEndpoint')).toBe('https://proxy.example/search');
     // 抓取地址没改过，仍按目录默认解析
     expect(readPluginProviderField('web', 'tinyfish', 'fetchEndpoint')).toBe('https://api.fetch.tinyfish.ai');
-    // 顺序：先 Tavily 再 TinyFish
-    expect(readPluginChannelOrder('web', 'search')).toEqual(['tavily', 'tinyfish']);
+    // 搜索不做链式降级：保存的顺序只留第一家（Tavily）
+    expect(readPluginChannelOrder('web', 'search')).toEqual(['tavily']);
   });
 
   it('清空端点 = 回到目录默认（不把空串写成覆盖值）', async () => {
@@ -151,12 +156,21 @@ describe('plugin-providers（插件外部服务配置）', () => {
   /* ---------- 通道优先级（2026-10-26 用户「用户可以自己配置优先级」） ----------
      联网的搜索 / 抓取 2026-11-04 起顺序内置，这里改用决策通道（仍可排）验证同一套机制。 */
 
-  it('通道优先级：保存后平台顺序优先，并随视图下发', async () => {
+  it('通道优先级：保存后平台顺序优先，并随视图下发（用抓取链验证，搜索/决策已改单档）', async () => {
+    await loadPluginProviderConfig();
+    await savePluginProviderConfig('web', { orders: { fetch: ['exa', 'tavily'] } });
+    expect(readPluginChannelOrder('web', 'fetch')).toEqual(['exa', 'tavily']);
+    const view = await getPluginProviderConfig('web');
+    expect(view.channels.find((c) => c.id === 'fetch')?.order).toEqual(['exa', 'tavily']);
+  });
+
+  /* 2026-11-10 用户「搜索，决策，都不做链式降级了」：单档通道只落第一家，运行时链长恒为 1 */
+  it('搜索 / 决策不做链式降级：保存多家只留第一家', async () => {
     await loadPluginProviderConfig();
     await savePluginProviderConfig('decision', { orders: { decision: ['cloudflare', 'alibaba'] } });
-    expect(readPluginChannelOrder('decision', 'decision')).toEqual(['cloudflare', 'alibaba']);
-    const view = await getPluginProviderConfig('decision');
-    expect(view.channels.find((c) => c.id === 'decision')?.order).toEqual(['cloudflare', 'alibaba']);
+    expect(readPluginChannelOrder('decision', 'decision')).toEqual(['cloudflare']);
+    await savePluginProviderConfig('web', { orders: { search: ['exa', 'tavily'] } });
+    expect(readPluginChannelOrder('web', 'search')).toEqual(['exa']);
   });
 
   it('通道优先级：未知 provider / 未知通道被拒，空数组 = 删掉覆盖回落默认', async () => {
@@ -165,16 +179,17 @@ describe('plugin-providers（插件外部服务配置）', () => {
       .rejects.toThrow(/未知 provider/);
     await expect(savePluginProviderConfig('decision', { orders: { nope: ['alibaba'] } }))
       .rejects.toThrow(/未知通道/);
-    await savePluginProviderConfig('decision', { orders: { decision: ['cloudflare'] } });
-    expect(readPluginChannelOrder('decision', 'decision')).toEqual(['cloudflare']);
-    await savePluginProviderConfig('decision', { orders: { decision: [] } });
-    expect(readPluginChannelOrder('decision', 'decision')).toEqual(['alibaba']);
+    await savePluginProviderConfig('web', { orders: { fetch: ['exa'] } });
+    expect(readPluginChannelOrder('web', 'fetch')).toEqual(['exa']);
+    await savePluginProviderConfig('web', { orders: { fetch: [] } });
+    // 空数组 = 删覆盖，回落到环境变量 FETCH_PROVIDER=tinyfish,tavily
+    expect(readPluginChannelOrder('web', 'fetch')).toEqual(['tinyfish', 'tavily']);
   });
 
   it('通道优先级：重复 provider 只算一次', async () => {
     await loadPluginProviderConfig();
-    await savePluginProviderConfig('decision', { orders: { decision: ['cloudflare', 'cloudflare', 'alibaba'] } });
-    expect(readPluginChannelOrder('decision', 'decision')).toEqual(['cloudflare', 'alibaba']);
+    await savePluginProviderConfig('web', { orders: { fetch: ['exa', 'exa', 'tavily'] } });
+    expect(readPluginChannelOrder('web', 'fetch')).toEqual(['exa', 'tavily']);
   });
 
   it('平台密文优先于环境变量，视图只回尾号', async () => {

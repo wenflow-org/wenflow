@@ -78,7 +78,12 @@ export function timeAgo(iso?: string | null): string {
   const d = Math.floor(h / 24)
   if (d === 1) return '昨天'
   if (d < 30) return `${d} 天前`
-  return new Date(t).toLocaleDateString('zh-CN')
+  /* 超过 30 天不再保留相对读数，退回绝对日期。
+     2026-11-11 全站口径：绝对日期统一 `YYYY-MM-DD`，不再用 toLocaleDateString 的
+     `2026/11/11`（斜杠与全站时间戳不同形，容易被读成另一个字段）。 */
+  const dt = new Date(t)
+  const p2 = (n: number) => String(n).padStart(2, '0')
+  return `${dt.getFullYear()}-${p2(dt.getMonth() + 1)}-${p2(dt.getDate())}`
 }
 
 /**
@@ -1222,8 +1227,10 @@ async function fetchLiveOverview(): Promise<OverviewHead> {
       key: 'goalConversations' as const,
       label: '目标对话',
       value: fmt(Number(conv.active || 0) + Number(conv.completed || 0) + Number(conv.cancelled || 0)),
-      foot: `累计完成 ${fmt(Number(conv.completed || 0))} 个`,
-      hint: '',
+      // 2026-11-11（困惑测试 #4）：原 foot 单抛「累计完成 6 个」，与卡面 9 并排读成自相矛盾；
+      // 改在卡根 title 里给构成式（hint 只进 title，不在卡内渲染），foot 不再重复其中一项。
+      foot: Number(conv.cancelled || 0) > 0 ? `已取消 ${fmt(Number(conv.cancelled || 0))} 个` : '',
+      hint: `共 ${fmt(Number(conv.active || 0) + Number(conv.completed || 0) + Number(conv.cancelled || 0))} 个 = 进行中 ${fmt(Number(conv.active || 0))} + 已完成 ${fmt(Number(conv.completed || 0))} + 已取消 ${fmt(Number(conv.cancelled || 0))}`,
     },
   ]
 
@@ -1358,7 +1365,12 @@ export async function liveCreateUser(data: { name: string; email: string; passwo
     isAdmin: data.admin,
     role: data.admin ? 'admin' : 'user'
   })
-  await fetchLiveUsers()
+  /* 写已成功即成功收口：列表刷新失败不能反过来把「创建成功」报成创建失败 */
+  try {
+    await fetchLiveUsers()
+  } catch {
+    /* 下一次列表加载/顶栏刷新会自然补齐 */
+  }
 }
 
 export async function liveDeleteUser(id: string): Promise<void> {
@@ -1459,7 +1471,12 @@ async function fetchLiveLearners(): Promise<void> {
 
 export async function liveRecomputeLearner(userId: string, pathId?: string): Promise<void> {
   await adminLearnerModelsApi.recompute(userId, pathId ? { pathId } : undefined)
-  await fetchLiveLearners()
+  /* 写已成功即成功收口：列表刷新失败不能反过来把「重算成功」报成重算失败 */
+  try {
+    await fetchLiveLearners()
+  } catch {
+    /* 下一次列表加载/顶栏刷新会自然补齐 */
+  }
 }
 
 export async function liveGetLearnerDetail(userId: string, pathId?: string, includeTest?: boolean): Promise<Record<string, unknown>> {
@@ -2040,11 +2057,22 @@ async function fetchLiveApiConfig(): Promise<void> {
   }
 }
 
-export async function liveFetchModels(apiUrl: string, apiKey: string): Promise<string[]> {
+/** 拉上游模型清单。返回值带软分类（后端 inferModelType）：前端筛「推荐对话」不自己维护字典。
+    旧后端没有 modelOptions 时 types 为空，调用方的推荐视图会退化为「全部」而不是筛空。 */
+export async function liveFetchModels(
+  apiUrl: string,
+  apiKey: string,
+): Promise<{ models: string[]; types: Record<string, string> }> {
   const res = await adminApiConfigApi.testConnection({ apiUrl, apiKey })
   const d = res.data?.data ?? res.data ?? {}
   const models = d.models || d.availableModels || []
-  return Array.isArray(models) ? models.map(String) : []
+  const types: Record<string, string> = {}
+  if (Array.isArray(d.modelOptions)) {
+    for (const o of d.modelOptions) {
+      if (o && o.id) types[String(o.id)] = String(o.inferredType || 'unknown')
+    }
+  }
+  return { models: Array.isArray(models) ? models.map(String) : [], types }
 }
 
 export async function liveSaveApiConfig(data: {

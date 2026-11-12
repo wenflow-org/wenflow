@@ -12,6 +12,7 @@ import {
   evidenceTypeZh,
   evidenceConfidenceText,
   evidenceTooltip,
+  evidenceFullTooltip,
   EVIDENCE_LOW_CONFIDENCE,
 } from '../evidence';
 
@@ -77,5 +78,14 @@ describe('evidenceSignalZh / evidenceConfidenceText / evidenceTooltip', () => {
     expect(evidenceTooltip('mastery', 0.92)).toBe('信号：掌握 · 置信 92%');
     expect(evidenceTooltip('mastery', 0.3)).toContain('置信 30%');
     expect(evidenceTooltip('mastery', 0.3)).toContain('证据不足');
+  });
+
+  it('完整 tooltip 的时间按全站口径 YYYY-MM-DD HH:mm（2026-11-11）', () => {
+    const text = evidenceFullTooltip('task-completed', 'mastery', 0.8, {
+      sessionId: 'teaching_user_x',
+      happenedAt: '2026-11-11T10:05:00Z',
+    });
+    expect(text).toMatch(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+    expect(text).not.toContain('2026-11-11T10:05:00Z');
   });
 });

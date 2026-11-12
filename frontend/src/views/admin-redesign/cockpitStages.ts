@@ -22,7 +22,7 @@ export function useCockpitStages(deps: {
   /** 中断类终态（failed/abandoned/timeout/finalization_failed/discarded/superseded，#135） */
   isInterruptedTerminal: ComputedRef<boolean>
   hasWrapup: ComputedRef<boolean>
-  goalConversationMessages: ComputedRef<Array<{ role: string; content: string }>>
+  goalConversationMessages: ComputedRef<Array<{ role: string; content: string; at?: string }>>
   pathStatusPath: ComputedRef<Record<string, unknown>>
   pathMilestonesView: ComputedRef<PathMilestoneView[]>
   learnLessons: ComputedRef<LearnLesson[]>
@@ -118,13 +118,15 @@ export function useCockpitStages(deps: {
        ——明明已完成 2/13 个任务）。步点副标优先走子任务动态读数「任务 d/t」（与 Learn 课树
        同源）；载荷只给概要时退后端计数，里程碑视图/计数是最后兜底（终态会话保持旧读数）。 */
     const tasks = pathMilestonesView.value.flatMap((m) => m.tasks)
-    if (tasks.length) return `任务 ${tasks.filter((t) => t.completed).length}/${tasks.length}`
+    /* 2026-11-11（困惑测试 #28）：列表进度 tooltip 的分母是「本阶段任务数」，这里是整条
+       路径摊平——两个数同屏出现（4 vs 21）却没有口径词。这里标「全路径」，列表侧标「本阶段」。 */
+    if (tasks.length) return `全路径任务 ${tasks.filter((t) => t.completed).length}/${tasks.length}`
     const srPath = asRecord(stageResults.value.path)
     const doneTasks = numberValue(pathStatusPath.value.completedTasks) ?? numberValue(srPath.completedTasks)
       ?? numberValue(stageStatus.value.path?.completedTasks)
     const totalTasks = numberValue(pathStatusPath.value.totalTasks) ?? numberValue(srPath.totalTasks)
       ?? numberValue(stageStatus.value.path?.totalTasks)
-    if (doneTasks !== null && totalTasks) return `任务 ${doneTasks}/${totalTasks}`
+    if (doneTasks !== null && totalTasks) return `全路径任务 ${doneTasks}/${totalTasks}`
     const completedMilestones = numberValue(pathStatusPath.value.completedMilestones)
       ?? numberValue(srPath.completedMilestones)
       ?? numberValue(stageStatus.value.path?.completedMilestones)
@@ -142,7 +144,7 @@ export function useCockpitStages(deps: {
   const learnProgressText = computed(() => {
     const done = countDoneLessons(learnLessons.value)
     const total = learnLessons.value.length
-    return `课程进度 ${done}/${total}`
+    return `课程进度 ${done}/${total}（全路径）`
   })
   /** 阶段步点副标：stepper 是「阶段推进」轴，读数是阶段汇总，须显式命名口径。
       2026-10-12：Path 步点已改读子任务完成数（内容轴，同源同数），本格若仍读

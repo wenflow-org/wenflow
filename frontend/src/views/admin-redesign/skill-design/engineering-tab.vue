@@ -1,5 +1,5 @@
 <template>
-  <!-- 工程：基础信息 / 依赖与发布 / 运行时契约 / 协议视图 / Skill 规则总览（低频只读区块）。
+  <!-- 工程：基础信息 / 依赖与发布 / 运行时契约 / 上下游调用协议 / Skill 规则总览（低频只读区块）。
        2026-11-06 整合：五块统一走卡 + 共享段头 + 共享键值（.mk-facts--rows），
        原先手搓的 .sdp-kv 表（自带灰底列与硬编码色值）整套下线；
        与宿主「工程信息」那张 kv 卡合并成一份（宿主那份已删）。 -->
@@ -25,8 +25,10 @@
             <strong class="mono" title="发布时记录下来的模型，运行时实际用哪个由「模型与路由」决定">{{ overview.db.model }}</strong>
           </div>
           <div v-if="overview.db?.publishedAt"><span>发布时间</span><strong>{{ fmtTime(String(overview.db.publishedAt)) }}</strong></div>
+          <!-- 2026-11-11（困惑测试 #87）：标签「不一致状态」不说是谁和谁不一致，值「已同步」也不说比的是什么。
+               后端比的是磁盘 prompt 文件正文哈希 vs agent_prompts 生效记录正文哈希（prompt-ops-overviews.ts）。 -->
           <div v-if="overview.drift">
-            <span>不一致状态</span>
+            <span title="磁盘 Prompt 文件正文与数据库生效记录正文的内容哈希是否一致。已同步 = 两边正文相同">不一致状态</span>
             <strong class="mono" :class="overview.drift === 'in-sync' ? 'sdp-ok' : 'sdp-warn'">{{ driftLabel(overview.drift) }}</strong>
           </div>
         </div>
@@ -104,7 +106,9 @@
 
     <section class="mk-card">
       <div class="mk-card__head">
-        <h3 class="mk-card__title">协议视图</h3>
+        <!-- 2026-11-11（困惑测试 #90）：本卡是 Goal→Path / Path→Learn 的跨服务调用协议，
+             与「指令与字段」页签的「核心文件查看/编辑」重名不同物，改名避撞。 -->
+        <h3 class="mk-card__title">上下游调用协议</h3>
         <span class="mk-card__meta">{{ protocols.length ? `${protocols.length} 组协议` : '' }}</span>
       </div>
       <div class="sdp-eng__body">
@@ -177,6 +181,7 @@
 import { computed, ref, watch } from 'vue'
 import { adminPromptOpsApi, adminPromptWorkbenchApi } from '@/api/adminApi'
 import { TERMS } from '../terms'
+import { formatTime } from '../cockpitFormat'
 import { shortHash } from './sdp-shared'
 import MkLoading from '@/components/mk/MkLoading.vue'
 
@@ -294,7 +299,9 @@ watch(
 function driftLabel(value: string) {
   return value === 'in-sync' ? TERMS.driftInSync : TERMS.driftValueMismatch
 }
-const fmtTime = (v: string) => (v ? new Date(v).toLocaleString('zh-CN', { hour12: false }) : '—')
+/** 绝对时间统一走 cockpitFormat.formatTime（YYYY-MM-DD HH:mm 单源）。
+ *  原先 toLocaleString('zh-CN') 渲染成 2026/11/10 21:10:23，与列表/详情其它时间两套写法。 */
+const fmtTime = (v: string) => (v ? formatTime(v) || '—' : '—')
 </script>
 
 <style scoped>

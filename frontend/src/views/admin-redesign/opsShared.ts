@@ -104,10 +104,11 @@ export function loadCaliber(kind: LoadCaliber, at?: string | null): LoadCaliberN
 
    2026-10-14 第二步：路径作用域升为**页级开关**（LearnerDetail 的 ld-scope），
    「当前进度/证据时间线/图谱/教学会话」随选择走 → 新增 'path' 档（读者选中的那条，
-   可能不是当前路径）。「概念掌握」「全局信号与背景」「记忆与复习」「行为基线」不随开关走：
-   前三者的数据源是学习者级概念清单与记忆痕迹（跨全部路径，backend #93），后者本就用户级，
-   仍标 all-paths。2026-11-02 外部评审 P1 前，「概念掌握」「全局信号与背景」两张卡的卡头
-   挂的是「当前路径」，与不随开关变的数据互相矛盾，正是这次改掉的。 */
+   可能不是当前路径）。「记忆与复习」「行为基线」不随开关走：前者以 (userId, conceptKey)
+   唯一、一个概念只有一条痕迹（pathId 是最后写入），按路径切会吞掉另一条路径学过的概念；
+   后者本就用户级，仍标 all-paths。
+   2026-11-11 多路径串台修复：「概念掌握」「概念信号与背景」改为按台账 sourcePaths 收窄
+   （旧快照无来源时如实回到 all-paths），证据时间线的目标/路径域事件与校准记录也按 pathId 过滤。 */
 
 export type PanelScope = 'current-path' | 'path' | 'all-paths' | 'all-stories' | 'single-conversation'
 

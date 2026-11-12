@@ -322,7 +322,6 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { adminAuthApi, adminSessionsApi } from '@/api/adminApi'
 import { errMsg } from './live'
-import { useIsNarrow } from './useIsNarrow'
 import { ipText } from './statusText'
 import { askConfirm, doneConfirm, failConfirm } from './useConfirm'
 import { toast } from '@/utils/toast'
@@ -697,7 +696,7 @@ async function revoke(s: AdminSessionRow) {
   const d = deviceOf(s)
   const confirmed = await askConfirm({
     title: '强制下线该会话',
-    message: `确定强制下线此会话吗？\n设备：${[d.browser, d.os, s.remember ? '记住我' : ''].filter(Boolean).join(' · ')}\nIP：${ipText(s.ip)}\n登录时间：${fmtDateTime(s.issuedAt)}`,
+    message: `确认强制下线此会话？\n设备：${[d.browser, d.os, s.remember ? '记住我' : ''].filter(Boolean).join(' · ')}\nIP：${ipText(s.ip)}\n登录时间：${fmtDateTime(s.issuedAt)}`,
     confirmText: '强制下线',
     busy: true,
   })
@@ -723,7 +722,7 @@ async function revokeAllSessions() {
   const scope = bulkScope.value
   const confirmed = await askConfirm({
     title: `下线${scope.label}全部活跃会话`,
-    message: `将强制下线${scope.label}的全部活跃会话（共 ${count} 个，当前登录标签页除外），确定吗？`,
+    message: `将强制下线${scope.label}的全部活跃会话（共 ${count} 个，当前登录标签页除外）。`,
     confirmText: '全部下线',
     busy: true,
   })
@@ -749,7 +748,7 @@ async function cleanupAllHistory() {
   const scope = bulkScope.value
   const confirmed = await askConfirm({
     title: `清理${scope.label}的历史会话`,
-    message: `将删除${scope.label}的 ${count} 条已结束会话记录（已过期或已下线），登录审计记录保留。此操作不可撤销，确定吗？`,
+    message: `将删除${scope.label}的 ${count} 条已结束会话记录（已过期或已下线），登录审计记录保留。此操作不可撤销。`,
     confirmText: '清理历史',
     danger: true,
     busy: true,
@@ -767,14 +766,13 @@ async function cleanupAllHistory() {
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
-/* LY6（2026-10-05 布局方案 §4）：≤1599 档三列 datetime 收 176→112，可见时刻改紧凑口径
-   MM-DD HH:mm（省年，会话有效期以天计）；完整时间仍在 title（fmtFull）与下线确认弹窗。 */
-const isMid = useIsNarrow(1600)
+/* LY6（2026-10-05 布局方案 §4）曾在 ≤1599 档把可见时刻收成 `MM-DD HH:mm`。
+   2026-11-11 时间口径审计撤除该降级：`11-09 23:53` 正是 BRIEF 明令禁止的格式，
+   且同页出现两套写法。日期再挤也不省年份——列宽由 CSS 承担。 */
 function fmtDateTime(iso?: string | null): string {
   if (!iso) return '—'
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return '—'
-  if (isMid.value) return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 function fmtFull(iso?: string | null): string {

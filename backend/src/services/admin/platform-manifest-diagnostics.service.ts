@@ -173,7 +173,7 @@ export async function collectManifestDiagnostics(): Promise<unknown> {
 
   // 逐项明细：户口簿活跃集 ∪ 注册表 并集，每项 status = unregistered | orphan-registration | ok
   const registeredNames = new Set(skillRegistrations.map((item) => item.name));
-  const exemptRegistrationPoints = new Set(['agents', 'platform-direct']);
+  const exemptRegistrationPoints = new Set(['agents', 'platform-direct', 'none']);
   const skillRegistrationItems = [
     ...missingSkillRegistrations.map(skillId => ({ skillId, status: 'unregistered' as const })),
     ...unknownSkillRegistrations.map(skillId => ({ skillId, status: 'orphan-registration' as const })),
@@ -184,7 +184,7 @@ export async function collectManifestDiagnostics(): Promise<unknown> {
         status: 'ok' as const,
         detail: registeredNames.has(skillId)
           ? 'skill_registrations 有行'
-          : 'agents/platform-direct 豁免（不落 skill_registrations 是预期）'
+          : '注册豁免：该注册点本就不落 skill_registrations（agents / platform-direct / none）'
       })),
   ].sort((a, b) => a.skillId.localeCompare(b.skillId));
 

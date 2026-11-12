@@ -966,8 +966,8 @@ const handleAdvisoryAction = async (action: string) => {
 
   const ok = await askConfirm({
     title: '调整当前路径',
-    message: '这会根据你最近的学习情况调整当前路径的后续阶段，已完成任务会保留不变。是否继续？',
-    confirmText: '确认调整当前路径',
+    message: '这会根据你最近的学习情况调整当前路径的后续阶段，已完成任务会保留不变。',
+    confirmText: '调整路径',
     danger: false,
   });
   if (!ok) return;

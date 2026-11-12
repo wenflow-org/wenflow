@@ -59,6 +59,10 @@ router.get('/', async (_req: Request, res: Response) => {
  */
 function validateMcpEndpoint(raw: unknown): string | null {
   const text = String(raw).trim();
+  /* 2026-11-11（管理台困惑测试 #92）：endpoint='local' 是「本机进程」的约定值——
+     运行时按它走 executeLocalTool（McpGateway），种子 config/mcp.json 的 file-reader 就是
+     这种形态。此前编辑弹层原样保存会被这条校验判成非法 URL（400），本机进程工具只能看不能改。 */
+  if (text === 'local') return null;
   try {
     const url = new URL(text);
     const isProduction = process.env.NODE_ENV === 'production';
@@ -68,7 +72,7 @@ function validateMcpEndpoint(raw: unknown): string | null {
     }
     return null;
   } catch {
-    return 'endpoint 必须是合法的 http(s) URL';
+    return 'endpoint 必须是合法的 http(s) URL 或 local（平台进程内执行）';
   }
 }
 

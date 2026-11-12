@@ -96,7 +96,8 @@
           <!-- 原型 wf-pend__acts：主按钮 + 次按钮「已有账号，登录」+ 返回首页同排 -->
           <div class="vn-end__acts">
             <router-link :to="primaryPath" class="vn-btn vn-btn--primary vn-btn--lg">{{ primaryLabel }}</router-link>
-            <router-link to="/login" class="vn-btn vn-btn--light vn-btn--lg">已有账号，登录</router-link>
+            <!-- 与首页尾屏同口径（2026-11-11）：已登录时不再显示「已有账号，登录」并把人送回登录页 -->
+            <router-link :to="loggedIn ? '/dashboard' : '/login'" class="vn-btn vn-btn--light vn-btn--lg">{{ loggedIn ? '回到学习台' : '已有账号，登录' }}</router-link>
             <router-link to="/" class="vn-end__back">← 返回首页</router-link>
           </div>
         </div>

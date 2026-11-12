@@ -85,27 +85,28 @@
           :value="costLoading ? '…' : costFailed ? '加载失败' : costUsd !== null ? `≈ $${fmtCostUsd(costUsd)}` : '—'"
           :tone="costFailed ? 'warn' : pricingMissing ? 'muted' : ''"
           :hint="costHintShort"
-          :clickable="pricingMissing"
-          @click="pricingMissing && goModelConfig()"
+          :clickable="!costLoading && !costFailed"
+          @click="goModelConfig()"
         />
         <MkKpi
           label="已定价调用"
-          :value="loadFailed ? '—' : summary ? `${costPricedCalls} 次` : '—'"
-          :tone="loadFailed ? 'muted' : ''"
+          :value="loadFailed && !summary ? '—' : summary ? `${costPricedCalls.toLocaleString()} 次` : '—'"
+          :tone="loadFailed && !summary ? 'muted' : ''"
+          :title="pricedCallsHint"
         />
         <MkKpi
           label="总 Token"
-          :value="loadFailed ? '—' : summary ? fmtTokens(summary.totals.tokens) : '—'"
-          :tone="loadFailed ? 'muted' : ''"
-          :hint="loadFailed ? '数据加载失败，Token 用量暂不可用' : ''"
-          :title="summary ? `输入 ${fmtTokens(summary.totals.promptTokens)} · 输出 ${fmtTokens(summary.totals.completionTokens)}` : undefined"
+          :value="loadFailed && !summary ? '—' : summary ? fmtTokens(summary.totals.tokens) : '—'"
+          :tone="loadFailed && !summary ? 'muted' : ''"
+          :hint="loadFailed && !summary ? '数据加载失败，Token 用量暂不可用' : ''"
+          :title="summary ? `输入 ${fmtTokens(summary.totals.promptTokens)} · 输出 ${fmtTokens(summary.totals.completionTokens)}（只读读数）` : undefined"
         />
         <MkKpi
           label="失败"
-          :value="loadFailed ? '—' : failedCallsText"
-          :tone="loadFailed ? 'muted' : failedCalls > 0 ? 'bad' : ''"
-          :hint="loadFailed ? '数据加载失败，失败数未知' : failedHintShort"
-          :clickable="!loadFailed && failedCalls > 0"
+          :value="loadFailed && !summary ? '—' : failedCallsText"
+          :tone="loadFailed && !summary ? 'muted' : failedCalls > 0 ? 'bad' : ''"
+          :hint="loadFailed && !summary ? '数据加载失败，失败数未知' : failedHintShort"
+          :clickable="!(loadFailed && !summary) && failedCalls > 0"
           @click="failedCalls > 0 && goFailedLogs()"
         />
       </section>
@@ -126,7 +127,7 @@
             <span class="mk-card__meta">单位：Token</span>
           </div>
           <div class="tc-head-links">
-            <button type="button" class="mk-link" @click="goOverview">总览趋势 →</button>
+            <button type="button" class="mk-link" @click="goOverview">前往平台总览 →</button>
             <button type="button" class="mk-link" @click="goExecLogs()">逐调用明细 →</button>
           </div>
         </div>
@@ -170,13 +171,14 @@
             <!-- 未配置单价是可执行的配置缺口：与「调用成本」卡同落点，直接去补单价 -->
             <button v-if="skillAllUnpriced" type="button" class="mk-badge mk-badge--muted tc-unpriced" @click="goModelConfig">均未配置单价</button>
             <button v-else-if="skillUnpriced > 0" type="button" class="mk-badge mk-badge--muted tc-unpriced" @click="goModelConfig">{{ skillUnpriced }} 个未配置单价</button>
+            <!-- 卡头 meta 已给出总数，展开钮只给动作，不再复读一遍「查看全部 25」 -->
             <button
               v-if="bySkill.length > skillLimit"
               type="button"
               class="tc-more"
               @click="skillAll = !skillAll"
             >
-              {{ skillAll ? '收起' : `查看全部 ${bySkill.length}` }}
+              {{ skillAll ? '收起' : '查看全部' }}
             </button>
           </div>
         </div>
@@ -206,8 +208,11 @@
             @keydown.enter.prevent="goSkillLogs(r)"
             @keydown.space.prevent="goSkillLogs(r)"
           >
-            <span class="tc-st__name" role="cell"><strong :title="r.display || r.key">{{ r.display || r.key }}</strong></span>
-            <span class="tc-st__num" role="cell">{{ r.calls }}</span>
+            <!-- Skill 列用**英文原名**（注册表 id，2026-11-10 用户要求）：
+                 这列是「哪条链」的对号入座，执行日志、字段路由、Prompt 文件里都是这个 id；
+                 中文显示名退到 title（需要认读时再看）。 -->
+            <span class="tc-st__name" role="cell"><strong :title="r.display || r.key">{{ r.key }}</strong></span>
+            <span class="tc-st__num" role="cell">{{ r.calls.toLocaleString() }}</span>
             <span class="tc-st__num" role="cell">{{ fmtTokens(r.tokens) }}</span>
             <span class="tc-st__num tc-st__num--dim" role="cell">{{ fmtTokens(r.promptTokens ?? 0) }}</span>
             <span class="tc-st__num tc-st__num--dim" role="cell">{{ fmtTokens(r.completionTokens ?? 0) }}</span>
@@ -227,9 +232,13 @@
           <div class="mk-card__head">
             <h3 class="mk-card__title">用户用量排行</h3>
             <div class="mk-card__head-right">
+              <!-- 2026-11-11（困惑测试 #98）：本页不按账号类型过滤（2026-10-21 裁决「撤开关，
+                   全部混在一起」），但范围原先只在导出 CSV 首行可见——照总览 R2 判例把
+                   「含虚拟学习者」写回可见位；虚拟账号行头像转紫并标「虚拟学习者」。 -->
+              <span class="mk-card__meta">全部账号 · 含虚拟学习者</span>
               <!-- D13：中小用户此前不可见——加按 用户ID/昵称/邮箱 的服务端搜索（不改动 summary/趋势） -->
               <MkFilterSearch v-model="userQuery" placeholder="搜索用户 ID / 昵称 / 邮箱" />
-              <span class="mk-card__meta">{{ userQuery ? `匹配 ${byUser.length}` : `Top ${byUser.length}` }}</span>
+              <span class="mk-card__meta">{{ byUserStale ? `上次结果 ${byUser.length}` : userQuery ? `匹配 ${byUser.length}` : `Top ${byUser.length}` }}</span>
               <!-- G8（2026-10-10）：搜索失败静默保留旧列表时的行内 stale 提示——此前失败无任何反馈，
                    meta「匹配 N」仍按输入框实时读数，与表格脱源（N 是旧结果的行数）。对齐 Skills.vue
                    liveSkillsError 行内告警判例：辅助数据失败不弹遮主表的 toast，但必须指认数据来源 -->
@@ -242,7 +251,7 @@
                 class="tc-more"
                 @click="userAll = !userAll"
               >
-                {{ userAll ? '收起' : `查看全部 ${byUser.length}` }}
+                {{ userAll ? '收起' : '查看全部' }}
               </button>
             </div>
           </div>
@@ -268,7 +277,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { intent, tokenCostCacheKey, tokenCostFilters } from './store'
-import { errMsg, isPageCacheFresh, markPageFetched, liveRefreshSeq } from './live'
+import { isPageCacheFresh, markPageFetched, liveRefreshSeq } from './live'
 import { adminTokenCostApi } from '@/api/adminApi'
 import MkKpi from '@/components/mk/MkKpi.vue'
 import OvBars from './OvBars.vue'
@@ -279,7 +288,7 @@ import MkPageHead from '@/components/mk/MkPageHead.vue'
 import MkPillSelect from '@/components/mk/MkPillSelect.vue'
 import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import { toast } from '@/utils/toast'
-import { formatUsd } from './costFormat'
+import { formatUsd, formatTokens as fmtTokens, formatPct } from './costFormat'
 
 /* 文案单源（R6 复读单源化）：卡标题与成本表的 aria-label 共用一份 */
 const SKILL_COST_TITLE = '按 Skill 成本明细'
@@ -500,20 +509,21 @@ function skillShareW(r: SkillCostRow): string {
   return `${Math.max(p > 0 ? 3 : 0, p)}%`
 }
 function skillSharePct(r: SkillCostRow): string {
-  const p = skillShareNum(r)
-  return p > 0 && p < 1 ? '<1%' : `${Math.round(p)}%`
+  return formatPct(skillShareNum(r))
 }
-/* 成本卡副行：只剩取不到数 / 待补单价这类状态与动作，不放口径说明 */
+/* 成本卡副行：状态 + 单价来源（2026-11-11 困惑测试 #99）。
+   已配价态原先返回空串——全页对「单价从哪来、在哪改」零线索；口径说明必须常驻（进卡根 title）。
+   单价真源：系统设置 → 模型与接入（USD / 1M tokens，ModelEditorDialog），点卡直达。 */
 const costHintShort = computed(() => {
   if (costLoading.value) return '金额统计中'
   if (costFailed.value) return '金额统计失败'
+  const source = '单价取自系统设置 → 模型与接入（USD / 1M tokens），点此查看 / 修改'
   if (costUsd.value === null) {
     if (costPricedCalls.value === 0 && costMissingCalls.value === 0) return `近 ${days.value} 天无调用`
     const n = missingPricingModels.value.length
-    // 补价入口可点：这是动作提示，不是口径解释
-    return `待补 ${n} 个模型单价 · 查看配置`
+    return `待补 ${n} 个模型单价 · ${source}`
   }
-  return ''
+  return source
 })
 /* 2026-10-21：输入/输出拆分与失败率都不再走副行——拆分在 title 与明细表列里，
    失败率升独立卡；副行只留给加载失败态。 */
@@ -539,7 +549,7 @@ function exportCsv() {
     '[按 Skill 成本明细]',
     'Skill,调用,Token,输入,输出,成本USD,Token占比%,成本占比%',
     ...bySkill.value.map((r) =>
-      [esc(r.display || r.key), r.calls, r.tokens, r.promptTokens ?? '', r.completionTokens ?? '',
+      [esc(r.key), r.calls, r.tokens, r.promptTokens ?? '', r.completionTokens ?? '',
         typeof r.usd === 'number' ? r.usd.toFixed(4) : '单价未配置', sharePct(r.tokens), costSharePct(r.usd)].join(',')),
     '',
     '[用户用量排行]',
@@ -606,22 +616,29 @@ const failedCalls = computed(() => summary.value?.totals.failed ?? 0)
 const totalCalls = computed(() => summary.value?.totals.calls ?? 0)
 const failedPct = computed(() => {
   if (!totalCalls.value) return '—'
-  const rate = (failedCalls.value / totalCalls.value) * 100
-  return `${rate > 0 && rate < 1 ? '<1' : rate.toFixed(1)}%`
+  return formatPct((failedCalls.value / totalCalls.value) * 100)
 })
 // P2（2026-10-04 全站评审）：值只给次数，占比单源留在 hint（此前「4%」卡内念两遍）
 const failedCallsText = computed(() =>
-  failedCalls.value > 0 ? `${failedCalls.value} 次` : '0 次'
+  failedCalls.value > 0 ? `${failedCalls.value.toLocaleString()} 次` : '0 次'
 )
 /** 失败卡副行：同一张卡内给分母，失败率不再另开一张卡。
     统计范围单独说明（2026-11-02 评审）：本卡数是窗口内失败调用，下面三张明细表
     只收产生 Token 用量的网关调用——不加这句，51 次失败在任何明细行上都找不到，
     会被读成「数字对不上」。
-    2026-11-04 口径对齐：本卡「失败」与 /admin/execution-logs 的「失败」同一判据（不含超时），
-    副行补「不含超时」以免被读成全量失败。 */
+    2026-11-11（困惑测试 #97）：平台口径已统一为「失败 = 没成功（含超时）」，
+    这里原先的「不含超时」是被取代的旧口径，后端聚合同步放开超时后两页数字自然对齐。 */
 const failedHintShort = computed(
-  () => `共 ${totalCalls.value} 次调用 · ${failedPct.value} · 失败不含超时 · 三张明细排行只统计产生 Token 用量的网关调用，其余失败不在明细行里`
+  () => `共 ${totalCalls.value} 次调用 · ${failedPct.value} · 失败含超时 · 三张明细排行只统计产生 Token 用量的网关调用，其余失败不在明细行里 · ${failedCalls.value > 0 ? '卡片可打开执行日志的失败视图' : '只读读数，当前无失败'}`
 )
+
+/** 已定价调用卡口径（2026-11-11 困惑测试 #96）：同一页三种「调用次数」同屏不同义——
+    本卡/排行行 = 网关层有 Token 且已配单价的调用；趋势柱与失败卡 = 全部调用（含 skill 层
+    不带 Token 的行与未定价行）。此前本卡是全页唯一没有 title 的 KPI。 */
+const pricedCallsHint = computed(() => {
+  if (loadFailed.value || !summary.value) return '数据加载失败，已定价调用数暂不可用'
+  return `仅统计网关层带 Token 用量、且模型已配单价的调用（近 ${days.value} 天）。趋势与失败卡的「次数」是全部调用，含 skill 层不带 Token 的调用与未定价调用，所以更大。三张排行表的行集与失败卡同一统计范围，只收产生 Token 用量的网关调用。只读读数`
+})
 
 /* P1#25 单价未配置 = 决策态：卡可点直达「系统设置」补单价 */
 const pricingMissing = computed(
@@ -717,26 +734,23 @@ async function load(force = false) {
     loadedKey.value = key
     statsAt.value = new Date().toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' })
     markPageFetched(key)
-  } catch (e) {
+  } catch {
     if (seq !== loadSeq) return
     loadFailed.value = true
-    /* 金额条为辅助信息：失败显式报错并可重试，绝不静默降级成「无调用」 */
+    /* 失败时整页同口径：清掉上一轮快照，由整页错误态接管；不再出现「横幅说旧结果、
+       KPI 说加载失败、表格继续画旧数」三种结论。错误态本身带重试，不再叠 toast。 */
     costFailed.value = true
     costUsd.value = null
     costPricingKnown.value = false
-    toast.error(`加载失败：${errMsg(e)}`)
+    summary.value = null
+    bySkill.value = []
+    byModel.value = []
+    byUser.value = []
   } finally {
     if (seq === loadSeq) { loading.value = false; costLoading.value = false; clearSlowTimer() }
   }
 }
 
-function fmtTokens(n: number): string {
-  if (!Number.isFinite(n) || n <= 0) return '0'
-  if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`
-  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`
-  if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`
-  return String(n)
-}
 
 /** M/D 标签（今日由 trendCols 单独给「今日」，此处不再判日） */
 function dayLabel(date: string): string {
@@ -744,9 +758,11 @@ function dayLabel(date: string): string {
   return `${m}/${d}`
 }
 
-/* 趋势柱数据映射（OvBars 列式结构，与总览 trend7dCols 同构）：
+/* 趋势柱数据映射（OvBars 列式结构）：
    单柱 Token（蓝）—— 原型为「近 7 天成本趋势 · 单位：元」，但接口 trend 无分日金额，
-   故不画金额/双柱系列；数值行给 Token，调用/失败数进 title 与卡尾 note。 */
+   故不画金额/双柱系列；数值行给 Token，调用/失败数进 title 与卡尾 note。
+   2026-11-11（困惑测试 #100）：原注释称「与总览 trend7dCols 同构」，总览已无该趋势卡，
+   依据失效；本页趋势是唯一实现，不再声称同构。 */
 const trendMax = computed(() => Math.max(1, ...trend.value.map((d) => d.tokens)))
 /* 2026-10-24：去掉 6% 最小柱高（极小值会被读成有量），零值归零；
    1% 仅保证非零值在像素取整后仍有一丝可见高度。 */
@@ -889,7 +905,9 @@ const trendCols = computed(() => trend.value.map((d) => ({
     minmax(56px, 78px)
     minmax(76px, 100px)
     minmax(62px, 84px)
-    minmax(70px, 92px)
+    /* 成本表头「预估成本 (USD)」单行放下（下限 86px）：70px 时表头折成两行，
+       与同行其它单行表头高低不齐 */
+    minmax(86px, 104px)
     minmax(105px, 150px);
   align-items: center;
   gap: 10px;

@@ -33,7 +33,7 @@
         </div>
         <p v-if="state.loading" class="vl-cleanup-footnote">正在统计候选…</p>
         <p v-else-if="state.loadError" class="vl-cleanup-footnote vl-cleanup-footnote--error">
-          候选读取失败：{{ state.loadError }}（重开向导重试；不会基于半份数据删除）
+          候选读取失败：{{ state.loadError }}（重开向导重试。不会基于半份数据删除）
         </p>
         <template v-else-if="candidates.length">
           <p class="vl-cleanup-summary">

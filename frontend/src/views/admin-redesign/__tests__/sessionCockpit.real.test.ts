@@ -8,7 +8,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import SessionCockpit from '../SessionCockpit.vue';
-import { intent, subPage } from '../store';
+import { intent, intentQueryParams, subPage, closeSubPage } from '../store';
 import { liveRefreshSeq } from '../live';
 
 /** 后端 /admin/session-console 同构载荷（teaching 会话，含 path/goal/wrapup/evidence/timeline）
@@ -219,9 +219,11 @@ async function mountCockpit(view: 'session' | 'session-real', id: string) {
 }
 
 describe('SessionCockpit 双模式', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     subPage.value = null;
+    // 冲掉上一用例卸载后仍排队的 watcher（否则载荷反查来源会把旧 learner 写进下一用例）
+    await nextTick();
   });
 
   it('顶栏刷新（liveRefreshSeq 广播）重拉本页会话载荷——终端会话轮询已停，这是唯一重读入口', async () => {
@@ -241,10 +243,18 @@ describe('SessionCockpit 双模式', () => {
     const btn = wrapper.findAll('.mk-hero__actions button').find((b) => b.text() === '执行日志');
     expect(btn).toBeTruthy();
     intent.scene = '';
+    // 上一次排查可能留下时间范围；座舱跳转必须清掉，否则 session 过滤会叠成空结果
+    intent.timeRange = 'today';
     await btn!.trigger('click');
     await settle();
     expect(intent.scene).toBe('execution-logs');
     expect(intent.sessionId).toBe('ts_real_1');
+    expect(intent.timeRange).toBe('');
+    // ExecLogs 的 URL 契约：?session= 精确定位 + ?tab=trace 落到 Trace 归组
+    expect(intentQueryParams('execution-logs')).toMatchObject({
+      session: 'ts_real_1',
+      tab: 'trace'
+    });
     wrapper.unmount();
   });
 
@@ -534,6 +544,34 @@ describe('SessionCockpit 双模式', () => {
     pathLanding.unmount();
   });
 
+  it('阶段瓦片点击把落点同步到 subPage.stage（?stage= 深链/刷新保持的单一来源）', async () => {
+    getRealSessionConsole.mockResolvedValue(realTeachingPayload());
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+
+    await wrapper.findAll('.cp-stp')[3].trigger('click'); // 总结
+    await settle();
+
+    expect(wrapper.find('.cp-stp[aria-selected="true"]').attributes('id')).toBe('cp-tab-wrapup');
+    // AdminConsole 的 URL→subPage 同步读的就是这个字段；写入后刷新/分享才能落回总结
+    expect(subPage.value?.stage).toBe('wrapup');
+
+    wrapper.unmount();
+    subPage.value = null;
+  });
+
+  it('非法 ?stage= 回落目标阶段，而不是停在 currentStage 或空页', async () => {
+    getRealSessionConsole.mockResolvedValue(realTeachingPayload());
+    // URL 解析后非法值不会写入 subPage.stage；用同形内存值模拟「显式但拼错」
+    subPage.value = { view: 'session-real', id: 'ts_real_1', stage: 'bogus' as never };
+    const wrapper = mount(SessionCockpit, { attachTo: document.body });
+    await settle();
+
+    expect(wrapper.find('.cp-stp[aria-selected="true"]').attributes('id')).toBe('cp-tab-goal');
+    wrapper.unmount();
+    subPage.value = null;
+  });
+
+
   it('学习者资料卡：上传 / 联网两类来源 + 理解摘要（brief）呈现，无资料不渲染', async () => {
     const payload = realTeachingPayload();
     payload.data.kind = 'goal';
@@ -714,7 +752,8 @@ describe('SessionCockpit 双模式', () => {
     expect(getPathDetailMock).toHaveBeenCalledWith('lp_1');
     // 步点副标走子任务动态读数（M1 2 任务完成 + M2 1 任务进行中 + M3 1 未开始 = 2/4），
     // 不再是「整阶段收齐才 +1」的里程碑口径（2026-10-12 走查：恒 0 读作没进展）
-    expect(wrapper.find('#cp-tab-path .cp-stp__meta').text()).toBe('任务 2/4');
+    // 2026-11-11 #70：座舱里的读数是全路径口径，前缀写明「全路径」
+    expect(wrapper.find('#cp-tab-path .cp-stp__meta').text()).toBe('全路径任务 2/4');
 
     const pane = wrapper.find('#cp-tabpanel-path');
     expect(pane.exists()).toBe(true);
@@ -748,14 +787,11 @@ describe('SessionCockpit 双模式', () => {
     expect(pane.find('.pd-stage__caret').exists()).toBe(false);
     // 旧出口退役：stepper 的 Path 步点即唯一入口，不再有「打开路径详情页」按钮
     expect(pane.text()).not.toContain('打开路径详情页');
-    // 治理动作保留，但收进右缘 ⋯ 菜单（2026-10-22 用户「这个位置不合适」）：
-    // 默认不露按钮；展开后才有「下线路径」，且没有第二颗刷新（顶栏刷新覆盖）
+    // 2026-11-11 #19：真实会话座舱是只读监控，路径治理（下线/恢复/重试）整组不渲染；
+    // 治理入口只留在路径列表页（OpsContent），能力不丢失。
     expect(pane.text()).not.toContain('下线路径');
     expect(pane.text()).not.toContain('刷新');
-    await pane.find('.mk-menu__btn').trigger('click');
-    await flushPromises();
-    const menuItems = pane.findAll('.mk-menu__pop .mk-menu__item').map((b) => b.text());
-    expect(menuItems).toEqual(['下线路径']);
+    expect(pane.find('.mk-menu__btn').exists()).toBe(false);
     // 顶栏刷新同时驱动面板（面板不再自带刷新钮）
     const detailCalls = getPathDetailMock.mock.calls.length;
     liveRefreshSeq.value += 1;
@@ -791,6 +827,39 @@ describe('SessionCockpit 双模式', () => {
       id: 'user_7',
       from: { view: 'session-real', id: 'ts_real_1', label: '会话监控', stage: 'path' },
     });
+
+    wrapper.unmount();
+    subPage.value = null;
+  });
+
+  /* 2026-11-11 真浏览器复现：课堂刷新后 subPage.from 丢失，面包屑只剩「用户账号 / 路径名」，
+     返回键落到用户列表。载荷里本就有 learner 块，据此反查来源补回，面包屑第三段用课堂主题。 */
+  it('深链/刷新：载荷 learner 反查来源；面包屑第三段是课堂主题，返回回到学习者详情', async () => {
+    const payload = realTeachingPayload();
+    payload.data.learner = { id: 'user_7', name: '陈晓', email: 'chenxiao@example.com' };
+    getRealSessionConsole.mockResolvedValue(payload);
+
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+    expect(subPage.value?.from).toMatchObject({
+      view: 'user', id: 'user_7', label: '陈晓', tab: 'sessions'
+    });
+    // 原回写是路径名「Python 入门学习路径」；有学习者来源时应显示课堂主题
+    expect(subPage.value?.label).toBe('函数练习 2/5：参数与返回值');
+
+    closeSubPage();
+    expect(subPage.value).toMatchObject({
+      view: 'user', id: 'user_7', label: '陈晓', tab: 'sessions'
+    });
+
+    wrapper.unmount();
+    subPage.value = null;
+  });
+
+  it('载荷无 learner：不硬编来源，from 为空（返回仍回教学会话列表）', async () => {
+    getRealSessionConsole.mockResolvedValue(realTeachingPayload());
+
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+    expect(subPage.value?.from).toBeUndefined();
 
     wrapper.unmount();
     subPage.value = null;
@@ -1050,6 +1119,37 @@ describe('SessionCockpit 双模式', () => {
     wrapper.unmount();
   });
 
+  it('检查点回放带选项（用户「题目呢」）：A/B/C/D 与学员选择都在，答案键不下发', async () => {
+    const payload = realTeachingPayload();
+    const cp = payload.data.teaching.checkpoints[0];
+    cp.type = 'single_choice';
+    cp.options = [
+      { id: 'A', text: '原因在身体上，要能查得到、看得见才算数' },
+      { id: 'B', text: '原因在意识之外，只能从症状和梦反推' },
+    ];
+    cp.selectedOptionIds = ['B'];
+    // 防御性：即使后端误把答案键带出来，页面也不渲染
+    ;(cp as unknown as Record<string, unknown>).correctOptionIds = ['A'];
+    getRealSessionConsole.mockResolvedValue(payload);
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+    const learnTab = wrapper.findAll('.cp-stp').find((el) => el.find('.cp-stp__name').text() === '学习');
+    await learnTab!.trigger('click');
+    await nextTick();
+
+    const inline = wrapper.find('.cp-checkpoint--inline');
+    const opts = inline.findAll('.cp-checkpoint__opt');
+    expect(opts).toHaveLength(2);
+    expect(opts.map((o) => o.find('.cp-checkpoint__opt-id').text())).toEqual(['A.', 'B.']);
+    expect(opts[1].text()).toContain('原因在意识之外');
+    // 只标学员选择，不标正确答案（答案键是服务端数据）
+    const picked = inline.findAll('.cp-checkpoint__opt--picked');
+    expect(picked).toHaveLength(1);
+    expect(picked[0].text()).toContain('学员选择');
+    expect(picked[0].text()).toContain('原因在意识之外');
+    expect(inline.text()).not.toContain('correctOptionIds');
+    wrapper.unmount();
+  });
+
   it('课堂转录按 markdown 渲染（用户「md没渲染」）：代码围栏出 pre，不露 ``` 原文', async () => {
     const payload = realTeachingPayload();
     const md = '看这段：\n\n```ts\ntype MyPick<T, K extends keyof T> = { [P in K]: T[P] }\n```\n\n边界在调用处。';
@@ -1155,6 +1255,35 @@ describe('SessionCockpit 双模式', () => {
     const teachers = wrapper.findAll('.cp-transcript__message.is-teacher');
     expect(teachers.length).toBeGreaterThan(0);
     expect(teachers.every((el) => !el.classes().includes('is-real-learner'))).toBe(true);
+
+    wrapper.unmount();
+  });
+
+  /* 2026-11-11 用户「对话里看不到时间，只有内容」：课堂转录的每条气泡头都要带发生时刻。
+     主显示 `MM-DD HH:mm`（跨天课堂不歧义），title/datetime 给完整 `YYYY-MM-DD HH:mm`。 */
+  it('课堂对话每条消息都渲染时间（气泡头 MM-DD HH:mm，title 为完整绝对时间）', async () => {
+    const payload = realTeachingPayload();
+    payload.data.teaching.messages = [
+      { role: 'user', content: '我不理解作用域', time: '2026-08-12T14:00:00.000Z' },
+      { role: 'assistant', content: '作用域是变量可见的范围…', time: '2026-08-12T14:00:05.000Z' }
+    ];
+    // 真实模式当前课优先 teaching.messages；归档课/回退路径读 conversations.learning，两处同源同数据
+    payload.data.conversations.learning.messages = payload.data.teaching.messages;
+    getRealSessionConsole.mockResolvedValue(payload);
+    const wrapper = await mountCockpit('session-real', 'ts_real_1');
+    const learnTab = wrapper.findAll('.cp-stp').find((el) => el.find('.cp-stp__name').text() === '学习');
+    await learnTab!.trigger('click');
+    await settle();
+
+    const times = wrapper.findAll('.cp-transcript__message .cp-msg__time');
+    expect(times.length, wrapper.findAll('.cp-transcript__message').map((m) => m.text()).join(' | ')).toBeGreaterThanOrEqual(2);
+    for (const time of times) {
+      const text = time.text();
+      expect(text).toMatch(/^\d{2}-\d{2} \d{2}:\d{2}$/);
+      // title 是完整绝对时间，供与执行日志/会话日志对照
+      expect(time.attributes('title')).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+      expect(time.attributes('datetime')).toBeTruthy();
+    }
 
     wrapper.unmount();
   });

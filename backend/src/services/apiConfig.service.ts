@@ -6,6 +6,7 @@ import { getAPIGateway } from '../gateway/api-gateway';
 import { decryptSecret, encryptSecret, SecretCryptoError } from '../utils/secret-crypto';
 import { endpointsMatch, resolveEndpointBoundSecret } from '../utils/endpoint-identity';
 import { isPlaceholderApiKey } from '../utils/api-key-placeholder';
+import { inferModelType } from '../config/model-type';
 
 const prisma = systemPrisma;
 
@@ -248,6 +249,8 @@ class APIConfigService {
   async testConnection(testUrl?: string, testKey?: string): Promise<{ 
     success: boolean; 
     models?: string[]; 
+    /** 每个上游模型的软分类（对话 / 向量 / 重排 / 其它）：前端「推荐对话」视图据此过滤 */
+    modelOptions?: Array<{ id: string; inferredType: ReturnType<typeof inferModelType> }>;
     error?: string;
     modelsCount?: number;
   }> {
@@ -287,6 +290,7 @@ class APIConfigService {
         return { 
           success: true, 
           models,
+          modelOptions: models.map((id) => ({ id, inferredType: inferModelType(id) })),
           modelsCount: models.length 
         };
       } else {

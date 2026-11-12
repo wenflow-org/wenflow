@@ -33,6 +33,11 @@ vi.mock('@/api/adminApi', () => ({
   adminSkillsApi: {
     getReconciliation: getReconciliationMock,
   },
+  // 2026-11-11 事件投递处置并入本页：内嵌面板自取死信清单
+  adminDevtoolsApi: {
+    getOutboxDead: vi.fn(async () => ({ data: { data: { deadCount: 0, items: [] } } })),
+    requeueOutboxDead: vi.fn(async () => ({ data: { data: { requeued: 0 } } })),
+  },
 }));
 
 function makeReconReport() {
@@ -311,6 +316,29 @@ describe('健康中心（G1）', () => {
     }
   });
 
+  it('事件投递处置卡只在健康检查页签里（2026-11-11 从系统设置运维工具并回）', async () => {
+    getSummaryMock.mockResolvedValue({ data: { success: true, data: makeReport() } });
+    dataSource.value = 'live';
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/admin/:page?', component: { template: '<div />' } }],
+    });
+    await router.push('/admin/health-center');
+    await router.isReady();
+    const wrapper = mount(HealthCenter, { global: { plugins: [router] } });
+    await flushPromises();
+    await nextTick();
+    expect(wrapper.find('#hc-outbox').exists()).toBe(true);
+    // 健康态是摘要，不是一张空表
+    expect(wrapper.find('#hc-outbox').text()).toContain('事件投递');
+    expect(wrapper.find('#hc-outbox').text()).toContain('没有投递失败的事件');
+
+    await router.push('/admin/health-center?tab=recon');
+    await flushPromises();
+    expect(wrapper.find('#hc-outbox').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
   it('分域组按 tone 排序（error→warn→ok）；运行时告警行给出跳转，不再常驻修复说明', async () => {
     const report = makeReport();
     report.health.items.push(
@@ -332,7 +360,7 @@ describe('健康中心（G1）', () => {
     // 运行时降级 / 死信两行各给一个可点的去处
     const labels = wrapper.findAll('.hc-check__actions .mk-link').map((b) => b.text());
     expect(labels.filter((l) => l === '执行日志 →').length).toBe(2);
-    expect(labels).toContain('运维工具 →');
+    expect(labels).toContain('事件投递 →');
   });
 
   it('概要卡点击落到具体项：异常行定位 / 核查异常与未达标落到对应筛选', async () => {

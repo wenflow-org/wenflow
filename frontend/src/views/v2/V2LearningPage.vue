@@ -9,7 +9,10 @@
       </button>
       <div class="learn__title">
         <strong>{{ taskTitle || '课堂' }}</strong>
-        <small>{{ pathName }}</small>
+        <small>
+          {{ pathName }}
+          <template v-if="stageProgress"> · 第 {{ stageProgress.index }} / {{ stageProgress.total }} 节</template>
+        </small>
       </div>
       <div class="learn__head-right">
         <!-- 结课入口：2026-11-06 走查后成为**唯一**入口（⋯ 菜单里那条同名双行项已撤，
@@ -238,7 +241,25 @@
             >重新开始</button>
         </div>
 
-        <div ref="scrollEl" class="tutor__scroll" @scroll="updateNearBottom">
+        <div ref="scrollEl" class="tutor__scroll" :class="{ 'tutor__scroll--intro': introLayout }" @scroll="updateNearBottom">
+          <!-- 本节要掌握（2026-11-11 首屏空洞修复）：只在「刚开课、只有开场白」时出现，
+               内容全部来自已有的知识点数据；学员一开口即退场，不长期占位。 -->
+          <section v-if="introLayout && introPoints.length" class="tutor__intro" aria-label="本节要掌握的知识点">
+            <span class="tutor__intro-kicker">本节要掌握</span>
+            <div class="tutor__intro-row">
+              <span
+                v-for="(kp, i) in introPoints"
+                :key="kp.id || i"
+                class="tutor__intro-chip"
+                :class="{ 'tutor__intro-chip--done': isMastered(kp) }"
+              >
+                <i aria-hidden="true">{{ isMastered(kp) ? '✓' : '○' }}</i>{{ kp.name || kp.title }}
+              </span>
+              <span v-if="knowledgePoints.length > introPoints.length" class="tutor__intro-more">
+                等 {{ knowledgePoints.length }} 个
+              </span>
+            </div>
+          </section>
           <!-- 消息空态（批20）：开场卡收起或会话被清空时不再是纯白滚动区 -->
           <div v-if="!msgs.length" class="tutor__empty">
             <strong>准备开始</strong>
@@ -402,9 +423,10 @@
               :key="q"
               type="button"
               class="reply"
+              :title="q"
               @click="sendDirect(q)"
             >
-              <span class="reply__text">{{ q }}</span>
+              <span class="reply__text">{{ replyLabel(q) }}</span>
             </button>
           </div>
         </div>
@@ -1044,6 +1066,21 @@ function onPageKeydown(e: KeyboardEvent) {
 /* ---------- 基础 ---------- */
 const taskTitle = ref('');
 const pathName = ref('');
+/** 本节在当前阶段的序号（「第 N / M 节」）。数据来自任务详情自带的 milestones.subtasks，
+    不新增请求；拿不到（旧数据/直进课堂）就不渲染，不猜。 */
+const stageProgress = ref<{ index: number; total: number } | null>(null);
+function updateStageProgress(task: Record<string, any> | null) {
+  const list = task?.milestones?.subtasks
+    || task?.milestone?.subtasks
+    || task?.week?.subtasks;
+  if (!Array.isArray(list) || list.length < 2) {
+    stageProgress.value = null;
+    return;
+  }
+  const tid = String(route.params.taskId || '');
+  const idx = list.findIndex((s: Record<string, any>) => String(s?.id || '') === tid);
+  stageProgress.value = idx >= 0 ? { index: idx + 1, total: list.length } : null;
+}
 const pathId = ref('');
 const session = ref<{ sessionId: string; revision: number } | null>(null);
 const initing = ref(true);
@@ -1331,6 +1368,21 @@ const confusionDeltas = computed<string[][]>(() => {
   });
 });
 const quickReplies = ref<string[]>([]);
+/**
+ * 快捷回复的显示文案（2026-11-11 实机走查）：服务端会把长标签截成
+ * 「先讲「同一星期几同…」」「拿「同一星期几同…」试一小步」——两条动作只剩同一个前缀，
+ * 视觉上无法区分「讲解」与「练习」。这里只压缩“引号里的题目”，保留动作差异；
+ * 发送仍用原文，title 里保留原文以便悬停确认。
+ */
+function replyLabel(text: string): string {
+  const t = String(text || '').trim();
+  // 只处理“引号里被省略号截断”的标签：完整标签（如「先讲「时间标志词」怎么找」）
+  // 本身有区分度，原样保留。
+  const truncated = /…|\.\.\./.test(t);
+  if (truncated && /^先讲[「“]/.test(t)) return '先讲这一条';
+  if (truncated && /^拿[「“]/.test(t) && /试一小步/.test(t)) return '拿它练一小步';
+  return t;
+}
 /** 开场摸底引导（opening.question 收敛进行动台面板的一行小字，不再单独成待答气泡）；仅在有动作选项时收进面板 */
 const openingQuestion = ref('');
 /** 开场景卡片（后端 session.scene）：resumed/new 的恢复·接续·重学·复习信息，取代模板双气泡 */
@@ -1416,6 +1468,17 @@ watch(checkpoint, (now) => {
      知识点全掌握时叠加完课提示。 */
   postQuizReplies.value = buildPostQuizReplies()
 })
+
+/* 首屏空洞修复（2026-11-11 实机走查 1280 浅色）：新开课堂只有一条导师开场白，
+   消息区顶部一条气泡、底部快捷回复与输入框，中间约 450px 全空，第一眼像没加载完。
+   两条措施都不造假数据：
+   ① 消息很少时把「本节要掌握」用真实知识点补在开场白上方；
+   ② 这组内容在滚动区里垂直居中，空白变成构图而不是漏渲染。
+   学员一开口（msgs > 1）即恢复顶部起排。 */
+const introLayout = computed(
+  () => msgs.value.length <= 1 && !openingScene.value && !checkpoint.value && !typing.value && !completed.value
+);
+const introPoints = computed(() => knowledgePoints.value.slice(0, 4));
 
 /**
  * 小测收起后的续接快选（2026-11-02 用户反馈「快选没什么意义」）：
@@ -1936,6 +1999,7 @@ async function boot() {
       if (!initing.value || !task) return;
       taskTitle.value = task?.title || task?.displayLabel || '';
       pathName.value = task?.pathTitle || task?.learningPathTitle || task?.learningPath?.title || '';
+      updateStageProgress(task);
     });
 
     const s = (await startSessionByMode()) as unknown as Record<string, any>;
@@ -1944,6 +2008,7 @@ async function boot() {
     if (task) {
       taskTitle.value = task?.title || task?.displayLabel || '';
       pathName.value = task?.pathTitle || task?.learningPathTitle || task?.learningPath?.title || '';
+      updateStageProgress(task);
     }
     /* pathId 取任务负载，query 兜底：任务负载偶发不带 learningPathId（旧路径/直进场），
        此时入口若带 ?pathId= （学习台 CTA）就靠它把「评估页 → 返回学习路径」接回详情页 */
@@ -2991,7 +3056,7 @@ onBeforeUnmount(() => {
 .learn__back:hover { color: var(--blue-deep); border-color: color-mix(in srgb, var(--blue) 35%, var(--line)); }
 .learn__title { display: grid; gap: 3px; min-width: 0; border-left: 1px solid var(--line); padding-left: 16px; }
 .learn__title strong { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.learn__title small { font-size: 12px; color: var(--faint); }
+.learn__title small { font-size: 12px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .learn__head-right { display: flex; align-items: center; gap: 10px; position: relative; }
 .learn__state-link {
   font-size: 12px; font-weight: 700;
@@ -3189,6 +3254,36 @@ onBeforeUnmount(() => {
 }
 .tutor__empty strong { font-size: 15px; color: var(--muted); }
 .tutor__empty p { margin: 0; font-size: 13px; }
+
+/* 首屏短会话构图（2026-11-11 实机走查）：只有开场白时，把「本节要掌握 + 开场白」
+   作为一组在消息区垂直居中，空白变成上下留白而不是中段断层。
+   学员开始互动后 introLayout 关闭，恢复从顶部起排。 */
+.tutor__scroll--intro { justify-content: center; }
+.tutor__intro {
+  display: grid; gap: 8px;
+  max-width: 760px; width: 100%;
+  margin: 0 auto;
+  padding: 12px 14px;
+  border: 1px dashed var(--line);
+  border-radius: var(--mk-radius-lg);
+  background: var(--canvas);
+}
+.tutor__intro-kicker { font-size: 12px; font-weight: 800; color: var(--faint); letter-spacing: .04em; }
+.tutor__intro-row { display: flex; flex-wrap: wrap; gap: 6px 8px; }
+.tutor__intro-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  max-width: 100%;
+  padding: 3px 9px;
+  border-radius: var(--mk-radius-pill);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 12px; font-weight: 600; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tutor__intro-chip i { font-style: normal; color: var(--faint); }
+.tutor__intro-chip--done { color: var(--green-ink); border-color: color-mix(in srgb, var(--green) 30%, var(--line)); }
+.tutor__intro-chip--done i { color: var(--green-ink); }
+.tutor__intro-more { align-self: center; font-size: 12px; color: var(--faint); }
 
 /* 恢复进度横幅：续上历史时的可见确认（替代一次性 toast） */
 .tutor__resume {
@@ -4327,6 +4422,8 @@ onBeforeUnmount(() => {
   /* 消息区贴底（窄屏专属）：首个子项吃满剩余空间，短会话下最新一条与下方快捷块/检查点
      紧贴输入框——手机上的视线与拇指都不用上下跑。桌面不适用：对话要从上往下长。 */
   .tutor__scroll > :first-child { margin-top: auto; }
+  /* intro 构图走居中而非贴底：auto 上边距会让「本节要掌握」单独沉到底部 */
+  .tutor__scroll--intro > :first-child { margin-top: 0; }
   /* 快捷块瘦身见文件末尾的媒体块：.replies/.reply 的基础规则在本文件靠后的 style 块里，
      同权重下写在这里会被覆盖 */
   /* 弹窗锚定在 ⋯ 按钮正下方、右对齐按钮 */

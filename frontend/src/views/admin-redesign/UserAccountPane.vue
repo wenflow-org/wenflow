@@ -145,11 +145,21 @@ interface Detail {
 
 const liveDetail = ref<Detail | null>(null)
 
-/** 绝对时间（概览 kv 的 title；timeAgo 的相对文案不带完整时刻） */
+/** 绝对时间（概览 kv 的 title；timeAgo 的相对文案不带完整时刻）
+ *  2026-11-11 时间口径：固定 YYYY-MM-DD HH:mm，不用 toLocaleString——后者在 zh-CN 下
+ *  输出 2026/11/11 18:32:59，与全站 `YYYY-MM-DD HH:mm` 口径打架。 */
 function fmtAbs(iso?: string | null): string {
   if (!iso) return ''
   const t = new Date(iso).getTime()
-  return Number.isNaN(t) ? '' : new Date(t).toLocaleString('zh-CN', { hour12: false })
+  return fmtDateTime(t)
+}
+
+/** 单点绝对时间格式化（也接受毫秒时间戳） */
+function fmtDateTime(value: string | number): string {
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return typeof value === 'string' ? value : ''
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 /** 复制完整用户 ID：支持排查要把它贴进会话/座舱/日志，截断的短号没法手动选全；
@@ -194,7 +204,7 @@ const grantExpiresLabel = computed(() => {
   const t = projectionGrant.value?.expiresAt
   if (!t) return '—'
   const d = new Date(t)
-  return Number.isNaN(d.getTime()) ? String(t) : d.toLocaleString('zh-CN', { hour12: false })
+  return Number.isNaN(d.getTime()) ? String(t) : fmtDateTime(d.getTime())
 })
 const grantNoteLabel = computed(() => projectionGrant.value?.note?.trim() || '用户未填写协助说明')
 
@@ -212,7 +222,7 @@ const projectionTokenExpiresAt = ref<number | null>(null)
 const projectionTokenExpiryLabel = computed(() => {
   const exp = projectionTokenExpiresAt.value
   if (exp == null || Date.now() >= exp) return ''
-  const hhmm = new Date(exp).toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' })
+  const hhmm = fmtDateTime(exp)
   return `token 有效期至 ${hhmm}（30 分钟）`
 })
 

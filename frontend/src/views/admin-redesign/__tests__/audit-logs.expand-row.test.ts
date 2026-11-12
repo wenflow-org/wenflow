@@ -131,15 +131,16 @@ describe('审计日志展开行：箭头旋转与展开区口径行位置', () =
     expect(btn.attributes('aria-expanded')).toBe('true');
     expect(btn.attributes('aria-controls')).toBe('audit-payload-a1');
 
-    // 口径行：请求行 + 带分隔点的 UA，同序相邻（位置由 flex-start 保证，不再靠 space-between）
+    // 口径行：请求行 + 带分隔点的 UA + 目标 ID 复制（2026-11-11 二轮走查）
     const meta = w.find('.log-payload-meta');
     const kids = meta.element.children;
-    expect(kids).toHaveLength(2);
+    expect(kids).toHaveLength(3);
     expect(kids[0].textContent).toContain('POST');
     expect(kids[0].textContent).toContain('HTTP 200');
     expect(kids[1].classList.contains('log-ua')).toBe(true);
     expect(kids[1].textContent).toContain('Python-urllib/3.10');
     expect(kids[1].querySelector('.log-meta-sep')?.textContent).toBe('·');
+    expect(kids[2].textContent).toContain('复制目标 ID');
     expect(meta.attributes('title')).toBeUndefined();
 
     w.unmount();

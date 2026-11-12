@@ -10,6 +10,7 @@ export const learnerAgentRuntimeDefinition = {
       kind: 'service',
       impl: 'services/learner/LearnerEvidenceProjector.ts handle（事件 → 学习者证据投影；events/learner-event-consumer.ts:49）',
       role: 'learner-evidence-projection',
+      summary: '把领域事件投影成学习者证据，重复事件按收件箱去重',
       condition: 'when learner profile related events arrive'
     },
     {
@@ -18,6 +19,7 @@ export const learnerAgentRuntimeDefinition = {
       kind: 'service',
       impl: 'services/learner/LearnerProfileService.ts clear + services/learner/LearnerSnapshotRefreshService.ts invalidate（清画像缓存并同源失效快照缓存，读路径超 TTL 自愈重建；events/learner-event-consumer.ts:52-54）',
       role: 'learner-profile-cache-clear',
+      summary: '清画像缓存，并让快照缓存同时失效',
       condition: 'after learner evidence is projected'
     },
     {
@@ -26,6 +28,7 @@ export const learnerAgentRuntimeDefinition = {
       kind: 'service',
       impl: 'services/learner/LearnerSnapshotRefreshService.ts refresh（events/learner-event-consumer.ts:67-75；教学 task:completed 与 goal:understanding:updated 不刷新）',
       role: 'learner-snapshot-refresh',
+      summary: '重算学习者快照：掌握度、动态状态与教学提示',
       condition: 'after profile cache is invalidated (skipped for teaching task:completed / goal:understanding:updated)'
     },
     {

@@ -6,32 +6,41 @@
     </div>
 
     <form class="form" :aria-busy="loading" @submit.prevent="handleLogin">
-      <!-- 被登录拦下时说明「为什么到了这里」（走查 2026-10-08 #5） -->
-      <div v-if="redirectNotice" class="notice">{{ redirectNotice }}</div>
+      <!-- 会话失效的 flash 与「需要登录」的守卫说明只保留一处：同一次 401 不能解释两遍 -->
+      <div v-if="authFlashMessage" class="notice">{{ authFlashMessage }}</div>
+      <div v-else-if="redirectNotice" class="notice">{{ redirectNotice }}</div>
       <div v-if="formError" class="errorbar" role="alert">{{ formError }}</div>
 
       <label class="field" :class="{ 'field--error': errors.name }">
         <span class="field__label">用户名</span>
         <input
+          id="login-name"
+          ref="nameEl"
           v-model.trim="form.name"
           type="text"
           class="field__input"
           autocomplete="username"
           autofocus
+          :aria-invalid="errors.name ? 'true' : undefined"
+          :aria-describedby="errors.name ? 'login-name-error' : undefined"
           @blur="touch('name')"
           @input="formError = ''"
         />
-        <span v-if="errors.name" class="field__error">{{ errors.name }}</span>
+        <span v-if="errors.name" id="login-name-error" class="field__error">{{ errors.name }}</span>
       </label>
 
       <label class="field" :class="{ 'field--error': errors.password }">
         <span class="field__label">密码</span>
         <span class="field__pwd">
           <input
+            id="login-password"
+            ref="passwordEl"
             v-model="form.password"
             :type="showPwd ? 'text' : 'password'"
             class="field__input"
             autocomplete="current-password"
+            :aria-invalid="errors.password ? 'true' : undefined"
+            :aria-describedby="errors.password ? 'login-password-error' : undefined"
             @blur="touch('password')"
             @input="formError = ''"
           />
@@ -40,7 +49,7 @@
             <EyeOff v-else :size="17" :stroke-width="1.75" />
           </button>
         </span>
-        <span v-if="errors.password" class="field__error">{{ errors.password }}</span>
+        <span v-if="errors.password" id="login-password-error" class="field__error">{{ errors.password }}</span>
       </label>
 
       <label class="remember-row">
@@ -94,6 +103,12 @@ const errors = reactive({ name: '', password: '' });
 const showPwd = ref(false);
 const remember = ref(false);
 const formError = ref('');
+/** 会话失效 flash：整页 reload 后只消费一次，用常驻 notice 承接，不再与 redirectNotice 叠加 */
+const authFlashMessage = ref('');
+/* 错误定位：提交时把焦点送到第一个出错的输入框（原则 9/11）。视觉红框之外，
+   aria-invalid / aria-describedby 让读屏也能把字段与错误文案关联起来。 */
+const nameEl = ref<HTMLInputElement | null>(null);
+const passwordEl = ref<HTMLInputElement | null>(null);
 
 function touch(key: 'name' | 'password') {
   if (key === 'name') errors.name = form.name ? '' : '请输入用户名';
@@ -138,7 +153,11 @@ const redirectNotice = computed(() =>
 async function handleLogin() {
   touch('name');
   touch('password');
-  if (errors.name || errors.password || loading.value) return;
+  if (errors.name || errors.password || loading.value) {
+    if (errors.name) nameEl.value?.focus();
+    else if (errors.password) passwordEl.value?.focus();
+    return;
+  }
 
   loading.value = true;
   try {
@@ -158,16 +177,10 @@ async function handleLogin() {
       ? String(error.message)
       : '登录失败，请检查用户名和密码';
     formError.value = message;
-    // 行内 errorbar 为主，toast 只留给网络类错误（走查 2026-09-27 P3 三页统一）
-    if (isNetworkError(error)) toast.error(message);
+    // 网络与业务错误都只走可停留的 errorbar，不再叠同文案 toast
   } finally {
     loading.value = false;
   }
-}
-
-/* http 层约定：断网/超时的 reject 不带 status 字段，业务错误一定带 */
-function isNetworkError(error: unknown): boolean {
-  return !(error && typeof error === 'object' && 'status' in error);
 }
 
 async function goRegister() {
@@ -184,8 +197,7 @@ async function goRegister() {
 }
 
 onMounted(() => {
-  const message = consumeAuthFlashMessage();
-  if (message) toast.error(message);
+  authFlashMessage.value = consumeAuthFlashMessage() ?? '';
 });
 </script>
 

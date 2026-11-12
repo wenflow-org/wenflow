@@ -112,7 +112,7 @@ describe('Admin 路由重定向', () => {
   });
 
   it('导航一级收敛（阶段 1）：退役场景 URL 重定向到对应宿主 + tab', async () => {
-    const cases: Array<[string, string, string]> = [
+    const cases: Array<[string, string, string | undefined]> = [
       ['/admin/feedback', '/admin/ops-hub', 'feedback'],
       ['/admin/ops-achievements', '/admin/ops-hub', 'achievements'],
       ['/admin/achievements', '/admin/ops-hub', 'achievements'],
@@ -123,8 +123,9 @@ describe('Admin 路由重定向', () => {
       // 而是真实场景路径（下面单独断言）；旧外部别名 /admin/external-capabilities 改投本页。
       // 2026-11-01：运维工具/数据导出/会话安全/访问与注册 从运营中心迁入「系统设置」
       ['/admin/session-security', '/admin/system-settings', 'security'],
-      ['/admin/ops-center', '/admin/system-settings', 'tools'],
-      ['/admin/devtools', '/admin/system-settings', 'tools'],
+      // 2026-11-11：运维工具页签下线，旧入口改投健康中心（事件投递卡在那里）
+      ['/admin/ops-center', '/admin/health-center', undefined],
+      ['/admin/devtools', '/admin/health-center', undefined],
       ['/admin/export-data', '/admin/system-settings', 'export'],
     ];
     for (const [from, toPath, tab] of cases) {
@@ -191,12 +192,19 @@ describe('Admin 路由重定向', () => {
     expect(router.currentRoute.value.query.tab).toBe('api');
   });
 
-  it('运营中心四个系统页签的老深链改投系统设置（2026-11-01 拆页）', async () => {
-    for (const t of ['tools', 'export', 'security', 'access']) {
+  it('运营中心系统页签的老深链改投（2026-11-01 拆页；2026-11-11 运维工具并入健康中心）', async () => {
+    for (const t of ['export', 'security', 'access']) {
       await router.push(`/admin/ops-hub?tab=${t}`);
       expect(router.currentRoute.value.path, `tab=${t}`).toBe('/admin/system-settings');
       expect(router.currentRoute.value.query.tab, `tab=${t}`).toBe(t);
     }
+    await router.push('/admin/ops-hub?tab=tools');
+    expect(router.currentRoute.value.path).toBe('/admin/health-center');
+    expect(router.currentRoute.value.query.tab).toBeUndefined();
+    // 旧书签直接指向已下线的设置页签，同样改投健康中心
+    await router.push('/admin/system-settings?tab=tools');
+    expect(router.currentRoute.value.path).toBe('/admin/health-center');
+    expect(router.currentRoute.value.query.tab).toBeUndefined();
     // 内容运营四页签仍留在运营中心（2026-11-09 空壳「运营待办」下线后为四个）
     for (const t of ['feedback', 'achievements', 'announce', 'inapp']) {
       await router.push(`/admin/ops-hub?tab=${t}`);
