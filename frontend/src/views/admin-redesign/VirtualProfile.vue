@@ -7,79 +7,78 @@
       @action="loadDetail(subPage?.id)"
     />
   </div>
+  <!-- 首次加载（列表缓存还没给出 d）：与 LearnerDetail 同源骨架，不再白屏 -->
+  <div v-else-if="!d" class="mk-page vp">
+    <div class="vp-skel" aria-hidden="true">
+      <MkSkeleton variant="identity" :avatar="52" />
+      <MkSkeleton variant="cards" :count="2" :h="220" :cols="2" :radius="12" />
+      <MkSkeleton variant="cards" :count="4" :h="96" :cols="4" :radius="10" />
+    </div>
+  </div>
   <div v-else-if="d" class="mk-page vp">
-    <header class="mk-entity mk-entity--flat">
-      <!-- 返回入口只在壳层顶栏（面包屑 🡐 / 返回上一级）：页内再放一颗「← 虚拟学习者」
-           会与顶栏并排成两个同义返回（2026-10-24 用户「这类返回是不是重复了」）。
-           LearnerDetail 早已按同一判例去掉页内返回。 -->
-      <div class="mk-entity__main">
-        <!-- 2026-10-15 用户拍板：撤「身份哈希八色」头像，改随全站语义——虚拟学习者=紫
-             （原语自带 mk-entity__avatar--learner，与列表 MkCellAvatar tone=virtual 同一语义色） -->
-        <span class="mk-entity__avatar mk-entity__avatar--round mk-entity__avatar--learner" aria-hidden="true">{{ d.name.slice(0, 1) }}</span>
-        <div class="mk-entity__name-row">
-          <h1 class="mk-entity__name mk-entity__name--lg">{{ d.name }}</h1>
-          <!-- 生命周期状态（无活动会话/运行中…）：身份信息，与名字同行；操作行只留可点按钮 -->
-          <span v-if="isLive" class="vp-life" :class="`vp-life--${lifeTone}`" :title="lifeHint">
-            <span class="vp-life__dot" aria-hidden="true"></span>{{ lifeLabel }}
-          </span>
-          <span v-if="d.archetype" class="mk-badge mk-badge--info">{{ d.archetype }}</span>
-          <span v-if="levelLabel" class="vp-top__level">{{ levelLabel }}</span>
-          <span v-if="goalText" class="vp-top__goal" :title="'长期倾向：影响模拟行为与学习需求'">{{ goalText }}</span>
-          <!-- 质量徽章已随裁判独立面移除（2026-09-27）：VL 页面不再展示裁判/保真分 -->
-        </div>
-        <!-- 跨页入口（2026-10-24 用户「为什么不设计到右上角」）：页面级动作归页头右缘，
-             与 LearnerDetail 的「虚拟档案 →」对称——那边也是 MkDetailHero 的 #actions。
+    <!-- 页头与用户侧详情（LearnerDetail）同一套 MkDetailHero：52px 头像、24px 页名、
+         身份副文一行、状态/属性 pills、右侧页面级动作。虚拟学习者头像走 tone=learner 紫
+         （与列表 MkCellAvatar tone=virtual 同语义）。返回入口只在壳层顶栏，页内不再重复。 -->
+    <MkDetailHero
+      :avatar="d.name.slice(0, 1)"
+      :title="d.name"
+      :sub="d.archetype || '虚拟学习者'"
+      tone="learner"
+    >
+      <template #pills>
+        <!-- 生命周期状态（无活动会话/运行中…）：身份信息，与名字同层 -->
+        <span v-if="isLive" class="vp-life" :class="`vp-life--${lifeTone}`" :title="lifeHint">
+          <span class="vp-life__dot" aria-hidden="true"></span>{{ lifeLabel }}
+        </span>
+        <span v-if="levelLabel" class="vp-top__level">{{ levelLabel }}</span>
+        <span v-if="goalText" class="vp-top__goal" :title="'长期倾向：影响模拟行为与学习需求'">{{ goalText }}</span>
+        <!-- 质量徽章已随裁判独立面移除（2026-09-27）：VL 页面不再展示裁判/保真分 -->
+      </template>
+      <template #actions>
+        <!-- 页面级动作归页头右缘，与 LearnerDetail 的「虚拟档案 →」对称（都是 MkDetailHero #actions）。
              默认档按钮（hero 位不用 sm，判例 2026-10-20）。 -->
-        <div class="mk-entity__actions">
-          <!-- 页面级主操作（2026-10-31 四轮评审 R4）：已有活跃会话时主位是「打开座舱」——
-               管理员此刻的第一诉求是看进度，蓝色「运行」会诱使误触新建一套重复会话
-               （沈舟/韩磊 故事/路径: 2/1 正是重复运行的产物）；新运行降级为次钮「再开一局」。
-               无活跃会话时维持原样（主位「运行」，复用列表的启动弹窗）。 -->
-          <template v-if="isLive && activeSessionId">
-            <button
-              type="button"
-              class="mk-btn mk-btn--primary"
-              title="打开当前活跃会话的座舱：查看对话、推进/暂停/终止等实时控制"
-              @click="goCockpit()"
-            >打开座舱</button>
-            <button
-              v-if="displayStories.length"
-              type="button"
-              class="mk-btn"
-              title="不影响当前会话：另选故事新开一套运行"
-              @click="openLaunch()"
-            >再开一局</button>
-          </template>
+        <!-- 页面级主操作（2026-10-31 四轮评审 R4）：已有活跃会话时主位是「打开座舱」——
+             管理员此刻的第一诉求是看进度，蓝色「运行」会诱使误触新建一套重复会话
+             （沈舟/韩磊 故事/路径: 2/1 正是重复运行的产物）；新运行降级为次钮「再开一局」。
+             无活跃会话时维持原样（主位「运行」，复用列表的启动弹窗）。 -->
+        <template v-if="isLive && activeSessionId">
           <button
-            v-else-if="isLive"
             type="button"
             class="mk-btn mk-btn--primary"
-            :disabled="!displayStories.length"
-            :title="displayStories.length
-              ? '启动一次新的实验运行：选一个故事，建会话并立刻开跑（不影响已有 session）'
-              : '先生成故事才能运行：到「故事池」生成或导入故事'"
-            @click="openLaunch()"
-          >运行</button>
+            title="打开当前活跃会话的座舱：查看对话、推进/暂停/终止等实时控制"
+            @click="goCockpit()"
+          >打开座舱</button>
           <button
-            v-if="d.userId"
+            v-if="displayStories.length"
             type="button"
             class="mk-btn"
-            title="同一账号的学习视图：概念 / 证据 / 图谱 / 教学会话"
-            @click="goRealLearner()"
-          >学习详情 →</button>
-        </div>
-        <!-- 头部只留身份信息（状态 + 属性 pill）与页面级入口；tab 级操作在下方操作台，
-             账号级低频操作在 tabs 行右端 ⋯ -->
-      </div>
-    </header>
+            title="不影响当前会话：另选故事新开一套运行"
+            @click="openLaunch()"
+          >再开一局</button>
+        </template>
+        <button
+          v-else-if="isLive"
+          type="button"
+          class="mk-btn mk-btn--primary"
+          :disabled="!displayStories.length"
+          :title="displayStories.length
+            ? '启动一次新的实验运行：选一个故事，建会话并立刻开跑（不影响已有 session）'
+            : '先生成故事才能运行：到「故事池」生成或导入故事'"
+          @click="openLaunch()"
+        >运行</button>
+        <button
+          v-if="d.userId"
+          type="button"
+          class="mk-btn"
+          title="同一账号的学习视图：概念 / 证据 / 图谱 / 教学会话"
+          @click="goRealLearner()"
+        >学习详情 →</button>
+      </template>
+    </MkDetailHero>
 
-    <!-- 状态条（#68 收敛到共享原语 MkStatStrip layout="grid"）：hero 下、subtabs 上的一行读数。
-         五格 = 运行次数 / 通过率 / 覆盖场景 / 当前状态 / 记忆点——原概览 pane 的 4 格
-         vp-metricgrid 与前三格同名同值（#69），已删除「记忆点」并入本条第 5 格，
-         同一屏只留一套同义数字。 -->
-    <section class="mk-card">
-      <MkStatStrip layout="grid" aria-label="虚拟学习者概览" :items="statItems" />
-    </section>
+    <!-- 页级读数条撤除（2026-11-12，对齐 LearnerDetail 2026-10-11 的同一判例）：
+         运行次数与「运行记录」页签角标同值，记忆点与「记忆池」卡头同源；通过率 / 覆盖场景
+         已下沉到概览「最近运行」卡脚注，按上下文读，不再在 hero 与页签之间占一条常驻带。 -->
 
     <!-- 详情接口失败但有列表兜底：区块级降级走共享 .mk-alert--row（自带 role=alert），
          此前是页私有 .vp-fallback + 硬编码 rgba 边框（审核 2026-10-06 低 [97]） -->
@@ -191,110 +190,126 @@
         <!-- ===== 概览 pane（原型 renderVLearnerDetail overview，index.html 2459-2472）=====
              4 张 metricCard + 「教学闭环定位」五环 + 「画像设定」kv + 「学习状态读数」lsm -->
         <template v-if="activeTab === 'overview'">
-          <section class="mk-card">
-            <div class="mk-card__head">
-              <h3 class="mk-card__title">教学闭环定位</h3>
-              <!-- 零运行画像：五环全绿会读成「都已完成」，这里明说还没开始 -->
-              <span v-if="!allRuns.length" class="mk-card__meta">尚未运行</span>
-            </div>
-            <div class="vp-cardbody">
-              <div class="loop" role="list" aria-label="教学闭环定位">
-                <template v-for="(s, i) in loopStages" :key="s.name">
-                  <span v-if="i" class="loop__arrow" aria-hidden="true">→</span>
-                  <div class="loop__step" :class="`loop__step--${s.tone}`" role="listitem" :title="s.title">
-                    <span class="loop__no">阶段 {{ i + 1 }}</span>
-                    <span class="loop__name">{{ s.name }}</span>
-                    <span class="loop__meta">{{ s.meta }}</span>
-                    <span class="loop__val">{{ s.val }}</span>
+          <!-- 与 LearnerDetail 概览同构：左 2fr 放「进行到哪 / 读数」，右 1fr 放「下一步 / 最近动态」。
+               原先三张卡等宽自动铺（auto-fit 280px）在 1280 下挤成三列，主次不分。 -->
+          <div class="vp-overview">
+            <div class="vp-overview__main">
+              <section class="mk-card">
+                <div class="mk-card__head">
+                  <h3 class="mk-card__title">教学闭环定位</h3>
+                  <!-- 零运行画像：五环全绿会读成「都已完成」，这里明说还没开始 -->
+                  <span v-if="!allRuns.length" class="mk-card__meta">尚未运行</span>
+                </div>
+                <div class="vp-cardbody">
+                  <div class="loop" role="list" aria-label="教学闭环定位">
+                    <template v-for="(s, i) in loopStages" :key="s.name">
+                      <span v-if="i" class="loop__arrow" aria-hidden="true">→</span>
+                      <div class="loop__step" :class="`loop__step--${s.tone}`" role="listitem" :title="s.title">
+                        <span class="loop__no">阶段 {{ i + 1 }}</span>
+                        <span class="loop__name">{{ s.name }}</span>
+                        <span class="loop__meta">{{ s.meta }}</span>
+                        <span class="loop__val">{{ s.val }}</span>
+                      </div>
+                    </template>
                   </div>
-                </template>
-              </div>
-            </div>
-          </section>
+                </div>
+              </section>
 
-          <div class="vp-2col">
-            <section class="mk-card">
-              <div class="mk-card__head">
-                <h3 class="mk-card__title">画像设定</h3>
-              </div>
-              <dl class="vp-kv">
-                <dt>画像类型</dt>
-                <dd>{{ d.archetype || '—' }}</dd>
-                <dt>主测场景</dt>
-                <dd :title="topScene ? `出现最频繁的运行场景：${topScene}` : '该画像还没有运行记录'">{{ topScene || '—' }}</dd>
-              </dl>
-            </section>
-
-            <!-- 最近一次运行：概览层回答「上次跑到哪」，读数与运行页签同源同文案
-                 （运行次数在页头状态条，此处不再复读） -->
-            <section class="mk-card">
-              <div class="mk-card__head">
-                <h3 class="mk-card__title">最近运行</h3>
-                <span
-                  v-if="latestRun"
-                  class="mk-card__meta"
-                  :title="latestRun.createdAt ? `最近一次运行创建于 ${formatTime(latestRun.createdAt)}` : undefined"
-                >{{ latestRun.time }}</span>
-              </div>
-              <div class="vp-cardbody">
-                <div v-if="latestRun" class="vp-lastrun">
-                  <div class="vp-lastrun__row">
-                    <span class="vp-lastrun__story" :title="latestRun.storyTitle || '未关联故事'">{{ latestRun.storyTitle || '未关联故事' }}</span>
-                    <RunStateBadge :status="runDisplayState(latestRun)" :hint="formatRunResult(runDisplayState(latestRun))" :pulse="false" />
+              <section class="mk-card">
+                <div class="mk-card__head">
+                  <h3 class="mk-card__title">学习状态读数</h3>
+                  <span v-if="lsmRows.length" class="mk-card__meta" :title="loadCaliberNote.title">{{ loadCaliberNote.label }}</span>
+                </div>
+                <div class="vp-cardbody">
+                  <div v-if="lsmRows.length" class="lsm">
+                    <div v-for="row in lsmRows" :key="row.label" class="lsm__row">
+                      <span class="lsm__label">{{ row.label }}</span>
+                      <span class="lsm__track"><i :data-tone="row.tone" :style="{ width: row.pct + '%' }"></i></span>
+                      <span class="lsm__end">
+                        <span class="lsm__val">{{ row.value }}</span>
+                        <span class="mk-badge" :class="row.refCls" :title="row.refTitle">{{ row.ref }}</span>
+                      </span>
+                    </div>
                   </div>
+                  <MkEmptyState
+                    v-else
+                    title="暂无学习状态读数"
+                    :description="lessonEmptyDesc"
+                    compact
+                  />
+                </div>
+              </section>
+            </div>
+
+            <div class="vp-overview__side">
+              <!-- 概览不重复画像字段（画像页签有完整字段）：这里只回答「现在该做什么」 -->
+              <section class="mk-card vp-next">
+                <div class="mk-card__head">
+                  <h3 class="mk-card__title">下一步</h3>
+                  <span class="mk-card__meta">{{ nextStep.state }}</span>
+                </div>
+                <div class="vp-cardbody vp-next__body">
+                  <p class="vp-next__hint">{{ nextStep.hint }}</p>
+                  <button type="button" class="mk-btn mk-btn--primary" @click="nextStep.action">{{ nextStep.label }}</button>
+                </div>
+              </section>
+
+              <!-- 最近一次运行：概览层回答「上次跑到哪」，读数与运行页签同源同文案。
+                   页级读数条撤除后，通过率 / 覆盖场景作为脚注留在这里（有上下文可读）。 -->
+              <section class="mk-card">
+                <div class="mk-card__head">
+                  <h3 class="mk-card__title">最近运行</h3>
                   <span
-                    v-if="runReadings(latestRun)"
-                    class="vp-lastrun__meta mono"
-                    :title="runReadingsTitle(latestRun)"
-                  >{{ runReadings(latestRun) }}</span>
-                  <span v-if="latestRun.currentTask" class="vp-lastrun__task" :title="latestRun.currentTask">{{ latestRun.currentTask }}</span>
-                  <!-- #45：徽章/菜单承诺「可进入座舱查看」后，概览层也要有真实入口 -->
-                  <button
-                    v-if="latestRun.sessionId"
-                    type="button"
-                    class="mk-link vp-lastrun__cockpit"
-                    title="进入这次运行的座舱：查看对话、推进/自动/暂停/终止等细粒度控制"
-                    @click="openSessionCockpit(String(latestRun.sessionId))"
-                  >打开座舱</button>
+                    v-if="latestRun"
+                    class="mk-card__meta"
+                    :title="latestRun.createdAt ? `最近一次运行创建于 ${formatTime(latestRun.createdAt)}` : undefined"
+                  >{{ latestRun.time }}</span>
                 </div>
-                <MkEmptyState
-                  v-else
-                  title="暂无运行记录"
-                  description="到「故事池」选一个故事运行一次，这里会显示最近一次的任务进度、回合与时长。"
-                  compact
-                />
-              </div>
-            </section>
-
-            <section class="mk-card">
-              <div class="mk-card__head">
-                <h3 class="mk-card__title">学习状态读数</h3>
-                <span v-if="lsmRows.length" class="mk-card__meta" :title="loadCaliberNote.title">{{ loadCaliberNote.label }}</span>
-              </div>
-              <div class="vp-cardbody">
-                <div v-if="lsmRows.length" class="lsm">
-                  <div v-for="row in lsmRows" :key="row.label" class="lsm__row">
-                    <span class="lsm__label">{{ row.label }}</span>
-                    <span class="lsm__track"><i :data-tone="row.tone" :style="{ width: row.pct + '%' }"></i></span>
-                    <span class="lsm__end">
-                      <span class="lsm__val">{{ row.value }}</span>
-                      <span class="mk-badge" :class="row.refCls" :title="row.refTitle">{{ row.ref }}</span>
-                    </span>
+                <div class="vp-cardbody">
+                  <div v-if="latestRun" class="vp-lastrun">
+                    <div class="vp-lastrun__row">
+                      <span class="vp-lastrun__story" :title="latestRun.storyTitle || '未关联故事'">{{ latestRun.storyTitle || '未关联故事' }}</span>
+                      <RunStateBadge :status="runDisplayState(latestRun)" :hint="formatRunResult(runDisplayState(latestRun))" :pulse="false" />
+                    </div>
+                    <span
+                      v-if="runReadings(latestRun)"
+                      class="vp-lastrun__meta mono"
+                      :title="runReadingsTitle(latestRun)"
+                    >{{ runReadings(latestRun) }}</span>
+                    <span v-if="latestRun.currentTask" class="vp-lastrun__task" :title="latestRun.currentTask">{{ latestRun.currentTask }}</span>
+                    <!-- #45：徽章/菜单承诺「可进入座舱查看」后，概览层也要有真实入口 -->
+                    <button
+                      v-if="latestRun.sessionId"
+                      type="button"
+                      class="mk-link vp-lastrun__cockpit"
+                      title="进入这次运行的座舱：查看对话、推进/自动/暂停/终止等细粒度控制"
+                      @click="openSessionCockpit(String(latestRun.sessionId))"
+                    >打开座舱</button>
+                    <p v-if="runSummary" class="vp-lastrun__summary" :title="runSummaryTitle">{{ runSummary }}</p>
                   </div>
+                  <MkEmptyState
+                    v-else
+                    title="暂无运行记录"
+                    description="到「故事池」选一个故事运行一次，这里会显示最近一次的任务进度、回合与时长。"
+                    compact
+                  />
                 </div>
-                <MkEmptyState
-                  v-else
-                  title="暂无学习状态读数"
-                  :description="lessonEmptyDesc"
-                  compact
-                />
-              </div>
-            </section>
+              </section>
+            </div>
           </div>
         </template>
 
-        <section v-if="activeTab === 'profile'" class="mk-card vp-hero">
+        <template v-if="activeTab === 'profile'">
+        <section class="mk-card vp-hero">
+          <div class="mk-card__head">
+            <h3 class="mk-card__title">人物背景</h3>
+            <span class="mk-card__meta">由身份卡派生</span>
+          </div>
           <div class="vp-hero__body">
+            <div class="vp-profile-scene">
+              <span>主测场景</span>
+              <strong>{{ topScene || topSceneEmpty }}</strong>
+            </div>
             <p class="vp-hero__story">{{ d.story || '暂无人物背景' }}</p>
             <div v-if="d.traits?.length" class="vp-traits">
               <span v-for="t in d.traits" :key="t" class="vp-trait">{{ t }}</span>
@@ -307,7 +322,10 @@
           </div>
         </section>
 
-        <section v-if="activeTab === 'profile'" class="mk-card">
+        <!-- 画像字段与能力维度并排：用户侧画像页是多列参数卡，这边原先两张通栏卡
+             在 1280 下各留半屏空白（2026-11-12 对齐 LearnerDetail 的 .ld-pf-grid） -->
+        <div class="vp-profile-grid">
+        <section class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">画像字段</h3>
           </div>
@@ -322,10 +340,9 @@
         <!-- 能力维度评分（原型 portrait pane，index.html 2416-2421）：meterrow + meter；
              画像接口目前只给身份/偏好类字段（知识水平、性格基线、personalityTraits 枚举），
              没有可计量的数值化维度 → 渲染空态，不硬造评分（红线） -->
-        <section v-if="activeTab === 'profile'" class="mk-card">
+        <section class="mk-card">
           <div class="mk-card__head">
             <h3 class="mk-card__title">能力维度评分</h3>
-            
           </div>
           <div class="vp-cardbody">
             <div v-if="abilityDimensions.length" class="lsm">
@@ -338,11 +355,13 @@
             <MkEmptyState
               v-else
               title="暂无能力维度评分"
-              description="暂无数值化能力维度（现有画像只有知识水平与性格偏好，无可计量评分）。"
+              description="这个画像只有知识水平与性格偏好，还没有可计量的能力维度。"
               compact
             />
           </div>
         </section>
+        </div>
+        </template>
 
         <!-- 学习状态读数不再在画像页签重复一份（2026-10-24）：概览页签已渲染同一张卡
              （同 lsmRows / 同口径 meta），两处同屏只差一格滚动，属于原型照搬留下的复读。 -->
@@ -434,9 +453,11 @@
 
           <MkEmptyState
             v-else-if="isLive && memoryEmpty"
-            title="记忆池还是空的"
-            description="完成课程后，学到的概念和做过的事会沉淀到这里。还没有学习记录时，记忆池为空是正常的。"
+            title="还没有学到概念"
+            description="完成课程后，学到的概念和做过的事会沉淀到这里。"
+            action-text="去故事池跑一节课"
             compact
+            @action="activeTab = 'stories'"
           />
 
           <template v-else>
@@ -472,8 +493,8 @@
             </div>
             <MkEmptyState
               v-else
-              title="记忆池还是空的"
-              description="完成课程后，学到的概念和做过的事会沉淀到这里。还没有学习记录时，记忆池为空是正常的。"
+              title="还没有学到概念"
+              description="完成课程后，学到的概念和做过的事会沉淀到这里。"
               compact
             />
 
@@ -548,6 +569,7 @@
               </template>
             </div>
           </div>
+          <p class="vp-pane-hint">故事决定这一轮模拟的学习需求。跑起来后到「运行记录」看阶段与结果。</p>
           <!-- 故事池三态：加载失败（接口挂了，不是没故事）/ 底层无故事 / 筛选无匹配 -->
           <MkEmptyState
             v-if="isLive && storiesLoadFailed"
@@ -605,12 +627,23 @@
                       @keydown.enter.prevent="selectStory(s, i)"
                       @keydown.space.prevent="selectStory(s, i)"
                     >{{ s.title }}</strong>
-                    <span class="mk-badge" :class="storyStatusMeta(s).cls">
+                    <!-- 故事模板生命周期只在「还没有运行」时出：一旦有 latestRun，
+                         下方 RunStateBadge 就是这一行唯一的状态，避免同一行出现两个
+                         一模一样的「已完成」胶囊（走查 2026-11-12） -->
+                    <span v-if="!s.latestRun?.sessionId" class="mk-badge" :class="storyStatusMeta(s).cls">
                       {{ storyStatusMeta(s).text }}
                     </span>
                     <span v-if="storyBudgetBadge(s)" class="vp-story__budget-badge" :title="'故事级预算：' + storyBudgetBadge(s) + '。留空字段按角色级取值'">预算自定义</span>
                   </div>
-                  <p class="vp-story__outline" :title="s.outline">{{ s.outline || '暂无故事概述' }}</p>
+                  <p class="vp-story__outline" :title="s.outline || undefined">
+                    {{ s.outline || '还没有概述。' }}
+                    <button
+                      v-if="isLive && !s.outline"
+                      type="button"
+                      class="mk-link"
+                      @click.stop="openEditStory(i, poolIndex(s, i))"
+                    >补充</button>
+                  </p>
                   <div class="vp-story__stats">
                     <span v-if="(s.runCount || 0) > 0" class="vp-story__stats-item" title="共运行次数">运行 {{ s.runCount }} 次</span>
                     <span v-if="stageCountsText(s)" class="vp-story__stats-item" title="运行进度：目标对话 / 路径规划 / 教学回合 的累计运行数（0 段省略）">{{ stageCountsText(s) }}</span>
@@ -671,7 +704,7 @@
 
         <section v-if="activeTab === 'timeline'" class="mk-card">
           <div class="mk-card__head">
-            <h3 class="mk-card__title">学习日程</h3>
+            <h3 class="mk-card__title">模拟日程</h3>
             <!-- 计数只在有会话时出：0 个会话时下面已有空态说明，徽章再报一次 0 是重复 -->
             <span v-if="timelineSessionOptions.length" class="mk-badge mk-badge--muted">{{ timelineSessionOptions.length }} 次运行</span>
             <!-- 2026-10-21：选运行从「整行 label + 全宽下拉」收进卡头右组（用户走查「标的地方重新做一下」）。
@@ -724,6 +757,7 @@
               :title="`运行记录较多，仅显示最近 ${RUNS_TAB_WINDOW} 次`"
             >显示最近 {{ RUNS_TAB_WINDOW }} 次</span>
           </div>
+          <p class="vp-pane-hint">按天分组。打开座舱看阶段与结果，也可继续、暂停或终止进行中的运行。</p>
           <MkEmptyState v-if="!allRuns.length" :class="LINE_EMPTY" title="还没有运行记录" />
           <MkEmptyState v-else-if="!runRows.length" :class="LINE_EMPTY" title="当前筛选无运行：">
             <button type="button" class="mk-link" @click="runsFilter = ''">查看全部</button>
@@ -1117,10 +1151,11 @@ import RunStateBadge from './RunStateBadge.vue'
 import RunStageBar from './RunStageBar.vue'
 import VirtualLearnerLaunch from './VirtualLearnerLaunch.vue'
 import MkSubTabs from '@/components/mk/MkSubTabs.vue'
-import MkStatStrip from '@/components/mk/MkStatStrip.vue'
+import MkDetailHero from '@/components/mk/MkDetailHero.vue'
 import MkEmptyState from '@/components/mk/MkEmptyState.vue'
 import MkSelect from '@/components/mk/MkSelect.vue'
 import MkLoading from '@/components/mk/MkLoading.vue'
+import MkSkeleton from '@/components/mk/MkSkeleton.vue'
 import MkChart from '@/components/mk/MkChart.vue'
 import DayTimeline from './DayTimeline.vue'
 import { useSafePolling } from '@/composables/useSafePolling'
@@ -1445,8 +1480,9 @@ const storyFilterOptions = computed(() => {
     { key: '', label: '全部', count: base.length },
     { key: 'running', label: '进行中', count: running },
     { key: 'paused', label: '已暂停', count: paused },
-    { key: 'failed', label: '需关注', count: failed },
+    /* 与运行页签同序（已完成 → 需关注）：两个筛选条是同一控件，顺序不能一个页签一个样 */
     { key: 'completed', label: '已完成', count: completed },
+    { key: 'failed', label: '需关注', count: failed },
   ]
 })
 const displayStories = computed<StoryItem[]>(() => {
@@ -2639,17 +2675,18 @@ function goSourceCard() {
 }
 
 const tabs = computed(() => {
-  const list: Array<{ key: ProfileTab; label: string; count?: number }> = [
-    { key: 'overview', label: '概览' },
-    { key: 'stories', label: '故事池', count: displayStories.value.length },
-    { key: 'runs', label: '运行', count: (d.value?.runs || []).length },
-    { key: 'timeline', label: '日程', count: timelineSessionOptions.value.length },
+  const list: Array<{ key: ProfileTab; label: string; count?: number; title?: string }> = [
+    { key: 'overview', label: '概览', title: '最近运行、教学闭环与下一步' },
+    // 角标取故事总数，不跟随筛选变化；筛选命中数在故事池的筛选 pills 里单独给
+    { key: 'stories', label: '故事池', count: stories.value.length, title: '故事决定这一轮模拟的学习需求' },
+    { key: 'runs', label: '运行记录', count: (d.value?.runs || []).length, title: '每次运行的阶段、结果与座舱入口' },
+    { key: 'timeline', label: '模拟日程', count: timelineSessionOptions.value.length, title: '按模拟日历推进并查看每日负荷' },
     // 角标与卡头同口径（#76）：表内实际渲染的概念行数，而不是四桶合计（上限 42 对不上 8）
-    { key: 'memory', label: '记忆池', count: memoryPoolRows.value.length },
-    { key: 'profile', label: '画像' },
+    { key: 'memory', label: '记忆池', count: memoryPoolRows.value.length, title: '这个虚拟学习者记住了什么' },
+    { key: 'profile', label: '画像', title: '人物背景、长期倾向与画像字段' },
     /* 运行预算（2026-10-21 用户「不放在画像里面，单独开一个 tab」）：配置是"下次跑用什么默认值"，
        与画像（这个人是谁）不是一件事。已下线虚拟学习者没有可跑的会话，不显示该页签。 */
-    ...(isLive.value ? [{ key: 'budget' as const, label: '预算' }] : [])
+    ...(isLive.value ? [{ key: 'budget' as const, label: '运行预算', title: '新运行的默认重试、回合与难度' }] : [])
   ]
   return list
 })
@@ -2748,8 +2785,10 @@ const sceneStats = computed(() => {
   return [...map.values()].sort((a, b) => b.count - a.count)
 })
 
-/** 主测场景：出现最频繁的运行场景（无运行 → 空串，模板显示 —） */
+/** 主测场景：出现最频繁的运行场景（无场景 → 空串，模板用 topSceneEmpty 说明原因） */
 const topScene = computed(() => sceneStats.value[0]?.name || '')
+/** 无场景分两种：根本没跑过，或跑过但运行没关联故事场景（后者不能写成「还没有运行」） */
+const topSceneEmpty = computed(() => (allRuns.value.length ? '运行还没有关联故事场景' : '还没有运行，暂无主测场景'))
 
 /** 最近一次运行（按 createdAt 倒序，与运行页签同口径）：概览「最近运行」卡用。
     运行次数在页头状态条，本卡只回答「上次跑到哪、跑成什么样」。 */
@@ -2767,6 +2806,41 @@ function runTimeText(iso?: string | null): string {
   return Date.now() - t > 30 * 86400000 ? formatTime(iso) : timeAgo(iso)
 }
 
+/** 概览的「下一步」：把散在故事池 / 运行 / 座舱三个入口收敛成一张可执行卡 */
+const nextStep = computed(() => {
+  const latest = latestRun.value
+  if (activeSessionId.value) {
+    return {
+      state: latest?.tone === 'bad' ? '最近运行失败' : '有运行在进行',
+      hint: '先去座舱看进度或排障；继续、暂停、终止都在那里。',
+      label: '打开座舱',
+      action: () => goCockpit()
+    }
+  }
+  if (!stories.value.length) {
+    return {
+      state: '还没有故事',
+      hint: '先为这个画像生成一个故事；故事决定这一轮模拟的学习需求。',
+      label: '去故事池',
+      action: () => { activeTab.value = 'stories' }
+    }
+  }
+  if (!latest) {
+    return {
+      state: '尚未运行',
+      hint: '故事已就绪；跑一次后，运行记录、模拟日程与记忆池会开始积累数据。',
+      label: '运行一个故事',
+      action: () => openLaunch()
+    }
+  }
+  return {
+    state: '最近一次已完成',
+    hint: '可以换一个故事，或再跑一局对比两次表现。',
+    label: '再开一局',
+    action: () => openLaunch()
+  }
+})
+
 /** 相对时间的主口径保留，但悬停必须能读到绝对时间（BRIEF 全站相对时间规则）。 */
 function runTimeTitle(run?: { updatedAt?: string; createdAt?: string; time?: string }): string {
   const stamp = String(run?.updatedAt || run?.createdAt || '')
@@ -2777,39 +2851,22 @@ function runTimeTitle(run?: { updatedAt?: string; createdAt?: string; time?: str
 
 /** 当前状态徽章语气：VS_STATE_META.tone（muted/warn/ok/bad）→ mk-badge 修饰类（均已全局定义） */
 
-/** 概览状态条 items（#68：共享 MkStatStrip layout=grid；#69：原 vp-metricgrid 的
-    「记忆点」并入本条第 5 格，不再与前三格同屏复读）。口径与下方各 pane 同源。 */
-const statItems = computed(() => {
+/** 概览「最近运行」脚注（2026-11-12，对齐 LearnerDetail 撤页级读数条）：
+    通过率与覆盖场景下沉到运行上下文里读；运行次数由「运行记录」页签角标承担，
+    记忆点由「记忆池」卡头承担，同一屏不再出现两份同义数字。 */
+const runSummary = computed(() => {
+  if (!allRuns.value.length) return ''
   const rs = runStats.value
-  const mem = memoryData.value
-  const memoryPoints = mem
-    ? (mem.counts.mastered || 0) + (mem.counts.dueReview || 0) + (mem.counts.struggling || 0)
-    : null
-  return [
-    {
-      label: '运行次数',
-      value: `${rs.total}${rs.exact ? '' : '（加载窗口）'}`,
-      title: '来源：会话流水记录（最近窗口）'
-    },
-    {
-      label: '通过率',
-      value: rs.passRate == null ? '—' : `${rs.passRate}%${rs.total ? `（近 ${rs.total} 次）` : ''}`,
-      title: passRateTitle.value
-    },
-    {
-      label: '覆盖场景',
-      // 有运行记录时 0 是事实（这些运行都没关联故事场景），不能落成「—」冒充未加载
-      value: allRuns.value.length ? String(sceneStats.value.length) : '—',
-      title: allRuns.value.length
-        ? (sceneStats.value.length ? '运行记录里出现过的不同场景（故事）数' : '运行记录尚未关联故事场景，覆盖数为 0')
-        : '暂无运行记录，无法统计覆盖场景'
-    },
-    {
-      label: '记忆点',
-      value: memoryPoints == null ? '—' : String(memoryPoints),
-      title: memoryPoints == null ? '记忆池未加载' : '来源：记忆池统计（已掌握、到期、卡点之和，不含最近完成事项）'
-    }
-  ]
+  const pass = rs.passRate == null ? '通过率 —' : `通过率 ${rs.passRate}%（近 ${rs.total} 次）`
+  const cover = sceneStats.value.length ? `覆盖 ${sceneStats.value.length} 个场景` : '场景未关联'
+  return `${pass} · ${cover}`
+})
+const runSummaryTitle = computed(() => {
+  if (!allRuns.value.length) return undefined
+  const cover = sceneStats.value.length
+    ? `运行记录里出现过的不同场景（故事）数：${sceneStats.value.length}`
+    : '运行记录尚未关联故事场景，覆盖数为 0'
+  return `${passRateTitle.value}。${cover}。`
 })
 
 /** 教学闭环定位（原型 loopStrip index.html:1708-1722，五环）。
@@ -2853,11 +2910,11 @@ const loopStages = computed<LoopStage[]>(() => {
     return i < currentIdx2 ? 'done' : i === currentIdx2 ? 'active' : 'idle'
   }
   return [
-    { name: '目标对话', meta: '澄清真实目标与约束', val: `${goalTotal} 会话`, tone: toneOf(0), title: `来源：故事池目标会话合计 ${goalTotal}` },
-    { name: '路径规划', meta: '生成阶段化学习路径', val: `${pathTotal} 路径`, tone: toneOf(1), title: `来源：故事池路径合计 ${pathTotal}` },
-    { name: '教学回合', meta: '回合式讲解与追问', val: `${learnTotal} 教学会话`, tone: toneOf(2), title: `来源：故事池教学会话合计 ${learnTotal}` },
-    { name: '课后评估', meta: '产出与掌握度评估', val: completed == null ? '—' : `${completed} 成果`, tone: toneOf(3), title: completed == null ? '记忆池未加载，暂无完成事项读数' : `来源：记忆池最近完成事项（共 ${completed} 项）` },
-    { name: '记忆复习', meta: '遗忘曲线调度复习', val: due == null ? '—' : `${due} 待办`, tone: toneOf(4), title: due == null ? '记忆池未加载，暂无到期读数' : `来源：记忆池到期复习（共 ${due} 条）` }
+    { name: '目标对话', meta: '澄清目标与约束', val: `${goalTotal} 会话`, tone: toneOf(0), title: `来源：故事池目标会话合计 ${goalTotal}` },
+    { name: '路径规划', meta: '生成阶段化路径', val: `${pathTotal} 路径`, tone: toneOf(1), title: `来源：故事池路径合计 ${pathTotal}` },
+    { name: '教学回合', meta: '回合讲解与追问', val: `${learnTotal} 教学会话`, tone: toneOf(2), title: `来源：故事池教学会话合计 ${learnTotal}` },
+    { name: '课后评估', meta: '产出与掌握评估', val: completed == null ? '—' : `${completed} 成果`, tone: toneOf(3), title: completed == null ? '记忆池未加载，暂无完成事项读数' : `来源：记忆池最近完成事项（共 ${completed} 项）` },
+    { name: '记忆复习', meta: '遗忘曲线复习', val: due == null ? '—' : `${due} 待办`, tone: toneOf(4), title: due == null ? '记忆池未加载，暂无到期读数' : `来源：记忆池到期复习（共 ${due} 条）` }
   ]
 })
 
@@ -3001,8 +3058,9 @@ watch(
 /** 故事生命周期 → 中文 + 徽章档位（后端原样回 completed/pending/draft，
     此前直接透出英文，和「草稿」混在一列）。未知值兜底草稿，不裸透内部枚举。
     2026-10-31 四轮评审 R7：本徽章只表达故事**模板**生命周期（预置/草稿/就绪），
-    不用运行态覆盖——运行态属于下方 RunStateBadge（已暂停/已完成…），同卡双徽章
-    各说各轴，不再出现两个近义词蓝标相隔 20px。 */
+    不用运行态覆盖——运行态属于下方 RunStateBadge。
+    2026-11-12：模板徽章只在没有 latestRun 时渲染；有运行后运行态徽章是唯一状态出口，
+    否则 completed 故事会在同一行出现两个「已完成」。 */
 function storyStatusMeta(s: StoryItem): { text: string; cls: string } {
   switch (String(s.status || '')) {
     case 'ready': return { text: '就绪', cls: 'mk-badge--ok' }
@@ -3253,12 +3311,12 @@ async function quietReload(id: string) {
 .vp {
   gap: 16px;
 }
-/* 页头身份区走 .mk-entity（shared.css）：--flat + --round 头像 + --lg 名字。
-   头像色（2026-10-15 用户拍板）：撤「身份哈希八色」私造色板，改随原语语义——
-   .mk-entity__avatar--learner（虚拟学习者=紫，见 mk-primitives.css），
-   与列表 MkCellAvatar tone=virtual 同一语义色。故本页不再有 vp-avatar--N 覆写。 */
+/* 首次加载骨架（列表缓存尚未给出 d）：与 LearnerDetail 的 .ld-skel 同构 */
+.vp-skel { display: grid; gap: 14px; }
+/* 页头身份区走共享 MkDetailHero（与 LearnerDetail 同源）：52px 圆形头像，tone=learner
+   紫色与列表 MkCellAvatar tone=virtual 同一语义色（2026-11-12 由页私有 .mk-entity 切换）。 */
 .vp-top__level { font-size: var(--mk-fs-micro); color: var(--mk-faint); font-weight: 700; }
-/* 页头主操作走 .mk-entity__actions（shared.css） */
+/* 页头主操作走 MkDetailHero 的 #actions（.mk-hero__actions） */
 /* 生命周期状态徽章（vlab-controls 唯一语义：进行中/已暂停/已失败/已终止/已完成…）
    语气对齐原型 statusPill（.pill--ok/--warn/--bad/--mute）：tone 底 + currentColor 圆点 */
 .vp-life {
@@ -3297,8 +3355,10 @@ async function quietReload(id: string) {
 }
 /* 工作流指引 */
 
-/* tabs 行右端常驻账号级 ⋯ 操作（页签本体是共享 MkSubTabs 下划线式） */
-.vp-tabsrow { display: flex; align-items: center; gap: 12px; }
+/* tabs 行右端常驻账号级 ⋯ 操作（页签本体是共享 MkSubTabs 下划线式）。
+   与 LearnerDetail 的 .ld-tabbar 同构：页签吃掉剩余宽度，右组不换行挤压页签。 */
+.vp-tabsrow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.vp-tabsrow :deep(.mk-subtabs) { flex: 1 1 auto; min-width: 0; }
 /* 右组：账号级 ⋯ 贴右缘（跨页入口在页头右缘，2026-10-24 上移） */
 .vp-tabsrow__actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
 .vp-tabsrow__ops { margin-left: 0; }
@@ -3307,32 +3367,38 @@ async function quietReload(id: string) {
 .vp-body { display: grid; gap: 14px; }
 
 /* ===== 概览 pane（原型 renderVLearnerDetail index.html:2403-2482）=====
-   状态条已收敛到共享 MkStatStrip layout="grid"（#68）；闭环 loop（1708-1722）+ 画像 kv + lsm（1723-1737）。
-   loop 与 Overview 同款；全部走 --mk-* token。 */
+   版式对齐 LearnerDetail：左 2fr 主内容（闭环 + 读数），右 1fr 侧栏（下一步 + 最近运行）。
+   页级读数条已撤（2026-11-12），loop（1708-1722）+ lsm（1723-1737）全部走 --mk-* token。 */
 
 .vp-cardbody { padding: 4px 16px 16px; }
-.vp-2col { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; align-items: start; }
-
-/* 画像设定 kv（原型 dl.kv：标签列 + 值列，行间不画线） */
-.vp-kv {
-  --kv-label: 88px;
+.vp-overview {
   display: grid;
-  grid-template-columns: var(--kv-label) minmax(0, 1fr);
-  gap: 8px 14px;
-  align-items: baseline;
-  margin: 0;
-  padding: 14px 16px;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
 }
-.vp-kv dt { color: var(--mk-muted); font-size: var(--mk-fs-micro); }
-.vp-kv dd { margin: 0; color: var(--mk-ink); font-size: var(--mk-fs-body); line-height: 1.5; word-break: break-word; }
-.vp-kv dd.mono { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.vp-overview__main,
+.vp-overview__side { display: grid; gap: 14px; align-content: start; min-width: 0; }
+/* 画像页：人物背景通栏，画像字段与能力维度并排（同 LearnerDetail 的多列参数卡） */
+.vp-profile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+/* 概览「下一步」：一句话 + 一颗动作，替掉原先只复读画像类型的空卡 */
+.vp-next__body { display: grid; gap: 10px; justify-items: start; }
+.vp-next__hint { margin: 0; color: var(--mk-muted); font-size: var(--mk-fs-body); line-height: 1.55; }
+/* 页签内的一句上下文：解释这页在看什么，不占一整个卡片 */
+.vp-pane-hint { margin: 0 16px 10px; color: var(--mk-muted); font-size: var(--mk-fs-micro); line-height: 1.55; }
+/* 画像页人物背景：先给「主测场景」这个可核对的事实，再读故事与倾向 */
+.vp-profile-scene { display: flex; gap: 10px; align-items: baseline; }
+.vp-profile-scene span { color: var(--mk-faint); font-size: var(--mk-fs-micro); }
+.vp-profile-scene strong { color: var(--mk-ink); font-size: var(--mk-fs-body); font-weight: 600; }
 
-/* 教学闭环条（复刻 Overview.vue 的 .loop，原型 loopStrip index.html:1708-1722） */
-.loop { display: flex; align-items: stretch; gap: 8px; overflow-x: auto; padding: 4px 0; }
+/* 教学闭环条（复刻 Overview.vue 的 .loop，原型 loopStrip index.html:1708-1722）。
+   概览左栏约 650px 时要放下 5 环：项可收缩（min-width:0）+ 小间距，
+   避免固定 138px 把容器撑到 814px、压到右侧栏下面；实在放不下才横滚。 */
+.loop { display: flex; align-items: stretch; gap: 6px; overflow-x: auto; padding: 4px 0; min-width: 0; }
 .loop__arrow { display: grid; place-items: center; flex: none; color: var(--mk-faint); font-size: var(--mk-fs-emphasis); }
 .loop__step {
-  flex: 1 1 0; min-width: 138px; display: grid; gap: 5px;
-  padding: 12px 14px; border: 1px solid var(--mk-line);
+  flex: 1 1 0; min-width: 0; display: grid; gap: 4px;
+  padding: 10px 11px; border: 1px solid var(--mk-line);
   border-radius: var(--mk-radius-xl); background: var(--mk-surface);
 }
 .loop__step--active { border-color: var(--mk-blue); background: var(--mk-blue-bg); }
@@ -3342,7 +3408,7 @@ async function quietReload(id: string) {
 .loop__step--idle { border-style: dashed; }
 .loop__no { font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 .loop__name { font-weight: 700; font-size: var(--mk-fs-emphasis); color: var(--mk-ink); }
-.loop__meta { font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.loop__meta { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.45; overflow-wrap: anywhere; text-wrap: balance; }
 .loop__val { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--mk-ink); }
 
 /* 概览「最近运行」：故事 + 终态徽章一行，读数第二行（文案与运行页签同源） */
@@ -3362,6 +3428,15 @@ async function quietReload(id: string) {
 .vp-lastrun__task { color: var(--mk-faint); }
 /* #45：座舱入口用 mk-link 的观感，但左对齐成第三行（不跟随右浮动） */
 .vp-lastrun__cockpit { justify-self: start; font-size: var(--mk-fs-micro); }
+/* 通过率 / 覆盖场景：页级读数条撤除后的落点，以细线与运行详情分档 */
+.vp-lastrun__summary {
+  margin: 4px 0 0;
+  padding-top: 8px;
+  border-top: 1px dashed var(--mk-line);
+  color: var(--mk-faint);
+  font-size: var(--mk-fs-micro);
+  font-variant-numeric: tabular-nums;
+}
 
 /* 学习状态读数 lsm（原型 learningState index.html:1723-1737）：label / 轨 / 值+参考 三列 */
 .lsm { display: grid; gap: 12px; }
@@ -3440,6 +3515,11 @@ async function quietReload(id: string) {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px 18px;
   padding: 16px 18px;
+}
+/* 窄屏两栏堆叠（与 LearnerDetail 1100px 断点同档）：主内容在前，侧栏在后 */
+@media (max-width: 1100px) {
+  .vp-overview { grid-template-columns: 1fr; }
+  .vp-profile-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 700px) {
   .vp-budget { grid-template-columns: 1fr; }

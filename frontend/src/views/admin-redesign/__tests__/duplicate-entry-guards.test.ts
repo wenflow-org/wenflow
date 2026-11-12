@@ -26,9 +26,10 @@ describe('重复操作入口守卫', () => {
   it('虚拟画像：学习详情只在页头右缘留一处，⋯ 菜单不再重复', () => {
     const src = read('VirtualProfile.vue')
     const hits = src.match(/goRealLearner\(\)/g) || []
-    // 按钮一处 + 函数定义一处（2026-10-24 入口从页签行上移到页头右缘）
+    // 按钮一处 + 函数定义一处（2026-10-24 入口从页签行上移到页头右缘；
+    // 2026-11-12 页头改用共享 MkDetailHero，动作改挂 #actions 插槽）
     expect(hits.length).toBe(2)
-    expect(src).toContain('mk-entity__actions')
+    expect(src).toContain('<template #actions>')
     expect(src).not.toContain('学习模型 / 证据 / 图谱）" @click="closeMenu(); goRealLearner()')
   })
 

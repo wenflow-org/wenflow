@@ -151,8 +151,9 @@ describe('页头 KPI 区（教学三页统一形态）', () => {
  */
 describe('页级读数形态归属', () => {
   const DIR = resolve(__dirname, '..');
-  /* 允许的宿主：VirtualProfile = 虚拟学习者详情 hero 下；Overview / MemoryReview = 卡内读数槽 */
-  const STATSTRIP_HOSTS = new Set(['VirtualProfile.vue', 'Overview.vue', 'MemoryReview.vue']);
+  /* 允许的宿主：Overview / MemoryReview = 卡内读数槽。
+     VirtualProfile 2026-11-12 已撤页级读数条（对齐 LearnerDetail），不再在名单里。 */
+  const STATSTRIP_HOSTS = new Set(['Overview.vue', 'MemoryReview.vue']);
   const files = readdirSync(DIR).filter((f) => f.endsWith('.vue'));
 
   it('MkStatStrip 只住详情页 hero 与卡内读数槽，列表页页级 KPI 一律 MkKpi 卡带', () => {

@@ -54,6 +54,21 @@ const MkSubTabsStub = defineComponent({
     <button v-for="t in tabs" :key="t.key" type="button" @click="$emit('update:modelValue', t.key)">{{ t.label }}</button>
   </div>`,
 })
+/** 页头改用共享 MkDetailHero（与 LearnerDetail 同源）：浅挂时把两个具名插槽摊开，
+    才能像真实页面一样点到 #actions 里的「运行」 */
+const MkDetailHeroStub = defineComponent({
+  props: {
+    avatar: { type: String, default: '' },
+    title: { type: String, default: '' },
+    sub: { type: String, default: '' },
+    tone: { type: String, default: '' },
+  },
+  template: `<header class="hero-stub">
+    <h1>{{ title }}</h1><p>{{ sub }}</p>
+    <slot name="pills" />
+    <div class="mk-hero__actions"><slot name="actions" /></div>
+  </header>`,
+})
 async function mountProfile() {
   const w = shallowMount(VirtualProfile, {
     global: {
@@ -61,6 +76,7 @@ async function mountProfile() {
         // launch 组件自身有接口与 Teleport，这里只验证宿主把「运行」接到了 open()
         VirtualLearnerLaunch: { template: '<div class="launch-stub" />', methods: { open: launchOpen } },
         MkSubTabs: MkSubTabsStub,
+        MkDetailHero: MkDetailHeroStub,
       },
     },
   })
@@ -84,7 +100,7 @@ beforeEach(() => {
 describe('画像页 · 页面级运行', () => {
   it('页头有「运行」，点击把当前档案与故事数交给启动弹窗', async () => {
     const w = await mountProfile()
-    const run = w.findAll('.mk-entity__actions button').find((b) => b.text() === '运行')
+    const run = w.findAll('.mk-hero__actions button').find((b) => b.text() === '运行')
     expect(run, '页头缺运行主操作').toBeTruthy()
     expect(run!.attributes('disabled')).toBeUndefined()
     await run!.trigger('click')
@@ -95,7 +111,7 @@ describe('画像页 · 页面级运行', () => {
   it('没有故事时「运行」禁用（先生成故事，不弹空选择器）', async () => {
     stub.stories = []
     const w = await mountProfile()
-    const run = w.findAll('.mk-entity__actions button').find((b) => b.text() === '运行')
+    const run = w.findAll('.mk-hero__actions button').find((b) => b.text() === '运行')
     expect(run!.attributes('disabled')).toBeDefined()
     w.unmount()
   })

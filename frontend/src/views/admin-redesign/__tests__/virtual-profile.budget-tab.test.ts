@@ -14,11 +14,11 @@ function budgetBlock(): string {
 }
 
 describe('VirtualProfile · 运行预算页签', () => {
-  it('页签集合里有「预算」，且排在画像之后', () => {
+  it('页签集合里有「运行预算」，且排在画像之后', () => {
     expect(Source).toContain("| 'budget'")
     const tabsBlock = Source.slice(Source.indexOf('const tabs = computed'), Source.indexOf('const hasToolbar'))
-    expect(tabsBlock).toContain("label: '预算'")
-    expect(tabsBlock.indexOf("label: '画像'")).toBeLessThan(tabsBlock.indexOf("label: '预算'"))
+    expect(tabsBlock).toContain("label: '运行预算'")
+    expect(tabsBlock.indexOf("label: '画像'")).toBeLessThan(tabsBlock.indexOf("label: '运行预算'"))
   })
 
   it('运行预算卡挂在新页签上，不再挂在画像页签', () => {
@@ -33,6 +33,6 @@ describe('VirtualProfile · 运行预算页签', () => {
   })
 
   it('没有可跑的会话时不出这个页签（虚拟学习者已下线）', () => {
-    expect(Source).toContain('isLive.value ? [{ key: \'budget\' as const, label: \'预算\' }] : []')
+    expect(Source).toContain("isLive.value ? [{ key: 'budget' as const, label: '运行预算'")
   })
 })
