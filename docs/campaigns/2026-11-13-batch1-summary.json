@@ -1,0 +1,459 @@
+{
+  "campaign": "2026-11-13-20-users",
+  "startedAt": "2026-11-12T17:36:01.959Z",
+  "backend": "http://127.0.0.1:3001",
+  "casesPath": "D:\\wenflow\\wenflow\\backend\\src\\scripts\\campaigns\\2026-11-13-20-users.json",
+  "concurrency": 5,
+  "daysOverride": null,
+  "results": {
+    "u01-labor-contract": {
+      "id": "u01-labor-contract",
+      "domain": "法律",
+      "learnerName": "[sim20-01] 李雯·劳动合同",
+      "status": "completed",
+      "attempt": 1,
+      "days": 8,
+      "startedAt": "2026-11-12T17:36:02.295Z",
+      "finishedAt": "2026-11-12T17:54:41.630Z",
+      "durationSec": 1119,
+      "exitCode": 0,
+      "signal": null,
+      "sessionId": "d1b4ed01-6a77-4ab8-9060-62665e8a94b8",
+      "profileId": "ce907d30-226d-42f8-8d57-e9b461263775",
+      "round": 4,
+      "findings": [],
+      "logPath": "D:\\wenflow\\wenflow\\backend\\.runtime\\campaigns\\2026-11-13-batch1\\u01-labor-contract\\harness.log"
+    },
+    "u02-rent-contract": {
+      "id": "u02-rent-contract",
+      "domain": "法律",
+      "learnerName": "[sim20-02] 周然·租房合同",
+      "status": "completed",
+      "attempt": 1,
+      "days": 7,
+      "startedAt": "2026-11-12T17:36:02.393Z",
+      "finishedAt": "2026-11-12T18:01:54.098Z",
+      "durationSec": 1552,
+      "exitCode": 0,
+      "signal": null,
+      "sessionId": "838991f9-a3ac-446c-bbdf-cbf971c1c087",
+      "profileId": "0fa35986-2429-4ee1-bc9f-bba2cf4be8b6",
+      "round": 4,
+      "findings": [],
+      "logPath": "D:\\wenflow\\wenflow\\backend\\.runtime\\campaigns\\2026-11-13-batch1\\u02-rent-contract\\harness.log"
+    },
+    "u03-civil-code-contract": {
+      "id": "u03-civil-code-contract",
+      "domain": "法律",
+      "learnerName": "[sim20-03] 陈建国·合同编",
+      "status": "failed",
+      "attempt": 1,
+      "days": 9,
+      "startedAt": "2026-11-12T17:36:02.463Z",
+      "finishedAt": "2026-11-12T18:15:36.156Z",
+      "durationSec": 2374,
+      "exitCode": 1,
+      "signal": null,
+      "sessionId": "f25d789b-bd43-40a0-b093-00facdca5535",
+      "profileId": "c0605e47-db5a-4969-b5ac-09792bc7ce3a",
+      "round": 9,
+      "findings": [
+        {
+          "code": "max-days-reached",
+          "detail": "已达 9 天仍未 completed"
+        }
+      ],
+      "logPath": "D:\\wenflow\\wenflow\\backend\\.runtime\\campaigns\\2026-11-13-batch1\\u03-civil-code-contract\\harness.log"
+    },
+    "u04-financial-statements": {
+      "id": "u04-financial-statements",
+      "domain": "财务",
+      "learnerName": "[sim20-04] 赵敏·财报三表",
+      "status": "failed",
+      "attempt": 1,
+      "days": 9,
+      "startedAt": "2026-11-12T17:36:02.534Z",
+      "finishedAt": "2026-11-12T18:08:29.692Z",
+      "durationSec": 1947,
+      "exitCode": 1,
+      "signal": null,
+      "sessionId": "ad327d46-b8fa-4d9d-b5c7-311dde1447bb",
+      "profileId": "10d4757c-2187-4d03-8099-d3daf0b72083",
+      "round": 9,
+      "findings": [
+        {
+          "code": "max-days-reached",
+          "detail": "已达 9 天仍未 completed"
+        }
+      ],
+      "logPath": "D:\\wenflow\\wenflow\\backend\\.runtime\\campaigns\\2026-11-13-batch1\\u04-financial-statements\\harness.log"
+    },
+    "u05-bp-review": {
+      "id": "u05-bp-review",
+      "domain": "商业",
+      "learnerName": "[sim20-05] 孙凯·BP审查",
+      "status": "completed",
+      "attempt": 1,
+      "days": 7,
+      "startedAt": "2026-11-12T17:36:02.607Z",
+      "finishedAt": "2026-11-12T18:00:32.344Z",
+      "durationSec": 1470,
+      "exitCode": 0,
+      "signal": null,
+      "sessionId": "ea34406d-8fd6-407f-866e-4fe59f6a260a",
+      "profileId": "91f15abe-3046-45cf-b505-075555c5c258",
+      "round": 4,
+      "findings": [],
+      "logPath": "D:\\wenflow\\wenflow\\backend\\.runtime\\campaigns\\2026-11-13-batch1\\u05-bp-review\\harness.log"
+    },
+    "u06-industry-report": {
+      "id": "u06-industry-report",
+      "domain": "商业",
+      "learnerName": "[sim20-06] 林悦·行业研究",
+      "status": "failed",
+      "attempt": 1,
+      "days": 8,
+      "startedAt": "2026-11-12T17:54:41.641Z",
+      "finishedAt": "2026-11-12T18:20:56.656Z",
+      "durationSec": 1575,
+      "exitCode": 1,
+      "signal": null,
+      "sessionId": "86b03389-73f6-4edc-9d0f-416a7059e6ed",
+      "profileId": "ac67274f-2e32-459f-8216-ff9d1e9f9cf2",
+      "round": 8,
+      "findings": [
+        {
+          "code": "max-days-reached",
+          "detail": "已达 8 天仍未 completed"
+        }
+      ],
+      "logPath": "D:\\wenflow\\wenflow\\backend\\.runtime\\campaigns\\2026-11-13-batch1\\u06-industry-report\\harness.log"
+    },
+    "u07-paper-abstract": {
+      "id": "u07-paper-abstract",
+      "domain": "学术阅读",
+      "learnerName": "[sim20-07] 何静·英文论文",
+      "status": "failed",
+      "attempt": 1,
+      "days": 8,
+      "startedAt": "2026-11-12T18:00:32.352Z",
+      "finishedAt": "2026-11-12T18:32:57.622Z",
+      "durationSec": 1945,
+      "exitCode": 1,
+      "signal": null,
+      "sessionId": "3af696ef-2111-47a9-b255-c99731701d44",
+      "profileId": "4a132fb5-9173-4a4e-a20b-aab25512e805",
+      "round": 8,
+      "findings": [
+        {
+          "code": "max-days-reached",
+          "detail": "已达 8 天仍未 completed"
+        }
+      ],
+      "logPath": "D:\\wenflow\\wenflow\\backend\\.runtime\\campaigns\\2026-11-13-batch1\\u07-paper-abstract\\harness.log"
+    },
+    "u08-kaoyan-long-sentence": {
+      "id": "u08-kaoyan-long-sentence",
+      "domain": "英语",
+      "learnerName": "[sim20-08] 王浩·长难句",
+      "status": "failed",
+      "attempt": 1,
+      "days": 8,
+      "startedAt": "2026-11-12T18:01:54.105Z",
+      "finishedAt": "2026-11-12T18:28:47.583Z",
+      "durationSec": 1613,
+      "exitCode": 1,
+      "signal": null,
+      "sessionId": "7a285f73-0c9d-48d6-9251-959db2e97c0f",
+      "profileId": "8161d21a-b3da-45aa-9f36-1329ecdba99f",
+      "round": 8,
+      "findings": [
+        {
+          "code": "max-days-reached",
+          "detail": "已达 8 天仍未 completed"
+        }
+      ],
+      "logPath": "D:\\wenflow\\wenflow\\backend\\.runtime\\campaigns\\2026-11-13-batch1\\u08-kaoyan-long-sentence\\harness.log"
+    },
+    "u09-classical-chinese": {
+      "id": "u09-classical-chinese",
+      "domain": "文言文",
+      "learnerName": "[sim20-09] 刘婷·文言文",
+      "status": "failed",
+      "attempt": 1,
+      "days": 8,
+      "startedAt": "2026-11-12T18:08:29.701Z",
+      "finishedAt": "2026-11-12T18:39:41.368Z",
+      "durationSec": 1872,
+      "exitCode": 1,
+      "signal": null,
+      "sessionId": "68fa0ada-219d-4bf8-9cb0-f8052c3c3151",
+      "profileId": "2277b544-6907-4747-89b1-bbd359430188",
+      "round": 8,
+      "findings": [
+        {
+          "code": "max-days-reached",
+          "detail": "已达 8 天仍未 completed"
+        }
+      ],
+      "logPath": "D:\\wenflow\\wenflow\\backend\\.runtime\\campaigns\\2026-11-13-batch1\\u09-classical-chinese\\harness.log"
+    },
+    "u10-literature-review": {
+      "id": "u10-literature-review",
+      "domain": "学术写作",
+      "learnerName": "[sim20-10] 许文·文献综述",
+      "status": "failed",
+      "attempt": 1,
+      "days": 9,
+      "startedAt": "2026-11-12T18:15:36.163Z",
+      "finishedAt": "2026-11-12T18:20:30.361Z",
+      "durationSec": 294,
+      "exitCode": 1,
+      "signal": null,
+      "sessionId": "b72e26d0-e00e-4566-86df-3d71b29e1f40",
+      "profileId": "df43628f-13b1-42e4-af3d-d05904b3a964",
+      "round": 0,
+      "findings": [
+        {
+          "code": "goal-ended-without-path",
+          "detail": "learner-left：本 case 预期生成路径，但 goal 在未生成路径的情况下结束"
+        }
+      ],
+      "logPath": "D:\\wenflow\\wenflow\\backend\\.runtime\\campaigns\\2026-11-13-batch1\\u10-literature-review\\harness.log"
+    },
+    "u11-argumentative-essay": {
+      "id": "u11-argumentative-essay",
+      "domain": "写作",
+      "learnerName": "[sim20-11] 张晨·议论文",
+      "status": "failed",
+      "attempt": 1,
+      "days": 8,
+      "startedAt": "2026-11-12T18:20:30.368Z",
+      "finishedAt": "2026-11-12T18:59:42.047Z",
+      "durationSec": 2352,
+      "exitCode": 1,
+      "signal": null,
+      "sessionId": "85c4bf7c-748b-4378-b0da-21a9cec42219",
+      "profileId": "02259e83-9059-4250-8535-14b148d334ff",
+      "round": 8,
+      "findings": [
+        {
+          "code": "max-days-reached",
+          "detail": "已达 8 天仍未 completed"
+        }
+      ],
+      "logPath": "D:\\wenflow\\wenflow\\backend\\.runtime\\campaigns\\2026-11-13-batch1\\u11-argumentative-essay\\harness.log"
+    },
+    "u12-workplace-email": {
+      "id": "u12-workplace-email",
+      "domain": "职场写作",
+      "learnerName": "[sim20-12] 郑楠·职场邮件",
+      "status": "completed",
+      "attempt": 1,
+      "days": 7,
+      "startedAt": "2026-11-12T18:20:56.664Z",
+      "finishedAt": "2026-11-12T18:49:24.904Z",
+      "durationSec": 1708,
+      "exitCode": 0,
+      "signal": null,
+      "sessionId": "ecee181d-80b6-4854-8008-1ca3d151444b",
+      "profileId": "e0b27ffc-f746-440c-b21a-0e84c7af0793",
+      "round": 6,
+      "findings": [],
+      "logPath": "D:\\wenflow\\wenflow\\backend\\.runtime\\campaigns\\2026-11-13-batch1\\u12-workplace-email\\harness.log"
+    },
+    "u13-keynote-speech": {
+      "id": "u13-keynote-speech",
+      "domain": "表达",
+      "learnerName": "[sim20-13] 高远·演讲讲稿",
+      "status": "failed",
+      "attempt": 1,
+      "days": 7,
+      "startedAt": "2026-11-12T18:28:47.589Z",
+      "finishedAt": "2026-11-12T19:03:50.078Z",
+      "durationSec": 2102,
+      "exitCode": 1,
+      "signal": null,
+      "sessionId": "45a2b064-01f9-4376-bca6-07dd16fe15b6",
+      "profileId": "c02ead1c-031b-4ed9-ac75-fcbcb010763c",
+      "round": 7,
+      "findings": [
+        {
+          "code": "max-days-reached",
+          "detail": "已达 7 天仍未 completed"
+        }
+      ],
+      "logPath": "D:\\wenflow\\wenflow\\backend\\.runtime\\campaigns\\2026-11-13-batch1\\u13-keynote-speech\\harness.log"
+    },
+    "u14-logical-fallacies": {
+      "id": "u14-logical-fallacies",
+      "domain": "逻辑",
+      "learnerName": "[sim20-14] 吴倩·逻辑谬误",
+      "status": "failed",
+      "attempt": 1,
+      "days": 7,
+      "startedAt": "2026-11-12T18:32:57.630Z",
+      "finishedAt": "2026-11-12T18:59:22.985Z",
+      "durationSec": 1585,
+      "exitCode": 1,
+      "signal": null,
+      "sessionId": "e93fabcb-d1d8-4a92-bca3-9af11fe4e2de",
+      "profileId": "a3ef6ae7-f942-4c48-b41b-ac7f546bef3a",
+      "round": 7,
+      "findings": [
+        {
+          "code": "max-days-reached",
+          "detail": "已达 7 天仍未 completed"
+        }
+      ],
+      "logPath": "D:\\wenflow\\wenflow\\backend\\.runtime\\campaigns\\2026-11-13-batch1\\u14-logical-fallacies\\harness.log"
+    },
+    "u15-statistical-thinking": {
+      "id": "u15-statistical-thinking",
+      "domain": "统计",
+      "learnerName": "[sim20-15] 罗珊·统计思维",
+      "status": "failed",
+      "attempt": 1,
+      "days": 8,
+      "startedAt": "2026-11-12T18:39:41.375Z",
+      "finishedAt": "2026-11-12T19:08:57.637Z",
+      "durationSec": 1756,
+      "exitCode": 1,
+      "signal": null,
+      "sessionId": "172dc4b3-6e39-43b8-ab34-0f1f43f5df5d",
+      "profileId": "dc7f2921-2d01-4491-ae8c-1d35f745eb75",
+      "round": 8,
+      "findings": [
+        {
+          "code": "max-days-reached",
+          "detail": "已达 8 天仍未 completed"
+        }
+      ],
+      "logPath": "D:\\wenflow\\wenflow\\backend\\.runtime\\campaigns\\2026-11-13-batch1\\u15-statistical-thinking\\harness.log"
+    },
+    "u16-rumor-verification": {
+      "id": "u16-rumor-verification",
+      "domain": "信息素养",
+      "learnerName": "[sim20-16] 黄蕾·信息核查",
+      "status": "failed",
+      "attempt": 1,
+      "days": 7,
+      "startedAt": "2026-11-12T18:49:24.912Z",
+      "finishedAt": "2026-11-12T19:25:56.964Z",
+      "durationSec": 2192,
+      "exitCode": 1,
+      "signal": null,
+      "sessionId": "e13ca263-22ee-476e-9744-9171c185abab",
+      "profileId": "f8338a84-9be5-442a-ad50-fcdae90a853b",
+      "round": 7,
+      "findings": [
+        {
+          "code": "max-days-reached",
+          "detail": "已达 7 天仍未 completed"
+        }
+      ],
+      "logPath": "D:\\wenflow\\wenflow\\backend\\.runtime\\campaigns\\2026-11-13-batch1\\u16-rumor-verification\\harness.log"
+    },
+    "u17-http-cache-concurrency": {
+      "id": "u17-http-cache-concurrency",
+      "domain": "概念理解",
+      "learnerName": "[sim20-17] 沈涛·缓存与并发",
+      "status": "failed",
+      "attempt": 1,
+      "days": 7,
+      "startedAt": "2026-11-12T18:59:22.994Z",
+      "finishedAt": "2026-11-12T19:25:31.366Z",
+      "durationSec": 1568,
+      "exitCode": 1,
+      "signal": null,
+      "sessionId": "b2274801-f83c-4bf7-ae1b-935010d3552f",
+      "profileId": "d06d8544-24ce-4d65-890d-6f574cdf0797",
+      "round": 7,
+      "findings": [
+        {
+          "code": "max-days-reached",
+          "detail": "已达 7 天仍未 completed"
+        }
+      ],
+      "logPath": "D:\\wenflow\\wenflow\\backend\\.runtime\\campaigns\\2026-11-13-batch1\\u17-http-cache-concurrency\\harness.log"
+    },
+    "u18-psychology-experiments": {
+      "id": "u18-psychology-experiments",
+      "domain": "心理学",
+      "learnerName": "[sim20-18] 唐宁·心理学实验",
+      "status": "failed",
+      "attempt": 1,
+      "days": 8,
+      "startedAt": "2026-11-12T18:59:42.054Z",
+      "finishedAt": "2026-11-12T19:34:53.438Z",
+      "durationSec": 2111,
+      "exitCode": 1,
+      "signal": null,
+      "sessionId": "9e5c840b-0674-453d-bfb8-9b9f83d431bc",
+      "profileId": "d668da17-b4b1-471d-a88a-cd021b4a24bd",
+      "round": 8,
+      "findings": [
+        {
+          "code": "max-days-reached",
+          "detail": "已达 8 天仍未 completed"
+        }
+      ],
+      "logPath": "D:\\wenflow\\wenflow\\backend\\.runtime\\campaigns\\2026-11-13-batch1\\u18-psychology-experiments\\harness.log"
+    },
+    "u19-vague-communication": {
+      "id": "u19-vague-communication",
+      "domain": "模糊目标",
+      "learnerName": "[sim20-19] 马骁·会说话",
+      "status": "failed",
+      "attempt": 1,
+      "days": 7,
+      "startedAt": "2026-11-12T19:03:50.084Z",
+      "finishedAt": "2026-11-12T19:25:46.383Z",
+      "durationSec": 1316,
+      "exitCode": 1,
+      "signal": null,
+      "sessionId": "eb6e1d18-f93e-4ae0-b6c7-4007a5b29bb0",
+      "profileId": "cc524eba-b88c-4c5d-b565-a4ee2845df43",
+      "round": 7,
+      "findings": [
+        {
+          "code": "max-days-reached",
+          "detail": "已达 7 天仍未 completed"
+        }
+      ],
+      "logPath": "D:\\wenflow\\wenflow\\backend\\.runtime\\campaigns\\2026-11-13-batch1\\u19-vague-communication\\harness.log"
+    },
+    "u20-vague-econ-news": {
+      "id": "u20-vague-econ-news",
+      "domain": "模糊目标",
+      "learnerName": "[sim20-20] 曹颖·经济新闻",
+      "status": "completed",
+      "attempt": 1,
+      "days": 7,
+      "startedAt": "2026-11-12T19:08:57.644Z",
+      "finishedAt": "2026-11-12T19:33:37.484Z",
+      "durationSec": 1480,
+      "exitCode": 0,
+      "signal": null,
+      "sessionId": "4c6d76a7-c116-4a27-b38f-7566ecd883ab",
+      "profileId": "684e72b7-1d1e-426a-aba1-8b8439092b4e",
+      "round": 4,
+      "findings": [],
+      "logPath": "D:\\wenflow\\wenflow\\backend\\.runtime\\campaigns\\2026-11-13-batch1\\u20-vague-econ-news\\harness.log"
+    }
+  },
+  "adminName": "admin",
+  "counts": {
+    "total": 20,
+    "pending": 0,
+    "running": 0,
+    "completed": 5,
+    "failed": 15,
+    "skipped": 0
+  },
+  "findings": {
+    "max-days-reached": 14,
+    "goal-ended-without-path": 1
+  },
+  "updatedAt": "2026-11-12T19:34:53.442Z"
+}

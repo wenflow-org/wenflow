@@ -3,7 +3,7 @@
  * 用户说「你给我讲」，导师切讲课模式成段授课，阶段停在 understanding、
  * 确认面板永不出現——goal 对话漂移成没有出口的教学回合。
  */
-import { assessGoalTeachingDrift } from '../index';
+import { assessGoalConvergenceOverdue, assessGoalTeachingDrift } from '../index';
 
 /** 2026-11-12 实测的讲课形态（节选改写）：小标题成段 + 长文 */
 const LECTURE = [
@@ -45,5 +45,34 @@ describe('assessGoalTeachingDrift（讲课漂移检测）', () => {
 
   it('空 reply 安全通过', () => {
     expect(assessGoalTeachingDrift('', 'understanding').valid).toBe(true);
+  });
+});
+
+describe('assessGoalConvergenceOverdue（收敛窗口）', () => {
+  /** 生成 priorUserTurns 个过往用户回合（每个用户回合前有一条 AI 回复） */
+  const history = (priorUserTurns: number) =>
+    Array.from({ length: priorUserTurns }, () => [{ role: 'ai' }, { role: 'user' }]).flat();
+
+  it('已 5 个用户回合、仍在 understanding、无提案 → 命中', () => {
+    const result = assessGoalConvergenceOverdue(
+      { state: { stage: 'understanding' }, reply: '再问一个细节：你手上有几篇论文？' },
+      // conversationHistory 契约：不含本轮用户输入；函数内部 +1
+      { conversationHistory: history(4) },
+    );
+    expect(result.valid).toBe(false);
+    expect(result.failureReason).toBe('GOAL_CONVERGENCE_OVERDUE');
+  });
+
+  it('4 个用户回合 → 不拦', () => {
+    expect(assessGoalConvergenceOverdue(
+      { state: { stage: 'understanding' } },
+      { conversationHistory: history(3) },
+    ).valid).toBe(true);
+  });
+
+  it('已进入 proposing / 已有提案 / 已收口 → 不拦', () => {
+    expect(assessGoalConvergenceOverdue({ state: { stage: 'proposing' } }, { conversationHistory: history(9) }).valid).toBe(true);
+    expect(assessGoalConvergenceOverdue({ state: { stage: 'understanding' }, confirmedProposal: { learning_direction: 'x' } }, { conversationHistory: history(9) }).valid).toBe(true);
+    expect(assessGoalConvergenceOverdue({ state: { stage: 'completed' } }, { conversationHistory: history(9) }).valid).toBe(true);
   });
 });

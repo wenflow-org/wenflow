@@ -648,7 +648,11 @@ async continueConversation(
           && options?.confirmProposal === true
           && proposalConfirmable;
         let adjudicatedConfirm = false;
-        if (proposalConfirmable && !flagConfirmWanted && !answerOnlyGate) {
+        // answer-only 闸也要先裁决用户这句话是不是确认（2026-11-13 批量跑数实证）：
+        // 旧实现用 `!answerOnlyGate` 跳过了裁决，导致「好，那就开始吧」这类打字确认既不算
+        // confirmIntent、也进不了 answerOnlyNudges 计数——学习者连续说三次「开始吧」，界面仍
+        // 只让他点确认，goal 一直卡到 20 步。裁决是零成本语义判断，闸门应该消费它而不是绕过它。
+        if (proposalConfirmable && !flagConfirmWanted) {
           // 纵深防御：adjudicateGoalConfirm 自带 fail-open（内部 catch → 非确认），
           // 但 service 不假设它永不抛——任何意外异常也按非确认走正常回合，不阻塞对话。
           let verdict = { confirm: false };
@@ -671,7 +675,11 @@ async continueConversation(
           adjudicatedConfirm = verdict.confirm;
         }
         const confirmIntentArrived = flagConfirmWanted || adjudicatedConfirm;
-        const confirmAllowed = !answerOnlyGate || answerOnlyNudges >= 2;
+        // 「坚持 ≥2 次」按**累计确认意图**计数（含本次）：第一次仍先直答，第二次才放行。
+        // 旧实现 `answerOnlyNudges >= 2` 在增量前判断，实际要第三次才放行（off-by-one），
+        // 且打字确认永远进不到增量分支。
+        const persistedConfirmCount = answerOnlyNudges + (confirmIntentArrived ? 1 : 0);
+        const confirmAllowed = !answerOnlyGate || persistedConfirmCount >= 2;
         if (confirmIntentArrived && confirmAllowed) {
           if (answerOnlyGate) {
             logger.info('[goal-conversation] answer-only：用户坚持 ≥2 次，放行排路径', { conversationId, userId });
@@ -685,11 +693,11 @@ async continueConversation(
           await this.updateConversationLifecycle(conversationId, 'proposing', {
             status: 'active',
             mutateCollectedData: (currentData) => {
-              (currentData as Record<string, unknown>).answerOnlyNudges = answerOnlyNudges + 1;
+              (currentData as Record<string, unknown>).answerOnlyNudges = persistedConfirmCount;
               currentData[RESPONSE_TRIAGE_KEY] = answerOnlyTriage;
             },
           });
-          logger.info('[goal-conversation] answer-only：确认拦截（第 ' + (answerOnlyNudges + 1) + ' 次），转普通回合直答', {
+          logger.info('[goal-conversation] answer-only：确认拦截（第 ' + persistedConfirmCount + ' 次），转普通回合直答', {
             conversationId,
             userId,
           });
@@ -1393,7 +1401,23 @@ async continueConversation(
     // 配置式值流转（P1 试点）：按 routings 表 goal 阶段（goal-agent 及其下辖 skill）交付行
     // + pathInRawOutput 从 skill 输出抽取 goal→path 字段，与 visibleSummary 并行产出
     // （golden 验证/后续装配切换）
-    const goalHandoffFields = await assembleGoalHandoff(aiResponse).catch((err) => {
+    //
+    // 交接源必须是「累计 understanding ⊕ 本轮输出」（2026-11-13 20 用户实证）：
+    // 旧实现只传 aiResponse，抽的是**最后一轮**模型输出。goal 模型在确认轮经常不再复述
+    // needsMaterial（u04 的年报需求、u01 的合同需求都只在前几轮出现），于是
+    // `understanding.needsMaterial` 被判 `missing-or-unmapped`，path 收不到声明 →
+    // 联网采集整链静默失效（u01 68 条课堂消息零法条出处、u04 公开年报需求零采集）。
+    // 累计 understanding 才是 goal 会话的事实沉淀；本轮输出覆盖同名字段即可。
+    const handoffSource = {
+      ...(aiResponse as any),
+      understanding: {
+        ...((data as any)?.understanding || {}),
+        ...(goalExt.understanding || {}),
+      },
+      confirmedProposal: goalExt.confirmedProposal ?? (data as any)?.confirmedProposal ?? null,
+      collected: (data as any)?.collected || {},
+    };
+    const goalHandoffFields = await assembleGoalHandoff(handoffSource).catch((err) => {
       logger.warn('[goal-conversation] assembleGoalHandoff failed, falling back to visibleSummary', {
         conversationId: conversation.id,
         error: (err as Error).message,

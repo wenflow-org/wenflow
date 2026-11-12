@@ -16,7 +16,7 @@ import {
 import { readMaterial, type MaterialRecord } from '../services/materials/material-store';
 import { materialRecordHasPhraseHit, selectMaterialsRanked } from '../services/materials/material-selection.service';
 import { applyMaterialRerankGate } from '../services/materials/material-rerank.service';
-import { partitionMaterialNeeds, deriveMaterialNeedsFromGoalText } from '../services/materials/material-need-origin';
+import { partitionMaterialNeeds, deriveMaterialNeedsFromGoalText, mergeDeclaredAndDerivedNeeds } from '../services/materials/material-need-origin';
 import { findWebRecordByTitle, normalizeTitleForMatch } from '../services/materials/material-web-ingest.service';
 import { patchPathsWithAsyncMaterials, type AsyncMaterialPatch } from '../services/materials/material-async-collect.service';
 import { collectBriefsWithDeadline } from '../services/materials/material-brief.service';
@@ -829,7 +829,10 @@ class PathCoordinator {
     // 文本，声明缺失但出现真实材料承诺/文档依赖信号时，自动派生采集需求走同一条链——
     // 两道闸：goal 声明是主通道（有对话上下文、queries 更准、async 下与规划并行），
     // 这里是承受交货压力的 path 自己的第二道判断。
-    if (!needsMaterial) {
+    // 2026-11-13 20 用户实证：goal 只声明私有材料（本人的劳动合同）时，旧链路整段跳过派生，
+    // 连带漏掉「法定上限/法规原文」这类公开依赖，路径零出处。改为始终派生，再由
+    // mergeDeclaredAndDerivedNeeds 决定是否补公开 need（已声明 public → 以 goal 为准）。
+    {
       const finalVisible = (goalFinalPayload as any)?.finalUserVisible;
       const keyStagesArray = (Array.isArray(finalVisible?.key_stages) && finalVisible.key_stages)
         || (Array.isArray((visibleSummary as any)?.keyStages) && (visibleSummary as any).keyStages)
@@ -843,12 +846,14 @@ class PathCoordinator {
         keyStages: Array.isArray(keyStagesArray) ? (keyStagesArray as string[]).join(' ') : null,
         stages: Array.isArray(keyStagesArray) ? (keyStagesArray as string[]) : null,
       });
-      if (derivedNeeds.length > 0) {
-        logger.info('[path-coordinator] needsMaterial 未登记但 goal 文本命中材料依赖信号，已自动派生采集需求（思考触发兜底）', {
+      const mergedNeeds = mergeDeclaredAndDerivedNeeds(needsMaterial, derivedNeeds, MATERIAL_COLLECTION_MAX_NEEDS);
+      if (mergedNeeds !== needsMaterial) {
+        logger.info('[path-coordinator] goal 未声明公开材料但文本命中材料依赖信号，已合并派生采集需求（思考触发兜底）', {
           userId: typeof input.userId === 'string' ? input.userId : null,
+          hadDeclared: !!needsMaterial,
           derived: derivedNeeds.map((need) => need.title),
         });
-        needsMaterial = derivedNeeds;
+        needsMaterial = mergedNeeds;
       }
     }
     // 附件理解摘要（material-brief）惰性就绪：path 是长流程，值得等 brief（有预算上限）——

@@ -1,4 +1,4 @@
-import { deriveMaterialNeedsFromGoalText, inferMaterialOrigin, partitionMaterialNeeds } from '../material-need-origin';
+import { compactTopic, deriveMaterialNeedsFromGoalText, inferMaterialOrigin, mergeDeclaredAndDerivedNeeds, partitionMaterialNeeds } from '../material-need-origin';
 import type { MaterialNeed } from '../../../skills/material-collector/types';
 
 describe('material-need-origin', () => {
@@ -116,5 +116,67 @@ describe('deriveMaterialNeedsFromGoalText · 研究价值闸（Layer 3：联网�
       stages: ['数据标准', '法规合规'],
     });
     expect(needs.length).toBeLessThanOrEqual(3);
+  });
+
+  it('goal 只声明私有材料时，派生公开 need 补位（不因私有声明跳过公开取证）', () => {
+    const declared = {
+      kind: '劳动合同',
+      title: '用户本人的新公司劳动合同（竞业限制与违约金条款）',
+      why: '平台不掌握其条款内容',
+      origin: 'private',
+      queries: [],
+    } as MaterialNeed;
+    const derived = deriveMaterialNeedsFromGoalText({
+      surfaceGoal: '审查劳动合同竞业限制条款，判断哪些条款有坑',
+      realProblem: '分不清法律允许约束到什么边界，缺一套法定尺子',
+      learningDirection: '立两条法定尺子，再拿合同逐句量',
+      stages: ['建立竞业限制的法定上限', '拿尺子量自己的合同'],
+    });
+    expect(derived.some((need) => inferMaterialOrigin(need) === 'public')).toBe(true);
+    const merged = mergeDeclaredAndDerivedNeeds(declared, derived, 3);
+    const list = (Array.isArray(merged) ? merged : [merged]) as MaterialNeed[];
+    expect(list[0]).toBe(declared);
+    expect(list.some((need) => inferMaterialOrigin(need) === 'public')).toBe(true);
+    expect(list.length).toBeLessThanOrEqual(3);
+  });
+
+  it('goal 已声明公开 need 时以 goal 为准，不再追加派生需求', () => {
+    const declared: MaterialNeed = {
+      kind: '法规', title: '中华人民共和国劳动合同法', origin: 'public', queries: ['劳动合同法 竞业限制'],
+    };
+    const derived = deriveMaterialNeedsFromGoalText({
+      surfaceGoal: '审查劳动合同',
+      learningDirection: '要真实案例',
+    });
+    expect(mergeDeclaredAndDerivedNeeds(declared, derived, 3)).toBe(declared);
+  });
+
+  it('未声明 needsMaterial 时返回派生列表（保持旧行为）', () => {
+    const derived = deriveMaterialNeedsFromGoalText({
+      surfaceGoal: '看懂货币政策怎么影响物价',
+      learningDirection: '宏观机制与传导数据拆解',
+    });
+    expect(mergeDeclaredAndDerivedNeeds(null, derived, 3)).toEqual(derived);
+  });
+
+  it('财报/报表/现金流类目标命中研究价值闸（2026-11-13 u04 实证）', () => {
+    const needs = deriveMaterialNeedsFromGoalText({
+      surfaceGoal: '读懂上市公司年报的三张财务报表，判断经营质量',
+      realProblem: '三表怎么串成一句话搞不懂，看着数字脑子转不动',
+      stages: ['三表勾稽与利润质量', '现金流与资产负债风险'],
+    });
+    expect(needs.length).toBeGreaterThan(0);
+    expect(needs.every((need) => need.origin === 'public')).toBe(true);
+  });
+
+  it('长句目标压出领域短语，检索词不再取整句前缀（u06 行业研究实证）', () => {
+    expect(compactTopic('我刚进咨询公司，第一次独立写行业研究报告，领导只说了句要有洞见')).toBe('行业研究报告');
+    expect(compactTopic('我下周一要签新公司的劳动合同')).toContain('劳动合同');
+
+    const needs = deriveMaterialNeedsFromGoalText({
+      surfaceGoal: '我刚进咨询公司，第一次独立写行业研究报告，领导只说了句要有洞见',
+      stages: ['从行业资料最反常处立出可证伪的判断'],
+    });
+    expect(needs.some((need) => (need.queries || []).includes('行业研究报告'))).toBe(true);
   });
 });

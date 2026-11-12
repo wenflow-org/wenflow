@@ -1075,6 +1075,39 @@ export function assessGoalTeachingDrift(reply: string, previousStage: string): {
   };
 }
 
+/**
+ * 收敛窗口超时检测（2026-11-13 20 用户实证 u10）。
+ *
+ * 现象：文献综述目标在 6 个 AI 回合里持续追问/给建议，始终不产 confirmedProposal，
+ * 时间紧张的学习者最后一轮说完就离场，goal 以 `learner-left` 收尾、零路径。
+ * 提示词已有「第 5 轮 AI 回合必须显式假设并进入 proposing」的硬规则，但模型没有遵守——
+ * 这类「轮数到达仍不收敛」是确定性可判的，放进软校验强制带反馈重试。
+ *
+ * 判据：历史用户轮次 + 本轮 ≥ 5，且输出 stage 不在 proposing/completed、且没有
+ * confirmedProposal。已有提案/已收口不拦；1-4 轮的正常采集不拦。
+ */
+export function assessGoalConvergenceOverdue(
+  parsed: any,
+  input: any,
+): { valid: boolean; failureReason?: string; violations?: string[] } {
+  const stage = String(parsed?.state?.stage ?? parsed?.stage ?? '');
+  if (stage === 'proposing' || stage === 'completed' || stage === 'ready') return { valid: true };
+  if (parsed?.confirmedProposal || parsed?.state?.confirmedProposal) return { valid: true };
+
+  const history = Array.isArray(input?.conversationHistory) ? input.conversationHistory : [];
+  const priorUserTurns = history.filter((m: any) => String(m?.role || '') === 'user').length;
+  const userTurns = priorUserTurns + 1;
+  if (userTurns < 5) return { valid: true };
+
+  return {
+    valid: false,
+    failureReason: 'GOAL_CONVERGENCE_OVERDUE',
+    violations: [
+      `已进行 ${userTurns} 轮用户回合仍未给出 confirmedProposal（stage=${stage || 'unknown'}）——超出收敛窗口`,
+    ],
+  };
+}
+
 function buildRetryNotice(prevFailureType: string, prevViolations: string[]): string {
   if (prevFailureType === 'GOAL_TEACHING_DRIFT') {
     return [
@@ -1083,6 +1116,18 @@ function buildRetryNotice(prevFailureType: string, prevViolations: string[]): st
       '① 只给最简定位（≤3 句，给概念锚点，不展开机制讲解，如「Agent＝大模型＋循环＋工具＋记事板，展开讲正是这条路径的主线」）；',
       '② 立刻把信号转回方案（「从头讲透这件事就是这条路径第一段的核心——方案定下来，第一课就从最底下那块讲起」）；',
       '③ reply 里禁止小标题式成段授课与课程内容预演——那是方案确认后 teaching-turn 的职责，越界会让用户失去确认面板与路径出口。',
+      `违规格条目: ${(prevViolations || []).join('；')}`,
+    ].join('\n');
+  }
+  if (prevFailureType === 'GOAL_CONVERGENCE_OVERDUE') {
+    return [
+      '[收敛窗口已到 — 本轮必须进入 proposing 并给出 confirmedProposal]',
+      '你已经追问多轮仍没给方案，时间紧张的学习者会直接离场（2026-11-13 u10 实证：6 轮追问后 learner-left、零路径）。',
+      '本轮只做三件事：',
+      '① 用一句话确认你已经掌握的问题与方向判断（不要复述原话、不要罗列分析过程）；',
+      '② 缺的硬条件按最小档显式假设并在 reply 里说明（例：「单次时长你没说，我先按 40 分钟算，不对你改」）；',
+      '③ 输出 confirmedProposal（learning_direction / first_deliverable / key_stages / out_of_scope），stage=proposing，',
+      '   reply 结尾只请用户确认或调整，不得再问任何新问题。',
       `违规格条目: ${(prevViolations || []).join('；')}`,
     ].join('\n');
   }
@@ -1149,10 +1194,15 @@ function buildGoalPromptSpec(
     // 讲课漂移软校验（2026-11-12 实证 gc_1794449336845：用户说「你给我讲」，导师直接切讲课
     // 模式成段授课（**小标题**+多段机制讲解），阶段停在 understanding，确认面板永不出現——
     // goal 对话漂移成教学回合。带反馈重试一次，仍漂移按原输出走（不硬拦）。
-    softValidateParsedOutput: (parsed: any, input: any) => assessGoalTeachingDrift(
-      typeof parsed?.reply === 'string' ? parsed.reply : '',
-      String(input?.previousStage ?? ''),
-    ),
+    // 收敛窗口软校验（2026-11-13 u10）：≥5 个用户回合仍无提案 → 强制重试并进 proposing。
+    softValidateParsedOutput: (parsed: any, input: any) => {
+      const drift = assessGoalTeachingDrift(
+        typeof parsed?.reply === 'string' ? parsed.reply : '',
+        String(input?.previousStage ?? ''),
+      );
+      if (!drift.valid) return drift;
+      return assessGoalConvergenceOverdue(parsed, input);
+    },
     normalizeOutput: (_parsed, payload) => parseGoalConversationResponse(
       // parseGoalConversationResponse 需要原始 content 以保留 dialogue 抽取路径；
       // callPrompt 成功时 parsed 已校验，这里用 JSON 回放等价 raw。

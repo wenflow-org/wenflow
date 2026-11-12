@@ -16,6 +16,7 @@ import { virtualLearnerScenarioDesignerDefinition } from '../../skills/virtual-l
 import { executeSkill } from '../../skills';
 import { buildLearnerStoryHints, buildStoryDirectionHints } from '../../services/virtual-lab/story-chapter.service';
 import { attachMaterialsToLearner } from '../../services/virtual-lab/card-import.service';
+import { anchorPersonaIdentity } from '../../services/virtual-lab/persona-identity-anchor';
 import { parseJson, normalizeStoryPoolData, ensureProfileStoryPool, isSameStory } from '../../virtual-lab/session-factory';
 import type { VirtualSessionRow } from '../../virtual-lab/vlab-types';
 import { parseStoryContext } from './virtual-learners.projections';
@@ -166,9 +167,25 @@ router.post('/generate-persona', async (req: Request, res) => {
       existingPersonaSeed,
     });
 
+    // 身份锚定（2026-11-13 5/5 并发实证：模型会无视 existingPersonaSeed 换职业/生活史）。
+    // 只覆盖身份字段，行为字段保留模型生成；漂移留痕便于后台审计。
+    const anchored = anchorPersonaIdentity(
+      (result as Record<string, unknown> | null)?.personaSeed,
+      existingPersonaSeed,
+    );
+    if (anchored.drift.length > 0) {
+      logger.warn('[generate-persona] 人设身份漂移，已按 existingPersonaSeed 锚定', {
+        drift: anchored.drift,
+      });
+    }
+
     res.json({
       success: true,
-      data: result,
+      data: {
+        ...(result as Record<string, unknown> | null),
+        personaSeed: anchored.personaSeed,
+        identityDrift: anchored.drift,
+      },
     });
   } catch (error) {
     logger.error('AI生成虚拟学习者身份失败:', error);
@@ -213,24 +230,33 @@ router.post('/:id/draft-profile', async (req: Request, res) => {
 
     const existingProfile = parseJson<Record<string, unknown>>(profile.profile, {});
     const existingTraits = parseJson<Record<string, unknown>>(profile.personalityTraits, {});
+    const personaSeedInput = {
+      ...existingProfile,
+      personalityTraits: existingTraits,
+      learningGoal: profile.learningGoal,
+    };
     const result = await executeSkill(virtualLearnerPersonaDesignerDefinition, {
       preferredLevels: profile.knowledgeLevel ? [profile.knowledgeLevel] : undefined,
-      existingPersonaSeed: {
-        ...existingProfile,
-        personalityTraits: existingTraits,
-        learningGoal: profile.learningGoal,
-      }
+      existingPersonaSeed: personaSeedInput,
     });
 
-    const personaSeed = result?.personaSeed;
+    const anchored = anchorPersonaIdentity(result?.personaSeed, personaSeedInput);
+    const personaSeed = result?.personaSeed ? anchored.personaSeed : null;
     if (!personaSeed) {
       return res.status(500).json({ success: false, error: '增强画像生成失败' });
+    }
+    if (anchored.drift.length > 0) {
+      logger.warn('[draft-profile] 人设身份漂移，已按 existingPersonaSeed 锚定', {
+        virtualProfileId: id,
+        drift: anchored.drift,
+      });
     }
 
     res.json({
       success: true,
       data: {
         generatedProfile: personaSeed,
+        identityDrift: anchored.drift,
       }
     });
   } catch (error) {

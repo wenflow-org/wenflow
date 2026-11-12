@@ -267,4 +267,55 @@ describe('打字确认裁决（goal-confirm-adjudicator）', () => {
       refusalVetoed: false,
     }));
   });
+
+  it('e) answer_then_hook：打字确认第一次拦截计数、第二次放行（不再要求第三次）', async () => {
+    seedProposingConversation();
+    const seeded = JSON.parse(conversationRecord.collectedData);
+    seeded.responseTriage = { mode: 'answer_then_hook', confidence: 'medium', reasons: ['一次性操作'] };
+    conversationRecord.collectedData = JSON.stringify(seeded);
+    mockCallPrompt.mockResolvedValue({ success: true, output: { confirm: true } });
+    mockExecuteSkill.mockResolvedValue(buildAiResponse({
+      userVisible: '先直接给你这一处的解法，想系统练再生成课。',
+      stage: 'proposing',
+      confirmedProposal: {
+        learning_direction: '复盘写作',
+        first_deliverable: '一份能直接用的月度复盘提纲',
+        key_stages: ['S1 复盘框架', 'S2 结论提炼'],
+      },
+    }));
+
+    const first = await goalConversationService.continueConversation('conv-1', '好，那就开始吧', 'user-1');
+    expect(mockRunGoalAsync).not.toHaveBeenCalled();
+    expect(mockExecuteSkill).toHaveBeenCalledTimes(1);
+    expect(first.internal.core.stage).toBe('proposing');
+    expect(JSON.parse(conversationRecord.collectedData).answerOnlyNudges).toBe(1);
+
+    const second = await goalConversationService.continueConversation('conv-1', '好，就按这版开始排吧', 'user-1');
+    expect(mockRunGoalAsync).toHaveBeenCalledTimes(1);
+    // 第二次确认直接推进，不再跑主对话回合（executeSkill 仍只有第一次那一次）
+    expect(mockExecuteSkill).toHaveBeenCalledTimes(1);
+    expect(second.internal.core.stage).toBe('completed');
+  });
+
+  it('f) goal→path 交接源合并累计 understanding：最后一轮未复述 needsMaterial 也不丢', async () => {
+    seedProposingConversation();
+    const seeded = JSON.parse(conversationRecord.collectedData);
+    seeded.understanding = {
+      ...(seeded.understanding || {}),
+      needsMaterial: { kind: '年报', title: '公开年报候选', origin: 'public', queries: ['巨潮资讯 年度报告'] },
+    };
+    conversationRecord.collectedData = JSON.stringify(seeded);
+    let captured: any = null;
+    mockAssembleGoalHandoff.mockImplementation(async (source: any) => {
+      captured = source;
+      return null;
+    });
+
+    await goalConversationService.continueConversation('conv-1', '确认并生成路径', 'user-1', { confirmProposal: true });
+
+    expect(captured?.understanding?.needsMaterial).toEqual(expect.objectContaining({
+      title: '公开年报候选',
+      origin: 'public',
+    }));
+  });
 });

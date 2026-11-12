@@ -444,14 +444,34 @@ async function applyRealisticPersona(
     log(`  ⚠ 拟真人设生成失败（http=${generated.status}），继续使用空壳人设`);
     return;
   }
+  // 身份锚定（2026-11-13 批量跑数实证）：persona-designer 在 temperature 0.8 + 「避免与最近样本
+  // 重复职业」的牵引下，经常无视 existingPersonaSeed，给「签劳动合同的产品经理」生成
+  // 「烘焙工作室主理人」这类无关身份。行为字段（情绪触发/失败模式/可用时间）仍有价值，
+  // 但 name/occupation/background 必须锚回本 case，否则模拟器会带着错误生活史进课堂。
+  // 平台侧的提示词/确定性锚定问题另记修复；跑数器先保证 case 身份不被污染。
+  const generatedIdentity = String(seed.nameHint || seed.name || '(unnamed)');
+  const caseRole = cliValue('profile-role', '可丢弃跑数学习者');
+  const caseBackground = [story.goalSeed.realProblem, story.triggerEvent].filter(Boolean).join('；');
+  const drift = generatedIdentity !== args.learnerName;
+  const anchoredSeed = {
+    ...seed,
+    nameHint: args.learnerName,
+    occupation: caseRole,
+    background: caseBackground || seed.background,
+    learningGoal: args.learningGoal,
+  };
+  if (drift) {
+    log(`  ⚠ 人设身份漂移：模型生成「${generatedIdentity}」，已按 case 锚回「${args.learnerName}」`
+      + `（保留行为字段：triggers/failures/time）`);
+  }
   const applied = await makeApi(args.baseUrl, 'PUT', `/api/admin/virtual-learners/${profileId}`, {
-    profile: seed,
+    profile: anchoredSeed,
   });
   if (applied.status !== 200) {
     log(`  ⚠ 拟真人设写回失败（http=${applied.status}），继续使用空壳人设`);
     return;
   }
-  log(`[persona] 已应用拟真人设：${seed.nameHint || seed.name || '(unnamed)'}｜`
+  log(`[persona] 已应用拟真人设：${anchoredSeed.nameHint}｜`
     + `triggers=${Array.isArray(seed.emotionalTriggers) ? seed.emotionalTriggers.length : 0}｜`
     + `failures=${Array.isArray(seed.failurePatterns) ? seed.failurePatterns.length : 0}｜`
     + `time=${seed.availableTime || '—'}`);
@@ -482,14 +502,24 @@ async function main(): Promise<void> {
     process.argv.slice(2).filter((a) => !EXTRA_ARG.test(a)),
     process.env,
   );
-  if (!args.adminPassword) {
+  const sharedCookie = (process.env.E2E_ADMIN_COOKIE || '').trim();
+  if (!args.adminPassword && !sharedCookie) {
     throw new Error('缺少管理员密码：请设置 E2E_ADMIN_PASSWORD（或让 .env 里有 INIT_ADMIN_PASSWORD）');
   }
   if (!args.learnerName) args.learnerName = defaultLearnerName(new Date());
   if (args.statePath) logFile = `${args.statePath}.log`;
 
-  await login(args.baseUrl, args.adminName, args.adminPassword);
-  log(`已登录 ${args.baseUrl}（admin=${args.adminName}）`);
+  // 批量跑数（campaign runner）会预登录一次并把 Cookie 传进来：
+  // 管理员登录会吊销「同 ip + 同 User-Agent」的兄弟会话，20 个并行 harness 各自登录
+  // 会互相踢下线（实测 3/4 个 case 在创建学习者时 403「会话已吊销或过期」）。
+  // 复用同一 Cookie 后，所有 case 共享一个有效会话，且不触发同设备清理。
+  if (sharedCookie) {
+    cookie = sharedCookie;
+    log(`已复用预登录管理员会话（E2E_ADMIN_COOKIE，${args.baseUrl}）`);
+  } else {
+    await login(args.baseUrl, args.adminName, args.adminPassword);
+    log(`已登录 ${args.baseUrl}（admin=${args.adminName}）`);
+  }
 
   let state = loadState(args.statePath);
   if (state) {

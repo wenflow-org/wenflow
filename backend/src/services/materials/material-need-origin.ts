@@ -58,7 +58,7 @@ const DOC_DEPENDENCY_RE = /(官方文档|API\s*文档|开发文档|技术规范|
  * 即使 goal 没承诺「真实材料」，这类路径也应默认带锚点资料。计分 ≥2（有关键阶段时 ≥1）
  * 即派生锚点 need（从 key stages 取主题）。口语/习惯/体能这类纯训练目标不命中信号，零误伤。
  */
-const RESEARCH_WORTHINESS_RE = /(机制|原理|框架|工具|平台|模型|算法|法规|法律|标准|规范|政策|经济|金融|心理|医学|历史|行业|数据|统计|案例|事件|版本|API|SDK|技术|科学|市场)/g;
+const RESEARCH_WORTHINESS_RE = /(机制|原理|框架|工具|平台|模型|算法|法规|法律|标准|规范|政策|经济|金融|心理|医学|历史|行业|数据|统计|案例|事件|版本|API|SDK|技术|科学|市场|财报|报表|会计|审计|年报|现金流|资产负债|利润表|造假|估值|投资|证券|合同|条款|司法|判例|税|保险)/g;
 
 export interface GoalTextSource {
   surfaceGoal?: string | null;
@@ -67,6 +67,32 @@ export interface GoalTextSource {
   keyStages?: string | null;
   /** 关键阶段名列表（锚点 need 的取材对象；与 keyStages 二选一，stages 优先） */
   stages?: string[] | null;
+}
+
+/** 领域名词短语（检索主干）识别：优先抓「行业研究报告 / 劳动合同 / 上市公司年报」这类短语 */
+const TOPIC_PHRASE_RE = /[\u4e00-\u9fa5A-Za-z0-9]{2,12}(?:研究报告|报告|分析|框架|方法|指南|规范|标准|手册|论文|文献|合同|条款|法规|法律|统计|数据|模型|算法|财报|年报|课程|教材)/;
+
+/**
+ * 从目标文本里压出可检索的主题短语（2026-11-13 u06 实证）。
+ *
+ * 旧实现取「前 3 段、24 字」，长句目标会压出「我刚进咨询公司 第一次独立写行业研究报告」这类
+ * 检索词，material-collector 搜索到的是标题相近但正文不对的文章，直接 not_found。
+ * 这里优先抓领域名词短语（行业研究报告/劳动合同/年报…），抓不到才退回去口语前缀的短截断。
+ */
+export function compactTopic(raw: string): string {
+  const text = String(raw || '').replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+  const match = text.match(TOPIC_PHRASE_RE);
+  if (match) {
+    // 去掉「第一次/独立/写」这类修饰前缀，留下真正的领域名词短语
+    const cleaned = match[0].replace(/^(第一次|首次|独立|系统|从头|真正|自己|新手|零基础|刚|最近|写|做|读|看|学)+/,'');
+    return (cleaned || match[0]).slice(0, 24);
+  }
+  const stripped = text
+    .replace(/^(我|我们)?(刚|最近|现在|想|要|能|需要|请|帮我|教我|能不能|如何|怎么)+/g, '')
+    .replace(/[，。；、,.!？""'']/g, ' ')
+    .trim();
+  return (stripped || text).slice(0, 16);
 }
 
 export function deriveMaterialNeedsFromGoalText(source: GoalTextSource): MaterialNeed[] {
@@ -82,7 +108,7 @@ export function deriveMaterialNeedsFromGoalText(source: GoalTextSource): Materia
 
   // 主题词：surface_goal/learning_direction 里最可能当检索主干的短语（截短去杂）
   const topicRaw = String(source.learningDirection || source.surfaceGoal || source.realProblem || '').trim();
-  const topic = topicRaw.replace(/[，。；、,.!？""'']/g, ' ').split(/\s+/).filter(Boolean).slice(0, 3).join(' ').slice(0, 24);
+  const topic = compactTopic(topicRaw);
 
   const needs: MaterialNeed[] = [];
   if (REAL_PROMISE_RE.test(corpus)) {
@@ -196,4 +222,42 @@ export function partitionMaterialNeeds(needs: MaterialNeed[]): {
     else publicNeeds.push(need);
   }
   return { publicNeeds, privateNeeds };
+}
+
+/**
+ * 合并「goal 声明」与「path 思考触发派生」的材料需求（2026-11-13 20 用户实证）。
+ *
+ * 旧链路只在 `needsMaterial` 为空时才派生（`if (!needsMaterial)`）。但 goal 经常只声明
+ * **私有材料**（如「用户本人的劳动合同」），path 就完全跳过派生——连带把「法定上限/法规原文」
+ * 这类**公开**依赖也漏掉，最终路径靠模型记忆讲法条、零出处。这里把判据改成
+ * 「只要没有公开声明，就允许派生补公开需求」：
+ *   - goal 已声明 public need → 以 goal 为准，不派生（避免 goal 层准确 queries 被泛化锚点冲淡）；
+ *   - goal 只声明 private / 未声明 → 保留私有 need（仍由分区拦下不联网），追加派生 public need；
+ *   - 按标题去重，总量不超过 cap。
+ */
+export function mergeDeclaredAndDerivedNeeds(
+  declared: unknown,
+  derived: MaterialNeed[],
+  cap = 3,
+): unknown {
+  const declaredNeeds = (Array.isArray(declared) ? declared : declared ? [declared] : [])
+    .filter((need): need is MaterialNeed => !!need && typeof need === 'object');
+  const hasPublicDeclared = declaredNeeds.some((need) => inferMaterialOrigin(need) === 'public');
+  // 未声明时保持旧链路形状：直接把派生列表交给 resolveMaterialPacks（数组）
+  if (!declared) return derived.slice(0, cap);
+  if (hasPublicDeclared) return declared;
+  if (derived.length === 0) return declared;
+
+  const merged: MaterialNeed[] = [];
+  const seen = new Set<string>();
+  for (const need of [...declaredNeeds, ...derived]) {
+    const key = String(need?.title || '').trim().toLowerCase();
+    if (key && seen.has(key)) continue;
+    if (key) seen.add(key);
+    merged.push(need);
+    if (merged.length >= cap) break;
+  }
+  if (merged.length === 0) return declared;
+  // 保持调用方原有形状：单条对象 → 单条对象（hasMaterialNeed 两种都认）
+  return Array.isArray(declared) || merged.length > 1 ? merged : merged[0];
 }
