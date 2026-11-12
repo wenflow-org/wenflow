@@ -197,24 +197,28 @@
               </div>
             </div>
             <!-- 角色筛选（2026-11-08 用户「把 [全部 48][必填 4][方案产出 5]… 做成表格顶部的点击筛选」）：
-                 48 行一次平铺读不完，先按产出角色收窄。 -->
+                 48 行一次平铺读不完，先按产出角色收窄。
+                 2026-11-12：改用全站筛选语汇 .mk-pill / .mk-pill__count——这是「筛选」不是
+                 视图切换（mk-seg 的语义），原先一条深色分段条压在表头上方，权重比表还重。 -->
             <div v-if="routingRows.length" class="skd-segrow">
               <span class="skd-seglabel">字段角色</span>
-              <div class="mk-seg sdp-seg skd-rolefilter" role="group" aria-label="按字段角色筛选">
+              <div class="mk-pills skd-rolefilter" role="group" aria-label="按字段角色筛选">
                 <button
                   type="button"
-                  class="mk-seg__item"
-                  :class="{ 'mk-seg__item--active': routingRoleFilter === '' }"
+                  class="mk-pill"
+                  :class="{ 'mk-pill--active': routingRoleFilter === '' }"
+                  :aria-pressed="routingRoleFilter === ''"
                   @click="routingRoleFilter = ''"
-                >全部 {{ routingRows.length }}</button>
+                >全部<span class="mk-pill__count">{{ routingRows.length }}</span></button>
                 <button
                   v-for="c in routingRoleChips"
                   :key="c.id"
                   type="button"
-                  class="mk-seg__item"
-                  :class="{ 'mk-seg__item--active': routingRoleFilter === c.id }"
+                  class="mk-pill"
+                  :class="{ 'mk-pill--active': routingRoleFilter === c.id }"
+                  :aria-pressed="routingRoleFilter === c.id"
                   @click="routingRoleFilter = c.id"
-                >{{ c.label }} {{ c.count }}</button>
+                >{{ c.label }}<span class="mk-pill__count">{{ c.count }}</span></button>
               </div>
             </div>
             <div class="skd-tablewrap">
@@ -1304,8 +1308,8 @@ useEscape(
 /* 字段路由页签内视图切换（2026-10-31 外部评审）：与协议页 sdp-pw__viewswitch 同语汇 */
 /* 字段路由页签内的分段：位置归位（与协议 / 版本 / 试跑同一套 .mk-seg） */
 .sdp-seg { width: fit-content; }
-/* 角色筛选条（2026-11-08）：贴在字段流向表上方，窄屏可换行不挤成一团 */
-.skd-rolefilter { width: auto; max-width: 100%; flex-wrap: wrap; margin: 0 16px 12px; }
+/* 角色筛选条（2026-11-08；2026-11-12 改全站筛选胶囊）：贴在字段流向表上方，窄屏可换行 */
+.skd-rolefilter { max-width: 100%; margin: 0 16px 12px; }
 /* 分段控件的可见对象名（2026-11-11 困惑测试 #79） */
 .skd-segrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .skd-seglabel { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-muted); white-space: nowrap; }

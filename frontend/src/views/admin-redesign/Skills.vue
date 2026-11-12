@@ -120,15 +120,23 @@
         <button type="button" class="mk-alert__btn" @click="retrySkills">重试</button>
       </div>
 
-      <!-- 健康点图例（2026-11-11 困惑测试 #73）：行首四色点此前只有各自悬停才知含义，
-           与「需关注」筛选的关系（只覆盖红档）也不可见。 -->
-      <p class="sk-health-legend">
-        状态点：
-        <span class="sk-health-legend__item"><i class="sk-dot sk-dot--ok"></i>健康</span>
-        <span class="sk-health-legend__item"><i class="sk-dot sk-dot--warn"></i>有失败（成功率 &lt;97%）</span>
-        <span class="sk-health-legend__item"><i class="sk-dot sk-dot--error"></i>异常（&lt;90%，即「需关注」）</span>
-        <span class="sk-health-legend__item"><i class="sk-dot sk-dot--idle"></i>空闲（未调用）</span>
-        <span class="sk-health-legend__note">「需关注」筛选只收红档（异常）</span>
+      <!-- 健康点图例（2026-11-11 困惑测试 #73；2026-11-12 收口）：屏上只留四个短档位，
+           阈值与「需关注」的映射收进各自 tooltip；不再在行尾复述一遍筛选规则。 -->
+      <p class="sk-health-legend" aria-label="状态点说明">
+        <span class="sk-health-legend__label">状态点</span>
+        <span class="sk-health-legend__item" title="成功率 ≥ 97%：窗口内调用基本都成功" aria-label="健康：成功率 ≥ 97%">
+          <i class="sk-dot sk-dot--ok" aria-hidden="true"></i>健康
+        </span>
+        <span class="sk-health-legend__item" title="成功率 90%–97%：有失败，但未到异常档" aria-label="有失败：成功率 90%–97%">
+          <i class="sk-dot sk-dot--warn" aria-hidden="true"></i>有失败
+        </span>
+        <span class="sk-health-legend__item" title="成功率 < 90%：异常档，「需关注」筛选只收这一档" aria-label="异常：成功率低于 90%，「需关注」筛选只收这一档">
+          <i class="sk-dot sk-dot--error" aria-hidden="true"></i>异常
+        </span>
+        <span class="sk-health-legend__item" title="窗口内没有调用记录" aria-label="未调用：窗口内没有调用记录">
+          <i class="sk-dot sk-dot--idle" aria-hidden="true"></i>未调用
+        </span>
+        <span class="sk-health-legend__note">「需关注」= 异常档</span>
       </p>
 
       <MockSkeletonTable v-if="liveLoading && !cards.length" :cols="7" />
@@ -1143,9 +1151,12 @@ const primaryCoverageText = computed(() =>
 .sk-act-na { font-size: var(--mk-fs-micro); }
 .sk-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 /* 健康点图例（2026-11-11 困惑测试 #73） */
-.sk-health-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 0 14px 8px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
-.sk-health-legend__item { display: inline-flex; align-items: center; gap: 5px; }
-.sk-health-legend__note { color: var(--mk-faint); }
+.sk-health-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px; margin: 0 14px 8px; font-size: var(--mk-fs-micro); color: var(--mk-muted); }
+.sk-health-legend__label { color: var(--mk-faint); font-weight: 600; }
+.sk-health-legend__item { display: inline-flex; align-items: center; gap: 6px; cursor: help; }
+/* 图例是静态说明：红点不闪（闪动只用于表格行，提醒当下有异常） */
+.sk-health-legend .sk-dot--error { animation: none; }
+.sk-health-legend__note { margin-left: auto; color: var(--mk-faint); }
 /* 成功率列的小色点（D 项：色点承载档位色，数字恒为 --mk-ink） */
 .sk-dot--sm { display: inline-block; width: 6px; height: 6px; margin-right: 6px; vertical-align: middle; }
 .sk-dot--ok { background: var(--mk-green); }
