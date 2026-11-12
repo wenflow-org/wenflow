@@ -67,6 +67,37 @@ export function appendDescriptionNote(
   return existing ? `${existing}\n\n${text}` : text;
 }
 
+/** 结构容量缺口披露的输入（来自 planningHints.capacityDeficit） */
+export interface CapacityDeficitNoteInput {
+  deficitRatio?: number | null;
+  requestedHours?: number | null;
+  capacityHours?: number | null;
+  sessionMinutes?: number | null;
+}
+
+/**
+ * 单次时长是硬约束、结构装不下内容目标时，给学习者的诚实说明。
+ * 不补课、不拉长单课：告诉用户“按你给的单次时长，结构最多承载多少；
+ * 要完整覆盖，需要加坐学或拆阶段”。低于 10% 的缺口不值得打扰用户。
+ */
+export function buildCapacityDeficitNote(input: CapacityDeficitNoteInput): string | null {
+  const ratio = Number(input.deficitRatio);
+  const requested = Number(input.requestedHours);
+  const capacity = Number(input.capacityHours);
+  if (!Number.isFinite(ratio) || ratio < 0.1) return null;
+  if (!Number.isFinite(requested) || !Number.isFinite(capacity) || requested <= capacity || capacity <= 0) return null;
+  const sessionMinutes = Number(input.sessionMinutes);
+  const missingHours = requested - capacity;
+  const missingSessions = Number.isFinite(sessionMinutes) && sessionMinutes > 0
+    ? Math.ceil((missingHours * 60) / sessionMinutes)
+    : null;
+  const sessionText = Number.isFinite(sessionMinutes) && sessionMinutes > 0
+    ? `${Math.round(sessionMinutes)} 分钟`
+    : '可用时长';
+  const addText = missingSessions ? `想完整覆盖，需要再增加约 ${missingSessions} 次坐学或拆分阶段；` : '';
+  return `【课时容量提示】按你给的单次 ${sessionText}，当前阶段结构最多承载约 ${Math.round(capacity * 10) / 10} 小时；内容目标约 ${Math.round(requested * 10) / 10} 小时。${addText}当前路径先覆盖主干，剩余部分可以在后续追加。`;
+}
+
 export interface DeliveryReconciliationInput {
   /** `budgetConservation`（未知结构安全读取）；非对象时返回 null */
   conservation: unknown;

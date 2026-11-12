@@ -368,6 +368,8 @@ sandbox:teaching-agent.teachingState.teachingControlContext
 ```
 sandbox:profile-agent.blockedFoundations
 sandbox:profile-agent.conceptLedger
+sandbox:profile-agent.curriculumControls
+sandbox:profile-agent.narrativeInsights
 sandbox:profile-agent.profile.curriculumControls
 sandbox:profile-agent.profile.narrativeInsights
 sandbox:profile-agent.recurringConfusions
@@ -396,9 +398,11 @@ sandbox:simulation-agent.currentPhase
 sandbox:simulation-agent.currentTask
 sandbox:simulation-agent.existingKnown
 sandbox:simulation-agent.existingPersonaSeed
+sandbox:simulation-agent.existingStoryPool
 sandbox:simulation-agent.existingStruggle
 sandbox:simulation-agent.experimentSummary
 sandbox:simulation-agent.forcedCorrectness
+sandbox:simulation-agent.friction
 sandbox:simulation-agent.frictionBudget
 sandbox:simulation-agent.goalState
 sandbox:simulation-agent.knowledgeSnapshot
@@ -412,6 +416,7 @@ sandbox:simulation-agent.metricCompleteness
 sandbox:simulation-agent.pathProposal
 sandbox:simulation-agent.pendingCheckpoint
 sandbox:simulation-agent.persona
+sandbox:simulation-agent.personaAnchorHint
 sandbox:simulation-agent.preferredDomains
 sandbox:simulation-agent.preferredGoalTypes
 sandbox:simulation-agent.preferredLevels

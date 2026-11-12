@@ -18,7 +18,7 @@ inputs:
     type: object
     ref: sandbox:path.normalizedInput
     desc: 目标上下文（surfaceGoal/confirmedProposal/successCriteria/learnerProfile）
-  - name: prerreqTree
+  - name: prerequisiteTree
     type: object?
     # #192：与 kc-mapper 同一数据键——运行时以顶层 prerequisiteTree 注入
     # （path-generation.core 评审调用），不在 normalizedInput 之下。

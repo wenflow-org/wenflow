@@ -25,3 +25,13 @@ describe('virtual-learner skill prompt dual-source consistency', () => {
     expect(prompt.length).toBeGreaterThan(200)
   })
 })
+
+describe('goal 模拟器离场语义（2026-11-11 告别死循环）', () => {
+  it('编译产物带 shouldEnd 字段与离场/不复读规则', () => {
+    const prompt = VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_PROMPT
+    expect(prompt).toContain('shouldEnd')
+    expect(prompt).toContain('像真人一样会离场')
+    expect(prompt).toContain('不会站在门口再答一轮')
+    expect(prompt).toContain('不要每轮都写小作文')
+  })
+})

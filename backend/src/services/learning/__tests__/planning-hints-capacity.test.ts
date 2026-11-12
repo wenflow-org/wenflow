@@ -34,7 +34,10 @@ describe('derivePlanningHints 结构容量自适应（R5-1）', () => {
   });
 
   it('小预算路径不受影响（不触发容量赤字，区间保持 scope 默认）', () => {
-    const h = hintsFor(20, 3, 30);
+    const h = derivePlanningHints(
+      '到高考', '每天30分钟', null, null, ['S1', 'S2', 'S3'],
+      { estimatedHours: 5, sessionsLengthMin: 30 }, 'large', null, null,
+    );
     expect(h.subtasksPerStageRange[1]).toBeLessThanOrEqual(14);
     expect(h.subtasksPerStageRange[0]).toBeLessThanOrEqual(h.subtasksPerStageRange[1]);
   });

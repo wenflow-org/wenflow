@@ -1,6 +1,6 @@
 ---
 agentId: skill:learner-state-review
-coreHash: af988c0a59f4593eae0c66a6107738b0749ba73909d1ca62a64e9f74acff6052
+coreHash: 391e12b29a0aacfd1f1658f16807bc15362a4669c36c8830cc9552387f914aa3
 coreVersion: 1
 temperature: 0.3
 maxTokens: 64000
@@ -18,6 +18,12 @@ failurePolicy: propagate
 - path：路径与确认方案上下文
 - evidence：客观事实轨迹：课堂证据、知识变化、课后总结、运行统计（只读追加）
 - state（不推进）：平台维护的主记忆快照（当前值，含 stage）
+
+输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
+- 「learnerDigest（object）」`sandbox:profile.snapshot.dynamicState`（编排注入） — 学习者状态摘要（confidenceLevel/recentTrend/节奏与卡点线索）
+- 「knowledgeDigest（object）」`sandbox:profile.snapshot.knowledgeMemory.currentPath`（编排注入） — 知识线索摘要（当前路径的掌握/脆弱/先修缺口线索）
+- 「recentEvidence（object[]）」`sandbox:teaching.session.evidence`（编排注入） — 最近课堂证据 [{ id, signal, concepts[], at }]；insight.evidenceRefs 只能引用其中出现过的 id
+- 「priorInsights（object[]）」`sandbox:profile.narrativeInsights`（编排注入） — 上一轮已产出的诊断（可延续/推翻；不得重复造新条目）
 
 ## 执行规则
 

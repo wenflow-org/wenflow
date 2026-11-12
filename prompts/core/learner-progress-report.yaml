@@ -6,14 +6,22 @@ identity: |
 channels: [task, learner, evidence, state]
 stateAdvance: false
 inputs:
-  - name: sessionEvidence
+  # 声明名必须与**模型实收载荷键**一致（2026-11-11 字段审计）：调用方
+  # LearnerProgressService 的 buildUserPayload 实际下发 { task, metrics, signals }；
+  # 此前声明 sessionEvidence / learnerSnapshotDynamic，模型在 payload 里找不到同名键。
+  # ref 只标注数据来源（调用方在其上做投影），不是键名来源。
+  - name: task
     type: object
-    ref: sandbox:teaching.session.evidence
-    desc: 会话证据（回合数/理解均值/困惑点/情绪/负荷）——task 与 signals 由调用方在此之上算出
-  - name: learnerSnapshotDynamic
+    ref: sandbox:teaching.session.info
+    desc: 当前任务信息 { title, timeSpent, difficulty }（调用方由 session/taskData 投影）
+  - name: metrics
     type: object
     ref: sandbox:profile.snapshot.dynamicState
-    desc: 学习者动态指标（completionRate/ktl/lf/lss 等，metrics 的来源）
+    desc: 本节指标 { completionRate, ktl, lf, lss }（调用方由 dynamicState 与权威学习状态投影）
+  - name: signals
+    type: string
+    ref: sandbox:teaching.session.evidence
+    desc: 学习信号描述（分号分隔的文本串，调用方由会话证据派生）
 rules:
   - 只能基于输入中的任务信息、指标和信号进行分析
   - 语气亲切、具体、鼓励，但不替用户做学习决策

@@ -15,6 +15,16 @@ import { dayKeyOf, endOfDay, parseDayKeyStart } from '../time/day-boundary';
 
 export type PlanningPaceSignal = 'compact' | 'standard' | 'extended';
 export type TimeBudgetCadence = 'per_day' | 'per_week' | 'per_session' | 'flexible' | 'unclear';
+/**
+ * 单次时长的来源（2026-11-11）：
+ * - explicit：用户明确说“每次只能/大概 N 分钟”，N 是硬约束；
+ * - estimated：用户给了模糊区间，平台取中值；
+ * - default：用户完全没提，平台静默落档的均值锚（不是硬上界）。
+ *
+ * 这三类必须分开：把 default 当 explicit 会把“不知道”误判成“只能坐 25 分钟”，
+ * 进而用 25min × 3 课 × 3 阶段把 8h 内容锁成 3.75h。
+ */
+export type SessionLengthSource = 'explicit' | 'estimated' | 'default' | 'unknown';
 
 function normalizeString(value: any): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
@@ -35,6 +45,29 @@ function normalizeCadence(value: any): TimeBudgetCadence | null {
     || value === 'unclear'
     ? value
     : null;
+}
+
+function normalizeSessionLengthSource(value: unknown): SessionLengthSource | null {
+  return value === 'explicit' || value === 'estimated' || value === 'default' ? value : null;
+}
+
+/**
+ * 旧数据没有 sessionsLengthSource：从原文反推，避免把“未提及，按最小档静默落档”
+ * 这类平台默认文本误当成用户硬约束。
+ */
+function inferSessionLengthSource(
+  timePerSession: string | null,
+  timeDimensions: Record<string, any> | null | undefined,
+): SessionLengthSource {
+  const explicit = normalizeSessionLengthSource((timeDimensions as any)?.sessionsLengthSource);
+  if (explicit) return explicit;
+  const text = timePerSession?.trim() ?? '';
+  if (text && /(未提及|未明确|静默|最小档|默认|按最小|平台默认)/.test(text)) return 'default';
+  if (text && parseSessionMinutes(text) !== null) return 'explicit';
+  const structured = Number((timeDimensions as any)?.sessionsLengthMin ?? (timeDimensions as any)?.sessionLengthMin);
+  if (Number.isFinite(structured) && structured > 0) return 'explicit';
+  // 没有来源、没有原文、没有结构化时长：保持旧行为（pace 档位默认），不要凭空落 25。
+  return 'unknown';
 }
 
 /** R8：客观内容体量锚的理智上界；超出视为脏值，按未提供处理（不参与任何日历乘法） */
@@ -267,7 +300,9 @@ export function parseTopicGranularity(value: unknown): TopicGranularity | null {
  * 颗粒度硬上界（只钳上界，不抬下限——抬下限会诱发「凑课注水」把 45 分钟的事撑成 1 小时）。
  * single_concept: 总学时 ≤1.2（外评：45 分钟清爽闯关课的量级；[1.5,4] 依然偏大）；
  *   阶段 ≤2、每阶段课 ≤2（总课数 ≤4）、单课 ≤25 分钟。
- * skill_module: 总学时 ≤6；阶段 ≤3、每阶段课 ≤3、单课 ≤35 分钟。
+ * skill_module: 总学时 ≤12（与 goal 的「专项技能/单模块突破 5-12h」参考锚对齐；
+ *   旧值 6 会把 8h 的合法技能模块直接腰斩）；阶段 ≤3、每阶段课 ≤5、单课 ≤35 分钟。
+ *   「每阶段 ≤5」是绝对上限：再往上不是同一认知盲区的不同动作，而是同题复读。
  * full_subject: 不钳（走既有长线推导）。
  */
 export const TOPIC_GRANULARITY_BOUNDS: Record<
@@ -275,7 +310,7 @@ export const TOPIC_GRANULARITY_BOUNDS: Record<
   { totalHoursCap: number; milestoneCap: number; subtasksPerStageCap: number; minutesCap: number }
 > = {
   single_concept: { totalHoursCap: 1.2, milestoneCap: 2, subtasksPerStageCap: 2, minutesCap: 25 },
-  skill_module: { totalHoursCap: 6, milestoneCap: 3, subtasksPerStageCap: 3, minutesCap: 35 },
+  skill_module: { totalHoursCap: 12, milestoneCap: 3, subtasksPerStageCap: 5, minutesCap: 35 },
 };
 
 export interface PlanningHints {
@@ -308,6 +343,12 @@ export interface PlanningHints {
   targetTotalHours: number | null;
   /** 每阶段学时锚（= targetTotalHours / targetMilestones；存在时各 milestone estimatedHours 应向它收敛，防大预算被模型惯性压回 ~10h/阶段） */
   targetHoursPerMilestone: number | null;
+  /**
+   * 未按结构容量夹取的阶段锚（= targetTotalHours / targetMilestones）。
+   * 仅用于展示/审计/内容覆盖判断；**不用于强制补课**——容量装不下时应报缺口或拆阶段，
+   * 不是在同一个阶段里塞同质任务把数字凑满。
+   */
+  rawTargetHoursPerMilestone?: number | null;
   /** 单任务分钟锚（= 总分钟 / 总任务数；存在时 subtask estimatedMinutes 均值应向它靠拢，防扩容后模型仍按 ~60min/任务填充） */
   targetMinutesPerTask: number | null;
   /**
@@ -571,6 +612,8 @@ export function derivePlanningHints(
     estimatedHours?: number | null;
     sessionsPerWeek?: number | null;
     sessionsLengthMin?: number | null;
+    /** 单次时长来源：explicit=用户硬约束；default=平台静默默认；estimated=模糊区间取中值 */
+    sessionsLengthSource?: SessionLengthSource | null;
     /** R8：兼容单数拼写；归一化时 sessionsLengthMin 优先 */
     sessionLengthMin?: number | null;
     totalSessions?: number | null;
@@ -620,7 +663,12 @@ export function derivePlanningHints(
   // 课题颗粒度（外评建议二）：goal scope_size 带「[单点概念]/[技能模块]/[完整学科]」前缀时
   // 解析出硬上界来源；无前缀（老数据/未按协议输出）→ null，行为与今天完全一致。
   const topicGranularity = parseTopicGranularity(typeof scopeSize === 'string' ? scopeSize : null);
+  // 标签与结构自洽校验（2026-11-11 心理学通识实证）：单点概念帽=2 段、技能模块帽=3 段。
+  // 若 key_stages 已超过该帽，说明模型把「4 家流派/8 小时/二十来次坐学」错标成 [单点概念]——
+  // 此时以结构为准忽略标签，否则会把已确认的 8h 课程压成 1.2h（真实事故：2 阶段 4 课）。
+  // 只否决「帽装不下结构」的标签；p-π 共轭（2 段 + 9.2h 背景污染）仍按单点帽收口。
   const granularityBounds = topicGranularity && topicGranularity !== 'full_subject'
+    && keyStageCount <= TOPIC_GRANULARITY_BOUNDS[topicGranularity].milestoneCap
     ? TOPIC_GRANULARITY_BOUNDS[topicGranularity]
     : null;
   const scopeConfig = scope ? SCOPE_SIZE_RANGES[scope] : null;
@@ -731,6 +779,7 @@ export function derivePlanningHints(
   // 正则只认阿拉伯数字 → 回退默认档 [30,120]，本该 [45,120]，整条路径排了 90min 课）。
   // 解析实现与默认值统一在 services/learning/capacity-authority.ts（#106）。
   const parsedSessionMinutes = parseSessionMinutes(timePerSession);
+  const sessionLengthSource = inferSessionLengthSource(timePerSession, timeDimensions as Record<string, any> | null | undefined);
 
   // 2026-09-28 R2（rw-school-15 案例：20min 早读被排 30min 课）：上界不得突破会话时长——
   // 「每步一次坐完」的硬约束优先于「任务别太小」的下限偏好。
@@ -773,6 +822,17 @@ export function derivePlanningHints(
   if (subtaskMinutesRange[1] > ATOMIC_TASK_MINUTES_CAP) {
     const upper = ATOMIC_TASK_MINUTES_CAP;
     subtaskMinutesRange = [Math.min(subtaskMinutesRange[0], upper), upper];
+  }
+
+  // 静默默认单次时长（2026-11-11）：用户没提时间时，25 分钟是**均值锚**，不是硬上界。
+  // 旧逻辑把它当 explicit，单课被锁死在 25min，4 阶段 × 4 课只能装 6.67h，8h 内容必然被腰斩；
+  // 更糟的是所有任务都标“约 25 分钟”，架空 stage-designer 的时长分化要求。
+  // 这里只放宽默认来源：显式说“每次只能 20 分钟”的用户仍按 20min 封顶。
+  if (sessionLengthSource === 'default') {
+    const mean = parsedSessionMinutes ?? (Number.isFinite(structuredSessionMinutes) ? structuredSessionMinutes : 25);
+    const lower = Math.max(15, Math.min(subtaskMinutesRange[0], Math.round(mean * 0.6)));
+    const upper = Math.min(45, Math.max(35, Math.round(mean + 10)));
+    subtaskMinutesRange = [Math.min(lower, upper), upper];
   }
 
   const parsedBudgetMinutes = parseBudgetMinutes(timeBudget);
@@ -864,7 +924,13 @@ export function derivePlanningHints(
   // R8：objectiveScopeHours 取代 totalSessions 后，≤1h 的客观体量也必须按「一节课」收口。
   const lessThanOneLesson = (totalSessions !== null && totalSessions < 1)
     || (objectiveScopeHoursNum !== null && objectiveScopeHoursNum <= ONE_SITTING_MAX_HOURS);
-  if (lessThanOneLesson || isTightAvailabilitySignal) {
+  // 2026-11-11 三组对照暴露的根因：minimal 时间 =「每次坐得短」，不是「这门课只有一小时」。
+  // 旧逻辑把两者合并，导致 8 小时/4 个流派的心理学路径被压成 2 阶段/4 课/0.9 小时。
+  // 只有「客观体量 ≤2h」的窄任务才收到一节课；大体量只收紧单课分钟，
+  // 结构（阶段数/任务数/总学时）仍按内容体量走——时间少应该拉长周期，不是砍内容。
+  const tightButLarge = isTightAvailabilitySignal
+    && objectiveScopeHoursNum !== null && objectiveScopeHoursNum > 2;
+  if (lessThanOneLesson || (isTightAvailabilitySignal && !tightButLarge)) {
     const cap = ONE_SITTING_BOUNDS;
     milestoneRange = [...cap.milestoneRange];
     conceptRange = [...cap.conceptRange];
@@ -872,6 +938,13 @@ export function derivePlanningHints(
     subtaskMinutesRange = [...cap.subtaskMinutesRange];
     maxWeeks = Math.min(maxWeeks, cap.maxWeeks);
     if (targetMilestones !== null) targetMilestones = Math.min(targetMilestones, cap.milestoneRange[1]);
+  } else if (isTightAvailabilitySignal) {
+    // 时间紧但内容大：只把单课压到 25 分钟以内，阶段/任务/总学时不动。
+    const tightMinutesCap = 25;
+    subtaskMinutesRange = [
+      Math.min(subtaskMinutesRange[0], tightMinutesCap),
+      Math.min(subtaskMinutesRange[1], tightMinutesCap),
+    ];
   }
 
   // ---- 课题颗粒度硬上界（2026-11-09 外评建议二，结构手术第 3 刀）----
@@ -1069,49 +1142,33 @@ export function derivePlanningHints(
   const estimatedHoursTotal = estimatedHoursTotalCapped === null
     ? null
     : Math.max(0.1, Math.round(estimatedHoursTotalCapped * 10) / 10);
-  // ---- 大预算扩容（2026-09-27，基线 31 格实测驱动）：锚定总学时超过结构天花板
-  // （阶段×任务×单任务分钟上限）时，按需抬升每阶段任务上限与单任务分钟上界——
-  // 任务语义升级为「学习单元（可含多次坐学）」。基线收缩比 0.07-0.74（中位 0.13-0.26）
-  // 的根因即此天花板：90-180h 真实预算被 5 阶段×6 任务×120min 压掉 70-90%，
-  // 且 mastery 人设的"把预算排满"抵抗对它零效果（对话信号不进结构先验）。
-  // 触发判据 = 容量赤字：锚定分钟数 > 当前上界容量（分钟上界×每阶段任务上限）。
-  const perStageHours = targetMilestones !== null && estimatedHoursTotal !== null
-    ? estimatedHoursTotal / targetMilestones
-    : null;
+  // ---- 大预算扩容（2026-09-27，基线 31 格实测驱动；2026-11-11 修正判据）----
+  // 旧判据 `anchorMin > capacityMin && perStageHours > 6` 有两处错：
+  //   ① anchorMin 是**全路径总分钟**，capacityMin 是**单阶段容量**，少乘了阶段数；
+  //   ② `perStageHours > 6` 把普通 8h 课程（2-2.67h/阶段）全挡在门外——扩容从未为它们生效。
+  // 现在按「每阶段锚分钟 > 单阶段容量」判断；普通路径单阶段任务上限封 5：
+  // 再往上不是同一认知盲区的不同动作，而是同题复读。装不下的部分由 capacityDeficit 诚实披露，
+  // 或由上游拆 key stage（不能在同一个盲区里塞 6-7 课凑时长）。
+  // 例外：单阶段锚 >6h 的超大预算（490h 考证型）仍允许抬到 30——这类路径的
+  // 正确解是更多阶段，但阶段数被 keyStages 锁死时，先保留旧容量，避免直接塌成几十小时。
   const capacityMin = subtaskMinutesRange[1] * subtasksPerStageRange[1];
   const anchorMin = estimatedHoursTotal !== null ? estimatedHoursTotal * 60 : null;
-  // 容量赤字布尔开关：锚定分钟数 > 当前上界容量，且每阶段需求 >6h（低于此不值得扩，见下方判据）。
-  // 与下方 `capacityDeficitReport`（可观测结构化报告）分工：本开关只决定「要不要扩容」，
-  // 报告负责「缺口多少、卡在哪道上界」。
-  const needsCapacityExpansion = anchorMin !== null && perStageHours !== null && targetMilestones !== null
-    ? anchorMin > capacityMin && perStageHours > 6
+  const perStageAnchorMin = anchorMin !== null && targetMilestones !== null
+    ? anchorMin / targetMilestones
+    : null;
+  const ABS_SUBTASKS_PER_STAGE_CAP = perStageAnchorMin !== null && perStageAnchorMin > 6 * 60 ? 30 : 5;
+  const neededLessonCount = perStageAnchorMin !== null
+    ? Math.ceil(perStageAnchorMin / subtaskMinutesRange[1])
+    : null;
+  const needsCapacityExpansion = neededLessonCount !== null && perStageAnchorMin !== null
+    ? neededLessonCount > subtasksPerStageRange[1] && perStageAnchorMin > capacityMin
     : false;
-  if (needsCapacityExpansion) {
-    // 2026-09-28 粒度修正：扩容只加「课数」，不再放大「单课时长」。此前 avgTaskMin*2 会把
-    // 分钟上界顶到 240（session=60min 时实测单课均值 82min、锚 108min）——单课超过用户
-    // 单次可用时间 = 一节课一天上不完（真实案例：90h 预算被切成 5×10×82min）。
-    // 单课上界保持会话档（subtaskMinutesRange[1]，已按 timePerSession 一比一校准）；
-    // 预算缺口由课数吸收；仍装不下的部分由
-    // targetHoursPerMilestone 的结构容量钳制诚实收缩（不多排账面学时）。
-    //
-    // 2026-09-29 R5-1：旧代码硬帽 Math.min(14, needed)——needed=54（school-16 型：650h/8 阶段
-    // = 81h/阶段）被夹回 14，且下限公式产出倒挂区间 [18,14]（range[0]>range[1]，下游
-    // 「遵守区间」的消费方拿到垃圾）。实证：扩容从未真正生效，长周期路径交付比 7-42%，
-    // 31 条缺口声明全是这个天花板。改为按需抬升：上界 = clamp(needed, 14, 30)。
-    // 30 的上限是防 filler 副作用（评审实测：强填课会产换皮复读，B 维同质化）——
-    // 超过 30 课/阶段仍由缺口声明诚实兜底，不靠堆课数虚增容量。
-    // 2026-09-29 用户口径修正：去掉这里额外的 90 封顶——它与 structureStageCapacityHours 用的
-    // subtaskMinutesRange[1] 不一致（CPA 实测 96 vs 90），造成「课数目标按 90 算、容量报告按 96 算」
-    // 两张皮。现在两处同源。
-    const perStageMin = anchorMin / targetMilestones;
-    const lessonMinutesCap = subtaskMinutesRange[1];
-    const needed = Math.ceil(perStageMin / lessonMinutesCap);
-    // 上界按需抬升（needed），30 封顶：强填课会产换皮复读（评审实证 B 维同质化），
-    // 超过 30 课/阶段仍由缺口声明诚实兜底，不靠堆课数虚增容量。
-    // 区间有序性天然保持：lower ≤ 原上界 ≤ 新上界。
+  if (needsCapacityExpansion && neededLessonCount !== null) {
+    // 只加「课数」，不放大「单课时长」：单课仍受用户单次坐姿校准。
+    // needed 超过 5 时封顶 5，剩余缺口交给 capacityDeficit，不用同质任务硬凑。
     subtasksPerStageRange = [
-      Math.max(3, Math.min(subtasksPerStageRange[0], Math.ceil(needed / 3))),
-      Math.min(30, Math.max(subtasksPerStageRange[1], needed)),
+      Math.max(3, Math.min(subtasksPerStageRange[0], Math.ceil(neededLessonCount / 3))),
+      Math.min(ABS_SUBTASKS_PER_STAGE_CAP, Math.max(subtasksPerStageRange[1], neededLessonCount)),
     ];
   }
   // 锚定总学时透传（供 path-planning prompt 把"总预算"显式交给 LLM 分配）
@@ -1119,11 +1176,25 @@ export function derivePlanningHints(
   // perStage 从总学时反推时，上限必须被 subtasksPerStageRange 钳制：scope_size 是"问题多大"的硬约束，
   // 不能因为 goal 碰巧推断出 estimatedHours 就突破 scope 的任务密度上限（否则 micro/small 又会被撑大）。
   // 下限保持宽松（硬编码 2），允许比 pace 默认更少，不被抬升。
-  // 单任务小时：常规 1h/任务；仅抬升分支按均摊小时计（任务=学习单元，含多次坐学）。
+  // 2026-11-11：除数不能再写死 1.0h/任务——单课上限已被单次时长校准（20/25/35/60min），
+  // 用 1h 反推会把 8h/4 阶段算成 2 个任务/阶段，再被 25min 上限压成 50min。
   const subtasksCap = subtasksPerStageRange[1];
+  const perTaskMinutesAnchor = sessionLengthSource === 'unknown'
+    ? 60
+    : Math.min(
+        subtaskMinutesRange[1],
+        Math.max(
+          subtaskMinutesRange[0],
+          parsedSessionMinutes
+            ?? (Number.isFinite(structuredSessionMinutes) && structuredSessionMinutes > 0 ? structuredSessionMinutes : 25),
+        ),
+      );
   const perStageFromHours: number | null =
     targetMilestones !== null && estimatedHoursTotal !== null
-      ? Math.min(subtasksCap, Math.max(2, Math.round(estimatedHoursTotal / targetMilestones / 1.0)))
+      ? Math.min(
+          subtasksCap,
+          Math.max(2, Math.round((estimatedHoursTotal * 60) / (targetMilestones * perTaskMinutesAnchor))),
+        )
       : null;
   // 无总学时信息时兜底：单阶段至少 2 个任务（预算未知时保守，但不再落到 1），
   // 上限仍受 subtasksPerStageRange 钳制。避免 micro + 学时缺失时产出"2 里程碑 × 1 任务"的空壳路径。
@@ -1151,12 +1222,13 @@ export function derivePlanningHints(
   // 每阶段学时锚被结构容量（任务数上限×分钟上限）钳制：预算真装不下时锚到容量上限（诚实装不下），
   // 而不是给出任务层永远填不满的账面注水锚（里程碑学时与任务分钟两张皮）。
   const structureStageCapacityHours = (effectiveSubtasksPerStageRange[1] * subtaskMinutesRange[1]) / 60;
-  const targetHoursPerMilestone =
+  const rawTargetHoursPerMilestone =
     targetMilestones !== null && estimatedHoursTotal !== null
-      ? Math.min(
-          structureStageCapacityHours,
-          Math.round((estimatedHoursTotal / targetMilestones) * 10) / 10,
-        )
+      ? Math.round((estimatedHoursTotal / targetMilestones) * 10) / 10
+      : null;
+  const targetHoursPerMilestone =
+    rawTargetHoursPerMilestone !== null
+      ? Math.min(structureStageCapacityHours, rawTargetHoursPerMilestone)
       : null;
   const targetMinutesPerTask =
     targetMilestones !== null && estimatedHoursTotal !== null && targetSubtasksPerStage !== null
@@ -1292,6 +1364,7 @@ export function derivePlanningHints(
     targetSubtasksForStage: null,
     targetTotalHours,
     targetHoursPerMilestone,
+    rawTargetHoursPerMilestone,
     targetMinutesPerTask,
     capacityDeficit,
     budgetDerivation,
@@ -1313,11 +1386,15 @@ export function derivePlanningHints(
 export function applyGranularityBoundsToHints(
   hints: PlanningHints | null,
   scopeSizeRaw: unknown,
+  structuralMilestoneCount?: number | null,
 ): PlanningHints | null {
   if (!hints) return hints;
   const topicGranularity = parseTopicGranularity(scopeSizeRaw);
   if (!topicGranularity || topicGranularity === 'full_subject') return hints;
   const bounds = TOPIC_GRANULARITY_BOUNDS[topicGranularity];
+  // 与 derivePlanningHints 同一自洽规则：帽装不下已有阶段数 ⇒ 标签错，以结构为准不钳。
+  // 调用方传入已落库的 milestone 数；未传（旧调用）时保持原行为。
+  if (structuralMilestoneCount != null && structuralMilestoneCount > bounds.milestoneCap) return hints;
 
   const next: PlanningHints = { ...hints };
   if (next.subtaskMinutesRange[1] > bounds.minutesCap) {
@@ -1343,10 +1420,8 @@ export function applyGranularityBoundsToHints(
   // 派生锚重算（与 derivePlanningHints 同公式；单点目标值在钳后必然落在区间内）
   if (next.targetMilestones !== null && next.targetTotalHours !== null) {
     const structureStageCapacityHours = (next.subtasksPerStageRange[1] * next.subtaskMinutesRange[1]) / 60;
-    next.targetHoursPerMilestone = Math.min(
-      structureStageCapacityHours,
-      Math.round((next.targetTotalHours / next.targetMilestones) * 10) / 10,
-    );
+    next.rawTargetHoursPerMilestone = Math.round((next.targetTotalHours / next.targetMilestones) * 10) / 10;
+    next.targetHoursPerMilestone = Math.min(structureStageCapacityHours, next.rawTargetHoursPerMilestone);
     if (next.targetSubtasksPerStage !== null) {
       next.targetMinutesPerTask = Math.min(
         next.subtaskMinutesRange[1],

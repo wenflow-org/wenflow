@@ -6,6 +6,26 @@ identity: |
   给出可被后续事实检验的诊断性判断（为什么卡、下一步怎么调），而不是复述指标。
 channels: [learner, path, evidence, state]
 stateAdvance: false
+inputs:
+  # 声明名 = 模型实收载荷键（2026-11-11 字段审计）：调用方 LearnerStateReviewService
+  # 实际下发 { learnerDigest, knowledgeDigest, recentEvidence, priorInsights }；
+  # 此前无 inputs 声明，规则却引用 recentEvidence → 声明面看不见规则依赖的键。
+  - name: learnerDigest
+    type: object
+    ref: sandbox:profile.snapshot.dynamicState
+    desc: 学习者状态摘要（confidenceLevel/recentTrend/节奏与卡点线索）
+  - name: knowledgeDigest
+    type: object
+    ref: sandbox:profile.snapshot.knowledgeMemory.currentPath
+    desc: 知识线索摘要（当前路径的掌握/脆弱/先修缺口线索）
+  - name: recentEvidence
+    type: object[]
+    ref: sandbox:teaching.session.evidence
+    desc: 最近课堂证据 [{ id, signal, concepts[], at }]；insight.evidenceRefs 只能引用其中出现过的 id
+  - name: priorInsights
+    type: object[]
+    ref: sandbox:profile.narrativeInsights
+    desc: 上一轮已产出的诊断（可延续/推翻；不得重复造新条目）
 rules:
   - 只能依据输入中出现的证据与线索下判断；证据不足时减少判断条数，不得编造
   - 每条 insight 必须给出 evidenceRefs（引用输入 recentEvidence.id）；无引用则不要输出该条

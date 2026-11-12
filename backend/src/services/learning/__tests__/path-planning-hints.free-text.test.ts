@@ -347,6 +347,20 @@ describe('可选负荷画像 learnerLoadProfile（加性参数，不传零差异
     expect(tightened.targetSubtasksPerStage).toBe(3);
   });
 
+  it('minimal 时间 × 大体量：只收紧单课分钟，不把 8 小时/4 阶段压成一节课', () => {
+    const stages = ['精神分析', '行为主义', '认知', '人本'];
+    const hints = derivePlanningHints(
+      '自由学习', '15分钟', null, null, stages,
+      { objectiveScopeHours: 8, sessionsLengthMin: 15, timeModelVersion: 2 },
+      '[技能模块] 四个流派各需独立机制学习，合计约 8 小时',
+      { availableTime: 'minimal' },
+    );
+    expect(hints.milestoneRange[1]).toBeGreaterThanOrEqual(4);
+    expect(hints.targetMilestones).toBeGreaterThanOrEqual(4);
+    expect(hints.targetTotalHours).toBeGreaterThanOrEqual(7.5);
+    expect(hints.subtaskMinutesRange[1]).toBeLessThanOrEqual(25);
+  });
+
   it('承受力锚（2026-09-21 数据定位 / 09-22 修正）：minimal ⇒ 结构收到一节课量级 [1,2]；仅低耐受不碰里程碑数', () => {
     const stages = ['S1', 'S2', 'S3', 'S4', 'S5'];
     const base = derivePlanningHints('三个月', null, null, null, stages, null, null, null);

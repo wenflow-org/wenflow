@@ -1,6 +1,6 @@
 ---
 agentId: skill:learner-progress-report
-coreHash: 79a0638fda2e11081abdb93e0a7d46df4ad7507840ff09b2f07a9fb23c889c07
+coreHash: e1fb86955e4112b6d6f384017e18e68dedb5f08e71df41aa96b0f86eaf03016f
 coreVersion: 1
 temperature: 0.4
 maxTokens: 64000
@@ -19,8 +19,9 @@ failurePolicy: propagate
 - state（不推进）：平台维护的主记忆快照（当前值，含 stage）
 
 输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
-- 「sessionEvidence（object）」`sandbox:teaching.session.evidence`（编排注入） — 会话证据（回合数/理解均值/困惑点/情绪/负荷）——task 与 signals 由调用方在此之上算出
-- 「learnerSnapshotDynamic（object）」`sandbox:profile.snapshot.dynamicState`（编排注入） — 学习者动态指标（completionRate/ktl/lf/lss 等，metrics 的来源）
+- 「task（object）」`sandbox:teaching.session.info`（编排注入） — 当前任务信息 { title, timeSpent, difficulty }（调用方由 session/taskData 投影）
+- 「metrics（object）」`sandbox:profile.snapshot.dynamicState`（编排注入） — 本节指标 { completionRate, ktl, lf, lss }（调用方由 dynamicState 与权威学习状态投影）
+- 「signals（string）」`sandbox:teaching.session.evidence`（编排注入） — 学习信号描述（分号分隔的文本串，调用方由会话证据派生）
 
 ## 执行规则
 

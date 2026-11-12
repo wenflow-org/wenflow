@@ -40,7 +40,7 @@ describe('derivePlanningHints × topic_granularity 硬上界', () => {
     if (hints.targetMilestones !== null) expect(hints.targetMilestones).toBeLessThanOrEqual(2);
   });
 
-  it('skill_module：总学时钳 ≤6h，分钟 ≤35，阶段 ≤3', () => {
+  it('skill_module：总学时钳 ≤12h，分钟 ≤35，阶段 ≤3，每阶段 ≤5 课', () => {
     const hints = derivePlanningHints(
       '一个月', null, null, null,
       ['概念建立', '变式练习', '综合实战'],
@@ -48,9 +48,10 @@ describe('derivePlanningHints × topic_granularity 硬上界', () => {
       '[技能模块] 一组相互依赖的技能，教材一章',
     );
     expect(hints.targetTotalHours).not.toBeNull();
-    expect(hints.targetTotalHours!).toBeLessThanOrEqual(6);
+    expect(hints.targetTotalHours!).toBeLessThanOrEqual(12);
     expect(hints.subtaskMinutesRange[1]).toBeLessThanOrEqual(35);
     expect(hints.milestoneRange[1]).toBeLessThanOrEqual(3);
+    expect(hints.subtasksPerStageRange[1]).toBeLessThanOrEqual(5);
   });
 
   it('full_subject / 无前缀：不钳（9.2h 锚原样通过）', () => {
@@ -73,16 +74,29 @@ describe('derivePlanningHints × topic_granularity 硬上界', () => {
     expect(hints.targetTotalHours).toBeLessThanOrEqual(1.2);
     expect(hints.targetTotalHours).toBeGreaterThanOrEqual(0.4);
   });
+
+  it('单点标签与 3+ 关键阶段冲突时忽略标签：4 家流派/8h 不被压成 1.2h', () => {
+    const hints = derivePlanningHints(
+      '自由学习', '25分钟', null, null,
+      ['精神分析', '行为主义', '认知流派', '人本主义'],
+      { objectiveScopeHours: 8, sessionsLengthMin: 25, timeModelVersion: 2 },
+      '[单点概念] 以流派主张与对应经典实验为主线，合计 4 家、约 8 小时、二十来次坐学',
+    );
+    // 结构否决：4 段装不进单点帽（2 段），标签作废，按 8h 真实体量走
+    expect(hints.targetTotalHours).toBeGreaterThanOrEqual(7.5);
+    expect(hints.targetMilestones).toBeGreaterThanOrEqual(4);
+    expect(hints.milestoneRange[1]).toBeGreaterThanOrEqual(4);
+  });
 });
 
 describe('derivePlannedOutline × 颗粒度同源（走查 P7：预览承诺=真实生成）', () => {
-  it('[单点概念] + 3 段大纲 → 预览钳到 2 段（与生成同一硬上界）', () => {
+  it('[单点概念] + 3 段大纲 → 标签与结构冲突，按 3 段走（不再钳到 2）', () => {
     const result = derivePlannedOutline({
       key_stages: ['判断链建立', '连续变式判别', '真题实战校准'],
       scope_size: '[单点概念] 只涉及一个判别动作（共轭类型判定），无前置依赖',
     });
-    expect(result.plannedMilestones).toBe(2);
-    expect(result.milestoneRange).toEqual([1, 2]);
+    expect(result.plannedMilestones).toBe(3);
+    expect(result.milestoneRange![1]).toBeGreaterThanOrEqual(3);
   });
 
   it('无前缀的自由文本：预览行为不变', () => {
@@ -132,14 +146,26 @@ describe('applyGranularityBoundsToHints × enrichment 入口防御性再钳（�
     expect(next!.targetHoursPerMilestone!).toBeCloseTo(0.6, 5);
   });
 
-  it('skill_module：6h 帽 + 3/3/35 上界', () => {
+  it('skill_module：12h 帽 + 5/5/35 上界', () => {
     const next = applyGranularityBoundsToHints(
       staleHints({ targetTotalHours: 14, subtaskMinutesRange: [30, 90] }),
       '【技能模块】资产减值一章',
     );
-    expect(next!.targetTotalHours!).toBeLessThanOrEqual(6);
+    expect(next!.targetTotalHours!).toBeLessThanOrEqual(12);
     expect(next!.milestoneRange).toEqual([2, 3]);
     expect(next!.subtaskMinutesRange[1]).toBeLessThanOrEqual(35);
+    expect(next!.subtasksPerStageRange[1]).toBeLessThanOrEqual(5);
+  });
+
+  it('已落库里程碑数装不下单点帽（4 > 2）⇒ 标签作废，hints 原样返回', () => {
+    const h = staleHints({ targetTotalHours: 8, targetMilestones: 4, milestoneRange: [2, 4] });
+    expect(applyGranularityBoundsToHints(h, '[单点概念] 四大流派与经典实验', 4)).toBe(h);
+  });
+
+  it('已落库 2 个里程碑时仍按单点帽收口', () => {
+    const next = applyGranularityBoundsToHints(staleHints(), '[单点概念] 一个判别动作', 2);
+    expect(next!.targetTotalHours!).toBeLessThanOrEqual(1.2);
+    expect(next!.milestoneRange).toEqual([1, 2]);
   });
 
   it('无前缀原文 / full_subject：原对象原样返回（引用相等，enrichment 不触发日志）', () => {
