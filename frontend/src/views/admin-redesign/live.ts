@@ -1365,7 +1365,12 @@ export async function liveCreateUser(data: { name: string; email: string; passwo
     isAdmin: data.admin,
     role: data.admin ? 'admin' : 'user'
   })
-  await fetchLiveUsers()
+  /* 写已成功即成功收口：列表刷新失败不能反过来把「创建成功」报成创建失败 */
+  try {
+    await fetchLiveUsers()
+  } catch {
+    /* 下一次列表加载/顶栏刷新会自然补齐 */
+  }
 }
 
 export async function liveDeleteUser(id: string): Promise<void> {
@@ -1466,7 +1471,12 @@ async function fetchLiveLearners(): Promise<void> {
 
 export async function liveRecomputeLearner(userId: string, pathId?: string): Promise<void> {
   await adminLearnerModelsApi.recompute(userId, pathId ? { pathId } : undefined)
-  await fetchLiveLearners()
+  /* 写已成功即成功收口：列表刷新失败不能反过来把「重算成功」报成重算失败 */
+  try {
+    await fetchLiveLearners()
+  } catch {
+    /* 下一次列表加载/顶栏刷新会自然补齐 */
+  }
 }
 
 export async function liveGetLearnerDetail(userId: string, pathId?: string, includeTest?: boolean): Promise<Record<string, unknown>> {

@@ -310,12 +310,18 @@ async function loadWorkbench() {
 }
 
 /** 任一待办域加载失败 → 页面基调降为 bad（禁止静默归零后仍显示「一切正常」） */
-const wbHasError = computed(() => Object.keys(wbErrors.value).length > 0 || annFailed.value)
+/** 当前页签体已经用整块错误态承接的域，不再由页级 alert 复读 */
+const hostWbErrors = computed(() => {
+  const next: Record<string, string> = { ...wbErrors.value }
+  if (tab.value === 'feedback') delete next.feedback
+  return next
+})
+const wbHasError = computed(() => Object.keys(hostWbErrors.value).length > 0 || annFailed.value)
 /** 公告域失败标志来自 live 层（只读既有导出 liveFailures，不改 live.ts）：
     公告由 live 层加载而非本页 loadWorkbench，失败时草稿公告计数同样不可信 */
 const annFailed = computed(() => !!liveFailures.value.announcements)
 const wbErrorText = computed(() =>
-  [...Object.values(wbErrors.value).filter(Boolean), ...(annFailed.value ? ['公告列表加载失败'] : [])].join('；')
+  [...Object.values(hostWbErrors.value).filter(Boolean), ...(annFailed.value ? ['公告列表加载失败'] : [])].join('；')
 )
 /* 2026-10-04 状态条退役：页头基调 statusTone（ok/warn/bad）与宿主分 tab 基调 hostTone
    随状态条整块删除——失败信号由页签体内 mk-alert + 指标卡「加载失败」foot 承载，
