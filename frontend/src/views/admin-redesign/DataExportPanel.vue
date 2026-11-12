@@ -236,14 +236,18 @@ async function runExport() {
   exportStep.value = 0
   exportTotal.value = keys.length
   let okCount = 0
+  let failCount = 0
   try {
     for (const key of keys) {
       exportStep.value += 1
       if (await doExport(key)) okCount += 1
+      else failCount += 1
     }
   } finally {
-    // 成功合并成一条：逐表各弹一次「导出成功」在 6 张表时会刷满 toast 池，读者反而看不到失败项
-    if (okCount) {
+    // 成功合并成一条；有失败项时收尾必须说「部分成功」，不能与逐表失败 toast 读成整批成功
+    if (okCount && failCount) {
+      toast.success(`已导出 ${okCount} 个，${failCount} 个失败`)
+    } else if (okCount) {
       toast.success(
         okCount === 1
           ? '导出成功，已开始下载'

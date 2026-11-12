@@ -20,6 +20,10 @@
       <MkSkeleton variant="cards" :count="4" :h="64" :cols="1" :radius="12" />
     </div>
     <template v-else>
+      <div v-if="loadError" class="mk-alert mk-alert--row" role="alert">
+        <span class="mk-alert__msg">{{ loadError }}</span>
+        <button type="button" class="mk-alert__btn" @click="load(true)">重试</button>
+      </div>
       <!-- 治理动作（2026-10-22 用户「下线路径属于比较危险操作？这个位置也不合适」）：
            下线/恢复、重试生成都是低频且带后果的动作，收进 ⋯ 菜单；刷新钮撤销——顶栏刷新
            已覆盖本面板（watch liveRefreshSeq），同屏不再出第二颗。
@@ -237,9 +241,10 @@ async function load(force = false) {
     if (body.title) writeBreadcrumbLabel(String(body.title))
   } catch (e) {
     if (seq !== loadSeq || props.pathId !== pid) return
-    /* 刷新失败保留旧数据（面板不白屏），首载失败走错误态 */
-    if (!d.value) loadError.value = `暂时无法获取该路径的完整信息：${errMsg(e)}`
-    else toast.error(`刷新失败：${errMsg(e)}`)
+    /* 刷新失败保留旧数据（面板不白屏）并常驻标旧；首载失败走整块错误态 */
+    loadError.value = d.value
+      ? `刷新失败，以下为上次结果：${errMsg(e)}`
+      : `暂时无法获取该路径的完整信息：${errMsg(e)}`
   } finally {
     if (seq === loadSeq) loading.value = false
   }

@@ -39,6 +39,7 @@
       role="tabpanel"
       aria-labelledby="ss-tab-api"
       ref="apiRef"
+      :active="tab === 'api'"
       embedded
     />
 

@@ -230,7 +230,7 @@ describe('网络与安全（出站策略）', () => {
     liveApiConfig.value = null;
     liveFailures.value = { apiConfig: 'boom' };
     const w = await mountPage();
-    expect(w.text()).toContain('访问策略读取失败');
+    expect(w.text()).toContain('网络策略读取失败');
     expect(w.text()).toContain('重试');
     w.unmount();
   });

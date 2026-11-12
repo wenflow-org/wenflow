@@ -238,7 +238,7 @@
               <span class="mk-card__meta">全部账号 · 含虚拟学习者</span>
               <!-- D13：中小用户此前不可见——加按 用户ID/昵称/邮箱 的服务端搜索（不改动 summary/趋势） -->
               <MkFilterSearch v-model="userQuery" placeholder="搜索用户 ID / 昵称 / 邮箱" />
-              <span class="mk-card__meta">{{ userQuery ? `匹配 ${byUser.length}` : `Top ${byUser.length}` }}</span>
+              <span class="mk-card__meta">{{ byUserStale ? `上次结果 ${byUser.length}` : userQuery ? `匹配 ${byUser.length}` : `Top ${byUser.length}` }}</span>
               <!-- G8（2026-10-10）：搜索失败静默保留旧列表时的行内 stale 提示——此前失败无任何反馈，
                    meta「匹配 N」仍按输入框实时读数，与表格脱源（N 是旧结果的行数）。对齐 Skills.vue
                    liveSkillsError 行内告警判例：辅助数据失败不弹遮主表的 toast，但必须指认数据来源 -->

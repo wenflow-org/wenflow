@@ -161,7 +161,8 @@ const takeaways = computed(() => {
 })
 
 const subText = computed(() => {
-  if (loading.value) return '正在读取只读记录'
+  // 进行态只由抽屉 body 的 MkLoading 表达；头部再写一句会同时出现两个加载信号
+  if (loading.value) return ''
   const status = statusText(firstText(teaching.value.status, goal.value.status))
   const start = fmtTime(firstText(teaching.value.startTime, payload.value?.createdAt as string))
   return [status, start].filter(Boolean).join(' · ') || '只读预览'

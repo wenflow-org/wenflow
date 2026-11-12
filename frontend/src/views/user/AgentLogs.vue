@@ -63,7 +63,7 @@
            不是原始调用次数，故不写「总调用」；导出与列表同走折叠视图，两处条数一致。 -->
       <div class="stat-card">
         <span>记录条数（折叠后）</span>
-        <strong>{{ pagination.total }}</strong>
+        <strong>{{ loading ? '—' : pagination.total }}</strong>
       </div>
       <div class="stat-card">
         <span>成功率（本页）</span>

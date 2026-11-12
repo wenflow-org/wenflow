@@ -238,7 +238,7 @@ import { toast } from '@/utils/toast'
 defineOptions({ name: 'ApiConfigPage' })
 
 /* 嵌入「系统设置」时不渲染自己的页头（页头与「刷新注册表」归宿主） */
-const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
+const props = withDefaults(defineProps<{ embedded?: boolean; active?: boolean }>(), { embedded: false, active: true })
 void props
 
 /** 供应商面板（BYOK）：页头「刷新注册表」与写后重取都走它的 refresh */
@@ -352,7 +352,7 @@ async function saveConn(): Promise<void> {
        拉失败时把弹窗还给用户，好让他就地改地址 / 重填密钥。 */
     connOpen.value = false
     await fetchModels('refetch')
-    if (connectionStatus.value === 'failed') connOpen.value = true
+    if (props.active && connectionStatus.value === 'failed') connOpen.value = true
     return
   }
   const ok = await saveGroups(['conn', 'reliability'])
@@ -523,7 +523,7 @@ function applyLiveConfig() {
   /* 首次部署（启动脚本没给 AI_API_URL、库里也没有）：直接展开连接表单。
      这条判断必须放在这里而不是 setup 里——配置是异步拉回来的，初始那一拍 form.apiUrl
      恒为空，放在 setup 会让「已配好的通道」也一进来就展开。 */
-  if (!cfg.value.apiUrl.trim()) connOpen.value = true
+  if (props.active && !cfg.value.apiUrl.trim()) connOpen.value = true
 }
 
 watch(

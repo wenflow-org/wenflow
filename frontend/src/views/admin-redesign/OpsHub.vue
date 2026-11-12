@@ -89,7 +89,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { liveFailures, errMsg, liveRefreshSeq, setLiveOpsPendingCounts } from './live'
+import { loadLiveData, liveFailures, errMsg, liveRefreshSeq, setLiveOpsPendingCounts } from './live'
 import { intent } from './store'
 import { adminFeedbackApi, adminLearningContentApi, adminDevtoolsApi, type LearningContentStats } from '@/api/adminApi'
 import { announcementCounts } from './opsShared'
@@ -135,6 +135,8 @@ async function refreshActive() {
   if (refreshing.value) return
   refreshing.value = true
   try {
+    /* 告警条的重试要清掉它展示的失败域：只刷当前页签会让公告等域的 liveFailures 常驻 */
+    if (wbHasError.value || annFailed.value) void loadLiveData()
     if (tab.value === 'feedback') feedbackRef.value?.refresh?.()
     else if (tab.value === 'achievements') achievementsRef.value?.refresh?.()
     else if (tab.value === 'announce') announceRef.value?.refresh?.()

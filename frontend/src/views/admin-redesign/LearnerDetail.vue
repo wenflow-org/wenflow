@@ -1712,6 +1712,11 @@ function resetDerivedState(id: string) {
   insightReliability.value = null
   ldSessionRows.value = []
   ldGoalRows.value = []
+  /* 换人时在途请求的 finally 会被 stale 守卫跳过，若这里不复位会永久停在「加载中」 */
+  ldSessLoading.value = false
+  ldSessError.value = false
+  ldGoalLoading.value = false
+  ldGoalError.value = false
   currentPathId.value = null
   pathInfo.value = null
   userRecord.value = null

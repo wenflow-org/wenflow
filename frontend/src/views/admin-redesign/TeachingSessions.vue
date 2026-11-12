@@ -368,7 +368,7 @@
         </table>
       </div>
       <MkEmptyState
-        v-else-if="!loadFailed"
+        v-else-if="!loadFailed || isFiltered"
         min
         :title="isFiltered ? '当前筛选无课堂' : '暂无教学会话'"
         :description="isFiltered ? '当前筛选条件下没有课堂，可清除筛选查看全部。' : '教学会话由学习者在端内发起；可从目标对话或学习者查看学习进程。'"

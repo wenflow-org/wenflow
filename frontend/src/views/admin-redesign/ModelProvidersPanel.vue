@@ -79,7 +79,7 @@
           <!-- 空模型时的下一步（2026-10-28 新人视角）：不丢一张空表，直接说清先做什么。
                2026-11-05 合并弹窗后，连接与模型清单在同一处，「去配置连接」不再指向卡头，
                而是直接把那张弹窗打开。 -->
-          <div v-if="selected.enabled && !selected.models.length" class="mpp-setup">
+          <div v-if="selected.enabled && !selected.models.length && !pullError" class="mpp-setup">
             <div class="mpp-setup__text">
               <strong>还没有挂载模型</strong>
               <span>点「＋ 添加模型」向上游拉取清单，勾选要挂的模型。手动录入在弹窗底部。</span>

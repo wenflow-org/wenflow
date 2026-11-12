@@ -509,7 +509,6 @@ const loadApiConfig = async () => {
     snapshotSaved();
   } catch {
     loadError.value = '无法读取已保存的配置，请检查网络或服务状态。';
-    toast.error('加载 API 配置失败');
   } finally {
     loading.value = false;
   }

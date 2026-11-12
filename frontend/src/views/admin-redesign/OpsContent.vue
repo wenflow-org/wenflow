@@ -68,7 +68,8 @@
         </div>
         <div class="mk-card__head-right">
           <MkFilterSearch v-model="keyword" placeholder="搜索标题或用户" />
-          <MkLoading v-if="loading" inline text="加载中…" />
+          <MkLoading v-if="loading && !rows.length" inline text="加载中…" />
+          <span v-else-if="loading && rows.length" class="mk-card__meta">正在刷新，以下为上次数据</span>
           <MkCols
             :col-defs="colDefs"
             storage-key="wf_paths_hidden_cols_v2"

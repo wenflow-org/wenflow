@@ -26,6 +26,7 @@
     <!-- 加载失败（首载无数据时优先于空态展示，含重试） -->
     <MkEmptyState
       v-if="loadFailed && !rows.length"
+      tone="error"
       title="反馈数据加载失败"
       description="反馈列表加载失败，请重试。"
       action-text="重试"
@@ -147,7 +148,7 @@
         <!-- 加载态：与同单元另三张表同口径（骨架屏，非 spinner 文案）——审核 #170 -->
         <MockSkeletonTable v-else-if="loading" :cols="8" />
         <MkEmptyState
-          v-else
+          v-else-if="!loadFailed"
           min
           :title="isFiltered ? '当前筛选无匹配' : '暂无反馈'"
           :description="isFiltered

@@ -3,7 +3,7 @@
     <MkPageHead v-if="!embedded" title="网络与安全" />
 
     <div v-if="configFailed" class="mk-alert mk-alert--row" role="alert">
-      <span class="mk-alert__msg">访问策略读取失败：为空不代表未配置</span>
+      <span class="mk-alert__msg">网络策略读取失败：为空不代表未配置</span>
       <button type="button" class="mk-alert__btn" @click="retryLoad">重试</button>
     </div>
 

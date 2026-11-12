@@ -86,10 +86,12 @@
             <span>连通状态</span>
             <span class="pmd-cols__act">操作</span>
           </div>
+          <!-- 失败事实始终上屏：旧清单非空或连接已改动时，stale 文案不能顶替这次失败 -->
+          <p v-if="error" class="pmd-empty pmd-empty--bad pmd-error-banner" role="alert">{{ error }}</p>
           <div class="pmd-list" :class="{ 'pmd-list--stale': stale && !loading }">
             <p v-if="loading" class="pmd-empty">正在向上游拉取模型清单…</p>
-            <p v-else-if="error && !models.length" class="pmd-empty pmd-empty--bad">{{ error }}</p>
             <p v-else-if="stale" class="pmd-empty">连接已改动，清单还是上一次的。先点「重新获取」。</p>
+            <p v-else-if="!models.length" class="pmd-empty">没有拉取到模型。</p>
             <template v-else>
               <div
                 v-for="row in visibleRows"
