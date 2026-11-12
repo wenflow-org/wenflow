@@ -20,6 +20,11 @@
     </div>
   </div>
   <div v-else-if="d" class="mk-page ld" :class="{ 'ld--fit': tab === 'graph' }">
+    <!-- 同一学习者切路径作用域失败：保留上次数据，但常驻标旧，不能只靠会消失的 toast -->
+    <div v-if="softReloadFailed" class="mk-alert mk-alert--row" role="alert">
+      <span class="mk-alert__msg">当前路径数据读取失败，以下为上次结果</span>
+      <button type="button" class="mk-alert__btn" @click="retrySoftReload">重试</button>
+    </div>
 
     <!-- 详情页头（newui/admin hero 形态，MkDetailHero）：返回钮在壳层顶栏，页内不重复 -->
     <MkDetailHero :avatar="d.name.charAt(0)" :title="d.name" :sub="d.email">
@@ -1683,6 +1688,12 @@ function switchTab(id: string) {
 
 /** 详情加载：成功全量数据；失败但有列表兜底 → 显示兜底；失败且无兜底 → 明确错误态 */
 const detailError = ref(false)
+/** soft 重读（同一学习者切路径作用域）失败：保留旧画像，但页面必须常驻标旧 */
+const softReloadFailed = ref(false)
+function retrySoftReload() {
+  const a = ldRecentArgs.value
+  if (a) void loadDetail(a.id, { soft: true })
+}
 /** 请求超时保护：详情接口挂起时不再无限「加载中…」，超时后走兜底/错误态 */
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -2108,6 +2119,7 @@ async function loadDetail(id: string | undefined, opts: { soft?: boolean } = {})
   if (!opts.soft) resetDerivedState(id)
   lastLoadedId = id
   detailError.value = false
+  softReloadFailed.value = false
   sparseAccount.value = false
   // 深链保持：URL 明确带 ?tab= 时尊重它，否则回落总览。
   // （此前无条件置 'overview'，会把 ?tab=profile/evidence/graph 的深链与刷新全部冲掉——
@@ -2375,6 +2387,11 @@ async function loadDetail(id: string | undefined, opts: { soft?: boolean } = {})
     void loadLdGoals(id, includeTest)
   } catch (e) {
     if (stale()) return
+    /* soft 重读失败：保留上一份路径数据，页面顶部常驻「上次结果」；不要用列表快照覆盖 */
+    if (opts.soft && liveDetail.value) {
+      softReloadFailed.value = true
+      return
+    }
     if (base) {
       // 列表兜底：详情接口失败时至少展示列表里已有的信息
       liveDetail.value = {
