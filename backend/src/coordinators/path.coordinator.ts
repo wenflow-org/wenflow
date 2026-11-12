@@ -839,10 +839,15 @@ class PathCoordinator {
         || null;
       const derivedNeeds = deriveMaterialNeedsFromGoalText({
         surfaceGoal: (goalFinalPayload as any)?.understanding?.surface_goal
-          ?? (visibleSummary as any)?.surfaceGoal,
+          ?? (visibleSummary as any)?.surfaceGoal
+          // 2026-11-13 u02/u03 实证：visibleSummary 缺 surfaceGoal 时落到原始诉求/确认方向，
+          // 否则语料为空、研究价值闸无从判断（租房合同/采购合同都因此零采集）。
+          ?? (goalFinalPayload as any)?.rawGoal
+          ?? (visibleSummary as any)?.confirmedProposal?.goal,
         realProblem: (goalFinalPayload as any)?.understanding?.real_problem,
         learningDirection: (typeof finalVisible?.learning_direction === 'string' ? finalVisible.learning_direction : null)
-          ?? (visibleSummary as any)?.learningDirection,
+          ?? (visibleSummary as any)?.learningDirection
+          ?? (visibleSummary as any)?.confirmedProposal?.learningDirection,
         keyStages: Array.isArray(keyStagesArray) ? (keyStagesArray as string[]).join(' ') : null,
         stages: Array.isArray(keyStagesArray) ? (keyStagesArray as string[]) : null,
       });

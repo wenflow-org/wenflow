@@ -60,6 +60,9 @@ const DOC_DEPENDENCY_RE = /(官方文档|API\s*文档|开发文档|技术规范|
  */
 const RESEARCH_WORTHINESS_RE = /(机制|原理|框架|工具|平台|模型|算法|法规|法律|标准|规范|政策|经济|金融|心理|医学|历史|行业|数据|统计|案例|事件|版本|API|SDK|技术|科学|市场|财报|报表|会计|审计|年报|现金流|资产负债|利润表|造假|估值|投资|证券|合同|条款|司法|判例|税|保险)/g;
 
+/** 强领域词：单独命中即可触发锚点采集（即使没有 keyStages 透传） */
+const STRONG_RESEARCH_RE = /(法规|法律|合同|条款|司法|判例|财报|报表|会计|审计|年报|现金流|统计|数据|行业|研究|机制|原理|标准|规范|政策|经济|金融|心理|医学)/;
+
 export interface GoalTextSource {
   surfaceGoal?: string | null;
   realProblem?: string | null;
@@ -137,7 +140,12 @@ export function deriveMaterialNeedsFromGoalText(source: GoalTextSource): Materia
   // 研究价值闸（Layer 3）：事实/机制/框架类领域默认带锚点资料——即使没有任何承诺信号。
   const worthinessScore = new Set(corpus.match(RESEARCH_WORTHINESS_RE) || []).size;
   const stages = (Array.isArray(source.stages) ? source.stages : []).map((s) => String(s || '').trim()).filter(Boolean);
-  const worthCollecting = stages.length > 0 ? worthinessScore >= 1 : worthinessScore >= 2;
+  // 强领域词（法规/合同/财报/统计/行业/机制…）单独命中即可采：这类目标即使没有阶段名
+  // （u02 租房合同实证：keyStages 未透传、语料只命中「合同」1 个信号），也不该退回模型记忆。
+  const hasStrongSignal = STRONG_RESEARCH_RE.test(corpus);
+  const worthCollecting = stages.length > 0
+    ? worthinessScore >= 1
+    : hasStrongSignal || worthinessScore >= 2;
   if (worthCollecting) {
     for (const stage of stages.slice(0, 2)) {
       if (needs.length >= 3) break;
@@ -243,8 +251,9 @@ export function mergeDeclaredAndDerivedNeeds(
   const declaredNeeds = (Array.isArray(declared) ? declared : declared ? [declared] : [])
     .filter((need): need is MaterialNeed => !!need && typeof need === 'object');
   const hasPublicDeclared = declaredNeeds.some((need) => inferMaterialOrigin(need) === 'public');
-  // 未声明时保持旧链路形状：直接把派生列表交给 resolveMaterialPacks（数组）
-  if (!declared) return derived.slice(0, cap);
+  // 未声明时保持旧链路形状：直接把派生列表交给 resolveMaterialPacks（数组）；
+  // 没有派生就保持 null（不能返回空数组，否则会把「未声明」变成「已声明空清单」）
+  if (!declared) return derived.length > 0 ? derived.slice(0, cap) : declared;
   if (hasPublicDeclared) return declared;
   if (derived.length === 0) return declared;
 

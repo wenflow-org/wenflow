@@ -71,9 +71,11 @@ for (const file of resultFiles.sort()) {
     ? 'completed'
     : findingCodes.has('goal-ended-without-path')
       ? 'goal-failed'
-      : findingCodes.has('max-days-reached')
-        ? 'incomplete'
-        : 'failed'
+      : findingCodes.has('orchestrator-stopped')
+        ? 'stopped'
+        : findingCodes.has('max-days-reached')
+          ? 'incomplete'
+          : 'failed'
   const row = {
     id: result.id,
     domain: result.domain || caseSpec.domain,
@@ -230,12 +232,14 @@ const count = rows.length
 const completed = rows.filter((r) => r.outcome === 'completed').length
 const goalFailed = rows.filter((r) => r.outcome === 'goal-failed').length
 const incomplete = rows.filter((r) => r.outcome === 'incomplete').length
+const stopped = rows.filter((r) => r.outcome === 'stopped').length
 const failed = rows.filter((r) => r.outcome === 'failed').length
 const paths = rows.filter((r) => r.path)
 const aggregates = {
   cases: count,
   completed,
   incomplete,
+  stopped,
   goalFailed,
   failed,
   pathsGenerated: paths.length,
@@ -265,7 +269,7 @@ md.push(`生成时间：${report.generatedAt}`)
 md.push('')
 md.push('## 汇总')
 md.push('')
-md.push(`- 用例：${aggregates.cases}（完成 ${completed} / 未跑完 ${incomplete} / goal 未收敛 ${goalFailed} / 失败 ${failed}）`)
+md.push(`- 用例：${aggregates.cases}（完成 ${completed} / 未跑完 ${incomplete} / 主动停止 ${stopped} / goal 未收敛 ${goalFailed} / 失败 ${failed}）`)
 md.push(`- 生成路径：${aggregates.pathsGenerated}`)
 md.push(`- 平均阶段数：${aggregates.avgStages}｜平均课次：${aggregates.avgLessons}｜平均预估时长：${aggregates.avgHours}h`)
 md.push(`- 一节课风险：${aggregates.oneLessonRisk.join(', ') || '无'}`)

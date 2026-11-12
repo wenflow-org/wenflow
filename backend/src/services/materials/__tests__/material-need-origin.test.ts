@@ -179,4 +179,13 @@ describe('deriveMaterialNeedsFromGoalText · 研究价值闸（Layer 3：联网�
     });
     expect(needs.some((need) => (need.queries || []).includes('行业研究报告'))).toBe(true);
   });
+
+  it('无 keyStages 时强领域词单独命中即派生（u02 租房合同实证）', () => {
+    const needs = deriveMaterialNeedsFromGoalText({
+      surfaceGoal: '能逐条审查租房合同，识别押金、维修责任、转租、提前解约、涨租五类风险',
+      realProblem: '分不清哪些条款是行业惯例、哪些是坑',
+    });
+    expect(needs.length).toBeGreaterThan(0);
+    expect(needs.every((need) => need.origin === 'public')).toBe(true);
+  });
 });
