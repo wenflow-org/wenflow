@@ -4187,7 +4187,7 @@ onBeforeUnmount(() => {
   width: 20px; height: 20px; display: grid; place-items: center;
   padding: 0; border: 1px solid var(--line); border-radius: 50%;
   background: var(--surface); color: var(--muted);
-  font-size: 11px; line-height: 1; cursor: pointer;
+  font-size: var(--mk-fs-micro); line-height: 1; cursor: pointer;
 }
 .composer__pending-del:hover { color: var(--wf-color-danger-dark); border-color: var(--wf-color-danger-dark); }
 .composer__pending-del:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
