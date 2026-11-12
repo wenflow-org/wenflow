@@ -4,7 +4,7 @@
  * 学生第一屏没有任何材料，课从第一句就悬空。护栏从 description 抽出材料行，
  * 开场 message 未含大半时整块补挂。
  */
-import { ensureOpeningMaterialGrounding, extractOpeningMaterialLines } from '../teaching-session-views';
+import { ensureOpeningMaterialGrounding, ensureOpeningSampleHonesty, extractOpeningMaterialLines } from '../teaching-session-views';
 import type { TeachingScenarioContext } from '../teaching-context-types';
 
 const ctx = (taskDescription: string) => ({ taskDescription }) as unknown as TeachingScenarioContext;
@@ -75,5 +75,33 @@ describe('ensureOpeningMaterialGrounding（开场材料落地护栏）', () => {
       ctx('下面这三步走。1. 先读题。2. 再作答。'),
     );
     expect(result).toBe(baseOpening);
+  });
+});
+
+describe('ensureOpeningSampleHonesty（示例口径护栏）', () => {
+  const DESC_WITH_SAMPLE = '下面是豆包收到「帮我订一张明天去上海的高铁票」后的一段示例回复：「好的，我来帮你安排……」任务：逐句回看这段示例。';
+  const ctxSample = { taskDescription: DESC_WITH_SAMPLE } as unknown as TeachingScenarioContext;
+  const base = { message: '', question: '', quickReplies: [{ text: '开始' }], mode: 'example-first' as const };
+
+  it('2026-11-12 实测形态：「你大概见过」→ 改写为（示例），材料本体保留', () => {
+    const opening = { ...base, message: '这段豆包回复你大概见过：用户说「帮我订一张明天去上海的高铁票」，它答「好的，我来帮你安排……」。这节课就逐句回看它。' };
+    const result = ensureOpeningSampleHonesty(opening, ctxSample);
+    expect(result.message).not.toContain('你大概见过');
+    expect(result.message).toContain('（示例）');
+    expect(result.message).toContain('帮我订一张明天去上海的高铁票');
+  });
+
+  it('疑问形态（向学习者提问）不误改', () => {
+    const opening = { ...base, message: '你在豆包里大概遇到过这种情况吗？说说当时它怎么答的。' };
+    const result = ensureOpeningSampleHonesty(opening, ctxSample);
+    expect(result.message).toBe(opening.message);
+  });
+
+  it('description 无示例标记 / message 无经验断言 → 不动', () => {
+    const cleanCtx = { taskDescription: '练习 10 道时态题，逐题写排除理由。' } as unknown as TeachingScenarioContext;
+    const opening = { ...base, message: '这段对话你大概见过。' };
+    expect(ensureOpeningSampleHonesty(opening, cleanCtx).message).toBe('这段对话你大概见过。');
+    const noClaim = { ...base, message: '下面是一段示例回复。' };
+    expect(ensureOpeningSampleHonesty(noClaim, ctxSample).message).toBe(noClaim.message);
   });
 });

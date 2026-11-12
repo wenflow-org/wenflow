@@ -1512,6 +1512,22 @@ function normalizeSplitCompareSpec(raw: Record<string, unknown>): Record<string,
   const left = normalizePanel(raw.left);
   const right = normalizePanel(raw.right);
   if (!left || !right) return null;
+  // 「逐句对账表」拒绝（2026-11-12 实证 st_1794451502004：订票回复逐句回看被装进 split-compare，
+  // 右栏「有没有依据」判定整列可见——老师提问的瞬间答案就印在题干正下方；两轮重画时
+  // 有/没有口径还当场反转）。split-compare 是「同一动作的两种走法」的正误交锋，
+  // 不是「句子 vs 来源判断」的制表对账：右栏头带「有没有/依据/来源」语义、或右栏多行
+  // 以「有：/没有：」开头的，整图拒绝——对账该用 matrix（判定格留白让学生填）或直接写正文。
+  const rightHead = String(right.head || '');
+  const rightRows = right.rows as Array<Record<string, unknown>>;
+  const verdictRows = rightRows.filter((r) => /^(有|没有)[：:]/.test(String(r.label || ''))).length;
+  if (/(有没有|依据|来源|出处|接的是上文哪)/.test(rightHead) || (rightRows.length >= 2 && verdictRows >= 2)) {
+    logger.warn('[TeachingTurnAgent] split-compare 装逐句对账表（句子 vs 来源判断），整图拒绝——对账用 matrix 留白或正文', {
+      rightHead,
+      verdictRows,
+      rightRows: rightRows.length,
+    });
+    return null;
+  }
   // V8：两栏行数差 >2 = 对照不成立（差 1~2 行由渲染侧「?」空槽兜住，差 3+ 才整图拒绝）
   const leftLen = (left.rows as unknown[]).length;
   const rightLen = (right.rows as unknown[]).length;

@@ -73,7 +73,7 @@ import {
   normalizeKnowledgePoints,
   reconcileTeachingKnowledgeState,
 } from './teaching-knowledge-state';
-import { buildDeterministicOpening, ensureOpeningActionLine, ensureOpeningMaterialGrounding, pickPeerStrategy, collectPeerHistory, OPENING_GENERATION_TIMEOUT_MS, COMPLETION_TURNS_BACKSTOP } from './teaching-session-views';
+import { buildDeterministicOpening, ensureOpeningActionLine, ensureOpeningMaterialGrounding, ensureOpeningSampleHonesty, pickPeerStrategy, collectPeerHistory, OPENING_GENERATION_TIMEOUT_MS, COMPLETION_TURNS_BACKSTOP } from './teaching-session-views';
 import { generateTeachingVisual, buildVisualOpportunity, detectExerciseLeakInReply, hasDanglingFigureReference, stripDanglingFigureReferences, paletteOfSubject, shouldEmitFigureAmong, figureKindCap, figureRestatesReply, stripInLessonAnnotations, maskFigureForQuestion, resolveFigureMaxPerSession, collectFigureNumbers, collectReplyNumbers, figureNumbersFightReply } from './teaching-visual.service';
 import type { TeachingOpening, ProcessStudentMessageOptions } from './AITeachingCoordinator';
 import { normalizeTaskTypeForMetrics } from './AITeachingCoordinator';
@@ -256,7 +256,7 @@ export async function generateOpening(context: TeachingScenarioContext): Promise
       taskId: context.taskId,
       topic: context.topic,
     });
-    return ensureOpeningMaterialGrounding(buildDeterministicOpening(context), context);
+    return ensureOpeningSampleHonesty(ensureOpeningMaterialGrounding(buildDeterministicOpening(context), context), context);
   }
 
   if (parsed) {
@@ -264,8 +264,12 @@ export async function generateOpening(context: TeachingScenarioContext): Promise
     // 模型可省略 quickReplies，实测 39.5% 的开场落库为空数组 → 第一屏没有任何可点的东西；
     // question 里还会写"也可以直接往下走"这种没有控件的动作承诺。这里统一收口。
     // 材料落地护栏（2026-11-12）：模型说「这段对话」却不摆本体时整块补挂（见 ensureOpeningMaterialGrounding）。
-    return ensureOpeningMaterialGrounding(
-      ensureOpeningActionLine(parsed as Partial<TeachingOpening>, context),
+    // 示例口径护栏（2026-11-12）：描述标「示例」而开场说成「你大概见过」时改回示例口径。
+    return ensureOpeningSampleHonesty(
+      ensureOpeningMaterialGrounding(
+        ensureOpeningActionLine(parsed as Partial<TeachingOpening>, context),
+        context,
+      ),
       context,
     );
   }
@@ -275,7 +279,7 @@ export async function generateOpening(context: TeachingScenarioContext): Promise
     taskId: context.taskId,
     topic: context.topic,
   });
-  return ensureOpeningMaterialGrounding(buildDeterministicOpening(context), context);
+  return ensureOpeningSampleHonesty(ensureOpeningMaterialGrounding(buildDeterministicOpening(context), context), context);
 }
 
 /**
