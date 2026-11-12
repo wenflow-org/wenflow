@@ -214,7 +214,6 @@ export async function generateAndApplyStory(
     recentScenarioHints: opts.extraHints || [],
     existingPersonaSeed: personaSeedForStory,
     existingStoryPool,
-    targetStoryCount: 1,
   });
 
   const newStory = result?.story ?? result?.output?.story;

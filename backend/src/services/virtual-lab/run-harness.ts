@@ -116,6 +116,13 @@ export interface HarnessArgs {
   resumeSessionId: string | null;
   /** 建议处置采样臂：keep/later/preview 只留痕，adopt 走真实 replan 并在成功后记执行档 */
   advisoryResponse: 'keep' | 'later' | 'preview' | 'adopt' | null;
+  /**
+   * 本 case 是否预期「不生成学习路径」（answer-only / oneoff 直答 / referral 物理边界）。
+   * true 时 goal 阶段正常终局（no-path / 学习者离场）按成功处理，不记 goal-not-converged。
+   */
+  expectNoPath: boolean;
+  /** 创建后用 persona-designer 生成完整人设（friction/情绪触发/背景），而不是空壳跑数人设 */
+  realisticPersona: boolean;
 }
 
 const RETRYABLE_HTTP = new Set([408, 425, 429, 502, 503, 504, 524]);
@@ -364,6 +371,8 @@ export function parseHarnessArgs(argv: string[], env: Record<string, string | un
     statePath: null,
     resumeSessionId: null,
     advisoryResponse: null,
+    expectNoPath: false,
+    realisticPersona: false,
   };
 
   const numberArg = (name: string, value: string, min: number, max: number): number => {
@@ -376,6 +385,7 @@ export function parseHarnessArgs(argv: string[], env: Record<string, string | un
 
   for (const arg of argv) {
     if (arg === '--keep') { args.keep = true; continue; }
+    if (arg === '--realistic-persona') { args.realisticPersona = true; continue; }
     if (!arg.startsWith('--')) continue;
     const eq = arg.indexOf('=');
     const key = eq >= 0 ? arg.slice(2, eq) : arg.slice(2);
@@ -389,6 +399,14 @@ export function parseHarnessArgs(argv: string[], env: Record<string, string | un
       case 'ready-timeout-ms': args.readyTimeoutMs = numberArg('--ready-timeout-ms', value, 0, 6 * 3600_000); break;
       case 'state': args.statePath = value.trim() || null; break;
       case 'session': args.resumeSessionId = value.trim() || null; break;
+      case 'expect': {
+        const expected = value.trim().toLowerCase();
+        if (!['path', 'no-path'].includes(expected)) {
+          throw new Error('--expect 只能是 path 或 no-path');
+        }
+        args.expectNoPath = expected === 'no-path';
+        break;
+      }
       case 'advisory-response': {
         const action = value.trim().toLowerCase();
         if (!['keep', 'later', 'preview', 'adopt'].includes(action)) {
@@ -400,6 +418,7 @@ export function parseHarnessArgs(argv: string[], env: Record<string, string | un
       case 'admin-name': args.adminName = value.trim() || args.adminName; break;
       case 'admin-password': throw new Error('请用环境变量 E2E_ADMIN_PASSWORD 传密码，不要放进命令行');
       case 'keep': break; // 开关形式（--keep）已在上面的分支处理
+      case 'realistic-persona': break; // 开关形式已在上面的分支处理
       default:
         throw new Error(`未知参数：${arg}`);
     }

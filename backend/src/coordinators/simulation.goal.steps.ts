@@ -79,6 +79,9 @@ export function buildGoalStepResult(params: {
     quickReplies?: string[];
   };
   goalReady: boolean;
+  learnerEnded?: boolean;
+  learnerEndReason?: string | null;
+  noPath?: boolean;
   logs: SimulationLogEntry[];
 }): SimulationStepResult {
   return {
@@ -87,6 +90,43 @@ export function buildGoalStepResult(params: {
     goalConversationResponse: params.goalResponse,
     currentStage: params.goalReady ? 'path' : 'goal',
     goalReady: params.goalReady,
+    ...(params.learnerEnded ? { learnerEnded: true, learnerEndReason: params.learnerEndReason ?? null } : {}),
+    ...(params.noPath ? { noPath: true } : {}),
     logs: params.logs
   };
+}
+
+/**
+ * 虚拟学习者「原地告别」检测（2026-11-11 真机：离场后 8 轮换词复读 farewell）。
+ *
+ * 模型自报 shouldEnd 是主信号；本函数是确定性兜底：新回复与最近两条学习者发言
+ * 都高度相似（三字组重合 ≥ 0.35）且长度 ≥ 12 字时，视为卡在同一个告别/承诺里，
+ * 由协调器提前收尾。只比较相邻学习者发言，不依赖具体关键词，避免案例过拟合。
+ */
+export function isRepetitiveLearnerReply(
+  history: ConversationHistoryItem[],
+  reply: string
+): boolean {
+  const text = String(reply || '').replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '');
+  if (text.length < 12) return false;
+  const grams = (value: string): Set<string> => {
+    const set = new Set<string>();
+    for (let i = 0; i < value.length - 2; i += 1) set.add(value.slice(i, i + 3));
+    return set;
+  };
+  const similarity = (a: string, b: string): number => {
+    const ga = grams(a);
+    const gb = grams(b);
+    if (!ga.size || !gb.size) return 0;
+    let hit = 0;
+    for (const gram of ga) if (gb.has(gram)) hit += 1;
+    return hit / Math.min(ga.size, gb.size);
+  };
+  const recent = (Array.isArray(history) ? history : [])
+    .filter((item) => item?.role === 'user')
+    .map((item) => String(item?.content || '').replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, ''))
+    .filter(Boolean)
+    .slice(-2);
+  if (recent.length < 2) return false;
+  return recent.every((previous) => similarity(previous, text) >= 0.35);
 }

@@ -42,6 +42,15 @@ function pathPayload(extra: Record<string, unknown> = {}) {
   };
 }
 
+/** 有学习记录的最小路径：AI 诊断入口需要至少一条完成/进行中的任务。 */
+function milestonesWithProgress() {
+  return [{
+    stageNumber: 1,
+    title: '阶段一',
+    subtasks: [{ id: 't1', title: '已完成任务', status: 'completed' }],
+  }];
+}
+
 async function mountDetail(extra: Record<string, unknown> = {}) {
   getPathDetail.mockResolvedValue(pathPayload(extra));
   const w = mount(V2LearningPathDetail);
@@ -60,12 +69,22 @@ describe('V2LearningPathDetail 调整策略门控', () => {
     for (const key of Object.keys(routeQuery)) delete routeQuery[key];
   });
 
-  it('旧路径无 adjustmentPolicy：三个场景入口全部可点', async () => {
-    const w = await mountDetail();
+  it('旧路径无 adjustmentPolicy 且有学习记录：三个场景入口全部可点', async () => {
+    const w = await mountDetail({ milestones: milestonesWithProgress() });
     await openDialog(w);
     const modes = w.findAll('.adjust-mode');
     expect(modes.length).toBe(3);
     for (const btn of modes) expect(btn.attributes('disabled')).toBeUndefined();
+  });
+
+  it('零进度：auto 禁用并说明没有诊断依据，rebuild/reshape 仍可点', async () => {
+    const w = await mountDetail();
+    await openDialog(w);
+    const [rebuild, reshape, auto] = w.findAll('.adjust-mode');
+    expect(rebuild.attributes('disabled')).toBeUndefined();
+    expect(reshape.attributes('disabled')).toBeUndefined();
+    expect(auto.attributes('disabled')).toBeDefined();
+    expect(auto.text()).toContain('还没有学习记录');
   });
 
   it('allowedModes 仅 expand/compress：rebuild 与 auto 禁用带原因，reshape 可点', async () => {
@@ -83,6 +102,7 @@ describe('V2LearningPathDetail 调整策略门控', () => {
 
   it('allowedModes 仅 replan：reshape 禁用，rebuild/auto 可点', async () => {
     const w = await mountDetail({
+      milestones: milestonesWithProgress(),
       adjustmentPolicy: { allowedModes: ['replan'], recommendedMode: null, triggerSource: 'ai-teaching' },
     });
     await openDialog(w);
@@ -92,14 +112,15 @@ describe('V2LearningPathDetail 调整策略门控', () => {
     expect(auto.attributes('disabled')).toBeUndefined();
   });
 
-  it('recommendedMode=replan：打开弹窗默认落到 AI 诊断填写步并带推荐标记，换一种方式后场景卡带「推荐」角标', async () => {
+  it('recommendedMode=replan 且有学习记录：打开弹窗默认落到 AI 诊断填写步并带推荐标记，换一种方式后场景卡带「推荐」角标', async () => {
     const w = await mountDetail({
+      milestones: milestonesWithProgress(),
       adjustmentPolicy: { allowedModes: ['expand', 'compress', 'replan'], recommendedMode: 'replan', triggerSource: null },
     });
     await openDialog(w);
     // 默认选中：直接进入 auto 场景的填写步（模式选择页被跳过）
     expect(w.find('.adjust-modes').exists()).toBe(false);
-    expect(w.find('.adjust-form__mode-hint').text()).toContain('AI 学习情况诊断');
+    expect(w.find('.adjust-form__mode-hint').text()).toContain('AI 诊断建议');
     expect(w.find('.adjust-form__rec').text()).toBe('按你的情况推荐');
     // 换一种方式：场景选择页里 auto 卡带「推荐」角标
     await w.find('.adjust-form__back').trigger('click');
@@ -108,6 +129,16 @@ describe('V2LearningPathDetail 调整策略门控', () => {
     expect(rebuild.find('.adjust-mode__rec').exists()).toBe(false);
     expect(reshape.find('.adjust-mode__rec').exists()).toBe(false);
     expect(auto.find('.adjust-mode__rec').text()).toBe('推荐');
+  });
+
+  it('recommendedMode=replan 但零进度：不推荐 AI 诊断，改推荐整条重新规划', async () => {
+    const w = await mountDetail({
+      adjustmentPolicy: { allowedModes: ['expand', 'compress', 'replan'], recommendedMode: 'replan', triggerSource: null },
+    });
+    await openDialog(w);
+    // 零进度没有诊断依据：策略的 replan 推荐落到 rebuild，并直接进入填写步
+    expect(w.find('.adjust-form__mode-hint').text()).toContain('整条重新规划');
+    expect(w.find('.adjust-form__rec').text()).toBe('按你的情况推荐');
   });
 });
 

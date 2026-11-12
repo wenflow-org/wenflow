@@ -435,6 +435,7 @@ export function resolveScenarioBudget(profileData: Record<string, unknown> | nul
 export function buildTimeDimensionsFromBudget(budget: ScenarioBudgetShape): {
   totalSessions: number;
   sessionsLengthMin: number;
+  sessionsLengthSource: 'explicit';
   totalWeeks: number | null;
   estimatedHours: number | null;
 } | null {
@@ -446,6 +447,7 @@ export function buildTimeDimensionsFromBudget(budget: ScenarioBudgetShape): {
   return {
     totalSessions: sessionsFromHours,
     sessionsLengthMin: dailyMinutes,
+    sessionsLengthSource: 'explicit',
     totalWeeks: budget.horizonDays !== null ? Math.max(1, Math.ceil(budget.horizonDays / 7)) : null,
     estimatedHours: budget.expectedHours,
   };

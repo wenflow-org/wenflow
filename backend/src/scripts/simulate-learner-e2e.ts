@@ -41,7 +41,9 @@ import {
   type RunState,
 } from '../services/virtual-lab/run-harness';
 
-const GOAL_MAX_STEPS = 14;
+// 拟真人设（--realistic-persona）会带真实摩擦（犹豫、追问、离场再回来），
+// 14 步在 2026-11-11 的合同/盘库案例已用到 13 步；留出余量避免把「慢但正常」误判为未收敛。
+const GOAL_MAX_STEPS = 20;
 /** 同一天"未就绪"时的重试间隔（不消耗模拟日，Fix D） */
 const NOT_READY_POLL_MS = 30_000;
 /**
@@ -217,19 +219,51 @@ function sessionFields(body: Record<string, unknown> | null): { status: string; 
   };
 }
 
-/** goal 阶段推进：`step` 直到离开 goal（有界），记录失败 finding。 */
-async function driveGoalPhase(args: HarnessArgs, state: RunState, statePath: string | null): Promise<boolean> {
+type GoalDriveOutcome = 'advanced' | 'no-path' | 'learner-left' | 'failed';
+
+function goalTerminalSignal(body: Record<string, unknown> | null): {
+  learnerEnded: boolean;
+  noPath: boolean;
+  reason: string | null;
+} {
+  const data = asRecord(body?.data);
+  const stageResults = asRecord(data.stageResults);
+  const goal = asRecord(stageResults.goal);
+  const learnerEnded = goal.learnerEnded === true || data.learnerEnded === true;
+  const noPath = goal.noPath === true || data.noPath === true
+    || (data.status === 'completed' && data.currentStage === 'goal');
+  return {
+    learnerEnded,
+    noPath,
+    reason: typeof goal.learnerEndReason === 'string'
+      ? goal.learnerEndReason
+      : typeof data.learnerEndReason === 'string' ? data.learnerEndReason : null,
+  };
+}
+
+/** goal 阶段推进：`step` 直到离开 goal、明确不排课或学习者离场（有界）。 */
+async function driveGoalPhase(args: HarnessArgs, state: RunState, statePath: string | null): Promise<GoalDriveOutcome> {
   for (let step = 1; step <= GOAL_MAX_STEPS; step += 1) {
     const detail = await makeApi(args.baseUrl, 'GET', `/api/admin/virtual-learners/sessions/${state.sessionId}`);
     const { status, currentStage } = sessionFields(detail.body);
+    const terminal = goalTerminalSignal(detail.body);
+    if (terminal.learnerEnded) {
+      log(`[goal] 虚拟学习者离场（${terminal.reason || 'learner-ended'}），停止追问`);
+      return 'learner-left';
+    }
+    if (terminal.noPath) {
+      log(`[goal] 正常终局且不排课（${currentStage}/${status}）`);
+      return 'no-path';
+    }
     if (currentStage !== 'goal') {
       log(`[goal] 离开 goal（第 ${step - 1} 步后）→ ${currentStage}/${status}`);
-      return true;
+      return 'advanced';
     }
     const started = Date.now();
     const response = await makeApi(args.baseUrl, 'POST', `/api/admin/virtual-learners/sessions/${state.sessionId}/step`, {});
     const after = await makeApi(args.baseUrl, 'GET', `/api/admin/virtual-learners/sessions/${state.sessionId}`);
     const afterFields = sessionFields(after.body);
+    const afterTerminal = goalTerminalSignal(after.body);
     log(`[goal] step#${step} ${((Date.now() - started) / 1000).toFixed(0)}s http=${response.status} → ${afterFields.currentStage}/${afterFields.status}`);
     if (response.status === 0 || response.status >= 500) {
       // 传输问题：退避后重试同一步（不改状态）
@@ -239,23 +273,31 @@ async function driveGoalPhase(args: HarnessArgs, state: RunState, statePath: str
     }
     if (response.status !== 200) {
       addFinding(state, 'goal-step-failed', `step#${step} http=${response.status} ${JSON.stringify(response.body?.error ?? '')}`.slice(0, 240));
-      return false;
+      return 'failed';
     }
-    if (afterFields.status === 'failed') {
+    if (afterFields.status === 'failed' || afterFields.status === 'abandoned') {
       addFinding(state, 'session-failed-at-goal', `${afterFields.currentStage}/${afterFields.status}`);
-      return false;
+      return 'failed';
+    }
+    if (afterTerminal.learnerEnded) {
+      log(`[goal] 虚拟学习者离场（${afterTerminal.reason || 'learner-ended'}），停止追问`);
+      return 'learner-left';
+    }
+    if (afterTerminal.noPath) {
+      log(`[goal] 正常终局且不排课（${afterFields.currentStage}/${afterFields.status}）`);
+      return 'no-path';
     }
     if (afterFields.currentStage !== 'goal') {
       log(`[goal] 已完成（${afterFields.currentStage}/${afterFields.status}）`);
-      return true;
+      return 'advanced';
     }
     persist(statePath, state);
     if (step === GOAL_MAX_STEPS) {
       addFinding(state, 'goal-not-converged', `${GOAL_MAX_STEPS} 步仍未离开 goal`);
-      return false;
+      return 'failed';
     }
   }
-  return true;
+  return 'failed';
 }
 
 /** 逐日上课：未就绪重试同日（不烧日）、可重试退避、限流长等、终局返回。 */
@@ -376,6 +418,45 @@ async function runDailyLoop(args: HarnessArgs, state: RunState, statePath: strin
   return 'exhausted';
 }
 
+/**
+ * 可选的拟真人设（--realistic-persona）：
+ * 空壳 profile（role/scenario/storyPool）没有 emotionalTriggers / failurePatterns /
+ * availableTime，friction 预算即使触发也无处落地，学习者会退化成"每轮都配合的答题机"。
+ * 这里用平台既有 persona-designer 生成完整人设，再合并回 profile（storyPool 保留）。
+ */
+async function applyRealisticPersona(
+  args: HarnessArgs,
+  profileId: string,
+  story: ReturnType<typeof storyFor>
+): Promise<void> {
+  const generated = await makeApi(args.baseUrl, 'POST', '/api/admin/virtual-learners/generate-persona', {
+    preferredLevels: ['beginner'],
+    existingPersonaSeed: {
+      nameHint: args.learnerName,
+      learningGoal: args.learningGoal,
+      role: cliValue('profile-role', '可丢弃跑数学习者'),
+      scenario: cliValue('profile-scenario', '端到端验证日期模拟与多日上课'),
+      background: story.triggerEvent,
+    },
+  });
+  const seed = asRecord(asRecord(generated.body?.data)?.personaSeed);
+  if (generated.status !== 200 || Object.keys(seed).length === 0) {
+    log(`  ⚠ 拟真人设生成失败（http=${generated.status}），继续使用空壳人设`);
+    return;
+  }
+  const applied = await makeApi(args.baseUrl, 'PUT', `/api/admin/virtual-learners/${profileId}`, {
+    profile: seed,
+  });
+  if (applied.status !== 200) {
+    log(`  ⚠ 拟真人设写回失败（http=${applied.status}），继续使用空壳人设`);
+    return;
+  }
+  log(`[persona] 已应用拟真人设：${seed.nameHint || seed.name || '(unnamed)'}｜`
+    + `triggers=${Array.isArray(seed.emotionalTriggers) ? seed.emotionalTriggers.length : 0}｜`
+    + `failures=${Array.isArray(seed.failurePatterns) ? seed.failurePatterns.length : 0}｜`
+    + `time=${seed.availableTime || '—'}`);
+}
+
 async function cleanupLearner(args: HarnessArgs, state: RunState): Promise<void> {
   if (!state.profileId) {
     log('[cleanup] 无 profileId，跳过删除（可用 --session 续跑或手工清理）');
@@ -456,8 +537,16 @@ async function main(): Promise<void> {
     state = createRunState({ runId: `e2e${Date.now().toString(36)}`, learnerName: args.learnerName });
     state.profileId = profileId;
     state.userId = userId;
+    if (args.realisticPersona) {
+      await applyRealisticPersona(args, profileId, storyFor(args));
+    }
 
-    const started = await makeApi(args.baseUrl, 'POST', `/api/admin/virtual-learners/${profileId}/start-session`, {});
+    // 本 harness 自己逐步驱动 Goal/advance-day；start-session 默认会立刻拉起后台
+    // autopilot（2026-10-21 产品口径），两者并发会让同一会话被双驱动——真机表现为
+    // 同一回合被重复推进、告别后仍有几十次 step。这里显式关掉，保持单驱动。
+    const started = await makeApi(args.baseUrl, 'POST', `/api/admin/virtual-learners/${profileId}/start-session`, {
+      autopilot: 'off',
+    });
     const sessionId = String(pick(started.body, 'id') ?? '');
     if (started.status !== 200 || !sessionId) {
       throw new Error(`start-session 失败（http=${started.status}）：${JSON.stringify(started.body?.error ?? started.body).slice(0, 240)}`);
@@ -478,12 +567,22 @@ async function main(): Promise<void> {
 
   persist(args.statePath, state);
 
-  const goalOk = await driveGoalPhase(args, state, args.statePath);
-  let result: 'completed' | 'failed' | 'exhausted' = goalOk ? 'exhausted' : 'failed';
-  if (goalOk) {
+  const goalOutcome = await driveGoalPhase(args, state, args.statePath);
+  let result: 'completed' | 'failed' | 'exhausted' = 'failed';
+  if (goalOutcome === 'advanced') {
     result = await runDailyLoop(args, state, args.statePath);
     if (result === 'exhausted') {
       addFinding(state, 'max-days-reached', `已达 ${args.maxDays} 天仍未 completed`);
+    }
+  } else if (goalOutcome === 'no-path' || goalOutcome === 'learner-left') {
+    if (args.expectNoPath) {
+      // answer-only / oneoff 直答 / referral 物理边界：不生成路径就是正确终局。
+      log(`===== 预期不排课（${goalOutcome}）：goal 正常收尾，不进入 path/teaching =====`);
+      result = 'completed';
+    } else {
+      addFinding(state, 'goal-ended-without-path',
+        `${goalOutcome}：本 case 预期生成路径，但 goal 在未生成路径的情况下结束`);
+      result = 'failed';
     }
   }
 

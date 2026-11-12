@@ -90,8 +90,20 @@ export const PRIMARY_BLOCK_TYPES = [
 ] as const;
 export type PrimaryBlockType = typeof PRIMARY_BLOCK_TYPES[number];
 
-export const RECURRENCE_TYPES = ['once', 'recurring'] as const;
+export const RECURRENCE_TYPES = ['oneoff', 'recurring'] as const;
 export type RecurrenceType = typeof RECURRENCE_TYPES[number];
+
+/**
+ * recurrence 归一（2026-11-11 外部评审隐患 4）：
+ * Goal 层 understanding.recurrence 的枚举是 oneoff|recurring，scenario-designer 旧口径是
+ * once|recurring。两套名字会让自动对账脚本在 `story.goalSeed.recurrence === understanding.recurrence`
+ * 上误判（once !== oneoff）。这里统一输出 oneoff，同时把历史/模型偶发的 once 当别名收下。
+ */
+export function normalizeRecurrence(value: unknown): RecurrenceType | null {
+  const raw = normalizeString(value);
+  if (raw === 'once') return 'oneoff';
+  return isAllowedEnum(raw, [...RECURRENCE_TYPES]) ? (raw as RecurrenceType) : null;
+}
 
 /** normalizeStory 里 goalSeed 的三个问题类型标注字段（均可空，非法/缺失时置 null）。 */
 export interface GoalSeedBlockAnnotation {
@@ -193,7 +205,7 @@ export function normalizeStory(raw: any) {
       realProblem: normalizeString(goalSeed.realProblem),
       // 问题类型标注：非法枚举 / 缺失一律置 null，不默认成 capability，避免把模型偏向藏起来。
       primaryBlockType: isAllowedEnum(goalSeed.primaryBlockType, [...PRIMARY_BLOCK_TYPES]) ? goalSeed.primaryBlockType : null,
-      recurrence: isAllowedEnum(goalSeed.recurrence, [...RECURRENCE_TYPES]) ? goalSeed.recurrence : null,
+      recurrence: normalizeRecurrence(goalSeed.recurrence),
       blockTypeEvidence: normalizeString(goalSeed.blockTypeEvidence),
       motivation: normalizeString(goalSeed.motivation),
       urgencyHint: normalizeString(goalSeed.urgencyHint),
@@ -508,7 +520,7 @@ export function validateScenarioOutput(parsed: any): { valid: boolean; failureRe
   if (!isAllowedEnum(goalSeed.primaryBlockType, [...PRIMARY_BLOCK_TYPES])) {
     missingBlockAnnotationFields.push('primaryBlockType');
   }
-  if (!isAllowedEnum(goalSeed.recurrence, [...RECURRENCE_TYPES])) {
+  if (!normalizeRecurrence(goalSeed.recurrence)) {
     missingBlockAnnotationFields.push('recurrence');
   }
   if (!normalizeString(goalSeed.blockTypeEvidence)) {

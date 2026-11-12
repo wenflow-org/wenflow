@@ -242,6 +242,13 @@ export interface NormalizedTeachingTurn {
   learnerVisibleMessage?: string;
   /** 本轮教师配图（#123）：随学习者可见上下文回流，模拟学习者"看得见"课堂配图 */
   images?: Array<{ url: string; caption?: string | null }>;
+  /**
+   * 本轮课堂结构图（Mermaid）与位置线/白板图（2026-11-11 外部评审隐患 3）：
+   * 虚拟学习者看不到前端渲染，必须随消息带回模拟会话，由 learn-phase 文本化后进
+   * visibleContext；否则教师按「图文互锁」说「看图」时学员会回「图在哪」。
+   */
+  diagrams?: Array<{ engine: string; code: string; caption: string | null }>;
+  figures?: unknown[];
   revision: number;
   knowledgePoints: any[];
   isCompletion: boolean;
@@ -281,6 +288,13 @@ export function normalizeProcessTeachingTurn(result: ProcessTeachingTurnResult):
     aiResponse: result.aiResponse || '',
     ...(Array.isArray(result.images) && result.images.length > 0
       ? { images: result.images.map((image) => ({ url: image.url, caption: image.caption ?? null })) }
+      : {}),
+    // 课堂结构图/白板图随回合结果透传（此前只透传 images，学习者在模拟链路里"看不见图"）
+    ...(Array.isArray(result.diagrams) && result.diagrams.length > 0
+      ? { diagrams: result.diagrams.map((diagram) => ({ engine: diagram.engine, code: diagram.code, caption: diagram.caption ?? null })) }
+      : {}),
+    ...(Array.isArray(result.figures) && result.figures.length > 0
+      ? { figures: result.figures }
       : {}),
     revision: result.revision,
     knowledgePoints: result.knowledgePoints || [],

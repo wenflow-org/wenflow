@@ -50,6 +50,14 @@ describe('ToastHost 形态（右上角 + 语义色圆底图标）', () => {
     expect(decl(host, 'transform') ?? '', '底部居中那版的 translateX(-50%) 又出现了').not.toContain('translateX(-50%)');
   });
 
+  it('宿主不得裁切子卡阴影（2026-11-11：圆角外出现直角）', () => {
+    const host = ruleFor('.toast-host {');
+    // overflow:hidden 会把 40px 的浮层阴影沿矩形边裁断，视觉上就是圆角外多一条直角边
+    expect(decl(host, 'overflow'), 'overflow:hidden 会把阴影裁成直角').not.toBe('hidden');
+    expect(decl(host, 'max-height'), 'max-height 只在配合 overflow 裁切时有意义').toBeNull();
+    expect(decl(ruleFor('.toast-item {'), 'box-shadow')).toContain('--mk-shadow-pop');
+  });
+
   it('四类图标是 50% 圆底 + 语义色（「彩色」的识别点）', () => {
     expect(decl(ruleFor('.toast-icon {'), 'border-radius')).toBe('50%');
     const types: Array<[string, string]> = [

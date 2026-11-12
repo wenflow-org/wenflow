@@ -109,6 +109,25 @@ describe('virtual-learner-goal-dialogue-simulator normalize', () => {
     expect(output.learnerState.readyToAdvance).toBe(true)
     expect(output.learnerState.goalReadiness).toBeGreaterThanOrEqual(0.82)
   })
+
+  // 2026-11-11 真机：排障直答后学习者说「先去忙」，AI 每轮收口+追问，模拟器连说 8 轮告别。
+  // 模拟器必须能自报「本轮之后真人不会再发消息」，协调器据此提前收尾。
+  it('shouldEnd=true 与 endReason 原样透传', () => {
+    const output = normalizeOutput({
+      reply: '好，那我先去忙，回头再试。',
+      shouldEnd: true,
+      endReason: 'leaving',
+      learnerState: { phaseFocus: 'understanding' },
+    }, input)
+    expect(output.shouldEnd).toBe(true)
+    expect(output.endReason).toBe('leaving')
+  })
+
+  it('shouldEnd 缺失/非布尔 → false（旧输出零变化，不误收尾）', () => {
+    expect(normalizeOutput({ reply: '嗯，明白了。' }, input).shouldEnd).toBe(false)
+    expect(normalizeOutput({ reply: '嗯，明白了。', shouldEnd: 'yes' as any }, input).shouldEnd).toBe(false)
+    expect(normalizeOutput({ reply: '嗯，明白了。', shouldEnd: false, endReason: 'leaving' }, input).endReason).toBe('')
+  })
 })
 
 describe('virtual-learner-goal-dialogue-simulator 失败显式传播', () => {

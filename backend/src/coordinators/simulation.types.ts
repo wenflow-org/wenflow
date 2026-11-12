@@ -188,7 +188,7 @@ export interface SimulationContext {
 
 export interface SimulationLogEntry {
   timestamp: string;
-  phase: 'virtual-reply' | 'goal-response' | 'stage-transition' | 'path-review' | 'path-replan' | 'path-replan-completed' | 'path-replan-guard' | 'path-regenerate' | 'path-enrichment-not-ready' | 'teaching-reply' | 'teaching-response' | 'teaching-start' | 'teaching-interrupted' | 'closure-attribution' | 'error';
+  phase: 'virtual-reply' | 'virtual-leave' | 'goal-response' | 'stage-transition' | 'path-review' | 'path-replan' | 'path-replan-completed' | 'path-replan-guard' | 'path-regenerate' | 'path-enrichment-not-ready' | 'teaching-reply' | 'teaching-response' | 'teaching-start' | 'teaching-interrupted' | 'closure-attribution' | 'error';
   durationMs?: number;
   details: {
     input?: any;
@@ -208,6 +208,11 @@ export interface SimulationStepResult {
   };
   currentStage: 'goal' | 'path' | 'teaching';
   goalReady: boolean;
+  /** 虚拟学习者本轮明确离场（去忙/已得到答案/拒绝），本轮之后不再生成学习者发言 */
+  learnerEnded?: boolean;
+  learnerEndReason?: string | null;
+  /** goal 会话已终局但平台不生成学习路径（answer-only / referral / oneoff 直答） */
+  noPath?: boolean;
   logs: SimulationLogEntry[];
   error?: string;
 }

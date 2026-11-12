@@ -69,8 +69,9 @@ const dismissToast = (item: ToastItem) => {
   /* 贴右缘：多张卡片向左伸展，右边缘始终对齐 20px 锚点 */
   align-items: flex-end;
   gap: 10px;
-  max-height: calc(100vh - 40px);
-  overflow: hidden;
+  /* 不要加 overflow:hidden / max-height：子卡有 40px 的浮层阴影，矩形裁切会把
+     圆角外的阴影切成一条直角边（2026-11-11 用户报「圆角外面还有个直角」）。
+     同时最多只显示 3 张（utils/toast MAX_VISIBLE_TOASTS），高度远低于视口，无需滚动裁切。 */
   pointer-events: none;
 }
 
