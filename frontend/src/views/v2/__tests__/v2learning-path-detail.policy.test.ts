@@ -5,7 +5,7 @@
  * - 侧栏「调整历史」折叠卡只在 replanLineage 有内容时渲染（无 lineage 不出空态卡）。
  * 口径：后端 learning.helpers.parsePathAdjustmentPolicy（无策略 null = 不限制；数组即允许集合）。
  */
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 
 const getPathDetail = vi.hoisted(() => vi.fn());
@@ -50,6 +50,20 @@ function milestonesWithProgress() {
     subtasks: [{ id: 't1', title: '已完成任务', status: 'completed' }],
   }];
 }
+
+// 2026-11-12 CI 实测：组件错误路径的 1500ms 重试 setTimeout 在 worker 关闭瞬间才触发
+// load()，留下 pending 的 onUserConsoleLog（EnvironmentTeardownError，全量用例 2803/2803
+// 通过但进程 exit 1）。本文件不验证定时器行为——长延时（重试/轮询）一律不排程，杜绝竞态。
+const realSetTimeout = window.setTimeout.bind(window);
+beforeEach(() => {
+  vi.spyOn(window, 'setTimeout').mockImplementation(((handler: TimerHandler, timeout?: number) => {
+    if ((timeout ?? 0) > 200) return 0 as unknown as number;
+    return realSetTimeout(handler, timeout);
+  }) as typeof window.setTimeout);
+});
+afterEach(() => {
+  vi.mocked(window.setTimeout).mockRestore();
+});
 
 async function mountDetail(extra: Record<string, unknown> = {}) {
   getPathDetail.mockResolvedValue(pathPayload(extra));

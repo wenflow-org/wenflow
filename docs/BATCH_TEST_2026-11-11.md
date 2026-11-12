@@ -171,7 +171,7 @@ npx ts-node --transpile-only backend/scripts/judge-stage-quality.ts --path <path
 - 第二次（16:31）：reviewer 指令升级为「将 milestone 从 2 个拆为 4 个，分别对应 confirmedProposal.keyStages 的四家流派」；stage 设计阶段仍出现 `[stage-hints-clamp] stage2 4 → 2`、`[stage-budget-clamp] 50 → 23 分钟`，最终 `milestoneCount: 2 / taskCount: 3 / estimatedHours: 1.2`。
 - 两次都命中 `[stage-enrichment] 颗粒度硬上界再钳生效`（`scopeSizeRaw` 为 `[单点概念]`，`targetHours 1.2`）——说明生效的是 `[单点概念]` 硬帽，reviewer 的 4 阶段/8 小时指令被 hints 覆盖。
 
-结论：**前端弹窗改动已生效，但后端进程仍是 10:54 启动的旧代码**（`ts-node --transpile-only src/index.ts`，无 watch），`path-planning-hints.ts` 的结构自洽修复未加载，所以重排必然回到 2 阶段/1.2h。重启后端后再触发一次「整条路径重新规划」，才会按 4 个 key_stages 重算为 4 阶段/约 8 小时。
+结论：**前端弹窗改动已生效，但后端进程仍是 10:54 裸启的旧代码**（ts-node 直启入口文件、无 watch、未走 restart.mjs 的类型快检），`path-planning-hints.ts` 的结构自洽修复未加载，所以重排必然回到 2 阶段/1.2h。重启后端后再触发一次「整条路径重新规划」，才会按 4 个 key_stages 重算为 4 阶段/约 8 小时。
 
 ### Toast 圆角外直角（2026-11-11 用户走查）
 
