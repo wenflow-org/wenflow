@@ -524,7 +524,7 @@
             <span class="adjust-mode__icon" aria-hidden="true">✦</span>
             <span class="adjust-mode__body">
               <strong>先让 AI 看看怎么调<span v-if="isRecommendedEntry('auto')" class="adjust-mode__rec">推荐</span></strong>
-              <small>结合你的完成情况、掌握度和卡点，先给一版调整建议；你看过再决定，不会直接改路径。</small>
+              <small>结合你的完成情况、掌握度和卡点，先给一版调整建议。你看过再决定，不会直接改路径。</small>
               <small v-if="!adjustEntryAllowed('auto')" class="adjust-mode__blocked">{{ adjustEntryBlockReason('auto') }}</small>
             </span>
             <span class="adjust-mode__arrow" aria-hidden="true">›</span>
@@ -1224,7 +1224,7 @@ const reshapeScopeUsable = computed(() => stages.value.some((s) => {
 
 const adjustPlaceholder = computed(() => {
   if (adjustMode.value === 'rebuild') return '例如：这条路径排得太短/太偏理论，我想按……重新规划整条路径。';
-  if (adjustMode.value === 'reshape') return '例如：第二阶段太难，想先补基础；或从第 3 阶段起多安排实操……';
+  if (adjustMode.value === 'reshape') return '例如：第二阶段太难，想先补基础，也可以从第 3 阶段起多安排实操……';
   if (adjustMode.value === 'auto') return '例如：最近学得吃力，卡在……。先帮我看看怎么调，再决定。';
   return '说说你想怎么调整……';
 });
