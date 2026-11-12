@@ -25,6 +25,13 @@ type BuildInput = {
   learningPathId?: string;
   milestoneId?: string;
   taskId?: string;
+  /** 正在收束的会话 id：仅用于把本次收束时刻作为该会话的业务 endTime（2026-11-11 D2）。 */
+  currentSessionId?: string;
+  /**
+   * 本次收束的业务结束时刻。advisory 在 completeWithEvent 落 endTime 之前生成，
+   * 不传时当前会话的看板信号会因 endTime=null 丢失 seenAt，被旧 0.35 痕迹压成假卡点。
+   */
+  sessionEndTimeOverride?: Date | null;
 };
 
 type ConceptSignal = {
@@ -711,10 +718,14 @@ export class LearnerKnowledgeMemoryService {
       // 降级总结不得进掌握证据（#70 P-45）：summary-only / summarySource=fallback 是模板兜底产物，
       // 它的 knowledgeItems 不是模型对学习结果的判断。知识状态行（session.knowledgeState）仍保留。
       const summaryIsReliable = wrapup?.status !== 'summary-only' && wrapup?.sources?.summary !== 'fallback';
-      const happenedAt = (session.endTime || session.updatedAt).toISOString();
+      const effectiveEndTime = session.id === input.currentSessionId && input.sessionEndTimeOverride
+        ? input.sessionEndTimeOverride
+        : session.endTime;
+      const happenedAt = (effectiveEndTime || session.updatedAt).toISOString();
       // 时钟域：概念"最近可见"只用会话业务结束时间 endTime（模拟链路经 simulatedNowOr 落模拟日）。
-      // 会话未结束（endTime=null）时不回退 updatedAt（真墙钟）——无结束时间 = 不记 seenAt。
-      const sessionSeenAt = session.endTime ? session.endTime.toISOString() : undefined;
+      // 会话未结束（endTime=null）时不回退 updatedAt（真墙钟）——无结束时间 = 不记 seenAt；
+      // 本轮收束的会话由调用方传入 sessionEndTimeOverride，避免 advisory 窗口内丢戳。
+      const sessionSeenAt = effectiveEndTime ? effectiveEndTime.toISOString() : undefined;
 
       // #195：同一课同一概念的掌握贡献只计一次。session.knowledgeState（结构化看板）是权威源，
       // wrapup.summary.knowledgeItems（LLM 摘要）按提示词规则 6「优先复用输入 knowledgePoints 的

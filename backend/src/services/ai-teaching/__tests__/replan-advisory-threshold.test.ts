@@ -153,7 +153,7 @@ describe('ReplanAdvisoryService.build 的阈值行为', () => {
   it('同一条信号换成 low/mid → 正常发出（阈值只认双低）', () => {
     const advisory = service.build({
       wrapup: wrapupWith({ metricTiers: { sessionLss: 'low', sessionLf: 'mid' } }),
-      learnerReplanProjection: projectionWith({ signal: reinforceSignal, milestoneComplete: false }),
+      learnerReplanProjection: projectionWith({ signal: reinforceSignal, milestoneComplete: true }),
       nextMilestone,
     });
     expect(advisory.shouldSuggest).toBe(true);
@@ -163,20 +163,64 @@ describe('ReplanAdvisoryService.build 的阈值行为', () => {
   it('建议携带目标阶段号（#58：确认时按此传 stageNumber/fromStageNumber）', () => {
     const advisory = service.build({
       wrapup: wrapupWith({ metricTiers: { sessionLss: 'low', sessionLf: 'mid' } }),
-      learnerReplanProjection: projectionWith({ signal: reinforceSignal, milestoneComplete: false }),
+      learnerReplanProjection: projectionWith({ signal: reinforceSignal, milestoneComplete: true }),
       nextMilestone: { ...nextMilestone, stageNumber: 3 },
     });
     expect(advisory.shouldSuggest).toBe(true);
     expect(advisory.targetStageNumber).toBe(3);
   });
 
-  it('双低但本课真的浮出卡点知识点（struggling）→ 仍发（硬证据盖过自评档位）', () => {
+  it('双低但本课真的浮出 ≥2 个卡点知识点（struggling）→ 仍发（硬证据盖过自评档位）', () => {
     const advisory = service.build({
       wrapup: wrapupWith({ metricTiers: { sessionLss: 'low', sessionLf: 'low' } }),
       learnerReplanProjection: projectionWith({
         signal: reinforceSignal,
-        milestoneComplete: false,
+        milestoneComplete: true,
+        strugglingConcepts: ['向量组的秩', '矩阵的零空间'],
+      }),
+      nextMilestone,
+    });
+    expect(advisory.shouldSuggest).toBe(true);
+  });
+
+  it('只有 1 个卡点 → 不再触发（单处卡点留给课堂内补强）', () => {
+    const advisory = service.build({
+      wrapup: wrapupWith({ metricTiers: { sessionLss: 'mid', sessionLf: 'mid' } }),
+      learnerReplanProjection: projectionWith({
+        signal: { shouldSuggest: false, priority: 'none', recommendation: 'keep', scope: 'none', rationale: '', reasonCodes: [] },
+        milestoneComplete: true,
         strugglingConcepts: ['向量组的秩'],
+      }),
+      nextMilestone,
+    });
+    expect(advisory.shouldSuggest).toBe(false);
+  });
+
+  it('只有 stillLearning / movedToReview（阶段收尾常态）→ 不再触发建议', () => {
+    const advisory = service.build({
+      wrapup: wrapupWith({
+        metricTiers: { sessionLss: 'mid', sessionLf: 'mid' },
+        stillLearning: ['识别构造主义与机能主义主张'],
+        movedToReview: ['一元二次方程求根'],
+      }),
+      learnerReplanProjection: projectionWith({
+        signal: { shouldSuggest: false, priority: 'none', recommendation: 'keep', scope: 'none', rationale: '', reasonCodes: [] },
+        milestoneComplete: true,
+      }),
+      nextMilestone,
+    });
+    expect(advisory.shouldSuggest).toBe(false);
+  });
+
+  it('重复困惑 ≥2 个点 → 触发（不是常态副产品）', () => {
+    const advisory = service.build({
+      wrapup: wrapupWith({
+        metricTiers: { sessionLss: 'mid', sessionLf: 'mid' },
+        topConfusionPoints: ['向量组的秩', '矩阵的零空间'],
+      }),
+      learnerReplanProjection: projectionWith({
+        signal: { shouldSuggest: false, priority: 'none', recommendation: 'keep', scope: 'none', rationale: '', reasonCodes: [] },
+        milestoneComplete: true,
       }),
       nextMilestone,
     });
@@ -211,7 +255,7 @@ describe('ReplanAdvisoryService.build 的阈值行为', () => {
           rationale: '掌握较稳定，可以考虑压缩下一阶段。',
           reasonCodes: ['stable_mastery', 'ready_to_accelerate'],
         },
-        milestoneComplete: false,
+        milestoneComplete: true,
       }),
       nextMilestone,
     });

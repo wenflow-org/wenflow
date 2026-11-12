@@ -19,6 +19,7 @@ import { applyWarmupExtractionForSession, enqueueReviewCompletedEvent } from './
 // 非正常终态判定（幽灵课 / 弃跑状态泄漏）：叶子方向的单向依赖，不成环（lifecycle 不 import 本服务）
 import { isAbnormalSessionClosure } from './teaching-session-lifecycle';
 import { evaluateSessionClosable } from './teaching-closure';
+import { mapKnowledgeStatusToMastery } from '../memory/memory-trace.service';
 import { validateTaskTerminalConsistency } from './terminal-consistency';
 
 export interface FinalizeSessionInput {
@@ -459,18 +460,25 @@ export class SessionFinalizationService {
         (p: any) => p && typeof p.name === 'string' && p.status && p.status !== 'review' && p.status !== 'pending'
       );
       if (progressed.length === 0) return [];
-      const items = progressed.map((p: any) => ({
-        conceptKey: p.name,
-        label: p.name,
-        // #94：看板项若带稳定键就带上（原样透传，不做名字推断）；没有就是 null
-        kcId: typeof p.kcId === 'string' && p.kcId.trim() ? p.kcId.trim() : null,
-        status: p.status,
-        progress: Number(p.progress) || 0,
-        masteryScore: p.status === 'mastered' ? (Number(p.progress) >= 100 ? 0.9 : 0.85) : 0.5,
-        rating: (p.status === 'mastered'
-          ? (Number(p.progress) >= 100 ? 'easy' : 'good')
-          : 'hard') as 'again' | 'hard' | 'good' | 'easy',
-      }));
+      const items = progressed.map((p: any) => {
+        const progress = Number(p.progress) || 0;
+        const mappedStatus = p.status === 'mastered' || p.status === 'learning' || p.status === 'pending' || p.status === 'review'
+          ? p.status
+          : 'learning';
+        const { masteryScore } = mapKnowledgeStatusToMastery(mappedStatus, progress);
+        return {
+          conceptKey: p.name,
+          label: p.name,
+          // #94：看板项若带稳定键就带上（原样透传，不做名字推断）；没有就是 null
+          kcId: typeof p.kcId === 'string' && p.kcId.trim() ? p.kcId.trim() : null,
+          status: p.status,
+          progress,
+          masteryScore,
+          rating: (p.status === 'mastered'
+            ? (progress >= 100 ? 'easy' : 'good')
+            : 'hard') as 'again' | 'hard' | 'good' | 'easy',
+        };
+      });
       logger.info('[SessionFinalization] 复习结果已采集（由事件消费者写入记忆引擎）', {
         sessionId: session.id,
         userId: session.userId,

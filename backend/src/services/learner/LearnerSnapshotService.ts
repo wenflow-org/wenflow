@@ -496,6 +496,8 @@ export class LearnerSnapshotService {
       lsb: number;
     };
     generatedAt?: Date;
+    currentSessionId?: string;
+    sessionEndTimeOverride?: Date | null;
   }): Promise<LearnerSnapshot> {
     const [{ profile, confidence, sources }, knowledgeMemory, latestConversation, latestSession, latestCompletedTask] = await Promise.all([
       learnerProfileService.getProfile(input.userId),
@@ -504,6 +506,8 @@ export class LearnerSnapshotService {
         learningPathId: input.learningPathId,
         milestoneId: input.milestoneId,
         taskId: input.taskId,
+        currentSessionId: input.currentSessionId,
+        sessionEndTimeOverride: input.sessionEndTimeOverride,
       }),
       prisma.learner_evidence.findFirst({
         where: { userId: input.userId, evidenceType: 'goal:understanding:updated' },

@@ -87,9 +87,9 @@ describe('applyAttribution（归因合并：只在建议成立时、且方向必
     source: 'llm' as const,
   };
 
-  it('方向落在可选项里 → 采用归因方向，并留下「为什么」', () => {
-    const merged = applyAttribution(advisory(), attribution);
-    expect(merged.recommendation).toBe('reinforce');
+  it('方向与阈值一致 → 采用归因的“为什么”', () => {
+    const merged = applyAttribution(advisory(), { ...attribution, recommendation: 'slow_down' });
+    expect(merged.recommendation).toBe('slow_down');
     expect(merged.attribution).toMatchObject({
       primaryReasonCode: 'struggling_concepts',
       reason: '「取大取小依据」连着两次没答对',
@@ -101,10 +101,13 @@ describe('applyAttribution（归因合并：只在建议成立时、且方向必
     expect(merged.reasonCodes).toEqual(['fragile_concepts', 'struggling_concepts']);
   });
 
-  it('方向不在可选项里 → 退回阈值方向（不让 UI 出现"按钮说一套推荐说另一套"）', () => {
+  it('方向与阈值不一致（含 accelerate→keep）→ 保留阈值方向，不挂归因', () => {
     const merged = applyAttribution(advisory(), { ...attribution, recommendation: 'accelerate' });
     expect(merged.recommendation).toBe('slow_down');
-    expect(merged.attribution?.thresholdRecommendation).toBe('slow_down');
+    expect(merged.attribution).toBeNull();
+    const kept = applyAttribution(advisory(), { ...attribution, recommendation: 'keep' });
+    expect(kept.recommendation).toBe('slow_down');
+    expect(kept.attribution).toBeNull();
   });
 
   it('建议未成立（shouldSuggest=false）→ 不并归因（阈值是唯一召回门）', () => {

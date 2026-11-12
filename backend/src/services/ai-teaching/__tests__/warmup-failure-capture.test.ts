@@ -18,14 +18,14 @@ describe('课内温故收束：失败的入库通道（回归 §3.9/§3.11 —�
     ];
     expect(collectWarmupReviewItems(items, after)).toEqual([
       { conceptKey: 'a', label: 'A', status: 'mastered', progress: 90, masteryScore: 0.85, rating: 'good' },
-      { conceptKey: 'b', label: 'B', status: 'learning', progress: 40, masteryScore: 0.5, rating: 'hard' },
+      { conceptKey: 'b', label: 'B', status: 'learning', progress: 40, masteryScore: 0.52, rating: 'hard' },
     ]);
   });
 
   it('问过了但始终没推进 + 学习者之后有发言 → 判为没答出（again）', () => {
     const items = [{ conceptKey: 'c', label: 'C', askedAt: '2026-09-16T10:00:00.000Z' }];
     expect(collectWarmupReviewItems(items, after)).toEqual([
-      { conceptKey: 'c', label: 'C', status: 'not-recalled', progress: 0, masteryScore: 0.5, rating: 'again' },
+      { conceptKey: 'c', label: 'C', status: 'not-recalled', progress: 0, masteryScore: 0.35, rating: 'again' },
     ]);
   });
 

@@ -90,10 +90,10 @@ function buildAllBranchAdvisories() {
     nextMilestone,
   });
   const remedial = service.build({
-    wrapup: wrapupWith({ topConfusionPoints: ['向量组的秩'] }),
+    wrapup: wrapupWith({ topConfusionPoints: ['向量组的秩', '矩阵的零空间'] }),
     learnerReplanProjection: projectionWith({
       signal: null,
-      strugglingConcepts: ['向量组的秩'],
+      strugglingConcepts: ['向量组的秩', '矩阵的零空间'],
     }),
     nextMilestone,
   });

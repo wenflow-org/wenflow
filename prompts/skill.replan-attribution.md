@@ -1,6 +1,6 @@
 ---
 agentId: skill:replan-attribution
-coreHash: 67b2596d8636cc2d196715f61a7c38bab272d70ce9cb7d5785cda3ff5cec9ab4
+coreHash: 1cbeb259324e28835a0c00a3fea0acc7bfa21b0e21e8ff6d9b2f29d80e3b2097
 coreVersion: 1
 temperature: 0.3
 maxTokens: 64000
@@ -20,9 +20,10 @@ failurePolicy: propagate
 - state（不推进）：平台维护的主记忆快照（当前值，含 stage）
 
 输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
-- 「replanSignal（object）」`sandbox:profile.snapshot.replanSignal`（编排注入） — 阈值召回（reasonCodes/priority/recommendation/scope/rationale）——归因必须在它允许的方向内选
-- 「sessionWrapup（object）」`sandbox:teaching.session.wrapup`（编排注入） — 课后收束（含未解决点与困惑），即归因证据（evidence）的来源
-- 「pathSummary（string）」`sandbox:path.path.summary`（编排注入） — 路径概要——路径位置上下文（pathContext）
+- 「recall（object）」`sandbox:profile.snapshot.replanSignal`（编排注入） — 阈值召回 { reasonCodes, recommendation, priority, rationale }——归因必须在它允许的方向内选
+- 「allowedRecommendations（string[]）」`sandbox:path.planningHints`（编排注入） — 系统真正能执行的方向集合（含 keep）；recommendation 必须取自其中
+- 「evidence（object[]）」`sandbox:teaching.session.wrapup`（编排注入） — 归因证据条目 [{ id, 概念名/未解决点名/掌握状态 }]；evidenceRefs 只能引用其中出现过的 id
+- 「pathContext（object?）」`sandbox:path.path.summary`（编排注入） — 路径位置上下文 { milestoneTitle, stageNumber }（可选）
 
 ## 执行规则
 
