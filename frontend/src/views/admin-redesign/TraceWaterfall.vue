@@ -38,14 +38,14 @@
           class="mk-pill"
           :class="{ 'mk-pill--active': viewMode === 'trace' }"
           :aria-pressed="viewMode === 'trace'"
-          @click="viewMode = 'trace'"
+          @click="viewMode = 'trace'; notice = ''"
         >链路</button>
         <button
           type="button"
           class="mk-pill"
           :class="{ 'mk-pill--active': viewMode === 'session' }"
           :aria-pressed="viewMode === 'session'"
-          @click="viewMode = 'session'"
+          @click="viewMode = 'session'; notice = ''"
         >会话</button>
       </span>
       <div class="wf-filter">
@@ -75,6 +75,7 @@
           class="wf-tracepick__search mono"
           placeholder="筛选链路 ID"
           title="回车直达该链路"
+          @input="notice = ''"
           @keydown.enter.prevent="searchTrace"
         />
       </div>
@@ -98,7 +99,7 @@
           <MkSelect v-model="activeSession" :options="sessionOptions" aria-label="选择会话" mono block />
         </div>
         <div v-else class="wf-tracepick__select">
-          <MkSelect v-model="activeTrace" :options="traceOptions" aria-label="选择链路" mono block />
+          <MkSelect v-model="activeTrace" :options="traceOptions" aria-label="选择链路" mono block @update:model-value="notice = ''" />
         </div>
       </div>
     </div>

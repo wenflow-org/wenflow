@@ -391,7 +391,8 @@ describe('C. AuditLogs 筛选栏：动作 / 失败动作 条件联动', () => {
     expect(AUDIT_SRC).toContain('aria-label="按动作筛选"');
     expect(AUDIT_SRC).toContain('aria-label="按失败动作筛选（状态为仅失败时可用）"');
     // 条件联动挂在状态值上（failedOnly），不是只看 failureByAction 有没有数据
-    expect(AUDIT_SRC).toMatch(/v-if="tab === 'operation' && failedOnly && failureByAction\.length"/);
+    // 统计失败时下拉退化为不可用，不展示旧计数
+    expect(AUDIT_SRC).toMatch(/v-if="tab === 'operation' && failedOnly && !statsError && failureByAction\.length"/);
     expect(AUDIT_SRC).toMatch(/v-if="tab === 'operation' && !failedOnly"/);
   });
 });

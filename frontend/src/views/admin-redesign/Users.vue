@@ -56,7 +56,21 @@
         </div>
       </div>
 
-      <MockSkeletonTable v-if="liveLoading && !users.length || (deletedLoading && !users.length)" :cols="7" />
+      <!-- 刷新失败但仍有旧行：显式标旧，避免把上一页名单当成当前结果 -->
+      <div v-if="!isDeletedView && liveFailures.users && users.length" class="mk-alert mk-alert--row" role="alert">
+        <span class="mk-alert__msg">用户列表刷新失败，以下为上次结果</span>
+        <button type="button" class="mk-alert__btn" :disabled="liveLoading" @click="retryLoad">{{ liveLoading ? '重试中…' : '重试' }}</button>
+      </div>
+      <MockSkeletonTable v-if="(liveLoading && !users.length) || (deletedLoading && !users.length)" :cols="7" />
+      <MkEmptyState
+        v-else-if="isDeletedView && deletedFailed"
+        min
+        tone="error"
+        title="已删除账号加载失败"
+        action-text="重试"
+        :action-busy="deletedLoading"
+        @action="loadDeletedUsers"
+      />
       <MkEmptyState
         v-else-if="loadFailed"
         min
@@ -356,6 +370,8 @@ interface UserRow {
 const deletedUsers = ref<UserRow[]>([])
 const deletedLoading = ref(false)
 const deletedTotal = ref(0)
+/** 已删除视图独立的失败态：不能借用活跃用户域的 loadFailed */
+const deletedFailed = ref(false)
 const isDeletedView = computed(() => pill.value === 'deleted')
 
 function mapDeletedRow(u: Record<string, unknown>): UserRow {
@@ -382,6 +398,7 @@ function mapDeletedRow(u: Record<string, unknown>): UserRow {
 
 async function loadDeletedUsers() {
   deletedLoading.value = true
+  deletedFailed.value = false
   try {
     const res = await getDeletedUsers({
       page: page.value,
@@ -392,11 +409,11 @@ async function loadDeletedUsers() {
     const items = body.users || body.items || []
     deletedUsers.value = items.map(mapDeletedRow)
     deletedTotal.value = Number(body.pagination?.total ?? items.length)
-  } catch (e) {
+  } catch {
     // 失败不静默：置空列表会让「已删除」pill 看起来像"没有已删用户"，误导管理员
     deletedUsers.value = []
     deletedTotal.value = 0
-    toast.error(`已删除用户加载失败：${errMsg(e)}`)
+    deletedFailed.value = true
   } finally {
     deletedLoading.value = false
   }
@@ -471,7 +488,7 @@ const showCol = (key: string) =>
 
 /** live 用户域拉取失败（且列表为空）→ 错误态；空态只在真正无数据时展示 */
 const loadFailed = computed(
-  () => isLive.value && !liveLoading.value && !!liveFailures.value.users && !liveUsers.value.length
+  () => !isDeletedView.value && isLive.value && !liveLoading.value && !!liveFailures.value.users && !liveUsers.value.length
 )
 function retryLoad() {
   void loadLiveData()

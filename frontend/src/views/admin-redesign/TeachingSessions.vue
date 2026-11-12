@@ -11,6 +11,7 @@
          · 异常（失败 / 收尾失败 / 超时）→ 点卡落到「状态」下拉的「异常」档；
          · 缺总结 → 落到「总结」下拉；有建议（服务端开关）→ 点卡筛选，卡头出现可移除胶囊；
          · 完结率只读。 -->
+    <p v-if="!embedded && rows.length && loadFailed" class="ts-stale-note">以下 KPI 与列表均为上次结果</p>
     <section v-if="!embedded && rows.length" class="mk-kpi-grid" aria-label="教学会话运维关注量">
       <MkKpi
         clickable
@@ -1260,7 +1261,8 @@ defineExpose({ refreshNow })
 .ts-mode { white-space: nowrap; }
 /* 产物格：有总结 / 缺总结两档都用徽章，在固定列宽内换行；建议处置并入 title，不再占行内位置。 */
 .ts-out { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }/* 加载失败错误条：形态回归共享 .mk-alert--row（红底/字号/按钮形态），页私有只留外边距 */
-.ts-error { margin: 0 16px 10px; }/* 状态分布卡已退役改 buckets 构成带（2026-10-04，共享原语 MkBuckets；stageband 原语留仍用页）。
+.ts-error { margin: 0 16px 10px; }
+.ts-stale-note { margin: 0 16px 6px; color: var(--mk-muted); font-size: var(--mk-fs-micro); }/* 状态分布卡已退役改 buckets 构成带（2026-10-04，共享原语 MkBuckets；stageband 原语留仍用页）。
    4K：抽屉加宽 + 字号跟随壳层放大（置于基础样式之后确保覆盖） */
 @media (min-width: 2000px) {
 }/* 3600+（zoom 1.3 档）：抽屉在 2800 基础上再放大一档 */

@@ -531,6 +531,10 @@
 
     <!-- ============ 证据：全局信号 + 左时间线 / 右曲线·建议·密度 两栏 ============ -->
     <div v-else-if="tab === 'evidence'" class="ld-tabpage" id="ld-panel-evidence" role="tabpanel" aria-labelledby="ld-tab-evidence">
+      <div v-if="evidenceFailed" class="mk-alert mk-alert--row" role="alert">
+        <span class="mk-alert__msg">学习事件读取失败，以下读数可能不完整</span>
+        <button type="button" class="mk-alert__btn" @click="retryEvidence">重试</button>
+      </div>
       <!-- 指标卡横排已撤（2026-10-11 用户走查）：LSS/KTL/LF/LSB 与「学习压力记录」曲线同族指标，
            当前值并入曲线卡头部读数行（.ld-load__hits），不再占页宽一整排 -->
 
@@ -1198,7 +1202,8 @@
       <!-- 调度与治理（温故计划 / 归并审计 / 同族重复 / 回滚）随 MemoryReview 一并进入本页签：
            到期清单预览与上方 FSRS 普查为同一概念集，故省略（omit-due-preview）；
            归并审计与同族重复在嵌入态压缩为单行轻量状态条（compact-audit），回滚动作仍可展开触达。 -->
-      <MemoryReview :user-id="subPage?.id || ''" :omit-due-preview="true" :compact-audit="true" />
+      <!-- 空态已由宿主卡承担：无 FSRS 行时不再挂载子组件，否则同一「没有记忆数据」会出两套文案 -->
+      <MemoryReview v-if="memoryPaneRows.length" :user-id="subPage?.id || ''" :omit-due-preview="true" :compact-audit="true" />
     </div>
 
     <!-- ============ 操作记录（原型 2184-2187）：feed/feedrow；口径见注释 ============ -->
@@ -1350,6 +1355,12 @@ interface EvidenceItem {
 const liveDetail = ref<Detail | null>(null)
 const rawDetail = ref<Record<string, unknown> | null>(null)
 const liveEvidence = ref<EvidenceItem[]>([])
+/** 证据域读取失败：不能静默替换成空数组，让「读不到」与「确实没有」同版面 */
+const evidenceFailed = ref(false)
+function retryEvidence() {
+  const a = ldRecentArgs.value
+  if (a) void loadDetail(a.id, { soft: true })
+}
 /** 校准/复习明细（2026-10-21）：检查点判分前预测、逐概念复习 rating、难度调整——**
  *  此前只在 learner_evidence.payload，证据页只有一行泛化标题。 */
 const calibrationDetails = ref<CalibrationDetailItem[]>([])
@@ -2137,7 +2148,10 @@ async function loadDetail(id: string | undefined, opts: { soft?: boolean } = {})
     // 详情与证据并行（此前串行 await：两个独立接口白等一趟 RTT）
     const [raw, evidenceRes] = await Promise.all([
       withTimeout(liveGetLearnerDetail(id, pathId, includeTest), 12000) as Promise<Record<string, unknown>>,
-      liveGetLearnerEvidence(id, pathId, includeTest).catch(() => ({ items: [], domain: [], loadCurve: [], calibrationDetails: [] }))
+      liveGetLearnerEvidence(id, pathId, includeTest).catch(() => {
+        if (!stale()) evidenceFailed.value = true
+        return { items: [], domain: [], loadCurve: [], calibrationDetails: [] }
+      })
     ])
     if (stale()) return
     // 画像/证据/概览多处 computeds 读 rawDetail（:1370-1382）——此前只在 resetDerivedState
@@ -2266,6 +2280,7 @@ async function loadDetail(id: string | undefined, opts: { soft?: boolean } = {})
       return tb - ta
     })
     liveEvidence.value = merged
+    evidenceFailed.value = false
     calibrationDetails.value = evidenceRes.calibrationDetails || []
     loadCurveRaw.value = evidenceRes.loadCurve || []
     // 校准/记忆痕迹：fire-and-forget 但必须带序号守卫，否则旧 id 的迟响应会写穿新详情

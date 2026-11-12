@@ -116,7 +116,7 @@
                且此时只留这一枚（「动作」让位），默认值改读「全部失败动作」。
                计数只随选项出现；空选项在失败域里读作「全部失败」。 -->
           <MkPillSelect
-            v-if="tab === 'operation' && failedOnly && failureByAction.length"
+            v-if="tab === 'operation' && failedOnly && !statsError && failureByAction.length"
             :model-value="failedAction"
             label="失败动作"
             aria-label="按失败动作筛选（状态为仅失败时可用）"
@@ -645,7 +645,7 @@ const failedOnly = computed(() => statusFilter.value === 'err')
 const statusFilterOptions = computed(() => [
   { value: '', label: '全部' },
   { value: 'ok', label: '仅成功' },
-  { value: 'err', label: failedCount.value > 0 ? `仅失败（${failedCount.value}）` : '仅失败' }
+  { value: 'err', label: !statsError.value && failedCount.value > 0 ? `仅失败（${failedCount.value}）` : '仅失败' }
 ])
 function applyStatusFilter(v: string) {
   statusFilter.value = v === 'ok' || v === 'err' ? v : ''

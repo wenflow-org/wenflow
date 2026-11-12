@@ -19,10 +19,9 @@
             class="mk-card__title"
             title="后台任务（更新学习画像、发放成就等）第一次投递失败会记在这里，确认根因修复后可重发。"
           >事件投递</h4>
-          <!-- 死信告警（原状态条语义迁入卡头）：失败显式降 bad，积压 >0 显式 warn，
-               零值只有成功加载后才显示「全部已送达」——加载中不得伪装成确认无死信 -->
-          <span v-if="deadFailed" class="mk-badge mk-badge--bad">加载失败</span>
-          <span v-else-if="!deadLoading && deadCount > 0" class="mk-badge mk-badge--warn">{{ deadCount }} 条待重发</span>
+          <!-- 死信告警（原状态条语义迁入卡头）：积压 >0 显式 warn，
+               零值只有成功加载后才显示「全部已送达」——读取失败由卡体错误态承担，卡头不再复读 -->
+          <span v-if="!deadLoading && deadCount > 0" class="mk-badge mk-badge--warn">{{ deadCount }} 条待重发</span>
           <span v-else-if="deadLoaded" class="mk-badge mk-badge--ok">全部已送达</span>
         </div>
         <div class="mk-card__head-right">

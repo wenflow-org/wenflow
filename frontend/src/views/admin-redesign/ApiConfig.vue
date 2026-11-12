@@ -55,7 +55,6 @@
             <span class="mono ac-conn-summary__addr" :title="configUnknown ? '配置读取失败，地址未知' : (form.apiUrl || '未配置服务地址')">{{ configUnknown ? '配置读取失败' : summaryHost }}</span>
             <span class="ac-conn-summary__dot" aria-hidden="true">·</span>
             <span class="ac-conn-summary__key">{{ configUnknown ? '密钥状态未知' : (keySet ? '密钥已配置' : '未配置密钥') }}</span>
-            <span v-if="connFetchFailed" class="mk-badge mk-badge--bad">上次获取模型：失败</span>
             <button type="button" class="mk-btn mk-btn--sm" :disabled="testing || configUnknown || !form.apiUrl.trim()" @click="testConn">{{ testing ? '测试中…' : '测试连接' }}</button>
             <!-- 2026-11-09 设计语言收敛：打开配置弹窗这类「开关」一律 mk-link
                  （会改服务状态的命令才走 mk-btn--sm：测试连接 / 保存），
@@ -597,7 +596,6 @@ const hasUnsavedModels = computed(() => {
    但它的位置是弹窗标题下——连接回页顶、弹窗只挑模型之后，这枚徽标没有落点了。
    成功是一次动作的正常结果（点「重新获取」当场有 toast），不值得常驻；
    失败必须留下来：它是「拉不到清单」的唯一线索。 */
-const connFetchFailed = computed(() => connectionStatus.value === 'failed')
 
 /** 已配置密钥但改了服务地址且 Key 留空：密钥不会随地址迁移，需提示重新输入 */
 const keyHintNeeded = computed(
@@ -747,8 +745,7 @@ async function fetchModels(source: 'open' | 'refetch' = 'refetch'): Promise<void
     connectionStatus.value = 'failed'
     connCheckedAt.value = new Date().toISOString()
     fetchError.value = errMsg(e)
-    // 打开弹窗时的那次失败不弹提示：弹窗里本来就有一行「连接失败：…」，再弹一遍是同一个事实说两次
-    if (!background) toast.error(`连接失败：${errMsg(e)}`)
+    // 弹窗与模型卡已有行内错误，不再叠同次失败的 toast
   } finally {
     fetching.value = false
   }

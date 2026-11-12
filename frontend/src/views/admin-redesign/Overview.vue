@@ -1146,7 +1146,8 @@ const todoItems = computed<TodoItem[]>(() => {
       action: investigateTodayFailures,
     });
   }
-  if (simTone.value === 'bad' || simTone.value === 'warn') {
+  /* 统计失败由虚拟学习者卡内的错误块 + 重试承担；待办行不再复读同一失败 */
+  if (!liveVirtualStatsError.value && (simTone.value === 'bad' || simTone.value === 'warn')) {
     const simText = `仿真 · ${simHeadline.value}`;
     items.push({
       key: 'sim',

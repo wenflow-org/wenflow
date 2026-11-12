@@ -1005,8 +1005,7 @@ async function applySelected() {
     toast.success(`已执行 ${body.applied ?? 0} 条归并${body.skipped?.length ? `，跳过 ${body.skipped.length} 条` : ''}`)
     await load()
   } catch (e) {
-    error.value = errMsg(e)
-    // 明细态失败必须有感知（P1#12）：error 渲染点可能在滚动视野外，toast 兜底
+    /* 写动作失败只保留带动作名的 toast；页面顶部 error 条留给取数失败，避免同一失败两套文案 */
     toast.error(`执行归并失败：${errMsg(e)}`)
   } finally {
     busy.value = false
@@ -1038,7 +1037,6 @@ async function applyOne(
     toast.success(`已执行 ${body.applied ?? 0} 条归并${body.skipped?.length ? `，跳过 ${body.skipped.length} 条` : ''}`)
     await load()
   } catch (e) {
-    error.value = errMsg(e)
     toast.error(`执行归并失败：${errMsg(e)}`)
   } finally {
     busy.value = false
@@ -1065,7 +1063,6 @@ async function rejectOne(
     toast.success('已驳回，这条建议之后不再重复给出')
     await load()
   } catch (e) {
-    error.value = errMsg(e)
     toast.error(`驳回失败：${errMsg(e)}`)
   } finally {
     busy.value = false
@@ -1165,7 +1162,6 @@ async function recompute() {
     await load()
     toast.success('已完成一次记忆复盘')
   } catch (e) {
-    error.value = errMsg(e)
     toast.error(`重新观察失败：${errMsg(e)}`)
   } finally {
     busy.value = false

@@ -8,7 +8,7 @@
     </MkPageHead>
 
     <MkEmptyState
-      v-if="failed"
+      v-if="failed && !displayReport"
       tone="error"
       title="健康报告加载失败"
       :description="errorText"
@@ -36,6 +36,11 @@
     </div>
 
     <template v-else-if="displayReport">
+      <!-- 轮询/刷新失败但有上一份报告：保留报告并显式标旧，不把整页替换成错误态 -->
+      <div v-if="failed" class="mk-alert mk-alert--row" role="alert">
+        <span class="mk-alert__msg">健康报告刷新失败，以下为上次结果</span>
+        <button type="button" class="mk-alert__btn" :disabled="loading" @click="refresh(true)">{{ loading ? '重试中…' : '重试' }}</button>
+      </div>
       <!-- 「本页看什么？」引导卡 2026-09-29 撤除（用户：「这个说明文不需要占位了吧」）：
            它原本的职责是解释「三个 tab 各是什么」，合一成页后三段标题自解释；
            术语本身（ACTIVE / W1-W4 / 哈希漂移 / 遥测漂移…）在顶栏「运营术语表」的「健康」类下

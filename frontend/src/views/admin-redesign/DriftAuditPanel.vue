@@ -48,7 +48,8 @@
         <span class="mk-card__title">最近变更</span>
         <span v-if="changes.length" class="mk-card__meta">{{ changes.length }} 条</span>
       </summary>
-      <ul v-if="changes.length" class="fdp__changes-list">
+      <MkLoading v-if="changesLoading && !changes.length" inline text="读取变更记录…" />
+      <ul v-else-if="changes.length" class="fdp__changes-list">
         <li v-for="(c, i) in changes" :key="i" class="fdp__change">
           <span class="mk-badge mk-badge--muted fdp__change-kind">{{ changeTypeText(c.changeType) }}</span>
           <span class="fdp__change-target">{{ targetTableText(c.targetTable) }}</span>
@@ -99,6 +100,7 @@ const drift = ref<{ items: Array<Record<string, unknown>>; totalDriftCount: numb
 const driftLoading = ref(false);
 const driftFailed = ref(false);
 const changes = ref<Array<Record<string, unknown>>>([]);
+const changesLoading = ref(false);
 const changesFailed = ref(false);
 /** 变更记录窗口：请求参数与空态说明共用（2026-11-11 困惑测试 #66） */
 const CHANGE_LIMIT = 10;
@@ -188,6 +190,7 @@ async function loadDrift() {
 }
 
 async function loadChanges() {
+  changesLoading.value = true;
   changesFailed.value = false;
   try {
     const c = await adminFieldRoutingsApi.getChanges({ stage: props.stage, limit: CHANGE_LIMIT });
@@ -195,6 +198,8 @@ async function loadChanges() {
   } catch {
     changesFailed.value = true;
     changes.value = [];
+  } finally {
+    changesLoading.value = false;
   }
 }
 

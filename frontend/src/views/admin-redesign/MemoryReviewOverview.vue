@@ -602,12 +602,14 @@ interface OverviewCard {
 /** 页级绝对值单一来源；失败/未落定一律 '—'（R2 + B5-F3-2），不静默归零 */
 const overviewCards = computed<OverviewCard[]>(() => {
   const t = totals.value;
-  const failed = !!error.value
+  /* 刷新失败但有旧行：KPI 与列表同口径保留旧值，标注「上次结果」；只有首载失败才置 — */
+  const failed = !!error.value && !rows.value.length
+  const stale = !!error.value && !!rows.value.length
   const pending = kpiPending.value
   const na = failed || pending
   const val = (v: number) => (na ? '—' : fmtCount(v))
-  const numTone = (tone: OverviewCard['tone']): OverviewCard['tone'] => (failed ? 'bad' : pending ? 'muted' : tone)
-  const numHint = (text: string) => (failed ? '取数失败' : pending ? '取数中…' : text)
+  const numTone = (tone: OverviewCard['tone']): OverviewCard['tone'] => (failed ? 'bad' : pending || stale ? 'muted' : tone)
+  const numHint = (text: string) => (failed ? '取数失败' : pending ? '取数中…' : stale ? '上次结果' : text)
   /* 待审队列已并入此卡（2026-10-22 用户「合并了」）：需人工确认的不是只有 ambiguous，
      同义概念待确认 + 模糊候选 + 未归类记忆清理建议才是完整的「人审待办」。口径取
      fragmentation.pendingReview；后端旧版没这个字段时退回 ambiguous，不静默归零。 */
@@ -644,13 +646,14 @@ const overviewCards = computed<OverviewCard[]>(() => {
    2026-10-22 起只留两卡：「待审队列」并入「需人工确认」，不再同维度说两遍。 */
 const fragmentationCards = computed<OverviewCard[]>(() => {
   const frag = totals.value.fragmentation
-  const failed = !!error.value
+  const failed = !!error.value && !rows.value.length
+  const stale = !!error.value && !!rows.value.length
   const pending = kpiPending.value
   const na = failed || pending
-  const numTone = (tone: OverviewCard['tone']): OverviewCard['tone'] => (failed ? 'bad' : pending ? 'muted' : tone)
+  const numTone = (tone: OverviewCard['tone']): OverviewCard['tone'] => (failed ? 'bad' : pending || stale ? 'muted' : tone)
   /* 副行只留取数状态（2026-10-21）：口径与包含关系全部进 title */
   const stateHint = (missing: boolean) =>
-    failed ? '取数失败' : pending ? '取数中…' : missing ? '指标未取到' : ''
+    failed ? '取数失败' : pending ? '取数中…' : stale ? '上次结果' : missing ? '指标未取到' : ''
   const ratio = frag?.duplicateLabelRatio
   return [
     {
