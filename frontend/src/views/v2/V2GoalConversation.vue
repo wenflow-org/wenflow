@@ -1567,33 +1567,21 @@ async function doReset() {
 
 const SCENE_BATCH_SIZE = 3;
 /**
- * 场景池：默认展示前 3 个，覆盖应试 / 职业转型 / 学业 / 兴趣 / 资料驱动五类起点。
+ * 场景池：默认展示前 3 个，覆盖兴趣 / AI / 统计 / 语言 / 化学 / 编程 / 学术写作七类起点。
  * seed 自带「现状 + 约束 + 想要的结果」，让目标澄清从具体场景开始，而不是先被反问四五轮。
  *
- * 2026-11-07 用户要求：不与物理世界发生交互的场景。原先的「面试开口卡壳 / 英语开会开不了口 /
- * 在职考电工中级证」三张要在现实里张嘴、动手、现场练——本产品给的是讲解、反馈与路径，
- * 教不了也验不了这类练习，摆出来等于承诺做不到的事。
- * 后续又按同一条口径换掉两张「纸面做题」：「考研数学卡在 90 分」「初二几何证明没思路」——
- * 卷面推导虽不碰实物，但练习场也不在屏幕内（本产品的反馈只落在文字/代码/表格这类可提交的产出物上）。
- * 现在十张全部是「读 / 写 / 代码 / 数据 / 文档」型：产出物能交出来、平台能对照判。
- * 五类起点：应试（行测 / 软考）、职业转型（会计转数据 / 后端进阶）、学业（数据结构 / 初二 Python）、
- * 兴趣（心理学）、资料与写作（公文 / 资料学成课）。 */
+ * 来源（2026-11-11 用户反馈「不要在旧 case 上改词，去找别的」）：这批除心理学外，
+ * 全部取自真实 goal 会话里的原始诉求，不是从旧场景池改写；心理学保留，是因为已有
+ * 10h/5 阶段的真机路径。
+ *
+ * 产品边界：不与物理世界发生交互。案例必须是「读 / 写 / 代码 / 数据 / 文档」型，
+ * 产出物能交出来、平台能对照判；不摆需要线下张嘴、动手、现场练的目标。
+ * 选例标准：优先能稳定长出 3-5 个阶段、约 5 小时以上的内容体量；一两次坐学就能做完的
+ * 单点操作不放默认位。更重要的是**必须是“要练出来的能力”，不是“发给通用 AI 几句话
+ * 就能解决的问题”**：用户自己要反复做、换一个对象仍要独立做、需要多轮反馈与迁移；
+ * 一次性咨询/代写/代查，即使答案可判，也不作为 goal case。
+ */
 const scenePool = [
-  {
-    title: '行测资料分析总超时',
-    desc: '20 题做不完，想稳到 90% 正确率',
-    seed: '我行测资料分析 20 题总是做不完，想练到 90% 正确率以上',
-    bg: 'color-mix(in srgb, var(--accent) 13%, transparent)', ink: 'var(--purple-ink)',
-    /* 图标随场景换（原气泡图标是给「面试开口」画的）：资料分析＝表格与图表 */
-    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M5 9.2h3V19H5V9.2zM10.6 5h2.8v14h-2.8V5zm5.6 8H19v6h-2.8v-6z"/></svg>'
-  },
-  {
-    title: '会计转数据分析',
-    desc: '3 个月补齐 SQL 与 Python，做出作品',
-    seed: '我做会计 5 年，想 3 个月内转到数据分析岗，SQL 和 Python 都是零基础',
-    bg: 'color-mix(in srgb, var(--cyan) 14%, transparent)', ink: 'var(--wf-color-secondary-dark)',
-    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2C7.6 2 4 3.8 4 6v12c0 2.2 3.6 4 8 4s8-1.8 8-4V6c0-2.2-3.6-4-8-4zm0 2c3.9 0 6 1.5 6 2s-2.1 2-6 2-6-1.5-6-2 2.1-2 6-2zm6 14c0 .5-2.1 2-6 2s-6-1.5-6-2v-3.2C7.7 17.5 9.8 18 12 18s4.3-.5 6-1.2V18zm0-5.5c0 .5-2.1 2-6 2s-6-1.5-6-2V9.3C7.7 10.5 9.8 11 12 11s4.3-.5 6-1.2V12.5z"/></svg>'
-  },
   {
     title: '系统了解心理学',
     desc: '不考试，读懂主要流派和经典实验',
@@ -1602,57 +1590,46 @@ const scenePool = [
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2a7 7 0 0 0-4 12.74V17h8v-2.26A7 7 0 0 0 12 2zM8 19h8v2H8v-2z"/></svg>'
   },
   {
-    title: '数据结构期末要补过',
-    desc: '挂过一次，想把树和图真的写出来',
-    seed: '我数据结构期末挂过一次，树和图总是似懂非懂，想真的搞懂并能自己写出代码',
+    title: '看懂 AI Agent 怎么运转',
+    desc: '不写代码，也能讲清它怎么想、怎么做',
+    seed: '我想从 0 搞懂 AI Agent 是怎么运转的，不写代码，但能讲清它怎么规划、调用工具、记住上下文',
     bg: 'color-mix(in srgb, var(--blue) 12%, transparent)', ink: 'var(--blue-deep)',
-    /* 图标：数据结构＝底层结构（芯片），原文档图标是给「纸面做题」考的卷面画的 */
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M15 9H9v6h6V9zm-2 4h-2v-2h2v2zm8-2V9h-2V7c0-1.1-.9-2-2-2h-2V3h-2v2h-2V3H9v2H7c-1.1 0-2 .9-2 2v2H3v2h2v2H3v2h2v2c0 1.1.9 2 2 2h2v2h2v-2h2v2h2v-2h2c1.1 0 2-.9 2-2v-2h2v-2h-2v-2h2zm-4 6H7V7h10v10z"/></svg>'
   },
   {
-    title: '软考中级要一次过',
-    desc: '每晚 1 小时，理论题不靠死记',
-    seed: '我报了软考中级，每晚只有 1 小时，理论题总是记不住',
+    title: '把因果推断讲给业务方',
+    desc: '被追问时，能说清控制变量和结论边界',
+    seed: '我做数据分析，想学会用统计方法把因果推断讲给业务方听，一被追问就慌，想系统补这块',
+    bg: 'color-mix(in srgb, var(--accent) 13%, transparent)', ink: 'var(--purple-ink)',
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 17l6-6 4 4 7-7v4h2V4h-8v2h3l-5 5-4-4-6 6z"/></svg>'
+  },
+  {
+    title: '日语动词变形练到 N4',
+    desc: 'て形、た形、ない形，换词也能变对',
+    seed: '我日语自学到 N5，动词变形老是记混，て形、た形、ない形一到用就出错，想系统练到 N4',
+    bg: 'color-mix(in srgb, var(--cyan) 14%, transparent)', ink: 'var(--wf-color-secondary-dark)',
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M18 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zm0 18H6V4h2v8l2.5-1.5L13 12V4h5v16z"/></svg>'
+  },
+  {
+    title: '有机推断：醇醛羧酸转化',
+    desc: '换一道题，也能自己推转化关系',
+    seed: '我想把醇、醛、羧酸之间的转化关系真正理清楚，能自己做有机推断题',
     bg: 'rgba(49,177,111,.12)' /* 场景卡专用绿基色：等价 var(--wf-color-success-bg) 家族 */, ink: 'var(--green-ink)',
-    /* 图标：考证＝认证徽章（与「资料学成课」的文档图标区分开） */
-    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M23 12l-2.44-2.79.34-3.69-3.61-.82-1.89-3.2L12 2.96 8.6 1.5 6.71 4.69 3.1 5.5l.34 3.7L1 12l2.44 2.79-.34 3.7 3.61.82L8.6 22.5l3.4-1.47 3.4 1.46 1.89-3.19 3.61-.82-.34-3.69L23 12zm-12.91 4.72l-3.8-3.81 1.48-1.48 2.32 2.33 5.85-5.87 1.48 1.48-7.33 7.35z"/></svg>'
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M9 3h6v2h-1v4.6l4.8 8.3A2 2 0 0 1 17 21H7a2 2 0 0 1-1.8-3.1L10 9.6V5H9V3zm3 8.4-3.9 6.8c-.2.4.1.8.5.8h6.8c.4 0 .7-.4.5-.8L12 11.4z"/></svg>'
   },
   {
-    title: '初二想学 Python 小工具',
-    desc: '学校学过一点，想自己写出完整脚本',
-    seed: '我上初二，想学 Python 自己做点小工具，学校学过一点但没写出过完整的东西',
+    title: '脱离教程写 Python',
+    desc: '离开教程，也能自己写出小工具',
+    seed: '我学 Python 总是照着教程抄，一关教程连算平均分或猜数字都写不出来，想真正学会独立写程序',
     bg: 'rgba(240,101,149,.12)', ink: '#d1456f',
-    /* 图标：写小工具＝扳手，原九宫格图标是给「几何证明」的图感画的 */
-    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/></svg>'
-  },
-  {
-    title: '后端进阶分布式',
-    desc: '做了 3 年 CRUD，想真正搞懂一致性',
-    seed: '我做了 3 年 CRUD，想系统搞懂分布式一致性，遇到线上问题能自己定位',
-    bg: 'color-mix(in srgb, var(--blue) 12%, transparent)', ink: 'var(--blue-deep)',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M14.6 16.6 19.2 12l-4.6-4.6 1.4-1.4L22 12l-5.9 5.9-1.5-1.3zm-5.2 0L7.8 18l-5.8-6 5.8-6 1.6 1.4L4.8 12l4.6 4.6z"/></svg>'
   },
   {
-    title: '英文文档读得太慢',
-    desc: '能猜懂大意，但要读得准而快',
-    seed: '工作要读英文技术文档，能猜懂大意但读得慢，想读到能直接抓要点',
-    bg: 'rgba(49,177,111,.12)' /* 场景卡专用绿基色：等价 var(--wf-color-success-bg) 家族 */, ink: 'var(--green-ink)',
-    /* 图标随场景换（原气泡图标是给「英语开会开口」画的）：读文档＝成排的文字行 */
-    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M4 4h16v2H4V4zm0 5h16v2H4V9zm0 5h11v2H4v-2zm0 5h11v2H4v-2z"/></svg>'
-  },
-  {
-    title: '公文写作总被退回',
-    desc: '通知、总结、请示，按机关格式写',
-    seed: '我刚转岗做行政，写通知和总结总被退回，想掌握机关公文的格式和写法',
+    title: '写出自己的学术综述',
+    desc: '英文文献能读，落笔能成文',
+    seed: '我想补学术英语，把自己那篇综述写出来，明年评职称要用；英文文献能读，但一落笔就不行',
     bg: 'color-mix(in srgb, var(--amber) 14%, transparent)', ink: 'var(--amber-ink)',
-    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M21 4H3a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1zM7 6h12v2H7V6zm0 5h12v2H7v-2zm0 5h8v2H7v-2z"/></svg>'
-  },
-  {
-    title: '把手里的资料学成课',
-    desc: '上传资料，按章节拆成能上的课',
-    seed: '公司发了一本 200 页的合规手册，只有两周，想抓住重点，资料可以上传',
-    bg: 'color-mix(in srgb, var(--accent) 13%, transparent)', ink: 'var(--purple-ink)',
-    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>'
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>'
   }
 ];
 
