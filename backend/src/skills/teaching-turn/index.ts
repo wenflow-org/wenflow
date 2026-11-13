@@ -3561,6 +3561,9 @@ export const teachingTurnPromptSpec: PromptCallSpec<TeachingTurnInput, TeachingT
   },
     retryStrategy: {
     maxAttempts: 2,
+    // 传输层有界重试（修复批 5a）：watchdog 中途掐断原是一击毙命（u04 整课终局）。
+    // 1 次传输重试 + 退避 ≈ 最坏再加 ~100s，仍在教学回合 300s 墙钟预算内。
+    transportMaxRetries: 1,
     onValidationFail: ({ failureReason }) => `上一次输出未通过校验，原因是：${failureReason}。请重新输出一个严格 JSON，特别注意：`
       // reply 是**用户可见文本**：实测（2026-09-22）模型有时只给了 knowledge/pedagogy 而漏掉 reply，
       // 导致整轮以 TEACHING_TURN_REPLY_MISSING 失败（用户看到"这节课没回应"）。这里点名要求。

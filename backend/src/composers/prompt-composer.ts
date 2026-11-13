@@ -375,8 +375,12 @@ export async function callPrompt<TInput, TOutput>(
     1,
     Math.min(generationResolution.maxAttempts ?? codeMaxAttempts, 5, logicalRetryLimit + 1)
   );
+  // 传输层有界重试预算（修复批 5a）：在 maxAttempts（逻辑/校验重试）之外，允许对
+  // 网关标记 retryable 的传输类错误整请求重试 N 次。缺省 0 = 行为与历史完全一致。
+  const transportMaxRetries = Math.max(0, Math.min(Number(spec.retryStrategy?.transportMaxRetries) || 0, 2));
+  const totalAttempts = maxAttempts + transportMaxRetries;
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+  for (let attempt = 1; attempt <= totalAttempts; attempt++) {
     if (attempt > 1) {
       if (localLogicalRetries >= logicalRetryLimit) {
         retryBudget.exhaustedBy = 'logical-retries';
@@ -499,6 +503,26 @@ export async function callPrompt<TInput, TOutput>(
           ? Number((error as any).attemptCount)
           : undefined
       });
+      // 传输层有界重试（修复批 5a）：网关对流式请求「流已开始即不重试」，watchdog 中途掐断
+      // 原是一击毙命（u04 实证：teaching-turn 97s ATTEMPT_TIMEOUT → 整课终局）。此处按
+      // spec.retryStrategy.transportMaxRetries 重新发起一次完整请求——LLM 调用无副作用，
+      // 天然幂等；只认网关标记 retryable 且非 caller_abort 的错误（请求方已放弃则重试无人收货）。
+      // 计数含本次：transportMaxRetries=1 → 至多两次 transport_failed，第二次直接走终局路径。
+      const transportRetryable = (error as any)?.retryable === true
+        && String((error as any)?.category || '') !== 'caller_abort';
+      const transportFailuresUsed = attempts.filter((entry) => entry.status === 'transport_failed').length;
+      if (transportRetryable && transportFailuresUsed <= transportMaxRetries && attempt < totalAttempts) {
+        logger.warn('[callPrompt] 传输层可重试失败，按 transportMaxRetries 预算重试', {
+          agentId: spec.agentId,
+          attempt,
+          transportFailuresUsed,
+          transportMaxRetries,
+          errorCode,
+          failureReason: failureReason.slice(0, 200),
+        });
+        await new Promise((resolve) => setTimeout(resolve, 1500 * transportFailuresUsed));
+        continue;
+      }
       await telemetryWriter.createPromptCall({
         id: promptCallId,
         agentId: spec.agentId,
@@ -557,7 +581,10 @@ export async function callPrompt<TInput, TOutput>(
       });
       // 长度截断（reasoning 白烧会占满 max_tokens）时**不再**翻倍 maxTokens 整包重跑：
       // 保持原上限重试一次即可——翻倍只会让重试时思考烧更多 token、首字更慢（2026-09 审计定案）
-      continue;
+      // 修复批 5a：逻辑/校验重试只许花 maxAttempts 预算——transportMaxRetries 引入后
+      // totalAttempts 可能 > maxAttempts，裸 continue 会把校验重试漏进传输预算轮次。
+      if (attempt < maxAttempts) continue;
+      break;
     }
 
     const validation = spec.validateParsedOutput
@@ -565,7 +592,7 @@ export async function callPrompt<TInput, TOutput>(
       : { valid: true as const };
     if (!validation.valid) {
       lastFailureReason = validation.failureReason || 'parsed output validation failed';
-      lastViolations = Array.isArray(validation.violations)
+      lastViolations = Array.isArray(validation.violations) && validation.violations.length
         ? [...validation.violations]
         : [lastFailureReason];
       attempts.push({
@@ -575,7 +602,9 @@ export async function callPrompt<TInput, TOutput>(
         llmRequestId: lastLlmRequestId || undefined,
         transportAttemptCount: gatewayMetadata?.attemptCount
       });
-      continue;
+      // 同上（修复批 5a）：校验重试不越 maxAttempts 预算
+      if (attempt < maxAttempts) continue;
+      break;
     }
 
     // P3 试点：core fields 声明契约校验（skill 领域校验通过后追加；
@@ -601,7 +630,9 @@ export async function callPrompt<TInput, TOutput>(
         llmRequestId: lastLlmRequestId || undefined,
         transportAttemptCount: gatewayMetadata?.attemptCount
       });
-      continue;
+      // 同上（修复批 5a）：校验重试不越 maxAttempts 预算
+      if (attempt < maxAttempts) continue;
+      break;
     }
 
     // 软校验（质量要求）：不通过时带反馈重试；最后一次仍不通过则按当前输出继续。

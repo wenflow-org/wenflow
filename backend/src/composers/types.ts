@@ -113,6 +113,15 @@ export interface PromptCallResult<TOutput> {
 
 export interface PromptRetryStrategy<TInput> {
   maxAttempts: number;
+  /**
+   * 传输层有界重试（2026-11-13 修复批 5a，u04 critical 根因）：
+   * 网关对流式请求「流已开始即不重试」（executor willRetry 的 !streamStarted 条款），
+   * watchdog 中途掐断 = 一击毙命——实证 teaching-turn 97s ATTEMPT_TIMEOUT 直接把
+   * 黑盒实验打成整课终局。本预算在 **prompt 层**补重试：重新发起一次完整请求
+   * （LLM 调用无副作用，天然幂等），只对网关标记 retryable 的传输类错误生效
+   * （caller_abort 除外——请求方已放弃，重试无人收货）。缺省 0 = 行为不变。
+   */
+  transportMaxRetries?: number;
   onValidationFail?: (params: {
     input: TInput;
     attempt: number;

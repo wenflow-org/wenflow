@@ -695,3 +695,102 @@ describe('callPrompt runtime overrides', () => {
     })
   })
 })
+
+describe('callPrompt 传输层有界重试（修复批 5a）', () => {
+  /** 仿 GatewayExecutionError：网关标记可重试的传输类失败（u04 形态：流中 watchdog 掐断） */
+  function transportTimeoutError(): Error {
+    return Object.assign(new Error('API request timed out after 97675ms (stream watchdog: idle 60000ms / total 300000ms)'), {
+      retryable: true,
+      category: 'provider_timeout',
+      code: 'ATTEMPT_TIMEOUT',
+    })
+  }
+
+  function baseSpec(transportMaxRetries?: number) {
+    return {
+      agentId: 'skill:test-transport',
+      defaultSystemPrompt: 'default prompt',
+      requireActivePrompt: true,
+      caller: { skillId: 'test-transport' },
+      buildUserPayload: () => ({ input: true }),
+      normalizeOutput: (parsed: any) => parsed,
+      ...(transportMaxRetries === undefined ? {} : { retryStrategy: { maxAttempts: 1, transportMaxRetries } }),
+    }
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockGatewayResolveRoute.mockRejectedValue(new Error('no route in test'))
+    mockPromptCallCreate.mockResolvedValue({})
+    // requireActivePrompt 需要活动 prompt（缺省冻结路径靠 promptRuntimeOverride，这里不用）
+    mockGetActivePrompt.mockResolvedValue({ systemPrompt: 'active prompt', version: 1 })
+  })
+
+  it('传输失败后按 transportMaxRetries 预算重试一次 → 第二次成功', async () => {
+    mockGatewayExecute
+      .mockRejectedValueOnce(transportTimeoutError())
+      .mockResolvedValue({
+        id: 'c-2', model: 'm',
+        choices: [{ index: 0, message: { role: 'assistant', content: '{"value":"ok"}' }, finish_reason: 'stop' }]
+      })
+
+    const result = await runWithContext({}, () => callPrompt(baseSpec(1), {}))
+
+    expect(result.success).toBe(true)
+    expect(mockGatewayExecute).toHaveBeenCalledTimes(2)
+    // 遥测记录两次尝试（第一次 transport_failed + 第二次 success）
+    expect(mockPromptCallCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ promptAttemptCount: 2, failureStage: null })
+    }))
+  })
+
+  it('缺省 transportMaxRetries=0 → 传输失败立即上抛，行为与历史一致', async () => {
+    mockGatewayExecute.mockRejectedValue(transportTimeoutError())
+
+    await expect(runWithContext({}, () => callPrompt(baseSpec(), {}))).rejects.toThrow('timed out')
+    expect(mockGatewayExecute).toHaveBeenCalledTimes(1)
+  })
+
+  it('caller_abort 不重试：请求方已放弃，重试无人收货', async () => {
+    mockGatewayExecute.mockRejectedValue(Object.assign(new Error('API request canceled'), {
+      retryable: true, category: 'caller_abort', code: 'CALLER_ABORTED',
+    }))
+
+    await expect(runWithContext({}, () => callPrompt(baseSpec(1), {}))).rejects.toThrow('canceled')
+    expect(mockGatewayExecute).toHaveBeenCalledTimes(1)
+  })
+
+  it('预算到顶：transportMaxRetries=1 两次传输失败 → 第 2 次后终局', async () => {
+    mockGatewayExecute.mockRejectedValue(transportTimeoutError())
+
+    await expect(runWithContext({}, () => callPrompt(baseSpec(1), {}))).rejects.toThrow('timed out')
+    expect(mockGatewayExecute).toHaveBeenCalledTimes(2)
+    expect(mockPromptCallCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ success: false, failureStage: 'transport' })
+    }))
+  })
+
+  it('校验重试不越 maxAttempts 预算：transportMaxRetries 引入后校验失败仍只花逻辑预算', async () => {
+    // 第一次传输失败（重试）→ 第二次返回缺 reply 的非法输出 → 校验失败在 maxAttempts=1 已到顶，不再重试
+    mockGatewayExecute
+      .mockRejectedValueOnce(transportTimeoutError())
+      .mockResolvedValue({
+        id: 'c-3', model: 'm',
+        choices: [{ index: 0, message: { role: 'assistant', content: '{"knowledge":{}}' }, finish_reason: 'stop' }]
+      })
+
+    const spec = {
+      ...baseSpec(1),
+      validateParsedOutput: (parsed: any) => (
+        parsed && typeof parsed === 'object' && parsed.reply
+          ? { valid: true as const }
+          : { valid: false as const, failureReason: 'REPLY_MISSING' }
+      ),
+    }
+    const result = await runWithContext({}, () => callPrompt(spec, {}))
+    expect(result.success).toBe(false)
+    // 只有 2 次 LLM 调用：1 传输失败 + 1 校验失败；校验失败不消耗传输预算轮次（无第 3 次调用）
+    expect(mockGatewayExecute).toHaveBeenCalledTimes(2)
+    expect(result.error?.message).toBe('REPLY_MISSING')
+  })
+})

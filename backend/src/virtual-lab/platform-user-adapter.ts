@@ -19,7 +19,21 @@ export interface PlatformHttpTransport {
   }): Promise<{ data: T; headers?: Record<string, unknown> }>
 }
 
+/**
+ * 平台 5xx 错误里**唯一不被掩码的瞬态信号是 error.code**——路由侧
+ * resolveTeachingError 对 status>=500 会把 message 换成泛化兜底文案（如「处理消息失败」），
+ * 内部原因（teaching-turn 供应商超时）只留在 code 里。2026-11-13 u04 实证：ATTEMPT_TIMEOUT
+ * 一路降级成裸「处理消息失败」，isTransientLlMFailure 认不出，整场实验被误终局化。
+ * 这里按 code/状态把 retryable 标志挂回错误对象，黑盒分类器据此走可恢复路径。
+ */
+const TRANSIENT_TRANSPORT_CODES = new Set([
+  'ATTEMPT_TIMEOUT', 'NETWORK_TIMEOUT', 'RETRY_BUDGET_EXHAUSTED', 'RATE_LIMITED',
+  'UPSTREAM_EMPTY', 'PARSE_FAILED', 'TRUNCATED_EMPTY_OUTPUT', 'PROVIDER_ERROR',
+])
+
 export class PlatformAdapterError extends Error {
+  /** 平台侧瞬态失败（5xx 或已知瞬态 code）：同幂等键重试安全（平台副作用未发生） */
+  readonly retryable: boolean
   constructor(
     message: string,
     readonly status?: number,
@@ -27,6 +41,10 @@ export class PlatformAdapterError extends Error {
   ) {
     super(message)
     this.name = 'PlatformAdapterError'
+    const code = typeof (payload as { error?: { code?: unknown } })?.error?.code === 'string'
+      ? (payload as { error?: { code?: string } }).error!.code!
+      : ''
+    this.retryable = Number(status) >= 500 || TRANSIENT_TRANSPORT_CODES.has(code)
   }
 }
 

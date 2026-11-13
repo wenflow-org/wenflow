@@ -392,3 +392,89 @@ u04 中途爆死未复现（批 A 的爆死是供应商故障）。修复批 4 �
 4. **收束自检口径**（4/5 minor~major）：收束两件套（判断口径+下一步）已有，补第三件
    「怎样算做对了」的自检口径——rule 234 同条内收紧。
 5. **路径等待交互**（referee 单例化但仍是每个 case 的等待体验）：进度反馈/ETA。
+
+## 十三、修复批 5（2026-11-13 当轮：供应商超时健壮性 + rule 243 对话问触达）
+
+承接 §12.6 队列第 1、3 项。5a 代码面（三层），5b 提示词面（条数守恒）。
+
+### 13.1 供应商超时健壮性（5a，批 A u04 critical 的直接根因）
+
+**三层叠加的死亡链**（日志逐层取证）：
+
+1. **网关层**：`willRetry = retryable && attempt < maxAttempts && !streamStarted` —— 流式请求
+   一旦流开始，传输层不再重试；watchdog 中途掐断（u04：teaching-turn 97s，idle 60s）= 一击毙命。
+2. **callPrompt 层**：gateway 抛错时 catch 直接 `throw`——传输失败不在 prompt 层重试
+   （只有校验失败走 `continue`）。
+3. **路由掩码**：`resolveTeachingError` 对 status>=500 把 message 换成泛化兜底「处理消息失败」
+   ——瞬态信号（timed out）丢失，**只有 error.code（ATTEMPT_TIMEOUT）幸存**；适配器抛出的
+   PlatformAdapterError 既无 retryable 字段、message 也无瞬态词 → `isRecoverableExecutionFailure`
+   误判不可恢复 → `persistUnexpectedFailure` → 整场实验 terminalReason=failed。
+
+**三层修复**：
+
+| 层 | 改动 | 语义 |
+| --- | --- | --- |
+| prompt-composer | `retryStrategy.transportMaxRetries`（缺省 0 = 行为不变；上限 2） | 对网关标记 retryable 且非 caller_abort 的传输错误，在逻辑预算（maxAttempts）之外整请求重试 N 次（退避 1.5s×次数）；同时给两处校验 `continue` 加 `attempt < maxAttempts` 闸——校验重试不越逻辑预算（否则会漏进传输轮次） |
+| platform-user-adapter | `PlatformAdapterError.retryable` | 按 `payload.error.code ∈ TRANSIENT_TRANSPORT_CODES` 或 status>=500 判定——message 被掩码后 code 是唯一幸存信号 |
+| autopilot.service | blackboxAdvance 瞬态判定补 `asErrorLike(error).retryable === true` | 适配器错误带标志后，step 级重试 + 控制面对账（批 3 机制）接管，实验保持 running |
+
+**开启范围**：teaching-turn 与 virtual-learner-learn-turn-simulator 各 `transportMaxRetries: 1`
+（1 次重试 + 退避最坏再加 ~100s，仍在教学回合 300s 墙钟预算内）。其余 skill 缺省 0，行为不变。
+
+**测试**：prompt-composer 5 例（重试后成功/缺省不重试/caller_abort 不重试/预算到顶终局/
+校验重试不越逻辑预算）+ PlatformAdapterError 4 例（ATTEMPT_TIMEOUT/404/缺 code 的 5xx/
+RETRY_BUDGET_EXHAUSTED）。
+
+### 13.2 rule 243 对话问设计触达（5b，ASSESSMENT_REPEAT_RECALL 剩余唯一杠杆）
+
+**病历单**：批 B `ASSESSMENT_REPEAT_RECALL` 2/5（minor×2）——「从 index 23 到 26，教师让学习者
+反复重说『这段跟我的实际情况对不上』这句措辞，一轮改口、一轮确认、一轮再确认」。编排层已无
+确定性信号可用（对话问没有答案键，复述分类器算不了——§12.3 归因），提示词面是剩余杠杆。
+
+**条数守恒改动**（rule 243 单条原位收紧，规则条数 126=126）：
+
+- 适用面从「检查点」扩到「**检查点与 check 轮对话提问**」——正文里的口语问句同样受迁移
+  默认形态约束（批 B 病灶全是对话问，不认自己是检查点）；
+- 点名反模式：**「让学生反复重说同一句结论（原话→改口→再确认）也是复述，不是迁移**——
+  同一句判断口径确认过一次就不要再让学生换措辞重说第二遍」；下一问要么给未贴标签新情形
+  （另一条款/另一段/另一组数据）让学生自己动手用口径判，要么推进到下一步。
+
+**门禁**：compile-all（33 文件）→ prompts:sync（skill:teaching-turn synced-from-code）→
+`prompts:check:all` 13 项子门禁全绿 → core:check hash 对齐 → lint 33/33。
+
+### 13.3 批 C 双评重评（5a+5b 上机）：`reeval4-2026-11-13`
+
+**语料结构变化（先读这个）**：u04 本轮 autopilot 跑得更远，单例贡献 7 课（全批 19 课 vs 批 B 14 课）
+——跨批对照时，u04 的课程级特点会放大成跨样本聚类，量级对比要打折。
+
+**referee 面**：actionable **0 类**（连续第二批）；u19 pass、u07/u17 pass_with_concerns。
+4b 换例守门批内再中 2 次（两批累计 4 次）；5a 传输重试 0 命中（本轮供应商健康，安全网待命）。
+
+**课堂层对照**（19 课，4 残课 inconclusive；逐课 verdict：3 pass + 12 pass_with_concerns）：
+
+| 聚类 | 批 B | 批 C | 判定 |
+| --- | --- | --- | --- |
+| `ASSESSMENT_REPEAT_RECALL` | 2/5（minor×2） | 2/5（minor×1，**major×1**） | **未收敛**——rule 243 对话面收紧没有移动覆盖；且裁判口径出现软化（代表 detail 自己承认「作为降低记忆负荷的脚手架有效」），属边界性教学姿态而非明确缺陷。音量已低（19 课 2 处），继续动提示词收益递减，转观察 |
+| `CLOSURE_MISSING` | 4/5（minor×5，major×1） | 5/5（minor×4，**major×8**） | **新形态主导**：`WRAPUP_MASTERY_OVERCLAIM`（收束把「工时判断混过档」的学习者标成 mastered/100）——收束产出高估掌握，与新三件套无关，是 wrapup 侧新靶子 |
+| `OPENING_ASSUME_EXPERIENCE` | 2（minor×2） | **5/5（minor×11，major×1）** | **爆量**：开场断言「上节课已把 X 逐句标过三档」但本课无据可查——每课开场都在引用不可核验的共同记忆。修复批 4 队列里是单例，现在正式成簇 |
+| `BOARD_MISMATCH` | 3/5（minor×5，major×1） | 3/5（minor×2，**major×6**） | major 上升，代表形态是**板面设计完整性**（rev3 只摊两笔业务教师却说四笔）——不是换例翻车（4b 管住的），是板面行数没跟上教学内容，与批 4 u07 型同源 |
+| `BOARD_DANGLING_TRACE` | 2（minor×2） | 2（**major×3**） | 指认不存在的边/格（载荷存在、指认错位）——指认精度类，维持 ≥2 待修 |
+| `NOTATION_LEAK` | 4/5 | 2（minor×3） | 维持低位 |
+
+### 13.4 修复批 5 结论与下一轮队列（§14）
+
+**5a 判定**：健壮性安全网就位（三层信号链打通 + 有界重试），本轮供应商健康未触发——无反证，
+保留。**5b 判定**：rule 243 收紧后该聚类未移动（2/5→2/5），且裁判自己开始把部分复述确认
+认定为有效脚手架——音量低 + 口径软化，提示词继续加压收益递减；转观察，不再迭代该条。
+
+**新靶子（按批 C 证据排优先级）**：
+
+1. **收束 mastery 高估**（major×8，最大簇）：wrapup 把有混档证据的学习者标 mastered/100
+   ——wrapup 产出与 learningEvaluation 自评不同源，需要一致性约束（代码可复算：收束标
+   mastered 的点在课内是否有 check 失败/纠错记录）。
+2. **开场假定上节课经历**（5/5，minor×11）：开场引用「上节课我们…」但本课证据面无法核验
+   ——开场生成侧要求条件式表述（「如果上周试过…」）或锚定本课材料。
+3. **板面行数没跟上教学**（major×6）：教师在口头展开 N 项，板面 rev 只呈现 M<N 项——
+   板书设计完整性（designBoard 的行覆盖 vs 教师展开度），编排层可复算（spec 行数 vs reply 枚举数）。
+4. 指认精度（不存在的边/格，major×3）：与 3 同属板书链，一并观察。
+5. ASSESSMENT_REPEAT_RECALL：转观察（低音量 + 裁判口径软化）。

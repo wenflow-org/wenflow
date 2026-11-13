@@ -1,4 +1,4 @@
-import { PlatformHttpTransport, PlatformUserAdapter } from '../platform-user-adapter'
+import { PlatformAdapterError, PlatformHttpTransport, PlatformUserAdapter } from '../platform-user-adapter'
 
 describe('PlatformUserAdapter', () => {
   it('使用 projection token 调用普通 Goal API 并只暴露可见 Observation', async () => {
@@ -267,5 +267,34 @@ describe('PlatformUserAdapter', () => {
     // goal 阶段非终态 → 'goal'；path 生成中 → 'path'
     expect(goal.control.platformStage).toBe('goal')
     expect(path.control.platformStage).toBe('path')
+  })
+})
+
+describe('PlatformAdapterError retryable（修复批 5a）', () => {
+  it('平台 5xx 且 message 被掩码时，error.code=ATTEMPT_TIMEOUT 仍判可恢复', () => {
+    // u04 实证链：路由对 status>=500 把 message 换成「处理消息失败」，瞬态信号只剩 code
+    const err = new PlatformAdapterError('处理消息失败', 500, {
+      error: { message: '处理消息失败', code: 'ATTEMPT_TIMEOUT', status: 500 }
+    })
+    expect(err.retryable).toBe(true)
+  })
+
+  it('无瞬态 code 的 4xx → 不可恢复（如 NOT_FOUND）', () => {
+    const err = new PlatformAdapterError('教学会话不存在', 404, {
+      error: { message: '教学会话不存在', code: 'NOT_FOUND', status: 404 }
+    })
+    expect(err.retryable).toBe(false)
+  })
+
+  it('缺 code 但 status>=500 → 按平台内部失败判可恢复', () => {
+    const err = new PlatformAdapterError('平台请求失败', 502, { error: { message: '平台请求失败' } })
+    expect(err.retryable).toBe(true)
+  })
+
+  it('RETRY_BUDGET_EXHAUSTED 等 4xx 之外的瞬态 code 也判可恢复', () => {
+    const err = new PlatformAdapterError('处理消息失败', 500, {
+      error: { message: '处理消息失败', code: 'RETRY_BUDGET_EXHAUSTED', status: 500 }
+    })
+    expect(err.retryable).toBe(true)
   })
 })

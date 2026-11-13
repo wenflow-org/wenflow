@@ -696,6 +696,9 @@ export async function virtualLearnerLearnTurnSimulator(input: any): Promise<Skil
       }),
       retryStrategy: {
         maxAttempts: 2,
+        // 传输层有界重试（修复批 5a）：学习者回合的供应商超时同属「一击毙命」类——
+        // 与 teaching-turn 同预算（1 次），把基础设施抖动降级为可恢复停顿。
+        transportMaxRetries: 1,
         onValidationFail: ({ failureReason }) => `上一次输出失败：${failureReason}。请只返回一个完整、可解析的 JSON 对象；不要 markdown，不要代码块，不要解释；所有字符串必须闭合。`
       },
     }, input || {}, { userId: (input as any)?.routingUserId || undefined });

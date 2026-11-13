@@ -946,7 +946,10 @@ export class AutopilotService {
         break
       } catch (error: unknown) {
         const message = String(asErrorLike(error).message || '')
-        const transient = /timeout|timed out|fetch failed|network|rate.?limit|5\d\d|canceled|missing reply|missing learnerstate|does not contain valid json|simulation failed|动作生成失败/i.test(message)
+        // 修复批 5a：平台 5xx 错误的 message 会被路由掩码成「处理消息失败」等泛化文案，
+        // 瞬态信号只剩 PlatformAdapterError.retryable（按 error.code 判定）——正则之外必须认它。
+        const transient = asErrorLike(error).retryable === true
+          || /timeout|timed out|fetch failed|network|rate.?limit|5\d\d|canceled|missing reply|missing learnerstate|does not contain valid json|simulation failed|动作生成失败/i.test(message)
         if (!transient) throw error
         attempt += 1
         if (/timeout|timed out/i.test(message)) {
