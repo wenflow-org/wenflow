@@ -34,6 +34,29 @@ describe('evaluateSessionClosable', () => {
     expect(decision.code).toBe('FINALIZATION_OPEN_QUESTION')
   })
 
+  it('closureLoopBreakReleased（收尾循环打断，2026-11-13 u07）→ 末问未答也放行，与延迟预算 backstop 同源', () => {
+    const decision = evaluateSessionClosable({
+      messages: [
+        { role: 'user', content: '我做完了' },
+        { role: 'assistant', content: '那这一步为什么要先乘？' },
+      ],
+      teachingState: { closureLoopBreakReleased: true },
+    })
+    expect(decision).toEqual({ closable: true })
+  })
+
+  it('无 closureLoopBreakReleased 时末问仍拦（打断标志不放行无关课）', () => {
+    const decision = evaluateSessionClosable({
+      messages: [
+        { role: 'user', content: '我做完了' },
+        { role: 'assistant', content: '那这一步为什么要先乘？' },
+      ],
+      teachingState: {},
+    })
+    expect(decision.closable).toBe(false)
+    expect(decision.code).toBe('FINALIZATION_OPEN_QUESTION')
+  })
+
   it('allowOpenQuestion（复习课有界收束）→ 末问未答也放行', () => {
     const decision = evaluateSessionClosable({
       messages: [

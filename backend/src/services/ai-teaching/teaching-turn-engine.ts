@@ -88,6 +88,7 @@ import { decideBoardIntent, numbersOnBoard } from './board-intent';
 import { applyBoardOp } from './board-controller';
 import { BOARD_DESIGN_BASE_INSTRUCTION, boardPromptInputForTeacher, decideBoardAttachment, openBoard, type BoardState } from './board-state';
 import { designBoard } from './board-designer.service';
+import { detectOpenRequest } from './teaching-closure';
 import { recordDegradation } from '../../skills/degradation-telemetry';
 import type { ReplanAdvisory } from './ReplanAdvisoryService';
 import {
@@ -840,7 +841,30 @@ export async function processStudentMessage(
         capGraceUsed: previousTeachingState.completionCapGraceUsed === true,
       })
     : { defer: false, reason: null as null, questionKey: null as string | null };
-  const completionReady = wouldComplete && !closureGate.defer;
+  // 收尾循环打断（2026-11-13 u07 实证）：内容讲完后老师连续多轮重发近同构收尾话术、
+  // 学员只会「好/收到/回去练」，完成信号却因软进度地板/模型信号未齐而永不落地——
+  // 10 分钟被同义重复占满，黑盒侧 confirm_complete 一直可点但实验被循环拖到 abandon。
+  // 循环信号 = 老师连续收尾（收尾话术或模型自报完成候选）且学员无新问题；连续 ≥3 轮
+  // 且知识面已冻结、无 pending 检查点时，绕过软条件强制放行完成信号，让完成确认面板
+  // 出现。finalize 门禁按 closureLoopBreakReleased 同步放行（#164 两门禁同源纪律）。
+  const priorClosureRepeatStreak = Number(previousTeachingState.closureRepeatStreak) || 0;
+  const learnerHasNewQuestion = /[?？]/.test(String(message || ''))
+    || detectOpenRequest(String(message || ''));
+  const closureRepeatStreak = (replySignalsClosing || modelRequestedCompletion) && !learnerHasNewQuestion
+    ? priorClosureRepeatStreak + 1
+    : 0;
+  let completionReady = wouldComplete && !closureGate.defer;
+  let forcedCompletionLoopBreak = false;
+  if (!completionReady && !extensionMode && targetsFrozenBefore && noPendingPoints && closureRepeatStreak >= 3) {
+    completionReady = true;
+    forcedCompletionLoopBreak = true;
+    logger.warn('[AITeaching] 收尾循环打断：连续收尾话术且学员无新问题，强制放行完成信号', {
+      sessionId: session.id,
+      taskId: session.taskId,
+      streak: closureRepeatStreak,
+      avgTargetProgress: Number(avgTargetProgress?.toFixed?.(3) ?? avgTargetProgress),
+    });
+  }
   if (closureGate.defer) {
     logger.info('[AITeaching] 收口闭合门禁：完成信号延迟一轮（末问未答，先让学员作答）', {
       sessionId: session.id,
@@ -1513,6 +1537,11 @@ export async function processStudentMessage(
         : 1;
       if (closureGate.capGrace) teachingState.completionCapGraceUsed = true;
     }
+
+    // 收尾循环打断：streak 跨回合继承；强制放行过的课，收束入口（evaluateSessionClosable）
+    // 依 closureLoopBreakReleased 同步放行，避免「引擎放完成、confirm_task 409」的僵局。
+    teachingState.closureRepeatStreak = closureRepeatStreak;
+    if (forcedCompletionLoopBreak) teachingState.closureLoopBreakReleased = true;
 
     // #48 P-22：掌握下降计数跨回合累加（本轮 0 次也保留上一轮计数，不清零）
     if (masteryDegrade.count > 0) {

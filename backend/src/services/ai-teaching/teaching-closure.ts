@@ -271,8 +271,12 @@ export function evaluateSessionClosable(input: {
    * 引擎已经放行的课，收束入口照此放行；留痕由 buildClosureAudit / appendClosureFollowUp
    * 负责（它们故意不看放行参数，未答末问照样写进总结的 actionPlan）。
    */
-  const closureBackstopReleased = Number(state.completionDeferrals) >= COMPLETION_DEFERRAL_ABSOLUTE_CAP
-    && state.completionCapGraceUsed === true;
+  // 收尾循环打断（2026-11-13 u07 实证）与延迟预算放行同源认账：引擎强制放行完成信号时
+  // 会落 closureLoopBreakReleased，这里不再按末句问号拦 409（未答末问由
+  // buildClosureAudit / appendClosureFollowUp 写进总结 actionPlan，与 backstop 同约定）。
+  const closureBackstopReleased = (Number(state.completionDeferrals) >= COMPLETION_DEFERRAL_ABSOLUTE_CAP
+    && state.completionCapGraceUsed === true)
+    || state.closureLoopBreakReleased === true;
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i];
     if (message?.role === 'user') break;
