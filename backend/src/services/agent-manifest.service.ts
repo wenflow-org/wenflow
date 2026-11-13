@@ -593,6 +593,17 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     monitoringGroup: 'Tool',
     noPromptFile: true
+  },
+  {
+    id: 'skill:classroom-quality-judge',
+    name: '课堂质量独立评审 Skill',
+    description: '课堂级独立 LLM 病历单：单节课逐轮记录 + 学习者真实可见的板书/图文载荷 + 收束产出，产出 code/severity/evidenceIds 结构化发现（2026-11-13 mini-batch，referee 看不到课堂内部证据的补位面）',
+    category: 'tool',
+    kind: 'skill',
+    runtimeEnabled: true,
+    userVisible: false,
+    monitoringGroup: 'Tool',
+    noPromptFile: true
   }
 ];
 

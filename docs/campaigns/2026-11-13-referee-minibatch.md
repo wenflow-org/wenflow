@@ -119,10 +119,59 @@ Referee 在 `virtual-lab/blackbox-runner.ts` 有硬门禁：
 - referee：`verdict=pass`，overall 86，controlConsistency **90**（修复前 72/87）；
 - 剩余 minor：5.5 分钟等待仍无进度条、第 2 个里程碑未达、紧迫场景下拒绝代写但没给「最小可用话术」台阶。
 
-## 八、下一轮优先级
+## 八、课堂级独立评审（classroom-quality-judge）
+
+### 为什么 referee 不够
+
+Referee 只看 publicTrace：板书/图文载荷、逐轮脚手架、收束产出这些**课堂内部证据**它拿不到，
+「教师引用板上左栏」因此只能报成不可证的 minor。课堂需要自己的独立 LLM 评审面。
+
+### 基建（已落地，门禁全绿）
+
+- 技能：`skill:classroom-quality-judge`（handler-only，照 goal-confirm-adjudicator 成例）
+  - `prompts/core/classroom-quality-judge.yaml` + manifest + skills.yaml + AGENT_MANIFEST；
+  - handler `backend/src/skills/classroom-quality-judge/index.ts`（callPrompt + 输出归一：证据 index 越界剔除、finding 必须挂有效 evidence、无板书面时 boardConsistency 强制 null）；
+  - `prompts:compile-all` / `prompts:sync` 落 DB；`prompts:skills:check`、`prompts:yaml:check`、`prompts:lint`、`prompts:core:check`、`prompts:fields-sync:check` 全绿；handler 单测 4 条。
+- 跑数器：`backend/src/scripts/judge-minibatch-classrooms.ts`
+  - 逐课抽 `teaching_session_messages`（含学习者真实可见的 figures 附件）+ `teachingState.sessionArtifacts.board` 白板快照 + `teaching_sessions.wrapup`；
+  - 断点续跑、`--force` 重评；code 归一聚类与 referee 同规则（≥2 例或 critical 才进修复，info 不进池）。
+
+### 证据源教训（自我纠错记录）
+
+首评把消息 `payload.analysis.board` 当板书源——它恒为 null，于是 32 课全部误报 BOARD_DANGLING_TRACE。
+真实落库位置：任务级白板在 `teachingState.sessionArtifacts.board`（BoardState，**只存最终 revision**），
+逐轮 figures 附件只在白板重渲染的轮次出现。喂真实快照后 `--force` 重评 32 课，结论才站得住：
+**白板 revision 历史不随消息落库，教师「板上左栏第 N 行」类指认在证据面不可回放**——
+这是 referee「板/图不可证」的真实根因，从 minor 升级为轨迹面产品缺陷。
+
+### 32 课结果（约 3.5 分钟评完，单课 ~15s）
+
+7 例黑盒批次共 32 节课，`verdict`：pass_with_concerns 29 / inconclusive 3（采样中断的 1-3 轮课）/ fail 0（单课层面无一 fail）。
+
+| 课堂聚类 | 覆盖 | 严重度 | 事实 |
+| --- | --- | --- | --- |
+| `BOARD_DANGLING_TRACE` | 7/7 | major×18 | 白板历史版本不落库；教师逐轮指认「左栏第 N 行」在证据面不可回放 |
+| `ASSESSMENT_REPEAT_RECALL` | 7/7 | minor×24 | 检查点以复述为主（同轮已给结论，学习者只需回忆标签），迁移型不足 |
+| `CLOSURE_MISSING` | 7/7 | major×4 | 收束缺「带走的判断/下一步动作」；部分为采样 abandon 伪问题（已标注） |
+| `BOARD_MISMATCH` | 6/7 | major×10 | figure 标题在轮次间漂移；「左右栏」结构与载荷对不上 |
+| `NOTATION_LEAK` | 6/7 | minor×17 | 「80% 那条相对线」「双线」等记号未当场用场景语言解释（referee 单例 → 跨样本确认） |
+| `SCAFFOLD_LATE` | 4/7 | minor×8 | 学习者连续念错时平台重复「再核一眼」而不先给可定位的对照物 |
+| `OPENING_PRIOR_ASSUMPTION` | 2/7 | minor×4 | 开场假定上节已练顺，先复述上节结论而非锚定本课材料 |
+
+### 与 referee 病历单的互证
+
+- referee 的 `TEACHING_BOARD_UNVERIFIABLE`（u07/u17 minor）→ 课堂评审定位根因为白板历史不落库，且覆盖升到 7/7；
+- referee 的 `internal_notation_leaked_to_learner`（u17 单例）→ 课堂层确认 6/7，升入修复池；
+- referee 看不到的「同构复述检查点」「脚手架降阶慢」「收束缺下一步」都是课堂层新发现。
+
+## 九、下一轮优先级
 
 1. **step 超时对账**（u04 critical）：超时后先 observe 对比 teaching revision，已推进则按已应用处理；未推进才换新 commandId 重试。
 2. **收尾不终止**（u07 major）：教学已具备 `confirm_complete` 仍循环 20 轮，需要编排层收敛/循环打断。
-3. **板/图不可证**（2/2 minor）：要么把板/图内容写入 publicTrace，要么禁止教师在不可见时引用。
-4. **Goal 范围裁剪**（u01 minor）：五类风险被收成三类，需在 Goal 确认时显式说明「本次不覆盖哪几类」。
-5. **任务主题漂移**（u07 minor）：生成任务与路径里程碑/原始目标做一致性校验。
+3. **白板 revision 历史落库**（课堂层 7/7）：把每次白板变更（或至少教师指认轮的快照）随消息持久化，让「板上指认」可回放；这是 referee 误报与课堂悬空指认的共同根因。
+4. **检查点迁移化**（课堂层 7/7）：复述型检查点改为「把口径用到未贴标签的新情形」（teaching 提示词面，走双门禁）。
+5. **记号当场解释**（课堂层 6/7）：零代码学习者面前引入记号必须当场用场景语言展开（teaching 提示词面）。
+6. **脚手架降阶时机**（课堂层 4/7）：学习者连续卡住 2 轮即给可定位对照物，不重复同构问法。
+7. **收束 next_action**（课堂层 7/7，剔除采样伪问题后仍普遍）：wrapup/收束语必须给「带走的判断 + 下一步动作」。
+8. **Goal 范围裁剪**（u01 minor）：五类风险被收成三类，需在 Goal 确认时显式说明「本次不覆盖哪几类」。
+9. **任务主题漂移**（u07 minor）：生成任务与路径里程碑/原始目标做一致性校验。

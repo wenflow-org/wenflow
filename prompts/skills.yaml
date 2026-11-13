@@ -595,7 +595,23 @@ skills:
     dataSource:
       db: []
       sandbox: []
-    notes: handler-only 外挂能力（照 material-collector 混合成例）——主接口是裁决 handler（不进 agentMembers、不进字段路由），内含一个 LLM 裁决环节，prompt 以 v4 核心文件 prompts/core/goal-confirm-adjudicator.yaml 编译产物承载（同时具备 coreFile 产物与 prompts/manifests/goal-confirm-adjudicator.yaml）。调用方 goal-conversation.service 在 proposing 阶段收到打字消息时先裁决：confirm=true 直接推进（不跑主对话回合），false 落库走正常回合；任何失败 fail-open 按非确认并留 P3 降级痕。硬规则：拿不准一律 false，不得替用户拍板。**定位声明（2026-11-08）**：本 skill 走平台基础模型与标准网关链路（callPrompt），与 decision 插件（decision-gate / services/decision）无关——决策模型是可选插件、不是平台基础建设，任何业务链路不得硬依赖它；若将来要给本裁决换快模型，用 skill_model_configs 的 per-skill 配置，不引入插件依赖。
+    notes: handler-only 外挂能力（照 goal-confirm-adjudicator 混合成例）——主接口是评审 handler（不进 agentMembers、不进字段路由），内含一个 LLM 评审环节，prompt 以 v4 核心文件 prompts/core/classroom-quality-judge.yaml 编译产物承载（同时具备 coreFile 产物与 prompts/manifests/classroom-quality-judge.yaml）。调用方是跑数脚本 judge-minibatch-classrooms.ts：黑盒会话终态后逐节课提取逐轮记录 + 学习者真实可见的板书/图文载荷 + wrapup，产出与 referee 同构的课堂级病历单（code/severity/evidenceIds）。与教学主链路完全解耦——评审缺席不影响任何教学行为。存在动机：referee 只看 publicTrace，板书载荷与逐轮脚手架是其盲区（2026-11-13 TEACHING_BOARD_UNVERIFIABLE 误报实证）。跨样本归因用跑数器里的 canonicalFindingCode 别名归一，不改本 skill 输出。
+
+  - skillId: classroom-quality-judge
+    kind: handler-only
+    handlerRef: backend/src/skills/classroom-quality-judge/index.ts
+    noPromptFile: true
+    displayName: 课堂质量独立评审 Skill
+    description: 单节课逐轮记录 + 板书/图文载荷 + 收束产出的独立 LLM 病历单（code/severity/evidenceIds）
+    dataSource:
+      db:
+        - table: teaching_sessions
+          keys: [wrapup, topic, mode]
+          via: prisma
+        - table: teaching_session_messages
+          keys: [payload]
+          via: prisma
+      sandbox: []
 
   - skillId: board-designer
     kind: handler-only

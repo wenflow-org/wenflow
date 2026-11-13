@@ -59,6 +59,11 @@ import { executeDecisionGate as executeDecisionGateFn } from './decision-gate';
 
 // goal 会话确认裁决器（handler-only 小 skill：打字确认的唯一语义裁决通道，fail-open 按非确认）
 export { goalConfirmAdjudicatorDefinition, executeGoalConfirmAdjudicator, adjudicateGoalConfirm, GOAL_CONFIRM_ADJUDICATOR_PROMPT } from './goal-confirm-adjudicator';
+
+// 课堂质量独立评审（2026-11-13：referee 看不到板书/图文/逐轮脚手架，课堂级病历单由此补位）
+export { classroomQualityJudgeDefinition, executeClassroomQualityJudge, CLASSROOM_QUALITY_JUDGE_PROMPT } from './classroom-quality-judge';
+import { classroomQualityJudgeDefinition } from './classroom-quality-judge';
+import { executeClassroomQualityJudge as executeClassroomQualityJudgeFn } from './classroom-quality-judge';
 import { goalConfirmAdjudicatorDefinition } from './goal-confirm-adjudicator';
 import { executeGoalConfirmAdjudicator as executeGoalConfirmAdjudicatorFn } from './goal-confirm-adjudicator';
 
@@ -172,6 +177,7 @@ export const allSkillDefinitions: SkillDefinition[] = [
   decisionGateDefinition,
   materialCollectorDefinition,
   goalConfirmAdjudicatorDefinition,
+  classroomQualityJudgeDefinition,
   materialBriefDefinition,
   ...auxSkillDefinitions,
   // 核心 LLM 能力单元（注册为 Skill 以确保 agent-registry 可见）
@@ -261,6 +267,7 @@ export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
   'decision-gate': executeDecisionGateFn,
   'material-collector': executeMaterialCollectorFn,
   'goal-confirm-adjudicator': executeGoalConfirmAdjudicatorFn,
+  'classroom-quality-judge': executeClassroomQualityJudgeFn,
   'material-brief': (input: any) => generateMaterialBriefFn(input),
   ...auxSkillHandlers,
   // 核心 LLM 能力单元（原 agents/，已迁入 skills/）
