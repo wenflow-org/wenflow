@@ -109,6 +109,16 @@ Referee 在 `virtual-lab/blackbox-runner.ts` 有硬门禁：
    - `synthetic-projection.middleware.ts` 登记 `POST /api/ai-teaching/tasks/:id/extension-session`；
    - 单测通过。
 
+### 单例真机验证（u01，2 课采样）
+
+修复后重跑 u01（新会话 `e3fb1ccf…`）：
+
+- `认知判决失败` 日志计数：**36 → 0**；
+- `platformStage` 序列：`goal → path → teaching → completed`，不再出现 `completed → generating` 跳变；
+- 路径生成文案已变为「通常需要 5-20 分钟…可以先忙别的」，实际 5.5 分钟就绪；
+- referee：`verdict=pass`，overall 86，controlConsistency **90**（修复前 72/87）；
+- 剩余 minor：5.5 分钟等待仍无进度条、第 2 个里程碑未达、紧迫场景下拒绝代写但没给「最小可用话术」台阶。
+
 ## 八、下一轮优先级
 
 1. **step 超时对账**（u04 critical）：超时后先 observe 对比 teaching revision，已推进则按已应用处理；未推进才换新 commandId 重试。
