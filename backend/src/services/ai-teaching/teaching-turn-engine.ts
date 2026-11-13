@@ -850,7 +850,13 @@ export async function processStudentMessage(
   const priorClosureRepeatStreak = Number(previousTeachingState.closureRepeatStreak) || 0;
   const learnerHasNewQuestion = /[?？]/.test(String(message || ''))
     || detectOpenRequest(String(message || ''));
-  const closureRepeatStreak = (replySignalsClosing || modelRequestedCompletion) && !learnerHasNewQuestion
+  // 循环信号两种形态都要认（锚点样本 2026-11-13 实证：复述循环未必带「到这儿收」类收尾词）：
+  // ① 显式收尾话术 / 模型自报完成候选；② 与上一轮回复低增量重复（teaching-repetition-guard 同源判据）。
+  const adjacentRepetition = assessAdjacentRepetition(
+    findPreviousAssistantReply(updatedMessages),
+    teachingOutput.reply || '',
+  );
+  const closureRepeatStreak = (replySignalsClosing || modelRequestedCompletion || adjacentRepetition.lowIncrement) && !learnerHasNewQuestion
     ? priorClosureRepeatStreak + 1
     : 0;
   let completionReady = wouldComplete && !closureGate.defer;
