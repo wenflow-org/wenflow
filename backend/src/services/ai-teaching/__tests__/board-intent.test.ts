@@ -7,7 +7,7 @@
  *  2) 换题信号要同时读**老师上一句**（老师主动换的数据）与**学生这一句**；
  *  3) 「要学生说的那句结论」按意图从板上撤掉，但材料与步骤一个不少。
  */
-import { decideBoardIntent, applyBoardIntent, numbersOnBoard, describeIntentForTeacher, guardTitleAgainstContent } from '../board-intent';
+import { decideBoardIntent, applyBoardIntent, numbersOnBoard, describeIntentForTeacher, guardTitleAgainstContent, shouldSkipExampleRefresh } from '../board-intent';
 import { deriveBoardFigure, openBoard, describeBoardForTeacher } from '../board-state';
 
 const splitBoard = {
@@ -335,5 +335,77 @@ describe('board-intent：结论句按意图收口', () => {
       edges: [],
     };
     expect(guardTitleAgainstContent(good).title).toBe('浮力大小：密度与排开体积的条件对照');
+  });
+});
+
+/* ────────────── 换例重绘守门（2026-11-13 修复批 4b，BOARD_MISMATCH major×3） ────────────── */
+
+describe('board-intent：changeSignal 记录换例信号的来源档位', () => {
+  const base = { kind: 'split-compare', taskType: 'model', boardNumbers: ['400', '60'] };
+
+  it('显式换词 → variant-words；换液体 → scene；反事实 → hypothetical', () => {
+    expect(decideBoardIntent({ ...base, studentText: '好', lastTeacherText: '把 800 米换成 400 米试试' }).changeSignal).toBe('variant-words');
+    expect(decideBoardIntent({ ...base, studentText: '好', lastTeacherText: '把液体换成酒精再看一次' }).changeSignal).toBe('scene');
+    expect(decideBoardIntent({ ...base, studentText: '好', lastTeacherText: '假设把顺序倒过来，先发货后付钱' }).changeSignal).toBe('hypothetical');
+  });
+
+  it('只提到板上没有的数字（同例深挖的常见形态）→ variant-numbers；无信号 → none', () => {
+    expect(decideBoardIntent({ ...base, studentText: '好', lastTeacherText: '那我们再看 300 万这处怎么记' }).changeSignal).toBe('variant-numbers');
+    expect(decideBoardIntent({ ...base, studentText: '好', lastTeacherText: '先看左栏最后那行' }).changeSignal).toBe('none');
+  });
+});
+
+describe('shouldSkipExampleRefresh（换例重绘守门，修复批 4b）', () => {
+  // u04 实证板面：右栏「付出货款 0 元/成本是存货」被换数触发重绘成「付现 60 万」——与教师开场打架
+  const financeBoard = {
+    left: { head: '利润表（权责发生制）', rows: [{ label: '营业成本 60 万', sub: '1 月发货' }] },
+    right: { head: '现金流水（收付实现制）', rows: [{ label: '付出货款 0 元', sub: '成本是存货，非本期付现' }] },
+  };
+
+  it('换数触发 + 老师本句仍在引用旧板两处内容 → 抑制重绘（同例深挖，不是换例）', () => {
+    const result = shouldSkipExampleRefresh({
+      intent: { changeSignal: 'variant-numbers' },
+      boardSpec: financeBoard,
+      teacherReply: '注意成本是存货，非本期付现，所以这里付出货款 0 元，现金还没动。',
+    });
+    expect(result.skip).toBe(true);
+    expect(result.hits.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('换数触发 + 老师在讲全新例子（旧板内容几乎不出现）→ 放行重绘', () => {
+    const result = shouldSkipExampleRefresh({
+      intent: { changeSignal: 'variant-numbers' },
+      boardSpec: financeBoard,
+      teacherReply: '我们换到第二笔生意：3 月下单、4 月交付，看看这两张表又各记多少。',
+    });
+    expect(result.skip).toBe(false);
+  });
+
+  it('旧板内容只命中 1 处 → 放行（单一词面重叠不构成「仍在讲旧例」）', () => {
+    const result = shouldSkipExampleRefresh({
+      intent: { changeSignal: 'variant-numbers' },
+      boardSpec: financeBoard,
+      teacherReply: '成本是存货这一点记住就行，我们看下个月的新单子。',
+    });
+    expect(result.skip).toBe(false);
+  });
+
+  it('显式换词（variant-words/scene）一律放行：老师明说要换，重绘是他要的动作', () => {
+    for (const changeSignal of ['variant-words', 'scene', 'hypothetical', 'none'] as const) {
+      const result = shouldSkipExampleRefresh({
+        intent: { changeSignal },
+        boardSpec: financeBoard,
+        teacherReply: '成本是存货，非本期付现；付出货款 0 元。现在把它换成酒精。',
+      });
+      expect(result.skip).toBe(false);
+    }
+  });
+
+  it('老师本句为空 → 不判（放行，不因脏数据误抑制）', () => {
+    expect(shouldSkipExampleRefresh({
+      intent: { changeSignal: 'variant-numbers' },
+      boardSpec: financeBoard,
+      teacherReply: '',
+    }).skip).toBe(false);
   });
 });

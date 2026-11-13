@@ -75,6 +75,14 @@ export interface TeachingCheckpoint {
   conceptName?: string;
   conceptKey?: string;
   conceptSource?: CheckpointConceptAttribution['conceptSource'];
+  /**
+   * 复述问标记（2026-11-13 修复批 4，ASSESSMENT_REPEAT_RECALL 课堂聚类 5/5）：
+   * 发射时代码判定「答案键已在教师已说过的内容里逐字出现」——材料已被教师贴过标签，
+   * 该题是对已给口径的复述确认而非迁移检验。只标 `true`（缺省即 false，旧行天然兼容），
+   * 随 pending → checkpointHistory 留档，供下一题出题门槛读「上一问是否复述型」。
+   * 仅标记布尔、不含答案键，stripCheckpointAnswerKeys 原样保留。
+   */
+  answerAlreadyGiven?: true;
 }
 
 export interface CheckpointSubmitPayload {
@@ -269,6 +277,53 @@ export function isDuplicateCheckpointQuestion(history: unknown, candidate: Check
     }
     return false;
   });
+}
+
+/* ──────────────── 复述问判定（2026-11-13 修复批 4，可复算门槛） ────────────────
+ * 课堂评审 ASSESSMENT_REPEAT_RECALL 聚类（重评 5/5 课全中）的病历单口径：教师先给出结论
+ * （贴标签），检查点再让学习者确认这个刚给出口径——答对只证明记住了口径，不证明会把口径
+ * 用到未被贴标签的新情形（迁移检验缺席）。提示词 rule 243 已把迁移定为出题默认形态，
+ * 这里给出它的**代码面可复算**判定，供编排层拦截「连续两问都复述已给答案」。
+ *
+ * 判定口径（纯函数，不碰 LLM）：检查点的答案键——选择题正确选项的文本、简答题要点词——
+ * 归一后在**教师已说过的内容**（此前各轮回复 + 本轮回复）里逐字出现 → 该题问的是已贴标签
+ * 材料。要点词/选项文本太短（<8 个归一字符）不参与：单个术语（如「显名否决权」）在教学
+ * 中必然出现过，按它判会把一切简答误判成复述；逐字结论（长语句）才是复述确认的可靠指纹。
+ * 无答案键（历史题只剩题面、选择题无 correctOptionIds）→ 判不了，返回 false（不误杀）。
+ */
+export interface CheckpointRecallCandidate {
+  options?: Array<{ id?: unknown; text?: unknown }>;
+  correctOptionIds?: string[];
+  expectedKeywords?: string[];
+}
+
+/** 归一后短于此的答案片段不参与复述比对（防「教学必然提过的术语」造成全量误判） */
+const RECALL_MIN_ANSWER_CHARS = 8;
+
+export function isCheckpointAnswerAlreadyGiven(
+  candidate: CheckpointRecallCandidate,
+  priorTeacherContent: string | Array<string | undefined | null>,
+): { recall: boolean; matched?: string } {
+  const correctIds = new Set(
+    (Array.isArray(candidate.correctOptionIds) ? candidate.correctOptionIds : []).map((id) => String(id)),
+  );
+  const fragments: string[] = [];
+  for (const option of Array.isArray(candidate.options) ? candidate.options : []) {
+    if (!correctIds.has(String(option?.id))) continue;
+    const normalized = normalizeForKeywordMatch(option?.text);
+    if (normalized.length >= RECALL_MIN_ANSWER_CHARS) fragments.push(normalized);
+  }
+  for (const keyword of Array.isArray(candidate.expectedKeywords) ? candidate.expectedKeywords : []) {
+    const normalized = normalizeForKeywordMatch(keyword);
+    if (normalized.length >= RECALL_MIN_ANSWER_CHARS) fragments.push(normalized);
+  }
+  if (fragments.length === 0) return { recall: false };
+  const scan = normalizeForKeywordMatch(
+    Array.isArray(priorTeacherContent) ? priorTeacherContent.filter(Boolean).join('\n') : priorTeacherContent,
+  );
+  if (!scan) return { recall: false };
+  const matched = fragments.find((fragment) => scan.includes(fragment));
+  return matched ? { recall: true, matched } : { recall: false };
 }
 
 export function summarizeCheckpointHistory(raw: unknown): {

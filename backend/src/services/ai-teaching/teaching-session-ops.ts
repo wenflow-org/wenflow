@@ -260,6 +260,9 @@ export async function submitCheckpoint(
         submittedAt: new Date().toISOString(),
         passed: false,
         skipped: true,
+        // 复述问标记随行（2026-11-13 修复批 4）：跳过也发生过「复述确认」这件事，
+        // 标记不随行会让下一题的连击门槛漏读「上一问是否复述型」。
+        ...(checkpoint.answerAlreadyGiven === true ? { answerAlreadyGiven: true as const } : {}),
       });
       teachingState.checkpointHistory = history.slice(-20);
       const skippedResult: CheckpointSubmitResult = {

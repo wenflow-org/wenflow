@@ -35,6 +35,7 @@ import {
   checkpointForMessageResult,
   getPendingCheckpoint,
   inheritTeachingState,
+  isCheckpointAnswerAlreadyGiven,
   isDuplicateCheckpointQuestion, normalizeCheckpointWithTelemetry,
   recordAnchorProbeResult,
   recordCheckpointAttemptEvidence,
@@ -84,7 +85,7 @@ import type { TeachingTurnOutput } from '../../skills/teaching-turn';
 import { findArithmeticMismatches, describeMismatchesForRepair } from './teaching-arithmetic-guard';
 import { repairContradictedPassedVerdict, shouldGuardReplyForFailedConcept, stripAffirmationsOnFailedVerdict } from './checkpoint-feedback-guard';
 import { assessAdjacentRepetition, findPreviousAssistantReply } from './teaching-repetition-guard';
-import { decideBoardIntent, numbersOnBoard } from './board-intent';
+import { decideBoardIntent, numbersOnBoard, shouldSkipExampleRefresh } from './board-intent';
 import { applyBoardOp } from './board-controller';
 import { BOARD_DESIGN_BASE_INSTRUCTION, boardPromptInputForTeacher, decideBoardAttachment, openBoard, type BoardState } from './board-state';
 import { designBoard } from './board-designer.service';
@@ -1258,29 +1259,55 @@ export async function processStudentMessage(
       boardNumbers: numbersOnBoard(board.figure?.maskedSpec),
     });
     if (intent.exampleChange !== 'none') {
-      const designed = await designBoard({
-        task: { title: context.taskTitle, description: context.taskDescription, taskType: context.taskType },
-        scenario: { subject: session.subject, topic: session.topic, learnerLevel: 'beginner' },
-        studentSays: message,
-        kindHint: board.figure?.kind ?? null,
-        questionIntent: intent,
-        lastTeacherReply: teachingOutput.reply,
-        instruction:
-          (intent.exampleChange === 'scene'
-            ? '老师这一轮换了对象/条件。把同一结构的板换成**当前这个情境**（对象、液体、条件标签全换）。'
-            : '老师这一轮换了例子/条件。把同一结构的板换成**老师这一轮给的例子**（该换的词、数值、单位全换，旧例子不要留）。')
-          + '结构、图型、副标注写法不变。' + intent.instruction,
-      }, { userId: session.userId, sessionId: session.id, taskId: session.taskId });
-      if (designed.figure) {
-        board = applyBoardOp(board, { type: 'update', reason: 'new-example' }, designed.figure) ?? board;
-      } else {
-        logger.warn('[AITeaching] 换板绘图被拒（保持旧板）', {
+      // 换例重绘守门（2026-11-13 修复批 4b，BOARD_MISMATCH 聚类 major×3）：换例信号最弱一档
+      // （老师只是提到板上还没有的数字，没说换成/改成/假设）常是**同例深挖**——此时重绘会把
+      // 同一例子的板改成编造的变体，与教师开场口述/旧板自相矛盾（实证：财务课 rev2「付出货款
+      // 0 元」被重绘成「付现 60 万」，老师照新板讲，整课口径翻车）。老师本句仍在引用旧板
+      // 内容 → 判同例深挖，本轮保持旧板（可复算口径见 shouldSkipExampleRefresh）。
+      const refreshGuard = shouldSkipExampleRefresh({
+        intent,
+        boardSpec: board.figure?.maskedSpec ?? null,
+        teacherReply: teachingOutput.reply,
+      });
+      if (refreshGuard.skip) {
+        logger.info('[AITeaching] 换例重绘抑制：换数信号但老师本句仍在引用旧板内容（同例深挖误触发），保持旧板', {
           sessionId,
           taskId: session.taskId,
-          kind: board.figure?.kind ?? null,
-          intent: `${intent.askAbout}/${intent.exampleChange}`,
-          reason: designed.reason,
+          hits: refreshGuard.hits.slice(0, 6),
         });
+        recordDegradation({
+          source: 'ai-teaching/board-refresh',
+          faultCategory: 'SCHEMA_VIOLATION',
+          severity: 'P2_DEGRADED',
+          impactedDimensions: ['board.revision'],
+          mitigationApplied: 'skip-example-refresh-stale-overlap',
+          rootCauseMessage: `variant refresh triggered by fresh numbers only while teacher reply still references old board content: ${refreshGuard.hits.slice(0, 4).join(' / ')}`,
+        });
+      } else {
+        const designed = await designBoard({
+          task: { title: context.taskTitle, description: context.taskDescription, taskType: context.taskType },
+          scenario: { subject: session.subject, topic: session.topic, learnerLevel: 'beginner' },
+          studentSays: message,
+          kindHint: board.figure?.kind ?? null,
+          questionIntent: intent,
+          lastTeacherReply: teachingOutput.reply,
+          instruction:
+            (intent.exampleChange === 'scene'
+              ? '老师这一轮换了对象/条件。把同一结构的板换成**当前这个情境**（对象、液体、条件标签全换）。'
+              : '老师这一轮换了例子/条件。把同一结构的板换成**老师这一轮给的例子**（该换的词、数值、单位全换，旧例子不要留）。')
+            + '结构、图型、副标注写法不变。' + intent.instruction,
+        }, { userId: session.userId, sessionId: session.id, taskId: session.taskId });
+        if (designed.figure) {
+          board = applyBoardOp(board, { type: 'update', reason: 'new-example' }, designed.figure) ?? board;
+        } else {
+          logger.warn('[AITeaching] 换板绘图被拒（保持旧板）', {
+            sessionId,
+            taskId: session.taskId,
+            kind: board.figure?.kind ?? null,
+            intent: `${intent.askAbout}/${intent.exampleChange}`,
+            reason: designed.reason,
+          });
+        }
       }
     }
   }
@@ -1573,6 +1600,20 @@ export async function processStudentMessage(
     // 引擎侧不再维护「节奏票」——旧 checkpointRhythmMinTurns 会把理解度 <0.6 加速到 2 条消息，
     // 与「学生懵时给支架不弹卡」直接冲突。下面只保留与编排层同向的结构兜底。
     const pendingBeforeTurn = previousTeachingState.pendingCheckpoint;
+    // 复述问判定输入（2026-11-13 修复批 4，课堂 ASSESSMENT_REPEAT_RECALL 聚类重评 5/5）：
+    // 本题答案键是否已在教师已说过的内容（历史回复 + 本轮回复）里逐字出现——是则材料已被
+    // 教师贴过标签，本题是对已给口径的复述确认而非迁移检验（可复算口径见
+    // isCheckpointAnswerAlreadyGiven）。放在换题面路径之前算好：新发射、就地换题面、
+    // 连击抑制三处共用同一个读数。锚题豁免：延迟保持率复测本就是重测已教概念，
+    // 按设计是复述——不参与判定、也不留标记（无标记的历史行天然当不了「上一问复述」）。
+    const candidateRecallOnLabeled = checkpointCandidate && !anchorTarget
+      ? isCheckpointAnswerAlreadyGiven(checkpointCandidate, [
+        ...updatedMessages
+          .filter((m) => m?.role === 'assistant')
+          .map((m) => String((m as { content?: unknown }).content ?? '')),
+        teachingOutput.reply,
+      ])
+      : { recall: false as const };
     // 作废通道：语义边界与两条护栏见 ./checkpoint-void.ts；作废不授权本轮出题，出题时机只认 controls.emitCheckpoint。
     const voidedPendingCheckpoint = teachingOutput.control?.voidCheckpoint === true && !submittedCheckpoint && !!pendingBeforeTurn;
     if (voidedPendingCheckpoint && pendingBeforeTurn) {
@@ -1586,14 +1627,21 @@ export async function processStudentMessage(
     if (!voidedPendingCheckpoint && pendingBeforeTurn && checkpointCandidate?.question) {
       const changedQuestion = normalizeForKeywordMatch(pendingBeforeTurn.question) !== normalizeForKeywordMatch(checkpointCandidate.question);
       if (changedQuestion && !isDuplicateCheckpointQuestion(previousTeachingState.checkpointHistory, checkpointCandidate)) {
-        teachingState.pendingCheckpoint = normalizeCheckpointWithTelemetry({
+        const replacementCheckpoint = normalizeCheckpointWithTelemetry({
           ...pendingBeforeTurn,
           question: checkpointCandidate.question,
           ...(checkpointCandidate.options ? { options: checkpointCandidate.options } : {}),
           ...(checkpointCandidate.correctOptionIds ? { correctOptionIds: checkpointCandidate.correctOptionIds } : {}),
           ...(checkpointCandidate.expectedKeywords ? { expectedKeywords: checkpointCandidate.expectedKeywords } : {}),
           ...(checkpointCandidate.hint ? { hint: checkpointCandidate.hint } : {}),
+          // 复述问标记随换题面重算（修复批 4）：就地换题面后旧标记可能失真——按新题面/新答案键
+          // 重算；新题已非复述时剥掉旧标记，保证历史行里「上一问复述」读数可复算。
+          ...(candidateRecallOnLabeled.recall ? { answerAlreadyGiven: true as const } : {}),
         }, pendingBeforeTurn.type);
+        if (!candidateRecallOnLabeled.recall) {
+          delete (replacementCheckpoint as { answerAlreadyGiven?: unknown }).answerAlreadyGiven;
+        }
+        teachingState.pendingCheckpoint = replacementCheckpoint;
         // 重出题同样要保证新题面在可见回复里（否则学员下一轮答的是一道历史里没有的题）
         applyCheckpointQuestionVisibility(checkpointCandidate.question);
       }
@@ -1628,7 +1676,36 @@ export async function processStudentMessage(
         rootCauseMessage: `duplicate checkpoint question (normalized) vs session checkpointHistory: ${duplicatedQuestion.slice(0, 200)}`,
       });
     }
-    if (checkpointEmissionEligible && !duplicateCheckpointQuestion) {
+    // 复述问门槛（修复批 4）：「上一问是对已贴标签材料的复述确认」且「本问又复述已给答案」
+    // → 连续复述，本回合抑制出题。单次复述仍放行（提示词 rule 243 已定迁移为默认形态，
+    // 代码只断连击）。抑制只跳过落库，不写 lastCheckpointConcept、不改回复：焦点下回合
+    // 可重试换迁移新情形，自愈不阻塞。
+    const previousCheckpointWasRecall = (() => {
+      const historyRows = Array.isArray(previousTeachingState.checkpointHistory)
+        ? previousTeachingState.checkpointHistory
+        : [];
+      const lastAnsweredRow = [...historyRows].reverse().find((row: any) => row?.voided !== true);
+      return lastAnsweredRow?.answerAlreadyGiven === true;
+    })();
+    const recallRepeatSuppressed = checkpointEmissionEligible
+      && !duplicateCheckpointQuestion
+      && previousCheckpointWasRecall
+      && candidateRecallOnLabeled.recall;
+    if (recallRepeatSuppressed) {
+      logger.info('[AITeaching] 连续复述问拦截：上一问已是对已贴标签材料的复述确认，本问答案键又在教师内容里逐字出现，本回合抑制出题', {
+        sessionId: session.id,
+        matched: (candidateRecallOnLabeled.matched ?? '').slice(0, 80),
+      });
+      recordDegradation({
+        source: 'ai-teaching/teaching-turn-checkpoint',
+        faultCategory: 'SCHEMA_VIOLATION',
+        severity: 'P2_DEGRADED',
+        impactedDimensions: ['checkpoint.question'],
+        mitigationApplied: 'suppress-consecutive-recall-checkpoint',
+        rootCauseMessage: `consecutive recall checkpoint: answer key already stated verbatim by teacher (matched: ${(candidateRecallOnLabeled.matched ?? '').slice(0, 120)})`,
+      });
+    }
+    if (checkpointEmissionEligible && !duplicateCheckpointQuestion && !recallRepeatSuppressed) {
       const checkpointTitle = checkpointCandidate.question.length > 20
         ? `${checkpointCandidate.question.slice(0, 20)}…`
         : checkpointCandidate.question;
@@ -1695,6 +1772,9 @@ export async function processStudentMessage(
                 : {}),
             }
           : {}),
+        // 复述问标记（修复批 4）：本问答案键已在教师内容里逐字出现 → 留档 true，
+        // 提交后随 history 行成为下一题出题门槛的「上一问是否复述型」输入。锚题轮恒不打。
+        ...(candidateRecallOnLabeled.recall ? { answerAlreadyGiven: true as const } : {}),
       }, checkpointCandidate.type);
       teachingState.lastCheckpointTurn = updatedMessages.length;
       // 单焦点守门员的发射层记忆：历史行可能无归属（旧 pending 或模型漏报 currentPoint），
@@ -1772,6 +1852,9 @@ export async function processStudentMessage(
         // 无归属的存量检查点（修复前发出的 pending）不带这两字段，聚合侧不误伤
         ...(historyConceptName ? { conceptName: historyConceptName } : {}),
         ...(historyConceptKey ? { conceptKey: historyConceptKey } : {}),
+        // 复述问标记随行（修复批 4）：出题时代码判定过「答案键已在教师内容里逐字出现」，
+        // 提交后落到 history，下一题出题门槛据此判断「上一问是否复述型」（缺省即非复述）。
+        ...(submittedCheckpoint.answerAlreadyGiven === true ? { answerAlreadyGiven: true as const } : {}),
       });
 
       // #96 阈值拟合前置：在判分前解析系统对「该概念已掌握」的预测（ktEstimate 优先，

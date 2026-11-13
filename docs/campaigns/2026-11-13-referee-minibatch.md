@@ -254,3 +254,141 @@ u07 式 `session_never_terminates` 消失；跑数器 abandon 409→同 key 重�
 3. **Goal 范围裁剪**（u01 minor）：五类风险被收成三类，需在 Goal 确认时显式说明「本次不覆盖哪几类」。
 4. **任务主题漂移**（u07 minor）：生成任务与路径里程碑/原始目标做一致性校验。
 5. **路径生成等待体验**（referee 面 5/5 major 持续）：进度反馈与 ETA（文案已诚实化，交互面仍无进度条）。
+
+## 十二、修复批 4（2026-11-13 当轮：出题时机编排面 + 换例重绘守门）
+
+承接 §十一 的前两个靶子，全部代码面（不动 YAML），条数守恒不适用。
+
+### 12.1 检查点出题时机：连续复述问门槛（代码面）
+
+**病历单**：`ASSESSMENT_REPEAT_RECALL` 5/5 课全中（minor×9）。代表形态：教师第 6 轮直接给出
+「这就是你要的那处无法指认」并收口要求压缩成追问、第 8 轮对学习者追问直接判「可以直接发」——
+两轮都是对刚给出口径的复述确认，未让学习者把口径用到未被贴标签的新情形。批 3 的 rule 243
+（提示词面）只收紧了「内容自检」，出题时机在编排层，需要可复算的代码门槛。
+
+**可复算口径**（纯函数 `isCheckpointAnswerAlreadyGiven`，teaching-checkpoint.ts）：检查点的
+答案键——选择题正确选项文本、简答题要点词——归一后在**教师已说过的内容**（历史回复 + 本轮回复）
+里逐字出现 → 该题问的是已贴标签材料，答对只证明记住了口径、不证明会迁移。要点词/选项文本
+<8 个归一字符不参与（教学必然提过的术语会把一切简答误判成复述；逐字结论才是复述确认的指纹）。
+无答案键 → 判不了，返回 false 不误杀。
+
+**编排层门槛**（teaching-turn-engine.ts，与同题复问抑制同构）：
+
+- 「上一问已复述」（checkpointHistory 最后一行非 voided 且带 `answerAlreadyGiven:true`）
+  且「本问又复述」→ 连续复述，本回合抑制出题 + 遥测（`suppress-consecutive-recall-checkpoint`）。
+- **只拦连击**：单次复述仍放行（提示词 rule 243 已定迁移为默认形态，代码只断连击）。
+- 放行的复述题在 pendingCheckpoint 打 `answerAlreadyGiven:true` 标记，提交/跳过后随行落
+  checkpointHistory——下一题的「上一问是否复述型」由此读数（stripCheckpointAnswerKeys 只删
+  答案键，布尔标记原样保留，不下发也不泄键）。
+- **锚题豁免**：延迟保持率复测本就是重测已教概念，按设计是复述——锚题轮不参与判定也不打标
+  （无标记的历史行天然当不了「上一问复述」）。
+- **抑制自愈**：抑制只跳过落库，不写 `lastCheckpointConcept`、不进 history、不改回复——
+  焦点下回合可重试换迁移新情形；模型若坚持复述，就持续不出卡（复述卡本无评估价值），课堂照常。
+- **就地换题面重算**：答错补救的换题面路径按新题面/新答案键重算标记，旧标记失真即剥掉，
+  保证「上一问复述」读数可复算。
+
+**测试**：`checkpoint-recall-gate.test.ts` 12 例——纯函数 5（选项命中/干扰项不误判/要点词长短/
+无键不判/迁移新情形）+ 引擎 7（连击抑制+遥测/首犯放行打标/上一复述本迁移放行/voided 不算
+上一问/锚题豁免/发射→作答落 history→下一题连击三段全链真值/换题面重算剥旧标记）。
+邻域回归：checkpoint 6 套件 80 例 + session-closure-gate 全绿。
+
+### 12.2 板书指认一致性：换例重绘守门（代码面）
+
+**病历单**：`BOARD_MISMATCH` 5/5 课（major×3）。三个 major 的共同链路：
+
+1. **u04（财务）**：教师提到板上还没有的「60 万」→ 换数信号触发 `designBoard` 重绘 →
+   右栏从 rev2「付出货款 0 元/成本是存货，非本期付现」翻成「购买商品支付现金 60 万/1 月已付货款」
+   ——与教师开场口述（1 月发货、2 月底收款）自相矛盾，教师再照新板讲，整课口径翻车。
+2. **u17（缓存）**：rev2 丢掉情形三行、rev3 整体换列，教师仍在引用「三种来路」矩阵结构。
+3. **u07（摘要）**：教师口头强调的核心区分（相关≠因果）板上无一承载——板书设计与教学脱节
+   （设计面问题，本批不强行代码化，先观察）。
+
+**根因**：`decideBoardIntent` 的换例信号最弱一档——`fresh.length`（老师提到板上还没有的数字）
+即判换例。但「老师讲到例子里还没上板的数」是**同例深挖**的正常形态，拿它当换题信号会让绘图员
+把同一例子的板重绘成编造的变体。
+
+**可复算门槛**（纯函数 `shouldSkipExampleRefresh`，board-intent.ts）：
+
+- `BoardIntent` 新增 `changeSignal` 字段记录信号来源档位：`scene`（换液体/换物体）>
+  `hypothetical`（反事实）> `variant-words`（明说换成/改成/拿掉）> `variant-numbers`
+  （只是新数字）> `none`。前四档是显式信号，一律放行重绘——老师明说要换，重绘是他要的动作。
+- 只对最弱的 `variant-numbers` 做二次确认：老师本句回复仍在引用旧板内容（maskedSpec 的
+  label/sub/head/title 等内容字段文本，归一后 ≥2 字的片段，**≥2 个不同片段**逐字命中本句）
+  → 老师在深挖同一例子，不是换例 → 本轮抑制重绘、保持旧板 + 遥测
+  （`skip-example-refresh-stale-overlap`）。
+- 双片段门槛防误伤：单一词面重叠（如顺口提到「成本是存货」）不拦；真正的换例句式通常带
+  换词/场景词，走显式档位本来就不拦。
+
+**测试**：`board-intent.test.ts` 追加 7 例——changeSignal 五档分型 2 + 守门 5（两处命中抑制/
+新例子放行/单处命中放行/显式换词一律放行/空回复不判）。全部 8 个 board 套件 99 例全绿。
+
+### 12.3 真机重评批 A（仅修复批 4a 上机）：`reeval2-2026-11-13`，5 例 × --max-tasks=2
+
+**referee 面**：4/5 pass_with_concerns + u04 critical 1 例——`TEACHING_TERMINAL_FAILURE`，教学
+第 12 轮「处理消息失败」爆死。**根因是 LLM 供应商故障，不是代码回归**：日志实锤 teaching-turn
+97s 超时（stream watchdog idle 60s），同分钟窗口 stage-designer 也 RETRY_BUDGET_EXHAUSTED、
+learning-predictor 超时——供应商侧全面变慢；裁判自己也判「属于平台侧失败而非学习者表现问题」。
+u04 因此整案 inconclusive（24 课基数少 1 课）。`PATH_GENERATION_LATENCY` major×4 持续（§十三队列）。
+
+**课堂层对照**（13 课，其中 4 课为 1-3 轮采样残课）：
+
+| 聚类 | 批 3 重评（14 课） | 批 A（13 课） | 判定 |
+| --- | --- | --- | --- |
+| `ASSESSMENT_REPEAT_RECALL` | 5/5（minor×9） | **5/5（minor×8）** | **未收敛**，归因见下 |
+| `BOARD_MISMATCH` | 5/5（major×3） | 4/5（major×3） | u01 退出聚类；major 未动（4b 未上机，批 B 验证） |
+| `CLOSURE_MISSING` | 3/5（major×2） | 5/5（major×6） | 恶化——u04 爆死课无 wrapup（基础设施误伤）+ 收束内容达标线从严，批 B 复核 |
+| `SCAFFOLD_LATE` | 5/5 | 5/5 | 维持 |
+| `BOARD_LEGEND_UNRENDERED` | — | 2（minor×2） | **证据管线伪影**，已修（见 12.4） |
+
+**ASSESSMENT_REPEAT_RECALL 未收敛的归因（DB 实证）**：批 A 13 课的正式检查点卡为 **0 张**
+（teaching_sessions 全查：0 条 checkpointHistory、仅 1 个未答完的 pending）——单焦点守门员 +
+2 课采样下，正式出题路径几乎从不触发。病历单证据 100% 挂 `content`（对话轮）：「第②③条差别
+被连续复述式追问」是对话问设计形态，emitCheckpoint 编排门槛**触达不了**。4a 按指令落地且
+全绿（编排面复述卡从此有可复算连击门槛），但该聚类的有效杠杆在**提示词面**：rule 243 对
+对话问设计的触达需要按条数守恒再收紧一轮（编排层已无可用确定性信号——对话问没有答案键，
+复述分类器算不了）。
+
+### 12.4 证据管线修正：legend 摘要 `[object Object]` 伪影
+
+批 A 新聚类的 `BOARD_LEGEND_UNRENDERED ×2`（「图例渲染为 [object Object]」）经 DB 实证是
+**判定脚本伪影**：真实载荷 legend 是 `{text, fill}` 对象数组（`✓ 符合`/`— 不符合`），前端渲染无恙；
+judge-minibatch-classrooms.ts 的 digest 只认 `.label`，把对象 String 成 `[object Object]`，
+制造了「学习者看不到图例」的假 finding。已修为 `label ?? text ?? 字符串` 三级回退，
+批 B 起按修正后的证据面评审。
+
+### 12.5 批 B（4b 上机）：`reeval3-2026-11-13`，同 5 例 × --max-tasks=2
+
+**referee 面（历史最佳）**：u04/u07/u17/u19 **pass** + u01 pass_with_concerns，**actionable 聚类
+为零**——所有 finding 均单样本噪音，连持续 5/5 的 `PATH_GENERATION_LATENCY` 本轮也未聚上
+（u17 裁判调用遇瞬时 fetch failed，`--resume` 补裁 pass）。运行时证据：epistemic 降级 0/5、
+Path 等待超时 0/5、LLM 执行失败仅 u01 一次（未致断课）。
+
+**课堂层对照**（14 课，4 课为 1-3 轮采样残课 inconclusive；逐课 verdict：2 pass + 8 pass_with_concerns）：
+
+| 聚类 | 批 3 重评 | 批 A（仅 4a） | 批 B（4a+4b） | 判定 |
+| --- | --- | --- | --- | --- |
+| `BOARD_MISMATCH` | 5/5（major×3） | 4/5（major×3） | **3/5（minor×5，major×1）** | **收敛**：u04 现金口径翻车消失；残余 major×1 是教师指认行位错（「右栏第 1 行」引的是左栏内容），属指认精度非板面翻车 |
+| `ASSESSMENT_REPEAT_RECALL` | 5/5（minor×9） | 5/5（minor×8） | **2/5（minor×2）** | 覆盖减半，但 4a 在批 A 已上机且零触达——减半**归因不明**（样本方差或板面稳定带来的二阶效应），对话层病灶解释不变，继续观察 |
+| `CLOSURE_MISSING` | 3/5（major×2） | 5/5（major×6，含 u04 爆死误伤） | 4/5（minor×5，major×1） | 水位持平略降；真实残余是「收束缺自检口径」（怎样算标对了），批 B 的 critical×1 是 `transcript_too_thin` 采样伪影（已从聚类剔除，见 12.4） |
+| `BOARD_LEGEND_UNRENDERED` | — | 2（伪影） | 0 | 摘要修复生效 |
+| `NOTATION_LEAK` / `SCAFFOLD_LATE` | 4/5、5/5（全 minor） | 3/5、5/5 | 4/5、4/5（全 minor） | 维持 |
+| 新增 | — | `OPENING_ASSUME_EXPERIENCE` | 2（minor×2） | 开场引用上一课「共同记忆」但本课无据可查——单例级先观察 |
+
+**4b 真机首杀（u01 竞业课，恰是批 A `board_pointer_mismatch` 病灶同款场景）**：教师逐项过
+「离职后2年内/不得去同行业公司」（同例深挖），换数信号（fresh numbers）想重绘板面，
+守门拦截保持旧板 + 遥测 `skip-example-refresh-stale-overlap`（hits：离职后2年内/不得去同行业公司）。
+
+**方向性结论**：板书翻车类 major 清零（3→1，且残余是另一种形态）、裁判面 actionable 清零、
+u04 中途爆死未复现（批 A 的爆死是供应商故障）。修复批 4 收口。
+
+### 12.6 下一轮队列（按批 B 证据重排）
+
+1. **ASSESSMENT 对话面提示词**：批 B 2/5（minor×2）——rule 243 的对话问设计触达按条数守恒
+   收紧一轮；编排层无确定性信号可用（对话问无答案键），这是该聚类剩余的唯一杠杆。
+2. **板书指认精度**（major×1）：教师口头指认行位/栏位与快照错位（「右栏第 1 行」实为左栏内容）
+   ——figures 指认校验或板面行命名统一，待 ≥2 例再动。
+3. **供应商抖动健壮性**：批 A u04 因 teaching-turn 97s 超时整案爆死——教学回合对
+   provider_timeout 加有界重试/续话，把基础设施抖动从「整课终局」降级为「可恢复停顿」。
+4. **收束自检口径**（4/5 minor~major）：收束两件套（判断口径+下一步）已有，补第三件
+   「怎样算做对了」的自检口径——rule 234 同条内收紧。
+5. **路径等待交互**（referee 单例化但仍是每个 case 的等待体验）：进度反馈/ETA。

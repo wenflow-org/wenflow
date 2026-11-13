@@ -30,6 +30,15 @@ export type ExampleChange = 'none' | 'variant' | 'scene';
 export interface BoardIntent {
   askAbout: BoardAskAbout;
   exampleChange: ExampleChange;
+  /**
+   * 换例信号的来源（2026-11-13 修复批 4b，BOARD_MISMATCH 聚类 major×3）：
+   * 同为 exampleChange='variant'，「老师明说了换成/改成/假设」（variant-words/hypothetical）
+   * 与「只是提到了板上还没有的数字」（variant-numbers）可信度完全不同——后者常是**同例深挖**
+   * 的正常信号（老师讲到例子里还没上板的数），拿它当换题信号会让绘图员把同一例子的板
+   * 重绘成自相矛盾的变体（实证：财务课 rev2「付出货款 0 元」被重绘成「付现 60 万」，
+   * 与教师开场口述打架）。shouldSkipExampleRefresh 据此只拦最弱的那档触发。
+   */
+  changeSignal: 'scene' | 'variant-words' | 'hypothetical' | 'variant-numbers' | 'none';
   /** 本轮是「把顺序/条件倒过来」的反事实推演（板面必须标假设，不能写成史实） */
   hypothetical?: boolean;
   /** 本轮新出现的数据（用于画板时直接摆上新现场） */
@@ -154,6 +163,18 @@ export function decideBoardIntent(signals: IntentSignals): BoardIntent {
     : fresh.length || variantChanged
       ? 'variant'
       : 'none';
+  // 换例信号的来源档位（修复批 4b）：显式换词 > 反事实 > 纯新数字 > 无。shouldSkipExampleRefresh
+  // 只对最弱的 variant-numbers 做二次确认——它最容易把「同例深挖」误判成换例。
+  // 反事实排在显式换词之前：「假设…倒过来」里的「假设」也命中换词表，但反事实是更具体的信号。
+  const changeSignal: BoardIntent['changeSignal'] = sceneChanged
+    ? 'scene'
+    : hypotheticalOrder
+      ? 'hypothetical'
+      : VARIANT_WORDS.test(teacher) && !NOT_EXAMPLE_CHANGE.test(source)
+        ? 'variant-words'
+        : fresh.length
+          ? 'variant-numbers'
+          : 'none';
 
   const askAbout = defaultAskAbout(kind, taskType);
   const reasonParts: string[] = [`图型 ${kind || '?'}/${taskType || '?'} → 问「${askAbout}」`];
@@ -182,11 +203,70 @@ export function decideBoardIntent(signals: IntentSignals): BoardIntent {
   return {
     askAbout,
     exampleChange,
+    changeSignal,
     ...(hypotheticalOrder ? { hypothetical: true } : {}),
     newNumbers: [...new Set(fresh)].slice(0, 8),
     instruction,
     reason: reasonParts.join('；'),
   };
+}
+
+/* ────────── 换例重绘守门（2026-11-13 修复批 4b，BOARD_MISMATCH 聚类 major×3） ──────────
+ * 课堂评审三个 major 的共同链路：换例信号最弱一档（老师只是提到板上还没有的数字）被当成
+ * 换题 → designBoard 把同一例子的板重绘成编造的变体 → 板面与教师开场口述/旧板自相矛盾，
+ * 老师再照着新板讲，整课口径翻车（财务课「付出货款 0 元 → 付现 60 万」）。
+ *
+ * 可复算口径（纯函数）：换数触发（changeSignal==='variant-numbers'，即老师没说换成/改成/
+ * 假设这类显式换词）且**老师本句仍在引用旧板内容**——旧板 ≥2 个不同字段的文本片段
+ * （归一后 ≥2 字）在本句逐字出现 → 老师在深挖同一例子，不是换例 → 本轮抑制重绘、保持旧板。
+ * 显式换词（variant-words/scene/hypothetical）一律放行：老师明说要换，重绘是他要的动作。
+ */
+const BOARD_TEXT_KEYS = new Set(['label', 'sub', 'head', 'title', 'name', 'text', 'note', 'item']);
+
+const normBoardText = (s: unknown): string =>
+  String(s ?? '').toLowerCase().replace(/[\s，。、；：！？,.;:!?（）()【】[\]"'“”‘’—-]/g, '');
+
+/** 收集板面 spec 里的文本片段（label/sub/head 等内容字段；id/kind/palette 等元数据不参与） */
+export function collectSpecTextFragments(spec: unknown, depth = 0): string[] {
+  if (depth > 6) return [];
+  if (Array.isArray(spec)) return spec.flatMap((v) => collectSpecTextFragments(v, depth + 1));
+  if (spec && typeof spec === 'object') {
+    return Object.entries(spec as Record<string, unknown>).flatMap(([k, v]) => {
+      if (!BOARD_TEXT_KEYS.has(k) && typeof v === 'string') return [];
+      return collectSpecTextFragments(v, depth + 1);
+    });
+  }
+  if (typeof spec === 'string') return spec.trim() ? [normBoardText(spec)] : [];
+  return [];
+}
+
+export interface ExampleRefreshGuardInput {
+  intent: Pick<BoardIntent, 'changeSignal'>;
+  /** 当前板的 spec（maskedSpec，即老师输入里看到的那份现场） */
+  boardSpec: unknown;
+  /** 老师本句回复 */
+  teacherReply: string | null | undefined;
+}
+
+export function shouldSkipExampleRefresh(
+  input: ExampleRefreshGuardInput,
+): { skip: boolean; reason: string; hits: string[] } {
+  if (input.intent?.changeSignal !== 'variant-numbers') {
+    return { skip: false, reason: `changeSignal=${input.intent?.changeSignal ?? 'none'}（非换数触发，不拦）`, hits: [] };
+  }
+  const reply = normBoardText(input.teacherReply);
+  if (!reply) return { skip: false, reason: '老师本句为空，不判', hits: [] };
+  // 去重后按**不同片段值**计数：两行不同 label 各被引用 = 2 处（仍在引用旧板的现场）；
+  // 同一行 label+sub 被引用通常也产生 ≥2 个不同片段——都指向「同例深挖」。
+  const hits = [...new Set(
+    collectSpecTextFragments(input.boardSpec)
+      .map((fragment) => fragment.trim())
+      .filter((fragment) => fragment.length >= 2 && reply.includes(fragment)),
+  )];
+  if (hits.length >= 2) {
+    return { skip: true, reason: `换数触发但老师本句仍在引用旧板 ${hits.length} 处内容（同例深挖，不是换例）`, hits };
+  }
+  return { skip: false, reason: `旧板内容命中 ${hits.length} 处（<2），放行重绘`, hits };
 }
 
 /**

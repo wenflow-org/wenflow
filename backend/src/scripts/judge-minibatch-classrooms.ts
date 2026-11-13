@@ -95,7 +95,11 @@ function digestFigures(figures: any): string | null {
     const cells = Array.isArray(spec.cells)
       ? spec.cells.map((c: any) => `${c?.r ?? '?'},${c?.c ?? '?'}${c?.tone ? `(${c.tone})` : ''}`).join(' ')
       : '';
-    const legend = Array.isArray(spec.legend) ? spec.legend.map((l: any) => String(l?.label ?? l)).filter(Boolean).join('；') : '';
+    // legend 条目真实形状是 {text, fill}（board-designer 产物，2026-11-13 实测 DB）：
+    // 只认 .label 会把对象 String 成「[object Object]」，制造「图例未渲染」伪影 finding
+    const legend = Array.isArray(spec.legend)
+      ? spec.legend.map((l: any) => String(l?.label ?? l?.text ?? (typeof l === 'string' ? l : '')).trim()).filter(Boolean).join('；')
+      : '';
     const generic = collectSpecTexts(spec);
     return [
       `图${i + 1}[${fig?.engine || '?'}/${fig?.kind || '?'}]`,
@@ -347,13 +351,24 @@ async function main() {
   await Promise.all(Array.from({ length: Math.min(concurrency, classroomJobs.length) }, () => worker()));
 
   // 跨样本归一聚类（只统计非 info；≥2 例或 critical 进 actionable）
+  // 采样残课伪影不进聚类（2026-11-13 批 A/B 实证）：--max-tasks 主动收口制造的 1-3 轮残课，
+  // 评审只能输出「证据不足/记录太薄」这类硬降分 finding（insufficient_evidence major×2 批 A、
+  // transcript_too_thin critical×1 批 B）——那是采样方法的属性，不是课堂的病。残课本身已按
+  // inconclusive 存档在逐课表，聚类侧剔除避免假 critical 污染修复队列。
+  const SAMPLING_ARTIFACT_CODES = new Set([
+    'transcript_too_thin', 'insufficient_evidence', 'insufficient_turns',
+    'insufficient_round_evidence', 'evidence_insufficient_turns', 'evidence_truncated_single_turn',
+    'inconclusive_insufficient_transcript',
+  ]);
   const byCode = new Map<string, any>();
   for (const r of records) {
     const findings = Array.isArray(r.report?.findings) ? r.report.findings : [];
     for (const f of findings) {
       const severity = String(f.severity || 'unknown');
       if (severity === 'info') continue;
-      const code = canonicalFindingCode(String(f.code || 'UNKNOWN'));
+      const rawCode = String(f.code || 'UNKNOWN');
+      if (SAMPLING_ARTIFACT_CODES.has(rawCode.toLowerCase())) continue;
+      const code = canonicalFindingCode(rawCode);
       const entry = byCode.get(code) || { code, rawCodes: new Set<string>(), cases: new Set<string>(), severities: {} as Record<string, number>, titles: [] as string[], details: [] as string[] };
       entry.rawCodes.add(String(f.code));
       entry.cases.add(r.caseId);
