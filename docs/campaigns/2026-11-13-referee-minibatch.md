@@ -708,3 +708,56 @@ stale_evaluation 维持 minor）；BOARD_DANGLING ×2 维持观察。
 2. **板链数字权威复用**：把板书已算出的链尾数字（如 −400）作为该链的权威值缓存，后续认可
    语 + 冲突数字即触发修正重调（复用第一刀的 repairInstruction 机制，KV 缓存便宜）。
 3. tripwire：频次观察（本轮 1 例）；若连续两批复现则第 2 项升级为强制实现。
+
+## 十八、批 I tripwire 观测（2026-11-14 当轮：认可式算术错误复现判定 → 未复现归档）
+
+### 18.1 判定：未复现 → 按观察项归档（杠杆不实现，tripwire 保留）
+
+**双评面证据**（`reeval10-2026-11-14`，5 例 × --max-tasks=2）：referee 面 0 条算术 code
+（actionable 仅 PATH_GENERATION_LATENCY ×3）；classroom 面 15 课生成、9 课进聚类，5 类
+actionable 聚类中无一算术（`grep -ci "ARITHMETIC\|arithmetic" classroom-report.md` = 0）。
+
+**归档决策依据（三条）**：
+
+1. **频次水位未达触发线**：批 H（reeval9）1 例 → 批 I（reeval10）双评面 0 例。「连续两批
+   复现」的 tripwire 判据未满足；单批 1 例更符合模型数值口误的方差分布，而非系统性缺陷。
+2. **检出形态局限如实入档**：课中自检闸 `findArithmeticMismatches` 只抓等式形态；认可式
+   （无等式、背书语 + 与板链冲突的数字）需跨载荷交叉引用板书数字，现有守卫结构性覆盖不到
+   ——这正是保留 tripwire 而非关闭观测的理由。
+3. **无复现证据不预建确定性守卫**：§17.4 杠杆（板链数字权威缓存 + 认可-数字交叉核对，复用
+   repairInstruction、链尾语境词门控）的误杀风险（教师合法引入新中间数）在单例水位下大于
+   收益。规格已存档于 §17.4，后续任意一批 ARITHMETIC code 再现即升级为强制实现。
+
+### 18.2 批 I 双评水位
+
+- referee 面：PATH_GENERATION_LATENCY ×3（{"minor":1,"major":2}，队列既有项，u01/u07
+  路径段 abandoned + u04 两残段与此同源）；其余全为单例 minor。
+- classroom 面 actionable 5 类：
+  - **CRITERIA_FALSE_GENERALIZATION ×1（critical×1，新簇）**——见 18.3 队列首项。
+  - **CLOSURE_MISSING ×2**（{"minor":2,"critical":1,"major":1}；u04
+    closure_premature_completion——收束宣布「净额那行也并好了，你扫一眼就知道」但同一
+    wrapup 自述「还需要你自己独立走一遍」，完成信号与证据不一致；u07
+    closure_scope_incomplete / closure_status_complete_mismatch）。
+  - **OPENING_ASSUME_EXPERIENCE ×2**（{"minor":3}）——批 8 修复后水位 4/5（major 为主）
+    → 2 课全 minor，收敛趋势确认但未清零；剩余形态是**反向断言**子形态
+    （「你之前没细看过这类合同」＝断言学习者没做过某事、「下周一又要签」＝假定日程），
+    现有判定器 `hasUnverifiablePriorClaim` 只抓正向断言（你说过/上一课你X了）。
+  - ASSESSMENT_REPEAT_RECALL ×2（{"major":1,"minor":1}）——观察项水位持平，维持既有决策。
+  - BOARD_MISMATCH ×2（{"minor":1,"major":1}）——已收敛簇残余（major 13→3→1→1 批际水位），
+    批 I u04 新形态为「部分方向边缺失被说成四支都标出」，与 §12.2 changeSignal 同域，维持观察。
+
+### 18.3 下一轮队列（按批 I 证据）
+
+1. **CRITERIA_FALSE_GENERALIZATION ×1（critical，u04 fail）**：收束口径「没进新钱的增减，
+   一律是占住」与同课第 4 轮示范（应付账款增加＝「钱还没付出去，所以放出 330」）直接矛盾
+   ——「一律」型全称概括踩掉课中已示范的反例，学习者套用会得到相反方向。critical 即修纪律
+   → 队列首项。取证方向：收束/总结生成器为何能输出与课中示范冲突的全称规则（与批 6 负证据
+   降档同域但不同形态：这次是教师口径自相矛盾，非 mastery 高估）；候选杠杆沿第一刀
+   repairInstruction 机制加「收束规则 vs 课中反例」一致性维度。
+2. CLOSURE_MISSING critical×1（u04 完成信号 vs wrapup 自述不一致）——与第 1 项同课，
+   下轮一并取证处理。
+3. OPENING_ASSUME 反向断言子形态——tripwire：下批复现成簇则把反向形态（「你之前没X过」）
+   纳入 `hasUnverifiablePriorClaim` 判定器（条数守恒改 rule 57）。
+4. PATH_GENERATION_LATENCY（referee 面，major×2）——队列既有项，批 I 水位未降
+   （abandoned×2 + 残段×2 与之同源），维持排队。
+5. 认可式算术 tripwire——继续观测（本节归档），ARITHMETIC code 任一批再现即按 §17.4 规格实现。
