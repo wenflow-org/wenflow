@@ -120,6 +120,13 @@ export interface TeachingSessionMessage {
    */
   figures?: TeachingFigure[];
   /**
+   * 本轮学习者可见的白板指针（2026-11-13 课堂评审）：任务级白板（sessionArtifacts.board）
+   * 在非重渲染轮不随消息下发 figures，但教师仍会指认板面——记录 revision/kind/focusId/conceal，
+   * 配合 sessionArtifacts.boardHistory 可回放「当时学习者看到的是什么」
+   * （评审面 referee/课堂评审据此定位被指对象，替代不可证的「板上左栏」口头指认）。
+   */
+  boardState?: { revision: number; kind: string | null; focusId: string | null; conceal: string | null } | null;
+  /**
    * 出图来源与动机（2026-10-21）：区分「模型自己判断要画」与「编排层给了出图时机」，
    * 并记下编排层的判定理由。评审时靠它回答「这张图为什么出现」；
    * 模型自己给的理由在 `figure.why`，两者互不替代。

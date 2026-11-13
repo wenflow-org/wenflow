@@ -51,6 +51,40 @@ const concurrency = Math.max(1, Number(arg('concurrency', '2')) || 2);
 const CONTENT_CLIP = Math.max(200, Number(arg('content-clip', '900')) || 900);
 const BOARD_CLIP = Math.max(100, Number(arg('board-clip', '700')) || 700);
 
+/** 通用 spec 文本抽取：不依赖特定图型结构（split-compare/concept-map 的条目不在行列标签里） */
+function collectSpecTexts(spec: any, limit = 24, itemClip = 60): string | null {
+  if (!spec || typeof spec !== 'object') return null;
+  const skipKeys = new Set(['tone', 'palette', 'engine', 'why', 'source', 'kind']);
+  const out: string[] = [];
+  const walk = (value: any, path: string, depth: number) => {
+    if (depth > 6 || out.length >= limit) return;
+    if (typeof value === 'string') {
+      const t = value.trim();
+      if (t.length >= 2) out.push(`${path}:${clip(t, itemClip)}`);
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach((item, i) => {
+        if (item && typeof item === 'object' && typeof item.text === 'string') {
+          const t = item.text.trim();
+          if (t.length >= 2) out.push(`${path}[${i}]${item.label ? `(${clip(String(item.label), 20)})` : ''}:${clip(t, itemClip)}`);
+          return;
+        }
+        walk(item, `${path}[${i}]`, depth + 1);
+      });
+      return;
+    }
+    if (value && typeof value === 'object') {
+      for (const [k, v] of Object.entries(value)) {
+        if (skipKeys.has(k)) continue;
+        walk(v, path ? `${path}.${k}` : k, depth + 1);
+      }
+    }
+  };
+  walk(spec, '', 0);
+  return out.length ? out.join('；') : null;
+}
+
 /** 图文载荷 → 评审可读的紧凑文本（保留行列标签/图例/高亮格，裁剪字节） */
 function digestFigures(figures: any): string | null {
   if (!Array.isArray(figures) || !figures.length) return null;
@@ -62,13 +96,15 @@ function digestFigures(figures: any): string | null {
       ? spec.cells.map((c: any) => `${c?.r ?? '?'},${c?.c ?? '?'}${c?.tone ? `(${c.tone})` : ''}`).join(' ')
       : '';
     const legend = Array.isArray(spec.legend) ? spec.legend.map((l: any) => String(l?.label ?? l)).filter(Boolean).join('；') : '';
+    const generic = collectSpecTexts(spec);
     return [
       `图${i + 1}[${fig?.engine || '?'}/${fig?.kind || '?'}]`,
+      typeof spec.title === 'string' && spec.title ? `标题:${spec.title}` : '',
       rows.length ? `行:${rows.join('｜')}` : '',
       cols.length ? `列:${cols.join('｜')}` : '',
       legend ? `图例:${legend}` : '',
       cells ? `标记格:${cells}` : '',
-      typeof spec.title === 'string' && spec.title ? `标题:${spec.title}` : '',
+      generic ? `内容:${generic}` : '',
     ].filter(Boolean).join('；');
   });
   return clip(parts.join('\n'), BOARD_CLIP) || null;
@@ -123,31 +159,23 @@ async function judgeClassroom(job: ClassroomJob, ts: any, outDir: string): Promi
     where: { sessionId: ts.id },
     orderBy: { id: 'asc' },
   });
-  const transcript: ClassroomJudgeTranscriptTurn[] = [];
-  let seq = 0;
-  for (const m of messages) {
-    let payload: any = {};
-    try { payload = JSON.parse(m.payload || '{}'); } catch { payload = {}; }
-    const role = payload.role === 'user' ? 'learner' : 'teacher';
-    const content = clip(payload.content, CONTENT_CLIP);
-    if (!content && !payload.analysis?.board && !payload.figures) continue;
-    transcript.push({
-      index: seq++,
-      role,
-      content,
-      board: digestBoard(payload.analysis?.board),
-      figure: digestFigures(payload.figures),
-      checkpoint: payload.checkpoint?.question ? clip(payload.checkpoint.question, 400) : null,
-    });
-  }
-
-  // 任务级白板快照：BoardState 在 teachingState.sessionArtifacts.board（消息 payload 里没有 board，
-  // 只有逐轮 figures 附件）——2026-11-13 首评误报 BOARD_DANGLING_TRACE ×7 的根因就是没喂这块证据。
+  // 任务级白板快照 + revision 历史（必须在 transcript 循环前解析）：BoardState 在
+  // teachingState.sessionArtifacts.board（消息 payload 里只有逐轮 figures 附件与 boardState 指针）。
+  // 2026-11-13 首评误报 BOARD_DANGLING TRACE ×7 的根因就是没喂这块证据；引擎补了 boardHistory
+  // 后，可逐轮回放学习者当时看到的板面。
   let boardState: any = null;
+  let boardHistory: Array<{ revision: number; kind: string; spec: any }> = [];
   try {
     const teachingState = ts.teachingState ? JSON.parse(ts.teachingState) : null;
     boardState = teachingState?.sessionArtifacts?.board || null;
-  } catch { boardState = null; }
+    const history = teachingState?.sessionArtifacts?.boardHistory;
+    if (Array.isArray(history)) boardHistory = history;
+  } catch { boardState = null; boardHistory = []; }
+  const revisionToDigest = new Map<number, string>();
+  for (const entry of boardHistory) {
+    const digest = digestFigures([{ spec: entry.spec }] as any);
+    if (digest && Number.isFinite(Number(entry.revision))) revisionToDigest.set(Number(entry.revision), digest);
+  }
   const boardDigestParts: string[] = [];
   if (boardState?.figure) {
     const fig = boardState.figure;
@@ -161,6 +189,31 @@ async function judgeClassroom(job: ClassroomJob, ts: any, outDir: string): Promi
   }
   const boardDigest = boardDigestParts.length ? clip(boardDigestParts.join('\n'), BOARD_CLIP * 2) : null;
   const board = { present: boardDigestParts.length > 0, digest: boardDigest };
+
+  const transcript: ClassroomJudgeTranscriptTurn[] = [];
+  let seq = 0;
+  for (const m of messages) {
+    let payload: any = {};
+    try { payload = JSON.parse(m.payload || '{}'); } catch { payload = {}; }
+    const role = payload.role === 'user' ? 'learner' : 'teacher';
+    const content = clip(payload.content, CONTENT_CLIP);
+    if (!content && !payload.analysis?.board && !payload.figures) continue;
+    // 教师轮的白板证据定位顺序（与评审规则一致）：本轮 figures 附件 → boardState 指针指向的
+    // boardHistory 快照（revision 回放）→ 无。学习者轮不挂板书面（板是老师指认的对象）。
+    const boardRevision = Number(payload.boardState?.revision);
+    const historyDigest = role === 'teacher' && Number.isFinite(boardRevision)
+      ? revisionToDigest.get(boardRevision) || null
+      : null;
+    transcript.push({
+      index: seq++,
+      role,
+      content,
+      board: digestBoard(payload.analysis?.board) ?? (historyDigest ? `白板@rev${boardRevision} ${historyDigest}` : null),
+      figure: digestFigures(payload.figures),
+      checkpoint: payload.checkpoint?.question ? clip(payload.checkpoint.question, 400) : null,
+    });
+  }
+
 
   let wrapupRaw: any = null;
   try { wrapupRaw = ts.wrapup ? JSON.parse(ts.wrapup) : null; } catch { wrapupRaw = null; }

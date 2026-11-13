@@ -904,6 +904,20 @@ export class AutopilotService {
   // ---------------------------------------------------------------------------
 
   /** 黑盒推进一步（含可恢复失败同 key 续跑）；返回该步观察的 stage，失败时返回 null */
+  /** step 超时对账用的控制面指纹：任一变化即「平台副作用已生效」 */
+  private async readBlackboxControlSnapshot(sessionId: string) {
+    const session = await prisma.virtual_sessions.findUnique({ where: { id: sessionId } })
+    const state = parseStageResults(session?.stageResults)
+    const control = (state.blackbox?.control || {}) as Record<string, unknown>
+    const trace = Array.isArray(state.blackbox?.publicTrace) ? state.blackbox.publicTrace : []
+    return {
+      teachingRevision: control.teachingRevision ?? null,
+      taskId: control.taskId ?? null,
+      completedTasks: control.completedTasks ?? null,
+      traceCount: trace.length,
+    }
+  }
+
   private async blackboxAdvance(sessionId: string, stepIndex: number): Promise<{ stage?: string } | null> {
     const session = await prisma.virtual_sessions.findUnique({ where: { id: sessionId } })
     if (!session) return null
@@ -911,6 +925,11 @@ export class AutopilotService {
     const trace = Array.isArray(stageResults.blackbox?.publicTrace) ? stageResults.blackbox.publicTrace : []
     const commandId = `autopilot-${stepIndex}`
     const expectedTraceCount = trace.length
+    // 2026-11-13 u04 critical 实证：step 的 HTTP 300s 超时 ≠ 平台副作用未发生——平台侧课堂
+    // 可能已推进（teachingRevision 已变）。旧逻辑同 key 直接重试，把旧动作再打一遍，撞上
+    // 「课堂已在其他页面更新」直接把整场实验打成 failed。超时类失败必须先对账：控制面指纹
+    // 有变化 → 按已生效收口（不再重打）；无变化 → 副作用未发生，同 key 重试才安全。
+    const controlBefore = await this.readBlackboxControlSnapshot(sessionId)
     let attempt = 0
     let result: { stage?: string } | null = null
     while (attempt < AUTOPILOT_BLACKBOX_STEP_RETRIES) {
@@ -926,11 +945,27 @@ export class AutopilotService {
         result = command.result as { stage?: string }
         break
       } catch (error: unknown) {
-        const transient = /timeout|timed out|fetch failed|network|rate.?limit|5\d\d|canceled|missing reply|missing learnerstate|does not contain valid json|simulation failed|动作生成失败/i.test(
-          String(asErrorLike(error).message || '')
-        )
+        const message = String(asErrorLike(error).message || '')
+        const transient = /timeout|timed out|fetch failed|network|rate.?limit|5\d\d|canceled|missing reply|missing learnerstate|does not contain valid json|simulation failed|动作生成失败/i.test(message)
         if (!transient) throw error
         attempt += 1
+        if (/timeout|timed out/i.test(message)) {
+          await this.refreshBlackboxObservation(sessionId)
+          const controlAfter = await this.readBlackboxControlSnapshot(sessionId)
+          const applied = controlAfter.teachingRevision !== controlBefore.teachingRevision
+            || controlAfter.taskId !== controlBefore.taskId
+            || controlAfter.completedTasks !== controlBefore.completedTasks
+          if (applied) {
+            logger.warn('[autopilot] step 超时但对账发现副作用已生效，按已应用处理', {
+              sessionId,
+              commandId,
+              before: controlBefore,
+              after: controlAfter
+            })
+            result = {}
+            break
+          }
+        }
         logger.warn('[autopilot] 黑盒 step 可恢复失败，同 key 续跑', {
           sessionId,
           commandId,

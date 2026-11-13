@@ -164,14 +164,49 @@ Referee 只看 publicTrace：板书/图文载荷、逐轮脚手架、收束产�
 - referee 的 `internal_notation_leaked_to_learner`（u17 单例）→ 课堂层确认 6/7，升入修复池；
 - referee 看不到的「同构复述检查点」「脚手架降阶慢」「收束缺下一步」都是课堂层新发现。
 
-## 九、下一轮优先级
+## 九、修复批 2（2026-11-13 当轮闭环：发现 → 修复 → 真机验证）
 
-1. **step 超时对账**（u04 critical）：超时后先 observe 对比 teaching revision，已推进则按已应用处理；未推进才换新 commandId 重试。
-2. **收尾不终止**（u07 major）：教学已具备 `confirm_complete` 仍循环 20 轮，需要编排层收敛/循环打断。
-3. **白板 revision 历史落库**（课堂层 7/7）：把每次白板变更（或至少教师指认轮的快照）随消息持久化，让「板上指认」可回放；这是 referee 误报与课堂悬空指认的共同根因。
-4. **检查点迁移化**（课堂层 7/7）：复述型检查点改为「把口径用到未贴标签的新情形」（teaching 提示词面，走双门禁）。
-5. **记号当场解释**（课堂层 6/7）：零代码学习者面前引入记号必须当场用场景语言展开（teaching 提示词面）。
-6. **脚手架降阶时机**（课堂层 4/7）：学习者连续卡住 2 轮即给可定位对照物，不重复同构问法。
-7. **收束 next_action**（课堂层 7/7，剔除采样伪问题后仍普遍）：wrapup/收束语必须给「带走的判断 + 下一步动作」。
-8. **Goal 范围裁剪**（u01 minor）：五类风险被收成三类，需在 Goal 确认时显式说明「本次不覆盖哪几类」。
-9. **任务主题漂移**（u07 minor）：生成任务与路径里程碑/原始目标做一致性校验。
+### 9.1 step 超时对账（u04 critical，代码面）
+
+`autopilot.service.ts` 的 `blackboxAdvance`：超时类失败不再直接同 key 重打——先
+`refreshBlackboxObservation` 对账，控制面指纹（teachingRevision/taskId/completedTasks）有变化
+即「副作用已生效」，按已应用收口；无变化才同 key 重试。单测 +1（对账生效不重打、无进展同 key 续跑两条路径都覆盖）。
+
+### 9.2 白板 revision 历史落库（课堂层 7/7 根因，代码面）
+
+- `teaching-turn-engine.ts`：`sessionArtifacts.boardHistory` 按 revision 变更追加快照
+  （学习者可见面 maskedSpec，上限 40 版）；assistant 消息新增 `boardState` 指针
+  （revision/kind/focusId/conceal），放全部板面变更之后写入。
+- `TeachingSessionRepository`：`TeachingSessionMessage.boardState` 字段（只增证据，不改前端行为）。
+- 课堂评审跑数器消费：教师轮定位顺序 = 本轮 figures 附件 → boardState 指针 → boardHistory 回放；
+  另加图型无关的 spec 文本抽取（split-compare/concept-map 的条目不在行列标签里）。
+
+### 9.3 真机 A/B 验证（u01 黑盒样本三轮）
+
+| 样本 | 证据面 | 正课板书 findings |
+| --- | --- | --- |
+| validation2（boardHistory+快照，无逐轮指针） | 非重渲染轮不可回放 | 1 课仍有 `board_dangling_trace` + `board_state_inconsistent` |
+| validation3（+boardState 指针，rev1 split-compare conceal=takeaway） | 指针+历史全通 | 摘要器只有标题时仍 1 major 悬空 |
+| validation3 重评（+图型无关 spec 文本抽取） | 板面内容完整可定位 | 板书 findings 降为 1 条 `board_minor_gap`（minor） |
+
+**`BOARD_DANGLING_TRACE` 在新链路上消失**；referee「板/图不可证」的根因已修。
+
+### 9.4 修复批 2 后的课堂跨样本聚类（32 课重评）
+
+| 聚类 | 修复批 1 时 | 修复批 2 后 | 解读 |
+| --- | --- | --- | --- |
+| `BOARD_DANGLING_TRACE` | 7/7（major×18） | 5/7（major×1，minor×11） | 旧课无 boardHistory 的证据缺口如实保留；新链路已解决 |
+| `BOARD_MISMATCH` | 7/7（major×4+minor×22） | 7/7（major×13+minor×18） | 板书设计/指认问题真实存在，不因证据修复而消失——下一步真靶子 |
+| `NOTATION_LEAK` | 6/7 | **7/7**（minor×18） | 覆盖升满 |
+| `ASSESSMENT_REPEAT_RECALL` | 7/7 | 7/7（minor×26） | 复述型检查点，提示词面待修 |
+| `CLOSURE_MISSING` | 7/7 | 7/7（major×6+minor×8） | 剔除采样伪问题后仍普遍 |
+| `SCAFFOLD_LATE` | 6/7 | 3/7 | 部分为证据面误报，随重评收敛 |
+| `OPENING_PRIOR_ASSUMPTION` | 2/7 | 2/7 | 维持 |
+
+## 十、下一轮优先级
+
+1. **收尾不终止**（u07 major，referee 面）：教学已具备 `confirm_complete` 仍循环 20 轮，需要编排层收敛/循环打断。
+2. **板书指认一致性**（课堂层 7/7 major×13）：figures 附件与教师口头指认的栏位结构对不上——板书设计/指认校验。
+3. **提示词面三件**（走双门禁 + 黄金锚点，只改不增）：检查点迁移化、记号当场解释、收束 next_action。
+4. **Goal 范围裁剪**（u01 minor）：五类风险被收成三类，需在 Goal 确认时显式说明「本次不覆盖哪几类」。
+5. **任务主题漂移**（u07 minor）：生成任务与路径里程碑/原始目标做一致性校验。

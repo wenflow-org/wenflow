@@ -1317,6 +1317,17 @@ export async function processStudentMessage(
     });
   }
 
+  // 白板指针随 assistant 消息落库（2026-11-13）：放在全部板面变更（换例重绘/figures 附加）
+  // 之后，保证指向的就是本轮学习者最终可见的那一版。
+  if (board) {
+    assistantMessage.boardState = {
+      revision: board.revision,
+      kind: board.figure?.kind ?? null,
+      focusId: board.figure?.focusId ?? null,
+      conceal: board.figure?.conceal ?? null,
+    };
+  }
+
   const persistedMessages = [...updatedMessages, assistantMessage];
   const previousMetrics = extractTeachingStateMetrics(previousTeachingState)
     || learningStateService.coerceMetrics(context.learningState)
@@ -1355,6 +1366,26 @@ export async function processStudentMessage(
       ...parseSessionArtifacts(session.teachingState),
       // 共享白板：任务级持久板书（跨轮保留；换任务时由上方 load 逻辑丢弃）
       board: board ?? null,
+      // 白板 revision 历史（2026-11-13 课堂评审 7/7 实证）：教师逐轮「板上左栏第 N 行」类指认
+      // 需要能回放学习者当时看到的板面。此前只存最终 revision，评审/裁判在证据面无法定位被指
+      // 对象（referee 误报 TEACHING_BOARD_UNVERIFIABLE、课堂评审误报 BOARD_DANGLING）。
+      // 按 revision 变更追加快照（学习者可见面 maskedSpec），上限 40 版，只增证据不改行为。
+      boardHistory: (() => {
+        const prev = parseSessionArtifacts(session.teachingState).boardHistory as
+          | Array<{ revision: number; at: string; kind: string; spec: Record<string, unknown> }>
+          | undefined;
+        const history = Array.isArray(prev) ? [...prev] : [];
+        if (!board?.figure) return history;
+        const last = history[history.length - 1];
+        if (last && last.revision === board.revision) return history;
+        history.push({
+          revision: board.revision,
+          at: new Date().toISOString(),
+          kind: board.figure.kind,
+          spec: board.figure.maskedSpec,
+        });
+        return history.slice(-40);
+      })(),
       initialKnowledgeState: effectiveInitialKnowledgeState,
       // 课内温故：① 标记"模型真的问出来了"（含 review/pending——问过 ≠ 有结果）
       // ② 合并实测结果；计划其余部分原样保留（含负担预算与积压计数）

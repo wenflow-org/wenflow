@@ -512,12 +512,13 @@ describe('AutopilotService 全自动模式', () => {
         publicTrace: [{ observation: { stage: 'goal', availableActions: ['chat'] } }]
       }
     })
-    // 第一次 step：可恢复超时失败（out 端），第二次同 key 成功 → 之后标记整场完成
-    let call = 0
-    mockRunCommand.mockImplementation(async () => {
-      call += 1
-      if (call === 1) throw new Error('timeout of 300000ms exceeded')
-      if (call === 2) {
+    // 第一次 step：可恢复超时失败（out 端）→ 超时对账（observe 刷新，轨迹未前进）→ 第二次同 key 成功
+    let stepCalls = 0
+    mockRunCommand.mockImplementation(async (options: any) => {
+      if (options?.kind === 'observe') return { result: { stage: 'goal' }, reused: false }
+      stepCalls += 1
+      if (stepCalls === 1) throw new Error('timeout of 300000ms exceeded')
+      if (stepCalls === 2) {
         sessionRecord.status = 'completed'
         return { result: { stage: 'completed' }, reused: false }
       }
@@ -529,10 +530,51 @@ describe('AutopilotService 全自动模式', () => {
     const final = await waitTerminal()
 
     expect(final.status).toBe('completed')
-    // 同 key 续跑：两次调用使用同一 commandId
-    const firstCommandId = mockRunCommand.mock.calls[0][0].commandId
-    const secondCommandId = mockRunCommand.mock.calls[1][0].commandId
-    expect(firstCommandId).toBe(secondCommandId)
+    // 同 key 续跑：两次 step 调用使用同一 commandId（对账 observe 的 commandId 带时间戳，另算）
+    const stepCommandIds = mockRunCommand.mock.calls
+      .filter((call) => call[0]?.kind === 'step')
+      .map((call) => call[0].commandId)
+    expect(stepCommandIds.length).toBe(2)
+    expect(stepCommandIds[0]).toBe(stepCommandIds[1])
+  })
+
+  it('blackbox：step 超时但对账发现副作用已生效 → 按已应用处理，不重打旧动作（u04 critical 回归）', async () => {
+    sessionRecord = buildSession('teaching', 'running', {
+      experiment: { mode: 'blackbox-api' },
+      blackbox: {
+        control: { teachingRevision: 3, taskId: 't1', completedTasks: 0 },
+        publicTrace: [{ observation: { stage: 'teaching', availableActions: ['chat'] } }]
+      }
+    })
+    let stepCalls = 0
+    mockRunCommand.mockImplementation(async (options: any) => {
+      if (options?.kind === 'observe') {
+        // 平台侧课堂已推进：刷新观察把新 teachingRevision 带回 stageResults
+        const sr = JSON.parse(sessionRecord.stageResults)
+        sr.blackbox.control.teachingRevision = (sr.blackbox.control.teachingRevision || 0) + 1
+        sr.blackbox.publicTrace.push({ observation: { stage: 'teaching', availableActions: ['chat'] } })
+        sessionRecord.stageResults = JSON.stringify(sr)
+        return { result: { stage: 'teaching' }, reused: false }
+      }
+      stepCalls += 1
+      if (stepCalls === 1) throw new Error('timeout of 300000ms exceeded')
+      sessionRecord.status = 'completed'
+      return { result: { stage: 'completed' }, reused: false }
+    })
+    mockAutoStep.mockResolvedValue({})
+
+    await service.start('s1')
+    const final = await waitTerminal()
+
+    expect(final.status).toBe('completed')
+    // 超时那次 step 没有被同 key 重打：两个 step commandId 不同（新的 stepIndex）
+    const stepCommandIds = mockRunCommand.mock.calls
+      .filter((call) => call[0]?.kind === 'step')
+      .map((call) => call[0].commandId)
+    expect(stepCommandIds.length).toBe(2)
+    expect(stepCommandIds[0]).not.toBe(stepCommandIds[1])
+    // 超时后做过对账刷新
+    expect(mockRunCommand.mock.calls.some((call) => call[0]?.kind === 'observe')).toBe(true)
   })
 
   it('blackbox：不可恢复错误直接失败退出', async () => {
