@@ -427,6 +427,68 @@ export function verifyKnowledgeEvidence(
   return { summary: { ...summary, knowledgeItems }, unverified };
 }
 
+/* ──────────── 课内负证据核对（修复批 6，WRAPUP_MASTERY_OVERCLAIM 课堂聚类 major×8） ────────────
+ * 证据回链闸（#52 ④）只看「学员说过点什么」——evidence 能回链到学员原话，点就能标 mastered；
+ * 课内的**客观反面记录**被完全忽略。病历单形态：收束把「核对基本条款一致性」标 mastered/100，
+ * 同一收束的 learningEvaluation 却承认学习者工时判断一度混档、要教师纠正——「说过但被纠过错」
+ * 一路绿灯。这里按可复算的课内记录收口：
+ *   - checkpointHistory 里该概念（conceptName/conceptKey 归一匹配点名）存在未通过/跳过行
+ *     （voided 不算），且其后没有更晚的 passed=true 行 → 反面成立 → 降档；
+ *   - misconception 概念名单命中 → 反面成立 → 降档；
+ *   - 概念无任何匹配行 → 判不了，不动（证据不足不惩罚学生，与 ④ 同纪律）。
+ * 降档形态与 ④ 一致：mastered → learning、progress 封顶 79，另打 negativeEvidenceDowngraded 标记。
+ */
+export function downgradeMasteredOnNegativeEvidence(
+  summary: SessionWrapupSummary,
+  evidence: { checkpointHistory?: unknown; misconceptionConceptNames?: string[] },
+): { summary: SessionWrapupSummary; downgraded: string[] } {
+  // summary-only 等兜底路径可能没有 summary/knowledgeItems——无点可核，原样返回
+  if (!summary || !Array.isArray((summary as { knowledgeItems?: unknown }).knowledgeItems)) {
+    return { summary, downgraded: [] };
+  }
+  const normalize = (value: unknown): string =>
+    String(value ?? '').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+  const rows = Array.isArray(evidence?.checkpointHistory)
+    ? (evidence.checkpointHistory as Array<Record<string, unknown>>)
+    : [];
+  const misconceptionKeys = (Array.isArray(evidence?.misconceptionConceptNames)
+    ? evidence.misconceptionConceptNames : [])
+    .map((name) => normalize(name))
+    .filter(Boolean);
+  const downgraded: string[] = [];
+  const knowledgeItems = (summary.knowledgeItems || []).map((item) => {
+    if (item?.status !== 'mastered') return item;
+    const key = normalize(item.name);
+    if (!key) return item;
+    const active = rows.filter((row) =>
+      row?.voided !== true && normalize(row?.conceptName ?? row?.conceptKey) === key);
+    if (active.length === 0 && !misconceptionKeys.includes(key)) return item;
+    const negative = active.filter((row) => row?.passed === false || row?.skipped === true);
+    const positive = active.filter((row) => row?.passed === true);
+    let contradicted = misconceptionKeys.includes(key);
+    if (!contradicted && negative.length > 0) {
+      if (positive.length === 0) {
+        contradicted = true;
+      } else {
+        const lastNegativeAt = negative
+          .map((row) => String(row?.submittedAt ?? '')).sort().pop() ?? '';
+        const lastPositiveAt = positive
+          .map((row) => String(row?.submittedAt ?? '')).sort().pop() ?? '';
+        contradicted = !lastPositiveAt || lastNegativeAt > lastPositiveAt;
+      }
+    }
+    if (!contradicted) return item;
+    downgraded.push(item.name);
+    return {
+      ...item,
+      status: 'learning' as const,
+      progress: Math.min(Number(item.progress) || 79, 79),
+      negativeEvidenceDowngraded: true,
+    };
+  });
+  return { summary: downgraded.length > 0 ? { ...summary, knowledgeItems } : summary, downgraded };
+}
+
 /**
  * 算式自检 · 确定性剥离（内容正确性第二刀，2026-10-08）：summary 的**文本要点**（数组项）
  * 逐条跑 findArithmeticMismatches，命中即剔除该要点、其余保留。长文本字段（topicSummary 等）

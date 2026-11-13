@@ -14,6 +14,7 @@ import { logger } from '../../utils/logger';
 import { executeSkill, sessionWrapupAgentDefinition } from '../../skills';
 import { recordDegradation, degradationCause } from '../../skills/degradation-telemetry';
 import type { SessionWrapupArtifact } from '../../skills/session-wrapup';
+import { downgradeMasteredOnNegativeEvidence } from '../../skills/session-wrapup';
 import type { ReviewPlan } from '../memory/review-plan.service';
 import { createDomainEvent } from '../../events/contracts';
 import { enqueueDomainEvent } from '../../events/outbox.repository';
@@ -827,6 +828,61 @@ export async function endSession(
   }
   const wrapupResult = sessionWrapupExt?.result || endWrapupFallback.result;
   const wrapupArtifact = sessionWrapupExt?.artifact || endWrapupFallback.artifact;
+  // 课内负证据核对（修复批 6，WRAPUP_MASTERY_OVERCLAIM 课堂聚类 major×8）：收束标 mastered
+  // 的点必须核对课内客观反面记录——该概念的检查点未通过/跳过（其后无更晚通过）或有误解记录
+  // → 降档（mastered→learning，封顶 79）。证据回链闸只看「学员说过点什么」，拦不住
+  // 「说过但被纠过错」（病历单：收束标 mastered/100，同一收束自认工时判断一度混档）。
+  {
+    // 误解台账（修复批 6 补强）：对话纠错是病历单的主形态（「工时判断一度混档要教师纠正」，
+    // 课内没有正式检查点失败记录可对）。模型逐轮上报的误解入 misconception_ledger
+    // （lastSessionId 锚定本课）；status != 'addressed' = 本课出现且未被后续正确表现化解。
+    // conceptKey 多为可读中文名，与收束点名归一可比（cpt_hash 形态匹配不到属 fail-soft）。
+    let sessionMisconceptionNames: string[] = [];
+    try {
+      const ledgerRows = await prisma.misconception_ledger.findMany({
+        where: { lastSessionId: session.id, status: { not: 'addressed' } },
+        select: { conceptKey: true },
+        take: 40,
+      });
+      sessionMisconceptionNames = [...new Set(ledgerRows.map((row) => row.conceptKey))];
+    } catch (ledgerError) {
+      logger.warn('[AITeaching] 误解台账读取失败，负证据核对仅用检查点历史（fail-open）', {
+        sessionId,
+        error: ledgerError instanceof Error ? ledgerError.message : String(ledgerError),
+      });
+    }
+    const negativeAdjusted = downgradeMasteredOnNegativeEvidence(wrapupResult.summary, {
+      checkpointHistory: session.teachingState?.checkpointHistory,
+      misconceptionConceptNames: sessionMisconceptionNames,
+    });
+    if (negativeAdjusted.downgraded.length > 0) {
+      wrapupResult.summary = negativeAdjusted.summary;
+      if (wrapupArtifact.summary) wrapupArtifact.summary = negativeAdjusted.summary;
+      // progress 桶同步：被降档的点不能留在 newlyMastered/unchangedMastered 里
+      const downgradedNames = new Set(negativeAdjusted.downgraded);
+      const buckets = wrapupArtifact.progress;
+      if (buckets) {
+        buckets.newlyMastered = (buckets.newlyMastered || []).filter((name) => !downgradedNames.has(name));
+        buckets.unchangedMastered = (buckets.unchangedMastered || []).filter((name) => !downgradedNames.has(name));
+        buckets.stillLearning = [
+          ...(buckets.stillLearning || []),
+          ...negativeAdjusted.downgraded.filter((name) => !(buckets.stillLearning || []).includes(name)),
+        ];
+      }
+      logger.warn('[AITeaching] 收束 mastery 与课内负证据相悖，已降档', {
+        sessionId,
+        downgraded: negativeAdjusted.downgraded,
+      });
+      recordDegradation({
+        source: 'ai-teaching/teaching-session-lifecycle',
+        faultCategory: 'SCHEMA_VIOLATION',
+        severity: 'P2_DEGRADED',
+        impactedDimensions: ['wrapup.summary.knowledgeItems'],
+        mitigationApplied: 'downgrade-mastered-on-negative-evidence',
+        rootCauseMessage: `mastered claims contradicted by lesson negative evidence: ${negativeAdjusted.downgraded.join('、').slice(0, 200)}`,
+      });
+    }
+  }
   const wrapupRuntimeEnvelope = wrapupOutput?.runtimeEnvelope
     || wrapupResult?.runtimeEnvelope
     || null;

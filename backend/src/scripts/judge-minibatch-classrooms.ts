@@ -358,7 +358,7 @@ async function main() {
   const SAMPLING_ARTIFACT_CODES = new Set([
     'transcript_too_thin', 'insufficient_evidence', 'insufficient_turns',
     'insufficient_round_evidence', 'evidence_insufficient_turns', 'evidence_truncated_single_turn',
-    'inconclusive_insufficient_transcript',
+    'inconclusive_insufficient_transcript', 'insufficient_evidence_truncated', 'lesson_truncated',
   ]);
   const byCode = new Map<string, any>();
   for (const r of records) {

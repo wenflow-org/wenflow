@@ -478,3 +478,57 @@ RETRY_BUDGET_EXHAUSTED）。
    板书设计完整性（designBoard 的行覆盖 vs 教师展开度），编排层可复算（spec 行数 vs reply 枚举数）。
 4. 指认精度（不存在的边/格，major×3）：与 3 同属板书链，一并观察。
 5. ASSESSMENT_REPEAT_RECALL：转观察（低音量 + 裁判口径软化）。
+
+## 十四、修复批 6（2026-11-13 当轮：收束 mastery 与课内负证据一致性）
+
+承接 §13.4 第 1 项：WRAPUP_MASTERY_OVERCLAIM（major×8，全战役最大簇）。
+
+### 14.1 病历单与既有闸的缺口
+
+代表形态：收束把「核对基本条款一致性」标 **mastered/100**，同一收束的 learningEvaluation 却
+承认学习者工时判断一度混档、要教师纠正。wrapup 链已有两道防高估闸，但都拦不住它：
+
+1. **证据回链闸**（#52 ④）：只验 evidence 能否回链到学员原话——「说过但被纠过错」照样过闸；
+2. **终态措辞闸**（#52 ③）：只看点自身 evidence/reason 里的相悖措辞——矛盾在点外
+   （learningEvaluation 文、课内客观记录）时不可见。
+
+### 14.2 可复算负证据降档（代码面）
+
+**纯函数** `downgradeMasteredOnNegativeEvidence`（session-wrapup skill，与 ④ 同纪律）：
+
+- 概念归一匹配 checkpointHistory（conceptName/conceptKey）——存在未通过/跳过行（voided 不算）
+  **且其后没有更晚的 passed=true 行** → 反面成立；先失败后通过 = 掌握成立不降；通过后又答错 = 反面成立；
+- misconception 概念名单命中 → 反面成立；
+- 概念无任何匹配行 → 判不了，不动（证据不足不惩罚学生）；
+- 降档形态与 ④ 一致：mastered → learning、progress 封顶 79，打 `negativeEvidenceDowngraded` 标记。
+
+**接线**（teaching-session-lifecycle，wrapupResult/artifact 解析后、持久化前）：对 result.summary
+与 artifact.summary 同步应用；artifact.progress 桶同步搬移（被降档点移出 newlyMastered/
+unchangedMastered → stillLearning）；打遥测 `downgrade-mastered-on-negative-evidence`。
+
+**测试**：negative-evidence.test.ts 6 例（未通过无后继通过降档 / 先败后过不降 / 败在过后降 /
+voided 不算+无行不判 / 误解名单命中 / learning 不参与+无历史原样）。wrapup 全套件 46 例绿。
+
+### 14.3 批 D 双评重评：`reeval5-2026-11-13`（15 课）
+
+**referee 面**：actionable 1 类——`PATH_GENERATION_LATENCY` ×4 **全 minor**（历史首次降出 major 档）。
+
+**课堂层对照**：
+
+| 聚类 | 批 C | 批 D | 判定 |
+| --- | --- | --- | --- |
+| `WRAPUP_MASTERY_OVERCLAIM` | 5/5（major×8） | **0（簇消失）** | 收束把 mastery 高估的形态本轮未出现。**归因保留**：降档闸 0 命中（15 课 checkpointHistory 仍为 0——正式检查点在本语料不触发），簇消失无法归因于本修复，方差可能性大；误解台账接线在批 D **之后**才补上，活验证顺延到下一轮 |
+| `OPENING_ASSUME_EXPERIENCE` | 5/5（minor×11） | 5/5（minor×6，major×2） | 维持（未修，纯观测符合预期） |
+| `BOARD_MISMATCH` | 3/5（major×6） | 4/5（**critical×2**，major×2） | **新 critical 形态**：板书把学习者已纠错的答案固化回最终板面（教师 index 4 明确纠正试用期上限为 2 个月，rev4 自 index 10 起一直写学习者 index 3 的错版「上限 1 个月」到课终）——板书 rev 采纳/滞留学员未纠正错误，与换例误触发（4b 已管）不同源 |
+| `ASSESSMENT_REPEAT_RECALL` | 2/5（minor+major） | 2/5（minor×2） | 维持低位；代表形态转为「对同一**指令**的复述确认」而非知识复述 |
+| `CLOSURE_MISSING` | 5/5（major×8） | 5/5（major×5） | 主力是残课 wrapup 缺失（采样属性）；`closure_overclaim`（收束标 complete 但目标产出从未被正确完成）为单例待观察 |
+
+**14.3a 降档闸 0 命中的归因与本批补强**：批 D 15 课 **0 课有 checkpointHistory**（再次实证正式
+检查点在本语料不完成闭环），而病历单的反面证据在**对话纠错**里——已补接误解台账：
+lifecycle 收束时查 `misconception_ledger`（`lastSessionId` 锚定本课、`status != 'addressed'`），
+conceptKey 与收束点名归一匹配（真实台账多为可读中文名，cpt_hash 形态匹配不到属 fail-soft）。
+批 D 会话实测有活例（「提炼业务价值结论」suspected/confirmed），下一轮验证闸的实战命中。
+
+**新 critical 靶子（§14 队列首项）**：板书固化学员已纠错误——教师口头纠正后板面 rev 不刷新，
+学员错版一直挂到课终且正落在本课核心边界点上。确定性杠杆难（纠正语义在对话里），
+候选方向：designBoard 刷新指令带「不得保留学员已被纠正的错误表述」+ 纠正轮次的刷新触发信号。
