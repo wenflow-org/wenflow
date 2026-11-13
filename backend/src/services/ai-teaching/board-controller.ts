@@ -22,6 +22,8 @@ export type BoardOp =
   | { type: 'setup'; reason: 'first-turn' | 'task-changed' }
   /** 老师换了例子/条件：同结构换新数据（减负模式的核心动作） */
   | { type: 'update'; reason: 'new-example' | 'condition-changed' }
+  /** 老师本轮纠正了学生错误理解：板面换掉与被纠正前说法一致的表述（修复批 7） */
+  | { type: 'update'; reason: 'correction' }
   /** 学生补上了空槽 / 检查点通过：同一块板切到完整态（仅 conceal:'full' 用） */
   | { type: 'reveal'; summary?: string }
   /** 学生还没答到点上：只移动焦点，把注意力引回那一处，不改内容 */

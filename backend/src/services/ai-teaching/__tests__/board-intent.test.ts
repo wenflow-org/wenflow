@@ -7,7 +7,7 @@
  *  2) 换题信号要同时读**老师上一句**（老师主动换的数据）与**学生这一句**；
  *  3) 「要学生说的那句结论」按意图从板上撤掉，但材料与步骤一个不少。
  */
-import { decideBoardIntent, applyBoardIntent, numbersOnBoard, describeIntentForTeacher, guardTitleAgainstContent, shouldSkipExampleRefresh } from '../board-intent';
+import { decideBoardIntent, applyBoardIntent, numbersOnBoard, describeIntentForTeacher, guardTitleAgainstContent, shouldSkipExampleRefresh, mergeCorrectionNotes, buildCorrectionDirective } from '../board-intent';
 import { deriveBoardFigure, openBoard, describeBoardForTeacher } from '../board-state';
 
 const splitBoard = {
@@ -407,5 +407,38 @@ describe('shouldSkipExampleRefresh（换例重绘守门，修复批 4b）', () =
       boardSpec: financeBoard,
       teacherReply: '',
     }).skip).toBe(false);
+  });
+});
+
+/* ────────────── 纠正语境（修复批 7，板书固化学员已纠错误 critical×2） ────────────── */
+
+describe('mergeCorrectionNotes / buildCorrectionDirective（纠正语境，修复批 7）', () => {
+  const MIS = { conceptKey: '核对试用期限档位', hypothesis: '学生误以为一年整的合同试用期上限按一个月算' };
+
+  it('误解假设并入名单（cap 5、按假设去重）', () => {
+    const prior = Array.from({ length: 5 }, (_, i) => ({ conceptKey: `k${i}`, hypothesis: `旧${i}`, turn: i }));
+    const merged = mergeCorrectionNotes(prior, [MIS], 10);
+    expect(merged).toHaveLength(5);
+    // 最旧的被挤出，新的在尾部
+    expect(merged.some((note) => note.hypothesis === MIS.hypothesis)).toBe(true);
+    expect(merged.some((note) => note.hypothesis === '旧0')).toBe(false);
+  });
+
+  it('同假设重复上报不重复入名单；空误解返回原名单', () => {
+    const first = mergeCorrectionNotes([], [MIS], 4);
+    const second = mergeCorrectionNotes(first, [{ ...MIS, conceptKey: '改名' }], 6);
+    expect(second).toHaveLength(1);
+    expect(mergeCorrectionNotes(first, [], 8)).toBe(first);
+  });
+
+  it('清除禁令含假设原文与「不得保留错误版本」', () => {
+    const directive = buildCorrectionDirective([MIS].map((m) => ({ ...m, turn: 4 })));
+    expect(directive).toContain('一个月');
+    expect(directive).toContain('不得保留');
+  });
+
+  it('无纠正记录 → 空禁令（不加重无谓 token）', () => {
+    expect(buildCorrectionDirective([])).toBe('');
+    expect(buildCorrectionDirective(undefined)).toBe('');
   });
 });

@@ -269,6 +269,51 @@ export function shouldSkipExampleRefresh(
   return { skip: false, reason: `旧板内容命中 ${hits.length} 处（<2），放行重绘`, hits };
 }
 
+/* ────────── 纠正语境（2026-11-13 修复批 7，BOARD_MISMATCH critical×2：板书固化学员已纠错误） ──────────
+ * 实证（批 D u01 badf3f77）：教师 turn4 纠正试用期档位（analysis.misconceptions 带可复算信号：
+ * 「学生误以为一年整落在『三个月以上不满一年』档，试用期上限按一个月算」），但常规意图当轮不刷，
+ * rev 停在 2；后续 rev3/rev4 刷新时设计器**盲重建**（不收当前板面），把学员错版又抄回板上，
+ * 「上限一个月，正好到顶」一直挂到课终，正落在本课核心边界点上。
+ *
+ * 两个可复算件（纯函数）：
+ *   - mergeCorrectionNotes：误解假设持久化名单（teachingState.lastCorrectionNotes，cap 5、按假设去重）
+ *     ——纠正语境跨轮可用，后续任何刷新轮都带着它；
+ *   - buildCorrectionDirective：给绘图员的清除禁令（含假设原文——设计器据此知道**哪句话**不得再现）。
+ */
+export interface BoardCorrectionNote {
+  conceptKey: string;
+  hypothesis: string;
+  turn: number;
+}
+
+const CORRECTION_NOTES_CAP = 5;
+
+export function mergeCorrectionNotes(
+  prior: BoardCorrectionNote[] | undefined | null,
+  turnMisconceptions: Array<{ conceptKey?: unknown; hypothesis?: unknown }>,
+  turnIndex: number,
+): BoardCorrectionNote[] {
+  const base = Array.isArray(prior) ? prior : [];
+  const fresh = (Array.isArray(turnMisconceptions) ? turnMisconceptions : [])
+    .map((m) => ({
+      conceptKey: String(m?.conceptKey ?? '').slice(0, 40),
+      hypothesis: String(m?.hypothesis ?? '').trim().slice(0, 120),
+      turn: turnIndex,
+    }))
+    .filter((note) => note.hypothesis);
+  if (fresh.length === 0) return base;
+  const seen = new Set(base.map((note) => note.hypothesis));
+  return [...base, ...fresh.filter((note) => !seen.has(note.hypothesis))].slice(-CORRECTION_NOTES_CAP);
+}
+
+export function buildCorrectionDirective(notes: BoardCorrectionNote[] | undefined | null): string {
+  const list = Array.isArray(notes) ? notes.filter((note) => note?.hypothesis) : [];
+  if (list.length === 0) return '';
+  return '老师此前已纠正过学生的错误理解：' + list.map((note) => `「${note.hypothesis}」`).join('；')
+    + '。板面凡与学生被纠正前说法一致的表述（数值、档位、结论、标签），必须按老师纠正后的口径写；'
+    + '**不得保留学生的错误版本**。';
+}
+
 /**
  * 副标注里的「剧透判断」：`sub` 本来是写单位/俗称/一句话解释的，
  * 但绘图员会把「数字照搬」「单位写错了」这类判断写进去——它同样是替学生把结论说了。

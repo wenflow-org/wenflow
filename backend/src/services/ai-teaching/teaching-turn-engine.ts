@@ -85,7 +85,7 @@ import type { TeachingTurnOutput } from '../../skills/teaching-turn';
 import { findArithmeticMismatches, describeMismatchesForRepair } from './teaching-arithmetic-guard';
 import { repairContradictedPassedVerdict, shouldGuardReplyForFailedConcept, stripAffirmationsOnFailedVerdict } from './checkpoint-feedback-guard';
 import { assessAdjacentRepetition, findPreviousAssistantReply } from './teaching-repetition-guard';
-import { decideBoardIntent, numbersOnBoard, shouldSkipExampleRefresh } from './board-intent';
+import { decideBoardIntent, numbersOnBoard, shouldSkipExampleRefresh, mergeCorrectionNotes, buildCorrectionDirective, type BoardCorrectionNote } from './board-intent';
 import { applyBoardOp } from './board-controller';
 import { BOARD_DESIGN_BASE_INSTRUCTION, boardPromptInputForTeacher, decideBoardAttachment, openBoard, type BoardState } from './board-state';
 import { designBoard } from './board-designer.service';
@@ -1248,6 +1248,24 @@ export async function processStudentMessage(
     }
   }
 
+  // 纠正语境（修复批 7，BOARD_MISMATCH critical×2：板书固化学员已纠错误）：误解轮的假设
+  // 持久化进 teachingState.lastCorrectionNotes（cap 5、按假设去重），本课后续所有刷新轮
+  // 都带着「不得保留学员被纠正前错误版本」的清除禁令——设计器盲重建（不收当前板面）时
+  // 否则会把学员错版原样抄回（实证 badf3f77：turn4 纠正试用期档位后 rev4 仍挂错版到课终）。
+  // 注意：teachingState 本体在下方才构建，这里先算好语境，持久化在声明后统一落。
+  const turnMisconceptions = Array.isArray(teachingOutput.analysis?.misconceptions)
+    ? (teachingOutput.analysis.misconceptions as Array<{ conceptKey?: unknown; hypothesis?: unknown }>)
+      .filter((m) => m && typeof m === 'object')
+    : [];
+  const mergedCorrectionNotes = mergeCorrectionNotes(
+    (previousTeachingState as { lastCorrectionNotes?: BoardCorrectionNote[] }).lastCorrectionNotes,
+    turnMisconceptions,
+    updatedMessages.length,
+  );
+  const correctionDirective = buildCorrectionDirective(mergedCorrectionNotes);
+  const correctionNotesChanged = mergedCorrectionNotes
+    !== (previousTeachingState as { lastCorrectionNotes?: BoardCorrectionNote[] }).lastCorrectionNotes;
+
   // 共享白板（方案 A，2026-10-28 接线）：老师先说完 → 识别「换了例子/条件」→ 同轮刷新板 →
   // 随本轮消息下发。首轮的板已在调用老师前建好；这里只处理后续轮。
   if (board && !isFirstTurnOfTask) {
@@ -1295,7 +1313,8 @@ export async function processStudentMessage(
             (intent.exampleChange === 'scene'
               ? '老师这一轮换了对象/条件。把同一结构的板换成**当前这个情境**（对象、液体、条件标签全换）。'
               : '老师这一轮换了例子/条件。把同一结构的板换成**老师这一轮给的例子**（该换的词、数值、单位全换，旧例子不要留）。')
-            + '结构、图型、副标注写法不变。' + intent.instruction,
+            + '结构、图型、副标注写法不变。' + intent.instruction
+            + correctionDirective,
         }, { userId: session.userId, sessionId: session.id, taskId: session.taskId });
         if (designed.figure) {
           board = applyBoardOp(board, { type: 'update', reason: 'new-example' }, designed.figure) ?? board;
@@ -1309,7 +1328,36 @@ export async function processStudentMessage(
           });
         }
       }
-    }
+    } else if (turnMisconceptions.length > 0) {
+        // 纠正轮确定性刷新槽位（修复批 7）：误解轮常规意图不刷 → 板面错过纠正机会
+        //（实证 badf3f77 turn4：教师纠正试用期档位，rev 停在 2，错版后被后续盲重建沿袭到课终）。
+        // 带清除指令强制重绘一次；4b 换例守门不适用——纠正不是换数，信号更强更明确。
+        const designed = await designBoard({
+          task: { title: context.taskTitle, description: context.taskDescription, taskType: context.taskType },
+          scenario: { subject: session.subject, topic: session.topic, learnerLevel: 'beginner' },
+          studentSays: message,
+          kindHint: board.figure?.kind ?? null,
+          questionIntent: intent,
+          lastTeacherReply: teachingOutput.reply,
+          instruction: '老师本轮纠正了学生的一个错误理解。把板面改成**老师本轮纠正后的正确口径**；'
+            + '不得保留学生被纠正前的错误版本。结构、图型、副标注写法不变。'
+            + intent.instruction + correctionDirective,
+        }, { userId: session.userId, sessionId: session.id, taskId: session.taskId });
+        if (designed.figure) {
+          board = applyBoardOp(board, { type: 'update', reason: 'correction' }, designed.figure) ?? board;
+          logger.info('[AITeaching] 纠正轮板书刷新：误解轮强制重绘，清除被纠正的错误表述', {
+            sessionId,
+            taskId: session.taskId,
+            notes: mergedCorrectionNotes.map((note) => note.conceptKey).slice(0, 4),
+          });
+        } else {
+          logger.warn('[AITeaching] 纠正轮板书刷新被拒（保持旧板）', {
+            sessionId,
+            taskId: session.taskId,
+            reason: designed.reason,
+          });
+        }
+      }
   }
   if (board && !assistantMessage.figures?.length && !detectExerciseLeakInReply(teachingOutput.reply)) {
     const boardDecision = decideBoardAttachment(board, updatedMessages, paletteOfSubject(session.subject));
@@ -1556,6 +1604,10 @@ export async function processStudentMessage(
     // 继承上一回合顶层状态后再覆盖本回合字段：否则 pendingCheckpoint / lastCheckpointTurn /
     // checkpointHistory 会在每次重建时丢失（18 号报告 N2）。
     const teachingState: Record<string, any> = inheritTeachingState(previousTeachingState, turnState);
+    // 纠正语境持久化（修复批 7）：teachingState 本体在此才构建，误解假设名单在此落
+    if (correctionNotesChanged) {
+      teachingState.lastCorrectionNotes = mergedCorrectionNotes;
+    }
 
     // 收口闭合门禁计数：延迟发生时 +1（跨回合继承）。
     // 计数分两口：全会话累计（绝对上限）+ 同一题累计（同题重复上限）。换新题时重置同题计数，
