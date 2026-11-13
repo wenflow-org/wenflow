@@ -30,8 +30,22 @@ const AUTOPILOT_GOAL_RETRIES = 3
 const AUTOPILOT_LESSON_RECOVERY_LIMIT = 3
 /** 黑盒 step 可恢复失败的同 key 重试上限 */
 const AUTOPILOT_BLACKBOX_STEP_RETRIES = 3
-/** 黑盒 waitingForObservation（path 生成中等）连续空等上限：超过判定死等退出 */
-const AUTOPILOT_WAIT_OBSERVATION_LIMIT_MS = 10 * 60 * 1000
+/**
+ * Path 生成等待上限（2026-11-13 黑盒 mini-batch 实证）。
+ *
+ * 旧值 10 分钟是「观察无变化」口径，但 Path 生成期间平台观察本来就不变：
+ * core → 逐阶段 design（并发度 1，单阶段 70-170s）→ KC 映射 → 落库，
+ * 实测 4 阶段约 20-25 分钟。黑盒 autopilot 因此在 10 分钟处误判「无进展」自杀，
+ * 会话停在 path，既学不到课也出不了裁判报告。
+ *
+ * 这里把 Path 等待与普通观察等待拆开：默认 45 分钟（可用环境变量覆盖），
+ * 仍保留「主动刷新观察」，真死等最终会收口。assisted 链路有自己的 waitForPathReady，
+ * 不受此常量影响。
+ */
+const AUTOPILOT_PATH_WAIT_LIMIT_MS = (() => {
+  const configured = Number(process.env.AUTOPILOT_PATH_WAIT_LIMIT_MS)
+  return Number.isFinite(configured) && configured > 0 ? configured : 45 * 60 * 1000
+})()
 /** 等待态主动刷新观察的最小间隔（太密会产生大量 observe 命令与轨迹快照；15s 足够及时） */
 const AUTOPILOT_OBSERVE_REFRESH_INTERVAL_MS = 15 * 1000
 /** 迭代间最小间隔（防止热循环打满数据库） */
@@ -1032,11 +1046,11 @@ export class AutopilotService {
       const isWaiting = stage === 'path' && !obs.availableActions.includes('start_learning')
       if (isWaiting) {
         waitingSince = waitingSince ?? Date.now()
-        if (Date.now() - waitingSince > AUTOPILOT_WAIT_OBSERVATION_LIMIT_MS) {
+        if (Date.now() - waitingSince > AUTOPILOT_PATH_WAIT_LIMIT_MS) {
           await this.writeState(sessionId, {
             status: 'failed',
             completedAt: new Date().toISOString(),
-            lastError: 'Path 生成等待超时（10 分钟无进展）'
+            lastError: `Path 生成等待超时（${Math.round(AUTOPILOT_PATH_WAIT_LIMIT_MS / 60000)} 分钟无进展）`
           })
           return
         }
@@ -1274,11 +1288,11 @@ export class AutopilotService {
         const isWaiting = !obs.availableActions.includes('start_learning')
         if (isWaiting) {
           waitingSince = waitingSince ?? Date.now()
-          if (Date.now() - waitingSince > AUTOPILOT_WAIT_OBSERVATION_LIMIT_MS) {
+          if (Date.now() - waitingSince > AUTOPILOT_PATH_WAIT_LIMIT_MS) {
             await this.writeState(sessionId, {
               status: 'failed',
               completedAt: new Date().toISOString(),
-              lastError: 'Path 生成等待超时（10 分钟无进展）'
+              lastError: `Path 生成等待超时（${Math.round(AUTOPILOT_PATH_WAIT_LIMIT_MS / 60000)} 分钟无进展）`
             })
             return
           }
