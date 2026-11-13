@@ -362,6 +362,10 @@ async function main() {
   ]);
   const byCode = new Map<string, any>();
   for (const r of records) {
+    // 残课结构排除（2026-11-14 批 G 实证）：1-2 轮残课上 closure_missing/criteria 等缺失类
+    // finding 是结构性必然（课都没讲完当然没有收束）——按 turnCount 整课剔除，
+    // 比逐个枚举伪影 code 更根本（批 D 的 closure critical×1 即 1 轮残课伪影）。
+    if (Number(r.turnCount || 0) < 3) continue;
     const findings = Array.isArray(r.report?.findings) ? r.report.findings : [];
     for (const f of findings) {
       const severity = String(f.severity || 'unknown');

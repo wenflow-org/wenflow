@@ -192,6 +192,21 @@ const CLOSING_REPLY_PATTERNS: RegExp[] = [
   /(我们)?(先|就)(到这|到这里)/,
 ];
 
+/**
+ * 开场「上一课经历」接地守卫（修复批 8，OPENING_ASSUME_EXPERIENCE 课堂聚类 4/5）：
+ * 开场文本断言存在上一课/上次经历（病历单形态：「上一课你把…五处逐条判完了」「上一阶段
+ * 那三把尺子已经走稳了」「你说过要的是……」）。lastLessonRecap 缺席 = 本课没有任何可核验的
+ * 上一课记录（recap 只在真实完成课存在时由 recap 链装配）——此时任何此类断言都不可核验。
+ */
+export function hasUnverifiablePriorClaim(opening: { message?: unknown; question?: unknown }): boolean {
+  const text = `${String(opening?.message ?? '')}\n${String(opening?.question ?? '')}`;
+  return /(上一[节节课次阶段环节]|上次[的课学习]?|你说过|你之前[提讲]过)/.test(text);
+}
+
+const OPENING_PRIOR_CLAIM_CONSTRAINT = '本课没有任何可核验的上一课记录。不得断言上一课/上次/上一阶段的经历或成果'
+  + '（如「你上一课判完了…」「上一阶段已经走稳」「你说过要的是…」）；如需衔接，改用条件式表述'
+  + '（「如果你之前接触过…」），或直接锚定本课材料开场。';
+
 export async function generateOpening(context: TeachingScenarioContext): Promise<TeachingOpening> {
   const runtimeSignals = deriveTeachingRuntimeSignals(context);
   const openingMode: TeachingOpening['mode'] = context.taskType === 'project'
@@ -202,23 +217,20 @@ export async function generateOpening(context: TeachingScenarioContext): Promise
       && runtimeSignals.recommendedPacing !== 'slow'
       ? 'predict'
       : 'self-assess';
-  let parsed: any = null;
-  try {
-    const result = await withTimeoutSignal(
-      (signal) => executeSkillWithResult(auxSkillDefinitionMap['teaching-opening-generator'], {
-        subject: context.subject,
-        topic: context.topic,
-        taskTitle: context.taskTitle,
-        taskDescription: context.taskDescription,
-        taskType: context.taskType,
-        pathSummary: context.pathProgress.pathSummary,
-        currentMilestoneTitle: context.pathProgress.currentMilestoneTitle,
-        learner: {
-          confidenceLevel: runtimeSignals.confidenceLevel,
-          recentTrend: runtimeSignals.recentTrend,
-          recommendedPacing: runtimeSignals.recommendedPacing,
-        },
-        openingMode,
+  const openingInput = {
+    subject: context.subject,
+    topic: context.topic,
+    taskTitle: context.taskTitle,
+    taskDescription: context.taskDescription,
+    taskType: context.taskType,
+    pathSummary: context.pathProgress.pathSummary,
+    currentMilestoneTitle: context.pathProgress.currentMilestoneTitle,
+    learner: {
+      confidenceLevel: runtimeSignals.confidenceLevel,
+      recentTrend: runtimeSignals.recentTrend,
+      recommendedPacing: runtimeSignals.recommendedPacing,
+    },
+    openingMode,
         ...(context.learningSignal ? { learningSignal: context.learningSignal } : {}),
         ...(context.lastLessonRecap ? { lastLessonRecap: context.lastLessonRecap } : {}),
         ...(context.priorLearningContext ? { priorLearningContext: context.priorLearningContext } : {}),
@@ -245,12 +257,16 @@ export async function generateOpening(context: TeachingScenarioContext): Promise
           requestPath: '/services/ai-teaching/generate-opening',
           callerAgentId: AI_TEACHING_AGENT_ID,
         },
-      }, { abortSignal: signal }),
-      OPENING_GENERATION_TIMEOUT_MS,
-      'OPENING_GENERATION_TIMEOUT'
-    );
-    parsed = result.success && result.output ? result.output : null;
-  } catch (error) {
+    };
+    let parsed: any = null;
+    try {
+      const result = await withTimeoutSignal(
+        (signal) => executeSkillWithResult(auxSkillDefinitionMap['teaching-opening-generator'], openingInput, { abortSignal: signal }),
+        OPENING_GENERATION_TIMEOUT_MS,
+        'OPENING_GENERATION_TIMEOUT'
+      );
+      parsed = result.success && result.output ? result.output : null;
+    } catch (error) {
     // 开场生成失败：降级为确定性开场兜底，保证开课链路在模型不可用时仍可用。
     logger.warn('[AITeaching] 开场交互块生成失败，降级为确定性开场', {
       error: error instanceof Error ? error.message : String(error),
@@ -267,13 +283,63 @@ export async function generateOpening(context: TeachingScenarioContext): Promise
     // question 里还会写"也可以直接往下走"这种没有控件的动作承诺。这里统一收口。
     // 材料落地护栏（2026-11-12）：模型说「这段对话」却不摆本体时整块补挂（见 ensureOpeningMaterialGrounding）。
     // 示例口径护栏（2026-11-12）：描述标「示例」而开场说成「你大概见过」时改回示例口径。
-    return ensureOpeningSampleHonesty(
+    let opening = ensureOpeningSampleHonesty(
       ensureOpeningMaterialGrounding(
         ensureOpeningActionLine(parsed as Partial<TeachingOpening>, context),
         context,
       ),
       context,
     );
+    // 开场「上一课经历」接地守卫（修复批 8，OPENING_ASSUME_EXPERIENCE 聚类 4/5）：
+    // lastLessonRecap 缺席 = 无可核验的上一课记录，开场文本却断言上一课经历
+    // → 按接地约束重生成一次（条件式表述或锚定本课材料）；重生成结果始终采用（带指令的
+    // 即便仍违例也优于原版），并打遥测。fail-open：重生成失败保留原开场，绝不阻塞开课。
+    if (!context.lastLessonRecap && hasUnverifiablePriorClaim(opening)) {
+      try {
+        const retry = await withTimeoutSignal(
+          (signal) => executeSkillWithResult(auxSkillDefinitionMap['teaching-opening-generator'], {
+            ...openingInput,
+            priorClaimConstraint: OPENING_PRIOR_CLAIM_CONSTRAINT,
+            __prompt: {
+              userId: context.userId,
+              taskId: context.taskId,
+              requestPath: '/services/ai-teaching/generate-opening',
+              callerAgentId: AI_TEACHING_AGENT_ID,
+            },
+          }, { abortSignal: signal }),
+          OPENING_GENERATION_TIMEOUT_MS,
+          'OPENING_GENERATION_TIMEOUT'
+        );
+        const reparsed = retry.success && retry.output ? retry.output : null;
+        if (reparsed) {
+          opening = ensureOpeningSampleHonesty(
+            ensureOpeningMaterialGrounding(
+              ensureOpeningActionLine(reparsed as Partial<TeachingOpening>, context),
+              context,
+            ),
+            context,
+          );
+          logger.warn('[AITeaching] 开场断言了不可核验的上一课经历，已按接地约束重生成', {
+            userId: context.userId,
+            taskId: context.taskId,
+            stillViolating: hasUnverifiablePriorClaim(opening),
+          });
+          recordDegradation({
+            source: 'ai-teaching/generate-opening',
+            faultCategory: 'SCHEMA_VIOLATION',
+            severity: 'P2_DEGRADED',
+            impactedDimensions: ['opening.message'],
+            mitigationApplied: 'regenerate-opening-prior-claim-grounded',
+            rootCauseMessage: 'opening asserted prior-lesson experience without verifiable recap; regenerated with grounding constraint',
+          });
+        }
+      } catch (retryError) {
+        logger.warn('[AITeaching] 开场接地重生成失败，保留原开场（fail-open）', {
+          error: retryError instanceof Error ? retryError.message : String(retryError),
+        });
+      }
+    }
+    return opening;
   }
 
   logger.warn('[AITeaching] 开场交互块缺少有效结构，降级为确定性开场', {

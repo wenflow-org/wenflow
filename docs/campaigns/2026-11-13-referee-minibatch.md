@@ -587,3 +587,66 @@ conceptKey 与收束点名归一匹配（真实台账多为可读中文名，cpt
 
 **修复批 7 结论**：板书固化 critical 清零 + 两闸门实战命中，负证据一致性链
 （误解报告 → 台账 → 收束降档 / 板书纠正刷新）全链贯通。
+
+## 十六、修复批 8（2026-11-14 当轮：开场「上一课经历」接地守卫）
+
+承接 §15.3 队列：OPENING_ASSUME_EXPERIENCE（4/5，minor×4 major×2，最大未修簇）。
+
+### 16.1 病历单与取证
+
+**病历单形态**：开场断言上一课经历——「上一课你把竞业限制和违约金那五处逐条判完了」
+「上一阶段那三把尺子已经走稳了」「上一课在万向钱潮上算出…3.62 亿」「你说过要的是……」——
+本课证据面无法核验这些先修经历。
+
+**取证**：recap 链（teaching-context-recap）已有可验证信号——`lastLessonRecap` 只在真实
+完成课（status='completed' + wrapup 非空）存在时由 recap 链装配；mini-batch 的前课多为
+abandoned（不满足）→ 开场生成时该输入缺席。断言正是在这个「无据可查」状态下产生的
+（taskOrder=2 让模型推断存在前任务并把叙述成已完成）。
+
+### 16.2 确定性接地守卫（代码面）
+
+- **判定器** `hasUnverifiablePriorClaim`（纯函数，message+question 双扫描）：
+  `/(上一[节节课次阶段]|上次[的课学习]?|你说过|你之前[提讲]过)/`；
+- **接线**（generateOpening）：`!context.lastLessonRecap && 判定命中` → 携带接地约束
+  （「本课没有任何可核验的上一课记录。不得断言…；如需衔接改用条件式表述（如果你之前
+  接触过…），或直接锚定本课材料开场」）**重生成一次**——重生成结果始终采用（带指令的
+  即便仍违例也优于原版），打遥测 `regenerate-opening-prior-claim-grounded`；
+- **fail-open**：重生成失败保留原开场，绝不阻塞开课。recap 存在（真有上一课）时守卫
+  完全不参与——引用真实 recap 内容合法。
+
+**测试**：opening-prior-claim-grounding.test.ts 4 例（病历单形态全命中/条件式不误伤/
+锚定本课不误伤/message+question 双扫描）。
+
+### 16.3 批 F 双评重评：`reeval7-2026-11-14`（10 课判定，u04 路径生成瞬态失败未开课）
+
+**接地守卫实战命中 ×1**（`regenerate-opening-prior-claim-grounded`）——但簇未收敛：
+
+| 聚类 | 批 E | 批 F | 判定 |
+| --- | --- | --- | --- |
+| `OPENING_ASSUME_EXPERIENCE` | 4/5（minor×4，major×2） | **4/5（minor×4，major×2）** | **未收敛**，归因有二：①判定器标记太窄（代表形态「期限那句的起算点和两年上限**你已经量稳了**」不带任何 prior 标记词；「上一环节」也不在标记集）——词面标记是打地鼠；②提示词 rule 57 是**条件式**条款——只管「输入提供 lastLessonRecap 时」，缺席分支完全静默，模型在无据可查时自由断言 |
+| `CLOSURE_MISSING` | 5/5（major×6） | 4/5（major×5） | 残课属性维持 |
+| 新 critical | — | `PHANTOM_TRANSFER_MATERIAL` ×1（u07） | 教师声称「下面三句来自一篇你没读过的摘要」但从未呈现，学员在无材料下编造答案、教师还表扬「判得准」——**对话中段材料悬空**（开场有材料护栏，课中无） |
+
+**第二刀（同批内迭代，双杠杆）**：
+
+1. **提示词 rule 57 原位收紧**（条数守恒 36=36，13 项门禁全绿）：补上**缺席分支**——输入未提供
+   lastLessonRecap 时同样不得断言上一课/上次/上一环节/上一阶段的经历成果或掌握状态（点名
+   「你已经量稳了」型），衔接用条件式或锚定本课材料；
+2. **判定器补「上一环节」**标记。
+
+u04 fail（路径生成瞬态状态翻转）为平台侧：管线日志全部成功（planning→reviewer→stage-designer×2），
+状态机在后续环节翻转——归入路径健壮性队列既有项，与批 8 无关（开课从未开始）。
+
+### 16.4 批 G 双评重评：`reeval8-2026-11-14`（15 课）——**收敛**
+
+| 聚类 | 批 F | 批 G | 判定 |
+| --- | --- | --- | --- |
+| `OPENING_ASSUME_EXPERIENCE` | 4/5（minor×4，major×2） | **×1 单例（major×1，不进 actionable）** | **收敛**——4/5 聚类解体。双杠杆分工生效：批 G 重生成 0 次 = rule 57 缺席分支让**首次生成就合规**（提示词前置纪律），代码判定器退居保险丝。剩余散形单例（OPENING_PRIOR_REFERENCE minor / OPENING_UNVERIFIED_PRIOR major / MATERIAL_NOT_ANCHORED major 各 1）存档观察 |
+| `PHANTOM_TRANSFER_MATERIAL` | critical×1 | **0（未复现）** | 单次形态，方差保留观察 |
+| `CLOSURE_MISSING` | 4/5（major×5） | 4/4（critical×1→实为 1 轮残课伪影，major×3） | critical 是 1 轮残课的结构性必然——判据改为**按 turnCount<3 整课剔除**（比枚举伪影 code 更根本）；真残余 wrapup_truncated/stale_evaluation 维持 |
+| `BOARD_MISMATCH` | — | ×1（major×1） | 维持低位 |
+| `BOARD_DANGLING_TRACE` | 2（major×2） | 2（major×1，minor×1） | 维持观察 |
+
+**修复批 8 结论**：开场假定性簇 4/5 → 收敛（连续三轮在册的最后一支大簇解体）。两轮迭代的
+教训归档：词面判定器是打地鼠（「你已经量稳了」无任何标记词），提示词缺席分支才是正路；
+代码判定器退居保险丝。全战役 8 批闭环完成，referee/课堂双面无 critical 真缺陷。
