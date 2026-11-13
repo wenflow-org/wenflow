@@ -203,10 +203,54 @@ Referee 只看 publicTrace：板书/图文载荷、逐轮脚手架、收束产�
 | `SCAFFOLD_LATE` | 6/7 | 3/7 | 部分为证据面误报，随重评收敛 |
 | `OPENING_PRIOR_ASSUMPTION` | 2/7 | 2/7 | 维持 |
 
-## 十、下一轮优先级
+## 十、修复批 3（2026-11-13 当轮：收尾不终止 + 提示词三件 + 收敛重评）
 
-1. **收尾不终止**（u07 major，referee 面）：教学已具备 `confirm_complete` 仍循环 20 轮，需要编排层收敛/循环打断。
-2. **板书指认一致性**（课堂层 7/7 major×13）：figures 附件与教师口头指认的栏位结构对不上——板书设计/指认校验。
-3. **提示词面三件**（走双门禁 + 黄金锚点，只改不增）：检查点迁移化、记号当场解释、收束 next_action。
-4. **Goal 范围裁剪**（u01 minor）：五类风险被收成三类，需在 Goal 确认时显式说明「本次不覆盖哪几类」。
-5. **任务主题漂移**（u07 minor）：生成任务与路径里程碑/原始目标做一致性校验。
+### 10.1 收尾循环打断（u07 major，代码面）
+
+- 根因取证：u07 循环课 teachingState——`completionDeferrals=2`（同题延迟到顶）、阶段已 `ready_to_close`，
+  但老师连续 4+ 轮重发近同构收尾话术，完成信号不再落地；既有「低增量重复护栏」只 warn 不打断。
+- 修复：`closureRepeatStreak` 跨回合继承（teachingState 持久化）；循环信号 = 老师连续
+  「显式收尾话术 / 模型自报完成候选 / **与上一轮低增量重复**」且学员无新问题；
+  连续 ≥3 轮且知识面已冻结、无 pending 检查点 → 绕过软条件强制放行完成信号，
+  并落 `closureLoopBreakReleased`——收束入口（evaluateSessionClosable）同源认账，
+  避免「引擎放完成、confirm 409」僵局（#164 两门禁同源纪律）。
+- 锚点样本回归发现复述循环未必带「到这儿收」类收尾词 → 循环信号并入
+  `assessAdjacentRepetition` 低增量判据（b22060fb）。单测 39/39 绿。
+
+### 10.2 提示词三件（只改不增，497b5c37，门禁全绿）
+
+| 改动 | 落点（既有规则内收紧） |
+| --- | --- |
+| 检查点迁移默认 | rule 243「依口径≠考原话」段：迁移是检查点默认形态；已文本作答/板上已给结论的材料同样算已贴标签 |
+| 记号即陌生词 | rule 98「真名锚定」反向：引入符号/缩写/工程记号必须当场用场景语言解释，否则 Meno 闸按积木未给 |
+| 收束两件套 | rule 234「主动提议收尾」：收口必须「一句带得走的判断口径 + 一个具体下一步」，禁止客套/复述充数 |
+
+`prompts:compile-all` / `prompts:sync` 落 DB；lint（33/33）、core:check、fields-sync、skills:check（F1~F12）全绿。
+
+### 10.3 收敛重评（5 例 × 2 课 = 14 节，全部修复生效后首轮回归）
+
+referee 面：**5/5 pass_with_concerns、零 critical**；u04 中途爆死消失（CTRL_ABANDON_CLEAN）；
+u07 式 `session_never_terminates` 消失；跑数器 abandon 409→同 key 重试→200 自愈按预期工作。
+
+课堂层对照（基线 = 修复批 2 后 32 课重评）：
+
+| 聚类 | 基线（32 课） | 重评（14 课） | 判定 |
+| --- | --- | --- | --- |
+| `BOARD_DANGLING_TRACE` | 5/7（major×1） | 2/5（minor×4） | 证据缺口已收敛；残余为「该课确实无板书附件」的如实 minor |
+| `BOARD_MISMATCH` | 7/7（major×13） | 5/5（major×3，minor×7） | severity 大幅下降但覆盖仍在——**下一个真靶子** |
+| `NOTATION_LEAK` | 7/7 | 4/5（minor×5） | 覆盖下降，全 minor |
+| `CLOSURE_MISSING` | 7/7（major×6） | 3/5（major×2） | 下降 |
+| `ASSESSMENT_REPEAT_RECALL` | 7/7 | 5/5（minor×9，+no_transfer×2） | 全 minor 但覆盖未降——出题时机 emitCheckpoint 在编排层，M1 只收紧了内容自检，需要编排面配合 |
+| `SCAFFOLD_LATE` | 3/7 | 5/5（minor×8） | 维持（评审粒度更细后显性化） |
+| 新增单例 | — | `board_stale_after_rev4`、`board_pointer_mismatch`、`closure_repeat_verbatim` | 白板历史/指针新证据面暴露的新形态，单例先观察 |
+
+**结论：方向性收敛成立**——critical 清零、major 从 13 降到 3、悬空消除、收尾循环与中途爆死消失；
+`ASSESSMENT_REPEAT_RECALL` 与 `BOARD_MISMATCH` 是下一轮的两个真靶子（编排面出题时机 / 板书指认校验）。
+
+## 十一、下一轮优先级
+
+1. **检查点出题时机编排面**（课堂层 5/5 minor）：`emitCheckpoint` 由编排层按可复算条件决定——把「上一问是复述」纳入出题门槛（代码面）。
+2. **板书指认一致性**（课堂层 5/5，major×3）：figures/白板快照与教师口头指认的栏位结构对不上——板书设计/指认校验。
+3. **Goal 范围裁剪**（u01 minor）：五类风险被收成三类，需在 Goal 确认时显式说明「本次不覆盖哪几类」。
+4. **任务主题漂移**（u07 minor）：生成任务与路径里程碑/原始目标做一致性校验。
+5. **路径生成等待体验**（referee 面 5/5 major 持续）：进度反馈与 ETA（文案已诚实化，交互面仍无进度条）。
