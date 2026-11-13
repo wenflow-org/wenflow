@@ -75,6 +75,7 @@ import { findMisconceptionFor } from '../config/misconception-corpus'
 import type { SkillDefinition } from '../skills/protocol'
 import { asErrorLike } from './vlab-types'
 import { buildCheckpointAction } from './blackbox-checkpoint'
+import { shouldFreezeSimulatorRoute } from './simulator-route-policy'
 import type {
   ActorProfileSnapshot,
   BlackboxRunState,
@@ -3127,9 +3128,14 @@ export class BlackboxVirtualLearnerRunner {
         // 对账失败不影响主流程
       }
     })();
+    // 只给本阶段的主模拟器套冻结路由；epistemic-grounding 等旁路 skill 走平台正常路由。
+    // 全部套用会让认知判决每次都被 provider 校验打回并静默降级（2026-11-13 7/7 实证）。
+    const promptRuntimeOverride = shouldFreezeSimulatorRoute(definition.name, stage)
+      ? this.simulatorRuntime(snapshot, stage)
+      : undefined
     return runWithContext({
       ...parentContext,
-      promptRuntimeOverride: this.simulatorRuntime(snapshot, stage)
+      promptRuntimeOverride
     }, () => executeSkill(definition, input))
   }
 

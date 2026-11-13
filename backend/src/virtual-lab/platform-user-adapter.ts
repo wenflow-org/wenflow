@@ -151,7 +151,10 @@ export class PlatformUserAdapter {
       control: {
         conversationId: core.conversationId || undefined,
         learningPathId: core.learningPath?.id || undefined,
-        platformStage: core.stage,
+        // 归一化到 observation 的阶段空间：goal 确认完成即进入 path，
+        // 不再把 goal 会话的 'completed' 原样透传（否则路径生成期间 platformStage
+        // 会在 completed → generating 间跳变，2026-11-13 u19/u20 裁判实证）。
+        platformStage: core.isCompleted ? 'path' : 'goal',
         goalCompleted: !!core.isCompleted,
         rawTraceId: traceId
       },
@@ -210,7 +213,8 @@ export class PlatformUserAdapter {
         learningPathId: pathId,
         taskId: firstTask?.id || null,
         teachingSessionId: null,
-        platformStage: path?.status,
+        // 同理：path.status 的 active/generating 不是阶段名；统一用 path/error/completed。
+        platformStage: runCompleted ? 'completed' : failed ? 'error' : 'path',
         runCompleted,
         completedTasks,
         totalTasks: tasks.length,

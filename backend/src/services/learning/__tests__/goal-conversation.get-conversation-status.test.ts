@@ -231,7 +231,7 @@ describe('getConversation · 已完成会话的 userVisible 重建（#213）', (
     const result = await goalConversationService.getConversation('gc-1', 'user-1');
 
     expect(result.userVisible).toBe(
-      '已收到确认，学习路径正在生成，通常 10-60 秒内完成，可前往“学习路径”查看进度。',
+      '已收到确认，学习路径正在生成，通常需要 5-20 分钟（阶段越多越久）。可以先忙别的，稍后回到“学习路径”查看进度。',
     );
     expect(result.userVisible).not.toContain('学习路径已生成');
     // 与 /reply 同源：同一操作两处口径一致
@@ -292,7 +292,7 @@ describe('getConversation · 已完成会话的 userVisible 重建（#213）', (
     const result = await goalConversationService.getConversation('gc-1', 'user-1');
 
     expect(result.userVisible).toBe(
-      '已收到确认，学习路径正在生成，通常 10-60 秒内完成，可前往“学习路径”查看进度。',
+      '已收到确认，学习路径正在生成，通常需要 5-20 分钟（阶段越多越久）。可以先忙别的，稍后回到“学习路径”查看进度。',
     );
     expect(result.userVisible).not.toContain('已生成');
     // 响应的 learningPath 形状不变（status 仍是权威行里的 active）

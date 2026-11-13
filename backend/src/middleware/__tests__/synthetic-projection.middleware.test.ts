@@ -22,6 +22,7 @@ describe('synthetic projection access', () => {
     expect(getRequiredSyntheticCapability('GET', '/api/learning/paths/path-1')).toBe('path:read')
     expect(getRequiredSyntheticCapability('POST', '/api/learning/paths/path-1/replan')).toBeNull()
     expect(getRequiredSyntheticCapability('POST', '/api/ai-teaching/sessions/s1/messages')).toBe('teaching:write')
+    expect(getRequiredSyntheticCapability('POST', '/api/ai-teaching/tasks/t1/extension-session')).toBe('teaching:write')
     expect(getRequiredSyntheticCapability('GET', '/api/admin/users')).toBeNull()
   })
 

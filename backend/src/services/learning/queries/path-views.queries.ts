@@ -336,7 +336,7 @@ export function getPathLearningAccessState(
       return {
         generationStatus,
         canStartLearning: false,
-        learningBlockedReason: '学习路径仍在生成中，请稍候再开始学习。'
+        learningBlockedReason: '学习路径仍在生成中（通常需要 5-20 分钟），可以先忙别的，稍后回来查看。'
       };
     }
 
@@ -390,7 +390,7 @@ export function getPathLearningAccessState(
   return {
     generationStatus,
     canStartLearning: false,
-    learningBlockedReason: '阶段任务还在生成中，请稍后再开始学习。'
+    learningBlockedReason: '阶段任务还在生成中（通常还需几分钟），可以先忙别的，稍后回来查看。'
   };
 }
 

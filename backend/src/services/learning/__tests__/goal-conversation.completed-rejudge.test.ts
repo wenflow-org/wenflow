@@ -338,7 +338,7 @@ describe('completed 硬阻断会话：补充说明重判通过', () => {
     // 返回已有路径的完成文案（#228 语义订正：这条占位路径的权威 status 仍是 generating，
     // 旧断言写死「已经生成」正是在锁定「路径还在生成却宣称已生成」的缺陷行为）
     expect(second.userVisible).toBe(
-      '已收到确认，学习路径正在生成，通常 10-60 秒内完成，可前往“学习路径”查看进度。',
+      '已收到确认，学习路径正在生成，通常需要 5-20 分钟（阶段越多越久）。可以先忙别的，稍后回到“学习路径”查看进度。',
     );
     const internal = second.internal as GoalEnvelope;
     expect(internal.core.learningPath).toEqual(expect.objectContaining({ id: boundPathId }));
@@ -492,7 +492,7 @@ describe('非硬阻断终局的普通 completed 会话：行为不回归', () =>
     expect(mockRunGoalAsync).not.toHaveBeenCalled();
     // 与同一秒的 GET 快照逐字同源（#228：同一态两接口同一口径）
     expect(result.userVisible).toBe(
-      '已收到确认，学习路径正在生成，通常 10-60 秒内完成，可前往“学习路径”查看进度。',
+      '已收到确认，学习路径正在生成，通常需要 5-20 分钟（阶段越多越久）。可以先忙别的，稍后回到“学习路径”查看进度。',
     );
     expect(result.userVisible).not.toContain('已经生成');
     const internal = result.internal as GoalEnvelope;

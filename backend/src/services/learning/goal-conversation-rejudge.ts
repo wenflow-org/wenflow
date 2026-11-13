@@ -461,7 +461,7 @@ export async function rejudgeHardBlockedCompletion(
   });
 
   return {
-    userVisible: '已收到你的补充说明，重新判断后可以生成学习路径，正在生成，通常 10-60 秒内完成，可前往“学习路径”查看进度。',
+    userVisible: '已收到你的补充说明，重新判断后开始生成学习路径，正在生成，通常需要 5-20 分钟。可以先忙别的，稍后回到“学习路径”查看进度。',
     internal: {
       core: {
         conversationId: conversation.id,

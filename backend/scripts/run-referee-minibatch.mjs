@@ -56,6 +56,14 @@ const concurrency = Math.max(1, Number(arg('concurrency', '2')) || 2)
 const timeoutMin = Math.max(5, Number(arg('timeout-min', '120')) || 120)
 const pollMs = Math.max(5_000, Number(arg('poll-sec', '30')) * 1000 || 30_000)
 const maxTurns = Math.max(1, Number(arg('max-turns', '24')) || 24)
+/**
+ * 每例采样任务数上限（0=跑完整条路径）。
+ *
+ * Step 1 的目标是「跨样本诊断」而不是完成率：3 并发下单课 20-30 轮、每轮双模型调用，
+ * 14 课的 case 会跑 6-7 小时。采样 4 课足以让裁判判断 Goal/Path/Teaching 风格与边界，
+ * 采样后以 abandoned 收口（referee 允许 abandoned 终态），并在结果里显式标注 sampledTasks。
+ */
+const maxTasks = Math.max(0, Number(arg('max-tasks', '0')) || 0)
 const frictionBudget = arg('friction-budget', 'normal')
 const resume = flag('resume')
 const keepAlive = flag('keep')
@@ -130,13 +138,36 @@ function storyFor(c) {
 }
 
 // ---- 单 case ----
-async function abandon(c, state, reason) {
-  const key = `minibatch-${c.id}-${Date.now()}`
-  const response = await api('POST', `/api/admin/virtual-learners/sessions/${state.sessionId}/blackbox-action`, {
-    type: 'abandon',
-    reason,
-  }, 180_000, { 'Idempotency-Key': key })
-  log(c.id, `abandon http=${response.status}${response.status === 200 ? '' : ` ${JSON.stringify(response.body?.error ?? response.body).slice(0, 160)}`}`)
+async function abandon(c, state, reason, tag = 'abandon') {
+  // 采样/超时收口时 autopilot 可能还在一次长 LLM 调用里；abandon 会被会话租约挡回 409。
+  // 同一个 Idempotency-Key 重试，既避开重复副作用，也给在途 step 留出收尾时间。
+  //
+  // 黑盒写操作还要求乐观并发令牌 X-Expected-Trace-Count（当前 publicTrace.length）。
+  // 缺它会 400「缺少合法的预期轨迹序号」；autopilot 在途时序号会变，所以每次重试都重读。
+  const key = `minibatch-${c.id}-${tag}`
+  let response = null
+  for (let attempt = 1; attempt <= 8; attempt += 1) {
+    let expectedTraceCount = 0
+    try {
+      const detail = dataOf((await api('GET', `/api/admin/virtual-learners/sessions/${state.sessionId}`, undefined, 120_000)).body)
+      // 会话详情里的 stageResults 可能是对象（API 已解析）也可能是字符串（Prisma 原样）；两种都认。
+      const raw = detail?.stageResults
+      const stage = typeof raw === 'string' ? JSON.parse(raw || '{}') : (raw && typeof raw === 'object' ? raw : {})
+      expectedTraceCount = Array.isArray(stage?.blackbox?.publicTrace) ? stage.blackbox.publicTrace.length : 0
+    } catch { expectedTraceCount = 0 }
+    response = await api('POST', `/api/admin/virtual-learners/sessions/${state.sessionId}/blackbox-action`, {
+      type: 'abandon',
+      reason,
+      expectedTraceCount,
+    }, 180_000, {
+      'Idempotency-Key': key,
+      'X-Expected-Trace-Count': String(expectedTraceCount),
+    })
+    if (response.status === 200) break
+    log(c.id, `abandon 第 ${attempt} 次 http=${response.status} ${JSON.stringify(response.body?.error ?? response.body).slice(0, 160)}`)
+    await new Promise((r) => setTimeout(r, 10_000))
+  }
+  log(c.id, `abandon 最终 http=${response?.status}`)
   return response
 }
 
@@ -165,6 +196,24 @@ async function waitForTerminal(c, state) {
     if (['completed', 'failed', 'abandoned'].includes(status)) {
       return { terminal: true, status, session, autopilot }
     }
+    // 采样上限：只跑到 N 个任务就收口（referee 允许 abandoned 终态）。
+    // totalTasks <= maxTasks 时让它自然跑完，不制造无谓的 abandoned。
+    const doneTasks = Number(session?.completedTasks) || 0
+    const totalTasks = Number(session?.totalTasks) || 0
+    if (maxTasks > 0 && doneTasks >= maxTasks && totalTasks > maxTasks) {
+      log(c.id, `已采样 ${doneTasks}/${totalTasks} 课，按 --max-tasks=${maxTasks} 收口`)
+      await api('POST', `/api/admin/virtual-learners/sessions/${state.sessionId}/autopilot/stop`, {})
+      await new Promise((r) => setTimeout(r, 15_000))
+      await abandon(c, state, '先学到这儿，回头再继续', 'sampled')
+      const after = dataOf((await api('GET', `/api/admin/virtual-learners/sessions/${state.sessionId}`)).body)
+      return {
+        terminal: ['completed', 'failed', 'abandoned'].includes(String(after?.status)),
+        status: String(after?.status || status),
+        session: after,
+        autopilot,
+        sampledTasks: doneTasks,
+      }
+    }
     if (['completed', 'failed', 'incomplete', 'stopped'].includes(autoStatus)) {
       // autopilot 已收口但会话还没落终态：先给状态机 60s 写完，再决定重启还是 abandon。
       await new Promise((r) => setTimeout(r, 60_000))
@@ -186,7 +235,7 @@ async function waitForTerminal(c, state) {
         if (restarted.status === 200) continue
       }
       log(c.id, `autopilot=${autoStatus} 且重启无效，发送 abandon 收口`)
-      await abandon(c, state, `referee-minibatch: autopilot ${autoStatus}`)
+      await abandon(c, state, '我先停一下，回头再继续', 'abandon')
       const after = dataOf((await api('GET', `/api/admin/virtual-learners/sessions/${state.sessionId}`)).body)
       return { terminal: ['completed', 'failed', 'abandoned'].includes(String(after?.status)), status: String(after?.status || freshStatus), session: after, autopilot }
     }
@@ -196,7 +245,7 @@ async function waitForTerminal(c, state) {
   log(c.id, `超时 ${timeoutMin}min：先 stop autopilot，再 abandon 收口以取得裁判资格`)
   await api('POST', `/api/admin/virtual-learners/sessions/${state.sessionId}/autopilot/stop`, {})
   await new Promise((r) => setTimeout(r, 15_000))
-  await abandon(c, state, `referee-minibatch timeout ${timeoutMin}min`)
+  await abandon(c, state, '我先停一下，回头再继续', 'timeout')
   const after = dataOf((await api('GET', `/api/admin/virtual-learners/sessions/${state.sessionId}`)).body)
   return { terminal: ['completed', 'failed', 'abandoned'].includes(String(after?.status)), status: String(after?.status || 'unknown'), session: after, autopilot: null, timedOut: true }
 }
@@ -276,7 +325,7 @@ async function runCase(c) {
   }
 
   const outcome = await waitForTerminal(c, state)
-  state.outcome = { terminal: outcome.terminal, status: outcome.status, timedOut: outcome.timedOut === true, endedAt: new Date().toISOString() }
+  state.outcome = { terminal: outcome.terminal, status: outcome.status, timedOut: outcome.timedOut === true, sampledTasks: outcome.sampledTasks ?? null, endedAt: new Date().toISOString() }
   state.autopilotState = outcome.autopilot
   writeJson(statePath, state)
 
@@ -318,6 +367,60 @@ async function runCase(c) {
   return result
 }
 
+// ---- 补救收口：把已采样但 abandon 失败的会话补成终态，再出裁判报告 ----
+async function finalizeCase(c) {
+  const dir = join(runRoot, c.id)
+  const statePath = join(dir, 'state.json')
+  const resultPath = join(dir, 'result.json')
+  const state = readJson(statePath, null)
+  if (!state?.sessionId) throw new Error('没有可收口的会话（state.json 缺 sessionId）')
+  const existing = readJson(resultPath, null)
+  if (existing?.referee?.report) {
+    log(c.id, '已有裁判报告，跳过')
+    return existing
+  }
+
+  let session = dataOf((await api('GET', `/api/admin/virtual-learners/sessions/${state.sessionId}`, undefined, 120_000)).body)
+  if (!['completed', 'failed', 'abandoned'].includes(String(session?.status))) {
+    log(c.id, `当前 ${session?.status}，先 stop autopilot 再 abandon 收口`)
+    await api('POST', `/api/admin/virtual-learners/sessions/${state.sessionId}/autopilot/stop`, {})
+    await new Promise((r) => setTimeout(r, 15_000))
+    await abandon(c, state, '先停在这里，回头再继续', 'finalize')
+    session = dataOf((await api('GET', `/api/admin/virtual-learners/sessions/${state.sessionId}`, undefined, 120_000)).body)
+  }
+
+  const result = {
+    id: c.id,
+    caseId: c.id,
+    domain: c.domain,
+    learnerName: c.learnerName,
+    goal: c.goal,
+    profileId: state.profileId,
+    userId: state.userId,
+    sessionId: state.sessionId,
+    outcome: { terminal: ['completed', 'failed', 'abandoned'].includes(String(session?.status)), status: String(session?.status || 'unknown'), sampledTasks: state.outcome?.sampledTasks ?? null, finalized: true, endedAt: new Date().toISOString() },
+    referee: existing?.referee || null,
+    actorAudit: existing?.actorAudit || null,
+    error: null,
+  }
+  if (!result.outcome.terminal) {
+    result.error = `收口失败：会话仍 ${session?.status}`
+    writeJson(resultPath, result)
+    return result
+  }
+  log(c.id, '会话终态，补出裁判报告…')
+  const evaluated = await api('POST', `/api/admin/session-audits/sessions/${state.sessionId}/evaluations`, {}, 30 * 60_000)
+  if (evaluated.status !== 200) {
+    result.error = `evaluations http=${evaluated.status} ${JSON.stringify(evaluated.body?.error ?? evaluated.body).slice(0, 400)}`
+  } else {
+    const data = dataOf(evaluated.body)
+    result.referee = data?.platform || null
+    result.actorAudit = data?.actor || null
+  }
+  writeJson(resultPath, result)
+  return result
+}
+
 // ---- 运行时证据（裁判看不到的后端日志）----
 // 2026-11-13 试点实证：黑盒每个教学回合的 epistemic-grounding 都因路由冻结校验失败而降级，
 // 裁判输入里只会体现为「学习者认知信号缺失」，不会点名根因。这里按 sessionId 从后端日志
@@ -345,6 +448,31 @@ function scanRuntimeEvidence(results) {
   }
 }
 
+// ---- 病历单 code 归一化 ----
+// 2026-11-13 实证：裁判提示词要求「稳定机器码」，但同一现象在不同 case 会输出
+// path_generation_latency / PATH_GENERATION_STALL_LONG / path_generation_stall /
+// path_generation_exceeds_promise 等变体，按原文聚类会把 7/7 的共性问题拆成 7 个单例。
+// 这里做确定性别名归一（只用于跨样本归因，不修改裁判输出）。
+function canonicalFindingCode(code) {
+  const c = String(code || '').trim().toUpperCase().replace(/[\s-]+/g, '_')
+  if (/ABANDON.*MID|RUN_ABANDONED_MIDTASKS/.test(c)) return 'SAMPLING_ABANDONED_MID_TASK'
+  if (/TERMINAL.*(FAILURE|FAILED)|RUN_TERMINAL_FAILURE/.test(c)) return 'CONTROL_TERMINAL_FAILURE'
+  if (/PATH.*(GENERATION|STALL|LATENCY|PROMISE)/.test(c)) return 'PATH_GENERATION_LATENCY'
+  if (/CONTROL.*STAGE.*(MISMATCH|GOAL_COMPLETED)/.test(c)) return 'CONTROL_STAGE_MISMATCH_GOAL_COMPLETED'
+  if (/ARTIFACT_REFERENCE|UNVERIFIABLE_BOARD|BOARD.*UNVERIFIABLE|TEACHING_REFERENCES/.test(c)) return 'TEACHING_BOARD_UNVERIFIABLE'
+  if (/TRACE.*(TRUNC|COVERAGE)/.test(c)) return 'TRACE_TRUNCATED'
+  if (/SESSION_SUPERSEDED/.test(c)) return 'SESSION_SUPERSEDED'
+  if (/METRIC.*(DEGRADED|INCOMPLETE|NO_METRICS)|SECOND_SESSION_NO_METRICS|DATA_METRICS/.test(c)) return 'METRICS_INCOMPLETE'
+  if (/CONTROL.*TASK.*COMPLETION.*LAG/.test(c)) return 'CONTROL_TASK_COMPLETION_LAG'
+  if (/GOAL_SCOPE_DRIFT/.test(c)) return 'GOAL_SCOPE_DRIFT'
+  if (/INTERNAL_NOTATION/.test(c)) return 'TEACHING_NOTATION_LEAK'
+  if (/INTERNAL_TOKEN/.test(c)) return 'INTERNAL_TOKEN_LEAK'
+  if (/SESSION_NEVER_TERMINATES/.test(c)) return 'SESSION_NEVER_TERMINATES'
+  if (/TOPIC_DRIFT/.test(c)) return 'TASK_TOPIC_DRIFT'
+  if (/GOAL_ACCEPTS_LEARNER_DELEGATION/.test(c)) return 'GOAL_ACCEPTS_LEARNER_DELEGATION'
+  return c
+}
+
 // ---- 并发执行 ----
 async function main() {
   mkdirSync(runRoot, { recursive: true })
@@ -352,23 +480,37 @@ async function main() {
   log(null, `mini-batch: ${cases.map((c) => c.id).join(', ')}｜concurrency=${concurrency}｜timeout=${timeoutMin}min｜maxTurns=${maxTurns}｜root=${runRoot}`)
 
   const results = []
-  let cursor = 0
-  async function worker(index) {
-    while (cursor < cases.length) {
-      const c = cases[cursor++]
+  if (flag('finalize')) {
+    log(null, 'finalize 模式：只补收口与裁判报告，不推进新任务')
+    for (const c of cases) {
       try {
-        results.push(await runCase(c))
+        results.push(await finalizeCase(c))
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
-        log(c.id, `失败：${message}`)
-        const dir = join(runRoot, c.id)
-        const state = readJson(join(dir, 'state.json'), { caseId: c.id })
-        writeJson(join(dir, 'state.json'), { ...state, lastError: message })
-        results.push({ caseId: c.id, goal: c.goal, error: message, referee: null })
+        log(c.id, `收口失败：${message}`)
+        const existing = readJson(join(runRoot, c.id, 'result.json'), null)
+        results.push(existing || { id: c.id, caseId: c.id, goal: c.goal, error: message, referee: null })
       }
     }
+  } else {
+    let cursor = 0
+    async function worker(index) {
+      while (cursor < cases.length) {
+        const c = cases[cursor++]
+        try {
+          results.push(await runCase(c))
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          log(c.id, `失败：${message}`)
+          const dir = join(runRoot, c.id)
+          const state = readJson(join(dir, 'state.json'), { caseId: c.id })
+          writeJson(join(dir, 'state.json'), { ...state, lastError: message })
+          results.push({ caseId: c.id, goal: c.goal, error: message, referee: null })
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(concurrency, cases.length) }, (_, i) => worker(i)))
   }
-  await Promise.all(Array.from({ length: Math.min(concurrency, cases.length) }, (_, i) => worker(i)))
   scanRuntimeEvidence(results)
 
   // ---- 聚类：只报 ≥2 次或 critical ----
@@ -376,11 +518,15 @@ async function main() {
   for (const r of results) {
     const findings = Array.isArray(r.referee?.report?.findings) ? r.referee.report.findings : []
     for (const f of findings) {
-      const code = String(f?.code || 'UNKNOWN')
-      const entry = byCode.get(code) || { code, count: 0, cases: [], severities: {}, titles: [], details: [], evidenceIds: [] }
-      entry.count += 1
+      const severity = String(f?.severity || 'unknown')
+      // info 是裁判的正面记录/观察，不进入待修列表（否则「Meno 闸通过 ×2」会被误判成病灶）。
+      if (severity === 'info') continue
+      const rawCode = String(f?.code || 'UNKNOWN')
+      const code = canonicalFindingCode(rawCode)
+      const entry = byCode.get(code) || { code, rawCodes: [], count: 0, cases: [], severities: {}, titles: [], details: [], evidenceIds: [] }
+      entry.rawCodes.push(rawCode)
       entry.cases.push(r.caseId)
-      entry.severities[String(f?.severity || 'unknown')] = (entry.severities[String(f?.severity || 'unknown')] || 0) + 1
+      entry.severities[severity] = (entry.severities[severity] || 0) + 1
       if (f?.title) entry.titles.push(String(f.title).slice(0, 200))
       if (f?.detail) entry.details.push(String(f.detail).slice(0, 300))
       if (Array.isArray(f?.evidenceIds)) entry.evidenceIds.push(...f.evidenceIds.slice(0, 5))
@@ -388,9 +534,15 @@ async function main() {
     }
   }
   const clusters = [...byCode.values()]
-    .map((e) => ({ ...e, cases: [...new Set(e.cases)], evidenceIds: [...new Set(e.evidenceIds)].slice(0, 20) }))
+    .map((e) => {
+      const cases = [...new Set(e.cases)]
+      return { ...e, cases, count: cases.length, rawCodes: [...new Set(e.rawCodes)], evidenceIds: [...new Set(e.evidenceIds)].slice(0, 20) }
+    })
     .sort((a, b) => b.count - a.count || a.code.localeCompare(b.code))
-  const actionable = clusters.filter((e) => e.count >= 2 || Object.keys(e.severities).includes('critical'))
+  // 采样/收口造成的伪问题：本轮 --max-tasks 主动 abandon 必然缺 wrapup/末课，
+  // 不能当平台缺陷进入修复清单（结果里保留原始 finding 以便追溯）。
+  const SAMPLING_ARTIFACTS = new Set(['SAMPLING_ABANDONED_MID_TASK', 'METRICS_INCOMPLETE'])
+  const actionable = clusters.filter((e) => !SAMPLING_ARTIFACTS.has(e.code) && (e.count >= 2 || Object.keys(e.severities).includes('critical')))
 
   const summary = {
     batch,

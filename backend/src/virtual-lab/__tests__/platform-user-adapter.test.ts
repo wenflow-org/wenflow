@@ -95,6 +95,8 @@ describe('PlatformUserAdapter', () => {
 
     expect(result.observation.availableActions).toEqual(['abandon'])
     expect(result.observation.lastActionResult?.visibleMessage).toBe('阶段任务仍在生成')
+    // 生成中仍属 path 阶段，不得透传 active/generating 导致 control 阶段跳变
+    expect(result.control.platformStage).toBe('path')
   })
 
   it('Path 就绪后只公开进入 Learn，并优先选择当前阶段的 todo task', async () => {
@@ -119,6 +121,7 @@ describe('PlatformUserAdapter', () => {
 
     expect(result.observation.availableActions).toEqual(['start_learning', 'abandon'])
     expect(result.observation.visibleTask?.id).toBe('todo')
+    expect(result.control.platformStage).toBe('path')
   })
 
   it('开始 Learn 与普通用户页面一致，不强制创建新教学会话', async () => {
@@ -261,5 +264,8 @@ describe('PlatformUserAdapter', () => {
 
     expect(goal.observation.availableActions).toContain('abandon')
     expect(path.observation.availableActions).toContain('abandon')
+    // goal 阶段非终态 → 'goal'；path 生成中 → 'path'
+    expect(goal.control.platformStage).toBe('goal')
+    expect(path.control.platformStage).toBe('path')
   })
 })

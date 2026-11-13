@@ -16,6 +16,9 @@ const ROUTE_RULES: RouteRule[] = [
   { method: 'GET', pattern: /^\/api\/learning\/paths\/[^/]+\/?$/, capability: 'path:read' },
   { method: 'POST', pattern: /^\/api\/learning\/tasks\/[^/]+\/complete\/?$/, capability: 'task:write' },
   { method: 'POST', pattern: /^\/api\/ai-teaching\/tasks\/[^/]+\/session\/?$/, capability: 'teaching:write' },
+  // 延伸课（#124）：2026-11-13 u13 实证——本课收束后合成用户开延伸课被
+  // route_unregistered 403 顶成 BLACKBOX_STEP_FAILED，整场实验硬终止。
+  { method: 'POST', pattern: /^\/api\/ai-teaching\/tasks\/[^/]+\/extension-session\/?$/, capability: 'teaching:write' },
   { method: 'POST', pattern: /^\/api\/ai-teaching\/sessions\/[^/]+\/(messages|end|finalize)\/?$/, capability: 'teaching:write' },
   { method: 'GET', pattern: /^\/api\/ai-teaching\/sessions\/[^/]+\/finalization\/?$/, capability: 'teaching:write' },
   { method: 'POST', pattern: /^\/api\/ai-teaching\/sessions\/[^/]+\/checkpoints\/[^/]+\/submit\/?$/, capability: 'teaching:write' },

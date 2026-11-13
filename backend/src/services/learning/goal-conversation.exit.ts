@@ -149,7 +149,7 @@ export async function buildCompletedConversationResult(input: {
  * confirmProposal 同步返回）共用同一句，避免同一操作在两处口径不一（#223）。
  */
 export const PATH_GENERATING_USER_VISIBLE =
-  '已收到确认，学习路径正在生成，通常 10-60 秒内完成，可前往“学习路径”查看进度。';
+  '已收到确认，学习路径正在生成，通常需要 5-20 分钟（阶段越多越久）。可以先忙别的，稍后回到“学习路径”查看进度。';
 
 /** 路径生成失败时的用户可见文案：如实说失败并可重试，绝不说已生成（#223）。 */
 const PATH_GENERATION_FAILED_USER_VISIBLE = '学习路径生成失败，可前往“学习路径”重试。';
