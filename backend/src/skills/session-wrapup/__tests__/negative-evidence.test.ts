@@ -1,4 +1,4 @@
-import { downgradeMasteredOnNegativeEvidence, capMasteredOnInsufficientEvidence } from '../index'
+import { downgradeMasteredOnNegativeEvidence, capMasteredOnInsufficientEvidence, verifyKnowledgeEvidence } from '../index'
 import type { SessionWrapupSummary } from '../index'
 
 /**
@@ -183,5 +183,44 @@ describe('capMasteredOnInsufficientEvidence', () => {
       unverifiedDowngraded: [],
       singlePassCapped: [],
     })
+  })
+})
+
+/* ────────────── 回链闸复述降权（修复批 11-③，教师口径记成学员自查） ────────────── */
+
+describe('verifyKnowledgeEvidence teacher-supplied（批 11-③）', () => {
+  const MESSAGES = [
+    { role: 'assistant', content: '合同里凡是能解释出两种意思的词，解释权都不在你手里，签约前必须逐条写死。' },
+    { role: 'user', content: '明白了，就是说合同里凡是能解释出两种意思的词，解释权都不在我手里。' },
+    { role: 'assistant', content: '对。接下来我们看补偿那一格。' },
+    { role: 'user', content: '我用「离职后两年内不能去竞品」这条自己判了：起算点含糊，属于要写死的。' },
+  ]
+
+  it('evidence 整句逐字命中教师消息（≥12 字）→ teacherSupplied 降级，复述回声不救', () => {
+    const result = verifyKnowledgeEvidence(
+      summaryWith([{ name: '同行业模糊表述', status: 'mastered', progress: 95, evidence: '合同里凡是能解释出两种意思的词，解释权都不在你手里' }]),
+      MESSAGES as any,
+    )
+    expect(result.teacherSupplied).toEqual(['同行业模糊表述'])
+    const item = result.summary.knowledgeItems[0] as any
+    expect(item.status).toBe('learning')
+    expect(item.teacherSuppliedEvidence).toBe(true)
+  })
+
+  it('不误伤：学员自己的产出句（非教师逐字）照常回链', () => {
+    const result = verifyKnowledgeEvidence(
+      summaryWith([{ name: '起算点判断', status: 'mastered', progress: 88, evidence: '学员自己判了：起算点含糊，属于要写死的' }]),
+      MESSAGES as any,
+    )
+    expect(result.teacherSupplied).toEqual([])
+    expect(result.unverified).toBe(0)
+  })
+
+  it('短 evidence（<12 字归一）不做教师逐字判定，走原窗口逻辑', () => {
+    const result = verifyKnowledgeEvidence(
+      summaryWith([{ name: '口径复述', status: 'learning', progress: 60, evidence: '解释权' }]),
+      MESSAGES as any,
+    )
+    expect(result.teacherSupplied).toEqual([])
   })
 })

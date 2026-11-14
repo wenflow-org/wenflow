@@ -443,8 +443,12 @@ export class APIExecutor {
       if (response.status < 200 || response.status >= 300) {
         const quota = this.isQuotaOrBalanceError(response.status, responseText);
         const authentication = response.status === 401 || (response.status === 403 && !quota);
+        // 410 归瞬态（修复批 11-①，u04 批 J critical 实证）：中转网关（newapi）回 410
+        // "openai_error" 是上游渠道池路由抖动——同一分钟内同 skill 其他调用全部成功、
+        // 数分钟后同调用也成功。按「4xx=永久」的旧分类它会跳过 composer 重试，
+        // 直接把路径生成打进终态 failed（学习者看到 generating→failed，整课缺失）。
         const retryable = !quota && !authentication
-          && (response.status >= 500 || response.status === 429 || response.status === 408 || response.status === 425);
+          && (response.status >= 500 || response.status === 429 || response.status === 408 || response.status === 425 || response.status === 410);
         throw new GatewayExecutionError(
           `API request failed with status ${response.status}: ${this.truncate(responseText, 500)}`,
           {
@@ -605,8 +609,9 @@ export class APIExecutor {
         if (statusCode < 200 || statusCode >= 300) {
           const quota = this.isQuotaOrBalanceError(statusCode, fullText);
           const authentication = statusCode === 401 || (statusCode === 403 && !quota);
+          // 410 归瞬态（修复批 11-①，u04 批 J critical 实证）——与上方缓冲路径同款分类，见其注释
           const retryable = !quota && !authentication
-            && (statusCode >= 500 || statusCode === 429 || statusCode === 408 || statusCode === 425);
+            && (statusCode >= 500 || statusCode === 429 || statusCode === 408 || statusCode === 425 || statusCode === 410);
           throw new GatewayExecutionError(
             `API request failed with status ${statusCode}: ${this.truncate(fullText, 500)}`,
             {

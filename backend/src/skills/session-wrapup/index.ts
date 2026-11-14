@@ -398,17 +398,41 @@ export function stripUnsupportedRetentionClaims(
 export function verifyKnowledgeEvidence(
   summary: SessionWrapupSummary,
   messages: Array<{ role?: string; content?: string }> | undefined,
-): { summary: SessionWrapupSummary; unverified: number } {
+): { summary: SessionWrapupSummary; unverified: number; teacherSupplied: string[] } {
   const userTexts = (Array.isArray(messages) ? messages : [])
     .filter((message) => message?.role === 'user' && typeof message.content === 'string')
     .map((message) => String(message.content));
-  if (userTexts.length < 2) return { summary, unverified: 0 };
+  if (userTexts.length < 2) return { summary, unverified: 0, teacherSupplied: [] };
   const corpus = userTexts.join('\n').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+  // 教师语料（修复批 11-③，交流体验评审 §20.4#3「教师口径记成学员自查」）：归一 ≥12 字的
+  // evidence 整句逐字命中**教师消息**时，该证据是教师口径（学员若复述过，也仍是教师原文的
+  // 回声）——不算学员独立产出，按未回链同形态降档。u01 实证：教师轮 16 先给口径、学员轮 17
+  // 复读「明白了」，wrapup 把该口径记成「学生自己指出」mastered 95。只拦整句逐字（≥12 字）
+  // ——正常转述/学员自己的话不会与教师文本逐字全同，不误伤。
+  const teacherCorpus = (Array.isArray(messages) ? messages : [])
+    .filter((message) => message?.role !== 'user' && typeof message.content === 'string')
+    .map((message) => String(message.content))
+    .join('\n')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]/gu, '');
   let unverified = 0;
+  const teacherSupplied: string[] = [];
   const knowledgeItems = (summary.knowledgeItems || []).map((item) => {
     const evidence = typeof item.evidence === 'string' ? item.evidence : '';
     const normalized = evidence.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
     if (normalized.length < 6) return item;
+    if (normalized.length >= 12 && teacherCorpus.includes(normalized)) {
+      teacherSupplied.push(item.name);
+      unverified += 1;
+      return {
+        ...item,
+        evidenceUnverified: true,
+        teacherSuppliedEvidence: true,
+        ...(item.status === 'mastered'
+          ? { status: 'learning' as const, progress: Math.min(Number(item.progress) || 79, 79) }
+          : {}),
+      };
+    }
     // 任一 6 字窗口出现在学员原话里即算回链成功（允许转述，不要求整句照抄）
     let linked = false;
     for (let i = 0; i + 6 <= normalized.length; i += 1) {
@@ -424,7 +448,7 @@ export function verifyKnowledgeEvidence(
         : {}),
     };
   });
-  return { summary: { ...summary, knowledgeItems }, unverified };
+  return { summary: { ...summary, knowledgeItems }, unverified, teacherSupplied };
 }
 
 /* ──────────── 课内负证据核对（修复批 6，WRAPUP_MASTERY_OVERCLAIM 课堂聚类 major×8） ────────────
@@ -1062,6 +1086,8 @@ export class SessionWrapupAgent {
           summary = verified.summary;
           logger.warn('[SessionWrapupAgent] 知识点证据未回链到学员原话，已标记并降级', {
             unverified: verified.unverified,
+            // 教师口径整句逐字（修复批 11-③）：「教师给的记成学员自查」形态的单列计数
+            teacherSupplied: verified.teacherSupplied,
           });
         }
       }

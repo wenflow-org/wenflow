@@ -37,6 +37,7 @@ import {
   inheritTeachingState,
   isCheckpointAnswerAlreadyGiven,
   isDuplicateCheckpointQuestion, normalizeCheckpointWithTelemetry,
+  findUnfurnishedChoiceQuestion,
   recordAnchorProbeResult,
   recordCheckpointAttemptEvidence,
   recordCheckpointResultEvidence,
@@ -705,6 +706,63 @@ export async function processStudentMessage(
         impactedDimensions: ['teachingReply.arithmetic', `task:${context.taskId}`],
         mitigationApplied: repairedOutput ? 'retry-corrective-instruction' : 'flagged-only',
         rootCauseMessage: mismatches.map((m) => m.expr).join('; '),
+      });
+      if (repairedOutput) rawTeachingOutput = repairedOutput;
+    }
+  }
+  // 出题附料确定性检测（修复批 11-②，交流体验评审 §20.4#2「盲答判对」）：正文抛选择题形态
+  // 而本轮既无 control.checkpoint（结构化选项由前端渲染）、正文也无内联选项列表——学员只能
+  // 盲答，教师还会采认盲答（u19 实证），评估作废。命中即带修复指令重调一次（与第一刀同形态：
+  // scenario.repairInstruction + 前缀 KV 缓存）；复检仍缺→打遥测放行，绝不阻塞课堂。
+  {
+    const bareChoice = findUnfurnishedChoiceQuestion(
+      rawTeachingOutput?.reply,
+      !!(rawTeachingOutput?.control?.checkpoint?.options?.length),
+    );
+    if (bareChoice) {
+      logger.warn('[AITeaching] 正文裸选择题（无选项/无材料），触发附料修复重调', {
+        userId: context.userId,
+        taskId: context.taskId,
+        snippet: bareChoice.snippet,
+      });
+      let repairedOutput: TeachingTurnOutput | null = null;
+      if (Date.now() - turnStartedAt < ARITHMETIC_REPAIR_BUDGET_MS) {
+        try {
+          (turnInput.scenario as Record<string, unknown>).repairInstruction = `你上一条回复在正文里出了一道选择题（「${bareChoice.snippet}」），但选项没有随文给出——学生只能盲答，这会让作答与评估都失效。本轮必须输出修正后的完整回复：要么把选项完整列出（逐项编号或 A/B/C 随文给出，选项材料必须在你给出的内容里），要么改成不需要选项的问法（让学生用自己的话作答、或直接对上文材料作答）；其余内容（知识看板、检查点、control 字段、语气、篇幅）原样保留；不得缩短回复或趁机改写无关内容；绝不可向学生提及任何校验或系统检查。`;
+          const repairResult = await withTimeoutSignal(
+            (signal) => executeSkill(teachingTurnAgentDefinition, turnInput, {
+              contextEnvelope: {
+                schemaVersion: 'context-envelope/v1',
+                principal: { userId: session.userId },
+                session: { sessionId: session.id, conversationId: session.id, taskId: session.taskId },
+              },
+              abortSignal: signal,
+            }),
+            ARITHMETIC_REPAIR_TIMEOUT_MS,
+            'CHOICE_MATERIAL_REPAIR_TIMEOUT: 附料修复重调超时'
+          );
+          if (repairResult.success) {
+            const candidate = extractTeachingOutput(repairResult);
+            if (candidate?.reply && !findUnfurnishedChoiceQuestion(
+              candidate.reply,
+              !!(candidate.control?.checkpoint?.options?.length),
+            )) {
+              repairedOutput = candidate;
+            }
+          }
+        } catch (error) {
+          logger.warn('[AITeaching] 附料修复重调失败，按原回复放行', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+      recordDegradation({
+        source: 'ai-teaching/teaching-turn-engine',
+        faultCategory: 'SCHEMA_VIOLATION',
+        severity: 'P2_DEGRADED',
+        impactedDimensions: ['teachingReply.choiceQuestion', `task:${context.taskId}`],
+        mitigationApplied: repairedOutput ? 'retry-supply-options-instruction' : 'flagged-only',
+        rootCauseMessage: `bare choice question without options/material: ${bareChoice.snippet}`,
       });
       if (repairedOutput) rawTeachingOutput = repairedOutput;
     }

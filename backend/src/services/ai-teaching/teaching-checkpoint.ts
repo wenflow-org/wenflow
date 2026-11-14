@@ -1144,3 +1144,35 @@ export function stripCheckpointAnswerKeys<T extends Record<string, any> | null |
   if (!teachingState || typeof teachingState !== 'object') return teachingState;
   return stripAnswerKeysDeep(teachingState) as T;
 }
+
+/* ──────────── 出题附料确定性检测（修复批 11-②，交流体验评审 §20.4#2「盲答判对」） ────────────
+ * 病历单形态（u19 b211a517 轮 8-10）：教师在正文抛「下面哪个开头算先给落点？」——正文没贴
+ * 选项、本轮也没有 control.checkpoint（结构化选项由前端渲染），学员只能盲答，教师还先采认
+ * 「方向对」再补材料——盲答被计入正确，评估作废，学员学到「没材料也能答对」。
+ * 判定（可复算）：回复含选择题询问形态 + **三个豁免**（本轮有带 options 的 control.checkpoint /
+ * 正文有内联选项列表 A.B. 或 ①② / 非询问用法）→ 判「裸选择题」。引擎据此带修复指令重调一次，
+ * 复检仍缺→打遥测放行（提示词 rule 97/243 同域软约束兜底，绝不阻塞课堂）。
+ */
+
+const CHOICE_ASK_PATTERN
+  = /(?:下面|以下|如下)[^。！？?]{0,24}(?:哪个|哪一[个项句条组帧行])|(?:从中|在其中)?(?:选一[个下]|选出最|选出正确)/;
+
+const INLINE_OPTIONS_PATTERN = /A[.、:：][^?？。]{1,60}B[.、:：]/;
+const INLINE_CIRCLED_COUNT_THRESHOLD = 2;
+
+export function findUnfurnishedChoiceQuestion(
+  reply: string | null | undefined,
+  hasStructuredCheckpointWithOptions: boolean,
+): { bare: true; snippet: string } | null {
+  const text = String(reply ?? '');
+  if (!text || hasStructuredCheckpointWithOptions) return null;
+  const ask = text.match(CHOICE_ASK_PATTERN);
+  if (!ask) return null;
+  if (INLINE_OPTIONS_PATTERN.test(text)) return null;
+  const circled = text.match(/[①②③④⑤]/g);
+  if (circled && circled.length > INLINE_CIRCLED_COUNT_THRESHOLD) return null;
+  // 摘出含询问形态的那句话供修复指令/遥测引用
+  const sentence = text.split(/(?<=[。！？?!])/).find((part) => CHOICE_ASK_PATTERN.test(part))
+    ?? ask[0];
+  return { bare: true, snippet: sentence.trim().slice(0, 120) };
+}

@@ -29,6 +29,8 @@ export interface PlatformHttpTransport {
 const TRANSIENT_TRANSPORT_CODES = new Set([
   'ATTEMPT_TIMEOUT', 'NETWORK_TIMEOUT', 'RETRY_BUDGET_EXHAUSTED', 'RATE_LIMITED',
   'UPSTREAM_EMPTY', 'PARSE_FAILED', 'TRUNCATED_EMPTY_OUTPUT', 'PROVIDER_ERROR',
+  // 修复批 11-①（u04 批 J critical）：中转网关 410 是渠道池路由抖动非永久消失，同幂等键重试安全
+  'UPSTREAM_410',
 ])
 
 export class PlatformAdapterError extends Error {

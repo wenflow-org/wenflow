@@ -42,6 +42,23 @@ import type { MaterialNeed, MaterialPackResult } from '../skills/material-collec
 const COORDINATOR_ID = 'path-agent';
 
 /**
+ * 上游瞬态失败判定（修复批 11-①，u04 批 J critical 实证）：中转网关（newapi）回 410
+ * "openai_error" 是上游渠道池路由抖动——同一分钟内同 skill 其他调用全部成功、数分钟后
+ * 同调用也成功。executor 分类已把 410 归瞬态（composer 在 maxAttempts 内重试）；这里是
+ * 后台任务层的最后兜底：normalize/generate 在写终态前失败时延迟重试一次，避免路径卡
+ * generating 后直接终态 failed、学习者整课缺失。
+ */
+const PATH_GENERATION_TRANSIENT_ERROR
+  = /status (408|410|425|429|5\d\d)|RATE_LIMITED|provider_timeout|PROVIDER_TIMEOUT|network|ECONN|ETIMEDOUT|socket hang up|aborted/i;
+const PATH_GENERATION_TRANSIENT_RETRY_DELAY_MS = 4_000;
+
+export function isProviderTransientPathError(error: unknown): boolean {
+  if (!error) return false;
+  if ((error as { retryable?: unknown }).retryable === true) return true;
+  return PATH_GENERATION_TRANSIENT_ERROR.test(String((error as Error)?.message ?? ''));
+}
+
+/**
  * 资料采集开关：默认开启（goal 声明了 needsMaterial 才触发，缺省零调用）。
  * 复用仓库既有的 `*_DISABLED === '1'` env 模式（同 SKILLS_FILE_DISABLED）；
  * 设 `MATERIAL_COLLECTION_DISABLED=1` 可整体关闭，path 生成行为回到接线前。
@@ -1289,9 +1306,28 @@ class PathCoordinator {
       return;
     }
     runBackgroundTask('learning.path.goal-generation', async () => {
-      try {
+      const attempt = async (): Promise<void> => {
         const normalizedInput = await this.normalizeGoalRequest(input);
         await this.generate(normalizedInput);
+      };
+      try {
+        try {
+          await attempt();
+        } catch (firstError) {
+          // 瞬态兜底重试（修复批 11-①）：executor 已把 410 归瞬态触发 composer 重试，这里
+          // 覆盖 composer 重试耗尽/未生效的情况——失败点在 skill 调用、路径记录仍在
+          // generating（未写终态），延迟一次重试是安全的；非瞬态失败不重试直接走原错误链。
+          if (!isProviderTransientPathError(firstError)) throw firstError;
+          logger.warn('[path-coordinator] 路径生成遇上游瞬态失败，延迟后重试一次', {
+            agentId: this.id,
+            userId: input.userId,
+            existingPathId: input.existingPathId,
+            delayMs: PATH_GENERATION_TRANSIENT_RETRY_DELAY_MS,
+            firstError: firstError instanceof Error ? firstError.message : String(firstError),
+          });
+          await new Promise((resolve) => setTimeout(resolve, PATH_GENERATION_TRANSIENT_RETRY_DELAY_MS));
+          await attempt();
+        }
         await hooks?.onSuccess?.();
       } catch (error) {
         logger.error('[path-coordinator] normalize goal request failed', {
