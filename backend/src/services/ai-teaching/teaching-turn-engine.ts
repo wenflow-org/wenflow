@@ -85,7 +85,7 @@ import type { TeachingTurnOutput } from '../../skills/teaching-turn';
 import { findArithmeticMismatches, describeMismatchesForRepair } from './teaching-arithmetic-guard';
 import { repairContradictedPassedVerdict, shouldGuardReplyForFailedConcept, stripAffirmationsOnFailedVerdict } from './checkpoint-feedback-guard';
 import { assessAdjacentRepetition, findPreviousAssistantReply } from './teaching-repetition-guard';
-import { decideBoardIntent, numbersOnBoard, shouldSkipExampleRefresh, mergeCorrectionNotes, buildCorrectionDirective, type BoardCorrectionNote } from './board-intent';
+import { decideBoardIntent, numbersOnBoard, shouldSkipExampleRefresh, mergeCorrectionNotes, buildCorrectionDirective, collectTurnBoardFaceText, type BoardCorrectionNote } from './board-intent';
 import { applyBoardOp } from './board-controller';
 import { BOARD_DESIGN_BASE_INSTRUCTION, boardPromptInputForTeacher, decideBoardAttachment, openBoard, type BoardState } from './board-state';
 import { designBoard } from './board-designer.service';
@@ -1730,8 +1730,36 @@ export async function processStudentMessage(
           .filter((m) => m?.role === 'assistant')
           .map((m) => String((m as { content?: unknown }).content ?? '')),
         teachingOutput.reply,
+        // 布题轮板书面（修复批 10-D1，交流体验评审 §19.2#1 答案提前暴露）：本轮随消息下发的
+        // 板面/配图也算「教师已贴标签的面」——u04 实证板书挂「净占用现金 830」而教师四轮追问
+        // 「报净额」，答案一直在学生视野内，题只能走过场。板面文本并入扫描源后，此类检查点
+        // 与答案已说破的检查点走同一条复述问链（标记 + 连击抑制 + wrapup 证据门）。
+        collectTurnBoardFaceText(assistantMessage?.figures),
       ])
       : { recall: false as const };
+    // 板面源单独命中时打遥测留痕（不做板面重绘——误伤教师合法中间数的风险大于单例收益，
+    // 修复批 10 只做「标记进复述链」；若后续批次水位不降再升级为布题轮板书遮蔽杠杆）。
+    const recallOnBoardFace = checkpointCandidate && !anchorTarget
+      ? isCheckpointAnswerAlreadyGiven(
+        checkpointCandidate,
+        collectTurnBoardFaceText(assistantMessage?.figures),
+      )
+      : { recall: false as const };
+    if (recallOnBoardFace.recall) {
+      logger.info('[AITeaching] 布题轮板面携带本题答案键（答案提前暴露），检查点按复述问标记', {
+        sessionId,
+        taskId: session.taskId,
+        matched: String(recallOnBoardFace.matched ?? '').slice(0, 80),
+      });
+      recordDegradation({
+        source: 'ai-teaching/teaching-turn-checkpoint',
+        faultCategory: 'SCHEMA_VIOLATION',
+        severity: 'P2_DEGRADED',
+        impactedDimensions: ['checkpoint.answerKey'],
+        mitigationApplied: 'flag-answer-on-board-face',
+        rootCauseMessage: `checkpoint answer key visible on board face this turn: ${String(recallOnBoardFace.matched ?? '').slice(0, 160)}`,
+      });
+    }
     // 作废通道：语义边界与两条护栏见 ./checkpoint-void.ts；作废不授权本轮出题，出题时机只认 controls.emitCheckpoint。
     const voidedPendingCheckpoint = teachingOutput.control?.voidCheckpoint === true && !submittedCheckpoint && !!pendingBeforeTurn;
     if (voidedPendingCheckpoint && pendingBeforeTurn) {

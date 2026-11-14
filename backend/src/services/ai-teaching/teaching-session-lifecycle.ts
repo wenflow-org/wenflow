@@ -14,7 +14,7 @@ import { logger } from '../../utils/logger';
 import { executeSkill, sessionWrapupAgentDefinition } from '../../skills';
 import { recordDegradation, degradationCause } from '../../skills/degradation-telemetry';
 import type { SessionWrapupArtifact } from '../../skills/session-wrapup';
-import { downgradeMasteredOnNegativeEvidence } from '../../skills/session-wrapup';
+import { downgradeMasteredOnNegativeEvidence, capMasteredOnInsufficientEvidence } from '../../skills/session-wrapup';
 import type { ReviewPlan } from '../memory/review-plan.service';
 import { createDomainEvent } from '../../events/contracts';
 import { enqueueDomainEvent } from '../../events/outbox.repository';
@@ -880,6 +880,42 @@ export async function endSession(
         impactedDimensions: ['wrapup.summary.knowledgeItems'],
         mitigationApplied: 'downgrade-mastered-on-negative-evidence',
         rootCauseMessage: `mastered claims contradicted by lesson negative evidence: ${negativeAdjusted.downgraded.join('、').slice(0, 200)}`,
+      });
+    }
+    // 掌握证据强度门（修复批 10-D2，交流体验评审 §19.2#2）：批 6 闸拦反面，这闸拦「零/弱
+    // 正面证据也标 mastered」——全复述行降档、零行零证据降档、单例通过 progress 封顶 89。
+    const evidenceAdjusted = capMasteredOnInsufficientEvidence(wrapupResult.summary, {
+      checkpointHistory: session.teachingState?.checkpointHistory,
+    });
+    const demotedNames = [...evidenceAdjusted.recallDowngraded, ...evidenceAdjusted.unverifiedDowngraded];
+    if (demotedNames.length > 0 || evidenceAdjusted.singlePassCapped.length > 0) {
+      wrapupResult.summary = evidenceAdjusted.summary;
+      if (wrapupArtifact.summary) wrapupArtifact.summary = evidenceAdjusted.summary;
+      if (demotedNames.length > 0) {
+        const buckets = wrapupArtifact.progress;
+        if (buckets) {
+          const demoted = new Set(demotedNames);
+          buckets.newlyMastered = (buckets.newlyMastered || []).filter((name) => !demoted.has(name));
+          buckets.unchangedMastered = (buckets.unchangedMastered || []).filter((name) => !demoted.has(name));
+          buckets.stillLearning = [
+            ...(buckets.stillLearning || []),
+            ...demotedNames.filter((name) => !(buckets.stillLearning || []).includes(name)),
+          ];
+        }
+      }
+      logger.warn('[AITeaching] 收束 mastery 正面证据不足，已降档/封顶', {
+        sessionId,
+        recallDowngraded: evidenceAdjusted.recallDowngraded,
+        unverifiedDowngraded: evidenceAdjusted.unverifiedDowngraded,
+        singlePassCapped: evidenceAdjusted.singlePassCapped,
+      });
+      recordDegradation({
+        source: 'ai-teaching/teaching-session-lifecycle',
+        faultCategory: 'SCHEMA_VIOLATION',
+        severity: 'P2_DEGRADED',
+        impactedDimensions: ['wrapup.summary.knowledgeItems'],
+        mitigationApplied: 'cap-mastered-on-insufficient-evidence',
+        rootCauseMessage: `mastered claims lack independent lesson evidence: recall-only=[${evidenceAdjusted.recallDowngraded.join('、').slice(0, 100)}] no-evidence=[${evidenceAdjusted.unverifiedDowngraded.join('、').slice(0, 100)}] single-pass-capped=[${evidenceAdjusted.singlePassCapped.join('、').slice(0, 100)}]`,
       });
     }
   }

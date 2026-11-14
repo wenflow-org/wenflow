@@ -284,6 +284,8 @@ export interface BoardCorrectionNote {
   conceptKey: string;
   hypothesis: string;
   turn: number;
+  /** 同一错形在本课的累计出现次数（首次=1）；≥2 即「复发」，触发升级指令（修复批 10-D4） */
+  hits?: number;
 }
 
 const CORRECTION_NOTES_CAP = 5;
@@ -303,15 +305,53 @@ export function mergeCorrectionNotes(
     .filter((note) => note.hypothesis);
   if (fresh.length === 0) return base;
   const seen = new Set(base.map((note) => note.hypothesis));
-  return [...base, ...fresh.filter((note) => !seen.has(note.hypothesis))].slice(-CORRECTION_NOTES_CAP);
+  // 复发升级（修复批 10-D4，交流体验评审 §19.2#6 同一错误复发时干预降级）：本课已纠过的
+  // 错形再次命中时不再只是去重跳过——hits +1 留痕，buildCorrectionDirective 据此出升级指令
+  //（复发处禁止直接给答案，改问思路 + 让学员自己产出判别）。
+  const recurring = fresh.filter((note) => seen.has(note.hypothesis));
+  const novel = fresh.filter((note) => !seen.has(note.hypothesis));
+  if (recurring.length === 0) {
+    return [...base, ...novel.map((note) => ({ ...note, hits: 1 }))].slice(-CORRECTION_NOTES_CAP);
+  }
+  const bumped = base.map((note) => (
+    recurring.some((r) => r.hypothesis === note.hypothesis)
+      ? { ...note, hits: (Number(note.hits) || 1) + 1 }
+      : note
+  ));
+  return [...bumped, ...novel.map((note) => ({ ...note, hits: 1 }))].slice(-CORRECTION_NOTES_CAP);
 }
 
 export function buildCorrectionDirective(notes: BoardCorrectionNote[] | undefined | null): string {
   const list = Array.isArray(notes) ? notes.filter((note) => note?.hypothesis) : [];
   if (list.length === 0) return '';
+  const escalated = list.some((note) => (Number(note?.hits) || 1) >= 2);
   return '老师此前已纠正过学生的错误理解：' + list.map((note) => `「${note.hypothesis}」`).join('；')
     + '。板面凡与学生被纠正前说法一致的表述（数值、档位、结论、标签），必须按老师纠正后的口径写；'
-    + '**不得保留学生的错误版本**。';
+    + '**不得保留学生的错误版本**。'
+    + (escalated
+      ? '其中**同一错形已纠正过仍复发**：本轮不得直接给出答案——先让学生说说他是怎么想的，'
+        + '再让他自己产出判别办法（这个判断各盯哪个词/怎么验），老师只做确认与补缺口。'
+      : '');
+}
+
+/**
+ * 本轮随消息下发的板面/配图可见文本（修复批 10-D1，答案提前暴露）：布题轮若板面上挂着
+ * 本题答案键（u04 实证：板书挂「净占用现金 830」而教师四轮追问「报净额」），题就是走过场。
+ * 引擎把这段文本并入复述问扫描源（isCheckpointAnswerAlreadyGiven），board 源单独命中打遥测。
+ */
+export function collectTurnBoardFaceText(figures: unknown): string {
+  if (!Array.isArray(figures)) return '';
+  const parts: string[] = [];
+  for (const figure of figures) {
+    if (!figure || typeof figure !== 'object') continue;
+    const spec = (figure as { spec?: unknown }).spec
+      ?? (figure as { maskedSpec?: unknown }).maskedSpec
+      ?? (figure as { fullSpec?: unknown }).fullSpec
+      ?? null;
+    const fragments = collectSpecTextFragments(spec);
+    if (fragments.length > 0) parts.push(fragments.join(' '));
+  }
+  return parts.join('\n');
 }
 
 /**

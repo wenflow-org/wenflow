@@ -489,6 +489,87 @@ export function downgradeMasteredOnNegativeEvidence(
   return { summary: downgraded.length > 0 ? { ...summary, knowledgeItems } : summary, downgraded };
 }
 
+/* ──────────── 掌握证据强度门（修复批 10-D2，交流体验评审 §19.2#2 证据通胀） ────────────
+ * 批 6 闸只拦「有反面记录」；交流体验子代理盲评抓到的新形态是「零/弱正面证据也标 mastered」：
+ *   - Gate A（全复述）：概念命中的检查点通过行**全部**带 answerAlreadyGiven（批 4 复述问标记）
+ *     → 复述不是独立产出 → mastered→learning 封顶 79（u01 实证：期限/补偿两格教师讲授+学员
+ *     复述过关即 mastered 88/85）；
+ *   - Gate B（零行零证据）：概念在本课**没有任何**检查点行、knowledgeItem.evidence 又给不出
+ *     可回链的独立产出句（归一 <6 字，与证据回链闸 ④ 同阈值）→ 降档形态同 A（u04 实证：
+ *     净额学员从未报出却进 newlyMastered——批 6 纪律「无匹配行不动」管反面，这里管「零正面」）；
+ *   - Gate C（单例通过）：恰好 1 行独立通过 → 状态保留（真快学者不惩罚），progress 封顶 89
+ *     （u17 实证：单例首答即 mastered 90）。
+ * 与批 6 负证据闸可叠加：负证据降档后 status 已非 mastered 的点，本闸自然不再处理。
+ */
+export function capMasteredOnInsufficientEvidence(
+  summary: SessionWrapupSummary,
+  evidence: { checkpointHistory?: unknown },
+): {
+  summary: SessionWrapupSummary;
+  recallDowngraded: string[];
+  unverifiedDowngraded: string[];
+  singlePassCapped: string[];
+} {
+  if (!summary || !Array.isArray((summary as { knowledgeItems?: unknown }).knowledgeItems)) {
+    return { summary, recallDowngraded: [], unverifiedDowngraded: [], singlePassCapped: [] };
+  }
+  const normalize = (value: unknown): string =>
+    String(value ?? '').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+  const rows = Array.isArray(evidence?.checkpointHistory)
+    ? (evidence.checkpointHistory as Array<Record<string, unknown>>)
+    : [];
+  const recallDowngraded: string[] = [];
+  const unverifiedDowngraded: string[] = [];
+  const singlePassCapped: string[] = [];
+  const knowledgeItems = (summary.knowledgeItems || []).map((item) => {
+    if (item?.status !== 'mastered') return item;
+    const key = normalize(item.name);
+    if (!key) return item;
+    const active = rows.filter((row) =>
+      row?.voided !== true && normalize(row?.conceptName ?? row?.conceptKey) === key);
+    const passedRows = active.filter((row) => row?.passed === true);
+    if (active.length > 0 && passedRows.length > 0 && passedRows.every((row) => row?.answerAlreadyGiven === true)) {
+      recallDowngraded.push(item.name);
+      return {
+        ...item,
+        status: 'learning' as const,
+        progress: Math.min(Number(item.progress) || 79, 79),
+        recallEvidenceDowngraded: true,
+      };
+    }
+    if (active.length === 0) {
+      const evidenceText = typeof item.evidence === 'string'
+        ? item.evidence.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
+        : '';
+      if (evidenceText.length < 6) {
+        unverifiedDowngraded.push(item.name);
+        return {
+          ...item,
+          status: 'learning' as const,
+          progress: Math.min(Number(item.progress) || 79, 79),
+          lessonEvidenceMissing: true,
+        };
+      }
+      return item;
+    }
+    if (active.length === 1 && passedRows.length === 1 && passedRows[0]?.answerAlreadyGiven !== true) {
+      const progress = Number(item.progress) || 0;
+      if (progress > 89) {
+        singlePassCapped.push(item.name);
+        return { ...item, progress: 89, singlePassEvidenceCapped: true };
+      }
+    }
+    return item;
+  });
+  const changed = recallDowngraded.length + unverifiedDowngraded.length + singlePassCapped.length > 0;
+  return {
+    summary: changed ? { ...summary, knowledgeItems } : summary,
+    recallDowngraded,
+    unverifiedDowngraded,
+    singlePassCapped,
+  };
+}
+
 /**
  * 算式自检 · 确定性剥离（内容正确性第二刀，2026-10-08）：summary 的**文本要点**（数组项）
  * 逐条跑 findArithmeticMismatches，命中即剔除该要点、其余保留。长文本字段（topicSummary 等）

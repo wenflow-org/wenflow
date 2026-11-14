@@ -1,4 +1,4 @@
-import { downgradeMasteredOnNegativeEvidence } from '../index'
+import { downgradeMasteredOnNegativeEvidence, capMasteredOnInsufficientEvidence } from '../index'
 import type { SessionWrapupSummary } from '../index'
 
 /**
@@ -101,5 +101,87 @@ describe('downgradeMasteredOnNegativeEvidence', () => {
     )
     expect(result.downgraded).toEqual([])
     expect(result.summary.knowledgeItems[1].status).toBe('mastered')
+  })
+})
+
+/* ────────────── 掌握证据强度门（修复批 10-D2，交流体验评审 §19.2#2 证据通胀） ────────────── */
+
+describe('capMasteredOnInsufficientEvidence', () => {
+  it('Gate A 全复述：概念通过行全部带 answerAlreadyGiven → 降档封顶 79', () => {
+    const result = capMasteredOnInsufficientEvidence(
+      summaryWith([{ name: '期限起算口径', status: 'mastered', progress: 88, evidence: '学员复述过' }]),
+      {
+        checkpointHistory: [
+          { conceptName: '期限起算口径', passed: true, answerAlreadyGiven: true, submittedAt: '2026-11-14T10:00:00Z' },
+          { conceptName: '期限起算口径', passed: true, answerAlreadyGiven: true, submittedAt: '2026-11-14T10:06:00Z' },
+        ],
+      },
+    )
+    expect(result.recallDowngraded).toEqual(['期限起算口径'])
+    const item = result.summary.knowledgeItems[0] as any
+    expect(item.status).toBe('learning')
+    expect(item.progress).toBeLessThanOrEqual(79)
+    expect(item.recallEvidenceDowngraded).toBe(true)
+  })
+
+  it('Gate A 不误伤：存在独立通过行（无复述标记）→ 原样', () => {
+    const result = capMasteredOnInsufficientEvidence(
+      summaryWith([{ name: '期限起算口径', status: 'mastered', progress: 88, evidence: '学员自己判了新条款' }]),
+      {
+        checkpointHistory: [
+          { conceptName: '期限起算口径', passed: true, answerAlreadyGiven: true, submittedAt: '2026-11-14T10:00:00Z' },
+          { conceptName: '期限起算口径', passed: true, submittedAt: '2026-11-14T10:06:00Z' },
+        ],
+      },
+    )
+    expect(result.recallDowngraded).toEqual([])
+    expect(result.summary.knowledgeItems[0].status).toBe('mastered')
+  })
+
+  it('Gate B 零行零证据：无检查点行且 evidence 归一 <6 字 → 降档', () => {
+    const result = capMasteredOnInsufficientEvidence(
+      summaryWith([{ name: '合成净额', status: 'mastered', progress: 90, evidence: '扫一眼' }]),
+      { checkpointHistory: [{ conceptName: '应收账款方向', passed: true, submittedAt: '2026-11-14T10:00:00Z' }] },
+    )
+    expect(result.unverifiedDowngraded).toEqual(['合成净额'])
+    expect((result.summary.knowledgeItems[0] as any).status).toBe('learning')
+    expect((result.summary.knowledgeItems[0] as any).lessonEvidenceMissing).toBe(true)
+  })
+
+  it('Gate B 不误伤：零行但 evidence 有实质产出句 → 原样', () => {
+    const result = capMasteredOnInsufficientEvidence(
+      summaryWith([{ name: '合成净额', status: 'mastered', progress: 90, evidence: '学员自己报出净额负400并解释了方向' }]),
+      {},
+    )
+    expect(result.unverifiedDowngraded).toEqual([])
+    expect(result.summary.knowledgeItems[0].status).toBe('mastered')
+  })
+
+  it('Gate C 单例通过：1 行独立通过且 progress > 89 → 封顶 89、状态保留', () => {
+    const result = capMasteredOnInsufficientEvidence(
+      summaryWith([{ name: '识别多副本', status: 'mastered', progress: 90, evidence: '学员首答判对' }]),
+      { checkpointHistory: [{ conceptName: '识别多副本', passed: true, submittedAt: '2026-11-14T10:00:00Z' }] },
+    )
+    expect(result.singlePassCapped).toEqual(['识别多副本'])
+    const item = result.summary.knowledgeItems[0] as any
+    expect(item.status).toBe('mastered')
+    expect(item.progress).toBe(89)
+    expect(item.singlePassEvidenceCapped).toBe(true)
+  })
+
+  it('learning 点与空 summary 原样返回', () => {
+    const result = capMasteredOnInsufficientEvidence(
+      summaryWith([{ name: '还在学', status: 'learning', progress: 40, evidence: '' }]),
+      {},
+    )
+    expect(result.recallDowngraded).toEqual([])
+    expect(result.unverifiedDowngraded).toEqual([])
+    expect(result.singlePassCapped).toEqual([])
+    expect(capMasteredOnInsufficientEvidence(undefined as any, {})).toEqual({
+      summary: undefined,
+      recallDowngraded: [],
+      unverifiedDowngraded: [],
+      singlePassCapped: [],
+    })
   })
 })

@@ -7,7 +7,7 @@
  *  2) 换题信号要同时读**老师上一句**（老师主动换的数据）与**学生这一句**；
  *  3) 「要学生说的那句结论」按意图从板上撤掉，但材料与步骤一个不少。
  */
-import { decideBoardIntent, applyBoardIntent, numbersOnBoard, describeIntentForTeacher, guardTitleAgainstContent, shouldSkipExampleRefresh, mergeCorrectionNotes, buildCorrectionDirective } from '../board-intent';
+import { decideBoardIntent, applyBoardIntent, numbersOnBoard, describeIntentForTeacher, guardTitleAgainstContent, shouldSkipExampleRefresh, mergeCorrectionNotes, buildCorrectionDirective, collectTurnBoardFaceText } from '../board-intent';
 import { deriveBoardFigure, openBoard, describeBoardForTeacher } from '../board-state';
 
 const splitBoard = {
@@ -440,5 +440,59 @@ describe('mergeCorrectionNotes / buildCorrectionDirective（纠正语境，修�
   it('无纠正记录 → 空禁令（不加重无谓 token）', () => {
     expect(buildCorrectionDirective([])).toBe('');
     expect(buildCorrectionDirective(undefined)).toBe('');
+  });
+});
+
+/* ────────────── 修复批 10（交流体验专项）：复发升级 + 板面答案暴露 ────────────── */
+
+describe('mergeCorrectionNotes 复发升级 / buildCorrectionDirective（修复批 10-D4）', () => {
+  const MIS = { conceptKey: 'b与d的判别', hypothesis: '学生把「有人主动清除」和「没人管过期」混为一谈' };
+
+  it('同一错形再次命中 → hits +1（留痕，不再只是静默去重）', () => {
+    const first = mergeCorrectionNotes([], [MIS], 4);
+    expect(first[0].hits).toBe(1);
+    const second = mergeCorrectionNotes(first, [{ ...MIS }], 13);
+    expect(second).toHaveLength(1);
+    expect(second[0].hits).toBe(2);
+    expect(second[0].turn).toBe(4);
+  });
+
+  it('不同错形首次出现 → hits=1；空误解仍返回原数组（身份不变）', () => {
+    const first = mergeCorrectionNotes([], [MIS], 4);
+    const second = mergeCorrectionNotes(first, [{ conceptKey: 'x', hypothesis: '另一个新错形' }], 6);
+    expect(second).toHaveLength(2);
+    expect(second.every((note) => note.hits === 1)).toBe(true);
+    expect(mergeCorrectionNotes(first, [], 8)).toBe(first);
+  });
+
+  it('hits ≥2 → 指令含升级条款（不得直接给答案，先问思路让学员产出判别）', () => {
+    const recurred = mergeCorrectionNotes(mergeCorrectionNotes([], [MIS], 4), [{ ...MIS }], 13);
+    const directive = buildCorrectionDirective(recurred);
+    expect(directive).toContain('不得直接给出答案');
+    expect(directive).toContain('怎么想的');
+  });
+
+  it('首犯（hits=1）→ 无升级条款（普通清除禁令即可）', () => {
+    const directive = buildCorrectionDirective([{ ...MIS, turn: 4, hits: 1 }]);
+    expect(directive).not.toContain('不得直接给出答案');
+  });
+});
+
+describe('collectTurnBoardFaceText（修复批 10-D1：布题轮板面答案暴露扫描源）', () => {
+  it('抽取 figures 的 spec 文本；无 spec 时回退 maskedSpec/fullSpec', () => {
+    const text = collectTurnBoardFaceText([
+      { kind: 'board', spec: { title: '四支现金流', rows: [{ label: '净占用现金', sub: '830 万元' }] } },
+      { kind: 'board', maskedSpec: { rows: [{ label: '合同负债', sub: '占住' }] } },
+    ]);
+    expect(text).toContain('净占用现金');
+    expect(text).toContain('830');
+    expect(text).toContain('合同负债');
+  });
+
+  it('非数组/空数组/无文本 figure → 空串（不参与扫描）', () => {
+    expect(collectTurnBoardFaceText(null)).toBe('');
+    expect(collectTurnBoardFaceText(undefined)).toBe('');
+    expect(collectTurnBoardFaceText([])).toBe('');
+    expect(collectTurnBoardFaceText([{ kind: 'board' }])).toBe('');
   });
 });
