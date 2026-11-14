@@ -1605,3 +1605,44 @@ core:check hasErrors=false 33/33、lint 全绿、prompts:sync already-in-sync；
 3. 模型权衡三选一仍待用户网关侧定夺（回滚 flip-model-config.cjs rollback 就绪）——
    收束冗余 CLOSURE_MISSING ×3（全部真实课）/ NOTATION_LEAK 跨批 6 例 / 口径翻转
    critical 均挂该决策。
+
+## 三十七、批 27（2026-11-15 当轮：reeval25 验证批——批 26 双杠杆实证 PASS + referee 连续零 actionable）
+
+### 37.1 双杠杆复核（对账）
+
+1. **材料自包含禁令 ✓**：本批新建 4 个 subtask 的 description **违禁措辞零命中**
+  （「提供一段/给一段/基于一段…」零出现）；抽样形态正是三选一设计——自带示例
+  （「例：领导在听到第 3 项数据时问『那我们要不要调预算？』」）、学习者自带真实材料
+  （「选一个你近期要交的真实汇报主题」）、文本等价（「不用贴原图，写出数据点与对应
+  结论即可」）。全批 14 课 **task_content_missing 零复发**。
+2. **材料诚实（学员侧）**：无编造类 finding；学习者侧无幻觉指控。
+3. **批 24 三杠杆持续 ✓**：5/5 abandon 200 无 run 失败；abandoned 12→16、completed
+  607→617（+10=5×2 完成课，4 弃跑收口 + 1 案例 totalTasks≤2 自然跑完，对账精确）；
+  active 恒 1 零新增。
+4. **referee：连续第二次 actionable 0 类**（u17 pass_with_concerns / u07 pass / u19
+  pass_with_concerns）。
+
+### 37.2 classroom（14 课）新聚类
+
+- **BOARD_MISMATCH ×3（critical×1 + major×2）回潮，但形态已分化**：u07L2 critical 为
+  **显式元素指认落空**——教师引用「result→discuss 的箭头写的是'支撑'」，板面只有
+  gestal→gap/gap→hypo，result/discuss 节点不存在。与批 22 取证否定的「软指认」不同形：
+  本形态带**显式节点/箭头名**，且引号用弯引号 ''——批 13 指认落空检测器的「」引号判据
+  疑似被引号风格绕过。批 28-① 取证靶点：核对批 13 检测器在本课是否漏报 + 引号风格
+  扩展（窄机械杠杆，非软指认那类语义判别）。
+- **CLOSURE_MISSING ×2 minor**：新形态——wrapup.actionPlan **文本被截断**
+  （「待验证：最后…」），学习者可见的下一步动作不完整。单簇观察。
+- NOTATION_LEAK ×2 minor（跨批累计 8 例）；SCAFFOLD_LATE ×2（响应稍慢但有效，minor
+  为主）——观察位维持。
+- **判官 severity 纪律二次滑点**：u01L3 弃跑课（3 轮）被 F-001 critical 打 fail
+  （「弃跑且无收束产出」）——批 22 豁免规则允许的形态（设计上无 wrapup），severity
+  应为 info。reeval23 u19 major + 本批 critical = **滑点达 ≥2 阈**，批 28 候选：
+  判官豁免规则的 severity 措辞收紧。
+
+### 37.3 批 28 队列
+
+1. board 显式指认落空取证（critical ×1 达标）：u07L2 逐轮还原 + 批 13 检测器漏报
+  定性（引号风格 vs 判据缺口）→ 窄杠杆设计；
+2. 判官 severity 纪律收紧候选（滑点 ≥2）：豁免规则的「最多一条 info」措辞强化；
+3. 模型权衡三选一仍待用户网关侧定夺（回滚 flip-model-config.cjs rollback 就绪）——
+  收束冗余/NOTATION_LEAK 跨批 8 例/口径翻转等 quality 族挂该决策。
