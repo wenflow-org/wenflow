@@ -897,3 +897,48 @@ u01 教师口径记成学员自查）全部落在闸的匹配盲区：checkpoint
    落空（指认行已被后续 rev 覆盖）与 d387c47c 板面冻结中间稿——归入批 4 指认一致性家族，
    取证指认轮的 rev 匹配。
 6. PATH_LATENCY 等既有观察项维持。
+
+## 二十一、修复批 11 + 批 K/L 双验证（2026-11-14 当轮：PATH_GENERATION critical 双层根因修复 → 收敛）
+
+### 21.1 修复内容（三笔提交）
+
+- **3fd5f251 四杠杆主体**：①PATH_GEN critical——取证 u04 批 J：网关回 **410 "openai_error"**
+  （上游渠道池抖动，同分钟同 skill 其他调用全成功），被「4xx=永久」旧分类挡在重试外→后台
+  任务无二次机会→终态 failed 整课缺失。三层修复：executor 双路 410 归瞬态 + path 后台任务
+  瞬态兜底延迟重试（4s）+ adapter 码表加 UPSTREAM_410。②裸选择题附料检测
+  （`findUnfurnishedChoiceQuestion`：询问形态+无 checkpoint options+无内联选项 → 判裸选，
+  repairInstruction 重调一次）。③回链闸教师口径降权（evidence 归一 ≥12 字整句逐字命中教师
+  语料 → teacherSuppliedEvidence 降档）。④rule 245 原位收紧（纠错解释不得预写候选答案集）。
+- **a7028c8c 422 追加**：批 K 新根因——u07 整例 PATH_GENERATION_FAILED 源于 **422 内容安全
+  筛查抖动**（良性学习目标间歇性误筛，同分钟多 skill 同中、同内容重试即过）。executor 双路
+  「422+content safety screening」归瞬态 + path 兜底正则扩展。
+- **d60584a7 附料词表缺口**：批 K u01 MISSING_OPTIONS 实证「下列哪一种」漏拦——词表扩
+  （下列/种）+ 病历单回归用例（注：晚于批 L 起跑，词表验证归批 M）。
+
+### 21.2 双验证结果
+
+**批 K（reeval12）**：u04（批 J critical 宿主）critical→**pass_with_concerns 且进课 26 步**
+（路径阶段 38 分钟延迟=重试链在工作，不再终态卡死）；u07 整例失败暴露 422 第二根因（→当轮
+补修）。机器双评面 actionable：批 I 5 类 → 批 J 2 类 → **批 K 0 类（首次全清）**。
+
+**批 L（reeval13）**：**critical 家族清零**——PATH_GENERATION_LATENCY ×3 **全 minor**（纯
+延迟 7-8 分钟，无终态失败）；五例全数进课（u07 批 K 缺课 → 批 L pass 正常出课）。422 修复
+实战证据链：18:01:47 teaching-turn 吃 422 筛查，日志 `retryable:true, willRetry:true,
+backoffMs:294`（分类翻转）→ 同 trace 重试 `execution succeeded`（19.5s）——端到端恢复。
+
+**liveness**：①422 composer 重试实战命中 ✓；410 兜底批 K 生效（u04 进课）✓；路径后台兜底
+批 L 未触发（前两层已够）。②③④批 K/L 无命中场景（方差，机制上线待观察）。
+
+### 21.3 批 L 机器面水位与批 12 队列
+
+referee 面：PATH_GENERATION_LATENCY ×3（minor×3，纯延迟）；classroom 面 15 课
+（9 pass_with_concerns / 1 fail=3 轮残课 / 5 inconclusive）：
+1. **OPENING_ASSUME_EXPERIENCE ×5 成簇（minor×7）**——§18.3-3 反向断言 tripwire 正式触发：
+   批 12 首项=把反向形态（「你之前没细看过」「上次你差半步」）纳入 `hasUnverifiablePriorClaim`
+   判定器 + rule 57 原位收紧（条数守恒）。
+2. BOARD_MISMATCH ×4（major×3，板面与已发送文本不一致/标题错位）——§20.4-5 板面状态管理
+   维持队列。
+3. CLOSURE_MISSING ×3（major×5，repetitive_closure_loop 六轮重复核对指令）——重复收束家族
+   major 形态回升，与 2 同批取证。
+4. NOTATION_LEAK ×2（minor）——代号家族轻残，维持观察。
+5. PATH_LATENCY minor×3——队列既有项降级为纯延迟观察（间隔等待提示优化可作低优选项）。
