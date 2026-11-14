@@ -990,3 +990,42 @@ streak≥2 时注入「学员已确认，停止重发指令，一句收干」刷
 2. 学员短确认收口（22.3 杠杆候选，repetitive_closure_loop）；
 3. OPENING 残余子形态取证（recap 在场但断言超纲——先读 recap 装配结构再定检测面）；
 4. 板面滞后形态 2（提示词侧，随任一批顺带）。
+
+## 二十三、修复批 13 + 批 N 验证（2026-11-14 当轮：指认-板面交叉核对 + 学员短确认收口；⚠️ 批 N 后段遭遇上游网关客户端封锁）
+
+### 23.1 修复内容（提交 ba2574e7，定向 48/48 + 全量 7342 零失败）
+
+- **①指认-板面交叉核对**（BOARD_MISMATCH 指认落空形态，§22.3 定性的可复算杠杆）：
+  `findUnmatchedBoardReferences`——reply 中带板面指认语境的引号片段（指认词在前：看板上「X」/
+  右栏「X」；指认词在后：标着「X」的那条线）归一 ≥4 字必须命中当轮持久板面；引对话豁免
+  （引用此前教师说过的话不判）。命中 → repairInstruction 重调（指认改为板面真实元素或删去
+  指认）→ 复检仍缺 flagged-only 放行。与算式/附料两刀同机制，三刀并列。
+- **②学员短确认收口**（repetitive_closure_loop）：`computeLearnerShortAckStreak`（最近连续
+  学员回合全是 ≤6 字非问句短确认的计数）+ 强制收口新分支（短确认 ×2 + closureRepeatStreak≥2
+  + 教师低增量 → 收口，**不依赖 targetsFrozen**；教师推进新内容时 lowIncrement=false 不触发）。
+  遥测新增 loopBreakKind 区分 short-ack-instruction-loop / frozen-targets。
+
+### 23.2 批 N（reeval15）验证：referee 面首次全清 + ① 杠杆实战命中 + ⚠️ 上游封锁
+
+- **referee 面 actionable 0 类**——战役首次（此前每批至少 1 类，PATH_LATENCY 本批未成簇）。
+- **① 杠杆实战命中**：20:21:28 抓到指认落空「业务相同的行业、单位」→ 触发修复重调 → 复检
+  仍缺 → flagged-only 放行（检测/修复/降级三级按设计工作）。
+- ② 本批无短确认循环场景（方差，机制待后续批次观察）。
+- **⚠️ 外部事件（非代码层）**：20:41 起 newapi 网关（newapi.wenflow.org）按客户端类型封锁
+  本平台全部 LLM 流量——返回 200 但内容为「本站仅限主流 Coding 客户端/CLI 使用…当前客户端
+  不支持」（prompt_tokens:0/completion_tokens:1），20:42 后零成功调用、86 次拒绝。下游症状：
+  u19 goal 首轮 STRUCTURED_OUTPUT_INVALID（封锁消息连续 3 次过不了 schema 校验）整例缺课、
+  502 invalid JSON、classroom judge 4 调用全灭。**批 N 双评=部分完成**：referee 完整（0
+  actionable），classroom 面被外部封锁阻塞（judge 断点续跑就绪，封锁解除后直接重跑
+  judge-minibatch-classrooms.ts --run-dir=.runtime/referee-minibatch/reeval15 即可补全）。
+- **处置建议（用户侧）**：网关封锁按客户端类型 UA/调用方特征拦截，代码层无法绕过也不应
+  绕过——需要更换供应商端点/升级网关套餐/客户端白名单登记。这是全平台级风险（教师、评审、
+  总结全链共用该网关），非战役局部问题。
+
+### 23.4 批 14 队列
+
+1. **（外部，最高优先）网关封锁解除/端点更换**——解除后补全批 N classroom 评审；
+2. STRUCTURED_OUTPUT_INVALID 观察项：封锁期间 1 例（同根因）；若封锁解除后独立复现，
+   取证连续 3 次校验失败的原始输出形态；
+3. ② 短确认收口继续观察（loopBreakKind=short-ack-instruction-loop 首次命中待记录）；
+4. §22.4 遗留：指认-板面已落地（本节），OPENING recap 超纲子形态、板面滞后提示词顺带维持。
