@@ -447,8 +447,12 @@ export class APIExecutor {
         // "openai_error" 是上游渠道池路由抖动——同一分钟内同 skill 其他调用全部成功、
         // 数分钟后同调用也成功。按「4xx=永久」的旧分类它会跳过 composer 重试，
         // 直接把路径生成打进终态 failed（学习者看到 generating→failed，整课缺失）。
+        // 422 内容安全筛查抖动（修复批 11-① 追加，u07 批 K critical 实证）：良性学习目标
+        // 被上游筛查间歇性拒绝（同内容重试即过、同分钟内多 skill 同时中招）——同样按瞬态
+        // 处理，composer 在 maxAttempts 内立即重试一次。
+        const contentScreeningFlake = /content safety screening/i.test(String(responseText ?? ''));
         const retryable = !quota && !authentication
-          && (response.status >= 500 || response.status === 429 || response.status === 408 || response.status === 425 || response.status === 410);
+          && (response.status >= 500 || response.status === 429 || response.status === 408 || response.status === 425 || response.status === 410 || contentScreeningFlake);
         throw new GatewayExecutionError(
           `API request failed with status ${response.status}: ${this.truncate(responseText, 500)}`,
           {
@@ -609,9 +613,10 @@ export class APIExecutor {
         if (statusCode < 200 || statusCode >= 300) {
           const quota = this.isQuotaOrBalanceError(statusCode, fullText);
           const authentication = statusCode === 401 || (statusCode === 403 && !quota);
-          // 410 归瞬态（修复批 11-①，u04 批 J critical 实证）——与上方缓冲路径同款分类，见其注释
+          // 410 / 422 内容筛查抖动归瞬态（修复批 11-①）——与上方缓冲路径同款分类，见其注释
+          const contentScreeningFlake = /content safety screening/i.test(String(fullText ?? ''));
           const retryable = !quota && !authentication
-            && (statusCode >= 500 || statusCode === 429 || statusCode === 408 || statusCode === 425 || statusCode === 410);
+            && (statusCode >= 500 || statusCode === 429 || statusCode === 408 || statusCode === 425 || statusCode === 410 || contentScreeningFlake);
           throw new GatewayExecutionError(
             `API request failed with status ${statusCode}: ${this.truncate(fullText, 500)}`,
             {
