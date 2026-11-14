@@ -1,4 +1,5 @@
 import prisma from '../../config/database'
+import { isExtensionSourceSettled } from '../contracts'
 import {
   BlackboxDatabaseBusyError,
   BlackboxSessionBusyError,
@@ -2849,5 +2850,62 @@ describe('BlackboxVirtualLearnerRunner', () => {
     const input = (executeSkill as jest.Mock).mock.calls[0][1]
     expect(input.turnSequence[0].turn).toBe(7)
     expect(input.turnSequence.at(-1).turn).toBe(30)
+  })
+})
+
+describe('延伸结算守卫（修复批 24-①，CTRL_EXT_CONFLICT u17 reeval23 critical）', () => {
+  it('源课未结算（teachingSessionId 仍指源课且 teaching 阶段）→ 不放行', () => {
+    expect(isExtensionSourceSettled({ teachingSessionId: 'teach1', extensionSourceSessionId: 'teach1', platformStage: 'teaching' })).toBe(false)
+  })
+
+  it('源课已让位（下一课接管）→ 放行', () => {
+    expect(isExtensionSourceSettled({ teachingSessionId: 'teach2', extensionSourceSessionId: 'teach1', platformStage: 'teaching' })).toBe(true)
+  })
+
+  it('课已收口（teachingSessionId 清空）→ 放行', () => {
+    expect(isExtensionSourceSettled({ teachingSessionId: null, extensionSourceSessionId: 'teach1', platformStage: 'teaching' })).toBe(true)
+  })
+
+  it('阶段离开 teaching（跑完收口）→ 放行；旧回执无源课 → 放行', () => {
+    expect(isExtensionSourceSettled({ teachingSessionId: 'teach1', extensionSourceSessionId: 'teach1', platformStage: 'completed' })).toBe(true)
+    expect(isExtensionSourceSettled({ teachingSessionId: 'teach1', extensionSourceSessionId: null, platformStage: 'teaching' })).toBe(true)
+  })
+})
+
+describe('延伸课开启永久失败降级（修复批 24-①）', () => {
+  it('平台守卫 400（永久性）→ 取消延伸意图继续实验，不整场跑死', async () => {
+    const runner = new BlackboxVirtualLearnerRunner() as any
+    const session = sessionWith({
+      learningPathId: 'p1',
+      taskId: 't2',
+      teachingSessionId: null,
+      extensionPhase: 'pending',
+      extensionTaskId: 't1',
+      extensionSourceSessionId: 'teach1',
+      extensionText: '老师，我还想就这节课再深入一点'
+    })
+    addObservation(session, {
+      stage: 'path',
+      visibleMessages: [],
+      visiblePath: { id: 'p1', title: '路径', milestones: [] },
+      visibleTask: { id: 't2', title: '第二个任务' },
+      availableActions: ['start_learning']
+    })
+    const adapter = {
+      startExtensionSession: jest.fn().mockRejectedValue(new Error('该任务还没有完成过课堂，先完成本课再来延伸学习'))
+    }
+    const currentSession = installMutableActionSession(runner, session, adapter)
+
+    const result = await runner.autoStep('vs1', 'admin1')
+
+    // 不抛错、意图取消、run 继续；轨迹末条为取消后的回执
+    expect(adapter.startExtensionSession).toHaveBeenCalledWith('t1')
+    const persisted = JSON.parse(currentSession().stageResults)
+    expect(persisted.blackbox.control).toEqual(expect.objectContaining({
+      extensionPhase: 'cancelled',
+      extensionTaskId: null
+    }))
+    expect(persisted.blackbox.publicTrace.at(-1)?.observation).toBeDefined()
+    expect(result.action).toEqual({ type: 'request_extension', text: '老师，我还想就这节课再深入一点' })
   })
 })

@@ -1470,3 +1470,53 @@ reeval22 已证 CLOSURE_MISSING ×4 全是弃跑课假阳性（wrapup=false 设�
 2. 模型权衡三选一仍待用户网关侧定夺（回滚 flip-model-config.cjs rollback 就绪）——
    ASSESSMENT_INCONSISTENCY / 真实收束缺口 / OPEN 泄结论三族都挂该决策；
 3. board 族观察位维持（跨批计数持续）；referee severity 纪律观察位（≥2 再收紧）。
+
+## 三十四、修复批 24（2026-11-15 当轮：u17 延伸 400 + 失败跑 active 残留取证 → 三杠杆落地）
+
+### 34.1 取证（全链路还原，铁证链）
+
+- **崩溃点**：`[autopilot] 运行未捕获异常 error=该任务还没有完成过课堂`——reeval22 期
+  （2e05a357）与 reeval23（db7d0a44）**同签名两批**，跨批 ≥2 达标。
+- **身份疑云澄清**：初判「双身份错位」被推翻——fb4decf7 是 u07 的学员（sim20-07 何静·
+  英文论文），u17(d9d95337) 全程单身份。计数维度没有错位：400 是**守卫按字母正确执行**。
+- **真链**：延伸意图在**课中**被记下（学习者在 active 课里说「还想深入」→
+  extensionPhase=pending，blackbox-runner.ts:918）→ 收口闭合门禁延迟结算（03:10:16
+  「完成信号延迟一轮：末问未答」实证）→ autoStep 的延伸触发（:952）**无源课结算检查**
+  （注释写「本课已结算」但代码不查）→ 开延伸 → 平台守卫「完成课=0」400（守卫正确）→
+  400 冒成未捕获异常 → autopilot 崩溃处理器只写 status=failed **不收口平台课** →
+  教学会话永留 active（幽灵）+ 整场实验陪葬（goal+课的产出全废，referee 只能
+  inconclusive）。
+- **附带实锤**：崩溃前 14 秒同回复双发（gw_1eff81bc/gw_5b261479 同 contentPreview）——
+  TEACH_LOOP_STUCK finding 的实物形态。
+
+### 34.2 三杠杆（全 runner 侧确定性，platform 守卫不动——它是对的）
+
+1. **L1 结算守卫**：新纯函数 `contracts.isExtensionSourceSettled(control)`——源课已让位
+  （teachingSessionId ≠ 源课 / 清空）或阶段离开 teaching 才放行开延伸；旧回执无源课
+  保持放行不收紧。autoStep 延伸分支接入。课中意图从此回到正常步进，结算后自然开课
+  （计数守卫看到的是真实的完成课数）。
+2. **L3 永久失败降级**：延伸开启失败时按 `isRecoverableExecutionFailure` 分流——瞬态照旧
+  抛出走可恢复重试；永久性（守卫 400 等）取消意图（extensionPhase='cancelled'，
+  contracts 联合类型放宽）+ recordDegradation P3 留痕 + run 继续。延伸是一期观测功能，
+  不再用整场实验陪葬。
+3. **L2 失败收口兜底**：autopilot 崩溃处理器在 writeState('failed') **之前** best-effort
+  走 runner act(abandon)——平台课按批 20 语义落 status='abandoned'+endReason（完成课
+  计数族天然隔离），失败只留日志不阻断终局化。幽灵 active 从源头消失。
+
+### 34.3 门禁与验证
+
+- tsc 0 err；blackbox-runner 套件 70/70（新增守卫 4 态 + 降级取消 5 测）；
+  virtual-lab+coordinators 618/618；**全量 jest 792/792 套件零失败**（战役首次全绿全量，
+  7361 tests）。
+- **验证批自然复核点（批 25）**：①延伸意图课中出现的 case——结算后延伸正常开启或
+  优雅取消（trace 中 extensionPhase ≠ 触发 run 失败）；②失败跑不再产生幽灵 active
+  （teaching_sessions 无新增 active 残留）；③abandon 收口落库语义持续（批 20 链）。
+
+### 34.4 批 25 队列
+
+1. 下一验证批（reeval24）：批 24 三杠杆自然复核（上述三点）；
+2. 模型权衡三选一仍待用户网关侧定夺（回滚 flip-model-config.cjs rollback 就绪）——
+   ASSESSMENT_INCONSISTENCY（u07L2 口径翻转 critical）/真实收束缺口/NOTATION_LEAK 三族
+   挂该决策；
+3. board 族观察位维持（跨批 6 例）；referee severity 纪律观察位（u19 双 major 描述性
+   残余，≥2 再收紧）。

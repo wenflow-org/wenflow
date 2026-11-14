@@ -1,6 +1,8 @@
 import { randomUUID as uuidv4 } from 'crypto'
 import { createHash } from 'crypto'
 import prisma from '../config/database'
+import { recordDegradation } from '../skills/degradation-telemetry';
+import { isExtensionSourceSettled } from './contracts';
 import { signProjectionToken, SYNTHETIC_CAPABILITIES } from '../utils/projection-token'
 import type { ResolvedRoute } from '../gateway/api-gateway'
 import type {
@@ -949,12 +951,51 @@ export class BlackboxVirtualLearnerRunner {
       }
       // 延伸课（#124）：本课已结算且学习者表达过延伸意愿 → 基于源任务开一节 extension 课堂。
       // 路径观察面本身不提供 request_extension，所以这是 runner 的内部状态迁移，不走 act 的动作白名单。
-      if (control.extensionPhase === 'pending' && control.extensionTaskId && !control.extensionMode) {
+      // 结算守卫（修复批 24-①，CTRL_EXT_CONFLICT u17 reeval23 critical）：延伸意图常在课中记下
+      // （学习者在 active 课里说「还想深入」）——源课未结算（teachingSessionId 仍是源课且阶段还在
+      // teaching）时绝不开延伸：平台计数守卫会把「完成课=0」的延伸请求 400 拒掉（「该任务还没有
+      // 完成过课堂」），旧实现把这个 400 冒成未捕获异常整场跑死（reeval22/23 两批实证），
+      // 且失败终局化不收口平台会话，幽灵 active 由此而来。源课结算后 teachingSessionId 已让位
+      // （下一课/清空）或阶段离开 teaching，此时才开延伸。
+      const extensionSourceSettled = isExtensionSourceSettled(control)
+      if (control.extensionPhase === 'pending' && control.extensionTaskId && !control.extensionMode && extensionSourceSettled) {
         const action: LearnerAction = {
           type: 'request_extension',
           text: control.extensionText || '老师，我想就这节课再深入学一点。'
         }
-        const extensionResult = await this.startExtensionSession(session, state, adapter, control)
+        let extensionResult: PlatformInteractionResult
+        try {
+          extensionResult = await this.startExtensionSession(session, state, adapter, control)
+        } catch (error) {
+          // 永久性失败（平台守卫 400 等）：取消延伸意图继续实验——延伸是一期观测功能，
+          // 不值得用整场实验陪葬；瞬态失败照旧抛出，走可恢复重试通道。
+          if (this.isRecoverableExecutionFailure(error)) throw error
+          logger.warn('[Blackbox] 延伸课开启失败（永久性），取消延伸意图继续实验', {
+            sessionId: session.id,
+            extensionTaskId: control.extensionTaskId,
+            error: error instanceof Error ? error.message : String(error)
+          })
+          recordDegradation({
+            source: 'virtual-lab/blackbox-runner',
+            faultCategory: 'UPSTREAM_EMPTY',
+            severity: 'P3_NOTICE',
+            impactedDimensions: ['blackbox.extension', `session:${session.id}`],
+            mitigationApplied: 'extension-intent-cancelled',
+            rootCauseMessage: `extension start failed permanently: ${String(error instanceof Error ? error.message : error).slice(0, 300)}`
+          })
+          const fallbackObservation: LearnerObservation = latest ?? {
+            stage: 'teaching',
+            visibleMessages: [],
+            availableActions: ['chat', 'abandon']
+          }
+          return {
+            action,
+            result: await this.projectPlatformResult(session, state, {
+              observation: fallbackObservation,
+              control: { ...control, extensionPhase: 'cancelled', extensionTaskId: null }
+            }, action)
+          }
+        }
         return { action, result: await this.projectPlatformResult(session, state, extensionResult, action) }
       }
       const snapshot = await this.getExperimentSnapshot(session, state)

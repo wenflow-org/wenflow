@@ -77,7 +77,7 @@ export type PlatformControlReceipt = {
    * 延伸课（#124）：`pending`=学习者已表达延伸意愿、等本课结算后开课；
    * `active`=延伸课进行中（`extensionMode`）；`completed`=已 end_only 收束、回到路径。
    */
-  extensionPhase?: 'pending' | 'active' | 'completed'
+  extensionPhase?: 'pending' | 'active' | 'completed' | 'cancelled'
   extensionMode?: boolean
   extensionTaskId?: string | null
   extensionSourceSessionId?: string | null
@@ -283,3 +283,19 @@ export type VirtualLearnerActorAuditOutput = {
     interpretation: string
   }>
 }
+
+/**
+ * 延伸触发结算守卫（修复批 24-①，CTRL_EXT_CONFLICT u17 reeval23 critical）：源课已结算才允许开延伸课堂。
+ * 源课未结算的形态：teachingSessionId 仍指向源课（课中意图）且阶段仍在 teaching；
+ * 任一「已让位/已离开」信号成立即视为结算。extensionSourceSessionId 缺失（旧回执）保持放行不收紧。
+ */
+export function isExtensionSourceSettled(control: {
+  teachingSessionId?: string | null
+  extensionSourceSessionId?: string | null
+  platformStage?: string | null
+}): boolean {
+  if (!control.extensionSourceSessionId) return true
+  if (control.teachingSessionId !== control.extensionSourceSessionId) return true
+  return control.platformStage !== 'teaching'
+}
+

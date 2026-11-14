@@ -371,7 +371,24 @@ export class AutopilotService {
           runId,
           error: error instanceof Error ? error.message : String(error)
         })
-        await this.writeState(sessionId, {
+                // 失败收口兜底（修复批 24-①，幽灵 active 会话）：未捕获异常终局化实验时，平台侧
+        // 教学会话还开着——永不入完成课计数、也不可再入（reeval23 u17 实证：延伸 400 崩溃
+        // 后会话永留 active）。趁虚拟会话仍可变先走 abandon 收口（批 20 语义：平台课落
+        // status=abandoned + endReason），失败只留日志不阻断终局化。
+        try {
+          const failureSession = await prisma.virtual_sessions.findUnique({ where: { id: sessionId } })
+          const failureState = parseStageResults(failureSession?.stageResults)
+          const controlSnapshot = (failureState.blackbox?.control || {}) as { teachingSessionId?: string | null }
+          if (controlSnapshot?.teachingSessionId) {
+            await blackboxVirtualLearnerRunner.act(sessionId, 'autopilot', { type: 'abandon', reason: '运行异常收口（失败兜底）' })
+          }
+        } catch (closeError) {
+          logger.warn('[autopilot] 失败收口兜底未完成（不阻断终局化）', {
+            sessionId,
+            error: closeError instanceof Error ? closeError.message : String(closeError)
+          })
+        }
+await this.writeState(sessionId, {
           status: 'failed',
           completedAt: new Date().toISOString(),
           lastError: String(error instanceof Error ? error.message : error).slice(0, 500)
