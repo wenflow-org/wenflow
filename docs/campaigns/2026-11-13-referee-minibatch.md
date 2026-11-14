@@ -1280,3 +1280,56 @@ agnes-3.0-flash 基线 vs deepseek-v4.1-flash 时代末期（批 M referee 1 类
 2. agnes 收束家族：批 16/19 数据已足够支撑模型决策，决策后定位（恢复 deepseek→水位回落
    验证批；维持 agnes→收束完备性提示词治理）；
 3. liveness 持续（已答不推进/剥离 已有实战；延伸回退/短确认/meta-only 待场景）。
+
+## 三十、修复批 20（2026-11-15 当轮：F_001 状态脱同步——abandon 语义族落库归位）
+
+### 30.1 取证（真语义缺陷确认，非误读）
+
+链路还原：黑盒 runner abandon → `platform-user-adapter.endTeaching('abandoned')` →
+`POST /finalize (end_only, learner-abandoned)` → **SessionFinalizationService.finalize 对
+end_only 无条件走 complete_task 结算链**（endReason 只进 completeTask 的 reason 参数，
+不改变落库 status）→ `completeTask + status='completed'`。
+
+铁证（批 S u07 session3, te73ljj）：16:58:19 开始 → 16:58:58 abandon 200 返回（**39 秒
+中止课**）→ teaching_sessions.status=**completed** + 任务完成指标 true，与实验回执
+abandoned 脱同步。污染面：①完成课计数族（`countCompletedLessonSessions`/
+`countCompletedLessonSessionsOnPath` 把中止课算进「已完成的课堂」——批 17 EXTENSION
+冲突的计数膨胀同源）；②startSession 同任务重学计数（completed ∈ 重学判定集合）。
+产物化取证：runner 日志 abandon 时间戳 vs DB 行 endTime/status 同秒对齐，脱同步确定性成立。
+
+### 30.2 修复（两刀 + 一处旧语义测试重写）
+
+1. **repo**：`TeachingSessionRepository.abandonSessionFinalization(sessionId, endReason)`
+   ——合并 endReason 进 teachingState、`status='abandoned'`、endTime、清 operationId/kind/
+   lease、revision+1（status 列为 String，'abandoned' 合法；endTime 走 `simulatedNowOr`）。
+2. **service 拦截**：finalize 的 end_only 分支入口处，`isAbnormalSessionClosure` 命中
+   （learner-abandoned / discarded / superseded / failed）→ 直接 abandonSessionFinalization
+   并返回；不再进 coordinator 结算链（wrapup/结算/温故回写全不产生）。**操作响应保持
+   `status:'completed'`**（runner endTeaching 以顶层操作状态判定成功，session 载荷携带真实
+   终态 abandoned）。
+3. **测试**：旧「弃跑 end_only → mockEndSession 被调用」用例编码的正是被修掉的旧语义，
+   重写为新语义断言（不走结算链/落 abandoned/操作态 completed/温故不回写）。
+
+### 30.3 门禁插曲（门禁网自己抓了两个网外鱼）
+
+- **模拟时钟审计真命中**：首版 repo 方法写 `endTime: new Date()` 被全量 jest 的
+  simulation-clock-wiring.audit 抓住（任务结算业务时间戳不得落真墙钟）→ 改
+  `simulatedNowOr()`。这是该审计守卫自部署以来首次拦下真实回归，非 flake。
+- **陈年截断浮出**：negative-evidence.test.ts 自批 15 提交时即缺 describe 收尾括号
+  （套件始终编译失败），此前多轮全量 jest 一直把它误归为「并发 flake」家族；本轮隔离
+  复核定性后补 2 行修复（eaca34f3）。同轮删除空的 path.coordinator.test.ts 残骸
+  （真实覆盖在 transient-retry.test.ts）。教训：**flake 名单要定期做隔离复核定性，
+  不能只按名字滚动豁免**。
+- 门禁终态：tsc 0 err；定向 6 套件 66/66 + finalization 23/23；全量 jest 7336+ 通过、
+  剩余为逐轮轮换的 env-dependent 套件级失败（McpGateway 超时 / database-vacuum /
+  infra-models 等，零断言失败，隔离全绿）。
+
+### 30.4 验证注记 + 队列
+
+- **本修复由验证批自然 exercise**：每批收口都会走 abandon 路径（runner 收口即
+  endTeaching），下一验证批直接查 u07 形态课的落库 status 是否 abandoned + 完成课计数
+  是否归位，无需专门构造。
+- 批 21 队列：①F_001 修复自然验证 + 旧 completed 中止课的计数治理面复核；②agnes 收束
+  家族——批 16/19 数据已足，**模型权衡三选一仍待用户网关侧定夺**（恢复 deepseek /
+  维持 agnes / 混合；回滚 `node .runtime/flip-model-config.cjs rollback` 就绪，不代执行）；
+  ③liveness 持续（延伸回退/短确认/meta-only 待场景）。
