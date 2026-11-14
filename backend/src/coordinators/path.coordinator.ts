@@ -49,7 +49,7 @@ const COORDINATOR_ID = 'path-agent';
  * generating 后直接终态 failed、学习者整课缺失。
  */
 const PATH_GENERATION_TRANSIENT_ERROR
-  = /status (408|410|425|429|5\d\d)|RATE_LIMITED|provider_timeout|PROVIDER_TIMEOUT|network|ECONN|ETIMEDOUT|socket hang up|aborted|content safety screening/i;
+  = /status (408|410|425|429|5\d\d)|RATE_LIMITED|provider_timeout|PROVIDER_TIMEOUT|network|ECONN|ETIMEDOUT|socket hang up|aborted|content safety screening|PATH_PLANNING_META_ONLY_PATH/i;
 const PATH_GENERATION_TRANSIENT_RETRY_DELAY_MS = 4_000;
 
 export function isProviderTransientPathError(error: unknown): boolean {

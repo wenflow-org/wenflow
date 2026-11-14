@@ -1051,3 +1051,39 @@ streak≥2 时注入「学员已确认，停止重发指令，一句收干」刷
 **模型切换的批际可比性注记**：批 14（reeval16）起运行于 agnes-3.0-flash，与批 I–N
 （deepseek-v4.1-flash）的水位对比存在**模型混杂变量**——批 14 定位为**新模型基线重建批**，
 其水位作新基线，不与 deepseek 时代直接比降幅。
+
+## 二十四、批 14：agnes 新模型基线（2026-11-14 当轮：基线重建 + meta-only 重试杠杆 + 质量权衡警示）
+
+### 24.1 基线读数（reeval16，12 课判定：4 pass / 5 pass_with_concerns / 2 fail / 1 inconclusive）
+
+- referee 面 actionable 1 类：**PATH_GENERATION_LATENCY ×1 critical（u17）**——根因
+  `PATH_PLANNING_META_ONLY_PATH`：agnes 对排障策略类目标的概念措辞滑向元认知词表
+  （「策略/清单」），触发 2026-10-20 的质量守卫。**输出方差非确定性失败** → 已纳入路径兜底
+  重试族（PATH_GENERATION_TRANSIENT_ERROR 扩展 + 单测钉住），重试一次换措辞即可恢复，
+  下批观察首次实战。
+- classroom 面 actionable 2 类：
+  - **CLOSURE_MISSING ×4（critical×1）**——critical 代表形态是 **wrapup 归因偏差**
+    （改进建议指控学习者「需确认唯一性约束边界」，但 index5 显示学习者已准确推断、index6
+    教师已肯定——总结指控了不存在的问题）。这是 agnes 的收束质量回退信号。
+  - BOARD_DANGLING_TRACE ×1（critical×1）——u01 课 board 快照缺失而教师话语隐含指代
+    可视化材料（证据链断裂形态，板面状态管理家族新子形态）。
+- liveness：批 14 窗口两杠杆无触发场景（方差）；STRUCTURED_OUTPUT_INVALID 0 例（封锁解除
+  后未独立复现，观察项关闭）。
+
+### 24.2 ⚠️ 模型质量权衡（需用户决策）
+
+agnes-3.0-flash 基线 vs deepseek-v4.1-flash 时代末期（批 M referee 1 类 minor / 批 N 0 类）：
+**收束归因准确性、板面证据链质量出现回退**（两个新 critical 形态都是 agnes 输出质量面），
+但平台全链可用。权衡选项：
+- 恢复 deepseek 渠道（向中转方申请/换套餐，回滚命令已备：
+  `node .runtime/flip-model-config.cjs rollback` + .env 还原）；
+- 维持 agnes 并按批 15 队列对收束归因/板面证据链做适配治理；
+- 混合：关键链（teaching-turn/wrapup）等 deepseek 恢复，轻链维持 agnes。
+
+### 24.3 批 15 队列
+
+1. wrapup 归因偏差（agnes 形态）取证：收束生成在 agnes 上的改进建议与课内证据回链核对
+   （现有 ④ 回链闸只链学员原话，不校验「指控的问题是否真实存在」——候选杠杆：改进建议
+   须引用一条学员真实失误轮次，否则降格为中性建议）；
+2. BOARD_DANGLING_TRACE（板面证据链断裂）归入板面状态管理家族；
+3. meta-only 重试首次实战记录；短确认收口继续观察。

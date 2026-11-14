@@ -19,6 +19,9 @@ describe('isProviderTransientPathError（路径生成瞬态判定）', () => {
     expect(isProviderTransientPathError(new Error('request aborted after 300s'))).toBe(true);
     expect(isProviderTransientPathError(new Error('getaddrinfo ECONNREFUSED ...'))).toBe(true);
     expect(isProviderTransientPathError({ retryable: true, message: 'whatever' })).toBe(true);
+    // u17 批 14（agnes 适配期）：排障策略类目标的概念措辞滑向元认知词表，触发质量守卫——
+    // 输出方差非确定性失败，重试一次换措辞即可恢复
+    expect(isProviderTransientPathError(new Error('PATH_GENERATION_FAILED: PATH_PLANNING_META_ONLY_PATH'))).toBe(true);
     // u07 批 K critical：良性学习目标被上游内容筛查间歇性拒绝（同内容重试即过）
     expect(isProviderTransientPathError(
       new Error('API request failed with status 422: {"error":{"message":"input rejected by content safety screening"}}'),
