@@ -1173,3 +1173,36 @@ agnes-3.0-flash 基线 vs deepseek-v4.1-flash 时代末期（批 M referee 1 类
 部分是真实的（wrapup 归因偏差被剥离闸 ×4+ 实证）。恢复 deepseek 不仅能回升教学质量，
 **还能恢复判官仪器的有效性**（双端回 deepseek 才能重建与批 I–N 可比的水位基线）——这为
 「恢复 deepseek」选项增加了测量学权重。回滚命令就绪。
+
+## 二十七、修复批 17 + 批 Q 验证（2026-11-14 当轮：GOAL_STUCK 死锁破解 + EXTENSION 跨任务回退 → 双 critical 未复现）
+
+### 27.1 取证结论与修复（提交 9a2eb51f）
+
+- **GOAL_STUCK_LOOP（u19 批 P critical）——双向死锁机理**：①硬字段守卫压回
+  （`time_budget` 缺失 → proposing 打回 understanding）；②stage=understanding →
+  `proposalConfirmable=false` → **确认裁决器永不触发**（循环窗口零调用）；③学员打字确认
+  变普通回合 → 模型重发方案 → 再压回。与在途 goal-confirm-adjudicator 方案的关联：裁决器
+  本体与 fail-open 均正常，缺陷在其 stage 门槛条件被压回绕开。
+  **修复两杠杆**：压回时注入缺失字段**确定性收集提问**（`buildMissingFieldQuestion`，
+  time_budget→「每周练几天、每天多久？」，顶掉模型下一问，逼对话走向补字段）；裁决门槛
+  **跨轮放行**（collected.confirmedProposal 在案即裁决，用户 agency 先例同向）。
+- **EXTENSION_STATE_CONFLICT（u17 批 P critical）——跨任务路由缺口**：学员说「顺便看看
+  最近那个活动页的案例」（指 task 1，其会话记录**确实 completed**），延伸请求却带当前活动
+  任务（task 2）的 taskId → 按当前任务计数=0 → 拒绝，报错与事实矛盾。
+  **修复**：`countCompletedLessonSessionsOnPath` 回退——当前任务无完成课但同路径已有完成课
+  即放行。
+
+### 27.2 批 Q（reeval19）验证
+
+- **referee 面 actionable 0 类**——两个 critical 均**未复现**；u19 从 fail 翻回
+  pass_with_concerns（goal 流正常推进、采样 2/4 课）；延伸拒绝批 Q 窗口 **0 次**。
+- 压回守卫本批 7 次——守卫照常工作，死锁破解提问把压回转向收集路径（无卡死）。
+- classroom 面（15 课，2 fail / 7 pass_with_concerns / 4 pass / 2 inconclusive）：
+  CLOSURE_MISSING ×3（critical×2）+ OPENING_ASSUMPTION ×2（major×1）——agnes 判官时代
+  课堂 critical 持续，标注器三态分化在案，**模型权衡决策仍是主变量**（见 §26.4）。
+
+### 27.3 批 18 队列
+
+1. 模型权衡决策落地（回滚或维持），批 18 以恢复后基线/治理批定位；
+2. classroom fail 课取证（agnes 判官 critical×2 结合标注器读数人工复核）；
+3. 四项 liveness + 延伸回退/死锁破解 首战记录持续。
