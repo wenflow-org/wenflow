@@ -505,7 +505,8 @@ describe('SessionFinalizationService', () => {
     expect(result.status).toBe('completed')
     const payload = result as Extract<typeof result, { status: 'completed' }>;
     expect(payload.session.status).toBe('abandoned')
-    expect(payload.taskCompletion.status).toBe('completed')
+    // 批 21：taskCompletion='skipped'——abandon 课结算确实跳过，不再对 trace 声称 completed
+    expect(payload.taskCompletion.status).toBe('skipped')
     expect(mockApplyWarmupExtractionForSession).not.toHaveBeenCalled()
   })
 

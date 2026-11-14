@@ -197,7 +197,10 @@ export class SessionFinalizationService {
           input.endReason || 'learner-abandoned',
         );
         return this.completedResponse(abandonedSession, operationId, {
-          status: 'completed',
+          // taskCompletion='skipped'（批 21，CRIT_METRICS_MISMATCH u04 reeval22 critical）：结算确实被
+          // 跳过，对 abandon 课声称 completed 会让 runner trace 与 control 台账（taskCompleted=false）
+          // 冲突；runner 契约只看顶层操作态 completed，此字段语义归位不影响收口。
+          status: 'skipped',
           alreadyCompleted: false,
         });
       }
