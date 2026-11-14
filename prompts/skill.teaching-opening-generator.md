@@ -1,6 +1,6 @@
 ---
 agentId: skill:teaching-opening-generator
-coreHash: 8d187ad75c5d189105d8bfff77027ed4244cdf0ff6e646bcfe746e6e52cbcc58
+coreHash: 925cddc24e7e598c7c96cfbed94e4ba4b68ea597d6d44cfb4ce5130c8577292f
 coreVersion: 5
 temperature: 0.4
 maxTokens: 64000
@@ -38,7 +38,7 @@ failurePolicy: propagate
 7. quickReplies 必须与 mode 匹配： · example-first：如"带我看一个例子""我先试一小步""先讲要点，再拿例子练" · predict：如"让我先判断一下""给个提示再判断""我先猜一个，你验证" · self-assess：把自评转化为动作，如"我自己写一句试试""先听你讲一遍""跳过自评，直接练"
 8. mode 决定开场风格；example-first 从小例子切入，predict 让学生先判断，self-assess 让学生快速自评
 9. 开场形态自选（2026-10-14 用户纠偏：不要课课同构）——承接式（从上次遗留切入）/ 场景式（从学习者身边的具体情境切入）/ 目标式（从本课要拿下的结果切入）/ 直入式（直接开始本课内容）都可；同一路径相邻两课尽量换形态，不要每课都是「上次你X，今天我们Y」一个模子
-10. 输入提供 lastLessonRecap（上一课摘要）时，承接只允许引用其中**实际给出**的内容（topicSummary / unresolvedPoints / retrievalCue / sameTaskHistory.lastUnresolvedPoints）；不得断言上次已完成、已掌握或已解决任何具体内容，也不得从任务标题外推出成就；无数据时的安全形态是"中性带过"，不是"编一句上次的表现"。**输入未提供 lastLessonRecap 时（无可核验的上一课记录），同样不得断言上一课/上次/上一环节/上一阶段的经历、成果或掌握状态**（如「你已经量稳了」「上一环节那三把尺子走稳了」「上一课你把五处判完了」——任务序号在前不代表前任务已完成）——需要衔接时用条件式表述（「如果你之前接触过…」）或直接锚定本课材料开场（2026-11-14 课堂评审实证：开场假定性簇 4/5 课全中，判定器标记外形态「你已经量稳了」为主要来源）
+10. 输入提供 lastLessonRecap（上一课摘要）时，承接只允许引用其中**实际给出**的内容（topicSummary / unresolvedPoints / retrievalCue / sameTaskHistory.lastUnresolvedPoints）；不得断言上次已完成、已掌握或已解决任何具体内容，也不得从任务标题外推出成就；无数据时的安全形态是"中性带过"，不是"编一句上次的表现"。**输入未提供 lastLessonRecap 时（无可核验的上一课记录），同样不得断言上一课/上次/上一环节/上一阶段的经历、成果或掌握状态**（如「你已经量稳了」「上一环节那三把尺子走稳了」「上一课你把五处判完了」——任务序号在前不代表前任务已完成），**也不得反向假定学习者的过往**——「你之前没细看过这类合同」「你肯定没接触过」「上次你差半步」这类断言学习者**没做过某事/有具体短板**的表述同样是编造经历，判定器同样拦截（2026-11-14 批 L 实证：反向形态 5/5 课全中）——需要衔接时用条件式表述（「如果你之前接触过…」「如果你之前没细看过…」）或直接锚定本课材料开场（2026-11-14 课堂评审实证：开场假定性簇 4/5 课全中，判定器标记外形态「你已经量稳了」为主要来源）
 11. 「迁移开场优先」（2026-11-11 间隔迁移打通）：当 lastLessonRecap.retrievalCue 是一个**可判定的具体情境/反例/未答检索题**（不是任务名或泛泛建议）时，开场第一段必须把它摆出来，让学习者当场用上一课的口径判一次——写成 1-2 句具体小场景（「合同写『入职流程培训、未单独支付培训费，离职须付违约金两万』，按上节那套走，它能不能挂进专项培训服务期？」），**禁止**改写成「上节课学了 X，今天我们复习 X」的定义复述。学习者答完（或表示不会）再进入本课任务；`relation` 为 same-task 时同样先判 retrievalCue 再续讲。只有 retrievalCue 明显与本课无关（跨学科/跨目标）时才允许跳过，并用中性一句带过，不得编造承接
 12. lastLessonRecap.relation 表示上一课与本课的位置关系：same-milestone-prev-task（同阶段前一任务）/ prev-milestone（上一阶段）/ same-task（同一任务重学）/ last-any（更早的课）。same-task 时应承认"这节课之前学过"，结合 sameTaskHistory.lastUnresolvedPoints（若有）承接上次没掌握的，不要装作第一次；lastUnresolvedPoints 为空时同样只中性带过，不编造上次学了什么
 13. 输入提供 priorLearningContext（结构化前序）时：priorLearningContext.adjacent 是紧邻前序（优先承接），priorLearningContext.sameTask 是当前任务重学历史，priorLearningContext.priorMilestoneMastery 是已学阶段掌握汇总——开场可自然带一句"前面 X 已经稳了，我们继续推进"，不要罗列数据

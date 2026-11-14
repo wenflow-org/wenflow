@@ -194,19 +194,34 @@ const CLOSING_REPLY_PATTERNS: RegExp[] = [
 ];
 
 /**
- * 开场「上一课经历」接地守卫（修复批 8，OPENING_ASSUME_EXPERIENCE 课堂聚类 4/5）：
- * 开场文本断言存在上一课/上次经历（病历单形态：「上一课你把…五处逐条判完了」「上一阶段
- * 那三把尺子已经走稳了」「你说过要的是……」）。lastLessonRecap 缺席 = 本课没有任何可核验的
- * 上一课记录（recap 只在真实完成课存在时由 recap 链装配）——此时任何此类断言都不可核验。
+ * 开场「上一课经历」接地守卫（修复批 8，OPENING_ASSUME_EXPERIENCE 课堂聚类 4/5；批 12 扩
+ * 反向断言，批 L 聚类 5/5 触发 §18.3-3 tripwire）：开场文本断言存在上一课/上次经历（病历单
+ * 形态：「上一课你把…五处逐条判完了」「上一阶段那三把尺子已经走稳了」「你说过要的是……」），
+ * 或**反向断言**学习者的过往（批 L 实证：「你之前没细看过这类合同，下周一又要签」——断言
+ * 学习者没做过某事同样是编造经历，无据）。lastLessonRecap 缺席 = 本课没有任何可核验的上一课
+ * 记录（recap 只在真实完成课存在时由 recap 链装配）——此时任何此类断言都不可核验。
+ * 条件式豁免：「如果你之前没接触过…」是批 8 钉住的合法衔接形态——命中反向断言的**句子**带
+ * 条件/疑问标记（如果/假如/要是/是否…）时不判违例。
  */
+const OPENING_PRIOR_HISTORY_PATTERN
+  = /(上一[节节课次阶段环节]|上次[的课学习]?|你说过|你之前[提讲]过)/;
+const OPENING_PRIOR_NEGATIVE_PATTERN
+  = /(?:你|您)(?:之前|以前|先前|过去)?[^。！？?！]{0,8}(?:没|从没|从未|不太)(?:细看|看过|接触|学过|遇过|见过|碰过|做过|试过|听过)/;
+const OPENING_CONDITIONAL_MARKERS = /(?:如果|假如|要是|若|是否|要不要|有没有|或许|可能|大概)/;
+
 export function hasUnverifiablePriorClaim(opening: { message?: unknown; question?: unknown }): boolean {
   const text = `${String(opening?.message ?? '')}\n${String(opening?.question ?? '')}`;
-  return /(上一[节节课次阶段环节]|上次[的课学习]?|你说过|你之前[提讲]过)/.test(text);
+  if (OPENING_PRIOR_HISTORY_PATTERN.test(text)) return true;
+  if (!OPENING_PRIOR_NEGATIVE_PATTERN.test(text)) return false;
+  const sentences = text.split(/[。！？?！]/);
+  return sentences.some((sentence) =>
+    OPENING_PRIOR_NEGATIVE_PATTERN.test(sentence) && !OPENING_CONDITIONAL_MARKERS.test(sentence));
 }
 
 const OPENING_PRIOR_CLAIM_CONSTRAINT = '本课没有任何可核验的上一课记录。不得断言上一课/上次/上一阶段的经历或成果'
-  + '（如「你上一课判完了…」「上一阶段已经走稳」「你说过要的是…」）；如需衔接，改用条件式表述'
-  + '（「如果你之前接触过…」），或直接锚定本课材料开场。';
+  + '（如「你上一课判完了…」「上一阶段已经走稳」「你说过要的是…」），也**不得反向假定**学习者'
+  + '的过往（「你之前没细看过这类合同」「你肯定没接触过」——断言学习者没做过某事同样是编造'
+  + '经历）；如需衔接，改用条件式表述（「如果你之前接触过/没接触过…」），或直接锚定本课材料开场。';
 
 export async function generateOpening(context: TeachingScenarioContext): Promise<TeachingOpening> {
   const runtimeSignals = deriveTeachingRuntimeSignals(context);

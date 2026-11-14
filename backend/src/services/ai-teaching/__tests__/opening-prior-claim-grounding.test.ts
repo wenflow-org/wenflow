@@ -46,4 +46,30 @@ describe('hasUnverifiablePriorClaim（开场上一课经历接地判定）', () 
       question: '上一阶段的口径你还有印象吗？',
     })).toBe(true);
   });
+
+  it('反向断言（批 12，批 L 聚类 5/5 tripwire）：断言学习者没做过某事同样违例', () => {
+    expect(hasUnverifiablePriorClaim({
+      message: '你之前没细看过这类合同，下周一又要签，心里没底很正常。今天我们把坑逐个点出来。',
+      question: '',
+    })).toBe(true);
+    expect(hasUnverifiablePriorClaim({
+      message: '你以前从没接触过财报，我们从第一张表开始。',
+      question: '',
+    })).toBe(true);
+    expect(hasUnverifiablePriorClaim({
+      message: '你过去不太见过这种条款写法吧？我们先看最常见的。',
+      question: '',
+    })).toBe(true);
+  });
+
+  it('条件式反向表述不违例（批 8 钉住的合法衔接形态的反向版）', () => {
+    expect(hasUnverifiablePriorClaim({
+      message: '如果你之前没接触过竞业限制，今天我们从法定下限说起；接触过的话可以直接判条款。',
+      question: '',
+    })).toBe(false);
+    expect(hasUnverifiablePriorClaim({
+      message: '要不要先看看你对这类合同的印象？没看过也没关系，我们从样例开始。',
+      question: '',
+    })).toBe(false);
+  });
 });
