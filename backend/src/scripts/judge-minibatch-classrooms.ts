@@ -169,8 +169,10 @@ async function judgeClassroom(job: ClassroomJob, ts: any, outDir: string): Promi
   // 后，可逐轮回放学习者当时看到的板面。
   let boardState: any = null;
   let boardHistory: Array<{ revision: number; kind: string; spec: any }> = [];
+  let sessionEndReason: string | null = null;
   try {
     const teachingState = ts.teachingState ? JSON.parse(ts.teachingState) : null;
+    sessionEndReason = (teachingState as any)?.endReason ?? null;
     boardState = teachingState?.sessionArtifacts?.board || null;
     const history = teachingState?.sessionArtifacts?.boardHistory;
     if (Array.isArray(history)) boardHistory = history;
@@ -242,6 +244,8 @@ async function judgeClassroom(job: ClassroomJob, ts: any, outDir: string): Promi
       learnerGoal: ts._learner?.learningGoal ?? null,
       learnerOccupation: ts._learner?.occupation ?? null,
       turnCount: transcript.length,
+      // 批 22-②：abandon 语义对齐——判官据 sessionTerminal 豁免弃跑课的收束判据
+      sessionTerminal: { status: (ts as any).status ?? null, endReason: sessionEndReason },
     },
     transcript,
     board,

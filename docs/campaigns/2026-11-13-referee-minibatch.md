@@ -1382,3 +1382,49 @@ abandoned 脱同步。污染面：①完成课计数族（`countCompletedLessonS
    豁免 METRICS/WRAPUP 族——预计直接消掉 CLOSURE_MISSING ×4 假阳性与 referee 残余 4 例；
 3. 模型权衡三选一仍待用户网关侧定夺（回滚 `node .runtime/flip-model-config.cjs
    rollback` 就绪）；agnes 收束家族真实缺口 3 例挂在该决策下。
+
+## 三十二、批 22（2026-11-15 当轮：判官 abandon 语义对齐落地 + 板面滞后杠杆取证否定）
+
+### 32.1 ②判官 abandon 语义对齐（落地，双 prompt 原位扩展条数守恒）
+
+reeval22 已证 CLOSURE_MISSING ×4 全是弃跑课假阳性（wrapup=false 设计如此）。双端判据豁免：
+
+- **classroom-quality-judge.yaml**：载荷键注释补 `classroom.sessionTerminal`；收束规则原位
+  扩展——`sessionTerminal.status='abandoned'` 时 wrapup.present=false 不记 closure 缺口、
+  closureQuality 不据此扣分（最多一条 info）。
+- **virtual-learner-referee.yaml**：metricCompleteness 数据完整性规则原位扩展——
+  experimentSummary/control 终态 abandoned 时不得据此输出 data 类扣分 finding。
+- **接线**：`ClassroomQualityJudgeInput.classroom.sessionTerminal` + judge 脚本从
+  ts.status / teachingState.endReason 注入。**referee 输入在场性核实**：terminalReason
+  本就在 runner trace（u07 finding 逐字引用过 control.terminalReason='abandoned'）——
+  缺的从来不是输入而是判据豁免，本轮补齐，runner 零改动。
+- 门禁：compile-all 33 文件、check:all（threshold-coupling 12/12）、core:check 33/33、
+  lint 全绿；prompts:sync already-in-sync；skills 套件 790/790；tsc 0 err。
+  **验证批自然复核**：下一批 CLOSURE_MISSING 应只在真实完成课出现（弃跑课 0 记录）。
+
+### 32.2 ①BOARD_MISMATCH 取证（完整）→ 引擎杠杆**取证否定**
+
+4 课逐轮还原（原始字节，非判官转述），三形态：
+- **A 提问维度错位**（u01L3 T2）：教师指派「对着支付时间」后问岗位/考核维度，板面右栏
+  只有 支付时间/支付方式/补偿标准/义务对应 四行——真缺陷；
+- **C 确认轮 ？ 占位未解锁**（u19L2 T6）：学员已答出两条理由、教师按完整叙述，板面右栏
+  理由 2 槽位仍是 ？（fork 遮罩未随确认释放）——真缺陷（确认后遮罩应解除）；
+- **B 抽象层级解读差**（u17L2/u04L1）：判官对推理链 vs 板面粒度的解读分歧——评审面
+  主观带，不可机械化。
+
+**判据原型 + 全语料回放（59 板书轮）→ 3 fires 全假阳性、0 真阳性**：假阳性全是
+迁移/推演问句（「哪一条的应对策略你想再推演一遍」「哪一步最该在签之前跟 HR 谈」——
+零交集是迁移题的**正确形态**）；真阳性 u01L3 T2 未入网（判官转述措辞≠教师原始字节，
+单测首版烘焙了转述文本，回放当场抓住）。判别面（板面指派 vs 迁移问句）是语义级的，
+正则级判据无法达宁窄勿宽 → **按战役纪律撤原型（board-lag-ask.ts 不落库），杠杆否定
+存档**。board_mismatch 继续由课堂评审面监测（本批 4 例全由判官抓到，评审面是有效
+检测器）；形态 C 若后续批次再现（≥2），考虑「确认轮 fork 遮罩释放」的板面管线杠杆。
+
+### 32.3 批 23 队列
+
+1. 下一验证批（reeval23）：①判官豁免复核——弃跑课 CLOSURE_MISSING 应归零、referee
+   METRICS 族残余应收敛；②taskCompletion='skipped'（批 21）自然复核；
+2. 模型权衡三选一仍待用户网关侧定夺（回滚 flip-model-config.cjs rollback 就绪）——
+   agnes 收束真实缺口 3 例（closure_gap/next_step_vague/missing_judgment）与
+   NOTATION_LEAK ×3 都挂在该决策下；
+3. 形态 C（确认轮遮罩释放）观察位：跨批 ≥2 再立项。

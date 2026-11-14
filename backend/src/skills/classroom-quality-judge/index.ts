@@ -42,6 +42,8 @@ export interface ClassroomQualityJudgeInput {
     learnerGoal?: string | null;
     learnerOccupation?: string | null;
     turnCount?: number | null;
+    /** 会话终态（批 22-②）：abandoned=学习者弃跑收口，设计上无 wrapup——判官据此豁免收束判据 */
+    sessionTerminal?: { status: string | null; endReason: string | null } | null;
   };
   transcript: ClassroomJudgeTranscriptTurn[];
   /** 本课任务级白板最终快照（teachingState.sessionArtifacts.board 的紧凑摘要；无则 present=false） */
