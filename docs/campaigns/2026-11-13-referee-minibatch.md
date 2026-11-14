@@ -1724,3 +1724,50 @@ referee verdict=fail [PATH_MISMATCH, CONTROL_INCONSISTENCY, TERMINAL_ABANDONMENT
    自动补触发）；
 2. u04 板面跨 rev 一致性簇（×2 major 可复算数字）取证定性；
 3. 模型权衡三选一仍待用户网关侧定夺（回滚 flip-model-config.cjs rollback 就绪）。
+
+## 四十、修复批 30（2026-11-15 当轮：u07 goal→path 断链根因闭合 + 提案分诊快照落地；u04 板面跨 rev 定性否定）
+
+### 40.1 ①u07 断链：三次假设全推翻，真根因是确认轮 understanding 漂移 × 分诊回退
+
+- **假设1 异步死亡/重启不接管 ❌**：goal 会话 gc_1794691315670 状态 completed、无
+  learningPathId——不是后台任务丢失。
+- **假设2 路径触发链 bug ❌**：触发链没断——是**被合法拒绝**。
+- **真根因（铁证）**：提案已展示（confirmedProposal 完整且完全可排：「建立英文实验型论文
+  的结构认知框架，并配备中断重启机制…」）、学员文本确认（「行，就照这版开始排吧」）后，
+  **确认轮的 understanding 漂移**（primary_block_type 缺失 + supportNeed=emotional）→
+  分诊走「缺阻塞类型+情绪需求」回退 → `emotional_support (medium)` → 硬阻断覆盖已确认
+  提案（「这类目标当前不会生成学习路径：你此刻更需要的可能是情绪与信心上的支持」）。
+  提案承诺 vs 闸门拒绝自相矛盾，整案例报废。
+- **设计语义辨析**：确认时点硬阻断是 F96/F97 的**有意设计**（2026-10-28 R4 P0：分诊判
+  referral 后不得再生成 5.3h 路径）——不能简单豁免确认时点。真正的缺口是**提案可见时刻
+  没有定格分诊**，让确认轮的漂移有了翻转空间。
+
+### 40.2 杠杆：提案时刻分诊快照（落地）
+
+`writeProposalTriageSnapshot(stage, data)`（goal-conversation.service 导出纯函数，接入
+updateConversationLifecycle 单咽喉点）：stage='proposing' 且无既有分诊/gated 待确认项时，
+把当前 understanding 的分诊结论定格进 collectedData[RESPONSE_TRIAGE_KEY]。确认轮硬阻断
+本就优先读 storedTriage——快照即生效，零额外接线。
+- u07 形态：提案轮定格 learning_path → 确认轮漂移不翻转 → 承诺兑现、路径生成；
+- F96/F97 保护不变：提案前已是 referral/emotional 的，快照本身就是阻断结论，确认照旧拦；
+- gated 待确认项不覆盖。
+- 门禁：tsc 0 err；新增 4 测（定格/漂移不覆盖/F96 保护/非 proposing 不写）；
+  learning 全套 1048/1048。**验证批自然复核（批 31）**：u07 形态案例应正常进教学。
+
+### 40.3 ②u04 板面跨 rev 簇：真实但瞬态/轻 grade，杠杆否定
+
+- u04L1（9 轮）：rev3→rev4 应收账款→总资产 置换属实，但 rev4 带「分母不变」标注
+  （为占比计算提供分母的有意演化），教师未口述——真实但轻 grade（判官 major 高估）。
+- u04L2（11 轮勾稽课）：170/155 指控**部分属实但属脚手架过渡态**——T8 教师正让学员填
+  「预收 5 亿」差额（板面按「答案不上板」纪律留白），rev3 恰处混合态（预收已上、
+  未分配利润暂缺 = 155）；T10 rev4 完整对平 170=170。**最终态无错误**，瞬态留白是
+  既有脚手架设计的正常形态。判官把过渡态当不一致，major 高估。
+- **杠杆否定**（观察位维持）：板面跨 rev「最终态数字错误」（非瞬态）再现 ≥2 再立项。
+
+### 40.4 批 31 队列
+
+1. 下一验证批（reeval27）：批 30 快照杠杆自然复核（goal 确认后进教学不再断链）+ 既有
+   杠杆持续观察；
+2. 模型权衡三选一仍待用户网关侧定夺（回滚 flip-model-config.cjs rollback 就绪）——
+   本批 understanding 漂移本身（goal-dialogue 模型逐轮重理解的不稳定）也是 agnes 时代
+   形态，决策后复查频率。

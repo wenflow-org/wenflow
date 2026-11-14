@@ -405,6 +405,13 @@ class GoalConversationService {
             ? (Array.isArray(options.appendMessage) ? options.appendMessage : [options.appendMessage])
             : [];
           if (appended.some((message) => message.role === 'user')) delete data.pendingUserTurn;
+          // 提案时刻分诊快照（修复批 30-①，u07 reeval26 goal→path 断链）：提案对用户可见即
+          // 平台承诺「点确认就排路径」——把此刻的分诊结论定格进 collectedData。确认轮的硬阻断
+          // 读 storedTriage（快照）而非重新分诊：understanding 在确认轮漂移（primary_block_type
+          // 缺失 + supportNeed=emotional → fresh 分诊翻成 emotional_support）不再翻转已展示的
+          // 承诺。F96/F97 预提案保护不变：提案前若已是 referral/emotional，快照本身就是阻断结论，
+          // 确认时照旧拦。
+          writeProposalTriageSnapshot(stage, data);
           options.mutateCollectedData?.(data);
         }
       }
@@ -1936,4 +1943,22 @@ export async function generateLearningPathFromConversation(conversationId: strin
   }
 
   return learningPath;
+}
+
+/**
+ * 提案时刻分诊快照（修复批 30-①，u07 reeval26 goal→path 断链）：提案对用户可见即平台
+ * 承诺「点确认就排路径」——把此刻的分诊结论定格进 collectedData[RESPONSE_TRIAGE_KEY]。
+ * 确认轮的硬阻断读 storedTriage（快照）而非重新分诊：understanding 在确认轮漂移
+ * （primary_block_type 缺失 + supportNeed=emotional → fresh 分诊翻成 emotional_support）
+ * 不再翻转已展示的承诺。F96/F97 预提案保护不变：提案前若已是 referral/emotional，
+ * 快照本身就是阻断结论，确认时照旧拦。已有快照或 gated 待确认项时不覆盖。
+ */
+export function writeProposalTriageSnapshot(
+  stage: 'understanding' | 'proposing' | 'ready' | 'completed',
+  data: Record<string, any>
+): void {
+  if (stage !== 'proposing') return
+  if (data[RESPONSE_TRIAGE_KEY] || data[RESPONSE_TRIAGE_PENDING_KEY]) return
+  const proposalTriage = triageGoalResponse(data.understanding)
+  if (proposalTriage) data[RESPONSE_TRIAGE_KEY] = proposalTriage
 }
