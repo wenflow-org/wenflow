@@ -573,6 +573,22 @@ function normalizeStageAndConfidence(
   };
 }
 
+/**
+ * 缺失硬字段 → 确定性收集提问（修复批 17-①）。路由表字段路径映射成学员能答的人话；
+ * 未映射的字段给通用模板。压回死锁的破局点：把「再确认」对话强制转向「补字段」。
+ */
+export function buildMissingFieldQuestion(missing: string[]): string | null {
+  if (!Array.isArray(missing) || missing.length === 0) return null;
+  const joined = missing.join('|');
+  if (/time_budget|time_horizon/i.test(joined)) {
+    return '排路径前还差一项时间安排：这几周你打算怎么投入？每周练几天、每天大概多久？';
+  }
+  if (/exam|deadline|timeline/i.test(joined)) {
+    return '还差一个时间锚点：这件事的截止时间或目标节点大概是什么时候？';
+  }
+  const firstField = String(missing[0] || '').split('(')[0];
+  return `还差一项关键信息（${firstField}），用一句话告诉我你的情况就行。`;
+}
 export function hasThinProposalPayload(payload: {
   understanding?: any;
   confirmedProposal?: any;
@@ -950,6 +966,12 @@ export function parseGoalConversationResponse(
     logger.warn('[skill:goal-conversation] proposing → understanding 压回（硬必需字段不齐）', {
       missing: thinCheck.missing,
     });
+ 
+    // 死锁破解（修复批 17-①，u19 GOAL_STUCK_LOOP critical 实证）：压回后若只让模型自然续写，
+    // 它会重发方案再要确认，而学员确认又被 stage 门挡在裁决之外——双向死锁 10 分钟。
+    // 这里把缺失字段转成一条确定性收集提问顶掉模型的下一问，逼对话走向「补字段」而非「再确认」。
+    const collectedQuestion = buildMissingFieldQuestion(thinCheck.missing);
+    if (collectedQuestion) nextQuestions = [collectedQuestion];
   }
 
   understanding = sanitizeUnderstanding(understanding);

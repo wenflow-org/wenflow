@@ -862,6 +862,21 @@ export class TeachingSessionRepository {
       where: { userId, taskId, status: 'completed', NOT: { mode: { in: ['review', 'extension'] } } },
     });
   }
+  /**
+   * 同路径完成课计数（修复批 17-②，EXTENSION_STATE_CONFLICT）：延伸意图常指向前序任务的
+   * 案例（「顺便看看最近那个活动页的案例」）而请求由当前活动任务发起——按当前任务计数会
+   * 漏掉同路径前序完成课，产生「任务1明明 completed 却说没完成过课堂」的矛盾报错。
+   */
+  async countCompletedLessonSessionsOnPath(userId: string, taskId: string): Promise<number> {
+    const session = await prisma.teaching_sessions.findFirst({
+      where: { userId, taskId },
+      select: { learningPathId: true },
+    });
+    if (!session?.learningPathId) return 0;
+    return prisma.teaching_sessions.count({
+      where: { userId, learningPathId: session.learningPathId, status: 'completed', NOT: { mode: { in: ['review', 'extension'] } } },
+    });
+  }
 
   async listByUser(userId: string, limit: number = 50): Promise<TeachingSessionRecord[]> {
     // 已知限制（L5）：固定 take 50，无分页；历史消息较多的用户只返回最近 50 条。

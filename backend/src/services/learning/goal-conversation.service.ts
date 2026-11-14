@@ -632,8 +632,12 @@ async continueConversation(
         // 提案内容门禁（#162，develop 侧修复并入）：没有可用提案时不代签——按钮与裁决都
         // 不该对着 null/半截提案生成路径，转普通回合由模型先补提案（判据见 goal-proposal-guard）。
         const collected = JSON.parse(conversation.collectedData || '{}');
-        const proposalConfirmable = conversation.stage === 'proposing'
-          && hasConfirmableProposal(conversation.collectedData, { conversationId, userId, stage: conversation.stage });
+        // 跨轮确认放行（修复批 17-①，u19 GOAL_STUCK_LOOP critical）：硬字段压回会把 stage
+        // 打回 understanding，而 collected.confirmedProposal 仍在案——此时学员打字确认
+        // （「确认，按这个方向排路径吧」）若仍要求 stage==='proposing'，裁决器永远不触发，
+        // 确认流死锁。改为：提案在案即裁决（用户 agency 先例「坚持 ≥2 次 → 放行」同向）。
+        const proposalConfirmable = hasConfirmableProposal(conversation.collectedData, { conversationId, userId, stage: conversation.stage })
+          && (conversation.stage === 'proposing' || Boolean((JSON.parse(conversation.collectedData || '{}') as Record<string, unknown>).confirmedProposal));
         // answer-only 出口（2026-11-10 外评：一句话能讲透的理解型诉求不排路径）：
         // 分诊判 answer_only 且用户坚持 <2 次 → 两确认通道都不放行，落普通回合——
         // 提示词层「一句话讲透测试」规则引导模型直接给出完整解答并收口；
