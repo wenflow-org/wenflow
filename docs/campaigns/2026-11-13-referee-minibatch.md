@@ -1248,3 +1248,35 @@ agnes-3.0-flash 基线 vs deepseek-v4.1-flash 时代末期（批 M referee 1 类
 2. 「填模板」类任务材料未渲染 + 提交循环（§28.1 精确靶点，与 1 同域治理）；
 3. 模型权衡三选一落地（回滚就绪）；
 4. liveness 持续（延伸回退/短确认/无板面指认 首战仍空缺）。
+
+## 二十九、修复批 19 + 批 S 验证（2026-11-15 当轮：已答不推进守卫首战命中）
+
+### 29.1 修复内容（提交含 F_LOOP 守卫 + 延伸回退 fail-closed）
+
+- **①F_LOOP 已答不推进守卫**（批 R critical 可复算杠杆）：`findRepeatedQuestionAfterAnswer`
+  （question-loop-guard.ts）——上一教师轮含问句 + 学员实质性作答（归一 ≥6 字非反问，短确认/
+  反问豁免）+ 本轮原样包含同一问句 → 判「已答不推进」。repairInstruction 重调（第一句反馈
+  作答→推进下一步，禁重复上轮问句），复检仍犯 flagged-only。第六刀（算式/附料/指认落空/
+  无板面指认/已答不推进 + 路径兜底重试）。
+- **②延伸回退 fail-closed**：批 17 的同路径回退在仓储计数异常时会 500——加 try/catch，
+  计数失败按严格规则拒绝（既有用例「无完结课堂→400」语义保持，mock 同步）。该回归由
+  全量 jest 抓住（批 17 落地时未跑全量 routes 的流程教训已吸收）。
+
+### 29.2 批 S（reeval21）验证
+
+- **① 首战实战命中**：00:57:23 拦截「学员已作答而教师原样重复同一问句」→ 触发修复重调。
+- 无据指控剥离再命中 ×2（累计 7+）；meta-only 延续零复现；短确认/无板面本批无场景。
+- referee 面 actionable 1 类：**F_001 ×1 critical（u07，新家族）**——状态脱同步：教学会话
+  终态 completed 而实验回执 abandoned（黑盒 runner abandon 标记与会话状态机不同步；与
+  EXTENSION 冲突同根族：黑盒 abandon 语义与产品完成态语义的错位）→ 批 20 队列。
+- classroom 面（15 课，3 fail / 6 pass / 3 pass_with_concerns / 2 inconclusive）：
+  **CLOSURE_MISSING ×4（critical×5，severity 数字超簇计数=agnes 判官严重度膨胀又一例）**
+  ——收束家族在 agnes 判官下持续高发，标注器三态注记在案；模型权衡决策仍是主变量。
+
+### 29.3 批 20 队列
+
+1. F_001 状态脱同步取证（critical）：黑盒 abandon 标记 vs teaching_sessions.status 的
+   语义错位面（与 EXTENSION 同根：abandon 语义族治理）；
+2. agnes 收束家族：批 16/19 数据已足够支撑模型决策，决策后定位（恢复 deepseek→水位回落
+   验证批；维持 agnes→收束完备性提示词治理）；
+3. liveness 持续（已答不推进/剥离 已有实战；延伸回退/短确认/meta-only 待场景）。
