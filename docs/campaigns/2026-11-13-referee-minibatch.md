@@ -1130,3 +1130,46 @@ agnes-3.0-flash 基线 vs deepseek-v4.1-flash 时代末期（批 M referee 1 类
    「降门槛脚手架或收口」二选一指令；
 3. meta-only/短确认/无板面指认 首战记录（持续 liveness 观察）；
 4. 若用户选择恢复 deepseek：整表回滚 + 批 16 作为恢复后基线批（队列 1/2 降为观察项）。
+
+## 二十六、修复批 16 + 批 P 验证（2026-11-14 当轮：判官漂移标注器 + 两个新平台状态机 critical）
+
+### 26.1 首项取证反转 + 测量卫生杠杆（提交至 judge-minibatch-classrooms.ts）
+
+- **原杠杆不实现（取证反转）**：agnes 两批 17 份 wrapup 产物 keyTakeaways/actionPlan **零空壳**
+  ——「wrapup 生成前必填校验」无的放矢（phantom 批 G 同款决策纪律，依据入档）。
+- **真发现：判官仪器漂移**——agnes 时代教师与判官**两端同时换模型**，批 14/15 的课堂 critical
+  读数两端混杂，水位对比有效性受损。
+- **落地：判官漂移标注器**——judge 脚本记录 wrapup 口径计数（keyTakeaways/actionPlan 条数
+  入 record），closure 族缺口聚类时三态注记并渲染：①产物不存在=残课/截断形态；②在案但
+  口径 0=空壳实锤；③在案口径非空=课内收束缺失或判官口径漂移（需人工复核）。旧记录聚类前
+  从 DB 回填。
+- **首战双验证**：批 O 重聚类——4 条 closure 缺口 **3 条为残课/截断伪影**、1 条 wrapup 在案
+  （「收束崩坏 critical×3」大幅修正）；批 P 新记录原生计数——3 条缺口自动分化为 2 课内
+  收束缺失/漂移 + 2 残课。
+
+### 26.2 批 P（reeval18）双评：两个新平台状态机 critical
+
+- **EXTENSION_STATE_CONFLICT ×1 critical（u17）**：任务 2 中途表达延伸意愿 → extensionPhase
+  pending → 抛「该任务还没有完成过课堂」（与任务 1 completed 矛盾）——延伸流程状态冲突，
+  实验失败终态。
+- **GOAL_STUCK_LOOP ×1 critical（u19）**：学习者多次明确确认「按这个方向排路径」，平台
+  10 分钟循环输出「等你回来点确认按钮」不触发路径生成——Goal 确认状态机缺陷；伴
+  **PLATFORM_RATE_LIMIT_FAIL**（agnes 渠道在并发 2 下出现限流新症状）。
+- classroom 面（11 课，1 fail / 3 pass / 5 pass_with_concerns / 2 inconclusive）：
+  CLOSURE_MISSING ×3（critical×1，标注器三态分化见上）+ NOTATION_LEAK ×2 minor。
+- liveness：无据指控剥离累计 3+ 次；无板面指认/短确认/meta-only 本批无场景（方差）。
+
+### 26.3 批 17 队列
+
+1. **GOAL_STUCK_LOOP 取证**（critical）：确认→排路径状态机为何不识别确认意图（与在途的
+   「确认动作减重」goal-confirm-adjudicator 方案的相关性一并评估）；
+2. **EXTENSION_STATE_CONFLICT 取证**（critical）：延伸流程与完成态判定的冲突窗口；
+3. **PLATFORM_RATE_LIMIT_FAIL 观察**：agnes 渠道限流阈值/频次（并发 2 即触发需关注）；
+4. liveness 四项持续；meta-only 重试/短确认收口首战记录仍空缺（方差）。
+
+### 26.4 模型权衡（仍待用户三选一，决策矩阵更新）
+
+判官漂移发现后：agnes 时代的「质量崩坏」读数部分是仪器效应（closure 族大半为伪影+漂移），
+部分是真实的（wrapup 归因偏差被剥离闸 ×4+ 实证）。恢复 deepseek 不仅能回升教学质量，
+**还能恢复判官仪器的有效性**（双端回 deepseek 才能重建与批 I–N 可比的水位基线）——这为
+「恢复 deepseek」选项增加了测量学权重。回滚命令就绪。
