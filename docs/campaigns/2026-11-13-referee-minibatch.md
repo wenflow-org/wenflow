@@ -1520,3 +1520,47 @@ reeval22 已证 CLOSURE_MISSING ×4 全是弃跑课假阳性（wrapup=false 设�
    挂该决策；
 3. board 族观察位维持（跨批 6 例）；referee severity 纪律观察位（u19 双 major 描述性
    残余，≥2 再收紧）。
+
+## 三十五、批 25（2026-11-15 当轮：reeval24 验证批——批 24 三杠杆全数实证 PASS + referee 首次零 actionable）
+
+### 35.1 三杠杆复核（对账）
+
+1. **延伸不再触发 run 失败 ✓**：u17（前两批的崩溃案主）verdict=**pass**（22 fail→23
+   inconclusive→24 pass），5/5 案例正常收口 abandon http=200，无任何 run failure、无
+   CTRL_EXT_CONFLICT 复发。
+2. **幽灵 active 零新增 ✓**：teaching_sessions active 恒为 1（reeval23 历史残留
+   e2617d91，修复前产生），本批全程零新增。
+3. **abandon 落库语义持续 ✓**：abandoned 8→12、completed 597→607——4 案例 abandon
+   收口（20s/27s/35s/39s，reason=learner-abandoned）+ 1 案例 totalTasks≤maxTasks 自然
+   跑完不制造弃跑（runner 既有规则），对账精确。
+4. **附：批 22 severity 纪律首次实战生效**：referee 的 abandon 相关 finding 全部降到
+   minor/info（RUN_ABORTED_NO_WRAPUP=info、DATA_INCOMPLETE_METRICS=minor），不再是 major。
+
+### 35.2 双评结果
+
+- **referee：actionable 0 类（战役首次）**——「所有 finding 都是单样本，按规则先视为
+  噪音」。u07 pass_with_concerns / u17 pass / u19 pass。
+- **classroom（14 课）**：4 pass / 5 pass_with_concerns / 2 fail / 3 inconclusive
+  （弃跑课 inconclusive 化持续）。弃跑课 closure 豁免持续生效：u04 弃跑课自产出
+  `closure_abandoned_no_wrapup`+`assessment_inconclusive` 中性码，u19 弃跑课
+  `truncated_session_abandoned`——CLOSURE_MISSING ×3 簇全部落在 wrapup=true 真实课
+  （redundant_closure/REPETITIVE_CLOSURE_1/CLOSURE_TRANSFER_WEAK：收束复述无新信息，
+  agnes 真实缺口族，挂模型决策）。
+
+### 35.3 新 actionable（→批 26 队列）
+
+- **TASK_CONTENT_MISSING ×1 critical（u19L2，classroom）**：任务描述要求「一段 500 字
+  杂乱进展文本」，transcript 从未展示该文本——学习者直接生成 90%/70% 等具体数据、教师
+  直接评价「准确」。布题材料链断裂新形态：材料未注入（布题链缺陷）或判官看不到材料
+  载荷（证据面缺口）。批 26-① 取证定向：拉 u19L2 的任务材料注入链（goal→task
+  description→开场）与判官输入比对。
+- **REPETITIVE_OPENING ×2（major×1）**：开场/引导语整段重复（u01L1 index2 复读 index0）
+  ——与 u07L2 的 F-REPEAT-QUIZ/F-LOOP-ASSIGN（75 轮课）同属重复家族；批 19 已答不推进
+  守卫管「作答后重复问句」，开场复读是另一形态，观察累积。
+- NOTATION_LEAK ×3 minor（跨批 6 例持续）；CLOSURE 冗余 ×3（agnes 族）——均挂模型决策。
+
+### 35.4 批 26 队列
+
+1. u19L2 布题材料链取证（critical ×1）：材料注入 vs 判官证据面，产出杠杆设计；
+2. 模型权衡三选一仍待用户网关侧定夺（回滚 flip-model-config.cjs rollback 就绪）；
+3. 重复家族（开场复读/quiz 循环）观察位累积 ≥2 立项。
