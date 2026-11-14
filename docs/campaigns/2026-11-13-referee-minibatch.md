@@ -1682,3 +1682,45 @@ critical 打 fail。classroom-quality-judge 收束豁免规则原位追加：**�
    受该决策影响；
 3. wrapup.actionPlan 截断（「待验证：最后…」，reeval25 CLOSURE_MISSING ×2 的真实成分）
    观察位：再现 ≥2 则取证 wrapup 产出链截断点。
+
+## 三十九、批 29（2026-11-15 当轮：reeval26 验证批——severity 收紧首轮 PASS + 新发现 goal→path 断链）
+
+### 39.1 severity 收紧复核 PASS（首轮即生效）
+
+4 个弃跑课（1 轮，wrapup=false）全部 **inconclusive** + info 类码（ABANDONED_NO_WRAPUP_INFO /
+C-ABANDONED-NO-SETTLEMENT / F-002 minor）——批 22 豁免 + 批 28 severity 措辞双重生效，
+弃跑课 critical/major **零出现**（reeval25 的 F-001 critical 形态消失）。
+
+### 39.2 杠杆持续对账
+
+- abandoned 16→20、completed 617→625（+8 = 4 案例 × 2 完成课；u07 未进教学——见 39.3）；
+  **active 归零**（reeval23 历史幽灵 e2617d91 已被闲置超时自然收编，timeout 60→61）——
+  幽灵问题全清。
+- referee：actionable 0 类（连续第三次）；u07 案例被本批唯一异常打 fail（见下）。
+
+### 39.3 新发现：u07 goal→path 断链（批 30-① 取证靶）
+
+u07 案例全程未进教学：goal 对话 05:23 最后活动后，**路径规划从未启动**（06:09 重启 +
+06:40 手动 stop 重启后仍零 path-coordinator 日志、零 LLM 调用，observe 15s 空转）。
+autopilot 自身 45 分钟路径等待超时触发（「Path 生成等待超时（45 分钟无进展）」→
+failed）→ 脚本重启 ×2 → 120min 总超时兜底 abandon 收口（设计内降级，abandon 200）。
+referee verdict=fail [PATH_MISMATCH, CONTROL_INCONSISTENCY, TERMINAL_ABANDONMENT]——
+单样本不进聚类，但**整案例报废 + 首次出现**，批 30-① 取证：goal confirm→runGoalAsync
+触发链在哪一环断（确认未发生 / 异步任务静默死亡 / 重启后任务不接管），产出触发链杠杆。
+备注：取证插曲——手动 stop 需 Cookie + Origin 双头（403 教训入档）；脚本 120min 超时
+兜底路径（stop+abandon+referee）全程按设计工作。
+
+### 39.4 classroom（12 课，u07 零课）新聚类
+
+- **F_001 ×2 major（u04L2）+ BOARD_MISMATCH ×2 major（u04L2/u17L2）→ 板面跨 rev 一致性
+  族（真形态候选）**：rev3→rev4 比较对象漂移（应收账款→总资产）、第 8 轮右侧 7 项缺
+  「未分配利润 -15」致 170 对平主张与板面 155 矛盾。与 reeval25 的判官误配不同，本簇
+  带具体数字可复算——批 30-② 取证定性（真缺陷则入板面管线杠杆）。
+- F_002 ×3 minor（SaaS 先验知识隐含）。弃跑课豁免码全中性。
+
+### 39.5 批 30 队列
+
+1. u07 goal→path 断链取证（整案例报废级）：触发链断点定位 → 杠杆（路径生成缺失检测/
+   自动补触发）；
+2. u04 板面跨 rev 一致性簇（×2 major 可复算数字）取证定性；
+3. 模型权衡三选一仍待用户网关侧定夺（回滚 flip-model-config.cjs rollback 就绪）。
