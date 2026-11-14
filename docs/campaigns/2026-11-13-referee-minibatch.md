@@ -1333,3 +1333,52 @@ abandoned 脱同步。污染面：①完成课计数族（`countCompletedLessonS
   家族——批 16/19 数据已足，**模型权衡三选一仍待用户网关侧定夺**（恢复 deepseek /
   维持 agnes / 混合；回滚 `node .runtime/flip-model-config.cjs rollback` 就绪，不代执行）；
   ③liveness 持续（延伸回退/短确认/meta-only 待场景）。
+
+## 三十一、批 21（2026-11-15 当轮：F_001 自然验证 PASS + abandon 响应语义归位 + 判官新假阳性面定性）
+
+### 31.1 reeval22 黑盒批（5 case 全走 abandon 收口 = 批 20 修复的自然 exercise）
+
+**F_001 验证 PASS，对账精确**：
+- 5 × `status='abandoned'` + `endReason='learner-abandoned'`（30-36s 中止课，全部 runner
+  abandon 200 收口）——修复前同形态落 completed（批 S 遗留的 42s/38s completed 短课即
+  before 对照，同窗反差成立）；
+- 10 × `status='completed'`（88-292s 真实课堂，5 案例 × 2 课采样）零误标；
+- 计数族归位：completed 579→589（+10 恰为真实课）、abandoned 0→5。
+  `countCompletedLessonSessions(OnPath)` 按 status='completed' 过滤，中止课自然出列。
+
+### 31.2 批 21 修复（critical ×1 达标）：abandon 响应 taskCompletion 语义归位
+
+- referee 聚类 actionable 仅 1 类：**CRIT_METRICS_MISMATCH ×1 critical（u04）**——
+  runner trace 的 endResult 显示中止课 `taskCompletion.status='completed'`，与 control
+  台账 `taskCompleted=false` 冲突。根因是批 20 拦截器的设计选择：操作态 completed（runner
+  契约）与 taskCompletion 字段（结算语义）共用一个值。
+- 修复：拦截器 `taskCompletion.status='completed' → 'skipped'`（结算确实被跳过）；
+  adapter 契约复核（`platform-user-adapter.ts:472` 只看顶层 `result.status`）确认零副作用。
+  测试断言同步，54/54 + tsc 绿。**下一验证批自然复核**（每批收口必走）。
+
+### 31.3 双评归因（referee + classroom 15 课）
+
+- **CLOSURE_MISSING ×4（critical×4）→ 100% 假阳性，全落在 wrapup=false 的 abandon 课**
+  （3/5/1 轮短课）。批 20 的正确语义（abandon 不产 wrapup）制造了判官不知情的新假阳性面：
+  判官照常按「收束完整性」要求弃跑课。真实完成课的收束软缺口另有 3 例（closure_gap /
+  next_step_vague / closure_missing_judgment，agnes 收束家族延续，severity 数字仍超簇
+  计数，模型权衡继续是主变量）。
+- **BOARD_MISMATCH ×4（major×3）→ 新家族第三形态**：板面在、软指认、内容滞后（u01：
+  教师问「调岗调薪条款」，板面还是「支付时间对照表」）。与批 13 指认落空（指认元素不在
+  板上）、批 15 无板面指认（根本没有板面）不同形。**本批窗口既有两检测器零命中**——
+  判据是显式板面指认词面，软指认（「对着…条款」「哪一条」）不入网。批 22-① 取证靶点。
+- referee 残余（METRICS_INCOMPLETE ×2 / METRIC_DEGRADED / WRAPUP_MISSING）同根：判官面
+  不知 abandon 语义。TERMINAL_STATE_INCONSISTENCY ×1（u07）为 runner 台账口径噪声
+  （platformStage=completed 指 goal 阶段达成，referee 自己也承认 abandoned 合法），不修。
+- NOTATION_LEAK ×3（minor×6，u04/u07/u17）：未定义工程记号（cf/rev/np/binlog/cdncache）
+  对零基础学员，提示词已有规则但 agnes 端持续违反——排在板面族之后。
+
+### 31.4 批 22 队列
+
+1. board_mismatch 取证：4 课逐轮还原（软指认形态 vs 批13/批15 判据缺口），设计
+   「板面滞后检测」杠杆（指认内容 ∈ 提问 ∧ ∉ 当前板面 → 修复重调/板面刷新）；
+2. 判官 abandon 语义对齐（评审面，非教学行为）：judge 脚本给 abandon 课注入
+   「弃跑收口（设计无 wrapup）」标注豁免收束判据；referee 输入同理带 terminalReason
+   豁免 METRICS/WRAPUP 族——预计直接消掉 CLOSURE_MISSING ×4 假阳性与 referee 残余 4 例；
+3. 模型权衡三选一仍待用户网关侧定夺（回滚 `node .runtime/flip-model-config.cjs
+   rollback` 就绪）；agnes 收束家族真实缺口 3 例挂在该决策下。
