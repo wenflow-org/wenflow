@@ -1646,3 +1646,39 @@ core:check hasErrors=false 33/33、lint 全绿、prompts:sync already-in-sync；
 2. 判官 severity 纪律收紧候选（滑点 ≥2）：豁免规则的「最多一条 info」措辞强化；
 3. 模型权衡三选一仍待用户网关侧定夺（回滚 flip-model-config.cjs rollback 就绪）——
   收束冗余/NOTATION_LEAK 跨批 8 例/口径翻转等 quality 族挂该决策。
+
+## 三十八、批 28（2026-11-15 当轮：board 显式指认取证反转（判官误配证据）+ 判官 severity 纪律收紧）
+
+### 38.1 u07L2 取证（第二次反转：教师正确，判官误配证据）
+
+- **铁证**：rev4 spec edges 原样 = `{from:'method',to:'result',label:'产出'}`
+  `{from:'result',to:'discuss',label:'支撑'}` `{from:'intro',to:'discuss',label:'回应缺口'}`
+  ——教师 T10「method→result 的箭头写的是"产出"，result→discuss 写的是"支撑"」**逐字
+  正确**；学习者可见面同样含 结果（R）/讨论（D）/产出/支撑。
+- **判官 critical 指控**（「仅存在 gestal→gap 和 gap→hypo，不存在 result/discuss 节点」）
+  是把 rev3（完形心理学概念图，边 id 恰为 gestal→gap/gap→hypo）的证据**错配**到 index
+  8-10 的 IMRaD 板上。
+- **同簇定性**：major#1（u17L3）判官自 detail 算术混乱（100 进场 + 90 排队 = 190 总到达
+  = 板面 190，一致，误读）；major#2（u19L2）为板面滞后软观察（批 22 形态 C 观察位）。
+  **BOARD_MISMATCH ×3 簇 = 1 判官误配 + 1 判官算术混乱 + 1 软滞后**——agnes 证据处理
+  质量族（挂模型决策），**引擎零杠杆**：批 13 检测器 43 轮 0 命中是正确行为（无真 miss）。
+- 教训入档：board 族「回潮」聚类必须先做逐轮铁证比对再立项——reeval22 的 ×4 全真、
+  reeval25 的 ×3 全假/软，同一 code 的证据质量天差地别。
+
+### 38.2 判官 severity 纪律收紧（落地，条数守恒）
+
+滑点 ≥2（reeval23 u19 major + reeval25 u01L3 critical）：u01L3 弃跑课（3 轮）被 F-001
+critical 打 fail。classroom-quality-judge 收束豁免规则原位追加：**豁免覆盖一切 finding 码
+（含自建码如 F-001/通用码）**——弃跑课的「无收束产出/学习目标未达成」是弃跑的当然结果，
+不得按 critical/major 报；verdict 应按证据不足走 inconclusive 而非 fail。
+门禁：compile 33 / threshold 12 / core:check 33/33 / lint 全绿 / sync 同步。
+
+### 38.3 批 29 队列
+
+1. 下一验证批（reeval26）：severity 收紧自然复核（弃跑课不再出 critical/major）+ 批 24/26
+   杠杆持续观察；
+2. 模型权衡三选一仍待用户网关侧定夺（回滚 flip-model-config.cjs rollback 就绪）——本批
+   再添一证：board 误配/算术混乱属 agnes 证据处理质量（评审面），与教学面 quality 族同
+   受该决策影响；
+3. wrapup.actionPlan 截断（「待验证：最后…」，reeval25 CLOSURE_MISSING ×2 的真实成分）
+   观察位：再现 ≥2 则取证 wrapup 产出链截断点。
