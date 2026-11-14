@@ -1029,3 +1029,25 @@ streak≥2 时注入「学员已确认，停止重发指令，一句收干」刷
    取证连续 3 次校验失败的原始输出形态；
 3. ② 短确认收口继续观察（loopBreakKind=short-ack-instruction-loop 首次命中待记录）；
 4. §22.4 遗留：指认-板面已落地（本节），OPENING recap 超纲子形态、板面滞后提示词顺带维持。
+
+### 23.5 补录：网关封锁解除（渠道切换）+ 批 N 课堂面补全（2026-11-14 晚）
+
+**解锁路径（用户侧选项②的落地，全程可回滚）**：
+1. 诊断确认封锁为**渠道级策略**：key/分组正常（deepseek-v3.2 返回标准路由错误），该中转仅有的
+   两个 chat 渠道（deepseek-v4.1-flash 及 -1017 变体）均改为 Coding 客户端专用罐头拦截；
+2. 排查发现同 key 下 **agnes-3.0-flash 渠道未受门禁**（平台 learner 侧技能一直在生产使用）；
+3. 金丝雀流程：先备份 32 行 skill_model_configs + platform_api_configs
+   （`.runtime/model-config-backup-2026-11-14T12-56-14.json`，回滚用 flip-model-config.cjs
+   rollback）→ 翻 platform defaultModel 三字段 → judge 单技能金丝雀（端到端出真实 verdict，
+   结构化输出正常）→ 翻全部 20 个钉死 deepseek 的主链技能行（thinkingMode→disabled，
+   agnes 为非推理 flash）+ .env 三字段同步 → 重启；
+4. 现状：全平台运行于 **agnes-3.0-flash**。deepseek 渠道恢复后可整表回滚。
+
+**批 N 课堂面补全**（judge 断点续跑，4 课：1 fail / 2 pass / 1 pass_with_concerns）：
+- 聚类 CLOSURE_MISSING ×2（critical×1）——**诚实归因：封锁打断的残课形态**（15 轮课截断在
+  迁移性问题上、wrapup 不存在 = 会话被 20:41 封锁打断的产物），不计教学质量水位；
+- 批 N 双评至此完整：referee 0 actionable + 课堂面已补。
+
+**模型切换的批际可比性注记**：批 14（reeval16）起运行于 agnes-3.0-flash，与批 I–N
+（deepseek-v4.1-flash）的水位对比存在**模型混杂变量**——批 14 定位为**新模型基线重建批**，
+其水位作新基线，不与 deepseek 时代直接比降幅。
