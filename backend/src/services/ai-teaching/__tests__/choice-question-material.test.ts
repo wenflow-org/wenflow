@@ -20,6 +20,11 @@ describe('findUnfurnishedChoiceQuestion（裸选择题判定）', () => {
       '这几个方案里，从中选一个你认为最稳的。',
       false,
     )).not.toBeNull();
+    // 批 K u01 实证：词表缺口（「下列哪一种」）漏拦，学员盲答还脑补了「另外两条」
+    expect(findUnfurnishedChoiceQuestion(
+      '下面三种表述，下列哪一种表述最能把坑写死？',
+      false,
+    )).not.toBeNull();
   });
 
   it('豁免一：本轮已出带 options 的 control.checkpoint → 不判', () => {

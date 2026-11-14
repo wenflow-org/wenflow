@@ -1155,7 +1155,7 @@ export function stripCheckpointAnswerKeys<T extends Record<string, any> | null |
  */
 
 const CHOICE_ASK_PATTERN
-  = /(?:下面|以下|如下)[^。！？?]{0,24}(?:哪个|哪一[个项句条组帧行])|(?:从中|在其中)?(?:选一[个下]|选出最|选出正确)/;
+  = /(?:下面|以下|如下|下列)[^。！？?]{0,24}(?:哪个|哪一[个项句条组帧行种])|(?:从中|在其中)?(?:选一[个下]|选出最|选出正确)/;
 
 const INLINE_OPTIONS_PATTERN = /A[.、:：][^?？。]{1,60}B[.、:：]/;
 const INLINE_CIRCLED_COUNT_THRESHOLD = 2;
