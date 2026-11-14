@@ -1,4 +1,4 @@
-import { downgradeMasteredOnNegativeEvidence, capMasteredOnInsufficientEvidence, verifyKnowledgeEvidence } from '../index'
+import { downgradeMasteredOnNegativeEvidence, capMasteredOnInsufficientEvidence, verifyKnowledgeEvidence, stripUnfoundedProblemAdvice } from '../index'
 import type { SessionWrapupSummary } from '../index'
 
 /**
@@ -224,3 +224,38 @@ describe('verifyKnowledgeEvidence teacher-supplied（批 11-③）', () => {
     expect(result.teacherSupplied).toEqual([])
   })
 })
+
+/* ────────────── 无据问题指控剥离（修复批 15-①，wrapup 归因偏差 agnes 形态） ────────────── */
+
+describe('stripUnfoundedProblemAdvice', () => {
+  it('病历单形态：零负证据课 + 改进建议带问题指控 → 剥离', () => {
+    const summary = summaryWith([{ name: '试用期上限口径', status: 'mastered', progress: 88, evidence: '学员当场答对' }]);
+    (summary as any).evaluationHighlights.improvements = ['在无历史合同的情境下，需更主动地确认「唯一性约束」的适用边界'];
+    (summary as any).actionPlan = ['下一课用新情形独立验证本节口径'];
+    const result = stripUnfoundedProblemAdvice(summary, { checkpointHistory: [] });
+    expect(result.stripped.length).toBe(1);
+    expect(result.summary.evaluationHighlights.improvements).toEqual([]);
+  });
+
+  it('有课内负证据（检查点未过/误解命中）→ 问题指控合法，不剥离', () => {
+    const summary = summaryWith([{ name: '试用期上限口径', status: 'mastered', progress: 88, evidence: '后来答对了' }]);
+    (summary as any).evaluationHighlights.improvements = ['「混淆了档位与上限」这一点需要注意'];
+    const result = stripUnfoundedProblemAdvice(summary, {
+      checkpointHistory: [{ conceptName: '试用期上限口径', passed: false, submittedAt: '2026-11-14T10:00:00Z' }],
+    });
+    expect(result.stripped).toEqual([]);
+    expect(result.summary.evaluationHighlights.improvements).toHaveLength(1);
+  });
+
+  it('误解命中也算负证据 → 不剥离；零负证据课 actionPlan 剥指控条且保底留 1 条', () => {
+    const summary = summaryWith([{ name: 'X', status: 'learning', progress: 50, evidence: '在学' }]);
+    (summary as any).actionPlan = ['需要注意容易混淆的档位', '下一课做间隔迁移微挑战'];
+    const result1 = stripUnfoundedProblemAdvice(summary, { misconceptionConceptNames: ['档位判断'] });
+    expect(result1.stripped).toEqual([]);
+    expect(result1.summary.actionPlan).toHaveLength(2);
+    const z = summaryWith([{ name: 'Y', status: 'learning', progress: 50, evidence: '在学' }]);
+    (z as any).actionPlan = ['需要注意容易混淆的档位', '下一课做间隔迁移微挑战'];
+    const result3 = stripUnfoundedProblemAdvice(z, { checkpointHistory: [] });
+    expect(result3.stripped.length).toBe(1);
+    expect(result3.summary.actionPlan).toEqual(['下一课做间隔迁移微挑战']);
+  })

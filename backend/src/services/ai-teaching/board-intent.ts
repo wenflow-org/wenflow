@@ -577,3 +577,25 @@ export function findUnmatchedBoardReferences(input: {
   }
   return { misses };
 }
+
+/**
+ * 无板面时的板面指认检测（修复批 15-②，BOARD_DANGLING_TRACE 批 14 critical：板面快照缺失
+ * 而教师话语隐含指代可视化材料——「直接拿刚才那个词」「第8条」）。本课当前没有板面（board
+ * 为空）而 reply 用板面指认词说话 → 学习者面对的是不存在的参照物。同一句含否定（「不用写在
+ * 板上」）时豁免。
+ */
+const BOARD_REF_MARKER = /(?:看)?板上|板面|白板|右栏|左栏|屏幕上这份|那一帧|那份图/;
+const BOARD_REF_NEGATION = /不(会|要|用|需|是)[^。！？?！]{0,6}(?:放|写|画|摆|呈现在?)?\s*(?:在)?\s*(?:看)?板上|板面|白板/;
+
+export function referencesBoardWithoutBoardAvailable(
+  reply: string | null | undefined,
+): { referenced: true; snippet: string } | null {
+  const text = String(reply ?? '');
+  if (!text) return null;
+  const match = text.match(BOARD_REF_MARKER);
+  if (!match) return null;
+  // 否定句豁免：命中标记所在的句子若含「不用写在板上」类表述，不算指认
+  const sentence = text.split(/(?<=[。！？?！])/).find((part) => BOARD_REF_MARKER.test(part)) ?? text;
+  if (BOARD_REF_NEGATION.test(sentence)) return null;
+  return { referenced: true, snippet: sentence.trim().slice(0, 120) };
+}

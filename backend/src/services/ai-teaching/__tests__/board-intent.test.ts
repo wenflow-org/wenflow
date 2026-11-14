@@ -7,7 +7,7 @@
  *  2) 换题信号要同时读**老师上一句**（老师主动换的数据）与**学生这一句**；
  *  3) 「要学生说的那句结论」按意图从板上撤掉，但材料与步骤一个不少。
  */
-import { decideBoardIntent, applyBoardIntent, numbersOnBoard, describeIntentForTeacher, guardTitleAgainstContent, shouldSkipExampleRefresh, mergeCorrectionNotes, buildCorrectionDirective, collectTurnBoardFaceText, findUnmatchedBoardReferences } from '../board-intent';
+import { decideBoardIntent, applyBoardIntent, numbersOnBoard, describeIntentForTeacher, guardTitleAgainstContent, shouldSkipExampleRefresh, mergeCorrectionNotes, buildCorrectionDirective, collectTurnBoardFaceText, findUnmatchedBoardReferences, referencesBoardWithoutBoardAvailable } from '../board-intent';
 import { deriveBoardFigure, openBoard, describeBoardForTeacher } from '../board-state';
 
 const splitBoard = {
@@ -532,5 +532,29 @@ describe('findUnmatchedBoardReferences（指认落空判定）', () => {
       boardText: '期限格 补偿格',
     }).misses).toEqual([]);
     expect(findUnmatchedBoardReferences({ reply: '', boardText: '' }).misses).toEqual([]);
+  });
+});
+
+/* ────────────── 修复批 15-②：无板面时的板面指认检测 ────────────── */
+
+describe('referencesBoardWithoutBoardAvailable（无板面指认判定）', () => {
+  it('病历单形态命中：无板面课教师说「直接拿刚才那个词」「板上那份」', () => {
+    expect(referencesBoardWithoutBoardAvailable(
+      '你直接看板上那份合同原文，拿刚才那个词来对。',
+    )?.snippet).toContain('板上');
+    expect(referencesBoardWithoutBoardAvailable(
+      '屏幕上这份对照表里，第8条就是红线。',
+    )).not.toBeNull();
+  });
+
+  it('豁免：否定句（「不用写在板上」）不判', () => {
+    expect(referencesBoardWithoutBoardAvailable(
+      '这题不需要写在板上，你口头把判断说给我听就行。',
+    )).toBeNull();
+  });
+
+  it('无板面指认词的回复 → 不判', () => {
+    expect(referencesBoardWithoutBoardAvailable('你把第8条的原句读出来，我们逐字对。')).toBeNull();
+    expect(referencesBoardWithoutBoardAvailable('')).toBeNull();
   });
 });

@@ -1251,3 +1251,64 @@ export async function sessionWrapupAgentHandler(input: any, context: any): Promi
 }
 
 export default sessionWrapupAgentHandler;
+
+/* ──────────── 无据问题指控剥离（修复批 15-①，交流体验 §24.1 wrapup 归因偏差 agnes 形态） ────────────
+ * 病历单形态（u01 批 14 critical）：wrapup 改进建议指控学员「需更主动地确认『唯一性约束』的
+ * 适用边界」，但课内证据显示学习者已准确推断、教师已肯定——总结指控了**不存在的问题**，
+ * 学员读到假批评（体验伤害）且记录被污染。
+ * 判定（可复算，保守面）：整节课**零负证据**（无未通过/跳过的检查点行、无误解命中）时，
+ * 改进建议/行动计划里带问题指控措辞（需注意/容易混淆/欠缺/薄弱/待加强…）的条目无据可挂
+ * → 剥离该条（与算式剥离第二刀同形态：数组项剔除，契约形状不变）。有任何负证据的课不判
+ * （问题指控可能合法）——保守漏判可接受，误删真实批评不可接受。
+ */
+const UNFOUNDED_PROBLEM_FRAME
+  = /(需(要)?(更)?(注意|主动|确认|警惕|加强)|容易(混淆|误)|混淆|欠缺|不足|待加强|仍会|反复冒头|薄弱|易错|没(有)?(掌握|吃透|走稳)|卡(壳|在))/;
+
+export function stripUnfoundedProblemAdvice(
+  summary: SessionWrapupSummary,
+  evidence: { checkpointHistory?: unknown; misconceptionConceptNames?: string[] },
+): { summary: SessionWrapupSummary; stripped: string[] } {
+  if (!summary || !Array.isArray((summary as { knowledgeItems?: unknown }).knowledgeItems)) {
+    return { summary, stripped: [] };
+  }
+  const rows = Array.isArray(evidence?.checkpointHistory)
+    ? (evidence.checkpointHistory as Array<Record<string, unknown>>)
+    : [];
+  const negatives = rows.filter((row) => row?.voided !== true && (row?.passed === false || row?.skipped === true));
+  const hasLessonNegative = negatives.length > 0
+    || (Array.isArray(evidence?.misconceptionConceptNames) && evidence.misconceptionConceptNames.length > 0);
+  if (hasLessonNegative) return { summary, stripped: [] };
+
+  const stripList = (items: unknown): { kept: unknown; removed: string[] } => {
+    if (!Array.isArray(items)) return { kept: items, removed: [] };
+    const kept: unknown[] = [];
+    const removed: string[] = [];
+    for (const item of items) {
+      const text = String(item ?? '');
+      if (text && UNFOUNDED_PROBLEM_FRAME.test(text)) removed.push(text.slice(0, 80));
+      else kept.push(item);
+    }
+    return { kept, removed };
+  };
+  const stripped: string[] = [];
+  let next: SessionWrapupSummary = summary;
+  // ① evaluationHighlights.improvements：问题指控条剥离
+  const highlights = summary.evaluationHighlights;
+  if (highlights && Array.isArray((highlights as { improvements?: unknown }).improvements)) {
+    const result = stripList((highlights as { improvements?: unknown }).improvements);
+    if (result.removed.length > 0) {
+      next = { ...next, evaluationHighlights: { ...highlights, improvements: result.kept as string[] } };
+      stripped.push(...result.removed);
+    }
+  }
+  // ② actionPlan：问题指控条剥离，但保底留 1 条（间隔迁移微挑战契约）
+  if (Array.isArray(summary.actionPlan) && summary.actionPlan.length > 1) {
+    const result = stripList(summary.actionPlan);
+    if (result.removed.length > 0 && (result.kept as unknown[]).length >= 1) {
+      next = { ...next, actionPlan: result.kept as string[] };
+      stripped.push(...result.removed);
+    }
+  }
+  if (stripped.length === 0) return { summary, stripped };
+  return { summary: next, stripped };
+}

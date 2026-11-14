@@ -86,7 +86,7 @@ import type { TeachingTurnOutput } from '../../skills/teaching-turn';
 import { findArithmeticMismatches, describeMismatchesForRepair } from './teaching-arithmetic-guard';
 import { repairContradictedPassedVerdict, shouldGuardReplyForFailedConcept, stripAffirmationsOnFailedVerdict } from './checkpoint-feedback-guard';
 import { assessAdjacentRepetition, findPreviousAssistantReply } from './teaching-repetition-guard';
-import { decideBoardIntent, numbersOnBoard, shouldSkipExampleRefresh, mergeCorrectionNotes, buildCorrectionDirective, collectTurnBoardFaceText, collectSpecTextFragments, findUnmatchedBoardReferences, type BoardCorrectionNote } from './board-intent';
+import { decideBoardIntent, numbersOnBoard, shouldSkipExampleRefresh, mergeCorrectionNotes, buildCorrectionDirective, collectTurnBoardFaceText, collectSpecTextFragments, findUnmatchedBoardReferences, referencesBoardWithoutBoardAvailable, type BoardCorrectionNote } from './board-intent';
 import { applyBoardOp } from './board-controller';
 import { BOARD_DESIGN_BASE_INSTRUCTION, boardPromptInputForTeacher, decideBoardAttachment, openBoard, type BoardState } from './board-state';
 import { designBoard } from './board-designer.service';
@@ -864,6 +864,56 @@ export async function processStudentMessage(
         impactedDimensions: ['teachingReply.boardReference', `task:${context.taskId}`],
         mitigationApplied: repairedOutput ? 'retry-board-reference-instruction' : 'flagged-only',
         rootCauseMessage: `board references not found on current board: ${boardRefMisses.misses.join(' | ').slice(0, 160)}`,
+      });
+      if (repairedOutput) rawTeachingOutput = repairedOutput;
+    }
+  }
+  // 无板面时的板面指认检测（修复批 15-②，BOARD_DANGLING_TRACE 批 14 critical：本课无板面
+  // 而教师用「看板上/那份图」说话——学习者面对不存在的参照物）。命中即带修复指令重调一次：
+  // 删去板面指认、用口头描述承接；复检仍犯→打遥测放行。
+  if (!board) {
+    const absentBoardRef = referencesBoardWithoutBoardAvailable(rawTeachingOutput?.reply);
+    if (absentBoardRef) {
+      logger.warn('[AITeaching] 本课无板面而回复指认板面（证据链断裂），触发修复重调', {
+        userId: context.userId,
+        taskId: context.taskId,
+        snippet: absentBoardRef.snippet,
+      });
+      let repairedOutput: TeachingTurnOutput | null = null;
+      if (Date.now() - turnStartedAt < ARITHMETIC_REPAIR_BUDGET_MS) {
+        try {
+          (turnInput.scenario as Record<string, unknown>).repairInstruction = `你上一条回复指认了板面/图示（「${absentBoardRef.snippet}」），但本课当前没有任何板面——学习者在屏幕上找不到你说的那份材料。本轮必须输出修正后的完整回复：删去对板面/图示的指认，把需要指认的内容改用口头完整描述（原句引用任务材料原文即可）；其余内容（知识看板、检查点、control 字段、语气、篇幅）原样保留；不得缩短回复或趁机改写无关内容；绝不可向学生提及任何校验或系统检查。`;
+          const repairResult = await withTimeoutSignal(
+            (signal) => executeSkill(teachingTurnAgentDefinition, turnInput, {
+              contextEnvelope: {
+                schemaVersion: 'context-envelope/v1',
+                principal: { userId: session.userId },
+                session: { sessionId: session.id, conversationId: session.id, taskId: session.taskId },
+              },
+              abortSignal: signal,
+            }),
+            ARITHMETIC_REPAIR_TIMEOUT_MS,
+            'BOARD_ABSENT_REPAIR_TIMEOUT: 无板面指认修复重调超时'
+          );
+          if (repairResult.success) {
+            const candidate = extractTeachingOutput(repairResult);
+            if (candidate?.reply && !referencesBoardWithoutBoardAvailable(candidate.reply)) {
+              repairedOutput = candidate;
+            }
+          }
+        } catch (error) {
+          logger.warn('[AITeaching] 无板面指认修复重调失败，按原回复放行', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+      recordDegradation({
+        source: 'ai-teaching/teaching-turn-engine',
+        faultCategory: 'SCHEMA_VIOLATION',
+        severity: 'P2_DEGRADED',
+        impactedDimensions: ['teachingReply.boardReference', `task:${context.taskId}`],
+        mitigationApplied: repairedOutput ? 'retry-board-absent-instruction' : 'flagged-only',
+        rootCauseMessage: `board referenced but no board exists: ${absentBoardRef.snippet}`,
       });
       if (repairedOutput) rawTeachingOutput = repairedOutput;
     }

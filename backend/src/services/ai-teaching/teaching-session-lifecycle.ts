@@ -14,7 +14,7 @@ import { logger } from '../../utils/logger';
 import { executeSkill, sessionWrapupAgentDefinition } from '../../skills';
 import { recordDegradation, degradationCause } from '../../skills/degradation-telemetry';
 import type { SessionWrapupArtifact } from '../../skills/session-wrapup';
-import { downgradeMasteredOnNegativeEvidence, capMasteredOnInsufficientEvidence } from '../../skills/session-wrapup';
+import { downgradeMasteredOnNegativeEvidence, capMasteredOnInsufficientEvidence, stripUnfoundedProblemAdvice } from '../../skills/session-wrapup';
 import type { ReviewPlan } from '../memory/review-plan.service';
 import { createDomainEvent } from '../../events/contracts';
 import { enqueueDomainEvent } from '../../events/outbox.repository';
@@ -916,6 +916,28 @@ export async function endSession(
         impactedDimensions: ['wrapup.summary.knowledgeItems'],
         mitigationApplied: 'cap-mastered-on-insufficient-evidence',
         rootCauseMessage: `mastered claims lack independent lesson evidence: recall-only=[${evidenceAdjusted.recallDowngraded.join('、').slice(0, 100)}] no-evidence=[${evidenceAdjusted.unverifiedDowngraded.join('、').slice(0, 100)}] single-pass-capped=[${evidenceAdjusted.singlePassCapped.join('、').slice(0, 100)}]`,
+      });
+    }
+    // 无据问题指控剥离（修复批 15-①，wrapup 归因偏差 agnes 形态）：零负证据课的改进建议/
+    // 行动计划里带问题指控措辞的条目无据可挂 → 剥离（学员读到假批评 = 体验伤害 + 记录污染）。
+    const adviceAdjusted = stripUnfoundedProblemAdvice(wrapupResult.summary, {
+      checkpointHistory: session.teachingState?.checkpointHistory,
+      misconceptionConceptNames: sessionMisconceptionNames,
+    });
+    if (adviceAdjusted.stripped.length > 0) {
+      wrapupResult.summary = adviceAdjusted.summary;
+      if (wrapupArtifact.summary) wrapupArtifact.summary = adviceAdjusted.summary;
+      logger.warn('[AITeaching] 零负证据课的改进建议含无据问题指控，已剥离', {
+        sessionId,
+        stripped: adviceAdjusted.stripped,
+      });
+      recordDegradation({
+        source: 'ai-teaching/teaching-session-lifecycle',
+        faultCategory: 'SCHEMA_VIOLATION',
+        severity: 'P2_DEGRADED',
+        impactedDimensions: ['wrapup.summary.advice'],
+        mitigationApplied: 'strip-unfounded-problem-advice',
+        rootCauseMessage: `problem-framing advice without any lesson negative evidence: ${adviceAdjusted.stripped.join(' ｜ ').slice(0, 200)}`,
       });
     }
   }
