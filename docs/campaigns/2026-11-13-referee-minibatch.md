@@ -1428,3 +1428,45 @@ reeval22 已证 CLOSURE_MISSING ×4 全是弃跑课假阳性（wrapup=false 设�
    agnes 收束真实缺口 3 例（closure_gap/next_step_vague/missing_judgment）与
    NOTATION_LEAK ×3 都挂在该决策下；
 3. 形态 C（确认轮遮罩释放）观察位：跨批 ≥2 再立项。
+
+## 三十三、批 23（2026-11-15 当轮：reeval23 验证批——批 21/22 修复三线全数实证 PASS）
+
+### 33.1 三线验证结果（对账）
+
+1. **弃跑课 CLOSURE_MISSING 归零 ✓**：4 个 wrapup=false 课（3 弃跑 + 1 失败跑）零 closure
+   指控；u04 弃跑课自产出 `closure_abandoned` + `truncated_session` 码并落 inconclusive——
+   豁免规则被模型语义级吸收（不止回避扣分，还自建了弃跑中性码）。CLOSURE_MISSING ×2
+   聚类全部落在 wrapup=true 真实完成课（u07L2 41 轮 major：收束缺「主张解除」法定前提
+   厘清；u01L2 nuance gap）——假阳性退场，真实收束缺口显形（agnes 家族，挂模型决策）。
+2. **referee METRICS 族收敛 ✓**：CRIT_METRICS_MISMATCH（critical）消失、
+   TERMINAL_STATE_INCONSISTENCY 消失、WRAPUP_MISSING 码消失；u07 verdict=pass（2 findings，
+   历史最佳）。残余：u19 CTL-ABANDON + DATA-INCOMPLETE 双 major——细节已自认
+   「因学习者主动中止（abandoned）未生成 wrapup」（因果归位），但 severity 未按规则降到
+   info（单样本，噪音级，不立项；再现 ≥2 再收紧措辞）。
+3. **taskCompletion='skipped' 落 trace ✓**：u07 result.json 实证
+   `taskCompletion: { status: skipped`；abandon 落库 3/3（24s/54s/31s，reason=learner-
+   abandoned）；completed 589→597、abandoned 5→8。
+
+### 33.2 新 actionable（→批 24 队列）
+
+- **CTRL_EXT_CONFLICT ×1 critical（u17，referee）**：学习者完成核心拆解后提出延伸需求，
+  终端报「该任务还没有完成过课堂」400 → autopilot failed → 教学会话残留 active 未收口
+  （幽灵 active 会话 + 失败跑收口缺口同链）。EXTENSION 语义族复发形态（批 17-② 同域）——
+  但本次疑似身份/路径维度错位（完成课计数与发延伸意图的 user 对不上），批 24-① 取证：
+  u17 全链路还原（延伸 400 落在哪条代码路径、计数查的是哪个 user/path、完成课落谁家）。
+- **ASSESSMENT_INCONSISTENCY ×1 critical（u07L2，classroom）**：教师轮 5/8 判「逻辑松」、
+  轮 26/33 无解释翻转为「紧」——判断口径自相矛盾贯穿 41 轮。真实教学质量 critical
+  （agnes 时代形态，单样本）。
+- **BOARD_DANGLING_TRACE ×2 minor（u04/u19）**：提问主体不在板面（问「短期借款」板上
+  只有固定资产/折旧）——板面家族第三形态持续积累（批 22 ×4 → 批 23 ×2 跨批 6 例），
+  引擎杠杆已证伪（批 22），评审面持续监测。
+- **OPEN-001 ×1 critical（u17 失败跑首课）**：开场泄结论 + Meno 违规——与延伸 400 同
+  案（失败链早段），随批 24-① 一并还原。
+
+### 33.3 批 24 队列
+
+1. u17 延伸 400 + 失败跑 active 残留取证（critical）：全链路还原 → 杠杆设计（收口兜底
+   /计数口径归位）；
+2. 模型权衡三选一仍待用户网关侧定夺（回滚 flip-model-config.cjs rollback 就绪）——
+   ASSESSMENT_INCONSISTENCY / 真实收束缺口 / OPEN 泄结论三族都挂该决策；
+3. board 族观察位维持（跨批计数持续）；referee severity 纪律观察位（≥2 再收紧）。
