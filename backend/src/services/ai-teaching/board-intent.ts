@@ -535,3 +535,45 @@ export function describeIntentForTeacher(intent: BoardIntent): string {
   };
   return `【本轮意图】${ask[intent.askAbout]}（${intent.reason}）。板面已按此裁剪：属于学生要说的结论不在板上。`;
 }
+
+/* ──────────── 指认-板面交叉核对（修复批 13-①，BOARD_MISMATCH 指认落空形态可复算杠杆） ────────────
+ * 病历单形态（批 L u01/批 M u01）：教师让学习者看板上「离职后补偿 → 条款效力」、标着
+ * 「先行给付」的那条线、「右栏第二行摆着两个比对对象」——但被指认的连线/行在当轮可见 rev
+ * 里不存在，学习者按指认看板对不上，关键判断口径无法定位。
+ * 判定（可复算）：reply 中带**板面指认语境**的引号片段（指认词在前：看板上「X」/板面「X」；
+ * 或指认词在后：标着「X」的那条线）→ 归一 ≥4 字后必须命中当轮板面文本；未命中且也不是
+ * 引用此前教师说过的话（引对话豁免）→ 记 miss。引擎据此带修复指令重调一次。
+ */
+const BOARD_REF_QUOTE_BEFORE
+  = /「([^「」]{1,40})」[^。！？?！]{0,10}的那?(?:条线|格|行|帧|支|栏|边|块|部分|节点|一处|一行)/g;
+
+const normRefText = (s: unknown): string =>
+  String(s ?? '').toLowerCase().replace(/[\s，。、；：！？,.;:!?（）()【】[\]"'"“”‘’—→⇒-]/g, '');
+
+export function findUnmatchedBoardReferences(input: {
+  reply: string | null | undefined;
+  boardText: string | null | undefined;
+  priorTeacherText?: string | null;
+}): { misses: string[] } {
+  const reply = String(input?.reply ?? '');
+  if (!reply) return { misses: [] };
+  const boardNorm = normRefText(input?.boardText);
+  const priorNorm = normRefText(input?.priorTeacherText);
+  const misses: string[] = [];
+  const check = (raw: string) => {
+    const norm = normRefText(raw);
+    if (norm.length < 4 || misses.length >= 3) return;
+    if (boardNorm.includes(norm)) return;
+    if (priorNorm && priorNorm.includes(norm)) return; // 引对话豁免：教师在引用此前说过的话
+    misses.push(raw.trim().slice(0, 40));
+  };
+  // 形态一：指认词在前——看板上「X」/右栏「X」
+  for (const match of reply.matchAll(/((?:(?:看)?板上|板面|白板|右栏|左栏|那格|那一格|那一行|那一帧|那一支|那条线|那一条线|节点)[^「」]{0,8})「([^「」]{1,40})」/g)) {
+    check(match[2]);
+  }
+  // 形态二：指认词在后——标着「X」的那条线
+  for (const match of reply.matchAll(BOARD_REF_QUOTE_BEFORE)) {
+    check(match[1]);
+  }
+  return { misses };
+}

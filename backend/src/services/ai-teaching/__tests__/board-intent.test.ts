@@ -7,7 +7,7 @@
  *  2) 换题信号要同时读**老师上一句**（老师主动换的数据）与**学生这一句**；
  *  3) 「要学生说的那句结论」按意图从板上撤掉，但材料与步骤一个不少。
  */
-import { decideBoardIntent, applyBoardIntent, numbersOnBoard, describeIntentForTeacher, guardTitleAgainstContent, shouldSkipExampleRefresh, mergeCorrectionNotes, buildCorrectionDirective, collectTurnBoardFaceText } from '../board-intent';
+import { decideBoardIntent, applyBoardIntent, numbersOnBoard, describeIntentForTeacher, guardTitleAgainstContent, shouldSkipExampleRefresh, mergeCorrectionNotes, buildCorrectionDirective, collectTurnBoardFaceText, findUnmatchedBoardReferences } from '../board-intent';
 import { deriveBoardFigure, openBoard, describeBoardForTeacher } from '../board-state';
 
 const splitBoard = {
@@ -494,5 +494,43 @@ describe('collectTurnBoardFaceText（修复批 10-D1：布题轮板面答案暴�
     expect(collectTurnBoardFaceText(undefined)).toBe('');
     expect(collectTurnBoardFaceText([])).toBe('');
     expect(collectTurnBoardFaceText([{ kind: 'board' }])).toBe('');
+  });
+});
+
+/* ────────────── 修复批 13-①：指认-板面交叉核对 ────────────── */
+
+describe('findUnmatchedBoardReferences（指认落空判定）', () => {
+  it('病历单形态命中：看板上「X」/标着「X」的那条线，板面无该文本', () => {
+    expect(findUnmatchedBoardReferences({
+      reply: '你先看板上「离职后补偿 → 条款效力」那条线，标着「先行给付」的那条线就是它。',
+      boardText: '竞业限制范围 竞业限制条款效力 条件期限',
+    }).misses.length).toBeGreaterThan(0);
+    expect(findUnmatchedBoardReferences({
+      reply: '标着「先行给付」的那条线就是关键。',
+      boardText: '范围 效力 条件期限',
+    }).misses).toContain('先行给付');
+  });
+
+  it('豁免：引号文本在板面上存在 → 不命中', () => {
+    expect(findUnmatchedBoardReferences({
+      reply: '看板上「净占用现金」那一行，就是三支合起来的结果。',
+      boardText: '应收账款 存货 应付账款 净占用现金 830 万元',
+    }).misses).toEqual([]);
+  });
+
+  it('豁免：引号文本是引用此前教师说过的话（引对话） → 不命中', () => {
+    expect(findUnmatchedBoardReferences({
+      reply: '就像刚才说的「钱还没付出去，所以放出来」这条口径，再看板上。',
+      boardText: '应付账款 放出 330',
+      priorTeacherText: '钱还没付出去，所以放出来——这就是应付账款的判断。',
+    }).misses).toEqual([]);
+  });
+
+  it('短引号（<4 归一字）与无指认语境的引号 → 不判', () => {
+    expect(findUnmatchedBoardReferences({
+      reply: '这个「对」字用得好。我们把「期限」讲完。',
+      boardText: '期限格 补偿格',
+    }).misses).toEqual([]);
+    expect(findUnmatchedBoardReferences({ reply: '', boardText: '' }).misses).toEqual([]);
   });
 });

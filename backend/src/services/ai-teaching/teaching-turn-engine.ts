@@ -86,7 +86,7 @@ import type { TeachingTurnOutput } from '../../skills/teaching-turn';
 import { findArithmeticMismatches, describeMismatchesForRepair } from './teaching-arithmetic-guard';
 import { repairContradictedPassedVerdict, shouldGuardReplyForFailedConcept, stripAffirmationsOnFailedVerdict } from './checkpoint-feedback-guard';
 import { assessAdjacentRepetition, findPreviousAssistantReply } from './teaching-repetition-guard';
-import { decideBoardIntent, numbersOnBoard, shouldSkipExampleRefresh, mergeCorrectionNotes, buildCorrectionDirective, collectTurnBoardFaceText, type BoardCorrectionNote } from './board-intent';
+import { decideBoardIntent, numbersOnBoard, shouldSkipExampleRefresh, mergeCorrectionNotes, buildCorrectionDirective, collectTurnBoardFaceText, collectSpecTextFragments, findUnmatchedBoardReferences, type BoardCorrectionNote } from './board-intent';
 import { applyBoardOp } from './board-controller';
 import { BOARD_DESIGN_BASE_INSTRUCTION, boardPromptInputForTeacher, decideBoardAttachment, openBoard, type BoardState } from './board-state';
 import { designBoard } from './board-designer.service';
@@ -207,6 +207,26 @@ const OPENING_PRIOR_HISTORY_PATTERN
   = /(上一[节节课次阶段环节]|上次[的课学习]?|你说过|你之前[提讲]过)/;
 const OPENING_PRIOR_NEGATIVE_PATTERN
   = /(?:你|您)(?:之前|以前|先前|过去)?[^。！？?！]{0,8}(?:没|从没|从未|不太)(?:细看|看过|接触|学过|遇过|见过|碰过|做过|试过|听过)/;
+/** 学员短确认连续计数（修复批 13-②，repetitive_closure_loop 取证定性）：最近连续的
+ * 学员回合全是 ≤6 字非问句短确认（「马上去」「好」「收到」「明白了」）时返回该计数——
+ * 配合教师 reply 低增量重复，即为「作业指令重发循环」的收口条件（u01 六轮、u04 十轮实证：
+ * 任务已宣布结束仍反复重发同一指令，学员只会短确认）。任一较长/含问句的学员回合打断计数。 */
+export function computeLearnerShortAckStreak(messages: Array<{ role?: unknown; content?: unknown }>): number {
+  let streak = 0;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (!message || message.role !== 'user') continue;
+    const text = String(message.content ?? '').trim();
+    if (!text) continue;
+    if (/[?？]/.test(text)) break;
+    const normalized = text.replace(/[^\p{L}\p{N}]/gu, '');
+    if (normalized.length === 0 || normalized.length > 6) break;
+    streak += 1;
+    if (streak >= 5) break;
+  }
+  return streak;
+}
+
 const OPENING_CONDITIONAL_MARKERS = /(?:如果|假如|要是|若|是否|要不要|有没有|或许|可能|大概)/;
 
 export function hasUnverifiablePriorClaim(opening: { message?: unknown; question?: unknown }): boolean {
@@ -782,6 +802,72 @@ export async function processStudentMessage(
       if (repairedOutput) rawTeachingOutput = repairedOutput;
     }
   }
+  // 指认-板面交叉核对（修复批 13-①，BOARD_MISMATCH 指认落空形态可复算杠杆，§22.3 定性）：
+  // reply 里带板面指认语境的引号片段（看板上「X」/标着「X」的那条线）在当前持久板面上找不到，
+  // 学习者按指认看板会对不上（批 L/M 实证：指认的连线 rev 里不存在、右栏行数不符）。命中即带
+  // 修复指令重调一次（同前两刀机制）；复检仍缺→打遥测放行，绝不阻塞课堂。
+  if (board) {
+    const boardFaceText = collectSpecTextFragments(
+      board.figure?.maskedSpec ?? board.figure?.fullSpec ?? null,
+    ).join(' ');
+    const priorTeacherText = updatedMessages
+      .filter((m) => m?.role === 'assistant')
+      .map((m) => String((m as { content?: unknown }).content ?? ''))
+      .join('\n');
+    const boardRefMisses = findUnmatchedBoardReferences({
+      reply: rawTeachingOutput?.reply,
+      boardText: boardFaceText,
+      priorTeacherText,
+    });
+    if (boardRefMisses.misses.length > 0) {
+      logger.warn('[AITeaching] 板面指认与当前板面不符（指认落空），触发修复重调', {
+        userId: context.userId,
+        taskId: context.taskId,
+        misses: boardRefMisses.misses,
+      });
+      let repairedOutput: TeachingTurnOutput | null = null;
+      if (Date.now() - turnStartedAt < ARITHMETIC_REPAIR_BUDGET_MS) {
+        try {
+          (turnInput.scenario as Record<string, unknown>).repairInstruction = `你上一条回复指认了板面上的具体内容（${boardRefMisses.misses.map((m) => `「${m}」`).join('、')}），但当前板面上找不到它们——学习者按指认看板会对不上。本轮必须输出修正后的完整回复：要么把指认改为当前板面上真实存在的元素（引号内逐字使用板面现有文本），要么删去对不存在元素的指认、只用口头讲解承接；其余内容（知识看板、检查点、control 字段、语气、篇幅）原样保留；不得缩短回复或趁机改写无关内容；绝不可向学生提及任何校验或系统检查。`;
+          const repairResult = await withTimeoutSignal(
+            (signal) => executeSkill(teachingTurnAgentDefinition, turnInput, {
+              contextEnvelope: {
+                schemaVersion: 'context-envelope/v1',
+                principal: { userId: session.userId },
+                session: { sessionId: session.id, conversationId: session.id, taskId: session.taskId },
+              },
+              abortSignal: signal,
+            }),
+            ARITHMETIC_REPAIR_TIMEOUT_MS,
+            'BOARD_REFERENCE_REPAIR_TIMEOUT: 板面指认修复重调超时'
+          );
+          if (repairResult.success) {
+            const candidate = extractTeachingOutput(repairResult);
+            if (candidate?.reply && findUnmatchedBoardReferences({
+              reply: candidate.reply,
+              boardText: boardFaceText,
+              priorTeacherText,
+            }).misses.length === 0) {
+              repairedOutput = candidate;
+            }
+          }
+        } catch (error) {
+          logger.warn('[AITeaching] 板面指认修复重调失败，按原回复放行', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+      recordDegradation({
+        source: 'ai-teaching/teaching-turn-engine',
+        faultCategory: 'SCHEMA_VIOLATION',
+        severity: 'P2_DEGRADED',
+        impactedDimensions: ['teachingReply.boardReference', `task:${context.taskId}`],
+        mitigationApplied: repairedOutput ? 'retry-board-reference-instruction' : 'flagged-only',
+        rootCauseMessage: `board references not found on current board: ${boardRefMisses.misses.join(' | ').slice(0, 160)}`,
+      });
+      if (repairedOutput) rawTeachingOutput = repairedOutput;
+    }
+  }
   // 检查点反馈硬门（拍板 #5 切口1，2026-10-08）：代码判错的作答回合，老师回复不得出现
   // 肯定语——此前只有提示词软约束（b52576b4 裁决注入），话术与判分脱钩从未被度量与拦截。
   // 命中即句子级剥离 + 遥测（MODEL_AFFIRMATION_MISMATCH）；切口2 的落库计数=本遥测为分子、
@@ -999,15 +1085,26 @@ export async function processStudentMessage(
   const closureRepeatStreak = (replySignalsClosing || modelRequestedCompletion || adjacentRepetition.lowIncrement) && !learnerHasNewQuestion
     ? priorClosureRepeatStreak + 1
     : 0;
+  // 学员短确认收口（修复批 13-②，repetitive_closure_loop 取证定性）：任务宣布结束后教师反复
+  // 重发同一作业指令（「去练/贴回来」）、学员只会「马上去/好」——旧强制收口需要 targetsFrozen，
+  // 多任务会话的后续任务不满足，循环持续十轮。短确认 ×2 + 教师低增量 ×streak≥2 本身即为收口
+  // 条件（不依赖 targetsFrozen）：教师若真在推进新内容，lowIncrement 为 false 不触发。
+  const learnerShortAckStreak = computeLearnerShortAckStreak(updatedMessages);
+  const shortAckInstructionLoopBreak = closureRepeatStreak >= 2
+    && learnerShortAckStreak >= 2
+    && adjacentRepetition.lowIncrement;
   let completionReady = wouldComplete && !closureGate.defer;
   let forcedCompletionLoopBreak = false;
-  if (!completionReady && !extensionMode && targetsFrozenBefore && noPendingPoints && closureRepeatStreak >= 3) {
+  if (!completionReady && !extensionMode
+    && ((targetsFrozenBefore && noPendingPoints && closureRepeatStreak >= 3) || shortAckInstructionLoopBreak)) {
     completionReady = true;
     forcedCompletionLoopBreak = true;
     logger.warn('[AITeaching] 收尾循环打断：连续收尾话术且学员无新问题，强制放行完成信号', {
       sessionId: session.id,
       taskId: session.taskId,
       streak: closureRepeatStreak,
+      learnerShortAckStreak,
+      loopBreakKind: shortAckInstructionLoopBreak ? 'short-ack-instruction-loop' : 'frozen-targets',
       avgTargetProgress: Number(avgTargetProgress?.toFixed?.(3) ?? avgTargetProgress),
     });
   }
