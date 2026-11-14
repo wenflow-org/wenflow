@@ -184,8 +184,17 @@ router.post('/tasks/:taskId/extension-session', async (req: any, res) => {
     let completedLessons = await teachingSessionRepository.countCompletedLessonSessions(userId, taskId);
     if (completedLessons === 0) {
       // 跨任务回退（修复批 17-②）：当前任务尚无完成课但同路径已有完成课时放行——延伸意图
-      // 指向前序任务案例是合法延伸（u17 EXTENSION_STATE_CONFLICT 实证）。
-      completedLessons = await teachingSessionRepository.countCompletedLessonSessionsOnPath(userId, taskId);
+      // 指向前序任务案例是合法延伸（u17 EXTENSION_STATE_CONFLICT 实证）。计数失败按严格
+      // 规则拒绝（fail-closed），不 500。
+      try {
+        completedLessons = await teachingSessionRepository.countCompletedLessonSessionsOnPath(userId, taskId);
+      } catch (pathCountError) {
+        logger.warn('[ai-teaching] 延伸回退计数失败，按本任务严格规则拒绝', {
+          taskId,
+          error: pathCountError instanceof Error ? pathCountError.message : String(pathCountError),
+        });
+        completedLessons = 0;
+      }
     }
     if (completedLessons === 0) {
       return sendValidationError(res, '该任务还没有完成过课堂，先完成本课再来延伸学习');

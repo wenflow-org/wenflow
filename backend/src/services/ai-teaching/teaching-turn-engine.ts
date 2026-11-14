@@ -46,6 +46,7 @@ import {
   shouldEmitCheckpoint,
   } from './teaching-checkpoint';
 import { resolveCheckpointPrediction } from './checkpoint-prediction';
+import { findRepeatedQuestionAfterAnswer } from './question-loop-guard';
 import {
   extractWarmupOutcomes,
   markWarmupAsked,
@@ -918,7 +919,66 @@ export async function processStudentMessage(
       if (repairedOutput) rawTeachingOutput = repairedOutput;
     }
   }
-  // 检查点反馈硬门（拍板 #5 切口1，2026-10-08）：代码判错的作答回合，老师回复不得出现
+  // 已答不推进守卫（修复批 19-①，F_LOOP u17 批 R critical 可复算杠杆）：学员实质性作答后
+  // 教师原样重复同一问句——学员开始自我怀疑（「是不是我没理解对」）。命中即带修复指令重调
+  // 一次（先反馈作答再推进）；复检仍犯→打遥测放行。
+  {
+    const prevAssistant = findPreviousAssistantReply(updatedMessages);
+    const repeatedQuestion = findRepeatedQuestionAfterAnswer({
+      priorTeacherReply: prevAssistant,
+      learnerReply: message,
+      currentReply: rawTeachingOutput?.reply,
+    });
+    if (repeatedQuestion) {
+      logger.warn('[AITeaching] 学员已作答而教师原样重复同一问句（已答不推进），触发修复重调', {
+        userId: context.userId,
+        taskId: context.taskId,
+        repeated: repeatedQuestion.repeated,
+      });
+      let repairedOutput: TeachingTurnOutput | null = null;
+      if (Date.now() - turnStartedAt < ARITHMETIC_REPAIR_BUDGET_MS) {
+        try {
+          (turnInput.scenario as Record<string, unknown>).repairInstruction = `学员刚刚已经回答了你的提问（「${repeatedQuestion.repeated}」），你却在原样重复同一个问题——这会让学员怀疑自己理解错了。本轮必须输出修正后的完整回复：第一句先对学员的作答给出明确反馈（对/不对+一句话为什么），然后推进到下一步（新情形追问/下一知识点/更小一步），不得原样重复上一轮的任何问句；其余内容（知识看板、检查点、control 字段、语气、篇幅）原样保留；不得缩短回复或趁机改写无关内容；绝不可向学生提及任何校验或系统检查。`;
+          const repairResult = await withTimeoutSignal(
+            (signal) => executeSkill(teachingTurnAgentDefinition, turnInput, {
+              contextEnvelope: {
+                schemaVersion: 'context-envelope/v1',
+                principal: { userId: session.userId },
+                session: { sessionId: session.id, conversationId: session.id, taskId: session.taskId },
+              },
+              abortSignal: signal,
+            }),
+            ARITHMETIC_REPAIR_TIMEOUT_MS,
+            'QUESTION_LOOP_REPAIR_TIMEOUT: 已答不推进修复重调超时'
+          );
+          if (repairResult.success) {
+            const candidate = extractTeachingOutput(repairResult);
+            if (candidate?.reply && !findRepeatedQuestionAfterAnswer({
+              priorTeacherReply: prevAssistant,
+              learnerReply: message,
+              currentReply: candidate.reply,
+            })) {
+              repairedOutput = candidate;
+            }
+          }
+        } catch (error) {
+          logger.warn('[AITeaching] 已答不推进修复重调失败，按原回复放行', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+      recordDegradation({
+        source: 'ai-teaching/teaching-turn-engine',
+        faultCategory: 'SCHEMA_VIOLATION',
+        severity: 'P2_DEGRADED',
+        impactedDimensions: ['teachingReply.questionLoop', `task:${context.taskId}`],
+        mitigationApplied: repairedOutput ? 'retry-answered-advance-instruction' : 'flagged-only',
+        rootCauseMessage: `question repeated after substantive learner answer: ${repeatedQuestion.repeated}`,
+      });
+      if (repairedOutput) rawTeachingOutput = repairedOutput;
+    }
+  }
+    // 检查点反馈硬门（拍板 #5 切口1，2026-10-08）：代码判错的作答回合，老师回复不得出现
   // 肯定语——此前只有提示词软约束（b52576b4 裁决注入），话术与判分脱钩从未被度量与拦截。
   // 命中即句子级剥离 + 遥测（MODEL_AFFIRMATION_MISMATCH）；切口2 的落库计数=本遥测为分子、
   // learner_evidence 的 code 失败 checkpoint:result 行为分母。整句全中/剥后过短时

@@ -18,6 +18,7 @@ const mockTeachingSessionRepository = {
   // #124：延伸课准入查「本课是否已有完结常规课堂」+ 完成态重定向排除延伸课
   findLatestCompletedLessonSession: jest.fn(),
   countCompletedLessonSessions: jest.fn(),
+  countCompletedLessonSessionsOnPath: jest.fn(),
   findCompletionPendingSession: jest.fn(),
   // 路由 2026-10-02 起在开课前先做「完课死锁自愈」探测（findStuckFinalizingSession）；
   // 默认 null = 无卡住会话，测试沿用正常开课路径。
@@ -970,6 +971,7 @@ describe('ai-teaching routes', () => {
 
   it('延伸课（#124）：本课没有完结课堂 → 400 拒绝且不开课', async () => {
     mockTeachingSessionRepository.countCompletedLessonSessions.mockResolvedValue(0);
+    mockTeachingSessionRepository.countCompletedLessonSessionsOnPath.mockResolvedValue(0);
     const handler = getRouteHandler('/tasks/:taskId/extension-session');
     const res = createResponse();
 
