@@ -222,6 +222,10 @@ async function judgeClassroom(job: ClassroomJob, ts: any, outDir: string): Promi
   let wrapupRaw: any = null;
   try { wrapupRaw = ts.wrapup ? JSON.parse(ts.wrapup) : null; } catch { wrapupRaw = null; }
   const lss = Number(wrapupRaw?.metrics?.lss ?? wrapupRaw?.lss);
+  const wrapupTakeaways = {
+    key: Array.isArray(wrapupRaw?.summary?.keyTakeaways) ? wrapupRaw.summary.keyTakeaways.length : -1,
+    plan: Array.isArray(wrapupRaw?.summary?.actionPlan) ? wrapupRaw.summary.actionPlan.length : -1,
+  };
   const wrapup = {
     present: Boolean(wrapupRaw) && Object.keys(wrapupRaw || {}).length > 0,
     summary: wrapupRaw ? clip(JSON.stringify(wrapupRaw), 800) : null,
@@ -260,6 +264,7 @@ async function judgeClassroom(job: ClassroomJob, ts: any, outDir: string): Promi
     boardPayloadTurns: transcript.filter(t => t.board || t.figure).length,
     boardSnapshotPresent: board.present,
     wrapupPresent: wrapup.present,
+    wrapupTakeaways,
     report: result.success ? result.output : null,
     error: result.success ? null : result.error?.message || 'CLASSROOM_JUDGE_FAILED',
     judgedAt: new Date().toISOString(),
@@ -379,8 +384,32 @@ async function main() {
       entry.severities[severity] = (entry.severities[severity] || 0) + 1;
       if (f.title) entry.titles.push(String(f.title).slice(0, 160));
       if (f.detail) entry.details.push(String(f.detail).slice(0, 280));
+      // 判官漂移标注（修复批 16，agnes 时代教师/判官双端换模型的测量卫生）：
+      // closure 族缺口与 wrapup 产物事实并排呈现——产物在案且口径非空=课内收束缺失或判官口径
+      // 漂移（需人工复核）；产物不存在=残课/截断形态；产物在案但口径 0=空壳实锤。
+      if (/closure/i.test(code)) {
+        const t = (r as { wrapupTakeaways?: { key: number; plan: number } }).wrapupTakeaways;
+        const present = (r as { wrapupPresent?: boolean }).wrapupPresent;
+        if (!present) entry.details.push(`[仪器注记|${r.caseId}] wrapup 产物不存在——残课/截断形态`);
+        else if (!t || t.key < 0) entry.details.push(`[仪器注记|${r.caseId}] wrapup 在案（旧记录无口径计数）`);
+        else if (t.key === 0) entry.details.push(`[仪器注记|${r.caseId}] wrapup 在案但口径 0 条——空壳实锤`);
+        else entry.details.push(`[仪器注记|${r.caseId}] wrapup 在案（口径${t.key}条/下一步${t.plan}条）——课内收束缺失或判官口径漂移，需人工复核`);
+      }
       byCode.set(code, entry);
     }
+  }
+  // 回填旧记录的 wrapup 口径计数（判官漂移标注需要；批 16 前的记录无此字段）
+  for (const r of records) {
+    const rt = (r as { wrapupTakeaways?: { key: number; plan: number } }).wrapupTakeaways;
+    if (rt && rt.key >= 0) continue;
+    try {
+      const ts = await prisma.teaching_sessions.findUnique({ where: { id: r.teachingSessionId } });
+      const w = ts?.wrapup ? JSON.parse(ts.wrapup) : null;
+      (r as { wrapupTakeaways?: { key: number; plan: number } }).wrapupTakeaways = {
+        key: Array.isArray(w?.summary?.keyTakeaways) ? w.summary.keyTakeaways.length : -1,
+        plan: Array.isArray(w?.summary?.actionPlan) ? w.summary.actionPlan.length : -1,
+      };
+    } catch { /* 单条回填失败不阻塞聚类 */ }
   }
   const clusters = [...byCode.values()]
     .map(e => ({
@@ -444,6 +473,10 @@ async function main() {
   md.push('## 全部聚类（含单例存档）');
   md.push('');
   for (const e of clusters) md.push(`- ${e.code} × ${e.count}｜${e.cases.join(', ')}｜${JSON.stringify(e.severities)}`);
+  for (const e of actionable) {
+    const notes = e.details.filter((d: string) => d.startsWith('[仪器注记'));
+    if (notes.length > 0) md.push(...notes.map((d: string) => `  - ${d}`));
+  }
   fs.writeFileSync(path.join(runRoot, 'classroom-report.md'), `${md.join('\n')}\n`);
 
   log(null, `完成：${records.length} 节课，actionable ${actionable.length} 类 → classroom-report.md`);
