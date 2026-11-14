@@ -857,6 +857,37 @@ export class TeachingSessionRepository {
   }
 
   /** 任务下已完结的常规课堂数（延伸学准入：基于本课 → 至少完成过一节；复习课/延伸课不算）。 */
+  /**
+   * 异常闭课落库（修复批 20-①，F_001 状态脱同步）：learner-abandoned 的 end_only 不再走
+   * complete_task 结算——39 秒中止课曾落 status='completed' 并污染完成课计数族
+   * （countCompletedLessonSessions/EXTENSION 计数被垫高，实验回执 abandoned 与会话
+   * completed 脱同步）。status='abandoned' 落库后，完成课口径自然归位；endReason 记入
+   * teachingState（teaching_sessions 无独立 endReason 列，引擎/生命周期都从 state 读）。
+   */
+  async abandonSessionFinalization(sessionId: string, endReason: string): Promise<TeachingSessionRecord> {
+    const current = await prisma.teaching_sessions.findUnique({ where: { id: sessionId } });
+    if (!current) throw new Error(`异常闭课失败：会话不存在 ${sessionId}`);
+    let teachingState: Record<string, unknown> = {};
+    try { teachingState = JSON.parse(current.teachingState || '{}') as Record<string, unknown>; } catch { /* 坏 state 按空处理 */ }
+    const mergedTeachingState = JSON.stringify({ ...teachingState, endReason });
+    const updated = await prisma.teaching_sessions.updateMany({
+      where: { id: sessionId },
+      data: {
+        status: 'abandoned',
+        endTime: simulatedNowOr(),
+        teachingState: mergedTeachingState,
+        operationId: null,
+        operationKind: null,
+        operationLeaseExpiresAt: null,
+        revision: { increment: 1 },
+        updatedAt: new Date(),
+      },
+    });
+    if (updated.count !== 1) throw new Error(`异常闭课落库失败：更新 0 行 ${sessionId}`);
+    const session = await prisma.teaching_sessions.findUnique({ where: { id: sessionId } });
+    if (!session) throw new Error(`会话不存在 ${sessionId}`);
+    return mapRecordHydrated(session, { lazy: true });
+  }
   async countCompletedLessonSessions(userId: string, taskId: string): Promise<number> {
     return prisma.teaching_sessions.count({
       where: { userId, taskId, status: 'completed', NOT: { mode: { in: ['review', 'extension'] } } },

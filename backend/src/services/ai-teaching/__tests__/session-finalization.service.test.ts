@@ -6,6 +6,8 @@ const mockRepository = {
   renewFinalizationLease: jest.fn(),
   recoverExpiredFinalizations: jest.fn(),
   markReviewCompleted: jest.fn(),
+  abandonSessionFinalization: jest.fn(),
+  countCompletedLessonSessions: jest.fn(),
 }
 const mockEndSession = jest.fn()
 const mockCompleteTask = jest.fn()
@@ -480,13 +482,14 @@ describe('SessionFinalizationService', () => {
     expect(mockApplyWarmupExtractionForSession).toHaveBeenCalledTimes(1)
   })
 
-  it('end_only：弃跑（learner-abandoned）→ 温故额度不回写（幽灵课不写正式轨）', async () => {
+  it('end_only：弃跑（learner-abandoned）→ 落 status=abandoned 不走 complete_task 结算（批 20-① F_001）', async () => {
     mockRepository.assertOwnership
       .mockResolvedValueOnce(completedSession({ status: 'active', wrapup: null, revision: 4 }))
-      .mockResolvedValueOnce(completedSession({ revision: 5 }))
-    mockEndSession.mockResolvedValue({ status: 'completed', operationId: 'end-op', revision: 5 })
+      .mockResolvedValueOnce(completedSession({ status: 'abandoned', wrapup: null, revision: 5 }))
+    mockRepository.abandonSessionFinalization.mockResolvedValue(
+      completedSession({ status: 'abandoned', wrapup: null, revision: 5 }))
 
-    await service.finalize({
+    const result = await service.finalize({
       sessionId: 'session-1',
       userId: 'user-1',
       action: 'end_only',
@@ -495,7 +498,14 @@ describe('SessionFinalizationService', () => {
       endReason: 'learner-abandoned'
     })
 
-    expect(mockEndSession).toHaveBeenCalled()
+    // 不再走 coordinator 结算链（completeTask/任务完成指标不再被污染）
+    expect(mockEndSession).not.toHaveBeenCalled()
+    expect(mockRepository.abandonSessionFinalization).toHaveBeenCalledWith('session-1', 'learner-abandoned')
+    // 操作响应保持 completed（runner endTeaching 以操作状态为准），session 载荷是真实终态
+    expect(result.status).toBe('completed')
+    const payload = result as Extract<typeof result, { status: 'completed' }>;
+    expect(payload.session.status).toBe('abandoned')
+    expect(payload.taskCompletion.status).toBe('completed')
     expect(mockApplyWarmupExtractionForSession).not.toHaveBeenCalled()
   })
 

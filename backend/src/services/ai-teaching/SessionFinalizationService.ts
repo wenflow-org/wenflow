@@ -187,6 +187,20 @@ export class SessionFinalizationService {
     }
 
     if (input.action === 'end_only') {
+      // 异常闭课分支（修复批 20-①，F_001 状态脱同步）：learner-abandoned 的 end_only 不再走
+      // complete_task 结算链——39 秒中止课曾落 status='completed' + 任务完成指标 true，与实验
+      // 回执 abandoned 脱同步，并污染完成课计数族。落 status='abandoned'、不产 wrapup/结算；
+      // 操作响应保持 completed（runner endTeaching 以操作状态为准）。
+      if (isAbnormalSessionClosure({ endReason: input.endReason, status: session.status })) {
+        const abandonedSession = await teachingSessionRepository.abandonSessionFinalization(
+          input.sessionId,
+          input.endReason || 'learner-abandoned',
+        );
+        return this.completedResponse(abandonedSession, operationId, {
+          status: 'completed',
+          alreadyCompleted: false,
+        });
+      }
       const result = await aiTeachingCoordinator.endSession(
         input.sessionId,
         input.endReason || 'manual-end',
