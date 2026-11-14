@@ -259,3 +259,5 @@ describe('stripUnfoundedProblemAdvice', () => {
     expect(result3.stripped.length).toBe(1);
     expect(result3.summary.actionPlan).toEqual(['下一课做间隔迁移微挑战']);
   })
+
+});
