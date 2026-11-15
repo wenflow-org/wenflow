@@ -1940,3 +1940,36 @@ u04 课（「辨认年报三张表的主角科目」，目标要求串勾稽、�
 1. ①围栏解除自然复核（reeval30：META_ONLY_PATH 类瞬态后路径重试应真正落地）；
 2. ②板面数字-指标绑定守卫：board-designer 输入面取证 → 落地；
 3. 模型权衡三选一仍待用户网关侧定夺（回滚 flip-model-config.cjs rollback 就绪）。
+
+## 四十六、批 36（2026-11-15 当轮：模型拆分执行（用户决策落地）+ reeval30 全 agnes 对照基线定格）
+
+### 46.1 模型拆分（用户拍板：授课保持 ds，只有学员扮演用 agnes）
+
+- 实况确认：11-14 因中转把 ds 通道限成 Coding 专用，flip 做的是**平台级**切换——授课
+  （teaching-turn 等 20 skill）也全在 agnes，与预期不符。
+- **拆分执行（定向恢复 11-14 备份形态）**：system.db skill_model_configs 32 行恢复为
+  **ds ×20（授课+评审链路）/ agnes ×7（学员扮演族：persona/scenario/goal-dialogue/
+  learn-turn/memory-curator/path-evaluator/epistemic-grounding）/ null ×5（继承
+  platform default=ds）**；platform default 回 deepseek-v4.1-flash。后端重启生效。
+- **ds 通道冒烟 ✓**：恢复后 classroom judge 15 课全部成功判出（若中转拦截仍在大面积
+  失败）——中转限制已解除或对该调用形态放行。回滚备份两份在案（11-14 全 ds 形态 +
+  11-15 全 agnes 形态）。
+
+### 46.2 reeval30（全程 agnes——拆分前最后一轮，对照基线定格）
+
+- referee：**actionable 0 类（连续第六次）**；5/5 abandon 200 无挂起无快败（u19 恢复
+  正常，批 35 围栏解除未获自然 exercise——本批无 META_ONLY_PATH 瞬态，下批继续）。
+- 对账：abandoned 29→38（含 reeval29+30 两批）、completed 645→663；active 零新增持续。
+- classroom（15 课，全 agnes 教学质量族定格）：
+  ASSESSMENT_REPEAT_RECALL ×5（复述家族，全案例）、SCAFFOLD_LATE ×5（major×5+critical×1，
+  第8轮复读开场原文未响应卡点——重复×脚手架合流形态）、BOARD_MISMATCH ×4（软指认族）。
+- 覆盖声明：reeval30 wrapup 零声明（max-tasks 采样 + agnes wrapup；下批 wrapup 转 ds
+  后重新验证）。
+
+### 46.3 批 37 队列（拆分后首轮对照）
+
+1. **reeval31（拆分后首轮验证批）**：授课/评审 ds vs 学员 agnes 的水位对照——重点看
+   agnes 时代三族（复述/脚手架/板面软指认）是否回落 + coverage 声明在 ds wrapup 下
+   是否生效；
+2. 围栏解除自然复核继续（等 META_ONLY_PATH 类瞬态出现）；
+3. 模型拆分后的水位结论将回填「模型权衡」归档（原三选一已由用户裁决为拆分形态）。
