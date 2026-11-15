@@ -1898,3 +1898,45 @@ u04 课（「辨认年报三张表的主角科目」，目标要求串勾稽、�
 1. u19 快败取证（失败分类 + 未重试）→ 杠杆；
 2. BOARD-001 critical 取证（2298 亿数字错位真伪 + 第4帧悬空）→ 观察位升级判定；
 3. 模型权衡三选一仍待用户网关侧定夺（回滚 flip-model-config.cjs rollback 就绪）。
+
+## 四十五、修复批 35（2026-11-15 当轮：u19 快败根因闭合 + 围栏解除杠杆落地；BOARD-001 混合定性）
+
+### 45.1 ①u19 快败：批 11 重试杠杆结构性失效实证 + 围栏解除杠杆（落地）
+
+铁证链（backend 日志 + DB）：
+1. 09:42:09 首次失败 `PATH_PLANNING_META_ONLY_PATH`（批 11 已归瞬态 ✓）→ coordinator
+   排 4s 延迟重试 ✓；
+2. 09:42:13 重试 attempt 在 `normalizeGoalRequest` 处被**自家围栏拦死**：
+   `GENERATION_RUN_FENCED`——首次失败已把 path_generation_runs 行写成 failed 终态
+   （errorCode/finishedAt 落库），围栏要求 `status='processing'` +
+   `learning_paths.activeGenerationRunId` 指回本 run → **重试从未真正执行过**；
+3. 后台任务失败 → onError 钩子落路径失败 → autopilot step 传播 → 会话 failed
+   （09:42:14「黑盒自动运行结束 status=failed」）→ 脚本见 session failed 判 terminal，
+   重启分支不触发（FAIL_NO_RETRY 的真相：脚本重启只救「session 活着 autopilot 死」，
+   不救「session 已被标死」）。
+- **批 11-① 定性修正**：其延迟重试对「首败即围栏落库」的失败族**结构性失效**——
+  该杠杆从未真正工作过（此前 6 批未复发是因为瞬态多数发生在 composer 层内被消化）。
+- **杠杆（落地）**：`resetFencedGenerationRun(input)`（path.coordinator 私有方法，重试分支
+  delay 后调用）——把 failed 行复位 processing（清 errorCode/errorMessage/finishedAt、
+  heartbeat 刷新）+ activeGenerationRunId 为空时回挂；单飞语义不变（首败任务已结束，
+  复位者即唯一在飞重试）；复位失败不阻断（按原链路继续）。新增 3 测（复位/缺参 no-op/
+  DB 错误不抛），coordinators 339/339 全绿，tsc 0 err。**批 36 reeval30 自然复核**：
+  META_ONLY_PATH 类瞬态失败后路径应能真正重试落地（不再 30 秒整案例报废）。
+
+### 45.2 ②BOARD-001：混合定性（第4帧=判官数数错误 FALSE；2298 错位=真实 ×1 critical）
+
+- **「第4帧悬空」FALSE**：rev4 确有 4 帧，中文「第4帧」= frame[3]（0-indexed），其 items
+  逐字含「现金 ?」——判官按 0-indexed 解读「不存在索引4」，数数口径错误。
+- **「营业收入 2298 亿」REAL**：T6 教师明言「腾讯净利润是 2298 亿」，rev4 frame[0]
+  利润表却把 2298 写进「营业收入」行（营收应远大于净利）——**板面最终态数字错位**
+  （批 40-② 观察位的形态首例确认，critical 达标）。
+- **杠杆设计（批 36 落地）**：板面数字-指标绑定一致性守卫——从教师轮提取「(指标)是/为
+  (数字)」绑定，板面 item 同数字异指标 → 修复重绘指令。需先取证 board-designer 输入面
+  （教师近期文本是否在画板输入内）。批 36-①。
+- 另：F_001 ×2（纠正后重复同构解释）重复家族观察位累积至 ×2+×2（跨批）。
+
+### 45.3 批 36 队列
+
+1. ①围栏解除自然复核（reeval30：META_ONLY_PATH 类瞬态后路径重试应真正落地）；
+2. ②板面数字-指标绑定守卫：board-designer 输入面取证 → 落地；
+3. 模型权衡三选一仍待用户网关侧定夺（回滚 flip-model-config.cjs rollback 就绪）。

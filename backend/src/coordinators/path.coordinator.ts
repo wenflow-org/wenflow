@@ -1,4 +1,5 @@
 ﻿import { logger } from '../utils/logger';
+import prisma from '../config/database';
 import {
   BackgroundTaskRejectedError,
   backgroundTaskTracker,
@@ -1287,6 +1288,39 @@ class PathCoordinator {
     }, { userId: input.userId, existingPathId: input.existingPathId });
   }
 
+  /**
+   * 瞬态重试的围栏解除（修复批 35-①，u19 reeval29 快败实证）：首次瞬态失败已把
+   * path_generation_runs 行写成 failed 终态（errorCode/errorMessage/finishedAt 落库），
+   * 直接重跑 attempt() 会在 normalize 的 getActiveGenerationRun 处被自家围栏拦死
+   * （GENERATION_RUN_FENCED：要求 status='processing' + learning_paths.activeGenerationRunId
+   * 指回本 run）——批 11-① 的延迟重试对该失败族结构性失效（重试从未真正执行过）。
+   * 重试前把行复位为 processing（清错误字段、恢复 active 指针）。单飞语义不变：
+   * 首次尝试的后台任务已结束，复位者就是唯一在飞的重试。
+   */
+  private async resetFencedGenerationRun(input: { existingPathId?: string | null; generationRunId?: string | null; userId?: string }): Promise<void> {
+    const pathId = input.existingPathId;
+    const runId = input.generationRunId;
+    if (!pathId || !runId) return;
+    try {
+      await prisma.$transaction([
+        prisma.learning_paths.updateMany({
+          where: { id: pathId, activeGenerationRunId: null },
+          data: { activeGenerationRunId: runId },
+        }),
+        prisma.path_generation_runs.updateMany({
+          where: { id: runId, learningPathId: pathId, status: { not: 'processing' } },
+          data: { status: 'processing', finishedAt: null, errorCode: null, errorMessage: null, heartbeatAt: new Date() },
+        }),
+      ]);
+    } catch (error) {
+      logger.warn('[path-coordinator] 围栏复位失败（重试按原链路继续）', {
+        userId: input.userId,
+        existingPathId: pathId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   runGoalAsync(
     input: GoalPathRequest,
     hooks?: {
@@ -1326,6 +1360,7 @@ class PathCoordinator {
             firstError: firstError instanceof Error ? firstError.message : String(firstError),
           });
           await new Promise((resolve) => setTimeout(resolve, PATH_GENERATION_TRANSIENT_RETRY_DELAY_MS));
+          await this.resetFencedGenerationRun(input);
           await attempt();
         }
         await hooks?.onSuccess?.();
