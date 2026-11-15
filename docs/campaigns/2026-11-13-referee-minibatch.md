@@ -1975,3 +1975,29 @@ u04 课（「辨认年报三张表的主角科目」，目标要求串勾稽、�
    是否生效；
 2. 围栏解除自然复核继续（等 META_ONLY_PATH 类瞬态出现）；
 3. 模型拆分后的水位结论将回填「模型权衡」归档（原三选一已由用户裁决为拆分形态）。
+
+## 四十七、批 37（2026-11-15 当轮：reeval31 拆分后首轮水位对照——三族未回落，agnes 归因否定 + 板面族升档）
+
+**配置**：授课+评审 ds（deepseek-v4.1-flash）/ 学员扮演 agnes（用户拆分裁决 + 教学基准立规，见档首常设约束）。后端重启（tsc 快检过）后 runner 5 例全终态（04:56-05:40Z，u17 abandon 409 重试后 200），运行时面全零（epistemic 降级/LLM 失败/Path 超时 0/0/0）。
+
+**水位对照（判官面板同步换 ds，混淆因子声明在案）**：
+
+| 族 | reeval30（全 agnes） | reeval31（ds 授课+ds 判官） | 判读 |
+| --- | --- | --- | --- |
+| ASSESSMENT_REPEAT_RECALL | ×5（minor×9） | ×5（minor×9） | **持平**——ds 授课不复少，非模型缺陷 |
+| SCAFFOLD_LATE | ×5（major×5+critical×1） | ×3（major×1+minor×3） | 降档，critical 清零（ds 正面信号，单批弱证据） |
+| BOARD_MISMATCH | ×4（major×2） | ×5（**major×4**） | **升档**——形态同款：行/槽位悬空指认（「右栏第3行空槽」板上只有 2 行） |
+| CLOSURE_MISSING | ×3 | ×1 | 降 |
+| NOTATION_LEAK | ×1 | ×3 | 跨批已知观察位（累计 11 例） |
+| BOARD_DANGLING_TRACE / STALE_REFERENCE | 未聚类 | ×2 / ×2 | 新聚类（全课无板书却用「尺子」指认；收束板面停留旧 rev） |
+
+**核心结论（回填模型权衡归档）**：三族没有因拆分回落——复述 ×5→×5 持平、板面 4→5 且 major 升档、仅脚手架 5→3 降档。**agnes 时代三族质量缺陷不能归因于 agnes 授课模型**，属提示词/引擎结构形态（复述回链闸盲区、板面引用无存在性校验）。后续治理回归提示词/确定性杠杆路线。对照局限：判官同步换 ds，severity 校准漂移在案，升降幅度不可单变量归因；「没有消失」这一层结论稳健。
+
+**取证三点**：
+1. **数字绑定守卫首战=无靶子**：全批教师「X是/为N亿」句式 0 命中（u01 法律域天然无亿级数字）、板面同数字异指标 0、掩码 0。守卫针对的「数字错位」亚型本轮未出现；本批板面族形态是**行/槽位悬空**，守卫不覆盖该亚型。
+2. **覆盖边界声明两模型下都稀发**：全库唯一命中仍是 reeval29 u04（01:29Z，agnes）；reeval30（agnes）0/10、reeval31（ds）0/10，learnerGoal 键/【学习目标】分区从未以结构形态落库。u01 五类条款目标 vs 2 课采样仍未列「本次未覆盖」。批 32 杠杆（模型自觉声明）效力不足是模型无关的——候选升级：lifecycle 确定性拼装未覆盖清单（task 全集 vs 已采样完成集，代码可算），进批 38 候选。
+3. **wrapup 结构勘误**：wrapup.summary 为对象（topicSummary/knowledgeSummary/…/actionPlan 十键），「未覆盖」历史命中文本位于 knowledgeSummary 内联，非独立分区。
+
+**referee 面**：零 actionable 连续纪录在第六次后中断——**PATH_GENERATION_LATENCY ×5**（minor×4+major×1，队列既有项，~3min 在承诺 5-20min 窗口内，豁免维持）+ **CONTROL_TASK_COMPLETION_MISMATCH ×2**（u17/u19，control 台账 completedTasks vs teaching 结算 taskCompletion='skipped'——批 20/21 设计语义的口径差，豁免维持，历史同类判过台账口径噪声）。二者均既有处置，不立项。
+
+**批 38 候选（待用户启动）**：①板面引用存在性守卫（major×4 升档达立项门槛：教师「第N行/右栏空槽」类指认时校验 board spec 行数，不存在则 mask 指认或触发刷新）——先取证 u01L2 第4轮悬空形态；②lifecycle 确定性未覆盖清单；③u07L1 全课无板书取证（9 轮 0 板书轮 vs 教师「尺子」指认——是设计面无板书选择还是落库链缺口）。围栏解除自然复核继续。
