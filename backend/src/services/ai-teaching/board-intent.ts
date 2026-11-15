@@ -599,3 +599,75 @@ export function referencesBoardWithoutBoardAvailable(
   if (BOARD_REF_NEGATION.test(sentence)) return null;
   return { referenced: true, snippet: sentence.trim().slice(0, 120) };
 }
+
+/* ──────────── 板面数字-指标绑定一致性守卫（修复批 36-②，BOARD-001 u04 reeval29 critical 实证） ────────────
+ * 病历单：T6 教师明言「腾讯净利润是 2298 亿」，后续板面 frame 却把 2298 写进「营业收入」行
+ * （营收应远大于净利），学习者可见至课终——数字被绑到错误指标上。
+ * 两件纯函数：
+ *   - extractTeacherNumberBindings：从教师文本提取「(指标)是/为/达(数字)亿」绑定；
+ *   - maskMismatchedBoardNumberLabels：板面文本字段里「指标 + 同数字」组合若与教师绑定冲突
+ *     （同数字被绑到别的指标、且没有任何绑定支持本指标），把数字挖成 ?（答案不上板纪律：
+ *     让学习者按教师口径自己填，而不是错着抄）。
+ * 宁窄勿宽：只处理亿级 ≥3 位数字；指标词取自数字前紧邻的中文段；无绑定支持冲突时不动作。
+ */
+export interface TeacherNumberBinding {
+  metric: string;
+  number: string;
+}
+
+const METRIC_MIN_LENGTH = 2;
+
+export function extractTeacherNumberBindings(texts: ReadonlyArray<string | null | undefined>): TeacherNumberBinding[] {
+  const out: TeacherNumberBinding[] = [];
+  const seen = new Set<string>();
+  for (const text of texts) {
+    // 引号是指标段的定界符（「资产负债表"资产总计"是 28527 亿」），先剥掉让指标段连续
+    const source = String(text ?? '').replace(/[“”「」'""]/g, '');
+    if (!source) continue;
+    for (const match of source.matchAll(/([\u4e00-\u9fa5]{2,12})(?:是|为|达|达到|高达)\s*([\d,]+(?:\.\d+)?)\s*亿/g)) {
+      const metric = match[1].replace(/^(说|的|那|这|其)/, '');
+      const number = match[2].replace(/,/g, '');
+      if (metric.length < METRIC_MIN_LENGTH || number.replace(/\./g, '').length < 3) continue;
+      const key = `${metric}|${number}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ metric, number });
+    }
+  }
+  return out;
+}
+
+const BOARD_NUMBER_LABEL = /([\u4e00-\u9fa5A-Za-z]{2,10})\s*([\d,]+(?:\.\d+)?)\s*亿/;
+
+export function maskMismatchedBoardNumberLabels<T>(spec: T, bindings: ReadonlyArray<TeacherNumberBinding>): { spec: T; masked: string[] } {
+  const masked: string[] = [];
+  if (bindings.length === 0) return { spec, masked };
+  const byNumber = new Map<string, string[]>();
+  for (const binding of bindings) {
+    const list = byNumber.get(binding.number) ?? [];
+    list.push(binding.metric);
+    byNumber.set(binding.number, list);
+  }
+  const walk = (value: any, depth: number): any => {
+    if (depth > 6) return value;
+    if (Array.isArray(value)) return value.map((item) => walk(item, depth + 1));
+    if (value && typeof value === 'object') {
+      const out: Record<string, unknown> = {};
+      for (const [key, item] of Object.entries(value as Record<string, unknown>)) out[key] = walk(item, depth + 1);
+      return out;
+    }
+    if (typeof value !== 'string') return value;
+    return value.replace(BOARD_NUMBER_LABEL, (whole, metricRaw: string, number: string) => {
+      const normalized = number.replace(/,/g, '');
+      if (normalized.replace(/\./g, '').length < 3) return whole;
+      const supported = byNumber.get(normalized);
+      if (!supported) return whole; // 教师没绑定过这个数字：不动
+      const metric = metricRaw.replace(/^(说|的|那|这|其)/, '');
+      if (supported.some((bound) => metric.includes(bound) || bound.includes(metric))) return whole;
+      masked.push(whole.trim().slice(0, 40));
+      return `${metric} ? 亿`;
+    });
+  };
+  const next = walk(spec, 0);
+  return { spec: next as T, masked };
+}

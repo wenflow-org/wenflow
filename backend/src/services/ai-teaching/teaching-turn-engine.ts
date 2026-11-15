@@ -91,6 +91,7 @@ import { decideBoardIntent, numbersOnBoard, shouldSkipExampleRefresh, mergeCorre
 import { applyBoardOp } from './board-controller';
 import { BOARD_DESIGN_BASE_INSTRUCTION, boardPromptInputForTeacher, decideBoardAttachment, openBoard, type BoardState } from './board-state';
 import { designBoard } from './board-designer.service';
+import { extractTeacherNumberBindings, maskMismatchedBoardNumberLabels } from './board-intent';
 import { detectOpenRequest } from './teaching-closure';
 import { recordDegradation } from '../../skills/degradation-telemetry';
 import type { ReplanAdvisory } from './ReplanAdvisoryService';
@@ -1663,7 +1664,22 @@ export async function processStudentMessage(
             + correctionDirective,
         }, { userId: session.userId, sessionId: session.id, taskId: session.taskId });
         if (designed.figure) {
-          board = applyBoardOp(board, { type: 'update', reason: 'new-example' }, designed.figure) ?? board;
+          // 数字-指标绑定一致性守卫（修复批 36-②，BOARD-001 u04 reeval29 critical）：教师
+          // 近轮「(指标)是/为(数字)亿」绑定与板面同数字异指标的行冲突时，把板面数字挖成
+          // ?（答案不上板纪律：让学习者按教师口径填，不错着抄）。绑定取最近 6 条教师发言。
+          const numberBindings = extractTeacherNumberBindings([
+            teachingOutput.reply,
+            ...session.messages.filter((m) => m.role === 'assistant').slice(-6).map((m) => String(m.content || '')),
+          ]);
+          const numberGuard = maskMismatchedBoardNumberLabels(designed.figure as any, numberBindings);
+          if (numberGuard.masked.length > 0) {
+            logger.warn('[AITeaching] 板面数字与教师绑定冲突，已挖空待学习者按教师口径填写', {
+              sessionId,
+              taskId: session.taskId,
+              masked: numberGuard.masked.slice(0, 4),
+            });
+          }
+          board = applyBoardOp(board, { type: 'update', reason: 'new-example' }, numberGuard.spec) ?? board;
         } else {
           logger.warn('[AITeaching] 换板绘图被拒（保持旧板）', {
             sessionId,
@@ -1690,7 +1706,22 @@ export async function processStudentMessage(
             + intent.instruction + correctionDirective,
         }, { userId: session.userId, sessionId: session.id, taskId: session.taskId });
         if (designed.figure) {
-          board = applyBoardOp(board, { type: 'update', reason: 'correction' }, designed.figure) ?? board;
+          // 数字-指标绑定一致性守卫（修复批 36-②，BOARD-001 u04 reeval29 critical）：教师
+          // 近轮「(指标)是/为(数字)亿」绑定与板面同数字异指标的行冲突时，把板面数字挖成
+          // ?（答案不上板纪律：让学习者按教师口径填，不错着抄）。绑定取最近 6 条教师发言。
+          const numberBindings = extractTeacherNumberBindings([
+            teachingOutput.reply,
+            ...session.messages.filter((m) => m.role === 'assistant').slice(-6).map((m) => String(m.content || '')),
+          ]);
+          const numberGuard = maskMismatchedBoardNumberLabels(designed.figure as any, numberBindings);
+          if (numberGuard.masked.length > 0) {
+            logger.warn('[AITeaching] 板面数字与教师绑定冲突，已挖空待学习者按教师口径填写', {
+              sessionId,
+              taskId: session.taskId,
+              masked: numberGuard.masked.slice(0, 4),
+            });
+          }
+          board = applyBoardOp(board, { type: 'update', reason: 'correction' }, numberGuard.spec) ?? board;
           logger.info('[AITeaching] 纠正轮板书刷新：误解轮强制重绘，清除被纠正的错误表述', {
             sessionId,
             taskId: session.taskId,
