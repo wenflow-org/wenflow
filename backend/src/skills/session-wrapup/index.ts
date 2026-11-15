@@ -41,6 +41,7 @@ export interface SessionWrapupInput {
     taskTitle?: string;
     taskDescription?: string;
     pathTitle?: string | null;
+    learnerGoal?: string | null;
     pathSummary?: string | null;
   };
   learningState?: {
@@ -858,6 +859,7 @@ function buildWrapupUserPrompt(input: SessionWrapupInput, mode: 'primary' | 'eva
 【任务类型】${input.sessionInfo.taskType || '未知'}
 【任务标题】${input.sessionInfo.taskTitle || input.sessionInfo.topic}
 【任务说明】${input.sessionInfo.taskDescription || '无'}
+【学习目标】${input.sessionInfo.learnerGoal || '无'}
 【路径标题】${input.sessionInfo.pathTitle || '无'}
 【路径摘要】${input.sessionInfo.pathSummary || '无'}
 【路径背景】${JSON.stringify(input.sessionStructure?.pathBackground || null)}
@@ -891,6 +893,7 @@ tier 只能取 low | mid | high（档位定义见 system prompt 的评分参考�
 【任务类型】${input.sessionInfo.taskType || '未知'}
 【任务标题】${input.sessionInfo.taskTitle || input.sessionInfo.topic}
 【任务说明】${input.sessionInfo.taskDescription || '无'}
+【学习目标】${input.sessionInfo.learnerGoal || '无'}
 【路径标题】${input.sessionInfo.pathTitle || '无'}
 【路径摘要】${input.sessionInfo.pathSummary || '无'}
 【路径背景】${JSON.stringify(input.sessionStructure?.pathBackground || null)}

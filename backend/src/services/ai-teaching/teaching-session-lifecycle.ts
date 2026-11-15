@@ -758,6 +758,9 @@ export async function endSession(
         taskDescription: context.taskDescription,
         pathTitle: context.pathContext.pathTitle || null,
         pathSummary: context.pathContext.pathSummary || null,
+        // 覆盖边界诚实（修复批 32-①）：wrapup 需要学习目标做范围对照，
+        // 否则任务/目标要求 > 课堂覆盖时无法声明「本次未覆盖 X」（reeval27 F_001×5 实证）
+        learnerGoal: context.learnerPersona?.surfaceGoal || null,
       },
       learningState: context.learningState ? {
         ...context.learningState,

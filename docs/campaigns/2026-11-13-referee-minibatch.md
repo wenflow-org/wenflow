@@ -1803,3 +1803,37 @@ updateConversationLifecycle 单咽喉点）：stage='proposing' 且无既有分�
    structuredData/milestone 对比）→ 落地；
 2. 模型权衡三选一仍待用户网关侧定夺（回滚 flip-model-config.cjs rollback 就绪）；
 3. 既有观察位维持（NOTATION_LEAK 跨批、重复家族、wrapup.actionPlan 截断）。
+
+## 四十二、修复批 32（2026-11-15 当轮：wrapup 覆盖边界声明杠杆落地）
+
+### 42.1 取证（wrapup 输入面）
+
+session-wrapup 产出的 sessionInfo 已含 taskTitle/taskDescription/pathTitle（本课范围可见），
+**缺 learnerGoal**——目标级范围（5 类条款横跨多课）无从对照，F_001 ×5 的覆盖缺口因此
+不可声明。context.learnerPersona.surfaceGoal 在收束调用点现成可用（TeachingContextBuilder
+开场画像摘要既有产物，零新查询）。
+
+### 42.2 杠杆三件套（落地）
+
+1. **lifecycle 接线**：wrapup 输入 sessionInfo 增 `learnerGoal`（learnerPersona.surfaceGoal）；
+2. **skill 模板/类型**：sessionInfo 类型 + 两个 prompt 模板（主模式/评估回退）各加
+  【学习目标】分区；snapshot-parity 测试抓到模板变化 → 快照更新（diff 恰为新增行）；
+3. **yaml 规则原位扩展（条数守恒）**：输入字段清单补【学习目标】；诚实家族规则尾部追加
+  **覆盖边界诚实**——输入提供【学习目标】时对照任务说明与本课实际覆盖，未全覆盖则
+  summary 必须逐项列明「本次未覆盖：X/Y/Z」+ actionPlan 给 1 条后续方向；不得让学习者
+  带「已覆盖全部」错觉收束。双重定性入档：采样截断（max-tasks=2）是测试批固有、判官
+  不知情；但真实用户中途停学时 wrapup 同样不声明剩余范围——诚实缺口真实存在。
+- 门禁：compile 33 / threshold 12 / core:check 33/33 / lint 全绿 / sync；wrapup+learning
+  定向 1896 测全绿；全量 jest 出现 4 套件并发 flake（与本批改动无关的 prompt-lab/vision/
+  goal-path 等，失败数逐轮轮换增长），隔离复测 22/22 全绿定性通过。
+
+### 42.3 验证批自然复核（批 33）
+
+u01 形态案例的 wrapup 应出现「本次未覆盖：违约金/试用期工资/调岗调薪/知识产权」+
+后续方向建议；classroom F_001/F_002 簇应显著收敛（判官能看到声明）。
+
+### 42.4 批 33 队列
+
+1. 下一验证批（reeval28）：覆盖边界声明自然复核 + 既有杠杆持续观察；
+2. 模型权衡三选一仍待用户网关侧定夺（回滚 flip-model-config.cjs rollback 就绪）；
+3. 既有观察位维持（NOTATION_LEAK 跨批 8 例、重复家族、actionPlan 截断）。
