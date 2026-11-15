@@ -1771,3 +1771,35 @@ updateConversationLifecycle 单咽喉点）：stage='proposing' 且无既有分�
 2. 模型权衡三选一仍待用户网关侧定夺（回滚 flip-model-config.cjs rollback 就绪）——
    本批 understanding 漂移本身（goal-dialogue 模型逐轮重理解的不稳定）也是 agnes 时代
    形态，决策后复查频率。
+
+## 四十一、批 31（2026-11-15 当轮：reeval27 验证批——批 30 快照杠杆实证 PASS + u07 断链修复闭环）
+
+### 41.1 快照杠杆复核 PASS（u07 断链修复闭环）
+
+- **u07：verdict=pass，完整走完 goal→path→教学**（reeval26 硬阻断报废 → 27 pass，
+  +2 课入账）；全程无挂起、无 45min 路径等待超时、无 120min 兜底触发。
+- 对账：abandoned 20→24（4 案例 abandon 收口 + 1 案例 totalTasks≤2 自然跑完）、
+  completed 625→635（+10 = 5 案例 × 2 课，u07 本批贡献 2 课）；active 零新增持续。
+- referee：**actionable 0 类（连续第四次）**；u17 pass_with_concerns / u19 inconclusive
+  （TEACHING_OPEN_ENDING 单样本）。
+
+### 41.2 classroom（14 课）：零 critical + 新家族浮现
+
+- **批 28 severity 纪律完全干净**：全报告 critical 计数 **0**；4 个弃跑课全部
+  inconclusive（F-ABANDON 等中性码）。
+- **新 actionable：收束覆盖边界声明缺失（F_001 ×5 major×2+minor×5 全案例 + F_002 ×4
+  minor×7+major×1）**：课程目标要求 5 类条款口径，课堂（max-tasks=2 采样）只覆盖竞业
+  限制 4 条，wrapup 既未声明「未覆盖违约金/试用期工资/调岗/知识产权」，也未给这些条款
+  的简易判断提示——学习者带着不完整的「检查清单」进实操，误以为已覆盖全部风险。
+  双重定性：①采样截断是测试批固有（max-tasks=2），判官对采样场景不知情；②但**真实
+  用户中途停学**（弃跑/时间不够）时 wrapup 同样不声明剩余范围——诚实缺口真实存在。
+- 其余：REPETITIVE/notation 等零星 minor，观察位维持。
+
+### 41.3 批 32 队列
+
+1. **wrapup 覆盖边界声明杠杆（F_001 ×5 + F_002 ×4 强达标）**：session-wrapup skill
+   提示词/产出闸——当 learnerGoal/task 要求的范围 > 实际课堂覆盖时，wrapup 必须列明
+   「本次未覆盖 X」+ 后续学习建议；设计取证（wrapup 拿得到 task 全范围吗——
+   structuredData/milestone 对比）→ 落地；
+2. 模型权衡三选一仍待用户网关侧定夺（回滚 flip-model-config.cjs rollback 就绪）；
+3. 既有观察位维持（NOTATION_LEAK 跨批、重复家族、wrapup.actionPlan 截断）。
