@@ -720,6 +720,26 @@ export async function endSession(
 
   const userMessageCount = session.messages.filter((message) => message.role === 'user').length;
   let wrapupOutput: any = null;
+    // 覆盖边界诚实（修复批 32-① 二次接线）：learnerPersona 叙事在实验环境全空（447
+    // profile 零 surfaceGoal 实证），改读 goal 会话 collectedData.understanding.surface_goal
+    // （学员目标原话，30/30 填充）；失败不阻断收束。
+    let wrapupLearnerGoal = context.learnerPersona?.surfaceGoal || null;
+    if (!wrapupLearnerGoal) {
+      try {
+        const goalRows = await prisma.$queryRawUnsafe<{ collectedData?: string }[]>(
+          "SELECT collectedData FROM goal_conversations WHERE userId = ? AND stage = 'completed' ORDER BY updatedAt DESC LIMIT 1",
+          session.userId
+        );
+        const goalUnderstanding = goalRows?.[0]?.collectedData
+          ? JSON.parse(goalRows[0].collectedData || '{}').understanding
+          : null;
+        const surfaceGoal = goalUnderstanding?.surface_goal;
+        if (surfaceGoal && String(surfaceGoal).trim()) wrapupLearnerGoal = String(surfaceGoal).trim();
+      } catch {
+        // 目标读取失败不阻断收束
+      }
+    }
+
   // M1 兜底原因：用于 summary-only 降级打标（允许降级，不允许未打标的降级）。
   let wrapupFallbackReason: string | null = null;
   if (userMessageCount < 2) {
@@ -760,7 +780,7 @@ export async function endSession(
         pathSummary: context.pathContext.pathSummary || null,
         // 覆盖边界诚实（修复批 32-①）：wrapup 需要学习目标做范围对照，
         // 否则任务/目标要求 > 课堂覆盖时无法声明「本次未覆盖 X」（reeval27 F_001×5 实证）
-        learnerGoal: context.learnerPersona?.surfaceGoal || null,
+        learnerGoal: wrapupLearnerGoal,
       },
       learningState: context.learningState ? {
         ...context.learningState,

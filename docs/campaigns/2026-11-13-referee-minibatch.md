@@ -1837,3 +1837,37 @@ u01 形态案例的 wrapup 应出现「本次未覆盖：违约金/试用期工�
 1. 下一验证批（reeval28）：覆盖边界声明自然复核 + 既有杠杆持续观察；
 2. 模型权衡三选一仍待用户网关侧定夺（回滚 flip-model-config.cjs rollback 就绪）；
 3. 既有观察位维持（NOTATION_LEAK 跨批 8 例、重复家族、actionPlan 截断）。
+
+## 四十三、批 33（2026-11-15 当轮：reeval28 验证批——覆盖边界杠杆数据源二次接线（批内修复））
+
+### 43.1 验证结果：杠杆未生效→数据源缺口批内定位修复
+
+- 批次本身干净：5/5 案例完成、referee **连续第五次 actionable 0 类**、无挂起无兜底。
+- **覆盖声明零命中**（7 wrapup 检查）：定位为**数据源缺口**——`learnerPersona.surfaceGoal`
+  在实验环境全空（447 profile 零 non-null；叙事提取在虚拟学习者链路不落库）→
+  【学习目标】传『无』→ 规则无从对照。批 32 的接线源选错。
+- **批内二次接线**：改读 goal 会话 `collectedData.understanding.surface_goal`（学员目标
+  原话，**30/30 填充**）——lifecycle 收束时按 userId 取最近 completed 会话解析，
+  learnerPersona 兜底、失败不阻断。解析器实数据验证 ✓（学员原话正确解析）。U07 形态
+  forensics 的 understanding.keys 早已显示 surface_goal 在案（数据一直在，取错了管子）。
+
+### 43.2 classroom（15 课）观察
+
+- **判官 F_001 码跨批不稳定**：reeval27 的 F_001=覆盖缺口，reeval28 的 F_001=脚手架
+  对照缺口（scaffolding gap）——通用码语义漂移，跨批聚类需按 detail 而非 code 对齐
+  （档案方法论注记）。
+- **F_CLOSE_01 critical（u19 弃跑课）——批 28 收紧措辞被「引用后违反」**：判官 detail
+  逐字引用规则 8 的豁免、完整推理（还讨论了 closureQuality 评分边界），然后仍落
+  critical。verdict 却是 pass_with_concerns（批 28 主要目标「不得判 fail」达成）。
+  定性：agnes severity 指令跟随上限，措辞强化已到边际——**join 模型决策族（×2）**，
+  挂模型权衡。
+- F_002 ×4（行动指令具体性 minor 族）、F_003 ×2（同构问法 minor）——观察位维持。
+
+### 43.3 批 34 队列
+
+1. 下一验证批（reeval29）：覆盖边界声明自然复核（二次接线后 u01 形态 wrapup 应出现
+   「本次未覆盖：…」；【学习目标】应为学员目标原话而非『无』）；
+2. 模型权衡三选一仍待用户网关侧定夺（回滚 flip-model-config.cjs rollback 就绪）——
+   severity 指令跟随（×2）+ evidence 误配（批 28）+ understanding 漂移（批 30）三证
+   皆指 agnes 时代形态；
+3. 既有观察位维持。
