@@ -558,3 +558,45 @@ describe('referencesBoardWithoutBoardAvailable（无板面指认判定）', () =
     expect(referencesBoardWithoutBoardAvailable('')).toBeNull();
   });
 });
+
+/* ────────────── 修复批 38-③：滞后引用判定（引对话豁免不再豁免旧板面对象） ────────────── */
+
+describe('findUnmatchedBoardReferences（滞后引用判定，u17L1 reeval33 实证）', () => {
+  const currentBoard = '命中链路 · 未命中链路 · 回源读库';
+  const priorBoard = '向银行借款 · 存款利息 · 还款节点';
+
+  it('病历单形态：旧板对象当前已无 + 教师此前说过 → 命中（不再豁免）', () => {
+    expect(findUnmatchedBoardReferences({
+      reply: '看板上「向银行借款」那条，接在哪个节点下？',
+      boardText: currentBoard,
+      priorTeacherText: '第 2 轮我们把「向银行借款」画到了图上。',
+      priorBoardText: priorBoard,
+    }).misses.length).toBeGreaterThan(0);
+  });
+
+  it('纯对话引用：从未上过板、教师此前说过 → 保持豁免', () => {
+    expect(findUnmatchedBoardReferences({
+      reply: '你刚才说的「重新排计划」那句，再讲一遍。',
+      boardText: currentBoard,
+      priorTeacherText: '你提到「重新排计划」。',
+      priorBoardText: priorBoard,
+    }).misses).toEqual([]);
+  });
+
+  it('当前板面存在 → 不论历史如何都放行', () => {
+    expect(findUnmatchedBoardReferences({
+      reply: '看板上「回源读库」那一步。',
+      boardText: currentBoard,
+      priorTeacherText: '回源读库。',
+      priorBoardText: '回源读库',
+    }).misses).toEqual([]);
+  });
+
+  it('无历史板面输入 → 行为与旧版一致（引对话豁免）', () => {
+    expect(findUnmatchedBoardReferences({
+      reply: '回到「向银行借款」那条。',
+      boardText: currentBoard,
+      priorTeacherText: '「向银行借款」。',
+    }).misses).toEqual([]);
+  });
+});

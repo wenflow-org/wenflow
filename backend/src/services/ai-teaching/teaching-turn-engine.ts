@@ -91,7 +91,7 @@ import { decideBoardIntent, numbersOnBoard, shouldSkipExampleRefresh, mergeCorre
 import { applyBoardOp } from './board-controller';
 import { BOARD_DESIGN_BASE_INSTRUCTION, boardPromptInputForTeacher, decideBoardAttachment, openBoard, type BoardState } from './board-state';
 import { designBoard } from './board-designer.service';
-import { extractTeacherNumberBindings, maskMismatchedBoardNumberLabels } from './board-intent';
+import { extractTeacherNumberBindings, findDanglingBoardPositionReferences, maskMismatchedBoardNumberLabels } from './board-intent';
 import { detectOpenRequest } from './teaching-closure';
 import { recordDegradation } from '../../skills/degradation-telemetry';
 import type { ReplanAdvisory } from './ReplanAdvisoryService';
@@ -820,6 +820,12 @@ export async function processStudentMessage(
       reply: rawTeachingOutput?.reply,
       boardText: boardFaceText,
       priorTeacherText,
+      // 滞后引用判定（批 38-③）：历史板面出现过、当前已无的指认对象不再被引对话豁免
+      priorBoardText: (parseSessionArtifacts(session.teachingState).boardHistory as
+        | Array<{ spec: Record<string, unknown> }>
+        | undefined)
+        ?.map((h) => collectSpecTextFragments(h?.spec ?? null).join(' '))
+        .join(' '),
     });
     if (boardRefMisses.misses.length > 0) {
       logger.warn('[AITeaching] 板面指认与当前板面不符（指认落空），触发修复重调', {
@@ -849,6 +855,11 @@ export async function processStudentMessage(
               reply: candidate.reply,
               boardText: boardFaceText,
               priorTeacherText,
+              priorBoardText: (parseSessionArtifacts(session.teachingState).boardHistory as
+                | Array<{ spec: Record<string, unknown> }>
+                | undefined)
+                ?.map((h) => collectSpecTextFragments(h?.spec ?? null).join(' '))
+                .join(' '),
             }).misses.length === 0) {
               repairedOutput = candidate;
             }
@@ -866,6 +877,63 @@ export async function processStudentMessage(
         impactedDimensions: ['teachingReply.boardReference', `task:${context.taskId}`],
         mitigationApplied: repairedOutput ? 'retry-board-reference-instruction' : 'flagged-only',
         rootCauseMessage: `board references not found on current board: ${boardRefMisses.misses.join(' | ').slice(0, 160)}`,
+      });
+      if (repairedOutput) rawTeachingOutput = repairedOutput;
+    }
+  }
+  // 位置/槽位指认存在性守卫（修复批 38-①，u01L2 reeval31 实证：位置/计数形态没有引号片段，
+  // 批 13-① 内容守卫抓不住——「右栏第 3 行我留了空槽」而右栏只有 2 行）。F1 越界行/帧指认
+  // + F2 空槽承诺无空位 → 修复指令重调一次；复检仍犯→打遥测放行，绝不阻塞课堂。
+  if (board) {
+    const positionSpec = board.figure?.maskedSpec ?? board.figure?.fullSpec ?? null;
+    const positionMisses = findDanglingBoardPositionReferences({
+      reply: rawTeachingOutput?.reply,
+      spec: positionSpec,
+    });
+    if (positionMisses.misses.length > 0) {
+      logger.warn('[AITeaching] 板面位置指认越界/空槽承诺无空位，触发修复重调', {
+        userId: context.userId,
+        taskId: context.taskId,
+        misses: positionMisses.misses,
+      });
+      let repairedOutput: TeachingTurnOutput | null = null;
+      if (Date.now() - turnStartedAt < ARITHMETIC_REPAIR_BUDGET_MS) {
+        try {
+          (turnInput.scenario as Record<string, unknown>).repairInstruction = `你上一条回复指认了板面上的位置（${positionMisses.misses.map((m) => `「${m}」`).join('、')}），但当前板面上不存在这些位置——学习者按指认去找会落空。本轮必须输出修正后的完整回复：先数一遍当前板面的行数/帧数，把指认改到真实存在的行/格/帧上（或逐字引用板面现有文本），也可以删去该位置指认、只用口头讲解承接；其余内容（知识看板、检查点、control 字段、语气、篇幅）原样保留；不得缩短回复或趁机改写无关内容；绝不可向学生提及任何校验或系统检查。`;
+          const repairResult = await withTimeoutSignal(
+            (signal) => executeSkill(teachingTurnAgentDefinition, turnInput, {
+              contextEnvelope: {
+                schemaVersion: 'context-envelope/v1',
+                principal: { userId: session.userId },
+                session: { sessionId: session.id, conversationId: session.id, taskId: session.taskId },
+              },
+              abortSignal: signal,
+            }),
+            ARITHMETIC_REPAIR_TIMEOUT_MS,
+            'BOARD_POSITION_REPAIR_TIMEOUT: 板面位置指认修复重调超时'
+          );
+          if (repairResult.success) {
+            const candidate = extractTeachingOutput(repairResult);
+            if (candidate?.reply && findDanglingBoardPositionReferences({
+              reply: candidate.reply,
+              spec: positionSpec,
+            }).misses.length === 0) {
+              repairedOutput = candidate;
+            }
+          }
+        } catch (error) {
+          logger.warn('[AITeaching] 板面位置指认修复重调失败，按原回复放行', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+      recordDegradation({
+        source: 'ai-teaching/teaching-turn-engine',
+        faultCategory: 'SCHEMA_VIOLATION',
+        severity: 'P2_DEGRADED',
+        impactedDimensions: ['teachingReply.boardPositionRef', `task:${context.taskId}`],
+        mitigationApplied: repairedOutput ? 'retry-board-position-ref-instruction' : 'flagged-only',
+        rootCauseMessage: `dangling board position references: ${positionMisses.misses.join(' | ').slice(0, 160)}`,
       });
       if (repairedOutput) rawTeachingOutput = repairedOutput;
     }

@@ -2001,3 +2001,19 @@ u04 课（「辨认年报三张表的主角科目」，目标要求串勾稽、�
 **referee 面**：零 actionable 连续纪录在第六次后中断——**PATH_GENERATION_LATENCY ×5**（minor×4+major×1，队列既有项，~3min 在承诺 5-20min 窗口内，豁免维持）+ **CONTROL_TASK_COMPLETION_MISMATCH ×2**（u17/u19，control 台账 completedTasks vs teaching 结算 taskCompletion='skipped'——批 20/21 设计语义的口径差，豁免维持，历史同类判过台账口径噪声）。二者均既有处置，不立项。
 
 **批 38 候选（待用户启动）**：①板面引用存在性守卫（major×4 升档达立项门槛：教师「第N行/右栏空槽」类指认时校验 board spec 行数，不存在则 mask 指认或触发刷新）——先取证 u01L2 第4轮悬空形态；②lifecycle 确定性未覆盖清单；③u07L1 全课无板书取证（9 轮 0 板书轮 vs 教师「尺子」指认——是设计面无板书选择还是落库链缺口）。围栏解除自然复核继续。
+
+## 四十八、修复批 38（2026-11-15/16 当轮：板面指认族双刀——位置/槽位守卫 v1 + 滞后引用豁免精准修；附 rogue 事故与中转故障废批记录）
+
+**取证 38-①（reeval31 判官 11 例板面 detail 全还原 + 原始字节核验）**：亚型收敛=A1 越界指认（u01L2 T4「右栏第 3 行空槽」而右栏仅 2 行、空槽实为第 2 行 label"?"）、A2 计数承诺（u19L3「三条依据」板上 2 条）、B 板面滞后（u01L1 收束停旧 rev/u17L2 B组/u04L1 百分比切换）、C 板书反口径（u17L1 major「未命中→129」vs 口述「甲命中99」）、D 答案上板（u04L3）、E 渲染占位（u17L3 [?/?]）。**判官误报 1 处被抓**：u01L2 T12「右栏那个空槽」——`rows[3] label "?"` 就是空槽，判官数漏；守卫反例测试直接采用该字节事实。
+
+**落地 38-②（位置/槽位指认存在性守卫 v1）**：`findDanglingBoardPositionReferences`（board-intent.ts）——F1 越界行/帧指认（中文序数含）+ F2 空槽承诺无空位；宁窄勿宽排除计数承诺与「第N条」法条语义；引擎在批 13-① 块后接线第四刀 repairInstruction 重调（重调一次→复检→遥测放行）。13 测绿+105 套件 1020 测绿+tsc 过。
+
+**落地 38-③（滞后引用豁免精准修，reeval33 判官实证驱动）**：reeval33 剩余板面 ×3 全为旧 rev 对象残留引用（u17L1「向银行借款」仅存第2轮旧图）——暴露批 13-① 引对话豁免把教师此前说过的旧板对象也放行。`findUnmatchedBoardReferences` 增 `priorBoardText` 入参：命中历史板面而当前板面无 = 滞后引用 → 抓；从未上过板的纯对话引用 → 保持豁免；复检处同参。三态测试 4 例。**38-④**：离线重放假阳性分析（「空着」vs「—」占位）→ BLANKISH_ITEM_RE 增破折号形态。
+
+**验证（三批）**：**reeval32=中转故障废批**（14:28-14:43Z provider 故障窗：u01/u04/u07/u17 goal 阶段黑盒三连败×3 重启无效 abandon，4/5 无 referee verdict（503 retry budget exhausted）；仅 u19 跑完 3 课 20 教师轮；离线重放零命中=无靶子非接线死；judge32 u19-only actionable 0）——按教学基准立规处置：不动模型、fail-closed。**reeval33**（5/5 健康）：判官板面族 ×5(major×4)→×3(major×3)；脚手架 ×3→0 清零；复述 ×5→×3；**新 critical ×3**（CONTRACT_VALUE_MISMATCH u01 期限两年误成六个月判对/DATA_MISREAD u19 支出121万当上季营收教师还表扬/SESSION_DEGENERATION_LOOP u17 马拉松 447 轮近 380 轮退化收束循环烧光预算并顶满 runner 120min）。**reeval34**（5/5，豁免精准修后）：判官板面族 ×3→×3 实例（BOARD_MISMATCH ×1 类集中 u01L1 + DANGLING ×1 + PREMATURE ×1）；复述 ×3→×1（低于聚类线）；referee actionable 2 类=PATH_LATENCY ×3（**critical×1 新形态：里程碑已出现但任务锁定不可开始**）+ TEACHING_HARD_TIMEOUT ×1 critical（u07，教学回合硬超时整案 failed）。
+
+**守卫实战行为**：批 13-① 块（含滞后引用）reeval34 期间触发 14 次重调；位置守卫零触发（465+99 教师轮离线重放仅 1 例 borderline 假阳性→38-④ 修复）；板面实例轨迹 **×9（31）→×5（33）→×3（34）**（判官同为 ds 面板，可比；单批波动诚实声明）。
+
+**事故与运行时记录**：①**rogue runner 事件**——judge 补跑链式命令误塞 `run-referee-minibatch.mjs --help`，脚本不识别 --help 即以默认批名真跑 ~6 分钟；处置：停进程→2 个服务端 autopilot 幽灵 stop+abandon 收口（200，running 归零）→minibatch-2026-11-15 目录留档。教训入档：**不猜测脚本参数，先读脚本源码**。②u07 hard-timeout 教学会话 active 残留（批 24 幽灵兜底未覆盖 hard-timeout 分支）——本例按仓库语义手工收口（abandoned+endTime=updatedAt+清租约+revision+1，active 归零），结构修复入批 39。
+
+**批 39 队列（全部 critical/major 达标，待用户启动）**：①内容真值族三 critical（教师确认错误答案：CONTRACT_VALUE/DATA_MISREAD/CONTENT_PARSE_ERROR_ENDORSED）取证+杠杆；②收束退化循环断路器（SESSION_DEGENERATION critical + SESSION_LOOP major + u01L3 49 轮 no_termination——连续收束语+学员应和 N 轮强制收口）；③hard-timeout 分支接批 24 幽灵兜底；④PATH_LATENCY critical×1 新形态取证（里程碑可见但任务锁定窗口）；⑤OPENING_ASSUME ×3 判官证据面豁免注记（同会话续课「上节课」为真，u04L3/u07L2/u19L2 均有同会话前课）。

@@ -554,17 +554,25 @@ export function findUnmatchedBoardReferences(input: {
   reply: string | null | undefined;
   boardText: string | null | undefined;
   priorTeacherText?: string | null;
+  priorBoardText?: string | null;
 }): { misses: string[] } {
   const reply = String(input?.reply ?? '');
   if (!reply) return { misses: [] };
   const boardNorm = normRefText(input?.boardText);
   const priorNorm = normRefText(input?.priorTeacherText);
+  const priorBoardNorm = normRefText(input?.priorBoardText);
   const misses: string[] = [];
   const check = (raw: string) => {
     const norm = normRefText(raw);
     if (norm.length < 4 || misses.length >= 3) return;
     if (boardNorm.includes(norm)) return;
-    if (priorNorm && priorNorm.includes(norm)) return; // 引对话豁免：教师在引用此前说过的话
+    // 滞后引用（修复批 38-③，u17L1 reeval33 实证）：被指对象在历史板面出现过、当前板面已无
+    // ——教师自己此前说过它不够成豁免（那正是「引旧板」形态），学习者按指认在当前板上落空。
+    if (priorBoardNorm && priorBoardNorm.includes(norm)) {
+      misses.push(raw.trim().slice(0, 40));
+      return;
+    }
+    if (priorNorm && priorNorm.includes(norm)) return; // 纯对话引用（从未上过板）：教师在引用此前说过的话
     misses.push(raw.trim().slice(0, 40));
   };
   // 形态一：指认词在前——看板上「X」/右栏「X」
@@ -670,4 +678,90 @@ export function maskMismatchedBoardNumberLabels<T>(spec: T, bindings: ReadonlyAr
   };
   const next = walk(spec, 0);
   return { spec: next as T, masked };
+}
+
+/* ──────────── 板面位置/槽位指认存在性守卫（修复批 38-①，u01L2 reeval31 实证） ────────────
+ * 病历单：T4 教师说「右栏第 3 行我留了空槽」，板上右栏只有 2 行（空槽实际在第 2 行，label "?"）
+ * ——位置指认越界，学习者按「第 3 行」找位置落空。批 13-① 的引号内容守卫抓不住这种形态：
+ * 位置/计数指认没有引号片段可与板面文本比对。
+ * 两形态确定性可判：
+ *   - F1 越界指认：「(左栏/右栏)第N行/格」「第N帧」的 N 超过当前板面对应容器的行数/帧数；
+ *   - F2 空槽承诺无空位：说出「空槽/空白格/留白」但板面没有任何待填位（label/sub 含 ?/＿/待填 等）。
+ * 宁窄勿宽：计数承诺（「三条依据」「四帧结构」）语义不可判，不在守卫面（判官侧持续观察）；
+ * 「第N条」多为法条/序号语义，排除；无板面结构（spec 空/无行无帧）时不动作。
+ */
+const POSITION_ROW_RE = /((?:左栏|右栏)的?)?第\s*([0-9一二两三四五六七八九十]+)\s*(?:行|格)/g;
+const POSITION_FRAME_RE = /第\s*([0-9一二两三四五六七八九十]+)\s*帧/g;
+const SLOT_PROMISE_RE = /空槽|空白格|留白|留了\s*(?:个|一)?\s*空|空着的?[一那]?[格行]?/;
+const BLANKISH_ITEM_RE = /\?|？|＿|__|待填|留白|空着|待你填|由你填|（空）|\(空\)|^—+$|^—\s|—$/;
+
+const CN_DIGIT: Record<string, number> = { 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
+
+function cnPositionToNumber(raw: string): number {
+  if (/^\d+$/.test(raw)) return Number(raw);
+  return CN_DIGIT[raw] ?? 0;
+}
+
+interface BoardContainerCounts {
+  leftRows: number;
+  rightRows: number;
+  frames: number;
+  hasBlank: boolean;
+}
+
+function boardContainersOf(spec: unknown): BoardContainerCounts {
+  const out: BoardContainerCounts = { leftRows: 0, rightRows: 0, frames: 0, hasBlank: false };
+  const walk = (value: any, depth: number): void => {
+    if (value === null || value === undefined || depth > 4) return;
+    if (Array.isArray(value)) {
+      for (const item of value) walk(item, depth + 1);
+      return;
+    }
+    if (typeof value === 'string') {
+      if (BLANKISH_ITEM_RE.test(value)) out.hasBlank = true;
+      return;
+    }
+    if (typeof value !== 'object') return;
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      if ((key === 'left' || key === 'right') && item && typeof item === 'object' && Array.isArray((item as any).rows)) {
+        if (key === 'left') out.leftRows = Math.max(out.leftRows, (item as any).rows.length);
+        else out.rightRows = Math.max(out.rightRows, (item as any).rows.length);
+      }
+      if (key === 'frames' && Array.isArray(item)) out.frames = Math.max(out.frames, item.length);
+      walk(item, depth + 1);
+    }
+  };
+  walk(spec, 0);
+  return out;
+}
+
+export function findDanglingBoardPositionReferences(input: {
+  reply: string | null | undefined;
+  spec: unknown;
+}): { misses: string[] } {
+  const reply = String(input?.reply ?? '');
+  const spec = input?.spec;
+  if (!reply || !spec || typeof spec !== 'object') return { misses: [] };
+  const containers = boardContainersOf(spec);
+  if (containers.leftRows + containers.rightRows + containers.frames === 0) return { misses: [] };
+  const misses: string[] = [];
+  const push = (raw: string) => {
+    const text = String(raw).replace(/\s+/g, '').slice(0, 24);
+    if (misses.length < 3 && !misses.includes(text)) misses.push(text);
+  };
+  for (const match of reply.matchAll(POSITION_ROW_RE)) {
+    const n = cnPositionToNumber(match[2]);
+    if (!n) continue;
+    const available = match[1]
+      ? (match[1].startsWith('左') ? containers.leftRows : containers.rightRows)
+      : Math.max(containers.leftRows, containers.rightRows);
+    if (available > 0 && n > available) push(match[0]);
+  }
+  for (const match of reply.matchAll(POSITION_FRAME_RE)) {
+    const n = cnPositionToNumber(match[1]);
+    if (!n) continue;
+    if (containers.frames > 0 && n > containers.frames) push(match[0]);
+  }
+  if (SLOT_PROMISE_RE.test(reply) && !containers.hasBlank) push(reply.match(SLOT_PROMISE_RE)![0]);
+  return { misses };
 }
