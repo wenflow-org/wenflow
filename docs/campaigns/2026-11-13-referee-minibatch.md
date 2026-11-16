@@ -5,6 +5,8 @@
 > 分支：`feat/unattended-20case-sim`（不合并 develop）。
 >
 > **常设约束（用户裁决，2026-11-15，优先级最高）**：授课+评审链路的 `deepseek-v4.1-flash` 是**教学基准模型**——即使 ds 出现严重故障/完全不可用，**也不得切换到其他模型**；基准变了会严重影响教学质量与全部水位对照。正确处置=如实报告故障、等待恢复（fail-closed，不降级、不替换、不临时顶替）。学员扮演族 7 skill（agnes-3.0-flash）不在本约束内；flip-model-config.cjs 的任何 flip/rollback 操作严禁把授课+评审 skill 移出 ds。「模型权衡三选一」就此永久关闭。
+>
+> **⚠️ 修订（用户指令，2026-11-16）**：用户指令「教学模型换成 gpt-6-luna 看看」——授课链路 **19 个 skill 已切 `gpt-6-luna`**（试验态）；**评审锚保持 ds 不变**（semantic-freeze-judge 显式 ds + classroom-quality-judge / virtual-learner-referee 经 platform default 继承 ds），判官面板跨批可比。学员扮演族 7 skill（agnes）不动。备份 `model-config-backup-2026-11-16T14-04-53.json`（切换前形态：ds×20/agnes×7/null×5）可整体回滚。原 11-15 约束中「不得切换」条款对授课侧暂缓执行，评审侧「不得移出 ds」继续有效；试验结论（reeval35 对照）出来后由用户定夺转正或回滚。
 
 ## 一、为什么不是直接复用前 20 例
 
@@ -2017,3 +2019,16 @@ u04 课（「辨认年报三张表的主角科目」，目标要求串勾稽、�
 **事故与运行时记录**：①**rogue runner 事件**——judge 补跑链式命令误塞 `run-referee-minibatch.mjs --help`，脚本不识别 --help 即以默认批名真跑 ~6 分钟；处置：停进程→2 个服务端 autopilot 幽灵 stop+abandon 收口（200，running 归零）→minibatch-2026-11-15 目录留档。教训入档：**不猜测脚本参数，先读脚本源码**。②u07 hard-timeout 教学会话 active 残留（批 24 幽灵兜底未覆盖 hard-timeout 分支）——本例按仓库语义手工收口（abandoned+endTime=updatedAt+清租约+revision+1，active 归零），结构修复入批 39。
 
 **批 39 队列（全部 critical/major 达标，待用户启动）**：①内容真值族三 critical（教师确认错误答案：CONTRACT_VALUE/DATA_MISREAD/CONTENT_PARSE_ERROR_ENDORSED）取证+杠杆；②收束退化循环断路器（SESSION_DEGENERATION critical + SESSION_LOOP major + u01L3 49 轮 no_termination——连续收束语+学员应和 N 轮强制收口）；③hard-timeout 分支接批 24 幽灵兜底；④PATH_LATENCY critical×1 新形态取证（里程碑可见但任务锁定窗口）；⑤OPENING_ASSUME ×3 判官证据面豁免注记（同会话续课「上节课」为真，u04L3/u07L2/u19L2 均有同会话前课）。
+
+## 四十九、批 39（2026-11-16 当轮：gpt-6-luna 授课侧 A/B 试验配置 + reeval35 首轮对照（3/5 verdict，ds 锚晚间不稳待补齐）
+
+**配置执行（用户指令「教学模型换成 gpt-6-luna 看看」）**：①网关探测——解密平台密钥直查 `/v1/models`：35 模型含 **gpt-6-luna**（初次误判「无此模型」来自 DB availableModels 旧缓存 37 项 + admin test 响应截断，用户纠正后复核确认）；`test-model` 实测 200/3.6s 出话。②切换边界——授课链路 **19 skill → gpt-6-luna**；**评审锚钉死 ds**（semantic-freeze-judge 显式 ds；classroom-quality-judge / virtual-learner-referee 经 platform default 继承 ds）→ 判官面板跨批可比；学员扮演族 agnes ×7 不动；null ×5 不动。③备份 `model-config-backup-2026-11-16T14-04-53.json`（ds×20 形态可整体回滚）。④重启生效，路由实证：luna 只打在 `skill:goal-conversation/material-collector/path-planning/path-reviewer` 等，agnes 家族调用原样。⑤档首常设约束更新为**试验态**（评审侧「不得移出 ds」继续有效）。
+
+**reeval35 首轮 A/B（对照 reeval34=ds 授课）**：5/5 会话跑完，**referee verdict 3/5**（u01/u07 的 referee 长调用两度被 ds 间歇抖动打断：2 秒探活 200/1.8s，5 分钟长调用 fetch failed——今晚 ds 晚间不稳第二日重演，昨日 22:28-22:43Z 限流窗口同源）。
+- **延迟硬伤**：luna teaching-turn 单次 **20-34s（ds 常态 5-13s，约 3 倍）**；luna 调用聚合 189 成功/10 失败；失败集中在支撑 skill（learning-predictor×3/concept-consolidator×5/concept-load-estimator×2，8s 硬帽族）。**u04 整案 failed**：开场后首个教学回合在 300s autopilot 步骤预算内未走完（同 key 3 连试超时）→ referee **TEACHING_RUNTIME_TIMEOUT critical**。
+- **质量面初步信号（样本薄）**：u17 referee **pass**（该案是批 24 崩溃案 + reeval33 447 轮退化案的老病号，首次全绿）；u19 pass（2 minor）。judge35 首轮（仅排上 u04/u17 两案 4 课）**actionable 0**——全量 judge 待 ds 稳定后补。
+- referee 面 actionable 1 类=TEACHING_RUNTIME_TIMEOUT critical（luna 延迟直接后果）。
+
+**事故二次（同根因）**：`--only=u01,u07,u19` 非 runner 有效旗标（正确为 `--cases=`）→ resume 静默按默认 6 例跑，**u13 误启动真跑 1 分钟**——发现即停（进程 kill + u13 会话 stop+abandon 200，running/active 归零）。「读脚本不猜参数」教训第二次触发：rogue 事件根因同款（--help 亦为臆测旗标）。**规则升级：任何 runner 旗标组合，先 grep 脚本源码确认存在再执行。**
+
+**待办（ds 稳定后）**：①补 u01/u07 referee（`--resume --cases=u01,u07` 语义已验证）②全量 judge 5 案 ③luna vs ds 逐族水位对照 + 延迟成本量化 ④结论交用户定夺：转正（gpt-6-luna 常驻授课 + 更新常设约束）或回滚（备份恢复 ds×20）。
