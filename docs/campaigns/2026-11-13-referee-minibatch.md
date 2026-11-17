@@ -2032,3 +2032,13 @@ u04 课（「辨认年报三张表的主角科目」，目标要求串勾稽、�
 **事故二次（同根因）**：`--only=u01,u07,u19` 非 runner 有效旗标（正确为 `--cases=`）→ resume 静默按默认 6 例跑，**u13 误启动真跑 1 分钟**——发现即停（进程 kill + u13 会话 stop+abandon 200，running/active 归零）。「读脚本不猜参数」教训第二次触发：rogue 事件根因同款（--help 亦为臆测旗标）。**规则升级：任何 runner 旗标组合，先 grep 脚本源码确认存在再执行。**
 
 **待办（ds 稳定后）**：①补 u01/u07 referee（`--resume --cases=u01,u07` 语义已验证）②全量 judge 5 案 ③luna vs ds 逐族水位对照 + 延迟成本量化 ④结论交用户定夺：转正（gpt-6-luna 常驻授课 + 更新常设约束）或回滚（备份恢复 ds×20）。
+
+**批 39 补完（2026-11-17 当轮）：u01/u07 referee 补齐 + 全量 judge 11 课——luna 授课可行性判定**
+
+**评审面补齐**：referee 5/5 verdict（u07 pass / u17 pass / u19 pass / **u01 fail**（CONTROL_TIMEOUT_TERMINAL_FAILURE——超时终局第二例）/ u04 inconclusive（300s 步骤预算 death critical））；judge 全量 11 课 actionable 1 类。
+
+**质量面判定（用户标准：课程质量没太大问题）——PASS**：judge 面板 **0 critical**、无 fail 教学课；聚类仅 1 类（CLOSURE_MISSING ×2，均为超时死亡案的兜底模板 wrapup，非教学缺陷）；三族水位与 ds 持平或更好（板面实例 ×3=ds 同水平 / 复述 ×4 minor / 脚手架 ×1）；批 39 队列的内容真值族（CONTRACT_VALUE/DATA_MISREAD 类）**未复现**；老病号 u17 referee+judge 双绿。vs reeval34（ds）：ds 批判官面板有 1 critical（content_parse_error_endorsed）+ u07 hard-timeout fail，luna 批反而更干净——超时风险非 luna 独有，luna 只是抬高概率（3 倍延迟）。
+
+**可行性代价（非质量问题的运营面）**：5 案中 2 案撞 300s autopilot 步骤预算死亡（u04 首回合即死、u01 中途死）→ 完成率 3/5；死亡案 wrapup 为兜底模板空壳（口径 0 条）。缓解选项：调大 autopilot 步骤预算（300s→480s+）或 luna 降并发——属配置决定，交用户。
+
+**结论**：**luna 授课质量可行性 PASS**（课程质量无大问题，未引入新缺陷族）；运营面需配套「步骤预算调宽」才能到 ds 时代的跑通率。配置维持试验态（19 skill=luna / 评审锚 ds / 备份在案），转正/回滚/调预算由用户定夺。
