@@ -56,7 +56,10 @@ let currentAbort: AbortController | null = null;
 /** 用户主动点击「停止生成」：中止后置 failed 提供重试入口（区别于离页中止的静默） */
 let userStopped = false;
 
-const INVALID_PATTERN = /待确认|待收集|未知|尚未|不确定|暂无|没有发现|未提供|n\/?a/i;
+/* 占位值判据：必须是「整个值就是占位符」才过滤，不能命中正文里的普通词。
+   2026-11-17 真机：方案第 2 阶段原文引「知而不行，只是未知」，旧 /未知/ 子串匹配
+   把整条阶段当占位符删掉 → 面板写「3 个阶段」却只列出 2 个（gc_1794910169154_01o30g0）。 */
+const INVALID_PATTERN = /^(?:待确认|待收集|未知|尚未(?:确定|提供)?|不确定|暂无|没有发现|未提供|unknown|n\/?a)[\s。.!！?？]*$/i;
 
 function pickText(...candidates: unknown[]): string {
   for (const c of candidates) {

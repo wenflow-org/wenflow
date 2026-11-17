@@ -256,6 +256,37 @@ describe('useGoalLive 流式渐进渲染', () => {
     expect(live.proposal?.stages).toEqual(['甲', '乙']);
   });
 
+  it('阶段正文含「未知」原文引用时不得被占位符过滤掉（2026-11-17 真机：3 阶段只显示 2 个）', async () => {
+    const stages = [
+      '原文先行立「心即理」：读与格物相关的短段',
+      '原文先行讲「知行合一」：以「知而不行，只是未知」为骨架',
+      '原文先行收「致良知」：以「是非之心人皆有之」为主',
+    ];
+    driveStream([], makeEnvelope({
+      internal: {
+        core: { conversationId: 'c1', stage: 'proposing', confidence: 0.8, isCompleted: false },
+        ext: {
+          goalConversation: {
+            understanding: {},
+            confirmedProposal: {
+              real_problem: 'x',
+              first_deliverable: 'y',
+              key_stages: stages,
+              plannedMilestones: 3,
+              previewStages: stages,
+            },
+          },
+        },
+      },
+    }));
+    const live = useGoalLive();
+    live.reset();
+    await live.send('开始');
+
+    expect(live.proposal?.stages).toEqual(stages);
+    expect(live.proposal?.stageCount).toBe(3);
+  });
+
   /**
    * 快速自测作答（2026-11-02 口径重做）：作答是**面板内的本地表单动作**，不发对话回合。
    *
