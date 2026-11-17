@@ -40,7 +40,8 @@ export interface LiveField {
   key: string;
   label: string;
   value: string;
-  status: 'done' | 'todo';
+  /** done=用户已确认；default=系统默认/推断（需校准）；todo=还没聊到 */
+  status: 'done' | 'default' | 'todo';
   fresh?: boolean;
 }
 
@@ -157,6 +158,39 @@ export function normalizeFieldValue(raw: unknown): string {
    「这句话是不是确认」由后端 goal-confirm-adjudicator 一次语义裁决——命中直接推进
    （不跑主对话回合），未命中由模型正常接住。前端不再维护第二份确认词表。 */
 
+/**
+ * 学情画像三态（2026-11-17 真机 gc_1794926822072_rpp3pu7）：
+ * 旧逻辑「有值=已收集」把系统默认/脑补也打绿勾，首轮就能显示 5/7。
+ * 现在只有用户明确给出（或从用户回答可靠推出）的才是 done；系统默认/推断标 default，
+ * 既不算进「已确认」进度，也不隐藏——用户能看到「当前按什么默认在规划」。
+ */
+export function resolveFieldStatus(
+  key: string,
+  value: string,
+  u: GoalUnderstanding,
+  currentStage: string
+): LiveField['status'] {
+  if (!value) return 'todo';
+  switch (key) {
+    case 'real_problem':
+      // 宽泛主题下的 real_problem 是系统诊断；只有用户明确 focused 或自述了具体场景才算确认。
+      // 不用 pain_points 判：宽泛主题也常写「不知道从哪开始」这类通用痛点，仍属系统推断。
+      return u.entry_state === 'focused' || String(u.scenario || '').trim() ? 'done' : 'default';
+    case 'background_experience': {
+      const level = String(u.current_baseline?.level || '').trim();
+      return level && level !== 'unknown' ? 'done' : 'default';
+    }
+    case 'time_per_session':
+      // sessionsLengthSource=default 是平台静默落档的 25 分钟，不是用户给的时间
+      return u.time_dimensions?.sessionsLengthSource === 'default' ? 'default' : 'done';
+    case 'success_criteria':
+      // 成功标准由系统提案，用户确认方案（ready/completed）后才算确认
+      return currentStage === 'ready' || currentStage === 'completed' ? 'done' : 'default';
+    default:
+      return 'done';
+  }
+}
+
 const fields = computed<LiveField[]>(() =>
   FIELD_DEFS.map((def) => {
     const value = normalizeFieldValue(def.read(understanding.value, collected.value));
@@ -164,13 +198,17 @@ const fields = computed<LiveField[]>(() =>
       key: def.key,
       label: def.label,
       value,
-      status: value ? 'done' : 'todo',
+      status: resolveFieldStatus(def.key, value, understanding.value, stage.value),
       fresh: freshKeys.value.includes(def.key)
     };
   })
 );
 
 const filledCount = computed(() => fields.value.filter((f) => f.status === 'done').length);
+/** 系统默认/推断项：展示但不计入「已确认」进度 */
+const defaultCount = computed(() => fields.value.filter((f) => f.status === 'default').length);
+/** 还没聊到的维度：进度提示只按这个算「还差几项」 */
+const missingCount = computed(() => fields.value.filter((f) => f.status === 'todo').length);
 
 const stageIndex = computed(() => {
   if (stage.value === 'completed' || stage.value === 'ready' || isCompleted.value) return 3;
@@ -706,6 +744,8 @@ export function useGoalLive() {
     entryState,
     fields,
     filledCount,
+    defaultCount,
+    missingCount,
     totalFields: FIELD_DEFS.length,
     quickReplies,
     proposal,

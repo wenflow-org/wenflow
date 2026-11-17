@@ -20,6 +20,8 @@ export interface GoalUnderstanding {
     strengths?: string[];
   };
   pain_points?: string;
+  /** 用户自述的具体使用场景（未提供时为空；用于判断 real_problem 是用户事实还是系统推断） */
+  scenario?: string;
   current_baseline?: {
     level?: string;
     evidence?: string;
@@ -28,6 +30,11 @@ export interface GoalUnderstanding {
     time_budget?: string;
     time_horizon?: string;
     time_per_session?: string;
+  };
+  time_dimensions?: {
+    sessionsLengthMin?: number | null;
+    sessionsLengthSource?: 'explicit' | 'estimated' | 'default';
+    objectiveScopeHours?: number | null;
   };
   success_criteria?: {
     observable_result?: string;

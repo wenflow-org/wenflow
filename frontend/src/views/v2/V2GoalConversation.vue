@@ -177,7 +177,7 @@
                右上角读作「画像 6/7」，与审计要求的措辞一致；字数不变，不挤占
                与阶段导航共享的那一行。 -->
           <strong><span class="panel__head-lead">学情</span><span class="panel__head-ext">画像</span></strong>
-          <span class="panel__count"><span class="panel__count-k">已收集</span> {{ live.filledCount }} / {{ live.totalFields }}</span>
+          <span class="panel__count"><span class="panel__count-k">已确认</span> {{ live.filledCount }} / {{ live.totalFields }}<span v-if="live.defaultCount" class="panel__count-default"> · {{ live.defaultCount }} 默认</span></span>
           <span class="panel__caret" aria-hidden="true">{{ panelExpanded ? '▾' : '▸' }}</span>
         </button>
         <!-- 面板背后的遮罩（2026-11-05 用户裁定）：窄屏面板是悬浮层，直接浮在聊天字上，
@@ -206,6 +206,21 @@
               </span>
               <div class="field__body">
                 <div class="field__label">{{ f.label }}</div>
+                <div v-if="f.value" class="field__value">{{ f.value }}</div>
+              </div>
+            </li>
+          </ul>
+          <!-- 系统默认/推断项（2026-11-17）：不再打成绿勾混进「已收集」，用黄标单独成组，
+               让用户一眼看出「哪些是平台按默认在规划、还没校准」。 -->
+          <ul v-if="defaultFields.length" class="checklist checklist--default">
+            <li
+              v-for="f in defaultFields"
+              :key="f.key"
+              class="field field--default"
+            >
+              <span class="field__mark">~</span>
+              <div class="field__body">
+                <div class="field__label">{{ f.label }}<em class="field__badge">默认 · 待校准</em></div>
                 <div v-if="f.value" class="field__value">{{ f.value }}</div>
               </div>
             </li>
@@ -247,7 +262,7 @@
           <!-- 方案被 Esc/关闭后提供重开入口，消除「关掉就找不回」的死路
               （2026-10-31 起与输入区上方的协商入口条同一处理器） -->
           <button
-            v-if="proposalDismissed && live.proposal && (live.stage === 'understanding' || live.stage === 'proposing')"
+            v-if="proposalDismissed && live.proposal && live.stage === 'proposing'"
             type="button"
             class="chat__show-proposal"
             @click="openProposalReview"
@@ -403,7 +418,7 @@
              2026-11-17：判据从 stage==='proposing' 放宽为「方案已成形」——硬必需字段缺时间
              预算时模型会把 stage 停在 understanding，却已产出完整方案并说「点确认」；旧判据
              让入口与确认按钮一起消失（真机 gc_1794910169154_01o30g0）。 -->
-        <div v-if="loggedIn && live.started && !live.sending && (live.stage === 'understanding' || live.stage === 'proposing') && live.proposal && !showProposal" class="proposal-invite">
+        <div v-if="loggedIn && live.started && !live.sending && live.stage === 'proposing' && live.proposal && !showProposal" class="proposal-invite">
           <span class="proposal-invite__doc" aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1.5V8h4.5L14 3.5zM8 12h8v1.5H8V12zm0 4h8v1.5H8V16z"/></svg></span>
           <div class="proposal-invite__text">
             <strong class="proposal-invite__title">学习方案 · 待确认</strong>
@@ -1204,9 +1219,10 @@ function messageHtml(m: LiveMessage): string {
   return cachedMessageHtml(box);
 }
 
-/* 学情画像按状态分组（2026-11-06 走查「斑马纹」）：已收集在上、待补充收拢底部 */
+/* 学情画像按状态分组（2026-11-17）：已确认 / 系统默认待校准 / 还没聊到，三态不再混算 */
 const doneFields = computed(() => live.fields.filter((f) => f.status === 'done'));
-const todoFields = computed(() => live.fields.filter((f) => f.status !== 'done'));
+const defaultFields = computed(() => live.fields.filter((f) => f.status === 'default'));
+const todoFields = computed(() => live.fields.filter((f) => f.status === 'todo'));
 const stageLabel = computed(() => {
   /* generating 与 stageIndex 无关：stageIndex 只在 stage 落库时翻转（proposing→ready），
      而「确认，生成我的路径」按下时 stageIndex 仍是 3 —— 此时面板顶还写「可生成路径」，
@@ -1214,11 +1230,12 @@ const stageLabel = computed(() => {
   if (phase.value === 'generating') return '生成中…';
   if (live.stageIndex === 3) return '可生成路径';
   if (live.stageIndex === 2) return '方案确认中';
-  /* 澄清期状态字由 7 项清单**推导**，不再恒为「继续澄清中」：
-     1/7、4/7、5/7 三屏原先同字，用户读不出「还差什么、什么时候进下一步」。
-     还差 N 项直接对得上左栏计数器与进度条，收满即说明该轮到「确认方案」。 */
-  const remain = Math.max(0, live.totalFields - live.filledCount);
-  return remain > 0 ? `还差 ${remain} 项关键信息` : '关键信息已收齐';
+  /* 澄清期状态字由三态清单推导（2026-11-17）：
+     只把「还没聊到」算作还差；系统默认/推断项单独提示待校准，不再算成已收集。 */
+  if (live.missingCount > 0 && live.defaultCount > 0) return `还差 ${live.missingCount} 项 · ${live.defaultCount} 项默认`;
+  if (live.missingCount > 0) return `还差 ${live.missingCount} 项关键信息`;
+  if (live.defaultCount > 0) return `${live.defaultCount} 项默认待校准`;
+  return '关键信息已收齐';
 });
 
 /* ---------- 真实生成进度跟踪（走查 2026-11-02 P22） ----------
@@ -1390,7 +1407,7 @@ const showProposal = computed(
  *  这里在它出现时重新贴底（不再补底衬 padding——布局本身已保证不重叠）。 */
 const proposalInviteVisible = computed(
   () => loggedIn && live.started && !live.sending
-    && (live.stage === 'understanding' || live.stage === 'proposing')
+    && live.stage === 'proposing'
     && !!live.proposal && !showProposal.value
 );
 /* 焦点管理（P2）：浮层打开把焦点移入对话框（读屏按 dialog 播报、Esc 立即可用），
@@ -2120,6 +2137,7 @@ function shuffleScenes() {
 }
 .panel__head strong { font-size: 14px; }
 .panel__count { font-size: 12px; font-weight: 800; color: var(--blue-deep); }
+.panel__count-default { font-weight: 600; color: var(--faint); }
 /* 折叠指示箭头：仅移动端显示 */
 .panel__caret { display: none; font-size: 12px; color: var(--faint); flex-shrink: 0; }
 .panel__body { display: flex; flex-direction: column; min-height: 0; }
@@ -2150,6 +2168,19 @@ function shuffleScenes() {
 }
 .field__mark svg { width: 10px; height: 10px; }
 .field--done .field__mark { background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--green-ink); }
+/* 系统默认/推断项：黄标 ~，与绿勾区分；不参与「已确认」计数 */
+.checklist--default .field { background: color-mix(in srgb, var(--amber) 7%, var(--surface)); }
+.field--default .field__mark {
+  background: color-mix(in srgb, var(--amber) 20%, transparent);
+  color: var(--amber-ink);
+  font-size: 11px; font-weight: 800; line-height: 1;
+}
+.field__badge {
+  font-style: normal; font-size: 10px; font-weight: 600;
+  color: var(--amber-ink);
+  background: color-mix(in srgb, var(--amber) 14%, transparent);
+  padding: 1px 6px; border-radius: 999px;
+}
 .field__label { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: var(--faint); }
 /* 正文常规字重（2026-11-05 用户裁定）：大段描述全用 600/700 会糊成一团、显得笨重；
    只留短标签/短数值的重音，正文回到 400 + 柔和浅色 + 1.5 行高 */
@@ -3041,6 +3072,7 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
      而它承载的只是一个次要计数。改成柔和的蓝底蓝字，并加一圈 surface 描边（用
      box-shadow 而非 border，不占布局尺寸），让角标与药丸之间有一道干净的呼吸缝。 */
   .panel__count-k { display: none; }
+  .panel__count-default { display: none; }
   /* 「画像 6/7 ▸」（2026-11-05 极简进度条 / 2026-11-06 审计 §4）：6/7 从右上角悬浮角标
      收进胶囊内部——角标读作「未读消息」且把顶部撑出一截鼓包；内联后省 ~20px 宽、消掉鼓包。
      窄屏只留「画像」二字（与「目标 6/7」划清界线），桌面仍是完整的「学情画像」；

@@ -169,6 +169,7 @@ async function inspectGoal(c, sessionId) {
       pathHours: path?.estimatedHours ?? null,
       askedForbidden: !!forbiddenAsk,
       askedForbiddenText: forbiddenAsk,
+      hardBlocked: /不会生成学习路径/.test(aiText),
       aiTurns: aiText ? aiText.split('\n').slice(-4) : [],
     },
   };
@@ -179,6 +180,7 @@ function evaluate(c, m) {
   if (!m) return ['没有 goal 会话可检查'];
   const expect = EXPECT[c.id] || {};
   if (m.pathStatus === 'failed') reasons.push('路径生成失败');
+  if (m.hardBlocked) reasons.push('被分诊硬阻断（「这类目标当前不会生成学习路径」）');
   const expectedEntry = expect.entryState;
   if (expectedEntry && m.entryState !== expectedEntry) {
     reasons.push(`entry_state=${m.entryState ?? 'null'}，期望 ${expectedEntry}`);

@@ -103,17 +103,28 @@ describe('目标规划页：用户侧视觉走查四条修复', () => {
     expect(block).toContain('生成中');
   });
 
-  it('#57 澄清期状态字由 7 项清单推导（1/7 与 5/7 不再同字）', () => {
+  it('#57 澄清期状态字由三态清单推导（只把「还没聊到」算还差）', () => {
     // 注释里也会提到旧文案，先剥注释再看代码
     const block = stripComments(computedBlock('stageLabel'));
-    expect(block, '状态字不再引用已收集/总项数，仍是不变的「继续澄清中」').toContain('live.totalFields - live.filledCount');
+    expect(block, '状态字不再区分系统默认与未收集，会把默认项算成还差').toContain('live.missingCount');
+    expect(block, '系统默认项没有单独提示').toContain('live.defaultCount');
     expect(block).toContain('还差');
+    expect(block, '默认项也当成已确认，伪收集会复发').not.toContain('live.totalFields - live.filledCount');
     expect(block, '静态兜底文案又回来了：三屏同字的问题会复发').not.toContain('继续澄清中');
+  });
+
+  it('#61 澄清期不弹底部确认条（追问胶囊与确认 CTA 不打架）', () => {
+    const start = source.indexOf('const proposalInviteVisible');
+    const block = stripComments(source.slice(start, source.indexOf('/* 焦点管理', start)));
+    expect(start, '没找到 proposalInviteVisible').toBeGreaterThan(-1);
+    expect(block, '确认条判据必须是 proposing').toContain("live.stage === 'proposing'");
+    expect(block, 'understanding 阶段仍会弹确认条：首轮澄清时双 CTA 会复发').not.toContain("live.stage === 'understanding'");
   });
 
   it('2026-11-06 走查：步骤条随行计数退役（PC 左栏画像卡常驻同一读数，同屏两处计数是重复）', () => {
     expect(source, 'stage-nav__sub 应整体移除：计数由左栏画像卡承担，移动端由面板角标承担').not.toContain('stage-nav__sub');
-    expect(source, '面板头计数仍要保留（唯一的已收集读数出口）').toContain('live.filledCount }} / {{ live.totalFields');
+    expect(source, '面板头计数仍要保留（唯一的已确认读数出口）').toContain('live.filledCount }} / {{ live.totalFields');
+    expect(source, '计数标签仍写「已收集」，系统默认值会被读成用户已确认').toContain('已确认');
   });
 
   it('#60 完成态浮层动作行撑满、主按钮独占余宽（桌面档）', () => {

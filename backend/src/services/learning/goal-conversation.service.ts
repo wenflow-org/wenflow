@@ -18,6 +18,7 @@ import {
 import { selectGoalHistory, RECENT_CONTEXT_LIMIT } from './goal-conversation.context';
 import { adjudicateGoalConfirm } from '../../skills/goal-confirm-adjudicator';
 import { hasConfirmableProposal } from './goal-proposal-guard';
+import { countGoalUserMessages, forceExploratoryFirstTurnClarification } from './goal-first-turn-guard';
 import { mergeProbeAnswersIntoUnderstanding, normalizeProbeAnswerInput } from './goal-probe-answers';
 import { applyConversationLifecycle, type ConversationLifecycleDb } from './goal-conversation.lifecycle';
 // stage 权威源收口（172-1）：读只认持久化值，降级时三处副本同步（见模块头）
@@ -557,7 +558,6 @@ class GoalConversationService {
       const aiResponse = await this.callAI(conversation.id, initialGoal, true, userId, options, {
         excludeTrailingUserInput: true
       });
-      const responseWithConversationId = this.withConversationId(aiResponse, conversation.id);
 
       if (!this.getStructuredOutputValid(aiResponse)) {
         // 用户目标已落库（上方），AI 回复不落库 → 422 恢复信封刷新后对话上下文不丢
@@ -566,8 +566,17 @@ class GoalConversationService {
           userId,
           attemptCount: aiResponse?.debug?.attemptCount || 0
         });
-        this.throwStructuredOutputInvalid(responseWithConversationId);
+        this.throwStructuredOutputInvalid(this.withConversationId(aiResponse, conversation.id));
       }
+
+      const forcedClarification = forceExploratoryFirstTurnClarification(aiResponse);
+      if (forcedClarification) {
+        logger.info('exploratory 首轮强制停留澄清（丢弃提前产出的方案）', {
+          conversationId: conversation.id,
+          userId
+        });
+      }
+      const responseWithConversationId = this.withConversationId(aiResponse, conversation.id);
 
       const openingGoalExt = this.getGoalExt(aiResponse.internal);
       await this.saveMessage(conversation.id, 'ai', aiResponse.userVisible, null, { quickReplies: openingGoalExt.quickReplies });
@@ -1280,7 +1289,7 @@ async continueConversation(
 
     const core = this.getCore(aiResponse.internal);
     const goalExt = this.getGoalExt(aiResponse.internal);
-    const stage = this.resolveStageFromResponse(aiResponse);
+    let stage = this.resolveStageFromResponse(aiResponse);
     const confidence = this.resolveConfidenceFromResponse(aiResponse);
 
     // 合并已收集的信息（从 ext.goalConversation.collected）
@@ -1317,6 +1326,14 @@ async continueConversation(
 
     if (goalExt.confirmedProposal !== undefined) {
       data.confirmedProposal = goalExt.confirmedProposal;
+    }
+
+    // 状态机自洽（2026-11-17）：已有可确认方案、且用户至少完成 1 轮校准（≥2 条用户消息）时，
+    // stage 不能再停在 understanding——否则顶部步骤条写「澄清问题」、底部已弹出确认条，
+    // 用户不知道是该继续答还是点确认。首轮（1 条用户消息）不会命中，仍由首轮强制澄清守卫拦截。
+    if (stage === 'understanding' && data.confirmedProposal && countGoalUserMessages(data) >= 2) {
+      stage = 'proposing';
+      data.stage = stage;
     }
 
     if (goalExt.structuredData !== undefined) {
