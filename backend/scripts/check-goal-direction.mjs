@@ -58,6 +58,18 @@ if (!cases.length) {
   process.exit(1);
 }
 
+/**
+ * 期望值不写进 case：case 只保留「前端示例（title/desc）+ 发给系统的第一句话」，
+ * 方便在 goal 页随机点一张直接测。验收口径集中在这里，避免把测试夹具混进用户样本。
+ */
+const EXPECT = {
+  'x01-wang-yangming': { entryState: 'exploratory', starter: true, maxStages: 2, maxHours: 2 },
+  'x02-western-philosophy': { entryState: 'exploratory', starter: true, maxStages: 2, maxHours: 2 },
+  'x03-behavioral-economics': { entryState: 'exploratory', starter: true, maxStages: 2, maxHours: 2 },
+  'x04-modern-china-history': { entryState: 'exploratory', starter: true, maxStages: 2, maxHours: 2 },
+  'x05-labor-contract-control': { entryState: 'focused', starter: false, minStages: 2 },
+};
+
 let cookie = '';
 async function login() {
   const response = await fetch(`${baseUrl}/api/admin-auth/login`, {
@@ -83,16 +95,18 @@ async function api(method, path, body, timeoutMs = 120_000) {
 const dataOf = (body) => body?.data && typeof body.data === 'object' ? body.data : null;
 
 function storyFor(c) {
+  const firstMessage = String(c.firstMessage || '').trim();
+  if (!firstMessage) throw new Error(`case ${c.id} 缺少 firstMessage（前端 seed）`);
   return {
     id: `story_${c.id}`,
-    title: `${c.id}｜${c.domain || ''}`,
+    title: c.title || c.id,
     sourceType: 'goal',
-    outline: [c.story?.role, c.story?.scenario].filter(Boolean).join('｜'),
-    visibleOpening: c.story?.opening || c.goal,
-    triggerEvent: c.story?.trigger || '',
-    goalSeed: { surfaceGoal: c.goal, realProblem: c.story?.problem || '' },
-    pressurePoints: [c.story?.problem, c.story?.scenario].filter(Boolean),
-    behaviorHooks: [c.story?.trigger].filter(Boolean),
+    outline: c.desc || '',
+    visibleOpening: firstMessage,
+    triggerEvent: '',
+    goalSeed: { surfaceGoal: firstMessage, realProblem: '' },
+    pressurePoints: [],
+    behaviorHooks: [],
   };
 }
 
@@ -163,28 +177,29 @@ async function inspectGoal(c, sessionId) {
 function evaluate(c, m) {
   const reasons = [];
   if (!m) return ['没有 goal 会话可检查'];
+  const expect = EXPECT[c.id] || {};
   if (m.pathStatus === 'failed') reasons.push('路径生成失败');
-  const expectedEntry = c.expectEntryState;
+  const expectedEntry = expect.entryState;
   if (expectedEntry && m.entryState !== expectedEntry) {
     reasons.push(`entry_state=${m.entryState ?? 'null'}，期望 ${expectedEntry}`);
   }
-  if (c.expectStarter) {
+  if (expect.starter) {
     if (!m.hasProposal && !m.pathMilestones) reasons.push('没有产出 confirmedProposal/路径');
-    if (m.keyStages > (c.expectMaxStages ?? 2)) reasons.push(`key_stages=${m.keyStages}，超过起步上限 ${c.expectMaxStages ?? 2}`);
-    if (m.plannedMilestones && m.plannedMilestones > (c.expectMaxStages ?? 2)) {
+    if (m.keyStages > (expect.maxStages ?? 2)) reasons.push(`key_stages=${m.keyStages}，超过起步上限 ${expect.maxStages ?? 2}`);
+    if (m.plannedMilestones && m.plannedMilestones > (expect.maxStages ?? 2)) {
       reasons.push(`plannedMilestones=${m.plannedMilestones}，超过起步上限`);
     }
-    if (typeof m.objectiveScopeHours === 'number' && m.objectiveScopeHours > (c.expectMaxHours ?? 2)) {
-      reasons.push(`objectiveScopeHours=${m.objectiveScopeHours}，超过起步上限 ${c.expectMaxHours ?? 2}`);
+    if (typeof m.objectiveScopeHours === 'number' && m.objectiveScopeHours > (expect.maxHours ?? 2)) {
+      reasons.push(`objectiveScopeHours=${m.objectiveScopeHours}，超过起步上限 ${expect.maxHours ?? 2}`);
     }
     if (m.hasProposal && m.outOfScope.length === 0) reasons.push('out_of_scope 为空，没有远期留白');
     if (m.askedForbidden) reasons.push(`追问了开放态不该问的用途/深度/卡点问题${m.askedForbiddenText ? `：${String(m.askedForbiddenText).slice(0, 80)}` : ''}`);
-    if (m.pathMilestones > (c.expectMaxStages ?? 2)) reasons.push(`路径阶段=${m.pathMilestones}，超过起步上限 ${c.expectMaxStages ?? 2}`);
+    if (m.pathMilestones > (expect.maxStages ?? 2)) reasons.push(`路径阶段=${m.pathMilestones}，超过起步上限 ${expect.maxStages ?? 2}`);
   }
-  if (c.expectStarter === false) {
+  if (expect.starter === false) {
     if (m.entryState === 'exploratory') reasons.push('明确目标被误判为 exploratory');
-    if (m.keyStages && m.keyStages < (c.expectMinStages ?? 3)) reasons.push(`key_stages=${m.keyStages}，低于完整路径下限 ${c.expectMinStages ?? 3}`);
-    if (m.pathMilestones && m.pathMilestones < (c.expectMinStages ?? 3)) reasons.push(`路径阶段=${m.pathMilestones}，低于完整路径下限`);
+    if (m.keyStages && m.keyStages < (expect.minStages ?? 3)) reasons.push(`key_stages=${m.keyStages}，低于完整路径下限 ${expect.minStages ?? 3}`);
+    if (m.pathMilestones && m.pathMilestones < (expect.minStages ?? 3)) reasons.push(`路径阶段=${m.pathMilestones}，低于完整路径下限`);
   }
   if (m.stage === 'understanding' && !m.pathId) reasons.push('goal 仍停在 understanding，没有收敛');
   if (!m.hasProposal && !m.pathId && m.stage !== 'completed') reasons.push('没有方案也没有路径');
@@ -194,20 +209,22 @@ function evaluate(c, m) {
 async function runCase(c) {
   const dir = join(runRoot, c.id);
   const statePath = join(dir, 'state.json');
+  const firstMessage = String(c.firstMessage || '').trim();
   const state = {
     caseId: c.id,
-    domain: c.domain,
-    goal: c.goal,
+    title: c.title,
+    desc: c.desc,
+    firstMessage,
     createdAt: new Date().toISOString(),
   };
 
   const created = await api('POST', '/api/admin/virtual-learners', {
-    name: c.learnerName || `[goal-dir] ${c.id}`,
-    learningGoal: c.goal,
+    name: `[goal-dir] ${c.title || c.id}`,
+    learningGoal: firstMessage,
     knowledgeLevel: 'beginner',
     profile: {
-      role: c.story?.role || '',
-      scenario: c.story?.scenario || '',
+      role: '',
+      scenario: c.desc || '',
       note: 'goal-direction check 自动创建，跑完可删',
       storyPool: [storyFor(c)],
     },
@@ -280,8 +297,9 @@ async function runCase(c) {
   const reasons = evaluate(c, inspected.metrics);
   const result = {
     id: c.id,
-    learnerName: c.learnerName,
-    goal: c.goal,
+    title: c.title,
+    desc: c.desc,
+    firstMessage,
     profileId: state.profileId,
     sessionId: state.sessionId,
     elapsedMs: state.elapsedMs,

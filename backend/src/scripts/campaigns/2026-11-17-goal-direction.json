@@ -3,117 +3,33 @@
   "cases": [
     {
       "id": "x01-wang-yangming",
-      "learnerName": "[dir-01] 沈岚·心学",
-      "domain": "人文",
-      "goal": "想系统了解王阳明心学，不为了考试。心即理、知行合一、致良知到底在讲什么，想能自己读懂《传习录》里的选段。",
-      "story": {
-        "role": "30岁产品经理，平时读商业书，没碰过原典",
-        "scenario": "通勤路上听播客听到王阳明，想弄清楚这三句话到底在说什么",
-        "opening": "我想系统了解王阳明心学，不为了考试。心即理、知行合一、致良知到底在讲什么，想能自己读懂《传习录》里的选段。",
-        "problem": "没读过原文，只知道三句口号，不知道该从哪本、哪段看起",
-        "trigger": "播客里把知行合一说成理论联系实际，听着一头雾水"
-      },
-      "persona": "realistic",
-      "days": 3,
-      "expect": "path",
-      "expectEntryState": "exploratory",
-      "expectStarter": true,
-      "expectMaxStages": 2,
-      "expectMaxHours": 2,
-      "tags": ["exploratory", "humanities", "starter"],
-      "watch": [
-        "是否追问用途/深度/最近卡点",
-        "是否给地图锚点后直接递起步提案",
-        "是否只有 2 个阶段且 objectiveScopeHours<=2",
-        "out_of_scope 是否写明远期留白"
-      ]
+      "title": "系统读懂王阳明心学",
+      "desc": "心即理、知行合一、致良知，能读选段",
+      "firstMessage": "我想系统了解王阳明心学，不为了考试。心即理、知行合一、致良知到底在讲什么，想能自己读懂《传习录》里的选段"
     },
     {
       "id": "x02-western-philosophy",
-      "learnerName": "[dir-02] 周棠·西哲",
-      "domain": "人文",
-      "goal": "想了解西方哲学大概在讲什么，不知道从哪开始，也没想好要往哪个方向深入。",
-      "story": {
-        "role": "26岁设计师，好奇心和审美兴趣驱动",
-        "scenario": "刷到很多哲学梗，想弄明白大家在说什么",
-        "opening": "我想了解西方哲学大概在讲什么，不知道从哪开始，也没想好要往哪个方向深入。",
-        "problem": "零散看过几个名字，没有整体图景，也不知道自己会对哪块感兴趣",
-        "trigger": "朋友聊存在主义，自己完全插不上话"
-      },
-      "persona": "realistic",
-      "days": 3,
-      "expect": "path",
-      "expectEntryState": "exploratory",
-      "expectStarter": true,
-      "expectMaxStages": 2,
-      "expectMaxHours": 2,
-      "tags": ["exploratory", "humanities", "starter"],
-      "watch": ["是否不追问用途/深度", "是否 2 阶段起步", "是否留白"]
+      "title": "西方哲学从哪读起",
+      "desc": "三条主线，先听懂哲学梗",
+      "firstMessage": "我想了解西方哲学大概在讲什么，不知道从哪开始，也没想好要往哪个方向深入。"
     },
     {
       "id": "x03-behavioral-economics",
-      "learnerName": "[dir-03] 陈默·行为经济",
-      "domain": "社科",
-      "goal": "通勤时想了解一点行为经济学，没考虑过用在哪，就是觉得人做决定的方式挺有意思。",
-      "story": {
-        "role": "34岁运营，通勤单程40分钟",
-        "scenario": "播客听多了想系统一点，但不想上课考试",
-        "opening": "通勤时想了解一点行为经济学，没考虑过用在哪，就是觉得人做决定的方式挺有意思。",
-        "problem": "只有零散印象，没有框架，也不知道从哪本或哪个概念入门",
-        "trigger": "看到「锚定效应」的解释，觉得生活里到处都是"
-      },
-      "persona": "realistic",
-      "days": 3,
-      "expect": "path",
-      "expectEntryState": "exploratory",
-      "expectStarter": true,
-      "expectMaxStages": 2,
-      "expectMaxHours": 2,
-      "tags": ["exploratory", "social-science", "starter"],
-      "watch": ["是否按兴趣型最小档", "是否 2 阶段起步", "是否不安排考试"]
+      "title": "通勤听懂行为经济学",
+      "desc": "锚定、损失厌恶，看懂日常套路",
+      "firstMessage": "通勤时想了解一点行为经济学，没考虑过用在哪，就是觉得人做决定的方式挺有意思。"
     },
     {
       "id": "x04-modern-china-history",
-      "learnerName": "[dir-04] 林远·近代史",
-      "domain": "历史",
-      "goal": "想理清中国近代史的主线，不考试，就是想知道到底发生了什么、为什么是那个走向。",
-      "story": {
-        "role": "40岁工程师，历史爱好者",
-        "scenario": "看纪录片觉得线索太乱，想建立自己的时间线",
-        "opening": "想理清中国近代史的主线，不考试，就是想知道到底发生了什么、为什么是那个走向。",
-        "problem": "知道一些事件名词，但串不起来，也分不清因果主次",
-        "trigger": "和孩子聊历史，发现自己只会背结论"
-      },
-      "persona": "realistic",
-      "days": 3,
-      "expect": "path",
-      "expectEntryState": "exploratory",
-      "expectStarter": true,
-      "expectMaxStages": 2,
-      "expectMaxHours": 2,
-      "tags": ["exploratory", "history", "starter"],
-      "watch": ["是否 2 阶段起步", "是否给主线锚点", "是否留白"]
+      "title": "理清中国近代史主线",
+      "desc": "事件串成因果，不再背结论",
+      "firstMessage": "想理清中国近代史的主线，不考试，就是想知道到底发生了什么、为什么是那个走向。"
     },
     {
       "id": "x05-labor-contract-control",
-      "learnerName": "[dir-05] 许宁·劳动合同",
-      "domain": "法律",
-      "goal": "能独立审查一份劳动合同，识别试用期、竞业限制、违约金、调岗调薪、知识产权归属五类高风险条款，并写出可执行的修改建议。",
-      "story": {
-        "role": "29岁产品经理，正在跳槽",
-        "scenario": "拿到新公司offer，下周一签合同，HR催今天答复",
-        "opening": "我下周一要签新公司的劳动合同，HR说今天就得给答复。我之前没仔细看过这种合同，竞业限制那部分看得心里发毛，你能教我怎么判断哪些条款有坑吗？",
-        "problem": "看不懂竞业限制、违约金和试用期条款，怕签完被动",
-        "trigger": "前同事离职后被原公司按竞业协议索赔"
-      },
-      "persona": "realistic",
-      "days": 8,
-      "expect": "path",
-      "expectEntryState": "focused",
-      "expectStarter": false,
-      "expectMinStages": 2,
-      "tags": ["focused", "control", "legal"],
-      "watch": ["不得被误判为 exploratory", "out_of_scope 是否如实声明收窄", "保留即时交付物"]
+      "title": "拿到合同能自己挑坑",
+      "desc": "竞业限制、试用期、违约金，逐条判断",
+      "firstMessage": "我下周一要签新公司的劳动合同，HR 说今天就得给答复。竞业限制那段看得心里发毛，试用期也看不太明白，想学会自己判断哪些条款有坑"
     }
   ]
 }
