@@ -97,7 +97,7 @@ describe('目标规划页：用户侧视觉走查四条修复', () => {
   it('#58 生成态阶段标签跟随 phase，不再只看 stageIndex', () => {
     const block = computedBlock('stageLabel');
     const gen = block.indexOf("phase.value === 'generating'");
-    const s3 = block.indexOf('live.stageIndex === 3');
+    const s3 = block.indexOf('effectiveStageIndex.value === 3');
     expect(gen, 'stageLabel 没有 phase==="generating" 分支：点确认后仍会喊「可生成路径」').toBeGreaterThan(-1);
     expect(gen, 'stageIndex 检查排在 phase 之前，生成态仍会返回「可生成路径」').toBeLessThan(s3);
     expect(block).toContain('生成中');
@@ -118,6 +118,7 @@ describe('目标规划页：用户侧视觉走查四条修复', () => {
     const block = stripComments(source.slice(start, source.indexOf('/* 焦点管理', start)));
     expect(start, '没找到 proposalInviteVisible').toBeGreaterThan(-1);
     expect(block, '确认条判据必须是 proposing').toContain("live.stage === 'proposing'");
+    expect(block, '旧会话/异常态下 exploratory 首轮仍会弹确认条').toContain('!exploratoryFirstTurn.value');
     expect(block, 'understanding 阶段仍会弹确认条：首轮澄清时双 CTA 会复发').not.toContain("live.stage === 'understanding'");
   });
 

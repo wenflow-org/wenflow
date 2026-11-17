@@ -262,7 +262,7 @@
           <!-- 方案被 Esc/关闭后提供重开入口，消除「关掉就找不回」的死路
               （2026-10-31 起与输入区上方的协商入口条同一处理器） -->
           <button
-            v-if="proposalDismissed && live.proposal && live.stage === 'proposing'"
+            v-if="proposalDismissed && live.proposal && live.stage === 'proposing' && !exploratoryFirstTurn"
             type="button"
             class="chat__show-proposal"
             @click="openProposalReview"
@@ -418,7 +418,7 @@
              2026-11-17：判据从 stage==='proposing' 放宽为「方案已成形」——硬必需字段缺时间
              预算时模型会把 stage 停在 understanding，却已产出完整方案并说「点确认」；旧判据
              让入口与确认按钮一起消失（真机 gc_1794910169154_01o30g0）。 -->
-        <div v-if="loggedIn && live.started && !live.sending && live.stage === 'proposing' && live.proposal && !showProposal" class="proposal-invite">
+        <div v-if="loggedIn && live.started && !live.sending && live.stage === 'proposing' && !exploratoryFirstTurn && live.proposal && !showProposal" class="proposal-invite">
           <span class="proposal-invite__doc" aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1.5V8h4.5L14 3.5zM8 12h8v1.5H8V12zm0 4h8v1.5H8V16z"/></svg></span>
           <div class="proposal-invite__text">
             <strong class="proposal-invite__title">学习方案 · 待确认</strong>
@@ -1219,6 +1219,15 @@ function messageHtml(m: LiveMessage): string {
   return cachedMessageHtml(box);
 }
 
+/* 首轮防御（2026-11-17）：exploratory 且用户只发了 1 条消息时，即使后端历史里已存了
+   提前产出的 proposing 方案（旧会话/模型越级），界面也按“澄清问题”展示，不弹确认条。
+   新会话已由 goal-first-turn-guard 在服务端拦截，这里是旧会话与异常态的显示兜底。 */
+const userTurnCount = computed(() => live.messages.filter((m) => m.role === 'user').length);
+const exploratoryFirstTurn = computed(() => live.entryState === 'exploratory' && userTurnCount.value <= 1);
+const effectiveStageIndex = computed(() =>
+  exploratoryFirstTurn.value && live.stage === 'proposing' ? 1 : live.stageIndex
+);
+
 /* 学情画像按状态分组（2026-11-17）：已确认 / 系统默认待校准 / 还没聊到，三态不再混算 */
 const doneFields = computed(() => live.fields.filter((f) => f.status === 'done'));
 const defaultFields = computed(() => live.fields.filter((f) => f.status === 'default'));
@@ -1228,8 +1237,8 @@ const stageLabel = computed(() => {
      而「确认，生成我的路径」按下时 stageIndex 仍是 3 —— 此时面板顶还写「可生成路径」，
      与屏幕上正在转的生成浮层互相矛盾，读起来像还停在「等你点确认」。 */
   if (phase.value === 'generating') return '生成中…';
-  if (live.stageIndex === 3) return '可生成路径';
-  if (live.stageIndex === 2) return '方案确认中';
+  if (effectiveStageIndex.value === 3) return '可生成路径';
+  if (effectiveStageIndex.value === 2) return '方案确认中';
   /* 澄清期状态字由三态清单推导（2026-11-17）：
      只把「还没聊到」算作还差；系统默认/推断项单独提示待校准，不再算成已收集。 */
   if (live.missingCount > 0 && live.defaultCount > 0) return `还差 ${live.missingCount} 项 · ${live.defaultCount} 项默认`;
@@ -1408,6 +1417,7 @@ const showProposal = computed(
 const proposalInviteVisible = computed(
   () => loggedIn && live.started && !live.sending
     && live.stage === 'proposing'
+    && !exploratoryFirstTurn.value
     && !!live.proposal && !showProposal.value
 );
 /* 焦点管理（P2）：浮层打开把焦点移入对话框（读屏按 dialog 播报、Esc 立即可用），
@@ -1459,8 +1469,8 @@ function openProposalReview() {
 /** 面包屑步标（2026-11-05 极简进度条）：已完成=✓（文字压暗不抢焦点）、
     进行中=空串（CSS 渲染呼吸蓝点）、未开始=序号（暗灰不催促） */
 function stageMark(i: number) {
-  if (live.stageIndex > i) return '✓';
-  if (live.stageIndex === i) return '';
+  if (effectiveStageIndex.value > i) return '✓';
+  if (effectiveStageIndex.value === i) return '';
   return String(i);
 }
 
@@ -1480,8 +1490,8 @@ function stageTail(s: string): string {
 
 function stageCls(i: number) {
   return {
-    'stage-nav__item--current': live.stageIndex === i,
-    'stage-nav__item--done': live.stageIndex > i
+    'stage-nav__item--current': effectiveStageIndex.value === i,
+    'stage-nav__item--done': effectiveStageIndex.value > i
   };
 }
 
