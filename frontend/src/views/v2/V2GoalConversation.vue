@@ -134,7 +134,7 @@
       <div v-if="visibleRecentGoals().length" class="recent">
         <span class="recent__title">最近会话</span>
         <ul class="recent__list">
-          <li v-for="r in visibleRecentGoals()" :key="r.id">
+          <li v-for="r in visibleRecentGoals()" :key="r.id" class="recent__row">
             <a
               :href="`/goal-conversation/${r.id}`"
               class="recent__item"
@@ -149,6 +149,17 @@
               <span v-else class="recent__time">{{ recentTime(r.at) }}</span>
               <span class="recent__go" aria-hidden="true">›</span>
             </a>
+            <!-- 手动移除入口（2026-11-17 用户反馈「没有清理删除之类的操作吗」）：
+                 本地列表此前只能靠新会话挤掉旧的、或打开失效会话时自动移除。
+                 只移除这条回访入口，不删除云端会话；hover/键盘聚焦时浮现，
+                 原位替换行尾的 ›。 -->
+            <button
+              type="button"
+              class="recent__remove"
+              :aria-label="`从最近会话移除：${r.preview}`"
+              title="从最近会话移除（不影响已有学习记录）"
+              @click.prevent="removeRecentGoal(r)"
+            >✕</button>
           </li>
         </ul>
       </div>
@@ -943,6 +954,12 @@ function rememberGoal(id: string) {
 function forgetRecentGoal(userId: string, id: string) {
   const next = forgetRecentGoalForUser(userId, id);
   if (recentGoalsUserId.value === userId) recentGoals.value = next;
+}
+/** 行尾手动移除（2026-11-17）：只删本地回访入口，不动云端会话；下次进来不再出现。 */
+function removeRecentGoal(entry: RecentGoalEntry) {
+  const ownerId = recentGoalsUserId.value;
+  if (!ownerId || !entry?.id) return;
+  forgetRecentGoal(ownerId, entry.id);
 }
 /** 最近列表剔除恢复卡指向的那条（同一条会话不出现两个入口）。与 live.hasSession() 一样
     在渲染时现取本地会话 id：它随会话开始/重置变化，不挂在响应式源上，函数调用才是最新值。 */
@@ -1760,7 +1777,21 @@ function shuffleScenes() {
   animation: recent-gen-pulse 1.4s ease-in-out infinite;
 }
 @keyframes recent-gen-pulse { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
-.recent__go { flex: none; color: var(--faint); font-weight: 700; }
+.recent__go { flex: none; color: var(--faint); font-weight: 700; transition: opacity 0.15s ease; }
+/* 行尾移除（2026-11-17）：hover / 键盘聚焦时浮现，原位替换 ›。
+   隐藏态必须 pointer-events:none —— 否则透明按钮仍会截走行右缘的点击（误触删除）。 */
+.recent__row { position: relative; }
+.recent__remove {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%;
+  display: grid; place-items: center;
+  background: transparent; color: var(--faint); font-size: 12px; line-height: 1;
+  cursor: pointer; opacity: 0; pointer-events: none;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.recent__row:hover .recent__remove, .recent__remove:focus-visible { opacity: 1; pointer-events: auto; }
+.recent__row:hover .recent__go { opacity: 0; }
+.recent__remove:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
 
 /* 居中 hero（2026-11-07 用户走查）：整页是一段「居中标题 → 大输入卡 → 底部轻量胶囊」的
    单列叙事；标题左对齐时整块浮在屏幕中央会头重脚轻（用户原话「缩在左上角而且字号偏小」）。
