@@ -5,6 +5,10 @@ import type { InteractionMeta } from '@/composables/useInteractionMeta';
 export interface GoalUnderstanding {
   surface_goal?: string;
   real_problem?: string;
+  /** 本次进入的确定度（2026-11-17）：exploratory=只抛主题、深度/用途未定。 */
+  entry_state?: 'focused' | 'exploratory';
+  /** 内容分型（goal 模型判定的 intent_type）。 */
+  intent_type?: string;
   motivation?: string;
   urgency?: string;
   background_experience?: string;

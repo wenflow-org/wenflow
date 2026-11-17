@@ -210,7 +210,7 @@
               </div>
             </li>
           </ul>
-          <div v-if="todoFields.length" class="todo">
+          <div v-if="todoFields.length && live.entryState !== 'exploratory'" class="todo">
             <div class="todo__head">待补充维度（{{ todoFields.length }}）</div>
             <ul class="todo__tags">
               <li v-for="f in todoFields" :key="f.key" class="todo__tag"><span class="todo__o">○</span>{{ f.label }}</li>
@@ -541,6 +541,15 @@
           <ol>
             <li v-for="(s, i) in reviewProposal.stages" :key="i" class="pstep"><i>{{ i + 1 }}</i><div><strong>{{ stageHead(s) }}</strong>{{ stageTail(s) }}</div></li>
           </ol>
+        </div>
+
+        <!-- 远期留白（2026-11-17 起步路径）：exploratory 只确认起步段，out_of_scope 明写
+             「暂不限定」的方向，让用户知道这不是残缺路径，而是走完再分岔。 -->
+        <div v-if="reviewProposal?.skip?.length" class="proposal__stages">
+          <span class="proposal__stages-label">暂不包含 · 走完这段再定</span>
+          <ul class="proposal__skip-list">
+            <li v-for="(s, i) in reviewProposal.skip" :key="i">{{ s }}</li>
+          </ul>
         </div>
 
         <!-- 前置自测：帮路径更贴合基础。2026-11-02 口径重做——作答是本地表单动作，
@@ -2783,6 +2792,12 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
 .proposal__stages ol {
   list-style: none; margin: 0; padding: 0;
   display: grid; gap: 8px;
+}
+.proposal__skip-list {
+  list-style: disc; margin: 0; padding: 0 0 0 18px;
+  display: grid; gap: 6px;
+  font-size: 13px; line-height: 1.5;
+  color: var(--muted);
 }
 .pstep {
   display: grid; grid-template-columns: 24px 1fr; gap: 10px; align-items: start;

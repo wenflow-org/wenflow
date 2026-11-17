@@ -34,6 +34,10 @@ import { normalizeDeadlineDate } from './deadline-date';
 
 export interface GoalPathVisibleSummary {
   surfaceGoal: string | null;
+  /** 本次进入的确定度（2026-11-17）：focused=明确目标；exploratory=只抛主题、深度/用途未定。 */
+  entryState?: 'focused' | 'exploratory' | null;
+  /** 内容分型（intent_type）：mastery/interest/exam/...；此前只存在于 goal 提示词，未透传到 path 层。 */
+  intentType?: string | null;
   realProblem: string | null;
   motivation: string | null;
   urgency: string | null;
@@ -241,6 +245,11 @@ export function buildGoalPathVisibleSummary(params: {
   const collected = params.collected || {};
 
   const surfaceGoal = normalizeString(understanding?.surface_goal);
+  const entryStateRaw = normalizeString(understanding?.entry_state);
+  const entryState: 'focused' | 'exploratory' | null = entryStateRaw === 'focused' || entryStateRaw === 'exploratory'
+    ? entryStateRaw
+    : null;
+  const intentType = normalizeString(understanding?.intent_type);
   const realProblem = normalizeString(understanding?.real_problem);
   const backgroundExperience = buildBackgroundExperience(understanding);
   const painPoints = normalizeStringArray(understanding?.pain_points);
@@ -287,6 +296,8 @@ export function buildGoalPathVisibleSummary(params: {
 
   return {
     surfaceGoal,
+    entryState,
+    intentType,
     schoolAnchor,
     realProblem,
     motivation: normalizeString(understanding?.motivation),

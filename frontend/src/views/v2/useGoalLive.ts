@@ -114,6 +114,12 @@ const understanding = ref<GoalUnderstanding>({});
 const collected = ref<Record<string, unknown>>({});
 const quickReplies = ref<Array<{ text: string; icon?: string }>>([]);
 const confirmedProposal = ref<Record<string, unknown> | null>(null);
+/** 进入态（2026-11-17）：exploratory 时左栏不展示「待补充维度」，避免把开放接触拍成问卷。 */
+const entryState = computed<'focused' | 'exploratory' | ''>(() => (
+  understanding.value.entry_state === 'exploratory'
+    ? 'exploratory'
+    : understanding.value.entry_state === 'focused' ? 'focused' : ''
+));
 /** 前置探测题作答记录（probeId → 选项 id，防重复作答） */
 const probeAnswers = ref<Record<string, string>>({});
 const learningPath = ref<{ id: string; status?: string } | null>(null);
@@ -697,6 +703,7 @@ export function useGoalLive() {
     stageIndex,
     isCompleted,
     hardBlocked,
+    entryState,
     fields,
     filledCount,
     totalFields: FIELD_DEFS.length,

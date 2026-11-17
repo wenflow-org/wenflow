@@ -114,6 +114,12 @@ function renderRoutingItem(item: RoutingGroupItem): string {
   const tagStr = tags.length ? ` [${tags.join('，')}]` : '';
   const typeStr = item.valueType ? `（${item.valueType}）` : '';
   const noteStr = item.notes ? ` —— ${item.notes}` : '';
+  // 时间条件三选一（2026-11-17）：规则 23 允许无期限自由学习按单次 25 分钟静默落档，
+  // 但这里此前只渲染 time_budget 一个必填字段，模型据此不敢进 proposing。文案与
+  // hasThinProposalPayload 的判定保持同源。
+  if (item.fieldId === 'understanding.available_resources.time_budget') {
+    return `  • understanding.available_resources.time_budget / time_horizon / time_per_session${typeStr}（任一即可；无期限自由学习未提时间时按单次 25 分钟 default 落档即满足）${tagStr}${noteStr}`;
+  }
   return `  • ${item.fieldId}${typeStr}${tagStr}${noteStr}`;
 }
 

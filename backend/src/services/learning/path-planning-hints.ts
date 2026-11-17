@@ -1528,6 +1528,11 @@ export function buildFramedNormalizedInput(input: any): any {
     : {};
 
   const surfaceGoal = normalizeString(learnerProfile.surfaceGoal);
+  const entryState: 'focused' | 'exploratory' | null =
+    learnerProfile.entryState === 'focused' || learnerProfile.entryState === 'exploratory'
+      ? learnerProfile.entryState
+      : null;
+  const intentType = normalizeString(learnerProfile.intentType);
   const explicitProblem = normalizeString(problemSpace.realProblem);
   // 方案乙：不再用动词前缀黑名单静默删阶段（"学习/设计/分析/梳理…"开头的阶段会被误删，
   // 实测把"设计…固定动作"这类真阶段删掉）。"哪些算认知阶段"是语义判断，交给 LLM：
@@ -1599,6 +1604,8 @@ export function buildFramedNormalizedInput(input: any): any {
     learnerProfile: {
       ...learnerProfile,
       surfaceGoal,
+      entryState,
+      intentType,
       currentBaseline: {
         level: normalizePathDifficulty(learnerProfile.currentBaseline?.level),
         evidence: normalizeString(learnerProfile.currentBaseline?.evidence),

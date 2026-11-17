@@ -12,6 +12,8 @@ function payloadWith(overrides: {
   real_problem?: string;
   surface_goal?: string;
   time_budget?: string;
+  time_per_session?: string;
+  sessions_length_min?: number;
   learning_direction?: string;
   first_deliverable?: string;
   key_stages?: string[];
@@ -20,7 +22,13 @@ function payloadWith(overrides: {
     understanding: {
       surface_goal: overrides.surface_goal ?? '学会用函数把月度报表自动汇总',
       real_problem: overrides.real_problem ?? '每次拼月报都要手工对数，费时还容易错',
-      available_resources: { time_budget: overrides.time_budget ?? '每天晚上半小时' },
+      available_resources: {
+        time_budget: overrides.time_budget ?? '每天晚上半小时',
+        ...(overrides.time_per_session !== undefined ? { time_per_session: overrides.time_per_session } : {}),
+      },
+      ...(overrides.sessions_length_min !== undefined
+        ? { time_dimensions: { sessionsLengthMin: overrides.sessions_length_min, sessionsLengthSource: 'default' } }
+        : {}),
       success_criteria: { observable_result: '打开模板即自动完成汇总与对数' },
     },
     confirmedProposal: {
@@ -67,6 +75,22 @@ describe('hasThinProposalPayload：硬必需字段缺失', () => {
     const result = hasThinProposalPayload(payloadWith({ time_budget: '未明确' }));
     expect(result.thin).toBe(true);
     expect(result.missing.join('；')).toContain('time_budget/time_horizon');
+  });
+
+  it('只有 time_per_session（单次可投入时长）→ 不 thin（2026-11-17 进入态改造）', () => {
+    const result = hasThinProposalPayload(payloadWith({ time_budget: '', time_per_session: '25 分钟' }));
+    expect(result.thin).toBe(false);
+  });
+
+  it('只有 time_dimensions.sessionsLengthMin（默认落档）→ 不 thin', () => {
+    const result = hasThinProposalPayload(payloadWith({ time_budget: '', sessions_length_min: 25 }));
+    expect(result.thin).toBe(false);
+  });
+
+  it('没有任何时间信号 → thin', () => {
+    const result = hasThinProposalPayload(payloadWith({ time_budget: '' }));
+    expect(result.thin).toBe(true);
+    expect(result.missing.join('；')).toContain('time_per_session');
   });
 
   it('key_stages 只有 1 条 → thin（需 ≥2）', () => {

@@ -670,15 +670,22 @@ export function hasThinProposalPayload(payload: {
       return true; // userVisible / core.* 等不参与该判定
     };
 
-    // 特殊处理 time_budget OR time_horizon（任意其一即可，且必须非"未明确"）
+    // 时间信号三选一（2026-11-17 进入态改造）：time_budget / time_horizon 之外，
+    // 单次可投入时长 time_per_session 与 time_dimensions.sessionsLengthMin 也是有效时间信息。
+    // 规则 23 的「无期限自由学习按单次 25 分钟静默落档即视为满足」此前在代码里没有兑现：
+    // 模型按提示词落了 time_per_session=25，thinCheck 却只认 time_budget/time_horizon，
+    // 方案被压回 understanding（真机 gc_1794910169154_01o30g0）。
     const tb = valueAt(understanding, 'available_resources.time_budget');
     const th = valueAt(understanding, 'available_resources.time_horizon');
-    const hasTimeAny = isUsableTime(tb) || isUsableTime(th);
+    const tps = valueAt(understanding, 'available_resources.time_per_session');
+    const sessionsMin = valueAt(understanding, 'time_dimensions.sessionsLengthMin');
+    const hasTimeAny = isUsableTime(tb) || isUsableTime(th) || isUsableTime(tps)
+      || (typeof sessionsMin === 'number' && Number.isFinite(sessionsMin) && sessionsMin > 0);
     if (!hasTimeAny) {
       missing.push(
-        tb || th
-          ? 'available_resources.time_budget/time_horizon(未明确)'
-          : 'available_resources.time_budget/time_horizon(缺失)'
+        tb || th || tps
+          ? 'available_resources.time_budget/time_horizon/time_per_session(未明确)'
+          : 'available_resources.time_budget/time_horizon/time_per_session(缺失)'
       );
     }
 
@@ -709,6 +716,10 @@ export function hasThinProposalPayload(payload: {
   const hasRealProblem = isSubstantiveRealProblem(understanding.real_problem, understanding.surface_goal);
   const hasTimeBudget = isUsableTime(valueAt(understanding, 'available_resources.time_budget'));
   const hasTimeHorizon = isUsableTime(valueAt(understanding, 'available_resources.time_horizon'));
+  const hasTimePerSession = isUsableTime(valueAt(understanding, 'available_resources.time_per_session'))
+    || (typeof valueAt(understanding, 'time_dimensions.sessionsLengthMin') === 'number'
+      && Number(valueAt(understanding, 'time_dimensions.sessionsLengthMin')) > 0);
+  const hasAnyTime = hasTimeBudget || hasTimeHorizon || hasTimePerSession;
   const hasSuccessCriteria = typeof understanding.success_criteria?.observable_result === 'string'
     && understanding.success_criteria.observable_result.trim().length > 0;
   const hasProposalDirection = typeof confirmedProposal.learning_direction === 'string'
@@ -722,7 +733,7 @@ export function hasThinProposalPayload(payload: {
 
   const evidenceCount = [
     hasRealProblem,
-    hasTimeBudget || hasTimeHorizon,
+    hasAnyTime,
     hasSuccessCriteria,
     hasProposalDirection,
     hasFirstDeliverable,
@@ -731,10 +742,10 @@ export function hasThinProposalPayload(payload: {
     hasStructuredOutline
   ].filter(Boolean).length;
 
-  const thin = !(hasRealProblem && (hasTimeBudget || hasTimeHorizon) && hasSuccessCriteria && hasProposalDirection && hasFirstDeliverable && hasKeyStages && hasOutOfScope) || evidenceCount < 6;
+  const thin = !(hasRealProblem && hasAnyTime && hasSuccessCriteria && hasProposalDirection && hasFirstDeliverable && hasKeyStages && hasOutOfScope) || evidenceCount < 6;
   if (thin) {
     if (!hasRealProblem) missing.push('real_problem');
-    if (!hasTimeBudget && !hasTimeHorizon) missing.push('available_resources.time_budget/time_horizon');
+    if (!hasAnyTime) missing.push('available_resources.time_budget/time_horizon/time_per_session');
     if (!hasSuccessCriteria) missing.push('success_criteria.observable_result');
     if (!hasProposalDirection) missing.push('confirmedProposal.learning_direction');
     if (!hasFirstDeliverable) missing.push('confirmedProposal.first_deliverable');

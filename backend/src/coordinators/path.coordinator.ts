@@ -168,6 +168,10 @@ interface NormalizedPathInputV1 {
   version: '1.0';
   learnerProfile: {
     surfaceGoal: string | null;
+    /** 进入态（2026-11-17）：exploratory=起步路径，下游按起步段设计；缺失/focused=现有行为。 */
+    entryState?: 'focused' | 'exploratory' | null;
+    /** 内容分型（intent_type）：供下游按考试/兴趣/掌握型分流。 */
+    intentType?: string | null;
     currentBaseline: {
       level: string | null;
       evidence: string | null;
@@ -421,6 +425,10 @@ class PathCoordinator {
       learnerProfile: {
         surfaceGoal: str('understanding.surface_goal', visibleSummary?.surfaceGoal)
           || this.normalizeString(rawGoal),
+        // 进入态/内容分型（2026-11-17）：从 visibleSummary 透传，供 path-planning /
+        // path-reviewer / path-task-design 区分「起步路径」与完整路径。
+        ...(visibleSummary?.entryState ? { entryState: visibleSummary.entryState } : {}),
+        ...(visibleSummary?.intentType ? { intentType: visibleSummary.intentType } : {}),
         // 技能性质（2026-10-26）：决定 AI 能否替学习者代跑核心动作。无值时整键不出现，
         // 下游按通用口径处理（不强制任何一档）。
         ...(normalizeSkillNature(pick('understanding.skill_nature') ?? visibleSummary?.skillNature)
