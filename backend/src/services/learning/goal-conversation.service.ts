@@ -655,8 +655,12 @@ async continueConversation(
         const answerOnlyGate = (answerOnlyTriage?.mode === 'answer_only'
           || answerOnlyTriage?.mode === 'answer_then_hook') && proposalConfirmable;
         const answerOnlyNudges = Number((collected as any)?.answerOnlyNudges || 0);
-        const flagConfirmWanted = conversation.stage === 'proposing'
-          && options?.confirmProposal === true
+        // 按钮 flag 的判据只看「有没有可确认的方案」，不再要求 stage==='proposing'
+        // （2026-11-17 真机会话 gc_1794910169154_01o30g0）：硬必需字段缺时间预算时
+        // 模型会把 stage 停在 understanding，却已经产出完整 confirmedProposal 并在
+        // 正文里说「点确认」；旧判据让按钮永远不出现，用户只能一直聊。按钮是显式
+        // 确认动作，方案内容门禁已由 proposalConfirmable 守住，stage 不该再拦。
+        const flagConfirmWanted = options?.confirmProposal === true
           && proposalConfirmable;
         let adjudicatedConfirm = false;
         // answer-only 闸也要先裁决用户这句话是不是确认（2026-11-13 批量跑数实证）：
@@ -723,8 +727,9 @@ async continueConversation(
 
       // 被门禁否决的确认（会话内没有可用提案）不再当作确认喂给模型：
       // 否则模型会按「用户已确认」推进，而本轮实际上只是在补提案（#162，develop 侧语义并入）。
-      const guardVetoedFlag = conversation.stage === 'proposing'
-        && options?.confirmProposal === true
+      // 判据不绑 stage：按钮在 understanding 阶段也可能被点（方案入口已放开），
+      // 没有可用提案时同样不能把 flag 传给模型。
+      const guardVetoedFlag = options?.confirmProposal === true
         && !proposalConfirmable;
       const aiOptions = guardVetoedFlag
         ? { ...options, confirmProposal: false }

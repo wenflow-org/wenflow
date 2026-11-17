@@ -268,6 +268,25 @@ describe('打字确认裁决（goal-confirm-adjudicator）', () => {
     }));
   });
 
+  it('d-3) stage 仍停在 understanding 但方案已完整：按钮 flag 同样推进（2026-11-17 真机 gc_1794910169154_01o30g0）', async () => {
+    seedProposingConversation();
+    const seeded = JSON.parse(conversationRecord.collectedData);
+    // 硬必需字段缺 time_budget → 模型把 stage 停在 understanding，但 confirmedProposal 已完整；
+    // 旧实现要求 stage==='proposing' 才认按钮，导致前端没有确认入口、用户只能继续聊。
+    seeded.stage = 'understanding';
+    conversationRecord.stage = 'understanding';
+    conversationRecord.collectedData = JSON.stringify(seeded);
+
+    const result = await goalConversationService.continueConversation('conv-1', '确认并生成路径', 'user-1', { confirmProposal: true });
+
+    expect(mockCallPrompt).not.toHaveBeenCalled();
+    expect(mockExecuteSkill).not.toHaveBeenCalled();
+    expect(mockRunGoalAsync).toHaveBeenCalledTimes(1);
+    expect(result.internal.core.stage).toBe('completed');
+    const persisted = JSON.parse(conversationRecord.collectedData);
+    expect(persisted.lastConfirmation).toEqual(expect.objectContaining({ channel: 'flag' }));
+  });
+
   it('e) answer_then_hook：打字确认第一次拦截计数、第二次放行（不再要求第三次）', async () => {
     seedProposingConversation();
     const seeded = JSON.parse(conversationRecord.collectedData);

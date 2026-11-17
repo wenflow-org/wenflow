@@ -247,7 +247,7 @@
           <!-- 方案被 Esc/关闭后提供重开入口，消除「关掉就找不回」的死路
               （2026-10-31 起与输入区上方的协商入口条同一处理器） -->
           <button
-            v-if="proposalDismissed && live.proposal && live.stage === 'proposing'"
+            v-if="proposalDismissed && live.proposal && (live.stage === 'understanding' || live.stage === 'proposing')"
             type="button"
             class="chat__show-proposal"
             @click="openProposalReview"
@@ -399,8 +399,11 @@
         <!-- 方案预览微卡片（2026-11-05 用户裁定方案 A）：左侧填方案摘要，
              副行优先承接 entryCopy.hint（自测未答语境），否则给阶段摘要；
              按钮恒定「查看并确认」（2026-11-08 用户裁定）：模型 proposing 文本指引「点确认」，
-             入口条必须带确认入口，确认面板从这里点开——打字确认只是对话流的次通道 -->
-        <div v-if="loggedIn && live.started && !live.sending && live.stage === 'proposing' && live.proposal && !showProposal" class="proposal-invite">
+             入口条必须带确认入口，确认面板从这里点开——打字确认只是对话流的次通道
+             2026-11-17：判据从 stage==='proposing' 放宽为「方案已成形」——硬必需字段缺时间
+             预算时模型会把 stage 停在 understanding，却已产出完整方案并说「点确认」；旧判据
+             让入口与确认按钮一起消失（真机 gc_1794910169154_01o30g0）。 -->
+        <div v-if="loggedIn && live.started && !live.sending && (live.stage === 'understanding' || live.stage === 'proposing') && live.proposal && !showProposal" class="proposal-invite">
           <span class="proposal-invite__doc" aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1.5V8h4.5L14 3.5zM8 12h8v1.5H8V12zm0 4h8v1.5H8V16z"/></svg></span>
           <div class="proposal-invite__text">
             <strong class="proposal-invite__title">学习方案 · 待确认</strong>
@@ -1377,7 +1380,9 @@ const showProposal = computed(
  *  被顶矮约一条的高度：贴底的最后一行因此被挤出可视区，读起来像「被悬浮条截断」。
  *  这里在它出现时重新贴底（不再补底衬 padding——布局本身已保证不重叠）。 */
 const proposalInviteVisible = computed(
-  () => loggedIn && live.started && !live.sending && live.stage === 'proposing' && !!live.proposal && !showProposal.value
+  () => loggedIn && live.started && !live.sending
+    && (live.stage === 'understanding' || live.stage === 'proposing')
+    && !!live.proposal && !showProposal.value
 );
 /* 焦点管理（P2）：浮层打开把焦点移入对话框（读屏按 dialog 播报、Esc 立即可用），
    关闭时归还原焦点，键盘用户不至于被「丢」在页面里 */
