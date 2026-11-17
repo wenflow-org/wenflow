@@ -18,7 +18,7 @@ import aiTeachingOrchestrator from '../services/ai-teaching/AITeachingCoordinato
 import { teachingSessionRepository } from '../services/ai-teaching/TeachingSessionRepository';
 import { sessionFinalizationService } from '../services/ai-teaching/SessionFinalizationService';
 import { executeSkill, virtualLearnerLearnTurnSimulatorDefinition, virtualLearnerEpistemicGroundingDefinition } from '../skills';
-import { sessionWrapupAgent, type SessionWrapupInput } from '../skills/session-wrapup';
+import { sessionWrapupAgent, type SessionWrapupInput } from '../skills/teaching-wrapup';
 import simulatedDayService from '../services/virtual-lab/simulated-day.service';
 import { safeJsonParse } from '../utils/safe-json';
 import { asErrorLike } from '../virtual-lab/vlab-types';
@@ -168,7 +168,7 @@ export async function startLearningPhase(ctx: SimulationOrchestrator, sessionId:
       // 此处**不得删库重建**：restartPathPhase 会重启同一竞态，并在 learning_paths.delete 后留下
       // 孤儿里程碑（实测：3 条路径共 11 个零子任务里程碑）。应按生成状态处置——
       //   仍在生成 → 如实上报"未就绪"，让调用方稍后重试；
-      //   确实失败/超时 → 触发官方阶段设计重试（同一个 Path 重跑 stage-designer，不删库）。
+      //   确实失败/超时 → 触发官方阶段设计重试（同一个 Path 重跑 path-task-design，不删库）。
       let retryAccepted: { accepted?: boolean; retryCount?: number; mode?: string } | null = null;
       let notReadyReason: string | undefined;
       try {
@@ -2727,7 +2727,7 @@ export async function findFirstRunnableTaskId(ctx: SimulationOrchestrator, sessi
 }
 
 /**
- * 学习完成后生成 wrapup 总结 (调用 skill:session-wrapup)
+ * 学习完成后生成 wrapup 总结 (调用 skill:teaching-wrapup)
  * 将结果写入 stageResults.teaching.wrapup
  */
 export async function generateWrapupForSession(ctx: SimulationOrchestrator, sessionId: string): Promise<{ success: boolean; error?: string }> {

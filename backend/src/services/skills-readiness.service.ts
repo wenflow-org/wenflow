@@ -15,7 +15,7 @@
  *   的 ACTIVE 行视为"保留决策下的必需资产"（handler requireActivePrompt: true），
  *   不计入告警 items，仅保留 zombieSkillActive 数组供审计计数。
  * - W2 注册对账：户口簿活跃集 vs skill_registrations（name 无 skill: 前缀）双向差集；
- *   registrationPoint=agents（learner-model 落 agentHandlers 注册）与 platform-direct
+ *   registrationPoint=agents（profile-learner-model 落 agentHandlers 注册）与 platform-direct
  *   （semantic-freeze-judge 平台守门直调）豁免方向 A（不落 skill_registrations 是预期）。
  * - W3 接线双向：ORCHESTRATOR_RUNTIME_DEFINITIONS steps vs 户口簿 coordinator 块；
  *   方向 A steps 引用不在户口簿 / 方向 B 户口簿登记未进 definition steps；
@@ -64,14 +64,14 @@ export function isRetiredSkill(skillId: string): boolean {
 
 /** W3-B 免检清单：coordinator.steps=[] 条目（notes 注明 service 侧接线，不进主链 steps） */
 export const W3_STEPS_EMPTY_EXEMPT: Record<string, string> = {
-  'adaptive-guidance-copy': 'dashboard / learning-state 两侧各自在 service 层调用（DashboardGuidanceSnapshotService / LearningStateGuidanceService），不在 ai-teaching.definition.ts steps 内；contracts 有登记',
-  'virtual-learner-persona-designer': '前置配置阶段（routes/admin/virtual-learners.ts），不在 simulation.definition.ts 主链 steps 内',
-  'virtual-learner-scenario-designer': '前置配置阶段（同 persona-designer），不在主链 steps 内',
+  'profile-adaptive-copy': 'dashboard / learning-state 两侧各自在 service 层调用（DashboardGuidanceSnapshotService / LearningStateGuidanceService），不在 ai-teaching.definition.ts steps 内；contracts 有登记',
+  'simulation-persona-designer': '前置配置阶段（routes/admin/virtual-learners.ts），不在 simulation.definition.ts 主链 steps 内',
+  'simulation-scenario-designer': '前置配置阶段（同 persona-designer），不在主链 steps 内',
   'path-reviewer': 'service 侧调用（learning.service.ts 内联 CIDDP 评审），非 path.coordinator 编排，不在 path.definition.ts steps 内',
-  'kc-mapper': 'service 侧调用（learning.service.ts KC 映射），非 path.coordinator 编排，不在 path.definition.ts steps 内',
-  'learning-predictor': 'service 侧调用（ai-teaching/TeachingContextBuilder 任务前预测），非 profile.coordinator 编排',
-  'virtual-learner-epistemic-grounding': 'teaching 回合内部辅助（blackbox-runner.ts / simulation.coordinator.ts 认知判决），在 learn-turn-simulator 前调用，不在 simulation.definition.ts 主链 steps 内',
-  'learner-model': 'handler-only 拉取式 API（按 action 取快照/写增量），不在 learner.definition.ts steps 内；事件链四步为证据投影/课后增强/清缓存/快照重算',
+  'path-kc-mapping': 'service 侧调用（learning.service.ts KC 映射），非 path.coordinator 编排，不在 path.definition.ts steps 内',
+  'profile-learning-predict': 'service 侧调用（ai-teaching/TeachingContextBuilder 任务前预测），非 profile.coordinator 编排',
+  'simulation-epistemic-grounding': 'teaching 回合内部辅助（blackbox-runner.ts / simulation.coordinator.ts 认知判决），在 learn-turn-simulator 前调用，不在 simulation.definition.ts 主链 steps 内',
+  'profile-learner-model': 'handler-only 拉取式 API（按 action 取快照/写增量），不在 learner.definition.ts steps 内；事件链四步为证据投影/课后增强/清缓存/快照重算',
 };
 
 export interface ReadinessWarningItem {
@@ -174,7 +174,7 @@ export function analyzeW1(book: SkillsBook, activeRows: CoreHashParityActiveRow[
 
   const missingActive = book.skills
     // #235：ACTIVE prompt 的豁免判据是「handler-only（代码 handler 实现）」，
-    // 不是 noPromptFile——后者现在只表示「没有提示词文件」，board-designer 这类
+    // 不是 noPromptFile——后者现在只表示「没有提示词文件」，teaching-board-design 这类
     // 有独立提示词产物、但同样不走 DB prompt 的 handler-only 仍必须豁免。
     .filter((entry) => entry.kind !== 'handler-only' && !activePromptIds.has(`skill:${entry.skillId}`))
     .map((entry) => entry.skillId)
@@ -230,8 +230,8 @@ export function analyzeW2(book: SkillsBook, registrations: Array<{ name: string 
   const missingRegistration = book.skills
     .filter((entry) => {
       const rp = registrationPointOf(entry);
-      // agents（learner-model 落 agentHandlers）/ platform-direct（semantic-freeze-judge 守门直调）
-      // / none（board-designer 等不进派发表、无注册语义）不落 skill_registrations 是预期行为，豁免方向 A
+      // agents（profile-learner-model 落 agentHandlers）/ platform-direct（semantic-freeze-judge 守门直调）
+      // / none（teaching-board-design 等不进派发表、无注册语义）不落 skill_registrations 是预期行为，豁免方向 A
       if (rp === 'agents' || rp === 'platform-direct' || rp === 'none') return false;
       return !registeredNames.has(entry.skillId);
     })

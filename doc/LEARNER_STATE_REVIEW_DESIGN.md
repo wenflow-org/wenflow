@@ -11,11 +11,11 @@
 
 ## 0. 结论（TL;DR）
 
-现状把「学习者画像」拆成了：**确定性状态层**（数值/聚合）+ **LLM 呈现层**（`adaptive-guidance-copy` 文案），**中间的「诊断层」缺失且不闭环**——LLM 只在最后一跳写文案，没有把证据变成可审计的判断并回写模型。
+现状把「学习者画像」拆成了：**确定性状态层**（数值/聚合）+ **LLM 呈现层**（`profile-adaptive-copy` 文案），**中间的「诊断层」缺失且不闭环**——LLM 只在最后一跳写文案，没有把证据变成可审计的判断并回写模型。
 
 本设计补上这一段：
 
-1. **新增一个 prompt+LLM 的诊断 skill** `learner-state-review`，事件驱动，输入是**裁剪后的投影**，输出**可证伪的结构化洞察**（带证据引用），回写并闭环到 dashboard / 教学 / replan。
+1. **新增一个 prompt+LLM 的诊断 skill** `profile-state-review`，事件驱动，输入是**裁剪后的投影**，输出**可证伪的结构化洞察**（带证据引用），回写并闭环到 dashboard / 教学 / replan。
 2. **掌握度用时序信念更新**（可配置 BKT，4 个标量、零训练）：**LLM 负责产出观测**（逐概念 掌握/未掌握 + 证据），**代码负责更新公式**。
 3. **校准闭环**：洞察里的可证伪断言落 `learner_projections`（scope=insight-records），用真实结果回填命中率，反哺参数与展示（n<5 不展示置信度）。
 
@@ -29,10 +29,10 @@
 
 | 环节 | LLM | 产物 / 去向 |
 |---|---|---|
-| `skills/lesson-knowledge-enricher/` | ✅ | `conceptLedger / recurringConfusions / reusable·blockedFoundations / transferSignals` → `learner_evidence`（`session-knowledge-distilled`）→ 回读进 `knowledgeMemory.globalBackground` |
+| `skills/profile-lesson-enrich/` | ✅ | `conceptLedger / recurringConfusions / reusable·blockedFoundations / transferSignals` → `learner_evidence`（`session-knowledge-distilled`）→ 回读进 `knowledgeMemory.globalBackground` |
 | `skills/teaching-turn/`（`analysis.misconceptions`） | ✅ | → `services/learner/misconception-ledger.service.ts`（suspected→confirmed→addressed）→ 回注教学 |
-| `skills/learning-predictor/` | ✅ | `stallRisk/tone/depth` → `prediction_records` → `PredictionCalibrationService` 校准 |
-| `skills/adaptive-guidance-copy/` | ✅ | dashboard / learning-state 评审**文案**（只上屏，不回写） |
+| `skills/profile-learning-predict/` | ✅ | `stallRisk/tone/depth` → `prediction_records` → `PredictionCalibrationService` 校准 |
+| `skills/profile-adaptive-copy/` | ✅ | dashboard / learning-state 评审**文案**（只上屏，不回写） |
 | `dynamicState`(lss/ktl/lf/lsb)、`learningControlState`、`replanSignal`、`LearnerStateSummary`、`taskMastery/conceptStates` | ❌ | `services/learner/LearnerSnapshotService.ts`、`LearnerKnowledgeMemoryService.ts` 阈值/权重 |
 
 即：**状态层是确定性的，呈现层是 LLM 的，诊断层是空的。**
@@ -41,8 +41,8 @@
 
 | # | 问题 | 证据 |
 |---|---|---|
-| P1 | **无独立「状态评审」LLM skill**：enricher 只覆盖知识台账，misconception 来自教学回合；没有谁周期性对「当前整体状态」做归因（前置/疲劳/动机/粒度） | 全仓无 `learner-state-review` 类 skill |
-| P2 | **评审不闭环**：`adaptive-guidance-copy` 输出只进快照，teaching/replan 读不到 | `DashboardGuidanceSnapshotService.ts:150` 之后无回写洞察 |
+| P1 | **无独立「状态评审」LLM skill**：enricher 只覆盖知识台账，misconception 来自教学回合；没有谁周期性对「当前整体状态」做归因（前置/疲劳/动机/粒度） | 全仓无 `profile-state-review` 类 skill |
+| P2 | **评审不闭环**：`profile-adaptive-copy` 输出只进快照，teaching/replan 读不到 | `DashboardGuidanceSnapshotService.ts:150` 之后无回写洞察 |
 | P3 | **掌握度是拍脑袋常数**：任务完成 = `score 0.45 / learning / developing`，无时序信念更新 | `LearnerKnowledgeMemoryService.ts:229` |
 | P4 | **无 guidance 投影**：把整行路径（含 `aiPromptTemplate` 12.5 万字符）与整块 `knowledgeMemory` 灌进 prompt | 实测单次 ~10.9 万 token / 130s |
 | P5 | **置信度粗、校准面窄**：misconception 置信度 `0/25/50/75/100`；校准只覆盖 predictor | `misconception-ledger.service.ts:19` |
@@ -56,8 +56,8 @@
 | 层 | 回答 | 谁做 | 是否 LLM |
 |---|---|---|---|
 | **状态层**（facts） | 在哪 / 掌握多少 / 风险几档 | 确定性聚合 + 可配置信念更新 | ❌ |
-| **诊断层**（why / what next） | 为什么卡：前置缺口？疲劳？动机？粒度？ | `learner-state-review` skill | ✅ |
-| **呈现层**（wording） | 怎么说给用户 | `adaptive-guidance-copy`（消费洞察） | ✅ |
+| **诊断层**（why / what next） | 为什么卡：前置缺口？疲劳？动机？粒度？ | `profile-state-review` skill | ✅ |
+| **呈现层**（wording） | 怎么说给用户 | `profile-adaptive-copy`（消费洞察） | ✅ |
 
 ### 2.2 约束下的取舍
 
@@ -83,7 +83,7 @@ LearnerSnapshotService（已有）→ LearnerSnapshot
         │      ├─ toReviewProjection（新增，给诊断层）
         │      └─ toGuidanceProjection（新增，给呈现层）
         │
-        ├─[LLM] learner-state-review（新增）──► learner_projections/scope=review（洞察，回写）
+        ├─[LLM] profile-state-review（新增）──► learner_projections/scope=review（洞察，回写）
         │                                   └─► learner_projections/scope=beliefs（BKT 信念）
         │
         ├─[代码] BKT 更新（LLM 观测 → 信念）──► learner_projections/scope=beliefs
@@ -98,14 +98,14 @@ LearnerSnapshotService（已有）→ LearnerSnapshot
 
 ---
 
-## 4. 诊断层：`learner-state-review` skill
+## 4. 诊断层：`profile-state-review` skill
 
 ### 4.1 定位与触发
 
-- 类型：mainline（profile stage）或 aux（service 直调）；走 v4 机制（`prompts/core/learner-state-review.yaml` + `skills/learner-state-review/` + `executeSkill` + ACTIVE prompt 编译同步 + 遥测）。
+- 类型：mainline（profile stage）或 aux（service 直调）；走 v4 机制（`prompts/core/profile-state-review.yaml` + `skills/profile-state-review/` + `executeSkill` + ACTIVE prompt 编译同步 + 遥测）。
 - 触发（事件驱动，与既有刷新同源）：
   - `lesson:completed`、`task:completed`、`review:completed`
-  - 手动重算：`POST /api/admin/learner-models/:userId/recompute`（可加 `withReview=1`）
+  - 手动重算：`POST /api/admin/profile-learner-models/:userId/recompute`（可加 `withReview=1`）
   - 节流：同一 `(userId, pathId, 输入指纹)` 命中缓存/已存在洞察则跳过。
 
 ### 4.2 输入契约（投影，目标 ≤ ~2k token）
@@ -209,8 +209,8 @@ model LearnerReviewPayloadDraft {
 
 | 投影 | 消费者 | 关键裁剪 |
 |---|---|---|
-| `toReviewProjection(snapshot)` | `learner-state-review` | 只带 §4.2 的 digest；丢 `knowledgeMemory.currentPath.taskMastery/conceptStates` 全量 |
-| `toGuidanceProjection(snapshot, path)` | `adaptive-guidance-copy` | 只带 state 摘要 + 当前任务 + top 概念；**丢 `learning_paths.aiPromptTemplate`（单字段 ~12.5 万字符）与完整 `knowledgeMemory`** |
+| `toReviewProjection(snapshot)` | `profile-state-review` | 只带 §4.2 的 digest；丢 `knowledgeMemory.currentPath.taskMastery/conceptStates` 全量 |
+| `toGuidanceProjection(snapshot, path)` | `profile-adaptive-copy` | 只带 state 摘要 + 当前任务 + top 概念；**丢 `learning_paths.aiPromptTemplate`（单字段 ~12.5 万字符）与完整 `knowledgeMemory`** |
 
 **效果（实测，2026-09-12）**：真实用户单次 guidance payload `249,841 → 20,041 字符`（**−92%**，约 `11.9 万 → 9.5k token`），其中 `aiPromptTemplate` 单项丢弃 116,887 字符；`knowledgeMemory` 明细与路径冗余字段一并裁掉。如需进一步压缩，可继续收敛 `profile.narrativeInsights`、`wrapup`、`path.description/subject/replanReason`。
 
@@ -292,7 +292,7 @@ model InsightRecordPayloadDraft {
 
 | 消费者 | 变更 |
 |---|---|
-| `DashboardGuidanceSnapshotService` / `LearningStateGuidanceService` | `adaptive-guidance-copy` 改为**读 `learner_projections`（scope=review） + `toGuidanceProjection`**，而非原始快照 |
+| `DashboardGuidanceSnapshotService` / `LearningStateGuidanceService` | `profile-adaptive-copy` 改为**读 `learner_projections`（scope=review） + `toGuidanceProjection`**，而非原始快照 |
 | `TeachingContextBuilder` | 注入 top-N `active` insights（有界，建议 ≤3）到 scenario，供教学回合引用 |
 | `replan` | `replanSignal.rationale` 可引用 `prerequisite_gap` 类洞察 |
 | admin（`LearnerDetail.vue`） | 新增「洞察」卡片：claim / 证据 / 状态 / 命中率（n<5 显示「样本不足」） |
@@ -321,11 +321,11 @@ model InsightRecordPayloadDraft {
 
 ### Slice 2 · 诊断 skill + 闭环
 
-- 新增 `skills/learner-state-review/` + `prompts/core/learner-state-review.yaml`。
+- 新增 `skills/profile-state-review/` + `prompts/core/profile-state-review.yaml`。
 - 新增 `learner_projections`（scope=review）（或复用 projection）与事件触发（`lesson/task/review:completed`）。
 - dashboard/learning-state/teaching 改消费 `insights`；`toReviewProjection`。
 - **DoD**：一次课后产出结构化洞察并落库；dashboard 文案引用洞察；教学能读到 top-N。
-- **进度（2026-09-12）**：**2a 已落地**——`LearnerProjectionService.toReviewProjection` + `LearnerStateReviewService`（评审载荷落 `learner_projections`，`scope=review`，`getLatest`/`refreshInBackground`，`source='rules'`）+ 单测。**2b 已落地**——`learner-state-review` aux skill（core + 编译 md + manifest + v4-aux 注册 + 户口簿）；服务改调该 skill，产出结构化诊断 `diagnosis`（`source='model'`，失败回退 `rules`）。**2c 已落地**——触发接入（`task:completed` / `lesson:completed`）+ 消费接入（dashboard 快照与 learning-state payload 附 `review`，路由透出；前端 `V2LearningState` 展示「状态评审」卡片）。实测：learning-state 端点返回 `review`（`source=model`）；门禁 `skills:check`/`yaml:check`/`core-hash-parity` 全绿；双端 tsc 通过。
+- **进度（2026-09-12）**：**2a 已落地**——`LearnerProjectionService.toReviewProjection` + `LearnerStateReviewService`（评审载荷落 `learner_projections`，`scope=review`，`getLatest`/`refreshInBackground`，`source='rules'`）+ 单测。**2b 已落地**——`profile-state-review` aux skill（core + 编译 md + manifest + v4-aux 注册 + 户口簿）；服务改调该 skill，产出结构化诊断 `diagnosis`（`source='model'`，失败回退 `rules`）。**2c 已落地**——触发接入（`task:completed` / `lesson:completed`）+ 消费接入（dashboard 快照与 learning-state payload 附 `review`，路由透出；前端 `V2LearningState` 展示「状态评审」卡片）。实测：learning-state 端点返回 `review`（`source=model`）；门禁 `skills:check`/`yaml:check`/`core-hash-parity` 全绿；双端 tsc 通过。
 
 ### Slice 3 · BKT + 校准 + 护栏
 
@@ -333,7 +333,7 @@ model InsightRecordPayloadDraft {
 - `learner_projections`（scope=insight-records） 回填命中率、`reliability` 展示、n<5 不显。
 - prompt 证据引用硬校验 + JSON schema 校验 + fallback；幂等指纹。
 - **DoD**：同输入重复评审结论稳定；命中率可查；越权/无证据洞察被拒。
-- **进度（2026-09-12）**：**3a 已落地**——`concept-belief.service`（零训练 BKT，`pL0/pT/pG/pS` 手填默认 + `applyObservations`/`getBeliefs`，复用 `learner_projections` `scope=beliefs`，无迁移）；评审服务用 `conceptAssessments` 观测驱动信念，摘要附入载荷。**3b 已落地**——`insight-calibration.service`：诊断断言落 `learner_projections`（`scope=insight-records`，无迁移），口径 v1 =「机会事件（task/lesson 完成）到达后，相关概念是否仍在 `struggling/fragile`」判定 hit/miss/unknown；`computeReliability` 样本 n<5 不引用；评审载荷附 `calibration`，前端展示「历史核对 N 条 · 命中 X%」。**3c 已落地**——`learner-state-review` handler 加 `evidenceRefs` 硬护栏（无引用/未知引用即丢弃）。
+- **进度（2026-09-12）**：**3a 已落地**——`concept-belief.service`（零训练 BKT，`pL0/pT/pG/pS` 手填默认 + `applyObservations`/`getBeliefs`，复用 `learner_projections` `scope=beliefs`，无迁移）；评审服务用 `conceptAssessments` 观测驱动信念，摘要附入载荷。**3b 已落地**——`insight-calibration.service`：诊断断言落 `learner_projections`（`scope=insight-records`，无迁移），口径 v1 =「机会事件（task/lesson 完成）到达后，相关概念是否仍在 `struggling/fragile`」判定 hit/miss/unknown；`computeReliability` 样本 n<5 不引用；评审载荷附 `calibration`，前端展示「历史核对 N 条 · 命中 X%」。**3c 已落地**——`profile-state-review` handler 加 `evidenceRefs` 硬护栏（无引用/未知引用即丢弃）。
 
 ---
 

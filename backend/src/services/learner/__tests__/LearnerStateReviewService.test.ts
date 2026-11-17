@@ -16,7 +16,7 @@ jest.mock('../LearningDecisionFeedService', () => ({
 }))
 jest.mock('../../../skills', () => ({
   executeSkillWithResult: jest.fn(),
-  auxSkillDefinitionMap: { 'learner-state-review': { name: 'learner-state-review' } },
+  auxSkillDefinitionMap: { 'profile-state-review': { name: 'profile-state-review' } },
 }))
 jest.mock('../../../utils/logger', () => ({
   logger: { warn: jest.fn(), info: jest.fn(), error: jest.fn(), debug: jest.fn() },
@@ -51,7 +51,7 @@ describe('LearnerStateReviewService (Slice 2a)', () => {
   it('refresh 生成评审载荷（含投影/摘要/洞察）并落库', async () => {
     const payload = await learnerStateReviewService.refresh('u1', 'lp1')
 
-    expect(payload?.schemaVersion).toBe('learner-state-review-v1')
+    expect(payload?.schemaVersion).toBe('profile-state-review-v1')
     expect(payload?.source).toBe('rules')
     expect(payload?.pathId).toBe('lp1')
     expect(payload?.insights).toEqual([{ id: 'concept-watch', kind: 'concept-watch' }])
@@ -110,9 +110,9 @@ describe('LearnerStateReviewService (Slice 2a)', () => {
   })
 
   it('getLatest 解析已存储载荷', async () => {
-    findUnique.mockResolvedValue({ payload: JSON.stringify({ schemaVersion: 'learner-state-review-v1', insights: [] }) })
+    findUnique.mockResolvedValue({ payload: JSON.stringify({ schemaVersion: 'profile-state-review-v1', insights: [] }) })
     const latest = await learnerStateReviewService.getLatest('u1', 'lp1')
-    expect(latest?.schemaVersion).toBe('learner-state-review-v1')
+    expect(latest?.schemaVersion).toBe('profile-state-review-v1')
     expect(findUnique).toHaveBeenCalledWith(expect.objectContaining({
       where: { projectionKey: reviewProjectionKey('u1', 'lp1') },
     }))

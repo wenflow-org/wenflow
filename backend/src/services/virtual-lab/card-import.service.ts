@@ -14,7 +14,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import yaml from 'js-yaml';
 import { executeSkill } from '../../skills';
-import { virtualLearnerPersonaDesignerDefinition } from '../../skills/virtual-learner-persona-designer';
+import { virtualLearnerPersonaDesignerDefinition } from '../../skills/simulation-persona-designer';
 import {
   createVirtualLearnerUser,
   createVirtualLearnerProfile,

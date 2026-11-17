@@ -37,7 +37,7 @@ const all = (sql: string): Promise<any[]> => new Promise((res, rej) => db.all(sq
   }
 
   const peerRows = await all(
-    `SELECT normalizedOutput FROM prompt_call_logs WHERE agentId = 'skill:peer-reinforcement' AND success = 1 ORDER BY createdAt DESC LIMIT 200`,
+    `SELECT normalizedOutput FROM prompt_call_logs WHERE agentId = 'skill:teaching-peer-reinforcement' AND success = 1 ORDER BY createdAt DESC LIMIT 200`,
   );
   const p = new Map<string, number>();
   for (const r of peerRows) {

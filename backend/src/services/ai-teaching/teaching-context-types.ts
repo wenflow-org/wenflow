@@ -1,7 +1,7 @@
 import type { TeachingKnowledgePointState, TeachingSessionRecord } from './TeachingSessionRepository';
 import type { PromptMaterial } from '../materials/material-prompt-projection';
 import type { ActiveTaskMaterialExcerpt } from '../materials/material-sections';
-import type { TeachingLearnerProjection } from '../../agents/learner-model-agent/types';
+import type { TeachingLearnerProjection } from '../../agents/profile-learner-model-agent/types';
 import type { ReviewPlan } from '../memory/review-plan.service';
 export interface TeachingScenarioContext {
   userId: string;
@@ -18,7 +18,7 @@ export interface TeachingScenarioContext {
     prerequisiteConcepts: string[];
     supportingConcepts: string[];
   };
-  /** 本课细粒度知识组件（kc-mapper 产出，含 kcId）：教学提示词按 KC 粒度对齐 knowledge.points 的依据 */
+  /** 本课细粒度知识组件（path-kc-mapping 产出，含 kcId）：教学提示词按 KC 粒度对齐 knowledge.points 的依据 */
   taskKcs: Array<{ kcId: string; name: string; taxonomy: string }>;
   taskKnowledgeSeeds: TeachingKnowledgePointState[];
   taskProfile: {
@@ -195,7 +195,7 @@ export interface TeachingScenarioContext {
     absent: boolean;
   } | null;
   /**
-   * 学习表现预测（任务前，learning-predictor 产出 + 校准实证可靠性）。
+   * 学习表现预测（任务前，profile-learning-predict 产出 + 校准实证可靠性）。
    * 超时/失败/低样本时为 null——教学照常，不得因预测缺失改变行为。
    */
   learnerPrediction: LearnerPredictionContext | null;

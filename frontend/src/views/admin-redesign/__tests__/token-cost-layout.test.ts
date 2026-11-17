@@ -48,7 +48,7 @@ const { apiObject } = vi.hoisted(() => ({
 /* 一行已定价 + 一行未定价：同时覆盖「有金额」与「占位」两档 */
 const skillRows = [
   { key: 'teaching-turn', display: '教学回合 Skill', calls: 100, tokens: 10_000_000, promptTokens: 9_500_000, completionTokens: 500_000, failed: 1, usd: 1.5, pricingKnown: true, pricedCalls: 100, callsMissingPricing: 0 },
-  { key: 'adaptive-guidance-copy', display: '自适应引导文案 Skill', calls: 40, tokens: 2_000_000, promptTokens: 1_900_000, completionTokens: 100_000, failed: 0, usd: null, pricingKnown: false, pricedCalls: 0, callsMissingPricing: 40 }
+  { key: 'profile-adaptive-copy', display: '自适应引导文案 Skill', calls: 40, tokens: 2_000_000, promptTokens: 1_900_000, completionTokens: 100_000, failed: 0, usd: null, pricingKnown: false, pricedCalls: 0, callsMissingPricing: 40 }
 ];
 
 vi.mock('@/api/adminApi', () => ({

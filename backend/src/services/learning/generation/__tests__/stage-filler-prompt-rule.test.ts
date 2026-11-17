@@ -2,7 +2,7 @@
  * R8-1 收尾刷课（同题复读）提示词规则 + filler 观测契约。
  *
  * 2026-09-29 实证：某阶段 12 课中 6 节标题逐字相同（「串联并联电功率计算的综合自测与查漏」），
- * 根因是把 `targetSubtasksForStage` 当"必须凑满的课数"用。提示词侧的修复是 stage-designer
+ * 根因是把 `targetSubtasksForStage` 当"必须凑满的课数"用。提示词侧的修复是 path-task-design
  * 新增「同题复读禁令」规则；代码侧已有 detectStageFiller 观测（只观测不阻断）。
  *
  * 两个不变量：
@@ -16,8 +16,8 @@ import { detectStageFiller, titleSimilarity } from '../stage-filler';
 // 本文件位于 backend/src/services/learning/generation/__tests__/ → 仓库根上溯 6 层
 const REPO_ROOT = path.resolve(__dirname, '../../../../../..');
 const read = (p: string) => fs.readFileSync(path.join(REPO_ROOT, p), 'utf8');
-const CORE = read('prompts/core/stage-designer.yaml');
-const MD = read('prompts/skill.stage-designer.md');
+const CORE = read('prompts/core/path-task-design.yaml');
+const MD = read('prompts/skill.path-task-design.md');
 
 describe('R8-1 同题复读禁令：提示词规则已编译进产物', () => {
   it('core yaml 含新规则', () => {

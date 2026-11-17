@@ -16,7 +16,7 @@ const mockPrisma = {
 
 jest.mock('../../../config/database', () => ({ __esModule: true, default: mockPrisma }));
 
-import { findCalibrationEvidence, findPathHistory } from '../learner-models.repo';
+import { findCalibrationEvidence, findPathHistory } from '../profile-learner-models.repo';
 
 beforeEach(() => {
   mockPrisma.learner_evidence.findMany.mockReset().mockResolvedValue([]);

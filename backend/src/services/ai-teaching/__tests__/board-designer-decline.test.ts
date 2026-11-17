@@ -8,7 +8,7 @@
 import {
   declinesParaphrasedMaterialBoard,
   resolveBoardDesignerOutput,
-} from '../board-designer.service';
+} from '../teaching-board-design.service';
 import type { TeachingFigure } from '../../../skills/teaching-turn';
 
 const SIX_SENTENCES_TASK =
@@ -46,7 +46,7 @@ describe('resolveBoardDesignerOutput', () => {
   it('{"figure":null} 无 reason → declined 带默认理由', () => {
     expect(resolveBoardDesignerOutput({ figure: null })).toEqual({
       outcome: 'declined',
-      reason: 'board-designer declined',
+      reason: 'teaching-board-design declined',
     });
   });
 

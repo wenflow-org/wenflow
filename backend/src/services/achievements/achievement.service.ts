@@ -19,7 +19,7 @@ interface UserStats {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-/** 「已掌握」判定：与 learner-model-agent/profile-aggregator 同口径（masteryScore 0-1）。 */
+/** 「已掌握」判定：与 profile-learner-model-agent/profile-aggregator 同口径（masteryScore 0-1）。 */
 const MASTERED_SCORE_THRESHOLD = 0.8;
 
 function achievementRecordId(userId: string, achievementId: string): string {

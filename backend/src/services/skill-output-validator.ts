@@ -464,13 +464,13 @@ export function validateCoreFieldDeclarations(fields: CoreFieldDeclaration[]): s
 const FIELD_VALIDATION_EXCLUDED_SKILLS = new Set([
   'skill:skill-author',
   'skill:semantic-freeze-judge',
-  'skill:virtual-learner-goal-dialogue-simulator',
-  'skill:virtual-learner-learn-turn-simulator',
-  'skill:virtual-learner-path-evaluator',
-  'skill:virtual-learner-persona-designer',
-  'skill:virtual-learner-referee',
-  'skill:virtual-learner-actor-auditor',
-  'skill:virtual-learner-scenario-designer',
+  'skill:simulation-goal-dialogue',
+  'skill:simulation-learn-turn',
+  'skill:simulation-path-evaluate',
+  'skill:simulation-persona-designer',
+  'skill:simulation-referee',
+  'skill:simulation-actor-audit',
+  'skill:simulation-scenario-designer',
   'skill:concept-priority',
 ]);
 

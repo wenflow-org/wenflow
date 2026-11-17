@@ -1,5 +1,5 @@
 /**
- * P2 golden：stage-designer 输入装配的配置化等价验证。
+ * P2 golden：path-task-design 输入装配的配置化等价验证。
  * 当前 learning.service 手拼 stageDesignerInput（milestone/previousMilestone/cognitiveCore/normalizedInput）；
  * 本测试验证：按路由表（path-agent 注入行 + path-planning 产出行）配置化抽取的字段
  * 与手拼装配的关键字段值等价。
@@ -49,11 +49,11 @@ const PATH_STATE = {
   }),
 }
 
-describe('stage-designer 输入装配（配置化 vs 手拼等价）', () => {
-  it('path 阶段路由行可按 pathInRawOutput 从路径状态抽取 stage-designer 输入', () => {
+describe('path-task-design 输入装配（配置化 vs 手拼等价）', () => {
+  it('path 阶段路由行可按 pathInRawOutput 从路径状态抽取 path-task-design 输入', () => {
     // path-agent 注入行（normalizedInput.*/previousMilestone）+ path-planning 产出行（milestones/cognitiveCore）
     const rows = PATH_FIELD_ROUTINGS
-      .filter((r) => r.handoff.includes('skill:stage-designer'))
+      .filter((r) => r.handoff.includes('skill:path-task-design'))
       .map((r) => ({
         fieldId: r.fieldId,
         handoff: r.handoff,
@@ -92,10 +92,10 @@ describe('stage-designer 输入装配（配置化 vs 手拼等价）', () => {
     expect(configured.planningHints.milestoneRange).toBeDefined()
   })
 
-  it('previousMilestone 已登记路由行且 handoff 指向 stage-designer', () => {
+  it('previousMilestone 已登记路由行且 handoff 指向 path-task-design', () => {
     const row = PATH_FIELD_ROUTINGS.find((r) => r.fieldId === 'previousMilestone')
     expect(row).toBeDefined()
-    expect(row!.handoff).toContain('skill:stage-designer')
+    expect(row!.handoff).toContain('skill:path-task-design')
     expect(row!.agentId).toBe('path-agent')
   })
 

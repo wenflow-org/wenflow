@@ -22,26 +22,26 @@ import { resolveEffectivePromptContract } from '../../services/prompt-lab/resolv
 import { logger } from '../../utils/logger';
 
 export type AuxSkillId =
-  | 'teaching-opening-generator'
-  | 'learner-progress-report'
+  | 'teaching-opening'
+  | 'profile-progress-report'
   | 'skill-author'
   | 'skill-compiler'
-  | 'learner-state-review'
-  | 'concept-consolidator'
-  | 'concept-load-estimator'
-  | 'replan-attribution'
+  | 'profile-state-review'
+  | 'profile-concept-consolidate'
+  | 'profile-concept-load'
+  | 'teaching-replan-attribution'
   | 'triage-judge';
 
 // File-as-Truth：从编译产物加载 systemPrompt，避免代码内嵌第二份 prompt 导致双源漂移
 const AUX_SKILL_PROMPTS: Record<AuxSkillId, string> = {
-  'teaching-opening-generator': loadPromptFile('skill:teaching-opening-generator')?.systemPrompt || '',
-  'learner-progress-report': loadPromptFile('skill:learner-progress-report')?.systemPrompt || '',
+  'teaching-opening': loadPromptFile('skill:teaching-opening')?.systemPrompt || '',
+  'profile-progress-report': loadPromptFile('skill:profile-progress-report')?.systemPrompt || '',
   'skill-author': loadPromptFile('skill:skill-author')?.systemPrompt || '',
   'skill-compiler': loadPromptFile('skill:skill-compiler')?.systemPrompt || '',
-  'learner-state-review': loadPromptFile('skill:learner-state-review')?.systemPrompt || '',
-  'concept-consolidator': loadPromptFile('skill:concept-consolidator')?.systemPrompt || '',
-  'concept-load-estimator': loadPromptFile('skill:concept-load-estimator')?.systemPrompt || '',
-  'replan-attribution': loadPromptFile('skill:replan-attribution')?.systemPrompt || '',
+  'profile-state-review': loadPromptFile('skill:profile-state-review')?.systemPrompt || '',
+  'profile-concept-consolidate': loadPromptFile('skill:profile-concept-consolidate')?.systemPrompt || '',
+  'profile-concept-load': loadPromptFile('skill:profile-concept-load')?.systemPrompt || '',
+  'teaching-replan-attribution': loadPromptFile('skill:teaching-replan-attribution')?.systemPrompt || '',
   'triage-judge': loadPromptFile('skill:triage-judge')?.systemPrompt || '',
 };
 
@@ -112,7 +112,7 @@ interface RunAuxOptions<TOutput> {
   coerceParse?: (parsed: any) => any;
   /** LLM 侧整轮重试（如返回非 JSON）；不传则沿用 callPrompt 默认（不重试）。
    *  onValidationFail 把失败原因回灌进重试提示——无它时重试只是把同样的 prompt 再发一遍，
-   *  模型往往重复同样的散文（concept-consolidator 实测 42/197 次非 JSON 失败）。 */
+   *  模型往往重复同样的散文（profile-concept-consolidate 实测 42/197 次非 JSON 失败）。 */
   retryStrategy?: {
     maxAttempts: number;
     onValidationFail?: (params: {
@@ -239,14 +239,14 @@ async function resolveDefaultFailureMode(skillId: AuxSkillId): Promise<'throw' |
 // ============================================================
 
 const META: Record<AuxSkillId, AuxSkillMeta> = {
-  'teaching-opening-generator': { skillId: 'teaching-opening-generator', displayName: '课堂开场交互生成器', description: '生成教学 Session 的开场 message、question 与 quickReplies', category: 'generation' },
-  'learner-progress-report': { skillId: 'learner-progress-report', displayName: '学习进展报告生成器', description: '基于学习指标和信号生成简短进展反馈', category: 'analysis' },
+  'teaching-opening': { skillId: 'teaching-opening', displayName: '课堂开场交互生成器', description: '生成教学 Session 的开场 message、question 与 quickReplies', category: 'generation' },
+  'profile-progress-report': { skillId: 'profile-progress-report', displayName: '学习进展报告生成器', description: '基于学习指标和信号生成简短进展反馈', category: 'analysis' },
   'skill-author': { skillId: 'skill-author', displayName: 'Prompt 起草助手', description: '为新 Skill 起草 system prompt', category: 'generation' },
   'skill-compiler': { skillId: 'skill-compiler', displayName: 'Skill Prompt 验收器', description: '执行 system prompt 并检查必填字段覆盖情况', category: 'analysis' },
-  'learner-state-review': { skillId: 'learner-state-review', displayName: '学习状态评审诊断器', description: '基于状态摘要与证据给出可证伪的学习状态诊断（为什么卡、下一步怎么调）', category: 'analysis' },
-  'concept-consolidator': { skillId: 'concept-consolidator', displayName: '概念身份归并器', description: '判断多个知识点名字里哪些是同一个概念的不同说法，输出可执行、可审计的归并建议', category: 'analysis' },
-  'concept-load-estimator': { skillId: 'concept-load-estimator', displayName: '概念负担判定器', description: '逐概念判定粒度/知识类型/检索难度档位，供温故配额按认知负担裁剪', category: 'analysis' },
-  'replan-attribution': { skillId: 'replan-attribution', displayName: '路径重排归因器', description: '在阈值召回的重排建议上给出主因、方向与一条可证伪断言', category: 'analysis' },
+  'profile-state-review': { skillId: 'profile-state-review', displayName: '学习状态评审诊断器', description: '基于状态摘要与证据给出可证伪的学习状态诊断（为什么卡、下一步怎么调）', category: 'analysis' },
+  'profile-concept-consolidate': { skillId: 'profile-concept-consolidate', displayName: '概念身份归并器', description: '判断多个知识点名字里哪些是同一个概念的不同说法，输出可执行、可审计的归并建议', category: 'analysis' },
+  'profile-concept-load': { skillId: 'profile-concept-load', displayName: '概念负担判定器', description: '逐概念判定粒度/知识类型/检索难度档位，供温故配额按认知负担裁剪', category: 'analysis' },
+  'teaching-replan-attribution': { skillId: 'teaching-replan-attribution', displayName: '路径重排归因器', description: '在阈值召回的重排建议上给出主因、方向与一条可证伪断言', category: 'analysis' },
   'triage-judge': { skillId: 'triage-judge', displayName: '需求分流判官', description: '判断真实诉求是否存在可迁移的因果心智、以及会不会反复发生（决定"要不要排路径"）', category: 'analysis' },
 };
 
@@ -256,7 +256,7 @@ const META: Record<AuxSkillId, AuxSkillMeta> = {
 
 async function teachingOpeningGeneratorHandler(input: any) {
   return runAux({
-    meta: META['teaching-opening-generator'],
+    meta: META['teaching-opening'],
     input,
     buildUserPayload: (d) => (process.env.PAYLOAD_STABLE_PREFIX !== '0'
       ? {
@@ -332,7 +332,7 @@ async function teachingOpeningGeneratorHandler(input: any) {
 
 async function learnerProgressReportHandler(input: any) {
   return runAux({
-    meta: META['learner-progress-report'],
+    meta: META['profile-progress-report'],
     input,
     buildUserPayload: (d) => (process.env.PAYLOAD_STABLE_PREFIX !== '0'
       ? { signals: d.signals, metrics: d.metrics, task: d.task }
@@ -373,7 +373,7 @@ async function skillCompilerHandler(input: any) {
 
 async function learnerStateReviewHandler(input: any) {
   return runAux({
-    meta: META['learner-state-review'],
+    meta: META['profile-state-review'],
     input,
     buildUserPayload: (d) => ({
       learnerDigest: d.learnerDigest,
@@ -443,7 +443,7 @@ async function learnerStateReviewHandler(input: any) {
  */
 async function conceptConsolidatorHandler(input: any) {
   return runAux({
-    meta: META['concept-consolidator'],
+    meta: META['profile-concept-consolidate'],
     input,
     buildUserPayload: (d) => ({
       candidates: Array.isArray(d.candidates) ? d.candidates : [],
@@ -519,7 +519,7 @@ async function conceptConsolidatorHandler(input: any) {
       return out;
     },
     // 2026-09-22 实测：此前未声明重试（callPrompt 默认不重试），一次跑偏即整轮失败。
-    // 与 kc-mapper 对齐，先给整轮重试；2026-09-23 补 onValidationFail——只有 maxAttempts 时
+    // 与 path-kc-mapping 对齐，先给整轮重试；2026-09-23 补 onValidationFail——只有 maxAttempts 时
     // 重试等于把同样的 prompt 再发一遍，实测仍有 42/197 次非 JSON 失败。
     // 2026-10-06（P2-25）：原回灌语「不要输出解释文字或 markdown 代码块之外的内容」按汉语句法读
     // 是「解释文字和代码块是允许的输出类别」，恰把 core 约束反着教一遍。改为与 core 同口径的正面指令。
@@ -539,7 +539,7 @@ async function conceptConsolidatorHandler(input: any) {
  */
 async function conceptLoadEstimatorHandler(input: any) {
   return runAux({
-    meta: META['concept-load-estimator'],
+    meta: META['profile-concept-load'],
     input,
     buildUserPayload: (d) => ({
       concepts: (Array.isArray(d.concepts) ? d.concepts : []).map((item: any) => ({
@@ -585,7 +585,7 @@ async function conceptLoadEstimatorHandler(input: any) {
  */
 async function replanAttributionHandler(input: any) {
   return runAux({
-    meta: META['replan-attribution'],
+    meta: META['teaching-replan-attribution'],
     input,
     buildUserPayload: (d) => ({
       recall: {
@@ -633,7 +633,7 @@ async function replanAttributionHandler(input: any) {
 
 /**
  * 需求分流判官：LLM 只判两个观测（transferable / recurrence），
- * **档位 artifact 由代码推导**（LLM 出观测、档位由代码裁决——与 replan-attribution 同一纪律）。
+ * **档位 artifact 由代码推导**（LLM 出观测、档位由代码裁决——与 teaching-replan-attribution 同一纪律）。
  * 依据：60 例混合数据实测，blockType 与 recurrence 几乎正交，按类型分流会误杀 13 例。
  */
 async function triageJudgeHandler(input: any) {
@@ -734,14 +734,14 @@ export const auxSkillDefinitions: SkillDefinition[] = Object.values(META)
   .map(definition);
 
 const AUX_SKILL_HANDLER_TABLE: Record<AuxSkillId, (input: any) => Promise<SkillExecutionResult<any>>> = {
-  'teaching-opening-generator': teachingOpeningGeneratorHandler,
-  'learner-progress-report': learnerProgressReportHandler,
+  'teaching-opening': teachingOpeningGeneratorHandler,
+  'profile-progress-report': learnerProgressReportHandler,
   'skill-author': skillAuthorHandler,
   'skill-compiler': skillCompilerHandler,
-  'learner-state-review': learnerStateReviewHandler,
-  'concept-consolidator': conceptConsolidatorHandler,
-  'concept-load-estimator': conceptLoadEstimatorHandler,
-  'replan-attribution': replanAttributionHandler,
+  'profile-state-review': learnerStateReviewHandler,
+  'profile-concept-consolidate': conceptConsolidatorHandler,
+  'profile-concept-load': conceptLoadEstimatorHandler,
+  'teaching-replan-attribution': replanAttributionHandler,
   'triage-judge': triageJudgeHandler,
 };
 

@@ -103,7 +103,7 @@
           "artifactKind": "conversation",
           "interactionMode": "turn",
           "contractFields": 11,
-          "ruleCount": 40,
+          "ruleCount": 50,
           "constraintCount": 3,
           "conditionalRuleCount": 0,
           "phases": [
@@ -125,16 +125,16 @@
       "orchestrationFile": "prompts/orchestration/path.yaml",
       "contracts": [
         "skill:path-planning",
-        "skill:stage-designer",
+        "skill:path-task-design",
         "skill:path-reviewer",
-        "skill:kc-mapper",
+        "skill:path-kc-mapping",
         "path-agent"
       ],
       "fieldCount": 47,
       "routingCount": 53,
       "codeEntry": [
         {
-          "label": "路径生成主链（path-planning → stage-designer）",
+          "label": "路径生成主链（path-planning → path-task-design）",
           "file": "backend/src/services/learning/generation/path-generation.core.ts"
         },
         {
@@ -172,6 +172,7 @@
               "kind": "service",
               "impl": "coordinators/path.coordinator.ts buildNormalizedInputV1（handoffFields 配置优先 + visibleSummary 确定性回退，无 LLM）",
               "role": "input-framing",
+              "summary": "输入定帧：把 goal 的理解结果整理成 path-planning 的输入（枚举、时间维度、体量上界），不调模型",
               "condition": "when goal handoff received"
             },
             {
@@ -182,7 +183,7 @@
             },
             {
               "step": 3,
-              "agentId": "skill:stage-designer",
+              "agentId": "skill:path-task-design",
               "kind": "skill",
               "role": "stage-task-expansion",
               "loopOver": "milestones"
@@ -190,9 +191,9 @@
           ],
           "memberSkills": [
             "path-planning",
-            "stage-designer",
+            "path-task-design",
             "path-reviewer",
-            "kc-mapper"
+            "path-kc-mapping"
           ]
         }
       ],
@@ -212,12 +213,12 @@
           "callSite": "agent steps"
         },
         {
-          "skillId": "stage-designer",
+          "skillId": "path-task-design",
           "kind": "mainline",
           "parentAgent": "path-agent",
           "displayName": "阶段设计 Skill",
           "description": "细化阶段内的任务与验收点",
-          "coreFile": "prompts/core/stage-designer.yaml",
+          "coreFile": "prompts/core/path-task-design.yaml",
           "inAgentSteps": true,
           "step": 3,
           "role": "stage-task-expansion",
@@ -240,12 +241,12 @@
           "callSite": "coordinator 登记（path-agent）"
         },
         {
-          "skillId": "kc-mapper",
+          "skillId": "path-kc-mapping",
           "kind": "mainline",
           "parentAgent": "path-agent",
           "displayName": "知识组件映射 Skill",
           "description": "将认知概念和子任务分解为细粒度 KC，标注前置依赖",
-          "coreFile": "prompts/core/kc-mapper.yaml",
+          "coreFile": "prompts/core/path-kc-mapping.yaml",
           "inAgentSteps": false,
           "step": null,
           "role": null,
@@ -286,7 +287,7 @@
           "artifactKind": "generation",
           "interactionMode": "snapshot",
           "contractFields": 0,
-          "ruleCount": 54,
+          "ruleCount": 60,
           "constraintCount": 4,
           "conditionalRuleCount": 0,
           "phases": [
@@ -297,14 +298,14 @@
           "usedInStages": []
         },
         {
-          "skillId": "stage-designer",
+          "skillId": "path-task-design",
           "stage": "path",
           "agentId": "path-agent",
           "kind": "mainline",
           "displayName": "阶段设计 Skill",
           "description": "细化阶段内的任务与验收点",
-          "coreFile": "prompts/core/stage-designer.yaml",
-          "manifestFile": "prompts/manifests/stage-designer.yaml",
+          "coreFile": "prompts/core/path-task-design.yaml",
+          "manifestFile": "prompts/manifests/path-task-design.yaml",
           "hasCore": true,
           "hasManifest": true,
           "baseVersion": 1,
@@ -325,7 +326,7 @@
           "artifactKind": "generation",
           "interactionMode": "snapshot",
           "contractFields": 0,
-          "ruleCount": 57,
+          "ruleCount": 75,
           "constraintCount": 1,
           "conditionalRuleCount": 2,
           "phases": [
@@ -374,14 +375,14 @@
           "usedInStages": []
         },
         {
-          "skillId": "kc-mapper",
+          "skillId": "path-kc-mapping",
           "stage": "path",
           "agentId": "path-agent",
           "kind": "mainline",
           "displayName": "知识组件映射 Skill",
           "description": "将认知概念和子任务分解为细粒度 KC，标注前置依赖",
-          "coreFile": "prompts/core/kc-mapper.yaml",
-          "manifestFile": "prompts/manifests/kc-mapper.yaml",
+          "coreFile": "prompts/core/path-kc-mapping.yaml",
+          "manifestFile": "prompts/manifests/path-kc-mapping.yaml",
           "hasCore": true,
           "hasManifest": true,
           "baseVersion": 1,
@@ -420,8 +421,8 @@
       "orchestrationFile": "prompts/orchestration/teaching.yaml",
       "contracts": [
         "skill:teaching-turn",
-        "skill:peer-reinforcement",
-        "skill:session-wrapup",
+        "skill:teaching-peer-reinforcement",
+        "skill:teaching-wrapup",
         "teaching-agent"
       ],
       "fieldCount": 51,
@@ -485,11 +486,12 @@
               "agentId": "TeachingContextBuilder",
               "kind": "service",
               "impl": "services/ai-teaching/TeachingContextBuilder.ts buildTeachingScenarioContext",
-              "role": "teaching-context-build"
+              "role": "teaching-context-build",
+              "summary": "装配教学上下文：学习者快照、当前任务、画像信号与控制项"
             },
             {
               "step": 2,
-              "agentId": "skill:teaching-opening-generator",
+              "agentId": "skill:teaching-opening",
               "kind": "skill",
               "role": "opening-generation",
               "condition": "on session start"
@@ -503,9 +505,9 @@
             },
             {
               "step": 4,
-              "agentId": "skill:peer-reinforcement",
+              "agentId": "skill:teaching-peer-reinforcement",
               "kind": "skill",
-              "role": "peer-reinforcement",
+              "role": "teaching-peer-reinforcement",
               "condition": "when control.shouldTriggerPeer = true"
             },
             {
@@ -514,13 +516,14 @@
               "kind": "service",
               "impl": "services/ai-teaching/AITeachingCoordinator.ts submitCheckpoint（teaching-turn 可选输出 control.checkpoint 产生 pendingCheckpoint）",
               "role": "checkpoint-decision",
+              "summary": "提交并裁决检查点作答，推进教学会话状态机",
               "condition": "when a pending checkpoint is returned"
             },
             {
               "step": 6,
-              "agentId": "skill:session-wrapup",
+              "agentId": "skill:teaching-wrapup",
               "kind": "skill",
-              "role": "session-wrapup",
+              "role": "teaching-wrapup",
               "condition": "when session ends"
             },
             {
@@ -529,13 +532,14 @@
               "kind": "service",
               "impl": "services/ai-teaching/ReplanAdvisoryService.ts build（endSession 流内调用）",
               "role": "replan-advisory",
+              "summary": "课后生成重规划建议（保持、补强、放慢、重排、加速），只记录不执行",
               "condition": "after wrapup and learner projection refresh"
             }
           ],
           "memberSkills": [
             "teaching-turn",
-            "peer-reinforcement",
-            "session-wrapup"
+            "teaching-peer-reinforcement",
+            "teaching-wrapup"
           ]
         }
       ],
@@ -555,40 +559,40 @@
           "callSite": "agent steps"
         },
         {
-          "skillId": "peer-reinforcement",
+          "skillId": "teaching-peer-reinforcement",
           "kind": "mainline",
           "parentAgent": "teaching-agent",
           "displayName": "伴学补强 Skill",
           "description": "同伴式引导讨论与理解补强",
-          "coreFile": "prompts/core/peer-reinforcement.yaml",
+          "coreFile": "prompts/core/teaching-peer-reinforcement.yaml",
           "inAgentSteps": true,
           "step": 4,
-          "role": "peer-reinforcement",
+          "role": "teaching-peer-reinforcement",
           "condition": "when control.shouldTriggerPeer = true",
           "loopOver": null,
           "callSite": "agent steps"
         },
         {
-          "skillId": "session-wrapup",
+          "skillId": "teaching-wrapup",
           "kind": "mainline",
           "parentAgent": "teaching-agent",
           "displayName": "课后产出 Skill",
           "description": "生成课后总结与评估",
-          "coreFile": "prompts/core/session-wrapup.yaml",
+          "coreFile": "prompts/core/teaching-wrapup.yaml",
           "inAgentSteps": true,
           "step": 6,
-          "role": "session-wrapup",
+          "role": "teaching-wrapup",
           "condition": "when session ends",
           "loopOver": null,
           "callSite": "agent steps"
         },
         {
-          "skillId": "teaching-opening-generator",
+          "skillId": "teaching-opening",
           "kind": "aux",
           "parentAgent": null,
           "displayName": "课堂开场交互生成器",
           "description": "生成教学 Session 的开场 message、question 与 quickReplies",
-          "coreFile": "prompts/core/teaching-opening-generator.yaml",
+          "coreFile": "prompts/core/teaching-opening.yaml",
           "inAgentSteps": true,
           "step": 2,
           "role": "opening-generation",
@@ -629,8 +633,8 @@
           "artifactKind": "conversation",
           "interactionMode": "turn",
           "contractFields": 15,
-          "ruleCount": 84,
-          "constraintCount": 17,
+          "ruleCount": 85,
+          "constraintCount": 21,
           "conditionalRuleCount": 14,
           "phases": [
             "turn-generated",
@@ -642,14 +646,14 @@
           "usedInStages": []
         },
         {
-          "skillId": "peer-reinforcement",
+          "skillId": "teaching-peer-reinforcement",
           "stage": "teaching",
           "agentId": "teaching-agent",
           "kind": "mainline",
           "displayName": "伴学补强 Skill",
           "description": "同伴式引导讨论与理解补强",
-          "coreFile": "prompts/core/peer-reinforcement.yaml",
-          "manifestFile": "prompts/manifests/peer-reinforcement.yaml",
+          "coreFile": "prompts/core/teaching-peer-reinforcement.yaml",
+          "manifestFile": "prompts/manifests/teaching-peer-reinforcement.yaml",
           "hasCore": true,
           "hasManifest": true,
           "baseVersion": 1,
@@ -681,14 +685,14 @@
           "usedInStages": []
         },
         {
-          "skillId": "session-wrapup",
+          "skillId": "teaching-wrapup",
           "stage": "teaching",
           "agentId": "teaching-agent",
           "kind": "mainline",
           "displayName": "课后产出 Skill",
           "description": "生成课后总结与评估",
-          "coreFile": "prompts/core/session-wrapup.yaml",
-          "manifestFile": "prompts/manifests/session-wrapup.yaml",
+          "coreFile": "prompts/core/teaching-wrapup.yaml",
+          "manifestFile": "prompts/manifests/teaching-wrapup.yaml",
           "hasCore": true,
           "hasManifest": true,
           "baseVersion": 1,
@@ -722,14 +726,14 @@
           "usedInStages": []
         },
         {
-          "skillId": "teaching-opening-generator",
+          "skillId": "teaching-opening",
           "stage": null,
           "agentId": "teaching-agent",
           "kind": "aux",
           "displayName": "课堂开场交互生成器",
           "description": "生成教学 Session 的开场 message、question 与 quickReplies",
-          "coreFile": "prompts/core/teaching-opening-generator.yaml",
-          "manifestFile": "prompts/manifests/teaching-opening-generator.yaml",
+          "coreFile": "prompts/core/teaching-opening.yaml",
+          "manifestFile": "prompts/manifests/teaching-opening.yaml",
           "hasCore": true,
           "hasManifest": true,
           "baseVersion": 1,
@@ -751,7 +755,7 @@
           "artifactKind": "generation",
           "interactionMode": "snapshot",
           "contractFields": 0,
-          "ruleCount": 20,
+          "ruleCount": 22,
           "constraintCount": 3,
           "conditionalRuleCount": 0,
           "phases": [
@@ -769,10 +773,10 @@
       "description": "学习者画像增强与背景知识沉淀，以及面向学习者的引导文案生成",
       "orchestrationFile": "prompts/orchestration/profile.yaml",
       "contracts": [
-        "skill:lesson-knowledge-enricher",
-        "skill:learner-model",
-        "skill:learning-predictor",
-        "skill:adaptive-guidance-copy",
+        "skill:profile-lesson-enrich",
+        "skill:profile-learner-model",
+        "skill:profile-learning-predict",
+        "skill:profile-adaptive-copy",
         "profile-agent"
       ],
       "fieldCount": 21,
@@ -820,6 +824,7 @@
               "kind": "service",
               "impl": "services/learner/LearnerEvidenceProjector.ts handle（事件 → 学习者证据投影；events/learner-event-consumer.ts:49）",
               "role": "learner-evidence-projection",
+              "summary": "把领域事件投影成学习者证据，重复事件按收件箱去重",
               "condition": "when learner profile related events arrive"
             },
             {
@@ -828,6 +833,7 @@
               "kind": "service",
               "impl": "services/learner/LearnerProfileService.ts clear + services/learner/LearnerSnapshotRefreshService.ts invalidate（清画像缓存并同源失效快照缓存，读路径超 TTL 自愈重建；events/learner-event-consumer.ts:52-54）",
               "role": "learner-profile-cache-clear",
+              "summary": "清画像缓存，并让快照缓存同时失效",
               "condition": "after learner evidence is projected"
             },
             {
@@ -836,11 +842,12 @@
               "kind": "service",
               "impl": "services/learner/LearnerSnapshotRefreshService.ts refresh（events/learner-event-consumer.ts:67-75；教学 task:completed 与 goal:understanding:updated 不刷新）",
               "role": "learner-snapshot-refresh",
+              "summary": "重算学习者快照：掌握度、动态状态与教学提示",
               "condition": "after profile cache is invalidated (skipped for teaching task:completed / goal:understanding:updated)"
             },
             {
               "step": 4,
-              "agentId": "skill:lesson-knowledge-enricher",
+              "agentId": "skill:profile-lesson-enrich",
               "kind": "skill",
               "impl": "events/lesson-enrichment-event.ts enqueueLessonEnrichmentEvent（events/learner-event-consumer.ts:81；仅 lesson:completed，登记独立事件后由泳道 services/learner/LessonKnowledgeEnrichmentConsumer.ts 消费，快路径不 await LLM）",
               "role": "lesson-knowledge-enrichment",
@@ -848,21 +855,21 @@
             }
           ],
           "memberSkills": [
-            "adaptive-guidance-copy",
-            "learner-model",
-            "lesson-knowledge-enricher",
-            "learning-predictor"
+            "profile-adaptive-copy",
+            "profile-learner-model",
+            "profile-lesson-enrich",
+            "profile-learning-predict"
           ]
         }
       ],
       "skills": [
         {
-          "skillId": "adaptive-guidance-copy",
+          "skillId": "profile-adaptive-copy",
           "kind": "mainline",
           "parentAgent": "profile-agent",
           "displayName": "自适应引导文案 Skill",
           "description": "根据情境生成自适应引导话术",
-          "coreFile": "prompts/core/adaptive-guidance-copy.yaml",
+          "coreFile": "prompts/core/profile-adaptive-copy.yaml",
           "inAgentSteps": false,
           "step": null,
           "role": null,
@@ -871,7 +878,7 @@
           "callSite": "coordinator 登记（profile-agent）"
         },
         {
-          "skillId": "learner-model",
+          "skillId": "profile-learner-model",
           "kind": "handler-only",
           "parentAgent": "profile-agent",
           "displayName": "学习者模型 Skill",
@@ -885,12 +892,12 @@
           "callSite": "coordinator 登记（profile-agent）"
         },
         {
-          "skillId": "lesson-knowledge-enricher",
+          "skillId": "profile-lesson-enrich",
           "kind": "mainline",
           "parentAgent": "profile-agent",
           "displayName": "课后知识增强 Skill",
           "description": "课后单次调用：蒸馏知识台账增量并抽取隐性概念线索",
-          "coreFile": "prompts/core/lesson-knowledge-enricher.yaml",
+          "coreFile": "prompts/core/profile-lesson-enrich.yaml",
           "inAgentSteps": true,
           "step": 4,
           "role": "lesson-knowledge-enrichment",
@@ -899,12 +906,12 @@
           "callSite": "agent steps"
         },
         {
-          "skillId": "learning-predictor",
+          "skillId": "profile-learning-predict",
           "kind": "mainline",
           "parentAgent": "profile-agent",
           "displayName": "学习表现预测 Skill",
           "description": "任务前基于知识状态摘要预测卡壳风险，含实证校准闭环",
-          "coreFile": "prompts/core/learning-predictor.yaml",
+          "coreFile": "prompts/core/profile-learning-predict.yaml",
           "inAgentSteps": false,
           "step": null,
           "role": null,
@@ -915,14 +922,14 @@
       ],
       "prompts": [
         {
-          "skillId": "adaptive-guidance-copy",
+          "skillId": "profile-adaptive-copy",
           "stage": "profile",
           "agentId": "profile-agent",
           "kind": "mainline",
           "displayName": "自适应引导文案 Skill",
           "description": "根据情境生成自适应引导话术",
-          "coreFile": "prompts/core/adaptive-guidance-copy.yaml",
-          "manifestFile": "prompts/manifests/adaptive-guidance-copy.yaml",
+          "coreFile": "prompts/core/profile-adaptive-copy.yaml",
+          "manifestFile": "prompts/manifests/profile-adaptive-copy.yaml",
           "hasCore": true,
           "hasManifest": true,
           "baseVersion": 1,
@@ -954,14 +961,14 @@
           "usedInStages": []
         },
         {
-          "skillId": "lesson-knowledge-enricher",
+          "skillId": "profile-lesson-enrich",
           "stage": "profile",
           "agentId": "profile-agent",
           "kind": "mainline",
           "displayName": "课后知识增强 Skill",
           "description": "课后单次调用：蒸馏知识台账增量并抽取隐性概念线索",
-          "coreFile": "prompts/core/lesson-knowledge-enricher.yaml",
-          "manifestFile": "prompts/manifests/lesson-knowledge-enricher.yaml",
+          "coreFile": "prompts/core/profile-lesson-enrich.yaml",
+          "manifestFile": "prompts/manifests/profile-lesson-enrich.yaml",
           "hasCore": true,
           "hasManifest": true,
           "baseVersion": 1,
@@ -991,14 +998,14 @@
           "usedInStages": []
         },
         {
-          "skillId": "learning-predictor",
+          "skillId": "profile-learning-predict",
           "stage": "profile",
           "agentId": "profile-agent",
           "kind": "mainline",
           "displayName": "学习表现预测 Skill",
           "description": "任务前基于知识状态摘要预测卡壳风险，含实证校准闭环",
-          "coreFile": "prompts/core/learning-predictor.yaml",
-          "manifestFile": "prompts/manifests/learning-predictor.yaml",
+          "coreFile": "prompts/core/profile-learning-predict.yaml",
+          "manifestFile": "prompts/manifests/profile-learning-predict.yaml",
           "hasCore": true,
           "hasManifest": true,
           "baseVersion": 1,
@@ -1036,15 +1043,15 @@
       "description": "虚拟学习者实验：样本设计 → 模拟器 → 旁路审计（服务端注入输入，无阶段间 handoff）",
       "orchestrationFile": "prompts/orchestration/simulation.yaml",
       "contracts": [
-        "skill:virtual-learner-persona-designer",
-        "skill:virtual-learner-scenario-designer",
-        "skill:virtual-learner-goal-dialogue-simulator",
-        "skill:virtual-learner-path-evaluator",
-        "skill:virtual-learner-learn-turn-simulator",
-        "skill:virtual-learner-epistemic-grounding",
-        "skill:virtual-learner-referee",
-        "skill:virtual-learner-actor-auditor",
-        "skill:virtual-learner-memory-curator",
+        "skill:simulation-persona-designer",
+        "skill:simulation-scenario-designer",
+        "skill:simulation-goal-dialogue",
+        "skill:simulation-path-evaluate",
+        "skill:simulation-learn-turn",
+        "skill:simulation-epistemic-grounding",
+        "skill:simulation-referee",
+        "skill:simulation-actor-audit",
+        "skill:simulation-memory-curate",
         "simulation-agent"
       ],
       "fieldCount": 20,
@@ -1121,7 +1128,7 @@
           "steps": [
             {
               "step": 1,
-              "agentId": "skill:virtual-learner-goal-dialogue-simulator",
+              "agentId": "skill:simulation-goal-dialogue",
               "role": "goal-stage-learner-turn-simulation",
               "loopOver": "goal-rounds"
             },
@@ -1139,13 +1146,13 @@
             },
             {
               "step": 4,
-              "agentId": "skill:virtual-learner-path-evaluator",
+              "agentId": "skill:simulation-path-evaluate",
               "role": "legacy-assisted-path-review",
               "condition": "legacy assisted mode only"
             },
             {
               "step": 5,
-              "agentId": "skill:virtual-learner-learn-turn-simulator",
+              "agentId": "skill:simulation-learn-turn",
               "role": "teaching-stage-learner-turn-simulation",
               "condition": "when teaching phase starts",
               "loopOver": "teaching-turns"
@@ -1159,33 +1166,33 @@
             },
             {
               "step": 7,
-              "agentId": "skill:virtual-learner-referee",
+              "agentId": "skill:simulation-referee",
               "role": "platform-quality-referee",
               "condition": "external: /api/admin/session-audits（裁判独立面，blackbox-api sessions only）"
             },
             {
               "step": 8,
-              "agentId": "skill:virtual-learner-actor-auditor",
+              "agentId": "skill:simulation-actor-audit",
               "role": "synthetic-learner-fidelity-audit",
               "condition": "external: /api/admin/session-audits（裁判独立面，blackbox-api sessions only）"
             },
             {
               "step": 9,
-              "agentId": "skill:virtual-learner-memory-curator",
+              "agentId": "skill:simulation-memory-curate",
               "role": "after-lesson-memory-curation",
               "condition": "after a lesson/task completes in any chain"
             }
           ],
           "memberSkills": [
-            "virtual-learner-persona-designer",
-            "virtual-learner-scenario-designer",
-            "virtual-learner-goal-dialogue-simulator",
-            "virtual-learner-path-evaluator",
-            "virtual-learner-learn-turn-simulator",
-            "virtual-learner-referee",
-            "virtual-learner-memory-curator",
-            "virtual-learner-actor-auditor",
-            "virtual-learner-epistemic-grounding"
+            "simulation-persona-designer",
+            "simulation-scenario-designer",
+            "simulation-goal-dialogue",
+            "simulation-path-evaluate",
+            "simulation-learn-turn",
+            "simulation-referee",
+            "simulation-memory-curate",
+            "simulation-actor-audit",
+            "simulation-epistemic-grounding"
           ]
         }
       ],
@@ -1205,12 +1212,12 @@
           "callSite": "agent steps"
         },
         {
-          "skillId": "virtual-learner-persona-designer",
+          "skillId": "simulation-persona-designer",
           "kind": "mainline",
           "parentAgent": "simulation-agent",
           "displayName": "虚拟学习者人格设计 Skill",
           "description": "为虚拟学习者生成稳定人格设定",
-          "coreFile": "prompts/core/virtual-learner-persona-designer.yaml",
+          "coreFile": "prompts/core/simulation-persona-designer.yaml",
           "inAgentSteps": false,
           "step": null,
           "role": null,
@@ -1219,12 +1226,12 @@
           "callSite": "coordinator 登记（simulation-agent）"
         },
         {
-          "skillId": "virtual-learner-scenario-designer",
+          "skillId": "simulation-scenario-designer",
           "kind": "mainline",
           "parentAgent": "simulation-agent",
           "displayName": "虚拟学习者场景设计 Skill",
           "description": "设计虚拟学习者的学习目标场景",
-          "coreFile": "prompts/core/virtual-learner-scenario-designer.yaml",
+          "coreFile": "prompts/core/simulation-scenario-designer.yaml",
           "inAgentSteps": false,
           "step": null,
           "role": null,
@@ -1233,12 +1240,12 @@
           "callSite": "coordinator 登记（simulation-agent）"
         },
         {
-          "skillId": "virtual-learner-goal-dialogue-simulator",
+          "skillId": "simulation-goal-dialogue",
           "kind": "mainline",
           "parentAgent": "simulation-agent",
           "displayName": "虚拟学习者目标对话模拟 Skill",
           "description": "模拟虚拟学习者在 Goal 阶段的回复",
-          "coreFile": "prompts/core/virtual-learner-goal-dialogue-simulator.yaml",
+          "coreFile": "prompts/core/simulation-goal-dialogue.yaml",
           "inAgentSteps": true,
           "step": 1,
           "role": "goal-stage-learner-turn-simulation",
@@ -1247,12 +1254,12 @@
           "callSite": "agent steps"
         },
         {
-          "skillId": "virtual-learner-path-evaluator",
+          "skillId": "simulation-path-evaluate",
           "kind": "mainline",
           "parentAgent": "simulation-agent",
           "displayName": "虚拟学习者路径评估 Skill",
           "description": "模拟虚拟学习者对 Path 的反馈与评估",
-          "coreFile": "prompts/core/virtual-learner-path-evaluator.yaml",
+          "coreFile": "prompts/core/simulation-path-evaluate.yaml",
           "inAgentSteps": true,
           "step": 4,
           "role": "legacy-assisted-path-review",
@@ -1261,12 +1268,12 @@
           "callSite": "agent steps"
         },
         {
-          "skillId": "virtual-learner-learn-turn-simulator",
+          "skillId": "simulation-learn-turn",
           "kind": "mainline",
           "parentAgent": "simulation-agent",
           "displayName": "虚拟学习者教学回合模拟 Skill",
           "description": "模拟虚拟学习者在 Learn 阶段的单轮回复",
-          "coreFile": "prompts/core/virtual-learner-learn-turn-simulator.yaml",
+          "coreFile": "prompts/core/simulation-learn-turn.yaml",
           "inAgentSteps": true,
           "step": 5,
           "role": "teaching-stage-learner-turn-simulation",
@@ -1275,12 +1282,12 @@
           "callSite": "agent steps"
         },
         {
-          "skillId": "virtual-learner-referee",
+          "skillId": "simulation-referee",
           "kind": "mainline",
           "parentAgent": "simulation-agent",
           "displayName": "平台体验裁判 Skill",
           "description": "基于 Blackbox 公开轨迹、旁路诊断和控制回执生成独立实验裁判报告",
-          "coreFile": "prompts/core/virtual-learner-referee.yaml",
+          "coreFile": "prompts/core/simulation-referee.yaml",
           "inAgentSteps": true,
           "step": 7,
           "role": "platform-quality-referee",
@@ -1289,12 +1296,12 @@
           "callSite": "agent steps"
         },
         {
-          "skillId": "virtual-learner-memory-curator",
+          "skillId": "simulation-memory-curate",
           "kind": "mainline",
           "parentAgent": "simulation-agent",
           "displayName": "虚拟学习者课后记忆提炼 Skill",
           "description": "以虚拟学习者本人视角，从课堂回合中提炼\"自己觉得学会了什么、卡在哪\"，产出可沉淀的记忆增量",
-          "coreFile": "prompts/core/virtual-learner-memory-curator.yaml",
+          "coreFile": "prompts/core/simulation-memory-curate.yaml",
           "inAgentSteps": true,
           "step": 9,
           "role": "after-lesson-memory-curation",
@@ -1303,12 +1310,12 @@
           "callSite": "agent steps"
         },
         {
-          "skillId": "virtual-learner-actor-auditor",
+          "skillId": "simulation-actor-audit",
           "kind": "mainline",
           "parentAgent": "simulation-agent",
           "displayName": "角色保真审计 Skill",
           "description": "基于画像、故事、摩擦预算、私有状态和公开行为评估合成学习者可信度",
-          "coreFile": "prompts/core/virtual-learner-actor-auditor.yaml",
+          "coreFile": "prompts/core/simulation-actor-audit.yaml",
           "inAgentSteps": true,
           "step": 8,
           "role": "synthetic-learner-fidelity-audit",
@@ -1317,12 +1324,12 @@
           "callSite": "agent steps"
         },
         {
-          "skillId": "virtual-learner-epistemic-grounding",
+          "skillId": "simulation-epistemic-grounding",
           "kind": "mainline",
           "parentAgent": "simulation-agent",
           "displayName": "认知判决 Skill",
           "description": "基于画像掌握度对当前步骤能否做对做离散认知判决（BEAGLE 物理两阶段第一段）",
-          "coreFile": "prompts/core/virtual-learner-epistemic-grounding.yaml",
+          "coreFile": "prompts/core/simulation-epistemic-grounding.yaml",
           "inAgentSteps": false,
           "step": null,
           "role": null,
@@ -1361,7 +1368,7 @@
           "artifactKind": "conversation",
           "interactionMode": "turn",
           "contractFields": 11,
-          "ruleCount": 40,
+          "ruleCount": 50,
           "constraintCount": 3,
           "conditionalRuleCount": 0,
           "phases": [
@@ -1374,14 +1381,14 @@
           "usedInStages": []
         },
         {
-          "skillId": "virtual-learner-persona-designer",
+          "skillId": "simulation-persona-designer",
           "stage": "simulation",
           "agentId": "simulation-agent",
           "kind": "mainline",
           "displayName": "虚拟学习者人格设计 Skill",
           "description": "为虚拟学习者生成稳定人格设定",
-          "coreFile": "prompts/core/virtual-learner-persona-designer.yaml",
-          "manifestFile": "prompts/manifests/virtual-learner-persona-designer.yaml",
+          "coreFile": "prompts/core/simulation-persona-designer.yaml",
+          "manifestFile": "prompts/manifests/simulation-persona-designer.yaml",
           "hasCore": true,
           "hasManifest": true,
           "baseVersion": 1,
@@ -1412,14 +1419,14 @@
           "usedInStages": []
         },
         {
-          "skillId": "virtual-learner-scenario-designer",
+          "skillId": "simulation-scenario-designer",
           "stage": "simulation",
           "agentId": "simulation-agent",
           "kind": "mainline",
           "displayName": "虚拟学习者场景设计 Skill",
           "description": "设计虚拟学习者的学习目标场景",
-          "coreFile": "prompts/core/virtual-learner-scenario-designer.yaml",
-          "manifestFile": "prompts/manifests/virtual-learner-scenario-designer.yaml",
+          "coreFile": "prompts/core/simulation-scenario-designer.yaml",
+          "manifestFile": "prompts/manifests/simulation-scenario-designer.yaml",
           "hasCore": true,
           "hasManifest": true,
           "baseVersion": 1,
@@ -1429,7 +1436,7 @@
             "learner"
           ],
           "identity": "一位\"虚拟学习者实验样本设计师\"。",
-          "inputs": 8,
+          "inputs": 10,
           "outputs": 3,
           "params": {
             "temperature": 0.9,
@@ -1450,14 +1457,14 @@
           "usedInStages": []
         },
         {
-          "skillId": "virtual-learner-goal-dialogue-simulator",
+          "skillId": "simulation-goal-dialogue",
           "stage": "simulation",
           "agentId": "simulation-agent",
           "kind": "mainline",
           "displayName": "虚拟学习者目标对话模拟 Skill",
           "description": "模拟虚拟学习者在 Goal 阶段的回复",
-          "coreFile": "prompts/core/virtual-learner-goal-dialogue-simulator.yaml",
-          "manifestFile": "prompts/manifests/virtual-learner-goal-dialogue-simulator.yaml",
+          "coreFile": "prompts/core/simulation-goal-dialogue.yaml",
+          "manifestFile": "prompts/manifests/simulation-goal-dialogue.yaml",
           "hasCore": true,
           "hasManifest": true,
           "baseVersion": 1,
@@ -1468,8 +1475,8 @@
             "task"
           ],
           "identity": "Goal 阶段虚拟学习者对话模拟器。",
-          "inputs": 7,
-          "outputs": 4,
+          "inputs": 9,
+          "outputs": 6,
           "params": {
             "temperature": 0.8,
             "maxTokens": 64000,
@@ -1479,7 +1486,7 @@
           "artifactKind": "conversation",
           "interactionMode": "turn",
           "contractFields": 0,
-          "ruleCount": 14,
+          "ruleCount": 18,
           "constraintCount": 3,
           "conditionalRuleCount": 1,
           "phases": [
@@ -1489,14 +1496,14 @@
           "usedInStages": []
         },
         {
-          "skillId": "virtual-learner-path-evaluator",
+          "skillId": "simulation-path-evaluate",
           "stage": "simulation",
           "agentId": "simulation-agent",
           "kind": "mainline",
           "displayName": "虚拟学习者路径评估 Skill",
           "description": "模拟虚拟学习者对 Path 的反馈与评估",
-          "coreFile": "prompts/core/virtual-learner-path-evaluator.yaml",
-          "manifestFile": "prompts/manifests/virtual-learner-path-evaluator.yaml",
+          "coreFile": "prompts/core/simulation-path-evaluate.yaml",
+          "manifestFile": "prompts/manifests/simulation-path-evaluate.yaml",
           "hasCore": true,
           "hasManifest": true,
           "baseVersion": 1,
@@ -1528,14 +1535,14 @@
           "usedInStages": []
         },
         {
-          "skillId": "virtual-learner-learn-turn-simulator",
+          "skillId": "simulation-learn-turn",
           "stage": "simulation",
           "agentId": "simulation-agent",
           "kind": "mainline",
           "displayName": "虚拟学习者教学回合模拟 Skill",
           "description": "模拟虚拟学习者在 Learn 阶段的单轮回复",
-          "coreFile": "prompts/core/virtual-learner-learn-turn-simulator.yaml",
-          "manifestFile": "prompts/manifests/virtual-learner-learn-turn-simulator.yaml",
+          "coreFile": "prompts/core/simulation-learn-turn.yaml",
+          "manifestFile": "prompts/manifests/simulation-learn-turn.yaml",
           "hasCore": true,
           "hasManifest": true,
           "baseVersion": 1,
@@ -1547,7 +1554,7 @@
             "evidence"
           ],
           "identity": "Learn 阶段虚拟学习者回合模拟器。",
-          "inputs": 12,
+          "inputs": 15,
           "outputs": 6,
           "params": {
             "temperature": 0.7,
@@ -1568,14 +1575,14 @@
           "usedInStages": []
         },
         {
-          "skillId": "virtual-learner-referee",
+          "skillId": "simulation-referee",
           "stage": "simulation",
           "agentId": "simulation-agent",
           "kind": "mainline",
           "displayName": "平台体验裁判 Skill",
           "description": "基于 Blackbox 公开轨迹、旁路诊断和控制回执生成独立实验裁判报告",
-          "coreFile": "prompts/core/virtual-learner-referee.yaml",
-          "manifestFile": "prompts/manifests/virtual-learner-referee.yaml",
+          "coreFile": "prompts/core/simulation-referee.yaml",
+          "manifestFile": "prompts/manifests/simulation-referee.yaml",
           "hasCore": true,
           "hasManifest": true,
           "baseVersion": 1,
@@ -1595,7 +1602,7 @@
           "artifactKind": "extraction",
           "interactionMode": "batch",
           "contractFields": 0,
-          "ruleCount": 11,
+          "ruleCount": 14,
           "constraintCount": 6,
           "conditionalRuleCount": 0,
           "phases": [
@@ -1605,14 +1612,14 @@
           "usedInStages": []
         },
         {
-          "skillId": "virtual-learner-memory-curator",
+          "skillId": "simulation-memory-curate",
           "stage": "simulation",
           "agentId": "simulation-agent",
           "kind": "mainline",
           "displayName": "虚拟学习者课后记忆提炼 Skill",
           "description": "以虚拟学习者本人视角，从课堂回合中提炼\"自己觉得学会了什么、卡在哪\"，产出可沉淀的记忆增量",
-          "coreFile": "prompts/core/virtual-learner-memory-curator.yaml",
-          "manifestFile": "prompts/manifests/virtual-learner-memory-curator.yaml",
+          "coreFile": "prompts/core/simulation-memory-curate.yaml",
+          "manifestFile": "prompts/manifests/simulation-memory-curate.yaml",
           "hasCore": true,
           "hasManifest": true,
           "baseVersion": 1,
@@ -1644,14 +1651,14 @@
           "usedInStages": []
         },
         {
-          "skillId": "virtual-learner-actor-auditor",
+          "skillId": "simulation-actor-audit",
           "stage": "simulation",
           "agentId": "simulation-agent",
           "kind": "mainline",
           "displayName": "角色保真审计 Skill",
           "description": "基于画像、故事、摩擦预算、私有状态和公开行为评估合成学习者可信度",
-          "coreFile": "prompts/core/virtual-learner-actor-auditor.yaml",
-          "manifestFile": "prompts/manifests/virtual-learner-actor-auditor.yaml",
+          "coreFile": "prompts/core/simulation-actor-audit.yaml",
+          "manifestFile": "prompts/manifests/simulation-actor-audit.yaml",
           "hasCore": true,
           "hasManifest": true,
           "baseVersion": 1,
@@ -1683,14 +1690,14 @@
           "usedInStages": []
         },
         {
-          "skillId": "virtual-learner-epistemic-grounding",
+          "skillId": "simulation-epistemic-grounding",
           "stage": "simulation",
           "agentId": "simulation-agent",
           "kind": "mainline",
           "displayName": "认知判决 Skill",
           "description": "基于画像掌握度对当前步骤能否做对做离散认知判决（BEAGLE 物理两阶段第一段）",
-          "coreFile": "prompts/core/virtual-learner-epistemic-grounding.yaml",
-          "manifestFile": "prompts/manifests/virtual-learner-epistemic-grounding.yaml",
+          "coreFile": "prompts/core/simulation-epistemic-grounding.yaml",
+          "manifestFile": "prompts/manifests/simulation-epistemic-grounding.yaml",
           "hasCore": true,
           "hasManifest": true,
           "baseVersion": 1,
@@ -1754,7 +1761,7 @@
       "artifactKind": "conversation",
       "interactionMode": "turn",
       "contractFields": 11,
-      "ruleCount": 40,
+      "ruleCount": 50,
       "constraintCount": 3,
       "conditionalRuleCount": 0,
       "phases": [
@@ -1800,7 +1807,7 @@
       "artifactKind": "generation",
       "interactionMode": "snapshot",
       "contractFields": 0,
-      "ruleCount": 54,
+      "ruleCount": 60,
       "constraintCount": 4,
       "conditionalRuleCount": 0,
       "phases": [
@@ -1813,14 +1820,14 @@
       ]
     },
     {
-      "skillId": "stage-designer",
+      "skillId": "path-task-design",
       "stage": "path",
       "agentId": "path-agent",
       "kind": "mainline",
       "displayName": "阶段设计 Skill",
       "description": "细化阶段内的任务与验收点",
-      "coreFile": "prompts/core/stage-designer.yaml",
-      "manifestFile": "prompts/manifests/stage-designer.yaml",
+      "coreFile": "prompts/core/path-task-design.yaml",
+      "manifestFile": "prompts/manifests/path-task-design.yaml",
       "hasCore": true,
       "hasManifest": true,
       "baseVersion": 1,
@@ -1841,7 +1848,7 @@
       "artifactKind": "generation",
       "interactionMode": "snapshot",
       "contractFields": 0,
-      "ruleCount": 57,
+      "ruleCount": 75,
       "constraintCount": 1,
       "conditionalRuleCount": 2,
       "phases": [
@@ -1894,14 +1901,14 @@
       ]
     },
     {
-      "skillId": "kc-mapper",
+      "skillId": "path-kc-mapping",
       "stage": "path",
       "agentId": "path-agent",
       "kind": "mainline",
       "displayName": "知识组件映射 Skill",
       "description": "将认知概念和子任务分解为细粒度 KC，标注前置依赖",
-      "coreFile": "prompts/core/kc-mapper.yaml",
-      "manifestFile": "prompts/manifests/kc-mapper.yaml",
+      "coreFile": "prompts/core/path-kc-mapping.yaml",
+      "manifestFile": "prompts/manifests/path-kc-mapping.yaml",
       "hasCore": true,
       "hasManifest": true,
       "baseVersion": 1,
@@ -1963,8 +1970,8 @@
       "artifactKind": "conversation",
       "interactionMode": "turn",
       "contractFields": 15,
-      "ruleCount": 84,
-      "constraintCount": 17,
+      "ruleCount": 85,
+      "constraintCount": 21,
       "conditionalRuleCount": 14,
       "phases": [
         "turn-generated",
@@ -1978,14 +1985,14 @@
       ]
     },
     {
-      "skillId": "peer-reinforcement",
+      "skillId": "teaching-peer-reinforcement",
       "stage": "teaching",
       "agentId": "teaching-agent",
       "kind": "mainline",
       "displayName": "伴学补强 Skill",
       "description": "同伴式引导讨论与理解补强",
-      "coreFile": "prompts/core/peer-reinforcement.yaml",
-      "manifestFile": "prompts/manifests/peer-reinforcement.yaml",
+      "coreFile": "prompts/core/teaching-peer-reinforcement.yaml",
+      "manifestFile": "prompts/manifests/teaching-peer-reinforcement.yaml",
       "hasCore": true,
       "hasManifest": true,
       "baseVersion": 1,
@@ -2019,14 +2026,14 @@
       ]
     },
     {
-      "skillId": "session-wrapup",
+      "skillId": "teaching-wrapup",
       "stage": "teaching",
       "agentId": "teaching-agent",
       "kind": "mainline",
       "displayName": "课后产出 Skill",
       "description": "生成课后总结与评估",
-      "coreFile": "prompts/core/session-wrapup.yaml",
-      "manifestFile": "prompts/manifests/session-wrapup.yaml",
+      "coreFile": "prompts/core/teaching-wrapup.yaml",
+      "manifestFile": "prompts/manifests/teaching-wrapup.yaml",
       "hasCore": true,
       "hasManifest": true,
       "baseVersion": 1,
@@ -2062,14 +2069,14 @@
       ]
     },
     {
-      "skillId": "adaptive-guidance-copy",
+      "skillId": "profile-adaptive-copy",
       "stage": "profile",
       "agentId": "profile-agent",
       "kind": "mainline",
       "displayName": "自适应引导文案 Skill",
       "description": "根据情境生成自适应引导话术",
-      "coreFile": "prompts/core/adaptive-guidance-copy.yaml",
-      "manifestFile": "prompts/manifests/adaptive-guidance-copy.yaml",
+      "coreFile": "prompts/core/profile-adaptive-copy.yaml",
+      "manifestFile": "prompts/manifests/profile-adaptive-copy.yaml",
       "hasCore": true,
       "hasManifest": true,
       "baseVersion": 1,
@@ -2103,7 +2110,7 @@
       ]
     },
     {
-      "skillId": "learner-model",
+      "skillId": "profile-learner-model",
       "stage": "profile",
       "agentId": "profile-agent",
       "kind": "handler-only",
@@ -2133,14 +2140,14 @@
       ]
     },
     {
-      "skillId": "lesson-knowledge-enricher",
+      "skillId": "profile-lesson-enrich",
       "stage": "profile",
       "agentId": "profile-agent",
       "kind": "mainline",
       "displayName": "课后知识增强 Skill",
       "description": "课后单次调用：蒸馏知识台账增量并抽取隐性概念线索",
-      "coreFile": "prompts/core/lesson-knowledge-enricher.yaml",
-      "manifestFile": "prompts/manifests/lesson-knowledge-enricher.yaml",
+      "coreFile": "prompts/core/profile-lesson-enrich.yaml",
+      "manifestFile": "prompts/manifests/profile-lesson-enrich.yaml",
       "hasCore": true,
       "hasManifest": true,
       "baseVersion": 1,
@@ -2172,14 +2179,14 @@
       ]
     },
     {
-      "skillId": "learning-predictor",
+      "skillId": "profile-learning-predict",
       "stage": "profile",
       "agentId": "profile-agent",
       "kind": "mainline",
       "displayName": "学习表现预测 Skill",
       "description": "任务前基于知识状态摘要预测卡壳风险，含实证校准闭环",
-      "coreFile": "prompts/core/learning-predictor.yaml",
-      "manifestFile": "prompts/manifests/learning-predictor.yaml",
+      "coreFile": "prompts/core/profile-learning-predict.yaml",
+      "manifestFile": "prompts/manifests/profile-learning-predict.yaml",
       "hasCore": true,
       "hasManifest": true,
       "baseVersion": 1,
@@ -2211,14 +2218,14 @@
       ]
     },
     {
-      "skillId": "virtual-learner-persona-designer",
+      "skillId": "simulation-persona-designer",
       "stage": "simulation",
       "agentId": "simulation-agent",
       "kind": "mainline",
       "displayName": "虚拟学习者人格设计 Skill",
       "description": "为虚拟学习者生成稳定人格设定",
-      "coreFile": "prompts/core/virtual-learner-persona-designer.yaml",
-      "manifestFile": "prompts/manifests/virtual-learner-persona-designer.yaml",
+      "coreFile": "prompts/core/simulation-persona-designer.yaml",
+      "manifestFile": "prompts/manifests/simulation-persona-designer.yaml",
       "hasCore": true,
       "hasManifest": true,
       "baseVersion": 1,
@@ -2251,14 +2258,14 @@
       ]
     },
     {
-      "skillId": "virtual-learner-scenario-designer",
+      "skillId": "simulation-scenario-designer",
       "stage": "simulation",
       "agentId": "simulation-agent",
       "kind": "mainline",
       "displayName": "虚拟学习者场景设计 Skill",
       "description": "设计虚拟学习者的学习目标场景",
-      "coreFile": "prompts/core/virtual-learner-scenario-designer.yaml",
-      "manifestFile": "prompts/manifests/virtual-learner-scenario-designer.yaml",
+      "coreFile": "prompts/core/simulation-scenario-designer.yaml",
+      "manifestFile": "prompts/manifests/simulation-scenario-designer.yaml",
       "hasCore": true,
       "hasManifest": true,
       "baseVersion": 1,
@@ -2268,7 +2275,7 @@
         "learner"
       ],
       "identity": "一位\"虚拟学习者实验样本设计师\"。",
-      "inputs": 8,
+      "inputs": 10,
       "outputs": 3,
       "params": {
         "temperature": 0.9,
@@ -2291,14 +2298,14 @@
       ]
     },
     {
-      "skillId": "virtual-learner-goal-dialogue-simulator",
+      "skillId": "simulation-goal-dialogue",
       "stage": "simulation",
       "agentId": "simulation-agent",
       "kind": "mainline",
       "displayName": "虚拟学习者目标对话模拟 Skill",
       "description": "模拟虚拟学习者在 Goal 阶段的回复",
-      "coreFile": "prompts/core/virtual-learner-goal-dialogue-simulator.yaml",
-      "manifestFile": "prompts/manifests/virtual-learner-goal-dialogue-simulator.yaml",
+      "coreFile": "prompts/core/simulation-goal-dialogue.yaml",
+      "manifestFile": "prompts/manifests/simulation-goal-dialogue.yaml",
       "hasCore": true,
       "hasManifest": true,
       "baseVersion": 1,
@@ -2309,8 +2316,8 @@
         "task"
       ],
       "identity": "Goal 阶段虚拟学习者对话模拟器。",
-      "inputs": 7,
-      "outputs": 4,
+      "inputs": 9,
+      "outputs": 6,
       "params": {
         "temperature": 0.8,
         "maxTokens": 64000,
@@ -2320,7 +2327,7 @@
       "artifactKind": "conversation",
       "interactionMode": "turn",
       "contractFields": 0,
-      "ruleCount": 14,
+      "ruleCount": 18,
       "constraintCount": 3,
       "conditionalRuleCount": 1,
       "phases": [
@@ -2332,14 +2339,14 @@
       ]
     },
     {
-      "skillId": "virtual-learner-path-evaluator",
+      "skillId": "simulation-path-evaluate",
       "stage": "simulation",
       "agentId": "simulation-agent",
       "kind": "mainline",
       "displayName": "虚拟学习者路径评估 Skill",
       "description": "模拟虚拟学习者对 Path 的反馈与评估",
-      "coreFile": "prompts/core/virtual-learner-path-evaluator.yaml",
-      "manifestFile": "prompts/manifests/virtual-learner-path-evaluator.yaml",
+      "coreFile": "prompts/core/simulation-path-evaluate.yaml",
+      "manifestFile": "prompts/manifests/simulation-path-evaluate.yaml",
       "hasCore": true,
       "hasManifest": true,
       "baseVersion": 1,
@@ -2373,14 +2380,14 @@
       ]
     },
     {
-      "skillId": "virtual-learner-learn-turn-simulator",
+      "skillId": "simulation-learn-turn",
       "stage": "simulation",
       "agentId": "simulation-agent",
       "kind": "mainline",
       "displayName": "虚拟学习者教学回合模拟 Skill",
       "description": "模拟虚拟学习者在 Learn 阶段的单轮回复",
-      "coreFile": "prompts/core/virtual-learner-learn-turn-simulator.yaml",
-      "manifestFile": "prompts/manifests/virtual-learner-learn-turn-simulator.yaml",
+      "coreFile": "prompts/core/simulation-learn-turn.yaml",
+      "manifestFile": "prompts/manifests/simulation-learn-turn.yaml",
       "hasCore": true,
       "hasManifest": true,
       "baseVersion": 1,
@@ -2392,7 +2399,7 @@
         "evidence"
       ],
       "identity": "Learn 阶段虚拟学习者回合模拟器。",
-      "inputs": 12,
+      "inputs": 15,
       "outputs": 6,
       "params": {
         "temperature": 0.7,
@@ -2415,14 +2422,14 @@
       ]
     },
     {
-      "skillId": "virtual-learner-referee",
+      "skillId": "simulation-referee",
       "stage": "simulation",
       "agentId": "simulation-agent",
       "kind": "mainline",
       "displayName": "平台体验裁判 Skill",
       "description": "基于 Blackbox 公开轨迹、旁路诊断和控制回执生成独立实验裁判报告",
-      "coreFile": "prompts/core/virtual-learner-referee.yaml",
-      "manifestFile": "prompts/manifests/virtual-learner-referee.yaml",
+      "coreFile": "prompts/core/simulation-referee.yaml",
+      "manifestFile": "prompts/manifests/simulation-referee.yaml",
       "hasCore": true,
       "hasManifest": true,
       "baseVersion": 1,
@@ -2442,7 +2449,7 @@
       "artifactKind": "extraction",
       "interactionMode": "batch",
       "contractFields": 0,
-      "ruleCount": 11,
+      "ruleCount": 14,
       "constraintCount": 6,
       "conditionalRuleCount": 0,
       "phases": [
@@ -2454,14 +2461,14 @@
       ]
     },
     {
-      "skillId": "virtual-learner-memory-curator",
+      "skillId": "simulation-memory-curate",
       "stage": "simulation",
       "agentId": "simulation-agent",
       "kind": "mainline",
       "displayName": "虚拟学习者课后记忆提炼 Skill",
       "description": "以虚拟学习者本人视角，从课堂回合中提炼\"自己觉得学会了什么、卡在哪\"，产出可沉淀的记忆增量",
-      "coreFile": "prompts/core/virtual-learner-memory-curator.yaml",
-      "manifestFile": "prompts/manifests/virtual-learner-memory-curator.yaml",
+      "coreFile": "prompts/core/simulation-memory-curate.yaml",
+      "manifestFile": "prompts/manifests/simulation-memory-curate.yaml",
       "hasCore": true,
       "hasManifest": true,
       "baseVersion": 1,
@@ -2495,14 +2502,14 @@
       ]
     },
     {
-      "skillId": "virtual-learner-actor-auditor",
+      "skillId": "simulation-actor-audit",
       "stage": "simulation",
       "agentId": "simulation-agent",
       "kind": "mainline",
       "displayName": "角色保真审计 Skill",
       "description": "基于画像、故事、摩擦预算、私有状态和公开行为评估合成学习者可信度",
-      "coreFile": "prompts/core/virtual-learner-actor-auditor.yaml",
-      "manifestFile": "prompts/manifests/virtual-learner-actor-auditor.yaml",
+      "coreFile": "prompts/core/simulation-actor-audit.yaml",
+      "manifestFile": "prompts/manifests/simulation-actor-audit.yaml",
       "hasCore": true,
       "hasManifest": true,
       "baseVersion": 1,
@@ -2536,14 +2543,14 @@
       ]
     },
     {
-      "skillId": "virtual-learner-epistemic-grounding",
+      "skillId": "simulation-epistemic-grounding",
       "stage": "simulation",
       "agentId": "simulation-agent",
       "kind": "mainline",
       "displayName": "认知判决 Skill",
       "description": "基于画像掌握度对当前步骤能否做对做离散认知判决（BEAGLE 物理两阶段第一段）",
-      "coreFile": "prompts/core/virtual-learner-epistemic-grounding.yaml",
-      "manifestFile": "prompts/manifests/virtual-learner-epistemic-grounding.yaml",
+      "coreFile": "prompts/core/simulation-epistemic-grounding.yaml",
+      "manifestFile": "prompts/manifests/simulation-epistemic-grounding.yaml",
       "hasCore": true,
       "hasManifest": true,
       "baseVersion": 1,
@@ -2689,14 +2696,14 @@
       "usedInStages": []
     },
     {
-      "skillId": "material-collector",
+      "skillId": "path-material-collect",
       "stage": null,
       "agentId": null,
       "kind": "handler-only",
       "displayName": "资料采集编排器 Skill",
       "description": "在 goal→path 之间采集外部权威资料：确定性编排 search→选源→fetch，LLM 仅抽取带引文的要点，产出 Material Pack",
-      "coreFile": "prompts/core/material-collector.yaml",
-      "manifestFile": "prompts/manifests/material-collector.yaml",
+      "coreFile": "prompts/core/path-material-collect.yaml",
+      "manifestFile": "prompts/manifests/path-material-collect.yaml",
       "hasCore": true,
       "hasManifest": true,
       "baseVersion": 1,
@@ -2704,7 +2711,7 @@
         "task",
         "evidence"
       ],
-      "identity": "「资料采集抽取器」，是 material-collector 编排链里唯一的 LLM 环节。",
+      "identity": "「资料采集抽取器」，是 path-material-collect 编排链里唯一的 LLM 环节。",
       "inputs": 0,
       "outputs": 5,
       "params": {
@@ -2726,14 +2733,14 @@
       "usedInStages": []
     },
     {
-      "skillId": "material-brief",
+      "skillId": "path-material-brief",
       "stage": null,
       "agentId": null,
       "kind": "handler-only",
       "displayName": "资料理解摘要器 Skill",
       "description": "Document Summary Index 摘要节点——对上传资料一次性产出结构化理解 brief（是什么/讲什么/目录/核心概念/天然切分维度），持久化在资料记录上供 goal/path 复用",
-      "coreFile": "prompts/core/material-brief.yaml",
-      "manifestFile": "prompts/manifests/material-brief.yaml",
+      "coreFile": "prompts/core/path-material-brief.yaml",
+      "manifestFile": "prompts/manifests/path-material-brief.yaml",
       "hasCore": true,
       "hasManifest": true,
       "baseVersion": 1,
@@ -2806,7 +2813,7 @@
         "dialogue"
       ],
       "identity": "goal 会话的确认裁决器。你只回答一件事：用户刚说的这段话，",
-      "inputs": 0,
+      "inputs": 1,
       "outputs": 1,
       "params": {
         "temperature": 0,
@@ -2827,7 +2834,44 @@
       "usedInStages": []
     },
     {
-      "skillId": "board-designer",
+      "skillId": "teaching-classroom-judge",
+      "stage": null,
+      "agentId": null,
+      "kind": "handler-only",
+      "displayName": "课堂质量独立评审 Skill",
+      "description": "单节课逐轮记录 + 板书/图文载荷 + 收束产出的独立 LLM 病历单（code/severity/evidenceIds）",
+      "coreFile": "prompts/core/teaching-classroom-judge.yaml",
+      "manifestFile": "prompts/manifests/teaching-classroom-judge.yaml",
+      "hasCore": true,
+      "hasManifest": true,
+      "baseVersion": 1,
+      "channels": [
+        "evidence",
+        "task"
+      ],
+      "identity": "WenFlow 课堂的独立旁路评审。你评审**一节课**的完整逐轮记录（含板书/图文载荷与收束产出），",
+      "inputs": 0,
+      "outputs": 5,
+      "params": {
+        "temperature": 0.2,
+        "maxTokens": 64000,
+        "failurePolicy": "retry"
+      },
+      "executionMode": "llm",
+      "artifactKind": "extraction",
+      "interactionMode": "batch",
+      "contractFields": 0,
+      "ruleCount": 12,
+      "constraintCount": 4,
+      "conditionalRuleCount": 0,
+      "phases": [
+        "reviewed"
+      ],
+      "contextMode": "snapshot-context",
+      "usedInStages": []
+    },
+    {
+      "skillId": "teaching-board-design",
       "stage": null,
       "agentId": null,
       "kind": "handler-only",
@@ -2855,14 +2899,14 @@
       "usedInStages": []
     },
     {
-      "skillId": "teaching-opening-generator",
+      "skillId": "teaching-opening",
       "stage": null,
       "agentId": "teaching-agent",
       "kind": "aux",
       "displayName": "课堂开场交互生成器",
       "description": "生成教学 Session 的开场 message、question 与 quickReplies",
-      "coreFile": "prompts/core/teaching-opening-generator.yaml",
-      "manifestFile": "prompts/manifests/teaching-opening-generator.yaml",
+      "coreFile": "prompts/core/teaching-opening.yaml",
+      "manifestFile": "prompts/manifests/teaching-opening.yaml",
       "hasCore": true,
       "hasManifest": true,
       "baseVersion": 1,
@@ -2884,7 +2928,7 @@
       "artifactKind": "generation",
       "interactionMode": "snapshot",
       "contractFields": 0,
-      "ruleCount": 20,
+      "ruleCount": 22,
       "constraintCount": 3,
       "conditionalRuleCount": 0,
       "phases": [
@@ -2896,14 +2940,14 @@
       ]
     },
     {
-      "skillId": "learner-progress-report",
+      "skillId": "profile-progress-report",
       "stage": null,
       "agentId": null,
       "kind": "aux",
       "displayName": "学习进展报告生成器",
       "description": "基于学习指标和信号生成简短进展反馈",
-      "coreFile": "prompts/core/learner-progress-report.yaml",
-      "manifestFile": "prompts/manifests/learner-progress-report.yaml",
+      "coreFile": "prompts/core/profile-progress-report.yaml",
+      "manifestFile": "prompts/manifests/profile-progress-report.yaml",
       "hasCore": true,
       "hasManifest": true,
       "baseVersion": 1,
@@ -2914,7 +2958,7 @@
         "state"
       ],
       "identity": "学习进展报告生成器。基于任务学习数据、指标与学习信号，生成一段内部用于学习者状态中心的简短分析。",
-      "inputs": 2,
+      "inputs": 3,
       "outputs": 2,
       "params": {
         "temperature": 0.4,
@@ -2935,14 +2979,14 @@
       "usedInStages": []
     },
     {
-      "skillId": "learner-state-review",
+      "skillId": "profile-state-review",
       "stage": null,
       "agentId": null,
       "kind": "aux",
       "displayName": "学习状态评审诊断器",
       "description": "基于状态摘要与最近证据给出可证伪的学习状态诊断（为什么卡、下一步怎么调）",
-      "coreFile": "prompts/core/learner-state-review.yaml",
-      "manifestFile": "prompts/manifests/learner-state-review.yaml",
+      "coreFile": "prompts/core/profile-state-review.yaml",
+      "manifestFile": "prompts/manifests/profile-state-review.yaml",
       "hasCore": true,
       "hasManifest": true,
       "baseVersion": 1,
@@ -2953,7 +2997,7 @@
         "state"
       ],
       "identity": "WenFlow 的学习状态评审诊断器。基于给定的学习状态摘要、知识线索与最近证据，",
-      "inputs": 0,
+      "inputs": 4,
       "outputs": 4,
       "params": {
         "temperature": 0.3,
@@ -2974,14 +3018,14 @@
       "usedInStages": []
     },
     {
-      "skillId": "concept-consolidator",
+      "skillId": "profile-concept-consolidate",
       "stage": null,
       "agentId": null,
       "kind": "aux",
       "displayName": "概念身份归并器",
       "description": "判断多个知识点名字里哪些是同一个概念的不同说法，输出可执行、可审计的归并建议",
-      "coreFile": "prompts/core/concept-consolidator.yaml",
-      "manifestFile": "prompts/manifests/concept-consolidator.yaml",
+      "coreFile": "prompts/core/profile-concept-consolidate.yaml",
+      "manifestFile": "prompts/manifests/profile-concept-consolidate.yaml",
       "hasCore": true,
       "hasManifest": true,
       "baseVersion": 1,
@@ -3012,14 +3056,14 @@
       "usedInStages": []
     },
     {
-      "skillId": "concept-load-estimator",
+      "skillId": "profile-concept-load",
       "stage": null,
       "agentId": null,
       "kind": "aux",
       "displayName": "概念负担判定器",
       "description": "逐概念判定粒度/知识类型/检索难度档位，供温故配额按认知负担裁剪",
-      "coreFile": "prompts/core/concept-load-estimator.yaml",
-      "manifestFile": "prompts/manifests/concept-load-estimator.yaml",
+      "coreFile": "prompts/core/profile-concept-load.yaml",
+      "manifestFile": "prompts/manifests/profile-concept-load.yaml",
       "hasCore": true,
       "hasManifest": true,
       "baseVersion": 1,
@@ -3050,14 +3094,14 @@
       "usedInStages": []
     },
     {
-      "skillId": "replan-attribution",
+      "skillId": "teaching-replan-attribution",
       "stage": null,
       "agentId": null,
       "kind": "aux",
       "displayName": "路径重排归因器",
       "description": "在阈值召回的重排建议上给出主因、方向与一条可证伪断言",
-      "coreFile": "prompts/core/replan-attribution.yaml",
-      "manifestFile": "prompts/manifests/replan-attribution.yaml",
+      "coreFile": "prompts/core/teaching-replan-attribution.yaml",
+      "manifestFile": "prompts/manifests/teaching-replan-attribution.yaml",
       "hasCore": true,
       "hasManifest": true,
       "baseVersion": 1,
@@ -3068,7 +3112,7 @@
         "state"
       ],
       "identity": "WenFlow 的路径重排归因器。系统已用阈值判定\"这条路径值得提示重排\"，并给出一组可选方向。",
-      "inputs": 3,
+      "inputs": 4,
       "outputs": 7,
       "params": {
         "temperature": 0.3,
@@ -3269,10 +3313,23 @@
       "coreFile": null
     }
   ],
-  "compiledOnlyPrompts": [],
+  "compiledOnlyPrompts": [
+    {
+      "skillId": "path-path-material-brief",
+      "promptFile": "prompts/skill.path-path-material-brief.md"
+    },
+    {
+      "skillId": "teaching-teaching-peer-reinforcement",
+      "promptFile": "prompts/skill.teaching-teaching-peer-reinforcement.md"
+    },
+    {
+      "skillId": "teaching-teaching-replan-attribution",
+      "promptFile": "prompts/skill.teaching-teaching-replan-attribution.md"
+    }
+  ],
   "skillsWithoutPrompt": [
     {
-      "skillId": "learner-model",
+      "skillId": "profile-learner-model",
       "kind": "handler-only",
       "displayName": "学习者模型 Skill",
       "reason": "handler-only：无 LLM 提示词，逻辑在代码 handler"
@@ -3308,22 +3365,22 @@
       "reason": "handler-only：无 LLM 提示词，逻辑在代码 handler"
     },
     {
-      "skillId": "board-designer",
+      "skillId": "teaching-board-design",
       "kind": "handler-only",
       "displayName": "课堂板书设计器 Skill",
-      "reason": "handler-only：提示词以独立产物 prompts/skill.board-designer.md 承载（无 core 源）"
+      "reason": "handler-only：提示词以独立产物 prompts/skill.teaching-board-design.md 承载（无 core 源）"
     }
   ],
   "counts": {
-    "skills": 39,
+    "skills": 40,
     "byKind": {
       "mainline": 20,
-      "handler-only": 10,
+      "handler-only": 11,
       "aux": 9
     },
-    "prompts": 32,
+    "prompts": 33,
     "mainline": 20,
     "aux": 9,
-    "handlerOnly": 10
+    "handlerOnly": 11
   }
 }

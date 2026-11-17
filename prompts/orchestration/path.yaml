@@ -8,9 +8,9 @@ description: 学习路径生成：Framing → Path Planning → Stage Designer �
 
 contracts:
   - agentId: skill:path-planning
-  - agentId: skill:stage-designer
+  - agentId: skill:path-task-design
   - agentId: skill:path-reviewer
-  - agentId: skill:kc-mapper
+  - agentId: skill:path-kc-mapping
   - agentId: path-agent
 
 fields:
@@ -138,7 +138,7 @@ fields:
     valueType: number
     description: 阶段估时（小时）
 
-  # === skill:stage-designer 产出 ===
+  # === skill:path-task-design 产出 ===
   - fieldId: subtasks.title
     promptRole: hard-required
     valueType: string
@@ -186,9 +186,9 @@ fields:
     valueType: array<object>
     description: 任务→资料条目引用（逐字核对后保留的才落库；无资料时不出该键）
 
-  # === skill:stage-designer 产出归属注记（2026-10-24 契约同步批） ===
+  # === skill:path-task-design 产出归属注记（2026-10-24 契约同步批） ===
   # path-planning 仅产出阶段骨架（milestones 不含 subtask）；subtasks.* 的实际逐阶段产出者是
-  # stage-designer，路由归属见 routings 中既有「stage-designer → path-agent」块
+  # path-task-design，路由归属见 routings 中既有「path-task-design → path-agent」块
   # （本批补齐该块缺的 icapLevel/description/materialRefs 三项）。
 
   # === skill:path-reviewer 产出（CIDDP 质量评审；2026-10-24 契约同步批补齐） ===
@@ -213,7 +213,7 @@ fields:
     valueType: string
     description: 低于阈值时的重规划指令（回传 path-planning 的修订依据）
 
-  # === skill:kc-mapper 产出（知识组件标注；2026-10-24 契约同步批补齐） ===
+  # === skill:path-kc-mapping 产出（知识组件标注；2026-10-24 契约同步批补齐） ===
   - fieldId: conceptKcs
     promptRole: hidden-inference
     valueType: array<object>
@@ -228,11 +228,11 @@ fields:
     description: KC 前置依赖图 {nodes[{kcId,name,taxonomy}], edges[{from,to,relation=prerequisite}]}（知识依赖非讲授顺序、无环）；代码侧物化为概念图供前置闭包查询
 
 routings:
-  # path-agent（确定性定帧）→ path-planning + stage-designer
+  # path-agent（确定性定帧）→ path-planning + path-task-design
   - agentId: path-agent
     fieldId: normalizedInput.learnerProfile.backgroundExperience
     render: hidden
-    handoff: [skill:path-planning, skill:stage-designer]
+    handoff: [skill:path-planning, skill:path-task-design]
     internal: true
     accumulate: false
     visibilityPreset: agent-internal
@@ -240,7 +240,7 @@ routings:
   - agentId: path-agent
     fieldId: normalizedInput.learnerProfile.constraintsAndBoundaries
     render: hidden
-    handoff: [skill:path-planning, skill:stage-designer]
+    handoff: [skill:path-planning, skill:path-task-design]
     internal: true
     accumulate: false
     visibilityPreset: agent-internal
@@ -248,7 +248,7 @@ routings:
   - agentId: path-agent
     fieldId: normalizedInput.problemSpace.realProblem
     render: hidden
-    handoff: [skill:path-planning, skill:stage-designer]
+    handoff: [skill:path-planning, skill:path-task-design]
     internal: true
     accumulate: false
     visibilityPreset: agent-internal
@@ -256,7 +256,7 @@ routings:
   - agentId: path-agent
     fieldId: normalizedInput.problemSpace.scenario
     render: hidden
-    handoff: [skill:path-planning, skill:stage-designer]
+    handoff: [skill:path-planning, skill:path-task-design]
     internal: true
     accumulate: false
     visibilityPreset: agent-internal
@@ -264,7 +264,7 @@ routings:
   - agentId: path-agent
     fieldId: normalizedInput.problemSpace.currentPainPoint
     render: hidden
-    handoff: [skill:path-planning, skill:stage-designer]
+    handoff: [skill:path-planning, skill:path-task-design]
     internal: true
     accumulate: false
     visibilityPreset: agent-internal
@@ -272,7 +272,7 @@ routings:
   - agentId: path-agent
     fieldId: normalizedInput.resources.timeBudget
     render: hidden
-    handoff: [skill:path-planning, skill:stage-designer]
+    handoff: [skill:path-planning, skill:path-task-design]
     internal: true
     accumulate: false
     visibilityPreset: agent-internal
@@ -280,7 +280,7 @@ routings:
   - agentId: path-agent
     fieldId: normalizedInput.resources.timeBudgetCadence
     render: hidden
-    handoff: [skill:path-planning, skill:stage-designer]
+    handoff: [skill:path-planning, skill:path-task-design]
     internal: true
     accumulate: false
     visibilityPreset: agent-internal
@@ -288,7 +288,7 @@ routings:
   - agentId: path-agent
     fieldId: normalizedInput.successCriteria.observableResult
     render: hidden
-    handoff: [skill:path-planning, skill:stage-designer]
+    handoff: [skill:path-planning, skill:path-task-design]
     internal: true
     accumulate: false
     visibilityPreset: agent-internal
@@ -296,7 +296,7 @@ routings:
   - agentId: path-agent
     fieldId: normalizedInput.confirmedProposal.firstDeliverable
     render: hidden
-    handoff: [skill:path-planning, skill:stage-designer]
+    handoff: [skill:path-planning, skill:path-task-design]
     internal: true
     accumulate: false
     visibilityPreset: agent-internal
@@ -304,7 +304,7 @@ routings:
   - agentId: path-agent
     fieldId: normalizedInput.confirmedProposal.keyStages
     render: hidden
-    handoff: [skill:path-planning, skill:stage-designer]
+    handoff: [skill:path-planning, skill:path-task-design]
     internal: true
     accumulate: false
     visibilityPreset: agent-internal
@@ -312,7 +312,7 @@ routings:
   - agentId: path-agent
     fieldId: normalizedInput.planningHints.paceSignal
     render: hidden
-    handoff: [skill:path-planning, skill:stage-designer]
+    handoff: [skill:path-planning, skill:path-task-design]
     internal: true
     accumulate: false
     visibilityPreset: agent-internal
@@ -320,7 +320,7 @@ routings:
   - agentId: path-agent
     fieldId: normalizedInput.planningHints.milestoneRange
     render: hidden
-    handoff: [skill:path-planning, skill:stage-designer]
+    handoff: [skill:path-planning, skill:path-task-design]
     internal: true
     accumulate: false
     visibilityPreset: agent-internal
@@ -328,7 +328,7 @@ routings:
   - agentId: path-agent
     fieldId: normalizedInput.planningHints.conceptRange
     render: hidden
-    handoff: [skill:path-planning, skill:stage-designer]
+    handoff: [skill:path-planning, skill:path-task-design]
     internal: true
     accumulate: false
     visibilityPreset: agent-internal
@@ -336,7 +336,7 @@ routings:
   - agentId: path-agent
     fieldId: normalizedInput.planningHints.subtasksPerStageRange
     render: hidden
-    handoff: [skill:path-planning, skill:stage-designer]
+    handoff: [skill:path-planning, skill:path-task-design]
     internal: true
     accumulate: false
     visibilityPreset: agent-internal
@@ -344,7 +344,7 @@ routings:
   - agentId: path-agent
     fieldId: normalizedInput.planningHints.subtaskMinutesRange
     render: hidden
-    handoff: [skill:path-planning, skill:stage-designer]
+    handoff: [skill:path-planning, skill:path-task-design]
     internal: true
     accumulate: false
     visibilityPreset: agent-internal
@@ -352,7 +352,7 @@ routings:
   - agentId: path-agent
     fieldId: normalizedInput.planningHints.maxWeeks
     render: hidden
-    handoff: [skill:path-planning, skill:stage-designer]
+    handoff: [skill:path-planning, skill:path-task-design]
     internal: true
     accumulate: false
     visibilityPreset: agent-internal
@@ -360,13 +360,13 @@ routings:
   - agentId: path-agent
     fieldId: previousMilestone
     render: hidden
-    handoff: [skill:stage-designer]
+    handoff: [skill:path-task-design]
     internal: true
     accumulate: false
     visibilityPreset: agent-internal
     notes: loopOver 编排注入（前一 milestone 上下文），非 LLM 输出
 
-  # path-planning → stage-designer + path-agent
+  # path-planning → path-task-design + path-agent
   - agentId: skill:path-planning
     fieldId: path.id
     render: visible
@@ -391,114 +391,114 @@ routings:
     handoff: [path-agent]
     internal: false
     accumulate: false
-  # cognitiveCore 同时供 stage-designer（learning.service stageDesignerBaseInput）
+  # cognitiveCore 同时供 path-task-design（learning.service stageDesignerBaseInput）
   - agentId: skill:path-planning
     fieldId: cognitiveCore.cognitiveDomain
     render: visible
-    handoff: [path-agent, skill:stage-designer, skill:kc-mapper]
+    handoff: [path-agent, skill:path-task-design, skill:path-kc-mapping]
     internal: false
     accumulate: true
   - agentId: skill:path-planning
     fieldId: cognitiveCore.coreConcepts
     render: visible
-    handoff: [path-agent, skill:stage-designer, skill:kc-mapper]
+    handoff: [path-agent, skill:path-task-design, skill:path-kc-mapping]
     internal: false
     accumulate: true
   - agentId: skill:path-planning
     fieldId: milestones.stageNumber
     render: visible
-    handoff: [skill:stage-designer, path-agent, skill:kc-mapper, skill:path-reviewer]
+    handoff: [skill:path-task-design, path-agent, skill:path-kc-mapping, skill:path-reviewer]
     internal: false
     accumulate: false
   - agentId: skill:path-planning
     fieldId: milestones.title
     render: visible
-    handoff: [skill:stage-designer, path-agent, skill:kc-mapper, skill:path-reviewer]
+    handoff: [skill:path-task-design, path-agent, skill:path-kc-mapping, skill:path-reviewer]
     internal: false
     accumulate: false
   - agentId: skill:path-planning
     fieldId: milestones.coreConcept
     render: visible
-    handoff: [skill:stage-designer, path-agent, skill:kc-mapper, skill:path-reviewer]
+    handoff: [skill:path-task-design, path-agent, skill:path-kc-mapping, skill:path-reviewer]
     internal: false
     accumulate: false
   - agentId: skill:path-planning
     fieldId: milestones.goal
     render: visible
-    handoff: [skill:stage-designer, path-agent, skill:kc-mapper, skill:path-reviewer]
+    handoff: [skill:path-task-design, path-agent, skill:path-kc-mapping, skill:path-reviewer]
     internal: false
     accumulate: false
   - agentId: skill:path-planning
     fieldId: milestones.estimatedHours
     render: visible
-    handoff: [skill:stage-designer, path-agent, skill:kc-mapper, skill:path-reviewer]
+    handoff: [skill:path-task-design, path-agent, skill:path-kc-mapping, skill:path-reviewer]
     internal: false
     accumulate: false
 
-  # stage-designer → path-agent
-  - agentId: skill:stage-designer
+  # path-task-design → path-agent
+  - agentId: skill:path-task-design
     fieldId: subtasks.title
     render: visible
     handoff: [path-agent]
     internal: false
     accumulate: false
-  - agentId: skill:stage-designer
+  - agentId: skill:path-task-design
     fieldId: subtasks.type
     render: visible
     handoff: [path-agent]
     internal: false
     accumulate: false
-  - agentId: skill:stage-designer
+  - agentId: skill:path-task-design
     fieldId: subtasks.estimatedMinutes
     render: visible
     handoff: [path-agent]
     internal: false
     accumulate: false
-  - agentId: skill:stage-designer
+  - agentId: skill:path-task-design
     fieldId: subtasks.acceptanceCriteria
     render: visible
     handoff: [path-agent]
     internal: false
     accumulate: false
-  - agentId: skill:stage-designer
+  - agentId: skill:path-task-design
     fieldId: subtasks.linkedConcept
     render: visible
     handoff: [path-agent]
     internal: false
     accumulate: false
-  - agentId: skill:stage-designer
+  - agentId: skill:path-task-design
     fieldId: subtasks.knowledgeType
     render: visible
     handoff: [path-agent]
     internal: false
     accumulate: false
-  - agentId: skill:stage-designer
+  - agentId: skill:path-task-design
     fieldId: subtasks.cognitiveLevel
     render: visible
     handoff: [path-agent]
     internal: false
     accumulate: false
-  - agentId: skill:stage-designer
+  - agentId: skill:path-task-design
     fieldId: subtasks.transferable
     render: visible
     handoff: [path-agent]
     internal: false
     accumulate: false
   # 2026-10-24 契约同步批：补齐该产出者块缺失的三项
-  - agentId: skill:stage-designer
+  - agentId: skill:path-task-design
     fieldId: subtasks.icapLevel
     render: visible
     handoff: [path-agent]
     internal: false
     accumulate: false
     notes: ICAP 非递减约束（active→constructive→interactive）
-  - agentId: skill:stage-designer
+  - agentId: skill:path-task-design
     fieldId: subtasks.description
     render: visible
     handoff: [path-agent]
     internal: false
     accumulate: false
-  - agentId: skill:stage-designer
+  - agentId: skill:path-task-design
     fieldId: subtasks.materialRefs
     render: visible
     handoff: [path-agent]
@@ -577,20 +577,20 @@ routings:
     accumulate: false
     notes: 评审未过时的修订指令回传。path-planning 并不直接收到 replanInstructions 这个键：重规划时它经 replan.reviewerFeedback（已声明 sandbox:path.replan）消费，故不声明为向 skill:path-planning 的直接交接（#199 实参对账）
 
-  # === skill:kc-mapper（2026-10-24 契约同步批；代码侧物化为概念图/KC 注册表） ===
-  - agentId: skill:kc-mapper
+  # === skill:path-kc-mapping（2026-10-24 契约同步批；代码侧物化为概念图/KC 注册表） ===
+  - agentId: skill:path-kc-mapping
     fieldId: conceptKcs
     render: hidden
     handoff: [path-agent]
     internal: true
     accumulate: false
-  - agentId: skill:kc-mapper
+  - agentId: skill:path-kc-mapping
     fieldId: taskKcLinks
     render: hidden
     handoff: [path-agent]
     internal: true
     accumulate: false
-  - agentId: skill:kc-mapper
+  - agentId: skill:path-kc-mapping
     fieldId: kcGraph
     render: hidden
     handoff: [path-agent]

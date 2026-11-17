@@ -31,7 +31,7 @@ describe('skills-readiness：W1 ACTIVE 覆盖', () => {
   it('正例：全量 ACTIVE 覆盖（handler-only noPromptFile 豁免）→ ok 零 warn', () => {
     const book = makeBook([
       makeEntry({ skillId: 'goal-conversation' }),
-      makeEntry({ skillId: 'learner-model', kind: 'handler-only', noPromptFile: true }),
+      makeEntry({ skillId: 'profile-learner-model', kind: 'handler-only', noPromptFile: true }),
     ]);
     const check = analyzeW1(book, [{ agentId: 'skill:goal-conversation' }]);
     expect(check.ok).toBe(true);
@@ -63,7 +63,7 @@ describe('skills-readiness：W2 注册对账', () => {
   it('正例：注册全覆盖（agents/platform-direct 豁免方向 A）→ ok', () => {
     const book = makeBook([
       makeEntry({ skillId: 'goal-conversation' }),
-      makeEntry({ skillId: 'learner-model', kind: 'handler-only', registrationPoint: 'agents' }),
+      makeEntry({ skillId: 'profile-learner-model', kind: 'handler-only', registrationPoint: 'agents' }),
       makeEntry({ skillId: 'semantic-freeze-judge', kind: 'aux', registrationPoint: 'platform-direct' }),
     ]);
     const check = analyzeW2(book, [{ name: 'goal-conversation' }]);
@@ -131,11 +131,11 @@ describe('skills-readiness：W3 接线双向', () => {
     },
     {
       id: 'teaching-agent',
-      steps: [{ agentId: 'skill:teaching-opening-generator' }],
+      steps: [{ agentId: 'skill:teaching-opening' }],
     },
     {
       id: 'simulation-agent',
-      steps: [{ agentId: 'skill:virtual-learner-goal-dialogue-simulator' }],
+      steps: [{ agentId: 'skill:simulation-goal-dialogue' }],
     },
   ];
 
@@ -143,19 +143,19 @@ describe('skills-readiness：W3 接线双向', () => {
     const book = makeBook([
       // steps 非空且已接线（mock definitions 引用的全部 skill 均登记）
       makeEntry({ skillId: 'goal-conversation', coordinator: { agentId: 'goal-agent', steps: [{ step: 1, role: 'goal-clarification' }] } }),
-      makeEntry({ skillId: 'teaching-opening-generator', kind: 'aux', coordinator: { agentId: 'teaching-agent', steps: [{ step: 2, role: 'opening-generation' }] } }),
-      makeEntry({ skillId: 'virtual-learner-goal-dialogue-simulator', coordinator: { agentId: 'simulation-agent', steps: [{ step: 1, role: 'goal-stage-learner-turn-simulation' }] } }),
+      makeEntry({ skillId: 'teaching-opening', kind: 'aux', coordinator: { agentId: 'teaching-agent', steps: [{ step: 2, role: 'opening-generation' }] } }),
+      makeEntry({ skillId: 'simulation-goal-dialogue', coordinator: { agentId: 'simulation-agent', steps: [{ step: 1, role: 'goal-stage-learner-turn-simulation' }] } }),
       // steps:[] 豁免清单（W3_STEPS_EMPTY_EXEMPT 全量 8 例）
-      makeEntry({ skillId: 'adaptive-guidance-copy', coordinator: { agentId: 'teaching-agent', steps: [] } }),
-      makeEntry({ skillId: 'virtual-learner-persona-designer', coordinator: { agentId: 'simulation-agent', steps: [] } }),
-      makeEntry({ skillId: 'virtual-learner-scenario-designer', coordinator: { agentId: 'simulation-agent', steps: [] } }),
+      makeEntry({ skillId: 'profile-adaptive-copy', coordinator: { agentId: 'teaching-agent', steps: [] } }),
+      makeEntry({ skillId: 'simulation-persona-designer', coordinator: { agentId: 'simulation-agent', steps: [] } }),
+      makeEntry({ skillId: 'simulation-scenario-designer', coordinator: { agentId: 'simulation-agent', steps: [] } }),
       makeEntry({ skillId: 'path-reviewer', coordinator: { agentId: 'path-agent', steps: [] } }),
-      makeEntry({ skillId: 'kc-mapper', coordinator: { agentId: 'path-agent', steps: [] } }),
-      makeEntry({ skillId: 'learning-predictor', coordinator: { agentId: 'profile-agent', steps: [] } }),
-      makeEntry({ skillId: 'learner-model', kind: 'handler-only', coordinator: { agentId: 'profile-agent', steps: [] } }),
-      makeEntry({ skillId: 'virtual-learner-epistemic-grounding', coordinator: { agentId: 'simulation-agent', steps: [] } }),
+      makeEntry({ skillId: 'path-kc-mapping', coordinator: { agentId: 'path-agent', steps: [] } }),
+      makeEntry({ skillId: 'profile-learning-predict', coordinator: { agentId: 'profile-agent', steps: [] } }),
+      makeEntry({ skillId: 'profile-learner-model', kind: 'handler-only', coordinator: { agentId: 'profile-agent', steps: [] } }),
+      makeEntry({ skillId: 'simulation-epistemic-grounding', coordinator: { agentId: 'simulation-agent', steps: [] } }),
       // 无 coordinator 块的 aux（service 直调）与 platform-direct
-      makeEntry({ skillId: 'learner-progress-report', kind: 'aux' }),
+      makeEntry({ skillId: 'profile-progress-report', kind: 'aux' }),
       makeEntry({ skillId: 'semantic-freeze-judge', kind: 'aux', registrationPoint: 'platform-direct' }),
     ]);
     const check = analyzeW3(book, mockDefinitions);
@@ -174,8 +174,8 @@ describe('skills-readiness：W3 接线双向', () => {
     // mock definitions 引用的 skill 全不在活跃集 → 方向 A 逐条报
     expect(check.stepWithoutBook).toEqual([
       'goal-agent → goal-conversation',
-      'simulation-agent → virtual-learner-goal-dialogue-simulator',
-      'teaching-agent → teaching-opening-generator',
+      'simulation-agent → simulation-goal-dialogue',
+      'teaching-agent → teaching-opening',
     ]);
     // orphan-skill 的 coordinator.steps 非空但 goal-agent definition 无该 skill → 方向 B
     expect(check.bookWithoutStep).toEqual(['orphan-skill']);

@@ -8,9 +8,9 @@ import { executeSkill } from '../../skills';
 import { callPrompt } from '../../composers/prompt-composer';
 import { goalConversationAgentDefinition } from '../../skills/goal-conversation';
 import { validatePathPlanningOutput } from '../../skills/path-planning';
-import { validateStageDesignerOutput, withLoadTargetForMilestone } from '../../skills/stage-designer';
-import { virtualLearnerGoalDialogueSimulatorDefinition } from '../../skills/virtual-learner-goal-dialogue-simulator';
-import { virtualLearnerPersonaDesignerDefinition } from '../../skills/virtual-learner-persona-designer';
+import { validateStageDesignerOutput, withLoadTargetForMilestone } from '../../skills/path-task-design';
+import { virtualLearnerGoalDialogueSimulatorDefinition } from '../../skills/simulation-goal-dialogue';
+import { virtualLearnerPersonaDesignerDefinition } from '../../skills/simulation-persona-designer';
 import { resolveStorySessionDemand } from '../../virtual-lab/story-demand';
 import { findProfileById } from '../../services/virtual-lab/virtual-learner-profile.repo';
 import { findAgentPromptById, findAgentPromptByVersion, findActiveAgentPrompt } from '../admin/prompt-ops.repo';
@@ -31,7 +31,7 @@ export function extractJson(text: string): any {
 /**
  * Skill 评估调用器（adapter 分发）：
  * - goal-conversation：走 executeSkill（多轮对话，校验结构化输出 + 期望字段）
- * - path-planning / stage-designer：直接 callPrompt（systemPromptOverride=被评估版本）+ 契约字段校验
+ * - path-planning / path-task-design：直接 callPrompt（systemPromptOverride=被评估版本）+ 契约字段校验
  * 返回 { result, parsed }，parsed 为模型原始输出 JSON（供 validator 检查）
  */
 // ============================================================
@@ -458,7 +458,7 @@ ${JSON.stringify({
     return { result: promptResult, parsed: promptResult?.output?.parsed || null };
   }
 
-  if (skillId === 'skill:stage-designer') {
+  if (skillId === 'skill:path-task-design') {
     const promptInput = input || caseItem.inputPayload || {
       milestone: { stageNumber: 1, title: '示例阶段' },
       previousMilestone: null,
@@ -494,10 +494,10 @@ ${JSON.stringify({
           ? { planningHints: { targetSubtasksPerStage: expectedFromInput, subtasksPerStageRange: [expectedFromInput, expectedFromInput] } }
           : null;
     const promptResult = await callPrompt<any, any>({
-      agentId: 'skill:stage-designer',
+      agentId: 'skill:path-task-design',
       defaultSystemPrompt: systemPrompt,
       requireActivePrompt: false,
-      caller: { skillId: 'stage-designer' },
+      caller: { skillId: 'path-task-design' },
       buildUserPayload: () => ({
         milestone: withLoadTargetForMilestone(promptInput.milestone, promptInput.cognitiveCore),
         previousMilestone: promptInput.previousMilestone || null,
@@ -569,7 +569,7 @@ export async function runSkillChecks(params: {
     }
   }
 
-  if (skillId === 'skill:stage-designer') {
+  if (skillId === 'skill:path-task-design') {
     const validation = validateStageDesignerOutput(parsed);
     checks.contractValid = validation.valid;
     checks.subtaskCount = Array.isArray(parsed.subtasks) ? parsed.subtasks.length : 0;

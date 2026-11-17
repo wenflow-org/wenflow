@@ -66,15 +66,15 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     'normalizedInput.learnerProfile.surfaceGoal',
     'normalizedInput.confirmedProposal',
     'normalizedInput.understanding.adjustments',
-    // #192 复核残留：kc-mapper / path-reviewer 的 prerequisiteTree ref 指向**顶层**通道
+    // #192 复核残留：path-kc-mapping / path-reviewer 的 prerequisiteTree ref 指向**顶层**通道
     // （载荷是 kcMapperInput.prerequisiteTree / path-generation 评审入参）；normalizedInput
     // 从不产出该键，此前登记的 `normalizedInput.prerequisiteTree` 是永不存在的路径。
     'prerequisiteTree',
-    // stage-designer 声明 ref: sandbox:path.materials（路径关联资料包，附件在前、联网在后）。
+    // path-task-design 声明 ref: sandbox:path.materials（路径关联资料包，附件在前、联网在后）。
     // 此前未登记 ⇒ prompts:check-handoff:strict 判失败（sandbox-path-unregistered）。
     'materials',
     'previousMilestone',
-    // stage-designer 的质检重试输入（上一次生成被判不合格时的修复提示）；
+    // path-task-design 的质检重试输入（上一次生成被判不合格时的修复提示）；
     // 主链路当前恒传 null，但 inputSchema 已声明、提示词规则 38 也引用它 —— 登记后声明三方一致。
     'repairHints',
     'milestones',
@@ -82,7 +82,7 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     'cognitiveCore',
     'planningHints',
     'replan',
-    // stage-designer 声明、编排层直接注入的三个沙盘键（无路由行）——此前未登记，
+    // path-task-design 声明、编排层直接注入的三个沙盘键（无路由行）——此前未登记，
     // prompts:check-handoff:strict 恒红（2026-10-04 与 epistemic-grounding 的 ref 缺口一并结清）：
     // schoolAnchor（校内锚：教材版本/考纲/进度）、supplementRequest（补课请求，提示词按规则消费）、
     // pathStageMap（渐进式设计的阶段映射）。
@@ -90,9 +90,9 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     'supplementRequest',
     'pathStageMap',
     // 动态规划（2026-10-17）：上一阶段真实学习信号（渐进式设计/阶段推进时由 stage 链注入）。
-    // stage-designer 提示词按它调整坡度与补强位置，必须登记，否则 strict 对账恒红。
+    // path-task-design 提示词按它调整坡度与补强位置，必须登记，否则 strict 对账恒红。
     'previousStageOutcome',
-    // 跨阶段去重事实源（2026-10-27 外部审查结清）：stage-designer 声明
+    // 跨阶段去重事实源（2026-10-27 外部审查结清）：path-task-design 声明
     // ref: sandbox:path.allPreviousStageTasks，但此前未登记 ⇒ 编译门 advisory 恒在。
     // 编排层直接注入（stage-enrichment），登记后声明三方一致。
     'allPreviousStageTasks',
@@ -122,7 +122,7 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     'controls.teachingControlContext',
     'classroomContext',
     'classroomEventContext',
-    // 开场生成器（teaching-opening-generator）的三个「编排注入」输入（03e9c08e 开场自由化：
+    // 开场生成器（teaching-opening）的三个「编排注入」输入（03e9c08e 开场自由化：
     // 画像/学情锚/任务目标进输入）。值由编排层组装（ai-teaching/TeachingContextBuilder +
     // skills/v4-aux-skills 在调用前注入 learnerPersona/schoolAnchor/taskProfile），
     // 不是 routings 表可推导的通道 ⇒ 未登记会让 prompts:check-handoff --strict 判失败。
@@ -132,12 +132,12 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     // #181：开场生成器新增 learnerPrediction 输入（编排层 TaskContextBuilder 组装、
     // v4-aux-skills 在调用前注入），同「编排注入」性质，登记后 check-handoff --strict 通过。
     'learnerPrediction',
-    // #197：session-wrapup 实收 7 键，其中 knowledgeContext / sessionStructure 由编排层
+    // #197：teaching-wrapup 实收 7 键，其中 knowledgeContext / sessionStructure 由编排层
     // 现场拼装（teaching-session-lifecycle / wrapup-regen），提示词规则依赖但 core inputs 未声明。
     // 补声明后这两个「编排注入」键需登记，否则 prompts:check-handoff --strict 判 sandbox-path-unregistered。
     'session.knowledgeContext',
     'session.structure',
-    // #199：learning-predictor 的输入契约补齐后，其三个「编排注入」键需登记——
+    // #199：profile-learning-predict 的输入契约补齐后，其三个「编排注入」键需登记——
     // knowledgeStateSummary/taskContext 由教学链现场组装（TeachingContextBuilder），
     // fatigueSignal 由 learningState 分类派生；不登记会让 --strict 判 sandbox-path-unregistered。
     'knowledgeStateSummary',

@@ -665,7 +665,7 @@ export async function callPrompt<TInput, TOutput>(
 
     // 用归一后的形态（contractParsed）而非原始 parsed：coerceParsedForContract 的语义是
     // "把等价变体收敛到契约形态"，落库/下游消费必须拿到收敛后的结果，否则会出现
-    // "校验通过但落库仍是别名字段"的静默断链（2026-09-22 kc-mapper：kcIds/type 落库、下游读 linkedKCs/relation 读空）。
+    // "校验通过但落库仍是别名字段"的静默断链（2026-09-22 path-kc-mapping：kcIds/type 落库、下游读 linkedKCs/relation 读空）。
     // 未声明 coerceParsedForContract 的 skill 中，contractParsed === extracted.parsed，行为不变。
     const normalizedOutput = spec.normalizeOutput(contractParsed, input);
     const runtimeEnvelope = await buildDefaultEnvelope(spec, normalizedOutput, input, runtimeContract);

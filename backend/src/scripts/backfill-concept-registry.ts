@@ -11,7 +11,7 @@
  *   4. milestones.coreConceptName     → conceptId
  *
  * 纪律：
- * - **只做文本精确解析**（normalizeConceptKey 后相等），语义近义一律留给 concept-consolidator 建议，
+ * - **只做文本精确解析**（normalizeConceptKey 后相等），语义近义一律留给 profile-concept-consolidate 建议，
  *   不做自动语义合并（设计 §7 风险 2）。
  * - 幂等：已解析出 conceptId 的行跳过；重复执行不产生新概念（alias 唯一索引兜底）。
  * - 可分批：`--scope=virtual` 隔离真实用户（默认），`--limit=` 控单次规模，`--dry-run` 只看计划。

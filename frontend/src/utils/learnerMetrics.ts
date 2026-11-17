@@ -10,7 +10,7 @@
  *
  * ⚠ 与「会话级」评分不是一回事：完课卡上的 sessionKtl 是后端 `evaluation.sessionKtl`
  * = **本节知识获得质量**（high = 8-10 学生能独立完成核心任务，高 = 好），判据见
- * prompts/skill.session-wrapup.md 与 LearnerKnowledgeMemoryService 的 resolveEvaluationSignal。
+ * prompts/skill.teaching-wrapup.md 与 LearnerKnowledgeMemoryService 的 resolveEvaluationSignal。
  * 长期状态里的 `ktl` 才是训练负荷。两者同名不同义，别互相套用框法。
  *
  * 本文件只放**纯定义**（无任何 import），好让 src/components/ 下的学习端组件也能引；

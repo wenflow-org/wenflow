@@ -83,7 +83,7 @@ function buildAgentLogWhere(userId: string, query: any, capabilityType?: string)
   } else if (capabilityType) {
     // #218：合法键必在 map 里，集合 = 该能力监控组的 manifest 全量成员（见
     // services/users/capability-groups——不再与 userListed 求交，否则 Profile 组
-    // 无 userListed 成员时该筛选恒空，而库里确有 skill:learning-predictor 等日志）。
+    // 无 userListed 成员时该筛选恒空，而库里确有 skill:profile-learning-predict 等日志）。
     where.agentId = { in: capabilityAgents[capabilityType] };
   } else if (includeSystem !== 'true') {
     // 默认「AI 任务记录」口径：只放行真实写日志的业务动作（manifest userListed）。

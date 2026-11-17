@@ -3,13 +3,13 @@
  *
  * 为什么抽出来：通知中心（`V2NotifCenter`）与运行时面板（`V2Runtime`）此前各存一份
  * 完全相同的映射表 —— 新增 skill 只补一处、另一处就悄悄回退成兜底名「AI 任务」
- * （走查 N1 实测：`skill:learner-progress-report` 就落在这个坑里）。
+ * （走查 N1 实测：`skill:profile-progress-report` 就落在这个坑里）。
  *
  * 约定：
  * - 新增**用户可见**的 skill/agent 时，在这里补一行；
  * - **平台内部** skill 不进表，由后端按 manifest `userVisible: false` 过滤
- *   （如 learner-state-review / concept-consolidator / concept-load-estimator /
- *   replan-attribution / learner-progress-report 已登记为不可见）；
+ *   （如 profile-state-review / profile-concept-consolidate / profile-concept-load /
+ *   teaching-replan-attribution / profile-progress-report 已登记为不可见）；
  * - 兜底名刻意**不泄露内部代号**（原样取 `-` 末段会向用户暴露 generator/copy 等内部名）。
  */
 
@@ -17,18 +17,24 @@ export const AGENT_LABEL: Record<string, string> = {
   'skill:path-planning': '生成学习路径',
   'skill:goal-conversation': '目标澄清对话',
   'skill:teaching-turn': '课堂互动处理',
+  'skill:teaching-peer-reinforcement': '伴学回应',
   'skill:peer-reinforcement': '伴学回应',
+  'skill:teaching-wrapup': '生成课后总结',
   'skill:session-wrapup': '生成课后总结',
+  'skill:profile-learner-model': '更新学习记录',
   'skill:learner-model': '更新学习记录',
+  'skill:path-task-design': '设计课程',
   'skill:stage-designer': '设计课程',
   'skill:path-reviewer': '评审路径',
+  'skill:path-kc-mapping': '整理知识组件',
   'skill:kc-mapper': '整理知识组件',
+  'skill:teaching-opening': '生成教学开场',
   'skill:teaching-opening-generator': '生成教学开场',
   'path-agent': '路径生成',
   'ai-teaching-agent': '课堂处理',
   'ai-tutor': '伴学回应',
   'system-canary': '系统自检',
-  'learner-model-agent': '更新学习记录',
+  'profile-learner-model-agent': '更新学习记录',
 };
 
 /** path-agent 阶段流水 phase → 用户可读的阶段名 */

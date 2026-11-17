@@ -5,15 +5,15 @@ import type {
   LearnerReplanProjection,
   LearnerSnapshot,
   TeachingLearnerProjection,
-} from '../../agents/learner-model-agent/types';
+} from '../../agents/profile-learner-model-agent/types';
 
-/** dashboard / learning-state 呈现层（adaptive-guidance-copy）专用投影：裁剪掉与文案无关的大字段 */
+/** dashboard / learning-state 呈现层（profile-adaptive-copy）专用投影：裁剪掉与文案无关的大字段 */
 export interface GuidanceCopyProjection {
   learnerSnapshot: LearnerSnapshot;
   path: Record<string, any> | null;
 }
 
-/** 状态评审诊断层（learner-state-review）专用投影：只带状态摘要与知识线索 */
+/** 状态评审诊断层（profile-state-review）专用投影：只带状态摘要与知识线索 */
 export interface ReviewProjection {
   learnerDigest: {
     level: number | null;
@@ -56,7 +56,7 @@ export class LearnerProjectionService {
    *  - path 丢掉整行 learning_paths（含 aiPromptTemplate，单字段可达 12 万字符）
    *  - learnerSnapshot.knowledgeMemory 丢掉 currentPath 的 taskMastery/conceptStates/recentEvidence/milestoneProgress
    *    与 globalBackground 全量台账，只保留 globalSignals + 顶部若干台账项
-   * 语义不变：adaptive-guidance-copy 只需状态摘要与少量概念。
+   * 语义不变：profile-adaptive-copy 只需状态摘要与少量概念。
    */
   toGuidanceProjection(snapshot: LearnerSnapshot, path?: Record<string, any> | null): GuidanceCopyProjection {
     const anySnapshot = snapshot as any;
@@ -152,7 +152,7 @@ export class LearnerProjectionService {
 
   /**
    * 收束摘要投影：剔除运行时/审计元数据（见 GUIDANCE_WRAPUP_DROP_KEYS）。
-   * 只用于 adaptive-guidance-copy 的输入载荷；summary/progress/evidence/evaluation
+   * 只用于 profile-adaptive-copy 的输入载荷；summary/progress/evidence/evaluation
    * 等语义字段原样保留。
    */
   toGuidanceWrapup(wrapup: Record<string, any> | null | undefined): Record<string, any> | null {
@@ -161,7 +161,7 @@ export class LearnerProjectionService {
   }
 
   /**
-   * 诊断层投影：给 learner-state-review 的最小状态摘要 + 知识线索。
+   * 诊断层投影：给 profile-state-review 的最小状态摘要 + 知识线索。
    * 不含逐任务/逐证据明细；证据引用由调用方按 DB 事件 id 另附（见设计 §4.2）。
    */
   toReviewProjection(snapshot: LearnerSnapshot): ReviewProjection {

@@ -139,7 +139,7 @@ export class LearningStateReadService {
       }
       lss = toInternalTenScale(lss);
       // sourceKey/taskId 透传给 replayDailyPmc 做跨家族去重：一节课可能同时有
-      // session-wrapup（真实 LSS）与 task-completion（合成占位 lss=4）两行，不去重会翻倍。
+      // teaching-wrapup（真实 LSS）与 task-completion（合成占位 lss=4）两行，不去重会翻倍。
       return { calculatedAt: r.calculatedAt, lss, ktl: r.ktl, lf: r.lf, sourceKey: r.sourceKey, taskId: r.taskId };
     });
     // until=asOf：把"最后一节课之后到今天"的空闲日补进序列，KTL/LF 才会按 λ^d 回落
@@ -382,10 +382,10 @@ export class LearningStateReadService {
     const committedRows = await prisma.learning_metrics.findMany({
       where: {
         ...committedMetricWhere(userId),
-        // 会话已提交指标的 sourceKey 恒为 `session-wrapup:<sessionId>`（prepareSessionScoreCommit
+        // 会话已提交指标的 sourceKey 恒为 `teaching-wrapup:<sessionId>`（prepareSessionScoreCommit
         // 是唯一写入点），走唯一索引精确命中。旧口径对每个会话拼一条 metadata LIKE（≤120 个），
         // SQLite 下对每行做全文子串匹配，索引完全用不上。
-        sourceKey: { in: requestedIds.map((sessionId) => `session-wrapup:${sessionId}`) },
+        sourceKey: { in: requestedIds.map((sessionId) => `teaching-wrapup:${sessionId}`) },
       },
       orderBy: { calculatedAt: 'asc' },
       select: {

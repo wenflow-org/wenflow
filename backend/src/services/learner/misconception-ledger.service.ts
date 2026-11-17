@@ -235,7 +235,7 @@ export const defaultMisconceptionLedgerDeps: MisconceptionLedgerDeps = {
   resolveConceptId: resolveConceptIdSafe,
 };
 
-/** 归并审计的 projectionKey 前缀（与 concept-consolidator 的 `ccs:` 并列，互不覆盖） */
+/** 归并审计的 projectionKey 前缀（与 profile-concept-consolidate 的 `ccs:` 并列，互不覆盖） */
 export const MISCONCEPTION_CONSOLIDATION_SCOPE = 'misconception-consolidation';
 /**
  * 归并**已执行**的审计键：含被删行完整快照 = 回滚凭据。

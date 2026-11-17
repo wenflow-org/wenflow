@@ -1,4 +1,4 @@
-// 在 system.db 中查找 qoder / stage-designer 相关配置
+// 在 system.db 中查找 qoder / path-task-design 相关配置
 import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,7 +15,7 @@ for (const t of tables) {
     const rows = q(`SELECT * FROM ${t} LIMIT 200`);
     for (const r of rows) {
       const s = JSON.stringify(r);
-      if (/qoder|stage-designer/i.test(s)) {
+      if (/qoder|path-task-design/i.test(s)) {
         console.log(`[${t}] ${s.slice(0, 400)}`);
       }
     }

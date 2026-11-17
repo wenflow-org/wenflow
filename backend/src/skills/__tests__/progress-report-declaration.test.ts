@@ -1,5 +1,5 @@
 /**
- * learner-progress-report 的「声明 ↔ 载荷」对齐（2026-11-11 字段审计）。
+ * profile-progress-report 的「声明 ↔ 载荷」对齐（2026-11-11 字段审计）。
  *
  * 此前 yaml 声明 sessionEvidence / learnerSnapshotDynamic，而 handler 实际下发
  * { task, metrics, signals }，模型在 payload 里找不到声明名。本用例把
@@ -22,7 +22,7 @@ const INPUT = {
   signals: '遇到困难: 强度 40%；学习减速: 强度 20%',
 }
 
-describe('learner-progress-report 声明与载荷对齐', () => {
+describe('profile-progress-report 声明与载荷对齐', () => {
   it('yaml 声明的每个 inputs.name 都是真实载荷键', async () => {
     mockCallPrompt.mockResolvedValue({
       success: true,
@@ -30,13 +30,13 @@ describe('learner-progress-report 声明与载荷对齐', () => {
       debug: {},
     })
 
-    await auxSkillHandlers['learner-progress-report'](INPUT)
+    await auxSkillHandlers['profile-progress-report'](INPUT)
 
     const [spec] = mockCallPrompt.mock.calls[0] as [{ buildUserPayload: () => unknown }]
     const payload = spec.buildUserPayload() as Record<string, unknown>
     const keys = Object.keys(payload)
 
-    const yamlPath = path.resolve(__dirname, '../../../../prompts/core/learner-progress-report.yaml')
+    const yamlPath = path.resolve(__dirname, '../../../../prompts/core/profile-progress-report.yaml')
     const doc = yaml.load(fs.readFileSync(yamlPath, 'utf8')) as {
       inputs: Array<{ name: string; ref?: string }>
     }

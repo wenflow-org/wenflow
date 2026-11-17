@@ -13,8 +13,8 @@ import path from 'node:path'
 
 jest.mock('../assemble-learning-state', () => ({ assembleLearningState: jest.fn() }))
 jest.mock('../../../skills', () => ({ executeSkillWithResult: jest.fn() }))
-jest.mock('../../../skills/adaptive-guidance-copy', () => ({
-  adaptiveGuidanceCopyDefinition: { name: 'adaptive-guidance-copy' },
+jest.mock('../../../skills/profile-adaptive-copy', () => ({
+  adaptiveGuidanceCopyDefinition: { name: 'profile-adaptive-copy' },
   buildFallback: jest.fn(),
 }))
 jest.mock('../LearnerStateReviewService', () => ({
@@ -30,7 +30,7 @@ jest.mock('../../../utils/logger', () => ({
   logger: { warn: jest.fn(), info: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }))
 
-import { buildFallback } from '../../../skills/adaptive-guidance-copy'
+import { buildFallback } from '../../../skills/profile-adaptive-copy'
 import { executeSkillWithResult } from '../../../skills'
 import { assembleLearningState } from '../assemble-learning-state'
 import learningStateGuidanceService from '../LearningStateGuidanceService'
@@ -65,7 +65,7 @@ describe('LearningStateGuidanceService（#187 视图口径）', () => {
       output: LEARNING_STATE_COPY,
       quality: 'model',
       cached: false,
-      debug: { skillId: 'adaptive-guidance-copy', model: 'm', systemPromptVersion: 3, durationMs: 21 },
+      debug: { skillId: 'profile-adaptive-copy', model: 'm', systemPromptVersion: 3, durationMs: 21 },
       duration: 21,
     })
     ;(buildFallback as jest.Mock).mockReturnValue({ headline: '先看清当前状态，再决定下一步', subtitle: 's' })
@@ -77,7 +77,7 @@ describe('LearningStateGuidanceService（#187 视图口径）', () => {
     // 关键断言：view 不再是硬编码的 'dashboard'，也不再借用 dashboard 快照
     expect(executeSkillWithResult).toHaveBeenCalledTimes(1)
     const [definition, input] = (executeSkillWithResult as jest.Mock).mock.calls[0]
-    expect((definition as any).name).toBe('adaptive-guidance-copy')
+    expect((definition as any).name).toBe('profile-adaptive-copy')
     expect(input.view).toBe('learning-state')
     expect(input.userId).toBe('u1')
 

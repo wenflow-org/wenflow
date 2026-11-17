@@ -16,7 +16,7 @@ export interface PeerChatItem {
   followUps?: string[];
 }
 
-/** 伴学策略 → 学法标签（与 peer-reinforcement skill 枚举对齐） */
+/** 伴学策略 → 学法标签（与 teaching-peer-reinforcement skill 枚举对齐） */
 const PEER_STRATEGY_LABEL: Record<string, string> = {
   feynman: '费曼讲解',
   debate: '观点辩论',

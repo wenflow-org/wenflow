@@ -1,11 +1,11 @@
 /**
- * #187：adaptive-guidance-copy 的 view 契约——**声明几个视图，就真实受理几个**。
+ * #187：profile-adaptive-copy 的 view 契约——**声明几个视图，就真实受理几个**。
  *
  * 病灶历史：skill 曾声明 dashboard / learning-state / path-list / path-detail 四个 view，
  * 但模型侧只有一处调用且硬编码 view='dashboard'，learning-state 页拿的是 dashboard 快照文案，
  * path 两个视图没有任何调用方——「声明 4 个 / 实际 1 个」。
  *
- * 现在收敛为两个真实视图（skills/adaptive-guidance-copy/views.ts 是唯一真源）：
+ * 现在收敛为两个真实视图（skills/profile-adaptive-copy/views.ts 是唯一真源）：
  *  - dashboard：DashboardGuidanceSnapshotService 生成（事件驱动快照）；
  *  - learning-state：LearningStateGuidanceService 自己按 view='learning-state' 生成。
  * 本用例钉住：GUIDANCE_VIEWS 里每一个都必须被路由受理（不是 400），且路由到**各自的**服务；
@@ -32,7 +32,7 @@ jest.mock('../../utils/logger', () => ({
 }))
 
 import router from '../adaptive-guidance.routes'
-import { GUIDANCE_VIEWS } from '../../skills/adaptive-guidance-copy/views'
+import { GUIDANCE_VIEWS } from '../../skills/profile-adaptive-copy/views'
 
 function getCopyHandler() {
   const layer = (router as any).stack.find((item: any) => item.route?.path === '/copy' && item.route?.methods?.get)

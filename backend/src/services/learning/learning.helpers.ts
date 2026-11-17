@@ -20,7 +20,7 @@ import type { PathGenerationPhase } from './path-generation-status';
 /**
  * 以任务分钟汇总归一「预计投入」展示时长（唯一用户可逐条核对的真实来源）：
  * - path.estimatedHours / milestone.estimatedHours 在骨架期由 path-planning LLM 粗估，
- *   与 stage-designer 逐任务产出的 estimatedMinutes 系统性脱节（无生成后校准），
+ *   与 path-task-design 逐任务产出的 estimatedMinutes 系统性脱节（无生成后校准），
  *   长期出现「路径 40h 但任务合计 12h」之类的偏差。
  * - 展示改由任务分钟汇总推导：
  *   阶段小时 = 该阶段任务分钟/60 向上取整（阶段级粗粒度，允许整点）；
@@ -491,7 +491,7 @@ export function parsePathCognitiveDesign(raw: string | null): PathCognitiveDesig
     return {
       cognitiveDomain,
       coreConcepts,
-      // 这两个键此前被丢掉：`cognitiveCore` 会被整份交给 stage-designer，而 stage 侧
+      // 这两个键此前被丢掉：`cognitiveCore` 会被整份交给 path-task-design，而 stage 侧
       // withLoadTargetForMilestone 依赖 `cognitiveCore.loadProfile.stageLoadDistribution`
       // 才能挂出 `milestone.loadTarget`（CLT 负荷调整与规则 #13 的唯一输入）。
       // 丢掉 ⇒ 生产与重规划两处 loadTarget 永不生效（审计 P1 §2.3a）。
@@ -545,8 +545,8 @@ export function parsePathAdjustmentPolicy(raw: string | null): PathAdjustmentPol
       : null;
     const triggerSource = candidate.triggerSource === 'learn'
       || candidate.triggerSource === 'ai-teaching'
-      || candidate.triggerSource === 'learner-model-agent'
-      || candidate.triggerSource === 'skill:learner-model'
+      || candidate.triggerSource === 'profile-learner-model-agent'
+      || candidate.triggerSource === 'skill:profile-learner-model'
       || candidate.triggerSource === 'system'
       ? candidate.triggerSource
       : null;

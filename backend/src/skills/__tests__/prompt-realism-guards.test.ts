@@ -53,8 +53,8 @@ describe('goal/path/stage prompt realism guards', () => {
     expect(md).toContain('不得出现「转成/写成/改成/说出可直接发送的话」')
   })
 
-  it('stage-designer：阶段任务不得越界产出后段成品', () => {
-    const md = read('prompts/skill.stage-designer.md')
+  it('path-task-design：阶段任务不得越界产出后段成品', () => {
+    const md = read('prompts/skill.path-task-design.md')
     expect(md).toContain('阶段交付物不越界')
     expect(md).toContain('禁止提前产出成品措辞或成稿')
   })
@@ -69,7 +69,7 @@ describe('goal/path/stage prompt realism guards', () => {
  */
 describe('虚拟学习者管线与 Meno/三摞改造对齐', () => {
   it('epistemic-grounding：教师支架充分度纳入 sampledCorrectness', () => {
-    const md = read('prompts/skill.virtual-learner-epistemic-grounding.md')
+    const md = read('prompts/skill.simulation-epistemic-grounding.md')
     expect(md).toContain('无支架冷测必挂')
     expect(md).toContain('有支架微步可过')
     expect(md).toContain('0.40-0.55')
@@ -77,19 +77,19 @@ describe('虚拟学习者管线与 Meno/三摞改造对齐', () => {
   })
 
   it('actor-auditor：脚手架答对不算能力悖论泄露', () => {
-    const md = read('prompts/skill.virtual-learner-actor-auditor.md')
+    const md = read('prompts/skill.simulation-actor-audit.md')
     expect(md).toContain('合理的支架承接')
     expect(md).toContain('不得判为能力悖论泄露')
   })
 
   it('goal 模拟器：拍板禁带新条件尾巴', () => {
-    const md = read('prompts/skill.virtual-learner-goal-dialogue-simulator.md')
+    const md = read('prompts/skill.simulation-goal-dialogue.md')
     expect(md).toContain('纯粹的拍板确认')
     expect(md).toContain('严禁顺带补充新的背景信息、时间条件、顾虑或追问')
   })
 
   it('learn-turn：白板可见 + memoryRecall 对齐间隔迁移', () => {
-    const md = read('prompts/skill.virtual-learner-learn-turn-simulator.md')
+    const md = read('prompts/skill.simulation-learn-turn.md')
     expect(md).toContain('【课堂白板】')
     expect(md).toContain('不要问「图在哪」')
     expect(md).toContain('能用旧框架解开老师给的新情境')
@@ -97,13 +97,13 @@ describe('虚拟学习者管线与 Meno/三摞改造对齐', () => {
   })
 
   it('scenario-designer：recurrence 统一 oneoff（once 作历史别名）', () => {
-    const md = read('prompts/skill.virtual-learner-scenario-designer.md')
+    const md = read('prompts/skill.simulation-scenario-designer.md')
     expect(md).toContain('oneoff | recurring')
     expect(md).toContain('不要写 once')
   })
 
   it('referee：认识 R1 豁免与 R2/R4 扣分', () => {
-    const md = read('prompts/skill.virtual-learner-referee.md')
+    const md = read('prompts/skill.simulation-referee.md')
     expect(md).toContain('R1 豁免')
     expect(md).toContain('R2 Path 体验扣分')
     expect(md).toContain('R4 Teaching 体验扣分')

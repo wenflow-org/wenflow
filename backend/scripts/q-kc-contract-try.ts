@@ -1,6 +1,6 @@
 /* eslint-disable no-console */
 /**
- * kc-mapper 契约离线验证（不发布、不写库）：
+ * path-kc-mapping 契约离线验证（不发布、不写库）：
  *   ① 编译 core.yaml → 过守门检查（五块结构 / 字段冻结）
  *   ② 用**真实路径输入**（案例路径的 cognitiveCore + milestones + subtasks）调一次模型
  *   ③ 打印新契约产出的 KC，和库里旧契约的 KC 对比粒度
@@ -19,7 +19,7 @@ async function main() {
   const p = prisma as any;
 
   // ── ① 编译 + 守门检查（纯本地，不发布） ─────────────────────────────
-  const loaded = loadCoreFile('kc-mapper');
+  const loaded = loadCoreFile('path-kc-mapping');
   if (!loaded?.core) { console.error('核心文件 schema 不合法', loaded?.diagnostics); process.exit(1); }
   const compiled = compileCoreFile(loaded.core, { coreVersion: 1 });
   const structure = checkFiveBlockStructure(compiled.prompt);

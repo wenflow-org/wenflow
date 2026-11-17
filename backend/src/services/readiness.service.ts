@@ -35,9 +35,9 @@ interface SystemDatabase {
 const CRITICAL_PROMPT_IDS = [
   'skill:goal-conversation',
   'skill:path-planning',
-  'skill:stage-designer',
+  'skill:path-task-design',
   'skill:teaching-turn',
-  'skill:session-wrapup'
+  'skill:teaching-wrapup'
 ] as const;
 
 export class ReadinessService {

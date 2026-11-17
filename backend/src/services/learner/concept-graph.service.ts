@@ -32,7 +32,7 @@ export const SCOPE_PATH = 'path';
  * `scope='user'` 全库零行，多路径用户的知识图谱在概念间完全不连通。
  */
 export const SCOPE_USER = 'user';
-export const SOURCE_KC_MAPPER = 'kc-mapper';
+export const SOURCE_KC_MAPPER = 'path-kc-mapping';
 export const SOURCE_DERIVED = 'path-planning-derived';
 /**
  * 概念级前置投影边（KC 级 prerequisite → 其所属 coreConcept 之间的 prerequisite）。
@@ -40,7 +40,7 @@ export const SOURCE_DERIVED = 'path-planning-derived';
  * 为什么需要：`kcGraph.edges` 的两端是 **KC 级**节点，而任务当前概念经 `resolveTaskConcept`
  * 解析出来是 **concept 级**节点——同一路径内两套粒度。结果概念级节点上没有 prerequisite 边，
  * `upstreamClosure` 恒为空（2026-09-23 实测 25/25 任务命中 0）。本投影把 KC 级前置折叠到概念级，
- * 让"要学 X 先掌握什么"在**概念级**也能走通。来源单列，便于与 kc-mapper 原始边区分统计。
+ * 让"要学 X 先掌握什么"在**概念级**也能走通。来源单列，便于与 path-kc-mapping 原始边区分统计。
  */
 export const SOURCE_PREREQUISITE_PROJECTION = 'prerequisite-projection';
 
@@ -292,7 +292,7 @@ export class ConceptGraphService {
    *
    * **重建语义（#173-2）**：写之前先按 `(userId, pathId)` 清掉本路径此前的 `scope='path'` 边，
    * 故物化结果恒等于「当前标注的图」，而不是与历次物化**叠加**。此前只 upsert：
-   * replace-path / 重跑 kc-mapper 之后，旧 KC 的边按同一 pathId 残留成幽灵边
+   * replace-path / 重跑 path-kc-mapping 之后，旧 KC 的边按同一 pathId 残留成幽灵边
    * （上游闭包 / 邻域 / 图视图读侧会把它们算进来）。范围只到 path 级行——`scope='user'`
    * （pathId=null）的跨路径聚合边不属于任何单条路径，不清。
    * 注：`aiPromptTemplate.kcAnnotation` 的落库仍在生成事务之外（stage-enrichment 的 SQLite 写锁取舍），

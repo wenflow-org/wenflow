@@ -8,7 +8,7 @@ const all = (sql: string, p: any[] = []): Promise<any[]> => new Promise((res, re
 (async () => {
   // 1) 伴学：策略在输入载荷的【策略】行（调用方按认知层级选定）
   const peer = await all(
-    `SELECT userPayload FROM prompt_call_logs WHERE agentId = 'skill:peer-reinforcement' AND success = 1 ORDER BY createdAt DESC LIMIT 200`,
+    `SELECT userPayload FROM prompt_call_logs WHERE agentId = 'skill:teaching-peer-reinforcement' AND success = 1 ORDER BY createdAt DESC LIMIT 200`,
   );
   const pd = new Map<string, number>();
   const pLevel = new Map<string, number>();

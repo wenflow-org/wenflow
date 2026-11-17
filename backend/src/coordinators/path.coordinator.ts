@@ -20,7 +20,7 @@ import { applyMaterialRerankGate } from '../services/materials/material-rerank.s
 import { partitionMaterialNeeds, deriveMaterialNeedsFromGoalText, mergeDeclaredAndDerivedNeeds } from '../services/materials/material-need-origin';
 import { findWebRecordByTitle, normalizeTitleForMatch } from '../services/materials/material-web-ingest.service';
 import { patchPathsWithAsyncMaterials, type AsyncMaterialPatch } from '../services/materials/material-async-collect.service';
-import { collectBriefsWithDeadline } from '../services/materials/material-brief.service';
+import { collectBriefsWithDeadline } from '../services/materials/path-material-brief.service';
 import {
   assertPathGenerationAllowed,
   evaluateGoalTriageEvidence,
@@ -38,7 +38,7 @@ import { normalizeSchoolAnchorShape, normalizeSkillNature, normalizePlatformJudg
 import { normalizeDeadlineDate } from '../services/learning/deadline-date';
 import { isDeadlineExplicitlyUnspecified, deriveRelativeDeadline, parseAbsoluteDeadline } from '../services/learning/deadline-text';
 import { resolveCapacity } from '../services/learning/capacity-authority';
-import type { MaterialNeed, MaterialPackResult } from '../skills/material-collector/types';
+import type { MaterialNeed, MaterialPackResult } from '../skills/path-material-collect/types';
 
 const COORDINATOR_ID = 'path-agent';
 
@@ -195,7 +195,7 @@ interface NormalizedPathInputV1 {
     /** 绝对日期（P0.1）：goal 模型解析出的外部截止锚（YYYY-MM-DD），可空 */
     deadlineDate: string | null;
     /**
-     * 外部资料采集结果（material-collector Material Pack）。goal 未声明 needsMaterial
+     * 外部资料采集结果（path-material-collect Material Pack）。goal 未声明 needsMaterial
      * 或采集失败/未开启时为缺失/not_found 条目，**不阻塞**路径生成。path-planning 读
      * pack.sections[].id/title 与 keyPoints 设计路径；learn 层按 sourceUrl+cite 引用选段。
      */
@@ -564,7 +564,7 @@ class PathCoordinator {
    *   - 模式（活的 path 批次 B）：sync=等待采集完成（preview 诊断口径）；async=生产链路
    *     **path 不等联网**——立即返回 pending 占位，真实采集进后台（预算放宽 90s），
    *     完成后等活跃 generation run 清空，再按 marker 回填 template（幂等）；
-   *   - 依赖：动态 import material-collector，避免把 search/fetch/prompt 依赖注入 path.coordinator 的静态图；
+   *   - 依赖：动态 import path-material-collect，避免把 search/fetch/prompt 依赖注入 path.coordinator 的静态图；
    *   - 超时/失败：fail-open，绝不阻塞路径生成。
    */
   private async resolveMaterialPacks(
@@ -577,11 +577,11 @@ class PathCoordinator {
 
     const collectorUserId = typeof userId === 'string' ? userId.trim() : '';
 
-    let collector: typeof import('../skills/material-collector');
+    let collector: typeof import('../skills/path-material-collect');
     try {
-      collector = await import('../skills/material-collector');
+      collector = await import('../skills/path-material-collect');
     } catch (error) {
-      logger.warn('[path-coordinator] material-collector 加载失败，跳过资料采集（fail-open）', {
+      logger.warn('[path-coordinator] path-material-collect 加载失败，跳过资料采集（fail-open）', {
         error: error instanceof Error ? error.message : String(error),
       });
       return null;
@@ -593,7 +593,7 @@ class PathCoordinator {
       .slice(0, MATERIAL_COLLECTION_MAX_NEEDS) as MaterialNeed[];
 
     // 来源域分流（2026-10-28 Frontier R1/R2：私有材料 26 次联网 0 成功）：
-    // private 不发起检索（公网注定搜不到），由 goal 请用户上传；public 才交给 material-collector。
+    // private 不发起检索（公网注定搜不到），由 goal 请用户上传；public 才交给 path-material-collect。
     const { publicNeeds, privateNeeds } = partitionMaterialNeeds(needs);
     if (privateNeeds.length > 0) {
       logger.info('[path-coordinator] 私有资料跳过联网采集（等待用户上传/按手上原文设计）', {
@@ -680,7 +680,7 @@ class PathCoordinator {
    * pending 占位**原位替换**为真实 pack。重启丢任务=可接受（下次生成库优先命中，资料不丢）。
    */
   private dispatchAsyncMaterialCollection(
-    collector: typeof import('../skills/material-collector'),
+    collector: typeof import('../skills/path-material-collect'),
     userId: string,
     needs: MaterialNeed[],
     placeholders: MaterialPackResult[]
@@ -879,7 +879,7 @@ class PathCoordinator {
         needsMaterial = mergedNeeds;
       }
     }
-    // 附件理解摘要（material-brief）惰性就绪：path 是长流程，值得等 brief（有预算上限）——
+    // 附件理解摘要（path-material-brief）惰性就绪：path 是长流程，值得等 brief（有预算上限）——
     // path-planning 拿到 brief 的 naturalDivisions/目录后才知道「这一堆怎么切分学习」。
     // fail-open：生成失败/超时的附件照常以 pack 进路径（brief=null），下次生成再补。
     const uploadUserId = typeof input.userId === 'string' ? input.userId.trim() : '';
@@ -1111,7 +1111,7 @@ class PathCoordinator {
   private async normalizeGoalRequest(input: GoalPathRequest): Promise<PathGenerationInput> {
     const config = await getPathAgentInputConfig();
     // 2026-10-28 R4 外部评审：生产链路原先走 async，公开资料永远在路径生成后才回填，
-    // stage-designer 拿不到正文（公开路径 materialRefs 恒为 0）。用户已明确接受
+    // path-task-design 拿不到正文（公开路径 materialRefs 恒为 0）。用户已明确接受
     // 路径生成变慢，故默认改 sync：先采后生成，让 pack 真正进入 resources.materials。
     // 需要旧行为时设 MATERIAL_COLLECTION_MODE=async（保留回滚口）。
     const mode: 'sync' | 'async' = process.env.MATERIAL_COLLECTION_MODE === 'async' ? 'async' : 'sync';

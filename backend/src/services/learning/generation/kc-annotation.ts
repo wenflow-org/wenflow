@@ -1,5 +1,5 @@
 /**
- * KC 映射（kc-mapper）执行与持久化：stage-designer 全部完成后调用。
+ * KC 映射（path-kc-mapping）执行与持久化：path-task-design 全部完成后调用。
  *
  * 将认知核心与子任务分解为知识组件（KC）+ 前置依赖图，写回
  * learning_paths.aiPromptTemplate.kcAnnotation，供 teaching-turn 按 KC 粒度消费
@@ -18,7 +18,7 @@ import prisma from '../../../config/database';
 import { logger } from '../../../utils/logger';
 import { executeSkillWithResult } from '../../../skills';
 import type { SkillDefinition } from '../../../skills/protocol';
-import { kcMapperDefinition } from '../../../skills/kc-mapper';
+import { kcMapperDefinition } from '../../../skills/path-kc-mapping';
 import { parsePathPromptTemplate } from '../learning.helpers';
 import { conceptGraphService, type MaterializeResult } from '../../learner/concept-graph.service';
 
@@ -46,7 +46,7 @@ export interface KcCognitiveCoreLike {
   [key: string]: unknown;
 }
 
-/** kc-mapper 的 LLM 输出（契约字段 + 宽松索引签名，容忍 prompt 演进新增字段） */
+/** path-kc-mapping 的 LLM 输出（契约字段 + 宽松索引签名，容忍 prompt 演进新增字段） */
 export interface KcAnnotation {
   conceptKcs?: Array<Record<string, unknown>>;
   taskKcLinks?: Array<Record<string, unknown>>;
@@ -71,7 +71,7 @@ function stableKeyOf(item: unknown): string {
 }
 
 /**
- * 渐进式设计的 KC 增量合并（活的 path 批次 D3）：把**单阶段**的 kc-mapper 输出合并进
+ * 渐进式设计的 KC 增量合并（活的 path 批次 D3）：把**单阶段**的 path-kc-mapping 输出合并进
  * 既有标注。顶层字段（conceptKcs/taskKcLinks/kcGraph）保持与 v1 相同形状的**并集**——
  * 读侧（TeachingContextBuilder.resolveTaskKcsFromPath 按 taskTitle 匹配）零改动兼容；
  * `byStage` 额外保留每阶段快照（渐进审计与未来按阶段读取）；v1 旧标注（无 version）
@@ -122,9 +122,9 @@ export function mergeKcStageAnnotation(
 }
 
 /**
- * 把 kc-mapper 链接绑到真实任务 id 上（issue #179）。
+ * 把 path-kc-mapping 链接绑到真实任务 id 上（issue #179）。
  *
- * kc-mapper 的输入里每个子任务带一个稳定键 `taskKey`，prompt 要求模型逐字回显；落库时用它查
+ * path-kc-mapping 的输入里每个子任务带一个稳定键 `taskKey`，prompt 要求模型逐字回显；落库时用它查
  * 出该任务的 `subtasks.id` 并写进链接的 `taskId`。读侧（resolveTaskKcsFromPath）据此精确匹配，
  * 不再依赖会被改写的标题、也能区分同名任务。
  *
@@ -184,7 +184,7 @@ export interface KcAnnotationParams {
  * 默认落库：读当前模板为基底、只覆盖 kcAnnotation，避免并发写互相覆盖。
  *
  * 导出供**身份迁移**复用（`src/scripts/kc-identity-migrate.ts`）：迁移必须先拿到模型输出、
- * 据此登记别名，再把**同一份**标注落库——kc-mapper 是 temperature 0.3，重跑一次名字就会变，
+ * 据此登记别名，再把**同一份**标注落库——path-kc-mapping 是 temperature 0.3，重跑一次名字就会变，
  * 别名与落库标注必须同源，否则登记的别名指向一批不存在的名字。
  */
 export async function persistKcAnnotationToPath(pathId: string, kcAnnotation: KcAnnotation): Promise<void> {
@@ -236,19 +236,19 @@ export async function mapAndPersistKcAnnotation(params: KcAnnotationParams): Pro
 
     if (kcResult?.success && kcResult?.output) {
       kcAnnotation = kcResult.output;
-      logger.info('[kc-mapper] KC 映射完成', {
+      logger.info('[path-kc-mapping] KC 映射完成', {
         userId,
         pathId,
         kcCount: kcAnnotation?.conceptKcs?.length || 0,
       });
     } else {
-      logger.warn('[kc-mapper] 映射无有效输出（best-effort，跳过持久化）', {
+      logger.warn('[path-kc-mapping] 映射无有效输出（best-effort，跳过持久化）', {
         pathId,
         quality: kcResult?.quality ?? null,
       });
     }
   } catch (kcError) {
-    logger.warn('[kc-mapper] 映射失败（best-effort，不阻断路径生成）', {
+    logger.warn('[path-kc-mapping] 映射失败（best-effort，不阻断路径生成）', {
       userId,
       pathId,
       error: kcError instanceof Error ? kcError.message : String(kcError),
@@ -259,7 +259,7 @@ export async function mapAndPersistKcAnnotation(params: KcAnnotationParams): Pro
 
   try {
     await (persist || persistKcAnnotationToPath)(pathId, kcAnnotation);
-    logger.info('[kc-mapper] KC 映射已持久化到 aiPromptTemplate', {
+    logger.info('[path-kc-mapping] KC 映射已持久化到 aiPromptTemplate', {
       pathId,
       kcCount: kcAnnotation?.conceptKcs?.length || 0,
       taskKcLinkCount: kcAnnotation?.taskKcLinks?.length || 0,
@@ -271,18 +271,18 @@ export async function mapAndPersistKcAnnotation(params: KcAnnotationParams): Pro
       try {
         const runMaterialize = materialize ?? ((p) => conceptGraphService.materializePathGraph(p));
         const graph = await runMaterialize({ userId, pathId, kcAnnotation, cognitiveCore });
-        logger.info('[kc-mapper] 概念图已物化到 concept_edges', { pathId, ...graph });
+        logger.info('[path-kc-mapping] 概念图已物化到 concept_edges', { pathId, ...graph });
       } catch (graphError) {
-        logger.warn('[kc-mapper] 概念图物化失败（best-effort，不阻断路径生成）', {
+        logger.warn('[path-kc-mapping] 概念图物化失败（best-effort，不阻断路径生成）', {
           pathId,
           error: graphError instanceof Error ? graphError.message : String(graphError),
         });
       }
     } else {
-      logger.warn('[kc-mapper] 缺 userId，跳过概念图物化', { pathId });
+      logger.warn('[path-kc-mapping] 缺 userId，跳过概念图物化', { pathId });
     }
   } catch (persistError) {
-    logger.warn('[kc-mapper] KC 映射持久化失败（best-effort，不阻断路径生成）', {
+    logger.warn('[path-kc-mapping] KC 映射持久化失败（best-effort，不阻断路径生成）', {
       userId,
       pathId,
       error: persistError instanceof Error ? persistError.message : String(persistError),

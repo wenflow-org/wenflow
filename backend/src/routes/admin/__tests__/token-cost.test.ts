@@ -213,7 +213,7 @@ describe('GET /token-cost/by-skill', () => {
     mockWindow();
     mockAggregateTokenGroups.mockResolvedValue([
       group('teaching-turn', 'u1', 'm1', { tokens: 1000, calls: 2, failed: 1 }),
-      group('virtual-learner-learn-turn-simulator', 'u1', 'm1', { tokens: 500 }),
+      group('simulation-learn-turn', 'u1', 'm1', { tokens: 500 }),
     ]);
 
     const handler = getRouteHandler('/by-skill', 'get');
@@ -227,7 +227,7 @@ describe('GET /token-cost/by-skill', () => {
     expect(body.data.items[0].tokens).toBe(1000);
     expect(body.data.items[0].calls).toBe(2);
     expect(body.data.items[0].failed).toBe(1);
-    expect(body.data.items[1].key).toBe('virtual-learner-learn-turn-simulator');
+    expect(body.data.items[1].key).toBe('simulation-learn-turn');
     expect(body.data.items[1].tokens).toBe(500);
   });
 

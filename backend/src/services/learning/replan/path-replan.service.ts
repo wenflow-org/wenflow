@@ -9,7 +9,7 @@ import prisma from '../../../config/database';
 import { withTransaction } from '../../../utils/with-transaction';
 import { logger } from '../../../utils/logger';
 import { executeSkill } from '../../../skills';
-import { stageDesignerDefinition } from '../../../skills/stage-designer';
+import { stageDesignerDefinition } from '../../../skills/path-task-design';
 import { getRequestContext, runWithContext } from '../../../gateway/api-gateway/context';
 import { assertGenerationRunFence, assertStageTasksPresent } from '../path-generation-status';
 import { clampStageTasksToHints } from '../path-planning-hints';
@@ -83,11 +83,11 @@ export class PathReplanNoTargetStageError extends Error {
 }
 
 /* ---------------- 重排规模锚（2026-10-15 双向化） ----------------
-   背景（审计 §七）：重排此前**不向 stage-designer 传任务数锚**，designer 于是掉到「全缺默认 3-6 个」，
+   背景（审计 §七）：重排此前**不向 path-task-design 传任务数锚**，designer 于是掉到「全缺默认 3-6 个」，
    而源阶段常只有 2 个 → 只能膨胀；且阶段学时段落是「改完任务后反向汇总」，没有任何"先定规模"的入口。
    这里按「目标阶段学时 × 系数」反推任务数，注入 `planningHints.targetSubtasksForStage`
-   （stage-designer 规则 8 视作**恰好该数**）→ 系数 <1 即压缩、>1 即补强、=1 即等量重排。
-   提示词侧规则 77 的「不能减课缩分钟」按 `repairHints.replanRatio < 1` 分叉（见 stage-designer.yaml）。
+   （path-task-design 规则 8 视作**恰好该数**）→ 系数 <1 即压缩、>1 即补强、=1 即等量重排。
+   提示词侧规则 77 的「不能减课缩分钟」按 `repairHints.replanRatio < 1` 分叉（见 path-task-design.yaml）。
 
    键必须同时覆盖**两套词汇**：上游建议动作（`replanSignal.recommendation` =
    keep/reinforce/slow_down/resequence/accelerate，见 LearnerSnapshotService）与请求 `mode`
@@ -108,7 +108,7 @@ export const REPLAN_TASK_COUNT_CAP = 8;
 export const REPLAN_ANCHOR_MINUTES_FALLBACK = 60;
 
 /**
- * stage-designer 产出的任务草稿。模型给的是自由 JSON，字段全可选；下方落库处逐字段兜底，
+ * path-task-design 产出的任务草稿。模型给的是自由 JSON，字段全可选；下方落库处逐字段兜底，
  * 故这里只声明「会被读到」的字段，不做校验（校验在 assertStageTasksPresent / hints 裁剪）。
  * 显式声明用于给 `clampStageTasksToHints` 钉住 T：该泛型从参数推不出元素类型时会退回
  * 约束 `{estimatedMinutes?: number}`，导致下游 taskData.title 等全部报 TS2339。
@@ -124,7 +124,7 @@ export type ReplanTaskDraft = {
   icapLevel?: string | null;
   transferable?: boolean | null;
   linkedConcept?: string | null;
-  /** 任务级可调整性（stage-designer 2026-10-17 输出）：压缩时保护 core、优先删减 flexible */
+  /** 任务级可调整性（path-task-design 2026-10-17 输出）：压缩时保护 core、优先删减 flexible */
   adjustability?: string | null;
 };
 
@@ -152,7 +152,7 @@ export function resolveAdvisoryAction(evidence?: Record<string, any> | null): st
 const FLEXIBLE_TASK_TYPES = new Set(['acquire', 'deconstruct', 'diagnose']);
 
 /**
- * 任务可调整性判据（与 stage-designer 的 normalizeAdjustability 同口径，动态规划 2026-10-17）：
+ * 任务可调整性判据（与 path-task-design 的 normalizeAdjustability 同口径，动态规划 2026-10-17）：
  * sidecar `aiPromptTemplate.taskAdjustability.byTask` 优先；旧路径没有 sidecar 时按任务类型兜底，
  * 使存量路径也能获得「保护骨干、优先删减建立类」的压缩语义。
  */
@@ -276,7 +276,7 @@ async function redesignMilestoneTasks(
     .filter((task: any) => resolveTaskAdjustability(task, adjustabilityByTask) === 'core')
     .slice(0, 6)
     .map((task: any) => ({ id: task.id, title: task.title, taskType: task.taskType || null }));
-  // 资料投影（2026-10-17）：重排此前完全不传 materials —— stage-designer 的
+  // 资料投影（2026-10-17）：重排此前完全不传 materials —— path-task-design 的
   // 「任务必须长在资料上」规则拿不到输入，重排出来的任务全部丢失 materialRefs。
   // 与生成链同口径：按阶段位次切章节窗口，末阶段才能引用到资料后部。
   const stageMaterials = extractPromptMaterials(normalizedInput, STAGE_MATERIAL_LIMITS, {
@@ -302,7 +302,7 @@ async function redesignMilestoneTasks(
     } : {}),
     cognitiveCore: pathCognitiveDesign,
     ...(stageMaterials ? { materials: stageMaterials } : {}),
-    // 规模锚（与生成链同构：planningHints 嵌在 normalizedInput 下，stage-designer 规则 8/77 读它）
+    // 规模锚（与生成链同构：planningHints 嵌在 normalizedInput 下，path-task-design 规则 8/77 读它）
     normalizedInput: replanHints
       ? { ...((normalizedInput as any) || {}), planningHints: replanHints }
       : normalizedInput,

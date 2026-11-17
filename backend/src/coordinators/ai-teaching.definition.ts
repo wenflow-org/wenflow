@@ -14,7 +14,7 @@ export const AITeachingCoordinatorRuntimeDefinition = {
     },
     {
       step: 2,
-      agentId: 'skill:teaching-opening-generator',
+      agentId: 'skill:teaching-opening',
       kind: 'skill',
       role: 'opening-generation',
       condition: 'on session start'
@@ -28,9 +28,9 @@ export const AITeachingCoordinatorRuntimeDefinition = {
     },
     {
       step: 4,
-      agentId: 'skill:peer-reinforcement',
+      agentId: 'skill:teaching-peer-reinforcement',
       kind: 'skill',
-      role: 'peer-reinforcement',
+      role: 'teaching-peer-reinforcement',
       condition: 'when control.shouldTriggerPeer = true'
     },
     {
@@ -44,9 +44,9 @@ export const AITeachingCoordinatorRuntimeDefinition = {
     },
     {
       step: 6,
-      agentId: 'skill:session-wrapup',
+      agentId: 'skill:teaching-wrapup',
       kind: 'skill',
-      role: 'session-wrapup',
+      role: 'teaching-wrapup',
       condition: 'when session ends'
     },
     {

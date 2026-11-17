@@ -176,7 +176,7 @@
               <span class="wf-row__stage-name" :title="`监控分组 ${span.stage} · Skill ${span.agent}`">{{ monitoringGroupText(span.stage) }}</span>
               <span class="wf-row__stage-id mono" :title="span.agent">{{ span.agent }}</span>
             </span>
-            <!-- 起点偏移（2026-11-02 评审）：同一条链路里同名 Skill 会重复出现（实测 5 行 stage-designer），
+            <!-- 起点偏移（2026-11-02 评审）：同一条链路里同名 Skill 会重复出现（实测 5 行 path-task-design），
                  行首只有 Skill 名时无法区分是哪一次调用 -->
             <span class="wf-row__start mono" :title="`距链路起点 ${fmtMs(span.startMs)} 开始`">+{{ fmtMs(span.startMs) }}</span>
           </span>

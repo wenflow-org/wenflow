@@ -1,6 +1,6 @@
 import prisma from '../../config/database';
 import { executeSkillWithResult } from '../../skills';
-import { adaptiveGuidanceCopyDefinition, type AdaptiveGuidanceCopyOutput } from '../../skills/adaptive-guidance-copy';
+import { adaptiveGuidanceCopyDefinition, type AdaptiveGuidanceCopyOutput } from '../../skills/profile-adaptive-copy';
 import { learnerSnapshotRefreshService } from './LearnerSnapshotRefreshService';
 import { learnerStateSummaryService, type LearnerStateSummaryOutput } from './LearnerStateSummaryService';
 import { learningDecisionFeedService, type LearningDecisionCard } from './LearningDecisionFeedService';
@@ -200,7 +200,7 @@ class DashboardGuidanceSnapshotService {
         summary,
         decisions,
         debug: {
-          skillId: result.debug?.skillId || 'adaptive-guidance-copy',
+          skillId: result.debug?.skillId || 'profile-adaptive-copy',
           model: result.debug?.model || null,
           systemPromptVersion: result.debug?.systemPromptVersion || null,
           durationMs: result.debug?.durationMs || result.duration || 0,

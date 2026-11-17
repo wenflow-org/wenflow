@@ -4,7 +4,7 @@
  * 病根：`toFormField` / `toCoreFieldPayload` 此前只映射 name/type/desc/turn，
  * 丢掉嵌套 `properties` 与 `enumValues`；于是「无编辑保存」时后端语义等价守卫
  * （coreFileSemanticallyEqual）判不等，走到全量序列化把嵌套子字段 schema 静默删掉。
- * 本用例钉住这两个投影函数对嵌套结构的保真（kc-mapper / concept-load-estimator 即此形态）。
+ * 本用例钉住这两个投影函数对嵌套结构的保真（path-kc-mapping / profile-concept-load 即此形态）。
  */
 import { describe, expect, it } from 'vitest';
 import { toFormField, toCoreFieldPayload, type CoreFormField } from '../skill-design/sdp-shared';

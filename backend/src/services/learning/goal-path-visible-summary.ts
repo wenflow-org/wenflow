@@ -29,7 +29,7 @@ export type SkillNature =
  */
 export type PlatformJudgment = 'judgeable_output' | 'judgeable_sensor' | 'not_judgeable';
 
-import type { MaterialNeed } from '../../skills/material-collector/types';
+import type { MaterialNeed } from '../../skills/path-material-collect/types';
 import { normalizeDeadlineDate } from './deadline-date';
 
 export interface GoalPathVisibleSummary {
@@ -97,7 +97,7 @@ export interface GoalPathVisibleSummary {
   /**
    * 外部权威资料需求（hidden，goal→path 资料采集缝）。
    * 由 goal-conversation 产出、随 collectedData.understanding.needsMaterial 落库；
-   * 白名单透传后供 path.coordinator 调 material-collector 采集（未声明则为 null）。
+   * 白名单透传后供 path.coordinator 调 path-material-collect 采集（未声明则为 null）。
    */
   needsMaterial?: MaterialNeed | MaterialNeed[] | null;
   /**

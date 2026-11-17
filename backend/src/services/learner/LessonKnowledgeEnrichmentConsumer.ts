@@ -2,7 +2,7 @@ import prisma from '../../config/database';
 import { withTransaction } from '../../utils/with-transaction';
 import type { DurableDomainEvent } from '../../events/contracts';
 import { executeSkill } from '../../skills';
-import { lessonKnowledgeEnricherDefinition, type LessonKnowledgeEnricherOutput } from '../../skills/lesson-knowledge-enricher';
+import { lessonKnowledgeEnricherDefinition, type LessonKnowledgeEnricherOutput } from '../../skills/profile-lesson-enrich';
 import { mapOutboxRecord } from '../../events/outbox.repository';
 import { LESSON_ENRICHMENT_EVENT_TYPE, type LessonEnrichmentEventData } from '../../events/lesson-enrichment-event';
 import { learnerProfileService } from './LearnerProfileService';
@@ -131,7 +131,7 @@ export class LessonKnowledgeEnrichmentConsumer {
       reusableFoundations: enriched?.reusableFoundations || [],
       blockedFoundations: enriched?.blockedFoundations || [],
       transferSignals: enriched?.transferSignals || [],
-      // 知识状态自然语言摘要：供预测器（learning-predictor）与教学决策直接读取
+      // 知识状态自然语言摘要：供预测器（profile-learning-predict）与教学决策直接读取
       knowledgeStateSummary: typeof enriched?.knowledgeStateSummary === 'string' ? enriched.knowledgeStateSummary : '',
     };
     const dialogueKnowledge = {

@@ -68,7 +68,7 @@ describe('LearningDecisionFeedService', () => {
       title: 'Excel 自动化',
       replanReason: '掌握证据显示前置缺口',
       replanMode: 'overwrite',
-      replanTriggerSource: 'learner-model-agent',
+      replanTriggerSource: 'profile-learner-model-agent',
       updatedAt: new Date('2026-07-25T10:00:00Z')
     }]
 

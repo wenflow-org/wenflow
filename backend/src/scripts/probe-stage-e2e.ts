@@ -5,7 +5,7 @@
  * 与生产的同源性：
  *   ① 真生成一条路径（真 LLM）→ 读回**真实落库**的 aiPromptTemplate
  *   ② 用生产的 `parsePathCognitiveDesign` 解析它（§2.3a 的修复点：loadProfile 是否还在）
- *   ③ 把结果按 `stage-enrichment` 的形状喂给**真实 stage-designer skill**（真 LLM），
+ *   ③ 把结果按 `stage-enrichment` 的形状喂给**真实 path-task-design skill**（真 LLM），
  *      再读回真实下发的 userPayload 核对：loadTarget 是否注入（§2.3a）、
  *      normalizedInput.resources.materials 是否已被剥离（§2.3c）、顶层 materials 是否在（§1.4 声明的通道）
  *   ④ 无资料再跑一次，核对模型编造的 materialRefs 是否被删（§2.3b）
@@ -16,7 +16,7 @@ import 'dotenv/config';
 import prisma from '../config/database';
 import pathOrchestrator from '../coordinators/path.coordinator';
 import { executeSkill } from '../skills';
-import { stageDesignerDefinition } from '../skills/stage-designer';
+import { stageDesignerDefinition } from '../skills/path-task-design';
 import { parsePathCognitiveDesign } from '../services/learning/learning.helpers';
 import goalConversationService from '../services/learning/goal-conversation.service';
 
@@ -91,7 +91,7 @@ async function main() {
     resources: { timeBudget: '每周5小时', materials: MATERIALS },
   };
 
-  // ③ 有资料：真跑 stage-designer
+  // ③ 有资料：真跑 path-task-design
   const startedAt = new Date();
   const withMaterials = await executeSkill(stageDesignerDefinition, {
     milestone, cognitiveCore: design, normalizedInput, materials: MATERIALS,
@@ -101,7 +101,7 @@ async function main() {
 
   await new Promise((r) => setTimeout(r, 3000));
   const calls = await prisma.prompt_call_logs.findMany({
-    where: { agentId: 'skill:stage-designer', createdAt: { gte: startedAt } },
+    where: { agentId: 'skill:path-task-design', createdAt: { gte: startedAt } },
     select: { userPayload: true }, orderBy: { createdAt: 'desc' },
   });
   // 载荷是 JSON；必须解析后按字段判断——用正则找 "resources"…"materials" 会把紧随其后的

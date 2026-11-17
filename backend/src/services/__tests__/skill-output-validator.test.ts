@@ -145,7 +145,7 @@ describe('validateSkillOutputFields（P3 运行时入口）', () => {
 
   it('排除名单内的 skill 返回 null（跳过）', async () => {
     expect(await validateSkillOutputFields('skill:skill-author', {})).toBeNull()
-    expect(await validateSkillOutputFields('skill:virtual-learner-referee', {})).toBeNull()
+    expect(await validateSkillOutputFields('skill:simulation-referee', {})).toBeNull()
   })
 
   it('delta 模式仅验类型，缺席合法', async () => {

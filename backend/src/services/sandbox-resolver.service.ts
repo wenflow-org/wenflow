@@ -78,8 +78,8 @@ export function checkSandboxRefs(
  * 动态读取声明，core yaml 变更后自动生效。
  * 例：`sandbox:goal.collectedData.state` → { agentAlias: 'goal', path: 'collectedData.state' }
  *
- * @param options.includeOptional 置 true 时连 `type: <t>?` 的可选输入一起纳入（stage-designer/
- *   kc-mapper 这类「声明即通道」的 skill 用它做通道级对账：#192 之前可选键被整类跳过，
+ * @param options.includeOptional 置 true 时连 `type: <t>?` 的可选输入一起纳入（path-task-design/
+ *   path-kc-mapping 这类「声明即通道」的 skill 用它做通道级对账：#192 之前可选键被整类跳过，
  *   于是声明了一堆沙盘键、池里一个都没有也没人发现）。
  */
 export async function extractSandboxRefsFromCore(
@@ -261,15 +261,15 @@ export function buildTeachingSandboxPool(options: {
 }
 
 /**
- * stage 链（stage-designer / kc-mapper）在 path 池里声明的通道键。
+ * stage 链（path-task-design / path-kc-mapping）在 path 池里声明的通道键。
  *
- * #192：这两个 skill 的真实载荷由编排层手工拼装（`stageDesignerInput` / kc-mapper 的
+ * #192：这两个 skill 的真实载荷由编排层手工拼装（`stageDesignerInput` / path-kc-mapping 的
  * `{subtasks, milestones, cognitiveCore, prerequisiteTree}`），从不经过 `normalizedInput`；
  * 此前池里没有这些键 ⇒ 「声明 ≠ 载荷」，且这两个 skill 未纳入运行期对账，问题一直不可见。
  * 现在：① 池按本清单显式登记通道（本次未注入的显式 null）；② 真实载荷（injected）覆盖同名键；
  * ③ 调用点在 executeSkill 之前跑 checkAgentSandboxRefs 对账，声明/载荷一旦再次漂移就会 warn。
  *
- * #192 复核残留：kc-mapper / path-reviewer 声明的它是**顶层** `prerequisiteTree`
+ * #192 复核残留：path-kc-mapping / path-reviewer 声明的它是**顶层** `prerequisiteTree`
  * （载荷即 `kcMapperInput.prerequisiteTree` / path-generation 的评审入参），此前只在
  * AgentContractView 登记了从不存在的 `normalizedInput.prerequisiteTree` ⇒ 声明恒不可解析。
  */
@@ -290,7 +290,7 @@ export const PATH_STAGE_SANDBOX_KEYS = [
 /** path 链：path.coordinator.buildNormalizedGoalInput 确定性定帧结果 + stage 链手工拼装载荷 */
 export function buildPathSandboxPool(
   normalizedInputV1: object,
-  /** stage-designer / kc-mapper 本次真实注入的载荷（键 ∪ PATH_STAGE_SANDBOX_KEYS） */
+  /** path-task-design / path-kc-mapping 本次真实注入的载荷（键 ∪ PATH_STAGE_SANDBOX_KEYS） */
   injected: Record<string, unknown> = {}
 ): Record<string, Record<string, unknown>> {
   const pathPool: Record<string, unknown> = {

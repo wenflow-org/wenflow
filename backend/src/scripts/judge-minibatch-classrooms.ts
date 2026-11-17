@@ -1,9 +1,9 @@
 /**
  * judge-minibatch-classrooms.ts —— 课堂级独立 LLM 评审跑数器（2026-11-13 mini-batch 第 2 步）。
  *
- * 为什么要有它：virtual-learner-referee 只看 publicTrace——板书/图文载荷、逐轮脚手架、
+ * 为什么要有它：simulation-referee 只看 publicTrace——板书/图文载荷、逐轮脚手架、
  * 收束产出这些课堂内部证据它拿不到（u07/u17 的 TEACHING_BOARD_UNVERifiable 误报根源）。
- * 本脚本对黑盒 mini-batch 的**每一节课**调 skill:classroom-quality-judge，产出与 referee
+ * 本脚本对黑盒 mini-batch 的**每一节课**调 skill:teaching-classroom-judge，产出与 referee
  * 同构的病历单（code/severity/evidenceIds），并做跨样本归一聚类（≥2 例或 critical 才进修复）。
  *
  * 输入：mini-batch run 目录里的 result.json（拿 caseId/userId/sessionId）；
@@ -20,7 +20,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { PrismaClient } from '@prisma/client';
 import { runWithContext } from '../gateway/api-gateway/context';
-import { executeClassroomQualityJudge, type ClassroomJudgeTranscriptTurn } from '../skills/classroom-quality-judge';
+import { executeClassroomQualityJudge, type ClassroomJudgeTranscriptTurn } from '../skills/teaching-classroom-judge';
 
 const prisma = new PrismaClient();
 
@@ -95,7 +95,7 @@ function digestFigures(figures: any): string | null {
     const cells = Array.isArray(spec.cells)
       ? spec.cells.map((c: any) => `${c?.r ?? '?'},${c?.c ?? '?'}${c?.tone ? `(${c.tone})` : ''}`).join(' ')
       : '';
-    // legend 条目真实形状是 {text, fill}（board-designer 产物，2026-11-13 实测 DB）：
+    // legend 条目真实形状是 {text, fill}（teaching-board-design 产物，2026-11-13 实测 DB）：
     // 只认 .label 会把对象 String 成「[object Object]」，制造「图例未渲染」伪影 finding
     const legend = Array.isArray(spec.legend)
       ? spec.legend.map((l: any) => String(l?.label ?? l?.text ?? (typeof l === 'string' ? l : '')).trim()).filter(Boolean).join('；')
@@ -453,7 +453,7 @@ async function main() {
   const md: string[] = [];
   md.push(`# 课堂级独立评审病历单（${path.basename(runRoot)}）`);
   md.push('');
-  md.push(`生成：${summary.generatedAt}｜评审技能：skill:classroom-quality-judge`);
+  md.push(`生成：${summary.generatedAt}｜评审技能：skill:teaching-classroom-judge`);
   md.push('');
   md.push('## 逐课');
   md.push('');

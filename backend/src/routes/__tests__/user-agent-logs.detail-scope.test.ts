@@ -187,8 +187,8 @@ async function callDetail(logId: string, query: any) {
 const CONVERSION_AGENTS_FIXTURE = [
   makeRow('acl_p1', 'skill:path-planning', '2026-10-01T10:00:00.000Z', { conversationId: 'conv-path-1' }, 'tr-p1'),
   makeRow('acl_p2', 'skill:path-planning', '2026-10-01T10:05:00.000Z', { conversationId: 'conv-path-1' }, 'tr-p2'),
-  makeRow('acl_k1', 'skill:kc-mapper', '2026-10-01T10:06:00.000Z', { conversationId: 'conv-path-1' }, 'tr-k1'),
-  makeRow('acl_s1', 'skill:stage-designer', '2026-10-01T10:07:00.000Z', { conversationId: 'conv-path-1' }, 'tr-s1'),
+  makeRow('acl_k1', 'skill:path-kc-mapping', '2026-10-01T10:06:00.000Z', { conversationId: 'conv-path-1' }, 'tr-k1'),
+  makeRow('acl_s1', 'skill:path-task-design', '2026-10-01T10:07:00.000Z', { conversationId: 'conv-path-1' }, 'tr-s1'),
   // 真实网关行不带 conversationId —— 详情不能靠会话预筛把它们丢掉，否则模型名补不回来
   makeRow('acl_gw', 'api-gateway', '2026-10-01T10:00:01.000Z', { model: 'claude-x' }, 'tr-p1'),
 ]

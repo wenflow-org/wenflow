@@ -100,7 +100,7 @@ export function validateGoalConversationStructuredOutput(
   const allowedTopLevelKeys = new Set([
     'reply', 'state', 'goalConversation', 'hints',
     'understanding', 'nextQuestions', 'quickReplies', 'confirmedProposal', 'confidenceScores', 'structuredData',
-    // goal→path 资料采集缝：hidden 顶层输出（不向用户展示，由 material-collector 消费）
+    // goal→path 资料采集缝：hidden 顶层输出（不向用户展示，由 path-material-collect 消费）
     'needsMaterial',
     // 动机信号/动机帧（规则：hidden，静默累积）：规范位置在 state 下，但模型可能直接写在顶层
     // （输入 shape 回写的既有兼容口径，见 normalizeGoalConversationModelPayload 的 `...state` 展开）。

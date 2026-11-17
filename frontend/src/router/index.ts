@@ -208,7 +208,7 @@ const routes: RouteRecordRaw[] = [
   // 旧版带参数路由 → 新平级页面（参数型无法被 /admin/:page 吸收）
   // 旧深链：people?tab=state → /admin/learner-state
   {
-    path: '/admin/learner-models/:userId?',
+    path: '/admin/profile-learner-models/:userId?',
     redirect: '/admin/learner-state'
   },
   {

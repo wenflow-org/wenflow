@@ -14,9 +14,9 @@ import { learnerProjectionService } from '../learner/LearnerProjectionService';
 import { decideTaskDifficulty, resolveBaselineLevel } from '../learner/TaskDifficultyAdjustmentService';
 import { classifyLoad } from '../learning/learning-load-verdict';
 import { resolveSuccessBandVerdict } from '../learner/independent-success-band.service';
-import type { TeachingLearnerProjection } from '../../agents/learner-model-agent/types';
+import type { TeachingLearnerProjection } from '../../agents/profile-learner-model-agent/types';
 import { executeSkill } from '../../skills';
-import { learningPredictorDefinition, type LearningPredictorOutput } from '../../skills/learning-predictor';
+import { learningPredictorDefinition, type LearningPredictorOutput } from '../../skills/profile-learning-predict';
 import { getRequestContext, runInAgentScope } from '../../gateway/api-gateway/context';
 import { AI_TEACHING_AGENT_ID } from './teaching-turn-shared';
 import { predictionCalibrationService } from '../learner/PredictionCalibrationService';
@@ -81,10 +81,10 @@ export async function loadLearnerSnapshotForContext(
 /**
  * 教学场景上下文装配 —— **teaching-agent 的编排边界**。
  *
- * #185：本函数内会调用静态归属别的 agent 的 skill（`skill:learning-predictor` 归属
+ * #185：本函数内会调用静态归属别的 agent 的 skill（`skill:profile-learning-predict` 归属
  * profile-agent），但真实调用方是教学链。这里显式进入 teaching-agent 作用域，
  * skill span 的 callerAgent 因此记 teaching-agent，而不是静态 owner——否则会被写成
- * 「profile-agent → skill:learning-predictor」这种归属扁平化的假边。
+ * 「profile-agent → skill:profile-learning-predict」这种归属扁平化的假边。
  */
 export async function buildTeachingScenarioContext(
   userId: string,
@@ -205,7 +205,7 @@ async function buildTeachingScenarioContextImpl(
   );
   const resolvedConcept = resolveTaskConceptFromPath(task, path);
   const taskKnowledgeSeeds = buildTaskKnowledgeSeeds({ task, path, resolvedConcept });
-  // issue #193：subtasks.learningObjectives 在主链生成里结构性为空——core/stage-designer.yaml 明令
+  // issue #193：subtasks.learningObjectives 在主链生成里结构性为空——core/path-task-design.yaml 明令
   // 「不要输出 learningObjectives」，stage-enrichment 每个 subtask 写 null，实测 2037/2037 为空；
   // 曾把它当 primaryConcepts 的「首选源」是一段永远走不到的次优分支。这里把 fallback 定为唯一路径：
   // 本课概念一律取 KC 种子（取不到 KC 时 buildTaskKnowledgeSeeds 回落任务 canonical 概念）。
@@ -277,7 +277,7 @@ async function buildTeachingScenarioContextImpl(
     taskProfile,
     graphNeighbors,
   });
-  // 本课知识组件（kc-mapper 拆出的最小单元）：既是注入字段，也参与误解台账检索——
+  // 本课知识组件（path-kc-mapping 拆出的最小单元）：既是注入字段，也参与误解台账检索——
   // 台账的 conceptKey 往往就是 KC 名（教学回合按 KC 粒度报误解），只按上面三个概念槽位去查
   // 会一条都拉不到；模型看不到既往标签就只能每轮重编一个 hypothesis（实测 22 行里 6 行标签为 null）。
   const taskKcs = resolveTaskKcsFromPath(task, path);
@@ -517,7 +517,7 @@ function markPredictionFailure(cooldownKey: string): void {
 /**
  * 幂等获取/生成学习表现预测：优先复用**新鲜且未回写**的记录，否则调 LLM 并记录。
  * issue #182：①复用加时间窗（TTL）；②超时走 executor 硬超时（抛 SKILL_TIMEOUT → 计入
- * learning-predictor 失败率）并在超时后中止底层请求（不再任其烧 token）；③失败由 debug
+ * profile-learning-predict 失败率）并在超时后中止底层请求（不再任其烧 token）；③失败由 debug
  * 升级为 warn 并对该 task 短时冷却；④客户端断开信号并入，保留请求级取消的既有行为。
  */
 export async function buildLearnerPrediction(

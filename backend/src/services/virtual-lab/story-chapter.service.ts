@@ -18,7 +18,7 @@
 import { randomUUID } from 'node:crypto';
 import { prisma } from '../../config/database';
 import { executeSkill } from '../../skills';
-import { virtualLearnerScenarioDesignerDefinition } from '../../skills/virtual-learner-scenario-designer';
+import { virtualLearnerScenarioDesignerDefinition } from '../../skills/simulation-scenario-designer';
 import { buildLearnerMemorySnapshot } from '../../virtual-lab/learner-memory';
 import { logger } from '../../utils/logger';
 import { withKeyedLock } from '../../utils/keyed-lock';

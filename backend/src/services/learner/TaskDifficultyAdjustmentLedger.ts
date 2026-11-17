@@ -323,7 +323,7 @@ export async function measureTaskDifficultyEffects(input: {
         userId: record.userId,
         metricType: 'learning_state',
         calculatedAt: { gte: record.occurredAt },
-        // 排除 task-completion 合成占位行（lss 恒 4）：它与同日同 taskId 的 session-wrapup 权威行成对出现，
+        // 排除 task-completion 合成占位行（lss 恒 4）：它与同日同 taskId 的 teaching-wrapup 权威行成对出现，
         // 两边 calculatedAt 常为同一毫秒（实测 88 组里 84 组同毫秒），按升序取"下一条状态"排序不确定，
         // 可能取到占位行 → 效果度量读到假的 lss=4。与 PMC 读侧的同义去重（dedupeLessonRows）对齐。
         NOT: { sourceKey: { startsWith: 'task-completion:' } },

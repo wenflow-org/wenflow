@@ -9,7 +9,7 @@
  * 阶段任务分钟总量的确定性夹（2026-10-25 方向改造 / 承诺二次违约修复）。
  *
  * 实证（uqcit3l）：hints 完全正确（targetTotalHours=2、targetHoursPerMilestone=0.7、
- * targetMinutesPerTask=20、subtaskMinutesRange=[9,30]），但 stage-designer 仍排出
+ * targetMinutesPerTask=20、subtaskMinutesRange=[9,30]），但 path-task-design 仍排出
  * 80/60/113 分钟三阶段共 253 分钟 ≈ 承诺 120 分钟的 2.1 倍——模型无视锚，
  * 而既有 clampStageTasksToHints 只夹「单任务上界」与「任务数上界」，不夹阶段总量。
  *

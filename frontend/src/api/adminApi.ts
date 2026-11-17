@@ -384,7 +384,7 @@ export const adminLearnerModelsApi = {
     page?: number;
     limit?: number;
   }) => {
-    return adminAxios.get('/admin/learner-models', { params });
+    return adminAxios.get('/admin/profile-learner-models', { params });
   },
 
   getDetail: async (userId: string, params?: {
@@ -392,14 +392,14 @@ export const adminLearnerModelsApi = {
     mode?: 'global' | 'path' | 'teaching';
     includeTest?: boolean;
   }) => {
-    return adminAxios.get(`/admin/learner-models/${userId}`, { params });
+    return adminAxios.get(`/admin/profile-learner-models/${userId}`, { params });
   },
 
   recompute: async (userId: string, data?: {
     pathId?: string;
     scope?: 'global' | 'path' | 'teaching';
   }) => {
-    return adminAxios.post(`/admin/learner-models/${userId}/recompute`, data || {});
+    return adminAxios.post(`/admin/profile-learner-models/${userId}/recompute`, data || {});
   },
 
   getEvidence: async (userId: string, params?: {
@@ -407,13 +407,13 @@ export const adminLearnerModelsApi = {
     limit?: number;
     includeTest?: boolean;
   }) => {
-    return adminAxios.get(`/admin/learner-models/${userId}/evidence`, { params });
+    return adminAxios.get(`/admin/profile-learner-models/${userId}/evidence`, { params });
   },
 
   getPredictions: async (userId: string, params?: {
     includeTest?: boolean;
   }) => {
-    return adminAxios.get(`/admin/learner-models/${userId}/predictions`, { params });
+    return adminAxios.get(`/admin/profile-learner-models/${userId}/predictions`, { params });
   }
 };
 
@@ -1913,7 +1913,7 @@ export interface EvalCaseExpectations {
   expectedStage?: string;
   /** path-planning：期望里程碑数（同时作为 prompt 注入约束） */
   expectedMilestones?: number;
-  /** stage-designer：期望子任务数（同时作为 prompt 注入约束） */
+  /** path-task-design：期望子任务数（同时作为 prompt 注入约束） */
   expectedSubtaskCount?: number;
   /** ===== 虚拟学习者模拟输入（mode:simulated） ===== */
   /** 输入来源模式：manual（默认，手写对话）/ simulated（虚拟学习者扮演学生输入） */

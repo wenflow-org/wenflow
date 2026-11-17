@@ -6,7 +6,7 @@ import { logger } from '../../utils/logger';
 import type { AgentDefinition, AgentOutput } from '../../agents/protocol';
 import { evaluateByCriteria, evaluateByProfile } from '../../skills/acceptance-evidence-evaluator';
 import { getFallbackStrategies, normalizeStrategy } from '../../skills/teaching-strategy-selector';
-import type { TeachingLearnerProjection } from '../../agents/learner-model-agent/types';
+import type { TeachingLearnerProjection } from '../../agents/profile-learner-model-agent/types';
 import { buildSkillOutcome, type SkillOutcome } from '../outcome';
 import { recordDegradation } from '../degradation-telemetry';
 import { findArithmeticMismatches, type ArithmeticMismatch } from '../../services/ai-teaching/teaching-arithmetic-guard';
@@ -38,7 +38,7 @@ const KNOWLEDGE_SUBFIELD_KEYS = ['currentPoint', 'points', 'confirmCheck'] as co
 
 /**
  * 知识点条目的**稳定身份键**（KC 身份迁移遗留项的写入侧收口，2026-10-19）：
- * `kcId` 来自 scenario.taskKcs（kc-mapper 产出，路径内 KC 局部序号），由模型在
+ * `kcId` 来自 scenario.taskKcs（path-kc-mapping 产出，路径内 KC 局部序号），由模型在
  * knowledge.points / analysis.ktEstimate.conceptMastery 里原样回填（契约见
  * prompts/core/teaching-turn.yaml）。模型措辞漂移时名字会变、kcId 不变——写入侧
  * 据此锚定同一概念（memory-trace.service resolveConceptIdSafe）。可选：缺省不填，
@@ -113,7 +113,7 @@ export interface TeachingTurnInput {
       prerequisiteConcepts: string[];
       supportingConcepts?: string[];
     };
-    /** 本课细粒度知识组件（kc-mapper 产出）：提示词规则要求 knowledge.points 对齐到 KC 粒度 */
+    /** 本课细粒度知识组件（path-kc-mapping 产出）：提示词规则要求 knowledge.points 对齐到 KC 粒度 */
     taskKcs?: Array<{ kcId: string; name: string; taxonomy?: string }>;
     /** 该路径关联的资料（投影后的最小集合）：讲解/示例要能引用其章节或条目原文 */
     materials?: Array<{
@@ -210,7 +210,7 @@ export interface TeachingTurnInput {
       }>;
     } | null;
     /**
-     * 诊断洞察（learner-state-review 出的"为什么卡"，已剔除被证伪的 claim）。
+     * 诊断洞察（profile-state-review 出的"为什么卡"，已剔除被证伪的 claim）。
      * 只读参考：与课堂实况冲突时以实况为准；不得在 reply 里向学生复述内部诊断。
      */
     learnerInsights?: Array<{ type?: string; claim?: string; action?: string }> | null;
@@ -255,7 +255,7 @@ export interface TeachingTurnInput {
       }>;
       absent?: boolean;
     } | null;
-    /** 学习表现预测（任务前 learning-predictor 产出）：参考信号，非命令；低样本时不得据此改变默认策略 */
+    /** 学习表现预测（任务前 profile-learning-predict 产出）：参考信号，非命令；低样本时不得据此改变默认策略 */
     learnerPrediction?: {
       stallRisk: number;
       predictedTone: 'smooth' | 'struggle' | 'fatigue';
@@ -2887,7 +2887,7 @@ function normalizeHelpSeekingType(value: any): { helpSeekingType?: string } {
  * **teaching-turn 的规则与代码都不读历史消息的 analysis** —— 规则里的
  * `analysis.*`（第 87/104/108/109 条）指的是**本轮要产出的** analysis，
  * 上一轮的分析另走 `analysisStage`（双引擎试点）单独字段。
- * 而 `session-wrapup` 的输入是**另处组装**且明确声明"含 analysis 标注"，
+ * 而 `teaching-wrapup` 的输入是**另处组装**且明确声明"含 analysis 标注"，
  * 因此不受此处影响。
  * 收益：逐条 analysis 让单轮 prompt 多出约 1–2k tokens（首轮实测 ~14.5k），
  * 裁掉可降 TTFT；不影响模型可见的对话文本。

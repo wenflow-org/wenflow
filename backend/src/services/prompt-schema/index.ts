@@ -971,13 +971,13 @@ export const BLOCK_RULE_PREFIX: Partial<Record<PromptSection, string>> = {
  */
 export function suggestRulePrefix(agentId: string): string {
   const customMap: Record<string, string> = {
-    'skill:adaptive-guidance-copy': 'AG',
-    'skill:peer-reinforcement': 'PR',
-    'skill:stage-designer': 'SD',
+    'skill:profile-adaptive-copy': 'AG',
+    'skill:teaching-peer-reinforcement': 'PR',
+    'skill:path-task-design': 'SD',
     'skill:goal-conversation': 'GC',
     'skill:path-planning': 'PA',
     'skill:teaching-turn': 'TT',
-    'skill:session-wrapup': 'SW',
+    'skill:teaching-wrapup': 'SW',
   };
   if (customMap[agentId]) return customMap[agentId];
 

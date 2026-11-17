@@ -3,7 +3,7 @@
  *
  * 语义：dataSource 声明的是"编排层为该 skill
  * 组装 LLM 输入时读取的数据源"（输入血缘），不是 handler 代码直读（handler 层零直读，
- * 仅 learner-model/mcp-tool 两特例，见例外账）。校验对象 = skills.yaml 26 条 dataSource。
+ * 仅 profile-learner-model/mcp-tool 两特例，见例外账）。校验对象 = skills.yaml 26 条 dataSource。
  *
  * 三通道：
  *   ① db 通道（W5a 未声明 / W5b 过期）：
@@ -16,7 +16,7 @@
  *        - W5a/W5b = WARN 级（warn 不阻断，白名单 = EXEMPT_UNDECLARED + CROSS_FILE_EVIDENCE）
  *   ② sandbox 通道：dataSource.sandbox 声明的 agent 前缀 vs 该 skill core.yaml inputs 中
  *      `ref: sandbox:<prefix>.*` 实际引用前缀集合，双向 diff，WARN 级。
- *   ③ 例外账（WARN 级）：mcp-tool（db 必须为空 + mcpTools 非空）、learner-model（handler
+ *   ③ 例外账（WARN 级）：mcp-tool（db 必须为空 + mcpTools 非空）、profile-learner-model（handler
  *      直读反例，db 必须非空）、semantic-freeze-judge 平台直调（db/sandbox 必须为空）。
  *
  * 退出码：error 级发现 >0 → 1；W5 warn 级仅输出，不阻断（调查 §4.1⑤ warn 级决策）。
@@ -75,59 +75,59 @@ const CALL_SITE_MANIFEST: Record<string, CallSite[]> = {
   'path-planning': [
     { file: 'backend/src/services/learning/generation/path-generation.core.ts', line: 386 },
   ],
-  'stage-designer': [
+  'path-task-design': [
     { file: 'backend/src/services/learning/generation/stage-enrichment.ts', line: 238 },
     { file: 'backend/src/services/learning/replan/path-replan.service.ts', line: 114 },
   ],
   'teaching-turn': [
     { file: 'backend/src/services/ai-teaching/teaching-turn-engine.ts', line: 283 },
   ],
-  'peer-reinforcement': [
+  'teaching-peer-reinforcement': [
     { file: 'backend/src/services/ai-teaching/teaching-session-ops.ts', line: 620 },
     { file: 'backend/src/services/ai-teaching/teaching-turn-engine.ts', line: 408 },
   ],
-  'session-wrapup': [
+  'teaching-wrapup': [
     { file: 'backend/src/services/ai-teaching/teaching-session-lifecycle.ts', line: 628 },
   ],
-  'adaptive-guidance-copy': [
+  'profile-adaptive-copy': [
     // #187：两个 view 各有自己的调用点（不再只有 dashboard 一处，learning-state 借它的文案）
     { file: 'backend/src/services/learner/DashboardGuidanceSnapshotService.ts', line: 178 },
     { file: 'backend/src/services/learner/LearningStateGuidanceService.ts', line: 130 },
   ],
-  'lesson-knowledge-enricher': [
+  'profile-lesson-enrich': [
     { file: 'backend/src/services/learner/LessonKnowledgeEnrichmentConsumer.ts', line: 44 },
   ],
-  'learning-predictor': [
+  'profile-learning-predict': [
     { file: 'backend/src/services/ai-teaching/TeachingContextBuilder.ts', line: 1362 },
   ],
-  'virtual-learner-persona-designer': [
+  'simulation-persona-designer': [
     { file: 'backend/src/routes/admin/virtual-learners.ts', line: 1054 },
     { file: 'backend/src/routes/admin/virtual-learners.ts', line: 1086 },
     { file: 'backend/src/virtual-lab/learner-provisioning.ts', line: 150 },
   ],
-  'virtual-learner-scenario-designer': [
+  'simulation-scenario-designer': [
     { file: 'backend/src/routes/admin/virtual-learners.ts', line: 1155 },
     { file: 'backend/src/virtual-lab/learner-provisioning.ts', line: 206 },
   ],
-  'virtual-learner-goal-dialogue-simulator': [
+  'simulation-goal-dialogue': [
     { file: 'backend/src/coordinators/simulation.coordinator.ts', line: 788 },
   ],
-  'virtual-learner-path-evaluator': [
+  'simulation-path-evaluate': [
     { file: 'backend/src/coordinators/simulation.path-phase.ts', line: 376 },
   ],
-  'virtual-learner-learn-turn-simulator': [
+  'simulation-learn-turn': [
     { file: 'backend/src/coordinators/simulation.learn-phase.ts', line: 692 },
   ],
-  'virtual-learner-referee': [
+  'simulation-referee': [
     { file: 'backend/src/virtual-lab/blackbox-runner.ts', line: 653 },
   ],
-  'virtual-learner-actor-auditor': [
+  'simulation-actor-audit': [
     { file: 'backend/src/virtual-lab/blackbox-runner.ts', line: 718 },
   ],
-  'teaching-opening-generator': [
+  'teaching-opening': [
     // 未找到 executeSkill 调用点：确认该 skill 是否仍由代码直调
   ],
-  'learner-progress-report': [
+  'profile-progress-report': [
     // 未找到 executeSkill 调用点：确认该 skill 是否仍由代码直调
   ],
   'skill-author': [
@@ -136,7 +136,7 @@ const CALL_SITE_MANIFEST: Record<string, CallSite[]> = {
   'skill-compiler': [
     // 未找到 executeSkill 调用点：确认该 skill 是否仍由代码直调
   ],
-  'learner-model': [
+  'profile-learner-model': [
     // 未找到 executeSkill 调用点：确认该 skill 是否仍由代码直调
   ],
   'mcp-tool': [
@@ -208,24 +208,24 @@ const CROSS_FILE_EVIDENCE: Record<string, Array<{ table: string; file: string; l
     { table: 'agent_lab_configs', file: 'backend/src/coordinators/path.coordinator.ts', line: 371 },
     { table: 'agent_lab_configs', file: 'backend/src/services/agentConfig.service.ts', line: 101 },
   ],
-  'stage-designer': [
+  'path-task-design': [
     // learning_paths + 内嵌 milestones（+subtasks）读出 aiPromptTemplate/cognitiveDesign/sceneFraming
     { table: 'learning_paths', file: 'backend/src/services/learning/learning.service.ts', line: 2829 },
     { table: 'milestones', file: 'backend/src/services/learning/learning.service.ts', line: 2882 },
     { table: 'subtasks', file: 'backend/src/services/learning/learning.service.ts', line: 4062 },
     { table: 'milestones', file: 'backend/src/services/learning/learning.service.ts', line: 4090 },
   ],
-  'virtual-learner-goal-dialogue-simulator': [
+  'simulation-goal-dialogue': [
     { table: 'virtual_sessions', file: 'backend/src/coordinators/simulation.coordinator.ts', line: 587 },
     { table: 'virtual_learner_profiles', file: 'backend/src/coordinators/simulation.coordinator.ts', line: 590 },
     { table: 'goal_conversations', file: 'backend/src/coordinators/simulation.coordinator.ts', line: 602 },
     { table: 'goal_conversations', file: 'backend/src/coordinators/simulation.coordinator.ts', line: 1661 },
   ],
-  'virtual-learner-learn-turn-simulator': [
+  'simulation-learn-turn': [
     { table: 'milestones', file: 'backend/src/coordinators/simulation.coordinator.ts', line: 2555 },
     { table: 'subtasks', file: 'backend/src/coordinators/simulation.coordinator.ts', line: 2555 },
   ],
-  'teaching-opening-generator': [
+  'teaching-opening': [
     // 输入 = buildTeachingScenarioContext 产物（startSession 组装，非 generateOpening 自身）
     { table: 'teaching_sessions', file: 'backend/src/services/ai-teaching/AITeachingCoordinator.ts', line: 1010 },
     { table: 'subtasks', file: 'backend/src/services/ai-teaching/TeachingContextBuilder.ts', line: 393 },
@@ -241,8 +241,8 @@ const CROSS_FILE_EVIDENCE: Record<string, Array<{ table: string; file: string; l
 // 共享函数体误报豁免（同一函数内为另一 skill 组装而读的表，不属于本 skill 输入；人工核对）
 const EXEMPT_UNDECLARED: Record<string, string[]> = {
   // processStudentMessage 函数体同时承载 teaching-turn（buildTeachingScenarioContext）
-  // 与 peer-reinforcement（仅取 session + 回合内存输出），后者豁免前者读的表
-  'peer-reinforcement': ['subtasks', 'milestones', 'learning_paths', 'learning_metrics', 'learner_evidence', 'agent_field_routings'],
+  // 与 teaching-peer-reinforcement（仅取 session + 回合内存输出），后者豁免前者读的表
+  'teaching-peer-reinforcement': ['subtasks', 'milestones', 'learning_paths', 'learning_metrics', 'learner_evidence', 'agent_field_routings'],
 };
 
 // ---------------------------------------------------------------------------
@@ -541,9 +541,9 @@ function main() {
         findings.push({ level: 'warn', channel: 'W5-例外账', message: 'mcp-tool: 必须声明 mcpTools（handler 直读 user_mcp_configs + config/mcp.json 平台工具）' });
       }
     }
-    if (entry.skillId === 'learner-model') {
+    if (entry.skillId === 'profile-learner-model') {
       if (declared.length === 0) {
-        findings.push({ level: 'warn', channel: 'W5-例外账', message: 'learner-model: handler 直读反例，dataSource.db 必须声明（learner_evidence/teaching_sessions/subtasks/learning_paths）' });
+        findings.push({ level: 'warn', channel: 'W5-例外账', message: 'profile-learner-model: handler 直读反例，dataSource.db 必须声明（learner_evidence/teaching_sessions/subtasks/learning_paths）' });
       }
     }
     if (['semantic-freeze-judge'].includes(entry.skillId)) {
@@ -574,7 +574,7 @@ function main() {
   console.log(`[data-source:check] skills.yaml 加载 OK（version=${book.version}，${book.skills.length} 条）`);
   console.log(`[data-source:check] prisma schema 模型名：主库+系统库共 ${modelNames.size} 个（声明表存在性校验基准）`);
   console.log(`[data-source:check] db 声明表对账通过：${okCount} 条；W5 warn 级发现：${warns.length} 条；error 级：${errors.length} 条`);
-  console.log('[data-source:check] 三通道：W5a 未声明表 / W5b 过期表 / W5-sandbox 声明一致性 / W5-例外账（mcp-tool·learner-model·平台直调）');
+  console.log('[data-source:check] 三通道：W5a 未声明表 / W5b 过期表 / W5-sandbox 声明一致性 / W5-例外账（mcp-tool·profile-learner-model·平台直调）');
 
   for (const f of [...errors, ...warns]) {
     const tag = f.level === 'error' ? 'ERROR' : 'warn';

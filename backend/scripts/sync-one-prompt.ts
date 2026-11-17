@@ -2,13 +2,13 @@
  * 作用域受限的 prompt 同步（dev scratch 工具，不入库）
  *
  * 为什么需要它：`npm run prompts:sync` 是全量 drift 同步——工作树里他人 WIP 的
- * `prompts/skill.{path-planning,stage-designer,session-wrapup}.md` 一旦与 DB ACTIVE 不同，
+ * `prompts/skill.{path-planning,path-task-design,teaching-wrapup}.md` 一旦与 DB ACTIVE 不同，
  * 会被一并写进共享的 system.db，等于替别人发布了他们没做完的提示词。
  * 本工具只对显式指定的 agentId 做与 syncCoreAgentPrompts 相同的 archive+create。
  *
  * 用法：
  *   npx ts-node --transpile-only scripts/sync-one-prompt.ts --dry                     # 只报告谁会被改（只读）
- *   npx ts-node --transpile-only scripts/sync-one-prompt.ts --agentId=skill:peer-reinforcement --write
+ *   npx ts-node --transpile-only scripts/sync-one-prompt.ts --agentId=skill:teaching-peer-reinforcement --write
  */
 import dotenv from 'dotenv';
 import systemPrisma from '../src/config/system-database';

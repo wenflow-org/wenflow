@@ -167,7 +167,7 @@ describe('#176-2 复核：invalidate 必须管住持久化投影（只删内存�
     // 白名单：快照 + 评审两族；绝不能是裸 { userId }（那会连当日复习额度、BKT 信念、归并审计一起删）
     expect(arg.where.OR).toEqual([
       { projectionKey: { startsWith: 'learner-snapshot-v1:' } },
-      { projectionKey: { startsWith: 'learner-state-review-v1:' } },
+      { projectionKey: { startsWith: 'profile-state-review-v1:' } },
     ]);
   });
 

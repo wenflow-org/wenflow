@@ -7,8 +7,8 @@ jest.mock('../../../config/database', () => ({
   default: { users: { findUnique, update, findMany } },
 }))
 jest.mock('../../../skills', () => ({ executeSkillWithResult: jest.fn() }))
-jest.mock('../../../skills/adaptive-guidance-copy', () => ({
-  adaptiveGuidanceCopyDefinition: { name: 'adaptive-guidance-copy' },
+jest.mock('../../../skills/profile-adaptive-copy', () => ({
+  adaptiveGuidanceCopyDefinition: { name: 'profile-adaptive-copy' },
 }))
 jest.mock('../assemble-learning-state', () => ({ assembleLearningState: jest.fn() }))
 jest.mock('../LearnerStateReviewService', () => ({
@@ -89,7 +89,7 @@ describe('DashboardGuidanceSnapshotService', () => {
 
   it('附带最近一次状态评审 review（诊断层闭环）', async () => {
     (learnerStateReviewService.getLatest as jest.Mock).mockResolvedValue({
-      schemaVersion: 'learner-state-review-v1',
+      schemaVersion: 'profile-state-review-v1',
       source: 'model',
       diagnosis: { narrative: 'n', insights: [] },
     })
@@ -100,9 +100,9 @@ describe('DashboardGuidanceSnapshotService', () => {
   })
 
   // issue #196 复核：guidance 投影曾把 transferSignals 硬置空、无读取方。现 guidance 侧
-  // （adaptive-guidance-copy）提示词规则读取 learner.knowledgeMemory.globalBackground.transferSignals，
+  // （profile-adaptive-copy）提示词规则读取 learner.knowledgeMemory.globalBackground.transferSignals，
   // 故该字段必须真的随投影送到 skill 输入——否则规则读到的永远是空数组（读取方名义存在、实际空转）。
-  it('guidance 侧消费：transferSignals 随投影送入 adaptive-guidance-copy 输入', async () => {
+  it('guidance 侧消费：transferSignals 随投影送入 profile-adaptive-copy 输入', async () => {
     (assembleLearningState as jest.Mock).mockResolvedValue({
       primaryPath: { id: 'lp1', title: 'T' },
       learnerSnapshot: {

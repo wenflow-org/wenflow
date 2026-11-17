@@ -5,7 +5,7 @@ const SOURCE_DIR = path.resolve(__dirname, '..');
 const ALLOWED_DIRECT_CALLERS = new Set([
   'composers/prompt-composer.ts',
   'gateway/index.ts',
-  // 材料语义判定（2026-11-07）：stage-designer 生成流程里的一个**瞬态辅助判定**，只需一段专用
+  // 材料语义判定（2026-11-07）：path-task-design 生成流程里的一个**瞬态辅助判定**，只需一段专用
   // system prompt + 一小段 JSON 输出，不对外暴露成 skill/agent。callPrompt 会强制解析 agentId 的
   // ACTIVE prompt 与 runtime/prompt contract（prompt-composer.ts:167-176），为一个瞬态判定新增
   // agent/prompt manifest 条目属于扩大范围；故在此登记为受控直连。userId/traceId/sessionId 由

@@ -5,7 +5,7 @@
  * goal-conversation 的 structured-validator 复用本核心，仅保留领域校验）：
  *  - extractJsonObject：默认路径（callPrompt），先最简贪婪提取，失败后依次降级：
  *    直接 parse → 剥离代码围栏 → 修复残缺 JSON → 截取首个完整 JSON 对象。
- *    容错链在 2026-08-30 加入（修复 learning-predictor 等默认路径 INVALID_JSON 失败）。
+ *    容错链在 2026-08-30 加入（修复 profile-learning-predict 等默认路径 INVALID_JSON 失败）。
  *  - extractStructuredPayloadWithDialogue：3 级策略（raw-trailing → code-fence → JSON: marker）
  *    + 不完整 JSON 修复 + 对话文本拆分（goal 阶段等需要"正文 + JSON"分离的场景）
  */

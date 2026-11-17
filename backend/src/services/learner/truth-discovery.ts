@@ -36,7 +36,7 @@ export type SourceWeights = Record<SourceClass, number>;
  *   自评无法凭数量或时效压过它（本模块是软加权，不做硬覆盖）。
  * - `structured_choice` 0.75：客观/结构化测验（选择题等可按集合精确判定），比代码裁决弱一档，
  *   因为存在「蒙对」与题目质量噪声，但仍显著高于任何语义/主观判断。
- * - `llm_inference` 0.50：LLM 的定性推断（如 learner-state-review 的 conceptAssessments），
+ * - `llm_inference` 0.50：LLM 的定性推断（如 profile-state-review 的 conceptAssessments），
  *   是语义判断、不满足「单技能二值作答」假设，只作**弱证据**（与 concept-belief 的诚实边界一致）。
  * - `self_report` 0.20：学习者自评。**自评不作真实掌握依据**——它的正当用途是与融合真值做差，
  *   派生元认知校准偏置（见 `metacognitiveCalibration`），而不是断言「已掌握」。
@@ -224,7 +224,7 @@ export function dominantSource(
  * ── 后续接入知识状态融合（不在本模块实现）──────────────────────────────
  * 1. 每个写入源先各自转成一条 `TruthClaim`：
  *    - 检查点落 `learner_evidence` 时，按 `judgedBy`（code → code_judged；结构化作答 → structured_choice）
- *    - learner-state-review 的 conceptAssessments → llm_inference
+ *    - profile-state-review 的 conceptAssessments → llm_inference
  *    - goal 对话 / 课后 JOL 自评 → self_report
  * 2. 对每个 (userId, conceptKey) 收集窗口内主张，调 `discoverTruth` 得真值。
  * 3. 消费方式（二选一，均不改变本模块）：

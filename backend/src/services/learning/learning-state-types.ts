@@ -174,7 +174,7 @@ export interface DisplayMetricCommitInput {
   primaryMetric?: 'lss' | 'lsb';
   /**
    * 本行 LSS 是「占位值」而非实测量（如 task-completion 在无主观难度时按默认难度 5 套公式）。
-   * 落 metadata.synthetic=true，供聚合侧显式区分；与 session-wrapup 的同课真实行并存时
+   * 落 metadata.synthetic=true，供聚合侧显式区分；与 teaching-wrapup 的同课真实行并存时
    * 由 dedupeLessonRows 优先保留真实行。
    */
   synthetic?: boolean;

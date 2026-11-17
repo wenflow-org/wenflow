@@ -21,7 +21,7 @@ export const pathAgentRuntimeDefinition = {
     },
     {
       step: 3,
-      agentId: 'skill:stage-designer',
+      agentId: 'skill:path-task-design',
       kind: 'skill',
       role: 'stage-task-expansion',
       loopOver: 'milestones'

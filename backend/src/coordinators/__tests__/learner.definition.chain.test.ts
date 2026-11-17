@@ -8,7 +8,7 @@
  * 1. **指针是死链**：曾写「真实执行体：outbox 消费者序列 index.ts:662-677」——该文件只有 211 行；
  *    上一轮改成 `bootstrap/schedulers.ts:75`，那一行是课后增强泳道的注释，真正的注册在 :106。
  *    所以这里既校验「行号落在文件行数内」，也校验「指针覆盖的行里确有它声称的调用」。
- * 2. **声明链与执行链不符**：曾把拉取式的 `skill:learner-model` 声明成事件链第一步、漏掉
+ * 2. **声明链与执行链不符**：曾把拉取式的 `skill:profile-learner-model` 声明成事件链第一步、漏掉
  *    「清画像缓存」，并把课后增强排在清缓存之前。真实链见 events/learner-event-consumer.ts:48-80
  *    （也见该文件 :4 的顺序说明）：证据投影 → 清画像缓存 → 快照重算 →（仅 lesson:completed）登记课后增强事件。
  */
@@ -25,7 +25,7 @@ const REAL_CHAIN: Array<{ agentId: string; call: string }> = [
   { agentId: 'LearnerEvidenceProjector', call: 'await learnerEvidenceProjector.handle(event)' },
   { agentId: 'LearnerProfileService', call: 'learnerProfileService.clear(event.userId)' },
   { agentId: 'LearnerSnapshotRefreshService', call: 'await learnerSnapshotRefreshService.refresh({' },
-  { agentId: 'skill:lesson-knowledge-enricher', call: 'await enqueueLessonEnrichmentEvent(event)' },
+  { agentId: 'skill:profile-lesson-enrich', call: 'await enqueueLessonEnrichmentEvent(event)' },
 ];
 
 function readSource(relativePath: string): string {
@@ -124,9 +124,9 @@ describe('#149 声明 steps 与真实执行链逐步对齐', () => {
     }
   });
 
-  it('拉取式的 skill:learner-model 不在事件链上（它不是本消费者的一步）', () => {
-    expect(stepAgentIds).not.toContain('skill:learner-model');
-    expect(readSource(CONSUMER)).not.toContain('learner-model');
+  it('拉取式的 skill:profile-learner-model 不在事件链上（它不是本消费者的一步）', () => {
+    expect(stepAgentIds).not.toContain('skill:profile-learner-model');
+    expect(readSource(CONSUMER)).not.toContain('profile-learner-model');
   });
 
   it('课后增强是登记事件而非同步执行（快路径不调用增强消费者）', () => {

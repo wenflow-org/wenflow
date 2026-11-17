@@ -4,7 +4,7 @@
  * 外部方案主张「后段 milestone 的 title+goal 语义上天然对应资料后部，用 Embedding 检索
  * 就能把锚点拉到 s-20~s-24」。本探针不跑生成，只做确定性的语义对齐测量：
  *   1. 取每条已完成路径的 milestone 标题/目标与资料包章节（title+summary）；
- *   2. 用现有 embedding 服务算 cosine，取 top-8（与 stage-designer 载荷同槽位）；
+ *   2. 用现有 embedding 服务算 cosine，取 top-8（与 path-task-design 载荷同槽位）；
  *   3. 记录 top-8 的章节序号均值/三分位分布，并与当前「按位置切窗」的窗口区间对比。
  *
  * 判读：若后段 milestone 的语义 top-8 明显偏后且三分位覆盖不塌，语义挂载值得上；

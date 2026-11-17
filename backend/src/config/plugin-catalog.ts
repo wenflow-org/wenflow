@@ -14,7 +14,7 @@ export interface PluginCatalogEntry {
 }
 
 export const PLUGIN_CATALOG: readonly PluginCatalogEntry[] = [
-  { id: 'web', name: '联网', skills: ['web-search', 'web-fetch', 'material-collector'] },
+  { id: 'web', name: '联网', skills: ['web-search', 'web-fetch', 'path-material-collect'] },
   { id: 'decision', name: '决策', skills: ['decision-gate'] },
   { id: 'image', name: '生图', skills: ['text-to-image'] },
   { id: 'mcp', name: 'MCP 工具调用', skills: ['mcp-tool'] },

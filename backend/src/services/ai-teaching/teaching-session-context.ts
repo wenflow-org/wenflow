@@ -1,8 +1,8 @@
 /**
  * 当前教学会话上下文（AsyncLocalStorage）
  *
- * 动机（审计 §5.2 P2 尾巴）：会话内触发的 aux skill（learner-state-review / concept-consolidator /
- * concept-load-estimator / replan-attribution …）此前不传 `sessionId`，
+ * 动机（审计 §5.2 P2 尾巴）：会话内触发的 aux skill（profile-state-review / profile-concept-consolidate /
+ * profile-concept-load / teaching-replan-attribution …）此前不传 `sessionId`，
  * 于是它们的 LLM 调用落在 `agent_call_logs` 的"(无会话)"栏——成本无法归到那一节课。
  *
  * 逐个调用点穿参要改 4 个服务的签名与内部调用链（易漏、且新调用点又会漏）；

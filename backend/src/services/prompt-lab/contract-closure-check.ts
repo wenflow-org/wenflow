@@ -240,7 +240,7 @@ export function checkProducerContracts(cores: readonly ClosureCoreLike[]): GateI
  *
  * 为什么只覆盖 kind=skill：
  *   对现网 31 个核心文件做全量扫描，若对所有声明的根做「无自动链 handoff 到该 skill」判定，
- *   adaptive-guidance-copy / learner-progress-report / kc-mapper / learning-predictor /
+ *   profile-adaptive-copy / profile-progress-report / path-kc-mapping / profile-learning-predict /
  *   path-reviewer 等的 sandbox 投影键（snapshot.*、normalizedInput、prerequisiteTree、
  *   learningState、taskContext…）会批量误报——它们由编排层直接注入 DB sandbox，根本不经过
  *   routing handoff。这些「声明但无 handoff」是真实的注入式交付，不是死边。sandbox 键的存在性

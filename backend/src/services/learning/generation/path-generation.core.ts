@@ -348,7 +348,7 @@ async function analyzePathWithAgent(data: GeneratePathData): Promise<any> {
     // path 输入定帧：skill:path-scene-framing 已移除（LLM 环节信息零增量、输出被 seed 覆盖），
     // normalizedInput 由确定性 buildFramedNormalizedInput 清洗并附加 planningHints。
     // API/裸输入模式（无结构化 normalizedInput）用最小兜底结构，保证 planningHints 不缺失。
-    // 定帧会白名单重建 resources（裁掉 material-collector 的 materials），故先取出、定帧后回挂。
+    // 定帧会白名单重建 resources（裁掉 path-material-collect 的 materials），故先取出、定帧后回挂。
     const incomingNormalizedInput = data.userProfile?.normalizedInput || null;
     const incomingMaterials = incomingNormalizedInput?.resources?.materials
       ?? incomingNormalizedInput?.materials

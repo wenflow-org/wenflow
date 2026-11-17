@@ -100,7 +100,7 @@ describe('分流钳制（出口不变量 B）· 用户承受力锚触发', () =>
   });
 });
 
-describe('clampHintsToOneSitting（Path 层自检 → stage-designer 的 hints）', () => {
+describe('clampHintsToOneSitting（Path 层自检 → path-task-design 的 hints）', () => {
   it('把任意 hints 收到一节课量级（只收上界，区间不塌成单点）', () => {
     const clamped = clampHintsToOneSitting(hintsWith(null));
     expect(clamped.milestoneRange[1]).toBeLessThanOrEqual(2);

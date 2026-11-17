@@ -1,7 +1,7 @@
 /**
  * LEARN_DIALOGUE_SKILLS 白名单守卫（2026-10-22 机械过滤审计 B 类）。
  *
- * 事故背景（router.ts 注释记载）：session-wrapup 曾不在集合内 → 用户绑定链上技能行
+ * 事故背景（router.ts 注释记载）：teaching-wrapup 曾不在集合内 → 用户绑定链上技能行
  * ds 落到无 ds 通道分组，「No available channel」8/8 全灭、整晚课总结全退 fallback。
  * 白名单漏配/条目失效都是静默的——这里做两向机械对账：
  *   ① 关键成员钉扎：学习对话链的承重技能必须在集合里（防误删/改名后漏补）；
@@ -20,15 +20,15 @@ const SKILLS_DIR = join(here, '..', '..', '..', 'skills');
 /** 白名单承重成员：学习对话链主链（漏任何一条即复现 wrapup 8/8 全灭级事故） */
 const CRITICAL_MEMBERS = [
   'teaching-turn',
-  'session-wrapup',
+  'teaching-wrapup',
   'goal-conversation',
-  'teaching-opening-generator',
-  'virtual-learner-learn-turn-simulator',
-  'virtual-learner-goal-dialogue-simulator',
+  'teaching-opening',
+  'simulation-learn-turn',
+  'simulation-goal-dialogue',
 ];
 
 describe('LEARN_DIALOGUE_SKILLS 白名单守卫', () => {
-  it('承重成员必须在集合里（session-wrapup 漏配曾致整晚总结全灭）', () => {
+  it('承重成员必须在集合里（teaching-wrapup 漏配曾致整晚总结全灭）', () => {
     const missing = CRITICAL_MEMBERS.filter(id => !LEARN_DIALOGUE_SKILLS.has(id));
     if (missing.length > 0) {
       throw new Error(`学习对话链技能不在 LEARN_DIALOGUE_SKILLS 白名单里：${missing.join(', ')}`);

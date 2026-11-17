@@ -95,7 +95,11 @@ export class PlatformUserAdapter {
     transport?: PlatformHttpTransport
   }) {
     const baseURL = options.baseURL || process.env.PLATFORM_API_BASE_URL || `http://127.0.0.1:${process.env.PORT || 3001}/api`
-    this.transport = options.transport || createAxiosTransport(baseURL, options.timeoutMs || 300000)
+    // 批 39（2026-11-17）：gpt-6-luna 授课 A/B——luna teaching-turn 单次 20-34s（ds 5-13s，约 3 倍），
+    // 300s 预算下 5 案中 2 案步进超时死亡（u04 首回合即死、u01 中途死）。默认放宽到 600s，
+    // 保留 VIRTUAL_LAB_STEP_TIMEOUT_MS 覆盖口（超时只是悬挂上限，正常调用不受影响）。
+    const stepTimeoutMs = Number(process.env.VIRTUAL_LAB_STEP_TIMEOUT_MS || '') || 600000
+    this.transport = options.transport || createAxiosTransport(baseURL, options.timeoutMs || stepTimeoutMs)
   }
 
   private async headers() {

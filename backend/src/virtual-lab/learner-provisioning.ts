@@ -16,8 +16,8 @@ import { randomBytes } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../config/database';
 import { executeSkill } from '../skills';
-import { virtualLearnerPersonaDesignerDefinition } from '../skills/virtual-learner-persona-designer';
-import { virtualLearnerScenarioDesignerDefinition } from '../skills/virtual-learner-scenario-designer';
+import { virtualLearnerPersonaDesignerDefinition } from '../skills/simulation-persona-designer';
+import { virtualLearnerScenarioDesignerDefinition } from '../skills/simulation-scenario-designer';
 import { ensureCardKey } from '../services/virtual-lab/card-import.service';
 import { logger } from '../utils/logger';
 

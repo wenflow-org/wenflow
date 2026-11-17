@@ -1,4 +1,4 @@
-// 查 user_agent_model_configs 中 stage-designer 的配置
+// 查 user_agent_model_configs 中 path-task-design 的配置
 import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

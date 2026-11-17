@@ -169,7 +169,7 @@
               <!-- 英文主行（2026-10-25 用户「以英文为主」）：与 Skills 列表 / 详情 hero 同口径，
                    canonical id 在前；中文 displayName 只在它确实是别名时括注（同 id 不重复） -->
               <!-- 2026-11-01 外部评审（五轮 P2）：1920 下长 id 带中文别名会被截成
-                   「teaching-opening-generator · 课…」，被吃掉的是 id 本身。id 是监控键，
+                   「teaching-opening · 课…」，被吃掉的是 id 本身。id 是监控键，
                    优先保它完整：id 长到 22 字符以上就不再续别名（别名仍在悬停里）。 -->
               <span class="rankrow__grow" :title="skillNameTitle(s.agentId)">
                 {{ skillIdOf(s.agentId) }}<template v-if="skillAliasOf(s.agentId) && skillIdOf(s.agentId).length <= 22"> · {{ skillAliasOf(s.agentId) }}</template>

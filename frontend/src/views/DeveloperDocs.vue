@@ -137,7 +137,7 @@ npm run dev</code></pre>
           </div>
 
           <div class="callout callout--warn">
-            <strong>「Agent」是旧称，当前能力单元叫 Skill。</strong> 现在的 LLM 能力单元是 <strong>Skill</strong>，全部位于 <code>backend/src/skills/</code>；<code>agents/</code> 仅余事件驱动的 <code>learner-model-agent</code>、仿真编排与 plugins 等遗留目录。后台部分历史筛选器与归属标签仍沿用 Agent 作为分组名，后续会统一为 Skill；看到 Agent 时请按 Skill 理解。
+            <strong>「Agent」是旧称，当前能力单元叫 Skill。</strong> 现在的 LLM 能力单元是 <strong>Skill</strong>，全部位于 <code>backend/src/skills/</code>；<code>agents/</code> 仅余事件驱动的 <code>profile-learner-model-agent</code>、仿真编排与 plugins 等遗留目录。后台部分历史筛选器与归属标签仍沿用 Agent 作为分组名，后续会统一为 Skill；看到 Agent 时请按 Skill 理解。
           </div>
         </section>
 
@@ -169,7 +169,7 @@ npm run dev</code></pre>
 ├── goal-conversation/       # 目标对话（conversational）
 ├── path-planning/           # 路径规划（generator）
 ├── teaching-turn/           # 教学回合（conversational）
-├── session-wrapup/          # 课后产出（distiller）
+├── teaching-wrapup/          # 课后产出（distiller）
 └── …                        # 共 30+ 个 Skill 目录（含检索、网页、图片等插件）
 
 prompts/                     # 仓库根，与 backend/ 同级

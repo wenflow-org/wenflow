@@ -12,18 +12,18 @@ import { pluginIdOfSkill, pluginNameOf } from '../config/plugin-catalog';
 import { getPluginStates } from '../services/plugin-states.service';
 
 // 阶段任务设计器
-export { stageDesignerDefinition } from './stage-designer';
-import { stageDesigner as stageDesignerFn } from './stage-designer';
+export { stageDesignerDefinition } from './path-task-design';
+import { stageDesigner as stageDesignerFn } from './path-task-design';
 
 // 动态引导文案
-export { adaptiveGuidanceCopyDefinition } from './adaptive-guidance-copy';
-import { adaptiveGuidanceCopy as adaptiveGuidanceCopyFn } from './adaptive-guidance-copy';
+export { adaptiveGuidanceCopyDefinition } from './profile-adaptive-copy';
+import { adaptiveGuidanceCopy as adaptiveGuidanceCopyFn } from './profile-adaptive-copy';
 
 // 课后知识增强（session-knowledge-distiller + dialogue-concept-extractor 于 2026-07 合并）
-export { lessonKnowledgeEnricherDefinition } from './lesson-knowledge-enricher';
-import { lessonKnowledgeEnricher as lessonKnowledgeEnricherFn } from './lesson-knowledge-enricher';
-export { learningPredictorDefinition } from './learning-predictor';
-import { learningPredictor as learningPredictorFn } from './learning-predictor';
+export { lessonKnowledgeEnricherDefinition } from './profile-lesson-enrich';
+import { lessonKnowledgeEnricher as lessonKnowledgeEnricherFn } from './profile-lesson-enrich';
+export { learningPredictorDefinition } from './profile-learning-predict';
+import { learningPredictor as learningPredictorFn } from './profile-learning-predict';
 
 // 目标理解编排器（新增：understanding 管理）
 // 已退役（code-only，见 retired-skills.ts）：纯函数 sanitize/merge/buildCollected 仍被 goal-conversation 直接引用，
@@ -61,58 +61,58 @@ import { executeDecisionGate as executeDecisionGateFn } from './decision-gate';
 export { goalConfirmAdjudicatorDefinition, executeGoalConfirmAdjudicator, adjudicateGoalConfirm, GOAL_CONFIRM_ADJUDICATOR_PROMPT } from './goal-confirm-adjudicator';
 
 // 课堂质量独立评审（2026-11-13：referee 看不到板书/图文/逐轮脚手架，课堂级病历单由此补位）
-export { classroomQualityJudgeDefinition, executeClassroomQualityJudge, CLASSROOM_QUALITY_JUDGE_PROMPT } from './classroom-quality-judge';
-import { classroomQualityJudgeDefinition } from './classroom-quality-judge';
-import { executeClassroomQualityJudge as executeClassroomQualityJudgeFn } from './classroom-quality-judge';
+export { classroomQualityJudgeDefinition, executeClassroomQualityJudge, CLASSROOM_QUALITY_JUDGE_PROMPT } from './teaching-classroom-judge';
+import { classroomQualityJudgeDefinition } from './teaching-classroom-judge';
+import { executeClassroomQualityJudge as executeClassroomQualityJudgeFn } from './teaching-classroom-judge';
 import { goalConfirmAdjudicatorDefinition } from './goal-confirm-adjudicator';
 import { executeGoalConfirmAdjudicator as executeGoalConfirmAdjudicatorFn } from './goal-confirm-adjudicator';
 
 // 资料采集编排器（非 LLM 外挂能力；确定性编排 search→选源→fetch，LLM 仅抽取带引文要点）
-export { materialCollectorDefinition, executeMaterialCollector, collectMaterialPack, collectMaterialForGoal, hasMaterialNeed } from './material-collector';
-export { materialBriefDefinition, generateMaterialBriefDraft, normalizeMaterialBrief, MATERIAL_BRIEF_PROMPT } from './material-brief';
-import { materialBriefDefinition } from './material-brief';
-import { executeMaterialCollector as executeMaterialCollectorFn } from './material-collector';
-import { generateMaterialBriefDraft as generateMaterialBriefFn } from './material-brief';
+export { materialCollectorDefinition, executeMaterialCollector, collectMaterialPack, collectMaterialForGoal, hasMaterialNeed } from './path-material-collect';
+export { materialBriefDefinition, generateMaterialBriefDraft, normalizeMaterialBrief, MATERIAL_BRIEF_PROMPT } from './path-material-brief';
+import { materialBriefDefinition } from './path-material-brief';
+import { executeMaterialCollector as executeMaterialCollectorFn } from './path-material-collect';
+import { generateMaterialBriefDraft as generateMaterialBriefFn } from './path-material-brief';
 
 // v4 辅助 LLM Skills（由原遗留插件/旁路迁入）
 import { auxSkillDefinitions, auxSkillHandlers, auxRetiredSkillHandlers } from './v4-aux-skills';
 export { auxSkillDefinitions, auxSkillDefinitionMap } from './v4-aux-skills';
 
 // 虚拟学习者场景设计
-export { virtualLearnerScenarioDesignerDefinition, VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT, VIRTUAL_LEARNER_SCENARIO_DESIGNER_MAX_TOKENS, VIRTUAL_LEARNER_SCENARIO_DESIGNER_TEMPERATURE } from './virtual-learner-scenario-designer';
-import { virtualLearnerScenarioDesigner as virtualLearnerScenarioDesignerFn } from './virtual-learner-scenario-designer';
+export { virtualLearnerScenarioDesignerDefinition, VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT, VIRTUAL_LEARNER_SCENARIO_DESIGNER_MAX_TOKENS, VIRTUAL_LEARNER_SCENARIO_DESIGNER_TEMPERATURE } from './simulation-scenario-designer';
+import { virtualLearnerScenarioDesigner as virtualLearnerScenarioDesignerFn } from './simulation-scenario-designer';
 
 // 虚拟学习者身份设计
-export { virtualLearnerPersonaDesignerDefinition, VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT, VIRTUAL_LEARNER_PERSONA_DESIGNER_MAX_TOKENS, VIRTUAL_LEARNER_PERSONA_DESIGNER_TEMPERATURE } from './virtual-learner-persona-designer';
-import { virtualLearnerPersonaDesigner as virtualLearnerPersonaDesignerFn } from './virtual-learner-persona-designer';
+export { virtualLearnerPersonaDesignerDefinition, VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT, VIRTUAL_LEARNER_PERSONA_DESIGNER_MAX_TOKENS, VIRTUAL_LEARNER_PERSONA_DESIGNER_TEMPERATURE } from './simulation-persona-designer';
+import { virtualLearnerPersonaDesigner as virtualLearnerPersonaDesignerFn } from './simulation-persona-designer';
 
 // 虚拟学习者 Goal 对话模拟
-export { virtualLearnerGoalDialogueSimulatorDefinition, VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_PROMPT, VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_MAX_TOKENS, VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_TEMPERATURE } from './virtual-learner-goal-dialogue-simulator';
-import { virtualLearnerGoalDialogueSimulator as virtualLearnerGoalDialogueSimulatorFn } from './virtual-learner-goal-dialogue-simulator';
+export { virtualLearnerGoalDialogueSimulatorDefinition, VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_PROMPT, VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_MAX_TOKENS, VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_TEMPERATURE } from './simulation-goal-dialogue';
+import { virtualLearnerGoalDialogueSimulator as virtualLearnerGoalDialogueSimulatorFn } from './simulation-goal-dialogue';
 
 // 虚拟学习者 Path 评估
-export { virtualLearnerPathEvaluatorDefinition, VIRTUAL_LEARNER_PATH_EVALUATOR_PROMPT, VIRTUAL_LEARNER_PATH_EVALUATOR_MAX_TOKENS, VIRTUAL_LEARNER_PATH_EVALUATOR_TEMPERATURE } from './virtual-learner-path-evaluator';
-import { virtualLearnerPathEvaluator as virtualLearnerPathEvaluatorFn } from './virtual-learner-path-evaluator';
+export { virtualLearnerPathEvaluatorDefinition, VIRTUAL_LEARNER_PATH_EVALUATOR_PROMPT, VIRTUAL_LEARNER_PATH_EVALUATOR_MAX_TOKENS, VIRTUAL_LEARNER_PATH_EVALUATOR_TEMPERATURE } from './simulation-path-evaluate';
+import { virtualLearnerPathEvaluator as virtualLearnerPathEvaluatorFn } from './simulation-path-evaluate';
 
 // 虚拟学习者 Learn 回合模拟
-export { virtualLearnerLearnTurnSimulatorDefinition, VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_PROMPT, VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_MAX_TOKENS, VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_TEMPERATURE } from './virtual-learner-learn-turn-simulator';
-import { virtualLearnerLearnTurnSimulator as virtualLearnerLearnTurnSimulatorFn } from './virtual-learner-learn-turn-simulator';
-import { virtualLearnerEpistemicGrounding as virtualLearnerEpistemicGroundingFn } from './virtual-learner-epistemic-grounding';
+export { virtualLearnerLearnTurnSimulatorDefinition, VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_PROMPT, VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_MAX_TOKENS, VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_TEMPERATURE } from './simulation-learn-turn';
+import { virtualLearnerLearnTurnSimulator as virtualLearnerLearnTurnSimulatorFn } from './simulation-learn-turn';
+import { virtualLearnerEpistemicGrounding as virtualLearnerEpistemicGroundingFn } from './simulation-epistemic-grounding';
 
 // 虚拟学习者认知判决（物理两阶段第一段）
-export { virtualLearnerEpistemicGroundingDefinition, VIRTUAL_LEARNER_EPISTEMIC_GROUNDING_PROMPT, VIRTUAL_LEARNER_EPISTEMIC_GROUNDING_MAX_TOKENS, VIRTUAL_LEARNER_EPISTEMIC_GROUNDING_TEMPERATURE } from './virtual-learner-epistemic-grounding';
+export { virtualLearnerEpistemicGroundingDefinition, VIRTUAL_LEARNER_EPISTEMIC_GROUNDING_PROMPT, VIRTUAL_LEARNER_EPISTEMIC_GROUNDING_MAX_TOKENS, VIRTUAL_LEARNER_EPISTEMIC_GROUNDING_TEMPERATURE } from './simulation-epistemic-grounding';
 
 // 虚拟学习者实验旁路裁判
-export { virtualLearnerRefereeDefinition, VIRTUAL_LEARNER_REFEREE_PROMPT, VIRTUAL_LEARNER_REFEREE_MAX_TOKENS, VIRTUAL_LEARNER_REFEREE_TEMPERATURE } from './virtual-learner-referee';
-import { virtualLearnerReferee as virtualLearnerRefereeFn } from './virtual-learner-referee';
+export { virtualLearnerRefereeDefinition, VIRTUAL_LEARNER_REFEREE_PROMPT, VIRTUAL_LEARNER_REFEREE_MAX_TOKENS, VIRTUAL_LEARNER_REFEREE_TEMPERATURE } from './simulation-referee';
+import { virtualLearnerReferee as virtualLearnerRefereeFn } from './simulation-referee';
 
 // 虚拟学习者课后记忆提炼
-export { virtualLearnerMemoryCuratorDefinition, VIRTUAL_LEARNER_MEMORY_CURATOR_PROMPT, VIRTUAL_LEARNER_MEMORY_CURATOR_MAX_TOKENS, VIRTUAL_LEARNER_MEMORY_CURATOR_TEMPERATURE } from './virtual-learner-memory-curator';
-import { virtualLearnerMemoryCurator as virtualLearnerMemoryCuratorFn } from './virtual-learner-memory-curator';
+export { virtualLearnerMemoryCuratorDefinition, VIRTUAL_LEARNER_MEMORY_CURATOR_PROMPT, VIRTUAL_LEARNER_MEMORY_CURATOR_MAX_TOKENS, VIRTUAL_LEARNER_MEMORY_CURATOR_TEMPERATURE } from './simulation-memory-curate';
+import { virtualLearnerMemoryCurator as virtualLearnerMemoryCuratorFn } from './simulation-memory-curate';
 
 // 虚拟学习者角色保真审计
-export { virtualLearnerActorAuditorDefinition, VIRTUAL_LEARNER_ACTOR_AUDITOR_PROMPT, VIRTUAL_LEARNER_ACTOR_AUDITOR_MAX_TOKENS, VIRTUAL_LEARNER_ACTOR_AUDITOR_TEMPERATURE } from './virtual-learner-actor-auditor';
-import { virtualLearnerActorAuditor as virtualLearnerActorAuditorFn } from './virtual-learner-actor-auditor';
+export { virtualLearnerActorAuditorDefinition, VIRTUAL_LEARNER_ACTOR_AUDITOR_PROMPT, VIRTUAL_LEARNER_ACTOR_AUDITOR_MAX_TOKENS, VIRTUAL_LEARNER_ACTOR_AUDITOR_TEMPERATURE } from './simulation-actor-audit';
+import { virtualLearnerActorAuditor as virtualLearnerActorAuditorFn } from './simulation-actor-audit';
 
 // ============================================================
 // 核心 LLM 能力单元（原 agents/，已迁入 skills/）
@@ -124,35 +124,35 @@ import { pathAgentHandler } from './path-planning';
 export { teachingTurnAgentDefinition, toTeachingTurnSkillOutcome } from './teaching-turn';
 export type { TeachingTurnArtifact, TeachingTurnInput, TeachingTurnOutput } from './teaching-turn';
 import { teachingTurnAgentHandler } from './teaching-turn';
-export { sessionWrapupAgentDefinition, sessionWrapupAgent, toWrapupArtifact, toWrapupSkillOutcome } from './session-wrapup';
-import { sessionWrapupAgentHandler } from './session-wrapup';
-export { peerAgentDefinition, toPeerCanonicalArtifact, toPeerSkillOutcome } from './peer-reinforcement';
-import { peerAgentHandler } from './peer-reinforcement';
+export { sessionWrapupAgentDefinition, sessionWrapupAgent, toWrapupArtifact, toWrapupSkillOutcome } from './teaching-wrapup';
+import { sessionWrapupAgentHandler } from './teaching-wrapup';
+export { peerAgentDefinition, toPeerCanonicalArtifact, toPeerSkillOutcome } from './teaching-peer-reinforcement';
+import { peerAgentHandler } from './teaching-peer-reinforcement';
 export { buildSkillOutcome, noneTransition } from './outcome';
 export type { SkillOutcome, ProposedTransition, SkillOutcomeMeta } from './outcome';
 
 // 所有 Skill 定义
 import { SkillDefinition } from './protocol';
-import { stageDesignerDefinition } from './stage-designer';
-import { adaptiveGuidanceCopyDefinition } from './adaptive-guidance-copy';
-import { lessonKnowledgeEnricherDefinition } from './lesson-knowledge-enricher';
-import { learningPredictorDefinition } from './learning-predictor';
-import { virtualLearnerScenarioDesignerDefinition } from './virtual-learner-scenario-designer';
-import { virtualLearnerPersonaDesignerDefinition } from './virtual-learner-persona-designer';
-import { virtualLearnerGoalDialogueSimulatorDefinition } from './virtual-learner-goal-dialogue-simulator';
-import { virtualLearnerPathEvaluatorDefinition } from './virtual-learner-path-evaluator';
-import { virtualLearnerLearnTurnSimulatorDefinition } from './virtual-learner-learn-turn-simulator';
-import { virtualLearnerEpistemicGroundingDefinition } from './virtual-learner-epistemic-grounding';
-import { virtualLearnerRefereeDefinition } from './virtual-learner-referee';
-import { virtualLearnerMemoryCuratorDefinition } from './virtual-learner-memory-curator';
-import { virtualLearnerActorAuditorDefinition } from './virtual-learner-actor-auditor';
+import { stageDesignerDefinition } from './path-task-design';
+import { adaptiveGuidanceCopyDefinition } from './profile-adaptive-copy';
+import { lessonKnowledgeEnricherDefinition } from './profile-lesson-enrich';
+import { learningPredictorDefinition } from './profile-learning-predict';
+import { virtualLearnerScenarioDesignerDefinition } from './simulation-scenario-designer';
+import { virtualLearnerPersonaDesignerDefinition } from './simulation-persona-designer';
+import { virtualLearnerGoalDialogueSimulatorDefinition } from './simulation-goal-dialogue';
+import { virtualLearnerPathEvaluatorDefinition } from './simulation-path-evaluate';
+import { virtualLearnerLearnTurnSimulatorDefinition } from './simulation-learn-turn';
+import { virtualLearnerEpistemicGroundingDefinition } from './simulation-epistemic-grounding';
+import { virtualLearnerRefereeDefinition } from './simulation-referee';
+import { virtualLearnerMemoryCuratorDefinition } from './simulation-memory-curate';
+import { virtualLearnerActorAuditorDefinition } from './simulation-actor-audit';
 import { pathReviewerDefinition, pathReviewer as pathReviewerFn } from './path-reviewer';
-import { kcMapperDefinition, kcMapper as kcMapperFn } from './kc-mapper';
+import { kcMapperDefinition, kcMapper as kcMapperFn } from './path-kc-mapping';
 import { mcpToolDefinition } from './mcp-tool';
 import { webSearchDefinition } from './web-search';
 import { webFetchDefinition } from './web-fetch';
 import { textToImageDefinition } from './text-to-image';
-import { materialCollectorDefinition } from './material-collector';
+import { materialCollectorDefinition } from './path-material-collect';
 
 export const allSkillDefinitions: SkillDefinition[] = [
   stageDesignerDefinition,
@@ -218,7 +218,7 @@ export const allSkillDefinitions: SkillDefinition[] = [
     stats: { callCount: 0, successRate: 1, avgLatency: 0 }
   },
   {
-    name: 'session-wrapup',
+    name: 'teaching-wrapup',
     displayName: '课后产出 Skill',
     version: '1.0.0',
     status: 'working',
@@ -230,7 +230,7 @@ export const allSkillDefinitions: SkillDefinition[] = [
     stats: { callCount: 0, successRate: 1, avgLatency: 0 }
   },
   {
-    name: 'peer-reinforcement',
+    name: 'teaching-peer-reinforcement',
     displayName: '伴学 Skill',
     version: '1.0.0',
     status: 'working',
@@ -245,37 +245,37 @@ export const allSkillDefinitions: SkillDefinition[] = [
 
 // Skill 名称映射
 export const skillHandlers: Record<string, (input: any) => Promise<any>> = {
-  'stage-designer': stageDesignerFn,
-  'adaptive-guidance-copy': adaptiveGuidanceCopyFn,
-  'lesson-knowledge-enricher': lessonKnowledgeEnricherFn,
-  'learning-predictor': learningPredictorFn,
-  'virtual-learner-persona-designer': virtualLearnerPersonaDesignerFn,
-  'virtual-learner-scenario-designer': virtualLearnerScenarioDesignerFn,
-  'virtual-learner-goal-dialogue-simulator': virtualLearnerGoalDialogueSimulatorFn,
-  'virtual-learner-path-evaluator': virtualLearnerPathEvaluatorFn,
-  'virtual-learner-learn-turn-simulator': virtualLearnerLearnTurnSimulatorFn,
-  'virtual-learner-epistemic-grounding': virtualLearnerEpistemicGroundingFn,
-  'virtual-learner-referee': virtualLearnerRefereeFn,
-  'virtual-learner-memory-curator': virtualLearnerMemoryCuratorFn,
-  'virtual-learner-actor-auditor': virtualLearnerActorAuditorFn,
+  'path-task-design': stageDesignerFn,
+  'profile-adaptive-copy': adaptiveGuidanceCopyFn,
+  'profile-lesson-enrich': lessonKnowledgeEnricherFn,
+  'profile-learning-predict': learningPredictorFn,
+  'simulation-persona-designer': virtualLearnerPersonaDesignerFn,
+  'simulation-scenario-designer': virtualLearnerScenarioDesignerFn,
+  'simulation-goal-dialogue': virtualLearnerGoalDialogueSimulatorFn,
+  'simulation-path-evaluate': virtualLearnerPathEvaluatorFn,
+  'simulation-learn-turn': virtualLearnerLearnTurnSimulatorFn,
+  'simulation-epistemic-grounding': virtualLearnerEpistemicGroundingFn,
+  'simulation-referee': virtualLearnerRefereeFn,
+  'simulation-memory-curate': virtualLearnerMemoryCuratorFn,
+  'simulation-actor-audit': virtualLearnerActorAuditorFn,
   'path-reviewer': pathReviewerFn,
-  'kc-mapper': kcMapperFn,
+  'path-kc-mapping': kcMapperFn,
   'mcp-tool': executeMcpToolFn,
   'web-search': executeWebSearchFn,
   'web-fetch': executeWebFetchFn,
   'text-to-image': executeTextToImageFn,
   'decision-gate': executeDecisionGateFn,
-  'material-collector': executeMaterialCollectorFn,
+  'path-material-collect': executeMaterialCollectorFn,
   'goal-confirm-adjudicator': executeGoalConfirmAdjudicatorFn,
-  'classroom-quality-judge': executeClassroomQualityJudgeFn,
-  'material-brief': (input: any) => generateMaterialBriefFn(input),
+  'teaching-classroom-judge': executeClassroomQualityJudgeFn,
+  'path-material-brief': (input: any) => generateMaterialBriefFn(input),
   ...auxSkillHandlers,
   // 核心 LLM 能力单元（原 agents/，已迁入 skills/）
   'goal-conversation': (input: any) => runGoalConversationAgent(input),
   'path-planning': (input: any) => pathAgentHandler(input.input, (input as any).context),
   'teaching-turn': (input: any) => teachingTurnAgentHandler(input),
-  'session-wrapup': (input: any) => sessionWrapupAgentHandler(input.input, (input as any).context),
-  'peer-reinforcement': (input: any) => peerAgentHandler(input.input, (input as any).context),
+  'teaching-wrapup': (input: any) => sessionWrapupAgentHandler(input.input, (input as any).context),
+  'teaching-peer-reinforcement': (input: any) => peerAgentHandler(input.input, (input as any).context),
 };
 
 /**

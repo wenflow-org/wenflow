@@ -2,13 +2,13 @@
  * #185 回归：编排声明边必须跟着「调用归属」走。
  *
  * 病灶：executor 把 skill span 的 callerAgent 归到**当前执行所在的 agent 边界**
- * （teaching-agent 作用域内直调 profile 归属的 learning-predictor），
+ * （teaching-agent 作用域内直调 profile 归属的 profile-learning-predict），
  * 但编排 YAML 从未声明这条调用边 ⇒ audit-handoff-edges 实跑时
- * `teaching-agent -> skill:learning-predictor` 恒判 usedButUndeclared（幽灵边）。
+ * `teaching-agent -> skill:profile-learning-predict` 恒判 usedButUndeclared（幽灵边）。
  *
  * 本测试直接读真实编排文件（prompts/orchestration/*.yaml），断言：
- *   ① 声明边集合含 teaching-agent ↔ skill:learning-predictor（且不是归属扁平化的 profile-agent 边）；
- *   ② 用真实日志形状（callerAgent=teaching-agent, agentId=skill:learning-predictor）跑对账，
+ *   ① 声明边集合含 teaching-agent ↔ skill:profile-learning-predict（且不是归属扁平化的 profile-agent 边）；
+ *   ② 用真实日志形状（callerAgent=teaching-agent, agentId=skill:profile-learning-predict）跑对账，
  *     该边不再出现在 usedButUndeclared —— 有向/无向两种口径都成立。
  */
 import { loadOrchestrationFiles } from '../../field-routing/orchestration-file';
@@ -20,7 +20,7 @@ import {
 } from '../handoff-edge-usage';
 
 const CALLER = 'teaching-agent';
-const CALLEE = 'skill:learning-predictor';
+const CALLEE = 'skill:profile-learning-predict';
 
 const declaredEdges = () => extractDeclaredHandoffEdges(loadOrchestrationFiles());
 
@@ -40,10 +40,10 @@ describe('#185 调用归属与声明边同步', () => {
       (candidate) => handoffPairKey(candidate.caller, candidate.callee) === handoffPairKey(CALLER, CALLEE),
     );
     expect(edge).toBeDefined();
-    // 有向声明必须正好是 teaching-agent → skill:learning-predictor（--directed 口径也匹配）
+    // 有向声明必须正好是 teaching-agent → skill:profile-learning-predict（--directed 口径也匹配）
     expect(edge).toMatchObject({ caller: CALLER, callee: CALLEE });
 
-    // 静态归属是 profile-agent；若声明成 profile-agent → skill:learning-predictor，
+    // 静态归属是 profile-agent；若声明成 profile-agent → skill:profile-learning-predict，
     // 就又退回「归属扁平化」的假边（#185 已修复的病灶）。
     expect(edges.some((candidate) => candidate.caller === 'profile-agent' && candidate.callee === CALLEE)).toBe(false);
   });

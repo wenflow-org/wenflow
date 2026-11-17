@@ -21,11 +21,11 @@ import type { OrchestrationStage } from '../../field-routing/orchestration-file'
 // F11 键集分派测试：mock 注册键集，避免加载真实 skills/agents 模块（其导入期会触发
 // refreshHardRequiredCache → 字段路由缓存刷新等生产装配，jest 环境下有循环 require 风险）
 jest.mock('../../../skills', () => ({
-  skillHandlers: { 'goal-conversation': jest.fn(), 'stage-designer': jest.fn() },
-  allSkillDefinitions: [{ name: 'stage-designer' }],
+  skillHandlers: { 'goal-conversation': jest.fn(), 'path-task-design': jest.fn() },
+  allSkillDefinitions: [{ name: 'path-task-design' }],
 }));
 jest.mock('../../../agents', () => ({
-  agentHandlers: { 'skill:learner-model': jest.fn() },
+  agentHandlers: { 'skill:profile-learner-model': jest.fn() },
 }));
 
 function makeEntry(overrides: Partial<Record<string, unknown>> = {}): SkillEntry {
@@ -201,7 +201,7 @@ describe('skill-completion：五档状态推进（正例）', () => {
 describe('skill-completion：豁免链（handler-only / aux）', () => {
   it('handler-only：core-ready / fields-synced / live 全豁免 → 直接 live', () => {
     const entry = makeEntry({
-      skillId: 'learner-model',
+      skillId: 'profile-learner-model',
       kind: 'handler-only',
       noPromptFile: true,
       registrationPoint: 'agents',
@@ -222,7 +222,7 @@ describe('skill-completion：豁免链（handler-only / aux）', () => {
   });
 
   it('aux：fields-synced 豁免但 live 不豁免（runAux requireActivePrompt）', () => {
-    const entry = makeEntry({ skillId: 'teaching-opening-generator', kind: 'aux', stage: undefined });
+    const entry = makeEntry({ skillId: 'teaching-opening', kind: 'aux', stage: undefined });
     const report = computeCompletionState({
       ...makeFullInput(entry),
       fieldsSync: null,
@@ -235,7 +235,7 @@ describe('skill-completion：豁免链（handler-only / aux）', () => {
   });
 
   it('aux：有 ACTIVE → live（manifest 分项对 aux 恒绿，F12 豁免）', () => {
-    const entry = makeEntry({ skillId: 'teaching-opening-generator', kind: 'aux', stage: undefined });
+    const entry = makeEntry({ skillId: 'teaching-opening', kind: 'aux', stage: undefined });
     const report = computeCompletionState({ ...makeFullInput(entry), fieldsSync: null, inManifest: false });
     expect(report.status).toBe('live');
     expect(report.items.find((item) => item.id === 'manifest')?.ok).toBe(true);
@@ -372,8 +372,8 @@ describe('skill-completion：装配与入口（依赖注入）', () => {
 describe('skill-completion：注册判定（F11 键集分派）', () => {
   it('defaultRegisteredCheck：skillHandlers 键 / definitions 名 / agents skill:<id> 命中', () => {
     expect(defaultRegisteredCheck(makeEntry({ skillId: 'goal-conversation' }))).toBe(true);
-    expect(defaultRegisteredCheck(makeEntry({ skillId: 'stage-designer' }))).toBe(true);
-    expect(defaultRegisteredCheck(makeEntry({ skillId: 'learner-model', kind: 'handler-only', registrationPoint: 'agents', noPromptFile: true, coreFile: undefined }))).toBe(true);
+    expect(defaultRegisteredCheck(makeEntry({ skillId: 'path-task-design' }))).toBe(true);
+    expect(defaultRegisteredCheck(makeEntry({ skillId: 'profile-learner-model', kind: 'handler-only', registrationPoint: 'agents', noPromptFile: true, coreFile: undefined }))).toBe(true);
     expect(defaultRegisteredCheck(makeEntry({ skillId: 'unknown-skill' }))).toBe(false);
     expect(defaultRegisteredCheck(makeEntry({ skillId: 'semantic-freeze-judge', registrationPoint: 'platform-direct' }))).toBe(true);
     expect(defaultRegisteredCheck(makeEntry({ skillId: 'ghost', registrationPoint: 'none' }))).toBe(true);

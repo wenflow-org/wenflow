@@ -10,7 +10,7 @@ export const EXTRA_CAPABILITY_SKILLS: readonly string[] = [
   'web-search',
   'web-fetch',
   'decision-gate',
-  'material-collector',
+  'path-material-collect',
 ] as const;
 
 const EXTRA_CAPABILITY_SKILL_SET = new Set<string>(EXTRA_CAPABILITY_SKILLS);

@@ -57,7 +57,7 @@ jest.mock('../../../gateway/api-gateway', () => ({
 jest.mock('../../../services/agentConfig.service', () => ({
   agentConfigService: { getActivePrompt: (...args: unknown[]) => mockGetActivePrompt(...args) },
 }))
-jest.mock('../board-designer.service', () => ({
+jest.mock('../teaching-board-design.service', () => ({
   designBoard: (...args: unknown[]) => mockDesignBoard(...args),
 }))
 jest.mock('../TeachingContextBuilder', () => ({

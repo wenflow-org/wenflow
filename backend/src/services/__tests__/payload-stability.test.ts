@@ -13,8 +13,8 @@ describe('payload 稳定前缀 SSOT', () => {
   it('已声明 skill：首键落稳定段内为真，易变键前置为假', () => {
     expect(isFirstKeyStable('teaching-turn', 'scenario')).toBe(true);
     expect(isFirstKeyStable('teaching-turn', 'classroomEventContext')).toBe(false);
-    expect(isFirstKeyStable('stage-designer', 'cognitiveCore')).toBe(true);
-    expect(isFirstKeyStable('stage-designer', 'milestone')).toBe(false);
+    expect(isFirstKeyStable('path-task-design', 'cognitiveCore')).toBe(true);
+    expect(isFirstKeyStable('path-task-design', 'milestone')).toBe(false);
   });
 
   it('未声明 skill 不参与护栏（恒为真）；空首键为假', () => {
@@ -43,24 +43,24 @@ describe('payload 稳定前缀 SSOT', () => {
     expect(isStablePrefix('teaching-turn', ['scenario'])).toBe(false);
     // 未声明的 skill 不参与护栏
     expect(isStablePrefix('some-unlisted-skill', ['anything'])).toBe(true);
-    // 声明长度不同：stage-designer = cognitiveCore → normalizedInput → materials
-    expect(isStablePrefix('stage-designer', ['cognitiveCore', 'normalizedInput', 'materials', 'milestone'])).toBe(true);
-    expect(isStablePrefix('stage-designer', ['cognitiveCore', 'materials', 'normalizedInput'])).toBe(false);
+    // 声明长度不同：path-task-design = cognitiveCore → normalizedInput → materials
+    expect(isStablePrefix('path-task-design', ['cognitiveCore', 'normalizedInput', 'materials', 'milestone'])).toBe(true);
+    expect(isStablePrefix('path-task-design', ['cognitiveCore', 'materials', 'normalizedInput'])).toBe(false);
   });
 
   it('声明覆盖本轮完成前缀改造的 skill', () => {
     for (const skillId of [
       'teaching-turn',
-      'stage-designer',
+      'path-task-design',
       'path-reviewer',
-      'adaptive-guidance-copy',
-      'virtual-learner-learn-turn-simulator',
-      'virtual-learner-goal-dialogue-simulator',
-      'virtual-learner-path-evaluator',
-      'virtual-learner-persona-designer',
-      'teaching-opening-generator',
-      'learner-progress-report',
-      'learning-predictor',
+      'profile-adaptive-copy',
+      'simulation-learn-turn',
+      'simulation-goal-dialogue',
+      'simulation-path-evaluate',
+      'simulation-persona-designer',
+      'teaching-opening',
+      'profile-progress-report',
+      'profile-learning-predict',
     ]) {
       expect(PAYLOAD_STABILITY[skillId]).toBeDefined();
     }

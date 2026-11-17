@@ -10,7 +10,7 @@
  */
 import 'dotenv/config';
 import prisma from '../config/database';
-import { profileAggregator } from '../agents/learner-model-agent/profile-aggregator';
+import { profileAggregator } from '../agents/profile-learner-model-agent/profile-aggregator';
 import learningStateService from '../services/learning/learning-state.service';
 import { learnerSnapshotRefreshService } from '../services/learner/LearnerSnapshotRefreshService';
 import { runWithSimulatedClock } from '../services/virtual-lab/simulation-clock-context';

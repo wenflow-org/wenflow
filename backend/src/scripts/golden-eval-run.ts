@@ -254,7 +254,7 @@ async function runOne(spec: Spec, state: RunState): Promise<void> {
   }
 
   // 3) 驱动 goal（step 自动应答）；负样本 6 步封顶
-  // 3.0) 附件夹具注入：必须在 goal 之前，让 material-collector 能读到「已上传资料」
+  // 3.0) 附件夹具注入：必须在 goal 之前，让 path-material-collect 能读到「已上传资料」
   if (Array.isArray(spec.fixtureMaterials) && spec.fixtureMaterials.length && entry.userId && entry.profileId && !entry.fixtures) {
     try {
       const injected = await ensureFixtureMaterialsForVirtualSession({

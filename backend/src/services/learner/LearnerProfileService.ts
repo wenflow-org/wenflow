@@ -1,5 +1,5 @@
-import { profileAggregator } from '../../agents/learner-model-agent/profile-aggregator';
-import type { LearnerModelProfile, ProfileFieldSources } from '../../agents/learner-model-agent/types';
+import { profileAggregator } from '../../agents/profile-learner-model-agent/profile-aggregator';
+import type { LearnerModelProfile, ProfileFieldSources } from '../../agents/profile-learner-model-agent/types';
 
 export class LearnerProfileService {
   private cache = new Map<string, {

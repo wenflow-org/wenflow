@@ -348,7 +348,7 @@ const props = withDefaults(
     height: '520px',
     loading: false,
     error: null,
-    emptyHint: '还没有概念图数据——路径生成后 kc-mapper 会产出前置依赖，随概念身份注册表物化进图。',
+    emptyHint: '还没有概念图数据——路径生成后 path-kc-mapping 会产出前置依赖，随概念身份注册表物化进图。',
     errorActionText: '',
     emptyActionText: '',
     practiceActionText: '',

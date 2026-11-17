@@ -16,17 +16,17 @@ import { resolveRuntimeContractsForAgents } from '../../services/prompt-lab/reso
 
 export function registerPromptOpsOverviewRoutes(router: import('express').Router): void {
 const SKILL_DISPLAY_NAMES: Record<string, string> = {
-  'skill:adaptive-guidance-copy': '自适应引导文案',
-  'skill:lesson-knowledge-enricher': '课后知识增强',
-  'skill:learning-predictor': '学习表现预测',
-  'skill:peer-reinforcement': '同伴强化对话',
+  'skill:profile-adaptive-copy': '自适应引导文案',
+  'skill:profile-lesson-enrich': '课后知识增强',
+  'skill:profile-learning-predict': '学习表现预测',
+  'skill:teaching-peer-reinforcement': '同伴强化对话',
   'skill:session-knowledge-distiller': '会话知识沉淀',
-  'skill:stage-designer': '阶段设计师',
-  'skill:virtual-learner-goal-dialogue-simulator': '虚拟学员·目标对话模拟',
-  'skill:virtual-learner-learn-turn-simulator': '虚拟学员·教学回合模拟',
-  'skill:virtual-learner-path-evaluator': '虚拟学员·路径评估',
-  'skill:virtual-learner-persona-designer': '虚拟学员·人设设计',
-  'skill:virtual-learner-scenario-designer': '虚拟学员·场景设计',
+  'skill:path-task-design': '阶段设计师',
+  'skill:simulation-goal-dialogue': '虚拟学员·目标对话模拟',
+  'skill:simulation-learn-turn': '虚拟学员·教学回合模拟',
+  'skill:simulation-path-evaluate': '虚拟学员·路径评估',
+  'skill:simulation-persona-designer': '虚拟学员·人设设计',
+  'skill:simulation-scenario-designer': '虚拟学员·场景设计',
 };
 
 // ============================================================
@@ -38,12 +38,12 @@ const AGENT_STAGE_MAP: Record<string, 'goal' | 'path' | 'teaching' | 'profile'> 
   'skill:goal-conversation': 'goal',
   // 以下虽未迁移但确定隶属的 stage
   'skill:path-planning': 'path',
-  'skill:stage-designer': 'path',
+  'skill:path-task-design': 'path',
   'skill:teaching-turn': 'teaching',
-  'skill:session-wrapup': 'teaching',
-  'skill:peer-reinforcement': 'teaching',
-  'skill:adaptive-guidance-copy': 'teaching',
-  'skill:lesson-knowledge-enricher': 'profile',
+  'skill:teaching-wrapup': 'teaching',
+  'skill:teaching-peer-reinforcement': 'teaching',
+  'skill:profile-adaptive-copy': 'teaching',
+  'skill:profile-lesson-enrich': 'profile',
 };
 
 // ============================================================

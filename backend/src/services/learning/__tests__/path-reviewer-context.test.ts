@@ -3,7 +3,7 @@ import { buildPathReviewerGoalContext } from '../path-reviewer-context';
 /**
  * 回归（审计 §3.19 P1⑥）：path-reviewer 的 goalContext 必须带 successCriteria
  * （yaml 声明 + Practicality 评分要用），且取自与 path-planning 同一份定帧结果。
- * 另附 P1⑤：stage-designer 的 loadTarget 注入（独立文件见 stage-designer 侧）。
+ * 另附 P1⑤：path-task-design 的 loadTarget 注入（独立文件见 path-task-design 侧）。
  */
 describe('路径评审的目标上下文（P1⑥）', () => {
   it('从 analysis.sceneFraming.normalizedInput 取 successCriteria（与生成侧同一份）', () => {

@@ -192,7 +192,7 @@ function trialExampleValue(type: string): unknown {
  * 按 Skill 输入契约（core.yaml inputs）生成试跑默认载荷。
  *
  * 背景（#15）：此前默认载荷硬编码 `{"input": "用一句话介绍你自己"}`，与大多数 Skill 的输入契约
- * 不符（如 stage-designer 要求 `milestone`），点「运行预览」必然以 INVALID_INPUT 失败。
+ * 不符（如 path-task-design 要求 `milestone`），点「运行预览」必然以 INVALID_INPUT 失败。
  * 现只收必填（type 不以 `?` 结尾）且有 name 的输入，按其类型给形状示例；无声明时返回 `{}`，
  * 不再塞一个与契约无关的 `input` 键。
  */

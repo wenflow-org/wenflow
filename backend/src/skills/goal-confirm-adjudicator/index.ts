@@ -6,7 +6,7 @@
  * 现在收敛为一次 temperature 0 的聚焦裁决调用；调用失败一律 fail-open 按非确认处理
  * （落库走正常回合，行为与旧白名单未命中一致），误确认生成没人要的路径比不确认伤。
  *
- * 形态照 material-collector 混合成例：handler-only 注册（不进 agentMembers、不进字段路由），
+ * 形态照 path-material-collect 混合成例：handler-only 注册（不进 agentMembers、不进字段路由），
  * 内含一个 LLM 环节，prompt 由 prompts/core/goal-confirm-adjudicator.yaml 编译产物承载。
  *
  * 定位声明（2026-11-08）：本 skill 走平台基础模型与标准网关链路（callPrompt），与 decision

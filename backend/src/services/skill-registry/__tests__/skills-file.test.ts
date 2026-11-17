@@ -46,10 +46,10 @@ describe('skills-file loader（P0 户口簿）', () => {
     ))).toBe(true);
     // 与文件头"计数不硬编码"一致：只断言已知成员存在，新增 handler-only 不再需要改本测试
     expect(handlerOnly.map((entry) => entry.skillId)).toEqual(
-      expect.arrayContaining(['learner-model', 'mcp-tool', 'web-search'])
+      expect.arrayContaining(['profile-learner-model', 'mcp-tool', 'web-search'])
     );
 
-    const learnerModel = byKind('handler-only').find((entry) => entry.skillId === 'learner-model')!;
+    const learnerModel = byKind('handler-only').find((entry) => entry.skillId === 'profile-learner-model')!;
     expect(resolveRegistrationPoint(learnerModel)).toBe('agents');
     const semanticFreezeJudge = byKind('aux').find((entry) => entry.skillId === 'semantic-freeze-judge')!;
     expect(resolveRegistrationPoint(semanticFreezeJudge)).toBe('platform-direct');
@@ -69,20 +69,20 @@ describe('skills-file loader（P0 户口簿）', () => {
     expect(getActiveSkillIds(book).size).toBe(new Set(book.skills.map((entry) => entry.skillId)).size);
     const members = getParentAgentMembers(book);
     expect(members.get('goal-agent')).toEqual(['skill:goal-conversation']);
-    expect(members.get('path-agent')).toEqual(['skill:path-planning', 'skill:stage-designer', 'skill:path-reviewer', 'skill:kc-mapper']);
+    expect(members.get('path-agent')).toEqual(['skill:path-planning', 'skill:path-task-design', 'skill:path-reviewer', 'skill:path-kc-mapping']);
     expect(members.get('teaching-agent')).toEqual([
       'skill:teaching-turn',
-      'skill:peer-reinforcement',
-      'skill:session-wrapup',
+      'skill:teaching-peer-reinforcement',
+      'skill:teaching-wrapup',
     ]);
-    // 2026-10-14 用户拍板：adaptive-guidance-copy 归画像阶段（它产出的是给学习者看的页面文案，
+    // 2026-10-14 用户拍板：profile-adaptive-copy 归画像阶段（它产出的是给学习者看的页面文案，
     // 消费的是画像阶段的 learnerSnapshot/learningState，授课链 routings 里没有它的 handoff）
     // → 从 teaching-agent 移到 profile-agent（按登记顺序排在首位）
     expect(members.get('profile-agent')).toEqual([
-      'skill:adaptive-guidance-copy',
-      'skill:learner-model',
-      'skill:lesson-knowledge-enricher',
-      'skill:learning-predictor',
+      'skill:profile-adaptive-copy',
+      'skill:profile-learner-model',
+      'skill:profile-lesson-enrich',
+      'skill:profile-learning-predict',
     ]);
     expect(members.get('simulation-agent')).toHaveLength(9);
     expect(members.has('mcp-tool')).toBe(false);
@@ -185,7 +185,7 @@ skills:
     handlerRef: backend/src/skills/x-test/index.ts
     noPromptFile: false
 `)).toThrow(/promptArtifact/);
-    // 声明了提示词产物又说自己没有提示词文件 → 自相矛盾（board-designer 修复前的形态）
+    // 声明了提示词产物又说自己没有提示词文件 → 自相矛盾（teaching-board-design 修复前的形态）
     expect(() => validateSkillsContent(`
 version: 1
 skills:
@@ -342,13 +342,13 @@ skills:
 /**
  * #235：声明与文件系统必须一致。
  *
- * `noPromptFile: true` 的字面含义是「没有提示词文件」。board-designer 修复前
- * 一边写 true、一边让运行期 `loadPromptFile('skill:board-designer')` 读
- * prompts/skill.board-designer.md（130 行板面 spec 契约）——这是同一件事的两份
+ * `noPromptFile: true` 的字面含义是「没有提示词文件」。teaching-board-design 修复前
+ * 一边写 true、一边让运行期 `loadPromptFile('skill:teaching-board-design')` 读
+ * prompts/skill.teaching-board-design.md（130 行板面 spec 契约）——这是同一件事的两份
  * 互相否定的声明。判据按「提示词产物是否唯一载体」：
  *   - 有 prompts/skill.<id>.md 且**无** prompts/core/<id>.yaml → 这份 .md 就是提示词本身，
  *     不许声明 noPromptFile: true；
- *   - 有 core yaml 的 handler-only（material-collector / material-brief）其提示词由 core 承载，
+ *   - 有 core yaml 的 handler-only（path-material-collect / path-material-brief）其提示词由 core 承载，
  *     产物是编译结果，可以继续以 noPromptFile 表示「户口簿没有 coreFile」。
  */
 describe('#235 noPromptFile 与文件系统一致', () => {
@@ -388,12 +388,12 @@ describe('#235 noPromptFile 与文件系统一致', () => {
     }
   });
 
-  it('board-designer：有提示词产物、无 core 源（#235 的具体形态）', () => {
-    const entry = book.skills.find((item) => item.skillId === 'board-designer')!;
+  it('teaching-board-design：有提示词产物、无 core 源（#235 的具体形态）', () => {
+    const entry = book.skills.find((item) => item.skillId === 'teaching-board-design')!;
     expect(entry.noPromptFile).toBe(false);
-    expect(entry.promptArtifact).toBe('prompts/skill.board-designer.md');
-    expect(fs.existsSync(path.join(PROMPTS_DIR, 'skill.board-designer.md'))).toBe(true);
-    expect(fs.existsSync(path.join(PROMPTS_DIR, 'core', 'board-designer.yaml'))).toBe(false);
+    expect(entry.promptArtifact).toBe('prompts/skill.teaching-board-design.md');
+    expect(fs.existsSync(path.join(PROMPTS_DIR, 'skill.teaching-board-design.md'))).toBe(true);
+    expect(fs.existsSync(path.join(PROMPTS_DIR, 'core', 'teaching-board-design.yaml'))).toBe(false);
   });
 
   it('运行时 manifest 的同一条声明也必须与文件系统一致（不止户口簿）', () => {

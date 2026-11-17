@@ -3,8 +3,8 @@
  *
  * 关键回归：遥测瘦身（`slimPromptCallRow` 把 >4K 的 userPayload 换成 `{__slim,bytes,sha256,head}`）
  * 之后，护栏若直接取 `Object.keys(parsed)[0]` 会恒得 `__slim` ⇒ 6 个 skill 全判违规
- * （实测 2026-10-15：teaching-turn / stage-designer / path-reviewer / adaptive-guidance-copy /
- * virtual-learner-learn-turn-simulator / virtual-learner-goal-dialogue-simulator）。
+ * （实测 2026-10-15：teaching-turn / path-task-design / path-reviewer / profile-adaptive-copy /
+ * simulation-learn-turn / simulation-goal-dialogue）。
  * 修法 = 遇标记时从 `head`（原 JSON 前 400 字符）还原首键；本用例钉住该行为与边界。
  */
 jest.mock('../../config/database', () => ({ __esModule: true, default: {} }));

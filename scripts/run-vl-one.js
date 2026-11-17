@@ -102,7 +102,7 @@ async function main() {
   log('done (' + dt + 's) goalRounds=' + d.goalRounds + ' pathGenerated=' + d.pathGenerated + ' finalStage=' + d.finalStage);
   if (d.error) log('  error: ' + String(d.error).slice(0, 120));
 
-  // wait for stage-designer subtasks
+  // wait for path-task-design subtasks
   let ms = 0, st = 0;
   for (let w = 0; w < 40; w++) {
     const lp = q('SELECT id FROM learning_paths WHERE userId=? ORDER BY updatedAt DESC LIMIT 1', [profile.userId]);

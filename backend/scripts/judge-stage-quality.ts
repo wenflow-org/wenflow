@@ -7,10 +7,10 @@
  *
  * 判官材料四块（与 docs/EXTERNAL_REVIEW_BRIEF_2026-11-10.md §9 第三刀一致）：
  *   ① 课堂真相：personaSeed + visibleDialogueContext（虚拟学习者会话可用时）
- *   ② lesson-knowledge-enricher 产出：blockedFoundations / recurringConfusions / knowledgeStateSummary
+ *   ② profile-lesson-enrich 产出：blockedFoundations / recurringConfusions / knowledgeStateSummary
  *      （无 enricher 日志时回退到 path-planning prerequisiteTree.unknownConcepts，并在 provenance 标注）
- *   ③ previousStageOutcome + replan-attribution 归因理由
- *   ④ stage-designer 下一阶段 subtasks（缺失时可用 --dry-run-stage 现场补跑一次）
+ *   ③ previousStageOutcome + teaching-replan-attribution 归因理由
+ *   ④ path-task-design 下一阶段 subtasks（缺失时可用 --dry-run-stage 现场补跑一次）
  *
  * 校准门（放行硬条件）：3 份黄金负样本（全抄原话 / 反向乱报 / 高负荷加难）必须全部 verdict=fail
  * 且 score ≤ 2，否则脚本退出码 1，禁止进入 50 份批跑。
@@ -100,9 +100,9 @@ const JUDGE_SYSTEM_PROMPT = [
   '',
   '材料分四块：',
   '①A 课堂真相：personaSeed（学习者真实画像/目标/起点）+ visibleDialogueContext（真实课堂逐轮对话；为空表示备课期尚无课堂记录）。',
-  '②A 备课产出：lesson-knowledge-enricher 的 blockedFoundations / recurringConfusions / knowledgeStateSummary（缺日志时可能回退到路径规划识别出的未知概念，provenance 会标注）。',
-  '③B 阶段复盘：previousStageOutcome（strugglingConcepts / recommendation）+ replan-attribution 的归因理由。',
-  '④C 下一阶段设计：stage-designer 产出的 subtasks（标题/类型/时长/描述/验收/预期误区）。',
+  '②A 备课产出：profile-lesson-enrich 的 blockedFoundations / recurringConfusions / knowledgeStateSummary（缺日志时可能回退到路径规划识别出的未知概念，provenance 会标注）。',
+  '③B 阶段复盘：previousStageOutcome（strugglingConcepts / recommendation）+ teaching-replan-attribution 的归因理由。',
+  '④C 下一阶段设计：path-task-design 产出的 subtasks（标题/类型/时长/描述/验收/预期误区）。',
   '',
   '你要执行三条铁律，逐条给结论：',
   '1) 幻觉/复读审计：C 的任务是否只是让学习者复述 A/B 已给的原话、定义或课堂结论（换个说法也算复述）？是否把编造的内容冒充成 A/B 中已有的学习者事实、真实数据或材料？有效任务必须让学习者在新情境里做一次判断或产出，而不是回忆标签。**为练习而构造的示例句/假设情境/虚构题干不算幻觉**——只要它明显是练习素材（如「原文：In a survey of 200 nurses…」「例如合同写…」），且没有冒充学习者的真实数据或已有材料；只有把编造内容当作「你上次说的」「你合同里写的」这类既成事实时才判幻觉。',
@@ -246,7 +246,7 @@ async function buildPersonaFromGoalSession(goalSessionId: string): Promise<Recor
 // ────────────────────────────── ②B 备课 / 复盘 ──────────────────────────────
 
 async function buildLessonKnowledge(scope: { pathId?: string | null; sessionId?: string | null; since?: Date | null }) {
-  const where: any = { agentId: 'skill:lesson-knowledge-enricher', success: true };
+  const where: any = { agentId: 'skill:profile-lesson-enrich', success: true };
   if (scope.pathId) where.pathId = scope.pathId;
   else if (scope.sessionId) where.sessionId = scope.sessionId;
   else if (scope.since) where.createdAt = { gte: scope.since };
@@ -254,7 +254,7 @@ async function buildLessonKnowledge(scope: { pathId?: string | null; sessionId?:
   const out = parseJsonLoose(row?.extractedJson || row?.normalizedOutput || row?.rawModelOutput);
   if (out) {
     return {
-      provenance: 'lesson-knowledge-enricher',
+      provenance: 'profile-lesson-enrich',
       lessonKnowledge: {
         blockedFoundations: asArray<string>(out.blockedFoundations),
         recurringConfusions: asArray<any>(out.recurringConfusions).map((x) => ({
@@ -298,7 +298,7 @@ async function buildLessonKnowledgeFallback(pathId: string) {
 }
 
 async function buildPreviousStageOutcome(scope: { pathId?: string | null; sessionId?: string | null; since?: Date | null }) {
-  const where: any = { agentId: 'skill:replan-attribution', success: true };
+  const where: any = { agentId: 'skill:teaching-replan-attribution', success: true };
   if (scope.pathId) where.pathId = scope.pathId;
   if (scope.sessionId) where.sessionId = scope.sessionId;
   if (!scope.pathId && !scope.sessionId && scope.since) where.createdAt = { gte: scope.since };
@@ -311,7 +311,7 @@ async function buildPreviousStageOutcome(scope: { pathId?: string | null; sessio
     .filter((item) => ['struggling_concepts', 'blocked_foundations', 'session_summary'].includes(str(item?.kind)))
     .map((item) => str(item?.text));
   return {
-    provenance: 'replan-attribution',
+    provenance: 'teaching-replan-attribution',
     previousStageOutcome: {
       strugglingConcepts: uniq(struggling),
       recommendation: str(output.recommendation || input?.recall?.recommendation),
@@ -325,7 +325,7 @@ async function buildPreviousStageOutcome(scope: { pathId?: string | null; sessio
 // ────────────────────────────── ④C 下一阶段 ──────────────────────────────
 
 function compactSubtask(task: any) {
-  // 兼容两种来源：stage-designer 输出（acceptanceHint/type/linkedConcept）与 DB subtasks 行
+  // 兼容两种来源：path-task-design 输出（acceptanceHint/type/linkedConcept）与 DB subtasks 行
   // （acceptanceCriteria/taskType/linkedConceptName）——后者不落 anticipatedMisconceptions。
   return {
     title: str(task?.title),
@@ -366,7 +366,7 @@ async function buildNextStage(pathId: string, stageNumber?: number): Promise<Jud
       generatedBy: 'db',
     };
   }
-  // 「下一阶段」= 第一个 locked 阶段（stage-designer 尚待/刚生成）；没有 locked 时取第一个未完成阶段。
+  // 「下一阶段」= 第一个 locked 阶段（path-task-design 尚待/刚生成）；没有 locked 时取第一个未完成阶段。
   // 不把当前 active 阶段当被评对象：它已被课堂消费，评它等于评旧设计（2026-11-11 校准首跑实证）。
   let target: any = null;
   for (const milestone of milestones) {
@@ -403,10 +403,10 @@ async function buildNextStage(pathId: string, stageNumber?: number): Promise<Jud
 
 /**
  * 渐进式备课对策：只生成了 Stage 1 时，用已有 previousStageOutcome 对下一阶段做一次
- * stage-designer dry-run，凑齐 payload ④（跑 1 堂课而不是整阶段，省 ~75% 样本成本）。
+ * path-task-design dry-run，凑齐 payload ④（跑 1 堂课而不是整阶段，省 ~75% 样本成本）。
  */
 async function dryRunNextStage(pathId: string, previousStageOutcome: JudgePayload['B']['previousStageOutcome']) {
-  const { stageDesigner } = await import('../src/skills/stage-designer');
+  const { stageDesigner } = await import('../src/skills/path-task-design');
   const run = await db.path_generation_runs.findFirst({ where: { learningPathId: pathId }, orderBy: { createdAt: 'desc' } });
   const rollback = parseJsonLoose(run?.rollbackSnapshot);
   const template = parseJsonLoose(rollback?.path?.aiPromptTemplate) || {};
@@ -594,10 +594,10 @@ function buildJudgeUserMessage(payload: JudgePayload): string {
     '【②A 备课产出 · lesson-knowledge】',
     JSON.stringify(payload.B.lessonKnowledge, null, 1),
     '',
-    '【③B 阶段复盘 · previousStageOutcome + replan-attribution】',
+    '【③B 阶段复盘 · previousStageOutcome + teaching-replan-attribution】',
     JSON.stringify(payload.B.previousStageOutcome, null, 1),
     '',
-    '【④C 下一阶段设计 · stage-designer subtasks】',
+    '【④C 下一阶段设计 · path-task-design subtasks】',
     payload.C.nextStage ? `下一阶段：${JSON.stringify(payload.C.nextStage)}` : '下一阶段信息缺失',
     JSON.stringify(payload.C.subtasks, null, 1),
     '',

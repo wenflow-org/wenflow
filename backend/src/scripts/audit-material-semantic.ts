@@ -38,7 +38,7 @@ interface Problem {
   detail: string;
 }
 
-/** brief 生成的输入预算（与 material-brief.service 的 BRIEF_INPUT_CHARS 同口径） */
+/** brief 生成的输入预算（与 path-material-brief.service 的 BRIEF_INPUT_CHARS 同口径） */
 const BRIEF_BUDGET = 24_000;
 
 function parseArgs(): { embed: number; recall: number; only: string; rerank: boolean } {

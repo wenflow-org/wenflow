@@ -13,7 +13,7 @@ describe('Skill Prompt Contract v2', () => {
   it('区分 normalization 与 code-only，而不滥用 archetype', () => {
     // 默认推断：无特例的 LLM skill 走 generation/json/json（prompt-compiler 特例已于 2026-08 退役）
     expect(buildDefaultSkillPromptContract({
-      skillId: 'stage-designer',
+      skillId: 'path-task-design',
       archetype: 'generator'
     })).toEqual(expect.objectContaining({
       artifactKind: 'generation',

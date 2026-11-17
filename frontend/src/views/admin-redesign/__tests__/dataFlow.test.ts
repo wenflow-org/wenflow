@@ -20,7 +20,7 @@ const flowOf = (s: string) =>
       ? [
           { step: 1, agentId: 'PathCoordinator.buildFramedNormalizedInput', role: 'input-framing', summary: '输入定帧：把 goal 的理解结果整理成 path-planning 的输入，不调模型', condition: 'when goal handoff received', resolved: { displayName: 'PathCoordinator.buildFramedNormalizedInput', kind: 'service' } },
           { step: 2, agentId: 'skill:path-planning', role: 'cognitive-core-and-milestones', resolved: { displayName: '路径规划 Skill', kind: 'skill' } },
-          { step: 3, agentId: 'skill:stage-designer', role: 'stage-task-expansion', loopOver: 'milestones', resolved: { displayName: '阶段设计 Skill', kind: 'skill' } },
+          { step: 3, agentId: 'skill:path-task-design', role: 'stage-task-expansion', loopOver: 'milestones', resolved: { displayName: '阶段设计 Skill', kind: 'skill' } },
         ]
       : [],
     stageNames,
@@ -53,7 +53,7 @@ describe('goal 阶段（链首：无入口，出口 24 字段 → path）', () =
   })
 })
 
-describe('path 阶段（入口 24 字段；闸口分发 normalizedInput；内部边 path-planning→stage-designer）', () => {
+describe('path 阶段（入口 24 字段；闸口分发 normalizedInput；内部边 path-planning→path-task-design）', () => {
   const f = flowOf('path')
   it('入口 = goal 阶段交接字段（无过滤）', () => {
     expect(f.entry.length).toBeGreaterThan(0)
@@ -70,20 +70,20 @@ describe('path 阶段（入口 24 字段；闸口分发 normalizedInput；内部
     expect(gate!.outputs.some((c) => c.fieldId === 'milestones.goal')).toBe(false)
     expect(f.exit.some((c) => c.fieldId === 'milestones.goal')).toBe(true)
   })
-  it('步骤顺序 = defSteps：闸口 → path-planning → stage-designer', () => {
+  it('步骤顺序 = defSteps：闸口 → path-planning → path-task-design', () => {
     const order = f.steps.map((s) => s.agentId)
     expect(order.indexOf('path-agent')).toBeGreaterThanOrEqual(0)
     expect(order.indexOf('skill:path-planning')).toBeGreaterThan(order.indexOf('path-agent'))
-    expect(order.indexOf('skill:stage-designer')).toBeGreaterThan(order.indexOf('skill:path-planning'))
+    expect(order.indexOf('skill:path-task-design')).toBeGreaterThan(order.indexOf('skill:path-planning'))
   })
-  it('path-planning 产出 cognitiveCore.* 且其 handoff 指向 stage-designer → 内部边', () => {
+  it('path-planning 产出 cognitiveCore.* 且其 handoff 指向 path-task-design → 内部边', () => {
     const pp = f.steps.find((s) => s.agentId === 'skill:path-planning')!
     expect(pp.outputs.some((c) => c.fieldId === 'cognitiveCore.cognitiveDomain')).toBe(true)
     const internal = f.edges.filter((e) => e.kind === 'internal')
     expect(internal.length).toBeGreaterThan(0)
   })
-  it('stage-designer 的输入包含 path-planning 移交字段（里程碑/认知核心）', () => {
-    const sd = f.steps.find((s) => s.agentId === 'skill:stage-designer')!
+  it('path-task-design 的输入包含 path-planning 移交字段（里程碑/认知核心）', () => {
+    const sd = f.steps.find((s) => s.agentId === 'skill:path-task-design')!
     expect(sd.inputs.some((c) => c.fieldId === 'milestones.goal')).toBe(true)
     expect(sd.inputs.some((c) => c.fieldId === 'cognitiveCore.cognitiveDomain')).toBe(true)
   })
@@ -144,8 +144,8 @@ describe('path 阶段（入口 24 字段；闸口分发 normalizedInput；内部
     expect(withFlags.steps.find((x) => x.agentId === 'skill:path-planning')!.unresolved).toBe(true)
   })
   it('orphan 步骤：已注册 agent 但无字段契约（0 routing 行 + 不在 defSteps）→ kind=orphan', () => {
-    if (f.steps.some((s) => s.agentId === 'skill:kc-mapper')) {
-      const o = f.steps.find((s) => s.agentId === 'skill:kc-mapper')!
+    if (f.steps.some((s) => s.agentId === 'skill:path-kc-mapping')) {
+      const o = f.steps.find((s) => s.agentId === 'skill:path-kc-mapping')!
       expect(o.kind).toBe('orphan')
       expect(o.outputs).toHaveLength(0)
       expect(o.inputs).toHaveLength(0)
@@ -158,7 +158,7 @@ describe('path 阶段（入口 24 字段；闸口分发 normalizedInput；内部
   })
 })
 
-describe('teaching 阶段（入口 path 交接；teaching-turn 输入来自闸口分发；内部边 teaching-turn→peer-reinforcement）', () => {
+describe('teaching 阶段（入口 path 交接；teaching-turn 输入来自闸口分发；内部边 teaching-turn→teaching-peer-reinforcement）', () => {
   const f = flowOf('teaching')
   it('入口来自 path 阶段', () => {
     expect(f.entryFrom?.stageId).toBe('path')
@@ -171,8 +171,8 @@ describe('teaching 阶段（入口 path 交接；teaching-turn 输入来自闸�
     const gate = f.steps.find((s) => s.kind === 'bridge-entry')!
     expect(gate.outputs.some((c) => c.fieldId === 'analysis.confusionPoints')).toBe(false)
   })
-  it('control.shouldTriggerPeer → peer-reinforcement 内部边', () => {
-    const pr = f.steps.find((s) => s.agentId === 'skill:peer-reinforcement')
+  it('control.shouldTriggerPeer → teaching-peer-reinforcement 内部边', () => {
+    const pr = f.steps.find((s) => s.agentId === 'skill:teaching-peer-reinforcement')
     expect(pr).toBeTruthy()
     expect(
       f.edges.some((e) => e.kind === 'internal' && e.fieldId === 'control.shouldTriggerPeer'),

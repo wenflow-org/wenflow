@@ -206,7 +206,7 @@ const completeTaskSchema = z.object({
 });
 
 const replanPathSchema = z.object({
-  triggerSource: z.enum(['goal-conversation', 'learner-model-agent', 'ai-teaching', 'admin', 'system', 'api']).optional(),
+  triggerSource: z.enum(['goal-conversation', 'profile-learner-model-agent', 'ai-teaching', 'admin', 'system', 'api']).optional(),
   reason: z.string().optional(),
   // compress（2026-10-15 双向化）：把目标阶段压到更少任务；overwrite = 等量/按建议重排
   mode: z.enum(['new_version', 'overwrite', 'compress']).optional(),
@@ -722,7 +722,7 @@ router.patch('/paths/:pathId/retry', async (req, res, next) => {
 // 支持用户侧"补充说明"（adjustments）：
 //   - 无学习进度（全 todo）→ 整路径重建（replace-path），补充说明注入 goal 请求供 LLM 重新规划
 //   - 有已完成任务（completed，无 in_progress）→ 收敛为重设计当前活动阶段（replan-stage），
-//     补充说明作为 reason 传给 stage-designer，已完成任务保留冻结
+//     补充说明作为 reason 传给 path-task-design，已完成任务保留冻结
 //   - 有 in_progress 任务或未结束课堂 → 409 拦截，提示先结束课堂
 router.post('/paths/:pathId/regenerate', llmGenerateUserLimiter, async (req, res, next) => {
   try {

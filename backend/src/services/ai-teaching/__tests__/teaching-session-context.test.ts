@@ -1,8 +1,8 @@
 /**
  * 教学会话作用域（AsyncLocalStorage）——让收束期的 aux skill 调用自动带上 sessionId。
  *
- * 背景（审计 §5.2 P2 尾巴）：这些 aux（learner-state-review / concept-consolidator /
- * concept-load-estimator / replan-attribution）此前不传 sessionId，LLM 成本落在"(无会话)"栏。
+ * 背景（审计 §5.2 P2 尾巴）：这些 aux（profile-state-review / profile-concept-consolidate /
+ * profile-concept-load / teaching-replan-attribution）此前不传 sessionId，LLM 成本落在"(无会话)"栏。
  */
 import { runWithTeachingSession, currentTeachingSessionId } from '../teaching-session-context';
 

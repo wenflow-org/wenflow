@@ -5,7 +5,7 @@
  * （实测 2037/2037），两者叠加使 `primaryConcepts` 恒为 `[]`；`prerequisiteConcepts` 又按
  * `primaryConcepts` 过滤 → **结构性永远为空**。整条"图 → 上游闭包 → 教学上下文"的链在这里断掉。
  *
- * 修复后：种子取自 `kcAnnotation.taskKcLinks`（kc-mapper 产出，含契约漂移归一），
+ * 修复后：种子取自 `kcAnnotation.taskKcLinks`（path-kc-mapping 产出，含契约漂移归一），
  * 取不到时回落任务自身的 canonical 概念；前置筛选改为按 `source` 区分真上游与回落口径。
  */
 import { buildTaskKnowledgeSeeds, pickPrerequisiteConcepts } from '../TeachingContextBuilder';
@@ -34,7 +34,7 @@ describe('buildTaskKnowledgeSeeds（本课知识组件种子）', () => {
   });
 
   it('标题收口不一致（issue #179）：annotation 存原始标题、DB 存 sanitize 后标题 → 仍能对上', () => {
-    // kc-mapper 拿到 stage-designer 的原始标题；subtasks 落库前 sanitizeUserFacingText 把「回捞」→「回顾」，
+    // path-kc-mapping 拿到 path-task-design 的原始标题；subtasks 落库前 sanitizeUserFacingText 把「回捞」→「回顾」，
     // teaching 侧拿 DB 标题回来查。两侧必须共用同一收口，否则这条链必断（KC 粒度静默丢空）。
     const rawTitlePath = {
       aiPromptTemplate: JSON.stringify({

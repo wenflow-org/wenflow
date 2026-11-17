@@ -1,7 +1,7 @@
 /**
  * 拟真人设身份锚定（确定性护栏，2026-11-13 20 用户批量跑数实证）。
  *
- * 问题：`virtual-learner-persona-designer` 在 temperature 0.8 + 「避免与最近样本重复职业」
+ * 问题：`simulation-persona-designer` 在 temperature 0.8 + 「避免与最近样本重复职业」
  * 的牵引下，会无视 `existingPersonaSeed` 的身份，给「签劳动合同的产品经理」生成
  * 「社区网格员」、给「看财报的运营」生成「高中语文老师」。提示词里虽有
  * 「优先保留 existingPersonaSeed 的长期底色」，但 5/5 并发样本全部漂移——这类

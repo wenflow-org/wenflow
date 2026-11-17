@@ -12,7 +12,7 @@
 import fs from 'fs';
 import path from 'path';
 import type { DocumentAnchor, DocumentStructure } from './document-parser.types';
-import type { MaterialBrief } from '../../skills/material-brief/types';
+import type { MaterialBrief } from '../../skills/path-material-brief/types';
 
 export interface MaterialRecord {
   id: string;

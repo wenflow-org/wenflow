@@ -46,7 +46,7 @@
 
 ## 3. 人设规范（33 字段，稳定身份）
 
-来源：`virtual-learners/presets.yaml`（内置手写）+ `virtual-learner-persona-designer`（LLM 生成，而 prompt 是 `prompts/core/virtual-learner-persona-designer.yaml`）。
+来源：`virtual-learners/presets.yaml`（内置手写）+ `simulation-persona-designer`（LLM 生成，而 prompt 是 `prompts/core/simulation-persona-designer.yaml`）。
 
 | 类别 | 字段 | 结构 |
 |---|---|---|
@@ -97,8 +97,8 @@
 |---|---|---|---|
 | A. 内置 preset | 启动时 `builtin-learners/seeder.ts` 读 `virtual-learners/presets.yaml` | 人设 + 手写故事 | 有 `presetVersion` + drift 检测；本地 9 个 |
 | B. 手动创建 | `POST /api/admin/virtual-learners` | 人设（必填 name） | `learningGoal` 可选 |
-| C. LLM 生成人设 | `POST /generate-persona`、`POST /:id/draft-profile` | personaSeed | skill `virtual-learner-persona-designer`；**代码会为缺失字段填默认值**（保成功率，与 prompt"禁止兜底句"有意的契约差异） |
-| D. LLM 生成故事 | `POST /:id/draft-stories` | 1 个故事（追加进 storyPool） | skill `virtual-learner-scenario-designer`；会注入"最近场景提示 + 该学习者记忆摘要"，`sampleType='student'` 时额外注入学生情境 |
+| C. LLM 生成人设 | `POST /generate-persona`、`POST /:id/draft-profile` | personaSeed | skill `simulation-persona-designer`；**代码会为缺失字段填默认值**（保成功率，与 prompt"禁止兜底句"有意的契约差异） |
+| D. LLM 生成故事 | `POST /:id/draft-stories` | 1 个故事（追加进 storyPool） | skill `simulation-scenario-designer`；会注入"最近场景提示 + 该学习者记忆摘要"，`sampleType='student'` 时额外注入学生情境 |
 | E. 批量 | `POST /api/admin/batch-experiments`，body `{name, description, learners[]}`，每项 `{name, learningGoal?, frictionBudget?}`（默认 `normal`，**每实验上限 20 人**） | 批量人设+故事 + 定时推演 | 人设/故事仍由 persona-designer + scenario-designer 生成；附带**模拟日推进 / 记忆衰减 / 快照**；**这不是 A/B 对照设施** |
 
 故事可改：`PUT /:id/stories/:storyIndex`（可不改代码注入自定义故事）；`DELETE /:id/stories/:storyIndex`。
@@ -117,12 +117,12 @@
 
 | skill | 角色 |
 |---|---|
-| `virtual-learner-goal-dialogue-simulator` | **Goal 阶段扮演学习者**（step 1，按 goal 轮次循环） |
-| `virtual-learner-learn-turn-simulator` | 教学阶段扮演学习者（step 5，按教学回合循环） |
-| `virtual-learner-memory-curator` | 课后记忆整理（step 9） |
-| `virtual-learner-referee` / `actor-auditor` | **裁判/审计已独立出仿真系统**（2026-09-27 拍板）：评估走独立面 `POST /api/admin/session-audits/sessions/:id/evaluations`（`routes/admin/session-audits.ts`），VL 页面无评审入口/徽章；合回与否以后再议 |
-| `virtual-learner-epistemic-grounding` | 黑盒链的认知接地（仿真核内，不受裁判独立影响） |
-| `virtual-learner-path-evaluator` | 仅 legacy assisted 调试 |
+| `simulation-goal-dialogue` | **Goal 阶段扮演学习者**（step 1，按 goal 轮次循环） |
+| `simulation-learn-turn` | 教学阶段扮演学习者（step 5，按教学回合循环） |
+| `simulation-memory-curate` | 课后记忆整理（step 9） |
+| `simulation-referee` / `actor-auditor` | **裁判/审计已独立出仿真系统**（2026-09-27 拍板）：评估走独立面 `POST /api/admin/session-audits/sessions/:id/evaluations`（`routes/admin/session-audits.ts`），VL 页面无评审入口/徽章；合回与否以后再议 |
+| `simulation-epistemic-grounding` | 黑盒链的认知接地（仿真核内，不受裁判独立影响） |
+| `simulation-path-evaluate` | 仅 legacy assisted 调试 |
 
 Goal 模拟器每轮的输入（`simulation.coordinator.ts`）：
 

@@ -87,7 +87,7 @@ export async function buildTeachingTurnInput(
       : [],
   };
 
-  // P1-13：learning-predictor 的自由描述原文透传（toneDetail/depthDetail）。
+  // P1-13：profile-learning-predict 的自由描述原文透传（toneDetail/depthDetail）。
   // 枚举 predictedTone/suggestedDepth 仅作机器判定；without 透传，模型说的「反复卡壳」
   // 到达开场策略时已被 pick() 抹成 'smooth'（audit LP-1）。字段类型声明在
   // TeachingContextBuilder/TeachingTurnInput（本次授权面外），此处按运行时形状读取——
@@ -132,7 +132,7 @@ export async function buildTeachingTurnInput(
     currentTaskOrder: context.pathProgress.currentTaskOrder,
     totalTasksInMilestone: context.pathProgress.totalTasksInMilestone,
     taskKnowledgeScope: context.taskKnowledgeScope,
-    // 本课 KC 列表（kc-mapper 产出，含 kcId）：提示词里有条件规则「如果输入提供 scenario.taskKcs…
+    // 本课 KC 列表（path-kc-mapping 产出，含 kcId）：提示词里有条件规则「如果输入提供 scenario.taskKcs…
     // 让 knowledge.points 对齐到 KC 粒度」——此前 context 里算了（TeachingContextBuilder:1567）
     // 却没有装配进 scenario，规则运行时被静默剥离（实测 8/14）。此处补齐装配点。
     taskKcs: context.taskKcs,

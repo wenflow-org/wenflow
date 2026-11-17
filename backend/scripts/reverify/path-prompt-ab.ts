@@ -75,7 +75,7 @@ const CASES: Record<'62' | '63' | '66', CaseSpec> = {
   },
   62: {
     label: '应试阶段任务层：真题/题型任务 + 末阶段限时整卷模考',
-    promptFile: 'prompts/skill.stage-designer.md',
+    promptFile: 'prompts/skill.path-task-design.md',
     rules: [
       '应试类阶段（milestone/goal/normalizedInput 指向考试、考纲、真题）的任务必须包含应试形态：① 至少 1 个任务直接做**真题或按题型分类的练习**（写清题型与作答动作，不是只整理概念）；② 若 pathStageMap.currentStageNumber === pathStageMap.stageCount（末阶段），必须有 1 个**限时整卷/成套模考**任务，并在同阶段安排**错因回收**（按题型与知识点归类错题，写出下一次的修订动作）。纯框架整理/概念复述不算题型能力。',
     ],
@@ -102,7 +102,7 @@ planningHints: {"targetSubtasksForStage":5,"subtasksPerStageRange":[3,5],"subtas
   },
   63: {
     label: '媒体类任务文本收口：录音/录像必须转写成文字产出',
-    promptFile: 'prompts/skill.stage-designer.md',
+    promptFile: 'prompts/skill.path-task-design.md',
     rules: [
       '媒体类任务的文本收口（2026-10-17 实测：10-16/17 生成的弹唱与普通话路径仍有「录音自查」类任务，但平台收不到也听不了录音）：若任务涉及录音/录像/拍照，必须写成「做一次 → 自己回听/回看 → 用文字写出听到/看到的具体差异（哪一小节、哪一拍、哪个音）」，acceptanceHint 必须落在文字产出上；禁止把「录一段音/拍一段视频」本身或「上传给老师看」作为完成信号，也不得暗示平台能听/能看。不涉及媒体的阶段不要凭空加媒体任务。',
     ],

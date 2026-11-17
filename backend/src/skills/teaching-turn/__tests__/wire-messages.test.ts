@@ -6,7 +6,7 @@
  * - teaching-turn 的规则里 `analysis.*`（第 87/104/108/109 条）指的是**本轮要产出的**
  *   analysis，不是历史消息的；上一轮分析另走 `analysisStage` 单独字段；
  * - skill 输入契约就是 `{ role, content }`（`TeachingTurnInput.messages`）；
- * - `session-wrapup` 才需要"含 analysis 标注"的消息，它自己的输入另处组装，不受影响。
+ * - `teaching-wrapup` 才需要"含 analysis 标注"的消息，它自己的输入另处组装，不受影响。
  */
 import { toWireMessages, type TeachingTurnInput } from '../index';
 

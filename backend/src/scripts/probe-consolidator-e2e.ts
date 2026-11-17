@@ -1,6 +1,6 @@
 /* eslint-disable no-console, @typescript-eslint/no-explicit-any -- 一次性验收 CLI */
 /**
- * concept-consolidator 端到端探针（审计 P1 §2.4 末条）。
+ * profile-concept-consolidate 端到端探针（审计 P1 §2.4 末条）。
  *
  * 实测失败画像（近 7 天 197 次）：44 CALLER_ABORTED（调用方取消，非提示词缺陷）、
  * 42 `response does not contain valid JSON object`、10 契约缺字段（merges/ambiguous 必填）。
@@ -30,7 +30,7 @@ async function stats(): Promise<string> {
   const since = new Date(Date.now() - 7 * 24 * 3600 * 1000);
   const rows = await prisma.prompt_call_logs.groupBy({
     by: ['errorCode'],
-    where: { agentId: 'skill:concept-consolidator', success: false, createdAt: { gte: since } },
+    where: { agentId: 'skill:profile-concept-consolidate', success: false, createdAt: { gte: since } },
     _count: { _all: true },
   });
   return rows.map((r) => `${r.errorCode}×${r._count._all}`).join(' | ') || '(无失败)';
@@ -40,8 +40,8 @@ async function main() {
   const runs = Math.max(1, Number(arg('runs') || 2));
   console.log('[probe] 调用前（近 7 天失败）：', await stats());
 
-  const def = (auxSkillDefinitionMap as any)['concept-consolidator'];
-  if (!def) throw new Error('找不到 concept-consolidator 定义');
+  const def = (auxSkillDefinitionMap as any)['profile-concept-consolidate'];
+  if (!def) throw new Error('找不到 profile-concept-consolidate 定义');
 
   let ok = 0;
   for (let i = 0; i < runs; i += 1) {
@@ -56,7 +56,7 @@ async function main() {
     }
     await new Promise((r) => setTimeout(r, 1200));
     const rows = await prisma.prompt_call_logs.findMany({
-      where: { agentId: 'skill:concept-consolidator', createdAt: { gte: startedAt } },
+      where: { agentId: 'skill:profile-concept-consolidate', createdAt: { gte: startedAt } },
       select: { success: true, errorMessage: true, promptAttemptCount: true },
     });
     for (const row of rows) {

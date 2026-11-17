@@ -1,9 +1,9 @@
-﻿import type { LearnerReplanProjection } from '../../agents/learner-model-agent/types';
-import type { SessionWrapupArtifact } from '../../skills/session-wrapup';
+﻿import type { LearnerReplanProjection } from '../../agents/profile-learner-model-agent/types';
+import type { SessionWrapupArtifact } from '../../skills/teaching-wrapup';
 import type { ReplanAttribution } from './ReplanAttributionService';
 import { DISPLAY_LABEL_MAP } from '../learning/learning.constants';
 
-import type { LearnerReplanSignal } from '../../agents/learner-model-agent/types';
+import type { LearnerReplanSignal } from '../../agents/profile-learner-model-agent/types';
 
 /**
  * 兜底文案与占位 id 不是概念名（与 LearnerKnowledgeMemoryService 的 F2 同源口径）：

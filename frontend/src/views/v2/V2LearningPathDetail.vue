@@ -1041,9 +1041,9 @@ const REPLAN_MODE_LABELS: Record<string, string> = {
 };
 const REPLAN_TRIGGER_LABELS: Record<string, string> = {
   'goal-conversation': '目标对话',
-  'learner-model-agent': '学习者模型建议',
+  'profile-learner-model-agent': '学习者模型建议',
   'ai-teaching': 'AI 教学建议',
-  'learner-model': '学习者模型建议',
+  'profile-learner-model': '学习者模型建议',
   admin: '管理员',
   system: '系统',
   api: '页面操作',

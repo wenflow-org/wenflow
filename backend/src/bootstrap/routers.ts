@@ -31,7 +31,7 @@ import adminGoalConversationsRoutes from '../routes/admin/goal-conversations';
 import adminUsersRoutes from '../routes/admin/users';
 import adminSessionsRoutes from '../routes/admin/sessions';
 import adminAuditLogsRoutes from '../routes/admin/audit-logs';
-import adminLearnerModelsRoutes from '../routes/admin/learner-models';
+import adminLearnerModelsRoutes from '../routes/admin/profile-learner-models';
 import adminMemoryTracesRoutes from '../routes/admin/memory-traces';
 import adminMemoryReviewRoutes from '../routes/admin/memory-review';
 import adminContentReviewRoutes from '../routes/admin/content-review';
@@ -110,12 +110,12 @@ export function registerRoutes(app: express.Express): void {
       agents: {
         'skill:path-planning': '学习路径规划',
         'teaching-agent': 'AI授课编排',
-        'skill:learner-model': '学习者画像与状态中心'
+        'skill:profile-learner-model': '学习者画像与状态中心'
       },
       skills: [
-        'stage-designer',
-        'adaptive-guidance-copy',
-        'lesson-knowledge-enricher'
+        'path-task-design',
+        'profile-adaptive-copy',
+        'profile-lesson-enrich'
       ]
     });
   });
@@ -178,7 +178,7 @@ export function registerRoutes(app: express.Express): void {
   app.use('/api/admin/announcements', ...adminRouteMiddleware, adminAnnouncementsRoutes);
   app.use('/api/admin/mcp', ...adminRouteMiddleware, adminMcpRoutes);
   app.use('/api/admin/plugins', ...adminRouteMiddleware, adminPluginsRoutes);
-  app.use('/api/admin/learner-models', ...adminRouteMiddleware, adminLearnerModelsRoutes);
+  app.use('/api/admin/profile-learner-models', ...adminRouteMiddleware, adminLearnerModelsRoutes);
   app.use('/api/admin/memory-traces', ...adminRouteMiddleware, adminMemoryTracesRoutes);
   app.use('/api/admin/memory-review', ...adminRouteMiddleware, adminMemoryReviewRoutes);
   // 内容抽检（#121）：与 CLI 同表同键，管理端只做读写

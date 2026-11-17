@@ -1,5 +1,5 @@
 import { compactTopic, deriveMaterialNeedsFromGoalText, inferMaterialOrigin, mergeDeclaredAndDerivedNeeds, partitionMaterialNeeds } from '../material-need-origin';
-import type { MaterialNeed } from '../../../skills/material-collector/types';
+import type { MaterialNeed } from '../../../skills/path-material-collect/types';
 
 describe('material-need-origin', () => {
   it('显式 origin 优先于文本启发式', () => {

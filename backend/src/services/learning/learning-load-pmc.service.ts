@@ -43,7 +43,7 @@ export interface PmcSourceRow {
   lss: number | null;
   ktl?: number | null;
   lf?: number | null;
-  /** 来源键：`session-wrapup:<sessionId>` / `task-completion:<taskId>` */
+  /** 来源键：`teaching-wrapup:<sessionId>` / `task-completion:<taskId>` */
   sourceKey?: string | null;
   /** 任务 id：一节课的稳定身份（同一天同一 taskId = 同一节课） */
   taskId?: string | null;
@@ -51,12 +51,12 @@ export interface PmcSourceRow {
 
 /**
  * 去重：一节课可能被**两个写入家族各记一行**——
- *   - `session-wrapup:<sessionId>`：会话评估的**真实 LSS**（权威）
+ *   - `teaching-wrapup:<sessionId>`：会话评估的**真实 LSS**（权威）
  *   - `task-completion:<taskId>`：任务完成侧的**合成占位**（LSS 恒 4，`calculateLSS` 默认档）
  * 二者是**同一节课**的两个观测，都落在同一天、同一 taskId 上。若直接求和，日负荷会翻倍
  * （实测：周敏 10-12 六节课 → 12 行，Σ 从真实 ~15.8 被顶到 41.76；四位 VL 的 10-09/10-12 同病）。
  *
- * 规则（最小、保守）：同一天、同 taskId 下**只要存在 session-wrapup 行，就丢弃 task-completion 行**。
+ * 规则（最小、保守）：同一天、同 taskId 下**只要存在 teaching-wrapup 行，就丢弃 task-completion 行**。
  * taskId 缺失、或只有单家族的行一律保留——无法配对即不折叠，宁可多留不误删。
  */
 export function dedupeLessonRows<T extends PmcSourceRow>(rows: ReadonlyArray<T>): T[] {
@@ -64,7 +64,7 @@ export function dedupeLessonRows<T extends PmcSourceRow>(rows: ReadonlyArray<T>)
   for (const r of rows) {
     const tid = String(r.taskId ?? '').trim();
     if (!tid) continue;
-    if (String(r.sourceKey ?? '').startsWith('session-wrapup:')) {
+    if (String(r.sourceKey ?? '').startsWith('teaching-wrapup:')) {
       const key = dayKeyOf(r.calculatedAt);
       if (key) wrapupKeys.add(`${key}|${tid}`);
     }
@@ -120,7 +120,7 @@ export function replayDailyPmc(
   options: { seedFromFirstRow?: boolean; until?: Date; seed?: PmcReplaySeed } = {},
 ): UserPmcSeries {
   const byDay = new Map<string, { load: number; lessons: number; oldKtl: number; oldLf: number }>();
-  // 跨家族去重（session-wrapup 权威行优先于 task-completion 占位行）——否则一节课被计两次，日负荷翻倍
+  // 跨家族去重（teaching-wrapup 权威行优先于 task-completion 占位行）——否则一节课被计两次，日负荷翻倍
   const deduped = dedupeLessonRows(rows);
   const seed = options.seed ?? null;
   const ordered = [...deduped]

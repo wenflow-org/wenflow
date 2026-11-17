@@ -112,7 +112,7 @@
                 :class="{
                   'sk-rec-flash': recDiff && e.row.diff === recDiff,
                   /* 异常行整行弱告警底（2026-10-14 用户评审）：全表最有价值的信息 = 那几行 ✗，
-                     此前混在一大片绿「已上线」胶囊里（实测 learner-model 行与健康行同底色）。 */
+                     此前混在一大片绿「已上线」胶囊里（实测 profile-learner-model 行与健康行同底色）。 */
                   'sk-rec-row--flagged': recRowFlagged(e.row),
                 }"
                 tabindex="0"
@@ -426,7 +426,7 @@ function recDotTone(row: RecRow) {
     避免「列上有红 ✗ 但整行看着跟健康行一样」。
     2026-10-31 外部评审：豁免类缺项不算异常——aux 无 manifest（免注册）、
     registrationExempt（豁免）、noPromptFile（纯函数不常驻）不参与标记，
-    整行不再泛红（learner-model 行此前被误报成告警行） */
+    整行不再泛红（profile-learner-model 行此前被误报成告警行） */
 function recRowFlagged(row: RecRow): boolean {
   if (!row.manifest && row.kind !== 'aux') return true
   if (!row.registered && !row.registrationExempt) return true

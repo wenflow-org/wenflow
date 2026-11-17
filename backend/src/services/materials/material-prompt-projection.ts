@@ -30,7 +30,7 @@ export const PATH_MATERIAL_LIMITS: PromptMaterialLimits = {
   maxTldrChars: 600,
 };
 
-/** 任务层（stage-designer）：任务要落到章节/条目上。 */
+/** 任务层（path-task-design）：任务要落到章节/条目上。 */
 export const STAGE_MATERIAL_LIMITS: PromptMaterialLimits = {
   maxMaterials: 3,
   maxSections: 8,
@@ -40,7 +40,7 @@ export const STAGE_MATERIAL_LIMITS: PromptMaterialLimits = {
 
 /**
  * 阶段位置窗口（2026-10-17）：任务层只带 8 个章节，此前**永远取前 8 个**——24 章节的包里
- * 后 2/3 对 stage-designer 完全不可见，路径引用因而恒落在原文前部（20 goal A/B 实证：
+ * 后 2/3 对 path-task-design 完全不可见，路径引用因而恒落在原文前部（20 goal A/B 实证：
  * 后半引用 9%，且 s-9 之后从未出现）。
  *
  * 修法：按阶段在路径中的位次，把章节/要点切成**连续窗口**（首阶段取头、末阶段取尾），
@@ -193,7 +193,7 @@ export interface PromptMaterial {
   sections: PromptMaterialSection[];
   keyPoints: PromptMaterialKeyPoint[];
   /**
-   * 资料理解摘要（material-brief；仅上传附件且已生成时存在，2026-09-24）。
+   * 资料理解摘要（path-material-brief；仅上传附件且已生成时存在，2026-09-24）。
    * path-planning 据此获得「这份资料是什么/怎么切分学习」的分段意图；
    * 联网资料不携带（其 pack 本身即采集时 LLM 抽取的摘要）。
    */

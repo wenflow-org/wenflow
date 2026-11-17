@@ -173,7 +173,7 @@ export function computeCompletionState(input: ComputeCompletionInput): SkillComp
   }
 
   // #235：live 档的豁免判据是「handler-only（逻辑在代码 handler，不依赖 DB prompt）」，
-  // 不是 noPromptFile——后者现在只表示「没有提示词文件」，board-designer 这类有独立提示词
+  // 不是 noPromptFile——后者现在只表示「没有提示词文件」，teaching-board-design 这类有独立提示词
   // 产物、但同样不走 DB prompt 的 handler-only 仍必须豁免。
   const liveExempt = entry.kind === 'handler-only';
   let liveOk: boolean;

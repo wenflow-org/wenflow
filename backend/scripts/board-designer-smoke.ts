@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import { decideBoardIntent } from '../src/services/ai-teaching/board-intent';
-import { designBoard } from '../src/services/ai-teaching/board-designer.service';
+import { designBoard } from '../src/services/ai-teaching/teaching-board-design.service';
 
 (async () => {
   const intent = decideBoardIntent({

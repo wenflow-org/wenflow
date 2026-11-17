@@ -13,7 +13,7 @@
  *
  * 升档更保守：要求**没有任何降档理由**，且课内状态明确"有余力"。降档最多 1 档（受 D_floor 口径约束），升档最多 1 档。
  */
-import type { LearnerLearningControlState } from '../../agents/learner-model-agent/types';
+import type { LearnerLearningControlState } from '../../agents/profile-learner-model-agent/types';
 import { classifyLoad } from '../learning/learning-load-verdict';
 
 /** `challengeLevelCap` 在任务级的具体含义：本任务难度不得越过该上限 */

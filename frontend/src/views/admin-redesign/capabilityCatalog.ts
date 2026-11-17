@@ -3,7 +3,7 @@
 // 2026-10-20 用户拍板：用户可见的「外挂能力」统一叫「插件」。插件是能力 bundle，
 // 成员是运行时 Skill；启停插件不改变主流程结构——下面每组的 fallback 写的是
 // 后端真实兜底，不是产品愿望：
-//   - 联网：material-collector 检索/抓取失败显式返回 not_found，不用模型记忆冒充资料；
+//   - 联网：path-material-collect 检索/抓取失败显式返回 not_found，不用模型记忆冒充资料；
 //     path.coordinator 的 resolveMaterialPacks 对采集失败 fail-open。
 //   - 决策：material-quality-gate 在 DECISION_DISABLED / 调用异常时返回 null，按放行处理。
 //   - 生图：teaching-visual.service 捕获生成失败后返回 null，不阻断课堂。
@@ -36,7 +36,7 @@ export const PLUGIN_GROUPS: readonly PluginGroup[] = [
     members: [
       { id: 'web-search', name: '网页搜索' },
       { id: 'web-fetch', name: '网页抓取' },
-      { id: 'material-collector', name: '资料采集' },
+      { id: 'path-material-collect', name: '资料采集' },
     ],
     fallback: '检索或抓取失败时资料包标为未找到，不用模型记忆冒充资料。路径按无外部资料继续生成。',
     primary: 'web-search',

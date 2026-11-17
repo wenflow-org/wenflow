@@ -24,16 +24,16 @@ jest.mock('../../utils/projection-token', () => ({
 }))
 jest.mock('../../skills', () => ({
   executeSkill: jest.fn(),
-  virtualLearnerGoalDialogueSimulatorDefinition: { name: 'virtual-learner-goal-dialogue-simulator', version: '1.0.0' },
-  virtualLearnerLearnTurnSimulatorDefinition: { name: 'virtual-learner-learn-turn-simulator', version: '1.0.0' },
+  virtualLearnerGoalDialogueSimulatorDefinition: { name: 'simulation-goal-dialogue', version: '1.0.0' },
+  virtualLearnerLearnTurnSimulatorDefinition: { name: 'simulation-learn-turn', version: '1.0.0' },
   VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_PROMPT: 'goal prompt',
   VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_MAX_TOKENS: 1200,
   VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_TEMPERATURE: 0.8,
   VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_PROMPT: 'learn prompt',
   VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_MAX_TOKENS: 800,
   VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_TEMPERATURE: 0.7,
-  virtualLearnerRefereeDefinition: { name: 'virtual-learner-referee', version: '1.0.0' },
-  virtualLearnerActorAuditorDefinition: { name: 'virtual-learner-actor-auditor', version: '1.0.0' }
+  virtualLearnerRefereeDefinition: { name: 'simulation-referee', version: '1.0.0' },
+  virtualLearnerActorAuditorDefinition: { name: 'simulation-actor-audit', version: '1.0.0' }
 }))
 jest.mock('../../config/database', () => ({
   __esModule: true,

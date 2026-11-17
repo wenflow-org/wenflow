@@ -2,7 +2,7 @@
  * #218 契约守卫：用户侧 AgentLogs.vue 的本地字典必须与 agent manifest 对齐。
  *
  * 背景：前端没有自动化门禁，字典写死在后端的镜像表里，已两次与 manifest 脱节
- * （旧 id teaching-agent / ai-teaching-agent / learner-model-agent 线上 0 行；
+ * （旧 id teaching-agent / ai-teaching-agent / profile-learner-model-agent 线上 0 行；
  *  manifest Profile 组新增的 7 个 skill 未进字典，被 `|| 'system'` 归成「平台底层」）。
  * 服务端 capabilityType 已改为按 manifest 派生，前端必须在同一 id 集合上映射，
  * 否则服务端筛出的行会在 displayLogs 的客户端二次过滤里被丢掉。
@@ -129,7 +129,7 @@ describe('#218 用户侧 AgentLogs.vue 字典与 manifest 对齐', () => {
 
   // #226/#218：结构性空的能力筛选项在前端必须有专属空态文案（不退化成通用「暂无日志」），
   // 反之**非空的能力不许写「平台暂无…」**——#218 复核就是抓到 profile 明明有
-  // skill:learning-predictor 等调用、文案却写死「平台暂无学习者模型类调用记录」。
+  // skill:profile-learning-predict 等调用、文案却写死「平台暂无学习者模型类调用记录」。
   // 这里的「是否结构性空」必须与后端 services/users/capability-groups 同一口径：
   // 能力集合 = 该监控组的 manifest 全量成员（kind !== 'alias'），不再与 userListed 求交。
   it('#218 能力筛选的空态文案与后端能力集合一致（非空的不许写「暂无」）', () => {

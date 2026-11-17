@@ -12,7 +12,7 @@
  *   **path 内隔离**：本服务只改「这俩是不是同一个东西」，不动任何 path 的知识结构，
  *   也不改 `label` 展示（只收敛调度键）。
  *
- * 纪律（照抄 learner-state-review）：LLM 只出**可证伪建议**，合并由代码执行，全程审计可回滚。
+ * 纪律（照抄 profile-state-review）：LLM 只出**可证伪建议**，合并由代码执行，全程审计可回滚。
  * 分两档：P1 观察（默认，只记录建议、一个字节都不动）；P2 执行（需要显式开关）。
  *
  * 词面闸门（P2-24 修复，2026-10-06 审计）：yaml rule 7 声明「字面高度接近才给 merges」——
@@ -359,7 +359,7 @@ const defaultDeps: ConceptConsolidatorDeps = {
     select: { payload: true },
   }) as any,
   writeAudit: (args) => prisma.learner_projections.upsert(args as any) as any,
-  callSkill: (input) => executeSkillWithResult(auxSkillDefinitionMap['concept-consolidator'], input as any) as any,
+  callSkill: (input) => executeSkillWithResult(auxSkillDefinitionMap['profile-concept-consolidate'], input as any) as any,
   recordMerge: (args) => prisma.learner_evidence.upsert(args as any) as any,
   findMerges: (args) => prisma.learner_evidence.findMany(args as any) as any,
   resolveConcept: (userId, text, opts) =>
@@ -660,7 +660,7 @@ export function validateConsolidation(input: {
     const aliases: string[] = Array.from(new Set<string>(aliasValues));
     if (!canonical || aliases.length === 0) continue;
     if (!known.has(canonical) || !aliases.every((alias) => known.has(alias))) {
-      logger.warn('[concept-consolidator] 丢弃越界建议（概念名不在候选里）', { canonical, aliases });
+      logger.warn('[profile-concept-consolidate] 丢弃越界建议（概念名不在候选里）', { canonical, aliases });
       continue;
     }
     // P1-17：已执行的 canonical 不再重复建议（whitelist 过滤的代码落点）
@@ -945,7 +945,7 @@ class ConceptConsolidatorService {
         }));
     });
     if (residualGroups.length > 0) {
-      logger.warn('[concept-consolidator] 预闸门：同形残余未清零，本轮不调 LLM', {
+      logger.warn('[profile-concept-consolidate] 预闸门：同形残余未清零，本轮不调 LLM', {
         userId,
         residualFamilies: residualGroups.map((group) => group.variants),
       });
@@ -973,10 +973,10 @@ class ConceptConsolidatorService {
           (previous?.proposals ?? []).flatMap((item) => item.aliases.map((alias) => [alias, item.canonical])),
         ),
       });
-      if (!result?.success) throw new Error(String(result?.error?.message || 'concept-consolidator failed'));
+      if (!result?.success) throw new Error(String(result?.error?.message || 'profile-concept-consolidate failed'));
       parsed = result.output;
     } catch (error) {
-      logger.warn('[concept-consolidator] 归并建议生成失败（不改动任何数据）', {
+      logger.warn('[profile-concept-consolidate] 归并建议生成失败（不改动任何数据）', {
         userId,
         error: error instanceof Error ? error.message : String(error),
       });
@@ -1051,7 +1051,7 @@ class ConceptConsolidatorService {
 
     await this.writeAudit(userId, audit);
 
-    logger.info('[concept-consolidator] 归并审计已记录', {
+    logger.info('[profile-concept-consolidate] 归并审计已记录', {
       userId,
       mode,
       candidates: candidates.length,
@@ -1067,7 +1067,7 @@ class ConceptConsolidatorService {
     // previous.proposals（待办建议）而非已执行 canonical——注释与实现不符。实际过滤落在
     // validateConsolidation(appliedCanonicals) 里（见该函数注释与 consolidate 调用点）。
     if (appliedKeys.size > 0) {
-      logger.info('[concept-consolidator] 已执行归并', { userId, canonicalKeys: Array.from(appliedKeys) });
+      logger.info('[profile-concept-consolidate] 已执行归并', { userId, canonicalKeys: Array.from(appliedKeys) });
     }
 
     return audit;
@@ -1125,7 +1125,7 @@ class ConceptConsolidatorService {
       },
     };
     await this.writeAudit(userId, next);
-    logger.info('[concept-consolidator] 归并已执行', {
+    logger.info('[profile-concept-consolidate] 归并已执行', {
       userId,
       strategy,
       applied: applied.length + appliedAlias.length,
@@ -1411,7 +1411,7 @@ class ConceptConsolidatorService {
             await this.deps.registerAlias({ userId, conceptId: resolved.conceptId, aliasRaw: fromKey, source: 'consolidator' });
           }
         } catch (aliasError) {
-          logger.warn('[concept-consolidator] 合并后别名登记失败（合并不回滚）', {
+          logger.warn('[profile-concept-consolidate] 合并后别名登记失败（合并不回滚）', {
             userId, fromKey, toKey,
             error: aliasError instanceof Error ? aliasError.message : String(aliasError),
           });
@@ -1423,7 +1423,7 @@ class ConceptConsolidatorService {
       if (ConceptConsolidatorService.isUniqueViolation(error)) {
         return { status: 'already_applied', applied: false, mergeId: eventId };
       }
-      logger.warn('[concept-consolidator] key 级归并执行失败（事务回滚，未改动数据）', {
+      logger.warn('[profile-concept-consolidate] key 级归并执行失败（事务回滚，未改动数据）', {
         userId, fromKey, toKey,
         error: error instanceof Error ? error.message : String(error),
       });
@@ -1563,7 +1563,7 @@ class ConceptConsolidatorService {
       if (ConceptConsolidatorService.isUniqueViolation(error)) {
         return { status: 'already_applied', applied: false, dropId: eventId };
       }
-      logger.warn('[concept-consolidator] 散键清理执行失败（事务回滚，未改动数据）', {
+      logger.warn('[profile-concept-consolidate] 散键清理执行失败（事务回滚，未改动数据）', {
         userId, conceptKey: key,
         error: error instanceof Error ? error.message : String(error),
       });
@@ -1721,7 +1721,7 @@ class ConceptConsolidatorService {
       stats: { ...audit.stats, rejected: (audit.stats?.rejected ?? 0) + records.length },
     };
     await this.writeAudit(userId, next);
-    logger.info('[concept-consolidator] 建议已驳回（留痕 + 移出待办）', { userId, rejected: records.length, skipped: skipped.length });
+    logger.info('[profile-concept-consolidate] 建议已驳回（留痕 + 移出待办）', { userId, rejected: records.length, skipped: skipped.length });
     return { rejected: records.length, skipped, audit: next };
   }
 
@@ -1811,7 +1811,7 @@ class ConceptConsolidatorService {
         if (variant === winner) continue;
         // 该对正挂在人审队列（任一方向同形匹配）→ 跳过，留人工
         if (queuedPairKeys.has(pairKeyOf(variant, winner))) {
-          logger.info('[concept-consolidator] 预闸门：同形对在人审队列中，跳过自动归并（留人工）', {
+          logger.info('[profile-concept-consolidate] 预闸门：同形对在人审队列中，跳过自动归并（留人工）', {
             userId, fromKey: variant, toKey: winner,
           });
           continue;
@@ -1821,7 +1821,7 @@ class ConceptConsolidatorService {
           merged += 1;
           if (autoCanonical) autoExecuted += 1;
         } else {
-          logger.warn('[concept-consolidator] 预闸门：同形归并未落地（残余将挡住本轮 LLM）', {
+          logger.warn('[profile-concept-consolidate] 预闸门：同形归并未落地（残余将挡住本轮 LLM）', {
             userId, fromKey: variant, toKey: winner, status: result.status, error: result.error,
           });
         }
@@ -1895,7 +1895,7 @@ class ConceptConsolidatorService {
     // 凭据来源：① 按次留档（权威，长期有效，不被审计滚动窗口挤掉）
     //           ② 审计 blob 里的近期视图（兼容本改动之前执行过的归并）
     const durable = await this.listAppliedMerges(userId).catch((error) => {
-      logger.warn('[concept-consolidator] 读取归并凭据失败，回退到审计内视图', {
+      logger.warn('[profile-concept-consolidate] 读取归并凭据失败，回退到审计内视图', {
         userId,
         error: error instanceof Error ? error.message : String(error),
       });
@@ -1913,7 +1913,7 @@ class ConceptConsolidatorService {
       orderBy: { occurredAt: 'asc' },
       select: { payload: true },
     }).catch((error: unknown) => {
-      logger.warn('[concept-consolidator] 读取散键清理凭据失败', {
+      logger.warn('[profile-concept-consolidate] 读取散键清理凭据失败', {
         userId,
         error: error instanceof Error ? error.message : String(error),
       });
@@ -1945,7 +1945,7 @@ class ConceptConsolidatorService {
 
     // alias 凭据（非破坏策略）：同样按 canonical 匹配，回滚语义不同（还原 conceptId + 删别名）
     const durableAliases = await this.listAliasMerges(userId).catch((error) => {
-      logger.warn('[concept-consolidator] 读取 alias 凭据失败', {
+      logger.warn('[profile-concept-consolidate] 读取 alias 凭据失败', {
         userId,
         error: error instanceof Error ? error.message : String(error),
       });
@@ -1974,7 +1974,7 @@ class ConceptConsolidatorService {
         rolledBack += 1;
         rolledBackAliasIds.push(aliasTarget.aliasMergeId);
       } catch (error) {
-        logger.warn('[concept-consolidator] 单条 alias 回滚失败（跳过）', {
+        logger.warn('[profile-concept-consolidate] 单条 alias 回滚失败（跳过）', {
           userId,
           canonical: aliasTarget.canonical,
           error: error instanceof Error ? error.message : String(error),
@@ -1989,7 +1989,7 @@ class ConceptConsolidatorService {
         rolledBack += 1;
         if (target.mergeId) rolledBackIds.push(target.mergeId);
       } catch (error) {
-        logger.warn('[concept-consolidator] 单条回滚失败（跳过）', {
+        logger.warn('[profile-concept-consolidate] 单条回滚失败（跳过）', {
           userId,
           canonical: target.canonical,
           error: error instanceof Error ? error.message : String(error),
@@ -2032,7 +2032,7 @@ class ConceptConsolidatorService {
     }
 
     if (!audit) {
-      logger.info('[concept-consolidator] 归并已回滚（无审计视图，按留档凭据）', { userId, rolledBack });
+      logger.info('[profile-concept-consolidate] 归并已回滚（无审计视图，按留档凭据）', { userId, rolledBack });
       return { audit: null, rolledBack, skipped };
     }
 
@@ -2057,7 +2057,7 @@ class ConceptConsolidatorService {
       },
     };
     await this.writeAudit(userId, next);
-    logger.info('[concept-consolidator] 归并已回滚', { userId, rolledBack });
+    logger.info('[profile-concept-consolidate] 归并已回滚', { userId, rolledBack });
     return { audit: next, rolledBack, skipped };
   }
 
@@ -2237,7 +2237,7 @@ class ConceptConsolidatorService {
           touchedRows.push({ table: 'misconception_ledger', id: String(row.id), previousConceptId: (row.conceptId as string | null) ?? null });
         }
         if (touchedRows.length > MAX_ALIAS_ROLLBACK_ROWS) {
-          logger.warn('[concept-consolidator] alias 归并影响行数超限，转人工（未执行）', {
+          logger.warn('[profile-concept-consolidate] alias 归并影响行数超限，转人工（未执行）', {
             userId, canonical: proposal.canonical, rows: touchedRows.length, limit: MAX_ALIAS_ROLLBACK_ROWS,
           });
           continue;
@@ -2277,7 +2277,7 @@ class ConceptConsolidatorService {
         }
         applied.push(merge);
       } catch (error) {
-        logger.warn('[concept-consolidator] 单条 alias 归并失败（跳过，不影响其余）', {
+        logger.warn('[profile-concept-consolidate] 单条 alias 归并失败（跳过，不影响其余）', {
           userId,
           canonical: proposal.canonical,
           error: error instanceof Error ? error.message : String(error),
@@ -2426,7 +2426,7 @@ class ConceptConsolidatorService {
         }
         applied.push(merge);
       } catch (error) {
-        logger.warn('[concept-consolidator] 单条归并执行失败（跳过，不影响其余）', {
+        logger.warn('[profile-concept-consolidate] 单条归并执行失败（跳过，不影响其余）', {
           userId,
           canonical: proposal.canonical,
           error: error instanceof Error ? error.message : String(error),
@@ -2438,20 +2438,20 @@ class ConceptConsolidatorService {
     return applied;
   }
 
-  /** 后台触发（与 learner-state-review 同源：lesson/task/review 完成时） */
+  /** 后台触发（与 profile-state-review 同源：lesson/task/review 完成时） */
   refreshInBackground(userId: string): void {
     const pending = this.inflight.get(userId);
     if (pending) return;
     const task = this.consolidate(userId, { mode: 'observe' })
       .catch((error: any) => {
-        logger.warn('[concept-consolidator] background run failed', { userId, error: error?.message || String(error) });
+        logger.warn('[profile-concept-consolidate] background run failed', { userId, error: error?.message || String(error) });
         return null;
       })
       .finally(() => {
         if (this.inflight.get(userId) === task) this.inflight.delete(userId);
       });
     this.inflight.set(userId, task);
-    runBackgroundTask('concept-consolidator.observe', () => task, { userId });
+    runBackgroundTask('profile-concept-consolidate.observe', () => task, { userId });
   }
 }
 

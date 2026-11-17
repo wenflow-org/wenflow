@@ -35,7 +35,7 @@ jest.mock('../../learner/LearnerProjectionService', () => ({ learnerProjectionSe
 jest.mock('../../learner/LearnerProgressService', () => ({ learnerProgressService: {} }));
 jest.mock('../../background-task-tracker.service', () => ({ runBackgroundTask: mockRunBackgroundTask }));
 jest.mock('../../../skills', () => ({ executeSkill: jest.fn() }));
-jest.mock('../../../skills/stage-designer', () => ({ stageDesignerDefinition: {} }));
+jest.mock('../../../skills/path-task-design', () => ({ stageDesignerDefinition: {} }));
 jest.mock('../../../skills/path-planning', () => ({ pathAgentDefinition: {} }));
 
 import learningService from '../learning.service';

@@ -1,0 +1,78 @@
+import { RuntimeDefinitionRecord } from '../../composers/definitions/types';
+
+export const virtualLearnerScenarioDesignerRuntimeDefinition: RuntimeDefinitionRecord = {
+  id: 'skill:simulation-scenario-designer',
+  displayName: 'Virtual Learner Scenario Designer',
+  description: '基于稳定 persona 生成一对多故事场景，并输出主故事 goalSeed 与一致性校验说明。',
+  category: 'skill',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      preferredDomains: { type: 'array' },
+      preferredGoalTypes: { type: 'array' },
+      preferredLevels: { type: 'array' },
+      preferredMotivations: { type: 'array' },
+      avoidDomains: { type: 'array' },
+      candidateDomains: { type: 'array' },
+      candidatePersonas: { type: 'array' },
+      recentScenarioHints: { type: 'array' },
+    },
+    required: [],
+  },
+  outputSchema: {
+    type: 'object',
+    properties: {
+      goalSeed: { type: 'object' },
+      personaSeed: { type: 'object' },
+      story: {
+        type: 'object',
+        properties: {
+          goalSeed: {
+            type: 'object',
+            properties: {
+              primaryBlockType: { type: ['string', 'null'] },
+              recurrence: { type: ['string', 'null'] },
+              blockTypeEvidence: { type: ['string', 'null'] },
+            },
+          },
+        },
+      },
+      situationSeed: { type: 'object' },
+      stories: { type: 'array' },
+      consistencyNotes: { type: 'array' },
+    },
+  },
+  variableBindings: {
+    consumes: [
+      'preferredDomains[]',
+      'preferredGoalTypes[]',
+      'preferredLevels[]',
+      'preferredMotivations[]',
+      'avoidDomains[]',
+      'candidateDomains[]',
+      'candidatePersonas[]',
+      'recentScenarioHints[]',
+    ],
+    produces: [
+      'goalSeed.domain',
+      'goalSeed.goalType',
+      'goalSeed.surfaceGoal',
+      'personaSeed.occupation',
+      'personaSeed.corePersonality',
+      'personaSeed.helpSeekingPattern',
+      'personaSeed.adversarialPattern',
+      'personaSeed.metacognitiveProfile',
+      'personaSeed.personalityTraits.questionStyle',
+      'situationSeed.currentPhase',
+      'stories[].title',
+      'stories[].pressurePoints[]',
+      'stories[].problemKnowledge.domainFamiliarity',
+      'stories[].goalSeed.surfaceGoal',
+    ],
+  },
+  capabilities: ['virtual-learner-scenario-design', 'persona-goal-matching', 'multi-story-scenario-design'],
+  defaultMaxTokens: 64000,
+  defaultTemperature: 0.9,
+  source: 'code',
+  managedByCode: true,
+};

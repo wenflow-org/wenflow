@@ -4,7 +4,7 @@
  * A. 非正常终态（`endReason==='learner-abandoned'` 等）的会话**仍然收束**（状态机照常闭合到 completed，
  *    wrapup 按设计留 NULL——调用方只能按 status 判定闭合、不得依赖 wrapup，见 #239），
  *    但**不写正式轨**：learner_evidence（lesson:completed 事件不带 userId）、
- *    learning_metrics（session-wrapup / session_load）、记忆回写（FSRS trace）、误解台账、休眠信号、
+ *    learning_metrics（teaching-wrapup / session_load）、记忆回写（FSRS trace）、误解台账、休眠信号、
  *    检查点留痕、aux 课后刷新链一律跳过，只落一条审计日志。
  * B. `review:completed` 只在 endSession **真正成功**（completed + wrapup，且非弃跑）后入队；
  *    抛错 / processing 时入队为 0。
@@ -223,8 +223,8 @@ beforeEach(() => {
   mockPrepareSessionScoreCommit.mockResolvedValue({
     userId: 'user-1',
     expectedRevision: 3,
-    sourceKey: 'session-wrapup:sess-abandon-1',
-    data: { sourceKey: 'session-wrapup:sess-abandon-1' },
+    sourceKey: 'teaching-wrapup:sess-abandon-1',
+    data: { sourceKey: 'teaching-wrapup:sess-abandon-1' },
     metrics: { lss: 6.1, ktl: 5.2, lf: 4.3, lsb: -1.2, timestamp: new Date().toISOString() },
   });
   mockCommitSessionLoadMetric.mockResolvedValue(undefined);
@@ -311,7 +311,7 @@ describe('弃跑/非正常终态收束：只闭合状态机，不写正式轨', 
     expect(event.type).toBe('lesson:completed');
     expect(event.userId).toBeNull();
 
-    // ③ learning_metrics：session-wrapup 的 metricCommit 为 null（第 6 参），session_load 不写
+    // ③ learning_metrics：teaching-wrapup 的 metricCommit 为 null（第 6 参），session_load 不写
     expect(mockPrepareSessionScoreCommit).not.toHaveBeenCalled();
     expect(mockCompleteWithEvent.mock.calls[0][5]).toBeNull();
     expect(mockCommitSessionLoadMetric).not.toHaveBeenCalled();
@@ -431,8 +431,8 @@ describe('弃跑/非正常终态收束：只闭合状态机，不写正式轨', 
 /**
  * #200：`lesson:completed` 事件载荷里的可见对话切片只带 role/content。
  *
- * 下游唯一消费者是 lesson-knowledge-enricher，其输入类型
- * （skills/lesson-knowledge-enricher/index.ts:66）只有 `{ role, content }`；
+ * 下游唯一消费者是 profile-lesson-enrich，其输入类型
+ * （skills/profile-lesson-enrich/index.ts:66）只有 `{ role, content }`；
  * 曾经额外带 `analysis`（每回合的判读块），抽取后无人读取，只是把重复内容塞进持久化载荷。
  * 这里直接读领域事件的 data，故能抓住"又有人把 analysis 加回去"。
  */

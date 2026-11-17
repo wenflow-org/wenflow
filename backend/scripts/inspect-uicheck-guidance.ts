@@ -1,4 +1,4 @@
-/* 临时排查脚本（走查用，不入库）：核对前端触发的 adaptive-guidance-copy 调用 */
+/* 临时排查脚本（走查用，不入库）：核对前端触发的 profile-adaptive-copy 调用 */
 import sqlite3 from 'sqlite3';
 import path from 'path';
 

@@ -6,7 +6,7 @@
  * 末阶段有资料却零引用（阶段 3 仅 1 条、阶段 4 零）。缺口看得见了，但没人补：
  * `stage-enrichment.ts` 的守卫当时只 warn（「不自动补引用」）。
  *
- * 修法（issue 原文口径）：对零引用阶段做**一次限定的** stage-designer supplement 调用
+ * 修法（issue 原文口径）：对零引用阶段做**一次限定的** path-task-design supplement 调用
  * （带 `supplementRequest` + 本阶段窗口资料），只收「带引用」的新任务；
  * **每路径最多 1 次**——闸对象由调用方按 run 作用域持有并传给每个阶段，
  * 本模块在**发起调用前**同步取闸（阶段设计并发 2 路，先查后置必须是同步的）。
@@ -116,11 +116,11 @@ export interface ZeroRefSupplementParams<T extends SupplementTask> {
   materials: PromptMaterial[] | null | undefined;
   /** 首轮任务（已归一化：title/type/estimatedMinutes/materialRefs…）。 */
   stageTasks: T[];
-  /** 首轮 stage-designer 输入（含窗口资料）；补课调用在它之上追加 supplementRequest。 */
+  /** 首轮 path-task-design 输入（含窗口资料）；补课调用在它之上追加 supplementRequest。 */
   designerInput: unknown;
   hints?: ZeroRefSupplementHints | null;
   gate: ZeroRefSupplementGate;
-  /** stage-designer 调用（生产=`executeSkill(stageDesignerDefinition, input)`）；返回 { subtasks } 或 null。 */
+  /** path-task-design 调用（生产=`executeSkill(stageDesignerDefinition, input)`）；返回 { subtasks } 或 null。 */
   callDesigner: (input: unknown) => Promise<{ subtasks?: unknown } | null | undefined>;
 }
 
@@ -198,14 +198,14 @@ export function pickReplaceVictims<T extends SupplementTask>(
 }
 
 /**
- * 零引用阶段的限定补课：闸内调一次 stage-designer，只并入「带窗口内引用」的新任务。
+ * 零引用阶段的限定补课：闸内调一次 path-task-design，只并入「带窗口内引用」的新任务。
  *
  * 流程与闸语义（按序）：
  *   ① 窗口无可用章节 → 跳过（**不消耗闸**：没发起调用）；
  *   ② 上界内无空位（任务数 ≥ subtasksPerStageRange[1]）→ 转**置换模式**：可换下的
  *      「无窗口引用」旧任务为 0 条时才跳过（不消耗闸）；否则照常发起调用，补成时等量置换；
  *   ③ 取闸失败（本路径已补过）→ 跳过；
- *   ④ 调用 stage-designer（payload = 首轮输入 + supplementRequest{needed, existing, minutesRange,
+ *   ④ 调用 path-task-design（payload = 首轮输入 + supplementRequest{needed, existing, minutesRange,
  *      stageNumber, reason:'zero-material-ref', materialRefsRequired:true}）；抛错 → `call-failed`；
  *   ⑤ 收任务：只留带窗口内引用的（其余拒收）；一条都没有 → `no-ref-tasks`；
  *   ⑥ add：整批候选交 mergeSupplementTasks 判重（**不按空位预截断**——预截断会让前几条被判重的

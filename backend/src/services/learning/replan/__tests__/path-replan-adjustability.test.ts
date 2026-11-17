@@ -1,7 +1,7 @@
 /**
  * 重排骨干判据（动态规划，2026-10-17）：
  * 压缩时必须保护 core（真实交付物/收口/补缺），优先让 flexible（建立/拆解/诊断）让位。
- * 新路径用 stage-designer 落的 sidecar 标注；存量路径没有 sidecar 时按任务类型兜底。
+ * 新路径用 path-task-design 落的 sidecar 标注；存量路径没有 sidecar 时按任务类型兜底。
  */
 import { resolveTaskAdjustability } from '../path-replan.service';
 

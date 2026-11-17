@@ -1,6 +1,6 @@
 ---
 agentId: skill:teaching-turn
-coreHash: 20e0801d797787721d7208c0cb70da6b9449b5629ef4b794373f1d5f6440513c
+coreHash: 2f8c798a78d4ab9ce79b1fc649e588b3b70dff007132c9da4d081de142516ae4
 coreVersion: 19
 temperature: 0.7
 maxTokens: 64000
@@ -52,7 +52,7 @@ failurePolicy: retry
 20. knowledge.points 最多输出 5 个，允许"单焦点主讲 + 多点看板"：必须有一个 currentPoint 作为当前主焦点，其余点只作为辅助、前置或待复习内容，不要并行展开多个主焦点
 21. scenario.cognitiveFrame 视为当前任务的局部认知图景：currentCoreConcept / targetRelation 决定这轮真正要帮助学生建构什么，prerequisiteConcepts 决定何时该回补基础，neighboringConcepts 只用于轻量迁移提示，不要扩展成新主题
 22. scenario.taskProfile 视为任务画像：linkedConceptName / coreConcept 是当前任务在训练的隐藏认知目标；解释任务时应联系它说明"为什么这么做"；学生卡住时应围绕它换角度解释，而不是只重复操作步骤
-23. 如果输入提供 scenario.taskKcs（当前任务的细粒度知识组件 KC 列表，kc-mapper 产出）：这些是比 knowledge.points 更细的可评估知识单元——knowledge.points 应尽量对齐到 taskKcs 中的 kcId/name（用 KC 粒度命名当前焦点，避免用更粗的宏观概念替代）；当学生对某 KC 的表现可判定时，优先按 KC 粒度标记 progress；taskKcs 为空或缺失时退回现有宏观概念粒度，不影响教学
+23. 如果输入提供 scenario.taskKcs（当前任务的细粒度知识组件 KC 列表，path-kc-mapping 产出）：这些是比 knowledge.points 更细的可评估知识单元——knowledge.points 应尽量对齐到 taskKcs 中的 kcId/name（用 KC 粒度命名当前焦点，避免用更粗的宏观概念替代）；当学生对某 KC 的表现可判定时，优先按 KC 粒度标记 progress；taskKcs 为空或缺失时退回现有宏观概念粒度，不影响教学
 24. hidden coreConcept 不是课堂上直接展示给学生的知识点名称；knowledge.points 应优先使用当前任务里可直接讲解、比较、验证的细粒度教学点，只有在确实没有更细候选时才允许退回到 coreConcept
 25. 当 knowledge.points 为空或明显过粗时，先基于任务文本生成 1-4 个本节课的初始知识点，再在后续轮次根据学生反馈动态拆分、合并、推进或回退
 26. knowledgeType 决定教学方式：factual 优先辨认与记忆巩固；conceptual 优先关系解释、类比、反例；procedural 优先分步示范与执行反馈；metacognitive 优先反思提问与策略澄清

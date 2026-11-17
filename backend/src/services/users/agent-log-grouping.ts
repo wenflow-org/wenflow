@@ -15,8 +15,8 @@ const CONVERSATION_AGENTS = new Set([
   'skill:goal-conversation',
   'skill:path-planning',
   'skill:path-reviewer',
-  'skill:stage-designer',
-  'skill:kc-mapper',
+  'skill:path-task-design',
+  'skill:path-kc-mapping',
   'path-agent',
 ]);
 
@@ -318,7 +318,7 @@ export function collapseAgentLogGroups(
       })),
     });
   }
-  // 未折叠进任何会话组的日志（teaching-turn/session-wrapup/peer 等）仍逐条输出
+  // 未折叠进任何会话组的日志（teaching-turn/teaching-wrapup/peer 等）仍逐条输出
   for (const [key, value] of dedupeMap) {
     const metadata = parseMetadata(value.metadata);
     const agent = String(value.agentId || '');

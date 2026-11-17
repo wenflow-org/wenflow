@@ -341,11 +341,11 @@ const pagination = reactive({
 const AGENT_OPTIONS = [
   { value: '', label: '全部' },
   { value: 'skill:path-planning', label: 'Path Agent' },
-  /* #218：下拉曾挂已废弃 id（teaching-agent / ai-teaching-agent / learner-model-agent，
+  /* #218：下拉曾挂已废弃 id（teaching-agent / ai-teaching-agent / profile-learner-model-agent，
      线上 0 行），「Agent=AI 授课」恒空。改为 manifest 中的真实 id
      （skill:teaching-turn 是授课真实执行体）。 */
   { value: 'skill:teaching-turn', label: 'AI 授课' },
-  { value: 'skill:learner-state-review', label: 'Learner State Hub' }
+  { value: 'skill:profile-state-review', label: 'Learner State Hub' }
 ];
 const CAPABILITY_OPTIONS = [
   { value: '', label: '全部' },
@@ -481,8 +481,8 @@ const displayLogs = computed(() => {
 /* 平台里结构性没有对应 agent 的能力类：筛选必然为空，不能沿用通用「暂无日志」
    （会被读成筛选或加载出错）。只有 tutoring 属于这一类——manifest 里没有任何
    辅导类 Agent/Skill（backend services/users/capability-groups 显式映射为空集）。
-   profile 不在此列：#218 复核确认库里确有该类调用（skill:learning-predictor /
-   skill:learner-state-review 等），后端能力筛选按 Profile 监控组全量成员派生，
+   profile 不在此列：#218 复核确认库里确有该类调用（skill:profile-learning-predict /
+   skill:profile-state-review 等），后端能力筛选按 Profile 监控组全量成员派生，
    因此不能再写「平台暂无学习者模型类调用记录」这种与事实相反的文案。 */
 const STRUCTURAL_EMPTY_CAPABILITIES: Record<string, string> = {
   tutoring: '平台暂无辅导类调用记录'
@@ -778,7 +778,7 @@ const formatAgentId = (logOrAgentId: string | AgentLogItem | null | undefined) =
   // 来源说明：本页为用户侧执行日志，无现成 agent 清单 API 可复用；id 含
   // 历史/业务别名（ai-teaching-agent、ai-tutor 等）与 admin 注册表不同构，
   // 保持本地字典，仅作显示层映射（未命中时原样回退 agentId）。
-  // #218：键以 manifest 真实 id 为准（skill:teaching-turn / skill:learner-model 等），
+  // #218：键以 manifest 真实 id 为准（skill:teaching-turn / skill:profile-learner-model 等），
   // 旧 id 保留只为兼容历史行。
   const agentNames: Record<string, string> = {
     'skill:goal-conversation': '目标对话',
@@ -788,27 +788,42 @@ const formatAgentId = (logOrAgentId: string | AgentLogItem | null | undefined) =
     'path-agent': '路径生成',
     // 2026-11-06 文案排查 §7：原展示名「阶段任务设计」含内部词「阶段任务」（门禁 R4），
     // 改为「课程阶段设计」——同一能力，用户可读且不再直出内部生成阶段名。
+    'skill:path-task-design': '课程阶段设计',
     'skill:stage-designer': '课程阶段设计',
     'skill:path-reviewer': '路径评审',
+    'skill:path-kc-mapping': '知识点映射',
     'skill:kc-mapper': '知识点映射',
     'teaching-agent': 'AI 授课',
     'skill:teaching-turn': 'AI 授课',
+    'skill:teaching-peer-reinforcement': '伴学补强',
     'skill:peer-reinforcement': '伴学补强',
+    'skill:teaching-wrapup': '课后总结',
     'skill:session-wrapup': '课后总结',
+    'skill:teaching-opening': '课堂开场',
     'skill:teaching-opening-generator': '课堂开场',
+    'skill:teaching-board-design': '课堂板书',
     'skill:board-designer': '课堂板书',
     'ai-teaching-agent': 'AI 授课',
     'profile-agent': '学习者 Agent',
+    'skill:profile-learner-model': '学习者模型',
     'skill:learner-model': '学习者模型',
+    'skill:profile-lesson-enrich': '课后知识增强',
     'skill:lesson-knowledge-enricher': '课后知识增强',
+    'skill:profile-adaptive-copy': '自适应引导文案',
     'skill:adaptive-guidance-copy': '自适应引导文案',
+    'skill:profile-progress-report': '学习进度报告',
     'skill:learner-progress-report': '学习进度报告',
+    'skill:profile-state-review': '学习状态复盘',
     'skill:learner-state-review': '学习状态复盘',
+    'skill:profile-concept-consolidate': '概念归并',
     'skill:concept-consolidator': '概念归并',
+    'skill:profile-concept-load': '概念负担评估',
     'skill:concept-load-estimator': '概念负担评估',
+    'skill:teaching-replan-attribution': '重排归因',
     'skill:replan-attribution': '重排归因',
+    'skill:profile-learning-predict': '学习表现预测',
     'skill:learning-predictor': '学习表现预测',
-    'learner-model-agent': '学习者模型',
+    'profile-learner-model-agent': '学习者模型',
     'ai-tutor': 'AI 辅导',
     'system-call': '平台底层调用'
   };
@@ -853,29 +868,44 @@ const getCapabilityType = (agentId?: string) => {
     'skill:path-planning': 'path',
     // 2026-11-04：path-agent 是路径生成编排器，此前未收录被归到 system，
     // 同一行来源标「业务层」、能力标「平台底层调用」自相矛盾（也与「隐藏底层调用」冲突）
+    'skill:path-task-design': 'path',
     'skill:stage-designer': 'path',
     'skill:path-reviewer': 'path',
+    'skill:path-kc-mapping': 'path',
     'skill:kc-mapper': 'path',
     'path-agent': 'path',
     'teaching-agent': 'teaching',
     'skill:teaching-turn': 'teaching',
+    'skill:teaching-peer-reinforcement': 'teaching',
     'skill:peer-reinforcement': 'teaching',
+    'skill:teaching-wrapup': 'teaching',
     'skill:session-wrapup': 'teaching',
+    'skill:teaching-opening': 'teaching',
     'skill:teaching-opening-generator': 'teaching',
+    'skill:teaching-board-design': 'teaching',
     'skill:board-designer': 'teaching',
     'ai-teaching-agent': 'teaching',
     'ai-tutor': 'tutoring',
     'profile-agent': 'profile',
+    'skill:profile-learner-model': 'profile',
     'skill:learner-model': 'profile',
+    'skill:profile-lesson-enrich': 'profile',
     'skill:lesson-knowledge-enricher': 'profile',
+    'skill:profile-adaptive-copy': 'profile',
     'skill:adaptive-guidance-copy': 'profile',
+    'skill:profile-progress-report': 'profile',
     'skill:learner-progress-report': 'profile',
+    'skill:profile-state-review': 'profile',
     'skill:learner-state-review': 'profile',
+    'skill:profile-concept-consolidate': 'profile',
     'skill:concept-consolidator': 'profile',
+    'skill:profile-concept-load': 'profile',
     'skill:concept-load-estimator': 'profile',
+    'skill:teaching-replan-attribution': 'profile',
     'skill:replan-attribution': 'profile',
+    'skill:profile-learning-predict': 'profile',
     'skill:learning-predictor': 'profile',
-    'learner-model-agent': 'profile',
+    'profile-learner-model-agent': 'profile',
     'unknown': 'system',
     'system-call': 'system'
   };

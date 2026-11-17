@@ -467,7 +467,7 @@ const NODE_TEXT: Record<string, string> = {
   'goal-conversation': '目标对话',
   'goal-conversation-agent': '目标对话',
   'path-planning': '路径规划',
-  'learner-model-agent': '学习记录'
+  'profile-learner-model-agent': '学习记录'
 }
 /* 教学策略枚举单源 = 后端 pedagogy.config / teaching-strategy-selector 的 8 类；
    末两条是早期与演示数据里的策略名，出现时也要读得懂 */

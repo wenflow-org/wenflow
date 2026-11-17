@@ -11,7 +11,7 @@ import { logger } from '../../utils/logger';
 import { runBackgroundTask } from '../background-task-tracker.service';
 import { executeSkill, executeSkillWithResult, auxSkillDefinitionMap, peerAgentDefinition } from '../../skills';
 import { teachingTurnAgentDefinition } from '../../skills/teaching-turn';
-import type { SessionWrapupArtifact } from '../../skills/session-wrapup';
+import type { SessionWrapupArtifact } from '../../skills/teaching-wrapup';
 import { TeachingOperationLeaseGuard } from './TeachingOperationLeaseGuard';
 import { teachingSessionRepository, type TeachingSessionRecord, type TeachingImage, type TeachingDiagram, type TeachingFigure } from './TeachingSessionRepository';import { knowledgeStateService, COMPLETION_TARGET_PROGRESS_FLOOR } from './KnowledgeStateService';
 import { peerTriggerService } from './PeerTriggerService';
@@ -90,7 +90,7 @@ import { assessAdjacentRepetition, findPreviousAssistantReply } from './teaching
 import { decideBoardIntent, numbersOnBoard, shouldSkipExampleRefresh, mergeCorrectionNotes, buildCorrectionDirective, collectTurnBoardFaceText, collectSpecTextFragments, findUnmatchedBoardReferences, referencesBoardWithoutBoardAvailable, type BoardCorrectionNote } from './board-intent';
 import { applyBoardOp } from './board-controller';
 import { BOARD_DESIGN_BASE_INSTRUCTION, boardPromptInputForTeacher, decideBoardAttachment, openBoard, type BoardState } from './board-state';
-import { designBoard } from './board-designer.service';
+import { designBoard } from './teaching-board-design.service';
 import { extractTeacherNumberBindings, findDanglingBoardPositionReferences, maskMismatchedBoardNumberLabels } from './board-intent';
 import { detectOpenRequest } from './teaching-closure';
 import { recordDegradation } from '../../skills/degradation-telemetry';
@@ -299,7 +299,7 @@ export async function generateOpening(context: TeachingScenarioContext): Promise
     let parsed: any = null;
     try {
       const result = await withTimeoutSignal(
-        (signal) => executeSkillWithResult(auxSkillDefinitionMap['teaching-opening-generator'], openingInput, { abortSignal: signal }),
+        (signal) => executeSkillWithResult(auxSkillDefinitionMap['teaching-opening'], openingInput, { abortSignal: signal }),
         OPENING_GENERATION_TIMEOUT_MS,
         'OPENING_GENERATION_TIMEOUT'
       );
@@ -335,7 +335,7 @@ export async function generateOpening(context: TeachingScenarioContext): Promise
     if (!context.lastLessonRecap && hasUnverifiablePriorClaim(opening)) {
       try {
         const retry = await withTimeoutSignal(
-          (signal) => executeSkillWithResult(auxSkillDefinitionMap['teaching-opening-generator'], {
+          (signal) => executeSkillWithResult(auxSkillDefinitionMap['teaching-opening'], {
             ...openingInput,
             priorClaimConstraint: OPENING_PRIOR_CLAIM_CONSTRAINT,
             __prompt: {
@@ -1397,7 +1397,7 @@ export async function processStudentMessage(
         || peerResult?.internal?.ext?.peer?.runtimeEnvelope
         || null;
     } catch (e: any) {
-      logger.warn('[AITeachingCoordinator] peer-reinforcement 失败', { error: e?.message || String(e) });
+      logger.warn('[AITeachingCoordinator] teaching-peer-reinforcement 失败', { error: e?.message || String(e) });
     }
   }
 

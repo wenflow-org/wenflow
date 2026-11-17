@@ -59,8 +59,8 @@ describe('path-planning 里程碑口径', () => {
   });
 });
 
-describe('stage-designer 默认值与交付物口径', () => {
-  const rules = rulesOf('stage-designer');
+describe('path-task-design 默认值与交付物口径', () => {
+  const rules = rulesOf('path-task-design');
 
   it('skillNature 缺失时统一按 cognitive_internalized，不再回退 tool_operation', () => {
     const joined = rules.join('\n');
@@ -91,13 +91,13 @@ describe('goal-conversation 时间模型', () => {
 
 describe('VL 判决链', () => {
   it('判决门文案与代码一致：观测留痕，结课权威在教师侧', () => {
-    const joined = rulesOf('virtual-learner-learn-turn-simulator').join('\n');
+    const joined = rulesOf('simulation-learn-turn').join('\n');
     expect(joined).toContain('平台会把判决作为观测留痕');
     expect(joined).not.toContain('代码会强制拦截');
   });
 
   it('判决器 inputs 声明了 pendingCheckpoint', () => {
-    const core = readCore('virtual-learner-epistemic-grounding');
+    const core = readCore('simulation-epistemic-grounding');
     expect(((core.inputs || []) as Array<{ name?: unknown }>).some((i) => i.name === 'pendingCheckpoint')).toBe(true);
   });
 });
@@ -117,17 +117,17 @@ describe('maxTokens 预算', () => {
 });
 
 describe('pipeline map 分类（不把直调/孤儿 prompt 静默当主链）', () => {
-  // 2026-11-02 更新：a896886d 已把 board-designer 按 F7 登记进 prompts/skills.yaml
-  // （kind=handler-only、registrationPoint=none、prompt 以独立产物 skill.board-designer.md 承载）。
+  // 2026-11-02 更新：a896886d 已把 teaching-board-design 按 F7 登记进 prompts/skills.yaml
+  // （kind=handler-only、registrationPoint=none、prompt 以独立产物 skill.teaching-board-design.md 承载）。
   // 登记之后它不再是「绕过户口簿的 compiled-only」，而是**已登记的直调能力**——本用例据此改成
   // 断言「它在 skillsWithoutPrompt 里被显式标为 handler-only，且不在 compiled-only 名单里」，
   // 保留原意：直调/孤儿 prompt 不许被当成主链静默混入。
-  it('board-designer 已登记为 handler-only（不再是 compiled-only）；无 core 的孤儿 prompt 单列', () => {
+  it('teaching-board-design 已登记为 handler-only（不再是 compiled-only）；无 core 的孤儿 prompt 单列', () => {
     const mapPath = path.resolve(process.cwd(), '..', 'doc', 'pipeline-map.json');
     const map = JSON.parse(fs.readFileSync(mapPath, 'utf8'));
     const ids = (rows: Array<Record<string, unknown>>) => rows.map((row) => row.skillId || row.id || row.name);
-    expect(ids(map.skillsWithoutPrompt)).toContain('board-designer');
-    expect(ids(map.compiledOnlyPrompts)).not.toContain('board-designer');
+    expect(ids(map.skillsWithoutPrompt)).toContain('teaching-board-design');
+    expect(ids(map.compiledOnlyPrompts)).not.toContain('teaching-board-design');
     expect(ids(map.orphanPrompts)).toEqual(
       expect.arrayContaining(['concept-priority', 'path-adjustment-generator']),
     );
@@ -138,10 +138,10 @@ describe('pipeline map 输入声明覆盖', () => {
   it('mainline 不允许无 inputs，除非是 service 直调（运行期入参）的已知例外', () => {
     const mapPath = path.resolve(process.cwd(), '..', 'doc', 'pipeline-map.json');
     const map = JSON.parse(fs.readFileSync(mapPath, 'utf8'));
-    // learning-predictor 由 TeachingContextBuilder service 直调，入参是运行期对象，
+    // profile-learning-predict 由 TeachingContextBuilder service 直调，入参是运行期对象，
     // core 的 inputs schema 要求 ref（skill/sandbox/user），没有 truthful 的 ref 可声明。
     // 其余 mainline 若 inputs=0，视为契约缺失（新 Skill 漏声明）。
-    const runtimeInputMainline = new Set(['learning-predictor']);
+    const runtimeInputMainline = new Set(['profile-learning-predict']);
     const missing = (map.prompts as Array<{ kind?: unknown; inputs?: unknown; skillId: string }>)
       .filter((p) => p.kind === 'mainline' && p.inputs === 0)
       .map((p) => p.skillId)

@@ -163,7 +163,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     defaultModelConfig: { temperature: 0.2, maxTokens: 64000 }
   },
   {
-    id: 'skill:stage-designer',
+    id: 'skill:path-task-design',
+    aliases: ['stage-designer', 'skill:stage-designer'],
     name: '阶段设计 Skill',
     description: '细化阶段内的任务与验收点',
     category: 'path',
@@ -187,7 +188,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     defaultModelConfig: { temperature: 0.3, maxTokens: 4000 }
   },
   {
-    id: 'skill:kc-mapper',
+    id: 'skill:path-kc-mapping',
+    aliases: ['kc-mapper', 'skill:kc-mapper'],
     name: '知识组件映射 Skill',
     description: '将认知概念和子任务分解为细粒度 KC，标注前置依赖关系',
     category: 'path',
@@ -216,7 +218,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     defaultModelConfig: { temperature: 0.7, maxTokens: 4000 }
   },
   {
-    id: 'skill:peer-reinforcement',
+    id: 'skill:teaching-peer-reinforcement',
     name: '伴学补强 Skill',
     description: '同伴式引导讨论与理解补强',
     category: 'teaching',
@@ -224,12 +226,12 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     runtimeEnabled: true,
     userVisible: false,
     monitoringGroup: 'Teaching',
-    aliases: ['peer-agent'],
+    aliases: ['peer-agent', 'peer-reinforcement', 'skill:peer-reinforcement'],
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.7, maxTokens: 4000 }
   },
   {
-    id: 'skill:session-wrapup',
+    id: 'skill:teaching-wrapup',
     name: '课后产出 Skill',
     description: '生成课后总结与评估',
     category: 'teaching',
@@ -238,16 +240,17 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     userVisible: false,
     userListed: true,
     monitoringGroup: 'Teaching',
-    aliases: ['session-wrapup-agent'],
+    aliases: ['teaching-wrapup-agent', 'session-wrapup', 'skill:session-wrapup'],
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.7, maxTokens: 4000 }
   },
   // 2026-10-29 数据审计 M-20：此前漏登记 manifest，/agents/logs 按监测组筛选时该 Skill
   // （教学开场白生成，周窗 604 行/36 错）不归属任何组、教学环节统计系统性漏计。
   // 教学主链第 2 步（ai-teaching.definition step 2 opening-generation），模型参数对齐
-  // prompts/core/teaching-opening-generator.yaml params。
+  // prompts/core/teaching-opening.yaml params。
   {
-    id: 'skill:teaching-opening-generator',
+    id: 'skill:teaching-opening',
+    aliases: ['teaching-opening-generator', 'skill:teaching-opening-generator'],
     name: '课堂开场交互生成器 Skill',
     description: '生成教学 Session 的开场 message、question 与 quickReplies',
     category: 'teaching',
@@ -258,12 +261,13 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.4, maxTokens: 64000 }
   },
-  // （课堂板书设计器，v19 白板的执行体：ai-teaching/board-designer.service 以 agentId
-  // skill:board-designer 写调用日志）与 teaching-opening-generator 同因登记：不登记则
+  // （课堂板书设计器，v19 白板的执行体：ai-teaching/teaching-board-design.service 以 agentId
+  // skill:teaching-board-design 写调用日志）与 teaching-opening 同因登记：不登记则
   // 不归属任何监控组、教学环节统计漏计。模型参数对齐 service 内 generationOverride
   // （temperature 0.2/重试 0.45、maxTokens 16000，BOARD_DESIGNER_MODEL 可环境覆盖）。
   {
-    id: 'skill:board-designer',
+    id: 'skill:teaching-board-design',
+    aliases: ['board-designer', 'skill:board-designer'],
     name: '课堂板书设计器 Skill',
     description: '按本轮教学意图生成课堂白板（认知减负区）的两栏板面 spec',
     category: 'teaching',
@@ -271,7 +275,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     runtimeEnabled: true,
     userVisible: false,
     monitoringGroup: 'Teaching',
-    // #235：它**有**提示词（prompts/skill.board-designer.md），只是没有 core yaml 源。
+    // #235：它**有**提示词（prompts/skill.teaching-board-design.md），只是没有 core yaml 源。
     // 这里原先写 true 与 skills.yaml 的声明一起构成「同一件事的两份互相否定声明」。
     noPromptFile: false,
     ioContractVersion: 'agent-output-v1',
@@ -280,7 +284,7 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
 
   // ============ Profile 下辖 Skills ============
   {
-    id: 'skill:learner-model',
+    id: 'skill:profile-learner-model',
     name: '学习者模型 Skill',
     description: '聚合学习者画像、状态与知识记忆（handler-only，无 LLM prompt）',
     category: 'profile',
@@ -288,13 +292,14 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     runtimeEnabled: true,
     userVisible: false,
     monitoringGroup: 'Profile',
-    aliases: ['learner-model-agent'],
+    aliases: ['profile-learner-model-agent', 'learner-model', 'skill:learner-model'],
     noPromptFile: true,
     ioContractVersion: 'agent-output-v1',
     defaultModelConfig: { temperature: 0.3, maxTokens: 1000 }
   },
   {
-    id: 'skill:lesson-knowledge-enricher',
+    id: 'skill:profile-lesson-enrich',
+    aliases: ['lesson-knowledge-enricher', 'skill:lesson-knowledge-enricher'],
     name: '课后知识增强 Skill',
     description: '课后单次调用：蒸馏知识台账增量并抽取隐性概念线索',
     category: 'profile',
@@ -308,7 +313,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
   // 2026-10-14 用户拍板由 teaching 段迁入：产出是学习者页面文案（dashboard/path 首屏），
   // 消费画像阶段的 learnerSnapshot/learningState，不在授课交付链上（teaching.yaml routings 无它）
   {
-    id: 'skill:adaptive-guidance-copy',
+    id: 'skill:profile-adaptive-copy',
+    aliases: ['adaptive-guidance-copy', 'skill:adaptive-guidance-copy'],
     name: '自适应引导文案 Skill',
     description: '根据情境生成自适应引导话术',
     category: 'profile',
@@ -324,7 +330,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
   // 用户 AI 任务列表」的过滤，在通知中心显示成 4 条没有名字的「AI 任务」。
   // 它们都是平台内部机制（不是用户发起的动作），一律 userVisible: false。
   {
-    id: 'skill:learner-progress-report',
+    id: 'skill:profile-progress-report',
+    aliases: ['learner-progress-report', 'skill:learner-progress-report'],
     name: '学习进度报告 Skill',
     description: '生成学习进度报告文本（供学习台/画像消费的平台内部调用）',
     category: 'profile',
@@ -336,7 +343,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     defaultModelConfig: { temperature: 0.4, maxTokens: 4000 }
   },
   {
-    id: 'skill:learner-state-review',
+    id: 'skill:profile-state-review',
+    aliases: ['learner-state-review', 'skill:learner-state-review'],
     name: '学习状态复盘 Skill',
     description: '课内状态复盘（LLM 观测）：给出"为什么卡、下一步怎么调"的诊断判断',
     category: 'profile',
@@ -348,7 +356,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     defaultModelConfig: { temperature: 0.4, maxTokens: 4000 }
   },
   {
-    id: 'skill:concept-consolidator',
+    id: 'skill:profile-concept-consolidate',
+    aliases: ['concept-consolidator', 'skill:concept-consolidator'],
     name: '概念归并 Skill',
     description: '判断哪些知识点名字其实是同一个概念的不同说法，输出可执行的归并建议',
     category: 'profile',
@@ -360,7 +369,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     defaultModelConfig: { temperature: 0.2, maxTokens: 4000 }
   },
   {
-    id: 'skill:concept-load-estimator',
+    id: 'skill:profile-concept-load',
+    aliases: ['concept-load-estimator', 'skill:concept-load-estimator'],
     name: '概念负担评估 Skill',
     description: '逐条判断知识点的真实负担：装了 1 个还是几个概念、陈述性/程序性、检索难度档',
     category: 'profile',
@@ -372,7 +382,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     defaultModelConfig: { temperature: 0.2, maxTokens: 4000 }
   },
   {
-    id: 'skill:replan-attribution',
+    id: 'skill:teaching-replan-attribution',
+    aliases: ['replan-attribution', 'skill:replan-attribution'],
     name: '重排归因 Skill',
     description: '在给定证据里找出路径值得重排的主因、在候选方向里选一个并留下可检验断言',
     category: 'profile',
@@ -384,7 +395,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     defaultModelConfig: { temperature: 0.3, maxTokens: 4000 }
   },
   {
-    id: 'skill:learning-predictor',
+    id: 'skill:profile-learning-predict',
+    aliases: ['learning-predictor', 'skill:learning-predictor'],
     name: '学习表现预测 Skill',
     description: '任务开始前预测卡壳风险与建议深度，校准闭环验证',
     category: 'profile',
@@ -398,7 +410,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
 
   // ============ Simulation 下辖 Skills ============
   {
-    id: 'skill:virtual-learner-persona-designer',
+    id: 'skill:simulation-persona-designer',
+    aliases: ['virtual-learner-persona-designer', 'skill:virtual-learner-persona-designer'],
     name: '虚拟学习者人格设计 Skill',
     description: '为虚拟学习者生成稳定人格设定',
     category: 'simulation',
@@ -410,7 +423,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     defaultModelConfig: { temperature: 0.8, maxTokens: 64000 }
   },
   {
-    id: 'skill:virtual-learner-scenario-designer',
+    id: 'skill:simulation-scenario-designer',
+    aliases: ['virtual-learner-scenario-designer', 'skill:virtual-learner-scenario-designer'],
     name: '虚拟学习者场景设计 Skill',
     description: '设计虚拟学习者的学习目标场景',
     category: 'simulation',
@@ -422,7 +436,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     defaultModelConfig: { temperature: 0.9, maxTokens: 64000 }
   },
   {
-    id: 'skill:virtual-learner-goal-dialogue-simulator',
+    id: 'skill:simulation-goal-dialogue',
+    aliases: ['virtual-learner-goal-dialogue-simulator', 'skill:virtual-learner-goal-dialogue-simulator'],
     name: '虚拟学习者目标对话模拟 Skill',
     description: '模拟虚拟学习者在 Goal 阶段的回复',
     category: 'simulation',
@@ -434,7 +449,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     defaultModelConfig: { temperature: 0.8, maxTokens: 64000 }
   },
   {
-    id: 'skill:virtual-learner-path-evaluator',
+    id: 'skill:simulation-path-evaluate',
+    aliases: ['virtual-learner-path-evaluator', 'skill:virtual-learner-path-evaluator'],
     name: '虚拟学习者路径评估 Skill',
     description: '模拟虚拟学习者对 Path 的反馈与评估',
     category: 'simulation',
@@ -446,7 +462,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     defaultModelConfig: { temperature: 0.8, maxTokens: 64000 }
   },
   {
-    id: 'skill:virtual-learner-learn-turn-simulator',
+    id: 'skill:simulation-learn-turn',
+    aliases: ['virtual-learner-learn-turn-simulator', 'skill:virtual-learner-learn-turn-simulator'],
     name: '虚拟学习者教学回合模拟 Skill',
     description: '模拟虚拟学习者在 Learn 阶段的单轮回复',
     category: 'simulation',
@@ -458,7 +475,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     defaultModelConfig: { temperature: 0.8, maxTokens: 64000 }
   },
   {
-    id: 'skill:virtual-learner-epistemic-grounding',
+    id: 'skill:simulation-epistemic-grounding',
+    aliases: ['virtual-learner-epistemic-grounding', 'skill:virtual-learner-epistemic-grounding'],
     name: '虚拟学习者认知判决 Skill',
     description: '基于学习者画像掌握度，对本轮能否做对当前步骤做离散认知判决（BEAGLE 物理两阶段第一段）',
     category: 'simulation',
@@ -470,7 +488,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     defaultModelConfig: { temperature: 0.3, maxTokens: 800 }
   },
   {
-    id: 'skill:virtual-learner-referee',
+    id: 'skill:simulation-referee',
+    aliases: ['virtual-learner-referee', 'skill:virtual-learner-referee'],
     name: '平台体验裁判 Skill',
     description: '基于 Blackbox 公开轨迹、旁路诊断和控制回执生成独立实验裁判报告',
     category: 'simulation',
@@ -482,7 +501,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     defaultModelConfig: { temperature: 0.2, maxTokens: 2400 }
   },
   {
-    id: 'skill:virtual-learner-memory-curator',
+    id: 'skill:simulation-memory-curate',
+    aliases: ['virtual-learner-memory-curator', 'skill:virtual-learner-memory-curator'],
     name: '虚拟学习者课后记忆提炼 Skill',
     description: '以虚拟学习者本人视角，从课堂回合中提炼"自己觉得学会了什么、卡在哪"，产出可沉淀的记忆增量',
     category: 'simulation',
@@ -494,7 +514,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     defaultModelConfig: { temperature: 0.3, maxTokens: 2400 }
   },
   {
-    id: 'skill:virtual-learner-actor-auditor',
+    id: 'skill:simulation-actor-audit',
+    aliases: ['virtual-learner-actor-auditor', 'skill:virtual-learner-actor-auditor'],
     name: '角色保真审计 Skill',
     description: '基于画像、故事、摩擦预算、私有状态和公开行为评估合成学习者可信度',
     category: 'simulation',
@@ -562,7 +583,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     noPromptFile: true
   },
   {
-    id: 'skill:material-collector',
+    id: 'skill:path-material-collect',
+    aliases: ['material-collector', 'skill:material-collector'],
     name: '资料采集编排器 Skill',
     description: '在 goal→path 之间采集外部权威资料：确定性编排 search→选源→fetch，LLM 仅抽取带引文的要点，产出 Material Pack',
     category: 'tool',
@@ -573,7 +595,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     noPromptFile: true
   },
   {
-    id: 'skill:material-brief',
+    id: 'skill:path-material-brief',
+    aliases: ['material-brief', 'skill:material-brief'],
     name: '资料理解摘要器 Skill',
     description: 'Document Summary Index 摘要节点：对上传资料一次性产出结构化理解 brief（是什么/讲什么/目录/核心概念/天然切分维度），持久化在资料记录上供 goal/path 复用',
     category: 'tool',
@@ -595,7 +618,8 @@ const AGENT_MANIFEST: AgentManifestEntry[] = [
     noPromptFile: true
   },
   {
-    id: 'skill:classroom-quality-judge',
+    id: 'skill:teaching-classroom-judge',
+    aliases: ['classroom-quality-judge', 'skill:classroom-quality-judge'],
     name: '课堂质量独立评审 Skill',
     description: '课堂级独立 LLM 病历单：单节课逐轮记录 + 学习者真实可见的板书/图文载荷 + 收束产出，产出 code/severity/evidenceIds 结构化发现（2026-11-13 mini-batch，referee 看不到课堂内部证据的补位面）',
     category: 'tool',
@@ -628,21 +652,21 @@ for (const item of AGENT_MANIFEST) {
  */
 export const LEGACY_AGENT_MEMBERS: Record<string, string[]> = {
   'goal-agent': ['skill:goal-conversation'],
-  'path-agent': ['skill:path-planning', 'skill:stage-designer', 'skill:path-reviewer', 'skill:kc-mapper'],
-  'teaching-agent': ['skill:teaching-turn', 'skill:peer-reinforcement', 'skill:session-wrapup'],
-  // adaptive-guidance-copy 2026-10-14 由 teaching-agent 迁入（产出=学习者页面文案，见 skills.yaml 注释）。
+  'path-agent': ['skill:path-planning', 'skill:path-task-design', 'skill:path-reviewer', 'skill:path-kc-mapping'],
+  'teaching-agent': ['skill:teaching-turn', 'skill:teaching-peer-reinforcement', 'skill:teaching-wrapup'],
+  // profile-adaptive-copy 2026-10-14 由 teaching-agent 迁入（产出=学习者页面文案，见 skills.yaml 注释）。
   // 顺序 = skills.yaml 文件顺序（P1 派生等价校验按文件序比对，不能随意排）
-  'profile-agent': ['skill:adaptive-guidance-copy', 'skill:learner-model', 'skill:lesson-knowledge-enricher', 'skill:learning-predictor'],
+  'profile-agent': ['skill:profile-adaptive-copy', 'skill:profile-learner-model', 'skill:profile-lesson-enrich', 'skill:profile-learning-predict'],
   'simulation-agent': [
-    'skill:virtual-learner-persona-designer',
-    'skill:virtual-learner-scenario-designer',
-    'skill:virtual-learner-goal-dialogue-simulator',
-    'skill:virtual-learner-path-evaluator',
-    'skill:virtual-learner-learn-turn-simulator',
-    'skill:virtual-learner-referee',
-    'skill:virtual-learner-memory-curator',
-    'skill:virtual-learner-actor-auditor',
-    'skill:virtual-learner-epistemic-grounding'
+    'skill:simulation-persona-designer',
+    'skill:simulation-scenario-designer',
+    'skill:simulation-goal-dialogue',
+    'skill:simulation-path-evaluate',
+    'skill:simulation-learn-turn',
+    'skill:simulation-referee',
+    'skill:simulation-memory-curate',
+    'skill:simulation-actor-audit',
+    'skill:simulation-epistemic-grounding'
   ]
 };
 
@@ -772,7 +796,7 @@ export function getOfficialAgentDefinitionsForUsers() {
  * 用户默认「AI 任务记录」列表（GET /me/agent-logs 不带筛选）放行的 agentId 集合。
  * 口径 = 真实写日志的业务动作（manifest userListed），与「是否顶层编排器」（userVisible）解耦：
  * goal-agent / teaching-agent 虽是 userVisible=true，但全表 0 行，放行它们只会让默认列表结构性
- * 只剩 path-agent；api-gateway / kc-mapper / adaptive-guidance-copy 等内部行不在集合内，自然被排除。
+ * 只剩 path-agent；api-gateway / path-kc-mapping / profile-adaptive-copy 等内部行不在集合内，自然被排除。
  */
 export function listUserListedAgentIds(): string[] {
   return AGENT_MANIFEST

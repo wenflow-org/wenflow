@@ -1,0 +1,744 @@
+import {
+  SkillDefinition,
+  SkillExecutionResult,
+} from '../protocol';
+import { callPrompt } from '../../composers/prompt-composer';
+import { mapSkillOutputEnvelope } from '../../services/prompt-lab/envelope-adapter';
+import { loadPromptFile } from '../../composers/prompt-files/loader';
+import {
+  type VirtualLearnerPersona,
+  type VirtualLearnerStory,
+  type FrictionBudget,
+  decideFrictionTrigger,
+  PERSONA_FIELD_ANCHORS_HINT,
+  projectSimulatorPayload,
+  collectVisibleHistoryImages,
+} from '../virtual-learner-shared';
+import { buildVisionContent } from '../../utils/vision-content';
+import type { EpistemicGrounding } from '../simulation-epistemic-grounding';
+
+export const VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_MAX_TOKENS = 800;
+export const VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_TEMPERATURE = 0.7;
+export const VIRTUAL_LEARNER_LEARN_TURN_SIMULATION_FAILED = 'VIRTUAL_LEARNER_LEARN_TURN_SIMULATION_FAILED';
+
+// File-as-Truth: the ACTIVE prompt at runtime is compiled from prompts/core/*.yaml.
+// Load it from the compiled artifact here; do not embed a second copy (dual-source drift).
+export const VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_PROMPT =
+  loadPromptFile('skill:simulation-learn-turn')?.systemPrompt || '';
+
+export type LearnLearnerPhase = 'trying' | 'blocked' | 'verifying' | 'ready_to_close';
+
+export interface LearnLearnerVisibleMessage {
+  role: 'learner' | 'teacher';
+  content: string;
+  /** 教师配图（#123）：以 image_url 内容块随请求发送；payload 里仍只投影文本 */
+  images?: Array<{ url: string; caption?: string | null }>;
+}
+
+export interface LearnLearnerSimulationInput {
+  learner: VirtualLearnerPersona | Record<string, any>;
+  story?: VirtualLearnerStory | Record<string, any> | null;
+  visibleContext: {
+    history: LearnLearnerVisibleMessage[];
+    lastTeacherMessage?: string;
+  };
+  currentPhase: LearnLearnerPhase;
+  previousLearnerState?: Record<string, any> | null;
+  currentTask?: {
+    title?: string | null;
+    milestoneTitle?: string | null;
+    /** 当前 task 的验收标准：学习者自评“是否达成”时以此为对照，与教师侧判据对齐 */
+    acceptanceCriteria?: string | null;
+    description?: string | null;
+  } | null;
+  knowledgeSnapshot?: Array<{
+    name: string;
+    status?: string;
+    progress?: number;
+  }>;
+  /** 学习者记忆（已掌握/到期复习/最近完成事项），供模拟器自然引用“我记得/我之前做过” */
+  learnerMemory?: {
+    mastered?: string[];
+    dueReview?: string[];
+    struggling?: string[];
+    recentCompleted?: string[];
+    /**
+     * 最近完成事项的具身细节（外部审计 P1-7）：只有标题不够，学习者跨课要能说出
+     * "上次我把报价单压到一页宽"这种具体操作，而不是只记得概念名。
+     */
+    recentDetails?: Array<{
+      title?: string;
+      deliverable?: string | null;
+      memoryDelta?: string | null;
+      selfCalibration?: string | null;
+      mastered?: string[];
+      struggling?: string[];
+    }>;
+  } | null;
+  /** 本轮认知判决（物理两阶段第一段产出，硬约束） */
+  epistemicGrounding?: EpistemicGrounding | null;
+  /** 控制学习者对抗度. 默认 'normal' */
+  frictionBudget?: FrictionBudget;
+  /**
+   * 当前待作答的理解检查点（不含答案键）。有值时应按人设给出 `checkpointAnswer`，
+   * 而不是继续闲聊——平台在待答检查点未消费前不会出下一题。
+   */
+  pendingCheckpoint?: {
+    id: string;
+    type: 'single_choice' | 'multi_choice' | 'short_answer';
+    question: string;
+    options?: Array<{ id: string; text: string }>;
+    allowSkip?: boolean;
+  } | null;
+  /**
+   * 日期模拟的时间上下文（**可选**，仅日期模拟开启时注入）。
+   * 注意：此前只声明在 yaml / 调用方，payload 未透传 → 对应的 "temporalContext" 规则是死的。
+   */
+  temporalContext?: {
+    simulatedNow?: string;
+    simulatedDay?: string;
+    dayIndex?: number;
+    timezone?: string;
+    sinceLastSessionDays?: number | null;
+  } | null;
+  /**
+   * 代码裁决的"这次还能不能想起来"观测（Q4）：对到期复习点的**概率化提取**结果。
+   * 模拟器据此人设化表达（CLEAR 顺畅、VAGUE 含糊/舌尖、CONFUSED 记成别的、FAILED 记不得）。
+   */
+  memoryRecall?: Array<{
+    conceptKey: string;
+    status: 'CLEAR' | 'VAGUE' | 'CONFUSED' | 'FAILED';
+    outputConceptKey?: string;
+  }> | null;
+}
+
+export interface LearnLearnerSimulationOutput {
+  reply: string;
+  emotion: 'neutral' | 'slightly_frustrated' | 'happy' | 'confident' | 'confused' | string;
+  /** 当 LLM 失败/校验失败时返回兜底数据, 评估时应排除这些 turn */
+  degraded?: boolean;
+  learnerState: {
+    phaseFocus: LearnLearnerPhase;
+    taskUnderstanding: number;
+    conceptualMastery: number;
+    proceduralMastery: number;
+    misconceptionRisk: number;
+    helpSeekingReadiness: number;
+    cognitiveLoad: number;
+    wantsHint: boolean;
+    wantsWorkedExample: boolean;
+    readyForNextTask: boolean;
+    remainingBlockers: string[];
+  };
+  learnerFeedback: {
+    selfReportedTaskDone: boolean;
+    satisfaction: number;
+    confidence: number;
+    wantsMoreHelp: boolean;
+    /** 达标后仍想就本课内容继续深入的延伸意愿（#124；不是未完成卡点） */
+    wantsExtension: boolean;
+    stopAsking: boolean;
+    remainingBlockers: string[];
+    reason: string;
+  };
+  debug?: {
+    visibleSignal?: string;
+    stateChangeReason?: string;
+    /** 归一化补齐检测：LLM 未输出、由代码用 fallback 默认值填充的状态字段统计 */
+    normalizedFallback?: {
+      fieldCount: number;
+      learnerState: string[];
+      learnerFeedback: string[];
+    };
+    /** P1-5：认知判决完成门拦截原因（判决缺失/放行时不写） */
+    judgeCompletionBlock?: string;
+    /** P1-4：判错轮 mastery 上界钳制的字段（无钳制时不写） */
+    judgeMasteryClampedFields?: string[];
+  };
+  /**
+   * 对 `pendingCheckpoint` 的作答草案（仅在有检查点时产出）。
+   * `selectedOptionIds` 必须是题目里真实存在的选项 id；简答题用 `answerText`。
+   */
+  checkpointAnswer?: {
+    selectedOptionIds?: string[];
+    answerText?: string;
+    confidence?: number;
+  };
+}
+
+
+function clamp01(value: any, fallback: number) {
+  const num = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(num)) return fallback;
+  return Math.max(0, Math.min(1, num));
+}
+
+function safeText(value: any): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function safeBool(value: any, fallback = false): boolean {
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+function normalizeStringArray(value: any): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => safeText(item)).filter(Boolean).slice(0, 5);
+}
+
+function buildFeedbackFromState(state: LearnLearnerSimulationOutput['learnerState'], reason = ''): LearnLearnerSimulationOutput['learnerFeedback'] {
+  const blockers = normalizeStringArray(state.remainingBlockers);
+  const confidentEnough = state.taskUnderstanding >= 0.78 && Math.max(state.conceptualMastery, state.proceduralMastery) >= 0.65;
+  const wantsMoreHelp = state.wantsHint || state.wantsWorkedExample || blockers.length > 0 || state.misconceptionRisk >= 0.45;
+  const selfReportedTaskDone = state.phaseFocus === 'ready_to_close' && confidentEnough && !wantsMoreHelp;
+
+  return {
+    selfReportedTaskDone,
+    satisfaction: clamp01(selfReportedTaskDone ? 0.86 : state.taskUnderstanding, 0.45),
+    confidence: clamp01(Math.max(state.conceptualMastery, state.proceduralMastery, state.taskUnderstanding), 0.45),
+    wantsMoreHelp,
+    // 默认无延伸意愿：只有模拟器显式输出且已达标时才成立（归一化处再钳一次）
+    wantsExtension: false,
+    stopAsking: selfReportedTaskDone,
+    remainingBlockers: blockers,
+    reason: reason || (selfReportedTaskDone ? '当前 task 已能跟上，愿意停止继续追问。' : '当前 task 仍有未完全确认的地方。')
+  };
+}
+
+function sanitizeVisibleContent(text: string): string {
+  return safeText(text)
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\r\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
+/** 剥离学生回复开头的「理解检查：」模板前缀（检查点作答被整段回显的 harness 工件，评审 2026-10-10）。 */
+function stripCheckpointEchoPrefix(reply: string): string {
+  return String(reply || '').replace(/^\s*理解检查\s*[:：]\s*/, '');
+}
+
+function normalizePhase(value: any): LearnLearnerPhase {
+  return value === 'blocked' || value === 'verifying' || value === 'ready_to_close' ? value : 'trying';
+}
+
+/** 句子终止符（收尾时保留）：切断在此处即是完整一句，不再补省略号。 */
+const SENTENCE_END_CHARS = '。！？!?';
+/** 子句分隔符：只作为「未完」的收尾点——切断时补省略号，不得冒充完整句。 */
+const CLAUSE_BREAK_CHARS = '，、；：,;:';
+
+/**
+ * 超限时按标点边界收尾（A/B 报告 D1；2026-10-13 复评再修 lesson 13）。
+ * 初版把 48/80/96 当硬上限直接 slice → 半句；二次修复改「句末保留、子句分隔符丢弃」，
+ * 但子句分支**丢掉标点直接返回**，会产出无标点的半句（如「…可如果学生本来就爱琢磨题」），
+ * 教师据它当完整发言脑补后半句（复评实证）。本版规则：
+ *  ① 窗口内存在句末标点 → 收在句末（完整句，无省略号）；
+ *  ② 只有子句分隔符 → 收在子句边界并**补省略号**（明示未完，不再冒充完整句）；
+ *  ③ 通篇无标点 → 硬截断 + 省略号。
+ */
+function cropReply(
+  reply: string,
+  phase: LearnLearnerPhase,
+  options: { teacherMessage?: string | null; hasCheckpoint?: boolean } = {}
+) {
+  const normalized = sanitizeVisibleContent(reply);
+  if (!normalized) return '';
+  const parts = normalized.split(/(?<=[。！？!?])\s*|\n+/).map((item) => item.trim()).filter(Boolean);
+  const limit = resolveReplyBudget(phase, options);
+  const shortened = parts.slice(0, limit.sentences).join(' ');
+  if (shortened.length <= limit.chars) return shortened;
+  const head = shortened.slice(0, limit.chars);
+  const MIN_CUT = 16;
+  const sentenceBoundary = Math.max(...SENTENCE_END_CHARS.split('').map((char) => head.lastIndexOf(char)));
+  if (sentenceBoundary >= MIN_CUT) return head.slice(0, sentenceBoundary + 1).trim();
+  const clauseBoundary = Math.max(...CLAUSE_BREAK_CHARS.split('').map((char) => head.lastIndexOf(char)));
+  const cutAt = clauseBoundary >= MIN_CUT ? head.slice(0, clauseBoundary) : head.slice(0, Math.max(24, limit.chars - 1));
+  return `${cutAt.trim()}…`;
+}
+
+/**
+ * 老师明确要求列举/总结/分步骤时，1-2 句的默认上限必须让位——否则会稳定产出
+ * "三件事只说了第一件"的截断回复（外部审计 P0-3：多步清单任务永远完不成）。
+ * 只认老师最后一条消息里的显式请求，避免所有回复都变长。
+ */
+const EXTENDED_REPLY_REQUEST = /(列出|列举|列一下|写下来|写出来|说出来|讲一遍|说一遍|分点|逐条|依次|分别|逐一|各自|总结|概述|概括|复述|完整地|步骤|流程|排序|排一下|(回我|告诉我|说出|说明|解释)[^。！？!?\n]{0,14}([一二三四五六七八九十两\d]+|几)(件|点|条|句|步|个|项|方面))/;
+
+function resolveReplyBudget(
+  phase: LearnLearnerPhase,
+  options: { teacherMessage?: string | null; hasCheckpoint?: boolean }
+): { sentences: number; chars: number } {
+  if (EXTENDED_REPLY_REQUEST.test(String(options.teacherMessage || ''))) {
+    return { sentences: 6, chars: 360 };
+  }
+  if (options.hasCheckpoint) {
+    return { sentences: 3, chars: 160 };
+  }
+  return phase === 'ready_to_close'
+    ? { sentences: 1, chars: 48 }
+    : { sentences: 2, chars: phase === 'blocked' ? 80 : 96 };
+}
+
+function buildFallback(input: LearnLearnerSimulationInput): LearnLearnerSimulationOutput {
+  const phaseFocus = normalizePhase(input.currentPhase);
+  const previous = input.previousLearnerState || {};
+  const taskTitle = safeText(input.currentTask?.title) || '当前任务';
+  const reply = phaseFocus === 'blocked'
+    ? '我大概知道你在说什么，但我卡在这一步，不太确定接下来该怎么做。'
+    : phaseFocus === 'verifying'
+      ? '我先按你的意思试一下，感觉大概能跟上。'
+      : phaseFocus === 'ready_to_close'
+        ? '嗯，这一步我现在基本会了，可以继续。'
+        : `我先按这个方向试一下，看看 ${taskTitle} 这一步能不能做出来。`;
+
+  const learnerState = {
+    phaseFocus,
+    taskUnderstanding: clamp01(previous.taskUnderstanding, phaseFocus === 'trying' ? 0.45 : phaseFocus === 'verifying' ? 0.72 : phaseFocus === 'ready_to_close' ? 0.86 : 0.36),
+    conceptualMastery: clamp01(previous.conceptualMastery, phaseFocus === 'ready_to_close' ? 0.8 : 0.45),
+    proceduralMastery: clamp01(previous.proceduralMastery, phaseFocus === 'ready_to_close' ? 0.82 : 0.46),
+    misconceptionRisk: clamp01(previous.misconceptionRisk, phaseFocus === 'blocked' ? 0.68 : 0.32),
+    helpSeekingReadiness: clamp01(previous.helpSeekingReadiness, phaseFocus === 'blocked' ? 0.75 : 0.42),
+    cognitiveLoad: clamp01(previous.cognitiveLoad, phaseFocus === 'blocked' ? 0.74 : 0.42),
+    wantsHint: phaseFocus === 'blocked',
+    wantsWorkedExample: false,
+    readyForNextTask: phaseFocus === 'ready_to_close',
+    remainingBlockers: phaseFocus === 'blocked' ? ['当前步骤还没真正对上'] : []
+  };
+
+  return {
+    reply: cropReply(reply, phaseFocus, {
+      teacherMessage: input.visibleContext?.lastTeacherMessage,
+      hasCheckpoint: !!input.pendingCheckpoint,
+    }),
+    emotion: phaseFocus === 'blocked' ? 'confused' : 'neutral',
+    learnerState,
+    learnerFeedback: buildFeedbackFromState(learnerState, '模型输出不可用时的保守自评'),
+    debug: {
+      visibleSignal: 'fallback',
+      stateChangeReason: '模型输出不可用时的保守兜底'
+    }
+  };
+}
+
+/**
+ * 检查点作答草案归一化：只在**有待答检查点**时产出；选项 id 必须是题目里真实存在的，
+ * 避免模型编造 id 导致提交被判"选项无效"。
+ */
+function normalizeCheckpointAnswer(
+  raw: any,
+  checkpoint: LearnLearnerSimulationInput['pendingCheckpoint']
+): LearnLearnerSimulationOutput['checkpointAnswer'] {
+  if (!checkpoint) return undefined;
+  const validIds = new Set((checkpoint.options || []).map((option) => option.id));
+  const selected = Array.isArray(raw?.selectedOptionIds)
+    ? raw.selectedOptionIds
+        .map((item: any) => safeText(item))
+        .filter((id: string) => validIds.has(id))
+        .slice(0, 4)
+    : [];
+  const answerText = safeText(raw?.answerText).slice(0, 200);
+  const confidence = typeof raw?.confidence === 'number' ? clamp01(raw.confidence, 0.5) : undefined;
+  if (!selected.length && !answerText) return undefined;
+  return {
+    ...(selected.length ? { selectedOptionIds: selected } : {}),
+    ...(answerText ? { answerText } : {}),
+    ...(confidence !== undefined ? { confidence } : {}),
+  };
+}
+
+function normalizeOutput(parsed: any, input: LearnLearnerSimulationInput): LearnLearnerSimulationOutput {
+  const fallback = buildFallback(input);
+  const rawState = parsed?.learnerState && typeof parsed.learnerState === 'object' ? parsed.learnerState : {};
+  const rawFeedback = parsed?.learnerFeedback && typeof parsed.learnerFeedback === 'object' ? parsed.learnerFeedback : {};
+  const normalizedFallback = {
+    fieldCount: LEARN_STATE_FIELDS.filter((field) => !(field in rawState)).length
+      + LEARN_FEEDBACK_FIELDS.filter((field) => !(field in rawFeedback)).length,
+    learnerState: LEARN_STATE_FIELDS.filter((field) => !(field in rawState)).slice(0, 8),
+    learnerFeedback: LEARN_FEEDBACK_FIELDS.filter((field) => !(field in rawFeedback)).slice(0, 8),
+  };
+  const phaseFocus = normalizePhase(rawState.phaseFocus || input.currentPhase);
+  const learnerState = {
+    phaseFocus,
+    taskUnderstanding: clamp01(rawState.taskUnderstanding, fallback.learnerState.taskUnderstanding),
+    conceptualMastery: clamp01(rawState.conceptualMastery, fallback.learnerState.conceptualMastery),
+    proceduralMastery: clamp01(rawState.proceduralMastery, fallback.learnerState.proceduralMastery),
+    misconceptionRisk: clamp01(rawState.misconceptionRisk, fallback.learnerState.misconceptionRisk),
+    helpSeekingReadiness: clamp01(rawState.helpSeekingReadiness, fallback.learnerState.helpSeekingReadiness),
+    cognitiveLoad: clamp01(rawState.cognitiveLoad, fallback.learnerState.cognitiveLoad),
+    wantsHint: safeBool(rawState.wantsHint, fallback.learnerState.wantsHint),
+    wantsWorkedExample: safeBool(rawState.wantsWorkedExample, fallback.learnerState.wantsWorkedExample),
+    readyForNextTask: safeBool(rawState.readyForNextTask, fallback.learnerState.readyForNextTask),
+    remainingBlockers: normalizeStringArray(rawState.remainingBlockers).length ? normalizeStringArray(rawState.remainingBlockers) : fallback.learnerState.remainingBlockers,
+  };
+  // P1-4：判错轮硬钳制掌握度上界——与 learn-phase 的主链防线同口径，避免
+  // simulator 输出/blackbox 私有状态先保存了高于 masteryProb 的自评。
+  const judgeMasteryClampedFields: string[] = [];
+  const judge = input.epistemicGrounding;
+  if (judge?.sampledCorrectness === false && typeof judge.masteryProb === 'number' && Number.isFinite(judge.masteryProb)) {
+    for (const field of ['conceptualMastery', 'proceduralMastery'] as const) {
+      if (learnerState[field] > judge.masteryProb) {
+        learnerState[field] = judge.masteryProb;
+        judgeMasteryClampedFields.push(field);
+      }
+    }
+  }
+  const fallbackFeedback = buildFeedbackFromState(learnerState, fallback.learnerFeedback.reason);
+  const feedbackBlockers = normalizeStringArray(rawFeedback.remainingBlockers);
+  const wantsMoreHelp = safeBool(rawFeedback.wantsMoreHelp, fallbackFeedback.wantsMoreHelp);
+  // P1-5 / #46（2026-10-18 拍板）：认知判决只作观测留痕，不再改写学员自评、也不再否决结课。
+  // 旧实现把 judgeGate 焊进 selfReportedTaskDone，判决一 false 学员就永远「没学完」，
+  // 连收束熔断的连击都数不起来（实测 29/29 轮判死、40 轮空转）。学员是否认为学完，
+  // 由学员自己的反馈决定；结课权威在教师侧（computeClosureDecision 记录 judgeBlocked）。
+  const judgeGate = evaluateJudgeCompletionGate(input.epistemicGrounding);
+  const selfReportedTaskDone = safeBool(rawFeedback.selfReportedTaskDone, fallbackFeedback.selfReportedTaskDone)
+    && !wantsMoreHelp
+    && feedbackBlockers.length === 0;
+  // 延伸意愿（#124）：只有「已达标 + 无卡点」时才成立——它是达标后的深入兴趣，不是继续纠缠的借口
+  const wantsExtension = safeBool(rawFeedback.wantsExtension, fallbackFeedback.wantsExtension)
+    && selfReportedTaskDone;
+  const checkpointAnswer = normalizeCheckpointAnswer(parsed?.checkpointAnswer, input.pendingCheckpoint);
+
+  return {
+    // 「理解检查：」模板前缀剥离（2026-10-10 逐字稿评审）：作答检查点时模型会整段回显题面
+    // 模板，该前缀属 harness 工件，不应出现在学生可见消息里（评审 6 节逐字稿中 3 节可见）。
+    reply: cropReply(stripCheckpointEchoPrefix(parsed?.reply || fallback.reply), phaseFocus, {
+      teacherMessage: input.visibleContext?.lastTeacherMessage,
+      hasCheckpoint: !!input.pendingCheckpoint,
+    }),
+    emotion: safeText(parsed?.emotion) || fallback.emotion,
+    learnerState,
+    learnerFeedback: {
+      selfReportedTaskDone,
+      satisfaction: clamp01(rawFeedback.satisfaction, fallbackFeedback.satisfaction),
+      confidence: clamp01(rawFeedback.confidence, fallbackFeedback.confidence),
+      wantsMoreHelp,
+      wantsExtension,
+      stopAsking: safeBool(rawFeedback.stopAsking, fallbackFeedback.stopAsking) && selfReportedTaskDone,
+      remainingBlockers: feedbackBlockers,
+      reason: sanitizeVisibleContent(rawFeedback.reason || fallbackFeedback.reason),
+    },
+    debug: {
+      visibleSignal: sanitizeVisibleContent(parsed?.debug?.visibleSignal || ''),
+      stateChangeReason: sanitizeVisibleContent(parsed?.debug?.stateChangeReason || ''),
+      // 归一化补齐检测：LLM 未输出的状态字段由代码用 fallback 默认值填充，供审计区分
+      normalizedFallback,
+      // P1-5：判决完成门拦截留痕（判决缺失/放行时为 undefined，不写盘）
+      ...(judgeGate.reason ? { judgeCompletionBlock: judgeGate.reason } : {}),
+      // P1-4：判错轮掌握度钳制留痕（供 session evidence/blackbox 审计）
+      ...(judgeMasteryClampedFields.length ? { judgeMasteryClampedFields } : {}),
+    },
+    ...(checkpointAnswer ? { checkpointAnswer } : {}),
+  };
+}
+
+/**
+ * 认知判决的完成门阈值（P1-5）：masteryProb 低于该值视为未掌握，不得结课。
+ * 与 coordinators/simulation.learn.steps.ts 的同口径常量保持一致（两处均在授权面内）。
+ */
+export const LEARN_JUDGE_COMPLETION_MASTERY_THRESHOLD = 0.5;
+
+/**
+ * 判决完成门：判决缺失 → 放行（保持现状，宁松勿误伤）；判错或掌握概率低于阈值 → 拦截。
+ * 与 computeClosureDecision 的判决条款同口径，构成完成链的两道防线。
+ */
+export function evaluateJudgeCompletionGate(
+  grounding: EpistemicGrounding | null | undefined,
+  threshold = LEARN_JUDGE_COMPLETION_MASTERY_THRESHOLD
+): { allowsCompletion: boolean; reason: string | null } {
+  if (!grounding || typeof grounding !== 'object') return { allowsCompletion: true, reason: null };
+  if (grounding.sampledCorrectness === false) {
+    return { allowsCompletion: false, reason: 'judge-sampled-correctness-false' };
+  }
+  const mastery = typeof grounding.masteryProb === 'number' && Number.isFinite(grounding.masteryProb)
+    ? grounding.masteryProb
+    : null;
+  if (mastery !== null && mastery < threshold) {
+    return { allowsCompletion: false, reason: 'judge-mastery-below-threshold' };
+  }
+  return { allowsCompletion: true, reason: null };
+}
+
+const LEARN_STATE_FIELDS = [
+  'phaseFocus', 'taskUnderstanding', 'conceptualMastery', 'proceduralMastery',
+  'misconceptionRisk', 'helpSeekingReadiness', 'cognitiveLoad', 'wantsHint',
+  'wantsWorkedExample', 'readyForNextTask', 'remainingBlockers',
+] as const;
+
+const LEARN_FEEDBACK_FIELDS = [
+  'selfReportedTaskDone', 'satisfaction', 'confidence', 'wantsMoreHelp',
+  'wantsExtension', 'stopAsking', 'remainingBlockers', 'reason',
+] as const;
+
+export { normalizeOutput, LEARN_STATE_FIELDS, LEARN_FEEDBACK_FIELDS };
+
+/**
+ * 检查点 → payload 的**白名单投影**：只保留学习者可见字段。
+ * 用白名单而非透传，确保将来契约追加答案键类字段时不会被带进给模型的输入。
+ */
+function projectPendingCheckpoint(checkpoint: LearnLearnerSimulationInput['pendingCheckpoint']) {
+  if (!checkpoint || typeof checkpoint !== 'object') return null;
+  const options = Array.isArray(checkpoint.options)
+    ? checkpoint.options
+        .filter((option) => option && typeof option.id === 'string')
+        .map((option) => ({ id: option.id, text: typeof option.text === 'string' ? option.text : '' }))
+    : [];
+  const projected: Record<string, unknown> = {
+    id: typeof checkpoint.id === 'string' ? checkpoint.id : '',
+    type: checkpoint.type,
+    question: typeof checkpoint.question === 'string' ? checkpoint.question : '',
+  };
+  if (options.length) projected.options = options;
+  if (checkpoint.allowSkip !== undefined) projected.allowSkip = checkpoint.allowSkip === true;
+  return projected;
+}
+
+function buildUserPayload(input: LearnLearnerSimulationInput) {
+  const history = Array.isArray(input.visibleContext?.history)
+    ? input.visibleContext.history.map((message) => ({
+        role: message?.role === 'teacher' ? 'teacher' : 'learner',
+        content: sanitizeVisibleContent(message?.content || '')
+      })).filter((message) => message.content).slice(-6)
+    : [];
+
+  const friction = decideFrictionTrigger(input.frictionBudget);
+  const temporalContext = input.temporalContext || null;
+  const pendingCheckpoint = projectPendingCheckpoint(input.pendingCheckpoint);
+  const memoryRecall = Array.isArray(input.memoryRecall)
+    ? input.memoryRecall
+        .filter((item) => item && typeof item.conceptKey === 'string' && ['CLEAR', 'VAGUE', 'CONFUSED', 'FAILED'].includes(String(item.status)))
+        .slice(0, 6)
+        .map((item) => ({
+          conceptKey: item.conceptKey,
+          status: item.status,
+          ...(item.outputConceptKey && item.outputConceptKey !== item.conceptKey
+            ? { outputConceptKey: item.outputConceptKey }
+            : {})
+        }))
+    : [];
+
+  // learner 里的概念数组逐回合被画像回写（persistProfileConcepts），放进稳定前缀会从
+  // 第 4 个键起打断 KV 缓存；剥到尾部 conceptProgress（数据不丢，位置后移）
+  const learnerSrc = (input.learner && typeof input.learner === 'object' ? input.learner : {}) as Record<string, any>;
+  const { knownConcepts, struggleConcepts, ...learnerRest } = learnerSrc;
+  const learnerProfileSrc = learnerRest.profile && typeof learnerRest.profile === 'object'
+    ? { ...(learnerRest.profile as Record<string, any>) }
+    : null;
+  if (learnerProfileSrc) {
+    delete learnerProfileSrc.knownConcepts;
+    delete learnerProfileSrc.struggleConcepts;
+  }
+  const stableLearner: Record<string, any> = { ...learnerRest };
+  if (learnerProfileSrc) stableLearner.profile = learnerProfileSrc;
+  const conceptProgress = {
+    knownConcepts: Array.isArray(knownConcepts) ? knownConcepts : [],
+    struggleConcepts: Array.isArray(struggleConcepts) ? struggleConcepts : [],
+  };
+
+  const body = {
+    learner: input.learner || {},
+    story: input.story || null,
+    visibleContext: {
+      history,
+      lastTeacherMessage: sanitizeVisibleContent(input.visibleContext?.lastTeacherMessage || history.filter((item) => item.role === 'teacher').slice(-1)[0]?.content || '')
+    },
+    currentPhase: normalizePhase(input.currentPhase),
+    previousLearnerState: input.previousLearnerState || null,
+    currentTask: input.currentTask || null,
+    knowledgeSnapshot: Array.isArray(input.knowledgeSnapshot) ? input.knowledgeSnapshot.slice(0, 5) : [],
+    ...(temporalContext ? { temporalContext } : {}),
+    learnerMemory: input.learnerMemory && typeof input.learnerMemory === 'object'
+      ? {
+          mastered: Array.isArray(input.learnerMemory.mastered) ? input.learnerMemory.mastered.slice(0, 8) : [],
+          dueReview: Array.isArray(input.learnerMemory.dueReview) ? input.learnerMemory.dueReview.slice(0, 8) : [],
+          struggling: Array.isArray(input.learnerMemory.struggling) ? input.learnerMemory.struggling.slice(0, 8) : [],
+          recentCompleted: Array.isArray(input.learnerMemory.recentCompleted)
+            ? input.learnerMemory.recentCompleted.slice(0, 5)
+            : [],
+          ...(Array.isArray(input.learnerMemory.recentDetails) && input.learnerMemory.recentDetails.length
+            ? {
+                recentDetails: input.learnerMemory.recentDetails
+                  .filter((item) => item && typeof item.title === 'string' && item.title.trim())
+                  .slice(0, 4)
+                  .map((item) => ({
+                    title: item.title,
+                    ...(item.deliverable ? { deliverable: item.deliverable } : {}),
+                    ...(item.memoryDelta ? { memoryDelta: item.memoryDelta } : {}),
+                    ...(Array.isArray(item.mastered) && item.mastered.length ? { mastered: item.mastered.slice(0, 4) } : {}),
+                    ...(Array.isArray(item.struggling) && item.struggling.length ? { struggling: item.struggling.slice(0, 4) } : {}),
+                  }))
+              }
+            : {}),
+        }
+      : null,
+    epistemicGrounding: input.epistemicGrounding || null,
+    ...(memoryRecall.length ? { memoryRecall } : {}),
+    friction: {
+      budget: friction.budget,
+      triggerProbability: friction.triggered ? 1 : 0,
+      triggered: friction.triggered,
+      guidance: friction.guidance
+    },
+    personaAnchorHint: PERSONA_FIELD_ANCHORS_HINT,
+    // 2026-11-08 全 skill 缓存调查：删掉整键 `task`。它**只装** task.requirements——5 条英文硬指令，
+    // 在提示词里全部有（且更详细）的对应规则，而 `requirements` 本身在正文/写源里引用数为 0：
+    //   "reply only as the learner, in 1-2 short sentences"   → 规则 11（长度规则，含列举/分点例外）
+    //   "apply friction.guidance ..."                          → 规则 5（friction 硬约束）
+    //   "let personaAnchorHint fields implicitly steer ..."    → 规则 6
+    //   "you may naturally reference your learnerMemory ..."   → 规则 16
+    //   "when pendingCheckpoint is present, answer it via ..." → 规则 23
+    // 本键也不在提示词的 12 项输入契约声明内。
+    ...(pendingCheckpoint ? { pendingCheckpoint } : {})
+  };
+
+  // 稳定前缀（默认启用；PAYLOAD_STABLE_PREFIX=0 回退旧序）：常量/慢变块（personaAnchorHint/story/learner 去易变概念数组）前置，
+  // 逐回合变化块后置。knownConcepts/struggleConcepts 每回合被画像回写，从 learner 剥离到尾部 conceptProgress
+  if (process.env.PAYLOAD_STABLE_PREFIX !== '0') {
+    return {
+      personaAnchorHint: body.personaAnchorHint,
+      story: body.story,
+      learner: stableLearner,
+      currentPhase: body.currentPhase,
+      previousLearnerState: body.previousLearnerState,
+      currentTask: body.currentTask,
+      knowledgeSnapshot: body.knowledgeSnapshot,
+      conceptProgress,
+      ...(temporalContext ? { temporalContext } : {}),
+      learnerMemory: body.learnerMemory,
+      ...(memoryRecall.length ? { memoryRecall } : {}),
+      epistemicGrounding: body.epistemicGrounding,
+      friction: body.friction,
+      visibleContext: body.visibleContext,
+      ...(pendingCheckpoint ? { pendingCheckpoint } : {}),
+    };
+  }
+  return body;
+}
+
+export const virtualLearnerLearnTurnSimulatorDefinition: SkillDefinition = {
+  name: 'simulation-learn-turn',
+  displayName: '虚拟学习者 Learn 回合模拟器',
+  version: '1.0.0',
+  category: 'generation',
+  description: '基于学习者画像、故事触发面与教师可见上下文，模拟虚拟学习者在 Learn 阶段的短回复与主观状态。',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      learner: { type: 'object', description: '学习者画像', required: true },
+      story: { type: 'object', description: '故事触发面' },
+      visibleContext: { type: 'object', description: '完整可见对话上下文', required: true },
+      currentPhase: { type: 'string', description: 'trying|blocked|verifying|ready_to_close', required: true },
+      previousLearnerState: { type: 'object', description: '上一轮学习者主观状态' },
+      currentTask: { type: 'object', description: '当前 task 信息' },
+      knowledgeSnapshot: { type: 'array', description: '当前任务知识看板' },
+      learnerMemory: { type: 'object', description: '学习者长期记忆（已掌握/到期复习/最近完成）' },
+      temporalContext: { type: 'object', description: '日期模拟时间上下文（可选）' },
+      memoryRecall: { type: 'array', description: '代码裁决的到期点概率化提取结果（Q4）' },
+      epistemicGrounding: { type: 'object', description: '本轮认知判决（硬约束）' },
+      pendingCheckpoint: { type: 'object', description: '当前待作答的理解检查点（不含答案键）' },
+    },
+  },
+  outputSchema: {
+    type: 'object',
+    properties: {
+      reply: { type: 'string', description: '学习者自然回复' },
+      emotion: { type: 'string', description: '当前情绪' },
+      learnerState: { type: 'object', description: 'Learn 阶段学习者主观状态' },
+      learnerFeedback: { type: 'object', description: '学习者对当前 task 是否学完的自我反馈' },
+      checkpointAnswer: { type: 'object', description: '对 pendingCheckpoint 的作答草案' },
+      debug: { type: 'object', description: '调试信息' },
+    },
+  },
+  capabilities: ['learn-stage-learner-simulation', 'visible-context-roleplay', 'short-teaching-reply'],
+  stats: {
+    callCount: 0,
+    successRate: 0,
+    avgLatency: 0,
+  }
+};
+
+export async function virtualLearnerLearnTurnSimulator(input: any): Promise<SkillExecutionResult<any>> {
+  try {
+    const result = await callPrompt<any, any>({
+      agentId: 'skill:simulation-learn-turn',
+      defaultSystemPrompt: VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_PROMPT,
+      requireActivePrompt: true,
+      caller: { skillId: 'simulation-learn-turn' },
+            buildUserPayload: (value: any) => projectSimulatorPayload(buildUserPayload(value)),
+      /**
+       * 消息形态（2026-10-18 #123）：payload 仍是既有 JSON 文本（prompt/缓存形态不变）；
+       * 可见历史里的**课堂配图**作为 image_url 内容块附在 user 消息尾部——
+       * 模拟学习者于是和真实学生一样"看得见"教师板书图，能引用只有图里才有的信息。
+       * 生效模型未声明 vision 时，prompt-composer 会摘掉图片块并告警（纯文本回退）。
+       */
+      buildMessages: ({ input: value, systemPrompt, userPayload, retryMessage }: any) => [
+        { role: 'system' as const, content: systemPrompt },
+        {
+          role: 'user' as const,
+          content: buildVisionContent(
+            retryMessage ? `${userPayload}\n\n${retryMessage}` : userPayload,
+            collectVisibleHistoryImages(value?.visibleContext?.history),
+            { label: '课堂配图', context: 'vl-learn-turn-simulator' }
+          ),
+        },
+      ],
+      validateParsedOutput: (parsed: any) => {
+        const replyOk = typeof parsed?.reply === 'string' && parsed.reply.trim().length > 0
+        const stateOk = parsed?.learnerState && typeof parsed.learnerState === 'object'
+        return {
+          valid: replyOk && stateOk,
+          failureReason: !replyOk ? 'missing reply' : 'missing learnerState'
+        }
+      },
+      normalizeOutput,
+      mapEnvelope: (output, _input, runtimeContract) => mapSkillOutputEnvelope(runtimeContract, output, {
+        phase: 'simulation-step-completed',
+        nextState: output?.learnerState ?? null,
+      }),
+      retryStrategy: {
+        maxAttempts: 2,
+        // 传输层有界重试（修复批 5a）：学习者回合的供应商超时同属「一击毙命」类——
+        // 与 teaching-turn 同预算（1 次），把基础设施抖动降级为可恢复停顿。
+        transportMaxRetries: 1,
+        onValidationFail: ({ failureReason }) => `上一次输出失败：${failureReason}。请只返回一个完整、可解析的 JSON 对象；不要 markdown，不要代码块，不要解释；所有字符串必须闭合。`
+      },
+    }, input || {}, { userId: (input as any)?.routingUserId || undefined });
+
+    if (!result.success || !result.output) {
+      // 失败显式传播：不产出伪 learnerState/伪 selfReportedTaskDone（与 catch 路径统一 success:false 语义）
+      return {
+        success: false,
+        error: {
+          code: VIRTUAL_LEARNER_LEARN_TURN_SIMULATION_FAILED,
+          message: result.error?.message || 'learn-turn-simulator-failed',
+        },
+        duration: result.debug.durationMs || 0,
+      };
+    }
+
+    return {
+      success: true,
+      output: {
+        ...result.output,
+        runtimeEnvelope: result.runtimeEnvelope,
+        _debug: {
+          rawModelOutput: result.debug.rawModelOutput,
+          extractedJson: result.debug.extractedJson,
+          userPayload: result.debug.userPayload,
+          systemPromptVersion: result.debug.systemPromptVersion,
+        },
+      },
+      duration: result.debug.durationMs,
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      error: {
+        code: VIRTUAL_LEARNER_LEARN_TURN_SIMULATION_FAILED,
+        message: error?.message || 'Unknown error',
+      },
+      duration: 0,
+    };
+  }
+}
+
+export default virtualLearnerLearnTurnSimulator;

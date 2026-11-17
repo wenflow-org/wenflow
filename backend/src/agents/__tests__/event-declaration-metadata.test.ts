@@ -3,7 +3,7 @@
  *
  * 上一轮修复把订阅声明对齐到了错的对象上：`LEARNER_EVENT_TYPES` 的 7 类事件是
  * profile-agent 的 outbox 执行体（bootstrap/schedulers.ts 注册的 handleLearnerEvent，
- * 序列见 events/learner-event-consumer.ts），而 skill:learner-model 是**拉取式**执行体
+ * 序列见 events/learner-event-consumer.ts），而 skill:profile-learner-model 是**拉取式**执行体
  * （gateway 按 action 调用），零事件消费、不在事件链内。把别人的消费集挂在它身上，
  * 看起来「已经对齐了」，实际是换了对象的错误声明。
  *
@@ -15,7 +15,7 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
-import { learnerModelAgentDefinition } from '../learner-model-agent';
+import { learnerModelAgentDefinition } from '../profile-learner-model-agent';
 import { pathAgentDefinition } from '../../skills/path-planning';
 
 const BACKEND_SRC = path.resolve(__dirname, '../..');
@@ -34,7 +34,7 @@ function readSource(relativePath: string): string {
   return fs.readFileSync(path.join(BACKEND_SRC, relativePath), 'utf8');
 }
 
-describe('#208 skill:learner-model 不得挂别人（事件链）的消费集', () => {
+describe('#208 skill:profile-learner-model 不得挂别人（事件链）的消费集', () => {
   it('subscribes 为空——它是拉取式执行体，不在事件链内', () => {
     expect(learnerModelAgentDefinition.subscribes).toEqual([]);
   });
@@ -45,9 +45,9 @@ describe('#208 skill:learner-model 不得挂别人（事件链）的消费集', 
     }
   });
 
-  it('真实消费体（events/learner-event-consumer.ts）不引用 learner-model', () => {
+  it('真实消费体（events/learner-event-consumer.ts）不引用 profile-learner-model', () => {
     const consumerSource = readSource('events/learner-event-consumer.ts');
-    expect(consumerSource).not.toContain('learner-model');
+    expect(consumerSource).not.toContain('profile-learner-model');
     expect(consumerSource).not.toContain('learnerModelAgent');
   });
 });
@@ -82,7 +82,7 @@ describe('#150 每个声明式 subscribes / publishes 字段都自带「不参�
     expect(violations).toEqual([]);
   });
 
-  it('learner-model 声明的两个发布事件在全仓仍无 emit 点（注释与事实一致，勿据此排障）', () => {
+  it('profile-learner-model 声明的两个发布事件在全仓仍无 emit 点（注释与事实一致，勿据此排障）', () => {
     const roots = ['agents', 'services', 'coordinators', 'events', 'skills', 'bootstrap', 'gateway'];
     const hits: string[] = [];
     for (const root of roots) {

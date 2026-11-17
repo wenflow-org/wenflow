@@ -19,7 +19,7 @@ const at = (iso: string, success: boolean, caller: string, callee: string): Hand
 describe('attachEdgeStats', () => {
   const edges: MembershipEdgeLike[] = [
     { id: 'path-agent__skill:path-planning', source: 'path-agent', target: 'skill:path-planning' },
-    { id: 'path-agent__skill:stage-designer', source: 'path-agent', target: 'skill:stage-designer' },
+    { id: 'path-agent__skill:path-task-design', source: 'path-agent', target: 'skill:path-task-design' },
     { id: 'teaching-agent__skill:teaching-turn', source: 'teaching-agent', target: 'skill:teaching-turn' },
   ];
 
@@ -55,7 +55,7 @@ describe('attachEdgeStats', () => {
     const result = attachEdgeStats(edges, usage, 'all');
     const sd = result[1];
 
-    // goal-agent → skill:path-planning 有流量，但不是 path-agent__stage-designer 这条边
+    // goal-agent → skill:path-planning 有流量，但不是 path-agent__path-task-design 这条边
     expect(sd.stats).toEqual({
       totalCalls: 0,
       failed: 0,

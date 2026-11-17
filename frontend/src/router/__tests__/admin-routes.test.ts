@@ -87,7 +87,7 @@ describe('Admin 路由重定向', () => {
     expect(router.currentRoute.value.query.tab).toBeUndefined();
     await router.push('/admin/learner-center');
     expect(router.currentRoute.value.path).toBe('/admin/learner-state');
-    await router.push('/admin/learner-models/u1');
+    await router.push('/admin/profile-learner-models/u1');
     expect(router.currentRoute.value.path).toBe('/admin/learner-state');
     // 2026-09-29 拆页：教学会话/目标对话/学习路径各自成场景，旧合并 URL /admin/sessions 反向重定向
     await router.push('/admin/sessions');

@@ -188,7 +188,7 @@ export function goalHandoffSourceAgentIds(): string[] {
  * 以及该抽取器实际遍历的 agentId 集合。门禁据此对账：声明行必须落在读取集合内，
  * 否则该交接声明在运行时永远抽不到值（静默失效，#189）。
  * 仅登记以**阶段名**为 handoff 目标的跨阶段抽取器；skill→skill 通道
- * （stage-designer / teaching-turn）由各自在途通道承载，不在本表。
+ * （path-task-design / teaching-turn）由各自在途通道承载，不在本表。
  */
 export interface ConfigDrivenStageHandoff {
   /** 抽取器函数名（报错定位用） */
@@ -243,8 +243,8 @@ export async function assembleGoalHandoff(
 }
 
 /**
- * stage-designer 跨轮上下文装配（配置式流转第三条链）：
- * 按 routings 表 path-agent 名下 handoff 含 skill:stage-designer 的编排注入行，
+ * path-task-design 跨轮上下文装配（配置式流转第三条链）：
+ * 按 routings 表 path-agent 名下 handoff 含 skill:path-task-design 的编排注入行，
  * 从装配源 { milestone, previousMilestone, cognitiveCore, normalizedInput } 抽值。
  * 目前聚焦跨轮上下文（previousMilestone）；未登记路径/缺失的通道跳过。
  */
@@ -255,7 +255,7 @@ export async function assembleStageDesignerChannels(
   const rows = rowsOverride
     ? rowsOverride
     : Array.from((await loadRoutings()).byAgent.get('path-agent')?.values() || []);
-  const channelRows = rows.filter((row) => row.handoff.includes('skill:stage-designer'));
+  const channelRows = rows.filter((row) => row.handoff.includes('skill:path-task-design'));
   const channels = extractFieldsByPath(source, channelRows);
   const skipped = channelRows
     .filter((row) => channels[row.fieldId] === undefined)

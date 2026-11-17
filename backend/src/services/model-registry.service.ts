@@ -264,7 +264,7 @@ export async function getModelRegistryOverview(): Promise<ModelRegistryOverview>
   } catch { /* 总览是诊断页:统计失败不阻塞其余信息 */ }
 
   // 启用的 skill_model_configs 若显式钉了目录外模型，同样会 transport 失败（#177：同一陷阱
-  // 此前已在 board-designer 手工绕过一次）。未配模型（null/空）走「继承平台默认」，由上面的
+  // 此前已在 teaching-board-design 手工绕过一次）。未配模型（null/空）走「继承平台默认」，由上面的
   // 平台默认告警覆盖，不在此重复告警。
   try {
     const skillRows = await systemPrisma.skill_model_configs.findMany({

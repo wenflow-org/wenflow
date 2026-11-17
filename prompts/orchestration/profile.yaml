@@ -4,7 +4,7 @@
 # profile 阶段字段**绝大多数**为编排器内部沉淀（写入 learnerModel），
 # 所以 render 默认 hidden, accumulate=true, internal 多为 false
 # （因为 snapshot/projection 会读，不是 skill 私有）。
-# 例外（2026-10-14）：skill:adaptive-guidance-copy 的 8 个产出是**学习者可见**的页面文案
+# 例外（2026-10-14）：skill:profile-adaptive-copy 的 8 个产出是**学习者可见**的页面文案
 # （render: visible + public-reply），因该技能本身归画像阶段而随迁入本文件——
 # 见下方「产出」注释块；下表合计 33 个字段中 25 hidden / 8 visible。
 
@@ -14,14 +14,14 @@ displayName: 画像阶段
 description: 学习者画像增强与背景知识沉淀，以及面向学习者的引导文案生成
 
 contracts:
-  - agentId: skill:lesson-knowledge-enricher
-  - agentId: skill:learner-model
-  - agentId: skill:learning-predictor
-  - agentId: skill:adaptive-guidance-copy
+  - agentId: skill:profile-lesson-enrich
+  - agentId: skill:profile-learner-model
+  - agentId: skill:profile-learning-predict
+  - agentId: skill:profile-adaptive-copy
   - agentId: profile-agent
 
 fields:
-  # === skill:lesson-knowledge-enricher 产出（承接已退役 distiller） ===
+  # === skill:profile-lesson-enrich 产出（承接已退役 distiller） ===
   - fieldId: conceptLedger
     promptRole: derived-presentation
     valueType: array<object>
@@ -49,7 +49,7 @@ fields:
     persistKey: knowledgeMemory.globalBackground.knowledgeStateSummary
     description: 本节课后知识状态自然语言摘要（LBM 式，供学习表现预测器与教学决策读取）
 
-  # === skill:learner-model 聚合产出（确定性 snapshot 结构） ===
+  # === skill:profile-learner-model 聚合产出（确定性 snapshot 结构） ===
   - fieldId: snapshot.dynamicState
     promptRole: derived-presentation
     valueType: object
@@ -79,7 +79,7 @@ fields:
     valueType: object
     description: 课程控制（taskGranularity/conceptDensity/reviewFrequency）
 
-  # === skill:adaptive-guidance-copy 产出（2026-10-14 由 teaching 阶段随技能迁入） ===
+  # === skill:profile-adaptive-copy 产出（2026-10-14 由 teaching 阶段随技能迁入） ===
   # 学习者可见的页面文案：dashboard / learning-state 首屏投影
   # （两个视图各自生成：dashboard 走事件驱动快照、learning-state 由页面按需生成，不跨视图借文案；path 视图已退役）
   - fieldId: headline
@@ -116,46 +116,46 @@ fields:
     description: 预警文案
 
 routings:
-  # lesson-knowledge-enricher → profile-agent：非 handoff——本 skill 的产出由课后知识增强消费者
+  # profile-lesson-enrich → profile-agent：非 handoff——本 skill 的产出由课后知识增强消费者
   # （services/learner/LessonKnowledgeEnrichmentConsumer）在 lesson:completed 事件链里执行并写进
   # 画像 3 层 JSON；全仓没有 profile 阶段的交接装配器（field-dispatcher 只登记 goal→path），
   # 原 handoff:[profile-agent] 是永不执行的声明（#180），故置空。
-  - agentId: skill:lesson-knowledge-enricher
+  - agentId: skill:profile-lesson-enrich
     fieldId: conceptLedger
     render: hidden
     handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
-  - agentId: skill:lesson-knowledge-enricher
+  - agentId: skill:profile-lesson-enrich
     fieldId: reusableFoundations
     render: hidden
     handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
-  - agentId: skill:lesson-knowledge-enricher
+  - agentId: skill:profile-lesson-enrich
     fieldId: blockedFoundations
     render: hidden
     handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
-  - agentId: skill:lesson-knowledge-enricher
+  - agentId: skill:profile-lesson-enrich
     fieldId: transferSignals
     render: hidden
     handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
-  - agentId: skill:lesson-knowledge-enricher
+  - agentId: skill:profile-lesson-enrich
     fieldId: recurringConfusions
     render: hidden
     handoff: []
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
-  - agentId: skill:lesson-knowledge-enricher
+  - agentId: skill:profile-lesson-enrich
     fieldId: knowledgeStateSummary
     render: hidden
     handoff: []
@@ -163,10 +163,10 @@ routings:
     accumulate: false
     visibilityPreset: agent-internal
 
-  # learner-model → profile-agent：非 handoff——字段由 ProfileAggregator 确定性聚合写入
-  # snapshot/projection，profile-agent 从不调用 skill:learner-model（audit-handoff-edges 该边零命中），
+  # profile-learner-model → profile-agent：非 handoff——字段由 ProfileAggregator 确定性聚合写入
+  # snapshot/projection，profile-agent 从不调用 skill:profile-learner-model（audit-handoff-edges 该边零命中），
   # 无运行时消费者，故 handoff 置空（#180）。
-  - agentId: skill:learner-model
+  - agentId: skill:profile-learner-model
     fieldId: snapshot.dynamicState
     render: hidden
     handoff: []
@@ -174,7 +174,7 @@ routings:
     accumulate: true
     visibilityPreset: agent-internal
     notes: 确定性聚合产出（ProfileAggregator/snapshot 装配），非 LLM 输出
-  - agentId: skill:learner-model
+  - agentId: skill:profile-learner-model
     fieldId: snapshot.learningControlState
     render: hidden
     handoff: []
@@ -182,7 +182,7 @@ routings:
     accumulate: true
     visibilityPreset: agent-internal
     notes: 确定性聚合产出（ProfileAggregator/snapshot 装配），非 LLM 输出
-  - agentId: skill:learner-model
+  - agentId: skill:profile-learner-model
     fieldId: snapshot.replanSignal
     render: hidden
     handoff: []
@@ -190,7 +190,7 @@ routings:
     accumulate: true
     visibilityPreset: agent-internal
     notes: 确定性聚合产出（ProfileAggregator/snapshot 装配），非 LLM 输出
-  - agentId: skill:learner-model
+  - agentId: skill:profile-learner-model
     fieldId: snapshot.teachingHints
     render: hidden
     handoff: []
@@ -198,7 +198,7 @@ routings:
     accumulate: true
     visibilityPreset: agent-internal
     notes: 确定性聚合产出（ProfileAggregator/snapshot 装配），非 LLM 输出
-  - agentId: skill:learner-model
+  - agentId: skill:profile-learner-model
     fieldId: snapshot.knowledgeMemory.currentPath
     render: hidden
     handoff: []
@@ -206,7 +206,7 @@ routings:
     accumulate: true
     visibilityPreset: agent-internal
     notes: 确定性聚合产出（ProfileAggregator/snapshot 装配），非 LLM 输出
-  - agentId: skill:learner-model
+  - agentId: skill:profile-learner-model
     fieldId: snapshot.knowledgeMemory.globalSignals
     render: hidden
     handoff: []
@@ -214,7 +214,7 @@ routings:
     accumulate: true
     visibilityPreset: agent-internal
     notes: 确定性聚合产出（ProfileAggregator/snapshot 装配），非 LLM 输出
-  - agentId: skill:learner-model
+  - agentId: skill:profile-learner-model
     fieldId: profile.curriculumControls
     render: hidden
     handoff: []
@@ -321,53 +321,53 @@ routings:
     visibilityPreset: agent-internal
     notes: learner 画像终点，写入 snapshot 与 projection
 
-  # adaptive-guidance-copy 输出（2026-10-14 随技能由 teaching 阶段迁入）
+  # profile-adaptive-copy 输出（2026-10-14 随技能由 teaching 阶段迁入）
   # 非 handoff：这 8 个字段是学习者可见的页面文案，由 dashboard 侧直接调用该 skill 产出
   # （services/learner/DashboardGuidanceSnapshotService），不经过任何阶段交接；profile 阶段
   # 没有交接装配器（field-dispatcher 只登记 goal→path），原 handoff:[profile-agent] 永不执行（#180），故置空。
-  - agentId: skill:adaptive-guidance-copy
+  - agentId: skill:profile-adaptive-copy
     fieldId: headline
     render: visible
     handoff: []
     internal: false
     accumulate: false
-  - agentId: skill:adaptive-guidance-copy
+  - agentId: skill:profile-adaptive-copy
     fieldId: subtitle
     render: visible
     handoff: []
     internal: false
     accumulate: false
-  - agentId: skill:adaptive-guidance-copy
+  - agentId: skill:profile-adaptive-copy
     fieldId: todayActions
     render: visible
     handoff: []
     internal: false
     accumulate: false
-  - agentId: skill:adaptive-guidance-copy
+  - agentId: skill:profile-adaptive-copy
     fieldId: nextStep
     render: visible
     handoff: []
     internal: false
     accumulate: false
-  - agentId: skill:adaptive-guidance-copy
+  - agentId: skill:profile-adaptive-copy
     fieldId: pathHint
     render: visible
     handoff: []
     internal: false
     accumulate: false
-  - agentId: skill:adaptive-guidance-copy
+  - agentId: skill:profile-adaptive-copy
     fieldId: paceHint
     render: visible
     handoff: []
     internal: false
     accumulate: false
-  - agentId: skill:adaptive-guidance-copy
+  - agentId: skill:profile-adaptive-copy
     fieldId: emptyStateCopy
     render: visible
     handoff: []
     internal: false
     accumulate: false
-  - agentId: skill:adaptive-guidance-copy
+  - agentId: skill:profile-adaptive-copy
     fieldId: warningCopy
     render: visible
     handoff: []

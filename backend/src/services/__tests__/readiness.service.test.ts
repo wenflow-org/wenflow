@@ -28,9 +28,9 @@ function createDatabases() {
       findMany: jest.fn().mockResolvedValue([
         { agentId: 'skill:goal-conversation' },
         { agentId: 'skill:path-planning' },
-        { agentId: 'skill:stage-designer' },
+        { agentId: 'skill:path-task-design' },
         { agentId: 'skill:teaching-turn' },
-        { agentId: 'skill:session-wrapup' }
+        { agentId: 'skill:teaching-wrapup' }
       ])
     },
     agent_contracts: { count: jest.fn().mockResolvedValue(FIELD_ROUTING_SEED_MANIFEST.contractAgentIds.length), findMany: jest.fn().mockResolvedValue([]) },

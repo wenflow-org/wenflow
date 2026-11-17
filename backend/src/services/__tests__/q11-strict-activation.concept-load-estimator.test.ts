@@ -1,5 +1,5 @@
 /**
- * Q11「点亮」验收：**真实 core 声明**（prompts/core/concept-load-estimator.yaml）驱动
+ * Q11「点亮」验收：**真实 core 声明**（prompts/core/profile-concept-load.yaml）驱动
  * skill-output-validator 的严格 JSON Schema 路径。
  *
  * 证据逻辑：若严格路径未激活（回退到宽容层），嵌套 enum 越界 / 未知子字段 / 缺嵌套必填
@@ -14,7 +14,7 @@ import {
   type CoreFieldDeclaration,
 } from '../skill-output-validator';
 
-const SKILL_ID = 'concept-load-estimator';
+const SKILL_ID = 'profile-concept-load';
 
 const validOutput = {
   concepts: [
@@ -28,7 +28,7 @@ const validOutput = {
   ],
 };
 
-describe('Q11 点亮：concept-load-estimator 走严格路径', () => {
+describe('Q11 点亮：profile-concept-load 走严格路径', () => {
   let fields: CoreFieldDeclaration[] | null = null;
 
   beforeAll(async () => {

@@ -157,7 +157,7 @@ export const RULE_KEY_SOURCES: Readonly<Record<string, readonly RuleKeySource[]>
         'backend/src/services/learning/goal-path-visible-summary.ts:326',
     },
   ],
-  'stage-designer': [
+  'path-task-design': [
     {
       key: 'planningHints',
       owner: 'normalizedInput',
@@ -165,7 +165,7 @@ export const RULE_KEY_SOURCES: Readonly<Record<string, readonly RuleKeySource[]>
         'backend/src/services/learning/generation/path-generation.core.ts:336（buildFramedNormalizedInput 附加 planningHints）',
     },
   ],
-  'teaching-opening-generator': [
+  'teaching-opening': [
     {
       key: 'lastLessonRecap',
       owner: 'payload:lastLessonRecap（编排注入顶层键）',
@@ -179,7 +179,7 @@ export const RULE_KEY_SOURCES: Readonly<Record<string, readonly RuleKeySource[]>
     {
       key: 'sameTaskHistory',
       owner: 'lastLessonRecap.sameTaskHistory',
-      evidence: 'prompts/core/teaching-opening-generator.yaml 规则「sameTaskHistory.lastUnresolvedPoints」',
+      evidence: 'prompts/core/teaching-opening.yaml 规则「sameTaskHistory.lastUnresolvedPoints」',
     },
   ],
   'teaching-turn': [
@@ -204,28 +204,28 @@ export const RULE_KEY_SOURCES: Readonly<Record<string, readonly RuleKeySource[]>
       evidence: 'backend/src/services/ai-teaching/teaching-turn-engine.ts:511',
     },
   ],
-  'virtual-learner-actor-auditor': [
+  'simulation-actor-audit': [
     {
       key: 'epistemicGrounding',
       owner: 'learnerPrivateState',
-      evidence: 'prompts/core/virtual-learner-actor-auditor.yaml 规则「若 learnerPrivateState 里存在 epistemicGrounding」',
+      evidence: 'prompts/core/simulation-actor-audit.yaml 规则「若 learnerPrivateState 里存在 epistemicGrounding」',
     },
   ],
-  'virtual-learner-goal-dialogue-simulator': [
+  'simulation-goal-dialogue': [
     {
       key: 'friction',
       owner: 'frictionBudget',
       evidence: 'backend/src/coordinators/simulation.helpers.ts:895（getSessionFrictionBudget 装配）',
     },
   ],
-  'virtual-learner-learn-turn-simulator': [
+  'simulation-learn-turn': [
     {
       key: 'friction',
       owner: 'frictionBudget',
       evidence: 'backend/src/coordinators/simulation.helpers.ts:895（getSessionFrictionBudget 装配）',
     },
   ],
-  'virtual-learner-path-evaluator': [
+  'simulation-path-evaluate': [
     {
       key: 'friction',
       owner: 'frictionBudget',

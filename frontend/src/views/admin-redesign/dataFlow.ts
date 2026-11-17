@@ -334,7 +334,7 @@ export function buildStageFlow(
     // orphan：已注册 agent（agents 清单），但无字段契约（0 routing 行）
     // 如实呈现为「无契约 Skill」：标注 no-contract 而非误导性「0 产出」。
     // 2026-11-11（困惑测试 #58）：原守卫多写了 `&& !def`，把「在 defSteps 但 0 进 0 出」的
-    // Skill（如 teaching-opening-generator，产出直接进会话消息）漏回通用卡，打出字面「0 产出」。
+    // Skill（如 teaching-opening，产出直接进会话消息）漏回通用卡，打出字面「0 产出」。
     const isOrphan = isSkill && !outputs.length && !inputs.length
     const kind = isBridge ? 'bridge-entry' as const
       : isOrphan ? 'orphan' as const

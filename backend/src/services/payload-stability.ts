@@ -36,7 +36,7 @@ export const PAYLOAD_STABILITY: Readonly<Record<string, PayloadStabilitySpec>> =
     retiredStable: ['scenario', 'promptDirectives', 'learner'],
     note: 'scenario(洁)/learner 跨回合稳定；controls/knowledge/对话等逐回合变化后置',
   },
-  'stage-designer': {
+  'path-task-design': {
     stable: ['cognitiveCore', 'normalizedInput', 'materials'],
     note: '跨里程碑不变；milestone/previousMilestone/repairHints 后置（materials 是整条路径的投影，同样逐里程碑不变）',
   },
@@ -44,30 +44,30 @@ export const PAYLOAD_STABILITY: Readonly<Record<string, PayloadStabilitySpec>> =
     stable: ['prerequisiteTree', 'goalContext'],
     note: '整条路径不变的前提知识树与目标上下文；pathPlan 后置',
   },
-  'adaptive-guidance-copy': {
+  'profile-adaptive-copy': {
     stable: ['view', 'path'],
     note: '视图名与路径投影逐次稳定；learner/learningState/wrapup/advisory 后置',
   },
-  'virtual-learner-learn-turn-simulator': {
+  'simulation-learn-turn': {
     // 2026-11-08 全 skill 载荷审计：删掉零引用键 task（只装 task.requirements，5 条硬指令
     // 提示词里都有对应规则），稳定前缀由四键收窄为三键。
     stable: ['personaAnchorHint', 'story', 'learner'],
     retiredStable: ['task', 'personaAnchorHint', 'story', 'learner'],
     note: '人设锚点/故事/画像为常量或慢变；回合状态后置',
   },
-  'virtual-learner-goal-dialogue-simulator': {
+  'simulation-goal-dialogue': {
     stable: ['personaAnchorHint', 'task', 'learner', 'story'],
     note: '人设锚点/任务/画像/故事稳定；可见对话与回合状态后置',
   },
-  'virtual-learner-path-evaluator': {
+  'simulation-path-evaluate': {
     stable: ['task', 'personaAnchorHint', 'goalState', 'learner'],
     note: '任务/锚点/目标态/画像稳定；路径提案与回合状态后置',
   },
-  'virtual-learner-persona-designer': {
+  'simulation-persona-designer': {
     stable: ['candidatePersonas', 'preferredLevels', 'recentPersonaHints', 'existingPersonaSeed'],
     note: '候选池/偏好/提示稳定；已有种子后置',
   },
-  'teaching-opening-generator': {
+  'teaching-opening': {
     stable: ['learner', 'openingMode'],
     note: '学习者摘要与开场模式跨回合稳定；任务上下文后置',
   },
@@ -75,11 +75,11 @@ export const PAYLOAD_STABILITY: Readonly<Record<string, PayloadStabilitySpec>> =
     stable: ['task'],
     note: 'task 常量前置；conversationContext 是追加式历史，state/userInput 每轮重写后置',
   },
-  'learner-progress-report': {
+  'profile-progress-report': {
     stable: ['signals', 'metrics'],
     note: '信号与指标为输入摘要；task 后置',
   },
-  'learning-predictor': {
+  'profile-learning-predict': {
     stable: ['fatigueSignal', 'knowledgeStateSummary'],
     note: '疲劳信号与历史摘要稳定；taskContext 后置',
   },

@@ -40,7 +40,7 @@ export interface ConceptTruthClaimInput {
 
 export interface ConceptTruthInput {
   conceptKey: string;
-  /** LLM 定性推断（如 learner-state-review 的 conceptAssessments）。 */
+  /** LLM 定性推断（如 profile-state-review 的 conceptAssessments）。 */
   llm?: readonly ConceptTruthClaimInput[] | null;
   /** 代码裁决观测（如 `learner_evidence:anchor:result`，judgedBy='code'）。 */
   code?: readonly ConceptTruthClaimInput[] | null;

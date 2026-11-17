@@ -5,7 +5,7 @@
  * memory_traces（fire-and-forget，失败静默丢失，不进事件链，不可追溯）。
  * 本消费者把复习结果沉淀为可追溯、可重放、幂等的领域数据：
  *   - learner_evidence：复习观测（review:completed 类型）。实际消费方是复习调度
- *     （review-plan.service：成功率/间隔）与管理端画像明细（learner-models.repo）；**不**在
+ *     （review-plan.service：成功率/间隔）与管理端画像明细（profile-learner-models.repo）；**不**在
  *     快照画像聚合（LearnerKnowledgeMemoryService）的白名单里——那里复习课掌握度由
  *     session.knowledgeState 承担。未来 BKT 亦以此为数据源。
  *   - memory_traces：复习调度数据源（rating 语义：mastered→Good、推进→Hard、未推进→Again）

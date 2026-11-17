@@ -21,7 +21,7 @@ jest.mock('../../materials/material-store', () => ({
   __esModule: true,
   listMaterials: (...args: any[]) => mockListMaterials(...args),
 }));
-jest.mock('../../materials/material-brief.service', () => ({
+jest.mock('../../materials/path-material-brief.service', () => ({
   __esModule: true,
   collectBriefsWithDeadline: (...args: any[]) => mockCollectBriefs(...args),
 }));

@@ -19,8 +19,8 @@ const CASES = [
 ];
 
 async function main() {
-  const def = (auxSkillDefinitionMap as any)['teaching-opening-generator'];
-  if (!def) throw new Error('找不到 teaching-opening-generator 定义');
+  const def = (auxSkillDefinitionMap as any)['teaching-opening'];
+  if (!def) throw new Error('找不到 teaching-opening 定义');
 
   let ok = 0;
   for (const c of CASES) {

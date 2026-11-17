@@ -12,8 +12,8 @@
  *   两个例证：
  *     - `system` → ['system-call', 'unknown']：这两个 id 从来不在 userListed 白名单里，
  *       显式选「系统底层调用」一直是「放宽到默认视图之外」的既有语义；
- *     - `profile` → Profile 组全量成员（skill:learning-predictor / skill:learner-model /
- *       skill:learner-state-review 等，全部非 userListed）。#218 的病灶正是把能力筛选
+ *     - `profile` → Profile 组全量成员（skill:profile-learning-predict / skill:profile-learner-model /
+ *       skill:profile-state-review 等，全部非 userListed）。#218 的病灶正是把能力筛选
  *       写成「监控组 ∩ userListed」，于是 profile 恒空、用户永远筛不出真实存在的调用。
  *
  *   因此「能力筛选 ⊆ 默认视图」**不是**本模块的不变式，已被产品口径有意取代（不是被

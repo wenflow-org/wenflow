@@ -15,7 +15,7 @@ jest.mock('../../../config/database', () => ({
 }));
 
 jest.mock('../../../skills', () => ({ executeSkill }));
-jest.mock('../../../skills/lesson-knowledge-enricher', () => ({ lessonKnowledgeEnricherDefinition: { name: 'lesson-knowledge-enricher' } }));
+jest.mock('../../../skills/profile-lesson-enrich', () => ({ lessonKnowledgeEnricherDefinition: { name: 'profile-lesson-enrich' } }));
 jest.mock('../LearnerProfileService', () => ({
   __esModule: true,
   learnerProfileService: { clear: (userId: string) => mockProfileClear(userId) }
@@ -111,7 +111,7 @@ describe('LessonKnowledgeEnrichmentConsumer', () => {
 
     expect(executeSkill).toHaveBeenCalledTimes(1);
     expect(executeSkill).toHaveBeenCalledWith(
-      { name: 'lesson-knowledge-enricher' },
+      { name: 'profile-lesson-enrich' },
       expect.objectContaining({
         transferGoal: '把递归思想迁移到树的遍历',
         knowledgeState: [{ name: 'A', status: 'mastered', progress: 100 }],
@@ -260,7 +260,7 @@ describe('LessonKnowledgeEnrichmentConsumer', () => {
     }));
 
     expect(executeSkill).toHaveBeenCalledWith(
-      { name: 'lesson-knowledge-enricher' },
+      { name: 'profile-lesson-enrich' },
       expect.objectContaining({
         transferGoal: null,
         knowledgeState: []

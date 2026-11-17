@@ -42,7 +42,7 @@ jest.mock('../../../utils/logger', () => ({
 jest.mock('../learning-state.service', () => ({ __esModule: true, default: {} }))
 jest.mock('../../learner/LearnerProjectionService', () => ({ learnerProjectionService: {} }))
 jest.mock('../../../skills', () => ({ executeSkill: jest.fn() }))
-jest.mock('../../../skills/stage-designer', () => ({ stageDesignerDefinition: {} }))
+jest.mock('../../../skills/path-task-design', () => ({ stageDesignerDefinition: {} }))
 
 import learningService from '../learning.service'
 

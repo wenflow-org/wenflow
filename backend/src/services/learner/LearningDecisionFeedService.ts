@@ -12,7 +12,7 @@
  * - LearnerStateSummaryOutput.global（节奏/状态级别）
  */
 
-import type { LearnerSnapshot } from '../../agents/learner-model-agent/types';
+import type { LearnerSnapshot } from '../../agents/profile-learner-model-agent/types';
 import type { LearnerStateSummaryOutput } from './LearnerStateSummaryService';
 import { DEADLINE_PACE_BEHIND_CODE } from './LearnerSnapshotService';
 

@@ -1,0 +1,421 @@
+import {
+  SkillDefinition,
+  SkillExecutionResult,
+} from '../protocol';
+import { callPrompt } from '../../composers/prompt-composer';
+import { mapSkillOutputEnvelope } from '../../services/prompt-lab/envelope-adapter';
+import { loadPromptFile } from '../../composers/prompt-files/loader';
+
+export const VIRTUAL_LEARNER_PERSONA_DESIGNER_MAX_TOKENS = 8000;
+export const VIRTUAL_LEARNER_PERSONA_DESIGNER_TEMPERATURE = 0.8;
+
+// File-as-Truth：运行时生效的 ACTIVE prompt 由 prompts/core/*.yaml 编译而来，
+// 这里只从编译产物加载，不内嵌第二份 prompt，避免双源漂移。
+export const VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT =
+  loadPromptFile('skill:simulation-persona-designer')?.systemPrompt || '';
+
+export const virtualLearnerPersonaDesignerDefinition: SkillDefinition = {
+  name: 'simulation-persona-designer',
+  displayName: '虚拟学习者身份设计器',
+  version: '1.2.0',
+  category: 'generation',
+  description: '为虚拟学习者生成稳定身份画像，不包含故事与情境',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      preferredLevels: { type: 'array' },
+      candidatePersonas: { type: 'array' },
+      recentPersonaHints: { type: 'array' },
+      existingPersonaSeed: { type: 'object' },
+    },
+  },
+  outputSchema: {
+    type: 'object',
+    properties: {
+      personaSeed: { type: 'object' },
+    },
+  },
+  capabilities: ['virtual-learner-persona-design'],
+  stats: {
+    callCount: 0,
+    successRate: 0,
+    avgLatency: 0,
+  }
+};
+
+function sanitizeGeneratedText(value: string): string {
+  return value
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\b(plan|build) mode\b/gi, ' ')
+    .replace(/\s*CRITICAL:\s*/gi, ' ')
+    .replace(/\r\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
+function normalizeString(value: any): string | null {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const sanitized = sanitizeGeneratedText(value);
+  return sanitized || null;
+}
+
+function normalizeStringArray(value: any, fallback: string[] = []): string[] {
+  if (!Array.isArray(value)) return fallback;
+  const next = value
+    .map((item) => normalizeString(item))
+    .filter((item): item is string => !!item);
+  return next.length ? Array.from(new Set(next)) : fallback;
+}
+
+function normalizeConceptArray(value: any): string[] {
+  return normalizeStringArray(value).slice(0, 4);
+}
+
+function isAllowedEnum<T extends string>(value: any, allowed: T[]): value is T {
+  return allowed.includes(value);
+}
+
+/**
+ * 学段 → 合理年龄区间（P1-15）。
+ * 义务教育/高中阶段的学生样本，其 age 必须落在学段的现实区间内；越界视为校验失败重试，
+ * **不再夹值**（旧实现 Math.max(18, Math.min(60, age)) 把「小学四年级学生」夹成 18 岁）。
+ */
+export const STAGE_AGE_RANGES = [
+  { stage: '小学', min: 6, max: 13 },
+  { stage: '初中', min: 11, max: 16 },
+  { stage: '高中', min: 14, max: 19 },
+] as const;
+
+/** 家长/教师/陪读等非学生语境词——命中即不判为「该学段的学生」，避免把陪读妈妈误判成小学生。 */
+const NON_STUDENT_CONTEXT = /家长|妈妈|爸爸|父母|陪读|家长群|老师|教师|家教|辅导员|班主任|教资|教师编|家长会/;
+
+/**
+ * 从身份文本（nameHint/occupation/education）识别「本人是该学段的学生」。
+ *
+ * 只认身份侧的学段+学生标记，**不扫 background**：background 常出现「家长/老师提到小学」这类
+ * 非本人学段语境（DB 实测 24 条 stage 命中里绝大多数是陪读妈妈/小学老师），扫 background 会误伤。
+ */
+export function detectStudentStage(seed: any): '小学' | '初中' | '高中' | null {
+  const fields = [seed?.nameHint, seed?.occupation, seed?.education]
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+  if (!fields.length) return null;
+  const idText = fields.join(' ');
+  // 高等教育/职校阶段不做年龄区间约束（成人回炉、专升本、考研跨度大）
+  if (/大学|本科|大专|高职|大[一二三四]|研究生|硕士|博士|考研|职校|中专|技校|职高|中职/.test(idText)) return null;
+  // 逐字段判定：某字段带家长/教师语境只跳过该字段（nameHint 写「妈妈陪学」不影响 occupation 里的学生身份）
+  for (const field of fields) {
+    if (NON_STUDENT_CONTEXT.test(field)) continue;
+    if (!/学生|在读|年级|在校|应届|考生|复读|女生|男生/.test(field)) continue;
+    // 顺序敏感：「高中三年级」不能被 [一二三四五六]年级 判成小学
+    if (/高中|高[一二三]/.test(field)) return '高中';
+    if (/初中|初[一二三]|[七八九]年级/.test(field)) return '初中';
+    if (/小学|[一二三四五六]年级/.test(field)) return '小学';
+  }
+  return null;
+}
+
+/**
+ * 学段与年龄一致性校验（P1-15）：学生身份而 age 越出学段区间 → 校验失败（由 retryStrategy 重试），
+ * 不夹值。无法识别学段（成人学习者/家长/教师）时不做年龄约束——去掉旧 [18,60] 硬夹后，
+ * 退休返聘、老年自学者等真实身份的年龄得以保留。
+ */
+export function validateStageAgeConsistency(seed: any): { valid: boolean; failureReason?: string } {
+  const stage = detectStudentStage(seed);
+  if (!stage) return { valid: true };
+  const range = STAGE_AGE_RANGES.find((item) => item.stage === stage)!;
+  const age = Number(seed?.age);
+  if (!Number.isFinite(age)) return { valid: true }; // 数值缺失由既有 age must be a number 分支拦截
+  if (age < range.min || age > range.max) {
+    return {
+      valid: false,
+      failureReason: `PERSONA_OUTPUT_INVALID: age=${age} 与学段「${stage}」不一致（${stage}学段合理区间 ${range.min}-${range.max}）——请修正 age 使其与身份学段相符，不要改身份学段去迁就年龄`,
+    };
+  }
+  return { valid: true };
+}
+
+const DEFAULT_CANDIDATE_PERSONAS = [
+  '销售主管，常被临时消息打断',
+  '运营专员，最近要独立做复盘',
+  '产品经理，方案总是越写越散',
+  '教培老师，课后复盘全凭感觉',
+  '求职转行者，自学总在开头放弃',
+  '大三学生，备考节奏很乱',
+  '二胎妈妈，想重新建立学习时间',
+  '门店店长，排班和复盘都很碎片化',
+  '客服组长，沟通记录难以整理',
+  '自由职业设计师，项目切换频繁',
+  '财务助理，月末报表压力大',
+  '社区工作者，信息整理任务很多',
+  '短视频创作者，选题和复盘混乱',
+  '大学辅导员，事务多且优先级难排',
+  '高中英语老师，想提升讲后总结质量',
+];
+
+const DEFAULT_RECENT_PERSONA_HINTS = [
+  '避免连续生成同类职业与同类年龄段的安全模板',
+  '避免称呼总是小陈/小张/小李这类重复模板',
+  '优先拉开职业背景、时间条件和求助风格的分布',
+];
+
+function validatePersonaOutput(parsed: any): { valid: boolean; failureReason?: string } {
+  const personaSeed = parsed?.personaSeed && typeof parsed.personaSeed === 'object' ? parsed.personaSeed : parsed;
+  if (!personaSeed || typeof personaSeed !== 'object') {
+    return { valid: false, failureReason: 'PERSONA_OUTPUT_INVALID: personaSeed is required' };
+  }
+
+  // 核心必填（normalize 无法推导的）：nameHint + background + age
+  // 其余字段（occupation/education/adversarialPattern 等）允许缺失——
+  // normalizePersonaOutput 会用 background 等推导合理默认，避免 LLM 偶发漏 1 个字段
+  // 就导致整个身份失败（批量场景尤其致命）。
+  const coreRequired = ['nameHint', 'background'];
+  const missingFields = coreRequired.filter((field) => !normalizeString(personaSeed[field]));
+  if (missingFields.length > 0) {
+    return { valid: false, failureReason: `PERSONA_OUTPUT_INVALID: missing required fields: ${missingFields.join(', ')}` };
+  }
+
+  if (!Number.isFinite(Number(personaSeed.age))) {
+    return { valid: false, failureReason: 'PERSONA_OUTPUT_INVALID: age must be a number' };
+  }
+
+  // P1-15：学段与年龄一致性——学生身份而 age 越出学段区间即失败重试（不夹值）
+  const stageAge = validateStageAgeConsistency(personaSeed);
+  if (!stageAge.valid) return stageAge;
+
+  // 概念/驱动数组：对抗行为依据（friction 引用），保持必填——缺失会让模拟器对抗失真。
+  if (normalizeConceptArray(personaSeed.knownConcepts).length === 0) {
+    return { valid: false, failureReason: 'PERSONA_OUTPUT_INVALID: knownConcepts must contain at least one item' };
+  }
+
+  if (normalizeConceptArray(personaSeed.struggleConcepts).length === 0) {
+    return { valid: false, failureReason: 'PERSONA_OUTPUT_INVALID: struggleConcepts must contain at least one item' };
+  }
+
+  if (normalizeStringArray(personaSeed.personalityDrivers).length === 0) {
+    return { valid: false, failureReason: 'PERSONA_OUTPUT_INVALID: personalityDrivers must contain at least one item' };
+  }
+
+  if (normalizeStringArray(personaSeed.emotionalTriggers).length === 0) {
+    return { valid: false, failureReason: 'PERSONA_OUTPUT_INVALID: emotionalTriggers must contain at least one item' };
+  }
+
+  if (normalizeStringArray(personaSeed.failurePatterns).length === 0) {
+    return { valid: false, failureReason: 'PERSONA_OUTPUT_INVALID: failurePatterns must contain at least one item' };
+  }
+
+  // 枚举字段：提供时必须合法；缺失时 normalize 兜底默认值
+  if (personaSeed.learningStyle !== undefined && !isAllowedEnum(personaSeed.learningStyle, ['reading', 'watching', 'doing', 'listening'])) {
+    return { valid: false, failureReason: 'PERSONA_OUTPUT_INVALID: learningStyle is invalid' };
+  }
+
+  if (personaSeed.availableTime !== undefined && !isAllowedEnum(personaSeed.availableTime, ['minimal', 'moderate', 'abundant'])) {
+    return { valid: false, failureReason: 'PERSONA_OUTPUT_INVALID: availableTime is invalid' };
+  }
+
+  if (personaSeed.techComfort !== undefined && !isAllowedEnum(personaSeed.techComfort, ['low', 'medium', 'high'])) {
+    return { valid: false, failureReason: 'PERSONA_OUTPUT_INVALID: techComfort is invalid' };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * 认知负荷「等级」枚举化（2026-09-21）。
+ * 吃 low|normal|high（含中文别名与"低——…"这类老散文的前缀）；散文/空 → null（未知，不收紧）。
+ * 与「行为描述」（overloadReaction 散文）分工：这里只表达等级，供机器判定。
+ */
+export function normalizeToleranceLevel(value: any): 'low' | 'normal' | 'high' | null {
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (!text) return null;
+  if (/^(low|低|极低)/i.test(text)) return 'low';
+  if (/^(high|高)/i.test(text)) return 'high';
+  if (/^(normal|中)/i.test(text)) return 'normal';
+  return null;
+}
+
+function normalizePersonaOutput(raw: any) {
+  const personaSeed = raw?.personaSeed && typeof raw.personaSeed === 'object' ? raw.personaSeed : raw || {};
+  const selfAwarenessPattern = normalizeString(personaSeed.selfAwarenessPattern);
+  const planningFollowThroughRaw = normalizeString(personaSeed.planningFollowThrough);
+  const overloadReactionRaw = normalizeString(personaSeed.overloadReaction);
+
+  // 校验枚举 helper
+  const enumOrNull = <T extends string>(value: any, allowed: T[]): T | null =>
+    (allowed.includes(value as T) ? (value as T) : null)
+
+  // 必填字段智能兜底：LLM 偶发漏字段（尤其 adversarialPattern/occupation 这类"难"字段），
+  // 若直接返回 null → validate 整体失败 → 整个身份被放弃（批量场景尤其致命）。
+  // 用已有字段推导合理默认，保证身份能生成（该字段后续可人工补全/重生成）。
+  const occupationRaw = normalizeString(personaSeed.occupation);
+  const backgroundRaw = normalizeString(personaSeed.background);
+  const helpSeekingRaw = normalizeString(personaSeed.helpSeekingPattern);
+  const failurePatternsRaw = normalizeStringArray(personaSeed.failurePatterns);
+  const emotionalTriggersRaw = normalizeStringArray(personaSeed.emotionalTriggers);
+  const struggleRaw = normalizeConceptArray(personaSeed.struggleConcepts);
+  const corePersonalityRaw = normalizeString(personaSeed.corePersonality);
+  const emotionalBaselineRaw = normalizeString(personaSeed.emotionalBaseline);
+
+  const occupation = occupationRaw
+    || (backgroundRaw ? backgroundRaw.split(/[，,。；;]/)[0].slice(0, 20) : null)
+    || '职场学习者';
+  const education = normalizeString(personaSeed.education) || (backgroundRaw ? '在职学习' : '自学');
+  const background = backgroundRaw || `${occupation}，日常学习时间有限，希望高效补上实用技能`;
+  const corePersonality = corePersonalityRaw || '务实、目标导向，遇到困难先自己尝试再求助';
+  const emotionalBaseline = emotionalBaselineRaw || '情绪平稳，压力大时略显焦虑但不外露';
+  const helpSeekingPattern = helpSeekingRaw || '先自己琢磨，实在不行才向老师或同事求助';
+  const adversarialPattern = normalizeString(personaSeed.adversarialPattern)
+    || (failurePatternsRaw.length ? `遇到挫折时容易${failurePatternsRaw[0]}，需要引导回到正轨` : '遇到困难时容易回避或拖延，需要明确的小步骤引导')
+    || '遇到困难时容易回避或拖延，需要明确的小步骤引导';
+  const selfAwareness = selfAwarenessPattern || '清楚自己的短板，但不太会拆解成可执行的小目标';
+  const planningFollowThrough = planningFollowThroughRaw || '计划容易立，执行容易打折，需要外部节奏推着走';
+  const overloadReaction = overloadReactionRaw || '信息一多就容易乱，需要把任务拆小';
+  const memoryRepairPattern = normalizeString(personaSeed.memoryRepairPattern) || '学过的东西容易忘，需要结合实例反复练习';
+  const behavioralProfileSummary = normalizeString(personaSeed.behavioralProfileSummary)
+    || `${occupation}，${corePersonality}；遇到${struggleRaw.length ? struggleRaw.join('、') : '学习困难'}时${adversarialPattern}。`;
+  // D13（A/B 报告 2026-10-13）：同一概念不得同时出现在 known 与 struggle——画像对同一概念的
+  // 掌握状态自相矛盾，会污染 analysis.helpSeekingType 一类判断。struggle 是教学摩擦的操作事实，
+  // 优先保留：从 known 中剔除与 struggle 重合的概念（去重后 known 可能为空，走下方默认兜底）。
+  const struggleConcepts = normalizeConceptArray(personaSeed.struggleConcepts);
+  const struggleSet = new Set(struggleConcepts);
+  const knownConcepts = normalizeConceptArray(personaSeed.knownConcepts)
+    .filter((concept) => !struggleSet.has(concept));
+  const learningStyle = isAllowedEnum(personaSeed.learningStyle, ['reading', 'watching', 'doing', 'listening']) ? personaSeed.learningStyle : 'doing';
+  const availableTime = isAllowedEnum(personaSeed.availableTime, ['minimal', 'moderate', 'abundant']) ? personaSeed.availableTime : 'moderate';
+  const techComfort = isAllowedEnum(personaSeed.techComfort, ['low', 'medium', 'high']) ? personaSeed.techComfort : 'medium';
+
+  // 补齐 scenario-designer 完整 schema 中的关键字段, 让两个 skill 互通
+  // (LLM 没生成时 fallback 默认值, 让下游 simulator 至少能识别字段名)
+  const motivationType = enumOrNull(personaSeed.motivationType, ['career', 'interest', 'necessity', 'social'] as const) || 'career'
+  const personalityTraitsRaw = personaSeed.personalityTraits || {}
+  const personalityTraits = {
+    verbosity: enumOrNull(personalityTraitsRaw.verbosity, ['terse', 'normal', 'verbose'] as const) || 'normal',
+    enthusiasm: enumOrNull(personalityTraitsRaw.enthusiasm, ['low', 'normal', 'high'] as const) || 'normal',
+    confusionStyle: enumOrNull(personalityTraitsRaw.confusionStyle, ['direct', 'hinting'] as const) || 'direct',
+    patience: enumOrNull(personalityTraitsRaw.patience, ['low', 'normal', 'high'] as const) || 'normal',
+    questionStyle: enumOrNull(personalityTraitsRaw.questionStyle, ['none', 'clarifying', 'challenging'] as const) || 'clarifying',
+    emotionalRange: enumOrNull(personalityTraitsRaw.emotionalRange, ['flat', 'moderate', 'expressive'] as const) || 'moderate',
+  }
+
+  return {
+    personaSeed: {
+      nameHint: normalizeString(personaSeed.nameHint) || occupation,
+      // P1-15：去掉 [18,60] 硬夹（曾把「小学四年级学生」夹成 18 岁、把 63 岁退休自学者夹到 60）。
+      // 学段-年龄一致性已在 validatePersonaOutput 校验（越界重试而非夹值）；此处只做通用合理区间
+      // 兜底（3-100），把明显异常值压回，保留义务教育学段与老年学习者的真实年龄。
+      age: Number.isFinite(Number(personaSeed.age))
+        ? Math.max(3, Math.min(100, Number(personaSeed.age)))
+        : 28,
+      occupation,
+      education,
+      background,
+      knownConcepts: knownConcepts.length ? knownConcepts : ['基础概念'],
+      struggleConcepts: struggleConcepts.length ? struggleConcepts : ['方法不清晰'],
+      learningStyle,
+      availableTime,
+      techComfort,
+      corePersonality,
+      emotionalBaseline,
+      helpSeekingPattern,
+      adversarialPattern,
+      selfAwarenessPattern: selfAwareness,
+      planningFollowThrough,
+      overloadReaction,
+      memoryRepairPattern,
+      behavioralProfileSummary,
+      // Backfill legacy field names so existing profile pages and session logic can keep working.
+      metacognitiveProfile: normalizeString(personaSeed.metacognitiveProfile) || selfAwareness,
+      selfRegulationStyle: normalizeString(personaSeed.selfRegulationStyle) || planningFollowThrough,
+      // 机器判定字段：只吃**等级枚举**（2026-09-21）。旧实现是 `… || overloadReaction`，
+      //   会把「行为散文」灌进这个机器字段 ⇒ 下游只能用正则猜（实测漏判 47%）。
+      //   行为描述留在 overloadReaction（simulation.helpers 的 resolveOverloadBehaviorText 读它）。
+      cognitiveLoadTolerance: normalizeToleranceLevel(personaSeed.cognitiveLoadTolerance),
+      // 补齐 scenario-designer 完整 schema 的字段 (兼容 simulator 的 friction 引用)
+      motivationType,
+      personalityDrivers: normalizeStringArray(personaSeed.personalityDrivers, ['完成当前学习目标']),
+      emotionalTriggers: emotionalTriggersRaw.length ? emotionalTriggersRaw : ['遇到挫折'],
+      failurePatterns: failurePatternsRaw.length ? failurePatternsRaw : ['半途而废'],
+      personalityTraits,
+      // 与 scenario-designer canonical 字段集对齐（可选，LLM 生成即保留）
+      priorAttempts: normalizeString(personaSeed.priorAttempts) || undefined,
+      communicationStyle: normalizeString(personaSeed.communicationStyle),
+      motivationOrientation: normalizeString(personaSeed.motivationOrientation),
+      resiliencePattern: normalizeString(personaSeed.resiliencePattern),
+      digitalLiteracy: normalizeString(personaSeed.digitalLiteracy),
+      behaviorBoundaries: normalizeStringArray(personaSeed.behaviorBoundaries),
+      learningPreferences: normalizeStringArray(personaSeed.learningPreferences),
+    }
+  };
+}
+
+export { validatePersonaOutput, normalizePersonaOutput };
+
+export async function virtualLearnerPersonaDesigner(input: any): Promise<SkillExecutionResult<any>> {
+  try {
+    const result = await callPrompt<any, any>({
+      agentId: 'skill:simulation-persona-designer',
+      defaultSystemPrompt: VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT,
+      requireActivePrompt: true,
+      caller: { skillId: 'simulation-persona-designer' },
+      // 稳定前缀（默认启用；PAYLOAD_STABLE_PREFIX=0 回退旧序）：candidatePersonas/preferredLevels 前置
+      buildUserPayload: (payload) => {
+        const body = {
+          preferredLevels: normalizeStringArray(payload?.preferredLevels),
+          // 候选池可空：不传/空 → 自由生成（不再兜底固定 15 职业池，消除职业天花板）
+          candidatePersonas: normalizeStringArray(payload?.candidatePersonas),
+          recentPersonaHints: normalizeStringArray(payload?.recentPersonaHints, DEFAULT_RECENT_PERSONA_HINTS),
+          existingPersonaSeed: payload?.existingPersonaSeed && typeof payload.existingPersonaSeed === 'object' ? payload.existingPersonaSeed : undefined,
+        };
+        if (process.env.PAYLOAD_STABLE_PREFIX !== '0') {
+          return {
+            candidatePersonas: body.candidatePersonas,
+            preferredLevels: body.preferredLevels,
+            recentPersonaHints: body.recentPersonaHints,
+            existingPersonaSeed: body.existingPersonaSeed,
+          };
+        }
+        return body;
+      },
+      validateParsedOutput: (parsed) => validatePersonaOutput(parsed),
+      normalizeOutput: (parsed) => normalizePersonaOutput(parsed),
+      mapEnvelope: (output, _input, runtimeContract) => mapSkillOutputEnvelope(runtimeContract, output, {
+        phase: 'completed',
+        isTerminal: true,
+      }),
+      retryStrategy: {
+        maxAttempts: 2,
+        onValidationFail: ({ failureReason }) => `请只输出一个合法 JSON 对象，必须包含完整 personaSeed，所有必填字段都要具体、非空、可观察，禁止使用模板套话或占位词。上次失败原因：${failureReason}`
+      }
+    }, input || {});
+
+    if (!result.success || !result.output) {
+      throw new Error(result.error?.message || 'VIRTUAL_LEARNER_PERSONA_DESIGN_FAILED');
+    }
+
+    return {
+      success: true,
+      output: {
+        ...result.output,
+        runtimeEnvelope: result.runtimeEnvelope,
+        _debug: {
+          rawModelOutput: result.debug.rawModelOutput,
+          extractedJson: result.debug.extractedJson,
+          userPayload: result.debug.userPayload,
+          systemPromptVersion: result.debug.systemPromptVersion,
+        },
+      },
+      duration: result.debug.durationMs,
+    };
+  } catch (error: any) {
+    return {
+      success: false,
+      error: {
+        code: 'VIRTUAL_LEARNER_PERSONA_DESIGN_FAILED',
+        message: error?.message || 'Unknown error',
+      },
+      duration: 0,
+    };
+  }
+}
+
+export default virtualLearnerPersonaDesigner;

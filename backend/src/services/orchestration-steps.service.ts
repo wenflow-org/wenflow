@@ -61,7 +61,7 @@ function isKnownParticipant(agentId: string): boolean {
  * 两类「未解析」属预期、**不算缺陷**，故排除在外：
  * - kind: 'service'：确定性内部实现（无 LLM 步骤，如 buildFramedNormalizedInput / TeachingContextBuilder），
  *   按约定不进 Agent 名册（编排图页「如实标注 unresolved」即此义——那是注解，不是故障）；
- * - v4 辅助技能（skills/v4-aux-skills，如 teaching-opening-generator）：独立注册表，不在 Agent 名册。
+ * - v4 辅助技能（skills/v4-aux-skills，如 teaching-opening）：独立注册表，不在 Agent 名册。
  * 只有「既非服务实现、agentId 又不在任一注册表」才是真缺陷（引用了不存在的 agent，
  * 或 agent 改名/删除后编排没同步）——那种步骤运行时不可路由。
  */

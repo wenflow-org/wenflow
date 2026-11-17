@@ -958,7 +958,7 @@ function goLearn() {
   router.push(pathId ? { path: `/learn/${todayTask.value.id}`, query: { pathId } } : `/learn/${todayTask.value.id}`);
 }
 
-/* ================= 提示条（skill: adaptive-guidance-copy 回填 + 分级） ================= */
+/* ================= 提示条（skill: profile-adaptive-copy 回填 + 分级） ================= */
 const guidanceCopy = computed(() => guidance.value?.copy || null);
 const guidanceSummary = computed(() => guidance.value?.summary || null);
 

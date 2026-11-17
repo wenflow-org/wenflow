@@ -1,6 +1,6 @@
 import prisma from '../../config/database';
 import { learnerProfileService } from './LearnerProfileService';
-import { personalizationEngine } from '../../agents/learner-model-agent/personalization';
+import { personalizationEngine } from '../../agents/profile-learner-model-agent/personalization';
 import learningStateService from '../learning/learning-state.service';
 import type {
   LearnerDynamicState,
@@ -9,7 +9,7 @@ import type {
   LearnerReplanSignal,
   LearnerSnapshot,
   LearnerTeachingHints,
-} from '../../agents/learner-model-agent/types';
+} from '../../agents/profile-learner-model-agent/types';
 import { learnerKnowledgeMemoryService } from './LearnerKnowledgeMemoryService';
 // 相对量判据（ACWR/form）单一真理源——把"疲劳/节奏/可加速"从绝对阈值迁到尺度无关的判据上。
 import { classifyLoad } from '../learning/learning-load-verdict';

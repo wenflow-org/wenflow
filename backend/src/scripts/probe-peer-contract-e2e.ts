@@ -8,13 +8,13 @@
  * 本探针真跑 `executePeerDiscussion`（真 skill + 真 LLM），逐次记录：
  *   - 是否成功产出 message
  *   - 模型原始输出里是否带 followUpQuestions（即本次是否命中"模型省略"这一分支）
- * 并统计 prompt_call_logs 里 skill:peer-reinforcement 的失败计数作为旁证。
+ * 并统计 prompt_call_logs 里 skill:teaching-peer-reinforcement 的失败计数作为旁证。
  *
  * 用法：npx ts-node --transpile-only src/scripts/probe-peer-contract-e2e.ts [--runs=2]
  */
 import 'dotenv/config';
 import prisma from '../config/database';
-import { executePeerDiscussion, type PeerDiscussionInput } from '../skills/peer-reinforcement';
+import { executePeerDiscussion, type PeerDiscussionInput } from '../skills/teaching-peer-reinforcement';
 
 function arg(name: string): string | null {
   const hit = process.argv.find((a) => a.startsWith(`--${name}=`));
@@ -54,15 +54,15 @@ const CASES: PeerDiscussionInput[] = [
 async function failureCount(): Promise<string> {
   const rows = await prisma.prompt_call_logs.groupBy({
     by: ['success'],
-    where: { agentId: 'skill:peer-reinforcement' },
+    where: { agentId: 'skill:teaching-peer-reinforcement' },
     _count: { _all: true },
   });
   const failed = await prisma.prompt_call_logs.count({
-    where: { agentId: 'skill:peer-reinforcement', success: false },
+    where: { agentId: 'skill:teaching-peer-reinforcement', success: false },
   });
   const byMsg = await prisma.prompt_call_logs.groupBy({
     by: ['errorMessage'],
-    where: { agentId: 'skill:peer-reinforcement', success: false },
+    where: { agentId: 'skill:teaching-peer-reinforcement', success: false },
     _count: { _all: true },
   });
   return `总计 ${rows.reduce((sum, r) => sum + r._count._all, 0)} 条 | 失败 ${failed} 条`
@@ -85,7 +85,7 @@ async function main() {
     }
     await new Promise((r) => setTimeout(r, 1500));
     const rows = await prisma.prompt_call_logs.findMany({
-      where: { agentId: 'skill:peer-reinforcement', createdAt: { gte: startedAt } },
+      where: { agentId: 'skill:teaching-peer-reinforcement', createdAt: { gte: startedAt } },
       select: { success: true, errorMessage: true, normalizedOutput: true, extractedJson: true, userPayload: true },
     });
     for (const row of rows) {

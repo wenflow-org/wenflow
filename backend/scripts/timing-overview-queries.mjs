@@ -20,7 +20,7 @@ await t('B topSkills: 7天 groupBy×3', async () => {
   return prisma.agent_call_logs.groupBy({ by: ['agentId'], where: { ...businessExecutionWhere, ...realUserScope, calledAt: { gte: week }, success: true }, _count: { _all: true } });
 });
 await t('C usage失败行: 7天失败全列无LIMIT', () => prisma.agent_call_logs.findMany({ where: { ...businessExecutionWhere, ...realUserScope, calledAt: { gte: week }, success: false }, orderBy: { calledAt: 'desc' } }));
-await t('D wrapup: take50 select output', () => prisma.agent_call_logs.findMany({ where: { agentId: 'skill:session-wrapup', ...realUserScope }, orderBy: { calledAt: 'desc' }, take: 50, select: { output: true } }));
+await t('D wrapup: take50 select output', () => prisma.agent_call_logs.findMany({ where: { agentId: 'skill:teaching-wrapup', ...realUserScope }, orderBy: { calledAt: 'desc' }, take: 50, select: { output: true } }));
 await t('E last24h: 24桶行(calledAt,success)', () => prisma.agent_call_logs.findMany({ where: { ...businessExecutionWhere, ...realUserScope, calledAt: { gte: day } }, orderBy: { calledAt: 'asc' }, select: { calledAt: true, success: true } }));
 await t('F last24h groupBy bySource等×3', async () => {
   await prisma.agent_call_logs.groupBy({ by: ['sourceEntry'], where: { calledAt: { gte: day } }, _count: { _all: true } });

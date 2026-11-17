@@ -208,7 +208,7 @@ describe('users agent log routes', () => {
         'skill:goal-conversation',
         'skill:path-planning',
         'skill:teaching-turn',
-        'skill:session-wrapup',
+        'skill:teaching-wrapup',
         'path-agent',
       ])
     );
@@ -216,8 +216,8 @@ describe('users agent log routes', () => {
     expect(listed).not.toContain('goal-agent');
     expect(listed).not.toContain('teaching-agent');
     // 内部噪音与网关不得进入默认列表
-    expect(listed).not.toContain('skill:adaptive-guidance-copy');
-    expect(listed).not.toContain('skill:kc-mapper');
+    expect(listed).not.toContain('skill:profile-adaptive-copy');
+    expect(listed).not.toContain('skill:path-kc-mapping');
     expect(listed).not.toContain('api-gateway');
     expect(listed).not.toContain('system-call');
     // mock 不模拟 SQL 过滤，因此这里只断言 where 构造正确
@@ -225,7 +225,7 @@ describe('users agent log routes', () => {
 
   // #218 复核残余：能力筛选此前 = manifest 监控组 ∩ userListed，而 Profile 组十条 manifest
   // 一条 userListed 都没有（学习模型 / 预测 / 状态复盘都是平台内部 skill），于是
-  // map.profile 恒为空数组——库里真实存在 skill:learning-predictor 等调用却永远筛不出来。
+  // map.profile 恒为空数组——库里真实存在 skill:profile-learning-predict 等调用却永远筛不出来。
   // 现在能力筛选 = 该监控组的 manifest 全量成员（kind !== 'alias'），默认视图仍是
   // userListed 白名单（见上一个用例），两条范围解耦。
   it('capabilityType 分组 = manifest 监控组全量成员；profile 不再恒空（#218）', async () => {
@@ -252,13 +252,13 @@ describe('users agent log routes', () => {
     const profile = await agentIdsFor('profile');
     expect(profile.length).toBeGreaterThan(0);
     expect(profile).toEqual(expect.arrayContaining([
-      'skill:learning-predictor',
-      'skill:learner-state-review',
-      'skill:learner-model',
+      'skill:profile-learning-predict',
+      'skill:profile-state-review',
+      'skill:profile-learner-model',
     ]));
     expect([...profile].sort()).toEqual([...groupIdsOf('Profile')].sort());
     // alias 节点不得混进集合（旧 id 线上 0 行，混进来只会白占 SQL in 列表）
-    expect(profile).not.toContain('learner-model-agent');
+    expect(profile).not.toContain('profile-learner-model-agent');
 
     const path = await agentIdsFor('path');
     expect(path).toContain('skill:path-planning');
@@ -347,9 +347,9 @@ describe('users agent log routes', () => {
 
     // profile：能力集合 = Profile 组全量成员，刻意包含默认视图（userListed）看不到的内部 skill
     const profile = await agentIdsFor('profile');
-    expect(profile).toEqual(expect.arrayContaining(['skill:learning-predictor', 'skill:learner-model']));
-    expect(userListed).not.toContain('skill:learning-predictor');
-    expect(userListed).not.toContain('skill:learner-model');
+    expect(profile).toEqual(expect.arrayContaining(['skill:profile-learning-predict', 'skill:profile-learner-model']));
+    expect(userListed).not.toContain('skill:profile-learning-predict');
+    expect(userListed).not.toContain('skill:profile-learner-model');
     // 直接断言「确实不是默认视图的子集」：确有成员在默认集合之外（旧不变式在此被有意打破）
     expect(profile.some((id) => !userListed.includes(id))).toBe(true);
 
@@ -359,12 +359,12 @@ describe('users agent log routes', () => {
     expect(system.every((id) => !userListed.includes(id))).toBe(true);
   });
 
-  // #218：筛选结果必须真的能被用户看见——服务端筛出 skill:learning-predictor 的行后，
+  // #218：筛选结果必须真的能被用户看见——服务端筛出 skill:profile-learning-predict 的行后，
   // 列表接口要把它们放进 data.logs（mock 不模拟 SQL 过滤，但能锁住「where 命中 + 响应透出」）。
   it('capabilityType=profile 时列表返回学习模型类调用行（#218）', async () => {
     const row = {
       id: 'acl_predict',
-      agentId: 'skill:learning-predictor',
+      agentId: 'skill:profile-learning-predict',
       sourceEntry: 'platform',
       calledAt: new Date('2026-11-05T02:00:00.000Z'),
       success: true,
@@ -386,8 +386,8 @@ describe('users agent log routes', () => {
     const mainCall = agentLogMocks.findMany.mock.calls
       .find((call: any[]) => Array.isArray(call[0]?.where?.agentId?.in));
     expect(mainCall).toBeTruthy();
-    expect(mainCall![0].where.agentId.in).toContain('skill:learning-predictor');
-    expect((res.body?.data?.logs ?? []).map((log: any) => log.agentId)).toContain('skill:learning-predictor');
+    expect(mainCall![0].where.agentId.in).toContain('skill:profile-learning-predict');
+    expect((res.body?.data?.logs ?? []).map((log: any) => log.agentId)).toContain('skill:profile-learning-predict');
   });
 
   // #229：`?capabilityType=x` / `Teaching` / `PROFILE` / `tutoring2` 修前既不命中

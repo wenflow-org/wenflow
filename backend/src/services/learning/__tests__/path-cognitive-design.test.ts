@@ -1,7 +1,7 @@
 /**
  * `parsePathCognitiveDesign` 的载荷保真（审计 P1 §2.3a）。
  *
- * 它产出的对象会被**整份**当作 `cognitiveCore` 交给 stage-designer；stage 侧
+ * 它产出的对象会被**整份**当作 `cognitiveCore` 交给 path-task-design；stage 侧
  * `withLoadTargetForMilestone` 依赖 `cognitiveCore.loadProfile.stageLoadDistribution`
  * 才能挂出 `milestone.loadTarget`（CLT 负荷调整与规则 #13 的唯一输入）。
  * 此前只返回 {cognitiveDomain, coreConcepts}，把 loadProfile / prerequisiteTree 丢掉

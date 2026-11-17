@@ -63,19 +63,19 @@ describe('checkSkillInputArgs（实参对账）', () => {
     {
       stage: 'teaching',
       contracts: [{ agentId: 'teaching-agent' }],
-      routings: [{ agentId: 'skill:teaching-turn', fieldId: 'control.trigger', handoff: ['skill:peer-reinforcement'] }],
+      routings: [{ agentId: 'skill:teaching-turn', fieldId: 'control.trigger', handoff: ['skill:teaching-peer-reinforcement'] }],
     },
   ];
 
   it('复现 #199 原病灶：三条「声明≠载荷」都会被拦下', () => {
-    // 修复前的三条真实声明（path.yaml / teaching.yaml / profile/teaching 的 learning-predictor 链路）
+    // 修复前的三条真实声明（path.yaml / teaching.yaml / profile/teaching 的 profile-learning-predict 链路）
     const originalStages: ClosureStageLike[] = [
       {
         stage: 'teaching',
         contracts: [{ agentId: 'teaching-agent' }],
         routings: [
-          { agentId: 'teaching-agent', fieldId: 'knowledgeStateSummary', handoff: ['skill:learning-predictor'] },
-          { agentId: 'skill:teaching-turn', fieldId: 'control.shouldTriggerPeer', handoff: ['skill:peer-reinforcement', 'teaching-agent'] },
+          { agentId: 'teaching-agent', fieldId: 'knowledgeStateSummary', handoff: ['skill:profile-learning-predict'] },
+          { agentId: 'skill:teaching-turn', fieldId: 'control.shouldTriggerPeer', handoff: ['skill:teaching-peer-reinforcement', 'teaching-agent'] },
         ],
       },
       {
@@ -87,13 +87,13 @@ describe('checkSkillInputArgs（实参对账）', () => {
       },
     ];
     const cores: ClosureCoreLike[] = [
-      // 修复前 learning-predictor 没有任何 inputs 声明
-      core({ skillId: 'learning-predictor', fields: [] }),
+      // 修复前 profile-learning-predict 没有任何 inputs 声明
+      core({ skillId: 'profile-learning-predict', fields: [] }),
       // path-planning 只声明 replan，没有 replanInstructions
       core({ skillId: 'path-planning', fields: [], inputs: [input({ name: 'replan', ref: 'sandbox:path.replan', sandboxPath: 'path.replan' })] }),
-      // peer-reinforcement 声明 reply/analysis 的来源，但没有 control
+      // teaching-peer-reinforcement 声明 reply/analysis 的来源，但没有 control
       core({
-        skillId: 'peer-reinforcement',
+        skillId: 'teaching-peer-reinforcement',
         fields: [],
         inputs: [input({ kind: 'skill', skill: 'teaching-turn', fieldPath: 'reply', ref: 'skill:teaching-turn.reply' })],
       }),
@@ -103,26 +103,26 @@ describe('checkSkillInputArgs（实参对账）', () => {
     expect(issues).toHaveLength(3);
     expect(issues.every((issue) => issue.code === 'skill-input-undeclared-arg')).toBe(true);
     const text = issues.map((issue) => issue.message).join('\n');
-    expect(text).toContain('skill:learning-predictor');
+    expect(text).toContain('skill:profile-learning-predict');
     expect(text).toContain('knowledgeStateSummary');
     expect(text).toContain('skill:path-planning');
     expect(text).toContain('replanInstructions');
-    expect(text).toContain('skill:peer-reinforcement');
+    expect(text).toContain('skill:teaching-peer-reinforcement');
     expect(text).toContain('control');
   });
 
   it('装配层交付的键未在 inputs 声明 → skill-input-undeclared-arg', () => {
-    const issues = checkSkillInputArgs(stages, [core({ skillId: 'peer-reinforcement', fields: [] })]);
+    const issues = checkSkillInputArgs(stages, [core({ skillId: 'teaching-peer-reinforcement', fields: [] })]);
     expect(issues).toHaveLength(1);
     expect(issues[0].code).toBe('skill-input-undeclared-arg');
     expect(issues[0].message).toContain('control');
-    expect(issues[0].message).toContain('peer-reinforcement');
+    expect(issues[0].message).toContain('teaching-peer-reinforcement');
   });
 
   it('声明了同根的输入（name 或 ref 来源根）即通过', () => {
     const byName = checkSkillInputArgs(stages, [
       core({
-        skillId: 'peer-reinforcement',
+        skillId: 'teaching-peer-reinforcement',
         fields: [],
         inputs: [input({ name: 'control', ref: 'sandbox:teaching.control' })],
       }),
@@ -131,7 +131,7 @@ describe('checkSkillInputArgs（实参对账）', () => {
 
     const byRefRoot = checkSkillInputArgs(stages, [
       core({
-        skillId: 'peer-reinforcement',
+        skillId: 'teaching-peer-reinforcement',
         fields: [],
         inputs: [input({ kind: 'skill', skill: 'teaching-turn', fieldPath: 'control.trigger', ref: 'skill:teaching-turn.control.trigger' })],
       }),
@@ -140,13 +140,13 @@ describe('checkSkillInputArgs（实参对账）', () => {
   });
 
   it('已登记豁免可放行（验收购建里明确允许的「或已登记为豁免」）', () => {
-    const before = SKILL_INPUT_ARG_EXEMPTIONS['peer-reinforcement'];
-    (SKILL_INPUT_ARG_EXEMPTIONS as Record<string, readonly string[]>)['peer-reinforcement'] = ['control'];
+    const before = SKILL_INPUT_ARG_EXEMPTIONS['teaching-peer-reinforcement'];
+    (SKILL_INPUT_ARG_EXEMPTIONS as Record<string, readonly string[]>)['teaching-peer-reinforcement'] = ['control'];
     try {
-      expect(checkSkillInputArgs(stages, [core({ skillId: 'peer-reinforcement', fields: [] })])).toEqual([]);
+      expect(checkSkillInputArgs(stages, [core({ skillId: 'teaching-peer-reinforcement', fields: [] })])).toEqual([]);
     } finally {
-      if (before === undefined) delete (SKILL_INPUT_ARG_EXEMPTIONS as Record<string, readonly string[]>)['peer-reinforcement'];
-      else (SKILL_INPUT_ARG_EXEMPTIONS as Record<string, readonly string[]>)['peer-reinforcement'] = before;
+      if (before === undefined) delete (SKILL_INPUT_ARG_EXEMPTIONS as Record<string, readonly string[]>)['teaching-peer-reinforcement'];
+      else (SKILL_INPUT_ARG_EXEMPTIONS as Record<string, readonly string[]>)['teaching-peer-reinforcement'] = before;
     }
   });
 });
@@ -157,7 +157,7 @@ describe('checkHandoffConsumers（消费者存在性）', () => {
       {
         stage: 'teaching',
         contracts: [{ agentId: 'teaching-agent' }],
-        routings: [{ agentId: 'skill:teaching-turn', fieldId: 'reply', handoff: ['teaching-agent', 'skill:peer-reinforcement'] }],
+        routings: [{ agentId: 'skill:teaching-turn', fieldId: 'reply', handoff: ['teaching-agent', 'skill:teaching-peer-reinforcement'] }],
       },
     ];
     expect(checkHandoffConsumers(stages)).toEqual([]);
@@ -198,7 +198,7 @@ describe('checkProducerContracts（产出-消费闭环）', () => {
     const cores: ClosureCoreLike[] = [
       core({ skillId: 'path-planning', fields: [{ name: 'milestones' }] }),
       core({
-        skillId: 'stage-designer',
+        skillId: 'path-task-design',
         fields: [],
         inputs: [input({ kind: 'skill', skill: 'path-planning', fieldPath: 'milestones.title', ref: 'skill:path-planning.milestones' })],
       }),
@@ -210,7 +210,7 @@ describe('checkProducerContracts（产出-消费闭环）', () => {
     const cores: ClosureCoreLike[] = [
       core({ skillId: 'path-planning', fields: [{ name: 'milestones' }] }),
       core({
-        skillId: 'stage-designer',
+        skillId: 'path-task-design',
         fields: [],
         inputs: [input({ kind: 'skill', skill: 'path-planning', fieldPath: 'ghostField', ref: 'skill:path-planning.ghostField' })],
       }),
@@ -224,7 +224,7 @@ describe('checkProducerContracts（产出-消费闭环）', () => {
   it('上游 core 不存在 → input-producer-core-missing', () => {
     const cores: ClosureCoreLike[] = [
       core({
-        skillId: 'stage-designer',
+        skillId: 'path-task-design',
         fields: [],
         inputs: [input({ kind: 'skill', skill: 'ghost-skill', fieldPath: 'x', ref: 'skill:ghost-skill.x' })],
       }),
@@ -241,11 +241,11 @@ describe('checkDeclaredInputDelivery（#199 盲区 1 反向死声明）', () => 
       stage: 'teaching',
       contracts: [{ agentId: 'teaching-agent' }],
       // teaching-turn 自动链产出 reply，但 handoff 只给 path-planning，
-      // 不给下面声明消费的 peer-reinforcement ⇒ 反向死声明
+      // 不给下面声明消费的 teaching-peer-reinforcement ⇒ 反向死声明
       routings: [
         { agentId: 'skill:teaching-turn', fieldId: 'reply', handoff: ['skill:path-planning'] },
-        // 这一行自动链产出 reply 且 handoff 给 peer-reinforcement ⇒ 正向用例
-        { agentId: 'skill:teaching-turn', fieldId: 'analysis.levelScore', handoff: ['skill:peer-reinforcement'] },
+        // 这一行自动链产出 reply 且 handoff 给 teaching-peer-reinforcement ⇒ 正向用例
+        { agentId: 'skill:teaching-turn', fieldId: 'analysis.levelScore', handoff: ['skill:teaching-peer-reinforcement'] },
       ],
     },
   ];
@@ -254,7 +254,7 @@ describe('checkDeclaredInputDelivery（#199 盲区 1 反向死声明）', () => 
     const cores: ClosureCoreLike[] = [
       core({ skillId: 'teaching-turn', fields: [{ name: 'analysis' }] }),
       core({
-        skillId: 'peer-reinforcement',
+        skillId: 'teaching-peer-reinforcement',
         fields: [],
         inputs: [input({ kind: 'skill', skill: 'teaching-turn', fieldPath: 'analysis.levelScore', ref: 'skill:teaching-turn.analysis.levelScore' })],
       }),
@@ -267,7 +267,7 @@ describe('checkDeclaredInputDelivery（#199 盲区 1 反向死声明）', () => 
   it('反向：声明消费 skill:teaching-turn.reply，但自动链从不 handoff 给本 skill → skill-input-dead-declaration', () => {
     const cores: ClosureCoreLike[] = [
       core({
-        skillId: 'peer-reinforcement',
+        skillId: 'teaching-peer-reinforcement',
         fields: [],
         inputs: [input({ kind: 'skill', skill: 'teaching-turn', fieldPath: 'reply', ref: 'skill:teaching-turn.reply' })],
       }),
@@ -275,7 +275,7 @@ describe('checkDeclaredInputDelivery（#199 盲区 1 反向死声明）', () => 
     const issues = checkDeclaredInputDelivery(stages, cores);
     expect(issues).toHaveLength(1);
     expect(issues[0].code).toBe('skill-input-dead-declaration');
-    expect(issues[0].message).toContain('peer-reinforcement');
+    expect(issues[0].message).toContain('teaching-peer-reinforcement');
     expect(issues[0].message).toContain('reply');
   });
 
@@ -291,7 +291,7 @@ describe('checkDeclaredInputDelivery（#199 盲区 1 反向死声明）', () => 
     ];
     const cores: ClosureCoreLike[] = [
       core({
-        skillId: 'peer-reinforcement',
+        skillId: 'teaching-peer-reinforcement',
         fields: [],
         inputs: [input({ kind: 'skill', skill: 'teaching-turn', fieldPath: 'reply', ref: 'skill:teaching-turn.reply' })],
       }),
@@ -301,27 +301,27 @@ describe('checkDeclaredInputDelivery（#199 盲区 1 反向死声明）', () => 
   });
 
   it('豁免可放行（与 SKILL_INPUT_ARG_EXEMPTIONS 同机制）', () => {
-    const before = SKILL_INPUT_DEAD_EDGE_EXEMPTIONS['peer-reinforcement'];
-    (SKILL_INPUT_DEAD_EDGE_EXEMPTIONS as Record<string, readonly string[]>)['peer-reinforcement'] = ['reply'];
+    const before = SKILL_INPUT_DEAD_EDGE_EXEMPTIONS['teaching-peer-reinforcement'];
+    (SKILL_INPUT_DEAD_EDGE_EXEMPTIONS as Record<string, readonly string[]>)['teaching-peer-reinforcement'] = ['reply'];
     try {
       const cores: ClosureCoreLike[] = [
         core({
-          skillId: 'peer-reinforcement',
+          skillId: 'teaching-peer-reinforcement',
           fields: [],
           inputs: [input({ kind: 'skill', skill: 'teaching-turn', fieldPath: 'reply', ref: 'skill:teaching-turn.reply' })],
         }),
       ];
       expect(checkDeclaredInputDelivery(stages, cores)).toEqual([]);
     } finally {
-      if (before === undefined) delete (SKILL_INPUT_DEAD_EDGE_EXEMPTIONS as Record<string, readonly string[]>)['peer-reinforcement'];
-      else (SKILL_INPUT_DEAD_EDGE_EXEMPTIONS as Record<string, readonly string[]>)['peer-reinforcement'] = before;
+      if (before === undefined) delete (SKILL_INPUT_DEAD_EDGE_EXEMPTIONS as Record<string, readonly string[]>)['teaching-peer-reinforcement'];
+      else (SKILL_INPUT_DEAD_EDGE_EXEMPTIONS as Record<string, readonly string[]>)['teaching-peer-reinforcement'] = before;
     }
   });
 
   it('sandbox / user 输入不参与反向死声明（避免编排注入式交付误报）', () => {
     const cores: ClosureCoreLike[] = [
       core({
-        skillId: 'peer-reinforcement',
+        skillId: 'teaching-peer-reinforcement',
         fields: [],
         inputs: [input({ name: 'snapshot', ref: 'sandbox:profile.snapshot.dynamicState', sandboxPath: 'profile.snapshot.dynamicState' })],
       }),
@@ -391,7 +391,7 @@ describe('declaredInputKeys（输入声明可见键）', () => {
     expect([...keys].sort()).toEqual(['learner', 'milestones', 'peerHistory']);
   });
 
-  it('learning-predictor 的三个编排注入键已在沙盘注册表登记（#199 补声明配套）', () => {
+  it('profile-learning-predict 的三个编排注入键已在沙盘注册表登记（#199 补声明配套）', () => {
     const keys = SANDBOX_EXTRA_KEYS['teaching-agent'];
     for (const key of ['knowledgeStateSummary', 'taskContext', 'learningState']) {
       expect(keys).toContain(key);

@@ -1,0 +1,631 @@
+/**
+ * 学习者模型类型定义
+ */
+
+export type MetacognitionLevel = 'high' | 'medium' | 'low';
+export type ThinkingStyle = 'intuitive' | 'logical' | 'visual' | 'practical' | 'mixed';
+export type ConfusionPattern = 'concept-confusion' | 'application-difficulty' | 'principle-misunderstanding' | 'none';
+export type PreferredStyle = 'video' | 'reading' | 'practice' | 'mixed';
+export type TheoryVsPractice = 'theory-first' | 'practice-first' | 'balanced';
+export type SessionLength = 'short' | 'medium' | 'long';
+export type MotivationTrigger = 'interest' | 'problem-solving' | 'external-pressure' | 'career';
+export type UrgencyLevel = 'high' | 'medium' | 'low';
+export type ConfidenceLevel = 'confident' | 'moderate' | 'anxious';
+
+export interface CognitiveProfile {
+  metacognitionLevel: MetacognitionLevel;
+  thinkingStyle: ThinkingStyle;
+  confusionPattern: ConfusionPattern;
+  priorKnowledgeStructure: 'scattered' | 'systematic' | 'blank';
+  selfAssessmentAccuracy: 'overconfident' | 'accurate' | 'underconfident';
+}
+
+export interface BehavioralBaseline {
+  avgResponseTime: number;
+  avgMessageLength: number;
+  avgInteractionInterval: number;
+  engagementLevel: number;
+  consistencyScore: number;
+}
+
+export interface LearningState {
+  ktl: number;
+  lf: number;
+  lss: number;
+  lsb: number;
+  masteryByTopic: Record<string, number>;
+  recentProgress: 'improving' | 'stable' | 'declining';
+  streak: number;
+}
+
+export interface LearningPreferences {
+  preferredStyle: PreferredStyle;
+  theoryVsPractice: TheoryVsPractice;
+  sessionLength: SessionLength;
+  preferredDifficulty: 'easy' | 'medium' | 'hard';
+  prefersHints: boolean;
+}
+
+export interface EmotionalProfile {
+  motivationTrigger: MotivationTrigger;
+  urgencyLevel: UrgencyLevel;
+  confidenceLevel: ConfidenceLevel;
+  frustrationTolerance: number;
+  rewardSensitivity: 'high' | 'medium' | 'low';
+}
+
+export interface InteractionHistory {
+  totalSessions: number;
+  totalMessages: number;
+  avgSessionDuration: number;
+  topicsExplored: string[];
+  conceptsStruggled: string[];
+  conceptsMastered: string[];
+}
+
+export interface LearnerNarrativeInsights {
+  goalNarrative: string;
+  backgroundContextNote: string;
+  motivationNarrative: string;
+  timeConstraintNote: string;
+  selfAssessmentNote: string;
+  contentReceptionPattern: string;
+  practicePreferenceNote: string;
+  frictionPatternNote: string;
+  effectiveTeachingPattern: string;
+  supportStyleNote: string;
+  taskGranularityNote: string;
+}
+
+export interface LearnerCurriculumControls {
+  taskGranularityLevel: 'small' | 'medium' | 'large';
+  conceptDensityLevel: 'low' | 'medium' | 'high';
+  reviewFrequencyLevel: 'low' | 'medium' | 'high';
+  progressionStrategyNote: string;
+}
+
+/**
+ * goal 阶段目标对话产出的叙述性理解（原文留存）。
+ * `learningSignal` 是学习者在目标对话中流露的交付形式偏好，教学侧（TeachingContextBuilder）
+ * 与开场技能据此兑现可见承诺，因此必须随 profile 持久化——只进 narrativeInsights 会丢原文。
+ */
+export interface LearnerGoalNarratives {
+  realProblem?: string;
+  surfaceGoal?: string;
+  motivation?: string;
+  backgroundExperience?: string;
+  painPoints?: string[];
+  learningSignal?: unknown;
+  currentLevel?: string;
+  availableTime?: string;
+}
+
+export interface LearnerModelProfile {
+  userId: string;
+  lastUpdated: string;
+  
+  cognitive: CognitiveProfile;
+  /**
+   * 学习行为基线（平均响应/消息长度/互动间隔/投入度/一致性）。
+   * **无观测时为 null**：EMA 基线数据源已于 2026-08 退役，`fetchBaselineData` 恒返回 null。
+   * 2026-11-09 运营字段真值核查：此前回落到 DEFAULT_BEHAVIORAL 常量，导致所有学员显示同一组
+   * 永远不变的数字；改为 null 语义，前端不渲染该子卡、下游不参与判断。
+   * 若将来实现真实采集（从 teaching_session_messages 计算），直接填值即可，结构不变。
+   */
+  behavioral: BehavioralBaseline | null;
+  learning: LearningState;
+  preferences: LearningPreferences;
+  emotional: EmotionalProfile;
+  history: InteractionHistory;
+  narrativeInsights: LearnerNarrativeInsights;
+  curriculumControls: LearnerCurriculumControls;
+  /** 有目标对话数据时存在；无则为 undefined（读取侧需可选链） */
+  narratives?: LearnerGoalNarratives;
+
+  /**
+   * 画像叙述的出处。目标对话是「一个目标一条」，叙述洞察里的背景与现状/目标与动机/
+   * 时间与自述只反映**最近一次**已完成目标对话，不是跨目标聚合——同一学习者在不同
+   * 目标下的背景与卡点互不相干（实测同一账号可并存「幼师考指南」「AI 教育平台」
+   * 「和猫沟通」三个目标，并集只会串味）。带上出处，读「背景与现状」时才不会误读成
+   * 该学习者的全部背景。
+   */
+  narrativeSource?: {
+    conversationId: string;
+    goalTitle: string;
+    completedAt: string | null;
+    /** 该目标对话所属路径（可为空：存量会话/目标对话未绑定路径时）。
+     *  管理端据此把叙述绑定到当前路径，避免奶茶店的目标背景摆进心理学路径的画像页
+     *  （2026-11-11 多路径串台走查）。 */
+    learningPathId?: string | null;
+  } | null;
+
+  /**
+   * 认知 / 偏好 / 情绪 / 叙述这组「人设字段」的**采集时点**（最近一次目标对话理解证据的时间）。
+   *
+   * 2026-11-09 画像链路核查确认：这组字段只在目标对话阶段写入，此后的教学表现不会回写
+   * （唯一的例外是 `selfAssessmentAccuracy`，它会被 FSRS 校准结果覆盖）。
+   * 暴露时点是为了让界面能标「来自哪天的目标对话」，避免把旧快照读成当前状态。
+   * 没有做「课后自动刷新人设」——那需要新的推断规则，属产品决策，不做编造式回写。
+   */
+  personaCapturedAt?: string | null;
+  
+  derivedInsights: {
+    learningVelocity: number;
+    optimalSessionLength: number;
+    recommendedDifficulty: 'easy' | 'medium' | 'hard';
+    suggestedApproach: string;
+    /**
+     * riskFactors / strengths 由 ProfileAggregator.identifyRiskFactors / identifyStrengths 从画像字段
+     * （cognitive/learning/behavioral/emotional）确定性推导，**不消费** knowledgeMemory.globalBackground
+     * 台账——契约上「不接通」。issue #196 点名的「叙述层增强永不触发」是：原先
+     * reusableFoundations→strengths / blockedFoundations→riskFactors 的增强，其唯一写入口
+     * （applyUpdate 的 'knowledge-background' 合并分支，写入方 learner.coordinator）在 1b3cf644 退役后
+     * 已无调用方。该分支与其增强随该提交一并移除、不再接通：接通需重造写入口或改从 globalBackground
+     * 派生，属产品决策，未做（保住现有行为）。
+     */
+    riskFactors: string[];
+    strengths: string[];
+  };
+}
+
+export interface LearnerDynamicState {
+  metrics: {
+    lss: number;
+    ktl: number;
+    lf: number;
+    lsb: number;
+  };
+  /**
+   * 课内判断所用的路径（缺省 = 全局聚合）。全局 metrics 管节奏/疲劳，
+   * 课内难度与支架按本路径的状态判断（见 LearnerSnapshotService）。
+   */
+  lessonScopePathId?: string | null;
+  /** 课内判断所用的指标（路径级；缺省时等于 metrics） */
+  lessonMetrics?: {
+    lss: number;
+    ktl: number;
+    lf: number;
+    lsb: number;
+  };
+  recentTrend: 'improving' | 'stable' | 'declining';
+  fatigueRisk: 'low' | 'medium' | 'high';
+  confidenceTrend: 'rising' | 'stable' | 'falling';
+  recentSessionQuality: 'strong' | 'mixed' | 'weak';
+  recommendedPacing: 'slow' | 'moderate' | 'fast';
+  recommendedInteraction: {
+    hintTiming: 'immediate' | 'delayed' | 'on-request';
+    encouragement: 'low' | 'medium' | 'high';
+    challenge: 'low' | 'medium' | 'high';
+  };
+  /** SRL 三阶段追踪（Zimmerman 2000）：forethought=规划期，performance=执行期，self-reflection=反思期 */
+  srlPhase: 'forethought' | 'performance' | 'self-reflection';
+}
+
+export interface LearnerRecentEvidence {
+  type: 'task-completed' | 'teaching-session' | 'summary' | 'evaluation';
+  taskId?: string;
+  sessionId?: string;
+  conceptKeys: string[];
+  signal: 'mastery' | 'struggle' | 'fatigue' | 'incomplete';
+  score?: number;
+  happenedAt: string;
+}
+
+export interface LearnerConceptState {
+  conceptKey: string;
+  label: string;
+  /**
+   * 概念身份（canonical，concepts.id）。读侧一律「conceptId 优先，空则回落 conceptKey/label」。
+   * 痕迹来源直接带；其它来源经注册表只读解析补齐；解析不到为 undefined（不编造）。
+   */
+  conceptId?: string;
+  sourceType: 'task-label' | 'session-knowledge' | 'derived' | 'memory-trace';
+  masteryScore: number;
+  stability: 'unknown' | 'fragile' | 'developing' | 'stable';
+  status: 'pending' | 'learning' | 'mastered' | 'review';
+  relatedTaskIds: string[];
+  relatedMilestoneIds: string[];
+  lastSeenAt?: string;
+}
+
+export interface LearnerTaskMastery {
+  taskId: string;
+  milestoneId: string;
+  title: string;
+  status: 'todo' | 'in_progress' | 'completed';
+  masteryState: 'unknown' | 'learning' | 'developing' | 'stable' | 'fragile';
+  confidence: number;
+  lastEvidenceAt?: string;
+}
+
+export interface LearnerMilestoneProgress {
+  milestoneId: string;
+  stageNumber: number;
+  title: string;
+  goal?: string | null;
+  totalTasks: number;
+  completedTasks: number;
+  masteryState: 'unknown' | 'partial' | 'stable' | 'at-risk';
+}
+
+export interface LearnerPrerequisiteGap {
+  conceptKey: string;
+  label: string;
+  reason: string;
+  severity: 'low' | 'medium' | 'high';
+  /**
+   * 缺口来源：
+   * - `graph` = 沿概念图 prerequisite 边向上游闭包得到的**真上游前置**未掌握；
+   * - `fallback` = 图缺失时的回落口径，实为"**本任务自身**薄弱概念"，**不是**前置。
+   * 消费方（教学上下文的 `prerequisiteConcepts`）据此区分，避免把本课概念当"前置"喂给模型。
+   */
+  source?: 'graph' | 'fallback';
+}
+
+export interface LearnerBackgroundConceptLedgerItem {
+  conceptKey: string;
+  label: string;
+  familiarity: 'seen' | 'practiced' | 'understood' | 'stable';
+  transferReadiness: 'low' | 'medium' | 'high';
+  misconceptionRisk: 'low' | 'medium' | 'high';
+  firstSeenAt?: string;
+  lastSeenAt?: string;
+  sourcePaths: string[];
+  sourceTasks: string[];
+  evidenceCount: number;
+  /**
+   * 数值掌握度（0–1，2026-11-09 补）。
+   *
+   * 三档 familiarity/transferReadiness 只回答「稳不稳」，看不出「0.9 掉到 0.35」这种退化——
+   * 运营页因此只能看到 practiced→practiced。本字段是**测量值**（确定性通道算出，与画像/图谱
+   * 共用 `resolveMasteryScore` 口径：取业务时间最新的证据信号）。模型蒸馏行不带数值，
+   * 合并规则：组内有确定性数值 → 取业务时间最新那条；纯模型行 → 字段缺省
+   * （不写 0：0 表示「测出来是 0」，缺省表示「没测到」）。
+   */
+  masteryScore?: number;
+}
+
+export interface LearnerRecurringConfusion {
+  conceptKey: string;
+  label: string;
+  pattern: string;
+  confidence: number;
+  count: number;
+  lastSeenAt?: string;
+}
+
+export interface LearnerTransferSignal {
+  conceptKey: string;
+  label: string;
+  readiness: 'low' | 'medium' | 'high';
+  confidence: number;
+  lastSeenAt?: string;
+}
+
+export interface LearnerGlobalBackgroundKnowledge {
+  conceptLedger: LearnerBackgroundConceptLedgerItem[];
+  recurringConfusions: LearnerRecurringConfusion[];
+  reusableFoundations: string[];
+  blockedFoundations: string[];
+  transferSignals: LearnerTransferSignal[];
+  /** 最近一次课后知识状态自然语言摘要（profile-lesson-enrich 产出，供预测器/教学决策读取）；
+   *  无 enrichment 证据时不出现（issue #194：此前声明为 profile 产出却从未进快照）。
+   *  issue #198：摘要按**当前路径**取（自由文本可命名概念，跨路径取会经预测器渗入当前教学场景）；
+   *  外层 globalBackground 的其它结构化字段仍是用户级跨路径聚合。 */
+  knowledgeStateSummary?: string;
+}
+
+export interface LearnerPathKnowledgeMemory {
+  learningPathId: string;
+  pathTitle: string;
+  pathSummary?: string | null;
+  /** 外部截止锚（P1.6 落后触发器判据输入，ISO 字符串）；无 deadline 的路径为 null */
+  deadline?: string | null;
+  /** 路径起点（createdAt，ISO 字符串）：时间进度百分位的分母起点；缺失时落后判据不启用 */
+  startedAt?: string | null;
+  progress: {
+    totalMilestones: number;
+    completedMilestones: number;
+    totalTasks: number;
+    completedTasks: number;
+  };
+  currentPosition: {
+    milestoneId: string;
+    stageNumber: number;
+    milestoneTitle: string;
+    milestoneGoal?: string | null;
+    taskId?: string;
+    taskTitle?: string;
+    taskOrder?: number;
+    totalTasksInMilestone?: number;
+    completedTasksInMilestone?: number;
+  };
+  milestoneProgress: LearnerMilestoneProgress[];
+  taskMastery: LearnerTaskMastery[];
+  conceptStates: LearnerConceptState[];
+  prerequisiteGaps: LearnerPrerequisiteGap[];
+  recentEvidence: LearnerRecentEvidence[];
+  /** 该路径自己的教学基础 / 反复困惑（2026-11-11 多路径串台修复）。
+   *  globalBackground 是用户级聚合，其中 reusableFoundations / blockedFoundations /
+   *  recurringConfusions 是自由文本，无法用概念 sourcePaths 收窄；这里按**证据行 pathId**
+   *  只收当前路径的条目，避免心理学页面出现奶茶店的「被阻塞基础」。
+   *  旧快照没有该字段时，前端回落到 globalBackground 全量名单（保持旧行为）。 */
+  scopedBackground?: {
+    reusableFoundations: string[];
+    blockedFoundations: string[];
+    recurringConfusions: LearnerRecurringConfusion[];
+  };
+}
+
+export interface LearnerKnowledgeMemory {
+  currentPath?: LearnerPathKnowledgeMemory;
+  globalSignals: {
+    masteredConcepts: string[];
+    fragileConcepts: string[];
+    strugglingConcepts: string[];
+    /** 高严重度卡点：struggling 且证据均分 <0.3（2026-10-15 P0-2 F4）。fragile 通道被记忆引擎
+     *  的「未巩固」常态饱和（实测 70-100% 痕迹 <0.5），不能当门槛；加速/压缩的判据用这一档。 */
+    severeStrugglingConcepts: string[];
+  };
+  globalBackground: LearnerGlobalBackgroundKnowledge;
+}
+
+export interface LearnerLearningControlState {
+  paceMode: 'recover' | 'steady' | 'push';
+  conceptLoad: 'low' | 'medium' | 'high';
+  reviewPriority: 'high' | 'medium' | 'low';
+  challengeLevelCap: 'low' | 'medium' | 'high';
+  checkpointNeed: 'high' | 'medium' | 'low';
+  shouldAvoidNewConcepts: boolean;
+  shouldPreferConsolidation: boolean;
+  shouldOfferBreak: boolean;
+}
+
+export interface LearnerReplanSignal {
+  shouldSuggest: boolean;
+  priority: 'none' | 'low' | 'medium' | 'high';
+  recommendation: 'keep' | 'reinforce' | 'slow_down' | 'resequence' | 'accelerate';
+  scope: 'none' | 'next_milestone' | 'downstream_path';
+  rationale: string;
+  reasonCodes: string[];
+}
+
+export interface LearnerTeachingHints {
+  promptEnhancement: string;
+  recommendedApproach: string;
+  emphasize: string[];
+  avoid: string[];
+  riskFactors: string[];
+}
+
+export interface LearnerPlanningProjection {
+  /** 恒为 true（无历史时返回 null 而不是带 false 的对象，避免给规划注入噪声） */
+  hasLearningHistory: boolean;
+  metrics: { lss: number; ktl: number; lf: number; lsb: number } | null;
+  recommendedPacing: string;
+  recentTrend: string;
+  fatigueRisk: string;
+  paceMode: string;
+  challengeLevelCap: string;
+  /** 已稳 / 脆弱 / 挣扎 / 阻塞地基 / 反复误解（各截断，供 prompt 做难度校准） */
+  masteredConcepts: string[];
+  fragileConcepts: string[];
+  strugglingConcepts: string[];
+  blockedFoundations: string[];
+  recurringConfusions: Array<{ concept: string; note: string; count: number }>;
+  conceptLedgerSize: number;
+}
+
+export interface LearnerSnapshot {
+  snapshotVersion: 'learner-snapshot-v1';
+  scope: {
+    userId: string;
+    learningPathId?: string;
+    milestoneId?: string;
+    taskId?: string;
+    mode: 'global' | 'path' | 'teaching';
+  };
+  freshness: {
+    generatedAt: string;
+    confidence: number;
+    basedOn: {
+      latestGoalConversationAt?: string;
+      latestMetricAt?: string;
+      latestTeachingSessionAt?: string;
+      latestTaskCompletionAt?: string;
+      latestPathUpdateAt?: string;
+    };
+  };
+  profile: LearnerModelProfile;
+  /** 逐字段来源（可选：虚拟会话/预览等不跑画像聚合的快照没有） */
+  profileSources?: ProfileFieldSources;
+  dynamicState: LearnerDynamicState;
+  learningControlState: LearnerLearningControlState;
+  replanSignal: LearnerReplanSignal;
+  knowledgeMemory: LearnerKnowledgeMemory;
+  teachingHints: LearnerTeachingHints;
+}
+
+export interface TeachingLearnerProjection {
+  stableProfile: {
+    thinkingStyle: string;
+    preferredStyle: string;
+    theoryVsPractice: string;
+    sessionLength: string;
+    confidenceLevel: string;
+  };
+  liveState: {
+    lss: number;
+    ktl: number;
+    lf: number;
+    lsb: number;
+    recentTrend: string;
+    recommendedPacing: string;
+    /**
+     * 疲劳风险（low/medium/high）。#183：此前只在 toReplanProjection 里出现，
+     * 课堂投影裁掉它 ⇒「该减速」结论到不了下一课。
+     */
+    fatigueRisk: 'low' | 'medium' | 'high';
+  };
+  /**
+   * 重排信号（阈值召回 + 归因）。#183：与 toReplanProjection.signal 同源，
+   * 让「该重排」结论随课堂载荷送达下一课，而不是只进 dashboard 文案与路径重排。
+   */
+  replanSignal: LearnerReplanSignal;
+  pathContext: {
+    pathTitle: string;
+    pathSummary?: string | null;
+    currentMilestoneTitle: string;
+    currentStageNumber: number;
+    currentTaskOrder: number;
+    totalTasksInMilestone: number;
+    completedPrerequisiteTasks: string[];
+  };
+  relevantKnowledge: {
+    mastered: string[];
+    fragile: string[];
+    struggling: string[];
+  };
+  backgroundKnowledge: {
+    reusableFoundations: string[];
+    blockedFoundations: string[];
+    recentConceptLedger: LearnerBackgroundConceptLedgerItem[];
+    recurringConfusions: LearnerRecurringConfusion[];
+    /** 迁移就绪度信号（profile-lesson-enrich 产出、经快照 globalBackground 聚合）。
+     *  供课堂在联系迁移目标时点名可迁移概念（issue #196：此前该字段无任何确定性消费方）。 */
+    transferSignals: LearnerTransferSignal[];
+  };
+  learningControlState: LearnerLearningControlState;
+  /**
+   * 任务级难度调整结论（可选）：baseline/adjusted/direction/reasons。
+   * 由 TaskDifficultyAdjustmentService 按学习者状态确定，课堂按此调整本节难度。
+   */
+  taskDifficulty?: {
+    baseline: number;
+    adjusted: number;
+    direction: 'decrease' | 'keep' | 'increase';
+    delta: number;
+    cap: number;
+    capSource: 'low' | 'medium' | 'high';
+    reasons: string[];
+    evidence: Record<string, unknown>;
+  };
+  teachingHints: {
+    promptEnhancement: string;
+    recommendedApproach: string;
+    emphasize: string[];
+    avoid: string[];
+    /** 画像判定的风险因子。#183：教学投影此前只保留前四个键，riskFactors 被裁掉 */
+    riskFactors: string[];
+  };
+}
+
+export interface LearnerReplanProjection {
+  path: {
+    learningPathId: string;
+    pathTitle: string;
+    progress: {
+      totalMilestones: number;
+      completedMilestones: number;
+      totalTasks: number;
+      completedTasks: number;
+    };
+    currentPosition: {
+      milestoneId: string;
+      stageNumber: number;
+      milestoneTitle: string;
+      taskId?: string;
+      taskTitle?: string;
+    };
+  };
+  mastery: {
+    stableTaskIds: string[];
+    fragileTaskIds: string[];
+    stableConcepts: string[];
+    fragileConcepts: string[];
+    strugglingConcepts: string[];
+    /** 高严重度卡点（struggling 且证据均分 <0.3）——压缩/加速判据用（P0-2 F4） */
+    severeStrugglingConcepts: string[];
+  };
+  risk: {
+    fatigueRisk: 'low' | 'medium' | 'high';
+    recentTrend: 'improving' | 'stable' | 'declining';
+    prerequisiteGaps: Array<{
+      conceptKey: string;
+      label: string;
+      severity: 'low' | 'medium' | 'high';
+    }>;
+  };
+  evidence: {
+    recentEvidence: LearnerRecentEvidence[];
+    milestoneStates: LearnerMilestoneProgress[];
+    taskMastery: LearnerTaskMastery[];
+  };
+  signal: LearnerReplanSignal;
+}
+
+/**
+ * 个性化配置（**只保留真正被消费的互动参数**）。
+ *
+ * 2026-11-09 画像链路核查：原接口还有 `contentStyle` / `pacing` / `pathAdjustment` 三段，
+ * 全仓没有任何读取方（`generateConfig` 的唯一调用点是 LearnerSnapshotService，它只取
+ * `interaction`），而且其中的绝对阈值（lf>5 / lf>4）与快照的 ACWR 相对判据不同源。
+ * 与其保留「算了没人用、还可能被误读成已生效」的字段，不如从契约里删掉；
+ * 将来若要接入，应以 `dynamicState` 的同一口径为输入，而不是重新造一套阈值。
+ */
+export interface LearnerPersonalizationConfig {
+  interaction: {
+    hintTiming: 'immediate' | 'delayed' | 'on-request';
+    encouragementFrequency: 'low' | 'medium' | 'high';
+    challengeFrequency: 'low' | 'medium' | 'high';
+  };
+}
+
+export interface ProfileUpdateSource {
+  agentId: string;
+  timestamp: string;
+  // dataType 收窄为 applyUpdate 实际落地的三种（issue #196 复核）：'behavioral' / 'preferences' /
+  // 'interaction' 虽被声明，但 applyUpdate 从无对应分支、只会落到 default 被判失败——声明与行为矛盾，
+  // 故一并移除。未声明的取值不再可能经类型进入；default 仅作运行期防御（agent 侧 metadata.source
+  // 是 as 断言，可能带任意值）。'knowledge-background' 随其合并分支移除：唯一写入方
+  // （learner.coordinator）在 1b3cf644 退役后无人调用。
+  dataType: 'cognitive' | 'learning' | 'emotional';
+  data: Partial<
+    CognitiveProfile & 
+    BehavioralBaseline & 
+    LearningState & 
+    LearningPreferences & 
+    EmotionalProfile &
+    InteractionHistory
+  >;
+  confidence: number;
+}
+
+/**
+ * 画像字段的来源（2026-11-02 P1-8）：每段只列**有数据支撑**的字段名。
+ *
+ * profile-aggregator 在没数据时会填 DEFAULT_*，界面必须能逐格区分「实测」与「初始默认值」。
+ * 只靠「该账号没有任何学习证据」这一个全局条件不够：有目标对话但还没上过课时，
+ * 认知/偏好/情绪来自对话（实测），行为基线/学习状态仍是默认常量，同一张卡里两种来源。
+ */
+export interface ProfileFieldSources {
+  cognitive: string[];
+  behavioral: string[];
+  learning: string[];
+  preferences: string[];
+  emotional: string[];
+  history: string[];
+  /** 课程控制（任务粒度/概念密度/复习频率/推进策略）是按画像规则推出来的，
+   *  只有输入画像有数据时才算「有支撑」，否则同样是默认常量 */
+  curriculumControls: string[];
+  /** 派生建议只有数值/分档三项需要标来源（learningVelocity / optimalSessionLength / recommendedDifficulty）；
+   *  建议文本、优势、风险因素是规则产出，不是「实测 vs 默认」 */
+  derivedInsights: string[];
+}
+
+export interface ProfileAggregationResult {
+  profile: LearnerModelProfile;
+  changes: string[];
+  confidence: number;
+  sources: ProfileFieldSources;
+}

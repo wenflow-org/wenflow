@@ -39,22 +39,22 @@ interface Config {
  */
 export const LEARN_DIALOGUE_SKILLS = new Set([
   'teaching-turn',
-  'virtual-learner-learn-turn-simulator',
-  'virtual-learner-epistemic-grounding',
-  'peer-reinforcement',
-  'adaptive-guidance-copy',
-  'learning-predictor',
-  'virtual-learner-goal-dialogue-simulator',
+  'simulation-learn-turn',
+  'simulation-epistemic-grounding',
+  'teaching-peer-reinforcement',
+  'profile-adaptive-copy',
+  'profile-learning-predict',
+  'simulation-goal-dialogue',
   // 2026-10-05：跑批把 ds 空出来（外部测试零影响）——这两条一并纳入用户模型优先集。
   // 只有「调用链从用户自有 provider 起步」（有 user-agent 绑定的上下文，跑批 admin 即此）
   // 才走用户模型；外部测试者无绑定 → 技能行 ds 照常生效。
   'goal-conversation',
-  'teaching-opening-generator',
-  // 2026-10-10：session-wrapup 与上两条同境——绑定链上技能行 ds 落到无 ds 通道的分组
+  'teaching-opening',
+  // 2026-10-10：teaching-wrapup 与上两条同境——绑定链上技能行 ds 落到无 ds 通道的分组
   //（实测「No available channel for deepseek-v4.1-flash under group 周卡」8/8 全灭，
   // wrapup 是链上唯一既被绑定又钉 ds 的环节，整晚 completed 课总结全退 fallback）。
   // 收口本就是学习对话链的一环，随链走用户模型；外部测试者无绑定不受影响。
-  'session-wrapup',
+  'teaching-wrapup',
 ]);
 
 /** 解析 skill_model_configs.paramOverrides（JSON）。非对象/坏 JSON 一律视为未覆盖。 */

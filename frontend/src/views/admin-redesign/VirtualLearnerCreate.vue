@@ -169,7 +169,7 @@ async function createSample() {
   }
 }
 
-/* AI 生成身份：skill:virtual-learner-persona-designer（只做人设，不依赖学习目标、不写故事） */
+/* AI 生成身份：skill:simulation-persona-designer（只做人设，不依赖学习目标、不写故事） */
 const personaBusy = ref(false)
 const personaSeed = ref<Record<string, unknown> | null>(null)
 /** AI 生成身份的样本类型：general=自由生成 / student=传统学生（课纲/考试/学期节奏） */

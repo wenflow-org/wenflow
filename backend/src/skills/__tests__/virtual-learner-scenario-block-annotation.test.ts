@@ -9,7 +9,7 @@ import {
   PRIMARY_BLOCK_TYPES,
   RECURRENCE_TYPES,
   VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT,
-} from '../virtual-learner-scenario-designer'
+} from '../simulation-scenario-designer'
 import { logger } from '../../utils/logger'
 
 /** 构造一份通过现有必填校验的最小场景（新标注字段缺失）。 */

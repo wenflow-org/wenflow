@@ -83,7 +83,7 @@ export interface GeneratePathData {
 export interface PathReplanRequest {
   pathId: string;
   userId: string;
-  triggerSource?: 'goal-conversation' | 'learner-model-agent' | 'skill:learner-model' | 'ai-teaching' | 'teaching-agent' | 'admin' | 'system' | 'api';
+  triggerSource?: 'goal-conversation' | 'profile-learner-model-agent' | 'skill:profile-learner-model' | 'ai-teaching' | 'teaching-agent' | 'admin' | 'system' | 'api';
   reason?: string;
   /** compress（2026-10-15 双向化）：按系数把目标阶段压到更少任务；overwrite = 等量/按建议重排。 */
   mode?: 'new_version' | 'overwrite' | 'compress';
@@ -237,9 +237,9 @@ export interface PathCognitiveConcept {
 export interface PathCognitiveDesign {
   cognitiveDomain?: string | null;
   coreConcepts?: PathCognitiveConcept[];
-  /** RPKT 前提知识缺口链（可选，path-planning 产出；供 stage-designer/kc-mapper/path-reviewer 消费） */
+  /** RPKT 前提知识缺口链（可选，path-planning 产出；供 path-task-design/path-kc-mapping/path-reviewer 消费） */
   prerequisiteTree?: unknown;
-  /** CLT 认知负荷画像（可选，path-planning 产出；供 stage-designer 按 loadTarget 调整子任务设计） */
+  /** CLT 认知负荷画像（可选，path-planning 产出；供 path-task-design 按 loadTarget 调整子任务设计） */
   loadProfile?: unknown;
 }
 
@@ -248,7 +248,7 @@ export type NewPathTaskType = typeof NEW_PATH_TASK_TYPES[number];
 export interface PathAdjustmentPolicy {
   allowedModes: Array<'expand' | 'compress' | 'replan'>;
   recommendedMode?: 'expand' | 'compress' | 'replan' | null;
-  triggerSource?: 'learn' | 'ai-teaching' | 'teaching-agent' | 'learner-model-agent' | 'skill:learner-model' | 'system' | null;
+  triggerSource?: 'learn' | 'ai-teaching' | 'teaching-agent' | 'profile-learner-model-agent' | 'skill:profile-learner-model' | 'system' | null;
 }
 
 export interface PathAdjustmentEvidence {

@@ -1,0 +1,40 @@
+version: prompt-lab-manifest/v1
+skillId: simulation-referee
+agentId: skill:simulation-referee
+name: default-virtual-learner-referee
+archetype: extractor
+description: Blackbox 虚拟学习者实验旁路裁判
+acceptableAgentIds:
+  - skill:simulation-referee
+publish:
+  enabled: true
+  exportTargets:
+    - platform-prompts
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: extraction
+  interactionMode: batch
+  input:
+    transport: json
+    schemaSource: skill-definition
+  output:
+    media: json
+    schemaSource: runtime-validator
+    envelope: adapter
+  context:
+    envelope: context-envelope/v1
+    delivery: sidecar
+  failurePolicy: retry
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState: { domain: virtual-learner, phases: [simulation-step-completed], defaultPhase: simulation-step-completed, terminalPhases: [simulation-step-completed], statusValues: [succeeded, partial, blocked, failed] }
+  contextUpdate: { mode: none, stateOwner: none }
+  outputEnvelope: adapter
+ownership:
+  tier: production
+  visibility: internal
+tags:
+  - virtual-learner
+  - extractor

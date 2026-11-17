@@ -21,9 +21,9 @@ import {
   documentSourceScore,
   rankSources,
   selectDiversifiedSources,
-} from '../skills/material-collector';
+} from '../skills/path-material-collect';
 import { searchWeb } from '../services/search';
-import type { MaterialNeed } from '../skills/material-collector';
+import type { MaterialNeed } from '../skills/path-material-collect';
 
 function arg(name: string): string | null {
   const hit = process.argv.find((entry) => entry.startsWith(`--${name}=`));

@@ -2,7 +2,7 @@
  * 「用户上传的附件」→ 「path 可消费的资料包（Material Pack）」。
  *
  * 定位（2026-09-22 用户口径）：**附件是主线**——用户上传的资料必须进入路径生成，
- * 联网采集只用于**补信息**。因此这里产出的包与 material-collector 的包**同构**，
+ * 联网采集只用于**补信息**。因此这里产出的包与 path-material-collect 的包**同构**，
  * 由 path.coordinator 合并后交给 path-planning（uploads 在前、web 在后）。
  *
  * 与采集包一致的硬约束：
@@ -14,7 +14,7 @@
  */
 import { readMaterial, type MaterialRecord } from './material-store';
 import { isProseTextLine, stripLineMarkers } from './document-parser.types';
-import { classifySourceTier } from '../../skills/material-collector';
+import { classifySourceTier } from '../../skills/path-material-collect';
 import { logger } from '../../utils/logger';
 import { selectMaterials } from './material-selection.service';
 import {
@@ -31,7 +31,7 @@ import type {
   MaterialPack,
   MaterialPackResult,
   MaterialSection,
-} from '../../skills/material-collector/types';
+} from '../../skills/path-material-collect/types';
 
 /** 单次最多带上几份附件（再多会挤占路径提示词预算）。 */
 export const MAX_UPLOAD_MATERIAL_PACKS = 3;

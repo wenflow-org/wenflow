@@ -83,7 +83,7 @@ export function isMaterialQualityGateEnabled(): boolean {
   // 单测默认不触网：jest 里 resolveDeps 会注入真实 gateMaterial，若 .env 配了决策 provider
   // 就会把假夹具送去真打上游。JEST_WORKER_ID 与 NODE_ENV 双保险——有套件会把 NODE_ENV 改成
   // production 后未还原（runInBand 共享进程），只判 NODE_ENV 会让后续套件误开闸门（实测
-  // material-collector 三套件在全量跑时被真判上游、单跑却通过）。需要覆盖时设 MATERIAL_QUALITY_GATE_FORCE=1。
+  // path-material-collect 三套件在全量跑时被真判上游、单跑却通过）。需要覆盖时设 MATERIAL_QUALITY_GATE_FORCE=1。
   const inTestRuntime = process.env.NODE_ENV === 'test' || Boolean(process.env.JEST_WORKER_ID);
   if (inTestRuntime && process.env.MATERIAL_QUALITY_GATE_FORCE !== '1') return false;
   return process.env.MATERIAL_QUALITY_GATE_DISABLED !== '1' && isDecisionEnabled() && isDecisionConfigured();

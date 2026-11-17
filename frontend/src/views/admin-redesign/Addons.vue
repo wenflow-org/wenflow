@@ -578,7 +578,7 @@ const STATS_RANGE_TEXT: Record<string, string> = { '7d': '近 7 天', '24h': '�
 const statsRangeText = computed(() => STATS_RANGE_TEXT[liveSkillStatsRange.value] || '近 7 天')
 
 /** 失败最多的成员（2026-11-11 困惑测试 #93）：「查失败」原先固定跳 primary，而 errorCount 是
-    成员合计——失败发生在 web-fetch / material-collector 时，跳到 web-search 的日志必为空。 */
+    成员合计——失败发生在 web-fetch / path-material-collect 时，跳到 web-search 的日志必为空。 */
 function failedTarget(p: PluginRow): string {
   const sorted = [...p.members].sort((a, b) => b.errors - a.errors)
   return sorted[0]?.errors > 0 ? sorted[0].id : p.primary

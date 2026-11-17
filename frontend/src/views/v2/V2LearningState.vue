@@ -270,7 +270,7 @@
 
           <!-- AI 调控建议（原型 wf-advisory，788-793 / 1971-1982）：
                4px 琥珀左边条 + 琥珀星标 head + 正文（guide 结论 / 建议列表 / 预警列表全保留）
-               + 主次双按钮 + 成功回执行。skill 生成块走 adaptive-guidance-copy，静态规则兜底。
+               + 主次双按钮 + 成功回执行。skill 生成块走 profile-adaptive-copy，静态规则兜底。
                真新用户全空态由顶部 state__hero 整卡承接，本卡的空态只兜「有数据但暂无建议」 -->
           <section class="card advisory state__adv">
             <div class="advisory__head">
@@ -1318,7 +1318,7 @@ watch(
   }
 );
 
-/* ---------- skill 引导（adaptive-guidance-copy, view=learning-state） ---------- */
+/* ---------- skill 引导（profile-adaptive-copy, view=learning-state） ---------- */
 const guidance = ref<Record<string, any> | null>(null);
 
 const router = useRouter();

@@ -20,8 +20,8 @@ jest.mock('../../config/database', () => ({
   },
 }));
 jest.mock('../../skills', () => ({ executeSkill: jest.fn() }));
-jest.mock('../../skills/virtual-learner-persona-designer', () => ({ virtualLearnerPersonaDesignerDefinition: {} }));
-jest.mock('../../skills/virtual-learner-scenario-designer', () => ({ virtualLearnerScenarioDesignerDefinition: {} }));
+jest.mock('../../skills/simulation-persona-designer', () => ({ virtualLearnerPersonaDesignerDefinition: {} }));
+jest.mock('../../skills/simulation-scenario-designer', () => ({ virtualLearnerScenarioDesignerDefinition: {} }));
 
 import { provisionVirtualProfile } from '../learner-provisioning';
 

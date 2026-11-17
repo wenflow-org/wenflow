@@ -194,13 +194,13 @@ describe('相对量形态（form / acwr）', () => {
 
 /**
  * 跨家族去重（2026-10-16 真实数据抓出的回归）：
- * 一节课会写**两行** learning_state —— `session-wrapup:<sessionId>`（真实会话 LSS）
+ * 一节课会写**两行** learning_state —— `teaching-wrapup:<sessionId>`（真实会话 LSS）
  * 与 `task-completion:<taskId>`（合成占位 lss=4，两行同 taskId 同日）。旧实现把两行都求和
  * → 日负荷翻倍（周敏 10-12 六节课 12 行，Σ 从真实 ~15.8 顶到 41.76）。去重须保留权威 wrapup 行。
  */
 describe('replayDailyPmc 跨家族去重（同日同 taskId 只算一节课）', () => {
   const day = new Date('2026-10-12T15:59:59.999Z');
-  const wrap = (taskId: string, lss: number) => ({ calculatedAt: day, lss, ktl: lss, lf: lss, sourceKey: `session-wrapup:teaching_xx_${taskId}`, taskId });
+  const wrap = (taskId: string, lss: number) => ({ calculatedAt: day, lss, ktl: lss, lf: lss, sourceKey: `teaching-wrapup:teaching_xx_${taskId}`, taskId });
   const tc = (taskId: string) => ({ calculatedAt: day, lss: 4, ktl: 4, lf: 4, sourceKey: `task-completion:${taskId}`, taskId });
 
   it('同日同 taskId 的 wrapup + task-completion → 只算 wrapup（不翻倍）', () => {
@@ -223,7 +223,7 @@ describe('replayDailyPmc 跨家族去重（同日同 taskId 只算一节课）',
 
   it('taskId 缺失 → 不折叠（宁可多留不误删）', () => {
     const rows = [
-      { calculatedAt: day, lss: 5, ktl: 5, lf: 5, sourceKey: 'session-wrapup:x', taskId: null },
+      { calculatedAt: day, lss: 5, ktl: 5, lf: 5, sourceKey: 'teaching-wrapup:x', taskId: null },
       { calculatedAt: day, lss: 4, ktl: 4, lf: 4, sourceKey: 'task-completion:y', taskId: null },
     ];
     expect(dedupeLessonRows(rows)).toHaveLength(2);

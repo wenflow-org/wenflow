@@ -17,7 +17,7 @@ jest.mock('../../../config/database', () => ({ __esModule: true, default: prisma
 jest.mock('../../../skills', () => ({
   __esModule: true,
   executeSkill: jest.fn(),
-  sessionWrapupAgentDefinition: { name: 'session-wrapup', version: '1.0.0' },
+  sessionWrapupAgentDefinition: { name: 'teaching-wrapup', version: '1.0.0' },
 }));
 jest.mock('../../../utils/logger', () => ({ logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } }));
 jest.mock('../TeachingContextBuilder', () => ({
@@ -38,8 +38,8 @@ jest.mock('../../learning/learning-state.service', () => ({
     prepareSessionScoreCommit: jest.fn(async () => ({
       userId: 'u1',
       expectedRevision: 7,
-      sourceKey: 'session-wrapup:sess-1',
-      data: { sourceKey: 'session-wrapup:sess-1', userId: 'u1', lss: 6 },
+      sourceKey: 'teaching-wrapup:sess-1',
+      data: { sourceKey: 'teaching-wrapup:sess-1', userId: 'u1', lss: 6 },
       metrics: { lss: 6, ktl: 6, lf: 6, lsb: 0, timestamp: new Date().toISOString() },
     })),
   },
@@ -137,7 +137,7 @@ describe('wrapup 重生成成功路径', () => {
       where: { id: 'u1', learningStateRevision: 7 },
       data: { learningStateRevision: { increment: 1 } },
     });
-    expect(prismaMock.learning_metrics.deleteMany).toHaveBeenCalledWith({ where: { sourceKey: 'session-wrapup:sess-1' } });
+    expect(prismaMock.learning_metrics.deleteMany).toHaveBeenCalledWith({ where: { sourceKey: 'teaching-wrapup:sess-1' } });
     expect(prismaMock.learning_metrics.create).toHaveBeenCalled();
     // 审计留痕
     expect(prismaMock.admin_audit_logs.create).toHaveBeenCalled();

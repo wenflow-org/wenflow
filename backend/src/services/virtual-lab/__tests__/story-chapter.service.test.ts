@@ -13,9 +13,9 @@ const prismaMock = {
 };
 jest.mock('../../../config/database', () => ({ __esModule: true, prisma: prismaMock }));
 jest.mock('../../../skills', () => ({ __esModule: true, executeSkill: jest.fn() }));
-jest.mock('../../../skills/virtual-learner-scenario-designer', () => ({
+jest.mock('../../../skills/simulation-scenario-designer', () => ({
   __esModule: true,
-  virtualLearnerScenarioDesignerDefinition: { name: 'virtual-learner-scenario-designer', version: '1.1.0' },
+  virtualLearnerScenarioDesignerDefinition: { name: 'simulation-scenario-designer', version: '1.1.0' },
 }));
 jest.mock('../../../virtual-lab/learner-memory', () => ({
   __esModule: true,

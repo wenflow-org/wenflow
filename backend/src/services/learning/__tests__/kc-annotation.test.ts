@@ -8,7 +8,7 @@
  * 本测试锁死三件事：
  * 1. 走 executeSkillWithResult 契约（不是 executeSkill）；
  * 2. 有 success+output 才落库，success:false / 抛错 / 空 output 都不落库且不抛；
- * 3. skill 输入带 cognitiveCore 与 prerequisiteTree（kc-mapper 的缺口覆盖校验输入）。
+ * 3. skill 输入带 cognitiveCore 与 prerequisiteTree（path-kc-mapping 的缺口覆盖校验输入）。
  */
 import { mapAndPersistKcAnnotation, bindKcLinksToSubtaskIds } from '../generation/kc-annotation';
 import * as skills from '../../../skills';
@@ -125,7 +125,7 @@ describe('mapAndPersistKcAnnotation（契约事故回归）', () => {
     await mapAndPersistKcAnnotation({ pathId: 'lp_1', template, milestones, subtasks, persist: jest.fn() });
 
     const [definition, input] = withResultMock().mock.calls[0];
-    expect(definition.name).toBe('kc-mapper');
+    expect(definition.name).toBe('path-kc-mapping');
     expect(input.cognitiveCore).toBe(template.cognitiveCore);
     expect(input.prerequisiteTree).toBe(template.cognitiveCore.prerequisiteTree);
     expect(input.milestones).toEqual([
@@ -169,7 +169,7 @@ describe('mapAndPersistKcAnnotation（契约事故回归）', () => {
  * 模型稳定产出合法 JSON 却因字段名/形态偏离契约被判死或下游读空。
  * coerceKcMapperParsed 把实测变体收敛到契约形态，normalizeOutput 亦复用同一函数。
  */
-import { coerceKcMapperParsed } from '../../../skills/kc-mapper';
+import { coerceKcMapperParsed } from '../../../skills/path-kc-mapping';
 
 describe('coerceKcMapperParsed（契约等价变体归一）', () => {
   it('gapCoverage 已非契约字段（#193）：模型残留该键一律丢弃', () => {
@@ -223,7 +223,7 @@ describe('coerceKcMapperParsed（契约等价变体归一）', () => {
 
 describe('bindKcLinksToSubtaskIds（issue #179：稳定键 taskKey 绑真实任务 id）', () => {
   it('同名任务各带独立 taskKey：各绑到自己的 subtasks.id，不共享', () => {
-    // kc-mapper 逐字回显输入 taskKey；同名任务靠 taskKey 区分（标题相同不再造成歧义）。
+    // path-kc-mapping 逐字回显输入 taskKey；同名任务靠 taskKey 区分（标题相同不再造成歧义）。
     const annotation = {
       taskKcLinks: [
         { taskKey: 'task-1-2', taskTitle: '复述清单', linkedKCs: ['kc-a'] },

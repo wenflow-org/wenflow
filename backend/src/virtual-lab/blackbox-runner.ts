@@ -3049,8 +3049,8 @@ export class BlackboxVirtualLearnerRunner {
 
   private async resolveSimulatorPrompts() {
     const [goal, teaching] = await Promise.all([
-      agentConfigService.getActivePrompt('skill:virtual-learner-goal-dialogue-simulator'),
-      agentConfigService.getActivePrompt('skill:virtual-learner-learn-turn-simulator')
+      agentConfigService.getActivePrompt('skill:simulation-goal-dialogue'),
+      agentConfigService.getActivePrompt('skill:simulation-learn-turn')
     ])
     const goalPrompt = goal?.systemPrompt?.trim()
     const teachingPrompt = teaching?.systemPrompt?.trim()

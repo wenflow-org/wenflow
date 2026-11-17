@@ -261,7 +261,7 @@ class LearnerProgressService {
         return `${typeMap[s.type] || s.type}: 强度 ${Math.round(s.intensity * 100)}%${s.context ? ` (${s.context})` : ''}`;
       }).join('；');
 
-      return await executeSkill(auxSkillDefinitionMap['learner-progress-report'], {
+      return await executeSkill(auxSkillDefinitionMap['profile-progress-report'], {
         task: {
           title: taskData.taskTitle || '未知任务',
           timeSpent: taskData.timeSpent || 0,

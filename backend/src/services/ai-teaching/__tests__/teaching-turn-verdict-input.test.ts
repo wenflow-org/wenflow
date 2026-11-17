@@ -74,7 +74,7 @@ describe('buildTeachingTurnInput：checkpointVerdict 注入（报告 #14）', ()
 });
 
 /**
- * P1-13（LP-1）：learning-predictor 自由描述原文（toneDetail/depthDetail）必须透传到
+ * P1-13（LP-1）：profile-learning-predict 自由描述原文（toneDetail/depthDetail）必须透传到
  * teaching-turn 输入，不能在下发前丢失——旧实现只透传枚举值，模型说的「反复卡壳」到达
  * 开场策略时已被抹成 'smooth'。
  */

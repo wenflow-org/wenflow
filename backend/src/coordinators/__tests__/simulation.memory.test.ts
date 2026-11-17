@@ -18,7 +18,7 @@ const mockRecordCompletedArtifact = jest.fn()
 jest.mock('../../skills', () => ({
   __esModule: true,
   executeSkill: (...args: unknown[]) => mockExecuteSkill(...args),
-  virtualLearnerMemoryCuratorDefinition: { name: 'virtual-learner-memory-curator', version: '1.0.0' },
+  virtualLearnerMemoryCuratorDefinition: { name: 'simulation-memory-curate', version: '1.0.0' },
 }))
 
 jest.mock('../../config/database', () => ({

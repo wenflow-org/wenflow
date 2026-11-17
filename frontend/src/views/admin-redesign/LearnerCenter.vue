@@ -2,7 +2,7 @@
   <div class="mk-page mk-page--fill">
     <!-- 2026-10-04 用户拍板：学习状态从「用户账号」宿主 tab 释放为独立页（/admin/learner-state，
          同 2026-09-29 教学三页拆页先例）；旧深链 /admin/people?tab=state 与 /admin/learner-center、
-         /admin/learner-models 由路由/宿主重定向兼容。一屏工作台：观测栏（KPI + 可点置信分段条）
+         /admin/profile-learner-models 由路由/宿主重定向兼容。一屏工作台：观测栏（KPI + 可点置信分段条）
          静态贴顶 + 表格区内滚，首行 530px 入首屏。 -->
     <MkPageHead title="学习状态" />
     <!-- 后端学习者域窗口截断口径（2026-10-04 解锁 50→500；2026-10-10 窗口 500→2000，

@@ -17,12 +17,12 @@ import SkillFieldRouting from '../SkillFieldRouting.vue';
 const routingPayload = {
   data: {
     data: {
-      skillId: 'skill:session-wrapup',
+      skillId: 'skill:teaching-wrapup',
       stage: 'wrapup',
-      agentId: 'skill:session-wrapup',
+      agentId: 'skill:teaching-wrapup',
       // 编排文件行：描述是「本次会话主题总结」
       routings: [
-        { agentId: 'skill:session-wrapup', fieldId: 'summary.topicSummary', render: 'visible', handoff: [], internal: false, accumulate: false }
+        { agentId: 'skill:teaching-wrapup', fieldId: 'summary.topicSummary', render: 'visible', handoff: [], internal: false, accumulate: false }
       ],
       fields: [
         { fieldId: 'summary.topicSummary', description: '本次会话主题总结', valueType: 'string', promptRole: 'public-reply', persistKey: 'summary.topicSummary' }
@@ -31,7 +31,7 @@ const routingPayload = {
       core: {
         exists: true,
         diagnostics: [],
-        sync: { skillId: 'skill:session-wrapup', stage: 'wrapup', state: 'ok', missing: [], orphan: [], typeMismatch: [] },
+        sync: { skillId: 'skill:teaching-wrapup', stage: 'wrapup', state: 'ok', missing: [], orphan: [], typeMismatch: [] },
         fields: [
           {
             name: 'summary',
@@ -61,7 +61,7 @@ async function mountRouting() {
   await router.push('/');
   await router.isReady();
   const wrapper = mount(SkillFieldRouting, {
-    props: { skillId: 'skill:session-wrapup' },
+    props: { skillId: 'skill:teaching-wrapup' },
     global: { plugins: [router] },
     attachTo: document.body
   });

@@ -392,7 +392,7 @@ export function closureSourceText(source: string | null | undefined): string {
 /**
  * 任务类型枚举 → 中文（全站单源，2026-10-07 审核 F2-2）。
  *
- * 枚举单源 = 后端 `NEW_PATH_TASK_TYPES`（learning.constants.ts:17）+ stage-designer 的 7 类认知弧
+ * 枚举单源 = 后端 `NEW_PATH_TASK_TYPES`（learning.constants.ts:17）+ path-task-design 的 7 类认知弧
  * （acquire→deconstruct→diagnose→model→execute→refine→consolidate），另含旧 4 类
  * （reading/practice/project/quiz）与 PathDetail 沿用的 reflection/assessment。
  * 未命中枚举回退「—」，原文由 taskTypeTitle 进 title（不裸直出英文枚举，也不猜词）。

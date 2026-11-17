@@ -7,7 +7,7 @@
  * 下游课堂拿不到材料：老师只能说「材料是 6 个句子」，白板退化成一张 6×3 的空壳矩阵
  * （18 格全 hit、零文本），学生看到一屏 ✓ 却读不出任何内容。
  *
- * 这是 stage-designer 既有规则（R4「示范题/例题/真题引用必须自带题面」、f1–f10「禁止
+ * 这是 path-task-design 既有规则（R4「示范题/例题/真题引用必须自带题面」、f1–f10「禁止
  * 空壳准备课」、108「数据来源显式化」）的漏网形态：那几条按**关键词**触发（例句/真题/配方/
  * 原始数据），而「给你 N 个句子」既不是"题"也不是"数据"，于是整条规则没被激活。
  *
@@ -15,13 +15,13 @@
  *   1. 描述里出现「N 个/道/条/行 … 句子/题/样本/…」这类**材料承诺**（N ≥ 2）；
  *   2. 且描述里没有任何材料本体的迹象：没有 materialRefs、没有编号列表、没有 ≥2 处引号原文；
  *   3. 且不属于规则 108 允许的两种合法来源：学习者手头已有 / 前序任务或阶段产出。
- * 命中即视为悬空引用，交给 stage-designer 的软校验带反馈重试一次。
+ * 命中即视为悬空引用，交给 path-task-design 的软校验带反馈重试一次。
  *
  * 2026-11-07 方向修正（真机：「几件 AI 教育事件」这类悬空引用漏判；随后把中文数词塞进正则
  * 反而从中间截半多字数词、越补越漏）：**语义判断不再靠正则，改由模型产出**。
  *    · 本模块只留**结构性事实**的确定性判定（下面这些正则 + materialRefs/来源检查）；
  *    · 「这段描述承诺了一批材料却没给本体」这个语义判断走
- *      `assessStageMaterialCompletenessByModel`（模型判定，结果并入 stage-designer 软校验 problems）。
+ *      `assessStageMaterialCompletenessByModel`（模型判定，结果并入 path-task-design 软校验 problems）。
  * 下面的正则刻意保持原样：它是高精度、宁可漏判的结构性预筛，不承担中文数词与语义泛化。
  */
 
@@ -153,7 +153,7 @@ export interface StageMaterialCompletenessResult {
 }
 
 /**
- * 阶段级软校验（stage-designer 用）：逐任务判定，汇总成一次纠错重试的失败原因。
+ * 阶段级软校验（path-task-design 用）：逐任务判定，汇总成一次纠错重试的失败原因。
  *
  * 与 materialRefs 覆盖度同口径：**只判缺失、不代写**——绝不替模型编出材料本体。
  */
@@ -253,8 +253,8 @@ function defaultMaterialJudgeCall(messages: ChatMessage[]): Promise<string> {
   // APIGateway.execute 从 getRequestContext() 继承，不会丢追溯。
   return getAPIGateway().execute(
     { messages, temperature: 0, max_tokens: 1200 },
-    { skillId: 'stage-designer', agentId: 'skill:stage-designer' },
-    { requestPath: 'stage-designer/material-semantic-judge' },
+    { skillId: 'path-task-design', agentId: 'skill:path-task-design' },
+    { requestPath: 'path-task-design/material-semantic-judge' },
   ).then((response) => response?.choices?.[0]?.message?.content || '');
 }
 
@@ -283,7 +283,7 @@ function classifyJudgeFault(error: unknown): 'UPSTREAM_EMPTY' | 'PARSE_FAILED' |
 }
 
 /**
- * 模型语义判定（stage-designer 软校验用）：返回 `{ valid, violations[] }`。
+ * 模型语义判定（path-task-design 软校验用）：返回 `{ valid, violations[] }`。
  *
  * 纪律：
  *  · 只判缺失、不代写——绝不替任务编出材料本体；

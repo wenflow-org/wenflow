@@ -151,7 +151,7 @@ describe('健康中心聚合（基准体系版）', () => {
     const fieldsSync = byId.get('fields-sync')!;
     expect(fieldsSync.semantics).toBe('consistency');
     expect(fieldsSync.base).toBe('bidirectional');
-    // 存量孤儿（path-planning / virtual-learner-scenario-designer）已补齐，归零
+    // 存量孤儿（path-planning / simulation-scenario-designer）已补齐，归零
     expect(fieldsSync.count).toBe(0);
     expect(fieldsSync.severity).toBe('ok');
     expect(fieldsSync.status).toBe('clean');

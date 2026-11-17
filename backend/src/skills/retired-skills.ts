@@ -16,7 +16,7 @@
  * 僵尸项处置（**2026-09-15 更新：覆盖 2026-08-10 的"保留注册"决定**）：
  * course-design / basic-evaluator / goal-alignment-checker 已**正式退役**——四同步
  * （注册代码 v4-aux-skills / 文件 core+manifests+编译产物 / 本名单 / 文档）完成，补入 PURGED_SKILLS。
- * 业务依据：course-design 的"周计划"模型已被 path→milestone→stage-designer 取代（其唯一入口
+ * 业务依据：course-design 的"周计划"模型已被 path→milestone→path-task-design 取代（其唯一入口
  * designWeekCourses 与孪生 generateTasksForExistingPath 均无调用者）；goal-alignment-checker 被
  * 现役 path-reviewer（CIDDP 五维，含 Pertinence）覆盖；basic-evaluator 无"评分/等级"产品面。
  * 一次性代价：启动 purge 会清理它们在 skill_model_configs 的历史行（该表不可自愈）。
@@ -64,7 +64,7 @@ export const PURGED_SKILLS: readonly string[] = [
   'image-analyzer',
   'memory-search',
   'smart-search',
-  // 2026-07 合并入 lesson-knowledge-enricher
+  // 2026-07 合并入 profile-lesson-enrich
   'session-knowledge-distiller',
   'dialogue-concept-extractor',
   // 2026-08 第三阶段命名反转：learning-* 改回 teaching-*（一次 breaking）；
@@ -90,7 +90,7 @@ export const PURGED_SKILLS: readonly string[] = [
   'structured-output-parser',
   'prompt-compiler',
   // 2026-08-11 完整退役：session-evaluation-fallback（曾注册于 v4-aux-skills）——43a01fb
-  // 纯重试+明确失败改造后失去全部调用语义（session-wrapup 缺 evaluation 直接 evaluation=null +
+  // 纯重试+明确失败改造后失去全部调用语义（teaching-wrapup 缺 evaluation 直接 evaluation=null +
   // 'unavailable'），注册/户口簿/产物四同步注销；
   // 存量 skill_registrations/skill_model_configs 等行由启动 purge 清理
   'session-evaluation-fallback',

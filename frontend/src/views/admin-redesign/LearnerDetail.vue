@@ -323,7 +323,7 @@
 
       <div class="ld-col">
         <!-- （原「7 天活跃趋势」卡已移除：trend7d 无任何数据来源，恒为 0 的假卡只会渲染
-             「学习者产生会话后将自动生成」的误导空态；后端 learner-models 无按日活跃接口） -->
+             「学习者产生会话后将自动生成」的误导空态；后端 profile-learner-models 无按日活跃接口） -->
         <section class="mk-card">
           <div class="mk-card__head">
             <!-- 「学习动态」：卡内是合并后的学习事件（教学/目标/路径域），与对象轴的
@@ -2649,7 +2649,7 @@ const activityFeed = computed<ActivityEntry[]>(() => {
   return items.sort((a, b) => b.at - a.at).slice(0, ACTIVITY_FEED_LIMIT)
 })
 const knowledgeMemory = computed(() => (rawDetail.value?.knowledgeMemory || null) as Record<string, unknown> | null)
-/** 证据记录：后端 learner-models 证据接口 */
+/** 证据记录：后端 profile-learner-models 证据接口 */
 const evidence = computed(() => liveEvidence.value)
 
 /** 后端快照的英文枚举 → 中文（参照 LearnerCenter mapTrend/mapFatigue 模式） */

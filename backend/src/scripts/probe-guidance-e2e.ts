@@ -1,6 +1,6 @@
 /* eslint-disable no-console, @typescript-eslint/no-explicit-any -- 一次性验收 CLI */
 /**
- * adaptive-guidance-copy 端到端探针（审计 P1 §2.4d）。
+ * profile-adaptive-copy 端到端探针（审计 P1 §2.4d）。
  *
  * 两处修复要真模型验证：
  *   ① 规则 6 的进度计数路径写全为 learningState.tasks.*（此前只说 tasks.*，模型得猜在哪）
@@ -11,7 +11,7 @@
  * 用法：npx ts-node --transpile-only src/scripts/probe-guidance-e2e.ts
  */
 import 'dotenv/config';
-import { adaptiveGuidanceCopy } from '../skills/adaptive-guidance-copy';
+import { adaptiveGuidanceCopy } from '../skills/profile-adaptive-copy';
 
 const base = {
   view: 'dashboard' as const,

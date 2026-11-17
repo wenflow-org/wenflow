@@ -2,7 +2,7 @@ import prisma from '../../config/database';
 import { learnerSnapshotService } from './LearnerSnapshotService';
 import { buildNonVirtualUserWhere, isTestAccountUser } from '../../utils/test-account';
 import { logger } from '../../utils/logger';
-import type { LearnerSnapshot } from '../../agents/learner-model-agent/types';
+import type { LearnerSnapshot } from '../../agents/profile-learner-model-agent/types';
 
 /**
  * 内存快照缓存条数上限（#176-2）。
@@ -41,8 +41,8 @@ export class LearnerSnapshotRefreshService {
    *
    * 只删内存键是不够的（复核实测）：`getLatest` 在内存未命中后会回落到持久化投影的 10 分钟窗口，
    * 把那行**由旧画像算出**的载荷重新读出并写回内存，于是「主动失效」在最要紧的场景里近乎空转——
-   * `learner-model-agent/index.ts:196-197` 的 `updateProfile` 清了画像 + 图快照，**并没有**接着 refresh
-   * 任何键；此后任意读路径（`TeachingContextBuilder.ts:74`、`admin/learner-models.ts:76,141`）拿到的
+   * `profile-learner-model-agent/index.ts:196-197` 的 `updateProfile` 清了画像 + 图快照，**并没有**接着 refresh
+   * 任何键；此后任意读路径（`TeachingContextBuilder.ts:74`、`admin/profile-learner-models.ts:76,141`）拿到的
    * 仍是旧画像拼出的快照，最长 10 分钟。
    *
    * 事件驱动的那几处（`learner-event-consumer.ts:54`、`schedulers.ts:97`、`LessonKnowledgeEnrichmentConsumer.ts:52`）
@@ -131,7 +131,7 @@ export class LearnerSnapshotRefreshService {
     /** 本服务的快照投影（纯缓存） */
     'learner-snapshot-v1:',
     /** 评审投影（LearnerStateReviewService 直读，从不经过本服务；同样派生自画像/证据） */
-    'learner-state-review-v1:',
+    'profile-state-review-v1:',
   ];
 
   private dropPersistedProjections(userId: string): void {
@@ -539,7 +539,7 @@ export class LearnerSnapshotRefreshService {
   }
 
   /**
-   * 目标/路径域证据时间线（learner-models 详情/证据端点）：
+   * 目标/路径域证据时间线（profile-learner-models 详情/证据端点）：
    * 按 evidenceType 白名单取最近 N 条，occurredAt 倒序。
    */
   async listDomainEvidence(userId: string, evidenceTypes: string[], take: number, pathId?: string) {
@@ -579,7 +579,7 @@ export class LearnerSnapshotRefreshService {
     return rows.filter((r) => !r.pathId || aliveSet.has(r.pathId));
   }
 
-  /** 目标用户是否虚拟学习者（learner-models 默认视图准入判断） */
+  /** 目标用户是否虚拟学习者（profile-learner-models 默认视图准入判断） */
   async isVirtualLearner(userId: string): Promise<boolean> {
     const target = await prisma.users.findUnique({
       where: { id: userId },

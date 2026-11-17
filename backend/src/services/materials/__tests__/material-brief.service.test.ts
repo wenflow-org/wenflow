@@ -1,9 +1,9 @@
 /**
- * material-brief 惰性编排单测（Document Summary Index 摘要节点的确定性编排层）：
+ * path-material-brief 惰性编排单测（Document Summary Index 摘要节点的确定性编排层）：
  * 缓存命中不重生成 / 未生成时调用 LLM 并落盘 / 失败 fail-open / 并发在途去重。
  * material-store 与 LLM 环节均 mock（不触达 fs / 网络）。
  */
-jest.mock('../../../skills/material-brief', () => ({
+jest.mock('../../../skills/path-material-brief', () => ({
   __esModule: true,
   generateMaterialBriefDraft: jest.fn(),
 }));
@@ -20,15 +20,15 @@ jest.mock('../material-semantic.service', () => ({
   selectRepresentativeText: jest.fn(),
 }));
 
-import { generateMaterialBriefDraft } from '../../../skills/material-brief';
+import { generateMaterialBriefDraft } from '../../../skills/path-material-brief';
 import { readMaterial, updateRecord } from '../material-store';
 import { selectRepresentativeText } from '../material-semantic.service';
 import {
   getOrGenerateMaterialBrief,
   collectBriefsWithDeadline,
-} from '../material-brief.service';
+} from '../path-material-brief.service';
 import type { MaterialRecord } from '../material-store';
-import type { MaterialBrief } from '../../../skills/material-brief/types';
+import type { MaterialBrief } from '../../../skills/path-material-brief/types';
 
 const generateMock = generateMaterialBriefDraft as jest.Mock;
 const readMaterialMock = readMaterial as jest.Mock;
@@ -71,7 +71,7 @@ beforeEach(() => {
   readMaterialMock.mockReturnValue({ record: makeRecord(), markdown: '正文内容'.repeat(100) });
 });
 
-describe('material-brief 惰性编排', () => {
+describe('path-material-brief 惰性编排', () => {
   it('记录已带 brief：直接返回缓存，不调 LLM、不落盘', async () => {
     const cached = getOrGenerateMaterialBrief(makeRecord({ brief }));
     await expect(cached).resolves.toBe(brief);

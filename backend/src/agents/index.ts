@@ -34,7 +34,7 @@ export {
   learnerModelAgentHandler as learnerModelAgentHandlerFn,
   LearnerModelAgent,
   learnerModelAgent
-} from './learner-model-agent';
+} from './profile-learner-model-agent';
 
 export {
   teachingTurnAgentDefinition,
@@ -45,7 +45,7 @@ export {
   sessionWrapupAgentDefinition,
   sessionWrapupAgent,
   sessionWrapupAgentHandler,
-} from '../skills/session-wrapup';
+} from '../skills/teaching-wrapup';
 
 // Simulation Orchestrator Agent
 export {
@@ -57,11 +57,11 @@ export {
 // 所有 Agent 定义
 import { AgentDefinition } from './protocol';
 import { pathAgentDefinition, pathAgentHandler as pathAgentHandlerFn } from '../skills/path-planning';
-import { learnerModelAgentDefinition, learnerModelAgentHandler as learnerModelAgentHandlerFn } from './learner-model-agent';
+import { learnerModelAgentDefinition, learnerModelAgentHandler as learnerModelAgentHandlerFn } from './profile-learner-model-agent';
 import { goalConversationAgentDefinition, goalConversationAgentHandler } from '../skills/goal-conversation';
 import { teachingTurnAgentDefinition, teachingTurnAgentHandler } from '../skills/teaching-turn';
-import { peerAgentDefinition, peerAgentHandler } from '../skills/peer-reinforcement';
-import { sessionWrapupAgentDefinition, sessionWrapupAgentHandler } from '../skills/session-wrapup';
+import { peerAgentDefinition, peerAgentHandler } from '../skills/teaching-peer-reinforcement';
+import { sessionWrapupAgentDefinition, sessionWrapupAgentHandler } from '../skills/teaching-wrapup';
 import { simulationOrchestratorAgentDefinition, simulationOrchestratorAgentHandler } from './simulation-agent';
 import { getAgentManifest } from '../services/agent-manifest.service';
 import { logger } from '../utils/logger';
@@ -78,11 +78,11 @@ export const allAgentDefinitions: AgentDefinition[] = [
 
 export const agentHandlers: Record<string, (input: any, context: any) => Promise<any>> = {
   'skill:path-planning': pathAgentHandlerFn,
-  'skill:learner-model': learnerModelAgentHandlerFn,
+  'skill:profile-learner-model': learnerModelAgentHandlerFn,
   'skill:goal-conversation': goalConversationAgentHandler,
   'skill:teaching-turn': teachingTurnAgentHandler,
-  'skill:peer-reinforcement': peerAgentHandler,
-  'skill:session-wrapup': sessionWrapupAgentHandler,
+  'skill:teaching-peer-reinforcement': peerAgentHandler,
+  'skill:teaching-wrapup': sessionWrapupAgentHandler,
   'simulation-agent': simulationOrchestratorAgentHandler
 };
 

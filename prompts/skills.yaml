@@ -69,12 +69,13 @@ skills:
           via: service
       sandbox: [path, goal]
 
-  - skillId: stage-designer
+  - skillId: path-task-design
     kind: mainline
     stage: path
     parentAgent: path-agent
-    handlerRef: backend/src/skills/stage-designer/index.ts
-    coreFile: prompts/core/stage-designer.yaml
+    handlerRef: backend/src/skills/path-task-design/index.ts
+    coreFile: prompts/core/path-task-design.yaml
+    aliases: [stage-designer]
     displayName: 阶段设计 Skill
     description: 细化阶段内的任务与验收点
     coordinator:
@@ -109,12 +110,13 @@ skills:
       sandbox: [path]
     notes: service 侧调用（learning.service.ts 内联评审，非 path.coordinator 编排），不在 path.definition.ts steps 内
 
-  - skillId: kc-mapper
+  - skillId: path-kc-mapping
     kind: mainline
     stage: path
     parentAgent: path-agent
-    handlerRef: backend/src/skills/kc-mapper/index.ts
-    coreFile: prompts/core/kc-mapper.yaml
+    handlerRef: backend/src/skills/path-kc-mapping/index.ts
+    coreFile: prompts/core/path-kc-mapping.yaml
+    aliases: [kc-mapper]
     displayName: 知识组件映射 Skill
     description: 将认知概念和子任务分解为细粒度 KC，标注前置依赖
     coordinator:
@@ -157,15 +159,15 @@ skills:
           via: routings
       sandbox: [teaching]
 
-  - skillId: peer-reinforcement
+  - skillId: teaching-peer-reinforcement
     kind: mainline
     stage: teaching
     parentAgent: teaching-agent
-    handlerRef: backend/src/skills/peer-reinforcement/index.ts
-    coreFile: prompts/core/peer-reinforcement.yaml
+    handlerRef: backend/src/skills/teaching-peer-reinforcement/index.ts
+    coreFile: prompts/core/teaching-peer-reinforcement.yaml
     displayName: 伴学补强 Skill
     description: 同伴式引导讨论与理解补强
-    aliases: [peer-agent]
+    aliases: [peer-agent, peer-reinforcement]
     coordinator:
       agentId: teaching-agent
       steps:
@@ -177,15 +179,15 @@ skills:
           via: service
       sandbox: [teaching]
 
-  - skillId: session-wrapup
+  - skillId: teaching-wrapup
     kind: mainline
     stage: teaching
     parentAgent: teaching-agent
-    handlerRef: backend/src/skills/session-wrapup/index.ts
-    coreFile: prompts/core/session-wrapup.yaml
+    handlerRef: backend/src/skills/teaching-wrapup/index.ts
+    coreFile: prompts/core/teaching-wrapup.yaml
     displayName: 课后产出 Skill
     description: 生成课后总结与评估
-    aliases: [session-wrapup-agent]
+    aliases: [session-wrapup-agent, session-wrapup]
     coordinator:
       agentId: teaching-agent
       steps:
@@ -207,15 +209,16 @@ skills:
           via: service
       sandbox: [teaching]
 
-  - skillId: adaptive-guidance-copy
+  - skillId: profile-adaptive-copy
     kind: mainline
     # 2026-10-14 用户拍板：它产出的是「给学习者看的页面文案」（dashboard/learning-state 首屏），
     # 消费的是画像阶段的 learnerSnapshot/learningState，不属于授课交付链（teaching.yaml routings 里
     # 它一条 handoff 都没有），归画像阶段。
     stage: profile
     parentAgent: profile-agent
-    handlerRef: backend/src/skills/adaptive-guidance-copy/index.ts
-    coreFile: prompts/core/adaptive-guidance-copy.yaml
+    handlerRef: backend/src/skills/profile-adaptive-copy/index.ts
+    coreFile: prompts/core/profile-adaptive-copy.yaml
+    aliases: [adaptive-guidance-copy]
     displayName: 自适应引导文案 Skill
     description: 根据情境生成自适应引导话术
     coordinator:
@@ -241,16 +244,16 @@ skills:
     notes: dashboard 侧调用（services/learner/DashboardGuidanceSnapshotService），不在 ai-teaching.definition.ts steps 内；contracts 有登记
 
   # ============ profile-agent 下辖（handler-only 优先于 mainline，保持派生 agentMembers 顺序） ============
-  - skillId: learner-model
+  - skillId: profile-learner-model
     kind: handler-only
     stage: profile
     parentAgent: profile-agent
-    handlerRef: backend/src/agents/learner-model-agent/index.ts
+    handlerRef: backend/src/agents/profile-learner-model-agent/index.ts
     registrationPoint: agents
     noPromptFile: true
     displayName: 学习者模型 Skill
     description: 聚合学习者画像、状态与知识记忆（handler-only，无 LLM prompt）
-    aliases: [learner-model-agent]
+    aliases: [learner-model-agent, learner-model]
     coordinator:
       agentId: profile-agent
       steps: []
@@ -267,12 +270,13 @@ skills:
       sandbox: []
     notes: handler 直读反例（P4 例外账）——handler 本体经 LearnerSnapshotService 直读 4 表（agents/learner-model-agent/index.ts:78-120），无 LLM 输入组装；拉取式 API（按 action 取快照/写增量），不在 learner.definition.ts steps 内
 
-  - skillId: lesson-knowledge-enricher
+  - skillId: profile-lesson-enrich
     kind: mainline
     stage: profile
     parentAgent: profile-agent
-    handlerRef: backend/src/skills/lesson-knowledge-enricher/index.ts
-    coreFile: prompts/core/lesson-knowledge-enricher.yaml
+    handlerRef: backend/src/skills/profile-lesson-enrich/index.ts
+    coreFile: prompts/core/profile-lesson-enrich.yaml
+    aliases: [lesson-knowledge-enricher]
     displayName: 课后知识增强 Skill
     description: 课后单次调用：蒸馏知识台账增量并抽取隐性概念线索
     coordinator:
@@ -287,12 +291,13 @@ skills:
       sandbox: []
     notes: LLM 输入来自 lesson:completed 领域事件 payload（AITeachingCoordinator.ts:1981-2006 发布，teaching_sessions 数据投影）；domain_event_inbox 为消费幂等读（LessonKnowledgeEnrichmentConsumer.ts:12）
 
-  - skillId: learning-predictor
+  - skillId: profile-learning-predict
     kind: mainline
     stage: profile
     parentAgent: profile-agent
-    handlerRef: backend/src/skills/learning-predictor/index.ts
-    coreFile: prompts/core/learning-predictor.yaml
+    handlerRef: backend/src/skills/profile-learning-predict/index.ts
+    coreFile: prompts/core/profile-learning-predict.yaml
+    aliases: [learning-predictor]
     displayName: 学习表现预测 Skill
     description: 任务前基于知识状态摘要预测卡壳风险，含实证校准闭环
     coordinator:
@@ -304,12 +309,13 @@ skills:
     notes: service 侧调用（ai-teaching/TeachingContextBuilder 任务前预测，非 profile.coordinator 编排），不在 profile.definition.ts steps 内
 
   # ============ simulation-agent 下辖（mainline，黑盒实验链） ============
-  - skillId: virtual-learner-persona-designer
+  - skillId: simulation-persona-designer
     kind: mainline
     stage: simulation
     parentAgent: simulation-agent
-    handlerRef: backend/src/skills/virtual-learner-persona-designer/index.ts
-    coreFile: prompts/core/virtual-learner-persona-designer.yaml
+    handlerRef: backend/src/skills/simulation-persona-designer/index.ts
+    coreFile: prompts/core/simulation-persona-designer.yaml
+    aliases: [virtual-learner-persona-designer]
     displayName: 虚拟学习者人格设计 Skill
     description: 为虚拟学习者生成稳定人格设定
     coordinator:
@@ -323,12 +329,13 @@ skills:
       sandbox: [simulation]
     notes: 前置配置阶段（routes/admin/virtual-learners.ts），不在 simulation.definition.ts 主链 steps 内。契约差异（有意保留，非缺陷）：core.yaml 要求"必填字段具体非空、禁止安全兜底句"，而代码 normalize 会为缺失字段填默认值以保成功率——prompt 定质量下限，代码兜底是最后一道防线（审计 §3.19 P2⑫）。
 
-  - skillId: virtual-learner-scenario-designer
+  - skillId: simulation-scenario-designer
     kind: mainline
     stage: simulation
     parentAgent: simulation-agent
-    handlerRef: backend/src/skills/virtual-learner-scenario-designer/index.ts
-    coreFile: prompts/core/virtual-learner-scenario-designer.yaml
+    handlerRef: backend/src/skills/simulation-scenario-designer/index.ts
+    coreFile: prompts/core/simulation-scenario-designer.yaml
+    aliases: [virtual-learner-scenario-designer]
     displayName: 虚拟学习者场景设计 Skill
     description: 设计虚拟学习者的学习目标场景
     coordinator:
@@ -342,12 +349,13 @@ skills:
       sandbox: [simulation]
     notes: 前置配置阶段（同 persona-designer），不在主链 steps 内
 
-  - skillId: virtual-learner-goal-dialogue-simulator
+  - skillId: simulation-goal-dialogue
     kind: mainline
     stage: simulation
     parentAgent: simulation-agent
-    handlerRef: backend/src/skills/virtual-learner-goal-dialogue-simulator/index.ts
-    coreFile: prompts/core/virtual-learner-goal-dialogue-simulator.yaml
+    handlerRef: backend/src/skills/simulation-goal-dialogue/index.ts
+    coreFile: prompts/core/simulation-goal-dialogue.yaml
+    aliases: [virtual-learner-goal-dialogue-simulator]
     displayName: 虚拟学习者目标对话模拟 Skill
     description: 模拟虚拟学习者在 Goal 阶段的回复
     coordinator:
@@ -366,12 +374,13 @@ skills:
           via: prisma
       sandbox: [simulation]
 
-  - skillId: virtual-learner-path-evaluator
+  - skillId: simulation-path-evaluate
     kind: mainline
     stage: simulation
     parentAgent: simulation-agent
-    handlerRef: backend/src/skills/virtual-learner-path-evaluator/index.ts
-    coreFile: prompts/core/virtual-learner-path-evaluator.yaml
+    handlerRef: backend/src/skills/simulation-path-evaluate/index.ts
+    coreFile: prompts/core/simulation-path-evaluate.yaml
+    aliases: [virtual-learner-path-evaluator]
     displayName: 虚拟学习者路径评估 Skill
     description: 模拟虚拟学习者对 Path 的反馈与评估
     coordinator:
@@ -392,12 +401,13 @@ skills:
       sandbox: [simulation]
     notes: 仅 legacy assisted 调试使用，正式黑盒链路不走
 
-  - skillId: virtual-learner-learn-turn-simulator
+  - skillId: simulation-learn-turn
     kind: mainline
     stage: simulation
     parentAgent: simulation-agent
-    handlerRef: backend/src/skills/virtual-learner-learn-turn-simulator/index.ts
-    coreFile: prompts/core/virtual-learner-learn-turn-simulator.yaml
+    handlerRef: backend/src/skills/simulation-learn-turn/index.ts
+    coreFile: prompts/core/simulation-learn-turn.yaml
+    aliases: [virtual-learner-learn-turn-simulator]
     displayName: 虚拟学习者教学回合模拟 Skill
     description: 模拟虚拟学习者在 Learn 阶段的单轮回复
     coordinator:
@@ -419,12 +429,13 @@ skills:
           via: prisma
       sandbox: [simulation]
 
-  - skillId: virtual-learner-referee
+  - skillId: simulation-referee
     kind: mainline
     stage: simulation
     parentAgent: simulation-agent
-    handlerRef: backend/src/skills/virtual-learner-referee/index.ts
-    coreFile: prompts/core/virtual-learner-referee.yaml
+    handlerRef: backend/src/skills/simulation-referee/index.ts
+    coreFile: prompts/core/simulation-referee.yaml
+    aliases: [virtual-learner-referee]
     displayName: 平台体验裁判 Skill
     description: 基于 Blackbox 公开轨迹、旁路诊断和控制回执生成独立实验裁判报告
     coordinator:
@@ -445,12 +456,13 @@ skills:
       sandbox: [simulation]
     notes: 手动触发（POST /api/admin/session-audits/sessions/:id/evaluations，routes/admin/session-audits.ts）；前置 experiment.mode='blackbox-api' 且会话终态。assisted autopilot 不自动执行，仿真主链未调用——故当前 0 调用
 
-  - skillId: virtual-learner-memory-curator
+  - skillId: simulation-memory-curate
     kind: mainline
     stage: simulation
     parentAgent: simulation-agent
-    handlerRef: backend/src/skills/virtual-learner-memory-curator/index.ts
-    coreFile: prompts/core/virtual-learner-memory-curator.yaml
+    handlerRef: backend/src/skills/simulation-memory-curate/index.ts
+    coreFile: prompts/core/simulation-memory-curate.yaml
+    aliases: [virtual-learner-memory-curator]
     displayName: 虚拟学习者课后记忆提炼 Skill
     description: 以虚拟学习者本人视角，从课堂回合中提炼"自己觉得学会了什么、卡在哪"，产出可沉淀的记忆增量
     coordinator:
@@ -465,12 +477,13 @@ skills:
           via: service
       sandbox: [simulation]
 
-  - skillId: virtual-learner-actor-auditor
+  - skillId: simulation-actor-audit
     kind: mainline
     stage: simulation
     parentAgent: simulation-agent
-    handlerRef: backend/src/skills/virtual-learner-actor-auditor/index.ts
-    coreFile: prompts/core/virtual-learner-actor-auditor.yaml
+    handlerRef: backend/src/skills/simulation-actor-audit/index.ts
+    coreFile: prompts/core/simulation-actor-audit.yaml
+    aliases: [virtual-learner-actor-auditor]
     displayName: 角色保真审计 Skill
     description: 基于画像、故事、摩擦预算、私有状态和公开行为评估合成学习者可信度
     coordinator:
@@ -487,12 +500,13 @@ skills:
       sandbox: [simulation]
     notes: 手动触发（同 referee，POST /api/admin/session-audits/sessions/:id/evaluations，routes/admin/session-audits.ts）；前置 experiment.mode='blackbox-api' 且会话终态。assisted autopilot 不自动执行，故当前 0 调用
 
-  - skillId: virtual-learner-epistemic-grounding
+  - skillId: simulation-epistemic-grounding
     kind: mainline
     stage: simulation
     parentAgent: simulation-agent
-    handlerRef: backend/src/skills/virtual-learner-epistemic-grounding/index.ts
-    coreFile: prompts/core/virtual-learner-epistemic-grounding.yaml
+    handlerRef: backend/src/skills/simulation-epistemic-grounding/index.ts
+    coreFile: prompts/core/simulation-epistemic-grounding.yaml
+    aliases: [virtual-learner-epistemic-grounding]
     displayName: 认知判决 Skill
     description: 基于画像掌握度对当前步骤能否做对做离散认知判决（BEAGLE 物理两阶段第一段）
     coordinator:
@@ -553,27 +567,27 @@ skills:
       sandbox: []
     notes: handler-only 外挂能力——handler 委托 backend/src/services/decision（provider 抽象 + 降级链：Cloudflare Clef / 阿里云 MaaS / Venice / OpenCode Zen），外部 HTTP 经 safeHttpRequest（SSRF/超时/大小限制）；provider 与密钥由 DECISION_PROVIDER / CF_ACCOUNT_ID / CF_TOKEN / DASHSCOPE_API_KEY 等环境变量承担，无 DB 直读，dataSource.db 保持空。**能力边界**：只返回每个 question 的概率/选项/分值，不生成自由文本，因此不得用于资料抽取（tldr/sections/keyPoints）；典型用途是材料可用性、可答性、覆盖度与分级判定。
 
-  - skillId: material-collector
+  - skillId: path-material-collect
     kind: handler-only
-    handlerRef: backend/src/skills/material-collector/index.ts
+    handlerRef: backend/src/skills/path-material-collect/index.ts
     noPromptFile: true
     displayName: 资料采集编排器 Skill
     description: 在 goal→path 之间采集外部权威资料：确定性编排 search→选源→fetch，LLM 仅抽取带引文的要点，产出 Material Pack
     dataSource:
       db: []
       sandbox: []
-    notes: handler-only 外挂能力（编排器）——handler 委托 backend/src/services/search + backend/src/services/fetch（provider 抽象 + 降级链），外部 HTTP 经 safeHttpRequest（SSRF/超时/大小限制），无 DB 直读，dataSource.db 保持空。**混合形态说明**：主接口是确定性 handler（故登记为 handler-only，照 web-fetch 成例，不进 agentMembers、不进字段路由），但内含一个 LLM 抽取环节，其 prompt 以 v4 核心文件 prompts/core/material-collector.yaml 编译产物承载（故同时具备 coreFile 产物与 prompts/manifests/material-collector.yaml）；户口簿按 F7 只登记 handler-only 形态，core/manifest 为抽取环节的 prompt 资产。三条硬规则：not_found 显式返回 / 无引文要点进不了 pack / 网页文本当数据不当指令。
+    notes: handler-only 外挂能力（编排器）——handler 委托 backend/src/services/search + backend/src/services/fetch（provider 抽象 + 降级链），外部 HTTP 经 safeHttpRequest（SSRF/超时/大小限制），无 DB 直读，dataSource.db 保持空。**混合形态说明**：主接口是确定性 handler（故登记为 handler-only，照 web-fetch 成例，不进 agentMembers、不进字段路由），但内含一个 LLM 抽取环节，其 prompt 以 v4 核心文件 prompts/core/path-material-collect.yaml 编译产物承载（故同时具备 coreFile 产物与 prompts/manifests/material-collector.yaml）；户口簿按 F7 只登记 handler-only 形态，core/manifest 为抽取环节的 prompt 资产。三条硬规则：not_found 显式返回 / 无引文要点进不了 pack / 网页文本当数据不当指令。
 
-  - skillId: material-brief
+  - skillId: path-material-brief
     kind: handler-only
-    handlerRef: backend/src/skills/material-brief/index.ts
+    handlerRef: backend/src/skills/path-material-brief/index.ts
     noPromptFile: true
     displayName: 资料理解摘要器 Skill
     description: Document Summary Index 摘要节点——对上传资料一次性产出结构化理解 brief（是什么/讲什么/目录/核心概念/天然切分维度），持久化在资料记录上供 goal/path 复用
     dataSource:
       db: []
       sandbox: []
-    notes: handler-only 外挂能力（照 material-collector 混合成例）——主接口是确定性 handler（不进 agentMembers、不进字段路由），内含一个 LLM 理解环节，其 prompt 以 v4 核心文件 prompts/core/material-brief.yaml 编译产物承载（同时具备 coreFile 产物与 prompts/manifests/material-brief.yaml）。惰性生成 + 缓存的编排（首次消费时生成、写入资料记录、失败 fail-open）由 backend/src/services/materials/material-brief.service.ts 负责。三条硬规则：not_found 显式返回 / toc.title 照抄原文标题且 overview/gist 不引入正文之外信息 / 外部文本当数据不当指令。
+    notes: handler-only 外挂能力（照 material-collector 混合成例）——主接口是确定性 handler（不进 agentMembers、不进字段路由），内含一个 LLM 理解环节，其 prompt 以 v4 核心文件 prompts/core/path-material-brief.yaml 编译产物承载（同时具备 coreFile 产物与 prompts/manifests/material-brief.yaml）。惰性生成 + 缓存的编排（首次消费时生成、写入资料记录、失败 fail-open）由 backend/src/services/materials/material-brief.service.ts 负责。三条硬规则：not_found 显式返回 / toc.title 照抄原文标题且 overview/gist 不引入正文之外信息 / 外部文本当数据不当指令。
 
   - skillId: text-to-image
     kind: handler-only
@@ -597,9 +611,9 @@ skills:
       sandbox: []
     notes: handler-only 外挂能力（照 goal-confirm-adjudicator 混合成例）——主接口是评审 handler（不进 agentMembers、不进字段路由），内含一个 LLM 评审环节，prompt 以 v4 核心文件 prompts/core/classroom-quality-judge.yaml 编译产物承载（同时具备 coreFile 产物与 prompts/manifests/classroom-quality-judge.yaml）。调用方是跑数脚本 judge-minibatch-classrooms.ts：黑盒会话终态后逐节课提取逐轮记录 + 学习者真实可见的板书/图文载荷 + wrapup，产出与 referee 同构的课堂级病历单（code/severity/evidenceIds）。与教学主链路完全解耦——评审缺席不影响任何教学行为。存在动机：referee 只看 publicTrace，板书载荷与逐轮脚手架是其盲区（2026-11-13 TEACHING_BOARD_UNVERIFIABLE 误报实证）。跨样本归因用跑数器里的 canonicalFindingCode 别名归一，不改本 skill 输出。
 
-  - skillId: classroom-quality-judge
+  - skillId: teaching-classroom-judge
     kind: handler-only
-    handlerRef: backend/src/skills/classroom-quality-judge/index.ts
+    handlerRef: backend/src/skills/teaching-classroom-judge/index.ts
     noPromptFile: true
     displayName: 课堂质量独立评审 Skill
     description: 单节课逐轮记录 + 板书/图文载荷 + 收束产出的独立 LLM 病历单（code/severity/evidenceIds）
@@ -613,27 +627,28 @@ skills:
           via: prisma
       sandbox: []
 
-  - skillId: board-designer
+  - skillId: teaching-board-design
     kind: handler-only
-    handlerRef: backend/src/services/ai-teaching/board-designer.service.ts
+    handlerRef: backend/src/services/ai-teaching/teaching-board-design.service.ts
     registrationPoint: none
-    # #235：它**有**提示词（prompts/skill.board-designer.md），只是没有 core yaml 源。
+    # #235：它**有**提示词（prompts/skill.teaching-board-design.md），只是没有 core yaml 源。
     # noPromptFile 问的是「有没有提示词文件」，此前写 true 与文件系统直接矛盾，
     # 也让 pipeline map 把它当成「无提示词的纯代码 handler」而隐藏了这份板面 spec 契约。
     noPromptFile: false
-    promptArtifact: prompts/skill.board-designer.md
+    promptArtifact: prompts/skill.teaching-board-design.md
     displayName: 课堂板书设计器 Skill
     description: 按本轮教学意图生成课堂白板（认知减负区）的板面 spec，经 teaching-turn 归一化后上墙
     dataSource:
       db: []
       sandbox: []
-    notes: handler-only 外挂能力（照 material-collector 混合成例）——主接口是确定性 service（teaching-turn-engine 按轮内意图直调 backend/src/services/ai-teaching/board-designer.service.ts 的 designBoard，不进 skillHandlers 派发表，registrationPoint=none），内含一个 LLM 绘图环节。**两个维度分开看（#235）**：有提示词产物 prompts/skill.board-designer.md（board-probe 跑通的成文，运行时 DB ACTIVE 优先、loadPromptFile 兜底），但没有 core yaml 源（prompts/core/board-designer.yaml 不存在）——「无提示词」与「无 core 源」不是一回事，故 noPromptFile=false + promptArtifact 声明，户口簿按 F7 登记 handler-only 形态、不填 coreFile。输出经 teaching-turn 归一化（图型白名单 + spec 契约）保证前端渲染安全，失败 fail-open 返回 null 由引擎保持旧板。三条硬规则：标题只点题不写结论 / 减负区画完整形态不留 ? / 只输出一个 figure JSON
+    notes: handler-only 外挂能力（照 material-collector 混合成例）——主接口是确定性 service（teaching-turn-engine 按轮内意图直调 backend/src/services/ai-teaching/teaching-board-design.service.ts 的 designBoard，不进 skillHandlers 派发表，registrationPoint=none），内含一个 LLM 绘图环节。**两个维度分开看（#235）**：有提示词产物 prompts/skill.teaching-board-design.md（board-probe 跑通的成文，运行时 DB ACTIVE 优先、loadPromptFile 兜底），但没有 core yaml 源（prompts/core/teaching-board-design.yaml 不存在）——「无提示词」与「无 core 源」不是一回事，故 noPromptFile=false + promptArtifact 声明，户口簿按 F7 登记 handler-only 形态、不填 coreFile。输出经 teaching-turn 归一化（图型白名单 + spec 契约）保证前端渲染安全，失败 fail-open 返回 null 由引擎保持旧板。三条硬规则：标题只点题不写结论 / 减负区画完整形态不留 ? / 只输出一个 figure JSON
 
   # ============ aux（10 条，不进字段路由；v4-aux-skills 注册） ============
-  - skillId: teaching-opening-generator
+  - skillId: teaching-opening
     kind: aux
     handlerRef: backend/src/skills/v4-aux-skills/index.ts
-    coreFile: prompts/core/teaching-opening-generator.yaml
+    coreFile: prompts/core/teaching-opening.yaml
+    aliases: [teaching-opening-generator]
     displayName: 课堂开场交互生成器
     description: 生成教学 Session 的开场 message、question 与 quickReplies
     coordinator:
@@ -657,10 +672,11 @@ skills:
       sandbox: [teaching]
     notes: v4-aux 旁挂 teaching-agent（ai-teaching.definition.ts step 2）；输入 = buildTeachingScenarioContext 产物（AITeachingCoordinator.ts:1010/1144）
 
-  - skillId: learner-progress-report
+  - skillId: profile-progress-report
     kind: aux
     handlerRef: backend/src/skills/v4-aux-skills/index.ts
-    coreFile: prompts/core/learner-progress-report.yaml
+    coreFile: prompts/core/profile-progress-report.yaml
+    aliases: [learner-progress-report]
     displayName: 学习进展报告生成器
     description: 基于学习指标和信号生成简短进展反馈
     dataSource:
@@ -668,10 +684,11 @@ skills:
       sandbox: [profile, teaching]
     notes: metrics/signals 由调用方内存计算（LearnerProgressService.ts:81-90 getCurrentMetrics 不落库），触发链 learning.service.ts:5343（任务完成）→ LearnerProgressService.ts:251 executeSkill；无 DB 直读
 
-  - skillId: learner-state-review
+  - skillId: profile-state-review
     kind: aux
     handlerRef: backend/src/skills/v4-aux-skills/index.ts
-    coreFile: prompts/core/learner-state-review.yaml
+    coreFile: prompts/core/profile-state-review.yaml
+    aliases: [learner-state-review]
     displayName: 学习状态评审诊断器
     description: 基于状态摘要与最近证据给出可证伪的学习状态诊断（为什么卡、下一步怎么调）
     dataSource:
@@ -681,10 +698,11 @@ skills:
       sandbox: [profile, teaching]
     notes: 诊断层 skill（设计 doc/LEARNER_STATE_REVIEW_DESIGN.md §4）；输入 = LearnerStateReviewService 的投影（toReviewProjection）+ 最近证据；输出结构化 insights/conceptAssessments/falsifiableClaims；经 runAux 调用，无 DB 直读
 
-  - skillId: concept-consolidator
+  - skillId: profile-concept-consolidate
     kind: aux
     handlerRef: backend/src/skills/v4-aux-skills/index.ts
-    coreFile: prompts/core/concept-consolidator.yaml
+    coreFile: prompts/core/profile-concept-consolidate.yaml
+    aliases: [concept-consolidator]
     displayName: 概念身份归并器
     description: 判断多个知识点名字里哪些是同一个概念的不同说法，输出可执行、可审计的归并建议
     dataSource:
@@ -698,10 +716,11 @@ skills:
       sandbox: []
     notes: 记忆层维护型 skill（用户级、跨 path 的身份归并；概念/结构层仍按 path 隔离）；调用方 = ConceptConsolidatorService.buildProjection（memory_traces 活跃概念 ≤60 + learner_evidence.pathId 归属路径），审计与回滚快照落 learner_projections(scope=concept-consolidation)；默认 observe 只记录建议不动数据，apply 只执行 autoApplicable（词面闸门）；触发点同 learner-state-review（AITeachingCoordinator 课后 / learning.service 任务完成）
 
-  - skillId: concept-load-estimator
+  - skillId: profile-concept-load
     kind: aux
     handlerRef: backend/src/skills/v4-aux-skills/index.ts
-    coreFile: prompts/core/concept-load-estimator.yaml
+    coreFile: prompts/core/profile-concept-load.yaml
+    aliases: [concept-load-estimator]
     displayName: 概念负担判定器
     description: 逐概念判定粒度/知识类型/检索难度档位，供温故配额按认知负担裁剪
     dataSource:
@@ -713,10 +732,11 @@ skills:
       sandbox: []
     notes: CLT 内在负荷判定（LLM 只出档位，数值由 concept-load.service 公式给，见 LEARNER_STATE_REVIEW_DESIGN §2.2）；调用方 = ConceptLoadService.resolveProfiles（按用户缓存到 learner_projections(scope=concept-load)，缺项才调 LLM，失败降级到规则版 estimateConceptLoad）；消费方 = review-plan.service 的温故配额
 
-  - skillId: replan-attribution
+  - skillId: teaching-replan-attribution
     kind: aux
     handlerRef: backend/src/skills/v4-aux-skills/index.ts
-    coreFile: prompts/core/replan-attribution.yaml
+    coreFile: prompts/core/teaching-replan-attribution.yaml
+    aliases: [replan-attribution]
     displayName: 路径重排归因器
     description: 在阈值召回的重排建议上给出主因、方向与一条可证伪断言
     dataSource:

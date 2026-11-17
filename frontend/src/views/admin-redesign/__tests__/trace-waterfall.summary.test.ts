@@ -67,7 +67,7 @@ function span(over: Partial<TraceSpan>): TraceSpan {
     id: 's1',
     traceId: 'tr-1',
     kind: 'call',
-    agent: 'virtual-learner-epistemic-grounding',
+    agent: 'simulation-epistemic-grounding',
     stage: 'Simulation',
     title: '调用',
     startMs: 0,

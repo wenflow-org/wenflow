@@ -116,7 +116,7 @@ export function resolvePathMaterialsForTeaching(aiPromptTemplate: string | null 
  */
 /**
  * 任务级迷思预判读侧（课前注入半条链，2026-09-26）：从 aiPromptTemplate.misconceptionHints.byTask[taskId]
- * 读回 stage-designer 的课前预判。与 resolveActiveTaskMaterialExcerpts 同款 sidecar 模式；失败 fail-open 返回 null。
+ * 读回 path-task-design 的课前预判。与 resolveActiveTaskMaterialExcerpts 同款 sidecar 模式；失败 fail-open 返回 null。
  */
 export function resolveTaskMisconceptionHints(params: {
   aiPromptTemplate: string | null | undefined;

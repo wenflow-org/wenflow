@@ -1,8 +1,8 @@
 /**
- * session-wrapup 评估档位（low | mid | high）↔ 0-10 数值的**唯一**映射实现。
+ * teaching-wrapup 评估档位（low | mid | high）↔ 0-10 数值的**唯一**映射实现。
  *
  * 单一事实来源（single source of truth）：
- * - 档位定义来自 `prompts/core/session-wrapup.yaml` 的 evaluation「评分参考」三档锚点
+ * - 档位定义来自 `prompts/core/teaching-wrapup.yaml` 的 evaluation「评分参考」三档锚点
  *   （1-4 / 5-7 / 8-10）。锚点表是 LLM 的判断依据；本文件的 min/max 必须与 yaml 同步。
  * - 除本文件外，任何地方都**不得**再写一份 "high → 9" 之类的映射；下游只允许调用
  *   `sessionEvaluationTierToValue()` / `resolveSessionEvaluationTier()`。
@@ -92,7 +92,7 @@ export function sessionEvaluationTierToValue(tier: SessionEvaluationTier): numbe
 
 /**
  * 零证据兜底（确定式，唯一来源）：会话没有任何可评估证据时使用。
- * 与 `prompts/core/session-wrapup.yaml` 规则「零证据分支」一致：三项均取保守值 3、confidence 0.1。
+ * 与 `prompts/core/teaching-wrapup.yaml` 规则「零证据分支」一致：三项均取保守值 3、confidence 0.1。
  *
  * 注意区分两件事：
  * - **零证据**（整节课都没有观测）→ 用本常量（显式兜底，值固定）；

@@ -204,10 +204,10 @@ for (const file of resultFiles.sort()) {
     openings: openings.slice(0, 4)
   }
 
-  // 材料：material-collector 调用按 sessionId / userId / pathId 归因
+  // 材料：path-material-collect 调用按 sessionId / userId / pathId 归因
   // （批量跑数里 LLM 调用上下文是 admin，sessionId 才是虚拟会话的可靠锚点）
   const materialWhere = {
-    agentId: 'skill:material-collector',
+    agentId: 'skill:path-material-collect',
     OR: [
       { sessionId },
       { userId: vs.userId },

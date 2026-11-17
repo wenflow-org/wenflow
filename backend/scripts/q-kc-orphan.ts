@@ -1,6 +1,6 @@
 /* eslint-disable no-console -- 只读诊断：KC 被任务关联的覆盖率 */
 /**
- * 只读诊断：孤立 KC 有多少（2026-09-24 用于给 kc-mapper 加"KC 必须有来路"规则取证）。
+ * 只读诊断：孤立 KC 有多少（2026-09-24 用于给 path-kc-mapping 加"KC 必须有来路"规则取证）。
  *
  * 口径：
  *   - KCs = kcGraph.nodes（回落 conceptKcs[].kcs）

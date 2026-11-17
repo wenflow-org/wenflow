@@ -86,9 +86,9 @@ describe('checkInputRefHandoff（三前缀分叉）', () => {
 
   it('skill: 路由表匹配且 handoff 包含本 skill 时通过', async () => {
     mockGetAgentRoutings.mockResolvedValue([
-      { agentId: 'skill:path-planning', fieldId: 'milestones.title', render: 'visible', handoff: ['skill:stage-designer'], internal: false, accumulate: false, pathInRawOutput: null },
+      { agentId: 'skill:path-planning', fieldId: 'milestones.title', render: 'visible', handoff: ['skill:path-task-design'], internal: false, accumulate: false, pathInRawOutput: null },
     ])
-    const result = await checkInputRefHandoff(makeCore('stage-designer'), {
+    const result = await checkInputRefHandoff(makeCore('path-task-design'), {
       ref: 'skill:path-planning.milestones',
       kind: 'skill',
       skill: 'path-planning',
@@ -103,7 +103,7 @@ describe('checkInputRefHandoff（三前缀分叉）', () => {
     mockGetAgentRoutings.mockResolvedValue([
       { agentId: 'skill:path-planning', fieldId: 'cognitiveCore.cognitiveDomain', render: 'visible', handoff: ['path-agent'], internal: false, accumulate: false, pathInRawOutput: null },
     ])
-    const result = await checkInputRefHandoff(makeCore('stage-designer'), {
+    const result = await checkInputRefHandoff(makeCore('path-task-design'), {
       ref: 'skill:path-planning.ghostField',
       kind: 'skill',
       skill: 'path-planning',
@@ -134,7 +134,7 @@ describe('checkRuleInputDeclarations（#197 规则引用键 ↔ inputs 声明）
   ]
 
   const makeWrapupCore = (withExtraInputs: boolean): CoreFile => ({
-    ...makeCore('session-wrapup'),
+    ...makeCore('teaching-wrapup'),
     rules: wrapupRules,
     inputs: [
       { ref: 'sandbox:teaching.session.evidence', kind: 'sandbox', skill: '', fieldPath: '', sandboxPath: 'teaching.session.evidence', userPath: '', name: 'sessionEvidence' },

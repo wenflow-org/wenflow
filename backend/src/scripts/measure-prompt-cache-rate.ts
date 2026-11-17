@@ -6,7 +6,7 @@
  *   promptCacheHitTokens 由上游回传；但 **promptCacheMissTokens 大量为 NULL**
  *   （DeepSeek 新版只回 prompt_tokens_details.cached_tokens，不回 uncached_tokens；
  *   实测 2305/3675 行为 NULL）。旧版按 hit/(hit+miss) 计算时 NULL 被当 0，
- *   分母塌成 hit，命中率虚报成 100%（例如 learning-predictor 曾显示 100%）。
+ *   分母塌成 hit，命中率虚报成 100%（例如 profile-learning-predict 曾显示 100%）。
  *
  *   故本脚本一律用 **promptTokens 作分母**：cacheRate = hit / promptTokens。
  *   并额外给出两个可指导优化的指标：

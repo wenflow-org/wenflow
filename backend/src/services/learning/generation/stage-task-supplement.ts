@@ -1,5 +1,5 @@
 /**
- * 阶段补课（2026-09-30 广度跑批实证驱动）：stage-designer 无视 targetSubtasksForStage
+ * 阶段补课（2026-09-30 广度跑批实证驱动）：path-task-design 无视 targetSubtasksForStage
  * 下限的代码兜底。
  *
  * 实证（rw-exam5-01，法考 620h 自述）：每阶段锚 30 课（59.2h × 60 / 120min），8 个阶段里

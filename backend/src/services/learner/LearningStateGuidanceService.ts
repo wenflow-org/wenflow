@@ -8,7 +8,7 @@
  * todayActions 里还带一条指回本页的「查看学习状态」自指深链，而本页真正需要的是
  * 「当前状态意味着什么 + 怎么调」。
  *
- * 现在本服务以 view='learning-state' 调用同一个 skill（skills/adaptive-guidance-copy），
+ * 现在本服务以 view='learning-state' 调用同一个 skill（skills/profile-adaptive-copy），
  * 由提示词里的视图专属规则产出本页口径；dashboard 侧仍走自己的快照（view='dashboard'）。
  * 两个视图各有自己的生成路径与缓存，不再跨视图借文案。
  * 聚合结果保留 15 分钟内存缓存（stale-while-revalidate）。
@@ -18,7 +18,7 @@ import {
   buildFallback,
   adaptiveGuidanceCopyDefinition,
   type AdaptiveGuidanceCopyOutput,
-} from '../../skills/adaptive-guidance-copy';
+} from '../../skills/profile-adaptive-copy';
 import { executeSkillWithResult } from '../../skills';
 import { learnerStateSummaryService, type LearnerStateSummaryOutput } from './LearnerStateSummaryService';
 import { learningDecisionFeedService, type LearningDecisionCard } from './LearningDecisionFeedService';
@@ -28,7 +28,7 @@ import { learnerStateReviewService, type LearnerStateReviewPayload } from './Lea
 import { logger } from '../../utils/logger';
 
 const CACHE_TTL_MS = 15 * 60 * 1000;
-/** 本视图的取值（与 skills/adaptive-guidance-copy/views.ts 的 GUIDANCE_VIEWS 同源） */
+/** 本视图的取值（与 skills/profile-adaptive-copy/views.ts 的 GUIDANCE_VIEWS 同源） */
 const LEARNING_STATE_VIEW = 'learning-state' as const;
 
 export interface LearningStateGuidancePayload {
@@ -142,7 +142,7 @@ class LearningStateGuidanceService {
           ? (result.quality === 'model' || result.quality === 'cache' ? 'model' : 'fallback')
           : result.cached ? 'fallback' : 'model';
         debug = {
-          skillId: result.debug?.skillId || 'adaptive-guidance-copy',
+          skillId: result.debug?.skillId || 'profile-adaptive-copy',
           model: result.debug?.model || null,
           systemPromptVersion: result.debug?.systemPromptVersion || null,
           durationMs: result.debug?.durationMs || result.duration || Date.now() - startedAt,

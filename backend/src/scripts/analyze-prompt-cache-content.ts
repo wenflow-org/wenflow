@@ -14,11 +14,11 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 const AGENT = 'skill:teaching-turn';
 const ZERO_CACHE_SKILLS = [
-  'skill:replan-attribution',
-  'skill:concept-consolidator',
-  'skill:learner-state-review',
-  'skill:learner-progress-report',
-  'skill:concept-load-estimator',
+  'skill:teaching-replan-attribution',
+  'skill:profile-concept-consolidate',
+  'skill:profile-state-review',
+  'skill:profile-progress-report',
+  'skill:profile-concept-load',
 ];
 
 interface AttemptRow {

@@ -79,7 +79,7 @@ export function dedupeConcepts(values: Array<string | null | undefined>): string
 /**
  * 任务↔KC 连接键的口径（issue #179）。
  *
- * kc-mapper 的输入标题来自 stage-designer 的**原始**标题，而 subtasks 落库前经
+ * path-kc-mapping 的输入标题来自 path-task-design 的**原始**标题，而 subtasks 落库前经
  * `sanitizeUserFacingText()` 收口（内部词表：回捞 → 回顾）；本函数两侧都用同一个
  * 收口再比较——只 trim/折叠空格消除不了该改写，凡是命中过词表的任务都会静默匹配不到 KC。
  * 用同一收口也让既有路径（标注里存的仍是原始标题）无需重跑生成即可对上。
@@ -107,7 +107,7 @@ function parsePathPromptTemplateCore(path: any) {
   return promptTemplate?.cognitiveCore || null;
 }
 
-/** 从 kcAnnotation.taskKcLinks 解析当前任务的细粒度知识组件（KC）列表（kc-mapper 下游激活 3b） */
+/** 从 kcAnnotation.taskKcLinks 解析当前任务的细粒度知识组件（KC）列表（path-kc-mapping 下游激活 3b） */
 export function resolveTaskKcsFromPath(task: any, path: any): Array<{ kcId: string; name: string; taxonomy: string }> {
   try {
     const template = path?.aiPromptTemplate ? JSON.parse(path.aiPromptTemplate) : {};
@@ -320,7 +320,7 @@ export function buildCognitiveFrame(params: {
 }
 
 /**
- * 本课的"知识组件种子"：kc-mapper 已经把任务↔KC 的映射落在 `kcAnnotation.taskKcLinks` 里，
+ * 本课的"知识组件种子"：path-kc-mapping 已经把任务↔KC 的映射落在 `kcAnnotation.taskKcLinks` 里，
  * 复用 `resolveTaskKcsFromPath`（含契约漂移归一）取出来即可，**不新增 LLM 调用**。
  *
  * 修复（2026-09-23）：本函数原为恒返回 `[]` 的空桩，而 `subtasks.learningObjectives` 全库为空
@@ -347,7 +347,7 @@ export function buildTaskKnowledgeSeeds(params: {
  * 有效失败（PF）触发条件：概念性任务 + 有迁移目标 + 练习/项目型。
  *
  * issue #193（复核收口）：原判据还含「无既定学习目标（新概念）」一项，判据源是
- * `subtasks.learningObjectives` 是否为空。该字段在**生成链**结构性为空——`prompts/core/stage-designer.yaml`
+ * `subtasks.learningObjectives` 是否为空。该字段在**生成链**结构性为空——`prompts/core/path-task-design.yaml`
  * 明令「不要输出 learningObjectives」，stage-enrichment 每个 subtask 写 null（实测 2037/2037 为空）
  * ⇒ 对生成出来的任务该条件恒真、从不判别，等于把 PF 是否触发挂在与生成链无关的分支上，故移除。
  *

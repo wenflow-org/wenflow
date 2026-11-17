@@ -173,7 +173,7 @@ export async function updateLearningMetrics(
         pathId: input.pathId ?? null,
         primaryMetric: 'lsb',
         // 占位标记：无主观难度时 LSS 是按默认难度 5 套公式算的，不是测量值。
-        // 旧行为把它当等价真实行，与同课 session-wrapup 真实行并存时污染日负荷
+        // 旧行为把它当等价真实行，与同课 teaching-wrapup 真实行并存时污染日负荷
         // （dedupeLessonRows 事后补救）；现在把「这是占位」写进 metadata，读侧不用再靠巧合猜。
         synthetic: input.lssScore == null && input.subjectiveDifficulty == null,
       };
@@ -216,8 +216,8 @@ export async function reconcileTaskCompletionMetric(
 
   // 写侧收口（2026-10-22 审计 P2）：无主观难度、也无显式 LSS 时不再落
   // task-completion:<taskId> 占位行（LSS 恒按默认难度 5 合成）。这类行与同课
-  // session-wrapup 真实行并存会把日负荷算成两倍，此前靠三道读侧 dedupe 事后补救。
-  // 真实的课前/课后负载由 session-wrapup 权威行承载；任务侧无测量就不写。
+  // teaching-wrapup 真实行并存会把日负荷算成两倍，此前靠三道读侧 dedupe 事后补救。
+  // 真实的课前/课后负载由 teaching-wrapup 权威行承载；任务侧无测量就不写。
   if (subjectiveDifficulty === undefined && explicitLss === undefined) {
     logger.debug('[LearningMetrics] 任务完成无主观难度，跳过占位指标行', {
       userId: event.userId,

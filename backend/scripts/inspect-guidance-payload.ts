@@ -1,4 +1,4 @@
-/** 只读：检查 adaptive-guidance-copy 真实载荷结构（供 D5 写准规则里的字段路径） */
+/** 只读：检查 profile-adaptive-copy 真实载荷结构（供 D5 写准规则里的字段路径） */
 import 'dotenv/config';
 import prisma from '../src/config/database';
 
@@ -15,7 +15,7 @@ function shape(value: unknown, depth = 0): unknown {
 
 async function main() {
   const row = await prisma.prompt_call_logs.findFirst({
-    where: { agentId: 'skill:adaptive-guidance-copy', success: true },
+    where: { agentId: 'skill:profile-adaptive-copy', success: true },
     select: { userPayload: true, createdAt: true },
     orderBy: { createdAt: 'desc' },
   });

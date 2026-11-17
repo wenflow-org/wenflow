@@ -93,8 +93,8 @@ jest.mock('../../coordinators/simulation.coordinator', () => ({
   default: mockSimulationCoordinator
 }))
 jest.mock('../../gateway', () => ({ getGateway: jest.fn(() => ({})) }))
-jest.mock('../../skills/virtual-learner-persona-designer', () => ({ virtualLearnerPersonaDesignerDefinition: {} }))
-jest.mock('../../skills/virtual-learner-scenario-designer', () => ({ virtualLearnerScenarioDesignerDefinition: {} }))
+jest.mock('../../skills/simulation-persona-designer', () => ({ virtualLearnerPersonaDesignerDefinition: {} }))
+jest.mock('../../skills/simulation-scenario-designer', () => ({ virtualLearnerScenarioDesignerDefinition: {} }))
 jest.mock('../../skills', () => ({ executeSkill: jest.fn() }))
 jest.mock('../../services/learning/learning.service', () => ({ __esModule: true, default: {} }))
 jest.mock('../../services/learning/path-mutation-safety', () => ({

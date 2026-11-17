@@ -1,5 +1,5 @@
 /**
- * adaptive-guidance-copy 的「声明 ↔ 载荷」对齐（审计 P1 §2.4d）。
+ * profile-adaptive-copy 的「声明 ↔ 载荷」对齐（审计 P1 §2.4d）。
  *
  * 此前 yaml 声明 learnerSnapshotDynamic/learningControlState/replanSignal/sessionWrapup，
  * 而载荷实际是 learner/learningState/advisory/wrapup，规则里引用的又是载荷键
@@ -16,7 +16,7 @@ jest.mock('../../composers/prompt-composer', () => ({
 import fs from 'node:fs'
 import path from 'node:path'
 import yaml from 'js-yaml'
-import { adaptiveGuidanceCopy, adaptiveGuidanceCopyDefinition, GUIDANCE_VIEWS } from '../adaptive-guidance-copy'
+import { adaptiveGuidanceCopy, adaptiveGuidanceCopyDefinition, GUIDANCE_VIEWS } from '../profile-adaptive-copy'
 
 const INPUT = {
   view: 'dashboard',
@@ -34,7 +34,7 @@ const LLM_OUTPUT = {
   emptyStateCopy: 'e', warningCopy: null,
 }
 
-describe('adaptive-guidance-copy 声明与载荷对齐', () => {
+describe('profile-adaptive-copy 声明与载荷对齐', () => {
   it('yaml 声明的每个 inputs.name 都是真实载荷键；调用方直供的 view/path 亦在载荷中', async () => {
     mockCallPrompt.mockResolvedValue({ success: true, output: LLM_OUTPUT, debug: {} })
     await adaptiveGuidanceCopy(INPUT as never)
@@ -44,7 +44,7 @@ describe('adaptive-guidance-copy 声明与载荷对齐', () => {
     const payload = JSON.parse(spec.buildUserPayload(INPUT, {})) as Record<string, unknown>
     const keys = Object.keys(payload)
 
-    const yamlPath = path.resolve(__dirname, '../../../../prompts/core/adaptive-guidance-copy.yaml')
+    const yamlPath = path.resolve(__dirname, '../../../../prompts/core/profile-adaptive-copy.yaml')
     const doc = yaml.load(fs.readFileSync(yamlPath, 'utf8')) as { inputs: Array<{ name: string; ref?: string }> }
 
     expect(doc.inputs.length).toBeGreaterThan(0)
@@ -66,7 +66,7 @@ describe('adaptive-guidance-copy 声明与载荷对齐', () => {
    * 且 learning-state 视图禁止输出指回本页的自指深链——否则「4 个 view」又会退化成一句空话。
    */
   it('#187：提示词规则与产出口径覆盖两个视图，learning-state 禁自指深链', () => {
-    const yamlPath = path.resolve(__dirname, '../../../../prompts/core/adaptive-guidance-copy.yaml')
+    const yamlPath = path.resolve(__dirname, '../../../../prompts/core/profile-adaptive-copy.yaml')
     const doc = yaml.load(fs.readFileSync(yamlPath, 'utf8')) as {
       rules: string[]
       fields: Array<{ name: string; desc?: string }>

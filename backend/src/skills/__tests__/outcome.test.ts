@@ -3,13 +3,13 @@ import { buildSkillOutcome, noneTransition } from '../outcome';
 describe('SkillOutcome scaffold', () => {
   it('builds v1 outcome with null transition by default', () => {
     const outcome = buildSkillOutcome({
-      skillId: 'skill:peer-reinforcement',
+      skillId: 'skill:teaching-peer-reinforcement',
       artifact: { message: 'hi', strategy: 'feynman', followUpQuestions: [] },
       quality: 'model',
     });
 
     expect(outcome.schemaVersion).toBe('skill-outcome/v1');
-    expect(outcome.meta.skillId).toBe('skill:peer-reinforcement');
+    expect(outcome.meta.skillId).toBe('skill:teaching-peer-reinforcement');
     expect(outcome.meta.quality).toBe('model');
     expect(outcome.transition).toBeNull();
     expect(outcome.artifact).toEqual({
@@ -29,7 +29,7 @@ describe('SkillOutcome scaffold', () => {
 
   it('keeps the staged three-axis vocabulary aligned with the migration baseline', () => {
     const outcome = buildSkillOutcome({
-      skillId: 'skill:session-wrapup',
+      skillId: 'skill:teaching-wrapup',
       artifact: { summary: 'done' },
       transition: {
         kind: 'append',

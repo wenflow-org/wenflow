@@ -4,13 +4,13 @@
  * 背景（2026-10-28 Frontier R1/R2 实证）：goal 在 44–50% 的路径里声明 needsMaterial，
  * 但 F3 私有材料组 26 次联网尝试 0 成功——内部手册/私有协议/本公司字典本就不该走公网检索。
  * 该模块把「要不要联网」从提示词软约束变成确定性分流：
- *   - private → 跳过 material-collector，由 goal 请用户上传附件（或按“用户手上有原文”设计路径）；
- *   - public  → 照旧交给 material-collector 检索/抓取/抽取。
+ *   - private → 跳过 path-material-collect，由 goal 请用户上传附件（或按“用户手上有原文”设计路径）；
+ *   - public  → 照旧交给 path-material-collect 检索/抓取/抽取。
  *
  * 判定优先级：goal 显式给出的 origin（public/private）> 文本启发式 > 默认 public。
  * 默认 public 是保守选择：保留现有检索行为，不因漏标而少采。
  */
-import type { MaterialNeed } from '../../skills/material-collector/types';
+import type { MaterialNeed } from '../../skills/path-material-collect/types';
 
 export type MaterialOrigin = 'public' | 'private';
 
@@ -47,7 +47,7 @@ const PRIVATE_PATTERNS = [
  * 这里是第二道闸：path 拿着全量 goal 文本，声明缺失但文本里出现「真实材料承诺 /
  * 具体文档依赖」信号时，确定性派生采集需求——派生出的 need 走同一条
  * resolveMaterialPacks 链（private 信号照旧被 partitionMaterialNeeds 拦下不联网）。
- * queries 只求方向正确（material-collector 自己有选源与抽取两道模型把关）。
+ * queries 只求方向正确（path-material-collect 自己有选源与抽取两道模型把关）。
  */
 const REAL_PROMISE_RE = /(真实案例|真实记录|真实对话|公开(跑偏|事故|调用|训练)?(记录|日志|复盘)|不拿编的|都是真事)/;
 const DOC_DEPENDENCY_RE = /(官方文档|API\s*文档|开发文档|技术规范|白皮书|操作手册|使用指南)/;
@@ -79,7 +79,7 @@ const TOPIC_PHRASE_RE = /[\u4e00-\u9fa5A-Za-z0-9]{2,12}(?:研究报告|报告|�
  * 从目标文本里压出可检索的主题短语（2026-11-13 u06 实证）。
  *
  * 旧实现取「前 3 段、24 字」，长句目标会压出「我刚进咨询公司 第一次独立写行业研究报告」这类
- * 检索词，material-collector 搜索到的是标题相近但正文不对的文章，直接 not_found。
+ * 检索词，path-material-collect 搜索到的是标题相近但正文不对的文章，直接 not_found。
  * 这里优先抓领域名词短语（行业研究报告/劳动合同/年报…），抓不到才退回去口语前缀的短截断。
  */
 export function compactTopic(raw: string): string {

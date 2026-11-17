@@ -72,7 +72,7 @@ jest.mock('../../skills', () => ({
 jest.mock('../../skills/virtual-learner-shared', () => ({
   normalizeFrictionBudget: (value: string) => value || 'normal'
 }))
-jest.mock('../../skills/session-wrapup', () => ({
+jest.mock('../../skills/teaching-wrapup', () => ({
   sessionWrapupAgent: { generate: jest.fn() }
 }))
 jest.mock('../../services/learning/goal-path-visible-summary', () => ({

@@ -17,18 +17,18 @@ import {
   toLegacySkillRuntimeStats,
   type SkillStatsRange,
 } from '../../services/skill-runtime-contract.service';
-import { STAGE_DESIGNER_PROMPT } from '../../skills/stage-designer';
+import { STAGE_DESIGNER_PROMPT } from '../../skills/path-task-design';
 import { buildThinkingPolicy, type ReasoningEffort, type ThinkingMode } from '../../gateway/api-gateway/thinking-policy';
 import { validateExternalUrl } from '../../utils/safe-http';
 import { GLOBAL_DEFAULT_MAX_TOKENS } from '../../services/resolve-llm-call-params';
-import { ADAPTIVE_GUIDANCE_COPY_PROMPT } from '../../skills/adaptive-guidance-copy';
-import { VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT } from '../../skills/virtual-learner-persona-designer';
-import { VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT } from '../../skills/virtual-learner-scenario-designer';
-import { VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_PROMPT } from '../../skills/virtual-learner-goal-dialogue-simulator';
-import { VIRTUAL_LEARNER_PATH_EVALUATOR_PROMPT } from '../../skills/virtual-learner-path-evaluator';
-import { VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_PROMPT } from '../../skills/virtual-learner-learn-turn-simulator';
-import { VIRTUAL_LEARNER_REFEREE_PROMPT } from '../../skills/virtual-learner-referee';
-import { VIRTUAL_LEARNER_ACTOR_AUDITOR_PROMPT } from '../../skills/virtual-learner-actor-auditor';
+import { ADAPTIVE_GUIDANCE_COPY_PROMPT } from '../../skills/profile-adaptive-copy';
+import { VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT } from '../../skills/simulation-persona-designer';
+import { VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT } from '../../skills/simulation-scenario-designer';
+import { VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_PROMPT } from '../../skills/simulation-goal-dialogue';
+import { VIRTUAL_LEARNER_PATH_EVALUATOR_PROMPT } from '../../skills/simulation-path-evaluate';
+import { VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_PROMPT } from '../../skills/simulation-learn-turn';
+import { VIRTUAL_LEARNER_REFEREE_PROMPT } from '../../skills/simulation-referee';
+import { VIRTUAL_LEARNER_ACTOR_AUDITOR_PROMPT } from '../../skills/simulation-actor-audit';
 import { GOAL_UNDERSTANDING_COMPOSER_PROMPT } from '../../skills/goal-understanding-composer';
 import { ACCEPTANCE_EVIDENCE_EVALUATOR_PROMPT } from '../../skills/acceptance-evidence-evaluator';
 import { checkSkillsReadinessFromSystemDb } from '../../services/skills-readiness.service';
@@ -56,15 +56,15 @@ import { writeNodeConfigChangeToSystemDb } from '../../services/node-config-chan
 const router = Router();
 
 const SKILL_FALLBACK_PROMPTS: Record<string, string> = {
-  'stage-designer': STAGE_DESIGNER_PROMPT,
-  'adaptive-guidance-copy': ADAPTIVE_GUIDANCE_COPY_PROMPT,
-  'virtual-learner-persona-designer': VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT,
-  'virtual-learner-scenario-designer': VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT,
-  'virtual-learner-goal-dialogue-simulator': VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_PROMPT,
-  'virtual-learner-path-evaluator': VIRTUAL_LEARNER_PATH_EVALUATOR_PROMPT,
-  'virtual-learner-learn-turn-simulator': VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_PROMPT,
-  'virtual-learner-referee': VIRTUAL_LEARNER_REFEREE_PROMPT,
-  'virtual-learner-actor-auditor': VIRTUAL_LEARNER_ACTOR_AUDITOR_PROMPT,
+  'path-task-design': STAGE_DESIGNER_PROMPT,
+  'profile-adaptive-copy': ADAPTIVE_GUIDANCE_COPY_PROMPT,
+  'simulation-persona-designer': VIRTUAL_LEARNER_PERSONA_DESIGNER_PROMPT,
+  'simulation-scenario-designer': VIRTUAL_LEARNER_SCENARIO_DESIGNER_PROMPT,
+  'simulation-goal-dialogue': VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_PROMPT,
+  'simulation-path-evaluate': VIRTUAL_LEARNER_PATH_EVALUATOR_PROMPT,
+  'simulation-learn-turn': VIRTUAL_LEARNER_LEARN_TURN_SIMULATOR_PROMPT,
+  'simulation-referee': VIRTUAL_LEARNER_REFEREE_PROMPT,
+  'simulation-actor-audit': VIRTUAL_LEARNER_ACTOR_AUDITOR_PROMPT,
   'goal-understanding-composer': GOAL_UNDERSTANDING_COMPOSER_PROMPT,
   'acceptance-evidence-evaluator': ACCEPTANCE_EVIDENCE_EVALUATOR_PROMPT,
 };
@@ -680,7 +680,7 @@ router.get('/:name/effective-prompt', async (req: Request, res: Response) => {
     const skill = gateway.getSkill(name);
 
     if (!skill) {
-      // 兜底：peer-reinforcement 等以 skill: 前缀注册到 agent 体系的节点
+      // 兜底：teaching-peer-reinforcement 等以 skill: 前缀注册到 agent 体系的节点
       // 不在 SkillRegistry 中，但仍然有 active prompt 可读
       const promptService = new AgentConfigService();
       const agentId = `skill:${name}`;
@@ -1056,7 +1056,7 @@ router.get('/reconciliation', async (req: Request, res: Response) => {
     const registeredNames = new Set(registrations.map((row) => row.name));
 
     // 注册豁免点（agents/platform-direct/none 不落 skill_registrations 是预期，W2 语义）
-    // 2026-11-11 困惑测试 #108：none（board-designer 这类不进派发表、平台守门直调）此前漏在集合外，
+    // 2026-11-11 困惑测试 #108：none（teaching-board-design 这类不进派发表、平台守门直调）此前漏在集合外，
     // 造成同一行「完成度=已上线」与「运行注册 ✗ 未注册」自相矛盾；与 skill-completion.service
     // (:286) 及 check-skills-file.ts 的「无注册语义=豁免」口径对齐。
     const w2 = analyzeW2(book, registrations);

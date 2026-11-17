@@ -162,7 +162,7 @@ describe('LearningMetricService task completion persistence', () => {
 
   /**
    * 占位行标记（2026-10-17）：无主观难度时 LSS 是按默认难度 5 套公式算的，不是测量值。
-   * 旧行为把它当等价真实行写库，与同课 session-wrapup 真实行并存时把日负荷算成两倍
+   * 旧行为把它当等价真实行写库，与同课 teaching-wrapup 真实行并存时把日负荷算成两倍
    * （dedupeLessonRows 事后补救）。现在打 metadata.synthetic，读侧可显式区分而不是靠巧合猜。
    */
   describe('synthetic（占位值）标记', () => {

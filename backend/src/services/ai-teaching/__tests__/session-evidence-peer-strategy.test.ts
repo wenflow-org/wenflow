@@ -2,7 +2,7 @@ import { computeSessionEvidence, pickPeerStrategy, shouldEmitCheckpoint } from '
 
 /**
  * 回归（审计 §3.19）：
- * - P0③：`session-wrapup` 的规则声明了"loadIndex 均值与峰值"，但 `computeSessionEvidence` 此前不产出该字段。
+ * - P0③：`teaching-wrapup` 的规则声明了"loadIndex 均值与峰值"，但 `computeSessionEvidence` 此前不产出该字段。
  * - P0②：伴学策略此前两处硬编码 `'feynman'`，使 skill 规则 38 的按层级选手法永不触发。
  */
 const asSession = (value: unknown) => value as Parameters<typeof computeSessionEvidence>[0];

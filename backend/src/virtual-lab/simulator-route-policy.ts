@@ -4,9 +4,9 @@
  * 背景（2026-11-13 7 例 mini-batch 实证）：
  * `executeSimulatorSkill` 原来对所有仿真技能都套 `simulatorRuntime(snapshot, stage)`，
  * 而快照只冻结了 goal/teaching 两个**主模拟器**的路由。于是每次调用
- * `virtual-learner-epistemic-grounding`（BEAGLE 认知判决）都会命中
- * `API route provider changed: expected skill:virtual-learner-learn-turn-simulator,
- * received skill:virtual-learner-epistemic-grounding`，被 catch 后恒降级为 null。
+ * `simulation-epistemic-grounding`（BEAGLE 认知判决）都会命中
+ * `API route provider changed: expected skill:simulation-learn-turn,
+ * received skill:simulation-epistemic-grounding`，被 catch 后恒降级为 null。
  *
  * 结果：7/7 个 case 的认知判决全部失效（日志计数 19-87 次/例），学习者认知信号缺失，
  * 裁判只能看到表现、看不到根因。冻结路由的语义应只覆盖「被冻结的那个模拟器」，
@@ -15,8 +15,8 @@
 export type SimulatorStage = 'goal' | 'teaching'
 
 const STAGE_SIMULATOR_NAMES: Record<SimulatorStage, string> = {
-  goal: 'virtual-learner-goal-dialogue-simulator',
-  teaching: 'virtual-learner-learn-turn-simulator',
+  goal: 'simulation-goal-dialogue',
+  teaching: 'simulation-learn-turn',
 }
 
 /** 该 skill 是否就是本阶段被冻结路由的主模拟器。 */

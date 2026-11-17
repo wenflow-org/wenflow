@@ -1859,7 +1859,7 @@ html[data-theme='dark'] .dfg-step__port:hover { background: var(--mk-graph-port-
   flex-shrink: 0; font-size: var(--mk-fs-micro); font-weight: 700; color: var(--mk-blue-text);
   background: var(--mk-blue-bg); border-radius: 6px; padding: 0 6px; line-height: 1.8;
   /* 上限 160px（2026-11-02 评审）：原 110px 把最常见的目的地都截了
-       （「→ stage-designer」实测 134px →「stage-des…」，chip 上的去向等于没写）。
+       （「→ path-task-design」实测 134px →「stage-des…」，chip 上的去向等于没写）。
        再长的 skill id 仍省略，全文在 title */
   max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }

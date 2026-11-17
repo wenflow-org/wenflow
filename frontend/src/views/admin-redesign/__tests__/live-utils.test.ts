@@ -218,11 +218,11 @@ describe('live.mapLogsToSpans（P1 消息列语义 + 网关配对 + 状态映射
     // 实测场景：网关 11.4s / skill 25.6s，两条记录写出时间差 4.2s > 固定窗口 1500ms
     const spans1 = mapLogsToSpans([
       { id: 'g1', traceId: 'tr:long', createdAt: '2026-08-13T10:00:00.000', executionLayer: 'api-gateway', durationMs: 11400, status: 'success' },
-      { id: 's1', traceId: 'tr:long', createdAt: '2026-08-13T10:00:04.200', executionLayer: 'skill', durationMs: 25600, status: 'success', agentId: 'skill:virtual-learner-learn-turn-simulator' }
+      { id: 's1', traceId: 'tr:long', createdAt: '2026-08-13T10:00:04.200', executionLayer: 'skill', durationMs: 25600, status: 'success', agentId: 'skill:simulation-learn-turn' }
     ]);
     expect(spans1).toHaveLength(1);
     expect(spans1[0].gatewayDurMs).toBe(11400);
-    expect(spans1[0].agent).toBe('virtual-learner-learn-turn-simulator');
+    expect(spans1[0].agent).toBe('simulation-learn-turn');
   });
 
   it('W2 修窗：短调用仍受 1500ms 兜底窗口约束（长耗时网关行不误配短 skill 行）', () => {

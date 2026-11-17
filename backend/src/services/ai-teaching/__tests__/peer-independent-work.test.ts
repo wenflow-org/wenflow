@@ -2,7 +2,7 @@
 /**
  * P1-14 修复③ + P2-11：独立作业进行中不得给解题钥匙 / 伴学历史转发。
  *
- * 本文件刻意只从**可直接加载**的模块取被测函数（teaching-session-views / skills/peer-reinforcement）：
+ * 本文件刻意只从**可直接加载**的模块取被测函数（teaching-session-views / skills/teaching-peer-reinforcement）：
  * 触发判定的钉测在 peer-trigger-service.test.ts，策略与载荷层的钉测在此。
  *
  * 生产实证链（prompt_call_logs 1791288425961，2026-10-06）：
@@ -21,7 +21,7 @@ jest.mock('../../../composers/prompt-composer', () => ({
 }));
 
 import { pickPeerStrategy, collectPeerHistory } from '../teaching-session-views';
-import { executePeerDiscussion, resolveEffectivePeerStrategy } from '../../../skills/peer-reinforcement';
+import { executePeerDiscussion, resolveEffectivePeerStrategy } from '../../../skills/teaching-peer-reinforcement';
 
 const PCL_TUTOR_REPLY =
   '下一题我完全不给提示，你自己从头写。题目："如图，点D在BC上，且 BD=CD，AD 垂直于 BC。求证：∠B = ∠C。"\n\n'

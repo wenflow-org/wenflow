@@ -20,7 +20,7 @@ jest.mock('../../config/database', () => ({ __esModule: true, default: mockPrism
 jest.mock('../../skills', () => ({
   __esModule: true,
   executeSkill: jest.fn().mockResolvedValue(null),
-  virtualLearnerMemoryCuratorDefinition: { name: 'virtual-learner-memory-curator', version: '1.0.0' },
+  virtualLearnerMemoryCuratorDefinition: { name: 'simulation-memory-curate', version: '1.0.0' },
 }))
 jest.mock('../../services/memory/memory-trace.service', () => ({
   memoryTraceService: { recordSessionOutcome: jest.fn(), getDueTraces: (...args: unknown[]) => mockGetDueTraces(...args) },
@@ -236,7 +236,7 @@ describe('P1-4 · clampLearnerStateToJudgment（掌握度上界钳制）', () =>
 describe('P1-6 · reconcileKnowledgeBoardWithJudgment（看板 × 判决对账）', () => {
   /**
    * 回归语料（忠实转录）：2026-10-07 只读抽查（node:sqlite readOnly + 参数绑定）
-   * prompt_call_logs agentId='skill:virtual-learner-learn-turn-simulator'，以
+   * prompt_call_logs agentId='skill:simulation-learn-turn'，以
    * pcl_9f1a2be3-27a4-4f76-b2c8-8733dd5e2519 的 createdAt 为锚的最近 12 条成功行。
    * judge/masteryProb/blockedConcept 与看板命中行（status/progress）逐字段照抄 DB：
    *   6 条 judge=false 且 blockedConcept 在看板为 mastered/100；6 条 judge=true 无 blockedConcept。

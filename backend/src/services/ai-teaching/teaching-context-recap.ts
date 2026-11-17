@@ -74,7 +74,7 @@ export async function fetchLatestPriorSessionEndTime(params: {
 /**
  * 复盘要点双形读取（P1-8 修复，2026-10-06 审计）：
  *
- * `session-wrapup` 产物把 topicSummary / knowledgeItems / actionPlan 嵌在 `wrapup.summary.*` 下
+ * `teaching-wrapup` 产物把 topicSummary / knowledgeItems / actionPlan 嵌在 `wrapup.summary.*` 下
  * （DB 实测顶层键无这三样：129/129 条 recap 全空），但历史产物/别处写入仍可能走顶层结构。
  * 因此「嵌套优先、顶层兜底」两态都读——与 `teaching-session-lifecycle.ts:243` 的双形读取同款。
  */

@@ -156,7 +156,7 @@ export interface LearningPath {
   adjustmentPolicy?: {
     allowedModes?: Array<'expand' | 'compress' | 'replan'>;
     recommendedMode?: 'expand' | 'compress' | 'replan' | null;
-    triggerSource?: 'learn' | 'ai-teaching' | 'learner-model-agent' | 'system' | null;
+    triggerSource?: 'learn' | 'ai-teaching' | 'profile-learner-model-agent' | 'system' | null;
   } | null;
   adjustmentEvidence?: {
     stableConcepts?: string[];
@@ -337,7 +337,7 @@ export interface AdaptiveGuidancePayload {
 }
 
 export interface PathReplanRequest {
-  triggerSource?: 'goal-conversation' | 'learner-model-agent' | 'ai-teaching' | 'admin' | 'system' | 'api';
+  triggerSource?: 'goal-conversation' | 'profile-learner-model-agent' | 'ai-teaching' | 'admin' | 'system' | 'api';
   reason?: string;
   /**
    * `new_version` 不放行：路径版本化未启用，后端对 'new_version' 一律 409（PATH_VERSIONING_NOT_SUPPORTED）。

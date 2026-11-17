@@ -135,34 +135,34 @@ sandbox:goal-agent.understanding.urgency
 
 | 字段 | 类型 | handoff |
 |---|---|---|
-| `normalizedInput.learnerProfile.backgroundExperience` | string | skill:path-planning, skill:stage-designer |
-| `normalizedInput.learnerProfile.constraintsAndBoundaries` | string | skill:path-planning, skill:stage-designer |
-| `normalizedInput.problemSpace.realProblem` | string | skill:path-planning, skill:stage-designer |
-| `normalizedInput.problemSpace.scenario` | string | skill:path-planning, skill:stage-designer |
-| `normalizedInput.problemSpace.currentPainPoint` | string | skill:path-planning, skill:stage-designer |
-| `normalizedInput.resources.timeBudget` | string | skill:path-planning, skill:stage-designer |
-| `normalizedInput.resources.timeBudgetCadence` | string | skill:path-planning, skill:stage-designer |
-| `normalizedInput.successCriteria.observableResult` | string | skill:path-planning, skill:stage-designer |
-| `normalizedInput.confirmedProposal.firstDeliverable` | string | skill:path-planning, skill:stage-designer |
-| `normalizedInput.confirmedProposal.keyStages` | string | skill:path-planning, skill:stage-designer |
-| `normalizedInput.planningHints.paceSignal` | string | skill:path-planning, skill:stage-designer |
-| `normalizedInput.planningHints.milestoneRange` | string | skill:path-planning, skill:stage-designer |
-| `normalizedInput.planningHints.conceptRange` | string | skill:path-planning, skill:stage-designer |
-| `normalizedInput.planningHints.subtasksPerStageRange` | string | skill:path-planning, skill:stage-designer |
-| `normalizedInput.planningHints.subtaskMinutesRange` | string | skill:path-planning, skill:stage-designer |
-| `normalizedInput.planningHints.maxWeeks` | number | skill:path-planning, skill:stage-designer |
-| `previousMilestone` | object | skill:stage-designer |
+| `normalizedInput.learnerProfile.backgroundExperience` | string | skill:path-planning, skill:path-task-design |
+| `normalizedInput.learnerProfile.constraintsAndBoundaries` | string | skill:path-planning, skill:path-task-design |
+| `normalizedInput.problemSpace.realProblem` | string | skill:path-planning, skill:path-task-design |
+| `normalizedInput.problemSpace.scenario` | string | skill:path-planning, skill:path-task-design |
+| `normalizedInput.problemSpace.currentPainPoint` | string | skill:path-planning, skill:path-task-design |
+| `normalizedInput.resources.timeBudget` | string | skill:path-planning, skill:path-task-design |
+| `normalizedInput.resources.timeBudgetCadence` | string | skill:path-planning, skill:path-task-design |
+| `normalizedInput.successCriteria.observableResult` | string | skill:path-planning, skill:path-task-design |
+| `normalizedInput.confirmedProposal.firstDeliverable` | string | skill:path-planning, skill:path-task-design |
+| `normalizedInput.confirmedProposal.keyStages` | string | skill:path-planning, skill:path-task-design |
+| `normalizedInput.planningHints.paceSignal` | string | skill:path-planning, skill:path-task-design |
+| `normalizedInput.planningHints.milestoneRange` | string | skill:path-planning, skill:path-task-design |
+| `normalizedInput.planningHints.conceptRange` | string | skill:path-planning, skill:path-task-design |
+| `normalizedInput.planningHints.subtasksPerStageRange` | string | skill:path-planning, skill:path-task-design |
+| `normalizedInput.planningHints.subtaskMinutesRange` | string | skill:path-planning, skill:path-task-design |
+| `normalizedInput.planningHints.maxWeeks` | number | skill:path-planning, skill:path-task-design |
+| `previousMilestone` | object | skill:path-task-design |
 | `path.id` | string | path-agent |
 | `path.name` | string | path-agent |
 | `path.summary` | string | path-agent |
 | `path.totalMilestones` | number | path-agent |
-| `cognitiveCore.cognitiveDomain` | string | path-agent, skill:stage-designer, skill:kc-mapper |
-| `cognitiveCore.coreConcepts` | array<object> | path-agent, skill:stage-designer, skill:kc-mapper |
-| `milestones.stageNumber` | number | skill:stage-designer, path-agent, skill:kc-mapper, skill:path-reviewer |
-| `milestones.title` | string | skill:stage-designer, path-agent, skill:kc-mapper, skill:path-reviewer |
-| `milestones.coreConcept` | string | skill:stage-designer, path-agent, skill:kc-mapper, skill:path-reviewer |
-| `milestones.goal` | string | skill:stage-designer, path-agent, skill:kc-mapper, skill:path-reviewer |
-| `milestones.estimatedHours` | number | skill:stage-designer, path-agent, skill:kc-mapper, skill:path-reviewer |
+| `cognitiveCore.cognitiveDomain` | string | path-agent, skill:path-task-design, skill:path-kc-mapping |
+| `cognitiveCore.coreConcepts` | array<object> | path-agent, skill:path-task-design, skill:path-kc-mapping |
+| `milestones.stageNumber` | number | skill:path-task-design, path-agent, skill:path-kc-mapping, skill:path-reviewer |
+| `milestones.title` | string | skill:path-task-design, path-agent, skill:path-kc-mapping, skill:path-reviewer |
+| `milestones.coreConcept` | string | skill:path-task-design, path-agent, skill:path-kc-mapping, skill:path-reviewer |
+| `milestones.goal` | string | skill:path-task-design, path-agent, skill:path-kc-mapping, skill:path-reviewer |
+| `milestones.estimatedHours` | number | skill:path-task-design, path-agent, skill:path-kc-mapping, skill:path-reviewer |
 | `subtasks.title` | string | path-agent |
 | `subtasks.type` | string | path-agent |
 | `subtasks.estimatedMinutes` | number | path-agent |
@@ -244,7 +244,7 @@ sandbox:path-agent.supplementRequest
 
 | 字段 | 类型 | handoff |
 |---|---|---|
-| `reply` | string | teaching-agent, skill:peer-reinforcement |
+| `reply` | string | teaching-agent, skill:teaching-peer-reinforcement |
 | `analysis.levelScore` | number | teaching-agent |
 | `analysis.confusionPoints` | array<string> | teaching-agent |
 | `analysis.engagement` | number | teaching-agent |
@@ -261,8 +261,8 @@ sandbox:path-agent.supplementRequest
 | `control.supplement` | object | teaching-agent |
 | `diagram` | object? | teaching-agent |
 | `figure` | object? | teaching-agent |
-| `analysis.cognitiveLevel` | string | teaching-agent, skill:peer-reinforcement |
-| `analysis.understanding` | number | teaching-agent, skill:peer-reinforcement |
+| `analysis.cognitiveLevel` | string | teaching-agent, skill:teaching-peer-reinforcement |
+| `analysis.understanding` | number | teaching-agent, skill:teaching-peer-reinforcement |
 | `knowledge.currentPoint` | string | teaching-agent |
 | `knowledge.points` | array<object> | teaching-agent |
 | `pedagogy.strategies` | array<string> | teaching-agent |
@@ -274,7 +274,7 @@ sandbox:path-agent.supplementRequest
 | `knowledge.state` | object | skill:teaching-turn |
 | `controls.teachingControlContext` | object | skill:teaching-turn |
 | `classroomContext` | object | skill:teaching-turn |
-| `knowledgeStateSummary` | string | skill:learning-predictor |
+| `knowledgeStateSummary` | string | skill:profile-learning-predict |
 | `message` | string | teaching-agent |
 | `followUpQuestions` | string[]? | teaching-agent |
 | `summary.topicSummary` | string | teaching-agent |

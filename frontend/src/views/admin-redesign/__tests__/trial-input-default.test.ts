@@ -1,13 +1,13 @@
 /**
  * #15：Skill 设计页「运行预览」默认载荷按 Skill 输入契约（core.yaml inputs）生成。
- * 此前硬编码 {"input": "用一句话介绍你自己"}，与契约不符的 Skill（如 stage-designer 要 milestone）
+ * 此前硬编码 {"input": "用一句话介绍你自己"}，与契约不符的 Skill（如 path-task-design 要 milestone）
  * 点「运行预览」必然以 INVALID_INPUT 失败。
  */
 import { describe, expect, it } from 'vitest';
 import { buildTrialInputFromContract } from '../skill-design/sdp-shared';
 
 describe('buildTrialInputFromContract（#15 试跑默认载荷）', () => {
-  it('只收必填（type 不带 ?），stage-designer → { milestone, cognitiveCore }', () => {
+  it('只收必填（type 不带 ?），path-task-design → { milestone, cognitiveCore }', () => {
     const inputs = [
       { name: 'milestone', type: 'object' },
       { name: 'previousMilestone', type: 'object?' },

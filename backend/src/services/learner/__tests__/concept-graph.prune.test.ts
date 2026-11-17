@@ -1,7 +1,7 @@
 /**
  * #173-2：概念图重建的「幽灵边」回归。
  *
- * 现象：`materializePathGraph` 只 upsert、不清旧边。replace-path / 重跑 kc-mapper 时，
+ * 现象：`materializePathGraph` 只 upsert、不清旧边。replace-path / 重跑 path-kc-mapping 时，
  * 旧 KC 解析出的边按同一 `pathId` 残留在 `concept_edges`，读侧（上游闭包 / 邻域 / 图视图）
  * 把已经不在路径图里的概念当成前置/后继，条数也恒大于当前图。
  *

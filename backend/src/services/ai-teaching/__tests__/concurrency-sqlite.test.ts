@@ -204,7 +204,7 @@ describe('Teaching SQLite concurrency and migrations', () => {
     `);
     await run(database, `
       INSERT INTO learning_metrics (id, sourceKey, userId, metricType, value, calculatedAt)
-      VALUES ('metric-1', 'session-wrapup:session-complete', 'user-1', 'learning_state', 1, CURRENT_TIMESTAMP)
+      VALUES ('metric-1', 'teaching-wrapup:session-complete', 'user-1', 'learning_state', 1, CURRENT_TIMESTAMP)
     `);
 
     // 身份唯一性由基线唯一索引保证：同 openKey / 同 sourceKey 均不得重复
@@ -216,7 +216,7 @@ describe('Teaching SQLite concurrency and migrations', () => {
 
     await expect(run(database, `
       INSERT INTO learning_metrics (id, sourceKey, userId, metricType, value, calculatedAt)
-      VALUES ('metric-2', 'session-wrapup:session-complete', 'user-1', 'learning_state', 2, CURRENT_TIMESTAMP)
+      VALUES ('metric-2', 'teaching-wrapup:session-complete', 'user-1', 'learning_state', 2, CURRENT_TIMESTAMP)
     `)).rejects.toMatchObject({ code: 'SQLITE_CONSTRAINT' });
   });
 
@@ -233,18 +233,18 @@ describe('Teaching SQLite concurrency and migrations', () => {
     const attempts = await Promise.all([
       commitFinalization(first, {
         sessionId: 'session-1', operationId: 'operation-1', metricId: 'metric-1',
-        sourceKey: 'session-wrapup:session-1', eventId: 'event-1', expectedRevision: 0
+        sourceKey: 'teaching-wrapup:session-1', eventId: 'event-1', expectedRevision: 0
       }),
       commitFinalization(second, {
         sessionId: 'session-2', operationId: 'operation-2', metricId: 'metric-2',
-        sourceKey: 'session-wrapup:session-2', eventId: 'event-2', expectedRevision: 0
+        sourceKey: 'teaching-wrapup:session-2', eventId: 'event-2', expectedRevision: 0
       })
     ]);
     expect(attempts.filter(Boolean)).toHaveLength(1);
 
     const losingSession = attempts[0]
-      ? { database: second, sessionId: 'session-2', operationId: 'operation-2', metricId: 'metric-2', sourceKey: 'session-wrapup:session-2', eventId: 'event-2' }
-      : { database: first, sessionId: 'session-1', operationId: 'operation-1', metricId: 'metric-1', sourceKey: 'session-wrapup:session-1', eventId: 'event-1' };
+      ? { database: second, sessionId: 'session-2', operationId: 'operation-2', metricId: 'metric-2', sourceKey: 'teaching-wrapup:session-2', eventId: 'event-2' }
+      : { database: first, sessionId: 'session-1', operationId: 'operation-1', metricId: 'metric-1', sourceKey: 'teaching-wrapup:session-1', eventId: 'event-1' };
     await expect(commitFinalization(losingSession.database, {
       ...losingSession,
       expectedRevision: 1
@@ -254,7 +254,7 @@ describe('Teaching SQLite concurrency and migrations', () => {
       SELECT learningStateRevision FROM users WHERE id = 'user-1'
     `);
     const metrics = await queryAll<any>(setup, `
-      SELECT COUNT(*) AS count FROM learning_metrics WHERE sourceKey LIKE 'session-wrapup:%'
+      SELECT COUNT(*) AS count FROM learning_metrics WHERE sourceKey LIKE 'teaching-wrapup:%'
     `);
     const sessions = await queryAll<any>(setup, `
       SELECT COUNT(*) AS count FROM teaching_sessions WHERE status = 'completed' AND wrapup IS NOT NULL
@@ -308,7 +308,7 @@ describe('Teaching SQLite concurrency and migrations', () => {
       sessionId: 'session-1',
       operationId: 'wrong-operation',
       metricId: 'metric-1',
-      sourceKey: 'session-wrapup:session-1',
+      sourceKey: 'teaching-wrapup:session-1',
       eventId: 'event-1',
       expectedRevision: 0
     })).rejects.toThrow('SESSION_FENCE_FAILED');
@@ -317,7 +317,7 @@ describe('Teaching SQLite concurrency and migrations', () => {
       SELECT learningStateRevision FROM users WHERE id = 'user-1'
     `);
     const metrics = await queryAll<any>(database, `
-      SELECT COUNT(*) AS count FROM learning_metrics WHERE sourceKey = 'session-wrapup:session-1'
+      SELECT COUNT(*) AS count FROM learning_metrics WHERE sourceKey = 'teaching-wrapup:session-1'
     `);
     const session = await queryAll<any>(database, `
       SELECT status, operationId FROM teaching_sessions WHERE id = 'session-1'

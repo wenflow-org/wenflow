@@ -657,7 +657,7 @@ function mapRow(s: Record<string, unknown>): Row {
   const wrapupStatus = wrapup?.status === 'complete' ? 'complete' : 'missing'
   const rawPracticeAdvice = String(summary?.practiceAdvice || '')
   const wrapupDegraded = isDegradedWrapup(wrapup, rawPracticeAdvice)
-  /* 评估来源：artifact.sources.evaluation（session-wrapup 落库形状）；兼容顶层 evaluationSource。
+  /* 评估来源：artifact.sources.evaluation（teaching-wrapup 落库形状）；兼容顶层 evaluationSource。
      只有明确记为 model 才算评估成功——缺来源字段的老产物不猜。 */
   const wrapupSources = (wrapup?.sources as Record<string, unknown>) || null
   const evalSource = String(wrapupSources?.evaluation ?? wrapup?.evaluationSource ?? '')

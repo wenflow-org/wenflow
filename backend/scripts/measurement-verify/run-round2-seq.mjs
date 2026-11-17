@@ -6,7 +6,7 @@
 //                   课后基线 out/seq-a1.after.json（memory_traces/knowledgeState/misconception_ledger/
 //                   learner_projections+learning_metrics EWMA/prediction_records，只读）
 //   seq-a2 看注入   同 path 下一任务开课。开课窗取证：prompt_call_logs（agentId=
-//                   skill:teaching-opening-generator / skill:teaching-turn）userPayload 结构段——
+//                   skill:teaching-opening / skill:teaching-turn）userPayload 结构段——
 //                   memoryWarmup 计划 / priorMisconceptions / lastLessonRecap / temporalGap / successBand；
 //                   老师是否先带回课1错概念；全对 → finalize complete_task；
 //                   课后对比 out/seq-a2.after.json（与 a1 逐项对照）

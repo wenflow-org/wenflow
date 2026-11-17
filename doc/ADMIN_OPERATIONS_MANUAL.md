@@ -67,7 +67,7 @@
 
 **隐藏场景**（不在侧栏但 URL 可达）：`/admin/glossary`（运营术语表，manifest `hidden: true`，顶栏帮助按钮入口，`glossary` 组件）；`/admin/skill-workbench`（Skill 工作台：核心文件清单与编译同步状态；「从 0 新建 Skill」**已迁出管理台、统一走 CLI** —— `PromptWorkbench.vue:172`，注册见 `AdminConsole.vue:167-169`）；`/admin/skills/:agentId+`（Skill 详情旧深链，重定向到 `?view=skill&id=`，`router/index.ts:195`）。
 
-**常见旧书签重定向**（`router/index.ts:187-373`）：`/admin/console/:page`、`/admin/users→people`、`/admin/learner-center|learner-models→learner-state`、`/admin/sessions?tab=`（→ teaching-sessions / goal-conversations / learning-paths）、`/admin/content|ops-content→learning-paths`、`/admin/skills?tab=prompt-eval→prompt-eval`（2026-10-25 拆页反向）、`/admin/health→health-center`、`/admin/traces|trace-waterfall|prompt-call-logs|event-center→execution-logs`、`/admin/batch-experiments→virtual-learners`、`/admin/feedback→ops-hub?tab=feedback`、`/admin/announcements|messages→ops-hub?tab=announce`、`/admin/notifications→ops-hub?tab=inapp`、`/admin/achievements|ops-achievements→ops-hub?tab=achievements`、`/admin/devtools→ops-hub?tab=tools`、`/admin/export-data→ops-hub?tab=export`、`/admin/session-security→ops-hub?tab=security`、`/admin/access-control→ops-hub?tab=access`、`/admin/models→api-config`、`/admin/external-capabilities→addons`。
+**常见旧书签重定向**（`router/index.ts:187-373`）：`/admin/console/:page`、`/admin/users→people`、`/admin/learner-center|profile-learner-models→learner-state`、`/admin/sessions?tab=`（→ teaching-sessions / goal-conversations / learning-paths）、`/admin/content|ops-content→learning-paths`、`/admin/skills?tab=prompt-eval→prompt-eval`（2026-10-25 拆页反向）、`/admin/health→health-center`、`/admin/traces|trace-waterfall|prompt-call-logs|event-center→execution-logs`、`/admin/batch-experiments→virtual-learners`、`/admin/feedback→ops-hub?tab=feedback`、`/admin/announcements|messages→ops-hub?tab=announce`、`/admin/notifications→ops-hub?tab=inapp`、`/admin/achievements|ops-achievements→ops-hub?tab=achievements`、`/admin/devtools→ops-hub?tab=tools`、`/admin/export-data→ops-hub?tab=export`、`/admin/session-security→ops-hub?tab=security`、`/admin/access-control→ops-hub?tab=access`、`/admin/models→api-config`、`/admin/external-capabilities→addons`。
 
 ### 1.3 全局交互方言（写一次，全站适用）
 
@@ -249,7 +249,7 @@
 
 **异常信号 → 下一步**
 - 异常终态堆积（≥10 转红）→ 执行日志按该会话 `sessionId` 查全部调用（含失败）。
-- 大量终态缺总结 → 课后总结链路问题，去执行日志按节点 `session-wrapup` + 失败态查该会话链路（`health-center.service.ts:465-700` 的 14 项 buildItem 清单里**没有**课后总结/`session-wrapup` 检查项，健康中心查不到此项）。
+- 大量终态缺总结 → 课后总结链路问题，去执行日志按节点 `teaching-wrapup` + 失败态查该会话链路（`health-center.service.ts:465-700` 的 14 项 buildItem 清单里**没有**课后总结/`teaching-wrapup` 检查项，健康中心查不到此项）。
 - 高关注会话 → 座舱看链路，或学习者详情看证据。
 
 **联动**：自动 20s 轮询；`intent` 深链跳执行日志按 sessionId 归组；`useSessionDrill` 三跳转（学习者/链路/座舱，`useSessionDrill.ts:23-39`）。
@@ -441,7 +441,7 @@
 1. `/admin/learner-state` 搜索该用户，读置信列与风险摘要（`LearnerCenter.vue:243-250, 528-537`）。低置信 = 有任务的快照中置信度 < 50%（`evidence.ts:11`）。
 2. 点行进入学习者详情，看「证据」时间线：低置信且 `signal` 偏 struggle/incomplete 才是问题；domain 类证据（goal/path）不套学习成败语义（`evidence.ts:1-40`）。
 3. 看该用户教学会话：`/admin/teaching-sessions` 搜索，找中断/超时/重复失败的会话（`TeachingSessions.vue:121, 213-226`）。
-4. 若会话大量缺总结 → 去执行日志按 `sessionId` 查 `session-wrapup` 失败。
+4. 若会话大量缺总结 → 去执行日志按 `sessionId` 查 `teaching-wrapup` 失败。
 5. 若概念挣扎集中 → 直接在学习者详情的「记忆与复习 / 记忆调度」页签看（`LearnerDetail.vue:1108-1115`）；旧深链 `/admin/memory-review?userId=<id>` 会转发到「记忆调度」页签（`MemoryReviewOverview.vue:604-620`）。在该页签看薄弱项与「需回路径重学」。
 6. 处置：必要时行内「发提醒」发站内通知（`LearnerCenter.vue:445-480`）；数据疑似陈旧时单条「重算」快照。
 
@@ -451,7 +451,7 @@
 2. 点会话行进入座舱，再按该 `sessionId` 到执行日志看全链路失败点（`useSessionDrill.ts:32-35`）。
 3. 座舱内看会话当前页签与日志（真实会话只读）（`TeachingSessions.vue:207-210, 969-977`）。
 4. 若异常堆积 ≥10（「异常」KPI 转红）→ 优先处理最新失败，判断是上游模型超时还是调用方中止（执行日志 `errorCategory`）。
-5. 终态缺总结单独处理：点「缺总结」KPI 卡（或「总结」下拉的「缺总结」档），进执行日志按节点 `session-wrapup` + 失败态查该会话链路（健康中心 14 项检查不含课后总结项，勿去那里找）。
+5. 终态缺总结单独处理：点「缺总结」KPI 卡（或「总结」下拉的「缺总结」档），进执行日志按节点 `teaching-wrapup` + 失败态查该会话链路（健康中心 14 项检查不含课后总结项，勿去那里找）。
 
 ### SOP-4 健康中心告警怎么响应
 
@@ -561,7 +561,7 @@ pages:
     actions:
       - {name: openDetail, view: learner}
       - {name: openIntervene, write: true, api: "POST /admin/notifications (kind=learning, scope=user)"}
-      - {name: recompute, write: true, api: "POST /admin/learner-models/:userId/recompute"}
+      - {name: recompute, write: true, api: "POST /admin/profile-learner-models/:userId/recompute"}
       - {name: recomputeAll, write: true}
   - id: teaching-sessions
     route: /admin/teaching-sessions

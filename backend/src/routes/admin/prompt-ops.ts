@@ -242,7 +242,7 @@ router.post('/run-eval', async (req: Request, res: Response) => {
   const SUPPORTED_EVAL_SKILLS = new Set([
     'skill:goal-conversation',
     'skill:path-planning',
-    'skill:stage-designer',
+    'skill:path-task-design',
   ]);
 
   if (!SUPPORTED_EVAL_SKILLS.has(canonicalAgentId)) {

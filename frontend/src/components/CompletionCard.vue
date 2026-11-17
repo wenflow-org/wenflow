@@ -289,7 +289,7 @@ const sessionMetricCards = computed(() => {
   const f = Number(evaluation.value.sessionLf ?? evaluation.value.lf);
   // 会话级 KTL = 后端 evaluation.sessionKtl = **本节知识获得质量**（high = 学生能独立完成核心任务）。
   // 高=好在这里是对的，别照着下面「长期 KTL=训练负荷（高=坏）」把它一起反过来——
-  // 两者同名不同义，判据见 prompts/skill.session-wrapup.md 的「评分参考」。
+  // 两者同名不同义，判据见 prompts/skill.teaching-wrapup.md 的「评分参考」。
   const kl = getSimpleLevel(k, 7, 4);
   const sl = getStress(s * 10);
   const fl = getStress(f * 10);

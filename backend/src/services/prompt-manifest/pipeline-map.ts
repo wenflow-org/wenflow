@@ -8,8 +8,8 @@
  *   - coordinators/*.definition.ts 各 Agent 的步骤顺序（代码里的编排真相）
  *
  * 组织口径（2026-10-29 拍板）：**场景为一级轴，Agent 为二级轴，Prompt 为三级轴**。
- * 原因：运行时是按阶段推进的状态机，编排文件也按阶段拆分；而 path-reviewer / kc-mapper /
- * learning-predictor 等 Skill 由 service 侧越步调用，只看 Agent steps 会漏掉真实调用点。
+ * 原因：运行时是按阶段推进的状态机，编排文件也按阶段拆分；而 path-reviewer / path-kc-mapping /
+ * profile-learning-predict 等 Skill 由 service 侧越步调用，只看 Agent steps 会漏掉真实调用点。
  * Agent 维度的"为什么"仍以 doc/AGENT_SKILL_MANUAL.md 为准，本文件只回答 what / who / where。
  */
 import * as fs from 'fs';
@@ -71,7 +71,7 @@ const CODE_ENTRY: Record<string, Array<{ label: string; file: string }>> = {
     { label: 'Goal → Path handoff（确定性定帧）', file: 'backend/src/coordinators/path.coordinator.ts' },
   ],
   path: [
-    { label: '路径生成主链（path-planning → stage-designer）', file: 'backend/src/services/learning/generation/path-generation.core.ts' },
+    { label: '路径生成主链（path-planning → path-task-design）', file: 'backend/src/services/learning/generation/path-generation.core.ts' },
     { label: 'Path 协调与 handoff 装配', file: 'backend/src/coordinators/path.coordinator.ts' },
     { label: '路径重排（人工确认制）', file: 'backend/src/services/learning/replan/path-replan.service.ts' },
   ],
@@ -417,8 +417,8 @@ export function buildPipelineMap(): PipelineMap {
     .map((f) => ({ skillId: f.replace(/^skill\./, '').replace(/\.md$/, ''), promptFile: `prompts/${f}` }))
     .filter((x) => !skillById.has(x.skillId) && !cores.has(x.skillId) && !manifests.has(x.skillId));
 
-  // #235：归类按**数据**说话，不按 kind 一句话概括。board-designer 是 handler-only，
-  // 但它的提示词以 prompts/skill.board-designer.md 承载（无 core 源）——若一律写成
+  // #235：归类按**数据**说话，不按 kind 一句话概括。teaching-board-design 是 handler-only，
+  // 但它的提示词以 prompts/skill.teaching-board-design.md 承载（无 core 源）——若一律写成
   // 「无 LLM 提示词」，那份 130 行的板面 spec 契约就被地图藏起来了。
   const promptArtifactSkillIds = new Set(
     fs.readdirSync(PROMPTS_DIR)
@@ -483,7 +483,7 @@ export function renderPipelineMarkdown(map: PipelineMap): string {
   L.push('## 口径：为什么以「场景」为一级轴');
   L.push('');
   L.push('运行时是按阶段推进的状态机（Goal → Path → Teaching），每阶段有自己的编排文件与执行体；');
-  L.push('而且 `path-reviewer` / `kc-mapper` / `learning-predictor` / `adaptive-guidance-copy` 等 Skill');
+  L.push('而且 `path-reviewer` / `path-kc-mapping` / `profile-learning-predict` / `profile-adaptive-copy` 等 Skill');
   L.push('是由 service 侧越步调用的，只看 Agent 的 `steps` 会漏掉真实调用点。因此：');
   L.push('');
   L.push('1. **场景（阶段）** 回答"什么时候、按什么顺序发生"；');
@@ -507,9 +507,9 @@ export function renderPipelineMarkdown(map: PipelineMap): string {
     return `["${s?.displayName || fallbackName}<br/>${agent}<br/>${chain}"]`;
   };
   L.push(`  U[用户 / 虚拟学习者] --> G${nodeLabel('goal', 'Goal 阶段', 'goal-agent', 'goal-conversation')}`);
-  L.push(`  G -->|"goal handoff（字段路由）"| P${nodeLabel('path', 'Path 阶段', 'path-agent', 'path-planning → stage-designer')}`);
+  L.push(`  G -->|"goal handoff（字段路由）"| P${nodeLabel('path', 'Path 阶段', 'path-agent', 'path-planning → path-task-design')}`);
   L.push(`  P -->|"path ready"| T${nodeLabel('teaching', 'Teaching 阶段', 'teaching-agent', 'opening → teaching-turn → wrapup')}`);
-  L.push(`  T -.->|"lesson 事件"| F${nodeLabel('profile', 'Profile 阶段', 'profile-agent', 'learner-model → enricher → snapshot')}`);
+  L.push(`  T -.->|"lesson 事件"| F${nodeLabel('profile', 'Profile 阶段', 'profile-agent', 'profile-learner-model → enricher → snapshot')}`);
   L.push('  F -.->|"LearnerSnapshot / hints"| P');
   L.push('  F -.->|"LearnerSnapshot / hints"| T');
   L.push(`  S${nodeLabel('simulation', 'Simulation 阶段', 'simulation-agent', 'virtual learner / referee')} --> G`);

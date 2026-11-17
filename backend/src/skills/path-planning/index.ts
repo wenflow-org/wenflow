@@ -1185,7 +1185,7 @@ ${replan ? renderReplanSection(replan) : ''}
 
 生成前自检（必须满足）：
 1. 不要把里程碑写成“内容呈现/课程交互/学习路径展示/个人数据面板”这类功能分组；如果阶段标题像功能目录，必须重组为认知递进阶段。
-2. 不要输出 subtasks、tasks、acceptanceCriteria、第一周计划、执行次数或作业清单；这些由后续 stage-designer 生成。
+2. 不要输出 subtasks、tasks、acceptanceCriteria、第一周计划、执行次数或作业清单；这些由后续 path-task-design 生成。
 3. 如果 ${confirmedFirstDeliverable ? `首个交付物是“${confirmedFirstDeliverable}”` : '存在首个交付物'}，第一阶段 goal 必须直接服务于它。
 4. ${observableResult ? `可观察结果是“${observableResult}”，所有里程碑 goal 都必须通向它。` : '如果没有明确的可观察结果，就把首个交付物当作早期阶段目标锚点。'}
 5. ${acceptanceCheck ? `验收检查要求：${acceptanceCheck}` : 'goal 必须是用户自己可以判断“是否达成”的阶段结果，但不要下钻到 task 级验收。'}
@@ -1247,7 +1247,7 @@ ${replan ? renderReplanSection(replan) : ''}
         });
       }
       const estimatedHours = Math.round(conservation.totalAfter) || clampHours(pathData.estimatedHours);
-      // 里程碑级 materialRefs 覆盖度（只观测）：路径层的任务引用由 stage-designer 产出，
+      // 里程碑级 materialRefs 覆盖度（只观测）：路径层的任务引用由 path-task-design 产出，
       // 这里零引用不等于整条路径没有资料引用，故不告警、不触发重试。
       if (promptMaterials?.length) {
         const milestones = Array.isArray(pathData.milestones) ? pathData.milestones : [];

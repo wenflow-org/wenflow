@@ -26,7 +26,7 @@
 
 | 维度 | **mainline**（主链） | **aux**（旁挂） | **handler-only**（纯函数） |
 |---|---|---|---|
-| 定位 | 阶段主流程产出（goal/path/teaching/profile/simulation 五阶段） | 旁挂能力（开场文案/课程设计/评估等），经 runAux 框架执行 | 无 LLM prompt 的纯函数/工具（learner-model、mcp-tool） |
+| 定位 | 阶段主流程产出（goal/path/teaching/profile/simulation 五阶段） | 旁挂能力（开场文案/课程设计/评估等），经 runAux 框架执行 | 无 LLM prompt 的纯函数/工具（profile-learner-model、mcp-tool） |
 | 进字段路由 | ✅ 是（编排文件 routings 有 `skill:<id>` 产出行） | ❌ 否（不进字段路由） | ❌ 否 |
 | 户口簿必填 | `kind` + `stage`（∈ 五阶段）+ `parentAgent` + `handlerRef` + `coreFile` | `kind` + `coreFile` + `handlerRef`（stage/parentAgent 可选） | `kind` + `handlerRef`（**禁填 coreFile**；默认 `noPromptFile: true`，有独立提示词产物 `prompts/skill.<id>.md` 时填 `promptArtifact` 且 `noPromptFile: false`，#235） |
 | 编排文件 | 必须出现在对应 stage 的 `contracts`（F3 铁律，双向校验） | 不要求 | 不要求 |
@@ -203,7 +203,7 @@ fields-sync 复检违规双文件回滚 → 落库 → 审计）。
 | `prompts:yaml:check` | 词表一致性（类型/角色/render 拼写） | error |
 | `prompts:fields-sync:check` | core fields ↔ 编排产出行：缺项（error）/ 孤儿（warn）/ 类型不一致（error） | 见上 |
 | `prompts:payload-prefix:check:strict` | payload 稳定前缀护栏：真实遥测校验各 skill 最近 payload 首键仍在声明稳定段内（strict：违规即失败） | error |
-| `prompts:threshold-coupling:check` | 提示词文本 ↔ 代码常量阈值耦合（memory-curator 阈值、session-wrapup 档位锚点等） | error |
+| `prompts:threshold-coupling:check` | 提示词文本 ↔ 代码常量阈值耦合（memory-curator 阈值、teaching-wrapup 档位锚点等） | error |
 
 **字段级联动的含义**：平台原子 API 保证「core ⇔ 编排」成对出现（成对加/成对改/成对删），
 field-sync 的缺项/孤儿不应由平台操作产生；若门禁报缺项/孤儿，先查是否手工只改了一侧。

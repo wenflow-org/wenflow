@@ -26,7 +26,7 @@
  *
  * 存量孤儿（warn，真实漂移保留报）：
  * - path-planning：estimatedHours / estimatedWeeks / cognitiveDesign（兼容镜像字段未路由）
- * - virtual-learner-scenario-designer：personaSeed / story（core 输出未路由，仅 consistencyNotes 进路由）
+ * - simulation-scenario-designer：personaSeed / story（core 输出未路由，仅 consistencyNotes 进路由）
  *
  * 2026-08-25 定稿：上述 5 条经逐项证据复核（见 ORPHAN_EXEMPT_FIELDS），均确认
  * "由路由子字段 / 后续阶段 / 退役语义承载"，移入豁免清单不再报孤儿——保留登记而非删除
@@ -135,27 +135,27 @@ export const ORPHAN_EXEMPT_FIELDS: ReadonlyArray<{ skillId: string; field: strin
     evidence: 'prompts/core/path-planning.yaml:106 自注"兼容镜像 = cognitiveCore"；正式数据走 cognitiveCore.* 路由（path.yaml:341-351）',
   },
   {
-    skillId: 'virtual-learner-scenario-designer',
+    skillId: 'simulation-scenario-designer',
     field: 'personaSeed',
     evidence: 'simulation.yaml:102 personas:Seed 路由属 persona-designer；scenario-designer 输出经 handoff [simulation-agent] 承接',
   },
   {
-    skillId: 'virtual-learner-scenario-designer',
+    skillId: 'simulation-scenario-designer',
     field: 'story',
     evidence: 'simulation.yaml:35 stories 字段已退役（语义由 profileData.storyPool 承接），core 仍要求输出的故事切片不进数据面路由',
   },
   {
-    skillId: 'virtual-learner-learn-turn-simulator',
+    skillId: 'simulation-learn-turn',
     field: 'checkpointAnswer',
     evidence: '2026-09-18 P1-3：平台出题时的作答草案，由 virtual-lab/blackbox-runner 直接读取用于提交检查点，不进编排数据面路由',
   },
   {
-    skillId: 'virtual-learner-goal-dialogue-simulator',
+    skillId: 'simulation-goal-dialogue',
     field: 'shouldEnd',
     evidence: '2026-11-11 离场语义：协调器 executeSingleStep 直接读取以提前收尾 Goal 回合（learner-ended），不进入编排数据面路由',
   },
   {
-    skillId: 'virtual-learner-goal-dialogue-simulator',
+    skillId: 'simulation-goal-dialogue',
     field: 'endReason',
     evidence: '2026-11-11 离场语义：与 shouldEnd 同轮输出，仅用于日志与 stageResults.goal.learnerEndReason 留痕，不进编排数据面路由',
   },

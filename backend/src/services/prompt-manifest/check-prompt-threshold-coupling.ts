@@ -3,7 +3,7 @@
  *
  * 背景：两处"文字约定"的数值耦合此前只存在于注释/提示词文本，改代码常量会静默漂移——
  * ① memory-curator 的 mastered/stuck 阈值与 virtual-lab/learner-memory.ts 常量互引；
- * ② session-wrapup 的档位区间描述与 session-evaluation-scale.ts 锚点互引（"改锚点必须同步改
+ * ② teaching-wrapup 的档位区间描述与 session-evaluation-scale.ts 锚点互引（"改锚点必须同步改
  *   这里与 yaml"）；本批另把 teaching.yaml 档位映射描述也纳入。
  *
  * 纪律：从源码文本正则提取常量（不 import 业务模块，避免 prisma 等副作用），
@@ -47,7 +47,7 @@ export function checkPromptThresholdCoupling(): { findings: Finding[]; exitCode:
   const learnerMemorySrc = read('src/virtual-lab/learner-memory.ts');
   const masteredThreshold = extractConst(learnerMemorySrc, 'MASTERED_CONFIDENCE_THRESHOLD');
   const stuckThreshold = extractConst(learnerMemorySrc, 'STUCK_MASTERY_THRESHOLD');
-  const curatorYaml = readPrompt('prompts/core/virtual-learner-memory-curator.yaml');
+  const curatorYaml = readPrompt('prompts/core/simulation-memory-curate.yaml');
   if (masteredThreshold === null || stuckThreshold === null) {
     findings.push({
       ok: false,
@@ -67,10 +67,10 @@ export function checkPromptThresholdCoupling(): { findings: Finding[]; exitCode:
     }
   }
 
-  // ② session-wrapup 档位区间 ↔ 锚点 min/max（三指标 × 三档，描述形如 "high＝8-10"）
+  // ② teaching-wrapup 档位区间 ↔ 锚点 min/max（三指标 × 三档，描述形如 "high＝8-10"）
   const scaleSrc = read('src/services/learning/session-evaluation-scale.ts');
   const anchors = extractTierAnchors(scaleSrc);
-  const wrapupYaml = readPrompt('prompts/core/session-wrapup.yaml');
+  const wrapupYaml = readPrompt('prompts/core/teaching-wrapup.yaml');
   if (anchors.length !== 3) {
     findings.push({
       ok: false,
@@ -87,7 +87,7 @@ export function checkPromptThresholdCoupling(): { findings: Finding[]; exitCode:
           item: `wrapup:${metric}:${a.tier}`,
           detail: ok
             ? `档位区间 ${needle} 与锚点一致`
-            : `session-wrapup.yaml 缺「${needle}」——与 SESSION_EVALUATION_TIER_ANCHORS(${a.min}-${a.max}) 漂移（scale 注释约定：改锚点必须同步改 yaml）`,
+            : `teaching-wrapup.yaml 缺「${needle}」——与 SESSION_EVALUATION_TIER_ANCHORS(${a.min}-${a.max}) 漂移（scale 注释约定：改锚点必须同步改 yaml）`,
         });
       }
     }

@@ -37,7 +37,7 @@ export interface SkillDefinition {
       description?: string;
       required?: boolean;
       default?: any;
-      /** 枚举取值（如 adaptive-guidance-copy 的 view=#187）；协议层只做声明，不参与运行时校验 */
+      /** 枚举取值（如 profile-adaptive-copy 的 view=#187）；协议层只做声明，不参与运行时校验 */
       enum?: (string | number)[];
     }>;
   };

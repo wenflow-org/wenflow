@@ -198,7 +198,7 @@ describe('fetchPriorLearningRecap（按路径位置接续前序）', () => {
   });
 });
 
-// P1-8（2026-10-06 审计）：session-wrapup 真实产物把三样嵌在 wrapup.summary.* 下，
+// P1-8（2026-10-06 审计）：teaching-wrapup 真实产物把三样嵌在 wrapup.summary.* 下，
 // 顶层恒无（129/129 recap 全空）。以下锁定「嵌套优先、顶层兜底」两态都读得到。
 describe('fetchPriorLearningRecap（复盘要点双形读取 · P1-8）', () => {
   beforeEach(() => {

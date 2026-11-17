@@ -19,8 +19,8 @@ describe('#219 默认列表口径 userListed', () => {
       'path-agent',
       'skill:goal-conversation',
       'skill:path-planning',
-      'skill:session-wrapup',
-      'skill:teaching-turn'
+      'skill:teaching-turn',
+      'skill:teaching-wrapup'
     ]);
   });
 
@@ -41,10 +41,10 @@ describe('#219 默认列表口径 userListed', () => {
 
   it('内部机制 skill 与平台底层调用不在白名单', () => {
     for (const internal of [
-      'skill:kc-mapper',
-      'skill:adaptive-guidance-copy',
-      'skill:learner-model',
-      'skill:virtual-learner-goal-dialogue-simulator',
+      'skill:path-kc-mapping',
+      'skill:profile-adaptive-copy',
+      'skill:profile-learner-model',
+      'skill:simulation-goal-dialogue',
       'api-gateway',
       'system-call',
       'unknown'

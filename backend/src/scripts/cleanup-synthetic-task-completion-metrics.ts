@@ -3,12 +3,12 @@
  * 清理「同课 twin」的 task-completion 占位指标（2026-10-22 审计 P2）。
  *
  * 背景：tasks 无主观难度时曾写 task-completion:<taskId> 占位行（LSS 恒按默认难度 5 合成）。
- * 同一节课还有 session-wrapup:<sessionId> 真实行时，读侧靠 dedupeLessonRows 折叠；
+ * 同一节课还有 teaching-wrapup:<sessionId> 真实行时，读侧靠 dedupeLessonRows 折叠；
  * 现在写侧已不再产生新占位行，本脚本清理历史 twin（只删有真实 wrapup 配对的 synthetic 行）。
  *
  * 安全边界：
  * - 只删 metadata.synthetic === true 且 sourceKey 以 task-completion: 开头的行；
- * - 必须存在同 userId + taskId + 应用时区本地日 的 session-wrapup 行；
+ * - 必须存在同 userId + taskId + 应用时区本地日 的 teaching-wrapup 行；
  * - 默认 dry-run，--apply 才写。
  */
 import 'dotenv/config';
@@ -37,7 +37,7 @@ async function main(): Promise<void> {
       select: { id: true, userId: true, taskId: true, sourceKey: true, calculatedAt: true, metadata: true },
     }),
     prisma.learning_metrics.findMany({
-      where: { sourceKey: { startsWith: 'session-wrapup:' } },
+      where: { sourceKey: { startsWith: 'teaching-wrapup:' } },
       select: { userId: true, taskId: true, calculatedAt: true },
     }),
   ]);

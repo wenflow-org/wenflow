@@ -1,7 +1,7 @@
 /**
  * 类型级回归：`softValidateParsedOutput` 是**同步**契约（2026-11-07）。
  *
- * 背景：改 stage-designer 材料闸门时曾把 `PromptCallSpec.softValidateParsedOutput` 的返回类型
+ * 背景：改 path-task-design 材料闸门时曾把 `PromptCallSpec.softValidateParsedOutput` 的返回类型
  * 放宽成 `PromptValidationResult | Promise<PromptValidationResult>`，结果 teaching-turn 的同步
  * 消费方（`board-deixis-guard.test.ts` 里直接取 `result.valid`）编译不过。这类破坏
  * `npm run typecheck` 看不见——`tsconfig.build.json` 的 exclude 把测试文件通配符也排除了，

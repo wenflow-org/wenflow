@@ -1,12 +1,12 @@
 /**
  * LearnerStateReviewService（状态评审诊断层 · Slice 2a）
  *
- * 定位：把「学习者状态」聚合成一份可回写、可复用的**评审产物**（learner-state-review-v1），
+ * 定位：把「学习者状态」聚合成一份可回写、可复用的**评审产物**（profile-state-review-v1），
  * 供 dashboard / learning-state / 教学侧消费；落 `learner_projections`（scope=review），按需读取。
  *
  * 当前实现（2a）：洞察来自既有**规则**组件（LearnerStateSummary + LearningDecisionFeed），
  *   不新增 LLM 调用；输入侧统一走 `toReviewProjection`（诊断层投影）。
- * 下一阶段（2b）：接入 `learner-state-review` LLM skill，把 `insights` 升级为可证伪诊断，
+ * 下一阶段（2b）：接入 `profile-state-review` LLM skill，把 `insights` 升级为可证伪诊断，
  *   并把 `source` 从 'rules' 升为 'model'（见 doc/LEARNER_STATE_REVIEW_DESIGN.md §4）。
  */
 import prisma from '../../config/database';
@@ -56,7 +56,7 @@ export interface LearnerStateReviewDiagnosis {
 }
 
 export interface LearnerStateReviewPayload {
-  schemaVersion: 'learner-state-review-v1';
+  schemaVersion: 'profile-state-review-v1';
   reviewVersion: 1;
   generatedAt: string;
   pathId: string | null;
@@ -79,7 +79,7 @@ export interface LearnerStateReviewPayload {
 }
 
 export function reviewProjectionKey(userId: string, pathId?: string | null): string {
-  return `learner-state-review-v1:${userId}:${pathId || 'global'}`;
+  return `profile-state-review-v1:${userId}:${pathId || 'global'}`;
 }
 
 class LearnerStateReviewService {
@@ -135,7 +135,7 @@ class LearnerStateReviewService {
         .slice(0, limit)
         .map(({ type, claim, action }) => ({ type, claim, action }));
     } catch (error) {
-      logger.warn('[learner-state-review] 读取活跃洞察失败，教学侧按无洞察处理', {
+      logger.warn('[profile-state-review] 读取活跃洞察失败，教学侧按无洞察处理', {
         userId,
         pathId,
         error: error instanceof Error ? error.message : String(error),
@@ -151,7 +151,7 @@ class LearnerStateReviewService {
 
     const task = this.perform(userId, pathId)
       .catch((error: any) => {
-        logger.warn('[learner-state-review] refresh failed', { userId, pathId, error: error?.message || String(error) });
+        logger.warn('[profile-state-review] refresh failed', { userId, pathId, error: error?.message || String(error) });
         return null;
       })
       .finally(() => {
@@ -163,7 +163,7 @@ class LearnerStateReviewService {
   }
 
   refreshInBackground(userId: string, pathId?: string | null): void {
-    runBackgroundTask('learner-state-review.refresh', () => this.refresh(userId, pathId), { userId, pathId });
+    runBackgroundTask('profile-state-review.refresh', () => this.refresh(userId, pathId), { userId, pathId });
   }
 
   private async perform(userId: string, pathId?: string | null): Promise<LearnerStateReviewPayload | null> {
@@ -248,7 +248,7 @@ class LearnerStateReviewService {
     });
 
     const payload: LearnerStateReviewPayload = {
-      schemaVersion: 'learner-state-review-v1',
+      schemaVersion: 'profile-state-review-v1',
       reviewVersion: 1,
       generatedAt,
       pathId: primaryPath.id,
@@ -302,7 +302,7 @@ async function runModelDiagnosis(
   pathId: string,
 ): Promise<{ source: 'rules' | 'model'; diagnosis: LearnerStateReviewDiagnosis | null }> {
   try {
-    const result = await executeSkillWithResult(auxSkillDefinitionMap['learner-state-review'], {
+    const result = await executeSkillWithResult(auxSkillDefinitionMap['profile-state-review'], {
       learnerDigest: projection.learnerDigest,
       knowledgeDigest: projection.knowledgeDigest,
       recentEvidence: buildRecentEvidence(learnerSnapshot),
@@ -324,7 +324,7 @@ async function runModelDiagnosis(
       };
     }
   } catch (error: any) {
-    logger.warn('[learner-state-review] LLM 诊断失败，回退规则洞察', {
+    logger.warn('[profile-state-review] LLM 诊断失败，回退规则洞察', {
       userId,
       pathId,
       error: error?.message || String(error),
@@ -361,7 +361,7 @@ async function loadCodeJudgedConceptClaims(
     return { claims, readFailed: false };
   } catch (error) {
     recordDegradation({
-      source: 'learner/learner-state-review',
+      source: 'learner/profile-state-review',
       faultCategory: 'DB_READ_FAILED',
       severity: 'P3_NOTICE',
       impactedDimensions: ['concept.truth.code_judged'],

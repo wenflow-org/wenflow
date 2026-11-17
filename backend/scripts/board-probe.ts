@@ -11,7 +11,7 @@
  *
  * 与 versioned-probe 的区别：那边一次调用里既写话术又凑 spec（图教合一）；
  * 这边每轮拆成两次调用，顺序固定：
- *   ① board-designer：只画板
+ *   ① teaching-board-design：只画板
  *   ② 归一化 + 图闸 → 得到「板上真实可见」的 verified board
  *   ③ teaching-turn：拿 describeBoardForTeacher() 的文本，看着真板说话（不再画图）
  *
@@ -50,11 +50,11 @@ const teachingMd = readFileSync(join(__dirname, '..', '..', 'prompts', 'skill.te
 const teachingSystem = teachingMd.replace(/^---[\s\S]*?---\s*/, '');
 
 /**
- * 板书提示词从 prompts/skill.board-designer.md 取（与 teaching-turn 同一套约定）：
+ * 板书提示词从 prompts/skill.teaching-board-design.md 取（与 teaching-turn 同一套约定）：
  * 文件里用 `<!-- mode:load -->` / `<!-- mode:full -->` 标记两套口径的补充段，
  * 这里按当前口径挑一段拼上图型指南。提示词只有一份，改提示词不用改脚本。
  */
-const boardMd = readFileSync(join(__dirname, '..', '..', 'prompts', 'skill.board-designer.md'), 'utf8');
+const boardMd = readFileSync(join(__dirname, '..', '..', 'prompts', 'skill.teaching-board-design.md'), 'utf8');
 const boardShared = boardMd.replace(/^---[\s\S]*?---\s*/, '');
 // 用 indexOf 切段而不是正则：标记两侧是 HTML 注释，正则里 `[\s\S]` 在多层转义下容易写坏
 const sectionOf = (tag: string): string => {

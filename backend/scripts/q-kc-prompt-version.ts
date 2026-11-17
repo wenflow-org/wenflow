@@ -3,7 +3,7 @@ import 'dotenv/config';
 import systemPrisma from '../src/config/system-database';
 (async () => {
   const rows: any[] = await (systemPrisma as any).agent_prompts.findMany({
-    where: { agentId: 'skill:kc-mapper' },
+    where: { agentId: 'skill:path-kc-mapping' },
     select: { version: true, status: true, publishedAt: true, name: true },
     orderBy: { version: 'desc' },
     take: 4,

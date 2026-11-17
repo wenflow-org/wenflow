@@ -1,11 +1,11 @@
-/* eslint-disable no-console -- 一次性触发 CLI：验证 kc-mapper 修复后 KC 图是否落库 */
+/* eslint-disable no-console -- 一次性触发 CLI：验证 path-kc-mapping 修复后 KC 图是否落库 */
 /**
  * 触发一次完整路径生成（生产同款函数 GoalConversationService.quickGeneratePath）：
- * 核心生成（path-planning → path-reviewer）+ 后台 stage 设计 + kc-mapper 落库。
+ * 核心生成（path-planning → path-reviewer）+ 后台 stage 设计 + path-kc-mapping 落库。
  *
  * ⚠️ 关键：stage 阶段由 path-generation.core.ts:995 以 runBackgroundTask 注册在
  * **本进程**后台跑，脚本必须等它完成再退出，否则后台任务被 process.exit 掐断
- * （2026-09-22 首次验证就踩过：核心生成成功但 0 子任务、kc-mapper 从未被调用）。
+ * （2026-09-22 首次验证就踩过：核心生成成功但 0 子任务、path-kc-mapping 从未被调用）。
  * 完成信号：路径 aiPromptTemplate._generation.kcMapping（stage 任务最终事务才写它）。
  */
 import 'dotenv/config';
@@ -55,7 +55,7 @@ async function main() {
   if (!pathId) throw new Error('核心生成未产出 pathId（生成失败，勿静默当成功）');
 
   const stageOk = await waitForStagePhase(pathId);
-  if (!stageOk) throw new Error('stage/kc-mapper 未在超时内完成（kcMapping 未落库）');
+  if (!stageOk) throw new Error('stage/path-kc-mapping 未在超时内完成（kcMapping 未落库）');
   await backgroundTaskTracker.drain().catch(() => undefined);
 
   const row = await prisma.learning_paths.findUnique({ where: { id: pathId }, select: { aiPromptTemplate: true } });

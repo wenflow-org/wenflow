@@ -1,5 +1,5 @@
 /**
- * PredictionCalibrationService —— learning-predictor 校准闭环
+ * PredictionCalibrationService —— profile-learning-predict 校准闭环
  *
  * 核心思想（对应「置信度不值钱」问题的根治）：
  * 不用公式拍置信度，而是让系统积累「预测 vs 实际」的对照记录，
@@ -24,7 +24,7 @@
  * 与全局 reliability 的「小样本不给数」口径一致。
  */
 import prisma from '../../config/database';
-import type { LearningPredictorOutput } from '../../skills/learning-predictor';
+import type { LearningPredictorOutput } from '../../skills/profile-learning-predict';
 
 export interface PredictionRecordInput {
   userId: string;
@@ -38,7 +38,7 @@ export interface PredictionRecordInput {
 
 export type PredictionOutcome = 'smooth' | 'struggled' | 'failed';
 
-/** 教学深度（与 learning-predictor 的 suggestedDepth 枚举同域） */
+/** 教学深度（与 profile-learning-predict 的 suggestedDepth 枚举同域） */
 export type CalibrationDepth = 'shallow' | 'standard' | 'deep';
 
 export const CALIBRATION_DEPTHS: readonly CalibrationDepth[] = ['shallow', 'standard', 'deep'];
@@ -268,7 +268,7 @@ export class PredictionCalibrationService {
       unclassifiedDepthCount,
     };
   }
-  /** 最近预测记录（含回写结果），供 learner-models 前端展示「预测 vs 实际」 */
+  /** 最近预测记录（含回写结果），供 profile-learner-models 前端展示「预测 vs 实际」 */
   async listRecentRecords(userId: string, take: number) {
     return prisma.prediction_records.findMany({
       where: { userId },

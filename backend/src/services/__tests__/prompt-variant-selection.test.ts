@@ -16,8 +16,8 @@ const VARIANT_C = row({ id: 'c', version: 9, variant: 'C', trafficWeight: 20 });
 
 describe('prompt 变体分流选择器', () => {
   test('无变体时永远取基线（旧行为零变化）', () => {
-    expect(pickActivePromptRow([BASE], 'skill:stage-designer', { selectionKey: 'u1' })?.id).toBe('base');
-    expect(pickActivePromptRow([BASE], 'skill:stage-designer', {})?.id).toBe('base');
+    expect(pickActivePromptRow([BASE], 'skill:path-task-design', { selectionKey: 'u1' })?.id).toBe('base');
+    expect(pickActivePromptRow([BASE], 'skill:path-task-design', {})?.id).toBe('base');
   });
 
   test('多行 ACTIVE 且无 selectionKey → 基线（不会意外进实验）', () => {
@@ -67,7 +67,7 @@ describe('prompt 变体分流选择器', () => {
 
   test('不同 agentId 的分桶相互独立（不串流量）', () => {
     const a = pickActivePromptRow([BASE, VARIANT_B], 'skill:goal-conversation', { selectionKey: 'u1' });
-    const b = pickActivePromptRow([BASE, VARIANT_B], 'skill:stage-designer', { selectionKey: 'u1' });
+    const b = pickActivePromptRow([BASE, VARIANT_B], 'skill:path-task-design', { selectionKey: 'u1' });
     // 只要求“各自稳定”，不要求不同——但至少两者都返回合法行
     expect([BASE.id, VARIANT_B.id]).toContain(a?.id);
     expect([BASE.id, VARIANT_B.id]).toContain(b?.id);

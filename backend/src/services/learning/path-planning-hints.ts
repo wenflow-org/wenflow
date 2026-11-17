@@ -331,12 +331,12 @@ export interface PlanningHints {
   scopeSize: ScopeSize | null;
   /** 强制里程碑目标数量（由 scope_size 与 keyStages 共同决定，path LLM 必须精确输出该值，不增减） */
   targetMilestones: number | null;
-  /** 强制每阶段子任务目标数量（由总学时/里程碑数推导，stage-designer 必须精确输出该值） */
+  /** 强制每阶段子任务目标数量（由总学时/里程碑数推导，path-task-design 必须精确输出该值） */
   targetSubtasksPerStage: number | null;
   /**
    * 本阶段任务锚（2026-09-28 去等分）：stage-enrichment 逐阶段按该 milestone 实际学时反推，
    * 存在时优先于 targetSubtasksPerStage（全局锚是按总学时均摊的，会合法化 5×10 式等分）。
-   * 仅 stage-designer 逐阶段调用时被注入，path-planning 主生成时为 null。
+   * 仅 path-task-design 逐阶段调用时被注入，path-planning 主生成时为 null。
    */
   targetSubtasksForStage: number | null;
   /** 锚定总学时（课次×单次时长/goal 直接推断；存在时 path-planning 须把各阶段学时之和分配到 ±50% 内） */
@@ -541,7 +541,7 @@ export const ONE_SITTING_MAX_HOURS = 1;
  */
 
 /**
- * hints 硬执行（2026-09-21）：把 stage-designer 的**产出**按 hints 兜底裁剪。
+ * hints 硬执行（2026-09-21）：把 path-task-design 的**产出**按 hints 兜底裁剪。
  *
  * 为什么需要：`subtasksPerStageRange` 对模型只是"软参考"——实测 hints=[2,2] 时仍产出
  * 5 任务/段（15.8h），导致"体量 = 课次 × 一次时长"的锚在上端**完全不生效**（输出不随锚变化，
@@ -581,8 +581,8 @@ export {
 /**
  * 把任意已算好的 hints 收到「一节课」量级（只收上界，不拍死数字；区间不塌成单点）。
  * 两个调用方：① Goal 层 triage 判定（derivePlanningHints 内）；② Path 层自检后，
- * 给 stage-designer 用的 hints（path 产出 ≤1 小时 ⇒ 任务数/分钟一并收紧，否则学时仍会被
- * stage-designer 的 30–90 分钟默认值撑回 7 小时）。
+ * 给 path-task-design 用的 hints（path 产出 ≤1 小时 ⇒ 任务数/分钟一并收紧，否则学时仍会被
+ * path-task-design 的 30–90 分钟默认值撑回 7 小时）。
  */
 export function clampHintsToOneSitting(hints: PlanningHints): PlanningHints {
   const cap = ONE_SITTING_BOUNDS;
@@ -817,7 +817,7 @@ export function derivePlanningHints(
   // 随即逼出 100-120 分钟的巨型单课（R6 D15/C17/E03 实证）。硬顶取 90：
   //   - 覆盖全部 100-120 分钟实证问题；
   //   - 不砍大预算结构容量（60 会让 490h 案例容量从 225h 掉到 150h，测试实证）。
-  // 更小的原子粒度（30-50 分钟分段）由 stage-designer 提示词在长会话场景要求。
+  // 更小的原子粒度（30-50 分钟分段）由 path-task-design 提示词在长会话场景要求。
   const ATOMIC_TASK_MINUTES_CAP = 90;
   if (subtaskMinutesRange[1] > ATOMIC_TASK_MINUTES_CAP) {
     const upper = ATOMIC_TASK_MINUTES_CAP;
@@ -826,7 +826,7 @@ export function derivePlanningHints(
 
   // 静默默认单次时长（2026-11-11）：用户没提时间时，25 分钟是**均值锚**，不是硬上界。
   // 旧逻辑把它当 explicit，单课被锁死在 25min，4 阶段 × 4 课只能装 6.67h，8h 内容必然被腰斩；
-  // 更糟的是所有任务都标“约 25 分钟”，架空 stage-designer 的时长分化要求。
+  // 更糟的是所有任务都标“约 25 分钟”，架空 path-task-design 的时长分化要求。
   // 这里只放宽默认来源：显式说“每次只能 20 分钟”的用户仍按 20min 封顶。
   if (sessionLengthSource === 'default') {
     const mean = parsedSessionMinutes ?? (Number.isFinite(structuredSessionMinutes) ? structuredSessionMinutes : 25);
@@ -1202,7 +1202,7 @@ export function derivePlanningHints(
   const fallbackPerStage = Math.min(subtasksCap, Math.max(paceFloor, 2));
   const targetSubtasksPerStage: number | null =
     perStageFromHours ?? (targetMilestones !== null ? fallbackPerStage : null);
-  // 2026-09-28 去等分：学时反推的锚从单点 [t,t] 改为 ±3 带。单点锚 + stage-designer
+  // 2026-09-28 去等分：学时反推的锚从单点 [t,t] 改为 ±3 带。单点锚 + path-task-design
   // 「恰好 N 课」强规则 = 全路径每阶段等数（真实案例 5×10；WPS 小预算路径 5×2 同理），
   // 与各阶段学时占比脱钩。带内由逐阶段锚（stage-enrichment 的 targetSubtasksForStage）
   // 按本阶段学时定数，全局锚只兜底无学时信息的阶段。
@@ -1656,7 +1656,7 @@ export function buildFramedNormalizedInput(input: any): any {
     timeDimensions,
     planningHints,
     // 校内锚（2026-09-30 维度 G 评审）：从学习者自述确定性抽取教材册次/单元/考试范围/学校进度，
-    // 随定帧输入一起进入 path-planning 与 stage-designer 提示词（无锚时该键不出现，行为不变）。
+    // 随定帧输入一起进入 path-planning 与 path-task-design 提示词（无锚时该键不出现，行为不变）。
     // 抽取放在定帧层而不是各 skill 内：单一真相源，两处提示词引用同一对象。
   };
   // 锚透传：LLM 给出且至少一项有值才带出；否则把入参里可能存在的空壳键删掉
@@ -1672,7 +1672,7 @@ export function buildFramedNormalizedInput(input: any): any {
     delete framed.learnerProfile.skillNature;
     delete framed.learnerProfile.skillNatureEvidence;
   }
-  // 平台可判定性（2026-10-26 二拆）：下游 stage-designer 据此决定任务形态——not_judgeable 时只能给
+  // 平台可判定性（2026-10-26 二拆）：下游 path-task-design 据此决定任务形态——not_judgeable 时只能给
   // 「训练计划 + 复盘归因」，禁止把身体技能降级成写自查卡。
   if (platformJudgment) {
     framed.learnerProfile.platformJudgment = platformJudgment;

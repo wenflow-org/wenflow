@@ -8,7 +8,7 @@ const rows = db.prepare(`
   SELECT c.createdAt, c.rawModelOutput, c.normalizedOutput
   FROM prompt_call_logs c
   JOIN users u ON c.userId = u.id
-  WHERE u.name = ? AND c.agentId = 'skill:stage-designer' AND c.success = 1
+  WHERE u.name = ? AND c.agentId = 'skill:path-task-design' AND c.success = 1
   ORDER BY c.createdAt
 `).all(user);
 const countTasks = (t) => {
@@ -31,7 +31,7 @@ if (path) {
 }
 // 每次调用 userPayload 里请求的任务数与分钟档
 const ups = db.prepare(`SELECT c.createdAt, c.userPayload FROM prompt_call_logs c JOIN users u ON c.userId=u.id
-  WHERE u.name=? AND c.agentId='skill:stage-designer' AND c.success=1 ORDER BY c.createdAt`).all(user);
+  WHERE u.name=? AND c.agentId='skill:path-task-design' AND c.success=1 ORDER BY c.createdAt`).all(user);
 for (const u of ups) {
   const t = String(u.userPayload);
   const want = t.match(/任务数[^0-9]{0,12}(\d+)/) || t.match(/targetSubtasksForStage[^0-9]{0,6}(\d+)/);

@@ -1,10 +1,10 @@
 /* eslint-disable no-console -- 一次性迁移 CLI：KC 身份迁移 */
 /**
- * KC 身份迁移：让**有痕迹的路径**也能安全重跑 kc-mapper（新契约），而不打断「痕迹→图节点」的 join。
+ * KC 身份迁移：让**有痕迹的路径**也能安全重跑 path-kc-mapping（新契约），而不打断「痕迹→图节点」的 join。
  *
  * ## 问题（实测 2026-09-23，commit a76cbfac）
  *
- * 重跑 kc-mapper 会产出全新的 KC 名（旧契约产物与 v10 产物实测同名交集≈0），物化时经
+ * 重跑 path-kc-mapping 会产出全新的 KC 名（旧契约产物与 v10 产物实测同名交集≈0），物化时经
  * 概念注册表解析 → 生成**新的 conceptId**；而该路径既有的 `memory_traces.conceptId`
  * 仍指向旧概念 → 重跑后旧概念变成图上孤立的"幽灵节点"（带掌握度但无边），
  * 新 KC 则是零掌握度的新节点。13 条路径 / 118 条痕迹被卡住不能重跑。
@@ -131,7 +131,7 @@ interface MatchRow { newKc: string; oldKc: string | null; confidence: string; re
 /**
  * 匹配建议的调用规格。
  *
- * 用独立 agentId（不是 `skill:kc-mapper`）：这是**另一个提示词**，挂在 kc-mapper 名下会把
+ * 用独立 agentId（不是 `skill:path-kc-mapping`）：这是**另一个提示词**，挂在 path-kc-mapping 名下会把
  * 该 skill 的 prompt-call 遥测口径搞脏（`systemPromptVersion` 为 null 的调用混进去）。
  * 本仓纪律是业务 LLM 调用一律走 `callPrompt`（`scripts/check-llm-call-boundary.ts` 会拦
  * 直接 `gateway.execute`），故这里用 `defaultSystemPrompt` 走正规入口、不注册 core 文件。
@@ -287,7 +287,7 @@ async function migrateOne(
 
   let captured: KcAnnotation | null = null;
   // 只跑一次模型：拿到输出后**同一份**标注既用于登记别名、又用于落库。
-  // （kc-mapper 是 temperature 0.3，重跑名字会变；别名必须与落库标注同源。）
+  // （path-kc-mapping 是 temperature 0.3，重跑名字会变；别名必须与落库标注同源。）
   await mapAndPersistKcAnnotation({
     pathId: path.id,
     userId: path.userId,
@@ -379,7 +379,7 @@ async function migrateOne(
   }
 
   // ⑥ 路径内清边 → 落库**已捕获的同一份标注** → 重物化
-  // （不重跑模型：kc-mapper 是 temperature 0.3，重跑名字会变，别名就指向一批不存在的名字）
+  // （不重跑模型：path-kc-mapping 是 temperature 0.3，重跑名字会变，别名就指向一批不存在的名字）
   const staleEdges = await prisma.concept_edges.count({ where: { userId: path.userId, pathId: path.id } });
   if (staleEdges > 0) {
     await prisma.concept_edges.deleteMany({ where: { userId: path.userId, pathId: path.id } });

@@ -1,7 +1,7 @@
 import { classifyWrapupSource, classifyPersistedWrapupSource } from '../platform-overview.service'
 
 /**
- * #70 P-45：session-wrapup handler 成功路径恒返回 success:true，
+ * #70 P-45：teaching-wrapup handler 成功路径恒返回 success:true，
  * 降级统计必须读内部显式来源，不能用 success 推断。
  */
 function output(sessionWrapup: Record<string, unknown>, success = true) {

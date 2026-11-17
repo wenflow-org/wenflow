@@ -1,8 +1,8 @@
 /**
  * 阶段任务设计（Anderson enrichment）执行体（架构审计 §5 行动 #2：learning.service.ts 拆分——生成域）
  *
- * 职责：认领 stageDesign run → 并发（限 2 路）逐阶段 stage-designer 生成任务 →
- * KC 映射（kc-mapper，best-effort）→ 事务落库子任务与估时回写 → 事件发出。
+ * 职责：认领 stageDesign run → 并发（限 2 路）逐阶段 path-task-design 生成任务 →
+ * KC 映射（path-kc-mapping，best-effort）→ 事务落库子任务与估时回写 → 事件发出。
  * 追加模式（appendOnly）只对空白阶段生成，不删除/覆盖既有任务。
  * 行为与拆分前 learning.service 同名私有方法逐一等价（P1-8 事务事故即发生在此链路，
  * 事务统一走 withTransaction 封装）。
@@ -13,7 +13,7 @@ import { withTransaction } from '../../../utils/with-transaction';
 import { executeSkill } from '../../../skills';
 import { runWithPathGenerationContext } from './generation-request-context';
 import { auditPathStageAgentsSandboxRefs } from './stage-sandbox-ref-audit';
-import { stageDesignerDefinition } from '../../../skills/stage-designer';
+import { stageDesignerDefinition } from '../../../skills/path-task-design';
 import {
   applyGranularityBoundsToHints,
   clampHintsToOneSitting,
@@ -146,8 +146,8 @@ export async function enrichLearningPathWithAnderson(
   } = {}
 ): Promise<void> {
   // 【A/B 归因修复 2026-10-01】后台生成链路原本没有 userId 请求上下文 → callPrompt 的
-  // 变体分流键缺失（恒走基线，实测 44% stage-designer 调用如此）且 prompt_call_logs.userId
-  // 空缺。此处用路径属主补齐上下文（保留既有字段），stage-designer/kc-mapper/补课全部继承。
+  // 变体分流键缺失（恒走基线，实测 44% path-task-design 调用如此）且 prompt_call_logs.userId
+  // 空缺。此处用路径属主补齐上下文（保留既有字段），path-task-design/path-kc-mapping/补课全部继承。
   // #248：这里也必须补 pathId（口径见 generation-request-context.runWithPathGenerationContext）。
   return runWithPathGenerationContext(
     { userId: data.userId, pathId, sourceConversationId: data.sourceConversationId },
@@ -322,7 +322,7 @@ async function enrichLearningPathWithAndersonInner(
     }
     // 出口不变量 B 的**下游一半**（2026-09-21）：Path 层已自检为"一次性操作"时，
     // 它产出的路径总量 ≤ 1 小时（见 path-planning 的"一次性操作"规则）。若不在这里
-    // 把 hints 一起收紧，stage-designer 会按 standard 档默认 30–90 分钟/任务把学时撑回 7 小时
+    // 把 hints 一起收紧，path-task-design 会按 standard 档默认 30–90 分钟/任务把学时撑回 7 小时
     // ——「学时 = 阶段数 × 每段任务数 × 单任务分钟」这条链必须两端都收。
     const oneSittingPath = Number.isFinite(Number(learningPath.estimatedHours))
       && Number(learningPath.estimatedHours) > 0
@@ -347,7 +347,7 @@ async function enrichLearningPathWithAndersonInner(
       // 后续阶段做中间产出/验收演练时同样需要对着终点校准。
       firstDeliverable: (normalizedInput as any)?.confirmedProposal?.firstDeliverable || null,
       successCriteria: (normalizedInput as any)?.successCriteria || null,
-      // 资料 → 任务（下游 learn 的第一段）：把附件/联网资料**投影后**交给 stage-designer，
+      // 资料 → 任务（下游 learn 的第一段）：把附件/联网资料**投影后**交给 path-task-design，
       // 让任务长在资料的具体章节/条目上，而不是只长在里程碑标题上。
       ...(extractPromptMaterials(normalizedInput, STAGE_MATERIAL_LIMITS)
         ? { materials: extractPromptMaterials(normalizedInput, STAGE_MATERIAL_LIMITS) }
@@ -389,13 +389,13 @@ async function enrichLearningPathWithAndersonInner(
 
     // 校内锚（2026-09-30 维度 G 评审 → 用户拍板改 LLM 口径）：锚由 goal-conversation 的
     // understanding.school_anchor（模型自己判断学习者是否身处某套教材/考试体系）经定帧层
-    // 透传到这里；非校内学习者该键不出现，stage-designer 行为与原先完全一致。
+    // 透传到这里；非校内学习者该键不出现，path-task-design 行为与原先完全一致。
     const pathSchoolAnchor = (normalizedInput as any)?.schoolAnchor
       ? ((normalizedInput as any).schoolAnchor as PathSchoolAnchor)
       : null;
     let anchorGoalNotes = 0;
     if (pathSchoolAnchor) {
-      logger.info('[school-anchor] 校内锚已解析，注入 stage-designer', {
+      logger.info('[school-anchor] 校内锚已解析，注入 path-task-design', {
         runId,
         textbook: pathSchoolAnchor.textbook,
         hasExamScope: !!pathSchoolAnchor.examScope,
@@ -417,13 +417,13 @@ async function enrichLearningPathWithAndersonInner(
     // 这个键在代码里根本不存在）——跨阶段衔接与去重规则长期空转。串行下 Stage N 完成后
     // 存摘要，Stage N+1 注入 previousMilestone.tasks。
     const stageTaskSummaries = new Map<number, Array<{ title: string; type: string | null; estimatedMinutes: number | null }>>();
-    // #192：留一份 stage-designer 的真实载荷样本（任一阶段），供本轮沙盘 ref 对账
+    // #192：留一份 path-task-design 的真实载荷样本（任一阶段），供本轮沙盘 ref 对账
     // ——core 声明的 sandbox:path.* 键必须能在池里解析（见 sandbox-resolver.buildPathSandboxPool）。
     let stageSandboxSample: Record<string, unknown> | null = null;
 
     /**
      * 逐阶段任务锚（2026-09-28 去等分）：按**本阶段实际学时**反推该阶段该出几个任务，
-     * 注入 planningHints.targetSubtasksForStage（stage-designer 规则 8 优先采用）。
+     * 注入 planningHints.targetSubtasksForStage（path-task-design 规则 8 优先采用）。
      * 全局 targetSubtasksPerStage 按总学时均摊，配合「恰好 N 课」强规则会把路径切成
      * 5×10 式等分（真实案例：90h 预算 → 5×10，且单课分钟被扩容块顶穿会话档）。
      * 锚分钟取 targetMinutesPerTask（已被会话档钳过），缺省退分钟上界 / 60。
@@ -441,7 +441,7 @@ async function enrichLearningPathWithAndersonInner(
       // 阶段分钟上界（2026-10-25 方向改造：uqcit3l 实证承诺为顶把 target 压到 2h 后，
       // 阶段锚 0.6h/36 分钟仍被 max(2,...) 抬成 2 个任务 × 30 分钟 = 60 分钟（1.67×），
       // 四阶段累计 227 分钟 vs 计划 132 分钟，承诺在 stageDesign 层二次违约）。
-      // 传给 stage-designer 一个显式上限：本阶段任务分钟总和不得超过阶段锚的 1.25 倍
+      // 传给 path-task-design 一个显式上限：本阶段任务分钟总和不得超过阶段锚的 1.25 倍
       // （超出部分说明该阶段装不下，应减任务/缩分钟，而不是把承诺撑破）。
       const targetSubtasks = Math.max(2, Math.min(cap, Math.round(stageAnchorMinutes / anchorMinutes)));
       // 预算下限必须 ≥ 最小任务数 × 单任务下限，否则「预算比最小任务量还小」——
@@ -487,7 +487,7 @@ async function enrichLearningPathWithAndersonInner(
           } : null,
         }).catch(() => ({ channels: {}, skipped: [] }));
       if (designerSkipped.length > 0) {
-        logger.warn('[path-generation] stage-designer channels skipped (config-driven extraction)', {
+        logger.warn('[path-generation] path-task-design channels skipped (config-driven extraction)', {
           runId,
           milestoneId: milestone.id,
           skipped: designerSkipped,
@@ -571,7 +571,7 @@ async function enrichLearningPathWithAndersonInner(
         ...stageDesignerBaseInput,
         ...(stageMaterials ? { materials: stageMaterials } : {}),
         normalizedInput: stageNormalizedInput,
-        // 全路径阶段地图（2026-10-03 A/B 审计实证：stage-designer 逐阶段调用只见当前阶段，
+        // 全路径阶段地图（2026-10-03 A/B 审计实证：path-task-design 逐阶段调用只见当前阶段，
         // 「真实动作前两个阶段」「跨阶段去重」类规则因看不见全局而无法执行——
         // 前置真实动作任务占比 A/B 实测 0.3%→1.4% 几乎未动）。注入全部阶段标题与当前位次，
         // 让单阶段调用具备全局视野；数据来自内存中的 milestones，无额外查询。
@@ -607,7 +607,7 @@ async function enrichLearningPathWithAndersonInner(
           })(),
         } : {}),
         // 渐进式（批次 D）：上一阶段的学习者账本信号——脆弱/挣扎概念、先修缺口、
-        // wrapup 里仍未掌握的点。stage-designer 据此调整下一阶段的坡度与回补任务。
+        // wrapup 里仍未掌握的点。path-task-design 据此调整下一阶段的坡度与回补任务。
         ...(progressive && options.previousStageOutcome
           ? { previousStageOutcome: options.previousStageOutcome }
           : {}),
@@ -836,7 +836,7 @@ async function enrichLearningPathWithAndersonInner(
       }
       // 引用覆盖守卫（2026-10-17）：有资料却零引用 = 本阶段任务没有长在资料上
       //（20 goal 复核实证：cpa/mbsr 末阶段）。缺口可见化之后**定向补课**（#119 优化项 1，2026-10-19）：
-      // 在路径级闸（每路径最多 1 次调用）下再调一次 stage-designer，只收「带引用且 sectionId
+      // 在路径级闸（每路径最多 1 次调用）下再调一次 path-task-design，只收「带引用且 sectionId
       // 命中本阶段窗口」的新任务；阶段已满（真实跑批常态：任务数被裁到 subtasksPerStageRange
       // 上界）时改为**等量置换**至多 2 条无引用旧任务，阶段任务数不变；闸用完/补不来则维持
       // 原状（只告警，见下方）。
@@ -999,7 +999,7 @@ async function enrichLearningPathWithAndersonInner(
     // 全路径材料覆盖体检（只告警，判据见 stage-material-coverage-audit）。
     auditStageMaterialCoverage({ pathId, stageMaterialAudit, normalizedInput });
 
-    // #192：把 stage-designer / kc-mapper 纳入沙盘 ref 运行期对账（载荷与判据见 stage-sandbox-ref-audit）。
+    // #192：把 path-task-design / path-kc-mapping 纳入沙盘 ref 运行期对账（载荷与判据见 stage-sandbox-ref-audit）。
     await auditPathStageAgentsSandboxRefs({
       pathId, normalizedInput, stageDesignerPayload: stageSandboxSample,
       kcMapperPayload: {
@@ -1009,17 +1009,17 @@ async function enrichLearningPathWithAndersonInner(
       },
     });
 
-    // KC 映射（kc-mapper）：stage-designer 全部完成后，将概念与子任务分解为知识组件 + 依赖图，
+    // KC 映射（path-kc-mapping）：path-task-design 全部完成后，将概念与子任务分解为知识组件 + 依赖图，
     // 写回 aiPromptTemplate.kcAnnotation，结束"写后无读者"，供 teaching-turn 按 KC 粒度消费。
     // 契约收口在 kc-annotation 模块（executeSkillWithResult；2026-09-22 判空错配事故修复见该文件头注）。
     // 渐进式（批次 D）与追加补齐（appendOnly，仅对空白阶段生成）都走 **增量合并**
-    // （mergeKcStageAnnotation，v2 顶层与 v1 同形、byStage 存阶段快照）：两者的 kc-mapper
+    // （mergeKcStageAnnotation，v2 顶层与 v1 同形、byStage 存阶段快照）：两者的 path-kc-mapping
     // 输入都只含本轮的阶段/任务，整包调用会把这段输出当全量覆写、抹掉**已设计阶段**的
     // taskKcLinks（issue #169：append 自愈通道只判 progressive，未判 appendOnly）。
     // 合并结果经本函数返回值交给下方 final 事务统一写 template（避免双写竞争）。
     //
     // 任务↔KC 的稳定键（issue #179）：连接键不能用会变形的自然语言标题，也不能靠标题自带的唯一性
-    // （同名任务无解）。这里给本次运行的每个任务分配「阶段序号-阶段内序号」的稳定键，随 kc-mapper
+    // （同名任务无解）。这里给本次运行的每个任务分配「阶段序号-阶段内序号」的稳定键，随 path-kc-mapping
     // 输入下发并要求逐字回显。
     // 键**写在任务对象自己的属性上**（而非 WeakMap）：同阶段重排（reorderStageTasks →
     // remapStageTaskReferences/repairForwardReferences）用浅拷贝 `{ ...task }` 换掉任务对象，
@@ -1034,7 +1034,7 @@ async function enrichLearningPathWithAndersonInner(
     let kcAnnotation: KcAnnotation | null;
     if (progressive || appendOnly) {
       const { executeSkillWithResult } = await import('../../../skills');
-      const { kcMapperDefinition } = await import('../../../skills/kc-mapper');
+      const { kcMapperDefinition } = await import('../../../skills/path-kc-mapping');
       const kcParams = {
         pathId,
         userId: data.userId,
@@ -1242,7 +1242,7 @@ async function enrichLearningPathWithAndersonInner(
             || (taskData.knowledgeType && taskData.cognitiveLevel ? `${taskData.knowledgeType} + ${taskData.cognitiveLevel}` : null);
 
           const subtaskId = `st_${Date.now()}_${Math.random().toString(36).substring(2, 9)}_${milestone.stageNumber}_${j}`;
-          // 稳定键 → 真实 id 登记（issue #179）：键在 kc-mapper 之前按原顺序分配并写在任务对象上，
+          // 稳定键 → 真实 id 登记（issue #179）：键在 path-kc-mapping 之前按原顺序分配并写在任务对象上，
           // 同阶段重排的浅拷贝会带着它流动，这里按属性取回即可（不再依赖对象身份）。
           const taskKey = (taskData as any)?.taskKey;
           if (taskKey) subtaskIdByTaskKey.set(taskKey, subtaskId);
@@ -1380,7 +1380,7 @@ async function enrichLearningPathWithAndersonInner(
           });
         }
       }
-      // 任务↔KC 连接键收稳（issue #179）：kc-mapper 只能按标题回写链接，而标题是会被改写的
+      // 任务↔KC 连接键收稳（issue #179）：path-kc-mapping 只能按标题回写链接，而标题是会被改写的
       // 自然语言（落库前经 sanitizeUserFacingText），同名任务更无法在标题上区分。落库前按模型
       // 逐字回显的 taskKey 把链路绑到真实 subtasks.id 上，读侧即可按 id 精确匹配，标题退为兜底键。
       // 未回显 taskKey 的链接（旧标注 / 模型漏回显）原样保留，由读侧回退标题并集。
@@ -1585,11 +1585,11 @@ async function enrichLearningPathWithAndersonInner(
             delivery: (reconciledConservation as { delivery?: string } | null)?.delivery ?? null,
           })
         : null;
-      // kc-mapper 失败此前静默降级（kcAnnotation=null → 审计整个不跑，路径照样 success，
+      // path-kc-mapping 失败此前静默降级（kcAnnotation=null → 审计整个不跑，路径照样 success，
       // 离线评审才发现 3 条路径 KC/审计双双丢失）。落显式标记：可见、可统计、可告警。
       const auditDisabledReason = kcAnnotation
         ? null
-        : ((progressive || appendOnly) ? 'kc-mapper-failed' : 'kc-mapper-persist-failed');
+        : ((progressive || appendOnly) ? 'path-kc-mapping-failed' : 'path-kc-mapping-persist-failed');
       if (structureAudit && structureAudit.issues.length > 0) {
         logger.warn('[stage-enrichment] 路径结构审计发现问题（只记录，不重排）', {
           pathId: learningPath.id,

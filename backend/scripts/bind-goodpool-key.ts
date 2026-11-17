@@ -9,9 +9,9 @@
  * 用法（key 只从环境变量进，脚本零字面量）：
  *   POOL_KEY='sk-xxx' npx ts-node --transpile-only scripts/bind-goodpool-key.ts [--dry]
  *
- * 【2026-09-30 13:40 范围收窄（用户拍板）】只换「长生成」那一个技能——stage-designer
+ * 【2026-09-30 13:40 范围收窄（用户拍板）】只换「长生成」那一个技能——path-task-design
  * （每 path 5 次调用 ≈175s，今早空回复失败全部落在 stage_design 阶段）；其余三个
- * （goal-conversation/path-planning/kc-mapper）留在默认 key，不动。
+ * （goal-conversation/path-planning/path-kc-mapping）留在默认 key，不动。
  */
 import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
@@ -19,7 +19,7 @@ import { encryptSecret, decryptSecret } from '../src/utils/secret-crypto';
 
 const DRY = process.argv.includes('--dry');
 const KEY_CONTEXT = 'system.skill_model_configs.apiKey';
-const SKILLS = ['stage-designer'];
+const SKILLS = ['path-task-design'];
 
 const key = (process.env.POOL_KEY || '').trim();
 if (!key) { console.error('缺少环境变量 POOL_KEY'); process.exit(1); }

@@ -87,7 +87,7 @@ function makeReport(overrides: Partial<HealthCenterSummaryReport> = {}): HealthC
         makeItem('w3-wiring', 'ok'),
         makeItem('override-record', 'info'),
         makeItem('runtime-prompt', 'warn', 50, Array.from({ length: 25 }, (_, i) => i === 0
-          ? 'skill:teaching-opening-generator ×12 @ 2026-09-06T02:14:04.671Z'
+          ? 'skill:teaching-opening ×12 @ 2026-09-06T02:14:04.671Z'
           : `drift ${i + 1}`)),
       ],
       abnormal: 4,
@@ -426,7 +426,7 @@ describe('健康中心（G1）', () => {
     expect(more.text()).toContain('共 25 条明细，仅显示前 20 条');
 
     // 运行时遥测本地化：后端 `agent ×N @ ISO` → 前端 `agent ×N｜最近 本地时间`
-    expect(details[1].text()).toContain('skill:teaching-opening-generator ×12｜最近');
+    expect(details[1].text()).toContain('skill:teaching-opening ×12｜最近');
     expect(details[1].text()).not.toContain('@ 2026-');
 
     // 点击行收起明细

@@ -72,7 +72,7 @@ function pickOne<T extends string>(value: unknown, allowed: readonly T[], fallba
 
 function inferContextMode(skillId: string, archetype: string): RuntimeContextMode {
   if (skillId === 'goal-conversation') return 'state-refresh';
-  if (['teaching-turn', 'peer-reinforcement', 'session-wrapup'].includes(skillId)) return 'thread-context';
+  if (['teaching-turn', 'teaching-peer-reinforcement', 'teaching-wrapup'].includes(skillId)) return 'thread-context';
   if (/^virtual-learner-(goal-dialogue|learn-turn|path-evaluator)/.test(skillId)) return 'simulation-refresh';
   if (archetype === 'conversational') return 'thread-context';
   return 'snapshot-context';
@@ -94,10 +94,10 @@ function inferStateOwner(mode: RuntimeContextMode): RuntimeStateOwner {
 
 function inferDomain(skillId: string): string {
   if (skillId === 'goal-conversation') return 'goal-conversation';
-  if (['teaching-turn', 'peer-reinforcement', 'session-wrapup'].includes(skillId)) return 'teaching';
-  if (['path-planning', 'stage-designer'].includes(skillId)) return 'path-generation';
+  if (['teaching-turn', 'teaching-peer-reinforcement', 'teaching-wrapup'].includes(skillId)) return 'teaching';
+  if (['path-planning', 'path-task-design'].includes(skillId)) return 'path-generation';
   if (skillId.startsWith('virtual-learner-')) return 'virtual-learner';
-  if (skillId.includes('knowledge') || skillId.includes('pattern') || skillId.includes('profile') || skillId.includes('concept')) return 'learner-model';
+  if (skillId.includes('knowledge') || skillId.includes('pattern') || skillId.includes('profile') || skillId.includes('concept')) return 'profile-learner-model';
   if (skillId.includes('guidance')) return 'guidance';
   if (skillId.includes('label')) return 'labeling';
   return skillId;
@@ -118,14 +118,14 @@ function inferPhases(skillId: string, domain: string): { phases: string[]; defau
       terminalPhases: ['completion-candidate'],
     };
   }
-  if (skillId === 'peer-reinforcement') {
+  if (skillId === 'teaching-peer-reinforcement') {
     return {
       phases: ['discussion-generated', 'discussion-completed'],
       defaultPhase: 'discussion-generated',
       terminalPhases: ['discussion-completed'],
     };
   }
-  if (skillId === 'session-wrapup') {
+  if (skillId === 'teaching-wrapup') {
     return {
       phases: ['wrapup-generated', 'session-finalized'],
       defaultPhase: 'wrapup-generated',
@@ -135,13 +135,13 @@ function inferPhases(skillId: string, domain: string): { phases: string[]; defau
   if (skillId === 'path-planning') {
     return { phases: ['core-path-generated', 'path-generation-failed'], defaultPhase: 'core-path-generated', terminalPhases: ['core-path-generated'] };
   }
-  if (skillId === 'stage-designer') {
+  if (skillId === 'path-task-design') {
     return { phases: ['stage-designed', 'stage-design-failed'], defaultPhase: 'stage-designed', terminalPhases: ['stage-designed'] };
   }
-  if (skillId === 'adaptive-guidance-copy') {
+  if (skillId === 'profile-adaptive-copy') {
     return { phases: ['guidance-generated'], defaultPhase: 'guidance-generated', terminalPhases: ['guidance-generated'] };
   }
-  if (skillId === 'lesson-knowledge-enricher') {
+  if (skillId === 'profile-lesson-enrich') {
     return { phases: ['knowledge-enriched'], defaultPhase: 'knowledge-enriched', terminalPhases: ['knowledge-enriched'] };
   }
   if (domain === 'virtual-learner') {

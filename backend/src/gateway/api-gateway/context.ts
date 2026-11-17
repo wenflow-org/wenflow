@@ -57,7 +57,7 @@ export interface RequestContext {
    * #185：当前执行所在的 **agent 边界**（进入某 agent 的编排作用域时由
    * {@link runInAgentScope} 写入，skill 执行时若其上没有边界则以该 skill 的归属 agent 兜底）。
    * skill span 的 `callerAgent` 取此值，因此跨阶段被调用的 skill（如教学链调用
-   * profile 阶段的 learning-predictor）会归到**真实调用方**，而不是它的静态归属。
+   * profile 阶段的 profile-learning-predict）会归到**真实调用方**，而不是它的静态归属。
    */
   agentScope?: string;
   /**
@@ -106,7 +106,7 @@ export function runWithContext<T>(context: RequestContext, fn: () => Promise<T>)
  * 语义是「**重置**」而不是「继承」：agent 边界以内的 skill 调用都以该 agent 为调用方，
  * 上层（autopilot / blackbox / 客户端）写入的运行来源移到 `rootCallerAgent` 保留追溯，
  * 不再冒充交接边的 caller。典型：虚拟课堂的自动驾驶以 `callerAgent: 'simulation-agent'`
- * 起跑，但教学链本身是 teaching-agent 的边界——不重置就会把 `simulation-agent → skill:session-wrapup`
+ * 起跑，但教学链本身是 teaching-agent 的边界——不重置就会把 `simulation-agent → skill:teaching-wrapup`
  * 之类的**幽灵边**写进 agent_call_logs，污染按 agent 的成功率/成本/限流归属。
  */
 export function runInAgentScope<T>(agentScope: string, fn: () => Promise<T>): Promise<T> {

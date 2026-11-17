@@ -1,0 +1,40 @@
+version: prompt-lab-manifest/v1
+skillId: simulation-actor-audit
+agentId: skill:simulation-actor-audit
+name: default-virtual-learner-actor-auditor
+archetype: extractor
+description: Blackbox 合成学习者角色保真度审计
+acceptableAgentIds:
+  - skill:simulation-actor-audit
+publish:
+  enabled: true
+  exportTargets:
+    - platform-prompts
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: extraction
+  interactionMode: batch
+  input:
+    transport: json
+    schemaSource: skill-definition
+  output:
+    media: json
+    schemaSource: runtime-validator
+    envelope: adapter
+  context:
+    envelope: context-envelope/v1
+    delivery: sidecar
+  failurePolicy: retry
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState: { domain: virtual-learner, phases: [simulation-step-completed], defaultPhase: simulation-step-completed, terminalPhases: [simulation-step-completed], statusValues: [succeeded, partial, blocked, failed] }
+  contextUpdate: { mode: none, stateOwner: none }
+  outputEnvelope: adapter
+ownership:
+  tier: production
+  visibility: internal
+tags:
+  - virtual-learner
+  - extractor

@@ -1,8 +1,8 @@
 /**
- * R4 实测修复批 B 项（2026-10-06）：stage-designer 引用示范题/例题/真题时必须自带题面。
+ * R4 实测修复批 B 项（2026-10-06）：path-task-design 引用示范题/例题/真题时必须自带题面。
  *
  * 实证：rw-school6-09 全程引用从未展示的示范题（422 次提及、0 次展示），学生与下游教学层
- * 拿不到题面，任务不可执行。提示词侧修复 = stage-designer 新增
+ * 拿不到题面，任务不可执行。提示词侧修复 = path-task-design 新增
  * 「示范题/例题/真题引用必须自带题面」规则（按仓库约定追加在末位）。
  *
  * 两个不变量（与 stage-filler-prompt-rule.test.ts 同构）：
@@ -16,8 +16,8 @@ import yaml from 'js-yaml';
 // 本文件位于 backend/src/services/learning/generation/__tests__/ → 仓库根上溯 6 层
 const REPO_ROOT = path.resolve(__dirname, '../../../../../..');
 const read = (p: string) => fs.readFileSync(path.join(REPO_ROOT, p), 'utf8');
-const CORE_TEXT = read('prompts/core/stage-designer.yaml');
-const MD = read('prompts/skill.stage-designer.md');
+const CORE_TEXT = read('prompts/core/path-task-design.yaml');
+const MD = read('prompts/skill.path-task-design.md');
 const CORE = yaml.load(CORE_TEXT) as { rules: string[] };
 
 const RULE = CORE.rules.find((r) => r.includes('示范题/例题/真题引用必须自带题面')) || '';

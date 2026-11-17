@@ -97,7 +97,7 @@ export interface SkillEntry {
   noPromptFile?: boolean;
   /**
    * #235：独立提示词产物的仓库相对路径（形如 `prompts/skill.<id>.md`）。
-   * 用于「有提示词、但没有 core yaml 源」的 handler-only 能力（如 board-designer）。
+   * 用于「有提示词、但没有 core yaml 源」的 handler-only 能力（如 teaching-board-design）。
    * mainline/aux 的提示词由 coreFile 承载，禁填本字段。
    */
   promptArtifact?: string;

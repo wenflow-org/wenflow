@@ -4,7 +4,7 @@
  * 背景：`conceptLedger[].evidenceCount` 同时有两个来源——
  *   ① 确定性倒排索引：由真实证据行（session knowledgeState / task:completed / 摘要 / 评估）
  *      命中该概念身份的条数算出（LearnerKnowledgeMemoryService.ts 的 evidenceIndicesByKey）；
- *   ② 模型自报：lesson-knowledge-enricher 的 LLM 输出字段。提示词里该字段只有结构占位
+ *   ② 模型自报：profile-lesson-enrich 的 LLM 输出字段。提示词里该字段只有结构占位
  *      `"evidenceCount": 0`，**没有任何计数规则**；真实 LLM 实测同一输入连跑 3 次，
  *      同一概念给出 3 / 2 / 17。
  *

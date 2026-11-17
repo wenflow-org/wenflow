@@ -33,7 +33,7 @@ export const learnerAgentRuntimeDefinition = {
     },
     {
       step: 4,
-      agentId: 'skill:lesson-knowledge-enricher',
+      agentId: 'skill:profile-lesson-enrich',
       kind: 'skill',
       impl: 'events/lesson-enrichment-event.ts enqueueLessonEnrichmentEvent（events/learner-event-consumer.ts:81；仅 lesson:completed，登记独立事件后由泳道 services/learner/LessonKnowledgeEnrichmentConsumer.ts 消费，快路径不 await LLM）',
       role: 'lesson-knowledge-enrichment',

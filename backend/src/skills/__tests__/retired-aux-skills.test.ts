@@ -23,14 +23,14 @@ const RETIRED_ID = 'triage-judge';
 
 /** 修复前 2026-09-15 退役波（course-design 等）之外的 aux 全集，用于防「顺手多摘」回归。 */
 const ACTIVE_AUX_AFTER_RETIREMENT = [
-  'teaching-opening-generator',
-  'learner-progress-report',
+  'teaching-opening',
+  'profile-progress-report',
   'skill-author',
   'skill-compiler',
-  'learner-state-review',
-  'concept-consolidator',
-  'concept-load-estimator',
-  'replan-attribution',
+  'profile-state-review',
+  'profile-concept-consolidate',
+  'profile-concept-load',
+  'teaching-replan-attribution',
 ];
 
 describe('F5 triage-judge 僵尸位退役', () => {
@@ -56,8 +56,8 @@ describe('F5 triage-judge 僵尸位退役', () => {
     expect(typeof auxRetiredSkillHandlers[RETIRED_ID]).toBe('function');
     expect(typeof executableSkillHandlers[RETIRED_ID]).toBe('function');
     // 注册面其余成员的直调路径不回归（executableSkillHandlers ⊇ skillHandlers）
-    expect(typeof executableSkillHandlers['replan-attribution']).toBe('function');
-    expect(typeof executableSkillHandlers['concept-consolidator']).toBe('function');
+    expect(typeof executableSkillHandlers['teaching-replan-attribution']).toBe('function');
+    expect(typeof executableSkillHandlers['profile-concept-consolidate']).toBe('function');
   });
 
   it('活跃守卫镜像：ALL_RETIRED_SKILLS ∩ 注册集 = ∅（retired:check 第 2 项的同款不变量）', () => {

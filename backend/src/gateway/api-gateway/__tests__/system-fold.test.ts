@@ -4,7 +4,7 @@
  * 事故：平台 zijian 网关静默丢弃 role:'system'，所有 skill 的系统提示词从未到达模型；
  * 直连实测（带 1467 字 system 与不带 system 的 prompt_tokens 完全相同）与
  * "同一约束写进 user 则被完美遵从"双向证实。表现为纯标注类 skill 集体把结构化输入
- * 当文档做总结（concept-consolidator 6/6 失败、kc-mapper 34 连败）。
+ * 当文档做总结（profile-concept-consolidate 6/6 失败、path-kc-mapping 34 连败）。
  *
  * 本测试锁死折叠语义：内容不丢、只进首条 user、其余消息顺序不变、无 system 时不拷贝。
  */

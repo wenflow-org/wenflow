@@ -2,7 +2,7 @@
  * conceptKey 键空间 join（P1-16 修复，2026-10-06 审计 §2.1）
  *
  * 背景：确定性台账的键是**中文 label**（task.linkedConceptName / 会话知识点名），
- * 而 lesson-knowledge-enricher 的模型行自拟 `conceptKey`（实测 67/120 为英文 slug）。
+ * 而 profile-lesson-enrich 的模型行自拟 `conceptKey`（实测 67/120 为英文 slug）。
  * 两套键空间按精确 conceptKey 永不 join → 同一概念「确定性一行 + 模型一行」并存，
  * 经 toTeachingProjection 注入课堂 prompt 后模型看到互相矛盾的状态。
  *

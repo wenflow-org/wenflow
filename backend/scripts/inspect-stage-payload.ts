@@ -1,16 +1,16 @@
-/** 只读：检查最近一条 stage-designer 真实载荷（验证 C4 单一资料投递） */
+/** 只读：检查最近一条 path-task-design 真实载荷（验证 C4 单一资料投递） */
 import 'dotenv/config';
 import prisma from '../src/config/database';
 
 async function main() {
   const rows = await prisma.prompt_call_logs.findMany({
-    where: { agentId: 'skill:stage-designer' },
+    where: { agentId: 'skill:path-task-design' },
     select: { userPayload: true, createdAt: true },
     orderBy: { createdAt: 'desc' },
     take: 10,
   });
 
-  console.log(`最近 ${rows.length} 条 stage-designer 载荷：`);
+  console.log(`最近 ${rows.length} 条 path-task-design 载荷：`);
   let withMaterials = 0;
   for (const row of rows) {
     const raw = row.userPayload || '';

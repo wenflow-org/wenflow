@@ -9,12 +9,12 @@
  *   建议重排，也不能越过召回范围；
  * - LLM 只在 `allowedRecommendations`（系统真能执行的方向）里选一个，并给出主因与一条可证伪断言；
  * - 断言经 `insight-calibration` 以 `insightType='replan_attribution'` 单独成列（不与
- *   learner-state-review 的可靠性混算）；
+ *   profile-state-review 的可靠性混算）；
  * - 超时/失败/越界 → 返回 null，调用方保留阈值版（护栏：失败降级，不阻塞课后收束）。
  */
 import { logger } from '../../utils/logger';
 import { executeSkillWithResult, auxSkillDefinitionMap } from '../../skills';
-import type { LearnerReplanSignal } from '../../agents/learner-model-agent/types';
+import type { LearnerReplanSignal } from '../../agents/profile-learner-model-agent/types';
 
 /** 归因超时（毫秒）：课后收束路径上，宁可不要归因也不拖住收束 */
 export const ATTRIBUTION_TIMEOUT_MS = 8000;
@@ -43,7 +43,7 @@ export interface ReplanAttributionDeps {
 }
 
 const defaultDeps: ReplanAttributionDeps = {
-  callSkill: (input) => executeSkillWithResult(auxSkillDefinitionMap['replan-attribution'], input as any) as any,
+  callSkill: (input) => executeSkillWithResult(auxSkillDefinitionMap['teaching-replan-attribution'], input as any) as any,
 };
 
 /** 系统真正能执行的方向：与 ReplanAdvisoryService 的 UI options 保持一致 */
@@ -134,14 +134,14 @@ class ReplanAttributionService {
           );
         }),
       ]);
-      if (!result?.success) throw new Error(String(result?.error?.message || 'replan-attribution failed'));
+      if (!result?.success) throw new Error(String(result?.error?.message || 'teaching-replan-attribution failed'));
       const normalized = normalizeAttribution(result.output, {
         reasonCodes,
         allowedRecommendations: allowed,
         evidenceIds: input.evidence.map((item) => item.id).filter(Boolean),
       });
       if (normalized) {
-        logger.info('[replan-attribution] 归因完成', {
+        logger.info('[teaching-replan-attribution] 归因完成', {
           reasonCode: normalized.primaryReasonCode,
           recommendation: normalized.recommendation,
           hasClaim: !!normalized.claim,
@@ -149,7 +149,7 @@ class ReplanAttributionService {
       }
       return normalized;
     } catch (error) {
-      logger.warn('[replan-attribution] 归因失败/超时，保留阈值版建议', {
+      logger.warn('[teaching-replan-attribution] 归因失败/超时，保留阈值版建议', {
         error: error instanceof Error ? error.message : String(error),
       });
       return null;

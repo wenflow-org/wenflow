@@ -189,7 +189,7 @@ interface GoalPromptInput {
  *
  * 设计口径（2026-09-22「附件是主线」+ 2026-09-24「Document Summary Index 摘要层」）：
  * 正文消费点在路径生成（附件打包）与教学按章节取回；goal 对话消费 brief
- * （material-brief 惰性生成一次、持久化复用）——知道「这份资料是什么/讲什么/怎么切分」
+ * （path-material-brief 惰性生成一次、持久化复用）——知道「这份资料是什么/讲什么/怎么切分」
  * 才能聊得好（澄清全面学 vs 重点学）；brief 未就绪时降级为 headings 元信息。
  */
 export interface GoalUploadedMaterialSummary {
@@ -209,7 +209,7 @@ export interface GoalUploadedMaterialSummary {
   libraryTotal?: number;
   /** 未列进本清单的资料份数；>0 时模型不应声称看完全部资料。 */
   libraryOmitted?: number;
-  /** 资料理解摘要（material-brief；未生成/生成失败为 null → 降级 headings）。 */
+  /** 资料理解摘要（path-material-brief；未生成/生成失败为 null → 降级 headings）。 */
   brief: {
     docType: string | null;
     subject: string | null;

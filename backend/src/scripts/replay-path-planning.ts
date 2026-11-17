@@ -26,7 +26,7 @@ import path from 'node:path';
 import sqlite3 from 'sqlite3';
 import { auxSkillDefinitionMap, executeSkill, executeSkillWithResult } from '../skills';
 import { pathAgentDefinition } from '../skills/path-planning';
-import { stageDesignerDefinition } from '../skills/stage-designer';
+import { stageDesignerDefinition } from '../skills/path-task-design';
 import { normalizeAgentOutput } from '../agents/output-normalizer';
 import { buildFramedNormalizedInput } from '../services/learning/path-planning-hints';
 import { buildPathAgentInput } from '../services/learning/generation/path-generation.core';
@@ -47,7 +47,7 @@ const ESTIMATE_LESSONS = process.argv.includes('--estimate-lessons');
 /** `--judge-only`：只调判官（估课次），不跑 path/stage —— 用于统计判官契约稳定性 */
 const JUDGE_ONLY = process.argv.includes('--judge-only');
 
-/** `--with-stage`：path 之后继续跑 stage-designer，汇总任务数与真实学时（定位注水点） */
+/** `--with-stage`：path 之后继续跑 path-task-design，汇总任务数与真实学时（定位注水点） */
 const WITH_STAGE = process.argv.includes('--with-stage');
 
 /** `--rich`：构造输入时额外灌入情绪/压力/抗拒材料（见 problemSpace 注释） */
@@ -65,7 +65,7 @@ const MATERIAL_FILE = (() => {
   return hit ? hit.slice('--material-file='.length) : null;
 })();
 
-/** `--material-search`：用 material-collector 联网采集（模拟**有网络搜索**） */
+/** `--material-search`：用 path-material-collect 联网采集（模拟**有网络搜索**） */
 const MATERIAL_SEARCH = process.argv.includes('--material-search');
 
 /** `--full`：打印完整路径结构（名称/摘要/每段的说明与概念），用于人眼审阅 */
@@ -267,7 +267,7 @@ async function main(): Promise<void> {
       const ni: any = data.userProfile?.normalizedInput || {};
       const packs: any[] = [];
       if (MATERIAL_SEARCH) {
-        const { collectMaterialPack } = await import('../skills/material-collector');
+        const { collectMaterialPack } = await import('../skills/path-material-collect');
         const pack: any = await collectMaterialPack(
           { kind: 'standard', title: (GOAL_ARG || '资料').slice(0, 60), why: 'replay：联网补信息' } as never,
           { maxSources: 5 }
@@ -342,7 +342,7 @@ async function main(): Promise<void> {
       console.log(`    【${m.stageNumber ?? ''}】${m.title}   (概念:${String(concept).slice(0, 26)})`);
     }
     if (WITH_STAGE && ms2.length > 0) {
-      // 定位注水点：path 只给段数与粗估学时；**真实学时 = 任务分钟之和**（stage-designer 产出）
+      // 定位注水点：path 只给段数与粗估学时；**真实学时 = 任务分钟之和**（path-task-design 产出）
       let totalTasks = 0;
       let totalMinutes = 0;
       const perStage: string[] = [];

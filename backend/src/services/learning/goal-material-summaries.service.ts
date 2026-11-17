@@ -25,7 +25,7 @@
 import { createHash } from 'crypto';
 import { logger } from '../../utils/logger';
 import type { GoalUploadedMaterialSummary } from '../../skills/goal-conversation';
-import { collectBriefsWithDeadline } from '../materials/material-brief.service';
+import { collectBriefsWithDeadline } from '../materials/path-material-brief.service';
 import { listMaterials, type MaterialRecord } from '../materials/material-store';
 import { selectMaterialsRanked, type MaterialSelection } from '../materials/material-selection.service';
 

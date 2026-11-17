@@ -7,12 +7,12 @@ jest.mock('../../composers/prompt-composer', () => ({
 import { auxSkillHandlers } from '../v4-aux-skills'
 
 /**
- * 回归：模型有时把 teaching-opening-generator 的 quickReplies 写成 string[]
+ * 回归：模型有时把 teaching-opening 的 quickReplies 写成 string[]
  * （core 声明为 object[]），此前会在 core fields 契约校验处整轮失败
  * （fields contract violation: quickReplies(type-mismatch:object[])）。
  * 现由 coerceParsedForContract 在校验前把等价变体收敛为 [{ text }]。
  */
-describe('teaching-opening-generator quickReplies 契约容错', () => {
+describe('teaching-opening quickReplies 契约容错', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockCallPrompt.mockResolvedValue({
@@ -24,7 +24,7 @@ describe('teaching-opening-generator quickReplies 契约容错', () => {
   })
 
   async function capturedSpec() {
-    await auxSkillHandlers['teaching-opening-generator']({ subject: 's', topic: 't', openingMode: 'example-first' })
+    await auxSkillHandlers['teaching-opening']({ subject: 's', topic: 't', openingMode: 'example-first' })
     expect(mockCallPrompt).toHaveBeenCalledTimes(1)
     return mockCallPrompt.mock.calls[0][0] as any
   }

@@ -5,7 +5,7 @@
  * 但流水线 100% 产路径。本模块依据 L1 已有的阻塞类型标注做确定性分诊，
  * 供 goal→path 链路在生成提议时决定「学习路径 / 组合 / 情绪支持 / 转介」。
  *
- * ── primaryBlockType 合法取值（源头：prompts/core/virtual-learner-scenario-designer.yaml）──
+ * ── primaryBlockType 合法取值（源头：prompts/core/simulation-scenario-designer.yaml）──
  *   capability          ＝ 存在可迁移的概念/技能缺口，需"建认知结构 + 多步练习"
  *   oneoff_operation    ＝ 一次性具体操作/工具用法，学会点哪里即可
  *   environment_tooling ＝ 设备/软件/网络/配置/环境阻塞，修好系统即可

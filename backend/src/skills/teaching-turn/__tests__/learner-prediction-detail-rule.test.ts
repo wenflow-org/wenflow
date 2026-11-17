@@ -1,7 +1,7 @@
 /**
  * P1-13（LP-1）teaching-turn 侧配套：learnerPrediction 自由描述原文（toneDetail）必须驱动开场策略。
  *
- * 实证（审计 LP-1）：learning-predictor 的 pick() 把 98/100 条自由描述抹成 'smooth'，teaching-turn
+ * 实证（审计 LP-1）：profile-learning-predict 的 pick() 把 98/100 条自由描述抹成 'smooth'，teaching-turn
  * 只读 normalized 枚举值，模型说的「反复卡壳」到达开场策略时已完全丢失。修复后预测器把原文透传为
  * toneDetail/depthDetail，本规则要求：即使 stallRisk < 0.7，只要语义含「反复卡壳/吃力/受阻/放慢」，
  * 开场也不得全速（混合描述按非乐观侧处理）。

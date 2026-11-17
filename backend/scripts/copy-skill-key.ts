@@ -4,7 +4,7 @@
  * 明文零暴露：不做加解密落库，只搬密文（同 context 可解密），搬完解密复核。
  *
  * 用法：npx ts-node --transpile-only -O '{"module":"commonjs"}' scripts/copy-skill-key.ts <源skillId> <目标skillId> [--dry]
- * 场景：2026-09-30 用户拍板「goal-conversation 也走好池」——从 stage-designer（已绑 path ds）复制。
+ * 场景：2026-09-30 用户拍板「goal-conversation 也走好池」——从 path-task-design（已绑 path ds）复制。
  * 路由按请求解析，改库热生效，无需重启后端。
  */
 import * as fs from 'node:fs';

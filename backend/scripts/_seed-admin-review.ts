@@ -421,7 +421,7 @@ async function main(): Promise<void> {
       ['skill:path-planning', 'pp-career-02', '转岗做产品经理', '目标宽泛、无截止时间，检验是否会先收敛范围。',
         [{ role: 'user', content: '我想转岗做产品经理，但不知道从哪开始。' }],
         { mustIncludeFields: ['milestones'] }],
-      ['skill:stage-designer', 'sd-01', '把「学会函数单调性」拆成子任务', '单里程碑展开，检验子任务粒度是否可执行。',
+      ['skill:path-task-design', 'sd-01', '把「学会函数单调性」拆成子任务', '单里程碑展开，检验子任务粒度是否可执行。',
         [{ role: 'user', content: '把「学会判断复合函数单调性」这个里程碑拆成具体子任务。' }],
         { mustIncludeFields: ['subtasks'] }],
     ] as const

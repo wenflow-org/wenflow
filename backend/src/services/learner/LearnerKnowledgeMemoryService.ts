@@ -18,7 +18,7 @@ import type {
   LearnerRecurringConfusion,
   LearnerTaskMastery,
   LearnerTransferSignal,
-} from '../../agents/learner-model-agent/types';
+} from '../../agents/profile-learner-model-agent/types';
 
 type BuildInput = {
   userId: string;
@@ -221,7 +221,7 @@ function dedupe(values: Array<string | null | undefined>) {
  *
  * 确定性台账的键是**中文 label**（task.linkedConceptName / 会话知识点名；displayLabel 兜底文案
  * 自 2026-10-15 起不进概念集合——它是显示文案不是概念身份），
- * 而 lesson-knowledge-enricher 的模型行自拟 `conceptKey`（实测 67/120 为英文 slug，如
+ * 而 profile-lesson-enrich 的模型行自拟 `conceptKey`（实测 67/120 为英文 slug，如
  * `hand-over-choice` 对应 label「交出选择权降低开场抵触」）。两套键空间按精确 conceptKey
  * 永不 join → 同一概念「确定性一行 + 模型一行」并存，经 toTeachingProjection 注入课堂 prompt
  * 后，下一个授课模型看到互相矛盾的状态。
@@ -302,7 +302,7 @@ function signalFromKnowledgeState(items: Array<{ status?: string | null }>): Lea
  * 继续用 `>= 6` 会把整个 mid 档（锚点定义："有明显吃力/疲劳但引导下仍能推进"）
  * 误判成 fatigue/mastery/struggle —— 等于把"正常摩擦"升级成"异常信号"。
  * 因此改为**按档位判定**（只有 high = 8-10 才进这些桶）；legacy 数值（无档位）仍走 >= 6。
- * 判据来源：session-wrapup 的评分参考（三个阈值参数的唯一定义在 session-evaluation-scale）。
+ * 判据来源：teaching-wrapup 的评分参考（三个阈值参数的唯一定义在 session-evaluation-scale）。
  */
 function resolveEvaluationSignal(evaluation: {
   sessionLf?: number | null;
@@ -339,7 +339,7 @@ export class LearnerKnowledgeMemoryService {
         // 否则 currentPath 恒空、recentEvidence/conceptLedger 等画像数据前端永远看不到。
         // 注意：#205 决定「非 active 路径不得被伪造成 currentPath」（否则学员端会给出
         // 「继续学习一条已下线路径」）。管理台要展示「他有路径、但已下线 + 真实进度」时，
-        // 走 admin 详情路由的 fallback 字段（learner-models.ts），不放宽这里。
+        // 走 admin 详情路由的 fallback 字段（profile-learner-models.ts），不放宽这里。
         await prisma.learning_paths.findFirst({
           where: { userId: input.userId, status: 'active' },
           orderBy: { updatedAt: 'desc' },
@@ -468,7 +468,7 @@ export class LearnerKnowledgeMemoryService {
     // issue #194：knowledgeStateSummary 曾只写进 learner_evidence、从不进快照。
     // 证据按 occurredAt desc 取，首个非空摘要即最新一次课后状态摘要。
     // issue #198：摘要是**自由文本**，可命名其它路径的概念。它随 globalBackground 进入
-    // 教学上下文并作为 learning-predictor 的输入（TeachingContextBuilder:446），而预测器按
+    // 教学上下文并作为 profile-learning-predict 的输入（TeachingContextBuilder:446），而预测器按
     // pathId/taskId 计算——若取到别的路径的摘要，别的路径的概念会无声渗入当前路径的教学场景
     // （focusConcepts 回写 prediction_records）。故摘要必须按**当前路径**取；其它路径的摘要
     // 不参与（跨路径概念仍以 conceptLedger/recurringConfusions 等结构化字段用户级聚合）。
@@ -500,7 +500,7 @@ export class LearnerKnowledgeMemoryService {
       if (evidence.evidenceType === 'session-knowledge-distilled') {
         const payload = parseJsonSafe<any>(evidence.payload, {});
         // issue #156（复核补修）：概念台账「最旧证据覆盖最新证据」。模型行本身不带时间戳
-        // （lesson-knowledge-enricher 输出无 lastSeenAt），需用**同源业务时间**补齐才能按证据
+        // （profile-lesson-enrich 输出无 lastSeenAt），需用**同源业务时间**补齐才能按证据
         // 新旧取胜；此处取所属会话的 endTime（确定性通道用的是同一个 session.endTime），
         // 不用证据墙钟 occurredAt——否则与确定性通道跨时钟域比较，模拟/回填链路下回退到旧课
         // 掌握度仍可复现。查不到业务时间（会话未结束/未加载）就**不记**时间，绝不回退墙钟。
@@ -902,7 +902,7 @@ export class LearnerKnowledgeMemoryService {
       // 过滤的「只认接触过且证据为负」一致）。只有标签信号的概念 = 未评估 → pending。
       const evidence = allSignals.filter((signal) => signal.sourceType !== 'task-label');
       // #195：仅由 LLM 摘要（derived）、无任何结构化看板 / 记忆痕迹接触证据的概念 = 幽灵概念。
-      // session-wrapup 的 knowledgeItems 是模型对课堂的判断，可能造出看板里不存在的知识点。
+      // teaching-wrapup 的 knowledgeItems 是模型对课堂的判断，可能造出看板里不存在的知识点。
       // 复核补修：这类概念**不再对外暴露 state**（下方 globalConceptStates / conceptStates 过滤
       // 掉 isGhost 行），因此既不入掌握均值、也不进 mastered / struggling / fragile 名单，
       // 更不会被任务级 confidence 计入（taskMastery 从 conceptStates 建倒排）。

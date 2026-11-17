@@ -34,11 +34,11 @@ jest.mock('../../../../skills', () => ({
   executeSkill: (...args: unknown[]) => mockExecuteSkill(...args),
   executeSkillWithResult: (...args: unknown[]) => mockExecuteSkillWithResult(...args),
 }));
-jest.mock('../../../../skills/stage-designer', () => ({
-  __esModule: true, stageDesignerDefinition: { name: 'stage-designer' },
+jest.mock('../../../../skills/path-task-design', () => ({
+  __esModule: true, stageDesignerDefinition: { name: 'path-task-design' },
 }));
-jest.mock('../../../../skills/kc-mapper', () => ({
-  __esModule: true, kcMapperDefinition: { name: 'kc-mapper' },
+jest.mock('../../../../skills/path-kc-mapping', () => ({
+  __esModule: true, kcMapperDefinition: { name: 'path-kc-mapping' },
 }));
 jest.mock('../../../learner/LearnerSnapshotRefreshService', () => ({
   __esModule: true,
@@ -232,8 +232,8 @@ describe('#168 replan 重建任务同步 conceptId / sidecar / KC 标注', () =>
     }));
   });
 
-  it('kc-mapper 失败时不阻断重排，但仍写 sidecar 与 conceptId', async () => {
-    mockExecuteSkillWithResult.mockRejectedValue(new Error('kc-mapper down'));
+  it('path-kc-mapping 失败时不阻断重排，但仍写 sidecar 与 conceptId', async () => {
+    mockExecuteSkillWithResult.mockRejectedValue(new Error('path-kc-mapping down'));
 
     await requestPathReplan({
       pathId: 'lp1',

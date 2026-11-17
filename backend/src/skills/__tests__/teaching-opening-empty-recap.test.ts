@@ -1,5 +1,5 @@
 /**
- * teaching-opening-generator 空数据承接出路（P1-9，2026-10-06 审计 §2.1）
+ * teaching-opening 空数据承接出路（P1-9，2026-10-06 审计 §2.1）
  *
  * 规则曾强制「message 必须先承接上节卡住点/检索题/未答问题」，但 P1-8 素材 129/129 全空，
  * 模型在 recap 全空下把任务标题外推为已完成事实。本测试钉住：yaml 规则与编译 md 都给出
@@ -16,10 +16,10 @@ const path = require('node:path')
 const yaml = require('js-yaml')
 
 const ROOT = path.resolve(__dirname, '../../../../')
-const YAML_PATH = path.join(ROOT, 'prompts/core/teaching-opening-generator.yaml')
-const MD_PATH = path.join(ROOT, 'prompts/skill.teaching-opening-generator.md')
+const YAML_PATH = path.join(ROOT, 'prompts/core/teaching-opening.yaml')
+const MD_PATH = path.join(ROOT, 'prompts/skill.teaching-opening.md')
 
-describe('teaching-opening-generator 空数据承接出路（P1-9）', () => {
+describe('teaching-opening 空数据承接出路（P1-9）', () => {
   const yamlText = fs.readFileSync(YAML_PATH, 'utf8')
   const mdText = fs.readFileSync(MD_PATH, 'utf8')
   const doc = yaml.load(yamlText) as { rules: string[] }

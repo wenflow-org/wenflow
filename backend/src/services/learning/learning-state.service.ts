@@ -197,8 +197,8 @@ export class LearningStateService {
       status: 'completed',
       wrapup: { not: null },
     };
-    if (excludedSourceKey?.startsWith('session-wrapup:')) {
-      sessionWhere.id = { not: excludedSourceKey.slice('session-wrapup:'.length) };
+    if (excludedSourceKey?.startsWith('teaching-wrapup:')) {
+      sessionWhere.id = { not: excludedSourceKey.slice('teaching-wrapup:'.length) };
     }
 
     if (since) {
@@ -409,7 +409,7 @@ export class LearningStateService {
       if (snapshot) return snapshot.metrics;
     }
     // 快路径未命中（无已提交行 / 最新行读取自检失败）→ 回落旧路径，保留
-    // listCommittedSnapshots 的 session-wrapup 兜底（历史未迁移数据）语义
+    // listCommittedSnapshots 的 teaching-wrapup 兜底（历史未迁移数据）语义
     const snapshots = await this.listCommittedSnapshots(userId);
     for (let index = snapshots.length - 1; index >= 0; index -= 1) {
       const snapshot = snapshots[index];
@@ -551,7 +551,7 @@ export class LearningStateService {
       throw new Error('会话学习状态提交缺少 sessionId');
     }
 
-    const sourceKey = `session-wrapup:${input.sessionId}`;
+    const sourceKey = `teaching-wrapup:${input.sessionId}`;
     const user = await prisma.users.findUnique({
       where: { id: userId },
       select: { learningStateRevision: true }
@@ -592,7 +592,7 @@ export class LearningStateService {
       sourceKey,
       version: this.committedMetricVersion,
       committed: true,
-      source: 'session-wrapup',
+      source: 'teaching-wrapup',
       pathId: input.pathId,
       taskId: input.taskId,
       sessionId: input.sessionId,

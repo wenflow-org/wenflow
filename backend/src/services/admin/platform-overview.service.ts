@@ -102,7 +102,7 @@ export function clearOverviewAllTimeCache(): void {
  * 返回 null = 不是可识别的 agent-output-v1 输出。
  *
  * 注意：agent_call_logs.output 在落库前经 executor 的 summarizeSkillPayload 深度裁剪
- * （executor.ts:54 对 depth>=2 直接写 '[max-depth]'），session-wrapup 唯一的来源字段
+ * （executor.ts:54 对 depth>=2 直接写 '[max-depth]'），teaching-wrapup 唯一的来源字段
  * internal.ext.sessionWrapup 会被整段抹掉。因此本函数只看「未裁剪」的日志形状，
  * 不能因为 ext 不是对象就回退 success（那会把裁剪后的行误判成 model）；
  * KPI 实际读数是持久化产物 teaching_sessions.wrapup，见 classifyPersistedWrapupSource。
@@ -150,7 +150,7 @@ export function classifyWrapupSource(output: unknown): {
 
 /**
  * 从持久化产物 teaching_sessions.wrapup 判定来源（#70 的正式读数口径）。
- * 形状见 session-wrapup 的 artifact：{ status, sources: { summary, evaluation }, ... }；
+ * 形状见 teaching-wrapup 的 artifact：{ status, sources: { summary, evaluation }, ... }；
  * 兼容顶层 summarySource/evaluationSource（与 learning-state.service.ts 的既有解析同构）。
  * 返回 null = wrapup 缺失/坏 JSON/无任何来源字段（不参与抽样分母）。
  */

@@ -13,8 +13,8 @@ import prisma from '../../config/database';
 import { logger } from '../../utils/logger';
 import { executeSkill, sessionWrapupAgentDefinition } from '../../skills';
 import { recordDegradation, degradationCause } from '../../skills/degradation-telemetry';
-import type { SessionWrapupArtifact } from '../../skills/session-wrapup';
-import { downgradeMasteredOnNegativeEvidence, capMasteredOnInsufficientEvidence, stripUnfoundedProblemAdvice } from '../../skills/session-wrapup';
+import type { SessionWrapupArtifact } from '../../skills/teaching-wrapup';
+import { downgradeMasteredOnNegativeEvidence, capMasteredOnInsufficientEvidence, stripUnfoundedProblemAdvice } from '../../skills/teaching-wrapup';
 import type { ReviewPlan } from '../memory/review-plan.service';
 import { createDomainEvent } from '../../events/contracts';
 import { enqueueDomainEvent } from '../../events/outbox.repository';
@@ -682,7 +682,7 @@ export async function endSession(
       status: session.status,
       suppressed: [
         'learner_evidence(lesson:completed)',
-        'learning_metrics(session-wrapup/session_load)',
+        'learning_metrics(teaching-wrapup/session_load)',
         'memory_traces(FSRS 回写)',
         'misconception_ledger / churn_evidence',
         'checkpoint_attempt_evidence',
@@ -1016,7 +1016,7 @@ export async function endSession(
   } : null;
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    // 非正常终态：metricCommit 置 null —— completeWithEvent 不写 learning_metrics（session-wrapup:<id>），
+    // 非正常终态：metricCommit 置 null —— completeWithEvent 不写 learning_metrics（teaching-wrapup:<id>），
     // finalState 随之 null → wrapup.stateUpdate 也为空，读侧（getSessionStateTimeline 的 wrapup 兜底）
     // 不会把弃跑课读成一次有效收束（R2 §3-a3 追问二 泄漏④）。
     const metricCommit = scoreInput && !abnormalClosure
@@ -1200,12 +1200,12 @@ export async function endSession(
         milestoneId: session.milestoneId,
         duration: durationMinutes,
         // 断链修复 P0-5：任务的可迁移目标（task.transferable 派生），供课后知识增强
-        // （lesson-knowledge-enricher）判断"迁移意图是否达成"，闭环 transferGoal 信号
+        // （profile-lesson-enrich）判断"迁移意图是否达成"，闭环 transferGoal 信号
         transferGoal: context?.cognitiveFrame?.transferGoal || null,
         performance: evaluationResult ? persistedEvaluation : null,
         knowledgeState: session.knowledgeState,
-        // 只带 role/content：下游唯一消费者是 lesson-knowledge-enricher，其输入类型
-        // （skills/lesson-knowledge-enricher/index.ts:66）只有这两键；曾额外带 analysis，
+        // 只带 role/content：下游唯一消费者是 profile-lesson-enrich，其输入类型
+        // （skills/profile-lesson-enrich/index.ts:66）只有这两键；曾额外带 analysis，
         // 抽取后无人读取，只是把每回合的判读块重复塞进事件的持久化载荷（#200 清理）。
         visibleDialogueContext: session.messages.slice(-16).map((message) => ({
           role: message.role,

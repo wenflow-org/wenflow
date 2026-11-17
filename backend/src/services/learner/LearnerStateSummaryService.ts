@@ -1,4 +1,4 @@
-import type { LearnerSnapshot } from '../../agents/learner-model-agent/types';
+import type { LearnerSnapshot } from '../../agents/profile-learner-model-agent/types';
 import { classifyLoad } from '../learning/learning-load-verdict';
 
 export interface LearnerGuidanceActionSummary {

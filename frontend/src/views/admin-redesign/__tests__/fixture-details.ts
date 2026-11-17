@@ -1331,7 +1331,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "description": "生成学习路径主结构"
       },
       {
-        "agentId": "skill:stage-designer",
+        "agentId": "skill:path-task-design",
         "description": "细化阶段内的任务与验收点"
       }
     ],
@@ -1370,7 +1370,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "render": "hidden",
         "handoff": [
           "skill:path-planning",
-          "skill:stage-designer"
+          "skill:path-task-design"
         ],
         "internal": true,
         "accumulate": false,
@@ -1385,7 +1385,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "render": "hidden",
         "handoff": [
           "skill:path-planning",
-          "skill:stage-designer"
+          "skill:path-task-design"
         ],
         "internal": true,
         "accumulate": false,
@@ -1400,7 +1400,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "render": "hidden",
         "handoff": [
           "skill:path-planning",
-          "skill:stage-designer"
+          "skill:path-task-design"
         ],
         "internal": true,
         "accumulate": false,
@@ -1415,7 +1415,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "render": "hidden",
         "handoff": [
           "skill:path-planning",
-          "skill:stage-designer"
+          "skill:path-task-design"
         ],
         "internal": true,
         "accumulate": false,
@@ -1430,7 +1430,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "render": "hidden",
         "handoff": [
           "skill:path-planning",
-          "skill:stage-designer"
+          "skill:path-task-design"
         ],
         "internal": true,
         "accumulate": false,
@@ -1445,7 +1445,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "render": "hidden",
         "handoff": [
           "skill:path-planning",
-          "skill:stage-designer"
+          "skill:path-task-design"
         ],
         "internal": true,
         "accumulate": false,
@@ -1460,7 +1460,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "render": "hidden",
         "handoff": [
           "skill:path-planning",
-          "skill:stage-designer"
+          "skill:path-task-design"
         ],
         "internal": true,
         "accumulate": false,
@@ -1475,7 +1475,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "render": "hidden",
         "handoff": [
           "skill:path-planning",
-          "skill:stage-designer"
+          "skill:path-task-design"
         ],
         "internal": true,
         "accumulate": false,
@@ -1490,7 +1490,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "render": "hidden",
         "handoff": [
           "skill:path-planning",
-          "skill:stage-designer"
+          "skill:path-task-design"
         ],
         "internal": true,
         "accumulate": false,
@@ -1505,7 +1505,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "render": "hidden",
         "handoff": [
           "skill:path-planning",
-          "skill:stage-designer"
+          "skill:path-task-design"
         ],
         "internal": true,
         "accumulate": false,
@@ -1520,7 +1520,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "render": "hidden",
         "handoff": [
           "skill:path-planning",
-          "skill:stage-designer"
+          "skill:path-task-design"
         ],
         "internal": true,
         "accumulate": false,
@@ -1535,7 +1535,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "render": "hidden",
         "handoff": [
           "skill:path-planning",
-          "skill:stage-designer"
+          "skill:path-task-design"
         ],
         "internal": true,
         "accumulate": false,
@@ -1550,7 +1550,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "render": "hidden",
         "handoff": [
           "skill:path-planning",
-          "skill:stage-designer"
+          "skill:path-task-design"
         ],
         "internal": true,
         "accumulate": false,
@@ -1565,7 +1565,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "render": "hidden",
         "handoff": [
           "skill:path-planning",
-          "skill:stage-designer"
+          "skill:path-task-design"
         ],
         "internal": true,
         "accumulate": false,
@@ -1580,7 +1580,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "render": "hidden",
         "handoff": [
           "skill:path-planning",
-          "skill:stage-designer"
+          "skill:path-task-design"
         ],
         "internal": true,
         "accumulate": false,
@@ -1595,7 +1595,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "render": "hidden",
         "handoff": [
           "skill:path-planning",
-          "skill:stage-designer"
+          "skill:path-task-design"
         ],
         "internal": true,
         "accumulate": false,
@@ -1637,7 +1637,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "fieldId": "previousMilestone",
         "render": "hidden",
         "handoff": [
-          "skill:stage-designer"
+          "skill:path-task-design"
         ],
         "internal": true,
         "accumulate": false,
@@ -1680,7 +1680,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "render": "visible",
         "handoff": [
           "path-agent",
-          "skill:stage-designer"
+          "skill:path-task-design"
         ],
         "internal": false,
         "accumulate": true,
@@ -1695,7 +1695,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "render": "visible",
         "handoff": [
           "path-agent",
-          "skill:stage-designer"
+          "skill:path-task-design"
         ],
         "internal": false,
         "accumulate": true,
@@ -1709,7 +1709,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "fieldId": "milestones.coreConcept",
         "render": "visible",
         "handoff": [
-          "skill:stage-designer",
+          "skill:path-task-design",
           "path-agent"
         ],
         "internal": false,
@@ -1724,7 +1724,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "fieldId": "milestones.estimatedHours",
         "render": "visible",
         "handoff": [
-          "skill:stage-designer",
+          "skill:path-task-design",
           "path-agent"
         ],
         "internal": false,
@@ -1739,7 +1739,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "fieldId": "milestones.goal",
         "render": "visible",
         "handoff": [
-          "skill:stage-designer",
+          "skill:path-task-design",
           "path-agent"
         ],
         "internal": false,
@@ -1754,7 +1754,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "fieldId": "milestones.stageNumber",
         "render": "visible",
         "handoff": [
-          "skill:stage-designer",
+          "skill:path-task-design",
           "path-agent"
         ],
         "internal": false,
@@ -1769,7 +1769,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "fieldId": "milestones.title",
         "render": "visible",
         "handoff": [
-          "skill:stage-designer",
+          "skill:path-task-design",
           "path-agent"
         ],
         "internal": false,
@@ -1836,7 +1836,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:stage-designer",
+        "agentId": "skill:path-task-design",
         "fieldId": "subtasks.acceptanceCriteria",
         "render": "visible",
         "handoff": [
@@ -1850,7 +1850,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:stage-designer",
+        "agentId": "skill:path-task-design",
         "fieldId": "subtasks.cognitiveLevel",
         "render": "visible",
         "handoff": [
@@ -1864,7 +1864,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:stage-designer",
+        "agentId": "skill:path-task-design",
         "fieldId": "subtasks.estimatedMinutes",
         "render": "visible",
         "handoff": [
@@ -1878,7 +1878,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:stage-designer",
+        "agentId": "skill:path-task-design",
         "fieldId": "subtasks.knowledgeType",
         "render": "visible",
         "handoff": [
@@ -1892,7 +1892,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:stage-designer",
+        "agentId": "skill:path-task-design",
         "fieldId": "subtasks.linkedConcept",
         "render": "visible",
         "handoff": [
@@ -1906,7 +1906,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:stage-designer",
+        "agentId": "skill:path-task-design",
         "fieldId": "subtasks.title",
         "render": "visible",
         "handoff": [
@@ -1920,7 +1920,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:stage-designer",
+        "agentId": "skill:path-task-design",
         "fieldId": "subtasks.transferable",
         "render": "visible",
         "handoff": [
@@ -1934,7 +1934,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:stage-designer",
+        "agentId": "skill:path-task-design",
         "fieldId": "subtasks.type",
         "render": "visible",
         "handoff": [
@@ -2299,7 +2299,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
     ],
     "agents": [
       {
-        "agentId": "skill:peer-reinforcement",
+        "agentId": "skill:teaching-peer-reinforcement",
         "description": "同伴式引导讨论与理解补强"
       },
       {
@@ -2311,17 +2311,17 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "description": "生成单轮教学回复与结构化教学状态"
       },
       {
-        "agentId": "skill:adaptive-guidance-copy",
+        "agentId": "skill:profile-adaptive-copy",
         "description": "根据情境生成自适应引导话术"
       },
       {
-        "agentId": "skill:session-wrapup",
+        "agentId": "skill:teaching-wrapup",
         "description": "生成课后总结与评估"
       }
     ],
     "routings": [
       {
-        "agentId": "skill:adaptive-guidance-copy",
+        "agentId": "skill:profile-adaptive-copy",
         "fieldId": "emptyStateCopy",
         "render": "visible",
         "handoff": [
@@ -2335,7 +2335,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:adaptive-guidance-copy",
+        "agentId": "skill:profile-adaptive-copy",
         "fieldId": "headline",
         "render": "visible",
         "handoff": [
@@ -2349,7 +2349,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:adaptive-guidance-copy",
+        "agentId": "skill:profile-adaptive-copy",
         "fieldId": "nextStep",
         "render": "visible",
         "handoff": [
@@ -2363,7 +2363,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:adaptive-guidance-copy",
+        "agentId": "skill:profile-adaptive-copy",
         "fieldId": "paceHint",
         "render": "visible",
         "handoff": [
@@ -2377,7 +2377,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:adaptive-guidance-copy",
+        "agentId": "skill:profile-adaptive-copy",
         "fieldId": "pathHint",
         "render": "visible",
         "handoff": [
@@ -2391,7 +2391,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:adaptive-guidance-copy",
+        "agentId": "skill:profile-adaptive-copy",
         "fieldId": "subtitle",
         "render": "visible",
         "handoff": [
@@ -2405,7 +2405,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:adaptive-guidance-copy",
+        "agentId": "skill:profile-adaptive-copy",
         "fieldId": "todayActions",
         "render": "visible",
         "handoff": [
@@ -2419,7 +2419,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:adaptive-guidance-copy",
+        "agentId": "skill:profile-adaptive-copy",
         "fieldId": "warningCopy",
         "render": "visible",
         "handoff": [
@@ -2433,7 +2433,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:peer-reinforcement",
+        "agentId": "skill:teaching-peer-reinforcement",
         "fieldId": "followUpQuestions",
         "render": "visible",
         "handoff": [
@@ -2447,7 +2447,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:peer-reinforcement",
+        "agentId": "skill:teaching-peer-reinforcement",
         "fieldId": "message",
         "render": "visible",
         "handoff": [
@@ -2461,7 +2461,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:session-wrapup",
+        "agentId": "skill:teaching-wrapup",
         "fieldId": "evaluation.confidence",
         "render": "hidden",
         "handoff": [
@@ -2475,7 +2475,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:session-wrapup",
+        "agentId": "skill:teaching-wrapup",
         "fieldId": "evaluation.reasoning",
         "render": "hidden",
         "handoff": [
@@ -2489,7 +2489,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:session-wrapup",
+        "agentId": "skill:teaching-wrapup",
         "fieldId": "evaluation.sessionKtl",
         "render": "hidden",
         "handoff": [
@@ -2503,7 +2503,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:session-wrapup",
+        "agentId": "skill:teaching-wrapup",
         "fieldId": "evaluation.sessionLf",
         "render": "hidden",
         "handoff": [
@@ -2517,7 +2517,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:session-wrapup",
+        "agentId": "skill:teaching-wrapup",
         "fieldId": "evaluation.sessionLss",
         "render": "hidden",
         "handoff": [
@@ -2531,7 +2531,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:session-wrapup",
+        "agentId": "skill:teaching-wrapup",
         "fieldId": "summary.actionPlan",
         "render": "visible",
         "handoff": [
@@ -2545,7 +2545,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:session-wrapup",
+        "agentId": "skill:teaching-wrapup",
         "fieldId": "summary.evaluationHighlights",
         "render": "visible",
         "handoff": [
@@ -2559,7 +2559,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:session-wrapup",
+        "agentId": "skill:teaching-wrapup",
         "fieldId": "summary.keyTakeaways",
         "render": "visible",
         "handoff": [
@@ -2573,7 +2573,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:session-wrapup",
+        "agentId": "skill:teaching-wrapup",
         "fieldId": "summary.knowledgeItems",
         "render": "visible",
         "handoff": [
@@ -2587,7 +2587,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:session-wrapup",
+        "agentId": "skill:teaching-wrapup",
         "fieldId": "summary.knowledgeSummary",
         "render": "visible",
         "handoff": [
@@ -2601,7 +2601,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:session-wrapup",
+        "agentId": "skill:teaching-wrapup",
         "fieldId": "summary.learningEvaluation",
         "render": "visible",
         "handoff": [
@@ -2615,7 +2615,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:session-wrapup",
+        "agentId": "skill:teaching-wrapup",
         "fieldId": "summary.metricInterpretation",
         "render": "hidden",
         "handoff": [
@@ -2629,7 +2629,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:session-wrapup",
+        "agentId": "skill:teaching-wrapup",
         "fieldId": "summary.practiceAdvice",
         "render": "visible",
         "handoff": [
@@ -2643,7 +2643,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:session-wrapup",
+        "agentId": "skill:teaching-wrapup",
         "fieldId": "summary.summaryVersion",
         "render": "hidden",
         "handoff": [
@@ -2657,7 +2657,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "notes": null
       },
       {
-        "agentId": "skill:session-wrapup",
+        "agentId": "skill:teaching-wrapup",
         "fieldId": "summary.topicSummary",
         "render": "visible",
         "handoff": [
@@ -2676,7 +2676,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "render": "hidden",
         "handoff": [
           "teaching-agent",
-          "skill:peer-reinforcement"
+          "skill:teaching-peer-reinforcement"
         ],
         "internal": false,
         "accumulate": true,
@@ -2747,7 +2747,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "render": "hidden",
         "handoff": [
           "teaching-agent",
-          "skill:peer-reinforcement"
+          "skill:teaching-peer-reinforcement"
         ],
         "internal": false,
         "accumulate": true,
@@ -2803,7 +2803,7 @@ export const fixtureDetails: Record<string, StageDetailLike> = {
         "fieldId": "control.shouldTriggerPeer",
         "render": "visible",
         "handoff": [
-          "skill:peer-reinforcement",
+          "skill:teaching-peer-reinforcement",
           "teaching-agent"
         ],
         "internal": false,

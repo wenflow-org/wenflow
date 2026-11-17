@@ -1,13 +1,13 @@
 import { buildFramedNormalizedInput } from '../path-planning-hints';
 import { buildPromptFriendlyNormalizedInput } from '../../../skills/path-planning';
-import { stripNestedMaterials } from '../../../skills/stage-designer';
+import { stripNestedMaterials } from '../../../skills/path-task-design';
 
 /**
  * #242 回归：skillNature / platformJudgment 在定帧层被整键删除。
  *
  * 现象：goal 层已判定这两个键（`goalFinalPayload.visibleSummary` 里确有），但
  * `framed.learnerProfile` 里它们为 undefined、`hasOwnProperty` 为 false，
- * 于是 path-planning 与 stage-designer 的完整载荷里一次都读不到。
+ * 于是 path-planning 与 path-task-design 的完整载荷里一次都读不到。
  *
  * 根因（同一提交 558d50e4 一次性引入）：producer `path.coordinator.ts:403-430` 写**内层**
  * `learnerProfile.skillNature / platformJudgment`，定帧层却读**顶层** `input.skillNature`
@@ -119,8 +119,8 @@ describe('#242 下游载荷：path-planning 提示词投影也必须带出这两
   });
 });
 
-describe('#242 端到端：stage-designer 的载荷装配（stripNestedMaterials）后仍读得到', () => {
-  it('定帧输出 → stage-designer 载荷 → learnerProfile.platformJudgment 可见', () => {
+describe('#242 端到端：path-task-design 的载荷装配（stripNestedMaterials）后仍读得到', () => {
+  it('定帧输出 → path-task-design 载荷 → learnerProfile.platformJudgment 可见', () => {
     const framed = buildFramedNormalizedInput({
       version: '1.0',
       learnerProfile: {
@@ -131,7 +131,7 @@ describe('#242 端到端：stage-designer 的载荷装配（stripNestedMaterials
       },
       resources: { materials: [{ title: 'a' }] },
     });
-    // stage-designer 的 buildUserPayload 走 stripNestedMaterials(payload.normalizedInput)
+    // path-task-design 的 buildUserPayload 走 stripNestedMaterials(payload.normalizedInput)
     const delivered = stripNestedMaterials(framed);
     expect(delivered.learnerProfile.skillNature).toBe('physical_internalized');
     expect(delivered.learnerProfile.platformJudgment).toBe('not_judgeable');

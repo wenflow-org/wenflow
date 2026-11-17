@@ -16,7 +16,7 @@ const mockClaimOperation = jest.fn();
 const mockCommitTurnState = jest.fn();
 const mockReleaseOperation = jest.fn();
 const mockExecuteSkill = jest.fn();
-const mockPeerDefinition = { id: 'skill:peer-reinforcement', __kind: 'peer' };
+const mockPeerDefinition = { id: 'skill:teaching-peer-reinforcement', __kind: 'peer' };
 const mockTurnDefinition = { id: 'skill:teaching-turn', __kind: 'teaching-turn' };
 
 jest.mock('../../../config/database', () => ({

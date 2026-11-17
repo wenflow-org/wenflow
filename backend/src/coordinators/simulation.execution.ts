@@ -794,7 +794,7 @@ export async function executeSingleStep(ctx: SimulationOrchestrator, input: Simu
           systemPromptOverrides: getSessionPromptOverrides(session),
           // 平台硬规则：proposing 阶段只有显式确认动作才会收束并触发 Path 生成。
           // 确认信号归学习者自己（2026-11-07 用户裁定）：模拟器在判断方案可行时用自己的
-          // 口吻把确认说出来（提示词真源 virtual-learner-goal-dialogue-simulator.yaml），
+          // 口吻把确认说出来（提示词真源 simulation-goal-dialogue.yaml），
           // 后端按确认文本判定——按钮 flag 直通 / 打字走 goal-confirm-adjudicator 裁决
           //（goal-conversation 侧已上线并经真机验证）。协调器不再按 readyToAdvance 代发：
           // 双方互为黑盒，agent 只认学习者实际说出的话。

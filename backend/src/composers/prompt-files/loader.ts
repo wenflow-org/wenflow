@@ -13,7 +13,7 @@
  * （agentId / 参数等），正文为 systemPrompt。
  *
  * 文件命名：agentId 中的冒号(:)在文件名中用点(.)替代，
- * 例如 agentId "skill:peer-reinforcement" -> 文件 "skill.peer-reinforcement.md"
+ * 例如 agentId "skill:teaching-peer-reinforcement" -> 文件 "skill.teaching-peer-reinforcement.md"
  * 但 frontmatter 中的 agentId 字段才是权威标识。
  */
 

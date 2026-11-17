@@ -10,8 +10,8 @@ description: 授课执行：Teaching Turn → Peer/Checkpoint → Wrapup
 
 contracts:
   - agentId: skill:teaching-turn
-  - agentId: skill:peer-reinforcement
-  - agentId: skill:session-wrapup
+  - agentId: skill:teaching-peer-reinforcement
+  - agentId: skill:teaching-wrapup
   - agentId: teaching-agent
 
 fields:
@@ -158,9 +158,9 @@ fields:
     valueType: object
     pathInRawOutput: teachingState.classroomContext
     description: 课堂上下文（上轮持久化）
-  # #185 调用归属：教学链在 teaching-agent 作用域内直调**画像阶段**的 learning-predictor
+  # #185 调用归属：教学链在 teaching-agent 作用域内直调**画像阶段**的 profile-learning-predict
   # （TeachingContextBuilder.buildLearnerPrediction，入参 knowledgeStateSummary），
-  # 运行日志因此记为 teaching-agent → skill:learning-predictor；本行声明该调用通道。
+  # 运行日志因此记为 teaching-agent → skill:profile-learning-predict；本行声明该调用通道。
   - fieldId: knowledgeStateSummary
     promptRole: soft-info
     valueType: string
@@ -181,7 +181,7 @@ fields:
   # 三者的沙盘引用声明在 core inputs（prompts/core/teaching-turn.yaml，ref sandbox:teaching.*）与
   # 沙盘键注册表（services/agent-contract-view.ts 的 SANDBOX_EXTRA_KEYS），门禁 prompts:check-handoff 据此对账。
 
-  # === skill:peer-reinforcement 产出 ===
+  # === skill:teaching-peer-reinforcement 产出 ===
   - fieldId: message
     promptRole: public-reply
     valueType: string
@@ -193,7 +193,7 @@ fields:
   # 注：definition.ts outputSchema 另有 strategy（required）——那是编排层所选策略的**代码回显**
   # （core 提示词不要求模型输出该字段），不属 LLM 产出契约，故不在此声明。
 
-  # === skill:session-wrapup 产出 ===
+  # === skill:teaching-wrapup 产出 ===
   - fieldId: summary.topicSummary
     promptRole: public-reply
     valueType: string
@@ -260,7 +260,7 @@ routings:
   - agentId: skill:teaching-turn
     fieldId: reply
     render: visible
-    handoff: [teaching-agent, skill:peer-reinforcement] # reply 原文同链交付伴学（tutorLatestReply）
+    handoff: [teaching-agent, skill:teaching-peer-reinforcement] # reply 原文同链交付伴学（tutorLatestReply）
     internal: false
     accumulate: false
   - agentId: skill:teaching-turn
@@ -381,18 +381,18 @@ routings:
     internal: false
     accumulate: false
     notes: 位置线图（空间/序关系确定性渲染）
-  # cognitiveLevel/understanding 同链交付 peer（peer-reinforcement 消费）
+  # cognitiveLevel/understanding 同链交付 peer（teaching-peer-reinforcement 消费）
   - agentId: skill:teaching-turn
     fieldId: analysis.cognitiveLevel
     render: hidden
-    handoff: [teaching-agent, skill:peer-reinforcement]
+    handoff: [teaching-agent, skill:teaching-peer-reinforcement]
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
   - agentId: skill:teaching-turn
     fieldId: analysis.understanding
     render: hidden
-    handoff: [teaching-agent, skill:peer-reinforcement]
+    handoff: [teaching-agent, skill:teaching-peer-reinforcement]
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
@@ -427,7 +427,7 @@ routings:
     handoff: [teaching-agent]
     internal: false
     accumulate: false
-    notes: 触发 peer 流程的信号。由 teaching-agent 的 PeerTriggerService 读取后决定是否调起伴学；peer-reinforcement 的实参（peerInput）不含 control，故不声明为向 skill:peer-reinforcement 的直接交接（#199 实参对账）
+    notes: 触发 peer 流程的信号。由 teaching-agent 的 PeerTriggerService 读取后决定是否调起伴学；teaching-peer-reinforcement 的实参（peerInput）不含 control，故不声明为向 skill:teaching-peer-reinforcement 的直接交接（#199 实参对账）
   - agentId: skill:teaching-turn
     fieldId: control.checkpoint
     render: visible
@@ -478,28 +478,28 @@ routings:
     visibilityPreset: agent-internal
     notes: 回合输入通道（AITeachingOrchestrator 组装注入）
 
-  # teaching-agent → skill:learning-predictor 输入通道（#185 调用归属）。
+  # teaching-agent → skill:profile-learning-predict 输入通道（#185 调用归属）。
   # 预测器静态归属 profile-agent，但真实调用方是**教学链**（teaching-agent 作用域，
   # TeachingContextBuilder.buildLearnerPrediction）；此前编排侧没有任何声明，
-  # audit-handoff-edges 把运行日志里的 teaching-agent → skill:learning-predictor 判成「幽灵边」。
+  # audit-handoff-edges 把运行日志里的 teaching-agent → skill:profile-learning-predict 判成「幽灵边」。
   # 本行即该调用边的声明：知识状态摘要由 teaching-agent 交给预测器做任务前预测。
   - agentId: teaching-agent
     fieldId: knowledgeStateSummary
     render: hidden
-    handoff: [skill:learning-predictor]
+    handoff: [skill:profile-learning-predict]
     internal: true
     accumulate: false
     visibilityPreset: agent-internal
     notes: 任务前学习表现预测输入（TeachingContextBuilder 注入；#185 调用归属）
 
-  # peer-reinforcement 输出
-  - agentId: skill:peer-reinforcement
+  # teaching-peer-reinforcement 输出
+  - agentId: skill:teaching-peer-reinforcement
     fieldId: message
     render: visible
     handoff: [teaching-agent]
     internal: false
     accumulate: false
-  - agentId: skill:peer-reinforcement
+  - agentId: skill:teaching-peer-reinforcement
     fieldId: followUpQuestions
     render: visible
     handoff: [teaching-agent]
@@ -507,98 +507,98 @@ routings:
     accumulate: false
   # strategy（peer 输出里的代码回显）不路由：非 LLM 产出，见 fields 区注记
 
-  # session-wrapup 输出
-  - agentId: skill:session-wrapup
+  # teaching-wrapup 输出
+  - agentId: skill:teaching-wrapup
     fieldId: summary.topicSummary
     render: visible
     handoff: [teaching-agent]
     internal: false
     accumulate: true
-  - agentId: skill:session-wrapup
+  - agentId: skill:teaching-wrapup
     fieldId: summary.knowledgeSummary
     render: visible
     handoff: [teaching-agent]
     internal: false
     accumulate: true
-  - agentId: skill:session-wrapup
+  - agentId: skill:teaching-wrapup
     fieldId: summary.knowledgeItems
     render: visible
     handoff: [teaching-agent]
     internal: false
     accumulate: true
-  - agentId: skill:session-wrapup
+  - agentId: skill:teaching-wrapup
     fieldId: summary.learningEvaluation
     render: visible
     handoff: [teaching-agent]
     internal: false
     accumulate: true
-  - agentId: skill:session-wrapup
+  - agentId: skill:teaching-wrapup
     fieldId: summary.practiceAdvice
     render: visible
     handoff: [teaching-agent]
     internal: false
     accumulate: true
-  - agentId: skill:session-wrapup
+  - agentId: skill:teaching-wrapup
     fieldId: summary.keyTakeaways
     render: visible
     handoff: [teaching-agent]
     internal: false
     accumulate: true
-  - agentId: skill:session-wrapup
+  - agentId: skill:teaching-wrapup
     fieldId: summary.actionPlan
     render: visible
     handoff: [teaching-agent]
     internal: false
     accumulate: true
-  - agentId: skill:session-wrapup
+  - agentId: skill:teaching-wrapup
     fieldId: summary.evaluationHighlights
     render: visible
     handoff: [teaching-agent]
     internal: false
     accumulate: true
-  - agentId: skill:session-wrapup
+  - agentId: skill:teaching-wrapup
     fieldId: summary.metricInterpretation
     render: hidden
     handoff: [teaching-agent]
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
-  - agentId: skill:session-wrapup
+  - agentId: skill:teaching-wrapup
     fieldId: summary.summaryVersion
     render: hidden
     handoff: [teaching-agent]
     internal: false
     accumulate: false
     visibilityPreset: agent-internal
-  - agentId: skill:session-wrapup
+  - agentId: skill:teaching-wrapup
     fieldId: evaluation.sessionLss
     render: hidden
     handoff: [teaching-agent]
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
-  - agentId: skill:session-wrapup
+  - agentId: skill:teaching-wrapup
     fieldId: evaluation.sessionKtl
     render: hidden
     handoff: [teaching-agent]
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
-  - agentId: skill:session-wrapup
+  - agentId: skill:teaching-wrapup
     fieldId: evaluation.sessionLf
     render: hidden
     handoff: [teaching-agent]
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
-  - agentId: skill:session-wrapup
+  - agentId: skill:teaching-wrapup
     fieldId: evaluation.confidence
     render: hidden
     handoff: [teaching-agent]
     internal: false
     accumulate: true
     visibilityPreset: agent-internal
-  - agentId: skill:session-wrapup
+  - agentId: skill:teaching-wrapup
     fieldId: evaluation.reasoning
     render: hidden
     handoff: [teaching-agent]

@@ -37,27 +37,27 @@ export const FIELD_LINEAGE: FieldLineageEntry[] = [
   // 供反馈归因取本轮策略；课堂页只展示 peerStrategy（同伴策略），两者不是同一字段。
   { skillId: 'teaching-turn', field: 'pedagogy', consumers: ['backend: feedback-collection.service（策略归因，取 message.strategies[0]）', 'backend: AITeachingCoordinator（随消息落库，供审计脚本 inspect-strategy-*）'] },
   { skillId: 'teaching-turn', field: 'control', consumers: ['backend: AITeachingCoordinator（课堂收束判断）', 'backend: peerTriggerService.shouldTrigger（同伴触发）'] },
-  // session-wrapup
-  { skillId: 'session-wrapup', field: 'summary', consumers: ['frontend: CompletionCard.vue', 'backend: learner.coordinator / LessonKnowledgeEnrichmentConsumer（回灌蒸馏器）'] },
-  { skillId: 'session-wrapup', field: 'evaluation', consumers: ['backend: AITeachingCoordinator.endSession（持久化）', 'frontend: LearningEvaluationPage.vue'] },
-  // peer-reinforcement
-  { skillId: 'peer-reinforcement', field: 'message', consumers: ['frontend: LearningPage.vue（peerMessage）'] },
-  { skillId: 'peer-reinforcement', field: 'followUpQuestions', consumers: ['frontend: LearningPage.vue'] },
-  // adaptive-guidance-copy
-  { skillId: 'adaptive-guidance-copy', field: '*', consumers: ['frontend: Dashboard.vue（引导文案）', 'frontend: V2Dashboard.vue（nextStep）'] },
+  // teaching-wrapup
+  { skillId: 'teaching-wrapup', field: 'summary', consumers: ['frontend: CompletionCard.vue', 'backend: learner.coordinator / LessonKnowledgeEnrichmentConsumer（回灌蒸馏器）'] },
+  { skillId: 'teaching-wrapup', field: 'evaluation', consumers: ['backend: AITeachingCoordinator.endSession（持久化）', 'frontend: LearningEvaluationPage.vue'] },
+  // teaching-peer-reinforcement
+  { skillId: 'teaching-peer-reinforcement', field: 'message', consumers: ['frontend: LearningPage.vue（peerMessage）'] },
+  { skillId: 'teaching-peer-reinforcement', field: 'followUpQuestions', consumers: ['frontend: LearningPage.vue'] },
+  // profile-adaptive-copy
+  { skillId: 'profile-adaptive-copy', field: '*', consumers: ['frontend: Dashboard.vue（引导文案）', 'frontend: V2Dashboard.vue（nextStep）'] },
   // 蒸馏/抽取家族（后台消费，无前端直接绑定）
-  { skillId: 'lesson-knowledge-enricher', field: '*', consumers: ['backend: LessonKnowledgeEnrichmentConsumer（learner_evidence 表）'] },
+  { skillId: 'profile-lesson-enrich', field: '*', consumers: ['backend: LessonKnowledgeEnrichmentConsumer（learner_evidence 表）'] },
   // path 家族
   { skillId: 'path-planning', field: '*', consumers: ['backend: learning.service persistGeneratedPath（learning_paths/milestones 表）', 'frontend: LearningPaths.vue / LearningPathDetail.vue（间接）'] },
-  { skillId: 'stage-designer', field: 'subtasks', consumers: ['backend: learning.service（subtasks.create / replan 重建）', 'frontend: LearningPathDetail.vue（间接）'] },
+  { skillId: 'path-task-design', field: 'subtasks', consumers: ['backend: learning.service（subtasks.create / replan 重建）', 'frontend: LearningPathDetail.vue（间接）'] },
   // virtual-learner 家族
-  { skillId: 'virtual-learner-goal-dialogue-simulator', field: '*', consumers: ['backend: simulation.coordinator（stageResults.goal）'] },
-  { skillId: 'virtual-learner-learn-turn-simulator', field: '*', consumers: ['backend: simulation.coordinator（stageResults.teaching）'] },
-  { skillId: 'virtual-learner-path-evaluator', field: '*', consumers: ['backend: simulation.coordinator（stageResults.path_review）'] },
-  { skillId: 'virtual-learner-persona-designer', field: 'personaSeed', consumers: ['backend: admin virtual-learners 路由（persona 持久化）'] },
-  { skillId: 'virtual-learner-scenario-designer', field: '*', consumers: ['backend: admin virtual-learners 路由'] },
-  { skillId: 'virtual-learner-referee', field: '*', consumers: ['backend: blackbox-runner（refereeReports）', 'frontend: SessionCockpit.vue / MockSessionCockpit.vue'] },
-  { skillId: 'virtual-learner-actor-auditor', field: '*', consumers: ['backend: blackbox-runner（actorAuditReports）', 'frontend: SessionCockpit.vue'] },
+  { skillId: 'simulation-goal-dialogue', field: '*', consumers: ['backend: simulation.coordinator（stageResults.goal）'] },
+  { skillId: 'simulation-learn-turn', field: '*', consumers: ['backend: simulation.coordinator（stageResults.teaching）'] },
+  { skillId: 'simulation-path-evaluate', field: '*', consumers: ['backend: simulation.coordinator（stageResults.path_review）'] },
+  { skillId: 'simulation-persona-designer', field: 'personaSeed', consumers: ['backend: admin virtual-learners 路由（persona 持久化）'] },
+  { skillId: 'simulation-scenario-designer', field: '*', consumers: ['backend: admin virtual-learners 路由'] },
+  { skillId: 'simulation-referee', field: '*', consumers: ['backend: blackbox-runner（refereeReports）', 'frontend: SessionCockpit.vue / MockSessionCockpit.vue'] },
+  { skillId: 'simulation-actor-audit', field: '*', consumers: ['backend: blackbox-runner（actorAuditReports）', 'frontend: SessionCockpit.vue'] },
 ];
 
 /** 查询某 skill 的血缘条目（文件优先，静态表兜底；按 mtime 缓存） */

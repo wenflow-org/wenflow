@@ -14,7 +14,7 @@ import { fetchWeb } from '../fetch';
 import { findWebRecordByTitle, ingestWebMaterial } from '../materials/material-web-ingest.service';
 import { extractSectionWindow } from '../materials/material-sections';
 import { readMaterial } from '../materials/material-store';
-import { rankSources, selectDiversifiedSources } from '../../skills/material-collector';
+import { rankSources, selectDiversifiedSources } from '../../skills/path-material-collect';
 
 /** 补充窗口上限（课堂上下文预算紧，正文截 1200 字）。 */
 export const SUPPLEMENT_EXCERPT_CHARS = 1200;
@@ -70,7 +70,7 @@ export async function fetchSupplementMaterial(
     }
 
     // ② 搜索 → 选源与备课采集**同源裁决**（2026-09-26）：此前只有 4 条内联黑名单、按位置抓前 3 条，
-    //    来源质量明显低于 material-collector 链；现在复用 rankSources（tier 分级 + 完整黑名单），
+    //    来源质量明显低于 path-material-collect 链；现在复用 rankSources（tier 分级 + 完整黑名单），
     //    preferDocuments=false（补充要的是可读讲解页，不是 PDF 原文）+ 同 host ≤2 防同站占满候选。
     const search = await deps.searchWeb({ query: trimmedQuery, maxResults: 5 });
     const candidates = selectDiversifiedSources(rankSources(search?.results || [], { preferDocuments: false }), {

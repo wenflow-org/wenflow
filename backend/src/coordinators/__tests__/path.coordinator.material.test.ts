@@ -37,13 +37,13 @@ jest.mock('../../services/search', () => ({ searchWeb: jest.fn() }))
 jest.mock('../../services/fetch', () => ({ fetchWeb: jest.fn() }))
 
 // 只 mock 采集入口；hasMaterialNeed 用真实实现（验证早退判定语义）
-jest.mock('../../skills/material-collector', () => ({
-  ...jest.requireActual('../../skills/material-collector'),
+jest.mock('../../skills/path-material-collect', () => ({
+  ...jest.requireActual('../../skills/path-material-collect'),
   collectMaterialForGoal: jest.fn(),
 }))
 
 import pathOrchestrator from '../path.coordinator'
-import { collectMaterialForGoal } from '../../skills/material-collector'
+import { collectMaterialForGoal } from '../../skills/path-material-collect'
 import { logger } from '../../utils/logger'
 
 const collectMock = collectMaterialForGoal as jest.Mock

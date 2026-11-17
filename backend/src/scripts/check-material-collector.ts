@@ -1,8 +1,8 @@
 /**
- * material:check —— material-collector 的**真跑**冒烟（真实 search / fetch / LLM，不走 mock）。
+ * material:check —— path-material-collect 的**真跑**冒烟（真实 search / fetch / LLM，不走 mock）。
  *
  * 用法：
- *   cd backend && npx ts-node --transpile-only src/scripts/check-material-collector.ts
+ *   cd backend && npx ts-node --transpile-only src/scripts/check-path-material-collect.ts
  *
  * 目的：用真实案例回答"网络搜索/抓取接进 goal→path 后到底能不能拿到可引用的资料"。
  * 重点看两件事：
@@ -11,7 +11,7 @@
  */
 
 import 'dotenv/config';
-import { collectMaterialPack, type MaterialPackResult } from '../skills/material-collector';
+import { collectMaterialPack, type MaterialPackResult } from '../skills/path-material-collect';
 
 interface Case {
   label: string;

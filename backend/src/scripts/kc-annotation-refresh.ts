@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- 探针/测试：LLM I/O 与 JSON 载荷形状内在动态（对齐 verify-from-zero 先例） */
 /* eslint-disable no-console -- 一次性回填 CLI：KC 重标注 */
 /**
- * KC 重标注（用**当前已发布**的 kc-mapper 契约重跑既有路径）。
+ * KC 重标注（用**当前已发布**的 path-kc-mapping 契约重跑既有路径）。
  *
- * 为什么需要它：kc-mapper 契约改了（KC 从"任务流程的步骤"改成"可独立习得的能力单元"，见
+ * 为什么需要它：path-kc-mapping 契约改了（KC 从"任务流程的步骤"改成"可独立习得的能力单元"，见
  * commit fe82ad5e），但既有路径的 `kcAnnotation` 还是旧契约产物，只影响新生成的路径。
  *
  * ⚠️ **身份断裂风险**（实测）：新旧 KC 名**完全同名交集 = 0**，物化时经概念注册表解析会生成

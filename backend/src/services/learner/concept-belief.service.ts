@@ -2,7 +2,7 @@
  * 概念信念服务（Slice 3a）：零训练、可配置参数的 BKT 时序更新。
  *
  * 设计约束（doc/LEARNER_STATE_REVIEW_DESIGN.md §6）：不训练模型。
- * - 观测来自 LLM 诊断（learner-state-review 的 conceptAssessments.observed：mastered|not）
+ * - 观测来自 LLM 诊断（profile-state-review 的 conceptAssessments.observed：mastered|not）
  * - 代码用 BKT 公式做时序信念更新（4 个可配置标量，按需分档）
  * - 落 `learner_projections`（scope='beliefs'），按 (userId, pathId) 幂等
  *

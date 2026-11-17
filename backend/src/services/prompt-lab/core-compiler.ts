@@ -123,7 +123,7 @@ export function compileCoreFile(core: CoreFile, options: CompileCoreOptions = {}
 
   // ## 使用通道（state 通道始终显式标注 stateAdvance 控制语义：可推进 / 不推进）
   // 只在 true 时标注会让 30 个 stateAdvance:false 的核心文件把该控制语义整块丢掉，
-  // 语义冻结判官据此判「核心文件有、产物无」→ divergent，阻断发布（2026-10-26 实证 stage-designer v56）。
+  // 语义冻结判官据此判「核心文件有、产物无」→ divergent，阻断发布（2026-10-26 实证 path-task-design v56）。
   const channelLines = core.channels.map((channel) => {
     const advance = channel === 'state' ? (core.stateAdvance ? '（可推进）' : '（不推进）') : '';
     return `- ${channel}${advance}：${CORE_CHANNEL_DESCRIPTIONS[channel]}`;

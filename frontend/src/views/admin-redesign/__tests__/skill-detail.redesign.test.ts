@@ -591,7 +591,7 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
   })
 
   it('#15 试跑输入按 core 输入契约生成默认载荷（唯一入口在 TrialTab）', async () => {
-    // stage-designer 的真实契约：milestone / cognitiveCore 必填，其余可选
+    // path-task-design 的真实契约：milestone / cognitiveCore 必填，其余可选
     coreMock.mockResolvedValue({
       data: {
         core: {
@@ -750,7 +750,7 @@ describe('SkillDetail 详情页（renderSkillDetail 落点）', () => {
     w.unmount()
   })
 
-  /* 2026-11-11 走查（lesson-knowledge-enricher）：6 个产出字段的「流向」全是 —、
+  /* 2026-11-11 走查（profile-lesson-enrich）：6 个产出字段的「流向」全是 —、
      「渲染」全是隐藏、「内部/累积」全空——三列逐行复读同一个空值，说明列被挤窄。
      与「脱敏列无数据就不出列」同一判例：整列没有信息量就省略。 */
   it('字段流向表：全表同值时省略空列（流向 / 渲染 / 属性），渲染全隐藏只在卡头说一次', async () => {

@@ -99,8 +99,8 @@ router.get('/', async (req, res) => {
 
 /**
  * 「允许平台默认」白名单（拍板 #9，2026-10-08）：近 30 天调用真 0 的 4 个技能
- * （skill-author/skill-compiler=入口已下线的工作台元技能；virtual-learner-referee/
- * virtual-learner-actor-auditor=手动触发的 VL 审计技能），补配置行只会制造
+ * （skill-author/skill-compiler=入口已下线的工作台元技能；simulation-referee/
+ * simulation-actor-audit=手动触发的 VL 审计技能），补配置行只会制造
  * 0 调用的新漂移点，故登记在此、不计入 unconfigured——skills 列表仍完整可见（审计可见性保留）。
  * 若未来其中某个进入高频主链，应先补配置行再把它移出本名单（09-28「漏配静默落旧通道」
  * 教训只针对高频主链技能）。
@@ -108,8 +108,8 @@ router.get('/', async (req, res) => {
 const PLATFORM_DEFAULT_ALLOWLIST: readonly string[] = [
   'skill-author',
   'skill-compiler',
-  'virtual-learner-referee',
-  'virtual-learner-actor-auditor',
+  'simulation-referee',
+  'simulation-actor-audit',
 ];
 
 /**

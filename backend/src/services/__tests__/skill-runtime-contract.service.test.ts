@@ -372,13 +372,13 @@ describe('skill-runtime-contract.service', () => {
         { userPayload: '{"milestone":{"title":"并发基础"}}', createdAt: new Date('2026-10-31') },
       ])
 
-      const sample = await getSkillSampleInput('stage-designer')
+      const sample = await getSkillSampleInput('path-task-design')
 
       expect(sample?.origin).toBe('real-call')
       expect(JSON.parse(sample!.json)).toEqual({ milestone: { title: '并发基础' } })
       // 查询按 skill 前缀 + 裸 id 两种落库形态一起找，只要成功行
       const where = mockPromptFindMany.mock.calls[0][0].where
-      expect(where.agentId.in).toEqual(['skill:stage-designer', 'stage-designer'])
+      expect(where.agentId.in).toEqual(['skill:path-task-design', 'path-task-design'])
       expect(where.success).toBe(true)
     })
 
@@ -389,12 +389,12 @@ describe('skill-runtime-contract.service', () => {
         { userPayload: '[1,2,3]', createdAt: new Date() },
       ])
 
-      expect(await getSkillSampleInput('stage-designer')).toBeNull()
+      expect(await getSkillSampleInput('path-task-design')).toBeNull()
     })
 
     it('查询抛错时返回 null，不把便利功能变成新的错误面', async () => {
       mockPromptFindMany.mockRejectedValue(new Error('db down'))
-      expect(await getSkillSampleInput('stage-designer')).toBeNull()
+      expect(await getSkillSampleInput('path-task-design')).toBeNull()
     })
 
     /* 2026-11-09 走查修复：库里存在「演示/探针行」——`seedpcl_*` 把 {"seed":true,"step":N}

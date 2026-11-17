@@ -14,9 +14,9 @@ import SkillModelCoverage from '../SkillModelCoverage.vue'
 import { chooseFilter, filterOption, filterOptions } from './filter-controls';
 
 const ROWS = [
-  { skillId: 'stage-designer', endpoint: null, model: null, tier: 'chat', source: 'platform-default', paramOverrides: null },
+  { skillId: 'path-task-design', endpoint: null, model: null, tier: 'chat', source: 'platform-default', paramOverrides: null },
   { skillId: 'teaching-turn', endpoint: null, model: 'deepseek-v4.1-flash', tier: 'chat', source: 'skill-model-only', paramOverrides: { temperature: 0.3 } },
-  { skillId: 'session-wrapup', endpoint: 'http://10.0.0.1:30001', model: 'agnes-3.0-flash', tier: 'chat', source: 'skill-channel', paramOverrides: null },
+  { skillId: 'teaching-wrapup', endpoint: 'http://10.0.0.1:30001', model: 'agnes-3.0-flash', tier: 'chat', source: 'skill-channel', paramOverrides: null },
   { skillId: 'path-planner', endpoint: null, model: null, tier: 'reasoning', source: 'platform-default', paramOverrides: null }
 ]
 
@@ -81,13 +81,13 @@ describe('SkillModelCoverage · 来源筛选与下钻', () => {
   it('来源 pill 收窄表格；计数保持不变（筛的是视图不是数据）', async () => {
     const w = await mountCoverage()
     await chooseFilter(w as never, '来源', '独立通道')
-    expect(skillIds(w)).toEqual(['session-wrapup'])
+    expect(skillIds(w)).toEqual(['teaching-wrapup'])
     expect(w.find('.mk-card__meta').text()).toContain('命中 1 / 共 4')
     expect(filterOption(w as never, '来源', '用平台默认').text()).toBe('用平台默认（2）')
 
     // 叠加搜索：独立通道 ∧ 命中关键字
     await w.find('.mk-filter__input').setValue('agnes')
-    expect(skillIds(w)).toEqual(['session-wrapup'])
+    expect(skillIds(w)).toEqual(['teaching-wrapup'])
     await w.find('.mk-filter__input').setValue('deepseek')
     expect(skillIds(w)).toEqual([])
     w.unmount()
@@ -142,7 +142,7 @@ describe('SkillModelCoverage · 来源筛选与下钻', () => {
     const w = await mountCoverage({ platformDefaultModel: 'agnes-3.0-flash' })
     const cells = w.findAll('.skc__model')
     const inherited = cells.filter((c) => c.text().includes('平台默认'))
-    // stage-designer（chat）与 path-planner（reasoning）两行都用同一个平台默认
+    // path-task-design（chat）与 path-planner（reasoning）两行都用同一个平台默认
     expect(inherited).toHaveLength(2)
     expect(inherited[0].text()).toContain('agnes-3.0-flash')
     // 2026-11-04：平台只有一个默认，推理档不再走另一个模型

@@ -304,8 +304,8 @@ describe('coverage 覆盖矩阵（拍板 #9：平台默认白名单）', () => {
         { agentId: 'skill:goal-conversation' },
         { agentId: 'skill:skill-author' },
         { agentId: 'skill:skill-compiler' },
-        { agentId: 'skill:virtual-learner-referee' },
-        { agentId: 'skill:virtual-learner-actor-auditor' },
+        { agentId: 'skill:simulation-referee' },
+        { agentId: 'skill:simulation-actor-audit' },
       ],
     })
     // 只有 goal-conversation 有配置行；白名单 4 技能全部 platform-default
@@ -321,7 +321,7 @@ describe('coverage 覆盖矩阵（拍板 #9：平台默认白名单）', () => {
     expect(payload.success).toBe(true)
     expect(payload.data.unconfigured).toEqual([])
     expect(payload.data.allowlisted).toEqual([
-      'skill-author', 'skill-compiler', 'virtual-learner-actor-auditor', 'virtual-learner-referee',
+      'simulation-actor-audit', 'simulation-referee', 'skill-author', 'skill-compiler',
     ])
     // skills 列表仍含全部 5 个（白名单成员可见，source 仍如实标 platform-default）
     const byId = new Map<string, any>(payload.data.skills.map((s: any) => [s.skillId, s]))

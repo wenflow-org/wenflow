@@ -7,7 +7,7 @@ import {
   sessionEvaluationTierToValue,
 } from '../session-evaluation-scale';
 
-describe('session-evaluation-scale：档位→数值的唯一映射（来源 = session-wrapup 锚点表）', () => {
+describe('session-evaluation-scale：档位→数值的唯一映射（来源 = teaching-wrapup 锚点表）', () => {
   it('锚点表覆盖 1-4 / 5-7 / 8-10 连续三档', () => {
     expect(SESSION_EVALUATION_TIERS).toEqual(['low', 'mid', 'high']);
     expect(SESSION_EVALUATION_TIER_ANCHORS.map((a) => [a.min, a.max])).toEqual([

@@ -503,7 +503,7 @@ export function collectPeerHistory(
 }
 
 /**
- * 伴学策略（peer-reinforcement 规则的"手法"）由**代码**按认知层级选定。
+ * 伴学策略（teaching-peer-reinforcement 规则的"手法"）由**代码**按认知层级选定。
  *
  * 断链修复（审计 §3.19 P0②）：此前两处调用都硬编码 `strategy: 'feynman'`，
  * 使 skill 规则 38「understand→类比 / apply→反例边界 / analyze+→辩论费曼」永不触发。
@@ -538,7 +538,7 @@ export function computeSessionEvidence(session: TeachingSessionRecord) {  // 排
   const engagementScores = analyzedMessages
     .map((message) => Number(message.analysis?.engagement))
     .filter((value) => Number.isFinite(value));
-  // 认知负荷：session-wrapup 的规则声明了"loadIndex 均值与峰值"，但此前从未提供（审计 §3.19 P0③）
+  // 认知负荷：teaching-wrapup 的规则声明了"loadIndex 均值与峰值"，但此前从未提供（审计 §3.19 P0③）
   const loadIndexScores = analyzedMessages
     .map((message) => Number(message.analysis?.loadIndex))
     .filter((value) => Number.isFinite(value));

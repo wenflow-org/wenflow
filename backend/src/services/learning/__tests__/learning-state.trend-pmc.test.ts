@@ -32,7 +32,7 @@ describe('getStateTrendWindow：趋势与 current 同走 PMC', () => {
       lf: 2,
       lsb: 7,
       calculatedAt: now,
-      sourceKey: 'session-wrapup:s1',
+      sourceKey: 'teaching-wrapup:s1',
       taskId: 't1',
       metadata: '{"version":"state-v2","committed":true}',
     };

@@ -16,7 +16,7 @@ import { memoryTraceService } from '../memory/memory-trace.service';
 import { getActiveForConcepts } from './misconception-ledger.service';
 import { getLevelFromXp } from './level.util';
 import { recordDegradation, degradationCause, type DegradationTelemetry } from '../../skills/degradation-telemetry';
-import type { LearnerSnapshot } from '../../agents/learner-model-agent/types';
+import type { LearnerSnapshot } from '../../agents/profile-learner-model-agent/types';
 
 export interface LearnerExitDueReviewItem {
   conceptKey: string;

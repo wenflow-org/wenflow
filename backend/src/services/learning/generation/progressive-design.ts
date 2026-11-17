@@ -82,7 +82,7 @@ export function extractLearnerSignals(
  * 从学习者 agent 账本提炼「上一阶段学得怎么样」：
  * 快照（fresh refresh，确保 task:completed 刚写完的证据已入账）的
  * fragile/struggling/gaps + 上一阶段最近一次 wrapup 的 stillLearning 知识点。
- * best-effort：任何失败返回 null（stage-designer 输入退化为骨架级 previousMilestone）。
+ * best-effort：任何失败返回 null（path-task-design 输入退化为骨架级 previousMilestone）。
  */
 export async function buildPreviousStageOutcome(
   pathId: string,
@@ -126,7 +126,7 @@ export async function buildPreviousStageOutcome(
       previousStageNumber,
       ...extractLearnerSignals(knowledgeMemory, wrapup),
       // 动态规划（2026-10-17）：不只传「哪几个概念没掌握」，还传系统对下一阶段的建议方向
-      // 与当前负荷档——stage-designer 据此决定坡度、补强位置与任务可调整性，而不是只看到
+      // 与当前负荷档——path-task-design 据此决定坡度、补强位置与任务可调整性，而不是只看到
       // 一份概念清单后自行猜测该加速还是减速。
       ...((): Partial<PreviousStageOutcome> => {
         // 快照是学习者 agent 的账本投影，这三块由不同写入方维护，这里只取需要的字段

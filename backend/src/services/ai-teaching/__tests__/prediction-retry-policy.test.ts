@@ -102,14 +102,14 @@ describe('buildLearnerPrediction：issue #182 三重保护', () => {
     mockPredictionFindFirst.mockResolvedValue(null);
     mockEvidenceFindFirst.mockResolvedValue(null);
     mockExecuteSkill.mockRejectedValue(
-      Object.assign(new Error('Skill learning-predictor exceeded 8000ms timeout'), { code: 'SKILL_TIMEOUT' }),
+      Object.assign(new Error('Skill profile-learning-predict exceeded 8000ms timeout'), { code: 'SKILL_TIMEOUT' }),
     );
 
     const ctx = await run('timeout-user');
     expect(ctx).toBeNull();
 
     const opts = mockExecuteSkill.mock.calls[0][2] as { timeout: number; abortSignal: AbortSignal };
-    // executor 硬超时 → SKILL_TIMEOUT → 计入 learning-predictor 失败率（executor.ts:363-381）
+    // executor 硬超时 → SKILL_TIMEOUT → 计入 profile-learning-predict 失败率（executor.ts:363-381）
     expect(opts.timeout).toBe(8000);
     // 超时后确实中止底层请求（原 Promise.race 只是不再等待，请求继续烧 token）
     expect(opts.abortSignal.aborted).toBe(true);

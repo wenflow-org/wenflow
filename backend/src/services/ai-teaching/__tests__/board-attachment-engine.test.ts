@@ -33,7 +33,7 @@ jest.mock('../../../skills', () => ({
   peerAgentDefinition: {},
 }))
 jest.mock('../../../skills/teaching-turn', () => ({ teachingTurnAgentDefinition: {} }))
-jest.mock('../board-designer.service', () => ({
+jest.mock('../teaching-board-design.service', () => ({
   designBoard: (...args: unknown[]) => mockDesignBoard(...args),
 }))
 jest.mock('../TeachingContextBuilder', () => ({

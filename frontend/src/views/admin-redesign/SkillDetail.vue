@@ -862,7 +862,7 @@ const routingRowsFiltered = computed(() =>
 /** 原型字段路由 5 列（字段/来源/目标/转换规则/脱敏）vs 本表 6 列（来源+目标并在「流向」、脱敏变属性 badges）：
    仅当后端真的下发了 masked 布尔才补出「脱敏」列，否则保持现状并省略（无数据不硬造）。 */
 const hasMaskedCol = computed(() => routingRows.value.some((r) => typeof r.masked === 'boolean'))
-/* 2026-11-11（去噪，2026-11-11 走查 lesson-knowledge-enricher 实测）：
+/* 2026-11-11（去噪，2026-11-11 走查 profile-lesson-enrich 实测）：
    该 Skill 的 6 个产出字段「流向」全是 —、「渲染」全是隐藏、「内部/累积」全空——
    三列各重复 6 遍同一个空值/同一个状态，读者要在噪声里找「说明」。
    与 hasMaskedCol 同一判例：整列没有信息量就省略，而不是逐行画徽章。

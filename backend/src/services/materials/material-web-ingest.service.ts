@@ -4,7 +4,7 @@
  * 把联网采集抓到的正文变成用户资料库里的**正式资料**（与上传附件同构）：
  *   - path 重建直接读库，零重采集；
  *   - extractSectionWindow 对它同样生效（「网络资料：域名」从跳链接升级为点开直达章节）；
- *   - material-brief 走 listMaterials 的既有惰性管线自动覆盖。
+ *   - path-material-brief 走 listMaterials 的既有惰性管线自动覆盖。
  *
  * 设计约束：
  *   - 走 parseDocument('.md') 复用文本闸门 + 锚点抽取（与上传同一套确定性解析）；

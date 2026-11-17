@@ -16,7 +16,7 @@ jest.mock('../../config/database', () => ({ __esModule: true, default: mockPrism
 jest.mock('../../skills', () => ({
   __esModule: true,
   executeSkill: jest.fn().mockResolvedValue(null),
-  virtualLearnerMemoryCuratorDefinition: { name: 'virtual-learner-memory-curator', version: '1.0.0' },
+  virtualLearnerMemoryCuratorDefinition: { name: 'simulation-memory-curate', version: '1.0.0' },
 }))
 jest.mock('../../services/memory/memory-trace.service', () => ({
   memoryTraceService: { recordSessionOutcome: jest.fn(), getDueTraces: jest.fn().mockResolvedValue([]) },

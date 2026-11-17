@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { dashboardGuidanceSnapshotService } from '../services/learner/DashboardGuidanceSnapshotService';
 import { learningStateGuidanceService } from '../services/learner/LearningStateGuidanceService';
-import { GUIDANCE_VIEWS, isGuidanceView } from '../skills/adaptive-guidance-copy/views';
+import { GUIDANCE_VIEWS, isGuidanceView } from '../skills/profile-adaptive-copy/views';
 import authService from '../services/auth/auth.service';
 import { logger } from '../utils/logger';
 
@@ -24,7 +24,7 @@ router.get('/copy', async (req: any, res) => {
     const canIncludeDebug = req.user?.isAdmin === true
       || (debugOperatorId ? (await authService.isUserAdmin(debugOperatorId)) === true : false);
 
-    // 视图白名单与 skill 声明同源（skills/adaptive-guidance-copy/views.ts）：声明几个视图就受理几个，
+    // 视图白名单与 skill 声明同源（skills/profile-adaptive-copy/views.ts）：声明几个视图就受理几个，
     // 不再出现「声明 4 个 / 实际 1 个可达」或反向的假声明。
     if (!isGuidanceView(requested)) {
       return res.status(400).json({

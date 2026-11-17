@@ -1,7 +1,7 @@
 /**
  * 课后知识增强的独立事件（#144 / #145 / #146）。
  *
- * 背景：课后增强（`lesson-knowledge-enricher`）是一次 10–20s 量级的 LLM 调用，原先在
+ * 背景：课后增强（`profile-lesson-enrich`）是一次 10–20s 量级的 LLM 调用，原先在
  * `handleLearnerEvent` 里被同步 `await`，而同一条 `lesson:completed` 又受「同用户队头保护」约束。
  * 三处代价叠在一起：
  *

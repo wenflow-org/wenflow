@@ -15,7 +15,7 @@
  */
 import 'dotenv/config';
 import { teachingTurnAgentHandler } from '../skills/teaching-turn';
-import { virtualLearnerLearnTurnSimulator } from '../skills/virtual-learner-learn-turn-simulator';
+import { virtualLearnerLearnTurnSimulator } from '../skills/simulation-learn-turn';
 import { teachingContextCompressionService } from '../services/ai-teaching/TeachingContextCompressionService';
 import { buildProbeImagePng, judgeVisionProbeAnswer } from './vision-probe';
 

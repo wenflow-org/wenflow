@@ -11,7 +11,7 @@
  */
 import { prisma } from '../../config/database';
 import { logger } from '../../utils/logger';
-import type { MaterialPackResult } from '../../skills/material-collector/types';
+import type { MaterialPackResult } from '../../skills/path-material-collect/types';
 import { normalizeTitleForMatch } from './material-web-ingest.service';
 
 /** 等活跃 run 清空的轮询：5s × 最多 10 分钟。 */

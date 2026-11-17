@@ -1,4 +1,4 @@
-// 查 stage-designer 相关模型/凭证配置
+// 查 path-task-design 相关模型/凭证配置
 import { DatabaseSync } from 'node:sqlite';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

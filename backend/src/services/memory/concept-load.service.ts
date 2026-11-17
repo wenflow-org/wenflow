@@ -7,7 +7,7 @@
  * 公式给（LLM 不自报分数），因此这里是「范式 A：LLM 出观测 + 代码算数值」的第二个落地。
  *
  * 两种来源并存，调用方无需关心：
- * - `source: 'llm'`：`concept-load-estimator` 判定的 granularity / knowledgeType / difficultyBand
+ * - `source: 'llm'`：`profile-concept-load` 判定的 granularity / knowledgeType / difficultyBand
  * - 缺档位（LLM 不可用、超时、新概念还没判）→ 回落到 `estimateConceptLoad` 的正则版
  *
  * 缓存：按用户落 `learner_projections(scope=concept-load)`。**按用户而不是全局**是有意的——
@@ -84,7 +84,7 @@ const defaultDeps: LoadDeps = {
     select: { payload: true },
   }) as any,
   writeCache: (args) => prisma.learner_projections.upsert(args as any) as any,
-  callSkill: (input) => executeSkillWithResult(auxSkillDefinitionMap['concept-load-estimator'], input as any) as any,
+  callSkill: (input) => executeSkillWithResult(auxSkillDefinitionMap['profile-concept-load'], input as any) as any,
 };
 
 export function conceptLoadCacheKey(userId: string): string {
@@ -233,7 +233,7 @@ class ConceptLoadService {
         () => deps.callSkill({ concepts: batch.map((label) => ({ conceptKey: label })) }),
         options.timeoutMs ?? JUDGE_TIMEOUT_MS,
       );
-      if (!result?.success) throw new Error(String(result?.error?.message || 'concept-load-estimator failed'));
+      if (!result?.success) throw new Error(String(result?.error?.message || 'profile-concept-load failed'));
       judged = normalizeJudgedProfiles(result.output, requested, now);
     } catch (error) {
       logger.warn('[concept-load] 档位判定失败，回落规则版负担估计', {

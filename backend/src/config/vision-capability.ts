@@ -15,9 +15,9 @@ export const VISION_CONTEXT_SKILLS: ReadonlySet<string> = new Set([
   // 教师侧：课堂配图随教学历史回流（教师能引用只有图里才有的信息）
   'teaching-turn',
   // 学习者侧：可见上下文里的课堂配图进模拟器请求
-  'virtual-learner-learn-turn-simulator',
+  'simulation-learn-turn',
   // 目标阶段对话当前无图，通道已通（如后续学习者上传参考图）
-  'virtual-learner-goal-dialogue-simulator',
+  'simulation-goal-dialogue',
 ]);
 
 export function skillCarriesVisionContext(skillId: string | null | undefined): boolean {

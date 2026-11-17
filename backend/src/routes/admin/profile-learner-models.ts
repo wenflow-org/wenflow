@@ -1,0 +1,359 @@
+import express from 'express';
+import { authMiddleware } from '../../middleware/auth.middleware';
+import { learnerSnapshotRefreshService } from '../../services/learner/LearnerSnapshotRefreshService';
+import { predictionCalibrationService } from '../../services/learner/PredictionCalibrationService';
+import { findCalibrationEvidence, findDisplayPathFallback, findPathHistory } from '../../services/admin/profile-learner-models.repo';
+import { profileAggregator } from '../../agents/profile-learner-model-agent/profile-aggregator';
+import learningStateService from '../../services/learning/learning-state.service';
+import { dayKeyOf } from '../../services/time/day-boundary';
+import { checkIsAdmin } from '../../services/admin-access.service';
+import { withUserSimulatedClock as withLearnerSimulatedClock } from '../../services/virtual-lab/simulated-clock-scope';
+
+const router = express.Router();
+router.use(authMiddleware);
+
+/** 安全解析 JSON 文本（learner_evidence.payload 等），失败返回 null */
+function safeJsonParse<T>(raw: string | null | undefined): T | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
+
+async function ensureAdmin(userId?: string) {
+  return checkIsAdmin(userId);
+}
+
+router.get('/', async (req, res) => {
+  try {
+    const allowed = await ensureAdmin(req.user?.userId);
+    if (!allowed) {
+      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
+    }
+
+    // 默认 = 全部非虚拟账号（2026-10-21 拍板：测试账号只是行内备注，不再单列视角）；
+    // includeTest=true 是按 id 直查虚拟账号的逃生口（学习者详情），只改默认视图不删数据
+    const includeTest = String(req.query.includeTest || '') === 'true';
+
+    const data = await learnerSnapshotRefreshService.listForAdmin({
+      userId: req.query.userId as string | undefined,
+      pathId: req.query.pathId as string | undefined,
+      staleOnly: req.query.staleOnly === 'true',
+      riskOnly: req.query.riskOnly === 'true',
+      includeTest,
+      page: req.query.page ? Number(req.query.page) : undefined,
+      limit: req.query.limit ? Number(req.query.limit) : undefined,
+    });
+
+    return res.json({ success: true, data });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: { message: error.message || '获取学习者模型列表失败' } });
+  }
+});
+
+/** 详情/证据默认视图：虚拟学习者需显式 includeTest=true 才可查（默认 404，不删数据只改默认视图） */
+async function ensureVirtualVisible(userId: string, includeTest: boolean): Promise<boolean> {
+  if (includeTest) return true;
+  return !(await learnerSnapshotRefreshService.isVirtualLearner(userId));
+}
+
+router.get('/:userId', async (req, res) => {
+  try {
+    const allowed = await ensureAdmin(req.user?.userId);
+    if (!allowed) {
+      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
+    }
+
+    const includeTest = String(req.query.includeTest || '') === 'true';
+    if (!(await ensureVirtualVisible(req.params.userId, includeTest))) {
+      return res.status(404).json({
+        success: false,
+        error: { message: '虚拟学习者数据需显式包含（includeTest=true 可查）' },
+      });
+    }
+
+    const pathId = req.query.pathId as string | undefined;
+    const scope = pathId ? 'path' : (req.query.mode as 'global' | 'path' | 'teaching' | undefined) || 'global';
+    const snapshot = await withLearnerSimulatedClock(req.params.userId, (cached) =>
+      cached
+        ? learnerSnapshotRefreshService.getLatest({ userId: req.params.userId, pathId, scope })
+        : learnerSnapshotRefreshService.refresh({ userId: req.params.userId, pathId, scope }),
+    );
+
+    const currentPath = snapshot.knowledgeMemory.currentPath;
+    const pathProgress = currentPath?.progress;
+    const globalSignals = snapshot.knowledgeMemory.globalSignals;
+
+    /* 「当前进度」的展示兜底（2026-11-08 审计）：快照只锚 active 路径（#205），学习者路径一旦
+       被下线（status=archived），currentPath 恒空 → 管理台「当前进度」显示「尚未开始学习」，
+       而同一页下方照常列着他 5 节已完成的课堂——同一份数据自相矛盾。
+       这里单独查一次「最近一条非 abandoned 路径」的**真实完成度**，只用于管理端展示：
+       不写进快照锚点，学员端仍不会被引导去继续学一条已下线的路径（#205 保持）。 */
+    const fallbackPath = currentPath ? null : await findDisplayPathFallback(req.params.userId);
+    const fallbackProgress = fallbackPath
+      ? (() => {
+          const all = fallbackPath.milestones.flatMap((m) => m.subtasks);
+          const done = all.filter((t) => t.status === 'completed').length;
+          const current = fallbackPath.milestones.find((m) => m.subtasks.some((t) => t.status !== 'completed'))
+            || fallbackPath.milestones[fallbackPath.milestones.length - 1];
+          return { totalTasks: all.length, completedTasks: done, stage: current?.title || '' };
+        })()
+      : null;
+
+    /* 路径作用域的画像补充（2026-11-11 多路径串台走查）：
+       - narrative：该路径自己的最近一次已完成目标对话产出的叙述（不是全局最近一次）；
+       - history：该路径的课堂主题/误解（不是最近 50 节跨路径的并集）。
+       两段都按当前快照锚定的路径取；取不到就留 null，前端据此显示「该路径暂无叙述」，
+       不再回落到另一条路径的全局数据。 */
+    const pathContextId = currentPath?.learningPathId || fallbackPath?.id || null;
+    const pathContext = pathContextId
+      ? await (async () => {
+          const [narrative, history] = await Promise.all([
+            profileAggregator.buildPathNarrative(req.params.userId, pathContextId, {
+              cognitive: snapshot.profile.cognitive,
+              preferences: snapshot.profile.preferences,
+              emotional: snapshot.profile.emotional,
+              learning: snapshot.profile.learning,
+              history: snapshot.profile.history,
+            }).catch(() => null),
+            findPathHistory(req.params.userId, pathContextId).catch(() => null),
+          ]);
+          return { pathId: pathContextId, narrative, history };
+        })()
+      : null;
+
+    return res.json({
+      success: true,
+      data: {
+        ...snapshot,
+        pathContext,
+        progress: pathProgress?.totalTasks
+          ? Number(((pathProgress.completedTasks / pathProgress.totalTasks) * 100).toFixed(1))
+          : fallbackProgress?.totalTasks
+            ? Number(((fallbackProgress.completedTasks / fallbackProgress.totalTasks) * 100).toFixed(1))
+            : 0,
+        concepts: {
+          mastered: globalSignals.masteredConcepts,
+          struggling: globalSignals.strugglingConcepts,
+          fragile: globalSignals.fragileConcepts,
+        },
+        pathTitle: currentPath?.pathTitle || fallbackPath?.title || null,
+        /* 管理端展示用的路径身份（含已下线）：前端据此在「当前进度」与「路径范围」下拉里
+           说出「已下线」而不是「暂无路径」。字段独立于快照锚点，不参与任何路由决策。 */
+        displayPath: fallbackPath
+          ? {
+              id: fallbackPath.id,
+              title: fallbackPath.title,
+              status: fallbackPath.status,
+              stage: fallbackProgress?.stage || '',
+              totalTasks: fallbackProgress?.totalTasks || 0,
+              completedTasks: fallbackProgress?.completedTasks || 0,
+            }
+          : null,
+      },
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: { message: error.message || '获取学习者模型详情失败' } });
+  }
+});
+
+router.post('/:userId/recompute', async (req, res) => {
+  try {
+    const allowed = await ensureAdmin(req.user?.userId);
+    if (!allowed) {
+      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
+    }
+
+    const pathId = (req.body?.pathId as string | undefined) || (req.query.pathId as string | undefined);
+    const scope = pathId ? 'path' : req.body?.scope || 'global';
+    const snapshot = await withLearnerSimulatedClock(req.params.userId, () =>
+      learnerSnapshotRefreshService.refresh({ userId: req.params.userId, pathId, scope }),
+    );
+
+    return res.json({ success: true, data: snapshot, message: '学习者模型已重算' });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: { message: error.message || '重算学习者模型失败' } });
+  }
+});
+
+router.get('/:userId/evidence', async (req, res) => {
+  try {
+    const allowed = await ensureAdmin(req.user?.userId);
+    if (!allowed) {
+      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
+    }
+
+    const includeTest = String(req.query.includeTest || '') === 'true';
+    if (!(await ensureVirtualVisible(req.params.userId, includeTest))) {
+      return res.status(404).json({
+        success: false,
+        error: { message: '虚拟学习者数据需显式包含（includeTest=true 可查）' },
+      });
+    }
+
+    const evidencePathId = req.query.pathId as string | undefined;
+    const snapshot = await withLearnerSimulatedClock(req.params.userId, (cached) =>
+      cached
+        ? learnerSnapshotRefreshService.getLatest({ userId: req.params.userId, pathId: evidencePathId, scope: 'path' })
+        : learnerSnapshotRefreshService.refresh({ userId: req.params.userId, pathId: evidencePathId, scope: 'path' }),
+    );
+
+    // 教学域 4 类证据（快照 recentEvidence：task-completed / teaching-session / summary / evaluation）
+    const teachingItems = snapshot.knowledgeMemory.currentPath?.recentEvidence || [];
+
+    // 目标/路径域证据：直接从 learner_evidence 表取（goal:understanding:updated / path:created / path:generated / path:adjusted / path:completed），
+    // 与教学证据合并为完整时间线（这些事件原本只用于画像聚合，不在时间线展示——调查结论 1）
+    const domainItems = await learnerSnapshotRefreshService.listDomainEvidence(
+      req.params.userId,
+      ['goal:understanding:updated', 'path:created', 'path:generated', 'path:adjusted', 'path:completed'],
+      30,
+      evidencePathId,
+    );
+
+    const domainEvidence = domainItems.map((e) => {
+      const payload = safeJsonParse<Record<string, any>>(e.payload) || {};
+      // goal/path 域证据语义：置信度表示「事件完成度/理解度」，不是学习成败。
+      // 统一用中性 signal 'incomplete'（前端渲染为灰点 + 中文「澄清/创建/生成」等，不误标掌握/未完成）
+      const signal: 'mastery' | 'struggle' | 'fatigue' | 'incomplete' = 'incomplete';
+      return {
+        type: e.evidenceType,
+        taskId: e.taskId || undefined,
+        sessionId: e.sessionId || undefined,
+        conceptKeys: Array.isArray(payload?.conceptKeys) ? payload.conceptKeys.map(String) : [],
+        signal,
+        score: e.confidence,
+        happenedAt: e.occurredAt.toISOString(),
+        // 附加域信息：payload 里的关键摘要。
+        // 2026-11-01 外部评审 P1：path:generated 的 payload 不带 pathTitle，原来这里退成空串，
+        // 「学习动态」只剩「路径生成」四个字——同一学员两条路径的创建/生成读起来一模一样，
+        // 被当成重复事件。生成事件改为报生成结果（任务/里程碑数），与 session-console 同口径。
+        detail: e.evidenceType === 'goal:understanding:updated'
+          ? String(payload?.understanding?.surface_goal || payload?.surfaceGoal || '目标澄清对话')
+          : e.evidenceType === 'path:generated'
+            ? [
+                typeof payload?.taskCount === 'number' ? `${payload.taskCount} 个任务` : '',
+                typeof payload?.milestoneCount === 'number' ? `${payload.milestoneCount} 个里程碑` : '',
+              ].filter(Boolean).join(' / ') || '路径生成完成'
+            : String(payload?.pathTitle || payload?.title || ''),
+      };
+    });
+
+    // 学习压力记录曲线：用系统真实压力指标体系（learning_metrics 的 LSS/KTL/LF/LSB 历史趋势，
+    // 与用户侧 /state/trends 同源）——不是学习分钟数，是每次会话/任务完成时 AI 评估的压力记录
+    let loadCurve: { date: string; lss: number | null; ktl: number | null; lf: number | null; lsb: number | null }[] = [];
+    try {
+      const trendWindow = await learningStateService.getStateTrendWindow(req.params.userId, { days: 90, mode: 'recent' });
+      loadCurve = trendWindow.trends.map((t) => ({
+        date: dayKeyOf(t.date),
+        lss: t.lss,
+        ktl: t.ktl,
+        lf: t.lf,
+        lsb: t.lsb,
+      }));
+    } catch {
+      // 压力趋势不可用（如用户无任何指标）时返回空数组，前端显示空态
+    }
+
+    // 校准/复习明细（2026-10-21）：checkpoint:result 带判分前预测（predictedMastery/predictionSource），
+    // review:completed 带逐概念 rating——此前只在 learner_evidence.payload 里，管理端任何页面都读不到。
+    // 这里给一份人读摘要（不搬整包 payload），供证据页「校准明细」卡直接展示。
+    let calibrationDetails: Array<{
+      type: string;
+      detail: string;
+      sessionId?: string;
+      taskId?: string;
+      conceptKey?: string;
+      happenedAt: string;
+    }> = [];
+    try {
+      const rows = await findCalibrationEvidence(req.params.userId, evidencePathId);
+      calibrationDetails = rows.map((row) => {
+        const payload = safeJsonParse<Record<string, any>>(row.payload) || {};
+        let detail = '';
+        if (row.evidenceType === 'checkpoint:result') {
+          const predicted = Number(payload.predictedMastery);
+          const source = String(payload.predictionSource || '');
+          const predictedText = Number.isFinite(predicted)
+            ? `预测 ${Math.round(predicted * 100)}%${source === 'kt-estimate' ? '（KT 估算）' : source === 'knowledge-state' ? '（知识状态）' : ''}`
+            : '无预测';
+          detail = `${predictedText} · 实际 ${payload.passed === true ? '通过' : '未通过'}${payload.detail ? `（${String(payload.detail)}）` : ''}`;
+        } else if (row.evidenceType === 'review:completed') {
+          const ratingZh: Record<string, string> = { again: '重来', hard: '困难', good: '良好', easy: '轻松' };
+          detail = `复习「${String(payload.conceptKey || '未命名概念')}」→ ${ratingZh[String(payload.rating)] || String(payload.rating || '—')}（掌握 ${Math.round(Number(payload.masteryScore ?? 0) * 100)}%）`;
+        } else {
+          const dirZh: Record<string, string> = { up: '升档', down: '降档', keep: '维持' };
+          detail = `难度 ${dirZh[String(payload.direction)] || String(payload.direction || '—')}：${payload.baseline ?? '—'} → ${payload.adjusted ?? '—'}${payload.applied === false ? '（未生效）' : ''}`;
+        }
+        return {
+          type: row.evidenceType,
+          detail,
+          sessionId: row.sessionId || undefined,
+          taskId: row.taskId || undefined,
+          conceptKey: typeof payload.conceptKey === 'string' ? payload.conceptKey : undefined,
+          happenedAt: row.occurredAt.toISOString(),
+        };
+      });
+    } catch {
+      calibrationDetails = [];
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        items: teachingItems,
+        domain: domainEvidence,
+        loadCurve,
+        calibrationDetails,
+      },
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: { message: error.message || '获取学习证据失败' } });
+  }
+});
+
+router.get('/:userId/predictions', async (req, res) => {
+  try {
+    const allowed = await ensureAdmin(req.user?.userId);
+    if (!allowed) {
+      return res.status(403).json({ success: false, error: { message: '需要管理员权限' } });
+    }
+
+    const includeTest = String(req.query.includeTest || '') === 'true';
+    if (!(await ensureVirtualVisible(req.params.userId, includeTest))) {
+      return res.status(404).json({
+        success: false,
+        error: { message: '虚拟学习者数据需显式包含（includeTest=true 可查）' },
+      });
+    }
+
+    // 实证命中率 + 校准桶（预测器可信度的统计口径）
+    const stats = await predictionCalibrationService.empiricalStats(req.params.userId);
+    // 最近预测记录（含回写结果），供前端展示"预测 vs 实际"
+    const recentRows = await predictionCalibrationService.listRecentRecords(req.params.userId, 10);
+
+    return res.json({
+      success: true,
+      data: {
+        stats,
+        recent: recentRows.map((r) => ({
+          id: r.id,
+          taskId: r.taskId,
+          stallRisk: r.stallRisk,
+          predictedTone: r.predictedTone,
+          suggestedDepth: r.suggestedDepth,
+          focusConcepts: safeJsonParse<string[]>(r.focusConcepts) || [],
+          rationale: r.rationale,
+          outcome: r.outcome,
+          createdAt: r.createdAt.toISOString(),
+          outcomeAt: r.outcomeAt?.toISOString() || null,
+        })),
+      },
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: { message: error.message || '获取预测校准数据失败' } });
+  }
+});
+
+export default router;

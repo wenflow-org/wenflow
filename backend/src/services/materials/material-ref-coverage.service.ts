@@ -90,7 +90,7 @@ export function materialsHaveLexicalOverlap(
 /**
  * 覆盖率阈值（当前未启用）：2026-10-21 离线对比实测（doc/local/RESOURCE-LIBRARY-OPT-2026-10-20/
  * INJECTION-GATE-COMPARISON.md §四），按 0.5 触发重试在 60 条真实路径上是 61 次 vs 零引用口径的
- * 13 次（≈4.7 倍 stage-designer 调用），且相关性闸门的词面口径尚不可靠——故软校验退回
+ * 13 次（≈4.7 倍 path-task-design 调用），且相关性闸门的词面口径尚不可靠——故软校验退回
  * 「零引用才重试」，覆盖率只进日志观测；本常量保留给将来接 embedding 相关性后复评。
  */
 export const MIN_STAGE_REF_COVERAGE_RATIO = 0.5;

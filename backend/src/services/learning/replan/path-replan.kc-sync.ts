@@ -8,7 +8,7 @@
  *   ② aiPromptTemplate.materialRefs.byTask / misconceptionHints.byTask（按新 subtaskId）；
  *   ③ aiPromptTemplate.kcAnnotation（taskKcLinks / conceptKcs / kcGraph）+ 概念图重物化，
  *      否则新任务在 teaching 侧 resolveTaskKcsFromPath 恒为空（旧任务的死链还留在模板里）。
- * 每个新任务分配稳定 taskKey（「阶段-序号」），随 kc-mapper 输入下发并要求逐字回显，
+ * 每个新任务分配稳定 taskKey（「阶段-序号」），随 path-kc-mapping 输入下发并要求逐字回显，
  * 落库时据它把 taskKcLinks 绑到真实 subtasks.id（issue #179 的既有做法）。
  *
  * 本模块只承载上述「预解析 + 合并 + 重物化」逻辑，service 只负责在正确的时点调用：
@@ -16,7 +16,7 @@
  */
 import { logger } from '../../../utils/logger';
 import { executeSkillWithResult } from '../../../skills';
-import { kcMapperDefinition } from '../../../skills/kc-mapper';
+import { kcMapperDefinition } from '../../../skills/path-kc-mapping';
 import { resolveTaskConcept } from '../learning.helpers';
 import { conceptRegistryService } from '../../learner/concept-registry.service';
 import { conceptGraphService, type CognitiveCoreLike } from '../../learner/concept-graph.service';
@@ -31,7 +31,7 @@ import {
 
 /**
  * 重排新任务的运行时输入：service 侧 ReplanTaskDraft 的读取超集——
- * stage-designer 输出还会附带 materialRefs / anticipatedMisconceptions 两个 sidecar 字段
+ * path-task-design 输出还会附带 materialRefs / anticipatedMisconceptions 两个 sidecar 字段
  * （service 的 ReplanTaskDraft 类型未声明，运行时存在）。
  */
 export interface ReplanNewTaskInput {
@@ -66,7 +66,7 @@ export interface ReplanKcSync {
 }
 
 /**
- * 事务外准备：解析 canonical 概念身份、跑 kc-mapper、做沙盘 ref 对账。
+ * 事务外准备：解析 canonical 概念身份、跑 path-kc-mapping、做沙盘 ref 对账。
  * 都是 best-effort——失败只告警，不阻断重排（conceptId 留空 / 沿用既有 kcAnnotation）。
  */
 export async function prepareReplanKcSync(input: {
@@ -118,7 +118,7 @@ export async function prepareReplanKcSync(input: {
     });
   }
 
-  // kc-mapper：对本阶段新任务重跑映射（best-effort，失败不阻断重排）。
+  // path-kc-mapping：对本阶段新任务重跑映射（best-effort，失败不阻断重排）。
   // 与生成链的渐进路径同口径：输入看全路径里程碑 + 本阶段新任务，结果按阶段增量合并进
   // 既有 kcAnnotation（整包替换会抹掉其他阶段已设计的 taskKcLinks）。
   const replanCognitiveCore = input.parsedTemplate?.cognitiveCore
@@ -161,7 +161,7 @@ export async function prepareReplanKcSync(input: {
     });
   }
 
-  // #192：stage-designer / kc-mapper 纳入沙盘 ref 运行期对账（真实载荷即池）。
+  // #192：path-task-design / path-kc-mapping 纳入沙盘 ref 运行期对账（真实载荷即池）。
   // 多阶段重排逐阶段调用本函数，只在首个阶段做一次（与 contentSnapshot 同口径）。
   if (!input.skipSandboxAudit) {
     await auditPathStageAgentsSandboxRefs({
@@ -269,7 +269,7 @@ export function buildReplanKcAnnotationPatch(
     );
     mergedKcAnnotation = bindKcLinksToSubtaskIds(merged, sync.subtaskIdByTaskKey) ?? null;
   }
-  // 无论 kc-mapper 是否成功，被删任务的死链都要清掉（否则模板里持续堆积无主 taskKcLinks，
+  // 无论 path-kc-mapping 是否成功，被删任务的死链都要清掉（否则模板里持续堆积无主 taskKcLinks，
   // 读侧按 id/title 都不命中）。其他阶段的链接与无 taskId 的旧标注保持原样。
   if (mergedKcAnnotation && Array.isArray(mergedKcAnnotation.taskKcLinks)) {
     const staleIdSet = new Set(staleTaskIds);
