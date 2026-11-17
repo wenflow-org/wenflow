@@ -1593,9 +1593,10 @@ const SCENE_BATCH_SIZE = 3;
  * 场景池：默认展示前 3 个，覆盖兴趣 / AI / 统计 / 语言 / 化学 / 编程 / 学术写作七类起点。
  * seed 自带「现状 + 约束 + 想要的结果」，让目标澄清从具体场景开始，而不是先被反问四五轮。
  *
- * 来源（2026-11-11 用户反馈「不要在旧 case 上改词，去找别的」）：这批除心理学外，
- * 全部取自真实 goal 会话里的原始诉求，不是从旧场景池改写；心理学保留，是因为已有
- * 10h/5 阶段的真机路径。
+ * 来源（2026-11-17 用户反馈「goal 页面的 case 改一下，不太好」）：整池重找，全部取自
+ * 真实 goal 会话里的原始诉求——其中五张（合同避坑/年报/技术评审/论文结构/汇报重点）正是
+ * 黑盒闭环战役反复验证过完整 goal→path→教学路径的案例（有 3-5 阶段、数小时体量、双评基线），
+ * 不是从旧场景池改写；SQL 查数、王阳明心学两条来自真实会话里的有机诉求。
  *
  * 产品边界：不与物理世界发生交互。案例必须是「读 / 写 / 代码 / 数据 / 文档」型，
  * 产出物能交出来、平台能对照判；不摆需要线下张嘴、动手、现场练的目标。
@@ -1606,53 +1607,53 @@ const SCENE_BATCH_SIZE = 3;
  */
 const scenePool = [
   {
-    title: '系统了解心理学',
-    desc: '不考试，读懂主要流派和经典实验',
-    seed: '我对心理学一直有兴趣，想系统了解主要流派和经典实验，不为了考试',
+    title: '拿到合同能自己挑坑',
+    desc: '竞业限制、试用期、违约金，逐条判断',
+    seed: '我下周一要签新公司的劳动合同，HR 说今天就得给答复。竞业限制那段看得心里发毛，试用期也看不太明白，想学会自己判断哪些条款有坑',
     bg: 'color-mix(in srgb, var(--amber) 14%, transparent)', ink: 'var(--amber-ink)',
-    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 2a7 7 0 0 0-4 12.74V17h8v-2.26A7 7 0 0 0 12 2zM8 19h8v2H8v-2z"/></svg>'
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M6 2h9l5 5v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1.5V8h4.5L14 3.5zM7 12h10v2H7v-2zm0 4h10v2H7v-2z"/></svg>'
   },
   {
-    title: '看懂 AI Agent 怎么运转',
-    desc: '不写代码，也能讲清它怎么想、怎么做',
-    seed: '我想从 0 搞懂 AI Agent 是怎么运转的，不写代码，但能讲清它怎么规划、调用工具、记住上下文',
+    title: '读懂上市公司年报',
+    desc: '利润、现金流、资产质量，拿真实年报练',
+    seed: '我在互联网公司做运营，想转行做行研。面试官说至少要能看懂上市公司年报，我翻开三张表就懵了，想系统读懂财报',
     bg: 'color-mix(in srgb, var(--blue) 12%, transparent)', ink: 'var(--blue-deep)',
-    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M15 9H9v6h6V9zm-2 4h-2v-2h2v2zm8-2V9h-2V7c0-1.1-.9-2-2-2h-2V3h-2v2h-2V3H9v2H7c-1.1 0-2 .9-2 2v2H3v2h2v2H3v2h2v2c0 1.1.9 2 2 2h2v2h2v-2h2v2h2v-2h2c1.1 0 2-.9 2-2v-2h2v-2h-2v-2h2zm-4 6H7V7h10v10z"/></svg>'
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M4 20V4h2v14h14v2H4zm4-3V9h2v8H8zm4 0V5h2v12h-2zm4 0v-6h2v6h-2z"/></svg>'
   },
   {
-    title: '把因果推断讲给业务方',
-    desc: '被追问时，能说清控制变量和结论边界',
-    seed: '我做数据分析，想学会用统计方法把因果推断讲给业务方听，一被追问就慌，想系统补这块',
-    bg: 'color-mix(in srgb, var(--accent) 13%, transparent)', ink: 'var(--purple-ink)',
-    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 17l6-6 4 4 7-7v4h2V4h-8v2h3l-5 5-4-4-6 6z"/></svg>'
-  },
-  {
-    title: '日语动词变形练到 N4',
-    desc: 'て形、た形、ない形，换词也能变对',
-    seed: '我日语自学到 N5，动词变形老是记混，て形、た形、ない形一到用就出错，想系统练到 N4',
+    title: '不写代码，听懂技术评审',
+    desc: '缓存、并发、旧值窗口，接得上开发的话',
+    seed: '我是产品经理，每次评审开发说「这个缓存策略有问题」「并发会打爆」，我完全接不上话。我不想学写代码，但想真正听懂他们在说什么',
     bg: 'color-mix(in srgb, var(--cyan) 14%, transparent)', ink: 'var(--wf-color-secondary-dark)',
-    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M18 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zm0 18H6V4h2v8l2.5-1.5L13 12V4h5v16z"/></svg>'
-  },
-  {
-    title: '有机推断：醇醛羧酸转化',
-    desc: '换一道题，也能自己推转化关系',
-    seed: '我想把醇、醛、羧酸之间的转化关系真正理清楚，能自己做有机推断题',
-    bg: 'rgba(49,177,111,.12)' /* 场景卡专用绿基色：等价 var(--wf-color-success-bg) 家族 */, ink: 'var(--green-ink)',
-    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M9 3h6v2h-1v4.6l4.8 8.3A2 2 0 0 1 17 21H7a2 2 0 0 1-1.8-3.1L10 9.6V5H9V3zm3 8.4-3.9 6.8c-.2.4.1.8.5.8h6.8c.4 0 .7-.4.5-.8L12 11.4z"/></svg>'
-  },
-  {
-    title: '脱离教程写 Python',
-    desc: '离开教程，也能自己写出小工具',
-    seed: '我学 Python 总是照着教程抄，一关教程连算平均分或猜数字都写不出来，想真正学会独立写程序',
-    bg: 'rgba(240,101,149,.12)', ink: '#d1456f',
     icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M14.6 16.6 19.2 12l-4.6-4.6 1.4-1.4L22 12l-5.9 5.9-1.5-1.3zm-5.2 0L7.8 18l-5.8-6 5.8-6 1.6 1.4L4.8 12l4.6 4.6z"/></svg>'
   },
   {
-    title: '写出自己的学术综述',
-    desc: '英文文献能读，落笔能成文',
-    seed: '我想补学术英语，把自己那篇综述写出来，明年评职称要用。英文文献能读，但一落笔就不行',
+    title: '读懂英文论文的骨架',
+    desc: '摘要、论证、转折，单词认识也能读明白',
+    seed: '我跨专业读研，导师让我每周读三篇英文论文。单词都认识，但一段摘要读下来不知道它在说什么，想找到方法读懂论文的结构',
+    bg: 'color-mix(in srgb, var(--accent) 13%, transparent)', ink: 'var(--purple-ink)',
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M18 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zm0 18H6V4h2v8l2.5-1.5L13 12V4h5v16z"/></svg>'
+  },
+  {
+    title: '三分钟汇报讲出重点',
+    desc: '结论先行、位置可数，被追问也接得住',
+    seed: '上周季度评审我讲了三分钟，领导直接打断说没重点。我准备了，但一紧张就想到哪说到哪，想把汇报结构真正练出来',
+    bg: 'rgba(240,101,149,.12)', ink: '#d1456f',
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 4h18v11H3V4zm2 2v7h14V6H5zm5 11h4v2h-4v-2z"/></svg>'
+  },
+  {
+    title: '自己写 SQL 取数',
+    desc: '取数、分组、对比，不再等排期',
+    seed: '我做运营，每次要数据都得等数据组排期。想学会用 SQL 自己查数，取数、分组、同比对比这些能独立写出来',
+    bg: 'rgba(49,177,111,.12)' /* 场景卡专用绿基色：等价 var(--wf-color-success-bg) 家族 */, ink: 'var(--green-ink)',
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 3c4.4 0 8 1.3 8 3s-3.6 3-8 3-8-1.3-8-3 3.6-3 8-3zm8 6.5V12c0 1.7-3.6 3-8 3s-8-1.3-8-3V9.5c1.6 1.2 4.6 2 8 2s6.4-.8 8-2zm0 5V17c0 1.7-3.6 3-8 3s-8-1.3-8-3v-2.5c1.6 1.2 4.6 2 8 2s6.4-.8 8-2z"/></svg>'
+  },
+  {
+    title: '系统读懂王阳明心学',
+    desc: '心即理、知行合一、致良知，能读选段',
+    seed: '我想系统了解王阳明心学，不为了考试。心即理、知行合一、致良知到底在讲什么，想能自己读懂《传习录》里的选段',
     bg: 'color-mix(in srgb, var(--amber) 14%, transparent)', ink: 'var(--amber-ink)',
-    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>'
+    icon: '<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M12 21s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.5-7 10-7 10z"/></svg>'
   }
 ];
 
