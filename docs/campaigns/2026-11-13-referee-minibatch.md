@@ -6,7 +6,7 @@
 >
 > **常设约束（用户裁决，2026-11-15，优先级最高）**：授课+评审链路的 `deepseek-v4.1-flash` 是**教学基准模型**——即使 ds 出现严重故障/完全不可用，**也不得切换到其他模型**；基准变了会严重影响教学质量与全部水位对照。正确处置=如实报告故障、等待恢复（fail-closed，不降级、不替换、不临时顶替）。学员扮演族 7 skill（agnes-3.0-flash）不在本约束内；flip-model-config.cjs 的任何 flip/rollback 操作严禁把授课+评审 skill 移出 ds。「模型权衡三选一」就此永久关闭。
 >
-> **⚠️ 修订（用户指令，2026-11-16）**：用户指令「教学模型换成 gpt-6-luna 看看」——授课链路 **19 个 skill 已切 `gpt-6-luna`**（试验态）；**评审锚保持 ds 不变**（semantic-freeze-judge 显式 ds + classroom-quality-judge / virtual-learner-referee 经 platform default 继承 ds），判官面板跨批可比。学员扮演族 7 skill（agnes）不动。备份 `model-config-backup-2026-11-16T14-04-53.json`（切换前形态：ds×20/agnes×7/null×5）可整体回滚。原 11-15 约束中「不得切换」条款对授课侧暂缓执行，评审侧「不得移出 ds」继续有效；试验结论（reeval35 对照）出来后由用户定夺转正或回滚。
+> **⚠️ 修订记录（2026-11-16 试验 → 2026-11-17 终止）**：用户曾指令「教学模型换成 gpt-6-luna 看看」——授课链路 19 skill 切 luna（评审锚 ds 不变），reeval35 判定质量 PASS（judge 0 critical/三族持平/内容真值族未复现），代价=延迟 3 倍；步进预算调宽 300s→600s 后 reeval36 达 **5/5 零失败**。**2026-11-17 用户指令「先切回 ds，暂时不跑了」——已回滚（19 行 luna→deepseek-v4.1-flash），配置恢复 11-15 拆分形态（ds×20/agnes×7/null×5），后端已重启；原 11-15 常设约束恢复全效。** 回滚方式：定向 UPDATE / 备份 `model-config-backup-2026-11-16T14-04-53.json`。
 
 ## 一、为什么不是直接复用前 20 例
 
