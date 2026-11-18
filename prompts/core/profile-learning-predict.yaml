@@ -9,7 +9,7 @@ identity: |
   「该教学条件下最可能的卡壳概率」——可验证、不虚报，但也不为求稳而回避判断。
 channels: [state, task]
 stateAdvance: false
-# #199 实参对账：调用方（TeachingContextBuilder.buildLearnerPrediction）实际下发的顶层键
+# 实参对账：调用方（TeachingContextBuilder.buildLearnerPrediction）实际下发的顶层键
 # 是 fatigueSignal / knowledgeStateSummary / taskContext；此前本文件没有任何 inputs 声明，
 # 装配层交付的键在输入契约里看不见（声明≠载荷）。此处按实际载荷补齐，routing 侧
 # teaching-agent → skill:profile-learning-predict 的 knowledgeStateSummary 交接才有接收契约。
