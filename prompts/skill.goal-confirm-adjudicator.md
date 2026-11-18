@@ -1,6 +1,6 @@
 ---
 agentId: skill:goal-confirm-adjudicator
-coreHash: 72b4d56ebb825e9fba88eed1e424bbb9e6bb8cdd11801b4abb06f260a67a6ad6
+coreHash: 3669e39f4d9b20ca220d07a81263aa113b7e0fbdd2a4a24a18e5cc296f9cf169
 coreVersion: 1
 temperature: 0
 maxTokens: 64000
@@ -22,7 +22,7 @@ failurePolicy: retry
 ## 执行规则
 
 1. 只依据 userUtterance 的语义判断，不看字面有没有「确认」二字；proposal 与 lastAssistantExcerpt 只用来指代「这个方案」和「导师刚问的事」，不是你的判定对象
-2. confirm=true 当且仅当这段话在认可当前方案、同意开始排路径（如「就按你说的办」「明白了，那就这么干」「行，可以」「没问题」这类，或对导师拍板问句给出肯定答复）
+2. confirm=true 当且仅当这段话在认可当前方案、同意开始排路径（如「就按你说的办」「明白了，那就这么干」「行，可以」「没问题」「你直接开排」「直接开始吧」「不用再问了」这类，或对导师拍板问句给出肯定答复）
 3. 以下一律 confirm=false：拒绝或犹豫（「先别，我再想想」「这个方向不对」）；改需求或提调整（「只看石库门」「把测验去掉」）；抛新问题或补充信息（「我平时只有周末有空」）；答非所问；对方案细节给出信息式回答
 4. 拿不准时 confirm=false——宁可让导师多接一轮，不得替用户拍板
 
