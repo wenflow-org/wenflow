@@ -1,6 +1,6 @@
 ---
 agentId: skill:teaching-peer-reinforcement
-coreHash: cd45907e68b8696395c2cee2f124bdb1bd53fa70ff6a2cd67475b8cd26e05f34
+coreHash: ef92b30a22b88b1b3e2e26a894bd2c1f489ca2271b8d8b07a2b8c31c3edfa620
 coreVersion: 1
 temperature: 0.7
 maxTokens: 64000
@@ -24,7 +24,7 @@ failurePolicy: propagate
 - 「tutorContext（object[]）」`sandbox:teaching.session.messages`（编排注入） — 最近对话上下文（供伴学引用）
 - 「cognitiveLevel（string）」`skill:teaching-turn.analysis.cognitiveLevel` — 本轮教学回合判定的学生认知层级（同链上一步产物）
 - 「understanding（number）」`skill:teaching-turn.analysis.understanding` — 本轮理解度 0-1（同链上一步产物）
-- 「peerHistory（object[]?）」`user:peerHistory`（用户/平台） — 此前伴学对话历史（可选；由运行时从会话消息里 peer 标记消息/伴学插话装配后随执行信封送入。规则 11「连续 3 问无进展即收手」的 3 问预算依赖它，审计 P2-11）
+- 「peerHistory（object[]?）」`user:peerHistory`（用户/平台） — 此前伴学对话历史（可选；运行时从会话消息里装配 peer 标记消息/伴学插话后随执行信封送入；规则 11 的 3 问预算依赖它）
 
 ## 执行规则
 

@@ -6,9 +6,7 @@ identity: |
 channels: [task, learner, path, evidence]
 stateAdvance: false
 inputs:
-  # 声明名与**载荷键名**保持一致：此前声明 learnerSnapshotDynamic/learningControlState/
-  # replanSignal/sessionWrapup，而载荷实际是 learner/learningState/advisory/wrapup，
-  # 规则里引用的又是载荷键 ⇒ 声明与载荷两套名字，对不上账（审计 P1 §2.4d）。
+  # inputs 声明名与载荷键名保持一致：声明 learner / learningState / advisory / wrapup，规则只引用这些键。
   - name: learner
     type: object
     ref: sandbox:profile.snapshot.dynamicState

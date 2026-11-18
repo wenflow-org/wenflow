@@ -9,7 +9,7 @@ stateAdvance: false
 inputs:
   # 声明名 = 模型实收载荷键：调用方 LearnerStateReviewService
   # 实际下发 { learnerDigest, knowledgeDigest, recentEvidence, priorInsights }；
-  # 此前无 inputs 声明，规则却引用 recentEvidence → 声明面看不见规则依赖的键。
+  # inputs 与规则引用的键一一对应。
   - name: learnerDigest
     type: object
     ref: sandbox:profile.snapshot.dynamicState
