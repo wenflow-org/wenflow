@@ -1,6 +1,6 @@
 ---
 agentId: skill:teaching-peer-reinforcement
-coreHash: 1152f18f8ceaa2b5d9ac610dc3aa46c848e0b661f061e188fcc51cbb2790e35b
+coreHash: cd45907e68b8696395c2cee2f124bdb1bd53fa70ff6a2cd67475b8cd26e05f34
 coreVersion: 1
 temperature: 0.7
 maxTokens: 64000
@@ -20,7 +20,7 @@ failurePolicy: propagate
 输入契约声明（ref 前缀 = 来源分类：skill 上游模型输出 / sandbox 编排注入 / user 用户平台）：
 - 「topic（string）」`sandbox:teaching.session.topic`（编排注入） — 当前任务主题
 - 「studentMessage（string）」`user:latestMessage`（用户/平台） — 学生本轮消息（触发伴学的输入）
-- 「tutorLatestReply（string）」`skill:teaching-turn.reply` — 老师最近一条回复原文（可选，可为空；供伴学对齐老师当前教学动作，2026-09-25 新增）
+- 「tutorLatestReply（string）」`skill:teaching-turn.reply` — 老师最近一条回复原文
 - 「tutorContext（object[]）」`sandbox:teaching.session.messages`（编排注入） — 最近对话上下文（供伴学引用）
 - 「cognitiveLevel（string）」`skill:teaching-turn.analysis.cognitiveLevel` — 本轮教学回合判定的学生认知层级（同链上一步产物）
 - 「understanding（number）」`skill:teaching-turn.analysis.understanding` — 本轮理解度 0-1（同链上一步产物）

@@ -7,7 +7,7 @@ identity: |
 channels: [learner, path, evidence, state]
 stateAdvance: false
 inputs:
-  # 声明名 = 模型实收载荷键（2026-11-11 字段审计）：调用方 LearnerStateReviewService
+  # 声明名 = 模型实收载荷键：调用方 LearnerStateReviewService
   # 实际下发 { learnerDigest, knowledgeDigest, recentEvidence, priorInsights }；
   # 此前无 inputs 声明，规则却引用 recentEvidence → 声明面看不见规则依赖的键。
   - name: learnerDigest

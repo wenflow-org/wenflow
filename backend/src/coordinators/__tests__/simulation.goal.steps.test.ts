@@ -25,6 +25,16 @@ describe('isRepetitiveLearnerReply（告别死循环确定性兜底）', () => {
     expect(isRepetitiveLearnerReply(history, '我看了合同，试用期写的是六个月。')).toBe(false);
   });
 
+  it('连续短告别 + 导师短收口 → true（跑批脚本里的 21 轮告别循环）', () => {
+    const history: ConversationHistoryItem[] = [
+      learner('好，那我先去忙。'),
+      agent('行，你先去忙。'),
+      learner('好，回头见。'),
+      agent('行，回头见。'),
+    ];
+    expect(isRepetitiveLearnerReply(history, '好，那我先去忙。')).toBe(true);
+  });
+
   it('历史不足两条学习者发言 → false', () => {
     expect(isRepetitiveLearnerReply([learner('好，我先去忙。')], '好，我先去忙。')).toBe(false);
   });

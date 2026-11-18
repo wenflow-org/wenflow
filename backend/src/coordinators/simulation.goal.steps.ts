@@ -107,7 +107,25 @@ export function isRepetitiveLearnerReply(
   history: ConversationHistoryItem[],
   reply: string
 ): boolean {
-  const text = String(reply || '').replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '');
+  const raw = String(reply || '');
+  // 结构性兜底：连续 3 条「短句且没有问句」的学习者发言，说明对话已停在告别/应答循环，
+  // 不再等 shouldEnd（仿真学生常常换着说「好，那我先去忙 / 好，回头见」）。
+  const isShortNonQuestion = (value: string): boolean => {
+    const t = value.trim();
+    return t.length > 0 && t.length <= 24 && !/[？?]/.test(t);
+  };
+  const recentRaw = (Array.isArray(history) ? history : [])
+    .filter((item) => item?.role === 'user')
+    .map((item) => String(item?.content || ''))
+    .filter(Boolean)
+    .slice(-2);
+  const last = Array.isArray(history) && history.length ? history[history.length - 1] : null;
+  const lastAgentClosure = last?.role === 'assistant'
+    && String(last.content || '').trim().length <= 60
+    && !/[？?]/.test(String(last.content || ''));
+  if (isShortNonQuestion(raw) && lastAgentClosure && recentRaw.length >= 2 && recentRaw.every(isShortNonQuestion)) return true;
+
+  const text = raw.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, '');
   if (text.length < 12) return false;
   const grams = (value: string): Set<string> => {
     const set = new Set<string>();

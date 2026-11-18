@@ -19,7 +19,7 @@ inputs:
   - name: tutorLatestReply
     type: string
     ref: skill:teaching-turn.reply
-    desc: 老师最近一条回复原文（可选，可为空；供伴学对齐老师当前教学动作，2026-09-25 新增）
+    desc: 老师最近一条回复原文
   - name: tutorContext
     type: object[]
     ref: sandbox:teaching.session.messages

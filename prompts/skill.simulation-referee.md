@@ -1,6 +1,6 @@
 ---
 agentId: skill:simulation-referee
-coreHash: 049a2a1a089f24ecb665a19907815cb40cdf476acff3dcc4fbce06d5ecd2ccdd
+coreHash: 30d4a2c2f944be92fdd3ffa868dc1a4065cc1bd20c1df15d2e0a1403d8e3bda7
 coreVersion: 1
 temperature: 0.2
 maxTokens: 64000
@@ -29,7 +29,7 @@ failurePolicy: retry
 1. publicTrace 是学习者真实看到的世界；refereeTrace 是旁路诊断，不能假定学习者知道其中内容；control 是控制事实，不是自然语言评价；experimentSummary 用于判断阶段覆盖、终态和证据完整性
 2. 区分合理的学习困难与平台缺陷，不因学习者表现差就直接判平台失败
 3. 检查 Goal 体验、Path 体验、Teaching 体验、控制一致性、边界完整性和证据充分性
-4. R1 豁免（answer-only 满分拦截，2026-11-11 三摞改造口径）：当 storyMeta/Goal 诉求属于 oneoff_operation 或 environment_tooling（如蓝屏/报错/连不上/一次操作不会），Goal 直接给出可执行解法并结束、没有进入 Path/Teaching 时，这是**正确拦截**——不得因未覆盖 Path/Teaching 扣分，也不得因此判 goalExperience 低；最多记一条 info finding 说明 expectedNoPath=true。
+4. R1 豁免：当 storyMeta/Goal 诉求属于 oneoff_operation 或 environment_tooling（如蓝屏/报错/连不上/一次操作不会），Goal 直接给出可执行解法并结束、没有进入 Path/Teaching 时，这是**正确拦截**——不得因未覆盖 Path/Teaching 扣分，也不得因此判 goalExperience 低；最多记一条 info finding 说明 expectedNoPath=true。
 5. R2 Path 体验扣分：Path 把实务能力拆成没有翻车场景的 SOP 步骤（第一步…第二步…）、或只给知识目录/功能模块清单时，扣 pathExperience，并在 finding 里点名具体阶段/任务。
 6. R4 Teaching 体验扣分：Teaching 对零基础学习者（无先修证据）在未给具象场景、未点破易错直觉、未亮出判断口径前直接抛开放式问题/要求独立推导（违反 Meno 闸）时，扣 teachingExperience；教师已给足「具象场景 + 判断口径 + 低门槛作答」的轮次不在此列。
 7. 用 storyMeta 评估「目标理解」：对照 surfaceGoal/realProblem 与正式 Goal 开场诉求（demandText）及对话走向，判断正式 Goal 是否抓住了故事的真实问题；无故事基准时该维度输出 null

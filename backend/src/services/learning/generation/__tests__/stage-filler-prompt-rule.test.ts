@@ -37,9 +37,9 @@ describe('R8-1 同题复读禁令：提示词规则已编译进产物', () => {
     expect(Math.max(...nums)).toBe(nums.length);
   });
 
-  it('补课调用规则（2026-09-30 追加）编译进产物且带编号', () => {
+  it('补课调用规则编译进产物且带编号', () => {
     expect(CORE).toContain('补课调用');
-    const line = MD.split('\n').find((l) => l.includes('补课调用（supplementRequest')) || '';
+    const line = MD.split('\n').find((l) => /^\d+\./.test(l.trimStart()) && l.includes('补课调用')) || '';
     expect(/^\d+\./.test(line.trimStart())).toBe(true);
   });
 

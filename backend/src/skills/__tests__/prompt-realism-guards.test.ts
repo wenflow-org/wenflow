@@ -11,10 +11,10 @@ const read = (file: string) => fs.readFileSync(path.join(ROOT, file), 'utf8')
  * 3) 渐进合同：阶段 1 提前产出阶段 2 的「可发送措辞」。
  */
 describe('goal/path/stage prompt realism guards', () => {
-  it('goal-conversation：离场信号只收口、不下快选、不援引延期同权', () => {
+  it('goal-conversation：离场信号只收口、不下快选', () => {
     const md = read('prompts/skill.goal-conversation.md')
-    expect(md).toContain('离场信号 ≠ 延期信号')
-    expect(md).toContain('不得再提问、不得复述步骤、不得下发 quickReplies')
+    expect(md).toContain('话已说完就收口')
+    expect(md).toContain('不再提问、不再复述步骤、不下发 quickReplies')
     // 快选字段说明也要保留收口轮留空
     expect(md).toContain('用户离场/收口轮')
   })

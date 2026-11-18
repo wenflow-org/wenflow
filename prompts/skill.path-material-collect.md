@@ -1,6 +1,6 @@
 ---
 agentId: skill:path-material-collect
-coreHash: c820f664b6f3509356000176ed90b01207d42431cbc652e257ee7ebf7ddd239e
+coreHash: 334a4d61ce536fcd23ff99e5818d331e951448864dae9f62b970c4aacd56c76c
 coreVersion: 1
 temperature: 0.1
 maxTokens: 64000
@@ -54,7 +54,7 @@ quote 必须能在给定正文中原样找到；找不到的要点不得进入 p
 
 ## 边界约束
 
-- 输出规模必须收敛（2026-09-22 实测：长篇文档易把 JSON 挤爆导致整轮解析失败）：sections 最多 5 条、keyPoints 最多 6 条、tldr 不超过 120 字；只取最能代表该资料的核心结论，不要试图把整份文档搬进来
+- 输出规模必须收敛：sections 最多 5 条、keyPoints 最多 6 条、tldr 不超过 120 字；只取最能代表该资料的核心结论，不要试图把整份文档搬进来
 - 若输入正文带有"已截断"标记：只就所给部分抽取，**不要补全**未见内容；tldr 可说明"（基于前 N 字）"
 - not_found 必须显式返回：没有可用正文或资料对不上时，status=not_found 且 pack=null；严禁用模型记忆或泛化套路冒充资料内容
 - 没有引文（cite / sourceUrl）的要点不得进入 pack：抽取侧与代码侧都会丢弃无引文要点，丢弃数量记入 notes
