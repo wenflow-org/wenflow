@@ -1,6 +1,6 @@
 ---
 agentId: skill:path-task-design
-coreHash: 2197acb58e810fd9589c25f4bb36141920901df1d1a09fc9fda660be58aa49b1
+coreHash: c3e7766923cdce6f453ca3f25723208cd50bc5c683798a8d83685d284c91fa19
 coreVersion: 1
 temperature: 0.3
 maxTokens: 64000
@@ -38,7 +38,7 @@ failurePolicy: retry
 3. subtasks 必须围绕当前 milestone 绑定的 coreConcept 展开
 4. 任务要可执行，但不要写成完整教案，不要输出课堂话术
 5. 可以输出 description 和 acceptanceHint，但要保持轻量，不要写成刚性周计划、次数处方、剂量处方、行为干预脚本或微型项目说明书
-6. 「验收越界修复」（repairHints.acceptanceFixes 存在时优先执行）：系统检测到下列任务的验收标准要求平台判定它看不到/听不到的身体动作或声音属性（吉他/美术/舞蹈等 not_judgeable 目标）。按 rules 重写这些任务的 acceptanceHint——保持任务主题与数量不变，只改验收落点：写明「平台不判动作质量，只接收学习者自述/复盘」；**不得**要求打卡、记录练习量或用自评练习事实冒充动作验收。tasks 里没点名的任务不要动
+6. 「验收越界修复」（repairHints.acceptanceFixes 存在时优先执行）：系统检测到下列任务的验收标准要求平台判定它看不到/听不到的身体动作或声音属性（吉他/美术/舞蹈等 not_judgeable 目标）。按 rules 重写这些任务的 acceptanceHint——能改写为原理/归因任务的就改写；历史路径无法删除训练类任务时，只改验收落点，写明「平台不判动作质量，只接收学习者自述/复盘」，**不得新增任务**；**不得**要求打卡、记录练习量或用自评练习事实冒充动作验收。tasks 里没点名的任务不要动
 7. type 只能是 acquire|deconstruct|model|execute|diagnose|refine|consolidate
 8. linkedConcept 默认指向当前 milestone 绑定的 coreConcept（主干概念），但同一阶段的 subtasks 不得全部锁定在同一个概念上机械复读：允许拆分多个认知分面（如"机制理解→操作实现→边界防御→迁移应用"），并通过 linkedConcept 指向当前 milestone 的 coreConcept 或其相邻 supporting concepts 实现多概念交织；consolidate 类型任务若在回捞前一阶段概念，linkedConcept 可以指向被回捞的跨阶段概念（crossStageConcept）；除非 repairHints 明确要求桥接任务，否则支持概念只允许来自同一 cognitiveCore 中声明的概念，不得引入未声明概念
 9. 输出数量优先级：① `planningHints.targetSubtasksForStage` 存在时作为本阶段的【容量上限参考】——实际课数由本阶段自然包含的独立认知闭环（Exit Node）个数决定，≤ 该上限即合法（**唯一保底下限**：当 intent_type === 'exam' 且需覆盖完整考纲清单时，才作为下限，防止漏考点）；严禁为凑满该数字而把同一个认知闭环拆成多节课；② 否则 `targetSubtasksPerStage` 是**全路径锚**而非单点——按本阶段 `estimatedHours` 占比在 `subtasksPerStageRange` 带内定数（学时重的阶段多排、轻的少排），**禁止全路径每个阶段数量完全相同**（除非各阶段学时确实相近）；③ 两者皆缺时遵守 `subtasksPerStageRange` 区间；④ 全缺时默认 3-6 个。**重排压缩例外**：当 `repairHints.replanRatio` 存在且 <1 时，`targetSubtasksForStage` 是**上限**而非恰好值——按"压缩"语义合并同质任务、删掉重复巩固、把已被证明可跳过的建立类任务并进后续任务，输出数应 ≤ 该上限；压缩时**不得**删掉真实交付物任务与业务判断/校准任务（宁可保留它们、把别的并掉）。**质量优先于数量**：按目标数量凑不齐互不重复的真实方向时，下方「同题复读禁令」优先于本条数量要求——宁可少给并在最后一个任务 description 诚实声明缺口，不得用同质/换皮任务凑数；数量规则不覆盖不重复规则
