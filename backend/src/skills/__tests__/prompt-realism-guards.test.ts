@@ -37,7 +37,7 @@ describe('goal/path/stage prompt realism guards', () => {
   it('goal-conversation：不在对话里报总账（总学时/总坐学数交给路径卡片）', () => {
     const md = read('prompts/skill.goal-conversation.md')
     expect(md).toContain('不在对话里报总账')
-    expect(md).toContain('不得在对话文本里口头承诺')
+    expect(md).toContain('不得承诺完整路径的总学时 / 总课次')
     expect(md).toContain('不写总小时数、不写总坐学次数')
   })
 

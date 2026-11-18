@@ -52,6 +52,7 @@ import {
   buildPlannedMisconceptionRows,
   buildTeachingStrategyGuidance,
   resolveActiveTaskMaterialExcerpts,
+  resolveEntryStateForTeaching,
   resolvePathMaterialsForTeaching,
   resolveSchoolAnchorForTeaching,
   resolveTaskMisconceptionHints,
@@ -428,6 +429,7 @@ async function buildTeachingScenarioContextImpl(
       currentTaskOrder,
       totalTasksInMilestone: orderedTasks.length,
     },
+    entryState: resolveEntryStateForTeaching(path.aiPromptTemplate),
     schoolAnchor: resolveSchoolAnchorForTeaching(path.aiPromptTemplate) ?? { background: null, baselineEvidence: null },
     learnerPersona,
     learningState: learningState ? {

@@ -67,6 +67,9 @@ export interface TeachingScenarioContext {
     currentTaskOrder: number;
     totalTasksInMilestone: number;
   };
+  /** 起步路径标记：goal 的 understanding.entry_state 随 normalizedInput 落库；
+   *  课堂据此区分探索起步段与完整路径；缺失时按 focused/通用口径处理。 */
+  entryState?: 'focused' | 'exploratory' | null;
   /** 学校体系锚（2026-09-30）：教材版本/考纲/在校进度。数据在 goal 提取的 learnerProfile 自由文本里，
    *  此前教学层从不读取（实测 64 回合 0 引用）——见 resolveSchoolAnchorForTeaching。 */
   schoolAnchor: {

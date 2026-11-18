@@ -9,7 +9,7 @@
  * 本测试锁 `resolveSchoolAnchorForTeaching` 的读侧契约：三种持久化形态都能取到、
  * 空模板返回 null（键缺省、课堂行为不变）。
  */
-import { resolveSchoolAnchorForTeaching } from '../TeachingContextBuilder';
+import { resolveEntryStateForTeaching, resolveSchoolAnchorForTeaching } from '../TeachingContextBuilder';
 
 const makeTemplate = (normalizedInput: Record<string, unknown>) => JSON.stringify({
   sceneFraming: { normalizedInput },
@@ -58,5 +58,24 @@ describe('resolveSchoolAnchorForTeaching · 学校体系锚读侧', () => {
     });
     const a = resolveSchoolAnchorForTeaching(t)!;
     expect(a.background).toContain('同济版');
+  });
+});
+
+describe('resolveEntryStateForTeaching · 起步路径标记读侧', () => {
+  it('从 sceneFraming.normalizedInput.learnerProfile.entryState 取到 exploratory', () => {
+    const t = makeTemplate({ learnerProfile: { entryState: 'exploratory' } });
+    expect(resolveEntryStateForTeaching(t)).toBe('exploratory');
+  });
+
+  it('回退链：顶层 normalizedInput 也能取到 focused', () => {
+    const t = JSON.stringify({ normalizedInput: { learnerProfile: { entryState: 'focused' } } });
+    expect(resolveEntryStateForTeaching(t)).toBe('focused');
+  });
+
+  it('缺失/非法值/空模板 → null（课堂按通用口径处理）', () => {
+    expect(resolveEntryStateForTeaching(makeTemplate({ learnerProfile: {} }))).toBeNull();
+    expect(resolveEntryStateForTeaching(makeTemplate({ learnerProfile: { entryState: 'other' } }))).toBeNull();
+    expect(resolveEntryStateForTeaching(null)).toBeNull();
+    expect(resolveEntryStateForTeaching('not-json')).toBeNull();
   });
 });

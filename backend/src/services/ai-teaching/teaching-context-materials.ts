@@ -83,6 +83,30 @@ export function resolveSchoolAnchorForTeaching(
 }
 
 /**
+ * 起步路径标记：goal 的 `learnerProfile.entryState` 随 normalizedInput 落库，
+ * 但教学层此前只投影 pathProgress/taskIntent，课堂拿不到「这条路径是探索起步段」。
+ * 这里按与学校锚相同的持久化形态回退读取；无值 → null（课堂行为不变）。
+ */
+export function resolveEntryStateForTeaching(
+  aiPromptTemplate: string | null | undefined,
+): 'focused' | 'exploratory' | null {
+  const parsed = parsePathPromptTemplate(aiPromptTemplate || null);
+  if (!parsed) return null;
+  const snapshot = resolveNormalizedInputSnapshot(parsed);
+  const candidates: unknown[] = [
+    getSceneFramingNormalizedInput(parsed.sceneFraming),
+    resolvePersistedNormalizedInput(parsed),
+    snapshot,
+    (snapshot as any)?.normalizedInput,
+  ];
+  for (const candidate of candidates) {
+    const value = (candidate as any)?.learnerProfile?.entryState;
+    if (value === 'focused' || value === 'exploratory') return value;
+  }
+  return null;
+}
+
+/**
  * 从路径模板（`learning_paths.aiPromptTemplate`）里取回该路径关联的资料，并投影成课堂用的最小集合。
  *
  * 数据位置：`sceneFraming.normalizedInput.resources.materials`（优先），回退持久化快照。

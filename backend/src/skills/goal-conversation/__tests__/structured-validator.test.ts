@@ -169,6 +169,13 @@ describe('validateGoalConversationStructuredOutput', () => {
     expect(result.failureType).toBe('invalid_stage');
   });
 
+  test('completed 是合法终态（answer-only / not_judgeable 收口）', () => {
+    const payload = buildValidPayload({ state: { stage: 'completed', confidence: 0.8, done: true } });
+    const result = validateGoalConversationStructuredOutput(payload);
+    expect(result.valid).toBe(true);
+    expect(result.failureType).toBe('none');
+  });
+
   // 审计 P0 §1.2：规则要求维护 state.motivation_signal / state.mi_frames，但字段表未声明，
   // 模型若照输入 shape 写在顶层会被整轮判 invalid_top_level_keys，伴生 hidden 字段直接丢。
   test('顶层 motivation_signal / mi_frames 允许（hidden 动机字段，不再整轮失败）', () => {

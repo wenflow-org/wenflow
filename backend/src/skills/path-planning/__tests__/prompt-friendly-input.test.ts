@@ -119,4 +119,22 @@ describe('path-planning 输入构造：学习证据必须真正进入提示词',
     const empty = asPromptFriendly(buildPromptFriendlyNormalizedInput({ ...base, schoolAnchor: null }));
     expect(Object.prototype.hasOwnProperty.call(empty.normalizedInput, 'schoolAnchor')).toBe(false);
   });
+
+  it('entryState / intentType 透传；缺失不出现键', () => {
+    const built = asPromptFriendly(
+      buildPromptFriendlyNormalizedInput({
+        ...base,
+        learnerProfile: { surfaceGoal: '想系统了解王阳明心学', entryState: 'exploratory', intentType: 'interest' },
+      }),
+    );
+    expect(built.normalizedInput.learnerProfile).toMatchObject({
+      entryState: 'exploratory',
+      intentType: 'interest',
+    });
+
+    const without = asPromptFriendly(buildPromptFriendlyNormalizedInput({ ...base }));
+    const profile = without.normalizedInput.learnerProfile as Record<string, unknown>;
+    expect(Object.prototype.hasOwnProperty.call(profile, 'entryState')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(profile, 'intentType')).toBe(false);
+  });
 });

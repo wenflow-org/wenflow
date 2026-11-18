@@ -225,14 +225,14 @@ export function validateGoalConversationStructuredOutput(
   // Delta 模式：state 缺席时整体跳过；state 存在时按字段出现校验（缺席=不变，由合并层回填 previous）
   const statePresent = parsedJson.state && typeof parsedJson.state === 'object';
   if (!options.deltaMode) {
-    if (!['understanding', 'proposing', 'ready'].includes(stage)) {
+    if (!['understanding', 'proposing', 'ready', 'completed'].includes(stage)) {
       return {
         valid: false,
         parseMode,
         parsedJson,
         dialogueText,
         failureType: 'invalid_stage',
-        violations: ['state.stage 必须是 understanding / proposing / ready 之一']
+        violations: ['state.stage 必须是 understanding / proposing / ready / completed 之一']
       };
     }
 
@@ -247,14 +247,14 @@ export function validateGoalConversationStructuredOutput(
       };
     }
   } else if (statePresent) {
-    if (parsedJson.state.stage !== undefined && !['understanding', 'proposing', 'ready'].includes(parsedJson.state.stage)) {
+    if (parsedJson.state.stage !== undefined && !['understanding', 'proposing', 'ready', 'completed'].includes(parsedJson.state.stage)) {
       return {
         valid: false,
         parseMode,
         parsedJson,
         dialogueText,
         failureType: 'invalid_stage',
-        violations: ['state.stage 必须是 understanding / proposing / ready 之一']
+        violations: ['state.stage 必须是 understanding / proposing / ready / completed 之一']
       };
     }
     if (parsedJson.state.confidence !== undefined

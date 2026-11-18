@@ -379,7 +379,15 @@ export function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
           level: normalizePromptString(learnerProfile.currentBaseline?.level),
           evidence: normalizePromptString(learnerProfile.currentBaseline?.evidence),
         },
-        // 技能性质 / 平台可判定性（2026-11-05 #242）：定帧层早已把它们写在 learnerProfile 内
+        // 进入态/内容分型：定帧层已写入 learnerProfile，但本投影是逐字段白名单重建；
+        // 不补进来则 path-planning 规则里的 entryState 永远读不到。无值时不出现键。
+        ...(learnerProfile.entryState === 'focused' || learnerProfile.entryState === 'exploratory'
+          ? { entryState: learnerProfile.entryState }
+          : {}),
+        ...(normalizePromptString(learnerProfile.intentType)
+          ? { intentType: normalizePromptString(learnerProfile.intentType) }
+          : {}),
+        // 技能性质 / 平台可判定性：定帧层早已把它们写在 learnerProfile 内
         // （path.coordinator.ts:403-430 生产、path-planning-hints.ts:1443-1459 透传），但本投影是
         // 逐字段白名单重建，与 schoolAnchor 同型地被静默裁掉 ⇒ path-planning 载荷里一次都不出现。
         // 无值时不出键（与定帧层同口径：判不出就按通用口径处理）。
