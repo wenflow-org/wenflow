@@ -1,6 +1,6 @@
 ---
 agentId: skill:path-kc-mapping
-coreHash: 7eea0d68574429a4463e6e4d016f51f1a776c5dd07afb008463ccf58c25cebf8
+coreHash: 6f395b91ccfa9baafc7dac7495cad13122a4fc1d3886c5478e393c0c5d979af0
 coreVersion: 1
 temperature: 0.3
 maxTokens: 64000
@@ -37,17 +37,16 @@ failurePolicy: propagate
 2. 每个 coreConcept 分解为 2-5 个 KC；每个 KC 是一个可独立习得、可单独评估的能力单元
 3. 一个 KC 只承载一个可检验的断言：名字里出现并列（并/且/和/还/同时）或两个动作， 说明它塞了两件事，必须拆成两个 KC。 例外：「区分／对比／辨别／比较 A 与 B」算一个断言（判据是把两者分开），不拆
 4. KC 命名：动词 + 单一可观测对象，控制在 12 字以内；不含从句、不引用规则原文或口诀。 反例（太长/复合）：「用「别人能看见什么不同」判断一条事项停在动作层还是结果层」 → 应拆为「区分动作层与结果层」+「用可见差异判断层级」两个 KC。 反例（步骤冒充能力）：「按顺序执行起手推算」——它只说了"照顺序做"，离开这条任务就只剩记顺序，不是 KC 正例：「识别半联动点」「区分目标描述与教育建议」「提取关键词维度」
-5. 不要按任务流程逐步骤改写：先在心里把这条任务的执行步骤列出来，然后问「哪几步其实是同一类能力、 会在别的任务里以同样方式再出现」，只把这些作为 KC；纯顺序性的步骤不进 KC 列表
+5. KC 应是可复用能力，不是任务步骤：先在心里列出任务的执行步骤，把会在别的任务里以同样方式再次出现的同类能力抽成 KC；纯顺序性步骤不进 KC 列表。若某个 KC 只可能被一个任务用到，先确认它是不是步骤——是则删掉，不是则保留
 6. KC 名字在同一条路径内保持稳定：同一个能力不要造两个名字；被多个任务用到时引用同一个 kcId
 7. KC 标注 taxonomy（factual|conceptual|procedural|metacognitive）
 8. KC 之间标注 prerequisiteKCs（前置依赖：要理解 KC-B 必须先掌握 KC-A）
 9. prerequisite 是知识依赖，不是讲授顺序：只有当「没掌握 A 就不可能掌握 B」时才标 A→B； 仅因「教学上先讲 A」而标的顺序、以及任何环，都不要输出
-10. 一个 KC 应当能被多个任务共用；若某个 KC 只可能被一个任务用到，先确认它是不是步骤而非能力
-11. 每个 KC 必须"有来路"：要么被至少一个 subtask 关联（出现在 taskKcLinks 的 linkedKCs 里）， 要么是某个**已被关联** KC 的前置（prerequisite 边的上游）。两样都不占的 KC 是孤岛—— 先自问它是不是某条任务的执行步骤：是则删掉，不是则并入语义最近的 KC； **不要为了让它"挂上"而硬造一条 taskKcLinks**（前置 KC 天然不会被任务直接关联，这是正常的）
-12. 每个 subtask 关联到至少 1 个 KC（通过 linkedKC 字段）
-13. taskKcLinks 必须覆盖输入 subtasks 的**每一项**，且每项都要逐字回显该项的 taskKey 作为该条链接的 taskKey（稳定键，禁止改写、省略或自造）；taskTitle 照抄输入的 title 即可，仅供人读对照。 同名任务靠 taskKey 区分，不得因为标题相同就合并成一条。
-14. 如果提供 prerequisiteTree，KC 依赖图必须覆盖所有 unknownConcepts（缺口链中的概念必须有对应的 KC 和前置标注）
-15. 不编造不存在于输入中的概念或 KC
+10. 每个 KC 必须"有来路"：要么被至少一个 subtask 关联（出现在 taskKcLinks 的 linkedKCs 里）， 要么是某个**已被关联** KC 的前置（prerequisite 边的上游）。两样都不占的 KC 是孤岛—— 先自问它是不是某条任务的执行步骤：是则删掉，不是则并入语义最近的 KC； **不要为了让它"挂上"而硬造一条 taskKcLinks**（前置 KC 天然不会被任务直接关联，这是正常的）
+11. 每个 subtask 关联到至少 1 个 KC（通过 linkedKC 字段）
+12. taskKcLinks 必须覆盖输入 subtasks 的**每一项**，且每项都要逐字回显该项的 taskKey 作为该条链接的 taskKey（稳定键，禁止改写、省略或自造）；taskTitle 照抄输入的 title 即可，仅供人读对照。 同名任务靠 taskKey 区分，不得因为标题相同就合并成一条。
+13. 如果提供 prerequisiteTree，KC 依赖图必须覆盖所有 unknownConcepts（缺口链中的概念必须有对应的 KC 和前置标注）
+14. 不编造不存在于输入中的概念或 KC
 
 ## 输出字段
 
