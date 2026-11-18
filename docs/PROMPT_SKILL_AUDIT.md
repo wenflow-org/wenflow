@@ -1,7 +1,7 @@
 # Prompt / Skill 结构审计台账
 
 审计口径：规则重复、规则互相矛盾、把个案写进 prompt、fields 承载算法、prose 状态机、与运行时代码契约不一致。
-结论分三类：**重构**（已改）、**收敛**（删除/合并了内容）、**通过**（逐条看完，无需改结构）。
+结论分三类：**重构**（已改）、**收敛**（删除/合并了内容）、**通过**（逐条阅读后判定无需改结构，不代表已重写）。
 
 ## goal
 
@@ -16,7 +16,7 @@
 |---|---|---|
 | path-planning | 重构 | 合并重复的纯文本约束；合并 `targetMilestones` 两套数量口径并保留测试依赖的标题；其余里程碑/预算规则逐条核对无冲突 |
 | path-task-design | 重构 | 合并重复的「真实场景锚 / 真实场景与判断锚」（统一为每阶段 1–2 个）；合并文本执行、单任务时长、验收判据三组重叠规则；删除「某阶段 6 节同题」等个案叙事 |
-| path-kc-mapping | 通过 | KC 拆分、命名、prerequisite 知识依赖、provenance 四组规则互不冲突；只清掉审计编号 |
+| path-kc-mapping | 重构 | 合并「可复用能力 / 不是任务步骤」两条重叠规则；KC 拆分、命名、prerequisite 知识依赖、provenance 边界一致 |
 | path-material-collect | 通过 | `status` / `cite` / `sourceUrl` / `provenance` 四层约束与 fields 一致，`not_found` 口径无分叉 |
 | path-material-brief | 通过 | 三个输出字段与 9 条规则一一对应，无重复或悬空引用 |
 | path-reviewer | 重构 | 澄清 Pertinence 对 beginner 路径名的判定方向：使用「入门/基础」是缺陷，不是适配 |
@@ -50,13 +50,13 @@
 |---|---|---|
 | simulation-goal-dialogue | 重构 | 离场/告别 5 条规则收敛为 2 条：拍板确认、像真人一样离场；拍板轮 `shouldEnd` 口径并入拍板规则 |
 | simulation-path-evaluate | 通过 | `accept/modify/reject` 只进 debug，主链只输出自然语言 reaction，与 fields 一致 |
-| simulation-persona-designer | 通过 | 人物分布规则与 scenario 的样本配比职责分离，未发现互相否定 |
+| simulation-persona-designer | 重构 | 合并「不要默认白领」与「candidatePersonas 为空」两条身份分布规则；样本配比与学生模式规则保留 |
 | simulation-scenario-designer | 重构 | 6 条来源/角色/样本分布规则合并为「来源与角色分布」「样本配比与分布」两条 |
 | simulation-learn-turn | 收敛 | 清理个案实证；阶段行为、完成自评、remainingBlockers 边界一致 |
 | simulation-referee | 通过 | R1 豁免、R2/R4 扣分、abandoned 不产 wrapup 的证据规则互不冲突 |
 | simulation-memory-curate | 重构 | 去掉「真实 payload 中字段几乎不存在」的补丁式说明；把「嘴硬但没真会」改为「完成 ≠ 掌握」 |
 | simulation-actor-audit | 通过 | 画像/故事/披露/摩擦/私有状态五类审计基准清晰，无重复 |
-| simulation-epistemic-grounding | 通过 | 画像先验 × 教师支架双轴判决一致；forcedCorrectness/pendingCheckpoint 特例无冲突 |
+| simulation-epistemic-grounding | 重构 | 合并 masteryProb 0.40-0.55 的两处重复表述，阈值只在字段定义处保留；画像先验 × 教师支架双轴判决一致 |
 
 ## 元技能
 
