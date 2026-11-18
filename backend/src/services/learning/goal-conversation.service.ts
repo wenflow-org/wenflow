@@ -769,7 +769,25 @@ async continueConversation(
       } : null;
 
       // 模型自报 ready/completed 不产生学习路径：路径生成只能由用户通过 UI 按钮显式确认触发
-      // （见上方 confirmProposal 硬规则路径）。模型自报一律回落 proposing，等待用户确认方案。
+      // （见上方 confirmProposal 硬规则路径）。模型自报 ready、或 completed 但带提案，一律回落 proposing。
+      // completed 且无提案是 answer-only / not_judgeable 的合法收口：它不生成路径，直接结束会话。
+      const hasConfirmedProposal = Boolean(
+        (goalExt as any)?.confirmedProposal
+        || (persistedData as any)?.confirmedProposal
+      );
+      if (stage === 'completed' && !hasConfirmedProposal) {
+        await this.updateConversationLifecycle(conversationId, 'completed', {
+          status: 'completed',
+          completedAt: new Date(),
+        });
+        logger.info('模型输出 completed 且无提案，按 answer-only / not_judgeable 收口', { conversationId });
+        return this.toServiceResult(responseWithConversationId, conversationId, {
+          stage: 'completed',
+          confidence,
+          isCompleted: true,
+          fallbackGoalExt,
+        });
+      }
       if (stage === 'ready' || stage === 'completed') {
         // 172-1：降级按 proposing 档（0.75~0.94）重算 confidence，不沿用 ready 档自报值（floor 0.95）
         const degradedConfidence = Math.min(Math.max(Number.isFinite(confidence) ? confidence : 0.75, 0.75), 0.94);

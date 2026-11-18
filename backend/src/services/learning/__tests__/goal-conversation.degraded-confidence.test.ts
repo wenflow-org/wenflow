@@ -126,6 +126,7 @@ const UNDERSTANDING = {
 function buildSelfReportedResponse(options: {
   stage: 'ready' | 'completed' | 'proposing';
   confidence: number;
+  confirmedProposal?: Record<string, unknown>;
 }) {
   return {
     userVisible: '我们聊得差不多了，可以开始学了。',
@@ -138,6 +139,7 @@ function buildSelfReportedResponse(options: {
           nextQuestions: [],
           quickReplies: [],
           collected: {},
+          ...(options.confirmedProposal ? { confirmedProposal: options.confirmedProposal } : {}),
         },
       },
     },
@@ -264,14 +266,28 @@ describe('172-1 降级回合的 confidence 口径', () => {
     expect(round2Payload.previousState.confidence).toBeLessThanOrEqual(PROPOSING_MAX);
   });
 
-  it('模型自报 completed 也走同一降级口径（不是只有 ready 一条路）', async () => {
-    mockExecuteSkill.mockResolvedValue(buildSelfReportedResponse({ stage: 'completed', confidence: 0.97 }));
+  it('模型自报 completed 且带提案，仍走降级口径（不能绕过用户确认）', async () => {
+    mockExecuteSkill.mockResolvedValue(buildSelfReportedResponse({
+      stage: 'completed',
+      confidence: 0.97,
+      confirmedProposal: { learning_direction: 'x', key_stages: ['a', 'b'] },
+    }));
 
     const result = await goalConversationService.continueConversation('conv-1', '我懂了', 'user-1');
 
     expect(result.internal.core.stage).toBe('proposing');
     expect(result.internal.core.confidence).toBeLessThan(0.95);
     expect(result.internal.core.confidence).toBeLessThanOrEqual(PROPOSING_MAX);
+  });
+
+  it('模型自报 completed 且无提案（answer-only / not_judgeable）→ 允许收口，不生成路径', async () => {
+    mockExecuteSkill.mockResolvedValue(buildSelfReportedResponse({ stage: 'completed', confidence: 0.9 }));
+
+    const result = await goalConversationService.continueConversation('conv-1', '我懂了，不用排课', 'user-1');
+
+    expect(result.internal.core.stage).toBe('completed');
+    expect(result.internal.core.isCompleted).toBe(true);
+    expect(result.internal.core.learningPath).toBeUndefined();
   });
 
   it('未降级的 proposing 回合不受影响（模型自报 0.8 原样保留）', async () => {
