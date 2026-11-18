@@ -23,7 +23,7 @@ describe('teaching-turn 契约收口', () => {
   it('看图指代只由 boardContext 决定，不再保留“文本自足是有条件的”旧分叉', () => {
     const rule15 = rules[14];
     expect(rule15).toContain('boardContext');
-    expect(rule15).toContain('文本自足与看图指代（2026-10-29 收口）');
+    expect(rule15).toContain('文本自足与看图指代');
     expect(rule15).not.toContain('文本自足是有条件的');
   });
 
