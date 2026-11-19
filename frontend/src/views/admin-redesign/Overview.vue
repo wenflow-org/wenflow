@@ -264,7 +264,12 @@
             <b class="ov-active-line__num">{{ sparseActiveDay.activeUsers }}</b>
             <span class="ov-active-line__meta">人 · {{ sparseActiveDay.date }}</span>
           </div>
-          <OvBars v-else-if="barchartCols.length" :cols="barchartCols" :bar-width="40" :min-bars-height="120" />
+          <OvBars
+            v-else-if="barchartCols.length && !allZeroActive"
+            :cols="barchartCols"
+            :bar-width="40"
+            :min-bars-height="120"
+          />
           <MkEmptyState v-else class="ov-card__empty" title="近 7 天暂无活跃数据" description="窗口内没有活跃学习者记录。" />
         </div>
       </div>
@@ -680,6 +685,11 @@ const sparseActiveDay = computed(() => {
   const days = (data.value?.growth7d || []).filter((g) => (g.activeUsers || 0) > 0)
   return days.length === 1 ? days[0] : null
 });
+/** 整窗零活跃（2026-11-20 走查）：柱图会画出一排「·」+ 一大片空画布，读成渲染坏了；
+    与「无 growth7d」同样走空态。 */
+const allZeroActive = computed(
+  () => barchartCols.value.length > 0 && barchartCols.value.every((c) => c.num === '0')
+);
 
 /* 系统健康摘要：拉巡检聚合的健康清单（/health-center/summary，60s 缓存），只取 warn/error 计数。
    P1#3 三态纪律：加载中 / 加载失败 / 空清单 / 有数据是四种不同事实，

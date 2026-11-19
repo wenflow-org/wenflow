@@ -122,7 +122,7 @@
 
         <!-- 活跃会话表（行分页：页码器在卡脚，跨组统一计数） -->
         <div class="mk-table-scroll">
-          <table class="mk-table mk-table--fixed">
+          <table class="mk-table mk-table--fixed ss-table">
             <colgroup>
               <col style="width:var(--mk-col-text)">
               <col style="width:var(--mk-col-id)">
@@ -219,7 +219,7 @@
             >仅显示最近 {{ g.historical.length }} 条，全量走「数据导出」</span>
           </summary>
           <div class="mk-table-scroll">
-            <table class="mk-table mk-table--fixed">
+            <table class="mk-table mk-table--fixed ss-table">
               <colgroup>
                 <col style="width:var(--mk-col-text)">
                 <col style="width:var(--mk-col-id)">
@@ -842,8 +842,11 @@ onMounted(async () => {
 
 /* 分组在 fill 布局里被拉到可用高度：活跃表在上，历史折叠条作为卡脚贴底。
    否则折叠条紧跟活跃行、其下留 300+px 空白，像表格里混进了一条无主行（2026-10-30 人工复查）。 */
-.ss-group { display: flex; flex-direction: column; }
-.ss-group > .mk-table-scroll { flex: none; }
+/* 2026-11-19：分组是 grid/flex 子项，min-width:auto 会被 1170px 的表撑开，
+   导致表格整块溢出卡片、右列（操作）被裁掉且没有横滚。压成 0 让
+   .mk-table-scroll 接管横向滚动。 */
+.ss-group { display: flex; flex-direction: column; min-width: 0; }
+.ss-group > .mk-table-scroll { flex: none; min-width: 0; }
 
 /* 卡头右组：两枚批量动作（2026-10-27 操作区收口） */
 .ss-head-acts { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
@@ -908,9 +911,12 @@ onMounted(async () => {
   color: var(--mk-amber, #b45309);
   white-space: nowrap;
 }
-/* LY6（2026-10-05 布局方案 §4）：三列时刻在 ≤1599 档收 176→112（MM-DD HH:mm 预算），
-   七列合计 968px，在 1280 内容区 992 内不再横向滚动；≥1600 恢复 token 原值。 */
+/* LY6（2026-10-05 布局方案 §4；2026-11-19 修正）：≤1599 档不能按「MM-DD HH:mm」估宽——
+   2026-11-11 时间口径审计已要求保留年份（完整 YYYY-MM-DD HH:mm），112px 会让三列时刻
+   压进相邻列（1280 实测最后活跃与过期时间叠字）。改为 160px，并给表格最小宽度，
+   窄屏走 .mk-table-scroll 横滚，而不是把内容挤出单元格。 */
 .ss-col--time { width: var(--mk-col-datetime); }
+.ss-table { min-width: 1170px; }
 /* 2026-11-04：状态列要容得下 3 字徽章。历史行的「已过期 / 已撤销」徽章本身 54px，
    而 --mk-col-badge 的 64px 只算了徽章、未计单元格左右 16px 内衬（内容盒仅 32px），
    390 / 1280 档徽章右缘越出 td 6px 压进「操作」列。本页两表同取
@@ -918,10 +924,7 @@ onMounted(async () => {
    本列内，活跃表与历史表的「状态 / 操作」也保持同宽对齐。 */
 .ss-col--status { width: max(var(--mk-col-badge), 88px); }
 @media (max-width: 1599px) {
-  .ss-col--time { width: 112px; }
-  /* 2026-11-04：≤1599 档列收 112px 后，内容盒只剩 80px（112−左右 16 内衬），
-     而「MM-DD HH:mm」按正文 14px 要 90px，溢出 10px（390×844 走查复现的量化溢出）。
-     本档把时间文本降到 micro 角色（≈12px→77px），与 ≥2800 档 .ss-time 同一字号口径。 */
+  .ss-col--time { width: 160px; }
   .ss-time { font-size: var(--mk-fs-micro); }
 }
 .ss-na { color: var(--mk-faint); font-size: var(--mk-fs-micro); }

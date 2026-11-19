@@ -225,7 +225,8 @@ const showBack = computed(() => !onTabSection.value && !route.path.startsWith('/
 const titleHidden = computed(
   // 2026-11-04：学习状态窄屏同屏三处「学习状态」（导航高亮 + 顶栏标题 + 正文 H1，顶栏与 H1 相距 62px），按本集合 P2-23 同口径收进来
   // 2026-11-05 屏效比：目标规划进集合——底部 dock 已高亮同一 tab，顶栏标题与之同屏复读（页内还有步骤条承载阶段语境），窄屏左槽亮品牌
-  () => route.path.startsWith('/dashboard') || route.path.startsWith('/knowledge-map') || route.path.startsWith('/library') || route.path.startsWith('/learning-state') || route.path.startsWith('/goal-conversation') || route.path.startsWith('/user/agent-logs')
+  // 2026-11-20 移动端走查：路径列表页同样顶栏「学习路径」+ 正文 H1「学习路径」上下复读，按同口径收进来（详情页保留顶栏标题）
+  () => route.path.startsWith('/dashboard') || route.path.startsWith('/knowledge-map') || route.path === '/learning-paths' || route.path.startsWith('/library') || route.path.startsWith('/learning-state') || route.path.startsWith('/goal-conversation') || route.path.startsWith('/user/agent-logs')
 );
 const pageTitle = computed(() => {
   const t = route.meta?.title;

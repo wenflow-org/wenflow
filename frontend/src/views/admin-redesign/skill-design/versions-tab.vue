@@ -139,7 +139,6 @@
                 </button>
               </div>
             </div>
-            <p class="sdp-var__create-note">评测时可以指定虚拟学习者按某个变体试跑。</p>
           </div>
         </template>
 
@@ -800,7 +799,6 @@ watch(() => props.skillId, () => {
   gap: 8px;
   align-items: center;
 }
-.sdp-var__create-note { margin: 0; font-size: var(--mk-fs-micro); color: var(--mk-faint); }
 /* 对照臂流量语义（2026-11-11 困惑测试 #88） */
 .sdp-var__intro { margin: 0; font-size: var(--mk-fs-micro); line-height: 1.6; color: var(--mk-muted); }
 /* 字段：标签在上、控件在下（原为同行，标签与输入框对不齐） */

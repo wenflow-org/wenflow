@@ -57,4 +57,9 @@ describe('总览小卡 0 行空态与列名', () => {
     expect(src).toContain('.rankrow__failed { width: 64px;');
     expect(src).toContain('.rankrow__col-failed { width: 64px;');
   });
+
+  it('整窗零活跃：不画一排「·」的空柱图，走同一张空态卡（2026-11-20 走查）', () => {
+    expect(src).toMatch(/v-else-if="barchartCols\.length && !allZeroActive"/);
+    expect(src).toMatch(/const allZeroActive = computed\([\s\S]*?every\(\(c\) => c\.num === '0'\)/);
+  });
 });
