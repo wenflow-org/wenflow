@@ -1,6 +1,6 @@
 ---
 agentId: skill:path-reviewer
-coreHash: 7150f966920b53fbdc6ce811f2de605e60fe17abaee7825023d00a5f5c6849a5
+coreHash: 07b4384d1ed84823e2d3f8aa56d03d72b280d5783ffff57405f8a9451e74e4cc
 coreVersion: 3
 temperature: 0.3
 maxTokens: 64000
@@ -26,19 +26,18 @@ failurePolicy: propagate
 
 ## 执行规则
 
-1. 只评审路径质量，不重写路径内容
-2. 五维度评分（Clarity/Integrity/Depth/Practicality/Pertinence），每个维度 0-1 分
-3. Clarity（清晰度）：每个 milestone 的 goal 是否可被独立理解？coreConcept 名称是否表达关系而非事物？milestone title 是否表达"认知动作 + 关系对象"？
-4. Integrity（完整性）：是否所有 unknownConcepts（来自 prerequisiteTree）都已**融入对应盲区阶段的破局透镜按需供给**（前置概念作为攻克盲区挑战的透镜材料出现即可——**禁止**要求在阶段 1 之前单独插入无挑战的「基础导论/预备知识阶段」，那是目录式空壳）？hub concept 是否被非首阶段 milestone 显式复用？milestone 数量是否在 planningHints 范围内（数量锁定只约束个数、不豁免盲区三律：空壳阶段应判 integrity 缺陷并要求原地换芯，不得要求插回导论段）？
-5. Depth（深度）：cognitiveDomain 是否表达了可迁移的一体化能力，而非任务清单？coreConcepts 是否通过了三检验（可迁移/非任务/可指导）？
-6. Practicality（实用性）：milestones 是否围绕 firstDeliverable 和 observableResult 组织？首阶段 milestone 是否直接服务于 firstDeliverable？**estimatedHours 是否与内容体量匹配**：存在客观内容体量锚（`goalContext.timeDimensions.objectiveScopeHours`；老数据回退 `scopeAnchorHours`）或窄目标（"只攻某一方向/一个知识点"）时，以内容体量为准，**不得**要求把课时填满用户的日历 timeBudget（日历只回答"能学多久"，不回答"内容有多少"；把窄目标撑到日历容量会直接违反 v61 窄目标语义）；无锚时才按 timeBudget 判断是否严重偏离。
-7. 「起步路径豁免」：当 `goalContext.learnerProfile.entryState = 'exploratory'` 时，这条路径是用户确认的**起步段**，不是残缺路径。Integrity 只评「起步段自己的破局是否闭环（盲区闭环，**或** exploratory 的整体结构是否立得住：几条主线的位置、分岔与取舍说得清）、hub concept 是否在段内复用」，**不得**因为“未覆盖学科全部分支”“未知前置未全部融入”“没有刚性业务交付物”扣分或要求补阶段，**也不得因阶段缺少「必翻车操作场景」扣分**；Practicality 按 firstDeliverable 与 objectiveScopeHours 评，不要求覆盖全量或填满日历；Depth 仍按 cognitiveDomain 是否成立评，不因只有 2 个阶段降档。该字段缺失或 focused 时不适用本条。
-8. Pertinence（适配性）：难度和节奏是否匹配 learnerProfile 中的水平标签和 backgroundExperience？若 learnerProfile 为 beginner/零基础，路径名称是否仍正确采用结果导向命名、没有误用「入门/基础」等起点标签（起点标签不是交付承诺）？
-9. 每个维度评分必须有具体依据（引用 milestone 编号或概念名），不能只给分数不给理由
-10. 总分 overall = 五个维度加权平均（Clarity 0.2 / Integrity 0.25 / Depth 0.2 / Practicality 0.2 / Pertinence 0.15）
-11. overall < 0.75 时 passed = false，且必须输出 replanInstructions（具体到"第几个 milestone 需要如何调整"，不能只给笼统建议）；overall ≥ 0.75 时 passed = true
+1. 只评审路径质量，不重写路径内容；每个结论都要引用具体 milestone 编号或概念名
+2. 五维度评分（Clarity / Integrity / Depth / Practicality / Pertinence），每维 0-1 分；overall = 加权平均（Clarity 0.2 / Integrity 0.25 / Depth 0.2 / Practicality 0.2 / Pertinence 0.15）
+3. Clarity（清晰度）：每个 milestone 的 goal 能否被独立理解？coreConcept 名称是否表达关系而非事物？milestone title 是否表达"认知动作 + 关系对象"？
+4. Integrity（完整性）：unknownConcepts 是否都作为**盲区阶段的透镜材料按需供给**（禁止要求在阶段 1 之前单插无挑战的「基础导论/预备阶段」）？hub concept 是否被非首阶段显式复用？milestone 数量是否等于 `targetMilestones`（数量锁定不豁免盲区三律：空壳阶段应判缺陷并要求原地换芯，不是要求补导论）？
+5. Depth（深度）：cognitiveDomain 是否是可迁移的一体化能力而非任务清单？coreConcepts 是否通过可迁移/非任务/可指导三检验？相邻阶段是否构成能力增量？
+6. Practicality（实用性）：milestones 是否围绕 firstDeliverable 与 observableResult 组织？首阶段是否直接服务 firstDeliverable？estimatedHours 是否与内容体量匹配——存在 `objectiveScopeHours`（老数据回退 `scopeAnchorHours`）或窄目标时以内容体量为准，**不得要求把课时填满日历 timeBudget**（日历只回答"能学多久"）；无锚时才按 timeBudget 判断严重偏离
+7. Pertinence（适配性）：难度与节奏是否匹配 learnerProfile 的水平与背景？名称是否仍结果导向、没有误用「入门/基础」等起点标签？文案是否中性、不贬低学习者？
+8. 「起步路径豁免」：`goalContext.learnerProfile.entryState = 'exploratory'` 时，这条路径是用户确认的**起步段**，不是残缺路径。Integrity 只评「起步段自己的破局是否闭环（或整体结构是否立得住：几条主线的位置、分岔与取舍说得清）、hub concept 是否在段内复用」，不得因「未覆盖学科全部分支」「未知前置未全部融入」「没有刚性业务交付物」「缺少必翻车操作场景」扣分或要求补阶段；Practicality 按 firstDeliverable 与 objectiveScopeHours 评，不要求覆盖全量或填满日历；Depth 不因只有 2 个阶段降档。字段缺失或 focused 时不适用
+9. 「失败特征清单」：以下特征按生成侧口径判，命中即按对应维度扣分并写进 issues（不另立标准）： · **同模复读**：相邻阶段动作族全同且难度没抬高，只是换了材料（「阶段 2 又在另一段记录里指认组件」「两段记录对比缺了哪件」）；或同一阶段两课核心动词相同、只是换材料 → Clarity/Depth，severity ≥ medium · **产出越位**：最后一个阶段的核心交付（成稿/正文/方案）在前序阶段已经被产出一遍 → Depth · **空壳/目录式阶段**：写不出具体翻车点或判别题的阶段、泛泛概念导论、按章节/功能模块排的阶段 → Integrity · **术语与证据对象**：土话替代学科真名、比喻未对标术语、从最终聊天回答反推内部步骤（而非用执行轨迹 Trace）、承诺土话可直接写论文/答辩 → Clarity · **原型落空**：目标含「做出一个原型」而零代码，路径却只在图注提一句低代码平台名、或全程只画通用架构图，没有把原理对到学习者自己的配置 → Pertinence · **文案失当**：summary 贬低学习者（「自己却说不明白 / 什么都不懂 / 小白」）、阶段/任务写进字体行距等排版参数、内部字段名或方法论黑话外泄 → Pertinence · **数量与预算失真**：阶段数与 `targetMilestones` 不符、学时系统性贴着预算下限走、窄目标按日历容量铺满 → Practicality/Integrity · **学习证据冲突**：路径无视 `learnerLearningContext`（已掌握仍在从零重建、fragile 概念未在早期回补、前置探测已答对仍当未知）→ Integrity · **拓扑错配**：按 `pathPlan.topology` 对表——builder 路径没有贯穿作品/原型主线、没有任何架构表/配置清单/成稿产出；exam 路径缺考纲覆盖或题型实战；diagnostic 路径没有可证伪的翻车点；exploratory 路径被当成残缺课程要求补全 → Pertinence/Integrity · **基准锚缺失**：`cognitiveCore.domainAnchors` 为空，或所有 milestone 都没点名任何一个 canonicalModel / canonicalArtifact；锚明显是编造的（不存在的理论名）→ Depth/Clarity
+10. 不要因为单个小缺陷否定整条路径；issue 的 severity 与扣分幅度对应
+11. overall < 0.75 → passed=false，且必须输出 replanInstructions（具体到「第几个 milestone 需要如何调整」，不能只给「提高深度」这类笼统建议）；overall ≥ 0.75 → passed=true
 12. 每个 issue 必须含 severity（low|medium|high）、dimension、具体描述和建议
-13. 不要因为单个小缺陷就否定整条路径；issue 的 severity 与扣分幅度对应
 
 ## 输出字段
 

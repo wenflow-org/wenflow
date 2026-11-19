@@ -234,9 +234,26 @@ export interface PathCognitiveConcept {
   description?: string;
 }
 
+/** 路径拓扑：决定阶段推进公式（path-planning 选择，reviewer/task-design 沿用）。 */
+export type PathTopology = 'exploratory' | 'builder' | 'exam' | 'diagnostic';
+
+/**
+ * 学科基准锚（2026-11-18）：领域公认的理论真名 / 分析载体 / 新手头号误区。
+ * 有了它，冷门领域也不靠提示词里手写学科例子兜底。
+ */
+export interface PathDomainAnchors {
+  canonicalModels?: string[];
+  canonicalArtifacts?: string[];
+  commonMisconceptions?: string[];
+}
+
 export interface PathCognitiveDesign {
   cognitiveDomain?: string | null;
   coreConcepts?: PathCognitiveConcept[];
+  /** 学科基准锚（可选，path-planning 产出；milestone 必须至少引用一个） */
+  domainAnchors?: PathDomainAnchors;
+  /** 路径拓扑（可选，随 cognitiveCore 一起落库；reviewer/task-design 沿用） */
+  topology?: PathTopology;
   /** RPKT 前提知识缺口链（可选，path-planning 产出；供 path-task-design/path-kc-mapping/path-reviewer 消费） */
   prerequisiteTree?: unknown;
   /** CLT 认知负荷画像（可选，path-planning 产出；供 path-task-design 按 loadTarget 调整子任务设计） */

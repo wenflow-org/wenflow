@@ -55,11 +55,106 @@ export interface TeachingSession {
   knowledgePoints?: KnowledgePointStatus[];
   mode?: 'new' | 'resumed' | 'review';
   revision: number;
+  /** 课堂契约（2026-11-19）：最低必须完成集 + 支线额度；开课卡展示 */
+  lessonContract?: LessonContract | null;
+  lessonReport?: LessonReport | null;
   opening?: {
     message: string;
     question: string;
     quickReplies: Array<{ text: string }>;
     mode: 'self-assess' | 'predict' | 'example-first';
+  };
+}
+
+export interface LessonContract {
+  version: 1;
+  coreKcs: Array<{ kcId: string; name: string }>;
+  minIndependentEvidence: number;
+  minTurns: number;
+  timeBudgetMin: number | null;
+  branchBudgets: {
+    examplePerKc: number;
+    deeperTurns: number;
+    prerequisitePatches: number;
+    offTopicInClassTurns: number;
+  };
+}
+
+/** 课末独立终检题（2026-11-19）：与课内检查点分离的结课终检，结果计入独立证据与结课报告 */
+export interface ExitTicket {
+  id: string;
+  question: string;
+  type: 'short_answer' | 'single_choice' | 'multi_choice';
+  options?: Array<{ id: string; text: string }>;
+  conceptName: string;
+  askedAt: string;
+  status: 'pending' | 'passed' | 'failed';
+  attempts: number;
+  judgedBy?: 'code' | 'model-rubric' | 'model-reference';
+  passed?: boolean;
+  answeredAt?: string;
+  detail?: string | null;
+}
+
+/** 24–72h 延迟保持探针（课后到期单点题；答案键只在服务端） */
+export interface RetentionProbeDueItem {
+  id: string;
+  conceptKey: string;
+  label: string;
+  scheduledAt: string;
+  windowEndsAt: string;
+  attempts: number;
+  question: {
+    question: string;
+    type: 'short_answer' | 'single_choice' | 'multi_choice';
+    options?: Array<{ id: string; text: string }>;
+  };
+}
+
+export interface RetentionProbeAnswerResult {
+  probeId: string;
+  conceptKey: string;
+  label: string;
+  passed: boolean;
+  judgedBy: 'code' | 'model-rubric' | 'model-reference';
+  detail: string;
+  downgraded: boolean;
+  attempts: number;
+}
+
+export interface LessonReport {
+  met: boolean;
+  coveredKcs: string[];
+  missingKcs: string[];
+  independentKcs: string[];
+  independentCount: number;
+  requiredIndependent: number;
+  reasons: string[];
+  generatedAt: string;
+  teachingTurns: number;
+  evidence: Array<{
+    kcId: string | null;
+    kcName: string;
+    kind: 'checkpoint' | 'knowledge' | 'test_out' | 'exit-ticket';
+    independent: boolean;
+    correct: boolean;
+    at: string;
+    turn: number;
+  }>;
+  branch: {
+    active: string | null;
+    patchesUsed: number;
+    offTopicTurns: number;
+    examplesUsed: number;
+  };
+  parkingLot: Array<{ at: string; topic: string; studentWords?: string | null }>;
+  exitTicket?: {
+    asked: boolean;
+    passed: boolean;
+    attempts: number;
+    conceptName: string | null;
+    judgedBy: string | null;
+    question: string | null;
   };
 }
 
@@ -132,6 +227,18 @@ export interface MessageResult {
   knowledgePoint: string | null;
   knowledgePoints: KnowledgePointStatus[];
   isCompletion: boolean;
+  /** 课堂契约与实时报告（2026-11-19）：契约卡/支线标签/结课报告直接消费 */
+  lessonContract?: LessonContract | null;
+  lessonReport?: LessonReport | null;
+  /** 课末终检题（待作答/通过/失败）：前端「最后一道题」状态卡直接消费 */
+  exitTicket?: ExitTicket | null;
+  branch?: {
+    kind: string;
+    need: string;
+    active: string | null;
+    remaining: number;
+    parkingLot: Array<{ at: string; topic: string; studentWords?: string | null }>;
+  } | null;
   shouldConfirmEnd?: boolean;
   endReason?: 'completion-candidate' | 'learner-requested-end' | null;
   peerTriggered: boolean;
@@ -396,6 +503,8 @@ export interface FinalizationResult {
   taskCompletion?: { status: 'completed' | 'skipped'; alreadyCompleted: boolean };
   finalization?: SessionFinalizationState | null;
   wrapup?: WrapupArtifact | null;
+  /** 课堂契约报告：主线覆盖/独立证据/支线/停车区（结课浮层展示） */
+  lessonReport?: LessonReport | null;
   advisory?: ReplanAdvisory | null;
   reviewItems?: unknown[];
   projectionStatus?: 'pending' | 'not_started';
@@ -436,6 +545,8 @@ const FINALIZATION_UNACTIONABLE_ERROR_CODES = new Set([
   'FINALIZATION_LAST_CHECKPOINT_FAILED',
   'FINALIZATION_SESSION_NOT_CLOSED',
   'TEACHING_SESSION_STALE',
+  // 课堂契约未达成（2026-11-19）：重试无意义，必须先补核心 KC 的证据或走 end_only
+  'LESSON_CONTRACT_NOT_MET',
 ]);
 
 export const aiTeachingAPI = {
@@ -452,6 +563,22 @@ export const aiTeachingAPI = {
   async getReviewDue(): Promise<Array<{ conceptKey: string; label: string; retention: number; reason: string; estimatedMinutes: number }>> {
     const result = await api.get('/ai-teaching/review/due');
     return result.data?.items || [];
+  },
+
+  /** 24–72h 延迟保持探针：到期清单（不含答案键） */
+  async getRetentionProbesDue(): Promise<RetentionProbeDueItem[]> {
+    const result = await api.get('/ai-teaching/retention/probes/due');
+    return result.data?.items || [];
+  },
+
+  /** 延迟保持探针：作答（未通过时后端会降级掌握度） */
+  async answerRetentionProbe(probeId: string, answer: string): Promise<RetentionProbeAnswerResult> {
+    const result = await api.post(
+      `/ai-teaching/retention/probes/${probeId}/answer`,
+      { answer },
+      { timeout: AI_REQUEST_TIMEOUT }
+    );
+    return result.data || result;
   },
 
   /** 开始复习课（mode=review，knowledgeState 注入到期复习点） */

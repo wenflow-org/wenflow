@@ -17,6 +17,10 @@ const mockPrisma: any = {
 }
 const mockRunBackgroundTask = jest.fn()
 
+// 本套件测的是 eager（一次性全量）恢复语义；渐进式默认开启后，空白未来阶段是正常状态，
+// 这些断言不再适用。显式关掉开关，保留 eager 路径的回归覆盖。
+process.env.PROGRESSIVE_STAGE_DESIGN = '0'
+
 jest.mock('../../../config/database', () => ({ __esModule: true, default: mockPrisma }))
 jest.mock('../../../utils/logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() }

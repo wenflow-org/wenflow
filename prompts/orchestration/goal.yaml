@@ -177,6 +177,16 @@ fields:
     valueType: string
     pathInRawOutput: internal.ext.goalConversation.understanding.platform_judgment_evidence
     description: 支撑 platform_judgment 的一句依据
+  - fieldId: understanding.intent_type
+    promptRole: hidden-inference
+    valueType: string
+    pathInRawOutput: internal.ext.goalConversation.understanding.intent_type
+    description: 主导意图分型 mastery|problem-fix|troubleshooting|exam|career-switch|research|interest|multi-goal；下游路径拓扑与课堂分流读它（core 规则要求每轮落库）
+  - fieldId: understanding.entry_state
+    promptRole: hidden-inference
+    valueType: string
+    pathInRawOutput: internal.ext.goalConversation.understanding.entry_state
+    description: 进入态 focused|exploratory；exploratory 触发起步路径与 pathTopologyHint=exploratory（core 规则要求每轮更新）
   - fieldId: understanding.sensor_readouts
     promptRole: hidden-inference
     valueType: array<string>
@@ -479,6 +489,22 @@ routings:
     internal: false
     accumulate: false
     visibilityPreset: agent-internal
+  - agentId: skill:goal-conversation
+    fieldId: understanding.intent_type
+    render: hidden
+    handoff: [goal-agent, path]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+    notes: auto — path 定帧层读取（buildFramedNormalizedInput → normalizedInput.learnerProfile.intentType，path-planning 分型与课堂分流消费）；2026-11-19 补齐声明
+  - agentId: skill:goal-conversation
+    fieldId: understanding.entry_state
+    render: hidden
+    handoff: [goal-agent, path]
+    internal: false
+    accumulate: true
+    visibilityPreset: agent-internal
+    notes: auto — path 定帧层读取（buildFramedNormalizedInput → normalizedInput.learnerProfile.entryState → pathTopologyHint=exploratory，path-planning 起步路径消费）；2026-11-19 补齐声明
   - agentId: skill:goal-conversation
     fieldId: understanding.sensor_readouts
     render: hidden

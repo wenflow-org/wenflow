@@ -72,6 +72,9 @@ function buildGoalSkillOutput(overrides: Record<string, any> = {}) {
             skill_nature_evidence: '需要自己组织汇报逻辑，AI 不能代跑',
             platform_judgment: 'judgeable_output',
             platform_judgment_evidence: '汇报稿与结构图可提交对照',
+            // core 规则要求每轮落库的分型字段（2026-11-19 补齐编排声明）
+            intent_type: 'problem-fix',
+            entry_state: 'focused',
             sensor_readouts: [],
             needsMaterial: { kind: 'standard', title: '内部汇报规范', why: '需要原文对照结构要求', queries: [], origin: 'private' },
             prerequisiteCheckResults: [{ questionId: 'q1', correct: true }],
@@ -148,7 +151,8 @@ describe('assembleGoalHandoff（配置式 goal→path 值抽取）', () => {
 
   // 回归守卫（#189）：挂在 skill 名下、声明 handoff→path 的字段此前抽取不到（抽取器只读 agent 名下行）
   it('skill 名下 handoff→path 的字段可被抽取（#189）', async () => {
-    expect(GOAL_SKILL_PATH_HANDOFF_FIELDS.length).toBe(6)
+    // 6 条原有 + 2026-11-19 补齐的 understanding.intent_type / entry_state
+    expect(GOAL_SKILL_PATH_HANDOFF_FIELDS.length).toBe(8)
     const output = buildGoalSkillOutput()
     const { fields } = await assembleGoalHandoff(output, GOAL_PATH_HANDOFF_ROWS)
     for (const fieldId of GOAL_SKILL_PATH_HANDOFF_FIELDS) {

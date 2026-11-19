@@ -91,10 +91,11 @@ function taskTitleKey(value: unknown): string | null {
   return normalizeConcept(sanitizeUserFacingText(value).text);
 }
 
-/** 契约是 linkedKCs，但实测弱模型/漂移模型会写成 kcIds / linkedKcIds / kcs（2026-09-22）。 */
+/** 契约是 linkedKCs，但实测弱模型/漂移模型会写成 linkedKC / kcIds / linkedKcIds / kcs（2026-09-22 / 2026-11-18）。 */
 function linkedKcIdsOf(link: any): unknown[] {
   if (!link || typeof link !== 'object') return [];
   if (Array.isArray(link.linkedKCs)) return link.linkedKCs;
+  if (Array.isArray(link.linkedKC)) return link.linkedKC;
   if (Array.isArray(link.kcIds)) return link.kcIds;
   if (Array.isArray(link.linkedKcIds)) return link.linkedKcIds;
   if (Array.isArray(link.kcs)) return link.kcs;

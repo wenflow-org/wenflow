@@ -55,6 +55,7 @@ import {
   resolveEntryStateForTeaching,
   resolvePathMaterialsForTeaching,
   resolveSchoolAnchorForTeaching,
+  resolveTaskMaterialPayloadForTeaching,
   resolveTaskMisconceptionHints,
 } from './teaching-context-materials';
 import type {
@@ -417,6 +418,12 @@ async function buildTeachingScenarioContextImpl(
       description: task.description || null,
       acceptanceCriteria: (task as any).acceptanceCriteria || null,
     },
+    // 课堂契约时间预算（2026-11-19）：任务计划分钟；缺失时契约不设时间硬门。
+    taskEstimatedMinutes: Number.isFinite(Number((task as any).estimatedMinutes))
+      ? Math.max(1, Number((task as any).estimatedMinutes))
+      : null,
+    // 课堂材料本体（2026-11-18）：与 description 分离；缺失时退回旧行为（按 description 组织）
+    taskMaterialPayload: resolveTaskMaterialPayloadForTeaching(path.aiPromptTemplate, task.id),
     teachingStrategyGuidance: buildTeachingStrategyGuidance(taskProfile),
     cognitiveFrame,
     canStartLearning,

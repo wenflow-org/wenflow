@@ -187,37 +187,40 @@ describe('coerceKcMapperParsed（契约等价变体归一）', () => {
     expect(r.taskKcLinks[0].linkedKCs).toEqual(['kc-1']);
   });
 
-  it('edges 缺 relation 补 prerequisite，type 别名转正', () => {
+  it('kcGraph 由 conceptKcs 派生；旧载荷边归一为 relation=prerequisite', () => {
     const r = coerceKcMapperParsed({
-      conceptKcs: [],
+      conceptKcs: [{ conceptId: 'c1', kcs: [
+        { kcId: 'a', name: 'A', taxonomy: 'conceptual' },
+        { kcId: 'b', name: 'B', taxonomy: 'conceptual' },
+        { kcId: 'c', name: 'C', taxonomy: 'conceptual' },
+      ] }],
       kcGraph: { nodes: [], edges: [{ from: 'a', to: 'b' }, { from: 'b', to: 'c', type: 'prerequisite' }] },
     });
     expect(r.kcGraph.edges).toEqual([
       { from: 'a', to: 'b', relation: 'prerequisite' },
-      { from: 'b', to: 'c', type: 'prerequisite', relation: 'prerequisite' },
+      { from: 'b', to: 'c', relation: 'prerequisite' },
     ]);
   });
 
-  it('节点为纯字符串或缺少 name/taxonomy 时从 conceptKcs 回填', () => {
+  it('节点为纯字符串或缺少 name/taxonomy 时从 conceptKcs 回填并按 kcId 去重', () => {
     const r = coerceKcMapperParsed({
       conceptKcs: [{ conceptId: 'c1', kcs: [{ kcId: 'kc-1', name: '识别半联动点', taxonomy: 'procedural' }] }],
       kcGraph: { nodes: ['kc-1', { kcId: 'kc-1' }], edges: [] },
     });
     expect(r.kcGraph.nodes).toEqual([
       { kcId: 'kc-1', name: '识别半联动点', taxonomy: 'procedural' },
-      { kcId: 'kc-1', name: '识别半联动点', taxonomy: 'procedural' },
     ]);
   });
 
-  it('已合规输入保持不变（幂等）', () => {
+  it('归一后幂等，且悬空端点（a→b 未定义）的旧边会被丢掉', () => {
     const input = {
       conceptKcs: [{ conceptId: 'c1', kcs: [{ kcId: 'kc-1', name: 'n', taxonomy: 'factual' }] }],
       taskKcLinks: [{ taskTitle: 't', linkedKCs: ['kc-1'] }],
       kcGraph: { nodes: [{ kcId: 'kc-1', name: 'n', taxonomy: 'factual' }], edges: [{ from: 'a', to: 'b', relation: 'prerequisite' }] },
     };
     const once = coerceKcMapperParsed(input);
-    expect(once).toEqual(input);
-    expect(coerceKcMapperParsed(once)).toEqual(input);
+    expect(once.kcGraph).toEqual({ nodes: [{ kcId: 'kc-1', name: 'n', taxonomy: 'factual' }], edges: [] });
+    expect(coerceKcMapperParsed(once)).toEqual(once);
   });
 });
 

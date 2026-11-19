@@ -203,4 +203,45 @@ describe('条件规则接线（真实编译产物）', () => {
     // 剥掉的量 ≈ 条件规则总量（实测 13 条 / 3,078 字量级）
     expect(original.length - stripped.length).toBeGreaterThan(2500);
   });
+
+  it('scenario.taskMaterial 存在时，材料本体规则进入本轮载荷（键位与装配一致）', async () => {
+    // 2026-11-19 审计：规则从 `task.material` 改为 `scenario.taskMaterial`，装配点同步到
+    // buildTeachingTurnInput；若两边再漂移，规则会被静默剥离（模型看不到材料）。
+    const { payload } = await capture({
+      ...INPUT,
+      scenario: { ...INPUT.scenario, taskMaterial: '1. She has already finished.\n2. I visited yesterday.' },
+    } as never);
+    expect(payload.conditionalRules).toContain('scenario.taskMaterial');
+    expect(payload.conditionalRules).toContain('不得因为简介短就自行编造材料');
+  });
+
+  it('scenario.lessonContract 存在时，契约/支线规则进入本轮载荷', async () => {
+    // 2026-11-19 全面改造：契约与支线规则的条件键必须与 buildTeachingTurnInput 的装配一致，
+    // 否则规则整段被剥离，自由需求又会回到“全靠模型自觉”。
+    const { payload } = await capture({
+      ...INPUT,
+      scenario: {
+        ...INPUT.scenario,
+        lessonContract: {
+          version: 1,
+          coreKcs: [{ kcId: 'kc-1', name: '识别工具返回' }],
+          minIndependentEvidence: 1,
+          minTurns: 3,
+          timeBudgetMin: 30,
+          branchBudgets: { examplePerKc: 1, deeperTurns: 3, prerequisitePatches: 1, offTopicInClassTurns: 1 },
+        },
+        branchState: {
+          active: 'deeper', turnsUsed: 1, budget: 3, lastNeed: 'deeper',
+          exampleUsedByKc: {}, deeperUsed: 1, patchesUsed: 0, offTopicTurns: 0,
+          parkingLot: [], directive: '深挖支线进行中',
+        },
+        branchDirective: '深挖支线进行中，剩余 2 轮',
+      },
+    } as never);
+    expect(payload.conditionalRules).toContain('scenario.lessonContract');
+    expect(payload.conditionalRules).toContain('最低必须完成');
+    expect(payload.conditionalRules).toContain('off_topic');
+    expect(payload.branchState).toMatchObject({ active: 'deeper' });
+    expect(payload.branchDirective).toContain('剩余 2 轮');
+  });
 });

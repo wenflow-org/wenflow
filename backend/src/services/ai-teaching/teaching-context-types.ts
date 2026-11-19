@@ -3,6 +3,7 @@ import type { PromptMaterial } from '../materials/material-prompt-projection';
 import type { ActiveTaskMaterialExcerpt } from '../materials/material-sections';
 import type { TeachingLearnerProjection } from '../../agents/profile-learner-model-agent/types';
 import type { ReviewPlan } from '../memory/review-plan.service';
+import type { BranchState, LessonContract } from './lesson-contract';
 export interface TeachingScenarioContext {
   userId: string;
   taskId: string;
@@ -34,6 +35,19 @@ export interface TeachingScenarioContext {
     description: string | null;
     acceptanceCriteria: string | null;
   };
+  /** 本任务计划时长（分钟）：用于课堂契约的时间预算；缺失时契约不设时间硬门。 */
+  taskEstimatedMinutes?: number | null;
+  /** 本节课最低必须完成集（lifecycle 建课契约，engine 每轮读取）。 */
+  lessonContract?: LessonContract | null;
+  /** 自由支线状态（预算/停车区/下一轮指令），由 engine 每轮更新。 */
+  branchState?: BranchState | null;
+  /** 本轮载荷要注入的支线指令（代码算，模型只执行）。 */
+  branchDirective?: string | null;
+  /**
+   * 本课课堂材料本体（path-task-design materialPayload，2026-11-18）：
+   * description 是给人看的 1-2 句简介；题面/日志/样本值/原文放这里，课堂优先用它。
+   */
+  taskMaterialPayload?: string | null;
   teachingStrategyGuidance: {
     knowledgeType: 'factual' | 'conceptual' | 'procedural' | 'metacognitive' | null;
     cognitiveLevel: 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create' | null;

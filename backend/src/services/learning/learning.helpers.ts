@@ -497,6 +497,10 @@ export function parsePathCognitiveDesign(raw: string | null): PathCognitiveDesig
       // 丢掉 ⇒ 生产与重规划两处 loadTarget 永不生效（审计 P1 §2.3a）。
       ...(candidate.loadProfile !== undefined ? { loadProfile: candidate.loadProfile } : {}),
       ...(candidate.prerequisiteTree !== undefined ? { prerequisiteTree: candidate.prerequisiteTree } : {}),
+      // 2026-11-19 端到端审计：本函数是「落库后读回 cognitiveCore」的唯一入口。白名单漏字段，
+      // domainAnchors/topology 就会在 stage-enrichment 与 replan 侧凭空消失（生成侧有、读侧没有）。
+      ...(candidate.domainAnchors !== undefined ? { domainAnchors: candidate.domainAnchors } : {}),
+      ...(candidate.topology !== undefined ? { topology: candidate.topology } : {}),
     };
   } catch {
     return null;

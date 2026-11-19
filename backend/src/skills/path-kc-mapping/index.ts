@@ -32,8 +32,9 @@ export function validateKcMapperOutput(parsed: any) {
 /**
  * 契约校验前的等价变体归一（core fields 契约校验用；业务形态仍由 normalizeOutput 决定）。
  *
- * 归一 taskKcLinks 的 kcIds/linkedKcIds/kcs 别名 → linkedKCs，kcGraph 节点/边补全（下游读取侧亦有容错）。
- * 对齐 core 契约：path-kc-mapping 的产出只有 conceptKcs / taskKcLinks / kcGraph（gapCoverage 已随 #193 从契约移除）。
+ * 归一 taskKcLinks 的 kcIds/linkedKcIds/linkedKC/kcs 别名 → linkedKCs；
+ * kcGraph **不再由模型输出**（2026-11-18）：统一从 conceptKcs 的 prerequisiteKCs 派生，
+ * 避免同一个 JSON 里手抄两份边、方向写反或漏节点。
  */
 export function coerceKcMapperParsed(parsed: any): any {
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return parsed;
@@ -47,7 +48,9 @@ export function coerceKcMapperParsed(parsed: any): any {
     out.taskKcLinks = out.taskKcLinks.map((link: any) => {
       if (!link || typeof link !== 'object') return link;
       if (Array.isArray(link.linkedKCs)) return link;
-      const alias = Array.isArray(link.kcIds) ? link.kcIds
+      // linkedKC（单数）曾在 rules 里被写错，历史/漂移模型仍可能输出；与 kcIds 等同级归一。
+      const alias = Array.isArray(link.linkedKC) ? link.linkedKC
+        : Array.isArray(link.kcIds) ? link.kcIds
         : Array.isArray(link.linkedKcIds) ? link.linkedKcIds
         : Array.isArray(link.kcs) ? link.kcs
         : null;
@@ -55,40 +58,90 @@ export function coerceKcMapperParsed(parsed: any): any {
     });
   }
 
-  // 边字段名归一：契约 relation，实测模型常写 type，甚至完全省略（2026-09-22）。
-  // 本 skill 的边语义唯一（都是前置依赖），缺省即补 "prerequisite"，保证下游按 relation 读取不落空。
-  if (out.kcGraph && typeof out.kcGraph === 'object' && Array.isArray((out.kcGraph as any).edges)) {
-    (out.kcGraph as any).edges = (out.kcGraph as any).edges.map((e: any) => {
-      if (!e || typeof e !== 'object') return e;
-      if (e.relation === undefined) return { ...e, relation: typeof e.type === 'string' ? e.type : 'prerequisite' };
-      return e;
-    });
+  const derived = deriveKcGraph(out.conceptKcs, parsed?.kcGraph);
+  out.kcGraph = { nodes: derived.nodes, edges: derived.edges };
+  return out;
+}
+
+interface DerivedKcGraph {
+  nodes: Array<{ kcId: string; name: string; taxonomy: string }>;
+  edges: Array<{ from: string; to: string; relation: 'prerequisite' }>;
+  /** 被 prerequisiteKCs 引用、但概念树里没有完整定义的 kcId（旧实现会静默丢边）。 */
+  danglingKcIds: string[];
+}
+
+/**
+ * 从 conceptKcs 派生 KC 依赖图（单一真相源：prerequisiteKCs 是子→父，派生成 from=前置→to=后继）。
+ * 兼容旧载荷：模型若仍带 kcGraph，只把它当补充节点/边；方向仍按本函数的 from=前置解释。
+ */
+export function deriveKcGraph(
+  conceptKcs: unknown,
+  legacyGraph?: { nodes?: unknown[]; edges?: unknown[] } | null,
+): DerivedKcGraph {
+  const nodes = new Map<string, { kcId: string; name: string; taxonomy: string }>();
+  const edgeKeys = new Set<string>();
+  const edges: DerivedKcGraph['edges'] = [];
+  const referenced = new Set<string>();
+
+  const addNode = (kcId: string, name?: unknown, taxonomy?: unknown) => {
+    if (!kcId) return;
+    const prev = nodes.get(kcId);
+    const nextName = typeof name === 'string' && name.trim() ? name : prev?.name || kcId;
+    const nextTax = typeof taxonomy === 'string' && taxonomy.trim() ? taxonomy : prev?.taxonomy || 'conceptual';
+    nodes.set(kcId, { kcId, name: nextName, taxonomy: nextTax });
+  };
+
+  for (const item of Array.isArray(conceptKcs) ? conceptKcs : []) {
+    for (const kc of Array.isArray(item?.kcs) ? item.kcs : []) {
+      if (!kc || typeof kc !== 'object' || typeof kc.kcId !== 'string') continue;
+      addNode(kc.kcId, kc.name, kc.taxonomy);
+    }
+  }
+  // 旧载荷补充节点（只补 kcId 已知、概念树里没定义的）
+  for (const raw of Array.isArray(legacyGraph?.nodes) ? legacyGraph.nodes : []) {
+    const node = typeof raw === 'string' ? { kcId: raw } : raw;
+    if (!node || typeof node !== 'object' || typeof (node as any).kcId !== 'string') continue;
+    const n = node as { kcId: string; name?: unknown; taxonomy?: unknown };
+    if (!nodes.has(n.kcId)) addNode(n.kcId, n.name, n.taxonomy);
   }
 
-  // 节点补全：契约要求 { kcId, name, taxonomy }；实测模型会省略 name/taxonomy。
-  // 从 conceptKcs 的 KC 明细回填（同名 kcId 的名称/分类），仍缺则给安全默认，避免下游 name 为空。
-  if (out.kcGraph && typeof out.kcGraph === 'object' && Array.isArray((out.kcGraph as any).nodes)) {
-    const kcDetailById = new Map<string, { name?: string; taxonomy?: string }>();
-    for (const item of Array.isArray(out.conceptKcs) ? out.conceptKcs : []) {
-      for (const kc of Array.isArray(item?.kcs) ? item.kcs : []) {
-        if (!kc || typeof kc !== 'object' || typeof kc.kcId !== 'string') continue;
-        kcDetailById.set(kc.kcId, { name: kc.name, taxonomy: kc.taxonomy });
+  for (const item of Array.isArray(conceptKcs) ? conceptKcs : []) {
+    for (const kc of Array.isArray(item?.kcs) ? item.kcs : []) {
+      if (!kc || typeof kc !== 'object' || typeof kc.kcId !== 'string') continue;
+      for (const prereq of Array.isArray(kc.prerequisiteKCs) ? kc.prerequisiteKCs : []) {
+        const from = typeof prereq === 'string' ? prereq : '';
+        if (!from || from === kc.kcId) continue;
+        referenced.add(from);
+        const key = `${from}->${kc.kcId}`;
+        if (edgeKeys.has(key)) continue;
+        edgeKeys.add(key);
+        edges.push({ from, to: kc.kcId, relation: 'prerequisite' });
       }
     }
-    (out.kcGraph as any).nodes = (out.kcGraph as any).nodes.map((n: any) => {
-      // 实测形态：节点可能被写成纯字符串 kcId（而非 { kcId, name, taxonomy } 对象），先归一为对象
-      const node = typeof n === 'string' ? { kcId: n } : n;
-      if (!node || typeof node !== 'object' || typeof node.kcId !== 'string') return node;
-      const detail = kcDetailById.get(node.kcId);
-      return {
-        ...node,
-        name: typeof node.name === 'string' && node.name.trim() ? node.name : (detail?.name || node.kcId),
-        taxonomy: typeof node.taxonomy === 'string' && node.taxonomy.trim() ? node.taxonomy : (detail?.taxonomy || 'conceptual'),
-      };
-    });
+  }
+  // 旧载荷边：两端已定义才并入（方向沿用 from=前置）
+  for (const raw of Array.isArray(legacyGraph?.edges) ? legacyGraph.edges : []) {
+    if (!raw || typeof raw !== 'object') continue;
+    const e = raw as { from?: unknown; to?: unknown };
+    const from = typeof e.from === 'string' ? e.from : '';
+    const to = typeof e.to === 'string' ? e.to : '';
+    if (!from || !to || from === to) continue;
+    const key = `${from}->${to}`;
+    if (edgeKeys.has(key)) continue;
+    edgeKeys.add(key);
+    edges.push({ from, to, relation: 'prerequisite' });
   }
 
-  return out;
+  const danglingKcIds = [...new Set([
+    ...[...referenced].filter((id) => !nodes.has(id)),
+    ...edges.flatMap((e) => [e.from, e.to]).filter((id) => !nodes.has(id)),
+  ])];
+  return {
+    nodes: [...nodes.values()],
+    // 悬空端点的边不落图：下游 materialize 会静默 skip，这里提前过滤并留审计
+    edges: edges.filter((e) => nodes.has(e.from) && nodes.has(e.to)),
+    danglingKcIds,
+  };
 }
 
 /**
@@ -101,6 +154,13 @@ export function auditKcGranularity(parsed: any, input: any): string[] {
   const warnings: string[] = [];
   const conceptKcs = Array.isArray(parsed?.conceptKcs) ? parsed.conceptKcs : [];
   const taskKcLinks = Array.isArray(parsed?.taskKcLinks) ? parsed.taskKcLinks : [];
+
+  // 悬空前置：被 prerequisiteKCs 引用、但 conceptKcs 里没有完整定义的 kcId。
+  // 旧实现只在物化时静默 skip，等于把依赖边悄悄丢掉；这里显式告警。
+  const { danglingKcIds } = deriveKcGraph(conceptKcs);
+  if (danglingKcIds.length > 0) {
+    warnings.push(`KC_DANGLING_PREREQ(ids=${danglingKcIds.slice(0, 8).join(',')})`);
+  }
 
   // 每个 coreConcept 的 KC 数
   const concepts = Array.isArray(input?.cognitiveCore?.coreConcepts)
@@ -121,19 +181,28 @@ export function auditKcGranularity(parsed: any, input: any): string[] {
     }
   }
 
-  // 每个 subtask 关联 ≥1 KC
+  // 每个 subtask 关联 ≥1 KC（2026-11-19：优先按 taskKey 对齐；标题只作无 key 时的回退，
+  // 同阶段同名任务不会再把另一条 link 当成自己的关联）
   const subtasks = Array.isArray(input?.subtasks) ? input.subtasks : [];
   const linkedTaskTitles = new Set<string>();
+  const linkedTaskKeys = new Set<string>();
   for (const link of taskKcLinks) {
     if (!link || typeof link !== 'object') continue;
     const title = typeof link.taskTitle === 'string' ? link.taskTitle : null;
+    const taskKey = typeof link.taskKey === 'string' ? link.taskKey : null;
     if (title) linkedTaskTitles.add(title);
+    if (taskKey) linkedTaskKeys.add(taskKey);
   }
   for (const task of subtasks) {
     if (!task || typeof task !== 'object') continue;
     const title = typeof task.title === 'string' ? task.title : null;
-    if (title && !linkedTaskTitles.has(title)) {
-      warnings.push(`KC_TASK_UNLINKED(task=${title.slice(0, 20)}, linkedKCs 缺失)`);
+    const taskKey = typeof task.taskKey === 'string' ? task.taskKey : null;
+    const linked = taskKey
+      ? linkedTaskKeys.has(taskKey)
+      : (title ? linkedTaskTitles.has(title) : false);
+    if (!linked) {
+      const label = taskKey ? `taskKey=${taskKey.slice(0, 24)}` : `task=${(title || '').slice(0, 20)}`;
+      warnings.push(`KC_TASK_UNLINKED(${label}, linkedKCs 缺失)`);
     }
   }
 

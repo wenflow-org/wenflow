@@ -14,6 +14,7 @@
  */
 import { probabilisticRecall, type RecallStatus, type ConfusableInput } from '../services/memory/probabilistic-recall';
 import type { LearnerMemorySnapshot } from './learner-memory';
+import { createDomainEvent, type DurableDomainEvent } from '../events/contracts';
 
 export interface MemoryRecallHint {
   conceptKey: string;
@@ -78,4 +79,75 @@ export function buildMemoryRecallHints(input: BuildMemoryRecallHintsInput): Memo
     });
   }
   return hints;
+}
+
+/** 提取四态 → 复习事件条目（FSRS quality 输入；与 review:completed 同一口径） */
+export interface RecallReviewItem {
+  conceptKey: string;
+  label: string;
+  status: 'learning' | 'mastered' | 'review';
+  progress: number;
+  masteryScore: number;
+  rating: 'again' | 'hard' | 'good' | 'easy';
+}
+
+/**
+ * 把代码裁决的提取结果映射为 FSRS 复习条目（2026-11-19，P2 效度闭环）。
+ * 此前 CLEAR/VAGUE/CONFUSED/FAILED 只作为模拟器提示、不回写记忆引擎，
+ * 导致「提取四态」只是叙述标签，无法驱动间隔重算。这里给确定性映射：
+ * - CLEAR：成功提取 → good / mastered（稳定掌握）
+ * - VAGUE：记得大概但不牢 → hard / learning
+ * - CONFUSED：把旧规则和别的概念混了 → again / review（fragile）
+ * - FAILED：完全想不起 → again / review（更低的掌握度）
+ * 注意：这是**代码裁决的模拟提取结果**，不是学习者真实自由作答；只在仿真链路使用。
+ */
+export function mapRecallStatusToReviewItem(hint: MemoryRecallHint): RecallReviewItem {
+  switch (hint.status) {
+    case 'CLEAR':
+      return { conceptKey: hint.conceptKey, label: hint.conceptKey, status: 'mastered', progress: 100, masteryScore: 0.9, rating: 'good' };
+    case 'VAGUE':
+      return { conceptKey: hint.conceptKey, label: hint.conceptKey, status: 'learning', progress: 50, masteryScore: 0.55, rating: 'hard' };
+    case 'CONFUSED':
+      return { conceptKey: hint.conceptKey, label: hint.conceptKey, status: 'review', progress: 0, masteryScore: 0.35, rating: 'again' };
+    case 'FAILED':
+    default:
+      return { conceptKey: hint.conceptKey, label: hint.conceptKey, status: 'review', progress: 0, masteryScore: 0.3, rating: 'again' };
+  }
+}
+
+export interface BuildSimulatedRecallEventInput {
+  userId: string;
+  teachingSessionId: string;
+  pathId?: string | null;
+  dayIndex: number;
+  hints: MemoryRecallHint[];
+  occurredAt: Date;
+}
+
+/**
+ * 构造仿真提取回写的 review:completed 事件。
+ * 幂等键 = (teachingSessionId, dayIndex)：同一天同一节课只回写一次；
+ * 跨天重抽时才产生新事件（与 buildMemoryRecallHints 的 stepIndex=dayIndex 同口径）。
+ */
+export function buildSimulatedRecallReviewEvent(
+  input: BuildSimulatedRecallEventInput,
+): DurableDomainEvent | null {
+  const hints = Array.isArray(input.hints) ? input.hints.filter((hint) => hint?.conceptKey) : [];
+  if (hints.length === 0 || !input.teachingSessionId) return null;
+  const items = hints.map(mapRecallStatusToReviewItem);
+  return createDomainEvent({
+    id: `sim-recall:${input.teachingSessionId}:${input.dayIndex}`,
+    type: 'review:completed',
+    aggregateType: 'review',
+    aggregateId: input.teachingSessionId,
+    userId: input.userId,
+    source: 'simulation-recall',
+    occurredAt: input.occurredAt,
+    data: {
+      sessionId: input.teachingSessionId,
+      mode: 'simulation-recall',
+      pathId: input.pathId ?? null,
+      reviewItems: items,
+    },
+  });
 }

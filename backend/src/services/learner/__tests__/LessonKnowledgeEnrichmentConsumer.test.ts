@@ -268,6 +268,65 @@ describe('LessonKnowledgeEnrichmentConsumer', () => {
     );
   });
 
+  it('lessonReport 随事件下发时透传给增强 skill；缺失时为 null（老事件兼容）', async () => {
+    inboxFindUnique.mockResolvedValue(null);
+    executeSkill.mockResolvedValue({
+      conceptLedger: [],
+      reusableFoundations: [],
+      blockedFoundations: [],
+      transferSignals: [],
+      recurringConfusions: []
+    });
+    const tx = {
+      domain_event_inbox: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({})
+      },
+      learner_evidence: { createMany: jest.fn().mockResolvedValue({ count: 2 }) }
+    };
+    transaction.mockImplementation(async (callback: any) => callback(tx));
+
+    const lessonReport = {
+      met: false,
+      coveredKcs: ['识别工具返回'],
+      missingKcs: ['解释 ReAct 往返'],
+      independentCount: 1,
+      parkingLot: [{ topic: '先修：函数' }]
+    };
+    await new LessonKnowledgeEnrichmentConsumer().handle(createDomainEvent({
+      id: 'evt-lesson-with-report',
+      type: 'lesson:completed',
+      aggregateType: 'lesson',
+      aggregateId: 'session-3',
+      userId: 'user-1',
+      source: 'test',
+      data: {
+        sessionId: 'session-3',
+        taskId: 'task-3',
+        knowledgeState: [],
+        visibleDialogueContext: [],
+        lessonReport
+      }
+    }));
+    expect(executeSkill.mock.calls[0][1]).toEqual(expect.objectContaining({ lessonReport }));
+
+    await new LessonKnowledgeEnrichmentConsumer().handle(createDomainEvent({
+      id: 'evt-lesson-no-report',
+      type: 'lesson:completed',
+      aggregateType: 'lesson',
+      aggregateId: 'session-4',
+      userId: 'user-1',
+      source: 'test',
+      data: {
+        sessionId: 'session-4',
+        taskId: 'task-4',
+        knowledgeState: [],
+        visibleDialogueContext: []
+      }
+    }));
+    expect(executeSkill.mock.calls[1][1]).toEqual(expect.objectContaining({ lessonReport: null }));
+  });
+
   it('executeSkill 失败时不写证据、不写 receipt，并向 outbox 抛错（退避重投语义）', async () => {
     inboxFindUnique.mockResolvedValue(null);
     executeSkill.mockRejectedValue(new Error('LESSON_KNOWLEDGE_ENRICHER_FAILED: provider timeout'));

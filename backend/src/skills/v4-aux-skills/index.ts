@@ -23,6 +23,8 @@ import { logger } from '../../utils/logger';
 
 export type AuxSkillId =
   | 'teaching-opening'
+  | 'teaching-exit-ticket'
+  | 'teaching-retention-probe'
   | 'profile-progress-report'
   | 'skill-author'
   | 'skill-compiler'
@@ -35,6 +37,8 @@ export type AuxSkillId =
 // File-as-Truth：从编译产物加载 systemPrompt，避免代码内嵌第二份 prompt 导致双源漂移
 const AUX_SKILL_PROMPTS: Record<AuxSkillId, string> = {
   'teaching-opening': loadPromptFile('skill:teaching-opening')?.systemPrompt || '',
+  'teaching-exit-ticket': loadPromptFile('skill:teaching-exit-ticket')?.systemPrompt || '',
+  'teaching-retention-probe': loadPromptFile('skill:teaching-retention-probe')?.systemPrompt || '',
   'profile-progress-report': loadPromptFile('skill:profile-progress-report')?.systemPrompt || '',
   'skill-author': loadPromptFile('skill:skill-author')?.systemPrompt || '',
   'skill-compiler': loadPromptFile('skill:skill-compiler')?.systemPrompt || '',
@@ -240,6 +244,8 @@ async function resolveDefaultFailureMode(skillId: AuxSkillId): Promise<'throw' |
 
 const META: Record<AuxSkillId, AuxSkillMeta> = {
   'teaching-opening': { skillId: 'teaching-opening', displayName: '课堂开场交互生成器', description: '生成教学 Session 的开场 message、question 与 quickReplies', category: 'generation' },
+  'teaching-exit-ticket': { skillId: 'teaching-exit-ticket', displayName: '课末终检题生成器', description: '结课前生成一道覆盖契约核心 KC 的新情境终检题（独立于课内检查点）', category: 'generation' },
+  'teaching-retention-probe': { skillId: 'teaching-retention-probe', displayName: '延迟保持探针生成器', description: '课后 24–72 小时对已学核心 KC 生成一道新情境单点题（独立判分）', category: 'generation' },
   'profile-progress-report': { skillId: 'profile-progress-report', displayName: '学习进展报告生成器', description: '基于学习指标和信号生成简短进展反馈', category: 'analysis' },
   'skill-author': { skillId: 'skill-author', displayName: 'Prompt 起草助手', description: '为新 Skill 起草 system prompt', category: 'generation' },
   'skill-compiler': { skillId: 'skill-compiler', displayName: 'Skill Prompt 验收器', description: '执行 system prompt 并检查必填字段覆盖情况', category: 'analysis' },
@@ -328,6 +334,96 @@ async function teachingOpeningGeneratorHandler(input: any) {
       ? { valid: true }
       : { valid: false, failureReason: 'TEACHING_OPENING_MESSAGE_MISSING' },
   });
+}
+
+function normalizeConceptName(value: any): string {
+  return String(value ?? '').trim().toLowerCase().replace(/\s+/g, '');
+}
+
+function coerceExitTicketOptions(value: any): Array<{ id: string; text: string }> {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item: any): { id: string; text: string } | null => {
+      if (!item || typeof item !== 'object') return null;
+      const id = asTrimmedString(item.id);
+      const text = asTrimmedString(item.text);
+      return id && text ? { id, text } : null;
+    })
+    .filter((item: { id: string; text: string } | null): item is { id: string; text: string } => item !== null)
+    .slice(0, 4);
+}
+
+/**
+ * 单题生成（2026-11-19）：课末终检与 24–72h 延迟保持探针共用同一份「出题 + 答案键」契约。
+ * 两者只在 prompt 语义上不同；判分与证据归因都在调用方（judgeCheckpointAnswer）。
+ */
+async function teachingProbeHandler(
+  input: any,
+  meta: AuxSkillMeta,
+  errorPrefix: 'EXIT_TICKET' | 'RETENTION_PROBE',
+) {
+  return runAux({
+    meta,
+    input,
+    buildUserPayload: (d) => ({
+      subject: d.subject,
+      topic: d.topic,
+      taskTitle: d.taskTitle,
+      coreKcs: Array.isArray(d.coreKcs) ? d.coreKcs : [],
+      recentDialogue: Array.isArray(d.recentDialogue) ? d.recentDialogue.slice(-8) : [],
+    }),
+    normalize: (parsed, d) => {
+      const question = asTrimmedString(parsed?.question);
+      const options = coerceExitTicketOptions(parsed?.options);
+      const wantsChoice = parsed?.type === 'single_choice' || parsed?.type === 'multi_choice';
+      const type: 'short_answer' | 'single_choice' | 'multi_choice' = wantsChoice && options.length >= 2
+        ? parsed.type
+        : 'short_answer';
+      const optionIds = new Set(options.map((option) => option.id));
+      const correctOptionIds = type !== 'short_answer' && Array.isArray(parsed?.correctOptionIds)
+        ? Array.from(new Set(parsed.correctOptionIds
+            .filter((id: any) => typeof id === 'string' && optionIds.has(id.trim()))
+            .map((id: string) => id.trim())))
+        : [];
+      const expectedKeywords = type === 'short_answer' && Array.isArray(parsed?.expectedKeywords)
+        ? parsed.expectedKeywords
+            .filter((keyword: any) => typeof keyword === 'string' && keyword.trim())
+            .map((keyword: string) => keyword.trim().slice(0, 40))
+            .slice(0, 3)
+        : [];
+      const coreNames = (Array.isArray(d.coreKcs) ? d.coreKcs : [])
+        .map((kc: any) => asTrimmedString(kc?.name))
+        .filter(Boolean);
+      const declared = asTrimmedString(parsed?.conceptName);
+      const conceptName = coreNames.find((name: string) => normalizeConceptName(name) === normalizeConceptName(declared))
+        || coreNames[0]
+        || '';
+      if (!question) throw new Error(`${errorPrefix}_QUESTION_MISSING`);
+      if (!conceptName) throw new Error(`${errorPrefix}_CONCEPT_MISSING`);
+      if (type !== 'short_answer' && correctOptionIds.length === 0) throw new Error(`${errorPrefix}_ANSWER_KEY_MISSING`);
+      if (type === 'short_answer' && expectedKeywords.length === 0) throw new Error(`${errorPrefix}_ANSWER_KEY_MISSING`);
+      return {
+        question,
+        type,
+        conceptName,
+        ...(type !== 'short_answer' ? { options, correctOptionIds } : {}),
+        ...(type === 'short_answer' ? { expectedKeywords } : {}),
+      };
+    },
+    coerceParse: (parsed) => (parsed && typeof parsed === 'object'
+      ? { ...parsed, options: coerceExitTicketOptions(parsed.options) }
+      : parsed),
+  });
+}
+
+/** 课末终检题（契约收束前的最后一道独立题） */
+async function teachingExitTicketHandler(input: any) {
+  return teachingProbeHandler(input, META['teaching-exit-ticket'], 'EXIT_TICKET');
+}
+
+/** 延迟保持探针（课后 24–72h 的单点提取题） */
+async function teachingRetentionProbeHandler(input: any) {
+  return teachingProbeHandler(input, META['teaching-retention-probe'], 'RETENTION_PROBE');
 }
 
 async function learnerProgressReportHandler(input: any) {
@@ -735,6 +831,8 @@ export const auxSkillDefinitions: SkillDefinition[] = Object.values(META)
 
 const AUX_SKILL_HANDLER_TABLE: Record<AuxSkillId, (input: any) => Promise<SkillExecutionResult<any>>> = {
   'teaching-opening': teachingOpeningGeneratorHandler,
+  'teaching-exit-ticket': teachingExitTicketHandler,
+  'teaching-retention-probe': teachingRetentionProbeHandler,
   'profile-progress-report': learnerProgressReportHandler,
   'skill-author': skillAuthorHandler,
   'skill-compiler': skillCompilerHandler,

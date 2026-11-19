@@ -35,6 +35,11 @@ const mockWrapupRegen = {
   startWrapupRegeneration: jest.fn(),
 };
 
+const mockRetentionProbeService = {
+  listDue: jest.fn(),
+  answer: jest.fn(),
+};
+
 const mockReserveTeachingOperation = jest.fn();
 const mockListSessionEvents = jest.fn();
 
@@ -52,6 +57,9 @@ jest.mock('../../services/ai-teaching/SessionFinalizationService', () => ({
 jest.mock('../../services/ai-teaching/teaching-wrapup-regen', () => ({
   __esModule: true,
   startWrapupRegeneration: mockWrapupRegen.startWrapupRegeneration,
+}));
+jest.mock('../../services/learner/retention-probe.service', () => ({
+  retentionProbeService: mockRetentionProbeService,
 }));
 jest.mock('../../middleware/auth.middleware', () => ({
   authMiddleware: (_req: any, _res: any, next: () => void) => next(),
@@ -1292,5 +1300,73 @@ describe('ai-teaching routes', () => {
       expect(data[0].activity).toBe('active');
       expect(data[0].lastActiveAt).toBeTruthy();
     });
+  });
+});
+
+
+describe('延迟保持探针路由（retention probes）', () => {
+  const makeRes = () => {
+    const res: any = {
+      status: jest.fn(),
+      json: jest.fn(),
+    };
+    res.status.mockReturnValue(res);
+    res.json.mockReturnValue(res);
+    return res;
+  };
+
+  it('GET /retention/probes/due 未登录 → 401', async () => {
+    const handler = getRouteHandler('/retention/probes/due', 'get');
+    const res = makeRes();
+    await handler({ headers: {} }, res);
+    expect(res.status).toHaveBeenCalledWith(401);
+  });
+
+  it('GET /retention/probes/due 只下发展示字段（无答案键）', async () => {
+    mockRetentionProbeService.listDue.mockResolvedValue([{
+      id: 'rp_1',
+      conceptKey: '匹配结论强度与前提',
+      label: '匹配结论强度与前提',
+      scheduledAt: '2026-11-20T08:00:00.000Z',
+      windowEndsAt: '2026-11-21T08:00:00.000Z',
+      attempts: 0,
+      question: { question: '新情境题？', type: 'single_choice', options: [{ id: 'A', text: '对' }, { id: 'B', text: '错' }] },
+    }]);
+    const handler = getRouteHandler('/retention/probes/due', 'get');
+    const res = makeRes();
+    await handler({ user: { userId: 'user-1' } }, res);
+    const body = res.json.mock.calls[0][0];
+    expect(body.data.items).toHaveLength(1);
+    expect(JSON.stringify(body)).not.toContain('correctOptionIds');
+    expect(JSON.stringify(body)).not.toContain('expectedKeywords');
+  });
+
+  it('POST answer 缺 answer → 400', async () => {
+    const handler = getRouteHandler('/retention/probes/:probeId/answer', 'post');
+    const res = makeRes();
+    await handler({ user: { userId: 'user-1' }, params: { probeId: 'rp_1' }, body: {} }, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  it('POST answer 已作答/过期 → 409；成功 → 返回判分与降级标记', async () => {
+    mockRetentionProbeService.answer.mockRejectedValueOnce(new Error('RETENTION_PROBE_EXPIRED'));
+    const handler = getRouteHandler('/retention/probes/:probeId/answer', 'post');
+    const res = makeRes();
+    await handler({ user: { userId: 'user-1' }, params: { probeId: 'rp_old' }, body: { answer: 'B' } }, res);
+    expect(res.status).toHaveBeenCalledWith(409);
+
+    mockRetentionProbeService.answer.mockResolvedValueOnce({
+      probe: { id: 'rp_1', conceptKey: 'kc', label: '概念', attempts: 1 },
+      passed: false,
+      judgedBy: 'code',
+      detail: '选项集合不一致（正确 A，作答 B）',
+      downgraded: true,
+    });
+    const res2 = makeRes();
+    await handler({ user: { userId: 'user-1' }, params: { probeId: 'rp_1' }, body: { answer: 'B' } }, res2);
+    const body = res2.json.mock.calls[0][0];
+    expect(body.data.passed).toBe(false);
+    expect(body.data.downgraded).toBe(true);
+    expect(body.data.judgedBy).toBe('code');
   });
 });

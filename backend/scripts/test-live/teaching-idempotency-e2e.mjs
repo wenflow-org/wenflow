@@ -9,6 +9,8 @@
  * 用法：
  *   node backend/scripts/test-live/teaching-idempotency-e2e.mjs
  *   E2E_BASE=http://127.0.0.1:3011 node ...   # 指定实例
+ *   E2E_GOAL_OPENING="..." E2E_GOAL_FOLLOWUPS='["...","..."]' node ...  # 覆盖目标（纯文本用例）
+ *   E2E_PATH_TIMEOUT_MS=2700000 node ...      # 路径生成等待上限（默认 45 分钟）
  *
  * 成本：goal 对话若干轮 + 路径生成 + 开课 + 2 个教学回合，全部走平台模型；
  * 具体额度取决于路径生成技能，通常几分钟内完成。
@@ -35,15 +37,19 @@ fs.mkdirSync(OUT_DIR, { recursive: true });
 
 const NAME = process.env.E2E_NAME || `e2e_live_${Date.now()}`;
 const PASSWORD = process.env.E2E_PASSWORD || `E2eLive!${randomUUID().slice(0, 12)}`;
+// 目标可通过环境变量覆盖，便于按「纯文本可教」约束做真机回归（默认保留历史吉他用例）。
 const GOAL = {
-  opening: '我今年 28 岁，后端程序员，吉他完全零基础。三个月后好朋友结婚，我想在婚礼上自弹自唱一首完整的民谣，比如《平凡之路》。我现在连琴都还没有，谱也不识。每天下班能练 40 分钟，周末能练 1 小时。帮我做一个从零到能上台弹唱的计划。',
-  followUps: [
-    '还没买琴，打算这周末去买一把入门面单民谣琴。和弦一个都不会按，识谱只会简谱的哆来咪。',
-    '唱歌还行，公司年会唱过一次没跑大调。主要是左手按弦和右手节奏完全不会，也没人教。',
-    '婚礼大概在明年 1 月 10 号。到时候要能不看谱完整弹唱一首。中间没有别的演出安排。',
-    '就按你的思路来，给我出方案吧。',
-  ],
+  opening: process.env.E2E_GOAL_OPENING || '我今年 28 岁，后端程序员，吉他完全零基础。三个月后好朋友结婚，我想在婚礼上自弹自唱一首完整的民谣，比如《平凡之路》。我现在连琴都还没有，谱也不识。每天下班能练 40 分钟，周末能练 1 小时。帮我做一个从零到能上台弹唱的计划。',
+  followUps: process.env.E2E_GOAL_FOLLOWUPS
+    ? JSON.parse(process.env.E2E_GOAL_FOLLOWUPS)
+    : [
+      '还没买琴，打算这周末去买一把入门面单民谣琴。和弦一个都不会按，识谱只会简谱的哆来咪。',
+      '唱歌还行，公司年会唱过一次没跑大调。主要是左手按弦和右手节奏完全不会，也没人教。',
+      '婚礼大概在明年 1 月 10 号。到时候要能不看谱完整弹唱一首。中间没有别的演出安排。',
+      '就按你的思路来，给我出方案吧。',
+    ],
 };
+const PATH_READY_TIMEOUT_MS = Number(process.env.E2E_PATH_TIMEOUT_MS) || 45 * 60 * 1000;
 
 const result = {
   stamp: STAMP,
@@ -198,7 +204,7 @@ async function driveGoal() {
 }
 
 async function waitForPath() {
-  const deadline = Date.now() + 20 * 60 * 1000;
+  const deadline = Date.now() + PATH_READY_TIMEOUT_MS;
   let lifecycle = '';
   while (Date.now() < deadline) {
     const res = await api('GET', `/api/learning/paths/${result.goal.pathId}/generation-status`);

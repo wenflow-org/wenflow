@@ -1,6 +1,6 @@
 ---
 agentId: skill:teaching-wrapup
-coreHash: 1359a2fa3a80a7fdd36920a09e5cc2436a19126e3243fefc8659e514916c782e
+coreHash: 1d17aa6a2e9cc80c15d6452a6c64ee90059c88e59159a159a6416bea178e6598
 coreVersion: 1
 temperature: 0.7
 maxTokens: 64000
@@ -33,25 +33,26 @@ failurePolicy: propagate
 1. 输入：标签化纯文本（非 JSON），每个字段一个【标签】分区：【学科】【主题】【时长】【学生消息数】【助教消息数】【任务类型】【任务标题】【任务说明】【学习目标】【路径标题】【路径摘要】【路径背景】【课堂最终状态】【课堂事件历史】【阶段轨迹】【结束原因】【知识点状态】【知识点变化】【记忆保持率提示】【学习状态】【课堂证据】【最近对话片段】；结尾指令区分模式：主模式要求同时输出 summary 与 evaluation；评估回退模式只要求输出 evaluation 对象
 2. 证据优先级从高到低：1) sessionEvidence / knowledgeContext.delta / sessionStructure.finalClassroomContext / sessionStructure.classroomEventHistory；2) sessionStructure.pathBackground / knowledgePoints / learningState / task 与 path 上下文；3) recent transcript
 3. 只基于输入证据输出，不要虚构学生已经掌握的内容
-4. 零证据分支：若输入缺少会话消息（消息数 < 2）、知识状态为空或回合数 < 1，视为"会话未产生可评估内容"——此时 summary.topicSummary 只写"本次会话未产生可评估内容（未开始或未记录对话）"，actionPlan 只输出 1 条"重新开始一次学习会话后再生成总结"，evaluation 三项 sessionKtl/sessionLss/sessionLf 均输出 low 档、confidence 取 0.1、reasoning 写"无对话证据"（平台另有确定式零证据兜底，会把三项固定为 3，你无需也不得据此编造主题内容）；禁止生成任何主题性练习建议、禁止提及输入中不存在的主题词（如"深呼吸""公开表达焦虑"等未出现在输入中的内容）
-5. 只总结本节课内发生的进展、困难与下一步建议，不要把历史已掌握内容误写为本节新增成果
-6. knowledgeItems 优先复用输入 knowledgePoints 的名称、状态、progress
-7. practiceAdvice 必须贴合 taskType：reading 偏阅读复盘，practice 偏练习巩固，project 偏产出推进，quiz 偏错题回顾
-8. actionPlan 中至少 1 条必须是**间隔迁移微挑战**；若本节课存在复习点（status=review）或已掌握但易遗忘的概念，必须额外给出 1 条"下一课开场迁移题"原文（供 teaching-turn 开场承接，如"下一节开场先判这个现场：…"——**给一个具体小场景而非问定义**，与 teaching-turn 的「课内温故 · 间隔迁移协议」同口径）
-9. 记忆保持率引用（knowledgeContext.reviewHints）：仅当输入提供了非空的【记忆保持率提示】分区（FSRS 公式算出的记忆保持率，每项含 concept 与 retrievability 0-1 数值）时，才可在 summary.knowledgeSummary 或 actionPlan 中引用其中 1-2 条即将遗忘的概念；数值必须逐字取自输入给出的百分比，禁止编造、修改或"估计"数值。输入未提供、或该分区为 null/[] 时，summary 与 metricInterpretation 中一律不得出现"保持率""记忆保持""记得几成""记得百分之几"等任何形式的记忆保持量化表述，也不得用 learningState 的内部字段（如 lsb/ktl）冒充保持率
-10. summary 是给学生看的，禁止直接复述内部字段名或状态码，如 mastered、newlyMastered、avgUnderstanding、sessionKtl
-11. 如果输入提供了阶段轨迹、课堂事件或结束原因，必须优先用它们解释本节课是如何推进、卡住、检核和结束的
-12. 只有当学生在本节课中表现出无提示下的独立应用，或纠正了先前错误理解后仍能稳定作答时，knowledgeItems.status 才可标记为 mastered；仅在引导下答对一次更适合 learning；仅被复习或回顾的内容不应伪装成本节新增掌握。**复述与跟随不是独立应用**：学员复读老师刚给的口径、照抄老师代做的步骤，都不算掌握证据；evidence 必须引用学员**自己的产出**（他写的判断、他算的数、他举的案例）。**归因要诚实**：不得把老师给的结果记成学员自查——老师直接给了答案、学员只是照收的轮次，必须如实写「由老师给出」，禁止写成「由学生自己发现/自查改回」。**改进建议同理**：evaluationHighlights.improvements / actionPlan 里指向学员问题、短板的建议，必须能对应课内一次**真实失误**（检查点未通过、误解被纠正、明确卡壳的轮次）；整节课无任何失误记录时，不得虚构问题指控（如指控学员「需确认某适用边界」而学员当场已答对）——写中性下一步（「下一课用新情形独立验证本节口径」）。**覆盖边界诚实**：输入提供【学习目标】时，对照它与【任务说明】及本课实际覆盖——目标/任务要求的内容本课未全部覆盖时，summary 必须如实列明「本次未覆盖：X/Y/Z」（逐项点名），actionPlan 给出 1 条后续学习方向建议（「下一课覆盖 X」）；不得让学习者带着「已覆盖全部」的错觉收束
-13. 情绪收尾：若本节课学生多次受挫（frustrated/confused 占比高或 sessionEvidence 情绪信号明确），actionPlan 第一条必须是安抚/重启类建议（如"先休息或回顾已会的小点，恢复状态后再继续"），summary 语气以认可投入为主，不苛责表现
-14. evaluationHighlights.strengths / improvements 必须能够解释 evaluation 的评分结论，不能和分数结论矛盾
-15. evaluation 原则上必须输出；若证据不足也要给出保守评分，把 confidence 设低，并在 reasoning 中说明证据不足；只有输入严重损坏时才允许 evaluation 缺失
-16. evaluation 的三项指标只输出档位对象（tier 取 low/mid/high，并附 evidence 证据句），禁止输出 0-10 数字；档位定义见 fields.evaluation 的评分参考，档位到数值由平台统一映射
-17. summary 输出长度预算（token 治理）：topicSummary ≤ 2 句、knowledgeSummary ≤ 3 句、practiceAdvice ≤ 3 条、learningEvaluation ≤ 3 句（亮点+改进各 1-2 条）、keyTakeaways ≤ 3 条、actionPlan ≤ 3 条、knowledgeItems ≤ 5 项；禁止为凑完整性而重复同一信息——topicSummary 与 knowledgeSummary 不得大段重叠、learningEvaluation 与 evaluationHighlights 不得复述同一句话；每句以信息增量优先，宁可少写不可灌水
-18. metricMetadata 必须随 evaluation 输出，显式标注 sessionLss/sessionLf 为间接推断值（isDirectMeasurement=false）；不得在 summary 中向学生输出"你的压力/疲劳值为 X"这类绝对化断言
-19. 解法尝试台账（输入提供 sessionEvidence.rsmAttempts 时）：那是本节课学生**试过的方法**（method/outcome/evidence，最近 5 条）。若有 ≥2 条，summary/knowledgeItems 里要做**方法层面的对比整合**（"你试了 A 与 B：A 在 X 上有效、B 在 Y 上失败，差别在于…"），而不是只复述知识点；某方法反复失败时，actionPlan 给出**可操作的替代方法**（不要写"再练一次"这类空建议）。台账为空或缺失时按常规总结，不得编造尝试
-20. 教学内容诚实（知识性断言降断言）：总结里涉及知识性内容（概念解释、结论、例子）时也要按把握度措辞——对没有十足把握的断言降低绝对化程度（用"一般/通常/在这个语境下"），避免"一定/永远/绝对"；对已确立的基础知识照常清晰陈述，不得过度免责或稀释清晰度
-21. 不得在 summary / actionPlan / knowledgeItems 中编造具体数字、日期、版本号、人名、引文或参考文献；需要引用具体值而又没有把握时，明确说明不确定或建议核对可靠来源（记忆保持率数值仅在输入给出【记忆保持率提示】时按上条严格引用）
-22. 数学/编程内容的步骤与结论必须可复核：只写能由本节证据或明确推导支撑的结果，不给出未经验证的计算结果或代码输出；没有把握时按前述规则降断言
+4. 课堂契约报告（输入提供 sessionStructure.lessonReport 时）：按它如实报告主线契约达成——coveredKcs/missingKcs/independentCount 逐项引用；met=false 时 summary 必须写明「本节契约未达成：缺 X 的证据/独立证据不足」，actionPlan 给出补齐方向，不得把未达成写成已完成；parkingLot 里的问题如实列为「课后待处理」，不得当作已解决。
+5. 零证据分支：若输入缺少会话消息（消息数 < 2）、知识状态为空或回合数 < 1，视为"会话未产生可评估内容"——此时 summary.topicSummary 只写"本次会话未产生可评估内容（未开始或未记录对话）"，actionPlan 只输出 1 条"重新开始一次学习会话后再生成总结"，evaluation 三项 sessionKtl/sessionLss/sessionLf 均输出 low 档、confidence 取 0.1、reasoning 写"无对话证据"（平台另有确定式零证据兜底，会把三项固定为 3，你无需也不得据此编造主题内容）；禁止生成任何主题性练习建议、禁止提及输入中不存在的主题词（如"深呼吸""公开表达焦虑"等未出现在输入中的内容）
+6. 只总结本节课内发生的进展、困难与下一步建议，不要把历史已掌握内容误写为本节新增成果
+7. knowledgeItems 优先复用输入 knowledgePoints 的名称、状态、progress
+8. practiceAdvice 必须贴合 taskType：reading 偏阅读复盘，practice 偏练习巩固，project 偏产出推进，quiz 偏错题回顾
+9. actionPlan 中至少 1 条必须是**间隔迁移微挑战**；若本节课存在复习点（status=review）或已掌握但易遗忘的概念，必须额外给出 1 条"下一课开场迁移题"原文（供 teaching-turn 开场承接，如"下一节开场先判这个现场：…"——**给一个具体小场景而非问定义**，与 teaching-turn 的「课内温故 · 间隔迁移协议」同口径）
+10. 记忆保持率引用（knowledgeContext.reviewHints）：仅当输入提供了非空的【记忆保持率提示】分区（FSRS 公式算出的记忆保持率，每项含 concept 与 retrievability 0-1 数值）时，才可在 summary.knowledgeSummary 或 actionPlan 中引用其中 1-2 条即将遗忘的概念；数值必须逐字取自输入给出的百分比，禁止编造、修改或"估计"数值。输入未提供、或该分区为 null/[] 时，summary 与 metricInterpretation 中一律不得出现"保持率""记忆保持""记得几成""记得百分之几"等任何形式的记忆保持量化表述，也不得用 learningState 的内部字段（如 lsb/ktl）冒充保持率
+11. summary 是给学生看的，禁止直接复述内部字段名或状态码，如 mastered、newlyMastered、avgUnderstanding、sessionKtl
+12. 如果输入提供了阶段轨迹、课堂事件或结束原因，必须优先用它们解释本节课是如何推进、卡住、检核和结束的
+13. 只有当学生在本节课中表现出无提示下的独立应用，或纠正了先前错误理解后仍能稳定作答时，knowledgeItems.status 才可标记为 mastered；仅在引导下答对一次更适合 learning；仅被复习或回顾的内容不应伪装成本节新增掌握。**复述与跟随不是独立应用**：学员复读老师刚给的口径、照抄老师代做的步骤，都不算掌握证据；evidence 必须引用学员**自己的产出**（他写的判断、他算的数、他举的案例）。**归因要诚实**：不得把老师给的结果记成学员自查——老师直接给了答案、学员只是照收的轮次，必须如实写「由老师给出」，禁止写成「由学生自己发现/自查改回」。**改进建议同理**：evaluationHighlights.improvements / actionPlan 里指向学员问题、短板的建议，必须能对应课内一次**真实失误**（检查点未通过、误解被纠正、明确卡壳的轮次）；整节课无任何失误记录时，不得虚构问题指控（如指控学员「需确认某适用边界」而学员当场已答对）——写中性下一步（「下一课用新情形独立验证本节口径」）。**覆盖边界诚实**：输入提供【学习目标】时，对照它与【任务说明】及本课实际覆盖——目标/任务要求的内容本课未全部覆盖时，summary 必须如实列明「本次未覆盖：X/Y/Z」（逐项点名），actionPlan 给出 1 条后续学习方向建议（「下一课覆盖 X」）；不得让学习者带着「已覆盖全部」的错觉收束
+14. 情绪收尾：若本节课学生多次受挫（frustrated/confused 占比高或 sessionEvidence 情绪信号明确），actionPlan 第一条必须是安抚/重启类建议（如"先休息或回顾已会的小点，恢复状态后再继续"），summary 语气以认可投入为主，不苛责表现
+15. evaluationHighlights.strengths / improvements 必须能够解释 evaluation 的评分结论，不能和分数结论矛盾
+16. evaluation 原则上必须输出；若证据不足也要给出保守评分，把 confidence 设低，并在 reasoning 中说明证据不足；只有输入严重损坏时才允许 evaluation 缺失
+17. evaluation 的三项指标只输出档位对象（tier 取 low/mid/high，并附 evidence 证据句），禁止输出 0-10 数字；档位定义见 fields.evaluation 的评分参考，档位到数值由平台统一映射
+18. summary 输出长度预算（token 治理）：topicSummary ≤ 2 句、knowledgeSummary ≤ 3 句、practiceAdvice ≤ 3 条、learningEvaluation ≤ 3 句（亮点+改进各 1-2 条）、keyTakeaways ≤ 3 条、actionPlan ≤ 3 条、knowledgeItems ≤ 5 项；禁止为凑完整性而重复同一信息——topicSummary 与 knowledgeSummary 不得大段重叠、learningEvaluation 与 evaluationHighlights 不得复述同一句话；每句以信息增量优先，宁可少写不可灌水
+19. metricMetadata 必须随 evaluation 输出，显式标注 sessionLss/sessionLf 为间接推断值（isDirectMeasurement=false）；不得在 summary 中向学生输出"你的压力/疲劳值为 X"这类绝对化断言
+20. 解法尝试台账（输入提供 sessionEvidence.rsmAttempts 时）：那是本节课学生**试过的方法**（method/outcome/evidence，最近 5 条）。若有 ≥2 条，summary/knowledgeItems 里要做**方法层面的对比整合**（"你试了 A 与 B：A 在 X 上有效、B 在 Y 上失败，差别在于…"），而不是只复述知识点；某方法反复失败时，actionPlan 给出**可操作的替代方法**（不要写"再练一次"这类空建议）。台账为空或缺失时按常规总结，不得编造尝试
+21. 教学内容诚实（知识性断言降断言）：总结里涉及知识性内容（概念解释、结论、例子）时也要按把握度措辞——对没有十足把握的断言降低绝对化程度（用"一般/通常/在这个语境下"），避免"一定/永远/绝对"；对已确立的基础知识照常清晰陈述，不得过度免责或稀释清晰度
+22. 不得在 summary / actionPlan / knowledgeItems 中编造具体数字、日期、版本号、人名、引文或参考文献；需要引用具体值而又没有把握时，明确说明不确定或建议核对可靠来源（记忆保持率数值仅在输入给出【记忆保持率提示】时按上条严格引用）
+23. 数学/编程内容的步骤与结论必须可复核：只写能由本节证据或明确推导支撑的结果，不给出未经验证的计算结果或代码输出；没有把握时按前述规则降断言
 
 ## 输出字段
 

@@ -71,6 +71,19 @@ describe('buildTeachingTurnInput：checkpointVerdict 注入（报告 #14）', ()
     const b = await buildTeachingTurnInput(SESSION, CONTEXT, { checkpointVerdict: null });
     expect(b.controls).not.toHaveProperty('checkpointVerdict');
   });
+
+  it('课末终检裁决 → controls.exitTicketVerdict 显式进载荷（与检查点裁决分离）', async () => {
+    const input = await buildTeachingTurnInput(SESSION, CONTEXT, {
+      exitTicketVerdict: { passed: false, detail: '起算点判断错' },
+    });
+    expect(input.controls?.exitTicketVerdict).toEqual({ passed: false, detail: '起算点判断错' });
+    expect(input.controls).not.toHaveProperty('checkpointVerdict');
+  });
+
+  it('无终检裁决 → exitTicketVerdict 字段缺失', async () => {
+    const input = await buildTeachingTurnInput(SESSION, CONTEXT, {});
+    expect(input.controls).not.toHaveProperty('exitTicketVerdict');
+  });
 });
 
 /**
@@ -122,5 +135,43 @@ describe('buildTeachingTurnInput：learnerPrediction 自由描述透传（P1-13�
   it('无 learnerPrediction 时字段缺失（不注入）', async () => {
     const input = await buildTeachingTurnInput(SESSION, CONTEXT, {});
     expect(input.scenario.learnerPrediction).toBeUndefined();
+  });
+
+  it('taskMaterialPayload 装配进 scenario.taskMaterial（教师 LLM 与条件规则共用）', async () => {
+    // 2026-11-19 审计：此前 material 只送白板设计器，教学回合载荷没有 task，
+    // 条件规则 `scenario.taskMaterial` 恒被剥离。
+    const input = await buildTeachingTurnInput(SESSION, {
+      ...(CONTEXT as Record<string, unknown>),
+      taskMaterialPayload: '1. x²-5x+6=0\n2. x²+2x-3=0',
+    } as never, {});
+    expect(input.scenario.taskMaterial).toContain('x²-5x+6=0');
+  });
+
+  it('无 taskMaterialPayload 时 taskMaterial 为 null（规则不注入，行为不变）', async () => {
+    const input = await buildTeachingTurnInput(SESSION, CONTEXT, {});
+    expect(input.scenario.taskMaterial).toBeNull();
+  });
+
+  it('课堂契约/支线状态装配进 scenario（契约稳定，支线逐回合）', async () => {
+    const input = await buildTeachingTurnInput(SESSION, {
+      ...(CONTEXT as Record<string, unknown>),
+      lessonContract: {
+        version: 1,
+        coreKcs: [{ kcId: 'kc-1', name: '识别工具返回' }],
+        minIndependentEvidence: 1,
+        minTurns: 3,
+        timeBudgetMin: 30,
+        branchBudgets: { examplePerKc: 1, deeperTurns: 3, prerequisitePatches: 1, offTopicInClassTurns: 1 },
+      },
+      branchState: {
+        active: 'deeper', turnsUsed: 1, budget: 3, lastNeed: 'deeper',
+        exampleUsedByKc: {}, deeperUsed: 1, patchesUsed: 0, offTopicTurns: 0,
+        parkingLot: [{ at: 't', topic: '八卦' }], directive: '深挖支线进行中',
+      },
+      branchDirective: '深挖支线进行中，剩余 2 轮',
+    } as never, {});
+    expect(input.scenario.lessonContract?.coreKcs).toHaveLength(1);
+    expect(input.scenario.branchState?.active).toBe('deeper');
+    expect(input.scenario.branchDirective).toContain('剩余 2 轮');
   });
 });

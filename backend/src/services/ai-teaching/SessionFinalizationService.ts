@@ -19,6 +19,7 @@ import { applyWarmupExtractionForSession, enqueueReviewCompletedEvent } from './
 // 非正常终态判定（幽灵课 / 弃跑状态泄漏）：叶子方向的单向依赖，不成环（lifecycle 不 import 本服务）
 import { isAbnormalSessionClosure } from './teaching-session-lifecycle';
 import { evaluateSessionClosable } from './teaching-closure';
+import { parseSessionArtifacts } from './checkpoint-shared';
 import { mapKnowledgeStatusToMastery } from '../memory/memory-trace.service';
 import { validateTaskTerminalConsistency } from './terminal-consistency';
 
@@ -114,6 +115,27 @@ export type { WarmupReviewItem } from './warmup-writeback';
 export class SessionFinalizationService {
   async finalize(input: FinalizeSessionInput) {
     const session = await teachingSessionRepository.assertOwnership(input.sessionId, input.userId);
+    // 课堂契约门（2026-11-19）：完成结算不能绕过契约——模型/前端/手动点击都必须等
+    // 「核心 KC 有证据 + 独立证据达标 + 回合数够」。退出（end_only）与复习课不走此门。
+    const contractArtifacts = parseSessionArtifacts(session.teachingState);
+    const contract = contractArtifacts.lessonContract as { coreKcs?: unknown[] } | undefined;
+    if (
+      input.action === 'complete_task'
+      && session.mode !== 'review'
+      && Array.isArray(contract?.coreKcs)
+      && contract.coreKcs.length > 0
+      && process.env.LESSON_CONTRACT_ENFORCE !== '0'
+    ) {
+      const report = contractArtifacts.lessonReport as { met?: boolean; reasons?: string[] } | undefined;
+      if (!report || report.met !== true) {
+        const error = new Error(
+          `本课还有契约目标未达成：${report?.reasons?.join('；') || '尚无课堂证据'}。可以继续作答/检查点，或选择「结束学习（不计入完成）」。`,
+        );
+        (error as { code?: string; status?: number }).code = 'LESSON_CONTRACT_NOT_MET';
+        (error as { status?: number }).status = 409;
+        throw error;
+      }
+    }
     // #51 P-25：机械收束门禁——末问未答 / 检查点未闭合时先拒绝结算（放弃/异常终态豁免）
     const closable = evaluateSessionClosable({
       messages: session.messages,
@@ -431,6 +453,9 @@ export class SessionFinalizationService {
       },
       taskCompletion,
       wrapup: session.wrapup,
+      // 课堂契约报告（2026-11-19）：结课浮层/反馈页直接展示「主线覆盖 + 独立证据 + 支线/停车区」，
+      // 与引擎每回合写入的 lessonReport 同源，不另算一遍。
+      lessonReport: parseSessionArtifacts(session.teachingState).lessonReport || null,
       advisory: session.advisory,
       reviewItems: [],
       projectionStatus: 'pending' as const,

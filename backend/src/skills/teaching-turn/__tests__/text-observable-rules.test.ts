@@ -57,9 +57,9 @@ describe('A 项：产出与练习动作必须纯文本可完成、平台可观�
     expect(line).toContain('平台观测不到');
   });
 
-  it('编译产物 md：口头宣称规则（38.）示例同步替换', () => {
-    const line = MD.split('\n').find((l) => l.includes('口头宣称不构成掌握证据')) || '';
-    expect(line.trimStart().startsWith('38.')).toBe(true);
+  it('编译产物 md：口头宣称规则示例同步替换（编号随新增规则顺延，不锁死数字）', () => {
+    const line = MD.split('\n').find((l) => /^\d+\./.test(l.trimStart()) && l.includes('口头宣称不构成掌握证据')) || '';
+    expect(/^\d+\./.test(line.trimStart())).toBe(true);
     expect(line).toContain('把这一步用你自己的话写出来');
     expect(MD).not.toContain('做给我看');
   });

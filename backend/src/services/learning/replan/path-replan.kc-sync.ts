@@ -48,6 +48,8 @@ export interface ReplanNewTaskInput {
 interface ReplanTemplateSnapshot {
   materialRefs?: Record<string, unknown> | null;
   misconceptionHints?: Record<string, unknown> | null;
+  /** 课堂材料本体（byTask 的值是 string） */
+  taskMaterials?: Record<string, unknown> | null;
   kcAnnotation?: KcAnnotation | null;
 }
 
@@ -61,6 +63,8 @@ export interface ReplanKcSync {
   subtaskIdByTaskKey: Map<string, string>;
   materialRefsByTask: Record<string, unknown[]>;
   misconceptionHintsByTask: Record<string, unknown[]>;
+  /** 任务级课堂材料本体（materialPayload；2026-11-18） */
+  materialPayloadsByTask: Record<string, string>;
   /** 仅在本次真的合并了新 KC 输出时非空，供事务提交后重物化概念图 */
   kcAnnotationForGraph: KcAnnotation | null;
 }
@@ -183,6 +187,7 @@ export async function prepareReplanKcSync(input: {
     subtaskIdByTaskKey: new Map<string, string>(),
     materialRefsByTask: {},
     misconceptionHintsByTask: {},
+    materialPayloadsByTask: {},
     kcAnnotationForGraph: null,
   };
 }
@@ -191,6 +196,7 @@ export async function prepareReplanKcSync(input: {
 export function resetReplanSyncCollectors(sync: ReplanKcSync): void {
   for (const key of Object.keys(sync.materialRefsByTask)) delete sync.materialRefsByTask[key];
   for (const key of Object.keys(sync.misconceptionHintsByTask)) delete sync.misconceptionHintsByTask[key];
+  for (const key of Object.keys(sync.materialPayloadsByTask)) delete sync.materialPayloadsByTask[key];
   sync.subtaskIdByTaskKey.clear();
   sync.kcAnnotationForGraph = null;
 }
@@ -206,6 +212,10 @@ export function recordReplanTaskSidecars(
   // 任务 → 资料条目：按 subtaskId 落进 aiPromptTemplate.materialRefs.byTask（生成链同款）
   if (Array.isArray(taskData.materialRefs) && taskData.materialRefs.length) {
     sync.materialRefsByTask[subtaskId] = taskData.materialRefs;
+  }
+  // 任务 → 课堂材料本体（2026-11-18）：与 description 分离，课堂优先读它
+  if (typeof (taskData as any).materialPayload === 'string' && (taskData as any).materialPayload.trim()) {
+    sync.materialPayloadsByTask[subtaskId] = (taskData as any).materialPayload.trim().slice(0, 6000);
   }
   // 任务 → 迷思预判：规范化后按 subtaskId 落进 aiPromptTemplate.misconceptionHints.byTask
   if (Array.isArray(taskData.anticipatedMisconceptions) && taskData.anticipatedMisconceptions.length) {
@@ -252,9 +262,14 @@ export function buildReplanKcAnnotationPatch(
     ...existingByTaskMap(txParsed?.misconceptionHints),
     ...sync.misconceptionHintsByTask,
   };
+  const mergedTaskMaterialsByTask: Record<string, string> = {
+    ...(existingByTaskMap(txParsed?.taskMaterials) as unknown as Record<string, string>),
+    ...sync.materialPayloadsByTask,
+  };
   for (const staleId of staleTaskIds) {
     delete mergedMaterialRefsByTask[staleId];
     delete mergedMisconceptionHintsByTask[staleId];
+    delete mergedTaskMaterialsByTask[staleId];
   }
 
   // KC 标注（#168）：本阶段重映射结果按阶段增量合并（不整包替换，避免抹掉其他阶段），
@@ -299,6 +314,14 @@ export function buildReplanKcAnnotationPatch(
           misconceptionHints: {
             ...(isRecord(txParsed?.misconceptionHints) ? txParsed.misconceptionHints : {}),
             byTask: mergedMisconceptionHintsByTask,
+          },
+        }
+      : {}),
+    ...(Object.keys(mergedTaskMaterialsByTask).length
+      ? {
+          taskMaterials: {
+            ...(isRecord(txParsed?.taskMaterials) ? txParsed.taskMaterials : {}),
+            byTask: mergedTaskMaterialsByTask,
           },
         }
       : {}),

@@ -196,4 +196,34 @@ describe('assessStageMaterialCompletenessByModel：语义判断交给模型（mo
     expect(facts[0].hasMaterialRefs).toBe(true);
     expect(facts[0].numberedListLines).toBeGreaterThanOrEqual(2);
   });
+
+  it('材料本体写在 materialPayload（description 只留简介）也判通过', () => {
+    // 2026-11-19 审计：新规则把本体从 description 分离后，质量闸若只扫 description
+    // 会把合规任务判成 MATERIAL_BODY_MISSING，逼模型把材料搬回简介。
+    const result = assessSubtaskMaterialCompleteness({
+      title: '在 6 个句子上指认时间标志词',
+      description: '给你 6 个句子，逐个判断时间标志词。',
+      materialPayload: '1. She has already finished her homework.\n2. I visited my aunt yesterday.\n3. He has lived here since 2020.',
+    });
+    expect(result.promisesMaterial).toBe(true);
+    expect(result.satisfied).toBe(true);
+    expect(result.reason).toBeUndefined();
+  });
+
+  it('materialPayload 为空串/占位文本不当作本体，仍可判缺口', () => {
+    const result = assessSubtaskMaterialCompleteness({
+      title: '对比 6 个句子',
+      description: '给你 6 个句子（含 already、since 2020、yesterday），找出时间标志词。',
+      materialPayload: '   ',
+    });
+    expect(result.satisfied).toBe(false);
+  });
+
+  it('语义判定事实里带 materialPayload 长度与前 120 字预览', () => {
+    const facts = collectSubtaskMaterialFacts([
+      { title: 't', description: '给你 6 个句子', materialPayload: 'x'.repeat(200) },
+    ]);
+    expect(facts[0].materialPayloadChars).toBe(200);
+    expect(facts[0].materialPayloadPreview).toHaveLength(120);
+  });
 });

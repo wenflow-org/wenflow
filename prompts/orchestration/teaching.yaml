@@ -176,7 +176,7 @@ fields:
   - fieldId: scenario
     promptRole: soft-info
     valueType: object
-    description: 任务与路径上下文（编排层整块组装：taskKcs/cognitiveFrame/materials/taskProfile/pathProgress 等；无单点抽取路径，故无 routings 行）
+    description: 任务与路径上下文（编排层整块组装：taskKcs/taskMaterial/cognitiveFrame/materials/taskProfile/pathProgress 等；taskMaterial=本课材料本体 materialPayload；无单点抽取路径，故无 routings 行）
   # 同类的 classroomEventContext / interactionProfile（同样是编排层组装、无单点抽取路径）亦不作 routings 行；
   # 三者的沙盘引用声明在 core inputs（prompts/core/teaching-turn.yaml，ref sandbox:teaching.*）与
   # 沙盘键注册表（services/agent-contract-view.ts 的 SANDBOX_EXTRA_KEYS），门禁 prompts:check-handoff 据此对账。

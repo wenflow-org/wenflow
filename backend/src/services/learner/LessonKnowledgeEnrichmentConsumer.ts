@@ -82,6 +82,11 @@ export class LessonKnowledgeEnrichmentConsumer {
     const transferGoal = typeof data.transferGoal === 'string' && data.transferGoal.trim()
       ? data.transferGoal.trim()
       : null;
+    // 课堂契约报告（2026-11-19）：平台确定式产出，与 wrapup 冲突时优先——
+    // missingKcs 是「本节未取得证据」的权威事实，增强侧据此把概念放进不稳定前置而不是按 wrapup 乐观判掌握。
+    const lessonReport = data.lessonReport && typeof data.lessonReport === 'object'
+      ? (data.lessonReport as Record<string, unknown>)
+      : null;
 
     // 呈现层投影（B1）：wrapup 里的**执行信封元数据**（runtimeEnvelope/debug）对知识蒸馏无信息量，
     // 实测每次稳定 ~2.4–2.8KB（占单次 payload 的 10~30%），发前剔除。
@@ -113,6 +118,7 @@ export class LessonKnowledgeEnrichmentConsumer {
             }
           : null,
         wrapup: wrapupPayload,
+        lessonReport,
         taskContext: { learningPathId: data.pathId, taskId: data.taskId },
         sessionEvidence: data.performance || null,
         visibleDialogueContext,

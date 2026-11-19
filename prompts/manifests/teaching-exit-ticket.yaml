@@ -1,0 +1,26 @@
+version: prompt-lab-manifest/v1
+skillId: teaching-exit-ticket
+agentId: skill:teaching-exit-ticket
+name: default-skill-teaching-exit-ticket
+archetype: generator
+description: 课末终检题生成器（独立于课内检查点）
+acceptableAgentIds: [skill:teaching-exit-ticket]
+publish: { enabled: true, exportTargets: [platform-prompts] }
+promptContract:
+  version: skill-prompt-contract/v2
+  executionMode: llm
+  artifactKind: generation
+  interactionMode: snapshot
+  input: { transport: json, schemaSource: skill-definition }
+  output: { media: json, schemaSource: runtime-validator, envelope: adapter }
+  context: { envelope: context-envelope/v1, delivery: sidecar }
+  failurePolicy: blocking
+runtimeContract:
+  version: prompt-runtime-contract/v1
+  contextMode: snapshot-context
+  businessState: { domain: teaching, phases: [exit-ticket-generated], defaultPhase: exit-ticket-generated, terminalPhases: [exit-ticket-generated], statusValues: [succeeded, partial, blocked, failed] }
+  contextUpdate: { mode: none, stateOwner: none }
+  outputEnvelope: adapter
+ownership: { tier: production, visibility: internal }
+tags: [core-skill, teaching, v4]
+notes: v4 核心文件的契约与运行参数家园。

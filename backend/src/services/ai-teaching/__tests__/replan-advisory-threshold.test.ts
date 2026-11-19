@@ -279,3 +279,77 @@ describe('ReplanAdvisoryService.build 的阈值行为', () => {
     expect(advisory.reasonCodes).toContain('advisory_suppressed_lesson_not_hard');
   });
 });
+
+/**
+ * 课堂契约 -> 重排建议（2026-11-19）：未达成 KC / 终检未过必须能改变建议方向，
+ * 与路径层 progressive-design 消费的是同一份 lessonReport（课后结论 -> 后续课表）。
+ */
+describe('ReplanAdvisoryService.build 消费 lessonReport', () => {
+  const lessonReportWith = (input: {
+    met?: boolean;
+    missingKcs?: string[];
+    exitTicket?: { asked?: boolean; passed?: boolean; conceptName?: string };
+  }) => ({
+    met: input.met ?? false,
+    missingKcs: input.missingKcs || [],
+    ...(input.exitTicket ? { exitTicket: { asked: true, passed: false, attempts: 2, conceptName: '判断抗辩依据', question: 'q', judgedBy: 'deterministic', ...input.exitTicket } } : {}),
+  } as never);
+
+  const accelerateSignal = {
+    shouldSuggest: true,
+    priority: 'medium',
+    recommendation: 'accelerate',
+    scope: 'next_milestone',
+    rationale: '当前阶段掌握稳定，可以压缩。',
+    reasonCodes: ['ready_to_accelerate'],
+  };
+
+  it('契约未达成时不允许加速：accelerate 降级为 reinforce，并带上 contract_unmet 与缺口点名', () => {
+    const advisory = service.build({
+      wrapup: wrapupWith({}),
+      learnerReplanProjection: projectionWith({ signal: accelerateSignal, milestoneComplete: true }),
+      nextMilestone,
+      lessonReport: lessonReportWith({ met: false, missingKcs: ['识别违约金触发条件'] }),
+    });
+    expect(advisory.shouldSuggest).toBe(true);
+    expect(advisory.recommendation).toBe('reinforce');
+    expect(advisory.reasonCodes).toContain('contract_unmet');
+    expect(advisory.ui.body).toContain('识别违约金触发条件');
+  });
+
+  it('终检未过单独构成补强证据：双低无卡点也会发建议，原因码 exit_ticket_failed', () => {
+    const advisory = service.build({
+      wrapup: wrapupWith({ metricTiers: { sessionLss: 'low', sessionLf: 'low' } }),
+      learnerReplanProjection: projectionWith({
+        signal: { shouldSuggest: false, priority: 'none', recommendation: 'keep', scope: 'none', rationale: '', reasonCodes: [] },
+        milestoneComplete: true,
+      }),
+      nextMilestone,
+      lessonReport: lessonReportWith({
+        met: true,
+        exitTicket: { asked: true, passed: false, conceptName: '定位期限起算点' },
+      }),
+    });
+    expect(advisory.shouldSuggest).toBe(true);
+    expect(advisory.recommendation).toBe('reinforce');
+    expect(advisory.reasonCodes).toContain('exit_ticket_failed');
+    expect(advisory.reasonCodes).not.toContain('advisory_suppressed_lesson_not_hard');
+    expect(advisory.ui.body).toContain('定位期限起算点');
+  });
+
+  it('契约已达成且无缺口：不因 lessonReport 诱发建议（双低无卡点仍压制）', () => {
+    const advisory = service.build({
+      wrapup: wrapupWith({ metricTiers: { sessionLss: 'low', sessionLf: 'low' } }),
+      learnerReplanProjection: projectionWith({
+        signal: { shouldSuggest: false, priority: 'none', recommendation: 'keep', scope: 'none', rationale: '', reasonCodes: [] },
+        milestoneComplete: true,
+      }),
+      nextMilestone,
+      lessonReport: lessonReportWith({
+        met: true,
+        exitTicket: { asked: true, passed: true, conceptName: '定位期限起算点' },
+      }),
+    });
+    expect(advisory.shouldSuggest).toBe(false);
+  });
+});

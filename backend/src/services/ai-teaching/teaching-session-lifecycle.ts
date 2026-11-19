@@ -61,6 +61,7 @@ import {
   computeSessionEvidence,
 } from './teaching-session-views';
 import { generateOpening } from './teaching-turn-engine';
+import { buildLessonContract, type LessonContract, type LessonReport } from './lesson-contract';
 import { AI_TEACHING_AGENT_ID, requireTeachingRevision } from './teaching-turn-shared';
 import { conceptConsolidatorService } from '../learner/ConceptConsolidatorService';
 import { lessonPrepService } from './lesson-prep.service';
@@ -75,6 +76,7 @@ import { learnerProjectionService } from '../learner/LearnerProjectionService';
 import { learnerSnapshotService } from '../learner/LearnerSnapshotService';
 import { learnerStateReviewService } from '../learner/LearnerStateReviewService';
 import { recordTaskDifficultyAdjustment } from '../learner/TaskDifficultyAdjustmentLedger';
+import { retentionProbeService } from '../learner/retention-probe.service';
 import { memoryTraceService } from '../memory/memory-trace.service';
 import { reviewQuotaService } from '../memory/review-quota.service';
 import { reviewPlanService } from '../memory/review-plan.service';
@@ -313,6 +315,8 @@ export async function startSession(input: TeachingSessionStartInput): Promise<{
   revision: number;
   /** 课内温故计划（记忆层）：日常课开场回捞的到期旧知；无到期点或复习课为 null */
   memoryWarmup?: ReviewPlan | null;
+  /** 课堂契约（最低必须完成集）：前端开课卡展示核心 KC/证据门槛/支线额度 */
+  lessonContract?: LessonContract | null;
   scene?: SessionOpeningScene;
 }> {
   const context = await buildTeachingScenarioContext(input.userId, input.taskId, null);
@@ -330,6 +334,8 @@ export async function startSession(input: TeachingSessionStartInput): Promise<{
     });
   } catch { /* 统计失败不阻断 */ }
   const seededKnowledgeState = cloneKnowledgePoints(context.taskKnowledgeSeeds);
+  // 课堂契约（2026-11-19）：建课时冻结「最低必须完成集」，模型之后不能改。
+  const lessonContract: LessonContract = buildLessonContract(context);
   // 复习课模式：knowledgeState 种子 = 任务种子 + 到期复习点（全部注入，非 limit 2）
   if (input.mode === 'review') {
     try {
@@ -390,7 +396,13 @@ export async function startSession(input: TeachingSessionStartInput): Promise<{
     mode: input.mode || 'tutor',
     messages: [],
     knowledgeState: seededKnowledgeState,
-    teachingState: memoryWarmup ? { sessionArtifacts: { memoryWarmup } } : null,
+    // 契约随 reserve 先落一份：即使开场生成失败/进程重启，恢复时也能拿到同一份必须集。
+    teachingState: {
+      sessionArtifacts: {
+        ...(memoryWarmup ? { memoryWarmup } : {}),
+        lessonContract,
+      },
+    },
   }, RECOVERY_WINDOW_MS);
 
   // 当日温故额度记账（跨会话共享：一天多节课不会把温故量放大；超额部分顺延到明天）。
@@ -436,8 +448,12 @@ export async function startSession(input: TeachingSessionStartInput): Promise<{
         ? new Date(sessionArtifacts.pausedAt).getTime()
         : null;
       const additionalPausedMs = wasPausedAt ? Math.max(0, Date.now() - wasPausedAt) : 0;
+      // 旧会话没有契约：恢复时补建一份并写回，保证同一节课后续回合走同一份必须集。
+      const resumedContract = (sessionArtifacts.lessonContract as LessonContract | undefined)
+        || buildLessonContract(resumedContext);
       const resumedTeachingState = buildTeachingStateWithArtifacts(previousSession.teachingState, {
         ...sessionArtifacts,
+        lessonContract: resumedContract,
         initialKnowledgeState: effectiveInitialKnowledgeState,
         pathBackgroundContext: sessionArtifacts.pathBackgroundContext || buildPathBackgroundContext(resumedContext),
         pausedAt: null,
@@ -471,6 +487,7 @@ export async function startSession(input: TeachingSessionStartInput): Promise<{
         mode: 'resumed',
         revision: previousSession.revision,
         memoryWarmup: (sessionArtifacts.memoryWarmup as ReviewPlan | undefined) ?? null,
+        lessonContract: resumedContract,
         scene: buildSessionOpeningScene({ mode: 'resumed', context: resumedContext, sameTaskAttempt }),
       };
     } finally {
@@ -566,6 +583,8 @@ export async function startSession(input: TeachingSessionStartInput): Promise<{
       sessionArtifacts: {
         // 计划在 reserve 时建立；这里必须保留（此前整段重写把计划抹掉，导致首个回合就没有温故）
         ...(memoryWarmup ? { memoryWarmup } : {}),
+        // 课堂契约（最低必须完成集）：跨回合稳定，模型每轮只读不改。
+        lessonContract,
         initialKnowledgeState: seededKnowledgeState,
         pathBackgroundContext: buildPathBackgroundContext(context),
         endReason: null,
@@ -597,6 +616,7 @@ export async function startSession(input: TeachingSessionStartInput): Promise<{
       mode: 'new',
       revision: session.revision,
       memoryWarmup,
+      lessonContract,
       scene: buildSessionOpeningScene({
         mode: 'new',
         context,
@@ -797,6 +817,8 @@ export async function endSession(
         finalClassroomContext,
         classroomEventHistory,
         stageHistory,
+        // 课堂契约报告（2026-11-19）：主线覆盖/独立证据/支线/停车区；wrapup 必须如实引用
+        lessonReport: sessionArtifacts.lessonReport || null,
         endReason: sessionArtifacts.endReason || endReason,
       },
     },
@@ -1111,6 +1133,9 @@ export async function endSession(
       // 点名收窄（2026-11-03 真人走查根因修复）：投影里的卡点来自**全学习者**，不按路径切，
       // 会把别的路径的概念点名到这节课的评估页上；这里把本条路径的概念名交给建议层收窄。
       pathConceptNames: await loadPathConceptNames(session.learningPathId),
+      // 课堂契约回流（2026-11-19）：未达成 KC / 终检未过直接进入结课建议，
+      // 与下一阶段设计消费同一份 lessonReport。
+      lessonReport: (sessionArtifacts.lessonReport as LessonReport | undefined) || null,
       nextMilestone: nextMilestone ? {
         milestoneId: nextMilestone.milestoneId,
         title: nextMilestone.title,
@@ -1204,6 +1229,9 @@ export async function endSession(
         transferGoal: context?.cognitiveFrame?.transferGoal || null,
         performance: evaluationResult ? persistedEvaluation : null,
         knowledgeState: session.knowledgeState,
+        // 课堂契约报告（2026-11-19）：主线覆盖/独立证据/支线/停车区随事件下行，
+        // 供课后增强/路径重排消费「未达成 KC 与停车问题」，不再只存在于会话内部。
+        lessonReport: sessionArtifacts.lessonReport || null,
         // 只带 role/content：下游唯一消费者是 profile-lesson-enrich，其输入类型
         // （skills/profile-lesson-enrich/index.ts:66）只有这两键；曾额外带 analysis，
         // 抽取后无人读取，只是把每回合的判读块重复塞进事件的持久化载荷（#200 清理）。
@@ -1328,6 +1356,22 @@ export async function endSession(
         error: error instanceof Error ? error.message : String(error),
       });
     });
+    // 延迟保持探针（2026-11-19）：课后 24–72h 对已有独立证据的核心 KC 排单点提取题。
+    // 只对正课排期：复习课/延伸课不产生新的保持窗口（否则复习本身会再排一轮探针）。
+    // best-effort 且不阻塞收束；排期只读本节契约/看板，不依赖上面的记忆回写完成。
+    if (session.mode !== 'review' && session.mode !== 'extension') runBackgroundTask('retention-probe.schedule', () => retentionProbeService.scheduleForSession({
+      userId: session.userId,
+      sessionId,
+      pathId: session.learningPathId ?? null,
+      taskId: session.taskId ?? null,
+      subject: session.subject,
+      topic: session.topic,
+      taskTitle: context?.taskTitle || session.topic,
+      lessonReport: sessionArtifacts.lessonReport || null,
+      knowledgeState: session.knowledgeState,
+      // 背景任务不继承模拟时钟 ALS：在收束请求内先取时刻，避免把窗口算到墙钟上
+      lessonAt: simulatedNowOr(),
+    }), { userId: session.userId, sessionId });
     // n+1 备课·资料腿（活的 path 批次 C）：下一任务引用的联网来源定向补采入库。
     // 认知腿（概念负荷预热/快照刷新/insights）已由上方 refreshInBackground 链承担，不重复触发。
     runWithTeachingSession(session.id, () => lessonPrepService.prepareNextLesson({

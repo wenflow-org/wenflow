@@ -62,6 +62,7 @@
           <div class="hero__main">
             <div class="hero__tags">
               <span class="badge" :class="badgeCls">{{ badgeText }}</span>
+              <span v-if="topologyLabel" class="badge badge--topology">{{ topologyLabel }}</span>
             </div>
             <h1>{{ pathTitle }}</h1>
             <p
@@ -87,6 +88,13 @@
                 <span class="metric"><b>{{ lessonCount ? `${lessonCount} 节课 · 约 ${path.estimatedHours} 小时` : '—' }}</b>已备好</span>
               </template>
               <span v-if="path.deadlineText" class="metric"><b>{{ path.deadlineText }}</b>目标周期</span>
+            </div>
+            <!-- 终局交付物（2026-11-18 方向五）：把「上课打卡」讲成「攒成果」。
+                 取用户确认方案时定下的 firstDeliverable；旧路径没有该字段时不显示。 -->
+            <div v-if="finalDeliverable" class="hero__deliverable">
+              <span class="hero__deliverable-tag">走完会拿到</span>
+              <p>{{ finalDeliverable }}</p>
+              <small v-if="stages.length">这条路径的 {{ stages.length }} 个阶段都朝这份成果收口</small>
             </div>
             <div class="hero__actions">
               <button
@@ -151,6 +159,14 @@
           <!-- 主列 -->
           <div class="stages-col">
           <div class="stages">
+            <!-- 极速模式（2026-11-18 方向五）：只显示 core 骨干课；进度仍按全部任务计算 -->
+            <div v-if="hasFlexibleTasks" class="stages__toolbar">
+              <label class="stages__toggle">
+                <input v-model="coreOnly" type="checkbox" />
+                <span>⏱ 时间紧，只看核心主干</span>
+              </label>
+              <small v-if="coreOnly">已隐藏 {{ hiddenFlexibleCount }} 节可跳过课</small>
+            </div>
             <section v-if="!stages.length" class="stages__empty card">
               <!-- kicker「路径准备中」+ 主行「还没有阶段与任务」已是完整结论；原第三行
                    「生成后…请稍后刷新页面查看」既复述状态、又与本页自动刷新相矛盾
@@ -171,7 +187,7 @@
                        ⇒ 学习者永远看不到。显式提到阶段头（折叠态即可见），披露才真正到达学习者。 -->
                   <small v-if="stageCapacityNote(stage)" class="stage__capacity">{{ stageCapacityNote(stage) }}</small>
                 </span>
-                <span class="stage__prog">{{ stageDoneCount(stage) }} / {{ stageTasks(stage).length }}</span>
+                <span class="stage__prog">{{ stageTasks(stage).length ? `${stageDoneCount(stage)} / ${stageTasks(stage).length}` : '待解锁' }}</span>
                 <span class="stage__chev" :class="{ 'stage__chev--open': openStages.includes(si) }">⌄</span>
               </button>
 
@@ -183,7 +199,11 @@
                   <!-- 阶段级「本阶段依据资料：[📄 公文种类]」整行删除（2026-11-06 二次走查）：
                        它与每个任务自己的引用签是同一批（实测阶段 1 的 2 个任务都挂同一个「公文种类」），
                        同屏读作上下复读机；引用已经挂在任务行上，阶段头再报一遍没有新增信息。 -->
-                  <template v-for="task in stageTasks(stage)" :key="task.id">
+                  <!-- 渐进式课表（2026-11-18 方向三）：未来阶段只出骨架，课表等上一阶段学完再生成 -->
+                  <p v-if="!stageTasks(stage).length" class="stage__pending">
+                    课表待解锁 · 学完上一阶段后，会按你的实际表现生成这一阶段的课
+                  </p>
+                  <template v-for="task in displayStageTasks(stage)" :key="task.id">
                   <div
                     class="task"
                     :class="`task--${taskCls(task)}`"
@@ -195,6 +215,10 @@
                   </span>
                   <div class="task__body">
                     <strong>{{ task.title || task.displayLabel }}</strong>
+                    <!-- 知识组件胶囊（2026-11-18 方向五）：这节课点亮哪些能力单元 -->
+                    <div v-if="task.kcs && task.kcs.length" class="task__kcs">
+                      <span v-for="kc in task.kcs" :key="kc.kcId" class="task__kc">{{ kc.name }}</span>
+                    </div>
                   </div>
                   <!-- 任务行（2026-11-06 二次走查·三行压两行）：左「类型 · 时长 · 资料签」、
                        右「操作按钮」同一行两端对齐。
@@ -1549,6 +1573,15 @@ function stageTasks(stage: Record<string, any>) {
   return (stage.subtasks || stage.tasks || []) as Array<Record<string, any>>;
 }
 
+/** 极速模式：过滤掉 flexible（可跳过）课；整阶段都被过滤时保留原样，避免阶段变空。 */
+const coreOnly = ref(false);
+function displayStageTasks(stage: Record<string, any>) {
+  const tasks = stageTasks(stage);
+  if (!coreOnly.value) return tasks;
+  const core = tasks.filter((task) => task.adjustability !== 'flexible');
+  return core.length ? core : tasks;
+}
+
 /* ---------- 手动结构编辑（#64 P-39） ---------- */
 const editingTaskId = ref<string | null>(null);
 const insertTitle = ref('');
@@ -1680,6 +1713,21 @@ function toggleStage(si: number) {
 
 /* ---------- 进度 ---------- */
 const allTasks = computed(() => stages.value.flatMap((s) => stageTasks(s)));
+const hasFlexibleTasks = computed(() => allTasks.value.some((t) => t.adjustability === 'flexible'));
+const hiddenFlexibleCount = computed(() => (coreOnly.value
+  ? allTasks.value.filter((t) => t.adjustability === 'flexible').length
+  : 0));
+const finalDeliverable = computed(() => {
+  const value = path.value?.firstDeliverable;
+  return typeof value === 'string' && value.trim() ? value.trim() : '';
+});
+const TOPOLOGY_LABELS: Record<string, string> = {
+  exploratory: '探索起步',
+  builder: '工程落地',
+  exam: '应试提分',
+  diagnostic: '诊断决策',
+};
+const topologyLabel = computed(() => TOPOLOGY_LABELS[String(path.value?.pathTopology || '')] || '');
 const totalTasks = computed(() => allTasks.value.length);
 const doneTasks = computed(() => allTasks.value.filter((t) => t.status === 'completed').length);
 const percent = computed(() => (totalTasks.value ? Math.round((doneTasks.value / totalTasks.value) * 100) : 0));
@@ -2171,6 +2219,26 @@ onBeforeUnmount(() => {
 .task--current .task__icon { border: 2px solid var(--blue); box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 14%, transparent); }
 .task--todo .task__icon { border: 2px dashed color-mix(in srgb, var(--blue) 15%, var(--line)); }
 .task--locked .task__icon { color: var(--faint); background: var(--canvas); opacity: .62; }
+.task__kcs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.task__kc {
+  font-size: 11px; line-height: 1; padding: 4px 7px; border-radius: 999px;
+  color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--blue) 22%, transparent);
+  white-space: nowrap;
+}
+.hero__deliverable {
+  margin-top: 14px; padding: 10px 12px; border-radius: 12px;
+  background: color-mix(in srgb, var(--blue) 6%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--blue) 20%, transparent);
+}
+.hero__deliverable-tag { font-size: 11px; font-weight: 800; letter-spacing: .04em; color: var(--blue-deep); }
+.hero__deliverable p { margin: 4px 0 0; font-size: 13.5px; line-height: 1.55; }
+.hero__deliverable small { display: block; margin-top: 3px; font-size: 11.5px; color: var(--faint); }
+.badge--topology { background: transparent; border: 1px dashed color-mix(in srgb, var(--blue) 35%, transparent); color: var(--blue-deep); }
+.stages__toolbar { display: flex; align-items: center; gap: 10px; padding: 2px 2px 8px; }
+.stages__toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+.stages__toolbar small { font-size: 11.5px; color: var(--faint); }
+.stage__pending { margin: 6px 2px 2px; padding: 10px 12px; border-radius: 10px; font-size: 12.5px; color: var(--faint); background: color-mix(in srgb, var(--ink) 4%, transparent); }
 .task__body strong { display: block; font-size: 13.5px; }
 .task__body small { display: block; margin-top: 2px; font-size: 12px; color: var(--faint); }
 /* 时长标签禁词中折行（bare/15）：「约 18 分钟」不拆成「约 18 分/钟」 */

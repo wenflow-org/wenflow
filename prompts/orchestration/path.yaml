@@ -107,6 +107,10 @@ fields:
     promptRole: derived-presentation
     valueType: number
     description: milestone 总数
+  - fieldId: topology
+    promptRole: control-signal
+    valueType: string
+    description: 路径拓扑（exploratory|builder|exam|diagnostic）；path-planning 判定，落库 pathTopology 后注入 path-task-design
   - fieldId: cognitiveCore.cognitiveDomain
     promptRole: soft-info
     valueType: string
@@ -115,6 +119,10 @@ fields:
     promptRole: soft-info
     valueType: array<object>
     description: 核心概念列表
+  - fieldId: cognitiveCore.domainAnchors
+    promptRole: soft-info
+    valueType: object
+    description: 学科基准锚 {canonicalModels[], canonicalArtifacts[], commonMisconceptions[]}；path-task-design 选材料与 reviewer 深度评分共用
   - fieldId: milestones.stageNumber
     promptRole: hard-required
     valueType: number
@@ -185,6 +193,10 @@ fields:
     promptRole: soft-info
     valueType: array<object>
     description: 任务→资料条目引用（逐字核对后保留的才落库；无资料时不出该键）
+  - fieldId: subtasks.materialPayload
+    promptRole: soft-info
+    valueType: string
+    description: 课堂材料本体（题面/日志/样本值/原文片段）；description 只留 1-2 句简介，落 taskMaterials.byTask 侧车供教学回合读取
 
   # === skill:path-task-design 产出归属注记（2026-10-24 契约同步批） ===
   # path-planning 仅产出阶段骨架（milestones 不含 subtask）；subtasks.* 的实际逐阶段产出者是
@@ -221,11 +233,11 @@ fields:
   - fieldId: taskKcLinks
     promptRole: hidden-inference
     valueType: array<object>
-    description: 任务↔KC 关联 [{taskTitle, linkedKCs[]}]（字段名逐字契约，代码侧另有别名归一兜底）；每个 subtask 至少关联 1 个 KC
+    description: 任务↔KC 关联 [{taskKey, taskTitle, linkedKCs[]}]；taskKey 必须与 subtasks[].taskKey 逐字一致（2026-11 起，标题只作可读备份）；每个 subtask 至少关联 1 个 KC
   - fieldId: kcGraph
-    promptRole: hidden-inference
+    promptRole: derived-presentation
     valueType: object
-    description: KC 前置依赖图 {nodes[{kcId,name,taxonomy}], edges[{from,to,relation=prerequisite}]}（知识依赖非讲授顺序、无环）；代码侧物化为概念图供前置闭包查询
+    description: KC 前置依赖图 {nodes[{kcId,name,taxonomy}], edges[{from,to,relation=prerequisite}]}——**不接受模型输出**，由后端 deriveKcGraph 从 conceptKcs[].prerequisiteKCs 确定性派生（知识依赖非讲授顺序、无环），物化为概念图供前置闭包查询
 
 routings:
   # path-agent（确定性定帧）→ path-planning + path-task-design

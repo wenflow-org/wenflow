@@ -28,13 +28,15 @@ describe('teaching-turn 契约收口', () => {
   });
 
   it('完成候选不再要求“无提示独立完成”', () => {
-    expect(rules[32]).not.toContain('无提示下独立完成');
-    expect(rules[32]).toContain('上一轮引导/提问下答对也算');
+    const rule = rules.find((r) => r.includes('上一轮引导/提问下答对也算'));
+    expect(rule).toBeTruthy();
+    expect(rule).not.toContain('无提示下独立完成');
   });
 
   it('“答对”的无提示定义只用于掌握证据，不用于完成判定', () => {
-    expect(rules[36]).toContain('只用于掌握度/知识看板判定');
-    expect(rules[36]).toContain('不用于 control.isCompletionCandidate');
+    const rule = rules.find((r) => r.includes('只用于掌握度/知识看板判定'));
+    expect(rule).toBeTruthy();
+    expect(rule).toContain('不用于 control.isCompletionCandidate');
   });
 
   it('figure.kind 枚举包含 split-compare，且给出 normalizer 认的 spec 字段', () => {

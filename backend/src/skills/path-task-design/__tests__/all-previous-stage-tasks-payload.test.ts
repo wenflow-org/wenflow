@@ -105,7 +105,8 @@ describe('#249 path-task-design 载荷：allPreviousStageTasks 必须过白名�
   });
 
   it('没修过头：两条分支里原有键一个不少，且没有多出计划外的键', async () => {
-    const expected = [...ORIGINAL_KEYS, 'allPreviousStageTasks'].sort();
+    // pathTopology 为 2026-11-19 审计补齐的契约键（core yaml「按拓扑定任务形态」依赖它）。
+    const expected = [...ORIGINAL_KEYS, 'allPreviousStageTasks', 'pathTopology'].sort();
     for (const mode of [undefined, '0']) {
       if (mode === undefined) delete process.env.PAYLOAD_STABLE_PREFIX;
       else process.env.PAYLOAD_STABLE_PREFIX = mode;

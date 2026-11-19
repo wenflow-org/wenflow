@@ -844,6 +844,24 @@ export class TeachingSessionRepository {
     return record ? mapRecordHydrated(record, { lazy: true }) : null;
   }
 
+  /**
+   * 任务下最近一节**常规教学**课堂（排除复习课/延伸课）。
+   *
+   * 用途（2026-11-19 完成权威收口）：`POST /api/learning/tasks/:taskId/complete` 没有显式
+   * teachingSessionId 时，按本任务最近一节正课判断课堂契约是否达成——复习/延伸课不是
+   * 任务完成课，不能拿它们的契约（或缺失契约）替任务结算做判断。
+   */
+  async findLatestTutorSession(
+    userId: string,
+    taskId: string
+  ): Promise<TeachingSessionRecord | null> {
+    const record = await prisma.teaching_sessions.findFirst({
+      where: { userId, taskId, mode: 'tutor' },
+      orderBy: { updatedAt: 'desc' }
+    });
+    return record ? mapRecordHydrated(record, { lazy: true }) : null;
+  }
+
   /** 最近一次「常规教学」完结会话：排除延伸课（延伸课的 wrapup 是延伸段反馈，不能当本课的完结反馈）。 */
   async findLatestCompletedLessonSession(
     userId: string,

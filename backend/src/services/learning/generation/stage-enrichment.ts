@@ -37,6 +37,7 @@ import { sanitizeUserFacingText } from '../user-facing-text';
 import { detectStageFiller, isStageFiller, detectCrossStageFiller, isCrossStageFiller } from './stage-filler';
 import { buildSupplementRequest, mergeSupplementTasks, needsLessonSupplement } from './stage-task-supplement';
 import { applyCrossStageDedup, buildExistingStageTitles } from './stage-cross-stage-dedup';
+import { detectCrossStageActionRepeat } from './stage-cross-stage-action';
 import {
   supplementZeroRefStage,
   createZeroRefSupplementGate,
@@ -268,8 +269,11 @@ async function enrichLearningPathWithAndersonInner(
     if (!learningPath) {
       throw new Error('PATH_ENRICHMENT_TARGET_NOT_FOUND');
     }
+    // 全量阶段快照（2026-11-19 审计）：渐进/追加会下面把 milestones 过滤成「本次要写的阶段」，
+    // 但末阶段判定、全路径阶段地图、前序任务去重都必须看**整条路径**。过滤只决定写哪一段。
+    const allMilestones = learningPath.milestones;
     // 跨阶段复读闸的存量侧输入（快照口径见 stage-cross-stage-dedup.buildExistingStageTitles）。
-    const existingStageTitles = buildExistingStageTitles(learningPath.milestones);
+    const existingStageTitles = buildExistingStageTitles(allMilestones);
     if (appendOnly || restrictMilestoneIds) {
       // 追加/渐进 restrict：只处理目标阶段，其余阶段一概不碰（不删除、不覆盖任何既有任务）。
       learningPath.milestones = learningPath.milestones.filter(
@@ -306,7 +310,7 @@ async function enrichLearningPathWithAndersonInner(
       const afterHints = applyGranularityBoundsToHints(
         beforeHints,
         scopeSizeRaw,
-        learningPath.milestones.length,
+        allMilestones.length,
       );
       if (afterHints !== beforeHints) {
         (normalizedInput as any).planningHints = afterHints;
@@ -416,7 +420,7 @@ async function enrichLearningPathWithAndersonInner(
     // （旧 previousMilestone 只有 title/coreConcept 两个骨架字段，previousMilestoneContext
     // 这个键在代码里根本不存在）——跨阶段衔接与去重规则长期空转。串行下 Stage N 完成后
     // 存摘要，Stage N+1 注入 previousMilestone.tasks。
-    const stageTaskSummaries = new Map<number, Array<{ title: string; type: string | null; estimatedMinutes: number | null }>>();
+    const stageTaskSummaries = new Map<string, Array<{ title: string; type: string | null; estimatedMinutes: number | null }>>();
     // #192：留一份 path-task-design 的真实载荷样本（任一阶段），供本轮沙盘 ref 对账
     // ——core 声明的 sandbox:path.* 键必须能在池里解析（见 sandbox-resolver.buildPathSandboxPool）。
     let stageSandboxSample: Record<string, unknown> | null = null;
@@ -462,6 +466,8 @@ async function enrichLearningPathWithAndersonInner(
 
     const processStageDesign = async (stageIndex: number): Promise<void> => {
       const milestone = learningPath.milestones[stageIndex];
+      // 全局位次（渐进/追加下 stageIndex 恒从 0 起）：末阶段、前序阶段、阶段地图都按全量路径算。
+      const globalStageIndex = Math.max(0, allMilestones.findIndex((item) => item.id === milestone.id));
       const stageStartedAt = new Date();
       const stageItemId = createGenerationId('pgsi');
       inFlightStageItemIds.add(stageItemId);
@@ -476,7 +482,7 @@ async function enrichLearningPathWithAndersonInner(
           startedAt: stageStartedAt
         }
       });
-      const previousMilestone = stageIndex > 0 ? learningPath.milestones[stageIndex - 1] : null;
+      const previousMilestone = globalStageIndex > 0 ? allMilestones[globalStageIndex - 1] : null;
       // 配置式跨轮上下文（第三条链）：routings 表 path-agent 注入行抽值优先，回退手拼
       const { channels: designerChannels, skipped: designerSkipped } =
         await assembleStageDesignerChannels({
@@ -505,7 +511,7 @@ async function enrichLearningPathWithAndersonInner(
       // 按阶段位次切连续窗口：首阶段看头、末阶段看尾，整条路径才有机会覆盖全文。
       const materialWindow = {
         stageNumber: milestone.stageNumber,
-        stageCount: learningPath.milestones.length,
+        stageCount: allMilestones.length,
       };
       // 窗口内语义排序（#119 优化项 2）：只重排同一窗口里的顺序（成员/数量不变），
       // 实证依据=现有引用语义分位 0.54–0.69、模型偏爱先出现的资料。
@@ -544,6 +550,16 @@ async function enrichLearningPathWithAndersonInner(
         // 自动退回窗口切片路径。kill switch：STAGE_MATERIAL_QUOTA_RERANK=0。
         process.env.STAGE_MATERIAL_QUOTA_RERANK !== '0'
       );
+      const previousStageTaskSummary = previousMilestone
+        ? (stageTaskSummaries.get(previousMilestone.id)
+          ?? (Array.isArray((previousMilestone as any).subtasks) && (previousMilestone as any).subtasks.length
+            ? (previousMilestone as any).subtasks.map((task: any) => ({
+                title: task.title,
+                type: task.taskType ?? null,
+                estimatedMinutes: task.estimatedMinutes ?? null,
+              }))
+            : null))
+        : null;
       const stageDesignerInput = {
         milestone: {
           stageNumber: milestone.stageNumber,
@@ -565,20 +581,23 @@ async function enrichLearningPathWithAndersonInner(
             }),
             // 幽灵通道修复（2026-10-26）：上一阶段真实任务清单（串行生成后才存在）。
             // 首操作任务借此真正「用上一阶段刚产出的东西」，而非只靠阶段标题猜。
-            ...(stageTaskSummaries.get(stageIndex - 1) ? { tasks: stageTaskSummaries.get(stageIndex - 1) } : {}),
+            // 渐进模式下上一阶段的任务在 DB 里（本轮不重新设计它），回退见 previousStageTaskSummary。
+            ...(previousStageTaskSummary ? { tasks: previousStageTaskSummary } : {}),
           },
         } : {}),
         ...stageDesignerBaseInput,
         ...(stageMaterials ? { materials: stageMaterials } : {}),
         normalizedInput: stageNormalizedInput,
+        // 拓扑（2026-11-18）：planning 已判定的路径类型，任务层据此选形态（builder 作品主线 / exam 真题 / 诊断翻车靶子）
+        ...((parsedTemplate as any)?.pathTopology ? { pathTopology: (parsedTemplate as any).pathTopology } : {}),
         // 全路径阶段地图（2026-10-03 A/B 审计实证：path-task-design 逐阶段调用只见当前阶段，
         // 「真实动作前两个阶段」「跨阶段去重」类规则因看不见全局而无法执行——
         // 前置真实动作任务占比 A/B 实测 0.3%→1.4% 几乎未动）。注入全部阶段标题与当前位次，
         // 让单阶段调用具备全局视野；数据来自内存中的 milestones，无额外查询。
         pathStageMap: {
-          stageCount: learningPath.milestones.length,
+          stageCount: allMilestones.length,
           currentStageNumber: milestone.stageNumber,
-          stages: learningPath.milestones.map((m) => ({
+          stages: allMilestones.map((m) => ({
             stageNumber: m.stageNumber,
             title: m.title,
             estimatedHours: m.estimatedHours || null,
@@ -587,13 +606,19 @@ async function enrichLearningPathWithAndersonInner(
         // 全部前序阶段任务标题（2026-10-27 R1 夜批实证：previousMilestone.tasks 只给上一阶段，
         // 阶段 N≥3 看不到更早阶段，跨阶段重复仍占 12/95（duplicateTask 第二大 flag；
         // D14 三个阶段各排一次「回放被岔开的对话」）。标题体积小（≤60 条），全量注入。
-        ...(stageIndex > 1 ? {
+        // 2026-11-19：按全局位次取前序；渐进模式下前序阶段的任务已在 DB，摘要缺失时从快照回退。
+        ...(globalStageIndex > 0 ? {
           allPreviousStageTasks: (() => {
-            const stages = learningPath.milestones
-              .slice(0, stageIndex)
-              .map((m, i) => ({
+            const stages = allMilestones
+              .slice(0, globalStageIndex)
+              .map((m) => ({
                 stageNumber: m.stageNumber,
-                tasks: (stageTaskSummaries.get(i) || []).map((t) => t.title),
+                tasks: (stageTaskSummaries.get(m.id)
+                  || (Array.isArray((m as any).subtasks)
+                    ? (m as any).subtasks.map((task: any) => ({ title: task.title }))
+                    : []))
+                  .map((t: any) => t.title)
+                  .filter(Boolean),
               }))
               .filter((s) => s.tasks.length > 0);
             // 注入留痕（2026-10-27）：agent_call_logs 输入截断无法验证，显式打日志供夜批核对
@@ -632,7 +657,14 @@ async function enrichLearningPathWithAndersonInner(
       // 2×30 分钟扎实装满 60 分钟预算而锚是 3 课时，强补只会压薄每课或产凑数任务。
       const wantedLessons = Number((stageHints as any)?.targetSubtasksForStage);
       let supplementAudit: Record<string, unknown> | null = null;
-      if (needsLessonSupplement(stageTasks, wantedLessons, (stageHints as any)?.stageMinutesBudget)) {
+      if (needsLessonSupplement(
+        stageTasks,
+        wantedLessons,
+        (stageHints as any)?.stageMinutesBudget,
+        // 与 path-task-design「补课调用」规则同源：只有 exam 路径把课数锚当下限；
+        // intentType 缺失（旧数据）时保持旧行为，已知非 exam 路径不再强补。
+        { intentType: (normalizedInput as any)?.learnerProfile?.intentType ?? undefined },
+      )) {
         const initialCount = stageTasks.length;
         const supplementRequest = buildSupplementRequest(
           stageTasks,
@@ -680,6 +712,84 @@ async function enrichLearningPathWithAndersonInner(
         }
       }
       assertStageTasksPresent(milestone.stageNumber, stageTasks);
+      const isFinalStage = globalStageIndex === allMilestones.length - 1;
+      // 跨阶段动作族复读拦截（2026-11-18 外评）：标题相似度闸抓不到「换材料重做同一动作」。
+      // 阶段 2 若只把阶段 1 的「指认组件 / 抽掉组件看露馅」换一段记录再做一遍，带修复提示重调一次；
+      // 重调仍重复则保留原产出并留痕（宁可留痕，不静默清空阶段）。
+      if (globalStageIndex > 0) {
+        // 渐进/追加 run 只设计当前阶段，stageDesignOutputs 里没有前序阶段 → 从全量快照的
+        // 已落库任务补齐，否则跨阶段动作族复读闸在渐进模式下对新路径全程空转。
+        const priorTasks = [
+          ...allMilestones
+            .slice(0, globalStageIndex)
+            .flatMap((m) => (Array.isArray((m as any).subtasks) ? (m as any).subtasks : []))
+            .map((task: any) => ({
+              title: task.title,
+              type: task.taskType ?? null,
+              description: task.description ?? null,
+            })),
+          ...stageDesignOutputs
+            .filter((stage) => stage.stageNumber < milestone.stageNumber)
+            .flatMap((stage) => stage.subtasks as Array<Record<string, unknown>>),
+        ];
+        const actionRepeat = detectCrossStageActionRepeat(
+          stageTasks as Array<Record<string, unknown>>,
+          priorTasks,
+        );
+        if (actionRepeat.repeated) {
+          logger.warn('[stage-action-diversity] 检出跨阶段动作族重复，带修复提示重调一次', {
+            pathId: learningPath.id,
+            stageNumber: milestone.stageNumber,
+            repeatedFamilies: actionRepeat.repeatedFamilies,
+            previousExamples: actionRepeat.previousExamples,
+          });
+          // produce（论文/成稿产出）留给最后一个阶段，前序阶段不再把「写正文」当新动作族。
+          const availableFamilies = (['diagnose', 'design', 'build', 'produce', 'transfer'] as const)
+            .filter((family) => family !== 'produce' || isFinalStage)
+            .filter((family) => !actionRepeat.previousFamilies.includes(family));
+          const retryResult = await executeSkill(stageDesignerDefinition, {
+            ...stageDesignerInput,
+            repairHints: {
+              actionDiversityFixes: {
+                reason: '本阶段任务与前序阶段使用了同一动作族，只是换了材料；学习者会感到同一节课又上了一遍',
+                previousFamilies: actionRepeat.previousFamilies,
+                repeatedFamilies: actionRepeat.repeatedFamilies,
+                previousExamples: actionRepeat.previousExamples,
+                requiredNewFamilies: availableFamilies,
+                rules: `重写本阶段任务：至少引入一个新动作族（${isFinalStage ? '诊断/纠错、设计/映射、搭建/配置、论证/产出、迁移/综合' : '诊断/纠错、设计/映射、搭建/配置、迁移/综合；论文正文产出留给最后一个阶段'}），不得再让学习者在另一段记录里指认组件、对比缺失组件或重做前序动作；材料可以换，但动作必须升级。`,
+              },
+            },
+          } as any).catch((error: unknown) => {
+            logger.warn('[stage-action-diversity] 修复重调失败，保留原产出', {
+              pathId: learningPath.id,
+              stageNumber: milestone.stageNumber,
+              error: String(error).slice(0, 200),
+            });
+            return null;
+          });
+          const retryTasks = Array.isArray((retryResult as any)?.subtasks)
+            ? (retryResult as any).subtasks as Array<Record<string, unknown>>
+            : [];
+          if (retryTasks.length > 0) {
+            const after = detectCrossStageActionRepeat(retryTasks, priorTasks);
+            if (!after.repeated) {
+              stageTasks = clampStageTasksToHints(retryTasks, stageHints || (normalizedInput as any)?.planningHints);
+              logger.warn('[stage-action-diversity] 修复重调采纳', {
+                pathId: learningPath.id,
+                stageNumber: milestone.stageNumber,
+                beforeFamilies: actionRepeat.repeatedFamilies,
+                afterFamilies: after.currentFamilies,
+              });
+            } else {
+              logger.warn('[stage-action-diversity] 修复重调仍重复，保留原产出', {
+                pathId: learningPath.id,
+                stageNumber: milestone.stageNumber,
+                families: after.repeatedFamilies,
+              });
+            }
+          }
+        }
+      }
       // 验收越界拦截（2026-10-26 外部评审 #4/#5）：platformJudgment=not_judgeable 时，
       // 验收词必须落在「学习者文字自述 + 可记录练习事实」上——平台是纯文本的，琴声/手型
       // 进不了系统，「声音清晰无闷响」「手型标准」这类判据给了下游 teaching 判官一个
@@ -881,7 +991,7 @@ async function enrichLearningPathWithAndersonInner(
             runId,
             pathId,
             stageNumber: milestone.stageNumber,
-            stageCount: learningPath.milestones.length,
+            stageCount: allMilestones.length,
             ...materialSupplement,
             refsAfter: stageMaterialSummary.count,
           };
@@ -912,7 +1022,7 @@ async function enrichLearningPathWithAndersonInner(
             runId,
             pathId,
             stageNumber: milestone.stageNumber,
-            stageCount: learningPath.milestones.length,
+            stageCount: allMilestones.length,
             materials: stageMaterials.length,
             taskCount: stageTasks.length,
           });
@@ -921,7 +1031,7 @@ async function enrichLearningPathWithAndersonInner(
             runId,
             pathId,
             stageNumber: milestone.stageNumber,
-            stageCount: learningPath.milestones.length,
+            stageCount: allMilestones.length,
             refs: stageMaterialSummary.count,
             minSection: stageMaterialSummary.minSection,
             maxSection: stageMaterialSummary.maxSection,
@@ -960,7 +1070,8 @@ async function enrichLearningPathWithAndersonInner(
         subtasks: stageTasks,
       });
       // 幽灵通道修复：记录本阶段任务摘要，供下一阶段 previousMilestone.tasks 注入
-      stageTaskSummaries.set(stageIndex, stageTasks.slice(0, 12).map((task: any) => ({
+      // 键用 milestone.id（渐进/追加下单阶段 run 的 stageIndex 恒 0，用索引会互相覆盖）。
+      stageTaskSummaries.set(milestone.id, stageTasks.slice(0, 12).map((task: any) => ({
         title: String(task?.title || '').slice(0, 80),
         type: typeof task?.type === 'string' ? task.type : null,
         estimatedMinutes: Number.isFinite(Number(task?.estimatedMinutes)) ? Number(task.estimatedMinutes) : null,
@@ -1136,6 +1247,9 @@ async function enrichLearningPathWithAndersonInner(
     // 任务级可调整性收集（key = subtaskId；动态规划，2026-10-17）：
     // 重排/压缩时据此保护核心骨干（core）、优先删减可调整任务（flexible）。
     const adjustabilityByTask: Record<string, 'core' | 'flexible'> = {};
+    // 任务级课堂材料本体（key = subtaskId；2026-11-18 方向四）：
+    // description 只留 1-2 句简介，材料原文/题面/样本值放这里，由 Learn 课堂读取。
+    const materialPayloadByTask: Record<string, string> = {};
 
     // 概念身份预解析（canonical，best-effort）：**必须在事务外**——SQLite 下事务持有写锁，
     // 事务内再写 concepts/aliases 会撞锁。设计：doc/KC_CONCEPT_IDENTITY_AND_GRAPH_DESIGN.md §3.4
@@ -1187,6 +1301,7 @@ async function enrichLearningPathWithAndersonInner(
       // 同理：资料引用收集器声明在事务外，重试不清空会把上一次尝试的条目累加进模板
       for (const key of Object.keys(materialRefsByTask)) delete materialRefsByTask[key];
       for (const key of Object.keys(misconceptionHintsByTask)) delete misconceptionHintsByTask[key];
+      for (const key of Object.keys(materialPayloadByTask)) delete materialPayloadByTask[key];
       for (const key of Object.keys(adjustabilityByTask)) delete adjustabilityByTask[key];
       subtaskIdByTaskKey.clear();
       await assertGenerationRunFence(tx, pathId, runId);
@@ -1251,6 +1366,10 @@ async function enrichLearningPathWithAndersonInner(
           // 任务 → 资料条目（skill 侧已逐字核对）：按 subtaskId 落进 aiPromptTemplate.materialRefs.byTask
           if (Array.isArray((taskData as any).materialRefs) && (taskData as any).materialRefs.length) {
             materialRefsByTask[subtaskId] = (taskData as any).materialRefs;
+          }
+          // 任务 → 课堂材料本体（2026-11-18）：与 description 分离，列表页保持短简介
+          if (typeof (taskData as any).materialPayload === 'string' && (taskData as any).materialPayload.trim()) {
+            materialPayloadByTask[subtaskId] = (taskData as any).materialPayload.trim().slice(0, 6000);
           }
           // 任务 → 迷思预判（课前注入半条链）：规范化后按 subtaskId 落进 aiPromptTemplate.misconceptionHints.byTask
           if (Array.isArray((taskData as any).anticipatedMisconceptions) && (taskData as any).anticipatedMisconceptions.length) {
@@ -1542,7 +1661,7 @@ async function enrichLearningPathWithAndersonInner(
           runId,
           pathId: learningPath.id,
           stagesPatched: anchorGoalNotes,
-          totalStages: learningPath.milestones.length,
+          totalStages: allMilestones.length,
         });
       }
       // 浮点收尾（2026-10-27 R8 冒烟实证 A13=6.600000000000001）：阶段小时逐项累加会带 IEEE754 尾巴，
@@ -1643,6 +1762,22 @@ async function enrichLearningPathWithAndersonInner(
                           ...misconceptionHintsByTask,
                         }
                       : misconceptionHintsByTask,
+                  },
+                }
+              : {}),
+            ...(Object.keys(materialPayloadByTask).length
+              ? {
+                  // 课堂材料 sidecar：合并语义与 materialRefs 相同（append/progressive 保留旧任务）
+                  taskMaterials: {
+                    ...(parsedTemplate?.taskMaterials && typeof parsedTemplate.taskMaterials === 'object' ? parsedTemplate.taskMaterials : {}),
+                    byTask: (appendOnly || progressive)
+                      ? {
+                          ...((parsedTemplate?.taskMaterials as any)?.byTask && typeof (parsedTemplate as any).taskMaterials.byTask === 'object'
+                            ? (parsedTemplate as any).taskMaterials.byTask
+                            : {}),
+                          ...materialPayloadByTask,
+                        }
+                      : materialPayloadByTask,
                   },
                 }
               : {}),

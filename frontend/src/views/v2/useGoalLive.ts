@@ -138,7 +138,9 @@ const freshKeys = ref<string[]>([]);
 const started = ref(false);
 
 const FIELD_DEFS: Array<{ key: string; label: string; read: (u: GoalUnderstanding, c: Record<string, unknown>) => string }> = [
-  { key: 'real_problem', label: '想解决的问题', read: (u, c) => pickText(u.real_problem, u.pain_points, u.surface_goal, c.real_problem, c.problem) },
+  // 「想解决的问题」给用户看的必须是用户自己的诉求，不是内部 real_problem 诊断：
+  // 2026-11-18 用户走查——弹窗与左栏都不该出现「未预设用途与深度」这类病历式第三人称。
+  { key: 'real_problem', label: '想解决的问题', read: (u, c) => pickText(u.surface_goal, c.surface_goal, u.real_problem, u.pain_points, c.real_problem, c.problem) },
   { key: 'motivation', label: '学习动机', read: (u, c) => pickText(u.motivation, c.motivation) },
   // 背景经验优先展示具体做过什么/证据；水平自评信息量低，仅在无证据时作为兜底
   { key: 'background_experience', label: '背景经验', read: (u, c) => pickText(u.background_experience, u.current_baseline?.evidence, u.background?.current_level, u.current_baseline?.level, c.level) },
@@ -173,8 +175,9 @@ export function resolveFieldStatus(
   if (!value) return 'todo';
   switch (key) {
     case 'real_problem':
-      // 宽泛主题下的 real_problem 是系统诊断；只有用户明确 focused 或自述了具体场景才算确认。
-      // 不用 pain_points 判：宽泛主题也常写「不知道从哪开始」这类通用痛点，仍属系统推断。
+      // 面板优先展示 surface_goal（用户原话）；有原话就是用户已给出的问题，标 done。
+      // 只有缺少原话、退回系统诊断时，才按 focused/场景证据判断；仍无证据则标 default。
+      if (String(u.surface_goal || '').trim()) return 'done';
       return u.entry_state === 'focused' || String(u.scenario || '').trim() ? 'done' : 'default';
     case 'background_experience': {
       const level = String(u.current_baseline?.level || '').trim();
@@ -238,8 +241,21 @@ const proposal = computed(() => {
   const stageCount = plannedMilestones ?? stages.length;
   const skip = toList(cp.out_of_scope ?? cp.not_now ?? cp.exclude).slice(0, 6);
   const probes = toProbes(cp.prerequisiteDiagnostics ?? cp.prerequisite_diagnostics ?? cp.prerequisite_diagnostics_list);
+  // 单次时长（2026-11-18 用户走查）：确认弹窗要给出轻量耗时预估，数据源与左栏
+  // 「可用时间」同一个字段。只展示单次节奏，不把 objectiveScopeHours 当成用户可感知
+  // 的总学时（那是平台内部用于排课的内容体量，容易和 25 分钟通勤打架）。
+  const rawSessionMinutes = understanding.value.time_dimensions?.sessionsLengthMin;
+  const sessionMinutes = typeof rawSessionMinutes === 'number' && rawSessionMinutes > 0
+    ? rawSessionMinutes
+    : null;
+  // 总时长用于弹窗消歧（3 阶段 · 单次 45 分钟 ≠ 总共 2 小时）：只展示内容体量估算，
+  // 不在聊天里报总账。没有 objectiveScopeHours 时保持不显示，不用阶段数硬乘。
+  const rawTotalHours = understanding.value.time_dimensions?.objectiveScopeHours;
+  const totalHours = typeof rawTotalHours === 'number' && rawTotalHours > 0
+    ? rawTotalHours
+    : null;
   if (!problem && !outcome && stages.length === 0) return null;
-  return { problem, outcome, stages, stageCount, skip, probes };
+  return { outcome, stages, stageCount, skip, probes, sessionMinutes, totalHours };
 });
 
 /** 前置探测题（goal-conversation prerequisiteDiagnostics）→ 展示结构 */

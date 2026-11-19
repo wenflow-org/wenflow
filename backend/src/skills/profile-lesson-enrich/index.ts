@@ -27,6 +27,7 @@ export const lessonKnowledgeEnricherDefinition: SkillDefinition = {
       knowledgeState: { type: 'array', description: '当前课堂知识状态', required: true },
       knowledgeDelta: { type: 'object', description: '课堂知识变化量' },
       wrapup: { type: 'object', description: '课堂总结与评估' },
+      lessonReport: { type: 'object', description: '课堂契约报告（平台确定式：met/coveredKcs/missingKcs/independentCount/branch/parkingLot）' },
       taskContext: { type: 'object', description: '任务与路径上下文' },
       sessionEvidence: { type: 'object', description: '课堂证据摘要' },
       visibleDialogueContext: { type: 'array', description: '可见课堂对话切片' },
@@ -64,6 +65,8 @@ export interface LessonKnowledgeEnricherInput {
     unchangedMastered?: string[];
   } | null;
   wrapup?: any;
+  /** 课堂契约报告（平台确定式）：与 wrapup 冲突时优先，missingKcs 视为仍未掌握 */
+  lessonReport?: any;
   taskContext?: {
     learningPathId?: string;
     taskId?: string;

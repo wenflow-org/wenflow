@@ -7,8 +7,9 @@
  * 下缘的描边——用户三张截图点名「学习方案 · 待确认 上下的黑边」。
  *
  * 修复口径：布局本身保证不重叠，不再用遮罩粉饰。
- *  1) 贴底坞 .chat__dock 是唯一的三段容器：pill / 待确认条 / 输入区 / 元数据行全在里面，
+ *  1) 贴底坞 .chat__dock 是唯一的贴底容器：生成 pill / 待确认条 / 输入区 / 元数据行在里面，
  *     滚动区在坞上方自然结束；坞透明、无边框、无渐变伪元素。
+ *     2026-11-18 用户复选：待确认条保持在输入框上方，不随消息流滚动。
  *  2) 消息反馈栏（👍👎🔄📋）整体退役——澄清期每轮都是问句，复制/重新生成没有对象，
  *     手机上每轮白吃 ~36px。
  *  3) 路径预览弹窗（Modal）里的 ⓘ「内容由 AI 生成」整行删除，全断面唯一出口是
@@ -64,7 +65,7 @@ function decl(rule: string, prop: string): string | null {
 }
 
 describe('底部三段：贴底坞取代渐变遮罩', () => {
-  it('模板里恰好一个 .chat__dock，且四类贴底元素全在里面', () => {
+  it('模板里恰好一个 .chat__dock，贴底元素都在里面', () => {
     expect(errors).toEqual([]);
     expect(root, '模板 AST 解析失败').toBeTruthy();
     const docks = nodes(root as TplNode, (n) => hasClass(n, 'chat__dock'));
@@ -80,6 +81,11 @@ describe('底部三段：贴底坞取代渐变遮罩', () => {
     for (const cls of ['proposal-invite', 'composer', 'chat__under-hint']) {
       expect(inside.has(cls), `${cls} 没进 .chat__dock：并列 flex 子项会重新引入遮挡`).toBe(true);
     }
+    /* 用户 2026-11-18 复选：确认面板保持在输入框上方，不随消息流滚走 */
+    const scrolls = nodes(root as TplNode, (n) => hasClass(n, 'chat__scroll'));
+    expect(scrolls.length, '会话流滚动区应恰好一处').toBe(1);
+    const inlineInvites = nodes(scrolls[0], (n) => hasClass(n, 'proposal-invite'));
+    expect(inlineInvites.length, '确认条不应再出现在对话滚动区内').toBe(0);
     /* 入口态的 composer 在 .entry 里，不许被一起收进会话态的坞 */
     expect(inside.has('composer--entry'), '入口态输入区不该进会话态坞').toBe(false);
   });

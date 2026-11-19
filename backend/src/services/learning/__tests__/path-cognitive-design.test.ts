@@ -61,4 +61,23 @@ describe('parsePathCognitiveDesign', () => {
       { id: 'concept-2', role: 'supporting' },
     ]);
   });
+
+  it('保留 domainAnchors 与 topology（stage-enrichment/replan 读回依赖）', () => {
+    // 2026-11-19 端到端审计：生成侧写入了锚与拓扑，但本读回入口白名单漏字段，
+    // 导致 path-task-design 的「按拓扑定形态」「用学科基准锚当材料」拿不到输入。
+    const design = parsePathCognitiveDesign(JSON.stringify({
+      cognitiveCore: {
+        cognitiveDomain: 'Agent 原理',
+        coreConcepts: [{ id: 'concept-1', name: 'ReAct 循环', role: 'hub' }],
+        topology: 'builder',
+        domainAnchors: {
+          canonicalModels: ['ReAct 循环'],
+          canonicalArtifacts: ['执行轨迹 Trace'],
+          commonMisconceptions: ['把 Agent 等同于会聊天的 LLM'],
+        },
+      },
+    }));
+    expect((design as any)?.topology).toBe('builder');
+    expect((design as any)?.domainAnchors?.canonicalArtifacts).toEqual(['执行轨迹 Trace']);
+  });
 });

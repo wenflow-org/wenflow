@@ -11,6 +11,7 @@ import {
 } from '../services/learning/learning-routes.repo';
 import learningService from '../services/learning/learning.service';
 import { teachingSessionRepository } from '../services/ai-teaching/TeachingSessionRepository';
+import { evaluateLessonContractGate } from '../services/ai-teaching/lesson-contract';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { learningPathsPollingLimiter } from '../middleware/api-rate-limit.middleware';
 import { logger } from '../utils/logger';
@@ -1305,6 +1306,39 @@ const resolveTaskCompletionSource = (req: express.Request): TaskCompletionSource
   return 'human-ui';
 };
 
+/**
+ * 任务结算的课堂契约门（2026-11-19）：与 `SessionFinalizationService.finalize(complete_task)`
+ * **同源同口径**——都走 `evaluateLessonContractGate`。
+ *
+ * 背景：本端点原先直接 `completeTask`，程序化调用方（learning-api / 脚本 / blackbox）可以在
+ * 契约未达成时把任务刷成完成，绕开课堂里的 409 门。完成权威必须只有一个：未达成 → 409。
+ *
+ * 判定对象：
+ * - 请求带 `teachingSessionId`（blackbox 补记通道）→ 用该课堂；
+ * - 未带 → 用本任务最近一节**正课**（tutor）；复习/延伸课不是任务完成课，不参与判定。
+ * - 无课堂（纯路径任务）或旧会话无持久化契约 → 不阻断（enforced=false）。
+ */
+async function assertLessonContractMetForTaskCompletion(input: {
+  userId: string;
+  taskId: string;
+  teachingSessionId?: string | null;
+}): Promise<void> {
+  const session = input.teachingSessionId
+    ? await teachingSessionRepository.getById(input.teachingSessionId)
+    : await teachingSessionRepository.findLatestTutorSession(input.userId, input.taskId);
+  if (!session) return;
+  if (session.userId !== input.userId) return;
+  if (session.mode === 'review' || session.mode === 'extension') return;
+  const gate = evaluateLessonContractGate(session.teachingState as Record<string, any> | null);
+  if (!gate.enforced || gate.met) return;
+  const error = new Error(
+    `本课还有契约目标未达成：${gate.reasons.join('；') || '尚无课堂证据'}。可以继续作答/检查点，或选择「结束学习（不计入完成）」。`
+  );
+  (error as { code?: string; status?: number }).code = 'LESSON_CONTRACT_NOT_MET';
+  (error as { status?: number }).status = 409;
+  throw error;
+}
+
 // 完成任务
 router.post('/tasks/:taskId/complete', async (req, res, next) => {
   try {
@@ -1312,6 +1346,13 @@ router.post('/tasks/:taskId/complete', async (req, res, next) => {
     const { taskId } = req.params;
 
     const data = completeTaskSchema.parse(req.body);
+
+    // 完成权威收口：与课堂 finalize 同一道门；未达成直接 409，不进入结算。
+    await assertLessonContractMetForTaskCompletion({
+      userId,
+      taskId,
+      teachingSessionId: data.teachingSessionId ?? null,
+    });
 
     const task = await learningService.completeTask({
       taskId,
@@ -1365,6 +1406,14 @@ router.post('/tasks/:taskId/complete', async (req, res, next) => {
       return res.status(403).json({
         success: false,
         error: { message: error.message }
+      });
+    }
+
+    // 课堂契约门：业务性拒绝（不是服务端错误），按 409 直接返回，避免落进全局 500 日志通道。
+    if (error.code === 'LESSON_CONTRACT_NOT_MET') {
+      return res.status(409).json({
+        success: false,
+        error: { message: error.message, code: 'LESSON_CONTRACT_NOT_MET', status: 409 }
       });
     }
 

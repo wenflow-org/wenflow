@@ -66,6 +66,10 @@ const STAGE_RUN = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
+// 本套件断言的是 eager（一次性全量）语义；渐进式默认开启后未来阶段留空是正常状态。
+// 渐进式路径另有 progressive-design.test.ts 覆盖；这里显式关掉开关保留 eager 回归。
+process.env.PROGRESSIVE_STAGE_DESIGN = '0'
+
 describe('getPathGenerationRetry：#241 零任务路径的可重试判定', () => {
   beforeEach(() => {
     jest.clearAllMocks();

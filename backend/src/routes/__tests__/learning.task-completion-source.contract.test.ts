@@ -10,6 +10,8 @@ const mockLearningService = {
   completeTask: jest.fn(),
 };
 const mockRecordDirectTaskCompletion = jest.fn();
+const mockGetTeachingSessionById = jest.fn();
+const mockFindLatestTutorSession = jest.fn();
 
 jest.mock('../../config/database', () => ({ __esModule: true, default: {} }));
 jest.mock('../../services/learning/learning.service', () => ({
@@ -19,6 +21,8 @@ jest.mock('../../services/learning/learning.service', () => ({
 jest.mock('../../services/ai-teaching/TeachingSessionRepository', () => ({
   teachingSessionRepository: {
     recordDirectTaskCompletion: (...args: unknown[]) => mockRecordDirectTaskCompletion(...args),
+    getById: (...args: unknown[]) => mockGetTeachingSessionById(...args),
+    findLatestTutorSession: (...args: unknown[]) => mockFindLatestTutorSession(...args),
   },
 }));
 jest.mock('../../middleware/auth.middleware', () => ({
@@ -74,6 +78,9 @@ describe('#105 任务结算通道按调用方身份分流（completionSource）'
       task: { id: 'task-1', status: 'completed', completedAt: null },
       alreadyCompleted: false,
     });
+    // 默认：任务没有课堂（纯路径任务）→ 契约门不介入，保持 #105 既有语义。
+    mockGetTeachingSessionById.mockResolvedValue(null);
+    mockFindLatestTutorSession.mockResolvedValue(null);
   });
 
   it('locks human-ui / learning-api / vl-blackbox for the three caller identities', async () => {
@@ -207,5 +214,130 @@ describe('#105 任务结算通道按调用方身份分流（completionSource）'
     const payload = mockLearningService.completeTask.mock.calls[0][0] as Record<string, unknown>;
     expect(payload).not.toHaveProperty('sessionId');
     expect(payload).not.toHaveProperty('sessionClosedBeforeCompletion');
+  });
+});
+
+describe('课堂契约门：任务结算与课堂 finalize 同源（2026-11-19）', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockLearningService.completeTask.mockResolvedValue({
+      task: { id: 'task-1', status: 'completed', completedAt: null },
+      alreadyCompleted: false,
+    });
+    mockGetTeachingSessionById.mockResolvedValue(null);
+    mockFindLatestTutorSession.mockResolvedValue(null);
+  });
+
+  const contractSession = (overrides: Record<string, unknown> = {}) => ({
+    id: 'teaching-1',
+    userId: 'user-human',
+    taskId: 'task-human',
+    mode: 'tutor',
+    status: 'completed',
+    teachingState: {
+      sessionArtifacts: {
+        lessonContract: {
+          version: 1,
+          coreKcs: [{ kcId: 'kc-1', name: '识别工具返回' }],
+          minIndependentEvidence: 1,
+          minTurns: 3,
+          timeBudgetMin: 20,
+          branchBudgets: { examplePerKc: 1, deeperTurns: 3, prerequisitePatches: 1, offTopicInClassTurns: 1 },
+        },
+        lessonReport: {
+          met: false,
+          reasons: ['独立证据不足：1/2（支线/提示证据不计入）'],
+        },
+      },
+    },
+    ...overrides,
+  });
+
+  const invoke = async (request: Record<string, unknown>) => {
+    const handler = getPostHandler('/tasks/:taskId/complete');
+    const res = createResponse();
+    const next = jest.fn();
+    await handler(request, res, next);
+    return { res, next };
+  };
+
+  const baseRequest = () => ({
+    headers: {},
+    user: { userId: 'user-human' },
+    params: { taskId: 'task-human' },
+    body: { actualMinutes: 30 },
+  });
+
+  it('最近一节正课契约未达成 → 409 LESSON_CONTRACT_NOT_MET，且不进入结算', async () => {
+    mockFindLatestTutorSession.mockResolvedValue(contractSession());
+    const { res, next } = await invoke(baseRequest());
+
+    expect(mockLearningService.completeTask).not.toHaveBeenCalled();
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      error: expect.objectContaining({ code: 'LESSON_CONTRACT_NOT_MET', status: 409 }),
+    });
+  });
+
+  it('契约已达成 → 正常结算', async () => {
+    mockFindLatestTutorSession.mockResolvedValue(contractSession({
+      teachingState: {
+        sessionArtifacts: {
+          lessonContract: { coreKcs: [{ kcId: 'kc-1', name: '识别工具返回' }] },
+          lessonReport: { met: true, reasons: [] },
+        },
+      },
+    }));
+    const { res } = await invoke(baseRequest());
+
+    expect(mockLearningService.completeTask).toHaveBeenCalledTimes(1);
+    expect(res.status).not.toHaveBeenCalledWith(409);
+  });
+
+  it('无课堂（纯路径任务）→ 不阻断', async () => {
+    mockFindLatestTutorSession.mockResolvedValue(null);
+    const { res } = await invoke(baseRequest());
+    expect(mockLearningService.completeTask).toHaveBeenCalledTimes(1);
+    expect(res.status).not.toHaveBeenCalledWith(409);
+  });
+
+  it('带 teachingSessionId（blackbox 补记通道）→ 按该课堂判定，未达成同样 409', async () => {
+    mockGetTeachingSessionById.mockResolvedValue(contractSession({
+      id: 'teaching-vl',
+      userId: 'user-vl',
+      taskId: 'task-vl',
+    }));
+    const { res, next } = await invoke({
+      headers: { 'x-caller-agent': 'virtual-learner-lab' },
+      user: { userId: 'user-vl' },
+      params: { taskId: 'task-vl' },
+      body: { teachingSessionId: 'teaching-vl', teachingRevision: 12 },
+    });
+    expect(mockGetTeachingSessionById).toHaveBeenCalledWith('teaching-vl');
+    expect(mockLearningService.completeTask).not.toHaveBeenCalled();
+    expect(mockRecordDirectTaskCompletion).not.toHaveBeenCalled();
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(409);
+  });
+
+  it('复习/延伸课不参与任务完成契约门（与 finalize 豁免同口径）', async () => {
+    mockFindLatestTutorSession.mockResolvedValue(contractSession({ mode: 'review' }));
+    const { res } = await invoke(baseRequest());
+    expect(mockLearningService.completeTask).toHaveBeenCalledTimes(1);
+    expect(res.status).not.toHaveBeenCalledWith(409);
+  });
+
+  it('teachingSessionId 不属于该用户 → 不做归属外判定，交给结算侧鉴权', async () => {
+    mockGetTeachingSessionById.mockResolvedValue(contractSession({ userId: 'someone-else' }));
+    const { res } = await invoke({
+      headers: {},
+      user: { userId: 'user-human' },
+      params: { taskId: 'task-human' },
+      body: { teachingSessionId: 'teaching-1' },
+    });
+    expect(mockLearningService.completeTask).toHaveBeenCalledTimes(1);
+    expect(res.status).not.toHaveBeenCalledWith(409);
   });
 });

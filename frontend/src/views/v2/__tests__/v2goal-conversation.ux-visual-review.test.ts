@@ -123,8 +123,16 @@ describe('目标规划页：用户侧视觉走查四条修复', () => {
 
   it('2026-11-06 走查：步骤条随行计数退役（PC 左栏画像卡常驻同一读数，同屏两处计数是重复）', () => {
     expect(source, 'stage-nav__sub 应整体移除：计数由左栏画像卡承担，移动端由面板角标承担').not.toContain('stage-nav__sub');
-    expect(source, '面板头计数仍要保留（唯一的已确认读数出口）').toContain('live.filledCount }} / {{ live.totalFields');
+    expect(source, '面板头计数仍要保留（唯一的已确认读数出口）').toContain('live.filledCount }}');
     expect(source, '计数标签仍写「已收集」，系统默认值会被读成用户已确认').toContain('已确认');
+    /* 2026-11-18：分数式「2/7 · 3 默认」把默认项排除在进度外，方案已成形时仍显示 28%，
+       制造虚假焦虑。读数改为「已确认 2 · 3 项平台暂定」，条形按 confirmed+default 一起填。 */
+    expect(source, '分数式计数会把系统默认项排除在进度外').not.toContain('live.filledCount }} / {{ live.totalFields');
+    expect(source, '默认项要进入同一条进度读数').toContain('live.defaultCount }} 项平台暂定');
+    expect(source, '进度条默认段没有单独渲染').toContain('panel__bar-default');
+    /* 面板内容溢出时 .panel__scroll 的 flex 子项会被压扁：进度条必须锁 flex-basis， */
+    /* 否则 6px 高度实测塌成 0，整条进度条消失。 */
+    expect(decl(ruleOf(allStyles, '.panel__bar'), 'flex'), '进度条会被 flex 压扁到 0 高').toBe('0 0 6px');
   });
 
   it('#60 完成态浮层动作行撑满、主按钮独占余宽（桌面档）', () => {
@@ -133,6 +141,37 @@ describe('目标规划页：用户侧视觉走查四条修复', () => {
     const primary = ruleOf(wide, '.proposal__actions--center .btn-primary');
     expect(decl(primary, 'flex'), '主按钮没吃满余宽，「查看我的路径」仍是一小块').toBe('1');
     expect(decl(primary, 'justify-content'), '拉满后按钮文字没居中').toBe('center');
+  });
+
+  it('2026-11-18 走查：默认项降噪、画像卡限 2 行、确认阶段 placeholder 跟随', () => {
+    const def = ruleOf(allStyles, '.checklist--default .field');
+    expect(decl(def, 'border'), '默认项仍是实底/黄底，会压过已确认卡').toContain('dashed');
+    expect(decl(def, 'background'), '默认项没有回到中性背景').toBe('transparent');
+    expect(source, '默认卡仍重复「默认 · 待校准」标签').not.toContain('<em class="field__badge">');
+    expect(source, '默认标签样式仍残留').not.toContain('.field__badge {');
+    expect(decl(ruleOf(allStyles, '.field__value'), '-webkit-line-clamp'), '单张画像卡仍会超过 2 行（标签 1 + 值 1）').toBe('1');
+
+    const placeholder = computedBlock('chatPlaceholder');
+    expect(placeholder, '确认阶段 placeholder 仍写「回答问题」').toContain("live.stage === 'proposing'");
+    expect(placeholder, 'placeholder 没有把确认入口告诉用户').toContain('查看并确认');
+
+    expect(source, 'AI 回复行高仍在 1.6 以下').toContain('line-height: 1.68');
+    expect(source, '长回复没有分段处理，会退回字墙').toContain('withReadableParagraphs');
+  });
+
+  it('2026-11-18 走查：确认弹窗去掉核心问题、补单次耗时、按钮改成继续微调', () => {
+    expect(source, '确认弹窗仍展示「核心问题」学情诊断').not.toContain('<span>核心问题</span>');
+    expect(source, '路径大纲没有单次耗时预估').toContain('单次约 {{ reviewProposal.sessionMinutes }} 分钟');
+    expect(source, '路径大纲没有总时长，3 阶段会被误读成 3 次').toContain('预计总时长约 {{ reviewProposal.totalHours }} 小时');
+    expect(source, '弹窗按钮仍是「再补充点信息」（与调大纲行为不符）').not.toContain('>再补充点信息</button>');
+    expect(source, '弹窗按钮没有改成「继续微调方向」').toContain('继续微调方向');
+  });
+
+  it('2026-11-18 走查：消息气泡按内容宽，不再被 flex 拉成整幅卡片', () => {
+    /* flex column 默认 align-items:stretch 会把 .msg 拉到 92% 上限：
+       短回复、typing 三点都会变成一整条横杠。 */
+    expect(decl(ruleOf(allStyles, '.chat__scroll'), 'align-items'), '消息行仍被拉伸到 max-width').toBe('flex-start');
+    expect(decl(ruleOf(allStyles, '.replies'), 'align-self'), '快选行被一起收成内容宽').toBe('stretch');
   });
 });
 

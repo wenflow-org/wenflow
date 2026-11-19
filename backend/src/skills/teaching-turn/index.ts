@@ -2,6 +2,7 @@ import { callPrompt } from '../../composers/prompt-composer';
 import { loadPromptFile } from '../../composers/prompt-files/loader';
 import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 import { PromptCallSpec, type PromptCallResult } from '../../composers/types';
+import type { BranchState, LessonContract } from '../../services/ai-teaching/lesson-contract';
 import { logger } from '../../utils/logger';
 import type { AgentDefinition, AgentOutput } from '../../agents/protocol';
 import { evaluateByCriteria, evaluateByProfile } from '../../skills/acceptance-evidence-evaluator';
@@ -32,6 +33,7 @@ const ALLOWED_COGNITIVE_LEVELS = ['remember', 'understand', 'apply', 'analyze', 
 const ALLOWED_EMOTIONAL_STATES = ['positive', 'neutral', 'frustrated', 'confused', 'bored'] as const;
 const ALLOWED_KNOWLEDGE_STATUSES = ['pending', 'learning', 'mastered', 'review'] as const;
 const ALLOWED_LOAD_BASIS = ['semantic', 'structure', 'pacing', 'combined', 'absent'] as const;
+const ALLOWED_STUDENT_NEEDS = ['answer', 'clarify', 'example', 'deeper', 'prerequisite_gap', 'off_topic', 'goal_change', 'test_out'] as const;
 
 /** knowledge 对象的子字段：Q9 契约漂移容错时按此名单从顶层回填（见 resolveKnowledgeBlock） */
 const KNOWLEDGE_SUBFIELD_KEYS = ['currentPoint', 'points', 'confirmCheck'] as const;
@@ -72,6 +74,17 @@ export interface TeachingTurnInput {
     taskTitle: string;
     taskDescription: string;
     taskType: string;
+    /**
+     * 本课材料本体（path-task-design materialPayload）：题面/日志/样本值/原文。
+     * description 只是简介；核心 yaml 规则「以材料为准组织课堂」按此键判定与消费。
+     */
+    taskMaterial?: string | null;
+    /** 课堂契约（2026-11-19）：最低必须完成集；由 lifecycle 建课冻结，模型只读。 */
+    lessonContract?: LessonContract | null;
+    /** 自由支线状态（预算/停车区）：逐回合变化，载荷尾部注入。 */
+    branchState?: BranchState | null;
+    /** 本轮支线指令（代码算）：逐回合变化，载荷尾部注入。 */
+    branchDirective?: string | null;
     taskProfile?: {
       knowledgeType?: 'factual' | 'conceptual' | 'procedural' | 'metacognitive' | null;
       cognitiveLevel?: 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create' | null;
@@ -317,6 +330,14 @@ export interface TeachingTurnInput {
       passed: boolean;
       detail: string | null;
     };
+    /**
+     * 课末独立终检的代码裁决（2026-11-19）：上一轮发出的 exit ticket 本轮作答后，
+     * 编排层按答案键判分并显式送进来；模型必须在 reply 第一句如实给结论，未通过则补救。
+     */
+    exitTicketVerdict?: {
+      passed: boolean;
+      detail: string | null;
+    };
   };
   classroomContext?: Record<string, any>;
   classroomEventContext?: Record<string, any>;
@@ -393,6 +414,8 @@ export interface TeachingTurnOutput {
     selfAssessmentSignal?: 'high' | 'medium' | 'low';
     /** 求助行为分流（自由描述，供后台统计与软拦截） */
     helpSeekingType?: string;
+    /** 本轮学生诉求分型（2026-11-19 课堂契约）：代码据此决定主线/支线，不用关键词。 */
+    studentNeed?: typeof ALLOWED_STUDENT_NEEDS[number];
     engagement: number;
     emotionalState: string;
     loadIndex: number;
@@ -440,6 +463,11 @@ export interface TeachingTurnOutput {
     checkpoint?: {
       question: string;
       type: 'short_answer' | 'single_choice' | 'multi_choice';
+      /**
+       * 本题考核的知识点名（可选，2026-11-19 课堂契约）：模型显式声明归属，编排层优先据此
+       * 归因（否则退回「当前教学点」近似）。要求与题面一致；契约缺口轮优先填核心 KC 名。
+       */
+      conceptName?: string;
       options?: Array<{ id: string; text: string }>;
       hint?: string;
       /**
@@ -862,6 +890,10 @@ export function normalizeOutput(parsed: Record<string, any>, input: TeachingTurn
       ...(normalizeRsmAttempts(analysis.rsmAttempts)),
       ...(normalizeSelfAssessmentSignal(analysis.selfAssessmentSignal)),
       ...(normalizeHelpSeekingType(analysis.helpSeekingType)),
+      // 学生诉求分型（2026-11-19）：白名单投影，非法值不落键（引擎回退 answer）。
+      ...((ALLOWED_STUDENT_NEEDS as readonly string[]).includes(String(analysis.studentNeed || ''))
+        ? { studentNeed: analysis.studentNeed as typeof ALLOWED_STUDENT_NEEDS[number] }
+        : {}),
       engagement: Number.isFinite(analysis.engagement) ? Number(analysis.engagement) : 0.5,
       emotionalState: (typeof analysis.emotionalState === 'string' && (ALLOWED_EMOTIONAL_STATES as readonly string[]).includes(analysis.emotionalState))
         ? analysis.emotionalState
@@ -2518,7 +2550,7 @@ function normalizeCheckpoint(value: Record<string, any>): NonNullable<TeachingTu
     : 'short_answer';
   // 答案键（2026-09-17，审计 §7 P1-1「独立传感器」）：只在校验得住时才留下——
   // 选择题的 id 必须真实存在于 options（否则是模型编的，宁可没有键，也不要做错误的代码裁决）；
-  // 简答要点限 1-4 条、每条 ≤40 字。键**不下发给学生**（coordinator 侧负责剥离）。
+  // 简答要点限 1-3 条（与 core yaml「只给 1-3 个核心词」同口径）、每条 ≤40 字。键**不下发给学生**（coordinator 侧负责剥离）。
   const optionIds = new Set(options.map((option) => option.id));
   const correctOptionIds = type !== 'short_answer' && Array.isArray(value.correctOptionIds)
     ? Array.from(new Set(value.correctOptionIds
@@ -2531,7 +2563,7 @@ function normalizeCheckpoint(value: Record<string, any>): NonNullable<TeachingTu
     ? value.expectedKeywords
         .filter((keyword: any) => typeof keyword === 'string' && keyword.trim())
         .map((keyword: string) => keyword.trim().slice(0, 40))
-        .slice(0, 4)
+        .slice(0, 3)
     : [];
   return {
     question: String(value.question).trim(),
@@ -2539,6 +2571,9 @@ function normalizeCheckpoint(value: Record<string, any>): NonNullable<TeachingTu
     ...(type !== 'short_answer' ? { options } : {}),
     ...(correctOptionIds.length > 0 ? { correctOptionIds } : {}),
     ...(expectedKeywords.length > 0 ? { expectedKeywords } : {}),
+    ...(typeof value.conceptName === 'string' && value.conceptName.trim()
+      ? { conceptName: value.conceptName.trim().slice(0, 60) }
+      : {}),
     ...(typeof value.hint === 'string' && value.hint.trim() ? { hint: value.hint.trim() } : {}),
   };
 }
@@ -3106,6 +3141,9 @@ function buildPromptInput(input: TeachingTurnInput) {
     // 逐回合合并回计划（teaching-warmup.ts），留在 scenario（system 消息）会让消费温故的回合
     // 整段 KV 缓存归零。提取到载荷尾部，模板引用路径同步改为顶层键名（core yaml 已同步）。
     memoryWarmup: scenarioMemoryWarmup,
+    // 课堂契约支线（2026-11-19）：预算/指令逐回合变化，放载荷尾部，避免打断稳定前缀缓存。
+    branchState: scenarioBranchState,
+    branchDirective: scenarioBranchDirective,
     ...stableScenario
   } = input.scenario;
   // learner 唯一的动态子键：编排层逐回合改写的难度档位（baseline/adjusted/reasons/evidence）
@@ -3171,6 +3209,9 @@ function buildPromptInput(input: TeachingTurnInput) {
       ...(scenarioSupplementaryMaterial ? { supplementaryMaterial: scenarioSupplementaryMaterial } : {}),
       // 温故计划（逐回合被消费合并 → 载荷尾部；模板引用路径已同步为顶层 memoryWarmup）
       ...(scenarioMemoryWarmup ? { memoryWarmup: scenarioMemoryWarmup } : {}),
+      // 课堂契约支线（逐回合变化 → 载荷尾部）：预算、停车区、本轮指令
+      ...(scenarioBranchState ? { branchState: scenarioBranchState } : {}),
+      ...(scenarioBranchDirective ? { branchDirective: scenarioBranchDirective } : {}),
     };
   }
 
@@ -3180,6 +3221,8 @@ function buildPromptInput(input: TeachingTurnInput) {
       ...(scenarioCompression ? { contextCompression: scenarioCompression } : {}),
       interactionProfile: scenarioInteractionProfile,
       ...(scenarioMemoryWarmup ? { memoryWarmup: scenarioMemoryWarmup } : {}),
+      ...(scenarioBranchState ? { branchState: scenarioBranchState } : {}),
+      ...(scenarioBranchDirective ? { branchDirective: scenarioBranchDirective } : {}),
     },
     knowledge: input.knowledge,
     learner: input.learner,

@@ -808,3 +808,167 @@ describe('SimulationOrchestrator durable task completion recovery', () => {
     expect(stepCalls).toBe(loopLimit)
   }, 20000)
 })
+
+/**
+ * 卡死收课 × 课堂契约门（2026-11-19 真课实测）：卡死分支只 endSession、taskRuntime 仍带着
+ * 已 completed 的 teachingSessionId，下一次调用会命中「会话已 completed → 补结算」恢复分支，
+ * 把 lessonReport.met=false 的任务直接标完成。契约未达成时必须停课不结算。
+ */
+describe('卡死收课遇契约未达成：停课不结算（不回落到补结算）', () => {
+  let sessionRecord: any
+  let learningPath: any
+  let coordinator: SimulationOrchestrator
+
+  const stuckRuntime = (extra: Record<string, unknown> = {}) => ({
+    status: 'active',
+    taskId: 'task-1',
+    taskTitle: '任务一',
+    teachingSessionId: 'teaching-1',
+    teachingRevision: 1,
+    turns: 11,
+    learnerDoneStreak: 0,
+    ...extra,
+  })
+
+  const contractSession = {
+    id: 'teaching-1',
+    status: 'active',
+    revision: 5,
+    teachingState: {
+      sessionArtifacts: {
+        lessonContract: { coreKcs: [{ name: '写出可核对判断' }] },
+        lessonReport: { met: false, reasons: ['缺少独立证据', '独立证据不足：0/1'] },
+      },
+    },
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    coordinator = new SimulationOrchestrator()
+    learningPath = {
+      id: 'path-1',
+      milestones: [{
+        id: 'milestone-1',
+        stageNumber: 1,
+        title: '里程碑一',
+        subtasks: [{ id: 'task-1', title: '任务一', status: 'active', estimatedMinutes: 20, order: 1 }],
+      }],
+    }
+    sessionRecord = {
+      id: 'simulation-1',
+      userId: 'user-1',
+      status: 'running',
+      currentStage: 'teaching',
+      learningPathId: 'path-1',
+      currentTaskId: 'task-1',
+      stageResults: JSON.stringify({
+        teaching: {
+          success: true,
+          teachingSessionId: 'teaching-1',
+          teachingRevision: 1,
+          currentMilestone: 0,
+          currentMilestoneTitle: '里程碑一',
+          currentTaskIdx: 0,
+          currentTaskId: 'task-1',
+          currentTaskTitle: '任务一',
+          totalMilestones: 1,
+          conversationHistory: [],
+          closureTrace: Array.from({ length: 5 }, (_, i) => ({
+            turn: i + 7,
+            teacherReady: false,
+            judgeFalse: true,
+            mastery: 0.4,
+          })),
+          taskRuntime: stuckRuntime(),
+        },
+      }),
+      logs: '[]',
+      virtual_learner_profiles: {
+        id: 'profile-1',
+        userId: 'user-1',
+        profile: '{}',
+        learningGoal: '完成任务',
+        knowledgeLevel: 'beginner',
+        knownConcepts: '[]',
+        struggleConcepts: '[]',
+        personalityTraits: '{}',
+      },
+    }
+    mockVirtualSessionFindUnique.mockImplementation(async () => sessionRecord)
+    mockVirtualSessionUpdate.mockImplementation(async ({ data }: any) => {
+      for (const [key, value] of Object.entries(data)) {
+        if (value !== undefined) sessionRecord[key] = value
+      }
+      return sessionRecord
+    })
+    mockLearningPathFindUnique.mockImplementation(async () => learningPath)
+    // 学员没学会、教师也不给收束 → 连续无进展，进入卡死判定
+    mockExecuteSkill.mockResolvedValue({
+      reply: '我还是没太明白这一句该怎么写。',
+      learnerState: { conceptualMastery: 0.4 },
+      epistemicGrounding: {
+        sampledCorrectness: false,
+        masteryProb: 0.4,
+        blockedConcept: '写出可核对判断',
+        reason: '仍未写出可核对判断',
+      },
+      learnerFeedback: {
+        selfReportedTaskDone: false,
+        wantsMoreHelp: true,
+        stopAsking: false,
+        remainingBlockers: ['不会写可核对判断'],
+      },
+    })
+    mockProcessStudentMessage.mockResolvedValue({
+      revision: 2,
+      aiResponse: '那我们再看这个例子。',
+      isCompletion: false,
+      autoEnded: false,
+      analysis: {},
+      knowledgePoints: [],
+      strategies: [],
+    })
+    mockEndSession.mockResolvedValue({ status: 'completed', revision: 6 })
+    getTeachingSessionSpy.mockResolvedValue(contractSession as any)
+    mockStartSession.mockResolvedValue({ sessionId: 'teaching-2', revision: 1, welcomeMessage: '重新开课' })
+    recordLedgerSpy.mockResolvedValue('completed')
+  })
+
+  const getLearningState = () => JSON.parse(sessionRecord.stageResults).teaching
+
+  it('卡死 + 契约未达成 → endSession(contract-not-met)，task 不完成、绑定清空', async () => {
+    mockCompleteTask.mockClear()
+    const result = await coordinator.executeLearningStep('simulation-1')
+    const learning = getLearningState()
+
+    expect(result).toEqual(expect.objectContaining({
+      success: true,
+      taskCompleted: false,
+      currentTaskStopped: true,
+    }))
+    expect(result.error).toContain('LESSON_CONTRACT_NOT_MET')
+    expect(mockEndSession).toHaveBeenCalledWith('teaching-1', 'contract-not-met', 5)
+    expect(mockCompleteTask).not.toHaveBeenCalled()
+    expect(learning.teachingSessionId).toBeNull()
+    expect(learning.taskRuntime).toEqual(expect.objectContaining({
+      status: 'contract-blocked',
+      taskId: 'task-1',
+      teachingSessionId: null,
+      turns: 0,
+      completionSource: 'contract-not-met',
+    }))
+  })
+
+  it('停课后下一次进入同一 task：重开课堂而不是补结算', async () => {
+    // 第一步：卡死 + 契约未达成 → contract-blocked
+    await coordinator.executeLearningStep('simulation-1')
+    mockCompleteTask.mockClear()
+    mockEndSession.mockClear()
+
+    // 第二步：下一次「开始学习」仍在同一 task（task 未完成）→ 重开课堂，而不是补结算
+    const result = await coordinator.startLearningPhase('simulation-1', { taskId: 'task-1' })
+    expect(mockCompleteTask).not.toHaveBeenCalled()
+    expect(mockStartSession).toHaveBeenCalledWith({ userId: 'user-1', taskId: 'task-1' })
+    expect(result).toEqual(expect.objectContaining({ success: true }))
+  })
+})

@@ -96,6 +96,11 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     // ref: sandbox:path.allPreviousStageTasks，但此前未登记 ⇒ 编译门 advisory 恒在。
     // 编排层直接注入（stage-enrichment），登记后声明三方一致。
     'allPreviousStageTasks',
+    // 路径拓扑（2026-11-18）：path-planning 从 normalizedInput.pathTopologyHint 读取定帧强信号，
+    // 输出 topology 后由编排层以 path.pathTopology 注入 path-task-design。两处都需登记，
+    // 否则 strict 对账判失败（sandbox-path-unregistered / sandbox-ref-unregistered）。
+    'pathTopology',
+    'normalizedInput.pathTopologyHint',
   ],
   'teaching-agent': [
     'session.messages',
@@ -112,6 +117,9 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     // （通道行不变式要求可按 pathInRawOutput 装配）；它在 prompts/orchestration/teaching.yaml 以 fields 行
     // 声明，并在此沙盘键注册表 + core inputs（sandbox:teaching.scenario）登记。
     'scenario',
+    // 课堂材料本体（2026-11-18，2026-11-19 审计修正键位）：buildTeachingTurnInput 把它装配在
+    // scenario.taskMaterial（来自 aiPromptTemplate.taskMaterials.byTask），提示词规则按同键消费。
+    'scenario.taskMaterial',
     'scenario.interactionProfile',
     'interactionProfile',
     'teachingState.classroomContext',

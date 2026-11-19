@@ -188,4 +188,14 @@ describe('screenCheckpointOutput（归一化出口接线）', () => {
     expect(result).toEqual(checkpoint);
     expect(mockRecordDegradation).not.toHaveBeenCalled();
   });
+
+  it('conceptName 随检查点透传（课堂契约的证据归因）', () => {
+    const result = screenCheckpointOutput({
+      question: '起算点应当从哪一天开始算？',
+      type: 'short_answer',
+      expectedKeywords: ['解除', '终止'],
+      conceptName: '定位竞业期限与起算点',
+    }, '请独立作答。', '定位竞业期限与起算点');
+    expect(result?.conceptName).toBe('定位竞业期限与起算点');
+  });
 });

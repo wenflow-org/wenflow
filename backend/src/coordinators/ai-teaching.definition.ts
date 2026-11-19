@@ -58,12 +58,20 @@ export const AITeachingCoordinatorRuntimeDefinition = {
       summary: '课后生成重规划建议（保持、补强、放慢、重排、加速），只记录不执行',
       condition: 'after wrapup and learner projection refresh'
     },
+    {
+      step: 8,
+      agentId: 'skill:teaching-exit-ticket',
+      kind: 'skill',
+      role: 'exit-ticket-generation',
+      condition: 'when completion is ready and the end-of-lesson exit ticket has not passed'
+    },
   ],
   variableGraph: {
     contextBuilder: ['scenario', 'scenario.cognitiveFrame', 'learner', 'knowledge', 'controls'],
     teachingTurn: ['reply', 'analysis', 'knowledge.points', 'pedagogy.strategies', 'control'],
     peerAgent: ['peer.message', 'peer.followUpQuestions'],
     checkpointEngine: ['pendingCheckpoint'],
+    exitTicket: ['exitTicket'],
     sessionWrapup: ['wrapup', 'evaluation'],
     replanAdvisory: ['advisory'],
   },

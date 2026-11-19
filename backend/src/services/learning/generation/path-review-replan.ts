@@ -30,6 +30,8 @@ export interface PathReviewAnalysis {
   summary?: string | null;
   cognitiveCore?: unknown;
   cognitiveDesign?: unknown;
+  /** 路径拓扑（path-planning 输出；缺失时旧路径按 diagnostic 评审） */
+  topology?: string | null;
   estimatedTotalHours?: number | null;
   suggestedMilestones?: Array<{
     stage?: number;
@@ -66,6 +68,7 @@ async function requestPathReview(
     pathPlan: {
       name: analysis.pathName,
       summary: analysis.summary,
+      topology: analysis.topology ?? null,
       cognitiveCore: analysis.cognitiveCore || analysis.cognitiveDesign,
       milestones: analysis.suggestedMilestones,
       estimatedHours: analysis.estimatedTotalHours,

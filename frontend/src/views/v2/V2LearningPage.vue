@@ -200,6 +200,39 @@
           </button>
         </div>
 
+        <!-- 课堂契约卡（2026-11-19）：本课最低必须完成集 + 自由支线额度。
+             只展示达成度；契约外探索不判失败，停车区把跑题问题留到课后。 -->
+        <div v-if="contractCoreKcs.length" class="contract">
+          <div class="contract__row">
+            <span class="contract__tag">本节契约</span>
+            <span class="contract__meta">
+              {{ contractCoveredCount }}/{{ contractCoreKcs.length }} 核心 KC
+              · 独立证据 {{ lessonReport?.independentCount ?? 0 }}/{{ lessonContract?.minIndependentEvidence ?? 0 }}
+            </span>
+            <span class="contract__branch" :class="{ 'contract__branch--active': branchActive }">
+              自由支线：{{ branchLabel }}<template v-if="branchActive"> · 剩 {{ branchRemaining }} 轮</template>
+            </span>
+          </div>
+          <div class="contract__kcs">
+            <span
+              v-for="kc in contractCoreKcs"
+              :key="kc.kcId || kc.name"
+              class="contract__kc"
+              :class="{ 'contract__kc--done': (lessonReport?.coveredKcs || []).includes(kc.name) }"
+            >{{ kc.name }}</span>
+          </div>
+          <div v-if="exitTicket" class="contract__exit" :class="`contract__exit--${exitTicket.status}`">
+            最后一道题（独立终检）：
+            <span v-if="exitTicket.status === 'pending'">待作答</span>
+            <span v-else-if="exitTicket.status === 'passed'">已通过</span>
+            <span v-else>未通过，继续补救</span>
+          </div>
+          <div v-if="contractParkingLot.length" class="contract__park">
+            停车区 {{ contractParkingLot.length }} 条：{{ contractParkingLot.map(p => p.topic).slice(0, 2).join('、') }}
+            <span v-if="contractParkingLot.length > 2">…</span>
+          </div>
+        </div>
+
         <!-- 开场景卡片：resumed / 接续 / 重学 / 复习 的结构化开场（取代模板双气泡的空转重复）。
              学员一旦开始互动/进入小测，大卡折叠成 40px 摘要条，把垂直空间还给对话流。 -->
         <div v-if="openingScene && !openingSceneDone && sceneCollapsed"
@@ -721,6 +754,12 @@
             <div v-if="finishStats.length" class="finish__stats">
               <span v-for="(s, i) in finishStats" :key="i"><b>{{ s.value }}</b>{{ s.label }}</span>
             </div>
+            <!-- 课堂契约报告：主线覆盖/独立证据/停车区（2026-11-19） -->
+            <p v-if="lessonContract && contractCoreKcs.length" class="finish__contract">
+              本节契约：{{ contractCoveredCount }}/{{ contractCoreKcs.length }} 个核心 KC 有证据
+              <template v-if="lessonReport"> · 独立证据 {{ lessonReport.independentCount }}/{{ lessonReport.requiredIndependent }}</template>
+              <template v-if="contractParkingLot.length"> · 停车区 {{ contractParkingLot.length }} 条待课后处理</template>
+            </p>
             <div class="finish__actions">
               <span v-if="evaluationUrl" class="btn-primary" role="button" tabindex="0" @click="goEvaluation" @keydown.enter="goEvaluation" @keydown.space.prevent="goEvaluation">查看学习反馈</span>
               <span v-if="!isReviewMode && !extensionMode" class="btn-ghost" role="button" tabindex="0" @click="startExtension" @keydown.enter="startExtension" @keydown.space.prevent="startExtension">延伸学习</span>
@@ -908,7 +947,7 @@ const END_WITHOUT_FINISH_LABEL = '结束学习（不计入完成）';
 
 import { useRoute, useRouter } from 'vue-router';
 import request, { API_BASE_URL } from '@/utils/api';
-import { aiTeachingAPI, createTeachingIdempotencyKey, type TeachingMessageImage } from '@/api/aiTeaching';
+import { aiTeachingAPI, createTeachingIdempotencyKey, type TeachingMessageImage, type ExitTicket, type LessonContract, type LessonReport } from '@/api/aiTeaching';
 import { readMaterialSection } from '@/api/materials';
 import { CHAT_IMAGE_RULES, compressChatImage } from '@/utils/imageCompress';
 import AiContentNote from '@/components/AiContentNote.vue';
@@ -1395,6 +1434,17 @@ function collapseOpeningScene() {
 /** 卡片已被用户处理（点主按钮/关闭）后不再展示 */
 const openingSceneDone = ref(false);
 const knowledgePoints = ref<Array<Record<string, any>>>([]);
+/** 课堂契约与实时报告（2026-11-19）：最低必须完成集 + 支线预算 + 停车区。 */
+const lessonContract = ref<LessonContract | null>(null);
+const lessonReport = ref<LessonReport | null>(null);
+const exitTicket = ref<ExitTicket | null>(null);
+const branchInfo = ref<{
+  kind: string;
+  need: string;
+  active: string | null;
+  remaining: number;
+  parkingLot: Array<{ at: string; topic: string; studentWords?: string | null }>;
+} | null>(null);
 /** 最近一轮讲师点到的知识点名：续接快选据此写具体动作，避免「继续往下讲」这类无内容空话 */
 const lastTaughtPoint = ref('');
 /**
@@ -1504,6 +1554,22 @@ const postQuizReplies = ref<string[]>([]);
    （用户在读题时不会误报）。换题或卡片收起即复位。 */
 const checkpointWalkedPast = ref(false);
 const allKpMastered = computed(() => knowledgePoints.value.length > 0 && masteredCount.value >= knowledgePoints.value.length);
+
+/* 课堂契约卡（2026-11-19）：主线覆盖/独立证据/支线/停车区。契约是“最低必须完成集”，
+   不是内容上限——UI 只展示达成度，不把未覆盖的探索内容判成失败。 */
+const contractCoreKcs = computed(() => lessonContract.value?.coreKcs || []);
+const contractCoveredCount = computed(() => {
+  const covered = new Set(lessonReport.value?.coveredKcs || []);
+  return contractCoreKcs.value.filter((kc) => covered.has(kc.name)).length;
+});
+const contractParkingLot = computed(() => branchInfo.value?.parkingLot || lessonReport.value?.parkingLot || []);
+const BRANCH_LABELS: Record<string, string> = {
+  spine: '主线', clarify: '澄清', example: '举例', deeper: '深挖',
+  patch: '先修补', park: '停车', escalate: '目标调整', test_out: '免修验证',
+};
+const branchLabel = computed(() => BRANCH_LABELS[branchInfo.value?.kind || 'spine'] || '主线');
+const branchActive = computed(() => !!branchInfo.value?.active);
+const branchRemaining = computed(() => Math.max(0, Number(branchInfo.value?.remaining) || 0));
 
 /* 作答回显（2026-10-31 复验）：提交路径此前从不追加用户气泡，后端却把这条作答落了库
    —— 刷新前看不见、刷新后看得见。成功落库后补一条（文本与后端落库一致，见 useCheckpointFlow）。 */
@@ -2051,6 +2117,9 @@ async function boot() {
     if (Array.isArray(s.knowledgePoints) && s.knowledgePoints.length) {
       knowledgePoints.value = s.knowledgePoints;
     }
+    // 课堂契约（2026-11-19）：开课响应带契约；恢复会话也带同一份
+    if (s.lessonContract) lessonContract.value = s.lessonContract;
+    if (s.lessonReport) lessonReport.value = s.lessonReport;
     // 会话来源提示：恢复上次课堂 / 已学完重开（避免「从头开始」困惑）
     if (s.mode === 'resumed') {
       // 恢复上下文：回填历史对话与待处理检查点，避免刷新后课堂记忆断裂
@@ -2558,6 +2627,11 @@ async function applyTurnResult(r: Record<string, any>, aiMsg?: { role: string; t
     // 否则学生点提交只会拿到「理解检查不存在或已处理」。
     checkpoint.value = null;
   }
+  // 课堂契约/支线（2026-11-19）：契约稳定；报告与支线每回合更新，契约卡实时显示覆盖度
+  if (r.lessonContract) lessonContract.value = r.lessonContract;
+  if (r.lessonReport) lessonReport.value = r.lessonReport;
+  if (r.exitTicket !== undefined) exitTicket.value = r.exitTicket;
+  if (r.branch) branchInfo.value = r.branch;
   if (r.isCompletion) {
     // 延伸课不自动结算（#124）：服务端延伸会话已抑制完成信号，这里再兜一层旧载荷——
     // 延伸段由学习者主动「结束学习」（end_only）收尾。
@@ -2606,6 +2680,8 @@ async function finish(
       ...(opts.confirmOpenQuestion ? { confirmOpenQuestion: true } : {})
     }, onFinalizeProgress) as unknown as Record<string, any>;
     completed.value = true;
+    if (r.lessonReport) lessonReport.value = r.lessonReport;
+    if (r.exitTicket !== undefined) exitTicket.value = r.exitTicket;
     // 结算成功：此前若残留门禁提示（例如上一轮 409 后用户已补答），一并收掉
     settleBlock.value = null;
     const wrapup = r.wrapup;
@@ -2970,6 +3046,8 @@ async function recoverSession(sid: string) {
       }
       toast.info('已重新开课');
     }
+    if (s.lessonContract) lessonContract.value = s.lessonContract;
+    if (s.lessonReport) lessonReport.value = s.lessonReport;
   } catch {
     toast.error('课堂连接恢复失败，请刷新页面后继续');
   }
@@ -3325,6 +3403,49 @@ onBeforeUnmount(() => {
 }
 .tutor__resume-close:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--muted); }
 /* 开场景卡片：resumed / 接续 / 重学 / 复习 的结构化开场 */
+/* 课堂契约卡（2026-11-19）：最低必须完成集 + 自由支线额度；不抢对话区高度 */
+.contract {
+  margin: 10px 14px 0;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--mk-radius-modal);
+  background: color-mix(in srgb, var(--surface) 92%, var(--blue) 8%);
+  display: grid; gap: 7px;
+  flex: 0 0 auto;
+}
+.contract__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.contract__tag {
+  font-size: 11px; font-weight: 700; letter-spacing: .04em;
+  padding: 2px 7px; border-radius: 999px;
+  background: color-mix(in srgb, var(--blue) 16%, transparent);
+  color: var(--blue);
+}
+.contract__meta { font-size: 12px; color: var(--muted); }
+.contract__branch {
+  margin-left: auto; font-size: 11px; color: var(--muted);
+  padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line);
+}
+.contract__branch--active {
+  color: var(--blue); border-color: color-mix(in srgb, var(--blue) 35%, transparent);
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
+}
+.contract__kcs { display: flex; flex-wrap: wrap; gap: 6px; }
+.contract__kc {
+  font-size: 12px; padding: 3px 9px; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--muted); background: var(--surface);
+}
+.contract__kc--done {
+  color: var(--green, #2f7d4f);
+  border-color: color-mix(in srgb, var(--green, #2f7d4f) 35%, transparent);
+  background: color-mix(in srgb, var(--green, #2f7d4f) 9%, transparent);
+}
+.contract__park { font-size: 11px; color: var(--muted); }
+.contract__exit { margin-top: 4px; font-size: 11px; color: var(--muted); }
+.contract__exit--pending { color: var(--accent, #b45309); }
+.contract__exit--passed { color: var(--success, #15803d); }
+.contract__exit--failed { color: var(--danger, #b91c1c); }
+.finish__contract { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+
 .oscene {
   margin: 10px 14px 0;
   padding: 16px 18px;
@@ -4885,6 +5006,7 @@ onBeforeUnmount(() => {
      （2026-09-28 用户「检查点面板超宽，是整个聊天区宽度」）。
      开场卡/续课条/快捷引导/检查点都是卡片，直接收窄居中；行动台是通栏分隔条（border-top +
      底色），条保持通栏、只用内边距把内容收进同一列（与 .composer 收 .composer__box 同法）。 */
+  .tutor > .contract,
   .tutor > .oscene,
   .tutor > .tutor__resume,
   .tutor > .replies,
@@ -4922,6 +5044,7 @@ onBeforeUnmount(() => {
   .learn__body { max-width: 1120px; }
   .tutor__scroll > *,
   .composer__box { max-width: 1000px; }
+  .tutor > .contract,
   .tutor > .oscene,
   .tutor > .tutor__resume,
   .tutor > .replies,

@@ -80,4 +80,28 @@ describe('mergeKcStageAnnotation 增量合并契约（批次 D3）', () => {
     });
     expect(b.taskKcLinks).toHaveLength(2);
   });
+
+  it('同一 conceptId 跨阶段再次映射：KC 按 kcId 并集，不整条覆盖', () => {
+    // 2026-11-19 审计：渐进式每阶段都会重新输出同一 coreConcept 的 KC 列表，
+    // 旧实现按 conceptId 覆盖 ⇒ 前面阶段的 KC 定义在顶层消失。
+    const a = mergeKcStageAnnotation(null, 1, {
+      conceptKcs: [{
+        conceptId: 'concept-1',
+        kcs: [{ kcId: 'kc-1a', name: '识别信息源', taxonomy: 'conceptual' }],
+      }],
+    });
+    const b = mergeKcStageAnnotation(a, 2, {
+      conceptKcs: [{
+        conceptId: 'concept-1',
+        kcs: [
+          { kcId: 'kc-1a', name: '识别信息源（阶段 2 修订）', taxonomy: 'conceptual' },
+          { kcId: 'kc-1b', name: '区分工具返回', taxonomy: 'procedural' },
+        ],
+      }],
+    });
+    expect(b.conceptKcs).toHaveLength(1);
+    const kcs = (b.conceptKcs as any[])[0].kcs as Array<{ kcId: string; name: string }>;
+    expect(kcs.map((kc) => kc.kcId)).toEqual(['kc-1a', 'kc-1b']);
+    expect(kcs.find((kc) => kc.kcId === 'kc-1a')?.name).toContain('阶段 2');
+  });
 });

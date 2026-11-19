@@ -17,10 +17,16 @@ import { logger } from '../../../utils/logger';
 import { runBackgroundTask } from '../../background-task-tracker.service';
 import { ownerContextOverride } from './owner-context';
 import { learnerSnapshotRefreshService } from '../../learner/LearnerSnapshotRefreshService';
+import { parseSessionArtifacts } from '../../ai-teaching/checkpoint-shared';
 
-/** 渐进式 stage 设计灰度开关（默认关）。 */
+/**
+ * 渐进式 stage 设计开关（2026-11-18 起默认开启）。
+ * 语义：创建时只设计 stage 1，stage N 完成后后台设计 N+1（带上一阶段真实学习信号）。
+ * 显式 `PROGRESSIVE_STAGE_DESIGN=0|false` 可回到一次性全量设计（保留回滚路径）。
+ */
 export function isProgressiveStageDesignEnabled(): boolean {
-  const raw = String(process.env.PROGRESSIVE_STAGE_DESIGN || '').trim().toLowerCase();
+  const raw = String(process.env.PROGRESSIVE_STAGE_DESIGN ?? '').trim().toLowerCase();
+  if (!raw) return true;
   return raw === '1' || raw === 'true';
 }
 
@@ -44,6 +50,21 @@ export interface PreviousStageOutcome {
   fatigueRisk?: 'low' | 'medium' | 'high';
   /** 节奏模式：recover 时下一阶段只减不增 */
   paceMode?: 'recover' | 'steady' | 'push';
+  /**
+   * 课堂契约报告回流（2026-11-19）：上一阶段各课 lessonReport 的未达成事实。
+   * 路径层据此把「课上没验过的点 / 学生想补的先修 / 停车区问题」排进下一阶段，
+   * 而不是只在课后增强层留一条记录。
+   */
+  /** 契约明确缺证据的核心 KC（≤5） */
+  contractGaps?: string[];
+  /** 覆盖了但尚未取得独立证据的核心 KC（≤5） */
+  weakKcs?: string[];
+  /** 课末终检未通过的核心 KC（≤3） */
+  exitTicketGaps?: string[];
+  /** 停车区里学生提出、课内未展开的问题（≤5，只作拓展线索） */
+  parkingLotTopics?: string[];
+  /** 停车区里标记为先修缺口的条目（≤5，下一阶段先补） */
+  prerequisitePatches?: string[];
 }
 
 const SIGNAL_CAP = 5;
@@ -79,6 +100,71 @@ export function extractLearnerSignals(
 }
 
 /**
+ * 课堂契约报告回流（2026-11-19）：从上一阶段各课已落库的 `sessionArtifacts.lessonReport`
+ * 聚合「下一阶段必须处理」的事实——未达成 KC、独立证据缺口、终检未过、停车区（先修补丁/拓展线索）。
+ * 纯函数，便于单测；无 lessonReport 的旧课不产生任何键。
+ */
+export function extractLessonReportSignals(
+  sessions: ReadonlyArray<{ teachingState?: unknown }>,
+): Pick<PreviousStageOutcome, 'contractGaps' | 'weakKcs' | 'exitTicketGaps' | 'parkingLotTopics' | 'prerequisitePatches'> {
+  const contractGapSet = new Set<string>();
+  const weakKcSet = new Set<string>();
+  const exitTicketGapSet = new Set<string>();
+  const parkingLotSet = new Set<string>();
+  const prerequisitePatchSet = new Set<string>();
+  const pushUnique = (target: Set<string>, value: unknown) => {
+    const text = typeof value === 'string' ? value.trim() : '';
+    if (text) target.add(text);
+  };
+  const normalize = (value: unknown) => String(value ?? '').trim().toLowerCase();
+  for (const session of sessions) {
+    let teachingState: Record<string, any> | null = null;
+    try {
+      const raw = session?.teachingState;
+      teachingState = typeof raw === 'string'
+        ? JSON.parse(raw)
+        : (raw && typeof raw === 'object' ? raw as Record<string, any> : null);
+    } catch {
+      teachingState = null;
+    }
+    const artifacts = parseSessionArtifacts(teachingState) as Record<string, any>;
+    const report = artifacts.lessonReport as Record<string, any> | undefined;
+    if (!report) continue;
+    for (const name of Array.isArray(report.missingKcs) ? report.missingKcs : []) {
+      pushUnique(contractGapSet, name);
+    }
+    const independentNames = new Set(
+      (Array.isArray(report.independentKcs) ? report.independentKcs : []).map(normalize),
+    );
+    const coreKcs = Array.isArray(artifacts.lessonContract?.coreKcs) ? artifacts.lessonContract.coreKcs : [];
+    for (const kc of coreKcs) {
+      const name = typeof kc?.name === 'string' ? kc.name.trim() : '';
+      if (name && !independentNames.has(normalize(name))) pushUnique(weakKcSet, name);
+    }
+    const exitTicket = report.exitTicket as Record<string, any> | undefined;
+    if (exitTicket?.asked === true && exitTicket?.passed !== true) {
+      pushUnique(exitTicketGapSet, exitTicket.conceptName);
+    }
+    for (const item of Array.isArray(report.parkingLot) ? report.parkingLot : []) {
+      const topic = typeof item?.topic === 'string' ? item.topic.trim() : '';
+      if (!topic) continue;
+      // 先修补丁只认系统写入的固定标记（prerequisite_gap 支线在补课额度用尽时写下
+      // 「先修缺口（本课补课额度已用完）」；兼容旧数据的「先修：」前缀），
+      // 不对学生原话做关键词分类——停车区里学生问题可能恰好含「先修」二字。
+      if (topic.startsWith('先修缺口') || topic.startsWith('先修：')) pushUnique(prerequisitePatchSet, topic);
+      else pushUnique(parkingLotSet, topic);
+    }
+  }
+  return {
+    ...(contractGapSet.size ? { contractGaps: Array.from(contractGapSet).slice(0, 5) } : {}),
+    ...(weakKcSet.size ? { weakKcs: Array.from(weakKcSet).slice(0, 5) } : {}),
+    ...(exitTicketGapSet.size ? { exitTicketGaps: Array.from(exitTicketGapSet).slice(0, 3) } : {}),
+    ...(parkingLotSet.size ? { parkingLotTopics: Array.from(parkingLotSet).slice(0, 5) } : {}),
+    ...(prerequisitePatchSet.size ? { prerequisitePatches: Array.from(prerequisitePatchSet).slice(0, 5) } : {}),
+  };
+}
+
+/**
  * 从学习者 agent 账本提炼「上一阶段学得怎么样」：
  * 快照（fresh refresh，确保 task:completed 刚写完的证据已入账）的
  * fragile/struggling/gaps + 上一阶段最近一次 wrapup 的 stillLearning 知识点。
@@ -102,18 +188,29 @@ export async function buildPreviousStageOutcome(
       where: { learningPathId: pathId, stageNumber: previousStageNumber },
       select: { id: true },
     });
-    const lastSession = previousMilestones.length > 0
-      ? await prisma.teaching_sessions.findFirst({
+    // 课堂契约回流（2026-11-19）：上一阶段每个任务取**最近一节正课**的 lessonReport，
+    // 聚合未达成 KC / 独立证据缺口 / 终检未过 / 停车区（含先修补丁）。
+    const previousSessions = previousMilestones.length > 0
+      ? await prisma.teaching_sessions.findMany({
           where: {
             userId,
             learningPathId: pathId,
             milestoneId: { in: previousMilestones.map((milestone) => milestone.id) },
             status: 'completed',
+            mode: 'tutor',
           },
           orderBy: { endTime: 'desc' },
-          select: { wrapup: true },
+          take: 20,
+          select: { id: true, taskId: true, wrapup: true, teachingState: true },
         })
-      : null;
+      : [];
+    const latestSessionByTask = new Map<string, (typeof previousSessions)[number]>();
+    for (const session of previousSessions) {
+      const key = session.taskId || session.id;
+      if (!latestSessionByTask.has(key)) latestSessionByTask.set(key, session);
+    }
+    const stageSessions = Array.from(latestSessionByTask.values());
+    const lastSession = stageSessions[0] || null;
     let wrapup: { summary?: { knowledgeItems?: Array<{ name?: string; status?: string }> } } | null = null;
     try {
       wrapup = lastSession?.wrapup ? JSON.parse(lastSession.wrapup) : null;
@@ -121,10 +218,15 @@ export async function buildPreviousStageOutcome(
       // wrapup 解析失败不影响其余信号
     }
 
+    const lessonReportSignals = extractLessonReportSignals(stageSessions);
+
     const outcome: PreviousStageOutcome = {
       source: 'learner-snapshot',
       previousStageNumber,
       ...extractLearnerSignals(knowledgeMemory, wrapup),
+      // 课堂契约回流（2026-11-19）：未达成 KC / 独立证据缺口 / 终检未过 / 停车区先修补丁
+      // 都作为「已发生的学习事实」进入下一阶段设计输入；无 lessonReport 的旧课不产生这些键。
+      ...lessonReportSignals,
       // 动态规划（2026-10-17）：不只传「哪几个概念没掌握」，还传系统对下一阶段的建议方向
       // 与当前负荷档——path-task-design 据此决定坡度、补强位置与任务可调整性，而不是只看到
       // 一份概念清单后自行猜测该加速还是减速。
@@ -167,6 +269,11 @@ export async function buildPreviousStageOutcome(
       struggling: outcome.strugglingConcepts.length,
       gaps: outcome.prerequisiteGaps.length,
       stillLearning: outcome.stillLearning.length,
+      contractGaps: outcome.contractGaps?.length || 0,
+      weakKcs: outcome.weakKcs?.length || 0,
+      exitTicketGaps: outcome.exitTicketGaps?.length || 0,
+      parkingLot: outcome.parkingLotTopics?.length || 0,
+      prerequisitePatches: outcome.prerequisitePatches?.length || 0,
     });
     return outcome;
   } catch (error) {

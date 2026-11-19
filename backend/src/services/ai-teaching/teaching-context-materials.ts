@@ -347,3 +347,16 @@ async function resolveSemanticExcerpts(params: {
  * 收束终评用 refresh 强制按收束时刻的事实重算，避免复用判完成时的旧快照。
  */
 
+/**
+ * 本课课堂材料本体（2026-11-18）：path-task-design 的 materialPayload → aiPromptTemplate.taskMaterials.byTask[subtaskId]。
+ * 与列表页 description 分离；缺失时返回 null，课堂退回按 description 组织（与旧行为一致）。
+ */
+export function resolveTaskMaterialPayloadForTeaching(
+  aiPromptTemplate: string | null | undefined,
+  taskId: string | null | undefined,
+): string | null {
+  if (!taskId) return null;
+  const parsed = parsePathPromptTemplate(aiPromptTemplate || null) as any;
+  const payload = parsed?.taskMaterials?.byTask?.[taskId];
+  return typeof payload === 'string' && payload.trim() ? payload.trim().slice(0, 6000) : null;
+}

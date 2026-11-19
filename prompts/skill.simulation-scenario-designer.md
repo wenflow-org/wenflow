@@ -1,6 +1,6 @@
 ---
 agentId: skill:simulation-scenario-designer
-coreHash: e9b8806bc2c905d9ab3db25f2f9c23c7263fc04ec6393feaffa7599fa2227229
+coreHash: 5a397f1ca5f6e325b7248a8af2ee16b22113b85dfa34bb6e141b1141e4a1ed34
 coreVersion: 1
 temperature: 0.9
 maxTokens: 64000
@@ -52,7 +52,7 @@ failurePolicy: retry
 17. 所有必填字段都必须给出具体、非空、可观察的内容；不要留空，不要写"待补充/未明确/通用模板"
 18. 不要依赖系统为你补齐 persona 或 story 字段；如果你发现自己想写安全兜底句，说明这次生成还不够具体，必须重写
 19. 字段取值约束：goalType 只能是 problem_driven|foundation_building|project_based|exam_prep|interest_exploration；motivationType 只能是 career|interest|necessity|social；availableTime 只能是 minimal|moderate|abundant；techComfort 只能是 low|medium|high；verbosity 只能是 terse|normal|verbose；enthusiasm 只能是 low|normal|high；confusionStyle 只能是 direct|hinting；patience 只能是 low|normal|high；questionStyle 只能是 none|clarifying|challenging；emotionalRange 只能是 flat|moderate|expressive
-20. 枚举分布要求：availableTime（minimal|moderate|abundant）/ techComfort（low|medium|high）/ learningStyle（reading|watching|doing|listening）/ cognitiveLoadTolerance（low|normal|high）**四个枚举都要覆盖全部档位且大致均衡**（各档约 1/3）。**不要把样本默认成"时间极少 + 不懂技术 + 动手型"**——那是采样偏差而不是现实。实测历史产出 73% minimal / 68% low / 62% doing，属于不合格样本集
+20. 枚举分布要求：availableTime（minimal|moderate|abundant）/ techComfort（low|medium|high）/ learningStyle（reading|watching|doing|listening）/ cognitiveLoadTolerance（low|normal|high）**四个枚举都要覆盖全部档位且大致均衡**（各档约 1/3）。**不要把样本默认成"时间极少 + 不懂技术 + 动手型"**——那是采样偏差而不是现实。实测历史产出 73% minimal / 68% low / 62% doing，属于不合格样本集。`learningStyle` 只作人设多样性与表达偏好标签，不是 VARK 学习风格结论：禁止据此推断能力或匹配教学形式
 21. 高质量要求（关键）：corePersonality / emotionalBaseline / helpSeekingPattern / adversarialPattern / metacognitiveProfile 不能退化成空泛安全模板，必须与人物职业、现实压力、失败经历和本次目标发生咬合；不要反复产出"有真实顾虑""先自己试再问""担心理想化建议"这种抽象但不可区分的句子，要说明这个人会在什么情境下这样做、会怎么做、边界在哪里；story 的 pressurePoints 和 behaviorHooks 必须具体到这个情境，而不是任何 learner 都能套用的通用句
 22. consistencyNotes 不能写成空话，要输出 2-4 条"故事与 persona 的一致性校验点"，明确说明 story 的 pressurePoints / behaviorHooks / visibleOpening 如何与 persona 的对应字段对齐
 

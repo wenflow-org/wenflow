@@ -603,18 +603,20 @@ skills:
   - skillId: goal-confirm-adjudicator
     kind: handler-only
     handlerRef: backend/src/skills/goal-confirm-adjudicator/index.ts
-    noPromptFile: true
+    noPromptFile: false
+    promptArtifact: prompts/skill.goal-confirm-adjudicator.md
     displayName: goal 确认裁决器 Skill
     description: goal 会话打字确认的唯一语义裁决通道——只回答「用户这句话是否表达就要这个方案、开始排路径」，fail-open 按非确认（2026-11-08 确认动作减重，替代白名单+confirmIntent+拒绝正则三件套）
     dataSource:
       db: []
       sandbox: []
-    notes: handler-only 外挂能力（照 goal-confirm-adjudicator 混合成例）——主接口是评审 handler（不进 agentMembers、不进字段路由），内含一个 LLM 评审环节，prompt 以 v4 核心文件 prompts/core/classroom-quality-judge.yaml 编译产物承载（同时具备 coreFile 产物与 prompts/manifests/classroom-quality-judge.yaml）。调用方是跑数脚本 judge-minibatch-classrooms.ts：黑盒会话终态后逐节课提取逐轮记录 + 学习者真实可见的板书/图文载荷 + wrapup，产出与 referee 同构的课堂级病历单（code/severity/evidenceIds）。与教学主链路完全解耦——评审缺席不影响任何教学行为。存在动机：referee 只看 publicTrace，板书载荷与逐轮脚手架是其盲区（2026-11-13 TEACHING_BOARD_UNVERIFIABLE 误报实证）。跨样本归因用跑数器里的 canonicalFindingCode 别名归一，不改本 skill 输出。
+    notes: handler-only（不进 agentMembers、不进字段路由），但**有**提示词：prompt 以 v4 核心文件 prompts/core/goal-confirm-adjudicator.yaml 编译产物承载（2026-11-19 修正：此前 noPromptFile 误标 true，版本/漂移检查被绕过）。调用方是 goal 确认链路；只做「这句话是否拍板」的语义裁决，fail-open 判非确认。
 
   - skillId: teaching-classroom-judge
     kind: handler-only
     handlerRef: backend/src/skills/teaching-classroom-judge/index.ts
-    noPromptFile: true
+    noPromptFile: false
+    promptArtifact: prompts/skill.teaching-classroom-judge.md
     displayName: 课堂质量独立评审 Skill
     description: 单节课逐轮记录 + 板书/图文载荷 + 收束产出的独立 LLM 病历单（code/severity/evidenceIds）
     dataSource:
@@ -643,7 +645,7 @@ skills:
       sandbox: []
     notes: handler-only 外挂能力（照 material-collector 混合成例）——主接口是确定性 service（teaching-turn-engine 按轮内意图直调 backend/src/services/ai-teaching/teaching-board-design.service.ts 的 designBoard，不进 skillHandlers 派发表，registrationPoint=none），内含一个 LLM 绘图环节。**两个维度分开看（#235）**：有提示词产物 prompts/skill.teaching-board-design.md（board-probe 跑通的成文，运行时 DB ACTIVE 优先、loadPromptFile 兜底），但没有 core yaml 源（prompts/core/teaching-board-design.yaml 不存在）——「无提示词」与「无 core 源」不是一回事，故 noPromptFile=false + promptArtifact 声明，户口簿按 F7 登记 handler-only 形态、不填 coreFile。输出经 teaching-turn 归一化（图型白名单 + spec 契约）保证前端渲染安全，失败 fail-open 返回 null 由引擎保持旧板。三条硬规则：标题只点题不写结论 / 减负区画完整形态不留 ? / 只输出一个 figure JSON
 
-  # ============ aux（10 条，不进字段路由；v4-aux-skills 注册） ============
+  # ============ aux（11 条，不进字段路由；v4-aux-skills 注册） ============
   - skillId: teaching-opening
     kind: aux
     handlerRef: backend/src/skills/v4-aux-skills/index.ts
@@ -671,6 +673,40 @@ skills:
           via: service
       sandbox: [teaching]
     notes: v4-aux 旁挂 teaching-agent（ai-teaching.definition.ts step 2）；输入 = buildTeachingScenarioContext 产物（AITeachingCoordinator.ts:1010/1144）
+
+  - skillId: teaching-exit-ticket
+    kind: aux
+    handlerRef: backend/src/skills/v4-aux-skills/index.ts
+    coreFile: prompts/core/teaching-exit-ticket.yaml
+    displayName: 课末终检题生成器
+    description: 结课前生成一道覆盖契约核心 KC 的新情境终检题（与课内检查点分离，通过即计入独立证据与结课报告）
+    coordinator:
+      agentId: teaching-agent
+      steps:
+        - { step: 8, role: exit-ticket-generation, condition: on completion ready and exit ticket not passed }
+    dataSource:
+      db:
+        - table: teaching_sessions
+          via: service
+      sandbox: [teaching]
+    notes: v4-aux 旁挂 teaching-agent（ai-teaching.definition.ts step 8）；由 teaching-turn-engine 在收束信号出现且契约启用时直调，产物存 sessionArtifacts.exitTicket，判分走 judgeCheckpointAnswer，证据 kind=exit-ticket
+
+  - skillId: teaching-retention-probe
+    kind: aux
+    handlerRef: backend/src/skills/v4-aux-skills/index.ts
+    coreFile: prompts/core/teaching-retention-probe.yaml
+    displayName: 延迟保持探针生成器
+    description: 课后 24–72 小时对已学核心 KC 生成一道新情境单点题（独立判分，未通过降级掌握度）
+    dataSource:
+      db:
+        - table: teaching_sessions
+          via: service
+        - table: memory_traces
+          via: service
+        - table: learner_evidence
+          via: service
+      sandbox: [teaching]
+    notes: 由 retention-probe.service 在课后调度、到期出题；答案键仅服务端保存，判分走 judgeCheckpointAnswer，失败经 review:completed 口径降级 memory_traces
 
   - skillId: profile-progress-report
     kind: aux

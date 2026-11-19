@@ -77,6 +77,8 @@ export interface SubtaskMaterialCompletenessInput {
   title?: string;
   description?: string;
   acceptanceHint?: string;
+  /** 课堂材料本体（path-task-design 2026-11-18 起与 description 分离；非空即视为本体已给） */
+  materialPayload?: string;
   /** 已通过逐字核对的任务级资料引用（非空即视为有来源） */
   materialRefs?: unknown;
 }
@@ -117,6 +119,12 @@ export function assessSubtaskMaterialCompleteness(
     return { promisesMaterial: false, promisedCount: 0, satisfied: true };
   }
 
+  // 独立材料本体（2026-11-18 起 description 只留简介，本体放 materialPayload）。
+  // 2026-11-19 审计：此前只扫 title/description/acceptanceHint，按新规则把材料放进
+  // materialPayload 的任务会被判「没给本体」并反复重试，最后被迫把材料搬回 description。
+  if (typeof task.materialPayload === 'string' && task.materialPayload.trim().length > 0) {
+    return { promisesMaterial: true, promisedCount, satisfied: true };
+  }
   // 合法来源：已核对通过的资料引用 / 学习者手头已有 / 前序产出
   if (Array.isArray(task.materialRefs) && task.materialRefs.length > 0) {
     return { promisesMaterial: true, promisedCount, satisfied: true };
@@ -196,6 +204,7 @@ export const MATERIAL_JUDGE_SYSTEM_PROMPT = `你是学习路径阶段的「材�
 判为通过（valid=true）的常见情形：
 - 任务没有承诺任何具体材料，只是让学习者观察、思考、练习、判断、比较；
 - 材料本体已经给出（逐条编号写出、引号原文、或可核对的资料引用）；
+- 任务的 materialPayloadChars > 0 且 materialPayloadPreview 显示的是材料本体（题面/句子/数值/原文），不是「材料略」「见课本」这类占位；
 - 任务写明材料来源是「你手上的…」「任务 N 产出的…」「前序阶段产出的…」；
 - 只承诺 1 份材料（单件不构成「一批」）；
 - 语义不确定时判通过——宁可漏判，不要误报。
@@ -221,24 +230,31 @@ export interface SubtaskMaterialFacts {
   description: string;
   acceptanceHint: string;
   hasMaterialRefs: boolean;
+  /** 独立材料本体的长度（0=未提供；>0 即视为本体已给，见 assessSubtaskMaterialCompleteness） */
+  materialPayloadChars: number;
+  /** 材料本体前 120 字（供语义判定确认它确实是本体而不是一句「材料略」） */
+  materialPayloadPreview: string;
   numberedListLines: number;
   quotedMaterialCount: number;
   asciiSentenceCount: number;
   hasDeclaredSource: boolean;
 }
 
-/** 收集结构性事实（纯函数）：materialRefs 有无、编号列表行数、引号原文数、英文句片段数、是否写明合法来源。 */
+/** 收集结构性事实（纯函数）：materialRefs/材料本体有无、编号列表行数、引号原文数、英文句片段数、是否写明合法来源。 */
 export function collectSubtaskMaterialFacts(
   subtasks: Array<SubtaskMaterialCompletenessInput & { title?: string }>,
 ): SubtaskMaterialFacts[] {
   return (Array.isArray(subtasks) ? subtasks : []).map((task, index) => {
     const text = [task?.title, task?.description, task?.acceptanceHint].filter(Boolean).join('\n');
+    const materialPayload = typeof task?.materialPayload === 'string' ? task.materialPayload.trim() : '';
     return {
       index: index + 1,
       title: String(task?.title || '').trim(),
       description: String(task?.description || '').trim(),
       acceptanceHint: String(task?.acceptanceHint || '').trim(),
       hasMaterialRefs: Array.isArray(task?.materialRefs) && task.materialRefs.length > 0,
+      materialPayloadChars: materialPayload.length,
+      materialPayloadPreview: materialPayload.slice(0, 120),
       numberedListLines: countMatches(text, NUMBERED_LIST_RE),
       quotedMaterialCount: countMaterialQuotes(text),
       asciiSentenceCount: countMatches(text, ASCII_SENTENCE_RE),

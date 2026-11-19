@@ -70,4 +70,13 @@ describe('needsLessonSupplement：补课双条件（课数不足 且 分钟未�
     expect(needsLessonSupplement([task(10)], 1, null)).toBe(false);
     expect(needsLessonSupplement([], 4, 120)).toBe(false);
   });
+
+  it('intentType 已知且非 exam → 不补（与 prompt「补课仅 exam」同口径）', () => {
+    // 2026-11-19 审计：代码此前对所有路径按 70% 下限补课，prompt 明写只有 exam 才补。
+    expect(needsLessonSupplement([task(10), task(10)], 4, 120, { intentType: 'skill' })).toBe(false);
+    expect(needsLessonSupplement([task(10), task(10)], 4, 120, { intentType: 'knowledge' })).toBe(false);
+    expect(needsLessonSupplement([task(10), task(10)], 4, 120, { intentType: 'exam' })).toBe(true);
+    // intentType 缺失（旧数据）保持旧行为
+    expect(needsLessonSupplement([task(10), task(10)], 4, 120, {})).toBe(true);
+  });
 });

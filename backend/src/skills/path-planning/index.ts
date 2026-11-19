@@ -270,9 +270,13 @@ export function enforceBudgetConservation(
  * `{name, understanding}` 并漏掉 `role`。因此这里给**字面骨架**，而不是再描述一遍规则。
  */
 const PATH_OUTPUT_SKELETON = '{"name":"…","summary":"…","totalMilestones":N,"estimatedHours":N,"estimatedWeeks":N,'
+  + '"topology":"builder",'
   + '"milestones":[{"stageNumber":1,"title":"…","description":"…","goal":"…","coreConcept":"concept-1"}],'
   + '"cognitiveCore":{"coreConcepts":[{"id":"concept-1","name":"…","role":"hub","description":"…"},'
-  + '{"id":"concept-2","name":"…","role":"supporting","description":"…"}]}}';
+  + '{"id":"concept-2","name":"…","role":"supporting","description":"…"}],'
+  // 重试轮同样受「必须产出拓扑与学科基准锚」约束：骨架漏字段会让首次校验失败的路径
+  // 在修复轮丢掉 topology/domainAnchors（2026-11-19 审计）。
+  + '"domainAnchors":{"canonicalModels":["…"],"canonicalArtifacts":["…"],"commonMisconceptions":["…"]}}}';
 
 const PATH_VALIDATION_REPAIR_HINTS: Record<string, string> = {
   PATH_PLANNING_HUB_CONCEPT_MISSING:
@@ -366,6 +370,11 @@ export function buildPromptFriendlyNormalizedInput(normalizedInput: any) {
   return {
     normalizedInput: {
       version: normalizePromptString(normalizedInput.version) || '1.0',
+      // 拓扑强信号（2026-11-18 引入，2026-11-19 审计修复）：定帧层写在 normalizedInput 顶层，
+      // 但本投影逐字段重建时漏了它 ⇒ 规则「pathTopologyHint 存在时必须采纳」永远拿不到输入。
+      ...(normalizedInput.pathTopologyHint === 'exam' || normalizedInput.pathTopologyHint === 'exploratory'
+        ? { pathTopologyHint: normalizedInput.pathTopologyHint }
+        : {}),
       learnerProfile: {
         surfaceGoal: normalizePromptString(learnerProfile.surfaceGoal),
         motivation: normalizePromptString(learnerProfile.motivation),
@@ -1285,6 +1294,9 @@ ${replan ? renderReplanSection(replan) : ''}
         estimatedWeeks,
         cognitiveCore: pathData.cognitiveCore || pathData.cognitiveDesign,
         cognitiveDesign: pathData.cognitiveDesign || pathData.cognitiveCore,
+        // 路径拓扑（2026-11-18）：白名单归一必须透传，否则模型输出会被剥掉、前端永远拿不到徽标，
+        // path-task-design 也拿不到拓扑形态。缺失时留 null，由编排层回退定帧 hint。
+        topology: pathData.topology || null,
         // 守恒执行层决策留痕（I6-2）：随输出透传，最终落 aiPromptTemplate._generation.budgetConservation。
         // 放在输出顶层而非 _debug：_debug 由调用方覆写（rawModelOutput/extractedJson），会被冲掉。
         budgetConservation: conservation.report,

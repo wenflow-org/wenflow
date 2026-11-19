@@ -25,6 +25,7 @@ import { listSessionEvents, recordSessionEvent, type SessionEventKind } from '..
 import { buildTurnAnalysisView } from '../services/ai-teaching/teaching-session-views';
 import { reviewPlanService } from '../services/memory/review-plan.service';
 import { learnerExitService } from '../services/learner/LearnerExitService';
+import { retentionProbeService } from '../services/learner/retention-probe.service';
 import { PromptStreamEvent, setRequestContext, getRequestContext } from '../gateway/api-gateway/context';
 import type { InteractionMetaRecord } from '../services/ai-teaching/TeachingContextBuilder';
 import {
@@ -124,6 +125,75 @@ router.get('/review/due', async (req: any, res) => {
   } catch (error: any) {
     logger.error('[review] 到期复习清单获取失败:', error);
     return sendTeachingError(res, error, '获取复习清单失败');
+  }
+});
+
+/**
+ * 延迟保持探针：到期清单（课后 24–72h）
+ * GET /api/ai-teaching/retention/probes/due
+ * 只下发题面与选项，答案键永远留在服务端。
+ */
+router.get('/retention/probes/due', async (req: any, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return sendUnauthorized(res);
+    }
+    const items = await retentionProbeService.listDue(userId, { limit: 3 });
+    res.json({ success: true, data: { items } });
+  } catch (error: any) {
+    logger.error('[retention-probe] 到期探针获取失败:', error);
+    return sendTeachingError(res, error, '获取延迟保持探针失败');
+  }
+});
+
+/**
+ * 延迟保持探针：作答
+ * POST /api/ai-teaching/retention/probes/:probeId/answer  body: { answer }
+ */
+router.post('/retention/probes/:probeId/answer', async (req: any, res) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      return sendUnauthorized(res);
+    }
+    const probeId = typeof req.params?.probeId === 'string' ? req.params.probeId.trim() : '';
+    const answer = typeof req.body?.answer === 'string' ? req.body.answer : '';
+    if (!probeId) return sendValidationError(res, '缺少 probeId');
+    if (!answer.trim()) return sendValidationError(res, '缺少 answer');
+    const result = await retentionProbeService.answer(userId, probeId, answer);
+    res.json({
+      success: true,
+      data: {
+        probeId: result.probe.id,
+        conceptKey: result.probe.conceptKey,
+        label: result.probe.label,
+        passed: result.passed,
+        judgedBy: result.judgedBy,
+        detail: result.detail,
+        downgraded: result.downgraded,
+        attempts: result.probe.attempts,
+      },
+    });
+  } catch (error: any) {
+    const code = typeof error?.message === 'string' ? error.message : '';
+    if (code === 'RETENTION_PROBE_NOT_FOUND') {
+      return res.status(404).json({ success: false, error: '探针不存在', code });
+    }
+    if (code === 'RETENTION_PROBE_NOT_PENDING' || code === 'RETENTION_PROBE_EXPIRED' || code === 'RETENTION_PROBE_NOT_DUE') {
+      return res.status(409).json({
+        success: false,
+        error: code === 'RETENTION_PROBE_EXPIRED'
+          ? '探针已过 72 小时窗口'
+          : code === 'RETENTION_PROBE_NOT_DUE' ? '探针还未到 24 小时窗口' : '探针已作答',
+        code,
+      });
+    }
+    if (code === 'RETENTION_PROBE_QUESTION_NOT_READY' || code === 'RETENTION_PROBE_NOT_JUDGEABLE') {
+      return res.status(503).json({ success: false, error: '探针题目尚未就绪，请稍后重试', code });
+    }
+    logger.error('[retention-probe] 作答失败:', error);
+    return sendTeachingError(res, error, '提交延迟保持探针失败');
   }
 });
 

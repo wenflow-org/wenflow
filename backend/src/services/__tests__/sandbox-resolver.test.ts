@@ -240,12 +240,13 @@ describe('sandbox-resolver', () => {
       expect(paths).toContain('repairHints');
       expect(paths).toContain('pathStageMap');
       expect(paths).toContain('allPreviousStageTasks');
+      expect(paths).toContain('pathTopology');
 
       const loggerSpy = jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
       const ok = await checkAgentSandboxRefs(
         'path-task-design',
         'path',
-        buildPathSandboxPool({}, { materials: [{ title: 'm' }] }),
+        buildPathSandboxPool({}, { materials: [{ title: 'm' }], pathTopology: 'builder' }),
         { includeOptional: true }
       );
       expect(ok!.missingCount).toBe(0);

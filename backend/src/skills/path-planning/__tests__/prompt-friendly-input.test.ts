@@ -137,4 +137,17 @@ describe('path-planning 输入构造：学习证据必须真正进入提示词',
     expect(Object.prototype.hasOwnProperty.call(profile, 'entryState')).toBe(false);
     expect(Object.prototype.hasOwnProperty.call(profile, 'intentType')).toBe(false);
   });
+
+  it('pathTopologyHint 透传；非法值不出现键', () => {
+    // 2026-11-19 审计：定帧层写在 normalizedInput 顶层，投影白名单漏字段 ⇒
+    // 规则「pathTopologyHint 存在时必须采纳」永远读不到 exam/exploratory 强信号。
+    const exam = asPromptFriendly(buildPromptFriendlyNormalizedInput({ ...base, pathTopologyHint: 'exam' }));
+    expect(exam.normalizedInput.pathTopologyHint).toBe('exam');
+
+    const exploratory = asPromptFriendly(buildPromptFriendlyNormalizedInput({ ...base, pathTopologyHint: 'exploratory' }));
+    expect(exploratory.normalizedInput.pathTopologyHint).toBe('exploratory');
+
+    const invalid = asPromptFriendly(buildPromptFriendlyNormalizedInput({ ...base, pathTopologyHint: 'builder' }));
+    expect(Object.prototype.hasOwnProperty.call(invalid.normalizedInput, 'pathTopologyHint')).toBe(false);
+  });
 });

@@ -26,7 +26,7 @@ const BOARD_DESIGNER_SYSTEM = BOARD_DESIGNER_PROMPT
 const BOARD_DESIGNER_MODEL = process.env.BOARD_DESIGNER_MODEL || 'deepseek-v4.1-flash';
 
 export interface BoardDesignRequest {
-  task: { title: string; description: string; taskType: string };
+  task: { title: string; description: string; taskType: string; material?: string | null };
   scenario: { subject: string; topic: string; learnerLevel: string };
   studentSays: string;
   kindHint?: string | null;

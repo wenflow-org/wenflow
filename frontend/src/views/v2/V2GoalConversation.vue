@@ -177,7 +177,10 @@
                右上角读作「画像 6/7」，与审计要求的措辞一致；字数不变，不挤占
                与阶段导航共享的那一行。 -->
           <strong><span class="panel__head-lead">学情</span><span class="panel__head-ext">画像</span></strong>
-          <span class="panel__count"><span class="panel__count-k">已确认</span> {{ live.filledCount }} / {{ live.totalFields }}<span v-if="live.defaultCount" class="panel__count-default"> · {{ live.defaultCount }} 默认</span></span>
+          <span
+            class="panel__count"
+            :title="live.defaultCount ? '平台根据你的描述先填入或假设，尚未经你确认；可直接在对话里改' : undefined"
+          ><span class="panel__count-k">已确认</span> {{ live.filledCount }}<span v-if="live.defaultCount" class="panel__count-default"> · {{ live.defaultCount }} 项平台暂定</span><span v-else class="panel__count-default"> / {{ live.totalFields }}</span></span>
           <span class="panel__caret" aria-hidden="true">{{ panelExpanded ? '▾' : '▸' }}</span>
         </button>
         <!-- 面板背后的遮罩（2026-11-05 用户裁定）：窄屏面板是悬浮层，直接浮在聊天字上，
@@ -188,7 +191,18 @@
                被滚动视口硬切在底边。滚动发生在内层，底缘渐隐 mask 才能只作用于内容、
                不把面板自己的描边/圆角/投影一起淡掉（sticky 伪元素钉不进 padding 区，已试无效） -->
           <div class="panel__scroll">
-          <div class="panel__bar"><i :style="{ width: (live.filledCount / live.totalFields) * 100 + '%' }"></i></div>
+          <!-- 进度条把「已确认」与「系统默认」都算作已填：2/7 + 3 默认只显示 28% 会让用户
+               在方案已成形时以为还差一大半。默认段用中性灰，不抢已确认的蓝。 -->
+          <div
+            class="panel__bar"
+            role="progressbar"
+            :aria-valuenow="live.filledCount + live.defaultCount"
+            :aria-valuemin="0"
+            :aria-valuemax="live.totalFields"
+          >
+            <i class="panel__bar-done" :style="{ width: (live.filledCount / live.totalFields) * 100 + '%' }"></i>
+            <i class="panel__bar-default" :style="{ width: (live.defaultCount / live.totalFields) * 100 + '%' }"></i>
+          </div>
           <div class="panel__confidence">{{ stageLabel }}</div>
 
           <!-- 按状态分组（2026-11-06 走查「斑马纹」）：已收集的排上面、各成独立圆角浅灰块；
@@ -206,22 +220,24 @@
               </span>
               <div class="field__body">
                 <div class="field__label">{{ f.label }}</div>
-                <div v-if="f.value" class="field__value">{{ f.value }}</div>
+                <div v-if="f.value" class="field__value" :title="f.value">{{ f.value }}</div>
               </div>
             </li>
           </ul>
-          <!-- 系统默认/推断项（2026-11-17）：不再打成绿勾混进「已收集」，用黄标单独成组，
-               让用户一眼看出「哪些是平台按默认在规划、还没校准」。 -->
+          <!-- 系统默认/推断项（2026-11-17）：不再打成绿勾混进「已收集」，单独成组，
+               让用户一眼看出「哪些是平台按默认在规划、还没校准」。
+               2026-11-18 视觉降噪：去掉黄色圆标与黄底，改中性虚线卡；
+               同日用户反馈不要每张卡重复「默认 · 待校准」标签——组状态只由
+               虚线卡与面板头的「N 默认」承担。 -->
           <ul v-if="defaultFields.length" class="checklist checklist--default">
             <li
               v-for="f in defaultFields"
               :key="f.key"
               class="field field--default"
             >
-              <span class="field__mark">~</span>
               <div class="field__body">
-                <div class="field__label">{{ f.label }}<em class="field__badge">默认 · 待校准</em></div>
-                <div v-if="f.value" class="field__value">{{ f.value }}</div>
+                <div class="field__label">{{ f.label }}</div>
+                <div v-if="f.value" class="field__value" :title="f.value">{{ f.value }}</div>
               </div>
             </li>
           </ul>
@@ -356,6 +372,10 @@
             </div>
           </div>
 
+          <!-- 方案协商入口固定在输入框上方（2026-11-18 用户复选）：
+               它属于「确认动作」而不是聊天内容，放在贴底坞里与输入区同一视觉组，
+               不随消息流滚走；方案正文仍由上方 AI 回复承担。 -->
+
           <!-- 快捷补充选项（skill 每轮返回）：对齐原型 .wf-replies —— 去白面板与面板头，
                改整行 .wf-reply 按钮组（蓝描边 + 蓝 5% 底 + 前置 6px 蓝点，选中变 ✓）。
                勾选语义不变：点选打勾进输入框，再点取消 -->
@@ -387,11 +407,12 @@
           <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M6 13l6 6 6-6"/></svg>
           回到底部
         </button>
-        <!-- 贴底坞（2026-11-06 走查·严格 flex 三段）：pill / 待确认条 / 输入区 / 元数据行
+        <!-- 贴底坞（2026-11-06 走查·严格 flex 三段）：生成 pill / 输入区 / 元数据行
              全部收进同一个 flex 子项，滚动区在坞上方自然结束。此前三者是 .chat 的并列
              flex 子项，且靠 ::before 渐变「假装」分隔——渐变在暗色下读成一条黑带、
              在亮色下读成灰蓝带，还盖掉了气泡下缘的描边（本次核心 Bug）。
-             坞本身透明无边框无分割线：层次由留白与卡片边界表达。 -->
+             坞本身透明无边框无分割线：层次由留白与卡片边界表达。
+             2026-11-18：待确认条保持钉在输入区上方（用户复选），与 pill/输入区同组。 -->
         <div class="chat__dock">
         <!-- 生成状态 pill（走查 2026-11-01 P22 / 2026-11-02 P22 复验）：确认生成后选「留在本页」关掉浮层，
              页面上除步条第 3 步高亮外没有任何持续状态，用户不知道生成还在不在走。
@@ -408,23 +429,14 @@
         >
           <span class="gen-pill__dot" aria-hidden="true"></span>{{ genPill.text }}
         </button>
-        <!-- 方案协商入口（2026-10-31 一锤定音修复）：proposing 不再自动盖 modal，
-             方案先在对话流里完整呈现、可直接回复继续调整（一轮二轮都行）；
-             这颗按钮是显式确认入口——点开方案卡审阅，确认动作仍只发生在卡内 -->
-        <!-- 方案预览微卡片（2026-11-05 用户裁定方案 A）：左侧填方案摘要，
-             副行优先承接 entryCopy.hint（自测未答语境），否则给阶段摘要；
-             按钮恒定「查看并确认」（2026-11-08 用户裁定）：模型 proposing 文本指引「点确认」，
-             入口条必须带确认入口，确认面板从这里点开——打字确认只是对话流的次通道
-             2026-11-17：判据从 stage==='proposing' 放宽为「方案已成形」——硬必需字段缺时间
-             预算时模型会把 stage 停在 understanding，却已产出完整方案并说「点确认」；旧判据
-             让入口与确认按钮一起消失（真机 gc_1794910169154_01o30g0）。 -->
+        <!-- 方案协商入口（2026-11-18 用户复选：保持在输入框上方）：
+             确认动作与输入区同组，不随消息流滚走；方案正文与调整快选仍在上方对话里。
+             入口只负责打开方案卡，确认动作发生在卡内。 -->
         <div v-if="loggedIn && live.started && !live.sending && live.stage === 'proposing' && live.proposal && !showProposal" class="proposal-invite">
           <span class="proposal-invite__doc" aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1.5V8h4.5L14 3.5zM8 12h8v1.5H8V12zm0 4h8v1.5H8V16z"/></svg></span>
           <div class="proposal-invite__text">
             <strong class="proposal-invite__title">学习方案 · 待确认</strong>
             <span v-if="entryCopy.hint" class="proposal-invite__sub">{{ entryCopy.hint }}</span>
-            <!-- 2026-11-09 文案门禁（R3）：无 outcome 时的回落句原本在正文里讲怎么用
-                 （「点开…」），而右邻就是一枚确认按钮；只报状态即可。 -->
             <span v-else-if="live.proposal?.stages?.length" class="proposal-invite__sub">共 {{ live.proposal.stages.length }} 个阶段 · {{ live.proposal?.outcome || '方向已成形' }}</span>
           </div>
           <button type="button" class="btn-primary proposal-invite__btn" @click="openProposalReview">{{ entryCopy.button }}</button>
@@ -540,11 +552,10 @@
         </div>
 
         <div class="proposal__body">
+        <!-- 2026-11-18 用户走查：确认弹窗不再展示「核心问题」。
+             它是给规划器看的学情诊断（第三人称、且常与后续对话不同步），不是用户要确认的
+             方案内容；第一屏直接从「预计产出」开始，弹窗高度也少一截。 -->
         <div class="proposal__rows">
-          <div v-if="reviewProposal?.problem" class="proposal__row">
-            <span>核心问题</span>
-            <p>{{ reviewProposal.problem }}</p>
-          </div>
           <div v-if="reviewProposal?.outcome" class="proposal__row">
             <span>预计产出</span>
             <p>{{ reviewProposal.outcome }}</p>
@@ -553,6 +564,16 @@
 
         <div v-if="reviewProposal?.stages.length" class="proposal__stages">
           <span class="proposal__stages-label">路径大纲 · {{ reviewProposal.stageCount }} 个阶段</span>
+          <!-- 耗时消歧（2026-11-18 外评）：只说「每次 45 分钟」会让用户把 N 个阶段误读成
+               N 次坐学；把单次节奏与内容总量分开写，避免「3 站怎么突然变 30 小时」。 -->
+          <span
+            v-if="reviewProposal.sessionMinutes || reviewProposal.totalHours"
+            class="proposal__stages-meta"
+          >
+            <template v-if="reviewProposal.sessionMinutes">单次约 {{ reviewProposal.sessionMinutes }} 分钟</template>
+            <template v-if="reviewProposal.sessionMinutes && reviewProposal.totalHours"> · </template>
+            <template v-if="reviewProposal.totalHours">预计总时长约 {{ reviewProposal.totalHours }} 小时</template>
+          </span>
           <ol>
             <li v-for="(s, i) in reviewProposal.stages" :key="i" class="pstep"><i>{{ i + 1 }}</i><div><strong>{{ stageHead(s) }}</strong>{{ stageTail(s) }}</div></li>
           </ol>
@@ -614,9 +635,9 @@
             <button type="button" class="btn-primary" @click="closeReadOnlyReview">返回</button>
           </template>
           <template v-else>
-            <!-- 「再补充点信息」改道聊天流（2026-11-05 用户裁定）：补充不开浮层内表单——
-                 退回聊天界面像发普通消息一样补充，AI 更新方案后从「查看方案」再回来确认 -->
-            <button type="button" class="btn-ghost" @click="supplementViaChat">再补充点信息</button>
+            <!-- 用户回对话区是在「调大纲/讨价还价」，不是补个人信息：
+                 按钮文案改成「继续微调方向」，与实际行为一致（2026-11-18 用户走查）。 -->
+            <button type="button" class="btn-ghost" @click="supplementViaChat">继续微调方向</button>
             <button type="button" class="btn-primary btn-primary--lg" @click="doConfirm">确认，生成我的路径</button>
           </template>
         </div>
@@ -777,6 +798,13 @@ const chatPlaceholder = computed(() => {
   }
   // 不写「上方」：输入框与重试按钮同屏，点哪儿由位置自明（文案门禁 R2）
   if (startFailed.value) return '首轮对话失败，请先重试';
+  // 方案已成形（2026-11-18）：输入框的职责从「回答澄清问题」变成「说调整 or 去确认」，
+  // 占位符必须跟着阶段走，否则用户还在按「回答问题」理解这个框，不知道可以直接确认。
+  if (live.stage === 'proposing' && live.proposal) {
+    return isNarrow.value
+      ? '说调整方向，或点确认方案'
+      : '直接说想调整的地方，或点「查看并确认」';
+  }
   return isNarrow.value ? '回答问题，或补充基础、时间…' : '回答导师的问题，或补充你的基础、时间和限制…';
 });
 function togglePanel() {
@@ -1204,17 +1232,36 @@ async function saveEdit(msg: LiveMessage) {
 }
 
 const formatMessage = (text: string) => plainMessageHtml(text);
+/* 长回复分段（2026-11-18 用户走查）：模型常把一整轮说成 6–8 行不断句的一段，
+   在 13.5px 气泡里读成一堵墙。这里只对「没有空行/列表/代码块的单段长文本」做
+   展示层切分：按句末标点每 2 句一段，最多保留原句序；短回复、已有结构的内容不动。
+   只影响渲染，不改消息原文（复制/编辑拿到的仍是原话）。 */
+const PARAGRAPH_MIN_CHARS = 90;
+function withReadableParagraphs(text: string): string {
+  const raw = (text || '').trim();
+  if (raw.length < PARAGRAPH_MIN_CHARS) return text;
+  if (/\n\s*\n/.test(raw)) return text;
+  if (raw.includes('```') || /^\s*(?:[-*+]\s|\d+\.\s|#{1,6}\s|>)/m.test(raw)) return text;
+  const sentences = raw.match(/[^。！？!?]+[。！？!?]+|[^。！？!?]+$/g);
+  if (!sentences || sentences.length < 3) return text;
+  const paragraphs: string[] = [];
+  for (let i = 0; i < sentences.length; i += 2) {
+    paragraphs.push(sentences.slice(i, i + 2).join('').trim());
+  }
+  return paragraphs.filter(Boolean).join('\n\n');
+}
 /* 历史消息 HTML 走 WeakMap 缓存（键=消息对象，对象稳定不重建）：响应式重渲不再每条
    重跑 markdown-it+DOMPurify（P2）。cachedMessageHtml 按 {text} 盒取缓存，这里给每条
    消息配一个稳定内容盒；流式文本是字符串字面量，保持 plainMessageHtml 直渲染 */
-const htmlBoxCache = new WeakMap<object, { text: string }>();
+const htmlBoxCache = new WeakMap<object, { raw: string; text: string }>();
 function messageHtml(m: LiveMessage): string {
   let box = htmlBoxCache.get(m);
   if (!box) {
-    box = { text: m.content };
+    box = { raw: m.content, text: withReadableParagraphs(m.content) };
     htmlBoxCache.set(m, box);
-  } else if (box.text !== m.content) {
-    box.text = m.content;
+  } else if (box.raw !== m.content) {
+    box.raw = m.content;
+    box.text = withReadableParagraphs(m.content);
   }
   return cachedMessageHtml(box);
 }
@@ -1401,10 +1448,9 @@ const proposalReviewRequested = ref(false);
 const showProposal = computed(
   () => !proposalDismissed.value && (proposalReviewRequested.value || phase.value === 'generating' || phase.value === 'done')
 );
-/** 底部「学习方案 · 待确认」条可见（判据与模板 v-if 同源）。
- *  2026-11-06 起该条与输入区同属 .chat__dock（严格 flex 三段），出现时滚动视口仍会
- *  被顶矮约一条的高度：贴底的最后一行因此被挤出可视区，读起来像「被悬浮条截断」。
- *  这里在它出现时重新贴底（不再补底衬 padding——布局本身已保证不重叠）。 */
+/** 「学习方案 · 待确认」条可见（判据与模板 v-if 同源）。
+ *  2026-11-18 用户复选：确认条保持在输入框上方（贴底坞内），不随消息流滚动。
+ *  它出现/消失会改变滚动视口高度；用户本就在贴底时重新贴底，避免最后一行被挤出视野。 */
 const proposalInviteVisible = computed(
   () => loggedIn && live.started && !live.sending
     && live.stage === 'proposing'
@@ -1600,7 +1646,7 @@ async function doConfirm() {
   }
 }
 
-/** 「再补充点信息」→ 退回聊天界面（2026-11-05 用户裁定）：方案本就活在对话流里，
+/** 「继续微调方向」→ 退回聊天界面（2026-11-05 用户裁定）：方案本就活在对话流里，
     补充 = 发一条普通消息让 AI 更新方案；关浮层并聚焦聊天输入框，之后可从「查看方案」重开确认 */
 function supplementViaChat() {
   proposalDismissed.value = true;
@@ -2144,8 +2190,18 @@ function shuffleScenes() {
 /* 面板内容滚动层（2026-11-05）：面板壳（描边/圆角/投影）与内容滚动分离——
    底缘渐隐 mask 只作用于内容层，不会把壳一起淡掉。桌面不滚动，mask 不生效 */
 .panel__scroll { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
-.panel__bar { height: 6px; border-radius: 999px; background: color-mix(in srgb, var(--line) 55%, transparent); overflow: hidden; }
-.panel__bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--cyan)); transition: width .4s ease; }
+.panel__bar {
+  display: flex;
+  /* 面板内容溢出时 flex 子项默认会被压扁：进度条必须锁死 6px，否则整条高度塌成 0 */
+  flex: 0 0 6px;
+  height: 6px; border-radius: 999px;
+  background: color-mix(in srgb, var(--line) 55%, transparent);
+  overflow: hidden;
+}
+.panel__bar i { display: block; height: 100%; transition: width .4s ease; }
+/* 已确认段：品牌蓝；默认段：中性灰——两者合起来才是「已填」，但视觉权重明确分层 */
+.panel__bar-done { background: linear-gradient(90deg, var(--blue), var(--cyan)); }
+.panel__bar-default { background: color-mix(in srgb, var(--ink) 16%, transparent); }
 .panel__confidence { font-size: 12px; color: var(--faint); }
 
 /* 目标信息字段：独立圆角浅灰块（2026-11-06 走查「斑马纹」改造）——
@@ -2168,23 +2224,29 @@ function shuffleScenes() {
 }
 .field__mark svg { width: 10px; height: 10px; }
 .field--done .field__mark { background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--green-ink); }
-/* 系统默认/推断项：黄标 ~，与绿勾区分；不参与「已确认」计数 */
-.checklist--default .field { background: color-mix(in srgb, var(--amber) 7%, var(--surface)); }
-.field--default .field__mark {
-  background: color-mix(in srgb, var(--amber) 20%, transparent);
-  color: var(--amber-ink);
-  font-size: 11px; font-weight: 800; line-height: 1;
-}
-.field__badge {
-  font-style: normal; font-size: 10px; font-weight: 600;
-  color: var(--amber-ink);
-  background: color-mix(in srgb, var(--amber) 14%, transparent);
-  padding: 1px 6px; border-radius: 999px;
+/* 系统默认/推断项：中性虚线卡，不再用黄底黄标抢过已确认项（2026-11-18 视觉降噪）；
+   不参与「已确认」计数。用户明确不要每张卡重复「默认 · 待校准」标签，
+   组状态由虚线卡与面板头的「N 默认」承担，卡片内只留字段名与值。 */
+.checklist--default .field {
+  grid-template-columns: 1fr;
+  padding: 8px 11px;
+  background: transparent;
+  border: 1px dashed color-mix(in srgb, var(--line) 82%, var(--ink) 18%);
 }
 .field__label { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: var(--faint); }
 /* 正文常规字重（2026-11-05 用户裁定）：大段描述全用 600/700 会糊成一团、显得笨重；
-   只留短标签/短数值的重音，正文回到 400 + 柔和浅色 + 1.5 行高 */
-.field__value { margin-top: 3px; font-size: 13px; font-weight: 400; line-height: 1.5; color: color-mix(in srgb, var(--ink) 84%, transparent); }
+   只留短标签/短数值的重音，正文回到 400 + 柔和浅色 + 1.5 行高。
+   2026-11-18：画像卡压到「标签 1 行 + 值 1 行」共 2 行（完整值进 title）——
+   单张卡铺 8 行会压过整列信息节奏，7 项也装不进一屏 */
+.field__value {
+  margin-top: 3px;
+  font-size: 13px; font-weight: 400; line-height: 1.5;
+  color: color-mix(in srgb, var(--ink) 84%, transparent);
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 /* 待补充组：标题 + 两列紧凑小标签（○ 维度名），不再每项占两行高 */
 .todo__head { font-size: 12px; font-weight: 600; color: var(--faint); margin-bottom: 8px; }
 .todo__tags { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -2335,6 +2397,10 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
   /* 左右与 .chat__head 的 16px 对齐；底衬 16 —— 渐隐遮罩退役后不再需要为它让位 */
   padding: 16px 16px 16px;
   display: flex; flex-direction: column; gap: 18px;
+  /* 2026-11-18 走查：flex column 默认 align-items:stretch，会让每条 .msg 都被拉到
+     92%/78% 上限——短回复也变成整幅宽卡片，typing 三点也成一整条横杠。
+     改成 flex-start 后由内容决定气泡宽度；用户消息仍靠 .msg--user 的 align-self:flex-end。 */
+  align-items: flex-start;
   transition: filter .2s ease, opacity .2s ease;
   /* 原生滚动条隐藏（2026-11-05 屏效比）：桌面 Windows 的经典粗滚动条在移动视口仿真里
      出戏且挤占右缘；触屏滚动手势/滚轮不受影响，内容可达性不变 */
@@ -2491,9 +2557,10 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
 }
 .msg__bubble {
   /* 原型 .wf-msg p：11/13 内边距、13.5px 行高、16px 圆角基线；
-     2026-11-05 屏效比微调：12/14 + 行高 1.55——卡片更紧凑、易读性不降档 */
+     2026-11-05 屏效比微调：12/14 + 行高 1.55——卡片更紧凑、易读性不降档
+     2026-11-18：行高回到 1.68（用户走查 1.6–1.75 档），长回复不再压成字墙 */
   padding: 12px 14px;
-  font-size: 13.5px; line-height: 1.55;
+  font-size: 13.5px; line-height: 1.68;
   border-radius: 16px; /* 圆角阶梯：卡片/弹层 */
   background: var(--surface); color: var(--ink);
 }
@@ -2509,7 +2576,7 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
 .msg--ai { max-width: 92%; }
 .msg--ai .msg__content { display: grid; gap: 5px; min-width: 0; }
 .msg--ai .msg__bubble b, .msg--ai .msg__bubble strong { color: var(--blue-deep); }
-.msg__bubble--html :deep(p) { margin: 0 0 8px; }
+.msg__bubble--html :deep(p) { margin: 0 0 10px; line-height: inherit; }
 .msg__bubble--html :deep(p:last-child) { margin-bottom: 0; }
 .msg__bubble--html :deep(ul), .msg__bubble--html :deep(ol) { margin: 4px 0; padding-left: 18px; }
 .msg__bubble--html :deep(li) { margin: 2px 0; }
@@ -2558,6 +2625,8 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
    胶囊按钮组：1px 蓝 28% 描边 + 蓝 5% 底 + blue-deep 文字；选中加 ✓（前置蓝点已撤） */
 .replies {
   display: flex; flex-wrap: wrap; gap: 8px;
+  /* 快选行仍是整行容器；只有消息气泡改为内容宽（见 .chat__scroll 的 align-items） */
+  align-self: stretch;
 }
 /* 2026-11-02 用户反馈「快选太宽」：整行大按钮改成自动宽度的胶囊，
    多个选项并排换行，不再一条占满一整行。（历史轮次 .msg__reply 已随「旧选项销毁」退役） */
@@ -2618,6 +2687,8 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
   border-radius: 12px;
   background: color-mix(in srgb, var(--blue) 8%, var(--surface));
 }
+/* 对话流内联版已退役（2026-11-18 用户复选：确认面板回到输入框上方）。
+   保留基础 .proposal-invite 作为坞内条目：左右 16px 与输入区对齐。 */
 /* 方案预览微卡片（2026-11-05 用户裁定方案 A）：左 65% 方案摘要两行（文档图标 + 主标/副标），
    右侧「查看并确认」——总高 ≈54px，比旧 hint 单行条更薄且信息量更高 */
 .proposal-invite__doc {
@@ -2783,7 +2854,7 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
   border-top: 1px solid var(--line);
 }
 /* 底部双钮收形（2026-11-05 用户裁定）：15px 字 + 13px 竖内衬 + 16px 圆角在 40px 高度上
-   读作两颗胖胶囊。改成 40px 定高 + 8px 同心圆角 + 左 1 : 右 2（次按钮「再补充点信息」是
+   读作两颗胖胶囊。改成 40px 定高 + 8px 同心圆角 + 左 1 : 右 2（次按钮「继续微调方向」是
    退路、主按钮「确认，生成我的路径」是终局，宽度比例应写进版式而不是靠字数自然形成）。
    加 .v2-page 前缀：与 v2.css 的 `.v2-page .btn-primary`（0,2,0）同权重时只靠加载顺序，
    那是上一版「页面副本赢全局」的同一类坑——这里提到 (0,3,0)，谁后加载都不影响结果。 */
@@ -2845,6 +2916,7 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
 .proposal__row p { margin: 0; font-size: 13.5px; line-height: 1.6; color: var(--ink); }
 .proposal__stages { display: grid; gap: 10px; width: 100%; text-align: left; }
 .proposal__stages-label { font-size: 12px; font-weight: 800; color: var(--muted); }
+.proposal__stages-meta { margin-top: -4px; font-size: 12px; font-weight: 500; color: var(--faint); }
 /* 路径大纲：原型 .wf-pstages —— 纵向列表行（24px 序号 + 标题），非四列网格 */
 .proposal__stages ol {
   list-style: none; margin: 0; padding: 0;

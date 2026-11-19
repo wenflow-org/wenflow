@@ -117,7 +117,8 @@
     "measurement:frozen-exam": "node scripts/measurement-verify/frozen-exam-run.mjs",
     "capability:check": "ts-node src/scripts/check-capability-consumers.ts",
     "test:e2e:long": "node scripts/test-live/teaching-longcourse-e2e.mjs",
-    "prompts:reachability:baseline:update": "ts-node src/scripts/check-routing-reachability.ts --update-baseline"
+    "prompts:reachability:baseline:update": "ts-node src/scripts/check-routing-reachability.ts --update-baseline",
+    "audit:referee-anchor": "ts-node src/scripts/export-referee-anchor.ts"
   },
   "keywords": [
     "ai",

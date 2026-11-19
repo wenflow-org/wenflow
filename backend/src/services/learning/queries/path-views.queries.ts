@@ -530,11 +530,55 @@ export async function getLearningPath(pathId: string) {
       : null;
     const materialRefsByStage: Record<string, any[]> = materialRefsRaw?.byStage || {};
     const materialRefsByTask: Record<string, any[]> = materialRefsRaw?.byTask || {};
+    // 任务级 KC 胶囊（2026-11-18 方向五）：taskKcLinks 已按 taskId 绑到 subtasks.id；
+    // kcId → name/taxonomy 从 conceptKcs（优先）与 kcGraph.nodes 建索引。
+    const kcMetaById = new Map<string, { kcId: string; name: string; taxonomy: string }>();
+    const kcAnnotation = (pathTemplate as any)?.kcAnnotation;
+    for (const item of Array.isArray(kcAnnotation?.conceptKcs) ? kcAnnotation.conceptKcs : []) {
+      for (const kc of Array.isArray(item?.kcs) ? item.kcs : []) {
+        if (!kc || typeof kc.kcId !== 'string') continue;
+        kcMetaById.set(kc.kcId, {
+          kcId: kc.kcId,
+          name: typeof kc.name === 'string' ? kc.name : kc.kcId,
+          taxonomy: typeof kc.taxonomy === 'string' ? kc.taxonomy : 'conceptual',
+        });
+      }
+    }
+    for (const node of Array.isArray(kcAnnotation?.kcGraph?.nodes) ? kcAnnotation.kcGraph.nodes : []) {
+      if (!node || typeof node.kcId !== 'string' || kcMetaById.has(node.kcId)) continue;
+      kcMetaById.set(node.kcId, {
+        kcId: node.kcId,
+        name: typeof node.name === 'string' ? node.name : node.kcId,
+        taxonomy: typeof node.taxonomy === 'string' ? node.taxonomy : 'conceptual',
+      });
+    }
+    const kcIdsByTaskId = new Map<string, string[]>();
+    for (const link of Array.isArray(kcAnnotation?.taskKcLinks) ? kcAnnotation.taskKcLinks : []) {
+      const taskId = typeof link?.taskId === 'string' ? link.taskId : null;
+      const ids = Array.isArray(link?.linkedKCs) ? link.linkedKCs
+        : Array.isArray(link?.linkedKC) ? link.linkedKC
+        : Array.isArray(link?.kcIds) ? link.kcIds
+        : null;
+      if (!taskId || !ids) continue;
+      kcIdsByTaskId.set(taskId, ids.map((id: unknown) => String(id || '')).filter(Boolean));
+    }
+    const adjustabilityByTaskRaw = (pathTemplate as any)?.taskAdjustability?.byTask;
+    const adjustabilityByTask = adjustabilityByTaskRaw && typeof adjustabilityByTaskRaw === 'object'
+      ? adjustabilityByTaskRaw as Record<string, unknown>
+      : {};
     const attachMaterialRefs = (milestones: any[]) => (Array.isArray(milestones) ? milestones : []).map((milestone: any) => ({
       ...milestone,
       materialRefs: materialRefsByStage[String(milestone?.stageNumber ?? milestone?.stage ?? '')] || undefined,
       subtasks: Array.isArray(milestone?.subtasks)
-        ? milestone.subtasks.map((task: any) => ({ ...task, materialRefs: materialRefsByTask[String(task?.id)] || undefined }))
+        ? milestone.subtasks.map((task: any) => ({
+            ...task,
+            materialRefs: materialRefsByTask[String(task?.id)] || undefined,
+            // 知识组件胶囊：前端直接渲染，不再二次请求概念图
+            kcs: (kcIdsByTaskId.get(String(task?.id)) || [])
+              .map((kcId) => kcMetaById.get(kcId) || { kcId, name: kcId, taxonomy: 'conceptual' }),
+            // 可调整性：core=骨干课，flexible=时间紧时可跳过（前端「只看主干」过滤）
+            adjustability: adjustabilityByTask[String(task?.id)] === 'flexible' ? 'flexible' : 'core',
+          }))
         : milestone?.subtasks,
     }));
     const activeRun = await getActiveGenerationRun(path.id, path.activeGenerationRunId);
@@ -564,6 +608,10 @@ export async function getLearningPath(pathId: string) {
       generationRun: buildGenerationRunStatus(activeRun),
       sceneSummary: getPathSceneSummary(path.aiPromptTemplate, normalized.milestones),
       cognitiveDesign: parsePathCognitiveDesign(path.aiPromptTemplate),
+      // 路径拓扑（2026-11-18）：前端展示拓扑徽标；旧路径缺省时不显示
+      pathTopology: (pathTemplate as any)?.pathTopology || (pathTemplate as any)?.cognitiveCore?.topology || null,
+      // 终局交付物（方向五）：路径页常驻卡片的锚点；取用户确认过的 firstDeliverable
+      firstDeliverable: pathMaterialsNormalizedInput?.confirmedProposal?.firstDeliverable || null,
       adjustmentPolicy: parsePathAdjustmentPolicy(path.aiPromptTemplate),
       adjustmentEvidence: parsePathAdjustmentEvidence(path.aiPromptTemplate),
       processDetail: {

@@ -48,6 +48,8 @@
 | `understanding.skill_nature_evidence` | string | path |
 | `understanding.platform_judgment` | string | goal-agent, path |
 | `understanding.platform_judgment_evidence` | string | path |
+| `understanding.intent_type` | string | goal-agent, path |
+| `understanding.entry_state` | string | goal-agent, path |
 | `understanding.sensor_readouts` | array<string> | path |
 | `understanding.needsMaterial` | object | path |
 | `confirmedProposal.prerequisiteDiagnostics` | array<object> | goal-agent |
@@ -199,6 +201,7 @@ sandbox:path-agent.normalizedInput.confirmedProposal.keyStages
 sandbox:path-agent.normalizedInput.learnerProfile.backgroundExperience
 sandbox:path-agent.normalizedInput.learnerProfile.constraintsAndBoundaries
 sandbox:path-agent.normalizedInput.learnerProfile.surfaceGoal
+sandbox:path-agent.normalizedInput.pathTopologyHint
 sandbox:path-agent.normalizedInput.planningHints.conceptRange
 sandbox:path-agent.normalizedInput.planningHints.maxWeeks
 sandbox:path-agent.normalizedInput.planningHints.milestoneRange
@@ -215,6 +218,7 @@ sandbox:path-agent.normalizedInput.understanding.adjustments
 sandbox:path-agent.path.name
 sandbox:path-agent.path.summary
 sandbox:path-agent.pathStageMap
+sandbox:path-agent.pathTopology
 sandbox:path-agent.planningHints
 sandbox:path-agent.prerequisiteTree
 sandbox:path-agent.previousMilestone
@@ -317,6 +321,7 @@ sandbox:teaching-agent.learningState
 sandbox:teaching-agent.pedagogy.strategies
 sandbox:teaching-agent.scenario
 sandbox:teaching-agent.scenario.interactionProfile
+sandbox:teaching-agent.scenario.taskMaterial
 sandbox:teaching-agent.school.anchor
 sandbox:teaching-agent.session.evidence
 sandbox:teaching-agent.session.info

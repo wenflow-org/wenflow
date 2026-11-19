@@ -14,13 +14,17 @@ const u = (patch: Partial<GoalUnderstanding> = {}): GoalUnderstanding => ({
 });
 
 describe('resolveFieldStatus：已确认 / 系统默认 / 未收集', () => {
-  it('宽泛主题下 real_problem 是系统诊断 → default，不算已确认', () => {
-    expect(resolveFieldStatus('real_problem', '初次接触，未预设用途', u(), 'understanding')).toBe('default');
+  it('有用户原话（surface_goal）→ real_problem 算已确认', () => {
+    expect(resolveFieldStatus('real_problem', '我想知道陶行知的教育理念', u(), 'understanding')).toBe('done');
   });
 
-  it('用户给出场景或明确 focused → real_problem 才算 done', () => {
-    expect(resolveFieldStatus('real_problem', 'x', u({ scenario: '写论文' }), 'understanding')).toBe('done');
-    expect(resolveFieldStatus('real_problem', 'x', u({ entry_state: 'focused' }), 'understanding')).toBe('done');
+  it('缺少原话、只剩系统诊断 → default，不算已确认', () => {
+    expect(resolveFieldStatus('real_problem', '初次接触，未预设用途', u({ surface_goal: '' }), 'understanding')).toBe('default');
+  });
+
+  it('无原话但有场景或明确 focused → real_problem 也算 done', () => {
+    expect(resolveFieldStatus('real_problem', 'x', u({ surface_goal: '', scenario: '写论文' }), 'understanding')).toBe('done');
+    expect(resolveFieldStatus('real_problem', 'x', u({ surface_goal: '', entry_state: 'focused' }), 'understanding')).toBe('done');
   });
 
   it('baseline.level=unknown → 背景经验 default；给了水平才 done', () => {

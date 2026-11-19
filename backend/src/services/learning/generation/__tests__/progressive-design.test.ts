@@ -11,6 +11,7 @@ jest.mock('../../../learner/LearnerSnapshotRefreshService', () => ({
 
 import {
   extractLearnerSignals,
+  extractLessonReportSignals,
   isProgressiveStageDesignEnabled,
 } from '../progressive-design';
 
@@ -21,9 +22,11 @@ describe('isProgressiveStageDesignEnabled', () => {
     else process.env.PROGRESSIVE_STAGE_DESIGN = original;
   });
 
-  it('默认关（未设置）', () => {
+  it('默认开（未设置 / 空串；2026-11-18 起渐进式是默认形态）', () => {
     delete process.env.PROGRESSIVE_STAGE_DESIGN;
-    expect(isProgressiveStageDesignEnabled()).toBe(false);
+    expect(isProgressiveStageDesignEnabled()).toBe(true);
+    process.env.PROGRESSIVE_STAGE_DESIGN = '';
+    expect(isProgressiveStageDesignEnabled()).toBe(true);
   });
   it("'1'/'true' 开", () => {
     process.env.PROGRESSIVE_STAGE_DESIGN = '1';
@@ -31,8 +34,8 @@ describe('isProgressiveStageDesignEnabled', () => {
     process.env.PROGRESSIVE_STAGE_DESIGN = 'true';
     expect(isProgressiveStageDesignEnabled()).toBe(true);
   });
-  it("其他值关（'0'/'false'/'off'）", () => {
-    for (const value of ['0', 'false', 'off', '']) {
+  it("显式关（'0'/'false'/'off'，保留回滚路径）", () => {
+    for (const value of ['0', 'false', 'off']) {
       process.env.PROGRESSIVE_STAGE_DESIGN = value;
       expect(isProgressiveStageDesignEnabled()).toBe(false);
     }
@@ -75,5 +78,60 @@ describe('extractLearnerSignals 信号提炼（钳制 ≤5、mastered 除外）'
     expect(signals).toEqual({
       fragileConcepts: [], strugglingConcepts: [], prerequisiteGaps: [], stillLearning: [],
     });
+  });
+});
+
+describe('extractLessonReportSignals（课堂契约回流路径层）', () => {
+  const stateWith = (report: Record<string, unknown>, contract?: Record<string, unknown>) => ({
+    teachingState: {
+      sessionArtifacts: {
+        lessonReport: report,
+        ...(contract ? { lessonContract: contract } : {}),
+      },
+    },
+  });
+
+  it('未达成 KC / 独立证据缺口 / 终检未过 / 停车区先修与拓展线索全部提炼', () => {
+    const signals = extractLessonReportSignals([
+      stateWith({
+        met: false,
+        missingKcs: ['识别违约金触发条件'],
+        independentKcs: ['定位期限起算点'],
+        exitTicket: { asked: true, passed: false, conceptName: '判断抗辩依据' },
+        parkingLot: [
+          { topic: '先修：合同成立要件' },
+          { topic: '程序员该不该考公' },
+        ],
+      }, {
+        coreKcs: [
+          { name: '识别违约金触发条件' },
+          { name: '定位期限起算点' },
+          { name: '判断抗辩依据' },
+        ],
+      }),
+      // 同一任务更旧的课不应重复（调用方已按 task 取最新）；这里验证跨课去重
+      stateWith({ met: true, missingKcs: ['识别违约金触发条件'], parkingLot: [{ topic: '先修：合同成立要件' }] }),
+    ]);
+    expect(signals.contractGaps).toEqual(['识别违约金触发条件']);
+    expect(signals.weakKcs).toEqual(['识别违约金触发条件', '判断抗辩依据']);
+    expect(signals.exitTicketGaps).toEqual(['判断抗辩依据']);
+    expect(signals.prerequisitePatches).toEqual(['先修：合同成立要件']);
+    expect(signals.parkingLotTopics).toEqual(['程序员该不该考公']);
+  });
+
+  it('无 lessonReport 的旧课 → 不产生任何键（设计输入保持骨架级）', () => {
+    expect(extractLessonReportSignals([{ teachingState: { sessionArtifacts: {} } }])).toEqual({});
+  });
+
+  it('JSON 字符串形态的 teachingState 同样可解析', () => {
+    const session = {
+      teachingState: JSON.stringify({
+        sessionArtifacts: {
+          lessonReport: { met: false, missingKcs: ['A'] },
+          lessonContract: { coreKcs: [{ name: 'A' }] },
+        },
+      }),
+    };
+    expect(extractLessonReportSignals([session]).contractGaps).toEqual(['A']);
   });
 });

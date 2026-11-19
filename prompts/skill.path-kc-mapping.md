@@ -1,6 +1,6 @@
 ---
 agentId: skill:path-kc-mapping
-coreHash: 6f395b91ccfa9baafc7dac7495cad13122a4fc1d3886c5478e393c0c5d979af0
+coreHash: 7e64e538270a61ca0b0d47601c0abc839f65399b7c1502436d6330a9a699cc20
 coreVersion: 1
 temperature: 0.3
 maxTokens: 64000
@@ -43,10 +43,11 @@ failurePolicy: propagate
 8. KC 之间标注 prerequisiteKCs（前置依赖：要理解 KC-B 必须先掌握 KC-A）
 9. prerequisite 是知识依赖，不是讲授顺序：只有当「没掌握 A 就不可能掌握 B」时才标 A→B； 仅因「教学上先讲 A」而标的顺序、以及任何环，都不要输出
 10. 每个 KC 必须"有来路"：要么被至少一个 subtask 关联（出现在 taskKcLinks 的 linkedKCs 里）， 要么是某个**已被关联** KC 的前置（prerequisite 边的上游）。两样都不占的 KC 是孤岛—— 先自问它是不是某条任务的执行步骤：是则删掉，不是则并入语义最近的 KC； **不要为了让它"挂上"而硬造一条 taskKcLinks**（前置 KC 天然不会被任务直接关联，这是正常的）
-11. 每个 subtask 关联到至少 1 个 KC（通过 linkedKC 字段）
+11. 每个 subtask 关联到至少 1 个 KC（通过 taskKcLinks 里的 linkedKCs 字段，复数）
 12. taskKcLinks 必须覆盖输入 subtasks 的**每一项**，且每项都要逐字回显该项的 taskKey 作为该条链接的 taskKey（稳定键，禁止改写、省略或自造）；taskTitle 照抄输入的 title 即可，仅供人读对照。 同名任务靠 taskKey 区分，不得因为标题相同就合并成一条。
-13. 如果提供 prerequisiteTree，KC 依赖图必须覆盖所有 unknownConcepts（缺口链中的概念必须有对应的 KC 和前置标注）
-14. 不编造不存在于输入中的概念或 KC
+13. 如果提供 prerequisiteTree：unknownConcepts 里的每个前置概念都必须有一个完整 KC 对象（kcId/name/taxonomy）， 统一放进**首个需要它的 coreConcept** 的 kcs 数组里（不要新造 conceptId，也不要只写进 prerequisiteKCs 引用）； 被 prerequisiteKCs 引用的每个 kcId 都必须能在 conceptKcs 里找到完整定义——悬空引用会被下游直接丢弃
+14. 不需要输出 kcGraph：系统会按 conceptKcs 里的 prerequisiteKCs 自动派生节点与边（from=前置，to=后继）
+15. 不编造不存在于输入中的概念或 KC
 
 ## 输出字段
 
@@ -55,15 +56,12 @@ failurePolicy: propagate
 - taskKcLinks · object[] — 每个 subtask 关联的 KC，每项（taskKey 逐字回显对应 subtask 的 taskKey；字段名必须逐字为
 taskKey/taskTitle/linkedKCs，不得写成 kcIds/kcs 等别名）：
 { "taskKey": "task-1-0", "taskTitle": "识别个人高唤醒触发模式", "linkedKCs": ["kc-1a", "kc-1b"] }
-- kcGraph · object — KC 依赖图，结构（edges 每项必须含 relation 字段，值为 "prerequisite"）：
-{ "nodes": [{ "kcId": "kc-1a", "name": "KC名", "taxonomy": "factual|conceptual|procedural|metacognitive" }],
-  "edges": [{ "from": "kc-1a", "to": "kc-1b", "relation": "prerequisite" }] }
 
 ## 边界约束
 
 - 不编造不存在于输入中的概念或 KC
 - KC 命名必须是动词+可观测对象，不能是名词标签
-- KC 名字不得含并列连接（并/且/和/还/同时/与）；含并列即为复合断言，必须拆开
+- KC 名字不得含并列动作连接（并/且/还/同时）；含并列即为复合断言，必须拆开。 例外：「区分/对比/辨别/比较 A 与 B」作为整体能力时允许保留单个「与」字（判据是把两者分开），不拆
 - KC 名字不得含引号包裹的规则原文、口诀或示例文本（那是 evidence，不是 KC 名）
 - KC 名字不超过 12 字；超过说明它含多个断言或含从句，请拆分或压缩
 - 不要把任务流程的执行步骤逐条列为 KC（步骤只体现在 prerequisite 顺序上）

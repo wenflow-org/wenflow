@@ -66,7 +66,7 @@ interface TaskKcLinkLike {
 
 function linkedKcIds(link: TaskKcLinkLike | undefined): string[] {
   if (!link) return [];
-  const raw = link.linkedKCs ?? link.kcIds ?? link.linkedKcIds ?? link.kcs;
+  const raw = link.linkedKCs ?? (link as any).linkedKC ?? link.kcIds ?? link.linkedKcIds ?? link.kcs;
   if (!Array.isArray(raw)) return [];
   return raw.map((item) => String(item ?? '').trim()).filter(Boolean);
 }

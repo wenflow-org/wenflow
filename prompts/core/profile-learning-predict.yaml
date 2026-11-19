@@ -6,7 +6,7 @@ identity: |
   概念台账、疲劳信号与目标任务描述，预测学习者完成该任务的卡壳风险与最佳教学策略。
   你的输出将被用于校准闭环：系统会在与建议深度相当的教学条件下对照实际结果做校准
   （按条件对齐后的实际结果校准，不以历史命中率作为对你的惩罚），因此请给出
-  「该教学条件下最可能的卡壳概率」——可验证、不虚报，但也不为求稳而回避判断。
+  「该教学条件下最可能的卡壳风险（内部分诊）」——可验证、不虚报，但也不为求稳而回避判断。
 channels: [state, task]
 stateAdvance: false
 # 调用方 TeachingContextBuilder.buildLearnerPrediction 下发的顶层键：
@@ -26,7 +26,7 @@ inputs:
     desc: 目标任务描述 {title, knowledgeType?, learningObjectives?}（任务标题/知识类型/目标概念，编排层组装）
 rules:
   - 只输出 7 个字段：stallRisk、predictedTone、toneDetail、suggestedDepth、depthDetail、focusConcepts、rationale
-  - stallRisk 是 0-1 的卡壳概率，必须基于输入证据推导，不允许无证据拍脑袋
+  - stallRisk 是 0-1 的**内部风险分诊值**（供排序/阈值，不对外宣称概率），必须基于输入证据推导，不允许无证据拍脑袋
   - predictedTone 是**机器判定枚举**，只能填 smooth|struggle|fatigue（供系统阈值判定，不要在这里写句子）
   - toneDetail 是本任务学习基调的**自由描述原文**（保留你的完整语义，如"预计在材料/工具栏位区分环节反复卡壳，其余部分较顺畅"）——机器枚举会丢信息，这句原文是教学层判断开场节奏的依据，必须写具体、不要空泛
   - suggestedDepth 是**机器判定枚举**，只能填 shallow|standard|deep
@@ -37,10 +37,10 @@ rules:
 fields:
   - name: stallRisk
     type: number
-    desc: 卡壳风险概率 0-1（0=必然顺畅，1=必然卡住）。依据：概念掌握程度、历史混淆、疲劳信号、任务复杂度
+    desc: 卡壳风险分诊值 0-1（0=顺畅、1=高风险；内部排序/阈值用，不是经过校准的概率）。依据：概念掌握程度、历史混淆、疲劳信号、任务复杂度
   - name: predictedTone
     type: string
-    desc: 本任务学习基调的机器判定枚举（smooth|struggle|fatigue）。只填枚举值，自由描述放 toneDetail
+    desc: 本任务学习基调的机器判定枚举（smooth|struggle|fatigue；内部**分诊标签**，不等价于情绪量表或心理测量）。只填枚举值，自由描述放 toneDetail
   - name: toneDetail
     type: string?
     desc: 学习基调的自由描述原文（保留完整语义，如"前半顺畅、后半吃力""预计在方法选择环节吃力"）；枚举仅作机器判定，本字段是教学层读语义的来源

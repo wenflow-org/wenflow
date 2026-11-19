@@ -28,10 +28,14 @@ describe('virtual-learner skill prompt dual-source consistency', () => {
 
 describe('goal 模拟器离场语义（2026-11-11 告别死循环）', () => {
   it('编译产物带 shouldEnd 字段与离场/不复读规则', () => {
+    // 2026-11 提示词压缩时「会离场 / 站在门口再答一轮 / 小作文」被并进同一条离场规则，
+    // 这里锁当前措辞；不变量不变：说离场话必须 shouldEnd、告别只说一次、不复述、默认短句。
     const prompt = VIRTUAL_LEARNER_GOAL_DIALOGUE_SIMULATOR_PROMPT
     expect(prompt).toContain('shouldEnd')
-    expect(prompt).toContain('像真人一样会离场')
-    expect(prompt).toContain('不会站在门口再答一轮')
-    expect(prompt).toContain('不要每轮都写小作文')
+    expect(prompt).toContain('像真人一样离场')
+    expect(prompt).toContain('本轮必须 shouldEnd=true')
+    expect(prompt).toContain('同一段告别只说一次')
+    expect(prompt).toContain('不要复述对方刚说的步骤')
+    expect(prompt).toContain('默认 1-2 句口语')
   })
 })

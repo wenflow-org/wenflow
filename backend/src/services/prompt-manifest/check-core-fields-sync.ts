@@ -94,6 +94,13 @@ export const EXEMPT_PLATFORM_ROOTS: ExemptRootSpec[] = [
     note: '控制信号字段（isCompletionCandidate/shouldTriggerPeer/checkpoint…）；teaching-turn core 已覆盖，兜底保留',
   },
   {
+    root: 'kcGraph',
+    kind: 'platform',
+    coreAliases: [],
+    evidence: 'src/skills/path-kc-mapping/index.ts deriveKcGraph',
+    note: 'KC 依赖图由后端从 conceptKcs.prerequisiteKCs 派生（2026-11-18），模型不再输出；core fields 不再声明，属于平台派生字段',
+  },
+  {
     root: 'path',
     kind: 'wrapper',
     coreAliases: ['name', 'summary', 'totalMilestones'],
@@ -128,6 +135,11 @@ export const ORPHAN_EXEMPT_FIELDS: ReadonlyArray<{ skillId: string; field: strin
     skillId: 'path-planning',
     field: 'estimatedWeeks',
     evidence: '顶层冗余声明：周数承载于 milestones 计划与 normalizedInput.planningHints（无独立路由需求）',
+  },
+  {
+    skillId: 'path-planning',
+    field: 'topology',
+    evidence: 'path-generation.core.ts analyzePath 读取 topology → aiPromptTemplate.pathTopology（编排层直接消费，无需独立路由行）',
   },
   {
     skillId: 'path-planning',

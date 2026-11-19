@@ -1,6 +1,7 @@
 ﻿import type { LearnerReplanProjection } from '../../agents/profile-learner-model-agent/types';
 import type { SessionWrapupArtifact } from '../../skills/teaching-wrapup';
 import type { ReplanAttribution } from './ReplanAttributionService';
+import type { LessonReport } from './lesson-contract';
 import { DISPLAY_LABEL_MAP } from '../learning/learning.constants';
 
 import type { LearnerReplanSignal } from '../../agents/profile-learner-model-agent/types';
@@ -86,6 +87,11 @@ interface BuildInput {
    * 传入本条路径的概念名后，点名只允许落在这些概念上；为空时不做收窄（旧调用方行为不变）。
    */
   pathConceptNames?: readonly string[];
+  /**
+   * 课堂契约报告（2026-11-19）：未达成 KC / 终检未过会作为硬信号进入建议，
+   * 让结课页的建议与下一阶段设计消费同一份课后结论（不再只看学习者快照）。
+   */
+  lessonReport?: LessonReport | null;
 }
 
 /** 概念名比较用归一：去空白与常见标点，避免「区分 A 与 B」和「区分A与B」判成不同。 */
@@ -269,6 +275,19 @@ export class ReplanAdvisoryService {
     }
 
     const reasonCodes: string[] = [];
+    // 课堂契约回流（2026-11-19）：契约未达成/终检未过是比快照更硬的「本节课事实」。
+    const lessonReport = input.lessonReport || null;
+    const reportMissing = (lessonReport?.missingKcs || []).filter(isRealConceptName).slice(0, 3);
+    const exitTicketFailed = lessonReport?.exitTicket?.asked === true && lessonReport.exitTicket.passed !== true;
+    const exitTicketGap = exitTicketFailed && isRealConceptName(lessonReport?.exitTicket?.conceptName)
+      ? String(lessonReport.exitTicket.conceptName).trim()
+      : null;
+    const contractGaps = Array.from(new Set([
+      ...reportMissing,
+      ...(exitTicketGap ? [exitTicketGap] : []),
+    ]));
+    const contractNeedsReinforcement = !!lessonReport
+      && (contractGaps.length > 0 || lessonReport.met === false);
     const lss = wrapup.evaluation?.sessionLss ?? null;
     const lf = wrapup.evaluation?.sessionLf ?? null;
     // ktl/confidence 不再在本层判「能否加速」（F4 2026-10-15 归一到快照 accelerateReady）：
@@ -317,12 +336,23 @@ export class ReplanAdvisoryService {
 
     if (learnerSignal?.shouldSuggest && !suppressSignalAdvisory
       && (currentMilestoneComplete || highRisk)) {
-      const recommendation = learnerSignal.recommendation === 'keep' ? 'reinforce' : learnerSignal.recommendation;
+      const rawRecommendation = learnerSignal.recommendation === 'keep' ? 'reinforce' : learnerSignal.recommendation;
+      // 契约未达成时不允许「加速」：再快的下一阶段也补不回本节没验过的核心能力。
+      const recommendation = contractNeedsReinforcement && rawRecommendation === 'accelerate'
+        ? 'reinforce'
+        : rawRecommendation;
       const scope = learnerSignal.scope === 'none' ? 'next_milestone' : learnerSignal.scope;
-      const priority = learnerSignal.priority === 'none' ? 'low' : learnerSignal.priority;
+      const rawPriority = learnerSignal.priority === 'none' ? 'low' : learnerSignal.priority;
+      const priority = contractNeedsReinforcement && rawPriority === 'low' ? 'medium' : rawPriority;
       // 点名只列真卡点与真实复习项：fragile 是饱和通道（会挤掉真名字），movedToReview 过兜底词/占位 id；
       // 投影来源的卡点再按本条路径收窄（见 BuildInput.pathConceptNames 注释）。
-      const focusPoints = buildFocusPoints(strugglingConcepts, wrapup.progress.movedToReview, input.pathConceptNames);
+      // 契约缺口优先点名（本节课事实，比快照更近）。
+      const focusPoints = Array.from(new Set([
+        ...contractGaps,
+        ...buildFocusPoints(strugglingConcepts, wrapup.progress.movedToReview, input.pathConceptNames),
+      ])).slice(0, 4);
+      if (contractGaps.length > 0) reasonCodes.push('contract_unmet');
+      if (exitTicketFailed) reasonCodes.push('exit_ticket_failed');
       // accelerate（压缩）走专用文案：界面语义是「把下一阶段压得更聚焦」，不是通用的「确认调整」。
       const isAccelerate = recommendation === 'accelerate';
       return {
@@ -335,7 +365,9 @@ export class ReplanAdvisoryService {
         // CompletionCard 会在动作按钮上方统一展示同义提示，这里再写一遍就是用户看到的
         // 同义重复 + 段落孤行（2026-11-03 真人反馈）。
         rationale: learnerSignal.rationale || '学习者状态中心判断当前路径后续安排需要重新确认。',
-        reasonCodes: learnerSignal.reasonCodes || [],
+        // 契约回流的原因码必须真的落进建议（信号分支原样返回会把上面 push 的
+        // contract_unmet/exit_ticket_failed 丢掉，前端就看不到「为什么改方向」）。
+        reasonCodes: Array.from(new Set([...(learnerSignal.reasonCodes || []), ...reasonCodes])),
         ui: isAccelerate
           ? {
               title: '可以考虑加速下一阶段',
@@ -385,20 +417,27 @@ export class ReplanAdvisoryService {
 
     // 同一阈值也管这条补强分支（该分支非 highRisk 时的唯一产出就是 reinforce）：
     // 本节课双低且没有显式知识证据时，不再凭 movedToReview/stillLearning 这类每课副产品发「补强」。
-    if (shouldSuppressRemedialAdvisory({ ...advisoryThreshold, recommendation: 'reinforce' })) {
+    // 契约未达成是显式证据，不受「双低压制」影响。
+    if (!contractNeedsReinforcement
+      && shouldSuppressRemedialAdvisory({ ...advisoryThreshold, recommendation: 'reinforce' })) {
       return { ...NO_ADVISORY, reasonCodes: ['advisory_suppressed_lesson_not_hard'] };
     }
 
-    if (highRisk || (currentMilestoneComplete && needsReinforcement)) {
+    if (highRisk || (currentMilestoneComplete && (needsReinforcement || contractNeedsReinforcement))) {
       if (highRisk) reasonCodes.push('high_risk');
       if (fragileConcepts.length > 0) reasonCodes.push('fragile_concepts');
       if (strugglingConcepts.length > 0) reasonCodes.push('struggling_concepts');
       if (wrapup.progress.movedToReview.length > 0) reasonCodes.push('moved_to_review');
       if (repeatedConfusion) reasonCodes.push('repeated_confusion');
+      if (contractGaps.length > 0) reasonCodes.push('contract_unmet');
+      if (exitTicketFailed) reasonCodes.push('exit_ticket_failed');
 
       // 与信号分支同口径：点名只列真卡点与真实复习项（fragile 饱和会挤掉真名字），
-      // 投影来源的卡点同样按本条路径收窄。
-      const focusPoints = buildFocusPoints(strugglingConcepts, wrapup.progress.movedToReview, input.pathConceptNames);
+      // 投影来源的卡点同样按本条路径收窄；契约缺口优先。
+      const focusPoints = Array.from(new Set([
+        ...contractGaps,
+        ...buildFocusPoints(strugglingConcepts, wrapup.progress.movedToReview, input.pathConceptNames),
+      ])).slice(0, 4);
 
       return {
         shouldSuggest: true,

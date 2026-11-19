@@ -13,7 +13,8 @@ import {
 import { executeSkill, virtualLearnerMemoryCuratorDefinition } from '../skills';
 import { safeJsonParse } from '../utils/safe-json';
 import { parseStageResultsPayload } from './simulation.helpers';
-import { buildMemoryRecallHints, type MemoryRecallHint } from '../virtual-lab/memory-recall';
+import { buildMemoryRecallHints, buildSimulatedRecallReviewEvent, type MemoryRecallHint } from '../virtual-lab/memory-recall';
+import { reviewCompletedConsumer } from '../services/learner/ReviewCompletedConsumer';
 import type { SimulationMilestone, SimulationTask, VirtualSessionWithProfile } from '../virtual-lab/vlab-types';
 
 /**
@@ -105,6 +106,44 @@ export async function buildAssistedMemoryRecall(
     sessionId,
     stepIndex: Number.isFinite(stepIndex) ? stepIndex : 0,
   });
+}
+
+/**
+ * 把本回合代码裁决的提取结果回写 FSRS（2026-11-19，P2 效度闭环）。
+ * 与 review:completed 消费者同一条 canonical 路径（mastery/稳定性/dueAt/lapses 一起更新），
+ * 幂等键 = (teachingSessionId, dayIndex)，跨天重抽才产生新事件。
+ * best-effort：失败只留日志，不影响本轮教学。
+ */
+const recordedRecallEvents = new Set<string>();
+
+export async function recordAssistedMemoryRecallOutcomes(input: {
+  userId: string;
+  teachingSessionId: string;
+  pathId?: string | null;
+  dayIndex: number;
+  hints: MemoryRecallHint[];
+  occurredAt: Date;
+}): Promise<void> {
+  const event = buildSimulatedRecallReviewEvent(input);
+  if (!event) return;
+  // 同一进程内同一 (session, day) 只处理一次：applyReview 在 inbox 去重前会做锚点解析，
+  // 每个回合都重跑会带来无谓的 DB/概念解析开销；跨进程仍由 domain_event_inbox 兜底。
+  if (recordedRecallEvents.has(event.id)) return;
+  recordedRecallEvents.add(event.id);
+  if (recordedRecallEvents.size > 500) {
+    const oldest = recordedRecallEvents.values().next().value;
+    if (oldest) recordedRecallEvents.delete(oldest);
+  }
+  try {
+    await reviewCompletedConsumer.applyReview(event);
+  } catch (error) {
+    logger.warn('[simulation-coordinator] 提取四态回写 FSRS 失败（不影响本轮教学）', {
+      userId: input.userId,
+      teachingSessionId: input.teachingSessionId,
+      dayIndex: input.dayIndex,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 /**

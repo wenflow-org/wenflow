@@ -53,6 +53,7 @@ import type {
   PathCognitiveConcept,
   PathCognitiveDesign,
   PathSceneFraming,
+  PathTopology,
   NormalizedPathTask,
   NormalizedPathMilestone,
 } from '../learning.types';
@@ -76,6 +77,30 @@ import {
 } from './run-lifecycle';
 import { enrichLearningPathWithAnderson } from './stage-enrichment';
 import { isProgressiveStageDesignEnabled } from './progressive-design';
+
+const PATH_TOPOLOGIES: readonly PathTopology[] = ['exploratory', 'builder', 'exam', 'diagnostic'];
+
+/** 归一 path-planning 输出的拓扑；非法值返回 null（由调用方回退到定帧 hint / diagnostic）。 */
+export function normalizePathTopology(value: unknown): PathTopology | null {
+  return typeof value === 'string' && (PATH_TOPOLOGIES as readonly string[]).includes(value.trim())
+    ? value.trim() as PathTopology
+    : null;
+}
+
+/** 学科基准锚归一：只保留非空字符串、各截断到 4 条；全空返回 undefined（不落空壳键）。 */
+export function normalizeDomainAnchors(value: unknown): PathCognitiveDesign['domainAnchors'] {
+  if (!value || typeof value !== 'object') return undefined;
+  const pick = (raw: unknown): string[] => Array.isArray(raw)
+    ? raw.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean).slice(0, 4)
+    : [];
+  const anchors = {
+    canonicalModels: pick((value as any).canonicalModels),
+    canonicalArtifacts: pick((value as any).canonicalArtifacts),
+    commonMisconceptions: pick((value as any).commonMisconceptions),
+  };
+  const hasAny = anchors.canonicalModels.length || anchors.canonicalArtifacts.length || anchors.commonMisconceptions.length;
+  return hasAny ? anchors : undefined;
+}
 
 function normalizeCognitiveDesign(
   candidate: PathCognitiveDesign | null | undefined,
@@ -136,6 +161,8 @@ function normalizeCognitiveDesign(
     coreConcepts: normalizedConcepts,
     ...(candidate?.prerequisiteTree ? { prerequisiteTree: candidate.prerequisiteTree } : {}),
     ...(candidate?.loadProfile ? { loadProfile: candidate.loadProfile } : {}),
+    ...(candidate?.domainAnchors ? { domainAnchors: candidate.domainAnchors } : {}),
+    ...(candidate?.topology ? { topology: candidate.topology } : {}),
   };
 }
 
@@ -254,6 +281,8 @@ function buildPathCognitiveDesign(data: GeneratePathData, analysis: any): PathCo
       coreConcepts: generatedCoreConcepts,
       prerequisiteTree: (generatedCognitiveDesign as any)?.prerequisiteTree ?? undefined,
       loadProfile: (generatedCognitiveDesign as any)?.loadProfile ?? undefined,
+      domainAnchors: normalizeDomainAnchors((generatedCognitiveDesign as any)?.domainAnchors),
+      topology: normalizePathTopology((generatedCognitiveDesign as any)?.topology) ?? undefined,
     },
     getSceneFramingFallbackDomain(sceneFraming) || analysis?.subject || data.description,
     focusSource,
@@ -462,6 +491,10 @@ async function analyzePathWithAgent(data: GeneratePathData): Promise<any> {
         tasks: []
       })),
       cognitiveCore: path.cognitiveCore || path.cognitiveDesign,
+      // 拓扑（2026-11-18）：planning 显式声明优先；缺失时回退定帧 hint（只有 exam/exploratory 会给）。
+      topology: normalizePathTopology((path as any)?.topology)
+        ?? normalizePathTopology((framedNormalizedInput as any)?.pathTopologyHint)
+        ?? null,
       recommendations: [],
       feasibility: 'high'
     };
@@ -504,6 +537,9 @@ async function persistGeneratedPath(data: GeneratePathData, analysis: any, miles
       pathAgentRaw: analysis.pathAgentRaw || null,
       suggestedMilestones: normalizedMilestonesData,
       cognitiveCore: cognitiveDesign,
+      pathTopology: normalizePathTopology((analysis as any)?.topology)
+        ?? normalizePathTopology(cognitiveDesign?.topology)
+        ?? null,
       ...(Object.keys(materialRefsByStage).length ? { materialRefs: { byStage: materialRefsByStage } } : {}),
       adjustmentPolicy,
       adjustmentEvidence,

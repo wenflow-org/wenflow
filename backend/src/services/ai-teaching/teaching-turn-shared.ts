@@ -69,6 +69,14 @@ export async function buildTeachingTurnInput(
     anchorTarget?: AnchorProbePlan | null;
     /** 检查点作答回合的代码裁决（报告 #14）：透传进 controls.checkpointVerdict（缺省不注入） */
     checkpointVerdict?: { passed: boolean; detail: string | null } | null;
+    /** 课末终检的确定性判分（上一轮发题、本轮作答）：透传进 controls，模型据此如实反馈 */
+    exitTicketVerdict?: { passed: boolean; detail: string | null } | null;
+    /**
+     * 课堂契约缺口强制出题（2026-11-19）：契约独立证据不足时，平台必须给模型一个
+     * 落证据的检查点机会——不能因为「当前焦点已考过/已收口」把节奏闸门一直关着。
+     * 仅在无 pending 检查点时由引擎置 true；出题内容仍由模型按契约目标 KC 生成。
+     */
+    forceCheckpoint?: boolean;
   } = {},
 ): Promise<TeachingTurnInput> {
   const compression = teachingContextCompressionService.compress(session.messages);
@@ -118,6 +126,13 @@ export async function buildTeachingTurnInput(
     taskTitle: context.taskTitle,
     taskDescription: context.taskDescription,
     taskType: context.taskType,
+    // 本课材料本体（2026-11-18 materialPayload；2026-11-19 审计补装配）：此前只送给白板设计器，
+    // 教师 LLM 拿不到题面/日志/样本，条件规则 `scenario.taskMaterial` 也因此恒被剥离。
+    taskMaterial: context.taskMaterialPayload ?? null,
+    // 课堂契约（2026-11-19）：最低必须完成集 + 当前支线预算/指令。契约稳定，支线逐回合变化。
+    lessonContract: context.lessonContract ?? null,
+    branchState: context.branchState ?? null,
+    branchDirective: context.branchDirective ?? null,
     taskProfile: context.taskProfile,
     currentTaskContext: context.currentTaskContext,
     cognitiveFrame: context.cognitiveFrame,
@@ -203,11 +218,10 @@ export async function buildTeachingTurnInput(
     anchorProbe?: AnchorPromptTarget;
     /** 真实侧时间信号（跨会话长间隔）：无前序会话时为 undefined，不注入该字段 */
     temporalGap?: TeachingTemporalGap;
-  } = {
-    mode: session.mode as TeachingMode,
+  } = {    mode: session.mode as TeachingMode,
     teachingControlContext: channels['controls.teachingControlContext'] || teachingControlContext,
     // 出题触发由代码给（2026-09-17）：模型只出题与答案键，不再自行决定"什么时候探测"
-    emitCheckpoint: shouldEmitCheckpoint(session, teachingState),
+    emitCheckpoint: shouldEmitCheckpoint(session, teachingState) || options.forceCheckpoint === true,
   };
   // 独立锚题探针（Q13/B4）：仅当本轮由代码选定目标时注入——提示词据此把本次检查点改成
   // 对该概念的独立复测（见 prompts/core/teaching-turn.yaml 的锚题约束）。目标为 null 时不注入任何字段。
@@ -220,6 +234,12 @@ export async function buildTeachingTurnInput(
     controls.checkpointVerdict = {
       passed: options.checkpointVerdict.passed === true,
       detail: options.checkpointVerdict.detail ?? null,
+    };
+  }
+  if (options.exitTicketVerdict) {
+    controls.exitTicketVerdict = {
+      passed: options.exitTicketVerdict.passed === true,
+      detail: options.exitTicketVerdict.detail ?? null,
     };
   }
   // 真实侧时间信号（Q19 真实侧）：有前序会话才注入；无前序时字段缺失，提示词行为不变。

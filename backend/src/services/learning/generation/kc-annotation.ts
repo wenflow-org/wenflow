@@ -71,6 +71,44 @@ function stableKeyOf(item: unknown): string {
 }
 
 /**
+ * conceptKcs 合并（2026-11-19 审计）：同一 coreConcept 在多个阶段被再次映射时，
+ * 不能整条覆盖——后一阶段只带来该阶段用到的 KC，覆盖会把前面阶段的 KC 定义清掉。
+ * 按 conceptId 归并，kcs 按 kcId 并集；同 kcId 以后出现的定义为准。
+ */
+function mergeConceptKcs(
+  previous: Array<Record<string, unknown>> | undefined,
+  incoming: Array<Record<string, unknown>> | undefined,
+): Array<Record<string, unknown>> {
+  const byConcept = new Map<string, Record<string, unknown>>();
+  // 兼容 v1 扁平形态 [{kcId,name,...}]（replan 存量与旧标注）：无 conceptId 时仍按 kcId 并集。
+  const flatByKc = new Map<string, Record<string, unknown>>();
+  for (const item of [...(Array.isArray(previous) ? previous : []), ...(Array.isArray(incoming) ? incoming : [])]) {
+    if (!item || typeof item !== 'object') continue;
+    const conceptId = String(item.conceptId ?? '');
+    if (!conceptId) {
+      const kcId = String(item.kcId ?? item.name ?? '');
+      if (kcId) flatByKc.set(kcId, item);
+      continue;
+    }
+    const existing = byConcept.get(conceptId);
+    if (!existing) {
+      byConcept.set(conceptId, { ...item, kcs: Array.isArray(item.kcs) ? [...item.kcs] : [] });
+      continue;
+    }
+    const kcMap = new Map<string, unknown>();
+    for (const kc of [
+      ...(Array.isArray(existing.kcs) ? existing.kcs as Array<Record<string, unknown>> : []),
+      ...(Array.isArray(item.kcs) ? item.kcs as Array<Record<string, unknown>> : []),
+    ]) {
+      const kcId = String(kc?.kcId ?? kc?.name ?? '');
+      if (kcId) kcMap.set(kcId, kc);
+    }
+    byConcept.set(conceptId, { ...existing, ...item, kcs: Array.from(kcMap.values()) });
+  }
+  return [...byConcept.values(), ...flatByKc.values()];
+}
+
+/**
  * 渐进式设计的 KC 增量合并（活的 path 批次 D3）：把**单阶段**的 path-kc-mapping 输出合并进
  * 既有标注。顶层字段（conceptKcs/taskKcLinks/kcGraph）保持与 v1 相同形状的**并集**——
  * 读侧（TeachingContextBuilder.resolveTaskKcsFromPath 按 taskTitle 匹配）零改动兼容；
@@ -109,7 +147,7 @@ export function mergeKcStageAnnotation(
     ...previous,
     version: 2,
     byStage,
-    conceptKcs: unionByKey(previous.conceptKcs || [], stageOutput.conceptKcs || [], stableKeyOf),
+    conceptKcs: mergeConceptKcs(previous.conceptKcs, stageOutput.conceptKcs),
     taskKcLinks: unionByKey(previous.taskKcLinks || [], stageOutput.taskKcLinks || [], (item) =>
       `${stableKeyOf(item)}::${Array.isArray(item?.linkedKCs) ? (item.linkedKCs as unknown[]).map(String).sort().join(',') : ''}`),
     kcGraph: {

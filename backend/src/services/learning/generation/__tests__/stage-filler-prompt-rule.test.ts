@@ -43,22 +43,18 @@ describe('R8-1 同题复读禁令：提示词规则已编译进产物', () => {
     expect(/^\d+\./.test(line.trimStart())).toBe(true);
   });
 
-  it('最新追加的规则在末位（材料承诺自带本体，2026-11-07；空壳准备课在其前），编号连续', () => {
+  it('规则全部带编号且全表连续（2026-11-18 按「能力增量」重组后不再要求任何单条规则恒在末位）', () => {
     expect(CORE).toContain('应试形态任务');
     expect(CORE).toContain('示范题/例题/真题引用必须自带题面');
     expect(CORE).toContain('真实场景与判断锚');
+    expect(CORE).toContain('材料自包含与承诺自检');
     const nums = [...MD.matchAll(/^(\d+)\.\s/gm)].map((m) => Number(m[1]));
     const last = Math.max(...nums);
-    // 追加纪律：最新那条规则必须排在末位。判定取**带编号的规则行**——正文里会引用它（如 repairHints
-    // 的 desc），不筛编号会误取到那句引用。
-    const newestRuleLine = MD.split('\n')
-      .find((l) => /^\d+\./.test(l.trimStart()) && l.includes('输出前自检：材料承诺必须自带本体')) || '';
-    expect(newestRuleLine.trimStart().startsWith(`${last}.`)).toBe(true);
-    // 既有的「空壳准备课」「应试形态任务」仍需带编号，只是不再要求它们恒为末位
-    const fillerLine = MD.split('\n').find((l) => l.includes('禁止「空壳准备课」')) || '';
-    expect(/^\d+\./.test(fillerLine.trimStart())).toBe(true);
-    const examLine = MD.split('\n').find((l) => l.includes('应试形态任务')) || '';
-    expect(/^\d+\./.test(examLine.trimStart())).toBe(true);
+    for (const needle of ['禁止「空壳准备课」', '应试形态任务', '材料自包含与承诺自检']) {
+      // 只取带编号的规则行：inputs 的 desc 里也会引用规则名，不筛编号会误取到那句引用
+      const line = MD.split('\n').find((l) => /^(\d+)\.\s/.test(l.trimStart()) && l.includes(needle)) || '';
+      expect(/^(\d+)\.\s/.test(line.trimStart())).toBe(true);
+    }
     // 编号连续、不跳号、不夹塞：有人把规则插到中间而不重排编号，这两条会失守
     expect(nums.length).toBeGreaterThan(30);
     expect(new Set(nums).size).toBe(nums.length);

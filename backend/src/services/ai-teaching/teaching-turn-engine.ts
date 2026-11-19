@@ -16,6 +16,22 @@ import { TeachingOperationLeaseGuard } from './TeachingOperationLeaseGuard';
 import { teachingSessionRepository, type TeachingSessionRecord, type TeachingImage, type TeachingDiagram, type TeachingFigure } from './TeachingSessionRepository';import { knowledgeStateService, COMPLETION_TARGET_PROGRESS_FLOOR } from './KnowledgeStateService';
 import { peerTriggerService } from './PeerTriggerService';
 import { buildTeachingScenarioContext, type TeachingScenarioContext } from './TeachingContextBuilder';
+import {
+  buildBranchDirective,
+  buildLessonContract,
+  buildLessonReport,
+  collectLessonEvidence,
+  evaluateLessonContract,
+  MAX_EXIT_TICKET_ATTEMPTS,
+  normalizeBranchState,
+  normalizeStudentNeed,
+  parseExitTicketSubmission,
+  resolveBranchDecision,
+  type ExitTicket,
+  type LessonContract,
+  type LessonEvidence,
+  type LessonReport,
+} from './lesson-contract';
 import { fenceLearnerMessagesForModel } from './input-fence';
 import { memoryTraceService } from '../memory/memory-trace.service';
 import { recordMisconceptions, rerouteMisconceptionConceptKey } from '../learner/misconception-ledger.service';
@@ -38,6 +54,7 @@ import {
   isCheckpointAnswerAlreadyGiven,
   isDuplicateCheckpointQuestion, normalizeCheckpointWithTelemetry,
   findUnfurnishedChoiceQuestion,
+  judgeCheckpointAnswer,
   recordAnchorProbeResult,
   recordCheckpointAttemptEvidence,
   recordCheckpointResultEvidence,
@@ -405,6 +422,115 @@ async function figureGateSnapshot(sessionId: string, kind: unknown) {
   return { figures, total: figures.length, kindCount, kindCap: figureKindCap(key) };
 }
 
+/**
+ * 课末终检题生成（2026-11-19）：独立 aux skill，只负责出题 + 答案键；判分由引擎确定性完成。
+ * 失败 fail-open（返回 null，不阻断收束）——没有终检题时契约门仍按既有证据判定。
+ */
+async function generateExitTicketForLesson(input: {
+  subject: string;
+  topic: string;
+  taskTitle: string;
+  contract: LessonContract;
+  evidence: LessonEvidence[];
+  messages: Array<{ role: string; content?: unknown }>;
+  attempts: number;
+}): Promise<ExitTicket | null> {
+  const definition = auxSkillDefinitionMap['teaching-exit-ticket'];
+  if (!definition) return null;
+  const independentNames = new Set(
+    input.evidence
+      .filter((item) => item.independent && item.correct)
+      .map((item) => item.kcName.trim()),
+  );
+  const coreKcs = input.contract.coreKcs.map((kc) => ({
+    name: kc.name,
+    hasIndependentEvidence: independentNames.has(kc.name.trim()),
+  }));
+  try {
+    const result: any = await executeSkill(definition, {
+      subject: input.subject,
+      topic: input.topic,
+      taskTitle: input.taskTitle,
+      coreKcs,
+      recentDialogue: input.messages.slice(-8).map((item) => ({
+        role: item.role,
+        content: String(item.content ?? '').slice(0, 400),
+      })),
+    } as any);
+    if (result?.success === false) {
+      throw new Error(typeof result.error === 'string' ? result.error : result.error?.message || 'EXIT_TICKET_FAILED');
+    }
+    const out: any = result?.output ?? result;
+    const question = typeof out?.question === 'string' ? out.question.trim() : '';
+    const conceptName = typeof out?.conceptName === 'string' ? out.conceptName.trim() : '';
+    if (!question || !conceptName) return null;
+    const type = out.type === 'single_choice' || out.type === 'multi_choice' || out.type === 'short_answer'
+      ? out.type
+      : 'short_answer';
+    const options = Array.isArray(out.options)
+      ? out.options
+          .filter((option: any) => option && typeof option.id === 'string' && typeof option.text === 'string')
+          .slice(0, 4)
+          .map((option: any) => ({ id: option.id.trim(), text: option.text.trim() }))
+      : [];
+    const optionIds = new Set(options.map((option: { id: string }) => option.id));
+    const correctOptionIds: string[] = type !== 'short_answer' && Array.isArray(out.correctOptionIds)
+      ? Array.from(new Set(out.correctOptionIds
+          .filter((id: any) => typeof id === 'string' && optionIds.has(id.trim()))
+          .map((id: string) => id.trim())))
+      : [];
+    const expectedKeywords = type === 'short_answer' && Array.isArray(out.expectedKeywords)
+      ? out.expectedKeywords
+          .filter((keyword: any) => typeof keyword === 'string' && keyword.trim())
+          .map((keyword: string) => keyword.trim().slice(0, 40))
+          .slice(0, 3)
+      : [];
+    // 无答案键的题不落库：终检必须能确定性判分，否则会变成「模型说了算」。
+    if (type !== 'short_answer' && (options.length < 2 || correctOptionIds.length === 0)) return null;
+    if (type === 'short_answer' && expectedKeywords.length === 0) return null;
+    return {
+      id: `et_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      question,
+      type,
+      conceptName,
+      ...(type !== 'short_answer' ? { options, correctOptionIds } : {}),
+      ...(type === 'short_answer' ? { expectedKeywords } : {}),
+      askedAt: new Date().toISOString(),
+      status: 'pending',
+      attempts: Math.max(1, input.attempts + 1),
+    };
+  } catch (error) {
+    logger.warn('[AITeaching] 课末终检题生成失败（fail-open，不阻断收束）', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+/** 去掉回复末尾仍在追问的段落（终检轮只保留一个待答问题）。 */
+function stripTrailingQuestionParagraph(reply: string): string {
+  const paragraphs = String(reply || '').split(/\n{2,}/).map((item) => item.trim()).filter(Boolean);
+  if (paragraphs.length > 0) {
+    const last = paragraphs[paragraphs.length - 1];
+    if (/[?？]/.test(last.split('\n').slice(-2).join('\n'))) paragraphs.pop();
+  }
+  return paragraphs.join('\n\n');
+}
+
+/** 把终检题追加到本轮教师回复（学生必须能在对话里看到题面）。 */
+export function appendExitTicketToReply(
+  teachingOutput: { reply?: string },
+  ticket: ExitTicket,
+): void {
+  const current = String(teachingOutput.reply || '');
+  if (current.includes(ticket.question)) return;
+  // 终检轮只留一个待答问题：模型回复末尾若还有自己的追问，整段撤掉——
+  // 两个问题同屏时学生会答前一个（2026-11-19 真课实证：两次终检都被当成「没作答」）。
+  const lead = stripTrailingQuestionParagraph(current);
+  const choiceHint = ticket.type === 'short_answer' ? '' : '\n\n（回复选项字母即可）';
+  teachingOutput.reply = `${lead}${lead ? '\n\n' : ''}最后一道题（独立作答，不限时）：${ticket.question}${choiceHint}`;
+}
+
 export async function processStudentMessage(
   sessionId: string,
   message: string,
@@ -432,6 +558,18 @@ export async function processStudentMessage(
   autoEnded?: boolean;
   recovered?: boolean;
   checkpoint?: TeachingCheckpoint | null;
+  /** 课堂契约（最低必须完成集）+ 本回合支线判定 + 实时报告：前端契约卡/支线标签直接消费。 */
+  lessonContract?: LessonContract | null;
+  lessonReport?: LessonReport | null;
+  /** 课末独立终检题（待作答/通过/失败），前端「结课终检」卡直接消费 */
+  exitTicket?: ExitTicket | null;
+  branch?: {
+    kind: string;
+    need: string;
+    active: string | null;
+    remaining: number;
+    parkingLot: Array<{ at: string; topic: string }>;
+  } | null;
   wrapup?: SessionWrapupArtifact & {
     stateUpdate: LearningStateMetrics | null;
     duration: number;
@@ -524,6 +662,70 @@ export async function processStudentMessage(
 
   const previousTeachingState = session.teachingState || {};
   const sessionArtifacts = parseSessionArtifacts(previousTeachingState);
+  // 课堂契约（2026-11-19）：旧会话没有契约时按当前上下文补建；契约只在建课时冻结，本回合只读。
+  const lessonContract: LessonContract = (sessionArtifacts.lessonContract as LessonContract | undefined)
+    || buildLessonContract(context);
+  const previousBranchState = normalizeBranchState(sessionArtifacts.branchState);
+  context.lessonContract = lessonContract;
+  context.branchState = previousBranchState;
+  const previousLessonReport = sessionArtifacts.lessonReport as LessonReport | undefined;
+  // 课末独立终检（2026-11-19）：与课内检查点分离的结课终检题。
+  // 上一轮发题、本轮学生作答 → 先确定性判分；结果计入证据账本（kind=exit-ticket）与结课报告。
+  let exitTicketState: ExitTicket | null = (sessionArtifacts.exitTicket as ExitTicket | undefined) || null;
+  const exitTicketHistory: ExitTicket[] = Array.isArray(sessionArtifacts.exitTicketHistory)
+    ? (sessionArtifacts.exitTicketHistory as ExitTicket[]).filter((item) => !!item && typeof item === 'object')
+    : [];
+  const exitTicketAttempts = exitTicketHistory.length;
+  let exitTicketVerdict: { passed: boolean; detail: string | null } | null = null;
+  let exitTicketGradedThisTurn = false;
+  if (exitTicketState?.status === 'pending'
+    && options.kind !== 'resume-continue'
+    && String(message || '').trim()) {
+    const submission = parseExitTicketSubmission(exitTicketState, String(message));
+    const judgement = judgeCheckpointAnswer(exitTicketState, submission);
+    const answeredAt = new Date().toISOString();
+    const passed = judgement?.passed === true;
+    exitTicketState = {
+      ...exitTicketState,
+      status: passed ? 'passed' : 'failed',
+      attempts: Math.max(1, Number(exitTicketState.attempts) || 1),
+      judgedBy: judgement?.judgedBy ?? 'model-reference',
+      passed,
+      answeredAt,
+      answerExcerpt: String(message).slice(0, 200),
+      detail: judgement?.detail ?? '无可用答案键，按未通过处理',
+    };
+    const historyIndex = exitTicketHistory.findIndex((item) => item.id === exitTicketState!.id);
+    if (historyIndex >= 0) exitTicketHistory[historyIndex] = exitTicketState;
+    else exitTicketHistory.push(exitTicketState);
+    exitTicketVerdict = { passed, detail: judgement?.detail ?? null };
+    exitTicketGradedThisTurn = true;
+  }
+  // 独立证据缺口必须点名到 coreKc：只说「独立证据不足」时，模型会随手挑一个自己刚讲过的
+  // 非核心点出题（2026-11-19 真课实证：核心 4 个 KC 只差 1 条独立证据，老师却把第二次检查点
+  // 出在「补偿金」这个契约外的点上），结果契约永远差一口气、课被拖到熔断。
+  const previousIndependentNames = new Set(
+    (Array.isArray(previousLessonReport?.evidence) ? previousLessonReport.evidence : [])
+      .filter((item) => item?.independent === true && typeof item.kcName === 'string')
+      .map((item) => item.kcName.trim()),
+  );
+  const independentGapKcs = lessonContract.coreKcs
+    .filter((kc) => !previousIndependentNames.has(kc.name.trim()))
+    .map((kc) => kc.name);
+  const contractGapDirective = previousLessonReport && previousLessonReport.met === false
+    ? [
+        Array.isArray(previousLessonReport.missingKcs) && previousLessonReport.missingKcs.length > 0
+          ? `本课契约还缺证据的 KC：${previousLessonReport.missingKcs.join('、')}。本轮必须回到这些 KC，先给认知积木，再通过 control.checkpoint 出一次独立检查点；`
+          : '',
+        independentGapKcs.length > 0
+          ? `独立证据不足（${previousLessonReport.independentCount}/${previousLessonReport.requiredIndependent}）：本轮必须通过 control.checkpoint 出一次独立检查点（只口头追问不算证据），题目落在以下尚无独立证据的核心 KC 之一——「${independentGapKcs.join('」「')}」，无提示、首答计分；`
+          : '',
+        '不要继续收尾。',
+      ].filter(Boolean).join('')
+    : null;
+  context.branchDirective = [buildBranchDirective(previousBranchState, lessonContract), contractGapDirective]
+    .filter(Boolean)
+    .join('\n') || null;
   // 课内温故：计划持久化在 sessionArtifacts（开课时建立、随回合合并结果），
   // 而 context 每回合重建 → 必须回填，否则模型永远拿不到温故计划、结果也摘不到。
   const turnMemoryWarmup = resolveTurnMemoryWarmup(sessionArtifacts);
@@ -582,7 +784,7 @@ export async function processStudentMessage(
       boardNumbers: [],
     });
     const designed = await designBoard({
-      task: { title: context.taskTitle, description: context.taskDescription, taskType: context.taskType },
+      task: { title: context.taskTitle, description: context.taskDescription, taskType: context.taskType, material: context.taskMaterialPayload || null },
       scenario: { subject: session.subject, topic: session.topic, learnerLevel: 'beginner' },
       studentSays: message,
       kindHint: visualOpportunity?.kindHint ?? null,
@@ -645,6 +847,14 @@ export async function processStudentMessage(
     checkpointVerdict: options.checkpointJudgement?.judgedBy === 'code'
       ? { passed: options.checkpointJudgement.passed, detail: options.checkpointJudgement.detail ?? null }
       : null,
+    exitTicketVerdict,
+    // 契约缺证据时必须给一次落证据的机会：常规节奏闸门按「当前焦点已考过/已收口」关闭，
+    // 真课里就出现「核心 KC 缺独立证据、老师只能在正文里口头提问、证据永不落账」的死结。
+    forceCheckpoint: previousLessonReport?.met === false
+      && !previousTeachingState.pendingCheckpoint
+      && ((Array.isArray(previousLessonReport.missingKcs) && previousLessonReport.missingKcs.length > 0)
+        || independentGapKcs.length > 0)
+      && previousTeachingAssistantCount >= 2,
   });
   // 教师补充材料（批次 E）：上一轮请求已入库 → 本轮把就绪载荷送进 scenario（模型可引用出处讲）。
   if (supplementPromotion.payload) {
@@ -1158,6 +1368,27 @@ export async function processStudentMessage(
       }
     : rawTeachingOutput;
   const { teachingOutput, existingPoints } = reconcileTeachingKnowledgeState(context, rawBoardOutput, frozenKnowledgeState);
+  // 自由需求分型 → 支线判定（2026-11-19）：模型只报「学生这轮想要什么」，代码决定进哪条支线、
+  // 还有多少预算、下一轮是否强制回主线。支线正确不冒充核心 KC 的独立证据。
+  const studentNeed = normalizeStudentNeed((rawTeachingOutput as any)?.analysis?.studentNeed);
+  const branchDecision = resolveBranchDecision({
+    need: studentNeed,
+    contract: lessonContract,
+    state: previousBranchState,
+    message,
+    focusKc: teachingOutput.knowledge?.currentPoint || null,
+  });
+  if (branchDecision.branch !== 'spine') {
+    logger.info('[AITeaching] 课堂支线判定', {
+      sessionId,
+      need: studentNeed,
+      branch: branchDecision.branch,
+      active: branchDecision.state.active,
+      turnsUsed: branchDecision.state.turnsUsed,
+      budget: branchDecision.state.budget,
+      parkingCount: branchDecision.state.parkingLot.length,
+    });
+  }
   // 到期旧知与本节看板物理分离（历史事故 2e3ca16：跨 path 到期点串进「本节知识点」被
   // 误显示为「进行中 · x%」，导致课内复习整体下线）：温故点只进 sessionArtifacts.memoryWarmup，
   // 收束时回写记忆引擎（FSRS 重排 dueAt + 落 learner_evidence 供动态预算回校准）。
@@ -1225,11 +1456,107 @@ export async function processStudentMessage(
   // 延伸学（#124）：延伸课不产生「完成」终态——它不是任务结算课，教师可一直陪学到学员主动结束
   // （finalize 仅允许 end_only）。任务完成判据仍照常计算并留痕，只是不把完成信号发出去。
   const extensionMode = session.mode === 'extension';
+  // 终检刚通过：收束轮不该再带新的追问（模型常会「顺手再验一处」，把课又拖下去）；
+  // 去掉末尾追问段，并允许本轮直接收束（终检本身就是最后一道关）。
+  const exitTicketJustPassed = exitTicketGradedThisTurn && exitTicketState?.status === 'passed';
+  if (exitTicketJustPassed) {
+    teachingOutput.reply = stripTrailingQuestionParagraph(teachingOutput.reply || '');
+  }
+  const rawCompletionSignal = !extensionMode
+    && (targetsConsolidated || backstopReady || softCompletionReady);
+  const completionSignal = rawCompletionSignal || exitTicketJustPassed;
+  // 课堂契约证据账本（2026-11-19）：只认已通过的检查点 + 课末终检 + 看板掌握；
+  // 独立证据要求代码裁决且首答正确。本回合刚提交的检查点尚未写入 checkpointHistory，这里显式并入。
+  const currentCheckpointRows = (options.checkpointId && submittedCheckpoint && options.checkpointJudgement)
+    ? [{
+        conceptName: submittedCheckpoint.conceptName ?? null,
+        passed: options.checkpointJudgement.passed === true,
+        judgedBy: options.checkpointJudgement.judgedBy,
+        attempts: 1,
+      }]
+    : [];
+  const lessonEvidence = collectLessonEvidence({
+    contract: lessonContract,
+    checkpointHistory: [
+      ...(Array.isArray(previousTeachingState.checkpointHistory) ? previousTeachingState.checkpointHistory : []),
+      ...currentCheckpointRows,
+    ],
+    exitTickets: exitTicketState ? [exitTicketState] : [],
+    knowledgeState: mergedKnowledge,
+    teachingTurns,
+  });
+  const contractEvaluation = evaluateLessonContract({
+    contract: lessonContract,
+    evidence: lessonEvidence,
+    teachingTurns,
+  });
+  // 只有「建课时已落库」的契约才作为完成硬门（旧会话/单测夹具没有契约 → 保持旧完成口径）；
+  // 引擎补建的契约仅用于提示词与观测，不改变完成率。
+  const persistedContract = sessionArtifacts.lessonContract as LessonContract | undefined;
+  const contractEnforced = !!persistedContract
+    && persistedContract.coreKcs?.length > 0
+    && process.env.LESSON_CONTRACT_ENFORCE !== '0';
+  const contractBlocked = contractEnforced && !contractEvaluation.met;
+
+  // 课末独立终检（2026-11-19）：收束信号出现时，先过一道与课内检查点分离的终检题；
+  // - 未发过/上一题失败 → 生成新题（每题都是新情境），本轮不完成；
+  // - 待作答 → 不完成；
+  // - 通过 → 计入契约独立证据，允许完成；
+  // - 失败次数用尽 → 不再发题，契约/终检未通过按未达成处理（交给停课/结算门）。
+  const exitTicketPassed = exitTicketState?.status === 'passed';
+  const exitTicketPending = exitTicketState?.status === 'pending';
+  let exitTicketBlocked = false;
+  if (contractEnforced && rawCompletionSignal) {
+    if (exitTicketPending) {
+      exitTicketBlocked = true;
+    } else if (!exitTicketPassed && exitTicketAttempts < MAX_EXIT_TICKET_ATTEMPTS) {
+      // 失败后的同一回合先由老师补救，不在学生刚答错的这一轮立刻再发一道新终检。
+      if (exitTicketGradedThisTurn) {
+        exitTicketBlocked = true;
+      } else {
+        const generated = await generateExitTicketForLesson({
+          subject: context.subject,
+          topic: context.topic,
+          taskTitle: context.taskTitle,
+          contract: lessonContract,
+          evidence: lessonEvidence,
+          messages: session.messages,
+          attempts: exitTicketAttempts,
+        });
+        if (generated) {
+          exitTicketState = generated;
+          exitTicketHistory.push(generated);
+          exitTicketBlocked = true;
+          appendExitTicketToReply(teachingOutput, generated);
+          // 终检与课内检查点不同槽：同轮不再叠加一道检查点。
+          if (teachingOutput.control) delete teachingOutput.control.checkpoint;
+          logger.info('[AITeaching] 课末终检已发出', {
+            sessionId,
+            conceptName: generated.conceptName,
+            type: generated.type,
+            attempt: exitTicketAttempts + 1,
+          });
+        }
+      }
+    } else if (!exitTicketPassed) {
+      exitTicketBlocked = true;
+    }
+  }
+  if (contractBlocked && rawCompletionSignal) {
+    logger.info('[AITeaching] 课堂契约未达成：完成信号暂缓', {
+      sessionId,
+      covered: contractEvaluation.coveredKcs,
+      missing: contractEvaluation.missingKcs,
+      independent: `${contractEvaluation.independentCount}/${contractEvaluation.requiredIndependent}`,
+      reasons: contractEvaluation.reasons,
+    });
+  }
   // 只有「本轮本来会发完成信号」时，收口门禁才有意义。此前无论是否会完成，
   // 只要回复带问号就 +1，长课里前 6 个普通提问就把绝对上限/唯一宽限消耗光，
   // 课末真正的新末问反而被直接收掉（外部独立评审 P0）。
-  const wouldComplete = !extensionMode
-    && (targetsConsolidated || backstopReady || softCompletionReady);
+  const wouldComplete = completionSignal
+    && !contractBlocked
+    && !exitTicketBlocked;
   const closureGate = wouldComplete
     ? shouldDeferCompletionForClosure({
         reply: teachingOutput.reply || '',
@@ -1274,7 +1601,7 @@ export async function processStudentMessage(
     && adjacentRepetition.lowIncrement;
   let completionReady = wouldComplete && !closureGate.defer;
   let forcedCompletionLoopBreak = false;
-  if (!completionReady && !extensionMode
+  if (!completionReady && !extensionMode && !contractBlocked
     && ((targetsFrozenBefore && noPendingPoints && closureRepeatStreak >= 3) || shortAckInstructionLoopBreak)) {
     completionReady = true;
     forcedCompletionLoopBreak = true;
@@ -1718,7 +2045,7 @@ export async function processStudentMessage(
         });
       } else {
         const designed = await designBoard({
-          task: { title: context.taskTitle, description: context.taskDescription, taskType: context.taskType },
+          task: { title: context.taskTitle, description: context.taskDescription, taskType: context.taskType, material: context.taskMaterialPayload || null },
           scenario: { subject: session.subject, topic: session.topic, learnerLevel: 'beginner' },
           studentSays: message,
           kindHint: board.figure?.kind ?? null,
@@ -1763,7 +2090,7 @@ export async function processStudentMessage(
         //（实证 badf3f77 turn4：教师纠正试用期档位，rev 停在 2，错版后被后续盲重建沿袭到课终）。
         // 带清除指令强制重绘一次；4b 换例守门不适用——纠正不是换数，信号更强更明确。
         const designed = await designBoard({
-          task: { title: context.taskTitle, description: context.taskDescription, taskType: context.taskType },
+          task: { title: context.taskTitle, description: context.taskDescription, taskType: context.taskType, material: context.taskMaterialPayload || null },
           scenario: { subject: session.subject, topic: session.topic, learnerLevel: 'beginner' },
           studentSays: message,
           kindHint: board.figure?.kind ?? null,
@@ -1878,6 +2205,17 @@ export async function processStudentMessage(
     };
   }
 
+  // 课堂报告（每回合都写）：前端契约卡实时显示「已覆盖/独立证据/停车区」，
+  // 结课时 wrapup/结算响应直接复用同一份，不另算一遍。
+  const lessonReport = buildLessonReport({
+    contract: lessonContract,
+    evaluation: contractEvaluation,
+    evidence: lessonEvidence,
+    branchState: branchDecision.state,
+    teachingTurns,
+    exitTicket: exitTicketState,
+  });
+
   const persistedMessages = [...updatedMessages, assistantMessage];
   const previousMetrics = extractTeachingStateMetrics(previousTeachingState)
     || learningStateService.coerceMetrics(context.learningState)
@@ -1937,6 +2275,13 @@ export async function processStudentMessage(
         return history.slice(-40);
       })(),
       initialKnowledgeState: effectiveInitialKnowledgeState,
+      // 课堂契约/支线/报告（2026-11-19）：契约稳定；支线预算与停车区逐回合更新；报告供前端实时展示。
+      lessonContract,
+      branchState: branchDecision.state,
+      lessonReport,
+      // 课末终检（2026-11-19）：当前题 + 历史（用于结课报告/复判追踪）
+      exitTicket: exitTicketState,
+      exitTicketHistory,
       // 课内温故：① 标记"模型真的问出来了"（含 review/pending——问过 ≠ 有结果）
       // ② 合并实测结果；计划其余部分原样保留（含负担预算与积压计数）
       ...(() => {
@@ -2255,7 +2600,10 @@ export async function processStudentMessage(
       })();
       const checkpointConcept = anchorTarget
         ? null
-        : resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.currentPoint)
+        // 模型显式声明的考点优先（2026-11-19）：契约缺口轮会点名核心 KC，声明值让证据落对账，
+        // 不再一律按「当前教学点」近似（真课实证：契约外的点拿走检查点归属，核心 KC 永远缺证据）。
+        : resolveCheckpointConceptAttribution(effectiveTeachingOutput.control?.checkpoint?.conceptName)
+          ?? resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.currentPoint)
           ?? resolveCheckpointConceptAttribution(effectiveTeachingOutput.knowledge.points[0]?.name)
           // 2026-11-11 第二刀补第二层：本轮 output.knowledge 为空但合并后的看板有当前焦点时，
           // 用看板最后一个点（追加顺序=当前焦点）。真机两例（盘库/心理）首题无归属即是此因。
@@ -2478,6 +2826,16 @@ export async function processStudentMessage(
       ? { confirmCheck: effectiveTeachingOutput.knowledge.confirmCheck }
       : {}),
     knowledgePoints: normalizeKnowledgePoints(mergedKnowledge),
+    lessonContract,
+    lessonReport,
+    exitTicket: exitTicketState,
+    branch: {
+      kind: branchDecision.branch,
+      need: studentNeed,
+      active: branchDecision.state.active,
+      remaining: Math.max(0, branchDecision.state.budget - branchDecision.state.turnsUsed),
+      parkingLot: branchDecision.state.parkingLot,
+    },
     isCompletion: completionReady,
     currentState,
     peerTriggered,

@@ -110,6 +110,11 @@ export function normalizeSubtasks(raw: any, fallbackConcept: string | null) {
       // 动态规划（2026-10-17）：任务级可调整性，重排压缩时据此保护骨干（core）、
       // 优先删减 flexible。白名单归一必须带上，否则模型输出会被剥掉（与 materialRefs 同坑）。
       adjustability: normalizeAdjustability(item?.adjustability, taskType),
+      // 课堂材料本体（2026-11-18）：与 description 分离——description 给人读，materialPayload 给课堂用。
+      // 白名单归一必须带上，否则模型输出会被剥掉（与 materialRefs 同坑）。
+      materialPayload: normalizeString(item?.materialPayload)
+        ? normalizeString(item?.materialPayload).slice(0, 6000)
+        : undefined,
       // 白名单归一**必须带上** materialRefs，否则任务级资料引用在此被丢掉
       // （随后由 withMaterialRefs 逐字核对；核对不过会在那里被删除）
       materialRefs: Array.isArray(item?.materialRefs) ? item.materialRefs : undefined,
@@ -234,6 +239,9 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
             firstDeliverable: payload.firstDeliverable || null,
             successCriteria: payload.successCriteria || null,
             repairHints: payload.repairHints || null,
+            // 拓扑（2026-11-18 引入，2026-11-19 审计修复）：yaml 声明 sandbox:path.pathTopology，
+            // 规则「按拓扑定任务形态」直接读它；本白名单漏带 ⇒ 编排层传了也在边界被裁掉。
+            pathTopology: payload.pathTopology || null,
             // 动态规划信号（2026-10-17）：上一阶段真实学习结果。此前 progressive 模式在
             // stage-enrichment 里算出了 previousStageOutcome，但 skill 的载荷白名单没带它 →
             // 信号在边界被静默丢弃（提示词侧从未见过）。同理补上 supplementRequest——
@@ -255,6 +263,7 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
             cognitiveCore: payload.cognitiveCore,
             normalizedInput: stripNestedMaterials(payload.normalizedInput),
             materials: payload.materials || null,
+            pathTopology: payload.pathTopology || null,
             repairHints: payload.repairHints || null,
             previousStageOutcome: payload.previousStageOutcome || null,
             supplementRequest: payload.supplementRequest || null,
@@ -350,8 +359,8 @@ export async function stageDesigner(input: any): Promise<SkillExecutionResult<an
           if (failureReason.includes('MATERIAL_BODY_MISSING_')) {
             blocks.push([
               '上一个版本里有任务**承诺了具体材料却没给材料本体**（例如「给你 6 个句子」却只列了 already、yesterday 这类特征词）。',
-              '改法（任选其一）：① 在 description 里把材料本体逐条写出来——句子/题面/数据值按 1. 2. 3. 编号列全，学习者不用去别处找；',
-              '② 引用 materials 里真实存在的小节（sectionId + 逐字 quote）；③ 材料本来就属于学习者手头或前序任务产出时，在 description 里写明来源（「用你手上的 X」「用任务 2 产出的 Y」）。',
+              '改法（任选其一）：① 把材料本体写进 materialPayload——句子/题面/数据值按 1. 2. 3. 编号列全，description 只留 1-2 句简介（不要把本体搬回 description）；',
+              '② 引用 materials 里真实存在的小节（sectionId + 逐字 quote 写进 materialPayload，并保留 materialRefs）；③ 材料本来就属于学习者手头或前序任务产出时，在 description 里写明来源（「用你手上的 X」「用任务 2 产出的 Y」）。',
               '不许保留「给你 N 个句子/道题」却不写出这些句子/题目的写法。',
             ].join('\n'));
           }

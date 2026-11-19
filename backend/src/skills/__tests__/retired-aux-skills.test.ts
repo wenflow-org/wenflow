@@ -24,6 +24,8 @@ const RETIRED_ID = 'triage-judge';
 /** 修复前 2026-09-15 退役波（course-design 等）之外的 aux 全集，用于防「顺手多摘」回归。 */
 const ACTIVE_AUX_AFTER_RETIREMENT = [
   'teaching-opening',
+  'teaching-exit-ticket',
+  'teaching-retention-probe',
   'profile-progress-report',
   'skill-author',
   'skill-compiler',

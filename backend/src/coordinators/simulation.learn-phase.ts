@@ -16,6 +16,7 @@ import learningService from '../services/learning/learning.service';
 import { assertPathMutationSafe } from '../services/learning/path-mutation-safety';
 import aiTeachingOrchestrator from '../services/ai-teaching/AITeachingCoordinator';
 import { teachingSessionRepository } from '../services/ai-teaching/TeachingSessionRepository';
+import { evaluateLessonContractGate, type LessonContractGate } from '../services/ai-teaching/lesson-contract';
 import { sessionFinalizationService } from '../services/ai-teaching/SessionFinalizationService';
 import { executeSkill, virtualLearnerLearnTurnSimulatorDefinition, virtualLearnerEpistemicGroundingDefinition } from '../skills';
 import { sessionWrapupAgent, type SessionWrapupInput } from '../skills/teaching-wrapup';
@@ -74,7 +75,9 @@ import { acquireSessionLease, releaseSessionLease } from './simulation.lease';
 import {
   buildAssistedMemoryRecall,
   persistKnowledgeState,
+  recordAssistedMemoryRecallOutcomes,
 } from './simulation.memory';
+import { simulatedNowOr } from '../services/virtual-lab/simulation-clock-context';
 import type { PendingTeachingCheckpoint } from './simulation.coordinator';
 import type { SimulationOrchestrator } from './simulation.coordinator';
 
@@ -393,6 +396,91 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
 }> {
   const startTime = Date.now();
   const logs: SimulationLogEntry[] = [];
+
+  /**
+   * 课堂契约未达成时的 VL 停课（2026-11-19）——「学员想结束/课时用尽」不等于「学会了」：
+   * 关闭课堂（end_only，wrapup 与契约报告照常产出），但**不结算任务**，并解除 task 与课堂绑定，
+   * 下一次进入同一 task 时重新开课（新契约/新回合预算）。这样契约门在 VL 链路上不会被
+   * 收束循环熔断或 timebox-skip 旁路，也不会把任务永久卡在 pending。
+   */
+  const stopTaskForUnmetLessonContract = async (input: {
+    teachingSessionId: string;
+    gateSession: { revision?: number | null; teachingState?: Record<string, any> | null } | null;
+    gate: LessonContractGate;
+    trigger: 'learner-loop-break' | 'timebox' | 'stuck';
+    taskRuntime: Record<string, unknown>;
+    currentTask: { id: string; title?: string };
+    learningState: TeachingState;
+    teachingRevision?: number;
+  }) => {
+    const stoppedAt = new Date().toISOString();
+    const triggerText = input.trigger === 'timebox'
+      ? '课时用尽'
+      : input.trigger === 'stuck' ? '连续无进展' : '学员要求结束';
+    const reason = `课堂契约未达成：${input.gate.reasons.join('；') || '缺少独立证据'}（${triggerText}，停课不结算）`;
+    const revision = typeof input.gateSession?.revision === 'number'
+      ? input.gateSession.revision
+      : input.teachingRevision;
+    try {
+      await aiTeachingOrchestrator.endSession(input.teachingSessionId, 'contract-not-met', revision);
+    } catch (error: unknown) {
+      logger.warn('[simulation-coordinator] 契约未达成停课：课堂收束失败（留待对账）', {
+        sessionId,
+        teachingSessionId: input.teachingSessionId,
+        error: asErrorLike(error).message || String(error),
+      });
+    }
+    const stoppedState: Record<string, unknown> = {
+      ...input.learningState,
+      teachingSessionId: null,
+      ...(typeof revision === 'number' ? { teachingRevision: revision } : {}),
+      taskRuntime: {
+        ...input.taskRuntime,
+        status: 'contract-blocked',
+        reason,
+        taskId: input.currentTask.id,
+        taskTitle: input.currentTask.title,
+        teachingSessionId: null,
+        // 下一课重新开课时给足新的课时预算与收束计数，否则第二天一进来就再撞 timebox/熔断。
+        turns: 0,
+        learnerDoneStreak: 0,
+        closureDecision: null,
+        finalizedAt: stoppedAt,
+        completionSource: 'contract-not-met',
+        error: null,
+        updatedAt: stoppedAt,
+      },
+    };
+    await ctx.updateTeachingStatePreservingControlFlags(sessionId, stoppedState);
+    logs.push({
+      timestamp: stoppedAt,
+      phase: 'stage-transition',
+      details: {
+        output: {
+          action: 'contract-not-met-stop',
+          trigger: input.trigger,
+          reason,
+          contractReasons: input.gate.reasons,
+          currentTask: input.currentTask.title,
+        },
+      },
+    });
+    await ctx.addSessionLogs(sessionId, logs).catch((logError: unknown) => {
+      logger.warn('[simulation-coordinator] 记录契约未达成停课日志失败', {
+        sessionId,
+        error: asErrorLike(logError).message || String(logError),
+      });
+    });
+    return {
+      // 停课是「今天这节课上过了，只是没达标」，不是链路失败：success=true + currentTaskStopped
+      // 让当天模拟日正常消耗（否则会被判 reverted、同日反复重开课堂）。
+      success: true,
+      taskCompleted: false,
+      currentTaskStopped: true,
+      logs,
+      error: `LESSON_CONTRACT_NOT_MET: ${reason}`,
+    };
+  };
   
   try {
     const session = await ctx.getVirtualSession(sessionId);
@@ -718,6 +806,29 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
     const learnTurnBudget = resolveLearnTurnBudget(stageResults, options.turnBudget);
     const runtimeTurns = taskRuntime.taskId === currentTask.id ? Number(taskRuntime.turns || 0) : 0;
     if (runtimeTurns >= learnTurnBudget) {
+      // 课堂契约完成门（2026-11-19 真课实证的旁路）：timebox-skip 原先无条件结算任务，
+      // 契约未达成也会把 task 标完成。契约未达成时改为「停课不结算」，下一次进入同一 task
+      // 重新开课；「讲不完/验不出」应作为真实问题暴露，而不是刷成完成率。
+      const timeboxTeachingSessionId = typeof taskRuntime.teachingSessionId === 'string'
+        ? taskRuntime.teachingSessionId
+        : null;
+      if (timeboxTeachingSessionId) {
+        const gateSession = await teachingSessionRepository
+          .getById(timeboxTeachingSessionId)
+          .catch(() => null);
+        const gate = evaluateLessonContractGate(gateSession?.teachingState);
+        if (gate.enforced && !gate.met) {
+          return await stopTaskForUnmetLessonContract({
+            teachingSessionId: timeboxTeachingSessionId,
+            gateSession,
+            gate,
+            trigger: 'timebox',
+            taskRuntime,
+            currentTask,
+            learningState,
+          });
+        }
+      }
       const skipReason = `当前 task 已达 ${learnTurnBudget} 回合课时上限仍未收束，自动跳过本课，进入下一课（timebox-skip）`;
       logs.push({
         timestamp: new Date().toISOString(),
@@ -985,6 +1096,18 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
       session.id,
       Number(temporalContext?.dayIndex) || 0
     ).catch(() => []);
+    // 提取四态回写 FSRS（2026-11-19）：代码裁决的 CLEAR/VAGUE/CONFUSED/FAILED 不再只是
+    // 模拟器提示；按 review:completed canonical 口径更新掌握度/稳定性/到期，驱动后续复习。
+    if (memoryRecall.length > 0 && teachingSessionId) {
+      await recordAssistedMemoryRecallOutcomes({
+        userId: session.userId,
+        teachingSessionId,
+        pathId: session.learningPathId ?? null,
+        dayIndex: Number(temporalContext?.dayIndex) || 0,
+        hints: memoryRecall,
+        occurredAt: simulatedNowOr(),
+      });
+    }
 
     // 教学检查点消费（assisted 链路）：已在判决前取到 pendingCheckpoint，这里直接复用。
 
@@ -1236,6 +1359,29 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
         );
         const closureLoopBreak = !extensionActive && shouldBreakClosureLoop(learnerDoneStreak);
         if (closureLoopBreak) {
+          // 课堂契约完成门（2026-11-19 真课实证）：熔断的语义是「尊重学员结束意愿」，
+          // 不是「认定这节课学会了」。契约未达成时降级为停课不结算（学员仍能下课，
+          // 但 task 不标完成），否则契约门会被「学员连说三次学完了」直接旁路。
+          const loopBreakTeachingSessionId = teachingSessionId
+            || (typeof taskRuntime.teachingSessionId === 'string' ? taskRuntime.teachingSessionId : null);
+          if (loopBreakTeachingSessionId) {
+            const gateSession = await teachingSessionRepository
+              .getById(loopBreakTeachingSessionId)
+              .catch(() => null);
+            const gate = evaluateLessonContractGate(gateSession?.teachingState);
+            if (gate.enforced && !gate.met) {
+              return await stopTaskForUnmetLessonContract({
+                teachingSessionId: loopBreakTeachingSessionId,
+                gateSession,
+                gate,
+                trigger: 'learner-loop-break',
+                taskRuntime,
+                currentTask,
+                learningState,
+                teachingRevision,
+              });
+            }
+          }
           closureDecision = {
             ...closureDecision,
             canCompleteTask: true,
@@ -1331,6 +1477,46 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
 
         if (stuckVerdict.stuck && !closureDecision.canCompleteTask) {
           await ctx.assertCurrentSessionLeaseOwned(sessionId);
+          // 课堂契约完成门（2026-11-19 真课实证的旁路）：卡死收课原先只 endSession，
+          // 但 taskRuntime 仍带着已 closed 的 teachingSessionId；下一次调用命中
+          // 「会话已 completed → 补结算」恢复分支，契约未达成的任务被直接标完成
+          // （实测 u05 task2：lessonReport.met=false 仍结算）。契约未达成时改为停课不结算，
+          // 清掉课堂绑定，下一次进入同一 task 重新开课。
+          const stuckGateSession = await teachingSessionRepository
+            .getById(teachingSessionId)
+            .catch(() => null);
+          const stuckGate = evaluateLessonContractGate(stuckGateSession?.teachingState);
+          if (stuckGate.enforced && !stuckGate.met) {
+            const contractStuckLearningState: TeachingState = {
+              ...learningState,
+              teachingSessionId: null,
+              closureTrace,
+              lessonKnowledgePoints,
+              lessonDowngradedConcepts,
+              // 本轮也是本课最后一回合：对话与主观状态必须落库（同下方卡死分支）。
+              latestLearnerFeedback: virtualReplyResult.learnerFeedback || virtualReplyResult.internal?.learnerFeedback || null,
+              closureDecision,
+              conversationHistory: [
+                ...(learningState.conversationHistory || []),
+                { role: 'user', content: learnerVisibleMessage || virtualReplyResult.userVisible },
+                {
+                  role: 'assistant',
+                  content: buildTeacherVisibleContent(aiResponse, aiResult),
+                  ...(Array.isArray(teacherImages) && teacherImages.length > 0 ? { images: teacherImages } : {})
+                }
+              ],
+            };
+            return await stopTaskForUnmetLessonContract({
+              teachingSessionId,
+              gateSession: stuckGateSession,
+              gate: stuckGate,
+              trigger: 'stuck',
+              taskRuntime,
+              currentTask,
+              learningState: contractStuckLearningState,
+              teachingRevision,
+            });
+          }
           const attribution = {
             taskId: currentTask.id,
             taskTitle: currentTask.title,

@@ -1598,6 +1598,11 @@ export function buildFramedNormalizedInput(input: any): any {
       })()
     : null;
 
+  // 路径拓扑 hint（2026-11-18）：只给结构化信号能确定的两种，其余交给 path-planning 按目标语义判定。
+  // exam：intentType=exam；exploratory：entry_state=exploratory。两者都不靠关键词猜测。
+  const pathTopologyHint: 'exam' | 'exploratory' | null =
+    intentType === 'exam' ? 'exam' : entryState === 'exploratory' ? 'exploratory' : null;
+
   const framed: Record<string, any> = {
     ...input,
     version: typeof input.version === 'string' ? input.version : '1.0',
@@ -1662,6 +1667,7 @@ export function buildFramedNormalizedInput(input: any): any {
       : null,
     timeDimensions,
     planningHints,
+    ...(pathTopologyHint ? { pathTopologyHint } : {}),
     // 校内锚（2026-09-30 维度 G 评审）：从学习者自述确定性抽取教材册次/单元/考试范围/学校进度，
     // 随定帧输入一起进入 path-planning 与 path-task-design 提示词（无锚时该键不出现，行为不变）。
     // 抽取放在定帧层而不是各 skill 内：单一真相源，两处提示词引用同一对象。

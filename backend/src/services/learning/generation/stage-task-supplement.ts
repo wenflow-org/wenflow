@@ -63,7 +63,14 @@ export function needsLessonSupplement<T extends SupplementTask>(
   tasks: T[],
   targetSubtasksForStage: number | null | undefined,
   stageMinutesBudget: number | null | undefined,
+  options: { intentType?: string | null } = {},
 ): boolean {
+  // 与 path-task-design「补课调用」规则对齐（2026-11-19 审计）：补课下限只对 exam 开放；
+  // 普通认知/技能路径「课数不足」不构成补课理由（Exit Node 下宁少勿凑）。
+  // 只有显式传入 intentType 时才启用门禁，避免旧调用方（测试/脚本）语义漂移。
+  if (options.intentType !== undefined && String(options.intentType || '').trim().toLowerCase() !== 'exam') {
+    return false;
+  }
   const wanted = Number(targetSubtasksForStage);
   if (!Number.isFinite(wanted) || wanted < 2) return false;
   if (!Array.isArray(tasks) || tasks.length === 0) return false;

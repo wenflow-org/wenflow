@@ -184,6 +184,13 @@ export const RULE_KEY_SOURCES: Readonly<Record<string, readonly RuleKeySource[]>
   ],
   'teaching-turn': [
     {
+      // 课堂材料本体（2026-11-18，2026-11-19 审计修正）：装配点在 buildTeachingTurnInput，
+      // scenario.taskMaterial ← TeachingContextBuilder.taskMaterialPayload（任务级材料 sidecar）。
+      key: 'scenario.taskMaterial',
+      owner: 'scenario.taskMaterial',
+      evidence: 'backend/src/services/ai-teaching/teaching-turn-shared.ts（scenario.taskMaterial ← context.taskMaterialPayload）',
+    },
+    {
       key: 'reliability',
       owner: 'scenario.learnerPrediction',
       evidence: 'backend/src/services/ai-teaching/teaching-turn-shared.ts:96（learnerPredictionPayload.reliability）',
