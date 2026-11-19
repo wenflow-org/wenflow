@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 边界解析 LLM/JSON 动态载荷，形状由上游契约与运行时校验兜底 */
 /**
  * 课堂契约与自由支线（2026-11-19 课堂全面改造）。
  *

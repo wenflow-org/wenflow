@@ -2221,24 +2221,24 @@ onBeforeUnmount(() => {
 .task--locked .task__icon { color: var(--faint); background: var(--canvas); opacity: .62; }
 .task__kcs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .task__kc {
-  font-size: 11px; line-height: 1; padding: 4px 7px; border-radius: 999px;
+  font-size: var(--mk-fs-micro); line-height: 1; padding: 4px 7px; border-radius: 999px;
   color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 8%, transparent);
   border: 1px solid color-mix(in srgb, var(--blue) 22%, transparent);
   white-space: nowrap;
 }
 .hero__deliverable {
   margin-top: 14px; padding: 10px 12px; border-radius: 12px;
-  background: color-mix(in srgb, var(--blue) 6%, var(--card));
+  background: color-mix(in srgb, var(--blue) 6%, var(--surface));
   border: 1px solid color-mix(in srgb, var(--blue) 20%, transparent);
 }
-.hero__deliverable-tag { font-size: 11px; font-weight: 800; letter-spacing: .04em; color: var(--blue-deep); }
+.hero__deliverable-tag { font-size: var(--mk-fs-micro); font-weight: 800; letter-spacing: .04em; color: var(--blue-deep); }
 .hero__deliverable p { margin: 4px 0 0; font-size: 13.5px; line-height: 1.55; }
-.hero__deliverable small { display: block; margin-top: 3px; font-size: 11.5px; color: var(--faint); }
+.hero__deliverable small { display: block; margin-top: 3px; font-size: var(--mk-fs-micro); color: var(--faint); }
 .badge--topology { background: transparent; border: 1px dashed color-mix(in srgb, var(--blue) 35%, transparent); color: var(--blue-deep); }
 .stages__toolbar { display: flex; align-items: center; gap: 10px; padding: 2px 2px 8px; }
 .stages__toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
-.stages__toolbar small { font-size: 11.5px; color: var(--faint); }
-.stage__pending { margin: 6px 2px 2px; padding: 10px 12px; border-radius: 10px; font-size: 12.5px; color: var(--faint); background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.stages__toolbar small { font-size: var(--mk-fs-micro); color: var(--faint); }
+.stage__pending { margin: 6px 2px 2px; padding: 10px 12px; border-radius: var(--mk-radius-md); font-size: 12.5px; color: var(--faint); background: color-mix(in srgb, var(--ink) 4%, transparent); }
 .task__body strong { display: block; font-size: 13.5px; }
 .task__body small { display: block; margin-top: 2px; font-size: 12px; color: var(--faint); }
 /* 时长标签禁词中折行（bare/15）：「约 18 分钟」不拆成「约 18 分/钟」 */

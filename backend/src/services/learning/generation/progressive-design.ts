@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 边界解析 LLM/JSON 动态载荷，形状由上游契约与运行时校验兜底 */
 /**
  * 渐进式 stage 设计（活的 path 批次 D，2026-09-25）。
  *

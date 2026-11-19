@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 边界解析 LLM/JSON 动态载荷，形状由上游契约与运行时校验兜底 */
 import express from 'express';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { learnerSnapshotRefreshService } from '../../services/learner/LearnerSnapshotRefreshService';

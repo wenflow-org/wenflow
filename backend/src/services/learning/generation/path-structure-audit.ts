@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 边界解析 LLM/JSON 动态载荷，形状由上游契约与运行时校验兜底 */
 /**
  * 路径结构确定性审计（2026-10-24，离线评审基线：前置缺失 30%、重复任务 20%）
  *

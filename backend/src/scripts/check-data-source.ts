@@ -80,11 +80,11 @@ const CALL_SITE_MANIFEST: Record<string, CallSite[]> = {
     { file: 'backend/src/services/learning/replan/path-replan.service.ts', line: 114 },
   ],
   'teaching-turn': [
-    { file: 'backend/src/services/ai-teaching/teaching-turn-engine.ts', line: 283 },
+    { file: 'backend/src/services/ai-teaching/teaching-turn-engine.ts', line: 421 },
   ],
   'teaching-peer-reinforcement': [
     { file: 'backend/src/services/ai-teaching/teaching-session-ops.ts', line: 620 },
-    { file: 'backend/src/services/ai-teaching/teaching-turn-engine.ts', line: 408 },
+    { file: 'backend/src/services/ai-teaching/teaching-turn-engine.ts', line: 1237 },
   ],
   'teaching-wrapup': [
     { file: 'backend/src/services/ai-teaching/teaching-session-lifecycle.ts', line: 628 },

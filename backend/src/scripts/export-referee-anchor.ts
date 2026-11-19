@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 边界解析 LLM/JSON 动态载荷，形状由上游契约与运行时校验兜底 */
 /**
  * Referee 人工锚点抽样导出（2026-11-19，P2 效度闭环）。
  *

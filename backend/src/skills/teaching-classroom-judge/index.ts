@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 边界解析 LLM/JSON 动态载荷，形状由上游契约与运行时校验兜底 */
 /**
  * teaching-classroom-judge —— 课堂级独立 LLM 评审（handler-only 小 skill，2026-11-13）。
  *

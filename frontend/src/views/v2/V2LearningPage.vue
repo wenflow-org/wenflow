@@ -3415,14 +3415,14 @@ onBeforeUnmount(() => {
 }
 .contract__row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .contract__tag {
-  font-size: 11px; font-weight: 700; letter-spacing: .04em;
+  font-size: var(--mk-fs-micro); font-weight: 700; letter-spacing: .04em;
   padding: 2px 7px; border-radius: 999px;
   background: color-mix(in srgb, var(--blue) 16%, transparent);
   color: var(--blue);
 }
 .contract__meta { font-size: 12px; color: var(--muted); }
 .contract__branch {
-  margin-left: auto; font-size: 11px; color: var(--muted);
+  margin-left: auto; font-size: var(--mk-fs-micro); color: var(--muted);
   padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line);
 }
 .contract__branch--active {
@@ -3439,10 +3439,10 @@ onBeforeUnmount(() => {
   border-color: color-mix(in srgb, var(--green, #2f7d4f) 35%, transparent);
   background: color-mix(in srgb, var(--green, #2f7d4f) 9%, transparent);
 }
-.contract__park { font-size: 11px; color: var(--muted); }
-.contract__exit { margin-top: 4px; font-size: 11px; color: var(--muted); }
+.contract__park { font-size: var(--mk-fs-micro); color: var(--muted); }
+.contract__exit { margin-top: 4px; font-size: var(--mk-fs-micro); color: var(--muted); }
 .contract__exit--pending { color: var(--accent, #b45309); }
-.contract__exit--passed { color: var(--success, #15803d); }
+.contract__exit--passed { color: var(--green-ink); }
 .contract__exit--failed { color: var(--danger, #b91c1c); }
 .finish__contract { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
 

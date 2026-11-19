@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 边界解析 LLM/JSON 动态载荷，形状由上游契约与运行时校验兜底 */
 /**
  * export-classroom-md.ts —— 把 mini-batch 某批的真实课堂逐轮导出为人类可读 Markdown，
  * 供教育视角 / 学员体验视角的子代理评审（2026-11-14 交流体验专项取证）。

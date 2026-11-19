@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 边界解析 LLM/JSON 动态载荷，形状由上游契约与运行时校验兜底 */
 /**
  * judge-minibatch-classrooms.ts —— 课堂级独立 LLM 评审跑数器（2026-11-13 mini-batch 第 2 步）。
  *

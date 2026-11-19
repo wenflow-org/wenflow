@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- 边界解析 LLM/JSON 动态载荷，形状由上游契约与运行时校验兜底 */
 /**
  * 本轮板书意图（2026-10-27 改造）：在画板**之前**，先由代码决定「这一轮老师要让学生产出什么」。
  *
