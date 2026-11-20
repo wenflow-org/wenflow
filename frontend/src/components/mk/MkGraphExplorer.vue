@@ -125,27 +125,33 @@
                  「已掌握/进行中/记忆偏弱/待学习」计数（同一信息横竖各画一遍是重复），
                  底图例只留「连线语义 + 形状/操作提示」这两样头行没有的东西 -->
             <div class="mk-ge__legend">
-              <span class="mk-ge__legend-group">
-                <i
-                  class="mk-ge__line"
-                  :style="{ borderTop: `${legendLines.prereq.width}px ${legendLines.prereq.type} ${legendLines.prereq.color}` }"
-                />前置依赖（先掌握左边）
-                <i
-                  class="mk-ge__line"
-                  :style="{ borderTop: `${legendLines.part.width}px ${legendLines.part.type} ${legendLines.part.color}` }"
-                />属于（知识组件 → 核心概念）
+              <span class="mk-ge__legend-group mk-ge__legend-lines">
+                <span class="mk-ge__legend-item">
+                  <i
+                    class="mk-ge__line"
+                    :style="{ borderTop: `${legendLines.prereq.width}px ${legendLines.prereq.type} ${legendLines.prereq.color}` }"
+                  />前置依赖（先掌握左边）
+                </span>
+                <span class="mk-ge__legend-item">
+                  <i
+                    class="mk-ge__line"
+                    :style="{ borderTop: `${legendLines.part.width}px ${legendLines.part.type} ${legendLines.part.color}` }"
+                  />属于（知识组件 → 核心概念）
+                </span>
               </span>
               <span class="mk-ge__legend-group mk-ge__legend-hint">
                 <!-- 形状与大小都要有出处（2026-11-09 走查）：图上同时出现圆/圆角方块与大小两档，
                      而图例此前只在头行解释了颜色，读者只能猜「方块是不是没学会」。
                      形状 = 粒度（圆点=核心概念 / 方块=知识组件，与 MkGraph 的 symbol 一致）；
-                     大小 = 该节点在图里的关系条数（MkGraph 的 baseSize 由 degree 推）。 -->
-                <i class="mk-ge__shape mk-ge__shape--round" aria-hidden="true" />圆点=核心概念 ·
-                <i class="mk-ge__shape mk-ge__shape--square" aria-hidden="true" />方块=知识组件 ·
-                节点越大=关系越多 ·
-                <span class="mk-ge__legend-desktop">拖动/滚轮可缩放</span>
-                <span class="mk-ge__legend-mobile">双指可缩放</span>
-                <span class="mk-ge__legend-tap"> · 点节点看名称</span>
+                     大小 = 该节点在图里的关系条数（MkGraph 的 baseSize 由 degree 推）。
+                     2026-11-20 移动端走查：整段是一句 nowrap 的块，390px 下直接溢出到屏幕外；
+                     拆成「每条提示一个 nowrap 项」+ flex 换行，整条提示换行而不是词中断行。 -->
+                <span class="mk-ge__legend-item"><i class="mk-ge__shape mk-ge__shape--round" aria-hidden="true" />圆点=核心概念</span>
+                <span class="mk-ge__legend-item"><i class="mk-ge__shape mk-ge__shape--square" aria-hidden="true" />方块=知识组件</span>
+                <span class="mk-ge__legend-item">节点越大=关系越多</span>
+                <span class="mk-ge__legend-item mk-ge__legend-desktop">拖动/滚轮可缩放</span>
+                <span class="mk-ge__legend-item mk-ge__legend-mobile">双指可缩放</span>
+                <span class="mk-ge__legend-item mk-ge__legend-tap">点节点看名称</span>
               </span>
             </div>
           </div>
@@ -836,8 +842,16 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   gap: var(--mk-space-1);
   /* 组内禁折行（2026-11-05 UX 审计）：402px 视口下「属于（知识组件 → 核心概念）」
      曾被拆成「核心概/念）」断在括号中间、符号悬在行首（截图实证）。外层 .mk-ge__legend
-     已有 flex-wrap，整组放不下时作为整体换行，组内文字不再词中拆断 */
+     已有 flex-wrap，整组放不下时作为整体换行，组内文字不再词中拆断。
+     2026-11-20 移动端走查：连线图例（两项、各带线样）在 390px 仍宽于整行 → 改为
+     「一项一个 nowrap 项」，组内按项换行，既不再溢出也不在括号中间断字。 */
   white-space: nowrap;
+}
+.mk-ge__legend-lines {
+  flex-wrap: wrap;
+  max-width: 100%;
+  white-space: normal;
+  gap: 2px 12px;
 }
 /* .mk-ge__dot* 已删（2026-11-05 PC 走查）：四档状态点从底图例撤除后无引用，
    状态色点只剩画布头统计行自己的 <i>（.mk-ge__stat 系） */
@@ -861,16 +875,27 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
 .mk-ge__shape--round { border-radius: 50%; }
 .mk-ge__shape--square { border-radius: 2px; }
 .mk-ge__legend-hint {
-  display: block;
+  /* 一条提示一项、按项换行：整组 white-space:nowrap 在 390px 会撑出屏幕（2026-11-20 移动端走查） */
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 12px;
+  white-space: normal;
   opacity: 0.8;
+}
+.mk-ge__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
 }
 /* 窄屏密集图不常显标签（见 MkGraph labelWorthy），补一句操作提示，避免用户以为图没名字 */
 .mk-ge__legend-tap { display: none; white-space: nowrap; }
 .mk-ge__legend-mobile { display: none; }
 @media (max-width: 900px) {
   .mk-ge__legend-desktop { display: none; }
-  .mk-ge__legend-mobile { display: inline; }
-  .mk-ge__legend-tap { display: inline; }
+  .mk-ge__legend-mobile { display: inline-flex; }
+  .mk-ge__legend-tap { display: inline-flex; }
 }
 /* 画布角落缩放控件（+ / - / ⟲）：38px 方钮竖排贴右下角图例上方 */
 .mk-ge__zoom {
@@ -880,6 +905,12 @@ input[type='checkbox'] { width: 18px; height: 18px; accent-color: var(--blue); }
   z-index: 5;
   display: grid;
   gap: 4px;
+}
+@media (max-width: 900px) {
+  /* 图例在窄屏会折成 3~4 行，原本按单行 40px 预留的 bottom 会让 +/−/⤢ 压在文字上。
+     抬到图例行高之上，按钮组仍贴画布右下角（2026-11-20 移动端走查实测 390px）。
+     必须写在基础规则之后：同权重下后写的覆盖。 */
+  .mk-ge__zoom { bottom: 112px; }
 }
 .mk-ge__zoom-btn {
   width: 32px; height: 32px;

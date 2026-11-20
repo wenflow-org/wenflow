@@ -113,7 +113,7 @@
           :mastered-count="knowledgePoints.filter(kp => kp.status === 'mastered').length"
           :total-count="knowledgePoints.length"
           :duration="formatTime(durationSeconds)"
-          :message-count="mainDialogueMessages.length"
+          :message-count="transcriptTotalCount"
           :wrapup="wrapup"
           :advisory="sessionDetail.advisory || null"
           :busy="completeTaskBusy"
@@ -196,11 +196,14 @@
               <article
                 v-if="entry.kind === 'message'"
                 class="evaluation-transcript-item"
-                :class="`evaluation-transcript-item--${entry.message.role}`"
+                :class="[
+                  `evaluation-transcript-item--${entry.message.role}`,
+                  { 'evaluation-transcript-item--peer': entry.message.peer === true }
+                ]"
                 :style="{ animationDelay: Math.min(index * 40, 500) + 'ms' }"
               >
                 <div class="evaluation-transcript-item__meta">
-                  <strong>{{ getMessageRoleLabel(entry.message.role) }}</strong>
+                  <strong>{{ entry.message.peer === true ? (entry.message.role === 'user' ? '你 · 伴学' : '伴学') : getMessageRoleLabel(entry.message.role) }}</strong>
                   <span v-if="entry.message.timestamp">{{ formatMessageTime(entry.message.timestamp) }}</span>
                 </div>
                 <div class="evaluation-transcript-item__body">
@@ -220,6 +223,19 @@
                     :figure="f"
                   />
                 </div>
+                <!-- 伴学插话（2026-11-20 走查）：课堂里伴学会在老师回合旁插一句，
+                     存成 assistant.peerMessage；当堂对话此前只回放老师主文，回看时这段互动直接消失。 -->
+                <aside
+                  v-if="entry.message.peerMessage && entry.message.peer !== true"
+                  class="evaluation-transcript-peer"
+                >
+                  <div class="evaluation-transcript-peer__meta">
+                    <strong>伴学</strong>
+                  </div>
+                  <div class="evaluation-transcript-peer__body">
+                    <MarkdownRenderer :content="entry.message.peerMessage" />
+                  </div>
+                </aside>
               </article>
               <!-- 小测回放卡（2026-11-04 走查）：题面/选项/学生选择/对错都在
                    teachingState.checkpointHistory（服务端已剥答案键），此前评估页完全不回放。
@@ -1629,6 +1645,46 @@ onUnmounted(() => {
   border-color: color-mix(in srgb, var(--blue) 22%, transparent);
 }
 
+/* 伴学单独发言（peer 标记行）：和老师/学员气泡区分开，回看时能认出这是伴学说的 */
+.evaluation-transcript-item--peer {
+  background: color-mix(in srgb, var(--blue) 6%, var(--surface));
+  border-color: color-mix(in srgb, var(--blue) 20%, var(--line));
+}
+
+/* 伴学在老师回合里的插话：挂在老师主文下方，不另起一条对话计数 */
+.evaluation-transcript-peer {
+  margin-top: 2px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--blue) 18%, var(--line));
+  border-left: 3px solid var(--blue);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--blue) 6%, var(--surface));
+}
+
+.evaluation-transcript-peer__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--blue-ink);
+}
+
+.evaluation-transcript-peer__body {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ink);
+}
+
+.evaluation-transcript-peer__body :deep(.markdown-renderer),
+.evaluation-transcript-peer__body :deep(.markdown-renderer > p) {
+  margin: 0;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+}
+
 .evaluation-transcript-item__meta {
   display: flex;
   align-items: center;
@@ -2016,6 +2072,12 @@ onUnmounted(() => {
 
   .evaluation-shell :deep(.advisory-options .completion-btn--primary) {
     grid-column: 1 / -1;
+  }
+
+  /* 去掉复读的「查看调整建议」后只剩两颗：主按钮若仍整行，旁边会空出半格。
+     两钮并排各占一列，既对齐又不多占一行。 */
+  .evaluation-shell :deep(.advisory-options--pair .completion-btn--primary) {
+    grid-column: auto;
   }
 
   .evaluation-shell :deep(.completion-actions) {

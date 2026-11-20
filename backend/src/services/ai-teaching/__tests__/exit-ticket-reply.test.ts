@@ -4,6 +4,7 @@
  * 否则学生（尤其模拟学习者）会去答前一个问题，终检被记成「空作答」。
  */
 import { appendExitTicketToReply } from '../teaching-turn-engine';
+import { gradePendingExitTicket, isExitTicketFormatMiss } from '../teaching-turn-preparation';
 import type { ExitTicket } from '../lesson-contract';
 
 const ticket: ExitTicket = {
@@ -44,5 +45,60 @@ describe('appendExitTicketToReply', () => {
     const output = { reply: `最后一道题：${ticket.question}` };
     appendExitTicketToReply(output, ticket);
     expect(output.reply.match(new RegExp(ticket.question.slice(0, 20), 'g'))?.length).toBe(1);
+  });
+
+  it('选择题必须列出选项原文，不能只问「回复选项字母」', () => {
+    const output = { reply: '这节课的重点是三表勾稽。' };
+    appendExitTicketToReply(output, ticket);
+    expect(output.reply).toContain('A. 收现少 400 万');
+    expect(output.reply).toContain('B. 收现少 800 万');
+    expect(output.reply.indexOf('A. 收现少 400 万')).toBeLessThan(output.reply.indexOf('回复选项字母即可'));
+  });
+});
+
+describe('gradePendingExitTicket 格式未识别', () => {
+  const failedEmpty = (id: string, attempt: number): ExitTicket => ({
+    ...ticket,
+    id,
+    status: 'failed',
+    passed: false,
+    attempts: attempt,
+    answerExcerpt: '两列都会互换：按位置拼，部门列的文本会落进人数列。',
+    detail: '选项集合不一致（正确 A，作答 空）',
+  });
+
+  it('整句作答、未带选项字母：保持 pending，不判负、不消耗次数，并触发重贴题面', () => {
+    const result = gradePendingExitTicket({
+      exitTicketState: ticket,
+      exitTicketHistory: [],
+      message: '两列都会互换：按位置拼，部门列的文本会落进人数列。',
+    });
+    expect(result.formatMiss).toBe(true);
+    expect(result.graded).toBe(false);
+    expect(result.state?.status).toBe('pending');
+    expect(result.attempts).toBe(0);
+    expect(result.history).toHaveLength(0);
+  });
+
+  it('历史里的「作答 空」不计入失败次数，不会把终检额度耗成死局', () => {
+    expect(isExitTicketFormatMiss(failedEmpty('et-0', 1))).toBe(true);
+    const result = gradePendingExitTicket({
+      exitTicketState: failedEmpty('et-2', 2),
+      exitTicketHistory: [failedEmpty('et-1', 1), failedEmpty('et-2', 2)],
+      message: '继续',
+    });
+    expect(result.attempts).toBe(0);
+  });
+
+  it('真正选了错误选项仍计一次失败', () => {
+    const result = gradePendingExitTicket({
+      exitTicketState: ticket,
+      exitTicketHistory: [failedEmpty('et-0', 1)],
+      message: 'A',
+    });
+    expect(result.formatMiss).toBe(false);
+    expect(result.graded).toBe(true);
+    expect(result.state?.status).toBe('failed');
+    expect(result.attempts).toBe(1);
   });
 });

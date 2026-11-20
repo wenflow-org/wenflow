@@ -179,7 +179,7 @@
           <strong><span class="panel__head-lead">学情</span><span class="panel__head-ext">画像</span></strong>
           <span
             class="panel__count"
-            :title="live.defaultCount ? '平台根据你的描述先填入或假设，尚未经你确认；可直接在对话里改' : undefined"
+            :title="live.defaultCount ? '平台根据你的描述先填入或假设，尚未经你确认。可直接在对话里改' : undefined"
           ><span class="panel__count-k">已确认</span> {{ live.filledCount }}<span v-if="live.defaultCount" class="panel__count-default"> · {{ live.defaultCount }} 项平台暂定</span><span v-else class="panel__count-default"> / {{ live.totalFields }}</span></span>
           <span class="panel__caret" aria-hidden="true">{{ panelExpanded ? '▾' : '▸' }}</span>
         </button>

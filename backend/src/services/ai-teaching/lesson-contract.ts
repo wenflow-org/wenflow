@@ -571,8 +571,10 @@ export function buildLessonReport(input: {
   const ticketPassed = ticket?.status === 'passed';
   const reasons = [...input.evaluation.reasons];
   if (ticketAsked && !ticketPassed) {
+    // detail 里可能带「正确 A」这类答案键（teaching-checkpoint 生成），只留服务端审计；
+    // report.reasons 会原样回给客户端并显示在结算门禁上，不能把正确选项泄给学员。
     reasons.push(ticket?.status === 'failed'
-      ? `课末终检未通过：${ticket.conceptName}（${ticket.detail || '未达到通过标准'}）`
+      ? `课末终检未通过：${ticket.conceptName || '核心 KC'}`
       : `课末终检待作答：${ticket?.conceptName || '核心 KC'}`);
   }
   return {

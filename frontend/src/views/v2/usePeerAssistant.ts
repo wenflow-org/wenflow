@@ -1,5 +1,5 @@
 /**
- * 伴学浮窗域（V2LearningPage.vue 拆分）：角色「小启」dock 式浮窗
+ * 伴学浮窗域（V2LearningPage.vue 拆分）：角色「伴学」dock 式浮窗
  * 消息收发（流式 + 传输失败回退非流式）、触发频控自动展开、历史回填与重置
  */
 import { computed, nextTick, ref, type Ref } from 'vue';
@@ -12,7 +12,7 @@ export interface PeerChatItem {
   time: string;
   /** 伴学策略（英文枚举），展示为学法标签；主动消息/失败兜底为 null */
   strategy?: string | null;
-  /** 小启消息自带的后续追问快选（skill followUpQuestions） */
+  /** 伴学消息自带的后续追问快选（skill followUpQuestions） */
   followUps?: string[];
 }
 
@@ -38,7 +38,7 @@ export function usePeerAssistant(session: Ref<{ sessionId: string; revision: num
   /** 伴学窗流式发送的独立 AbortController（与主对话互不干扰） */
   let peerStreamAbort: AbortController | null = null;
 
-  /** 最近一条小启消息的策略：头部状态行展示「正在用 XX 陪你练」 */
+  /** 最近一条伴学消息的策略：头部状态行展示「正在用 XX 陪你练」 */
   const peerLastStrategy = ref<string | null>(null);
 
   /** 头部状态行文案：随打开来源 + 最近策略动态变化 */
@@ -72,7 +72,7 @@ export function usePeerAssistant(session: Ref<{ sessionId: string; revision: num
   }
 
   /** AI 侦测卡点推来消息：**只亮红点不自动展开**（2026-09-25 设计调整）。
-      原自动展开会盖住老师刚发的消息/配图（真课实测：老师提问等学生作答时被小启窗压住）——
+      原自动展开会盖住老师刚发的消息/配图（真课实测：老师提问等学生作答时被伴学窗压住）——
       学生应先看老师，红点 + FAB 文案邀请学生自己点开，主动权在学生。 */
   function openPeerByTrigger() {
     peerEntry.value = 'trigger';
@@ -91,7 +91,7 @@ export function usePeerAssistant(session: Ref<{ sessionId: string; revision: num
     if (item.role === 'peer') {
       if (item.strategy) peerLastStrategy.value = item.strategy;
     } else {
-      // 用户发言后，下一条小启回复前保持「正在陪你聊」
+      // 用户发言后，下一条伴学回复前保持「正在陪你聊」
       peerLastStrategy.value = null;
       peerEntry.value = 'user';
     }
@@ -149,7 +149,7 @@ export function usePeerAssistant(session: Ref<{ sessionId: string; revision: num
     await sendPeerCore(t);
   }
 
-  /** 点击小启给的追问快选：直接发送该追问 */
+  /** 点击伴学给的追问快选：直接发送该追问 */
   async function sendPeerDirect(text: string) {
     const t = String(text || '').trim();
     if (!t || peerSending.value || !session.value) return;

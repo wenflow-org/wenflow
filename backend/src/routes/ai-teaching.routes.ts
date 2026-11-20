@@ -472,6 +472,12 @@ const resolveTeachingError = (error: any, fallbackMessage: string): { status: nu
     status = 409;
   } else if (code === 'FINALIZATION_SESSION_NOT_CLOSED') {
     status = 409;
+  } else if (code === 'LESSON_CONTRACT_NOT_MET') {
+    /* 契约门（2026-11-20 课堂走查）：服务端消息含「缺少证据的 KC」，会被下方
+       message.includes('缺少') 抢先改写成 400 VALIDATION_ERROR——前端收到的 code
+       随之丢失，结算失败退化成「课堂结束处理尚未完成」的通用故障弹窗。
+       显式 code 优先于文案启发式：保留契约门的 409 与原文，前端才能给逐条缺口。 */
+    status = 409;
   } else if (message.includes('无权访问')) {
     status = 403;
     code = 'FORBIDDEN';

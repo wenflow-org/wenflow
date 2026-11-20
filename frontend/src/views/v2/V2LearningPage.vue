@@ -20,13 +20,17 @@
              （有活会话 + 未结算 + 非延伸学习），不再额外要求「已有一轮对话」——
              否则这次合并等于悄悄收窄了可结算的范围。知识点未全掌握时仍可计入进度，
              提示走 title（finishHint）。 -->
+        <!-- 结课入口只在本节真正学完（知识点全掌握 / 契约已达标）时出现：
+             开课 0/4 就摆「完成」会读成催进度或可随时结课；提前离开用 ⋯ 菜单的
+             「结束学习（不计入完成）」，两者语义分开。 -->
         <button
-          v-if="session && !completed && !extensionMode"
+          v-if="canCompleteLesson"
           type="button"
           class="learn__finishbtn"
+          aria-label="完成本节"
           :title="finishHint"
           @click="completeAndSettle()"
-        >完成本节</button>
+        ><span class="learn__finishbtn-full">完成本节</span><span class="learn__finishbtn-short" aria-hidden="true">完成</span></button>
         <!-- 知识点入口：原型单列无侧栏 → 常驻左栏降级为头部入口 + 浮窗（功能不删） -->
         <button
           v-if="knowledgePoints.length"
@@ -36,8 +40,9 @@
           :aria-label="`知识点 ${masteredCount}/${knowledgePoints.length}，${kpOpen ? '收起' : '打开'}知识点面板`"
           :aria-expanded="kpOpen"
           aria-controls="learn-kp-panel"
+          title="知识点进度"
           @click="toggleKp"
-        >知识点 <b>{{ masteredCount }}/{{ knowledgePoints.length }}</b></button>
+        ><span class="learn__kpbtn-text">知识点</span><b>{{ masteredCount }}/{{ knowledgePoints.length }}</b></button>
         <!-- 顶栏「学习中」裸绿字撤除（2026-11-06 走查）：用户本来就在课堂里，这行绿字
              既不解释状态、又与两侧胶囊/按钮抢宽度。正常态整条让位；只有**异常**（开课失败
              红字 / 锁定课琥珀字）才显形——那是用户必须知道的，藏在 ⋯ 菜单里不合适。 -->
@@ -55,6 +60,15 @@
         <ImmersiveMenu mask>
           <div class="learn__menu-group">
             <span v-if="!session" class="learn__menu-label">本节还没有开起来，先返回路径详情处理解锁或重开。</span>
+            <!-- 未达到完课条件时，完成入口收进 ⋯：不在页头提前催「完成」；
+                 点它会走同一套契约门禁，缺什么由页内提示逐条说明。达标后页头出现 CTA，
+                 这条自动退场，避免双入口。 -->
+            <button
+              v-if="session && !completed && !extensionMode && !canCompleteLesson"
+              type="button"
+              class="learn__menu-item"
+              @click="completeAndSettle()"
+            >完成本节（计入进度）</button>
             <button type="button" class="learn__menu-item" v-if="session" @click="pauseAndLeave">暂停并离开</button>
             <button type="button" class="learn__menu-item" v-if="session && !completed" @click="endSession">{{ END_WITHOUT_FINISH_LABEL }}</button>
             <!-- 已结算：不给「说明文字」，给一个真动作（copy:check §6「变控件」） -->
@@ -244,34 +258,34 @@
         </div>
         <div v-else-if="openingScene && !openingSceneDone"
              class="oscene" :class="`oscene--${openingScene.kind || 'first'}`">
-            <div class="oscene__tag">{{ sceneTag }}</div>
-            <h3 class="oscene__title">{{ openingScene.title || sceneDefaultTitle }}</h3>
+            <div class="oscene__head">
+              <div class="oscene__tag">{{ sceneTag }}</div>
+              <h3 class="oscene__title">{{ openingScene.title || sceneDefaultTitle }}</h3>
+            </div>
             <p v-if="sceneLead" class="oscene__lead">{{ sceneLead }}</p>
-            <div v-if="openingScene.recap?.summary" class="oscene__summary">{{ openingScene.recap.summary }}</div>
+            <p v-if="sceneSummary" class="oscene__summary">{{ sceneSummary }}</p>
             <div v-if="sceneUnresolved.length" class="oscene__chips">
-              <span class="oscene__chip-label">上次还没完全掌握</span>
+              <span class="oscene__chip-label">上次待巩固</span>
               <span v-for="(u, ui) in sceneUnresolved" :key="ui" class="oscene__chip">{{ u }}</span>
             </div>
             <div v-if="sceneMasteryWarn.length" class="oscene__warn">
               <span>前序基础提醒：</span>{{ sceneMasteryWarn }}
             </div>
+            <!-- 主行动与弱出口同一行：破坏性的「重新开始」仍降级为文字链接，
+                 但不再孤零零掉到卡片左下角（2026-11-20 恢复卡走查）。 -->
             <div class="oscene__actions">
               <button type="button" class="btn-primary" :disabled="typing || actionBusy" @click="startFromScene">
                 <span v-if="typing" class="spinner spinner--sm"></span>
                 {{ scenePrimaryText }}
               </button>
+              <button
+                v-if="openingScene.kind === 'resume'"
+                type="button"
+                class="oscene__restart"
+                :disabled="typing || actionBusy"
+                @click="restart"
+              >重新开始</button>
             </div>
-            <!-- 破坏性出口降级为角落小字链接：不与主行动并排抢点击（确认弹窗仍兜底，2026-10-09 用户反馈）。
-                 「先看看」已删：卡片非模态，历史与快选在其后本来可见，不点主按钮的自然状态就是先看看。
-                 「（清空当前进度）」已删（2026-11-03 次要文字扫查）：后果由确认弹窗完整承载，
-                 ⋯菜单的 small 是同一事实的第二遍（用于区分并列项），角落链接不再第三遍陈述 -->
-            <button
-              v-if="openingScene.kind === 'resume'"
-              type="button"
-              class="oscene__restart"
-              :disabled="typing || actionBusy"
-              @click="restart"
-            >重新开始</button>
         </div>
 
         <div ref="scrollEl" class="tutor__scroll" :class="{ 'tutor__scroll--intro': introLayout }" @scroll="updateNearBottom">
@@ -479,7 +493,6 @@
               <span class="reply__text">{{ q }}</span>
             </button>
           </div>
-          <p v-if="allKpMastered" class="replies__nudge">本节知识点已全部过完，点「完成本节」即可完成这节课。</p>
         </div>
 
         <!-- 知识点确认（动态行动台）：AI 讲完一个点、给出 confirmCheck 时出现 -->
@@ -583,7 +596,7 @@
               type="button"
               class="checkpoint__peer"
               @click="openPeerByUser"
-            >问小启</button>
+            >问伴学</button>
           </div>
           <!-- 越过小测的后果说明（2026-11-06）：出题闸门在后端是硬拦
                （teaching-checkpoint.ts「已有 pendingCheckpoint 就不再出题」），
@@ -619,6 +632,29 @@
               >仍然完成结算</button>
               <button type="button" class="gate__close" aria-label="关闭提示" @click="dismissSettleGate">✕</button>
             </div>
+          </div>
+        </Transition>
+
+        <!-- 结束提示：完成条件已满足时，不让「可以收课了」只藏在页头一颗小按钮里。
+             门禁/结算浮层出现时让位，避免同一屏三条指令抢焦点。 -->
+        <Transition name="gate-pop">
+          <div v-if="lessonReadyToFinish && !settleBlock && !finalizing" class="ready" role="region" aria-label="本节完成提示">
+            <div class="ready__body">
+              <strong>{{ allKpMastered ? '本节知识点已全部掌握' : '本节目标已达成' }}</strong>
+              <span>可以完成本节，系统会生成本次学习总结。</span>
+            </div>
+            <button type="button" class="btn-primary ready__go" @click="completeAndSettle()">完成本节</button>
+          </div>
+        </Transition>
+
+        <!-- 知识点已学完但契约未过：说明还差课末终检，而不是摆一颗点了必被 409 拒绝的「完成本节」 -->
+        <Transition name="gate-pop">
+          <div v-if="showFinishBlocked" class="ready ready--blocked" role="region" aria-label="本节完成提示">
+            <div class="ready__body">
+              <strong>{{ finishBlockedTitle }}</strong>
+              <span>{{ finishBlockedText }}</span>
+            </div>
+            <button type="button" class="btn-ghost ready__go" @click="goAnswerFinishGate">去作答</button>
           </div>
         </Transition>
 
@@ -749,7 +785,10 @@
             <span class="finish__ring">
               <svg viewBox="0 0 24 24" width="26" height="26"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
             </span>
-            <h2>本节完成</h2>
+            <h2>{{ finishHeading }}</h2>
+            <p v-if="finishAction === 'end_only'" class="finish__notcounted">
+              本次不计入完成，任务进度与里程碑保持不变。学习总结仍可在反馈里查看。
+            </p>
             <p>{{ wrapupText || '这次学习已经记录。' }}</p>
             <div v-if="finishStats.length" class="finish__stats">
               <span v-for="(s, i) in finishStats" :key="i"><b>{{ s.value }}</b>{{ s.label }}</span>
@@ -777,18 +816,19 @@
       </section>
     </div>
 
-    <!-- 伴学浮窗：小启（独立角色，暖橙系）；不占主对话区，可回复、可收起成悬浮球 -->
+    <!-- 伴学浮窗：问流伴学（平台蓝，独立于导师对话）；不占主对话区，可回复、可收起成悬浮球 -->
     <div v-if="peerOpen && peerItems.length" class="peer-backdrop" aria-hidden="true" @click="minimizePeer"></div>
     <Transition name="peer-pop">
-      <div v-if="peerOpen && peerItems.length" class="peerdock" role="dialog" aria-label="小启伴学" aria-live="polite">
+      <div v-if="peerOpen && peerItems.length" class="peerdock" role="dialog" aria-label="问流伴学" aria-live="polite">
         <div class="peerdock__head">
           <span class="peerdock__avatar" aria-hidden="true">
-            <span class="peerdock__avatar-q">Q</span>
+            <svg class="peerdock__avatar-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z"/>
+            </svg>
           </span>
           <div class="peerdock__title">
             <span class="peerdock__name">
-              <strong>小启</strong>
-              <span class="peerdock__tag">伴学伙伴</span>
+              <strong>问流伴学</strong>
             </span>
             <span class="peerdock__status">
               <i class="peerdock__status-dot"></i>{{ peerHeadline }}
@@ -825,7 +865,7 @@
             v-model="peerInput"
             type="text"
             maxlength="500"
-            placeholder="和小启聊聊你的卡点…"
+            placeholder="和伴学聊聊你的卡点…"
             @keydown.enter.exact.prevent="sendPeer"
           />
           <button
@@ -845,14 +885,16 @@
       v-if="!peerOpen && peerItems.length"
       type="button"
       class="peerfab"
-      :class="{ 'peerfab--quiz': !!checkpoint }"
-      aria-label="打开小启伴学"
+      :class="{ 'peerfab--quiz': !!checkpoint, 'peerfab--gate': !!settleBlock, 'peerfab--ready': lessonReadyToFinish || showFinishBlocked }"
+      aria-label="打开问流伴学"
       @click="openPeerByUser"
     >
-      <span class="peerfab__q" aria-hidden="true">Q</span>
+      <svg class="peerfab__icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z"/>
+      </svg>
       <span class="peerfab__label" aria-hidden="true">伴学</span>
       <i v-if="peerUnread" class="peerfab__dot"></i>
-      <span v-if="peerUnread" class="peerfab__hint" role="status">小启有新消息</span>
+      <span v-if="peerUnread" class="peerfab__hint" role="status">伴学有新消息</span>
     </button>
     <!-- 教师补充材料弹层（批次 E） -->
     <div v-if="supplementPreview.open" class="supmodal" @click.self="closeSupplement">
@@ -1242,7 +1284,16 @@ const SETTLE_GATE_COPY: Record<string, { title: string; action: SettleGateAction
     actionLabel: '去作答',
     guide: '先答完这道小测。等老师讲完这一轮，再来结算课堂。'
   },
-  FINALIZATION_LAST_CHECKPOINT_FAILED: { title: '先把最后一道小测处理完', action: 'checkpoint', actionLabel: '去查看' }
+  FINALIZATION_LAST_CHECKPOINT_FAILED: { title: '先把最后一道小测处理完', action: 'checkpoint', actionLabel: '去查看' },
+  /* 2026-11-20 课堂走查：契约门 409（LESSON_CONTRACT_NOT_MET）此前落到通用失败弹窗
+     「课堂结算遇到问题，稍后重试」——实际不是故障，是核心 KC 缺证据，重试永远同一结果，
+     还把用户往「查看学习反馈」这个死胡同里推。服务端 error.message 已带逐条缺口，
+     与上面三条门禁同样走页内常驻提示，把原因原文和「继续作答」出口一起给到。 */
+  LESSON_CONTRACT_NOT_MET: {
+    title: '还差几步才能完成本节课',
+    action: 'composer',
+    actionLabel: '继续学习'
+  }
 }
 function showSettleGate(code: string, message: string, server = false) {
   const copy = SETTLE_GATE_COPY[code] || {
@@ -1278,6 +1329,13 @@ function jumpToSettleGate() {
     return
   }
   composerEl.value?.focus()
+}
+
+/** 契约未过时把最后一条教师消息（通常就是课末终检题）带回视野，并把焦点交给输入框 */
+function goAnswerFinishGate() {
+  const nodes = document.querySelectorAll<HTMLElement>('.tutor__scroll .msg--ai')
+  nodes[nodes.length - 1]?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  composerEl.value?.focus({ preventScroll: true })
 }
 
 /* ---------- 结算成功后的自动进入反馈 ----------
@@ -1465,6 +1523,13 @@ const shouldAskSelfAssess = computed(() => {
 });
 
 const completed = ref(false);
+/** 本次收尾走的动作：end_only 不计入完成，完成浮层不能再说「本节完成」 */
+const finishAction = ref<'complete_task' | 'end_only' | 'complete_review' | null>(null);
+const finishHeading = computed(() => {
+  if (finishAction.value === 'end_only') return '本次学习已结束';
+  if (finishAction.value === 'complete_review' || isReviewMode.value) return '复习完成';
+  return '本节完成';
+});
 
 /* 讲解气泡（2026-11-02 用户定调「讲解归对话区」）：复用与正常发送同一条流式气泡机制——
    首个 delta 建气泡、逐段追加，收尾时用整段正文补齐（覆盖非流式回退、以及流被截断的情况）。
@@ -1554,6 +1619,48 @@ const postQuizReplies = ref<string[]>([]);
    （用户在读题时不会误报）。换题或卡片收起即复位。 */
 const checkpointWalkedPast = ref(false);
 const allKpMastered = computed(() => knowledgePoints.value.length > 0 && masteredCount.value >= knowledgePoints.value.length);
+/* 完课入口不提前摆在页头（2026-11-20 用户走查：0/4 知识点时就给「完成」读作催进度/可随时结课）：
+   知识点全部掌握或课堂契约已达标后才出现；想提前离开走 ⋯ 菜单的「结束学习（不计入完成）」，
+   两条语义分开——完成=已学完并计入进度，结束=不结算。 */
+const canCompleteLesson = computed(() => {
+  if (!session.value || completed.value || extensionMode.value) return false
+  /* lessonReport 是后端契约的权威口径：它把「课末终检」也算进 met。
+     只看知识点会在终检未通过时误放「完成本节」，点下去必被 409 拒绝
+     （2026-11-20 用户实测：4/4 知识点 + 终检作答空 → 还差几步才能完成）。 */
+  if (lessonReport.value) return lessonReport.value.met === true
+  if (knowledgePoints.value.length === 0) return true
+  return allKpMastered.value
+});
+/* 知识点已学完但契约还没过（最常见就是课末终检没作答/没通过）：
+   在输入区上方说明还差什么，不能继续摆一颗点了必被拒的「完成本节」。 */
+const showFinishBlocked = computed(() =>
+  !!lessonReport.value
+  && lessonReport.value.met !== true
+  && knowledgePoints.value.length > 0
+  && allKpMastered.value
+  && !checkpoint.value
+  && !settleBlock.value
+  && !finalizing.value
+)
+const finishBlockedTitle = computed(() =>
+  lessonReport.value?.exitTicket?.asked && lessonReport.value.exitTicket.passed !== true
+    ? '还差课末终检'
+    : '本课契约还未达标'
+)
+const finishBlockedText = computed(() =>
+  lessonReport.value?.exitTicket?.asked && lessonReport.value.exitTicket.passed !== true
+    ? '继续作答最后一道独立终检题，通过后即可完成本节。'
+    : '继续完成课堂契约要求的检查与证据后即可完成本节。'
+)
+/* 结束提示（2026-11-20 用户走查）：满足完课条件后只在页头多一颗「完成」，
+   对话里没有任何「这节课可以收了」的提示，学员会以为老师还在布置下一步。
+   在输入区上方给一条常驻收束条；无知识点的课不提前摆，避免开课即「已达成」。 */
+const lessonReadyToFinish = computed(() =>
+  canCompleteLesson.value
+  && !typing.value
+  && !checkpoint.value
+  && (knowledgePoints.value.length > 0 || lessonReport.value?.met === true)
+)
 
 /* 课堂契约卡（2026-11-19）：主线覆盖/独立证据/支线/停车区。契约是“最低必须完成集”，
    不是内容上限——UI 只展示达成度，不把未覆盖的探索内容判成失败。 */
@@ -1664,7 +1771,7 @@ const resumedNotice = ref(false);
 
 /* ---------- 开场景卡片（resumed / continuation / relearn / review） ---------- */
 const {
-  sceneTag, scenePrimaryText, sceneDefaultTitle, sceneLead,
+  sceneTag, scenePrimaryText, sceneDefaultTitle, sceneSummary, sceneLead,
   sceneUnresolved, sceneMasteryWarn, quickReplyKicker
 } = useOpeningSceneViews(openingScene)
 
@@ -1841,7 +1948,7 @@ function pulseCheckpoint() {
   checkpointEl.value?.scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
 
-/* ---------- 伴学浮窗（角色「小启」，dock 式不占主对话区） ---------- */
+/* ---------- 伴学浮窗（角色「伴学」，dock 式不占主对话区） ---------- */
 const {
   peerOpen, peerUnread, peerItems, peerInput, peerSending, peerScrollEl,
   peerHeadline, openPeerByUser, openPeerByTrigger, minimizePeer,
@@ -2162,7 +2269,7 @@ async function boot() {
               if (restoredReplies.length) openingQuestion.value = String(openingAnalysis.question);
               else msgs.value.push({ role: 'ai', text: String(openingAnalysis.question), time: nowTime() });
             }
-            // 伴学历史回填进小启浮窗（刷新后不丢失）：
+            // 伴学历史回填进伴学浮窗（刷新后不丢失）：
             // ① 主动伴学 = peer 标记消息；② 自动触发伴学 = assistant 消息内嵌的 peerMessage
             const peerRestored: Array<{ role: 'me' | 'peer'; text: string; strategy: string | null }> = [];
             for (const m of detail.messages) {
@@ -2232,6 +2339,14 @@ async function boot() {
           if (Array.isArray(detail.knowledgePoints) && detail.knowledgePoints.length) {
             knowledgePoints.value = detail.knowledgePoints;
           }
+          /* 恢复会话的契约口径（2026-11-20 用户实测）：resumed 响应不一定带
+             lessonContract/lessonReport，但 teachingState.sessionArtifacts 里一直有。
+             不补这一步，刷新后前端只看到 4/4 就摆「完成本节」，点下去必被
+             后端契约门 409 拒绝（课末终检未过）。 */
+          const artifacts = (detail.state?.sessionArtifacts || {}) as Record<string, any>;
+          if (artifacts.lessonContract) lessonContract.value = artifacts.lessonContract;
+          if (artifacts.lessonReport) lessonReport.value = artifacts.lessonReport;
+          if (artifacts.exitTicket) exitTicket.value = artifacts.exitTicket;
           session.value.revision = typeof detail.revision === 'number' ? detail.revision : session.value.revision;
         }
       } catch { /* 历史回填失败不阻断上课 */ }
@@ -2576,7 +2691,7 @@ async function applyTurnResult(r: Record<string, any>, aiMsg?: { role: string; t
       pushMsg({ role: 'ai', text: EMPTY_REPLY_TEXT, time: nowTime() });
     }
   }
-  // 伴学触发：进独立浮动窗，不占主对话区（角色小启，暖橙系）。
+  // 伴学触发：进独立浮动窗，不占主对话区（平台蓝，和课堂主按钮同色系）。
   // 频控：冷却期（60s）内或用户手动收起过 → 仅累计未读红点，不强制展开，避免打扰循环
   if (r.peerTriggered && r.peerMessage) {
     pushPeerItem({
@@ -2666,6 +2781,7 @@ async function finish(
     return;
   }
   finalizing.value = true;
+  finishAction.value = action;
   startSettleProgress(action === 'end_only' ? 'end' : 'complete', opts.enterEvaluation === true);
   try {
     // 结算前向前同步 revision：complete/end 的入口会先 abort 在途流式（不走 stopGeneration），
@@ -2717,7 +2833,7 @@ async function finish(
     // 「课堂还在进行中」（#115 稳定复现的死胡同）。给出后端原因原文，让用户先回应再结算；
     // 该提示常驻到条件解除，避免 4s toast 一闪而过、用户误以为结算没反应。
     const gateCode = String(e?.response?.data?.error?.code || e?.code || '');
-    if (gateCode === 'FINALIZATION_PENDING_CHECKPOINT' || gateCode === 'FINALIZATION_OPEN_QUESTION' || gateCode === 'FINALIZATION_LAST_CHECKPOINT_FAILED') {
+    if (gateCode === 'FINALIZATION_PENDING_CHECKPOINT' || gateCode === 'FINALIZATION_OPEN_QUESTION' || gateCode === 'FINALIZATION_LAST_CHECKPOINT_FAILED' || gateCode === 'LESSON_CONTRACT_NOT_MET') {
       // server=true：这是服务端的拒绝，常驻提示不能被本地检查点收卡（见 watch(checkpoint)）顺手清掉
       showSettleGate(gateCode, e?.response?.data?.error?.message || e?.message || '', true);
       return;
@@ -2915,17 +3031,9 @@ const {
    「主 CTA 与当前任务相逆、压在输入流上方易误触」，但只降了材质（lesson-cta--damped）没动位置。
    2026-10-06 先挪进 ⋯ 菜单；2026-11-06 走查又把菜单里那条撤了 —— 顶栏「完成本节」与它同 handler
    （completeAndSettle），菜单那条属重复入口且双行撑高菜单。完课入口最终只保留顶栏一处。
-   「本课知识点尚未全部掌握」的信号走 finishHint → title，不丢信息。 */
-const kpIncomplete = computed(() => {
-  const total = knowledgePoints.value.length;
-  return total > 0 && masteredCount.value < total;
-});
-/** 顶栏「完成本节」的 title 副文：知识点未掌握时前置提示，其余为常规口径 */
-const finishHint = computed(() =>
-  kpIncomplete.value
-    ? '本课知识点尚未全部掌握 · 仍可计入进度并生成总结'
-    : '计入进度 · 生成本次学习总结'
-);
+   2026-11-20：入口改为「可完课才出现」（见 canCompleteLesson），不再在 0/4 时提前摆出。 */
+/** 顶栏「完成本节」的 title 副文：入口只在可完课时出现，不再提示「未掌握也可完成」 */
+const finishHint = computed(() => '计入进度 · 生成本次学习总结');
 
 /* 头部掌握度小圆环已撤（2026-11-06 走查）：它和每条知识点前的进度圈同形，
    标题因此读成列表项；掌握度读数由「n / N 已掌握」纯文字 + 下方进度条承担。
@@ -3171,6 +3279,8 @@ onBeforeUnmount(() => {
   padding: 0 12px; height: 32px; cursor: pointer; white-space: nowrap;
 }
 .learn__finishbtn:hover { border-color: color-mix(in srgb, var(--blue) 35%, var(--line)); color: var(--blue-deep); }
+/* 窄屏用的短标签；桌面保留完整「完成本节」 */
+.learn__finishbtn-short { display: none; }
 /* 连接态：降为纯文字（原型顶栏只有一行状态字，不再挂绿胶囊） */
 .learn__live {
   font-size: 12px; font-weight: 700; color: var(--green-ink);
@@ -3445,15 +3555,27 @@ onBeforeUnmount(() => {
 .contract__exit--passed { color: var(--green-ink); }
 .contract__exit--failed { color: var(--danger, #b91c1c); }
 .finish__contract { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+/* 结束学习（不计入完成）与「本节完成」共用同一张浮层：必须把「没有计入」写在标题下，
+   否则 0/4 知识点 + 绿勾「本节完成」会读成本节已达标（2026-11-20 课堂走查）。 */
+.finish__notcounted {
+  margin: 2px 0 0;
+  padding: 6px 10px;
+  border-radius: var(--mk-radius-sm);
+  background: var(--canvas);
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.6;
+}
 
 .oscene {
   margin: 10px 14px 0;
-  padding: 16px 18px;
+  padding: 14px 16px;
   border: 1px solid var(--line);
   border-radius: var(--mk-radius-modal);
   background: var(--surface);
   box-shadow: var(--shadow-sm);
-  display: grid; gap: 8px;
+  display: grid; gap: 9px;
   flex: 0 0 auto;
 }
 .oscene--review { border-color: color-mix(in srgb, var(--blue) 30%, transparent); }
@@ -3481,46 +3603,61 @@ onBeforeUnmount(() => {
   font: inherit; font-size: 12px; font-weight: 700; color: var(--blue);
   cursor: pointer;
 }
+.oscene__head {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px;
+  min-width: 0;
+}
 .oscene__tag {
-  justify-self: start;
+  flex: 0 0 auto;
   font-size: 12px; font-weight: 800;
   letter-spacing: 0.04em;
   color: var(--blue-deep);
   background: color-mix(in srgb, var(--blue) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent);
-  padding: 2px 9px; border-radius: var(--mk-radius-pill);
+  padding: 2px 8px; border-radius: var(--mk-radius-pill);
 }
 .oscene--review .oscene__tag { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 12%, transparent); border-color: color-mix(in srgb, var(--blue) 32%, transparent); }
-.oscene__title { margin: 0; font-size: 15px; font-weight: 800; color: var(--ink); }
+.oscene__title {
+  margin: 0; flex: 1 1 160px; min-width: 0;
+  font-size: 15px; line-height: 1.45; font-weight: 800; color: var(--ink);
+}
 .oscene__lead { margin: 0; font-size: 12.5px; line-height: 1.65; color: var(--muted); }
+/* 上次复盘：读成一段引文，而不是一块灰底故障提示 */
 .oscene__summary {
   margin: 0;
-  font-size: 12.5px; line-height: 1.7;
+  padding: 1px 0 1px 10px;
+  border-left: 2px solid color-mix(in srgb, var(--blue) 35%, var(--line));
+  font-size: 12.5px; line-height: 1.65;
   color: var(--muted);
-  background: color-mix(in srgb, var(--ink) 3.5%, transparent);
-  border-radius: var(--mk-radius-lg); padding: 8px 11px;
 }
-.oscene__chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.oscene__chip-label { font-size: 12px; font-weight: 700; color: var(--faint); }
+.oscene__chips { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 6px; }
+.oscene__chip-label {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 700; color: var(--muted);
+}
+.oscene__chip-label::before {
+  content: ''; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--amber);
+}
 .oscene__chip {
-  font-size: 12px; font-weight: 700;
-  color: var(--amber);
-  background: color-mix(in srgb, var(--amber) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--amber) 32%, transparent);
-  padding: 2px 9px; border-radius: var(--mk-radius-pill);
+  font-size: 12px; font-weight: 600; line-height: 1.5;
+  color: var(--ink);
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  padding: 2px 8px; border-radius: var(--mk-radius-pill);
 }
-.oscene__warn { font-size: 12px; line-height: 1.6; color: var(--amber); }
+.oscene__warn { font-size: 12px; line-height: 1.6; color: var(--amber-ink); }
 .oscene__warn span { font-weight: 700; }
 .oscene__restart {
-  justify-self: start;
-  margin-top: 2px;
-  border: 0; background: transparent; color: var(--faint);
-  font: inherit; font-size: 12px; cursor: pointer;
-  padding: 2px 0;
+  flex: 0 0 auto;
+  margin: 0;
+  border: 0; background: transparent; color: var(--muted);
+  font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+  padding: 4px 2px;
 }
-.oscene__restart:hover { color: var(--red-ink); }
+.oscene__restart:hover { color: var(--red-ink); text-decoration: underline; }
 .oscene__restart:disabled { opacity: 0.6; cursor: default; }
-.oscene__actions { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+.oscene__actions { display: flex; align-items: center; gap: 10px 14px; margin-top: 2px; flex-wrap: wrap; }
 /* 暗色：底色/描边已全部令牌化，自动翻转，原逐条暗色字面量覆写退役 */
 .tutor__jump-bottom {
   /* 锚在输入区上方：原来 bottom:16px 是相对 .tutor 的底部，会压到输入框下方的
@@ -3540,6 +3677,8 @@ onBeforeUnmount(() => {
 }
 /* hover 只变色，不抬升（translateX(-50%) 是居中必须保留的那一半） */
 .tutor__jump-bottom:hover { color: var(--blue); transform: translateX(-50%); }
+/* 结束提示条占住输入区上方：回到底部浮标同步抬高，避免压在提示文案上 */
+.tutor:has(> .ready) .tutor__jump-bottom { bottom: 214px; }
 .msg { display: flex; flex-direction: column; gap: 5px; max-width: 76%; } /* 85→76：与 goal 页同口径收窄对话行（2026-09-27 用户反馈） */
 .msg--user { align-self: flex-end; align-items: flex-end; position: relative; }
 .msg--user .msg__bubble {
@@ -3780,7 +3919,7 @@ onBeforeUnmount(() => {
   animation: learn-typing 1.2s ease-in-out infinite;
 }
 
-/* ---------- 伴学浮窗（角色「小启」· 暖橙系，dock 式不占主对话区） ---------- */
+/* ---------- 伴学浮窗（问流伴学 · 平台蓝，dock 式不占主对话区） ---------- */
 /* 移动端浮窗遮罩：只在小屏出现，盖住主课堂输入区，避免双输入框/双免责声明叠罗汉 */
 .peer-backdrop { display: none; }
 .peerdock {
@@ -3791,7 +3930,7 @@ onBeforeUnmount(() => {
   display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
   max-height: 440px;
   background: var(--surface);
-  border: 1px solid color-mix(in srgb, var(--wf-color-warning) 28%, transparent);
+  border: 1px solid color-mix(in srgb, var(--blue) 22%, var(--line));
   border-radius: 16px; /* 圆角阶梯：弹层 */
   /* 原 0 16px 40px rgba(190,92,26,.14) 是橙色染色投影：按三档中性档改用 overlay
      （悬浮抽屉本就该压住滚动内容，不靠颜色分层）。 */
@@ -3805,35 +3944,19 @@ onBeforeUnmount(() => {
 .peerdock__head {
   display: flex; align-items: center; gap: 10px;
   padding: 11px 14px;
-  background: linear-gradient(135deg, rgba(255, 152, 67, 0.12), color-mix(in srgb, var(--amber) 5%, transparent));
-  border-bottom: 1px solid color-mix(in srgb, var(--wf-color-warning) 18%, transparent);
+  background: color-mix(in srgb, var(--blue) 5%, var(--surface));
+  border-bottom: 1px solid color-mix(in srgb, var(--blue) 14%, var(--line));
 }
-/* 小启 Q 头像：暖橙实底 + 白字 Q，与导师问流（蓝紫 favicon）明确区分。
-   批次 D：135deg 橙渐变 → 纯色 #d97706（对白字 4.52:1，达 WCAG AA；
-   原渐变两端 #ff9d4d / #f4791f 对白字分别只有 2.0:1 / 2.9:1，本就不达标）。 */
+/* 伴学头像：平台蓝实底 + 白色对话图标，与导师问流同一套品牌色 */
 .peerdock__avatar {
   width: 32px; height: 32px; border-radius: 50%; flex: 0 0 auto;
-  background: #d97706;
-  /* 原 0 6px 14px rgba(244,121,31,.35) 橙色发光已删：头像在 dock 卡内，不承担层级 */
+  background: var(--blue);
   display: grid; place-items: center;
 }
-.peerdock__avatar-q {
-  color: #fff; font-size: 17px; font-weight: 800; font-style: italic;
-  font-family: Georgia, 'Times New Roman', serif;
-  line-height: 1;
-  transform: translateX(-0.5px);
-}
+.peerdock__avatar-icon { color: var(--wf-text-on-primary); }
 .peerdock__title { flex: 1; min-width: 0; display: grid; gap: 2px; }
-.peerdock__name { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.peerdock__name strong { font-size: 13.5px; color: var(--ink); }
-.peerdock__tag {
-  flex: 0 0 auto;
-  font-size: 12px; font-weight: 700; color: var(--amber-ink);
-  background: color-mix(in srgb, var(--amber) 16%, transparent);
-  border: 1px solid color-mix(in srgb, var(--amber) 35%, transparent);
-  padding: 1px 7px; border-radius: var(--mk-radius-pill);
-  line-height: 1.6;
-}
+.peerdock__name { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 0 0 auto; white-space: nowrap; }
+.peerdock__name strong { font-size: 13.5px; color: var(--ink); white-space: nowrap; }
 .peerdock__status {
   display: flex; align-items: center; gap: 5px; min-width: 0;
   font-size: 12px; color: var(--muted);
@@ -3850,12 +3973,12 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
   width: 32px; height: 32px; border-radius: 50%;
   display: grid; place-items: center;
-  border: 1px solid color-mix(in srgb, var(--wf-color-warning) 26%, var(--line));
+  border: 1px solid color-mix(in srgb, var(--blue) 24%, var(--line));
   background: color-mix(in srgb, var(--surface) 70%, transparent);
   padding: 0;
   color: var(--muted); cursor: pointer;
 }
-.peerdock__min:hover { background: color-mix(in srgb, var(--wf-color-warning) 14%, transparent); color: var(--ink); }
+.peerdock__min:hover { background: color-mix(in srgb, var(--blue) 10%, transparent); color: var(--ink); }
 .peerdock__scroll {
   overflow-y: auto; padding: 14px 12px 12px;
   display: grid; gap: 10px; align-content: start;
@@ -3870,8 +3993,8 @@ onBeforeUnmount(() => {
   max-width: 100%; padding: 9px 12px;
   font-size: 13px; line-height: 1.6;
   border-radius: 4px 16px 16px 16px; /* 圆角阶梯：卡片/弹层 + 内芯尾角 */
-  background: color-mix(in srgb, var(--wf-color-warning) 9%, transparent); color: var(--ink);
-  border: 1px solid color-mix(in srgb, var(--wf-color-warning) 18%, transparent);
+  background: color-mix(in srgb, var(--blue) 6%, var(--surface)); color: var(--ink);
+  border: 1px solid color-mix(in srgb, var(--blue) 16%, var(--line));
 }
 .peerdock__msg--me .peerdock__bubble {
   border-radius: 16px 16px 4px 16px;
@@ -3890,9 +4013,9 @@ onBeforeUnmount(() => {
 .peerdock__bubble--typing i:nth-child(3) { animation-delay: 0.3s; }
 /* .peerdock__meta / .peerdock__strategy / .peerdock__msg > small / .peerdock__ai-note 已删
    （2026-11-06 走查）：伴学策略名已在浮窗副标题「随时找我聊卡点 · 类比迁移」里，每条消息
-   再挂一枚琥珀色胶囊 + 「小启 · 19:31」时间戳是同一信息的三四遍；小窗本就矮，
+   再挂一枚琥珀色胶囊 + 「伴学 · 19:31」时间戳是同一信息的三四遍；小窗本就矮，
    一屏的 1/4 被这些重复标签与免责声明吃掉。 */
-/* 小启追问快选：紧凑按钮（2026-11-06 走查）——原来是与气泡同形的大圆角长条，
+/* 伴学追问快选：紧凑按钮（2026-11-06 走查）——原来是与气泡同形的大圆角长条，
    分不清「这是消息还是能点的东西」；现在横排、8px 小圆角、带 ↳ 前缀，一眼是按钮 */
 .peerdock__follows {
   display: flex; flex-wrap: wrap; align-items: flex-start;
@@ -3901,19 +4024,19 @@ onBeforeUnmount(() => {
 .peerdock__follow {
   text-align: left;
   max-width: 100%; padding: 4px 10px;
-  font: inherit; font-size: 12px; font-weight: 600; line-height: 1.5; color: var(--amber-ink);
+  font: inherit; font-size: 12px; font-weight: 600; line-height: 1.5; color: var(--blue-deep);
   background: var(--surface);
-  border: 1px solid color-mix(in srgb, var(--wf-color-warning) 35%, transparent);
+  border: 1px solid color-mix(in srgb, var(--blue) 28%, var(--line));
   border-radius: 8px;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 .peerdock__follow::before { content: '↳'; margin-right: 5px; color: var(--faint); }
 [data-theme='dark'] .peerdock__follow {
-  background: color-mix(in srgb, var(--amber) 8%, transparent);
-  color: var(--wf-color-warning-light);
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
+  color: var(--blue-ink);
 }
-.peerdock__follow:hover { background: color-mix(in srgb, var(--amber) 16%, transparent); border-color: color-mix(in srgb, var(--wf-color-warning) 55%, transparent); }
+.peerdock__follow:hover { background: color-mix(in srgb, var(--blue) 10%, transparent); border-color: color-mix(in srgb, var(--blue) 50%, var(--line)); }
 .peerdock__follow:disabled { opacity: 0.5; cursor: default; }
 /* 输入条（2026-11-06 走查）：与主界面同形——发送键内嵌在输入盒右端，圆形成一颗图标钮 */
 .peerdock__input {
@@ -3929,26 +4052,25 @@ onBeforeUnmount(() => {
   background: var(--surface);
   color: var(--ink);
 }
-.peerdock__input input:focus { border-color: color-mix(in srgb, var(--wf-color-warning) 55%, transparent); box-shadow: var(--mk-focus-ring); }
-/* 发送键：32 圆形实底（与主界面同形）。颜色用暖橙 #d97706 —— 小启的角色色。
-   （#d97706 对白字 4.52:1 达 AA；规范橙族两档都不足 AA，属已登记的令牌缺口。） */
+.peerdock__input input:focus { border-color: color-mix(in srgb, var(--blue) 50%, transparent); box-shadow: var(--mk-focus-ring); }
+/* 发送键：32 圆形实底（与主界面同形），平台蓝 */
 .peerdock__send {
   flex: 0 0 auto;
   width: 32px; height: 32px; padding: 0;
   display: grid; place-items: center;
   border: 0; border-radius: 50%;
-  color: var(--mk-on-fill); background: #d97706;
+  color: var(--wf-text-on-primary); background: var(--blue);
   cursor: pointer;
   transition: filter 0.15s ease;
 }
 .peerdock__send:hover:not(:disabled) { filter: brightness(1.05); }
 .peerdock__send:disabled { opacity: 0.45; cursor: default; }
-/* 小启悬浮球：暖橙 Q（区别于导师品牌蓝紫） */
+/* 伴学悬浮球：平台蓝，和课堂主按钮同一套品牌色 */
 .peerfab {
   position: fixed; right: 22px; bottom: 22px; z-index: 59;
-  min-width: 52px; height: 52px; padding: 0 14px 0 10px;
+  min-width: 52px; height: 52px; padding: 0 14px 0 12px;
   border: 0; border-radius: 999px;
-  background: #d97706;   /* 批次 D：135deg 橙渐变 → 纯色（白字 4.52:1，AA） */
+  background: var(--blue);
   /* 原 0 14px 32px rgba(239,125,31,.4) 橙色发光改为 overlay 中性档：
      FAB 常驻压在滚动内容之上，确实需要抬升才能读出来，这是规范允许的例外；
      但颜色必须中性，彩色光晕一律不行。 */
@@ -3959,13 +4081,9 @@ onBeforeUnmount(() => {
 }
 /* hover 不再抬升也不换投影（两态已无差别），按压反馈留给 :active */
 .peerfab:active { transform: scale(0.98); }
-.peerfab__q {
-  color: #fff; font-size: 26px; font-weight: 800; font-style: italic;
-  font-family: Georgia, 'Times New Roman', serif;
-  line-height: 1;
-}
+.peerfab__icon { color: var(--wf-text-on-primary); flex: 0 0 auto; }
 .peerfab__label {
-  color: #fff; font-size: 12.5px; font-weight: 800; letter-spacing: 0.02em;
+  color: var(--wf-text-on-primary); font-size: 12.5px; font-weight: 800; letter-spacing: 0.02em;
   line-height: 1;
 }
 .peerfab__dot {
@@ -3980,7 +4098,7 @@ onBeforeUnmount(() => {
   padding: 6px 10px;
   border-radius: var(--mk-radius-md);
   background: var(--surface);
-  border: 1px solid color-mix(in srgb, var(--wf-color-warning) 30%, var(--line));
+  border: 1px solid color-mix(in srgb, var(--blue) 28%, var(--line));
   box-shadow: var(--wf-shadow-raised);
   color: var(--ink); font-size: 12px; font-weight: 700; line-height: 1.4;
   white-space: nowrap;
@@ -3989,10 +4107,10 @@ onBeforeUnmount(() => {
 .peerfab__hint::after {
   content: ''; position: absolute; right: -5px; top: 50%; transform: translateY(-50%) rotate(45deg);
   width: 8px; height: 8px; background: var(--surface);
-  border-top: 1px solid color-mix(in srgb, var(--wf-color-warning) 30%, var(--line));
-  border-right: 1px solid color-mix(in srgb, var(--wf-color-warning) 30%, var(--line));
+  border-top: 1px solid color-mix(in srgb, var(--blue) 28%, var(--line));
+  border-right: 1px solid color-mix(in srgb, var(--blue) 28%, var(--line));
 }
-/* 浮窗遮罩：宽度档从 640 提到 1023（2026-11-06 走查）——图 7 那种「小启直接压在
+/* 浮窗遮罩：宽度档从 640 提到 1023（2026-11-06 走查）——图 7 那种「伴学直接压在
    蓝色小测卡上、两个亮边框打架」的场景出现在手机宽度，而 641–1023 这档此前完全没有遮罩 */
 @media (max-width: 1023px) {
   .peer-backdrop {
@@ -4002,28 +4120,51 @@ onBeforeUnmount(() => {
 }
 @media (max-width: 640px) {
   .peerdock {
-    left: 0; right: 0; bottom: 0; width: auto; z-index: 80;
-    max-height: 78dvh;
-    border-radius: var(--mk-radius-xl) var(--mk-radius-xl) 0 0;
+    left: 10px; right: 10px; bottom: 8px; width: auto; z-index: 80;
+    max-height: 64dvh;
+    border-radius: var(--mk-radius-xl);
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
+  /* 移动端伴学面板收密度（2026-11-20 用户反馈「UI 太大」）：
+     页头和气泡不再按桌面/平板尺寸铺满，头像缩一档、标题与状态并成一行；
+     角色标签由悬浮球和标题「问流伴学」承担，窄屏不再重复。 */
+  .peerdock__head { padding: 8px 12px; gap: 8px; }
+  .peerdock__avatar { width: 28px; height: 28px; }
+  .peerdock__title { display: flex; align-items: center; gap: 6px; }
+  .peerdock__name strong { font-size: 13px; }
+  .peerdock__status { flex: 1 1 auto; min-width: 0; }
+  .peerdock__scroll { padding: 10px 10px 8px; gap: 8px; }
+  .peerdock__bubble { padding: 7px 10px; font-size: 12.5px; line-height: 1.55; }
+  .peerdock__follow { padding: 3px 8px; }
+  .peerdock__input { padding: 6px 8px; }
   .peerfab { right: 12px; bottom: calc(104px + env(safe-area-inset-bottom, 0px)); height: 44px; min-width: 44px; padding: 0 12px 0 9px; z-index: 79; }
-  /* 小测待答时不再让悬浮球抢卡片宽度：入口收进小测操作行（问小启），
+  /* 小测待答时不再让悬浮球抢卡片宽度：入口收进小测操作行（问伴学），
      卡片恢复满宽，桌面端仍保留右下角浮窗入口 */
   .peerfab--quiz { display: none; }
+  /* 结算门禁常驻在输入区上方，右下角悬浮球会压住「继续学习」按钮（2026-11-20 移动端走查）。
+     门禁是阻塞操作，收起伴学球；关掉提示后它会自动回来。 */
+  .peerfab--gate { display: none; }
+  /* 结束提示条同样占据输入区上方，悬浮球原地会压住「完成本节」；
+     抬到提示条之上而不是收起——收课后伴学入口仍需可用 */
+  .peerfab--ready { bottom: calc(190px + env(safe-area-inset-bottom, 0px)); }
+  /* 与「提交」同高（2026-11-20 用户反馈「一大一小」）：
+     移动端全局把 .btn-primary 抬到 44 触控档，这里若仍留 36 就会在并排时矮一截。 */
   .checkpoint__actions .checkpoint__peer {
     display: inline-flex; align-items: center; justify-content: center;
-    min-height: 36px; padding: 0 12px;
-    /* 同卡同色系（2026-11-06 走查）：小测卡已全部转蓝，这颗「问小启」不再单独用紫 */
+    min-height: 44px; padding: 0 14px;
+    /* 同卡同色系（2026-11-06 走查）：小测卡已全部转蓝，这颗「问伴学」不再单独用紫 */
     border: 1px solid color-mix(in srgb, var(--blue) 30%, var(--line));
-    border-radius: 8px;
+    border-radius: var(--mk-radius-md);
     background: transparent; color: var(--blue-deep);
     font-size: 13px; font-weight: 700; cursor: pointer;
   }
   .checkpoint__actions .checkpoint__peer:active { transform: scale(.98); }
   /* 最后一条消息给右下角伴学球留出空间，避免压住复制键/输入框上沿 */
-  .tutor__scroll { padding-bottom: 78px; }
-  .peerfab__q { font-size: 20px; }
+  .tutor__scroll { padding-bottom: 78px; gap: 14px; }
+  /* 触屏操作条常显，40px 点击盒在消息流里会撑出一段空白（2026-11-20 用户反馈「消息间隔太大」）：
+     点击盒尺寸不动，用上下负边距把占位收回到 ~28px，图标仍落在气泡下沿外侧。
+     选择器带 .tutor 前缀，压过后面基础档的 margin-top: 0。 */
+  .tutor .msg__content--actions > .msg-actions { margin-top: -8px; margin-bottom: -8px; }
   .peerfab__hint { max-width: 150px; }
 }
 /* 窄屏（平板/小窗）：dock 收窄并抬高，避免与底部输入区重叠（长消息上探场景） */
@@ -4460,6 +4601,26 @@ onBeforeUnmount(() => {
   font-size: 12px; cursor: pointer;
 }
 .gate__close:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
+/* 结束提示条：完成条件满足后常驻在输入区上方，用成功色轻提示，不抢小测/门禁 */
+.ready {
+  margin: 8px 14px 0;
+  padding: 9px 12px;
+  display: flex; align-items: center; gap: 12px;
+  border: 1px solid color-mix(in srgb, var(--green) 32%, var(--line));
+  border-radius: var(--mk-radius-lg);
+  background: color-mix(in srgb, var(--green) 7%, var(--surface));
+  flex: 0 0 auto;
+}
+.ready__body { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; }
+.ready__body strong { font-size: 13px; color: var(--ink); }
+.ready__body span { font-size: 12px; line-height: 1.5; color: var(--muted); }
+.ready__go { flex: 0 0 auto; }
+/* 契约未过：用暖色说明「还差终检」，但不给会失败的完成动作 */
+.ready--blocked {
+  border-color: color-mix(in srgb, var(--amber) 35%, var(--line));
+  background: color-mix(in srgb, var(--amber) 7%, var(--surface));
+}
+.ready--blocked .ready__body strong { color: var(--amber-ink); }
 .gate-pop-enter-active, .gate-pop-leave-active { transition: opacity .18s ease, transform .18s ease; }
 .gate-pop-enter-from, .gate-pop-leave-to { opacity: 0; transform: translateY(4px); }
 
@@ -4505,7 +4666,7 @@ onBeforeUnmount(() => {
      在 340px 里折成两行（hint 行 17→33px）。隐藏后只剩声明，居中与入口页 .goal__ai-note 一致。 */
   .composer__hint > .composer__hint-note { display: none; }
   .composer__hint { flex-wrap: nowrap; justify-content: center; }
-  /* 移动端头部：单行紧凑 —— 返回隐藏、标题占主列可截断，右侧「学习中」+「⋯」同行，不再换行占第二行 */
+  /* 移动端头部：单行紧凑 —— 标题占主列可截断，右侧「完成/知识点/⋯」同行 */
   .learn__head {
     grid-template-columns: auto minmax(0, 1fr) auto;
     grid-template-rows: auto;
@@ -4548,6 +4709,69 @@ onBeforeUnmount(() => {
   /* 快捷块瘦身见文件末尾的媒体块：.replies/.reply 的基础规则在本文件靠后的 style 块里，
      同权重下写在这里会被覆盖 */
   /* 弹窗锚定在 ⋯ 按钮正下方、右对齐按钮 */
+}
+
+/* 手机页头（2026-11-20 课堂走查）：不写死两行，交给 flex 按当前动作数自动折行——
+   有「完成本节」时三颗控件放不下 → 动作整组落到第二行、标题独占首行；
+   结算后只剩「知识点 + ⋯」时一行放得下 → 自动收回单行，不再固定留一条空动作行。
+   标题 flex-basis 160：390px 两动作可同排，360/320 或三动作时自然换行。 */
+@media (max-width: 640px) {
+  .learn__head {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0 8px;
+  }
+  .learn__back { order: 0; }
+  .learn__title {
+    order: 1;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .learn__head-right {
+    order: 2;
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    margin-left: 0;
+    gap: 4px;
+    justify-content: flex-end;
+  }
+  /* 三颗动作与标题同排（2026-11-20 二次走查）：窄屏放不下完整标签，
+     完成按钮压成「完成」、知识点只留 0/4 读数（aria-label / title 仍给全称）。
+     这样页头只有一行，不再单独占一条动作带。 */
+  .learn__finishbtn {
+    min-width: 50px;
+    padding: 0 10px;
+    color: var(--blue-deep);
+    border-color: color-mix(in srgb, var(--blue) 28%, var(--line));
+  }
+  .learn__finishbtn-full { display: none; }
+  .learn__finishbtn-short { display: inline; }
+  /* 知识点入口压成两行小胶囊：上面「知识点」、下面 0/4。
+     比只留 0/4 好认，又比横排「知识点 0/4」省 ~25px 宽度。 */
+  .learn__kpbtn {
+    flex-direction: column;
+    gap: 0;
+    padding: 0 6px;
+    justify-content: center;
+  }
+  .learn__kpbtn-text {
+    display: block;
+    font-size: 12px;
+    line-height: 1.05;
+    font-weight: 600;
+    color: var(--muted);
+  }
+  .learn__kpbtn b {
+    font-size: 12px;
+    line-height: 1.1;
+  }
+  .learn__title strong {
+    font-size: 13.5px;
+    line-height: 1.3;
+    /* 26 字任务名两行时避免「…出什么 / 岔子」这种末行只剩两字的孤行 */
+    text-wrap: balance;
+  }
 }
 </style>
 
@@ -4800,13 +5024,7 @@ onBeforeUnmount(() => {
   background: none;
   box-shadow: none;
 }
-/* 小测答后的完课提示行：弱化呈现，只指路不强推（完成本节按钮在头部） */
-.replies__nudge {
-  margin: 0;
-  font-size: 12.5px;
-  color: var(--mk-muted);
-}
-/* 面板头（kicker/hint）已随模板降级为 .visually-hidden 的读屏文本，样式只保底 */
+/* 小测答后的续接动作行（完课提示已上移到输入区上方的 .ready，不再在这里复读） */
 .replies__kicker {
   font-size: 12px;
   font-weight: 800;
@@ -4957,7 +5175,11 @@ onBeforeUnmount(() => {
      （2026-09-24 课堂移动端走查；.stage-card__warn 的「!」是装饰字形不动） */
   .stage-card h2 { font-size: 18px; }
   .finish__card h2 { font-size: 18px; }
-  .oscene__title { font-size: 14px; }
+  .oscene__title { font-size: 14.5px; }
+  /* 窄屏：标签与标题仍并排；主按钮吃掉剩余宽度，弱出口留在同一行末尾 */
+  .oscene__head { gap: 4px 7px; }
+  .oscene__actions { flex-wrap: nowrap; gap: 10px; }
+  .oscene__restart { padding: 4px 0; }
   .learn__stage { padding: 28px 16px; }
   .finish { padding: 16px; }
   .finish__card { padding: 20px; border-radius: var(--mk-radius-modal); }
@@ -4970,11 +5192,11 @@ onBeforeUnmount(() => {
   .tutor__scroll { padding: 14px; }
   .oscene { padding: 12px 14px; }
   .learn__live { font-size: 12px; }
-  /* 续课卡主按钮收小（2026-09-26 用户「从这继续按钮还很大」；2026-10-09 起卡内只剩
-     主按钮一个选项，「重新开始」已降级为 .oscene__restart 小字链接）：
-     非页级主 CTA，按触诊分级取紧凑档 40；align-items:center 防 flex stretch */
+  /* 续课卡主按钮收小（2026-09-26 用户「从这继续按钮还很大」）：
+     非页级主 CTA，按触诊分级取紧凑档 40；align-items:center 防 flex stretch。
+     2026-11-20 起「重新开始」回到同一行动行末尾，仍是弱文字出口，不抢主按钮。 */
   .oscene__actions { align-items: center; }
-  .oscene__actions .btn-primary { padding: 8px 15px; font-size: 13px; min-height: 40px; }
+  .oscene__actions .btn-primary { flex: 1 1 auto; min-width: 0; padding: 8px 15px; font-size: 13px; min-height: 40px; }
 }
 </style>
 
@@ -5011,6 +5233,7 @@ onBeforeUnmount(() => {
   .tutor > .tutor__resume,
   .tutor > .replies,
   .tutor > .gate,
+  .tutor > .ready,
   .tutor > .checkpoint {
     width: calc(100% - 28px);
     max-width: 760px;
@@ -5049,6 +5272,7 @@ onBeforeUnmount(() => {
   .tutor > .tutor__resume,
   .tutor > .replies,
   .tutor > .gate,
+  .tutor > .ready,
   .tutor > .checkpoint {
     max-width: 1000px;
   }

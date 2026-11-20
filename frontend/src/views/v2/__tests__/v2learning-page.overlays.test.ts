@@ -2,7 +2,7 @@
  * 课堂页三个浮层 + 回到底部浮标的护栏（2026-11-06 走查）
  *
  * 四组实测问题：
- *  ① 伴学浮窗「小启」：每条消息头顶挂一枚琥珀色学法胶囊 + 「小启 · 19:31」时间戳，
+ *  ① 伴学浮窗「问流伴学」：每条消息头顶挂一枚琥珀色学法胶囊 + 「伴学 · 19:31」时间戳，
  *     底部常驻一行 AI 免责声明——浮窗本就矮，重复标签吃掉近 1/4 屏；
  *     追问快选与气泡同形（大圆角长条），分不清是消息还是按钮；
  *     发送键是外挂的咖啡色椭圆文字钮，与输入框各长各的；
@@ -96,21 +96,21 @@ function mediaOf(query: string): string[] {
 const { descriptor, errors } = parse(source);
 const root = descriptor.template?.ast as unknown as TplNode | undefined;
 
-describe('伴学浮窗「小启」：去掉重复标签，控件与主界面同形', () => {
+describe('伴学浮窗「问流伴学」：去掉重复标签，控件与主界面同形', () => {
   it('免责声明行与每条消息的学法/时间标签一并撤除', () => {
     expect(errors).toEqual([]);
     const live = stripComments(source);
     for (const cls of ['peerdock__meta', 'peerdock__strategy', 'peerdock__ai-note']) {
-      expect(live, `${cls} 又回到小启里了`).not.toContain(cls);
+      expect(live, `${cls} 又回到伴学里了`).not.toContain(cls);
     }
-    /* 主输入区那条声明仍保留（合规要求）；这里只管小启浮窗内部 */
+    /* 主输入区那条声明仍保留（合规要求）；这里只管伴学浮窗内部 */
     const dock = live.slice(live.indexOf('class="peerdock"'));
     expect(
       dock.slice(0, dock.indexOf('</Transition>')),
-      'AI 合规声明不该再常驻小启底部'
+      'AI 合规声明不该再常驻伴学底部'
     ).not.toContain('<AiContentNote');
-    /* 模板里也不许再出现「小启 · 时间」这种逐条标签 */
-    expect(live).not.toMatch(/小启 · \{\{/);
+    /* 模板里也不许再出现「伴学 · 时间」这种逐条标签 */
+    expect(live).not.toMatch(/伴学 · \{\{/);
   });
 
   it('追问快选是紧凑按钮：横排可折行、8px 圆角、带 ↳ 前缀', () => {
@@ -145,8 +145,27 @@ describe('伴学浮窗「小启」：去掉重复标签，控件与主界面同�
     expect(blocks.length, '没有 ≤1023 的媒体块').toBeGreaterThan(0);
     expect(
       blocks.some((b) => /\.peer-backdrop\s*\{[\s\S]*?display:\s*block/.test(b)),
-      '≤1023 这档没有给小启加遮罩 → 浮窗直接压在选项/小测卡上'
+      '≤1023 这档没有给伴学加遮罩 → 浮窗直接压在选项/小测卡上'
     ).toBe(true);
+  });
+
+  it('移动端伴学面板收密度：浮动卡片 + 单行页头，不再整面墙', () => {
+    const block = mediaOf('(max-width: 640px)').find((b) => b.includes('.peerdock__title'));
+    expect(block, '≤640 没有伴学面板密度规则').toBeTruthy();
+    const flat = block!.replace(/\s+/g, ' ');
+    expect(flat).toContain('max-height: 64dvh');
+    expect(flat).toContain('left: 10px; right: 10px');
+    expect(flat).toContain('.peerdock__title { display: flex;');
+    expect(flat).toContain('font-size: 12.5px');
+  });
+
+  it('伴学改走平台蓝与「问流伴学」品牌名，不再出现「小启」', () => {
+    const live = stripComments(source);
+    expect(live).toContain('问流伴学');
+    expect(live).not.toContain('小启');
+    // FAB 用图标 + 伴学，而不是角色字母 Q
+    expect(live).toContain('class="peerfab__icon"');
+    expect(live).not.toContain('peerfab__q');
   });
 });
 

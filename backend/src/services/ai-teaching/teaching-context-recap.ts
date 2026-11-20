@@ -88,7 +88,13 @@ export function readWrapupSummaryFields(wrapup: any): {
     ? wrapup.summary
     : null;
   const rawTopicSummary = summary?.topicSummary ?? wrapup?.topicSummary;
-  const topicSummary = typeof rawTopicSummary === 'string' && rawTopicSummary.trim() ? rawTopicSummary.trim() : null;
+  // 模型失败时的 summary-only 兜底会写「本次学习记录生成遇到问题…」——它是故障说明，
+  // 不是上一节课的复盘。原样透传会让恢复卡一开屏就报警，也会把它当上下文喂给下一课。
+  const isDegradedTopicSummary = typeof rawTopicSummary === 'string'
+    && /^本次学习记录生成遇到问题/.test(rawTopicSummary.trim());
+  const topicSummary = typeof rawTopicSummary === 'string' && rawTopicSummary.trim() && !isDegradedTopicSummary
+    ? rawTopicSummary.trim()
+    : null;
   const rawActionPlan = summary?.actionPlan ?? wrapup?.actionPlan;
   const actionPlan = Array.isArray(rawActionPlan)
     ? rawActionPlan.filter((item: any) => typeof item === 'string' && item.trim())

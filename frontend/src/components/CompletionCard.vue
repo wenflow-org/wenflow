@@ -17,9 +17,9 @@
         </p>
         <p v-else class="section-hint">{{ settleReassurance }}</p>
         <div v-if="advisoryKept" class="section-hint">你已选择保持原计划，这条建议不会再调整后续安排。</div>
-        <div v-else class="advisory-options">
+        <div v-else class="advisory-options" :class="{ 'advisory-options--pair': advisoryOptions.length === 2 }">
           <button
-            v-for="option in advisory.ui.options"
+            v-for="option in advisoryOptions"
             :key="option.key"
             type="button"
             class="completion-btn completion-btn--small"
@@ -187,6 +187,16 @@ const settleReassurance = '确认后会调整后续学习安排。';
 const advisoryBody = computed(() => (advisory.value?.ui.body || '')
   .replace(/该调整只会调整后续阶段的课程安排，(?:不会覆盖|不影响)你已完成的内容。/g, '')
   .trim());
+/* 「查看调整建议」弹窗读的就是 ui.body——和卡面正文同一段话，点开只是复读。
+   只要卡面已经展示正文、且另有真正的调整动作（确认/压缩/补强等），就去掉它；
+   正文为空或没有其它动作的旧建议保留，避免把唯一入口删掉。 */
+const advisoryOptions = computed(() => {
+  const options = advisory.value?.ui.options || [];
+  const hasAdjustment = options.some((option) => ['confirm', 'accelerate', 'reinforce', 'resequence', 'slow_down'].includes(option.key));
+  return advisoryBody.value && hasAdjustment
+    ? options.filter((option) => option.key !== 'preview')
+    : options;
+});
 /** 学习者已明确「保持原计划」：建议卡转已决策态，不再给可重复点击的按钮 */
 const advisoryKept = computed(() => advisory.value?.learnerResponse?.action === 'keep');
 const busy = computed(() => props.busy === true);
@@ -356,7 +366,14 @@ const formattedStrengths = computed(() => (evaluationHighlights.value ? formatSe
 const formattedImprovements = computed(() => (evaluationHighlights.value ? formatSentenceList(evaluationHighlights.value.improvements) : ''));
 
 const getKnowledgeTagType = (s: string) => (s === 'mastered' ? 'success' : s === 'learning' ? 'warning' : s === 'review' ? 'danger' : 'info');
-const getKnowledgeStatusLabel = (s: string) => (s === 'mastered' ? '已学会' : s === 'learning' ? '继续练习' : s === 'review' ? '建议回看' : '尚未展开');
+/* 课已结算且知识点全掌握时，AI 仍可能把某个点标成 learning（「会了但还不稳」）。
+   此时列表若还写「继续练习」，会和同一张卡头的「4/4 已学会」正面打架；
+   改口径为「建议巩固」：保留 AI 的提醒，但不否定已完成的掌握状态。 */
+const getKnowledgeStatusLabel = (s: string) => {
+  if (s === 'mastered') return '已学会';
+  if (s === 'learning') return props.masteredCount >= props.totalCount && props.totalCount > 0 ? '建议巩固' : '继续练习';
+  return s === 'review' ? '建议回看' : '尚未展开';
+};
 
 /* el-tag type → 学习组件 .status-tag 变体。色 token 与旧 EP 覆写一一对应：
    success=success-*、warning=efficient-*、danger=warning-*、info=pending-*。 */
@@ -457,10 +474,20 @@ const tagClass = (type: string) => ({
 .metric-help__btn:hover, .metric-help[open] .metric-help__btn { color: var(--green); background: color-mix(in srgb, var(--green) 10%, transparent); }
 .metric-help__body {
   position: absolute; right: 0; top: calc(100% + 4px); z-index: 20;
-  width: min(240px, 70vw); margin: 0; padding: 8px 10px;
+  /* 55vw：三列指标在 320 档每张卡只有 ~75px，240px 浮层右对齐会伸到屏幕外；
+     收到 55vw 后中/右列仍贴右，左列另走下面的左对齐。 */
+  width: min(240px, 55vw); margin: 0; padding: 8px 10px;
   font-size: 12px; line-height: 1.55; color: var(--ink);
   background: var(--surface); border: 1px solid var(--line);
   border-radius: 8px; box-shadow: var(--mk-shadow-modal);
+}
+/* 首列卡片的 ⓘ 靠近屏幕左边，浮层再右对齐会整块跑到负坐标（真课 390/320 实测）；
+   首列改为从图标左缘向右展开，其余列保持右对齐。
+   本节表现固定三列，只有第一张；长期状态 4 列时第一张也靠左，≤900 两列时每行第一张都靠左。 */
+#sec-perf .metric-card:first-child .metric-help__body,
+#sec-longterm .metric-card:first-child .metric-help__body {
+  left: 0;
+  right: auto;
 }
 .metric-card--good { border-color: color-mix(in srgb, var(--green) 30%, var(--line)); }
 .metric-card--normal { border-color: color-mix(in srgb, var(--green) 30%, var(--line)); }
@@ -508,6 +535,11 @@ const tagClass = (type: string) => ({
 /* 窄屏 4 项走 2×2（原先 1 列 = 4 行）；3 项保持一行 3 列 */
 @media (max-width: 900px) {
   .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* 两列时每行第一张的 ⓘ 都在左缘，浮层都改为向右展开 */
+  #sec-longterm .metric-card:nth-child(odd) .metric-help__body {
+    left: 0;
+    right: auto;
+  }
 }
 @media (max-width: 640px) {
   .completion-summary {

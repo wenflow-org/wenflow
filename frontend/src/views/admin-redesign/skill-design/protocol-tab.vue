@@ -1038,7 +1038,7 @@ watch(
   padding: 7px 0;
   border-bottom: 1px solid var(--mk-line);
 }
-.sdp-crow__name { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-ink); overflow-wrap: anywhere; }
+.sdp-crow__name { font-size: var(--mk-fs-micro); font-weight: 600; color: var(--mk-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sdp-crow__desc { font-size: var(--mk-fs-micro); color: var(--mk-muted); line-height: 1.55; overflow-wrap: anywhere; }
 .sdp-crow__type { font-size: var(--mk-fs-micro); color: var(--mk-faint); text-align: right; }
 /* 查看态·流程：一组一组的小签（core 状态机 / 运行时阶段 / 终止） */

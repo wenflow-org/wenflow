@@ -659,9 +659,12 @@ function buildOption(viewState?: { zoom?: number; center?: [number | string, num
           // 力导向的总跨度 ≈ 边长·√n；上面的 480 / 110-220 是按 ~40 节点校准的。
           // 2026-10-29：桌面降高后 24 节点仍会顶满 650px 画布，底部标签被裁；
           // 密集档收紧斥力上限与边长，让最外圈节点离边留出标签高度（n≤40 时 shrink=1）。
-          repulsion: narrow ? 110 : (denseGraph ? Math.min(520, Math.round(480 * shrink * shrink)) : 240),
+          // 2026-11-20 移动端走查：390px 画布 fit 已顶到 1.5 上限，布局本身仍缩在中间
+          // （15 节点只占 ~150px 宽），标签互相叠；窄屏斥力 110→160、边长 36~80→48~96，
+          // 先把布局铺开再由 fitGraphView 取景，标签间才有可读间距。
+          repulsion: narrow ? 160 : (denseGraph ? Math.min(520, Math.round(480 * shrink * shrink)) : 240),
           edgeLength: narrow
-            ? [36, 80]
+            ? [48, 96]
             : (denseGraph ? [Math.round(90 * shrink), Math.round(170 * shrink)] : [80, 160]),
           /* 向心引力（2026-11-06 走查）：旧值（0.06~0.13）下两个互不相连的知识簇各自往外跑，
              中间隔出 ~220px 的空洞、下一簇撞上画布底缘把图例文字切掉一半。

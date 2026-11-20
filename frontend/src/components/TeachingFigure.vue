@@ -413,7 +413,11 @@ const ariaLabel = computed(() => {
   color: var(--text-secondary);
   text-align: center;
 }
-.teaching-figure__canvas svg {
+/* v-html 注入的 SVG 不带组件 scope 属性，普通后代选择器匹配不到——
+   原来写成 `.teaching-figure__canvas svg` 时规则整条失效，全局 `svg{max-width:100%}`
+   在窄卡上把 620/949px 的图缩到 291px，12px 正文掉成 5px（2026-11-20 移动端课堂走查）。
+   用 :deep 命中注入节点，保留自然尺寸，由卡片横向滚动承接。 */
+.teaching-figure__canvas :deep(svg) {
   display: block;
   /* 自然尺寸出图：全局 svg{max-width:100%} 会把 760 宽的位置线缩到卡宽（标签跟着缩到看不清），
      这里显式放开，宽图由卡片横向滚动承接（与结构图通道同一口径） */

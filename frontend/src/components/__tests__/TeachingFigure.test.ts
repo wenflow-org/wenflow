@@ -6,6 +6,9 @@
  */
 import { describe, expect, it } from 'vitest';
 import { mount } from '@vue/test-utils';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import TeachingFigure from '../TeachingFigure.vue';
 
 const positionLine = {
@@ -188,5 +191,14 @@ describe('TeachingFigure 多图型', () => {
     const wrapper = mount(TeachingFigure, { props: { figure: positionLine } });
     expect(wrapper.find('svg').attributes('style')).toBeUndefined();
     expect(wrapper.find('figure').attributes('style')).toBeUndefined();
+  });
+
+  it('渲染器注入的 SVG 必须走 :deep 解除 max-width，窄卡才不会把图缩成 5px 字', () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const src = readFileSync(resolve(here, '../TeachingFigure.vue'), 'utf8');
+    expect(src).toContain('.teaching-figure__canvas :deep(svg)');
+    expect(src).toMatch(/:deep\(svg\) \{[\s\S]*?max-width: none;/);
+    // 普通后代选择器对 v-html 注入节点无效，留着会让人以为规则生效
+    expect(src).not.toMatch(/\.teaching-figure__canvas svg \{/);
   });
 });

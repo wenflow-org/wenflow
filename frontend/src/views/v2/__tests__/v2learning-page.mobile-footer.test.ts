@@ -67,4 +67,15 @@ describe('课堂页移动端 AI 消息页脚', () => {
     expect(ruleHaving('.msg__content--actions > .msg-actions', 'grid-column')).toContain('grid-column: 2');
     expect(ruleHaving('.msg__content--actions > .msg__meta', 'grid-column')).toContain('grid-column: 1');
   });
+
+  it('触屏操作条不再把消息间距撑高：40px 点击盒用负边距收回占位', () => {
+    const blocks = [...css.matchAll(/@media \(max-width: 640px\) \{/g)]
+      .map((m) => blockAt(m.index!))
+      .filter((b) => b.includes('.msg__content--actions > .msg-actions'));
+    expect(blocks, '≤640 没有收消息操作条占位的规则').toHaveLength(1);
+    const rule = blocks[0].replace(/\s+/g, ' ');
+    expect(rule).toContain('margin-top: -8px');
+    expect(rule).toContain('margin-bottom: -8px');
+    expect(flat).toContain('.tutor__scroll { padding-bottom: 78px; gap: 14px; }');
+  });
 });

@@ -33,7 +33,12 @@ vi.mock('@/utils/projection', () => ({
   isProjectionMode: vi.fn(() => false)
 }));
 
-vi.mock('@/components/CompletionCard.vue', () => ({ default: { template: '<div class="stub-completion" />' } }));
+vi.mock('@/components/CompletionCard.vue', () => ({
+  default: {
+    props: ['messageCount'],
+    template: '<div class="stub-completion" :data-messages="messageCount" />'
+  }
+}));
 vi.mock('@/components/learning/SessionFeedbackPanel.vue', () => ({ default: { template: '<div class="stub-feedback" />' } }));
 vi.mock('@/components/TeachingFigure.vue', () => ({
   default: { props: ['figure'], template: '<div class="stub-figure" :data-kind="figure && figure.kind" />' }
@@ -89,6 +94,60 @@ describe('LearningEvaluationPage 当堂对话折叠', () => {
     /* 数量即入口（2026-11-06）：卡头不再单摆一颗静态计数胶囊，按钮文案自带条数，
        与展开的内容同源，不可能再出现「47 条消息 / 展开 54 条」 */
     expect(w.find('.evaluation-transcript-card__meta').exists()).toBe(false);
+    expect(w.find('.stub-completion').attributes('data-messages')).toBe('5');
+  });
+
+  it('回放伴学插话：assistant.peerMessage 挂在老师消息下，并标出「伴学」', async () => {
+    getSessionDetailMock.mockResolvedValue({
+      ...detail,
+      messages: [
+        {
+          role: 'assistant',
+          content: '老师主文：先把每份表的列序对齐。',
+          timestamp: '2026-09-23T02:51:00.000Z',
+          peerTriggered: true,
+          peerMessage: '伴学想和你掰扯一下：列名一样就不算错位吗？'
+        }
+      ]
+    });
+    const w = await mountReady();
+    await w.find('.evaluation-transcript-toggle').trigger('click');
+    const peer = w.find('.evaluation-transcript-peer');
+    expect(peer.exists()).toBe(true);
+    expect(peer.find('.evaluation-transcript-peer__meta').text()).toContain('伴学');
+    expect(peer.text()).toContain('列名一样就不算错位吗');
+    expect(w.find('.evaluation-transcript-item').text()).toContain('老师主文');
+  });
+
+  it('伴学单人对话行不再冒充老师/学员：标成「伴学」并加 --peer 样式', async () => {
+    getSessionDetailMock.mockResolvedValue({
+      ...detail,
+      messages: [
+        { role: 'user', content: '问你个问题', timestamp: '2026-09-23T02:51:00.000Z', peer: true },
+        { role: 'assistant', content: '伴学的回答', timestamp: '2026-09-23T02:52:00.000Z', peer: true }
+      ]
+    });
+    const w = await mountReady();
+    await w.find('.evaluation-transcript-toggle').trigger('click');
+    const items = w.findAll('.evaluation-transcript-item');
+    expect(items).toHaveLength(2);
+    expect(items[0].classes()).toContain('evaluation-transcript-item--peer');
+    expect(items[0].find('.evaluation-transcript-item__meta strong').text()).toBe('你 · 伴学');
+    expect(items[1].find('.evaluation-transcript-item__meta strong').text()).toBe('伴学');
+  });
+
+  it('卡头「学习消息」与展开按钮同源：小测回放卡也算一条，不再差 4 条', async () => {
+    getSessionDetailMock.mockResolvedValue({
+      ...detail,
+      state: {
+        checkpointHistory: [
+          { checkpointId: 'cp-1', title: '小测', question: '哪份表会错位？', type: 'single_choice', options: [], passed: true }
+        ]
+      }
+    });
+    const w = await mountReady();
+    expect(w.find('.stub-completion').attributes('data-messages')).toBe('6');
+    expect(w.find('.evaluation-transcript-toggle').text()).toContain('展开 6 条对话');
   });
 
   it('点击后在展开/收起之间切换，条目数随之变化', async () => {

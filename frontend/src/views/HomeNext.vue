@@ -50,7 +50,7 @@
             <p class="hn-stage__from">来自「Excel 周报自动化」</p>
             <h3>跑通第一版数据读取</h3>
             <div class="hn-stage__meta">
-              <span>阶段 2 / 5</span>
+              <span>阶段 2 / 3</span>
               <span>约 25 分钟</span>
             </div>
             <div class="hn-stage__prog"><i style="--w: 42%" /></div>

@@ -912,6 +912,20 @@ onBeforeUnmount(() => {
   font-size: 12px;
 }
 .nc__task-time { margin-left: auto; font-size: 12px; color: var(--faint); flex-shrink: 0; }
+@media (max-width: 640px) {
+  /* 弹层在 390px 下：标题要和「共 N 次」、相对时间、展开/移除三组控件抢一行，
+     「生成学习路径」被挤成「生成学习路 / 径」两行。窄屏让标题独占首行，
+     计数与时间落到第二行；横向信息量不变，标题不再断在单字上（2026-11-20 移动端走查）。 */
+  .nc__task-row { flex-wrap: wrap; row-gap: 2px; }
+  .nc__task-label {
+    flex: 1 0 100%;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .nc__task-time { margin-left: 0; }
+}
 .nc__task-detail { font-size: 12px; color: var(--muted); }
 .nc__task-progress {
   height: 3px;
