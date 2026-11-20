@@ -1,4 +1,5 @@
 import { fetchPriorLearningRecap } from '../TeachingContextBuilder';
+import { readWrapupSummaryFields } from '../teaching-context-recap';
 
 // TeachingContextBuilder 顶层 import 的模块不触发真实 DB（仅实例/函数定义），
 // 这里只 mock prisma 用到的模型方法，验证「按路径位置接续前序」的选源优先级。
@@ -294,5 +295,17 @@ describe('fetchPriorLearningRecap（复盘要点双形读取 · P1-8）', () => 
     expect(recap?.sameTaskHistory?.lastSummary).toBe('上次学到这里');
     expect(recap?.sameTaskHistory?.lastUnresolvedPoints).toEqual(['难点Z']);
     expect(recap?.sameTaskHistory?.lastActionPlan).toEqual(['下次先复习难点Z']);
+  });
+
+  it('模型失败留下的兜底摘要不当作上一课复盘（恢复卡不再开屏报警）', () => {
+    // buildEndWrapupFallback 的固定文案：它是故障说明，不是「上次学了什么」
+    const fields = readWrapupSummaryFields({
+      topicSummary: '本次学习记录生成遇到问题，为你保留了基础总结。',
+      knowledgeItems: [{ name: '难点Z', status: 'learning' }],
+      actionPlan: ['重新完成一次完整的学习'],
+    });
+    expect(fields.topicSummary).toBeNull();
+    // 知识点状态仍可用于「上次待巩固」，不连坐
+    expect(fields.unresolvedPoints).toEqual(['难点Z']);
   });
 });

@@ -17,15 +17,24 @@ export function useOpeningSceneViews(openingScene: Ref<Record<string, any> | nul
   const scenePrimaryText = computed(() => SCENE_META[openingScene.value?.kind]?.primary || '开始');
   const sceneDefaultTitle = computed(() => {
     const k = openingScene.value?.kind;
-    if (k === 'resume') return '继续这节课，从上次离开的地方接着学';
+    // 标签已经承担「继续/重新学/今日复习」的场景定性，标题不再重复同一句话，
+    // 这样标签与标题才能并进同一行（2026-11-20 恢复卡走查：两行同义复读 + 卡片过高）。
+    if (k === 'resume') return '从上次离开的地方接着学';
     if (k === 'continuation') return '接着上一课往下学';
-    if (k === 'relearn') return '重新学这一课，把上次没掌握的补上';
-    if (k === 'review') return '今日复习：巩固快忘记的知识点';
+    if (k === 'relearn') return '上次没完全掌握的这次补上';
+    if (k === 'review') return '巩固快忘的知识点';
     return '开始这节课';
+  });
+  /** 上次课的降级占位不是「复盘摘要」：模型生成失败时 wrapup 里只留一句故障说明，
+   *  直接当摘要展示会让恢复卡一上来就报错（2026-11-20 恢复卡走查）。 */
+  const sceneSummary = computed(() => {
+    const s = openingScene.value?.recap?.summary;
+    if (typeof s !== 'string' || !s.trim()) return '';
+    return /^本次学习记录生成遇到问题/.test(s.trim()) ? '' : s.trim();
   });
   /** 副文案：依据 kind 给一句人话引导。
    *  P2-27（2026-10-04 全站评审 confirmed）：resume 分支副文已删——原「你的进度还在，接着上次
-   *  的内容继续，不用从头开始。」与标题「继续这节课 · 从上次离开的地方接着学」同信息，
+   *  的内容继续，不用从头开始。」与标题「从上次离开的地方接着学」同信息，
    *  一卡内「继续」×4 同义复读收敛为徽章/标题/按钮（操作位职责保留）；resume 时 sceneLead
    *  返回 ''，模板 v-if 不渲染副文行。continuation/relearn/review 的副文各承载增量信息，不动。 */
   const sceneLead = computed(() => {
@@ -70,7 +79,7 @@ export function useOpeningSceneViews(openingScene: Ref<Record<string, any> | nul
     return '怎么开始';
   });
   return {
-    sceneTag, scenePrimaryText, sceneDefaultTitle, sceneLead,
+    sceneTag, scenePrimaryText, sceneDefaultTitle, sceneSummary, sceneLead,
     sceneUnresolved, sceneMasteryWarn, quickReplyKicker
   };
 }

@@ -117,7 +117,7 @@ export function buildSessionOpeningScene(opts: {
   if (mode === 'resumed') {
     return {
       kind: 'resume',
-      title: '继续这节课 · 从上次离开的地方接着学',
+      title: '从上次离开的地方接着学',
       recap: recap ? {
         topic: recap.sourceTopic,
         summary: recap.topicSummary,

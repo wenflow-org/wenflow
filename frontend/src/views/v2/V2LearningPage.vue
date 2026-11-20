@@ -258,34 +258,34 @@
         </div>
         <div v-else-if="openingScene && !openingSceneDone"
              class="oscene" :class="`oscene--${openingScene.kind || 'first'}`">
-            <div class="oscene__tag">{{ sceneTag }}</div>
-            <h3 class="oscene__title">{{ openingScene.title || sceneDefaultTitle }}</h3>
+            <div class="oscene__head">
+              <div class="oscene__tag">{{ sceneTag }}</div>
+              <h3 class="oscene__title">{{ openingScene.title || sceneDefaultTitle }}</h3>
+            </div>
             <p v-if="sceneLead" class="oscene__lead">{{ sceneLead }}</p>
-            <div v-if="openingScene.recap?.summary" class="oscene__summary">{{ openingScene.recap.summary }}</div>
+            <p v-if="sceneSummary" class="oscene__summary">{{ sceneSummary }}</p>
             <div v-if="sceneUnresolved.length" class="oscene__chips">
-              <span class="oscene__chip-label">上次还没完全掌握</span>
+              <span class="oscene__chip-label">上次待巩固</span>
               <span v-for="(u, ui) in sceneUnresolved" :key="ui" class="oscene__chip">{{ u }}</span>
             </div>
             <div v-if="sceneMasteryWarn.length" class="oscene__warn">
               <span>前序基础提醒：</span>{{ sceneMasteryWarn }}
             </div>
+            <!-- 主行动与弱出口同一行：破坏性的「重新开始」仍降级为文字链接，
+                 但不再孤零零掉到卡片左下角（2026-11-20 恢复卡走查）。 -->
             <div class="oscene__actions">
               <button type="button" class="btn-primary" :disabled="typing || actionBusy" @click="startFromScene">
                 <span v-if="typing" class="spinner spinner--sm"></span>
                 {{ scenePrimaryText }}
               </button>
+              <button
+                v-if="openingScene.kind === 'resume'"
+                type="button"
+                class="oscene__restart"
+                :disabled="typing || actionBusy"
+                @click="restart"
+              >重新开始</button>
             </div>
-            <!-- 破坏性出口降级为角落小字链接：不与主行动并排抢点击（确认弹窗仍兜底，2026-10-09 用户反馈）。
-                 「先看看」已删：卡片非模态，历史与快选在其后本来可见，不点主按钮的自然状态就是先看看。
-                 「（清空当前进度）」已删（2026-11-03 次要文字扫查）：后果由确认弹窗完整承载，
-                 ⋯菜单的 small 是同一事实的第二遍（用于区分并列项），角落链接不再第三遍陈述 -->
-            <button
-              v-if="openingScene.kind === 'resume'"
-              type="button"
-              class="oscene__restart"
-              :disabled="typing || actionBusy"
-              @click="restart"
-            >重新开始</button>
         </div>
 
         <div ref="scrollEl" class="tutor__scroll" :class="{ 'tutor__scroll--intro': introLayout }" @scroll="updateNearBottom">
@@ -1706,7 +1706,7 @@ const resumedNotice = ref(false);
 
 /* ---------- 开场景卡片（resumed / continuation / relearn / review） ---------- */
 const {
-  sceneTag, scenePrimaryText, sceneDefaultTitle, sceneLead,
+  sceneTag, scenePrimaryText, sceneDefaultTitle, sceneSummary, sceneLead,
   sceneUnresolved, sceneMasteryWarn, quickReplyKicker
 } = useOpeningSceneViews(openingScene)
 
@@ -3497,12 +3497,12 @@ onBeforeUnmount(() => {
 
 .oscene {
   margin: 10px 14px 0;
-  padding: 16px 18px;
+  padding: 14px 16px;
   border: 1px solid var(--line);
   border-radius: var(--mk-radius-modal);
   background: var(--surface);
   box-shadow: var(--shadow-sm);
-  display: grid; gap: 8px;
+  display: grid; gap: 9px;
   flex: 0 0 auto;
 }
 .oscene--review { border-color: color-mix(in srgb, var(--blue) 30%, transparent); }
@@ -3530,46 +3530,61 @@ onBeforeUnmount(() => {
   font: inherit; font-size: 12px; font-weight: 700; color: var(--blue);
   cursor: pointer;
 }
+.oscene__head {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px;
+  min-width: 0;
+}
 .oscene__tag {
-  justify-self: start;
+  flex: 0 0 auto;
   font-size: 12px; font-weight: 800;
   letter-spacing: 0.04em;
   color: var(--blue-deep);
   background: color-mix(in srgb, var(--blue) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent);
-  padding: 2px 9px; border-radius: var(--mk-radius-pill);
+  padding: 2px 8px; border-radius: var(--mk-radius-pill);
 }
 .oscene--review .oscene__tag { color: var(--blue-deep); background: color-mix(in srgb, var(--blue) 12%, transparent); border-color: color-mix(in srgb, var(--blue) 32%, transparent); }
-.oscene__title { margin: 0; font-size: 15px; font-weight: 800; color: var(--ink); }
+.oscene__title {
+  margin: 0; flex: 1 1 160px; min-width: 0;
+  font-size: 15px; line-height: 1.45; font-weight: 800; color: var(--ink);
+}
 .oscene__lead { margin: 0; font-size: 12.5px; line-height: 1.65; color: var(--muted); }
+/* 上次复盘：读成一段引文，而不是一块灰底故障提示 */
 .oscene__summary {
   margin: 0;
-  font-size: 12.5px; line-height: 1.7;
+  padding: 1px 0 1px 10px;
+  border-left: 2px solid color-mix(in srgb, var(--blue) 35%, var(--line));
+  font-size: 12.5px; line-height: 1.65;
   color: var(--muted);
-  background: color-mix(in srgb, var(--ink) 3.5%, transparent);
-  border-radius: var(--mk-radius-lg); padding: 8px 11px;
 }
-.oscene__chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.oscene__chip-label { font-size: 12px; font-weight: 700; color: var(--faint); }
+.oscene__chips { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 6px; }
+.oscene__chip-label {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 700; color: var(--muted);
+}
+.oscene__chip-label::before {
+  content: ''; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--amber);
+}
 .oscene__chip {
-  font-size: 12px; font-weight: 700;
-  color: var(--amber);
-  background: color-mix(in srgb, var(--amber) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--amber) 32%, transparent);
-  padding: 2px 9px; border-radius: var(--mk-radius-pill);
+  font-size: 12px; font-weight: 600; line-height: 1.5;
+  color: var(--ink);
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  padding: 2px 8px; border-radius: var(--mk-radius-pill);
 }
-.oscene__warn { font-size: 12px; line-height: 1.6; color: var(--amber); }
+.oscene__warn { font-size: 12px; line-height: 1.6; color: var(--amber-ink); }
 .oscene__warn span { font-weight: 700; }
 .oscene__restart {
-  justify-self: start;
-  margin-top: 2px;
-  border: 0; background: transparent; color: var(--faint);
-  font: inherit; font-size: 12px; cursor: pointer;
-  padding: 2px 0;
+  flex: 0 0 auto;
+  margin: 0;
+  border: 0; background: transparent; color: var(--muted);
+  font: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+  padding: 4px 2px;
 }
-.oscene__restart:hover { color: var(--red-ink); }
+.oscene__restart:hover { color: var(--red-ink); text-decoration: underline; }
 .oscene__restart:disabled { opacity: 0.6; cursor: default; }
-.oscene__actions { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
+.oscene__actions { display: flex; align-items: center; gap: 10px 14px; margin-top: 2px; flex-wrap: wrap; }
 /* 暗色：底色/描边已全部令牌化，自动翻转，原逐条暗色字面量覆写退役 */
 .tutor__jump-bottom {
   /* 锚在输入区上方：原来 bottom:16px 是相对 .tutor 的底部，会压到输入框下方的
@@ -5072,7 +5087,11 @@ onBeforeUnmount(() => {
      （2026-09-24 课堂移动端走查；.stage-card__warn 的「!」是装饰字形不动） */
   .stage-card h2 { font-size: 18px; }
   .finish__card h2 { font-size: 18px; }
-  .oscene__title { font-size: 14px; }
+  .oscene__title { font-size: 14.5px; }
+  /* 窄屏：标签与标题仍并排；主按钮吃掉剩余宽度，弱出口留在同一行末尾 */
+  .oscene__head { gap: 4px 7px; }
+  .oscene__actions { flex-wrap: nowrap; gap: 10px; }
+  .oscene__restart { padding: 4px 0; }
   .learn__stage { padding: 28px 16px; }
   .finish { padding: 16px; }
   .finish__card { padding: 20px; border-radius: var(--mk-radius-modal); }
@@ -5085,11 +5104,11 @@ onBeforeUnmount(() => {
   .tutor__scroll { padding: 14px; }
   .oscene { padding: 12px 14px; }
   .learn__live { font-size: 12px; }
-  /* 续课卡主按钮收小（2026-09-26 用户「从这继续按钮还很大」；2026-10-09 起卡内只剩
-     主按钮一个选项，「重新开始」已降级为 .oscene__restart 小字链接）：
-     非页级主 CTA，按触诊分级取紧凑档 40；align-items:center 防 flex stretch */
+  /* 续课卡主按钮收小（2026-09-26 用户「从这继续按钮还很大」）：
+     非页级主 CTA，按触诊分级取紧凑档 40；align-items:center 防 flex stretch。
+     2026-11-20 起「重新开始」回到同一行动行末尾，仍是弱文字出口，不抢主按钮。 */
   .oscene__actions { align-items: center; }
-  .oscene__actions .btn-primary { padding: 8px 15px; font-size: 13px; min-height: 40px; }
+  .oscene__actions .btn-primary { flex: 1 1 auto; min-width: 0; padding: 8px 15px; font-size: 13px; min-height: 40px; }
 }
 </style>
 
