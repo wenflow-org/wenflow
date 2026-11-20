@@ -17,9 +17,9 @@
         </p>
         <p v-else class="section-hint">{{ settleReassurance }}</p>
         <div v-if="advisoryKept" class="section-hint">你已选择保持原计划，这条建议不会再调整后续安排。</div>
-        <div v-else class="advisory-options">
+        <div v-else class="advisory-options" :class="{ 'advisory-options--pair': advisoryOptions.length === 2 }">
           <button
-            v-for="option in advisory.ui.options"
+            v-for="option in advisoryOptions"
             :key="option.key"
             type="button"
             class="completion-btn completion-btn--small"
@@ -187,6 +187,16 @@ const settleReassurance = '确认后会调整后续学习安排。';
 const advisoryBody = computed(() => (advisory.value?.ui.body || '')
   .replace(/该调整只会调整后续阶段的课程安排，(?:不会覆盖|不影响)你已完成的内容。/g, '')
   .trim());
+/* 「查看调整建议」弹窗读的就是 ui.body——和卡面正文同一段话，点开只是复读。
+   只要卡面已经展示正文、且另有真正的调整动作（确认/压缩/补强等），就去掉它；
+   正文为空或没有其它动作的旧建议保留，避免把唯一入口删掉。 */
+const advisoryOptions = computed(() => {
+  const options = advisory.value?.ui.options || [];
+  const hasAdjustment = options.some((option) => ['confirm', 'accelerate', 'reinforce', 'resequence', 'slow_down'].includes(option.key));
+  return advisoryBody.value && hasAdjustment
+    ? options.filter((option) => option.key !== 'preview')
+    : options;
+});
 /** 学习者已明确「保持原计划」：建议卡转已决策态，不再给可重复点击的按钮 */
 const advisoryKept = computed(() => advisory.value?.learnerResponse?.action === 'keep');
 const busy = computed(() => props.busy === true);

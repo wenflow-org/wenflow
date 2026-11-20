@@ -2018,6 +2018,12 @@ onUnmounted(() => {
     grid-column: 1 / -1;
   }
 
+  /* 去掉复读的「查看调整建议」后只剩两颗：主按钮若仍整行，旁边会空出半格。
+     两钮并排各占一列，既对齐又不多占一行。 */
+  .evaluation-shell :deep(.advisory-options--pair .completion-btn--primary) {
+    grid-column: auto;
+  }
+
   .evaluation-shell :deep(.completion-actions) {
     gap: 8px;
   }
