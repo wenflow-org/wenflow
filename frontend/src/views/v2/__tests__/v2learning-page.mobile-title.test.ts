@@ -64,4 +64,20 @@ describe('课堂页窄屏页头标题', () => {
     expect(decl(baseRule, 'white-space')).toBe('nowrap');
     expect(decl(baseRule, 'text-overflow')).toBe('ellipsis');
   });
+
+  it('390 页头把三颗动作收进标题行，不再单独占一条动作带', () => {
+    const blocks = [...css.matchAll(/@media \(max-width: 640px\) \{/g)].map((m) => blockAt(m.index!));
+    const hit = blocks.find((b) => b.includes('.learn__finishbtn-short'));
+    expect(hit, '≤640 没有把动作收进标题行').toBeTruthy();
+    const flat = hit!.replace(/\s+/g, ' ');
+    expect(flat).toContain('flex-wrap: nowrap');
+    expect(flat).toContain('.learn__finishbtn-full { display: none; }');
+    expect(flat).toContain('.learn__finishbtn-short { display: inline; }');
+    expect(flat).toContain('.learn__kpbtn-text');
+    expect(flat).toContain('flex-direction: column');
+    expect(flat).toContain('text-wrap: balance');
+    // 不再靠第二条动作行/满宽动作栏
+    expect(flat).not.toContain('.learn__head--with-finish');
+    expect(flat).not.toContain('grid-template-rows');
+  });
 });

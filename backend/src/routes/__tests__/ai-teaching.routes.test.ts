@@ -845,6 +845,28 @@ describe('ai-teaching routes', () => {
     );
   });
 
+  it('契约未达成（LESSON_CONTRACT_NOT_MET）保留 409 与原文，不被「缺少」文案改写成 400', async () => {
+    const message = '本课还有契约目标未达成：缺少证据的 KC：识别列名错位现象；独立证据不足：0/2。';
+    mockSessionFinalizationService.finalize.mockRejectedValue(
+      Object.assign(new Error(message), { code: 'LESSON_CONTRACT_NOT_MET', status: 409 }),
+    );
+    const handler = getRouteHandler('/sessions/:sessionId/finalize');
+    const res = createResponse();
+
+    await handler({
+      user: { userId: 'user-1' },
+      params: { sessionId: 'session-1' },
+      headers: { 'idempotency-key': 'finalize-contract-1' },
+      body: { action: 'complete_task', revision: 8, reason: 'manual-end' },
+    }, res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      error: { code: 'LESSON_CONTRACT_NOT_MET', message, status: 409 },
+    });
+  });
+
   it('未确认时入参形状不变（不带 confirmOpenQuestion 字段）', async () => {
     mockSessionFinalizationService.finalize.mockResolvedValue({ status: 'completed', revision: 9 });
     const handler = getRouteHandler('/sessions/:sessionId/finalize');

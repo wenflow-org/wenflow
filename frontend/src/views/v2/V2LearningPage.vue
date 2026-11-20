@@ -20,13 +20,17 @@
              （有活会话 + 未结算 + 非延伸学习），不再额外要求「已有一轮对话」——
              否则这次合并等于悄悄收窄了可结算的范围。知识点未全掌握时仍可计入进度，
              提示走 title（finishHint）。 -->
+        <!-- 结课入口只在本节真正学完（知识点全掌握 / 契约已达标）时出现：
+             开课 0/4 就摆「完成」会读成催进度或可随时结课；提前离开用 ⋯ 菜单的
+             「结束学习（不计入完成）」，两者语义分开。 -->
         <button
-          v-if="session && !completed && !extensionMode"
+          v-if="canCompleteLesson"
           type="button"
           class="learn__finishbtn"
+          aria-label="完成本节"
           :title="finishHint"
           @click="completeAndSettle()"
-        >完成本节</button>
+        ><span class="learn__finishbtn-full">完成本节</span><span class="learn__finishbtn-short" aria-hidden="true">完成</span></button>
         <!-- 知识点入口：原型单列无侧栏 → 常驻左栏降级为头部入口 + 浮窗（功能不删） -->
         <button
           v-if="knowledgePoints.length"
@@ -36,8 +40,9 @@
           :aria-label="`知识点 ${masteredCount}/${knowledgePoints.length}，${kpOpen ? '收起' : '打开'}知识点面板`"
           :aria-expanded="kpOpen"
           aria-controls="learn-kp-panel"
+          title="知识点进度"
           @click="toggleKp"
-        >知识点 <b>{{ masteredCount }}/{{ knowledgePoints.length }}</b></button>
+        ><span class="learn__kpbtn-text">知识点</span><b>{{ masteredCount }}/{{ knowledgePoints.length }}</b></button>
         <!-- 顶栏「学习中」裸绿字撤除（2026-11-06 走查）：用户本来就在课堂里，这行绿字
              既不解释状态、又与两侧胶囊/按钮抢宽度。正常态整条让位；只有**异常**（开课失败
              红字 / 锁定课琥珀字）才显形——那是用户必须知道的，藏在 ⋯ 菜单里不合适。 -->
@@ -55,6 +60,15 @@
         <ImmersiveMenu mask>
           <div class="learn__menu-group">
             <span v-if="!session" class="learn__menu-label">本节还没有开起来，先返回路径详情处理解锁或重开。</span>
+            <!-- 未达到完课条件时，完成入口收进 ⋯：不在页头提前催「完成」；
+                 点它会走同一套契约门禁，缺什么由页内提示逐条说明。达标后页头出现 CTA，
+                 这条自动退场，避免双入口。 -->
+            <button
+              v-if="session && !completed && !extensionMode && !canCompleteLesson"
+              type="button"
+              class="learn__menu-item"
+              @click="completeAndSettle()"
+            >完成本节（计入进度）</button>
             <button type="button" class="learn__menu-item" v-if="session" @click="pauseAndLeave">暂停并离开</button>
             <button type="button" class="learn__menu-item" v-if="session && !completed" @click="endSession">{{ END_WITHOUT_FINISH_LABEL }}</button>
             <!-- 已结算：不给「说明文字」，给一个真动作（copy:check §6「变控件」） -->
@@ -749,7 +763,10 @@
             <span class="finish__ring">
               <svg viewBox="0 0 24 24" width="26" height="26"><path fill="currentColor" d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>
             </span>
-            <h2>本节完成</h2>
+            <h2>{{ finishHeading }}</h2>
+            <p v-if="finishAction === 'end_only'" class="finish__notcounted">
+              本次不计入完成，任务进度与里程碑保持不变。学习总结仍可在反馈里查看。
+            </p>
             <p>{{ wrapupText || '这次学习已经记录。' }}</p>
             <div v-if="finishStats.length" class="finish__stats">
               <span v-for="(s, i) in finishStats" :key="i"><b>{{ s.value }}</b>{{ s.label }}</span>
@@ -845,7 +862,7 @@
       v-if="!peerOpen && peerItems.length"
       type="button"
       class="peerfab"
-      :class="{ 'peerfab--quiz': !!checkpoint }"
+      :class="{ 'peerfab--quiz': !!checkpoint, 'peerfab--gate': !!settleBlock }"
       aria-label="打开小启伴学"
       @click="openPeerByUser"
     >
@@ -1242,7 +1259,16 @@ const SETTLE_GATE_COPY: Record<string, { title: string; action: SettleGateAction
     actionLabel: '去作答',
     guide: '先答完这道小测。等老师讲完这一轮，再来结算课堂。'
   },
-  FINALIZATION_LAST_CHECKPOINT_FAILED: { title: '先把最后一道小测处理完', action: 'checkpoint', actionLabel: '去查看' }
+  FINALIZATION_LAST_CHECKPOINT_FAILED: { title: '先把最后一道小测处理完', action: 'checkpoint', actionLabel: '去查看' },
+  /* 2026-11-20 课堂走查：契约门 409（LESSON_CONTRACT_NOT_MET）此前落到通用失败弹窗
+     「课堂结算遇到问题，稍后重试」——实际不是故障，是核心 KC 缺证据，重试永远同一结果，
+     还把用户往「查看学习反馈」这个死胡同里推。服务端 error.message 已带逐条缺口，
+     与上面三条门禁同样走页内常驻提示，把原因原文和「继续作答」出口一起给到。 */
+  LESSON_CONTRACT_NOT_MET: {
+    title: '还差几步才能完成本节课',
+    action: 'composer',
+    actionLabel: '继续学习'
+  }
 }
 function showSettleGate(code: string, message: string, server = false) {
   const copy = SETTLE_GATE_COPY[code] || {
@@ -1465,6 +1491,13 @@ const shouldAskSelfAssess = computed(() => {
 });
 
 const completed = ref(false);
+/** 本次收尾走的动作：end_only 不计入完成，完成浮层不能再说「本节完成」 */
+const finishAction = ref<'complete_task' | 'end_only' | 'complete_review' | null>(null);
+const finishHeading = computed(() => {
+  if (finishAction.value === 'end_only') return '本次学习已结束';
+  if (finishAction.value === 'complete_review' || isReviewMode.value) return '复习完成';
+  return '本节完成';
+});
 
 /* 讲解气泡（2026-11-02 用户定调「讲解归对话区」）：复用与正常发送同一条流式气泡机制——
    首个 delta 建气泡、逐段追加，收尾时用整段正文补齐（覆盖非流式回退、以及流被截断的情况）。
@@ -1554,6 +1587,15 @@ const postQuizReplies = ref<string[]>([]);
    （用户在读题时不会误报）。换题或卡片收起即复位。 */
 const checkpointWalkedPast = ref(false);
 const allKpMastered = computed(() => knowledgePoints.value.length > 0 && masteredCount.value >= knowledgePoints.value.length);
+/* 完课入口不提前摆在页头（2026-11-20 用户走查：0/4 知识点时就给「完成」读作催进度/可随时结课）：
+   知识点全部掌握或课堂契约已达标后才出现；想提前离开走 ⋯ 菜单的「结束学习（不计入完成）」，
+   两条语义分开——完成=已学完并计入进度，结束=不结算。 */
+const canCompleteLesson = computed(() => {
+  if (!session.value || completed.value || extensionMode.value) return false
+  if (lessonReport.value?.met === true) return true
+  if (knowledgePoints.value.length === 0) return true
+  return allKpMastered.value
+});
 
 /* 课堂契约卡（2026-11-19）：主线覆盖/独立证据/支线/停车区。契约是“最低必须完成集”，
    不是内容上限——UI 只展示达成度，不把未覆盖的探索内容判成失败。 */
@@ -2666,6 +2708,7 @@ async function finish(
     return;
   }
   finalizing.value = true;
+  finishAction.value = action;
   startSettleProgress(action === 'end_only' ? 'end' : 'complete', opts.enterEvaluation === true);
   try {
     // 结算前向前同步 revision：complete/end 的入口会先 abort 在途流式（不走 stopGeneration），
@@ -2717,7 +2760,7 @@ async function finish(
     // 「课堂还在进行中」（#115 稳定复现的死胡同）。给出后端原因原文，让用户先回应再结算；
     // 该提示常驻到条件解除，避免 4s toast 一闪而过、用户误以为结算没反应。
     const gateCode = String(e?.response?.data?.error?.code || e?.code || '');
-    if (gateCode === 'FINALIZATION_PENDING_CHECKPOINT' || gateCode === 'FINALIZATION_OPEN_QUESTION' || gateCode === 'FINALIZATION_LAST_CHECKPOINT_FAILED') {
+    if (gateCode === 'FINALIZATION_PENDING_CHECKPOINT' || gateCode === 'FINALIZATION_OPEN_QUESTION' || gateCode === 'FINALIZATION_LAST_CHECKPOINT_FAILED' || gateCode === 'LESSON_CONTRACT_NOT_MET') {
       // server=true：这是服务端的拒绝，常驻提示不能被本地检查点收卡（见 watch(checkpoint)）顺手清掉
       showSettleGate(gateCode, e?.response?.data?.error?.message || e?.message || '', true);
       return;
@@ -2915,17 +2958,9 @@ const {
    「主 CTA 与当前任务相逆、压在输入流上方易误触」，但只降了材质（lesson-cta--damped）没动位置。
    2026-10-06 先挪进 ⋯ 菜单；2026-11-06 走查又把菜单里那条撤了 —— 顶栏「完成本节」与它同 handler
    （completeAndSettle），菜单那条属重复入口且双行撑高菜单。完课入口最终只保留顶栏一处。
-   「本课知识点尚未全部掌握」的信号走 finishHint → title，不丢信息。 */
-const kpIncomplete = computed(() => {
-  const total = knowledgePoints.value.length;
-  return total > 0 && masteredCount.value < total;
-});
-/** 顶栏「完成本节」的 title 副文：知识点未掌握时前置提示，其余为常规口径 */
-const finishHint = computed(() =>
-  kpIncomplete.value
-    ? '本课知识点尚未全部掌握 · 仍可计入进度并生成总结'
-    : '计入进度 · 生成本次学习总结'
-);
+   2026-11-20：入口改为「可完课才出现」（见 canCompleteLesson），不再在 0/4 时提前摆出。 */
+/** 顶栏「完成本节」的 title 副文：入口只在可完课时出现，不再提示「未掌握也可完成」 */
+const finishHint = computed(() => '计入进度 · 生成本次学习总结');
 
 /* 头部掌握度小圆环已撤（2026-11-06 走查）：它和每条知识点前的进度圈同形，
    标题因此读成列表项；掌握度读数由「n / N 已掌握」纯文字 + 下方进度条承担。
@@ -3171,6 +3206,8 @@ onBeforeUnmount(() => {
   padding: 0 12px; height: 32px; cursor: pointer; white-space: nowrap;
 }
 .learn__finishbtn:hover { border-color: color-mix(in srgb, var(--blue) 35%, var(--line)); color: var(--blue-deep); }
+/* 窄屏用的短标签；桌面保留完整「完成本节」 */
+.learn__finishbtn-short { display: none; }
 /* 连接态：降为纯文字（原型顶栏只有一行状态字，不再挂绿胶囊） */
 .learn__live {
   font-size: 12px; font-weight: 700; color: var(--green-ink);
@@ -3445,6 +3482,18 @@ onBeforeUnmount(() => {
 .contract__exit--passed { color: var(--green-ink); }
 .contract__exit--failed { color: var(--danger, #b91c1c); }
 .finish__contract { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+/* 结束学习（不计入完成）与「本节完成」共用同一张浮层：必须把「没有计入」写在标题下，
+   否则 0/4 知识点 + 绿勾「本节完成」会读成本节已达标（2026-11-20 课堂走查）。 */
+.finish__notcounted {
+  margin: 2px 0 0;
+  padding: 6px 10px;
+  border-radius: var(--mk-radius-sm);
+  background: var(--canvas);
+  color: var(--ink);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.6;
+}
 
 .oscene {
   margin: 10px 14px 0;
@@ -4011,6 +4060,9 @@ onBeforeUnmount(() => {
   /* 小测待答时不再让悬浮球抢卡片宽度：入口收进小测操作行（问小启），
      卡片恢复满宽，桌面端仍保留右下角浮窗入口 */
   .peerfab--quiz { display: none; }
+  /* 结算门禁常驻在输入区上方，右下角悬浮球会压住「继续学习」按钮（2026-11-20 移动端走查）。
+     门禁是阻塞操作，收起伴学球；关掉提示后它会自动回来。 */
+  .peerfab--gate { display: none; }
   .checkpoint__actions .checkpoint__peer {
     display: inline-flex; align-items: center; justify-content: center;
     min-height: 36px; padding: 0 12px;
@@ -4505,7 +4557,7 @@ onBeforeUnmount(() => {
      在 340px 里折成两行（hint 行 17→33px）。隐藏后只剩声明，居中与入口页 .goal__ai-note 一致。 */
   .composer__hint > .composer__hint-note { display: none; }
   .composer__hint { flex-wrap: nowrap; justify-content: center; }
-  /* 移动端头部：单行紧凑 —— 返回隐藏、标题占主列可截断，右侧「学习中」+「⋯」同行，不再换行占第二行 */
+  /* 移动端头部：单行紧凑 —— 标题占主列可截断，右侧「完成/知识点/⋯」同行 */
   .learn__head {
     grid-template-columns: auto minmax(0, 1fr) auto;
     grid-template-rows: auto;
@@ -4548,6 +4600,69 @@ onBeforeUnmount(() => {
   /* 快捷块瘦身见文件末尾的媒体块：.replies/.reply 的基础规则在本文件靠后的 style 块里，
      同权重下写在这里会被覆盖 */
   /* 弹窗锚定在 ⋯ 按钮正下方、右对齐按钮 */
+}
+
+/* 手机页头（2026-11-20 课堂走查）：不写死两行，交给 flex 按当前动作数自动折行——
+   有「完成本节」时三颗控件放不下 → 动作整组落到第二行、标题独占首行；
+   结算后只剩「知识点 + ⋯」时一行放得下 → 自动收回单行，不再固定留一条空动作行。
+   标题 flex-basis 160：390px 两动作可同排，360/320 或三动作时自然换行。 */
+@media (max-width: 640px) {
+  .learn__head {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0 8px;
+  }
+  .learn__back { order: 0; }
+  .learn__title {
+    order: 1;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .learn__head-right {
+    order: 2;
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    margin-left: 0;
+    gap: 4px;
+    justify-content: flex-end;
+  }
+  /* 三颗动作与标题同排（2026-11-20 二次走查）：窄屏放不下完整标签，
+     完成按钮压成「完成」、知识点只留 0/4 读数（aria-label / title 仍给全称）。
+     这样页头只有一行，不再单独占一条动作带。 */
+  .learn__finishbtn {
+    min-width: 50px;
+    padding: 0 10px;
+    color: var(--blue-deep);
+    border-color: color-mix(in srgb, var(--blue) 28%, var(--line));
+  }
+  .learn__finishbtn-full { display: none; }
+  .learn__finishbtn-short { display: inline; }
+  /* 知识点入口压成两行小胶囊：上面「知识点」、下面 0/4。
+     比只留 0/4 好认，又比横排「知识点 0/4」省 ~25px 宽度。 */
+  .learn__kpbtn {
+    flex-direction: column;
+    gap: 0;
+    padding: 0 6px;
+    justify-content: center;
+  }
+  .learn__kpbtn-text {
+    display: block;
+    font-size: 12px;
+    line-height: 1.05;
+    font-weight: 600;
+    color: var(--muted);
+  }
+  .learn__kpbtn b {
+    font-size: 12px;
+    line-height: 1.1;
+  }
+  .learn__title strong {
+    font-size: 13.5px;
+    line-height: 1.3;
+    /* 26 字任务名两行时避免「…出什么 / 岔子」这种末行只剩两字的孤行 */
+    text-wrap: balance;
+  }
 }
 </style>
 

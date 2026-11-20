@@ -49,4 +49,24 @@ describe('V2LearningPage 课堂契约卡与自由支线', () => {
     expect(source).toContain('个核心 KC 有证据');
     expect(source).toContain('待课后处理');
   });
+
+  it('结算被契约缺口拒绝时走页内门禁并展示逐条原因，不落「稍后重试」故障弹窗', () => {
+    expect(source).toContain("LESSON_CONTRACT_NOT_MET");
+    expect(source).toContain('还差几步才能完成本节课');
+    expect(source).toMatch(/LESSON_CONTRACT_NOT_MET[\s\S]{0,4000}showSettleGate/);
+  });
+
+  it('结束学习（不计入完成）的浮层不冒充「本节完成」', () => {
+    expect(source).toContain("finishAction.value === 'end_only'");
+    expect(source).toContain('本次学习已结束');
+    expect(source).toContain('本次不计入完成，任务进度与里程碑保持不变');
+  });
+
+  it('完成入口不提前摆出：知识点未全掌握且契约未达标时不显示', () => {
+    expect(source).toContain('const canCompleteLesson = computed');
+    expect(source).toContain('v-if="canCompleteLesson"');
+    expect(source).toMatch(/allKpMastered[\s\S]{0,800}canCompleteLesson/);
+    // 提前离开只走 ⋯ 菜单的「结束学习（不计入完成）」
+    expect(source).toContain('结束学习（不计入完成）');
+  });
 });
