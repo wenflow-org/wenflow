@@ -21,6 +21,10 @@ import { callPrompt } from '../../composers/prompt-composer';
 import { loadPromptFile } from '../../composers/prompt-files/loader';
 import { adaptToRuntimeEnvelope } from '../../services/prompt-lab/envelope-adapter';
 import { assessPlanningSourceHonesty } from '../../services/learning/generation/stage-subtask-quality';
+import {
+  auditMilestoneRationales,
+  isClarificationEnforceEnabled,
+} from '../../services/learning/goal-clarification-contract';
 
 import { logger } from '../../utils/logger';
 import { buildPromptFriendlyMaterials } from '../../services/materials/material-prompt-projection';
@@ -38,6 +42,24 @@ const PATH_PLANNING_PROMPT = loadPromptFile(AGENT_ID)?.systemPrompt || '';
 
 function normalizePromptString(value: any): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+/**
+ * Phase 3：MilestoneRationale 的重规划反馈。
+ *
+ * 生成后审计只能「判死」；放在 callPrompt 的 validateParsedOutput 里，模型能拿到
+ * 具体缺口并重写一次（现有 retryStrategy.maxAttempts=2）。持久化前还有一道硬阻断，
+ * 防止模型第二次仍不写 rationale 时把不可追溯的路径落成 active。
+ */
+function readClarificationFromPathInput(input: any): unknown {
+  return input?.metadata?.normalizedInput?.clarification
+    ?? input?.metadata?.clarification
+    ?? null;
+}
+
+function readMilestonesForRationaleAudit(parsed: any): unknown[] {
+  const plan = parsed?.path || parsed;
+  return Array.isArray(plan?.milestones) ? plan.milestones : [];
 }
 
 function normalizePromptStringArray(value: any): string[] {
@@ -889,7 +911,6 @@ export const pathAgentDefinition: AgentDefinition = {
           totalMilestones: { type: 'number' },
           estimatedHours: { type: 'number' },
           cognitiveCore: { type: 'object' },
-          cognitiveDesign: { type: 'object' },
           milestones: { type: 'array' }
         }
       }
@@ -1322,6 +1343,17 @@ ${replan ? renderReplanSection(replan) : ''}
       if (!base.valid) return base;
       // 离线评测要单独看 prompt 质量，不能被代码层的范围门挡住（正常运行时不受影响）
       if (process.env.PATH_EVAL_BYPASS_GATES === '1') return base;
+      // Phase 3：有澄清契约时，rationale 缺失直接作为校验失败 → 带反馈重试一次。
+      const clarification = readClarificationFromPathInput(input);
+      if (clarification && isClarificationEnforceEnabled()) {
+        const audit = auditMilestoneRationales(readMilestonesForRationaleAudit(parsed), clarification);
+        if (!audit.ok) {
+          return {
+            valid: false,
+            failureReason: `CLARIFICATION_RATIONALE_NOT_SATISFIED: ${audit.reasons.join('；')}`,
+          };
+        }
+      }
       return validateScopeBinding(parsed, learningScope);
     },
     // 来源诚实软校验（2026-11-12）：无材料时 summary/milestone 不得宣称「真实/公开记录」——
@@ -1352,6 +1384,12 @@ ${replan ? renderReplanSection(replan) : ''}
         + (failureReason.includes('PLANNING_SOURCE_HONESTY')
           ? String.fromCharCode(10) + '本路径没有联网采集结果或用户上传资料，summary 与各阶段的 title/description/goal 里不得出现「真实对话/真实记录/真实案例/公开复盘」等措辞——'
             + '把这类承诺改写为「示意记录/示例样本（形态参照公开事故类型）」，或删掉来源断言。' + String.fromCharCode(10)
+          : '')
+        + (failureReason.includes('CLARIFICATION_RATIONALE_NOT_SATISFIED')
+          ? String.fromCharCode(10) + '每个 milestone 必须补 rationale：'
+            + '{ "serves": "core|baseline|stopping|constraint", "evidence": "引用澄清契约的哪一条", "assumes": "可选" }；'
+            + '最后一个 milestone 的 rationale.serves 必须是 stopping，且 evidence 要对上 stopping.statement。'
+            + '缺 rationale 或终点不服务 stopping 会被拒绝落库。' + String.fromCharCode(10)
           : '')
         + `上次失败原因：${failureReason}`,
     },

@@ -15,6 +15,8 @@ export interface PathReviewerGoalContext {
   confirmedProposal: unknown;
   learnerProfile: unknown;
   successCriteria: unknown;
+  /** 澄清契约（Phase 2）：评审据此审计里程碑 rationale 与终点 stopping 覆盖 */
+  clarification?: unknown;
   /** 时间模型（与 normalizedInput 同命名，驼峰；R8 权威字段 + legacy 诊断字段） */
   timeDimensions?: {
     scopeAnchorHours?: number | null;
@@ -42,6 +44,7 @@ export function buildPathReviewerGoalContext(input: {
             successCriteria?: unknown;
             timeDimensions?: PathReviewerGoalContext['timeDimensions'];
             resources?: PathReviewerGoalContext['resources'];
+            clarification?: unknown;
           };
         } | null;
       }
@@ -53,6 +56,7 @@ export function buildPathReviewerGoalContext(input: {
     confirmedProposal: input.confirmedProposal ?? null,
     learnerProfile: input.learnerProfile ?? null,
     successCriteria: framed?.successCriteria ?? null,
+    clarification: framed?.clarification ?? null,
     timeDimensions: framed?.timeDimensions ?? null,
     resources: framed?.resources ?? null,
   };

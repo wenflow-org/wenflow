@@ -32,7 +32,15 @@
  *
  * 兼容口径：字段既接受 goal 产出的 snake_case（real_problem / constraints_and_boundaries /
  * primary_block_type / support_need 等），也接受 scenario 标注的 camelCase（primaryBlockType 等）。
+ *
+ * Phase 4（2026-11-20）：有澄清契约时**契约优先**——用 `stopping.scope / blockingNeed`
+ * 直接派生去向，不再读 intent/block/skill 标签；标签分支仅保留给无 contract 的旧会话。
  */
+import {
+  deriveGoalRoute,
+  normalizeClarificationContract,
+} from './goal-clarification-contract';
+
 export const PRIMARY_BLOCK_TYPES = [
   'capability',
   'oneoff_operation',
@@ -96,6 +104,8 @@ export const DEFAULT_RESPONSE_TRIAGE_ENFORCEMENT: ResponseTriageEnforcementMode 
 
 export interface ResponseTriageInput {
   realProblem?: unknown;
+  /** Phase 4：澄清契约（存在时优先于所有身份标签） */
+  clarification?: unknown;
   primaryBlockType?: unknown;
   recurrence?: unknown;
   blockTypeEvidence?: unknown;
@@ -294,6 +304,41 @@ export function normalizeSupportNeed(value: string | null | undefined): SupportN
  */
 export function triageGoalResponse(input: ResponseTriageInput | null | undefined): ResponseTriage {
   const understanding = asObject(input);
+  // Phase 4：澄清契约优先。存在 contract 时，去向只由“请求属性”派生，
+  // 不读 intent_type / primary_block_type / skill_nature 等身份标签。
+  const clarification = understanding.clarification;
+  if (clarification && typeof clarification === 'object') {
+    const contract = normalizeClarificationContract(clarification);
+    const route = deriveGoalRoute(contract);
+    const reasons = [`澄清契约派生：route=${route}`];
+    if (route === 'support') {
+      return {
+        mode: contract.blockingNeed === 'referral' ? 'referral' : 'emotional_support',
+        confidence: 'high',
+        reasons: [...reasons, `blockingNeed=${contract.blockingNeed}`],
+      };
+    }
+    // scope=instance 只说明“验的是一个实例”，不等于“一次性操作”。
+    // 只有 kind=do 且没有任何基线证据时才是真正的 one-off（如“怎么重置密码”）；
+    // 有基线/学习诉求的实例任务（如审自己那份合同）仍应走学习路径。
+    const isOneOff = route === 'one_off'
+      && contract.stopping.kind === 'do'
+      && contract.baseline.known.length === 0;
+    if (isOneOff) {
+      return {
+        mode: 'answer_then_hook',
+        confidence: 'high',
+        reasons: [...reasons, 'stopping.scope=instance × kind=do × 无基线证据（一次性操作，不排课）'],
+      };
+    }
+    return {
+      mode: 'learning_path',
+      confidence: contract.stopping.statement ? 'medium' : 'low',
+      reasons: [...reasons, contract.stopping.statement
+        ? `stopping.kind=${contract.stopping.kind} / scope=${contract.stopping.scope}`
+        : '契约尚无 stopping.statement，路径可生成但需补停机条件'],
+    };
+  }
   const realProblem = pickString(understanding, ['realProblem', 'real_problem']);
   const blockType = pickString(understanding, ['primaryBlockType', 'primary_block_type']);
   const recurrence = pickString(understanding, ['recurrence']);

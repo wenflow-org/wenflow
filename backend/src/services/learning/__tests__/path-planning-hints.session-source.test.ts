@@ -3,7 +3,7 @@
  *
  * 锁三类事实：
  * ① 用户显式说“每次 20 分钟”时，单课仍按 20 封顶；
- * ② 用户完全没提时，25 只是均值锚，单课允许 15-35，不再把 8h 内容锁成 3.75h；
+ * ② 用户完全没提时，25 只是均值锚，单课允许 15-30（承诺 +5 分钟），不再把 8h 内容锁成 3.75h；
  * ③ 扩容按“每阶段锚分钟 > 单阶段容量”触发，不再被 `perStageHours > 6` 挡住。
  */
 import { derivePlanningHints } from '../path-planning-hints';
@@ -24,30 +24,30 @@ describe('sessionsLengthSource：显式 vs 静默默认', () => {
     expect(hints.targetHoursPerMilestone).toBeLessThan(hints.rawTargetHoursPerMilestone!);
   });
 
-  it('静默默认 25 分钟：25 是均值锚，单课区间放宽到 15-35，8h/4 阶段装得下', () => {
+  it('静默默认 25 分钟：25 是均值锚，单课区间 15-30，8h/4 阶段装得下', () => {
     const hints = derivePlanningHints(
       null, null, null, null,
       ['S1', 'S2', 'S3', 'S4'],
       { objectiveScopeHours: 8, sessionsLengthMin: 25, sessionsLengthSource: 'default', timeModelVersion: 2 },
       null,
     );
-    expect(hints.subtaskMinutesRange).toEqual([15, 35]);
+    expect(hints.subtaskMinutesRange).toEqual([15, 30]);
     expect(hints.targetTotalHours).toBe(8);
     expect(hints.capacityDeficit).toBeNull();
     expect(hints.targetHoursPerMilestone).toBe(2);
   });
 
-  it('静默默认 25 分钟：8h/3 阶段扩到 5 课后装得下（不再被 3 课上限锁成 3.75h）', () => {
+  it('静默默认 25 分钟：8h/3 阶段扩到 5 课后容量 7.5h，缺口如实保留', () => {
     const hints = derivePlanningHints(
       null, null, null, null,
       ['S1', 'S2', 'S3'],
       { objectiveScopeHours: 8, sessionsLengthMin: 25, sessionsLengthSource: 'default', timeModelVersion: 2 },
       null,
     );
-    expect(hints.subtaskMinutesRange).toEqual([15, 35]);
+    expect(hints.subtaskMinutesRange).toEqual([15, 30]);
     expect(hints.subtasksPerStageRange[1]).toBe(5);
-    expect(hints.capacityDeficit).toBeNull();
-    expect(hints.targetHoursPerMilestone).toBeCloseTo(2.7, 1);
+    expect(hints.capacityDeficit).not.toBeNull();
+    expect(hints.targetHoursPerMilestone).toBeCloseTo(2.5, 1);
   });
 
   it('显式 25 分钟：3 阶段封 5 课后仍装不下 8h，缺口如实保留', () => {

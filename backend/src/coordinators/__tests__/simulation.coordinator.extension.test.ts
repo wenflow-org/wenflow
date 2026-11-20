@@ -482,4 +482,104 @@ describe('#124 assisted 延伸学：正课收束 → 延伸课堂 → 结算', (
       }
     })
   })
+
+  // D1（2026-11-19）：学习者可以主动下课。离场只停课、不结算任务（下次可续），
+  // 且不得压过教师已给出的结课信号；延伸课是有界陪学，不接受离场（由回合上限收尾）。
+  describe('学习者主动离场（D1）', () => {
+    const exitOutput = (endReason: string) => ({
+      reply: endReason === 'time-up' ? '今天先到这，我这边时间到了。' : '我跟不动了，先停一下。',
+      learnerState: { readyForNextTask: false },
+      learnerFeedback: {
+        selfReportedTaskDone: false,
+        wantsMoreHelp: false,
+        stopAsking: false,
+        remainingBlockers: [],
+        wantsExtension: false,
+      },
+      shouldEnd: true,
+      endReason,
+    })
+
+    it('学员时间到 + 教师未结课 → 停课不结算，课堂解绑', async () => {
+      mockExecuteSkill.mockResolvedValue(exitOutput('time-up'))
+      mockProcessStudentMessage.mockResolvedValue({
+        revision: 2,
+        aiResponse: '好，那我们下次继续。',
+        isCompletion: false,
+        autoEnded: false,
+        analysis: {},
+        knowledgePoints: [],
+        strategies: []
+      })
+
+      const result = await coordinator.executeLearningStep('simulation-1')
+      const learning = getLearningState()
+
+      expect(result).toEqual(expect.objectContaining({
+        success: true,
+        taskCompleted: false,
+        currentTaskStopped: true,
+      }))
+      expect(result.error).toContain('LEARNER_EXITED')
+      expect(mockCompleteTask).not.toHaveBeenCalled()
+      expect(mockEndSession).toHaveBeenCalledWith('teaching-1', 'learner-exited', 2)
+      expect(learning.teachingSessionId).toBeNull()
+      expect(learning.taskRuntime).toEqual(expect.objectContaining({
+        status: 'learner-exited',
+        taskId: 'task-1',
+        turns: 0,
+        learnerDoneStreak: 0,
+      }))
+      expect(result.logs).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          details: expect.objectContaining({
+            output: expect.objectContaining({ action: 'learner-exit-requested', reason: 'time-up' })
+          })
+        })
+      ]))
+    })
+
+    it('教师已给结课信号 → 按正常完成链路结算（离场不得压过教学权威）', async () => {
+      mockExecuteSkill.mockResolvedValue({
+        ...exitOutput('task-done'),
+        learnerFeedback: {
+          selfReportedTaskDone: true,
+          wantsMoreHelp: false,
+          stopAsking: true,
+          remainingBlockers: [],
+          wantsExtension: false,
+        },
+      })
+      mockProcessStudentMessage.mockResolvedValue({
+        revision: 2,
+        aiResponse: '这节课就到这儿。',
+        isCompletion: true,
+        autoEnded: false,
+        analysis: {},
+        knowledgePoints: [],
+        strategies: []
+      })
+
+      const result = await coordinator.executeLearningStep('simulation-1')
+
+      expect(result).toEqual(expect.objectContaining({ success: true, taskCompleted: true }))
+      expect(mockCompleteTask).toHaveBeenCalledTimes(1)
+      expect(mockEndSession).toHaveBeenCalledWith('teaching-1', 'task-completed', 2)
+      expect(mockEndSession).not.toHaveBeenCalledWith('teaching-1', 'learner-exited', expect.anything())
+    })
+
+    it('延伸课内学员想下课 → 不按离场停正课，延伸课照常按回合推进', async () => {
+      setLearningState(extensionState(2))
+      mockExecuteSkill.mockResolvedValue(exitOutput('time-up'))
+
+      const result = await coordinator.executeLearningStep('simulation-1')
+      const learning = getLearningState()
+
+      expect(result).toEqual(expect.objectContaining({ success: true, taskCompleted: false }))
+      expect(mockCompleteTask).not.toHaveBeenCalled()
+      expect(mockEndSession).not.toHaveBeenCalledWith('teaching-1', 'learner-exited', expect.anything())
+      expect(learning.extensionRuntime.active).toBe(true)
+      expect(learning.extensionRuntime.turns).toBe(3)
+    })
+  })
 })

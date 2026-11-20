@@ -9,7 +9,7 @@
  * mock 永不漂移，handoff 分支真实生效。
  */
 
-import pathOrchestrator from '../path.coordinator'
+import pathOrchestrator, { resolveMilestonesForRationaleAudit } from '../path.coordinator'
 
 jest.mock('../../services/agentConfig.service', () => {
   const actual = jest.requireActual('../../services/agentConfig.service')
@@ -295,5 +295,80 @@ describe('path.coordinator normalizedInputV1 配置式装配', () => {
       structuredData: { learner: { identity: '直连旧值' } },
     } as any)
     expect(withoutHandoff.userProfile.structuredData).toEqual({ learner: { identity: '直连旧值' } })
+  })
+
+  // Phase 2（2026-11-20）：澄清契约替代身份标签，成为 Path 的第一性输入。
+  const CLARIFICATION = {
+    core: { question: '学习科学与 CLT 是包含还是冲突', evidence: ['和 clt 之间关系'] },
+    baseline: {
+      known: ['用户主动使用 CLT 缩写'],
+      unknown: ['是否读过样例效应'],
+      misconceptions: [],
+      evidence: ['用户自然说出 CLT'],
+    },
+    stopping: {
+      kind: 'explain',
+      scope: 'class',
+      evidence: 'platform',
+      statement: '能解释两者关系并把新案例放进框架',
+    },
+    constraints: { timePerSessionMin: 25 },
+    assumptions: [],
+    blockingNeed: 'none',
+    unknowns: [],
+  }
+
+  it('clarification 透传进 PathGenerationInput 与 normalizedInput', async () => {
+    const normalized = await pathOrchestrator.previewNormalizedGoalInput({
+      userId: 'user-1',
+      rawGoal: '想弄清学习科学与 CLT 的关系',
+      visibleSummary: VISIBLE_SUMMARY,
+      clarification: CLARIFICATION,
+    } as any)
+
+    expect(normalized.clarification).toEqual(CLARIFICATION)
+    expect((normalized.userProfile?.normalizedInput as any)?.clarification).toEqual(CLARIFICATION)
+  })
+
+  it('默认配置 + 契约缺第一站信息 → 生成前抛 CLARIFICATION_REQUIRED（无需显式开开关）', async () => {
+    const incomplete = {
+      ...CLARIFICATION,
+      unknowns: [{
+        id: 'u1',
+        question: '你读过样例效应吗？',
+        planImpact: 'first-station',
+        discriminates: ['读过：直接进争论', '没读过：从实验讲起'],
+      }],
+    }
+    const previous = process.env.GOAL_CLARIFICATION_ENFORCE
+    delete process.env.GOAL_CLARIFICATION_ENFORCE
+    try {
+      await expect(pathOrchestrator.generateFromGoal({
+        userId: 'user-1',
+        rawGoal: '想弄清学习科学与 CLT 的关系',
+        visibleSummary: VISIBLE_SUMMARY,
+        clarification: incomplete,
+      } as any)).rejects.toMatchObject({ code: 'CLARIFICATION_REQUIRED' })
+    } finally {
+      if (previous === undefined) delete process.env.GOAL_CLARIFICATION_ENFORCE
+      else process.env.GOAL_CLARIFICATION_ENFORCE = previous
+    }
+  })
+
+  // 回归：milestones 表不存 rationale，审计必须读 aiPromptTemplate.suggestedMilestones，
+  // 否则每次生成都会被误判成「缺少 rationale」。
+  it('MilestoneRationale 审计取生成期模板中的 milestones（含 rationale）', () => {
+    const milestones = [
+      { name: '样例效应', rationale: { serves: 'baseline', evidence: '补上未读过的实验' } },
+      { name: '争论复盘', rationale: { serves: 'stopping', evidence: '能解释两者关系' } },
+    ]
+    const resolved = resolveMilestonesForRationaleAudit({
+      aiPromptTemplate: JSON.stringify({ suggestedMilestones: milestones }),
+      milestones: [{ name: '样例效应' }, { name: '争论复盘' }],
+    })
+    expect(resolved).toEqual(milestones)
+
+    // 模板缺失/损坏 → 回退到直接字段（不抛错）
+    expect(resolveMilestonesForRationaleAudit({ aiPromptTemplate: 'not-json', milestones })).toEqual(milestones)
   })
 })

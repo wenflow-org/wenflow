@@ -7,7 +7,7 @@
  * 下缘的描边——用户三张截图点名「学习方案 · 待确认 上下的黑边」。
  *
  * 修复口径：布局本身保证不重叠，不再用遮罩粉饰。
- *  1) 贴底坞 .chat__dock 是唯一的贴底容器：生成 pill / 待确认条 / 输入区 / 元数据行在里面，
+ *  1) 贴底坞 .chat__dock 是唯一的贴底容器：待确认条 / 输入区 / 元数据行在里面，
  *     滚动区在坞上方自然结束；坞透明、无边框、无渐变伪元素。
  *     2026-11-18 用户复选：待确认条保持在输入框上方，不随消息流滚动。
  *  2) 消息反馈栏（👍👎🔄📋）整体退役——澄清期每轮都是问句，复制/重新生成没有对象，
@@ -74,13 +74,15 @@ describe('底部三段：贴底坞取代渐变遮罩', () => {
     const inside = new Set<string>();
     for (const child of docks[0].children || []) {
       if (child.type !== 1) continue;
-      for (const cls of ['gen-pill', 'proposal-invite', 'composer', 'chat__under-hint', 'composer--entry']) {
+      for (const cls of ['proposal-invite', 'composer', 'chat__under-hint', 'composer--entry']) {
         if (hasClass(child, cls)) inside.add(cls);
       }
     }
     for (const cls of ['proposal-invite', 'composer', 'chat__under-hint']) {
       expect(inside.has(cls), `${cls} 没进 .chat__dock：并列 flex 子项会重新引入遮挡`).toBe(true);
     }
+    /* 2026-11-20：路径创建/生成进度统一收进右上角通知中心，对话底坞不再出现生成 pill。 */
+    expect(source, '生成 pill 已从目标页退役，不应在坞或模板任何位置复活').not.toContain('gen-pill');
     /* 用户 2026-11-18 复选：确认面板保持在输入框上方，不随消息流滚走 */
     const scrolls = nodes(root as TplNode, (n) => hasClass(n, 'chat__scroll'));
     expect(scrolls.length, '会话流滚动区应恰好一处').toBe(1);
@@ -88,6 +90,12 @@ describe('底部三段：贴底坞取代渐变遮罩', () => {
     expect(inlineInvites.length, '确认条不应再出现在对话滚动区内').toBe(0);
     /* 入口态的 composer 在 .entry 里，不许被一起收进会话态的坞 */
     expect(inside.has('composer--entry'), '入口态输入区不该进会话态坞').toBe(false);
+  });
+
+  it('out_of_scope 只做内部边界，不在确认面板展示「本轮暂不展开」', () => {
+    expect(source).not.toContain('本轮暂不展开');
+    expect(source).not.toContain('reviewProposal.skip');
+    expect(source).not.toContain('proposal__skip-list');
   });
 
   it('滚动区不再为悬浮条补底衬（--pill / --invite 两个 class 判例退役）', () => {

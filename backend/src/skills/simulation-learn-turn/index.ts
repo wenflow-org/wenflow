@@ -101,6 +101,10 @@ export interface LearnLearnerSimulationInput {
     timezone?: string;
     sinceLastSessionDays?: number | null;
   } | null;
+  /** 本节已经发生的学习者回合数（0=首轮）：离场语义的软时间判断输入 */
+  turnIndex?: number;
+  /** 本节软时间预算（回合数）：达到后允许学习者自然离场，不是硬性截断 */
+  turnBudget?: number;
   /**
    * 代码裁决的"这次还能不能想起来"观测（Q4）：对到期复习点的**概率化提取**结果。
    * 模拟器据此人设化表达（CLEAR 顺畅、VAGUE 含糊/舌尖、CONFUSED 记成别的、FAILED 记不得）。
@@ -141,6 +145,12 @@ export interface LearnLearnerSimulationOutput {
     remainingBlockers: string[];
     reason: string;
   };
+  /**
+   * 学习者主动下课（D1 补口）：只表示「这个人要离开本次课堂」，不是平台结课裁决。
+   * 编排层按此停课/暂停，不计失败、不标 task 完成。
+   */
+  shouldEnd: boolean;
+  endReason: 'task-done' | 'time-up' | 'frustrated' | 'not-helpful' | 'other' | null;
   debug?: {
     visibleSignal?: string;
     stateChangeReason?: string;
@@ -313,6 +323,9 @@ function buildFallback(input: LearnLearnerSimulationInput): LearnLearnerSimulati
     emotion: phaseFocus === 'blocked' ? 'confused' : 'neutral',
     learnerState,
     learnerFeedback: buildFeedbackFromState(learnerState, '模型输出不可用时的保守自评'),
+    // 兜底不主动离场：模型不可用不能替学习者做下课决定。
+    shouldEnd: false,
+    endReason: null,
     debug: {
       visibleSignal: 'fallback',
       stateChangeReason: '模型输出不可用时的保守兜底'
@@ -398,6 +411,31 @@ function normalizeOutput(parsed: any, input: LearnLearnerSimulationInput): Learn
     && selfReportedTaskDone;
   const checkpointAnswer = normalizeCheckpointAnswer(parsed?.checkpointAnswer, input.pendingCheckpoint);
 
+  // 离场语义（2026-11-19）：模型可表达「本轮结束就下课」，但代码守住三条硬边界——
+  // ① 有待答检查点不许走；② 延伸意愿成立时不许走；③ task-done 必须自评已达成，
+  // time-up/frustrated 必须真的到了软预算/连续受挫门槛，防止模型用离场逃避作答。
+  const exitReasons = ['task-done', 'time-up', 'frustrated', 'not-helpful', 'other'] as const;
+  type ExitReason = typeof exitReasons[number];
+  let shouldEnd = safeBool(parsed?.shouldEnd, false);
+  const rawEndReason = safeText(parsed?.endReason);
+  let endReason: ExitReason | null = shouldEnd
+    ? (exitReasons.includes(rawEndReason as ExitReason) ? rawEndReason as ExitReason : 'other')
+    : null;
+  if (shouldEnd && input.pendingCheckpoint) shouldEnd = false;
+  if (shouldEnd && wantsExtension) shouldEnd = false;
+  if (shouldEnd && endReason === 'task-done' && !selfReportedTaskDone) shouldEnd = false;
+  const turnIndex = Number(input.turnIndex);
+  const turnBudget = Number(input.turnBudget);
+  if (shouldEnd && endReason === 'time-up' && Number.isFinite(turnIndex)
+    && turnIndex < (Number.isFinite(turnBudget) && turnBudget > 0 ? turnBudget : 18)) {
+    shouldEnd = false;
+  }
+  if (shouldEnd && (endReason === 'frustrated' || endReason === 'not-helpful')
+    && Number.isFinite(turnIndex) && turnIndex < 8) {
+    shouldEnd = false;
+  }
+  if (!shouldEnd) endReason = null;
+
   return {
     // 「理解检查：」模板前缀剥离（2026-10-10 逐字稿评审）：作答检查点时模型会整段回显题面
     // 模板，该前缀属 harness 工件，不应出现在学生可见消息里（评审 6 节逐字稿中 3 节可见）。
@@ -417,6 +455,8 @@ function normalizeOutput(parsed: any, input: LearnLearnerSimulationInput): Learn
       remainingBlockers: feedbackBlockers,
       reason: sanitizeVisibleContent(rawFeedback.reason || fallbackFeedback.reason),
     },
+    shouldEnd,
+    endReason,
     debug: {
       visibleSignal: sanitizeVisibleContent(parsed?.debug?.visibleSignal || ''),
       stateChangeReason: sanitizeVisibleContent(parsed?.debug?.stateChangeReason || ''),
@@ -546,6 +586,8 @@ function buildUserPayload(input: LearnLearnerSimulationInput) {
     currentTask: input.currentTask || null,
     knowledgeSnapshot: Array.isArray(input.knowledgeSnapshot) ? input.knowledgeSnapshot.slice(0, 5) : [],
     ...(temporalContext ? { temporalContext } : {}),
+    ...(typeof input.turnIndex === 'number' ? { turnIndex: input.turnIndex } : {}),
+    ...(typeof input.turnBudget === 'number' ? { turnBudget: input.turnBudget } : {}),
     learnerMemory: input.learnerMemory && typeof input.learnerMemory === 'object'
       ? {
           mastered: Array.isArray(input.learnerMemory.mastered) ? input.learnerMemory.mastered.slice(0, 8) : [],
@@ -603,6 +645,8 @@ function buildUserPayload(input: LearnLearnerSimulationInput) {
       knowledgeSnapshot: body.knowledgeSnapshot,
       conceptProgress,
       ...(temporalContext ? { temporalContext } : {}),
+    ...(typeof input.turnIndex === 'number' ? { turnIndex: input.turnIndex } : {}),
+    ...(typeof input.turnBudget === 'number' ? { turnBudget: input.turnBudget } : {}),
       learnerMemory: body.learnerMemory,
       ...(memoryRecall.length ? { memoryRecall } : {}),
       epistemicGrounding: body.epistemicGrounding,
@@ -632,6 +676,8 @@ export const virtualLearnerLearnTurnSimulatorDefinition: SkillDefinition = {
       knowledgeSnapshot: { type: 'array', description: '当前任务知识看板' },
       learnerMemory: { type: 'object', description: '学习者长期记忆（已掌握/到期复习/最近完成）' },
       temporalContext: { type: 'object', description: '日期模拟时间上下文（可选）' },
+      turnIndex: { type: 'number', description: '本节已发生的学习者回合数（0=首轮，用于离场判断）' },
+      turnBudget: { type: 'number', description: '本节软时间预算（回合数，非硬性截断）' },
       memoryRecall: { type: 'array', description: '代码裁决的到期点概率化提取结果（Q4）' },
       epistemicGrounding: { type: 'object', description: '本轮认知判决（硬约束）' },
       pendingCheckpoint: { type: 'object', description: '当前待作答的理解检查点（不含答案键）' },
@@ -644,6 +690,8 @@ export const virtualLearnerLearnTurnSimulatorDefinition: SkillDefinition = {
       emotion: { type: 'string', description: '当前情绪' },
       learnerState: { type: 'object', description: 'Learn 阶段学习者主观状态' },
       learnerFeedback: { type: 'object', description: '学习者对当前 task 是否学完的自我反馈' },
+      shouldEnd: { type: 'boolean', description: '本轮结束是否离开课堂（学习者主动下课，非平台结课裁决）' },
+      endReason: { type: 'string', description: 'task-done|time-up|frustrated|not-helpful|other' },
       checkpointAnswer: { type: 'object', description: '对 pendingCheckpoint 的作答草案' },
       debug: { type: 'object', description: '调试信息' },
     },

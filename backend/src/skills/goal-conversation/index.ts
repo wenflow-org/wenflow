@@ -65,6 +65,13 @@ export interface GoalConversationInternal {
       motivationSignal?: any;
       /** 动机 Schema 帧（跨轮累积，hidden，仅供对话节奏参考） */
       miFrames?: any;
+      /**
+       * 澄清契约（2026-11-20 Phase 2/3）：模型对本轮“核心问题/基线/停机条件/
+       * 未知项”的自述；服务端据此拦截缺口未闭合的提案（GOAL_CLARIFICATION_ENFORCE=0 回滚）。
+       */
+      clarification?: any;
+      /** 模型判断本轮该 ask / propose / close；门控在缺口未闭合时统一改写为 ask */
+      nextAction?: 'ask' | 'propose' | 'close';
     };
   };
 }
@@ -852,6 +859,9 @@ export function parseGoalConversationResponse(
   let structuredData: any = undefined;
   let confirmedProposal: any = undefined;
   let confidenceScores: any = undefined;
+  // shadow 观测（Phase 1）：只透传，不参与 stage/提案门禁。
+  let clarification: any = undefined;
+  let nextAction: 'ask' | 'propose' | 'close' | undefined;
   let nextQuestions: string[] = [];
   let understanding = { ...(previousUnderstanding || {}) };
   let normalizedPayload: Record<string, any> = {};
@@ -918,6 +928,8 @@ export function parseGoalConversationResponse(
     structuredData = normalizedPayload.structuredData;
     confirmedProposal = normalizedPayload.confirmedProposal;
     confidenceScores = normalizedPayload.confidenceScores;
+    clarification = normalizedPayload.clarification;
+    nextAction = normalizeNextAction(normalizedPayload.nextAction);
 
     if (!understanding || Object.keys(understanding).length === 0) {
       understanding = mergeUnderstanding(previousUnderstanding, normalizedPayload);
@@ -1032,7 +1044,10 @@ export function parseGoalConversationResponse(
           confirmedProposal,
           confidenceScores,
           motivationSignal,
-          miFrames
+          miFrames,
+          // shadow 观测：仅在模型本轮确实产出时透出，保持既有 DTO 形状不变。
+          ...(clarification !== undefined ? { clarification } : {}),
+          ...(nextAction ? { nextAction } : {})
         }
       }
     }
@@ -1073,7 +1088,15 @@ export function normalizeGoalConversationModelPayload(parsedJson: any): Record<s
     confirmedProposal: topLevel.confirmedProposal ?? legacy.confirmedProposal ?? state.confirmedProposal,
     structuredData: topLevel.structuredData ?? legacy.structuredData ?? state.structuredData,
     confidenceScores: topLevel.confidenceScores ?? legacy.confidenceScores ?? state.confidenceScores,
+    // 澄清契约 shadow（Phase 1）：仅透传观测，不参与状态合并与阶段推进。
+    clarification: topLevel.clarification ?? legacy.clarification ?? state.clarification,
+    nextAction: topLevel.nextAction ?? legacy.nextAction ?? state.nextAction,
   };
+}
+
+function normalizeNextAction(value: unknown): 'ask' | 'propose' | 'close' | undefined {
+  const text = typeof value === 'string' ? value.trim() : '';
+  return text === 'ask' || text === 'propose' || text === 'close' ? text : undefined;
 }
 
 function buildStructuredOutputErrorMessage(attemptCount: number): string {

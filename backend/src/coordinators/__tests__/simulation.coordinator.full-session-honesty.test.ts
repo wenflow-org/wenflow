@@ -266,4 +266,61 @@ describe('SimulationOrchestrator.executeFullSession 诚实返回', () => {
       immediateSetTimeout.mockRestore()
     }
   })
+
+  it('学习者离场 → 正常收尾，不再报「未收敛」', async () => {
+    (coordinator as any).executeAutoLoop = jest.fn().mockResolvedValue([
+      { success: true, goalReady: false, learnerEnded: true, learnerEndReason: 'time-up' }
+    ])
+
+    const result = await coordinator.executeFullSession('simulation-1', { maxRounds: 10 })
+
+    expect(result.success).toBe(false)
+    expect(result.terminalReason).toBe('learner-ended')
+    expect(result.error).toContain('离场')
+    expect(result.error).not.toContain('未收敛')
+  })
+
+  it('分诊不排课 → 正常收尾，不再报「未收敛」', async () => {
+    (coordinator as any).executeAutoLoop = jest.fn().mockResolvedValue([
+      { success: true, goalReady: false, noPath: true }
+    ])
+
+    const result = await coordinator.executeFullSession('simulation-1', { maxRounds: 10 })
+
+    expect(result.success).toBe(false)
+    expect(result.terminalReason).toBe('no-path')
+    expect(result.error).toContain('不排课')
+    expect(result.error).not.toContain('未收敛')
+  })
+
+  it('executeAutoLoop：学习者离场后立即停止，不再重复 step', async () => {
+    const stepStub = jest.fn().mockResolvedValue({
+      success: true,
+      goalReady: false,
+      learnerEnded: true,
+      learnerEndReason: 'task-done'
+    })
+    ;(coordinator as any).executeSingleStep = stepStub
+
+    const results = await coordinator.executeAutoLoop(
+      { sessionId: 'simulation-1', userId: 'user-1', mode: 'auto-loop' },
+      { maxRounds: 10 }
+    )
+
+    expect(stepStub).toHaveBeenCalledTimes(1)
+    expect(results).toHaveLength(1)
+  })
+
+  it('executeAutoLoop：分诊不排课后立即停止', async () => {
+    const stepStub = jest.fn().mockResolvedValue({ success: true, goalReady: false, noPath: true })
+    ;(coordinator as any).executeSingleStep = stepStub
+
+    const results = await coordinator.executeAutoLoop(
+      { sessionId: 'simulation-1', userId: 'user-1', mode: 'auto-loop' },
+      { maxRounds: 10 }
+    )
+
+    expect(stepStub).toHaveBeenCalledTimes(1)
+    expect(results).toHaveLength(1)
+  })
 })

@@ -439,6 +439,30 @@ export async function executeSingleStep(ctx: SimulationOrchestrator, input: Simu
     const profile = parseProfileData(session.virtual_learner_profiles);
     const initialStageResults: StageResults = safeJsonParse<StageResults>(session.stageResults, {});
     const storyContext = parseStoryContextFromStageResults(initialStageResults);
+    // 终局入口闸（V-D1）：学习者已离场 / 平台已判不排课，任何驱动方再次 step 都不得
+    // 重新拉起 Goal 模型调用——旧实现会在同一告别回合上反复追问、烧满预算。
+    const goalTerminal = (initialStageResults.goal || {}) as Record<string, unknown>;
+    if (goalTerminal.learnerEnded === true) {
+      return {
+        success: true,
+        virtualUserReply: typeof goalTerminal.lastReply === 'string' ? goalTerminal.lastReply : '',
+        currentStage: 'goal',
+        goalReady: false,
+        learnerEnded: true,
+        learnerEndReason: typeof goalTerminal.learnerEndReason === 'string' ? goalTerminal.learnerEndReason : null,
+        logs
+      };
+    }
+    if (goalTerminal.noPath === true && session.status === 'completed') {
+      return {
+        success: true,
+        virtualUserReply: typeof goalTerminal.lastReply === 'string' ? goalTerminal.lastReply : '',
+        currentStage: 'goal',
+        goalReady: false,
+        noPath: true,
+        logs
+      };
+    }
     // 管理面终态（批量终止/僵尸回收/失败）的会话不可再推进：防止执行器复活会话
     if (session.status === 'failed' || session.status === 'abandoned') {
       throw new Error(`会话已终止（${session.status}），无法继续执行`);
@@ -1032,7 +1056,25 @@ export async function executeAutoLoop(
       });
       break;
     }
-    
+
+    // 学习者离场 / 平台分诊不排课都是正常终局：继续跑只会让同一个告别回合
+    // 被重复追问到 maxRounds（虚拟学习者调查 V-H2 / V-D1）。
+    if (stepResult.noPath) {
+      logger.info('[simulation-coordinator] 自动循环因「不排课」正常收尾', {
+        sessionId: input.sessionId,
+        round
+      });
+      break;
+    }
+    if (stepResult.learnerEnded) {
+      logger.info('[simulation-coordinator] 自动循环因学习者离场终止', {
+        sessionId: input.sessionId,
+        round,
+        reason: stepResult.learnerEndReason
+      });
+      break;
+    }
+
     if (stepResult.goalReady) {
       logger.info('[simulation-coordinator] 自动循环因Goal Ready终止', {
         sessionId: input.sessionId,
@@ -1085,6 +1127,12 @@ export async function executeFullSession(
   pathGenerated: boolean;
   isPathCompleted: boolean;
   finalStage?: string;
+  /**
+   * Goal 阶段的真实终局：converged=生成路径；learner-ended=学习者主动离场；
+   * no-path=平台分诊不排课；max-rounds=预算内确实没收敛。
+   * 后两者不再混报成「未收敛」（2026-11-19 虚拟学习者调查 V-H2）。
+   */
+  terminalReason?: 'converged' | 'learner-ended' | 'no-path' | 'max-rounds' | 'failed';
   error?: string;
 }> {
   const config = await getSimulationAgentConfig();
@@ -1107,6 +1155,7 @@ export async function executeFullSession(
     pathGenerated: false,
     isPathCompleted: false,
     finalStage: session.currentStage,
+    terminalReason: undefined as 'converged' | 'learner-ended' | 'no-path' | 'max-rounds' | 'failed' | undefined,
     error: undefined as string | undefined
   };
 
@@ -1123,6 +1172,21 @@ export async function executeFullSession(
       );
       summary.goalRounds = goalResults.length;
       const lastGoal = goalResults[goalResults.length - 1];
+      summary.terminalReason = lastGoal?.goalReady
+        ? 'converged'
+        : lastGoal?.learnerEnded
+          ? 'learner-ended'
+          : lastGoal?.noPath
+            ? 'no-path'
+            : 'max-rounds';
+      // 学习者离场 / 分诊不排课都是正常收尾，不能报成「Goal 未收敛」。
+      // 旧实现只认 goalReady：离场会话被当失败，且自动循环继续烧满预算（V-H2）。
+      if (summary.terminalReason === 'learner-ended' || summary.terminalReason === 'no-path') {
+        summary.error = summary.terminalReason === 'learner-ended'
+          ? `学习者已在 Goal 阶段离场（${lastGoal?.learnerEndReason || 'learner-ended'}），正常收尾`
+          : '平台分诊为不排课，Goal 正常收尾，未生成路径';
+        return summary;
+      }
       // 诚实返回：Goal 未在预算内收敛同样报错（不再静默跳到后续阶段）
       if (!lastGoal?.goalReady) {
         summary.error = lastGoal?.error || `Goal 阶段在 ${maxRounds} 轮内未收敛，请再次运行或调大 maxRounds`;

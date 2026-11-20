@@ -28,7 +28,15 @@ import {
   type GoalTriageEvidence,
 } from '../services/learning/path-generation-gate';
 import { resolveGoalTriageEvidenceForPathId } from '../services/learning/goal-triage-evidence';
+import { parsePathPromptTemplate } from '../services/learning/learning.helpers';
 import type { ResponseTriage } from '../services/learning/response-triage';
+import {
+  assertClarificationReadyForPath,
+  auditMilestoneRationales,
+  ClarificationRequiredError,
+  isClarificationEnforceEnabled,
+  type ClarificationContract,
+} from '../services/learning/goal-clarification-contract';
 import {
   getPathAgentInputConfig,
   type PathAgentInputConfig
@@ -57,6 +65,26 @@ export function isProviderTransientPathError(error: unknown): boolean {
   if (!error) return false;
   if ((error as { retryable?: unknown }).retryable === true) return true;
   return PATH_GENERATION_TRANSIENT_ERROR.test(String((error as Error)?.message ?? ''));
+}
+
+/**
+ * Phase 2 MilestoneRationale 审计的取数口径。
+ *
+ * DB 的 `milestones` 表没有 rationale 列（`persistGeneratedPath` 只写白名单字段），
+ * 生成结果里带 rationale 的是 `aiPromptTemplate.suggestedMilestones` —— 它在
+ * normalizeMilestonesWithConcepts 之后原样落库，是**生成期真实产物**。
+ * 若只读 `result.milestones`，审计会 100% 报「缺少 rationale」，把门禁变成噪音。
+ */
+export function resolveMilestonesForRationaleAudit(result: unknown): unknown[] {
+  const payload = (result && typeof result === 'object' ? result : {}) as Record<string, unknown>;
+  const template = parsePathPromptTemplate(
+    typeof payload.aiPromptTemplate === 'string' ? payload.aiPromptTemplate : null
+  );
+  if (Array.isArray(template.suggestedMilestones) && template.suggestedMilestones.length > 0) {
+    return template.suggestedMilestones;
+  }
+  const direct = payload.milestones ?? (payload.path as Record<string, unknown> | undefined)?.milestones;
+  return Array.isArray(direct) ? direct : [];
 }
 
 /**
@@ -139,6 +167,12 @@ export interface PathGenerationInput {
    * `generateFromGoal` → `normalizeGoalRequest` 会自动注入；直生成入口由调用方提供。
    */
   goalTriage?: GoalTriageEvidence | null;
+  /**
+   * 澄清契约（2026-11-20 Phase 2）：goal 层的「核心问题 / 基线证据 / 停机条件」
+   * 直接作为 Path 的第一性输入，替代 entryState/intentType/skillNature 身份标签。
+   * 缺失（旧会话/旧调用方）⇒ 不注入，Path 回退既有标签逻辑。
+   */
+  clarification?: ClarificationContract | null;
 }
 
 /** 前置知识探测结果（goal 层 prerequisiteCheckResults 透传，供 path-planning prerequisiteTree.knownConcepts 校准） */
@@ -162,6 +196,8 @@ interface GoalFinalPayload {
   adjustments?: string | null;
   /** 前置知识探测结果（goal 层 prerequisiteCheckResults 透传，供 prerequisiteTree.knownConcepts 校准） */
   prerequisiteCheckResults?: PrerequisiteCheckResult[] | null;
+  /** 澄清契约（2026-11-20 Phase 2）：goal→path 的第一性输入 */
+  clarification?: ClarificationContract | null;
 }
 
 interface NormalizedPathInputV1 {
@@ -216,6 +252,8 @@ interface NormalizedPathInputV1 {
     outOfScope: string[];
     scopeSize: string | null;
   };
+  /** 澄清契约（2026-11-20 Phase 2）：Path 的第一性输入；存在时优先于身份标签 */
+  clarification?: ClarificationContract;
   /** 时间模型（R8）：三权威字段 + legacy 诊断字段 */
   timeDimensions?: {
     totalWeeks?: number | null;
@@ -295,6 +333,8 @@ export interface GoalPathRequest {
   triageHint?: TriageHint | null;
   /** goal 层置信度评分（goal-conversation skill 产出；仅透传，供 path-planning 参考） */
   confidenceScores?: any;
+  /** 澄清契约（2026-11-20 Phase 2）：Goal 的第一性产物，Path 直接读它而不是身份标签 */
+  clarification?: ClarificationContract | null;
   systemPromptOverrides?: {
     pathAgent?: string;
   };
@@ -397,7 +437,8 @@ class PathCoordinator {
     visibleSummary: GoalPathVisibleSummary | null | undefined,
     rawGoal: string | null | undefined,
     learnerLoadProfile: LearnerLoadProfile | null = null,
-    triageHint: TriageHint | null = null
+    triageHint: TriageHint | null = null,
+    clarification: ClarificationContract | null = null
   ): NormalizedPathInputV1 {
     const pick = (handoffKey: string): any => {
       const value = handoffFields?.[handoffKey];
@@ -417,6 +458,8 @@ class PathCoordinator {
 
     return {
       version: '1.0',
+      // 澄清契约（2026-11-20 Phase 2）：存在时 Path 以它为准，标签字段仅作兼容回退。
+      ...(clarification ? { clarification } : {}),
       // 校内锚（2026-09-30 LLM 抽取）：goal-conversation 的 understanding.school_anchor 经
       // visibleSummary 带到此处；非校内学习者整键不出现（下游行为与原先完全一致）。
       ...(normalizeSchoolAnchorForV1(pick('understanding.school_anchor') ?? visibleSummary?.schoolAnchor)
@@ -780,6 +823,8 @@ class PathCoordinator {
       adjustments: typeof input.adjustments === 'string' && input.adjustments.trim() ? input.adjustments.trim() : null,
       // 前置知识探测结果（goal 层 prerequisiteCheckResults 透传）
       prerequisiteCheckResults: input.prerequisiteCheckResults || null,
+      // 澄清契约（2026-11-20 Phase 2）：goal 的第一性输入，直接进 normalizedInput
+      clarification: input.clarification || null,
       // goal→path 配置式值流转（routings 表抽取；装配时优先于 visibleSummary）
       goalHandoffFields: input.goalHandoffFields || undefined,
     };
@@ -829,7 +874,8 @@ class PathCoordinator {
       visibleSummary,
       goalFinalPayload.rawGoal,
       input.learnerLoadProfile ?? null,
-      input.triageHint ?? null
+      input.triageHint ?? null,
+      goalFinalPayload.clarification ?? null
     );
     if (goalFinalPayload.prerequisiteCheckResults?.length) {
       normalizedInputV1.prerequisiteCheckResults = goalFinalPayload.prerequisiteCheckResults;
@@ -1082,6 +1128,7 @@ class PathCoordinator {
       deadline,
       deadlineText,
       systemPromptOverrides: input.systemPromptOverrides,
+      clarification: input.clarification ?? null,
       userProfile: {
         skillLevel,
         currentSkillLevel: skillLevel,
@@ -1104,6 +1151,8 @@ class PathCoordinator {
           visibleSummary: goalFinalPayload.visibleSummary || null,
           conversationHistory: goalFinalPayload.conversationHistory || [],
           prerequisiteCheckResults: goalFinalPayload.prerequisiteCheckResults || null,
+          // 澄清契约随 goalFinalPayload 持久化，异步生成/重试仍能读到
+          clarification: goalFinalPayload.clarification || null,
           // 持久化 handoff 字段，支持异步生成/重试/重生成时仍走配置式装配
           goalHandoffFields: goalFinalPayload.goalHandoffFields || null,
         },
@@ -1117,6 +1166,11 @@ class PathCoordinator {
   }
 
   private async normalizeGoalRequest(input: GoalPathRequest): Promise<PathGenerationInput> {
+    // Phase 3 clarification_required 回路：契约存在时（默认启用），缺第一站/停机条件
+    // 直接拒绝生成（422 CLARIFICATION_REQUIRED），把 gaps 带回 Goal；旧会话无契约不受影响。
+    if (input.clarification && isClarificationEnforceEnabled()) {
+      assertClarificationReadyForPath(input.clarification);
+    }
     const config = await getPathAgentInputConfig();
     // 2026-10-28 R4 外部评审：生产链路原先走 async，公开资料永远在路径生成后才回填，
     // path-task-design 拿不到正文（公开路径 materialRefs 恒为 0）。用户已明确接受
@@ -1124,6 +1178,11 @@ class PathCoordinator {
     // 需要旧行为时设 MATERIAL_COLLECTION_MODE=async（保留回滚口）。
     const mode: 'sync' | 'async' = process.env.MATERIAL_COLLECTION_MODE === 'async' ? 'async' : 'sync';
     const normalized = await this.buildNormalizedGoalInput(input, config, mode);
+    // 澄清契约（Phase 2）：既进 normalizedInput，也作为 PathGenerationInput 顶层字段，
+    // 供 learning.service / path-planning 直接消费；缺失时保持 undefined（旧行为）。
+    if (input.clarification) {
+      normalized.clarification = input.clarification;
+    }
     // goal 层判定凭证随归一化结果一起下传，由 generate 统一守卫（#217）。
     // responseTriage 优先；缺失时用 visibleSummary 的可判定性投影兜同一套判定。
     normalized.goalTriage = {
@@ -1173,6 +1232,46 @@ class PathCoordinator {
     });
 
     const result = await learningService.generateLearningPath(input);
+
+    // Phase 3 MilestoneRationale 审计：契约存在时检查每个 milestone 是否声明服务
+    // core/baseline/stopping/constraint，且终点服务 stopping。
+    // 主阻断在 persistGeneratedPath 落库前（缺 rationale 直接抛，路径标 failed）；
+    // 这里是**回读校验**：正常不会触发，触发即说明持久化边界回归，必须 fail closed，
+    // 不能把一条不可追溯的路径以 active 形态交出去。
+    if (input.clarification && isClarificationEnforceEnabled()) {
+      const milestones = resolveMilestonesForRationaleAudit(result);
+      const audit = auditMilestoneRationales(milestones, input.clarification);
+      if (!audit.ok) {
+        logger.error('[path-coordinator] MilestoneRationale 回读审计未通过，阻断路径', {
+          userId: input.userId,
+          sourceConversationId: input.sourceConversationId || null,
+          reasons: audit.reasons,
+          missingRationale: audit.missingRationale,
+          invalidServes: audit.invalidServes,
+          stoppingCovered: audit.stoppingCovered,
+        });
+        const pathId = (result as { id?: string })?.id
+          ?? (result as { path?: { id?: string } })?.path?.id;
+        if (pathId) {
+          try {
+            await prisma.learning_paths.updateMany({
+              where: { id: pathId },
+              data: { status: 'failed' },
+            });
+          } catch (error) {
+            logger.error('[path-coordinator] 阻断路径时标记 failed 失败', {
+              pathId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+        throw new ClarificationRequiredError([{
+          field: 'milestone.rationale',
+          severity: 'blocking',
+          reason: `里程碑 rationale 未通过审计：${audit.reasons.join('；')}`,
+        }]);
+      }
+    }
 
     logger.info('[path-coordinator] generate complete', {
       agentId: this.id,

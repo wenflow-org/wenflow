@@ -568,6 +568,23 @@ async function enrichLearningPathWithAndersonInner(
           description: milestone.description || null,
           goal: milestone.goal || null,
           estimatedHours: milestone.estimatedHours || null,
+          // 2026-11-20：loadTarget 存在 cognitiveCore.loadProfile 里，此前没进 milestone 输入，
+          // 导致 path-task-design 的「low 时每任务 ≤1 个新概念」规则永远不触发（语法阶段 1
+          // 第 1 课挂 3 个 KC 的实证）。这里按 stageNumber 取当前阶段的负荷档位注入。
+          loadTarget: (() => {
+            const distribution = (parsedTemplate as any)?.cognitiveCore?.loadProfile?.stageLoadDistribution;
+            const entry = Array.isArray(distribution)
+              ? distribution.find((item: any) => Number(item?.stageNumber) === Number(milestone.stageNumber))
+              : null;
+            return entry?.loadTarget ?? null;
+          })(),
+          zpdDistance: (() => {
+            const distribution = (parsedTemplate as any)?.cognitiveCore?.loadProfile?.stageLoadDistribution;
+            const entry = Array.isArray(distribution)
+              ? distribution.find((item: any) => Number(item?.stageNumber) === Number(milestone.stageNumber))
+              : null;
+            return entry?.zpdDistance ?? null;
+          })(),
         },
         ...(previousMilestone ? {
           previousMilestone: {
@@ -601,6 +618,14 @@ async function enrichLearningPathWithAndersonInner(
             stageNumber: m.stageNumber,
             title: m.title,
             estimatedHours: m.estimatedHours || null,
+            // 阶段概念边界（2026-11-20）：task-design 需要知道后序阶段解锁了哪些概念，
+            // 才能把“不得把后序概念写进本阶段验收”落到概念名而不是只靠标题猜。
+            coreConceptName: (m as any).coreConceptName
+              || (Array.isArray((parsedTemplate as any)?.cognitiveCore?.coreConcepts)
+                ? (parsedTemplate as any).cognitiveCore.coreConcepts.find(
+                    (concept: any) => concept?.id && concept.id === (m as any).coreConceptId,
+                  )?.name ?? null
+                : null),
           })),
         },
         // 全部前序阶段任务标题（2026-10-27 R1 夜批实证：previousMilestone.tasks 只给上一阶段，
@@ -1432,7 +1457,7 @@ async function enrichLearningPathWithAndersonInner(
       const stageHoursForAudit: Array<{ stageNumber: number; title: string | null; estimatedHours: number | null }> = [];
       // #55：路径级对账要的是「计划」而不是回写后的任务汇总——必须在循环前从骨架锚取
       // （循环内 tx.milestones.update 之后 learningPath.milestones 仍是旧值，语义上也是锚）。
-      const plannedAnchorHours = learningPath.milestones.reduce(
+      const plannedAnchorHours = allMilestones.reduce(
         (sum, milestone) => sum + (Number(milestone.estimatedHours) || 0),
         0,
       );
@@ -1666,8 +1691,14 @@ async function enrichLearningPathWithAndersonInner(
       }
       // 浮点收尾（2026-10-27 R8 冒烟实证 A13=6.600000000000001）：阶段小时逐项累加会带 IEEE754 尾巴，
       // 写路径总学时前统一保留一位小数（下界 0.1），与标称/展示口径一致。
-      const pathHoursToWrite = pathNormalizedHours > 0
-        ? Math.max(0.1, Math.round(pathNormalizedHours * 10) / 10)
+      // 2026-11-20：渐进/追加模式只生成了路径的一个片段，不能把片段任务分钟当成整条路径总学时——
+      // 否则 4 阶段/9.4h 的骨架在第 1 阶段生成后会显示成 1.9h，还会让后续阶段误判成「一节课」路径。
+      // 片段模式取「骨架锚」与本轮实际交付的较大值；全路径模式仍以真实任务汇总为准。
+      const pathHoursForWrite = (progressive || appendOnly)
+        ? Math.max(pathNormalizedHours, plannedAnchorHours)
+        : pathNormalizedHours;
+      const pathHoursToWrite = pathHoursForWrite > 0
+        ? Math.max(0.1, Math.round(pathHoursForWrite * 10) / 10)
         : undefined;
 
       // #56 阶段预算不变量：阶段预算必须按内容反推，不能恒等复制上游总量（等分/全等于总量

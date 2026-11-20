@@ -2545,6 +2545,46 @@ describe('BlackboxVirtualLearnerRunner', () => {
     }
   })
 
+  it('学习者在教学回合主动下课 → 计划为 abandon（不再陪到回合上限）', async () => {
+    const runner = new BlackboxVirtualLearnerRunner() as any
+    const session = sessionWith({
+      conversationId: 'g1', learningPathId: 'p1', taskId: 't1', teachingSessionId: 'teach1', teachingRevision: 3
+    })
+    const state = JSON.parse(session.stageResults)
+    state.experimentSnapshot = {
+      actorProfile: { learningGoal: '测试目标' },
+      story: { visibleOpening: '开场' },
+      frictionBudget: 'normal'
+    }
+    state.blackbox.publicTrace = [{
+      observation: {
+        stage: 'teaching',
+        visibleMessages: [{ role: 'teacher', content: '还有哪里不清楚吗？' }],
+        visibleTask: { id: 't1', title: '任务' },
+        availableActions: ['chat', 'abandon']
+      }
+    }]
+    session.stageResults = JSON.stringify(state)
+    runner.context = jest.fn().mockResolvedValue({ session, state })
+    runner.persistPrivateState = jest.fn()
+    runner.act = jest.fn().mockResolvedValue({ observation: { stage: 'path' }, control: {} })
+    ;(executeSkill as jest.Mock).mockResolvedValue({
+      reply: '今天先到这，我这边时间到了。',
+      learnerState: { wantsHint: false, wantsWorkedExample: false },
+      learnerFeedback: { selfReportedTaskDone: false, stopAsking: false, wantsMoreHelp: false, remainingBlockers: [] },
+      shouldEnd: true,
+      endReason: 'time-up'
+    })
+
+    const result = await runner.autoStep('vs1', 'admin1')
+
+    expect(runner.act).toHaveBeenCalledWith('vs1', 'admin1', expect.objectContaining({
+      type: 'abandon',
+      reason: expect.stringContaining('learner-exited:time-up:')
+    }))
+    expect(result.action).toEqual(expect.objectContaining({ type: 'abandon' }))
+  })
+
   it('模拟器输出缺 reply 也纳入 3-strike 重试，耗尽后落 degraded 标记并明确失败', async () => {
     const runner = new BlackboxVirtualLearnerRunner() as any
     const session = sessionWith({ conversationId: 'g1' })

@@ -78,6 +78,13 @@ import {
   recordAssistedMemoryRecallOutcomes,
 } from './simulation.memory';
 import { simulatedNowOr } from '../services/virtual-lab/simulation-clock-context';
+
+/**
+ * 学习者视角的单节软时间预算（回合数）：只用于模拟器判断「今天是不是该下课了」，
+ * 不是教学硬闸门（硬闸门仍是 LEARN_AUTO_TURN_CAP / turnBudget）。18 轮约等于
+ * 一次 20 分钟微课的真实话轮量；有未解卡点时允许再留 1-2 轮。
+ */
+const LEARN_LEARNER_SOFT_TURN_BUDGET = 18;
 import type { PendingTeachingCheckpoint } from './simulation.coordinator';
 import type { SimulationOrchestrator } from './simulation.coordinator';
 
@@ -481,7 +488,78 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
       error: `LESSON_CONTRACT_NOT_MET: ${reason}`,
     };
   };
-  
+
+  /**
+   * 学习者主动离场（2026-11-19，D1）：关课但不结算任务，任务保持可续跑暂停态。
+   * 与「契约未达成」区分：这不是缺证据，而是人走了——不能记失败，也不能标完成。
+   */
+  const stopTaskForLearnerExit = async (input: {
+    teachingSessionId: string;
+    reason: string;
+    taskRuntime: Record<string, unknown>;
+    currentTask: { id: string; title?: string };
+    learningState: TeachingState;
+    teachingRevision?: number;
+  }) => {
+    const stoppedAt = new Date().toISOString();
+    const reasonText = `学习者主动离场（${input.reason}），停课不结算`;
+    try {
+      await aiTeachingOrchestrator.endSession(input.teachingSessionId, 'learner-exited', input.teachingRevision);
+    } catch (error: unknown) {
+      logger.warn('[simulation-coordinator] 学员离场停课：课堂收束失败（留待对账）', {
+        sessionId,
+        teachingSessionId: input.teachingSessionId,
+        error: asErrorLike(error).message || String(error),
+      });
+    }
+    const stoppedState: Record<string, unknown> = {
+      ...input.learningState,
+      teachingSessionId: null,
+      taskRuntime: {
+        ...input.taskRuntime,
+        status: 'learner-exited',
+        reason: reasonText,
+        taskId: input.currentTask.id,
+        taskTitle: input.currentTask.title,
+        teachingSessionId: null,
+        // 下一次进入同一 task 重新开课，给足新预算，避免第二天一进来就撞旧计数。
+        turns: 0,
+        learnerDoneStreak: 0,
+        closureDecision: null,
+        finalizedAt: stoppedAt,
+        completionSource: 'learner-exited',
+        error: null,
+        updatedAt: stoppedAt,
+      },
+    };
+    await ctx.updateTeachingStatePreservingControlFlags(sessionId, stoppedState);
+    logs.push({
+      timestamp: stoppedAt,
+      phase: 'stage-transition',
+      details: {
+        output: {
+          action: 'learner-exited-stop',
+          reason: reasonText,
+          currentTask: input.currentTask.title,
+        },
+      },
+    });
+    await ctx.addSessionLogs(sessionId, logs).catch((logError: unknown) => {
+      logger.warn('[simulation-coordinator] 记录学员离场日志失败', {
+        sessionId,
+        error: asErrorLike(logError).message || String(logError),
+      });
+    });
+    return {
+      // 当天这节课上过了，只是学员提前离开：success=true + currentTaskStopped 让模拟日正常消耗。
+      success: true,
+      taskCompleted: false,
+      currentTaskStopped: true,
+      logs,
+      error: `LEARNER_EXITED: ${reasonText}`,
+    };
+  };
+
   try {
     const session = await ctx.getVirtualSession(sessionId);
     const profile = parseProfileData(session.virtual_learner_profiles);
@@ -1145,6 +1223,8 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
       ...(pendingCheckpoint ? { pendingCheckpoint } : {}),
       epistemicGrounding,
       ...(temporalContext ? { temporalContext } : {}),
+      turnIndex: runtimeTurns,
+      turnBudget: LEARN_LEARNER_SOFT_TURN_BUDGET,
       frictionBudget: getSessionFrictionBudget(session),
     }));
 
@@ -1401,6 +1481,40 @@ export async function executeLearningStep(ctx: SimulationOrchestrator, sessionId
               }
             }
           });
+        }
+
+        // 学习者主动离场（D1，2026-11-19）：学员说「今天先到这/我跟不动了」时，
+        // 不能继续让教师追问到 40 回合上限。尊重离场，但任务不结算（下次可续）。
+        // 教师已经明确可结课时不走本分支，交给正常完成链路。
+        const learnerExitRequested = !extensionActive && virtualReplyOutput?.shouldEnd === true;
+        if (learnerExitRequested && !closureDecision.canCompleteTask) {
+          const exitTeachingSessionId = teachingSessionId
+            || (typeof taskRuntime.teachingSessionId === 'string' ? taskRuntime.teachingSessionId : null);
+          const exitReason = typeof virtualReplyOutput?.endReason === 'string'
+            ? virtualReplyOutput.endReason
+            : 'other';
+          logs.push({
+            timestamp: new Date().toISOString(),
+            phase: 'stage-transition',
+            details: {
+              output: {
+                action: 'learner-exit-requested',
+                reason: exitReason,
+                currentTask: currentTask.title,
+              },
+            },
+          });
+          if (exitTeachingSessionId) {
+            return await stopTaskForLearnerExit({
+              teachingSessionId: exitTeachingSessionId,
+              reason: exitReason,
+              taskRuntime,
+              currentTask,
+              learningState,
+              teachingRevision,
+            });
+          }
+          return { success: true, taskCompleted: false, currentTaskStopped: true, logs };
         }
 
         // 延伸学（#124 assisted 轨）：extension 模式下教学引擎不产生完成信号（延伸课不结算任务），

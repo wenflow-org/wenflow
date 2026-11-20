@@ -498,3 +498,58 @@ describe('answer_only 否定式剥离（均线案真机漏判实证）', () => {
     expect(t.mode).toBe('learning_path');
   });
 });
+
+describe('triageGoalResponse · 澄清契约优先（Phase 4）', () => {
+  const base = {
+    core: { question: '学习科学和 CLT 的关系', evidence: ['和 clt 关系'] },
+    baseline: { known: ['知道 CLT'], unknown: [], misconceptions: [], evidence: ['用户说出 CLT'] },
+    stopping: { kind: 'explain', scope: 'class', evidence: 'platform', statement: '能解释两者关系' },
+    constraints: {},
+    assumptions: [],
+    blockingNeed: 'none',
+    unknowns: [],
+  };
+
+  it('有契约时忽略旧标签：skill_nature/physical 不再决定去处', () => {
+    const result = triageGoalResponse({
+      ...base,
+      clarification: base,
+      platform_judgment: 'not_judgeable',
+      skill_nature: 'physical_internalized',
+      primary_block_type: 'emotion_relationship',
+    } as never);
+    expect(result.mode).toBe('learning_path');
+    expect(result.reasons.join('')).toContain('澄清契约');
+  });
+
+  it('契约 blockingNeed=emotional → emotional_support', () => {
+    const result = triageGoalResponse({
+      ...base,
+      clarification: { ...base, blockingNeed: 'emotional' },
+      primary_block_type: 'capability',
+    } as never);
+    expect(result.mode).toBe('emotional_support');
+  });
+
+  it('scope=instance 但有基线/学习诉求 → 仍 learning_path（审自己那份合同）', () => {
+    const result = triageGoalResponse({
+      ...base,
+      clarification: { ...base, stopping: { ...base.stopping, scope: 'instance', kind: 'decide' } },
+      primary_block_type: 'capability',
+    } as never);
+    expect(result.mode).toBe('learning_path');
+  });
+
+  it('scope=instance × kind=do × 无基线 → answer_then_hook（真一次性操作）', () => {
+    const result = triageGoalResponse({
+      ...base,
+      clarification: {
+        ...base,
+        baseline: { known: [], unknown: [], misconceptions: [], evidence: [] },
+        stopping: { ...base.stopping, scope: 'instance', kind: 'do' },
+      },
+      primary_block_type: 'capability',
+    } as never);
+    expect(result.mode).toBe('answer_then_hook');
+  });
+});

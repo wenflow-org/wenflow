@@ -437,6 +437,8 @@ sandbox:simulation-agent.storyMeta
 sandbox:simulation-agent.struggleConcepts
 sandbox:simulation-agent.task
 sandbox:simulation-agent.temporalContext
+sandbox:simulation-agent.turnBudget
+sandbox:simulation-agent.turnIndex
 sandbox:simulation-agent.turnSequence
 sandbox:simulation-agent.visibleContext
 ```

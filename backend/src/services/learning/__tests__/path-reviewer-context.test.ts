@@ -60,4 +60,23 @@ describe('路径评审的目标上下文（P1⑥）', () => {
       calendarCapacityHours: 120,
     });
   });
+
+  // Phase 2（2026-11-20）：path-reviewer 的 Integrity 规则引用 goalContext.clarification，
+  // 构造器必须透传同一份定帧输入里的澄清契约，否则规则是死引用。
+  it('从 normalizedInput 透传 clarification（评审 rationale/stopping 闭环）', () => {
+    const clarification = {
+      core: { question: '学习科学与 CLT 的关系', evidence: ['和 clt 之间关系'] },
+      baseline: { known: [], unknown: [], misconceptions: [], evidence: [] },
+      stopping: { kind: 'explain', scope: 'class', evidence: 'platform', statement: '能解释两者关系' },
+      assumptions: [],
+      blockingNeed: 'none',
+      unknowns: [],
+    };
+    const ctx = buildPathReviewerGoalContext({
+      description: '弄清 CLT',
+      analysis: { sceneFraming: { normalizedInput: { clarification } } },
+    });
+    expect(ctx.clarification).toEqual(clarification);
+    expect(buildPathReviewerGoalContext({ description: '弄清 CLT' }).clarification).toBeNull();
+  });
 });

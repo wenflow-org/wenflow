@@ -292,6 +292,8 @@ export interface NormalizedPathMilestone {
   goal?: string;
   estimatedHours?: number;
   coreConcept?: string | null;
+  /** 澄清契约追溯（2026-11-20 Phase 2）：{ serves, evidence, assumes? }，随 suggestedMilestones 落库 */
+  rationale?: unknown;
   tasks: NormalizedPathTask[];
 }
 

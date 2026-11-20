@@ -38,7 +38,9 @@ export const goalConversationRuntimeDefinition: RuntimeDefinitionRecord = {
   },
   capabilities: ['goal-clarification', 'problem-discovery', 'stage-transition'],
   defaultMaxTokens: 64000,
-  defaultTemperature: 0.7,
+  // 2026-11-20：0.7 会让「缺口是否闭合」的判断偏发散（同一轮既想提案又补未知）。
+  // 澄清契约是强约束状态机 + 自然对话，降到 0.35 压低脑补，不改模型。
+  defaultTemperature: 0.35,
   source: 'code',
   managedByCode: true,
 };

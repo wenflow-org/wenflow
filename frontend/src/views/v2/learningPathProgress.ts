@@ -107,7 +107,7 @@ export function isGenerationSettled(lifecycle: GenerationLifecycleLike | null | 
   return lifecycle.phase === 'ready' || lifecycle.status === 'failed' || lifecycle.status === 'stale';
 }
 
-/** 生成中 pill 的紧凑阶段短语（口径同 buildGenerationProgress 主行 / 列表页 phaseTextOf） */
+/** 生成中状态的紧凑阶段短语（用于完成弹层副文；口径同 buildGenerationProgress 主行 / 列表页 phaseTextOf） */
 export function genStageLabel(lifecycle: GenerationLifecycleLike): string {
   const done = isPositiveInt(lifecycle.completedStages) ? lifecycle.completedStages : 0;
   const total = isPositiveInt(lifecycle.totalStages) ? lifecycle.totalStages : 0;
@@ -116,30 +116,6 @@ export function genStageLabel(lifecycle: GenerationLifecycleLike): string {
   if (total > 0 && clampedDone >= total) return '课时正在写入';
   if (total > 0) return `课程准备中（${clampedDone}/${total}）`;
   return '课程准备中';
-}
-
-export interface GenPillCopy {
-  tone: 'run' | 'done' | 'fail';
-  text: string;
-}
-
-/**
- * status → pill 文案的唯一映射。
- * - 生成中 → run「正在生成路径 · {真实阶段}」；
- * - 完成 → done「路径已创建 · 生成完成」（点击去路径详情）；
- * - 失败/stale → fail「生成失败」（重试入口在路径列表的失败卡上）；
- * - 状态接口尚未应答（null/undefined，短暂窗口）→ run 过渡「路径已创建 · 生成中」——
- *   P22 红线：生成未确认完成前不得给平静终态。
- */
-export function genPillCopy(lifecycle: GenerationLifecycleLike | null | undefined): GenPillCopy {
-  if (!lifecycle) return { tone: 'run', text: '路径已创建 · 生成中' };
-  if (lifecycle.status === 'failed' || lifecycle.status === 'stale') {
-    return { tone: 'fail', text: '生成失败' };
-  }
-  if (lifecycle.phase === 'ready') {
-    return { tone: 'done', text: '路径已创建 · 生成完成' };
-  }
-  return { tone: 'run', text: `正在生成路径 · ${genStageLabel(lifecycle)}` };
 }
 
 /* ---------- 用户侧时间锚点（2026-11-11 走查：列表四张卡只有「已完成 / 100%」，分不出新旧） ----------

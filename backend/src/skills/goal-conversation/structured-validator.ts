@@ -100,6 +100,9 @@ export function validateGoalConversationStructuredOutput(
   const allowedTopLevelKeys = new Set([
     'reply', 'state', 'goalConversation', 'hints',
     'understanding', 'nextQuestions', 'quickReplies', 'confirmedProposal', 'confidenceScores', 'structuredData',
+    // 澄清契约 shadow 观测（2026-11-20 Phase 1）：只透传给服务端记录「本应拦截的提案」，
+    // 不改变用户可见行为；不是对话推进的权威字段。
+    'clarification', 'nextAction',
     // goal→path 资料采集缝：hidden 顶层输出（不向用户展示，由 path-material-collect 消费）
     'needsMaterial',
     // 动机信号/动机帧（规则：hidden，静默累积）：规范位置在 state 下，但模型可能直接写在顶层

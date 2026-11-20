@@ -22,7 +22,8 @@ describe('goal/path/stage prompt realism guards', () => {
   it('goal-conversation：能力缺口 × 在办真实任务不得整包交付 SOP', () => {
     const md = read('prompts/skill.goal-conversation.md')
     expect(md).toContain('真实任务当教材，禁止整包 SOP')
-    expect(md).toContain('最多给一个诊断动作')
+    expect(md).toContain('最多给一个轻诊断口径')
+    expect(md).toContain('禁止在聊天里再布置')
     expect(md).toContain('不要再等用户离线做完')
     expect(md).toContain('弄好回我')
     expect(md).toContain('第一课的交付物必须就是这次真实任务的产物')
@@ -41,18 +42,18 @@ describe('goal/path/stage prompt realism guards', () => {
     expect(md).toContain('不写总小时数、不写总坐学次数')
   })
 
-  it('goal-conversation：裸主题先分流，不一句话直接进 proposing', () => {
+  it('goal-conversation：只给主题先补基线，不按身份分流、不直接进 proposing', () => {
     const md = read('prompts/skill.goal-conversation.md')
-    expect(md).toContain('裸主题先分流')
-    expect(md).toContain('先问一个分流问题')
-    expect(md).toContain('不直接进入 proposing')
-    expect(md).toContain('已有探索信号时不再问用途')
+    expect(md).toContain('第一性规则：先澄清，再提案')
+    expect(md).toContain('先问一个能区分第一站的具体问题')
+    expect(md).toContain('不先问「考试/工作/兴趣」这种身份分流')
+    expect(md).toContain('答完再决定是否提案')
   })
 
   it('goal-conversation：零代码原型走低代码，不默认塞 Python 模板', () => {
     const md = read('prompts/skill.goal-conversation.md')
     expect(md).toContain('零代码原型走低代码')
-    expect(md).toContain('Coze/扣子、Dify、FastGPT')
+    expect(md).toContain('可视化低代码平台')
     expect(md).toContain('不要给 Python 脚本或工程实现当默认方案')
   })
 
@@ -60,8 +61,10 @@ describe('goal/path/stage prompt realism guards', () => {
     const md = read('prompts/skill.goal-conversation.md')
     expect(md).toContain('论文/毕设术语与证据')
     expect(md).toContain('禁止声称土话/比喻可直接写进论文')
-    expect(md).toContain('Thought → Action → Observation')
-    expect(md).toContain('后台执行轨迹（Trace）')
+    expect(md).toContain('必须用标准术语，比喻只能作入口并当场对标')
+    // 领域知识（Agent 四模块/ReAct/Trace）不进通用目标澄清提示词。
+    expect(md).not.toContain('Agent 原理的标准四模块')
+    expect(md).not.toContain('Thought → Action → Observation')
   })
 
   it('goal-conversation：工作/开发场景只是背景，不把知识学习改写成产品方案', () => {
@@ -70,7 +73,7 @@ describe('goal/path/stage prompt realism guards', () => {
     expect(md).toContain('不得把目标改写成「把 X 产品设计好 / 解决 X 的产品问题」')
     expect(md).toContain('不得把 first_deliverable 写成「拿 X 的一个具体任务说清三句话」')
     expect(md).toContain('知识学习类目标的 first_deliverable 必须先写知识掌握本身')
-    expect(md).toContain('按起步提案形态（≤2 阶段）处理')
+    expect(md).toContain('按轻起步提案形态（≤2 阶段）处理')
   })
 
   it('goal-conversation：方向先给、问题后置，用户说「都要」不再拆分选择', () => {
@@ -78,7 +81,7 @@ describe('goal/path/stage prompt realism guards', () => {
     expect(md).toContain('方向先给、问题后置')
     expect(md).toContain('首轮最多问一个会改变路径的问题')
     expect(md).toContain('用户说「都要」就按一条链装，不再拆分选择')
-    expect(md).toContain('不是「你卡在哪/你最没把握」')
+    expect(md).toContain('不用「你卡在哪/你最没把握」')
   })
 
   it('goal-conversation：加深度只叠加、不把第一站换成论文精读', () => {
@@ -87,7 +90,7 @@ describe('goal/path/stage prompt realism guards', () => {
     expect(md).toContain('不得把第一站改写成论文精读')
     expect(md).toContain('先保留用户已经接受的入口')
     expect(md).toContain('原提案第一站本就是直觉入口')
-    expect(md).toContain('exploratory 起步提案因此可放宽到 3 个阶段')
+    expect(md).toContain('起步提案因此可放宽到 3 个阶段')
   })
 
   it('goal-conversation：规划期只报菜名、不提前拆解案例', () => {
@@ -99,10 +102,10 @@ describe('goal/path/stage prompt realism guards', () => {
 
   it('goal-conversation：时间口径按单次节奏，不拿 2h 上限当默认值', () => {
     const md = read('prompts/skill.goal-conversation.md')
-    expect(md).toContain('时间口径一致（exploratory / 自由学习）')
+    expect(md).toContain('时间口径一致')
     expect(md).toContain('不得把 objectiveScopeHours 说成「两小时以内」')
-    expect(md).toContain('2 站≈1h')
-    expect(md).toContain('2h 只是上限不是默认值')
+    expect(md).toContain('不得用来推算总时长')
+    expect(md).toContain('轻起步 objectiveScopeHours 硬上限 2h；完整路径不套此上限')
   })
 
   it('goal-conversation：默认假设不逐轮播报，不写「你没说」', () => {
@@ -110,15 +113,20 @@ describe('goal/path/stage prompt realism guards', () => {
     expect(md).toContain('reply 不再逐条播报「你没说、我先按」')
     expect(md).toContain('不在 reply 里解释「你没提/我先按 X/要调随时说」')
     expect(md).toContain('不在 reply 里写「题型你没提，我先按…」这类播报')
-    expect(md).toContain('不逐条播报假设值')
+    expect(md).toContain('假设直接落进字段与 proposal')
   })
 
-  it('goal-conversation：导师语气像搭档，不替用户下绝对结论', () => {
+  it('goal-conversation：说话像懂行的真人，不像客服或教材', () => {
     const md = read('prompts/skill.goal-conversation.md')
-    expect(md).toContain('导师语气：像搭档，不像审判者')
-    expect(md).toContain('避免「我的判断是」')
-    expect(md).toContain('少用「不是…而是…」开道')
+    expect(md).toContain('说话像懂行的真人，不像客服或教材')
+    expect(md).toContain('先接话，再推进')
+    expect(md).toContain('不当百科复读机')
+    expect(md).toContain('不暴露系统机制')
     expect(md).toContain('不替用户宣布「来得及/来不及」')
+    // 客服套话与内部词只能在规则里出现，reply 明确禁用。
+    expect(md).toContain('reply 里不出现「你这边」')
+    // 三段式模板已删除，避免每轮先做总结。
+    expect(md).not.toContain('先 1-2 句总结已理解的内容')
   })
 
   it('goal-conversation：考试类不报总学时、不写「2-3 倍/行业口径」法务腔', () => {
@@ -165,17 +173,22 @@ describe('goal/path/stage prompt realism guards', () => {
   it('path-task-design：技术原理课用标准术语与执行轨迹，不用土话替代', () => {
     const md = read('prompts/skill.path-task-design.md')
     expect(md).toContain('领域口径落地')
-    expect(md).toContain('Thought → Action → Observation')
+    expect(md).toContain('技术原理类任务必须用标准术语')
     expect(md).toContain('后台执行轨迹（Trace）')
-    expect(md).toContain('禁止只用「本子/记事板/循环判断」等土话替代术语')
+    expect(md).toContain('按 path-planning')
+    expect(md).toContain('不能从最终回答反推内部步骤')
   })
 
-  it('path-task-design：零代码原型走低代码平台，并落到自己的原型配置', () => {
+  it('path-task-design：零代码原型落到自己的平台配置，领域品牌只在 planning 保留', () => {
     const md = read('prompts/skill.path-task-design.md')
     expect(md).toContain('零代码/低代码原型')
-    expect(md).toContain('Coze/扣子、Dify、FastGPT')
-    expect(md).toContain('不得把 Python 脚本模板或工程实现当默认方案')
-    expect(md).toContain('自己的原型')
+    expect(md).toContain('自己的平台配置')
+    expect(md).toContain('交配置清单或运行 Trace 作证据')
+    expect(md).not.toContain('Coze/扣子、Dify、FastGPT')
+    // 标准清单留在 path-planning，task-design 只引用口径，避免双份硬补丁。
+    const planning = read('prompts/skill.path-planning.md')
+    expect(planning).toContain('Coze/扣子、Dify、FastGPT')
+    expect(planning).toContain('Thought → Action → Observation')
   })
 
   it('path-task-design：论文正文只在最后一站，前序阶段不提前写成稿', () => {
@@ -234,6 +247,82 @@ describe('goal/path/stage prompt realism guards', () => {
     const md = read('prompts/skill.path-reviewer.md')
     expect(md).toContain('拓扑错配')
     expect(md).toContain('基准锚缺失')
+  })
+
+  it('path：修复跨文件硬冲突（instance / cognitiveDesign / 错位评审项）', () => {
+    const planning = read('prompts/skill.path-planning.md')
+    const reviewer = read('prompts/skill.path-reviewer.md')
+    // scope=instance 不再等同一次性操作，与 goal 层和新 triage 同口径。
+    expect(planning).toContain('scope=instance 只表示验收对象是一份具体材料或一次真实决策')
+    expect(planning).toContain('只有 kind=do 且 baseline 没有证据时才是真一次性操作')
+    // cognitiveDesign 只保留“已退役、不再输出”的声明，不再要求模型镜像一份。
+    expect(planning).not.toContain('cognitiveDesign = cognitiveCore')
+    expect(planning).not.toContain('cognitiveDesign 只是兼容镜像')
+    expect(planning).toContain('`cognitiveDesign` 不再由模型输出')
+    // 课节/排版检查不属于骨架评审器。
+    expect(reviewer).not.toContain('同一阶段两课核心动词相同')
+    expect(reviewer).not.toContain('字体行距')
+  })
+
+  it('path：阶段只能用已解锁概念验收（防偷跑与负荷倒挂）', () => {
+    const planning = read('prompts/skill.path-planning.md')
+    const taskDesign = read('prompts/skill.path-task-design.md')
+    const reviewer = read('prompts/skill.path-reviewer.md')
+    const goal = read('prompts/skill.goal-conversation.md')
+    expect(goal).toContain('不是第一站验收单')
+    expect(planning).toContain('首阶段只做 firstDeliverable 的第一跳')
+    expect(planning).toContain('不得把后序阶段的概念塞进 M1 的例句并作为验收判据')
+    expect(planning).toContain('M1 自检（输出前必做）')
+    expect(planning).toContain('M1 只取 keyStages 第 1 条的能力，不照抄 `firstDeliverable`')
+    expect(planning).toContain('首站材料复杂度服从 loadTarget')
+    expect(taskDesign).toContain('只有当前阶段是末阶段')
+    expect(taskDesign).toContain('阶段概念边界')
+    expect(taskDesign).toContain('只能作为**不考核的背景材料**出现')
+    expect(taskDesign).toContain('首站（currentStageNumber=1）的例句只出现本阶段能解释的结构')
+    expect(reviewer).toContain('终点前置 / 概念偷跑')
+    expect(reviewer).toContain('负荷倒挂')
+  })
+
+  it('path：单次承诺与任务分钟上界一致（默认 25 分钟不再放行 35 分钟）', () => {
+    const planning = read('prompts/skill.path-planning.md')
+    const taskDesign = read('prompts/skill.path-task-design.md')
+    expect(planning).toContain('按 `timeDimensions.sessionsLengthMin` 写实际单次节奏')
+    expect(taskDesign).toContain('允许的浮动不超过 +5 分钟')
+    expect(taskDesign).not.toContain('一节 35 分钟的真课')
+  })
+
+  it('path：首站不引入非谓语/后序结构，限时只作形态不作验收判据', () => {
+    const planning = read('prompts/skill.path-planning.md')
+    expect(planning).not.toContain('一个谓语 vs 多个动词形式的简单对照')
+    expect(planning).toContain('首站目标只答本阶段的问题')
+    expect(planning).toContain('不解释其余动词形式（-ing / to do / -ed）为什么不是谓语')
+    expect(planning).not.toContain('限时连做 N 题正确率不低于 X%')
+    expect(planning).toContain('限时只作任务形态')
+    expect(planning).toContain('不看提示连续做对 N 题')
+    // M4 标题点名「从句与非谓语」，goal 只验从句会复现「标题与验收脱节」
+    expect(planning).toContain('标题与验收同域')
+    expect(planning).toContain('标题写「从句与非谓语」，goal 就不能只验从句')
+  })
+
+  it('path-task-design：前置顺序、末课材料前提、收口课认知层级与 loadTarget 回退', () => {
+    const taskDesign = read('prompts/skill.path-task-design.md')
+    expect(taskDesign).toContain('阶段内前置顺序自检')
+    expect(taskDesign).toContain('但前提是用户明确提到手头有真实材料')
+    expect(taskDesign).toContain('禁止假设用户手头有正在读的材料')
+    expect(taskDesign).toContain('收口课不默认标 create')
+    expect(taskDesign).toContain('缺省时读 `cognitiveCore.loadProfile.stageLoadDistribution`')
+    // 2026-11-20 密度：low 负荷下，两个未建立概念必须拆成两节；≥4 个平级子类按 2-3 个一组拆
+    expect(taskDesign).toContain('若一个任务必须同时用到两个尚未建立的概念')
+    expect(taskDesign).toContain('各自只推进一个概念')
+    expect(taskDesign).toContain('判断动作不同就算两个概念')
+    expect(taskDesign).toContain('同一任务并列教授 ≥4 个平级子类')
+    expect(taskDesign).toContain('不得一节课塞完全部子类')
+  })
+
+  it('path-reviewer：标题点名的概念必须在同阶段验收里覆盖', () => {
+    const reviewer = read('prompts/skill.path-reviewer.md')
+    expect(reviewer).toContain('标题与验收脱节')
+    expect(reviewer).toContain('只验从句、不验非谓语')
   })
 
   it('path-planning：阶段递进用一条通用轴，不再内置单案例阶段模板', () => {

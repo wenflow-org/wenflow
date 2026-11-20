@@ -1339,6 +1339,7 @@ class SimulationOrchestrator {  readonly id = COORDINATOR_ID;
     pathGenerated: boolean;
     isPathCompleted: boolean;
     finalStage?: string;
+    terminalReason?: 'converged' | 'learner-ended' | 'no-path' | 'max-rounds' | 'failed';
     error?: string;
   }> {
     return execPhaseExecuteFullSession(this, sessionId, options);

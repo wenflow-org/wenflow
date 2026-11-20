@@ -407,28 +407,13 @@
           <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M6 13l6 6 6-6"/></svg>
           回到底部
         </button>
-        <!-- 贴底坞（2026-11-06 走查·严格 flex 三段）：生成 pill / 输入区 / 元数据行
+        <!-- 贴底坞（2026-11-06 走查·严格 flex 三段）：待确认条 / 输入区 / 元数据行
              全部收进同一个 flex 子项，滚动区在坞上方自然结束。此前三者是 .chat 的并列
              flex 子项，且靠 ::before 渐变「假装」分隔——渐变在暗色下读成一条黑带、
              在亮色下读成灰蓝带，还盖掉了气泡下缘的描边（本次核心 Bug）。
              坞本身透明无边框无分割线：层次由留白与卡片边界表达。
-             2026-11-18：待确认条保持钉在输入区上方（用户复选），与 pill/输入区同组。 -->
+             2026-11-20：路径生成进度统一收进右上角通知中心（AI 任务），坞里不再放生成 pill。 -->
         <div class="chat__dock">
-        <!-- 生成状态 pill（走查 2026-11-01 P22 / 2026-11-02 P22 复验）：确认生成后选「留在本页」关掉浮层，
-             页面上除步条第 3 步高亮外没有任何持续状态，用户不知道生成还在不在走。
-             2026-11-02 起跟真实状态：拿到 pathId 后轮询 generation-status（复用 /learning-paths
-             的接口与节奏），文案与终态由 genPillCopy 统一映射——生成未确认完成前不给平静终态。
-             浮层出现期间让位（genPill 返回 null）——浮层内已有同等进度，双份状态互相抢焦点。
-             放在消息区与输入区之间：桌面/移动同位，不与移动端「目标信息」锚点带抢位置。 -->
-        <button
-          v-if="genPill"
-          type="button"
-          class="gen-pill"
-          :class="[`gen-pill--${genPill.tone}`]"
-          @click="onGenPillClick"
-        >
-          <span class="gen-pill__dot" aria-hidden="true"></span>{{ genPill.text }}
-        </button>
         <!-- 方案协商入口（2026-11-18 用户复选：保持在输入框上方）：
              确认动作与输入区同组，不随消息流滚走；方案正文与调整快选仍在上方对话里。
              入口只负责打开方案卡，确认动作发生在卡内。 -->
@@ -577,15 +562,6 @@
           <ol>
             <li v-for="(s, i) in reviewProposal.stages" :key="i" class="pstep"><i>{{ i + 1 }}</i><div><strong>{{ stageHead(s) }}</strong>{{ stageTail(s) }}</div></li>
           </ol>
-        </div>
-
-        <!-- 远期留白（2026-11-17 起步路径）：exploratory 只确认起步段，out_of_scope 明写
-             「暂不限定」的方向，让用户知道这不是残缺路径，而是走完再分岔。 -->
-        <div v-if="reviewProposal?.skip?.length" class="proposal__stages">
-          <span class="proposal__stages-label">暂不包含 · 走完这段再定</span>
-          <ul class="proposal__skip-list">
-            <li v-for="(s, i) in reviewProposal.skip" :key="i">{{ s }}</li>
-          </ul>
         </div>
 
         <!-- 前置自测：帮路径更贴合基础。2026-11-02 口径重做——作答是本地表单动作，
@@ -750,7 +726,7 @@ import { toast } from '@/utils/toast';
 import { askConfirm } from '@/views/admin-redesign/useConfirm';
 import { proposalEntryCopy } from './goalStageCopy';
 import { learningAPI, type GenerationLifecycleDTO } from '@/api/learning';
-import { genPillCopy, genStageLabel, isGenerationSettled } from './learningPathProgress';
+import { genStageLabel, isGenerationSettled } from './learningPathProgress';
 
 const route = useRoute();
 const router = useRouter();
@@ -1370,59 +1346,18 @@ watch(
   { immediate: true }
 );
 
-/* 生成状态 pill（走查 2026-11-01 P22 / 2026-11-02 复验）：只在浮层被关掉（「留在本页」/Esc）后承担持续指示。
-   确认在途按等待时长给阶段字（刻度同 GEN_WAIT_STAGES）；pathId 在手后一切以 generation-status
-   为准（genPillCopy 统一映射）：生成中带真实阶段、完成给 done 终态（点击去路径详情）、失败给
-   fail（点击去路径列表的重试入口）。跟踪未建立的短暂窗口给进行态过渡——生成未确认完成前
-   不得给平静终态（P22 缺陷1）。浮层打开期间返回 null 让位。 */
-const genPill = computed(() => {
-  if (!live.started && !genTrack.value) return null;
-  // 分诊硬阻断终局：不会生成路径，「路径已创建 · 生成中」类状态条一律不显示（P0 假成功）
-  if (live.hardBlocked) return null;
-  if (showProposal.value) return null;
-  if (phase.value === 'generating') {
-    const stage = waitTick.value < 8 ? '梳理目标' : waitTick.value < 25 ? '拆解阶段' : waitTick.value < 60 ? '排布任务' : '即将完成';
-    return { tone: 'run' as const, text: `正在生成路径 · ${stage}` };
-  }
-  if (genTrack.value) {
-    return genPillCopy(genTrack.value.lc);
-  }
-  if (phase.value === 'done') {
-    // #213：无路径即硬阻断终局——不谎称「路径已创建」，也不跟踪一个不存在的生成任务。
-    return live.learningPath ? { tone: 'run' as const, text: '路径已创建 · 生成中' } : null;
-  }
-  if (confirmError.value) {
-    return live.stopped === 'confirm'
-      ? { tone: 'fail' as const, text: '已停止生成' }
-      : { tone: 'fail' as const, text: '确认失败' };
-  }
-  return null;
-});
-
 /** 该「最近会话」是否就是当前正在生成路径的那条（2026-11-06 走查 图4）。
     只在真进行态（tone=run）挂状态字：终态/失败态在列表行里没有动作可给，
     挂在行上会让「点进去能干嘛」说不清——那两种态由路径列表承接。 */
 function isGeneratingRecent(r: RecentGoalEntry): boolean {
-  if (genPill.value?.tone !== 'run') return false;
   const cid = genConversationId.value || getGoalConversationCid() || '';
-  return !!cid && r.id === cid;
+  if (!cid || r.id !== cid) return false;
+  if (phase.value === 'generating') return true;
+  const lc = genTrack.value?.lc;
+  // 跟踪已建立但 status 尚未应答的短暂窗口也算生成中（不提前给平静终态）。
+  return !!genTrack.value && (!lc || !isGenerationSettled(lc));
 }
 
-/** pill 点击：done 去路径详情；fail 去路径列表（失败卡上有重试）；
-    进行态回浮层面板（会话态）或去路径列表（入口态无浮层可回） */
-function onGenPillClick() {
-  const pill = genPill.value;
-  if (!pill) return;
-  if (pill.tone === 'done' && genTrack.value?.pathId) {
-    router.push(`/learning-path/${genTrack.value.pathId}`);
-    return;
-  }
-  if (pill.tone === 'fail' || !live.started) {
-    router.push('/learning-paths?from=goal');
-    return;
-  }
-  openProposalReview();
-}
 
 /** 完成弹层的副文（P22 缺陷3）：跟随真实状态——生成完成后不再说「还在生成中」。
     跟踪未建立（旧信封无 learningPath 等）回退原句，不做无凭据的宣称。
@@ -1868,7 +1803,7 @@ function shuffleScenes() {
 .recent__item:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
 .recent__preview { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; color: var(--muted); }
 .recent__time { flex: none; font-size: 12px; color: var(--faint); }
-/* 生成中行（2026-11-06 走查 图4）：时间位换成蓝色状态字 + 脉点，与 .gen-pill--run 同一语言。
+/* 生成中行（2026-11-06 走查 图4）：时间位换成蓝色状态字 + 脉点，与生成中状态同一语言。
    宽度与时间字同档（12px），不把省略号压缩到挤字。 */
 .recent__gen {
   flex: none; display: inline-flex; align-items: center; gap: 5px;
@@ -2720,53 +2655,6 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
   font-size: 12px;
 }
 
-/* ---------- 生成状态 pill（走查 2026-11-01 P22） ----------
-   三档语言：run=蓝描边脉点（与 .proposal__stop 同族的进行态）、done=平静绿档
-   （同 done-ring 的成功语言）、fail=红档（同 .errorbar）。min-height 36：触屏下沿。 */
-.gen-pill {
-  flex: 0 0 auto;
-  align-self: flex-start;
-  /* 收进 .chat__dock：条间留白由坞的 gap 统一给，自己不再带下外边距 */
-  margin: 0 16px;
-  display: inline-flex; align-items: center; gap: 7px;
-  min-height: 36px; padding: 0 12px;
-  /* 8px 控件圆角（2026-11-06 审计 §1 去肥胖化）：状态条不再用全圆胶囊；
-     36 是仓库「可点元素 ≥36px」硬下沿，高度不动 */
-  border-radius: var(--mk-radius-md);
-  font: inherit; font-size: 12px; font-weight: 700;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-.gen-pill--run {
-  border: 1px solid color-mix(in srgb, var(--blue) 35%, transparent);
-  background: color-mix(in srgb, var(--blue) 8%, var(--surface));
-  color: var(--blue-deep);
-}
-.gen-pill--run:hover { background: color-mix(in srgb, var(--blue) 14%, var(--surface)); }
-.gen-pill--done {
-  border: 1px solid color-mix(in srgb, var(--green) 30%, transparent);
-  background: color-mix(in srgb, var(--green) 10%, var(--surface));
-  color: var(--green-ink);
-}
-.gen-pill--fail {
-  border: 1px solid color-mix(in srgb, var(--red) 30%, transparent);
-  background: color-mix(in srgb, var(--red) 8%, transparent);
-  color: var(--red-ink);
-}
-.gen-pill__dot {
-  flex: 0 0 auto;
-  width: 7px; height: 7px; border-radius: 50%;
-  background: currentColor;
-}
-/* 入口态那颗 gen-pill 已删（2026-11-06 走查 图4）：状态并入 .recent__gen，本次不再有入口态 pill */
-@media (prefers-reduced-motion: no-preference) {
-  .gen-pill--run .gen-pill__dot { animation: gen-pill-pulse 1.6s ease-in-out infinite; }
-}
-@keyframes gen-pill-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
-}
-
 /* ---------- 输入区：对话卡内的底条（2026-10-06 归位） ----------
    它是 .chat（对话卡）的最后一个 flex 子项：宽度 = 对话列，与上方气泡同列同左右缘。
    历史教训：2026-10-02 曾把输入区拆成「页级通栏底条 + 复刻 .work 栅格的 .composer__inner」，
@@ -2921,12 +2809,6 @@ html[data-theme='dark'] .stage-nav__item--current i { background: var(--mk-blue-
 .proposal__stages ol {
   list-style: none; margin: 0; padding: 0;
   display: grid; gap: 8px;
-}
-.proposal__skip-list {
-  list-style: disc; margin: 0; padding: 0 0 0 18px;
-  display: grid; gap: 6px;
-  font-size: 13px; line-height: 1.5;
-  color: var(--muted);
 }
 .pstep {
   display: grid; grid-template-columns: 24px 1fr; gap: 10px; align-items: start;

@@ -10,7 +10,7 @@ import { paceSignalRangeConfig, timeHorizonPaceMapping, tightBudgetConfig } from
 import { normalizePathDifficulty } from './path-difficulty';
 import { normalizeDeadlineDate } from './deadline-date';
 import { resolveCapacity, parseSessionMinutes } from './capacity-authority';
-import { normalizeSkillNature, normalizePlatformJudgment, type SkillNature } from './goal-path-visible-summary';
+import { normalizeSkillNature, normalizePlatformJudgment } from './goal-path-visible-summary';
 import { dayKeyOf, endOfDay, parseDayKeyStart } from '../time/day-boundary';
 
 export type PlanningPaceSignal = 'compact' | 'standard' | 'extended';
@@ -828,10 +828,12 @@ export function derivePlanningHints(
   // 旧逻辑把它当 explicit，单课被锁死在 25min，4 阶段 × 4 课只能装 6.67h，8h 内容必然被腰斩；
   // 更糟的是所有任务都标“约 25 分钟”，架空 path-task-design 的时长分化要求。
   // 这里只放宽默认来源：显式说“每次只能 20 分钟”的用户仍按 20min 封顶。
+  // 2026-11-20：承诺是「每次约 25 分钟」时，上界只允许 +5（30 分钟），不再放到 35——
+  // 否则用户按 25 分钟排时间，实际拿到 35 分钟课，直接违反「一次坐姿内收尾」。
   if (sessionLengthSource === 'default') {
     const mean = parsedSessionMinutes ?? (Number.isFinite(structuredSessionMinutes) ? structuredSessionMinutes : 25);
     const lower = Math.max(15, Math.min(subtaskMinutesRange[0], Math.round(mean * 0.6)));
-    const upper = Math.min(45, Math.max(35, Math.round(mean + 10)));
+    const upper = Math.min(45, Math.max(25, Math.round(mean + 5)));
     subtaskMinutesRange = [Math.min(lower, upper), upper];
   }
 
@@ -1528,11 +1530,15 @@ export function buildFramedNormalizedInput(input: any): any {
     : {};
 
   const surfaceGoal = normalizeString(learnerProfile.surfaceGoal);
-  const entryState: 'focused' | 'exploratory' | null =
-    learnerProfile.entryState === 'focused' || learnerProfile.entryState === 'exploratory'
+  // Phase 4：澄清契约存在时，身份标签在 Path 边界退场——不再作为定帧输入。
+  // 旧会话（无 contract）继续走标签回退，保证兼容。
+  const hasClarification = !!input.clarification && typeof input.clarification === 'object';
+  const entryState: 'focused' | 'exploratory' | null = hasClarification
+    ? null
+    : learnerProfile.entryState === 'focused' || learnerProfile.entryState === 'exploratory'
       ? learnerProfile.entryState
       : null;
-  const intentType = normalizeString(learnerProfile.intentType);
+  const intentType = hasClarification ? null : normalizeString(learnerProfile.intentType);
   const explicitProblem = normalizeString(problemSpace.realProblem);
   // 方案乙：不再用动词前缀黑名单静默删阶段（"学习/设计/分析/梳理…"开头的阶段会被误删，
   // 实测把"设计…固定动作"这类真阶段删掉）。"哪些算认知阶段"是语义判断，交给 LLM：
@@ -1572,8 +1578,11 @@ export function buildFramedNormalizedInput(input: any): any {
   const rawSkillNature = learnerProfile.skillNature ?? input.skillNature;
   const rawPlatformJudgment = learnerProfile.platformJudgment ?? input.platformJudgment;
   const rawSensorReadouts = learnerProfile.sensorReadouts ?? input.sensorReadouts;
-  const skillNature = normalizeSkillNature(rawSkillNature);
-  const skillNatureEvidence = normalizeString(learnerProfile.skillNatureEvidence ?? input.skillNatureEvidence) || null;
+  // 有 contract 时 skill_nature 也退场（平台可判定性改由 stopping.evidence 承担）。
+  const skillNature = hasClarification ? null : normalizeSkillNature(rawSkillNature);
+  const skillNatureEvidence = hasClarification
+    ? null
+    : normalizeString(learnerProfile.skillNatureEvidence ?? input.skillNatureEvidence) || null;
   // 平台可判定性（2026-10-26 二拆）：not_judgeable 时任务形态只能是「训练计划 + 复盘归因」，不得编自查卡假装可判定。
   const platformJudgment = normalizePlatformJudgment(rawPlatformJudgment);
   const platformJudgmentEvidence = normalizeString(learnerProfile.platformJudgmentEvidence ?? input.platformJudgmentEvidence) || null;
@@ -1599,7 +1608,8 @@ export function buildFramedNormalizedInput(input: any): any {
     : null;
 
   // 路径拓扑 hint（2026-11-18）：只给结构化信号能确定的两种，其余交给 path-planning 按目标语义判定。
-  // exam：intentType=exam；exploratory：entry_state=exploratory。两者都不靠关键词猜测。
+  // 说明（Phase 4）：有 clarification 时 intentType/entryState 已置空（标签退场），hint 自然缺省，
+  // 由 path-planning 读契约语义决定拓扑；无契约旧会话仍按 intent=exam / entry=exploratory 回退。
   const pathTopologyHint: 'exam' | 'exploratory' | null =
     intentType === 'exam' ? 'exam' : entryState === 'exploratory' ? 'exploratory' : null;
 

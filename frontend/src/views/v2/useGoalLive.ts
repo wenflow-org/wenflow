@@ -239,7 +239,6 @@ const proposal = computed(() => {
   const stages = (previewStages.length ? previewStages : toList(cp.key_stages ?? cp.stages ?? cp.outline))
     .slice(0, plannedMilestones ?? 5);
   const stageCount = plannedMilestones ?? stages.length;
-  const skip = toList(cp.out_of_scope ?? cp.not_now ?? cp.exclude).slice(0, 6);
   const probes = toProbes(cp.prerequisiteDiagnostics ?? cp.prerequisite_diagnostics ?? cp.prerequisite_diagnostics_list);
   // 单次时长（2026-11-18 用户走查）：确认弹窗要给出轻量耗时预估，数据源与左栏
   // 「可用时间」同一个字段。只展示单次节奏，不把 objectiveScopeHours 当成用户可感知
@@ -255,7 +254,7 @@ const proposal = computed(() => {
     ? rawTotalHours
     : null;
   if (!problem && !outcome && stages.length === 0) return null;
-  return { outcome, stages, stageCount, skip, probes, sessionMinutes, totalHours };
+  return { outcome, stages, stageCount, probes, sessionMinutes, totalHours };
 });
 
 /** 前置探测题（goal-conversation prerequisiteDiagnostics）→ 展示结构 */

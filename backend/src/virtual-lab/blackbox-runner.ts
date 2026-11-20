@@ -1146,6 +1146,8 @@ export class BlackboxVirtualLearnerRunner {
             previousLearnerState: state.blackbox?.learnerPrivateState?.teaching || null,
             currentTask: latest.visibleTask || null,
             knowledgeSnapshot,
+            turnIndex: lessonHistory.filter((item) => item.role === 'learner').length,
+            turnBudget: 18,
             ...(await this.buildLearnerMemoryContextForSimulator(session.userId, sessionId, history.length)),
             epistemicGrounding,
             frictionBudget: snapshot.frictionBudget,
@@ -1178,6 +1180,11 @@ export class BlackboxVirtualLearnerRunner {
               && output.learnerFeedback?.selfReportedTaskDone === true
               && output.learnerFeedback?.stopAsking === true
               ? { type: 'confirm_complete' }
+              : output.shouldEnd === true && latest.availableActions.includes('abandon')
+                ? {
+                    type: 'abandon',
+                    reason: `learner-exited:${output.endReason || 'other'}:${String(output.reply || '').slice(0, 80)}`
+                  }
               : output.learnerState?.wantsHint
                 ? { type: 'request_hint', text: output.reply }
               : output.learnerState?.wantsWorkedExample

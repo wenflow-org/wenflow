@@ -97,6 +97,79 @@ describe('simulation-learn-turn normalize', () => {
     const out = normalizeOutput({ reply: fourSentences }, brief)
     expect(out.reply).toBe('我点的是页面布局。 缩放填的是 1 页宽。')
   })
+
+  // D1（2026-11-19）：学习者可以主动下课，但代码必须守住三道边界，防止模型早退。
+  it('time-up：达到软预算才放行；未到预算一律 false', () => {
+    const early = normalizeOutput(
+      { reply: '今天先到这。', shouldEnd: true, endReason: 'time-up' },
+      { ...input, turnIndex: 5, turnBudget: 18 },
+    )
+    expect(early.shouldEnd).toBe(false)
+    expect(early.endReason).toBeNull()
+
+    const due = normalizeOutput(
+      { reply: '今天先到这。', shouldEnd: true, endReason: 'time-up' },
+      { ...input, turnIndex: 18, turnBudget: 18 },
+    )
+    expect(due.shouldEnd).toBe(true)
+    expect(due.endReason).toBe('time-up')
+  })
+
+  it('task-done 必须自评达成；未达成时不得离场', () => {
+    const out = normalizeOutput(
+      { reply: '那我先走了。', shouldEnd: true, endReason: 'task-done', learnerFeedback: { selfReportedTaskDone: false } },
+      { ...input, turnIndex: 30, turnBudget: 18 },
+    )
+    expect(out.shouldEnd).toBe(false)
+
+    const done = normalizeOutput(
+      {
+        reply: '那我先走了。',
+        shouldEnd: true,
+        endReason: 'task-done',
+        learnerFeedback: { selfReportedTaskDone: true, remainingBlockers: [], wantsMoreHelp: false },
+      },
+      { ...input, turnIndex: 12, turnBudget: 18 },
+    )
+    expect(done.shouldEnd).toBe(true)
+    expect(done.endReason).toBe('task-done')
+  })
+
+  it('有待答检查点 / 想延伸 / 未到挫败门槛 → 不得离场', () => {
+    const withCheckpoint = normalizeOutput(
+      { reply: '今天先到这。', shouldEnd: true, endReason: 'time-up' },
+      {
+        ...input,
+        turnIndex: 20,
+        turnBudget: 18,
+        pendingCheckpoint: { id: 'cp1', type: 'short_answer', question: '题面' },
+      },
+    )
+    expect(withCheckpoint.shouldEnd).toBe(false)
+
+    const wantsExtension = normalizeOutput(
+      {
+        reply: '今天先到这。',
+        shouldEnd: true,
+        endReason: 'task-done',
+        learnerFeedback: { selfReportedTaskDone: true, wantsExtension: true },
+      },
+      { ...input, turnIndex: 20, turnBudget: 18 },
+    )
+    expect(wantsExtension.shouldEnd).toBe(false)
+
+    const earlyFrustration = normalizeOutput(
+      { reply: '我跟不动了。', shouldEnd: true, endReason: 'frustrated' },
+      { ...input, turnIndex: 3, turnBudget: 18 },
+    )
+    expect(earlyFrustration.shouldEnd).toBe(false)
+  })
+
+  it('模型输出不可用时的兜底不替学习者做下课决定', () => {
+    const fallback = normalizeOutput(undefined, input)
+    expect(fallback.shouldEnd).toBe(false)
+    expect(fallback.endReason).toBeNull()
+  })
 })
 
 describe('simulation-learn-turn 失败显式传播', () => {

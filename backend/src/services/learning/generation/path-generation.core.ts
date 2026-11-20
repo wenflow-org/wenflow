@@ -23,6 +23,10 @@ import { buildFramedNormalizedInput } from '../path-planning-hints';
 import { normalizePathDifficulty } from '../path-difficulty';
 import { sanitizeUserFacingText, detectBoilerplateClause } from '../user-facing-text';
 import { buildPathReviewerGoalContext } from '../path-reviewer-context';
+import {
+  auditMilestoneRationales,
+  isClarificationEnforceEnabled,
+} from '../goal-clarification-contract';
 import { reviewPathWithAutoReplan, MAX_PATH_REPLAN_DEPTH } from './path-review-replan';
 import {
   assertGenerationRunFence,
@@ -364,6 +368,57 @@ export function buildPathAgentInput(data: GeneratePathData): AgentInput {
 }
 
 
+/**
+ * path-planning 输出 → 持久化 suggestedMilestones 的白名单快照（2026-11-20 Phase 2）。
+ *
+ * 这一层此前只保留 stage/name/goal/estimatedHours/materialRefs，会静默丢掉
+ * `rationale`。而 `MilestoneRationale` 审计读的正是 aiPromptTemplate.suggestedMilestones，
+ * 丢在这里 ⇒ 每次生成都被判「缺少 rationale」。新增可追溯字段必须同步加进本白名单。
+ */
+export function buildSuggestedMilestoneSnapshot(m: any, idx: number) {
+  return {
+    stage: m.stageNumber || idx + 1,
+    name: m.title,
+    coreConcept: typeof m.coreConcept === 'string' ? m.coreConcept : undefined,
+    description: m.description,
+    goal: m.goal,
+    estimatedHours: m.estimatedHours,
+    ...(m.rationale && typeof m.rationale === 'object' ? { rationale: m.rationale } : {}),
+    // 资料引用（已在 skill 侧逐字核对）：白名单重建时**必须带上**，否则在此边界被丢掉
+    ...(Array.isArray(m.materialRefs) && m.materialRefs.length ? { materialRefs: m.materialRefs } : {}),
+    tasks: []
+  };
+}
+
+/**
+ * Phase 3：落库前的 MilestoneRationale 硬闸门。
+ *
+ * 与 path-planning 的校验重试形成两级：
+ * 1) 首次输出缺 rationale → 校验失败，带反馈重试一次（重规划）；
+ * 2) 重试后仍缺失 → 这里在**事务/落库之前**抛出，路径被标记 failed，不会以 active 形态
+ *    进入学习（旧行为是落库后只附带回执，学习者会拿到一条不可追溯的路径）。
+ */
+export function assertClarificationRationalesReadyForPersistence(
+  milestones: unknown,
+  clarification: unknown,
+): void {
+  if (!clarification || !isClarificationEnforceEnabled()) return;
+  const audit = auditMilestoneRationales(milestones, clarification);
+  if (audit.ok) return;
+  const error = new Error(
+    `CLARIFICATION_REQUIRED: 里程碑 rationale 审计未通过：${audit.reasons.join('；')}`
+  );
+  (error as Error & { code?: string; audit?: unknown }).code = 'CLARIFICATION_REQUIRED';
+  (error as Error & { code?: string; audit?: unknown }).audit = audit;
+  throw error;
+}
+
+function readPathClarification(data: GeneratePathData): unknown {
+  return (data.userProfile?.normalizedInput as { clarification?: unknown } | undefined)?.clarification
+    ?? (data.userProfile?.goalFinalPayload as { clarification?: unknown } | undefined)?.clarification
+    ?? null;
+}
+
 async function analyzePathWithAgent(data: GeneratePathData): Promise<any> {
   try {
     const agentInput = buildPathAgentInput(data);
@@ -479,17 +534,7 @@ async function analyzePathWithAgent(data: GeneratePathData): Promise<any> {
       sceneFramingInput: null,
       pathAgentInput,
       pathAgentRaw,
-      suggestedMilestones: taskChainMilestones.map((m: any, idx: number) => ({
-        stage: m.stageNumber || idx + 1,
-        name: m.title,
-        coreConcept: typeof m.coreConcept === 'string' ? m.coreConcept : undefined,
-        description: m.description,
-        goal: m.goal,
-        estimatedHours: m.estimatedHours,
-        // 资料引用（已在 skill 侧逐字核对）：白名单重建时**必须带上**，否则在此边界被丢掉
-        ...(Array.isArray(m.materialRefs) && m.materialRefs.length ? { materialRefs: m.materialRefs } : {}),
-        tasks: []
-      })),
+      suggestedMilestones: taskChainMilestones.map((m: any, idx: number) => buildSuggestedMilestoneSnapshot(m, idx)),
       cognitiveCore: path.cognitiveCore || path.cognitiveDesign,
       // 拓扑（2026-11-18）：planning 显式声明优先；缺失时回退定帧 hint（只有 exam/exploratory 会给）。
       topology: normalizePathTopology((path as any)?.topology)
@@ -511,6 +556,8 @@ async function analyzePathWithAgent(data: GeneratePathData): Promise<any> {
 async function persistGeneratedPath(data: GeneratePathData, analysis: any, milestonesData: any[], runId?: string) {
   const cognitiveDesign = buildPathCognitiveDesign(data, analysis);
   const normalizedMilestonesData = clampMilestonesWithLog(normalizeMilestonesWithConcepts(milestonesData, cognitiveDesign), data, runId);
+  // Phase 3：有澄清契约时，rationale 不闭环不得落库（重试已在 skill 校验层做过一次）。
+  assertClarificationRationalesReadyForPersistence(normalizedMilestonesData, readPathClarification(data));
 
   // 资料引用（materialRefs）：里程碑 → 资料条目，**已在 skill 侧逐字核对**过。
   // 落进 aiPromptTemplate（不新增表列），读侧由 path-views 合并进 milestones/subtasks 返回给学习者。

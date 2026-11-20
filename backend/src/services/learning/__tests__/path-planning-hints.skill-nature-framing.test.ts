@@ -39,6 +39,31 @@ describe('#242 定帧层：内层 learnerProfile 的 skillNature / platformJudgm
     expect(Object.prototype.hasOwnProperty.call(out, 'platformJudgment')).toBe(true);
   });
 
+  it('Phase 4：有 clarification 时 skillNature / entryState / intentType 退场（platformJudgment 保留）', () => {
+    const out = framedLearnerProfile({
+      version: '1.0',
+      learnerProfile: {
+        surfaceGoal: '想自己弹唱一首完整的歌',
+        entryState: 'exploratory',
+        intentType: 'interest',
+        skillNature: 'physical_internalized',
+        platformJudgment: 'not_judgeable',
+      },
+      clarification: {
+        core: { question: '弹唱到什么算通', evidence: ['想自己弹唱'] },
+        baseline: { known: [], unknown: [], misconceptions: [], evidence: ['没弹过'] },
+        stopping: { kind: 'do', scope: 'class', evidence: 'self', statement: '完整弹唱一首' },
+        assumptions: [],
+        blockingNeed: 'none',
+        unknowns: [],
+      },
+    });
+    expect(out.entryState).toBeNull();
+    expect(out.intentType).toBeNull();
+    expect(out.skillNature).toBeUndefined();
+    expect(out.platformJudgment).toBe('not_judgeable');
+  });
+
   it('二次定帧幂等（生成链会再定帧一次）', () => {
     const once = buildFramedNormalizedInput({
       version: '1.0',

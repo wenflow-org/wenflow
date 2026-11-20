@@ -85,7 +85,7 @@
               <span v-if="lifecyclePreparing && !lifecycleFailed" class="metric"><b>准备中</b>课程与任务</span>
               <template v-else-if="!lifecyclePreparing">
                 <span class="metric"><b>{{ currentStageNo }} / {{ stages.length || '?' }}</b>当前阶段</span>
-                <span class="metric"><b>{{ lessonCount ? `${lessonCount} 节课 · 约 ${path.estimatedHours} 小时` : '—' }}</b>已备好</span>
+                <span class="metric" :title="`已生成 ${lessonCount} 节课，合计约 ${preparedHours} 小时；整条路径计划约 ${path.estimatedHours} 小时`"><b>{{ lessonCount ? `${lessonCount} 节课 · 约 ${preparedHours} 小时` : '—' }}</b>已备好</span>
               </template>
               <span v-if="path.deadlineText" class="metric"><b>{{ path.deadlineText }}</b>目标周期</span>
             </div>
@@ -159,13 +159,20 @@
           <!-- 主列 -->
           <div class="stages-col">
           <div class="stages">
-            <!-- 极速模式（2026-11-18 方向五）：只显示 core 骨干课；进度仍按全部任务计算 -->
+            <!-- 极速模式（2026-11-18 方向五）：只显示 core 骨干课；进度仍按全部任务计算。
+                 2026-11-20：工具条并入「课程安排」标题行，开关靠右，不再独占一条空行。 -->
             <div v-if="hasFlexibleTasks" class="stages__toolbar">
-              <label class="stages__toggle">
-                <input v-model="coreOnly" type="checkbox" />
-                <span>⏱ 时间紧，只看核心主干</span>
-              </label>
-              <small v-if="coreOnly">已隐藏 {{ hiddenFlexibleCount }} 节可跳过课</small>
+              <span class="stages__toolbar-title">
+                课程安排
+                <small>{{ stages.length }} 个阶段</small>
+              </span>
+              <span class="stages__toolbar-actions">
+                <label class="stages__toggle">
+                  <input v-model="coreOnly" type="checkbox" />
+                  <span>⏱ 时间紧，只看核心主干</span>
+                </label>
+                <small v-if="coreOnly" class="stages__toolbar-note">已隐藏 {{ hiddenFlexibleCount }} 节可跳过课</small>
+              </span>
             </div>
             <section v-if="!stages.length" class="stages__empty card">
               <!-- kicker「路径准备中」+ 主行「还没有阶段与任务」已是完整结论；原第三行
@@ -457,7 +464,7 @@
         <div class="adjust-dialog__head">
           <div>
             <h3 id="adjustDialogTitle" class="adjust-dialog__title">调整这条路径</h3>
-            <p class="adjust-dialog__desc">选择你想改的范围。已完成的课堂记录都会保留在学习历史里。</p>
+            <p class="adjust-dialog__desc">{{ adjustDialogDesc }}</p>
           </div>
           <button type="button" class="adjust-dialog__close" aria-label="关闭" @click="adjustDialogOpen = false">
             <svg viewBox="0 0 24 24" width="14" height="14"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/></svg>
@@ -518,7 +525,7 @@
             <span class="adjust-mode__icon" aria-hidden="true">↺</span>
             <span class="adjust-mode__body">
               <strong>整条路径重新规划<span v-if="isRecommendedEntry('rebuild')" class="adjust-mode__rec">推荐</span></strong>
-              <small>范围、节奏或顺序没排对，按新说明重排整条路径。已完成的课堂记录保留，但新路径不沿用旧任务。</small>
+              <small>范围、节奏或顺序要整体重排。已完成课堂留在学习历史，但不沿用旧任务。</small>
               <small v-if="!adjustEntryAllowed('rebuild')" class="adjust-mode__blocked">{{ adjustEntryBlockReason('rebuild') }}</small>
             </span>
             <span class="adjust-mode__arrow" aria-hidden="true">›</span>
@@ -558,7 +565,7 @@
         <!-- 场景说明 + 补充输入 -->
         <template v-else>
           <div class="adjust-form__mode-hint" :class="`adjust-form__mode-hint--${adjustMode}`">
-            <template v-if="adjustMode === 'rebuild'">整条重新规划 · 已完成记录保留</template>
+            <template v-if="adjustMode === 'rebuild'">整条重新规划 · 已完成课堂保留</template>
             <template v-else-if="adjustMode === 'reshape'">只调未学部分 · 已完成原样保留</template>
             <template v-else>AI 诊断建议 · 先看建议再决定</template>
             <span class="adjust-form__hint-group">
@@ -567,7 +574,7 @@
             </span>
           </div>
           <p v-if="adjustMode === 'rebuild' && hasLearningProgress" class="adjust-form__warn">
-            这条路径已有学习进度。整条重新规划会替换当前安排：已完成的课堂记录仍在学习历史里，但新路径不会接着旧任务走。
+            已有学习进度：整条重排会换掉当前安排。已完成课堂仍留在学习历史，但新路径不接着旧任务走。
           </p>
 
           <!-- reshape 调整范围：仅当前阶段（老行为） / 当前及之后 / 自选起始阶段 -->
@@ -662,6 +669,7 @@
           <!-- 输入态（无建议时） -->
           <template v-else>
             <textarea
+              ref="adjustTextarea"
               v-model="adjustText"
               class="adjust-dialog__textarea"
               rows="4"
@@ -673,7 +681,7 @@
               <button
                 type="button"
                 class="btn-primary"
-                :class="{ 'btn-primary--off': adjusting || !adjustText.trim(), 'btn-primary--danger': adjustMode === 'rebuild' && hasLearningProgress }"
+                :class="{ 'btn-primary--off': adjusting || (!adjustText.trim() && adjustMode !== 'rebuild'), 'btn-primary--danger': adjustMode === 'rebuild' && hasLearningProgress }"
                 :disabled="adjusting"
                 @click="submitAdjust"
               >
@@ -681,13 +689,16 @@
                 {{ adjusting ? (adjustMode === 'auto' ? '正在诊断…' : '正在提交…') : adjustConfirmText }}
               </button>
             </div>
-            <p v-if="!adjustText.trim() && !adjusting" class="adjust-form__hint">先写几句想怎么调整，再点{{ adjustConfirmText }}。</p>
+            <p v-if="!adjustText.trim() && !adjusting" class="adjust-form__hint">
+              <template v-if="adjustMode === 'rebuild'">不写也行：直接按原目标重排；想定向调整就写几句。</template>
+              <template v-else>先写几句想怎么调整；点「{{ adjustConfirmText }}」继续。</template>
+            </p>
             <!-- 回退保障句跟随真实能力（paths/iphone/2）：AI 重排会留存快照 → 承诺成立并给
                  就地入口（此前入口只挂 hero，审计全 UI 搜索不到「回退」）；无快照（如仅做过
                  手动微调的旧路径）不再凭空承诺 -->
             <p class="adjust-form__hint adjust-form__hint--safety">
-              <template v-if="rollbackAvailable">调整前的安排已留存，可随时一键回退。</template>
-              <template v-else>调整前的安排会自动留存，调整完成后可一键回退。</template>
+              <template v-if="rollbackAvailable">调整前已留快照，可随时回退。</template>
+              <template v-else>调整前会自动留一份快照，完成后可一键回退。</template>
             </p>
             <p v-if="rollbackAvailable" class="adjust-form__rollback">
               <button type="button" class="btn-ghost" :disabled="rollingBack" @click="confirmRollback">
@@ -1190,6 +1201,8 @@ watch(adjustDialogOpen, (open) => {
 });
 onBeforeUnmount(() => window.removeEventListener('keydown', onAdjustDialogKey));
 const adjustText = ref('');
+/** 空文本提交时把焦点送回输入框：校验提示已在输入框下方，不再飘右上角 toast */
+const adjustTextarea = ref<HTMLTextAreaElement | null>(null);
 const adjusting = ref(false);
 const adjustMode = ref<AdjustMode>(null);
 /** reshape 调整范围：'next'（仅当前活动阶段，默认/老行为）| 'rest'（当前及之后所有未学阶段）| 'from'（自选起始阶段） */
@@ -1246,10 +1259,17 @@ const reshapeScopeUsable = computed(() => stages.value.some((s) => {
   return !tasks.every((t) => t.status === 'completed') && !tasks.some((t) => t.status === 'in_progress');
 }));
 
+const adjustDialogDesc = computed(() => {
+  if (adjustMode.value === 'rebuild') return '整条重排：范围、节奏或顺序整体重来。';
+  if (adjustMode.value === 'reshape') return '只改还没学的部分：已完成阶段和任务原样保留。';
+  if (adjustMode.value === 'auto') return '先看 AI 建议，确认后才改路径。';
+  return '选择调整方式。已完成的课堂记录会留在学习历史里。';
+});
+
 const adjustPlaceholder = computed(() => {
-  if (adjustMode.value === 'rebuild') return '例如：这条路径排得太短/太偏理论，我想按……重新规划整条路径。';
-  if (adjustMode.value === 'reshape') return '例如：第二阶段太难，想先补基础，也可以从第 3 阶段起多安排实操……';
-  if (adjustMode.value === 'auto') return '例如：最近学得吃力，卡在……。先帮我看看怎么调，再决定。';
+  if (adjustMode.value === 'rebuild') return '例如：排得太短、太偏理论，我想多安排实操。';
+  if (adjustMode.value === 'reshape') return '例如：第二阶段太难，想先补基础；或从第 3 阶段起多安排实操。';
+  if (adjustMode.value === 'auto') return '例如：最近学得吃力，卡在……。先帮我看看怎么调。';
   return '说说你想怎么调整……';
 });
 
@@ -1298,7 +1318,10 @@ async function runAdjustIntent(mode: NonNullable<AdjustMode>, t: string, fromSta
     // 整条重建：显式声明覆盖当前规划（有进度时后端放行 replace-path）
     res = await learningAPI.regeneratePath(pathId.value, t, { mode: 'rebuild-all', ...(cleared ? { clearedSessionIds: cleared } : {}) }) as unknown as { message?: string; data?: any };
     adjustDialogOpen.value = false;
-    toast.success(res?.message || '正在按你的说明重新规划整条路径');
+    // 空说明是「按原目标重排」，不能再提示“按你的说明”，否则用户没写也会被安上一句说明。
+    toast.success(t.trim()
+      ? (res?.message || '正在按你的说明重新规划整条路径')
+      : '正在按原目标重新规划整条路径');
     schedulePoll();
     setTimeout(() => { load(true); }, 1500);
   } else if (mode === 'reshape') {
@@ -1314,12 +1337,12 @@ async function runAdjustIntent(mode: NonNullable<AdjustMode>, t: string, fromSta
       schedulePoll();
       setTimeout(() => { load(true); }, 1500);
     } else if (status === 'redesigned-stage') {
-      toast.success(res?.message || '已按你的说明调整后续阶段');
+      toast.success(res?.message || '已按你的说明调整当前阶段');
       setTimeout(() => { load(true); }, 1500);
     } else if (status === 'awaiting-confirmation') {
       toast.info('调整方案已生成，需确认后生效');
     } else {
-      toast.success(res?.message || '正在按你的说明重新规划');
+      toast.success(res?.message || '正在调整当前阶段');
       schedulePoll();
       setTimeout(() => { load(true); }, 1500);
     }
@@ -1382,9 +1405,10 @@ async function submitAdjust() {
   const t = adjustText.value.trim();
   const mode = adjustMode.value;
   if (!mode) return;
-  if (!t) {
-    // 不再用 disabled 挡：可点但给明确提示，避免「点了没反应」的困惑
-    toast.info('先写几句想怎么调整，再点确认。');
+  if (!t && mode !== 'rebuild') {
+    // 校验提示就在输入框下方：不再飘右上角 toast，把焦点送回输入框即可。
+    // 「整条重新规划」允许空说明——直接按原目标重排（后端 rebuild-all 的默认 reason）。
+    adjustTextarea.value?.focus();
     return;
   }
   if (adjusting.value) return;
@@ -1713,11 +1737,25 @@ function toggleStage(si: number) {
 
 /* ---------- 进度 ---------- */
 const allTasks = computed(() => stages.value.flatMap((s) => stageTasks(s)));
+/** 已备好课的分钟汇总：与「已备好」同口径，不能拿整条路径总学时冒充已生成部分 */
+const preparedMinutes = computed(() => allTasks.value.reduce(
+  (sum, task) => sum + (Number(task.estimatedMinutes) || 0),
+  0,
+));
+const preparedHours = computed(() => (preparedMinutes.value > 0
+  ? Math.max(0.1, Math.round(preparedMinutes.value / 6) / 10)
+  : 0));
 const hasFlexibleTasks = computed(() => allTasks.value.some((t) => t.adjustability === 'flexible'));
 const hiddenFlexibleCount = computed(() => (coreOnly.value
   ? allTasks.value.filter((t) => t.adjustability === 'flexible').length
   : 0));
 const finalDeliverable = computed(() => {
+  // 2026-11-20：顶栏「走完会拿到」要读末阶段 goal，而不是 goal 层最初确认的
+  // firstDeliverable——后者是路径级最早可见成果，路径生成后可能与末阶段验收脱节
+  // （语法路径：顶部写 5 个句子，末阶段已是 10 个含从句与非谓语的长句）。
+  const lastStage = stages.value[stages.value.length - 1];
+  const lastGoal = typeof lastStage?.goal === 'string' ? lastStage.goal.trim() : '';
+  if (lastGoal) return lastGoal;
   const value = path.value?.firstDeliverable;
   return typeof value === 'string' && value.trim() ? value.trim() : '';
 });
@@ -1809,10 +1847,10 @@ const sceneRows = computed(() => {
   const s = sceneSummary.value;
   if (!s || typeof s === 'string') return [];
   const rows: Array<{ label: string; value: string }> = [];
-  // 该字段是**整条路径**的首份产出（confirmedProposal.first_deliverable），
-  // 与目标对话预览里同一字段的「预计产出」对齐；旧标签「第一阶段产出」会让人
-  // 以为它是阶段 1 的产出（走查 P6）
-  if (s.firstDeliverable) rows.push({ label: '预计产出', value: String(s.firstDeliverable) });
+  // 预计产出优先与「走完会拿到」同源（末阶段 goal）；旧路径没有末阶段 goal 时，
+  // 才回落到 goal 层 confirmedProposal.firstDeliverable。避免同页出现两个不同的“产出”。
+  const deliverable = finalDeliverable.value || (s.firstDeliverable ? String(s.firstDeliverable) : '');
+  if (deliverable) rows.push({ label: '预计产出', value: deliverable });
   if (s.targetState) rows.push({ label: '目标状态', value: String(s.targetState) });
   // 规划焦点（confirmedProposal.keyStages）与左侧阶段列表重复，不再在此展示
   // 注意：excludedScope/「先不学」不展示——不学的内容无需让用户确认，避免不必要的顾虑（与 goal 预览一致）
@@ -2235,9 +2273,30 @@ onBeforeUnmount(() => {
 .hero__deliverable p { margin: 4px 0 0; font-size: 13.5px; line-height: 1.55; }
 .hero__deliverable small { display: block; margin-top: 3px; font-size: var(--mk-fs-micro); color: var(--faint); }
 .badge--topology { background: transparent; border: 1px dashed color-mix(in srgb, var(--blue) 35%, transparent); color: var(--blue-deep); }
-.stages__toolbar { display: flex; align-items: center; gap: 10px; padding: 2px 2px 8px; }
-.stages__toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
-.stages__toolbar small { font-size: var(--mk-fs-micro); color: var(--faint); }
+.stages__toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 10px 12px;
+  padding: 0 2px 10px;
+}
+.stages__toolbar-title {
+  display: inline-flex; align-items: baseline; gap: 8px;
+  font-size: 13px; font-weight: 800; color: var(--ink);
+}
+.stages__toolbar-title small { font-size: 12px; font-weight: 500; color: var(--faint); }
+.stages__toolbar-actions { display: inline-flex; align-items: center; gap: 10px; margin-left: auto; flex-wrap: wrap; }
+.stages__toggle {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--mk-radius-md);
+  background: var(--surface);
+  font-size: 12.5px; color: var(--muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.stages__toggle:hover { color: var(--ink); border-color: color-mix(in srgb, var(--blue) 35%, var(--line)); }
+.stages__toggle input { accent-color: var(--blue); }
+.stages__toolbar-note { font-size: var(--mk-fs-micro); color: var(--faint); }
 .stage__pending { margin: 6px 2px 2px; padding: 10px 12px; border-radius: var(--mk-radius-md); font-size: 12.5px; color: var(--faint); background: color-mix(in srgb, var(--ink) 4%, transparent); }
 .task__body strong { display: block; font-size: 13.5px; }
 .task__body small { display: block; margin-top: 2px; font-size: 12px; color: var(--faint); }

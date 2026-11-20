@@ -28,7 +28,7 @@ jest.mock('../../utils/logger', () => ({
 jest.mock('../../skills', () => ({ executeSkill: jest.fn(), virtualLearnerPathEvaluatorDefinition: {} }))
 jest.mock('../path.coordinator', () => ({ __esModule: true, default: {} }))
 
-import { waitForPathReady } from '../simulation.path-phase'
+import { waitForPathReady, buildGoalPathRequest } from '../simulation.path-phase'
 import { logger } from '../../utils/logger'
 
 const ctx = { getVirtualSession: (...a: unknown[]) => mockGetVirtualSession(...a) } as never
@@ -139,5 +139,41 @@ describe('waitForPathReady：续期与文案', () => {
       ready: false,
       reason: '路径生成未产出里程碑（path status=failed）'
     })
+  })
+})
+
+// Phase 2（2026-11-20）：澄清契约必须从 Goal 的 collectedData 进入仿真 Path 请求，
+// 否则 enforce 下的 Path 预检/MilestoneRationale 审计在 20 例仿真里等于不存在。
+describe('buildGoalPathRequest · 澄清契约下传', () => {
+  const clarification = {
+    core: { question: '学习科学与 CLT 的关系', evidence: ['和 clt 之间关系'] },
+    baseline: { known: [], unknown: [], misconceptions: [], evidence: [] },
+    stopping: { kind: 'explain', scope: 'class', evidence: 'platform', statement: '能解释两者关系' },
+    assumptions: [],
+    blockingNeed: 'none',
+    unknowns: [],
+  }
+
+  const session = {
+    userId: 'u1',
+    goalConversationId: 'gc1',
+    virtual_learner_profiles: { profile: '{}' },
+    stageResults: null,
+  } as never
+
+  it('collectedData.clarification → request.clarification', () => {
+    const { request } = buildGoalPathRequest(session, {
+      description: '想弄清学习科学与 CLT 的关系',
+      collectedData: JSON.stringify({ clarification }),
+    })
+    expect(request.clarification).toEqual(clarification)
+  })
+
+  it('旧会话无契约 → null（行为回滚到标签链路）', () => {
+    const { request } = buildGoalPathRequest(session, {
+      description: '想弄清学习科学与 CLT 的关系',
+      collectedData: JSON.stringify({}),
+    })
+    expect(request.clarification).toBeNull()
   })
 })

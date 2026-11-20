@@ -218,6 +218,10 @@ export const SANDBOX_EXTRA_KEYS: Record<string, string[]> = {
     'memoryRecall',
     'persona',
     'turnSequence',
+    // D1（2026-11-19）：学习者离场语义需要「本节已发生回合数 / 软预算」作为时间感输入，
+    // assisted（simulation.learn-phase）与 blackbox（blackbox-runner）直接注入。
+    'turnIndex',
+    'turnBudget',
     'existingKnown',
     'existingStruggle',
   ],

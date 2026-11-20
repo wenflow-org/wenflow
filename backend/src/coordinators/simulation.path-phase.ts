@@ -274,6 +274,9 @@ export function buildGoalPathRequest(
       collected: collectedData.collected || {},
     }),
     conversationHistory: (Array.isArray(collectedData.messages) ? collectedData.messages : []) as ConversationHistoryItem[],
+    // Phase 2：Goal 服务会把澄清契约落进 collectedData；仿真链路必须与真人 goal 链路同口径下传，
+    // 否则 enforce 下的 Path 预检/MilestoneRationale 审计在仿真里等于不存在。
+    clarification: (collectedData.clarification as GoalPathRequest['clarification']) ?? null,
     systemPromptOverrides: pathAgentOverrides ? { pathAgent: pathAgentOverrides } : undefined
   };
   return { request, rawGoalSource: pathRawGoal.source };

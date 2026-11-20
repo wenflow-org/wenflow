@@ -40,6 +40,8 @@ import { assembleGoalHandoff } from '../../services/field-dispatcher';
 import { buildCompletedConversationResult, buildHardBlockMessage, buildHardBlockResult, PATH_COMPLETED_USER_VISIBLE, PATH_GENERATING_USER_VISIBLE, resolveConversationUserVisible, resolvePathCompletionUserVisible } from './goal-conversation.exit';
 import { getPathCompletionProjection } from './goal-conversation.path-projection';
 import { buildGoalConversationExt } from './goal-conversation.ext';
+import { buildClarificationShadowObservation } from './goal-clarification-contract';
+import { enforceClarificationGate } from './goal-clarification-gate';
 import learningService from './learning.service';
 import { bindGeneratingPath, kickPathGeneration, rejudgeHardBlockedCompletion, type GoalConversationRejudgeDeps } from './goal-conversation-rejudge';
 import { createDomainEvent } from '../../events/contracts';
@@ -184,6 +186,8 @@ class GoalConversationService {
     confidenceScores?: any;
     motivationSignal?: any;
     miFrames?: any;
+    clarification?: any;
+    nextAction?: 'ask' | 'propose' | 'close';
   } {
     const ext = internal?.ext?.goalConversation || {};
     return {
@@ -195,8 +199,31 @@ class GoalConversationService {
       confirmedProposal: this.withPlannedOutline(ext.confirmedProposal),
       confidenceScores: ext.confidenceScores,
       motivationSignal: ext.motivationSignal,
-      miFrames: ext.miFrames
+      miFrames: ext.miFrames,
+      clarification: ext.clarification,
+      nextAction: ext.nextAction
     };
+  }
+
+  /**
+   * 澄清契约 shadow（2026-11-20 Phase 1）：只记录「模型给了提案、但契约说还缺
+   * 第一站/停机条件级信息」的轮次，不改写回复、不改阶段、不改持久化。
+   * 用于在真实流量上验证「分型跑偏是否会被新契约拦住」，为 Phase 2 提供证据。
+   */
+  private logClarificationShadow(
+    conversationId: string,
+    stage: string,
+    goalExt: { clarification?: any; nextAction?: string; confirmedProposal?: any }
+  ): void {
+    const observation = buildClarificationShadowObservation({
+      conversationId,
+      stage,
+      clarification: goalExt?.clarification,
+      nextAction: goalExt?.nextAction,
+      confirmedProposal: goalExt?.confirmedProposal,
+    });
+    if (!observation) return;
+    logger.warn('[goal-clarification-shadow] 本应拦截的提案（未改变用户可见行为）', observation);
   }
 
   /**
@@ -320,6 +347,7 @@ class GoalConversationService {
       structuredData: goalExt.structuredData !== undefined ? goalExt.structuredData : (fallback?.structuredData ?? undefined),
       confidenceScores: goalExt.confidenceScores !== undefined ? goalExt.confidenceScores : (fallback?.confidenceScores ?? undefined)
     };
+    this.logClarificationShadow(conversationId, stage, resolvedGoalExt);
     return {
       userVisible: overrides?.userVisible ?? aiResponse?.userVisible ?? '',
       runtimeEnvelope: aiResponse?.runtimeEnvelope || null,
@@ -335,7 +363,10 @@ class GoalConversationService {
           goalConversation: {
             ...resolvedGoalExt,
             // 分诊结论（纯函数）：随结果透出，供虚拟会话遥测统计「分诊命中率」
-            responseTriage: triageGoalResponse(resolvedGoalExt.understanding)
+            responseTriage: triageGoalResponse({
+              ...resolvedGoalExt.understanding,
+              clarification: resolvedGoalExt.clarification,
+            })
           }
         }
       }
@@ -473,6 +504,7 @@ class GoalConversationService {
           goalConversation: buildGoalConversationExt({
             understanding: data.understanding,
             collected: data.collected,
+            clarification: data.clarification,
           })
         }
       }
@@ -568,10 +600,15 @@ class GoalConversationService {
         this.throwStructuredOutputInvalid(this.withConversationId(aiResponse, conversation.id));
       }
 
-      const responseWithConversationId = this.withConversationId(aiResponse, conversation.id);
+      let responseWithConversationId = this.withConversationId(aiResponse, conversation.id);
+      // Phase 3：契约不允许提案时，把本轮改写成澄清回合（默认开启，GOAL_CLARIFICATION_ENFORCE=0 回滚）。
+      responseWithConversationId = enforceClarificationGate(responseWithConversationId, {
+        conversationId: conversation.id,
+        onBlocked: (info) => logger.warn('[goal-clarification-enforce] 提案已拦截并改写为澄清提问', info),
+      });
 
-      const openingGoalExt = this.getGoalExt(aiResponse.internal);
-      await this.saveMessage(conversation.id, 'ai', aiResponse.userVisible, null, { quickReplies: openingGoalExt.quickReplies });
+      const openingGoalExt = this.getGoalExt(responseWithConversationId.internal);
+      await this.saveMessage(conversation.id, 'ai', responseWithConversationId.userVisible, null, { quickReplies: openingGoalExt.quickReplies });
 
       // 更新收集的数据（stage 优先取 runtimeEnvelope.phase）
       await this.updateCollectedData(conversation.id, responseWithConversationId);
@@ -738,7 +775,7 @@ async continueConversation(
       const aiResponse = await this.callAI(conversation.id, userReply, false, userId, aiOptions, {
         excludeTrailingUserInput: true
       });
-      const responseWithConversationId = this.withConversationId(aiResponse, conversationId);
+      let responseWithConversationId = this.withConversationId(aiResponse, conversationId);
 
       if (!this.getStructuredOutputValid(aiResponse)) {
         // 用户消息已落库（上方），AI 回复不落库 → 422 恢复信封刷新后对话上下文不丢
@@ -751,8 +788,13 @@ async continueConversation(
         this.throwStructuredOutputInvalid(responseWithConversationId);
       }
 
-      const replyGoalExt = this.getGoalExt(aiResponse.internal);
-      await this.saveMessage(conversation.id, 'ai', aiResponse.userVisible, null, { quickReplies: replyGoalExt.quickReplies });
+      responseWithConversationId = enforceClarificationGate(responseWithConversationId, {
+        conversationId,
+        onBlocked: (info) => logger.warn('[goal-clarification-enforce] 提案已拦截并改写为澄清提问', info),
+      });
+
+      const replyGoalExt = this.getGoalExt(responseWithConversationId.internal);
+      await this.saveMessage(conversation.id, 'ai', responseWithConversationId.userVisible, null, { quickReplies: replyGoalExt.quickReplies });
 
       // 更新收集的数据（stage 优先取 runtimeEnvelope.phase）
       const persistedData = await this.updateCollectedData(conversation.id, responseWithConversationId);
@@ -881,7 +923,10 @@ async continueConversation(
     // ── 硬阻断（2026-10-28 R4 外部评审 P0）：referral / emotional_support /
     //    not_judgeable×physical_internalized 三类结论，不依赖 advisory/gated、也不允许
     //    「再次确认」放行。否则 F96/F97 会在分诊判 referral 后仍生成 5.3h/26.4h 路径。
-    const hardBlockTriage = storedTriage ?? triageGoalResponse(understanding);
+    const hardBlockTriage = storedTriage ?? triageGoalResponse({
+      ...understanding,
+      clarification: (data as Record<string, unknown>).clarification,
+    });
     if (isHardBlockResponseTriage(hardBlockTriage, understanding)) {
       // #213：拒绝文案随终局落库（user 回合 + ai 拒绝回合同笔原子写入）。此前文案
       // 只进返回值，重载后用户只看到自己那句确认，无从知道为什么没生成路径。
@@ -1314,7 +1359,10 @@ async continueConversation(
     // 注意：分诊结论**只落库/遥测**，不写进面向用户的 reply——提示词明令 hidden 信号不得向用户
     // 宣布（primary_block_type / support_need 等），平台侧替它宣布会与之反向冲突。
     // 需要用户显式知情时走 gated 模式（那是产品化的确认闸门，不是静默附加）。
-    const responseTriage = triageGoalResponse(data.understanding);
+    const responseTriage = triageGoalResponse({
+      ...data.understanding,
+      clarification: (data as Record<string, unknown>).clarification,
+    });
     data[RESPONSE_TRIAGE_KEY] = responseTriage;
 
     // 保存 stage（优先 envelope.phase）
@@ -1336,6 +1384,15 @@ async continueConversation(
 
     if (goalExt.confirmedProposal !== undefined) {
       data.confirmedProposal = goalExt.confirmedProposal;
+    }
+
+    // 澄清契约（2026-11-20 Phase 2）：随 collectedData 持久化，Path 生成时直接读取；
+    // nextAction 只作诊断留痕（enforce 模式下会被改写为 ask）。
+    if (goalExt.clarification !== undefined) {
+      data.clarification = goalExt.clarification;
+    }
+    if (goalExt.nextAction !== undefined) {
+      data.nextAction = goalExt.nextAction;
     }
 
     // 状态机自洽（2026-11-17）：已有可确认方案、且用户至少说过 2 轮时，stage 不能再停在
@@ -1428,7 +1485,10 @@ async continueConversation(
     const confirmedProposal = goalExt.confirmedProposal ?? data.confirmedProposal ?? null;
     // 响应分诊（纯函数）：透传进 GoalPathRequest.responseTriage（仅类型/透传，不改 path 生成逻辑）。
     const responseTriage = resolveResponseTriageFromCollectedData(data)
-      || triageGoalResponse(understanding);
+      || triageGoalResponse({
+        ...understanding,
+        clarification: goalExt.clarification ?? (data as Record<string, unknown>).clarification,
+      });
     // 路径体量分诊（2026-10-29）：把 understanding 的阻塞类型 × 复现性翻译成 Path 层
     // 真正消费的 `{ transferable, recurrence }`。此前只算 responseTriage（mode 轴），
     // triage 永不为空但 hints 永远收不到 ⇒「低可迁移 × 一次性」钳制在生产链路空转。
@@ -1504,6 +1564,8 @@ async continueConversation(
       prerequisiteCheckResults: resolvePrerequisiteCheckResultsFromUnderstanding(understanding),
       // 响应分诊结论（advisory 默认；path 侧仅类型透传，不改变生成逻辑）
       responseTriage,
+      // 澄清契约（2026-11-20 Phase 2）：Goal 的第一性产物，Path 直接读它而不是身份标签。
+      clarification: goalExt.clarification ?? (data as any)?.clarification ?? null,
       // 体量分诊（transferable × recurrence）：path.coordinator 写进 normalizedInput.triage，
       // 由 derivePlanningHints 消费；缺失时下游行为与今天完全一致。
       triageHint,
@@ -1684,7 +1746,7 @@ async continueConversation(
             isCompleted: true
           },
           ext: {
-            goalConversation: buildGoalConversationExt({ understanding, collected })
+            goalConversation: buildGoalConversationExt({ understanding, collected, clarification: data.clarification })
           }
         }
       }, systemPromptOverrides);
@@ -1717,7 +1779,7 @@ async continueConversation(
             learningPath
           },
           ext: {
-            goalConversation: buildGoalConversationExt({ understanding, collected })
+            goalConversation: buildGoalConversationExt({ understanding, collected, clarification: data.clarification })
           }
         }
       };
@@ -1994,6 +2056,9 @@ export function writeProposalTriageSnapshot(
 ): void {
   if (stage !== 'proposing') return
   if (data[RESPONSE_TRIAGE_KEY] || data[RESPONSE_TRIAGE_PENDING_KEY]) return
-  const proposalTriage = triageGoalResponse(data.understanding)
+  const proposalTriage = triageGoalResponse({
+    ...data.understanding,
+    clarification: (data as Record<string, unknown>).clarification,
+  })
   if (proposalTriage) data[RESPONSE_TRIAGE_KEY] = proposalTriage
 }

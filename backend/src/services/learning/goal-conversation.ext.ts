@@ -15,6 +15,8 @@ export interface GoalConversationExtInput {
   nextQuestions?: string[];
   quickReplies?: string[];
   collected?: Record<string, unknown> | null;
+  /** Phase 4：澄清契约（存在时分诊不复读身份标签） */
+  clarification?: unknown;
   /** 显式分诊结论（如落库值 / 待确认提议）；缺省按 understanding 纯函数推导 */
   responseTriage?: ResponseTriage | null;
   /** 分支特有字段（confirmedProposal / structuredData 等） */
@@ -27,7 +29,10 @@ export function buildGoalConversationExt(input: GoalConversationExtInput = {}) {
     nextQuestions: input.nextQuestions || [],
     quickReplies: input.quickReplies || [],
     ...(input.extra || {}),
-    responseTriage: input.responseTriage ?? triageGoalResponse(input.understanding || {}),
+    responseTriage: input.responseTriage ?? triageGoalResponse({
+      ...(input.understanding || {}),
+      clarification: input.clarification,
+    }),
     collected: input.collected || {},
   };
 }

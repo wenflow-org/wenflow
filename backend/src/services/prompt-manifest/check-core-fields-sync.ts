@@ -162,6 +162,16 @@ export const ORPHAN_EXEMPT_FIELDS: ReadonlyArray<{ skillId: string; field: strin
     evidence: '2026-09-18 P1-3：平台出题时的作答草案，由 virtual-lab/blackbox-runner 直接读取用于提交检查点，不进编排数据面路由',
   },
   {
+    skillId: 'simulation-learn-turn',
+    field: 'shouldEnd',
+    evidence: '2026-11-19 D1 离场语义：assisted（simulation.learn-phase.ts:1489 stopTaskForLearnerExit）与 blackbox（blackbox-runner.ts:1183 abandon）直接读取，不进编排数据面路由',
+  },
+  {
+    skillId: 'simulation-learn-turn',
+    field: 'endReason',
+    evidence: '2026-11-19 D1 离场语义：与 shouldEnd 同轮输出，仅用于停课原因留痕（taskRuntime.reason / abandon reason），不进编排数据面路由',
+  },
+  {
     skillId: 'simulation-goal-dialogue',
     field: 'shouldEnd',
     evidence: '2026-11-11 离场语义：协调器 executeSingleStep 直接读取以提前收尾 Goal 回合（learner-ended），不进入编排数据面路由',
@@ -187,6 +197,16 @@ export const ORPHAN_EXEMPT_FIELDS: ReadonlyArray<{ skillId: string; field: strin
     skillId: 'teaching-turn',
     field: 'figure',
     evidence: 'prompts/core/teaching-turn.yaml:198 位置线图结构化 spec（2026-09-27 Scope B）：handler 侧 normalizeFigure 直通前端渲染（skills/teaching-turn/index.ts:812，index.ts:759 随消息下发），不进编排数据面路由',
+  },
+  {
+    skillId: 'goal-conversation',
+    field: 'clarification',
+    evidence: '2026-11-20 Phase 1 澄清契约 shadow：goal-conversation.service.logClarificationShadow 直接读取并与 canProposeClarification 对账，仅记录「本应拦截的提案」，不进编排数据面路由',
+  },
+  {
+    skillId: 'goal-conversation',
+    field: 'nextAction',
+    evidence: '2026-11-20 Phase 1 澄清契约 shadow：与 clarification 同轮输出，仅用于 shadow 日志判断「模型是否认为本轮该提案」，不参与阶段推进与数据面路由',
   },
 ];
 

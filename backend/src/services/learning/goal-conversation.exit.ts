@@ -17,6 +17,8 @@ export interface GoalExitContext {
   understanding: Record<string, unknown>;
   confidence: number;
   collected: Record<string, unknown>;
+  /** Phase 4：澄清契约（存在时分诊不复读身份标签） */
+  clarification?: unknown;
 }
 
 export interface HardBlockMessageOptions {
@@ -72,6 +74,7 @@ export function buildHardBlockResult(ctx: GoalExitContext, triage: ResponseTriag
         goalConversation: buildGoalConversationExt({
           understanding: ctx.understanding,
           collected: ctx.collected,
+          clarification: ctx.clarification,
           responseTriage: triage,
         }),
       },
@@ -136,6 +139,7 @@ export async function buildCompletedConversationResult(input: {
         goalConversation: buildGoalConversationExt({
           understanding: data.understanding,
           collected: data.collected,
+          clarification: data.clarification,
           // #251③：优先用落库的分诊值；缺失时由 helper 按 understanding 纯函数兜底
           responseTriage: triage,
         }),
