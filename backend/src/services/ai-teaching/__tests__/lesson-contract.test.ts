@@ -294,6 +294,19 @@ describe('课末独立终检（exit ticket）', () => {
     });
     expect(passed.met).toBe(true);
     expect(passed.exitTicket).toMatchObject({ asked: true, passed: true, judgedBy: 'code' });
+
+    // 失败终检的 detail 可能带答案键，report.reasons 会直接回给客户端 → 不能泄题
+    const failed = buildLessonReport({
+      contract,
+      evaluation,
+      evidence,
+      branchState: normalizeBranchState(null),
+      teachingTurns: 5,
+      exitTicket: ticket({ status: 'failed', passed: false, detail: '选项集合不一致（正确 A，作答 空）' }),
+    });
+    expect(failed.met).toBe(false);
+    expect(failed.reasons.join(' ')).toContain('课末终检未通过：识别工具返回');
+    expect(failed.reasons.join(' ')).not.toContain('正确 A');
   });
 
   it('选择题作答解析：选项字母 / 选项原文都认，多选取全部命中', () => {
