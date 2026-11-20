@@ -493,7 +493,6 @@
               <span class="reply__text">{{ q }}</span>
             </button>
           </div>
-          <p v-if="allKpMastered" class="replies__nudge">本节知识点已全部过完，点「完成本节」即可完成这节课。</p>
         </div>
 
         <!-- 知识点确认（动态行动台）：AI 讲完一个点、给出 confirmCheck 时出现 -->
@@ -597,7 +596,7 @@
               type="button"
               class="checkpoint__peer"
               @click="openPeerByUser"
-            >问小启</button>
+            >问伴学</button>
           </div>
           <!-- 越过小测的后果说明（2026-11-06）：出题闸门在后端是硬拦
                （teaching-checkpoint.ts「已有 pendingCheckpoint 就不再出题」），
@@ -806,18 +805,19 @@
       </section>
     </div>
 
-    <!-- 伴学浮窗：小启（独立角色，暖橙系）；不占主对话区，可回复、可收起成悬浮球 -->
+    <!-- 伴学浮窗：问流伴学（平台蓝，独立于导师对话）；不占主对话区，可回复、可收起成悬浮球 -->
     <div v-if="peerOpen && peerItems.length" class="peer-backdrop" aria-hidden="true" @click="minimizePeer"></div>
     <Transition name="peer-pop">
-      <div v-if="peerOpen && peerItems.length" class="peerdock" role="dialog" aria-label="小启伴学" aria-live="polite">
+      <div v-if="peerOpen && peerItems.length" class="peerdock" role="dialog" aria-label="问流伴学" aria-live="polite">
         <div class="peerdock__head">
           <span class="peerdock__avatar" aria-hidden="true">
-            <span class="peerdock__avatar-q">Q</span>
+            <svg class="peerdock__avatar-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z"/>
+            </svg>
           </span>
           <div class="peerdock__title">
             <span class="peerdock__name">
-              <strong>小启</strong>
-              <span class="peerdock__tag">伴学伙伴</span>
+              <strong>问流伴学</strong>
             </span>
             <span class="peerdock__status">
               <i class="peerdock__status-dot"></i>{{ peerHeadline }}
@@ -854,7 +854,7 @@
             v-model="peerInput"
             type="text"
             maxlength="500"
-            placeholder="和小启聊聊你的卡点…"
+            placeholder="和伴学聊聊你的卡点…"
             @keydown.enter.exact.prevent="sendPeer"
           />
           <button
@@ -875,13 +875,15 @@
       type="button"
       class="peerfab"
       :class="{ 'peerfab--quiz': !!checkpoint, 'peerfab--gate': !!settleBlock, 'peerfab--ready': lessonReadyToFinish }"
-      aria-label="打开小启伴学"
+      aria-label="打开问流伴学"
       @click="openPeerByUser"
     >
-      <span class="peerfab__q" aria-hidden="true">Q</span>
+      <svg class="peerfab__icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z"/>
+      </svg>
       <span class="peerfab__label" aria-hidden="true">伴学</span>
       <i v-if="peerUnread" class="peerfab__dot"></i>
-      <span v-if="peerUnread" class="peerfab__hint" role="status">小启有新消息</span>
+      <span v-if="peerUnread" class="peerfab__hint" role="status">伴学有新消息</span>
     </button>
     <!-- 教师补充材料弹层（批次 E） -->
     <div v-if="supplementPreview.open" class="supmodal" @click.self="closeSupplement">
@@ -1904,7 +1906,7 @@ function pulseCheckpoint() {
   checkpointEl.value?.scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
 
-/* ---------- 伴学浮窗（角色「小启」，dock 式不占主对话区） ---------- */
+/* ---------- 伴学浮窗（角色「伴学」，dock 式不占主对话区） ---------- */
 const {
   peerOpen, peerUnread, peerItems, peerInput, peerSending, peerScrollEl,
   peerHeadline, openPeerByUser, openPeerByTrigger, minimizePeer,
@@ -2225,7 +2227,7 @@ async function boot() {
               if (restoredReplies.length) openingQuestion.value = String(openingAnalysis.question);
               else msgs.value.push({ role: 'ai', text: String(openingAnalysis.question), time: nowTime() });
             }
-            // 伴学历史回填进小启浮窗（刷新后不丢失）：
+            // 伴学历史回填进伴学浮窗（刷新后不丢失）：
             // ① 主动伴学 = peer 标记消息；② 自动触发伴学 = assistant 消息内嵌的 peerMessage
             const peerRestored: Array<{ role: 'me' | 'peer'; text: string; strategy: string | null }> = [];
             for (const m of detail.messages) {
@@ -2639,7 +2641,7 @@ async function applyTurnResult(r: Record<string, any>, aiMsg?: { role: string; t
       pushMsg({ role: 'ai', text: EMPTY_REPLY_TEXT, time: nowTime() });
     }
   }
-  // 伴学触发：进独立浮动窗，不占主对话区（角色小启，暖橙系）。
+  // 伴学触发：进独立浮动窗，不占主对话区（平台蓝，和课堂主按钮同色系）。
   // 频控：冷却期（60s）内或用户手动收起过 → 仅累计未读红点，不强制展开，避免打扰循环
   if (r.peerTriggered && r.peerMessage) {
     pushPeerItem({
@@ -3625,6 +3627,8 @@ onBeforeUnmount(() => {
 }
 /* hover 只变色，不抬升（translateX(-50%) 是居中必须保留的那一半） */
 .tutor__jump-bottom:hover { color: var(--blue); transform: translateX(-50%); }
+/* 结束提示条占住输入区上方：回到底部浮标同步抬高，避免压在提示文案上 */
+.tutor:has(> .ready) .tutor__jump-bottom { bottom: 214px; }
 .msg { display: flex; flex-direction: column; gap: 5px; max-width: 76%; } /* 85→76：与 goal 页同口径收窄对话行（2026-09-27 用户反馈） */
 .msg--user { align-self: flex-end; align-items: flex-end; position: relative; }
 .msg--user .msg__bubble {
@@ -3865,7 +3869,7 @@ onBeforeUnmount(() => {
   animation: learn-typing 1.2s ease-in-out infinite;
 }
 
-/* ---------- 伴学浮窗（角色「小启」· 暖橙系，dock 式不占主对话区） ---------- */
+/* ---------- 伴学浮窗（问流伴学 · 平台蓝，dock 式不占主对话区） ---------- */
 /* 移动端浮窗遮罩：只在小屏出现，盖住主课堂输入区，避免双输入框/双免责声明叠罗汉 */
 .peer-backdrop { display: none; }
 .peerdock {
@@ -3876,7 +3880,7 @@ onBeforeUnmount(() => {
   display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
   max-height: 440px;
   background: var(--surface);
-  border: 1px solid color-mix(in srgb, var(--wf-color-warning) 28%, transparent);
+  border: 1px solid color-mix(in srgb, var(--blue) 22%, var(--line));
   border-radius: 16px; /* 圆角阶梯：弹层 */
   /* 原 0 16px 40px rgba(190,92,26,.14) 是橙色染色投影：按三档中性档改用 overlay
      （悬浮抽屉本就该压住滚动内容，不靠颜色分层）。 */
@@ -3890,35 +3894,19 @@ onBeforeUnmount(() => {
 .peerdock__head {
   display: flex; align-items: center; gap: 10px;
   padding: 11px 14px;
-  background: linear-gradient(135deg, rgba(255, 152, 67, 0.12), color-mix(in srgb, var(--amber) 5%, transparent));
-  border-bottom: 1px solid color-mix(in srgb, var(--wf-color-warning) 18%, transparent);
+  background: color-mix(in srgb, var(--blue) 5%, var(--surface));
+  border-bottom: 1px solid color-mix(in srgb, var(--blue) 14%, var(--line));
 }
-/* 小启 Q 头像：暖橙实底 + 白字 Q，与导师问流（蓝紫 favicon）明确区分。
-   批次 D：135deg 橙渐变 → 纯色 #d97706（对白字 4.52:1，达 WCAG AA；
-   原渐变两端 #ff9d4d / #f4791f 对白字分别只有 2.0:1 / 2.9:1，本就不达标）。 */
+/* 伴学头像：平台蓝实底 + 白色对话图标，与导师问流同一套品牌色 */
 .peerdock__avatar {
   width: 32px; height: 32px; border-radius: 50%; flex: 0 0 auto;
-  background: #d97706;
-  /* 原 0 6px 14px rgba(244,121,31,.35) 橙色发光已删：头像在 dock 卡内，不承担层级 */
+  background: var(--blue);
   display: grid; place-items: center;
 }
-.peerdock__avatar-q {
-  color: #fff; font-size: 17px; font-weight: 800; font-style: italic;
-  font-family: Georgia, 'Times New Roman', serif;
-  line-height: 1;
-  transform: translateX(-0.5px);
-}
+.peerdock__avatar-icon { color: var(--wf-text-on-primary); }
 .peerdock__title { flex: 1; min-width: 0; display: grid; gap: 2px; }
-.peerdock__name { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.peerdock__name strong { font-size: 13.5px; color: var(--ink); }
-.peerdock__tag {
-  flex: 0 0 auto;
-  font-size: 12px; font-weight: 700; color: var(--amber-ink);
-  background: color-mix(in srgb, var(--amber) 16%, transparent);
-  border: 1px solid color-mix(in srgb, var(--amber) 35%, transparent);
-  padding: 1px 7px; border-radius: var(--mk-radius-pill);
-  line-height: 1.6;
-}
+.peerdock__name { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 0 0 auto; white-space: nowrap; }
+.peerdock__name strong { font-size: 13.5px; color: var(--ink); white-space: nowrap; }
 .peerdock__status {
   display: flex; align-items: center; gap: 5px; min-width: 0;
   font-size: 12px; color: var(--muted);
@@ -3935,12 +3923,12 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
   width: 32px; height: 32px; border-radius: 50%;
   display: grid; place-items: center;
-  border: 1px solid color-mix(in srgb, var(--wf-color-warning) 26%, var(--line));
+  border: 1px solid color-mix(in srgb, var(--blue) 24%, var(--line));
   background: color-mix(in srgb, var(--surface) 70%, transparent);
   padding: 0;
   color: var(--muted); cursor: pointer;
 }
-.peerdock__min:hover { background: color-mix(in srgb, var(--wf-color-warning) 14%, transparent); color: var(--ink); }
+.peerdock__min:hover { background: color-mix(in srgb, var(--blue) 10%, transparent); color: var(--ink); }
 .peerdock__scroll {
   overflow-y: auto; padding: 14px 12px 12px;
   display: grid; gap: 10px; align-content: start;
@@ -3955,8 +3943,8 @@ onBeforeUnmount(() => {
   max-width: 100%; padding: 9px 12px;
   font-size: 13px; line-height: 1.6;
   border-radius: 4px 16px 16px 16px; /* 圆角阶梯：卡片/弹层 + 内芯尾角 */
-  background: color-mix(in srgb, var(--wf-color-warning) 9%, transparent); color: var(--ink);
-  border: 1px solid color-mix(in srgb, var(--wf-color-warning) 18%, transparent);
+  background: color-mix(in srgb, var(--blue) 6%, var(--surface)); color: var(--ink);
+  border: 1px solid color-mix(in srgb, var(--blue) 16%, var(--line));
 }
 .peerdock__msg--me .peerdock__bubble {
   border-radius: 16px 16px 4px 16px;
@@ -3975,9 +3963,9 @@ onBeforeUnmount(() => {
 .peerdock__bubble--typing i:nth-child(3) { animation-delay: 0.3s; }
 /* .peerdock__meta / .peerdock__strategy / .peerdock__msg > small / .peerdock__ai-note 已删
    （2026-11-06 走查）：伴学策略名已在浮窗副标题「随时找我聊卡点 · 类比迁移」里，每条消息
-   再挂一枚琥珀色胶囊 + 「小启 · 19:31」时间戳是同一信息的三四遍；小窗本就矮，
+   再挂一枚琥珀色胶囊 + 「伴学 · 19:31」时间戳是同一信息的三四遍；小窗本就矮，
    一屏的 1/4 被这些重复标签与免责声明吃掉。 */
-/* 小启追问快选：紧凑按钮（2026-11-06 走查）——原来是与气泡同形的大圆角长条，
+/* 伴学追问快选：紧凑按钮（2026-11-06 走查）——原来是与气泡同形的大圆角长条，
    分不清「这是消息还是能点的东西」；现在横排、8px 小圆角、带 ↳ 前缀，一眼是按钮 */
 .peerdock__follows {
   display: flex; flex-wrap: wrap; align-items: flex-start;
@@ -3986,19 +3974,19 @@ onBeforeUnmount(() => {
 .peerdock__follow {
   text-align: left;
   max-width: 100%; padding: 4px 10px;
-  font: inherit; font-size: 12px; font-weight: 600; line-height: 1.5; color: var(--amber-ink);
+  font: inherit; font-size: 12px; font-weight: 600; line-height: 1.5; color: var(--blue-deep);
   background: var(--surface);
-  border: 1px solid color-mix(in srgb, var(--wf-color-warning) 35%, transparent);
+  border: 1px solid color-mix(in srgb, var(--blue) 28%, var(--line));
   border-radius: 8px;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 .peerdock__follow::before { content: '↳'; margin-right: 5px; color: var(--faint); }
 [data-theme='dark'] .peerdock__follow {
-  background: color-mix(in srgb, var(--amber) 8%, transparent);
-  color: var(--wf-color-warning-light);
+  background: color-mix(in srgb, var(--blue) 10%, transparent);
+  color: var(--blue-ink);
 }
-.peerdock__follow:hover { background: color-mix(in srgb, var(--amber) 16%, transparent); border-color: color-mix(in srgb, var(--wf-color-warning) 55%, transparent); }
+.peerdock__follow:hover { background: color-mix(in srgb, var(--blue) 10%, transparent); border-color: color-mix(in srgb, var(--blue) 50%, var(--line)); }
 .peerdock__follow:disabled { opacity: 0.5; cursor: default; }
 /* 输入条（2026-11-06 走查）：与主界面同形——发送键内嵌在输入盒右端，圆形成一颗图标钮 */
 .peerdock__input {
@@ -4014,26 +4002,25 @@ onBeforeUnmount(() => {
   background: var(--surface);
   color: var(--ink);
 }
-.peerdock__input input:focus { border-color: color-mix(in srgb, var(--wf-color-warning) 55%, transparent); box-shadow: var(--mk-focus-ring); }
-/* 发送键：32 圆形实底（与主界面同形）。颜色用暖橙 #d97706 —— 小启的角色色。
-   （#d97706 对白字 4.52:1 达 AA；规范橙族两档都不足 AA，属已登记的令牌缺口。） */
+.peerdock__input input:focus { border-color: color-mix(in srgb, var(--blue) 50%, transparent); box-shadow: var(--mk-focus-ring); }
+/* 发送键：32 圆形实底（与主界面同形），平台蓝 */
 .peerdock__send {
   flex: 0 0 auto;
   width: 32px; height: 32px; padding: 0;
   display: grid; place-items: center;
   border: 0; border-radius: 50%;
-  color: var(--mk-on-fill); background: #d97706;
+  color: var(--wf-text-on-primary); background: var(--blue);
   cursor: pointer;
   transition: filter 0.15s ease;
 }
 .peerdock__send:hover:not(:disabled) { filter: brightness(1.05); }
 .peerdock__send:disabled { opacity: 0.45; cursor: default; }
-/* 小启悬浮球：暖橙 Q（区别于导师品牌蓝紫） */
+/* 伴学悬浮球：平台蓝，和课堂主按钮同一套品牌色 */
 .peerfab {
   position: fixed; right: 22px; bottom: 22px; z-index: 59;
-  min-width: 52px; height: 52px; padding: 0 14px 0 10px;
+  min-width: 52px; height: 52px; padding: 0 14px 0 12px;
   border: 0; border-radius: 999px;
-  background: #d97706;   /* 批次 D：135deg 橙渐变 → 纯色（白字 4.52:1，AA） */
+  background: var(--blue);
   /* 原 0 14px 32px rgba(239,125,31,.4) 橙色发光改为 overlay 中性档：
      FAB 常驻压在滚动内容之上，确实需要抬升才能读出来，这是规范允许的例外；
      但颜色必须中性，彩色光晕一律不行。 */
@@ -4044,13 +4031,9 @@ onBeforeUnmount(() => {
 }
 /* hover 不再抬升也不换投影（两态已无差别），按压反馈留给 :active */
 .peerfab:active { transform: scale(0.98); }
-.peerfab__q {
-  color: #fff; font-size: 26px; font-weight: 800; font-style: italic;
-  font-family: Georgia, 'Times New Roman', serif;
-  line-height: 1;
-}
+.peerfab__icon { color: var(--wf-text-on-primary); flex: 0 0 auto; }
 .peerfab__label {
-  color: #fff; font-size: 12.5px; font-weight: 800; letter-spacing: 0.02em;
+  color: var(--wf-text-on-primary); font-size: 12.5px; font-weight: 800; letter-spacing: 0.02em;
   line-height: 1;
 }
 .peerfab__dot {
@@ -4065,7 +4048,7 @@ onBeforeUnmount(() => {
   padding: 6px 10px;
   border-radius: var(--mk-radius-md);
   background: var(--surface);
-  border: 1px solid color-mix(in srgb, var(--wf-color-warning) 30%, var(--line));
+  border: 1px solid color-mix(in srgb, var(--blue) 28%, var(--line));
   box-shadow: var(--wf-shadow-raised);
   color: var(--ink); font-size: 12px; font-weight: 700; line-height: 1.4;
   white-space: nowrap;
@@ -4074,10 +4057,10 @@ onBeforeUnmount(() => {
 .peerfab__hint::after {
   content: ''; position: absolute; right: -5px; top: 50%; transform: translateY(-50%) rotate(45deg);
   width: 8px; height: 8px; background: var(--surface);
-  border-top: 1px solid color-mix(in srgb, var(--wf-color-warning) 30%, var(--line));
-  border-right: 1px solid color-mix(in srgb, var(--wf-color-warning) 30%, var(--line));
+  border-top: 1px solid color-mix(in srgb, var(--blue) 28%, var(--line));
+  border-right: 1px solid color-mix(in srgb, var(--blue) 28%, var(--line));
 }
-/* 浮窗遮罩：宽度档从 640 提到 1023（2026-11-06 走查）——图 7 那种「小启直接压在
+/* 浮窗遮罩：宽度档从 640 提到 1023（2026-11-06 走查）——图 7 那种「伴学直接压在
    蓝色小测卡上、两个亮边框打架」的场景出现在手机宽度，而 641–1023 这档此前完全没有遮罩 */
 @media (max-width: 1023px) {
   .peer-backdrop {
@@ -4094,20 +4077,18 @@ onBeforeUnmount(() => {
   }
   /* 移动端伴学面板收密度（2026-11-20 用户反馈「UI 太大」）：
      页头和气泡不再按桌面/平板尺寸铺满，头像缩一档、标题与状态并成一行；
-     角色标签「伴学伙伴」由悬浮球和标题「小启」承担，窄屏不再重复。 */
+     角色标签由悬浮球和标题「问流伴学」承担，窄屏不再重复。 */
   .peerdock__head { padding: 8px 12px; gap: 8px; }
   .peerdock__avatar { width: 28px; height: 28px; }
-  .peerdock__avatar-q { font-size: 15px; }
   .peerdock__title { display: flex; align-items: center; gap: 6px; }
   .peerdock__name strong { font-size: 13px; }
-  .peerdock__tag { display: none; }
   .peerdock__status { flex: 1 1 auto; min-width: 0; }
   .peerdock__scroll { padding: 10px 10px 8px; gap: 8px; }
   .peerdock__bubble { padding: 7px 10px; font-size: 12.5px; line-height: 1.55; }
   .peerdock__follow { padding: 3px 8px; }
   .peerdock__input { padding: 6px 8px; }
   .peerfab { right: 12px; bottom: calc(104px + env(safe-area-inset-bottom, 0px)); height: 44px; min-width: 44px; padding: 0 12px 0 9px; z-index: 79; }
-  /* 小测待答时不再让悬浮球抢卡片宽度：入口收进小测操作行（问小启），
+  /* 小测待答时不再让悬浮球抢卡片宽度：入口收进小测操作行（问伴学），
      卡片恢复满宽，桌面端仍保留右下角浮窗入口 */
   .peerfab--quiz { display: none; }
   /* 结算门禁常驻在输入区上方，右下角悬浮球会压住「继续学习」按钮（2026-11-20 移动端走查）。
@@ -4121,7 +4102,7 @@ onBeforeUnmount(() => {
   .checkpoint__actions .checkpoint__peer {
     display: inline-flex; align-items: center; justify-content: center;
     min-height: 44px; padding: 0 14px;
-    /* 同卡同色系（2026-11-06 走查）：小测卡已全部转蓝，这颗「问小启」不再单独用紫 */
+    /* 同卡同色系（2026-11-06 走查）：小测卡已全部转蓝，这颗「问伴学」不再单独用紫 */
     border: 1px solid color-mix(in srgb, var(--blue) 30%, var(--line));
     border-radius: var(--mk-radius-md);
     background: transparent; color: var(--blue-deep);
@@ -4130,7 +4111,6 @@ onBeforeUnmount(() => {
   .checkpoint__actions .checkpoint__peer:active { transform: scale(.98); }
   /* 最后一条消息给右下角伴学球留出空间，避免压住复制键/输入框上沿 */
   .tutor__scroll { padding-bottom: 78px; }
-  .peerfab__q { font-size: 20px; }
   .peerfab__hint { max-width: 150px; }
 }
 /* 窄屏（平板/小窗）：dock 收窄并抬高，避免与底部输入区重叠（长消息上探场景） */
@@ -4984,13 +4964,7 @@ onBeforeUnmount(() => {
   background: none;
   box-shadow: none;
 }
-/* 小测答后的完课提示行：弱化呈现，只指路不强推（完成本节按钮在头部） */
-.replies__nudge {
-  margin: 0;
-  font-size: 12.5px;
-  color: var(--mk-muted);
-}
-/* 面板头（kicker/hint）已随模板降级为 .visually-hidden 的读屏文本，样式只保底 */
+/* 小测答后的续接动作行（完课提示已上移到输入区上方的 .ready，不再在这里复读） */
 .replies__kicker {
   font-size: 12px;
   font-weight: 800;

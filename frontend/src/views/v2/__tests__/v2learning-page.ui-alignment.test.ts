@@ -163,7 +163,7 @@ describe('小测卡：蓝色系 + 紧凑', () => {
     expect(actionBlock, '跳过又从头部回到动作行了').not.toContain('skipCheckpoint');
   });
 
-  it('「问小启」与「提交」同高：移动端都走 44px 触控档', () => {
+  it('「问伴学」与「提交」同高：移动端都走 44px 触控档', () => {
     // 全局移动端规则把 .btn-primary 抬到 44；同伴学入口若留 36，就会一大一小
     const peer = ruleOf('.checkpoint__actions .checkpoint__peer');
     expect(has(peer, /min-height:\s*44px/)).toBe(true);
