@@ -148,6 +148,17 @@ describe('伴学浮窗「小启」：去掉重复标签，控件与主界面同�
       '≤1023 这档没有给小启加遮罩 → 浮窗直接压在选项/小测卡上'
     ).toBe(true);
   });
+
+  it('移动端伴学面板收密度：浮动卡片 + 单行页头，不再整面墙', () => {
+    const block = mediaOf('(max-width: 640px)').find((b) => b.includes('.peerdock__tag'));
+    expect(block, '≤640 没有伴学面板密度规则').toBeTruthy();
+    const flat = block!.replace(/\s+/g, ' ');
+    expect(flat).toContain('max-height: 64dvh');
+    expect(flat).toContain('left: 10px; right: 10px');
+    expect(flat).toContain('.peerdock__tag { display: none; }');
+    expect(flat).toContain('.peerdock__title { display: flex;');
+    expect(flat).toContain('font-size: 12.5px');
+  });
 });
 
 describe('⋯ 菜单：单行项，高度减半', () => {

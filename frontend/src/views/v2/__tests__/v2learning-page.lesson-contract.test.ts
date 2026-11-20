@@ -69,4 +69,15 @@ describe('V2LearningPage 课堂契约卡与自由支线', () => {
     // 提前离开只走 ⋯ 菜单的「结束学习（不计入完成）」
     expect(source).toContain('结束学习（不计入完成）');
   });
+
+  it('完课条件满足后在输入区上方给出结束提示，而不是只藏一颗页头按钮', () => {
+    expect(source).toContain('const lessonReadyToFinish = computed');
+    expect(source).toContain('class="ready"');
+    expect(source).toContain('本节知识点已全部掌握');
+    expect(source).toContain('可以完成本节，系统会生成本次学习总结。');
+    expect(source).toContain('class="btn-primary ready__go"');
+    // 结束提示条占住输入区上方，伴学球必须抬上去，不能压住「完成本节」
+    expect(source).toContain("'peerfab--ready': lessonReadyToFinish");
+    expect(source).toContain('.peerfab--ready { bottom:');
+  });
 });

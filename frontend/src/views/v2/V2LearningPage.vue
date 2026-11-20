@@ -636,6 +636,18 @@
           </div>
         </Transition>
 
+        <!-- 结束提示：完成条件已满足时，不让「可以收课了」只藏在页头一颗小按钮里。
+             门禁/结算浮层出现时让位，避免同一屏三条指令抢焦点。 -->
+        <Transition name="gate-pop">
+          <div v-if="lessonReadyToFinish && !settleBlock && !finalizing" class="ready" role="region" aria-label="本节完成提示">
+            <div class="ready__body">
+              <strong>{{ allKpMastered ? '本节知识点已全部掌握' : '本节目标已达成' }}</strong>
+              <span>可以完成本节，系统会生成本次学习总结。</span>
+            </div>
+            <button type="button" class="btn-primary ready__go" @click="completeAndSettle()">完成本节</button>
+          </div>
+        </Transition>
+
         <!-- 结算进度浮层：finalize 含自动关课 + wrapup LLM（实测数十秒），旧实现全程静默，
              用户只能猜点击有没有生效（#115 复测）。阶段文案来自服务端轮询，不是假进度条。 -->
         <Transition name="finish-pop">
@@ -862,7 +874,7 @@
       v-if="!peerOpen && peerItems.length"
       type="button"
       class="peerfab"
-      :class="{ 'peerfab--quiz': !!checkpoint, 'peerfab--gate': !!settleBlock }"
+      :class="{ 'peerfab--quiz': !!checkpoint, 'peerfab--gate': !!settleBlock, 'peerfab--ready': lessonReadyToFinish }"
       aria-label="打开小启伴学"
       @click="openPeerByUser"
     >
@@ -1596,6 +1608,15 @@ const canCompleteLesson = computed(() => {
   if (knowledgePoints.value.length === 0) return true
   return allKpMastered.value
 });
+/* 结束提示（2026-11-20 用户走查）：满足完课条件后只在页头多一颗「完成」，
+   对话里没有任何「这节课可以收了」的提示，学员会以为老师还在布置下一步。
+   在输入区上方给一条常驻收束条；无知识点的课不提前摆，避免开课即「已达成」。 */
+const lessonReadyToFinish = computed(() =>
+  canCompleteLesson.value
+  && !typing.value
+  && !checkpoint.value
+  && (knowledgePoints.value.length > 0 || lessonReport.value?.met === true)
+)
 
 /* 课堂契约卡（2026-11-19）：主线覆盖/独立证据/支线/停车区。契约是“最低必须完成集”，
    不是内容上限——UI 只展示达成度，不把未覆盖的探索内容判成失败。 */
@@ -4066,11 +4087,25 @@ onBeforeUnmount(() => {
 }
 @media (max-width: 640px) {
   .peerdock {
-    left: 0; right: 0; bottom: 0; width: auto; z-index: 80;
-    max-height: 78dvh;
-    border-radius: var(--mk-radius-xl) var(--mk-radius-xl) 0 0;
+    left: 10px; right: 10px; bottom: 8px; width: auto; z-index: 80;
+    max-height: 64dvh;
+    border-radius: var(--mk-radius-xl);
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
+  /* 移动端伴学面板收密度（2026-11-20 用户反馈「UI 太大」）：
+     页头和气泡不再按桌面/平板尺寸铺满，头像缩一档、标题与状态并成一行；
+     角色标签「伴学伙伴」由悬浮球和标题「小启」承担，窄屏不再重复。 */
+  .peerdock__head { padding: 8px 12px; gap: 8px; }
+  .peerdock__avatar { width: 28px; height: 28px; }
+  .peerdock__avatar-q { font-size: 15px; }
+  .peerdock__title { display: flex; align-items: center; gap: 6px; }
+  .peerdock__name strong { font-size: 13px; }
+  .peerdock__tag { display: none; }
+  .peerdock__status { flex: 1 1 auto; min-width: 0; }
+  .peerdock__scroll { padding: 10px 10px 8px; gap: 8px; }
+  .peerdock__bubble { padding: 7px 10px; font-size: 12.5px; line-height: 1.55; }
+  .peerdock__follow { padding: 3px 8px; }
+  .peerdock__input { padding: 6px 8px; }
   .peerfab { right: 12px; bottom: calc(104px + env(safe-area-inset-bottom, 0px)); height: 44px; min-width: 44px; padding: 0 12px 0 9px; z-index: 79; }
   /* 小测待答时不再让悬浮球抢卡片宽度：入口收进小测操作行（问小启），
      卡片恢复满宽，桌面端仍保留右下角浮窗入口 */
@@ -4078,6 +4113,9 @@ onBeforeUnmount(() => {
   /* 结算门禁常驻在输入区上方，右下角悬浮球会压住「继续学习」按钮（2026-11-20 移动端走查）。
      门禁是阻塞操作，收起伴学球；关掉提示后它会自动回来。 */
   .peerfab--gate { display: none; }
+  /* 结束提示条同样占据输入区上方，悬浮球原地会压住「完成本节」；
+     抬到提示条之上而不是收起——收课后伴学入口仍需可用 */
+  .peerfab--ready { bottom: calc(190px + env(safe-area-inset-bottom, 0px)); }
   /* 与「提交」同高（2026-11-20 用户反馈「一大一小」）：
      移动端全局把 .btn-primary 抬到 44 触控档，这里若仍留 36 就会在并排时矮一截。 */
   .checkpoint__actions .checkpoint__peer {
@@ -4529,6 +4567,20 @@ onBeforeUnmount(() => {
   font-size: 12px; cursor: pointer;
 }
 .gate__close:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
+/* 结束提示条：完成条件满足后常驻在输入区上方，用成功色轻提示，不抢小测/门禁 */
+.ready {
+  margin: 8px 14px 0;
+  padding: 9px 12px;
+  display: flex; align-items: center; gap: 12px;
+  border: 1px solid color-mix(in srgb, var(--green) 32%, var(--line));
+  border-radius: var(--mk-radius-lg);
+  background: color-mix(in srgb, var(--green) 7%, var(--surface));
+  flex: 0 0 auto;
+}
+.ready__body { flex: 1 1 auto; min-width: 0; display: grid; gap: 2px; }
+.ready__body strong { font-size: 13px; color: var(--ink); }
+.ready__body span { font-size: 12px; line-height: 1.5; color: var(--muted); }
+.ready__go { flex: 0 0 auto; }
 .gate-pop-enter-active, .gate-pop-leave-active { transition: opacity .18s ease, transform .18s ease; }
 .gate-pop-enter-from, .gate-pop-leave-to { opacity: 0; transform: translateY(4px); }
 
@@ -5147,6 +5199,7 @@ onBeforeUnmount(() => {
   .tutor > .tutor__resume,
   .tutor > .replies,
   .tutor > .gate,
+  .tutor > .ready,
   .tutor > .checkpoint {
     width: calc(100% - 28px);
     max-width: 760px;
@@ -5185,6 +5238,7 @@ onBeforeUnmount(() => {
   .tutor > .tutor__resume,
   .tutor > .replies,
   .tutor > .gate,
+  .tutor > .ready,
   .tutor > .checkpoint {
     max-width: 1000px;
   }
