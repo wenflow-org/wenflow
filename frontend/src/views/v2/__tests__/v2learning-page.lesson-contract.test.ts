@@ -80,4 +80,19 @@ describe('V2LearningPage 课堂契约卡与自由支线', () => {
     expect(source).toContain("'peerfab--ready': lessonReadyToFinish");
     expect(source).toContain('.peerfab--ready { bottom:');
   });
+
+  it('契约报告存在时以 met 为准：课末终检未过不提前摆完成，改提示去作答', () => {
+    expect(source).toContain('if (lessonReport.value) return lessonReport.value.met === true');
+    expect(source).toContain('const showFinishBlocked = computed');
+    expect(source).toContain('还差课末终检');
+    expect(source).toContain('继续作答最后一道独立终检题');
+    expect(source).toContain('goAnswerFinishGate');
+  });
+
+  it('恢复会话从 sessionArtifacts 回填契约/报告，刷新后不会只看 4/4 就放完成', () => {
+    expect(source).toContain('detail.state?.sessionArtifacts');
+    expect(source).toContain('artifacts.lessonContract');
+    expect(source).toContain('artifacts.lessonReport');
+    expect(source).toContain('artifacts.exitTicket');
+  });
 });

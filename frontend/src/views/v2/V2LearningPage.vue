@@ -647,6 +647,17 @@
           </div>
         </Transition>
 
+        <!-- 知识点已学完但契约未过：说明还差课末终检，而不是摆一颗点了必被 409 拒绝的「完成本节」 -->
+        <Transition name="gate-pop">
+          <div v-if="showFinishBlocked" class="ready ready--blocked" role="region" aria-label="本节完成提示">
+            <div class="ready__body">
+              <strong>{{ finishBlockedTitle }}</strong>
+              <span>{{ finishBlockedText }}</span>
+            </div>
+            <button type="button" class="btn-ghost ready__go" @click="goAnswerFinishGate">去作答</button>
+          </div>
+        </Transition>
+
         <!-- 结算进度浮层：finalize 含自动关课 + wrapup LLM（实测数十秒），旧实现全程静默，
              用户只能猜点击有没有生效（#115 复测）。阶段文案来自服务端轮询，不是假进度条。 -->
         <Transition name="finish-pop">
@@ -874,7 +885,7 @@
       v-if="!peerOpen && peerItems.length"
       type="button"
       class="peerfab"
-      :class="{ 'peerfab--quiz': !!checkpoint, 'peerfab--gate': !!settleBlock, 'peerfab--ready': lessonReadyToFinish }"
+      :class="{ 'peerfab--quiz': !!checkpoint, 'peerfab--gate': !!settleBlock, 'peerfab--ready': lessonReadyToFinish || showFinishBlocked }"
       aria-label="打开问流伴学"
       @click="openPeerByUser"
     >
@@ -1320,6 +1331,13 @@ function jumpToSettleGate() {
   composerEl.value?.focus()
 }
 
+/** 契约未过时把最后一条教师消息（通常就是课末终检题）带回视野，并把焦点交给输入框 */
+function goAnswerFinishGate() {
+  const nodes = document.querySelectorAll<HTMLElement>('.tutor__scroll .msg--ai')
+  nodes[nodes.length - 1]?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  composerEl.value?.focus({ preventScroll: true })
+}
+
 /* ---------- 结算成功后的自动进入反馈 ----------
    用户复测：结算完成后停在「本节完成」浮层，没人点就不知道反馈已经好了。
    自动进入带可见倒计时与「留在此页」——延伸学习等出口不被自动跳转吃掉。 */
@@ -1606,10 +1624,34 @@ const allKpMastered = computed(() => knowledgePoints.value.length > 0 && mastere
    两条语义分开——完成=已学完并计入进度，结束=不结算。 */
 const canCompleteLesson = computed(() => {
   if (!session.value || completed.value || extensionMode.value) return false
-  if (lessonReport.value?.met === true) return true
+  /* lessonReport 是后端契约的权威口径：它把「课末终检」也算进 met。
+     只看知识点会在终检未通过时误放「完成本节」，点下去必被 409 拒绝
+     （2026-11-20 用户实测：4/4 知识点 + 终检作答空 → 还差几步才能完成）。 */
+  if (lessonReport.value) return lessonReport.value.met === true
   if (knowledgePoints.value.length === 0) return true
   return allKpMastered.value
 });
+/* 知识点已学完但契约还没过（最常见就是课末终检没作答/没通过）：
+   在输入区上方说明还差什么，不能继续摆一颗点了必被拒的「完成本节」。 */
+const showFinishBlocked = computed(() =>
+  !!lessonReport.value
+  && lessonReport.value.met !== true
+  && knowledgePoints.value.length > 0
+  && allKpMastered.value
+  && !checkpoint.value
+  && !settleBlock.value
+  && !finalizing.value
+)
+const finishBlockedTitle = computed(() =>
+  lessonReport.value?.exitTicket?.asked && lessonReport.value.exitTicket.passed !== true
+    ? '还差课末终检'
+    : '本课契约还未达标'
+)
+const finishBlockedText = computed(() =>
+  lessonReport.value?.exitTicket?.asked && lessonReport.value.exitTicket.passed !== true
+    ? '继续作答最后一道独立终检题，通过后即可完成本节。'
+    : '继续完成课堂契约要求的检查与证据后即可完成本节。'
+)
 /* 结束提示（2026-11-20 用户走查）：满足完课条件后只在页头多一颗「完成」，
    对话里没有任何「这节课可以收了」的提示，学员会以为老师还在布置下一步。
    在输入区上方给一条常驻收束条；无知识点的课不提前摆，避免开课即「已达成」。 */
@@ -2297,6 +2339,14 @@ async function boot() {
           if (Array.isArray(detail.knowledgePoints) && detail.knowledgePoints.length) {
             knowledgePoints.value = detail.knowledgePoints;
           }
+          /* 恢复会话的契约口径（2026-11-20 用户实测）：resumed 响应不一定带
+             lessonContract/lessonReport，但 teachingState.sessionArtifacts 里一直有。
+             不补这一步，刷新后前端只看到 4/4 就摆「完成本节」，点下去必被
+             后端契约门 409 拒绝（课末终检未过）。 */
+          const artifacts = (detail.state?.sessionArtifacts || {}) as Record<string, any>;
+          if (artifacts.lessonContract) lessonContract.value = artifacts.lessonContract;
+          if (artifacts.lessonReport) lessonReport.value = artifacts.lessonReport;
+          if (artifacts.exitTicket) exitTicket.value = artifacts.exitTicket;
           session.value.revision = typeof detail.revision === 'number' ? detail.revision : session.value.revision;
         }
       } catch { /* 历史回填失败不阻断上课 */ }
@@ -4565,6 +4615,12 @@ onBeforeUnmount(() => {
 .ready__body strong { font-size: 13px; color: var(--ink); }
 .ready__body span { font-size: 12px; line-height: 1.5; color: var(--muted); }
 .ready__go { flex: 0 0 auto; }
+/* 契约未过：用暖色说明「还差终检」，但不给会失败的完成动作 */
+.ready--blocked {
+  border-color: color-mix(in srgb, var(--amber) 35%, var(--line));
+  background: color-mix(in srgb, var(--amber) 7%, var(--surface));
+}
+.ready--blocked .ready__body strong { color: var(--amber-ink); }
 .gate-pop-enter-active, .gate-pop-leave-active { transition: opacity .18s ease, transform .18s ease; }
 .gate-pop-enter-from, .gate-pop-leave-to { opacity: 0; transform: translateY(4px); }
 
