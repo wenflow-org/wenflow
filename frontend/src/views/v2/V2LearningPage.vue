@@ -4110,7 +4110,11 @@ onBeforeUnmount(() => {
   }
   .checkpoint__actions .checkpoint__peer:active { transform: scale(.98); }
   /* 最后一条消息给右下角伴学球留出空间，避免压住复制键/输入框上沿 */
-  .tutor__scroll { padding-bottom: 78px; }
+  .tutor__scroll { padding-bottom: 78px; gap: 14px; }
+  /* 触屏操作条常显，40px 点击盒在消息流里会撑出一段空白（2026-11-20 用户反馈「消息间隔太大」）：
+     点击盒尺寸不动，用上下负边距把占位收回到 ~28px，图标仍落在气泡下沿外侧。
+     选择器带 .tutor 前缀，压过后面基础档的 margin-top: 0。 */
+  .tutor .msg__content--actions > .msg-actions { margin-top: -8px; margin-bottom: -8px; }
   .peerfab__hint { max-width: 150px; }
 }
 /* 窄屏（平板/小窗）：dock 收窄并抬高，避免与底部输入区重叠（长消息上探场景） */
