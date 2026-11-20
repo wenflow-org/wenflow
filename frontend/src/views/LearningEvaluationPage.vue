@@ -113,7 +113,7 @@
           :mastered-count="knowledgePoints.filter(kp => kp.status === 'mastered').length"
           :total-count="knowledgePoints.length"
           :duration="formatTime(durationSeconds)"
-          :message-count="mainDialogueMessages.length"
+          :message-count="transcriptTotalCount"
           :wrapup="wrapup"
           :advisory="sessionDetail.advisory || null"
           :busy="completeTaskBusy"

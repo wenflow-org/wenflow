@@ -356,7 +356,14 @@ const formattedStrengths = computed(() => (evaluationHighlights.value ? formatSe
 const formattedImprovements = computed(() => (evaluationHighlights.value ? formatSentenceList(evaluationHighlights.value.improvements) : ''));
 
 const getKnowledgeTagType = (s: string) => (s === 'mastered' ? 'success' : s === 'learning' ? 'warning' : s === 'review' ? 'danger' : 'info');
-const getKnowledgeStatusLabel = (s: string) => (s === 'mastered' ? '已学会' : s === 'learning' ? '继续练习' : s === 'review' ? '建议回看' : '尚未展开');
+/* 课已结算且知识点全掌握时，AI 仍可能把某个点标成 learning（「会了但还不稳」）。
+   此时列表若还写「继续练习」，会和同一张卡头的「4/4 已学会」正面打架；
+   改口径为「建议巩固」：保留 AI 的提醒，但不否定已完成的掌握状态。 */
+const getKnowledgeStatusLabel = (s: string) => {
+  if (s === 'mastered') return '已学会';
+  if (s === 'learning') return props.masteredCount >= props.totalCount && props.totalCount > 0 ? '建议巩固' : '继续练习';
+  return s === 'review' ? '建议回看' : '尚未展开';
+};
 
 /* el-tag type → 学习组件 .status-tag 变体。色 token 与旧 EP 覆写一一对应：
    success=success-*、warning=efficient-*、danger=warning-*、info=pending-*。 */

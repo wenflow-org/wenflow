@@ -33,7 +33,12 @@ vi.mock('@/utils/projection', () => ({
   isProjectionMode: vi.fn(() => false)
 }));
 
-vi.mock('@/components/CompletionCard.vue', () => ({ default: { template: '<div class="stub-completion" />' } }));
+vi.mock('@/components/CompletionCard.vue', () => ({
+  default: {
+    props: ['messageCount'],
+    template: '<div class="stub-completion" :data-messages="messageCount" />'
+  }
+}));
 vi.mock('@/components/learning/SessionFeedbackPanel.vue', () => ({ default: { template: '<div class="stub-feedback" />' } }));
 vi.mock('@/components/TeachingFigure.vue', () => ({
   default: { props: ['figure'], template: '<div class="stub-figure" :data-kind="figure && figure.kind" />' }
@@ -89,6 +94,21 @@ describe('LearningEvaluationPage 当堂对话折叠', () => {
     /* 数量即入口（2026-11-06）：卡头不再单摆一颗静态计数胶囊，按钮文案自带条数，
        与展开的内容同源，不可能再出现「47 条消息 / 展开 54 条」 */
     expect(w.find('.evaluation-transcript-card__meta').exists()).toBe(false);
+    expect(w.find('.stub-completion').attributes('data-messages')).toBe('5');
+  });
+
+  it('卡头「学习消息」与展开按钮同源：小测回放卡也算一条，不再差 4 条', async () => {
+    getSessionDetailMock.mockResolvedValue({
+      ...detail,
+      state: {
+        checkpointHistory: [
+          { checkpointId: 'cp-1', title: '小测', question: '哪份表会错位？', type: 'single_choice', options: [], passed: true }
+        ]
+      }
+    });
+    const w = await mountReady();
+    expect(w.find('.stub-completion').attributes('data-messages')).toBe('6');
+    expect(w.find('.evaluation-transcript-toggle').text()).toContain('展开 6 条对话');
   });
 
   it('点击后在展开/收起之间切换，条目数随之变化', async () => {
