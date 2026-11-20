@@ -414,18 +414,30 @@ export function stripTrailingQuestionParagraph(reply: string): string {
   return paragraphs.join('\n\n');
 }
 
-/** 把终检题追加到本轮教师回复（学生必须能在对话里看到题面）。 */
+/** 把终检题追加到本轮教师回复（学生必须能在对话里看到题面与选项）。 */
 export function appendExitTicketToReply(
   teachingOutput: { reply?: string },
   ticket: ExitTicket,
 ): void {
   const current = String(teachingOutput.reply || '');
-  if (current.includes(ticket.question)) return;
+  const optionsBlock = (Array.isArray(ticket.options) ? ticket.options : [])
+    .filter((option) => option && typeof option.id === 'string' && typeof option.text === 'string')
+    .map((option) => `${option.id}. ${option.text}`)
+    .join('\n');
+  const choiceHint = ticket.type === 'short_answer' ? '' : '\n\n（回复选项字母即可）';
+  // 题面已由模型带出时只补选项：只问字母却不列选项，学生只能猜（2026-11-20 真课实证：
+  // 学员把正确选项写成完整句子，解析不到字母，两次都被记成「作答 空」）。
+  if (current.includes(ticket.question)) {
+    if (optionsBlock && !current.includes(optionsBlock)) {
+      teachingOutput.reply = `${current}\n\n${optionsBlock}${choiceHint}`;
+    }
+    return;
+  }
   // 终检轮只留一个待答问题：模型回复末尾若还有自己的追问，整段撤掉——
   // 两个问题同屏时学生会答前一个（2026-11-19 真课实证：两次终检都被当成「没作答」）。
   const lead = stripTrailingQuestionParagraph(current);
-  const choiceHint = ticket.type === 'short_answer' ? '' : '\n\n（回复选项字母即可）';
-  teachingOutput.reply = `${lead}${lead ? '\n\n' : ''}最后一道题（独立作答，不限时）：${ticket.question}${choiceHint}`;
+  const optionsText = optionsBlock ? `\n${optionsBlock}` : '';
+  teachingOutput.reply = `${lead}${lead ? '\n\n' : ''}最后一道题（独立作答，不限时）：${ticket.question}${optionsText}${choiceHint}`;
 }
 
 
@@ -463,6 +475,13 @@ export function buildUpdatedMessages(
   ]);
 }
 
+/** 选择题终检未识别出任何选项（多为学生用整句作答、没带字母）：算格式未识别，不算答错。 */
+export function isExitTicketFormatMiss(ticket: ExitTicket | null | undefined): boolean {
+  if (!ticket || ticket.status !== 'failed') return false;
+  if (ticket.type === 'short_answer') return false;
+  return /作答\s*空/.test(String(ticket.detail || ''));
+}
+
 /** 课末终检的确定性判分（发题后学生作答 → 更新状态/历史/裁决；含历史回填）。 */
 export function gradePendingExitTicket(input: {
   exitTicketState: ExitTicket | null;
@@ -475,15 +494,27 @@ export function gradePendingExitTicket(input: {
   attempts: number;
   verdict: { passed: boolean; detail: string | null } | null;
   graded: boolean;
+  /** 选择题没解析出选项：保持 pending，下一轮重新贴题面与选项，不消耗作答次数 */
+  formatMiss: boolean;
 } {
   let state = input.exitTicketState;
   const history: ExitTicket[] = Array.isArray(input.exitTicketHistory)
     ? (input.exitTicketHistory as ExitTicket[]).filter((item) => !!item && typeof item === 'object')
     : [];
+  // 历史里的「格式未识别」不计入失败次数；否则学生两次整句作答就把终检额度耗尽，
+  // 契约永久 met=false，结算门再也过不去（2026-11-20 真课实测死局）。
+  const countAttempts = () => history.filter((item) => !isExitTicketFormatMiss(item)).length;
+  const attempts = countAttempts();
   let verdict: { passed: boolean; detail: string | null } | null = null;
   let graded = false;
+  let formatMiss = false;
   if (state?.status === 'pending' && input.kind !== 'resume-continue' && String(input.message || '').trim()) {
     const submission = parseExitTicketSubmission(state, String(input.message));
+    const selected = Array.isArray(submission.selectedOptionIds) ? submission.selectedOptionIds : [];
+    const hasOptions = Array.isArray(state.options) && state.options.some((option) => !!option?.id);
+    if (state.type !== 'short_answer' && hasOptions && selected.length === 0) {
+      return { state, history, attempts, verdict, graded, formatMiss: true };
+    }
     const judgement = judgeCheckpointAnswer(state, submission);
     const passed = judgement?.passed === true;
     state = {
@@ -502,7 +533,7 @@ export function gradePendingExitTicket(input: {
     verdict = { passed, detail: judgement?.detail ?? null };
     graded = true;
   }
-  return { state, history, attempts: history.length, verdict, graded };
+  return { state, history, attempts: countAttempts(), verdict, graded, formatMiss };
 }
 
 /** 契约缺口指令：独立证据不足时点名到 coreKc，避免模型挑契约外点出题。 */

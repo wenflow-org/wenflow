@@ -255,6 +255,7 @@ export async function processStudentMessage(
   const exitTicketAttempts = exitTicketTurn.attempts;
   const exitTicketVerdict = exitTicketTurn.verdict;
   const exitTicketGradedThisTurn = exitTicketTurn.graded;
+  const exitTicketFormatMiss = exitTicketTurn.formatMiss;
   const contractGap = buildContractGapDirective(previousLessonReport, lessonContract);
   const contractGapDirective = contractGap.directive;
   const independentGapKcs = contractGap.independentGapKcs;
@@ -1041,6 +1042,13 @@ export async function processStudentMessage(
   const exitTicketPassed = exitTicketState?.status === 'passed';
   const exitTicketPending = exitTicketState?.status === 'pending';
   let exitTicketBlocked = false;
+  // 选择题只认选项字母。学生若整句作答，解析不出选项时不要把答案判负：
+  // 保持 pending，本轮重贴题面与选项，下一轮按字母作答即可（不消耗次数）。
+  if (exitTicketFormatMiss && exitTicketState?.status === 'pending' && !extensionMode) {
+    appendExitTicketToReply(teachingOutput, exitTicketState);
+    if (teachingOutput.control) delete teachingOutput.control.checkpoint;
+    exitTicketBlocked = true;
+  }
   if (contractEnforced && rawCompletionSignal) {
     if (exitTicketPending) {
       exitTicketBlocked = true;
