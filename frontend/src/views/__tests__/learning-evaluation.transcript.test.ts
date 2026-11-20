@@ -97,6 +97,45 @@ describe('LearningEvaluationPage 当堂对话折叠', () => {
     expect(w.find('.stub-completion').attributes('data-messages')).toBe('5');
   });
 
+  it('回放伴学插话：assistant.peerMessage 挂在老师消息下，并标出「伴学」', async () => {
+    getSessionDetailMock.mockResolvedValue({
+      ...detail,
+      messages: [
+        {
+          role: 'assistant',
+          content: '老师主文：先把每份表的列序对齐。',
+          timestamp: '2026-09-23T02:51:00.000Z',
+          peerTriggered: true,
+          peerMessage: '伴学想和你掰扯一下：列名一样就不算错位吗？'
+        }
+      ]
+    });
+    const w = await mountReady();
+    await w.find('.evaluation-transcript-toggle').trigger('click');
+    const peer = w.find('.evaluation-transcript-peer');
+    expect(peer.exists()).toBe(true);
+    expect(peer.find('.evaluation-transcript-peer__meta').text()).toContain('伴学');
+    expect(peer.text()).toContain('列名一样就不算错位吗');
+    expect(w.find('.evaluation-transcript-item').text()).toContain('老师主文');
+  });
+
+  it('伴学单人对话行不再冒充老师/学员：标成「伴学」并加 --peer 样式', async () => {
+    getSessionDetailMock.mockResolvedValue({
+      ...detail,
+      messages: [
+        { role: 'user', content: '问你个问题', timestamp: '2026-09-23T02:51:00.000Z', peer: true },
+        { role: 'assistant', content: '伴学的回答', timestamp: '2026-09-23T02:52:00.000Z', peer: true }
+      ]
+    });
+    const w = await mountReady();
+    await w.find('.evaluation-transcript-toggle').trigger('click');
+    const items = w.findAll('.evaluation-transcript-item');
+    expect(items).toHaveLength(2);
+    expect(items[0].classes()).toContain('evaluation-transcript-item--peer');
+    expect(items[0].find('.evaluation-transcript-item__meta strong').text()).toBe('你 · 伴学');
+    expect(items[1].find('.evaluation-transcript-item__meta strong').text()).toBe('伴学');
+  });
+
   it('卡头「学习消息」与展开按钮同源：小测回放卡也算一条，不再差 4 条', async () => {
     getSessionDetailMock.mockResolvedValue({
       ...detail,
