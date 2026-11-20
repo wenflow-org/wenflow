@@ -474,10 +474,20 @@ const tagClass = (type: string) => ({
 .metric-help__btn:hover, .metric-help[open] .metric-help__btn { color: var(--green); background: color-mix(in srgb, var(--green) 10%, transparent); }
 .metric-help__body {
   position: absolute; right: 0; top: calc(100% + 4px); z-index: 20;
-  width: min(240px, 70vw); margin: 0; padding: 8px 10px;
+  /* 55vw：三列指标在 320 档每张卡只有 ~75px，240px 浮层右对齐会伸到屏幕外；
+     收到 55vw 后中/右列仍贴右，左列另走下面的左对齐。 */
+  width: min(240px, 55vw); margin: 0; padding: 8px 10px;
   font-size: 12px; line-height: 1.55; color: var(--ink);
   background: var(--surface); border: 1px solid var(--line);
   border-radius: 8px; box-shadow: var(--mk-shadow-modal);
+}
+/* 首列卡片的 ⓘ 靠近屏幕左边，浮层再右对齐会整块跑到负坐标（真课 390/320 实测）；
+   首列改为从图标左缘向右展开，其余列保持右对齐。
+   本节表现固定三列，只有第一张；长期状态 4 列时第一张也靠左，≤900 两列时每行第一张都靠左。 */
+#sec-perf .metric-card:first-child .metric-help__body,
+#sec-longterm .metric-card:first-child .metric-help__body {
+  left: 0;
+  right: auto;
 }
 .metric-card--good { border-color: color-mix(in srgb, var(--green) 30%, var(--line)); }
 .metric-card--normal { border-color: color-mix(in srgb, var(--green) 30%, var(--line)); }
@@ -525,6 +535,11 @@ const tagClass = (type: string) => ({
 /* 窄屏 4 项走 2×2（原先 1 列 = 4 行）；3 项保持一行 3 列 */
 @media (max-width: 900px) {
   .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* 两列时每行第一张的 ⓘ 都在左缘，浮层都改为向右展开 */
+  #sec-longterm .metric-card:nth-child(odd) .metric-help__body {
+    left: 0;
+    right: auto;
+  }
 }
 @media (max-width: 640px) {
   .completion-summary {
