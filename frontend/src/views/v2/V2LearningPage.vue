@@ -4078,12 +4078,14 @@ onBeforeUnmount(() => {
   /* 结算门禁常驻在输入区上方，右下角悬浮球会压住「继续学习」按钮（2026-11-20 移动端走查）。
      门禁是阻塞操作，收起伴学球；关掉提示后它会自动回来。 */
   .peerfab--gate { display: none; }
+  /* 与「提交」同高（2026-11-20 用户反馈「一大一小」）：
+     移动端全局把 .btn-primary 抬到 44 触控档，这里若仍留 36 就会在并排时矮一截。 */
   .checkpoint__actions .checkpoint__peer {
     display: inline-flex; align-items: center; justify-content: center;
-    min-height: 36px; padding: 0 12px;
+    min-height: 44px; padding: 0 14px;
     /* 同卡同色系（2026-11-06 走查）：小测卡已全部转蓝，这颗「问小启」不再单独用紫 */
     border: 1px solid color-mix(in srgb, var(--blue) 30%, var(--line));
-    border-radius: 8px;
+    border-radius: var(--mk-radius-md);
     background: transparent; color: var(--blue-deep);
     font-size: 13px; font-weight: 700; cursor: pointer;
   }
